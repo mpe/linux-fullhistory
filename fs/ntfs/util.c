@@ -12,7 +12,7 @@
 #include "struct.h"
 #include "util.h"
 
-#include <errno.h>
+#include <linux/errno.h>
 /* FreeBSD doesn't seem to have EILSEQ in errno.h */
 #ifndef EILSEQ
 # define EILSEQ	EINVAL

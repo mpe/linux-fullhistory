@@ -128,7 +128,7 @@ struct alpha_machine_vector jensen_mv __initmv = {
 	BUS(jensen),
 	machine_check:		jensen_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
-	rtc_port: 0x170, rtc_addr: 0, rtc_bcd: 1,
+	rtc_port: 0x170,
 
 	nr_irqs:		16,
 	irq_probe_mask:		_PROBE_MASK(16),

@@ -377,6 +377,7 @@ __initfunc(void lance_probe1(int ioaddr))
 	unsigned char hpJ2405A = 0;			/* HP ISA adaptor */
 	int hp_builtin = 0;					/* HP on-board ethernet. */
 	static int did_version = 0;			/* Already printed version info. */
+	unsigned long flags;
 
 	/* First we look for special cases.
 	   Check for HP's on-board ethernet by looking for 'HP' in the BIOS.
@@ -563,8 +564,11 @@ __initfunc(void lance_probe1(int ioaddr))
 			outw(0x7f04, ioaddr+LANCE_DATA); /* Clear the memory error bits. */
 			if (request_dma(dma, chipname))
 				continue;
+				
+			flags=claim_dma_lock();
 			set_dma_mode(dma, DMA_MODE_CASCADE);
 			enable_dma(dma);
+			release_dma_lock(flags);
 
 			/* Trigger an initialization. */
 			outw(0x0001, ioaddr+LANCE_DATA);
@@ -576,7 +580,9 @@ __initfunc(void lance_probe1(int ioaddr))
 				printk(", DMA %d.\n", dev->dma);
 				break;
 			} else {
+				flags=claim_dma_lock();
 				disable_dma(dma);
+				release_dma_lock(flags);
 				free_dma(dma);
 			}
 		}
@@ -649,8 +655,10 @@ lance_open(struct device *dev)
 
 	/* The DMA controller is used as a no-operation slave, "cascade mode". */
 	if (dev->dma != 4) {
+		unsigned long flags=claim_dma_lock();
 		enable_dma(dev->dma);
 		set_dma_mode(dev->dma, DMA_MODE_CASCADE);
+		release_dma_lock(flags);
 	}
 
 	/* Un-Reset the LANCE, needed only for the NE2100. */
@@ -1121,7 +1129,11 @@ lance_close(struct device *dev)
 	outw(0x0004, ioaddr+LANCE_DATA);
 
 	if (dev->dma != 4)
+	{
+		unsigned long flags=claim_dma_lock();
 		disable_dma(dev->dma);
+		release_dma_lock(flags);
+	}
 
 	free_irq(dev->irq, dev);
 

@@ -30,7 +30,7 @@
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
-struct thread_struct * original_pcb_ptr;
+struct thread_struct original_pcb;
 
 #ifndef __SMP__
 struct pgtable_cache_struct quicklists;
@@ -193,47 +193,66 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 	unsigned long newptbr;
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
+	struct thread_struct *original_pcb_ptr;
 
 	/* initialize mem_map[] */
 	start_mem = free_area_init(start_mem, end_mem);
 
 	/* find free clusters, update mem_map[] accordingly */
 	memdesc = (struct memdesc_struct *)
-		(INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
+		(hwrpb->mddt_offset + (unsigned long) hwrpb);
 	cluster = memdesc->cluster;
 	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
 		unsigned long pfn, nr;
-		if (cluster->usage & 1)
+
+		/* Bit 0 is console/PALcode reserved.  Bit 1 is
+		   non-volatile memory -- we might want to mark
+		   this for later */
+		if (cluster->usage & 3)
 			continue;
 		pfn = cluster->start_pfn;
 		nr = cluster->numpages;
-
-		/* non-volatile memory. We might want to mark this for later */
-		if (cluster->usage & 2)
-			continue;
 
 		while (nr--)
 			clear_bit(PG_reserved, &mem_map[pfn++].flags);
 	}
 
-	/* unmap the console stuff: we don't need it, and we don't want it */
-	/* Also set up the real kernel PCB while we're at it.. */
+	/* Initialize the kernel's page tables.  Linux puts the vptb in
+	   the last slot of the L1 page table.  */
 	memset((void *) ZERO_PAGE, 0, PAGE_SIZE);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
 	pgd_val(swapper_pg_dir[1023]) =
 		(newptbr << 32) | pgprot_val(PAGE_KERNEL);
+
+	/* Set the vptb.  This is often done by the bootloader, but 
+	   shouldn't be required.  */
+	if (hwrpb->vptb != 0xfffffffe00000000) {
+		wrvptptr(0xfffffffe00000000);
+		hwrpb->vptb = 0xfffffffe00000000;
+		hwrpb_update_checksum(hwrpb);
+	}
+
+	/* Also set up the real kernel PCB while we're at it.  */
 	init_task.tss.ptbr = newptbr;
 	init_task.tss.pal_flags = 1;	/* set FEN, clear everything else */
 	init_task.tss.flags = 0;
-	original_pcb_ptr =
-	  phys_to_virt((unsigned long)load_PCB(&init_task.tss));
-#if 0
-printk("OKSP 0x%lx OPTBR 0x%lx\n",
-       original_pcb_ptr->ksp, original_pcb_ptr->ptbr);
-#endif
-
+	original_pcb_ptr = load_PCB(&init_task.tss);
 	tbia();
+
+	/* Save off the contents of the original PCB so that we can
+	   restore the original console's page tables for a clean reboot.
+
+	   Note that the PCB is supposed to be a physical address, but
+	   since KSEG values also happen to work, folks get confused.
+	   Check this here.  */
+
+	if ((unsigned long)original_pcb_ptr < PAGE_OFFSET) {
+		original_pcb_ptr = (struct thread_struct *)
+		  phys_to_virt((unsigned long) original_pcb_ptr);
+	}
+	original_pcb = *original_pcb_ptr;
+
 	return start_mem;
 }
 
@@ -250,18 +269,29 @@ paging_init_secondary(void)
 	current->tss.ptbr = init_task.tss.ptbr;
 	current->tss.pal_flags = 1;
 	current->tss.flags = 0;
-
-#if 0
-printk("paging_init_secondary: KSP 0x%lx PTBR 0x%lx\n",
-       current->tss.ksp, current->tss.ptbr);
-#endif
-
 	load_PCB(&current->tss);
 	tbia();
 
 	return;
 }
 #endif /* __SMP__ */
+
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM)
+void
+srm_paging_stop (void)
+{
+	/* Move the vptb back to where the SRM console expects it.  */
+	swapper_pg_dir[1] = swapper_pg_dir[1023];
+	tbia();
+	wrvptptr(0x200000000);
+	hwrpb->vptb = 0x200000000;
+	hwrpb_update_checksum(hwrpb);
+
+	/* Reload the page tables that the console had in use.  */
+	load_PCB(&original_pcb);
+	tbia();
+}
+#endif
 
 #if DEBUG_POISON
 static void

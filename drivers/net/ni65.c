@@ -351,6 +351,7 @@ __initfunc(static int ni65_probe1(struct device *dev,int ioaddr))
 {
 	int i,j;
 	struct priv *p;
+	unsigned long flags;
 
 	for(i=0;i<NUM_CARDS;i++) {
 		if(check_region(ioaddr, cards[i].total_size))
@@ -417,12 +418,20 @@ __initfunc(static int ni65_probe1(struct device *dev,int ioaddr))
 				int dma = dmatab[i];
 				if(test_bit(dma,&dma_channels) || request_dma(dma,"ni6510"))
 					continue;
+					
+				flags=claim_dma_lock();
 				disable_dma(dma);
 				set_dma_mode(dma,DMA_MODE_CASCADE);
 				enable_dma(dma);
+				release_dma_lock(flags);
+				
 				ni65_init_lance(p,dev->dev_addr,0,0); /* trigger memory access */
+				
+				flags=claim_dma_lock();
 				disable_dma(dma);
 				free_dma(dma);
+				release_dma_lock(flags);
+				
 				if(readreg(CSR0) & CSR0_IDON)
 					break;
 			}
@@ -718,20 +727,25 @@ static int ni65_lance_reinit(struct device *dev)
 {
 	 int i;
 	 struct priv *p = (struct priv *) dev->priv;
+	 unsigned long flags;
 
 	 p->lock = 0;
 	 p->xmit_queued = 0;
 
+	 flags=claim_dma_lock();
 	 disable_dma(dev->dma); /* I've never worked with dma, but we do it like the packetdriver */
 	 set_dma_mode(dev->dma,DMA_MODE_CASCADE);
 	 enable_dma(dev->dma);
+	 release_dma_lock(flags);
 
 	 outw(inw(PORT+L_RESET),PORT+L_RESET); /* first: reset the card */
 	 if( (i=readreg(CSR0) ) != 0x4)
 	 {
 		 printk(KERN_ERR "%s: can't RESET %s card: %04x\n",dev->name,
 							cards[p->cardno].cardname,(int) i);
+		 flags=claim_dma_lock();
 		 disable_dma(dev->dma);
+		 release_dma_lock(flags);
 		 return 0;
 	 }
 
@@ -782,7 +796,9 @@ static int ni65_lance_reinit(struct device *dev)
 		 return 1; /* ->OK */
 	 }
 	 printk(KERN_ERR "%s: can't init lance, status: %04x\n",dev->name,(int) inw(PORT+L_DATAREG));
+	 flags=claim_dma_lock();
 	 disable_dma(dev->dma);
+	 release_dma_lock(flags);
 	 return 0; /* ->Error */
 }
 
@@ -1167,8 +1183,10 @@ static void set_multicast_list(struct device *dev)
 }
 
 #ifdef MODULE
+static char devicename[9] = { 0, };
+
 static struct device dev_ni65 = {
-	"				",	/* "ni6510": device name inserted by net_init.c */
+	devicename,	/* "ni6510": device name inserted by net_init.c */
 	0, 0, 0, 0,
 	0x360, 9,	 /* I/O address, IRQ */
 	0, 0, 0, NULL, ni65_probe };

@@ -8,8 +8,6 @@
  *
  * NeXTstep support added on February 5th 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk>.
- *
- * write support by Daniel Pirkl <daniel.pirkl@email.cz>
  */
 
 #ifndef _LINUX_UFS_FS_I_H

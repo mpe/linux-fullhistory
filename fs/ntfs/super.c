@@ -9,7 +9,7 @@
 #include "struct.h"
 #include "super.h"
 
-#include <errno.h>
+#include <linux/errno.h>
 #include "macros.h"
 #include "inode.h"
 #include "support.h"

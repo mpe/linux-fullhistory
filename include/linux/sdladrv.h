@@ -33,7 +33,7 @@ typedef struct sdlahw
 	unsigned fwid;			/* firmware ID */
 	unsigned port;			/* adapter I/O port base */
 	int irq;			/* interrupt request level */
-	unsigned long dpmbase;		/* dual-port memory base */
+	void * dpmbase;			/* dual-port memory base */
 	unsigned dpmsize;		/* dual-port memory size */
 	unsigned pclk;			/* CPU clock rate, kHz */
 	unsigned long memory;		/* memory size */

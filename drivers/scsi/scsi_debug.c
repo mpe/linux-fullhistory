@@ -42,8 +42,8 @@ struct proc_dir_entry proc_scsi_scsi_debug = {
 
 /* A few options that we want selected */
 
-#define NR_HOSTS_PRESENT 1
-#define NR_FAKE_DISKS   3
+#define NR_HOSTS_PRESENT 20
+#define NR_FAKE_DISKS   6
 #define N_HEAD          32
 #define N_SECTOR        64
 #define DISK_READONLY(TGT)      (1)
@@ -55,6 +55,8 @@ struct proc_dir_entry proc_scsi_scsi_debug = {
 
 /* Skip some consistency checking.  Good for benchmarking */
 #define SPEEDY
+/* Read return zeros. Undefine for benchmarking */
+#define CLEAR
 
 /* Number of real scsi disks that will be detected ahead of time */
 static int NR_REAL=-1;
@@ -299,11 +301,8 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #if defined(SCSI_SETUP_LATENCY) || defined(SCSI_DATARATE)
     {
 	int delay = SCSI_SETUP_LATENCY;
-	double usec;
 	
-	usec = 0.0;
-	usec = (SCpnt->request.nr_sectors << 9) * 1.0e6 / SCSI_DATARATE;
-	delay += usec;
+	delay += SCpnt->request.nr_sectors * SCSI_DATARATE;
 	if(delay) usleep(delay);
     };
 #endif
@@ -323,29 +322,31 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	do{
 	    VERIFY1_DEBUG(READ);
 	    /* For the speedy test, we do not even want to fill the buffer with anything */
-#ifndef SPEEDY
+#ifdef CLEAR
 	    memset(buff, 0, bufflen);
 #endif
 	    /* If this is block 0, then we want to read the partition table for this
 	     * device.  Let's make one up */
-	    if(block == 0 && target == 0) {
+	    if(block == 0) {
+	    	int i;
                 memset(buff, 0, bufflen);
 		*((unsigned short *) (buff+510)) = 0xAA55;
 		p = (struct partition* ) (buff + 0x1be);
-		npart = 0;
-		while(starts[npart+1]){
-		    p->start_sect = starts[npart];
-		    p->nr_sects = starts[npart+1] - starts [npart];
+		i = 0;
+		while(starts[i+1]){
+		    p->start_sect = starts[i];
+		    p->nr_sects = starts[i+1] - starts [i];
 		    p->sys_ind = 0x81;  /* Linux partition */
-                    p->head       = (npart == 0 ? 1 : 0);
+                    p->head       = (i == 0 ? 1 : 0);
                     p->sector     = 1;
-                    p->cyl        = starts[npart] / N_HEAD / N_SECTOR;
+                    p->cyl        = starts[i] / N_HEAD / N_SECTOR;
                     p->end_head   = N_HEAD - 1;
                     p->end_sector = N_SECTOR;
-                    p->end_cyl    = starts[npart + 1] / N_HEAD / N_SECTOR;
+                    p->end_cyl    = starts[i + 1] / N_HEAD / N_SECTOR;
 		    p++;
-		    npart++;
+		    i++;
 		};
+		if (!npart) npart = i;
 		scsi_debug_errsts = 0;
 		break;
 	    };
@@ -376,7 +377,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	    } /* End phony disk change code */
 #endif
 	    
-#ifndef SPEEDY
+#ifdef CLEAR
 	    memcpy(buff, &target, sizeof(target));
 	    memcpy(buff+sizeof(target), cmd, 24);
 	    memcpy(buff+60, &block, sizeof(block));
@@ -384,7 +385,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #endif
 	    nbytes -= bufflen;
 	    if(SCpnt->use_sg){
-#ifndef SPEEDY
+#ifdef CLEAR
 		memcpy(buff+128, bh, sizeof(struct buffer_head));
 #endif
 		block += bufflen >> 9;

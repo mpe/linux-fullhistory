@@ -770,6 +770,7 @@ static void sppp_cp_send (struct sppp *sp, u16 proto, u8 type,
 	sp->obytes += skb->len;
 	/* Control is high priority so it doesnt get queued behind data */
 	skb->priority=1;
+	skb->dev = dev;
 	dev_queue_xmit(skb);
 }
 
@@ -811,6 +812,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 			ch->par2, ch->rel, ch->time0, ch->time1);
 	sp->obytes += skb->len;
 	skb->priority=1;
+	skb->dev = dev;
 	dev_queue_xmit(skb);
 }
 
@@ -861,9 +863,11 @@ int sppp_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	{
 		case SPPPIOCCISCO:
 			sp->pp_flags|=PP_CISCO;
+			dev->type = ARPHRD_HDLC;
 			break;
 		case SPPPIOCPPP:
 			sp->pp_flags&=~PP_CISCO;
+			dev->type = ARPHRD_PPP;
 			break;
 		default:
 			return -EINVAL;
@@ -908,7 +912,7 @@ void sppp_attach(struct ppp_device *pd)
 	dev->hard_header = sppp_hard_header;
 	dev->rebuild_header = sppp_rebuild_header;
 	dev->tx_queue_len = 10;
-	dev->type = ARPHRD_PPP;
+	dev->type = ARPHRD_HDLC;
 	dev->addr_len = 0;
 	dev->hard_header_len = sizeof(struct ppp_header);
 	dev->mtu = PPP_MTU;
@@ -924,7 +928,7 @@ void sppp_attach(struct ppp_device *pd)
 	dev->change_mtu = sppp_change_mtu;
 	dev->hard_header_cache = NULL;
 	dev->header_cache_update = NULL;
-	dev->flags = IFF_MULTICAST;
+	dev->flags = IFF_MULTICAST|IFF_POINTOPOINT|IFF_NOARP;
 	dev_init_buffers(dev);
 }
 

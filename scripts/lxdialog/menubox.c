@@ -60,8 +60,11 @@ static int menu_width, item_x;
 static void
 print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey)
 {
-    int i, j;
+    int j;
     char menu_item[menu_width+1];
+#if OLD_NCURSES
+     int i;
+#endif
 
     strncpy(menu_item, item, menu_width);
     menu_item[menu_width] = 0;

@@ -458,8 +458,7 @@ static int do_try_to_free_page(int gfp_mask)
 	if (gfp_mask & __GFP_WAIT)
 		stop = 0;
 
-	if (((buffermem >> PAGE_SHIFT) * 100 > buffer_mem.borrow_percent * num_physpages)
-		   || (page_cache_size * 100 > page_cache.borrow_percent * num_physpages))
+	if (buffer_over_borrow() || pgcache_over_borrow())
 		shrink_mmap(i, gfp_mask);
 
 	switch (state) {
@@ -650,11 +649,10 @@ void swap_tick(void)
 	}
  
 	if ((long) (now - want) >= 0) {
-		if (want_wakeup || (num_physpages * buffer_mem.max_percent) < (buffermem >> PAGE_SHIFT) * 100
-				|| (num_physpages * page_cache.max_percent < page_cache_size * 100)) {
+		if (want_wakeup || buffer_over_max() || pgcache_over_max()) {
 			/* Set the next wake-up time */
 			next_swap_jiffies = now + swapout_interval;
-			wake_up(&kswapd_wait);
+			kswapd_wakeup();
 		}
 	}
 	timer_active |= (1<<SWAP_TIMER);

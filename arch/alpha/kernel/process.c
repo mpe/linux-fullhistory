@@ -181,6 +181,9 @@ generic_kill_arch (int mode, char *restart_cmd)
 		return;
 	}
 
+	if (alpha_using_srm)
+		srm_paging_stop();
+
 	halt();
 }
 

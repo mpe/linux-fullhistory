@@ -31,6 +31,8 @@
 #define SNDCARD_SOFTOSS			36
 #define SNDCARD_VMIDI			37
 #define SNDCARD_WAVEFRONT               41
+#define SNDCARD_OPL3SA2                 42
+#define SNDCARD_OPL3SA2_MPU             43
 
 void attach_opl3sa_wss (struct address_info *hw_config);
 int probe_opl3sa_wss (struct address_info *hw_config);
@@ -412,6 +414,11 @@ struct driver_info sound_drivers[] =
 	{"CS4232MPU", 0, SNDCARD_CS4232_MPU,	"CS4232 MIDI",		attach_cs4232_mpu, probe_cs4232_mpu, unload_cs4232_mpu},
 #endif
 
+#ifdef CONFIG_SOUND_OPL3SA2
+	{"OPL3SA2", 0, SNDCARD_OPL3SA2,	"OPL3SA2",		attach_opl3sa2, probe_opl3sa2, unload_opl3sa2},
+	{"OPL3SA2MPU", 0, SNDCARD_OPL3SA2_MPU,	"OPL3SA2 MIDI",		attach_opl3sa2_mpu, probe_opl3sa2_mpu, unload_opl3sa2_mpu},
+#endif
+
 #ifdef CONFIG_SGALAXY
 	{"SGALAXY", 0, SNDCARD_SGALAXY,	"Sound Galaxy WSS",		attach_sgalaxy, probe_sgalaxy, unload_sgalaxy},
 #endif
@@ -558,6 +565,16 @@ struct card_info snd_installed_cards[] =
 	{SNDCARD_CS4232_MPU, {CONFIG_CS4232_MPU_BASE, CONFIG_CS4232_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 	{SNDCARD_CS4232, {CONFIG_CS4232_BASE, CONFIG_CS4232_IRQ, CONFIG_CS4232_DMA, CONFIG_CS4232_DMA2}, SND_DEFAULT_ENABLE},
+#endif
+
+#ifdef CONFIG_SOUND_OPL3SA2
+#ifndef CONFIG_OPL3SA2_DMA2
+#define CONFIG_OPL3SA2_DMA2 CONFIG_OPL3SA2_DMA
+#endif
+#ifdef CONFIG_OPL3SA2_MPU_BASE
+	{SNDCARD_OPL3SA2_MPU, {CONFIG_OPL3SA2_MPU_BASE, CONFIG_OPL3SA2_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#endif
+	{SNDCARD_OPL3SA2, {CONFIG_OPL3SA2_BASE, CONFIG_OPL3SA2_IRQ, CONFIG_OPL3SA2_DMA, CONFIG_OPL3SA2_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifdef CONFIG_SGALAXY

@@ -93,8 +93,8 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
  *		then 512 bytes is assumed.
  * else
  *		sector_size is hardsect_size[MAJOR][MINOR]
- * This is currently set by some scsi device and read by the msdos fs driver
- * This might be a some uses later.
+ * This is currently set by some scsi devices and read by the msdos fs driver.
+ * Other uses may appear later.
  */
 int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 
@@ -297,8 +297,8 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	int queue_new_request = 0;
 
 	switch (MAJOR(req->rq_dev)) {
-		case SCSI_DISK_MAJOR:
-			disk_index = (MINOR(req->rq_dev) & 0x0070) >> 4;
+		case SCSI_DISK0_MAJOR:
+			disk_index = (MINOR(req->rq_dev) & 0x00f0) >> 4;
 			if (disk_index < 4)
 				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
@@ -479,7 +479,14 @@ void make_request(int major,int rw, struct buffer_head * bh)
 			break;
 		/* fall through */
 
-	     case SCSI_DISK_MAJOR:
+	     case SCSI_DISK0_MAJOR:
+	     case SCSI_DISK1_MAJOR:
+	     case SCSI_DISK2_MAJOR:
+	     case SCSI_DISK3_MAJOR:
+	     case SCSI_DISK4_MAJOR:
+	     case SCSI_DISK5_MAJOR:
+	     case SCSI_DISK6_MAJOR:
+	     case SCSI_DISK7_MAJOR:
 	     case SCSI_CDROM_MAJOR:
 
 		do {

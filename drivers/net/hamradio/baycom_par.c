@@ -357,14 +357,6 @@ static void par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* --------------------------------------------------------------------- */
 
-static int par96_preempt(void *handle)
-{
-	/* we cannot relinquish the port in the middle of an operation */
-	return 1;
-}
-
-/* --------------------------------------------------------------------- */
-
 static void par96_wakeup(void *handle)
 {
         struct device *dev = (struct device *)handle;
@@ -396,8 +388,8 @@ static int par96_open(struct device *dev)
 	}
 	memset(&bc->modem, 0, sizeof(bc->modem));
 	bc->hdrv.par.bitrate = 9600;
-	if (!(bc->pdev = parport_register_device(pp, dev->name, par96_preempt, par96_wakeup, 
-						 par96_interrupt, PARPORT_DEV_LURK, dev))) {
+	if (!(bc->pdev = parport_register_device(pp, dev->name, NULL, par96_wakeup, 
+						 par96_interrupt, PARPORT_DEV_EXCL, dev))) {
 		printk(KERN_ERR "baycom_par: cannot register parport at 0x%lx\n", pp->base);
 		return -ENXIO;
 	}

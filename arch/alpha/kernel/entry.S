@@ -552,7 +552,6 @@ entSys:
 ret_from_sys_call:
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
 	/* check bottom half interrupts */
-	bne	$1,ret_from_handle_bh
 	ldq	$3,bh_active
 	ldq	$4,bh_mask
 	and	$3,$4,$2
@@ -678,7 +677,7 @@ signal_return:
 	bis	$30,$30,$18
 	bis	$31,$31,$16
 	jsr	$26,do_signal
-	lda	$30,SWITCH_STACK_SIZE($30)
+	bsr	$1,undo_switch_stack
 	br	$31,restore_all
 .end entSys
 

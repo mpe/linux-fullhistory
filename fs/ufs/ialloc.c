@@ -34,25 +34,12 @@
 #include "util.h"
 
 #undef UFS_IALLOC_DEBUG
-#undef UFS_IALLOC_DEBUG_MORE
 
 #ifdef UFS_IALLOC_DEBUG
 #define UFSD(x) printk("(%s, %d), %s: ", __FILE__, __LINE__, __FUNCTION__); printk x;
 #else
 #define UFSD(x)
 #endif
-
-#ifdef UFS_IALLOC_DEBUG_MORE
-#define UFSDM \
-ufs_print_cylinder_stuff (ucg, swab); \
-printk("inode: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_nifree), SWAB32(sb->fs_cs(ucpi->c_cgx).cs_nifree), SWAB32(ucg->cg_cs.cs_nifree)); \
-printk("block: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_nbfree), SWAB32(sb->fs_cs(ucpi->c_cgx).cs_nbfree), SWAB32(ucg->cg_cs.cs_nbfree)); \
-printk("fragment: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_nffree), SWAB32(sb->fs_cs(ucpi->c_cgx).cs_nffree), SWAB32(ucg->cg_cs.cs_nffree)); \
-printk("ndir: total %u, fs %u, cg %u\n", SWAB32(usb1->fs_cstotal.cs_ndir), SWAB32(sb->fs_cs(ucpi->c_cgx).cs_ndir), SWAB32(ucg->cg_cs.cs_ndir));
-#else
-#define UFSDM
-#endif
-
 
 /*
  * NOTE! When we get the inode, we're the only people
@@ -120,8 +107,6 @@ void ufs_free_inode (struct inode * inode)
 	if (!ufs_cg_chkmagic(ucg))
 		ufs_panic (sb, "ufs_free_fragments", "internal error, bad cg magic number");
 
-	UFSDM
-	
 	ucg->cg_time = SWAB32(CURRENT_TIME);
 
 	is_directory = S_ISDIR(inode->i_mode);
@@ -152,8 +137,6 @@ void ufs_free_inode (struct inode * inode)
 		ubh_ll_rw_block (WRITE, 1, (struct ufs_buffer_head **) &ucpi);
 		ubh_wait_on_buffer (UCPI_UBH);
 	}
-	
-	UFSDM
 	
 	sb->s_dirt = 1;
 	unlock_super (sb);
@@ -251,8 +234,6 @@ cg_found:
 	if (!ufs_cg_chkmagic(ucg)) 
 		ufs_panic (sb, "ufs_new_inode", "internal error, bad cg magic number");
 
-	UFSDM
-	
 	start = ucpi->c_irotor;
 	bit = ubh_find_next_zero_bit (UCPI_UBH, ucpi->c_iusedoff, uspi->s_ipg, start);
 	if (!(bit < uspi->s_ipg)) {
@@ -316,8 +297,6 @@ cg_found:
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
 
-	UFSDM
-	
 	unlock_super (sb);
 
 	if(DQUOT_ALLOC_INODE(sb, inode)) {

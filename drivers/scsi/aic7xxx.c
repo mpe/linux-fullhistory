@@ -328,7 +328,6 @@
 #include "hosts.h"
 #include "aic7xxx.h"
 
-#include "aic7xxx/bsd_q.h"
 #include "aic7xxx/sequencer.h"
 #include "aic7xxx/scsi_message.h"
 #include "aic7xxx_reg.h"
@@ -350,7 +349,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.0"
+#define AIC7XXX_C_VERSION  "5.1.2"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -6281,8 +6280,10 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
       (((aic_inb(p, SEQADDR1) << 8) & 0x100) | aic_inb(p, SEQADDR0)));
     if (aic7xxx_panic_on_abort)
       aic7xxx_panic_abort(p, NULL);
+#ifdef CONFIG_PCI
     if (errno & PCIERRSTAT)
       aic7xxx_pci_intr(p);
+#endif
     if (errno & (SQPARERR | ILLOPCODE | ILLSADDR))
     {
       sti();

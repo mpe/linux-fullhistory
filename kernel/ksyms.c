@@ -53,6 +53,8 @@
 #include <linux/console.h>
 #include <linux/time.h>
 
+#include <asm/spinlock.h>
+
 extern unsigned char aux_device_present, pckbd_read_mask;
 
 #if defined(CONFIG_PROC_FS)
@@ -79,6 +81,7 @@ extern void *sys_call_table;
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
+extern spinlock_t dma_spin_lock;
 
 #ifdef MODVERSIONS
 const struct module_symbol __export_Using_Versions
@@ -300,6 +303,7 @@ EXPORT_SYMBOL(autoirq_report);
 /* dma handling */
 EXPORT_SYMBOL(request_dma);
 EXPORT_SYMBOL(free_dma);
+EXPORT_SYMBOL(dma_spin_lock);
 #ifdef HAVE_DISABLE_HLT
 EXPORT_SYMBOL(disable_hlt);
 EXPORT_SYMBOL(enable_hlt);

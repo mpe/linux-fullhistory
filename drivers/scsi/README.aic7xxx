@@ -412,7 +412,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     the system. Each file presents the current configuration and transfer
     statistics (enabled with #define in aic7xxx.c) for each controller.
 
-    Thanks to Michael Neuffer for for his upper-level SCSI help, and
+    Thanks to Michael Neuffer for his upper-level SCSI help, and
     Matthew Jacob for statistics support.
 
   Debugging the driver

@@ -238,7 +238,7 @@ static struct sock *nr_find_socket(unsigned char index, unsigned char id)
 /*
  *	Find a connected NET/ROM socket given their circuit IDs.
  */
-static struct sock *nr_find_peer(unsigned char index, unsigned char id)
+static struct sock *nr_find_peer(unsigned char index, unsigned char id, ax25_address *dest)
 {
 	struct sock *s;
 	unsigned long flags;
@@ -247,7 +247,7 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id)
 	cli();
 
 	for (s = nr_list; s != NULL; s = s->next) {
-		if (s->protinfo.nr->your_index == index && s->protinfo.nr->your_id == id) {
+		if (s->protinfo.nr->your_index == index && s->protinfo.nr->your_id == id && ax25cmp(&s->protinfo.nr->dest_addr, dest) == 0) {
 			restore_flags(flags);
 			return s;
 		}
@@ -575,14 +575,15 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			sk->state_change(sk);
 			sk->dead                 = 1;
 			sk->destroy              = 1;
+			sk->socket               = NULL;
 			break;
 
 		default:
+			sk->socket = NULL;
 			break;
 	}
 
 	sock->sk   = NULL;	
-	sk->socket = NULL;	/* Not used, but we should do this */
 
 	return 0;
 }
@@ -597,7 +598,11 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (sk->zapped == 0)
 		return -EINVAL;
 
-	if (addr_len != sizeof(struct sockaddr_ax25) && addr_len != sizeof(struct full_sockaddr_ax25))
+	if (addr_len < sizeof(struct sockaddr_ax25) || addr_len > sizeof(struct
+full_sockaddr_ax25))
+		return -EINVAL;
+
+	if (addr_len < (addr->fsa_ax25.sax25_ndigis * sizeof(ax25_address) + sizeof(struct sockaddr_ax25)))
 		return -EINVAL;
 
 	if (addr->fsa_ax25.sax25_family != AF_NETROM)
@@ -863,10 +868,10 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 
 	if (circuit_index == 0 && circuit_id == 0) {
 		if (frametype == NR_CONNACK && flags == NR_CHOKE_FLAG)
-			sk = nr_find_peer(peer_circuit_index, peer_circuit_id);
+			sk = nr_find_peer(peer_circuit_index, peer_circuit_id, src);
 	} else {
 		if (frametype == NR_CONNREQ)
-			sk = nr_find_peer(circuit_index, circuit_id);
+			sk = nr_find_peer(circuit_index, circuit_id, src);
 		else
 			sk = nr_find_socket(circuit_index, circuit_id);
 	}

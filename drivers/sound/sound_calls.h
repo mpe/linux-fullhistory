@@ -251,6 +251,8 @@ void unload_trix_sb(struct address_info *hw_info);
 void unload_trix_mpu(struct address_info *hw_info);
 void unload_cs4232(struct address_info *hw_info);
 void unload_cs4232_mpu(struct address_info *hw_info);
+void unload_opl3sa2(struct address_info *hw_info);
+void unload_opl3sa2_mpu(struct address_info *hw_info);
 
 /* From cs4232.c */
 
@@ -258,6 +260,12 @@ int probe_cs4232 (struct address_info *hw_config);
 void attach_cs4232 (struct address_info *hw_config);
 int probe_cs4232_mpu (struct address_info *hw_config);
 void attach_cs4232_mpu (struct address_info *hw_config);
+
+/* From opl3sa2.c */
+int probe_opl3sa2 (struct address_info *hw_config);
+void attach_opl3sa2 (struct address_info *hw_config);
+int probe_opl3sa2_mpu (struct address_info *hw_config);
+void attach_opl3sa2_mpu (struct address_info *hw_config);
 
 /*	From maui.c */
 void attach_maui(struct address_info * hw_config);

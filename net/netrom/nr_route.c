@@ -81,6 +81,22 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		if (ax25cmp(ax25, &nr_neigh->callsign) == 0 && nr_neigh->dev == dev)
 			break;
 
+	/*
+	 * The L2 link to a neighbour has failed in the past
+	 * and now a frame comes from this neighbour. We assume
+	 * it was a temporary trouble with the link and reset the
+	 * routes now (and not wait for a node broadcast).
+	 */
+	if (nr_neigh != NULL && nr_neigh->failed != 0 && quality == 0) {
+		struct nr_node *node;
+
+		for (node = nr_node_list; node != NULL; node = node->next)
+			for (i = 0; i < node->count; i++)
+				if (node->routes[i].neighbour == nr_neigh)
+					if (i < node->which)
+						node->which = i;
+	}
+
 	if (nr_neigh != NULL)
 		nr_neigh->failed = 0;
 

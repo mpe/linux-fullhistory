@@ -149,8 +149,6 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 			 unsigned long a2, unsigned long a3, unsigned long a4,
 			 unsigned long a5, struct pt_regs regs)
 {
-	extern int ptrace_cancel_bpt (struct task_struct *who);
-
 	lock_kernel();
 	die_if_kernel("Instruction fault", &regs, type, 0);
 	switch (type) {
@@ -558,11 +556,12 @@ s_reg_to_mem (unsigned long s_reg)
 
 #define OP_INT_MASK	( 1L << 0x28 | 1L << 0x2c   /* ldl stl */	\
 			| 1L << 0x29 | 1L << 0x2d   /* ldq stq */	\
-			| 1L << 0x0c | 1L << 0x0d ) /* ldwu stw */
+			| 1L << 0x0c | 1L << 0x0d   /* ldwu stw */	\
+			| 1L << 0x0a | 1L << 0x0e ) /* ldbu stb */
 
 #define OP_WRITE_MASK	( 1L << 0x26 | 1L << 0x27   /* sts stt */	\
 			| 1L << 0x2c | 1L << 0x2d   /* stl stq */	\
-			| 1L << 0xd )		    /* stw */
+			| 1L << 0x0d | 1L << 0x0e ) /* stw stb */
 
 #define R(x)	((size_t) &((struct pt_regs *)0)->x)
 

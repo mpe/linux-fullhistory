@@ -43,6 +43,7 @@ else
             bool '     Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
             bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
             bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
+            bool '     CMD646 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CMD646
           fi
         fi
       fi

@@ -168,7 +168,14 @@ static int is_local_disk(kdev_t dev)	    /* Guess if the device is a local hard 
 	case IDE1_MAJOR:
 	case IDE2_MAJOR:
 	case IDE3_MAJOR:
-	case SCSI_DISK_MAJOR:
+	case SCSI_DISK0_MAJOR:
+	case SCSI_DISK1_MAJOR:
+	case SCSI_DISK2_MAJOR:
+	case SCSI_DISK3_MAJOR:
+	case SCSI_DISK4_MAJOR:
+	case SCSI_DISK5_MAJOR:
+	case SCSI_DISK6_MAJOR:
+	case SCSI_DISK7_MAJOR:
 		return 1;
 	default:
 		return 0;

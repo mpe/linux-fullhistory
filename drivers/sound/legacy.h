@@ -27,6 +27,7 @@
 #define CONFIG_MPU401
 #define CONFIG_MSS
 #define CONFIG_OPL3SA1
+#define CONFIG_OPL3SA2
 #define CONFIG_PAS
 #define CONFIG_PSS
 #define CONFIG_SB

@@ -19,17 +19,23 @@ old_gas := $(shell if $(AS) --version 2>&1 | grep 'version 2.7' > /dev/null; the
 # Determine if GCC understands the -mcpu= option.
 have_mcpu := $(shell if $(CC) -mcpu=ev5 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
 
-# If GENERIC, make sure to turn off any instruction set extensions that
-# the host compiler might have on by default.  Given that EV4 and EV5
-# have the same instruction set, prefer EV5 because an EV5 schedule is
-# more likely to keep an EV4 processor busy than vice-versa.
-ifeq ($(CONFIG_ALPHA_GENERIC)$(have_mcpu),yy)
- CFLAGS := $(CFLAGS) -mcpu=ev5
-endif
-
-# If EV6, turn on the proper optimizations.
-ifeq ($(CONFIG_ALPHA_EV6)$(have_mcpu),yy)
- CFLAGS := $(CFLAGS) -mcpu=ev6
+# Turn on the proper cpu optimizations.
+ifeq ($(have_mcpu),y)
+  # If GENERIC, make sure to turn off any instruction set extensions that
+  # the host compiler might have on by default.  Given that EV4 and EV5
+  # have the same instruction set, prefer EV5 because an EV5 schedule is
+  # more likely to keep an EV4 processor busy than vice-versa.
+  ifeq ($(CONFIG_ALPHA_GENERIC),y)
+    CFLAGS := $(CFLAGS) -mcpu=ev5
+  endif
+  ifeq ($(CONFIG_ALPHA_EV4),y)
+    CFLAGS := $(CFLAGS) -mcpu=ev4
+  endif
+  # Leave out EV5, since it is too hard to figure out whether we
+  # should use EV56 insns or not.
+  ifeq ($(CONFIG_ALPHA_EV6),y)
+    CFLAGS := $(CFLAGS) -mcpu=ev6
+  endif
 endif
 
 # For TSUNAMI, we must have the assembler not emulate our instructions.

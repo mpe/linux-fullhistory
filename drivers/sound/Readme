@@ -168,7 +168,7 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	with impossible parameters. Check that the application is
 	for sound driver version 2.X or later.
 
-In general the printout of of /dev/sndstat should tell what is the problem.
+In general the printout of /dev/sndstat should tell what is the problem.
 It's possible that there are bugs in the sound driver but 99% of the problems
 reported to me are caused by somehow incorrect setup during "make config".
 

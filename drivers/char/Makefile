@@ -184,14 +184,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_PSMOUSE),y)
-L_OBJS += psaux.o
-else
-  ifeq ($(CONFIG_PSMOUSE),m)
-  M_OBJS += psaux.o
-  endif
-endif
-
 ifeq ($(CONFIG_SOFT_WATCHDOG),y)
 L_OBJS += softdog.o
 else

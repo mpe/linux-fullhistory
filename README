@@ -96,15 +96,6 @@ INSTALLING the kernel:
    the current directory, but an alternative directory can be specified
    as the second argument.
 
- - Make sure your /usr/include/asm, /usr/include/linux, and /usr/include/scsi
-   directories are just symlinks to the kernel sources:
-
-		cd /usr/include
-		rm -rf asm linux scsi
-		ln -s /usr/src/linux/include/asm-i386 asm
-		ln -s /usr/src/linux/include/linux linux
-		ln -s /usr/src/linux/include/scsi scsi
-
  - Make sure you have no stale .o files and dependencies lying around:
 
 		cd /usr/src/linux

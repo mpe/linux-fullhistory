@@ -72,6 +72,7 @@ obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o
 obj-$(CONFIG_SOUND_MSNDPIN)	+= msnd.o msnd_pinnacle.o
 obj-$(CONFIG_SOUND_MSS)		+= ad1848.o
 obj-$(CONFIG_SOUND_OPL3SA1)	+= opl3sa.o ad1848.o uart401.o
+obj-$(CONFIG_SOUND_OPL3SA2)	+= opl3sa2.o ad1848.o uart401.o mpu401.o
 obj-$(CONFIG_SOUND_PAS)		+= pas2.o sb.o uart401.o
 obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_SB)		+= sb.o uart401.o
@@ -219,7 +220,7 @@ maui.o: maui_boot.h
 
 ifeq ($(CONFIG_MAUI_HAVE_BOOT),y)
     maui_boot.h: $(patsubst "%", %, $(CONFIG_MAUI_BOOT_FILE)) bin2hex
-	bin2hex -i maui_os < $(CONFIG_MAUI_BOOT_FILE) > $@
+	./bin2hex -i maui_os < $(CONFIG_MAUI_BOOT_FILE) > $@
 else
     maui_boot.h:
 	(							\

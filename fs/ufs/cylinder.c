@@ -22,7 +22,6 @@
 #include "util.h"
 
 #undef UFS_CYLINDER_DEBUG
-#undef UFS_CYLINDER_DEBUG_MORE
 
 #ifdef UFS_CYLINDER_DEBUG
 #define UFSD(x) printk("(%s, %d), %s:", __FILE__, __LINE__, __FUNCTION__); printk x;
@@ -50,10 +49,6 @@ static void ufs_read_cylinder (struct super_block * sb,
 	ucpi = sb->u.ufs_sb.s_ucpi[bitmap_nr];
 	ucg = (struct ufs_cylinder_group *)sb->u.ufs_sb.s_ucg[cgno]->b_data;
 
-#ifdef UFS_CYLINDER_DEBUG_MORE
-	ufs_print_cylinder_stuff (ucg, swab);
-#endif
-
 	UCPI_UBH->fragment = ufs_cgcmin(cgno);
 	UCPI_UBH->count = uspi->s_cgsize >> sb->s_blocksize_bits;
 	/*
@@ -77,7 +72,9 @@ static void ufs_read_cylinder (struct super_block * sb,
 	ucpi->c_iusedoff = SWAB32(ucg->cg_iusedoff);
 	ucpi->c_freeoff = SWAB32(ucg->cg_freeoff);
 	ucpi->c_nextfreeoff = SWAB32(ucg->cg_nextfreeoff);
-	
+	ucpi->c_clustersumoff = SWAB32(ucg->cg_u.cg_44.cg_clustersumoff);
+	ucpi->c_clusteroff = SWAB32(ucg->cg_u.cg_44.cg_clusteroff);
+	ucpi->c_nclusterblks = SWAB32(ucg->cg_u.cg_44.cg_nclusterblks);
 	UFSD(("EXIT\n"))
 	return;	
 	
@@ -201,10 +198,12 @@ struct ufs_cg_private_info * ufs_load_cylinder (
 			sb->u.ufs_sb.s_cg_loaded++;
 		else
 			ufs_put_cylinder (sb, UFS_MAX_GROUP_LOADED-1);
+		ucpi = sb->u.ufs_sb.s_ucpi[sb->u.ufs_sb.s_cg_loaded - 1];
 		for (j = sb->u.ufs_sb.s_cg_loaded - 1; j > 0; j--) {
 			sb->u.ufs_sb.s_cgno[j] = sb->u.ufs_sb.s_cgno[j-1];
 			sb->u.ufs_sb.s_ucpi[j] = sb->u.ufs_sb.s_ucpi[j-1];
 		}
+		sb->u.ufs_sb.s_ucpi[0] = ucpi;
 		ufs_read_cylinder (sb, cgno, 0);
 	}
 	UFSD(("EXIT\n"))

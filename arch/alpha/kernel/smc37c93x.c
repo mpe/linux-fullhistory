@@ -8,6 +8,7 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/hwrpb.h>
 #include <asm/io.h>
@@ -86,21 +87,28 @@ static unsigned long __init SMCConfigState(unsigned long baseAddr)
 	unsigned long indexPort;
 	unsigned long dataPort;
 
+	int i;
+
 	configPort = indexPort = baseAddr;
 	dataPort = configPort + 1;
 
-	outb(CONFIG_ON_KEY, configPort);
-	outb(CONFIG_ON_KEY, configPort);
-	outb(DEVICE_ID, indexPort);
-	devId = inb(dataPort);
-	if ( devId == VALID_DEVICE_ID ) {
-		outb(DEVICE_REV, indexPort);
-		devRev = inb(dataPort);
+#define NUM_RETRIES 5
+
+	for (i = 0; i < NUM_RETRIES; i++)
+	{
+		outb(CONFIG_ON_KEY, configPort);
+		outb(CONFIG_ON_KEY, configPort);
+		outb(DEVICE_ID, indexPort);
+		devId = inb(dataPort);
+		if (devId == VALID_DEVICE_ID) {
+			outb(DEVICE_REV, indexPort);
+			devRev = inb(dataPort);
+			break;
+		}
+		else
+			udelay(100);
 	}
-	else {
-		baseAddr = 0;
-	}
-	return baseAddr;
+	return (i != NUM_RETRIES) ? baseAddr : 0L;
 }
 
 static void __init SMCRunState(unsigned long baseAddr)

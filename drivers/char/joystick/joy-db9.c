@@ -389,7 +389,9 @@ static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 			return port;
 		}
 
-		info.port = parport_register_device(pp, "joystick (db9)", NULL, js_db9_wakeup, NULL, 0, NULL);
+		info.port = parport_register_device(pp, "joystick (db9)", NULL, js_db9_wakeup, NULL, PARPORT_DEV_EXCL, NULL);
+		if (!info.port)
+			return port;
 		info.wanted = 0;
 	}
 #else

@@ -95,6 +95,10 @@ ifeq ($(CONFIG_FB_ATY),y)
 L_OBJS += atyfb.o
 endif
 
+ifeq ($(CONFIG_FB_IGA),y)
+L_OBJS += igafb.o
+endif
+
 ifeq ($(CONFIG_FB_CONTROL),y)
 L_OBJS += controlfb.o
 endif
@@ -447,7 +451,7 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-promcon_tbl.c: prom.uni
+promcon_tbl.c: prom.uni ../char/conmakehash
 	../char/conmakehash prom.uni | \
 	sed -e '/#include <[^>]*>/p' -e 's/types/init/' \
 	    -e 's/dfont\(_uni.*\]\)/promfont\1 __initdata/' > promcon_tbl.c

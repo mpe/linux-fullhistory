@@ -15,6 +15,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/lockd.h>
+#include <linux/smp_lock.h>
 
 #define NLMDBG_FACILITY		NLMDBG_CIENT
 
@@ -167,6 +168,7 @@ reclaimer(void *ptr)
 
 	/* This one ensures that our parent doesn't terminate while the
 	 * reclaim is in progress */
+	lock_kernel();
 	lockd_up();
 
 	/* First, reclaim all locks that have been granted previously. */
@@ -198,6 +200,7 @@ reclaimer(void *ptr)
 	/* Release host handle after use */
 	nlm_release_host(host);
 	lockd_down();
+	unlock_kernel();
 
 	return 0;
 }

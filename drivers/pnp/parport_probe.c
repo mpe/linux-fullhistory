@@ -91,7 +91,7 @@ static long read_polled(struct parport *port, char *buf,
 
 int parport_probe(struct parport *port, char *buffer, int len)
 {
-	struct pardevice *dev = parport_register_device(port, "IEEE 1284 probe", NULL, NULL, NULL, PARPORT_DEV_TRAN, &dev);
+	struct pardevice *dev = parport_register_device(port, "IEEE 1284 probe", NULL, NULL, NULL, 0, &dev);
 
 	int result = 0;
 

@@ -317,15 +317,14 @@ NCR53c406a_dma_setup (unsigned char *ptr,
     if ((count & 1) || (((unsigned) ptr) & 1))
         panic ("NCR53c406a: attempted unaligned DMA transfer\n"); 
     
-    save_flags(flags);
-    cli();
+    flags=claim_dma_lock();
     disable_dma(dma_chan);
     clear_dma_ff(dma_chan);
     set_dma_addr(dma_chan, (long) ptr);
     set_dma_count(dma_chan, count);
     set_dma_mode(dma_chan, mode);
     enable_dma(dma_chan);
-    restore_flags(flags);
+    release_dma_lock(flags);    
     
     return count;
 }
@@ -343,12 +342,12 @@ NCR53c406a_dma_read(unsigned char *src, unsigned int count) {
 static __inline__ int 
 NCR53c406a_dma_residual (void) {
     register int tmp;
-    unsigned long flags = 0;
-    save_flags(flags);
-    cli();
+    unsigned long flags;
+
+    flags=claim_dma_lock();
     clear_dma_ff(dma_chan);
     tmp = get_dma_residue(dma_chan);
-    restore_flags(flags);
+    release_dma_lock(flags);
     
     return tmp;
 }

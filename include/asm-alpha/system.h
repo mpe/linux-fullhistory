@@ -95,8 +95,7 @@ extern void wrmces (unsigned long);
 extern unsigned long whami(void);
 extern void wripir(unsigned long);
 
-#define halt() \
-__asm__ __volatile__ ("call_pal %0 #halt" : : "i" (PAL_halt) : "memory")
+extern void halt(void) __attribute__((noreturn));
 
 #define switch_to(prev,next) do {					\
 	current = next;							\

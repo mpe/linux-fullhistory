@@ -172,14 +172,29 @@ int imm_detect(Scsi_Host_Template * host)
 
         imm_hosts[i].dev =
             parport_register_device(pb, "imm", NULL, imm_wakeup,
-                         NULL, PARPORT_DEV_TRAN, (void *) &imm_hosts[i]);
+                         NULL, 0, (void *) &imm_hosts[i]);
+
+	if (!imm_hosts[i].dev)
+		continue;
 
         /* Claim the bus so it remembers what we do to the control
          * registers. [ CTR and ECP ]
          */
-        if (imm_pb_claim(i))
-            while (imm_hosts[i].p_busy)
-                schedule();     /* We are safe to schedule here */
+	if (imm_pb_claim(i))
+	{
+	    unsigned long now = jiffies;
+	    while (imm_hosts[i].p_busy)
+	    {
+		schedule();	/* We are safe to schedule here */
+		if (jiffies > now + 3*HZ)
+		{
+		    printk(KERN_ERR "imm%d: failed to claim parport because a "
+			   "pardevice is owning the port for too longtime!\n",
+			   i);
+		    return 0;
+		}
+	    }
+	}
 
         ppb = IMM_BASE(i) = imm_hosts[i].dev->port->base;
         w_ctr(ppb, 0x0c);

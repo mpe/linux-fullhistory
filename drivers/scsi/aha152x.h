@@ -36,6 +36,7 @@ extern struct proc_dir_entry proc_scsi_aha152x;
                   queuecommand:       aha152x_queue,	  \
                   abort:              aha152x_abort,	  \
                   reset:              aha152x_reset,	  \
+                  release:            aha152x_release,	  \
                   slave_attach:       0,		  \
                   bios_param:         aha152x_biosparam,  \
                   can_queue:          1,		  \

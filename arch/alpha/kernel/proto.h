@@ -143,6 +143,7 @@ extern void reset_for_srm(void);
 
 /* time.c */
 extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
+extern unsigned long est_cycle_freq;
 
 /* smc37c93x.c */
 extern void SMC93x_Init(void);
@@ -172,5 +173,12 @@ extern void entSys(void);
 extern void entUna(void);
 
 /* process.c */
-void generic_kill_arch (int mode, char *reboot_cmd);
-void cpu_idle(void *) __attribute__((noreturn));
+extern void generic_kill_arch (int mode, char *reboot_cmd);
+extern void cpu_idle(void *) __attribute__((noreturn));
+
+/* ptrace.c */
+extern int ptrace_set_bpt (struct task_struct *child);
+extern int ptrace_cancel_bpt (struct task_struct *child);
+
+/* ../mm/init.c */
+void srm_paging_stop(void);

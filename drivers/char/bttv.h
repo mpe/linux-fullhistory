@@ -31,7 +31,6 @@
 #include "bt848.h"
 #include <linux/videodev.h>
 
-#define MAX_CLIPRECS	100
 #define MAX_GBUFFERS	2
 #define RISCMEM_LEN	(32744*2)
 
@@ -56,10 +55,9 @@ struct bttv_window
 	ushort depth;
 };
 
-
 struct bttv_pll_info {
-	unsigned int pll_ifreq;	/* PLL input frequency 	  */
-	unsigned int pll_ofreq;	/* PLL output frequency   */
+	unsigned int pll_ifreq;		/* PLL input frequency    */
+	unsigned int pll_ofreq;		/* PLL output frequency   */
 	unsigned int pll_crystal;	/* Crystal used for input */
 };
 
@@ -143,6 +141,7 @@ struct bttv
 	int i2c_command;
 	int triton1;
 };
+
 #endif
 
 /*The following should be done in more portable way. It depends on define

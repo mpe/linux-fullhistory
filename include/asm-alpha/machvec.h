@@ -22,11 +22,9 @@ struct alpha_machine_vector
 	unsigned long hae_cache;
 	unsigned long *hae_register;
 
-	unsigned int nr_irqs  : 16;
-	unsigned int rtc_port : 16;
-	unsigned int rtc_addr : 15;
-	unsigned int rtc_bcd  : 1;
-	unsigned int max_asn  : 16;
+	int nr_irqs;
+	int rtc_port;
+	int max_asn;
 	unsigned long max_dma_address;
 	unsigned long mmu_context_mask;
 	unsigned long irq_probe_mask;

@@ -29,7 +29,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.63 1998/09/10 18:37:19 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.65 1998/09/18 19:13:03 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -1099,7 +1099,9 @@ static struct file_operations dev_fileops = {
 	dev_ioctl,	/* ioctl */
 	NULL,		/* mmap */
 	dev_open,	/* open */
+#ifndef LINUX20
 	NULL,		/* flush */
+#endif
 	dev_release,	/* release */
 	NULL,		/* fsync */
 	NULL,		/* fasync */

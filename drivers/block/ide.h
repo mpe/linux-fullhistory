@@ -328,6 +328,7 @@ typedef struct hwif_s {
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
 	struct hwif_s	*mate;		/* other hwif from same PCI chip */
 	unsigned long	dma_base;	/* base addr for dma ports */
+	unsigned	dma_extra;	/* extra addr for dma ports */
 	unsigned long	config_data;	/* for use by chipset-specific code */
 	unsigned long	select_data;	/* for use by chipset-specific code */
 	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
@@ -725,6 +726,14 @@ int ide_unregister_subdriver (ide_drive_t *drive);
 int ide_replace_subdriver(ide_drive_t *drive, const char *driver);
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
+#define ON_BOARD		1
+#define NEVER_BOARD		0
+#ifdef CONFIG_BLK_DEV_OFFBOARD
+#  define OFF_BOARD		ON_BOARD
+#else /* CONFIG_BLK_DEV_OFFBOARD */
+#  define OFF_BOARD		NEVER_BOARD
+#endif /* CONFIG_BLK_DEV_OFFBOARD */
+
 unsigned long ide_find_free_region (unsigned short size) __init;
 void ide_scan_pcibus (void) __init;
 #endif
@@ -735,6 +744,7 @@ int ide_build_dmatable (ide_drive_t *drive);
 void ide_dma_intr  (ide_drive_t *drive);
 int check_drive_lists (ide_drive_t *drive, int good_bad);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
+int ide_release_dma (ide_hwif_t *hwif);
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_ports) __init;
 unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif

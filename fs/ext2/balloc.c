@@ -86,11 +86,12 @@ static int read_block_bitmap (struct super_block * sb,
 {
 	struct ext2_group_desc * gdp;
 	struct buffer_head * bh = NULL;
-	int retval = 0;
+	int retval = -EIO;
 	
 	gdp = ext2_get_group_desc (sb, block_group, NULL);
 	if (!gdp)
 		goto error_out;
+	retval = 0;
 	bh = bread (sb->s_dev, le32_to_cpu(gdp->bg_block_bitmap), sb->s_blocksize);
 	if (!bh) {
 		ext2_error (sb, "read_block_bitmap",

@@ -591,6 +591,7 @@ static void znet_rx(struct device *dev)
 /* The inverse routine to znet_open(). */
 static int znet_close(struct device *dev)
 {
+	unsigned long flags;
 	int ioaddr = dev->base_addr;
 
 	dev->tbusy = 1;
@@ -598,8 +599,10 @@ static int znet_close(struct device *dev)
 
 	outb(CMD0_RESET, ioaddr);			/* CMD0_RESET */
 
+	flags=claim_dma_lock();
 	disable_dma(zn.rx_dma);
 	disable_dma(zn.tx_dma);
+	release_dma_lock(flags);
 
 	free_irq(dev->irq, dev);
 
@@ -662,10 +665,14 @@ static void set_multicast_list(struct device *dev)
 
 void show_dma(void)
 {
+	unsigned long flags;
 	short dma_port = ((zn.tx_dma&3)<<2) + IO_DMA2_BASE;
 	unsigned addr = inb(dma_port);
 	addr |= inb(dma_port) << 8;
+
+	flags=claim_dma_lock();
 	printk("Addr: %04x cnt:%3x...", addr<<1, get_dma_residue(zn.tx_dma));
+	release_dma_lock(flags);
 }
 
 /* Initialize the hardware.  We have to do this when the board is open()ed
@@ -680,22 +687,22 @@ static void hardware_init(struct device *dev)
 	/* Reset the chip, and start it up. */
 	outb(CMD0_RESET, ioaddr);
 
-	cli(); {							/* Protect against a DMA flip-flop */
-		disable_dma(zn.rx_dma); 		/* reset by an interrupting task. */
-		clear_dma_ff(zn.rx_dma);
-		set_dma_mode(zn.rx_dma, DMA_RX_MODE);
-		set_dma_addr(zn.rx_dma, (unsigned int) zn.rx_start);
-		set_dma_count(zn.rx_dma, RX_BUF_SIZE);
-		enable_dma(zn.rx_dma);
-		/* Now set up the Tx channel. */
-		disable_dma(zn.tx_dma);
-		clear_dma_ff(zn.tx_dma);
-		set_dma_mode(zn.tx_dma, DMA_TX_MODE);
-		set_dma_addr(zn.tx_dma, (unsigned int) zn.tx_start);
-		set_dma_count(zn.tx_dma, zn.tx_buf_len<<1);
-		enable_dma(zn.tx_dma);
-	} sti();
-
+	flags=claim_dma_lock();
+	disable_dma(zn.rx_dma); 		/* reset by an interrupting task. */
+	clear_dma_ff(zn.rx_dma);
+	set_dma_mode(zn.rx_dma, DMA_RX_MODE);
+	set_dma_addr(zn.rx_dma, (unsigned int) zn.rx_start);
+	set_dma_count(zn.rx_dma, RX_BUF_SIZE);
+	enable_dma(zn.rx_dma);
+	/* Now set up the Tx channel. */
+	disable_dma(zn.tx_dma);
+	clear_dma_ff(zn.tx_dma);
+	set_dma_mode(zn.tx_dma, DMA_TX_MODE);
+	set_dma_addr(zn.tx_dma, (unsigned int) zn.tx_start);
+	set_dma_count(zn.tx_dma, zn.tx_buf_len<<1);
+	enable_dma(zn.tx_dma);
+	release_dma_lock(flags);
+	
 	if (znet_debug > 1)
 	  printk(KERN_DEBUG "%s: Initializing the i82593, tx buf %p... ", dev->name,
 			 zn.tx_start);

@@ -242,7 +242,10 @@ plip_init_dev(struct device *dev, struct parport *pb))
 
 	pardev = parport_register_device(pb, dev->name, plip_preempt,
 					 plip_wakeup, plip_interrupt, 
-					 PARPORT_DEV_LURK, dev);
+					 0, dev);
+
+	if (!pardev)
+		return -ENODEV;
 
 	printk(KERN_INFO "%s", version);
 	printk(KERN_INFO "%s: Parallel port at %#3lx, using IRQ %d\n", dev->name,

@@ -49,7 +49,7 @@ failed:
 	return NULL;
 }
 
-struct ufs_buffer_head * _ubh_bread2_ (struct ufs_sb_private_info * uspi,
+struct ufs_buffer_head * ubh_bread_uspi (struct ufs_sb_private_info * uspi,
 	kdev_t dev, unsigned fragment, unsigned size)
 {
 	unsigned i, j, count;
@@ -82,14 +82,14 @@ void ubh_brelse (struct ufs_buffer_head * ubh)
 	kfree (ubh);
 }
 
-void ubh_brelse2 (struct ufs_buffer_head * ubh)
+void ubh_brelse_uspi (struct ufs_sb_private_info * uspi)
 {
 	unsigned i;
-	if (!ubh)
+	if (!USPI_UBH)
 		return;
-	for ( i = 0; i < ubh->count; i++ ) {
-		brelse (ubh->bh[i]);
-		ubh->bh[i] = NULL;
+	for ( i = 0; i < USPI_UBH->count; i++ ) {
+		brelse (USPI_UBH->bh[i]);
+		USPI_UBH->bh[i] = NULL;
 	}
 }
 
@@ -138,8 +138,6 @@ unsigned ubh_max_bcount (struct ufs_buffer_head * ubh)
 	for ( i = 0; i < ubh->count; i++ ) 
 		if ( ubh->bh[i]->b_count > max )
 			max = ubh->bh[i]->b_count;
-	if (max == 0)
-		printk("Je cosi shnileho v kralovstvi Danskem!\n");
 	return max;
 }
 

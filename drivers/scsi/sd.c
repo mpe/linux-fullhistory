@@ -14,8 +14,11 @@
  *
  *       Modified by Eric Youngdale eric@aib.com to support loadable
  *       low-level scsi drivers.
+ *
+ *       Modified by Jirka Hanika geo@ff.cuni.cz to support more
+ *       scsi disks using eight major numbers.
  */
-
+ 
 #include <linux/module.h>
 #ifdef MODULE
 /*
@@ -41,7 +44,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#define MAJOR_NR SCSI_DISK_MAJOR
+#define MAJOR_NR SCSI_DISK0_MAJOR
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
@@ -54,6 +57,15 @@
 /*
  *  static const char RCSid[] = "$Header:";
  */
+ 
+#define SD_MAJOR(i) (!(i) ? SCSI_DISK0_MAJOR : SCSI_DISK1_MAJOR-1+(i))
+ 
+#define SCSI_DISKS_PER_MAJOR	16
+#define SD_MAJOR_NUMBER(i)	SD_MAJOR((i) >> 8)
+#define SD_MINOR_NUMBER(i)	((i) & 255)
+#define MKDEV_SD_PARTITION(i)	MKDEV(SD_MAJOR_NUMBER(i), (i) & 255)
+#define MKDEV_SD(index)		MKDEV_SD_PARTITION((index) << 4)
+#define N_USED_SD_MAJORS	((sd_template.dev_max + SCSI_DISKS_PER_MAJOR - 1) / SCSI_DISKS_PER_MAJOR)
 
 #define MAX_RETRIES 5
 
@@ -91,12 +103,9 @@ static void sd_detach(Scsi_Device *);
 
 static void sd_devname(unsigned int disknum, char * buffer)
 {
-    if( disknum <= 26 )
-    {
+    if( disknum < 26 )
         sprintf(buffer, "sd%c", 'a' + disknum);
-    }
-    else
-    {
+    else {
         unsigned int min1;
         unsigned int min2;
         /*
@@ -105,13 +114,13 @@ static void sd_devname(unsigned int disknum, char * buffer)
          */
         min1 = disknum / 26;
         min2 = disknum % 26;
-        sprintf(buffer, "sd%c%c", 'a' + min1, 'a' + min2);
+        sprintf(buffer, "sd%c%c", 'a' + min1 - 1, 'a' + min2);
     }
 }
 
 struct Scsi_Device_Template sd_template =
 { NULL, "disk", "sd", NULL, TYPE_DISK,
-      SCSI_DISK_MAJOR, 0, 0, 0, 1,
+      SCSI_DISK0_MAJOR, 0, 0, 0, 1,
       sd_detect, sd_init,
       sd_finish, sd_attach, sd_detach
 };
@@ -175,7 +184,7 @@ static int sd_open(struct inode * inode, struct file * filp)
      * See if we are requesting a non-existent partition.  Do this
      * after checking for disk change.
      */
-    if(sd_sizes[MINOR(inode->i_rdev)] == 0)
+    if(sd_sizes[SD_PARTITION(inode->i_rdev)] == 0)
 	return -ENXIO;
 
     if(rscsi_disks[target].device->removable)
@@ -230,8 +239,13 @@ static struct file_operations sd_fops = {
     fop_revalidate_scsidisk      /* revalidate */
 };
 
+/*
+ *	If we need more than one SCSI disk major (i.e. more than
+ *	16 SCSI disks), we'll have to kmalloc() more gendisks later.
+ */
+
 static struct gendisk sd_gendisk = {
-    MAJOR_NR,                    /* Major number */
+    SCSI_DISK0_MAJOR,            /* Major number */
     "sd",                        /* Major name */
     4,                           /* Bits to shift to get real from partition */
     1 << 4,                      /* Number of partitions per real */
@@ -242,7 +256,12 @@ static struct gendisk sd_gendisk = {
     0,                           /* number */
     NULL,                        /* internal */
     NULL                         /* next */
-};
+}; 
+
+static struct gendisk *sd_gendisks = &sd_gendisk;
+
+#define SD_GENDISK(i)    sd_gendisks[(i) / SCSI_DISKS_PER_MAJOR]
+#define LAST_SD_GENDISK  sd_gendisks[N_USED_SD_MAJORS - 1]
 
 static void sd_geninit (struct gendisk *ignored)
 {
@@ -251,10 +270,6 @@ static void sd_geninit (struct gendisk *ignored)
     for (i = 0; i < sd_template.dev_max; ++i)
 	if(rscsi_disks[i].device)
 	    sd[i << 4].nr_sects = rscsi_disks[i].capacity;
-#if 0
-    /* No longer needed - we keep track of this as we attach/detach */
-    sd_gendisk.nr_real = sd_template.dev_max;
-#endif
 }
 
 /*
@@ -271,7 +286,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
     int good_sectors = (result == 0 ? this_count : 0);
     int block_sectors = 1;
 
-    sd_devname(MINOR(SCpnt->request.rq_dev) >> 4, nbuff);
+    sd_devname(DEVICE_NR(SCpnt->request.rq_dev), nbuff);
 
     SCSI_LOG_HLCOMPLETE(1,printk("%s : rw_intr(%d, %x [%x %x])\n", nbuff,
 	   SCpnt->host->host_no, 
@@ -309,7 +324,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	  }
 	else if (sector_size == 256)
 	  error_sector >>= 1;
-	error_sector -= sd[MINOR(SCpnt->request.rq_dev)].start_sect;
+	error_sector -= sd[SD_PARTITION(SCpnt->request.rq_dev)].start_sect;
 	error_sector &= ~ (block_sectors - 1);
 	good_sectors = error_sector - SCpnt->request.sector;
 	if (good_sectors < 0 || good_sectors >= this_count)
@@ -524,7 +539,7 @@ static void do_sd_request (void)
 	}
 
 	INIT_SCSI_REQUEST;
-        SDev = rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device;
+        SDev = rscsi_disks[CURRENT_DEV].device;
 
         /*
          * If the host for this device is in error recovery mode, don't
@@ -578,7 +593,7 @@ static void do_sd_request (void)
 
 	if (flag++ == 0)
 	    SCpnt = scsi_allocate_device(&CURRENT,
-			   rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device, 0);
+			   rscsi_disks[CURRENT_DEV].device, 0);
 	else SCpnt = NULL;
 
 	/*
@@ -643,7 +658,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	return;
     }
 
-    devm =  MINOR(SCpnt->request.rq_dev);
+    devm =  SD_PARTITION(SCpnt->request.rq_dev);
     dev = DEVICE_NR(SCpnt->request.rq_dev);
 
     block = SCpnt->request.sector;
@@ -1329,7 +1344,7 @@ static int sd_init_onedisk(int i)
 		printk ("scsi : deleting disk entry.\n");
 		rscsi_disks[i].device = NULL;
 		sd_template.nr_dev--;
-		sd_gendisk.nr_real--;
+		SD_GENDISK(i).nr_real--;
 
                 /* Wake up a process waiting for device */
                 wake_up(&SCpnt->device->device_wait);
@@ -1463,51 +1478,79 @@ static int sd_init()
 
     if (sd_template.dev_noticed == 0) return 0;
 
+    if (!rscsi_disks)
+        sd_template.dev_max = sd_template.dev_noticed + SD_EXTRA_DEVS;
+
+    /* 128 disks is our current limit (8 majors, 16 disks per major) */
+    if(sd_template.dev_max > 128)
+   	sd_template.dev_max = 128;
+
     if(!sd_registered) {
-	  if (register_blkdev(MAJOR_NR,"sd",&sd_fops)) {
-	      printk("Unable to get major %d for SCSI disk\n",MAJOR_NR);
-	      return 1;
-	  }
-	  sd_registered++;
-      }
+	for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) {
+	    if (register_blkdev(SD_MAJOR(i),"sd",&sd_fops)) {
+		printk("Unable to get major %d for SCSI disk\n", SD_MAJOR(i));
+		return 1;
+	    }
+	}
+	sd_registered++;
+    }
 
     /* We do not support attaching loadable devices yet. */
     if(rscsi_disks) return 0;
 
-    sd_template.dev_max = sd_template.dev_noticed + SD_EXTRA_DEVS;
-
     rscsi_disks = (Scsi_Disk *)
 	scsi_init_malloc(sd_template.dev_max * sizeof(Scsi_Disk), GFP_ATOMIC);
     memset(rscsi_disks, 0, sd_template.dev_max * sizeof(Scsi_Disk));
-
-    sd_sizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) *
-					sizeof(int), GFP_ATOMIC);
+    
+  /* for every (necessary) major: */
+    sd_sizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
     memset(sd_sizes, 0, (sd_template.dev_max << 4) * sizeof(int));
 
-    sd_blocksizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) *
-					     sizeof(int), GFP_ATOMIC);
+    sd_blocksizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+    sd_hardsizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
 
-    sd_hardsizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) *
-					    sizeof(int), GFP_ATOMIC);
-
-     for(i=0;i<(sd_template.dev_max << 4);i++)
-       {
-         sd_blocksizes[i] = 1024;
-         sd_hardsizes[i] = 512;
-       }
+    for(i=0; i < sd_template.dev_max << 4; i++) {
+	sd_blocksizes[i] = 1024;
+	sd_hardsizes[i] = 512;
+    }
  
-    blksize_size[MAJOR_NR] = sd_blocksizes;
-    hardsect_size[MAJOR_NR] = sd_hardsizes;
+    for (i=0; i < N_USED_SD_MAJORS; i++) {
+	blksize_size[SD_MAJOR(i)] = sd_blocksizes + i * (SCSI_DISKS_PER_MAJOR << 4);
+	hardsect_size[SD_MAJOR(i)] = sd_hardsizes + i * (SCSI_DISKS_PER_MAJOR << 4);
+    }
     sd = (struct hd_struct *) scsi_init_malloc((sd_template.dev_max << 4) *
 					       sizeof(struct hd_struct),
 					       GFP_ATOMIC);
 
-
-    sd_gendisk.max_nr = sd_template.dev_max;
-    sd_gendisk.part = sd;
-    sd_gendisk.sizes = sd_sizes;
-    sd_gendisk.real_devices = (void *) rscsi_disks;
+    if (N_USED_SD_MAJORS > 1)
+    	sd_gendisks = (struct gendisk *)
+    	    kmalloc(N_USED_SD_MAJORS * sizeof(struct gendisk), GFP_ATOMIC);
+    for (i=0; i < N_USED_SD_MAJORS; i++) {
+	sd_gendisks[i].major = SD_MAJOR(i);
+	sd_gendisks[i].major_name = "sd";
+	sd_gendisks[i].minor_shift = 4;
+	sd_gendisks[i].max_p = 1 << 4;
+	sd_gendisks[i].max_nr = SCSI_DISKS_PER_MAJOR;
+	sd_gendisks[i].init = sd_geninit;
+	sd_gendisks[i].part = sd + (i * SCSI_DISKS_PER_MAJOR << 4);
+	sd_gendisks[i].sizes = sd_sizes + (i * SCSI_DISKS_PER_MAJOR << 4);
+	sd_gendisks[i].nr_real = 0;
+	sd_gendisks[i].next = sd_gendisks + i + 1;
+	sd_gendisks[i].real_devices =
+		 (void *) (rscsi_disks + i * SCSI_DISKS_PER_MAJOR);
+    }
+    LAST_SD_GENDISK.max_nr =
+    	sd_template.dev_max % SCSI_DISKS_PER_MAJOR;
+    LAST_SD_GENDISK.next = NULL;
     return 0;
+}
+
+/*
+ * sd_get_queue() returns the queue which corresponds to a given device.
+ */
+static struct request **sd_get_queue (kdev_t dev)
+{
+	return &blk_dev[MAJOR_NR].current_request;
 }
 
 static void sd_finish()
@@ -1515,15 +1558,19 @@ static void sd_finish()
     struct gendisk *gendisk;
     int i;
 
-    blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+    for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) {
+        /* FIXME: After 2.2 we should implement multiple sd queues */
+        blk_dev[SD_MAJOR(i)].request_fn = DEVICE_REQUEST;
+        if (i) blk_dev[SD_MAJOR(i)].queue = sd_get_queue;
+    }
 
     for (gendisk = gendisk_head; gendisk != NULL; gendisk = gendisk->next)
-      if (gendisk == &sd_gendisk)
+      if (gendisk == sd_gendisks)
 	break;
     if (gendisk == NULL)
       {
-	sd_gendisk.next = gendisk_head;
-	gendisk_head = &sd_gendisk;
+	LAST_SD_GENDISK.next = gendisk_head;
+	gendisk_head = sd_gendisks;
       }
 
     for (i = 0; i < sd_template.dev_max; ++i)
@@ -1534,7 +1581,7 @@ static void sd_finish()
 		&& !rscsi_disks[i].has_part_table) {
 		sd_sizes[i << 4] = rscsi_disks[i].capacity;
 		/* revalidate does sd_init_onedisk via MAYBE_REINIT*/
-		revalidate_scsidisk(MKDEV(MAJOR_NR, i << 4), 0);
+		revalidate_scsidisk(MKDEV_SD(i), 0);
 	    }
 	    else
 	    	i=sd_init_onedisk(i);
@@ -1542,13 +1589,17 @@ static void sd_finish()
 	}
 
     /* If our host adapter is capable of scatter-gather, then we increase
-     * the read-ahead to 16 blocks (32 sectors).  If not, we use
-     * a two block (4 sector) read ahead.
+     * the read-ahead to 60 blocks (120 sectors).  If not, we use
+     * a two block (4 sector) read ahead. We can only respect this with the
+     * granularity of every 16 disks (one device major).
      */
-    if(rscsi_disks[0].device && rscsi_disks[0].device->host->sg_tablesize)
-	read_ahead[MAJOR_NR] = 120;  /* 120 sector read-ahead */
-    else
-	read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
+    for (i=0; i < N_USED_SD_MAJORS; i++) {
+        read_ahead[SD_MAJOR(i)] =
+            (rscsi_disks[i * SCSI_DISKS_PER_MAJOR].device
+          && rscsi_disks[i * SCSI_DISKS_PER_MAJOR].device->host->sg_tablesize)
+            ? 120  /* 120 sector read-ahead */
+            : 4;   /* 4 sector read-ahead */
+    }
 
     return;
 }
@@ -1586,7 +1637,7 @@ static int sd_attach(Scsi_Device * SDp){
     rscsi_disks[i].device = SDp;
     rscsi_disks[i].has_part_table = 0;
     sd_template.nr_dev++;
-    sd_gendisk.nr_real++;
+    SD_GENDISK(i).nr_real++;
     return 0;
 }
 
@@ -1594,7 +1645,6 @@ static int sd_attach(Scsi_Device * SDp){
 #define USAGE rscsi_disks[target].device->access_count
 #define CAPACITY rscsi_disks[target].capacity
 #define MAYBE_REINIT  sd_init_onedisk(target)
-#define GENDISK_STRUCT sd_gendisk
 
 /* This routine is called to flush all partitions and partition tables
  * for a changed scsi disk, and then re-read the new partition table.
@@ -1603,15 +1653,13 @@ static int sd_attach(Scsi_Device * SDp){
  * usage == 1 (we need an open channel to use an ioctl :-), so this
  * is our limit.
  */
-int revalidate_scsidisk(kdev_t dev, int maxusage){
+int revalidate_scsidisk(kdev_t dev, int maxusage) {
     int target;
-    struct gendisk * gdev;
     int max_p;
     int start;
     int i;
 
     target =  DEVICE_NR(dev);
-    gdev = &GENDISK_STRUCT;
 
     if (DEVICE_BUSY || USAGE > maxusage) {
 	printk("Device busy for revalidation (usage=%d)\n", USAGE);
@@ -1619,37 +1667,38 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
     }
     DEVICE_BUSY = 1;
 
-    max_p = gdev->max_p;
-    start = target << gdev->minor_shift;
+    max_p = sd_gendisks->max_p;
+    start = target << sd_gendisks->minor_shift;
 
     for (i=max_p - 1; i >=0 ; i--) {
-	int minor = start+i;
-	kdev_t devi = MKDEV(MAJOR_NR, minor);
+	int index = start+i;
+	kdev_t devi = MKDEV_SD_PARTITION(index);
         struct super_block *sb = get_super(devi);
 	sync_dev(devi);
 	if (sb) invalidate_inodes(sb);
 	invalidate_buffers(devi);
-	gdev->part[minor].start_sect = 0;
-	gdev->part[minor].nr_sects = 0;
+	sd_gendisks->part[index].start_sect = 0;
+	sd_gendisks->part[index].nr_sects = 0;
         /*
          * Reset the blocksize for everything so that we can read
          * the partition table.  Technically we will determine the
          * correct block size when we revalidate, but we do this just
          * to make sure that everything remains consistent.
          */
-        blksize_size[MAJOR_NR][minor] = 1024;
+        sd_blocksizes[index] = 1024;
         if( rscsi_disks[target].sector_size == 2048 )
-          blksize_size[MAJOR_NR][minor] = 2048;
+          sd_blocksizes[index] = 2048;
         else
-          blksize_size[MAJOR_NR][minor] = 1024;
+          sd_blocksizes[index] = 1024;
     }
 
 #ifdef MAYBE_REINIT
     MAYBE_REINIT;
 #endif
 
-    gdev->part[start].nr_sects = CAPACITY;
-    resetup_one_dev(gdev, target);
+    sd_gendisks->part[start].nr_sects = CAPACITY;
+    resetup_one_dev(&SD_GENDISK(target),
+		    target % SCSI_DISKS_PER_MAJOR);
 
     DEVICE_BUSY = 0;
     return 0;
@@ -1676,15 +1725,15 @@ static void sd_detach(Scsi_Device * SDp)
 	    start = i << sd_gendisk.minor_shift;
 
 	    for (i=max_p - 1; i >=0 ; i--) {
-		int minor = start+i;
-		kdev_t devi = MKDEV(MAJOR_NR, minor);
+		int index = start+i;
+		kdev_t devi = MKDEV_SD_PARTITION(index);
                 struct super_block *sb = get_super(devi);
 		sync_dev(devi);
 		if (sb) invalidate_inodes(sb);
 		invalidate_buffers(devi);
-		sd_gendisk.part[minor].start_sect = 0;
-		sd_gendisk.part[minor].nr_sects = 0;
-		sd_sizes[minor] = 0;
+		sd_gendisks->part[index].start_sect = 0;
+		sd_gendisks->part[index].nr_sects = 0;
+		sd_sizes[index] = 0;
 	    }
 
 	    dpnt->has_part_table = 0;
@@ -1693,7 +1742,7 @@ static void sd_detach(Scsi_Device * SDp)
 	    SDp->attached--;
 	    sd_template.dev_noticed--;
 	    sd_template.nr_dev--;
-	    sd_gendisk.nr_real--;
+	    SD_GENDISK(start).nr_real--;
 	    return;
 	}
     return;
@@ -1710,48 +1759,48 @@ void cleanup_module( void)
 {
     struct gendisk * prev_sdgd;
     struct gendisk * sdgd;
+    int i;
+    int removed = 0;
 
     scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
-    unregister_blkdev(SCSI_DISK_MAJOR, "sd");
+
+    for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) 
+    unregister_blkdev(SD_MAJOR(i),"sd");
+    
     sd_registered--;
     if( rscsi_disks != NULL )
     {
-	scsi_init_free((char *) rscsi_disks,
-		       (sd_template.dev_noticed + SD_EXTRA_DEVS)
-		       * sizeof(Scsi_Disk));
-
+	scsi_init_free((char *) rscsi_disks, 
+			sd_template.dev_max * sizeof(Scsi_Disk));
 	scsi_init_free((char *) sd_sizes, sd_template.dev_max * sizeof(int));
 	scsi_init_free((char *) sd_blocksizes, sd_template.dev_max * sizeof(int));
 	scsi_init_free((char *) sd_hardsizes, sd_template.dev_max * sizeof(int));
 	scsi_init_free((char *) sd,
 		       (sd_template.dev_max << 4) * sizeof(struct hd_struct));
 	/*
-	 * Now remove sd_gendisk from the linked list
+	 * Now remove sd_gendisks from the linked list
 	 */
-	sdgd = gendisk_head;
-	prev_sdgd = NULL;
-	while(sdgd != &sd_gendisk)
-	{
-	    prev_sdgd = sdgd;
-	    sdgd = sdgd->next;
-	}
 
-	if(sdgd != &sd_gendisk)
-	    printk("sd_gendisk not in disk chain.\n");
-	else {
-	    if(prev_sdgd != NULL)
-		prev_sdgd->next = sdgd->next;
-	    else
-		gendisk_head = sdgd->next;
+	for (sdgd = gendisk_head; sdgd; sdgd = sdgd->next)
+	{
+	    if (sdgd->next >= sd_gendisks && sdgd->next <= LAST_SD_GENDISK)
+	    	    removed++, sdgd->next = sdgd->next->next;
+	    else sdgd = sdgd->next;
 	}
+	if (removed != N_USED_SCSI_DISKS)
+	    printk("%s %d sd_gendisks in disk chain",
+	    	removed > N_USED_SCSI_DISKS ? "total" : "just", removed);
+	
     }
 
-    blksize_size[MAJOR_NR] = NULL;
-    blk_dev[MAJOR_NR].request_fn = NULL;
-    blk_size[MAJOR_NR] = NULL;
-    hardsect_size[MAJOR_NR] = NULL;
-    read_ahead[MAJOR_NR] = 0;
+    for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) {
+        blk_dev[SD_MAJOR(i)].request_fn = NULL;
+        blk_size[SD_MAJOR(i)] = NULL;
+        hardsect_size[SD_MAJOR(i)] = NULL;
+        read_ahead[SD_MAJOR(i)] = 0;
+    }
     sd_template.dev_max = 0;
+    if (sd_gendisks != &sd_gendisk) kfree(sd_gendisks);
 }
 #endif /* MODULE */
 

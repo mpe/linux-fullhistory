@@ -844,12 +844,17 @@ __initfunc (static inline int port_detect \
       bus_type = "VESA";
       }
    else {
+      unsigned long flags;
       sh[j]->wish_block = TRUE;
       sh[j]->unchecked_isa_dma = TRUE;
+      
+      flags=claim_dma_lock();
       disable_dma(dma_channel);
       clear_dma_ff(dma_channel);
       set_dma_mode(dma_channel, DMA_MODE_CASCADE);
       enable_dma(dma_channel);
+      release_dma_lock(flags);
+      
       sh[j]->dma_channel = dma_channel;
       sprintf(BN(j), "U14F%d", j);
       bus_type = "ISA";

@@ -734,7 +734,7 @@ static void refill_freelist(int size)
 	needed = bdf_prm.b_un.nrefill * size;  
 
 	while ((nr_free_pages > freepages.min*2) &&
-	        (buffermem >> PAGE_SHIFT) * 100 < (buffer_mem.max_percent * num_physpages) &&
+	        !buffer_over_max() &&
 		grow_buffers(GFP_BUFFER, size)) {
 		obtained += PAGE_SIZE;
 		if (obtained >= needed)

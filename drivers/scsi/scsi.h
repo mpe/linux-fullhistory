@@ -690,16 +690,22 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
  * that an interrupt may start another request, so we run this with interrupts
  * turned off 
  */
-#define INIT_SCSI_REQUEST       \
-    if (!CURRENT) {             \
-	CLEAR_INTR;             \
-	return;                 \
-    }                           \
-    if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)           \
-	panic(DEVICE_NAME ": request list destroyed");\
-    if (CURRENT->bh) {                                \
-	if (!buffer_locked(CURRENT->bh))              \
-	    panic(DEVICE_NAME ": block not locked");  \
+#if MAJOR_NR == SCSI_DISK0_MAJOR
+#define CHECK_INITREQ_SD_MAJOR(major) SCSI_DISK_MAJOR(major)
+#else
+#define CHECK_INITREQ_SD_MAJOR(major) ((major) == MAJOR_NR)
+#endif
+
+#define INIT_SCSI_REQUEST       			\
+    if (!CURRENT) {             			\
+	CLEAR_INTR;             			\
+	return;                 			\
+    }                           			\
+    if (!CHECK_INITREQ_SD_MAJOR(MAJOR(CURRENT->rq_dev)))\
+	panic(DEVICE_NAME ": request list destroyed");	\
+    if (CURRENT->bh) {                                	\
+	if (!buffer_locked(CURRENT->bh))              	\
+	    panic(DEVICE_NAME ": block not locked");  	\
     }
 #endif
 

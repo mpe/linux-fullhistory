@@ -103,7 +103,10 @@ sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 static void
 sx164_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
+	outb(0, DMA1_RESET_REG);
+	outb(0, DMA2_RESET_REG);
+	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
+	outb(0, DMA2_MASK_REG);
 
 	if (alpha_using_srm) {
 		alpha_mv.update_irq_hw = sx164_srm_update_irq_hw;

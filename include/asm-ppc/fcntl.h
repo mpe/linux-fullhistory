@@ -16,6 +16,7 @@
 #define O_NDELAY	O_NONBLOCK
 #define O_SYNC		010000
 #define FASYNC		020000	/* fcntl, for BSD compatibility */
+#define O_DIRECTORY	040000	/* must be a directory */
 
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get f_flags */

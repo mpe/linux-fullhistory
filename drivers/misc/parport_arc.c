@@ -33,6 +33,11 @@
 /* ARC can't read from the data latch, so we must use a soft copy. */
 static unsigned char data_copy;
 
+static void arc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	parport_generic_irq(irq, (struct parport *) dev_id, regs);
+}
+
 static void arc_write_data(struct parport *p, unsigned char data)
 {
 	data_copy = data;
@@ -110,7 +115,7 @@ static struct parport_operations parport_arc_ops =
 
 	arc_enable_irq,
 	arc_disable_irq,
-	arc_examine_irq,
+	arc_interrupt,
 
 	arc_inc_use_count,
 	arc_dec_use_count,

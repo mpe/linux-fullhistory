@@ -8,7 +8,7 @@
 #include "struct.h"
 #include "dir.h"
 
-#include <errno.h>
+#include <linux/errno.h>
 #include "super.h"
 #include "inode.h"
 #include "attr.h"

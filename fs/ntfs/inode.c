@@ -10,7 +10,7 @@
 #include "struct.h"
 #include "inode.h"
 
-#include <errno.h>
+#include <linux/errno.h>
 #include "macros.h"
 #include "attr.h"
 #include "super.h"

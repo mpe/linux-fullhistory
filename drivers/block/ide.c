@@ -1737,6 +1737,11 @@ void ide_unregister (unsigned int index)
 	else
 		hwgroup->hwif = HWIF(hwgroup->drive);
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	if (hwif->dma_base)
+		(void) ide_release_dma(hwif);
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 	/*
 	 * Remove us from the kernel's knowledge
 	 */
@@ -2998,8 +3003,13 @@ void cleanup_module (void)
 {
 	int index;
 
-	for (index = 0; index < MAX_HWIFS; ++index)
+	for (index = 0; index < MAX_HWIFS; ++index) {
 		ide_unregister(index);
+#ifdef CONFIG_BLK_DEV_IDEDMA
+		if (ide_hwifs[index].dma_base)
+			(void) ide_release_dma(&ide_hwifs[index]);
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+	}
 #ifdef CONFIG_PROC_FS
 	proc_ide_destroy();
 #endif

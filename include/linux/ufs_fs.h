@@ -16,6 +16,8 @@
  *
  * NeXTstep support added on February 5th 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk>.
+ *
+ * Write support by Daniel Pirkl <daniel.pirkl@email.cz>
  */
 
 #ifndef __LINUX_UFS_FS_H
@@ -67,7 +69,7 @@
 
 /* From here to next blank line, s_flags for ufs_sb_info */
 /* endianness */
-#define UFS_BYTESEX		0x00000001	/* mask; leave room to 0xF */
+#define UFS_BYTESEX             0x00000001      /* mask; leave room to 0xF */
 #if defined(__LITTLE_ENDIAN) || defined(__BIG_ENDIAN)
 /* these are for sane architectures */
 #define UFS_NATIVE_ENDIAN	0x00000000
@@ -91,19 +93,33 @@
 #define UFS_ST_OLD		0x00000000
 #define UFS_ST_44BSD		0x00000100
 #define UFS_ST_SUN		0x00000200
-#define UFS_ST_NEXT		0x00000400
-/* filesystem flavors (combo of features) */
-#define UFS_FEATURES		0x00FFFFF0	/* room for extension */
-#define UFS_VANILLA		0x00000000
-#define UFS_OLD			0x00000000	/* 4.2BSD */
-#define UFS_44BSD		0x00000130
-#define UFS_HURD		0x00000130
-#define UFS_SUN			0x00000200
-#define UFS_NEXT		0x00000400
+/*cylinder group encoding */
+#define UFS_CG_MASK		0x00003000	/* mask for the following */
+#define UFS_CG_OLD		0x00000000
+#define UFS_CG_44BSD		0x00002000
+#define UFS_CG_SUN		0x00001000
 
 /* fs_inodefmt options */
 #define UFS_42INODEFMT	-1
 #define UFS_44INODEFMT	2
+
+/* mount options */
+#define UFS_MOUNT_ONERROR		0x0000000F
+#define UFS_MOUNT_ONERROR_PANIC		0x00000001
+#define UFS_MOUNT_ONERROR_LOCK		0x00000002
+#define UFS_MOUNT_ONERROR_UMOUNT	0x00000004
+#define UFS_MOUNT_ONERROR_REPAIR	0x00000008
+
+#define UFS_MOUNT_UFSTYPE		0x000000F0
+#define UFS_MOUNT_UFSTYPE_OLD		0x00000010
+#define UFS_MOUNT_UFSTYPE_44BSD		0x00000020
+#define UFS_MOUNT_UFSTYPE_SUN		0x00000040
+#define UFS_MOUNT_UFSTYPE_NEXT		0x00000080
+
+
+#define ufs_clear_opt(o,opt)	o &= ~UFS_MOUNT_##opt
+#define ufs_set_opt(o,opt)	o |= UFS_MOUNT_##opt
+#define ufs_test_opt(o,opt)	((o) & UFS_MOUNT_##opt)
 
 /*
  * MINFREE gives the minimum acceptable percentage of file system
@@ -202,6 +218,19 @@ struct ufs_timeval {
 	__s32	tv_usec;
 };
 
+/*
+ * File types
+ */
+#define DT_UNKNOWN	0
+#define DT_FIFO		1
+#define DT_CHR		2
+#define DT_DIR		4
+#define DT_BLK		6
+#define DT_REG		8
+#define DT_LNK		10
+#define DT_SOCK		12
+#define DT_WHT		14
+   
 struct ufs_dir_entry {
 	__u32  d_ino;			/* inode number of this entry */
 	__u16  d_reclen;		/* length of this entry */
@@ -377,7 +406,15 @@ struct	ufs_cylinder_group {
 	__u32	cg_iusedoff;		/* (char) used inode map */
 	__u32	cg_freeoff;		/* (u_char) free block map */
 	__u32	cg_nextfreeoff;		/* (u_char) next available space */
-	__u32	cg_sparecon[16];	/* reserved for future use */
+	union {
+		struct {
+			__u32	cg_clustersumoff;	/* (u_int32) counts of avail clusters */
+			__u32	cg_clusteroff;		/* (u_int8) free cluster map */
+			__u32	cg_nclusterblks;	/* number of clusters this cg */
+			__u32	cg_sparecon[13];	/* reserved for future use */
+		} cg_44;
+		__u32	cg_sparecon[16];	/* reserved for future use */
+	} cg_u;
 	__u8	cg_space[1];		/* space for cylinder group maps */
 /* actually longer */
 };
@@ -393,7 +430,7 @@ struct ufs_inode {
 			__u16	ui_suid;	/*  0x4 */
 			__u16	ui_sgid;	/*  0x6 */
 		} oldids;
-		__u32	ui_inumber;	/*  0x4 lsf: inode number */
+		__u32	ui_inumber;		/*  0x4 lsf: inode number */
 		__u32	ui_author;		/*  0x4 GNU HURD: author */
 	} ui_u1;
 	__u64	ui_size;		/*  0x8 */
@@ -412,22 +449,22 @@ struct ufs_inode {
 	__u32	ui_gen;			/* 0x6c like ext2 i_version, for NFS support */
 	union {
 		struct {
-			__u32	ui_shadow;/* 0x70 shadow inode with security data */
-			__u32	ui_uid;	/* 0x74 long EFT version of uid */
-			__u32	ui_gid;	/* 0x78 long EFT version of gid */
-			__u32	ui_oeftflag;/* 0x7c reserved */
+			__u32	ui_shadow;	/* 0x70 shadow inode with security data */
+			__u32	ui_uid;		/* 0x74 long EFT version of uid */
+			__u32	ui_gid;		/* 0x78 long EFT version of gid */
+			__u32	ui_oeftflag;	/* 0x7c reserved */
 		} ui_sun;
 		struct {
-			__u32	ui_uid;	/* 0x70 File owner */
-			__u32	ui_gid;	/* 0x74 File group */
-			__s32	ui_spare[2];/* 0x78 reserved */
+			__u32	ui_uid;		/* 0x70 File owner */
+			__u32	ui_gid;		/* 0x74 File group */
+			__s32	ui_spare[2];	/* 0x78 reserved */
 		} ui_44;
 		struct {
-			__u32	ui_uid;	/* 0x70 */
-			__u32	ui_gid;	/* 0x74 */
-			__u16	ui_modeh;/* 0x78 mode high bits */
-			__u16	ui_spare;/* 0x7A unused */
-			__u32	ui_trans;/* 0x7c filesystem translator */
+			__u32	ui_uid;		/* 0x70 */
+			__u32	ui_gid;		/* 0x74 */
+			__u16	ui_modeh;	/* 0x78 mode high bits */
+			__u16	ui_spare;	/* 0x7A unused */
+			__u32	ui_trans;	/* 0x7c filesystem translator */
 		} ui_hurd;
 	} ui_u3;
 };
@@ -480,7 +517,6 @@ extern void ufs_read_inode (struct inode *);
 extern void ufs_put_inode (struct inode *);
 extern void ufs_write_inode (struct inode *);
 extern int ufs_sync_inode (struct inode *);
-extern void ufs_print_inode (struct inode *);
 extern void ufs_write_inode (struct inode *);
 extern void ufs_delete_inode (struct inode *);
 extern struct buffer_head * ufs_getfrag (struct inode *, unsigned, int, int *);
@@ -503,10 +539,8 @@ extern struct file_system_type ufs_fs_type;
 extern void ufs_warning (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
 extern void ufs_error (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
 extern void ufs_panic (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
-        
 extern int init_ufs_fs(void);
 extern void ufs_write_super (struct super_block *);
-extern void ufs_print_cylinder_stuff(struct ufs_cylinder_group *, __u32);
 
 /* symlink.c */
 extern struct inode_operations ufs_symlink_inode_operations;

@@ -138,15 +138,15 @@ static int sound_start_dma(struct dma_buffparms *dmap, unsigned long physaddr, i
 	int chan = dmap->dma;
 
 	/* printk( "Start DMA%d %d, %d\n",  chan,  (int)(physaddr-dmap->raw_buf_phys),  count); */
-	save_flags(flags);
-	cli();
+
+	flags = claim_dma_lock();
 	disable_dma(chan);
 	clear_dma_ff(chan);
 	set_dma_mode(chan, dma_mode);
 	set_dma_addr(chan, physaddr);
 	set_dma_count(chan, count);
 	enable_dma(chan);
-	restore_flags(flags);
+	release_dma_lock(flags);
 
 	return 0;
 }
@@ -201,11 +201,17 @@ static int open_dmap(struct audio_operations *adev, int mode, struct dma_buffpar
 
 static void close_dmap(struct audio_operations *adev, struct dma_buffparms *dmap)
 {
+	unsigned long flags;
+	
 	sound_close_dma(dmap->dma);
 	if (dmap->flags & DMA_BUSY)
 		dmap->dma_mode = DMODE_NONE;
 	dmap->flags &= ~DMA_BUSY;
+	
+	flags=claim_dma_lock();
 	disable_dma(dmap->dma);
+	release_dma_lock(flags);
+	
 	sound_free_dmap(dmap);
 }
 
@@ -279,7 +285,7 @@ int DMAbuf_open(int dev, int mode)
 	}
 	adev->enable_bits = mode;
 
-	if (mode == OPEN_READ || (mode != OPEN_WRITE && adev->flags & DMA_DUPLEX)) {
+	if (mode == OPEN_READ || (mode != OPEN_WRITE && (adev->flags & DMA_DUPLEX))) {
 		if ((retval = open_dmap(adev, mode, dmap_in)) < 0) {
 			adev->d->close(dev);
 			if (mode & OPEN_WRITE)
@@ -311,7 +317,7 @@ void DMAbuf_reset(int dev)
 static void dma_reset_output(int dev)
 {
 	struct audio_operations *adev = audio_devs[dev];
-	unsigned long flags;
+	unsigned long flags,f ;
 	struct dma_buffparms *dmap = adev->dmap_out;
 
 	if (!(dmap->flags & DMA_STARTED))	/* DMA is not active */
@@ -341,8 +347,12 @@ static void dma_reset_output(int dev)
 	else
 		adev->d->halt_output(dev);
 	adev->dmap_out->flags &= ~DMA_STARTED;
+	
+	f=claim_dma_lock();
 	clear_dma_ff(dmap->dma);
 	disable_dma(dmap->dma);
+	release_dma_lock(f);
+	
 	restore_flags(flags);
 	dmap->byte_counter = 0;
 	reorganize_buffers(dev, adev->dmap_out, 0);
@@ -377,7 +387,7 @@ void DMAbuf_launch_output(int dev, struct dma_buffparms *dmap)
 		return;		/* Don't start DMA yet */
 	dmap->dma_mode = DMODE_OUTPUT;
 
-	if (!(dmap->flags & DMA_ACTIVE) || !(adev->flags & DMA_AUTOMODE) || dmap->flags & DMA_NODMA) {
+	if (!(dmap->flags & DMA_ACTIVE) || !(adev->flags & DMA_AUTOMODE) || (dmap->flags & DMA_NODMA)) {
 		if (!(dmap->flags & DMA_STARTED)) {
 			reorganize_buffers(dev, dmap, 0);
 			if (adev->d->prepare_for_output(dev, dmap->fragment_size, dmap->nbufs))
@@ -404,7 +414,7 @@ int DMAbuf_sync(int dev)
 	int n = 0;
 	struct dma_buffparms *dmap;
 
-	if (!adev->go && (!adev->enable_bits & PCM_ENABLE_OUTPUT))
+	if (!adev->go && !(adev->enable_bits & PCM_ENABLE_OUTPUT))
 		return 0;
 
 	if (adev->dmap_out->dma_mode == DMODE_OUTPUT) {
@@ -476,7 +486,7 @@ int DMAbuf_release(int dev, int mode)
 
 	if (adev->open_mode == OPEN_READ ||
 	    (adev->open_mode != OPEN_WRITE &&
-	     adev->flags & DMA_DUPLEX))
+	     (adev->flags & DMA_DUPLEX)))
 		close_dmap(adev, adev->dmap_in);
 	adev->open_mode = 0;
 	restore_flags(flags);
@@ -606,6 +616,7 @@ int DMAbuf_get_buffer_pointer(int dev, struct dma_buffparms *dmap, int direction
 
 	int pos;
 	unsigned long flags;
+	unsigned long f;
 
 	save_flags(flags);
 	cli();
@@ -613,9 +624,12 @@ int DMAbuf_get_buffer_pointer(int dev, struct dma_buffparms *dmap, int direction
 		pos = 0;
 	else {
 		int chan = dmap->dma;
+		
+		f=claim_dma_lock();
 		clear_dma_ff(chan);
 		disable_dma(dmap->dma);
 		pos = get_dma_residue(chan);
+		
 		pos = dmap->bytes_in_use - pos;
 
 		if (!(dmap->mapping_flags & DMA_MAP_MAPPED)) {
@@ -634,6 +648,7 @@ int DMAbuf_get_buffer_pointer(int dev, struct dma_buffparms *dmap, int direction
 		if (pos >= dmap->bytes_in_use)
 			pos = 0;
 		enable_dma(dmap->dma);
+		release_dma_lock(f);
 	}
 	restore_flags(flags);
 	/* printk( "%04x ",  pos); */
@@ -961,10 +976,16 @@ static void do_outputintr(int dev, int dummy)
 	}
 	if (!(adev->flags & DMA_AUTOMODE))
 		dmap->flags &= ~DMA_ACTIVE;
-	while (dmap->qlen <= 0) {
+		
+	/*
+	 *	This is  dmap->qlen <= 0 except when closing when
+	 *	dmap->qlen < 0
+	 */
+	 
+	while (dmap->qlen <= -dmap->closing) {
 		dmap->underrun_count++;
 		dmap->qlen++;
-		if (dmap->flags & DMA_DIRTY && dmap->applic_profile != APF_CPUINTENS) {
+		if ((dmap->flags & DMA_DIRTY) && dmap->applic_profile != APF_CPUINTENS) {
 			dmap->flags &= ~DMA_DIRTY;
 			memset(adev->dmap_out->raw_buf, adev->dmap_out->neutral_byte,
 			       adev->dmap_out->buffsize);
@@ -988,10 +1009,15 @@ void DMAbuf_outputintr(int dev, int notify_only)
 	cli();
 	if (!(dmap->flags & DMA_NODMA)) {
 		int chan = dmap->dma, pos, n;
+		unsigned long f;
+		
+		f=claim_dma_lock();
 		clear_dma_ff(chan);
 		disable_dma(dmap->dma);
 		pos = dmap->bytes_in_use - get_dma_residue(chan);
 		enable_dma(dmap->dma);
+		release_dma_lock(f);
+		
 		pos = pos / dmap->fragment_size;	/* Actual qhead */
 		if (pos < 0 || pos >= dmap->nbufs)
 			pos = 0;
@@ -1056,7 +1082,7 @@ static void do_inputintr(int dev)
 			}
 		}
 	}
-	if (!(adev->flags & DMA_AUTOMODE) || dmap->flags & DMA_NODMA) {
+	if (!(adev->flags & DMA_AUTOMODE) || (dmap->flags & DMA_NODMA)) {
 		local_start_dma(adev, dmap->raw_buf_phys, dmap->bytes_in_use, DMA_MODE_READ);
 		adev->d->start_input(dev, dmap->raw_buf_phys + dmap->qtail * dmap->fragment_size, dmap->fragment_size, 1);
 		if (adev->d->trigger)
@@ -1078,10 +1104,14 @@ void DMAbuf_inputintr(int dev)
 
 	if (!(dmap->flags & DMA_NODMA)) {
 		int chan = dmap->dma, pos, n;
+		unsigned long f;
+		
+		f=claim_dma_lock();
 		clear_dma_ff(chan);
 		disable_dma(dmap->dma);
 		pos = dmap->bytes_in_use - get_dma_residue(chan);
 		enable_dma(dmap->dma);
+		release_dma_lock(f);
 
 		pos = pos / dmap->fragment_size;	/* Actual qhead */
 		if (pos < 0 || pos >= dmap->nbufs)
@@ -1112,11 +1142,10 @@ int DMAbuf_open_dma(int dev)
 	if (adev->dmap_out->dma >= 0) {
 		unsigned long flags;
 
-		save_flags(flags);
-		cli();
+		flags=claim_dma_lock();
 		clear_dma_ff(adev->dmap_out->dma);
 		disable_dma(adev->dmap_out->dma);
-		restore_flags(flags);
+		release_dma_lock(flags);
 	}
 	return 0;
 }

@@ -12,7 +12,29 @@
  *      precision CMOS clock update
  * 1996-05-03    Ingo Molnar
  *      fixed time warps in do_[slow|fast]_gettimeoffset()
+ * 1998-09-05    (Various)
+ *	More robust do_fast_gettimeoffset() algorithm implemented
+ *	(works with APM, Cyrix 6x86MX and Centaur C6),
+ *	monotonic gettimeofday() with fast_get_timeoffset(),
+ *	drift-proof precision TSC calibration on boot
+ *	(C. Scott Ananian <cananian@alumni.princeton.edu>, Andrew D.
+ *	Balsa <andrebalsa@altern.org>, Philip Gladstone <philip@raptor.com>;
+ *	ported from 2.0.35 Jumbo-9 by Michael Krause <m.krause@tu-harburg.de>).
  */
+
+/* What about the "updated NTP code" stuff in 2.0 time.c? It's not in
+ * 2.1, perhaps it should be ported, too.
+ *
+ * What about the BUGGY_NEPTUN_TIMER stuff in do_slow_gettimeoffset()?
+ * Whatever it fixes, is it also fixed in the new code from the Jumbo
+ * patch, so that that code can be used instead?
+ *
+ * The CPU Hz should probably be displayed in check_bugs() together
+ * with the CPU vendor and type. Perhaps even only in MHz, though that
+ * takes away some of the fun of the new code :)
+ *
+ * - Michael Krause */
+
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -41,100 +63,51 @@
 #include "irq.h"
 
 extern int setup_x86_irq(int, struct irqaction *);
-extern volatile unsigned long lost_ticks;
 
-/* change this if you have some constant time drift */
-#define USECS_PER_JIFFY (1000020/HZ)
+unsigned long cpu_hz;	/* Detected as we calibrate the TSC */
 
-#ifndef	CONFIG_APM	/* cycle counter may be unreliable */
-/* Cycle counter value at the previous timer interrupt.. */
-static struct {
-	unsigned long low;
-	unsigned long high;
-} init_timer_cc, last_timer_cc;
+/* Number of usecs that the last interrupt was delayed */
+static int delay_at_last_interrupt;
+
+static unsigned long last_tsc_low; /* lsb 32 bits of Time Stamp Counter */
+
+/* Cached *multiplier* to convert TSC counts to microseconds.
+ * (see the equation below).
+ * Equal to 2^32 * (1 / (clocks per usec) ).
+ * Initialized in time_init.
+ */
+static unsigned long fast_gettimeoffset_quotient=0;
 
 static unsigned long do_fast_gettimeoffset(void)
 {
 	register unsigned long eax asm("ax");
 	register unsigned long edx asm("dx");
-	unsigned long tmp, quotient, low_timer;
 
-	/* Last jiffy when do_fast_gettimeoffset() was called. */
-	static unsigned long last_jiffies=0;
-
-	/*
-	 * Cached "1/(clocks per usec)*2^32" value. 
-	 * It has to be recalculated once each jiffy.
-	 */
-	static unsigned long cached_quotient=0;
-
-	tmp = jiffies;
-
-	quotient = cached_quotient;
-	low_timer = last_timer_cc.low;
-
-	if (last_jiffies != tmp) {
-		last_jiffies = tmp;
-
-		/* Get last timer tick in absolute kernel time */
-		eax = low_timer;
-		edx = last_timer_cc.high;
-		__asm__("subl "SYMBOL_NAME_STR(init_timer_cc)",%0\n\t"
-			"sbbl "SYMBOL_NAME_STR(init_timer_cc)"+4,%1"
-			:"=a" (eax), "=d" (edx)
-			:"0" (eax), "1" (edx));
-
-		/*
-		 * Divide the 64-bit time with the 32-bit jiffy counter,
-		 * getting the quotient in clocks.
-		 *
-		 * Giving quotient = "1/(average internal clocks per usec)*2^32"
-		 * we do this '1/...' trick to get the 'mull' into the critical 
-		 * path. 'mull' is much faster than divl (10 vs. 41 clocks)
-		 */
-		__asm__("divl %2"
-			:"=a" (eax), "=d" (edx)
-			:"r" (tmp),
-			 "0" (eax), "1" (edx));
-
-		edx = USECS_PER_JIFFY;
-		tmp = eax;
-		eax = 0;
-
-		__asm__("divl %2"
-			:"=a" (eax), "=d" (edx)
-			:"r" (tmp),
-			 "0" (eax), "1" (edx));
-		cached_quotient = eax;
-		quotient = eax;
-	}
-
-	/* Read the time counter */
-	__asm__("rdtsc" : "=a" (eax), "=d" (edx));
+	/* Read the Time Stamp Counter */
+	__asm__("rdtsc"
+		:"=a" (eax), "=d" (edx));
 
 	/* .. relative to previous jiffy (32 bits is enough) */
 	edx = 0;
-	eax -= low_timer;
+	eax -= last_tsc_low;	/* tsc_low delta */
 
 	/*
-	 * Time offset = (USECS_PER_JIFFY * time_low) * quotient.
-	 */
+         * Time offset = (tsc_low delta) * fast_gettimeoffset_quotient.
+         *             = (tsc_low delta) / (clocks_per_usec)
+         *             = (tsc_low delta) / (clocks_per_jiffy / usecs_per_jiffy)
+	 *
+	 * Using a mull instead of a divl saves up to 31 clock cycles
+	 * in the critical path.
+         */
 
 	__asm__("mull %2"
 		:"=a" (eax), "=d" (edx)
-		:"r" (quotient),
+		:"r" (fast_gettimeoffset_quotient),
 		 "0" (eax), "1" (edx));
 
-	/*
- 	 * Due to possible jiffies inconsistencies, we need to check 
-	 * the result so that we'll get a timer that is monotonic.
-	 */
-	if (edx >= USECS_PER_JIFFY)
-		edx = USECS_PER_JIFFY-1;
-
-	return edx;
+	/* our adjusted time offset in microseconds */
+	return edx + delay_at_last_interrupt;
 }
-#endif
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
@@ -249,20 +222,11 @@ static unsigned long do_slow_gettimeoffset(void)
 	return count;
 }
 
-#ifndef CONFIG_APM
-/*
- * this is only used if we have fast gettimeoffset:
- */
-static void do_x86_get_fast_time(struct timeval * tv)
-{
-	do_gettimeofday(tv);
-}
-#endif
-
 static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
 
 /*
- * This version of gettimeofday has near microsecond resolution.
+ * This version of gettimeofday has microsecond resolution
+ * and better than microsecond precision on fast x86 machines with TSC.
  */
 void do_gettimeofday(struct timeval *tv)
 {
@@ -272,20 +236,11 @@ void do_gettimeofday(struct timeval *tv)
 	cli();
 	*tv = xtime;
 	tv->tv_usec += do_gettimeoffset();
-
-	/*
-	 * xtime is atomically updated in timer_bh. lost_ticks is
-	 * nonzero if the timer bottom half hasnt executed yet.
-	 */
-	if (lost_ticks)
-		tv->tv_usec += USECS_PER_JIFFY;
-
-	restore_flags(flags);
-
 	if (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
 	}
+	restore_flags(flags);
 }
 
 void do_settimeofday(struct timeval *tv)
@@ -311,13 +266,15 @@ void do_settimeofday(struct timeval *tv)
 	sti();
 }
 
-
 /*
  * In order to set the CMOS clock precisely, set_rtc_mmss has to be
  * called 500 ms after the second nowtime has started, because when
  * nowtime is written into the registers of the CMOS clock, it will
  * jump to the next second precisely 500 ms later. Check the Motorola
  * MC146818A or Dallas DS12887 data sheet for details.
+ *
+ * BUG: This routine does not handle hour overflow properly; it just
+ *      sets the minutes. Usually you'll only notice that after reboot!
  */
 static int set_rtc_mmss(unsigned long nowtime)
 {
@@ -354,8 +311,12 @@ static int set_rtc_mmss(unsigned long nowtime)
 		}
 		CMOS_WRITE(real_seconds,RTC_SECONDS);
 		CMOS_WRITE(real_minutes,RTC_MINUTES);
-	} else
+	} else {
+		printk(KERN_WARNING
+		       "set_rtc_mmss: can't update from %d to %d\n",
+		       cmos_minutes, real_minutes);
 		retval = -1;
+	}
 
 	/* The following flags have to be released exactly in this order,
 	 * otherwise the DS12887 (popular MC146818A clone with integrated
@@ -431,21 +392,37 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #endif
 }
 
-#ifndef	CONFIG_APM	/* cycle counter may be unreliable */
 /*
  * This is the same as the above, except we _also_ save the current
- * cycle counter value at the time of the timer interrupt, so that
+ * Time Stamp Counter value at the time of the timer interrupt, so that
  * we later on can estimate the time of day more exactly.
  */
 static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
+	int count, flags;
+
+	/* It is important that these two operations happen almost at the
+	 * same time. We do the RDTSC stuff first, since it's faster. To
+         * avoid any inconsistencies, we disable interrupts locally.
+         */
+	
+	__save_flags(flags);
+	__cli(); 
 	/* read Pentium cycle counter */
 	__asm__("rdtsc"
-		:"=a" (last_timer_cc.low),
-		 "=d" (last_timer_cc.high));
+		:"=a" (last_tsc_low):: "eax", "edx");
+
+	outb_p(0x00, 0x43);     /* latch the count ASAP */
+
+	count = inb_p(0x40);    /* read the latched count */
+	count |= inb(0x40) << 8;
+
+	count = ((LATCH-1) - count) * TICK_SIZE;
+	delay_at_last_interrupt = (count + LATCH/2) / LATCH;
+	__restore_flags(flags);
+       
 	timer_interrupt(irq, NULL, regs);
 }
-#endif
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
  * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
@@ -520,6 +497,80 @@ unsigned long get_cmos_time(void)
 
 static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0, "timer", NULL, NULL};
 
+/* ------ Calibrate the TSC ------- 
+ * Return 2^32 * (1 / (TSC clocks per usec)) for do_fast_gettimeoffset().
+ * Too much 64-bit arithmetic here to do this cleanly in C, and for
+ * accuracy's sake we want to keep the overhead on the CTC speaker (channel 2)
+ * output busy loop as low as possible. We avoid reading the CTC registers
+ * directly because of the awkward 8-bit access mechanism of the 82C54
+ * device.
+ */
+
+__initfunc(static unsigned long calibrate_tsc(void))
+{
+       unsigned long retval;
+
+       __asm__( /* set the Gate high, program CTC channel 2 for mode 0
+		 * (interrupt on terminal count mode), binary count, 
+		 * load 5 * LATCH count, (LSB and MSB)
+		 * to begin countdown, read the TSC and busy wait.
+		 * BTW LATCH is calculated in timex.h from the HZ value
+		 */
+
+	       /* Set the Gate high, disable speaker */
+	       "inb  $0x61, %%al\n\t" /* Read port */
+	       "andb $0xfd, %%al\n\t" /* Turn off speaker Data */
+	       "orb  $0x01, %%al\n\t" /* Set Gate high */
+	       "outb %%al, $0x61\n\t" /* Write port */
+
+	       /* Now let's take care of CTC channel 2 */
+	       "movb $0xb0, %%al\n\t" /* binary, mode 0, LSB/MSB, ch 2*/
+	       "outb %%al, $0x43\n\t" /* Write to CTC command port */
+	       "movb $0x0c, %%al\n\t"
+	       "outb %%al, $0x42\n\t" /* LSB of count */
+	       "movb $0xe9, %%al\n\t"
+	       "outb %%al, $0x42\n\t" /* MSB of count */
+
+               /* Read the TSC; counting has just started */
+               "rdtsc\n\t"
+               /* Move the value for safe-keeping. */
+               "movl %%eax, %%ebx\n\t"
+               "movl %%edx, %%ecx\n\t"
+
+	       /* Busy wait. Only 50 ms wasted at boot time. */
+               "0: inb $0x61, %%al\n\t" /* Read Speaker Output Port */
+	       "testb $0x20, %%al\n\t" /* Check CTC channel 2 output (bit 5) */
+               "jz 0b\n\t"
+
+               /* And read the TSC.  5 jiffies (50.00077ms) have elapsed. */
+               "rdtsc\n\t"
+
+               /* Great.  So far so good.  Store last TSC reading in
+                * last_tsc_low (only 32 lsb bits needed) */
+               "movl %%eax, last_tsc_low\n\t"
+               /* And now calculate the difference between the readings. */
+               "subl %%ebx, %%eax\n\t"
+               "sbbl %%ecx, %%edx\n\t" /* 64-bit subtract */
+	       /* but probably edx = 0 at this point (see below). */
+               /* Now we have 5 * (TSC counts per jiffy) in eax.  We want
+                * to calculate TSC->microsecond conversion factor. */
+
+               /* Note that edx (high 32-bits of difference) will now be 
+                * zero iff CPU clock speed is less than 85 GHz.  Moore's
+                * law says that this is likely to be true for the next
+                * 12 years or so.  You will have to change this code to
+                * do a real 64-by-64 divide before that time's up. */
+               "movl %%eax, %%ecx\n\t"
+               "xorl %%eax, %%eax\n\t"
+               "movl %1, %%edx\n\t"
+               "divl %%ecx\n\t" /* eax= 2^32 / (1 * TSC counts per microsecond) */
+	       /* Return eax for the use of fast_gettimeoffset */
+               "movl %%eax, %0\n\t"
+               : "=r" (retval)
+               : "r" (5 * 1000020/HZ)
+               : /* we clobber: */ "ax", "bx", "cx", "dx", "cc", "memory");
+       return retval;
+}
 
 __initfunc(void time_init(void))
 {
@@ -527,36 +578,36 @@ __initfunc(void time_init(void))
 	xtime.tv_usec = 0;
 
 /*
- * If we have APM enabled we can't currently depend
- * on the cycle counter, because a suspend to disk
- * will reset it. Somebody should come up with a
- * better solution than to just disable the fast time
- * code..
+ * If we have APM enabled or the CPU clock speed is variable
+ * (CPU stops clock on HLT or slows clock to save power)
+ * then the TSC timestamps may diverge by up to 1 jiffy from
+ * 'real time' but nothing will break.
+ * The most frequent case is that the CPU is "woken" from a halt
+ * state by the timer interrupt itself, so we get 0 error. In the
+ * rare cases where a driver would "wake" the CPU and request a
+ * timestamp, the maximum error is < 1 jiffy. But timestamps are
+ * still perfectly ordered.
+ * Note that the TSC counter will be reset if APM suspends
+ * to disk; this won't break the kernel, though, 'cuz we're
+ * smart.  See devices/char/apm_bios.c.
  */
-#ifndef CONFIG_APM
-	/* If we have the CPU hardware time counters, use them */
-	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) { 
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
 		do_gettimeoffset = do_fast_gettimeoffset;
-		do_get_fast_time = do_x86_get_fast_time;
-
-		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
-		    boot_cpu_data.x86 == 5 &&
-		    boot_cpu_data.x86_model == 0) {
-			/* turn on cycle counters during power down */
-			__asm__ __volatile__ (" movl $0x83, %%ecx \n \
-				rdmsr \n \
-				orl $1,%%eax \n \
-				wrmsr \n " 
-                                      : : : "ax", "cx", "dx" );
-				udelay(500);
-		}
-
-		/* read Pentium cycle counter */
-		__asm__("rdtsc"
-			:"=a" (init_timer_cc.low),
-			 "=d" (init_timer_cc.high));
+		do_get_fast_time = do_gettimeofday;
 		irq0.handler = pentium_timer_interrupt;
+		fast_gettimeoffset_quotient = calibrate_tsc();
+		
+		/* report CPU clock rate in Hz.
+		 * The formula is (10^6 * 2^32) / (2^32 * 1 / (clocks/us)) =
+		 * clock/second. Our precision is about 100 ppm.
+		 */
+		{	unsigned long eax=0, edx=1000000;
+			__asm__("divl %2"
+	       		:"=a" (cpu_hz), "=d" (edx)
+               		:"r" (fast_gettimeoffset_quotient),
+                	"0" (eax), "1" (edx));
+			printk("Detected %ld Hz processor.\n", cpu_hz);
+		}
 	}
-#endif
 	setup_x86_irq(0, &irq0);
 }

@@ -132,8 +132,6 @@ extern int parport_pc_ecp_read_block(struct parport *p, void *buf, size_t length
 
 extern int parport_pc_ecp_write_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle);
 
-extern int parport_pc_examine_irq(struct parport *p);
-
 extern void parport_pc_inc_use_count(void);
 
 extern void parport_pc_dec_use_count(void);

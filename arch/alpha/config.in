@@ -175,8 +175,6 @@ then
 	define_bool CONFIG_ALPHA_AVANTI y
 fi
 
-#bool 'Echo console messages on /dev/ttyS0 (COM1)' CONFIG_SERIAL_ECHO
-
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'PCI quirks' CONFIG_PCI_QUIRKS
   if [ "$CONFIG_PCI_QUIRKS" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then

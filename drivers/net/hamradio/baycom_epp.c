@@ -1010,14 +1010,6 @@ static struct net_device_stats *baycom_get_stats(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int epp_preempt(void *handle)
-{
-        /* we cannot relinquish the port in the middle of an operation */
-        return 1;
-}
-
-/* --------------------------------------------------------------------- */
-
 static void epp_wakeup(void *handle)
 {
         struct device *dev = (struct device *)handle;
@@ -1070,8 +1062,8 @@ static int epp_open(struct device *dev)
         }
 #endif
 	memset(&bc->modem, 0, sizeof(bc->modem));
-        if (!(bc->pdev = parport_register_device(pp, dev->name, epp_preempt, epp_wakeup, 
-                                                 epp_interrupt, PARPORT_DEV_LURK, dev))) {
+        if (!(bc->pdev = parport_register_device(pp, dev->name, NULL, epp_wakeup, 
+                                                 epp_interrupt, PARPORT_DEV_EXCL, dev))) {
                 printk(KERN_ERR "%s: cannot register parport at 0x%lx\n", bc_drvname, pp->base);
                 return -ENXIO;
         }

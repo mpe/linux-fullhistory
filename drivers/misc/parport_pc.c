@@ -1,4 +1,4 @@
-/* Low-level parallel-port routines for PC-style hardware.
+/* Low-level parallel-port routines for 8255-based PC-style hardware.
  * 
  * Authors: Phil Blundell <Philip.Blundell@pobox.com>
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
@@ -32,19 +32,16 @@
  * accomodate this.
  */
 
-#include <linux/stddef.h>
-#include <linux/tasks.h>
-
-#include <asm/ptrace.h>
-#include <asm/io.h>
-
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+
+#include <asm/io.h>
 
 #include <linux/parport.h>
 #include <linux/parport_pc.h>
@@ -53,9 +50,9 @@
    than PARPORT_MAX (in <linux/parport.h>).  */
 #define PARPORT_PC_MAX_PORTS  8
 
-static void parport_pc_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
+static void parport_pc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	/* Null function - does nothing */
+	parport_generic_irq(irq, (struct parport *) dev_id, regs);
 }
 
 void parport_pc_write_epp(struct parport *p, unsigned char d)
@@ -173,7 +170,7 @@ void parport_pc_enable_irq(struct parport *p)
 void parport_pc_release_resources(struct parport *p)
 {
 	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(p->irq, NULL);
+		free_irq(p->irq, p);
 	release_region(p->base, p->size);
 	if (p->modes & PARPORT_MODE_PCECR)
 		release_region(p->base+0x400, 3);
@@ -183,7 +180,9 @@ int parport_pc_claim_resources(struct parport *p)
 {
 	int err;
 	if (p->irq != PARPORT_IRQ_NONE)
-		if ((err = request_irq(p->irq, parport_pc_null_intr_func, 0, p->name, NULL)) != 0) return err;
+		if ((err = request_irq(p->irq, parport_pc_interrupt,
+				       0, p->name, p)) != 0)
+			return err;
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
 		request_region(p->base+0x400, 3, p->name);
@@ -240,11 +239,6 @@ int parport_pc_ecp_read_block(struct parport *p, void *buf, size_t length, void 
 int parport_pc_ecp_write_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle)
 {
 	return -ENOSYS; /* FIXME */
-}
-
-int parport_pc_examine_irq(struct parport *p)
-{
-	return 0; /* FIXME */
 }
 
 void parport_pc_inc_use_count(void)
@@ -313,7 +307,7 @@ struct parport_operations parport_pc_ops =
 
 	parport_pc_enable_irq,
 	parport_pc_disable_irq,
-	parport_pc_examine_irq,
+	parport_pc_interrupt,
 
 	parport_pc_inc_use_count,
 	parport_pc_dec_use_count,

@@ -147,13 +147,13 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == SCSI_DISK_MAJOR)
+#elif (SCSI_DISK_MAJOR(MAJOR_NR))
 
 #define DEVICE_NAME "scsidisk"
 #define DEVICE_INTR do_sd  
 #define TIMEOUT_VALUE (2*HZ)
 #define DEVICE_REQUEST do_sd_request
-#define DEVICE_NR(device) (MINOR(device) >> 4)
+#define DEVICE_NR(device) (((MAJOR(device) & SD_MAJOR_MASK) << (8 - 4)) + (MINOR(device) >> 4))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 

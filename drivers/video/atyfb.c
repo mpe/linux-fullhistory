@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.77 1998/09/14 08:01:46 jj Exp $
+/*  $Id: atyfb.c,v 1.81 1998/10/14 16:45:38 ecd Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -28,6 +28,8 @@
 
     - cursor support on all cards and all ramdacs.
     - cursor parameters controlable via ioctl()s.
+    - guess PLL and MCLK based on the original PLL register values initialized
+      by the BIOS or Open Firmware (if they are initialized).
 
 						(Anyone to help with this?)
 
@@ -60,7 +62,7 @@
 
 #include <asm/io.h>
 
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #include <video/macmodes.h>
@@ -83,7 +85,7 @@
 /*
  * Debug flags.
  */
-#undef PLL_DEBUG
+#undef DEBUG
 
 
 #define GUI_RESERVE	0x00001000
@@ -322,7 +324,7 @@ static void init_engine(const struct atyfb_par *par,
 			const struct fb_info_aty *info);
 static void aty_st_514(int offset, u8 val, const struct fb_info_aty *info);
 static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info);
-#ifdef PLL_DEBUG
+#if defined(__sparc__) || defined(DEBUG)
 static u8 aty_ld_pll(int offset, const struct fb_info_aty *info);
 #endif
 static void aty_set_crtc(const struct fb_info_aty *info,
@@ -366,7 +368,7 @@ static int atyfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			 u_int transp, struct fb_info *fb);
 static void do_install_cmap(int con, struct fb_info *info);
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
 static int read_aty_sense(const struct fb_info_aty *info);
 #endif
 
@@ -401,7 +403,7 @@ static char noaccel __initdata = 0;
 
 static const u32 ref_clk_per = 1000000000000ULL/14318180;
 
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
 static int default_vmode = VMODE_NVRAM;
 static int default_cmode = CMODE_NVRAM;
 #endif
@@ -443,6 +445,14 @@ static struct aty_features {
     { 0x4749, 0x4749, "3D RAGE PRO (BGA, PCI)" },
     { 0x4750, 0x4750, "3D RAGE PRO (PQFP, PCI)" },
     { 0x4751, 0x4751, "3D RAGE PRO (PQFP, PCI, limited 3D)" },
+};
+
+static const char *aty_gx_ram[8] __initdata = {
+    "DRAM", "VRAM", "VRAM", "DRAM", "GDRAM", "EVRAM", "EVRAM", "RESV"
+};
+
+static const char *aty_ct_ram[8] __initdata = {
+    "OFF", "DRAM", "EDO", "HPDRAM", "SDRAM", "SGRAM", "WRAM", "RESV"
 };
 
 
@@ -670,7 +680,7 @@ static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info)
     aty_st_8(CLOCK_CNTL + 1, (offset << 2) & ~PLL_WR_EN, info);
 }
 
-#ifdef PLL_DEBUG
+#if defined(__sparc__) || defined(DEBUG)
 static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
 {
     u8 res;
@@ -685,7 +695,7 @@ static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
 }
 #endif
 
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
 
     /*
      *  Apple monitor sense
@@ -725,7 +735,7 @@ static int read_aty_sense(const struct fb_info_aty *info)
     return sense;
 }
 
-#endif /* defined(CONFIG_PMAC) || defined(CONFIG_CHRP) */
+#endif /* defined(CONFIG_PPC) */
 
 /* ------------------------------------------------------------------------- */
 
@@ -2289,6 +2299,78 @@ static int atyfb_mmap(struct fb_info *info, struct file *file,
 	}
 	return 0;
 }
+
+static struct {
+	u32	yoffset;
+	u8	r[2][256];
+	u8	g[2][256];
+	u8	b[2][256];
+} atyfb_save;
+
+static void atyfb_save_palette(struct fb_info *fb, int enter)
+{
+	struct fb_info_aty *info = (struct fb_info_aty *)fb;
+	int i, tmp, scale;
+
+	for (i = 0; i < 256; i++) {
+		tmp = aty_ld_8(DAC_CNTL, info) & 0xfc;
+		if ((Gx == GT_CHIP_ID) || (Gx == GU_CHIP_ID) ||
+		    (Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID) ||
+		    (Gx == GD_CHIP_ID) || (Gx == GI_CHIP_ID) ||
+		    (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID))
+			tmp |= 0x2;
+		aty_st_8(DAC_CNTL, tmp, info);
+		aty_st_8(DAC_REGS + DAC_MASK, 0xff, info);
+		eieio();
+		scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
+			(info->current_par.crtc.bpp == 16)) ? 3 : 0;
+		info->aty_cmap_regs->rindex = i << scale;
+		eieio();
+		atyfb_save.r[enter][i] = info->aty_cmap_regs->lut;
+		eieio();
+		atyfb_save.g[enter][i] = info->aty_cmap_regs->lut;
+		eieio();
+		atyfb_save.b[enter][i] = info->aty_cmap_regs->lut;
+		eieio();
+		info->aty_cmap_regs->windex = i << scale;
+		eieio();
+		info->aty_cmap_regs->lut = atyfb_save.r[1-enter][i];
+		eieio();
+		info->aty_cmap_regs->lut = atyfb_save.g[1-enter][i];
+		eieio();
+		info->aty_cmap_regs->lut = atyfb_save.b[1-enter][i];
+		eieio();
+	}
+}
+
+static void atyfb_palette(int enter)
+{
+	struct fb_info_aty *info;
+	struct atyfb_par *par;
+	struct display *d;
+	int i;
+
+	for (i = 0; i < MAX_NR_CONSOLES; i++) {
+		d = &fb_display[i];
+		if (d->fb_info &&
+		    d->fb_info->fbops == &atyfb_ops &&
+		    d->fb_info->display_fg &&
+		    d->fb_info->display_fg->vc_num == i) {
+			atyfb_save_palette(d->fb_info, enter);
+			info = (struct fb_info_aty *)d->fb_info;
+			par = &info->current_par;
+			if (enter) {
+				atyfb_save.yoffset = par->crtc.yoffset;
+				par->crtc.yoffset = 0;
+				set_off_pitch(par, info);
+			} else {
+				par->crtc.yoffset = atyfb_save.yoffset;
+				set_off_pitch(par, info);
+			}
+			break;
+		}
+	}
+}
 #endif /* __sparc__ */
 
     /*
@@ -2302,9 +2384,9 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     int j, k;
     struct fb_var_screeninfo var;
     struct display *disp;
-    const char *chipname = NULL;
+    const char *chipname = NULL, *ramname = NULL;
     int pll, mclk;
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
     int sense;
 #endif
 
@@ -2325,6 +2407,7 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID)) {
 	info->bus_type = (aty_ld_le32(CONFIG_STAT0, info) >> 0) & 0x07;
 	info->ram_type = (aty_ld_le32(CONFIG_STAT0, info) >> 3) & 0x07;
+	ramname = aty_gx_ram[info->ram_type];
 	/* FIXME: clockchip/RAMDAC probing? */
 #ifdef CONFIG_ATARI
 	info->dac_type = DAC_ATI68860_B;
@@ -2339,6 +2422,7 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     } else {
 	info->bus_type = PCI;
 	info->ram_type = (aty_ld_le32(CONFIG_STAT0, info) & 0x07);
+	ramname = aty_ct_ram[info->ram_type];
 	info->dac_type = DAC_INTERNAL;
 	info->clk_type = CLK_INTERNAL;
 	if ((Gx == CT_CHIP_ID) || (Gx == ET_CHIP_ID)) {
@@ -2454,17 +2538,34 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	  info->total_vram += 0x400000;
     }
 
-    printk("%d%c %d MHz PLL, %d Mhz MCLK\n", 
+    printk("%d%c %s, %d MHz PLL, %d Mhz MCLK\n", 
     	   info->total_vram == 0x80000 ? 512 : (info->total_vram >> 20), 
-    	   info->total_vram == 0x80000 ? 'K' : 'M', pll, mclk);
-    
+    	   info->total_vram == 0x80000 ? 'K' : 'M', ramname, pll, mclk);
+
+#ifdef DEBUG
+    if ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID)) {
+	int i;
+	printk("BUS_CNTL DAC_CNTL MEM_CNTL EXT_MEM_CNTL CRTC_GEN_CNTL "
+	       "DSP_CONFIG DSP_ON_OFF\n"
+	       "%08x %08x %08x %08x     %08x      %08x   %08x\n"
+	       "PLL",
+	       aty_ld_le32(BUS_CNTL, info), aty_ld_le32(DAC_CNTL, info),
+	       aty_ld_le32(MEM_CNTL, info), aty_ld_le32(EXT_MEM_CNTL, info),
+	       aty_ld_le32(CRTC_GEN_CNTL, info), aty_ld_le32(DSP_CONFIG, info),
+	       aty_ld_le32(DSP_ON_OFF, info));
+	for (i = 0; i < 16; i++)
+	    printk(" %02x", aty_ld_pll(i, info));
+	printk("\n");
+    }
+#endif
+
     if (info->bus_type == ISA)
 	if ((info->total_vram == 0x400000) || (info->total_vram == 0x800000)) {
 	    /* protect GUI-regs if complete Aperture is VRAM */
 	    info->total_vram -= GUI_RESERVE;
 	}
 
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
     if (default_vmode == VMODE_NVRAM) {
 	default_vmode = nvram_read_byte(NV_VMODE);
 	if (default_vmode <= 0 || default_vmode > VMODE_MAX)
@@ -2487,9 +2588,9 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	default_cmode = CMODE_8;
     if (mac_vmode_to_var(default_vmode, default_cmode, &var))
 	var = default_var;
-#else /* !CONFIG_PMAC && !CONFIG_CHRP */
+#else /* !CONFIG_PPC */
     var = default_var;
-#endif /* !CONFIG_PMAC && !CONFIG_CHRP */
+#endif /* !CONFIG_PPC */
     if (noaccel)
         var.accel_flags &= ~FB_ACCELF_TEXT;
     else
@@ -2520,6 +2621,9 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     info->fb_info.blank = &atyfbcon_blank;
     info->fb_info.flags = FBINFO_FLAG_DEFAULT;
 
+#ifdef __sparc__
+    atyfb_save_palette(&info->fb_info, 0);
+#endif
     for (j = 0; j < 16; j++) {
 	k = color_table[j];
 	info->palette[j].red = default_red[k];
@@ -2555,6 +2659,7 @@ __initfunc(void atyfb_init(void))
     struct fb_info_aty *info;
     unsigned long addr;
 #ifdef __sparc__
+    extern void (*prom_palette) (int);
     extern int con_is_present(void);
     struct pcidev_cookie *pcp;
     char prop[128];
@@ -2703,6 +2808,9 @@ __initfunc(void atyfb_init(void))
 		struct fb_var_screeninfo *var = &default_var;
 		u32 v_total, h_total;
 		struct crtc crtc;
+		u8 pll_regs[16];
+		u8 clock_cntl;
+		unsigned int N, P, Q, M, T;
 
 		crtc.vxres = prom_getintdefault(node, "width", 1024);
 		crtc.vyres = prom_getintdefault(node, "height", 768);
@@ -2715,15 +2823,59 @@ __initfunc(void atyfb_init(void))
 		crtc.gen_cntl = aty_ld_le32(CRTC_GEN_CNTL, info);
 		aty_crtc_to_var(&crtc, var);
 
-		/*
-		 * FIXME: Read the PLL to figure actual Refresh Rate.
-		 *        Default to 66Hz for now.
-		 */
 		h_total = var->xres + var->right_margin +
 			  var->hsync_len + var->left_margin;
 		v_total = var->yres + var->lower_margin +
 			  var->vsync_len + var->upper_margin;
-		default_var.pixclock = 1000000000000ULL/(66*h_total*v_total);
+
+		/*
+		 * Read the PLL to figure actual Refresh Rate.
+		 */
+    		clock_cntl = aty_ld_8(CLOCK_CNTL, info);
+		/* printk("atyfb: CLOCK_CNTL: %02x\n", clock_cntl); */
+		for (i = 0; i < 16; i++) {
+			pll_regs[i] = aty_ld_pll(i, info);
+			/* printk("atyfb: PLL %2d: %02x\n", i, pll_regs[i]); */
+		}
+		/*
+		 * PLL Reference Devider M:
+		 */
+		M = pll_regs[2];
+		/* printk("atyfb: M: %02x\n", M); */
+
+		/*
+		 * PLL Feedback Devider N (Dependant on CLOCK_CNTL):
+		 */
+		N = pll_regs[7 + (clock_cntl & 3)];
+		/* printk("atyfb: N: %02x\n", N); */
+
+		/*
+		 * PLL Post Devider P (Dependant on CLOCK_CNTL):
+		 */
+		P = 1 << (pll_regs[6] >> ((clock_cntl & 3) << 1));
+		/* printk("atyfb: P: %2d\n", P); */
+
+		/*
+		 * PLL Devider Q:
+		 */
+		Q = N / P;
+		/* printk("atyfb: Q: %d\n", Q); */
+
+		/*
+		 * Target Frequency:
+		 *
+		 *      T * M
+		 * Q = -------
+		 *      2 * R
+		 *
+		 * where R is XTALIN (= 14318 kHz).
+		 */
+		T = 2 * Q * 14318 / M;
+		/* printk("atyfb: T: %d\n", T); */
+
+		default_var.pixclock =
+			((1000000000000ULL / v_total) * 1000) / (T * h_total);
+		/* printk("atyfb: pixclock: %d\n", default_var.pixclock); */
 	    }
 
 #else /* __sparc__ */
@@ -2764,6 +2916,9 @@ __initfunc(void atyfb_init(void))
 	    }
 
 #ifdef __sparc__
+	    if (!prom_palette)
+		prom_palette = atyfb_palette;
+
 	    /*
 	     * Add /dev/fb mmap values.
 	     */
@@ -2920,7 +3075,7 @@ __initfunc(void atyfb_setup(char *options, int *ints))
 	} else if (!strncmp(this_opt, "noaccel", 7)) {
 		noaccel = 1;
 	}
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
 	else if (!strncmp(this_opt, "vmode:", 6)) {
 	    unsigned int vmode = simple_strtoul(this_opt+6, NULL, 0);
 	    if (vmode > 0 && vmode <= VMODE_MAX)

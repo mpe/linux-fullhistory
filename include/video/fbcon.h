@@ -465,7 +465,30 @@ static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
     fast_memmove(dst, src, size);
     return dst;
 }
+
 #else
+
+#ifdef CONFIG_SUN4
+/* To be honest, this is slow_memmove :). But sun4 is crappy, so what we can do. */
+static __inline__ void fast_memmove(void *d, const void *s, size_t count)
+{
+    int i;
+    if (d<s) {
+	for (i=0; i<count; i++)
+	    ((char *) d)[i] = ((char *) s)[i];
+    } else
+	for (i=0; i<count; i++)
+	    ((char *) d)[count-i-1] = ((char *) s)[count-i-1];
+}
+
+static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
+{
+    fast_memmove(dst, src, size);
+    return dst;
+}
+
+#else
+
 static __inline__ void *mymemmove(void *d, const void *s, size_t count)
 {
     return(memmove(d, s, count));
@@ -475,7 +498,10 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 {
     memmove(dst, src, size);
 }
-#endif	/* !i386 */
+
+#endif /* !sun4 */
+
+#endif /* !i386 */
 
 #endif /* !m68k */
 

@@ -145,6 +145,12 @@ pmac_get_cpuinfo(char *buffer)
 #include "../../../drivers/scsi/sd.h"
 #include "../../../drivers/scsi/hosts.h"
 
+#define SD_MAJOR(i)		(!(i) ? SCSI_DISK0_MAJOR : SCSI_DISK1_MAJOR-1+(i))
+#define SD_MAJOR_NUMBER(i)	SD_MAJOR((i) >> 8)
+#define SD_MINOR_NUMBER(i)	((i) & 255)
+#define MKDEV_SD_PARTITION(i)	MKDEV(SD_MAJOR_NUMBER(i), SD_MINOR_NUMBER(i))
+#define MKDEV_SD(index)		MKDEV_SD_PARTITION((index) << 4)
+
 kdev_t sd_find_target(void *host, int tgt)
 {
     Scsi_Disk *dp;
@@ -153,7 +159,7 @@ kdev_t sd_find_target(void *host, int tgt)
     for (dp = rscsi_disks, i = 0; i < sd_template.dev_max; ++i, ++dp)
         if (dp->device != NULL && dp->device->host == host
             && dp->device->id == tgt)
-            return MKDEV(SCSI_DISK_MAJOR, i << 4);
+            return MKDEV_SD(i);
     return 0;
 }
 #endif

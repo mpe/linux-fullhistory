@@ -53,7 +53,7 @@ dep_tristate 'Generic NCR5380/53c400 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 $
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT
   if [ "$CONFIG_SCSI_PPA" != "n" ]; then
-    int  '  Pedantic EPP-checking'   CONFIG_SCSI_PPA_HAVE_PEDANTIC 2 0 3
+    bool  '  Pedantic EPP-checking'   CONFIG_SCSI_PPA_HAVE_PEDANTIC
   fi
   dep_tristate 'IOMEGA ZIP Plus drive SCSI support' CONFIG_SCSI_IMM $CONFIG_SCSI $CONFIG_PARPORT
 fi

@@ -466,7 +466,9 @@ static struct js_port __init *js_console_probe(int *config, struct js_port *port
 			return port;
 		}
 
-		info.port = parport_register_device(pp, "joystick (console)", NULL, js_console_wakeup, NULL, 0, NULL);
+		info.port = parport_register_device(pp, "joystick (console)", NULL, js_console_wakeup, NULL, PARPORT_DEV_EXCL, NULL);
+		if (!info.port)
+			return port;
 		info.wanted = 0;
 		info.use = 0;
 	}

@@ -296,7 +296,7 @@ static int qc_detect(struct qcam_device *q)
 		if (reg != lastreg)
 			count++;
 		lastreg = reg;
-		mdelay(1);
+		mdelay(2);
 	}
 
 	/* Be liberal in what you accept...  */

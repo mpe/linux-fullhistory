@@ -247,8 +247,7 @@ ruffian_kill_arch (int mode, char *reboot_cmd)
 struct alpha_machine_vector ruffian_mv __initmv = {
 	vector_name:		"Ruffian",
 	DO_EV5_MMU,
-	/* RUFFIAN always uses BCD, like a PeeCee.  */
-	rtc_port: 0x70, rtc_addr: 0x80, rtc_bcd: 1,
+	DO_DEFAULT_RTC,
 	/* For the moment, do not use BWIO on RUFFIAN.  */
 	IO(PYXIS,pyxis,pyxis),
 	DO_PYXIS_BUS,

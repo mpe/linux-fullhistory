@@ -148,14 +148,6 @@ struct hfmodem_state hfmodem_state[NR_DEVICE];
 #define SP_PAR  2
 #define SP_MIDI 4
 
-/* ---------------------------------------------------------------------- */
-
-static int parptt_preempt(void *handle)
-{
-	/* we cannot relinquish the port in the middle of an operation */
-	return 1;
-}
-
 /* --------------------------------------------------------------------- */
 
 static void parptt_wakeup(void *handle)
@@ -176,8 +168,8 @@ __initfunc(static int check_lpt(struct hfmodem_state *dev, unsigned int iobase))
 		pp = pp->next;
 	if (!pp)
 		return 0;
-	if (!(dev->ptt_out.pardev = parport_register_device(pp, hfmodem_drvname, parptt_preempt, parptt_wakeup, 
-							    NULL, PARPORT_DEV_LURK, dev)))
+	if (!(dev->ptt_out.pardev = parport_register_device(pp, hfmodem_drvname, NULL, parptt_wakeup, 
+							    NULL, PARPORT_DEV_EXCL, dev)))
 		return 0;
 	return 1;
 }

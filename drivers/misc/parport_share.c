@@ -27,6 +27,7 @@
 #include <linux/sched.h>
 
 #include <asm/spinlock.h>
+#include <asm/irq.h>
 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
@@ -55,19 +56,12 @@ struct parport *parport_enumerate(void)
 	return portlist;
 }
 
-void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
-{
-	/* Null function - does nothing.  IRQs are pointed here whenever
-	   there is no real handler for them.  */
-}
-
 struct parport *parport_register_port(unsigned long base, int irq, int dma,
 				      struct parport_operations *ops)
 {
 	struct parport *tmp;
 	int portnum;
 	char *name;
-	unsigned long flags;
 
 	/* Check for a previously registered port.
 	   NOTE: we will ignore irq and dma if we find a previously
@@ -111,7 +105,9 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->ops = ops;
 	tmp->number = portnum;
 	memset (&tmp->probe_info, 0, sizeof (struct parport_device_info));
-	spin_lock_init (&tmp->lock);
+	spin_lock_init(&tmp->cad_lock);
+	spin_lock_init(&tmp->waitlist_lock);
+	spin_lock_init(&tmp->pardevice_lock);
 
 	name = kmalloc(15, GFP_KERNEL);
 	if (!name) {
@@ -122,14 +118,19 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	sprintf(name, "parport%d", portnum);
 	tmp->name = name;
 
-	/* Chain the entry to our list. */
-	spin_lock_irqsave (&parportlist_lock, flags);
+	/*
+	 * Chain the entry to our list.
+	 *
+	 * This function must not run from an irq handler so we don' t need
+	 * to clear irq on the local CPU. -arca
+	 */
+	spin_lock(&parportlist_lock);
 	if (portlist_tail)
 		portlist_tail->next = tmp;
 	portlist_tail = tmp;
 	if (!portlist)
 		portlist = tmp;
-	spin_unlock_irqrestore (&parportlist_lock, flags);
+	spin_unlock(&parportlist_lock);
 
 	tmp->probe_info.class = PARPORT_CLASS_LEGACY;  /* assume the worst */
 	tmp->waithead = tmp->waittail = NULL;
@@ -140,8 +141,8 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 void parport_unregister_port(struct parport *port)
 {
 	struct parport *p;
-	unsigned long flags;
-	spin_lock_irqsave (&parportlist_lock, flags);
+
+	spin_lock(&parportlist_lock);
 	if (portlist == port) {
 		if ((portlist = port->next) == NULL)
 			portlist_tail = NULL;
@@ -155,7 +156,7 @@ void parport_unregister_port(struct parport *port)
 		else printk (KERN_WARNING
 			     "%s not found in port list!\n", port->name);
 	}
-	spin_unlock_irqrestore (&parportlist_lock, flags);
+	spin_unlock(&parportlist_lock);
 	if (port->probe_info.class_name)
 		kfree (port->probe_info.class_name);
 	if (port->probe_info.mfr)
@@ -195,7 +196,13 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 			  int flags, void *handle)
 {
 	struct pardevice *tmp;
-	unsigned long flgs;
+
+	if (port->flags & PARPORT_FLAG_EXCL) {
+		/* An exclusive device is registered. */
+		printk (KERN_DEBUG "%s: no more devices allowed\n",
+			port->name);
+		return NULL;
+	}
 
 	if (flags & PARPORT_DEV_LURK) {
 		if (!pf || !kf) {
@@ -242,12 +249,30 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 
 	/* Chain this onto the list */
 	tmp->prev = NULL;
-	spin_lock_irqsave (&port->lock, flgs);
+	/*
+	 * This function must not run from an irq handler so we don' t need
+	 * to clear irq on the local CPU. -arca
+	 */
+	spin_lock(&port->pardevice_lock);
+
+	if (flags & PARPORT_DEV_EXCL) {
+		if (port->devices) {
+			spin_unlock (&port->pardevice_lock);
+			kfree (tmp->state);
+			kfree (tmp);
+			printk (KERN_DEBUG
+				"%s: cannot grant exclusive access for "
+				"device %s\n", port->name, name);
+			return NULL;
+		}
+		port->flags |= PARPORT_FLAG_EXCL;
+	}
+
 	tmp->next = port->devices;
 	if (port->devices)
 		port->devices->prev = tmp;
 	port->devices = tmp;
-	spin_unlock_irqrestore (&port->lock, flgs);
+	spin_unlock(&port->pardevice_lock);
 
 	inc_parport_count();
 	port->ops->inc_use_count();
@@ -262,7 +287,6 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 void parport_unregister_device(struct pardevice *dev)
 {
 	struct parport *port;
-	unsigned long flags;
 
 #ifdef PARPORT_PARANOID
 	if (dev == NULL) {
@@ -279,14 +303,18 @@ void parport_unregister_device(struct pardevice *dev)
 		return;
 	}
 
-	spin_lock_irqsave (&port->lock, flags);
+	spin_lock(&port->pardevice_lock);
 	if (dev->next)
 		dev->next->prev = dev->prev;
 	if (dev->prev)
 		dev->prev->next = dev->next;
 	else
 		port->devices = dev->next;
-	spin_unlock_irqrestore (&port->lock, flags);
+
+	if (dev->flags & PARPORT_DEV_EXCL)
+		port->flags &= ~PARPORT_FLAG_EXCL;
+
+	spin_unlock(&port->pardevice_lock);
 
 	kfree(dev->state);
 	kfree(dev);
@@ -337,7 +365,7 @@ try_again:
 		dev->waiting = 0;
 
 		/* Take ourselves out of the wait list again.  */
-		spin_lock_irqsave (&port->lock, flags);
+		spin_lock_irqsave (&port->waitlist_lock, flags);
 		if (dev->waitprev)
 			dev->waitprev->waitnext = dev->waitnext;
 		else
@@ -346,28 +374,27 @@ try_again:
 			dev->waitnext->waitprev = dev->waitprev;
 		else
 			port->waittail = dev->waitprev;
-		spin_unlock_irqrestore (&port->lock, flags);
+		spin_unlock_irqrestore (&port->waitlist_lock, flags);
 		dev->waitprev = dev->waitnext = NULL;
 	}
 
-	/* Now we do the change of devices */
-	spin_lock_irqsave(&port->lock, flags);
-	port->cad = dev;
-	spin_unlock_irqrestore(&port->lock, flags);
+	if (oldcad && port->irq != PARPORT_IRQ_NONE && !oldcad->irq_func)
+		/*
+		 * If there was an irq pending it should hopefully happen
+		 * before return from enable_irq(). -arca
+		 */
+		enable_irq(port->irq);
 
-	/* Swap the IRQ handlers. */
-	if (port->irq != PARPORT_IRQ_NONE) {
-		if (oldcad && oldcad->irq_func) {
-			free_irq(port->irq, oldcad->private);
-			request_irq(port->irq, parport_null_intr_func,
-				    SA_INTERRUPT, port->name, NULL);
-		}
-		if (dev->irq_func) {
-			free_irq(port->irq, NULL);
-			request_irq(port->irq, dev->irq_func,
-				    SA_INTERRUPT, dev->name, dev->private);
-		}
-	}
+	/*
+	 * Avoid running irq handlers if the pardevice doesn' t use it. -arca
+	 */
+	if (port->irq != PARPORT_IRQ_NONE && !dev->irq_func)
+		disable_irq(port->irq);
+
+	/* Now we do the change of devices */
+	write_lock_irqsave(&port->cad_lock, flags);
+	port->cad = dev;
+	write_unlock_irqrestore(&port->cad_lock, flags);
 
 	/* Restore control registers */
 	port->ops->restore_state(port, dev->state);
@@ -379,10 +406,10 @@ blocked:
 	   interest.  This is only allowed for devices sleeping in
 	   parport_claim_or_block(), or those with a wakeup function.  */
 	if (dev->waiting & 2 || dev->wakeup) {
-		spin_lock_irqsave (&port->lock, flags);
+		spin_lock_irqsave (&port->waitlist_lock, flags);
 		if (port->cad == NULL) {
 			/* The port got released in the meantime. */
-			spin_unlock_irqrestore (&port->lock, flags);
+			spin_unlock_irqrestore (&port->waitlist_lock, flags);
 			goto try_again;
 		}
 		if (test_and_set_bit(0, &dev->waiting) == 0) {
@@ -395,7 +422,7 @@ blocked:
 			} else
 				port->waithead = port->waittail = dev;
 		}
-		spin_unlock_irqrestore (&port->lock, flags);
+		spin_unlock_irqrestore (&port->waitlist_lock, flags);
 	}
 	return -EAGAIN;
 }
@@ -451,19 +478,19 @@ void parport_release(struct pardevice *dev)
 		       "when not owner\n", port->name, dev->name);
 		return;
 	}
-	spin_lock_irqsave(&port->lock, flags);
+	write_lock_irqsave(&port->cad_lock, flags);
 	port->cad = NULL;
-	spin_unlock_irqrestore(&port->lock, flags);
+	write_unlock_irqrestore(&port->cad_lock, flags);
+
+	/*
+	 * Reenable irq and so discard the eventually pending irq while
+	 * cad is NULL. -arca
+	 */
+	if (port->irq != PARPORT_IRQ_NONE && !dev->irq_func)
+		enable_irq(port->irq);
 
 	/* Save control registers */
 	port->ops->save_state(port, dev->state);
-
-	/* Point IRQs somewhere harmless. */
-	if (port->irq != PARPORT_IRQ_NONE && dev->irq_func) {
-		free_irq(port->irq, dev->private);
-		request_irq(port->irq, parport_null_intr_func,
-			    SA_INTERRUPT, port->name, NULL);
- 	}
 
 	/* If anybody is waiting, find out who's been there longest and
 	   then wake them up. (Note: no locking required) */

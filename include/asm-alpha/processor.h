@@ -59,7 +59,9 @@ struct thread_struct {
 	mm_segment_t fs;
 
 	/* Breakpoint handling for ptrace.  */
-	long debugreg[8];
+	unsigned long bpt_addr[2];
+	unsigned int bpt_insn[2];
+	int bpt_nsaved;
 };
 
 #define INIT_MMAP { &init_mm, PAGE_OFFSET,  PAGE_OFFSET+0x10000000, \

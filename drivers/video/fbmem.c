@@ -66,6 +66,8 @@ extern void offb_init(void);
 extern void offb_setup(char *options, int *ints);
 extern void atyfb_init(void);
 extern void atyfb_setup(char *options, int *ints);
+extern void igafb_init(void);
+extern void igafb_setup(char *options, int *ints);
 extern void imsttfb_init(void);
 extern void dnfb_init(void);
 extern void tgafb_init(void);
@@ -115,6 +117,9 @@ static struct {
 #endif
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
+#endif
+#ifdef CONFIG_FB_IGA
+        { "igafb", igafb_init, igafb_setup },
 #endif
 #ifdef CONFIG_FB_IMSTT
 	{ "imsttfb", imsttfb_init, NULL },

@@ -1196,15 +1196,6 @@ CONFIG_HUB6
   Say Y here to enable support in the dumb serial driver to support
   the HUB6 card.
 
-TGA Console Support
-CONFIG_TGA_CONSOLE
-  Many Alpha systems (e.g the Multia) are shipped with a graphics card
-  that implements the TGA interface (much like the VGA standard, but
-  older TGA adapters are *not* VGA compatible).  On such systems, you
-  should say Y here so that the TGA driver rather than the standard
-  VGA driver is used.  Note that, at this time, there is no X server
-  for these systems. If unsure, try N.
-
 PCI support
 CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
@@ -3216,6 +3207,16 @@ Netlink device emulation
 CONFIG_NETLINK_DEV
   This is a backward compatibility option, choose Y for now.
   This option will be removed soon.
+
+HIgh Performance Parallel Interface support (EXPERIMENTAL)
+CONFIG_HIPPI
+  HIgh Performance Parallel Interface (HIPPI) is a 800Mbit/sec and
+  1600Mbit/sec dual-simplex switched or point-to-point network. HIPPI
+  can run over copper (25m) or fiber (300m on multi-mode or 10km on
+  single-mode). If you are connected to a HIPPI network, and want
+  to enable HIPPI support in the kernel, say Y here (you must also
+  remember to enable the driver for your HIPPI card below). Most
+  people will say N here.
 
 SCSI support?
 CONFIG_SCSI
@@ -5312,7 +5313,7 @@ CONFIG_ARCNET_RIM_I
   This is yet another chipset driver for the COM90xx cards, but this
   time only using memory-mapped mode, and no IO ports at all. This
   driver is completely untested, so if you have one of these cards,
-  please mail dwmw2@cam.ac.uk, especially if it works!
+  please mail David.Woodhouse@mvhi.com, especially if it works!
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
@@ -8187,7 +8188,7 @@ CONFIG_SOUND
   say more than an occasional beep, by programming the PC speaker.
   Kernel patches and programs to do that are in the pcsndrv package on
   ftp://sunsite.unc.edu/pub/Linux/kernel/patches/console/ and in the
-  pcsp patch at ftp://dwmw2.robinson.cam.ac.uk/pub/kernel/ .
+  pcsp patch at http://www.imladris.demon.co.uk/pcsp/
 
 OSS sound modules
 CONFIG_SOUND_OSS
@@ -9261,7 +9262,7 @@ CONFIG_TT_DMA_EMUL
 
 Ariadne support
 CONFIG_ARIADNE
-  If you have a VillageTronics Ariadne Ethernet adapter, say Y.
+  If you have a Village Tronic Ariadne Ethernet adapter, say Y.
   Otherwise, say N.
 
   This driver is also available as a module ( = code which can be
@@ -9271,7 +9272,7 @@ CONFIG_ARIADNE
 
 Ariadne II support
 CONFIG_ARIADNE2
-  If you have a VillageTronics Ariadne II Ethernet adapter, say Y.
+  If you have a Village Tronic Ariadne II Ethernet adapter, say Y.
   Otherwise, say N.
 
   This driver is also available as a module ( = code which can be
@@ -9745,6 +9746,46 @@ CONFIG_VIDC_SOUND
   Say 'Y' here for ARM systems with the VIDC video controller and 16-bit
   Linear sound DACs.  If unsure, say N.
 
+Backward compatibility mode for Xpmac
+CONFIG_FB_COMPAT_XPMAC
+  If you use the Xpmac X server (common with mklinux), you'll need
+  to enable this to use X. You should consider changing to XFree86
+  which includes a server that supports the frame buffer device
+  directly (XF68_FBDev).
+
+Support for PowerMac keyboard
+CONFIG_MAC_KEYBOARD
+  This option allows you to use an ADB keyboard attached to your
+  machine. Note that this disables any other (ie. PS/2) keyboard
+  support, even if your machine is physically capable of using both
+  at the same time.
+  
+  If you use an ADB keyboard (4 pin connector), say Y here.
+  If you use a PS/2 keyboard (6 pin connector), say N here.
+
+Support for PowerMac floppy
+CONFIG_MAC_FLOPPY
+  If you have a SWIM-3 (Super Woz Integrated Machine 3; from Apple)
+  floppy controller, say Y here. Most commonly found in PowerMacs.
+
+Support for PowerMac serial ports
+CONFIG_MAC_SERIAL
+  If you have Macintosh style serial ports (8 pin mini-DIN), this
+  is the driver for them. If you also have regular serial ports
+  and enable the driver for them, you can't currently use the
+  serial console feature.
+
+Support for PowerMac ADB mouse
+CONFIG_ADBMOUSE
+  If you have an ADB mouse (4 pin connector) as is common on
+  Macintoshes, say Y here.
+
+Winbond SL82c105 support
+CONFIG_BLK_DEV_SL82C105
+  If you have a Winbond SL82c105 IDE controller, say Y here to
+  enable special configuration for this chip. This is common
+  on various CHRP motherboards, but could be used elsewhere.
+  If in doubt, say Y.
 #
 # A couple of things I keep forgetting:
 #   capitalize: AppleTalk, Ethernet, DMA, FTP, Internet, Intel, IRQ, 
@@ -9853,7 +9894,7 @@ CONFIG_VIDC_SOUND
 # LocalWords:  INSNS Ataris AutoConfig ZORRO OCS AMIFB Agnus Denise ECS CDTV GB
 # LocalWords:  AGA Cybervision CYBER GSP TMS DMI Zorro ACSI ROMs SLM BioNet GVP
 # LocalWords:  PAMsNet TekMagic Cyberstorm MkI CYBERSTORMII MkII BLZ onboard cx
-# LocalWords:  VillageTronics ATARILANCE RieblCard PAMCard VME MFP sangoma LAPB
+# LocalWords:  Village Tronic ATARILANCE RieblCard PAMCard VME MFP sangoma LAPB
 # LocalWords:  Rhotron BioData's Multiface AMIGAMOUSE COPCON Amiga's bitplanes
 # LocalWords:  ATARIMOUSE MFPSER SCC's MegaSTE ESCC Atari's GVPIOEXT DMASOUND
 # LocalWords:  fdutils cisco univercd rpcg htm iface lapb LAPBETHER tpqic qic

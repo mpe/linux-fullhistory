@@ -344,6 +344,21 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 }
 
+/*
+ * Needed for allowing full modular support of ide-driver
+ */
+int ide_release_dma (ide_hwif_t *hwif)
+{
+	if (hwif->dmatable) {
+		clear_page((unsigned long)hwif->dmatable);	/* clear PRD 1st */
+		free_page((unsigned long)hwif->dmatable);	/* free PRD 2nd */
+	}
+	if ((hwif->dma_extra) && (hwif->channel == 0))
+		release_region((hwif->dma_base + 16), hwif->dma_extra);
+	release_region(hwif->dma_base, 8);
+	return 1;
+}
+
 __initfunc(void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports))
 {
 	static unsigned long dmatable = 0;
@@ -404,6 +419,7 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 		if (extra) /* PDC20246 & HPT343 */
 			request_region(dma_base+16, extra, name);
 		dma_base += hwif->channel ? 8 : 0;
+		hwif->dma_extra = extra;
 		if (inb(dma_base+2) & 0x80) {
 			printk("%s: simplex device:  DMA disabled\n", name);
 			dma_base = 0;

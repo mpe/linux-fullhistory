@@ -11,4 +11,5 @@ smp.txt
 	- use and state info about Linux/PPC on MP machines
 sound.txt
 	- info on sound support under Linux/PPC
-
+zImage_layout.txt
+	- info on the kernel images for Linux/PPC

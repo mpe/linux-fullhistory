@@ -8,8 +8,7 @@
  *
  * $Id: ufs_fs_sb.h,v 1.8 1998/05/06 12:04:40 jj Exp $
  *
- * Write support by Daniel Pirkl (daniel.pirkl@email.cz)
- * Charles University (Prague), Faculty of Mathematics and Physics
+ * Write support by Daniel Pirkl <daniel.pirkl@email.cz>
  */
 
 #ifndef __LINUX_UFS_FS_SB_H
@@ -41,8 +40,10 @@ struct ufs_cg_private_info {
 	__u32	c_iusedoff;	/* (char) used inode map */
 	__u32	c_freeoff;	/* (u_char) free block map */
 	__u32	c_nextfreeoff;	/* (u_char) next available space */
+	__u32	c_clustersumoff;/* (u_int32) counts of avail clusters */
+	__u32	c_clusteroff;	/* (u_int8) free cluster map */
+	__u32	c_nclusterblks;	/* number of clusters this cg */
 };	
-	
 
 struct ufs_sb_private_info {
 	struct ufs_buffer_head s_ubh; /* buffer containing super block */
@@ -83,6 +84,7 @@ struct ufs_sb_private_info {
 	__u32	s_ipg;		/* inodes per group */
 	__u32	s_fpg;		/* fragments per group */
 	__u32	s_cpc;		/* cyl per cycle in postbl */
+	__s32	s_contigsumsize;/* size of cluster summary array, 44bsd */
 	__s64	s_qbmask;	/* ~usb_bmask */
 	__s64	s_qfmask;	/* ~usb_fmask */
 	__s32	s_postblformat;	/* format of positional layout tables */
@@ -102,11 +104,14 @@ struct ufs_sb_private_info {
 	__u32	s_nspb;		/* number of sector per block */
 	__u32	s_inopf;	/* inodes per fragment */
 	__u32	s_sbbase;	/* offset of NeXTstep superblock */
+	__u32	s_bpf;		/* bits per fragment */
+	__u32	s_bpfshift;	/* bits per fragment shift*/
+	__u32	s_bpfmask;	/* bits per fragment mask */
 };
 
 
-#define UFS_MAX_GROUP_LOADED 1
-#define UFS_CGNO_EMPTY uspi->s_ncg
+#define UFS_MAX_GROUP_LOADED 8
+#define UFS_CGNO_EMPTY ((unsigned)-1)
 
 struct ufs_sb_info {
 	struct ufs_sb_private_info * s_uspi;	
@@ -119,6 +124,7 @@ struct ufs_sb_info {
 	struct ufs_cg_private_info * s_ucpi[UFS_MAX_GROUP_LOADED]; 
 	unsigned s_cgno[UFS_MAX_GROUP_LOADED];
 	unsigned short s_cg_loaded;
+	unsigned s_mount_opt;
 };
 
 /*

@@ -1304,7 +1304,7 @@ S: Lafayette, Indiana 47905
 S: USA
 
 N: Johan Myreen
-E: jem@vipunen.hut.fi
+E: jem@iki.fi
 D: PS/2 mouse driver writer etc.
 S: Dragonvagen 1 A 13
 S: FIN-00330 Helsingfors
@@ -1852,6 +1852,18 @@ S: Schleiermacherstrasse 12
 S: 90491 Nuernberg
 S: Germany
 
+N: Geert Uytterhoeven
+E: geert@linux-m68k.org
+W: http://www.cs.kuleuven.ac.be/~geert/
+P: 1024/EC4A1EE1 8B 88 38 35 88 1E 95 A1  CD 9E AE DC 4B 4A 2F 41
+D: m68k/Amiga and PPC/CHRP Longtrail coordinator
+D: Frame buffer device and XF68_FBDev maintainer
+D: m68k IDE maintainer
+D: Amiga Zorro maintainer
+S: C. Huysmansstraat 12
+S: B-3128 Baal
+S: Belgium
+
 N: Petr Vandrovec
 E: vandrove@vc.cvut.cz
 D: Small contributions to ncpfs
@@ -1991,14 +2003,15 @@ S: 2612 XV Delft
 S: The Netherlands
 
 N: David Woodhouse
+E: Dave@mvhi.com
 E: Dave@imladris.demon.co.uk
 D: Extensive ARCnet rewrite
 D: ARCnet COM20020, COM90xx IO-MAP drivers
 D: SO_BINDTODEVICE in 2.1.x (from Elliot Poger's code in 2.0.31)
 D: Contributed to NCPFS rewrite for 2.1.x dcache
 D: Alpha platforms: SX164, LX164 and Ruffian ported to 2.1.x
-S: Robinson College, Grange Road
-S: Cambridge. CB3 9AN
+S: 29, David Bull Way
+S: Milton, Cambridge. CB4 6DP
 S: England
 
 N: Frank Xia

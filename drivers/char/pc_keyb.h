@@ -14,6 +14,9 @@
 #define KBD_REPORT_UNKN			/* Report unknown scan codes */
 #define KBD_REPORT_TIMEOUTS		/* Report keyboard timeouts */
 #undef KBD_IS_FOCUS_9000		/* We have the brain-damaged FOCUS-9000 keyboard */
+#undef INITIALIZE_MOUSE			/* Define if your PS/2 mouse needs initialization. */
+
+
 
 #define KBD_INIT_TIMEOUT 1000		/* Timeout in ms for initializing the keyboard */
 #define KBC_TIMEOUT 250			/* Timeout in ms for sending to keyboard controller */
@@ -109,3 +112,13 @@ extern unsigned char aux_device_present;
 #define AUX_ENABLE_DEV		0xF4	/* Enable aux device */
 #define AUX_DISABLE_DEV		0xF5	/* Disable aux device */
 #define AUX_RESET		0xFF	/* Reset aux device */
+
+#define AUX_BUF_SIZE		2048
+
+struct aux_queue {
+	unsigned long head;
+	unsigned long tail;
+	struct wait_queue *proc_list;
+	struct fasync_struct *fasync;
+	unsigned char buf[AUX_BUF_SIZE];
+};

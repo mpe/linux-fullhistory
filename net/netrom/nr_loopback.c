@@ -77,16 +77,16 @@ static void nr_loopback_timer(unsigned long param)
 	ax25_address *nr_dest;
 	struct device *dev;
 
-	while ((skb = skb_dequeue(&loopback_queue)) != NULL) {
+	if ((skb = skb_dequeue(&loopback_queue)) != NULL) {
 		nr_dest = (ax25_address *)(skb->data + 7);
 
-		if ((dev = nr_dev_get(nr_dest)) == NULL) {
-			kfree_skb(skb);
-			continue;
-		}
+		dev = nr_dev_get(nr_dest);
 
-		if (nr_rx_frame(skb, dev) == 0)
+		if (dev == NULL || nr_rx_frame(skb, dev) == 0)
 			kfree_skb(skb);
+
+		if (!skb_queue_empty(&loopback_queue) && !nr_loopback_running())
+			nr_set_loopback_timer();
 	}
 }
 

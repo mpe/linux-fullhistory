@@ -5,7 +5,7 @@ This document and the related code was written by me
 (Cort Dougan, cort@cs.nmt.edu) please email me if you have questions,
 comments or corrections.
 
-Last Change: 4.1.98
+Last Change: 10.8.98
 
 SMP support for Linux/PPC is still in its early stages and likely to
 be buggy for a while.  If you want to help by writing code or testing
@@ -13,7 +13,7 @@ different hardware please email me!
 
 1. State of Supported Hardware
 
-  PowerSurge Architecture - UMAX s900, Apple 9500/9600/8500/8600/7500/7600
+  PowerSurge Architecture - tested on UMAX s900, Apple 9600
     The second processor on this machine boots up just fine and
     enters its idle loop.  Hopefully a completely working SMP kernel
     on this machine will be done shortly.
@@ -22,7 +22,9 @@ different hardware please email me!
     necessary to work with any number would not be overly difficult but
     I don't have any machines with >2 processors so it's not high on my
     list of priorities.  If anyone else would like do to the work email
-    me and I can point out the places that need changed.
+    me and I can point out the places that need changed.  If you have >2
+    processors and don't want to add support yourself let me know and I
+    can take a look into it.
 
   BeBox
     BeBox support hasn't been added to the 2.1.X kernels from 2.0.X

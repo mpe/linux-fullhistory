@@ -352,13 +352,17 @@ static void handlefc(struct device *dev)
 	/* called *only* from idle, non-reentrant */
 	int dma = dev->dma;
 	int base = dev->base_addr;
+	unsigned long flags;
 
+
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 	set_dma_mode(dma,DMA_MODE_READ);
 	set_dma_addr(dma,virt_to_bus(ltdmacbuf));
 	set_dma_count(dma,50);
 	enable_dma(dma);
+	release_dma_lock(flags);
 
 	inb_p(base+3);
 	inb_p(base+2);
@@ -370,13 +374,16 @@ static void handlefd(struct device *dev)
 {
 	int dma = dev->dma;
 	int base = dev->base_addr;
+	unsigned long flags;
 
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 	set_dma_mode(dma,DMA_MODE_READ);
 	set_dma_addr(dma,virt_to_bus(ltdmabuf));
 	set_dma_count(dma,800);
 	enable_dma(dma);
+	release_dma_lock(flags);
 
 	inb_p(base+3);
 	inb_p(base+2);
@@ -391,21 +398,25 @@ static void handlewrite(struct device *dev)
 	/* on entry, 0xfb and ltdmabuf holds data */
 	int dma = dev->dma;
 	int base = dev->base_addr;
-
-
+	unsigned long flags;
+	
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 	set_dma_mode(dma,DMA_MODE_WRITE);
 	set_dma_addr(dma,virt_to_bus(ltdmabuf));
 	set_dma_count(dma,800);
 	enable_dma(dma);
-
+	release_dma_lock(flags);
+	
 	inb_p(base+3);
 	inb_p(base+2);
 
 	if ( wait_timeout(dev,0xfb) ) {
+		flags=claim_dma_lock();
 		printk("timed out in handlewrite, dma res %d\n",
 			get_dma_residue(dev->dma) );
+		release_dma_lock(flags);
 	}
 }
 
@@ -415,15 +426,17 @@ static void handleread(struct device *dev)
 	/* on exit, ltdmabuf holds data */
 	int dma = dev->dma;
 	int base = dev->base_addr;
+	unsigned long flags;
 
-
-
+	
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 	set_dma_mode(dma,DMA_MODE_READ);
 	set_dma_addr(dma,virt_to_bus(ltdmabuf));
 	set_dma_count(dma,800);
 	enable_dma(dma);
+	release_dma_lock(flags);
 
 	inb_p(base+3);
 	inb_p(base+2);
@@ -435,14 +448,16 @@ static void handlecommand(struct device *dev)
 	/* on entry, 0xfa and ltdmacbuf holds command */
 	int dma = dev->dma;
 	int base = dev->base_addr;
+	unsigned long flags;
 
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 	set_dma_mode(dma,DMA_MODE_WRITE);
 	set_dma_addr(dma,virt_to_bus(ltdmacbuf));
 	set_dma_count(dma,50);
 	enable_dma(dma);
-
+	release_dma_lock(flags);
 	inb_p(base+3);
 	inb_p(base+2);
 	if ( wait_timeout(dev,0xfa) ) printk("timed out in handlecommand\n");
@@ -978,6 +993,7 @@ __initfunc(int ltpc_probe(struct device *dev))
 	int probe3, probe4, probe9;
 	unsigned short straymask;
 	unsigned long flags;
+	unsigned long f;
 
 	err = ltpc_init(dev);
 	if (err) return err;
@@ -1089,6 +1105,7 @@ __initfunc(int ltpc_probe(struct device *dev))
 	inb_p(base+6); /* tri-state interrupt line */
 
 	timeout = jiffies+100;
+	
 	while(timeout>jiffies) {
 		/* wait for the card to complete initialization */
 	}
@@ -1098,21 +1115,26 @@ __initfunc(int ltpc_probe(struct device *dev))
 	/* set up both dma 1 and 3 for read call */
 
 	if (!request_dma(1,"ltpc")) {
+	
+		f=claim_dma_lock();
 		disable_dma(1);
 		clear_dma_ff(1);
 		set_dma_mode(1,DMA_MODE_WRITE);
 		set_dma_addr(1,virt_to_bus(ltdmabuf));
 		set_dma_count(1,sizeof(struct lt_mem));
 		enable_dma(1);
+		release_dma_lock(f);
 		dma|=1;
 	}
 	if (!request_dma(3,"ltpc")) {
+		f=claim_dma_lock();
 		disable_dma(3);
 		clear_dma_ff(3);
 		set_dma_mode(3,DMA_MODE_WRITE);
 		set_dma_addr(3,virt_to_bus(ltdmabuf));
 		set_dma_count(3,sizeof(struct lt_mem));
 		enable_dma(3);
+		release_dma_lock(f);
 		dma|=2;
 	}
 
@@ -1174,13 +1196,15 @@ __initfunc(int ltpc_probe(struct device *dev))
 	if(debug&DEBUG_VERBOSE) {
 		printk("finishing up transfer\n");
 	}
-
+	
+	f=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 	set_dma_mode(dma,DMA_MODE_READ);
 	set_dma_addr(dma,virt_to_bus(ltdmabuf));
 	set_dma_count(dma,0x100);
 	enable_dma(dma);
+	release_dma_lock(f);
 
 	(void) inb_p(base+3);
 	(void) inb_p(base+2);

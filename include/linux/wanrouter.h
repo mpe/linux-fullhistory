@@ -319,7 +319,7 @@ typedef struct wan_device
 	void* private;			/* -> driver private data */
 					/****** hardware configuration ******/
 	unsigned ioport;		/* adapter I/O port base #1 */
-	unsigned long maddr;		/* dual-port memory address */
+	void * maddr;			/* dual-port memory address */
 	unsigned msize;			/* dual-port memory size */
 	int irq;			/* interrupt request level */
 	int dma;			/* DMA request level */

@@ -123,7 +123,7 @@ struct parport_operations {
 
 	void (*enable_irq)(struct parport *);
 	void (*disable_irq)(struct parport *);
-	int (*examine_irq)(struct parport *);
+	void (*interrupt)(int, void *, struct pt_regs *);
 
 	void (*inc_use_count)(void);
 	void (*dec_use_count)(void);
@@ -206,7 +206,9 @@ struct parport {
 	void *private_data;     /* for lowlevel driver */
 
 	int number;		/* port index - the `n' in `parportn' */
-	spinlock_t lock;
+	spinlock_t pardevice_lock;
+	spinlock_t waitlist_lock;
+	spinlock_t cad_lock;
 };
 
 /* parport_register_port registers a new parallel port at the given address (if
@@ -234,10 +236,9 @@ struct parport *parport_enumerate(void);
 
 /* parport_register_device declares that a device is connected to a port, and 
  * tells the kernel all it needs to know.  
- * pf is the preemption function (may be NULL for a transient driver)
- * kf is the wake-up function (may be NULL for a transient driver)
+ * pf is the preemption function (may be NULL for no callback)
+ * kf is the wake-up function (may be NULL for no callback)
  * irq_func is the interrupt handler (may be NULL for no interrupts)
- * Only one lurking driver can be used on a given port. 
  * handle is a user pointer that gets handed to callback functions. 
  */
 struct pardevice *parport_register_device(struct parport *port, 
@@ -294,11 +295,31 @@ extern __inline__ int parport_yield_blocking(struct pardevice *dev)
 	return parport_claim_or_block(dev);
 }
 
-/* Flags used to identify what a device does. */
-#define PARPORT_DEV_TRAN	        0x0000  /* We're transient. */
-#define PARPORT_DEV_LURK	        0x0001  /* We lurk. */
+/*
+ * Lowlevel drivers _can_ call this support function to handle irqs.
+ */
+extern __inline__ void parport_generic_irq(int irq, struct parport *port,
+					   struct pt_regs *regs)
+{
+	read_lock(&port->cad_lock);
+	if (!port->cad)
+		goto out_unlock;
+	if (port->cad->irq_func)
+		port->cad->irq_func(irq, port->cad->private, regs);
+	else
+		printk(KERN_ERR "%s: irq%d happened with irq_func NULL "
+		       "with %s as cad!\n", port->name, irq, port->cad->name);
+ out_unlock:
+	read_unlock(&port->cad_lock);
+}
 
-#define PARPORT_FLAG_COMA		1
+/* Flags used to identify what a device does. */
+#define PARPORT_DEV_TRAN		0	/* WARNING !! DEPRECATED !! */
+#define PARPORT_DEV_LURK		(1<<0)	/* WARNING !! DEPRECATED !! */
+#define PARPORT_DEV_EXCL		(1<<1)	/* Need exclusive access. */
+
+#define PARPORT_FLAG_COMA		(1<<0)
+#define PARPORT_FLAG_EXCL		(1<<1)	/* EXCL driver registered. */
 
 extern void parport_parse_irqs(int, const char *[], int irqval[]);
 extern int parport_ieee1284_nibble_mode_ok(struct parport *, unsigned char);

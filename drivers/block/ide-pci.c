@@ -117,16 +117,6 @@ typedef struct ide_pci_device_s {
 	unsigned int		extra;
 } ide_pci_device_t;
 
-#ifdef CONFIG_BLK_DEV_OFFBOARD
-#  define ON_BOARD		0
-#  define OFF_BOARD		1
-#  define NEVER_BOARD		0
-#else /* CONFIG_BLK_DEV_OFFBOARD */
-#  define ON_BOARD		1
-#  define OFF_BOARD		0
-#  define NEVER_BOARD		0
-#endif /* CONFIG_BLK_DEV_OFFBOARD */
-
 static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_PIIXa,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIXb,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },

@@ -279,7 +279,7 @@ int audio_read(int dev, struct file *file, char *buf, int count)
 			 *	Nonblocking mode handling. Return current # of bytes
 			 */
 
-			if (file->f_flags & O_NONBLOCK && buf_no == -EAGAIN)
+			if ((file->f_flags & O_NONBLOCK) && buf_no == -EAGAIN)
 				return p;
 
 			if (p > 0) 		/* Avoid throwing away data */

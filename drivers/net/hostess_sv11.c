@@ -1,3 +1,5 @@
+#define LINUX_21
+
 /*
  *	Comtrol SV11 card driver
  *
@@ -7,7 +9,7 @@
  *	Its a genuine Z85230
  *
  *	It supports DMA using two DMA channels in SYNC mode. The driver doesn't
- *	use these facilities (yet).
+ *	use these facilities
  *	
  *	The control port is at io+1, the data at io+3 and turning off the DMA
  *	is done by writing 0 to io+4
@@ -19,6 +21,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/net.h>
@@ -50,7 +53,7 @@ struct sv11_device
 
 /*
  *	Frame receive. Simple for our card as we do sync ppp and there
- *	is no funny garbage involved. This is very timing sensitive.
+ *	is no funny garbage involved
  */
  
 static void hostess_input(struct z8530_channel *c, struct sk_buff *skb)
@@ -58,13 +61,12 @@ static void hostess_input(struct z8530_channel *c, struct sk_buff *skb)
 	/* Drop the CRC - its not a good idea to try and negotiate it ;) */
 	skb_trim(skb, skb->len-2);
 	skb->protocol=htons(ETH_P_WAN_PPP);
+	skb->mac.raw=skb->data;
 	skb->dev=c->netdevice;
 	/*
 	 *	Send it to the PPP layer. We dont have time to process
 	 *	it right now.
 	 */
-	skb->mac.raw = skb->data;
-	
 	netif_rx(skb);
 }
  
@@ -75,15 +77,24 @@ static void hostess_input(struct z8530_channel *c, struct sk_buff *skb)
 static int hostess_open(struct device *d)
 {
 	struct sv11_device *sv11=d->priv;
-	int err;
+	int err = -1;
 	
 	/*
 	 *	Link layer up
 	 */
-	if(dma)
-		err=z8530_sync_dma_open(d, &sv11->sync.chanA);
-	else
-		err=z8530_sync_open(d, &sv11->sync.chanA);
+	switch(dma)
+	{
+		case 0:
+			err=z8530_sync_open(d, &sv11->sync.chanA);
+			break;
+		case 1:
+			err=z8530_sync_dma_open(d, &sv11->sync.chanA);
+			break;
+		case 2:
+			err=z8530_sync_txdma_open(d, &sv11->sync.chanA);
+			break;
+	}
+	
 	if(err)
 		return err;
 	/*
@@ -92,10 +103,18 @@ static int hostess_open(struct device *d)
 	err=sppp_open(d);
 	if(err)
 	{
-		if(dma)
-			z8530_sync_dma_close(d, &sv11->sync.chanA);
-		else
-			z8530_sync_close(d, &sv11->sync.chanA);
+		switch(dma)
+		{
+			case 0:
+				z8530_sync_close(d, &sv11->sync.chanA);
+				break;
+			case 1:
+				z8530_sync_dma_close(d, &sv11->sync.chanA);
+				break;
+			case 2:
+				z8530_sync_txdma_close(d, &sv11->sync.chanA);
+				break;
+		}				
 		return err;
 	}
 	sv11->sync.chanA.rx_function=hostess_input;
@@ -123,10 +142,19 @@ static int hostess_close(struct device *d)
 	 *	Link layer down
 	 */
 	d->tbusy=1;
-	if(dma)
-		z8530_sync_dma_close(d, &sv11->sync.chanA);
-	else
-		z8530_sync_close(d, &sv11->sync.chanA);
+	
+	switch(dma)
+	{
+		case 0:
+			z8530_sync_close(d, &sv11->sync.chanA);
+			break;
+		case 1:
+			z8530_sync_dma_close(d, &sv11->sync.chanA);
+			break;
+		case 2:
+			z8530_sync_txdma_close(d, &sv11->sync.chanA);
+			break;
+	}
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -135,10 +163,10 @@ static int hostess_ioctl(struct device *d, struct ifreq *ifr, int cmd)
 {
 	struct sv11_device *sv11=d->priv;
 	/* z8530_ioctl(d,&sv11->sync.chanA,ifr,cmd) */
-	return sppp_do_ioctl(d, ifr, cmd);
+	return sppp_do_ioctl(d, ifr,cmd);
 }
 
-static struct net_device_stats *hostess_get_stats(struct device *d)
+static struct enet_statistics *hostess_get_stats(struct device *d)
 {
 	struct sv11_device *sv11=d->priv;
 	if(sv11)
@@ -157,6 +185,7 @@ static int hostess_queue_xmit(struct sk_buff *skb, struct device *d)
 	return z8530_queue_xmit(&sv11->sync.chanA, skb);
 }
 
+#ifdef LINUX_21
 static int hostess_neigh_setup(struct neighbour *n)
 {
 	if (n->nud_state == NUD_NONE) {
@@ -175,6 +204,15 @@ static int hostess_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
 	}
 	return 0;
 }
+
+#else
+
+static int return_0(struct device *d)
+{
+	return 0;
+}
+
+#endif
 
 /*
  *	Description block for a Comtrol Hostess SV11 card
@@ -243,13 +281,17 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 		 *	You can have DMA off or 1 and 3 thats the lot
 		 *	on the Comtrol.
 		 */
-		dev->chanA.txdma=1;
-		dev->chanA.rxdma=3;
-		outb(14, iobase+4);		/* DMA on */
+		dev->chanA.txdma=3;
+		dev->chanA.rxdma=1;
+		outb(0x03|0x08, iobase+4);		/* DMA on */
 		if(request_dma(dev->chanA.txdma, "Hostess SV/11 (TX)")!=0)
 			goto fail;
-		if(request_dma(dev->chanA.rxdma, "Hostess SV/11 (RX)")!=0)
-			goto dmafail;
+			
+		if(dma==1)
+		{
+			if(request_dma(dev->chanA.rxdma, "Hostess SV/11 (RX)")!=0)
+				goto dmafail;
+		}
 	}
 	save_flags(flags);
 	cli();
@@ -259,7 +301,10 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	 */
 	 
 	if(z8530_init(dev)!=0)
+	{
+		printk(KERN_ERR "Z8530 series device not found.\n");
 		goto dmafail2;
+	}
 	z8530_channel_load(&dev->chanB, z8530_dead_port);
 	if(dev->type==Z85C30)
 		z8530_channel_load(&dev->chanA, z8530_hdlc_kilostream);
@@ -269,8 +314,6 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	restore_flags(flags);
 
 
-	printk(KERN_INFO "begin loading hdlc\n");
-	
 	/*
 	 *	Now we can take the IRQ
 	 */
@@ -291,7 +334,6 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 			 *	Local fields
 			 */	
 			sprintf(sv->name,"hdlc%d", i);
-			printk("Filling in device '%s' at %p\n", sv->name, d);
 			
 			d->name = sv->name;
 			d->base_addr = iobase;
@@ -305,8 +347,12 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 			d->get_stats = hostess_get_stats;
 			d->set_multicast_list = NULL;
 			d->do_ioctl = hostess_ioctl;
+#ifdef LINUX_21			
 			d->neigh_setup = hostess_neigh_setup_dev;
 			dev_init_buffers(d);
+#else
+			d->init = return_0;
+#endif
 			d->set_mac_address = NULL;
 			
 			if(register_netdev(d)==-1)
@@ -322,11 +368,11 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 		}
 	}
 dmafail2:
-	if(!dma)
-		goto fail;
-	free_dma(dev->chanA.rxdma);
+	if(dma==1)
+		free_dma(dev->chanA.rxdma);
 dmafail:
-	free_dma(dev->chanA.txdma);
+	if(dma)
+		free_dma(dev->chanA.txdma);
 fail:
 	free_irq(irq, dev);
 fail2:
@@ -342,8 +388,11 @@ static void sv11_shutdown(struct sv11_device *dev)
 	z8530_shutdown(&dev->sync);
 	unregister_netdev(&dev->netdev.dev);
 	free_irq(dev->sync.irq, dev);
-	free_dma(dev->sync.chanA.rxdma);
-	free_dma(dev->sync.chanA.txdma);
+	if(dma)
+	{
+		free_dma(dev->sync.chanA.rxdma);
+		free_dma(dev->sync.chanA.txdma);
+	}
 	release_region(dev->sync.chanA.ctrlio-1, 8);
 }
 
@@ -352,6 +401,7 @@ static void sv11_shutdown(struct sv11_device *dev)
 static int io=0x200;
 static int irq=9;
 
+#ifdef LINUX_21
 MODULE_PARM(io,"i");
 MODULE_PARM_DESC(io, "The I/O base of the Comtrol Hostess SV11 card");
 MODULE_PARM(dma,"i");
@@ -361,12 +411,13 @@ MODULE_PARM_DESC(irq, "The interrupt line setting for the Comtrol Hostess SV11 c
 
 MODULE_AUTHOR("Bulding Number Three Ltd");
 MODULE_DESCRIPTION("Modular driver for the Comtrol Hostess SV11");
+#endif
 
 static struct sv11_device *sv11_unit;
 
 int init_module(void)
 {
-	printk(KERN_INFO "SV-11 Z85230 Synchronous Driver v 0.02.\n");
+	printk(KERN_INFO "SV-11 Z85230 Synchronous Driver v 0.01.\n");
 	printk(KERN_INFO "(c) Copyright 1998, Building Number Three Ltd.\n");	
 	if(dma)
 		printk(KERN_WARNING "DMA mode probably wont work right now.\n");

@@ -14,6 +14,7 @@
 #include <linux/errno.h>
 #include <asm/dma.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 
 
 /* A note on resource allocation:

@@ -327,13 +327,17 @@ static inline void check_3c505_dma(struct device *dev)
 {
 	elp_device *adapter = dev->priv;
 	if (adapter->dmaing && (jiffies > (adapter->current_dma.start_time + 10))) {
-		unsigned long flags;
+		unsigned long flags, f;
 		printk("%s: DMA %s timed out, %d bytes left\n", dev->name, adapter->current_dma.direction ? "download" : "upload", get_dma_residue(dev->dma));
 		save_flags(flags);
 		cli();
 		adapter->dmaing = 0;
 		adapter->busy = 0;
+		
+		f=claim_dma_lock();
 		disable_dma(dev->dma);
+		release_dma_lock(f);
+		
 		if (adapter->rx_active)
 			adapter->rx_active--;
 		outb_control(adapter->hcr_val & ~(DMAE | TCEN | DIR), dev);
@@ -601,6 +605,7 @@ static void receive_packet(struct device *dev, int len)
 	elp_device *adapter = dev->priv;
 	void *target;
 	struct sk_buff *skb;
+	unsigned long flags;
 
 	rlen = (len + 1) & ~1;
 	skb = dev_alloc_skb(rlen + 2);
@@ -632,12 +637,14 @@ static void receive_packet(struct device *dev, int len)
 
 	outb_control(adapter->hcr_val | DIR | TCEN | DMAE, dev);
 
+	flags=claim_dma_lock();
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
 	set_dma_mode(dev->dma, 0x04);	/* dma read */
 	set_dma_addr(dev->dma, virt_to_bus(target));
 	set_dma_count(dev->dma, rlen);
 	enable_dma(dev->dma);
+	release_dma_lock(flags);
 
 	if (elp_debug >= 3) {
 		printk("%s: rx DMA transfer started\n", dev->name);
@@ -1019,6 +1026,7 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 {
 	elp_device *adapter = dev->priv;
 	unsigned long target;
+	unsigned long flags;
 
 	/*
 	 * make sure the length is even and no shorter than 60 bytes
@@ -1060,7 +1068,8 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 		target = virt_to_bus(adapter->dma_buffer);
 	}
 	adapter->current_dma.skb = skb;
-	cli();
+
+	flags=claim_dma_lock();
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
 	set_dma_mode(dev->dma, 0x48);	/* dma memory -> io */
@@ -1068,6 +1077,8 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 	set_dma_count(dev->dma, nlen);
 	outb_control(adapter->hcr_val | DMAE | TCEN, dev);
 	enable_dma(dev->dma);
+	release_dma_lock(flags);
+	
 	if (elp_debug >= 3)
 		printk("%s: DMA transfer started\n", dev->name);
 

@@ -17,6 +17,7 @@
 #define O_SYNC		0x2000
 #define O_NONBLOCK	0x4000
 #define O_NOCTTY	0x8000	/* not fcntl */
+#define O_DIRECTORY	0x10000	/* must be a directory */
 
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get f_flags */

@@ -133,14 +133,29 @@ int ppa_detect(Scsi_Host_Template * host)
 
 	ppa_hosts[i].dev =
 	    parport_register_device(pb, "ppa", NULL, ppa_wakeup,
-			 NULL, PARPORT_DEV_TRAN, (void *) &ppa_hosts[i]);
+			 NULL, 0, (void *) &ppa_hosts[i]);
+
+	if (!ppa_hosts[i].dev)
+		continue;
 
 	/* Claim the bus so it remembers what we do to the control
 	 * registers. [ CTR and ECP ]
 	 */
 	if (ppa_pb_claim(i))
+	{
+	    unsigned long now = jiffies;
 	    while (ppa_hosts[i].p_busy)
+	    {
 		schedule();	/* We are safe to schedule here */
+		if (jiffies > now + 3*HZ)
+		{
+		    printk(KERN_ERR "ppa%d: failed to claim parport because a "
+			   "pardevice is owning the port for too longtime!\n",
+			   i);
+		    return 0;
+		}
+	    }
+	}
 
 	ppb = PPA_BASE(i) = ppa_hosts[i].dev->port->base;
 	w_ctr(ppb, 0x0c);

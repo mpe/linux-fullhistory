@@ -8,15 +8,15 @@
  * Corrections in device setup for some laptop mice & trackballs.
  * 02Feb93  (troyer@saifr00.cfsat.Honeywell.COM,mch@wimsey.bc.ca)
  *
- * Modified by Johan Myreen (jem@pandora.pp.fi) 04Aug93
+ * Modified by Johan Myreen (jem@iki.fi) 04Aug93
  *   to include support for QuickPort mouse.
  *
  * Changed references to "QuickPort" with "82C710" since "QuickPort"
  * is not what this driver is all about -- QuickPort is just a
  * connector type, and this driver is for the mouse port on the Chips
- * & Technologies 82C710 interface chip. 15Nov93 jem@pandora.pp.fi
+ * & Technologies 82C710 interface chip. 15Nov93 jem@iki.fi
  *
- * Added support for SIGIO. 28Jul95 jem@pandora.pp.fi
+ * Added support for SIGIO. 28Jul95 jem@iki.fi
  *
  * Rearranged SIGIO support to use code from tty_io.  9Sept95 ctm@ardi.com
  *

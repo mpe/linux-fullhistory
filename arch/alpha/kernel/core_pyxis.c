@@ -99,33 +99,13 @@ static int
 mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
-	unsigned long addr;
+	*type1 = (bus == 0) ? 0 : 1;
+	*pci_addr = (bus << 16) | (device_fn << 8) | (where);
 
 	DBG_CNF(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x,"
-		 " pci_addr=0x%p, type1=0x%p)\n",
-		 bus, device_fn, where, pci_addr, type1));
+		 " returning address 0x%p\n"
+		 bus, device_fn, where, *pci_addr));
 
-	if (bus == 0) {
-		int device;
-
-		device = device_fn >> 3;
-		/* Type 0 configuration cycle. */
-#if NOT_NOW
-		if (device > 20) {
-			DBG_CNF(("mk_conf_addr: device (%d) > 20, return -1\n",
-				 device));
-			return -1;
-		}
-#endif
-		*type1 = 0;
-		addr = (device_fn << 8) | (where);
-	} else {
-		/* Type 1 configuration cycle.  */
-		*type1 = 1;
-		addr = (bus << 16) | (device_fn << 8) | (where);
-	}
-	*pci_addr = addr;
-	DBG_CNF(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
 	return 0;
 }
 
@@ -142,12 +122,11 @@ conf_read(unsigned long addr, unsigned char type1)
 	stat0 = *(vuip)PYXIS_ERR;
 	*(vuip)PYXIS_ERR = stat0; mb();
 	temp = *(vuip)PYXIS_ERR;  /* re-read to force write */
-	DBG_CNF(("conf_read: PYXIS ERR was 0x%x\n", stat0));
 
 	/* If Type1 access, must set PYXIS CFG.  */
 	if (type1) {
 		pyxis_cfg = *(vuip)PYXIS_CFG;
-		*(vuip)PYXIS_CFG = pyxis_cfg | 1; mb();
+		*(vuip)PYXIS_CFG = (pyxis_cfg & ~3L) | 1; mb();
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
@@ -172,14 +151,15 @@ conf_read(unsigned long addr, unsigned char type1)
 
 	/* If Type1 access, must reset IOC CFG so normal IO space ops work.  */
 	if (type1) {
-		*(vuip)PYXIS_CFG = pyxis_cfg & ~1; mb();
+		*(vuip)PYXIS_CFG = pyxis_cfg & ~3L; mb();
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
+
+	__restore_flags(flags);
 
 	DBG_CNF(("conf_read(addr=0x%lx, type1=%d) = %#x\n",
 		 addr, type1, value));
 
-	__restore_flags(flags);
 	return value;
 }
 
@@ -189,9 +169,6 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	unsigned long flags;
 	unsigned int stat0, temp;
 	unsigned int pyxis_cfg = 0;
-
-	DBG_CNF(("conf_write(addr=%#lx, value=%#x, type1=%d)\n",
-		 addr, value, type1));
 
 	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
@@ -203,7 +180,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	/* If Type1 access, must set PYXIS CFG.  */
 	if (type1) {
 		pyxis_cfg = *(vuip)PYXIS_CFG;
-		*(vuip)PYXIS_CFG = pyxis_cfg | 1; mb();
+		*(vuip)PYXIS_CFG = (pyxis_cfg & ~3L) | 1; mb();
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
@@ -216,18 +193,20 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	/* Access configuration space.  */
 	*(vuip)addr = value;
 	mb();
-	mb();  /* magic */
-	temp = *(vuip)PYXIS_ERR; /* do a PYXIS read to force the write */
+	temp = *(vuip)addr; /* read back to force the write */
 	PYXIS_mcheck_expected = 0;
 	mb();
 
 	/* If Type1 access, must reset IOC CFG so normal IO space ops work.  */
 	if (type1) {
-		*(vuip)PYXIS_CFG = pyxis_cfg & ~1; mb();
+		*(vuip)PYXIS_CFG = pyxis_cfg & ~3L; mb();
 		temp = *(vuip)PYXIS_CFG;  /* re-read to force write */
 	}
 
 	__restore_flags(flags);
+
+	DBG_CNF(("conf_write(addr=%#lx, value=%#x, type1=%d)\n",
+		 addr, value, type1));
 }
 
 int

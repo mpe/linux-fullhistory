@@ -39,6 +39,7 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 unsigned int boot_cpu_id = 0;
 static int smp_activated = 0;
+static unsigned long ipicnt[NR_CPUS] = {0,}; /* IPI counts */
 
 int smp_found_config = 0; /* Have we found an SMP box */
 static int max_cpus = -1;
@@ -619,7 +620,6 @@ local_flush_tlb_all(unsigned int this_cpu)
 {
 	tbia();
 	clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
-	mb();
 	return 0;
 }
 
@@ -627,12 +627,9 @@ static int
 local_flush_tlb_mm(unsigned int this_cpu)
 {
 	struct mm_struct * mm = ipi_msg_flush_tb.p.flush_mm;
-	if (mm != current->mm)
-		flush_tlb_other(mm);
-	else
+	if (mm == current->mm)
 		flush_tlb_current(mm);
 	clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
-	mb();
 	return 0;
 }
 
@@ -642,12 +639,9 @@ local_flush_tlb_page(unsigned int this_cpu)
 	struct vm_area_struct * vma = ipi_msg_flush_tb.p.flush_vma;
 	struct mm_struct * mm = vma->vm_mm;
 
-	if (mm != current->mm)
-		flush_tlb_other(mm);
-	else
+	if (mm == current->mm)
 		flush_tlb_current_page(mm, vma, ipi_msg_flush_tb.flush_addr);
 	clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
-	mb();
 	return 0;
 }
 
@@ -701,7 +695,7 @@ handle_ipi(struct pt_regs *regs)
 	volatile int * pending_ipis = &ipi_bits[this_cpu];
 	int ops;
 
-	mb();
+	mb();		/* Order bit setting and interrupt. */
 #if 0
 	printk("handle_ipi: on CPU %d ops 0x%x PC 0x%lx\n",
 	       this_cpu, *pending_ipis, regs->pc);
@@ -711,10 +705,10 @@ handle_ipi(struct pt_regs *regs)
 		for (first = 0; (ops & 1) == 0; ++first, ops >>= 1)
 			; /* look for the first thing to do */
 		clear_bit(first, pending_ipis);
-		mb();
+		mb();	/* Order bit clearing and data access. */
 		if ((*ipi_func[first])(this_cpu))
-		  printk("%d\n", first);
-		mb();
+			printk("%d\n", first);
+		mb();	/* Order data access and bit clearing. */
 	}
 	if (hwrpb->txrdy)
 	  secondary_console_message();
@@ -726,19 +720,26 @@ send_ipi_message(long to_whom, enum ipi_message_type operation)
 	int i;
 	unsigned int j;
 
+	mb();			/* Order out-of-band data and bit setting. */
 	for (i = 0, j = 1; i < NR_CPUS; ++i, j += j) {
 		if ((to_whom & j) == 0)
 			continue;
 		set_bit(operation, &ipi_bits[i]);
-		mb();
+		mb();		/* Order bit setting and interrupt. */
 		wripir(i);
 	}
 }
 
-int smp_info(char *buffer)
+int
+smp_info(char *buffer)
 {
-        return sprintf(buffer, "CPUs probed %d active %d map 0x%x\n",
-		       smp_num_probed, smp_num_cpus, cpu_present_map);
+	int i;
+	unsigned long sum = 0;
+	for (i = 0; i < NR_CPUS; i++)
+		sum += ipicnt[i];
+
+        return sprintf(buffer, "CPUs probed %d active %d map 0x%x IPIs %ld\n",
+		       smp_num_probed, smp_num_cpus, cpu_present_map, sum);
 }
 
 /* wrapper for call from panic() */
@@ -763,19 +764,22 @@ flush_tlb_all(void)
 	unsigned int to_whom = cpu_present_map ^ (1 << smp_processor_id());
 	int timeout = 10000;
 
+	spin_lock_own(&kernel_flag, "flush_tlb_all");
+
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
 	send_ipi_message(to_whom, TLB_ALL);
 	tbia();
 
 	while (ipi_msg_flush_tb.flush_tb_mask) {
-	  if (--timeout < 0) {
-	    printk("flush_tlb_all: STUCK on CPU %d mask 0x%x\n",
-		   smp_processor_id(), ipi_msg_flush_tb.flush_tb_mask);
-	    ipi_msg_flush_tb.flush_tb_mask = 0;
-	    break;
-	  }
-	  udelay(100);
-		; /* Wait for all clear from other CPUs. */
+		if (--timeout < 0) {
+			printk("flush_tlb_all: STUCK on CPU %d mask 0x%x\n",
+			       smp_processor_id(),
+			       ipi_msg_flush_tb.flush_tb_mask);
+			ipi_msg_flush_tb.flush_tb_mask = 0;
+			break;
+		}
+		/* Wait for all clear from other CPUs. */
+		udelay(100);
 	}
 }
 
@@ -784,6 +788,8 @@ flush_tlb_mm(struct mm_struct *mm)
 {
 	unsigned int to_whom = cpu_present_map ^ (1 << smp_processor_id());
 	int timeout = 10000;
+
+	spin_lock_own(&kernel_flag, "flush_tlb_mm");
 
 	ipi_msg_flush_tb.p.flush_mm = mm;
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
@@ -813,6 +819,8 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 	unsigned int to_whom = cpu_present_map ^ (1 << cpu);
 	struct mm_struct * mm = vma->vm_mm;
 	int timeout = 10000;
+
+	spin_lock_own(&kernel_flag, "flush_tlb_page");
 
 	ipi_msg_flush_tb.p.flush_vma = vma;
 	ipi_msg_flush_tb.flush_addr = addr;
@@ -849,6 +857,8 @@ flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 	timeout = 10000;
 	to_whom = cpu_present_map ^ (1 << smp_processor_id());
 
+	spin_lock_own(&kernel_flag, "flush_tlb_range");
+
 	ipi_msg_flush_tb.p.flush_mm = mm;
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
 	send_ipi_message(to_whom, TLB_MM);
@@ -871,11 +881,51 @@ flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 }
 
 #if DEBUG_SPINLOCK
-void spin_lock(spinlock_t * lock)
+
+#ifdef MANAGE_SPINLOCK_IPL
+
+static inline long 
+spinlock_raise_ipl(spinlock_t * lock)
+{
+ 	long min_ipl = lock->target_ipl;
+	long last_ipl = swpipl(7);
+	if (last_ipl < 7 && min_ipl < 7)
+		setipl(min_ipl < last_ipl ? last_ipl : min_ipl);
+	return last_ipl;
+}
+
+static inline void
+spinlock_restore_ipl(long prev)
+{
+	setipl(prev);
+}
+
+#else
+
+#define spinlock_raise_ipl(LOCK)	0
+#define spinlock_restore_ipl(PREV)	((void)0)
+
+#endif /* MANAGE_SPINLOCK_IPL */
+
+void
+spin_unlock(spinlock_t * lock)
+{
+	long old_ipl = lock->saved_ipl;
+	mb();
+	lock->lock = 0;
+	spinlock_restore_ipl(old_ipl);
+}
+
+void
+spin_lock(spinlock_t * lock)
 {
 	long tmp;
-	long stuck;
+	long stuck = 1<<27;
 	void *inline_pc = __builtin_return_address(0);
+	unsigned long started = jiffies;
+	int printed = 0;
+	int cpu = smp_processor_id();
+	long old_ipl = spinlock_raise_ipl(lock);
 
  try_again:
 
@@ -885,15 +935,15 @@ void spin_lock(spinlock_t * lock)
 	   of this object file's text section so as to perfect
 	   branch prediction.  */
 	__asm__ __volatile__(
-	"1:	ldq_l	%0,%1\n"
+	"1:	ldl_l	%0,%1\n"
 	"	subq	%2,1,%2\n"
 	"	blbs	%0,2f\n"
 	"	or	%0,1,%0\n"
-	"	stq_c	%0,%1\n"
+	"	stl_c	%0,%1\n"
 	"	beq	%0,3f\n"
 	"4:	mb\n"
 	".section .text2,\"ax\"\n"
-	"2:	ldq	%0,%1\n"
+	"2:	ldl	%0,%1\n"
 	"	subq	%2,1,%2\n"
 	"3:	blt	%2,4b\n"
 	"	blbs	%0,2b\n"
@@ -905,13 +955,43 @@ void spin_lock(spinlock_t * lock)
 	: "2" (stuck));
 
 	if (stuck < 0) {
-		printk("spinlock stuck at %p (cur=%p, own=%p, prev=%p)\n",
-		       inline_pc, current, lock->task, lock->previous);
+		if (!printed) {
+			printk("spinlock stuck at %p(%d) owner %s at %p\n",
+			       inline_pc, cpu, lock->task->comm,
+			       lock->previous);
+			printed = 1;
+		}
+		stuck = 1<<30;
 		goto try_again;
-	} else {
-		lock->previous = inline_pc;
-		lock->task = current;
 	}
+
+	/* Exiting.  Got the lock.  */
+	lock->saved_ipl = old_ipl;
+	lock->on_cpu = cpu;
+	lock->previous = inline_pc;
+	lock->task = current;
+
+	if (printed) {
+		printk("spinlock grabbed at %p(%d) %ld ticks\n",
+		       inline_pc, cpu, jiffies - started);
+	}
+}
+
+int
+spin_trylock(spinlock_t * lock)
+{
+	long old_ipl = spinlock_raise_ipl(lock);
+	int ret;
+	if ((ret = !test_and_set_bit(0, lock))) {
+		mb();
+		lock->saved_ipl = old_ipl;
+		lock->on_cpu = smp_processor_id();
+		lock->previous = __builtin_return_address(0);
+		lock->task = current;
+	} else {
+		spinlock_restore_ipl(old_ipl);
+	}
+	return ret;
 }
 #endif /* DEBUG_SPINLOCK */
 
@@ -930,22 +1010,21 @@ void write_lock(rwlock_t * lock)
 	__asm__ __volatile__(
 	"1:	ldl_l	%1,%0\n"
 	"	blbs	%1,6f\n"
-	"	or	%1,1,%2\n"
-	"	stl_c	%2,%0\n"
-	"	beq	%2,6f\n"
 	"	blt	%1,8f\n"
+	"	mov	1,%1\n"
+	"	stl_c	%1,%0\n"
+	"	beq	%1,6f\n"
 	"4:	mb\n"
 	".section .text2,\"ax\"\n"
-	"6:	ldl	%1,%0\n"
-	"	blt	%3,4b	# debug\n"
+	"6:	blt	%3,4b	# debug\n"
 	"	subl	%3,1,%3	# debug\n"
+	"	ldl	%1,%0\n"
 	"	blbs	%1,6b\n"
-	"	br	1b\n"
-	"8:	ldl	%1,%0\n"
-	"	blt	%4,4b	# debug\n"
+	"8:	blt	%4,4b	# debug\n"
 	"	subl	%4,1,%4	# debug\n"
+	"	ldl	%1,%0\n"
 	"	blt	%1,8b\n"
-	"	br	4b\n"
+	"	br	1b\n"
 	".previous"
 	: "=m" (__dummy_lock(lock)), "=&r" (regx), "=&r" (regy)
 	, "=&r" (stuck_lock), "=&r" (stuck_reader)

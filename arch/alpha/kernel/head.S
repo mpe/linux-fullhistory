@@ -9,8 +9,6 @@
 
 #include <asm/system.h>
 
-#define halt call_pal PAL_halt
-
 .globl swapper_pg_dir
 .globl _stext
 swapper_pg_dir=SWAPPER_PGD
@@ -29,28 +27,28 @@ __start:
 	lda	$30,0x4000($8)
 	/* ... and then we can start the kernel.  */
 	jsr	$26,start_kernel
-	halt
+	call_pal PAL_halt
 	.end __start
 
 #ifdef __SMP__
 	.align 3
 	.globl	__start_cpu
 	.ent	__start_cpu
-	/* on entry here from SRM console, the HWPCB of this processor */
-	/* has been loaded, and $27 contains the task pointer */
+	/* On entry here from SRM console, the HWPCB of this processor
+	   has been loaded, and $27 contains the task pointer */
 __start_cpu:
 	.prologue 0
-	/* first order of business, load the GP */
+	/* First order of business, load the GP */
 	br	$26,1f
 1:	ldgp	$29,0($26)
 	/* We need to get current loaded up with our first task...  */
-	lda	$8,0($27)
-	/* set FEN */
+	mov	$27,$8
+	/* Set FEN */
 	lda	$16,1($31)
 	call_pal PAL_wrfen
 	/* ... and then we can start the processor.  */
 	jsr	$26,start_secondary
-	halt
+	call_pal PAL_halt
 	.end __start_cpu
 #endif /* __SMP__ */
 
@@ -121,9 +119,19 @@ whami:
 	.globl  wripir
 	.ent    wripir
 wripir:
+	.prologue 0
 	call_pal PAL_wripir
 	ret     ($26)
 	.end wripir
+
+	.align 3
+	.globl wrvptptr
+	.ent wrvptptr
+wrvptptr:
+	.prologue 0
+	call_pal PAL_wrvptptr
+	ret	($26)
+	.end wrvptptr
 
 	#
 	# The following two functions are needed for supporting SRM PALcode
@@ -152,3 +160,17 @@ cserve_dis:
 	call_pal PAL_cserve
 	ret	($26)
 	.end	cserve_dis
+
+	#
+	# It is handy, on occasion, to make halt actually just loop. 
+	# Putting it here means we dont have to recompile the whole
+	# kernel.
+	#
+
+	.align 3
+	.globl	halt
+	.ent	halt
+halt:
+	.prologue 0
+	call_pal PAL_halt
+	.end	halt

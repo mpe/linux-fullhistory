@@ -295,7 +295,7 @@ void __init js_l4_setup(char *str, int *ints)
 #ifdef MODULE
 int init_module(void)
 #else
-int __init js_l4_an_init(void)
+int __init js_l4_init(void)
 #endif
 {
 	int i, cards;

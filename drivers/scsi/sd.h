@@ -42,6 +42,11 @@ extern Scsi_Disk * rscsi_disks;
 
 extern int revalidate_scsidisk(kdev_t dev, int maxusage);
 
+#define N_SD_MAJORS	8
+
+#define SD_MAJOR_MASK	(N_SD_MAJORS - 1)
+#define SD_PARTITION(i)		(((MAJOR(i) & SD_MAJOR_MASK) << 8) | (MINOR(i) & 255))
+
 #endif
 
 /*

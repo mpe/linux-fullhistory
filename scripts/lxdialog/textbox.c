@@ -451,8 +451,11 @@ print_page (WINDOW * win, int height, int width)
 static void
 print_line (WINDOW * win, int row, int width)
 {
-    int i, y, x;
+    int y, x;
     char *line;
+#if OLD_NCURSES
+     int i;
+#endif
 
     line = get_line ();
     line += MIN (strlen (line), hscroll);	/* Scroll horizontally */

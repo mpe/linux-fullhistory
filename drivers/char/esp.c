@@ -395,15 +395,20 @@ static _INLINE_ void receive_chars_pio(struct esp_struct *info, int num_bytes)
 
 static _INLINE_ void receive_chars_dma(struct esp_struct *info, int num_bytes)
 {
+	unsigned long flags;
 	info->stat_flags &= ~ESP_STAT_RX_TIMEOUT;
 	dma_bytes = num_bytes;
 	info->stat_flags |= ESP_STAT_DMA_RX;
+	
+	flags=claim_dma_lock();
         disable_dma(dma);
         clear_dma_ff(dma);
         set_dma_mode(dma, DMA_MODE_READ);
         set_dma_addr(dma, virt_to_bus(dma_buffer));
         set_dma_count(dma, dma_bytes);
         enable_dma(dma);
+        release_dma_lock(flags);
+        
         serial_out(info, UART_ESI_CMD1, ESI_START_DMA_RX);
 }
 
@@ -412,12 +417,17 @@ static _INLINE_ void receive_chars_dma_done(struct esp_struct *info,
 {
 	struct tty_struct *tty = info->tty;
 	int num_bytes;
-
+	unsigned long flags;
+	
+	
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 
 	info->stat_flags &= ~ESP_STAT_DMA_RX;
 	num_bytes = dma_bytes - get_dma_residue(dma);
+	release_dma_lock(flags);
+	
 	info->icount.rx += num_bytes;
 
 	memcpy(tty->flip.char_buf_ptr, dma_buffer, num_bytes);
@@ -534,6 +544,8 @@ static _INLINE_ void transmit_chars_pio(struct esp_struct *info,
 
 static _INLINE_ void transmit_chars_dma(struct esp_struct *info, int num_bytes)
 {
+	unsigned long flags;
+	
 	dma_bytes = num_bytes;
 
 	if (info->xmit_tail + dma_bytes <= ESP_XMIT_SIZE) {
@@ -564,34 +576,46 @@ static _INLINE_ void transmit_chars_dma(struct esp_struct *info, int num_bytes)
 	}
 
 	info->stat_flags |= ESP_STAT_DMA_TX;
+	
+	flags=claim_dma_lock();
         disable_dma(dma);
         clear_dma_ff(dma);
         set_dma_mode(dma, DMA_MODE_WRITE);
         set_dma_addr(dma, virt_to_bus(dma_buffer));
         set_dma_count(dma, dma_bytes);
         enable_dma(dma);
+        release_dma_lock(flags);
+        
         serial_out(info, UART_ESI_CMD1, ESI_START_DMA_TX);
 }
 
 static _INLINE_ void transmit_chars_dma_done(struct esp_struct *info)
 {
 	int num_bytes;
+	unsigned long flags;
+	
 
+	flags=claim_dma_lock();
 	disable_dma(dma);
 	clear_dma_ff(dma);
 
 	num_bytes = dma_bytes - get_dma_residue(dma);
 	info->icount.tx += dma_bytes;
+	release_dma_lock(flags);
 
 	if (dma_bytes != num_bytes) {
 		dma_bytes -= num_bytes;
 		memmove(dma_buffer, dma_buffer + num_bytes, dma_bytes);
+		
+		flags=claim_dma_lock();
         	disable_dma(dma);
         	clear_dma_ff(dma);
         	set_dma_mode(dma, DMA_MODE_WRITE);
         	set_dma_addr(dma, virt_to_bus(dma_buffer));
         	set_dma_count(dma, dma_bytes);
         	enable_dma(dma);
+        	release_dma_lock(flags);
+        	
         	serial_out(info, UART_ESI_CMD1, ESI_START_DMA_TX);
 	} else {
 		dma_bytes = 0;
@@ -1003,7 +1027,7 @@ static int startup(struct esp_struct * info)
  */
 static void shutdown(struct esp_struct * info)
 {
-	unsigned long	flags;
+	unsigned long	flags, f;
 
 	if (!(info->flags & ASYNC_INITIALIZED))
 		return;
@@ -1025,8 +1049,11 @@ static void shutdown(struct esp_struct * info)
 	/* stop a DMA transfer on the port being closed */
 	   
 	if (info->stat_flags & (ESP_STAT_DMA_RX | ESP_STAT_DMA_TX)) {
+		f=claim_dma_lock();
 		disable_dma(dma);
 		clear_dma_ff(dma);
+		release_dma_lock(f);
+		
 		dma_bytes = 0;
 	}
 	

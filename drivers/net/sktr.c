@@ -298,6 +298,7 @@ __initfunc(static int sktr_pci_chk_card(struct device *dev))
 __initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
 {
 	int i, err;
+	unsigned long flags;
 
 	err = sktr_isa_chk_ioaddr(ioaddr);
 	if(err < 0)
@@ -373,9 +374,11 @@ __initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
                 }
         }
 
+	flags=claim_dma_lock();
 	disable_dma(dev->dma);
         set_dma_mode(dev->dma, DMA_MODE_CASCADE);
         enable_dma(dev->dma);
+        release_dma_lock(flags);
 
 	printk("%s: %s found at %#4x, using IRQ %d and DMA %d.\n",
                 dev->name, AdapterName, ioaddr, dev->irq, dev->dma);
@@ -1446,7 +1449,12 @@ static int sktr_close(struct device *dev)
 	sktr_disable_interrupts(dev);
    
 	if(dev->dma > 0) 
+	{
+		unsigned long flags=claim_dma_lock();
 		disable_dma(dev->dma);
+		release_dma_lock(flags);
+	}
+	
 	outw(0xFF00, dev->base_addr + SIFCMD);
 	if(dev->dma > 0)
 		outb(0xff, dev->base_addr + POSREG);

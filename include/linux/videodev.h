@@ -159,6 +159,9 @@ struct video_window
 	struct	video_clip *clips;	/* Set only */
 	int	clipcount;
 #define VIDEO_WINDOW_INTERLACE	1
+#define VIDEO_CLIP_BITMAP	-1
+/* bitmap is 1024x625, a '1' bit represents a clipped pixel */
+#define VIDEO_CLIPMAP_SIZE	(128 * 625)
 };
 
 struct video_capture

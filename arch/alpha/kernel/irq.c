@@ -311,26 +311,41 @@ free_irq(unsigned int irq, void *dev_id)
 
 int get_irq_list(char *buf)
 {
-	int i, len = 0;
+	int i, j;
 	struct irqaction * action;
-	int cpu = smp_processor_id();
+	char *p = buf;
+
+#ifdef __SMP__
+	p += sprintf(p, "           ");
+	for (j = 0; j < smp_num_cpus; j++)
+		p += sprintf(p, "CPU%d       ", j);
+	*p++ = '\n';
+#endif
 
 	for (i = 0; i < NR_IRQS; i++) {
 		action = irq_action[i];
 		if (!action) 
 			continue;
-		len += sprintf(buf+len, "%2d: %10u %c %s",
-			       i, kstat.irqs[cpu][i],
-			       (action->flags & SA_INTERRUPT) ? '+' : ' ',
-			       action->name);
+		p += sprintf(p, "%3d: ",i);
+#ifndef __SMP__
+		p += sprintf(p, "%10u ", kstat_irqs(i));
+#else
+		for (j = 0; j < smp_num_cpus; j++)
+			p += sprintf(p, "%10u ",
+				     kstat.irqs[cpu_logical_map(j)][i]);
+#endif
+		p += sprintf(p, "  %c%s",
+			     (action->flags & SA_INTERRUPT)?'+':' ',
+			     action->name);
+
 		for (action=action->next; action; action = action->next) {
-			len += sprintf(buf+len, ", %s%s",
-				       (action->flags & SA_INTERRUPT) ? "+":"",
-				       action->name);
+			p += sprintf(p, ", %c%s",
+				     (action->flags & SA_INTERRUPT)?'+':' ',
+				     action->name);
 		}
-		len += sprintf(buf+len, "\n");
+		*p++ = '\n';
 	}
-	return len;
+	return p - buf;
 }
 
 #ifdef __SMP__
@@ -427,8 +442,10 @@ get_irqlock(int cpu, void* where)
 	/*
 	 * Finally.
 	 */
+#if DEBUG_SPINLOCK
 	global_irq_lock.task = current;
 	global_irq_lock.previous = where;
+#endif
 	global_irq_holder = cpu;
 	previous_irqholder = where;
 }

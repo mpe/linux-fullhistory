@@ -868,7 +868,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 
 		if (status.b.check || test_bit (PC_DMA_ERROR, &pc->flags)) {	/* Error detected */
 #if IDEFLOPPY_DEBUG_LOG
-			printk (KERN_INFO "ide-floppy: %s: I/O error, ",drive->name);
+			printk (KERN_INFO "ide-floppy: %s: I/O error\n",drive->name);
 #endif /* IDEFLOPPY_DEBUG_LOG */
 			rq->errors++;
 			if (pc->c[0] == IDEFLOPPY_REQUEST_SENSE_CMD) {
@@ -1057,6 +1057,7 @@ static void idefloppy_create_read_capacity_cmd (idefloppy_pc_t *pc)
 	pc->c[0] = IDEFLOPPY_READ_CAPACITY_CMD;
 	pc->c[7] = 255;
 	pc->c[8] = 255;
+	pc->request_transfer = 255;
 }
 
 /*

@@ -6,6 +6,7 @@
 #include <linux/tasks.h>
 
 extern unsigned int local_irq_count[NR_CPUS];
+extern unsigned long hardirq_no[NR_CPUS];
 
 /*
  * Are we in an interrupt context? Either doing bottom half
@@ -32,6 +33,7 @@ extern unsigned int local_irq_count[NR_CPUS];
 
 #include <asm/atomic.h>
 #include <asm/spinlock.h>
+#include <asm/smp.h>
 
 extern int global_irq_holder;
 extern spinlock_t global_irq_lock;
@@ -50,10 +52,12 @@ static inline void hardirq_enter(int cpu, int irq)
 {
 	++local_irq_count[cpu];
         atomic_inc(&global_irq_count);
+	hardirq_no[cpu] |= 1L << irq;		/* debugging only */
 }
 
 static inline void hardirq_exit(int cpu, int irq)
 {
+	hardirq_no[cpu] &= ~(1L << irq);	/* debugging only */
 	atomic_dec(&global_irq_count);
         --local_irq_count[cpu];
 }

@@ -467,19 +467,22 @@ get_sysvec(long type, long variation, long cpu)
 				vec = eb66_vecs[eb66_indices[member]];
 			break;
 		case ST_DEC_1000:
-			if (cpu == EV5_CPU)
+			cpu &= 0xffffffff;
+			if (cpu == EV5_CPU || cpu == EV56_CPU)
 				vec = &mikasa_primo_mv;
 			else
 				vec = &mikasa_mv;
 			break;
 		case ST_DEC_NORITAKE:
-			if (cpu == EV5_CPU)
+			cpu &= 0xffffffff;
+			if (cpu == EV5_CPU || cpu == EV56_CPU)
 				vec = &noritake_primo_mv;
 			else
 				vec = &noritake_mv;
 			break;
 		case ST_DEC_2100_A500:
-			if (cpu == EV5_CPU)
+			cpu &= 0xffffffff;
+			if (cpu == EV5_CPU || cpu == EV56_CPU)
 				vec = &sable_gamma_mv;
 			else
 				vec = &sable_mv;
@@ -678,7 +681,7 @@ int get_cpuinfo(char *buffer)
 		      "system variation\t: %s\n"
 		      "system revision\t\t: %ld\n"
 		      "system serial number\t: %s\n"
-		      "cycle frequency [Hz]\t: %lu\n"
+		      "cycle frequency [Hz]\t: %lu %s\n"
 		      "timer frequency [Hz]\t: %lu.%02lu\n"
 		      "page size [bytes]\t: %ld\n"
 		      "phys. address bits\t: %ld\n"
@@ -691,7 +694,8 @@ int get_cpuinfo(char *buffer)
 		       (char*)cpu->serial_no,
 		       systype_name, sysvariation_name, hwrpb->sys_revision,
 		       (char*)hwrpb->ssn,
-		       hwrpb->cycle_freq,
+		       hwrpb->cycle_freq ? : est_cycle_freq,
+		       hwrpb->cycle_freq ? "" : "est.",
 		       hwrpb->intr_freq / 4096,
 		       (100 * hwrpb->intr_freq / 4096) % 100,
 		       hwrpb->pagesize,
@@ -703,8 +707,8 @@ int get_cpuinfo(char *buffer)
 		       platform_string());
 
 #ifdef __SMP__
-	return len + smp_info(buffer+len);
-#else
-	return len;
+	len += smp_info(buffer+len);
 #endif
+
+	return len;
 }

@@ -66,7 +66,6 @@ static unsigned char misc_minors[DYNAMIC_MINORS / 8];
 
 extern int adbdev_init(void);
 extern int bus_mouse_init(void);
-extern int psaux_init(void);
 extern int qpmouse_init(void);
 extern int ms_bus_mouse_init(void);
 extern int atixl_busmouse_init(void);
@@ -156,8 +155,13 @@ int misc_register(struct miscdevice * misc)
 	}
 	if (misc->minor < DYNAMIC_MINORS)
 		misc_minors[misc->minor >> 3] |= 1 << (misc->minor & 7);
-	misc->next = &misc_list;
-	misc->prev = misc_list.prev;
+
+	/*
+	 * Add it to the front, so that later devices can "override"
+	 * earlier defaults
+	 */
+	misc->prev = &misc_list;
+	misc->next = misc_list.next;
 	misc->prev->next = misc;
 	misc->next->prev = misc;
 	return 0;
@@ -199,10 +203,7 @@ int __init misc_init(void)
 	bus_mouse_init();
 #endif
 #if defined CONFIG_82C710_MOUSE
-	qpmouse_init();		/* This must be before psaux_init */
-#endif
-#if defined CONFIG_PSMOUSE
-	psaux_init();
+	qpmouse_init();
 #endif
 #ifdef CONFIG_MS_BUSMOUSE
 	ms_bus_mouse_init();

@@ -11,8 +11,6 @@
  * 4.4BSD (FreeBSD) support added on February 1st 1998 by
  * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
  * on code by Martin von Loewis <martin@mira.isdn.cs.tu-berlin.de>.
- *
- * write support by Daniel Pirkl <daniel.pirkl@email.cz> 1998
  */
 
 #include <linux/fs.h>
@@ -104,11 +102,11 @@ revalidate:
 		       && offset < sb->s_blocksize) {
 			de = (struct ufs_dir_entry *) (bh->b_data + offset);
 			/* XXX - put in a real ufs_check_dir_entry() */
-			if ((de->d_reclen == 0) || (ufs_namlen(de) == 0)) {
+			if ((de->d_reclen == 0) || (ufs_get_de_namlen(de) == 0)) {
 			/* SWAB16() was unneeded -- compare to 0 */
 				filp->f_pos = (filp->f_pos &
-					      (sb->s_blocksize - 1)) +
-					       sb->s_blocksize;
+				              (sb->s_blocksize - 1)) +
+				               sb->s_blocksize;
 				brelse(bh);
 				return stored;
 			}
@@ -119,7 +117,7 @@ revalidate:
 				/* On error, skip the f_pos to the
 				   next block. */
 				filp->f_pos = (filp->f_pos &
-					      (sb->s_blocksize - 1)) +
+				              (sb->s_blocksize - 1)) +
 					       sb->s_blocksize;
 				brelse (bh);
 				return stored;
@@ -137,8 +135,8 @@ revalidate:
 				unsigned long version = inode->i_version;
 
 				UFSD(("filldir(%s,%u)\n", de->d_name, SWAB32(de->d_ino)))
-				UFSD(("namlen %u\n", ufs_namlen(de)))
-				error = filldir(dirent, de->d_name, ufs_namlen(de),
+				UFSD(("namlen %u\n", ufs_get_de_namlen(de)))
+				error = filldir(dirent, de->d_name, ufs_get_de_namlen(de),
 						filp->f_pos, SWAB32(de->d_ino));
 				if (error)
 					break;
@@ -172,7 +170,7 @@ int ufs_check_dir_entry (const char * function,	struct inode * dir,
 		error_msg = "reclen is smaller than minimal";
 	else if (SWAB16(de->d_reclen) % 4 != 0)
 		error_msg = "reclen % 4 != 0";
-	else if (SWAB16(de->d_reclen) < UFS_DIR_REC_LEN(ufs_namlen(de)))
+	else if (SWAB16(de->d_reclen) < UFS_DIR_REC_LEN(ufs_get_de_namlen(de)))
 		error_msg = "reclen is too small for namlen";
 	else if (dir && ((char *) de - bh->b_data) + SWAB16(de->d_reclen) >
 		 dir->i_sb->s_blocksize)
@@ -185,7 +183,7 @@ int ufs_check_dir_entry (const char * function,	struct inode * dir,
 			    "offset=%lu, inode=%lu, reclen=%d, namlen=%d",
 			    dir->i_ino, dir->i_size, error_msg, offset,
 			    (unsigned long) SWAB32(de->d_ino),
-			    SWAB16(de->d_reclen), ufs_namlen(de));
+			    SWAB16(de->d_reclen), ufs_get_de_namlen(de));
 	
 	return (error_msg == NULL ? 1 : 0);
 }

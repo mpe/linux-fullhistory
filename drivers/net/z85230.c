@@ -152,8 +152,9 @@ u8 z8530_hdlc_kilostream[]=
 	3,	ENT_HM|RxCRC_ENAB|Rx8,
 	5,	TxCRC_ENAB|RTS|TxENAB|Tx8|DTR,
 	9,	0,		/* Disable interrupts */
+	6,	0xFF,
 	7,	FLAG,
-	10,	ABUNDER|MARKIDLE|NRZ|CRCPS,
+	10,	ABUNDER|NRZ|CRCPS,/*MARKIDLE ??*/
 	11,	TCTRxCP,
 	14,	DISDPLL,
 	15,	DCDIE|SYNCIE|CTSIE|TxUIE|BRKIE,
@@ -176,8 +177,9 @@ u8 z8530_hdlc_kilostream_85230[]=
 	3,	ENT_HM|RxCRC_ENAB|Rx8,
 	5,	TxCRC_ENAB|RTS|TxENAB|Tx8|DTR,
 	9,	0,		/* Disable interrupts */
+	6,	0xFF,
 	7,	FLAG,
-	10,	ABUNDER|MARKIDLE|NRZ|CRCPS,
+	10,	ABUNDER|NRZ|CRCPS,	/* MARKIDLE?? */
 	11,	TCTRxCP,
 	14,	DISDPLL,
 	15,	DCDIE|SYNCIE|CTSIE|TxUIE|BRKIE,
@@ -389,6 +391,8 @@ static void z8530_dma_rx(struct z8530_channel *chan)
 	if(chan->rxdma_on)
 	{
 		/* Special condition check only */
+		u8 r7=read_zsreg(chan, R7);
+		u8 r6=read_zsreg(chan, R6);
 		u8 status=read_zsreg(chan, R1);
 		if(status&END_FR)
 		{
@@ -418,6 +422,7 @@ static void z8530_dma_tx(struct z8530_channel *chan)
 
 static void z8530_dma_status(struct z8530_channel *chan)
 {
+	unsigned long flags;
 	u8 status=read_zsreg(chan, R0);
 	u8 altered=chan->status^status;
 	
@@ -427,10 +432,12 @@ static void z8530_dma_status(struct z8530_channel *chan)
 	{
 		if(status&TxEOM)
 		{
+			flags=claim_dma_lock();
 			/* Transmit underrun */
 			disable_dma(chan->txdma);
 			clear_dma_ff(chan->txdma);	
 			chan->txdma_on=0;
+			release_dma_lock(flags);
 			z8530_tx_done(chan);
 		}
 	}
@@ -460,6 +467,15 @@ struct z8530_irqhandler z8530_dma_sync=
 };
 
 EXPORT_SYMBOL(z8530_dma_sync);
+
+struct z8530_irqhandler z8530_txdma_sync=
+{
+	z8530_rx,
+	z8530_dma_tx,
+	z8530_dma_status
+};
+
+EXPORT_SYMBOL(z8530_txdma_sync);
 
 /*
  *	Interrupt vectors for a Z8530 that is in 'parked' mode.
@@ -566,7 +582,7 @@ void z8530_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				irqs->status(&dev->chanB);
 		}
 	}
-	if(work==200)
+	if(work==5000)
 		printk(KERN_ERR "%s: interrupt jammed - abort(0x%X)!\n", dev->name, intr);
 	/* Ok all done */
 	locker=0;
@@ -619,6 +635,8 @@ EXPORT_SYMBOL(z8530_sync_close);
 
 int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 {
+	unsigned long flags;
+	
 	c->sync = 1;
 	c->mtu = dev->mtu;
 	c->count = 0;
@@ -665,6 +683,7 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 		return -ENOBUFS;
 	}
 	c->tx_dma_used=0;
+	c->dma_tx = 1;
 	c->dma_num=0;
 	c->dma_ready=1;
 	
@@ -672,13 +691,23 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 	 *	Enable DMA control mode
 	 */
 	 
-	c->regs[R1]|= WT_RDY_RT|WT_FN_RDYFN;
+	/*
+	 *	TX DMA via DIR/REQ
+	 */
+	 
+	c->regs[R14]|= DTRREQ;
+	write_zsreg(c, R14, c->regs[R14]);     
+
+	/*
+	 *	RX DMA via W/Req
+	 */	 
+
+	c->regs[R1]|= WT_FN_RDYFN;
+	c->regs[R1]|= WT_RDY_RT;
 	c->regs[R1]|= INT_ERR_Rx;
 	write_zsreg(c, R1, c->regs[R1]);
 	c->regs[R1]|= WT_RDY_ENAB;
 	write_zsreg(c, R1, c->regs[R1]);            
-	c->regs[R14]|= DTRREQ;
-	write_zsreg(c, R14, c->regs[R14]);     
 	
 	/*
 	 *	DMA interrupts
@@ -688,9 +717,11 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 	 *	Set up the DMA configuration
 	 */	
 	 
+	flags=claim_dma_lock();
+	 
 	disable_dma(c->rxdma);
 	clear_dma_ff(c->rxdma);
-	set_dma_mode(c->rxdma, DMA_MODE_READ);
+	set_dma_mode(c->rxdma, DMA_MODE_READ|0x10);
 	set_dma_addr(c->rxdma, virt_to_bus(c->rx_buf[0]));
 	set_dma_count(c->rxdma, c->mtu);
 	enable_dma(c->rxdma);
@@ -699,6 +730,8 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 	clear_dma_ff(c->txdma);
 	set_dma_mode(c->txdma, DMA_MODE_WRITE);
 	disable_dma(c->txdma);
+	
+	release_dma_lock(flags);
 	
 	/*
 	 *	Select the DMA interrupt handlers
@@ -719,6 +752,8 @@ EXPORT_SYMBOL(z8530_sync_dma_open);
 int z8530_sync_dma_close(struct device *dev, struct z8530_channel *c)
 {
 	u8 chk;
+	unsigned long flags;
+	
 	c->irqs = &z8530_nop;
 	c->max = 0;
 	c->sync = 0;
@@ -726,12 +761,17 @@ int z8530_sync_dma_close(struct device *dev, struct z8530_channel *c)
 	/*
 	 *	Disable the PC DMA channels
 	 */
-	 
+	
+	flags=claim_dma_lock(); 
 	disable_dma(c->rxdma);
 	clear_dma_ff(c->rxdma);
+	
 	c->rxdma_on = 0;
+	
 	disable_dma(c->txdma);
 	clear_dma_ff(c->txdma);
+	release_dma_lock(flags);
+	
 	c->txdma_on = 0;
 	c->tx_dma_used = 0;
 
@@ -774,6 +814,137 @@ int z8530_sync_dma_close(struct device *dev, struct z8530_channel *c)
 }
 
 EXPORT_SYMBOL(z8530_sync_dma_close);
+
+int z8530_sync_txdma_open(struct device *dev, struct z8530_channel *c)
+{
+	printk("Opening sync interface for TX-DMA\n");
+	c->sync = 1;
+	c->mtu = dev->mtu;
+	c->count = 0;
+	c->skb = NULL;
+	c->skb2 = NULL;
+	
+	/*
+	 *	Load the PIO receive ring
+	 */
+
+	z8530_rx_done(c);
+	z8530_rx_done(c);
+
+ 	/*
+	 *	Load the DMA interfaces up
+	 */
+
+	c->rxdma_on = 0;
+	c->txdma_on = 0;
+	
+	c->tx_dma_buf[0]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
+	if(c->tx_dma_buf[0]==NULL)
+	{
+		kfree(c->rx_buf[0]);
+		kfree(c->rx_buf[1]);
+		c->rx_buf[0]=NULL;
+		return -ENOBUFS;
+	}
+	c->tx_dma_buf[1]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
+	if(c->tx_dma_buf[1]==NULL)
+	{
+		kfree(c->tx_dma_buf[0]);
+		kfree(c->rx_buf[0]);
+		kfree(c->rx_buf[1]);
+		c->rx_buf[0]=NULL;
+		c->rx_buf[1]=NULL;
+		c->tx_dma_buf[0]=NULL;
+		return -ENOBUFS;
+	}
+	c->tx_dma_used=0;
+	c->dma_num=0;
+	c->dma_ready=1;
+	c->dma_tx = 1;
+
+ 	/*
+	 *	Enable DMA control mode
+	 */
+
+ 	/*
+	 *	TX DMA via DIR/REQ
+ 	 */
+	c->regs[R14]|= DTRREQ;
+	write_zsreg(c, R14, c->regs[R14]);     
+	
+	/*
+	 *	Set up the DMA configuration
+	 */	
+	 
+	disable_dma(c->txdma);
+	clear_dma_ff(c->txdma);
+	set_dma_mode(c->txdma, DMA_MODE_WRITE);
+	disable_dma(c->txdma);
+	
+	/*
+	 *	Select the DMA interrupt handlers
+	 */
+
+	c->rxdma_on = 0;
+	c->txdma_on = 1;
+	c->tx_dma_used = 1;
+	 
+	c->irqs = &z8530_txdma_sync;
+	printk("Loading RX\n");
+	z8530_rtsdtr(c,1);
+	printk("Rx interrupts ON\n");	
+	write_zsreg(c, R3, c->regs[R3]|RxENABLE);
+	return 0;
+}
+
+EXPORT_SYMBOL(z8530_sync_txdma_open);
+	
+int z8530_sync_txdma_close(struct device *dev, struct z8530_channel *c)
+{
+	u8 chk;
+	c->irqs = &z8530_nop;
+	c->max = 0;
+	c->sync = 0;
+	
+	/*
+	 *	Disable the PC DMA channels
+	 */
+	 
+	disable_dma(c->txdma);
+	clear_dma_ff(c->txdma);
+	c->txdma_on = 0;
+	c->tx_dma_used = 0;
+
+	/*
+	 *	Disable DMA control mode
+	 */
+	 
+	c->regs[R1]&= ~WT_RDY_ENAB;
+	write_zsreg(c, R1, c->regs[R1]);            
+	c->regs[R1]&= ~(WT_RDY_RT|WT_FN_RDYFN|INT_ERR_Rx);
+	c->regs[R1]|= INT_ALL_Rx;
+	write_zsreg(c, R1, c->regs[R1]);
+	c->regs[R14]&= ~DTRREQ;
+	write_zsreg(c, R14, c->regs[R14]);   
+	
+	if(c->tx_dma_buf[0])
+	{
+		kfree(c->tx_dma_buf[0]);
+		c->tx_dma_buf[0]=NULL;
+	}
+	if(c->tx_dma_buf[1])
+	{
+		kfree(c->tx_dma_buf[1]);
+		c->tx_dma_buf[1]=NULL;
+	}
+	chk=read_zsreg(c,R0);
+	write_zsreg(c, R3, c->regs[R3]);
+	z8530_rtsdtr(c,0);
+	return 0;
+}
+
+
+EXPORT_SYMBOL(z8530_sync_txdma_close);
 
 /*
  *	Describe a Z8530 in a standard format. We must pass the I/O as
@@ -929,7 +1100,12 @@ static void z8530_tx_begin(struct z8530_channel *c)
 	if(c->tx_skb==NULL)
 	{
 		/* Idle on */
-		disable_dma(c->txdma);
+		if(c->txdma)
+		{
+			flags=claim_dma_lock();
+			disable_dma(c->txdma);
+			release_dma_lock(flags);
+		}
 		c->txcount=0;
 	}
 	else
@@ -938,19 +1114,22 @@ static void z8530_tx_begin(struct z8530_channel *c)
 		c->txcount=c->tx_skb->len;
 		
 		
-		if(c->tx_dma_used)
+		if(c->dma_tx)
 		{
 			/*
-			 *	FIXME. DMA is broken for the non 85230,
+			 *	FIXME. DMA is broken for the original 8530,
 			 *	on the older parts we need to set a flag and
 			 *	wait for a further TX interrupt to fire this
 			 *	stage off	
 			 */
+			 
+			flags=claim_dma_lock();
 			disable_dma(c->txdma);
 			clear_dma_ff(c->txdma);
 			set_dma_addr(c->txdma, virt_to_bus(c->tx_ptr));
 			set_dma_count(c->txdma, c->txcount);
 			enable_dma(c->txdma);
+			release_dma_lock(flags);
 			write_zsreg(c, R5, c->regs[R5]|TxENAB);
 		}
 		else
@@ -1020,12 +1199,17 @@ static void z8530_rx_done(struct z8530_channel *c)
 		 *	Save the ready state and the buffer currently
 		 *	being used as the DMA target
 		 */
+
 		int ready=c->dma_ready;
-		char *rxb=c->rx_buf[c->dma_num];
+		unsigned char *rxb=c->rx_buf[c->dma_num];
+		unsigned long flags;
 		
 		/*
 		 *	Complete this DMA. Neccessary to find the length
 		 */		
+		 
+		flags=claim_dma_lock();
+		
 		disable_dma(c->rxdma);
 		clear_dma_ff(c->rxdma);
 		c->rxdma_on=0;
@@ -1042,16 +1226,21 @@ static void z8530_rx_done(struct z8530_channel *c)
 		if(ready)
 		{
 			c->dma_num^=1;
-			set_dma_mode(c->rxdma, DMA_MODE_READ);
+			set_dma_mode(c->rxdma, DMA_MODE_READ|0x10);
 			set_dma_addr(c->rxdma, virt_to_bus(c->rx_buf[c->dma_num]));
 			set_dma_count(c->rxdma, c->mtu);
 			c->rxdma_on = 1;
 			enable_dma(c->rxdma);
+			/* Stop any frames that we missed the head of 
+			   from passing */
+			write_zsreg(c, R0, RES_Rx_CRC);
 		}
 		else
 			/* Can't occur as we dont reenable the DMA irq until
 			   after the flip is done */
 			printk("DMA flip overrun!\n");
+			
+		release_dma_lock(flags);
 		
 		/*
 		 *	Shove the old buffer into an sk_buff. We can't DMA
@@ -1127,6 +1316,21 @@ static void z8530_rx_done(struct z8530_channel *c)
 		printk("Lost a frame\n");
 }
 
+/*
+ *	Cannot DMA over a 64K boundary on a PC
+ */
+ 
+extern inline int spans_boundary(struct sk_buff *skb)
+{
+	unsigned long a=(unsigned long)skb->data;
+	a^=(a+skb->len);
+	if(a&0x00010000)	/* If the 64K bit is different.. */
+	{
+		printk("spanner\n");
+		return 1;
+	}
+	return 0;
+}
 
 /*
  *	Queue a packet for transmission. Because we have rather
@@ -1151,7 +1355,7 @@ int z8530_queue_xmit(struct z8530_channel *c, struct sk_buff *skb)
 	 *	limit, then copy to the flip buffer
 	 */
 	 
-	if(c->dma_tx && (unsigned long)(virt_to_bus(skb->data+skb->len))>=16*1024*1024)
+	if(c->dma_tx && ((unsigned long)(virt_to_bus(skb->data+skb->len))>=16*1024*1024 || spans_boundary(skb)))
 	{
 		/* 
 		 *	Send the flip buffer, and flip the flippy bit.

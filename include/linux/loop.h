@@ -85,10 +85,14 @@ struct loop_info {
  * Loop filter types
  */
 
-#define LO_CRYPT_NONE	0
-#define LO_CRYPT_XOR	1
-#define LO_CRYPT_DES	2
-#define LO_CRYPT_DUMMY     9
+#define LO_CRYPT_NONE	  0
+#define LO_CRYPT_XOR	  1
+#define LO_CRYPT_DES	  2
+#define LO_CRYPT_FISH2    3    /* Brand new Twofish encryption */
+#define LO_CRYPT_BLOW     4
+#define LO_CRYPT_CAST128  5
+#define LO_CRYPT_IDEA     6
+#define LO_CRYPT_DUMMY    9
 #define LO_CRYPT_SKIPJACK 10
 #define MAX_LO_CRYPT	20
 

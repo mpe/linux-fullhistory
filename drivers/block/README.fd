@@ -102,12 +102,12 @@ isn't, use the old method using environment variables.
 	Tells the floppy driver that a workable DMA channel is available
 	(the default).
 
-floppy=nofifo
+ floppy=nofifo
 	Disables the FIFO entirely. This is needed if you get "Bus
 	master arbitration error" messages from your Ethernet card (or
 	from other devices) while accessing the floppy.
 
-floppy=fifo
+ floppy=fifo
 	Enables the FIFO (default)
 
  floppy=<threshold>,fifo_depth
@@ -188,6 +188,13 @@ floppy=fifo
 
  floppy=<nr>,dma
 	Sets the floppy DMA channel to <nr> instead of 2
+
+ floppy=slow
+	Use PS/2 stepping rate:
+	 " PS/2 floppies have much slower step rates than regular floppies.
+	   It's been recommended that take about 1/4 of the default speed
+	   in some more extreme cases."
+	 
 
 
 Supporting utilities and additional documentation:

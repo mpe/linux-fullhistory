@@ -33,9 +33,6 @@ asmlinkage void ret_from_sys_call(void);
 asmlinkage int do_signal(sigset_t *, struct pt_regs *,
 			 struct switch_stack *, unsigned long, unsigned long);
 
-extern int ptrace_set_bpt (struct task_struct *child);
-extern int ptrace_cancel_bpt (struct task_struct *child);
-
 
 /*
  * The OSF/1 sigprocmask calling sequence is different from the

@@ -257,7 +257,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 				ext2_debug ("creating next block\n");
 
 				de = (struct ext2_dir_entry_2 *) bh->b_data;
-				de->inode = le32_to_cpu(0);
+				de->inode = 0;
 				de->rec_len = le16_to_cpu(sb->s_blocksize);
 				dir->i_size = offset + sb->s_blocksize;
 				dir->u.ext2_i.i_flags &= ~EXT2_BTREE_FL;
@@ -291,7 +291,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 				de->rec_len = cpu_to_le16(EXT2_DIR_REC_LEN(de->name_len));
 				de = de1;
 			}
-			de->inode = cpu_to_le32(0);
+			de->inode = 0;
 			de->name_len = namelen;
 			de->file_type = 0;
 			memcpy (de->name, name, namelen);
@@ -344,7 +344,8 @@ static int ext2_delete_entry (struct ext2_dir_entry_2 * dir,
 				pde->rec_len =
 					cpu_to_le16(le16_to_cpu(pde->rec_len) +
 						    le16_to_cpu(dir->rec_len));
-			dir->inode = le32_to_cpu(0);
+			else
+				dir->inode = 0;
 			return 0;
 		}
 		i += le16_to_cpu(de->rec_len);

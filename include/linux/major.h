@@ -28,7 +28,7 @@
 #define LP_MAJOR	6
 #define VCS_MAJOR	7
 #define LOOP_MAJOR	7
-#define SCSI_DISK_MAJOR	8
+#define SCSI_DISK0_MAJOR 8
 #define SCSI_TAPE_MAJOR	9
 #define MD_MAJOR        9
 #define MISC_MAJOR	10
@@ -81,6 +81,14 @@
 #define IDE4_MAJOR	56
 #define IDE5_MAJOR	57
 
+#define SCSI_DISK1_MAJOR	65
+#define SCSI_DISK2_MAJOR	66
+#define SCSI_DISK3_MAJOR	67
+#define SCSI_DISK4_MAJOR	68
+#define SCSI_DISK5_MAJOR	69
+#define SCSI_DISK6_MAJOR	70
+#define SCSI_DISK7_MAJOR	71
+
 #define SPECIALIX_NORMAL_MAJOR 75
 #define SPECIALIX_CALLOUT_MAJOR 76
 
@@ -92,8 +100,11 @@
  * Tests for SCSI devices.
  */
 
+#define SCSI_DISK_MAJOR(M) ((M) == SCSI_DISK0_MAJOR || \
+  ((M) >= SCSI_DISK1_MAJOR && (M) <= SCSI_DISK7_MAJOR))
+  
 #define SCSI_BLK_MAJOR(M) \
-  ((M) == SCSI_DISK_MAJOR	\
+  (SCSI_DISK_MAJOR(M)	\
    || (M) == SCSI_CDROM_MAJOR)
 
 static __inline__ int scsi_blk_major(int m) {

@@ -1132,7 +1132,6 @@ static void release_dev(struct file * filp)
 	 * both sides, and we've completed the last operation that could 
 	 * block, so it's safe to proceed with closing.
 	 */
-
 	if (pty_master) {
 		if (--o_tty->count < 0) {
 			printk("release_dev: bad pty slave count (%d) for %s\n",
@@ -1145,6 +1144,16 @@ static void release_dev(struct file * filp)
 		       tty->count, tty_name(tty, buf));
 		tty->count = 0;
 	}
+
+	/*
+	 * We've decremented tty->count, so we should zero out
+	 * filp->private_data, to break the link between the tty and
+	 * the file descriptor.  Otherwise if close_fp() blocks before
+	 * the the file descriptor is removed from the inuse_filp
+	 * list, check_tty_count() could observe a discrepancy and
+	 * printk a warning message to the user.
+	 */
+	filp->private_data = 0;
 
 	/*
 	 * Perform some housekeeping before deciding whether to return.
@@ -1180,7 +1189,6 @@ static void release_dev(struct file * filp)
 	/* check whether both sides are closing ... */
 	if (!tty_closing || (o_tty && !o_tty_closing))
 		return;
-	filp->private_data = 0;
 	
 #ifdef TTY_DEBUG_HANGUP
 	printk("freeing tty structure...");
@@ -1293,7 +1301,6 @@ retry_open:
 		return retval;
 
 #ifdef CONFIG_UNIX98_PTYS
-	/* N.B. this error exit may leave filp->f_flags with O_NONBLOCK set */
 init_dev_done:
 #endif
 	filp->private_data = tty;
@@ -2084,6 +2091,7 @@ __initfunc(int tty_init(void))
 	if (tty_register_driver(&dev_syscons_driver))
 		panic("Couldn't register /dev/console driver\n");
 
+#ifdef CONFIG_UNIX98_PTYS
 	dev_ptmx_driver = dev_tty_driver;
 	dev_ptmx_driver.driver_name = "/dev/ptmx";
 	dev_ptmx_driver.name = dev_ptmx_driver.driver_name + 5;
@@ -2094,7 +2102,8 @@ __initfunc(int tty_init(void))
 
 	if (tty_register_driver(&dev_ptmx_driver))
 		panic("Couldn't register /dev/ptmx driver\n");
-
+#endif
+	
 #ifdef CONFIG_VT
 	dev_console_driver = dev_tty_driver;
 	dev_console_driver.driver_name = "/dev/tty0";

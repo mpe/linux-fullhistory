@@ -524,16 +524,8 @@ layout_dev(struct pci_dev *dev)
 			size = (mask & base) & 0xffffffff;
 			switch (type) {
 			case PCI_BASE_ADDRESS_MEM_TYPE_32:
-				break;
-
 			case PCI_BASE_ADDRESS_MEM_TYPE_64:
-				printk("bios32 WARNING: "
-				       "ignoring 64-bit device in "
-				       "slot %d, function %d: \n",
-				       PCI_SLOT(dev->devfn),
-				       PCI_FUNC(dev->devfn));
-				idx++;	/* skip extra 4 bytes */
-				continue;
+				break;
 
 			case PCI_BASE_ADDRESS_MEM_TYPE_1M:
 				/*
@@ -594,6 +586,29 @@ layout_dev(struct pci_dev *dev)
 						   off, base);
 			handle = PCI_HANDLE(bus->number) | base;
 			dev->base_address[idx] = handle;
+
+			/*
+			 * Currently for 64-bit cards, we simply do the usual
+			 * for setup of the first register (low) of the pair,
+			 * and then clear out the second (high) register, as
+			 * we are not yet able to do 64-bit addresses, and
+			 * setting the high register to 0 allows 32-bit SAC
+			 * addresses to be used.
+			 */
+			if (type == PCI_BASE_ADDRESS_MEM_TYPE_64) {
+				pcibios_write_config_dword(bus->number,
+							   dev->devfn,
+							   off+4, 0);
+				/* Bypass hi reg in the loop.  */
+				dev->base_address[++idx] = 0;
+
+				printk("bios32 WARNING: "
+				       "handling 64-bit device in "
+				       "slot %d, function %d: \n",
+				       PCI_SLOT(dev->devfn),
+				       PCI_FUNC(dev->devfn));
+			}
+
 			DBG_DEVS(("layout_dev: dev 0x%x MEM @ 0x%lx (0x%x)\n",
 				  dev->device, handle, size));
 		}
@@ -692,36 +707,46 @@ layout_bus(struct pci_bus *bus)
 		struct pci_dev *bridge = bus->self;
 
 		DBG_DEVS(("layout_bus: config bus %d bridge\n", bus->number));
+
 		/*
 		 * Set up the top and bottom of the PCI I/O segment
 		 * for this bus.
 		 */
 		pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
-					  0x1c, &l);
+					  PCI_IO_BASE, &l);
 		l &= 0xffff0000;
 		l |= ((bio >> 8) & 0x00f0) | ((tio - 1) & 0xf000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
-					   0x1c, l);
+					   PCI_IO_BASE, l);
+
+		/* Also clear out the upper 16 bits.  */
+		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
+					   PCI_IO_BASE_UPPER16, 0);
+
 		/*
 		 * Set up the top and bottom of the  PCI Memory segment
 		 * for this bus.
 		 */
 		l = ((bmem & 0xfff00000) >> 16) | ((tmem - 1) & 0xfff00000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
-					   0x20, l);
+					   PCI_MEMORY_BASE, l);
 		/*
 		 * Turn off downstream PF memory address range:
 		 */
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
-					   0x24, 0x0000ffff);
+					   PCI_PREF_MEMORY_BASE, 0x0000ffff);
+
 		/*
 		 * Tell bridge that there is an ISA bus in the system,
 		 * and (possibly) a VGA as well.
 		 */
+		/* ??? This appears to be a single-byte write into MIN_GNT.
+		   What is up with this?  */
 		l = 0x00040000; /* ISA present */
 		if (found_vga) l |= 0x00080000; /* VGA present */
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   0x3c, l);
+
 		/*
 		 * Clear status bits, enable I/O (for downstream I/O),
 		 * turn on master enable (for upstream I/O), turn on
@@ -729,7 +754,7 @@ layout_bus(struct pci_bus *bus)
 		 * master enable (for upstream memory and I/O).
 		 */
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
-					   0x4, 0xffff0007);
+					   PCI_COMMAND, 0xffff0007);
 	}
 	DBG_DEVS(("layout_bus: bus %d finished\n", bus->number));
 	return found_vga;

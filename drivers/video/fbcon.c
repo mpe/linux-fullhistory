@@ -1338,11 +1338,6 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
     if (resize) {
 	/* reset wrap/pan */
 	p->var.xoffset = p->var.yoffset = p->yscroll = 0;
-	if (!p->dispsw->set_font || 
-	    !p->dispsw->set_font(p, fontwidth(p), fontheight(p))) {
-	    /* Adjust the virtual screen-size to fontheight*rows */
-	    p->var.yres_virtual = (p->var.yres/h)*h;
-	}
 	p->vrows = p->var.yres_virtual/h;
 	updatescrollmode(p);
 	vc_resize_con( p->var.yres/h, p->var.xres/w, unit );

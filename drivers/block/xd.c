@@ -533,6 +533,8 @@ static void xd_interrupt_handler(int irq, void *dev_id, struct pt_regs * regs)
 /* xd_setup_dma: set up the DMA controller for a data transfer */
 static u_char xd_setup_dma (u_char mode,u_char *buffer,u_int count)
 {
+	unsigned long f;
+	
 	if (nodma)
 		return (PIO_MODE);
 	if (((u_int) buffer & 0xFFFF0000) != (((u_int) buffer + count) & 0xFFFF0000)) {
@@ -541,11 +543,15 @@ static u_char xd_setup_dma (u_char mode,u_char *buffer,u_int count)
 #endif /* DEBUG_OTHER */
 		return (PIO_MODE);
 	}
+	
+	f=claim_dma_lock();
 	disable_dma(xd_dma);
 	clear_dma_ff(xd_dma);
 	set_dma_mode(xd_dma,mode);
 	set_dma_addr(xd_dma,(u_int) buffer);
 	set_dma_count(xd_dma,count);
+	
+	release_dma_lock(f);
 
 	return (DMA_MODE);			/* use DMA and INT */
 }
@@ -597,13 +603,22 @@ static inline u_char xd_waitport (u_short port,u_char flags,u_char mask,u_long t
 
 static inline u_int xd_wait_for_IRQ (void)
 {
+	unsigned long flags;
 	xd_watchdog_int.expires = jiffies + 8 * HZ;
 	add_timer(&xd_watchdog_int);
+	
+	flags=claim_dma_lock();
 	enable_dma(xd_dma);
+	release_dma_lock(flags);
+	
 	sleep_on(&xd_wait_int);
 	del_timer(&xd_watchdog_int);
 	xdc_busy = 0;
+	
+	flags=claim_dma_lock();
 	disable_dma(xd_dma);
+	release_dma_lock(flags);
+	
 	if (xd_error) {
 		printk("xd: missed IRQ - command aborted\n");
 		xd_error = 0;

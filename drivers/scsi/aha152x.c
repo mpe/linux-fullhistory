@@ -444,6 +444,7 @@ MODULE_PARM(aha152x1, "1-8i");
 
 /* set by aha152x_setup according to the command line */
 static int  setup_count=0;
+static int  registered_count=0;
 static struct aha152x_setup {
   int io_port;
   int irq;
@@ -951,6 +952,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
     shpnt = aha152x_host[setup[i].irq-IRQ_MIN] =
       scsi_register(tpnt, sizeof(struct aha152x_hostdata));
+    registered_count++;
 
     shpnt->io_port                     = setup[i].io_port;
     shpnt->n_io_port                   = IO_RANGE;
@@ -1013,7 +1015,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
     SETBITS(DMACNTRL0, INTEN);
 
-    ok = request_irq(shpnt->irq, aha152x_swintr, SA_INTERRUPT, "aha152x", NULL);
+    ok = request_irq(shpnt->irq, aha152x_swintr, SA_INTERRUPT, "aha152x", shpnt);
     if(ok<0) {
       if(ok == -EINVAL)
         printk("aha152x%d: bad IRQ %d.\n", i, shpnt->irq);
@@ -1024,6 +1026,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       printk("aha152x: driver needs an IRQ.\n");
 
       scsi_unregister(shpnt);
+      registered_count--;
+      release_region(shpnt->io_port, IO_RANGE);
       shpnt=aha152x_host[shpnt->irq-IRQ_MIN]=0;
       continue;
     }
@@ -1037,7 +1041,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
     while(!HOSTDATA(shpnt)->swint && jiffies<the_time)
       barrier();
 
-    free_irq(shpnt->irq,0);
+    free_irq(shpnt->irq,shpnt);
 
     if(!HOSTDATA(shpnt)->swint) {
       if(TESTHI(DMASTAT, INTSTAT)) {
@@ -1049,6 +1053,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       printk("aha152x: IRQ %d possibly wrong.  Please verify.\n", shpnt->irq);
 
       scsi_unregister(shpnt);
+      registered_count--;
+      release_region(shpnt->io_port, IO_RANGE);
       shpnt=aha152x_host[shpnt->irq-IRQ_MIN]=0;
       continue;
     }
@@ -1061,12 +1067,23 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
     SETPORT(SSTAT0, 0x7f);
     SETPORT(SSTAT1, 0xef);
 
-    if(request_irq(shpnt->irq,aha152x_intr,SA_INTERRUPT,"aha152x",NULL)<0) {
+    if(request_irq(shpnt->irq,aha152x_intr,SA_INTERRUPT,"aha152x",shpnt)<0) {
       printk("aha152x: failed to reassign interrupt.\n");
     }
   }
   
-  return (setup_count>0);
+  return (registered_count>0);
+}
+
+
+int aha152x_release(struct Scsi_Host *shpnt)
+{
+  if (shpnt->irq)
+    free_irq(shpnt->irq, shpnt);
+  if (shpnt->io_port)
+    release_region(shpnt->io_port, IO_RANGE);
+
+  return 0;
 }
 
 /* 

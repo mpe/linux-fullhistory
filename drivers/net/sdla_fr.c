@@ -650,8 +650,8 @@ static int if_init(struct device *dev)
 	dev->irq = wandev->irq;
 	dev->dma = wandev->dma;
 	dev->base_addr = wandev->ioport;
-	dev->mem_start = wandev->maddr;
-	dev->mem_end = wandev->maddr + wandev->msize - 1;
+	dev->mem_start = (unsigned long)wandev->maddr;
+	dev->mem_end = dev->mem_start + wandev->msize - 1;
 	/* Set transmit buffer queue length */
 	dev->tx_queue_len = 10;
 	/* Initialize socket buffers */

@@ -9,7 +9,7 @@
 #include "struct.h"
 #include "attr.h"
 
-#include <errno.h>
+#include <linux/errno.h>
 #include "macros.h"
 #include "support.h"
 #include "util.h"

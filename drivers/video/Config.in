@@ -71,6 +71,14 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool '  Leo (ZX) support' CONFIG_FB_LEO
     fi
   fi
+  if [ "$ARCH" = "sparc" ]; then
+    if [ "$CONFIG_PCI" != "n" ]; then
+      bool 'PCI framebuffers' CONFIG_FB_PCI
+      if [ "$CONFIG_FB_PCI" != "n" ]; then
+        bool '  IGA 168x display support' CONFIG_FB_IGA
+      fi
+    fi
+  fi
   if [ "$ARCH" = "sparc64" ]; then
     if [ "$CONFIG_PCI" != "n" ]; then
       bool 'PCI framebuffers' CONFIG_FB_PCI
@@ -133,7 +141,8 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_TCX" = "y" -o "$CONFIG_FB_CGTHREE" = "y" -o \
 	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
 	 "$CONFIG_FB_CGFOURTEEN" = "y" -o "$CONFIG_FB_G364" = "y" -o \
-	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" ]; then
+	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
+         "$CONFIG_FB_IGA" = "y" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     else
       if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
@@ -143,7 +152,8 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_TCX" = "m" -o "$CONFIG_FB_CGTHREE" = "m" -o \
 	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
 	   "$CONFIG_FB_CGFOURTEEN" = "m" -o "$CONFIG_FB_G364" = "m" -o \
-	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" ]; then
+	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
+           "$CONFIG_FB_IGA" = "y" ]; then
 	define_bool CONFIG_FBCON_CFB8 m
       fi
     fi

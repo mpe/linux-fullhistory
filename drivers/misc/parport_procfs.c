@@ -29,16 +29,13 @@
 
 struct proc_dir_entry *base = NULL;
 
-extern void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs);
-
 static int irq_write_proc(struct file *file, const char *buffer,
-					  unsigned long count, void *data)
+			  unsigned long count, void *data)
 {
 	int retval = -EINVAL;
 	int newirq = PARPORT_IRQ_NONE;
 	struct parport *pp = (struct parport *)data;
 	int oldirq = pp->irq;
-	unsigned long flags;
 
 /*
  * We can have these valid cases:
@@ -70,30 +67,44 @@ static int irq_write_proc(struct file *file, const char *buffer,
 	if (oldirq == newirq)
 		goto out;
 
-	spin_lock_irqsave(&pp->lock, flags);
 	if (pp->flags & PARPORT_FLAG_COMA)
 		goto out_ok;
 
 	retval = -EBUSY;
+
+	/*
+	 * Here we don' t need the irq version of spinlocks because
+	 * the parport_lowlevel irq handler must not change the cad,
+	 * and so has no one reason to write_lock() the cad_lock spinlock.
+	 *						-arca
+	 */
+	read_lock(&pp->cad_lock);
+
 	if (pp->cad)
-		goto out_unlock;
+	{
+		read_unlock(&pp->cad_lock);
+		return retval;
+	}
 
 	if (newirq != PARPORT_IRQ_NONE) { 
-		retval = request_irq(newirq, parport_null_intr_func,
-				     SA_INTERRUPT, pp->name, NULL);
+		retval = request_irq(newirq, pp->ops->interrupt,
+				     0, pp->name, pp);
 		if (retval)
-			goto out_unlock;
-		else retval = count;
+		{
+			read_unlock(&pp->cad_lock);
+			return retval;
+		}
 	}
 
 	if (oldirq != PARPORT_IRQ_NONE)
-		free_irq(oldirq, NULL);
+		free_irq(oldirq, pp);
+
+	retval = count;
+
+	read_unlock(&pp->cad_lock);
 
 out_ok:
 	pp->irq = newirq;
-
-out_unlock:
-	spin_unlock_irqrestore (&pp->lock, flags);
 
 out:
 	return retval;

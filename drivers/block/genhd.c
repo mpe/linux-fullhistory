@@ -71,7 +71,7 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 {
 	unsigned int part;
 	const char *maj = hd->major_name;
-	char unit = (minor >> hd->minor_shift) + 'a';
+	int unit = (minor >> hd->minor_shift) + 'a';
 
 	/*
 	 * IDE devices use multiple major numbers, but the drives
@@ -91,8 +91,19 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			unit += 2;
 		case IDE0_MAJOR:
 			maj = "hd";
+			break;
 	}
 	part = minor & ((1 << hd->minor_shift) - 1);
+	if (hd->major >= SCSI_DISK1_MAJOR && hd->major <= SCSI_DISK7_MAJOR) {
+		unit = unit + (hd->major - SCSI_DISK1_MAJOR + 1) * 16;
+		if (unit > 'z') {
+			unit -= 'z' + 1;
+			sprintf(buf, "sd%c%c", 'a' + unit / 26, 'a' + unit % 26);
+			if (part)
+				sprintf(buf + 4, "%d", part);
+			return buf;
+		}
+	}
 	if (part)
 		sprintf(buf, "%s%c%d", maj, unit, part);
 	else

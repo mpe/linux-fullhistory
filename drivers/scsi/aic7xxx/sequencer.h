@@ -73,7 +73,9 @@ struct instruction {
 	union	ins_formats format;
 	unsigned int	srcline;
 	struct symbol *patch_label;
-	STAILQ_ENTRY(instruction) links;
+  struct {
+    struct instruction *stqe_next;
+  } links;
 };
 
 #define	AIC_OP_OR	0x0

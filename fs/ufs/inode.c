@@ -117,7 +117,7 @@ int ufs_bmap (struct inode * inode, int fragment)
 	 * direct fragment
 	 */
 	if (fragment < UFS_NDIR_FRAGMENT)
-		return ufs_inode_bmap (inode, fragment);
+		return (uspi->s_sbbase + ufs_inode_bmap (inode, fragment));
 
 	/*
 	 * indirect fragment
@@ -128,8 +128,9 @@ int ufs_bmap (struct inode * inode, int fragment)
 			UFS_IND_FRAGMENT + (fragment >> uspi->s_apbshift));
 		if (!tmp)
 			return 0;
-		return ufs_block_bmap (bread (sb->s_dev, tmp, sb->s_blocksize), 
-			fragment & uspi->s_apbmask, uspi, swab);
+		return (uspi->s_sbbase + 
+			ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
+			fragment & uspi->s_apbmask, uspi, swab));
 	}
 
 	/*
@@ -141,12 +142,13 @@ int ufs_bmap (struct inode * inode, int fragment)
 			UFS_DIND_FRAGMENT + (fragment >> uspi->s_2apbshift));
 		if (!tmp)
 			return 0;
-		tmp = ufs_block_bmap (bread (sb->s_dev, tmp, sb->s_blocksize),
+		tmp = ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
 			(fragment >> uspi->s_apbshift) & uspi->s_apbmask, uspi, swab);
 		if (!tmp)
 			return 0;
-		return ufs_block_bmap (bread (sb->s_dev, tmp, sb->s_blocksize),
-			fragment & uspi->s_apbmask, uspi, swab);
+		return (uspi->s_sbbase + 
+			ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
+			fragment & uspi->s_apbmask, uspi, swab));
 	}
 
 	/*
@@ -157,16 +159,17 @@ int ufs_bmap (struct inode * inode, int fragment)
 		UFS_TIND_FRAGMENT + (fragment >> uspi->s_3apbshift));
 	if (!tmp)
 		return 0;
-	tmp = ufs_block_bmap (bread (sb->s_dev, tmp, sb->s_blocksize),
+	tmp = ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
 		(fragment >> uspi->s_2apbshift) & uspi->s_apbmask, uspi, swab);
 	if (!tmp)
 		return 0;
-	tmp = ufs_block_bmap (bread (sb->s_dev, tmp, sb->s_blocksize),
+	tmp = ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
 		(fragment >> uspi->s_apbshift) & uspi->s_apbmask, uspi, swab);
 	if (!tmp)
 		return 0;
-	return ufs_block_bmap (bread (sb->s_dev, tmp, sb->s_blocksize),
-		fragment & uspi->s_apbmask, uspi, swab);
+	return (uspi->s_sbbase + 
+		ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
+		fragment & uspi->s_apbmask, uspi, swab));
 }
 
 static struct buffer_head * ufs_inode_getfrag (struct inode * inode, 
@@ -197,7 +200,7 @@ repeat:
 	tmp = SWAB32(*p);
 	lastfrag = inode->u.ufs_i.i_lastfrag;
 	if (tmp && fragment < lastfrag) {
-		result = getblk (sb->s_dev, tmp + blockoff, sb->s_blocksize);
+		result = getblk (sb->s_dev, uspi->s_sbbase + tmp + blockoff, sb->s_blocksize);
 		if (tmp == SWAB32(*p)) {
 			UFSD(("EXIT, result %u\n", tmp + blockoff))
 			return result;
@@ -308,7 +311,7 @@ static struct buffer_head * ufs_block_getfrag (struct inode * inode,
 repeat:
 	tmp = SWAB32(*p);
 	if (tmp) {
-		result = getblk (bh->b_dev, tmp + blockoff, sb->s_blocksize);
+		result = getblk (bh->b_dev, uspi->s_sbbase + tmp + blockoff, sb->s_blocksize);
 		if (tmp == SWAB32(*p)) {
 			brelse (bh);
 			UFSD(("EXIT, result %u\n", tmp + blockoff))
@@ -329,7 +332,6 @@ repeat:
 	tmp = ufs_new_fragments (inode, p, ufs_blknum(new_fragment), goal, uspi->s_fpb, err);
 	if (!tmp) {
 		if (SWAB32(*p)) {
-			printk("REPEAT\n");
 			goto repeat;
 		}
 		else {
@@ -464,7 +466,7 @@ void ufs_read_inode (struct inode * inode)
 		return;
 	}
 	
-	bh = bread (sb->s_dev, ufs_inotofsba(inode->i_ino), sb->s_blocksize);
+	bh = bread (sb->s_dev, uspi->s_sbbase + ufs_inotofsba(inode->i_ino), sb->s_blocksize);
 	if (!bh) {
 		ufs_warning (sb, "ufs_read_inode", "unable to read inode %lu\n", inode->i_ino);
 		return;
@@ -483,7 +485,8 @@ void ufs_read_inode (struct inode * inode)
 	 * Linux has only 16-bit uid and gid, so we can't support EFT.
 	 * Files are dynamically chown()ed to root.
 	 */
-	inode->i_uid = ufs_uid(ufs_inode);
+	inode->i_uid = inode->u.ufs_i.i_uid = ufs_get_inode_uid(ufs_inode);
+	inode->i_gid = inode->u.ufs_i.i_gid = ufs_get_inode_gid(ufs_inode);
 	if (inode->i_uid == UFS_USEEFT) {
 		inode->i_uid = 0;
 	}
@@ -510,8 +513,6 @@ void ufs_read_inode (struct inode * inode)
 	inode->u.ufs_i.i_flags = SWAB32(ufs_inode->ui_flags);
 	inode->u.ufs_i.i_gen = SWAB32(ufs_inode->ui_gen);
 	inode->u.ufs_i.i_shadow = SWAB32(ufs_inode->ui_u3.ui_sun.ui_shadow);
-	inode->u.ufs_i.i_uid = SWAB32(ufs_inode->ui_u3.ui_sun.ui_uid);
-	inode->u.ufs_i.i_gid = SWAB32(ufs_inode->ui_u3.ui_sun.ui_gid);
 	inode->u.ufs_i.i_oeftflag = SWAB32(ufs_inode->ui_u3.ui_sun.ui_oeftflag);
 	inode->u.ufs_i.i_lastfrag = howmany (inode->i_size, uspi->s_fsize);
 	
@@ -540,8 +541,6 @@ void ufs_read_inode (struct inode * inode)
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISSOCK(inode->i_mode))
-		; /* nothing */
 	else if (S_ISFIFO(inode->i_mode))
 		init_fifo(inode);
 
@@ -558,12 +557,13 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 	struct buffer_head * bh;
 	struct ufs_inode * ufs_inode;
 	unsigned i;
-	unsigned swab;
+	unsigned flags, swab;
 
 	UFSD(("ENTER, ino %lu\n", inode->i_ino))
 
 	sb = inode->i_sb;
 	uspi = sb->u.ufs_sb.s_uspi;
+	flags = sb->u.ufs_sb.s_flags;
 	swab = sb->u.ufs_sb.s_swab;
 
 	if (inode->i_ino < UFS_ROOTINO || 
@@ -582,22 +582,15 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 	ufs_inode->ui_mode = SWAB16(inode->i_mode);
 	ufs_inode->ui_nlink = SWAB16(inode->i_nlink);
 
-	if (inode->i_uid == 0 && inode->u.ufs_i.i_uid >= UFS_USEEFT) {
-		ufs_inode->ui_u3.ui_sun.ui_uid = SWAB32(inode->u.ufs_i.i_uid);
-		ufs_inode->ui_u1.oldids.ui_suid = (__u16)ufs_inode->ui_u3.ui_sun.ui_uid;
-	}
-	else {
-		ufs_inode->ui_u1.oldids.ui_suid = SWAB16(inode->i_uid);
-		ufs_inode->ui_u3.ui_sun.ui_uid = (__u32) ufs_inode->ui_u1.oldids.ui_suid;
-	}
-	if (inode->i_gid == 0 && inode->u.ufs_i.i_gid >= UFS_USEEFT) {
-		ufs_inode->ui_u3.ui_sun.ui_gid = SWAB32(inode->u.ufs_i.i_gid);
-		ufs_inode->ui_u1.oldids.ui_sgid = (__u16)ufs_inode->ui_u3.ui_sun.ui_gid;
-	}
-	else {
-		ufs_inode->ui_u1.oldids.ui_sgid = SWAB16(inode->i_gid);
-		ufs_inode->ui_u3.ui_sun.ui_gid = (__u32) ufs_inode->ui_u1.oldids.ui_sgid;
-	}
+	if (inode->i_uid == 0 && inode->u.ufs_i.i_uid >= UFS_USEEFT)
+		ufs_set_inode_uid (ufs_inode, inode->u.ufs_i.i_uid);
+	else
+		ufs_set_inode_uid (ufs_inode, inode->i_uid);
+
+	if (inode->i_gid == 0 && inode->u.ufs_i.i_gid >= UFS_USEEFT)
+		ufs_set_inode_gid (ufs_inode, inode->u.ufs_i.i_gid);
+	else
+		ufs_set_inode_gid (ufs_inode, inode->i_gid);
 		
 	ufs_inode->ui_size = SWAB64((u64)inode->i_size);
 	ufs_inode->ui_atime.tv_sec = SWAB32(inode->i_atime);

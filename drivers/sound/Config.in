@@ -20,11 +20,11 @@ if [ "$CONFIG_SOUND_MSNDCLAS" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "m" ]; then
    if [ "$CONFIG_SOUND_MSNDCLAS" = "y" ]; then
      comment 'Compiled-in MSND Classic support requires firmware during compilation.'
      define_bool CONFIG_MSNDCLAS_HAVE_BOOT y
-     string '  Full pathname of MSNDINIT.BIN firmware file' CONFIG_MSNDCLAS_INIT_FILE "/etc/sound/msndinit.bin"
-     string '  Full pathname of MSNDPERM.BIN firmware file' CONFIG_MSNDCLAS_PERM_FILE "/etc/sound/msndperm.bin"
    else
      define_bool CONFIG_MSNDCLAS_HAVE_BOOT n
    fi
+   string '  Full pathname of MSNDINIT.BIN firmware file' CONFIG_MSNDCLAS_INIT_FILE "/etc/sound/msndinit.bin"
+   string '  Full pathname of MSNDPERM.BIN firmware file' CONFIG_MSNDCLAS_PERM_FILE "/etc/sound/msndperm.bin"
 fi
 if [ "$CONFIG_SOUND_MSNDCLAS" = "y" ]; then
    int 'MSND Classic IRQ 5,7,9,10,11,12' CONFIG_MSNDCLAS_IRQ 5
@@ -36,29 +36,29 @@ dep_tristate 'Support for Turtle Beach MultiSound Pinnacle, Fiji' CONFIG_SOUND_M
 if [ "$CONFIG_SOUND_MSNDPIN" = "y" -o "$CONFIG_SOUND_MSNDPIN" = "m" ]; then
    if [ "$CONFIG_SOUND_MSNDPIN" = "y" ]; then
      comment 'Compiled-in MSND Pinnacle support requires firmware during compilation.'
-     string '  Full pathname of PNDSPINI.BIN firmware file' CONFIG_MSNDPIN_INIT_FILE "/etc/sound/pndspini.bin"
-     string '  Full pathname of PNDSPERM.BIN firmware file' CONFIG_MSNDPIN_PERM_FILE "/etc/sound/pndsperm.bin"
      define_bool CONFIG_MSNDPIN_HAVE_BOOT y
    else
      define_bool CONFIG_MSNDPIN_HAVE_BOOT n
    fi
+   string '  Full pathname of PNDSPINI.BIN firmware file' CONFIG_MSNDPIN_INIT_FILE "/etc/sound/pndspini.bin"
+   string '  Full pathname of PNDSPERM.BIN firmware file' CONFIG_MSNDPIN_PERM_FILE "/etc/sound/pndsperm.bin"
 fi
 if [ "$CONFIG_SOUND_MSNDPIN" = "y" ]; then
    int 'MSND Pinnacle IRQ 5,7,9,10,11,12' CONFIG_MSNDPIN_IRQ 5
    hex 'MSND Pinnacle memory B0000,C8000,D0000,D8000,E0000,E8000' CONFIG_MSNDPIN_MEM D0000
    hex 'MSND Pinnacle I/O 210,220,230,240,250,260,290,3E0' CONFIG_MSNDPIN_IO 290
    bool 'MSND Pinnacle has S/PDIF I/O' CONFIG_MSNDPIN_DIGITAL
-   bool 'MSND Pinnacle Non-PnP Mode' CONFIG_MSNDPIN_NONPNP
+   bool 'MSND Pinnacle non-PnP Mode' CONFIG_MSNDPIN_NONPNP
    if [ "$CONFIG_MSNDPIN_NONPNP" = "y" ]; then
      comment 'MSND Pinnacle DSP section will be configured to above parameters.'
-     hex 'MSDN Pinnacle config port 250,260,270' CONFIG_MSNDPIN_CFG 250
+     hex 'MSND Pinnacle config port 250,260,270' CONFIG_MSNDPIN_CFG 250
      comment 'Pinnacle-specific Device Configuration (0 disables)'
      hex 'MSND Pinnacle MPU I/O (e.g. 330)' CONFIG_MSNDPIN_MPU_IO 0
      int 'MSND Pinnacle MPU IRQ (e.g. 9)' CONFIG_MSNDPIN_MPU_IRQ 0
      hex 'MSND Pinnacle IDE I/O 0 (e.g. 170)' CONFIG_MSNDPIN_IDE_IO0 0
      hex 'MSND Pinnacle IDE I/O 1 (e.g. 376)' CONFIG_MSNDPIN_IDE_IO1 0
      int 'MSND Pinnacle IDE IRQ (e.g. 15)' CONFIG_MSNDPIN_IDE_IRQ 0
-     hex 'MSDN Pinnacle joystick I/O (e.g. 200)' CONFIG_MSNDPIN_JOYSTICK_IO 0
+     hex 'MSND Pinnacle joystick I/O (e.g. 200)' CONFIG_MSNDPIN_JOYSTICK_IO 0
    fi
 fi
 if [ "$CONFIG_SOUND_MSNDPIN" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "y" ]; then
@@ -190,6 +190,16 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'CS4232 second (duplex) DMA 0, 1 or 3' CONFIG_CS4232_DMA2 3
       hex 'CS4232 MIDI I/O base 330, 370, 3B0 or 3F0' CONFIG_CS4232_MPU_BASE 330
       int 'CS4232 MIDI IRQ 5, 7, 9, 11, 12 or 15' CONFIG_CS4232_MPU_IRQ 9
+  fi
+
+  dep_tristate 'Support for Yamaha OPL3-SA[2,3,x] based (PnP) cards' CONFIG_SOUND_OPL3SA2 $CONFIG_SOUND_OSS
+  if [ "$CONFIG_SOUND_OPL3SA2" = "y" ]; then
+      hex 'OPL3SA2 audio I/O base 530, 604, E80 or F40' CONFIG_OPL3SA2_BASE 530
+      int 'OPL3SA2 audio IRQ 5, 7, 9, 11, 12 or 15' CONFIG_OPL3SA2_IRQ 11
+      int 'OPL3SA2 audio DMA 0, 1 or 3' CONFIG_OPL3SA2_DMA 0
+      int 'OPL3SA2 second (duplex) DMA 0, 1 or 3' CONFIG_OPL3SA2_DMA2 1
+      hex 'OPL3SA2 MIDI I/O base 330, 370, 3B0 or 3F0' CONFIG_OPL3SA2_MPU_BASE 330
+      int 'OPL3SA2 MIDI IRQ 5, 7, 9, 11, 12 or 15' CONFIG_OPL3SA2_MPU_IRQ 9
   fi
 
   dep_tristate 'Limited support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_SOUND_MAUI $CONFIG_SOUND_OSS

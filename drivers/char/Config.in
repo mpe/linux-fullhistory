@@ -56,7 +56,7 @@ if [ "$CONFIG_MOUSE" = "y" ]; then
 	tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
 	tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
 	tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
-	tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
+	bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
 	tristate 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
 	tristate 'PC110 digitizer pad support' CONFIG_PC110_PAD
 fi

@@ -346,7 +346,7 @@ static struct pci_access pci_direct_conf2 = {
  * attempt to make use of direct access hints provided by the PCI BIOS).
  *
  * This should be close to trivial, but it isn't, because there are buggy
- * chipsets (yes, you guessed it, by Intel) that have no class ID.
+ * chipsets (yes, you guessed it, by Intel and Compaq) that have no class ID.
  */
 __initfunc(int pci_sanity_check(struct pci_access *a))
 {
@@ -356,9 +356,9 @@ __initfunc(int pci_sanity_check(struct pci_access *a))
 		return 1;
 	for(dfn=0; dfn < 0x100; dfn++)
 		if ((!a->read_config_word(0, dfn, PCI_CLASS_DEVICE, &x) &&
-		     x == PCI_CLASS_BRIDGE_HOST) ||
+		     (x == PCI_CLASS_BRIDGE_HOST || x == PCI_CLASS_DISPLAY_VGA)) ||
 		    (!a->read_config_word(0, dfn, PCI_VENDOR_ID, &x) &&
-		     x == PCI_VENDOR_ID_INTEL))
+		     (x == PCI_VENDOR_ID_INTEL || x == PCI_VENDOR_ID_COMPAQ)))
 			return 1;
 	DBG("PCI: Sanity check failed\n");
 	return 0;

@@ -302,9 +302,8 @@ extern void baycom_ser_hdx_setup(char *str, int *ints);
 #ifdef CONFIG_SOUNDMODEM
 extern void sm_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_PMAC_CONSOLE
-extern void pmac_cons_setup(char *str, int *ints);
-extern void pmac_vmode_setup(char *str, int *ints);
+#ifdef CONFIG_ADBMOUSE
+extern void adb_mouse_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_WDT
 extern void wdt_setup(char *str, int *ints);

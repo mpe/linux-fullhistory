@@ -153,6 +153,11 @@ static int irqdma_allocated = 0;
 #include <linux/interrupt.h>
 #include <linux/init.h>
 
+/*
+ * PS/2 floppies have much slower step rates than regular floppies.
+ * It's been recommended that take about 1/4 of the default speed
+ * in some more extreme cases.
+ */
 static int slow_floppy = 0;
 
 #include <asm/dma.h>
@@ -354,7 +359,7 @@ static struct {
       0, { 1, 0, 0, 0, 0, 0, 0, 0}, 3*HZ/2, 1 }, "360K PC" }, /*5 1/4 360 KB PC*/
 
 {{2,  500, 16, 16, 6000, 4*HZ/10, 3*HZ, 14, SEL_DLY, 6,  83, 3*HZ, 17, {3,1,2,0,2}, 0,
-      0, { 2, 5, 6,23,10,20,11, 0}, 3*HZ/2, 2 }, "1.2M" }, /*5 1/4 HD AT*/
+      0, { 2, 5, 6,23,10,20,12, 0}, 3*HZ/2, 2 }, "1.2M" }, /*5 1/4 HD AT*/
 
 {{3,  250, 16, 16, 3000,    1*HZ, 3*HZ,  0, SEL_DLY, 5,  83, 3*HZ, 20, {3,1,2,0,2}, 0,
       0, { 4,22,21,30, 3, 0, 0, 0}, 3*HZ/2, 4 }, "720k" }, /*3 1/2 DD*/
@@ -1051,6 +1056,7 @@ static void floppy_enable_hlt(void)
 static void setup_DMA(void)
 {
 	unsigned long flags;
+	unsigned long f;
 
 #ifdef FLOPPY_SANITY_CHECK
 	if (raw_cmd->length == 0){
@@ -1072,17 +1078,20 @@ static void setup_DMA(void)
 	}
 #endif
 	INT_OFF;
+	f=claim_dma_lock();
 	fd_disable_dma();
 #ifdef fd_dma_setup
 	if(fd_dma_setup(raw_cmd->kernel_data, raw_cmd->length, 
 			(raw_cmd->flags & FD_RAW_READ)?
 			DMA_MODE_READ : DMA_MODE_WRITE,
 			FDCS->address) < 0) {
+		release_dma_lock(f);
 		INT_ON;
 		cont->done(0);
 		FDCS->reset=1;
 		return;
 	}
+	release_dma_lock(f);
 #else	
 	fd_clear_dma_ff();
 	fd_cacheflush(raw_cmd->kernel_data, raw_cmd->length);
@@ -1092,6 +1101,7 @@ static void setup_DMA(void)
 	fd_set_dma_count(raw_cmd->length);
 	virtual_dma_port = FDCS->address;
 	fd_enable_dma();
+	release_dma_lock(f);
 #endif
 	INT_ON;
 	floppy_disable_hlt();
@@ -1694,11 +1704,15 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 	int do_print;
+	unsigned long f;
 
 	lasthandler = handler;
 	interruptjiffies = jiffies;
 
+	f=claim_dma_lock();
 	fd_disable_dma();
+	release_dma_lock(f);
+	
 	floppy_enable_hlt();
 	CLEAR_INTR;
 	if (fdc >= N_FDC || FDCS->address == -1){
@@ -1779,13 +1793,18 @@ static void reset_interrupt(void)
  */
 static void reset_fdc(void)
 {
+	unsigned long flags;
+	
 	SET_INTR(reset_interrupt);
 	FDCS->reset = 0;
 	reset_fdc_info(0);
 
 	/* Pseudo-DMA may intercept 'reset finished' interrupt.  */
 	/* Irrelevant for systems with true DMA (i386).          */
+	
+	flags=claim_dma_lock();
 	fd_disable_dma();
+	release_dma_lock(flags);
 
 	if (FDCS->version >= FDC_82072A)
 		fd_outb(0x80 | (FDCS->dtr &3), FD_STATUS);
@@ -1844,12 +1863,18 @@ static void show_floppy(void)
 
 static void floppy_shutdown(void)
 {
+	unsigned long flags;
+	
 	if (!initialising)
 		show_floppy();
 	cancel_activity();
 
 	floppy_enable_hlt();
+	
+	flags=claim_dma_lock();
 	fd_disable_dma();
+	release_dma_lock(flags);
+	
 	/* avoid dma going to a random drive after shutdown */
 
 	if (!initialising)
@@ -1897,6 +1922,8 @@ static int start_motor(void (*function)(void) )
 
 static void floppy_ready(void)
 {
+	unsigned long flags;
+	
 	CHECK_RESET;
 	if (start_motor(floppy_ready)) return;
 	if (fdc_dtr()) return;
@@ -1915,8 +1942,12 @@ static void floppy_ready(void)
 #ifdef fd_chose_dma_mode
 	if ((raw_cmd->flags & FD_RAW_READ) || 
 	    (raw_cmd->flags & FD_RAW_WRITE))
+	{
+		flags=claim_dma_lock();
 		fd_chose_dma_mode(raw_cmd->kernel_data,
 				  raw_cmd->length);
+		release_dma_lock(flags);
+	}
 #endif
 
 	if (raw_cmd->flags & (FD_RAW_NEED_SEEK | FD_RAW_NEED_DISK)){
@@ -3020,7 +3051,12 @@ static void raw_cmd_done(int flag)
 			raw_cmd->reply[i] = reply_buffer[i];
 
 		if (raw_cmd->flags & (FD_RAW_READ | FD_RAW_WRITE))
+		{
+			unsigned long flags;
+			flags=claim_dma_lock();
 			raw_cmd->length = fd_get_dma_residue();
+			release_dma_lock(flags);
+		}
 		
 		if ((raw_cmd->flags & FD_RAW_SOFTFAILURE) &&
 		    (!raw_cmd->reply_count || (raw_cmd->reply[0] & 0xc0)))
@@ -4025,6 +4061,7 @@ static struct param_table {
 	{ "usefifo", 0, &no_fifo, 0, 0 },
 
 	{ "cmos", set_cmos, 0, 0, 0 },
+	{ "slow", 0, &slow_floppy, 1, 0 },
 
 	{ "unexpected_interrupts", 0, &print_unex, 1, 0 },
 	{ "no_unexpected_interrupts", 0, &print_unex, 0, 0 },
@@ -4036,15 +4073,6 @@ __initfunc(void floppy_setup(char *str, int *ints))
 	int i;
 	int param;
 	if (str) {
-	/*
-	 * PS/2 floppies have much slower step rates than regular floppies.
-	 * It's been recommended that take about 1/4 of the default speed
-	 * in some more extreme cases.
-	 */
-	if( strcmp(str,"slow") == 0) {
-		slow_floppy = 1;
-		return;
-	}
 		for (i=0; i< ARRAY_SIZE(config_params); i++){
 			if (strcmp(str,config_params[i].name) == 0){
 				if (ints[0])
@@ -4125,6 +4153,8 @@ __initfunc(int floppy_init(void))
 #endif
 
 	if (floppy_grab_irq_and_dma()){
+		del_timer(&fd_timeout);
+		blk_dev[MAJOR_NR].request_fn = NULL;
 		unregister_blkdev(MAJOR_NR,"fd");
 		del_timer(&fd_timeout);
 		return -EBUSY;
@@ -4176,7 +4206,8 @@ __initfunc(int floppy_init(void))
 	current_drive = 0;
 	floppy_release_irq_and_dma();
 	initialising=0;
-	if (have_no_fdc) {
+	if (have_no_fdc) 
+	{
 		DPRINT("no floppy controllers found\n");
 		unregister_blkdev(MAJOR_NR,"fd");		
 	}

@@ -62,6 +62,8 @@ static struct {
 	time_t last_rtc_update;
 } state;
 
+unsigned long est_cycle_freq;
+
 
 static inline __u32 rpcc(void)
 {
@@ -162,7 +164,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
  * drivers depend on them being initialized (e.g., joystick driver).
  */
 
-/* It is (normally) only counter 1 that presents config problems, so
+/* It is (normally) only counter 0 that presents config problems, so
    provide this support function to do the rest of the job.  */
 
 void inline
@@ -184,11 +186,19 @@ init_pit_rest(void)
 static inline void
 rtc_init_pit (void)
 {
+	unsigned char control;
+
 	/* Setup interval timer if /dev/rtc is being used */
 	outb(0x34, 0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb(LATCH & 0xff, 0x40);	/* LSB */
 	outb(LATCH >> 8, 0x40);		/* MSB */
 	request_region(0x40, 0x20, "timer"); /* reserve pit */
+
+	/* Turn off RTC interrupts before /dev/rtc is initialized */
+	control = CMOS_READ(RTC_CONTROL);
+        control &= ~(RTC_PIE | RTC_AIE | RTC_UIE);
+        CMOS_WRITE(control, RTC_CONTROL);
+        CMOS_READ(RTC_INTR_FLAGS);
 
 	init_pit_rest();
 }
@@ -197,11 +207,25 @@ rtc_init_pit (void)
 void
 generic_init_pit (void)
 {
-	int x;
-	if ((x = (CMOS_READ(RTC_FREQ_SELECT) & 0x3f)) != 0x26) {
+	unsigned char x;
+
+        /* Reset periodic interrupt frequency.  */
+	x = CMOS_READ(RTC_FREQ_SELECT) & 0x3f;
+	if (x != 0x26 && x != 0x19 && x != 0x06) {
 		printk("Setting RTC_FREQ to 1024 Hz (%x)\n", x);
 		CMOS_WRITE(0x26, RTC_FREQ_SELECT);
 	}
+
+	/* Turn on periodic interrupts.  */
+	x = CMOS_READ(RTC_CONTROL);
+	if (!(x & RTC_PIE)) {
+		printk("Turning on RTC interrupts.\n");
+		x |= RTC_PIE;
+		x &= ~(RTC_AIE | RTC_UIE);
+		CMOS_WRITE(x, RTC_CONTROL);
+	}
+	CMOS_READ(RTC_INTR_FLAGS);
+
 	request_region(RTC_PORT(0), 0x10, "timer"); /* reserve rtc */
 
 	/* Turn off the PIT.  */
@@ -223,11 +247,9 @@ generic_init_pit (void)
 void
 time_init(void)
 {
-#ifdef CONFIG_RTC
-	unsigned char save_control;
-#endif
         void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
+	unsigned long cycle_freq;
 
 	/* Initialize the timers.  */
 	init_pit();
@@ -246,16 +268,17 @@ time_init(void)
 
 	/* If our cycle frequency isn't valid, go another round and give
 	   a guess at what it should be.  */
-	if (hwrpb->cycle_freq == 0) {
+	cycle_freq = hwrpb->cycle_freq;
+	if (cycle_freq == 0) {
 		printk("HWRPB cycle frequency bogus.  Estimating... ");
 
 		do { } while (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP));
 		do { } while (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
 		cc2 = rpcc();
-		hwrpb->cycle_freq = cc2 - cc1;
+		est_cycle_freq = cycle_freq = cc2 - cc1;
 		cc1 = cc2;
 
-		printk("%lu Hz\n", hwrpb->cycle_freq);
+		printk("%lu Hz\n", cycle_freq);
 	}
 
 	/* From John Bowman <bowman@math.ualberta.ca>: allow the values
@@ -300,18 +323,8 @@ time_init(void)
 
 	state.last_time = cc1;
 	state.scaled_ticks_per_cycle
-		= ((unsigned long) HZ << FIX_SHIFT) / hwrpb->cycle_freq;
+		= ((unsigned long) HZ << FIX_SHIFT) / cycle_freq;
 	state.last_rtc_update = 0;
-
-#ifdef CONFIG_RTC 
-	/* turn off RTC interrupts before /dev/rtc is initialized */
-	save_control = CMOS_READ(RTC_CONTROL);
-        save_control &= ~RTC_PIE;
-        save_control &= ~RTC_AIE;
-        save_control &= ~RTC_UIE;
-        CMOS_WRITE(save_control, RTC_CONTROL);
-        CMOS_READ(RTC_INTR_FLAGS);
-#endif
 
 	/* setup timer */ 
         irq_handler = timer_interrupt;

@@ -107,6 +107,7 @@
  2.0.12      5.44         8 Aug 1996  Use ID 7 for all PCI cards
  2.1.1       5.45         2 Oct 1996  Update ROM accesses for 2.1.x
  2.1.97      5.46	 23 Apr 1998  Rewritten PCI detection routines [mj]
+ 2.1.11x     5.47	  9 Aug 1998  Touched for 8 SCSI disk majors support
 
  
 
@@ -1891,7 +1892,11 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
       0x0a bytes long.  Heads are one less than we need to report.
     */
 
-   drive = MINOR(dev) / 16;
+   if (MAJOR(dev) != SCSI_DISK0_MAJOR) {
+      printk("fdomain_16x0_biosparam: too many disks");
+      return 0;
+   }
+   drive = MINOR(dev) >> 4;
 
    if (bios_major == 2) {
       switch (Quantum) {

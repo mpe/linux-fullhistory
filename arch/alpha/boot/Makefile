@@ -36,7 +36,10 @@ bootimage:	tools/mkbb tools/lxboot tools/bootlx vmlinux.nh
 	tools/mkbb bootimage tools/lxboot
 
 bootpfile:	tools/bootph vmlinux.nh
-	( cat tools/bootph vmlinux.nh ) > bootpfile
+	cat tools/bootph vmlinux.nh > bootpfile
+ifdef INITRD
+	cat $(INITRD) >> bootpfile
+endif
 
 srmboot:	bootdevice bootimage
 	dd if=bootimage of=$(BOOTDEV) bs=512 seek=1 skip=1
@@ -48,15 +51,18 @@ bootdevice:
 vmlinux.gz: vmlinux
 	gzip -fv9 vmlinux
 
-#
-# A raw binary without header.  Used by raw boot.
-#
 main.o: ksize.h
 
 bootp.o: ksize.h
 
-ksize.h: $(OBJSTRIP) vmlinux.nh
-	echo "#define KERNEL_SIZE `$(OBJSTRIP) -p vmlinux.nh /dev/null`" > $@
+ksize.h: vmlinux.nh dummy
+	echo "#define KERNEL_SIZE `ls -l vmlinux.nh | awk '{print $$5}'`" > $@T
+ifdef INITRD
+	[ -f $(INITRD) ] || exit 1
+	echo "#define INITRD_SIZE `ls -l $(INITRD) | awk '{print $$5}'`" >> $@T
+endif
+	cmp -s $@T $@ || mv -f $@T $@
+	rm -f $@T
 
 vmlinux.nh: $(VMLINUX) $(OBJSTRIP)
 	$(OBJSTRIP) -v $(VMLINUX) vmlinux.nh
@@ -91,3 +97,5 @@ clean:
 	rm -f vmlinux.nh ksize.h
 
 dep:
+
+dummy:

@@ -323,23 +323,14 @@ out:
 
 #ifdef CONFIG_ALPHA_GENERIC
 # define RTC_PORT(x)	((x) + alpha_mv.rtc_port)
-# define RTC_ADDR(x)	((x) | alpha_mv.rtc_addr)
-# define RTC_ALWAYS_BCD	(alpha_mv.rtc_bcd)
 #else
 # ifdef CONFIG_ALPHA_JENSEN
 #  define RTC_PORT(x)	(0x170+(x))
-#  define RTC_ADDR(x)	(x)
 # else
 #  define RTC_PORT(x)	(0x70 + (x))
-#  define RTC_ADDR(x)	(0x80 | (x))
-# endif
-# ifdef CONFIG_ALPHA_RUFFIAN
-#  define RTC_ALWAYS_BCD	1
-# else
-#  define RTC_ALWAYS_BCD	0
 # endif
 #endif
-
+#define RTC_ALWAYS_BCD	0
 
 #endif /* __KERNEL__ */
 

@@ -3,7 +3,7 @@
  *
  * Copyright 1994 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
  *
- * Some parts are based on hd.c by Linus Thorvalds
+ * Some parts are based on hd.c by Linus Torvalds
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive for

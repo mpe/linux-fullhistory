@@ -269,9 +269,9 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 	card->hw.irq     = (conf->irq == 9) ? 2 : conf->irq;
 	/* Compute the virtual address of the card in kernel space */
 	if(conf->maddr)
-		card->hw.dpmbase = (unsigned long)phys_to_virt(conf->maddr);
+		card->hw.dpmbase = phys_to_virt(conf->maddr);
 	else	/* But 0 means NULL */
-		card->hw.dpmbase = conf->maddr;
+		card->hw.dpmbase = (void *)conf->maddr;
 
 	card->hw.dpmsize = SDLA_WINDOWSIZE;
 	card->hw.type    = conf->hw_opt[0];
@@ -470,8 +470,8 @@ static int ioctl_dump (sdla_t* card, sdla_dump_t* u_dump)
 		}
 		/* FIXME::: COPY TO KERNEL BUFFER FIRST ?? */
 		sti();	/* Not ideal but tough we have to do this */
-		if(copy_to_user((void*)(dump.ptr),
-			(void*)(card->hw.dpmbase + pos), len))	
+		if(copy_to_user((void *)dump.ptr,
+			(u8 *)card->hw.dpmbase + pos, len))	
 			return -EFAULT;
 		cli();
 		dump.length     -= len;

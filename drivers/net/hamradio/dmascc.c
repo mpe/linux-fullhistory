@@ -966,6 +966,7 @@ static void special_condition(struct device *dev, int rc)
 {
   struct scc_priv *priv = dev->priv;
   int cb, cmd = priv->cmd;
+  unsigned long flags;
 
   /* See Figure 2-15. Only overrun and EOF need to be checked. */
   
@@ -976,9 +977,12 @@ static void special_condition(struct device *dev, int rc)
   } else if (rc & END_FR) {
     /* End of frame. Get byte count */
     if (dev->dma) {
+        flags=claim_dma_lock();
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
 	cb = BUF_SIZE - get_dma_residue(dev->dma) - 2;
+	release_dma_lock(flags);
+	
     } else {
 	cb = priv->rx_ptr - 2;
     }
@@ -1013,9 +1017,13 @@ static void special_condition(struct device *dev, int rc)
     }
     /* Get ready for new frame */
     if (dev->dma) {
+      
+      flags=claim_dma_lock();
       set_dma_addr(dev->dma, (int) priv->rx_buf[priv->rx_head]);
       set_dma_count(dev->dma, BUF_SIZE);
       enable_dma(dev->dma);
+      release_dma_lock(flags);
+      
     } else {
       priv->rx_ptr = 0;
     }
@@ -1102,6 +1110,7 @@ static void es_isr(struct device *dev)
   struct scc_info *info = priv->info;
   int i, cmd = priv->cmd;
   int st, dst, res;
+  unsigned long flags;
 
   /* Read status and reset interrupt bit */
   st = read_scc(cmd, R0);
@@ -1118,9 +1127,11 @@ static void es_isr(struct device *dev)
     /* Get remaining bytes */
     i = priv->tx_tail;
     if (dev->dma) {
+      flags=claim_dma_lock();
       disable_dma(dev->dma);
       clear_dma_ff(dev->dma);
       res = get_dma_residue(dev->dma);
+      release_dma_lock(flags);
     } else {
       res = priv->tx_len[i] - priv->tx_ptr;
       if (res) write_scc(cmd, R0, RES_Tx_P);
@@ -1133,9 +1144,11 @@ static void es_isr(struct device *dev)
     /* Check if another frame is available and we are allowed to transmit */
     if (priv->tx_count && (jiffies - priv->tx_start) < priv->param.txtime) {
       if (dev->dma) {
+        flags=claim_dma_lock();
 	set_dma_addr(dev->dma, (int) priv->tx_buf[priv->tx_tail]);
 	set_dma_count(dev->dma, priv->tx_len[priv->tx_tail]);
 	enable_dma(dev->dma);
+	release_dma_lock(flags);
       } else {
 	/* If we have an ESCC, we are allowed to write data bytes
 	   immediately. Otherwise we have to wait for the next
@@ -1170,12 +1183,14 @@ static void es_isr(struct device *dev)
     if (st & DCD) {
       if (dev->dma) {
 	/* Program DMA controller */
+	flags=claim_dma_lock();
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
 	set_dma_mode(dev->dma, DMA_MODE_READ);
 	set_dma_addr(dev->dma, (int) priv->rx_buf[priv->rx_head]);
 	set_dma_count(dev->dma, BUF_SIZE);
 	enable_dma(dev->dma);
+	release_dma_lock(flags);
 	/* Configure PackeTwin DMA */
 	if (info->type == TYPE_TWIN) {
 	  outb_p((dev->dma == 1) ? TWIN_DMA_HDX_R1 : TWIN_DMA_HDX_R3,
@@ -1195,7 +1210,12 @@ static void es_isr(struct device *dev)
       }
     } else {
       /* Disable DMA */
-      if (dev->dma) disable_dma(dev->dma);
+      if (dev->dma)
+      {
+      	flags=claim_dma_lock();
+      	disable_dma(dev->dma);
+      	release_dma_lock(flags);
+      }
       /* Disable receiver */
       write_scc(cmd, R3, Rx8);
       /* DMA disable, RX int disable, Ext int enable */
@@ -1228,11 +1248,13 @@ static void es_isr(struct device *dev)
     while (read_scc(cmd, R0) & Rx_CH_AV) read_scc(cmd, R8);
     priv->rx_over = 0;
     if (dev->dma) {
+      flags=claim_dma_lock();
       disable_dma(dev->dma);
       clear_dma_ff(dev->dma);
       set_dma_addr(dev->dma, (int) priv->rx_buf[priv->rx_head]);
       set_dma_count(dev->dma, BUF_SIZE);
       enable_dma(dev->dma);
+      release_dma_lock(flags);
     } else {
       priv->rx_ptr = 0;
     }
@@ -1245,6 +1267,7 @@ static void tm_isr(struct device *dev)
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
   int cmd = priv->cmd;
+  unsigned long flags;
 
   switch (priv->tx_state) {
   case TX_OFF:
@@ -1266,12 +1289,16 @@ static void tm_isr(struct device *dev)
     priv->tx_state = TX_ACTIVE;
     if (dev->dma) {
       /* Program DMA controller */
+      
+      flags=claim_dma_lock();
       disable_dma(dev->dma);
       clear_dma_ff(dev->dma);
       set_dma_mode(dev->dma, DMA_MODE_WRITE);
       set_dma_addr(dev->dma, (int) priv->tx_buf[priv->tx_tail]);
       set_dma_count(dev->dma, priv->tx_len[priv->tx_tail]);
       enable_dma(dev->dma);
+      release_dma_lock(flags);
+      
       /* Configure PackeTwin DMA */
       if (info->type == TYPE_TWIN) {
 	outb_p((dev->dma == 1) ? TWIN_DMA_HDX_T1 : TWIN_DMA_HDX_T3,

@@ -772,10 +772,15 @@ static inline void wd7000_enable_intr (Adapter *host)
 
 static inline void wd7000_enable_dma (Adapter *host)
 {
+    unsigned long flags;
     host->control |= DMA_EN;
     outb (host->control, host->iobase + ASC_CONTROL);
+    
+    flags = claim_dma_lock();
     set_dma_mode (host->dma, DMA_MODE_CASCADE);
     enable_dma (host->dma);
+    release_dma_lock(flags);
+    
 }
 
 

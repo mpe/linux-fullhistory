@@ -153,7 +153,7 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 		} while (tmp != bh);
 
 		/* Refuse to swap out all buffer pages */
-		if ((buffermem >> PAGE_SHIFT) * 100 < (buffer_mem.min_percent * num_physpages))
+		if (buffer_under_min())
 			goto next;
 	}
 
@@ -174,7 +174,7 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 			age_page(page);
 			if (page->age)
 				break;
-			if (page_cache_size * 100 < (page_cache.min_percent * num_physpages))
+			if (pgcache_under_min())
 				break;
 			if (PageSwapCache(page)) {
 				delete_from_swap_cache(page);
