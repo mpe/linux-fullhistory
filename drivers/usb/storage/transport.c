@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.32 2000/11/03 00:18:04 mdharm Exp $
+ * $Id: transport.c,v 1.38 2000/11/21 00:52:10 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -90,9 +90,9 @@ unsigned int usb_stor_transfer_length(Scsi_Cmnd *srb)
 	*/
 
 	static char *lengths =
-		
+
 	      /* 0123456789ABCDEF   0123456789ABCDEF */
-		
+
 		"00XLZ6XZBXBBXXXB" "00LBBLG0R0L0GG0X"  /* 00-1F */
 		"XXXXT8XXB4B0BBBB" "ZZZ0B00HCSSZTBHH"  /* 20-3F */
 		"M0HHB0X000H0HH0X" "XHH0HHXX0TH0H0XX"  /* 40-5F */
@@ -213,129 +213,129 @@ unsigned int usb_stor_transfer_length(Scsi_Cmnd *srb)
 	*/
 
 	if (srb->sc_data_direction == SCSI_DATA_WRITE) {
-     		doDefault = 1;
+		doDefault = 1;
 	}
 	else
 		switch (lengths[srb->cmnd[0]]) {
-		case 'L':
-			len = srb->cmnd[4];
-			break;
+			case 'L':
+				len = srb->cmnd[4];
+				break;
 
-		case 'M':
-			len = srb->cmnd[8];
-			break;
+			case 'M':
+				len = srb->cmnd[8];
+				break;
 
-		case '0':
-		case '1':
-		case '2':
-		case '3':
-		case '4':
-		case '5':
-		case '6':
-		case '7':
-		case '8':
-		case '9':
-			len = lengths[srb->cmnd[0]]-'0';
-			break;
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+				len = lengths[srb->cmnd[0]]-'0';
+				break;
 
-		case 'G':
-			len = (((unsigned int)srb->cmnd[3])<<8) |
-				srb->cmnd[4];
-			break;
+			case 'G':
+				len = (((unsigned int)srb->cmnd[3])<<8) |
+					srb->cmnd[4];
+				break;
 
-		case 'H':
-			len = (((unsigned int)srb->cmnd[7])<<8) |
-				srb->cmnd[8];
-			break;
+			case 'H':
+				len = (((unsigned int)srb->cmnd[7])<<8) |
+					srb->cmnd[8];
+				break;
 
-		case 'I':
-			len = (((unsigned int)srb->cmnd[8])<<8) |
-				srb->cmnd[9];
-			break;
-				   
-		case 'R':
-			len = (((unsigned int)srb->cmnd[2])<<16) |
-				(((unsigned int)srb->cmnd[3])<<8) |
-				srb->cmnd[4];
-			break;
-				   
-		case 'S':
-			len = (((unsigned int)srb->cmnd[3])<<16) |
-				(((unsigned int)srb->cmnd[4])<<8) |
-				srb->cmnd[5];
-			break;
-				   
-		case 'T':
-			len = (((unsigned int)srb->cmnd[6])<<16) |
-				(((unsigned int)srb->cmnd[7])<<8) |
-				srb->cmnd[8];
-			break;
-				   
-		case 'U':
-			len = (((unsigned int)srb->cmnd[7])<<16) |
-				(((unsigned int)srb->cmnd[8])<<8) |
-				srb->cmnd[9];
-			break;
-				   
-		case 'C':
-			len = (((unsigned int)srb->cmnd[2])<<24) |
-				(((unsigned int)srb->cmnd[3])<<16) |
-				(((unsigned int)srb->cmnd[4])<<8) |
-				srb->cmnd[5];
-			break;
-				   
-		case 'D':
-			len = (((unsigned int)srb->cmnd[6])<<24) |
-				(((unsigned int)srb->cmnd[7])<<16) |
-				(((unsigned int)srb->cmnd[8])<<8) |
-				srb->cmnd[9];
-			break;
-				   
-		case 'V':
-			len = 20;
-			break;
-				   
-		case 'W':
-			len = 24;
-			break;
-				   
-		case 'B':
-			/* Use buffer size due to different block sizes */
-			doDefault = 1;
-			break;
-				   
-		case 'X':
-			US_DEBUGP("Error: UNSUPPORTED COMMAND %02X\n",
-				  srb->cmnd[0]);
-			doDefault = 1;
-			break;
-				   
-		case 'Z':
-			/* Use buffer size due to mode dependence */
-			doDefault = 1;
-			break;
-				   
-		default:
-			US_DEBUGP("Error: COMMAND %02X out of range or table inconsistent (%c).\n",
-				  srb->cmnd[0], lengths[srb->cmnd[0]] );
-			doDefault = 1;
+			case 'I':
+				len = (((unsigned int)srb->cmnd[8])<<8) |
+					srb->cmnd[9];
+				break;
+
+			case 'R':
+				len = (((unsigned int)srb->cmnd[2])<<16) |
+					(((unsigned int)srb->cmnd[3])<<8) |
+					srb->cmnd[4];
+				break;
+
+			case 'S':
+				len = (((unsigned int)srb->cmnd[3])<<16) |
+					(((unsigned int)srb->cmnd[4])<<8) |
+					srb->cmnd[5];
+				break;
+
+			case 'T':
+				len = (((unsigned int)srb->cmnd[6])<<16) |
+					(((unsigned int)srb->cmnd[7])<<8) |
+					srb->cmnd[8];
+				break;
+
+			case 'U':
+				len = (((unsigned int)srb->cmnd[7])<<16) |
+					(((unsigned int)srb->cmnd[8])<<8) |
+					srb->cmnd[9];
+				break;
+
+			case 'C':
+				len = (((unsigned int)srb->cmnd[2])<<24) |
+					(((unsigned int)srb->cmnd[3])<<16) |
+					(((unsigned int)srb->cmnd[4])<<8) |
+					srb->cmnd[5];
+				break;
+
+			case 'D':
+				len = (((unsigned int)srb->cmnd[6])<<24) |
+					(((unsigned int)srb->cmnd[7])<<16) |
+					(((unsigned int)srb->cmnd[8])<<8) |
+					srb->cmnd[9];
+				break;
+
+			case 'V':
+				len = 20;
+				break;
+
+			case 'W':
+				len = 24;
+				break;
+
+			case 'B':
+				/* Use buffer size due to different block sizes */
+				doDefault = 1;
+				break;
+
+			case 'X':
+				US_DEBUGP("Error: UNSUPPORTED COMMAND %02X\n",
+						srb->cmnd[0]);
+				doDefault = 1;
+				break;
+
+			case 'Z':
+				/* Use buffer size due to mode dependence */
+				doDefault = 1;
+				break;
+
+			default:
+				US_DEBUGP("Error: COMMAND %02X out of range or table inconsistent (%c).\n",
+						srb->cmnd[0], lengths[srb->cmnd[0]] );
+				doDefault = 1;
 		}
 	   
-	if ( doDefault == 1 ) {
-		/* Are we going to scatter gather? */
-		if (srb->use_sg) {
-			/* Add up the sizes of all the sg segments */
-			sg = (struct scatterlist *) srb->request_buffer;
-			for (i = 0; i < srb->use_sg; i++)
-				total += sg[i].length;
-			len = total;
-		}
-		else
-			/* Just return the length of the buffer */
-			len = srb->request_bufflen;
-	}
+	   if ( doDefault == 1 ) {
+		   /* Are we going to scatter gather? */
+		   if (srb->use_sg) {
+			   /* Add up the sizes of all the sg segments */
+			   sg = (struct scatterlist *) srb->request_buffer;
+			   for (i = 0; i < srb->use_sg; i++)
+				   total += sg[i].length;
+			   len = total;
+		   }
+		   else
+			   /* Just return the length of the buffer */
+			   len = srb->request_bufflen;
+	   }
 
-	return len;
+return len;
 }
 
 /* This is a version of usb_clear_halt() that doesn't read the status from
@@ -423,7 +423,7 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 	if (status) {
 		/* something went wrong */
 		up(&(us->current_urb_sem));
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 		remove_wait_queue(&wqh, &wait);
 		kfree(dr);
 		return status;
@@ -481,7 +481,7 @@ int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 	if (status) {
 		/* something went wrong */
 		up(&(us->current_urb_sem));
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 		remove_wait_queue(&wqh, &wait);
 		return status;
 	}
@@ -538,7 +538,7 @@ int usb_stor_transfer_partial(struct us_data *us, char *buf, int length)
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
 		clear_halt(us->pusb_dev, pipe);
 	}
-	
+
 	/* did we send all the data? */
 	if (partial == length) {
 		US_DEBUGP("usb_stor_transfer_partial(): transfer complete\n");
@@ -824,24 +824,44 @@ void usb_stor_CBI_irq(struct urb *urb)
 	US_DEBUGP("USB IRQ recieved for device on host %d\n", us->host_no);
 	US_DEBUGP("-- IRQ data length is %d\n", urb->actual_length);
 	US_DEBUGP("-- IRQ state is %d\n", urb->status);
+	US_DEBUGP("-- Interrupt Status (0x%x, 0x%x)\n",
+			us->irqbuf[0], us->irqbuf[1]);
+
+	/* reject improper IRQs */
+	if (urb->actual_length != 2) {
+		US_DEBUGP("-- IRQ too short\n");
+		return;
+	}
 
 	/* is the device removed? */
-	if (urb->status != -ENOENT) {
-		/* save the data for interpretation later */
-		US_DEBUGP("-- Interrupt Status (0x%x, 0x%x)\n",
-			  ((unsigned char*)urb->transfer_buffer)[0], 
-			  ((unsigned char*)urb->transfer_buffer)[1]);
-
-
-		/* was this a wanted interrupt? */
-		if (atomic_read(us->ip_wanted)) {
-			atomic_set(us->ip_wanted, 0);
-			US_DEBUGP("-- Current value of ip_waitq is: %d\n", atomic_read(&us->ip_waitq.count));
-			up(&(us->ip_waitq));
-		} else
-			US_DEBUGP("ERROR: Unwanted interrupt received!\n");
-	} else
+	if (urb->status == -ENOENT) {
 		US_DEBUGP("-- device has been removed\n");
+		return;
+	}
+
+	/* was this a command-completion interrupt? */
+	if (us->irqbuf[0] && (us->subclass != US_SC_UFI)) {
+		US_DEBUGP("-- not a command-completion IRQ\n");
+		return;
+	}
+
+	/* was this a wanted interrupt? */
+	if (!atomic_read(us->ip_wanted)) {
+		US_DEBUGP("ERROR: Unwanted interrupt received!\n");
+		return;
+	}
+
+	/* adjust the flag */
+	atomic_set(us->ip_wanted, 0);
+		
+	/* copy the valid data */
+	us->irqdata[0] = us->irqbuf[0];
+	us->irqdata[1] = us->irqbuf[1];
+
+	/* wake up the command thread */
+	US_DEBUGP("-- Current value of ip_waitq is: %d\n",
+			atomic_read(&us->ip_waitq.count));
+	up(&(us->ip_waitq));
 }
 
 int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
@@ -903,18 +923,17 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* go to sleep until we get this interrupt */
 	US_DEBUGP("Current value of ip_waitq is: %d\n", atomic_read(&us->ip_waitq.count));
 	down(&(us->ip_waitq));
-	
+
 	/* if we were woken up by an abort instead of the actual interrupt */
 	if (atomic_read(us->ip_wanted)) {
 		US_DEBUGP("Did not get interrupt on CBI\n");
 		atomic_set(us->ip_wanted, 0);
 		return USB_STOR_TRANSPORT_ABORTED;
 	}
-	
+
 	US_DEBUGP("Got interrupt data (0x%x, 0x%x)\n", 
-		  ((unsigned char*)us->irq_urb->transfer_buffer)[0],
-		  ((unsigned char*)us->irq_urb->transfer_buffer)[1]);
-	
+			us->irqdata[0], us->irqdata[1]);
+
 	/* UFI gives us ASC and ASCQ, like a request sense
 	 *
 	 * REQUEST_SENSE and INQUIRY don't affect the sense data on UFI
@@ -932,22 +951,24 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 			else
 				return USB_STOR_TRANSPORT_GOOD;
 	}
-	
+
 	/* If not UFI, we interpret the data as a result code 
 	 * The first byte should always be a 0x0
 	 * The second byte & 0x0F should be 0x0 for good, otherwise error 
 	 */
-	if (((unsigned char*)us->irq_urb->transfer_buffer)[0]) {
-		US_DEBUGP("CBI IRQ data showed reserved bType\n");
+	if (us->irqdata[0]) {
+		US_DEBUGP("CBI IRQ data showed reserved bType %d\n",
+				us->irqdata[0]);
 		return USB_STOR_TRANSPORT_ERROR;
 	}
-	switch (((unsigned char*)us->irq_urb->transfer_buffer)[1] & 0x0F) {
-	case 0x00: 
-		return USB_STOR_TRANSPORT_GOOD;
-	case 0x01: 
-		return USB_STOR_TRANSPORT_FAILED;
-	default: 
-		return USB_STOR_TRANSPORT_ERROR;
+
+	switch (us->irqdata[1] & 0x0F) {
+		case 0x00: 
+			return USB_STOR_TRANSPORT_GOOD;
+		case 0x01: 
+			return USB_STOR_TRANSPORT_FAILED;
+		default: 
+			return USB_STOR_TRANSPORT_ERROR;
 	}
 
 	/* we should never get here, but if we do, we're in trouble */
@@ -1056,7 +1077,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* if the device was removed, then we're already reset */
 	if (!us->pusb_dev)
 		return SUCCESS;
-	
+
 	/* set up the command wrapper */
 	bcb.Signature = cpu_to_le32(US_BULK_CB_SIGN);
 	bcb.DataTransferLength = cpu_to_le32(usb_stor_transfer_length(srb));
@@ -1066,14 +1087,14 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	if (us->flags & US_FL_SCM_MULT_TARG)
 		bcb.Lun |= srb->target << 4;
 	bcb.Length = srb->cmd_len;
-	
+
 	/* construct the pipe handle */
 	pipe = usb_sndbulkpipe(us->pusb_dev, us->ep_out);
-	
+
 	/* copy the command payload */
 	memset(bcb.CDB, 0, sizeof(bcb.CDB));
 	memcpy(bcb.CDB, srb->cmnd, bcb.Length);
-	
+
 	/* send it to out endpoint */
 	US_DEBUGP("Bulk command S 0x%x T 0x%x Trg %d LUN %d L %d F %d CL %d\n",
 		  le32_to_cpu(bcb.Signature), bcb.Tag,
@@ -1082,7 +1103,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	result = usb_stor_bulk_msg(us, &bcb, pipe, US_BULK_CB_WRAP_LEN, 
 				   &partial);
 	US_DEBUGP("Bulk command transfer result=%d\n", result);
-	
+
 	/* if the command was aborted, indicate that */
 	if (result == -ENOENT)
 		return USB_STOR_TRANSPORT_ABORTED;
@@ -1095,7 +1116,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* unknown error -- we've got a problem */
 		return USB_STOR_TRANSPORT_ERROR;
 	}
-	
+
 	/* if the command transfered well, then we go to the data stage */
 	if (result == 0) {
 		/* send/receive data payload, if there is any */
@@ -1109,14 +1130,14 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 				return USB_STOR_TRANSPORT_ABORTED;
 		}
 	}
-	
+
 	/* See flow chart on pg 15 of the Bulk Only Transport spec for
 	 * an explanation of how this code works.
 	 */
-	
+
 	/* construct the pipe handle */
 	pipe = usb_rcvbulkpipe(us->pusb_dev, us->ep_in);
-	
+
 	/* get CSW for device status */
 	US_DEBUGP("Attempting to get CSW...\n");
 	result = usb_stor_bulk_msg(us, &bcs, pipe, US_BULK_CS_WRAP_LEN, 
@@ -1139,7 +1160,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* if the command was aborted, indicate that */
 		if (result == -ENOENT)
 			return USB_STOR_TRANSPORT_ABORTED;
-		
+
 		/* if it fails again, we need a reset and return an error*/
 		if (result == -EPIPE) {
 			US_DEBUGP("clearing halt for pipe 0x%x\n", pipe);
@@ -1147,13 +1168,13 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 			return USB_STOR_TRANSPORT_ERROR;
 		}
 	}
-	
+
 	/* if we still have a failure at this point, we're in trouble */
 	US_DEBUGP("Bulk status result = %d\n", result);
 	if (result) {
 		return USB_STOR_TRANSPORT_ERROR;
 	}
-	
+
 	/* check bulk status */
 	US_DEBUGP("Bulk status Sig 0x%x T 0x%x R %d Stat 0x%x\n",
 		  le32_to_cpu(bcs.Signature), bcs.Tag, 
@@ -1164,24 +1185,24 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 		US_DEBUGP("Bulk logical error\n");
 		return USB_STOR_TRANSPORT_ERROR;
 	}
-	
+
 	/* based on the status code, we report good or bad */
 	switch (bcs.Status) {
-	case US_BULK_STAT_OK:
-		/* command good -- note that we could be short on data */
-		return USB_STOR_TRANSPORT_GOOD;
+		case US_BULK_STAT_OK:
+			/* command good -- note that data could be short */
+			return USB_STOR_TRANSPORT_GOOD;
 
-	case US_BULK_STAT_FAIL:
-		/* command failed */
-		return USB_STOR_TRANSPORT_FAILED;
-		
-	case US_BULK_STAT_PHASE:
-		/* phase error -- note that a transport reset will be
-		 * invoked by the invoke_transport() function
-		 */
-		return USB_STOR_TRANSPORT_ERROR;
+		case US_BULK_STAT_FAIL:
+			/* command failed */
+			return USB_STOR_TRANSPORT_FAILED;
+
+		case US_BULK_STAT_PHASE:
+			/* phase error -- note that a transport reset will be
+			 * invoked by the invoke_transport() function
+			 */
+			return USB_STOR_TRANSPORT_ERROR;
 	}
-	
+
 	/* we should never get here, but if we do, we're in trouble */
 	return USB_STOR_TRANSPORT_ERROR;
 }

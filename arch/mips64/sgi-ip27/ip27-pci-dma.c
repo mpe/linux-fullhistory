@@ -42,7 +42,7 @@ void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 
 	if (ret != NULL) {
 		memset(ret, 0, size);
-		*dma_handle = virt_to_bus(ret);
+		*dma_handle = (bus_to_baddr[hwdev->bus->number] | __pa(ret));
 	}
 
 	return ret;

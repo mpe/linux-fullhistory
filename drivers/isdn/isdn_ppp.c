@@ -83,7 +83,7 @@ static void isdn_ppp_mp_cleanup( isdn_net_local * lp );
 static int isdn_ppp_bundle(struct ippp_struct *, int unit);
 #endif	/* CONFIG_ISDN_MPP */
   
-char *isdn_ppp_revision = "$Revision: 1.84 $";
+char *isdn_ppp_revision = "$Revision: 1.85 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 

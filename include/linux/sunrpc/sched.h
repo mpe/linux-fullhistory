@@ -43,7 +43,7 @@ struct rpc_task {
 	struct rpc_task *	tk_prev_task;	/* global list of tasks */
 	struct rpc_clnt *	tk_client;	/* RPC client */
 	struct rpc_rqst *	tk_rqstp;	/* RPC request */
-	volatile int		tk_status;	/* result of last operation */
+	int			tk_status;	/* result of last operation */
 	struct rpc_wait_queue *	tk_rpcwait;	/* RPC wait queue we're on */
 
 	/*

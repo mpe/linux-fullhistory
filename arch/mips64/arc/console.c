@@ -1,17 +1,14 @@
-/* $Id: console.c,v 1.3 1999/10/19 20:51:44 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- *
- * ARC console code.
  *
  * Copyright (C) 1996 David S. Miller (dm@sgi.com)
  */
 #include <linux/init.h>
 #include <asm/sgialib.h>
 
-void __init prom_putchar(char c)
+void prom_putchar(char c)
 {
 	ULONG cnt;
 	CHAR it = c;

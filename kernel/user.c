@@ -8,7 +8,6 @@
  * able to have per-user limits for system resources. 
  */
 
-#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -74,29 +73,12 @@ static inline struct user_struct *uid_hash_find(uid_t uid, struct user_struct **
 	}
 }
 
-/*
- * For SMP, we need to re-test the user struct counter
- * after having acquired the spinlock. This allows us to do
- * the common case (not freeing anything) without having
- * any locking.
- */
-#ifdef CONFIG_SMP
-  #define uid_hash_free(up)	(!atomic_read(&(up)->__count))
-#else
-  #define uid_hash_free(up)	(1)
-#endif
-
 void free_uid(struct user_struct *up)
 {
-	if (up) {
-		if (atomic_dec_and_test(&up->__count)) {
-			spin_lock(&uidhash_lock);
-			if (uid_hash_free(up)) {
-				uid_hash_remove(up);
-				kmem_cache_free(uid_cachep, up);
-			}
-			spin_unlock(&uidhash_lock);
-		}
+	if (up && atomic_dec_and_lock(&up->__count, &uidhash_lock)) {
+		uid_hash_remove(up);
+		kmem_cache_free(uid_cachep, up);
+		spin_unlock(&uidhash_lock);
 	}
 }
 

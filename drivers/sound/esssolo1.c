@@ -69,6 +69,7 @@
  *    07.02.2000   0.13  Use pci_alloc_consistent and pci_register_driver
  *    19.02.2000   0.14  Use pci_dma_supported to determine if recording should be disabled
  *    13.03.2000   0.15  Reintroduce initialization of a couple of PCI config space registers
+ *    21.11.2000   0.16  Initialize dma buffers in poll, otherwise poll may return a bogus mask
  */
 
 /*****************************************************************************/
@@ -1168,10 +1169,16 @@ static unsigned int solo1_poll(struct file *file, struct poll_table_struct *wait
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
+	if (file->f_mode & FMODE_WRITE) {
+		if (!s->dma_dac.ready && prog_dmabuf_dac(s))
+			return 0;
 		poll_wait(file, &s->dma_dac.wait, wait);
-	if (file->f_mode & FMODE_READ)
+	}
+	if (file->f_mode & FMODE_READ) {
+		if (!s->dma_adc.ready && prog_dmabuf_adc(s))
+			return 0;
 		poll_wait(file, &s->dma_adc.wait, wait);
+	}
 	spin_lock_irqsave(&s->lock, flags);
 	solo1_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -2384,7 +2391,7 @@ static int __init init_solo1(void)
 {
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.15 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.16 time " __TIME__ " " __DATE__ "\n");
 	if (!pci_register_driver(&solo1_driver)) {
 		pci_unregister_driver(&solo1_driver);
                 return -ENODEV;

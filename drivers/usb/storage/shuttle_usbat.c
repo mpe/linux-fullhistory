@@ -1,6 +1,6 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  *
- * $Id: shuttle_usbat.c,v 1.10 2000/09/24 00:03:08 groovyjava Exp $
+ * $Id: shuttle_usbat.c,v 1.11 2000/11/13 22:29:36 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
@@ -169,7 +169,7 @@ static int usbat_raw_bulk(struct us_data *us,
                 US_DEBUGP("us_transfer_partial(): unknown error\n");
                 return US_BULK_TRANSFER_FAILED;
         }
-	
+
 	if (act_len != len) {
 		US_DEBUGP("Warning: Transferred only %d bytes\n",
 			act_len);
@@ -241,7 +241,7 @@ int usbat_read(struct us_data *us,
 		0,
 		content,
 		1);
-		
+
 	return result;
 }
 
@@ -260,7 +260,7 @@ int usbat_write(struct us_data *us,
 		0,
 		NULL,
 		0);
-		
+
 	return result;
 }
 
@@ -286,7 +286,7 @@ int usbat_set_shuttle_features(struct us_data *us,
 		0,
 		command,
 		8);
-		
+
 	return result;
 }
 
@@ -317,7 +317,7 @@ int usbat_read_block(struct us_data *us,
 
 	result = usbat_bulk_transport(us,
 		NULL, 0, SCSI_DATA_READ, content, len, use_sg);
-		
+
 	return result;
 }
 
@@ -605,7 +605,7 @@ int usbat_read_user_io(struct us_data *us,
 		0,
 		data_flags,
 		1);
-		
+
 	return result;
 }
 
@@ -623,7 +623,7 @@ int usbat_write_user_io(struct us_data *us,
 		0,
 		NULL,
 		0);
-		
+
 	return result;
 }
 
@@ -676,7 +676,7 @@ int usbat_handle_read10(struct us_data *us,
 		srb->transfersize = srb->request_bufflen/len;
 	}
 
-	
+
 	len = (65535/srb->transfersize) * srb->transfersize;
 	US_DEBUGP("Max read is %d bytes\n", len);
 	buffer = kmalloc(len, GFP_KERNEL);
@@ -694,7 +694,7 @@ int usbat_handle_read10(struct us_data *us,
 	}
 
 	while (transferred != srb->request_bufflen) {
-		
+
 		if (len > srb->request_bufflen - transferred)
 			len = srb->request_bufflen - transferred;
 
@@ -711,7 +711,7 @@ int usbat_handle_read10(struct us_data *us,
 			data[7+6] = 0;
 		data[7+7] = MSB_of(len / srb->transfersize); // SCSI command
 		data[7+8] = LSB_of(len / srb->transfersize); // num sectors
-		
+
 		result = usbat_rw_block_test(us, USBAT_ATA, 
 			registers, data, 19,
 			0x10, 0x17, 0xFD, 0x30,
@@ -1048,7 +1048,7 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 		}
 		else
 			len = status;
-			
+
 
 		result = usbat_read_block(us, USBAT_ATA, 0x10, 
 			srb->request_buffer, len, srb->use_sg);

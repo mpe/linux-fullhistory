@@ -60,7 +60,7 @@ struct sigaction32 {
 
 /* IRIX compatible stack_t  */
 typedef struct sigaltstack32 {
-	void *ss_sp;
+	s32 ss_sp;
 	__kernel_size_t32 ss_size;
 	int ss_flags;
 } stack32_t;
@@ -272,11 +272,13 @@ sys32_sigaltstack(abi64_no_regargs, struct pt_regs regs)
 	stack_t kss, koss;
 	int ret, err = 0;
 	mm_segment_t old_fs = get_fs();
+	s32 sp;
 
 	if (uss) {
 		if (!access_ok(VERIFY_READ, uss, sizeof(*uss)))
 			return -EFAULT;
-		err |= __get_user(kss.ss_sp, &uss->ss_sp);
+		err |= __get_user(sp, &uss->ss_sp);
+		kss.ss_size = (long) sp;
 		err |= __get_user(kss.ss_size, &uss->ss_size);
 		err |= __get_user(kss.ss_flags, &uss->ss_flags);
 		if (err)
@@ -290,7 +292,8 @@ sys32_sigaltstack(abi64_no_regargs, struct pt_regs regs)
 	if (!ret && uoss) {
 		if (!access_ok(VERIFY_WRITE, uoss, sizeof(*uoss)))
 			return -EFAULT;
-		err |= __put_user(koss.ss_sp, &uoss->ss_sp);
+		sp = (int) (long) koss.ss_sp;
+		err |= __put_user(sp, &uoss->ss_sp);
 		err |= __put_user(koss.ss_size, &uoss->ss_size);
 		err |= __put_user(koss.ss_flags, &uoss->ss_flags);
 		if (err)
@@ -879,12 +882,12 @@ asmlinkage int sys32_rt_sigaction(int sig, const struct sigaction32 *act,
 		if (!access_ok(VERIFY_WRITE, oact, sizeof(*oact)))
 			return -EFAULT;
 
-		err |= __put_user((u32)(u64)new_sa.sa.sa_handler,
+		err |= __put_user((u32)(u64)old_sa.sa.sa_handler,
 		                   &oact->sa_handler);
-		err |= __put_user(new_sa.sa.sa_flags, &oact->sa_flags);
-		err |= __put_user((u32)(u64)new_sa.sa.sa_restorer,
+		err |= __put_user(old_sa.sa.sa_flags, &oact->sa_flags);
+		err |= __put_user((u32)(u64)old_sa.sa.sa_restorer,
 		                  &oact->sa_restorer);
-		err |= put_sigset(&new_sa.sa.sa_mask, &oact->sa_mask);
+		err |= put_sigset(&old_sa.sa.sa_mask, &oact->sa_mask);
 		if (err)
 			return -EFAULT;
 	}

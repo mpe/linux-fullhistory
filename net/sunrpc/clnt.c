@@ -510,7 +510,7 @@ call_bind(struct rpc_task *task)
 	struct rpc_clnt	*clnt = task->tk_client;
 	struct rpc_xprt *xprt = clnt->cl_xprt;
 
-	task->tk_action = (xprt->connected) ? call_transmit : call_reconnect;
+	task->tk_action = (xprt_connected(xprt)) ? call_transmit : call_reconnect;
 
 	if (!clnt->cl_port) {
 		task->tk_action = call_reconnect;
@@ -663,7 +663,7 @@ minor_timeout:
 	else if (!clnt->cl_port) {
 		task->tk_action = call_bind;
 		clnt->cl_stats->rpcretrans++;
-	} else if (clnt->cl_xprt->stream && !clnt->cl_xprt->connected) {
+	} else if (!xprt_connected(clnt->cl_xprt)) {
 		task->tk_action = call_reconnect;
 		clnt->cl_stats->rpcretrans++;
 	} else {

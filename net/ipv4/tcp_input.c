@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.202 2000/09/21 01:05:38 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.203 2000/11/28 17:04:09 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -56,6 +56,10 @@
  *		Andi Kleen:		Process packets with PSH set in the
  *					fast path.
  *		J Hadi Salim:		ECN support
+ *	 	Andrei Gurtov,
+ *		Pasi Sarolahti,
+ *		Panu Kuhlberg:		Experimental audit of TCP (re)transmission
+ *					engine. Lots of bugs are found.
  */
 
 #include <linux/config.h>
@@ -1259,7 +1263,7 @@ static void tcp_cwnd_down(struct tcp_opt *tp)
 static __inline__ int tcp_packet_delayed(struct tcp_opt *tp)
 {
 	return !tp->retrans_stamp ||
-		(tp->saw_tstamp &&
+		(tp->saw_tstamp && tp->rcv_tsecr &&
 		 (__s32)(tp->rcv_tsecr - tp->retrans_stamp) < 0);
 }
 
@@ -1378,10 +1382,8 @@ static int tcp_try_undo_loss(struct sock *sk, struct tcp_opt *tp)
 		NET_INC_STATS_BH(TCPLossUndo);
 		tp->retransmits = 0;
 		tp->undo_marker = 0;
-		if (!IsReno(tp)) {
+		if (!IsReno(tp))
 			tp->ca_state = TCP_CA_Open;
-			tp->backoff = 0;
-		}
 		return 1;
 	}
 	return 0;
@@ -1479,7 +1481,6 @@ tcp_fastretrans_alert(struct sock *sk, u32 prior_snd_una,
 			tp->retransmits = 0;
 			if (tcp_try_undo_recovery(sk, tp))
 				return;
-			tp->backoff = 0;
 			break;
 
 		case TCP_CA_CWR:
@@ -1579,7 +1580,7 @@ tcp_fastretrans_alert(struct sock *sk, u32 prior_snd_una,
 /* Read draft-ietf-tcplw-high-performance before mucking
  * with this code. (Superceeds RFC1323)
  */
-static void tcp_ack_saw_tstamp(struct tcp_opt *tp)
+static void tcp_ack_saw_tstamp(struct tcp_opt *tp, int flag)
 {
 	__u32 seq_rtt;
 
@@ -1594,7 +1595,12 @@ static void tcp_ack_saw_tstamp(struct tcp_opt *tp)
 	seq_rtt = tcp_time_stamp - tp->rcv_tsecr;
 	tcp_rtt_estimator(tp, seq_rtt);
 	tcp_set_rto(tp);
-	tp->rto <<= tp->backoff;
+	if (tp->backoff) {
+		if (!tp->retransmits || !(flag & FLAG_RETRANS_DATA_ACKED))
+			tp->backoff = 0;
+		else
+			tp->rto <<= tp->backoff;
+	}
 	tcp_bound_rto(tp);
 }
 
@@ -1609,20 +1615,27 @@ static void tcp_ack_no_tstamp(struct tcp_opt *tp, u32 seq_rtt, int flag)
 	 * I.e. Karn's algorithm. (SIGCOMM '87, p5.)
 	 */
 
-	if (!tp->retransmits && !(flag & FLAG_RETRANS_DATA_ACKED)) {
-		tp->backoff = 0;
-		tcp_rtt_estimator(tp, seq_rtt);
-		tcp_set_rto(tp);
-		tcp_bound_rto(tp);
+	tcp_rtt_estimator(tp, seq_rtt);
+	tcp_set_rto(tp);
+	if (tp->backoff) {
+		/* To relax it? We have valid sample as soon as we are
+		 * here. Why not to clear backoff?
+		 */
+		if (!tp->retransmits || !(flag & FLAG_RETRANS_DATA_ACKED))
+			tp->backoff = 0;
+		else
+			tp->rto <<= tp->backoff;
 	}
+	tcp_bound_rto(tp);
 }
 
 static __inline__ void
-tcp_ack_update_rtt(struct tcp_opt *tp, int flag, u32 seq_rtt)
+tcp_ack_update_rtt(struct tcp_opt *tp, int flag, s32 seq_rtt)
 {
-	if (tp->saw_tstamp)
-		tcp_ack_saw_tstamp(tp);
-	else
+	/* Note that peer MAY send zero echo. In this case it is ignored. (rfc1323) */
+	if (tp->saw_tstamp && tp->rcv_tsecr)
+		tcp_ack_saw_tstamp(tp, flag);
+	else if (seq_rtt >= 0)
 		tcp_ack_no_tstamp(tp, seq_rtt, flag);
 }
 
@@ -1669,7 +1682,7 @@ static int tcp_clean_rtx_queue(struct sock *sk)
 	struct sk_buff *skb;
 	__u32 now = tcp_time_stamp;
 	int acked = 0;
-	__u32 seq_rtt = 0; /* F..g gcc... */
+	__s32 seq_rtt = -1;
 
 	while((skb=skb_peek(&sk->write_queue)) && (skb != tp->send_head)) {
 		struct tcp_skb_cb *scb = TCP_SKB_CB(skb); 
@@ -1700,16 +1713,23 @@ static int tcp_clean_rtx_queue(struct sock *sk)
 				if(sacked & TCPCB_SACKED_RETRANS)
 					tp->retrans_out--;
 				acked |= FLAG_RETRANS_DATA_ACKED;
-			}
+				seq_rtt = -1;
+			} else if (seq_rtt < 0)
+				seq_rtt = now - scb->when;
 			if(sacked & TCPCB_SACKED_ACKED)
 				tp->sacked_out--;
 			if(sacked & TCPCB_LOST)
 				tp->lost_out--;
-		}
+			if(sacked & TCPCB_URG) {
+				if (tp->urg_mode &&
+				    !before(scb->end_seq, tp->snd_up))
+					tp->urg_mode = 0;
+			}
+		} else if (seq_rtt < 0)
+			seq_rtt = now - scb->when;
 		if(tp->fackets_out)
 			tp->fackets_out--;
 		tp->packets_out--;
-		seq_rtt = now - scb->when;
 		__skb_unlink(skb, skb->list);
 		tcp_free_skb(sk, skb);
 	}
@@ -1821,7 +1841,8 @@ static int tcp_ack_update_window(struct sock *sk, struct tcp_opt *tp,
 
 #ifdef TCP_DEBUG
 	if (before(tp->snd_una + tp->snd_wnd, tp->snd_nxt)) {
-		if (net_ratelimit())
+		if ((tp->snd_una + tp->snd_wnd)-tp->snd_nxt >= (1<<tp->snd_wscale)
+		    && net_ratelimit())
 			printk(KERN_DEBUG "TCP: peer %u.%u.%u.%u:%u/%u shrinks window %u:%u:%u. Bad, what else can I say?\n",
 			       NIPQUAD(sk->daddr), htons(sk->dport), sk->num,
 			       tp->snd_una, tp->snd_wnd, tp->snd_nxt);
@@ -1929,7 +1950,7 @@ uninteresting_ack:
  * But, this can also be called on packets in the established flow when
  * the fast version below fails.
  */
-void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp)
+void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp, int estab)
 {
 	unsigned char *ptr;
 	struct tcphdr *th = skb->h.th;
@@ -1956,7 +1977,7 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp)
 					return;	/* don't parse partial options */
 	  			switch(opcode) {
 				case TCPOPT_MSS:
-					if(opsize==TCPOLEN_MSS && th->syn) {
+					if(opsize==TCPOLEN_MSS && th->syn && !estab) {
 						u16 in_mss = ntohs(*(__u16 *)ptr);
 						if (in_mss) {
 							if (tp->user_mss && tp->user_mss < in_mss)
@@ -1966,7 +1987,7 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp)
 					}
 					break;
 				case TCPOPT_WINDOW:
-					if(opsize==TCPOLEN_WINDOW && th->syn)
+					if(opsize==TCPOLEN_WINDOW && th->syn && !estab)
 						if (sysctl_tcp_window_scaling) {
 							tp->wscale_ok = 1;
 							tp->snd_wscale = *(__u8 *)ptr;
@@ -1981,8 +2002,8 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp)
 					break;
 				case TCPOPT_TIMESTAMP:
 					if(opsize==TCPOLEN_TIMESTAMP) {
-						if (sysctl_tcp_timestamps) {
-							tp->tstamp_ok = 1;
+						if ((estab && tp->tstamp_ok) ||
+						    (!estab && sysctl_tcp_timestamps)) {
 							tp->saw_tstamp = 1;
 							tp->rcv_tsval = ntohl(*(__u32 *)ptr);
 							tp->rcv_tsecr = ntohl(*(__u32 *)(ptr+4));
@@ -1990,7 +2011,7 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_opt *tp)
 					}
 					break;
 				case TCPOPT_SACK_PERM:
-					if(opsize==TCPOLEN_SACK_PERM && th->syn) {
+					if(opsize==TCPOLEN_SACK_PERM && th->syn && !estab) {
 						if (sysctl_tcp_sack) {
 							tp->sack_ok = 1;
 							tcp_sack_reset(tp);
@@ -2019,7 +2040,8 @@ static __inline__ int tcp_fast_parse_options(struct sk_buff *skb, struct tcphdr 
 	if (th->doff == sizeof(struct tcphdr)>>2) {
 		tp->saw_tstamp = 0;
 		return 0;
-	} else if (th->doff == (sizeof(struct tcphdr)>>2)+(TCPOLEN_TSTAMP_ALIGNED>>2)) {
+	} else if (tp->tstamp_ok &&
+		   th->doff == (sizeof(struct tcphdr)>>2)+(TCPOLEN_TSTAMP_ALIGNED>>2)) {
 		__u32 *ptr = (__u32 *)(th + 1);
 		if (*ptr == __constant_ntohl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
 					     | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP)) {
@@ -2031,7 +2053,7 @@ static __inline__ int tcp_fast_parse_options(struct sk_buff *skb, struct tcphdr 
 			return 1;
 		}
 	}
-	tcp_parse_options(skb, tp);
+	tcp_parse_options(skb, tp, 1);
 	return 1;
 }
 
@@ -3329,8 +3351,9 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 					 struct tcphdr *th, unsigned len)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	int saved_clamp = tp->mss_clamp;
 
-	tcp_parse_options(skb, tp);
+	tcp_parse_options(skb, tp, 0);
 
 	if (th->ack) {
 		/* rfc793:
@@ -3345,24 +3368,12 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 *  test reduces to:
 		 */
 		if (TCP_SKB_CB(skb)->ack_seq != tp->snd_nxt)
-			return 1;
+			goto reset_and_undo;
 
-		if (tp->saw_tstamp) {
-			if (tp->rcv_tsecr == 0) {
-				/* Workaround for bug in linux-2.1 and early
-				 * 2.2 kernels. Let's pretend that we did not
-				 * see such timestamp to avoid bogus rtt value,
-				 * calculated by tcp_ack().
-				 */
-				tp->saw_tstamp = 0;
-
-				/* But do not forget to store peer's timestamp! */
-				if (th->syn)
-					tcp_store_ts_recent(tp);
-			} else if (!between(tp->rcv_tsecr, tp->retrans_stamp, tcp_time_stamp)) {
-				NET_INC_STATS_BH(PAWSActiveRejected);
-				return 1;
-			}
+		if (tp->saw_tstamp && tp->rcv_tsecr &&
+		    !between(tp->rcv_tsecr, tp->retrans_stamp, tcp_time_stamp)) {
+			NET_INC_STATS_BH(PAWSActiveRejected);
+			goto reset_and_undo;
 		}
 
 		/* Now ACK is acceptable.
@@ -3386,7 +3397,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 *                                        --ANK(990513)
 		 */
 		if (!th->syn)
-			goto discard;
+			goto discard_and_undo;
 
 		/* rfc793:
 		 *   "If the SYN bit is on ...
@@ -3419,14 +3430,16 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 			tp->window_clamp = min(tp->window_clamp,65535);
 		}
 
-		if (tp->tstamp_ok) {
+		if (tp->saw_tstamp) {
+			tp->tstamp_ok = 1;
 			tp->tcp_header_len =
 				sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
 			tp->advmss -= TCPOLEN_TSTAMP_ALIGNED;
-		} else
-			tp->tcp_header_len = sizeof(struct tcphdr);
-		if (tp->saw_tstamp)
 			tcp_store_ts_recent(tp);
+		} else {
+			tp->tcp_header_len = sizeof(struct tcphdr);
+		}
+
 		if (tp->sack_ok && sysctl_tcp_fack)
 			tp->sack_ok |= 2;
 
@@ -3467,7 +3480,10 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 			tp->ack.lrcvtime = tcp_time_stamp;
 			tcp_enter_quickack_mode(tp);
 			tcp_reset_xmit_timer(sk, TCP_TIME_DACK, TCP_DELACK_MAX);
-			goto discard;
+
+discard:
+			__kfree_skb(skb);
+			return 0;
 		} else {
 			tcp_send_ack(sk);
 		}
@@ -3483,12 +3499,12 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 *      Otherwise (no ACK) drop the segment and return."
 		 */
 
-		goto discard;
+		goto discard_and_undo;
 	}
 
 	/* PAWS check. */
 	if (tp->ts_recent_stamp && tp->saw_tstamp && tcp_paws_check(tp, 0))
-		goto discard;
+		goto discard_and_undo;
 
 	if (th->syn) {
 		/* We see SYN without ACK. It is attempt of
@@ -3496,8 +3512,15 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 * Particularly, it can be connect to self.
 		 */
 		tcp_set_state(sk, TCP_SYN_RECV);
-		if (tp->saw_tstamp)
+
+		if (tp->saw_tstamp) {
+			tp->tstamp_ok = 1;
 			tcp_store_ts_recent(tp);
+			tp->tcp_header_len =
+				sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+		} else {
+			tp->tcp_header_len = sizeof(struct tcphdr);
+		}
 
 		tp->rcv_nxt = TCP_SKB_CB(skb)->seq + 1;
 		tp->rcv_wup = TCP_SKB_CB(skb)->seq + 1;
@@ -3526,15 +3549,23 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 * Uncomment this return to process the data.
 		 */
 		return -1;
+#else
+		goto discard;
 #endif
 	}
 	/* "fifth, if neither of the SYN or RST bits is set then
 	 * drop the segment and return."
 	 */
 
-discard:
-	__kfree_skb(skb);
-	return 0;
+discard_and_undo:
+	tcp_clear_options(tp);
+	tp->mss_clamp = saved_clamp;
+	goto discard;
+
+reset_and_undo:
+	tcp_clear_options(tp);
+	tp->mss_clamp = saved_clamp;
+	return 1;
 }
 
 
@@ -3671,8 +3702,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				 * and does not calculate rtt.
 				 * Fix it at least with timestamps.
 				 */
-				if (tp->saw_tstamp && !tp->srtt)
-					tcp_ack_saw_tstamp(tp);
+				if (tp->saw_tstamp && tp->rcv_tsecr && !tp->srtt)
+					tcp_ack_saw_tstamp(tp, 0);
 
 				if (tp->tstamp_ok)
 					tp->advmss -= TCPOLEN_TSTAMP_ALIGNED;

@@ -271,7 +271,7 @@ static struct ip_tunnel * ipgre_tunnel_locate(struct ip_tunnel_parm *parms, int 
 	nt = (struct ip_tunnel*)dev->priv;
 	nt->dev = dev;
 	dev->init = ipgre_tunnel_init;
-	dev->new_style = 1;
+	dev->features |= NETIF_F_DYNALLOC;
 	memcpy(&nt->parms, parms, sizeof(*parms));
 	strcpy(dev->name, nt->parms.name);
 	if (dev->name[0] == 0) {

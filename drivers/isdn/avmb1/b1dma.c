@@ -1,11 +1,17 @@
 /*
- * $Id: b1dma.c,v 1.9 2000/11/01 14:05:02 calle Exp $
+ * $Id: b1dma.c,v 1.11 2000/11/19 17:02:47 kai Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1dma.c,v $
+ * Revision 1.11  2000/11/19 17:02:47  kai
+ * compatibility cleanup - part 3
+ *
+ * Revision 1.10  2000/11/19 17:01:53  kai
+ * compatibility cleanup - part 2
+ *
  * Revision 1.9  2000/11/01 14:05:02  calle
  * - use module_init/module_exit from linux/init.h.
  * - all static struct variables are initialized with "membername:" now.

@@ -19,7 +19,7 @@
 #include <asm/sn/sn0/hubni.h>
 #include <asm/sn/sn0/hubio.h>
 #include <asm/sn/klconfig.h>
-#include <asm/ioc3.h>
+#include <asm/sn/ioc3.h>
 #include <asm/mipsregs.h>
 #include <asm/sn/arch.h>
 #include <asm/sn/sn_private.h>
@@ -104,10 +104,12 @@ static void __init verify_mode(void)
 #define BASE_XBOW_PORT  	8     /* Lowest external port */
 
 unsigned int bus_to_cpu[256];
+unsigned long bus_to_baddr[256];
 
 void __init pcibr_setup(cnodeid_t nid)
 {
-	int 			i, start, num, masterwid;
+	int 			i, start, num;
+	unsigned long		masterwid;
 	bridge_t 		*bridge; 
 	volatile u64 		hubreg;
 	nasid_t	 		nasid, masternasid;
@@ -115,6 +117,17 @@ void __init pcibr_setup(cnodeid_t nid)
 	widgetreg_t 		widget_id;
 	static spinlock_t	pcibr_setup_lock = SPIN_LOCK_UNLOCKED;
 
+	/*
+	 * If the master is doing this for headless node, nothing to do.
+	 * This is because currently we require at least one of the hubs
+	 * (master hub) connected to the xbow to have at least one enabled 
+	 * cpu to receive intrs. Else we need an array bus_to_intrnasid[] 
+	 * that bridge_startup() needs to use to target intrs. All dma is
+	 * routed thru the widget of the master hub. The master hub wid
+	 * is selectable by WIDGET_A below.
+	 */
+	if (nid != get_compact_nodeid())
+		return;
 	/*
 	 * find what's on our local node
 	 */
@@ -137,6 +150,8 @@ void __init pcibr_setup(cnodeid_t nid)
 			num_bridges = 1;
         		bus_to_wid[0] = 0x8;
 			bus_to_nid[0] = 0;
+			masterwid = 0xa;
+			bus_to_baddr[0] = 0xa100000000000000UL;
 		} else if (partnum == XBOW_WIDGET_PART_NUM) {
 			lboard_t *brd;
 			klxbow_t *xbow_p;
@@ -157,21 +172,22 @@ void __init pcibr_setup(cnodeid_t nid)
 			else {
 			   /*
 			    * Okay, here's a xbow. Lets arbitrate and find
-			    * out if we should initialize it. Set hub connected
-			    * at highest or lowest widget as master.
-			    * This algo needs to change a little for headless
-			    * nodes.
+			    * out if we should initialize it. Set enabled 
+			    * hub connected at highest or lowest widget as 
+			    * master.
 			    */
 #ifdef WIDGET_A
 			   i = HUB_WIDGET_ID_MAX + 1;
 			   do {
 				i--;
-			   } while (!XBOW_PORT_TYPE_HUB(xbow_p, i));
+			   } while ((!XBOW_PORT_TYPE_HUB(xbow_p, i)) ||
+					(!XBOW_PORT_IS_ENABLED(xbow_p, i)));
 #else
 			   i = HUB_WIDGET_ID_MIN - 1;
 			   do {
 				i++;
-			   } while (!XBOW_PORT_TYPE_HUB(xbow_p, i));
+			   } while ((!XBOW_PORT_TYPE_HUB(xbow_p, i)) ||
+					(!XBOW_PORT_IS_ENABLED(xbow_p, i)));
 #endif
 			   masterwid = i;
 			   masternasid = XBOW_PORT_NASID(xbow_p, i);
@@ -187,6 +203,7 @@ void __init pcibr_setup(cnodeid_t nid)
 					printk("widget 0x%x is a bridge\n", i);
 					bus_to_wid[num_bridges] = i;
 					bus_to_nid[num_bridges] = nasid;
+					bus_to_baddr[num_bridges] = ((masterwid << 60) | (1UL << 56));	/* Barrier set */
 					num_bridges++;
 				   }
 				}
@@ -205,6 +222,10 @@ void __init pcibr_setup(cnodeid_t nid)
         		bus_to_nid[1] = 0;
         		bus_to_nid[2] = 0;
 
+			bus_to_baddr[0] = 0xa100000000000000UL;
+			bus_to_baddr[1] = 0xa100000000000000UL;
+			bus_to_baddr[2] = 0xa100000000000000UL;
+			masterwid = 0xa;
 			num_bridges = 3;
 		}
 	}
@@ -240,24 +261,25 @@ void __init pcibr_setup(cnodeid_t nid)
 		/*
 		 * Hmm...  IRIX sets additional bits in the address which 
 		 * are documented as reserved in the bridge docs.
-		 * We waste time programming b_wid_int_upper/b_wid_int_lower,
-		 * since bridge_startup will set up the widget->nasid intr
-		 * path anyway.
 		 */
 		bridge->b_int_mode = 0x0;		/* Don't clear ints */
-		bridge->b_wid_int_upper = 0x000a8000;	/* Ints to widget A */
-		bridge->b_wid_int_lower = 0x01800090;
-		bridge->b_dir_map = 0xa00000;		/* DMA */
+		bridge->b_wid_int_upper = 0x8000 | (masterwid << 16);
+		bridge->b_wid_int_lower = 0x01800090;	/* PI_INT_PEND_MOD off*/
+		bridge->b_dir_map = (masterwid << 20);	/* DMA */
 		bridge->b_int_enable = 0;
 
 		bridge->b_wid_tflush;     /* wait until Bridge PIO complete */
 	}
 }
 
+extern void ip27_setup_console(void);
+
 void __init ip27_setup(void)
 {
 	nasid_t nid;
 	hubreg_t p, e;
+
+	ip27_setup_console();
 
 	num_bridges = 0;
 	/*

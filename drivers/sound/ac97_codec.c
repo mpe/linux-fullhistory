@@ -284,6 +284,10 @@ static void ac97_write_mixer(struct ac97_codec *codec, int oss_channel,
 			if (oss_channel == SOUND_MIXER_IGAIN) {
 				right = (right * mh->scale) / 100;
 				left = (left * mh->scale) / 100;
+				if (right >= mh->scale)
+					right = mh->scale-1;
+				if (left >= mh->scale)
+					left = mh->scale-1;
 			} else {
 				/* these may have 5 or 6 bit resolution */
 				if (oss_channel == SOUND_MIXER_VOLUME ||
@@ -294,27 +298,49 @@ static void ac97_write_mixer(struct ac97_codec *codec, int oss_channel,
 
 				right = ((100 - right) * scale) / 100;
 				left = ((100 - left) * scale) / 100;
-			}			
+				if (right >= scale)
+					right = scale-1;
+				if (left >= scale)
+					left = scale-1;
+			}
 			val = (left << 8) | right;
 		}
 	} else if (oss_channel == SOUND_MIXER_BASS) {
 		val = codec->codec_read(codec , mh->offset) & ~0x0f00;
-		val |= ((((100 - left) * mh->scale) / 100) << 8) & 0x0e00;
+		left = ((100 - left) * mh->scale) / 100;
+		if (left >= mh->scale)
+			left = mh->scale-1;
+		val |= (left << 8) & 0x0e00;
 	} else if (oss_channel == SOUND_MIXER_TREBLE) {
 		val = codec->codec_read(codec , mh->offset) & ~0x000f;
-		val |= (((100 - left) * mh->scale) / 100) & 0x000e;
+		left = ((100 - left) * mh->scale) / 100;
+		if (left >= mh->scale)
+			left = mh->scale-1;
+		val |= left & 0x000e;
 	} else if(left == 0) {
 		val = AC97_MUTE;
 	} else if (oss_channel == SOUND_MIXER_SPEAKER) {
-		val = (((100 - left) * mh->scale) / 100) << 1;
+		left = ((100 - left) * mh->scale) / 100;
+		if (left >= mh->scale)
+			left = mh->scale-1;
+		val = left << 1;
 	} else if (oss_channel == SOUND_MIXER_PHONEIN) {
-		val = (((100 - left) * mh->scale) / 100);
+		left = ((100 - left) * mh->scale) / 100;
+		if (left >= mh->scale)
+			left = mh->scale-1;
+		val = left;
 	} else if (oss_channel == SOUND_MIXER_PHONEOUT) {
 		scale = (1 << codec->bit_resolution);
-		val = (((100 - left) * scale) / 100);
+		left = ((100 - left) * scale) / 100;
+		if (left >= mh->scale)
+			left = mh->scale-1;
+		val = left;
 	} else if (oss_channel == SOUND_MIXER_MIC) {
 		val = codec->codec_read(codec , mh->offset) & ~0x801f;
-		val |= (((100 - left) * mh->scale) / 100);
+		left = ((100 - left) * mh->scale) / 100;
+		if (left >= mh->scale)
+			left = mh->scale-1;
+		val |= left;
 		/*  the low bit is optional in the tone sliders and masking
 		    it lets us avoid the 0xf 'bypass'.. */
 	}

@@ -1,5 +1,4 @@
-/* $Id: spinlock.h,v 1.4 2000/01/25 00:41:46 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -32,9 +31,6 @@ typedef struct {
  * We make no fairness assumptions.  They have a cost.
  */
 
-typedef struct { unsigned long a[100]; } __dummy_lock_t;
-#define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))
-
 static inline void spin_lock(spinlock_t *lock)
 {
 	unsigned int tmp;
@@ -48,8 +44,8 @@ static inline void spin_lock(spinlock_t *lock)
 	"beqz\t%1, 1b\n\t"
 	" sync\n\t"
 	".set\treorder"
-	: "=o" (__dummy_lock(lock)), "=&r" (tmp)
-	: "o" (__dummy_lock(lock))
+	: "=o" (lock->lock), "=&r" (tmp)
+	: "o" (lock->lock)
 	: "memory");
 }
 
@@ -60,8 +56,8 @@ static inline void spin_unlock(spinlock_t *lock)
 	"sync\n\t"
 	"sw\t$0, %0\n\t"
 	".set\treorder"	
-	: "=o" (__dummy_lock(lock))
-	: "o" (__dummy_lock(lock))
+	: "=o" (lock->lock)
+	: "o" (lock->lock)
 	: "memory");
 }
 
@@ -77,8 +73,8 @@ static inline unsigned int spin_trylock(spinlock_t *lock)
 	"beqz\t%2, 1b\n\t"
 	" and\t%2, %0, %3\n\t"
 	".set\treorder"
-	:"=&r" (temp), "=m" (*lock), "=&r" (res)
-	:"r" (1), "m" (*lock)
+	: "=&r" (temp), "=m" (lock->lock), "=&r" (res)
+	: "r" (1), "m" (lock->lock)
 	: "memory");
 
 	return res == 0;
@@ -112,8 +108,8 @@ static inline void read_lock(rwlock_t *rw)
 	"beqz\t%1, 1b\n\t"
 	" sync\n\t"
 	".set\treorder"	
-	: "=o" (__dummy_lock(rw)), "=&r" (tmp)
-	: "o" (__dummy_lock(rw))
+	: "=o" (rw->lock), "=&r" (tmp)
+	: "o" (rw->lock)
 	: "memory");
 }
 
@@ -132,8 +128,8 @@ static inline void read_unlock(rwlock_t *rw)
 	"beqz\t%1, 1b\n\t"
 	"sync\n\t"
 	".set\treorder"	
-	: "=o" (__dummy_lock(rw)), "=&r" (tmp)
-	: "o" (__dummy_lock(rw))
+	: "=o" (rw->lock), "=&r" (tmp)
+	: "o" (rw->lock)
 	: "memory");
 }
 
@@ -150,8 +146,8 @@ static inline void write_lock(rwlock_t *rw)
 	"beqz\t%1, 1b\n\t"
 	" sync\n\t"
 	".set\treorder"	
-	: "=o" (__dummy_lock(rw)), "=&r" (tmp)
-	: "o" (__dummy_lock(rw))
+	: "=o" (rw->lock), "=&r" (tmp)
+	: "o" (rw->lock)
 	: "memory");
 }
 
@@ -162,8 +158,8 @@ static inline void write_unlock(rwlock_t *rw)
 	"sync\n\t"
 	"sw\t$0, %0\n\t"
 	".set\treorder"	
-	: "=o" (__dummy_lock(rw))
-	: "o" (__dummy_lock(rw))
+	: "=o" (rw->lock)
+	: "o" (rw->lock)
 	: "memory");
 }
 

@@ -163,7 +163,8 @@ mode_tiger(struct BCState *bcs, int mode, int bc)
 			break;
 		case (L1_MODE_TRANS):
 			break;
-		case (L1_MODE_HDLC): 
+		case (L1_MODE_HDLC_56K):
+		case (L1_MODE_HDLC):
 			fill_mem(bcs, bcs->hw.tiger.send,
 				NETJET_DMA_TXSIZE, bc, 0xff);
 			bcs->hw.tiger.r_state = HDLC_ZERO_SEARCH;
@@ -345,13 +346,13 @@ static int make_raw_data_56k(struct BCState *bcs) {
 	register u_char s_val = 0;
 	register u_char bitcnt = 0;
 	u_int fcs;
-
+	
 	if (!bcs->tx_skb) {
 		debugl1(bcs->cs, "tiger make_raw_56k: NULL skb");
 		return(1);
 	}
 	val = HDLC_FLAG_VALUE;
-	for (j=0; j<8; j++) {
+	for (j=0; j<8; j++) { 
 		bitcnt++;
 		s_val >>= 1;
 		if (val & 1)
@@ -378,7 +379,7 @@ static int make_raw_data_56k(struct BCState *bcs) {
 	val = (fcs>>8) & 0xff;
 	MAKE_RAW_BYTE_56K;
 	val = HDLC_FLAG_VALUE;
-	for (j=0; j<8; j++) {
+	for (j=0; j<8; j++) { 
 		bitcnt++;
 		s_val >>= 1;
 		if (val & 1)
@@ -439,20 +440,30 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 	register u_char r_val = bcs->hw.tiger.r_val;
 	register u_int bitcnt = bcs->hw.tiger.r_bitcnt;
 	u_int *p = buf;
-        
+	int bits;
+	u_char mask;
+
+        if (bcs->mode == L1_MODE_HDLC) { // it's 64k
+		mask = 0xff;
+		bits = 8;
+	}
+	else { // it's 56K
+		mask = 0x7f;
+		bits = 7;
+	};
 	for (i=0;i<cnt;i++) {
 		val = bcs->channel ? ((*p>>8) & 0xff) : (*p & 0xff);
 		p++;
 		if (p > pend)
 			p = bcs->hw.tiger.rec;
-		if (val == 0xff) {
+		if ((val & mask) == mask) {
 			state = HDLC_ZERO_SEARCH;
 			bcs->hw.tiger.r_tot++;
 			bitcnt = 0;
 			r_one = 0;
 			continue;
 		}
-		for (j=0;j<8;j++) {
+		for (j=0;j<bits;j++) {
 			if (state == HDLC_ZERO_SEARCH) {
 				if (val & 1) {
 					r_one++;
@@ -640,8 +651,14 @@ void netjet_fill_dma(struct BCState *bcs)
 			bcs->Flag);
 	if (test_and_set_bit(BC_FLG_BUSY, &bcs->Flag))
 		return;
-	if (make_raw_data(bcs))
-		return;		
+	if (bcs->mode == L1_MODE_HDLC) { // it's 64k
+		if (make_raw_data(bcs))
+			return;		
+	}
+	else { // it's 56k
+		if (make_raw_data_56k(bcs))
+			return;		
+	};
 	if (bcs->cs->debug & L1_DEB_HSCX)
 		debugl1(bcs->cs,"tiger fill_dma2: c%d %4x", bcs->channel,
 			bcs->Flag);

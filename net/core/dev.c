@@ -2414,11 +2414,12 @@ int netdev_finish_unregister(struct net_device *dev)
 		return 0;
 	}
 #ifdef NET_REFCNT_DEBUG
-	printk(KERN_DEBUG "netdev_finish_unregister: %s%s.\n", dev->name, dev->new_style?"":", old style");
+	printk(KERN_DEBUG "netdev_finish_unregister: %s%s.\n", dev->name,
+	       (dev->features & NETIF_F_DYNALLOC)?"":", old style");
 #endif
 	if (dev->destructor)
 		dev->destructor(dev);
-	if (dev->new_style)
+	if (dev->features & NETIF_F_DYNALLOC)
 		kfree(dev);
 	return 0;
 }
@@ -2462,6 +2463,10 @@ int unregister_netdevice(struct net_device *dev)
 		return -ENODEV;
 	}
 
+	/* Synchronize to net_rx_action. */
+	br_write_lock_bh(BR_NETPROTO_LOCK);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
+
 	if (dev_boot_phase == 0) {
 #ifdef CONFIG_NET_FASTROUTE
 		dev_clear_fastroute(dev);
@@ -2491,7 +2496,7 @@ int unregister_netdevice(struct net_device *dev)
 	free_divert_blk(dev);
 #endif
 
-	if (dev->new_style) {
+	if (dev->features & NETIF_F_DYNALLOC) {
 #ifdef NET_REFCNT_DEBUG
 		if (atomic_read(&dev->refcnt) != 1)
 			printk(KERN_DEBUG "unregister_netdevice: holding %s refcnt=%d\n", dev->name, atomic_read(&dev->refcnt)-1);

@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.40 2000/10/10 09:44:46 anton Exp $
+/* $Id: ioport.c,v 1.41 2000/11/27 07:46:31 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -447,6 +447,7 @@ void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n, int dir
  */
 void sbus_dma_sync_single(struct sbus_dev *sdev, u32 ba, long size, int direction)
 {
+#if 0
 	unsigned long va;
 	struct resource *res;
 
@@ -461,6 +462,7 @@ void sbus_dma_sync_single(struct sbus_dev *sdev, u32 ba, long size, int directio
 	 * to a kernel near you. - Anton
 	 */
 	/* mmu_inval_dma_area(va, (size + PAGE_SIZE-1) & PAGE_MASK); */
+#endif
 }
 
 void sbus_dma_sync_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n, int direction)

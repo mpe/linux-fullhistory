@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.19 2000/07/11 22:35:24 davem Exp $
+ *	$Id: reassembly.c,v 1.20 2000/11/28 13:48:03 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -287,6 +287,9 @@ static struct frag_queue *ip6_frag_intern(unsigned int hash,
 #endif
 	fq = fq_in;
 
+	if (!mod_timer(&fq->timer, jiffies + sysctl_ip6frag_time))
+		atomic_inc(&fq->refcnt);
+
 	atomic_inc(&fq->refcnt);
 	if((fq->next = ip6_frag_hash[hash]) != NULL)
 		fq->next->pprev = &fq->next;
@@ -355,9 +358,6 @@ static void ip6_frag_queue(struct frag_queue *fq, struct sk_buff *skb,
 
 	if (fq->last_in & COMPLETE)
 		goto err;
-
-	if (!mod_timer(&fq->timer, jiffies + sysctl_ip6frag_time))
-		atomic_inc(&fq->refcnt);
 
 	offset = ntohs(fhdr->frag_off) & ~0x7;
 	end = offset + (ntohs(skb->nh.ipv6h->payload_len) -

@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.22 2000/11/24 17:05:37 kai Exp $
+/* $Id: avm_pci.c,v 1.22.6.1 2000/11/28 12:02:46 kai Exp $
  *
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,17 +18,10 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.22 $";
+static const char *avm_pci_rev = "$Revision: 1.22.6.1 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
-
-#ifndef PCI_VENDOR_ID_AVM
-#define PCI_VENDOR_ID_AVM	0x1244
-#endif
-#ifndef PCI_DEVICE_ID_AVM_FRITZ
-#define PCI_DEVICE_ID_AVM_FRITZ	0xa00
-#endif
 
 #define  HDLC_FIFO		0x0
 #define  HDLC_STATUS		0x4
@@ -789,7 +782,7 @@ setup_avm_pcipnp(struct IsdnCard *card)
 			return(0);
 		}
 		if ((dev_avm = pci_find_device(PCI_VENDOR_ID_AVM,
-			PCI_DEVICE_ID_AVM_FRITZ,  dev_avm))) {
+			PCI_DEVICE_ID_AVM_A1,  dev_avm))) {
 			cs->irq = dev_avm->irq;
 			if (!cs->irq) {
 				printk(KERN_ERR "FritzPCI: No IRQ for PCI card found\n");

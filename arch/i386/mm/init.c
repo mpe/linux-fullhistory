@@ -198,7 +198,7 @@ void __init kmap_init(void)
 
 void show_mem(void)
 {
-	int i,free = 0, total = 0, reserved = 0;
+	int i, total = 0, reserved = 0;
 	int shared = 0, cached = 0;
 	int highmem = 0;
 
@@ -214,9 +214,7 @@ void show_mem(void)
 			reserved++;
 		else if (PageSwapCache(mem_map+i))
 			cached++;
-		else if (!page_count(mem_map+i))
-			free++;
-		else
+		else if (page_count(mem_map+i))
 			shared += page_count(mem_map+i) - 1;
 	}
 	printk("%d pages of RAM\n", total);
@@ -437,7 +435,7 @@ void __init zap_low_mappings (void)
 }
 
 /*
- * paging_init() sets up the page tables - note that the first 4MB are
+ * paging_init() sets up the page tables - note that the first 8MB are
  * already mapped by head.S.
  *
  * This routines also unmaps the page at virtual kernel address 0, so

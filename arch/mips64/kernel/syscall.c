@@ -31,6 +31,8 @@
 #include <asm/sysmips.h>
 #include <asm/uaccess.h>
 
+extern asmlinkage void syscall_trace(void);
+
 asmlinkage int sys_pipe(abi64_no_regargs, struct pt_regs regs)
 {
 	int fd[2];
@@ -117,43 +119,6 @@ out:
 }
 
 /*
- * Compacrapability ...
- */
-asmlinkage int sys_uname(struct old_utsname * name)
-{
-	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
-		return 0;
-	return -EFAULT;
-}
-
-/*
- * Compacrapability ...
- */
-asmlinkage int sys_olduname(struct oldold_utsname * name)
-{
-	int error;
-
-	if (!name)
-		return -EFAULT;
-	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
-		return -EFAULT;
-  
-	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	error -= __put_user(0,name->sysname+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	error -= __put_user(0,name->nodename+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	error -= __put_user(0,name->release+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	error -= __put_user(0,name->version+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	error = __put_user(0,name->machine+__OLD_UTS_LEN);
-	error = error ? -EFAULT : 0;
-
-	return error;
-}
-
-/*
  * Do the indirect syscall syscall.
  *
  * XXX This is borken.
@@ -168,7 +133,7 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
 {
 	int	*p;
 	char	*name;
-	int	flags, tmp, len, errno;
+	int	tmp, len, errno;
 
 	switch(cmd) {
 	case SETNAME: {
@@ -191,8 +156,6 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
 	}
 
 	case MIPS_ATOMIC_SET: {
-		/* This is broken in case of page faults and SMP ...
-		    Risc/OS faults after maximum 20 tries with EAGAIN.  */
 		unsigned int tmp;
 
 		p = (int *) arg1;
@@ -200,15 +163,41 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
 		if (errno)
 			return errno;
 		errno = 0;
-		save_and_cli(flags);
-		errno |= __get_user(tmp, p);
-		errno |= __put_user(arg2, p);
-		restore_flags(flags);
+
+		__asm__(".set\tpush\t\t\t# sysmips(MIPS_ATOMIC, ...)\n\t"
+			".set\tnoreorder\n\t"
+			".set\tnoat\n\t"
+			"1:\tll\t%0, %4\n\t"
+			"2:\tmove\t$1, %3\n\t"
+			"3:\tsc\t$1, %1\n\t"
+			"beqzl\t$1, 2b\n\t"
+			"4:\t ll\t%0, %4\n\t"
+			".set\tpop\n\t"
+			".section\t.fixup,\"ax\"\n"
+			"5:\tli\t%2, 1\t\t\t# error\n\t"
+			".previous\n\t"
+			".section\t__ex_table,\"a\"\n\t"
+			".dword\t1b, 5b\n\t"
+			".dword\t3b, 5b\n\t"
+			".dword\t4b, 5b\n\t"
+			".previous\n\t"
+			: "=&r" (tmp), "=o" (* (u32 *) p), "=r" (errno)
+			: "r" (arg2), "o" (* (u32 *) p), "2" (errno)
+			: "$1");
 
 		if (errno)
-			return tmp;
+			return -EFAULT;
 
-		return tmp;		/* This is broken ...  */
+		/* We're skipping error handling etc.  */
+		if (current->ptrace & PT_TRACESYS)
+			syscall_trace();
+
+		__asm__ __volatile__(
+			"move\t$29, %0\n\t"
+			"j\tret_from_sys_call"
+			: /* No outputs */
+			: "r" (&cmd));
+		/* Unreached */
 	}
 
 	case MIPS_FIXADE:
@@ -217,7 +206,7 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
 		return 0;
 
 	case FLUSH_CACHE:
-		flush_cache_l1();
+		_flush_cache_l2();
 		return 0;
 
 	case MIPS_RDNVRAM:

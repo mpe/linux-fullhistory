@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.128 2000/10/29 01:51:09 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.129 2000/11/28 17:04:10 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -252,7 +252,13 @@ int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 			th->window	= htons(tcp_select_window(sk));
 		}
 		th->check		= 0;
-		th->urg_ptr		= ntohs(tcb->urg_ptr);
+		th->urg_ptr		= 0;
+
+		if (tp->urg_mode &&
+		    between(tp->snd_up, tcb->seq+1, tcb->seq+0xFFFF)) {
+			th->urg_ptr		= htons(tp->snd_up-tcb->seq);
+			th->urg			= 1;
+		}
 
 		if (tcb->flags & TCPCB_FLAG_SYN) {
 			tcp_syn_build_options((__u32 *)(th + 1),
@@ -315,7 +321,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue, unsigne
 	__skb_queue_tail(&sk->write_queue, skb);
 	tcp_charge_skb(sk, skb);
 
-	if (!force_queue && tp->send_head == NULL && tcp_snd_test(tp, skb, cur_mss, 1)) {
+	if (!force_queue && tp->send_head == NULL && tcp_snd_test(tp, skb, cur_mss, tp->nonagle)) {
 		/* Send it out now. */
 		TCP_SKB_CB(skb)->when = tcp_time_stamp;
 		if (tcp_transmit_skb(sk, skb_clone(skb, sk->allocation)) == 0) {
@@ -344,7 +350,7 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	u16 flags;
 
 	/* Get a new skb... force flag on. */
-	buff = tcp_alloc_skb(sk, nsize + MAX_TCP_HEADER + 15, GFP_ATOMIC);
+	buff = tcp_alloc_skb(sk, nsize + MAX_TCP_HEADER, GFP_ATOMIC);
 	if (buff == NULL)
 		return -ENOMEM; /* We'll just try again later. */
 	tcp_charge_skb(sk, buff);
@@ -358,27 +364,14 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	
 	/* PSH and FIN should only be set in the second packet. */
 	flags = TCP_SKB_CB(skb)->flags;
-	TCP_SKB_CB(skb)->flags = flags & ~(TCPCB_FLAG_FIN | TCPCB_FLAG_PSH);
-	if(flags & TCPCB_FLAG_URG) {
-		u16 old_urg_ptr = TCP_SKB_CB(skb)->urg_ptr;
-
-		/* Urgent data is always a pain in the ass. */
-		if(old_urg_ptr > len) {
-			TCP_SKB_CB(skb)->flags &= ~(TCPCB_FLAG_URG);
-			TCP_SKB_CB(skb)->urg_ptr = 0;
-			TCP_SKB_CB(buff)->urg_ptr = old_urg_ptr - len;
-		} else {
-			flags &= ~(TCPCB_FLAG_URG);
-		}
-	}
-	if(!(flags & TCPCB_FLAG_URG))
-		TCP_SKB_CB(buff)->urg_ptr = 0;
+	TCP_SKB_CB(skb)->flags = flags & ~(TCPCB_FLAG_FIN|TCPCB_FLAG_PSH);
 	TCP_SKB_CB(buff)->flags = flags;
-	TCP_SKB_CB(buff)->sacked = TCP_SKB_CB(skb)->sacked&(TCPCB_LOST|TCPCB_EVER_RETRANS);
+	TCP_SKB_CB(buff)->sacked = TCP_SKB_CB(skb)->sacked&(TCPCB_LOST|TCPCB_EVER_RETRANS|TCPCB_AT_TAIL);
 	if (TCP_SKB_CB(buff)->sacked&TCPCB_LOST) {
 		tp->lost_out++;
 		tp->left_out++;
 	}
+	TCP_SKB_CB(buff)->sacked &= ~TCPCB_AT_TAIL;
 
 	/* Copy and checksum data tail into the new buffer. */
 	buff->csum = csum_partial_copy_nocheck(skb->data + len, skb_put(buff, nsize),
@@ -489,7 +482,7 @@ int tcp_write_xmit(struct sock *sk)
 		mss_now = tcp_current_mss(sk); 
 
 		while((skb = tp->send_head) &&
-		      tcp_snd_test(tp, skb, mss_now, tcp_skb_is_last(sk, skb))) {
+		      tcp_snd_test(tp, skb, mss_now, tcp_skb_is_last(sk, skb) ? tp->nonagle : 1)) {
 			if (skb->len > mss_now) {
 				if (tcp_fragment(sk, skb, mss_now))
 					break;
@@ -544,6 +537,7 @@ int tcp_write_xmit(struct sock *sk)
  *	If the free space is less than the 1/4 of the maximum
  *	space available and the free space is less than 1/2 mss,
  *	then set the window to 0.
+ *	[ Actually, bsd uses MSS and 1/4 of maximal _window_ ]
  *	Otherwise, just prevent the window from shrinking
  *	and from being larger than the largest representable value.
  *
@@ -589,7 +583,7 @@ u32 __tcp_select_window(struct sock *sk)
 		if (tcp_memory_pressure)
 			tp->rcv_ssthresh = min(tp->rcv_ssthresh, 4*tp->advmss);
 
-		if (free_space < ((int) (mss/2)))
+		if (free_space < ((int)mss))
 			return 0;
 	}
 
@@ -625,10 +619,6 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 		int skb_size = skb->len, next_skb_size = next_skb->len;
 		u16 flags = TCP_SKB_CB(skb)->flags;
 
-		/* Punt if the first SKB has URG set. */
-		if(flags & TCPCB_FLAG_URG)
-			return;
-	
 		/* Also punt if next skb has been SACK'd. */
 		if(TCP_SKB_CB(next_skb)->sacked & TCPCB_SACKED_ACKED)
 			return;
@@ -666,16 +656,12 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 
 		/* Merge over control information. */
 		flags |= TCP_SKB_CB(next_skb)->flags; /* This moves PSH/FIN etc. over */
-		if(flags & TCPCB_FLAG_URG) {
-			u16 urgptr = TCP_SKB_CB(next_skb)->urg_ptr;
-			TCP_SKB_CB(skb)->urg_ptr = urgptr + skb_size;
-		}
 		TCP_SKB_CB(skb)->flags = flags;
 
 		/* All done, get rid of second SKB and account for it so
 		 * packet counting does not break.
 		 */
-		TCP_SKB_CB(skb)->sacked |= TCP_SKB_CB(next_skb)->sacked&TCPCB_EVER_RETRANS;
+		TCP_SKB_CB(skb)->sacked |= TCP_SKB_CB(next_skb)->sacked&(TCPCB_EVER_RETRANS|TCPCB_AT_TAIL);
 		if (TCP_SKB_CB(next_skb)->sacked&TCPCB_SACKED_RETRANS)
 			tp->retrans_out--;
 		if (TCP_SKB_CB(next_skb)->sacked&TCPCB_LOST) {
@@ -687,6 +673,11 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 			tp->sacked_out--;
 			tp->left_out--;
 		}
+		/* Not quite right: it can be > snd.fack, but
+		 * it is better to underestimate fackets.
+		 */
+		if (tp->fackets_out)
+			tp->fackets_out--;
 		tcp_free_skb(sk, next_skb);
 		tp->packets_out--;
 	}
@@ -946,7 +937,7 @@ void tcp_send_fin(struct sock *sk)
 	} else {
 		/* Socket is locked, keep trying until memory is available. */
 		for (;;) {
-			skb = alloc_skb(MAX_TCP_HEADER + 15, GFP_KERNEL);
+			skb = alloc_skb(MAX_TCP_HEADER, GFP_KERNEL);
 			if (skb)
 				break;
 			current->policy |= SCHED_YIELD;
@@ -958,13 +949,12 @@ void tcp_send_fin(struct sock *sk)
 		skb->csum = 0;
 		TCP_SKB_CB(skb)->flags = (TCPCB_FLAG_ACK | TCPCB_FLAG_FIN);
 		TCP_SKB_CB(skb)->sacked = 0;
-		TCP_SKB_CB(skb)->urg_ptr = 0;
 
 		/* FIN eats a sequence byte, write_seq advanced by tcp_send_skb(). */
 		TCP_SKB_CB(skb)->seq = tp->write_seq;
 		TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq + 1;
 		tcp_send_skb(sk, skb, 0, mss_now);
-		__tcp_push_pending_frames(sk, tp, mss_now);
+		__tcp_push_pending_frames(sk, tp, mss_now, 1);
 	}
 }
 
@@ -979,7 +969,7 @@ void tcp_send_active_reset(struct sock *sk, int priority)
 	struct sk_buff *skb;
 
 	/* NOTE: No TCP options attached and we never retransmit this. */
-	skb = alloc_skb(MAX_TCP_HEADER + 15, priority);
+	skb = alloc_skb(MAX_TCP_HEADER, priority);
 	if (!skb) {
 		NET_INC_STATS(TCPAbortFailed);
 		return;
@@ -990,7 +980,6 @@ void tcp_send_active_reset(struct sock *sk, int priority)
 	skb->csum = 0;
 	TCP_SKB_CB(skb)->flags = (TCPCB_FLAG_ACK | TCPCB_FLAG_RST);
 	TCP_SKB_CB(skb)->sacked = 0;
-	TCP_SKB_CB(skb)->urg_ptr = 0;
 
 	/* Send it off. */
 	TCP_SKB_CB(skb)->seq = tcp_acceptable_seq(sk, tp);
@@ -1158,7 +1147,6 @@ int tcp_connect(struct sock *sk, struct sk_buff *buff)
 	TCP_SKB_CB(buff)->flags = TCPCB_FLAG_SYN;
 	TCP_ECN_send_syn(tp, buff);
 	TCP_SKB_CB(buff)->sacked = 0;
-	TCP_SKB_CB(buff)->urg_ptr = 0;
 	buff->csum = 0;
 	TCP_SKB_CB(buff)->seq = tp->write_seq++;
 	TCP_SKB_CB(buff)->end_seq = tp->write_seq;
@@ -1267,7 +1255,7 @@ void tcp_send_ack(struct sock *sk)
 		 * tcp_transmit_skb() will set the ownership to this
 		 * sock.
 		 */
-		buff = alloc_skb(MAX_TCP_HEADER + 15, GFP_ATOMIC);
+		buff = alloc_skb(MAX_TCP_HEADER, GFP_ATOMIC);
 		if (buff == NULL) {
 			tcp_schedule_ack(tp);
 			tp->ack.ato = TCP_ATO_MIN;
@@ -1280,7 +1268,6 @@ void tcp_send_ack(struct sock *sk)
 		buff->csum = 0;
 		TCP_SKB_CB(buff)->flags = TCPCB_FLAG_ACK;
 		TCP_SKB_CB(buff)->sacked = 0;
-		TCP_SKB_CB(buff)->urg_ptr = 0;
 
 		/* Send it off, this clears delayed acks for us. */
 		TCP_SKB_CB(buff)->seq = TCP_SKB_CB(buff)->end_seq = tcp_acceptable_seq(sk, tp);
@@ -1291,14 +1278,22 @@ void tcp_send_ack(struct sock *sk)
 
 /* This routine sends a packet with an out of date sequence
  * number. It assumes the other end will try to ack it.
+ *
+ * Question: what should we make while urgent mode?
+ * 4.4BSD forces sending single byte of data. We cannot send
+ * out of window data, because we have SND.NXT==SND.MAX...
+ *
+ * Current solution: to send TWO zero-length segments in urgent mode:
+ * one is with SEG.SEQ=SND.UNA to deliver urgent pointer, another is
+ * out-of-date with SND.UNA-1 to probe window.
  */
-static int tcp_xmit_probe_skb(struct sock *sk)
+static int tcp_xmit_probe_skb(struct sock *sk, int urgent)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sk_buff *skb;
 
 	/* We don't queue it, tcp_transmit_skb() sets ownership. */
-	skb = alloc_skb(MAX_TCP_HEADER + 15, GFP_ATOMIC);
+	skb = alloc_skb(MAX_TCP_HEADER, GFP_ATOMIC);
 	if (skb == NULL) 
 		return -1;
 
@@ -1306,14 +1301,13 @@ static int tcp_xmit_probe_skb(struct sock *sk)
 	skb_reserve(skb, MAX_TCP_HEADER);
 	skb->csum = 0;
 	TCP_SKB_CB(skb)->flags = TCPCB_FLAG_ACK;
-	TCP_SKB_CB(skb)->sacked = 0;
-	TCP_SKB_CB(skb)->urg_ptr = 0;
+	TCP_SKB_CB(skb)->sacked = urgent;
 
 	/* Use a previous sequence.  This should cause the other
 	 * end to send an ack.  Don't queue or clone SKB, just
 	 * send it.
 	 */
-	TCP_SKB_CB(skb)->seq = tp->snd_una - 1;
+	TCP_SKB_CB(skb)->seq = urgent ? tp->snd_una : tp->snd_una - 1;
 	TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq;
 	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 	return tcp_transmit_skb(sk, skb);
@@ -1353,7 +1347,10 @@ int tcp_write_wakeup(struct sock *sk)
 			}
 			return err;
 		} else {
-			return tcp_xmit_probe_skb(sk);
+			if (tp->urg_mode &&
+			    between(tp->snd_up, tp->snd_una+1, tp->snd_una+0xFFFF))
+				tcp_xmit_probe_skb(sk, TCPCB_URG);
+			return tcp_xmit_probe_skb(sk, 0);
 		}
 	}
 	return -1;

@@ -180,33 +180,9 @@ void deactivate_page_nolock(struct page * page)
 	 * Don't touch it if it's not on the active list.
 	 * (some pages aren't on any list at all)
 	 */
-	if (PageActive(page) && page_count(page) <= maxcount &&
-			!page_ramdisk(page)) {
-
-		/*
-		 * We can move the page to the inactive_dirty list
-		 * if we have the strong suspicion that they might
-		 * become freeable in the near future.
-		 *
-		 * That is, the page has buffer heads attached (that
-		 * need to be cleared away) and/or the function calling
-		 * us has an extra reference count on the page.
-		 */
-		if (page->buffers || page_count(page) == 2) {
-			del_page_from_active_list(page);
-			add_page_to_inactive_dirty_list(page);
-		/*
-		 * Only if we are SURE the page is clean and immediately
-		 * reusable, we move it to the inactive_clean list.
-		 */
-		} else if (page->mapping && !PageDirty(page) &&
-							!PageLocked(page)) {
-			del_page_from_active_list(page);
-			add_page_to_inactive_clean_list(page);
-		}
-		/*
-		 * OK, we cannot free the page. Leave it alone.
-		 */
+	if (PageActive(page) && page_count(page) <= maxcount && !page_ramdisk(page)) {
+		del_page_from_active_list(page);
+		add_page_to_inactive_dirty_list(page);
 	}
 }	
 

@@ -1,28 +1,33 @@
-// $Id: l3ni1.c,v 2.3 2000/06/26 08:59:14 keil Exp $
+// $Id: l3ni1.c,v 2.5 2000/11/19 17:02:48 kai Exp $
+//
 //-----------------------------------------------------------------------------
 //
 // NI1 D-channel protocol
 //
-// Author                Matt Henderson & Guy Ellis - Traverse Tecnologies Pty Ltd
-//                                www.traverse.com.au
+// Authors:
+// Matt Henderson & Guy Ellis - Traverse Tecnologies Pty Ltd
+// www.traverse.com.au
 //
 // 2000.6.6 Initial implementation of routines for US NI1 
 // Layer 3 protocol based on the EURO/DSS1 D-channel protocol 
-// driver written by Karsten Keil et al.  Thanks also for the 
-// code provided by Ragnar Paulson and Will Scales.
+// driver written by Karsten Keil et al.  
+// NI-1 Hall of Fame - Thanks to.... 
+// Ragnar Paulson - for some handy code fragments
+// Will Scales - beta tester extraordinaire
+// Brett Whittacre - beta tester and remote devel system in Vegas
 //
 // This file is (c) under GNU PUBLIC LICENSE
 //
 //-----------------------------------------------------------------------------
-
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl3.h"
 #include "l3ni1.h"
 #include <linux/ctype.h>
+#include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *ni1_revision = "$Revision: 2.3 $";
+const char *ni1_revision = "$Revision: 2.5 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -1664,7 +1669,7 @@ l3ni1_setup_rsp(struct l3_process *pc, u_char pr,
 	newl3state(pc, 8);
 	if (pc->debug & L3_DEB_WARN)
 		l3_debug(pc->st, "D-chan connect for waiting call");
-	l3ni1_message_plus_chid(pc, MT_CONNECT); /* GE 05/09/00 */
+	l3ni1_message_plus_chid(pc, MT_CONNECT); /* GE 05/09/00 */ 
 	L3DelTimer(&pc->timer);
 	L3AddTimer(&pc->timer, T313, CC_T313);
 }
@@ -2567,7 +2572,7 @@ l3ni1_global_restart(struct l3_process *pc, u_char pr, void *arg)
 			up->st->lli.l4l3(up->st, CC_RESTART | REQUEST, up);
 		else if (up->para.bchannel == chan)
 			up->st->lli.l4l3(up->st, CC_RESTART | REQUEST, up);
-
+		
 		up = up->next;
 	}
 	p = tmp;

@@ -24,6 +24,11 @@
 #include <net/sock.h>
 #include <net/protocol.h>
 
+struct icmp_err {
+  int		errno;
+  unsigned	fatal:1;
+};
+
 extern struct icmp_err icmp_err_convert[];
 extern struct icmp_mib icmp_statistics[NR_CPUS*2];
 #define ICMP_INC_STATS(field)		SNMP_INC_STATS(icmp_statistics, field)

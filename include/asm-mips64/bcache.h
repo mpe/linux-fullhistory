@@ -14,8 +14,9 @@
 
 #ifdef CONFIG_BOARD_SCACHE
 
-/* Some R4000 / R4400 / R4600 / R5000 machines may have chipset implemented
-   caches.  On machines with other CPUs the CPU does the cache thing itself. */
+/* Some R4000 / R4400 / R4600 / R5000 machines may have a non-dma-coherent,
+   chipset implemented caches.  On machines with other CPUs the CPU does the 
+   cache thing itself. */
 struct bcache_ops {
 	void (*bc_enable)(void);
 	void (*bc_disable)(void);

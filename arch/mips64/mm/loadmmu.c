@@ -55,8 +55,6 @@ void (*update_mmu_cache)(struct vm_area_struct * vma,
 
 void (*_show_regs)(struct pt_regs *);
 
-int (*_user_mode)(struct pt_regs *);
-
 extern void ld_mmu_r4xx0(void);
 extern void ld_mmu_andes(void);
 

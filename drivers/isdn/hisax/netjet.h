@@ -1,4 +1,4 @@
-// $Id: netjet.h,v 2.5 2000/11/24 17:05:38 kai Exp $
+// $Id: netjet.h,v 2.5.6.1 2000/11/28 12:02:46 kai Exp $
 //-----------------------------------------------------------------------------
 //
 // NETjet common header file
@@ -15,13 +15,6 @@ extern const char *CardType[];
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
-/* PCI stuff */
-#ifndef PCI_VENDOR_ID_TIGERJET
-#define PCI_VENDOR_ID_TIGERJET	0xe159
-#endif
-#ifndef PCI_DEVICE_ID_TIGERJET_300
-#define PCI_DEVICE_ID_TIGERJET_300	0x0001
-#endif
 #define NETJET_CTRL	0x00
 #define NETJET_DMACTRL	0x01
 #define NETJET_AUXCTRL	0x02

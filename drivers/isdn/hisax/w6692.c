@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.12 2000/11/24 17:05:38 kai Exp $
+/* $Id: w6692.c,v 1.12.6.1 2000/11/28 12:02:46 kai Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
@@ -18,18 +18,6 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 
-#ifndef PCI_VENDOR_ID_ASUSCOM
-#define PCI_VENDOR_ID_ASUSCOM	0x675
-#endif
-#ifndef PCI_DEVICE_ID_ASUSCOM_TA1
-#define PCI_DEVICE_ID_ASUSCOM_TA1	0x1702
-#endif
-#ifndef PCI_VENDOR_ID_WINBOND2
-#define PCI_VENDOR_ID_WINBOND2	0x1050
-#endif
-#ifndef PCI_DEVICE_ID_WINBOND_6692
-#define	PCI_DEVICE_ID_WINBOND_6692	0x6692
-#endif
 /* table entry in the PCI devices list */
 typedef struct {
 	int vendor_id;
@@ -40,14 +28,14 @@ typedef struct {
 
 static const PCI_ENTRY id_list[] =
 {
-	{PCI_VENDOR_ID_ASUSCOM, PCI_DEVICE_ID_ASUSCOM_TA1, "AsusCom", "TA XXX"},
-	{PCI_VENDOR_ID_WINBOND2, PCI_DEVICE_ID_WINBOND_6692, "Winbond", "W6692"},
+	{PCI_VENDOR_ID_DYNALINK, PCI_DEVICE_ID_DYNALINK_IS64PH, "Dynalink/AsusCom", "IS64PH"},
+	{PCI_VENDOR_ID_WINBOND2, PCI_DEVICE_ID_WINBOND2_6692, "Winbond", "W6692"},
 	{0, 0, NULL, NULL}
 };
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.12 $";
+const char *w6692_revision = "$Revision: 1.12.6.1 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -971,7 +959,7 @@ static int id_idx ;
 
 static struct pci_dev *dev_w6692 __initdata;
 
-int __init
+int __init 
 setup_w6692(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;

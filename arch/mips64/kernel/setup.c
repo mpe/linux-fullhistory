@@ -1,5 +1,4 @@
-/* $Id: setup.c,v 1.9 2000/03/14 01:39:27 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -36,11 +35,6 @@
 #include <asm/stackframe.h>
 #include <asm/system.h>
 #include <asm/pgalloc.h>
-
-#ifdef CONFIG_SGI_IP27
-/* XXX Origin garbage has no business in this file  */
-#include <asm/sn/sn0/addrs.h>
-#endif
 
 #ifndef CONFIG_SMP
 struct cpuinfo_mips cpu_data[1];

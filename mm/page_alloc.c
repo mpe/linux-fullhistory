@@ -90,8 +90,6 @@ static void __free_pages_ok (struct page *page, unsigned long order)
 		BUG();
 	if (PageDecrAfter(page))
 		BUG();
-	if (PageDirty(page))
-		BUG();
 	if (PageActive(page))
 		BUG();
 	if (PageInactiveDirty(page))
@@ -99,7 +97,7 @@ static void __free_pages_ok (struct page *page, unsigned long order)
 	if (PageInactiveClean(page))
 		BUG();
 
-	page->flags &= ~(1<<PG_referenced);
+	page->flags &= ~((1<<PG_referenced) | (1<<PG_dirty));
 	page->age = PAGE_AGE_START;
 	
 	zone = page->zone;

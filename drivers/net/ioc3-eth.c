@@ -69,7 +69,7 @@
 #include <asm/pci/bridge.h>
 
 /* 32 RX buffers.  This is tunable in the range of 16 <= x < 512.  */
-#define RX_BUFFS 32
+#define RX_BUFFS 64
 
 /* Private ioctls that de facto are well known and used for examply
    by mii-tool.  */
@@ -96,6 +96,7 @@ struct ioc3_private {
 	int tx_pi;			/* TX producer index */
 	int txqlen;
 	u32 emcr, ehar_h, ehar_l;
+	struct timer_list negtimer;
 	spinlock_t ioc3_lock;
 };
 
@@ -104,7 +105,7 @@ static void ioc3_set_multicast_list(struct net_device *dev);
 static int ioc3_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void ioc3_timeout(struct net_device *dev);
 static inline unsigned int ioc3_hash(const unsigned char *addr);
-static void ioc3_stop(struct net_device *dev);
+static inline void ioc3_stop(struct net_device *dev);
 static void ioc3_init(struct net_device *dev);
 
 static const char ioc3_str[] = "IOC3 Ethernet";
@@ -381,16 +382,19 @@ static u16 mii_read(struct ioc3 *ioc3, int phy, int reg)
 	ioc3->micr = (phy << MICR_PHYADDR_SHIFT) | reg | MICR_READTRIG;
 	while (ioc3->micr & MICR_BUSY);
 
-	return ioc3->midr & MIDR_DATA_MASK;
+	return ioc3->midr_r & MIDR_DATA_MASK;
 }
 
 static void mii_write(struct ioc3 *ioc3, int phy, int reg, u16 data)
 {
 	while (ioc3->micr & MICR_BUSY);
-	ioc3->midr = data;
+	ioc3->midr_w = data;
 	ioc3->micr = (phy << MICR_PHYADDR_SHIFT) | reg;
 	while (ioc3->micr & MICR_BUSY);
 }
+
+static int ioc3_mii_init(struct net_device *dev, struct ioc3_private *ip,
+                         struct ioc3 *ioc3);
 
 static struct net_device_stats *ioc3_get_stats(struct net_device *dev)
 {
@@ -425,6 +429,8 @@ ioc3_rx(struct net_device *dev, struct ioc3_private *ip, struct ioc3 *ioc3)
 			skb_trim(skb, len);
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
+
+			ip->rx_skbs[rx_entry] = NULL;	/* Poison  */
 
 			new_skb = ioc3_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
 			if (!new_skb) {
@@ -545,6 +551,7 @@ ioc3_error(struct net_device *dev, struct ioc3_private *ip,
 
 	ioc3_stop(dev);
 	ioc3_init(dev);
+	ioc3_mii_init(dev, ip, ioc3);
 
 	dev->trans_start = jiffies;
 	netif_wake_queue(dev);
@@ -563,6 +570,7 @@ static void ioc3_interrupt(int irq, void *_dev, struct pt_regs *regs)
 	u32 eisr;
 
 	eisr = ioc3->eisr & enabled;
+
 	while (eisr) {
 		ioc3->eisr = eisr;
 		ioc3->eisr;				/* Flush */
@@ -579,46 +587,43 @@ static void ioc3_interrupt(int irq, void *_dev, struct pt_regs *regs)
 	}
 }
 
-/* One day this will do the autonegotiation.  */
-int ioc3_mii_init(struct net_device *dev, struct ioc3_private *ip,
-                  struct ioc3 *ioc3)
+static void negotiate(unsigned long data)
 {
-	u16 word, mii0, mii_status, mii2, mii3, mii4;
-	u32 vendor, model, rev;
+	struct net_device *dev = (struct net_device *) data;
+	struct ioc3_private *ip = (struct ioc3_private *) dev->priv;
+	struct ioc3 *ioc3 = ip->regs;
+
+	mod_timer(&ip->negtimer, jiffies + 20 * HZ);
+}
+
+static int ioc3_mii_init(struct net_device *dev, struct ioc3_private *ip,
+                         struct ioc3 *ioc3)
+{
+	u16 word, mii0;
 	int i, phy;
 
 	spin_lock_irq(&ip->ioc3_lock);
 	phy = -1;
 	for (i = 0; i < 32; i++) {
 		word = mii_read(ioc3, i, 2);
-		if ((word != 0xffff) & (word != 0x0000)) {
+		if ((word != 0xffff) && (word != 0x0000)) {
 			phy = i;
 			break;			/* Found a PHY		*/
 		}
 	}
 	if (phy == -1) {
 		spin_unlock_irq(&ip->ioc3_lock);
-		printk("Didn't find a PHY, goodbye.\n");
 		return -ENODEV;
 	}
 	ip->phy = phy;
 
-	mii0 = mii_read(ioc3, phy, 0);
-	mii_status = mii_read(ioc3, phy, 1);
-	mii2 = mii_read(ioc3, phy, 2);
-	mii3 = mii_read(ioc3, phy, 3);
-	mii4 = mii_read(ioc3, phy, 4);
-	vendor = (mii2 << 12) | (mii3 >> 4);
-	model  = (mii3 >> 4) & 0x3f;
-	rev    = mii3 & 0xf;
-	printk("Ok, using PHY %d, vendor 0x%x, model %d, rev %d.\n",
-	       phy, vendor, model, rev);
-	printk(KERN_INFO "%s:  MII transceiver found at MDIO address "
-	       "%d, config %4.4x status %4.4x.\n",
-	       dev->name, phy, mii0, mii_status);
-
 	/* Autonegotiate 100mbit and fullduplex. */
-	mii_write(ioc3, phy, 0, mii0 | 0x3100);
+	mii0 = mii_read(ioc3, ip->phy, 0);
+	mii_write(ioc3, ip->phy, 0, mii0 | 0x3100);
+
+	ip->negtimer.function = &negotiate;
+	ip->negtimer.data = (unsigned long) dev;
+	mod_timer(&ip->negtimer, jiffies);	/* Run it now  */
 
 	spin_unlock_irq(&ip->ioc3_lock);
 
@@ -670,22 +675,26 @@ ioc3_free_rings(struct ioc3_private *ip)
 	struct sk_buff *skb;
 	int rx_entry, n_entry;
 
-	ioc3_clean_tx_ring(ip);
-	ip->txr = NULL;
-	free_pages((unsigned long)ip->txr, 2);
-
-	n_entry = ip->rx_ci;
-	rx_entry = ip->rx_pi;
-
-	while (n_entry != rx_entry) {
-		skb = ip->rx_skbs[n_entry];
-		if (skb)
-			dev_kfree_skb_any(skb);
-
-		n_entry = (n_entry + 1) & 511;
+	if (ip->txr) {
+		ioc3_clean_tx_ring(ip);
+		free_pages((unsigned long)ip->txr, 2);
+		ip->txr = NULL;
 	}
-	free_page((unsigned long)ip->rxr);
-	ip->rxr = NULL;
+
+	if (ip->rxr) {
+		n_entry = ip->rx_ci;
+		rx_entry = ip->rx_pi;
+
+		while (n_entry != rx_entry) {
+			skb = ip->rx_skbs[n_entry];
+			if (skb)
+				dev_kfree_skb_any(skb);
+
+			n_entry = (n_entry + 1) & 511;
+		}
+		free_page((unsigned long)ip->rxr);
+		ip->rxr = NULL;
+	}
 }
 
 static void
@@ -698,7 +707,7 @@ ioc3_alloc_rings(struct net_device *dev, struct ioc3_private *ip,
 
 	if (ip->rxr == NULL) {
 		/* Allocate and initialize rx ring.  4kb = 512 entries  */
-		ip->rxr = (unsigned long *) get_free_page(GFP_KERNEL);
+		ip->rxr = (unsigned long *) get_free_page(GFP_KERNEL|GFP_ATOMIC);
 		rxr = (unsigned long *) ip->rxr;
 
 		/* Now the rx buffers.  The RX ring may be larger but
@@ -707,7 +716,7 @@ ioc3_alloc_rings(struct net_device *dev, struct ioc3_private *ip,
 		for (i = 0; i < RX_BUFFS; i++) {
 			struct sk_buff *skb;
 
-			skb = ioc3_alloc_skb(RX_BUF_ALLOC_SIZE, 0);
+			skb = ioc3_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
 			if (!skb) {
 				show_free_areas();
 				continue;
@@ -729,7 +738,7 @@ ioc3_alloc_rings(struct net_device *dev, struct ioc3_private *ip,
 
 	if (ip->txr == NULL) {
 		/* Allocate and initialize tx rings.  16kb = 128 bufs.  */
-		ip->txr = (struct ioc3_etxd *)__get_free_pages(GFP_KERNEL, 2);
+		ip->txr = (struct ioc3_etxd *)__get_free_pages(GFP_KERNEL|GFP_ATOMIC, 2);
 		ip->tx_pi = 0;
 		ip->tx_ci = 0;
 	}
@@ -741,6 +750,7 @@ ioc3_init_rings(struct net_device *dev, struct ioc3_private *ip,
 {
 	unsigned long ring;
 
+	ioc3_free_rings(ip);
 	ioc3_alloc_rings(dev, ip, ioc3);
 
 	ioc3_clean_rx_ring(ip);
@@ -824,7 +834,7 @@ static void ioc3_init(struct net_device *dev)
 	ioc3->eier;
 }
 
-static void ioc3_stop(struct net_device *dev)
+static inline void ioc3_stop(struct net_device *dev)
 {
 	struct ioc3_private *ip = dev->priv;
 	struct ioc3 *ioc3 = ip->regs;
@@ -863,6 +873,7 @@ ioc3_close(struct net_device *dev)
 {
 	struct ioc3_private *ip = dev->priv;
 
+	del_timer(&ip->negtimer);
 	netif_stop_queue(dev);
 
 	ioc3_stop(dev);					/* Flush */
@@ -875,14 +886,23 @@ ioc3_close(struct net_device *dev)
 	return 0;
 }
 
-static void ioc3_pci_init(struct pci_dev *pdev)
+static int ioc3_pci_init(struct pci_dev *pdev)
 {
+	u16 mii0, mii_status, mii2, mii3, mii4;
 	struct net_device *dev = NULL;	// XXX
 	struct ioc3_private *ip;
 	struct ioc3 *ioc3;
 	unsigned long ioc3_base, ioc3_size;
+	u32 vendor, model, rev;
+	int phy;
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(0, sizeof(struct ioc3_private));
+
+	if (!dev)
+		return -ENOMEM;
+
+	ip = dev->priv;
+	memset(ip, 0, sizeof(*ip));
 
 	/*
 	 * This probably needs to be register_netdevice, or call
@@ -891,9 +911,6 @@ static void ioc3_pci_init(struct pci_dev *pdev)
 	 */
 	netif_device_attach(dev);
 
-	ip = (struct ioc3_private *) kmalloc(sizeof(*ip), GFP_KERNEL);
-	memset(ip, 0, sizeof(*ip));
-	dev->priv = ip;
 	dev->irq = pdev->irq;
 
 	ioc3_base = pdev->resource[0].start;
@@ -906,12 +923,38 @@ static void ioc3_pci_init(struct pci_dev *pdev)
 	ioc3_stop(dev);
 	ip->emcr = 0;
 	ioc3_init(dev);
+
+	init_timer(&ip->negtimer);
 	ioc3_mii_init(dev, ip, ioc3);
+
+	phy = ip->phy;
+	if (phy == -1) {
+		printk(KERN_CRIT"%s: Didn't find a PHY, goodbye.\n", dev->name);
+		ioc3_stop(dev);
+		free_irq(dev->irq, dev);
+		ioc3_free_rings(ip);
+
+		return -ENODEV;
+	}
+
+	mii0 = mii_read(ioc3, phy, 0);
+	mii_status = mii_read(ioc3, phy, 1);
+	mii2 = mii_read(ioc3, phy, 2);
+	mii3 = mii_read(ioc3, phy, 3);
+	mii4 = mii_read(ioc3, phy, 4);
+	vendor = (mii2 << 12) | (mii3 >> 4);
+	model  = (mii3 >> 4) & 0x3f;
+	rev    = mii3 & 0xf;
+	printk(KERN_INFO"Using PHY %d, vendor 0x%x, model %d, rev %d.\n",
+	       phy, vendor, model, rev);
+	printk(KERN_INFO "%s:  MII transceiver found at MDIO address "
+	       "%d, config %4.4x status %4.4x.\n",
+	       dev->name, phy, mii0, mii_status);
 
 	ioc3_ssram_disc(ip);
 	printk("IOC3 SSRAM has %d kbyte.\n", ip->emcr & EMCR_BUFSIZ ? 128 : 64);
 
-        ioc3_get_eaddr(dev, ioc3);
+	ioc3_get_eaddr(dev, ioc3);
 
 	/* The IOC3-specific entries in the device structure. */
 	dev->open		= ioc3_open;
@@ -922,6 +965,8 @@ static void ioc3_pci_init(struct pci_dev *pdev)
 	dev->get_stats		= ioc3_get_stats;
 	dev->do_ioctl		= ioc3_ioctl;
 	dev->set_multicast_list	= ioc3_set_multicast_list;
+
+	return 0;
 }
 
 static int __init ioc3_probe(void)
@@ -938,7 +983,8 @@ static int __init ioc3_probe(void)
 
 		while ((pdev = pci_find_device(PCI_VENDOR_ID_SGI,
 		                               PCI_DEVICE_ID_SGI_IOC3, pdev))) {
-			ioc3_pci_init(pdev);
+			if (ioc3_pci_init(pdev))
+				return -ENOMEM;
 			cards++;
 		}
 	}
@@ -1018,10 +1064,14 @@ ioc3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 static void ioc3_timeout(struct net_device *dev)
 {
+	struct ioc3_private *ip = dev->priv;
+	struct ioc3 *ioc3 = ip->regs;
+
 	printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
 
 	ioc3_stop(dev);
 	ioc3_init(dev);
+	ioc3_mii_init(dev, ip, ioc3);
 
 	dev->trans_start = jiffies;
 	netif_wake_queue(dev);

@@ -3279,7 +3279,7 @@ recheck:
 		if (mddev2 == mddev)
 			continue;
 		if (mddev2->curr_resync && match_mddev_units(mddev,mddev2)) {
-			printk(KERN_INFO "md: serializing resync, md%d has overlapping physical units with md%d!\n", mdidx(mddev), mdidx(mddev2));
+			printk(KERN_INFO "md: serializing resync, md%d shares one or more physical units with md%d!\n", mdidx(mddev), mdidx(mddev2));
 			serialize = 1;
 			break;
 		}
@@ -3587,9 +3587,9 @@ int md__init md_init (void)
 {
 	static char * name = "mdrecoveryd";
 	
-	printk (KERN_INFO "md driver %d.%d.%d MAX_MD_DEVS=%d, MAX_REAL=%d\n",
+	printk (KERN_INFO "md driver %d.%d.%d MAX_MD_DEVS=%d, MD_SB_DISKS=%d\n",
 			MD_MAJOR_VERSION, MD_MINOR_VERSION,
-			MD_PATCHLEVEL_VERSION, MAX_MD_DEVS, MAX_REAL);
+			MD_PATCHLEVEL_VERSION, MAX_MD_DEVS, MD_SB_DISKS);
 
 	if (devfs_register_blkdev (MAJOR_NR, "md", &md_fops))
 	{
@@ -3639,7 +3639,7 @@ struct {
 	unsigned long set;
 	int pers[MAX_MD_BOOT_DEVS];
 	int chunk[MAX_MD_BOOT_DEVS];
-	kdev_t devices[MAX_MD_BOOT_DEVS][MAX_REAL];
+	kdev_t devices[MAX_MD_BOOT_DEVS][MD_SB_DISKS];
 } md_setup_args md__initdata = { 0, };
 
 /*
@@ -3713,7 +3713,7 @@ static int md__init md_setup(char *str)
 		pername="super-block";
 	}
 	devnames = str;
-	for (; i<MAX_REAL && str; i++) {
+	for (; i<MD_SB_DISKS && str; i++) {
 		if ((device = name_to_kdev_t(str))) {
 			md_setup_args.devices[minor][i] = device;
 		} else {
@@ -3853,7 +3853,7 @@ void cleanup_module (void)
 #endif
 
 __initcall(md_init);
-#ifdef CONFIG_AUTODETECT_RAID
+#if defined(CONFIG_AUTODETECT_RAID) || defined(CONFIG_MD_BOOT)
 __initcall(md_run_setup);
 #endif
 

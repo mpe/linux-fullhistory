@@ -165,6 +165,16 @@ static int neigh_del_timer(struct neighbour *n)
 	return 0;
 }
 
+static void pneigh_queue_purge(struct sk_buff_head *list)
+{
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(list)) != NULL) {
+		dev_put(skb->dev);
+		kfree_skb(skb);
+	}
+}
+
 int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 {
 	int i;
@@ -209,11 +219,11 @@ int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 		}
 	}
 
-	skb_queue_purge(&tbl->proxy_queue);
 	pneigh_ifdown(tbl, dev);
 	write_unlock_bh(&tbl->lock);
 
 	del_timer_sync(&tbl->proxy_timer);
+	pneigh_queue_purge(&tbl->proxy_queue);
 	return 0;
 }
 
@@ -999,7 +1009,11 @@ static void neigh_proxy_process(unsigned long arg)
 	struct neigh_table *tbl = (struct neigh_table *)arg;
 	long sched_next = 0;
 	unsigned long now = jiffies;
-	struct sk_buff *skb = tbl->proxy_queue.next;
+	struct sk_buff *skb;
+
+	spin_lock(&tbl->proxy_queue.lock);
+
+	skb = tbl->proxy_queue.next;
 
 	while (skb != (struct sk_buff*)&tbl->proxy_queue) {
 		struct sk_buff *back = skb;
@@ -1007,19 +1021,21 @@ static void neigh_proxy_process(unsigned long arg)
 
 		skb = skb->next;
 		if (tdif <= 0) {
+			struct net_device *dev = back->dev;
 			__skb_unlink(back, &tbl->proxy_queue);
-			if (tbl->proxy_redo)
+			if (tbl->proxy_redo && netif_running(dev))
 				tbl->proxy_redo(back);
 			else
 				kfree_skb(back);
+
+			dev_put(dev);
 		} else if (!sched_next || tdif < sched_next)
 			sched_next = tdif;
 	}
 	del_timer(&tbl->proxy_timer);
-	if (sched_next) {
-		tbl->proxy_timer.expires = jiffies + sched_next;
-		add_timer(&tbl->proxy_timer);
-	}
+	if (sched_next)
+		mod_timer(&tbl->proxy_timer, jiffies + sched_next);
+	spin_unlock(&tbl->proxy_queue.lock);
 }
 
 void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
@@ -1034,16 +1050,19 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 	}
 	skb->stamp.tv_sec = 0;
 	skb->stamp.tv_usec = now + sched_next;
+
+	spin_lock(&tbl->proxy_queue.lock);
 	if (del_timer(&tbl->proxy_timer)) {
 		long tval = tbl->proxy_timer.expires - now;
 		if (tval < sched_next)
 			sched_next = tval;
 	}
-	tbl->proxy_timer.expires = now + sched_next;
 	dst_release(skb->dst);
 	skb->dst = NULL;
+	dev_hold(skb->dev);
 	__skb_queue_tail(&tbl->proxy_queue, skb);
-	add_timer(&tbl->proxy_timer);
+	mod_timer(&tbl->proxy_timer, now + sched_next);
+	spin_unlock(&tbl->proxy_queue.lock);
 }
 
 
@@ -1135,7 +1154,7 @@ int neigh_table_clear(struct neigh_table *tbl)
 	del_timer_sync(&tbl->gc_timer);
 	tasklet_kill(&tbl->gc_task);
 	del_timer_sync(&tbl->proxy_timer);
-	skb_queue_purge(&tbl->proxy_queue);
+	pneigh_queue_purge(&tbl->proxy_queue);
 	neigh_ifdown(tbl, NULL);
 	if (tbl->entries)
 		printk(KERN_CRIT "neighbour leakage\n");

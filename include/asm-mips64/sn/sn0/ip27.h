@@ -89,7 +89,6 @@
 #define CPU_RESCHED_B_IRQ	1
 #define CPU_CALL_A_IRQ		2
 #define CPU_CALL_B_IRQ		3
-#define IOC3_ETH_INT		4
 #define BASE_PCI_IRQ		4
 
 #define SN00_BRIDGE		0x9200000008000000

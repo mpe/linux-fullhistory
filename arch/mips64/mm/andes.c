@@ -20,11 +20,6 @@
 
 static int scache_lsz64;
 
-/* CP0 hazard avoidance.  I think we can drop this for the R10000.  */
-#define BARRIER __asm__ __volatile__(".set noreorder\n\t" \
-				     "nop; nop; nop; nop; nop; nop;\n\t" \
-				     ".set reorder\n\t")
-
 /*
  * This version has been tuned on an Origin.  For other machines the arguments
  * of the pref instructin may have to be tuned differently.
@@ -143,8 +138,6 @@ andes_flush_cache_sigtramp(unsigned long addr)
 #define NTLB_ENTRIES       64
 #define NTLB_ENTRIES_HALF  32
 
-/* TLB operations.
-   XXX These should work fine on R10k without the BARRIERs.  */
 static inline void
 andes_flush_tlb_all(void)
 {
@@ -162,19 +155,15 @@ andes_flush_tlb_all(void)
 	set_entryhi(CKSEG0);
 	set_entrylo0(0);
 	set_entrylo1(0);
-	BARRIER;
 
 	entry = get_wired();
 
 	/* Blast 'em all away. */
 	while(entry < NTLB_ENTRIES) {
 		set_index(entry);
-		BARRIER;
 		tlb_write_indexed();
-		BARRIER;
 		entry++;
 	}
-	BARRIER;
 	set_entryhi(old_ctx);
 	__restore_flags(flags);
 }
@@ -222,18 +211,14 @@ andes_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 
 				set_entryhi(start | newpid);
 				start += (PAGE_SIZE << 1);
-				BARRIER;
 				tlb_probe();
-				BARRIER;
 				idx = get_index();
 				set_entrylo0(0);
 				set_entrylo1(0);
 				set_entryhi(KSEG0);
-				BARRIER;
 				if(idx < 0)
 					continue;
 				tlb_write_indexed();
-				BARRIER;
 			}
 			set_entryhi(oldpid);
 		} else {
@@ -261,20 +246,16 @@ andes_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 		__save_and_cli(flags);
 		oldpid = (get_entryhi() & 0xff);
 		set_entryhi(page | newpid);
-		BARRIER;
 		tlb_probe();
-		BARRIER;
 		idx = get_index();
 		set_entrylo0(0);
 		set_entrylo1(0);
 		set_entryhi(KSEG0);
 		if(idx < 0)
 			goto finish;
-		BARRIER;
 		tlb_write_indexed();
 
 	finish:
-		BARRIER;
 		set_entryhi(oldpid);
 		__restore_flags(flags);
 	}
@@ -311,32 +292,20 @@ static void andes_update_mmu_cache(struct vm_area_struct * vma,
 	address &= (PAGE_MASK << 1);
 	set_entryhi(address | (pid));
 	pgdp = pgd_offset(vma->vm_mm, address);
-	BARRIER;
 	tlb_probe();
-	BARRIER;
 	pmdp = pmd_offset(pgdp, address);
 	idx = get_index();
 	ptep = pte_offset(pmdp, address);
-	BARRIER;
 	set_entrylo0(pte_val(*ptep++) >> 6);
 	set_entrylo1(pte_val(*ptep) >> 6);
 	set_entryhi(address | (pid));
-	BARRIER;
 	if(idx < 0) {
 		tlb_write_random();
 	} else {
 		tlb_write_indexed();
 	}
-	BARRIER;
 	set_entryhi(pid);
-	BARRIER;
 	__restore_flags(flags);
-}
-
-static int
-andes_user_mode(struct pt_regs *regs)
-{
-	return (regs->cp0_status & ST0_KSU) == KSU_USER;
 }
 
 static void andes_show_regs(struct pt_regs *regs)
@@ -407,7 +376,6 @@ void __init ld_mmu_andes(void)
 	update_mmu_cache = andes_update_mmu_cache;
 
 	_show_regs = andes_show_regs;
-	_user_mode = andes_user_mode;
 
         flush_cache_l1();
 

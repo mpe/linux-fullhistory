@@ -1,11 +1,28 @@
 /*
- * $Id: c4.c,v 1.18 2000/11/01 14:05:02 calle Exp $
+ * $Id: c4.c,v 1.20.6.1 2000/11/28 12:02:45 kai Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.20.6.1  2000/11/28 12:02:45  kai
+ * MODULE_DEVICE_TABLE for 2.4
+ *
+ * Revision 1.20.2.2  2000/11/26 17:47:53  kai
+ * added PCI_DEV_TABLE for 2.4
+ *
+ * Revision 1.20.2.1  2000/11/26 17:14:19  kai
+ * fix device ids
+ * also needs patches to include/linux/pci_ids.h
+ *
+ * Revision 1.20  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.19  2000/11/19 17:02:47  kai
+ * compatibility cleanup - part 3
+ *
  * Revision 1.18  2000/11/01 14:05:02  calle
  * - use module_init/module_exit from linux/init.h.
  * - all static struct variables are initialized with "membername:" now.
@@ -89,35 +106,22 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.20 $";
+static char *revision = "$Revision: 1.20.6.1 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
 
 /* ------------------------------------------------------------- */
 
-#ifndef PCI_VENDOR_ID_DEC
-#define PCI_VENDOR_ID_DEC	0x1011
-#endif
+static int suppress_pollack;
 
-#ifndef PCI_DEVICE_ID_DEC_21285
-#define PCI_DEVICE_ID_DEC_21285	0x1065
-#endif
+static struct pci_device_id c4_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_DEC,PCI_DEVICE_ID_DEC_21285, PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_C4 },
+	{ }			/* Terminating entry */
+};
 
-#ifndef PCI_VENDOR_ID_AVM
-#define PCI_VENDOR_ID_AVM	0x1244
-#endif
-
-#ifndef PCI_DEVICE_ID_AVM_C4
-#define PCI_DEVICE_ID_AVM_C4	0x0800
-#endif
-
-/* ------------------------------------------------------------- */
-
-static int suppress_pollack = 0;
-
+MODULE_DEVICE_TABLE(pci, c4_pci_tbl);
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
-
 MODULE_PARM(suppress_pollack, "0-1i");
 
 /* ------------------------------------------------------------- */

@@ -231,7 +231,7 @@ illegal_syscall:
 	sys	sys32_alarm	1
 	sys	sys_fstat	2
 	sys	sys_pause	0
-	sys	sys_utime	2			/* 4030 */
+	sys	sys32_utime	2			/* 4030 */
 	sys	sys_ni_syscall	0
 	sys	sys_ni_syscall	0
 	sys	sys_access	2
@@ -260,7 +260,7 @@ illegal_syscall:
 	sys	sys_ni_syscall	2
 	sys	sys_setpgid	2
 	sys	sys_ni_syscall, 0
-	sys	sys_olduname	1
+	sys	sys_ni_syscall	0	/* was sys_olduname  */
 	sys	sys_umask	1			/* 4060 */
 	sys	sys_chroot	1
 	sys	sys_ustat	2
@@ -310,7 +310,7 @@ illegal_syscall:
 	sys	sys32_newstat	2
 	sys	sys32_newlstat	2
 	sys	sys32_newfstat	2
-	sys	sys_uname	1
+	sys	sys_ni_syscall	0	/* was sys_uname */
 	sys	sys_ni_syscall	0	/* sys_ioperm  *//* 4110 */
 	sys	sys_vhangup	0
 	sys	sys_ni_syscall	0	/* was sys_idle	 */
@@ -323,9 +323,9 @@ illegal_syscall:
 	sys	sys32_sigreturn	0
 	sys	sys_clone	0			/* 4120 */
 	sys	sys_setdomainname 2
-	sys	sys_newuname	1
+	sys	sys32_newuname	1
 	sys	sys_ni_syscall	0	/* sys_modify_ldt */
-	sys	sys_adjtimex	1
+	sys	sys32_adjtimex	1
 	sys	sys_mprotect	3			/* 4125 */
 	sys	sys32_sigprocmask	3
 	sys	sys_create_module 2
@@ -337,7 +337,7 @@ illegal_syscall:
 	sys	sys_fchdir	1
 	sys	sys_bdflush	2
 	sys	sys_sysfs	3			/* 4135 */
-	sys	sys_personality	1
+	sys	sys32_personality	1
 	sys	sys_ni_syscall	0 /* for afs_syscall */
 	sys	sys_setfsuid	1
 	sys	sys_setfsgid	1
@@ -354,7 +354,7 @@ illegal_syscall:
 	sys	sys_ni_syscall	0			/* 4150 */
 	sys	sys_getsid	1
 	sys	sys_fdatasync	0
-	sys	sys_sysctl	1
+	sys	sys32_sysctl	1
 	sys	sys_mlock	2
 	sys	sys_munlock	2			/* 4155 */
 	sys	sys_mlockall	1
@@ -378,9 +378,9 @@ illegal_syscall:
 	sys	sys_listen	2
 	sys	sys_recv	4			/* 4175 */
 	sys	sys_recvfrom	6
-	sys	sys_recvmsg	3
+	sys	sys32_recvmsg	3
 	sys	sys_send	4
-	sys	sys_sendmsg	3
+	sys	sys32_sendmsg	3
 	sys	sys_sendto	6			/* 4180 */
 	sys	sys32_setsockopt	5
 	sys	sys_shutdown	2
@@ -401,8 +401,8 @@ illegal_syscall:
 	sys	sys32_rt_sigtimedwait 4
 	sys	sys32_rt_sigqueueinfo 3
 	sys	sys32_rt_sigsuspend 0
-	sys	sys_pread	4			/* 4200 */
-	sys	sys_pwrite	4
+	sys	sys32_pread	6			/* 4200 */
+	sys	sys32_pwrite	6
 	sys	sys_chown	3
 	sys	sys_getcwd	2
 	sys	sys_capget	2
@@ -414,13 +414,14 @@ illegal_syscall:
 	sys	sys_mmap2	6			/* 4210 */
 	sys	sys_truncate64	2
 	sys	sys_ftruncate64	2
-	sys	sys_newstat	3
-	sys	sys_newlstat	3
-	sys	sys_newfstat	3			/* 4210 */
+	sys	sys_newstat	2
+	sys	sys_newlstat	2
+	sys	sys_newfstat	2			/* 4215 */
 	sys	sys_pivot_root	2
 	sys	sys_mincore	3
 	sys	sys_madvise	3
 	sys	sys_getdents64	3
+	sys	sys32_fcntl64	3			/* 4220 */
 	.endm
 
 	.macro	sys function, nargs

@@ -1,4 +1,4 @@
-/* $Id: gazel.c,v 2.11 2000/11/24 17:05:37 kai Exp $
+/* $Id: gazel.c,v 2.11.6.1 2000/11/28 12:02:46 kai Exp $
  *
  * gazel.c     low level stuff for Gazel isdn cards
  *
@@ -19,26 +19,12 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *gazel_revision = "$Revision: 2.11 $";
+const char *gazel_revision = "$Revision: 2.11.6.1 $";
 
 #define R647      1
 #define R685      2
 #define R753      3
 #define R742      4
-
-/* Gazel R685 stuff */
-#ifndef PCI_VENDOR_ID_PLX
-#define PCI_VENDOR_ID_PLX	0x10b5
-#endif
-#ifndef PCI_DEVICE_ID_PLX_R685
-#define PCI_DEVICE_ID_PLX_R685	0x1030
-#endif
-#ifndef PCI_DEVICE_ID_PLX_R753
-#define PCI_DEVICE_ID_PLX_R753	0x1152
-#endif
-#ifndef PCI_DEVICE_ID_PLX_DJINN_ITOO
-#define PCI_DEVICE_ID_PLX_DJINN_ITOO	0x1151
-#endif
 
 #define PLX_CNTRL    0x50	/* registre de controle PLX */
 #define RESET_GAZEL  0x4

@@ -251,12 +251,10 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	if (t->reg31 == (unsigned long) ret_from_sys_call)
 		return t->reg31;
 
-	return ((unsigned long*)t->reg29)[17];
+	return ((unsigned long*)t->reg29)[11];
 }
 
-struct pt_regs;
-extern int (*_user_mode)(struct pt_regs *);
-#define user_mode(regs)	_user_mode(regs)
+#define user_mode(regs)	(((regs)->cp0_status & ST0_KSU) == KSU_USER)
 
 /*
  * Do necessary setup to start up a newly executed thread.

@@ -136,9 +136,7 @@ pfn_t node_getfirstfree(cnodeid_t cnode)
 	loadbase = CKSSEG + 16777216;
 #endif
 	offset = PAGE_ALIGN((unsigned long)(&_end)) - loadbase;
-	if (cnode == 0)
-		return (offset >> PAGE_SHIFT);
-	else if (CPUMASK_TSTB(ktext_repmask, cnode))
+	if ((cnode == 0) || (CPUMASK_TSTB(ktext_repmask, cnode)))
 		return (TO_NODE(nasid, offset) >> PAGE_SHIFT);
 	else
 		return (KDM_TO_PHYS(PAGE_ALIGN(SYMMON_STK_ADDR(nasid, 0))) >> 

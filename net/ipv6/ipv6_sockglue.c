@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.33 2000/02/27 19:42:54 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.34 2000/11/28 13:44:28 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -443,7 +443,7 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		len -= msg.msg_controllen;
 		return put_user(len, optlen);
 	}
-	case IP_MTU:
+	case IPV6_MTU:
 	{
 		struct dst_entry *dst;
 		val = 0;	
@@ -458,6 +458,63 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 			return -ENOTCONN;
 		break;
 	}
+
+	case IPV6_PKTINFO:
+		val = np->rxopt.bits.rxinfo;
+		break;
+
+	case IPV6_HOPLIMIT:
+		val = np->rxopt.bits.rxhlim;
+		break;
+
+	case IPV6_RTHDR:
+		val = np->rxopt.bits.srcrt;
+		break;
+
+	case IPV6_HOPOPTS:
+		val = np->rxopt.bits.hopopts;
+		break;
+
+	case IPV6_AUTHHDR:
+		val = np->rxopt.bits.authhdr;
+		break;
+
+	case IPV6_DSTOPTS:
+		val = np->rxopt.bits.dstopts;
+		break;
+
+	case IPV6_FLOWINFO:
+		val = np->rxopt.bits.rxflow;
+		break;
+
+	case IPV6_UNICAST_HOPS:
+		val = np->hop_limit;
+		break;
+
+	case IPV6_MULTICAST_HOPS:
+		val = np->mcast_hops;
+		break;
+
+	case IPV6_MULTICAST_LOOP:
+		val = np->mc_loop;
+		break;
+
+	case IPV6_MULTICAST_IF:
+		val = np->mcast_oif;
+		break;
+
+	case IPV6_MTU_DISCOVER:
+		val = np->pmtudisc;
+		break;
+
+	case IPV6_RECVERR:
+		val = np->recverr;
+		break;
+
+	case IPV6_FLOWINFO_SEND:
+		val = np->sndflow;
+		break;
+
 	default:
 #ifdef CONFIG_NETFILTER
 		lock_sock(sk);

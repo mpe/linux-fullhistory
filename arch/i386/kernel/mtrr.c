@@ -1083,7 +1083,7 @@ static int cyrix_get_free_region (unsigned long base, unsigned long size)
     if (size > 0x2000)
     {
 	cyrix_get_arr (7, &lbase, &lsize, &ltype);
-	if (lsize == 1) return 7;
+	if (lsize == 0) return 7;
 	/*  Else try ARR0-ARR6 first  */
     }
     else

@@ -82,8 +82,6 @@ struct vm_area_struct;
 struct sysinfo;
 
 struct zone_t;
-/* linux/ipc/shm.c */
-extern int shm_swap(int, int);
 
 /* linux/mm/swap.c */
 extern int memory_pressure;

@@ -522,7 +522,7 @@ static inline struct dquot *find_best_free(void)
 struct dquot *get_empty_dquot(void)
 {
 	struct dquot *dquot;
-	int shrink = 1;	/* Number of times we should try to shrink dcache and icache */
+	int shrink = 8;	/* Number of times we should try to shrink dcache and icache */
 
 repeat:
 	dquot = find_best_free();
@@ -1474,7 +1474,7 @@ static int quota_on(struct super_block *sb, short type, char *path)
 	if (IS_ERR(f))
 		goto out_lock;
 	error = -EIO;
-	if (!f->f_op->read && !f->f_op->write)
+	if (!f->f_op || (!f->f_op->read && !f->f_op->write))
 		goto out_f;
 	inode = f->f_dentry->d_inode;
 	error = -EACCES;

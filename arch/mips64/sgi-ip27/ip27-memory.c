@@ -258,8 +258,8 @@ void __init mem_init(void)
 	extern unsigned long totalram_pages;
 	extern unsigned long setup_zero_pages(void);
 	cnodeid_t nid;
-	unsigned long tmp, ram;
-	unsigned long codesize, reservedpages, datasize, initsize;
+	unsigned long tmp;
+	unsigned long codesize, datasize, initsize;
 	int slot, numslots;
 	struct page *pg, *pslot;
 	pfn_t pgnr;
@@ -295,7 +295,6 @@ void __init mem_init(void)
 			 * free up the pages that hold the memmap entries.
 			 */
 			while (pg < pslot) {
-				pg->flags |= (1<<PG_skip);
 				pg++; pgnr++;
 			}
 
@@ -317,32 +316,17 @@ void __init mem_init(void)
 
 	totalram_pages -= setup_zero_pages();	/* This comes from node 0 */
 
-	reservedpages = ram = 0;
-	for (nid = 0; nid < numnodes; nid++) {
-		for (tmp = PLAT_NODE_DATA_STARTNR(nid); tmp < 
-			(PLAT_NODE_DATA_STARTNR(nid) +
-			PLAT_NODE_DATA_SIZE(nid)); tmp++) {
-			/* Ignore holes */
-			if (PageSkip(mem_map+tmp))
-				continue;
-			if (page_is_ram(tmp)) {
-				ram++;
-				if (PageReserved(mem_map+tmp))
-					reservedpages++;
-			}
-		}
-	}
-
 	codesize =  (unsigned long) &_etext - (unsigned long) &_stext;
 	datasize =  (unsigned long) &_edata - (unsigned long) &_fdata;
 	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
 
+	tmp = (unsigned long) nr_free_pages();
 	printk("Memory: %luk/%luk available (%ldk kernel code, %ldk reserved, "
 		"%ldk data, %ldk init)\n",
-		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
-		ram << (PAGE_SHIFT-10),
+		tmp << (PAGE_SHIFT-10),
+		num_physpages << (PAGE_SHIFT-10),
 		codesize >> 10,
-		reservedpages << (PAGE_SHIFT-10),
+		(num_physpages - tmp) << (PAGE_SHIFT-10),
 		datasize >> 10,
 		initsize >> 10);
 }

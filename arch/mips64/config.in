@@ -21,7 +21,7 @@ if [ "$CONFIG_SGI_IP27" = "y" ]; then
    bool '  Mapped kernel support' CONFIG_MAPPED_KERNEL
    bool '  Kernel text replication support' CONFIG_REPLICATE_KTEXT
    bool '  Exception handler replication support' CONFIG_REPLICATE_EXHANDLERS
-   bool '  Multi-Processing support (Experimental)' CONFIG_SMP
+   bool '  Multi-Processing support' CONFIG_SMP
    #bool '  IP27 XXL' CONFIG_SGI_SN0_XXL
 fi
 endmenu

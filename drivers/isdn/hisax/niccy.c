@@ -1,4 +1,4 @@
-/* $Id: niccy.c,v 1.15 2000/11/24 17:05:38 kai Exp $
+/* $Id: niccy.c,v 1.15.6.1 2000/11/28 12:02:46 kai Exp $
  *
  * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
  *          compatible (SAGEM cybermodem)
@@ -22,7 +22,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *niccy_revision = "$Revision: 1.15 $";
+const char *niccy_revision = "$Revision: 1.15.6.1 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -39,12 +39,6 @@ const char *niccy_revision = "$Revision: 1.15 $";
 #define NICCY_PCI	2
 
 /* PCI stuff */
-#ifndef PCI_VENDOR_ID_SATSAGEM
-#define PCI_VENDOR_ID_SATSAGEM	0x1267
-#endif
-#ifndef PCI_DEVICE_ID_SATSAGEM_NICCY
-#define PCI_DEVICE_ID_SATSAGEM_NICCY	0x1016
-#endif
 #define PCI_IRQ_CTRL_REG	0x38
 #define PCI_IRQ_ENABLE		0x1f00
 #define PCI_IRQ_DISABLE		0xff0000

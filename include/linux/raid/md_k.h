@@ -59,7 +59,6 @@ typedef struct mdk_rdev_s mdk_rdev_t;
 #error MD doesnt handle bigger kdev yet
 #endif
 
-#define MAX_REAL     12			/* Max number of disks per md dev */
 #define MAX_MD_DEVS  (1<<MINORBITS)	/* Max number of md dev */
 
 /*

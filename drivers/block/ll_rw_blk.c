@@ -684,7 +684,7 @@ static int __make_request(request_queue_t * q, int rw,
 	int max_segments = MAX_SEGMENTS;
 	struct request * req = NULL, *freereq = NULL;
 	int rw_ahead, max_sectors, el_ret;
-	struct list_head *head = &q->queue_head;
+	struct list_head *head;
 	int latency;
 	elevator_t *elevator = &q->elevator;
 
@@ -738,6 +738,7 @@ again:
 	/*
 	 * skip first entry, for devices with active queue head
 	 */
+	head = &q->queue_head;
 	if (q->head_active && !q->plugged)
 		head = head->next;
 

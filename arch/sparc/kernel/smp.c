@@ -26,7 +26,6 @@
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
-#include <asm/atops.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 

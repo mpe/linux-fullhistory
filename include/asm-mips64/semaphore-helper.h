@@ -1,5 +1,4 @@
-/* $Id: semaphore-helper.h,v 1.2 1999/10/20 18:10:32 ralf Exp $
- *
+/*
  * SMP- and interrupt-safe semaphores helper functions.
  *
  * (C) Copyright 1996 Linus Torvalds
@@ -31,8 +30,8 @@ waking_non_zero(struct semaphore *sem)
 	"beqz\t%0, 1b\n\t"
 	"2:"
 	".text"
-	: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
-	: "0"(0));
+	: "=r" (ret), "=r" (tmp), "=m" (sem->waking)
+	: "0" (0));
 
 	return ret;
 }
@@ -88,8 +87,8 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 	scd	%1, %2
 	beqz	%1, 0b
 	.set	pop"
-	: "=&r"(ret), "=&r"(tmp), "=m"(*sem)
-	: "r"(signal_pending(tsk)), "i"(-EINTR));
+	: "=&r" (ret), "=&r" (tmp), "=m" (*sem)
+	: "r" (signal_pending(tsk)), "i" (-EINTR));
 
 #elif defined(__MIPSEL__)
 
@@ -121,8 +120,8 @@ waking_non_zero_interruptible(struct semaphore *sem, struct task_struct *tsk)
 	scd	%1, %2
 	beqz	%1, 0b
 	.set	pop"
-	: "=&r"(ret), "=&r"(tmp), "=m"(*sem)
-	: "r"(signal_pending(tsk)), "i"(-EINTR));
+	: "=&r" (ret), "=&r" (tmp), "=m" (*sem)
+	: "r" (signal_pending(tsk)), "i" (-EINTR));
 
 #else
 #error "MIPS but neither __MIPSEL__ nor __MIPSEB__?"

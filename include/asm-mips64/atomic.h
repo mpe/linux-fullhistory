@@ -1,5 +1,4 @@
-/* $Id$
- *
+/*
  * Atomic operations that C can't guarantee us.  Useful for
  * resource counting etc..
  *
@@ -10,20 +9,14 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997, 1999 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1999, 2000 by Ralf Baechle
  */
 #ifndef _ASM_ATOMIC_H
 #define _ASM_ATOMIC_H
 
-#include <linux/config.h>
-
 #include <asm/sgidefs.h>
 
-#ifdef CONFIG_SMP
 typedef struct { volatile int counter; } atomic_t;
-#else
-typedef struct { int counter; } atomic_t;
-#endif
 
 #ifdef __KERNEL__
 #define ATOMIC_INIT(i)    { (i) }
@@ -31,26 +24,17 @@ typedef struct { int counter; } atomic_t;
 #define atomic_read(v)	((v)->counter)
 #define atomic_set(v,i)	((v)->counter = (i))
 
-/*
- * Make sure gcc doesn't try to be clever and move things around
- * on us. We need to use _exactly_ the address the user gave us,
- * not some alias that contains the same information.
- */
-#define __atomic_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
-
 extern __inline__ void atomic_add(int i, volatile atomic_t * v)
 {
 	unsigned long temp;
 
 	__asm__ __volatile__(
-		"1:\tll\t%0,%1\n\t"
+		"1:\tll\t%0,%1\t\t\t# atomic_add\n\t"
 		"addu\t%0,%2\n\t"
 		"sc\t%0,%1\n\t"
 		"beqz\t%0,1b"
-		:"=&r" (temp),
-		 "=m" (__atomic_fool_gcc(v))
-		:"Ir" (i),
-		 "m" (__atomic_fool_gcc(v)));
+		: "=&r" (temp), "=m" (v->counter)
+		: "Ir" (i), "m" (v->counter));
 }
 
 extern __inline__ void atomic_sub(int i, volatile atomic_t * v)
@@ -58,14 +42,12 @@ extern __inline__ void atomic_sub(int i, volatile atomic_t * v)
 	unsigned long temp;
 
 	__asm__ __volatile__(
-		"1:\tll\t%0,%1\n\t"
+		"1:\tll\t%0,%1\t\t\t# atomic_sub\n\t"
 		"subu\t%0,%2\n\t"
 		"sc\t%0,%1\n\t"
 		"beqz\t%0,1b"
-		:"=&r" (temp),
-		 "=m" (__atomic_fool_gcc(v))
-		:"Ir" (i),
-		 "m" (__atomic_fool_gcc(v)));
+		: "=&r" (temp), "=m" (v->counter)
+		: "Ir" (i), "m" (v->counter));
 }
 
 /*
@@ -76,18 +58,16 @@ extern __inline__ int atomic_add_return(int i, atomic_t * v)
 	unsigned long temp, result;
 
 	__asm__ __volatile__(
-		".set\tnoreorder\n"
+		".set\tnoreorder\t\t\t# atomic_add_return\n"
 		"1:\tll\t%1,%2\n\t"
 		"addu\t%0,%1,%3\n\t"
 		"sc\t%0,%2\n\t"
 		"beqz\t%0,1b\n\t"
 		"addu\t%0,%1,%3\n\t"
 		".set\treorder"
-		:"=&r" (result),
-		 "=&r" (temp),
-		 "=m" (__atomic_fool_gcc(v))
-		:"Ir" (i),
-		 "m" (__atomic_fool_gcc(v)));
+		: "=&r" (result), "=&r" (temp), "=m" (v->counter)
+		: "Ir" (i), "m" (v->counter)
+		: "memory");
 
 	return result;
 }
@@ -97,18 +77,16 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
 	unsigned long temp, result;
 
 	__asm__ __volatile__(
-		".set\tnoreorder\n"
+		".set\tnoreorder\t\t\t# atomic_sub_return\n"
 		"1:\tll\t%1,%2\n\t"
 		"subu\t%0,%1,%3\n\t"
 		"sc\t%0,%2\n\t"
 		"beqz\t%0,1b\n\t"
 		"subu\t%0,%1,%3\n\t"
 		".set\treorder"
-		:"=&r" (result),
-		 "=&r" (temp),
-		 "=m" (__atomic_fool_gcc(v))
-		:"Ir" (i),
-		 "m" (__atomic_fool_gcc(v)));
+		: "=&r" (result), "=&r" (temp), "=m" (v->counter)
+		: "Ir" (i), "m" (v->counter)
+		: "memory");
 
 	return result;
 }

@@ -1,6 +1,6 @@
 /* Driver for Freecom USB/IDE adaptor
  *
- * $Id: freecom.c,v 1.13 2000/10/03 01:06:07 mdharm Exp $
+ * $Id: freecom.c,v 1.14 2000/11/13 22:27:57 mdharm Exp $
  *
  * Freecom v0.1:
  *
@@ -425,7 +425,7 @@ int freecom_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* Send it out. */
 		result = usb_stor_bulk_msg (us, fcb, opipe,
 				FCM_PACKET_LENGTH, &partial);
-		
+
 		/* The Freecom device will only fail if there is something
 		 * wrong in USB land.  It returns the status in its own
 		 * registers, which come back in the bulk pipe.
@@ -433,13 +433,13 @@ int freecom_transport(Scsi_Cmnd *srb, struct us_data *us)
 		if (result != 0) {
 			US_DEBUGP ("freecom xport failure: r=%d, p=%d\n",
 					result, partial);
-			
+
 			/* -ENOENT -- we canceled this transfer */
 			if (result == -ENOENT) {
 				US_DEBUGP("freecom_transport(): transfer aborted\n");
 				return US_BULK_TRANSFER_ABORTED;
 			}
-			
+
 			return USB_STOR_TRANSPORT_ERROR;
 		}
 
@@ -455,7 +455,7 @@ int freecom_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 		US_DEBUG(pdump ((void *) fst, partial));
 	}
-	
+
         if (partial != 4 || result != 0) {
                 return USB_STOR_TRANSPORT_ERROR;
         }
@@ -647,7 +647,7 @@ static void pdump (void *ibuffer, int length)
 	unsigned char *buffer = (unsigned char *) ibuffer;
 	int i, j;
 	int from, base;
-	
+
 	offset = 0;
 	for (i = 0; i < length; i++) {
 		if ((i & 15) == 0) {
@@ -670,17 +670,17 @@ static void pdump (void *ibuffer, int length)
 		}
 		offset += sprintf (line+offset, " %02x", buffer[i] & 0xff);
 	}
-	
+
 	/* Add the last "chunk" of data. */
 	from = (length - 1) % 16;
 	base = ((length - 1) / 16) * 16;
-	
+
 	for (i = from + 1; i < 16; i++)
 		offset += sprintf (line+offset, "   ");
 	if (from < 8)
 		offset += sprintf (line+offset, "  ");
 	offset += sprintf (line+offset, " - ");
-	
+
 	for (i = 0; i <= from; i++) {
 		if (buffer[base+i] >= 32 && buffer[base+i] <= 126)
 			line[offset++] = buffer[base+i];

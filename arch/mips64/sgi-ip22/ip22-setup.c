@@ -153,7 +153,7 @@ void __init ip22_setup(void)
 			console_setup ("ttyS0");
 	}
 #endif
-#ifdef CONFIG_SGI_PROM_CONSOLE
+#ifdef CONFIG_ARC_CONSOLE
 	console_setup("ttyS0");
 #endif
 

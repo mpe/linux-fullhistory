@@ -215,8 +215,8 @@ void vfree(void * addr)
 		if (tmp->addr == addr) {
 			*p = tmp->next;
 			vmfree_area_pages(VMALLOC_VMADDR(tmp->addr), tmp->size);
-			kfree(tmp);
 			write_unlock(&vmlist_lock);
+			kfree(tmp);
 			return;
 		}
 	}

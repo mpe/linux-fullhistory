@@ -421,7 +421,7 @@ int irda_device_setup(struct net_device *dev)
         dev->hard_header_len = 0;
         dev->addr_len        = 0;
 
-	dev->new_style       = 1;
+	dev->features        |= NETIF_F_DYNALLOC;
 	/* dev->destructor      = irda_device_destructor; */
 
         dev->type            = ARPHRD_IRDA;

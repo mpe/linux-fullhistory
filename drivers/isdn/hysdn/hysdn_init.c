@@ -1,4 +1,4 @@
-/* $Id: hysdn_init.c,v 1.6 2000/11/13 22:51:47 kai Exp $
+/* $Id: hysdn_init.c,v 1.6.6.1 2000/11/28 12:02:47 kai Exp $
 
  * Linux driver for HYSDN cards, init functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -23,6 +23,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/version.h>
 #include <linux/poll.h>
 #include <linux/vmalloc.h>
@@ -31,7 +32,7 @@
 
 #include "hysdn_defs.h"
 
-static char *hysdn_init_revision = "$Revision: 1.6 $";
+static char *hysdn_init_revision = "$Revision: 1.6.6.1 $";
 int cardmax;			/* number of found cards */
 hysdn_card *card_root = NULL;	/* pointer to first card */
 
@@ -45,21 +46,30 @@ static struct {
 } pci_subid_map[] = {
 
 	{
-		PCI_SUB_ID_METRO, BD_METRO
+		PCI_SUBDEVICE_ID_HYPERCOPE_METRO, BD_METRO
 	},
 	{
-		PCI_SUB_ID_CHAMP2, BD_CHAMP2
+		PCI_SUBDEVICE_ID_HYPERCOPE_CHAMP2, BD_CHAMP2
 	},
 	{
-		PCI_SUB_ID_ERGO, BD_ERGO
+		PCI_SUBDEVICE_ID_HYPERCOPE_ERGO, BD_ERGO
 	},
 	{
-		PCI_SUB_ID_OLD_ERGO, BD_ERGO
+		PCI_SUBDEVICE_ID_HYPERCOPE_OLD_ERGO, BD_ERGO
 	},
 	{
 		0, 0
 	}			/* terminating entry */
 };
+
+static struct pci_device_id hysdn_pci_tbl[] __initdata = {
+	{PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_HYPERCOPE_PLX, PCI_ANY_ID, PCI_SUBDEVICE_ID_HYPERCOPE_METRO},
+	{PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_HYPERCOPE_PLX, PCI_ANY_ID, PCI_SUBDEVICE_ID_HYPERCOPE_CHAMP2},
+	{PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_HYPERCOPE_PLX, PCI_ANY_ID, PCI_SUBDEVICE_ID_HYPERCOPE_ERGO},
+	{PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_HYPERCOPE_PLX, PCI_ANY_ID, PCI_SUBDEVICE_ID_HYPERCOPE_OLD_ERGO},
+	{ }				/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, hysdn_pci_tbl);
 
 /*********************************************************************/
 /* search_cards searches for available cards in the pci config data. */
@@ -75,7 +85,7 @@ search_cards(void)
 
 	card_root = NULL;
 	card_last = NULL;
-	while ((akt_pcidev = pci_find_device(PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_PLX,
+	while ((akt_pcidev = pci_find_device(PCI_VENDOR_ID_HYPERCOPE, PCI_DEVICE_ID_HYPERCOPE_PLX,
 					     akt_pcidev)) != NULL) {
 		if (pci_enable_device(akt_pcidev))
 			continue;

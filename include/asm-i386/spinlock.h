@@ -141,7 +141,7 @@ typedef struct {
  * Changed to use the same technique as rw semaphores.  See
  * semaphore.h for details.  -ben
  */
-/* the spinlock helpers are in arch/i386/kernel/semaphore.S */
+/* the spinlock helpers are in arch/i386/kernel/semaphore.c */
 
 static inline void read_lock(rwlock_t *rw)
 {

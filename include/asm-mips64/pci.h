@@ -78,9 +78,10 @@ extern inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
 	if (direction == PCI_DMA_NONE)
 		BUG();
 
+#ifndef CONFIG_COHERENT_IO
 	dma_cache_wback_inv((unsigned long)ptr, size);
-
-	return virt_to_bus(ptr);
+#endif
+	return (bus_to_baddr[hwdev->bus->number] | __pa(ptr));
 }
 
 /*
@@ -119,18 +120,18 @@ extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
 extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
 			     int nents, int direction)
 {
-#ifndef CONFIG_COHERENT_IO
 	int i;
-#endif
 
 	if (direction == PCI_DMA_NONE)
 		BUG();
 
 	/* Make sure that gcc doesn't leave the empty loop body.  */
+	for (i = 0; i < nents; i++, sg++) {
 #ifndef CONFIG_COHERENT_IO
-	for (i = 0; i < nents; i++, sg++)
 		dma_cache_wback_inv((unsigned long)sg->address, sg->length);
 #endif
+		sg->address = (char *)(bus_to_baddr[hwdev->bus->number] | __pa(sg->address));
+	}
 
 	return nents;
 }
@@ -165,8 +166,9 @@ extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
 {
 	if (direction == PCI_DMA_NONE)
 		BUG();
-
-	dma_cache_wback_inv((unsigned long)bus_to_virt(dma_handle), size);
+#ifndef CONFIG_COHERENT_IO
+	dma_cache_wback_inv((unsigned long)__va(dma_handle - bus_to_baddr[hwdev->bus->number]), size);
+#endif
 }
 
 /*
@@ -201,7 +203,7 @@ extern inline void pci_dma_sync_sg(struct pci_dev *hwdev,
  * returns, or alternatively stop on the first sg_dma_len(sg) which
  * is 0.
  */
-#define sg_dma_address(sg)	(virt_to_bus((sg)->address))
+#define sg_dma_address(sg)	((unsigned long)((sg)->address))
 #define sg_dma_len(sg)		((sg)->length)
 
 #endif /* __KERNEL__ */

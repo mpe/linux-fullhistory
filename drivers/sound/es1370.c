@@ -116,6 +116,7 @@
  *    08.01.2000   0.32  Prevent some ioctl's from returning bad count values on underrun/overrun;
  *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
  *    07.02.2000   0.33  Use pci_alloc_consistent and pci_register_driver
+ *    21.11.2000   0.34  Initialize dma buffers in poll, otherwise poll may return a bogus mask
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -1280,10 +1281,16 @@ static unsigned int es1370_poll(struct file *file, struct poll_table_struct *wai
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
+	if (file->f_mode & FMODE_WRITE) {
+		if (!s->dma_dac2.ready && prog_dmabuf_dac2(s))
+			return 0;
 		poll_wait(file, &s->dma_dac2.wait, wait);
-	if (file->f_mode & FMODE_READ)
+	}
+	if (file->f_mode & FMODE_READ) {
+		if (!s->dma_adc.ready && prog_dmabuf_adc(s))
+			return 0;
 		poll_wait(file, &s->dma_adc.wait, wait);
+	}
 	spin_lock_irqsave(&s->lock, flags);
 	es1370_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -1855,6 +1862,8 @@ static unsigned int es1370_poll_dac(struct file *file, struct poll_table_struct 
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
+	if (!s->dma_dac1.ready && prog_dmabuf_dac1(s))
+		return 0;
 	poll_wait(file, &s->dma_dac1.wait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	es1370_update_ptr(s);
@@ -2655,7 +2664,7 @@ static int __init init_es1370(void)
 {
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.33 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.34 time " __TIME__ " " __DATE__ "\n");
 	return pci_module_init(&es1370_driver);
 }
 

@@ -28,7 +28,7 @@
  *
  *  Expect speeds of around 330Kbytes/second over a UHCI host controller.
  *  OHCI should be faster.  Increase the MTU for faster transfers of large
- *  files.  (16384 is a good size)
+ *  files (up-to 800Kbytes/second).  (16384 is a good size)
  *
  *  $Id: plusb.c,v 1.18 2000/02/14 10:38:58 fliegl Exp $
  *
@@ -135,6 +135,10 @@
 #include <linux/skbuff.h>
 //#define DEBUG 1
 #include <linux/usb.h>
+
+#if (LINUX_VERSION_CODE < 0x020300)
+#define dev_kfree_skb_any dev_kfree_skb
+#endif
 
 /* Definitions formerly in plusb.h relocated. No need to export them -EZA */
 
@@ -401,11 +405,9 @@ static void plusb_write_bulk_complete(urb_t *purb)
 
 	skb_list->state=0;
 
-	if( purb->status == -EPIPE ) {
-		
+	if( purb->status == -EPIPE )
 		printk(KERN_CRIT "%s: plusb_write_bulk_complete: got -EPIPE and don't know what to do!\n",
 		     s->net_dev.name);
-	}
 		
 	if(!purb->status) {
 		s->net_stats.tx_packets++;
@@ -421,15 +423,10 @@ static void plusb_write_bulk_complete(urb_t *purb)
 	
 	dbg("plusb_bh: dev_kfree_skb");
 
-
-#if (LINUX_VERSION_CODE < 0x020300)
-	dev_kfree_skb(skb_list->skb);
-#else
 	/* NOTE: In 2.4 it's a problem to call dev_kfree_skb() in a hard IRQ:
 	   Oct 28 23:42:14 bug kernel: Warning: kfree_skb on hard IRQ c023329a
 	*/
 	dev_kfree_skb_any(skb_list->skb);
-#endif
 	
 	skb_list->skb = NULL;
 	if (plusb_add_buf_tail (s, &s->free_skb_list, &s->tx_skb_list)) {
@@ -463,12 +460,10 @@ static void plusb_read_bulk_complete(urb_t *purb)
 	if(!s->connected)
 		return;
 
-	if( purb->status == -EPIPE ) {
-		
+	if( purb->status == -EPIPE )
 		printk(KERN_CRIT "%s: plusb_read_bulk_complete: got -EPIPE and I don't know what to do!\n",
 		     s->net_dev.name);
-		
-	} else if (!purb->status) {
+	else if (!purb->status) {
 		struct sk_buff *skb;
 		unsigned char *dst;
 		int len=purb->transfer_buffer_length;
@@ -651,11 +646,7 @@ static void plusb_free_all(plusb_t *s)
 		skb_list = list_entry (skb, skb_list_t, skb_list);
 		if (skb_list->skb) {
 			dbg ("Freeing SKB in queue");
-#if (LINUX_VERSION_CODE < 0x020300)
-			dev_kfree_skb(skb_list->skb);
-#else
 			dev_kfree_skb_any(skb_list->skb);
-#endif
 			skb_list->skb = NULL;
 		}
 		kfree(skb_list);

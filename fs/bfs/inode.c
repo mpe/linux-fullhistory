@@ -77,7 +77,6 @@ static void bfs_read_inode(struct inode * inode)
 	inode->i_atime = di->i_atime;
 	inode->i_mtime = di->i_mtime;
 	inode->i_ctime = di->i_ctime;
-	inode->i_rdev = 0; /* BFS doesn't have special nodes */
 	inode->iu_dsk_ino = di->i_ino; /* can be 0 so we store a copy */
 	inode->iu_sblock = di->i_sblock;
 	inode->iu_eblock = di->i_eblock;

@@ -61,7 +61,6 @@
 
 extern asmlinkage void ip27_irq(void);
 extern int irq_to_bus[], irq_to_slot[], bus_to_cpu[];
-int (*irq_cannonicalize)(int irq);
 int intr_connect_level(int cpu, int bit);
 int intr_disconnect_level(int cpu, int bit);
 
@@ -392,18 +391,10 @@ int probe_irq_off (unsigned long irqs)
 	return 0;
 }
 
-static int indy_irq_cannonicalize(int irq)
-{
-	return irq;	/* Sane hardware, sane code ... */
-}
-
 void __init init_IRQ(void)
 {
-	irq_cannonicalize = indy_irq_cannonicalize;
-
 	set_except_vector(0, ip27_irq);
 }
-
 
 #ifdef CONFIG_SMP
 

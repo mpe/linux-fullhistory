@@ -1,5 +1,4 @@
-/* $Id: pgalloc.h,v 1.3 2000/02/24 00:13:20 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
@@ -202,11 +201,5 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 }
 
 extern int do_check_pgt_cache(int, int);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	printk("set_pgdir!\n");
-	while(1);
-}
 
 #endif /* _ASM_PGALLOC_H */

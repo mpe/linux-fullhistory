@@ -150,7 +150,7 @@ int do_check_pgt_cache(int low, int high)
 
 void show_mem(void)
 {
-	int i,free = 0,total = 0,reserved = 0;
+	int i, total = 0, reserved = 0;
 	int shared = 0, cached = 0;
 
 	printk("Mem-info:\n");
@@ -163,9 +163,7 @@ void show_mem(void)
 			reserved++;
 		else if (PageSwapCache(mem_map+i))
 			cached++;
-		else if (!page_count(mem_map+i))
-			free++;
-		else
+		else if (page_count(mem_map+i))
 			shared += page_count(mem_map+i) - 1;
 	}
 	printk("%d pages of RAM\n",total);

@@ -196,6 +196,7 @@ fail_nomem:
 }
 
 #define allocate_mm()	(kmem_cache_alloc(mm_cachep, SLAB_KERNEL))
+#define free_mm(mm)	(kmem_cache_free(mm_cachep, (mm)))
 
 static struct mm_struct * mm_init(struct mm_struct * mm)
 {
@@ -206,7 +207,7 @@ static struct mm_struct * mm_init(struct mm_struct * mm)
 	mm->pgd = pgd_alloc();
 	if (mm->pgd)
 		return mm;
-	kmem_cache_free(mm_cachep, mm);
+	free_mm(mm);
 	return NULL;
 }
 	
@@ -236,7 +237,7 @@ inline void __mmdrop(struct mm_struct *mm)
 	if (mm == &init_mm) BUG();
 	pgd_free(mm->pgd);
 	destroy_context(mm);
-	kmem_cache_free(mm_cachep, mm);
+	free_mm(mm);
 }
 
 /*

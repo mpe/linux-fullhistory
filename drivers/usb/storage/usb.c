@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.54 2000/10/31 21:32:10 mdharm Exp $
+ * $Id: usb.c,v 1.57 2000/11/21 02:56:41 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -196,7 +196,7 @@ static int usb_stor_control_thread(void * __us)
 		action = us->action;
 		us->action = 0;
 		us->srb = us->queue_srb;
-	
+
 		/* release the queue lock as fast as possible */
 		up(&(us->queue_exclusion));
 
@@ -213,7 +213,7 @@ static int usb_stor_control_thread(void * __us)
 				us->srb = NULL;
 				break;
 			}
-			
+
 			/* reject if target != 0 or if LUN is higher than
 			 * the maximum known LUN
 			 */
@@ -312,14 +312,14 @@ static int usb_stor_control_thread(void * __us)
 			US_DEBUGP("-- US_ACT_EXIT command recieved\n");
 			break;
 		}
-
-		set_current_state(TASK_INTERRUPTIBLE);
 	} /* for (;;) */
+
+	/* clean up after ourselves */
+	set_current_state(TASK_INTERRUPTIBLE);
+	remove_wait_queue(&(us->wqh), &wait);
 
 	/* notify the exit routine that we're actually exiting now */
 	up(&(us->notify));
-
-	remove_wait_queue(&(us->wqh), &wait);
 
 	return 0;
 }	
@@ -489,7 +489,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
                 US_FL_SINGLE_LUN },
 
 #ifdef CONFIG_USB_STORAGE_SDDR09
-	{ 0x0781, 0x0200, 0x0100, 0x0100, 
+	{ 0x0781, 0x0200, 0x0100, 0x0208, 
 		"Sandisk",
 		"ImageMate SDDR-09",
 		US_SC_SCSI, US_PR_EUSB_SDDR09, NULL,
@@ -551,7 +551,7 @@ static struct us_unusual_dev* us_find_dev(u16 idVendor, u16 idProduct,
 		 (ptr->bcdDeviceMin <= bcdDevice) &&
 		 (ptr->bcdDeviceMax >= bcdDevice)))
 		ptr++;
-	
+
 	/* if the search ended because we hit the end record, we failed */
 	if (ptr->idVendor == 0x0000) {
 		US_DEBUGP("-- did not find a matching device\n");
@@ -577,7 +577,7 @@ static int usb_stor_allocate_irq(struct us_data *ss)
 	int result;
 
 	US_DEBUGP("Allocating IRQ for CBI transport\n");
-	
+
 	/* lock access to the data structure */
 	down(&(ss->irq_urb_sem));
 
@@ -588,18 +588,18 @@ static int usb_stor_allocate_irq(struct us_data *ss)
 		US_DEBUGP("couldn't allocate interrupt URB");
 		return 1;
 	}
-	
+
 	/* calculate the pipe and max packet size */
 	pipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int->bEndpointAddress & 
 			      USB_ENDPOINT_NUMBER_MASK);
 	maxp = usb_maxpacket(ss->pusb_dev, pipe, usb_pipeout(pipe));
 	if (maxp > sizeof(ss->irqbuf))
 		maxp = sizeof(ss->irqbuf);
-	
+
 	/* fill in the URB with our data */
 	FILL_INT_URB(ss->irq_urb, ss->pusb_dev, pipe, ss->irqbuf, maxp, 
 		     usb_stor_CBI_irq, ss, ss->ep_int->bInterval); 
-	
+
 	/* submit the URB for processing */
 	result = usb_submit_urb(ss->irq_urb);
 	US_DEBUGP("usb_submit_urb() returns %d\n", result);
@@ -679,7 +679,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		protocol = altsetting->bInterfaceProtocol;
 		flags = 0;
 	}
-	
+
 	/*
 	 * Find the endpoints we need
 	 * We are expecting a minimum of 2 endpoints - in and out (bulk).
@@ -744,7 +744,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	if (dev->descriptor.iSerialNumber && !(flags & US_FL_IGNORE_SER))
 		usb_string(dev, dev->descriptor.iSerialNumber, 
 			   serial, sizeof(serial));
-	
+
 	/* Create a GUID for this device */
 	if (dev->descriptor.iSerialNumber && serial[0]) {
 		/* If we have a serial number, and it's a non-NULL string */
@@ -777,7 +777,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		/* establish the connection to the new device upon reconnect */
 		ss->ifnum = ifnum;
 		ss->pusb_dev = dev;
-	
+
 		/* copy over the endpoint data */
 		if (ep_in)
 			ss->ep_in = ep_in->bEndpointAddress & 
@@ -810,7 +810,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	} else { 
 		/* New device -- allocate memory and initialize */
 		US_DEBUGP("New GUID " GUID_FORMAT "\n", GUID_ARGS(guid));
-	
+
 		if ((ss = (struct us_data *)kmalloc(sizeof(struct us_data), 
 						    GFP_KERNEL)) == NULL) {
 			printk(KERN_WARNING USB_STORAGE "Out of memory\n");
@@ -879,7 +879,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 		/* copy the GUID we created before */
 		memcpy(ss->guid, guid, sizeof(guid));
-		
+
 		/* 
 		 * Set the handler pointers based on the protocol
 		 * Again, this data is persistant across reattachments
@@ -891,21 +891,21 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->transport_reset = usb_stor_CB_reset;
 			ss->max_lun = 7;
 			break;
-			
+
 		case US_PR_CBI:
 			ss->transport_name = "Control/Bulk/Interrupt";
 			ss->transport = usb_stor_CBI_transport;
 			ss->transport_reset = usb_stor_CB_reset;
 			ss->max_lun = 7;
 			break;
-			
+
 		case US_PR_BULK:
 			ss->transport_name = "Bulk";
 			ss->transport = usb_stor_Bulk_transport;
 			ss->transport_reset = usb_stor_Bulk_reset;
 			ss->max_lun = usb_stor_Bulk_max_lun(ss);
 			break;
-			
+
 #ifdef CONFIG_USB_STORAGE_HP8200e
 		case US_PR_SCM_ATAPI:
 			ss->transport_name = "SCM/ATAPI";
@@ -941,7 +941,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
                         ss->max_lun = 0;
                         break;
 #endif
-			
+
 		default:
 			ss->transport_name = "Unknown";
 			kfree(ss->current_urb);
@@ -1004,7 +1004,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			usb_dec_dev_use(dev);
 			return NULL;
 		}
-		
+
 		/*
 		 * Since this is a new device, we need to generate a scsi 
 		 * host definition, and register with the higher SCSI layers
@@ -1016,7 +1016,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 		/* Grab the next host number */
 		ss->host_number = my_host_number++;
-			
+
 		/* We abuse this pointer so we can pass the ss pointer to 
 		 * the host controler thread in us_detect.  But how else are
 		 * we to do it?
@@ -1027,7 +1027,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		 * the device if it needs initialization */
 		if (unusual_dev && unusual_dev->initFunction)
 			unusual_dev->initFunction(ss);
-		
+
 		/* start up our control thread */
 		ss->pid = kernel_thread(usb_stor_control_thread, ss,
 					CLONE_VM);
@@ -1039,14 +1039,14 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			usb_dec_dev_use(dev);
 			return NULL;
 		}
-		
+
 		/* wait for the thread to start */
 		down(&(ss->notify));
-			
+
 		/* now register	 - our detect function will be called */
 		ss->htmplt.module = THIS_MODULE;
 		scsi_register_module(MODULE_SCSI_HA, &(ss->htmplt));
-		
+
 		/* lock access to the data structures */
 		down(&us_list_semaphore);
 
@@ -1133,7 +1133,7 @@ int __init usb_stor_init(void)
 void __exit usb_stor_exit(void)
 {
 	struct us_data *next;
-	
+
 	US_DEBUGP("usb_stor_exit() called\n");
 
 	/* Deregister the driver
@@ -1141,7 +1141,7 @@ void __exit usb_stor_exit(void)
 	 */
 	US_DEBUGP("-- calling usb_deregister()\n");
 	usb_deregister(&usb_storage_driver) ;
-	
+
 	/* While there are still virtual hosts, unregister them
 	 * Note that it's important to do this completely before removing
 	 * the structures because of possible races with the /proc
@@ -1151,7 +1151,7 @@ void __exit usb_stor_exit(void)
 		US_DEBUGP("-- calling scsi_unregister_module()\n");
 		scsi_unregister_module(MODULE_SCSI_HA, &(next->htmplt));
 	}
-	
+
 	/* While there are still structures, free them.  Note that we are
 	 * now race-free, since these structures can no longer be accessed
 	 * from either the SCSI command layer or the /proc interface

@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.50 2000/07/07 22:29:42 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.52 2000/11/28 13:32:54 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -51,6 +51,9 @@
 int sysctl_ipfrag_high_thresh = 256*1024;
 int sysctl_ipfrag_low_thresh = 192*1024;
 
+/* Important NOTE! Fragment queue must be destroyed before MSL expires.
+ * RFC791 is wrong proposing to prolongate timer each fragment arrival by TTL.
+ */
 int sysctl_ipfrag_time = IP_FRAG_TIME;
 
 struct ipfrag_skb_cb
@@ -287,6 +290,9 @@ static struct ipq *ip_frag_intern(unsigned int hash, struct ipq *qp_in)
 #endif
 	qp = qp_in;
 
+	if (!mod_timer(&qp->timer, jiffies + sysctl_ipfrag_time))
+		atomic_inc(&qp->refcnt);
+
 	atomic_inc(&qp->refcnt);
 	if((qp->next = ipq_hash[hash]) != NULL)
 		qp->next->pprev = &qp->next;
@@ -366,9 +372,6 @@ static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 
 	if (qp->last_in & COMPLETE)
 		goto err;
-
-	if (!mod_timer(&qp->timer, jiffies + sysctl_ipfrag_time))
-		atomic_inc(&qp->refcnt);
 
 	offset = ntohs(iph->frag_off);
 	flags = offset & ~IP_OFFSET;
@@ -537,7 +540,7 @@ static struct sk_buff *ip_frag_reasm(struct ipq *qp)
 		if (skb->ip_summed != fp->ip_summed)
 			skb->ip_summed = CHECKSUM_NONE;
 		else if (skb->ip_summed == CHECKSUM_HW)
-			skb->csum = csum_chain(skb->csum, fp->csum);
+			skb->csum = csum_add(skb->csum, fp->csum);
 	}
 
 	skb->dst = dst_clone(head->dst);

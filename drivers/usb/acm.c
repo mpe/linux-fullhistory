@@ -508,12 +508,12 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum,
 	if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints != 2) {
 		ifcom = cfacm->interface[1].altsetting + 0;
 		ifdata = cfacm->interface[0].altsetting + 0;
-		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints !=2)
+		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints < 2)
 			return NULL;
 	}
 
 	if (ifcom->bInterfaceClass != 2 || ifcom->bInterfaceSubClass != 2 ||
-	    ifcom->bInterfaceProtocol != 1 || ifcom->bNumEndpoints != 1)
+	    ifcom->bInterfaceProtocol != 1 || ifcom->bNumEndpoints < 1)
 			return NULL;
 
 	epctrl = ifcom->endpoint + 0;

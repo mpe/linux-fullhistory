@@ -11,7 +11,7 @@
 #include <asm/sn/sn0/hubni.h>
 #include <asm/sn/sn0/hubio.h>
 #include <asm/sn/klconfig.h>
-#include <asm/ioc3.h>
+#include <asm/sn/ioc3.h>
 #include <asm/mipsregs.h>
 #include <asm/sn/gda.h>
 #include <asm/sn/intr.h>
@@ -271,6 +271,9 @@ void per_hub_init(cnodeid_t cnode)
 {
 	extern void pcibr_setup(cnodeid_t);
 	cnodemask_t	done;
+	nasid_t		nasid;
+
+	nasid = COMPACT_TO_NASID_NODEID(cnode);
 
 	spin_lock(&hub_mask_lock);
 	/* Test our bit. */
@@ -281,6 +284,11 @@ void per_hub_init(cnodeid_t cnode)
 	 	 * Do the actual initialization if it hasn't been done yet.
 	 	 * We don't need to hold a lock for this work.
 	 	 */
+		/*
+		 * Set CRB timeout at 5ms, (< PI timeout of 10ms)
+		 */
+		REMOTE_HUB_S(nasid, IIO_ICTP, 0x800);
+		REMOTE_HUB_S(nasid, IIO_ICTO, 0xff);
 		hub_rtc_init(cnode);
 		pcibr_setup(cnode); 
 #ifdef CONFIG_REPLICATE_EXHANDLERS

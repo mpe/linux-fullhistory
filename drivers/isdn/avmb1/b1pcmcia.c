@@ -1,11 +1,20 @@
 /*
- * $Id: b1pcmcia.c,v 1.10 2000/05/06 00:52:36 kai Exp $
+ * $Id: b1pcmcia.c,v 1.12 2000/11/23 20:45:14 kai Exp $
  * 
  * Module for AVM B1/M1/M2 PCMCIA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pcmcia.c,v $
+ * Revision 1.12  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.11  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
  * Revision 1.10  2000/05/06 00:52:36  kai
  * merged changes from kernel tree
  * fixed timer and net_device->name breakage

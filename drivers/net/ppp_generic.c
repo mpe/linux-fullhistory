@@ -2207,7 +2207,7 @@ ppp_create_interface(int unit, int *retp)
 	dev->init = ppp_net_init;
 	sprintf(dev->name, "ppp%d", unit);
 	dev->priv = ppp;
-	dev->new_style = 1;
+	dev->features |= NETIF_F_DYNALLOC;
 
 	rtnl_lock();
 	ret = register_netdevice(dev);

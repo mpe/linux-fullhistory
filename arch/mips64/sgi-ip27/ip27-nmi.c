@@ -57,10 +57,10 @@ nmi_cpu_eframe_save(nasid_t nasid,
 {
 	int 		i, numberof_nmi_cpu_regs;
 	machreg_t	*prom_format;
-	
+
 	/* Get the total number of registers being saved by the prom */
 	numberof_nmi_cpu_regs = sizeof(struct reg_struct) / sizeof(machreg_t);
-	
+
 	/* Get the pointer to the current cpu's register set. */
 	prom_format = 
 	    (machreg_t *)(TO_UNCAC(TO_NODE(nasid, IP27_NMI_KREGS_OFFSET)) +
@@ -166,4 +166,3 @@ cont_nmi_dump(void)
 	nmi_eframes_save();
 	LOCAL_HUB_S(NI_PORT_RESET, NPR_PORTRESET | NPR_LOCALRESET);
 }
-

@@ -1457,9 +1457,9 @@ static void remove_card(struct ti_lynx *lynx)
 
         switch (lynx->state) {
         case have_intr:
+                reg_write(lynx, PCI_INT_ENABLE, 0);
                 free_irq(lynx->dev->irq, lynx);
         case have_iomappings:
-                reg_write(lynx, PCI_INT_ENABLE, 0);
                 reg_write(lynx, MISC_CONTROL, MISC_CONTROL_SWRESET);
                 iounmap(lynx->registers);
                 iounmap(lynx->local_rom);

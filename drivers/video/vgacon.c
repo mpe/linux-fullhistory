@@ -11,7 +11,7 @@
  *			    1995  Jay Estabrook
  *
  *	User definable mapping table and font loading by Eugene G. Crosser,
- *	<crosser@pccross.msk.su>
+ *	<crosser@average.org>
  *
  *	Improved loadable font/UTF-8 support by H. Peter Anvin
  *	Feb-Sep 1995 <peter.anvin@linux.org>

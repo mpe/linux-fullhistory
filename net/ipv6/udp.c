@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.58 2000/10/18 18:04:23 davem Exp $
+ *	$Id: udp.c,v 1.59 2000/11/28 13:38:38 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -906,15 +906,11 @@ static void get_udp6_sock(struct sock *sp, char *tmpbuf, int i)
 {
 	struct in6_addr *dest, *src;
 	__u16 destp, srcp;
-	int sock_timer_active;
-	unsigned long timer_expires;
 
 	dest  = &sp->net_pinfo.af_inet6.daddr;
 	src   = &sp->net_pinfo.af_inet6.rcv_saddr;
 	destp = ntohs(sp->dport);
 	srcp  = ntohs(sp->sport);
-	sock_timer_active = timer_pending(&sp->timer) ? 2 : 0;
-	timer_expires = (sock_timer_active == 2 ? sp->timer.expires : jiffies);
 	sprintf(tmpbuf,
 		"%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
 		"%02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",
@@ -925,7 +921,7 @@ static void get_udp6_sock(struct sock *sp, char *tmpbuf, int i)
 		dest->s6_addr32[2], dest->s6_addr32[3], destp,
 		sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
-		sock_timer_active, timer_expires-jiffies, 0,
+		0, 0L, 0,
 		sock_i_uid(sp), 0,
 		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp);

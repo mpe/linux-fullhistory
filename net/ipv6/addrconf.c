@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: addrconf.c,v 1.58 2000/05/03 06:37:07 davem Exp $
+ *	$Id: addrconf.c,v 1.59 2000/11/28 11:39:43 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -21,6 +21,7 @@
  *	<chexum@bankinf.banki.hu>
  *	Andi Kleen			:	kill doube kfree on module
  *						unload.
+ *	Maciej W. Rozycki		:	FDDI support
  */
 
 #include <linux/config.h>
@@ -667,6 +668,7 @@ static int ipv6_generate_eui64(u8 *eui, struct net_device *dev)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
+	case ARPHRD_FDDI:
 	case ARPHRD_IEEE802_TR:
 		if (dev->addr_len != ETH_ALEN)
 			return -1;
@@ -1207,7 +1209,8 @@ static void addrconf_dev_config(struct net_device *dev)
 
 	ASSERT_RTNL();
 
-	if ((dev->type != ARPHRD_ETHER)  && 
+	if ((dev->type != ARPHRD_ETHER) && 
+	    (dev->type != ARPHRD_FDDI) &&
 	    (dev->type != ARPHRD_IEEE802_TR)) {
 		/* Alas, we support only Ethernet autoconfiguration. */
 		return;
@@ -2008,6 +2011,7 @@ void __init addrconf_init(void)
 			init_loopback(dev);
 			break;
 		case ARPHRD_ETHER:
+		case ARPHRD_FDDI:
 		case ARPHRD_IEEE802_TR:	
 			addrconf_dev_config(dev);
 			break;

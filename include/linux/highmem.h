@@ -13,7 +13,6 @@ extern struct page *highmem_start_page;
 /* declarations for linux/mm/highmem.c */
 FASTCALL(unsigned int nr_free_highpages(void));
 
-extern struct page * replace_with_highmem(struct page *);
 extern struct buffer_head * create_bounce(int rw, struct buffer_head * bh_orig);
 
 
@@ -30,7 +29,6 @@ static inline void bh_kunmap(struct buffer_head *bh)
 #else /* CONFIG_HIGHMEM */
 
 static inline unsigned int nr_free_highpages(void) { return 0; }
-#define replace_with_highmem(page) page
 
 static inline void *kmap(struct page *page) { return page_address(page); }
 

@@ -51,11 +51,11 @@ struct divert_blk;
 
 /* Backlog congestion levels */
 #define NET_RX_SUCCESS		0   /* keep 'em coming, baby */
-#define NET_RX_CN_LOW		1   /* storm alert, just in case */
-#define NET_RX_CN_MOD		2   /* Storm on its way! */
-#define NET_RX_CN_HIGH		5   /* The storm is here */
-#define NET_RX_DROP		-1  /* packet dropped */
-#define NET_RX_BAD		-2  /* packet dropped due to kernel error */
+#define NET_RX_DROP		1  /* packet dropped */
+#define NET_RX_CN_LOW		2   /* storm alert, just in case */
+#define NET_RX_CN_MOD		3   /* Storm on its way! */
+#define NET_RX_CN_HIGH		4   /* The storm is here */
+#define NET_RX_BAD		5  /* packet dropped due to kernel error */
 
 #define net_xmit_errno(e)	((e) != NET_XMIT_CN ? -ENOBUFS : 0)
 
@@ -333,11 +333,17 @@ struct net_device
 	atomic_t		refcnt;
 	/* The flag marking that device is unregistered, but held by an user */
 	int			deadbeaf;
-	/* New style devices allow asynchronous destruction;
-	   netdevice_unregister for old style devices blocks until
-	   the last user will dereference this device.
-	 */
-	int			new_style;
+
+	/* Net device features */
+	int			features;
+#define NETIF_F_SG		1	/* Scatter/gather IO. */
+#define NETIF_F_IP_CSUM		2	/* Can checksum only TCP/UDP over IPv4. */
+#define NETIF_F_NO_CSUM		4	/* Does not require checksum. F.e. loopack. */
+#define NETIF_F_HW_CSUM		8	/* Can checksum all the packets. */
+#define NETIF_F_DYNALLOC	16	/* Self-dectructable device. */
+#define NETIF_F_HIGHDMA		32	/* Can DMA to high memory. */
+#define NETIF_F_FRAGLIST	1	/* Scatter/gather IO. */
+
 	/* Called after device is detached from network. */
 	void			(*uninit)(struct net_device *dev);
 	/* Called after last user reference disappears. */

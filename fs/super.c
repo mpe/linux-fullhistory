@@ -1037,13 +1037,13 @@ static int do_umount(struct vfsmount *mnt, int umount_root, int flags)
 	}
 
 	spin_lock(&dcache_lock);
-	if (atomic_read(&mnt->mnt_count) > 2) {
-		spin_unlock(&dcache_lock);
-		mntput(mnt);
-		return -EBUSY;
-	}
 
 	if (mnt->mnt_instances.next != mnt->mnt_instances.prev) {
+		if (atomic_read(&mnt->mnt_count) > 2) {
+			spin_unlock(&dcache_lock);
+			mntput(mnt);
+			return -EBUSY;
+		}
 		if (sb->s_type->fs_flags & FS_SINGLE)
 			put_filesystem(sb->s_type);
 		/* We hold two references, so mntput() is safe */

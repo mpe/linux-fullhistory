@@ -1,6 +1,6 @@
 /* Driver for SanDisk SDDR-09 SmartMedia reader
  *
- * $Id: sddr09.c,v 1.12 2000/10/03 01:06:07 mdharm Exp $
+ * $Id: sddr09.c,v 1.14 2000/11/21 02:58:26 mdharm Exp $
  *
  * SDDR09 driver v0.1:
  *
@@ -175,7 +175,7 @@ static int sddr09_raw_bulk(struct us_data *us,
                 US_DEBUGP("us_transfer_partial(): unknown error\n");
                 return US_BULK_TRANSFER_FAILED;
         }
-	
+
 	if (act_len != len) {
 		US_DEBUGP("Warning: Transferred only %d bytes\n",
 			act_len);
@@ -355,10 +355,10 @@ int sddr09_read_data(struct us_data *us,
 			0,
 			command,
 			12);
-		
+
 		US_DEBUGP("Result for send_control in read_data %d\n",
 			result);
-		
+
 		if (result != USB_STOR_TRANSPORT_GOOD) {
 			if (use_sg)
 				kfree(buffer);
@@ -426,7 +426,7 @@ int sddr09_read_control(struct us_data *us,
 
 	US_DEBUGP("Result for send_control in read_control %d\n",
 		result);
-		
+
 	if (result != USB_STOR_TRANSPORT_GOOD)
 		return result;
 
@@ -461,7 +461,7 @@ int sddr09_read_deviceID(struct us_data *us,
 
 	US_DEBUGP("Result of send_control for device ID is %d\n",
 		result);
-		
+
 	if (result != USB_STOR_TRANSPORT_GOOD)
 		return result;
 
@@ -491,7 +491,7 @@ int sddr09_read_status(struct us_data *us,
 		0,
 		command,
 		12);
-		
+
 	if (result != USB_STOR_TRANSPORT_GOOD)
 		return result;
 
@@ -517,7 +517,7 @@ int sddr09_reset(struct us_data *us) {
 		0,
 		command,
 		12);
-		
+
 	return result;
 }
 
@@ -578,6 +578,10 @@ unsigned long sddr09_get_capacity(struct us_data *us,
 	case 0x75: // 32MB
 		*blocksize = 32;
 		return 0x02000000;
+
+	case 0x76: // 64MB
+		*blocksize = 32;
+		return 0x04000000;
 
 	default: // unknown
 		return 0;
@@ -656,7 +660,7 @@ int sddr09_read_map(struct us_data *us) {
 		return -1;
 	}
 
-	
+
 
 	if (info->lba_to_pba)
 		kfree(info->lba_to_pba);
@@ -691,7 +695,7 @@ int sddr09_read_map(struct us_data *us) {
 			continue;
 		if ((ptr[6]>>4)!=0x01)
 			continue;
-		
+
 		/* ensure even parity */
 
 		lba = short_pack(ptr[7], ptr[6]);
@@ -876,7 +880,7 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 		ptr[7] = LSB_of(info->pagesize&0xFFFF);
 
 		sddr09_read_map(us);
-		
+
 		return USB_STOR_TRANSPORT_GOOD;
 	}
 
@@ -974,7 +978,7 @@ int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 	if (srb->request_bufflen == 0)
 		return USB_STOR_TRANSPORT_GOOD;
-	
+
 	if (srb->sc_data_direction == SCSI_DATA_WRITE ||
 	    srb->sc_data_direction == SCSI_DATA_READ) {
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_minisocks.c,v 1.4 2000/09/18 05:59:48 davem Exp $
+ * Version:	$Id: tcp_minisocks.c,v 1.5 2000/11/28 17:04:10 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -134,7 +134,7 @@ tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 
 	tp.saw_tstamp = 0;
 	if (th->doff > (sizeof(struct tcphdr)>>2) && tw->ts_recent_stamp) {
-		tcp_parse_options(skb, &tp);
+		tcp_parse_options(skb, &tp, 0);
 
 		if (tp.saw_tstamp) {
 			tp.ts_recent = tw->ts_recent;
@@ -809,7 +809,7 @@ struct sock *tcp_check_req(struct sock *sk,struct sk_buff *skb,
 
 	ttp.saw_tstamp = 0;
 	if (th->doff > (sizeof(struct tcphdr)>>2)) {
-		tcp_parse_options(skb, &ttp);
+		tcp_parse_options(skb, &ttp, 0);
 
 		if (ttp.saw_tstamp) {
 			ttp.ts_recent = req->ts_recent;

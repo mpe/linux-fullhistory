@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.53 2000/10/22 16:06:56 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.54 2000/11/28 13:34:56 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -356,10 +356,14 @@ int ip_recv_error(struct sock *sk, struct msghdr *msg, int len)
 	err = copied;
 
 	/* Reset and regenerate socket error */
+	spin_lock_irq(&sk->error_queue.lock);
 	sk->err = 0;
 	if ((skb2 = skb_peek(&sk->error_queue)) != NULL) {
 		sk->err = SKB_EXT_ERR(skb2)->ee.ee_errno;
+		spin_unlock_irq(&sk->error_queue.lock);
 		sk->error_report(sk);
+	} else {
+		spin_unlock_irq(&sk->error_queue.lock);
 	}
 
 out_free_skb:	

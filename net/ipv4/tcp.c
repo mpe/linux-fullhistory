@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.179 2000/11/10 04:02:04 davem Exp $
+ * Version:	$Id: tcp.c,v 1.180 2000/11/28 17:04:09 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -929,13 +929,13 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 	iov = msg->msg_iov;
 	copied = 0;
 
-	while(--iovlen >= 0) {
+	while (--iovlen >= 0) {
 		int seglen=iov->iov_len;
 		unsigned char * from=iov->iov_base;
 
 		iov++;
 
-		while(seglen > 0) {
+		while (seglen > 0) {
 			int copy, tmp, queue_it;
 
 			if (err)
@@ -952,17 +952,11 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 			/* Now we need to check if we have a half
 			 * built packet we can tack some data onto.
 			 */
-			if (tp->send_head && !(flags & MSG_OOB)) {
-				skb = sk->write_queue.prev;
+			skb = sk->write_queue.prev;
+			if (tp->send_head &&
+			    (mss_now - skb->len) > 0) {
 				copy = skb->len;
-				/* If the remote does SWS avoidance we should
-				 * queue the best we can if not we should in 
-				 * fact send multiple packets...
-				 * A method for detecting this would be most
-				 * welcome.
-				 */
-				if (skb_tailroom(skb) > 0 &&
-				    (mss_now - copy) > 0) {
+				if (skb_tailroom(skb) > 0) {
 					int last_byte_was_odd = (copy % 4);
 
 					copy = mss_now - copy;
@@ -1004,7 +998,15 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 						TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_PSH;
 						tp->pushed_seq = tp->write_seq;
 					}
+					if (flags&MSG_OOB) {
+						tp->urg_mode = 1;
+						tp->snd_up = tp->write_seq;
+						TCP_SKB_CB(skb)->sacked |= TCPCB_URG;
+					}
 					continue;
+				} else {
+					TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_PSH;
+					tp->pushed_seq = tp->write_seq;
 				}
 			}
 
@@ -1032,6 +1034,8 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 				set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
 				set_bit(SOCK_NOSPACE, &sk->socket->flags);
 
+				__tcp_push_pending_frames(sk, tp, mss_now, 1);
+
 				if (!timeo) {
 					err = -EAGAIN;
 					goto do_interrupted;
@@ -1040,7 +1044,6 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 					err = sock_intr_errno(timeo);
 					goto do_interrupted;
 				}
-				__tcp_push_pending_frames(sk, tp, mss_now);
 				timeo = wait_for_tcp_memory(sk, timeo);
 
 				/* If SACK's were formed or PMTU events happened,
@@ -1053,7 +1056,6 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 			seglen -= copy;
 
 			/* Prepare control bits for TCP header creation engine. */
-			TCP_SKB_CB(skb)->flags = TCPCB_FLAG_ACK;
 			if (PSH_NEEDED ||
 			    after(tp->write_seq+copy, tp->pushed_seq+(tp->max_window>>1))) {
 				TCP_SKB_CB(skb)->flags = TCPCB_FLAG_ACK|TCPCB_FLAG_PSH;
@@ -1063,12 +1065,10 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 			}
 			TCP_SKB_CB(skb)->sacked = 0;
 			if (flags & MSG_OOB) {
-				/* Funny. 8) This makes URG fully meaningless.
-				 * Well, OK. It does not contradict to anything yet. */
-				TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_URG;
-				TCP_SKB_CB(skb)->urg_ptr = copy;
-			} else
-				TCP_SKB_CB(skb)->urg_ptr = 0;
+				TCP_SKB_CB(skb)->sacked |= TCPCB_URG;
+				tp->urg_mode = 1;
+				tp->snd_up = tp->write_seq + copy;
+			}
 
 			/* TCP data bytes are SKB_PUT() on top, later
 			 * TCP+IP+DEV headers are SKB_PUSH()'d beneath.
@@ -1093,20 +1093,20 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 	}
 	err = copied;
 out:
-	__tcp_push_pending_frames(sk, tp, mss_now);
-	TCP_CHECK_TIMER(sk);
+	__tcp_push_pending_frames(sk, tp, mss_now, tp->nonagle);
 out_unlock:
+	TCP_CHECK_TIMER(sk);
 	release_sock(sk);
 	return err;
 
 do_sock_err:
-	if(copied)
+	if (copied)
 		err = copied;
 	else
 		err = sock_error(sk);
 	goto out;
 do_shutdown:
-	if(copied)
+	if (copied)
 		err = copied;
 	else {
 		if (!(flags&MSG_NOSIGNAL))
@@ -1115,13 +1115,16 @@ do_shutdown:
 	}
 	goto out;
 do_interrupted:
-	if(copied)
+	if (copied)
 		err = copied;
-	goto out;
+	goto out_unlock;
 do_fault:
 	__kfree_skb(skb);
 do_fault2:
-	err = -EFAULT;
+	if (copied)
+		err = copied;
+	else
+		err = -EFAULT;
 	goto out;
 }
 

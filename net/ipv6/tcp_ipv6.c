@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.126 2000/10/18 18:04:23 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.127 2000/11/28 17:04:10 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1157,11 +1157,11 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 	if (req == NULL)
 		goto drop;
 
-	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+	tcp_clear_options(&tp);
 	tp.mss_clamp = IPV6_MIN_MTU - sizeof(struct tcphdr) - sizeof(struct ipv6hdr);
 	tp.user_mss = sk->tp_pinfo.af_tcp.user_mss;
 
-	tcp_parse_options(skb, &tp);
+	tcp_parse_options(skb, &tp, 0);
 
 	tcp_openreq_init(req, &tp, skb);
 
@@ -1924,7 +1924,8 @@ static void get_tcp6_sock(struct sock *sp, char *tmpbuf, int i)
 		tp->probes_out,
 		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp,
-		tp->rto, tp->ack.ato, tp->ack.quick, tp->ack.pingpong, sp->sndbuf
+		tp->rto, tp->ack.ato, (tp->ack.quick<<1)|tp->ack.pingpong,
+		tp->snd_cwnd, tp->snd_ssthresh>=0xFFFF?-1:tp->snd_ssthresh
 		);
 }
 

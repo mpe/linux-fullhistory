@@ -269,6 +269,8 @@ static inline int free_pte(pte_t page)
 		 * free_page() used to be able to clear swap cache
 		 * entries.  We may now have to do it manually.  
 		 */
+		if (pte_dirty(page))
+			SetPageDirty(ptpage);
 		free_page_and_swap_cache(ptpage);
 		return 1;
 	}
@@ -829,8 +831,9 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	 * - we're the only user (count == 1)
 	 * - the only other user is the swap cache,
 	 *   and the only swap cache user is itself,
-	 *   in which case we can remove the page
-	 *   from the swap cache.
+	 *   in which case we can just continue to
+	 *   use the same swap cache (it will be
+	 *   marked dirty).
 	 */
 	switch (page_count(old_page)) {
 	case 2:
@@ -845,7 +848,6 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 			UnlockPage(old_page);
 			break;
 		}
-		delete_from_swap_cache_nolock(old_page);
 		UnlockPage(old_page);
 		/* FallThrough */
 	case 1:
@@ -1085,14 +1087,9 @@ static int do_swap_page(struct mm_struct * mm,
 	 */
 	lock_page(page);
 	swap_free(entry);
-	if (write_access && !is_page_shared(page)) {
-		delete_from_swap_cache_nolock(page);
-		UnlockPage(page);
-		page = replace_with_highmem(page);
-		pte = mk_pte(page, vma->vm_page_prot);
+	if (write_access && !is_page_shared(page))
 		pte = pte_mkwrite(pte_mkdirty(pte));
-	} else
-		UnlockPage(page);
+	UnlockPage(page);
 
 	set_pte(page_table, pte);
 	/* No need to invalidate - it was non-present before */

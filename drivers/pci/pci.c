@@ -354,16 +354,16 @@ static void
 run_sbin_hotplug(struct pci_dev *pdev, int insert)
 {
 	int i;
-	char *argv[3], *envp[7];
-	char id[20], sub_id[24], bus_id[64], class_id[20];
+	char *argv[3], *envp[8];
+	char id[20], sub_id[24], bus_id[24], class_id[20];
 
 	if (!hotplug_path[0])
 		return;
 
-	sprintf(class_id, "PCI_CLASS=%X", pdev->class >> 8);
+	sprintf(class_id, "PCI_CLASS=%X", pdev->class);
 	sprintf(id, "PCI_ID=%X/%X", pdev->vendor, pdev->device);
 	sprintf(sub_id, "PCI_SUBSYS_ID=%X/%X", pdev->subsystem_vendor, pdev->subsystem_device);
-	sprintf(bus_id, "PCI_BUS_ID=%s", pdev->slot_name);
+	sprintf(bus_id, "PCI_SLOT_NAME=%s", pdev->slot_name);
 
 	i = 0;
 	argv[i++] = hotplug_path;
@@ -376,6 +376,7 @@ run_sbin_hotplug(struct pci_dev *pdev, int insert)
 	envp[i++] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
 	
 	/* other stuff we want to pass to /sbin/hotplug */
+	envp[i++] = class_id;
 	envp[i++] = id;
 	envp[i++] = sub_id;
 	envp[i++] = bus_id;

@@ -23,6 +23,8 @@
 #include <asm/sn/io.h>
 #endif
 
+extern unsigned long bus_to_baddr[256];
+
 /*
  * Slowdown I/O port space accesses for antique hardware.
  */
@@ -109,22 +111,6 @@ extern inline unsigned long virt_to_phys(volatile void * address)
 extern inline void * phys_to_virt(unsigned long address)
 {
 	return (void *)(address + PAGE_OFFSET);
-}
-
-#define	BRIDGE_DIRECT_MAPPED_BASE	0xa180000000000000ull
-
-/*
- * IO bus memory addresses are also 1:1 with the physical address
- * This simplistic model doesn't hold for the Origin.
- */
-extern inline unsigned long virt_to_bus(volatile void * address)
-{
-	return (((unsigned long)address - PAGE_OFFSET)|BRIDGE_DIRECT_MAPPED_BASE);
-}
-
-extern inline void * bus_to_virt(unsigned long address)
-{
-	return (void *)((address & ~BRIDGE_DIRECT_MAPPED_BASE) + PAGE_OFFSET);
 }
 
 /*

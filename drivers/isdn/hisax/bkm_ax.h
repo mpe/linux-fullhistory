@@ -1,4 +1,4 @@
-/* $Id: bkm_ax.h,v 1.5 2000/11/19 17:41:03 kai Exp $
+/* $Id: bkm_ax.h,v 1.5.6.1 2000/11/28 12:02:46 kai Exp $
  * bkm_ax.h   low level decls for T-Berkom cards A4T and Scitel Quadro (4*S0, passive)
  *
  * Author     Roland Klabunde (R.Klabunde@Berkom.de)
@@ -16,27 +16,6 @@
 #define	SCT_3		3
 #define	SCT_4		4
 #define BKM_A4T		5
-
-
-/* A4T																*/
-#ifndef PCI_VENDOR_ID_ZORAN
-#define PCI_VENDOR_ID_ZORAN	0x11DE
-#endif
-#ifndef PCI_DEVICE_ID_ZORAN_36120
-#define PCI_DEVICE_ID_ZORAN_36120	0x6120
-#endif
-#define	A4T_SUBVEN_ID		0x0871	
-#define	A4T_SUBSYS_ID		0xFFA4
-/* Scitel Quadro 																*/
-#ifndef PCI_VENDOR_ID_PLX
-#define PCI_VENDOR_ID_PLX	0x10B5
-#endif
-#ifndef PCI_DEVICE_ID_PLX_9050
-#define PCI_DEVICE_ID_PLX_9050	0x9050
-#endif
-#define	SCT_SUBVEN_ID		0x0871
-#define	SCT_SUBSYS_ID		0xFFA8
-
 
 #define	PLX_ADDR_PLX		0x14	/* Addr PLX configuration */
 #define	PLX_ADDR_ISAC		0x18	/* Addr ISAC */

@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.54 2000/08/02 06:05:16 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.55 2000/11/28 13:13:27 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -205,7 +205,7 @@ struct net_device *ipmr_reg_vif(struct vifctl *v)
 	dev->flags		= IFF_NOARP;
 	dev->hard_start_xmit	= reg_vif_xmit;
 	dev->get_stats		= reg_vif_get_stats;
-	dev->new_style		= 1;
+	dev->features		|= NETIF_F_DYNALLOC;
 
 	if (register_netdevice(dev)) {
 		kfree(dev);

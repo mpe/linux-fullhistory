@@ -15,7 +15,7 @@
 
 static char ppbuf[1024];
 
-void __init prom_printf(char *fmt, ...)
+void prom_printf(char *fmt, ...)
 {
 	va_list args;
 	char ch, *bptr;

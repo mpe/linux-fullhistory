@@ -737,7 +737,7 @@ static struct FsmNode L1BFnList[] __initdata =
 
 #define L1B_FN_COUNT (sizeof(L1BFnList)/sizeof(struct FsmNode))
 
-void __init
+void __init 
 Isdnl1New(void)
 {
 #ifdef HISAX_UINTERFACE

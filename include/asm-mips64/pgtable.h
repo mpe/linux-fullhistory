@@ -526,7 +526,7 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define swp_entry_to_pte(x)	((pte_t) { (x).val })
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
-#define PageSkip(page)		test_bit(PG_skip, &(page)->flags)
+#define PageSkip(page)		(0)
 #ifndef CONFIG_DISCONTIGMEM
 #define kern_addr_valid(addr)	(1)
 #endif
@@ -696,6 +696,19 @@ extern inline void set_wired(unsigned long val)
 		"mtc0 %0, $6\n\t"
 		".set reorder"
 		: : "r" (val));
+}
+
+extern inline unsigned long get_info(void)
+{
+	unsigned long val;
+
+	__asm__(
+		".set push\n\t"
+		".set reorder\n\t"
+		"mfc0 %0, $7\n\t"
+		".set pop"
+		: "=r" (val));
+	return val;
 }
 
 /* CP0_TAGLO and CP0_TAGHI registers */

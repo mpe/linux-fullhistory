@@ -185,7 +185,7 @@ show_mem(void)
 			reserved++;
 		else if (PageSwapCache(mem_map+i))
 			cached++;
-		else if (!atomic_read(&mem_map[i].count))
+		else if (!page_count(mem_map+i))
 			free++;
 		else
 			shared += atomic_read(&mem_map[i].count) - 1;

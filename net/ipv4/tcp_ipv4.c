@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.220 2000/11/14 07:26:02 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.221 2000/11/28 17:04:10 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1320,17 +1320,14 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	if (req == NULL)
 		goto drop;
 
- 	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+	tcp_clear_options(&tp);
 	tp.mss_clamp = 536;
 	tp.user_mss = sk->tp_pinfo.af_tcp.user_mss;
 
-	tcp_parse_options(skb, &tp);
+	tcp_parse_options(skb, &tp, 0);
 
 	if (want_cookie) {
-		tp.sack_ok = 0;
-		tp.wscale_ok = 0;
-		tp.snd_wscale = 0;
-		tp.tstamp_ok = 0;
+		tcp_clear_options(&tp);
 		tp.saw_tstamp = 0;
 	}
 
@@ -1343,6 +1340,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		tp.saw_tstamp = 0;
 		tp.tstamp_ok = 0;
 	}
+	tp.tstamp_ok = tp.saw_tstamp;
 
 	tcp_openreq_init(req, &tp, skb);
 
@@ -2016,7 +2014,8 @@ static void get_tcp_sock(struct sock *sp, char *tmpbuf, int i)
 		tp->probes_out,
 		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp,
-		tp->rto, tp->ack.ato, tp->ack.quick, tp->ack.pingpong, sp->sndbuf
+		tp->rto, tp->ack.ato, (tp->ack.quick<<1)|tp->ack.pingpong,
+		tp->snd_cwnd, tp->snd_ssthresh>=0xFFFF?-1:tp->snd_ssthresh
 		);
 }
 

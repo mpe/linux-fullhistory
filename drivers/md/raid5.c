@@ -1516,8 +1516,8 @@ static int raid5_sync_request (mddev_t *mddev, unsigned long block_nr)
 	raid5_conf_t *conf = (raid5_conf_t *) mddev->private;
 	struct stripe_head *sh;
 	int sectors_per_chunk = conf->chunk_size >> 9;
-	unsigned long stripe = (block_nr<<2)/sectors_per_chunk;
-	int chunk_offset = (block_nr<<2) % sectors_per_chunk;
+	unsigned long stripe = (block_nr<<1)/sectors_per_chunk;
+	int chunk_offset = (block_nr<<1) % sectors_per_chunk;
 	int dd_idx, pd_idx;
 	unsigned long first_sector;
 	int raid_disks = conf->raid_disks;

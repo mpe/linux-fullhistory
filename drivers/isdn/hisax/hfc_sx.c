@@ -1487,7 +1487,7 @@ setup_hfcsx(struct IsdnCard *card)
 	cs->hw.hfcsx.int_s1 = 0;
 	cs->dc.hfcsx.ph_state = 0;
 	cs->hw.hfcsx.fifo = 255;
-	if ((cs->typ == ISDN_CTYPE_HFC_SX) ||
+	if ((cs->typ == ISDN_CTYPE_HFC_SX) || 
 	    (cs->typ == ISDN_CTYPE_HFC_SP_PCMCIA)) {
 	        if ((!cs->hw.hfcsx.base) || 
 		    check_region((cs->hw.hfcsx.base), 2)) {

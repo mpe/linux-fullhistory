@@ -1,11 +1,10 @@
-/* $Id: ptrace.h,v 1.3 1999/12/04 03:59:12 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999 by Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1994, 95, 96, 97, 98, 99, 2000 by Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
 #ifndef _ASM_PTRACE_H
 #define _ASM_PTRACE_H
@@ -56,6 +55,19 @@ struct pt_regs {
 };
 
 #endif /* !(_LANGUAGE_ASSEMBLY__) */
+
+/* Arbitrarily choose the same ptrace numbers as used by the Sparc code. */
+/* #define PTRACE_GETREGS		12 */
+/* #define PTRACE_SETREGS		13 */
+/* #define PTRACE_GETFPREGS		14 */
+/* #define PTRACE_SETFPREGS		15 */
+/* #define PTRACE_GETFPXREGS		18 */
+/* #define PTRACE_SETFPXREGS		19 */
+
+#define PTRACE_SETOPTIONS	21
+
+/* options set using PTRACE_SETOPTIONS */
+#define PTRACE_O_TRACESYSGOOD	0x00000001
 
 #ifdef _LANGUAGE_ASSEMBLY
 #include <asm/offset.h>

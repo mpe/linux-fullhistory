@@ -486,6 +486,18 @@ lc_start_delay(struct FsmInst *fi, int event, void *arg)
 }
 
 static void
+lc_start_delay_check(struct FsmInst *fi, int event, void *arg)
+/* 20/09/00 - GE timer not user for NI-1 as layer 2 should stay up */
+{
+       struct PStack *st = fi->userdata;
+
+       FsmChangeState(fi, ST_L3_LC_REL_DELAY);
+       /* 19/09/00 - GE timer not user for NI-1 */
+       if (st->protocol != ISDN_PTYPE_NI1) 
+       		FsmAddTimer(&st->l3.l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 50);
+}
+
+static void
 lc_release_req(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;

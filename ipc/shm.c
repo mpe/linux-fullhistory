@@ -129,7 +129,6 @@ static int shm_swapout(struct page *, struct file *);
 static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
 #endif
 
-static void zshm_swap (int prio, int gfp_mask);
 static void zmap_unuse(swp_entry_t entry, struct page *page);
 static void shmzero_open(struct vm_area_struct *shmd);
 static void shmzero_close(struct vm_area_struct *shmd);
@@ -1374,14 +1373,40 @@ asmlinkage long sys_shmdt (char *shmaddr)
 /*
  * Enter the shm page into the SHM data structures.
  *
- * The way "nopage" is done, we don't actually have to
- * do anything here: nopage will have filled in the shm
- * data structures already, and shm_swap_out() will just
- * work off them..
+ * This turns the physical page into a swap cache entry.
  */
 static int shm_swapout(struct page * page, struct file *file)
 {
-	return 0;
+	struct shmid_kernel *shp;
+	struct inode * inode = file->f_dentry->d_inode;
+	swp_entry_t entry;
+	unsigned int idx;
+
+	idx = page->index;
+	entry = get_swap_page();
+	if (!entry.val)
+		return -ENOMEM;
+
+	/* Add it to the swap cache */
+	add_to_swap_cache(page, entry);
+	SetPageDirty(page);
+
+	/* Add it to the shm data structures */
+	swap_duplicate(entry);		/* swap-cache and SHM_ENTRY */
+	shp = shm_lock(inode->i_ino);
+	SHM_ENTRY (shp, idx) = swp_entry_to_pte(entry);
+	shm_unlock(inode->i_ino);
+
+	/*
+	 * We had one extra page count for the SHM_ENTRY.
+	 * We just overwrote it, so we should free that
+	 * count too (the VM layer will do an additional
+	 * free that free's the page table count that
+	 * it got rid of itself).
+	 */
+	page_cache_free(page);
+
+	return 1;		/* We might have slept */
 }
 
 /*
@@ -1395,47 +1420,58 @@ static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx,
 	if (idx >= shp->shm_npages)
 		return NOPAGE_SIGBUS;
 
+repeat:
+	/* Do we already have the page in memory? */
 	pte = SHM_ENTRY(shp,idx);
-	if (!pte_present(pte)) {
-		/* page not present so shm_swap can't race with us
-		   and the semaphore protects us by other tasks that
-		   could potentially fault on our pte under us */
-		if (pte_none(pte)) {
-			shm_unlock(shp->id);
-			page = page_cache_alloc();
-			if (!page)
-				goto oom;
-			clear_user_highpage(page, address);
-			if ((shp != shm_lock(shp->id)) && (shp->id != zero_id))
-				BUG();
-		} else {
-			swp_entry_t entry = pte_to_swp_entry(pte);
-
-			shm_unlock(shp->id);
-			page = lookup_swap_cache(entry);
-			if (!page) {
-				lock_kernel();
-				swapin_readahead(entry);
-				page = read_swap_cache(entry);
-				unlock_kernel();
-				if (!page)
-					goto oom;
-			}
-			delete_from_swap_cache(page);
-			page = replace_with_highmem(page);
-			swap_free(entry);
-			if ((shp != shm_lock(shp->id)) && (shp->id != zero_id))
-				BUG();
-			(*swp)--;
-		}
-		(*rss)++;
-		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
-		SHM_ENTRY(shp, idx) = pte;
+	if (pte_present(pte)) {	
+		/* Yes - just increment the page count */
+		page = pte_page(pte);
+		page_cache_get(page);
+		return page;
 	}
 
-	/* pte_val(pte) == SHM_ENTRY (shp, idx) */
-	page_cache_get(pte_page(pte));
-	return pte_page(pte);
+	/* No, but maybe we ahve a page cache entry for it? */
+	if (!pte_none(pte)) {
+		swp_entry_t entry = pte_to_swp_entry(pte);
+
+		shm_unlock(shp->id);
+
+		/* Look it up or read it in.. */
+		page = lookup_swap_cache(entry);
+		if (!page) {
+			lock_kernel();
+			swapin_readahead(entry);
+			page = read_swap_cache(entry);
+			unlock_kernel();
+			if (!page)
+				goto oom;
+		}
+		if ((shp != shm_lock(shp->id)) && (shp->id != zero_id))
+			BUG();
+		(*swp)--;
+		return page;
+	}
+
+	/* Ok, get a new page */
+	shm_unlock(shp->id);
+	page = page_cache_alloc();
+	if (!page)
+		goto oom;
+	clear_user_highpage(page, address);
+	if ((shp != shm_lock(shp->id)) && (shp->id != zero_id))
+		BUG();
+
+	page->index = idx;
+	/* Did somebody else allocate it while we slept? */
+	if (!pte_none(SHM_ENTRY(shp, idx))) {
+		page_cache_free(page);
+		goto repeat;
+	}
+
+	pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
+	SHM_ENTRY(shp, idx) = pte;
+	page_cache_get(page);	/* one for the page table, once more for SHM_ENTRY */
+	return page;
 
 oom:
 	shm_lock(shp->id);
@@ -1461,129 +1497,6 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	return(page);
 }
 
-#define OKAY	0
-#define RETRY	1
-#define FAILED	2
-
-static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_t swap_entry, int *counter, struct page **outpage)
-{
-	pte_t page;
-	struct page *page_map;
-
-	page = SHM_ENTRY(shp, idx);
-	if (!pte_present(page))
-		return RETRY;
-	page_map = pte_page(page);
-	if (page_map->zone->free_pages > page_map->zone->pages_high)
-		return RETRY;
-	if (shp->id != zero_id) swap_attempts++;
-
-	if (--*counter < 0) /* failed */
-		return FAILED;
-	if (page_count(page_map) != 1)
-		return RETRY;
-
-	lock_page(page_map);
-	SHM_ENTRY (shp, idx) = swp_entry_to_pte(swap_entry);
-
-	/* add the locked page to the swap cache before allowing
-	   the swapin path to run lookup_swap_cache(). This avoids
-	   reading a not yet uptodate block from disk.
-	   NOTE: we just accounted the swap space reference for this
-	   swap cache page at __get_swap_page() time. */
-	add_to_swap_cache(*outpage = page_map, swap_entry);
-	return OKAY;
-}
-
-static void shm_swap_postop(struct page *page)
-{
-	lock_kernel();
-	rw_swap_page(WRITE, page, 0);
-	unlock_kernel();
-	page_cache_release(page);
-}
-
-static int shm_swap_preop(swp_entry_t *swap_entry)
-{
-	lock_kernel();
-	/* subtle: preload the swap count for the swap cache. We can't
-	   increase the count inside the critical section as we can't release
-	   the shm_lock there. And we can't acquire the big lock with the
-	   shm_lock held (otherwise we would deadlock too easily). */
-	*swap_entry = __get_swap_page(2);
-	if (!(*swap_entry).val) {
-		unlock_kernel();
-		return 1;
-	}
-	unlock_kernel();
-	return 0;
-}
-
-/*
- * Goes through counter = (shm_rss >> prio) present shm pages.
- */
-static unsigned long swap_id; /* currently being swapped */
-static unsigned long swap_idx; /* next to swap */
-
-int shm_swap (int prio, int gfp_mask)
-{
-	struct shmid_kernel *shp;
-	swp_entry_t swap_entry;
-	unsigned long id, idx;
-	int loop = 0;
-	int counter;
-	struct page * page_map;
-
-	/*
-	 * Push this inside:
-	 */
-	if (!(gfp_mask & __GFP_IO))
-		return 0;
-
-	zshm_swap(prio, gfp_mask);
-	counter = shm_rss >> prio;
-	if (!counter)
-		return 0;
-	if (shm_swap_preop(&swap_entry))
-		return 0;
-
-	shm_lockall();
-check_id:
-	shp = shm_get(swap_id);
-	if(shp==NULL || shp->shm_flags & PRV_LOCKED) {
-next_id:
-		swap_idx = 0;
-		if (++swap_id > shm_ids.max_id) {
-			swap_id = 0;
-			if (loop) {
-failed:
-				shm_unlockall();
-				__swap_free(swap_entry, 2);
-				return 0;
-			}
-			loop = 1;
-		}
-		goto check_id;
-	}
-	id = swap_id;
-
-check_table:
-	idx = swap_idx++;
-	if (idx >= shp->shm_npages)
-		goto next_id;
-
-	switch (shm_swap_core(shp, idx, swap_entry, &counter, &page_map)) {
-		case RETRY: goto check_table;
-		case FAILED: goto failed;
-	}
-	swap_successes++;
-	shm_swp++;
-	shm_rss--;
-	shm_unlockall();
-
-	shm_swap_postop(page_map);
-	return 1;
-}
 
 /*
  * Free the swap entry and set the new pte for the shm page.
@@ -1710,7 +1623,6 @@ done:
 #define VMA_TO_SHP(vma)		((vma)->vm_file->private_data)
 
 static spinlock_t zmap_list_lock = SPIN_LOCK_UNLOCKED;
-static unsigned long zswap_idx; /* next to swap */
 static struct shmid_kernel *zswap_shp = &zshmid_kernel;
 static int zshm_rss;
 
@@ -1857,62 +1769,3 @@ static void zmap_unuse(swp_entry_t entry, struct page *page)
 	shm_unlock(zero_id);
 	spin_unlock(&zmap_list_lock);
 }
-
-static void zshm_swap (int prio, int gfp_mask)
-{
-	struct shmid_kernel *shp;
-	swp_entry_t swap_entry;
-	unsigned long idx;
-	int loop = 0;
-	int counter;
-	struct page * page_map;
-
-	counter = zshm_rss >> prio;
-	if (!counter)
-		return;
-next:
-	if (shm_swap_preop(&swap_entry))
-		return;
-
-	spin_lock(&zmap_list_lock);
-	shm_lock(zero_id);
-	if (zshmid_kernel.zero_list.next == 0)
-		goto failed;
-next_id:
-	if (zswap_shp == &zshmid_kernel) {
-		if (loop) {
-failed:
-			shm_unlock(zero_id);
-			spin_unlock(&zmap_list_lock);
-			__swap_free(swap_entry, 2);
-			return;
-		}
-		zswap_shp = list_entry(zshmid_kernel.zero_list.next, 
-					struct shmid_kernel, zero_list);
-		zswap_idx = 0;
-		loop = 1;
-	}
-	shp = zswap_shp;
-
-check_table:
-	idx = zswap_idx++;
-	if (idx >= shp->shm_npages) {
-		zswap_shp = list_entry(zswap_shp->zero_list.next, 
-					struct shmid_kernel, zero_list);
-		zswap_idx = 0;
-		goto next_id;
-	}
-
-	switch (shm_swap_core(shp, idx, swap_entry, &counter, &page_map)) {
-		case RETRY: goto check_table;
-		case FAILED: goto failed;
-	}
-	shm_unlock(zero_id);
-	spin_unlock(&zmap_list_lock);
-
-	shm_swap_postop(page_map);
-	if (counter)
-		goto next;
-	return;
-}
-

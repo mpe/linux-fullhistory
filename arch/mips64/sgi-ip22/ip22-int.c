@@ -1,5 +1,4 @@
-/* $Id: ip22-int.c,v 1.5 2000/03/02 02:36:50 ralf Exp $
- *
+/*
  * indy_int.c: Routines for generic manipulation of the INT[23] ASIC
  *             found on INDY workstations..
  *
@@ -65,7 +64,6 @@ static char lc2msk_to_irqnr[256];
 static char lc3msk_to_irqnr[256];
 
 extern asmlinkage void indyIRQ(void);
-int (*irq_cannonicalize)(int irq);
 
 #ifdef CONFIG_REMOTE_DEBUG
 extern void rs_kgdb_hook(int);
@@ -607,13 +605,7 @@ static inline void sgint_init(void)
 #endif
 }
 
-static int indy_irq_cannonicalize(int irq)
-{
-	return irq;	/* Sane hardware, sane code ... */
-}
-
 void __init init_IRQ(void)
 {
-	irq_cannonicalize = indy_irq_cannonicalize;
 	sgint_init();
 }

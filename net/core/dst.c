@@ -179,7 +179,8 @@ static int dst_dev_event(struct notifier_block *this, unsigned long event, void 
 				   now. _It_ _is_ _explicit_ _deliberate_
 				   _race_ _condition_.
 				 */
-				if (event!=NETDEV_DOWN && !dev->new_style &&
+				if (event!=NETDEV_DOWN &&
+				    !(dev->features & NETIF_F_DYNALLOC) &&
 				    dst->output == dst_blackhole) {
 					dst->dev = &loopback_dev;
 					dev_put(dev);

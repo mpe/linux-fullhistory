@@ -604,6 +604,8 @@ int prepare_binprm(struct linux_binprm *bprm)
 	/* Huh? We had already checked for MAY_EXEC, WTF do we check this? */
 	if (!(mode & 0111))	/* with at least _one_ execute bit set */
 		return -EACCES;
+	if (bprm->file->f_op == NULL)
+		return -EACCES;
 
 	bprm->e_uid = current->euid;
 	bprm->e_gid = current->egid;

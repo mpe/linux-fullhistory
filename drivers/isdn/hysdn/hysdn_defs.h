@@ -1,4 +1,4 @@
-/* $Id: hysdn_defs.h,v 1.5 2000/11/22 17:13:13 kai Exp $
+/* $Id: hysdn_defs.h,v 1.5.6.1 2000/11/28 12:02:47 kai Exp $
 
  * Linux driver for HYSDN cards, global definitions and exported vars and functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -114,21 +114,6 @@
 #define PROC_SUBDIR_NAME "hysdn"
 #define PROC_CONF_BASENAME "cardconf"
 #define PROC_LOG_BASENAME "cardlog"
-
-/************************/
-/* PCI constant defines */
-/************************/
-#define PCI_VENDOR_ID_HYPERCOPE 0x1365
-#define PCI_DEVICE_ID_PLX 0x9050	/* all DPRAM cards use the same id */
-
-/*****************************/
-/* sub ids determining cards */
-/*****************************/
-#define PCI_SUB_ID_OLD_ERGO 0x0104
-#define PCI_SUB_ID_ERGO     0x0106
-#define PCI_SUB_ID_METRO    0x0107
-#define PCI_SUB_ID_CHAMP2   0x0108
-#define PCI_SUB_ID_PLEXUS   0x0109
 
 /***********************************/
 /* PCI 32 bit parms for IO and MEM */

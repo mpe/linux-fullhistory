@@ -786,6 +786,10 @@ static int handle_iso_send(struct file_info *fi, struct pending_request *req,
         req->req.length = 0;
         queue_task(&req->tq, &packet->complete_tq);
 
+        spin_lock_irq(&fi->reqlists_lock);
+        list_add_tail(&req->list, &fi->req_pending);
+        spin_unlock_irq(&fi->reqlists_lock);
+
         if (!hpsb_send_packet(packet)) {
                 req->req.error = RAW1394_ERROR_SEND_ERROR;
                 queue_complete_req(req);

@@ -12,6 +12,7 @@
 #
 # Select the object file format to substitute into the linker script.
 #
+CPP=$(CC) -E
 ifdef CONFIG_CPU_LITTLE_ENDIAN
 tool-prefix	= mips64el-linux-
 else
@@ -129,6 +130,10 @@ else
 64bit-bfd = elf64-bigmips
 endif
 
+vmlinux: arch/mips64/ld.script.elf32
+arch/mips64/ld.script.elf32: arch/mips64/ld.script.elf32.S
+	$(CPP) -C -P -I$(HPATH) -imacros $(HPATH)/asm-mips64/sn/mapped_kernel.h -Umips arch/mips64/ld.script.elf32.S > arch/mips64/ld.script.elf32
+
 ifdef CONFIG_MAPPED_KERNEL
 vmlinux.64: vmlinux
 	$(OBJCOPY) -O $(64bit-bfd) --change-addresses=0xbfffffff40000000 $< $@
@@ -149,7 +154,7 @@ archclean:
 	@$(MAKEBOOT) clean
 	$(MAKE) -C arch/$(ARCH)/kernel clean
 	$(MAKE) -C arch/$(ARCH)/tools clean
-	rm -f vmlinux.64
+	rm -f vmlinux.64 arch/($ARCH)/ld.script.elf32
 
 archmrproper:
 	@$(MAKEBOOT) mrproper

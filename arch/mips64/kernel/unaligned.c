@@ -1,5 +1,4 @@
-/* $Id: unaligned.c,v 1.2 1999/11/23 17:12:50 ralf Exp $
- *
+/*
  * Handle unaligned accesses by emulation.
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -91,8 +90,8 @@
  * User code may only access USEG; kernel code may access the
  * entire address space.
  */
-#define check_axs(p,a,s)                                \
-	if ((long)(~(pc) & ((a) | ((a)+(s)))) < 0)      \
+#define check_axs(pc,a,s)				\
+	if ((long)(~(pc) & ((a) | ((a)+(s)))) < 0)	\
 		goto sigbus;
 
 static inline void

@@ -91,6 +91,8 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	 */
 	if (PageSwapCache(page)) {
 		entry.val = page->index;
+		if (pte_dirty(pte))
+			SetPageDirty(page);
 set_swap_pte:
 		swap_duplicate(entry);
 		set_pte(page_table, swp_entry_to_pte(entry));
@@ -168,10 +170,10 @@ out_failed:
 		flush_tlb_page(vma, address);
 		spin_unlock(&mm->page_table_lock);
 		error = swapout(page, file);
-		UnlockPage(page);
 		if (file) fput(file);
-		if (!error)
-			goto out_free_success;
+		if (error < 0)
+			goto out_unlock_restore;
+		UnlockPage(page);
 		deactivate_page(page);
 		page_cache_release(page);
 		return error;
@@ -192,9 +194,6 @@ out_failed:
 	SetPageDirty(page);
 	goto set_swap_pte;
 
-out_free_success:
-	page_cache_release(page);
-	return 1;
 out_unlock_restore:
 	set_pte(page_table, pte);
 	UnlockPage(page);
@@ -484,7 +483,7 @@ struct page * reclaim_page(zone_t * zone)
 			continue;
 		}
 
-		/* The page is dirty, or locked, move to inactive_diry list. */
+		/* The page is dirty, or locked, move to inactive_dirty list. */
 		if (page->buffers || TryLockPage(page)) {
 			del_page_from_inactive_clean_list(page);
 			add_page_to_inactive_dirty_list(page);
@@ -937,13 +936,6 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 		 */
 		shrink_dcache_memory(priority, gfp_mask);
 		shrink_icache_memory(priority, gfp_mask);
-
-		/* Try to get rid of some shared memory pages.. */
-		while (shm_swap(priority, gfp_mask)) {
-			made_progress = 1;
-			if (--count <= 0)
-				goto done;
-		}
 
 		/*
 		 * Then, try to page stuff out..

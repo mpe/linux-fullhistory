@@ -165,42 +165,6 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #endif /* defined (_LANGUAGE_ASSEMBLY) */
 
 /*
- * Inline code for use of the ll and sc instructions
- *
- * FIXME: This instruction is only available on MIPS ISA >=2.
- * Since these operations are only being used for atomic operations
- * the easiest workaround for the R[23]00 is to disable interrupts.
- * This fails for R3000 SMP machines which use that many different
- * technologies as replacement that it is difficult to create even
- * just a hook for for all machines to hook into.  The only good
- * thing is that there is currently no R3000 SMP machine on the
- * Linux/MIPS target list ...
- */
-#define load_linked(addr)                                       \
-({                                                              \
-	unsigned int __res;                                     \
-                                                                \
-	__asm__ __volatile__(                                   \
-	"ll\t%0,(%1)"                                           \
-	: "=r" (__res)                                          \
-	: "r" ((unsigned long) (addr)));                        \
-                                                                \
-	__res;                                                  \
-})
-
-#define store_conditional(addr,value)                           \
-({                                                              \
-	int	__res;                                          \
-                                                                \
-	__asm__ __volatile__(                                   \
-	"sc\t%0,(%2)"                                           \
-	: "=r" (__res)                                          \
-	: "0" (value), "r" (addr));                             \
-                                                                \
-	__res;                                                  \
-})
-
-/*
  * Bitfields in the R4xx0 cp0 status register
  */
 #define ST0_IE			0x00000001

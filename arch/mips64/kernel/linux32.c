@@ -5,7 +5,6 @@
  * Written by Ulf Carlsson (ulfc@engr.sgi.com)
  * sys32_execve from ia64/ia32 code, Feb 2000, Kanoj Sarcar (kanoj@sgi.com)
  */
-
 #include <linux/mm.h>
 #include <linux/errno.h>
 #include <linux/file.h>
@@ -22,6 +21,13 @@
 #include <linux/shm.h>
 #include <linux/sem.h>
 #include <linux/msg.h>
+#include <linux/sysctl.h>
+#include <linux/utime.h>
+#include <linux/utsname.h>
+#include <linux/personality.h>
+#include <linux/timex.h>
+#include <linux/dnotify.h>
+#include <net/sock.h>
 
 #include <asm/uaccess.h>
 #include <asm/mman.h>
@@ -174,6 +180,36 @@ asmlinkage int sys_ftruncate64(unsigned int fd, unsigned int high,
 	if ((int)high < 0)
 		return -EINVAL;
 	return sys_ftruncate(fd, ((long) high << 32) | low);
+}
+
+extern asmlinkage int sys_utime(char * filename, struct utimbuf * times);
+
+struct utimbuf32 {
+	__kernel_time_t32 actime, modtime;
+};
+
+asmlinkage int sys32_utime(char * filename, struct utimbuf32 *times)
+{
+	struct utimbuf t;
+	mm_segment_t old_fs;
+	int ret;
+	char *filenam;
+	
+	if (!times)
+		return sys_utime(filename, NULL);
+	if (get_user (t.actime, &times->actime) ||
+	    __get_user (t.modtime, &times->modtime))
+		return -EFAULT;
+	filenam = getname (filename);
+	ret = PTR_ERR(filenam);
+	if (!IS_ERR(filenam)) {
+		old_fs = get_fs();
+		set_fs (KERNEL_DS); 
+		ret = sys_utime(filenam, &t);
+		set_fs (old_fs);
+		putname (filenam);
+	}
+	return ret;
 }
 
 #if 0
@@ -1005,6 +1041,72 @@ bad_file:
 	return ret;
 }
 
+/* From the Single Unix Spec: pread & pwrite act like lseek to pos + op +
+   lseek back to original location.  They fail just like lseek does on
+   non-seekable files.  */
+
+asmlinkage ssize_t sys32_pread(unsigned int fd, char * buf,
+			       size_t count, u32 unused, loff_t pos)
+{
+	ssize_t ret;
+	struct file * file;
+	ssize_t (*read)(struct file *, char *, size_t, loff_t *);
+
+	ret = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto bad_file;
+	if (!(file->f_mode & FMODE_READ))
+		goto out;
+	ret = locks_verify_area(FLOCK_VERIFY_READ, file->f_dentry->d_inode,
+				file, pos, count);
+	if (ret)
+		goto out;
+	ret = -EINVAL;
+	if (!file->f_op || !(read = file->f_op->read))
+		goto out;
+	if (pos < 0)
+		goto out;
+	ret = read(file, buf, count, &pos);
+	if (ret > 0)
+		inode_dir_notify(file->f_dentry->d_parent->d_inode, DN_ACCESS);
+out:
+	fput(file);
+bad_file:
+	return ret;
+}
+
+asmlinkage ssize_t sys32_pwrite(unsigned int fd, const char * buf,
+			        size_t count, u32 unused, loff_t pos)
+{
+	ssize_t ret;
+	struct file * file;
+	ssize_t (*write)(struct file *, const char *, size_t, loff_t *);
+
+	ret = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto bad_file;
+	if (!(file->f_mode & FMODE_WRITE))
+		goto out;
+	ret = locks_verify_area(FLOCK_VERIFY_WRITE, file->f_dentry->d_inode,
+				file, pos, count);
+	if (ret)
+		goto out;
+	ret = -EINVAL;
+	if (!file->f_op || !(write = file->f_op->write))
+		goto out;
+	if (pos < 0)
+		goto out;
+
+	ret = write(file, buf, count, &pos);
+	if (ret > 0)
+		inode_dir_notify(file->f_dentry->d_parent->d_inode, DN_MODIFY);
+out:
+	fput(file);
+bad_file:
+	return ret;
+}
 /*
  * Ooo, nasty.  We need here to frob 32-bit unsigned longs to
  * 64-bit unsigned longs.
@@ -1326,9 +1428,11 @@ static inline int put_flock(struct flock *kfl, struct flock32 *ufl)
 	return err;
 }
 
-extern asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
+extern asmlinkage long
+sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
 
-asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
+asmlinkage long
+sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
 	case F_GETLK:
@@ -1339,18 +1443,33 @@ asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg
 			mm_segment_t old_fs;
 			long ret;
 			
-			if(get_flock(&f, (struct flock32 *)arg))
+			if (get_flock(&f, (struct flock32 *)arg))
 				return -EFAULT;
 			old_fs = get_fs(); set_fs (KERNEL_DS);
 			ret = sys_fcntl(fd, cmd, (unsigned long)&f);
 			set_fs (old_fs);
-			if(put_flock(&f, (struct flock32 *)arg))
+			if (put_flock(&f, (struct flock32 *)arg))
 				return -EFAULT;
 			return ret;
 		}
 	default:
 		return sys_fcntl(fd, cmd, (unsigned long)arg);
 	}
+}
+
+asmlinkage long
+sys32_fcntl64(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+	case F_GETLK64:
+		return sys_fcntl(fd, F_GETLK, arg);
+	case F_SETLK64:
+		return sys_fcntl(fd, F_SETLK, arg);
+	case F_SETLKW64:
+		return sys_fcntl(fd, F_SETLKW, arg);
+	}
+
+	return sys32_fcntl(fd, cmd, arg);
 }
 
 struct msgbuf32 { s32 mtype; char mtext[1]; };
@@ -1762,3 +1881,454 @@ sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u32 fifth)
 	return err;
 }
 
+struct sysctl_args32
+{
+	__kernel_caddr_t32 name;
+	int nlen;
+	__kernel_caddr_t32 oldval;
+	__kernel_caddr_t32 oldlenp;
+	__kernel_caddr_t32 newval;
+	__kernel_size_t32 newlen;
+	unsigned int __unused[4];
+};
+
+asmlinkage long sys32_sysctl(struct sysctl_args32 *uargs32)
+{
+	struct __sysctl_args kargs;
+	struct sysctl_args32 kargs32;
+	mm_segment_t old_fs;
+	int name[CTL_MAXNAME];
+	size_t oldlen[1];
+	int err, ret;
+
+	ret = -EFAULT;
+
+	memset(&kargs, 0, sizeof (kargs));
+	
+	err = get_user(kargs32.name, &uargs32->name);
+	err |= __get_user(kargs32.nlen, &uargs32->nlen);
+	err |= __get_user(kargs32.oldval, &uargs32->oldval);
+	err |= __get_user(kargs32.oldlenp, &uargs32->oldlenp);
+	err |= __get_user(kargs32.newval, &uargs32->newval);
+	err |= __get_user(kargs32.newlen, &uargs32->newlen);
+	if (err)
+		goto out;
+
+	if (kargs32.nlen == 0 || kargs32.nlen >= CTL_MAXNAME) {
+		ret = -ENOTDIR;
+		goto out;
+	}
+
+	kargs.name = name;
+	kargs.nlen = kargs32.nlen;
+	if (copy_from_user(kargs.name, (int *)A(kargs32.name),
+			   kargs32.nlen * sizeof(name) / sizeof(name[0])))
+		goto out;
+
+	if (kargs32.oldval) {
+		if (!kargs32.oldlenp || get_user(oldlen[0],
+						 (int *)A(kargs32.oldlenp)))
+			return -EFAULT;
+		kargs.oldlenp = oldlen;
+		kargs.oldval = kmalloc(oldlen[0], GFP_KERNEL);
+		if (!kargs.oldval) {
+			ret = -ENOMEM;
+			goto out;
+		}
+	}
+
+	if (kargs32.newval && kargs32.newlen) {
+		kargs.newval = kmalloc(kargs32.newlen, GFP_KERNEL);
+		if (!kargs.newval) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		if (copy_from_user(kargs.newval, (int *)A(kargs32.newval),
+				   kargs32.newlen))
+			goto out;
+	}
+
+	old_fs = get_fs(); set_fs (KERNEL_DS);
+	ret = sys_sysctl(&kargs);
+	set_fs (old_fs);
+
+	if (ret)
+		goto out;
+
+	if (kargs.oldval) {
+		if (put_user(oldlen[0], (int *)A(kargs32.oldlenp)) ||
+		    copy_to_user((int *)A(kargs32.oldval), kargs.oldval,
+				 oldlen[0]))
+			ret = -EFAULT;
+	}
+out:
+	if (kargs.oldval)
+		kfree(kargs.oldval);
+	if (kargs.newval)
+		kfree(kargs.newval);
+	return ret; 
+}
+
+asmlinkage long sys32_newuname(struct new_utsname * name)
+{
+	int ret = 0;
+
+	down_read(&uts_sem);
+	if (copy_to_user(name,&system_utsname,sizeof *name))
+		ret = -EFAULT;
+	up_read(&uts_sem);
+
+	if (current->personality == PER_LINUX32 && !ret)
+		if (copy_to_user(name->machine, "mips\0\0\0", 8))
+			ret = -EFAULT;
+
+	return ret;
+}
+
+extern asmlinkage long sys_personality(unsigned long);
+
+asmlinkage int sys32_personality(unsigned long personality)
+{
+	int ret;
+	if (current->personality == PER_LINUX32 && personality == PER_LINUX)
+		personality = PER_LINUX32;
+	ret = sys_personality(personality);
+	if (ret == PER_LINUX32)
+		ret = PER_LINUX;
+	return ret;
+}
+
+/* Handle adjtimex compatability. */
+
+struct timex32 {
+	u32 modes;
+	s32 offset, freq, maxerror, esterror;
+	s32 status, constant, precision, tolerance;
+	struct timeval32 time;
+	s32 tick;
+	s32 ppsfreq, jitter, shift, stabil;
+	s32 jitcnt, calcnt, errcnt, stbcnt;
+	s32  :32; s32  :32; s32  :32; s32  :32;
+	s32  :32; s32  :32; s32  :32; s32  :32;
+	s32  :32; s32  :32; s32  :32; s32  :32;
+};
+
+extern int do_adjtimex(struct timex *);
+
+asmlinkage int sys32_adjtimex(struct timex32 *utp)
+{
+	struct timex txc;
+	int ret;
+
+	memset(&txc, 0, sizeof(struct timex));
+
+	if(get_user(txc.modes, &utp->modes) ||
+	   __get_user(txc.offset, &utp->offset) ||
+	   __get_user(txc.freq, &utp->freq) ||
+	   __get_user(txc.maxerror, &utp->maxerror) ||
+	   __get_user(txc.esterror, &utp->esterror) ||
+	   __get_user(txc.status, &utp->status) ||
+	   __get_user(txc.constant, &utp->constant) ||
+	   __get_user(txc.precision, &utp->precision) ||
+	   __get_user(txc.tolerance, &utp->tolerance) ||
+	   __get_user(txc.time.tv_sec, &utp->time.tv_sec) ||
+	   __get_user(txc.time.tv_usec, &utp->time.tv_usec) ||
+	   __get_user(txc.tick, &utp->tick) ||
+	   __get_user(txc.ppsfreq, &utp->ppsfreq) ||
+	   __get_user(txc.jitter, &utp->jitter) ||
+	   __get_user(txc.shift, &utp->shift) ||
+	   __get_user(txc.stabil, &utp->stabil) ||
+	   __get_user(txc.jitcnt, &utp->jitcnt) ||
+	   __get_user(txc.calcnt, &utp->calcnt) ||
+	   __get_user(txc.errcnt, &utp->errcnt) ||
+	   __get_user(txc.stbcnt, &utp->stbcnt))
+		return -EFAULT;
+
+	ret = do_adjtimex(&txc);
+
+	if(put_user(txc.modes, &utp->modes) ||
+	   __put_user(txc.offset, &utp->offset) ||
+	   __put_user(txc.freq, &utp->freq) ||
+	   __put_user(txc.maxerror, &utp->maxerror) ||
+	   __put_user(txc.esterror, &utp->esterror) ||
+	   __put_user(txc.status, &utp->status) ||
+	   __put_user(txc.constant, &utp->constant) ||
+	   __put_user(txc.precision, &utp->precision) ||
+	   __put_user(txc.tolerance, &utp->tolerance) ||
+	   __put_user(txc.time.tv_sec, &utp->time.tv_sec) ||
+	   __put_user(txc.time.tv_usec, &utp->time.tv_usec) ||
+	   __put_user(txc.tick, &utp->tick) ||
+	   __put_user(txc.ppsfreq, &utp->ppsfreq) ||
+	   __put_user(txc.jitter, &utp->jitter) ||
+	   __put_user(txc.shift, &utp->shift) ||
+	   __put_user(txc.stabil, &utp->stabil) ||
+	   __put_user(txc.jitcnt, &utp->jitcnt) ||
+	   __put_user(txc.calcnt, &utp->calcnt) ||
+	   __put_user(txc.errcnt, &utp->errcnt) ||
+	   __put_user(txc.stbcnt, &utp->stbcnt))
+		ret = -EFAULT;
+
+	return ret;
+}
+
+/*
+ *  Declare the 32-bit version of the msghdr
+ */
+ 
+struct msghdr32 {
+	unsigned int    msg_name;	/* Socket name			*/
+	int		msg_namelen;	/* Length of name		*/
+	unsigned int    msg_iov;	/* Data blocks			*/
+	unsigned int	msg_iovlen;	/* Number of blocks		*/
+	unsigned int    msg_control;	/* Per protocol magic (eg BSD file descriptor passing) */
+	unsigned int	msg_controllen;	/* Length of cmsg list */
+	unsigned	msg_flags;
+};
+
+static inline int
+shape_msg(struct msghdr *mp, struct msghdr32 *mp32)
+{
+	int ret;
+	unsigned int i;
+
+	if (!access_ok(VERIFY_READ, mp32, sizeof(*mp32)))
+		return(-EFAULT);
+	ret = __get_user(i, &mp32->msg_name);
+	mp->msg_name = (void *)A(i);
+	ret |= __get_user(mp->msg_namelen, &mp32->msg_namelen);
+	ret |= __get_user(i, &mp32->msg_iov);
+	mp->msg_iov = (struct iovec *)A(i);
+	ret |= __get_user(mp->msg_iovlen, &mp32->msg_iovlen);
+	ret |= __get_user(i, &mp32->msg_control);
+	mp->msg_control = (void *)A(i);
+	ret |= __get_user(mp->msg_controllen, &mp32->msg_controllen);
+	ret |= __get_user(mp->msg_flags, &mp32->msg_flags);
+	return(ret ? -EFAULT : 0);
+}
+
+/*
+ *	Verify & re-shape IA32 iovec. The caller must ensure that the
+ *      iovec is big enough to hold the re-shaped message iovec.
+ *
+ *	Save time not doing verify_area. copy_*_user will make this work
+ *	in any case.
+ *
+ *	Don't need to check the total size for overflow (cf net/core/iovec.c),
+ *	32-bit sizes can't overflow a 64-bit count.
+ */
+
+static inline int
+verify_iovec32(struct msghdr *m, struct iovec *iov, char *address, int mode)
+{
+	int size, err, ct;
+	struct iovec32 *iov32;
+	
+	if(m->msg_namelen)
+	{
+		if(mode==VERIFY_READ)
+		{
+			err=move_addr_to_kernel(m->msg_name, m->msg_namelen, address);
+			if(err<0)
+				goto out;
+		}
+		
+		m->msg_name = address;
+	} else
+		m->msg_name = NULL;
+
+	err = -EFAULT;
+	size = m->msg_iovlen * sizeof(struct iovec32);
+	if (copy_from_user(iov, m->msg_iov, size))
+		goto out;
+	m->msg_iov=iov;
+
+	err = 0;
+	iov32 = (struct iovec32 *)iov;
+	for (ct = m->msg_iovlen; ct-- > 0; ) {
+		iov[ct].iov_len = (__kernel_size_t)iov32[ct].iov_len;
+		iov[ct].iov_base = (void *) A(iov32[ct].iov_base);
+		err += iov[ct].iov_len;
+	}
+out:
+	return err;
+}
+
+extern __inline__ void
+sockfd_put(struct socket *sock)
+{
+	fput(sock->file);
+}
+
+/* XXX This really belongs in some header file... -DaveM */
+#define MAX_SOCK_ADDR	128		/* 108 for Unix domain - 
+					   16 for IP, 16 for IPX,
+					   24 for IPv6,
+					   about 80 for AX.25 */
+
+extern struct socket *sockfd_lookup(int fd, int *err);
+
+/*
+ *	BSD sendmsg interface
+ */
+
+int sys32_sendmsg(int fd, struct msghdr32 *msg, unsigned flags)
+{
+	struct socket *sock;
+	char address[MAX_SOCK_ADDR];
+	struct iovec iovstack[UIO_FASTIOV], *iov = iovstack;
+	unsigned char ctl[sizeof(struct cmsghdr) + 20];	/* 20 is size of ipv6_pktinfo */
+	unsigned char *ctl_buf = ctl;
+	struct msghdr msg_sys;
+	int err, ctl_len, iov_size, total_len;
+	
+	err = -EFAULT;
+	if (shape_msg(&msg_sys, msg))
+		goto out; 
+
+	sock = sockfd_lookup(fd, &err);
+	if (!sock) 
+		goto out;
+
+	/* do not move before msg_sys is valid */
+	err = -EINVAL;
+	if (msg_sys.msg_iovlen > UIO_MAXIOV)
+		goto out_put;
+
+	/* Check whether to allocate the iovec area*/
+	err = -ENOMEM;
+	iov_size = msg_sys.msg_iovlen * sizeof(struct iovec32);
+	if (msg_sys.msg_iovlen > UIO_FASTIOV) {
+		iov = sock_kmalloc(sock->sk, iov_size, GFP_KERNEL);
+		if (!iov)
+			goto out_put;
+	}
+
+	/* This will also move the address data into kernel space */
+	err = verify_iovec32(&msg_sys, iov, address, VERIFY_READ);
+	if (err < 0) 
+		goto out_freeiov;
+	total_len = err;
+
+	err = -ENOBUFS;
+
+	if (msg_sys.msg_controllen > INT_MAX)
+		goto out_freeiov;
+	ctl_len = msg_sys.msg_controllen; 
+	if (ctl_len) 
+	{
+		if (ctl_len > sizeof(ctl))
+		{
+			err = -ENOBUFS;
+			ctl_buf = sock_kmalloc(sock->sk, ctl_len, GFP_KERNEL);
+			if (ctl_buf == NULL) 
+				goto out_freeiov;
+		}
+		err = -EFAULT;
+		if (copy_from_user(ctl_buf, msg_sys.msg_control, ctl_len))
+			goto out_freectl;
+		msg_sys.msg_control = ctl_buf;
+	}
+	msg_sys.msg_flags = flags;
+
+	if (sock->file->f_flags & O_NONBLOCK)
+		msg_sys.msg_flags |= MSG_DONTWAIT;
+	err = sock_sendmsg(sock, &msg_sys, total_len);
+
+out_freectl:
+	if (ctl_buf != ctl)    
+		sock_kfree_s(sock->sk, ctl_buf, ctl_len);
+out_freeiov:
+	if (iov != iovstack)
+		sock_kfree_s(sock->sk, iov, iov_size);
+out_put:
+	sockfd_put(sock);
+out:       
+	return err;
+}
+
+/*
+ *	BSD recvmsg interface
+ */
+
+int
+sys32_recvmsg (int fd, struct msghdr32 *msg, unsigned int flags)
+{
+	struct socket *sock;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov=iovstack;
+	struct msghdr msg_sys;
+	unsigned long cmsg_ptr;
+	int err, iov_size, total_len, len;
+
+	/* kernel mode address */
+	char addr[MAX_SOCK_ADDR];
+
+	/* user mode address pointers */
+	struct sockaddr *uaddr;
+	int *uaddr_len;
+	
+	err=-EFAULT;
+	if (shape_msg(&msg_sys, msg))
+		goto out;
+
+	sock = sockfd_lookup(fd, &err);
+	if (!sock)
+		goto out;
+
+	err = -EINVAL;
+	if (msg_sys.msg_iovlen > UIO_MAXIOV)
+		goto out_put;
+	
+	/* Check whether to allocate the iovec area*/
+	err = -ENOMEM;
+	iov_size = msg_sys.msg_iovlen * sizeof(struct iovec);
+	if (msg_sys.msg_iovlen > UIO_FASTIOV) {
+		iov = sock_kmalloc(sock->sk, iov_size, GFP_KERNEL);
+		if (!iov)
+			goto out_put;
+	}
+
+	/*
+	 *	Save the user-mode address (verify_iovec will change the
+	 *	kernel msghdr to use the kernel address space)
+	 */
+	 
+	uaddr = msg_sys.msg_name;
+	uaddr_len = &msg->msg_namelen;
+	err = verify_iovec32(&msg_sys, iov, addr, VERIFY_WRITE);
+	if (err < 0)
+		goto out_freeiov;
+	total_len=err;
+
+	cmsg_ptr = (unsigned long)msg_sys.msg_control;
+	msg_sys.msg_flags = 0;
+	
+	if (sock->file->f_flags & O_NONBLOCK)
+		flags |= MSG_DONTWAIT;
+	err = sock_recvmsg(sock, &msg_sys, total_len, flags);
+	if (err < 0)
+		goto out_freeiov;
+	len = err;
+
+	if (uaddr != NULL) {
+		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr, uaddr_len);
+		if (err < 0)
+			goto out_freeiov;
+	}
+	err = __put_user(msg_sys.msg_flags, &msg->msg_flags);
+	if (err)
+		goto out_freeiov;
+	err = __put_user((unsigned long)msg_sys.msg_control-cmsg_ptr, 
+							 &msg->msg_controllen);
+	if (err)
+		goto out_freeiov;
+	err = len;
+
+out_freeiov:
+	if (iov != iovstack)
+		sock_kfree_s(sock->sk, iov, iov_size);
+out_put:
+	sockfd_put(sock);
+out:
+	return err;
+}

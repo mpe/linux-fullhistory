@@ -1,11 +1,30 @@
 /*
- * $Id: t1pci.c,v 1.11 2000/08/08 09:24:19 calle Exp $
+ * $Id: t1pci.c,v 1.13.6.1 2000/11/28 12:02:45 kai Exp $
  * 
  * Module for AVM T1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1pci.c,v $
+ * Revision 1.13.6.1  2000/11/28 12:02:45  kai
+ * MODULE_DEVICE_TABLE for 2.4
+ *
+ * Revision 1.13.2.2  2000/11/26 17:47:53  kai
+ * added PCI_DEV_TABLE for 2.4
+ *
+ * Revision 1.13.2.1  2000/11/26 17:14:19  kai
+ * fix device ids
+ * also needs patches to include/linux/pci_ids.h
+ *
+ * Revision 1.13  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.12  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
  * Revision 1.11  2000/08/08 09:24:19  calle
  * calls to pci_enable_device surounded by #ifndef COMPAT_HAS_2_2_PCI
  *
@@ -69,23 +88,19 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.13 $";
+static char *revision = "$Revision: 1.13.6.1 $";
 
 #undef CONFIG_T1PCI_DEBUG
 #undef CONFIG_T1PCI_POLLDEBUG
 
 /* ------------------------------------------------------------- */
 
-#ifndef PCI_VENDOR_ID_AVM
-#define PCI_VENDOR_ID_AVM	0x1244
-#endif
+static struct pci_device_id t1pci_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_T1, PCI_ANY_ID, PCI_ANY_ID },
+	{ }				/* Terminating entry */
+};
 
-#ifndef PCI_DEVICE_ID_AVM_T1
-#define PCI_DEVICE_ID_AVM_T1	0x1200
-#endif
-
-/* ------------------------------------------------------------- */
-
+MODULE_DEVICE_TABLE(pci, t1pci_pci_tbl);
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
 
 /* ------------------------------------------------------------- */

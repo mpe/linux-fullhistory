@@ -37,7 +37,7 @@
 #include <linux/smp_lock.h>
 
 #include <asm/m48t35.h>
-#include <asm/ioc3.h>
+#include <asm/sn/ioc3.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>

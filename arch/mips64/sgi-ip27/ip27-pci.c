@@ -199,10 +199,11 @@ pci_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 	if (irqstore[dev->bus->number][slot])
 		return(irqstore[dev->bus->number][slot]);
 	else {
-		lastirq++;	/* IOC3_ETH_INT hack */
 		irq_to_bus[lastirq] = dev->bus->number;
 		irq_to_slot[lastirq] = slot;
-		return(irqstore[dev->bus->number][slot] = lastirq);
+		irqstore[dev->bus->number][slot] = lastirq;
+		lastirq++;
+		return (lastirq - 1);
 	}
 }
 
@@ -314,11 +315,25 @@ pci_fixup_ioc3(struct pci_dev *d)
 		d->resource[i].end = 0UL;
 		d->resource[i].flags = 0UL;
 	}
-	d->subsystem_vendor = 0;
-	d->subsystem_device = 0;
-	d->irq = 1;
 
 	pci_disable_swapping(d);
+
+	/*
+	 * The serial driver will try to probe for serial ports
+	 * later on. MENET boards dbe out unrecoverably on sio space
+	 * access to the 4th ioc3. (The first 3 iocs work okay, they
+	 * have kbd/ms ports; all have ethernet ports). Catch this
+	 * case now and disable the serial driver from looking at 
+	 * these ioc3s. Identify MENET cards by seeing if an ioc3 is
+	 * at slot 3.
+	 */
+	d->subsystem_vendor = 0xFF00;
+	if (PCI_SLOT(d->devfn) == 3) {
+		struct list_head *p;
+		list_for_each(p, &d->bus->devices) {
+			list_entry(p, struct pci_dev, bus_list)->subsystem_vendor = 0;
+		}
+	}
 }
 
 static void __init

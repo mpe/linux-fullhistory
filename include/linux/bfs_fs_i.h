@@ -1,6 +1,6 @@
 /*
  *	include/linux/bfs_fs_i.h
- *	Copyright (C) 1999 Tigran Aivazian <tigran@ocston.org>
+ *	Copyright (C) 1999 Tigran Aivazian <tigran@veritas.com>
  */
 
 #ifndef _LINUX_BFS_FS_I

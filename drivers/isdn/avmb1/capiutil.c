@@ -997,8 +997,8 @@ EXPORT_SYMBOL(capi_message2str);
 EXPORT_SYMBOL(capi_info2str);
 
 static int __init capiutil_init(void)
-{
-	return 0;
+{ 
+	return 0; 
 }
 
 static void __exit capiutil_exit(void)

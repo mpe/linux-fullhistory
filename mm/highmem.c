@@ -22,36 +22,6 @@
 #include <linux/swap.h>
 #include <linux/slab.h>
 
-struct page * replace_with_highmem(struct page * page)
-{
-	struct page *highpage;
-
-	if (PageHighMem(page) || !nr_free_highpages())
-		return page;
-
-	highpage = alloc_page(GFP_ATOMIC|__GFP_HIGHMEM);
-	if (!highpage)
-		return page;
-	if (!PageHighMem(highpage)) {
-		page_cache_release(highpage);
-		return page;
-	}
-
-	copy_page(kmap(highpage), page_address(page));
-	kunmap(highpage);
-
-	if (page->mapping)
-		BUG();
-
-	/*
-	 * We can just forget the old page since 
-	 * we stored its data into the new highmem-page.
-	 */
-	page_cache_release(page);
-
-	return highpage;
-}
-
 /*
  * Virtual_count is not a pure "count".
  *  0 means that it is not mapped, and has not been mapped

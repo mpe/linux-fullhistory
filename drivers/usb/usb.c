@@ -30,7 +30,7 @@
 #include <linux/interrupt.h>  /* for in_interrupt() */
 #include <linux/kmod.h>
 #include <linux/init.h>
-
+#include <linux/devfs_fs_kernel.h>
 
 #ifdef CONFIG_USB_DEBUG
 	#define DEBUG
@@ -66,6 +66,8 @@ static void usb_check_support(struct usb_device *);
  */
 LIST_HEAD(usb_driver_list);
 LIST_HEAD(usb_bus_list);
+
+devfs_handle_t usb_devfs_handle;	/* /dev/usb dir. */
 
 static struct usb_busmap busmap;
 
@@ -2123,16 +2125,20 @@ static struct file_operations usb_fops = {
 
 int usb_major_init(void)
 {
-	if (register_chrdev(USB_MAJOR,"usb",&usb_fops)) {
+	if (devfs_register_chrdev(USB_MAJOR, "usb", &usb_fops)) {
 		err("unable to get major %d for usb devices", USB_MAJOR);
 		return -EBUSY;
 	}
+
+	usb_devfs_handle = devfs_mk_dir(NULL, "usb", NULL);
+
 	return 0;
 }
 
 void usb_major_cleanup(void)
 {
-	unregister_chrdev(USB_MAJOR, "usb");
+	devfs_unregister(usb_devfs_handle);
+	devfs_unregister_chrdev(USB_MAJOR, "usb");
 }
 
 
@@ -2235,3 +2241,5 @@ EXPORT_SYMBOL(usb_unlink_urb);
 
 EXPORT_SYMBOL(usb_control_msg);
 EXPORT_SYMBOL(usb_bulk_msg);
+
+EXPORT_SYMBOL(usb_devfs_handle);

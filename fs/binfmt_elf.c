@@ -247,7 +247,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 		goto out;
 	if (!elf_check_arch(interp_elf_ex))
 		goto out;
-	if (!interpreter->f_op->mmap)
+	if (!interpreter->f_op || !interpreter->f_op->mmap)
 		goto out;
 
 	/*
@@ -364,7 +364,7 @@ static unsigned long load_aout_interp(struct exec * interp_ex,
 
 	do_brk(0, text_data);
 	retval = -ENOEXEC;
-	if (!interpreter->f_op->read)
+	if (!interpreter->f_op || !interpreter->f_op->read)
 		goto out;
 	retval = interpreter->f_op->read(interpreter, addr, text_data, &offset);
 	if (retval < 0)
@@ -789,7 +789,7 @@ static int load_elf_library(struct file *file)
 
 	/* First of all, some simple consistency checks */
 	if (elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
-	   !elf_check_arch(&elf_ex) || !file->f_op->mmap)
+	   !elf_check_arch(&elf_ex) || !file->f_op || !file->f_op->mmap)
 		goto out;
 
 	/* Now read in all of the header information */

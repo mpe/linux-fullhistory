@@ -2659,9 +2659,9 @@ void wakeup_bdflush(int block)
 		return;
 	}
 
-	/* kflushd can wakeup us before we have a chance to
+	/* bdflush can wakeup us before we have a chance to
 	   go to sleep so we must be smart in handling
-	   this wakeup event from kflushd to avoid deadlocking in SMP
+	   this wakeup event from bdflush to avoid deadlocking in SMP
 	   (we are not holding any lock anymore in these two paths). */
 	__set_current_state(TASK_UNINTERRUPTIBLE);
 	add_wait_queue(&bdflush_done, &wait);
@@ -2824,7 +2824,7 @@ int bdflush(void *sem)
 
 	tsk->session = 1;
 	tsk->pgrp = 1;
-	strcpy(tsk->comm, "kflushd");
+	strcpy(tsk->comm, "bdflush");
 	bdflush_tsk = tsk;
 
 	/* avoid getting signals */

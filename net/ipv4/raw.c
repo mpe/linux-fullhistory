@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.55 2000/10/24 22:54:26 davem Exp $
+ * Version:	$Id: raw.c,v 1.56 2000/11/28 13:38:38 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -614,20 +614,16 @@ static void get_raw_sock(struct sock *sp, char *tmpbuf, int i)
 {
 	unsigned int dest, src;
 	__u16 destp, srcp;
-	int timer_active;
-	unsigned long timer_expires;
 
 	dest  = sp->daddr;
 	src   = sp->rcv_saddr;
 	destp = 0;
 	srcp  = sp->num;
-	timer_active = (timer_pending(&sp->timer)) ? 2 : 0;
-	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",
 		i, src, srcp, dest, destp, sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
-		timer_active, timer_expires-jiffies, 0,
+		0, 0L, 0,
 		sock_i_uid(sp), 0,
 		sock_i_ino(sp),
 		atomic_read(&sp->refcnt), sp);

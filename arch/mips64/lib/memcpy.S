@@ -1,13 +1,12 @@
-/* $Id: memcpy.S,v 1.2 1999/10/19 20:51:51 ralf Exp $
- *
+/*
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Unified implementation of memcpy, memmove and the __copy_user backend.
  *
- * Copyright (C) 1998, 1999 Ralf Baechle
- * Copyright (C) 1999 Silicon Graphics, Inc.
+ * Copyright (C) 1998, 1999, 2000 Ralf Baechle
+ * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  *
  * For __rmemcpy and memmove an exception is always a kernel bug, therefore
  * they're not protected.  In order to keep the exception fixup routine
@@ -28,12 +27,20 @@
 #define uswU	swr
 #define ulwL	lwl
 #define ulwU	lwr
+#define usdL	sdl
+#define usdU	sdr
+#define uldL	ldl
+#define uldU	ldr
 #endif
 #ifdef __MIPSEL__
 #define uswL	swr
 #define uswU	swl
 #define ulwL	lwr
 #define ulwU	lwl
+#define usdL	sdr
+#define usdU	sdl
+#define uldL	ldr
+#define uldU	ldl
 #endif
 
 #define EX(insn,reg,addr,handler)			\
@@ -49,6 +56,33 @@
 	PTR	9b, handler; 				\
 	PTR	10b, handler; 				\
 	.previous
+
+#define UEXD(insn,reg,addr,handler)			\
+9:	insn ## L reg, addr;				\
+10:	insn ## U reg, 7 + addr;			\
+	.section __ex_table,"a"; 			\
+	PTR	9b, handler; 				\
+	PTR	10b, handler; 				\
+	.previous
+
+/* ascending order, destination aligned  */
+#define MOVE_BIGGERCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	EX(ld, t0, (offset + 0x00)(src), l_fixup); \
+	EX(ld, t1, (offset + 0x08)(src), l_fixup); \
+	EX(ld, t2, (offset + 0x10)(src), l_fixup); \
+	EX(ld, t3, (offset + 0x18)(src), l_fixup); \
+	EX(sd, t0, (offset + 0x00)(dst), s_fixup); \
+	EX(sd, t1, (offset + 0x08)(dst), s_fixup); \
+	EX(sd, t2, (offset + 0x10)(dst), s_fixup); \
+	EX(sd, t3, (offset + 0x18)(dst), s_fixup); \
+	EX(ld, t0, (offset + 0x20)(src), l_fixup); \
+	EX(ld, t1, (offset + 0x28)(src), l_fixup); \
+	EX(ld, t2, (offset + 0x30)(src), l_fixup); \
+	EX(ld, t3, (offset + 0x38)(src), l_fixup); \
+	EX(sd, t0, (offset + 0x20)(dst), s_fixup); \
+	EX(sd, t1, (offset + 0x28)(dst), s_fixup); \
+	EX(sd, t2, (offset + 0x30)(dst), s_fixup); \
+	EX(sd, t3, (offset + 0x38)(dst), s_fixup)
 
 /* ascending order, destination aligned  */
 #define MOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
@@ -68,6 +102,25 @@
 	EX(sw, t1, (offset + 0x14)(dst), s_fixup); \
 	EX(sw, t2, (offset + 0x18)(dst), s_fixup); \
 	EX(sw, t3, (offset + 0x1c)(dst), s_fixup)
+
+/* ascending order, destination unaligned  */
+#define UMOVE_BIGGERCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	EX(ld, t0, (offset + 0x00)(src), l_fixup); \
+	EX(ld, t1, (offset + 0x08)(src), l_fixup); \
+	EX(ld, t2, (offset + 0x10)(src), l_fixup); \
+	EX(ld, t3, (offset + 0x18)(src), l_fixup); \
+	UEXD(usd, t0, (offset + 0x00)(dst), s_fixup); \
+	UEXD(usd, t1, (offset + 0x08)(dst), s_fixup); \
+	UEXD(usd, t2, (offset + 0x10)(dst), s_fixup); \
+	UEXD(usd, t3, (offset + 0x18)(dst), s_fixup); \
+	EX(ld, t0, (offset + 0x20)(src), l_fixup); \
+	EX(ld, t1, (offset + 0x28)(src), l_fixup); \
+	EX(ld, t2, (offset + 0x30)(src), l_fixup); \
+	EX(ld, t3, (offset + 0x38)(src), l_fixup); \
+	UEXD(usd, t0, (offset + 0x20)(dst), s_fixup); \
+	UEXD(usd, t1, (offset + 0x28)(dst), s_fixup); \
+	UEXD(usd, t2, (offset + 0x30)(dst), s_fixup); \
+	UEXD(usd, t3, (offset + 0x38)(dst), s_fixup)
 
 /* ascending order, destination unaligned  */
 #define UMOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
@@ -93,12 +146,12 @@
 	.set	noat
 
 	.align	5
-LEAF(xxmemcpy)					/* a0=dst a1=src a2=len */
+LEAF(memcpy)					/* a0=dst a1=src a2=len */
 	move	v0, a0				/* return value */
 __memcpy:
 FEXPORT(__copy_user)
 	xor	ta0, a0, a1
-	andi	ta0, ta0, 0x3
+	andi	ta0, ta0, 0x7
 	move	t3, a0
 	beqz	ta0, can_align
 	 sltiu	t8, a2, 0x8
@@ -127,7 +180,7 @@ hword_align:
 word_align:
 	beqz	t8, dword_align
 	 sltiu	t8, a2, 56
-	
+
 	EX(lh, ta0, (a1), l_fixup)
 	dsubu	a2, a2, 0x2
 	EX(sh, ta0, (a0), s_fixup)
@@ -185,10 +238,10 @@ begin_movement:
 	 andi	ta2, a2, 0x40
 
 move_128bytes:
-	MOVE_BIGCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
-	MOVE_BIGCHUNK(a1, a0, 0x20, ta0, ta1, ta3, t0)
-	MOVE_BIGCHUNK(a1, a0, 0x40, ta0, ta1, ta3, t0)
-	MOVE_BIGCHUNK(a1, a0, 0x60, ta0, ta1, ta3, t0)
+	pref	0, 2*128(a0)
+	pref	1, 2*128(a1)
+	MOVE_BIGGERCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
+	MOVE_BIGGERCHUNK(a1, a0, 0x40, ta0, ta1, ta3, t0)
 	dsubu	t8, t8, 0x01
 	daddu	a1, a1, 0x80
 	bnez	t8, move_128bytes
@@ -199,8 +252,7 @@ move_128bytes:
 	 andi	ta2, a2, 0x20
 
 move_64bytes:
-	MOVE_BIGCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
-	MOVE_BIGCHUNK(a1, a0, 0x20, ta0, ta1, ta3, t0)
+	MOVE_BIGGERCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
 	daddu	a1, a1, 0x40
 	daddu	a0, a0, 0x40
 
@@ -257,10 +309,8 @@ memcpy_u_src:
 	xori	ta0, 7
 	dsubu	ta0, a1
 
-	UEX(ulw, ta1, 0(a1), l_fixup)		# dword alignment
-	UEX(ulw, ta2, 4(a1), l_fixup)
-	UEX(usw, ta1, 0(a0), s_fixup)
-	UEX(usw, ta2, 4(a0), s_fixup)
+	UEXD(uld, ta1, 0(a1), l_fixup)		# dword alignment
+	UEXD(usd, ta1, 0(a0), s_fixup)
 
 	daddu	a1, ta0				# src
 	daddu	a0, ta0				# dst
@@ -276,11 +326,9 @@ u_qword_align:
 	beqz	t8, u_oword_align
 	 andi	t8, a1, 0x10
 
-	EX(lw, ta0, 0x00(a1), l_fixup)
-	EX(lw, ta1, 0x04(a1), l_fixup)
+	EX(ld, ta0, 0x00(a1), l_fixup)
 	dsubu	a2, a2, 0x8
-	UEX(usw, ta0, 0x00(a0), s_fixup)
-	UEX(usw, ta1, 0x04(a0), s_fixup)
+	UEXD(usd, ta0, 0x00(a0), s_fixup)
 	daddu	a1, a1, 0x8
 	andi	t8, a1, 0x10
 	daddu	a0, a0, 0x8
@@ -307,10 +355,8 @@ u_begin_movement:
 	 andi	ta2, a2, 0x40
 
 u_move_128bytes:
-	UMOVE_BIGCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
-	UMOVE_BIGCHUNK(a1, a0, 0x20, ta0, ta1, ta3, t0)
-	UMOVE_BIGCHUNK(a1, a0, 0x40, ta0, ta1, ta3, t0)
-	UMOVE_BIGCHUNK(a1, a0, 0x60, ta0, ta1, ta3, t0)
+	UMOVE_BIGGERCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
+	UMOVE_BIGGERCHUNK(a1, a0, 0x40, ta0, ta1, ta3, t0)
 	dsubu	t8, t8, 0x01
 	daddu	a1, a1, 0x80
 	bnez	t8, u_move_128bytes
@@ -321,8 +367,7 @@ u_move_128bytes:
 	 andi	ta2, a2, 0x20
 
 u_move_64bytes:
-	UMOVE_BIGCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
-	UMOVE_BIGCHUNK(a1, a0, 0x20, ta0, ta1, ta3, t0)
+	UMOVE_BIGGERCHUNK(a1, a0, 0x00, ta0, ta1, ta3, t0)
 	daddu	a1, a1, 0x40
 	daddu	a0, a0, 0x40
 
@@ -365,7 +410,7 @@ u_end_bytes:
 
 	jr	ra
 	 move	a2, zero
-	END(xxmemcpy)
+	END(memcpy)
 
 /* descending order, destination aligned  */
 #define RMOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
@@ -406,14 +451,14 @@ u_end_bytes:
 	usw	t3, (offset + 0x0c)(dst)
 
 	.align	5
-LEAF(xxmemmove)
+LEAF(memmove)
 	sltu	ta0, a0, a1			# dst < src -> memcpy
-	bnez	ta0, xxmemcpy
+	bnez	ta0, memcpy
 	 daddu	v0, a0, a2
 	sltu	ta0, v0, a1			# dst + len < src -> non-
 	bnez	ta0, __memcpy			# overlapping, can use memcpy
 	 move	v0, a0				/* return value */
-	END(xxmemmove)
+	END(memmove)
 
 LEAF(__rmemcpy)					/* a0=dst a1=src a2=len */
 	daddu	a0, a2				# dst = dst + len

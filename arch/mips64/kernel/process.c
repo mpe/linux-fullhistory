@@ -186,28 +186,51 @@ extern void scheduling_functions_end_here(void);
 #define first_sched	((unsigned long) scheduling_functions_start_here)
 #define last_sched	((unsigned long) scheduling_functions_end_here)
 
+/* get_wchan - a maintenance nightmare ...  */
 unsigned long get_wchan(struct task_struct *p)
 {
-	unsigned long schedule_frame;
-	unsigned long pc;
+	unsigned long frame, pc;
 
 	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;
 
 	pc = thread_saved_pc(&p->thread);
-	if (pc == (unsigned long) interruptible_sleep_on
-	    || pc == (unsigned long) sleep_on) {
-		schedule_frame = ((unsigned long *)p->thread.reg30)[9];
-		return ((unsigned long *)schedule_frame)[15];
-	}
-	if (pc == (unsigned long) interruptible_sleep_on_timeout
-	    || pc == (unsigned long) sleep_on_timeout) {
-		schedule_frame = ((unsigned long *)p->thread.reg30)[9];
-		return ((unsigned long *)schedule_frame)[16];
-	}
+	if (pc < first_sched || pc >= last_sched)
+		goto out;
+
+	if (pc >= (unsigned long) sleep_on_timeout)
+		goto schedule_timeout_caller;
+	if (pc >= (unsigned long) sleep_on)
+		goto schedule_caller;
+	if (pc >= (unsigned long) interruptible_sleep_on_timeout)
+		goto schedule_timeout_caller;
+	if (pc >= (unsigned long)interruptible_sleep_on)
+		goto schedule_caller;
+	goto schedule_timeout_caller;
+
+schedule_caller:
+	frame = ((unsigned long *)p->thread.reg30)[10];
+	pc    = ((unsigned long *)frame)[7];
+	goto out;
+
+schedule_timeout_caller:
+	/* Must be schedule_timeout ...  */
+	pc    = ((unsigned long *)p->thread.reg30)[11];
+	frame = ((unsigned long *)p->thread.reg30)[10];
+
+	/* The schedule_timeout frame ...  */
+	pc    = ((unsigned long *)frame)[9];
+	frame = ((unsigned long *)frame)[8];
+
 	if (pc >= first_sched && pc < last_sched) {
-		printk(KERN_DEBUG "Bug in %s\n", __FUNCTION__);
+		/* schedule_timeout called by interruptible_sleep_on_timeout */
+		pc    = ((unsigned long *)frame)[7];
+		frame = ((unsigned long *)frame)[6];
 	}
+
+out:
+	if (current->thread.mflags & MF_32BIT)	/* Kludge for 32-bit ps  */
+		pc &= 0xffffffff;
 
 	return pc;
 }

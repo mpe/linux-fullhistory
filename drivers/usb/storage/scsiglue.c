@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.17 2000/11/02 21:27:49 mdharm Exp $
+ * $Id: scsiglue.c,v 1.19 2000/11/13 22:28:55 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -124,7 +124,7 @@ static int release(struct Scsi_Host *psh)
 	us->action = US_ACT_EXIT;
 	wake_up(&(us->wqh));
 	down(&(us->notify));
-	
+
 	/* remove the pointer to the data structure we were using */
 	(struct us_data*)psh->hostdata[0] = NULL;
 
@@ -261,7 +261,7 @@ static int bus_reset( Scsi_Cmnd *srb )
 			US_DEBUGPX("skipping ourselves.\n");
 			continue;
 		}
-		
+
 		/* simulate a disconnect and reconnect for all interfaces */
 		US_DEBUGPX("simulating disconnect/reconnect.\n");
 		down(&intf->driver->serialize);
@@ -330,7 +330,7 @@ static int proc_info (char *buffer, char **start, off_t offset, int length,
 	if (!us) {
 		return -ESRCH;
 	}
-	
+
 	/* print the controler name */
 	SPRINTF("   Host scsi%d: usb-storage\n", hostno);
 

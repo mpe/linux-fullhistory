@@ -654,14 +654,23 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 	 */
 
 	if (in6_dev->nd_parms) {
-		if (ra_msg->retrans_timer)
-			in6_dev->nd_parms->retrans_time = (ntohl(ra_msg->retrans_timer)*HZ)/1000;
+		__u32 rtime = ntohl(ra_msg->retrans_timer);
 
-		if (ra_msg->reachable_time) {
-			__u32 rtime = (ntohl(ra_msg->reachable_time)*HZ)/1000;
+		if (rtime && rtime/1000 < MAX_SCHEDULE_TIMEOUT/HZ) {
+			rtime = (rtime*HZ)/1000;
+			if (rtime < HZ/10)
+				rtime = HZ/10;
+			in6_dev->nd_parms->retrans_time = rtime;
+		}
 
-			if (rtime &&
-			    rtime != in6_dev->nd_parms->base_reachable_time) {
+		rtime = ntohl(ra_msg->reachable_time);
+		if (rtime && rtime/1000 < MAX_SCHEDULE_TIMEOUT/(3*HZ)) {
+			rtime = (rtime*HZ)/1000;
+
+			if (rtime < HZ/10)
+				rtime = HZ/10;
+
+			if (rtime != in6_dev->nd_parms->base_reachable_time) {
 				in6_dev->nd_parms->base_reachable_time = rtime;
 				in6_dev->nd_parms->gc_staletime = 3 * rtime;
 				in6_dev->nd_parms->reachable_time = neigh_rand_reach_time(rtime);
@@ -1050,11 +1059,9 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 						neigh_release(neigh);
 					}
 				} else {
-					/* Hack. It will be freed upon exit from
-					   ndisc_rcv
-					 */
-					atomic_inc(&skb->users);
-					pneigh_enqueue(&nd_tbl, in6_dev->nd_parms, skb);
+					struct sk_buff *n = skb_clone(skb, GFP_ATOMIC);
+					if (n)
+						pneigh_enqueue(&nd_tbl, in6_dev->nd_parms, n);
 					in6_dev_put(in6_dev);
 					return 0;
 				}

@@ -84,11 +84,6 @@ struct icmphdr {
 
 #include <linux/ip.h>
 
-struct icmp_err {
-  int		errno;
-  unsigned	fatal:1;
-};
-
 /*
  *	Build xmit assembly blocks
  */

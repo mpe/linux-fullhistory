@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.67 2000/07/30 23:12:24 davem Exp $
+/* $Id: traps.c,v 1.68 2000/11/22 06:50:37 davem Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -551,7 +551,7 @@ void do_fpe_common(struct pt_regs *regs)
 			else if (fsr & 0x01)
 				info.si_code = FPE_FLTRES;
 		}
-		send_sig_info(SIGFPE, &info, current);
+		force_sig_info(SIGFPE, &info, current);
 	}
 }
 
@@ -594,7 +594,7 @@ void do_tof(struct pt_regs *regs)
 	info.si_code = EMT_TAGOVF;
 	info.si_addr = (void *)regs->tpc;
 	info.si_trapno = 0;
-	send_sig_info(SIGEMT, &info, current);
+	force_sig_info(SIGEMT, &info, current);
 }
 
 void do_div0(struct pt_regs *regs)
@@ -606,7 +606,7 @@ void do_div0(struct pt_regs *regs)
 	info.si_code = FPE_INTDIV;
 	info.si_addr = (void *)regs->tpc;
 	info.si_trapno = 0;
-	send_sig_info(SIGFPE, &info, current);
+	force_sig_info(SIGFPE, &info, current);
 }
 
 void instruction_dump (unsigned int *pc)
@@ -715,7 +715,7 @@ void do_illegal_instruction(struct pt_regs *regs)
 	info.si_code = ILL_ILLOPC;
 	info.si_addr = (void *)pc;
 	info.si_trapno = 0;
-	send_sig_info(SIGILL, &info, current);
+	force_sig_info(SIGILL, &info, current);
 }
 
 void mem_address_unaligned(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr)
@@ -734,7 +734,7 @@ void mem_address_unaligned(struct pt_regs *regs, unsigned long sfar, unsigned lo
 	info.si_code = BUS_ADRALN;
 	info.si_addr = (void *)sfar;
 	info.si_trapno = 0;
-	send_sig_info(SIGBUS, &info, current);
+	force_sig_info(SIGBUS, &info, current);
 }
 
 void do_privop(struct pt_regs *regs)
@@ -746,7 +746,7 @@ void do_privop(struct pt_regs *regs)
 	info.si_code = ILL_PRVOPC;
 	info.si_addr = (void *)regs->tpc;
 	info.si_trapno = 0;
-	send_sig_info(SIGILL, &info, current);
+	force_sig_info(SIGILL, &info, current);
 }
 
 void do_privact(struct pt_regs *regs)

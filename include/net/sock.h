@@ -383,7 +383,8 @@ struct tcp_opt {
 	__u32	urg_seq;	/* Seq of received urgent pointer */
 	__u16	urg_data;	/* Saved octet of OOB data and control flags */
 	__u8	pending;	/* Scheduled timer event	*/
-	__u8	__empty;
+	__u8	urg_mode;	/* In urgent mode		*/
+	__u32	snd_up;		/* Urgent pointer		*/
 
 	/* The syn_wait_lock is necessary only to avoid tcp_get_info having
 	 * to grab the main lock sock while browsing the listening hash
@@ -402,7 +403,7 @@ struct tcp_opt {
 	struct open_request	*accept_queue;
 	struct open_request	*accept_queue_tail;
 
-	int write_pending;	/* A write to socket waits to start. */
+	int			write_pending;	/* A write to socket waits to start. */
 
 	unsigned int		keepalive_time;	  /* time before keep alive takes place */
 	unsigned int		keepalive_intvl;  /* time interval between keep alive probes */

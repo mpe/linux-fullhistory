@@ -6,12 +6,16 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.45 2000/10/28 17:19:25 davem Exp $
+ *	$Id: sit.c,v 1.47 2000/11/28 13:49:22 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
+ *
+ *	Changes:
+ * Roger Venning <r.venning@telstra.com>:	6to4 support
+ * Nate Thompson <nate@thebog.net>:		6to4 support
  */
 
 #define __NO_VERSION__
@@ -176,7 +180,7 @@ struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	nt = (struct ip_tunnel*)dev->priv;
 	nt->dev = dev;
 	dev->init = ipip6_tunnel_init;
-	dev->new_style = 1;
+	dev->features |= NETIF_F_DYNALLOC;
 	memcpy(&nt->parms, parms, sizeof(*parms));
 	strcpy(dev->name, nt->parms.name);
 	if (dev->name[0] == 0) {
@@ -423,6 +427,21 @@ static inline int do_ip_send(struct sk_buff *skb)
 	return ip_send(skb);
 }
 
+
+/* Returns the embedded IPv4 address if the IPv6 address
+   comes from 6to4 (draft-ietf-ngtrans-6to4-04) addr space */
+
+static inline u32 try_6to4(struct in6_addr *v6dst)
+{
+	u32 dst = 0;
+
+	if (v6dst->s6_addr16[0] == htons(0x2002)) {
+	        /* 6to4 v6 addr has 16 bits prefix, 32 v4addr, 16 SLA, ... */
+		memcpy(&dst, &v6dst->s6_addr16[1], 4);
+	}
+	return dst;
+}
+
 /*
  *	This function assumes it is being called from dev_queue_xmit()
  *	and that skb is filled properly by that function.
@@ -452,6 +471,9 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (skb->protocol != __constant_htons(ETH_P_IPV6))
 		goto tx_error;
 
+	if (!dst)
+		dst = try_6to4(&iph6->daddr);
+
 	if (!dst) {
 		struct neighbour *neigh = NULL;
 
@@ -478,6 +500,10 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (ip_route_output(&rt, dst, tiph->saddr, RT_TOS(tos), tunnel->parms.link)) {
+		tunnel->stat.tx_carrier_errors++;
+		goto tx_error_icmp;
+	}
+	if (rt->rt_type != RTN_UNICAST) {
 		tunnel->stat.tx_carrier_errors++;
 		goto tx_error_icmp;
 	}

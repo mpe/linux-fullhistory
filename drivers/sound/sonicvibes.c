@@ -87,6 +87,7 @@
  *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
  *                       use Martin Mares' pci_assign_resource
  *    07.02.2000   0.26  Use pci_alloc_consistent and pci_register_driver
+ *    21.11.2000   0.27  Initialize dma buffers in poll, otherwise poll may return a bogus mask
  *
  */
 
@@ -1484,10 +1485,16 @@ static unsigned int sv_poll(struct file *file, struct poll_table_struct *wait)
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
+	if (file->f_mode & FMODE_WRITE) {
+		if (!s->dma_dac.ready && prog_dmabuf(s, 1))
+			return 0;
 		poll_wait(file, &s->dma_dac.wait, wait);
-	if (file->f_mode & FMODE_READ)
+	}
+	if (file->f_mode & FMODE_READ) {
+		if (!s->dma_adc.ready && prog_dmabuf(s, 0))
+			return 0;
 		poll_wait(file, &s->dma_adc.wait, wait);
+	}
 	spin_lock_irqsave(&s->lock, flags);
 	sv_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -2666,7 +2673,7 @@ static int __init init_sonicvibes(void)
 {
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.26 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.27 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

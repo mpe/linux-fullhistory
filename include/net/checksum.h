@@ -124,10 +124,31 @@ static __inline__ unsigned int csum_and_copy_to_user
 }
 #endif
 
-static inline unsigned int csum_chain(unsigned int csum, unsigned int addend)
+static inline unsigned int csum_add(unsigned int csum, unsigned int addend)
 {
 	csum += addend;
 	return csum + (csum < addend);
+}
+
+static inline unsigned int csum_sub(unsigned int csum, unsigned int addend)
+{
+	return csum_add(csum, ~addend);
+}
+
+static inline unsigned int
+csum_block_add(unsigned int csum, unsigned int csum2, int offset)
+{
+	if (offset&1)
+		csum2 = ((csum2&0xFF00FF)<<8)+((csum2>>8)&0xFF00FF);
+	return csum_add(csum, csum2);
+}
+
+static inline unsigned int
+csum_block_sub(unsigned int csum, unsigned int csum2, int offset)
+{
+	if (offset&1)
+		csum2 = ((csum2&0xFF00FF)<<8)+((csum2>>8)&0xFF00FF);
+	return csum_sub(csum, csum2);
 }
 
 #endif

@@ -511,7 +511,8 @@ static inline void locks_unlock_delete(struct file_lock **thisfl_p)
 	struct file_lock *fl = *thisfl_p;
 	int (*lock)(struct file *, int, struct file_lock *);
 
-	if ((lock = fl->fl_file->f_op->lock) != NULL) {
+	if (fl->fl_file->f_op &&
+	    (lock = fl->fl_file->f_op->lock) != NULL) {
 		fl->fl_type = F_UNLCK;
 		lock(fl->fl_file, F_SETLK, fl);
 	}
@@ -1355,7 +1356,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	if (!flock_to_posix_lock(filp, &file_lock, &flock))
 		goto out_putf;
 
-	if (filp->f_op->lock) {
+	if (filp->f_op && filp->f_op->lock) {
 		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			goto out_putf;
@@ -1479,7 +1480,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		goto out_putf;
 	}
 
-	if (filp->f_op->lock != NULL) {
+	if (filp->f_op && filp->f_op->lock != NULL) {
 		error = filp->f_op->lock(filp, cmd, file_lock);
 		if (error < 0)
 			goto out_putf;
@@ -1520,7 +1521,7 @@ int fcntl_getlk64(unsigned int fd, struct flock64 *l)
 	if (!flock64_to_posix_lock(filp, &file_lock, &flock))
 		goto out_putf;
 
-	if (filp->f_op->lock) {
+	if (filp->f_op && filp->f_op->lock) {
 		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			goto out_putf;
@@ -1617,7 +1618,7 @@ int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l)
 		goto out_putf;
 	}
 
-	if (filp->f_op->lock != NULL) {
+	if (filp->f_op && filp->f_op->lock != NULL) {
 		error = filp->f_op->lock(filp, cmd, file_lock);
 		if (error < 0)
 			goto out_putf;

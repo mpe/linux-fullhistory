@@ -1488,11 +1488,11 @@ static int filemap_write_page(struct file *file,
  * at the same time..
  */
 extern void wakeup_bdflush(int);
-int filemap_swapout(struct page * page, struct file * file)
+int filemap_swapout(struct page * page, struct file *file)
 {
-	int retval = filemap_write_page(file, page, 0);
+	filemap_write_page(file, page, 0);
 	wakeup_bdflush(0);
-	return retval;
+	return 1;	/* We might have slept */
 }
 
 /* Called with mm->page_table_lock held to protect against other

@@ -56,13 +56,13 @@ netjet_s_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		/* the 2nd write page is free */
 		sval = 0x08;
 	else	/* the 1st write page is free */
-		sval = 0x04;
+		sval = 0x04;	
 	if (inl(cs->hw.njet.base + NETJET_DMA_READ_ADR) <
 		inl(cs->hw.njet.base + NETJET_DMA_READ_IRQ))
 		/* the 2nd read page is free */
 		sval = sval | 0x02;
 	else	/* the 1st read page is free */
-		sval = sval | 0x01;
+		sval = sval | 0x01;	
 	if (sval != cs->hw.njet.last_is0) /* we have a DMA interrupt */
 	{
 		if (test_and_set_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags)) {
@@ -71,11 +71,11 @@ netjet_s_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		}
 		cs->hw.njet.irqstat0 = sval;
 		restore_flags(flags);
-		if ((cs->hw.njet.irqstat0 & NETJET_IRQM0_READ) !=
+		if ((cs->hw.njet.irqstat0 & NETJET_IRQM0_READ) != 
 			(cs->hw.njet.last_is0 & NETJET_IRQM0_READ))
 			/* we have a read dma int */
 			read_tiger(cs);
-		if (cs->hw.njet.irqstat0 & NETJET_IRQM0_WRITE) !=
+		if ((cs->hw.njet.irqstat0 & NETJET_IRQM0_WRITE) !=
 			(cs->hw.njet.last_is0 & NETJET_IRQM0_WRITE))
 			/* we have a write dma int */
 			write_tiger(cs);

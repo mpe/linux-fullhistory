@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.34 2000/11/24 17:05:37 kai Exp $
+/* $Id: hfc_pci.c,v 1.34.6.2 2000/11/28 12:02:46 kai Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -35,7 +35,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.34 $";
+static const char *hfcpci_revision = "$Revision: 1.34.6.2 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -51,25 +51,25 @@ typedef struct {
 
 static const PCI_ENTRY id_list[] =
 {
-	{0x1397, 0x2BD0, "CCD/Billion/Asuscom", "2BD0"},
-	{0x1397, 0xB000, "Billion", "B000"},
-	{0x1397, 0xB006, "Billion", "B006"},
-	{0x1397, 0xB007, "Billion", "B007"},
-	{0x1397, 0xB008, "Billion", "B008"},
-	{0x1397, 0xB009, "Billion", "B009"},
-	{0x1397, 0xB00A, "Billion", "B00A"},
-	{0x1397, 0xB00B, "Billion", "B00B"},
-	{0x1397, 0xB00C, "Billion", "B00C"},
-	{0x1043, 0x0675, "Asuscom/Askey", "675"},
-	{0x0871, 0xFFA2, "German telekom", "T-Concept"},
-	{0x0871, 0xFFA1, "German telekom", "A1T"},
-	{0x1051, 0x0100, "Motorola MC145575", "MC145575"},
-	{0x1397, 0xB100, "Seyeon", "B100"},
-	{0x15B0, 0x2BD0, "Zoltrix", "2BD0"},
-	{0x114F, 0x70,"Digi International", "Digi DataFire Micro V IOM2 (Europe)"},
-	{0x114F, 0x71,"Digi International", "Digi DataFire Micro V (Europe)"},
-	{0x114F, 0x72,"Digi International", "Digi DataFire Micro V IOM2 (North America)"},
-	{0x114F, 0x73,"Digi International", "Digi DataFire Micro V (North America)"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_2BD0, "CCD/Billion/Asuscom", "2BD0"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B000, "Billion", "B000"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B006, "Billion", "B006"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B007, "Billion", "B007"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B008, "Billion", "B008"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B009, "Billion", "B009"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00A, "Billion", "B00A"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00B, "Billion", "B00B"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00C, "Billion", "B00C"},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B100, "Seyeon", "B100"},
+	{PCI_VENDOR_ID_ASUSTEK, PCI_DEVICE_ID_ASUSTEK_0675, "Asuscom/Askey", "675"},
+	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_T_CONCEPT, "German telekom", "T-Concept"},
+	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_A1T, "German telekom", "A1T"},
+	{PCI_VENDOR_ID_ANIGMA, PCI_DEVICE_ID_ANIGMA_MC145575, "Motorola MC145575", "MC145575"},
+	{PCI_VENDOR_ID_ZOLTRIX, PCI_DEVICE_ID_ZOLTRIX_2BD0, "Zoltrix", "2BD0"},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_IOM2_E,"Digi International", "Digi DataFire Micro V IOM2 (Europe)"},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_E,"Digi International", "Digi DataFire Micro V (Europe)"},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_IOM2_A,"Digi International", "Digi DataFire Micro V IOM2 (North America)"},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_A,"Digi International", "Digi DataFire Micro V (North America)"},
 	{0, 0, NULL, NULL},
 };
 

@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Main Header File
  *
- * $Id: usb.h,v 1.10 2000/10/19 18:44:11 mdharm Exp $
+ * $Id: usb.h,v 1.11 2000/11/13 22:38:55 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -152,7 +152,7 @@ struct us_data {
 	int			host_number;	 /* to find us		*/
 	int			host_no;	 /* allocated by scsi	*/
 	Scsi_Cmnd		*srb;		 /* current srb		*/
-	
+
 	/* thread information */
 	Scsi_Cmnd		*queue_srb;	 /* the single queue slot */
 	int			action;		 /* what to do		  */
@@ -166,6 +166,7 @@ struct us_data {
 	struct semaphore	irq_urb_sem;	 /* to protect irq_urb	 */
 	struct urb		*irq_urb;	 /* for USB int requests */
 	unsigned char		irqbuf[2];	 /* buffer for USB IRQ	 */
+	unsigned char		irqdata[2];	 /* data from USB IRQ	 */
 
 	/* control and bulk communications data */
 	struct semaphore	current_urb_sem; /* to protect irq_urb	 */

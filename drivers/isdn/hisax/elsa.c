@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.26 2000/11/24 17:05:37 kai Exp $
+/* $Id: elsa.c,v 2.26.6.1 2000/11/28 12:02:46 kai Exp $
  *
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -30,7 +30,7 @@
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.26 $";
+const char *Elsa_revision = "$Revision: 2.26.6.1 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
  "PCMCIA", "QS 1000", "QS 3000", "Microlink PCI", "QS 3000 PCI", 
@@ -67,15 +67,6 @@ const char *ITACVer[] =
 #define ELSA_PCMCIA_IPAC 11
 
 /* PCI stuff */
-#ifndef PCI_VENDOR_ID_ELSA
-#define PCI_VENDOR_ID_ELSA	0x1048
-#endif
-#ifndef PCI_DEVICE_ID_ELSA_MIRCOLINK
-#define PCI_DEVICE_ID_ELSA_MIRCOLINK	0x1000
-#endif
-#ifndef PCI_DEVICE_ID_ELSA_QS3000
-#define PCI_DEVICE_ID_ELSA_QS3000	0x3000
-#endif
 #define ELSA_PCI_IRQ_MASK	0x04
 
 /* ITAC Registeradressen (only Microlink PC) */
@@ -991,7 +982,7 @@ setup_elsa(struct IsdnCard *card)
 		}
 		cs->subtyp = 0;
 		if ((dev_qs1000 = pci_find_device(PCI_VENDOR_ID_ELSA,
-			PCI_DEVICE_ID_ELSA_MIRCOLINK, dev_qs1000))) {
+			PCI_DEVICE_ID_ELSA_MICROLINK, dev_qs1000))) {
 			if (pci_enable_device(dev_qs1000))
 				return(0);
 			cs->subtyp = ELSA_QS1000PCI;
