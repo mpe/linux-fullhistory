@@ -312,7 +312,7 @@ proc option_name {w mnum line text helpidx} {
 	$w.x$line.l configure -activefore [cget $w.x$line.l -fg] \
 				-activeback [cget $w.x$line.l -bg]
 	button $w.x$line.help -text "Help" -relief raised \
-		-command "dohelp .dohelp $helpidx"
+		-command "dohelp .dohelp $helpidx .menu$mnum"
 	pack $w.x$line.help -side right -fill y
 	pack $w.x$line.l -side right -fill both -expand on
 }
@@ -325,9 +325,9 @@ proc toggle_switch2 {w mnum line text variable} {
 		-relief groove -width 2 -command "update_active"
 	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
 		-relief groove -width 2 -command "update_active"
-		
+
 	option_name $w $mnum $line $text $variable
-		
+
 	pack $w.x$line.n $w.x$line.m $w.x$line.y -side right -fill y
 }
 
@@ -339,9 +339,9 @@ proc toggle_switch3 {w mnum line text variable} {
 		-relief groove -width 2 -command "update_active"
 	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
 		-relief groove -width 2 -command "update_active"
-		
+
 	option_name $w $mnum $line $text $variable
-		
+
 	global CONFIG_MODULES
 	if {($CONFIG_MODULES == 0)} then {
 		$w.x$line.m configure -state disabled
@@ -400,6 +400,17 @@ proc minimenu { w mnum line text variable helpidx } {
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
+proc menusplit {w m n} {
+	if { $n > 2 } then {
+		set menuoptsize [expr [$m yposition 2] - [$m yposition 1]]   
+		set maxsize [winfo screenheight $w]
+		set splitpoint [expr $maxsize * 4 / 5 / $menuoptsize - 1]
+		for {set i [expr $splitpoint + 1]} {$i <= $n} {incr i $splitpoint} {
+			$m entryconfigure $i -columnbreak 1
+		}
+	}
+}
+
 proc submenu { w mnum line text subnum } {
 	frame $w.x$line
 	button $w.x$line.l -text "" -width 15 -relief groove
@@ -412,11 +423,20 @@ proc submenu { w mnum line text subnum } {
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
-proc comment {w line text } {
-#nothing done for comments now.
+proc comment {w mnum line text } {
+	frame $w.x$line
+	button $w.x$line.l -text "" -width 15 -relief groove
+	$w.x$line.l configure -activefore [cget $w.x$line.l -fg] \
+		-activeback [cget $w.x$line.l -bg] -state disabled
+	button $w.x$line.m -text "$text" -relief groove -anchor w
+	$w.x$line.m configure -activefore [cget $w.x$line.m -fg] \
+		-activeback [cget $w.x$line.m -bg]
+	pack $w.x$line.l -side left -fill both
+	pack $w.x$line.m -anchor w -side right -fill both -expand on
+	pack $w.x$line -anchor w -fill both -expand on
 }
 
-proc dohelp {w var }  {
+proc dohelp {w var parent}  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
 
@@ -442,45 +462,73 @@ ${var}:\\
 			" Documentation/Configure.help]
 		set found [expr [string length "$message"] > 0]
 	}
-	
+
 	frame $w.f1
+	pack $w.f1 -fill both -expand on
 
-	if { $found == 0 } then {
-		if { $filefound == 0 } then {
-		message $w.f1.m -width 750 -aspect 300 -relief flat -text \
-			"No help available - unable to open file Documentation/Configure.help.  This file should have come with your kernel."
-		} else {
-		message $w.f1.m -width 400 -aspect 300 -relief flat -text \
-			"No help available for $var"
-		}
-		label $w.f1.bm -bitmap error
-		wm title $w "RTFM"
-	} else {
-		text $w.f1.m -width 73 -relief flat -wrap word
-		$w.f1.m insert 0.0 $message
-		$w.f1.m conf -state disabled  -height [$w.f1.m index end]
-
-		label $w.f1.bm -bitmap info
-		wm title $w "Configuration help" 
-	}
-	pack $w.f1.bm $w.f1.m -side left -padx 10
-	pack $w.f1 -side top
-	set oldFocus [focus]
-	
 	# Do the OK button
 	#
+	set oldFocus [focus]
 	frame $w.f2
 	button $w.f2.ok -text "OK" \
 		-width 10 -command "destroy $w; catch {focus $oldFocus}"
 	pack $w.f2.ok -side bottom -pady 6 -anchor n
 	pack $w.f2 -side bottom -padx 10 -anchor s
 
-	# Finish off the window
-	#
+	scrollbar $w.f1.vscroll -command "$w.f1.canvas yview"
+	pack $w.f1.vscroll -side right -fill y
+
+	canvas $w.f1.canvas -relief flat -borderwidth 0 \
+		-yscrollcommand "$w.f1.vscroll set"
+	frame $w.f1.f
+	pack $w.f1.canvas -side right -fill y -expand on
+
+	if { $found == 0 } then {
+		if { $filefound == 0 } then {
+		message $w.f1.f.m -width 750 -aspect 300 -relief flat -text \
+			"No help available - unable to open file Documentation/Configure.help.  This file should have come with your kernel."
+		} else {
+		message $w.f1.f.m -width 400 -aspect 300 -relief flat -text \
+			"No help available for $var"
+		}
+		label $w.f1.bm -bitmap error
+		wm title $w "RTFM"
+	} else {
+		text $w.f1.f.m -width 73 -relief flat -wrap word
+		$w.f1.f.m insert 0.0 $message
+		$w.f1.f.m conf -state disabled -height [$w.f1.f.m index end]
+
+		label $w.f1.bm -bitmap info
+		wm title $w "Configuration help" 
+	}
+	pack $w.f1.f.m -side left
+	pack $w.f1.bm $w.f1.f -side left -padx 10
+
 	focus $w
-	global winx; global winy
-	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+	set winx [expr [winfo x $parent]+20]
+	set winy [expr [winfo y $parent]+20]
 	wm geometry $w +$winx+$winy
+	set sizok [expr [winfo reqheight $w.f2.ok] + 12]
+	set maxy [expr [winfo screenheight .] * 3 / 4]
+	set canvtotal [winfo reqheight $w.f1.f.m]
+	if [expr $sizok + $canvtotal < $maxy] {
+		set sizy $canvtotal
+	} else {
+		set sizy [expr $maxy - $sizok]
+	}
+	$w.f1.canvas configure -height $sizy -width [winfo reqwidth $w.f1.f.m] \
+		-scrollregion "0 0 [winfo reqwidth $w.f1.f.m] \
+			[winfo reqheight $w.f1.f.m]"
+	$w.f1.canvas create window 0 0 -anchor nw -window $w.f1.f
+	update idletasks
+
+	set maxy [winfo screenheight .]
+	if [expr $sizok + $canvtotal < $maxy] {
+		set sizy [expr $sizok + $canvtotal]
+	} else {
+		set sizy $maxy
+	}
+	wm maxsize $w [winfo width $w] $sizy
 }
 
 proc wrapup {w }  {

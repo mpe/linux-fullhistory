@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.53 2000/03/31 04:06:19 davem Exp $
+# $Id: Makefile,v 1.54 2000/05/12 23:51:24 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -59,13 +59,11 @@ check_asm: dummy
 	@echo "#ifndef CONFIG_SMP" >> asm_offsets.h
 	@echo "" >> asm_offsets.h
 	@echo "#include <linux/config.h>" > tmp.c
-	@echo "#undef __SMP__" >> tmp.c
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
 	$(CPP) $(CPPFLAGS) tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
 	@echo "#include <linux/config.h>" >> check_asm.c
-	@echo "#undef __SMP__" >> check_asm.c
 	@echo "#undef CONFIG_SMP" >> check_asm.c
 	@echo "#include <linux/sched.h>" >> check_asm.c
 	@echo 'struct task_struct _task;' >> check_asm.c

@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.30 1999/12/01 23:52:03 davem Exp $
+/* $Id: ttable.S,v 1.31 2000/05/09 17:40:14 davem Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)

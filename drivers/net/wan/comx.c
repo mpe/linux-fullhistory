@@ -598,11 +598,6 @@ static int comx_write_proc(struct file *file, const char *buffer, u_long count,
 	char str[30];
 	int ret=0;
 
-	if (file->f_dentry->d_inode->i_ino != entry->low_ino) {
-		printk(KERN_ERR "comx_write_proc: file <-> data internal error\n");
-		return -EIO;
-	}
-
 	if (count > PAGE_SIZE) {
 		printk(KERN_ERR "count is %lu > %d!!!\n", count, (int)PAGE_SIZE);
 		return -ENOSPC;

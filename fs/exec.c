@@ -45,8 +45,8 @@
 #include <linux/kmod.h>
 #endif
 
-static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
-static spinlock_t binfmt_lock = SPIN_LOCK_UNLOCKED;
+static struct linux_binfmt *formats;
+static rwlock_t binfmt_lock = RW_LOCK_UNLOCKED;
 
 int register_binfmt(struct linux_binfmt * fmt)
 {
@@ -56,17 +56,17 @@ int register_binfmt(struct linux_binfmt * fmt)
 		return -EINVAL;
 	if (fmt->next)
 		return -EBUSY;
-	spin_lock(&binfmt_lock);
+	write_lock(&binfmt_lock);
 	while (*tmp) {
 		if (fmt == *tmp) {
-			spin_unlock(&binfmt_lock);
+			write_unlock(&binfmt_lock);
 			return -EBUSY;
 		}
 		tmp = &(*tmp)->next;
 	}
 	fmt->next = formats;
 	formats = fmt;
-	spin_unlock(&binfmt_lock);
+	write_unlock(&binfmt_lock);
 	return 0;	
 }
 
@@ -74,16 +74,16 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 {
 	struct linux_binfmt ** tmp = &formats;
 
-	spin_lock(&binfmt_lock);
+	write_lock(&binfmt_lock);
 	while (*tmp) {
 		if (fmt == *tmp) {
 			*tmp = fmt->next;
-			spin_unlock(&binfmt_lock);
+			write_unlock(&binfmt_lock);
 			return 0;
 		}
 		tmp = &(*tmp)->next;
 	}
-	spin_unlock(&binfmt_lock);
+	write_unlock(&binfmt_lock);
 	return -EINVAL;
 }
 
@@ -103,35 +103,34 @@ asmlinkage long sys_uselib(const char * library)
 {
 	int fd, retval;
 	struct file * file;
-	struct linux_binfmt * fmt;
 
-	lock_kernel();
 	fd = sys_open(library, 0, 0);
-	retval = fd;
 	if (fd < 0)
-		goto out;
+		return fd;
 	file = fget(fd);
 	retval = -ENOEXEC;
-	if (file && file->f_op && file->f_op->read) {
-		spin_lock(&binfmt_lock);
-		for (fmt = formats ; fmt ; fmt = fmt->next) {
-			if (!fmt->load_shlib)
-				continue;
-			if (!try_inc_mod_count(fmt->module))
-				continue;
-			spin_unlock(&binfmt_lock);
-			retval = fmt->load_shlib(file);
-			spin_lock(&binfmt_lock);
-			put_binfmt(fmt);
-			if (retval != -ENOEXEC)
-				break;
+	if (file) {
+		if(file->f_op && file->f_op->read) {
+			struct linux_binfmt * fmt;
+
+			read_lock(&binfmt_lock);
+			for (fmt = formats ; fmt ; fmt = fmt->next) {
+				if (!fmt->load_shlib)
+					continue;
+				if (!try_inc_mod_count(fmt->module))
+					continue;
+				read_unlock(&binfmt_lock);
+				retval = fmt->load_shlib(file);
+				read_lock(&binfmt_lock);
+				put_binfmt(fmt);
+				if (retval != -ENOEXEC)
+					break;
+			}
+			read_unlock(&binfmt_lock);
 		}
-		spin_unlock(&binfmt_lock);
+		fput(file);
 	}
-	fput(file);
 	sys_close(fd);
-out:
-	unlock_kernel();
   	return retval;
 }
 
@@ -747,14 +746,14 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	}
 #endif
 	for (try=0; try<2; try++) {
-		spin_lock(&binfmt_lock);
+		read_lock(&binfmt_lock);
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
 			if (!fn)
 				continue;
 			if (!try_inc_mod_count(fmt->module))
 				continue;
-			spin_unlock(&binfmt_lock);
+			read_unlock(&binfmt_lock);
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
 				put_binfmt(fmt);
@@ -764,16 +763,16 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 				current->did_exec = 1;
 				return retval;
 			}
-			spin_lock(&binfmt_lock);
+			read_lock(&binfmt_lock);
 			put_binfmt(fmt);
 			if (retval != -ENOEXEC)
 				break;
 			if (!bprm->file) {
-				spin_unlock(&binfmt_lock);
+				read_unlock(&binfmt_lock);
 				return retval;
 			}
 		}
-		spin_unlock(&binfmt_lock);
+		read_unlock(&binfmt_lock);
 		if (retval != -ENOEXEC) {
 			break;
 #ifdef CONFIG_KMOD

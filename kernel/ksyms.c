@@ -220,6 +220,7 @@ EXPORT_SYMBOL(dput);
 EXPORT_SYMBOL(have_submounts);
 EXPORT_SYMBOL(d_genocide);
 EXPORT_SYMBOL(d_find_alias);
+EXPORT_SYMBOL(d_prune_aliases);
 EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);

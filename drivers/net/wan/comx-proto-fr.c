@@ -641,11 +641,6 @@ static int fr_write_proc(struct file *file, const char *buffer,
 		fr = ch->LINE_privdata;
 	}
 
-	if (file->f_dentry->d_inode->i_ino != entry->low_ino) {
-		printk(KERN_ERR "comxfr_write_proc: file <-> data internal error\n");
-		return -EIO;
-	}
-
 	if (!(page = (char *)__get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}

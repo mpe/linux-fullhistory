@@ -259,8 +259,6 @@ int coda_cache_check(struct inode *inode, int mask)
 
 void coda_purge_dentries(struct inode *inode)
 {
-	struct list_head *tmp, *head = &inode->i_dentry;
-
 	if (!inode)
 		return ;
 
@@ -268,23 +266,7 @@ void coda_purge_dentries(struct inode *inode)
 	iget(inode->i_sb, inode->i_ino);
 	/* catch the dentries later if some are still busy */
 	coda_flag_inode(inode, C_PURGE);
-
-restart:
-	tmp = head;
-	while ((tmp = tmp->next) != head) {
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
-		if (!dentry->d_count) {
-			CDEBUG(D_DOWNCALL, 
-			       "coda_free_dentries: freeing %s/%s, i_count=%d\n",
-			       dentry->d_parent->d_name.name, dentry->d_name.name, 
-			       inode->i_count);
-			dget(dentry);
-			d_drop(dentry);
-			dput(dentry);
-			goto restart;
-		}
-			
-	}
+	d_prune_aliases(inode);
 	iput(inode);
 }
 
@@ -311,7 +293,6 @@ static void coda_flag_children(struct dentry *parent, int flag)
 
 void coda_flag_inode_children(struct inode *inode, int flag)
 {
-	struct list_head *alias;
 	struct dentry *alias_de;
 
 	ENTRY;

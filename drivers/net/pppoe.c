@@ -33,6 +33,7 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
+#include <linux/if_ether.h>
 #include <linux/if_pppox.h>
 #include <net/sock.h>
 #include <linux/ppp_channel.h>
@@ -46,10 +47,12 @@
 
 
 static int __attribute__((unused)) pppoe_debug = 7;
-#define PPPOE_HASH_SIZE 16
+#define PPPOE_HASH_BITS 4
+#define PPPOE_HASH_SIZE (1<<PPPOE_HASH_BITS)
 
 int pppoe_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg);
 int pppoe_xmit(struct ppp_channel *chan, struct sk_buff *skb);
+int __pppoe_xmit(struct sock *sk, struct sk_buff *skb);
 
 struct proto_ops pppoe_ops;
 
@@ -81,23 +84,18 @@ static inline int cmp_addr(struct pppoe_addr *a, unsigned long sid, char *addr)
 
 static int hash_item(unsigned long sid, unsigned char *addr)
 {
-	int i = 0;
-	union {
-		char c[sizeof(unsigned long)];
-		unsigned long i;
-	} hash;
+	char hash=0;
+	int i,j;
+	for (i = 0; i < ETH_ALEN ; ++i){
+		for (j = 0; j < 8/PPPOE_HASH_BITS ; ++j){
+			hash ^= addr[i] >> ( j * PPPOE_HASH_BITS );
+		}
+	}
 
-	hash.i = sid;
+	for (i = 0; i < (sizeof(unsigned long)*8) / PPPOE_HASH_BITS ; ++i)
+		hash ^= sid >> (i*PPPOE_HASH_BITS);
 
-	for (i = 0; i < ETH_ALEN; ++i)
-		hash.c[0] = hash.c[0] ^ addr[i];
-
-	for (i = 1; i < sizeof(int); ++i)
-		hash.c[0] = hash.c[0] ^ hash.c[i];
-
-	i = (int) (hash.c[0] & (PPPOE_HASH_SIZE - 1));
-
-	return i;
+	return hash & ( PPPOE_HASH_SIZE - 1 );
 }	
 
 static struct pppox_opt *item_hash_table[PPPOE_HASH_SIZE] = { 0, };
@@ -105,7 +103,7 @@ static struct pppox_opt *item_hash_table[PPPOE_HASH_SIZE] = { 0, };
 /**********************************************************************
  *
  *  Set/get/delete/rehash items  (internal versions)
- *  
+ *
  **********************************************************************/
 static struct pppox_opt *__get_item(unsigned long sid, unsigned char *addr)
 {
@@ -162,7 +160,7 @@ static struct pppox_opt *__delete_item(unsigned long sid, char *addr)
 	return ret;
 }
 
-static struct pppox_opt *__find_on_dev(struct net_device *dev, 
+static struct pppox_opt *__find_on_dev(struct net_device *dev,
 				       struct pppox_opt *start)
 {
 	struct pppox_opt *po;
@@ -195,9 +193,9 @@ static struct pppox_opt *__find_on_dev(struct net_device *dev,
 /**********************************************************************
  *
  *  Set/get/delete/rehash items
- *  
+ *
  **********************************************************************/
-static inline struct pppox_opt *get_item(unsigned long sid, 
+static inline struct pppox_opt *get_item(unsigned long sid,
 					 unsigned char *addr)
 {
 	struct pppox_opt *po;
@@ -239,7 +237,7 @@ static inline struct pppox_opt *delete_item(unsigned long sid, char *addr)
 	return ret;
 }
 
-static struct pppox_opt *find_on_dev(struct net_device *dev, 
+static struct pppox_opt *find_on_dev(struct net_device *dev,
 				     struct pppox_opt *start)
 {
 	struct pppox_opt *po;
@@ -255,7 +253,7 @@ static struct pppox_opt *find_on_dev(struct net_device *dev,
  *  Certain device events require that sockets be unconnected
  *
  **************************************************************************/
-static int pppoe_device_event(struct notifier_block *this, 
+static int pppoe_device_event(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
 	int error = NOTIFY_DONE;
@@ -277,7 +275,7 @@ static int pppoe_device_event(struct notifier_block *this,
 
 			if (po->sk->state & PPPOX_CONNECTED)
 				pppox_unbind_sock(po->sk);
-			
+
 			if (po->sk->state & PPPOX_CONNECTED) {
 				lock_sock(po->sk);
 				po->sk->shutdown = RCV_SHUTDOWN&SEND_SHUTDOWN;
@@ -313,7 +311,7 @@ static struct notifier_block pppoe_notifier = {
  * Receive a PPPoE Session frame.
  *
  ***********************************************************************/
-static int pppoe_rcv(struct sk_buff *skb, 
+static int pppoe_rcv(struct sk_buff *skb,
 		      struct net_device *dev,
 		      struct packet_type *pt)
 
@@ -336,6 +334,19 @@ static int pppoe_rcv(struct sk_buff *skb,
 		skb_pull(skb, sizeof(struct pppoe_hdr));
 
 		ppp_input(&po->chan, skb);
+	} else if( sk->state & PPPOX_RELAY ){
+		struct pppox_opt *relay_po;
+
+		relay_po = get_item_by_addr( &po->pppoe_relay );
+
+		if( relay_po == NULL  ||
+		    !( relay_po->sk->state & PPPOX_CONNECTED ) )
+			goto abort;
+
+		skb_pull(skb, sizeof(struct pppoe_hdr));
+		if( !__pppoe_xmit( relay_po->sk , skb) )
+			goto abort;
+
 	} else {
 		sock_queue_rcv_skb(sk, skb);
 	}
@@ -353,7 +364,7 @@ abort:
  * -- This is solely for detection of PADT frames
  *
  ***********************************************************************/
-static int pppoe_disc_rcv(struct sk_buff *skb, 
+static int pppoe_disc_rcv(struct sk_buff *skb,
 			  struct net_device *dev,
 			  struct packet_type *pt)
 
@@ -539,7 +550,7 @@ int pppoe_connect(struct socket *sock, struct sockaddr *uservaddr,
 
 	dev = dev_get_by_name(sp->sa_addr.pppoe.dev);
 		
-	error = -ENODEV; 
+	error = -ENODEV;
 	if (!dev)
 		goto end;
 
@@ -768,13 +779,11 @@ end:
 
 /************************************************************************
  *
- * xmit function called by generic PPP driver
- * sends PPP frame over PPPoE socket
+ * xmit function for internal use.
  *
  ***********************************************************************/
-int pppoe_xmit(struct ppp_channel *chan, struct sk_buff *skb)
+int __pppoe_xmit(struct sock *sk, struct sk_buff *skb)
 {
-	struct sock *sk = (struct sock *) chan->private;
 	struct net_device *dev = sk->protinfo.pppox->pppoe_dev;
 	struct pppoe_hdr hdr;
 	struct pppoe_hdr *ph;
@@ -832,6 +841,20 @@ int pppoe_xmit(struct ppp_channel *chan, struct sk_buff *skb)
  abort:
 	return 0;
 }
+
+
+/************************************************************************
+ *
+ * xmit function called by generic PPP driver
+ * sends PPP frame over PPPoE socket
+ *
+ ***********************************************************************/
+int pppoe_xmit(struct ppp_channel *chan, struct sk_buff *skb)
+{
+	struct sock *sk = (struct sock *) chan->private;
+	return __pppoe_xmit(sk, skb);
+}
+
 
 struct ppp_channel_ops pppoe_chan_ops = { pppoe_xmit , NULL };
 

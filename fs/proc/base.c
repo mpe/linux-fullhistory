@@ -22,6 +22,7 @@
 #include <linux/stat.h>
 #include <linux/init.h>
 #include <linux/file.h>
+#include <linux/string.h>
 
 /*
  * For hysterical raisins we keep the same inumbers as in the old procfs.
@@ -866,6 +867,28 @@ static struct inode_operations proc_base_inode_operations = {
 	lookup:		proc_base_lookup,
 };
 
+/*
+ * /proc/self:
+ */
+static int proc_self_readlink(struct dentry *dentry, char *buffer, int buflen)
+{
+	char tmp[30];
+	sprintf(tmp, "%d", current->pid);
+	return vfs_readlink(dentry,buffer,buflen,tmp);
+}
+
+static int proc_self_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	char tmp[30];
+	sprintf(tmp, "%d", current->pid);
+	return vfs_follow_link(nd,tmp);
+}	
+
+static struct inode_operations proc_self_inode_operations = {
+	readlink:	proc_self_readlink,
+	follow_link:	proc_self_follow_link,
+};
+
 struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
 {
 	unsigned int pid, c;
@@ -877,6 +900,23 @@ struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
 	pid = 0;
 	name = dentry->d_name.name;
 	len = dentry->d_name.len;
+	if (len == 4 && !memcmp(name, "self", 4)) {
+		inode = get_empty_inode();
+		if (!inode)
+			return ERR_PTR(-ENOMEM);
+		inode->i_sb = dir->i_sb;
+		inode->i_dev = dir->i_sb->s_dev;
+		inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+		inode->i_ino = fake_ino(0, PROC_PID_INO);
+		inode->u.proc_i.file = NULL;
+		inode->u.proc_i.task = NULL;
+		inode->i_mode = S_IFLNK|S_IRWXUGO;
+		inode->i_uid = inode->i_gid = 0;
+		inode->i_size = 64;
+		inode->i_op = &proc_self_inode_operations;
+		d_add(dentry, inode);
+		return NULL;
+	}
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;
@@ -921,7 +961,8 @@ void proc_pid_delete_inode(struct inode *inode)
 {
 	if (inode->u.proc_i.file)
 		fput(inode->u.proc_i.file);
-	free_task_struct(inode->u.proc_i.task);
+	if (inode->u.proc_i.task)
+		free_task_struct(inode->u.proc_i.task);
 }
 
 #define PROC_NUMBUF 10
@@ -937,7 +978,7 @@ static int get_pid_list(int index, unsigned int *pids)
 	struct task_struct *p;
 	int nr_pids = 0;
 
-	index -= FIRST_PROCESS_ENTRY;
+	index--;
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		int pid = p->pid;
@@ -958,8 +999,16 @@ int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir)
 {
 	unsigned int pid_array[PROC_MAXPIDS];
 	char buf[PROC_NUMBUF];
-	unsigned int nr = filp->f_pos;
+	unsigned int nr = filp->f_pos - FIRST_PROCESS_ENTRY;
 	unsigned int nr_pids, i;
+
+	if (!nr) {
+		ino_t ino = fake_ino(0,PROC_PID_INO);
+		if (filldir(dirent, "self", 4, filp->f_pos, ino) < 0)
+			return 0;
+		filp->f_pos++;
+		nr++;
+	}
 
 	nr_pids = get_pid_list(nr, pid_array);
 
@@ -968,11 +1017,7 @@ int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir)
 		ino_t ino = fake_ino(pid,PROC_PID_INO);
 		unsigned long j = PROC_NUMBUF;
 
-		do {
-			j--;
-			buf[j] = '0' + (pid % 10);
-			pid /= 10;
-		} while (pid);
+		do buf[--j] = '0' + (pid % 10); while (pid/=10);
 
 		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, ino) < 0)
 			break;

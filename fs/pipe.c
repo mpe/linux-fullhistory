@@ -465,7 +465,7 @@ fail_page:
 	return NULL;
 }
 
-static struct vfsmount *pipe_mnt = NULL;
+static struct vfsmount *pipe_mnt;
 
 static struct inode * get_pipe_inode(void)
 {

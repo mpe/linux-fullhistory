@@ -109,6 +109,7 @@
 #define PCI_CONF_IRQ_OFFSET        0x3c
 #define PCI_CONF_AMISIG            0xa0
 #define AMI_SIGNATURE              0x3344
+#define AMI_SIGNATURE_471          0xCCCC
 
 #if LINUX_VERSION_CODE < 0x20100
 #define MEGARAID \

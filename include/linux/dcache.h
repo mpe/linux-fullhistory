@@ -164,6 +164,7 @@ extern struct dentry * d_alloc_root(struct inode *);
 extern void d_genocide(struct dentry *);
 
 extern struct dentry *d_find_alias(struct inode *);
+extern void d_prune_aliases(struct inode *);
 
 /* test whether we have any submounts in a subdir tree */
 extern int have_submounts(struct dentry *);

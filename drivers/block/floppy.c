@@ -200,15 +200,21 @@ static void register_devfs_entries (int drive) __init;
 static devfs_handle_t devfs_handle = NULL;
 
 #define K_64	0x10000		/* 64KB */
-#include <asm/floppy.h>
 
 /* the following is the mask of allowed drives. By default units 2 and
  * 3 of both floppy controllers are disabled, because switching on the
  * motor of these drives causes system hangs on some PCI computers. drive
  * 0 is the low bit (0x1), and drive 7 is the high bit (0x80). Bits are on if
- * a drive is allowed. */
+ * a drive is allowed.
+ *
+ * NOTE: This must come before we include the arch floppy header because
+ *       some ports reference this variable from there. -DaveM
+ */
 
 static int allowed_drive_mask = 0x33;
+
+#include <asm/floppy.h>
+
 static int irqdma_allocated = 0;
 
 #define MAJOR_NR FLOPPY_MAJOR

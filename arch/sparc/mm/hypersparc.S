@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.14 1999/08/14 03:51:47 anton Exp $
+/* $Id: hypersparc.S,v 1.15 2000/05/09 17:40:13 davem Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)

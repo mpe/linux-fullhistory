@@ -265,6 +265,8 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 	||   cfg->token == token_define_int || cfg->token == token_define_string
 	||   cfg->token == token_define_tristate || cfg->token == token_unset )
 	    return;
+	if ( cfg->token == token_comment && line_num == -1 )
+	    return;
     }
     else
     {
@@ -464,6 +466,7 @@ void generate_if( struct kconfig * cfg, struct condition * ocond,
 		menu_num, line_num );
 	    break;
 
+	case token_comment:
 	case token_mainmenu_option:
 	    if ( line_num >= 0 )
 	    {
@@ -1135,6 +1138,7 @@ void dump_tk_script( struct kconfig * scfg )
 	case token_bool:
 	case token_choice_header:
 	case token_choice_item:
+	case token_comment:
 	case token_dep_bool:
 	case token_dep_tristate:
 	case token_dep_mbool:
@@ -1189,6 +1193,8 @@ void dump_tk_script( struct kconfig * scfg )
     {
 	int menu_line = 0;
 	int nr_submenu = imenu;
+	int menu_name_omitted = 0;
+	int opt_count = 0;
 
 	clear_globalflags();
 	start_proc( menu_first[imenu]->label, imenu, 
@@ -1210,6 +1216,21 @@ void dump_tk_script( struct kconfig * scfg )
 		cfg = menu_last[nr_submenu];
 		break;
 
+	    case token_comment:
+		if ( !cfg->menu_line && !menu_name_omitted )
+		{
+		    cfg->menu_line = -1;
+		    menu_name_omitted = 1;
+		}
+		else
+		{
+		    menu_name_omitted = 1;
+		    cfg->menu_line = menu_line++;
+		    printf( "\tcomment $w.config.f %d %d \"%s\"\n",
+			cfg->menu_number, cfg->menu_line, cfg->label );
+		}
+		break;
+
 	    case token_bool:
 		cfg->menu_line = menu_line++;
 		printf( "\tbool $w.config.f %d %d \"%s\" %s\n",
@@ -1227,8 +1248,10 @@ void dump_tk_script( struct kconfig * scfg )
 		printf( "\tminimenu $w.config.f %d %d \"%s\" tmpvar_%d %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
 		    -(cfg->nameindex), vartable[cfg->next->nameindex].name );
-		printf( "\tmenu $w.config.f.x%d.x.menu\n", cfg->menu_line );
+		printf( "\tmenu $w.config.f.x%d.x.menu -title \"%s\"\n",
+		    cfg->menu_line, cfg->label );
 		cfg1 = cfg;
+		opt_count = 0;
 		break;
 
 	    case token_choice_item:
@@ -1236,6 +1259,12 @@ void dump_tk_script( struct kconfig * scfg )
 		printf( "\t$w.config.f.x%d.x.menu add radiobutton -label \"%s\" -variable tmpvar_%d -value \"%s\" -command \"update_active\"\n",
 		    cfg1->menu_line, cfg->label, -(cfg1->nameindex),
 		    cfg->label );
+		opt_count++;
+		if ( cfg->next && cfg->next->token != token_choice_item ) {
+		    /* last option in the menu */
+		    printf( "\tmenusplit $w $w.config.f.x%d.x.menu %d\n",
+			cfg1->menu_line, opt_count );
+		}
 		break;
 
 	    case token_dep_bool:

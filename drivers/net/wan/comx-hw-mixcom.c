@@ -742,11 +742,6 @@ static int mixcom_write_proc(struct file *file, const char *buffer,
 	char *page;
 	int value;
 
-	if (file->f_dentry->d_inode->i_ino != entry->low_ino) {
-		printk(KERN_ERR "mixcom_write_proc: file <-> data internal error\n");
-		return -EIO;
-	}
-
 	if (!(page = (char *)__get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}

@@ -90,7 +90,8 @@ void vmfree_area_pages(unsigned long address, unsigned long size)
 	flush_tlb_all();
 }
 
-static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned long size)
+static inline int alloc_area_pte (pte_t * pte, unsigned long address,
+			unsigned long size, int gfp_mask)
 {
 	unsigned long end;
 
@@ -102,7 +103,7 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 		struct page * page;
 		if (!pte_none(*pte))
 			printk(KERN_ERR "alloc_area_pte: page already exists\n");
-		page = alloc_page(GFP_KERNEL|__GFP_HIGHMEM);
+		page = alloc_page(gfp_mask);
 		if (!page)
 			return -ENOMEM;
 		set_pte(pte, mk_pte(page, PAGE_KERNEL));
@@ -112,7 +113,7 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 	return 0;
 }
 
-static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned long size)
+static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned long size, int gfp_mask)
 {
 	unsigned long end;
 
@@ -124,7 +125,7 @@ static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 		pte_t * pte = pte_alloc_kernel(pmd, address);
 		if (!pte)
 			return -ENOMEM;
-		if (alloc_area_pte(pte, address, end - address))
+		if (alloc_area_pte(pte, address, end - address, gfp_mask))
 			return -ENOMEM;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
@@ -132,7 +133,8 @@ static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 	return 0;
 }
 
-int vmalloc_area_pages(unsigned long address, unsigned long size)
+inline int vmalloc_area_pages (unsigned long address,
+					unsigned long size, int gfp_mask)
 {
 	pgd_t * dir;
 	unsigned long end = address + size;
@@ -146,7 +148,7 @@ int vmalloc_area_pages(unsigned long address, unsigned long size)
 		pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
 			return -ENOMEM;
-		if (alloc_area_pmd(pmd, address, end - address))
+		if (alloc_area_pmd(pmd, address, end - address, gfp_mask))
 			return -ENOMEM;
 		if (pgd_val(olddir) != pgd_val(*dir))
 			set_pgdir(address, *dir);
@@ -210,7 +212,7 @@ void vfree(void * addr)
 	printk(KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n", addr);
 }
 
-void * vmalloc(unsigned long size)
+void * __vmalloc (unsigned long size, int gfp_mask)
 {
 	void * addr;
 	struct vm_struct *area;
@@ -226,7 +228,7 @@ void * vmalloc(unsigned long size)
 		return NULL;
 	}
 	addr = area->addr;
-	if (vmalloc_area_pages(VMALLOC_VMADDR(addr), size)) {
+	if (vmalloc_area_pages(VMALLOC_VMADDR(addr), size, gfp_mask)) {
 		vfree(addr);
 		BUG();
 		return NULL;

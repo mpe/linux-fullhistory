@@ -221,11 +221,6 @@ static int comxlapb_write_proc(struct file *file, const char *buffer,
 	unsigned long parm;
 	char *page;
 
-	if (file->f_dentry->d_inode->i_ino != entry->low_ino) {
-		printk(KERN_ERR "comxlapb_write_proc: file <-> data internal error\n");
-		return -EIO;
-	}
-
 	if (lapb_getparms(dev->priv, &parms)) {
 		return -ENODEV;
 	}

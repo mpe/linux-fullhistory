@@ -140,9 +140,13 @@ proc_file_lseek(struct file * file, loff_t offset, int orig)
 {
     switch (orig) {
     case 0:
+	if (offset < 0)
+	    return -EINVAL;    
 	file->f_pos = offset;
 	return(file->f_pos);
     case 1:
+	if (offset + file->f_pos < 0)
+	    return -EINVAL;    
 	file->f_pos += offset;
 	return(file->f_pos);
     case 2:
@@ -339,7 +343,7 @@ static struct inode_operations proc_dir_inode_operations = {
 	lookup:		proc_lookup,
 };
 
-int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
+static int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {
 	int	i;
 	

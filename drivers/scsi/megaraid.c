@@ -1481,7 +1481,7 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
     if ((flag & BOARD_QUARTZ) && (skip_id == -1)) {
       u16 magic;
       pci_read_config_word(pdev, PCI_CONF_AMISIG, &magic);
-      if (magic != AMI_SIGNATURE)
+      if ((magic != AMI_SIGNATURE) && (magic != AMI_SIGNATURE_471))
 	continue;		/* not an AMI board */
     }
     printk (KERN_INFO "megaraid: found 0x%4.04x:0x%4.04x: in %s\n",

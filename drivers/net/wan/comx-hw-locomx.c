@@ -330,11 +330,6 @@ static int locomx_write_proc(struct file *file, const char *buffer,
 	int val;
 	char *page;
 
-	if (file->f_dentry->d_inode->i_ino != entry->low_ino) {
-		printk(KERN_ERR "hw_write_proc: file <-> data internal error\n");
-		return -EIO;
-	}
-
 	if (!(page = (char *)__get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}

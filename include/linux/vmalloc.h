@@ -18,18 +18,49 @@ struct vm_struct {
 	struct vm_struct * next;
 };
 
-struct vm_struct * get_vm_area(unsigned long size, unsigned long flags);
-void vfree(void * addr);
-void * vmalloc(unsigned long size);
-long vread(char *buf, char *addr, unsigned long count);
-void vmfree_area_pages(unsigned long address, unsigned long size);
-int vmalloc_area_pages(unsigned long address, unsigned long size);
+extern struct vm_struct * get_vm_area (unsigned long size, unsigned long flags);
+extern void vfree(void * addr);
+extern void * __vmalloc (unsigned long size, int gfp_mask);
+extern long vread(char *buf, char *addr, unsigned long count);
+extern void vmfree_area_pages(unsigned long address, unsigned long size);
+extern int vmalloc_area_pages(unsigned long address, unsigned long size , int gfp_mask);
 
-/* vmlist_lock is a read-write spinlock that protects vmlist 
+extern struct vm_struct * vmlist;
+
+
+/*
+ *	Allocate any pages
+ */
+ 
+static inline void * vmalloc (unsigned long size)
+{
+	return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM);
+}
+
+/*
+ *	Allocate ISA addressable pages for broke crap
+ */
+
+static inline void * vmalloc_dma (unsigned long size)
+{
+	return __vmalloc(size, GFP_KERNEL|GFP_DMA);
+}
+
+/*
+ *	vmalloc 32bit PA addressable pages - eg for PCI 32bit devices
+ */
+ 
+static inline void * vmalloc_32(unsigned long size)
+{
+	return __vmalloc(size, GFP_KERNEL);
+}
+
+/*
+ * vmlist_lock is a read-write spinlock that protects vmlist
  * Used in mm/vmalloc.c (get_vm_area() and vfree()) and fs/proc/kcore.c.
  */
 extern rwlock_t vmlist_lock;
- 
+
 extern struct vm_struct * vmlist;
 #endif
 

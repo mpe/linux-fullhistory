@@ -71,6 +71,7 @@ static struct {
 	{0x83847605, "SigmaTel STAC9704"      , NULL},
 	{0x83847608, "SigmaTel STAC9708"      , NULL},
 	{0x83847609, "SigmaTel STAC9721/23"   , sigmatel_init},
+	{0x54524106, "TriTech TR28026"        , NULL},
 	{0x54524108, "TriTech TR28028"        , NULL},
 	{0x574D4C00, "Wolfson WM9704"         , NULL},
 	{0x00000000, NULL, NULL}
@@ -330,6 +331,10 @@ static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask)
 
 	/* else, write the first set in the mask as the
 	   output */	
+	/* clear out current set value first (AC97 supports only 1 input!) */
+	val = (1 << ac97_rm2oss[codec->codec_read(codec, AC97_RECORD_SELECT)&0x07]);
+	if (mask != val) mask &= ~val;
+	
 	val = ffs(mask); 
 	val = ac97_oss_rm[val-1];
 	val |= val << 8;  /* set both channels */
@@ -418,6 +423,7 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 		switch (_IOC_NR(cmd)) {
 		case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 			if (!codec->recmask_io) return -EINVAL;
+			if(!val) return 0;
 			if (!(val &= codec->record_sources)) return -EINVAL;
 
 			codec->recmask_io(codec, 0, val);

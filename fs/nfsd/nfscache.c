@@ -49,16 +49,21 @@ nfsd_cache_init(void)
 	struct svc_cacherep	*rp;
 	struct nfscache_head	*rh;
 	size_t			i;
+	unsigned long		order;
 
 	if (cache_initialized)
 		return;
 
 	i = CACHESIZE * sizeof (struct svc_cacherep);
-	nfscache = kmalloc (i, GFP_KERNEL);
+	for (order = 0; (PAGE_SIZE << order) < i; order++)
+		;
+	nfscache = (struct svc_cacherep *)
+		__get_free_pages(GFP_KERNEL, order);
 	if (!nfscache) {
 		printk (KERN_ERR "nfsd: cannot allocate %d bytes for reply cache\n", i);
 		return;
 	}
+	memset(nfscache, 0, i);
 
 	i = HASHSIZE * sizeof (struct nfscache_head);
 	hash_list = kmalloc (i, GFP_KERNEL);

@@ -90,8 +90,6 @@ struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry);
 void proc_pid_delete_inode(struct inode *inode);
 int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir);
 
-extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
-
 extern struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 						struct proc_dir_entry *parent);
 extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
@@ -167,7 +165,6 @@ extern inline void proc_net_remove(const char *name)
 
 #else
 
-extern inline int proc_register(struct proc_dir_entry *a, struct proc_dir_entry *b) { return 0; }
 extern inline struct proc_dir_entry *proc_net_create(const char *name, mode_t mode, 
 	get_info_t *get_info) {return NULL;}
 extern inline void proc_net_remove(const char *name) {}

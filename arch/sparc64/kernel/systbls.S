@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.72 2000/04/13 07:30:34 jj Exp $
+/* $Id: systbls.S,v 1.73 2000/05/10 14:23:39 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -83,7 +83,7 @@ sys_call_table:
 /*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_chown, sys_mknod
 /*15*/	.word sys_chmod, sys_lchown, sparc_brk, sys_perfctr, sys_lseek
 /*20*/	.word sys_getpid, sys_capget, sys_capset, sys_setuid, sys_getuid
-/*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_sigaltstack, sys_nis_syscall
+/*25*/	.word sys_nis_syscall, sys_ptrace, sys_alarm, sys_sigaltstack, sys_nis_syscall
 /*30*/	.word sys_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
 	.word sys_nis_syscall, sys_sync, sys_kill, sys_newstat, sys_sendfile
 /*40*/	.word sys_newlstat, sys_dup, sys_pipe, sys_times, sys_nis_syscall
@@ -124,7 +124,7 @@ sys_call_table:
 	.word sys_ipc, sys_nis_syscall, sys_clone, sys_nis_syscall, sys_adjtimex
 /*220*/	.word sys_nis_syscall, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
 	.word sys_bdflush, sys_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
-/*230*/	.word sys_select, sys_time, sys_nis_syscall, sys_stime, sys_nis_syscall
+/*230*/	.word sys_select, sys_nis_syscall, sys_nis_syscall, sys_stime, sys_nis_syscall
 	.word sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep

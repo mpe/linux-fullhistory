@@ -61,8 +61,9 @@ Mellon the rights to redistribute these changes without encumbrance.
 
 
 
-/* Catch new _KERNEL defn for NetBSD */
-#ifdef __NetBSD__
+/* Catch new _KERNEL defn for NetBSD and DJGPP/__CYGWIN32__ */
+#if defined(__NetBSD__) || \
+  ((defined(DJGPP) || defined(__CYGWIN32__)) && !defined(KERNEL))
 #include <sys/types.h>
 #endif 
 
@@ -91,7 +92,6 @@ struct timespec {
         long       ts_nsec;
 };
 #else  /* DJGPP but not KERNEL */
-#include <sys/types.h>
 #include <sys/time.h>
 typedef unsigned long long u_quad_t;
 #endif /* !KERNEL */

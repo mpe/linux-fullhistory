@@ -193,7 +193,7 @@ output files.
 
 Configure:  implemented
 Menuconfig: implemented
-Xconfig:    does not display, but writes to output files
+Xconfig:    implemented
 mconfig:    implemented
 
 Example:

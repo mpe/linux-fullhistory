@@ -1,4 +1,4 @@
-/* $Id: inode.c,v 1.10 2000/03/24 01:32:51 davem Exp $
+/* $Id: inode.c,v 1.11 2000/05/22 07:29:42 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996-1999 Jakub Jelinek  (jakub@redhat.com)

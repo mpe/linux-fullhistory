@@ -1,4 +1,4 @@
-/* $Id: tsunami.S,v 1.3 1999/10/09 05:32:19 zaitcev Exp $
+/* $Id: tsunami.S,v 1.4 2000/05/09 17:40:13 davem Exp $
  * tsunami.S: High speed MicroSparc-I mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)

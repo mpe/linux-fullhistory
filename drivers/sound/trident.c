@@ -29,6 +29,10 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.14.3 May 20 2000 Aaron Holtzman
+ *  Fix kfree'd memory access in release
+ *  Fix race in open while looking for a free virtual channel slot
+ *  remove open_wait wq (which appears to be unused)
  *  v0.14.2 Mar 29 2000 Ching Ling Lee
  *	Add clear to silence advance in trident_update_ptr 
  *	fix invalid data of the end of the sound
@@ -166,10 +170,6 @@ struct trident_state {
 	unsigned int magic;
 	struct trident_card *card;	/* Card info */
 
-	/* single open lock mechanism, only used for recording */
-	struct semaphore open_sem;
-	wait_queue_head_t open_wait;
-
 	/* file mode */
 	mode_t open_mode;
 
@@ -260,6 +260,9 @@ struct trident_card {
 
 	/* We keep trident cards in a linked list */
 	struct trident_card *next;
+
+	/* single open lock mechanism, only used for recording */
+	struct semaphore open_sem;
 
 	/* The trident has a certain amount of cross channel interaction
 	   so we use a single per card lock */
@@ -1904,6 +1907,7 @@ static int trident_open(struct inode *inode, struct file *file)
 
 	/* find an avaiable virtual channel (instance of /dev/dsp) */
 	while (card != NULL) {
+		down(&card->open_sem);
 		for (i = 0; i < NR_HW_CH; i++) {
 			if (card->states[i] == NULL) {
 				state = card->states[i] = (struct trident_state *)
@@ -1915,6 +1919,7 @@ static int trident_open(struct inode *inode, struct file *file)
 				goto found_virt;
 			}
 		}
+		up(&card->open_sem);
 		card = card->next;
 	}
 	/* no more virtual channel avaiable */
@@ -1939,10 +1944,8 @@ static int trident_open(struct inode *inode, struct file *file)
 	state->card = card;
 	state->magic = TRIDENT_STATE_MAGIC;
 	init_waitqueue_head(&dmabuf->wait);
-	init_MUTEX(&state->open_sem);
 	file->private_data = state;
 
-	down(&state->open_sem);
 
 	/* set default sample format. According to OSS Programmer's Guide  /dev/dsp
 	   should be default to unsigned 8-bits, mono, with sample rate 8kHz and
@@ -1985,7 +1988,7 @@ static int trident_open(struct inode *inode, struct file *file)
 	}
 
 	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
-	up(&state->open_sem);
+	up(&card->open_sem);
 
 #ifdef DEBUG
 	printk(KERN_ERR "trident: open virtual channel %d, hard channel %d\n", 
@@ -1999,6 +2002,7 @@ static int trident_open(struct inode *inode, struct file *file)
 static int trident_release(struct inode *inode, struct file *file)
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;
+	struct trident_card *card = state->card;
 	struct dmabuf *dmabuf = &state->dmabuf;
 
 	VALIDATE_STATE(state);
@@ -2009,25 +2013,25 @@ static int trident_release(struct inode *inode, struct file *file)
 	}
 
 	/* stop DMA state machine and free DMA buffers/channels */
-	down(&state->open_sem);
+	down(&card->open_sem);
 
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac(state);
 		dealloc_dmabuf(state);
 		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
+
 	if (file->f_mode & FMODE_READ) {
 		stop_adc(state);
 		dealloc_dmabuf(state);
 		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
 
-	kfree(state->card->states[state->virt]);
-	state->card->states[state->virt] = NULL;
-	state->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
+	card->states[state->virt] = NULL;
+	kfree(state);
 
 	/* we're covered by the open_sem */
-	up(&state->open_sem);
+	up(&card->open_sem);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -2408,6 +2412,7 @@ static int __init trident_probe(struct pci_dev *pci_dev, const struct pci_device
 	card->banks[BANK_A].bitmap = 0UL;
 	card->banks[BANK_B].addresses = &bank_b_addrs;
 	card->banks[BANK_B].bitmap = 0UL;
+	init_MUTEX(&card->open_sem);
 	spin_lock_init(&card->lock);
 	devs = card;
 

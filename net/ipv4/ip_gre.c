@@ -268,10 +268,10 @@ static struct ip_tunnel * ipgre_tunnel_locate(struct ip_tunnel_parm *parms, int 
 	dev->priv = (void*)(dev+1);
 	nt = (struct ip_tunnel*)dev->priv;
 	nt->dev = dev;
-	strcpy(dev->name, nt->parms.name);
 	dev->init = ipgre_tunnel_init;
 	dev->new_style = 1;
 	memcpy(&nt->parms, parms, sizeof(*parms));
+	strcpy(dev->name, nt->parms.name);
 	if (dev->name[0] == 0) {
 		int i;
 		for (i=1; i<100; i++) {

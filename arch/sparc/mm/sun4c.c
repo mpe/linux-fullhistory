@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.191 2000/04/08 02:11:41 davem Exp $
+/* $Id: sun4c.c,v 1.192 2000/05/09 17:40:13 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)

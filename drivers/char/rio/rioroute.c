@@ -34,7 +34,6 @@ static char *_rioroute_c_sccs_ = "@(#)rioroute.c	1.3";
 #endif
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>

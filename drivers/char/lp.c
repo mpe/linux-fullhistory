@@ -146,13 +146,6 @@ struct lp_struct lp_table[LP_NO];
 
 static unsigned int lp_count = 0;
 
-/* Test if printer is ready */
-#define	LP_READY(status)	((status) & LP_PBUSY)
-/* Test if the printer is not acking the strobe */
-#define	LP_NO_ACKING(status)	((status) & LP_PACK)
-/* Test if the printer has error conditions */
-#define LP_NO_ERROR(status)	((status) & LP_PERRORP)
-
 #undef LP_DEBUG
 
 /* --- low-level port access ----------------------------------- */
@@ -265,6 +258,7 @@ static ssize_t lp_write(struct file * file, const char * buf,
 	parport_set_timeout (lp_table[minor].dev,
 			     lp_table[minor].timeout);
 
+	if ((retv = lp_check_status (minor)) == 0)
 	do {
 		/* Write the data. */
 		written = parport_write (port, kbuf, copy_size);

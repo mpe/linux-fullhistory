@@ -1031,11 +1031,6 @@ static int comxhw_write_proc(struct file *file, const char *buffer,
 	char *page;
 
 
-	if (file->f_dentry->d_inode->i_ino != entry->low_ino) {
-		printk(KERN_ERR "comx_write_proc: file <-> data internal error\n");
-		return -EIO;
-	}
-
 	if(ch->init_status & HW_OPEN) {
 		return -EAGAIN;	
 	}

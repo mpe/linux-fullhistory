@@ -143,6 +143,8 @@ struct bttv {
 
         int tuner_type;
         int channel;
+
+	spinlock_t s_lock;
         
         unsigned int nr;
 	unsigned short id;

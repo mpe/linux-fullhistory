@@ -4354,7 +4354,8 @@ Target	Requested Completed  Requested Completed  Requested Completed\n\
 		   HostAdapter, Length, BusLogic_MessageBufferSize);
   if ((Length -= Offset) <= 0) return 0;
   if (Length >= BytesAvailable) Length = BytesAvailable;
-  *StartPointer = &HostAdapter->MessageBuffer[Offset];
+  memcpy(ProcBuffer, HostAdapter->MessageBuffer + Offset, Length);
+  *StartPointer = ProcBuffer;
   return Length;
 }
 

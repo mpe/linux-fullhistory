@@ -83,11 +83,13 @@
 #include <linux/version.h>
 
 #ifndef __KERNEL__
+#define ____NOT_KERNEL____
 #define __KERNEL__
+#endif
 #include <linux/kdev_t.h>
+#ifdef ____NOT_KERNEL____
+#undef ____NOT_KERNEL____
 #undef __KERNEL__
-#else
-#include <linux/kdev_t.h>
 #endif
 
 #include <linux/major.h>

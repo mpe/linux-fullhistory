@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.86 2000/04/15 06:02:50 davem Exp $
+/* $Id: irq.c,v 1.87 2000/05/09 17:40:13 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)

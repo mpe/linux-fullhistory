@@ -19,64 +19,16 @@ extern int dasd_proc_read_statistics ( char *, char **, off_t, int);
 extern int dasd_proc_read_debug ( char *, char **, off_t, int);
 #endif /* DASD_PROFILE */
 
-struct proc_dir_entry dasd_proc_root_entry = {
-	0,
-	4,"dasd",
-	S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-};
-
-struct proc_dir_entry dasd_proc_devices_entry = {
-	0,
-	7,"devices",
-	S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-	&dasd_proc_read_devices,
-};
-
-#ifdef DASD_PROFILE
-struct proc_dir_entry dasd_proc_stats_entry = {
-	0,
-	10,"statistics",
-	S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-	&dasd_proc_read_statistics,
-};
-
-struct proc_dir_entry dasd_proc_debug_entry = {
-	0,
-	5,"debug",
-	S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-	&dasd_proc_read_debug,
-};
-#endif /* DASD_PROFILE */
-
-struct proc_dir_entry dasd_proc_device_template = {
-	0,
-	6,"dd????",
-	S_IFBLK | S_IRUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-};
+static struct proc_dir_entry *dasd_proc_root_entry;
 
 void
 dasd_proc_init ( void )
 {
-	proc_register( & proc_root, & dasd_proc_root_entry);
-	proc_register( & dasd_proc_root_entry, & dasd_proc_devices_entry);
+	dasd_proc_root_entry = proc_mkdir("dasd", NULL);
+	create_proc_info_entry("devices",0,&dasd_proc_root_entry,dasd_proc_read_devices);
 #ifdef DASD_PROFILE
- 	proc_register( & dasd_proc_root_entry, & dasd_proc_stats_entry); 
- 	proc_register( & dasd_proc_root_entry, & dasd_proc_debug_entry); 
+	create_proc_info_entry("statistics",0,&dasd_proc_root_entry,dasd_proc_read_statistics);
+	create_proc_info_entry("debug",0,&dasd_proc_root_entry,dasd_proc_read_debug);
 #endif /* DASD_PROFILE */
 }
 

@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.17 1999/12/15 22:18:49 davem Exp $
+/* $Id: ide.h,v 1.18 2000/05/22 07:29:43 davem Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)

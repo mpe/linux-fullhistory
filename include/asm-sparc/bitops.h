@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.55 2000/02/09 03:28:32 davem Exp $
+/* $Id: bitops.h,v 1.56 2000/05/09 17:40:15 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)

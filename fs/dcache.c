@@ -249,6 +249,26 @@ struct dentry * d_find_alias(struct inode *inode)
 }
 
 /*
+ *	Try to kill dentries associated with this inode.
+ * WARNING: you must own a reference to inode.
+ */
+void d_prune_aliases(struct inode *inode)
+{
+	struct list_head *tmp, *head = &inode->i_dentry;
+restart:
+	tmp = head;
+	while ((tmp = tmp->next) != head) {
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
+		if (!dentry->d_count) {
+			dget(dentry);
+			d_drop(dentry);
+			dput(dentry);
+			goto restart;
+		}
+	}
+}
+
+/*
  * Throw away a dentry - free the inode, dput the parent.
  * This requires that the LRU list has already been
  * removed.

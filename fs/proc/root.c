@@ -22,38 +22,9 @@ struct proc_dir_entry *proc_net, *proc_bus, *proc_root_fs, *proc_root_driver;
 struct proc_dir_entry *proc_sys_root;
 #endif
 
-/*
- * /proc/self:
- */
-static int proc_self_readlink(struct dentry *dentry, char *buffer, int buflen)
-{
-	char tmp[30];
-	sprintf(tmp, "%d", current->pid);
-	return vfs_readlink(dentry,buffer,buflen,tmp);
-}
-
-static int proc_self_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-	char tmp[30];
-	sprintf(tmp, "%d", current->pid);
-	return vfs_follow_link(nd,tmp);
-}	
-
-static struct inode_operations proc_self_inode_operations = {
-	readlink:	proc_self_readlink,
-	follow_link:	proc_self_follow_link
-};
-
-static struct proc_dir_entry proc_root_self = {
-	0, 4, "self",
-	S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, 1, 0, 0,
-	64, &proc_self_inode_operations,
-};
-
 void __init proc_root_init(void)
 {
 	proc_misc_init();
-	proc_register(&proc_root, &proc_root_self);
 	proc_net = proc_mkdir("net", 0);
 #ifdef CONFIG_SYSVIPC
 	proc_mkdir("sysvipc", 0);

@@ -135,16 +135,8 @@ extern void __put_user_bad(void);
 		:"0" (ptr),"d" (x)					\
 		:"cx")
 
-#define put_user(x,ptr)									\
-({	int __ret_pu;									\
-	switch(sizeof (*(ptr))) {							\
-	case 1:  __put_user_x(1,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
-	case 2:  __put_user_x(2,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
-	case 4:  __put_user_x(4,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
-	default: __put_user_x(X,__ret_pu,x,ptr); break;					\
-	}										\
-	__ret_pu;									\
-})
+#define put_user(x,ptr)							\
+  __put_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)))
 
 #define __get_user(x,ptr) \
   __get_user_nocheck((x),(ptr),sizeof(*(ptr)))
@@ -157,6 +149,16 @@ extern void __put_user_bad(void);
 	__put_user_size((x),(ptr),(size),__pu_err);	\
 	__pu_err;					\
 })
+
+
+#define __put_user_check(x,ptr,size)			\
+({							\
+	long __pu_err = -EFAULT;					\
+	__typeof__(*(ptr)) *__pu_addr = (ptr);		\
+	if (access_ok(VERIFY_WRITE,__pu_addr,size))	\
+		__put_user_size((x),__pu_addr,(size),__pu_err);	\
+	__pu_err;					\
+})							
 
 #define __put_user_size(x,ptr,size,retval)				\
 do {									\

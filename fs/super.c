@@ -315,6 +315,7 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 		strcpy(name, dir_name);
 		mnt->mnt_dirname = name;
 	}
+	mnt->mnt_owner = current->uid;
 
 	if (parent)
 		list_add(&mnt->mnt_child, &parent->mnt_mounts);
@@ -1021,9 +1022,6 @@ asmlinkage long sys_umount(char * name, int flags)
 	char *kname;
 	int retval;
 
-	if (!capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
 	lock_kernel();
 	kname = getname(name);
 	retval = PTR_ERR(kname);
@@ -1038,6 +1036,11 @@ asmlinkage long sys_umount(char * name, int flags)
 	retval = -EINVAL;
 	if (nd.dentry!=nd.mnt->mnt_root)
 		goto dput_and_out;
+
+	retval = -EPERM;
+	if (!capable(CAP_SYS_ADMIN) && current->uid!=nd.mnt->mnt_owner)
+		goto dput_and_out;
+
 	dput(nd.dentry);
 	/* puts nd.mnt */
 	down(&mount_sem);
@@ -1060,6 +1063,21 @@ asmlinkage long sys_oldumount(char * name)
 	return sys_umount(name,0);
 }
 
+static int mount_is_safe(struct nameidata *nd)
+{
+	if (capable(CAP_SYS_ADMIN))
+		return 0;
+	if (S_ISLNK(nd->dentry->d_inode->i_mode))
+		return -EPERM;
+	if (nd->dentry->d_inode->i_mode & S_ISVTX) {
+		if (current->uid != nd->dentry->d_inode->i_uid)
+			return -EPERM;
+	}
+	if (permission(nd->dentry->d_inode, MAY_WRITE))
+		return -EPERM;
+	return 0;
+}
+
 /*
  * do loopback mount.
  */
@@ -1069,18 +1087,22 @@ static int do_loopback(char *old_name, char *new_name)
 	int err = 0;
 	if (!old_name || !*old_name)
 		return -EINVAL;
-	if (path_init(old_name, LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &old_nd))
+	if (path_init(old_name, LOOKUP_POSITIVE, &old_nd))
 		err = path_walk(old_name, &old_nd);
 	if (err)
 		goto out;
-	if (path_init(new_name, LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &new_nd))
+	if (path_init(new_name, LOOKUP_POSITIVE, &new_nd))
 		err = path_walk(new_name, &new_nd);
 	if (err)
 		goto out1;
-	err = -EPERM;
-	if (!capable(CAP_SYS_ADMIN) &&
-	     current->uid != new_nd.dentry->d_inode->i_uid)
+	err = mount_is_safe(&new_nd);
+	if (err)
 		goto out2;
+	err = -EINVAL;
+	if (S_ISDIR(new_nd.dentry->d_inode->i_mode) !=
+	      S_ISDIR(old_nd.dentry->d_inode->i_mode))
+		goto out2;
+		
 	down(&mount_sem);
 	err = -ENOENT;
 	if (d_unhashed(old_nd.dentry) && !IS_ROOT(old_nd.dentry))

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.42 2000/01/29 17:57:26 jj Exp $ */
+/* $Id: unistd.h,v 1.44 2000/05/16 16:42:33 jj Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -246,7 +246,9 @@
 #define __NR_setfsuid           228 /* Linux Specific                              */
 #define __NR_setfsgid           229 /* Linux Specific                              */
 #define __NR__newselect         230 /* Linux Specific                              */
-#define __NR_time               231 /* Linux Specific                              */
+#ifdef __KERNEL__
+#define __NR_time		231 /* Linux sparc32                               */
+#endif
 /* #define __NR_oldstat         232    Linux Specific                              */
 #define __NR_stime              233 /* Linux Specific                              */
 /* #define __NR_oldfstat        234    Linux Specific                              */

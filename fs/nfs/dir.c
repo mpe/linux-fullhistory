@@ -605,11 +605,8 @@ static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 		int error;
 		
 		nfs_zap_caches(dir_i);
+		NFS_CACHEINV(inode);
 		error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
-		if (error >= 0) {
-			if (inode->i_nlink)
-				inode->i_nlink --;
-		}
 	}
 	iput(inode);
 }
@@ -678,7 +675,6 @@ static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 		nfs_renew_times(dentry);
 		error = 0;
 	}
-	NFS_CACHEINV(dentry->d_parent->d_inode);
 	return error;
 }
 
@@ -772,7 +768,6 @@ static int nfs_mkdir(struct inode *dir_i, struct dentry *dentry, int mode)
 	d_drop(dentry);
 #endif
 	nfs_zap_caches(dir_i);
-	dir_i->i_nlink++;
 	error = NFS_PROTO(dir_i)->mkdir(dir, &dentry->d_name, &attr, &fhandle,
 					&fattr);
 	if (!error && fhandle.size != 0)
@@ -792,12 +787,6 @@ static int nfs_rmdir(struct inode *dir_i, struct dentry *dentry)
 
 	nfs_zap_caches(dir_i);
 	error = NFS_PROTO(dir_i)->rmdir(dir, &dentry->d_name);
-
-	/* Update i_nlink */
-	if (!error) {
-		if (dir_i->i_nlink)
-			dir_i->i_nlink--;
-	}
 
 	return error;
 }
@@ -881,7 +870,7 @@ out:
  * Remove a file after making sure there are no pending writes,
  * and after checking that the file has only one user. 
  *
- * We update inode->i_nlink and free the inode prior to the operation
+ * We invalidate the attribute cache and free the inode prior to the operation
  * to avoid possible races if the server reuses the inode.
  */
 static int nfs_safe_remove(struct dentry *dentry)
@@ -895,13 +884,6 @@ static int nfs_safe_remove(struct dentry *dentry)
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		inode->i_ino);
 
-	if (dentry->d_count > 1) {
-#ifdef NFS_PARANOIA
-printk("nfs_safe_remove: %s/%s busy, d_count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
-#endif
-		goto out;
-	}
 	/*
 	 * Unhash the dentry while we remove the file ...
 	 */
@@ -909,22 +891,26 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 		d_drop(dentry);
 		rehash = 1;
 	}
+	if (dentry->d_count > 1) {
+#ifdef NFS_PARANOIA
+		printk("nfs_safe_remove: %s/%s busy, d_count=%d\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			dentry->d_count);
+#endif
+		goto out;
+	}
 	nfs_zap_caches(dir_i);
+	NFS_CACHEINV(inode);
 	error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
 	if (error < 0)
 		goto out;
 	/*
-	 * Update i_nlink and free the inode
+	 * Free the inode
 	 */
-	if (inode->i_nlink)
-		inode->i_nlink --;
 	d_delete(dentry);
-	/*
-	 * Rehash the negative dentry if the operation succeeded.
-	 */
-	if (rehash)
-		d_add(dentry, NULL);
 out:
+	if (rehash)
+		d_rehash(dentry);
 	return error;
 }
 
@@ -1018,14 +1004,8 @@ nfs_link(struct dentry *old_dentry, struct inode *dir_i, struct dentry *dentry)
 	 */
 	d_drop(dentry);
 	nfs_zap_caches(dir_i);
+	NFS_CACHEINV(inode);
 	error = NFS_PROTO(dir_i)->link(old_dentry, dir, &dentry->d_name);
-	if (!error) {
- 		/*
-		 * Update the link count immediately, as some apps
-		 * (e.g. pine) test this after making a link.
-		 */
-		inode->i_nlink++;
-	}
 	return error;
 }
 
@@ -1058,8 +1038,17 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	struct inode *old_inode = old_dentry->d_inode;
 	struct inode *new_inode = new_dentry->d_inode;
-	struct dentry *dentry = NULL;
-	int error, rehash = 0;
+	struct dentry *dentry = NULL, *rehash = NULL;
+	int error = -EBUSY;
+
+	/*
+	 * To prevent any new references to the target during the rename,
+	 * we unhash the dentry and free the inode in advance.
+	 */
+	if (!d_unhashed(new_dentry)) {
+		d_drop(new_dentry);
+		rehash = new_dentry;
+	}
 
 	dfprintk(VFS, "NFS: rename(%s/%s -> %s/%s, ct=%d)\n",
 		 old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
@@ -1076,7 +1065,6 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	 */
 	if (!new_inode)
 		goto go_ahead;
-	error = -EBUSY;
 	if (S_ISDIR(new_inode->i_mode))
 		goto out;
 	else if (new_dentry->d_count > 1) {
@@ -1090,10 +1078,10 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		/* silly-rename the existing target ... */
 		err = nfs_sillyrename(new_dir, new_dentry);
 		if (!err) {
-			new_dentry = dentry;
+			new_dentry = rehash = dentry;
 			new_inode = NULL;
-			/* hash the replacement target */
-			d_add(new_dentry, NULL);
+			/* instantiate the replacement target */
+			d_instantiate(new_dentry, NULL);
 		}
 
 		/* dentry still busy? */
@@ -1117,14 +1105,6 @@ go_ahead:
 		shrink_dcache_parent(old_dentry);
 	}
 
-	/*
-	 * To prevent any new references to the target during the rename,
-	 * we unhash the dentry and free the inode in advance.
-	 */
-	if (!d_unhashed(new_dentry)) {
-		d_drop(new_dentry);
-		rehash = 1;
-	}
 	if (new_inode)
 		d_delete(new_dentry);
 
@@ -1134,15 +1114,12 @@ go_ahead:
 					   &old_dentry->d_name,
 					   new_dentry->d_parent,
 					   &new_dentry->d_name);
-	NFS_CACHEINV(old_dir);
-	NFS_CACHEINV(new_dir);
-	/* Update the dcache if needed */
+out:
 	if (rehash)
-		d_add(new_dentry, NULL);
+		d_rehash(rehash);
 	if (!error && !S_ISDIR(old_inode->i_mode))
 		d_move(old_dentry, new_dentry);
 
-out:
 	/* new dentry created? */
 	if (dentry)
 		dput(dentry);

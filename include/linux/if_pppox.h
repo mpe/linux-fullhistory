@@ -16,12 +16,13 @@
 #ifndef __LINUX_IF_PPPOX_H
 #define __LINUX_IF_PPPOX_H
 
-#include <linux/if_ether.h>
-#include <linux/if.h>
 
 #include <asm/types.h>
 #include <asm/byteorder.h>
+
 #ifdef  __KERNEL__
+#include <linux/if_ether.h>
+#include <linux/if.h>
 #include <linux/netdevice.h>
 #include <linux/sched.h>
 #include <asm/semaphore.h>

@@ -13,9 +13,13 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 2.0 1999/12/25 15:07:32 fischer Exp fischer $
+ * $Id: aha152x.c,v 2.1 2000/05/17 16:23:17 fischer Exp fischer $
  *
  * $Log: aha152x.c,v $
+ * Revision 2.1  2000/05/17 16:23:17  fischer
+ * - signature update
+ * - fix for data out w/o scatter gather
+ *
  * Revision 2.0  1999/12/25 15:07:32  fischer
  * - interrupt routine completly reworked
  * - basic support for new eh code
@@ -202,7 +206,7 @@
 
 #include <linux/module.h>
 
-#ifdef PCMCIA
+#if defined(PCMCIA)
 #undef MODULE
 #endif
 
@@ -275,7 +279,6 @@
 #define DPRINTK(when,msgs...)
 #define	DO_LOCK(flags)		spin_lock_irqsave(&QLOCK,flags)
 #define	DO_UNLOCK(flags)	spin_unlock_irqrestore(&QLOCK,flags)
-#define DEBUG_DEFAULT	0
 #endif
 
 #define LEAD		"(scsi%d:%d:%d) "
@@ -290,6 +293,7 @@
 			(cmd) ? ((cmd)->lun & 0x07) : -1
 
 #define DELAY_DEFAULT 100
+#define DEBUG_DEFAULT 0
 
 /* possible irq range */
 #if defined(PCMCIA)
@@ -1714,7 +1718,9 @@ static void reset_ports(struct Scsi_Host *shpnt)
  */
 int aha152x_host_reset(Scsi_Cmnd * SCpnt)
 {
+#if defined(AHA152X_DEBUG)
 	struct Scsi_Host *shpnt = SCpnt->host;
+#endif
 
 	DPRINTK(debug_eh, DEBUG_LEAD "aha152x_host_reset(%p)\n", CMDINFO(SCpnt), SCpnt);
 
@@ -2731,14 +2737,19 @@ static void datao_end(struct Scsi_Host *shpnt)
 
 		CURRENT_SC->resid += data_count;
 
-		data_count -= CURRENT_SC->SCp.ptr - CURRENT_SC->SCp.buffer->address;
-		while(data_count>0) {
-			CURRENT_SC->SCp.buffer--;
-			CURRENT_SC->SCp.buffers_residual++;
-			data_count -= CURRENT_SC->SCp.buffer->length;
+		if(CURRENT_SC->use_sg) {
+			data_count -= CURRENT_SC->SCp.ptr - CURRENT_SC->SCp.buffer->address;
+			while(data_count>0) {
+				CURRENT_SC->SCp.buffer--;
+				CURRENT_SC->SCp.buffers_residual++;
+				data_count -= CURRENT_SC->SCp.buffer->length;
+			}
+			CURRENT_SC->SCp.ptr           = CURRENT_SC->SCp.buffer->address - data_count;
+			CURRENT_SC->SCp.this_residual = CURRENT_SC->SCp.buffer->length + data_count;
+		} else {
+			CURRENT_SC->SCp.ptr           -= data_count;
+			CURRENT_SC->SCp.this_residual += data_count;
 		}
-		CURRENT_SC->SCp.ptr           = CURRENT_SC->SCp.buffer->address - data_count;
-		CURRENT_SC->SCp.this_residual = CURRENT_SC->SCp.buffer->length + data_count;
 	}
 
 	DPRINTK(debug_datao, DEBUG_LEAD "datao_end: request_bufflen=%d; resid=%d; stcnt=%d\n",

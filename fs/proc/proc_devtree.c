@@ -112,7 +112,6 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		al = proc_symlink(at, de, ent->name);
 		if (al == 0)
 			break;
-		proc_register(de, al);
 		*lastp = al;
 		lastp = &al->next;
 	}

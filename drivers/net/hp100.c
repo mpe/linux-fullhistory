@@ -3123,11 +3123,11 @@ int hp100_port[5] = { 0, -1, -1, -1, -1 };
 MODULE_PARM(hp100_port, "1-5i");
 #endif
 
-#ifndef LINUX_2_1
-static char devname[5][IFNAMSIZ] = { "", "", "", "", "" };
-static char *hp100_name[5] = { devname[0], devname[1],
-                               devname[2], devname[3],
-                               devname[4] };
+/* Allocate 5 string of length IFNAMSIZ, one string for each device */
+char hp100_name[5][IFNAMSIZ] = { "", "", "", "", "" };
+#ifdef LINUX_2_1
+/* Allow insmod to write those 5 strings individually */
+MODULE_PARM(hp100_name, "1-5c" __MODULE_STRING(IFNAMSIZ));
 #endif
 
 /* List of devices */
@@ -3159,9 +3159,11 @@ int init_module( void )
       /* Create device and set basics args */
       hp100_devlist[i] = kmalloc(sizeof(struct net_device), GFP_KERNEL);
       memset(hp100_devlist[i], 0x00, sizeof(struct net_device));
-#ifndef LINUX_2_1
+#if LINUX_VERSION_CODE >= 0x020362	/* 2.3.99-pre7 */
+      memcpy(hp100_devlist[i]->name, hp100_name[i], IFNAMSIZ);	/* Copy name */
+#else
       hp100_devlist[i]->name = hp100_name[i];
-#endif
+#endif /* LINUX_VERSION_CODE >= 0x020362 */
       hp100_devlist[i]->base_addr = hp100_port[i];
       hp100_devlist[i]->init = &hp100_probe;
 

@@ -555,22 +555,18 @@ nfs_free_dentries(struct inode *inode)
 	struct list_head *tmp, *head = &inode->i_dentry;
 	int unhashed;
 
-restart:
+	if (S_ISDIR(inode->i_mode)) {
+		struct dentry *dentry = d_find_alias(inode);
+		if (dentry) {
+			shrink_dcache_parent(dentry);
+			dput(dentry);
+		}
+	}
+	d_prune_aliases(inode);
 	tmp = head;
 	unhashed = 0;
 	while ((tmp = tmp->next) != head) {
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
-		dprintk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name,
-			dentry->d_count, !d_unhashed(dentry));
-		if (!list_empty(&dentry->d_subdirs))
-			shrink_dcache_parent(dentry);
-		if (!dentry->d_count) {
-			dget(dentry);
-			d_drop(dentry);
-			dput(dentry);
-			goto restart;
-		}
 		if (d_unhashed(dentry))
 			unhashed++;
 	}

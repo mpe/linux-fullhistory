@@ -130,7 +130,7 @@ static const char * get_string( const char * pnt, char ** label )
 static const char * get_qstring( const char * pnt, char ** label )
 {
     char quote_char;
-    char newlabel [1024];
+    char newlabel [2048];
     char * pnt1;
 
     /* advance to the open quote */
@@ -705,7 +705,7 @@ static void tokenize_line( const char * pnt )
  */
 static void do_source( const char * filename )
 {
-    char buffer [1024];
+    char buffer [2048];
     FILE * infile;
     const char * old_file;
     int old_lineno;

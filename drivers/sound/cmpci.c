@@ -586,7 +586,7 @@ static void start_adc(struct cm_state *s)
 
 /* --------------------------------------------------------------------- */
 
-#define DMABUF_DEFAULTORDER (17-PAGE_SHIFT)
+#define DMABUF_DEFAULTORDER (16-PAGE_SHIFT)
 #define DMABUF_MINORDER 1
 
 static void dealloc_dmabuf(struct dmabuf *db)

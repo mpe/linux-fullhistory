@@ -55,6 +55,16 @@ pack .f0.right.store .f0.right.load .f0.right.quit .f0.right.save \
 pack .f0.left .f0.middle .f0.right -side left -padx 5 -pady 0 -fill y
 pack .f0 -padx 5 -pady 5
 
+update idletasks
+set winy [expr 10 + [winfo reqheight .f0]]
+set scry [lindex [wm maxsize .] 1]
+set winx [expr 10 + [winfo reqwidth .f0]]
+set scrx [lindex [wm maxsize .] 0]
+if {$winx < $scrx} then {set maxx -1} else {set maxx $winx}
+if {$winy < $scry} then {set maxy -1} else {set maxy $winy}
+.f0 configure -width $winx -height $winy 
+wm maxsize . $maxx $maxy
+
 #
 # If we cannot write our config files, disable the write button.
 #

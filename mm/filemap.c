@@ -244,13 +244,19 @@ repeat:
 	spin_unlock(&pagecache_lock);
 }
 
+/*
+ * nr_dirty represents the number of dirty pages that we will write async
+ * before doing sync writes.  We can only do sync writes if we can
+ * wait for IO (__GFP_IO set).
+ */
 int shrink_mmap(int priority, int gfp_mask)
 {
-	int ret = 0, count;
+	int ret = 0, count, nr_dirty;
 	struct list_head * page_lru;
 	struct page * page = NULL;
 	
 	count = nr_lru_pages / (priority + 1);
+	nr_dirty = priority;
 
 	/* we need pagemap_lru_lock for list_del() ... subtle code below */
 	spin_lock(&pagemap_lru_lock);
@@ -258,10 +264,10 @@ int shrink_mmap(int priority, int gfp_mask)
 		page = list_entry(page_lru, struct page, lru);
 		list_del(page_lru);
 
-		count--;
 		if (PageTestandClearReferenced(page))
 			goto dispose_continue;
 
+		count--;
 		/*
 		 * Avoid unscalable SMP locking for pages we can
 		 * immediate tell are untouchable..
@@ -287,7 +293,8 @@ int shrink_mmap(int priority, int gfp_mask)
 		 * of zone - it's old.
 		 */
 		if (page->buffers) {
-			if (!try_to_free_buffers(page, 1))
+			int wait = ((gfp_mask & __GFP_IO) && (nr_dirty-- < 0));
+			if (!try_to_free_buffers(page, wait))
 				goto unlock_continue;
 			/* page was locked, inode can't go away under us */
 			if (!page->mapping) {

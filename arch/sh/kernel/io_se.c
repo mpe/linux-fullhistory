@@ -7,8 +7,6 @@
  * I/O routine for Hitachi SolutionEngine.
  *
  */
-#include <linux/config.h>
-
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <asm/io.h>

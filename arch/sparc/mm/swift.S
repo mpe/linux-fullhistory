@@ -1,4 +1,4 @@
-/* $Id: swift.S,v 1.4 2000/02/12 03:08:47 zaitcev Exp $
+/* $Id: swift.S,v 1.5 2000/05/09 17:40:13 davem Exp $
  * swift.S: MicroSparc-II mmu/cache operations.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
