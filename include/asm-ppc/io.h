@@ -18,17 +18,18 @@
 
 extern unsigned long io_base;
 #define SLOW_DOWN_IO
-
 #define _IO_BASE io_base
+
+extern unsigned long pci_dram_offset;
 #undef PCI_DRAM_OFFSET
-#define PCI_DRAM_OFFSET  _IO_BASE
+#define PCI_DRAM_OFFSET  pci_dram_offset
 
 #define readb(addr) (*(volatile unsigned char *) (addr))
 #define readw(addr) ld_le16((volatile unsigned short *)(addr))
-#define readl(addr) ld_le32(addr)
+#define readl(addr) ld_le32((volatile unsigned *)addr)
 #define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
 #define writew(b,addr) st_le16((volatile unsigned short *)(addr),(b))
-#define writel(b,addr) st_le32((addr),(b))
+#define writel(b,addr) st_le32((volatile unsigned *)(addr),(b))
 
 #define insb(port, buf, ns)	_insb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
 #define outsb(port, buf, ns)	_outsb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
@@ -48,7 +49,7 @@ extern unsigned long io_base;
 #define outb_p(val, port)	out_8((unsigned char *)((port)+_IO_BASE), (val))
 #define inw_p(port)		in_le16((unsigned short *)((port)+_IO_BASE))
 #define outw_p(val, port)	out_le16((unsigned short *)((port)+_IO_BASE), (val))
-#define inl_p(port)		in_le32(((unsigned *)port))
+#define inl_p(port)		in_le32(((unsigned *)(port)+_IO_BASE))
 #define outl_p(val, port)	out_le32((unsigned *)((port)+_IO_BASE), (val))
 
 extern void _insb(volatile unsigned char *port, void *buf, int ns);
@@ -85,6 +86,7 @@ extern inline void * bus_to_virt(unsigned long address)
  * I/O devices etc.
  */
 extern void *ioremap(unsigned long address, unsigned long size);
+extern void iounmap(unsigned long *addr);
 
 /*
  * Change virtual addresses to physical addresses and vv, for

@@ -80,6 +80,10 @@ ip_rfc1812_filter - INTEGER
 	(sort of gated, routed etc. etc.) is confused by such packets,
 	even if they are valid.
 
+	NOTE: this option is turned on per default only when ip_forwarding
+	is on. For non-forwarding hosts it doesn't make much sense and 
+	makes some legal multihoming configurations impossible.
+
 ip_fib_model - INTEGER
 	0 - (DEFAULT) Standard model. All routes are in class MAIN.
 	1 - default routes go to class DEFAULT. This mode should
@@ -88,7 +92,61 @@ ip_fib_model - INTEGER
 	    Interface routes are in class MAIN.
 	    Gateway routes are in class DEFAULT.
 
+IP Fragmentation:
 
+ipfrag_high_thresh - INTEGER
+	Maximum memory used to reassemble IP fragments. When 
+	ipfrag_high_thresh bytes of memory is allocated for this purpose,
+	the fragment handler will toss packets until ipfrag_low_thresh
+	is reached.
+	
+ipfrag_low_thresh - INTEGER
+	See ipfrag_high_thresh	
+
+ipfrag_time - INTEGER
+	Time in seconds to keep an IP fragment in memory.	
+
+TCP variables: 
+
+tcp_syn_retries - INTEGER
+	Number of times initial SYNs for an TCP connection attempt will
+	be retransmitted. Should not be higher that 255.
+
+tcp_keepalive_time - INTEGER
+	How often TCP sends out keepalive messages when keepalive is enabled.
+	Default: 2hours.
+
+tcp_keepalive_probes - INTEGER
+	How many keepalive probes TCP sends out, until it decides that the
+	connection is broken.
+
+tcp_retries1 - INTEGER
+tcp_retries2 - INTEGER
+tcp_max_delay_acks - INTEGER
+tcp_fin_timeout - INTEGER
+tcp_max_ka_probes - INTEGER
+	Undocumented for now.
+
+tcp_syncookies - BOOLEAN
+	Only valid when the kernel was compiled with CONFIG_SYNCOOKIES
+	Send out syncookies when the syn backlog queue of a socket 
+	overflows. This is to prevent against the common 'syn flood attack'
+	Default: FALSE
+
+tcp_stdurg - BOOLEAN
+	Use the Host requirements interpretation of the TCP urg pointer field.
+	Most hosts use the older BSD interpretation, so if you turn this on
+	Linux might not communicate correctly with them.	
+	Default: FALSE 
+	
+tcp_syn_taildrop  - BOOLEAN
+tcp_max_syn_backlog - INTEGER
+	Undocumented (work in progress)
 
 Alexey Kuznetsov.
 kuznet@ms2.inr.ac.ru
+
+Updated by:
+Andi Kleen
+ak@muc.de
+$Id: ip-sysctl.txt,v 1.3 1997/08/22 19:22:00 freitag Exp $

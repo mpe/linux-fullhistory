@@ -500,6 +500,6 @@ cpc_handler:
 	 nop
 
 	.section __ex_table
-	.align  8
-	.xword  cpc_start, 0, cpc_end, cpc_handler
+	.align  4
+	.word  cpc_start, 0, cpc_end, cpc_handler
 

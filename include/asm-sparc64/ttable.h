@@ -1,6 +1,8 @@
-/* $Id: ttable.h,v 1.2 1997/08/09 09:03:36 davem Exp $ */
+/* $Id: ttable.h,v 1.3 1997/08/29 15:52:35 jj Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
+
+#include <linux/config.h>
 
 #define BOOT_KERNEL b sparc64_boot; nop; nop; nop; nop; nop; nop; nop;
 
@@ -87,17 +89,28 @@
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	ba,pt	%xcc, rtrap;				\
 	 clr	%l6;
+	 
+#define INDIRECT_SOLARIS_SYSCALL(num)			\
+	sethi	%hi(109f), %g7;				\
+	ba,pt	%xcc, etrap;				\
+109:	 or	%g7, %lo(109b), %g7;			\
+	ba,pt	%xcc, tl0_solaris + 0xc;		\
+	 mov	num, %g1;				\
+	nop;nop;nop;
 
 #define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sunos_sys_table)
 #define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table32)
 #define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
 #define GETCC_TRAP TRAP(getcc)
 #define SETCC_TRAP TRAP(setcc)
+#ifdef CONFIG_SOLARIS_EMUL
+#define SOLARIS_SYSCALL_TRAP TRAP(solaris_sparc_syscall)
+#else
+#define SOLARIS_SYSCALL_TRAP TRAP(solaris_syscall)
+#endif
 /* FIXME: Write these actually */	
 #define NETBSD_SYSCALL_TRAP TRAP(netbsd_syscall)
-#define SOLARIS_SYSCALL_TRAP TRAP(solaris_syscall)
 #define BREAKPOINT_TRAP TRAP(breakpoint_trap)
-#define INDIRECT_SOLARIS_SYSCALL(tlvl) TRAP_ARG(indirect_syscall, tlvl)
 
 #define TRAP_IRQ(routine, level)			\
 	rdpr	%pil, %g2;				\

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.3 1997/07/29 09:35:10 davem Exp $
+/* $Id: sys_sparc.c,v 1.5 1997/09/03 12:29:05 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -191,9 +191,12 @@ out:
 asmlinkage unsigned long
 c_sys_nis_syscall (struct pt_regs *regs)
 {
+	static int count=0;
 	lock_kernel();
-	printk ("Unimplemented SPARC system call %ld\n",regs->u_regs[1]);
-	show_regs (regs);
+	if (++count <= 20) { /* Don't make the system unusable, if someone goes stuck */
+		printk ("Unimplemented SPARC system call %ld\n",regs->u_regs[1]);
+		show_regs (regs);
+	}
 	unlock_kernel();
 	return -ENOSYS;
 }
@@ -256,4 +259,16 @@ sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *o
 asmlinkage int sys_aplib(void)
 {
 	return -ENOSYS;
+}
+
+asmlinkage int solaris_syscall(struct pt_regs *regs)
+{
+	lock_kernel();
+	regs->tpc = regs->tnpc;
+	regs->tnpc += 4;
+	printk ("For Solaris binary emulation you need solaris module loaded\n");
+	show_regs (regs);
+	send_sig(SIGSEGV, current, 1);
+	unlock_kernel();
+	return 0;
 }

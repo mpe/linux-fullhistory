@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.35 1997/07/17 02:21:45 davem Exp $
+/* $Id: cgsix.c,v 1.37 1997/08/22 15:55:20 jj Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -409,8 +409,8 @@ cg6_reset (fbinfo_t *fb)
 	struct cg6_info *cg6 = &(fb->info.cg6);
 	unsigned int rev, conf;
 
-	if (fb->setcursor)
-		sun_hw_hide_cursor ();
+	if (fb == &fbinfo[0])
+		sbus_hw_hide_cursor ();
 	/* Turn off stuff in the Transform Engine. */
 	cg6->tec->tec_matrix = 0;
 	cg6->tec->tec_clip = 0;
@@ -466,7 +466,7 @@ __initfunc(void cg6_setup (fbinfo_t *fb, int slot, u32 cg6, int cg6_io))
 	fb->setcursor = cg6_setcursor;
 	fb->setcursormap = cg6_setcursormap;
 	fb->setcurshape = cg6_setcurshape;
-	fb->postsetup = sun_cg_postsetup;
+	fb->postsetup = cg_postsetup;
 	fb->blitc = cg6_blitc;
 	fb->setw = cg6_setw;
 	fb->cpyw = cg6_cpyw;

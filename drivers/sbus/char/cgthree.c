@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.23 1997/07/17 02:21:46 davem Exp $
+/* $Id: cgthree.c,v 1.24 1997/08/20 07:38:37 davem Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -213,7 +213,7 @@ __initfunc(void cg3_setup (fbinfo_t *fb, int slot, u32 cg3, int cg3_io,
 	fb->type.fb_cmsize = 256;
 	fb->mmap = cg3_mmap;
 	fb->loadcmap = cg3_loadcmap;
-	fb->postsetup = sun_cg_postsetup;
+	fb->postsetup = cg_postsetup;
 	fb->ioctl = 0; /* no special ioctls */
 	fb->reset = 0;
 	fb->blank = cg3_blank;

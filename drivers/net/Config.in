@@ -6,15 +6,25 @@ tristate 'ARCnet support' CONFIG_ARCNET
 if [ "$CONFIG_ARCNET" != "n" ]; then
   bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
   bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
+  dep_tristate '  ARCnet COM90xx (normal) chipset driver' CONFIG_ARCNET_COM90xx $CONFIG_ARCNET
+  dep_tristate '  ARCnet COM90xx (IO mapped) chipset driver' CONFIG_ARCNET_COM90xxIO $CONFIG_ARCNET
+  dep_tristate '  ARCnet COM90xx (RIM I) chipset driver' CONFIG_ARCNET_RIM_I $CONFIG_ARCNET
+  dep_tristate '  ARCnet COM20020 chipset driver' CONFIG_ARCNET_COM20020 $CONFIG_ARCNET
 fi
+
 tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
-
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Ethertap network tap' CONFIG_ETHERTAP
+fi
 #
 #	Ethernet
 #
 bool 'Ethernet (10 or 100Mbit)' CONFIG_NET_ETHERNET
 if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
+  if [ "$CONFIG_PMAC" = "y" ]; then
+    bool 'MACE (Power Mac ethernet) support' CONFIG_MACE
+  fi
   if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
     bool 'MIPS JAZZ onboard SONIC ethernet support' CONFIG_MIPS_JAZZ_SONIC
   fi
@@ -43,6 +53,14 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     fi
     tristate 'SMC 9194 support' CONFIG_SMC9194
   fi
+  bool 'Racal-Interlan (Micom) NI cards' CONFIG_NET_VENDOR_RACAL
+  if [ "$CONFIG_NET_VENDOR_RACAL" = "y" ]; then
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'NI5010 support' CONFIG_NI5010
+    fi
+    tristate 'NI5210 support' CONFIG_NI52
+    tristate 'NI6510 support' CONFIG_NI65
+  fi
   bool 'Other ISA cards' CONFIG_NET_ISA
   if [ "$CONFIG_NET_ISA" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -63,8 +81,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'ICL EtherTeam 16i/32 support' CONFIG_ETH16I
     fi
     tristate 'NE2000/NE1000 support' CONFIG_NE2000
-    tristate 'NI5210 support' CONFIG_NI52
-    tristate 'NI6510 support' CONFIG_NI65
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool 'SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
     fi
@@ -152,14 +168,11 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
       bool 'Soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
       bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
       bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
-# if [ -f doesn't work with xconfig. Enable it again when the drivers are really
-# included.
-#      if [ -f drivers/net/soundmodem/sm_afsk2666.c ]; then
-#        bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
-#      fi
-#      if [ -f drivers/net/soundmodem/sm_psk4800.c ]; then
-#        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
-#      fi
+    fi
+    tristate 'Shortwave radio modem driver' CONFIG_HFMODEM
+    if [ "$CONFIG_HFMODEM" != "n" ]; then
+      bool 'HFmodem support for Soundblaster and compatible cards' CONFIG_HFMODEM_SBC
+      bool 'HFmodem support for WSS and Crystal cards' CONFIG_HFMODEM_WSS
     fi
     tristate 'Shortwave radio modem driver' CONFIG_HFMODEM
     if [ "$CONFIG_HFMODEM" != "n" ]; then
@@ -210,4 +223,3 @@ if [ "$CONFIG_LAPB" != "n" ]; then
     dep_tristate 'X.25 async driver' CONFIG_X25_ASY $CONFIG_LAPB
 fi
 fi
-

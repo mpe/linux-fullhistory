@@ -57,6 +57,12 @@ SECTIONS
     CONSTRUCTORS
   }
   _edata  =  .;
+  PROVIDE (edata = .);
+
+  .fixup   : { *(.fixup) }
+  __start___ex_table = .;
+  __ex_table : { *(__ex_table) }
+  __stop___ex_table = .;
 
   . = ALIGN(4096);
   __init_begin = .;
@@ -65,7 +71,6 @@ SECTIONS
   . = ALIGN(4096);
   __init_end = .;
 
-  PROVIDE (edata = .);
   __bss_start = .;
   .bss       :
   {

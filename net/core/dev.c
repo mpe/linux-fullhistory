@@ -90,6 +90,16 @@
 extern int plip_init(void);
 #endif
 
+const char *if_port_text[] = {
+  "unknown",
+  "BNC",
+  "10baseT",
+  "AUI",
+  "100baseT",
+  "100baseTX",
+  "100baseFX"
+};
+
 /*
  *	The list of devices, that are able to output.
  */
@@ -954,6 +964,53 @@ void dev_tint(struct device *dev)
 
 
 /*
+ *	Count the installed interfaces (SIOCGIFCOUNT)
+ */
+
+static int dev_ifcount(unsigned int *arg)
+{
+	struct device *dev;
+	int err;
+	unsigned int count = 0;
+
+	for (dev = dev_base; dev != NULL; dev = dev->next) 
+		count++;
+
+	err = copy_to_user(arg, &count, sizeof(unsigned int));
+	if (err)
+		return -EFAULT; 
+	return 0;
+}
+
+/*
+ *	Map an interface index to its name (SIOGIFNAME)
+ */
+
+static int dev_ifname(struct ifreq *arg)
+{
+	struct device *dev;
+	struct ifreq ifr;
+	int err;
+
+	/*
+	 *	Fetch the caller's info block. 
+	 */
+	
+	err = copy_from_user(&ifr, arg, sizeof(struct ifreq));
+	if (err)
+		return -EFAULT;
+
+	dev = dev_get_by_index(ifr.ifr_ifindex);
+	if (!dev)
+		return -ENODEV;
+
+	strcpy(ifr.ifr_name, dev->name);
+
+	err = copy_to_user(&ifr, arg, sizeof(struct ifreq));
+	return (err)?-EFAULT:0;
+}
+
+/*
  *	Perform a SIOCGIFCONF call. This structure will change
  *	size eventually, and there is nothing I can do about it.
  *	Thus we will need a 'compatibility mode'.
@@ -965,7 +1022,7 @@ static int dev_ifconf(char *arg)
 	struct ifreq ifr;
 	struct device *dev;
 	char *pos;
-	int len;
+	unsigned int len;
 	int err;
 
 	/*
@@ -1262,8 +1319,8 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				 */
 				 
 				dev->flags = (ifr.ifr_flags & (
-					IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
-					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |
+					IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK | IFF_PORTSEL |
+					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING | IFF_AUTOMEDIA |
 					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI | IFF_SLAVE | IFF_MASTER
 					| IFF_MULTICAST)) | (dev->flags & IFF_UP);
 				/*
@@ -1476,6 +1533,10 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFCONF:
 			(void) dev_ifconf((char *) arg);
 			return 0;
+		case SIOCGIFCOUNT:
+			return dev_ifcount((unsigned int *) arg);
+		case SIOGIFNAME:
+			return dev_ifname((struct ifreq *)arg);
 
 		/*
 		 *	Ioctl calls that can be done by all.
@@ -1554,6 +1615,7 @@ extern int pt_init(void);
 extern int sm_init(void);
 extern int baycom_init(void);
 extern int lapbeth_init(void);
+extern void arcnet_init(void);
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_dev = {
@@ -1630,6 +1692,9 @@ __initfunc(int net_dev_init(void))
 #endif
 #if defined(CONFIG_PLIP)
 	plip_init();
+#endif
+#if defined(CONFIG_ARCNET)
+	arcnet_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

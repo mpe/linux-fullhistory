@@ -32,6 +32,8 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 
+#include <net/netlink.h>
+
 #define	NEXT_DEV	NULL
 
 
@@ -63,15 +65,14 @@ extern int apricot_probe(struct device *);
 extern int ewrk3_probe(struct device *);
 extern int de4x5_probe(struct device *);
 extern int el1_probe(struct device *);
-#if	defined(CONFIG_WAVELAN)
 extern int wavelan_probe(struct device *);
-#endif	/* defined(CONFIG_WAVELAN) */
 extern int el16_probe(struct device *);
 extern int elmc_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
 extern int es_probe(struct device *);
 extern int e2100_probe(struct device *);
+extern int ni5010_probe(struct device *);
 extern int ni52_probe(struct device *);
 extern int ni65_probe(struct device *);
 extern int sonic_probe(struct device *);
@@ -90,7 +91,9 @@ extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
 extern int tlan_probe(struct device *);
+extern int mace_probe(struct device *);
 extern int cs89x0_probe(struct device *dev);
+extern int ethertap_probe(struct device *dev);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -105,6 +108,12 @@ __initfunc(static int ethif_probe(struct device *dev))
 	return 1;		/* ENXIO */
 
     if (1
+#ifdef CONFIG_HAPPYMEAL
+	/* Please keep this one first, we'd like the on-board ethernet
+	 * to be probed first before other PCI cards on Ultra/PCI.  -DaveM
+	 */
+	&& happy_meal_probe(dev)
+#endif
 #ifdef CONFIG_DGRS
 	&& dgrs_probe(dev)
 #endif
@@ -222,6 +231,9 @@ __initfunc(static int ethif_probe(struct device *dev))
 #if defined(CONFIG_SK_G16)
 	&& SK_init(dev)
 #endif
+#ifdef CONFIG_NI5010
+        && ni5010_probe(dev)
+#endif
 #ifdef CONFIG_NI52
 	&& ni52_probe(dev)
 #endif
@@ -246,14 +258,14 @@ __initfunc(static int ethif_probe(struct device *dev))
 #ifdef CONFIG_TLAN
 	&& tlan_probe(dev)
 #endif
-#ifdef CONFIG_HAPPYMEAL
-	&& happy_meal_probe(dev)
-#endif
 #ifdef CONFIG_SUNQE
 	&& qec_probe(dev)
 #endif
 #ifdef CONFIG_MYRI_SBUS
 	&& myri_sbus_probe(dev)
+#endif
+#ifdef CONFIG_MACE
+	&& mace_probe(dev)
 #endif
 #ifdef CONFIG_SGISEEQ
 	&& sgiseeq_probe(dev)
@@ -270,6 +282,12 @@ __initfunc(static int ethif_probe(struct device *dev))
 
 
 
+#ifdef CONFIG_ETHERTAP
+    static struct device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&tap0_dev)
+#endif
+
 #ifdef CONFIG_SDLA
     extern int sdla_init(struct device *);
     static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
@@ -284,14 +302,6 @@ static struct device atp_dev = {
     "atp0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, atp_init, /* ... */ };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&atp_dev)
-#endif
-
-#ifdef CONFIG_ARCNET
-    extern int arcnet_probe(struct device *dev);
-    static struct device arcnet_dev = {
-	"arc0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, arcnet_probe, };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&arcnet_dev)
 #endif
 
 #if defined(CONFIG_LTPC)

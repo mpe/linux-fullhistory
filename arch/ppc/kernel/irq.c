@@ -28,18 +28,30 @@
 #include <linux/config.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
+#include <linux/openpic.h>
+#include <linux/pci.h>
+#include <linux/bios32.h>
+#include <linux/openpic.h>
 
+#include <asm/hydra.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 
 #undef SHOW_IRQ
+#define OPENPIC_DEBUG
 
 unsigned lost_interrupts = 0;
-
 unsigned int local_irq_count[NR_CPUS];
-static struct irqaction irq_action[32];
+static struct irqaction irq_action[NR_IRQS];
+static int spurious_interrupts = 0;
+int __ppc_bh_counter;
+static unsigned int cached_irq_mask = 0xffffffff;
+static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
+
+#define cached_21	(((char *)(&cached_irq_mask))[3])
+#define cached_A1	(((char *)(&cached_irq_mask))[2])
 
 /*
  * These are set to the appropriate functions by init_IRQ()
@@ -47,11 +59,6 @@ static struct irqaction irq_action[32];
 void (*mask_and_ack_irq)(int irq_nr);
 void (*set_irq_mask)(int irq_nr);
 
-static unsigned int cached_irq_mask = 0xffffffff;
-#define cached_21	(((char *)(&cached_irq_mask))[3])
-#define cached_A1	(((char *)(&cached_irq_mask))[2])
-static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
-int __ppc_bh_counter;
 
 /* prep */
 #define PREP_IRQ_MASK	(((unsigned int)cached_A1)<<8) | (unsigned int)cached_21
@@ -65,7 +72,10 @@ extern unsigned long route_pci_interrupts(void);
 #define KEYBOARD_IRQ	20	/* irq number for command-power interrupt */
 #define PMAC_IRQ_MASK	(~ld_le32(IRQ_ENABLE))
 
-void prep_mask_and_ack_irq(int irq_nr)
+/* chrp */
+volatile struct Hydra *Hydra = NULL;
+
+void i8259_mask_and_ack_irq(int irq_nr)
 {
 	spin_lock(&irq_controller_lock);
 	cached_irq_mask |= 1 << irq_nr;
@@ -94,7 +104,16 @@ void pmac_mask_and_ack_irq(int irq_nr)
 	spin_unlock(&irq_controller_lock);
 }
 
-void prep_set_irq_mask(int irq_nr)
+void chrp_mask_and_ack_irq(int irq_nr)
+{
+	/* spinlocks are done by i8259_mask_and_ack() - Cort */
+	if (is_8259_irq(irq_nr))
+	    i8259_mask_and_ack_irq(irq_nr);
+	openpic_eoi(0);	
+}
+
+
+void i8259_set_irq_mask(int irq_nr)
 {
 	if (irq_nr > 7) {
 		outb(cached_A1,0xA1);
@@ -114,6 +133,21 @@ void pmac_set_irq_mask(int irq_nr)
 	 */
 	if ((ld_le32(IRQ_LEVEL) & (1UL<<irq_nr)) && !(ld_le32(IRQ_FLAG) & (1UL<<irq_nr)))
 		lost_interrupts |= (1UL<<irq_nr);
+}
+
+void chrp_set_irq_mask(int irq_nr)
+{
+	if (is_8259_irq(irq_nr)) {
+		i8259_set_irq_mask(irq_nr);
+	} else
+	{
+		/* disable? */
+		if ( cached_irq_mask & (1UL<<irq_nr) )
+			openpic_disable_irq(irq_to_openpic(irq_nr));
+		/* enable */
+		else
+			openpic_disable_irq(irq_to_openpic(irq_nr));
+	}
 }
 
 /*
@@ -171,6 +205,8 @@ int get_irq_list(char *buf)
 	len+=sprintf(buf+len, "IPI: %8lu received\n",
 		ipi_count);
 #endif
+	len += sprintf(buf+len, "99: %10u    spurious or short\n",
+		       spurious_interrupts);
 	return len;
 }
 
@@ -184,13 +220,56 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 
 	hardirq_enter(cpu);
 
-	if ( _machine == _MACH_Pmac )
+
+	/*
+	 * I'll put this ugly mess of code into a function
+	 * such as get_pending_irq() or some such clear thing
+	 * so we don't have a switch in the irq code and
+	 * the chrp code is merged a bit with the prep.
+	 * -- Cort
+	 */
+	switch ( _machine )
 	{
+	case _MACH_Pmac:
 		bits = ld_le32(IRQ_FLAG) | lost_interrupts;
 		lost_interrupts = 0;
-	}
-	else /* prep */
-	{
+		for (irq = NR_IRQS - 1; irq >= 0; --irq)
+			if (bits & (1U << irq))
+				break;
+		break;
+	case _MACH_chrp:
+		irq = openpic_irq(0);		
+		if (irq == IRQ_8259_CASCADE)
+		{
+			/*
+			 * This magic address generates a PCI IACK cycle.
+			 * 
+			 * This should go in the above mask/ack code soon. -- Cort
+			 */
+			irq = (*(volatile unsigned char *)0xfec80000) & 0x0f;
+		}
+		else if (irq >= 64)
+		{
+			/*
+			 *  OpenPIC interrupts >64 will be used for other purposes
+			 *  like interprocessor interrupts and hardware errors
+			 */
+#ifdef OPENPIC_DEBUG
+			printk("OpenPIC interrupt %d\n", irq);
+#endif
+			if (irq==99)
+				spurious_interrupts++;
+		}
+		else {
+			/*
+			 *  Here we should process IPI timer
+			 *  for now the interrupt is dismissed.
+			 */
+			goto out;
+		}
+		break;
+	case _MACH_IBM:
+	case _MACH_Motorola:
 #if 1
 		outb(0x0C, 0x20);
 		irq = inb(0x20) & 7;
@@ -221,13 +300,10 @@ retry_cascade:
 		}
 		/* ignore masked irqs */
 		bits &= ~cached_irq_mask;
-#endif
+#endif		
+		break;
 	}
 	
-	for (irq = NR_IRQS - 1; irq >= 0; --irq)
-		if (bits & (1U << irq))
-			break;
-
 	if (irq < 0) {
 		printk("Bogus interrupt from PC = %lx\n", regs->nip);
 		goto out;
@@ -238,12 +314,12 @@ retry_cascade:
 	status = 0;
 	action = irq_action + irq;
 	kstat.interrupts[irq]++;
-	if ( action )
+	if ( action && action->handler)
 	{
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
 		status |= action->flags;
-		action->handler(irq, action->dev_id, regs);
+			action->handler(irq, action->dev_id, regs);
 		/*if (status & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);*/
 		__cli(); /* in case the handler turned them on */
@@ -251,11 +327,13 @@ retry_cascade:
 		unmask_irq(irq);
 		spin_unlock(&irq_controller_lock);
 	} else {
+		if ( irq == 7 ) /* i8259 gives us irq 7 on 'short' intrs */
+			spurious_interrupts++;
 		disable_irq( irq );
 	}
 	
 	/* make sure we don't miss any cascade intrs due to eoi-ing irq 2 */
-	if ( (_machine != _MACH_Pmac)/*prep*/ && (irq > 7) )
+	if ( is_prep && (irq > 7) )
 		goto retry_cascade;
 	/* do_bottom_half is called if necessary from int_return in head.S */
 out:
@@ -329,12 +407,37 @@ int probe_irq_off (unsigned long irqs)
 	return 0;
 }
 
+__initfunc(static void i8259_init(void))
+{
+	/* init master interrupt controller */
+	outb(0x11, 0x20); /* Start init sequence */
+	outb(0x40, 0x21); /* Vector base */
+	/*outb(0x04, 0x21);*/ /* edge tiggered, Cascade (slave) on IRQ2 */
+	outb(0x0C, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
+	outb(0x01, 0x21); /* Select 8086 mode */
+	outb(0xFF, 0x21); /* Mask all */
+	
+	/* init slave interrupt controller */
+	outb(0x11, 0xA0); /* Start init sequence */
+	outb(0x48, 0xA1); /* Vector base */
+	/*outb(0x02, 0xA1);*/ /* edge triggered, Cascade (slave) on IRQ2 */
+	outb(0x0A, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
+	outb(0x01, 0xA1); /* Select 8086 mode */
+	outb(0xFF, 0xA1); /* Mask all */
+	outb(cached_A1, 0xA1);
+	outb(cached_21, 0x21);
+	if (request_irq(2, no_action, SA_INTERRUPT, "cascade", NULL) != 0)
+		panic("Could not allocate cascade IRQ!");
+	enable_irq(2);  /* Enable cascade interrupt */
+}
+
 __initfunc(void init_IRQ(void))
 {
 	extern void xmon_irq(int, void *, struct pt_regs *);
 
-	if ( _machine == _MACH_Pmac )
+	switch (_machine)
 	{
+	case _MACH_Pmac:
 		mask_and_ack_irq = pmac_mask_and_ack_irq;
 		set_irq_mask = pmac_set_irq_mask;
 		
@@ -342,28 +445,14 @@ __initfunc(void init_IRQ(void))
 #ifdef CONFIG_XMON
 		request_irq(KEYBOARD_IRQ, xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
-	}
-	else /* prep */
-	{
-		mask_and_ack_irq = prep_mask_and_ack_irq;
-		set_irq_mask = prep_set_irq_mask;
+		break;
+	case _MACH_Motorola:
+	case _MACH_IBM:
+		mask_and_ack_irq = i8259_mask_and_ack_irq;
+		set_irq_mask = i8259_set_irq_mask;
 		
-		/* init master interrupt controller */
-		outb(0x11, 0x20); /* Start init sequence */
-		outb(0x40, 0x21); /* Vector base */
-		/*outb(0x04, 0x21);*/ /* edge tiggered, Cascade (slave) on IRQ2 */
-		outb(0x0C, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
-		outb(0x01, 0x21); /* Select 8086 mode */
-		outb(0xFF, 0x21); /* Mask all */
-
-		/* init slave interrupt controller */
-		outb(0x11, 0xA0); /* Start init sequence */
-		outb(0x48, 0xA1); /* Vector base */
-		/*outb(0x02, 0xA1);*/ /* edge triggered, Cascade (slave) on IRQ2 */
-		outb(0x0A, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
-		outb(0x01, 0xA1); /* Select 8086 mode */
-		outb(0xFF, 0xA1); /* Mask all */
-
+		i8259_init();
+		route_pci_interrupts();
 		/*
 		 * According to the Carolina spec from ibm irq's 0,1,2, and 8
 		 * must be edge triggered.  Also, the pci intrs must be level
@@ -389,17 +478,40 @@ __initfunc(void init_IRQ(void))
 			 * Sound on the Powerstack reportedly needs to be edge triggered
 			 */
 			if ( _machine == _MACH_Motorola )
-			{}
+			{
+				/*irq_mode2 &= ~0x04L;
+				outb( irq_mode1 , 0x4d0 );
+				outb( irq_mode2 , 0x4d1 );*/
+			}
 
-			/*outb( irq_mode1 , 0x4d0 );
-			  outb( irq_mode2 , 0x4d1 );*/
 		}
-		outb(cached_A1, 0xA1);
-		outb(cached_21, 0x21);
-		if (request_irq(2, no_action, SA_INTERRUPT, "cascade", NULL) != 0)
-			panic("Could not allocate cascade IRQ!");
-		enable_irq(2);  /* Enable cascade interrupt */
-
-		route_pci_interrupts();
+		break;
+	case _MACH_chrp:
+		mask_and_ack_irq = chrp_mask_and_ack_irq;
+		set_irq_mask = chrp_set_irq_mask;
+		if ((Hydra = find_hydra())) {
+			printk("Hydra Mac I/O at %p\n", Hydra);
+			out_le32(&Hydra->Feature_Control, HYDRA_FC_SCC_CELL_EN |
+				 HYDRA_FC_SCSI_CELL_EN |
+				 HYDRA_FC_SCCA_ENABLE |
+				 HYDRA_FC_SCCB_ENABLE |
+				 HYDRA_FC_ARB_BYPASS |
+				 HYDRA_FC_MPIC_ENABLE |
+				 HYDRA_FC_SLOW_SCC_PCLK |
+				 HYDRA_FC_MPIC_IS_MASTER);
+			OpenPIC = (volatile struct OpenPIC *)&Hydra->OpenPIC;
+		} else if (!OpenPIC /* && find_xxx */) {
+			printk("Unknown openpic implementation\n");
+			/* other OpenPIC implementations */
+			/* ... */
+ 		}
+		if (OpenPIC)
+		    openpic_init();
+		else
+		    panic("No OpenPIC found");
+		if (Hydra)
+		    hydra_post_openpic_init();
+		i8259_init();
+		break;
 	}
 }

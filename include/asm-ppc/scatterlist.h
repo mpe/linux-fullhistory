@@ -24,4 +24,9 @@ struct scatterlist {
 #define ISA_DMA_THRESHOLD (0x00ffffff)
 #endif
 
+#ifdef CONFIG_CHRP
+/* The W83C553F supports 32-bit DMA on ISA */
+#define ISA_DMA_THRESHOLD (~0UL)
+#endif
+
 #endif /* !(_PPC_SCATTERLIST_H) */

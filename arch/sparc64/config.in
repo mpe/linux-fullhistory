@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.10 1997/08/11 14:35:45 davem Exp $
+# $Id: config.in,v 1.17 1997/09/04 01:54:43 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -61,6 +61,9 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
+fi
 endmenu
 
 mainmenu_option next_comment
@@ -81,6 +84,19 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
 fi
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+
+if [ "$CONFIG_PCI" = "y" ]; then
+	tristate 'Ultra/PCI IDE disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
+	if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
+	  dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
+	  dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
+	  dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
+	  dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
+	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
+	  define_bool CONFIG_IDE_CHIPSETS y
+	  define_bool CONFIG_BLK_DEV_NS87415 y
+	fi
+fi
 
 endmenu
 
@@ -115,6 +131,21 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 
 	bool 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
 	tristate 'PTI Qlogic,ISP Driver' CONFIG_SCSI_QLOGICPTI $CONFIG_SCSI
+
+	if [ "$CONFIG_PCI" != "n" ]; then
+	  dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
+	  if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
+	    bool '   Enable tagged command queueing' CONFIG_AIC7XXX_TAGGED_QUEUEING Y
+	    dep_tristate '   Override driver defaults for commands per LUN' CONFIG_OVERRIDE_CMDS N
+	    if [ "$CONFIG_OVERRIDE_CMDS" != "n" ]; then
+	      int  '   Maximum number of commands per LUN' CONFIG_AIC7XXX_CMDS_PER_LUN 8
+	    fi
+	    bool '   Enable SCB paging' CONFIG_AIC7XXX_PAGE_ENABLE N
+	    bool '   Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
+	    int  '   Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 15
+	  fi
+	fi
+
 	endmenu
 fi
 endmenu
@@ -140,6 +171,9 @@ if [ "$CONFIG_NET" = "y" ]; then
 		tristate 'Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
 		tristate 'Sun QuadEthernet support' CONFIG_SUNQE
 		tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
+		if [ "$CONFIG_PCI" = "y" ]; then
+			tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+		fi
 #		bool 'FDDI driver support' CONFIG_FDDI
 #		if [ "$CONFIG_FDDI" = "y" ]; then
 #		fi

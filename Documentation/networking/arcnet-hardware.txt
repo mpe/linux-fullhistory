@@ -10,8 +10,8 @@
 Because so many people (myself included) seem to have obtained ARCnet cards
 without manuals, this file contains a quick introduction to ARCnet hardware,
 some cabling tips, and a listing of all jumper settings I can find. Please
-e-mail apenwarr@foxnet.net with any settings for your particular card, or
-any other information you have!
+e-mail apenwarr@bond.net with any settings for your particular card, or any
+other information you have!
 
 
 INTRODUCTION TO ARCNET
@@ -80,7 +80,7 @@ CABLING ARCNET NETWORKS
 This section was rewritten by 
         Vojtech Pavlik     <Vojtech.Pavlik@st.mff.cuni.cz>
 using information from several people, including:
-        Avery Pennraun     <apenwarr@foxnet.net>
+        Avery Pennraun     <apenwarr@bond.net>
  	Stephen A. Wood    <saw@hallc1.cebaf.gov>
  	John Paul Morrison <jmorriso@bogomips.ee.ubc.ca>
  	Joachim Koenig     <jojo@repas.de>
@@ -3129,6 +3129,6 @@ Other Cards
 
 I have no information on other models of ARCnet cards at the moment.  Please
 send any and all info to:
-	apenwarr@foxnet.net
+	apenwarr@bond.net
 
 Thanks.

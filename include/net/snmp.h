@@ -19,6 +19,8 @@
 #ifndef _SNMP_H
 #define _SNMP_H
  
+#include <linux/config.h>
+
 /*
  *	We use all unsigned longs. Linux will soon be so reliable that even these
  *	will rapidly get too small 8-). Seriously consider the IpInReceives count
@@ -122,6 +124,5 @@ struct udp_mib
  	unsigned long	UdpInErrors;
  	unsigned long	UdpOutDatagrams;
 };
- 
  	
 #endif

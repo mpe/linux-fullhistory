@@ -321,9 +321,6 @@ int sock_sendmsg(struct socket *sock, struct msghdr *msg, int size)
 	int err;
 	struct scm_cookie scm;
 
-	if (!sock->ops->sendmsg)
-		return -EOPNOTSUPP;
-
 	err = scm_send(sock, msg, &scm);
 	if (err < 0)
 		return err;
@@ -338,9 +335,6 @@ int sock_sendmsg(struct socket *sock, struct msghdr *msg, int size)
 int sock_recvmsg(struct socket *sock, struct msghdr *msg, int size, int flags)
 {
 	struct scm_cookie scm;
-
-	if (!sock->ops->recvmsg)
-		return -EOPNOTSUPP;
 
 	memset(&scm, 0, sizeof(scm));
 
@@ -374,7 +368,6 @@ static long sock_read(struct inode *inode, struct file *file,
 		      char *ubuf, unsigned long size)
 {
 	struct socket *sock;
-	int err;
 	struct iovec iov;
 	struct msghdr msg;
 
@@ -382,9 +375,7 @@ static long sock_read(struct inode *inode, struct file *file,
   
 	if (size==0)		/* Match SYS5 behaviour */
 		return 0;
-	/* FIXME: I think this can be removed now. */
-	if ((err=verify_area(VERIFY_WRITE,ubuf,size))<0)
-	  	return err;
+
 	msg.msg_name=NULL;
 	msg.msg_namelen=0;
 	msg.msg_iov=&iov;
@@ -408,7 +399,6 @@ static long sock_write(struct inode *inode, struct file *file,
 		       const char *ubuf, unsigned long size)
 {
 	struct socket *sock;
-	int err;
 	struct msghdr msg;
 	struct iovec iov;
 	
@@ -417,10 +407,6 @@ static long sock_write(struct inode *inode, struct file *file,
 	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
 
-	/* FIXME: I think this can be removed now */
-	if ((err=verify_area(VERIFY_READ,ubuf,size))<0)
-	  	return err;
-	
 	msg.msg_name=NULL;
 	msg.msg_namelen=0;
 	msg.msg_iov=&iov;
@@ -480,9 +466,7 @@ static unsigned int sock_poll(struct file *file, poll_table * wait)
 	 *	We can't return errors to poll, so it's either yes or no. 
 	 */
 
-	if (sock->ops->poll)
-		return sock->ops->poll(sock, wait);
-	return 0;
+	return sock->ops->poll(sock, wait);
 }
 
 
@@ -617,7 +601,10 @@ int sock_create(int family, int type, int protocol, struct socket **res)
  */
   
 	if ((type != SOCK_STREAM && type != SOCK_DGRAM &&
-	     type != SOCK_SEQPACKET && type != SOCK_RAW &&
+	     type != SOCK_SEQPACKET && type != SOCK_RAW && type != SOCK_RDM &&
+#ifdef CONFIG_XTP
+		type != SOCK_WEB  &&
+#endif
 	     type != SOCK_PACKET) || protocol < 0)
 			return -EINVAL;
 
@@ -634,7 +621,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 					   closest posix thing */
 	}
 
-	sock->type = type;
+	sock->type   = type;
 
 	if ((i = net_families[family]->create(sock, protocol)) < 0) 
 	{
@@ -694,13 +681,6 @@ asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2
 	sock1 = sockfd_lookup(fd1, &err);
 	if (!sock1)
 		goto out;
-	err = -EOPNOTSUPP;
-	if (!sock1->ops->socketpair) 
-	{
-		sys_close(fd1);
-		goto out;
-	}
-
 	/*
 	 *	Now grab another socket and try to connect the two together. 
 	 */
@@ -1304,7 +1284,7 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct socket *sock;
 
 	sock = socki_lookup (filp->f_dentry->d_inode);
-	if (sock && sock->ops && sock->ops->fcntl)
+	if (sock && sock->ops)
 		return sock->ops->fcntl(sock, cmd, arg);
 	return(-EINVAL);
 }
@@ -1410,6 +1390,9 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
  
 int sock_register(struct net_proto_family *ops)
 {
+	if (ops->family < 0 || ops->family >= NPROTO)
+		return -1;
+
 	net_families[ops->family]=ops;
 	return 0;
 }
@@ -1422,6 +1405,9 @@ int sock_register(struct net_proto_family *ops)
  
 int sock_unregister(int family)
 {
+	if (family < 0 || family >= NPROTO)
+		return -1;
+
 	net_families[family]=NULL;
 	return 0;
 }

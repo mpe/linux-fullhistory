@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.9 1997/08/12 04:12:40 ecd Exp $
+/* $Id: time.c,v 1.12 1997/08/22 20:12:13 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -18,6 +18,7 @@
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/oplib.h>
 #include <asm/mostek.h>
@@ -242,11 +243,25 @@ __initfunc(void clock_probe(void))
 				if (edev->prom_node == node)
 					break;
 			if (!edev) {
-				prom_printf("%s: Mostek not probed by EBUS\n");
+				prom_printf("%s: Mostek not probed by EBUS\n",
+					    __FUNCTION__);
 				prom_halt();
 			}
 
-			clk_reg[0] = edev->regs[0];
+			if (check_region(edev->base_address[0],
+					 sizeof(struct mostek48t59))) {
+				prom_printf("%s: Can't get region %lx, %d\n",
+					    __FUNCTION__, edev->base_address[0],
+					    sizeof(struct mostek48t59));
+				prom_halt();
+			}
+			request_region(edev->base_address[0],
+				       sizeof(struct mostek48t59), "clock");
+
+			mstk48t59_regs = (struct mostek48t59 *)
+						edev->base_address[0];
+			mstk48t02_regs = &mstk48t59_regs->regs;
+			break;
 		}
 #endif
 		else {
@@ -333,25 +348,29 @@ void do_gettimeofday(struct timeval *tv)
 	/* Load doubles must be used on xtime so that what we get
 	 * is guarenteed to be atomic, this is why we can run this
 	 * with interrupts on full blast.  Don't touch this... -DaveM
+	 *
+	 * Note with time_t changes to the timeval type, I must now use
+	 * nucleus atomic quad 128-bit loads.
 	 */
 	__asm__ __volatile__("
 	sethi	%hi(linux_timers), %o1
 	sethi	%hi(xtime), %g2
 	ldx	[%o1 + %lo(linux_timers)], %g3
-1:	ldd	[%g2 + %lo(xtime)], %o4
+	or	%g2, %lo(xtime), %g2
+1:	ldda	[%g2] 0x24, %o4
 	membar	#LoadLoad | #MemIssue
 	ldx	[%g3], %o1
 	membar	#LoadLoad | #MemIssue
-	ldd	[%g2 + %lo(xtime)], %o2
+	ldda	[%g2] 0x24, %o2
 	membar	#LoadLoad
 	xor	%o4, %o2, %o2
 	xor	%o5, %o3, %o3
 	orcc	%o2, %o3, %g0
-	bne,pn	%icc, 1b
+	bne,pn	%xcc, 1b
 	 cmp	%o1, 0
 	bge,pt	%icc, 1f
 	 sethi	%hi(tick), %o3
-	ld	[%o3 + %lo(tick)], %o3
+	ldx	[%o3 + %lo(tick)], %o3
 	sethi	%hi(0x1fffff), %o2
 	or	%o2, %lo(0x1fffff), %o2
 	add	%o5, %o3, %o5
@@ -360,12 +379,12 @@ void do_gettimeofday(struct timeval *tv)
 	sethi	%hi(1000000), %o2
 	or	%o2, %lo(1000000), %o2
 	cmp	%o5, %o2
-	bl,a,pn	%icc, 1f
-	 st	%o4, [%o0 + 0x0]
+	bl,a,pn	%xcc, 1f
+	 stx	%o4, [%o0 + 0x0]
 	add	%o4, 0x1, %o4
 	sub	%o5, %o2, %o5
-	st	%o4, [%o0 + 0x0]
-1:	st	%o5, [%o0 + 0x4]");
+	stx	%o4, [%o0 + 0x0]
+1:	stx	%o5, [%o0 + 0x8]");
 }
 
 void do_settimeofday(struct timeval *tv)

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.34 1997/08/15 06:44:18 davem Exp $
+/* $Id: irq.c,v 1.39 1997/08/31 03:11:18 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -112,6 +112,13 @@ int get_irq_list(char *buf)
 		}
 		len += sprintf(buf + len, "\n");
 	}
+#if 0
+#ifdef CONFIG_PCI
+	len += sprintf(buf + len, "ISTAT: PCI[%016lx] OBIO[%016lx]\n",
+		       psycho_root->psycho_regs->pci_istate,
+		       psycho_root->psycho_regs->obio_istate);
+#endif
+#endif
 	return len;
 }
 
@@ -216,24 +223,24 @@ unsigned char psycho_ino_to_pil[] = {
 	6, 4, 3, 1,			/* PCI B slot 1  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 2  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 3  Int A, B, C, D */
-	3, /* SCSI */
-	3, /* Ethernet */
-	2, /* Parallel Port */
-	8, /* Audio Record */
-	7, /* Audio Playback */
-	8, /* PowerFail */
-	7, /* Keyboard/Mouse/Serial */
-	8, /* Floppy */
-	2, /* Spare Hardware */
-	4, /* Keyboard */
-	4, /* Mouse */
-	7, /* Serial */
-	6, /* Timer 0 */
-	6, /* Timer 1 */
-	8, /* Uncorrectable ECC */
-	8, /* Correctable ECC */
-	8, /* PCI Bus A Error */
-	7, /* PCI Bus B Error */
+	3,  /* SCSI */
+	5,  /* Ethernet */
+	8,  /* Parallel Port */
+	13, /* Audio Record */
+	14, /* Audio Playback */
+	15, /* PowerFail */
+	12, /* Keyboard/Mouse/Serial */
+	11, /* Floppy */
+	2,  /* Spare Hardware */
+	12, /* Keyboard */
+	4,  /* Mouse */
+	12, /* Serial */
+	10, /* Timer 0 */
+	11, /* Timer 1 */
+	15, /* Uncorrectable ECC */
+	15, /* Correctable ECC */
+	15, /* PCI Bus A Error */
+	15, /* PCI Bus B Error */
 	1, /* Power Management */
 };
 
@@ -254,10 +261,15 @@ unsigned char psycho_ino_to_pil[] = {
 /* Now these are always passed a true fully specified sun4u INO. */
 void enable_irq(unsigned int ino)
 {
-	struct ino_bucket *bucket = ino_lookup(ino);
+	struct ino_bucket *bucket;
 	unsigned long tid;
 	unsigned int *imap;
 
+#ifdef CONFIG_PCI
+	if(PCI_IRQ_P(ino))
+		ino &= (PCI_IRQ_IGN | PCI_IRQ_INO);
+#endif
+	bucket = ino_lookup(ino);
 	if(!bucket)
 		return;
 
@@ -281,9 +293,14 @@ void enable_irq(unsigned int ino)
 /* This now gets passed true ino's as well. */
 void disable_irq(unsigned int ino)
 {
-	struct ino_bucket *bucket = ino_lookup(ino);
+	struct ino_bucket *bucket;
 	unsigned int *imap;
 
+#ifdef CONFIG_PCI
+	if(PCI_IRQ_P(ino))
+		ino &= (PCI_IRQ_IGN | PCI_IRQ_INO);
+#endif
+	bucket = ino_lookup(ino);
 	if(!bucket)
 		return;
 
@@ -427,6 +444,37 @@ static void get_irq_translations(int *cpu_irq, int *ivindex_fixup,
 	panic("Bad IRQ bus type...");
 }
 
+#ifdef CONFIG_PCI
+static void pci_irq_frobnicate(int *cpu_irq, int *ivindex_fixup,
+			       unsigned int **imap, unsigned int **iclr,
+			       unsigned int irq)
+{
+	struct linux_psycho *psycho = psycho_root;
+	struct psycho_regs *pregs = psycho->psycho_regs;
+	unsigned long addr, imoff;
+
+	addr = (unsigned long) &pregs->imap_a_slot0;
+	imoff = (irq & PCI_IRQ_IMAP_OFF) >> PCI_IRQ_IMAP_OFF_SHFT;
+	addr = addr + imoff;
+
+	*imap = ((unsigned int *)addr) + 1;
+
+	addr = (unsigned long) pregs;
+	addr += psycho_iclr_offset(irq & (PCI_IRQ_INO));
+	*iclr = ((unsigned int *)addr) + 1;
+
+	*cpu_irq = psycho_ino_to_pil[irq & (PCI_IRQ_INO)];
+	if(*cpu_irq == 0) {
+		printk("get_irq_translations: BAD PSYCHO INO[%x]\n", irq);
+		panic("Bad PSYCHO IRQ frobnication...");
+	}
+
+	/* IVINDEX fixup only needed for PCI slot irq lines. */
+	if(!(irq & 0x20))
+		*ivindex_fixup = irq & 0x03;
+}
+#endif
+
 /* Once added, they are never removed. */
 static struct ino_bucket *add_ino_hash(unsigned int ivindex,
 				       unsigned int *imap, unsigned int *iclr,
@@ -475,6 +523,11 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	imap = iclr = NULL;
 
 	ivindex_fixup = 0;
+#ifdef CONFIG_PCI
+	if(PCI_IRQ_P(irq)) {
+		pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
+	} else
+#endif
 	if(irqflags & SA_DCOOKIE) {
 		if(!dev_id) {
 			printk("request_irq: SA_DCOOKIE but dev_id is NULL!\n");
@@ -588,10 +641,16 @@ void free_irq(unsigned int irq, void *dev_id)
 	unsigned int cpu_irq;
 	int ivindex = -1;
 
-	if(irq == 14)
+	if(irq == 14) {
 		cpu_irq = irq;
-	else
-		cpu_irq = sysio_ino_to_pil[irq];
+	} else {
+#ifdef CONFIG_PCI
+		if(PCI_IRQ_P(irq))
+			cpu_irq = psycho_ino_to_pil[irq & PCI_IRQ_INO];
+		else
+#endif
+			cpu_irq = sysio_ino_to_pil[irq];
+	}
 	action = *(cpu_irq + irq_action);
 	if(!action->handler) {
 		printk("Freeing free IRQ %d\n", irq);
@@ -804,10 +863,12 @@ void synchronize_irq(void)
 void report_spurious_ivec(struct pt_regs *regs)
 {
 	extern unsigned long ivec_spurious_cookie;
+	static int times = 0;
 
 	printk("IVEC: Spurious interrupt vector (%016lx) received at (%016lx)\n",
 	       ivec_spurious_cookie, regs->tpc);
-	return;
+	if(times++ > 1)
+		prom_halt();
 }
 
 void unexpected_irq(int irq, void *dev_cookie, struct pt_regs *regs)
@@ -850,13 +911,21 @@ void handler_irq(int irq, struct pt_regs *regs)
 		unexpected_irq(irq, 0, regs);
 	} else {
 		do {
-			action->handler(irq, action->dev_id, regs);
-			if(action->flags & SA_IMAP_MASKED) {
-				struct ino_bucket *bucket =
-					(struct ino_bucket *)action->mask;
+			struct ino_bucket *bucket = NULL;
+			unsigned int ino = 0;
 
+			if(action->flags & SA_IMAP_MASKED) {
+				bucket = (struct ino_bucket *)action->mask;
+
+				ino = bucket->ino;
+				if(!(ivector_to_mask[ino] & 0x80000000))
+					continue;
+			}
+
+			action->handler(irq, action->dev_id, regs);
+			if(bucket) {
+				ivector_to_mask[ino] &= ~(0x80000000);
 				*(bucket->iclr) = SYSIO_ICLR_IDLE;
-				membar("#MemIssue");
 			}
 		} while((action = action->next) != NULL);
 	}

@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.23 1997/05/31 12:36:35 freitag Exp $
+ * Version:	$Id: ip_fragment.c,v 1.25 1997/08/17 05:56:07 freitag Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -313,8 +313,8 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	len = qp->ihlen + qp->len;
 	
 	if(len>65535) {
-		printk(KERN_INFO "Oversized IP packet from %s.\n",
-		       in_ntoa(qp->iph->saddr));
+		printk(KERN_INFO "Oversized IP packet from %I.\n", 
+		       &qp->iph->saddr);
 		ip_statistics.IpReasmFails++;
 		ip_free(qp);
 		return NULL;
@@ -360,7 +360,6 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 
 	skb->pkt_type = qp->fragments->skb->pkt_type;
 	skb->protocol = qp->fragments->skb->protocol;
-
 	/* We glued together all fragments, so remove the queue entry. */
 	ip_free(qp);
 
@@ -437,8 +436,8 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	
 	/* Attempt to construct an oversize packet. */
 	if(ntohs(iph->tot_len)+(int)offset>65535) {
-		printk(KERN_INFO "Oversized packet received from %s\n",
-		       in_ntoa(iph->saddr));
+		printk(KERN_INFO "Oversized packet received from %I\n",
+		       &iph->saddr);
 		frag_kfree_skb(skb, FREE_READ);
 		ip_statistics.IpReasmFails++;
 		return NULL;

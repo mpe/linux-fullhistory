@@ -13,6 +13,8 @@
 #ifndef _RESIDUAL_
 #define _RESIDUAL_
 
+#ifndef __ASSEMBLY__
+
 #define MAX_CPUS 32                     /* These should be set to the maximum */
 #define MAX_MEMS 64                     /* number possible for this system.   */
 #define MAX_DEVICES 256                 /* Changing these will change the     */
@@ -313,5 +315,7 @@ typedef struct _RESIDUAL {
 
 
 extern RESIDUAL res;
+void print_residual_device_info(void);
+#endif /* __ASSEMBLY__ */
 #endif  /* ndef _RESIDUAL_ */
 

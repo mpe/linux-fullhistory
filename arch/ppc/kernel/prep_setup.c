@@ -34,6 +34,7 @@
 #include <asm/residual.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/ide.h>
 
 /* for the mac fs */
 kdev_t boot_dev;
@@ -55,33 +56,18 @@ extern int rd_image_start;	/* starting block # of image */
 
 extern char saved_command_line[256];
 
-struct screen_info screen_info = {
-	0, 25,			/* orig-x, orig-y */
-	{ 0, 0 },		/* unused */
-	0,			/* orig-video-page */
-	0,			/* orig-video-mode */
-	80,			/* orig-video-cols */
-	0,0,0,			/* ega_ax, ega_bx, ega_cx */
-	25,			/* orig-video-lines */
-	1,			/* orig-video-isVGA */
-	16			/* orig-video-points */
-};
+void prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+{
+	ide_ioreg_t port = base;
+	int i = 8;
 
+	while (i--)
+		*p++ = port++;
+	*p++ = base + 0x206;
+	if (irq != NULL)
+		*irq = 0;
+}
 
-/*
- * these are here to get by until the pmac/prep merge is done
- */
-int pmac_display_supported(char *name)
-{
-	return 0;
-}
-int sd_find_target(void *a, int b)
-{
-	return 0;
-}
-void pmac_find_display(void)
-{
-}
 
 int
 prep_get_cpuinfo(char *buffer)
@@ -237,6 +223,7 @@ prep_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	extern char cmd_line[];
 	extern char _etext[], _edata[], _end[];
 	extern int panic_timeout;
+	unsigned char reg;
 
 	/* Save unparsed command line copy for /proc/cmdline */
 	strcpy( saved_command_line, cmd_line );
@@ -257,6 +244,12 @@ prep_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	init_task.mm->brk = (unsigned long) _end;	
 	
 	aux_device_present = 0xaa;
+	/* Set up floppy in PS/2 mode */
+	outb(0x09, SIO_CONFIG_RA);
+	reg = inb(SIO_CONFIG_RD);
+	reg = (reg & 0x3F) | 0x40;
+	outb(reg, SIO_CONFIG_RD);
+	outb(reg, SIO_CONFIG_RD);	/* Have to write twice to change! */
 	
 	switch ( _machine )
 	{
@@ -289,6 +282,8 @@ prep_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 #endif
 
 	printk("Boot arguments: %s\n", cmd_line);
+
+	print_residual_device_info();
 	
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");

@@ -193,7 +193,7 @@ void note_bootable_part(kdev_t dev, int part)
 	}
 }
 
-void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
 	struct device_node *np;
 	int i;

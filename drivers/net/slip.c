@@ -106,6 +106,7 @@ static void slip_unesc6(struct slip *sl, unsigned char c);
 #ifdef CONFIG_SLIP_SMART
 static void sl_keepalive(unsigned long sls);
 static void sl_outfill(unsigned long sls);
+static int sl_ioctl(struct device *dev,struct ifreq *rq,int cmd);
 #endif
 
 /* Find a free SLIP channel, and link in this `tty' line. */
@@ -1015,8 +1016,6 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 #ifdef CONFIG_SLIP_SMART
 	/* VSV changes start here */
         case SIOCSKEEPALIVE:
-                if (sl->keepalive)
-                        (void)del_timer (&sl->keepalive_timer);
 		err = verify_area(VERIFY_READ, arg, sizeof(int));
 		if (err)  {
 			return -err;
@@ -1024,6 +1023,8 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		get_user(tmp,(int *)arg);
                 if (tmp > 255) /* max for unchar */
 			return -EINVAL;
+                if (sl->keepalive)
+                        (void)del_timer (&sl->keepalive_timer);
 		if ((sl->keepalive = (unchar) tmp) != 0) {
 			sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
 			add_timer(&sl->keepalive_timer);
@@ -1040,8 +1041,6 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		return 0;
 
         case SIOCSOUTFILL:
-                if (sl->outfill)
-                         (void)del_timer (&sl->outfill_timer);
 		err = verify_area(VERIFY_READ, arg, sizeof(int));
 		if (err)  {
 			return -err;
@@ -1049,6 +1048,8 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		get_user(tmp,(int *)arg);
                 if (tmp > 255) /* max for unchar */
 			return -EINVAL;
+                if (sl->outfill)
+                         (void)del_timer (&sl->outfill_timer);
                 if ((sl->outfill = (unchar) tmp) != 0){
 			sl->outfill_timer.expires=jiffies+sl->outfill*HZ;
 			add_timer(&sl->outfill_timer);
@@ -1075,6 +1076,58 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		return -ENOIOCTLCMD;
 	}
 }
+
+/* VSV changes start here */
+#ifdef CONFIG_SLIP_SMART
+/* function do_ioctl called from net/core/dev.c
+   to allow get/set outfill/keepalive parameter
+   by ifconfig                                 */
+
+static int sl_ioctl(struct device *dev,struct ifreq *rq,int cmd)
+{
+	struct slip *sl = (struct slip*)(dev->priv);
+
+	if (sl == NULL)		/* Allocation failed ?? */
+		return -ENODEV;
+
+	switch(cmd){
+        case SIOCSKEEPALIVE:
+		/* max for unchar */
+                if (((unsigned int)((unsigned long)rq->ifr_data)) > 255)
+			return -EINVAL;
+                if (sl->keepalive)
+                        (void)del_timer (&sl->keepalive_timer);
+		sl->keepalive = (unchar) ((unsigned long)rq->ifr_data);
+		if (sl->keepalive != 0) {
+			sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
+			add_timer(&sl->keepalive_timer);
+			set_bit(SLF_KEEPTEST, &sl->flags);
+                }
+		break;
+
+        case SIOCGKEEPALIVE:
+		rq->ifr_data=(caddr_t)((unsigned long)sl->keepalive);
+		break;
+
+        case SIOCSOUTFILL:
+                if (((unsigned)((unsigned long)rq->ifr_data)) > 255) /* max for unchar */
+			return -EINVAL;
+                if (sl->outfill)
+			del_timer (&sl->outfill_timer);
+                if ((sl->outfill = (unchar)((unsigned long) rq->ifr_data)) != 0){
+			sl->outfill_timer.expires=jiffies+sl->outfill*HZ;
+			add_timer(&sl->outfill_timer);
+			set_bit(SLF_OUTWAIT, &sl->flags);
+		}
+                break;
+
+        case SIOCGOUTFILL:
+		rq->ifr_data=(caddr_t)((unsigned long)sl->outfill);
+	};
+	return 0;
+}
+#endif
+/* VSV changes end */
 
 static int sl_open_dev(struct device *dev)
 {
@@ -1173,6 +1226,9 @@ int slip_init(struct device *dev)
 	dev->open		= sl_open_dev;
 	dev->stop		= sl_close;
 	dev->get_stats	        = sl_get_stats;
+#ifdef CONFIG_SLIP_SMART
+	dev->do_ioctl		= sl_ioctl;
+#endif
 	dev->hard_header_len	= 0;
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;

@@ -1,6 +1,13 @@
-Yes.. it's being worked on.
+                       Linux DECnet Project
+                      ======================
 
-If you want to get involved email me <Alan.Cox@linux.org> and I'll put you
-in touch with the people doing the work.
+For information on the Linux DECnet Project and the latest progress,
+look at the project home page:
 
-Alan
+http://eeshack3.swan.ac.uk/~gw7rrm/DECnet/index.html
+
+To contribute either mail <SteveW@ACM.org> or post on one of the Linux
+mailing lists (either linux-net or netdev).
+
+Steve Whitehouse <SteveW@ACM.org>
+http://eeshack3.swan.ac.uk/~gw7rrm

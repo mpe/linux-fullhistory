@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.1 1997/06/06 20:37:56 freitag Exp $
+ *  $Id: syncookies.c,v 1.2 1997/08/22 19:15:08 freitag Exp $
  *
  *  Missing: IPv6 support. 
  *           Some counter so that the Administrator can see when the machine
@@ -149,6 +149,7 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 	struct open_request *req; 
 	int mss; 
 	struct rtable *rt; 
+	__u8 rcv_wscale;
 
 	if (!sysctl_tcp_syncookies)
 		return sk;
@@ -210,7 +211,8 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 	req->window_clamp = rt->u.dst.window;  
 	tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
 				  &req->rcv_wnd, &req->window_clamp, 
-				  0, &req->rcv_wscale);
+				  0, &rcv_wscale);
+	req->rcv_wscale = rcv_wscale; 
 
 	return get_cookie_sock(sk, skb, req, &rt->u.dst);
 }

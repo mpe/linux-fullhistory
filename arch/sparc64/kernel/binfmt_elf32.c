@@ -8,6 +8,9 @@
 
 #define elf_check_arch(x)	(((x) == EM_SPARC) || ((x) == EM_SPARC32PLUS))
 
+#define ELF_ET_DYN_BASE         0x60000000
+
+
 #include <asm/processor.h>
 #include <linux/module.h>
 #include <linux/config.h>

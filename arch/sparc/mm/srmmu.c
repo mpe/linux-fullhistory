@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.150 1997/07/25 23:06:17 davem Exp $
+/* $Id: srmmu.c,v 1.151 1997/08/28 11:10:54 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2103,14 +2103,18 @@ unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	sparc_iobase_vaddr = 0xfd000000;    /* 16MB of IOSPACE on all sun4m's. */
 	physmem_mapped_contig = 0;	    /* for init.c:taint_real_pages()   */
 
-	/* Find the number of contexts on the srmmu. */
-	cpunode = prom_getchild(prom_root_node);
-	num_contexts = 0;
-	while((cpunode = prom_getsibling(cpunode)) != 0) {
-		prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
-		if(!strcmp(node_str, "cpu")) {
-			num_contexts = prom_getintdefault(cpunode, "mmu-nctx", 0x8);
-			break;
+	if (sparc_cpu_model == sun4d)
+		num_contexts = 65536; /* We now it is Viking */
+	else {
+		/* Find the number of contexts on the srmmu. */
+		cpunode = prom_getchild(prom_root_node);
+		num_contexts = 0;
+		while((cpunode = prom_getsibling(cpunode)) != 0) {
+			prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
+			if(!strcmp(node_str, "cpu")) {
+				num_contexts = prom_getintdefault(cpunode, "mmu-nctx", 0x8);
+				break;
+			}
 		}
 	}
 

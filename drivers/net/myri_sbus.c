@@ -19,7 +19,9 @@ static char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #include <linux/init.h>
+
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -34,6 +36,7 @@ static char *version =
 #include <asm/auxio.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <asm/irq.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -275,7 +278,7 @@ static void myri_init_rings(struct myri_eth *mp, int from_irq)
 		mp->rx_skbs[i] = skb;
 		skb->dev = dev;
 		skb_put(skb, RX_ALLOC_SIZE);
-		rxd[i].myri_scatters[0].addr = (unsigned long) skb->data;
+		rxd[i].myri_scatters[0].addr = (u32) ((unsigned long)skb->data);
 		rxd[i].myri_scatters[0].len = RX_ALLOC_SIZE;
 		rxd[i].ctx = i;
 		rxd[i].num_sg = 1;
@@ -337,6 +340,11 @@ static inline void myri_tx(struct myri_eth *mp, struct device *dev)
 		dev_kfree_skb(skb, FREE_WRITE);
 		mp->tx_skbs[entry] = NULL;
 		mp->enet_stats.tx_packets++;
+
+#ifdef NEED_DMA_SYNCHRONIZATION
+		mmu_sync_dma(((u32)((unsigned long)skb->data)),
+			     skb->len, mp->myri_sbus_dev->my_bus);
+#endif
 
 		entry = NEXT_TX(entry);
 	}
@@ -429,13 +437,19 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 			drops++;
 			DRX(("DROP "));
 			mp->enet_stats.rx_dropped++;
-			rxd->myri_scatters[0].addr = (unsigned long) skb->data;
+			rxd->myri_scatters[0].addr =
+				(u32) ((unsigned long)skb->data);
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
 			rq->tail = NEXT_RX(rq->tail);
 			goto next;
 		}
+
+#ifdef NEED_DMA_SYNCHRONIZATION
+		mmu_sync_dma(((u32)((unsigned long)skb->data)),
+			     skb->len, mp->myri_sbus_dev->my_bus);
+#endif
 
 		DRX(("len[%d] ", len));
 		if(len > RX_COPY_THRESHOLD) {
@@ -450,7 +464,8 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 			mp->rx_skbs[index] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, RX_ALLOC_SIZE);
-			rxd->myri_scatters[0].addr = (unsigned long) new_skb->data;
+			rxd->myri_scatters[0].addr =
+				(u32) ((unsigned long)new_skb->data);
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -474,7 +489,8 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 
 			/* Reuse original ring buffer. */
 			DRX(("reuse "));
-			rxd->myri_scatters[0].addr = (unsigned long) skb->data;
+			rxd->myri_scatters[0].addr =
+				(u32) ((unsigned long)skb->data);
 			rxd->myri_scatters[0].len = RX_ALLOC_SIZE;
 			rxd->ctx = index;
 			rxd->num_sg = 1;
@@ -618,7 +634,8 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 	txd = &sq->myri_txd[entry];
 	mp->tx_skbs[entry] = skb;
 
-	txd->myri_gathers[0].addr = (unsigned long) skb->data;
+	txd->myri_gathers[0].addr =
+		(unsigned int) ((unsigned long)skb->data);
 	txd->myri_gathers[0].len = len;
 	txd->num_sg = 1;
 	txd->chan = KERNEL_CHANNEL;
@@ -837,12 +854,12 @@ static inline void determine_reg_space_size(struct myri_eth *mp)
 	case CPUVERS_3_0:
 	case CPUVERS_3_1:
 	case CPUVERS_3_2:
-		mp->reg_size = (3 * 128 * 1024) + PAGE_SIZE;
+		mp->reg_size = (3 * 128 * 1024) + 4096;
 		break;
 
 	case CPUVERS_4_0:
 	case CPUVERS_4_1:
-		mp->reg_size = ((PAGE_SIZE<<1) + mp->eeprom.ramsz);
+		mp->reg_size = ((4096<<1) + mp->eeprom.ramsz);
 		break;
 
 	case CPUVERS_4_2:
@@ -850,7 +867,7 @@ static inline void determine_reg_space_size(struct myri_eth *mp)
 	default:
 		printk("myricom: AIEEE weird cpu version %04x assuming pre4.0\n",
 		       mp->eeprom.cpuvers);
-		mp->reg_size = (3 * 128 * 1024) + PAGE_SIZE;
+		mp->reg_size = (3 * 128 * 1024) + 4096;
 	};
 }
 
@@ -1077,6 +1094,22 @@ static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *
 
 	/* Register interrupt handler now. */
 	DET(("Requesting MYRIcom IRQ line.\n"));
+#ifdef __sparc_v9__
+	if(sparc_cpu_model == sun4u) {
+		struct devid_cookie dcookie;
+
+		dcookie.real_dev_id = dev;
+		dcookie.imap = dcookie.iclr = 0;
+		dcookie.pil = -1;
+		dcookie.bus_cookie = sdev->my_bus;
+		if(request_irq(dev->irq, &myri_interrupt,
+			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+			       "MyriCOM Ethernet", &dcookie)) {
+			printk("MyriCOM: Cannot register interrupt handler.\n");
+			return ENODEV;
+		}
+	} else
+#endif
 	if(request_irq(dev->irq, &myri_interrupt,
 		       SA_SHIRQ, "MyriCOM Ethernet", (void *) dev)) {
 		printk("MyriCOM: Cannot register interrupt handler.\n");

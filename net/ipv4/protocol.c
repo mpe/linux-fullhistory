@@ -77,7 +77,6 @@ static struct inet_protocol tcp_protocol =
 	"TCP"			/* name			*/
 };
 
-
 static struct inet_protocol udp_protocol = 
 {
 	udp_rcv,		/* UDP handler		*/

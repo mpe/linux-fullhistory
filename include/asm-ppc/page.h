@@ -13,11 +13,11 @@
 /*
  * these virtual mappings for prep and pmac
  * on the prep machine the io areas are at different physical locations
- * than their virtual address.  On the pmac the io areas
+ * than their virtual address.  On the pmac and chrp the io areas
  * are mapped 1-1 virtual/physical.
  * -- Cort
  */
-#ifdef CONFIG_PREP
+#if defined(CONFIG_PREP) || defined(CONFIG_CHRP)
 #define KERNELBASE	0x90000000
 #endif
 #ifdef CONFIG_PMAC

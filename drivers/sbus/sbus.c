@@ -68,8 +68,14 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 	   sparc_cpu_model == sun4m ||
 	   sparc_cpu_model == sun4u) {
 		/* Ahh, we can determine the slot and offset */
-		sbus_dev->slot = sbus_dev_slot(base);
-		sbus_dev->offset = sbus_dev_offset(base);
+		if(sparc_cpu_model == sun4u) {
+			/* A bit tricky on the SYSIO. */
+			sbus_dev->slot = sbus_dev->reg_addrs[0].which_io;
+			sbus_dev->offset = sbus_dev_offset(base);
+		} else {
+			sbus_dev->slot = sbus_dev_slot(base);
+			sbus_dev->offset = sbus_dev_offset(base);
+		}
 	} else {   /* Grrr, gotta do calculations to fix things up */
 		sbus_dev->slot = sbus_dev->reg_addrs[0].which_io;
 		sbus_dev->offset = base;
@@ -108,6 +114,18 @@ no_regs:
 			sbus_dev->num_irqs = 0;
 		} else {
 			sbus_dev->num_irqs = 1;
+			if(sbus_dev->irqs[0].pri < 0x20) {
+				int old_irq = sbus_dev->irqs[0].pri;
+
+				/* Need to do special SLOT fixups in this case. */
+#if 0 /* DEBUGGING */
+				printk("SBUS[%x:%lx]: INO fixup from [%x] to [%x]\n",
+				       sbus_dev->slot, sbus_dev->offset,
+				       old_irq, old_irq + (sbus_dev->slot * 8));
+#endif
+				sbus_dev->irqs[0].pri =
+					(old_irq + (sbus_dev->slot * 8));
+			}
 		}
 	} else {
 		len = prom_getproperty(nd, "intr", (void *)sbus_dev->irqs,
@@ -212,6 +230,8 @@ sbus_do_child_siblings(unsigned long memory_start, int start_node,
 	return memory_start;
 }
 
+/* #define E3000_DEBUG */
+
 __initfunc(unsigned long
 sbus_init(unsigned long memory_start, unsigned long memory_end))
 {
@@ -221,6 +241,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	struct linux_sbus_device *this_dev;
 	int num_sbus = 0;  /* How many did we find? */
 
+#ifdef E3000_DEBUG
+	prom_printf("sbus_init: Radek, record following output for me. -DaveM\n");
+#endif
 	memory_start = ((memory_start + 7) & (~7));
 
 	topnd = prom_getchild(prom_root_node);
@@ -228,11 +251,15 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	/* Finding the first sbus is a special case... */
 	iommund = 0;
 	if(sparc_cpu_model == sun4u) {
-		/* IOMMU "hides" inside SBUS/SYSIO node. */
-		iommund = nd = prom_searchsiblings(topnd, "sbus");
+		nd = prom_searchsiblings(topnd, "sbus");
 		if(nd == 0) {
+#ifdef CONFIG_PCI
+			printk("SBUS: No SBUS's found.\n");
+			return sun_console_init(memory_start);
+#else
 			prom_printf("YEEE, UltraSparc sbus not found\n");
 			prom_halt();
+#endif
 		}
 	} else if(sparc_cpu_model == sun4d) {
 		if((iommund = prom_searchsiblings(topnd, "io-unit")) == 0 ||
@@ -249,6 +276,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		}
 	}
 
+#ifdef E3000_DEBUG
+	prom_printf("sbus_init: 1st sbus node(%x)\n", nd);
+#endif
 	/* Ok, we've found the first one, allocate first SBus struct
 	 * and place in chain.
 	 */
@@ -257,16 +287,34 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	sbus->next = 0;
 	this_sbus=nd;
 
-	/* Have IOMMU will travel. XXX grrr - this should be per sbus... */
-	if(iommund) {
-		if (sparc_cpu_model == sun4d)
-			iommu_sun4d_init(this_sbus, sbus);
-		else
-			memory_start = iommu_init(iommund, memory_start, memory_end, sbus);
+	if(sparc_cpu_model != sun4u)
+		/* Have IOMMU will travel.
+		 *
+		 * XXX This should be per sbus on sun4d...
+		 */
+		if(iommund) {
+			if (sparc_cpu_model == sun4d)
+				iommu_sun4d_init(this_sbus, sbus);
+			else
+				memory_start = iommu_init(iommund,
+							  memory_start, memory_end,
+							  sbus);
 	}
 
 	/* Loop until we find no more SBUS's */
 	while(this_sbus) {
+		/* IOMMU hides inside SBUS/SYSIO prom node on Ultra. */
+#ifdef E3000_DEBUG
+		prom_printf("sbus%d: [ii()", num_sbus);
+#endif
+		if(sparc_cpu_model == sun4u)
+			memory_start = iommu_init(this_sbus,
+						  memory_start, memory_end,
+						  sbus);
+
+#ifdef E3000_DEBUG
+		prom_printf("1");
+#endif
 		printk("sbus%d: ", num_sbus);
 		sbus_clock = prom_getint(this_sbus, "clock-frequency");
 		if(sbus_clock==-1) sbus_clock = (25*1000*1000);
@@ -279,9 +327,15 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		strcpy(sbus->prom_name, lbuf);
 		sbus->clock_freq = sbus_clock;
 		
+#ifdef E3000_DEBUG
+		prom_printf("psri()");
+#endif
 		prom_sbus_ranges_init (iommund, sbus);
 
 		sbus_devs = prom_getchild(this_sbus);
+#ifdef E3000_DEBUG
+		prom_printf("chld(%x)", sbus_devs);
+#endif
 
 		sbus->devices = (struct linux_sbus_device *) memory_start;
 		memory_start += sizeof(struct linux_sbus_device);
@@ -289,6 +343,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		this_dev = sbus->devices;
 		this_dev->next = 0;
 
+#ifdef E3000_DEBUG
+		prom_printf("fsd()");
+#endif
 		fill_sbus_device(sbus_devs, this_dev);
 		this_dev->my_bus = sbus;
 
@@ -298,8 +355,14 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_dev->child = (struct linux_sbus_device *) memory_start;
 			memory_start += sizeof(struct linux_sbus_device);
 			/* Fill it */
+#ifdef E3000_DEBUG
+			prom_printf("fsd(chld)");
+#endif
 			fill_sbus_device(prom_getchild(sbus_devs), this_dev->child);
 			this_dev->child->my_bus = sbus;
+#ifdef E3000_DEBUG
+			prom_printf("sdcs()");
+#endif
 			memory_start = sbus_do_child_siblings(memory_start,
 							      prom_getchild(sbus_devs),
 							      this_dev->child,
@@ -308,6 +371,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_dev->child = 0;
 		}
 
+#ifdef E3000_DEBUG
+		prom_printf("2");
+#endif
 		while((sbus_devs = prom_getsibling(sbus_devs)) != 0) {
 			/* Allocate device node */
 			this_dev->next = (struct linux_sbus_device *) memory_start;
@@ -316,6 +382,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_dev->next=0;
 
 			/* Fill it */
+#ifdef E3000_DEBUG
+			prom_printf("fsd()");
+#endif
 			fill_sbus_device(sbus_devs, this_dev);
 			this_dev->my_bus = sbus;
 
@@ -327,9 +396,15 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 				memory_start += sizeof(struct linux_sbus_device);
 
 				/* Fill it */
+#ifdef E3000_DEBUG
+				prom_printf("fsd()");
+#endif
 				fill_sbus_device(prom_getchild(sbus_devs),
 						 this_dev->child);
 				this_dev->child->my_bus = sbus;
+#ifdef E3000_DEBUG
+				prom_printf("sdcs()");
+#endif
 				memory_start = sbus_do_child_siblings(
 						     memory_start,
 						     prom_getchild(sbus_devs),
@@ -340,14 +415,26 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			}
 		}
 
+#ifdef E3000_DEBUG
+		prom_printf("di()");
+#endif
 		memory_start = dvma_init(sbus, memory_start);
 
 		num_sbus++;
+#ifdef E3000_DEBUG
+		prom_printf("3, off to next sbus\n");
+#endif
 		if(sparc_cpu_model == sun4u) {
 			this_sbus = prom_getsibling(this_sbus);
+#ifdef E3000_DEBUG
+			prom_printf("sbus_init: sibling(%x), ", this_sbus);
+#endif
 			if(!this_sbus)
 				break;
 			this_sbus = prom_searchsiblings(this_sbus, "sbus");
+#ifdef E3000_DEBUG
+			prom_printf("next sbus node(%x),", this_sbus);
+#endif
 		} else if(sparc_cpu_model == sun4d) {
 			iommund = prom_getsibling(iommund);
 			if(!iommund) break;
@@ -360,6 +447,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_sbus = prom_searchsiblings(this_sbus, "sbus");
 		}
 		if(this_sbus) {
+#ifdef E3000_DEBUG
+			prom_printf(" scanning another sbus\n");
+#endif
 			sbus->next = (struct linux_sbus *) memory_start;
 			memory_start += sizeof(struct linux_sbus);
 			sbus = sbus->next;
@@ -368,7 +458,13 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			break;
 		}
 	} /* while(this_sbus) */
+#ifdef E3000_DEBUG
+	prom_printf("sbus_init: No more sbus's, calling sun_console_init()\n");
+#endif
 	memory_start = sun_console_init(memory_start); /* whee... */
+#ifdef E3000_DEBUG
+	prom_printf("sbus_init: back from sun_console_init()\n");
+#endif
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();
 #endif
@@ -388,8 +484,10 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 #ifdef __sparc_v9__
 	if (sparc_cpu_model == sun4u) {
 		extern void sun4u_start_timers(void);
+		extern void clock_probe(void);
 
 		sun4u_start_timers();
+		clock_probe();
 	}
 #endif
 	return memory_start;

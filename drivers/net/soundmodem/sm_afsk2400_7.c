@@ -34,7 +34,6 @@
  * a "legacy" link.
  */
 
-#include <linux/config.h>
 #include "sm.h"
 #include "sm_tbl_afsk2400_7.h"
 

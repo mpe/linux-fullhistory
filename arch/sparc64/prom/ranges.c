@@ -1,4 +1,4 @@
-/* $Id: ranges.c,v 1.7 1997/08/15 06:44:29 davem Exp $
+/* $Id: ranges.c,v 1.8 1997/08/17 22:39:45 ecd Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -87,16 +87,6 @@ void prom_apply_central_ranges(struct linux_central *central,
 				 central->num_central_ranges);
 }
 
-#ifdef CONFIG_PCI
-void prom_apply_ebus_ranges(struct linux_ebus *ebus,
-			    struct linux_prom_registers *regs, int nregs)
-{
-	if (ebus->num_ebus_ranges)
-		prom_adjust_regs(regs, nregs, ebus->ebus_ranges,
-				 ebus->num_ebus_ranges);
-}
-#endif
-
 __initfunc(void prom_ranges_init(void))
 {
 }
@@ -140,32 +130,14 @@ __initfunc(void prom_fhc_ranges_init(int fnode, struct linux_fhc *fhc))
 #ifdef CONFIG_PCI
 __initfunc(void prom_ebus_ranges_init(struct linux_ebus *ebus))
 {
-	struct ebus_range {
-		unsigned int	cld_space;
-		unsigned int	cld_base;
-		unsigned int	prn_space;
-		unsigned int	prn_base_hi;
-		unsigned int	prn_base_lo;
-		unsigned int	size;
-	} ranges[PROMREG_MAX];
-	int i, success;
+	int success;
 
 	ebus->num_ebus_ranges = 0;
 	success = prom_getproperty(ebus->prom_node, "ranges",
-				   (char *)ranges, sizeof (ranges));
+				   (char *)ebus->ebus_ranges,
+				   sizeof(ebus->ebus_ranges));
 	if (success != -1)
-		ebus->num_ebus_ranges = (success/sizeof(struct ebus_range));
-
-	for (i = 0; i < ebus->num_ebus_ranges; i++) {
-		ebus->ebus_ranges[i].ot_child_space = ranges[i].cld_space;
-		ebus->ebus_ranges[i].ot_child_base = ranges[i].cld_base;
-		ebus->ebus_ranges[i].ot_parent_space =
-				ranges[i].prn_space & 0x0f000000;
-		if (ranges[i].prn_base_hi)
-			prom_printf("WARNING: %s: ot_parent_base high lost\n");
-		ebus->ebus_ranges[i].ot_parent_base = ranges[i].prn_base_lo;
-		ebus->ebus_ranges[i].or_size = ranges[i].size;
-	}
+		ebus->num_ebus_ranges = (success/sizeof(struct linux_prom_ebus_ranges));
 }
 
 __initfunc(void prom_pbm_ranges_init(int pnode, struct linux_pbm_info *pbm))

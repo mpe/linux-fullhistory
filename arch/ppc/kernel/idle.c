@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.3 1997/08/10 04:49:08 davem Exp $
+ * $Id: idle.c,v 1.4 1997/08/23 22:46:01 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -276,3 +276,4 @@ int power_saved(void *unused)
 		schedule();
 	}
 }
+

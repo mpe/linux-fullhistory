@@ -43,15 +43,13 @@ enum {
 #define SVR4_MAXWIN 31
 
 typedef struct {
-	uint rwin_lo[8];
-	uint rwin_in[8];
+	u32 rwin_lo[8];
+	u32 rwin_in[8];
 } svr4_rwindow_t;
 
 typedef struct {
 	int            count;
-
-	/* XXX 32-bit pointers on 64-bit kernel... fixme XXX */
-	int            *winptr [SVR4_MAXWIN]; /* pointer to the windows */
+	u32            winptr [SVR4_MAXWIN]; /* pointer to the windows */
 
 	svr4_rwindow_t win[SVR4_MAXWIN];      /* the windows */
 } svr4_gwindows_t;
@@ -59,28 +57,23 @@ typedef struct {
 typedef int svr4_gregset_t[SVR4_NREGS];
 
 typedef struct {
-	double   fpu_regs[32];
-	void     *fp_q;
-	unsigned fp_fsr;
+	u64   	 fpu_regs[32];
+	u32	 fp_q;
+	u32      fp_fsr;
 	u_char   fp_nqel;
 	u_char   fp_nqsize;
 	u_char   inuse;		/* if fpu is in use */
 } svr4_fregset_t;
 
 typedef struct {
-	uint    id;		/* if this holds "xrs" string => ptr is valid */
-
-	/* XXX what is caddr_t on sparc64?? XXX */
-	caddr_t ptr;
+	u32    id;		/* if this holds "xrs" string => ptr is valid */
+	u32    ptr;
 } svr4_xrs_t;
 
 /* Machine dependant context */
 typedef struct {
 	svr4_gregset_t   greg;	/* registers 0..19 (see top) */
-
-	/* XXX 32-bit pointers again... fixme XXX */
-	svr4_gwindows_t  *gwin;	/* may point to register windows */
-
+	u32		 gwin;	/* may point to register windows */
 	svr4_fregset_t   freg;	/* floating point registers */
 	svr4_xrs_t       xrs;	/* mhm? */
 	int              pad[19];
@@ -101,15 +94,12 @@ typedef struct svr4_stack_t {
 
 /* Context used by getcontext and setcontext */
 typedef struct svr4_ucontext_t {
-	u_int                flags; /* context flags, indicate what is loaded */
-
-	/* XXX 32-bit pointer... fixme XXX */
-	struct svr4_ucontext *link;
-
-	svr4_sigset_t        sigmask;
-	svr4_stack_t         stack;
-	svr4_mcontext_t      mcontext;
-	int                  pad[23];
+	u32		flags; /* context flags, indicate what is loaded */
+	u32		link;
+	svr4_sigset_t	sigmask;
+	svr4_stack_t	stack;
+	svr4_mcontext_t	mcontext;
+	int		pad[23];
 } svr4_ucontext_t;                          
 
 /* windows hold the windows as they were at signal time,

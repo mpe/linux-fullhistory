@@ -27,6 +27,7 @@
 	FIXES:
 		Alan Cox:       Removed the 'Unexpected interrupt' bug.
 		Michael Meskes:	Upgraded to Donald Becker's version 1.07.
+		Phil Blundell:  Media selection support.
 */
 
 static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
@@ -127,6 +128,7 @@ static void update_stats(int addr, struct device *dev);
 static struct net_device_stats *el3_get_stats(struct device *dev);
 static int el3_rx(struct device *dev);
 static int el3_close(struct device *dev);
+static int el3_set_config(struct device *dev, struct ifmap *map);
 #ifdef HAVE_MULTICAST
 static void set_multicast_list(struct device *dev);
 #endif
@@ -136,9 +138,15 @@ static void set_multicast_list(struct device *dev);
 __initfunc(int el3_probe(struct device *dev))
 {
 	short lrs_state = 0xff, i;
-	ushort ioaddr, irq, if_port;
+	ushort ioaddr, irq, port;
 	short *phys_addr = (short *)dev->dev_addr;
 	static int current_tag = 0;
+	static int el3_portmap[] = { 
+	  IF_PORT_10BASET, 
+	  IF_PORT_AUI, 
+	  IF_PORT_UNKNOWN, 
+	  IF_PORT_10BASE2 
+	};
 
 	/* First check all slots of the EISA bus.  The next slot address to
 	   probe is kept in 'eisa_addr' to support multiple probe() calls. */
@@ -156,7 +164,7 @@ __initfunc(int el3_probe(struct device *dev))
 			outw(SelectWindow | 0, ioaddr + 0xC80 + EL3_CMD);
 
 			irq = inw(ioaddr + WN0_IRQ) >> 12;
-			if_port = inw(ioaddr + 6)>>14;
+			port = inw(ioaddr + 6)>>14;
 			for (i = 0; i < 3; i++)
 				phys_addr[i] = htons(read_eeprom(ioaddr, i));
 
@@ -179,7 +187,7 @@ __initfunc(int el3_probe(struct device *dev))
 			if ((mca_adaptor_id(i) | 1) == 0x627c) {
 				ioaddr = mca_pos_base_addr(i);
 				irq = inw(ioaddr + WN0_IRQ) >> 12;
-				if_port = inw(ioaddr + 6)>>14;
+				port = inw(ioaddr + 6)>>14;
 				for (i = 0; i < 3; i++)
 					phys_addr[i] = htons(read_eeprom(ioaddr, i));
 
@@ -245,7 +253,7 @@ __initfunc(int el3_probe(struct device *dev))
 
 	{
 		unsigned short iobase = id_read_eeprom(8);
-		if_port = iobase >> 14;
+		port = iobase >> 14;
 		ioaddr = 0x200 + ((iobase & 0x1f) << 4);
 	}
 	if (dev->irq > 1  &&  dev->irq < 16)
@@ -273,13 +281,13 @@ __initfunc(int el3_probe(struct device *dev))
  found:
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-	dev->if_port = if_port;
+	dev->if_port = el3_portmap[port];
 	request_region(dev->base_addr, EL3_IO_EXTENT, "3c509");
 
 	{
-		const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
+		static const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
 		printk("%s: 3c509 at %#3.3lx tag %d, %s port, address ",
-			   dev->name, dev->base_addr, current_tag, if_names[dev->if_port]);
+			   dev->name, dev->base_addr, current_tag, if_names[port]);
 	}
 
 	/* Read in the station address. */
@@ -301,12 +309,14 @@ __initfunc(int el3_probe(struct device *dev))
 	dev->hard_start_xmit = &el3_start_xmit;
 	dev->stop = &el3_close;
 	dev->get_stats = &el3_get_stats;
+	dev->set_config = &el3_set_config;
 #ifdef HAVE_MULTICAST
 		dev->set_multicast_list = &set_multicast_list;
 #endif
 
 	/* Fill in the generic fields of the device structure. */
 	ether_setup(dev);
+	dev->flags |= IFF_PORTSEL;
 	return 0;
 }
 
@@ -345,6 +355,59 @@ __initfunc(static ushort id_read_eeprom(int index))
 
 
 static int
+el3_set_config(struct device *dev, struct ifmap *map)
+{
+	int ioaddr = dev->base_addr;
+    if (map->port != dev->if_port) {
+	  switch (map->port) {
+	  case IF_PORT_10BASE2:
+	  case IF_PORT_10BASET:
+	  case IF_PORT_AUI:
+		if (dev->start) {
+		  if (dev->if_port == IF_PORT_10BASE2)
+			/* Turn off thinnet power. */
+			outw(StopCoax, ioaddr + EL3_CMD);
+		  else if (dev->if_port == IF_PORT_10BASET) {
+			/* Disable link beat and jabber */
+			EL3WINDOW(4);
+			outw(inw(ioaddr + WN4_MEDIA) & ~MEDIA_TP, ioaddr + WN4_MEDIA);
+			EL3WINDOW(1);
+		  }
+		}
+		printk(KERN_INFO "%s: %s port selected.\n", dev->name, 
+			   if_port_text[map->port]);
+		dev->if_port = map->port;
+		if (dev->start) {
+		  if (dev->if_port == IF_PORT_10BASE2)
+			/* Start the thinnet transceiver. We should really wait 50ms...*/
+			outw(StartCoax, ioaddr + EL3_CMD);
+		  else if (dev->if_port == IF_PORT_10BASET) {
+			/* 10baseT interface, enabled link beat and jabber check. */
+			EL3WINDOW(4);
+			outw(inw(ioaddr + WN4_MEDIA) | MEDIA_TP, ioaddr + WN4_MEDIA);
+			EL3WINDOW(1);
+		  }
+		}
+		break;
+	  default:
+		printk(KERN_ERR "%s: %s port not supported.\n", dev->name, 
+			   if_port_text[map->port]);
+		return -EINVAL;
+	  }
+	}
+	if (map->irq != dev->irq) {
+	  printk(KERN_ERR "%s: cannot change interrupt.\n", dev->name);
+	  return -EINVAL;
+	}
+	if (map->base_addr != dev->base_addr) {
+	  printk(KERN_ERR "%s: cannot change base address.\n", dev->name);
+	  return -EINVAL;
+	}
+	return 0;
+}
+
+
+static int
 el3_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
@@ -376,10 +439,10 @@ el3_open(struct device *dev)
 	for (i = 0; i < 6; i++)
 		outb(dev->dev_addr[i], ioaddr + i);
 
-	if (dev->if_port == 3)
+	if (dev->if_port == IF_PORT_10BASE2)
 		/* Start the thinnet transceiver. We should really wait 50ms...*/
 		outw(StartCoax, ioaddr + EL3_CMD);
-	else if (dev->if_port == 0) {
+	else if (dev->if_port == IF_PORT_10BASET) {
 		/* 10baseT interface, enabled link beat and jabber check. */
 		EL3WINDOW(4);
 		outw(inw(ioaddr + WN4_MEDIA) | MEDIA_TP, ioaddr + WN4_MEDIA);
@@ -731,10 +794,10 @@ el3_close(struct device *dev)
 	outw(RxDisable, ioaddr + EL3_CMD);
 	outw(TxDisable, ioaddr + EL3_CMD);
 
-	if (dev->if_port == 3)
+	if (dev->if_port == IF_PORT_10BASE2)
 		/* Turn off thinnet power.  Green! */
 		outw(StopCoax, ioaddr + EL3_CMD);
-	else if (dev->if_port == 0) {
+	else if (dev->if_port == IF_PORT_10BASET) {
 		/* Disable link beat and jabber, if_port may change ere next open(). */
 		EL3WINDOW(4);
 		outw(inw(ioaddr + WN4_MEDIA) & ~MEDIA_TP, ioaddr + WN4_MEDIA);

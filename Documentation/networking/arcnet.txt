@@ -37,7 +37,7 @@ If you think so, why not flame me in a quick little e-mail?  Please also
 include the type of card(s) you're using, software, size of network, and
 whether it's working or not.)
 
-My e-mail address is: apenwarr@foxnet.net
+My e-mail address is: apenwarr@bond.net
 
 
 ---------------------------------------------------------------------------
@@ -45,7 +45,15 @@ My e-mail address is: apenwarr@foxnet.net
 			
 These are the ARCnet drivers for Linux.
 
-This new release has resulted from many months of on-and-off effort from me
+
+This new release (2.91) has been put together by David Woodhouse 
+<dwmw2@cam.ac.uk>, in an attempt to tidy up the driver after adding support 
+for yet another chipset. Now the generic support has been separated from the
+individual chipset drivers, and the source files aren't quite so packed with
+#ifdefs! I've changed this file a bit, but kept it in the first person from
+Avery, because I didn't want to completely rewrite it.
+
+The previous release resulted from many months of on-and-off effort from me
 (Avery Pennarun), many bug reports/fixes and suggestions from others, and in
 particular a lot of input and coding from Tomasz Motylewski.  Starting with
 ARCnet 2.10 ALPHA, Tomasz's all-new-and-improved RFC1051 support has been
@@ -71,7 +79,8 @@ may not work right in the first place.
 Other Drivers and Info
 ----------------------
 
-You can try my ARCNET page on the World Wide Web at:
+You can (could - foxnet.net is no more - DW.) try my ARCNET page on the 
+World Wide Web at:
 	http://www.foxnet.net/~apenwarr/arcnet/
 
 Also, SMC (one of the companies that makes ARCnet cards) has a WWW site you
@@ -97,18 +106,10 @@ access.
 Installing the Driver
 ---------------------
 
-** Note: the latest version of the driver contains preliminary support for
-	ARCnet RIM I cards.  These are very old cards that don't use I/O
-	ports at all, but rather map the status and command ports into
-	shared memory.  To compile the driver in RIM I mode, you must (for
-	now) edit linux/drivers/net/arcnet.c, find the line that says:
-		#undef RIM_I_MODE
-	and change it to:
-		#define RIM_I_MODE
-
 All you will need to do in order to install the driver is:
 	make config
-		(be sure to choose ARCnet in the network devices)
+		(be sure to choose ARCnet in the network devices 
+		and at least one chipset driver.)
 	make dep
 	make clean
 	make zImage
@@ -120,24 +121,72 @@ the linux/drivers/net directory.
 You will know the driver is installed properly if you get some ARCnet
 messages when you reboot into the new Linux kernel.
 
-If you use a RIM I card, you will need to give the kernel boot parameters
-specifying your card's irq, node ID, and shared memory.  For example,
-	LILO boot: linux ether=9,0x42,0xD0000,0,arc0
-if your card is node number 42h, irq 9, with shared memory at 0xD0000.
+There are four chipset options:
 
-NOTE that if you aren't using RIM I, the above command will still work but
-you will need to replace the node ID with an I/O port number, for example:
-	LILO boot: linux ether=9,0x300,0xD0000,0,arc0
+ 1. Standard ARCnet COM90xx chipset.
 
-You can add the ether= parameter to /etc/lilo.conf to avoid typing this
-every time.
+This is the normal ARCnet card, which you've probably got. This is the only
+chipset driver which will autoprobe if not told where the card is.
+It following options on the command line:
+ com90xx=[<io>[,<irq>[,<shmem>]]][,<name>] | <name>
+
+If you load the chipset support as a module, the options are:
+ io=<io> irq=<irq> shmem=<shmem> device=<name>
+
+To disable the autoprobe, just specify "com90xx=" on the kernel command line.
+To specify the name alone, but allow autoprobe, just put "com90xx=<name>"
+
+ 2. ARCnet COM20020 chipset.
+
+This is the new chipset from SMC with support for promiscuous mode (packet 
+sniffing), extra diagnostic information, etc. Unfortunately, there is no
+sensible method of autoprobing for these cards. You must specify the I/O
+address on the kernel command line.
+The command line options are:
+ com20020=<io>[,<irq>[,<node_ID>[,backplane[,CKP[,timeout]]]]][,name]
+
+If you load the chipset support as a module, the options are:
+ io=<io> irq=<irq> node=<node_ID> backplane=<backplane> clock=<CKP>
+ timeout=<timeout> device=<name>
+
+The COM20020 chipset allows you to set the node ID in software, overriding the
+default which is still set in DIP switches on the card. If you don't have the
+COM20020 data sheets, and you don't know what the other three options refer
+to, then they won't interest you - forget them.
+
+ 3. ARCnet COM90xx chipset in IO-mapped mode.
+
+This will also work with the normal ARCnet cards, but doesn't use the shared
+memory. It performs less well than the above driver, but is provided in case
+you have a card which doesn't support shared memory, or (strangely) in case
+you have so many ARCnet cards in your machine that you run out of shmem slots.
+If you don't give the IO address on the kernel command line, then the driver
+will not find the card.
+The command line options are:
+ com90io=<io>[,<irq>][,<name>] 
+
+If you load the chipset support as a module, the options are:
+ io=<io> irq=<irq> device=<name>
+
+ 4. ARCnet RIM I cards.
+
+These are COM90xx chips which are _completely_ memory mapped. The support for
+these is not tested. If you have one, please mail the author with a success 
+report. All options must be specified, except the device name.
+Command line options:
+ arcrimi=<shmem>,<irq>,<node_ID>[,<name>]
+
+If you load the chipset support as a module, the options are:
+ shmem=<shmem> irq=<irq> node=<node_ID> device=<name>
 
 
 Loadable Module Support
 -----------------------
 
-Configure and rebuild Linux.  When asked, answer 'm' to "arcnet support" if
-you want to use the loadable module.
+Configure and rebuild Linux.  When asked, answer 'm' to "Generic ARCnet 
+support" and to support for your ARcnet chipset if you want to use the
+loadable module. You can also say 'y' to "Generic ARCnet support" and 'm' 
+to the chipset support if you wish.
 
 	make config
 	make dep
@@ -152,20 +201,18 @@ and works as a module, so most of this is now unnecessary.)
 
 For example:
 	cd /usr/src/linux/modules
-	insmod arcnet.o io=0x300 irq=2 shmem=0xd0000
-
-You can name the device using something like "device=arc1" (for a second
-card) or "device=eth0" (for weird compatibility reasons) if you like.
-
-If you use RIM I, you don't need to specify io= but you must include node=
-for your ARCnet card's station ID.
+	insmod arcnet.o
+	insmod com90xx.o
+	insmod com20020.o io=0x2e0 device=eth1
 	
 
 Using the Driver
 ----------------
 
-If you build your kernel with ARCnet support included, it should probe for
-your card automatically when you boot.
+If you build your kernel with ARCnet COM90xx support included, it should 
+probe for your card automatically when you boot. If you use a different
+chipset driver complied into the kernel, you must give the necessary options
+on the kernel command line, as detailed above.
 
 Go read the NET-2-HOWTO and ETHERNET-HOWTO for Linux; they should be
 available where you picked up this driver.  Think of your ARCnet as a
@@ -180,13 +227,19 @@ Multiple Cards in One Computer
 ------------------------------
 
 Linux has pretty good support for this now, but since I've been busy, the
-ARCnet driver has somewhat suffered in this respect.  For now, the easiest
-way to use multiple ARCnet cards is to build it as a loadable module and
-then do something like this:
-	insmod -o arc0 arcnet
-	insmod -o arc1 arcnet device=arc1
-(Note that in the first line, the default is device=arc0, but it doesn't
-hurt if you want to add it for consistency.)
+ARCnet driver has somewhat suffered in this respect. COM90xx support, if 
+compiled into the kernel, will (try to) autodetect all the installed cards. 
+
+If you have other cards, with support compiled into the kernel, then you can 
+just repeat the options on the kernel command line, e.g.:
+LILO: linux com20020=0x2e0 com20020=0x380 com90io=0x260
+
+If you have the chipset support built as a loadable module, then you need to 
+do something like this:
+	insmod -o arc0 com90xx
+	insmod -o arc1 com20020 io=0x2e0
+	insmod -o arc2 com90xx
+The ARCnet drivers will now sort out their names automatically.
 
 
 How do I get it to work with...?
@@ -441,7 +494,7 @@ It works: what now?
 Send mail describing your setup, preferably including driver version, kernel
 version, ARCnet card model, CPU type, number of systems on your network, and
 list of software in use to me at the following address:
-	apenwarr@foxnet.net
+	apenwarr@bond.net
 
 I do send (sometimes automated) replies to all messages I receive.  My email
 can be weird (and also usually gets forwarded all over the place along the

@@ -38,7 +38,9 @@
  *					path MTU bug.
  *		Thomas Quinot	:	ICMP Dest Unreach codes up to 15 are
  *					valid (RFC 1812).
- *
+ *		Andi Kleen	:	Check all packet lengths properly
+ *					and moved all kfree_skb() up to
+ *					icmp_rcv.
  *
  * RFC1122 (Host Requirements -- Comm. Layer) Status:
  * (boy, are there a lot of rules for ICMP)
@@ -690,14 +692,15 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	
 	/*
 	 *	Incomplete header ?
+	 * 	Only checks for the IP header, there should be an
+	 *	additional check for longer headers in upper levels.
 	 */
-	 
-	if(skb->len<sizeof(struct iphdr)+8)
-	{
-		kfree_skb(skb, FREE_READ);
+
+	if(len<sizeof(struct iphdr)) {
+		icmp_statistics.IcmpInErrors++;
 		return;
 	}
-	
+		
 	iph = (struct iphdr *) (icmph + 1);
 	dp = (unsigned char*)iph;
 	
@@ -712,29 +715,27 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 			case ICMP_PORT_UNREACH:
 				break;
 			case ICMP_FRAG_NEEDED:
-				if (ipv4_config.no_pmtu_disc)
-					printk(KERN_INFO "ICMP: %s: fragmentation needed and DF set.\n",
+				if (ipv4_config.no_pmtu_disc) {
+					if (net_ratelimit())
+						printk(KERN_INFO "ICMP: %s: fragmentation needed and DF set.\n",
 					       in_ntoa(iph->daddr));
-				else {
+				} else {
 					unsigned short new_mtu;
 					new_mtu = ip_rt_frag_needed(iph, ntohs(icmph->un.frag.mtu));
-					if (!new_mtu) {
-						kfree_skb(skb, FREE_READ);
+					if (!new_mtu) 
 						return;
-					}
 					icmph->un.frag.mtu = htons(new_mtu);
 				}
 				break;
 			case ICMP_SR_FAILED:
-				printk(KERN_INFO "ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr));
+				if (net_ratelimit())
+					printk(KERN_INFO "ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr));
 				break;
 			default:
 				break;
 		}
-		if (icmph->code>NR_ICMP_UNREACH) {
-			kfree_skb(skb, FREE_READ);
+		if (icmph->code>NR_ICMP_UNREACH) 
 			return;
-		}
 	}
 	
 	/*
@@ -754,10 +755,12 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 
 	if(__ip_chk_addr(iph->daddr)==IS_BROADCAST)
 	{
-		printk("%s sent an invalid ICMP error to a broadcast.\n",
-			in_ntoa(skb->nh.iph->saddr));
-		kfree_skb(skb, FREE_READ);
+		if (net_ratelimit())
+			printk("%s sent an invalid ICMP error to a broadcast.\n",
+			       in_ntoa(skb->nh.iph->saddr));
+		return; 
 	}
+
 
 	/*
 	 *	Deliver ICMP message to raw sockets. Pretty useless feature?
@@ -794,12 +797,10 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 		/* appropriate protocol layer (MUST), as per 3.2.2. */
 
 		if (iph->protocol == ipprot->protocol && ipprot->err_handler)
-			ipprot->err_handler(skb, dp);
+ 			ipprot->err_handler(skb, dp);
 
 		ipprot = nextip;
   	}
-
-	kfree_skb(skb, FREE_READ);
 }
 
 
@@ -812,13 +813,17 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	struct iphdr *iph;
 	unsigned long ip;
 
+	if (len < sizeof(struct iphdr)) {
+		icmp_statistics.IcmpInErrors++;
+		return; 
+	}
+		
 	/*
 	 *	Get the copied header of the packet that caused the redirect
 	 */
 	 
 	iph = (struct iphdr *) (icmph + 1);
 	ip = iph->daddr;
-
 
 	switch(icmph->code & 7) {
 		case ICMP_REDIR_NET:
@@ -835,11 +840,6 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, int len)
 		default:
 			break;
   	}
-  	/*
-  	 *	Discard the original packet
-  	 */
-  	 
-  	kfree_skb(skb, FREE_READ);
 }
 
 /*
@@ -862,7 +862,6 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	icmp_param.data_len=len;
 	icmp_reply(&icmp_param, skb);
 #endif
-	kfree_skb(skb, FREE_READ);
 }
 
 /*
@@ -885,7 +884,6 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 
 	if(len<12) {
 		icmp_statistics.IcmpInErrors++;
-		kfree_skb(skb, FREE_READ);
 		return;
 	}
 	
@@ -903,7 +901,6 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	icmp_param.data_ptr=&times;
 	icmp_param.data_len=12;
 	icmp_reply(&icmp_param, skb);
-	kfree_skb(skb,FREE_READ);
 }
 
 
@@ -940,13 +937,14 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	struct device *dev = skb->dev;
 
 	if (!ipv4_config.addrmask_agent ||
+	    len < 4 ||
 	    ZERONET(rt->rt_src) ||
 	    rt->rt_src_dev != rt->u.dst.dev ||
 	    !(rt->rt_flags&RTCF_DIRECTSRC) ||
 	    (rt->rt_flags&RTF_GATEWAY) ||
 	    !(dev->ip_flags&IFF_IP_ADDR_OK) ||
 	    !(dev->ip_flags&IFF_IP_MASK_OK)) {
-		kfree_skb(skb, FREE_READ);
+		icmp_statistics.IcmpInErrors++;
 		return;
 	}
 
@@ -956,7 +954,6 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	icmp_param.data_ptr=&dev->pa_mask;
 	icmp_param.data_len=4;
 	icmp_reply(&icmp_param, skb);
-	kfree_skb(skb, FREE_READ);
 }
 
 /*
@@ -976,20 +973,19 @@ static void icmp_address_reply(struct icmphdr *icmph, struct sk_buff *skb, int l
 	    (rt->rt_flags&RTF_GATEWAY) ||
 	    !(dev->ip_flags&IFF_IP_ADDR_OK) ||
 	    !(dev->ip_flags&IFF_IP_MASK_OK)) {
-		kfree_skb(skb, FREE_READ);
+		icmp_statistics.IcmpInErrors++;
 		return;
 	}
 
 	mask = *(u32*)&icmph[1];
-	if (mask != dev->pa_mask)
+	if (mask != dev->pa_mask && net_ratelimit())
 		printk(KERN_INFO "Wrong address mask %08lX from %08lX/%s\n",
 		       ntohl(mask), ntohl(rt->rt_src), dev->name);
-	kfree_skb(skb, FREE_READ);
 }
 
 static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
-	kfree_skb(skb, FREE_READ);
+	return; 
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
@@ -1062,38 +1058,21 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	struct rtable *rt = (struct rtable*)skb->dst;
 
 	icmp_statistics.IcmpInMsgs++;
-	
-	if(len < sizeof(struct icmphdr))
-	{
-		icmp_statistics.IcmpInErrors++;
-		printk(KERN_INFO "ICMP: runt packet\n");
-		kfree_skb(skb, FREE_READ);
-		return 0;
-	}
- 	
-  	/*
-	 *	Validate the packet
-  	 */
-	
-	if (ip_compute_csum((unsigned char *) icmph, len)) {
-		icmp_statistics.IcmpInErrors++;
-		printk(KERN_INFO "ICMP: failed checksum from %s!\n", in_ntoa(skb->nh.iph->saddr));
-		kfree_skb(skb, FREE_READ);
-		return(0);
-	}
-	
+
 	/*
 	 *	18 is the highest 'known' ICMP type. Anything else is a mystery
 	 *
 	 *	RFC 1122: 3.2.2  Unknown ICMP messages types MUST be silently discarded.
 	 */
-	 
-	if (icmph->type > NR_ICMP_TYPES) {
-		icmp_statistics.IcmpInErrors++;		/* Is this right - or do we ignore ? */
-		kfree_skb(skb,FREE_READ);
-		return(0);
+	if(len < sizeof(struct icmphdr) ||
+	   ip_compute_csum((unsigned char *) icmph, len) ||
+	   icmph->type > NR_ICMP_TYPES)
+	{
+		icmp_statistics.IcmpInErrors++;
+		kfree_skb(skb, FREE_READ);
+		return 0;
 	}
-	
+	 
 	/*
 	 *	Parse the ICMP message 
 	 */
@@ -1117,6 +1096,7 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	len -= sizeof(struct icmphdr);
 	(*icmp_pointers[icmph->type].input)++;
 	(icmp_pointers[icmph->type].handler)(icmph, skb, len);
+	kfree_skb(skb, FREE_READ); 
 	return 0;
 }
 

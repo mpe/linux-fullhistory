@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.32 1997/07/01 21:59:38 davem Exp $
+/* $Id: processor.h,v 1.33 1997/08/19 14:18:36 jj Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -55,10 +55,13 @@ struct thread_struct {
 
 #endif /* !(__ASSEMBLY__) */
 
-#define SPARC_FLAG_KTHREAD      0x1    /* task is a kernel thread */
-#define SPARC_FLAG_UNALIGNED    0x2    /* is allowed to do unaligned accesses */
-#define SPARC_FLAG_NEWSIGNALS   0x4    /* task wants new-style signals */
-#define SPARC_FLAG_32BIT        0x8    /* task is older 32-bit binary */
+#define SPARC_FLAG_USEDFPUL	0x01    /* Used f0-f31 */
+#define SPARC_FLAG_USEDFPUU	0x02    /* Used f32-f62 */
+#define SPARC_FLAG_USEDFPU	0x04    /* If ever FEF bit was set while TSTATE_PEF */
+#define SPARC_FLAG_KTHREAD      0x10    /* task is a kernel thread */
+#define SPARC_FLAG_UNALIGNED    0x20    /* is allowed to do unaligned accesses */
+#define SPARC_FLAG_NEWSIGNALS   0x40    /* task wants new-style signals */
+#define SPARC_FLAG_32BIT        0x80    /* task is older 32-bit binary */
 
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
 		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
@@ -89,7 +92,7 @@ extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 /* Do necessary setup to start up a newly executed thread. */
 #define start_thread(regs, pc, sp) \
 do { \
-	regs->tstate = (regs->tstate & (TSTATE_CWP)) | (TSTATE_IE|TSTATE_PEF); \
+	regs->tstate = (regs->tstate & (TSTATE_CWP)) | (TSTATE_IE); \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
@@ -125,7 +128,7 @@ do { \
 	pc &= 0x00000000ffffffffUL; \
 	sp &= 0x00000000ffffffffUL; \
 \
-	regs->tstate = (regs->tstate & (TSTATE_CWP))|(TSTATE_IE|TSTATE_AM|TSTATE_PEF); \
+	regs->tstate = (regs->tstate & (TSTATE_CWP))|(TSTATE_IE|TSTATE_AM); \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.20 1997/07/11 11:05:29 jj Exp $
+# $Id: Makefile,v 1.22 1997/08/29 15:51:53 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -17,7 +17,7 @@ LD		= sparc64-linux-ld
 NM		= sparc64-linux-nm
 AR		= sparc64-linux-ar
 RANLIB		= sparc64-linux-ranlib
-ELF2AOUT64	= elf2aout64
+ELFTOAOUT	= elftoaout
 
 #
 # Uncomment the first CFLAGS if you are doing kgdb source level
@@ -34,13 +34,21 @@ HEAD := arch/sparc64/kernel/head.o arch/sparc64/kernel/init_task.o
 SUBDIRS := $(SUBDIRS) arch/sparc64/kernel arch/sparc64/lib arch/sparc64/mm \
 	arch/sparc64/prom
 
+ifneq ($(CONFIG_SOLARIS_EMUL),n)
+  SUBDIRS += arch/sparc64/solaris
+endif
+
 CORE_FILES := arch/sparc64/kernel/kernel.o arch/sparc64/mm/mm.o $(CORE_FILES)
+
+ifeq ($(CONFIG_SOLARIS_EMUL),y)
+  CORE_FILES += arch/sparc64/solaris/solaris.o
+endif
 
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc64/prom/promlib.a \
 	$(TOPDIR)/arch/sparc64/lib/lib.a
 
 vmlinux.aout: vmlinux
-	$(ELF2AOUT64) -o $(TOPDIR)/vmlinux.aout $(TOPDIR)/vmlinux
+	$(ELFTOAOUT) -o $(TOPDIR)/vmlinux.aout $(TOPDIR)/vmlinux
 
 archclean:
 	rm -f $(TOPDIR)/vmlinux.aout

@@ -141,25 +141,16 @@ get_max:
 #define POLLOUT_SET (POLLWRBAND | POLLWRNORM | POLLOUT | POLLERR)
 #define POLLEX_SET (POLLPRI)
 
-static int do_select(int n, fd_set_buffer *fds)
+static int do_select(int n, fd_set_buffer *fds, poll_table *wait)
 {
 	int retval;
-	poll_table wait_table, *wait;
-	struct poll_table_entry *entry;
 	int i;
 
 	retval = max_select_fd(n, fds);
 	if (retval < 0)
 		goto out;
 	n = retval;
-	retval = -ENOMEM;
-	entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
-	if (!entry)
-		goto out;
 	retval = 0;
-	wait_table.nr = 0;
-	wait_table.entry = entry;
-	wait = &wait_table;
 	for (;;) {
 		struct file ** fd = current->files->fd;
 		current->state = TASK_INTERRUPTIBLE;
@@ -197,8 +188,6 @@ static int do_select(int n, fd_set_buffer *fds)
 			break;
 		schedule();
 	}
-	free_wait(&wait_table);
-	free_page((unsigned long) entry);
 	current->state = TASK_RUNNING;
 out:
 	return retval;
@@ -286,14 +275,48 @@ __zero_fd_set((nr)-1, (unsigned long *) (fdp))
  */
 asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
-	int error = -EINVAL;
+	int error;
 	fd_set_buffer *fds;
 	unsigned long timeout;
+	poll_table wait_table, *wait;
 
 	lock_kernel();
+	timeout = ~0UL;
+	if (tvp) {
+		error = -EFAULT;
+		if (!access_ok(VERIFY_WRITE, tvp, sizeof(*tvp)))
+			goto out_nowait;
+		error = __get_user(timeout, &tvp->tv_usec);
+		if (error)
+			goto out_nowait;
+		timeout = ROUND_UP(timeout,(1000000/HZ));
+		{
+			unsigned long tmp;
+			error = __get_user(tmp, &tvp->tv_sec);
+			if (error)
+				goto out_nowait;
+			timeout += tmp * (unsigned long) HZ;
+		}
+		if (timeout)
+			timeout += jiffies + 1;
+	}
+	error = -ENOMEM;
+	wait = NULL;
+	current->timeout = timeout;
+	if (timeout) {
+		struct poll_table_entry *entry;
+
+		entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
+		if (!entry)
+			goto out_nowait;
+		wait_table.nr = 0;
+		wait_table.entry = entry;
+		wait = &wait_table;
+	}
 	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
 	if (!fds)
-		goto out;
+		goto out_nofds;
+	error = -EINVAL;
 	if (n < 0)
 		goto out;
 	if (n > KFDS_NR)
@@ -301,36 +324,11 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	if ((error = get_fd_set(n, inp, &fds->in)) ||
 	    (error = get_fd_set(n, outp, &fds->out)) ||
 	    (error = get_fd_set(n, exp, &fds->ex))) goto out;
-	timeout = ~0UL;
-	if (tvp) {
-		error = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
-		if (error)
-			goto out;
-		__get_user(timeout, &tvp->tv_usec);
-		timeout = ROUND_UP(timeout,(1000000/HZ));
-		{
-			unsigned long tmp;
-			__get_user(tmp, &tvp->tv_sec);
-			timeout += tmp * (unsigned long) HZ;
-		}
-		if (timeout)
-			timeout += jiffies + 1;
-	}
 	zero_fd_set(n, &fds->res_in);
 	zero_fd_set(n, &fds->res_out);
 	zero_fd_set(n, &fds->res_ex);
-	current->timeout = timeout;
-	error = do_select(n, fds);
-	timeout = current->timeout - jiffies - 1;
+	error = do_select(n, fds, wait);
 	current->timeout = 0;
-	if ((long) timeout < 0)
-		timeout = 0;
-	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
-		__put_user(timeout/HZ, &tvp->tv_sec);
-		timeout %= HZ;
-		timeout *= (1000000/HZ);
-		__put_user(timeout, &tvp->tv_usec);
-	}
 	if (error < 0)
 		goto out;
 	if (!error) {
@@ -344,6 +342,12 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	set_fd_set(n, exp, &fds->res_ex);
 out:
 	free_page((unsigned long) fds);
+out_nofds:
+	if (wait) {
+		free_wait(&wait_table);
+		free_page((unsigned long) wait->entry);
+	}
+out_nowait:
 	unlock_kernel();
 	return error;
 }
@@ -392,42 +396,42 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 {
 	int i, count, fdcount, err;
 	struct pollfd * fds, *fds1;
-	poll_table wait_table;
-	struct poll_table_entry *entry;
+	poll_table wait_table, *wait;
 
 	lock_kernel();
+	if (timeout < 0)
+		timeout = 0x7fffffff;
+	else if (timeout)
+		timeout = ((unsigned long)timeout*HZ+999)/1000+jiffies+1;
 	err = -ENOMEM;
-	entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
-	if (!entry)
-		goto out;
+
+	wait = NULL;
+	if (timeout) {
+		struct poll_table_entry *entry;
+		entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
+		if (!entry)
+			goto out;
+		wait_table.nr = 0;
+		wait_table.entry = entry;
+		wait = &wait_table;
+	}
 	fds = (struct pollfd *) kmalloc(nfds*sizeof(struct pollfd), GFP_KERNEL);
 	if (!fds) {
-		free_page((unsigned long) entry);
 		goto out;
 	}
 
 	err = -EFAULT;
 	if (copy_from_user(fds, ufds, nfds*sizeof(struct pollfd))) {
-		free_page((unsigned long)entry);
 		kfree(fds);
 		goto out;
 	}
 
-	if (timeout < 0)
-		timeout = 0x7fffffff;
-	else if (timeout)
-		timeout = ((unsigned long)timeout*HZ+999)/1000+jiffies+1;
 	current->timeout = timeout;
 
 	count = 0;
-	wait_table.nr = 0;
-	wait_table.entry = entry;
 
-	fdcount = do_poll(nfds, fds, timeout ? &wait_table : NULL);
+	fdcount = do_poll(nfds, fds, wait);
 	current->timeout = 0;
-
-	free_wait(&wait_table);
-	free_page((unsigned long) entry);
 
 	/* OK, now copy the revents fields back to user space. */
 	fds1 = fds;
@@ -440,6 +444,10 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 	else
 		err = fdcount;
 out:
+	if (wait) {
+		free_wait(&wait_table);
+		free_page((unsigned long) wait->entry);
+	}
 	unlock_kernel();
 	return err;
 }

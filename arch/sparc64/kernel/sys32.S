@@ -1,4 +1,4 @@
-/* $Id: sys32.S,v 1.2 1997/07/20 09:18:47 davem Exp $
+/* $Id: sys32.S,v 1.3 1997/08/22 20:11:47 davem Exp $
  * sys32.S: I-cache tricks for 32-bit compatability layer simple
  *          conversions.
  *
@@ -73,7 +73,7 @@ sys32_mremap:
 	.globl		sys32_readlink, sys32_unlink, sys32_rmdir, sys32_symlink
 	.globl		sys32_link, sys32_rename, sys32_truncate, sys32_ftruncate
 	.globl		sys32_chroot, sys32_chmod, sys32_chown, sys32_creat
-	.globl		sys32_mkdir, sys32_mknod, sys32_utimes, sys32_ustat
+	.globl		sys32_mkdir, sys32_mknod, sys32_ustat
 sys32_read:
 	srl		%o1, 0, %o1
 	mov		%o7, %g1
@@ -202,12 +202,6 @@ sys32_mknod:
 	srl		%o2, 16, %o2
 	call		sys_mknod
 	 mov		%g1, %o7
-sys32_utimes:
-	srl		%o0, 0, %o0
-	mov		%o7, %g1
-	srl		%o1, 0, %o1
-	call		sys_utimes
-	 mov		%g1, %o7
 sys32_ustat:
 	srl		%o1, 0, %o1
 	mov		%o7, %g1
@@ -285,24 +279,9 @@ sys32_getsockopt:
 	call		sys_setsockopt
 	 mov		%g1, %o7
 
-	.align		32
-	.globl		sys32_gettimeofday, sys32_settimeofday
-sys32_gettimeofday:
-	srl		%o0, 0, %o0
-	mov		%o7, %g1
-	srl		%o1, 0, %o1
-	call		sys_gettimeofday
-	 mov		%g1, %o7
-sys32_settimeofday:
-	srl		%o0, 0, %o0
-	mov		%o7, %g1
-	srl		%o1, 0, %o1
-	call		sys_settimeofday
-	 mov		%g1, %o7
-
 	.globl		sys32_bdflush, sys32_uselib, sys32_umount, sys32_syslog
-	.globl		sys32_personality, sys32_waitpid, sys32_getitimer
-	.globl		sys32_setitimer, sys32_sched_setscheduler
+	.globl		sys32_personality, sys32_waitpid
+	.globl		sys32_sched_setscheduler
 	.globl		sys32_sched_setparam, sys32_sched_getparam, sys32_signal
 	.globl		sys32_reboot, sys32_acct, sys32_newuname, sys32_olduname
 	.globl		sys32_sethostname, sys32_gethostname, sys32_setdomainname
@@ -337,17 +316,6 @@ sys32_waitpid:
 	srl		%o1, 0, %o1
 	mov		%o7, %g1
 	call		sys_waitpid
-	 mov		%g1, %o7
-sys32_getitimer:
-	srl		%o1, 0, %o1
-	mov		%o7, %g1
-	call		sys_getitimer
-	 mov		%g1, %o7
-sys32_setitimer:
-	srl		%o1, 0, %o1
-	mov		%o7, %g1
-	srl		%o2, 0, %o2
-	call		sys_setitimer
 	 mov		%g1, %o7
 sys32_sched_setscheduler:
 	srl		%o2, 0, %o2

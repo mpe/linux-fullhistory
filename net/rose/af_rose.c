@@ -149,7 +149,7 @@ static struct sock *rose_alloc_sock(void)
 	struct sock *sk;
 	rose_cb *rose;
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_ROSE, GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((rose = kmalloc(sizeof(*rose), GFP_ATOMIC)) == NULL) {
@@ -613,16 +613,6 @@ static struct sock *rose_make_new(struct sock *osk)
 	return sk;
 }
 
-static int rose_dup(struct socket *newsock, struct socket *oldsock)
-{
-	struct sock *sk = oldsock->sk;
-
-	if (sk == NULL || newsock == NULL)
-		return -EINVAL;
-
-	return rose_create(newsock, sk->protocol);
-}
-
 static int rose_release(struct socket *sock, struct socket *peer)
 {
 	struct sock *sk = sock->sk;
@@ -814,11 +804,6 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	sti();
 
 	return 0;
-}
-
-static int rose_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return -EOPNOTSUPP;
 }
 
 static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
@@ -1332,11 +1317,11 @@ static struct net_proto_family rose_family_ops = {
 static struct proto_ops rose_proto_ops = {
 	AF_ROSE,
 
-	rose_dup,
+	sock_no_dup,
 	rose_release,
 	rose_bind,
 	rose_connect,
-	rose_socketpair,
+	sock_no_socketpair,
 	rose_accept,
 	rose_getname,
 	datagram_poll,

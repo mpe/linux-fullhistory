@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.20 1997/05/07 09:40:04 davem Exp $
+ *	$Id: addrconf.c,v 1.21 1997/08/09 03:44:24 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -627,6 +627,39 @@ int addrconf_add_ifaddr(void *arg)
 	else
 		ip6_rt_addr_add(&ifp->addr, dev);
 
+	return 0;
+}
+
+int addrconf_del_ifaddr(void *arg)
+{
+	struct in6_ifreq ireq;
+	struct inet6_ifaddr *ifp;
+	struct device *dev;
+	int scope;
+	struct inet6_dev *idev;
+	
+	if (!suser())
+		return -EPERM;
+	
+	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))
+		return -EFAULT;
+
+	if ((dev = dev_get_by_index(ireq.ifr6_ifindex)) == NULL)
+		return -EINVAL;
+
+	if ((idev = ipv6_get_idev(dev)) == NULL)
+		return -EINVAL;
+
+	scope = ipv6_addr_scope(&ireq.ifr6_addr);
+
+	for (ifp=idev->addr_list; ifp; ifp=ifp->if_next) {
+	  if (ifp->scope == scope && 
+	    (!memcmp(&ireq.ifr6_addr, &ifp->addr, sizeof(struct in6_addr)))) {
+	    ipv6_del_addr(ifp);
+	    break;
+	  }
+	}
+	
 	return 0;
 }
 

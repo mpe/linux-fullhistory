@@ -8,6 +8,8 @@
 
 #define __save_flags(flags)	({\
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
+#define __save_and_cli(flags)	({__save_flags(flags);__cli();})
+
 extern __inline__ void __restore_flags(unsigned long flags)
 {
         extern unsigned lost_interrupts;
@@ -80,27 +82,29 @@ extern int do_signal(unsigned long oldmask, struct pt_regs *regs);
 extern void dump_regs(struct pt_regs *);
 
 #ifndef __SMP__
+
 #define cli()	__cli()
 #define sti()	__sti()
 #define save_flags(flags)	__save_flags(flags)
 #define restore_flags(flags)	__restore_flags(flags)
 
-#else
-#error need global cli/sti etc. defined for SMP
-#endif
+#else /* __SMP__ */
+
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
+extern void __global_restore_flags(unsigned long);
+#define cli() __global_cli()
+#define sti() __global_sti()
+#define save_flags(x) ((x)=__global_save_flags())
+#define restore_flags(x) __global_restore_flags(x)
+
+#endif /* !__SMP__ */
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 
-/* this guy lives in arch/ppc/kernel */
-extern inline unsigned long *xchg_u32(void *m, unsigned long val);
-
-/*
- *  these guys don't exist.
- *  someone should create them.
- *              -- Cort
- */
 extern void *xchg_u64(void *ptr, unsigned long val);
-extern int xchg_u8(char *m, char val);
+extern void *xchg_u32(void *m, unsigned long val);
 
 /*
  * This function doesn't exist, so you'll get a linker error
@@ -111,6 +115,9 @@ extern int xchg_u8(char *m, char val);
  * too well on the alpha anyway..
  */
 extern void __xchg_called_with_bad_pointer(void);
+
+#define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
+#define tas(ptr) (xchg((ptr),1))
 
 static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 {
@@ -124,13 +131,6 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 	return x;
 
 
-}
-
-
-
-extern inline int tas(char * m)
-{
-	return xchg_u8(m,1);
 }
 
 extern inline void * xchg_ptr(void * m, void * val)

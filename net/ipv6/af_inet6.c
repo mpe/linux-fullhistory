@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.19 1997/06/02 14:40:40 alan Exp $
+ *	$Id: af_inet6.c,v 1.21 1997/08/20 11:25:00 alan Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -71,7 +71,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	struct proto *prot;
 
-	sk = sk_alloc(GFP_KERNEL);
+	sk = sk_alloc(AF_INET6, GFP_KERNEL);
 	if (sk == NULL) 
 		goto do_oom;
 
@@ -167,10 +167,6 @@ do_oom:
 	return -ENOBUFS;
 }
 
-static int inet6_dup(struct socket *newsock, struct socket *oldsock)
-{
-	return(inet6_create(newsock, oldsock->sk->protocol));
-}
 
 /* bind for INET6 API */
 static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
@@ -247,11 +243,6 @@ static int inet6_release(struct socket *sock, struct socket *peer)
 {
 	MOD_DEC_USE_COUNT;
 	return inet_release(sock, peer);
-}
-
-static int inet6_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return(-EOPNOTSUPP);
 }
 
 /*
@@ -364,11 +355,14 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCSIFSLAVE:
 	case SIOCGIFSLAVE:
 	case SIOGIFINDEX:
-
+	case SIOGIFNAME:
+	case SIOCGIFCOUNT:
 		return(dev_ioctl(cmd,(void *) arg));		
 		
 	case SIOCSIFADDR:
 		return addrconf_add_ifaddr((void *) arg);
+	case SIOCDIFADDR:
+		return addrconf_del_ifaddr((void *) arg);
 	case SIOCSIFDSTADDR:
 		return addrconf_set_dstaddr((void *) arg);
 	default:
@@ -387,11 +381,11 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 struct proto_ops inet6_stream_ops = {
 	AF_INET6,
 
-	inet6_dup,
+	sock_no_dup,
 	inet6_release,
 	inet6_bind,
 	inet_stream_connect,		/* ok		*/
-	inet6_socketpair,		/* a do nothing	*/
+	sock_no_socketpair,		/* a do nothing	*/
 	inet_accept,			/* ok		*/
 	inet6_getname, 
 	inet_poll,			/* ok		*/
@@ -408,11 +402,11 @@ struct proto_ops inet6_stream_ops = {
 struct proto_ops inet6_dgram_ops = {
 	AF_INET6,
 
-	inet6_dup,
+	sock_no_dup,
 	inet6_release,
 	inet6_bind,
 	inet_dgram_connect,		/* ok		*/
-	inet6_socketpair,		/* a do nothing	*/
+	sock_no_socketpair,		/* a do nothing	*/
 	inet_accept,			/* ok		*/
 	inet6_getname, 
 	datagram_poll,			/* ok		*/

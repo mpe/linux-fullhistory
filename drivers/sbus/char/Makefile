@@ -50,9 +50,13 @@ endif
 #endif
 
 O_TARGET := sunchar.o
-O_OBJ    := ${FB_OBJS} suncons.o  sunfb.o
-O_OBJS   := ${O_OBJ} sunkbd.o sunkeymap.o sunmouse.o sunserial.o
+O_OBJ    := ${FB_OBJS} suncons.o sbuscons.o pcicons.o sunfb.o
+O_OBJS   := ${O_OBJ} sunkbd.o sunkeymap.o sunmouse.o sunserial.o zs.o
 M_OBJS   :=
+
+ifeq ($(ARCH),sparc64)
+O_OBJS += su.o pcikbd.o
+endif
 
 ifeq ($(CONFIG_SUN_OPENPROMIO),y)
 O_OBJS += openprom.o
@@ -84,6 +88,20 @@ else
   ifeq ($(CONFIG_SUN_VIDEOPIX),m)
   M_OBJS += vfc.o
   endif
+endif
+
+ifeq ($(CONFIG_SAB82532),y)
+O_OBJS += sab82532.o
+else
+  ifeq ($(CONFIG_SAB82532),m)
+  M_OBJS += sab82532.o
+  endif
+endif
+
+# Add PCI console/fb drivers here.
+#
+ifeq ($(CONFIG_PCI),y)
+O_OBJS += mach64.o
 endif
 
 include $(TOPDIR)/Rules.make

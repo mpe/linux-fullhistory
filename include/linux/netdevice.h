@@ -130,7 +130,20 @@ struct net_device_stats
 	
 };
 
+/* Media selection options. */
+enum {
+        IF_PORT_UNKNOWN = 0,
+        IF_PORT_10BASE2,
+        IF_PORT_10BASET,
+        IF_PORT_AUI,
+        IF_PORT_100BASET,
+        IF_PORT_100BASETX,
+        IF_PORT_100BASEFX
+};
+
 #ifdef __KERNEL__
+
+extern const char *if_port_text[];
 
 #include <linux/skbuff.h>
 
@@ -163,7 +176,7 @@ struct device
 	unsigned long		mem_end;	/* shared mem end	*/
 	unsigned long		mem_start;	/* shared mem start	*/
 	unsigned long		base_addr;	/* device I/O address	*/
-	unsigned char		irq;		/* device IRQ number	*/
+	unsigned int		irq;		/* device IRQ number	*/
 	
 	/* Low-level status flags. */
 	volatile unsigned char	start,		/* start an operation	*/

@@ -34,7 +34,7 @@
 #include <linux/init.h>
 #include <net/arp.h>
 
-static void tr_source_route(struct trh_hdr *trh, struct device *dev);
+static void tr_source_route(struct sk_buff *skb, struct trh_hdr *trh, struct device *dev);
 static void tr_add_rif_info(struct trh_hdr *trh, struct device *dev);
 static void rif_check_expire(unsigned long dummy);
 
@@ -114,7 +114,7 @@ int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	if(daddr) 
 	{
 		memcpy(trh->daddr,daddr,dev->addr_len);
-		tr_source_route(trh,dev);
+		tr_source_route(skb,trh,dev);
 		return(dev->hard_header_len);
 	}
 	return -dev->hard_header_len;
@@ -146,7 +146,7 @@ int tr_rebuild_header(struct sk_buff *skb)
 	}
 	else 
 	{	
-		tr_source_route(trh,dev); 
+		tr_source_route(skb,trh,dev); 
 		return 0;
 	}
 }
@@ -187,15 +187,46 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev)
 }
 
 /*
+ *      Reformat the headers to make a "standard" frame. This is done
+ *      in-place in the sk_buff. 
+ */
+
+void tr_reformat(struct sk_buff *skb, unsigned int hdr_len)
+{
+	struct trllc *llc = (struct trllc *)(skb->data+hdr_len);
+	struct device *dev = skb->dev;
+	unsigned char *olddata = skb->data;
+	int slack;
+
+	if (llc->dsap == 0xAA && llc->ssap == 0xAA)
+	{
+		slack = sizeof(struct trh_hdr) - hdr_len;
+		skb_push(skb, slack);
+		memmove(skb->data, olddata, hdr_len);
+		memset(skb->data+hdr_len, 0, slack);
+	}
+	else
+	{
+		struct trllc *local_llc;
+		slack = sizeof(struct trh_hdr) - hdr_len + sizeof(struct trllc);
+		skb_push(skb, slack);
+		memmove(skb->data, olddata, hdr_len);
+		memset(skb->data+hdr_len, 0, slack);
+		local_llc = (struct trllc *)(skb->data+dev->hard_header_len);
+		local_llc->ethertype = htons(ETH_P_TR_802_2);
+       	}
+}
+
+/*
  *	We try to do source routing... 
  */
 
-static void tr_source_route(struct trh_hdr *trh,struct device *dev) 
+static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct device *dev) 
 {
-
-	int i;
+	int i, slack;
 	unsigned int hash;
 	rif_cache entry;
+	unsigned char *olddata;
 
 	/*
 	 *	Broadcasts are single route as stated in RFC 1042 
@@ -252,9 +283,20 @@ printk("source routing for %02X %02X %02X %02X %02X %02X\n",trh->daddr[0],
 			trh->rcf=htons((((sizeof(trh->rcf)) << 8) & TR_RCF_LEN_MASK)  
 				       | TR_RCF_FRAME2K | TR_RCF_LIMITED_BROADCAST);
 			trh->saddr[0]|=TR_RII;
+#if TR_SR_DEBUG
 			printk("no entry in rif table found - broadcasting frame\n");
+#endif
 		}
 	}
+
+	/* Compress the RIF here so we don't have to do it in the driver(s) */
+	if (!(trh->saddr[0] & 0x80))
+		slack = 18;
+	else 
+		slack = 18 - ((ntohs(trh->rcf) & TR_RCF_LEN_MASK)>>8);
+	olddata = skb->data;
+	skb_pull(skb, slack);
+	memmove(skb->data, olddata, sizeof(struct trh_hdr) - slack);
 }
 
 /*

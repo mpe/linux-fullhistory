@@ -78,11 +78,11 @@ __strlen_user:
          clr    %o0
 
 	.section __ex_table,#alloc
-	.align	8
+	.align	4
 
-	.xword	10b, 30b
-	.xword	11b, 30b
-	.xword	12b, 30b
-	.xword	15b, 30b
-	.xword	13b, 30b
-	.xword	14b, 30b
+	.word	10b, 30b
+	.word	11b, 30b
+	.word	12b, 30b
+	.word	15b, 30b
+	.word	13b, 30b
+	.word	14b, 30b

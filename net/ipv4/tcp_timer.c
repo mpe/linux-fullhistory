@@ -447,6 +447,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 			
 			/* TCP_LISTEN is implied. */
 			if (!sk->sock_readers && tp->syn_wait_queue) {
+				struct open_request *prev = (struct open_request *)(&tp->syn_wait_queue);
 				struct open_request *req = tp->syn_wait_queue;
 				do {
 					struct open_request *conn;
@@ -454,13 +455,15 @@ static void tcp_syn_recv_timer(unsigned long data)
 					conn = req;
 					req = req->dl_next;
 
-					if (conn->sk)
-						continue;
+					if (conn->sk) {
+						prev = conn; 
+						continue; 
+					}
 
 					if ((long)(now - conn->expires) <= 0)
 						break;
 
-					tcp_synq_unlink(tp, conn);
+					tcp_synq_unlink(tp, conn, prev);
 					if (conn->retrans >= sysctl_tcp_retries1) {
 #ifdef TCP_DEBUG
 						printk(KERN_DEBUG "syn_recv: "
@@ -475,6 +478,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 							break;
 					} else {
 						__u32 timeo;
+						struct open_request *op; 
 
 						(*conn->class->rtx_syn_ack)(sk, conn);
 
@@ -487,8 +491,12 @@ static void tcp_syn_recv_timer(unsigned long data)
 							     << conn->retrans),
 							    120*HZ);
 						conn->expires = now + timeo;
+						op = prev->dl_next; 
 						tcp_synq_queue(tp, conn);
+						if (op != prev->dl_next)
+							prev = prev->dl_next;
 					}
+					/* old prev still valid here */
 				} while (req);
 			}
 			sk = sk->next;

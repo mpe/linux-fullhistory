@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.82 1997/05/01 01:40:38 davem Exp $
+/* $Id: head.S,v 1.83 1997/08/28 11:10:39 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -827,22 +827,18 @@ got_prop:
 
 		cmp	%l1, 'c'		! We already know we are not
 		be	1f			! on a plain sun4 because of
-		 nop				! the check for 0x4000 in %o0
-
-		cmp	%l1, 'm'		! at start
+		 				! the check for 0x4000 in %o0
+		 cmp	%l1, 'm'		! at start
 		be	1f
-		 nop
-
-		cmp	%l1, 'e'
+		 cmp	%l1, 'd'
+		be	1f
+		 cmp	%l1, 'e'
 		be	no_sun4e_here		! Could be a sun4e.
 		 nop
-
-		b	no_sun4u_here		! AIEEE, a V9 sun4u...
+		b	no_sun4u_here		! AIEEE, a V9 sun4u... Get our BIG BROTHER kernel :))
 		 nop
 
-
-1:
-		set	C_LABEL(cputypval), %l1
+1:		set	C_LABEL(cputypval), %l1
 		ldub	[%l1 + 0x4], %l1
 		cmp	%l1, 'm'		! Test for sun4d, sun4e ?
 		be	sun4m_init

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.35 1997/07/23 15:18:04 freitag Exp $
+ *	$Id: tcp_ipv6.c,v 1.37 1997/08/22 19:15:40 freitag Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -536,6 +536,7 @@ out:
 	return retval;
 }
 
+/* XXX: this functions needs to be updated like tcp_v4_err. */
 void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 		struct in6_addr *saddr, struct in6_addr *daddr,
 		struct inet6_protocol *protocol)
@@ -553,7 +554,7 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 
 	np = &sk->net_pinfo.af_inet6;
 
-	if (type == ICMPV6_PKT_TOOBIG) {
+	if (type == ICMPV6_PKT_TOOBIG && sk->state != TCP_LISTEN) {
 		/* icmp should have updated the destination cache entry */
 
 		dst_check(&np->dst, np->dst_cookie);
@@ -579,11 +580,12 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 		else
 			sk->mtu = np->dst->pmtu;
 
+		release_sock(sk);
 		return;
 	}
 
+	/* FIXME: This is wrong. Need to check for open_requests here. */
 	opening = (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV);
-	
 	if (icmpv6_err_convert(type, code, &err) || opening) {
 		sk->err = err;
 
@@ -657,13 +659,15 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
         }
 
 	if (req->rcv_wnd == 0) {
+		__u8 rcv_wscale;
 		/* Set this up on the first call only */
 		req->window_clamp = 0; /* FIXME: should be in dst cache */
 		tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
 			&req->rcv_wnd,
 			&req->window_clamp,
 			req->wscale_ok,
-			&req->rcv_wscale);
+			&rcv_wscale);
+		req->rcv_wscale = rcv_wscale; 
 	}
 	th->window = htons(req->rcv_wnd);
 
@@ -764,7 +768,6 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	sk->data_ready(sk, 0);
 
 exit:
-	kfree_skb(skb, FREE_READ);
 	return 0;
 }
 
@@ -814,7 +817,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		return newsk;
 	}
 
-	newsk = sk_alloc(GFP_ATOMIC);
+	newsk = sk_alloc(AF_INET6, GFP_ATOMIC);
 	if (newsk == NULL) {
 	        if (dst)
 		    dst_release(dst);
@@ -1021,58 +1024,30 @@ static void tcp_v6_send_reset(struct in6_addr *saddr, struct in6_addr *daddr,
 	tcp_statistics.TcpOutSegs++;
 }
 
-struct sock *tcp_v6_check_req(struct sock *sk, struct sk_buff *skb)
+static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
+					      void *header, 
+					      struct tcphdr *th,
+					      struct open_request **prevp)
 {
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct open_request *req = tp->syn_wait_queue;
+	struct ipv6hdr *ip6h = header; 
+	struct open_request *req, *prev; 
+	__u16 rport = th->source; 
 
 	/*	assumption: the socket is not in use.
 	 *	as we checked the user count on tcp_rcv and we're
 	 *	running from a soft interrupt.
 	 */
-	if (!req)
-		return sk;
-
-	while(req) {
-		if (!ipv6_addr_cmp(&req->af.v6_req.rmt_addr, &skb->nh.ipv6h->saddr) &&
-		    !ipv6_addr_cmp(&req->af.v6_req.loc_addr, &skb->nh.ipv6h->daddr) &&
-		    req->rmt_port == skb->h.th->source) {
-			u32 flg;
-
-			if (req->sk) {
-				printk(KERN_DEBUG "BUG: syn_recv:"
-				       "socket exists\n");
-				break;
-			}
-
-			/* Check for syn retransmission */
-			flg = *(((u32 *)skb->h.th) + 3);
-			flg &= __constant_htonl(0x001f0000);
-
-			if ((flg == __constant_htonl(0x00020000)) &&
-			    (!after(skb->seq, req->rcv_isn))) {
-				/*	retransmited syn
-				 *	FIXME: must send an ack
-				 */
-				return NULL;
-			}
-
-			skb_orphan(skb);
-			sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
-
-			tcp_dec_slow_timer(TCP_SLT_SYNACK);
-
-			if (sk == NULL)
-				return NULL;
-
-			skb_set_owner_r(skb, sk);
-			req->expires = 0UL;
-			req->sk = sk;
-			break;
+	prev = (struct open_request *) (&tp->syn_wait_queue); 
+	for (req = prev->dl_next; req; req = req->dl_next) {
+		if (!ipv6_addr_cmp(&req->af.v6_req.rmt_addr, &ip6h->saddr) &&
+		    !ipv6_addr_cmp(&req->af.v6_req.loc_addr, &ip6h->daddr) &&
+		    req->rmt_port == rport) {
+			*prevp = prev; 
+			return req; 
 		}
-		req = req->dl_next;
+		prev = req; 
 	}
-	return sk;
+	return NULL; 
 }
 
 int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
@@ -1149,10 +1124,11 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 	/*
 	 *	Signal NDISC that the connection is making
 	 *	"forward progress"
+	 *	This is in the fast path and should be _really_ speed up! -Ak
 	 */
 	if (sk->state != TCP_LISTEN) {
 		struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-		struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
+		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 		if (after(skb->seq, tp->rcv_nxt) ||
 		    after(skb->ack_seq, tp->snd_una)) {
@@ -1168,18 +1144,19 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 
 	skb_set_owner_r(skb, sk);
 
+	/* I don't understand why lock_sock()/release_sock() is not  
+	 * called here. IPv4 does this. It looks like a bug to me. -AK
+	 */
 	if (sk->state == TCP_ESTABLISHED) {
 		if (tcp_rcv_established(sk, skb, th, len))
 			goto no_tcp_socket;
 		return 0;
 	}
 
-	if (sk->state == TCP_LISTEN) {
-		/*
-		 *	find possible connection requests
-		 */
-		sk = tcp_v6_check_req(sk, skb);
 
+	if (sk->state == TCP_LISTEN && 
+	    ((u32 *)th)[3] & __constant_htonl(0x00120000)) {
+		sk = tcp_check_req(sk, skb, opt); 
 		if (sk == NULL)
 			goto discard_it;
 	}
@@ -1308,6 +1285,12 @@ static void v6_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
 	sin6->sin6_port	= sk->dummy_th.dest;
 }
 
+static struct sock *cookie_v6_check(struct sock *sk, struct sk_buff *skb,
+				    void *opt)
+{
+	return sk;  /* dummy */
+}
+
 static struct tcp_func ipv6_specific = {
 	tcp_v6_build_header,
 	tcp_v6_xmit,
@@ -1320,6 +1303,8 @@ static struct tcp_func ipv6_specific = {
 	ipv6_getsockopt,
 	v6_addr2sockaddr,
 	tcp_v6_reply_reset,
+	tcp_v6_search_req,
+	/* not implemented yet: */ cookie_v6_check,
 	sizeof(struct sockaddr_in6)
 };
 
@@ -1339,6 +1324,8 @@ static struct tcp_func ipv6_mapped = {
 	ipv6_getsockopt,
 	v6_addr2sockaddr,
 	tcp_v6_reply_reset,
+	tcp_v6_search_req,
+	cookie_v6_check, /* not implemented yet. */
 	sizeof(struct sockaddr_in6)
 };
 
@@ -1360,10 +1347,19 @@ static int tcp_v6_init_sock(struct sock *sk)
 	tp->rcv_wnd = 0;
 	tp->in_mss = 536;
 	/* tp->rcv_wnd = 8192; */
+	tp->tstamp_ok = 0;
+	tp->sack_ok = 0;
+	tp->wscale_ok = 0;
+	tp->snd_wscale = 0;
+	tp->sacks = 0;
+	tp->saw_tstamp = 0;
+	tp->syn_backlog = 0;
 
 	/* start with only sending one packet at a time. */
 	tp->snd_cwnd = 1;
 	tp->snd_ssthresh = 0x7fffffff;
+
+
 
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
@@ -1384,8 +1380,7 @@ static int tcp_v6_init_sock(struct sock *sk)
   	sk->dummy_th.doff=sizeof(struct tcphdr)>>2;
 
 	/* Init SYN queue. */
-	tp->syn_wait_queue = NULL;
-	tp->syn_wait_last = &tp->syn_wait_queue;
+	tcp_synq_init(tp);
 
 	sk->tp_pinfo.af_tcp.af_specific = &ipv6_specific;
 

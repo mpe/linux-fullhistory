@@ -53,8 +53,33 @@ device_scan(unsigned long mem_start))
 			}
 		};
 		if(cpu_ctr == 0) {
+			if (sparc_cpu_model == sun4d) {
+				scan = prom_getchild(prom_root_node);
+				for (scan = prom_searchsiblings(scan, "cpu-unit"); scan;
+				     scan = prom_searchsiblings(prom_getsibling(scan), "cpu-unit")) {
+					int node = prom_getchild(scan);
+					
+					prom_getstring(node, "device_type", node_str, sizeof(node_str));
+					if (strcmp(node_str, "cpu") == 0) {
+						prom_getproperty(node, "cpu-id", (char *) &thismid, sizeof(thismid));
+						if (cpu_ctr < NCPUS) {
+							cpu_nds[cpu_ctr] = node;
+							linux_cpus[cpu_ctr].prom_node = node;
+							linux_cpus[cpu_ctr].mid = thismid;
+						}
+						prom_printf("Found CPU %d <node=%08lx,mid=%d>\n",
+							    cpu_ctr, (unsigned long) node,
+							    thismid);
+						cpu_ctr++;
+					}
+				}
+			}
+			if (cpu_ctr > NCPUS)
+				cpu_ctr = NCPUS;
+		}
+		if(cpu_ctr == 0) {
 			printk("No CPU nodes found, cannot continue.\n");
-			/* Probably a sun4d or sun4e, Sun is trying to trick us ;-) */
+			/* Probably a sun4e, Sun is trying to trick us ;-) */
 			halt();
 		}
 		printk("Found %d CPU prom device tree node(s).\n", cpu_ctr);

@@ -1,4 +1,4 @@
-/* $Id: creator.c,v 1.7 1997/07/17 02:21:47 davem Exp $
+/* $Id: creator.c,v 1.12 1997/08/25 07:50:27 jj Exp $
  * creator.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -101,14 +101,24 @@
 #define FFB_UCSR_RP_BUSY       0x02000000
 
 struct ffb_fbc {
-	u8		xxx1[0x200];
+	u8		xxx1[0x60];
+	volatile u32	by;
+	volatile u32	bx;
+	u32		xxx2;
+	u32		xxx3;
+	volatile u32	bh;
+	volatile u32	bw;
+	u8		xxx4[0x188];
 	volatile u32	ppc;
-	u8		xxx2[0x50];
+	u32		xxx5;
+	volatile u32	fg;
+	volatile u32	bg;
+	u8		xxx6[0x44];
 	volatile u32	fbc;
 	volatile u32	rop;
-	u8		xxx3[0x34];
+	u8		xxx7[0x34];
 	volatile u32	pmask;
-	u8		xxx4[12];
+	u8		xxx8[12];
 	volatile u32	clip0min;
 	volatile u32	clip0max;
 	volatile u32	clip1min;
@@ -117,11 +127,17 @@ struct ffb_fbc {
 	volatile u32	clip2max;
 	volatile u32	clip3min;
 	volatile u32	clip3max;
-	u8		xxx5[0x3c];
+	u8		xxx9[0x3c];
 	volatile u32	unk1;
-	u8		xxx6[0x500];
 	volatile u32	unk2;
-	u8		xxx7[0xfc];
+	u8		xxx10[0x10];
+	volatile u32	fontxy;
+	volatile u32	fontw;
+	volatile u32	fontinc;
+	volatile u32	font;
+	u8		xxx11[0x4dc];
+	volatile u32	unk3;
+	u8		xxx12[0xfc];
 	volatile u32	ucsr;
 };
 
@@ -141,6 +157,7 @@ static void ffb_blitc(unsigned short, int, int);
 static void ffb_setw(int, int, unsigned short, int);
 static void ffb_cpyw(int, int, unsigned short *, int);
 static void ffb_fill(int, int, int *);
+static void ffb_penguin(int,int,int);
 
 static struct {
 	unsigned long voff;
@@ -176,6 +193,8 @@ ffb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	uint size, page, r, map_size;
 	unsigned long map_offset = 0;
 	int i;
+	int alignment;
+	struct vm_area_struct *vmm;
 
 	size = vma->vm_end - vma->vm_start;
         if (vma->vm_offset & ~PAGE_MASK)
@@ -184,15 +203,18 @@ ffb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	/* Try to align RAM */
 #define ALIGNMENT 0x400000
 	map_offset = vma->vm_offset + size;
+	alignment = 0;
 	if (vma->vm_offset < FFB_FBC_REGS_VOFF) {
-		struct vm_area_struct *vmm = find_vma(current->mm, vma->vm_start);
-		int alignment = ALIGNMENT - ((vma->vm_start - vma->vm_offset) & (ALIGNMENT - 1));
-
-		if (alignment == ALIGNMENT) alignment = 0;
-		if (alignment && (!vmm || vmm->vm_start >= vma->vm_end + alignment)) {
-			vma->vm_start += alignment;
-			vma->vm_end += alignment;
-		}
+		vmm = find_vma(current->mm, vma->vm_start);
+		alignment = ALIGNMENT - ((vma->vm_start - vma->vm_offset) & (ALIGNMENT - 1));
+	} else if (vma->vm_offset >= FFB_DFB8R_VOFF && (vma->vm_offset & (ALIGNMENT - 1)) == 0x4000) {
+		vmm = find_vma(current->mm, vma->vm_start);
+		alignment = ALIGNMENT - (vma->vm_start & (ALIGNMENT - 1));
+	}
+	if (alignment == ALIGNMENT) alignment = 0;
+	if (alignment && (!vmm || vmm->vm_start >= vma->vm_end + alignment)) {
+		vma->vm_start += alignment;
+		vma->vm_end += alignment;
 	}
 #undef ALIGNMENT
 
@@ -205,7 +227,7 @@ ffb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		for (i = 0; i < sizeof (ffbmmap) / sizeof (ffbmmap[0]); i++)
 			if (ffbmmap[i].voff == vma->vm_offset+page) {
 				map_size = ffbmmap[i].size;
-				map_offset = fb->info.ffb.physbase + ffbmmap[i].poff;
+				map_offset = (fb->info.ffb.physbase + ffbmmap[i].poff) & _PAGE_PADDR;
 			}
 
 		if (!map_size){
@@ -380,8 +402,8 @@ ffb_setcursor (fbinfo_t *fb)
 	dac->type2 = 0x104;
 /* Should this be just 0x7ff?? Should I do some margin handling and setcurshape
    in that case? */
-	dac->value2 = (((c->cpos.fbx - c->chot.fbx) & 0xffff) << 16)
-	              |((c->cpos.fby - c->chot.fby) & 0xffff);
+	dac->value2 = (((c->cpos.fby - c->chot.fby) & 0xffff) << 16)
+	              |((c->cpos.fbx - c->chot.fbx) & 0xffff);
 	ffb_curs_enable (fb, fb->cursor.enable);
 }
 
@@ -480,32 +502,14 @@ ffb_ioctl (struct inode *inode, struct file *file, unsigned cmd, unsigned long a
 void
 ffb_reset (fbinfo_t *fb)
 {
-	struct ffb_info *ffb = &(fb->info.ffb);
-	int fifo;
-
-	if (fb->setcursor)
-		sun_hw_hide_cursor ();
-	
-	while ((fifo = (ffb->fbc->ucsr & FFB_UCSR_FIFO_MASK)) < 8);
- 	ffb->fbc->ppc = (FFB_PPC_ACE_DISABLE << FFB_PPC_ACE_SHIFT) |
-			(FFB_PPC_DCE_DISABLE << FFB_PPC_DCE_SHIFT) |
-			(FFB_PPC_ABE_DISABLE << FFB_PPC_ABE_SHIFT) |
-			(FFB_PPC_VCE_DISABLE << FFB_PPC_VCE_SHIFT) |
-			(FFB_PPC_APE_DISABLE << FFB_PPC_APE_SHIFT) |
-			(FFB_PPC_CS_VARIABLE << FFB_PPC_CS_SHIFT);
-	ffb->fbc->fbc = (FFB_FBC_WB_A        << FFB_FBC_WB_SHIFT) |
-			(FFB_FBC_PGE_MASK    << FFB_FBC_BE_SHIFT) |
-			(FFB_FBC_PGE_MASK    << FFB_FBC_GE_SHIFT) |
-			(FFB_FBC_PGE_MASK    << FFB_FBC_RE_SHIFT);
-	ffb->fbc->rop = (FFB_ROP_NEW         << FFB_ROP_RGB_SHIFT);
-	ffb->fbc->pmask = 0x00ffffff;
-	while (ffb->fbc->ucsr & FFB_UCSR_RP_BUSY);
+	if (fb == &fbinfo[0])
+		sbus_hw_hide_cursor ();
 }
 
 __initfunc(static unsigned long ffb_postsetup (fbinfo_t *fb, unsigned long memory_start))
 {
 	fb->info.ffb.clut = (u32 *)(memory_start);
-        fb->color_map = (u8 *)(memory_start+256*4+256);
+        fb->color_map = (u8 *)(memory_start+256*4);
         return memory_start + 256*4 + 256*3;
 }
 
@@ -513,10 +517,11 @@ __initfunc(void creator_setup (fbinfo_t *fb, int slot, int ffb_node, unsigned lo
 {
 	struct ffb_info *ffbinfo;
 	struct linux_prom64_registers regs[2*PROMREG_MAX];
-	
+	int type;
+
 	if (prom_getproperty(ffb_node, "reg", (void *) regs, sizeof(regs)) <= 0)
 		return;
-	ffb = regs[0].phys_addr;
+	ffb = (long)__va(regs[0].phys_addr);
 	printk ("creator%d at 0x%016lx ", slot, ffb);
 	
 	fb->base = ffb;	/* ??? */
@@ -536,9 +541,11 @@ __initfunc(void creator_setup (fbinfo_t *fb, int slot, int ffb_node, unsigned lo
 	fb->setw = ffb_setw;
 	fb->cpyw = ffb_cpyw;
 	fb->fill = ffb_fill;
+	fb->draw_penguin = ffb_penguin;
 	fb->ioctl = ffb_ioctl;
 	fb->cursor.hwsize.fbx = 64;
 	fb->cursor.hwsize.fby = 64;
+	fb->type.fb_depth = 24;
 	
 	ffbinfo = (struct ffb_info *) &fb->info.ffb;
 	
@@ -546,16 +553,18 @@ __initfunc(void creator_setup (fbinfo_t *fb, int slot, int ffb_node, unsigned lo
 
 	ffbinfo->fbc = (struct ffb_fbc *)(ffb + FFB_FBC_REGS_POFF);
 	ffbinfo->dac = (struct ffb_dac *)(ffb + FFB_DAC_POFF);
-	
+
 	ffbinfo->dac->type = 0x8000;
 	ffbinfo->dac_rev = (ffbinfo->dac->value >> 0x1c);
 	
 	if (slot == sun_prom_console_id)
 		fb_restore_palette = ffb_restore_palette;
+		
+	type = prom_getintdefault (ffb_node, "board_type", 8);
 
 	/* Initialize Brooktree DAC */
 
-	printk("DAC %d\n", ffbinfo->dac_rev);
+	printk("TYPE %d DAC %d\n", type, ffbinfo->dac_rev);
 		
 	if (slot && sun_prom_console_id == slot)
 		return;
@@ -573,18 +582,152 @@ __initfunc(void creator_setup (fbinfo_t *fb, int slot, int ffb_node, unsigned lo
 
 extern unsigned char vga_font[];
 
+#define FFB_BLITC_START(attr) \
+	{ \
+		register struct ffb_fbc *ffb = fbinfo[0].info.ffb.fbc; \
+		register u32 *clut = fbinfo[0].info.ffb.clut; \
+		int i; \
+		ffb->ppc = 0x203; \
+		ffb->fg = clut[attr & 0xf]; \
+		ffb->fbc = 0x2000707f; \
+		ffb->rop = 0x83; \
+		ffb->pmask = 0xffffffff; \
+		ffb->bg = clut[attr>>4];
+#define FFB_BLITC_BODY4(count,x,y,start,action) \
+		while (count >= 4) { \
+			count -= 4; \
+		    	ffb->fontw = 32; \
+		    	ffb->fontinc = 0x10000; \
+		    	ffb->fontxy = (y << 16) + x; \
+		    	x += 32; \
+		    	start; \
+		    	for (i = 0; i < CHAR_HEIGHT; i++) { \
+		    		action; \
+		    	} \
+		}
+#define FFB_BLITC_BODY1(x,y,action) \
+		    	ffb->fontw = 8; \
+		    	ffb->fontinc = 0x10000; \
+		    	ffb->fontxy = (y << 16) + x; \
+		    	x += 8; \
+		    	for (i = 0; i < CHAR_HEIGHT; i++) { \
+		    		action; \
+		    	}
+#define FFB_BLITC_END \
+	}
+	
 static void ffb_blitc(unsigned short charattr, int xoff, int yoff)
 {
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(charattr);
+	unsigned char *p = &vga_font[((unsigned char)charattr) << 4];
+	FFB_BLITC_START(attrib)
+	FFB_BLITC_BODY1(xoff, yoff, ffb->font=((*p++) << 24))
+	FFB_BLITC_END
 }
 
 static void ffb_setw(int xoff, int yoff, unsigned short c, int count)
 {
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(c);
+	unsigned char *p = &vga_font[((unsigned char)c) << 4];
+	register unsigned char *q;
+	register uint l;
+	FFB_BLITC_START(attrib)
+	if (count >= 4) {
+		FFB_BLITC_BODY4(count, xoff, yoff, q = p, 
+			l = *q++;
+			l |= l << 8;
+			l |= l << 16;
+			ffb->font=l)
+	}
+	while (count) {
+		count--;
+		q = p;
+		FFB_BLITC_BODY1(xoff, yoff, ffb->font=((*q++) << 24));
+	}
+	FFB_BLITC_END
 }
 
 static void ffb_cpyw(int xoff, int yoff, unsigned short *p, int count)
 {
+	unsigned char attrib = CHARATTR_TO_SUNCOLOR(*p);
+	unsigned char *p1, *p2, *p3, *p4;
+	FFB_BLITC_START(attrib)
+	if (count >= 4) {
+		FFB_BLITC_BODY4(count, xoff, yoff, 
+			p1 = &vga_font[((unsigned char)*p++) << 4];
+			p2 = &vga_font[((unsigned char)*p++) << 4];
+			p3 = &vga_font[((unsigned char)*p++) << 4];
+			p4 = &vga_font[((unsigned char)*p++) << 4], 
+			ffb->font=((uint)*p4++) | ((((uint)*p3++) | ((((uint)*p2++) | (((uint)*p1++) << 8)) << 8)) << 8))
+	}
+	while (count) {
+		count--;
+		p1 = &vga_font[((unsigned char)*p++) << 4];
+		FFB_BLITC_BODY1(xoff, yoff, ffb->font=((*p1++) << 24));
+	}
+	FFB_BLITC_END
 }
 
+#if 0
+#define FFB_FILL_START(attr) \
+	{ \
+		register struct ffb_fbc *ffb = fbinfo[0].info.ffb.fbc; \
+		register u32 *clut = fbinfo[0].info.ffb.clut; \
+		ffb->ppc =0x1803; \
+		ffb->fg = clut[attr & 0xf]; \
+		ffb->fbc = 0x2000707f; \
+		ffb->rop = 0x83; \
+		ffb->pmask = 0xffffffff; \
+		ffb->unk2 = 8;
+#define FFB_FILL_END \
+	}
+#else
+#define FFB_FILL_START(attr) \
+	{ \
+		register struct ffb_fbc *ffb = fbinfo[0].info.ffb.fbc; \
+		ffb->ppc = 0x1803; \
+		ffb->fg = 0; \
+		ffb->fbc = 0x2000707f; \
+		ffb->rop = 0x83; \
+		ffb->pmask = 0xffffffff; \
+		ffb->unk2 = 8;
+#define FFB_FILL_END \
+	}
+#endif	
+	
 static void ffb_fill(int attrib, int count, int *boxes)
 {
+	attrib = 5;
+	FFB_FILL_START(attrib)
+	while (count-- > 0) {
+		ffb->by = boxes[1];
+		ffb->bx = boxes[0];
+		ffb->bw = boxes[2];
+		ffb->bh = boxes[3];
+		boxes += 4;
+	}
+	FFB_FILL_END
+}
+
+__initfunc(void ffb_penguin(int x_margin, int y_margin, int ncpus))
+{
+	int i, j, k;
+	u32 *p, *q;
+	unsigned char *r;
+	unsigned char c;
+	
+	p = (u32 *)(fbinfo[0].info.ffb.physbase + FFB_DFB24_POFF + y_margin*8192 + x_margin*4);
+	for (i = 0; i < 80; i++, p += 2048) {
+		q = p;
+		for (j = 0; j < ncpus; j++) {
+			r = linux_logo + 80 * i;
+			for (k = 0; k < 80; k++, r++) {
+				c = *r - 32;
+				*q++ = (linux_logo_red[c]) | 
+				       (linux_logo_green[c]<<8) | 
+				       (linux_logo_blue[c]<<16);
+			}
+			q += 8;
+		}
+	}
 }

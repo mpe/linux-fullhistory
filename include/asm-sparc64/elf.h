@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.7 1997/06/14 21:28:07 davem Exp $ */
+/* $Id: elf.h,v 1.8 1997/08/21 18:09:07 richard Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -38,5 +38,14 @@ typedef unsigned long elf_fpregset_t;
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	8192
+
+/* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
+   use of this is to invoke "./ld.so someprog" to test out a new version of
+   the loader.  We need to make sure that it is out of the way of the program
+   that it will "exec", and that there is sufficient room for the brk.  */
+
+#ifndef ELF_ET_DYN_BASE
+#define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
+#endif
 
 #endif /* !(__ASM_SPARC64_ELF_H) */

@@ -2953,7 +2953,7 @@ void dfx_rcv_init(
 			 * the old EISA boards.
 			 */
 			newskb->data = (char *)((unsigned long)
-						(newskb->data+127) & ~128);
+						(newskb->data+127) & ~127);
 			bp->descr_block_virt->rcv_data[i+j].long_1 = virt_to_bus(newskb->data);
 			/*
 			 * p_rcv_buff_va is only used inside the
@@ -3065,7 +3065,7 @@ void dfx_rcv_queue_process(
 					if (newskb){
 						rx_in_place = 1;
 
-						newskb->data = (char *)((unsigned long)(newskb->data+127) & ~128);
+						newskb->data = (char *)((unsigned long)(newskb->data+127) & ~127);
 						skb = (struct sk_buff *)bp->p_rcv_buff_va[entry];
 						skb->data += RCV_BUFF_K_PADDING;
 						bp->p_rcv_buff_va[entry] = (char *)newskb;

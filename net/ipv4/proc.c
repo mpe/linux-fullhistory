@@ -23,6 +23,8 @@
  *		Alan Cox	:	Handle dead sockets properly.
  *	Gerhard Koerting	:	Show both timers
  *		Alan Cox	:	Allow inode to be NULL (kernel socket)
+ *	Andi Kleen		:	Add support for open_requests and 
+ *					split functions for more readibility.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -47,6 +49,82 @@
 #include <net/sock.h>
 #include <net/raw.h>
 
+/* Format a single open_request into tmpbuf. */
+static inline void get__openreq(struct sock *sk, struct open_request *req, 
+				char *tmpbuf, 
+				int i)
+{
+	/* FIXME: I'm not sure if the timer fields are correct. */
+	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu",
+		i,
+		(long unsigned int)req->af.v4_req.loc_addr,
+		ntohs(sk->dummy_th.source),
+		(long unsigned int)req->af.v4_req.rmt_addr,
+		req->rmt_port,
+		TCP_SYN_RECV,
+		0,0, /* use sizeof(struct open_request) here? */
+		0, (unsigned long)(req->expires - jiffies), /* ??? */
+		req->retrans,
+		sk->socket ? sk->socket->inode->i_uid : 0,
+		0,      /* ??? */
+		sk->socket ? sk->socket->inode->i_ino:0);
+}
+
+/* Format a single socket into tmpbuf. */
+static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
+{
+	unsigned long  dest, src;
+	unsigned short destp, srcp;
+	int timer_active, timer_active1, timer_active2;
+	unsigned long timer_expires;
+	struct tcp_opt *tp = &sp->tp_pinfo.af_tcp;
+
+	dest  = sp->daddr;
+	src   = sp->saddr;
+	destp = sp->dummy_th.dest;
+	srcp  = sp->dummy_th.source;
+	
+	/* FIXME: The fact that retransmit_timer occurs as a field
+	 * in two different parts of the socket structure is,
+	 * to say the least, confusing. This code now uses the
+	 * right retransmit_timer variable, but I'm not sure
+	 * the rest of the timer stuff is still correct.
+	 * In particular I'm not sure what the timeout value
+	 * is suppose to reflect (as opposed to tm->when). -- erics
+	 */
+	
+	destp = ntohs(destp);
+	srcp  = ntohs(srcp);
+	timer_active1 = del_timer(&tp->retransmit_timer);
+	timer_active2 = del_timer(&sp->timer);
+	if (!timer_active1) tp->retransmit_timer.expires=0;
+	if (!timer_active2) sp->timer.expires=0;
+	timer_active=0;
+	timer_expires=(unsigned)-1;
+	if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
+		timer_active=timer_active1;
+		timer_expires=tp->retransmit_timer.expires;
+	}
+	if (timer_active2 && sp->timer.expires < timer_expires) {
+		timer_active=timer_active2;
+		timer_expires=sp->timer.expires;
+		}
+	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		i, src, srcp, dest, destp, sp->state, 
+		format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
+		format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
+				timer_active, timer_expires-jiffies,
+		tp->retransmits,
+		sp->socket ? sp->socket->inode->i_uid:0,
+		timer_active?sp->timeout:0,
+		sp->socket ? sp->socket->inode->i_ino:0);
+	
+	if (timer_active1) add_timer(&tp->retransmit_timer);
+	if (timer_active2) add_timer(&sp->timer);	
+}
+
 /*
  * Get__netinfo returns the length of that string.
  *
@@ -57,12 +135,7 @@
 static int
 get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t offset, int length)
 {
-	struct sock *sp;
-	struct tcp_opt *tp;
-	int timer_active, timer_active1, timer_active2;
-	unsigned long timer_expires;
-	unsigned long  dest, src;
-	unsigned short destp, srcp;
+	struct sock *sp, *next;
 	int len=0, i = 0;
 	off_t pos=0;
 	off_t begin;
@@ -78,68 +151,46 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
  *	at the wrong moment (eg a syn recv socket getting a reset), or
  *	a memory timer destroy. Instead of playing with timers we just
  *	concede defeat and do a start_bh_atomic().
+ * 	Why not just use lock_sock()? As far as I can see all timer routines
+ *	check for sock_readers before doing anything. -AK
+ *      [Disabled for now again, because it hard-locked my machine, and there
+ *	 is an theoretical situation then, where an user could prevent
+ *	 sockets from being destroyed by constantly reading /proc/net/tcp.]
  */
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK(); 
 	sp = pro->sklist_next;
 	while(sp != (struct sock *)pro) {
+		if (format == 0 && sp->state == TCP_LISTEN) {
+			struct open_request *req;
+
+			for (req = sp->tp_pinfo.af_tcp.syn_wait_queue; req;
+			     i++, req = req->dl_next) {
+				pos += 128;
+				if (pos < offset) 
+					continue;
+				get__openreq(sp, req, tmpbuf, i); 
+				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
+				if(len >= length)
+					break; 
+			}
+		}
+		
 		pos += 128;
 		if (pos < offset)
 			goto next;
-
-		tp = &(sp->tp_pinfo.af_tcp);
-		dest  = sp->daddr;
-		src   = sp->saddr;
-		destp = sp->dummy_th.dest;
-		srcp  = sp->dummy_th.source;
-
-		/* FIXME: The fact that retransmit_timer occurs as a field
-		 * in two different parts of the socket structure is,
-	 	 * to say the least, confusing. This code now uses the
-		 * right retransmit_timer variable, but I'm not sure
-		 * the rest of the timer stuff is still correct.
-		 * In particular I'm not sure what the timeout value
-		 * is suppose to reflect (as opposed to tm->when). -- erics
-		 */
-
-		/* Since we are Little Endian we need to swap the bytes :-( */
-		destp = ntohs(destp);
-		srcp  = ntohs(srcp);
-		timer_active1 = del_timer(&tp->retransmit_timer);
-		timer_active2 = del_timer(&sp->timer);
-		if (!timer_active1) tp->retransmit_timer.expires=0;
-		if (!timer_active2) sp->timer.expires=0;
-		timer_active=0;
-		timer_expires=(unsigned)-1;
-		if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
-			timer_active=timer_active1;
-			timer_expires=tp->retransmit_timer.expires;
-		}
-		if (timer_active2 && sp->timer.expires < timer_expires) {
-			timer_active=timer_active2;
-			timer_expires=sp->timer.expires;
-		}
-		sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
-			" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
-			i, src, srcp, dest, destp, sp->state, 
-			format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
-			format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
-			timer_active, timer_expires-jiffies,
-			tp->retransmits,
-			sp->socket ? sp->socket->inode->i_uid:0,
-			timer_active?sp->timeout:0,
-			sp->socket ? sp->socket->inode->i_ino:0);
-
-		if (timer_active1) add_timer(&tp->retransmit_timer);
-		if (timer_active2) add_timer(&sp->timer);
+		
+		get__sock(sp, tmpbuf, i, format);
+		
 		len += sprintf(buffer+len, "%-127s\n", tmpbuf);
 		if(len >= length)
 			break;
 	next:
-		sp = sp->sklist_next;
+		next = sp->sklist_next;
+		sp = next;
 		i++;
 	}
 	SOCKHASH_UNLOCK();
-
+	
 	begin = len - (pos - offset);
 	*start = buffer + begin;
 	len -= begin;

@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.11 1997/08/08 08:34:02 jj Exp $
+/* $Id: VIScopy.S,v 1.14 1997/08/22 15:54:53 jj Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -42,8 +42,8 @@
 99:	ba	VIScopyfixup_ret;		\
 	 a, b, %o0;				\
 	.section __ex_table;			\
-	.align	8;				\
-	.xword	98b, 99b;			\
+	.align	4;				\
+	.word	98b, 99b;			\
 	.text;					\
 	.align	4;
 #define EX2(x,y,c,d,e,a,b) 			\
@@ -54,37 +54,48 @@
 	ba	VIScopyfixup_ret;		\
 	 a, b, %o0;				\
 	.section __ex_table;			\
-	.align	8;				\
-	.xword	98b, 99b;			\
+	.align	4;				\
+	.word	98b, 99b;			\
 	.text;					\
 	.align	4;
 #define EXO2(x,y) 				\
 98: 	x,y;					\
 	.section __ex_table;			\
-	.align	8;				\
-	.xword	98b, VIScopyfixup_reto2;	\
+	.align	4;				\
+	.word	98b, VIScopyfixup_reto2;	\
 	.text;					\
 	.align	4;
 #define EXVISN(x,y,n) 				\
 98: 	x,y;					\
 	.section __ex_table;			\
-	.align	8;				\
-	.xword	98b, VIScopyfixup_vis##n;	\
+	.align	4;				\
+	.word	98b, VIScopyfixup_vis##n;	\
 	.text;					\
 	.align	4;
 #define EXT(start,end,handler) 			\
 	.section __ex_table;			\
-	.align	8;				\
-	.xword	start, 0, end, handler;		\
+	.align	4;				\
+	.word	start, 0, end, handler;		\
 	.text;					\
 	.align	4;
 #else
-#define FPU_CLEAN_RETL	\
-	retl;		\
+#ifdef REGS_64BIT
+#define FPU_CLEAN_RETL				\
+	retl;					\
 	 mov	%g6, %o0;
-#define FPU_RETL	\
-	retl;		\
+#define FPU_RETL				\
+	retl;					\
 	 mov	%g6, %o0;
+#else
+#define FPU_CLEAN_RETL				\
+	wr	%g0, FPRS_FEF, %fprs;		\
+	retl;					\
+	 mov	%g6, %o0;
+#define FPU_RETL				\
+	wr	%g0, FPRS_FEF, %fprs;		\
+	retl;					\
+	 mov	%g6, %o0;
+#endif
 #define NORMAL_RETL	\
 	retl;		\
 	 mov	%g6, %o0;
@@ -113,8 +124,8 @@
 
 #define MAIN_LOOP_CHUNK(src, dest, fdest, fsrc, len, jmptgt)	\
 	EXVIS(LDBLK		[%src] ASIBLK, %fdest);		\
-	add			%src, 0x40, %src;		\
 	ASI_SETDST_BLK						\
+	add			%src, 0x40, %src;		\
 	add			%dest, 0x40, %dest;		\
 	subcc			%len, 0x40, %len;		\
 	be,pn			%xcc, jmptgt;			\

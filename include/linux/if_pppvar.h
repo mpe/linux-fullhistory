@@ -1,4 +1,4 @@
-/*	$Id: if_pppvar.h,v 1.3 1996/09/01 07:45:23 davem Exp $	*/
+/*	$Id: if_pppvar.h,v 1.4 1997/09/03 11:55:06 ecd Exp $	*/
 /*
  * if_pppvar.h - private structures and declarations for PPP.
  *
@@ -72,7 +72,7 @@ struct ppp_buffer {
         __s32		count;		/* Count of characters in bufr	*/
         __s32		head;		/* index to head of list	*/
         __s32		tail;		/* index to tail of list	*/
-        __u32		locked;		/* Buffer is being sent		*/
+        unsigned long	locked;		/* Buffer is being sent		*/
         __s32		type;		/* Type of the buffer		*/
 					/* =0, device read buffer	*/
 					/* =1, device write buffer	*/
@@ -93,7 +93,7 @@ struct ppp {
 	__s32		magic;		/* magic value for structure	*/
 
 	/* Bitmapped flag fields. */
-	__u32		inuse;		/* are we allocated?		*/
+	unsigned long	inuse;		/* are we allocated?		*/
 	__u8		escape;		/* 0x20 if prev char was PPP_ESC*/
 	__u8		toss;		/* toss this frame		*/
 

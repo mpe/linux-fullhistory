@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.29 1997/07/17 02:20:40 davem Exp $
+/*  $Id: process.c,v 1.42 1997/08/19 14:17:55 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -385,7 +385,8 @@ void flush_thread(void)
 
 	/* No new signal delivery by default. */
 	current->tss.new_signal = 0;
-	current->flags &= ~PF_USEDFPU;
+	current->tss.flags &= ~(SPARC_FLAG_USEDFPU | SPARC_FLAG_USEDFPUL |
+			        SPARC_FLAG_USEDFPUU);
 	
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.current_ds = USER_DS;
@@ -642,6 +643,7 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	if(!error) {
 		fprs_write(0);
 		regs->fprs = 0;
+		regs->tstate &= ~TSTATE_PEF;
 	}
 out:
 	unlock_kernel();

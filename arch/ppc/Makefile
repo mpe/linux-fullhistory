@@ -1,6 +1,3 @@
-#
-# ppc/Makefile
-#
 # This file is included by the global makefile so that you can add your own
 # architecture-specific flags and dependencies. Remember to do have actions
 # for "archclean" and "archdep" for cleaning up and making dependencies for
@@ -12,7 +9,7 @@
 #
 # Copyright (C) 1994 by Linus Torvalds
 # Changes for PPC by Gary Thomas
-# Modified by Cort Dougan and Paul Mackerras
+# Rewritten by Cort Dougan and Paul Mackerras
 #
 
 ifeq ($(CONFIG_PMAC),y)
@@ -23,18 +20,16 @@ endif
 
 # PowerPC (cross) tools
 ifneq ($(shell uname -m),ppc)
-CROSS_COMPILE 	=powerpc-eabi-
+CROSS_COMPILE 	= ppc-linux-elf-
+else
+CHECKS		= checks
 endif
 
 ASFLAGS		=
 LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELBASE) -Bstatic
 CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
-CFLAGS		= $(CFLAGSINC) \
-		-Wall -Wstrict-prototypes -Wno-uninitialized \
-		-fno-builtin \
-		-fsigned-char \
-		-msoft-float \
-		-O2 -pipe
+CFLAGS		:= $(CFLAGS) -D__powerpc__ -fsigned-char -msoft-float -pipe \
+		-fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple -mstring
 CPP		= $(CC) -E $(CFLAGS)
 
 ifdef CONFIG_601
@@ -64,7 +59,7 @@ endif
 ifdef CONFIG_PMAC
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/coffboot
 else
-# PReP systems
+# PReP and CHRP systems
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 endif
 
@@ -74,7 +69,7 @@ checks:
 BOOT_TARGETS = netboot znetboot zImage floppy install \
 	vmlinux.coff znetboot.initrd zImage.initrd
 
-$(BOOT_TARGETS): checks vmlinux
+$(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKEBOOT) $@
 
 tags:
@@ -83,9 +78,6 @@ tags:
 archclean:
 	rm -f arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h
 	rm -f arch/ppc/kernel/checks
-	find arch/ppc/ -name '*.o' -exec /bin/rm -f '{}' \;
-	find arch/ppc/ -name '*~' -exec /bin/rm -f '{}' \;
-	find arch/ppc/ -name '*.a' -exec /bin/rm -f '{}' \;
 	@$(MAKEBOOT) clean
 
 archdep:

@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.21 1997/07/31 07:37:25 davem Exp $ */
+/* $Id: uaccess.h,v 1.22 1997/08/19 15:25:35 jj Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -81,7 +81,7 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
 
 struct exception_table_entry
 {
-        unsigned long insn, fixup;
+        unsigned insn, fixup;
 };
 
 /* Returns 0 if exception not found and fixup otherwise.  */
@@ -155,8 +155,8 @@ __asm__ __volatile__(							\
 	" mov	%3, %0\n\n\t"						\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	8\n\t"							\
-	".xword	1b, 3b\n\t"						\
+	".align	4\n\t"							\
+	".word	1b, 3b\n\t"						\
 	".previous\n\n\t"						\
        : "=r" (ret) : "r" (x), "r" (__m(addr)),				\
 	 "i" (-EFAULT), "i" (ASI_S))
@@ -167,8 +167,8 @@ __asm__ __volatile__(							\
 	"/* Put user asm ret, inline. */\n"				\
 "1:\t"	"st"#size "a %1, [%2] %3\n\n\t"					\
 	".section __ex_table,#alloc\n\t"				\
-	".align	8\n\t"							\
-	".xword	1b, __ret_efault\n\n\t"					\
+	".align	4\n\t"							\
+	".word	1b, __ret_efault\n\n\t"					\
 	".previous\n\n\t"						\
        : "=r" (foo) : "r" (x), "r" (__m(addr)), "i" (ASI_S));		\
 else									\
@@ -182,8 +182,8 @@ __asm__ __volatile(							\
 	" restore %%g0, %3, %%o0\n\n\t"					\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	8\n\t"							\
-	".xword	1b, 3b\n\n\t"						\
+	".align	4\n\t"							\
+	".word	1b, 3b\n\n\t"						\
 	".previous\n\n\t"						\
        : "=r" (foo) : "r" (x), "r" (__m(addr)),				\
          "i" (ret), "i" (ASI_S))
@@ -225,8 +225,8 @@ __asm__ __volatile__(							\
 	" mov	%3, %0\n\n\t"						\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	8\n\t"							\
-	".xword	1b, 3b\n\n\t"						\
+	".align	4\n\t"							\
+	".word	1b, 3b\n\n\t"						\
 	".previous\n\t"							\
        : "=r" (ret), "=r" (x) : "r" (__m(addr)),			\
 	 "i" (-EFAULT), "i" (ASI_S))
@@ -237,8 +237,8 @@ __asm__ __volatile__(							\
 	"/* Get user asm ret, inline. */\n"				\
 "1:\t"	"ld"#size "a [%1] %2, %0\n\n\t"					\
 	".section __ex_table,#alloc\n\t"				\
-	".align	8\n\t"							\
-	".xword	1b,__ret_efault\n\n\t"					\
+	".align	4\n\t"							\
+	".word	1b,__ret_efault\n\n\t"					\
 	".previous\n\t"							\
        : "=r" (x) : "r" (__m(addr)), "i" (ASI_S));			\
 else									\
@@ -252,8 +252,8 @@ __asm__ __volatile__(							\
 	" restore %%g0, %3, %%o0\n\n\t"					\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	8\n\t"							\
-	".xword	1b, 3b\n\n\t"						\
+	".align	4\n\t"							\
+	".word	1b, 3b\n\n\t"						\
 	".previous\n\t"							\
        : "=r" (x) : "r" (__m(addr)), "i" (retval), "i" (ASI_S))
 

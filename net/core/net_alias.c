@@ -216,6 +216,17 @@ static int net_alias_devinit(struct device *dev)
 }
 
 
+/* 
+ * 2 options for multicast:
+ *    1) fake it for aliases.
+ *    2) allow aliases and actual device to set it.
+ * current choice: option 1
+ */
+static void net_alias_setmulticast(struct device *dev)
+{
+}
+
+
 /*
  *	Hard_start_xmit() should not be called.
  *	ignore ... but shout!.
@@ -269,6 +280,8 @@ static int net_alias_devsetup(struct net_alias *alias,
 	dev->type = main_dev->type;
 	dev->open = net_alias_open;
 	dev->stop = net_alias_close;
+	if (main_dev->set_multicast_list)
+	  dev->set_multicast_list = net_alias_setmulticast;
 	dev->hard_header_len = main_dev->hard_header_len;
 	memcpy(dev->broadcast, main_dev->broadcast, MAX_ADDR_LEN);
 	memcpy(dev->dev_addr, main_dev->dev_addr, MAX_ADDR_LEN);

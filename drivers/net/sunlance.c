@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.64 1997/05/14 20:46:40 davem Exp $
+/* $Id: sunlance.c,v 1.68 1997/08/15 06:44:36 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -75,11 +75,13 @@ static char *lancedma = "LANCE DMA";
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <asm/pgtable.h>
 #include <linux/errno.h>
 #include <asm/byteorder.h>	/* Used by the checksum routines */
 
@@ -92,6 +94,7 @@ static char *lancedma = "LANCE DMA";
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>		/* For tpe-link-test? setting */
+#include <asm/irq.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -241,6 +244,7 @@ struct lance_private {
 
 	struct device		 *dev;		  /* Backpointer	*/
 	struct lance_private	 *next_module;
+	struct linux_sbus        *sbus;
 };
 
 #define TX_BUFFS_AVAIL ((lp->tx_old<=lp->tx_new)?\
@@ -661,6 +665,23 @@ static int lance_open (struct device *dev)
 
 	last_dev = dev;
 
+#ifdef __sparc_v9__
+	if (sparc_cpu_model == sun4u) {
+		struct devid_cookie dcookie;
+
+		dcookie.real_dev_id = dev;
+		dcookie.imap = dcookie.iclr = 0;
+		dcookie.pil = -1;
+		dcookie.bus_cookie = lp->sbus;
+		if(request_irq(dev->irq, &lance_interrupt,
+			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+			       lancestr, &dcookie)) {
+			printk ("Lance: Can't get irq %d\n", dev->irq);
+			return -EAGAIN;
+		}
+
+	} else
+#endif
 	if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
 			 lancestr, (void *) dev)) {
 		printk ("Lance: Can't get irq %d\n", dev->irq);
@@ -978,6 +999,7 @@ sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 	/* Make certain the data structures used by the LANCE are aligned. */
 	dev->priv = (void *)(((unsigned long)dev->priv + 7) & ~7);
 	lp = (struct lance_private *) dev->priv;
+	lp->sbus = sdev->my_bus;
 	if (lebuffer){
 		prom_apply_sbus_ranges (lebuffer->my_bus,
 					&lebuffer->reg_addrs [0],

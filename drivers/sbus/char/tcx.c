@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.17 1997/07/17 02:21:50 davem Exp $
+/* $Id: tcx.c,v 1.20 1997/08/22 15:55:14 jj Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -259,8 +259,8 @@ tcx_reset (fbinfo_t *fb)
 {
 	struct tcx_info *tcx = &(fb->info.tcx);
 
-	if (fb->setcursor)
-		sun_hw_hide_cursor ();
+	if (fb->setcursor && fb == &fbinfo[0])
+		sbus_hw_hide_cursor ();
 	/* Reset control plane to 8bit mode if necessary */
 	if (fb->open && fb->mmaped)
 		tcx_set_control_plane (fb);
@@ -292,7 +292,7 @@ __initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, u32 tcx, struct lin
 	fb->emulations [1] = FBTYPE_SUN3COLOR;
 	fb->emulations [2] = FBTYPE_MEMCOLOR;
 	fb->switch_from_graph = tcx_switch_from_graph;
-	fb->postsetup = sun_cg_postsetup;
+	fb->postsetup = cg_postsetup;
 	
 	tcxinfo = (struct tcx_info *) &fb->info.tcx;
 	
@@ -309,7 +309,7 @@ __initfunc(void tcx_setup (fbinfo_t *fb, int slot, int node, u32 tcx, struct lin
 	tcxinfo->tec = sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_TEC_OFFSET], 0,
 		 sizeof (struct tcx_tec), "tcx_tec", fb->space, 0);
 	if (!fb->base){
-		fb->base = (unsigned long)
+		fb->base = (uint) (unsigned long)
 			sparc_alloc_io((u32)tcxinfo->tcx_offsets [TCX_RAM8BIT_OFFSET],
 				       0, fb->type.fb_size, "tcx_ram", fb->space, 0);
 	}

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.43 1997/04/27 19:24:43 schenk Exp $
+ * Version:	$Id: tcp_output.c,v 1.46 1997/08/24 16:22:28 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -306,11 +306,13 @@ static int tcp_wrxmit_frag(struct sock *sk, struct sk_buff *skb, int size)
 		tp->packets_out--;
 		return -1;
 	} else {
+#if 0
 		/* If tcp_fragment succeded then
 		 * the send head is the resulting
 		 * fragment
 		 */
 		tp->send_head = skb->next;
+#endif
 	}
 	return 0;
 }
@@ -365,6 +367,7 @@ void tcp_write_xmit(struct sock *sk)
 		if (size - (th->doff << 2) > sk->mss) {
 			if (tcp_wrxmit_frag(sk, skb, size))
 				break;
+			size = skb->len - (((unsigned char*)th) - skb->data);
 		}
 
 		tp->last_ack_sent = th->ack_seq = htonl(tp->rcv_nxt);
@@ -620,11 +623,31 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
+/* Do a simple retransmit without using the backoff mechanisms in
+ * tcp_timer. This is used to speed up path mtu recovery. Note that
+ * these simple retransmit aren't counted in the usual tcp retransmit
+ * backoff counters. 
+ * The socket is already locked here.
+ */ 
+void tcp_simple_retransmit(struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
+	/* Clear delay ack timer. */
+ 	tcp_clear_xmit_timer(sk, TIME_DACK);
+ 
+ 	tp->retrans_head = NULL; 
+ 	/* Don't muck with the congestion window here. */
+ 	tp->dup_acks = 0;
+ 	tp->high_seq = tp->snd_nxt;
+ 	/* FIXME: make the current rtt sample invalid */
+ 	tcp_do_retransmit(sk, 0); 
+}
 
 /*
  *	A socket has timed out on its send queue and wants to do a
  *	little retransmitting.
- *	retransmit_head can be different from the head of the write_queue
+ *	retrans_head can be different from the head of the write_queue
  *	if we are doing fast retransmit.
  */
 

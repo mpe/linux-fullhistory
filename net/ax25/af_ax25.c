@@ -828,7 +828,7 @@ int ax25_create(struct socket *sock, int protocol)
 			return -ESOCKTNOSUPPORT;
 	}
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
@@ -854,7 +854,7 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	struct sock *sk;
 	ax25_cb *ax25;
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
@@ -917,16 +917,6 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	ax25->sk          = sk;
 
 	return sk;
-}
-
-static int ax25_dup(struct socket *newsock, struct socket *oldsock)
-{
-	struct sock *sk = oldsock->sk;
-
-	if (sk == NULL || newsock == NULL)
-		return -EINVAL;
-
-	return ax25_create(newsock, sk->protocol);
 }
 
 static int ax25_release(struct socket *sock, struct socket *peer)
@@ -1204,10 +1194,6 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	return 0;
 }
 
-static int ax25_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return -EOPNOTSUPP;
-}
 
 static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 {
@@ -1707,11 +1693,11 @@ static struct net_proto_family ax25_family_ops =
 static struct proto_ops ax25_proto_ops = {
 	AF_AX25,
 
-	ax25_dup,
+	sock_no_dup,
 	ax25_release,
 	ax25_bind,
 	ax25_connect,
-	ax25_socketpair,
+	sock_no_socketpair,
 	ax25_accept,
 	ax25_getname,
 	datagram_poll,

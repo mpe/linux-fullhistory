@@ -65,8 +65,7 @@ int ipip_rcv(struct sk_buff *skb, unsigned short len)
 	/*
 	 *	Discard the original IP header
 	 */
-
-	skb->mac.raw = skb->data;	 
+	 
 	skb_pull(skb, skb->h.raw - skb->nh.raw);
 	
 	/*

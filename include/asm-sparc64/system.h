@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.35 1997/08/07 03:53:00 davem Exp $ */
+/* $Id: system.h,v 1.36 1997/08/19 14:18:33 jj Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -143,7 +143,7 @@ extern __inline__ void flushw_user(void)
 #define switch_to(prev, next)							\
 do {	__label__ switch_continue;						\
 	register unsigned long task_pc asm("o7");				\
-	(prev)->tss.kregs->fprs = 0;						\
+	(prev)->tss.kregs->tstate &= ~TSTATE_PEF;				\
 	task_pc = ((unsigned long) &&switch_continue) - 0x8;			\
 	(next)->mm->cpu_vm_mask |= (1UL << smp_processor_id());			\
 	__asm__ __volatile__(							\

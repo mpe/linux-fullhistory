@@ -24,6 +24,8 @@
  *		Alan Cox	:	Started proper garbage collector
  *		Heiko EiBfeldt	:	Missing verify_area check
  *		Alan Cox	:	Started POSIXisms
+ *		Andreas Schwab	:	Replace inode by dentry for proper
+ *					reference counting
  *
  * Known differences from reference BSD that was tested:
  *
@@ -229,7 +231,9 @@ static unix_socket *unix_find_socket_byinode(struct inode *i)
 
 	for (s=unix_socket_table[i->i_ino & 0xF]; s; s=s->next)
 	{
-		if(s->protinfo.af_unix.inode==i)
+		struct dentry *dentry = s->protinfo.af_unix.dentry;
+
+		if(dentry && dentry->d_inode == i)
 		{
 			unix_lock(s);
 			return(s);
@@ -291,10 +295,10 @@ static void unix_destroy_socket(unix_socket *sk)
 		}
 	}
 	
-	if(sk->protinfo.af_unix.inode!=NULL)
+	if(sk->protinfo.af_unix.dentry!=NULL)
 	{
-		iput(sk->protinfo.af_unix.inode);
-		sk->protinfo.af_unix.inode=NULL;
+		dput(sk->protinfo.af_unix.dentry);
+		sk->protinfo.af_unix.dentry=NULL;
 	}
 	
 	if(!unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
@@ -355,7 +359,7 @@ static int unix_create(struct socket *sock, int protocol)
 		default:
 			return -ESOCKTNOSUPPORT;
 	}
-	sk = sk_alloc(GFP_KERNEL);
+	sk = sk_alloc(AF_UNIX, GFP_KERNEL);
 	if (!sk)
 		return -ENOMEM;
 
@@ -363,18 +367,13 @@ static int unix_create(struct socket *sock, int protocol)
 
 	sk->destruct = unix_destruct_addr;
 	sk->protinfo.af_unix.family=AF_UNIX;
-	sk->protinfo.af_unix.inode=NULL;
+	sk->protinfo.af_unix.dentry=NULL;
 	sk->sock_readers=1;			/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
 	return 0;
-}
-
-static int unix_dup(struct socket *newsock, struct socket *oldsock)
-{
-	return unix_create(newsock, 0);
 }
 
 static int unix_release(struct socket *sock, struct socket *peer)
@@ -427,7 +426,7 @@ static int unix_autobind(struct socket *sock)
 	addr = kmalloc(sizeof(*addr) + sizeof(short) + 16, GFP_KERNEL);
 	if (!addr)
 		return -ENOBUFS;
-	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode)
+	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.dentry)
 	{
 		kfree(addr);
 		return -EINVAL;
@@ -494,12 +493,11 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct sock *sk = sock->sk;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
 	struct dentry * dentry;
-	struct inode * inode = NULL;
 	int err;
 	unsigned hash;
 	struct unix_address *addr;
 	
-	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode ||
+	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.dentry ||
 	    sunaddr->sun_family != AF_UNIX)
 		return -EINVAL;
 
@@ -516,7 +514,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	/* We slept; recheck ... */
 
-	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.inode)
+	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.dentry)
 	{
 		kfree(addr);
 		return -EINVAL;		/* Already bound */
@@ -549,16 +547,9 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	
 
 	dentry = do_mknod(sunaddr->sun_path, S_IFSOCK|S_IRWXUGO, 0);
-	err = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		inode = dentry->d_inode;
-		inode->i_count++;	/* HATEFUL - we should use the dentry */
-		dput(dentry);
-		err = 0;
-	}
-
-	if(err<0)
+	if (IS_ERR(dentry))
 	{
+		err = PTR_ERR(dentry);
 		unix_release_addr(addr);
 		sk->protinfo.af_unix.addr = NULL;
 		if (err==-EEXIST)
@@ -567,8 +558,8 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			return err;
 	}
 	unix_remove_socket(sk);
-	sk->protinfo.af_unix.list = &unix_socket_table[inode->i_ino & 0xF];
-	sk->protinfo.af_unix.inode = inode;
+	sk->protinfo.af_unix.list = &unix_socket_table[dentry->d_inode->i_ino & 0xF];
+	sk->protinfo.af_unix.dentry = dentry;
 	unix_insert_socket(sk);
 
 	return 0;
@@ -800,11 +791,8 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 		atomic_inc(&sk->protinfo.af_unix.addr->refcnt);
 		newsk->protinfo.af_unix.addr=sk->protinfo.af_unix.addr;
 	}
-	if (sk->protinfo.af_unix.inode)
-	{
-		sk->protinfo.af_unix.inode->i_count++;	/* Should use dentry */
-		newsk->protinfo.af_unix.inode=sk->protinfo.af_unix.inode;
-	}
+	if (sk->protinfo.af_unix.dentry)
+		newsk->protinfo.af_unix.dentry=dget(sk->protinfo.af_unix.dentry);
 		
 	for (;;)
 	{
@@ -1215,8 +1203,15 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 			if (copied >= target)
 				break;
 
+			/*
+			 *	POSIX 1003.1g mandates this order.
+			 */
+			 
 			if (sk->err) 
+			{
+				up(&sk->protinfo.af_unix.readsem);
 				return sock_error(sk);
+			}
 
 			if (sk->shutdown & RCV_SHUTDOWN)
 				break;
@@ -1426,7 +1421,7 @@ done:
 struct proto_ops unix_stream_ops = {
 	AF_UNIX,
 	
-	unix_dup,
+	sock_no_dup,
 	unix_release,
 	unix_bind,
 	unix_stream_connect,
@@ -1447,12 +1442,12 @@ struct proto_ops unix_stream_ops = {
 struct proto_ops unix_dgram_ops = {
 	AF_UNIX,
 	
-	unix_dup,
+	sock_no_dup,
 	unix_release,
 	unix_bind,
 	unix_dgram_connect,
 	unix_socketpair,
-	NULL,
+	sock_no_accept,
 	unix_getname,
 	datagram_poll,
 	unix_ioctl,

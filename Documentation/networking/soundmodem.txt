@@ -9,7 +9,9 @@ attempt to include full duplex support failed because the hardware did
 not support it (it appeared that the card only provides one DMA channel,
 although the Codec chip would support two channels). The driver needs
 some processing power! A 486DX/2 66MHz is a minimum requirement, otherwise
-interactive performance of the computer may become sluggish.
+interactive performance of the computer may become sluggish. This driver
+does *not* support telephone modem standards, it is intended for radio
+use only.
 
 
 The Interface of the driver

@@ -1743,7 +1743,7 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 static int ipx_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
-	sk=sk_alloc(GFP_KERNEL);
+	sk=sk_alloc(AF_IPX, GFP_KERNEL);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)
@@ -1774,11 +1774,6 @@ static int ipx_release(struct socket *sock, struct socket *peer)
 	sock->sk=NULL;
 	ipx_destroy_socket(sk);
 	return(0);
-}
-
-static int ipx_dup(struct socket *newsock,struct socket *oldsock)
-{
-	return(ipx_create(newsock,SOCK_DGRAM));
 }
 
 static unsigned short ipx_first_free_socketnum(ipx_interface *intrfc)
@@ -1931,11 +1926,6 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	sock->state = SS_CONNECTED;
 	sk->state=TCP_ESTABLISHED;
 	return 0;
-}
-
-static int ipx_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return(-EOPNOTSUPP);
 }
 
 static int ipx_accept(struct socket *sock, struct socket *newsock, int flags)
@@ -2283,11 +2273,11 @@ static struct net_proto_family ipx_family_ops = {
 static struct proto_ops ipx_dgram_ops = {
 	AF_IPX,
 
-	ipx_dup,
+	sock_no_dup,
 	ipx_release,
 	ipx_bind,
 	ipx_connect,
-	ipx_socketpair,
+	sock_no_socketpair,
 	ipx_accept,
 	ipx_getname,
 	datagram_poll,

@@ -54,6 +54,9 @@
 #define SIOCADDMULTI	0x8931		/* Multicast address lists	*/
 #define SIOCDELMULTI	0x8932
 #define SIOGIFINDEX	0x8933		/* name -> if_index mapping	*/
+#define SIOGIFNAME	0x8934		/* if_index -> name mapping	*/
+#define SIOCGIFCOUNT	0x8935		/* get number of interfaces	*/
+#define SIOCDIFADDR	0x8936		/* delete PA address		*/
 
 #define SIOCGIFBR	0x8940		/* Bridging support		*/
 #define SIOCSIFBR	0x8941		/* Set bridging options 	*/

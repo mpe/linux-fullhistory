@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.23 1997/08/09 18:33:17 jj Exp $
+/* $Id: systbls.S,v 1.24 1997/08/22 20:12:06 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -173,9 +173,9 @@ sunos_sys_table:
 	.word sys_listen, sunos_nosys, sunos_sigaction
 	.word sunos_sigblock, sunos_sigsetmask, sys_sigpause
 	.word sys32_sigstack, sys32_recvmsg, sys32_sendmsg
-	.word sunos_nosys, sys_gettimeofday, sys32_getrusage
+	.word sunos_nosys, sys32_gettimeofday, sys32_getrusage
 	.word sunos_getsockopt, sunos_nosys, sunos_readv
-	.word sunos_writev, sys_settimeofday, sys_fchown
+	.word sunos_writev, sys32_settimeofday, sys_fchown
 	.word sys_fchmod, sys32_recvfrom, sys32_setreuid
 	.word sys_setregid, sys32_rename, sys32_truncate
 	.word sys32_ftruncate, sys_flock, sunos_nosys

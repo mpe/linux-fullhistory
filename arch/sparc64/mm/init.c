@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.54 1997/08/15 06:44:23 davem Exp $
+/*  $Id: init.c,v 1.55 1997/08/24 01:22:29 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -180,7 +180,7 @@ __initfunc(unsigned long iommu_init(int iommu_node, unsigned long memory_start,
 	prom_printf("IOMMU: IMPL[%x] VERS[%x] SYSIO mapped at %016lx\n",
 		    (unsigned int) impl, (unsigned int)vers, (unsigned long) sregs);
 #endif
-	printk("IOMMU: IMPL[%x] VERS[%x] SYSIO mapped at %016lx\n",
+	printk("IOMMU(SBUS): IMPL[%x] VERS[%x] SYSIO mapped at %016lx\n",
 	       (unsigned int) impl, (unsigned int)vers, (unsigned long) sregs);
 	
 	control &= ~(IOMMU_CTRL_TSBSZ);

@@ -261,7 +261,16 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				return -EINVAL;
 			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && !suser())
 				return -EPERM;
-			sk->ip_tos=val;
+			if (sk->ip_tos != val) {
+				start_bh_atomic(); 
+				sk->ip_tos=val;
+				sk->priority = rt_tos2priority(val);
+				if (sk->dst_cache) {
+					dst_release(sk->dst_cache); 
+					sk->dst_cache = NULL;
+				}
+				end_bh_atomic();
+			}
 			sk->priority = rt_tos2priority(val);
 			return 0;
 		case IP_TTL:

@@ -21,7 +21,9 @@ static char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #include <linux/init.h>
+
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -36,6 +38,7 @@ static char *version =
 #include <asm/auxio.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <asm/irq.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -153,7 +156,7 @@ static void qe_init_rings(struct sunqe *qep, int from_irq)
 		skb_reserve(skb, 34);
 
 		qb->qe_rxd[i].rx_addr =
-			(unsigned int) ((unsigned long)skb->data);
+			(u32) ((unsigned long)skb->data);
 		qb->qe_rxd[i].rx_flags =
 			(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 	}
@@ -444,6 +447,10 @@ static inline void qe_tx(struct sunqe *qep)
 		skb = qep->tx_skbs[elem];
 		qep->tx_skbs[elem] = NULL;
 		qep->net_stats.tx_bytes+=skb->len;
+#ifdef NEED_DMA_SYNCHRONIZATION
+		mmu_sync_dma(((u32)((unsigned long)skb->data)),
+			     skb->len, qep->qe_sbusdev->my_bus);
+#endif
 		dev_kfree_skb(skb, FREE_WRITE);
 
 		qep->net_stats.tx_packets++;
@@ -492,12 +499,16 @@ static inline void qe_rx(struct sunqe *qep)
 			/* Return it to the QE. */
 			qep->net_stats.rx_dropped++;
 			this->rx_addr =
-				(unsigned int) ((unsigned long)qep->rx_skbs[elem]->data);
+				(u32) ((unsigned long)qep->rx_skbs[elem]->data);
 			this->rx_flags =
 				(RXD_OWN | (RX_BUF_ALLOC_SIZE & RXD_LENGTH));
 			goto next;
 		}
 		skb = qep->rx_skbs[elem];
+#ifdef NEED_DMA_SYNCHRONIZATION
+		mmu_sync_dma(((u32)((unsigned long)skb->data)),
+			     skb->len, qep->qe_sbusdev->my_bus);
+#endif
 		if(len > RX_COPY_THRESHOLD) {
 			struct sk_buff *new_skb;
 
@@ -514,7 +525,7 @@ static inline void qe_rx(struct sunqe *qep)
 			skb_reserve(new_skb, 34);
 
 			rxbase[elem].rx_addr =
-				(unsigned int) ((unsigned long)new_skb->data);
+				(u32) ((unsigned long)new_skb->data);
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 
@@ -535,7 +546,7 @@ static inline void qe_rx(struct sunqe *qep)
 
 			/* Reuse original ring buffer. */
 			rxbase[elem].rx_addr =
-				(unsigned int) ((unsigned long)skb->data);
+				(u32) ((unsigned long)skb->data);
 			rxbase[elem].rx_flags =
 				(RXD_OWN | ((RX_BUF_ALLOC_SIZE - 34) & RXD_LENGTH));
 
@@ -738,8 +749,7 @@ static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	qep->tx_skbs[entry] = skb;
 
-	/* FIX FOR ULTRA */
-	qep->qe_block->qe_txd[entry].tx_addr = (unsigned long) skb->data;
+	qep->qe_block->qe_txd[entry].tx_addr = (u32) ((unsigned long) skb->data);
 	qep->qe_block->qe_txd[entry].tx_flags =
 		(TXD_OWN | TXD_SOP | TXD_EOP | (len & TXD_LENGTH));
 	qep->tx_new = NEXT_TX(entry);
@@ -1110,7 +1120,25 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 			res = EAGAIN;
 			goto qec_free_devs;
 		}
-	} else {
+	}
+#ifdef __sparc_v9__
+	else if(sparc_cpu_model == sun4u) {
+		struct devid_cookie dcookie;
+
+		dcookie.real_dev_id = qecp;
+		dcookie.imap = dcookie.iclr = 0;
+		dcookie.pil = -1;
+		dcookie.bus_cookie = sdev->my_bus;
+		if(request_irq(sdev->irqs[0].pri, &qec_interrupt,
+			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+			       "QuadEther", &dcookie)) {
+			printk("QuadEther: Can't register QEC master irq handler.\n");
+			res = EAGAIN;
+			goto qec_free_devs;
+		}
+	}
+#endif
+	else {
 		if(request_irq(sdev->irqs[0].pri, &qec_interrupt,
 			       SA_SHIRQ, "QuadEther", (void *) qecp)) {
 			printk("QuadEther: Can't register QEC master irq handler.\n");

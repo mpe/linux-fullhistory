@@ -37,8 +37,8 @@ static struct sk_buff_head skb_queue_rd[MAX_LINKS];
 static int rdq_size[MAX_LINKS];
 static struct wait_queue *read_space_wait[MAX_LINKS];
 
-static unsigned active_map = 0;
-static unsigned open_map = 0;
+static unsigned long active_map = 0;
+static unsigned long open_map = 0;
 
 /*
  *	Device operations

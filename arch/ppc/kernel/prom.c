@@ -16,6 +16,7 @@
 #include <linux/blk.h>
 #include <asm/prom.h>
 #include <asm/page.h>
+#include <asm/processor.h>
 
 #define getpromprop(node, name, buf, len)	\
 	((int)call_prom("getprop", 4, 1, (node), (name), (buf), (len)))
@@ -128,7 +129,7 @@ void
 prom_init(char *params, int unused, void (*pp)(void *))
 {
 	/* First get a handle for the stdout device */
-	if ( _machine != _MACH_Pmac ) /* prep */
+	if ( ! have_of() )
 		return;
 	prom_entry = pp;
 	prom_chosen = call_prom("finddevice", 1, 1, "/chosen");

@@ -423,7 +423,7 @@ static struct sock *x25_alloc_socket(void)
 	struct sock *sk;
 	x25_cb *x25;
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_X25, GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((x25 = kmalloc(sizeof(*x25), GFP_ATOMIC)) == NULL) {
@@ -521,16 +521,6 @@ static struct sock *x25_make_new(struct sock *osk)
 	init_timer(&x25->timer);
 
 	return sk;
-}
-
-static int x25_dup(struct socket *newsock, struct socket *oldsock)
-{
-	struct sock *sk = oldsock->sk;
-
-	if (sk == NULL || newsock == NULL)
-		return -EINVAL;
-
-	return x25_create(newsock, sk->protocol);
 }
 
 static int x25_release(struct socket *sock, struct socket *peer)
@@ -682,11 +672,6 @@ static int x25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len
 	return 0;
 }
 	
-static int x25_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return -EOPNOTSUPP;
-}
-
 static int x25_accept(struct socket *sock, struct socket *newsock, int flags)
 {
 	struct sock *sk;
@@ -1254,11 +1239,11 @@ struct net_proto_family x25_family_ops = {
 static struct proto_ops x25_proto_ops = {
 	AF_X25,
 
-	x25_dup,
+	sock_no_dup,
 	x25_release,
 	x25_bind,
 	x25_connect,
-	x25_socketpair,
+	sock_no_socketpair,
 	x25_accept,
 	x25_getname,
 	datagram_poll,

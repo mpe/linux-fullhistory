@@ -2,14 +2,7 @@
 #define __NET_NETLINK_H
 
 #define NET_MAJOR 36		/* Major 18 is reserved for networking 						*/
-/* so....                                ^^ is this 36? */
-/* and the things below... */
-#define MAX_LINKS 16		/* 18,0 for route updates, 18,1 for SKIP, 18,2 debug tap 18,3 PPP reserved 	*/
-				/* 4-7 are psi0-psi3  8 is arpd 9 is ppp */
-				/* 10 is for IPSEC <John Ioannidis> */
-				/* 11 IPv6 route updates		*/
-				/* 12 is for firewall trapout	*/
-
+#define MAX_LINKS 32
 #define MAX_QBYTES 32768	/* Maximum bytes in the queue 							*/
 
 #include <linux/netlink.h>
@@ -23,7 +16,7 @@ extern int init_netlink(void);
 /*
  *	skb should fit one page. This choice is good for headerless malloc.
  */
-#define NLMSG_GOODSIZE (PAGE_SIZE - ((sizeof(struct sk_buff)+0xF)&~0xF))
+#define NLMSG_GOODSIZE (PAGE_SIZE - ((sizeof(struct sk_buff)+0xF)&~0xF)-32)
 
 #define NLMSG_RECOVERY_TIMEO	(HZ/2)		/* If deleivery was failed,
 						   retry after */
@@ -62,13 +55,11 @@ extern __inline__ void nlmsg_ack(struct nlmsg_ctl* ctl, unsigned long seq,
 #define NETLINK_SKIP		1	/* Reserved for ENskip  			*/
 #define NETLINK_USERSOCK	2	/* Reserved for user mode socket protocols 	*/
 #define NETLINK_FIREWALL	3	/* Firewalling hook				*/
-#define NETLINK_PSI		4	/* PSI devices - 4 to 7 */
-#define NETLINK_ARPD		8
-#define NETLINK_IPSEC		10	/* IPSEC */
-#define NETLINK_ROUTE6		11	/* af_inet6 route comm channel */
-#define NETLINK_IP6_FW		13
-/* Wouldn't this suffice instead of the confusion at the top of
-   this file?  i.e. 3 is firewall or ppp... */
-/* #define MAX_LINKS		16 */
-
+#define NETLINK_FREE		4	/* PSI devices - 4 to 7 (obsolete)		*/
+#define NETLINK_ARPD		8	/* ARP daemon for big switched networks		*/
+#define NETLINK_IPSEC		10	/* IPSEC  (JI)					*/
+#define NETLINK_ROUTE6		11	/* Af_inet6 route communication channel		*/
+#define NETLINK_IP6_FW		13	/* IPv6 firewall trap outs			*/
+#define NETLINK_DNRT		14	/* DECnet routing messages			*/
+#define NETLINK_TAPBASE		16	/* 16->31 are the ethertap devices 		*/
 #endif

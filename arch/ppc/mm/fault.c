@@ -145,8 +145,8 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 	if (xmon_kernel_faults)
 		xmon(regs);
 #endif
-	panic("kernel access of bad area\n pc %lx address %lX tsk %s/%d",
-	      regs->nip,address,current->comm,current->pid);
+	panic("kernel access of bad area pc %lx lr %lx address %lX tsk %s/%d",
+	      regs->nip,regs->link,address,current->comm,current->pid);
 }
 
 unsigned long va_to_phys(unsigned long address)

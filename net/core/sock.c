@@ -71,8 +71,10 @@
  *		Alan Cox	: 	Generic socket allocation to make hooks
  *					easier (suggested by Craig Metz).
  *		Michael Pall	:	SO_ERROR returns positive errno again
- *             Steve Whitehouse:       Added default destructor to free
- *                                     protocol private data.
+ *              Steve Whitehouse:       Added default destructor to free
+ *                                      protocol private data.
+ *              Steve Whitehouse:       Added various other default routines
+ *                                      common to several socket families.
  *
  * To Fix:
  *
@@ -458,12 +460,15 @@ static kmem_cache_t *sk_cachep;
  *	usage.
  */
  
-struct sock *sk_alloc(int priority)
+struct sock *sk_alloc(int family, int priority)
 {
 	struct sock *sk = kmem_cache_alloc(sk_cachep, priority);
 
-	if(sk)
+	if(sk) {
 		memset(sk, 0, sizeof(struct sock));
+		sk->family = family;
+	}
+
 	return sk;
 }
 
@@ -802,13 +807,83 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 }
 
 /*
- *	Support routines for general vectors
+ * Set of default routines for initialising struct proto_ops when
+ * the protocol does not support a particular function. In certain
+ * cases where it makes no sense for a protocol to have a "do nothing"
+ * function, some default processing is provided.
  */
 
-/*
- *	Socket with no special fcntl calls.
- */ 
- 
+int sock_no_dup(struct socket *newsock, struct socket *oldsock)
+{
+	struct sock *sk = oldsock->sk;
+
+	return net_families[sk->family]->create(newsock, sk->protocol);
+}
+
+int sock_no_release(struct socket *sock, struct socket *peersock)
+{
+	return 0;
+}
+
+int sock_no_bind(struct socket *sock, struct sockaddr *saddr, int len)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_connect(struct socket *sock, struct sockaddr *saddr, 
+		    int len, int flags)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_socketpair(struct socket *sock1, struct socket *sock2)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_accept(struct socket *sock, struct socket *newsock, int flags)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_getname(struct socket *sock, struct sockaddr *saddr, 
+		    int *len, int peer)
+{
+	return -EOPNOTSUPP;
+}
+
+unsigned int sock_no_poll(struct socket *sock, poll_table *pt)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_listen(struct socket *sock, int backlog)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_shutdown(struct socket *sock, int how)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_setsockopt(struct socket *sock, int level, int optname,
+		    char *optval, int optlen)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_getsockopt(struct socket *sock, int level, int optname,
+		    char *optval, int *optlen)
+{
+	return -EOPNOTSUPP;
+}
+
 int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
@@ -832,26 +907,19 @@ int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	}
 }
 
-/*
- *	Default socket getsockopt / setsockopt
- */
- 
-int sock_no_setsockopt(struct socket *sock, int level, int optname,
-		    char *optval, int optlen)
+int sock_no_sendmsg(struct socket *sock, struct msghdr *m, int flags,
+		    struct scm_cookie *scm)
 {
 	return -EOPNOTSUPP;
 }
 
-int sock_no_getsockopt(struct socket *sock, int level, int optname,
-		    char *optval, int *optlen)
+int sock_no_recvmsg(struct socket *sock, struct msghdr *m, int flags,
+		    struct scm_cookie *scm)
 {
 	return -EOPNOTSUPP;
 }
 
-int sock_no_listen(struct socket *sock, int backlog)
-{
-	return -EOPNOTSUPP;
-}
+
 
 /*
  *	Default Socket Callbacks
@@ -903,6 +971,7 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->state 	= 	TCP_CLOSE;
 	sk->zapped	=	1;
 	sk->socket	=	sock;
+
 	if(sock)
 	{
 		sk->type	=	sock->type;

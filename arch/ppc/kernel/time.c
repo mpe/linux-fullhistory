@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.8 1997/08/11 08:37:51 cort Exp $
+ * $Id: time.c,v 1.10 1997/08/27 22:06:56 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -26,7 +26,7 @@
 
 #include "time.h"
 
-/* this is set to the appropriate pmac/prep func in init_IRQ() */
+/* this is set to the appropriate pmac/prep/chrp func in init_IRQ() */
 int (*set_rtc_time)(unsigned long);
 
 /* keep track of when we need to update the rtc */
@@ -125,11 +125,14 @@ void do_settimeofday(struct timeval *tv)
 void
 time_init(void)
 {
-#ifdef CONFIG_PREP
 	/* pmac hasn't yet called via_cuda_init() */
-	if ( _machine != _MACH_Pmac ) /* prep */
+	if ( _machine != _MACH_Pmac )
 	{
-		xtime.tv_sec = prep_get_rtc_time();
+
+		if ( _machine == _MACH_chrp )
+			xtime.tv_sec = chrp_get_rtc_time();
+		else /* assume prep */
+			xtime.tv_sec = prep_get_rtc_time();
 		xtime.tv_usec = 0;
 		/*
 		 * mark the rtc/on-chip timer as in sync
@@ -137,35 +140,33 @@ time_init(void)
 		 */
 		last_rtc_update = xtime.tv_sec;
 	}
-#endif /* CONFIG_PREP */
+
 	if ((_get_PVR() >> 16) == 1) {
 		/* 601 processor: dec counts down by 128 every 128ns */
 		decrementer_count = DECREMENTER_COUNT_601;
 		count_period_num = COUNT_PERIOD_NUM_601;
 		count_period_den = COUNT_PERIOD_DEN_601;
-	} else {
-		/*
-		 * These should setup decrementer_count 
-		 */
-		if ( _machine == _MACH_Pmac )
-			pmac_calibrate_decr();
-#ifdef CONFIG_PREP
-		else /* PReP */
-			prep_calibrate_decr();
-#endif /* CONFIG_PREP */
 	}
 
-	if ( _machine == _MACH_Pmac )
+	switch (_machine)
+	{
+	case _MACH_Pmac:
+		pmac_calibrate_decr();
 		set_rtc_time = pmac_set_rtc_time;
-#ifdef CONFIG_PREP
-	else /* prep */
+		break;
+	case _MACH_IBM:
+	case _MACH_Motorola:
+		prep_calibrate_decr();
 		set_rtc_time = prep_set_rtc_time;
-#endif /* CONFIG_PREP */
-		
+		break;
+	case _MACH_chrp:
+		chrp_calibrate_decr();
+		set_rtc_time = chrp_set_rtc_time;
+		break;
+	}
 	set_dec(decrementer_count);
 }
 
-#ifdef CONFIG_PREP
 /*
  * Uses the on-board timer to calibrate the on-chip decrementer register
  * for prep systems.  On the pmac the OF tells us what the frequency is
@@ -218,4 +219,50 @@ void prep_calibrate_decr_handler(int irq, void *dev, struct pt_regs * regs)
 		*done_ptr = 1;
 	}
 }
-#endif /* CONFIG_PREP */
+
+void chrp_calibrate_decr(void)
+{
+	int freq, fp, divisor;
+
+	fp = 16666000;		/* hardcoded for now */
+	freq = fp*60;	/* try to make freq/1e6 an integer */
+        divisor = 60;
+        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
+        decrementer_count = freq / HZ / divisor;
+        count_period_num = divisor;
+        count_period_den = freq / 1000000;
+}
+
+
+/* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
+ * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
+ * => year=1980, mon=12, day=31, hour=23, min=59, sec=59.
+ *
+ * [For the Julian calendar (which was used in Russia before 1917,
+ * Britain & colonies before 1752, anywhere else before 1582,
+ * and is still in use by some communities) leave out the
+ * -year/100+year/400 terms, and add 10.]
+ *
+ * This algorithm was first published by Gauss (I think).
+ *
+ * WARNING: this function will overflow on 2106-02-07 06:28:16 on
+ * machines were long is 32-bit! (However, as time_t is signed, we
+ * will already get problems at other places on 2038-01-19 03:14:08)
+ */
+inline unsigned long mktime(unsigned int year, unsigned int mon,
+				   unsigned int day, unsigned int hour,
+				   unsigned int min, unsigned int sec)
+{
+	
+	if (0 >= (int) (mon -= 2)) {	/* 1..12 -> 11,12,1..10 */
+		mon += 12;	/* Puts Feb last since it has leap day */
+		year -= 1;
+	}
+	return (((
+		(unsigned long)(year/4 - year/100 + year/400 + 367*mon/12 + day) +
+		year*365 - 719499
+		)*24 + hour /* now have hours */
+		)*60 + min /* now have minutes */
+		)*60 + sec; /* finally seconds */
+}
+

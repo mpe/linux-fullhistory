@@ -1,4 +1,4 @@
-/* $Id: sab82532.h,v 1.2 1997/08/12 04:13:15 ecd Exp $
+/* $Id: sab82532.h,v 1.3 1997/09/03 11:55:04 ecd Exp $
  * sab82532.h: Register Definitions for the Siemens SAB82532 DUSCC
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -122,11 +122,10 @@ union sab82532_async_regs {
 #define NR_PORTS			 2
 
 union sab82532_irq_status {
-	unsigned long			 stat;
+	unsigned short			 stat;
 	struct {
 		unsigned char		 isr0;
 		unsigned char		 isr1;
-		unsigned char		 ddsr;
 	} sreg;
 };
 
@@ -142,6 +141,7 @@ struct sab82532 {
 	int				 ignore_status_mask;
 	int				 timeout;
 	int				 xmit_fifo_size;
+	int				 recv_fifo_size;
 	int				 custom_divisor;
 	int				 quot;
 	int				 x_char;
@@ -154,6 +154,9 @@ struct sab82532 {
 	unsigned char			 interrupt_mask1;
 	unsigned char			 pvr_dtr_bit;
 	unsigned char			 pvr_dsr_bit;
+	unsigned char			 dcd;
+	unsigned char			 cts;
+	unsigned char			 dsr;
 	unsigned long			 event;
 	unsigned long			 last_active;
 	int				 line;
@@ -338,22 +341,23 @@ struct sab82532 {
 
 /* Interrupt Mask Register 0 (IMR0) */
 #define SAB82532_IMR0_TCD		0x80
+#define SAB82532_IMR0_TIME		0x40
 #define SAB82532_IMR0_PERR		0x20
-#define SAB82532_IMR0_SCD		0x10
+#define SAB82532_IMR0_FERR		0x10
 #define SAB82532_IMR0_PLLA		0x08
 #define SAB82532_IMR0_CDSC		0x04
 #define SAB82532_IMR0_RFO		0x02
 #define SAB82532_IMR0_RPF		0x01
-#define SAB82532_IMR0_OR_ME_IN		0x40
 
 /* Interrupt Mask Register 1 (IMR1) */
+#define SAB82532_IMR1_BRK		0x80
+#define SAB82532_IMR1_BRKT		0x40
 #define SAB82532_IMR1_ALLS		0x20
-#define SAB82532_IMR1_XDU		0x10
+#define SAB82532_IMR1_XOFF		0x10
 #define SAB82532_IMR1_TIN		0x08
 #define SAB82532_IMR1_CSC		0x04
-#define SAB82532_IMR1_XMR		0x02
+#define SAB82532_IMR1_XON		0x02
 #define SAB82532_IMR1_XPR		0x01
-#define SAB82532_IMR1_OR_ME_IN		0xc0
 
 /* Port Interrupt Status Register (PIS) */
 #define SAB82532_PIS_SYNC_B		0x08

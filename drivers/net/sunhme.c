@@ -10,6 +10,7 @@ static char *version =
 
 #include <linux/module.h>
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -20,6 +21,7 @@ static char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -35,10 +37,17 @@ static char *version =
 #include <asm/auxio.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <asm/irq.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#include <linux/bios32.h>
+#include <asm/pbm.h>
+#endif
 
 #include "sunhme.h"
 
@@ -68,30 +77,33 @@ static struct happy_meal *root_happy_dev = NULL;
 #define DEFAULT_JAMSIZE    4 /* Toe jam */
 
 /* Oh yes, the MIF BitBang is mighty fun to program.  BitBucket is more like it. */
-#define BB_PUT_BIT(tregs, bit) \
-do { (tregs)->bb_data = (bit); (tregs)->bb_clock = 0; (tregs)->bb_clock = 1; } while(0)
+#define BB_PUT_BIT(hp, tregs, bit)						\
+do {	hme_write32(hp, &(tregs)->bb_data, (bit));				\
+	hme_write32(hp, &(tregs)->bb_clock, 0);					\
+	hme_write32(hp, &(tregs)->bb_clock, 1);					\
+} while(0)
 
-#define BB_GET_BIT(tregs, internal)              \
-({                                               \
-	(tregs)->bb_clock = 0;                   \
-	(tregs)->bb_clock = 1;                   \
-	if(internal)                             \
-		((tregs)->cfg & TCV_CFG_MDIO0);  \
-	else                                     \
-		((tregs)->cfg & TCV_CFG_MDIO1);  \
+#define BB_GET_BIT(hp, tregs, internal)						\
+({										\
+	hme_write32(hp, &(tregs)->bb_clock, 0);					\
+	hme_write32(hp, &(tregs)->bb_clock, 1);					\
+	if(internal)								\
+		hme_read32(hp, &(tregs)->cfg) & TCV_CFG_MDIO0;			\
+	else									\
+		hme_read32(hp, &(tregs)->cfg) & TCV_CFG_MDIO1;			\
 })
 
-#define BB_GET_BIT2(tregs, internal)                      \
-({                                                        \
-	int retval;                                       \
-	(tregs)->bb_clock = 0;                            \
-	udelay(1);                                        \
-	if(internal)                                      \
-		retval = ((tregs)->cfg & TCV_CFG_MDIO0);  \
-	else                                              \
-		retval = ((tregs)->cfg & TCV_CFG_MDIO1);  \
-	(tregs)->bb_clock = 1;                            \
-	retval;                                           \
+#define BB_GET_BIT2(hp, tregs, internal)					\
+({										\
+	int retval;								\
+	hme_write32(hp, &(tregs)->bb_clock, 0);					\
+	udelay(1);								\
+	if(internal)								\
+		retval = hme_read32(hp, &(tregs)->cfg) & TCV_CFG_MDIO0;		\
+	else									\
+		retval = hme_read32(hp, &(tregs)->cfg) & TCV_CFG_MDIO1;		\
+	hme_write32(hp, &(tregs)->bb_clock, 1);					\
+	retval;									\
 })
 
 #define TCVR_FAILURE      0x80000000     /* Impossible MIF read value */
@@ -107,38 +119,38 @@ static inline int happy_meal_bb_read(struct happy_meal *hp,
 	ASD(("happy_meal_bb_read: reg=%d ", reg));
 
 	/* Enable the MIF BitBang outputs. */
-	tregs->bb_oenab = 1;
+	hme_write32(hp, &tregs->bb_oenab, 1);
 
 	/* Force BitBang into the idle state. */
 	for(i = 0; i < 32; i++)
-		BB_PUT_BIT(tregs, 1);
+		BB_PUT_BIT(hp, tregs, 1);
 
 	/* Give it the read sequence. */
-	BB_PUT_BIT(tregs, 0);
-	BB_PUT_BIT(tregs, 1);
-	BB_PUT_BIT(tregs, 1);
-	BB_PUT_BIT(tregs, 0);
+	BB_PUT_BIT(hp, tregs, 0);
+	BB_PUT_BIT(hp, tregs, 1);
+	BB_PUT_BIT(hp, tregs, 1);
+	BB_PUT_BIT(hp, tregs, 0);
 
 	/* Give it the PHY address. */
 	tmp = hp->paddr & 0xff;
 	for(i = 4; i >= 0; i--)
-		BB_PUT_BIT(tregs, ((tmp >> i) & 1));
+		BB_PUT_BIT(hp, tregs, ((tmp >> i) & 1));
 
 	/* Tell it what register we want to read. */
 	tmp = (reg & 0xff);
 	for(i = 4; i >= 0; i--)
-		BB_PUT_BIT(tregs, ((tmp >> i) & 1));
+		BB_PUT_BIT(hp, tregs, ((tmp >> i) & 1));
 
 	/* Close down the MIF BitBang outputs. */
-	tregs->bb_oenab = 0;
+	hme_write32(hp, &tregs->bb_oenab, 0);
 
 	/* Now read in the value. */
-	unused = BB_GET_BIT2(tregs, (hp->tcvr_type == internal));
+	unused = BB_GET_BIT2(hp, tregs, (hp->tcvr_type == internal));
 	for(i = 15; i >= 0; i--)
-		retval |= BB_GET_BIT2(tregs, (hp->tcvr_type == internal));
-	unused = BB_GET_BIT2(tregs, (hp->tcvr_type == internal));
-	unused = BB_GET_BIT2(tregs, (hp->tcvr_type == internal));
-	unused = BB_GET_BIT2(tregs, (hp->tcvr_type == internal));
+		retval |= BB_GET_BIT2(hp, tregs, (hp->tcvr_type == internal));
+	unused = BB_GET_BIT2(hp, tregs, (hp->tcvr_type == internal));
+	unused = BB_GET_BIT2(hp, tregs, (hp->tcvr_type == internal));
+	unused = BB_GET_BIT2(hp, tregs, (hp->tcvr_type == internal));
 	ASD(("value=%x\n", retval));
 	return retval;
 }
@@ -153,37 +165,37 @@ static inline void happy_meal_bb_write(struct happy_meal *hp,
 	ASD(("happy_meal_bb_write: reg=%d value=%x\n", reg, value));
 
 	/* Enable the MIF BitBang outputs. */
-	tregs->bb_oenab = 1;
+	hme_write32(hp, &tregs->bb_oenab, 1);
 
 	/* Force BitBang into the idle state. */
 	for(i = 0; i < 32; i++)
-		BB_PUT_BIT(tregs, 1);
+		BB_PUT_BIT(hp, tregs, 1);
 
 	/* Give it write sequence. */
-	BB_PUT_BIT(tregs, 0);
-	BB_PUT_BIT(tregs, 1);
-	BB_PUT_BIT(tregs, 0);
-	BB_PUT_BIT(tregs, 1);
+	BB_PUT_BIT(hp, tregs, 0);
+	BB_PUT_BIT(hp, tregs, 1);
+	BB_PUT_BIT(hp, tregs, 0);
+	BB_PUT_BIT(hp, tregs, 1);
 
 	/* Give it the PHY address. */
 	tmp = (hp->paddr & 0xff);
 	for(i = 4; i >= 0; i--)
-		BB_PUT_BIT(tregs, ((tmp >> i) & 1));
+		BB_PUT_BIT(hp, tregs, ((tmp >> i) & 1));
 
 	/* Tell it what register we will be writing. */
 	tmp = (reg & 0xff);
 	for(i = 4; i >= 0; i--)
-		BB_PUT_BIT(tregs, ((tmp >> i) & 1));
+		BB_PUT_BIT(hp, tregs, ((tmp >> i) & 1));
 
 	/* Tell it to become ready for the bits. */
-	BB_PUT_BIT(tregs, 1);
-	BB_PUT_BIT(tregs, 0);
+	BB_PUT_BIT(hp, tregs, 1);
+	BB_PUT_BIT(hp, tregs, 0);
 
 	for(i = 15; i >= 0; i--)
-		BB_PUT_BIT(tregs, ((value >> i) & 1));
+		BB_PUT_BIT(hp, tregs, ((value >> i) & 1));
 
 	/* Close down the MIF BitBang outputs. */
-	tregs->bb_oenab = 0;
+	hme_write32(hp, &tregs->bb_oenab, 0);
 }
 
 #define TCVR_READ_TRIES   16
@@ -205,14 +217,15 @@ static inline int happy_meal_tcvr_read(struct happy_meal *hp,
 		return happy_meal_bb_read(hp, tregs, reg);
 	}
 
-	tregs->frame = (FRAME_READ | (hp->paddr << 23) | ((reg & 0xff) << 18));
-	while(!(tregs->frame & 0x10000) && --tries)
+	hme_write32(hp, &tregs->frame,
+		    (FRAME_READ | (hp->paddr << 23) | ((reg & 0xff) << 18)));
+	while(!(hme_read32(hp, &tregs->frame) & 0x10000) && --tries)
 		udelay(20);
 	if(!tries) {
 		printk("happy meal: Aieee, transceiver MIF read bolixed\n");
 		return TCVR_FAILURE;
 	}
-	retval = tregs->frame & 0xffff;
+	retval = hme_read32(hp, &tregs->frame) & 0xffff;
 	ASD(("value=%04x\n", retval));
 	return retval;
 }
@@ -232,9 +245,10 @@ static inline void happy_meal_tcvr_write(struct happy_meal *hp,
 		return happy_meal_bb_write(hp, tregs, reg, value);
 
 	/* Would you like fries with that? */
-	tregs->frame = (FRAME_WRITE | (hp->paddr << 23) |
-			((reg & 0xff) << 18) | (value & 0xffff));
-	while(!(tregs->frame & 0x10000) && --tries)
+	hme_write32(hp, &tregs->frame,
+		    (FRAME_WRITE | (hp->paddr << 23) |
+		     ((reg & 0xff) << 18) | (value & 0xffff)));
+	while(!(hme_read32(hp, &tregs->frame) & 0x10000) && --tries)
 		udelay(20);
 
 	/* Anything else? */
@@ -364,9 +378,13 @@ static int set_happy_link_modes(struct happy_meal *hp, struct hmeal_tcvregs *tre
 	 * XXX Happy Meal front end for this to work every time.
 	 */
 	if(full)
-		hp->bigmacregs->tx_cfg |= BIGMAC_TXCFG_FULLDPLX;
+		hme_write32(hp, &hp->bigmacregs->tx_cfg,
+			    hme_read32(hp, &hp->bigmacregs->tx_cfg) |
+			    BIGMAC_TXCFG_FULLDPLX);
 	else
-		hp->bigmacregs->tx_cfg &= ~(BIGMAC_TXCFG_FULLDPLX);
+		hme_write32(hp, &hp->bigmacregs->tx_cfg,
+			    hme_read32(hp, &hp->bigmacregs->tx_cfg) &
+			    ~(BIGMAC_TXCFG_FULLDPLX));
 
 	return 0;
 no_response:
@@ -541,15 +559,16 @@ static void happy_meal_timer(unsigned long data)
 #define TX_RESET_TRIES     32
 #define RX_RESET_TRIES     32
 
-static inline void happy_meal_tx_reset(struct hmeal_bigmacregs *bregs)
+static inline void happy_meal_tx_reset(struct happy_meal *hp,
+				       struct hmeal_bigmacregs *bregs)
 {
 	int tries = TX_RESET_TRIES;
 
 	HMD(("happy_meal_tx_reset: reset, "));
 
 	/* Would you like to try our SMCC Delux? */
-	bregs->tx_swreset = 0;
-	while((bregs->tx_swreset & 1) && --tries)
+	hme_write32(hp, &bregs->tx_swreset, 0);
+	while((hme_read32(hp, &bregs->tx_swreset) & 1) && --tries)
 		udelay(20);
 
 	/* Lettuce, tomato, buggy hardware (no extra charge)? */
@@ -560,15 +579,16 @@ static inline void happy_meal_tx_reset(struct hmeal_bigmacregs *bregs)
 	HMD(("done\n"));
 }
 
-static inline void happy_meal_rx_reset(struct hmeal_bigmacregs *bregs)
+static inline void happy_meal_rx_reset(struct happy_meal *hp,
+				       struct hmeal_bigmacregs *bregs)
 {
 	int tries = RX_RESET_TRIES;
 
 	HMD(("happy_meal_rx_reset: reset, "));
 
 	/* We have a special on GNU/Viking hardware bugs today. */
-	bregs->rx_swreset = 0;
-	while((bregs->rx_swreset & 1) && --tries)
+	hme_write32(hp, &bregs->rx_swreset, 0);
+	while((hme_read32(hp, &bregs->rx_swreset) & 1) && --tries)
 		udelay(20);
 
 	/* Will that be all? */
@@ -581,15 +601,16 @@ static inline void happy_meal_rx_reset(struct hmeal_bigmacregs *bregs)
 
 #define STOP_TRIES         16
 
-static inline void happy_meal_stop(struct hmeal_gregs *gregs)
+static inline void happy_meal_stop(struct happy_meal *hp,
+				   struct hmeal_gregs *gregs)
 {
 	int tries = STOP_TRIES;
 
 	HMD(("happy_meal_stop: reset, "));
 
 	/* We're consolidating our STB products, it's your lucky day. */
-	gregs->sw_reset = GREG_RESET_ALL;
-	while(gregs->sw_reset && --tries)
+	hme_write32(hp, &gregs->sw_reset, GREG_RESET_ALL);
+	while(hme_read32(hp, &gregs->sw_reset) && --tries)
 		udelay(20);
 
 	/* Come back next week when we are "Sun Microelectronics". */
@@ -605,19 +626,22 @@ static void happy_meal_get_counters(struct happy_meal *hp,
 {
 	struct net_device_stats *stats = &hp->net_stats;
 
-	stats->rx_crc_errors += bregs->rcrce_ctr;
-	bregs->rcrce_ctr = 0;
+	stats->rx_crc_errors += hme_read32(hp, &bregs->rcrce_ctr);
+	hme_write32(hp, &bregs->rcrce_ctr, 0);
 
-	stats->rx_frame_errors += bregs->unale_ctr;
-	bregs->unale_ctr = 0;
+	stats->rx_frame_errors += hme_read32(hp, &bregs->unale_ctr);
+	hme_write32(hp, &bregs->unale_ctr, 0);
 
-	stats->rx_length_errors += bregs->gle_ctr;
-	bregs->gle_ctr = 0;
+	stats->rx_length_errors += hme_read32(hp, &bregs->gle_ctr);
+	hme_write32(hp, &bregs->gle_ctr, 0);
 
-	stats->tx_aborted_errors += bregs->ex_ctr;
+	stats->tx_aborted_errors += hme_read32(hp, &bregs->ex_ctr);
 
-	stats->collisions += (bregs->ex_ctr + bregs->lt_ctr);
-	bregs->ex_ctr = bregs->lt_ctr = 0;
+	stats->collisions +=
+		(hme_read32(hp, &bregs->ex_ctr) +
+		 hme_read32(hp, &bregs->lt_ctr));
+	hme_write32(hp, &bregs->ex_ctr, 0);
+	hme_write32(hp, &bregs->lt_ctr, 0);
 }
 
 static inline void happy_meal_poll_start(struct happy_meal *hp,
@@ -634,12 +658,12 @@ static inline void happy_meal_poll_start(struct happy_meal *hp,
 
 	/* Start the MIF polling on the external transceiver. */
 	ASD(("polling on, "));
-	tmp = tregs->cfg;
+	tmp = hme_read32(hp, &tregs->cfg);
 	tmp &= ~(TCV_CFG_PDADDR | TCV_CFG_PREGADDR);
 	tmp |= ((hp->paddr & 0x1f) << 10);
 	tmp |= (TCV_PADDR_ETX << 3);
 	tmp |= TCV_CFG_PENABLE;
-	tregs->cfg = tmp;
+	hme_write32(hp, &tregs->cfg, tmp);
 
 	/* Let the bits set. */
 	udelay(200);
@@ -660,9 +684,9 @@ static inline void happy_meal_poll_start(struct happy_meal *hp,
 	/* Listen only for the MIF interrupts we want to hear. */
 	ASD(("mif ints on, "));
 	if(speed == 100)
-		tregs->int_mask = 0xfffb;
+		hme_write32(hp, &tregs->int_mask, 0xfffb);
 	else
-		tregs->int_mask = 0xfff9;
+		hme_write32(hp, &tregs->int_mask, 0xfff9);
 	ASD(("done\n"));
 }
 
@@ -680,11 +704,12 @@ static inline void happy_meal_poll_stop(struct happy_meal *hp,
 
 	/* Shut up the MIF. */
 	ASD(("were polling, mif ints off, "));
-	tregs->int_mask = 0xffff;
+	hme_write32(hp, &tregs->int_mask, 0xffff);
 
 	/* Turn off polling. */
 	ASD(("polling off, "));
-	tregs->cfg &= ~(TCV_CFG_PENABLE);
+	hme_write32(hp, &tregs->cfg,
+		    hme_read32(hp, &tregs->cfg) & ~(TCV_CFG_PENABLE));
 
 	/* We are no longer polling. */
 	hp->happy_flags &= ~(HFLAG_POLL);
@@ -706,11 +731,11 @@ static int happy_meal_tcvr_reset(struct happy_meal *hp,
 	unsigned long tconfig;
 	int result, tries = TCVR_RESET_TRIES;
 
-	tconfig = tregs->cfg;
+	tconfig = hme_read32(hp, &tregs->cfg);
 	ASD(("happy_meal_tcvr_reset: tcfg<%08lx> ", tconfig));
 	if(hp->tcvr_type == external) {
 		ASD(("external<"));
-		tregs->cfg = tconfig & ~(TCV_CFG_PSELECT);
+		hme_write32(hp, &tregs->cfg, tconfig & ~(TCV_CFG_PSELECT));
 		hp->tcvr_type = internal;
 		hp->paddr = TCV_PADDR_ITX;
 		ASD(("ISOLATE,"));
@@ -722,13 +747,13 @@ static int happy_meal_tcvr_reset(struct happy_meal *hp,
 			return -1;
 		}
 		ASD(("phyread_ok,PSELECT>"));
-		tregs->cfg = tconfig | TCV_CFG_PSELECT;
+		hme_write32(hp, &tregs->cfg, tconfig | TCV_CFG_PSELECT);
 		hp->tcvr_type = external;
 		hp->paddr = TCV_PADDR_ETX;
 	} else {
 		if(tconfig & TCV_CFG_MDIO1) {
 			ASD(("internal<PSELECT,"));
-			tregs->cfg = (tconfig | TCV_CFG_PSELECT);
+			hme_write32(hp, &tregs->cfg, (tconfig | TCV_CFG_PSELECT));
 			ASD(("ISOLATE,"));
 			happy_meal_tcvr_write(hp, tregs, DP83840_BMCR,
 					      (BMCR_LOOPBACK|BMCR_PDOWN|BMCR_ISOLATE));
@@ -738,7 +763,7 @@ static int happy_meal_tcvr_reset(struct happy_meal *hp,
 				return -1;
 			}
 			ASD(("phyread_ok,~PSELECT>"));
-			tregs->cfg = (tconfig & ~(TCV_CFG_PSELECT));
+			hme_write32(hp, &tregs->cfg, (tconfig & ~(TCV_CFG_PSELECT)));
 			hp->tcvr_type = internal;
 			hp->paddr = TCV_PADDR_ITX;
 		}
@@ -795,7 +820,7 @@ static int happy_meal_tcvr_reset(struct happy_meal *hp,
 static void happy_meal_transceiver_check(struct happy_meal *hp,
 					 struct hmeal_tcvregs *tregs)
 {
-	unsigned long tconfig = tregs->cfg;
+	unsigned long tconfig = hme_read32(hp, &tregs->cfg);
 
 	ASD(("happy_meal_transceiver_check: tcfg=%08lx ", tconfig));
 	if(hp->happy_flags & HFLAG_POLL) {
@@ -810,18 +835,20 @@ static void happy_meal_transceiver_check(struct happy_meal *hp,
 				ASD(("<external>\n"));
 				tconfig &= ~(TCV_CFG_PENABLE);
 				tconfig |= TCV_CFG_PSELECT;
-				tregs->cfg = tconfig;
+				hme_write32(hp, &tregs->cfg, tconfig);
 			}
 		} else {
 			if(hp->tcvr_type == external) {
 				ASD(("<external> "));
-				if(!(tregs->status >> 16)) {
+				if(!(hme_read32(hp, &tregs->status) >> 16)) {
 					ASD(("<poll stop> "));
 					happy_meal_poll_stop(hp, tregs);
 					hp->paddr = TCV_PADDR_ITX;
 					hp->tcvr_type = internal;
 					ASD(("<internal>\n"));
-					tregs->cfg &= ~(TCV_CFG_PSELECT);
+					hme_write32(hp, &tregs->cfg,
+						    hme_read32(hp, &tregs->cfg) &
+						    ~(TCV_CFG_PSELECT));
 				}
 				ASD(("\n"));
 			} else {
@@ -829,18 +856,19 @@ static void happy_meal_transceiver_check(struct happy_meal *hp,
 			}
 		}
 	} else {
-		unsigned long reread = tregs->cfg;
+		unsigned long reread = hme_read32(hp, &tregs->cfg);
 
 		/* Else we can just work off of the MDIO bits. */
 		ASD(("<not polling> "));
 		if(reread & TCV_CFG_MDIO1) {
-			tregs->cfg = tconfig | TCV_CFG_PSELECT;
+			hme_write32(hp, &tregs->cfg, tconfig | TCV_CFG_PSELECT);
 			hp->paddr = TCV_PADDR_ETX;
 			hp->tcvr_type = external;
 			ASD(("<external>\n"));
 		} else {
 			if(reread & TCV_CFG_MDIO0) {
-				tregs->cfg = tconfig & ~(TCV_CFG_PSELECT);
+				hme_write32(hp, &tregs->cfg,
+					    tconfig & ~(TCV_CFG_PSELECT));
 				hp->paddr = TCV_PADDR_ITX;
 				hp->tcvr_type = internal;
 				ASD(("<internal>\n"));
@@ -946,11 +974,17 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 		/* Because we reserve afterwards. */
 		skb_put(skb, (ETH_FRAME_LEN + RX_OFFSET));
 
-		hb->happy_meal_rxd[i].rx_addr =
-			(u32) ((unsigned long)skb->data);
+		if(hp->happy_flags & HFLAG_PCI) {
+			pcihme_write_rxd(&hb->happy_meal_rxd[i],
+					 (RXFLAG_OWN |
+					  ((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
+					 (u32)virt_to_bus((volatile void *)skb->data));
+		} else {
+			hb->happy_meal_rxd[i].rx_addr = (u32)((unsigned long) skb->data);
+			hb->happy_meal_rxd[i].rx_flags =
+				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
+		}
 		skb_reserve(skb, RX_OFFSET);
-		hb->happy_meal_rxd[i].rx_flags =
-			(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
 	}
 
 	HMD(("init txring, "));
@@ -1097,7 +1131,8 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	unsigned long regtmp;
 	unsigned char *e = &hp->dev->dev_addr[0];
 
-	HMD(("happy_meal_init: "));
+	HMD(("happy_meal_init: happy_flags[%08x] ",
+	     hp->happy_flags));
 	if(!(hp->happy_flags & HFLAG_INIT)) {
 		HMD(("set HFLAG_INIT, "));
 		hp->happy_flags |= HFLAG_INIT;
@@ -1110,7 +1145,7 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 
 	/* Stop transmitter and receiver. */
 	HMD(("happy_meal_init: to happy_meal_stop\n"));
-	happy_meal_stop(gregs);
+	happy_meal_stop(hp, gregs);
 
 	/* Alloc and reset the tx/rx descriptor chains. */
 	HMD(("happy_meal_init: to happy_meal_init_rings\n"));
@@ -1120,16 +1155,21 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 		happy_meal_init_rings(hp, from_irq);
 
 	/* Shut up the MIF. */
-	HMD(("happy_meal_init: Disable all MIF irqs, "));
-	tregs->int_mask = 0xffff;
+	HMD(("happy_meal_init: Disable all MIF irqs (old[%08x]), ",
+	     hme_read32(hp, &tregs->int_mask)));
+	hme_write32(hp, &tregs->int_mask, 0xffff);
 
 	/* See if we can enable the MIF frame on this card to speak to the DP83840. */
 	if(hp->happy_flags & HFLAG_FENABLE) {
-		HMD(("use frame, "));
-		tregs->cfg &= ~(TCV_CFG_BENABLE);
+		HMD(("use frame old[%08x], ",
+		     hme_read32(hp, &tregs->cfg)));
+		hme_write32(hp, &tregs->cfg,
+			    hme_read32(hp, &tregs->cfg) & ~(TCV_CFG_BENABLE));
 	} else {
-		HMD(("use bitbang, "));
-		tregs->cfg |= TCV_CFG_BENABLE;
+		HMD(("use bitbang old[%08x], ",
+		     hme_read32(hp, &tregs->cfg)));
+		hme_write32(hp, &tregs->cfg,
+			    hme_read32(hp, &tregs->cfg) | TCV_CFG_BENABLE);
 	}
 
 	/* Check the state of the transceiver. */
@@ -1147,13 +1187,13 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	case internal:
 		/* Using the MII buffers. */
 		HMD(("internal, using MII, "));
-		bregs->xif_cfg = 0;
+		hme_write32(hp, &bregs->xif_cfg, 0);
 		break;
 
 	case external:
 		/* Not using the MII, disable it. */
 		HMD(("external, disable MII, "));
-		bregs->xif_cfg = BIGMAC_XCFG_MIIDISAB;
+		hme_write32(hp, &bregs->xif_cfg, BIGMAC_XCFG_MIIDISAB);
 		break;
 	};
 
@@ -1162,81 +1202,90 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 
 	/* Reset the Happy Meal Big Mac transceiver and the receiver. */
 	HMD(("tx/rx reset, "));
-	happy_meal_tx_reset(bregs);
-	happy_meal_rx_reset(bregs);
+	happy_meal_tx_reset(hp, bregs);
+	happy_meal_rx_reset(hp, bregs);
 
 	/* Set jam size and inter-packet gaps to reasonable defaults. */
 	HMD(("jsize/ipg1/ipg2, "));
-	bregs->jsize     = DEFAULT_JAMSIZE;
-	bregs->ipkt_gap1 = DEFAULT_IPG1;
-	bregs->ipkt_gap2 = DEFAULT_IPG2;
+	hme_write32(hp, &bregs->jsize, DEFAULT_JAMSIZE);
+	hme_write32(hp, &bregs->ipkt_gap1, DEFAULT_IPG1);
+	hme_write32(hp, &bregs->ipkt_gap2, DEFAULT_IPG2);
 
 	/* Load up the MAC address and random seed. */
 	HMD(("rseed/macaddr, "));
 
 	/* XXX use something less deterministic... */
-	bregs->rand_seed = 0xbd;
+	hme_write32(hp, &bregs->rand_seed, 0xbd);
 
-	bregs->mac_addr2 = ((e[4] << 8) | e[5]);
-	bregs->mac_addr1 = ((e[2] << 8) | e[3]);
-	bregs->mac_addr0 = ((e[0] << 8) | e[1]);
+	hme_write32(hp, &bregs->mac_addr2, ((e[4] << 8) | e[5]));
+	hme_write32(hp, &bregs->mac_addr1, ((e[2] << 8) | e[3]));
+	hme_write32(hp, &bregs->mac_addr0, ((e[0] << 8) | e[1]));
 
 	/* Ick, figure out how to properly program the hash table later... */
 	HMD(("htable, "));
-	bregs->htable3 = 0;
-	bregs->htable2 = 0;
-	bregs->htable1 = 0;
-	bregs->htable0 = 0;
+	hme_write32(hp, &bregs->htable3, 0);
+	hme_write32(hp, &bregs->htable2, 0);
+	hme_write32(hp, &bregs->htable1, 0);
+	hme_write32(hp, &bregs->htable0, 0);
 
 	/* Set the RX and TX ring ptrs. */
-	HMD(("ring ptrs\n"));
-	erxregs->rx_ring = hp->hblock_dvma + hblock_offset(happy_meal_rxd, 0);
-	etxregs->tx_ring = hp->hblock_dvma + hblock_offset(happy_meal_txd, 0);
+	HMD(("ring ptrs rxr[%08x] txr[%08x]\n",
+	     (hp->hblock_dvma + hblock_offset(happy_meal_rxd, 0)),
+	     (hp->hblock_dvma + hblock_offset(happy_meal_txd, 0))));
+	hme_write32(hp, &erxregs->rx_ring,
+		    (hp->hblock_dvma + hblock_offset(happy_meal_rxd, 0)));
+	hme_write32(hp, &etxregs->tx_ring,
+		    (hp->hblock_dvma + hblock_offset(happy_meal_txd, 0)));
 
-	/* Set the supported SBUS burst sizes. */
-	HMD(("happy_meal_init: bursts<"));
+	/* Set the supported burst sizes. */
+	HMD(("happy_meal_init: old[%08x] bursts<",
+	     hme_read32(hp, &gregs->cfg)));
 
-#if 0 /* XXX take down huahaga and debug this... */
-	/* Grrr... */
+#ifdef __sparc_v9__
 	if(hp->happy_bursts & DMA_BURST64) {
 		HMD(("64>"));
-		gregs->cfg = GREG_CFG_BURST64;
+		hme_write32(hp, &gregs->cfg, GREG_CFG_BURST64);
 	} else
 #endif
 	if(hp->happy_bursts & DMA_BURST32) {
 		HMD(("32>"));
-		gregs->cfg = GREG_CFG_BURST32;
+		hme_write32(hp, &gregs->cfg, GREG_CFG_BURST32);
 	} else if(hp->happy_bursts & DMA_BURST16) {
 		HMD(("16>"));
-		gregs->cfg = GREG_CFG_BURST16;
+		hme_write32(hp, &gregs->cfg, GREG_CFG_BURST16);
 	} else {
 		HMD(("XXX>"));
-		gregs->cfg = 0;
+		hme_write32(hp, &gregs->cfg, 0);
 	}
 
 	/* Turn off interrupts we do not want to hear. */
 	HMD((", enable global interrupts, "));
-	gregs->imask = (GREG_IMASK_GOTFRAME | GREG_IMASK_RCNTEXP |
-			GREG_IMASK_SENTFRAME | GREG_IMASK_TXPERR);
+	hme_write32(hp, &gregs->imask,
+		    (GREG_IMASK_GOTFRAME | GREG_IMASK_RCNTEXP |
+		     GREG_IMASK_SENTFRAME | GREG_IMASK_TXPERR));
 
 	/* Set the transmit ring buffer size. */
-	HMD(("tx rsize=%d, ", (int)TX_RING_SIZE));
-	etxregs->tx_rsize = (TX_RING_SIZE >> ETX_RSIZE_SHIFT) - 1;
+	HMD(("tx rsize=%d oreg[%08x], ", (int)TX_RING_SIZE,
+	     hme_read32(hp, &etxregs->tx_rsize)));
+	hme_write32(hp, &etxregs->tx_rsize, (TX_RING_SIZE >> ETX_RSIZE_SHIFT) - 1);
 
 	/* Enable transmitter DVMA. */
-	HMD(("tx dma enable, "));
-	etxregs->cfg |= ETX_CFG_DMAENABLE;
+	HMD(("tx dma enable old[%08x], ",
+	     hme_read32(hp, &etxregs->cfg)));
+	hme_write32(hp, &etxregs->cfg,
+		    hme_read32(hp, &etxregs->cfg) | ETX_CFG_DMAENABLE);
 
 	/* This chip really rots, for the receiver sometimes when you
 	 * write to it's control registers not all the bits get there
 	 * properly.  I cannot think of a sane way to provide complete
 	 * coverage for this hardware bug yet.
 	 */
-	HMD(("erx regs bug\n"));
-	erxregs->cfg = ERX_CFG_DEFAULT(RX_OFFSET);
-	regtmp = erxregs->cfg;
-	erxregs->cfg = ERX_CFG_DEFAULT(RX_OFFSET);
-	if(erxregs->cfg != ERX_CFG_DEFAULT(RX_OFFSET)) {
+	HMD(("erx regs bug old[%08x]\n",
+	     hme_read32(hp, &erxregs->cfg)));
+	hme_write32(hp, &erxregs->cfg, ERX_CFG_DEFAULT(RX_OFFSET));
+	regtmp = hme_read32(hp, &erxregs->cfg);
+	hme_write32(hp, &erxregs->cfg, ERX_CFG_DEFAULT(RX_OFFSET));
+	if(hme_read32(hp, &erxregs->cfg) != ERX_CFG_DEFAULT(RX_OFFSET)) {
 		printk("happy meal: Eieee, rx config register gets greasy fries.\n");
 		printk("happy meal: Trying to set %08x, reread gives %08lx\n",
 		       ERX_CFG_DEFAULT(RX_OFFSET), regtmp);
@@ -1244,8 +1293,9 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	}
 
 	/* Enable Big Mac hash table filter. */
-	HMD(("happy_meal_init: enable hash, "));
-	bregs->rx_cfg = BIGMAC_RXCFG_HENABLE;
+	HMD(("happy_meal_init: enable hash rx_cfg_old[%08x], ",
+	     hme_read32(hp, &bregs->rx_cfg)));
+	hme_write32(hp, &bregs->rx_cfg, BIGMAC_RXCFG_HENABLE);
 
 	/* Let the bits settle in the chip. */
 	udelay(10);
@@ -1255,7 +1305,7 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	regtmp = 0;
 	if(hp->happy_flags & HFLAG_FULL)
 		regtmp |= BIGMAC_TXCFG_FULLDPLX;
-	bregs->tx_cfg = regtmp | BIGMAC_TXCFG_DGIVEUP;
+	hme_write32(hp, &bregs->tx_cfg, regtmp | BIGMAC_TXCFG_DGIVEUP);
 
 	/* Enable the output drivers no matter what. */
 	regtmp = BIGMAC_XCFG_ODENABLE;
@@ -1268,13 +1318,18 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	if(hp->tcvr_type == external)
 		regtmp |= BIGMAC_XCFG_MIIDISAB;
 
-	HMD(("XIF config, "));
-	bregs->xif_cfg = regtmp;
+	HMD(("XIF config old[%08x], ",
+	     hme_read32(hp, &bregs->xif_cfg)));
+	hme_write32(hp, &bregs->xif_cfg, regtmp);
 
 	/* Start things up. */
-	HMD(("tx and rx ON!\n"));
-	bregs->tx_cfg |= BIGMAC_TXCFG_ENABLE;
-	bregs->rx_cfg |= BIGMAC_RXCFG_ENABLE;
+	HMD(("tx old[%08x] and rx [%08x] ON!\n",
+	     hme_read32(hp, &bregs->tx_cfg),
+	     hme_read32(hp, &bregs->rx_cfg)));
+	hme_write32(hp, &bregs->tx_cfg,
+		    hme_read32(hp, &bregs->tx_cfg) | BIGMAC_TXCFG_ENABLE);
+	hme_write32(hp, &bregs->rx_cfg,
+		    hme_read32(hp, &bregs->rx_cfg) | BIGMAC_RXCFG_ENABLE);
 
 	/* Get the autonegotiation started, and the watch timer ticking. */
 	happy_meal_begin_auto_negotiation(hp, tregs);
@@ -1289,21 +1344,23 @@ static void happy_meal_set_initial_advertisement(struct happy_meal *hp)
 	struct hmeal_bigmacregs *bregs	= hp->bigmacregs;
 	struct hmeal_gregs *gregs	= hp->gregs;
 
-	happy_meal_stop(gregs);
-	tregs->int_mask = 0xffff;
+	happy_meal_stop(hp, gregs);
+	hme_write32(hp, &tregs->int_mask, 0xffff);
 	if(hp->happy_flags & HFLAG_FENABLE)
-		tregs->cfg &= ~(TCV_CFG_BENABLE);
+		hme_write32(hp, &tregs->cfg,
+			    hme_read32(hp, &tregs->cfg) & ~(TCV_CFG_BENABLE));
 	else
-		tregs->cfg |= TCV_CFG_BENABLE;
+		hme_write32(hp, &tregs->cfg,
+			    hme_read32(hp, &tregs->cfg) | TCV_CFG_BENABLE);
 	happy_meal_transceiver_check(hp, tregs);
 	switch(hp->tcvr_type) {
 	case none:
 		return;
 	case internal:
-		bregs->xif_cfg = 0;
+		hme_write32(hp, &bregs->xif_cfg, 0);
 		break;
 	case external:
-		bregs->xif_cfg = BIGMAC_XCFG_MIIDISAB;
+		hme_write32(hp, &bregs->xif_cfg, BIGMAC_XCFG_MIIDISAB);
 		break;
 	};
 	if(happy_meal_tcvr_reset(hp, tregs))
@@ -1544,6 +1601,13 @@ static inline void happy_meal_tx(struct happy_meal *hp)
 		hp->tx_skbs[elem] = NULL;
 		hp->net_stats.tx_bytes+=skb->len;
 		
+#ifdef NEED_DMA_SYNCHRONIZATION
+#ifdef CONFIG_PCI
+		if(!(hp->happy_flags & HFLAG_PCI))
+#endif
+			mmu_sync_dma(kva_to_hva(hp, skb->data),
+				     skb->len, hp->happy_sbus_dev->my_bus);
+#endif
 		dev_kfree_skb(skb, FREE_WRITE);
 
 		hp->net_stats.tx_packets++;
@@ -1552,6 +1616,39 @@ static inline void happy_meal_tx(struct happy_meal *hp)
 	hp->tx_old = elem;
 	TXD((">"));
 }
+
+#ifdef CONFIG_PCI
+static inline void pci_happy_meal_tx(struct happy_meal *hp)
+{
+	struct happy_meal_txd *txbase = &hp->happy_block->happy_meal_txd[0];
+	struct happy_meal_txd *this;
+	int elem = hp->tx_old;
+
+	TXD(("TX<"));
+	while(elem != hp->tx_new) {
+		struct sk_buff *skb;
+		unsigned int flags;
+
+		TXD(("[%d]", elem));
+		this = &txbase[elem];
+		__asm__ __volatile__("lduwa [%1] %2, %0"
+				     : "=r" (flags)
+				     : "r" (&this->tx_flags), "i" (ASI_PL));
+		if(flags & TXFLAG_OWN)
+			break;
+		skb = hp->tx_skbs[elem];
+		hp->tx_skbs[elem] = NULL;
+		hp->net_stats.tx_bytes+=skb->len;
+		
+		dev_kfree_skb(skb, FREE_WRITE);
+
+		hp->net_stats.tx_packets++;
+		elem = NEXT_TX(elem);
+	}
+	hp->tx_old = elem;
+	TXD((">"));
+}
+#endif
 
 static inline void sun4c_happy_meal_tx(struct happy_meal *hp)
 {
@@ -1616,13 +1713,19 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			/* Return it to the Happy meal. */
 	drop_it:
 			hp->net_stats.rx_dropped++;
-			this->rx_addr =
-				(u32) ((unsigned long)hp->rx_skbs[elem]->data);
+			this->rx_addr = kva_to_hva(hp, hp->rx_skbs[elem]->data);
 			this->rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
 			goto next;
 		}
 		skb = hp->rx_skbs[elem];
+#ifdef NEED_DMA_SYNCHRONIZATION
+#ifdef CONFIG_PCI
+		if(!(hp->happy_flags & HFLAG_PCI))
+#endif
+			mmu_sync_dma(kva_to_hva(hp, skb->data),
+				     skb->len, hp->happy_sbus_dev->my_bus);
+#endif
 		if(len > RX_COPY_THRESHOLD) {
 			struct sk_buff *new_skb;
 
@@ -1636,8 +1739,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			hp->rx_skbs[elem] = new_skb;
 			new_skb->dev = dev;
 			skb_put(new_skb, (ETH_FRAME_LEN + RX_OFFSET));
-			rxbase[elem].rx_addr =
-				(u32) ((unsigned long)new_skb->data);
+			rxbase[elem].rx_addr = kva_to_hva(hp, new_skb->data);
 			skb_reserve(new_skb, RX_OFFSET);
 			rxbase[elem].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
@@ -1658,8 +1760,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			memcpy(copy_skb->data, skb->data, len);
 
 			/* Reuse original ring buffer. */
-			rxbase[elem].rx_addr =
-				(u32) ((unsigned long)skb->data);
+			rxbase[elem].rx_addr = kva_to_hva(hp, skb->data);
 			rxbase[elem].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
 
@@ -1687,6 +1788,117 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 		printk("%s: Memory squeeze, deferring packet.\n", hp->dev->name);
 	RXD((">"));
 }
+
+#ifdef CONFIG_PCI
+static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
+				     struct hmeal_gregs *gregs)
+{
+	struct happy_meal_rxd *rxbase = &hp->happy_block->happy_meal_rxd[0];
+	struct happy_meal_rxd *this;
+	unsigned int flags;
+	int elem = hp->rx_new, drops = 0;
+
+	RXD(("RX<"));
+	this = &rxbase[elem];
+	__asm__ __volatile__("lduwa [%1] %2, %0"
+			     : "=r" (flags)
+			     : "r" (&this->rx_flags), "i" (ASI_PL));
+	while(!(flags & RXFLAG_OWN)) {
+		struct sk_buff *skb;
+		int len;
+		u16 csum;
+
+		RXD(("[%d ", elem));
+
+		len = flags >> 16;
+		csum = flags & RXFLAG_CSUM;
+
+		/* Check for errors. */
+		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
+			RXD(("ERR(%08lx)]", flags));
+			hp->net_stats.rx_errors++;
+			if(len < ETH_ZLEN)
+				hp->net_stats.rx_length_errors++;
+			if(len & (RXFLAG_OVERFLOW >> 16)) {
+				hp->net_stats.rx_over_errors++;
+				hp->net_stats.rx_fifo_errors++;
+			}
+
+			/* Return it to the Happy meal. */
+	drop_it:
+			hp->net_stats.rx_dropped++;
+			pcihme_write_rxd(this,
+				 (RXFLAG_OWN|((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
+				 (u32) virt_to_bus((volatile void *)hp->rx_skbs[elem]->data));
+			goto next;
+		}
+		skb = hp->rx_skbs[elem];
+		if(len > RX_COPY_THRESHOLD) {
+			struct sk_buff *new_skb;
+
+			/* Now refill the entry, if we can. */
+			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			if(!new_skb) {
+				drops++;
+				goto drop_it;
+			}
+
+			hp->rx_skbs[elem] = new_skb;
+			new_skb->dev = dev;
+			skb_put(new_skb, (ETH_FRAME_LEN + RX_OFFSET));
+			pcihme_write_rxd(&rxbase[elem],
+				 (RXFLAG_OWN|((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
+				  (u32)virt_to_bus((volatile void *)new_skb->data));
+			skb_reserve(new_skb, RX_OFFSET);
+
+			/* Trim the original skb for the netif. */
+			skb_trim(skb, len);
+		} else {
+			struct sk_buff *copy_skb = dev_alloc_skb(len+2);
+
+			if(!copy_skb) {
+				drops++;
+				goto drop_it;
+			}
+
+			copy_skb->dev = dev;
+			skb_reserve(copy_skb, 2);
+			skb_put(copy_skb, len);
+			memcpy(copy_skb->data, skb->data, len);
+
+			/* Reuse original ring buffer. */
+			pcihme_write_rxd(&rxbase[elem],
+				 (RXFLAG_OWN|((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
+				 (u32)virt_to_bus((volatile void *)skb->data));
+
+			skb = copy_skb;
+		}
+
+		/* This card is _fucking_ hot... */
+		if(!~(csum))
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		else
+			skb->ip_summed = CHECKSUM_NONE;
+
+		RXD(("len=%d csum=%4x]", len, csum));
+		skb->protocol = eth_type_trans(skb, dev);
+		netif_rx(skb);
+
+		hp->net_stats.rx_packets++;
+		hp->net_stats.rx_bytes+=len;
+	next:
+		elem = NEXT_RX(elem);
+		this = &rxbase[elem];
+		__asm__ __volatile__("lduwa [%1] %2, %0"
+				     : "=r" (flags)
+				     : "r" (&this->rx_flags), "i" (ASI_PL));
+	}
+	hp->rx_new = elem;
+	if(drops)
+		printk("%s: Memory squeeze, deferring packet.\n", hp->dev->name);
+	RXD((">"));
+}
+#endif
 
 static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 				       struct hmeal_gregs *gregs)
@@ -1757,7 +1969,7 @@ static void happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct happy_meal *hp         = (struct happy_meal *) dev->priv;
 	struct hmeal_gregs *gregs     = hp->gregs;
 	struct hmeal_tcvregs *tregs   = hp->tcvregs;
-	unsigned long happy_status    = gregs->stat;
+	unsigned int happy_status    = hme_read32(hp, &gregs->stat);
 
 	HMD(("happy_meal_interrupt: status=%08lx ", happy_status));
 
@@ -1795,13 +2007,59 @@ static void happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	HMD(("done\n"));
 }
 
+#ifdef CONFIG_PCI
+static void pci_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct device *dev            = (struct device *) dev_id;
+	struct happy_meal *hp         = (struct happy_meal *) dev->priv;
+	struct hmeal_gregs *gregs     = hp->gregs;
+	struct hmeal_tcvregs *tregs   = hp->tcvregs;
+	unsigned int happy_status     = readl((unsigned long)&gregs->stat);
+
+	HMD(("happy_meal_interrupt: status=%08lx ", happy_status));
+
+	dev->interrupt = 1;
+
+	if(happy_status & GREG_STAT_ERRORS) {
+		HMD(("ERRORS "));
+		if(happy_meal_is_not_so_happy(hp, gregs, /* un- */ happy_status)) {
+			dev->interrupt = 0;
+			return;
+		}
+	}
+
+	if(happy_status & GREG_STAT_MIFIRQ) {
+		HMD(("MIFIRQ "));
+		happy_meal_mif_interrupt(hp, gregs, tregs);
+	}
+
+	if(happy_status & GREG_STAT_TXALL) {
+		HMD(("TXALL "));
+		pci_happy_meal_tx(hp);
+	}
+
+	if(happy_status & GREG_STAT_RXTOHOST) {
+		HMD(("RXTOHOST "));
+		pci_happy_meal_rx(hp, dev, gregs);
+	}
+
+	if(dev->tbusy && (TX_BUFFS_AVAIL(hp) >= 0)) {
+		hp->dev->tbusy = 0;
+		mark_bh(NET_BH);
+	}
+
+	dev->interrupt = 0;
+	HMD(("done\n"));
+}
+#endif
+
 static void sun4c_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev            = (struct device *) dev_id;
 	struct happy_meal *hp         = (struct happy_meal *) dev->priv;
 	struct hmeal_gregs *gregs     = hp->gregs;
 	struct hmeal_tcvregs *tregs   = hp->tcvregs;
-	unsigned long happy_status    = gregs->stat;
+	unsigned int happy_status    = hme_read32(hp, &gregs->stat);
 
 	HMD(("happy_meal_interrupt: status=%08lx ", happy_status));
 
@@ -1852,7 +2110,41 @@ static int happy_meal_open(struct device *dev)
 			printk("happy meal: Can't order irq %d to go.\n", dev->irq);
 			return -EAGAIN;
 		}
-	} else {
+	}
+#ifdef __sparc_v9__
+	else if(sparc_cpu_model == sun4u) {
+		struct devid_cookie dcookie;
+
+#ifdef CONFIG_PCI
+		if(hp->happy_flags & HFLAG_PCI) {
+			if(request_irq(dev->irq, &pci_happy_meal_interrupt,
+				       SA_SHIRQ, "HAPPY MEAL (PCI)", dev)) {
+				HMD(("EAGAIN\n"));
+				printk("happy_meal(PCI: Can't order irq %d to go.\n",
+				       dev->irq);
+				return -EAGAIN;
+			}
+			goto v9_done;
+		}
+#endif
+		dcookie.real_dev_id = dev;
+		dcookie.imap = dcookie.iclr = 0;
+		dcookie.pil = -1;
+		dcookie.bus_cookie = hp->happy_sbus_dev->my_bus;
+		if(request_irq(dev->irq, &happy_meal_interrupt,
+			       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+			       "HAPPY MEAL", &dcookie)) {
+			HMD(("EAGAIN\n"));
+			printk("happy_meal(SBUS): Can't order irq %d to go.\n",
+			       dev->irq);
+			return -EAGAIN;
+		}
+#ifdef CONFIG_PCI
+	v9_done:
+#endif
+	}
+#endif
+	else {
 		if(request_irq(dev->irq, &happy_meal_interrupt,
 			       SA_SHIRQ, "HAPPY MEAL", (void *) dev)) {
 			HMD(("EAGAIN\n"));
@@ -1874,8 +2166,12 @@ static int happy_meal_close(struct device *dev)
 {
 	struct happy_meal *hp = (struct happy_meal *) dev->priv;
 
-	happy_meal_stop(hp->gregs);
+	happy_meal_stop(hp, hp->gregs);
 	happy_meal_clean_rings(hp);
+
+	/* If auto-negotiation timer is running, kill it. */
+	del_timer(&hp->happy_timer);
+
 	free_irq(dev->irq, (void *)dev);
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -1917,21 +2213,70 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	SXD(("SX<l[%d]e[%d]>", len, entry));
 	hp->tx_skbs[entry] = skb;
-	hp->happy_block->happy_meal_txd[entry].tx_addr =
-		(u32) ((unsigned long)skb->data);
+	hp->happy_block->happy_meal_txd[entry].tx_addr = kva_to_hva(hp, skb->data);
 	hp->happy_block->happy_meal_txd[entry].tx_flags =
 		(TXFLAG_OWN | TXFLAG_SOP | TXFLAG_EOP | (len & TXFLAG_SIZE));
 	hp->tx_new = NEXT_TX(entry);
 
 	/* Get it going. */
 	dev->trans_start = jiffies;
-	hp->etxregs->tx_pnding = ETX_TP_DMAWAKEUP;
+	hme_write32(hp, &hp->etxregs->tx_pnding, ETX_TP_DMAWAKEUP);
 
 	if(TX_BUFFS_AVAIL(hp))
 		dev->tbusy = 0;
 
 	return 0;
 }
+
+#ifdef CONFIG_PCI
+static int pci_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
+{
+	struct happy_meal *hp = (struct happy_meal *) dev->priv;
+	int len, entry;
+
+	if(dev->tbusy) {
+		int tickssofar = jiffies - dev->trans_start;
+	    
+		if (tickssofar < 40) {
+			return 1;
+		} else {
+			printk ("%s: transmit timed out, resetting\n", dev->name);
+			hp->net_stats.tx_errors++;
+			happy_meal_init(hp, 0);
+			dev->tbusy = 0;
+			dev->trans_start = jiffies;
+			return 0;
+		}
+	}
+
+	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
+		printk("happy meal: Transmitter access conflict.\n");
+		return 1;
+	}
+
+	if(!TX_BUFFS_AVAIL(hp))
+		return 1;
+
+	len = skb->len;
+	entry = hp->tx_new;
+
+	SXD(("SX<l[%d]e[%d]>", len, entry));
+	hp->tx_skbs[entry] = skb;
+	pcihme_write_txd(&hp->happy_block->happy_meal_txd[entry],
+			 (TXFLAG_OWN|TXFLAG_SOP|TXFLAG_EOP|(len & TXFLAG_SIZE)),
+			 (u32) virt_to_bus((volatile void *)skb->data));
+	hp->tx_new = NEXT_TX(entry);
+
+	/* Get it going. */
+	dev->trans_start = jiffies;
+	writel(ETX_TP_DMAWAKEUP, (unsigned long)&hp->etxregs->tx_pnding);
+
+	if(TX_BUFFS_AVAIL(hp))
+		dev->tbusy = 0;
+
+	return 0;
+}
+#endif
 
 static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 {
@@ -2023,12 +2368,13 @@ static void happy_meal_set_multicast(struct device *dev)
 	set_bit(0, (void *) &dev->tbusy);
 
 	if((dev->flags & IFF_ALLMULTI) || (dev->mc_count > 64)) {
-		bregs->htable0 = 0xffff;
-		bregs->htable1 = 0xffff;
-		bregs->htable2 = 0xffff;
-		bregs->htable3 = 0xffff;
+		hme_write32(hp, &bregs->htable0, 0xffff);
+		hme_write32(hp, &bregs->htable1, 0xffff);
+		hme_write32(hp, &bregs->htable2, 0xffff);
+		hme_write32(hp, &bregs->htable3, 0xffff);
 	} else if(dev->flags & IFF_PROMISC) {
-		bregs->rx_cfg |= BIGMAC_RXCFG_PMISC;
+		hme_write32(hp, &bregs->rx_cfg,
+			    hme_read32(hp, &bregs->rx_cfg) | BIGMAC_RXCFG_PMISC);
 	} else {
 		u16 hash_table[4];
 
@@ -2056,19 +2402,20 @@ static void happy_meal_set_multicast(struct device *dev)
 			crc >>= 26;
 			hash_table[crc >> 4] |= 1 << (crc & 0xf);
 		}
-		bregs->htable0 = hash_table[0];
-		bregs->htable1 = hash_table[1];
-		bregs->htable2 = hash_table[2];
-		bregs->htable3 = hash_table[3];
+		hme_write32(hp, &bregs->htable0, hash_table[0]);
+		hme_write32(hp, &bregs->htable1, hash_table[1]);
+		hme_write32(hp, &bregs->htable2, hash_table[2]);
+		hme_write32(hp, &bregs->htable3, hash_table[3]);
 	}
 
 	/* Let us get going again. */
 	dev->tbusy = 0;
 }
 
+static unsigned hme_version_printed = 0;
+
 static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *sdev)
 {
-	static unsigned version_printed = 0;
 	struct happy_meal *hp;
 	int i;
 
@@ -2079,10 +2426,10 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 		if(dev->priv == NULL)
 			return -ENOMEM;
 	}
-	if(version_printed++ == 0)
+	if(hme_version_printed++ == 0)
 		printk(version);
 
-	printk("%s: HAPPY MEAL 10/100baseT Ethernet ", dev->name);
+	printk("%s: HAPPY MEAL (SBUS) 10/100baseT Ethernet ", dev->name);
 
 	dev->base_addr = (long) sdev;
 	for(i = 0; i < 6; i++)
@@ -2095,6 +2442,9 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	memset(hp, 0, sizeof(*hp));
 
 	hp->happy_sbus_dev = sdev;
+#ifdef CONFIG_PCI
+	hp->happy_pci_dev = NULL;
+#endif
 
 	if(sdev->num_registers != 5) {
 		printk("happymeal: Device does not have 5 regs, it has %d.\n",
@@ -2211,6 +2561,124 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	return 0;
 }
 
+#ifdef CONFIG_PCI
+__initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
+{
+	struct pcidev_cookie *pcp;
+	struct happy_meal *hp;
+	unsigned long hpreg_base;
+	unsigned short pci_command;
+	int i, node;
+
+	if(dev == NULL) {
+		dev = init_etherdev(0, sizeof(struct happy_meal));
+	} else {
+		dev->priv = kmalloc(sizeof(struct happy_meal), GFP_KERNEL);
+		if(dev->priv == NULL)
+			return -ENOMEM;
+	}
+	if(hme_version_printed++ == 0)
+		printk(version);
+
+	printk("%s: HAPPY MEAL (PCI/CheerIO) 10/100BaseT Ethernet ", dev->name);
+
+	dev->base_addr = (long) pdev;
+	for(i = 0; i < 6; i++)
+		printk("%2.2x%c",
+		       dev->dev_addr[i] = idprom->id_ethaddr[i],
+		       i == 5 ? ' ' : ':');
+
+	printk("\n");
+
+	hp = (struct happy_meal *)dev->priv;
+	memset(hp, 0, sizeof(*hp));
+
+	hp->happy_sbus_dev = NULL;
+	hp->happy_pci_dev = pdev;
+
+	hpreg_base = pdev->base_address[0];
+	if((hpreg_base & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
+		printk("happymeal(PCI): Cannot find proper PCI device base address.\n");
+		return ENODEV;
+	}
+	hpreg_base &= PCI_BASE_ADDRESS_MEM_MASK;
+
+	/* Now make sure pci_dev cookie is there. */
+	pcp = pdev->sysdata;
+	if(pcp == NULL || pcp->prom_node == -1) {
+		printk("happymeal(PCI): Some PCI device info missing\n");
+		return ENODEV;
+	}
+	node = pcp->prom_node;
+
+	/* Layout registers. */
+	hp->gregs      = (struct hmeal_gregs *)		(hpreg_base + 0x0000);
+	hp->etxregs    = (struct hmeal_etxregs *)	(hpreg_base + 0x2000);
+	hp->erxregs    = (struct hmeal_erxregs *)	(hpreg_base + 0x4000);
+	hp->bigmacregs = (struct hmeal_bigmacregs *)	(hpreg_base + 0x6000);
+	hp->tcvregs    = (struct hmeal_tcvregs *)	(hpreg_base + 0x7000);
+
+	hp->hm_revision = prom_getintdefault(node, "hm-rev", 0xff);
+	if(hp->hm_revision == 0xff)
+		hp->hm_revision = 0xa0;
+
+	/* Now enable the feature flags we can. */
+	if(hp->hm_revision == 0x20 || hp->hm_revision == 0x21)
+		hp->happy_flags = HFLAG_20_21;
+	else if(hp->hm_revision != 0xa0)
+		hp->happy_flags = HFLAG_NOT_A0;
+
+	/* And of course, indicate this is PCI. */
+	hp->happy_flags |= HFLAG_PCI;
+
+	/* Assume PCI happy meals can handle all burst sizes. */
+	hp->happy_bursts = DMA_BURSTBITS;
+
+	hp->happy_block = (struct hmeal_init_block *) get_free_page(GFP_DMA);
+	if(!hp->happy_block) {
+		printk("happymeal(PCI): Cannot get hme init block.\n");
+		return ENODEV;
+	}
+
+	hp->hblock_dvma = (u32) virt_to_bus(hp->happy_block);
+	hp->sun4c_buffers = 0;
+
+	hp->linkcheck = 0;
+	hp->timer_state = asleep;
+	hp->timer_ticks = 0;
+	happy_meal_set_initial_advertisement(hp);
+
+	hp->dev = dev;
+	dev->open = &happy_meal_open;
+	dev->stop = &happy_meal_close;
+	dev->hard_start_xmit = &pci_happy_meal_start_xmit;
+	dev->get_stats = &happy_meal_get_stats;
+	dev->set_multicast_list = &happy_meal_set_multicast;
+	dev->irq = pdev->irq;
+	dev->dma = 0;
+	ether_setup(dev);
+
+	/* If we don't do this, nothing works. */
+	pcibios_read_config_word(pdev->bus->number,
+				 pdev->devfn,
+				 PCI_COMMAND, &pci_command);
+	pci_command |= PCI_COMMAND_MASTER;
+	pcibios_write_config_word(pdev->bus->number,
+				  pdev->devfn,
+				  PCI_COMMAND, pci_command);
+
+#ifdef MODULE
+	/* We are home free at this point, link us in to the happy
+	 * module device list.
+	 */
+	dev->ifindex = dev_new_index();
+	hp->next_module = root_happy_dev;
+	root_happy_dev = hp;
+#endif
+	return 0;
+}
+#endif
+
 __initfunc(int happy_meal_probe(struct device *dev))
 {
 	struct linux_sbus *bus;
@@ -2224,7 +2692,8 @@ __initfunc(int happy_meal_probe(struct device *dev))
 
 	for_each_sbus(bus) {
 		for_each_sbusdev(sdev, bus) {
-			if(cards) dev = NULL;
+			if(cards)
+				dev = NULL;
 			if(!strcmp(sdev->prom_name, "SUNW,hme")) {
 				cards++;
 				if((v = happy_meal_ether_init(dev, sdev)))
@@ -2232,6 +2701,23 @@ __initfunc(int happy_meal_probe(struct device *dev))
 			}
 		}
 	}
+#ifdef CONFIG_PCI
+	if(pcibios_present()) {
+		struct pci_dev *pdev;
+
+		for(pdev = pci_devices; pdev; pdev = pdev->next) {
+			if(cards)
+				dev = NULL;
+			if((pdev->vendor == PCI_VENDOR_ID_SUN) &&
+			   (pdev->device == PCI_DEVICE_ID_SUN_HAPPYMEAL)) {
+				cards++;
+				if((v = happy_meal_pci_init(dev, pdev)))
+					return v;
+			}
+
+		}
+	}
+#endif
 	if(!cards)
 		return ENODEV;
 	return 0;

@@ -94,8 +94,8 @@ start_ldr:
 	   as ptr to residual -- Cort*/
 	lis	r6,cmd_line@h
 	ori	r6,r6,cmd_line@l
-	subi	r7,r7,1
-00:	lbzu	r2,1(r12)
+	subi	r7,r6,1
+00:	lbzu	r2,1(r7)
 	cmpi	0,r2,0
 	bne	00b
 

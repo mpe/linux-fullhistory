@@ -36,6 +36,9 @@
 /* Does not seem to be listed in the Sun file either */
 #define FBTYPE_CREATOR          22
 
+#define FBTYPE_PCI_GENERIC	1000
+#define FBTYPE_PCI_MACH64	1001
+
 /* fbio ioctls */
 /* Returned by FBIOGTYPE */
 struct  fbtype {

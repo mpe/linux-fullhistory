@@ -1,6 +1,6 @@
 /*
- * $Id: pci.c,v 1.11 1997/08/13 03:06:14 cort Exp $
- * Common pmac/prep pci routines. -- Cort
+ * $Id: pci.c,v 1.12 1997/08/27 05:05:28 cort Exp $
+ * Common pmac/prep/chrp pci routines. -- Cort
  */
 
 #include <linux/kernel.h>
@@ -16,6 +16,7 @@
 #include <asm/pci-bridge.h>
 
 unsigned long io_base;
+unsigned long pci_dram_offset;
 
 /*
  * It would be nice if we could create a include/asm/pci.h and have just
@@ -61,6 +62,24 @@ extern int pmac_pcibios_find_device(unsigned short vendor, unsigned short dev_id
 			unsigned short index, unsigned char *bus_ptr,
 			unsigned char *dev_fn_ptr);
 extern int pmac_pcibios_find_class(unsigned int class_code, unsigned short index,
+		       unsigned char *bus_ptr, unsigned char *dev_fn_ptr);
+
+extern int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+			     unsigned char offset, unsigned char *val);
+extern int chrp_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+			     unsigned char offset, unsigned short *val);
+extern int chrp_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+			      unsigned char offset, unsigned int *val);
+extern int chrp_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+			      unsigned char offset, unsigned char val);
+extern int chrp_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+			      unsigned char offset, unsigned short val);
+extern int chrp_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+			       unsigned char offset, unsigned int val);
+extern int chrp_pcibios_find_device(unsigned short vendor, unsigned short dev_id,
+			unsigned short index, unsigned char *bus_ptr,
+			unsigned char *dev_fn_ptr);
+extern int chrp_pcibios_find_class(unsigned int class_code, unsigned short index,
 		       unsigned char *bus_ptr, unsigned char *dev_fn_ptr);
 
 extern int prep_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
@@ -132,19 +151,9 @@ int pcibios_present(void)
 __initfunc(unsigned long
 pcibios_init(unsigned long mem_start,unsigned long mem_end))
 {
-	if ( _machine == _MACH_Pmac )
-	{
-		ptr_pcibios_read_config_byte = pmac_pcibios_read_config_byte;
-		ptr_pcibios_read_config_word = pmac_pcibios_read_config_word;
-		ptr_pcibios_read_config_dword = pmac_pcibios_read_config_dword;
-		ptr_pcibios_write_config_byte = pmac_pcibios_write_config_byte;
-		ptr_pcibios_write_config_word = pmac_pcibios_write_config_word;
-		ptr_pcibios_write_config_dword = pmac_pcibios_write_config_dword;
-		ptr_pcibios_find_device = pmac_pcibios_find_device;
-		ptr_pcibios_find_class = pmac_pcibios_find_class;
-	}
-	else /* prep */
-	{
+	switch (_machine) {
+	    case _MACH_Motorola:
+	    case _MACH_IBM:
 		ptr_pcibios_read_config_byte = prep_pcibios_read_config_byte;
 		ptr_pcibios_read_config_word = prep_pcibios_read_config_word;
 		ptr_pcibios_read_config_dword = prep_pcibios_read_config_dword;
@@ -153,6 +162,27 @@ pcibios_init(unsigned long mem_start,unsigned long mem_end))
 		ptr_pcibios_write_config_dword = prep_pcibios_write_config_dword;
 		ptr_pcibios_find_device = prep_pcibios_find_device;
 		ptr_pcibios_find_class = prep_pcibios_find_class;
+		break;
+	    case _MACH_Pmac:
+		ptr_pcibios_read_config_byte = pmac_pcibios_read_config_byte;
+		ptr_pcibios_read_config_word = pmac_pcibios_read_config_word;
+		ptr_pcibios_read_config_dword = pmac_pcibios_read_config_dword;
+		ptr_pcibios_write_config_byte = pmac_pcibios_write_config_byte;
+		ptr_pcibios_write_config_word = pmac_pcibios_write_config_word;
+		ptr_pcibios_write_config_dword = pmac_pcibios_write_config_dword;
+		ptr_pcibios_find_device = pmac_pcibios_find_device;
+		ptr_pcibios_find_class = pmac_pcibios_find_class;
+		break;
+	    case _MACH_chrp:
+		ptr_pcibios_read_config_byte = chrp_pcibios_read_config_byte;
+		ptr_pcibios_read_config_word = chrp_pcibios_read_config_word;
+		ptr_pcibios_read_config_dword = chrp_pcibios_read_config_dword;
+		ptr_pcibios_write_config_byte = chrp_pcibios_write_config_byte;
+		ptr_pcibios_write_config_word = chrp_pcibios_write_config_word;
+		ptr_pcibios_write_config_dword = chrp_pcibios_write_config_dword;
+		ptr_pcibios_find_device = chrp_pcibios_find_device;
+		ptr_pcibios_find_class = chrp_pcibios_find_class;
+		break;
 	}
 	return mem_start;
 }

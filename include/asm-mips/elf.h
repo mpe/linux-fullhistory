@@ -40,4 +40,11 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  */
 #define ELF_PLAT_INIT(_r)	_r->regs[2] = 0;
 
+/* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
+   use of this is to invoke "./ld.so someprog" to test out a new version of
+   the loader.  We need to make sure that it is out of the way of the program
+   that it will "exec", and that there is sufficient room for the brk.  */
+
+#define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
+
 #endif /* __ASM_MIPS_ELF_H */

@@ -956,7 +956,7 @@ unsigned short atalk_checksum(struct ddpehdr *ddp, int len)
 static int atalk_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
-	sk=sk_alloc(GFP_KERNEL);
+	sk=sk_alloc(AF_APPLETALK, GFP_KERNEL);
 	if(sk==NULL)
 		return(-ENOMEM);
 	switch(sock->type)
@@ -982,15 +982,6 @@ static int atalk_create(struct socket *sock, int protocol)
 	sk->mtu=DDP_MAXSZ;
 	sk->zapped=1;
 	return(0);
-}
-
-/*
- *	Copy a socket. No work needed.
- */
-
-static int atalk_dup(struct socket *newsock,struct socket *oldsock)
-{
-	return(atalk_create(newsock,SOCK_DGRAM));
 }
 
 /*
@@ -1141,15 +1132,6 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	sock->state = SS_CONNECTED;
 	sk->state=TCP_ESTABLISHED;
 	return(0);
-}
-
-/*
- *	Not relevant
- */
-
-static int atalk_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return(-EOPNOTSUPP);
 }
 
 /*
@@ -1994,7 +1976,9 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCGIFCONF:
 		case SIOCADDMULTI:
 		case SIOCDELMULTI:
-
+		case SIOCGIFCOUNT:
+		case SIOGIFINDEX:
+		case SIOGIFNAME:
 			return(dev_ioctl(cmd,(void *) arg));
 
 		case SIOCSIFMETRIC:
@@ -2021,11 +2005,11 @@ static struct net_proto_family atalk_family_ops = {
 static struct proto_ops atalk_dgram_ops = {
 	AF_APPLETALK,
 
-	atalk_dup,
+	sock_no_dup,
 	atalk_release,
 	atalk_bind,
 	atalk_connect,
-	atalk_socketpair,
+	sock_no_socketpair,
 	atalk_accept,
 	atalk_getname,
 	datagram_poll,

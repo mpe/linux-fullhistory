@@ -294,12 +294,6 @@ int inet_listen(struct socket *sock, int backlog)
 		return -EAGAIN;
 
 	/* We might as well re use these. */ 
-	/*
-	 * note that the backlog is "unsigned char", so truncate it
-	 * somewhere. We might as well truncate it to what everybody
-	 * else does..
-	 * Now truncate to 128 not 5. 
-	 */
 	if ((unsigned) backlog == 0)	/* BSDism */
 		backlog = 1;
 	if ((unsigned) backlog > SOMAXCONN)
@@ -328,7 +322,7 @@ static int inet_create(struct socket *sock, int protocol)
 	struct proto *prot;
 
 	sock->state = SS_UNCONNECTED;
-	sk = sk_alloc(GFP_KERNEL);
+	sk = sk_alloc(AF_INET, GFP_KERNEL);
 	if (sk == NULL) 
 		goto do_oom;
 
@@ -437,15 +431,6 @@ do_oom:
 	return -ENOBUFS;
 }
 
-
-/*
- *	Duplicate a socket.
- */
- 
-static int inet_dup(struct socket *newsock, struct socket *oldsock)
-{
-	return inet_create(newsock, oldsock->sk->protocol);
-}
 
 /*
  *	The peer socket should always be NULL (or else). When we call this
@@ -924,6 +909,8 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCSIFSLAVE:
 		case SIOCGIFSLAVE:
 		case SIOGIFINDEX:
+		case SIOGIFNAME:
+		case SIOCGIFCOUNT:
 			return(dev_ioctl(cmd,(void *) arg));
 
 		case SIOCGIFBR:
@@ -973,11 +960,11 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 struct proto_ops inet_stream_ops = {
 	AF_INET,
 
-	inet_dup,
+	sock_no_dup,
 	inet_release,
 	inet_bind,
 	inet_stream_connect,
-	NULL,
+	sock_no_socketpair,
 	inet_accept,
 	inet_getname, 
 	inet_poll,
@@ -994,12 +981,12 @@ struct proto_ops inet_stream_ops = {
 struct proto_ops inet_dgram_ops = {
 	AF_INET,
 
-	inet_dup,
+	sock_no_dup,
 	inet_release,
 	inet_bind,
 	inet_dgram_connect,
-	NULL,
-	NULL,
+	sock_no_socketpair,
+	sock_no_accept,
 	inet_getname, 
 	datagram_poll,
 	inet_ioctl,
@@ -1017,7 +1004,6 @@ struct net_proto_family inet_family_ops = {
 	inet_create
 };
 
-extern unsigned long seq_offset;
 
 #ifdef CONFIG_PROC_FS
 #ifdef CONFIG_INET_RARP
@@ -1084,8 +1070,6 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 	 */
    
   	(void) sock_register(&inet_family_ops);
-
-  	seq_offset = CURRENT_TIME*250;
 
 	/*
 	 *	Add all the protocols. 

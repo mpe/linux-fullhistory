@@ -12,19 +12,16 @@
 
 O_TARGET := kernel.o
 O_OBJS := misc.o traps.o process.o signal.o syscalls.o \
-	  align.o ptrace.o irq.o bitops.o ppc_htab.o idle.o prom.o \
-	  time.o prep_time.o pmac_time.o \
-	  setup.o pmac_setup.o pmac_support.o \
-	  pci.o prep_pci.o pmac_pci.o
+	  align.o ptrace.o irq.o openpic.o bitops.o ppc_htab.o idle.o \
+	  time.o prep_time.o pmac_time.o chrp_time.o \
+	  setup.o prep_setup.o pmac_setup.o pmac_support.o chrp_setup.o \
+	  pci.o prep_pci.o pmac_pci.o chrp_pci.o \
+	  residual.o prom.o
 OX_OBJS := ppc_ksyms.o
 
 all: head.o kernel.o
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h ppc_defs.h
-
-ifeq ($(CONFIG_PREP),y)
-O_OBJS += prep_setup.o #prep_time.o
-endif
 
 ppc_defs.h: mk_defs.c ppc_defs.head \
 		$(TOPDIR)/include/asm/mmu.h \
@@ -37,7 +34,7 @@ ppc_defs.h: mk_defs.c ppc_defs.head \
 	rm mk_defs.s
 
 checks: checks.c
-	$(HOSTCC) ${CFLAGS} -o checks checks.c
+	$(HOSTCC) -fno-builtin -I$(TOPDIR)/include -D__KERNEL__ -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

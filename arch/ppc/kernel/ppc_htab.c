@@ -1,5 +1,6 @@
 /*
- * $Id: ppc_htab.c,v 1.4 1997/08/12 04:24:54 cort Exp $
+ * $Id: ppc_htab.c,v 1.7 1997/08/24 19:33:32 cort Exp $
+ *
  * PowerPC hash table management proc entry.  Will show information
  * about the current hash table and will allow changes to it.
  *
@@ -33,6 +34,7 @@ static long long ppc_htab_lseek(struct inode * inode, struct file * file,
 
 extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
+extern unsigned long _SDR1;
 
 static struct file_operations ppc_htab_operations = {
     ppc_htab_lseek,	/* lseek   */
@@ -83,6 +85,7 @@ static long ppc_htab_read(struct inode * inode, struct file * file,
 	unsigned int kptes = 0, overflow = 0, uptes = 0;
 	PTE *ptr;
 	struct task_struct *p;
+	char buffer[128];
 	
 	if (nbytes < 0)
 		return -EINVAL;
@@ -94,7 +97,7 @@ static long ppc_htab_read(struct inode * inode, struct file * file,
 	 * due to the way tlb invalidation is handled on the ppc
 	 * -- Cort
 	 */
-	for ( ptr = Hash ; ptr < (PTE *)(Hash+Hash_size) ; ptr+=sizeof(PTE))
+	for ( ptr = Hash ; ptr < Hash_end ; ptr += sizeof(PTE))
 	{
 		if (ptr->v)
 		{
@@ -118,7 +121,8 @@ static long ppc_htab_read(struct inode * inode, struct file * file,
 				overflow++;
 		}
 	}
-	n += sprintf( buf,
+	
+	n += sprintf( buffer,
 		      "Size\t\t: %luKb\n"
 		      "Buckets\t\t: %lu\n"
  		      "Address\t\t: %08lx\n"
@@ -136,9 +140,12 @@ static long ppc_htab_read(struct inode * inode, struct file * file,
 		      overflow,
 		      ((kptes+uptes)*100) / (Hash_size/sizeof(PTE))
 		);
-	/* if we're trying to read part of the file that isn't there */
-	if ( file->f_pos > n )
-		return -ENOMEM;
+
+	if (file->f_pos >= strlen(buffer))
+		return 0;
+	if (n > strlen(buffer) - file->f_pos)
+		n = strlen(buffer) - file->f_pos;
+	copy_to_user(buf, buffer + file->f_pos, n);
 	file->f_pos += n;
 	return n;
 }
@@ -150,11 +157,47 @@ static long
 ppc_htab_write(struct inode * inode, struct file * file,
 		const char * buffer, unsigned long count)
 {
+	unsigned long size;
+	extern void reset_SDR1(void);
+	
 	if ( current->uid != 0 )
 		return -EACCES;
-	else
-		return -ENOSYS;
-	return 0;
+	
+	/* only know how to set size right now */
+	if ( strncmp( buffer, "size ", 5) )
+		return -EINVAL;
+
+	size = simple_strtoul( &buffer[5], NULL, 10 );
+	
+	/* only allow to shrink */
+	if ( size >= Hash_size>>10 )
+		return -EINVAL;
+
+	/* minimum size of htab */
+	if ( size < 64 )
+		return -EINVAL;
+	
+	/* make sure it's a multiple of 64k */
+	if ( size % 64 )
+		return -EINVAL;
+	
+	printk("Hash table resize to %luk\n", size);
+	/*
+	 * We need to rehash all kernel entries for the new htab size.
+	 * Kernel only since we do a flush_tlb_all().  Since it's kernel
+	 * we only need to bother with vsids 0-15.  To avoid problems of
+	 * clobbering un-rehashed values we put the htab at a new spot
+	 * and put everything there.
+	 * -- Cort
+	 */
+	Hash_size = size<<10;
+	Hash_mask = (Hash_size >> 6) - 1;
+        _SDR1 = __pa(Hash) | (Hash_mask >> 10);
+	flush_tlb_all();
+
+	reset_SDR1();
+	printk("done\n");
+	return count;
 }
 
 
@@ -176,21 +219,3 @@ ppc_htab_lseek(struct inode * inode, struct file * file,
     }
 }
 
-
-#if 0
-/*
-  for root.c
-  */
-static struct proc_dir_entry proc_root_ppc_htab = {
-	PROC_PPC_HTAB, 8, "ppc_htab",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_ppc_htab_inode_operations
-};
-#ifdef __powerpc__
-	proc_register(&proc_root, &proc_root_ppc_htab);
-#endif
-
-
-/* add to proc_fs.h
-   	PROC_PPC_HTAB,*/
-#endif

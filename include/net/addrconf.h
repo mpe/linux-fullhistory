@@ -52,6 +52,7 @@ extern int		        addrconf_notify(struct notifier_block *this,
 						void * data);
 
 extern int			addrconf_add_ifaddr(void *arg);
+extern int			addrconf_del_ifaddr(void *arg);
 extern int			addrconf_set_dstaddr(void *arg);
 
 extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr);

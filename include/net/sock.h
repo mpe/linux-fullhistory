@@ -23,6 +23,7 @@
  *	Pauline Middelink	:	identd support
  *		Alan Cox	:	Eliminate low level recv/recvfrom
  *		David S. Miller	:	New socket lookup architecture.
+ *              Steve Whitehouse:       Default routines for sock_ops
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -88,7 +89,7 @@ struct unix_opt
 	char *			name;
 	int  			locks;
 	struct unix_address	*addr;
-	struct inode *		inode;
+	struct dentry *		dentry;
 	struct semaphore	readsem;
 	struct sock *		other;
 	struct sock **		list;
@@ -281,6 +282,8 @@ struct tcp_opt
 
 	struct open_request	*syn_wait_queue;
 	struct open_request	**syn_wait_last;
+	int syn_backlog;
+
 	struct tcp_func		*af_specific;
 };
 
@@ -430,8 +433,8 @@ struct sock
 						   'timed out' */
 	unsigned char		protocol;
 	volatile unsigned char	state;
-	unsigned char		ack_backlog;
-	unsigned char		max_ack_backlog;
+	unsigned short		ack_backlog;
+	unsigned short		max_ack_backlog;
 	unsigned char		priority;
 	unsigned char		debug;
 	int			rcvbuf;
@@ -734,7 +737,7 @@ static __inline__ int max(unsigned int a, unsigned int b)
 	return a;
 }
 
-extern struct sock *		sk_alloc(int priority);
+extern struct sock *		sk_alloc(int family, int priority);
 extern void			sk_free(struct sock *sk);
 extern void			destroy_sock(struct sock *sk);
 
@@ -762,12 +765,42 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *sk,
 						     int noblock,
 						     int *errcode);
 
-extern int 			sock_no_fcntl(struct socket *, unsigned int, unsigned long);
+/*
+ * Functions to fill in entries in struct proto_ops when a protocol
+ * does not implement a particular function.
+ */
+extern int                      sock_no_dup(struct socket *, struct socket *);
+extern int                      sock_no_release(struct socket *, 
+						struct socket *);
+extern int                      sock_no_bind(struct socket *, 
+					     struct sockaddr *, int);
+extern int                      sock_no_connect(struct socket *,
+						struct sockaddr *, int, int);
+extern int                      sock_no_socketpair(struct socket *,
+						   struct socket *);
+extern int                      sock_no_accept(struct socket *,
+					       struct socket *, int);
+extern int                      sock_no_getname(struct socket *,
+						struct sockaddr *, int *, int);
+extern unsigned int             sock_no_poll(struct socket *,
+					     poll_table *);
+extern int                      sock_no_ioctl(struct socket *, unsigned int,
+					      unsigned long);
+extern int			sock_no_listen(struct socket *, int);
+extern int                      sock_no_shutdown(struct socket *, int);
 extern int			sock_no_getsockopt(struct socket *, int , int,
 						   char *, int *);
 extern int			sock_no_setsockopt(struct socket *, int, int,
 						   char *, int);
-extern int			sock_no_listen(struct socket *, int);
+extern int 			sock_no_fcntl(struct socket *, 
+					      unsigned int, unsigned long);
+extern int                      sock_no_sendmsg(struct socket *,
+						struct msghdr *, int,
+						struct scm_cookie *);
+extern int                      sock_no_recvmsg(struct socket *,
+						struct msghdr *, int,
+						struct scm_cookie *);
+
 /*
  *	Default socket callbacks and setup code
  */
@@ -775,6 +808,7 @@ extern int			sock_no_listen(struct socket *, int);
 extern void sock_def_callback1(struct sock *);
 extern void sock_def_callback2(struct sock *, int);
 extern void sock_def_callback3(struct sock *);
+extern void sock_def_destruct(struct sock *);
 
 /* Initialise core socket variables */
 extern void sock_init_data(struct socket *sock, struct sock *sk);

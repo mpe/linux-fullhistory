@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.19 1997/07/26 18:38:56 davem Exp $
+/* $Id: ttable.S,v 1.20 1997/08/29 15:51:39 jj Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -100,6 +100,7 @@ tl0_bkpt:	BREAKPOINT_TRAP
 tl0_resv102:	BTRAP(0x102)
 tl0_flushw:	FLUSH_WINDOW_TRAP
 tl0_resv104:	BTRAP(0x104) BTRAP(0x105) BTRAP(0x106) BTRAP(0x107)
+		.globl tl0_solaris
 tl0_solaris:	SOLARIS_SYSCALL_TRAP
 tl0_netbsd:	NETBSD_SYSCALL_TRAP
 tl0_resv10a:	BTRAP(0x10a) BTRAP(0x10b) BTRAP(0x10c) BTRAP(0x10d) BTRAP(0x10e)

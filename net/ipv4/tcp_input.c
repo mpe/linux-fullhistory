@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.54 1997/07/10 11:19:39 freitag Exp $
+ * Version:	$Id: tcp_input.c,v 1.56 1997/08/31 08:24:54 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -39,6 +39,8 @@
  *		David S. Miller	:	Don't allow zero congestion window.
  *		Eric Schenk	:	Fix retransmitter so that it sends
  *					next packet on ack of previous packet.
+ *		Andi Kleen	:	Moved open_request checking here
+ *					and process RSTs for open_requests.
  */
 
 #include <linux/config.h>
@@ -1319,7 +1321,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	int queued = 0;
 	u32 flg;
-	
+
 	/*
 	 *	Header prediction.
 	 *	The code follows the one in the famous 
@@ -1388,7 +1390,6 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				tcp_send_delayed_ack(sk, HZ/2);
 			else
 				tcp_send_ack(sk);
-
 			return 0;
 		}
 	}
@@ -1402,21 +1403,20 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 			tcp_send_ack(sk);
 			kfree_skb(skb, FREE_READ);
-			return 0;
+			return 0; 
 		}
 	}
 
 	if(th->syn && skb->seq != sk->syn_seq) {
-		printk(KERN_DEBUG "syn in established state\n");
+		SOCK_DEBUG(sk, "syn in established state\n");
 		tcp_reset(sk, skb);
-		kfree_skb(skb, FREE_READ);
 		return 1;
 	}
 	
 	if(th->rst) {
 		tcp_reset(sk,skb);
 		kfree_skb(skb, FREE_READ);
-		return 0;
+		return 0; 
 	}
 	
 	if(th->ack)
@@ -1443,7 +1443,86 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	if (!queued)
 		kfree_skb(skb, FREE_READ);
+
 	return 0;
+}
+
+/* Shared between IPv4 and IPv6 now. */
+struct sock *
+tcp_check_req(struct sock *sk, struct sk_buff *skb, void *opt)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct open_request *dummy, *req; 
+
+	/*	assumption: the socket is not in use.
+	 *	as we checked the user count on tcp_rcv and we're
+	 *	running from a soft interrupt.
+	 */
+	req = tp->af_specific->search_open_req(tp, (void *)skb->nh.raw, skb->h.th, 
+					       &dummy); 
+	if (req) {
+		if (req->sk) {
+			/*	socket already created but not
+			 *	yet accepted()...
+			 */
+			sk = req->sk;
+		} else {
+			u32 flg; 
+
+			/* Check for syn retransmission */
+			flg = *(((u32 *)skb->h.th) + 3);
+
+			flg &= __constant_htonl(0x00170000); 
+			if ((flg == __constant_htonl(0x00020000)) &&
+			    (!after(skb->seq, req->rcv_isn))) {
+				/*	retransmited syn.
+				 */
+				req->class->rtx_syn_ack(sk, req); 
+				return NULL;
+			}
+		      
+			/* In theory the packet could be for a cookie, but
+			 * TIME_WAIT should guard us against this. 
+			 * XXX: Nevertheless check for cookies?
+			 */ 
+			if (skb->ack_seq != req->snt_isn+1) {
+				tp->af_specific->send_reset(skb);
+				return NULL; 
+			}
+
+			sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
+			tcp_dec_slow_timer(TCP_SLT_SYNACK);
+			if (sk == NULL)
+				return NULL;
+
+			req->expires = 0UL;
+			req->sk = sk;
+		}
+	} 
+#ifdef CONFIG_SYNCOOKIES
+	else {
+		sk = tp->af_specific->cookie_check(sk, skb, opt); 
+		if (sk == NULL)
+			return NULL; 
+	}
+#endif
+	skb_orphan(skb); 
+	skb_set_owner_r(skb, sk);
+	return sk; 
+}
+
+
+static void tcp_rst_req(struct tcp_opt *tp, struct sk_buff *skb)
+{
+	struct open_request *req, *prev;
+
+	req = tp->af_specific->search_open_req(tp,skb->nh.iph,skb->h.th,&prev);
+	if (!req)
+		return;
+	/* Sequence number check required by RFC793 */
+	if (before(skb->seq, req->snt_isn) || after(skb->seq, req->snt_isn+1))
+		return;
+	tcp_synq_unlink(tp, req, prev);
 }
 
 /*
@@ -1461,14 +1540,16 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 	/* state == CLOSED, hash lookup always fails, so no worries. -DaveM */
 	switch (sk->state) {
 	case TCP_LISTEN:
-		if (th->rst)			
+		if (th->rst) {
+			tcp_rst_req(tp, skb);  
 			goto discard;
+		}
 
 		/* These use the socket TOS.. 
 		 * might want to be the received TOS 
 		 */
 		if(th->ack)  
-			return 1; /* send reset */
+			return 1; 
 		
 		if(th->syn) {
 			if(tp->af_specific->conn_request(sk, skb, opt, 0) < 0)
@@ -1490,7 +1571,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			 * against this problem. So, we drop the data
 			 * in the interest of security over speed.
 			 */
-			return 0;
+			goto discard;
 		}
 		
 		goto discard;
@@ -1635,7 +1716,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 			if(tp->af_specific->conn_request(sk, skb, opt, isn) < 0)
 				return 1;
-			return 0;
+
+			goto discard;
 		}
 
 		break;
@@ -1794,10 +1876,10 @@ step6:
 	tcp_data_snd_check(sk);
 	tcp_ack_snd_check(sk);
 
-	if (queued)
-		return 0;
+	if (!queued) { 
 discard:
-	kfree_skb(skb, FREE_READ);
+		kfree_skb(skb, FREE_READ);
+	}
 	return 0;
 }
 

@@ -8,50 +8,36 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_BINFMT_IRIX
-
 /* Only one at this time. */
 #define IRIX32_EMUL "usr/gnemul/irix/"
 
-#if 0 /* XXX FIXME */
-
-extern int __namei(int, const char *, struct inode *, char *, struct inode **,
-		   struct inode **, struct qstr *, struct dentry **, int *);
-
-static __inline__ int
-__prefix_namei(int retrieve_mode, const char * name, struct inode * base,
-	       char * buf, struct inode ** res_dir, struct inode ** res_inode,
-	       struct qstr * last_name, struct dentry ** last_entry,
-	       int * last_error)
+static inline struct dentry *
+__mips_lookup_dentry(const char *name, int follow_link)
 {
 	int error;
+	struct dentry *base;
 
 	if (current->personality != PER_IRIX32)
-		return -EINVAL;
+		return ERR_PTR(-ENOENT);
 
-	while (*name == '/')
-		name++;
-
-	atomic_inc(&current->fs->root->i_count);
-	error = __namei(NAM_FOLLOW_LINK, IRIX32_EMUL, current->fs->root,
-			buf, NULL, &base, NULL, NULL, NULL);
-	if (error)
-		return error;
-
-	error = __namei(retrieve_mode, name, base, buf, res_dir, res_inode,
-			last_name, last_entry, last_error);
-	if (error)
-		return error;
-
-	return 0;
+	base = lookup_dentry (IRIX32_EMUL,
+			dget (current->fs->root), 1);
+			
+	if (IS_ERR (base)) return base;
+	
+	return lookup_dentry (name, base, follow_link);
 }
 
-#endif /* XXX FIXME */
+#ifdef CONFIG_BINFMT_IRIX
+
+#define __prefix_lookup_dentry(name, follow_link)				\
+	dentry = __mips_lookup_dentry (name, follow_link);			\
+	if (!IS_ERR (dentry)) return dentry;
 
 #else /* !defined(CONFIG_BINFMT_IRIX) */
 
-#define __prefix_namei(retrieve_mode, name, base, buf, res_dir, res_inode, \
-		       last_name, last_entry, last_error) 1
+#define __prefix_lookup_dentry(name, follow_link) \
+        do {} while (0)
 
 #endif /* !defined(CONFIG_BINFMT_IRIX) */
 

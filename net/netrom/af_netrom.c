@@ -98,7 +98,7 @@ static struct sock *nr_alloc_sock(void)
 	struct sock *sk;
 	nr_cb *nr;
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = sk_alloc(AF_NETROM, GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	if ((nr = kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
@@ -526,16 +526,6 @@ static struct sock *nr_make_new(struct sock *osk)
 	return sk;
 }
 
-static int nr_dup(struct socket *newsock, struct socket *oldsock)
-{
-	struct sock *sk = oldsock->sk;
-
-	if (sk == NULL || newsock == NULL)
-		return -EINVAL;
-
-	return nr_create(newsock, sk->protocol);
-}
-
 static int nr_release(struct socket *sock, struct socket *peer)
 {
 	struct sock *sk = sock->sk;
@@ -726,11 +716,6 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	sti();
 
 	return 0;
-}
-
-static int nr_socketpair(struct socket *sock1, struct socket *sock2)
-{
-	return -EOPNOTSUPP;
 }
 
 static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
@@ -1211,11 +1196,11 @@ static struct net_proto_family nr_family_ops =
 static struct proto_ops nr_proto_ops = {
 	AF_NETROM,
 
-	nr_dup,
+	sock_no_dup,
 	nr_release,
 	nr_bind,
 	nr_connect,
-	nr_socketpair,
+	sock_no_socketpair,
 	nr_accept,
 	nr_getname,
 	datagram_poll,

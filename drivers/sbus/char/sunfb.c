@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.26 1997/07/17 02:21:48 davem Exp $
+/* $Id: sunfb.c,v 1.28 1997/08/22 15:55:23 jj Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -42,7 +42,6 @@
 #include "fb.h"
 
 extern void set_other_palette (int);
-extern void sun_clear_fb(int);
 extern void set_cursor (int);
 
 #define FB_SETUP(err) \
@@ -197,9 +196,9 @@ fb_ioctl (struct inode *inode, struct file *file, uint cmd, unsigned long arg)
  		if (fb == fbinfo) {
  			if (vt_cons[fg_console]->vc_mode == KD_TEXT)
  				return -EINVAL; /* Don't let graphics programs hide our nice text cursor */
- 			sun_hw_cursor_shown = 0; /* Forget state of our text cursor */
+ 			sbus_hw_cursor_shown = 0; /* Forget state of our text cursor */
 		}
-		return sun_hw_scursor ((struct fbcursor *) arg, fb);
+		return sbus_hw_scursor ((struct fbcursor *) arg, fb);
 
 	case FBIOSCURPOS:
 		if (!fb->setcursor) return -EINVAL;
@@ -242,8 +241,11 @@ fb_close (struct inode * inode, struct file *filp)
 		vt_cons [fb->vtconsole]->vc_mode = KD_TEXT;
 
 	/* Leaving graphics mode, turn off the cursor */
-	if (fb->mmaped)
-		sun_clear_fb (minor);
+	if (fb->mmaped) {
+		fb->clear_fb (minor);
+		if (!minor && suncons_ops.clear_margin)
+			suncons_ops.clear_margin();
+	}
 	cursor.set    = FB_CUR_SETCUR;
 	cursor.enable = 0;
 	

@@ -175,36 +175,27 @@ __start:
  * Use the first pair of BAT registers to map the 1st 16MB
  * of RAM to KERNELBASE.
  */
-	mfspr	r9,PVR
-	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
-	cmpi	0,r9,1
-	lis	r11,KERNELBASE@h
-	bne	4f
-	ori	r11,r11,4		/* set up BAT registers for 601 */
-	li	r8,0x7f
-	oris	r9,r11,0x800000@h	/* set up BAT reg for 2nd 8M */
-	oris	r10,r8,0x800000@h	/* set up BAT reg for 2nd 8M */
-	mtspr	IBAT1U,r9
-	mtspr	IBAT1L,r10
-	b	5f
-4:	ori	r11,r11,0x1ff		/* set up BAT registers for 604 */
-	li	r8,2
-	mtspr	DBAT0U,r11
-	mtspr	DBAT0L,r8
-5:	mtspr	IBAT0U,r11
-	mtspr	IBAT0L,r8
-	isync
-
-#if 0	
-/*
- * Now we have the 1st 8M of RAM mapped at KERNELBASE, so we can
- * refer to addresses of data items, procedures, etc. normally.
- */
-	lis	r10,start_here@ha	/* jump up to our copy at KERNELBASE */
-	addi	r10,r10,start_here@l
-	mtlr	r10
-	blr
-#endif
+        mfspr   r9,PVR
+        rlwinm  r9,r9,16,16,31          /* r9 = 1 for 601, 4 for 604 */
+        cmpi    0,r9,1
+        lis     r11,KERNELBASE@h
+        bne     4f
+        ori     r11,r11,4               /* set up BAT registers for 601 */
+        li      r8,0x7f
+        ori     r11,r11,4               /* set up BAT registers for 601 */
+        li      r8,0x7f
+        oris    r9,r11,0x800000@h       /* set up BAT reg for 2nd 8M */
+        oris    r10,r8,0x800000@h       /* set up BAT reg for 2nd 8M */
+        mtspr   IBAT1U,r9
+        mtspr   IBAT1L,r10
+        b       5f
+4:      ori     r11,r11,0x1ff           /* set up BAT registers for 604 */
+        li      r8,2
+        mtspr   DBAT0U,r11
+        mtspr   DBAT0L,r8
+5:      mtspr   IBAT0U,r11
+        mtspr   IBAT0L,r8
+        isync
 /*
  * we now have the 1st 16M of ram mapped with the bats.
  * prep needs the mmu to be turned on here, but pmac already has it on.
@@ -220,7 +211,6 @@ __start:
 	SYNC
 	rfi				/* enables MMU */
 		
-
 /*
  * GCC sometimes accesses words at negative offsets from the stack
  * pointer, although the SysV ABI says it shouldn't.  To cope with
@@ -834,15 +824,13 @@ start_here:
 	bne	3f			/* don't invalidate the D-cache */
 	ori	r8,r8,HID0_DCI		/* unless it wasn't enabled */
 3:
-	/* I haven't tested this yet so it's off now - Cort */
 	/* turn on dpm for 603 */
 	cmpi	0,r9,3
 	bne	10f
 	oris	r11,r11,HID0_DPM@h
-10:	
+10:
 	sync
 	mtspr	HID0,r8			/* enable and invalidate caches */
-	sync
 	mtspr	HID0,r11		/* enable caches */
 	sync
 	isync
@@ -954,6 +942,30 @@ start_here:
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */
 
+
+	.globl reset_SDR1
+reset_SDR1:
+	lis	r6,_SDR1@ha
+	lwz	r6,_SDR1@l(r6)
+	mfmsr	r3
+	li	r4,MSR_IR|MSR_DR
+	andc	r3,r3,r4
+	lis	r4,2f@h
+	addis	r4,r4,-KERNELBASE@h
+	ori	r4,r4,2f@l
+	mtspr	SRR0,r4
+	mtspr	SRR1,r3
+	rfi
+2:	/* load new SDR1 */
+	tlbia			
+	mtspr	SDR1,r6
+	/* turn the mmu back on */
+	li	r4,MSR_KERNEL
+	mflr	r3
+	mtspr	SRR0,r3
+	mtspr	SRR1,r4
+	rfi
+	
 /*
  * FP unavailable trap from kernel - print a message, but let
  * the task use FP in the kernel until it returns to user mode.

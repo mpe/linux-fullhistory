@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.21 1997/07/17 02:21:48 davem Exp $
+/* $Id: leo.c,v 1.25 1997/08/22 17:33:58 jj Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -9,12 +9,12 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
+#include <linux/delay.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>
 #include <asm/fbio.h>
 #include <asm/pgtable.h>
-#include <asm/delay.h>
 #include <asm/uaccess.h>
 
 /* These must be included after asm/fbio.h */
@@ -129,6 +129,7 @@ static void leo_blitc(unsigned short, int, int);
 static void leo_setw(int, int, unsigned short, int);
 static void leo_cpyw(int, int, unsigned short *, int);
 static void leo_fill(int, int, int *);
+static void leo_penguin(int,int,int);
 
 static void
 leo_restore_palette (fbinfo_t *fb)
@@ -496,8 +497,8 @@ leo_ioctl (struct inode *inode, struct file *file, unsigned cmd, unsigned long a
 static void
 leo_reset (fbinfo_t *fb)
 {
-	if (fb->setcursor)
-		sun_hw_hide_cursor ();
+	if (fb == &fbinfo[0])
+		sbus_hw_hide_cursor ();
 }
 
 
@@ -537,6 +538,7 @@ __initfunc(void leo_setup (fbinfo_t *fb, int slot, u32 leo, int leo_io))
 	fb->setw = leo_setw;
 	fb->cpyw = leo_cpyw;
 	fb->fill = leo_fill;
+	fb->draw_penguin = leo_penguin;
 	fb->base_depth = 0;
 	
 	leoinfo = (struct leo_info *) &fb->info.leo;
@@ -691,4 +693,10 @@ static void leo_fill(int attrib, int count, int *boxes)
 		i = us->attrs;
 		us->fill = (boxes[0] & 0x7ff) | ((boxes[1] & 0x7ff) << 11) | ((i & 3) << 29) | ((i & 8) ? 0x80000000 : 0);
 	}
+}
+
+__initfunc(void leo_penguin(int x_margin, int y_margin, int ncpus))
+{
+	suncons_ops.clear_screen();
+	/* FIXME: Write this */
 }

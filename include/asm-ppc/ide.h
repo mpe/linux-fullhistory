@@ -21,10 +21,12 @@
 
 #define ide_sti()	sti()
 
-#ifdef CONFIG_PREP
-
 typedef unsigned short ide_ioreg_t;
+void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void prep_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
 
+#if defined(CONFIG_PREP) || defined(CONFIG_CHRP)
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
 	switch (base) {
@@ -47,18 +49,6 @@ static __inline__ ide_ioreg_t ide_default_io_base(int index)
 		default:
 			return 0;
 	}
-}
-
-static __inline__ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
-{
-	ide_ioreg_t port = base;
-	int i = 8;
-
-	while (i--)
-		*p++ = port++;
-	*p++ = base + 0x206;
-	if (irq != NULL)
-		*irq = 0;
 }
 
 typedef union {
@@ -89,7 +79,8 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 
 #define ide_fix_driveid(id)		do {} while (0)
 
-#endif
+#endif /* CONFIG_CHRP || CONFIG_PREP */
+
 
 #ifdef CONFIG_PMAC
 
@@ -107,7 +98,6 @@ extern __inline__ ide_ioreg_t ide_default_io_base(int index)
 	return index;
 }
 
-void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */

@@ -2,6 +2,7 @@
 #define __ASM_PPC_PROCESSOR_H
 
 #include <asm/ptrace.h>
+#include <asm/residual.h>
 
 /* Bit encodings for Machine State Register (MSR) */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
@@ -51,11 +52,29 @@
 #define FPSCR_FX        (1<<31)
 #define FPSCR_FEX       (1<<30)
 
+#define _MACH_Motorola 1 /* motorola prep */
+#define _MACH_IBM      2 /* ibm prep */
+#define _MACH_Pmac     4 /* pmac or pmac clone (non-chrp) */
+#define _MACH_chrp     8 /* chrp machine */
 
 #ifndef __ASSEMBLY__
+extern int _machine;
+
+/* if we're a prep machine */
+#define is_prep (_machine & (_MACH_Motorola|_MACH_IBM))
 /*
- * PowerPC machine specifics
+ * if we have openfirmware - pmac/chrp have it implicitly
+ * but we have to check residual data to know on prep
  */
+extern __inline__ int have_of(void)
+{
+	if ( (_machine & (_MACH_Pmac|_MACH_chrp)) /*||
+	     ( is_prep && (res.VitalProductData.FirmwareSupplier & OpenFirmware))*/)
+		return 1; 
+	else 
+		return 0;
+}
+
 struct task_struct;
 void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp);
 void release_thread(struct task_struct *);
@@ -69,14 +88,10 @@ void release_thread(struct task_struct *);
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
- * Write Protection works right in supervisor mode on the PowerPC
- */
-#define wp_works_ok 1
-#define wp_works_ok__is_a_macro /* for versions in ksyms.c */
-
-/*
- * User space process size: 2GB. This is hardcoded into a few places,
- * so don't change it unless you know what you are doing.
+ * this is the minimum allowable io space due to the location
+ * of the io areas on prep (first one at 0x80000000) but
+ * as soon as I get around to remapping the io areas with the BATs
+ * to match the mac we can raise this. -- Cort
  */
 #define TASK_SIZE	(0x80000000UL)
 
@@ -129,17 +144,17 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 int ll_printk(const char *, ...);
 void ll_puts(const char *);
 
-extern int _machine;
-#endif /* ndef ASSEMBLY*/
-
-#define _MACH_Motorola 1 /* motorola prep */
-#define _MACH_IBM      2 /* ibm prep */
-#define _MACH_Pmac     4 /* pmac or pmac clone */
-#define _MACH_chrp     8 /* chrp machine */
-
-#define is_prep ((_machine == _MACH_Motorola)||(_machine == _MACH_IBM))
-
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
+
+#endif /* ndef ASSEMBLY*/
+
   
 #endif /* __ASM_PPC_PROCESSOR_H */
+
+
+
+
+
+
+

@@ -344,7 +344,7 @@ void ip_queue_xmit(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
 	struct rtable *rt = (struct rtable*)skb->dst;
-	struct device *dev = rt->u.dst.dev;
+	struct device *dev;
 	unsigned int tot_len;
 	struct iphdr *iph = skb->nh.iph;
 
@@ -357,6 +357,11 @@ void ip_queue_xmit(struct sk_buff *skb)
 
 	iph->tot_len = htons(tot_len);
 	iph->id = htons(ip_id_count++);
+
+	if (rt->u.dst.obsolete)
+		goto check_route;
+after_check_route:
+	dev = rt->u.dst.dev;
 
 	if (call_out_firewall(PF_INET, dev, iph, NULL,&skb) < FW_ACCEPT) {
 		kfree_skb(skb, FREE_WRITE);
@@ -419,18 +424,38 @@ void ip_queue_xmit(struct sk_buff *skb)
 	skb->dst->output(skb);
 	return;
 
+check_route:
+	/* Ugly... ugly... but what can I do?
+
+	   Essentially it is "ip_reroute_output" function. --ANK
+	 */
+	{
+		struct rtable *nrt;
+		if (ip_route_output(&nrt, rt->key.dst, rt->key.src,
+				    rt->key.tos, NULL)) {
+			kfree_skb(skb, 0);
+			return;
+		}
+		skb->dst = &nrt->u.dst;
+		ip_rt_put(rt);
+		rt = nrt;
+	}
+	goto after_check_route;
+	
 fragment:
 	if ((iph->frag_off & htons(IP_DF)))
 	{
 		printk(KERN_DEBUG "sending pkt_too_big to self\n");
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
-			  htonl(dev->mtu));
+			  htonl(rt->u.dst.pmtu));
 			  
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
 	
 	ip_fragment(skb, 1, skb->dst->output);
+
+
 }
 
 
@@ -446,7 +471,8 @@ fragment:
  *	field in the last fragment it sends... actually it also helps
  * 	the reassemblers, they can put most packets in at the head of
  *	the fragment queue, and they know the total size in advance. This
- *	last feature will measurable improve the Linux fragment handler.
+ *	last feature will measurably improve the Linux fragment handler one
+ *	day.
  *
  *	The callback has five args, an arbitrary pointer (copy of frag),
  *	the source IP address (may depend on the routing table), the 

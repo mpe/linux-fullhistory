@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.43 1997/07/17 02:20:45 davem Exp $
+/* $Id: sys_sparc32.c,v 1.55 1997/09/04 01:54:51 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -44,6 +44,7 @@
 #include <asm/ipc.h>
 #include <asm/uaccess.h>
 #include <asm/fpumacro.h>
+#include <asm/semaphore.h>
 
 /* As gcc will warn about casting u32 to some ptr, we have to cast it to
  * unsigned long first, and that's what is A() for.
@@ -53,6 +54,33 @@
  */
 #define A(x) ((unsigned long)x)
  
+extern char * getname_quicklist;
+extern int getname_quickcount;
+extern struct semaphore getname_quicklock;
+extern int kerneld_msqid;
+
+/* Tuning: increase locality by reusing same pages again...
+ * if getname_quicklist becomes too long on low memory machines, either a limit
+ * should be added or after a number of cycles some pages should
+ * be released again ...
+ */
+static inline char * get_page(void)
+{
+	char * res;
+	down(&getname_quicklock);
+	res = getname_quicklist;
+	if (res) {
+		getname_quicklist = *(char**)res;
+		getname_quickcount--;
+	}
+	else
+		res = (char*)__get_free_page(GFP_KERNEL);
+	up(&getname_quicklock);
+	return res;
+}
+
+#define putname32 putname
+
 /* In order to reduce some races, while at the same time doing additional
  * checking and hopefully speeding things up, we copy filenames to the
  * kernel data space before using them..
@@ -74,44 +102,67 @@ static inline int do_getname32(u32 filename, char *page)
 	return retval;
 }
 
-/* This is a single page for faster getname.
- *   If the page is available when entering getname, use it.
- *   If the page is not available, call __get_free_page instead.
- * This works even though do_getname can block (think about it).
- * -- Michael Chastain, based on idea of Linus Torvalds, 1 Dec 1996.
- * We don't use the common getname/putname from namei.c, so that
- * this still works well, as every routine which calls getname32
- * will then call getname, then putname and then putname32.
- */
-static unsigned long name_page_cache32 = 0;
-
-void putname32(char * name)
+char * getname32(u32 filename)
 {
-	unsigned long page;
+	char *tmp, *result;
 
-	page = xchg(&name_page_cache32, ((unsigned long)name));
-	if(page)
-		free_page(page);
+	result = ERR_PTR(-ENOMEM);
+	tmp = get_page();
+	if (tmp)  {
+		int retval = do_getname32(filename, tmp);
+
+		result = tmp;
+		if (retval < 0) {
+			putname32(tmp);
+			result = ERR_PTR(retval);
+		}
+	}
+	return result;
 }
 
-int getname32(u32 filename, char **result)
+/* 32-bit timeval and related flotsam.  */
+
+struct timeval32
 {
-	unsigned long page;
-	int retval;
+    int tv_sec, tv_usec;
+};
 
-	page = xchg(&name_page_cache32, NULL);
-	if (!page) {
-		page = __get_free_page(GFP_KERNEL);
-		if (!page)
-			return -ENOMEM;
-	}
+struct itimerval32
+{
+    struct timeval32 it_interval;
+    struct timeval32 it_value;
+};
 
-	retval = do_getname32(filename, (char *) page);
-	if (retval < 0)
-		putname32( (char *) page );
-	else
-		*result = (char *) page;
-	return retval;
+static inline long get_tv32(struct timeval *o, struct timeval32 *i)
+{
+	return (!access_ok(VERIFY_READ, tv32, sizeof(*tv32)) ||
+		(__get_user(o->tv_sec, &i->tv_sec) |
+		 __get_user(o->tv_usec, &i->tv_usec)));
+}
+
+static inline long put_tv32(struct timeval32 *o, struct timeval *i)
+{
+	return (!access_ok(VERIFY_WRITE, o, sizeof(*o)) ||
+		(__put_user(i->tv_sec, &o->tv_sec) |
+		 __put_user(i->tv_usec, &o->tv_usec)));
+}
+
+static inline long get_it32(struct itimerval *o, struct itimerval32 *i)
+{
+	return (!access_ok(VERIFY_READ, i32, sizeof(*i32)) ||
+		(__get_user(o->it_interval.tv_sec, &i->it_interval.tv_sec) |
+		 __get_user(o->it_interval.tv_usec, &i->it_interval.tv_usec) |
+		 __get_user(o->it_value.tv_sec, &i->it_value.tv_sec) |
+		 __get_user(o->it_value.tv_usec, &i->it_value.tv_usec)));
+}
+
+static inline long put_it32(struct itimerval32 *o, struct itimerval *i)
+{
+	return (!access_ok(VERIFY_WRITE, i32, sizeof(*i32)) ||
+		(__put_user(i->it_interval.tv_sec, &o->it_interval.tv_sec) |
+		 __put_user(i->it_interval.tv_usec, &o->it_interval.tv_usec) |
+		 __put_user(i->it_value.tv_sec, &o->it_value.tv_sec) |
+		 __put_user(i->it_value.tv_usec, &o->it_value.tv_usec)));
 }
 
 extern asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
@@ -266,14 +317,25 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 		switch (call) {
 		case MSGSND:
 			{
-				struct msgbuf *p = kmalloc (second + sizeof (struct msgbuf), GFP_KERNEL);
+				struct msgbuf *p = kmalloc (second + sizeof (struct msgbuf) + 4, GFP_KERNEL);
 				
 				if (!p) err = -ENOMEM;
 				else {
-					if (get_user(p->mtype, &(((struct msgbuf32 *)A(ptr))->mtype)) ||
-					    __copy_from_user(p->mtext, &(((struct msgbuf32 *)A(ptr))->mtext), second))
-						err = -EFAULT;
-					else {
+					err = 0;
+					if (first == kerneld_msqid) {
+						*(int *)p->mtext = 0;
+						if (get_user(p->mtype, &(((struct msgbuf32 *)A(ptr))->mtype)) ||
+						    __copy_from_user(&p->mtext[4], &(((struct msgbuf32 *)A(ptr))->mtext[0]), 4) ||
+						    __copy_from_user(&p->mtext[8], &(((struct msgbuf32 *)A(ptr))->mtext[4]), second-4))
+							err = -EFAULT;
+						else
+							second += 4;
+					} else {
+						if (get_user(p->mtype, &(((struct msgbuf32 *)A(ptr))->mtype)) ||
+						    __copy_from_user(p->mtext, &(((struct msgbuf32 *)A(ptr))->mtext), second))
+							err = -EFAULT;
+					}
+					if (!err) {
 						unsigned long old_fs = get_fs();
 						set_fs (KERNEL_DS);
 						err = sys_msgsnd (first, p, second, third);
@@ -287,6 +349,7 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 			{
 				struct msgbuf *p;
 				unsigned long old_fs;
+				long msgtyp = fifth;
 				
 				if (!version) {
 					struct ipc_kludge tmp;
@@ -297,20 +360,35 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 					if(copy_from_user(&tmp,(struct ipc_kludge *)A(ptr), sizeof (tmp)))
 						goto out;
 					ptr = tmp.msgp;
-					fifth = tmp.msgtyp;
+					msgtyp = tmp.msgtyp;
 				}
-				p = kmalloc (second + sizeof (struct msgbuf), GFP_KERNEL);
+
+				p = kmalloc (second + sizeof (struct msgbuf) + 4, GFP_KERNEL);
 				if (!p) {
 					err = -EFAULT;
 					goto out;
 				}
+
 				old_fs = get_fs();
 				set_fs (KERNEL_DS);
-				err = sys_msgrcv (first, p, second, fifth, third);
+				err = sys_msgrcv (first, p, second + 4, msgtyp, third);
 				set_fs (old_fs);
-				if (put_user (p->mtype, &(((struct msgbuf32 *)A(ptr))->mtype)) ||
-				    __copy_to_user(&(((struct msgbuf32 *)A(ptr))->mtext), p->mtext, second))
-					err = -EFAULT;
+
+				if (err < 0)
+					goto out;
+
+				if (first == kerneld_msqid) {
+					if (put_user (p->mtype, &(((struct msgbuf32 *)A(ptr))->mtype)) ||
+					    __copy_to_user(&(((struct msgbuf32 *)A(ptr))->mtext[0]), &p->mtext[4], 4) ||
+					    __copy_to_user(&(((struct msgbuf32 *)A(ptr))->mtext[4]), &p->mtext[8], err-8))
+						err = -EFAULT;
+					else
+						err -= 4;
+				} else {
+					if (put_user (p->mtype, &(((struct msgbuf32 *)A(ptr))->mtype)) ||
+					    __copy_to_user(&(((struct msgbuf32 *)A(ptr))->mtext), p->mtext, err))
+						err = -EFAULT;
+				}
 				kfree (p);
 				goto out;
 			}
@@ -472,8 +550,9 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 			err = -EINVAL;
 			goto out;
 		}
-	else
-		err = -EINVAL;
+
+	err = -EINVAL;
+
 out:
 	unlock_kernel();
 	return err;
@@ -565,8 +644,9 @@ asmlinkage int sys32_quotactl(int cmd, u32 special, int id, u32 addr)
 		return sys_quotactl(cmd, (const char *)A(special),
 				    id, (caddr_t)A(addr));
 	}
-	err = getname32 (special, &spec);
-	if (err) return err;
+	spec = getname32 (special);
+	err = PTR_ERR(spec);
+	if (IS_ERR(spec)) return err;
 	old_fs = get_fs ();
 	set_fs (KERNEL_DS);
 	err = sys_quotactl(cmd, (const char *)spec, id, (caddr_t)A(addr));
@@ -608,8 +688,9 @@ asmlinkage int sys32_statfs(u32 path, u32 buf)
 	unsigned long old_fs = get_fs();
 	char *pth;
 	
-	ret = getname32 (path, &pth);
-	if (!ret) {
+	pth = getname32 (path);
+	ret = PTR_ERR(pth);
+	if (!IS_ERR(pth)) {
 		set_fs (KERNEL_DS);
 		ret = sys_statfs((const char *)pth, &s);
 		set_fs (old_fs);
@@ -651,8 +732,9 @@ asmlinkage int sys32_utime(u32 filename, u32 times)
 	if (get_user (t.actime, &(((struct utimbuf32 *)A(times))->actime)) ||
 	    __get_user (t.modtime, &(((struct utimbuf32 *)A(times))->modtime)))
 		return -EFAULT;
-	ret = getname32 (filename, &filenam);
-	if (!ret) {
+	filenam = getname32 (filename);
+	ret = PTR_ERR(filenam);
+	if (!IS_ERR(filenam)) {
 		old_fs = get_fs();
 		set_fs (KERNEL_DS); 
 		ret = sys_utime(filenam, &t);
@@ -1019,7 +1101,13 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 
 	ret = -EFAULT;
 
-	nn = (n + (8 * sizeof(unsigned long)) - 1) / (8 * sizeof (unsigned long));
+	nn = (n + (8 * sizeof(long)) - 1) / (8 * sizeof(long));
+	if (inp && verify_area(VERIFY_WRITE, Inp, nn*sizeof(long)))
+		goto out;
+	if (outp && verify_area(VERIFY_WRITE, Outp, nn*sizeof(long)))
+		goto out;
+	if (exp && verify_area(VERIFY_WRITE, Exp, nn*sizeof(long)))
+		goto out;
 	for (i = 0; i < nn; i++, Inp += 2, Outp += 2, Exp += 2, q += 2) {
 		if(inp && (__get_user (q[1], Inp) || __get_user (q[0], Inp+1)))
 			goto out;
@@ -1033,7 +1121,7 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 
 	ktvp = NULL;
 	if(tvp) {
-		if(copy_from_user(&kern_tv, (struct timeval *)A(tvp), sizeof(*ktvp)))
+		if (get_tv32(&kern_tv, (struct timeval32 *)A(tvp)))
 			goto out;
 		ktvp = &kern_tv;
 	}
@@ -1048,8 +1136,12 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 			 ktvp);
 	set_fs (old_fs);
 
-	if(tvp && !(current->personality & STICKY_TIMEOUTS))
-		copy_to_user((struct timeval *)A(tvp), &kern_tv, sizeof(*ktvp));
+	if(tvp && !(current->personality & STICKY_TIMEOUTS)) {
+		if (put_tv32((struct timeval32 *)A(tvp), &kern_tv)) {
+			ret = -EFAULT;
+			goto out;
+		}
+	}
 
 	q = (u32 *)p;
 	Inp = (u32 *)A(inp);
@@ -1112,8 +1204,9 @@ asmlinkage int sys32_newstat(u32 filename, u32 statbuf)
 	char *filenam;
 	unsigned long old_fs = get_fs();
 	
-	ret = getname32 (filename, &filenam);
-	if (!ret) {
+	filenam = getname32 (filename);
+	ret = PTR_ERR(filenam);
+	if (!IS_ERR(filenam)) {
 		set_fs (KERNEL_DS);
 		ret = sys_newstat(filenam, &s);
 		set_fs (old_fs);
@@ -1133,8 +1226,9 @@ asmlinkage int sys32_newlstat(u32 filename, u32 statbuf)
 	char *filenam;
 	unsigned long old_fs = get_fs();
 	
-	ret = getname32 (filename, &filenam);
-	if (!ret) {
+	filenam = getname32 (filename);
+	ret = PTR_ERR(filenam);
+	if (!IS_ERR(filenam)) {
 		set_fs (KERNEL_DS);
 		ret = sys_newlstat(filenam, &s);
 		set_fs (old_fs);
@@ -1240,12 +1334,12 @@ static void *do_smb_super_data_conv(void *raw_data)
 	struct smb_mount_data *s = (struct smb_mount_data *)raw_data;
 	struct smb_mount_data32 *s32 = (struct smb_mount_data32 *)raw_data;
 
-	s->dir_mode = s32->dir_mode;
-	s->file_mode = s32->file_mode;
-	s->gid = s32->gid;
-	s->uid = s32->uid;
-	memmove (&s->addr, &s32->addr, (((long)&s->uid) - ((long)&s->addr)));
+	s->version = s32->version;
 	s->mounted_uid = s32->mounted_uid;
+	s->uid = s32->uid;
+	s->gid = s32->gid;
+	s->file_mode = s32->file_mode;
+	s->dir_mode = s32->dir_mode;
 	return raw_data;
 }
 
@@ -1345,8 +1439,8 @@ asmlinkage int sys32_mount(u32 dev_name, u32 dir_name, u32 type, u32 new_flags, 
 }
 
 struct rusage32 {
-        struct timeval ru_utime;
-        struct timeval ru_stime;
+        struct timeval32 ru_utime;
+        struct timeval32 ru_stime;
         s32    ru_maxrss;
         s32    ru_ixrss;
         s32    ru_idrss;
@@ -1704,7 +1798,7 @@ struct timex32 {
 	s32 constant;
 	s32 precision;
 	s32 tolerance;
-	struct timeval time;
+	struct timeval32 time;
 	s32 tick;
 	s32 ppsfreq;
 	s32 jitter;
@@ -2302,6 +2396,7 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
 	if(!error) {
 		fprs_write(0);
 		regs->fprs = 0;
+		regs->tstate &= ~TSTATE_PEF;
 	}
 out:
 	unlock_kernel();
@@ -2361,8 +2456,12 @@ asmlinkage int sys32_query_module(u32 name_user, int which, u32 buf, __kernel_si
 	case QM_MODULES:
 	case QM_REFS:
 	case QM_DEPS:
-		if (name_user && (ret = getname32 (name_user, &usernam)))
-			return ret;
+		if (name_user) {
+			usernam = getname32 (name_user);
+			ret = PTR_ERR(usernam);
+			if (IS_ERR(usernam))
+				return ret;
+		}
 		buff = kmalloc (bufsiz, GFP_KERNEL);
 		if (!buff) {
 			if (name_user) putname32 (usernam);
@@ -2423,8 +2522,12 @@ qmsym_toshort:
 		if (name_user) putname32 (usernam);
 		return ret;
 	case QM_INFO:
-		if (name_user && (ret = getname32 (name_user, &usernam)))
-			return ret;
+		if (name_user) {
+			usernam = getname32 (name_user);
+			ret = PTR_ERR(usernam);
+			if (IS_ERR(usernam))
+				return ret;
+		}
 		set_fs (KERNEL_DS);
 		ret = sys_query_module (usernam, which, (char *)&mi, sizeof (mi), &val);
 		set_fs (old_fs);
@@ -2782,4 +2885,107 @@ done:
 	if(kres)
 		kfree(kres);
 	return err;
+}
+
+/* Translations due to time_t size differences.  Which affects all
+   sorts of things, like timeval and itimerval.  */
+
+extern struct timezone sys_tz;
+extern int do_sys_settimeofday(struct timeval *tv, struct timezone *tz);
+
+asmlinkage int sys32_gettimeofday(u32 tv, u32 tz)
+{
+	if (tv) {
+		struct timeval ktv;
+		do_gettimeofday(&ktv);
+		if (put_tv32((struct timeval32 *)A(tv), &ktv))
+			return -EFAULT;
+	}
+	if (tz) {
+		if (copy_to_user((void*)A(tz), &sys_tz, sizeof(sys_tz)))
+			return -EFAULT;
+	}
+	return 0;
+}
+
+asmlinkage int sys32_settimeofday(u32 tv, u32 tz)
+{
+	struct timeval ktv;
+	struct timezone ktz;
+
+ 	if (tv) {
+		if (get_tv32(&ktv, (struct timeval32 *)A(tv)))
+			return -EFAULT;
+	}
+	if (tz) {
+		if (copy_from_user(&ktz, (void*)A(tz), sizeof(ktz)))
+			return -EFAULT;
+	}
+
+	return do_sys_settimeofday(tv ? &ktv : NULL, tz ? &ktz : NULL);
+}
+
+extern int do_getitimer(int which, struct itimerval *value);
+
+asmlinkage int sys32_getitimer(int which, u32 it)
+{
+	struct itimerval kit;
+	int error;
+
+	error = do_getitimer(which, &kit);
+	if (!error && put_it32((struct itimerval32 *)A(it), &kit))
+		error = -EFAULT;
+
+	return error;
+}
+
+extern int do_setitimer(int which, struct itimerval *, struct itimerval *);
+
+asmlinkage int sys32_setitimer(int which, u32 in, u32 out)
+{
+	struct itimerval kin, kout;
+	int error;
+
+	if (in) {
+		if (get_it32(&kin, (struct itimerval32 *)A(in)))
+			return -EFAULT;
+	} else
+		memset(&kin, 0, sizeof(kin));
+
+	error = do_setitimer(which, &kin, out ? &kout : NULL);
+	if (error || !out)
+		return error;
+	if (put_it32((struct itimerval32 *)A(out), &kout))
+		return -EFAULT;
+
+	return 0;
+
+}
+
+asmlinkage int sys_utimes(char *, struct timeval *);
+
+asmlinkage int sys32_utimes(u32 filename, u32 tvs)
+{
+	char *kfilename;
+	struct timeval ktvs[2];
+	unsigned long old_fs;
+	int ret;
+
+	kfilename = getname32(filename);
+	ret = PTR_ERR(kfilename);
+	if (!IS_ERR(kfilename)) {
+		if (tvs) {
+			if (get_tv32(&ktvs[0], (struct timeval32 *)A(tvs)) ||
+			    get_tv32(&ktvs[1], 1+(struct timeval32 *)A(tvs)))
+				return -EFAULT;
+		}
+
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		ret = sys_utimes(kfilename, &ktvs[0]);
+		set_fs(old_fs);
+
+		putname32(kfilename);
+	}
+	return ret;
 }

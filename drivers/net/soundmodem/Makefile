@@ -42,6 +42,9 @@ endif
 
 M_OBJS		:= $(O_TARGET)
 
+all:		all_targets
+.PHONY:		all
+
 gentbl:		gentbl.c
 		$(HOSTCC) -Wall $< -o $@ -lm
 

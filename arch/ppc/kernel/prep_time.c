@@ -18,7 +18,6 @@
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 #include <linux/kernel_stat.h>
-#include <linux/mc146818rtc.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -26,9 +25,6 @@
 #include <asm/nvram.h>
 
 #include "time.h"
-
-inline unsigned long mktime(unsigned int, unsigned int,unsigned int,
-				   unsigned int, unsigned int, unsigned int);
 
 /*
  * The motorola uses the m48t18 rtc (includes DS1643) whose registers
@@ -88,108 +84,6 @@ void prep_cmos_clock_write(unsigned long val, int addr)
 		return;
 	}
 	printk("Unknown machine in prep_cmos_clock_write()!\n");
-}
-
-#define TICK_SIZE tick
-#define FEBRUARY	2
-#define	STARTOFTIME	1970
-#define SECDAY		86400L
-#define SECYR		(SECDAY * 365)
-#define	leapyear(year)		((year) % 4 == 0)
-#define	days_in_year(a) 	(leapyear(a) ? 366 : 365)
-#define	days_in_month(a) 	(month_days[(a) - 1])
-
-static int      month_days[12] = {
-	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
-};
-
-#if 0
-static unsigned long do_slow_gettimeoffset(void)
-{
-	int count;
-	unsigned long offset = 0;
-
-	/* timer count may underflow right here */
-	outb_p(0x00, 0x43);	/* latch the count ASAP */
-	count = inb_p(0x40);	/* read the latched count */
-	count |= inb(0x40) << 8;
-	/* we know probability of underflow is always MUCH less than 1% */
-	if (count > (LATCH - LATCH/100)) {
-		/* check for pending timer interrupt */
-		outb_p(0x0a, 0x20);
-		if (inb(0x20) & 1)
-			offset = TICK_SIZE;
-	}
-	count = ((LATCH-1) - count) * TICK_SIZE;
-	count = (count + LATCH/2) / LATCH;
-	return offset + count;
-}
-static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
-
-/*
- * This version of gettimeofday has near microsecond resolution.
- */
-void do_gettimeofday(struct timeval *tv)
-{
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	*tv = xtime;
-	tv->tv_usec += do_gettimeoffset();
-	if (tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
-	}
-	restore_flags(flags);
-}
-
-void do_settimeofday(struct timeval *tv)
-{
-	cli();
-	tv->tv_usec -= do_gettimeoffset();
-  
-	if (tv->tv_usec < 0) {
-		tv->tv_usec += 1000000;
-		tv->tv_sec--;
-	}
-  
-	xtime = *tv;
-	time_state = TIME_ERROR;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
-	sti();
-}
-
-#endif
-
-void to_tm(int tim, struct rtc_time * tm)
-{
-	register int    i;
-	register long   hms, day;
-
-	day = tim / SECDAY;
-	hms = tim % SECDAY;
-
-	/* Hours, minutes, seconds are easy */
-	tm->tm_hour = hms / 3600;
-	tm->tm_min = (hms % 3600) / 60;
-	tm->tm_sec = (hms % 3600) % 60;
-
-	/* Number of years in days */
-	for (i = STARTOFTIME; day >= days_in_year(i); i++)
-		day -= days_in_year(i);
-	tm->tm_year = i;
-
-	/* Number of months in days left */
-	if (leapyear(tm->tm_year))
-		days_in_month(FEBRUARY) = 29;
-	for (i = 1; day >= days_in_month(i); i++)
-		day -= days_in_month(i);
-	days_in_month(FEBRUARY) = 28;
-	tm->tm_mon = i;
-
-	/* Days are what is left over (+1) from all that. */
-	tm->tm_mday = day + 1;
 }
 
 /*
@@ -278,38 +172,6 @@ unsigned long prep_get_rtc_time(void)
 	if ((year += 1900) < 1970)
 		year += 100;
 	return mktime(year, mon, day, hour, min, sec);
-}
-
-/* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
- * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
- * => year=1980, mon=12, day=31, hour=23, min=59, sec=59.
- *
- * [For the Julian calendar (which was used in Russia before 1917,
- * Britain & colonies before 1752, anywhere else before 1582,
- * and is still in use by some communities) leave out the
- * -year/100+year/400 terms, and add 10.]
- *
- * This algorithm was first published by Gauss (I think).
- *
- * WARNING: this function will overflow on 2106-02-07 06:28:16 on
- * machines were long is 32-bit! (However, as time_t is signed, we
- * will already get problems at other places on 2038-01-19 03:14:08)
- */
-inline unsigned long mktime(unsigned int year, unsigned int mon,
-				   unsigned int day, unsigned int hour,
-				   unsigned int min, unsigned int sec)
-{
-	
-	if (0 >= (int) (mon -= 2)) {	/* 1..12 -> 11,12,1..10 */
-		mon += 12;	/* Puts Feb last since it has leap day */
-		year -= 1;
-	}
-	return (((
-		(unsigned long)(year/4 - year/100 + year/400 + 367*mon/12 + day) +
-		year*365 - 719499
-		)*24 + hour /* now have hours */
-		)*60 + min /* now have minutes */
-		)*60 + sec; /* finally seconds */
 }
 
 #if 0

@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.28 1997/08/05 19:19:40 davem Exp $
+/*  $Id: signal32.c,v 1.30 1997/08/29 15:51:33 jj Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -117,9 +117,17 @@ asmlinkage void _sigpause32_common(unsigned int set, struct pt_regs *regs)
 static inline void restore_fpu_state32(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	unsigned long *fpregs = (unsigned long *)(regs + 1);
-	copy_from_user(fpregs, &fpu->si_float_regs[0], (sizeof(unsigned int) * 64));
+	unsigned long fprs;
+	
+	__get_user(fprs, &fpu->si_fprs);
+	if (fprs & FPRS_DL)
+		copy_from_user(fpregs, &fpu->si_float_regs[0], (sizeof(unsigned int) * 32));
+	if (fprs & FPRS_DU)
+		copy_from_user(fpregs+16, &fpu->si_float_regs[32], (sizeof(unsigned int) * 32));
 	__get_user(fpregs[32], &fpu->si_fsr);
 	__get_user(fpregs[33], &fpu->si_gsr);
+	regs->fprs = fprs;
+	regs->tstate |= TSTATE_PEF;
 }
 
 void do_new_sigreturn32(struct pt_regs *regs)
@@ -169,8 +177,10 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	regs->tstate &= ~(TSTATE_ICC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 
+#if 0
 	if (psr & PSR_EF)
-		regs->fprs = FPRS_FEF;
+		regs->tstate |= TSTATE_PEF;
+#endif		
 
 	__get_user(fpu_save, &sf->fpu_save);
 	if (fpu_save)
@@ -273,7 +283,7 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	__put_user(pc, &sc->sigc_pc);
 	__put_user(npc, &sc->sigc_npc);
 	psr = tstate_to_psr (regs->tstate);
-	if(current->flags & PF_USEDFPU)
+	if(current->tss.flags & SPARC_FLAG_USEDFPU)
 		psr |= PSR_EF;
 	__put_user(psr, &sc->sigc_psr);
 	__put_user(regs->u_regs[UREG_G1], &sc->sigc_g1);
@@ -318,10 +328,22 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 static inline void save_fpu_state32(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	unsigned long *fpregs = (unsigned long *)(regs+1);
-	copy_to_user(&fpu->si_float_regs[0], fpregs, (sizeof(unsigned int) * 64));
+	unsigned long fprs;
+	
+	fprs = (regs->fprs & FPRS_FEF) |
+		(current->tss.flags & (SPARC_FLAG_USEDFPUL | SPARC_FLAG_USEDFPUU));
+	if (fprs & FPRS_DL)
+		copy_to_user(&fpu->si_float_regs[0], fpregs, (sizeof(unsigned int) * 32));
+	else
+		clear_user(&fpu->si_float_regs[0], (sizeof(unsigned int) * 32));
+	if (fprs & FPRS_DU)
+		copy_to_user(&fpu->si_float_regs[32], fpregs+16, (sizeof(unsigned int) * 32));
+	else
+		clear_user(&fpu->si_float_regs[32], (sizeof(unsigned int) * 32));
 	__put_user(fpregs[32], &fpu->si_fsr);
 	__put_user(fpregs[33], &fpu->si_gsr);
-	regs->fprs = 0;
+	__put_user(fprs, &fpu->si_fprs);
+	regs->tstate &= ~TSTATE_PEF;
 }
 
 static inline void new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
@@ -335,7 +357,7 @@ static inline void new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
 	sigframe_size = NF_ALIGNEDSZ;
-	if (!(current->flags & PF_USEDFPU))
+	if (!(current->tss.flags & SPARC_FLAG_USEDFPU))
 		sigframe_size -= sizeof(__siginfo_fpu_t);
 
 	regs->u_regs[UREG_FP] &= 0x00000000ffffffffUL;
@@ -362,7 +384,7 @@ static inline void new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 	__put_user(regs->tnpc, &sf->info.si_regs.npc);
 	__put_user(regs->y, &sf->info.si_regs.y);
 	psr = tstate_to_psr (regs->tstate);
-	if(current->flags & PF_USEDFPU)
+	if(current->tss.flags & SPARC_FLAG_USEDFPU)
 		psr |= PSR_EF;
 	__put_user(psr, &sf->info.si_regs.psr);
 	for (i = 0; i < 16; i++)
@@ -469,7 +491,7 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	__put_user(regs->tpc, &((*gr) [SVR4_PC]));
 	__put_user(regs->tnpc, &((*gr) [SVR4_NPC]));
 	psr = tstate_to_psr (regs->tstate);
-	if(current->flags & PF_USEDFPU)
+	if(current->tss.flags & SPARC_FLAG_USEDFPU)
 		psr |= PSR_EF;
 	__put_user(psr, &((*gr) [SVR4_PSR]));
 	__put_user(regs->y, &((*gr) [SVR4_Y]));
@@ -488,7 +510,7 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	/* Save the currently window file: */
 
 	/* 1. Link sfp->uc->gwins to our windows */
-	__put_user(gw, &mc->gwin);
+	__put_user((u32)(long)gw, &mc->gwin);
 	    
 	/* 2. Number of windows to restore at setcontext (): */
 	__put_user(current->tss.w_saved, &gw->count);
@@ -506,9 +528,9 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	 */
 #if 0	 
 	for(window = 0; window < current->tss.w_saved; window++) {
-		__put_user((int *) &(gw->win [window]), &gw->winptr [window]);
+		__put_user((int *) &(gw->win [window]), (int **)gw->winptr +window );
 		copy_to_user(&gw->win [window], &current->tss.reg_window [window], sizeof (svr4_rwindow_t));
-		__put_user(0, gw->winptr [window]);
+		__put_user(0, (int *)gw->winptr + window);
 	}
 #endif	
 
@@ -546,7 +568,7 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 }
 
 asmlinkage int
-svr4_getcontext32(svr4_ucontext_t *uc, struct pt_regs *regs)
+svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs)
 {
 	svr4_gregset_t  *gr;
 	svr4_mcontext_t *mc;
@@ -572,7 +594,7 @@ svr4_getcontext32(svr4_ucontext_t *uc, struct pt_regs *regs)
 	__put_user(regs->tpc, &uc->mcontext.greg [SVR4_PC]);
 	__put_user(regs->tnpc, &uc->mcontext.greg [SVR4_NPC]);
 	__put_user((tstate_to_psr(regs->tstate) |
-		    ((current->flags & PF_USEDFPU) ? PSR_EF : 0)),
+		    ((current->tss.flags & SPARC_FLAG_USEDFPU) ? PSR_EF : 0)),
 		   &uc->mcontext.greg [SVR4_PSR]);
         __put_user(regs->y, &uc->mcontext.greg [SVR4_Y]);
 	
@@ -595,7 +617,7 @@ svr4_getcontext32(svr4_ucontext_t *uc, struct pt_regs *regs)
 
 
 /* Set the context for a svr4 application, this is Solaris way to sigreturn */
-asmlinkage int svr4_setcontext32(svr4_ucontext_t *c, struct pt_regs *regs)
+asmlinkage int svr4_setcontext(svr4_ucontext_t *c, struct pt_regs *regs)
 {
 	struct thread_struct *tp = &current->tss;
 	svr4_gregset_t  *gr;
@@ -640,9 +662,10 @@ asmlinkage int svr4_setcontext32(svr4_ucontext_t *c, struct pt_regs *regs)
 	__get_user(psr, &((*gr) [SVR4_PSR]));
 	regs->tstate &= ~(TSTATE_ICC);
 	regs->tstate |= psr_to_tstate_icc(psr);
+#if 0	
 	if(psr & PSR_EF)
-		regs->fprs = FPRS_FEF;
-
+		regs->tstate |= TSTATE_PEF;
+#endif
 	/* Restore g[1..7] and o[0..7] registers */
 	for (i = 0; i < 7; i++)
 		__get_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);

@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.24 1997/07/17 02:21:44 davem Exp $
+/* $Id: cgfourteen.c,v 1.25 1997/08/20 07:38:36 davem Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -456,7 +456,7 @@ __initfunc(void cg14_setup (fbinfo_t *fb, int slot, int con_node, u32 cg14, int 
 	fb->setcurshape = cg14_setcurshape;
 	fb->ioctl = cg14_ioctl;
 	fb->switch_from_graph = cg14_switch_from_graph;
-	fb->postsetup = sun_cg_postsetup;
+	fb->postsetup = cg_postsetup;
 	fb->reset = cg14_reset;
 	fb->blank = 0;
 	fb->unblank = 0;

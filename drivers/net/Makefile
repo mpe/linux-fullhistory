@@ -53,6 +53,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ETHERTAP),y)
+L_OBJS += ethertap.o
+else
+  ifeq ($(CONFIG_ETHERTAP),m)
+  M_OBJS += ethertap.o
+  endif
+endif
+
 ifeq ($(CONFIG_SHAPER),y)
 L_OBJS += shaper.o
 else
@@ -431,6 +439,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NI5010),y)
+L_OBJS += ni5010.o
+else
+  ifeq ($(CONFIG_NI5010),m)
+  M_OBJS += ni5010.o
+  endif
+endif
+
 ifeq ($(CONFIG_NI52),y)
 L_OBJS += ni52.o
 else
@@ -482,10 +498,42 @@ else
 endif
 
 ifeq ($(CONFIG_ARCNET),y)
-L_OBJS += arcnet.o
+LX_OBJS += arcnet.o
 else
   ifeq ($(CONFIG_ARCNET),m)
-  M_OBJS += arcnet.o
+  MX_OBJS += arcnet.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARCNET_COM90xx),y)
+L_OBJS += com90xx.o
+else
+  ifeq ($(CONFIG_ARCNET_COM90xx),m)
+  M_OBJS += com90xx.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARCNET_COM90xxIO),y)
+L_OBJS += com90io.o
+else
+  ifeq ($(CONFIG_ARCNET_COM90xxIO),m)
+  M_OBJS += com90io.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARCNET_RIM_I),y)
+L_OBJS += arc-rimi.o
+else
+  ifeq ($(CONFIG_ARCNET_RIM_I),m)
+  M_OBJS += arc-rimi.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARCNET_COM20020),y)
+L_OBJS += com20020.o
+else
+  ifeq ($(CONFIG_ARCNET_COM20020),m)
+  M_OBJS += com20020.o
   endif
 endif
 
@@ -700,6 +748,10 @@ else
   ALL_SUB_DIRS += soundmodem
   MOD_SUB_DIRS += soundmodem
   endif
+endif
+
+ifeq ($(CONFIG_MACE),y)
+L_OBJS += mace.o
 endif
 
 # If anything built-in uses the hdlcdrv, then build it into the kernel also.

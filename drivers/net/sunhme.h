@@ -7,6 +7,8 @@
 #ifndef _SUNHME_H
 #define _SUNHME_H
 
+#include <linux/config.h>
+
 /* Happy Meal global registers. */
 struct hmeal_gregs {
 	volatile unsigned int sw_reset;      /* Software Reset  */
@@ -552,6 +554,9 @@ struct happy_meal {
 
 	struct net_device_stats	  net_stats;      /* Statistical counters              */
 	struct linux_sbus_device *happy_sbus_dev; /* ;-)                               */
+#ifdef CONFIG_PCI
+	struct pci_dev		 *happy_pci_dev;
+#endif
 	struct device            *dev;            /* Backpointer                       */
 	struct happy_meal        *next_module;
 };
@@ -568,6 +573,7 @@ struct happy_meal {
 #define HFLAG_RXCV                0x00000100      /* XXX RXCV ENABLE                   */
 #define HFLAG_INIT                0x00000200      /* Init called at least once         */
 #define HFLAG_LINKUP              0x00000400      /* 1 = Link is up                    */
+#define HFLAG_PCI                 0x00000800      /* PCI based Happy Meal              */
 
 #define HFLAG_20_21  (HFLAG_POLLENABLE | HFLAG_FENABLE)
 #define HFLAG_NOT_A0 (HFLAG_POLLENABLE | HFLAG_FENABLE | HFLAG_LANCE | HFLAG_RXCV)
@@ -588,5 +594,67 @@ static inline struct sk_buff *happy_meal_alloc_skb(unsigned int length, int gfp_
 	}
 	return skb;
 }
+
+/* Register/DMA access stuff, used to cope with differences between
+ * PCI and SBUS happy meals.
+ */
+extern inline u32 kva_to_hva(struct happy_meal *hp, char *addr)
+{
+#ifdef CONFIG_PCI
+	if(hp->happy_flags & HFLAG_PCI)
+		return (u32) virt_to_bus((volatile void *)addr);
+	else
+#endif
+		return (u32) ((unsigned long)addr);
+}
+
+extern inline unsigned int hme_read32(struct happy_meal *hp,
+				      volatile unsigned int *reg)
+{
+#ifdef CONFIG_PCI
+	if(hp->happy_flags & HFLAG_PCI)
+		return readl((unsigned long)reg);
+	else
+#endif
+		return *reg;
+}
+
+extern inline void hme_write32(struct happy_meal *hp,
+			       volatile unsigned int *reg,
+			       unsigned int val)
+{
+#ifdef CONFIG_PCI
+	if(hp->happy_flags & HFLAG_PCI)
+		writel(val, (unsigned long)reg);
+	else
+#endif
+		*reg = val;
+}
+
+#ifdef CONFIG_PCI
+extern inline void pcihme_write_rxd(struct happy_meal_rxd *rp,
+				    unsigned int flags,
+				    unsigned int addr)
+{
+	__asm__ __volatile__("
+	stwa	%3, [%0] %2
+	stwa	%4, [%1] %2
+"	: /* no outputs */
+	: "r" (&rp->rx_addr), "r" (&rp->rx_flags),
+	  "i" (ASI_PL), "r" (addr), "r" (flags));
+}
+
+extern inline void pcihme_write_txd(struct happy_meal_txd *tp,
+				    unsigned int flags,
+				    unsigned int addr)
+{
+	__asm__ __volatile__("
+	stwa	%3, [%0] %2
+	stwa	%4, [%1] %2
+"	: /* no outputs */
+	: "r" (&tp->tx_addr), "r" (&tp->tx_flags),
+	  "i" (ASI_PL), "r" (addr), "r" (flags));
+}
+#endif
 
 #endif /* !(_SUNHME_H) */

@@ -23,13 +23,15 @@
 #ifndef _ASM_DMA_H
 #define _ASM_DMA_H
 
+#ifndef MAX_DMA_CHANNELS
 #define MAX_DMA_CHANNELS	8
+#endif
 
 /* The maximum address that we can perform a DMA transfer to on this platform */
 /* Doesn't really apply... */
 #define MAX_DMA_ADDRESS      0xFFFFFFFF
 
-#ifdef CONFIG_PREP
+#if defined(CONFIG_PREP) || defined(CONFIG_CHRP)
 #include <asm/io.h>		/* need byte IO */
 
 
@@ -57,7 +59,8 @@
  *  - page registers for 5-7 don't use data bit 0, represent 128K pages
  *  - page registers for 0-3 use bit 0, represent 64K pages
  *
- * DMA transfers are limited to the lower 16MB of _physical_ memory.  
+ * On PReP, DMA transfers are limited to the lower 16MB of _physical_ memory.  
+ * On CHRP, the W83C553F (and VLSI Tollgate?) support full 32 bit addressing.
  * Note that addresses loaded into registers must be _physical_ addresses,
  * not logical addresses (which may differ if paging is active).
  *
@@ -325,12 +328,14 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 	return (dmanr<=3)? count : (count<<1);
 }
 
-#else /* CONFIG_PREP */
+#endif /* CONFIG_PREP || CONFIG_CHRP */
+
+#ifdef CONFIG_PMAC
 
 #define DMA_MODE_READ	1
 #define DMA_MODE_WRITE	2
 
-#endif /* CONFIG_PREP */
+#endif /* CONFIG_PMAC */
 
 /* These are in kernel/dma.c: */
 extern void free_dma(unsigned int dmanr);	/* release it again */

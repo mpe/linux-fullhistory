@@ -54,6 +54,16 @@ extern char etext[], _stext[];
 extern char __init_begin, __init_end;
 extern RESIDUAL res;
 
+/* Hardwired MMU segments */
+#if defined(CONFIG_PREP) || defined(CONFIG_PMAC)
+#define MMU_SEGMENT_1		0x80000000
+#define MMU_SEGMENT_2		0xc0000000
+#endif /* CONFIG_PREP || CONFIG_PMAC */
+#ifdef CONFIG_CHRP
+#define MMU_SEGMENT_1		0xf0000000	/* LongTrail */
+#define MMU_SEGMENT_2		0xc0000000
+#endif /* CONFIG_CHRP */
+
 
 void *find_mem_piece(unsigned, unsigned);
 static void mapin_ram(void);
@@ -264,7 +274,7 @@ find_mem_piece(unsigned size, unsigned align)
 unsigned long *pmac_find_end_of_memory(void)
 {
 	unsigned long a, total;
-	unsigned long h, kstart, ksize;
+	unsigned long kstart, ksize;
 	extern char _stext[], _end[];
 	int i;
 
@@ -313,20 +323,6 @@ unsigned long *pmac_find_end_of_memory(void)
 	ksize = PAGE_ALIGN(_end - _stext);
 	remove_mem_piece(&phys_avail, kstart, ksize, 0);
 	remove_mem_piece(&prom_mem, kstart, ksize, 0);
-
-	/*
-	 * Allow 64k of hash table for every 16MB of memory,
-	 * up to a maximum of 2MB.
-	 */
-	for (h = 64<<10; h < total / 256 && h < 2<<20; h *= 2)
-		;
-	Hash_size = h;
-	Hash_mask = (h >> 6) - 1;
-
-	/* Find some memory for the hash table. */
-	Hash = find_mem_piece(Hash_size, Hash_size);
-	printk("Total memory = %ldMB; using %ldkB for hash table (at %p)\n",
-	       total >> 20, Hash_size >> 10, Hash);
 
 	return __va(total);
 }
@@ -572,13 +568,13 @@ void si_meminfo(struct sysinfo *val)
 BAT BAT0 =
 {
   {
-    0x80000000>>17, 	/* bepi */
+    MMU_SEGMENT_1>>17, 	/* bepi */
     BL_256M,		/* bl */
     1,			/* vs -- supervisor mode valid */
     1,			/* vp -- user mode valid */
   },
   {
-    0x80000000>>17,		/* brpn */
+    MMU_SEGMENT_1>>17,		/* brpn */
     1,			/* write-through */
     1,			/* cache-inhibited */
     0,			/* memory coherence */
@@ -589,13 +585,13 @@ BAT BAT0 =
 BAT BAT1 =
 {
   {
-    0xC0000000>>17, 	/* bepi */
+    MMU_SEGMENT_2>>17, 	/* bepi */
     BL_256M,		/* bl */
     1,			/* vs */
     1,			/* vp */
   },
   {
-    0xC0000000>>17,		/* brpn */
+    MMU_SEGMENT_2>>17,		/* brpn */
     1,			/* w */
     1,			/* i (cache disabled) */
     0,			/* m */
@@ -660,13 +656,13 @@ P601_BAT BAT0_601 =
 P601_BAT BAT1_601 =
 {
   {
-    0xC0000000>>17, 	/* bepi */
+    MMU_SEGMENT_2>>17, 	/* bepi */
     1,1,0, /* wim */
     1, 0, /* vs, vp */
     BPP_RW, /* pp */
   },
   {
-    0xC0000000>>17,		/* brpn */
+    MMU_SEGMENT_2>>17,		/* brpn */
     1, /* v */
     BL_8M, /* bl */
   }
@@ -711,8 +707,7 @@ P601_BAT BAT3_601 =
 unsigned long *prep_find_end_of_memory(void)
 {
 	int i;
-	unsigned long h;
-	/* setup the hash table */
+	
 	if (res.TotalMemory == 0 )
 	{
 		/*
@@ -723,34 +718,10 @@ unsigned long *prep_find_end_of_memory(void)
 		res.TotalMemory = 0x03000000;
 		printk("Ramsize default to be %ldM\n", res.TotalMemory>>20);
 	}
-	
-#if 0
-	/* linux has trouble with > 64M ram -- Cort */
-	if ( res.TotalMemory > 0x04000000 /* 64M */ )
-	{
-		printk("Only using first 64M of ram.\n");
-		res.TotalMemory = 0x04000000;
-	}
-#endif	
-	
-	/* setup the bat2 mapping to cover physical ram */
-	BAT2.batu.bl = 0x1; /* 256k mapping */
-	for ( h = 256*1024 /* 256k */ ; (h <= res.TotalMemory) && (h <= 256*1024*1024);
-	      h *= 2 )
-		BAT2.batu.bl = (BAT2.batu.bl << 1) | BAT2.batu.bl;
-	/*
-	 * Allow 64k of hash table for every 16MB of memory,
-	 * up to a maximum of 2MB.
-	 */
-	for (h = 64<<10; h < res.TotalMemory / 256 && h < 2<<20; h *= 2)
-		;
-	Hash_size = h;
-	Hash_mask = (h >> 6) - 1;
-	
-	/* align htab on a Hash_size boundry above _end[] */
-	Hash = (PTE *)_ALIGN( (unsigned long)&_end, Hash_size);
-	memset(Hash, Hash_size, 0 );
 
+	/* NOTE: everything below here is moving to mapin_ram() */
+
+	
 	/*
 	 * if this is a 601, we can only map sizes of 8M with the BAT's
 	 * so we have to map what we can't map with the bats with the segregs
@@ -790,9 +761,7 @@ unsigned long *prep_find_end_of_memory(void)
 	}
 #endif /* MAP_RAM_WITH_SEGREGS */
 	
-	printk("Total memory = %ldMB; using %ldkB for hash table (at %p)\n",
-	       res.TotalMemory >> 20, Hash_size >> 10, Hash);
-	return ((unsigned long *)res.TotalMemory);
+	return (__va(res.TotalMemory));
 }
 
 
@@ -809,20 +778,39 @@ static void mapin_ram()
     int i;
     unsigned long v, p, s, f;
 
-    v = KERNELBASE;
-    for (i = 0; i < phys_mem.n_regions; ++i) {
-	p = phys_mem.regions[i].address;
-	for (s = 0; s < phys_mem.regions[i].size; s += PAGE_SIZE) {
-	    f = _PAGE_PRESENT | _PAGE_ACCESSED;
-	    if ((char *) v < _stext || (char *) v >= etext)
-		f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
-	    else
-		/* On the powerpc, no user access forces R/W kernel access */
-		f |= _PAGE_USER;
-	    map_page(&init_task, v, p, f);
-	    v += PAGE_SIZE;
-	    p += PAGE_SIZE;
-	}
+    if ( _machine == _MACH_Pmac )
+    {
+	    v = KERNELBASE;
+	    for (i = 0; i < phys_mem.n_regions; ++i) {
+		    p = phys_mem.regions[i].address;
+		    for (s = 0; s < phys_mem.regions[i].size; s += PAGE_SIZE) {
+			    f = _PAGE_PRESENT | _PAGE_ACCESSED;
+			    if ((char *) v < _stext || (char *) v >= etext)
+				    f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
+			    else
+				    /* On the powerpc, no user access forces R/W kernel access */
+				    f |= _PAGE_USER;
+			    map_page(&init_task, v, p, f);
+			    v += PAGE_SIZE;
+			    p += PAGE_SIZE;
+		    }
+	    }
+    }
+    else /* prep */
+    {
+	    /* setup the bat2 mapping to cover physical ram */
+	    BAT2.batu.bl = 0x1; /* 256k mapping */
+	    for ( f = 256*1024 /* 256k */ ;
+		  (f <= res.TotalMemory) && (f <= 256*1024*1024);
+		  f *= 2 )
+		    BAT2.batu.bl = (BAT2.batu.bl << 1) | BAT2.batu.bl;
+	    /*
+	     * let ibm get to the device mem from user mode since
+	     * the X for them needs it right now -- Cort
+	     */
+	    if ( _machine == _MACH_IBM )
+		    BAT0.batu.vp = BAT1.batu.vp = 1;
+	    
     }
 }
 
@@ -878,10 +866,29 @@ static void inherit_prom_translations()
 static void hash_init(void)
 {
 	int Hash_bits;
+	unsigned long h;
 
 	extern unsigned int hash_page_patch_A[], hash_page_patch_B[],
 		hash_page_patch_C[];
 
+	/*
+	 * Allow 64k of hash table for every 16MB of memory,
+	 * up to a maximum of 2MB.
+	 */
+	for (h = 64<<10; h < (ulong)__pa(end_of_DRAM) / 256 && h < 2<<20; h *= 2)
+		;
+	Hash_size = h;
+	Hash_mask = (h >> 6) - 1;
+
+	/* Find some memory for the hash table. */
+	if ( is_prep )
+		/* align htab on a Hash_size boundry above _end[] */
+		Hash = (PTE *)_ALIGN( (unsigned long)&_end, Hash_size);
+	else /* pmac */
+		Hash = find_mem_piece(Hash_size, Hash_size);
+	
+	printk("Total memory = %ldMB; using %ldkB for hash table (at %p)\n",
+	       __pa(end_of_DRAM) >> 20, Hash_size >> 10, Hash);
 	memset(Hash, 0, Hash_size);
 	Hash_end = (PTE *) ((unsigned long)Hash + Hash_size);
 
@@ -924,19 +931,17 @@ MMU_init(void)
 {
 	if ( _machine == _MACH_Pmac )
 		end_of_DRAM = pmac_find_end_of_memory();
-	else /* prep */
+	else /* prep and chrp */
 		end_of_DRAM = prep_find_end_of_memory();
 		
         hash_init();
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
 
+	/* Map in all of RAM starting at KERNELBASE */
+	mapin_ram();
 	if ( _machine == _MACH_Pmac )
-	{
-		/* Map in all of RAM starting at KERNELBASE */
-		mapin_ram();
 		/* Copy mappings from the prom */
 		inherit_prom_translations();
-	}
 }
 
 static void *
@@ -949,7 +954,7 @@ MMU_get_page()
 		if (p == 0)
 			panic("couldn't get a page in MMU_get_page");
 	} else {
-		if ( is_prep )
+		if ( is_prep || (_machine == _MACH_chrp) )
 		{
 			mmu_pages_count++;
 			if ( mmu_pages_count > MAX_MMU_PAGES )
@@ -971,9 +976,30 @@ ioremap(unsigned long addr, unsigned long size)
 {
 	unsigned long p, end = addr + size;
 
+	/*
+	 * BAT mappings on prep cover this already so don't waste
+	 * space with it. -- Cort
+	 */
+	if ( is_prep )
+		if ( ((addr >= 0xc0000000) && (end < (0xc0000000+(256<<20)))) ||
+		     ((addr >= 0x80000000) && (end < (0x80000000+(256<<20)))) )
+			return (void *)addr;
 	for (p = addr & PAGE_MASK; p < end; p += PAGE_SIZE)
 		map_page(&init_task, p, p, pgprot_val(PAGE_KERNEL_CI) | _PAGE_GUARDED);
 	return (void *) addr;
+}
+
+extern void iounmap(unsigned long *addr)
+{
+	/*
+	 * BAT mappings on prep cover this already so don't waste
+	 * space with it. -- Cort
+	 */
+	if ( is_prep )
+		if ( (((unsigned long)addr >= 0xc0000000) && ((unsigned long)addr < (0xc0000000+(256<<20)))) ||
+		     (((unsigned long)addr >= 0x80000000) && ((unsigned long)addr < (0x80000000+(256<<20)))) )
+			return;
+	/* else unmap it */
 }
 
 void
@@ -1091,3 +1117,4 @@ mmu_context_overflow(void)
 	current->mm->context = MUNGE_CONTEXT(++next_mmu_context);
 	set_context(current->mm->context);
 }
+

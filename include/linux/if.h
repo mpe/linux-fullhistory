@@ -39,6 +39,9 @@
 
 #define IFF_MULTICAST	0x1000		/* Supports multicast		*/
 
+#define IFF_PORTSEL	0x2000          /* can set media type		*/
+#define IFF_AUTOMEDIA	0x4000		/* auto media select active	*/
+
 /*
  * The ifaddr structure contains information about one address
  * of an interface.  They are maintained by the different address

@@ -62,6 +62,10 @@ extern int sysctl_tcp_fin_timeout;
 extern int sysctl_tcp_syncookies;
 extern int sysctl_tcp_syn_retries;
 extern int sysctl_tcp_stdurg; 
+extern int sysctl_tcp_syn_taildrop; 
+extern int sysctl_max_syn_backlog; 
+
+int tcp_retr1_max = 255; 
 
 extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp);
@@ -184,7 +188,8 @@ ctl_table ipv4_table[] = {
 	 &sysctl_tcp_keepalive_probes, sizeof(int), 0644, NULL, 
 	 &proc_dointvec},
 	{NET_IPV4_TCP_RETRIES1, "tcp_retries1",
-	 &sysctl_tcp_retries1, sizeof(int), 0644, NULL, &proc_dointvec},
+	 &sysctl_tcp_retries1, sizeof(int), 0644, NULL, &proc_dointvec_minmax, 
+	 &sysctl_intvec, NULL, NULL, &tcp_retr1_max},
 	{NET_IPV4_TCP_RETRIES2, "tcp_retries2",
 	 &sysctl_tcp_retries2, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_TCP_MAX_DELAY_ACKS, "tcp_max_delay_acks",
@@ -208,6 +213,10 @@ ctl_table ipv4_table[] = {
 	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
 	{NET_TCP_STDURG, "tcp_stdurg", &sysctl_tcp_stdurg,
+	 sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_SYN_TAILDROP, "tcp_syn_taildrop", &sysctl_tcp_syn_taildrop,
+	 sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_MAX_SYN_BACKLOG, "tcp_max_syn_backlog", &sysctl_max_syn_backlog,
 	 sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };

@@ -58,6 +58,10 @@
  *
  *	Changes by Christopher Turcksin <wabbit@rtfc.demon.co.uk>
  *	+ Now compiles ok as a module again.
+ *
+ *	Changes by Paul Norton (pnorton@cts.com) :
+ *      + moved the header manipulation code in tr_tx and tr_rx to
+ *        net/802/tr.c. (July 12 1997)
  */
 
 #ifdef PCMCIA
@@ -87,7 +91,7 @@
 /* version and credits */
 static char *version =
 "ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
-"         v2.1.35  5/ 1/97 Paul Norton <pnorton@cts.com>\n";
+"         v2.1.42  7/12/97 Paul Norton <pnorton@cts.com>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -168,8 +172,8 @@ int		ibmtr_probe(struct device *dev);
 static int	ibmtr_probe1(struct device *dev, int ioaddr);
 static unsigned char	get_sram_size(struct tok_info *adapt_info);
 static int	tok_init_card(struct device *dev);
-static int	trdev_init(struct device *dev);
 void		tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static int	trdev_init(struct device *dev);
 static void 	initial_tok_int(struct device *dev);
 static void 	open_sap(unsigned char type,struct device *dev);
 void		tok_open_adapter(unsigned long dev_addr);
@@ -1249,7 +1253,15 @@ static void tr_tx(struct device *dev)
 	   effective address where we will place data.*/
 	dhb=ti->sram
 		+ntohs(readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
-	llc = (struct trllc *) &(ti->current_skb->data[sizeof(struct trh_hdr)]);
+	
+	/* Figure out the size of the 802.5 header */
+	if (!(trhdr->saddr[0] & 0x80)) /* RIF present? */
+		hdr_len=sizeof(struct trh_hdr)-18;
+	else 
+		hdr_len=((ntohs(trhdr->rcf) & TR_RCF_LEN_MASK)>>8)
+			+sizeof(struct trh_hdr)-18;
+
+	llc = (struct trllc *)(ti->current_skb->data + hdr_len);
 
 	xmit_command = readb(ti->srb + offsetof(struct srb_xmit, command));
 
@@ -1277,39 +1289,15 @@ static void tr_tx(struct device *dev)
 
 	}
 
-	/* the token ring packet is copied from sk_buff to the adapter
-	   buffer identified in the command data received with the
-	   interrupt.  The sk_buff area was set up with a maximum
-	   sized route information field so here we must compress
-	   out the extra (all) rif fields.   */
-	/* nb/dwm .... I re-arranged code here to avoid copy of extra
-	   bytes, ended up with fewer statements as well. */
-
-	/* TR arch. identifies if RIF present by high bit of source
-	   address.  So here we check if RIF present */
-
-	if (!(trhdr->saddr[0] & 0x80)) { /* RIF present : preserve it */
-		hdr_len=sizeof(struct trh_hdr)-18;
-
-#if TR_VERBOSE
-		DPRINTK("hdr_length: %d, frame length: %ld\n", hdr_len,
-			ti->current_skb->len-18);
-#endif
-	} else hdr_len=((ntohs(trhdr->rcf) & TR_RCF_LEN_MASK)>>8)
-		  +sizeof(struct trh_hdr)-18;
-
-	/* header length including rif is computed above, now move the data
-	   and set fields appropriately. */
-	memcpy_toio(dhb, ti->current_skb->data, hdr_len);
-
+	/*
+	 *      the token ring packet is copied from sk_buff to the adapter
+	 *      buffer identified in the command data received with the interrupt.
+	 */
 	writeb(hdr_len, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
-	writew(htons(ti->current_skb->len-sizeof(struct trh_hdr)+hdr_len),
+	writew(htons(ti->current_skb->len),
 	       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
 
-	/*  now copy the actual packet data next to hdr */
-	memcpy_toio(dhb + hdr_len,
-		    ti->current_skb->data + sizeof(struct trh_hdr),
-		    ti->current_skb->len - sizeof(struct trh_hdr));
+	memcpy_toio(dhb, ti->current_skb->data, ti->current_skb->len);
 
 	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	dev->tbusy=0;
@@ -1328,7 +1316,7 @@ static void tr_rx(struct device *dev)
 	unsigned int rbuffer_len, lan_hdr_len, hdr_len, ip_len, length;
 	struct sk_buff *skb;
 	unsigned int skb_size = 0;
-	int	is8022 = 0;
+	int	IPv4_p = 0;
 	unsigned int chksum = 0;
 	struct iphdr *iph;
 
@@ -1347,7 +1335,7 @@ static void tr_rx(struct device *dev)
 
 	lan_hdr_len=readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
 	
-	llc=(rbuffer+offsetof(struct rec_buf, data) + lan_hdr_len);
+	llc=(rbuffer + offsetof(struct rec_buf, data) + lan_hdr_len);
 
 #if TR_VERBOSE
 	DPRINTK("offsetof data: %02X lan_hdr_len: %02X\n",
@@ -1366,19 +1354,19 @@ static void tr_rx(struct device *dev)
 		(int)readw(llc + offsetof(struct trllc, ethertype)));
 #endif
 	if (readb(llc + offsetof(struct trllc, llc))!=UI_CMD) {
-			writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
-			ti->tr_stats.rx_dropped++;
-			writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-			return;
+		writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
+		ti->tr_stats.rx_dropped++;
+		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+		return;
 	}
 
-       	if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
-       	    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
-       		is8022 = 1;
+       	if ((readb(llc + offsetof(struct trllc, dsap))==0xAA) &&
+       	    (readb(llc + offsetof(struct trllc, ssap))==0xAA)) {
+       		IPv4_p = 1;
        	}
 
 #if TR_VERBOSE
-       	if (is8022){
+       	if (!IPv4_p){
 
        		__u32 trhhdr;
 
@@ -1405,11 +1393,8 @@ static void tr_rx(struct device *dev)
 #endif
 
        	length = ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
-       	skb_size = length-lan_hdr_len+sizeof(struct trh_hdr);
-       	if (is8022) {
-       		skb_size += sizeof(struct trllc);
-       	}
-
+       	skb_size = length-lan_hdr_len+sizeof(struct trh_hdr)+sizeof(struct trllc);
+ 
        	if (!(skb=dev_alloc_skb(skb_size))) {
        		DPRINTK("out of memory. frame dropped.\n");
        		ti->tr_stats.rx_dropped++;
@@ -1418,53 +1403,37 @@ static void tr_rx(struct device *dev)
        		return;
        	}
 
-       	skb_put(skb, skb_size);
+      	skb_put(skb, length);
+	skb_reserve(skb, sizeof(struct trh_hdr)-lan_hdr_len+sizeof(struct trllc));
        	skb->dev=dev;
-
        	data=skb->data;
+	rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));
+	rbufdata = rbuffer + offsetof(struct rec_buf,data);
 
-	/* Copy the 802.5 MAC header */
-	memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data), lan_hdr_len);
-
-	if (lan_hdr_len<sizeof(struct trh_hdr))
-		memset(data+lan_hdr_len, 0, sizeof(struct trh_hdr)-lan_hdr_len);
-
-	data+=sizeof(struct trh_hdr);
-	rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)))-lan_hdr_len;
-
-	if (is8022) {
-		/* create whitewashed LLC header in sk buffer */
-		struct trllc	*local_llc = (struct trllc *)data;
-		memset(local_llc, 0, sizeof(*local_llc));
-		local_llc->ethertype = htons(ETH_P_TR_802_2);
-		hdr_len = sizeof(struct trllc);
-		/* copy the real LLC header to the sk buffer */
-		data += hdr_len;
-		memcpy_fromio(data, rbuffer+offsetof(struct rec_buf, data)+lan_hdr_len,hdr_len);
-	} else {
-                /* Copy the LLC header and the IPv4 header */
-		hdr_len = sizeof(struct trllc) + sizeof(struct iphdr);
-		memcpy_fromio(data, rbuffer+offsetof(struct rec_buf, data)+lan_hdr_len,hdr_len);
+	if (IPv4_p) {
+                /* Copy the headers without checksumming */
+		hdr_len = lan_hdr_len + sizeof(struct trllc) + sizeof(struct iphdr);
+		memcpy_fromio(data, rbufdata, hdr_len);
 
 		/* Watch for padded packets and bogons */
-		iph=(struct iphdr*)(data+sizeof(struct trllc));
+		iph=(struct iphdr*)(data + lan_hdr_len + sizeof(struct trllc));
 		ip_len = ntohs(iph->tot_len) - sizeof(struct iphdr);
-		length -= lan_hdr_len + hdr_len;
+		length -= hdr_len;
 		if ((ip_len <= length) && (ip_len > 7))
 			length = ip_len;
+		data += hdr_len;
+		rbuffer_len -= hdr_len;
+		rbufdata += hdr_len;
         }
-	data        += hdr_len;
-	rbuffer_len -= hdr_len;
-	rbufdata     = rbuffer + offsetof(struct rec_buf,data) + lan_hdr_len + hdr_len;
 
 	/* Copy the payload... */
 	for (;;) {
-		if (is8022)
-			memcpy_fromio(data, rbufdata, rbuffer_len);
-		else
+		if (IPv4_p)
 			chksum = csum_partial_copy(bus_to_virt(rbufdata), data,
 						   length < rbuffer_len ? length : rbuffer_len,
 						   chksum);
+		else
+			memcpy_fromio(data, rbufdata, rbuffer_len);
 		rbuffer = ntohs(readw(rbuffer));
 		if (!rbuffer)
 			break;
@@ -1481,11 +1450,14 @@ static void tr_rx(struct device *dev)
 
        	ti->tr_stats.rx_packets++;
 
-	skb->protocol  = tr_type_trans(skb,dev);
-	if (!is8022){
+	tr_reformat(skb, lan_hdr_len); 
+	skb->protocol = tr_type_trans(skb,dev);
+
+ 	if (IPv4_p){
 		skb->csum      = chksum;
 		skb->ip_summed = 1;
 	}
+
 	netif_rx(skb);
 }
 
@@ -1610,7 +1582,7 @@ void cleanup_module(void)
 			 irq2dev_map[dev_ibmtr[i]->irq] = NULL;
 			 release_region(dev_ibmtr[i]->base_addr, IBMTR_IO_EXTENT);
 			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info));
-			 kfree_s(dev_ibmtr[i], sizeof(struct dev));
+			 kfree_s(dev_ibmtr[i], sizeof(struct device));
 			 dev_ibmtr[i] = NULL;
                 }
 }

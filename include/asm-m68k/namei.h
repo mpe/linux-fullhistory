@@ -12,7 +12,7 @@
  * Look at asm-sparc/namei.h for details.
  */
 
-#define __prefix_namei(retrieve_mode, name, base, buf, res_dir, res_inode, \
-		       last_name, last_entry, last_error) 1
+#define __prefix_lookup_dentry(name, follow_link) \
+        do {} while (0)
 
 #endif

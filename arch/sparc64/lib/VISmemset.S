@@ -1,4 +1,4 @@
-/* $Id: VISmemset.S,v 1.6 1997/08/08 08:34:13 jj Exp $
+/* $Id: VISmemset.S,v 1.7 1997/08/22 15:54:56 jj Exp $
  * VISmemset.S: High speed memset operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
@@ -171,6 +171,10 @@ memset:
 12:
 #ifdef __KERNEL__
 	wr		%g0, 0, %fprs
+#else
+#ifndef REGS_64BIT
+	wr		%g0, FPRS_FEF, %fprs
+#endif
 #endif
 	membar		#StoreLoad | #StoreStore
 9:	andcc		%o2, 0x78, %g5

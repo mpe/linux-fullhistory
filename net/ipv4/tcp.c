@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.67 1997/07/20 12:46:07 freitag Exp $
+ * Version:	$Id: tcp.c,v 1.70 1997/09/01 03:14:28 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -268,7 +268,8 @@
  *
  * Urgent Pointer (4.2.2.4)
  * **MUST point urgent pointer to last byte of urgent data (not right
- *     after). (doesn't, to be like BSD)
+ *     after). (doesn't, to be like BSD. That's configurable, but defaults
+ *	to off)
  *   MUST inform application layer asynchronously of incoming urgent
  *     data. (does)
  *   MUST provide application with means of determining the amount of
@@ -282,7 +283,8 @@
  *   MUST ignore unsupported options (does)
  *
  * Maximum Segment Size Option (4.2.2.6)
- *   MUST implement both sending and receiving MSS. (does)
+ *   MUST implement both sending and receiving MSS. (does, but currently
+ *	only uses the smaller of both of them)
  *   SHOULD send an MSS with every SYN where receive MSS != 536 (MAY send
  *     it always). (does, even when MSS == 536, which is legal)
  *   MUST assume MSS == 536 if no MSS received at connection setup (does)
@@ -296,7 +298,8 @@
  * Initial Sequence Number Selection (4.2.2.8)
  *   MUST use the RFC 793 clock selection mechanism.  (doesn't, but it's
  *     OK: RFC 793 specifies a 250KHz clock, while we use 1MHz, which is
- *     necessary for 10Mbps networks - and harder than BSD to spoof!)
+ *     necessary for 10Mbps networks - and harder than BSD to spoof!
+ *     With syncookies we doesn't)
  *
  * Simultaneous Open Attempts (4.2.2.10)
  *   MUST support simultaneous open attempts (does)
@@ -359,8 +362,8 @@
  *   MAY provide keep-alives. (does)
  *   MUST make keep-alives configurable on a per-connection basis. (does)
  *   MUST default to no keep-alives. (does)
- * **MUST make keep-alive interval configurable. (doesn't)
- * **MUST make default keep-alive interval > 2 hours. (doesn't)
+ *   MUST make keep-alive interval configurable. (does)
+ *   MUST make default keep-alive interval > 2 hours. (does)
  *   MUST NOT interpret failure to ACK keep-alive packet as dead
  *     connection. (doesn't)
  *   SHOULD send keep-alive with no data. (does)
@@ -384,15 +387,16 @@
  *     Unreachables (0, 1, 5), Time Exceededs and Parameter
  *     Problems. (doesn't)
  *   SHOULD report soft Destination Unreachables etc. to the
- *     application. (does)
+ *     application. (does, but may drop them in the ICMP error handler
+ *	during an accept())
  *   SHOULD abort connection upon receipt of hard Destination Unreachable
- *     messages (2, 3, 4). (does)
+ *     messages (2, 3, 4). (does, but see above)
  *
  * Remote Address Validation (4.2.3.10)
  *   MUST reject as an error OPEN for invalid remote IP address. (does)
  *   MUST ignore SYN with invalid source address. (does)
  *   MUST silently discard incoming SYN for broadcast/multicast
- *     address. (does)
+ *     address. (I'm not sure if it does. Someone should check this.)
  *
  * Asynchronous Reports (4.2.4.1)
  * MUST provide mechanism for reporting soft errors to application
@@ -402,6 +406,7 @@
  *   MUST allow application layer to set Type of Service. (does IP_TOS)
  *
  * (Whew. -- MS 950903)
+ * (Updated by AK, but not complete yet.)
  **/
 
 #include <linux/types.h>
@@ -416,7 +421,6 @@
 
 int sysctl_tcp_fin_timeout = TCP_FIN_TIMEOUT;
 
-unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;
 
 kmem_cache_t *tcp_openreq_cachep;
@@ -426,17 +430,20 @@ kmem_cache_t *tcp_openreq_cachep;
  *	the socket locked or with interrupts disabled
  */
 
-static struct open_request *tcp_find_established(struct tcp_opt *tp)
+static struct open_request *tcp_find_established(struct tcp_opt *tp, 
+						 struct open_request **prevp)
 {
 	struct open_request *req = tp->syn_wait_queue;
-
+	struct open_request *prev = (struct open_request *)&tp->syn_wait_queue; 
 	while(req) {
 		if (req->sk && 
 		    (req->sk->state == TCP_ESTABLISHED ||
 		     req->sk->state >= TCP_FIN_WAIT1))
 			break;
+		prev = req; 
 		req = req->dl_next;
 	}
+	*prevp = prev; 
 	return req;
 }
 
@@ -466,8 +473,7 @@ static void tcp_close_pending (struct sock *sk)
 		tcp_openreq_free(iter);
 	}
 
-	tp->syn_wait_queue = NULL;
-	tp->syn_wait_last = &tp->syn_wait_queue;
+	tcp_synq_init(tp);
 }
 
 /*
@@ -566,10 +572,10 @@ static int tcp_readable(struct sock *sk)
  */
 static unsigned int tcp_listen_poll(struct sock *sk, poll_table *wait)
 {
-	struct open_request *req;
+	struct open_request *req, *dummy;
 
 	lock_sock(sk);
-	req = tcp_find_established(&sk->tp_pinfo.af_tcp);
+	req = tcp_find_established(&sk->tp_pinfo.af_tcp, &dummy);
 	release_sock(sk);
 	if (req)
 		return POLLIN | POLLRDNORM;
@@ -1021,7 +1027,10 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 			sk->urg_data = URG_READ;
 			
 		if(len>0)
+		{
 			err = memcpy_toiovec(msg->msg_iov, &c, 1);
+			msg->msg_flags|=MSG_OOB;
+		}
 		else
 			msg->msg_flags|=MSG_TRUNC;
 			
@@ -1415,13 +1424,9 @@ void tcp_shutdown(struct sock *sk, int how)
 
 static inline int closing(struct sock * sk)
 {
-	switch (sk->state) {
-		case TCP_FIN_WAIT1:
-		case TCP_CLOSING:
-		case TCP_LAST_ACK:
-			return 1;
-	};
-	return 0;
+	return ((1 << sk->state) & ((1 << TCP_FIN_WAIT1)|
+				    (1 << TCP_CLOSING)|
+				    (1 << TCP_LAST_ACK)));
 }
 
 
@@ -1501,7 +1506,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 static struct open_request * wait_for_connect(struct sock * sk)
 {
 	struct wait_queue wait = { current, NULL };
-	struct open_request *req = NULL;
+	struct open_request *req = NULL, *dummy;
 
 	add_wait_queue(sk->sleep, &wait);
 	for (;;) {
@@ -1509,8 +1514,8 @@ static struct open_request * wait_for_connect(struct sock * sk)
 		release_sock(sk);
 		schedule();
 		lock_sock(sk);
-		req = tcp_find_established(&(sk->tp_pinfo.af_tcp));
-		if (req)
+		req = tcp_find_established(&(sk->tp_pinfo.af_tcp), &dummy);
+		if (req) 
 			break;
 		if (current->signal & ~current->blocked)
 			break;
@@ -1528,7 +1533,7 @@ static struct open_request * wait_for_connect(struct sock * sk)
 struct sock *tcp_accept(struct sock *sk, int flags)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	struct open_request *req;
+	struct open_request *req, *prev;
 	struct sock *newsk = NULL;
 	int error;
 
@@ -1541,13 +1546,18 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 
 	lock_sock(sk);
 
-	req = tcp_find_established(tp);
+	req = tcp_find_established(tp, &prev);
 	if (req) {
 got_new_connect:
-		tcp_synq_unlink(tp, req);
+		tcp_synq_unlink(tp, req, prev);
 		newsk = req->sk;
 		tcp_openreq_free(req);
 		sk->ack_backlog--;
+		/* FIXME: need to check here if socket has already
+		 * an soft_err or err set.
+		 * We have two options here then: reply (this behaviour matches
+		 * Solaris) or return the error to the application (old Linux)
+		 */
 		error = 0;
 out:
 		release_sock(sk);

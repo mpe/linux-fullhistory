@@ -27,13 +27,20 @@ typedef struct user_m68kfp_struct elf_fpregset_t;
 #define ELF_DATA	ELFDATA2MSB;
 #define ELF_ARCH	EM_68K
 
-	/* For SVR4/m68k the function pointer to be registered with
-	   `atexit' is passed in %a1.  Although my copy of the ABI has
-	   no such statement, it is actually used on ASV.  */
+/* For SVR4/m68k the function pointer to be registered with `atexit' is
+   passed in %a1.  Although my copy of the ABI has no such statement, it
+   is actually used on ASV.  */
 #define ELF_PLAT_INIT(_r)	_r->a1 = 0
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	4096
+
+/* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
+   use of this is to invoke "./ld.so someprog" to test out a new version of
+   the loader.  We need to make sure that it is out of the way of the program
+   that it will "exec", and that there is sufficient room for the brk.  */
+
+#define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
 
 #define ELF_CORE_COPY_REGS(pr_reg, regs)				\
 	/* Bleech. */							\

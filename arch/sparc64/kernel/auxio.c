@@ -10,6 +10,7 @@
 #include <linux/smp.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/ioport.h>
 
 #include <asm/oplib.h>
 #include <asm/io.h>
@@ -39,18 +40,25 @@ __initfunc(void auxio_probe(void))
 #ifdef CONFIG_PCI
 		struct linux_ebus *ebus;
 		struct linux_ebus_device *edev = 0;
+		unsigned long led_auxio;
 
 		for_all_ebusdev(edev, ebus)
 			if (!strcmp(edev->prom_name, "auxio"))
 				break;
 
 		if (edev) {
-			auxio_register = (unsigned char *)
-				sparc_alloc_io(edev->regs[0].phys_addr, 0,
-					       edev->regs[0].reg_size,
-					       "auxiliaryIO",
-					       edev->regs[0].which_io, 0x0);
-			*(auxio_register) = 0x01;
+			if (check_region(edev->base_address[0],
+					 sizeof(unsigned int))) {
+				prom_printf("%s: Can't get region %lx, %d\n",
+					    __FUNCTION__, edev->base_address[0],
+					    sizeof(unsigned int));
+				prom_halt();
+			}
+			request_region(edev->base_address[0],
+				       sizeof(unsigned int), "LED auxio");
+
+			led_auxio = edev->base_address[0];
+			outl(0x01, led_auxio);
 			return;
 		}
 #endif

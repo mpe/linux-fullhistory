@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.5 1997/07/17 02:24:28 davem Exp $
+/* $Id: namei.h,v 1.7 1997/09/04 15:46:31 jj Exp $
  * linux/include/asm-sparc64/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -11,40 +11,40 @@
 #define SPARC_BSD_EMUL "usr/gnemul/sunos/"
 #define SPARC_SOL_EMUL "usr/gnemul/solaris/"
 
-#if 0 /* XXX FIXME */
-extern int __namei(int, const char *, struct inode *, char *, struct inode **,
-		   struct inode **, struct qstr *, struct dentry **, int *);
-
-static inline int
-__prefix_namei(int retrieve_mode, const char * name, struct inode * base,
-	       char * buf, struct inode ** res_dir, struct inode ** res_inode,
-	       struct qstr * last_name, struct dentry ** last_entry,
-	       int * last_error)
+static inline struct dentry *
+__sparc64_lookup_dentry(const char *name, int follow_link)
 {
 	int error;
+	struct dentry *base;
 
-	if (!(current->personality & (PER_BSD|PER_SVR4)))
-		return -ENOENT;
+	switch (current->personality) {
+	case PER_BSD:
+	case PER_SVR4:
+		break;
+	default:
+		return ERR_PTR(-ENOENT);
+	}
 
-	while (*name == '/')
-		name++;
-
-	atomic_inc(&current->fs->root->i_count);
-	error = __namei(NAM_FOLLOW_LINK,
-		        current->personality & PER_BSD ?
-		        SPARC_BSD_EMUL : SPARC_SOL_EMUL, current->fs->root,
-		        buf, NULL, &base, NULL, NULL, NULL);
-	if (error)
-		return error;
-
-	error = __namei(retrieve_mode, name, base, buf, res_dir, res_inode,
-			last_name, last_entry, last_error);
-	if (error)
-		return error;
-
-	return 0;
+	base = lookup_dentry ((current->personality == PER_BSD) ?
+			SPARC_BSD_EMUL : SPARC_SOL_EMUL,
+			dget (current->fs->root), 1);
+			
+	if (IS_ERR (base)) return base;
+	
+	base = lookup_dentry (name, base, follow_link);
+	
+	if (IS_ERR (base)) return base;
+	
+	if (!base->d_inode) {
+		dput(base);
+		return ERR_PTR(-ENOENT);
+	}
+	
+	return base;
 }
 
-#endif /* XXX FIXME */
+#define __prefix_lookup_dentry(name, follow_link)				\
+	dentry = __sparc64_lookup_dentry (name, follow_link);			\
+	if (!IS_ERR (dentry)) return dentry;
 
 #endif /* __SPARC64_NAMEI_H */

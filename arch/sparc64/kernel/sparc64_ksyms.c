@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.17 1997/08/10 01:51:01 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.21 1997/09/03 12:29:07 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/in6.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -28,11 +29,13 @@
 #include <asm/ptrace.h>
 #include <asm/user.h>
 #include <asm/uaccess.h>
+#include <asm/checksum.h>
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #include <asm/dma.h>
 #endif
 #include <asm/a.out.h>
+#include <asm/svr4.h>
 
 struct poll {
 	int fd;
@@ -45,14 +48,27 @@ extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 void _sigpause_common (unsigned int set, struct pt_regs *);
 extern void *__bzero_1page(void *);
 extern void *__bzero(void *, size_t);
+extern void *__bzero_noasi(void *, size_t);
 extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
-extern unsigned int csum_partial_copy_sparc64(const char *src, char *dst,
-					      int len, unsigned int sum);
 extern char saved_command_line[];
-
+extern char *getname32(u32 name);
+extern void linux_sparc_syscall(void);
+extern void rtrap(void);
+extern void show_regs(struct pt_regs *);
+extern void solaris_syscall(void);
+extern void syscall_trace(void);
+extern u32 sunos_sys_table[], sys_call_table32[];
+extern void tl0_solaris(void);
+extern void sys_sigsuspend(void);
+extern int sys_getppid(void);
+extern int svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs);
+extern int svr4_setcontext(svr4_ucontext_t *uc, struct pt_regs *regs);
+extern int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
+extern int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg);
+                
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
 
@@ -155,6 +171,25 @@ EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strspn);
 
+#ifdef CONFIG_SOLARIS_EMUL_MODULE
+EXPORT_SYMBOL(getname32);
+EXPORT_SYMBOL(linux_sparc_syscall);
+EXPORT_SYMBOL(rtrap);
+EXPORT_SYMBOL(show_regs);
+EXPORT_SYMBOL(solaris_syscall);
+EXPORT_SYMBOL(syscall_trace);
+EXPORT_SYMBOL(sunos_sys_table);
+EXPORT_SYMBOL(sys_call_table32);
+EXPORT_SYMBOL(tl0_solaris);
+EXPORT_SYMBOL(sys_sigsuspend);
+EXPORT_SYMBOL(sys_getppid);
+EXPORT_SYMBOL(svr4_getcontext);
+EXPORT_SYMBOL(svr4_setcontext);
+EXPORT_SYMBOL(linux_cpus);
+EXPORT_SYMBOL(sys_ioctl);
+EXPORT_SYMBOL(sys32_ioctl);
+#endif
+
 /* Special internal versions of library functions. */
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
@@ -172,6 +207,7 @@ EXPORT_SYMBOL(csum_partial_copy_sparc64);
 EXPORT_SYMBOL(__copy_to_user);
 EXPORT_SYMBOL(__copy_from_user);
 EXPORT_SYMBOL(__strncpy_from_user);
+EXPORT_SYMBOL(__bzero_noasi);
 
 /* No version information on this, heavily used in inline asm,
  * and will always be 'void __ret_efault(void)'.

@@ -1,6 +1,6 @@
 /* sunmouse.c: Sun mouse driver for the Sparc
  *
- * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
  *
  * Parts based on the psaux.c driver written by:
@@ -10,6 +10,7 @@
  * Jan/5/96  Added VUID support, sigio support - miguel.
  * Mar/5/96  Added proper mouse stream support - miguel.
  * Sep/96    Allow more than one reader -miguel.
+ * Aug/97    Added PCI 8042 controller support -DaveM
  */
 
 /* The mouse is run off of one of the Zilog serial ports.  On
@@ -37,6 +38,7 @@
  * FIXME: We need to support more than one mouse.
  * */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fcntl.h>
@@ -90,7 +92,7 @@ static struct sun_mouse sunmouse;
 
 extern void mouse_put_char(char ch);
 
-/* #define SMOUSE_DEBUG */
+#undef SMOUSE_DEBUG
 
 static void
 push_event (Firm_event *ev)
@@ -125,6 +127,9 @@ push_char (char c)
 	int next = (sunmouse.head + 1) % STREAM_SIZE;
 
 	if (next != sunmouse.tail){
+#ifdef SMOUSE_DEBUG
+		printk("P<%02x>\n", (unsigned char)c);
+#endif
 		sunmouse.queue.stream [sunmouse.head] = c;
 		sunmouse.head = next;
 	}
@@ -142,14 +147,14 @@ static int mouse_baud = 4800;		/* Initial rate set by zilog driver. */
 /* Change the baud rate after receiving too many "bogon bytes". */
 void sun_mouse_change_baud(void)
 {
-	extern void zs_change_mouse_baud(int newbaud);
+	extern void rs_change_mouse_baud(int newbaud);
 
 	if(mouse_baud == 1200)
 		mouse_baud = 4800;
 	else
 		mouse_baud = 1200;
 
-	zs_change_mouse_baud(mouse_baud);
+	rs_change_mouse_baud(mouse_baud);
 	mouse_baud_changing = 1;
 }
 
@@ -373,9 +378,25 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 		char *p = buffer, *end = buffer+count;
 		
 		while (p < end && !queue_empty ()){
-			copy_to_user_ret((Firm_event *)p, get_from_queue(),
-				     sizeof(Firm_event), -EFAULT);
-			p += sizeof (Firm_event);
+#ifdef CONFIG_SPARC32_COMPAT
+			if (current->tss.flags & SPARC_FLAG_32BIT) {
+				Firm_event *q = get_from_queue();
+				
+				copy_to_user_ret((Firm_event *)p, q, 
+						 sizeof(Firm_event)-sizeof(struct timeval),
+						 -EFAULT);
+				p += sizeof(Firm_event)-sizeof(struct timeval);
+				__put_user_ret(q->time.tv_sec, (u32 *)p, -EFAULT);
+				p += sizeof(u32);
+				__put_user_ret(q->time.tv_usec, (u32 *)p, -EFAULT);
+				p += sizeof(u32);
+			} else
+#endif	
+			{	
+				copy_to_user_ret((Firm_event *)p, get_from_queue(),
+				     		 sizeof(Firm_event), -EFAULT);
+				p += sizeof (Firm_event);
+			}
 		}
 		sunmouse.ready = !queue_empty ();
 		inode->i_atime = CURRENT_TIME;

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.16 1997/08/11 08:37:49 cort Exp $
+# $Id: config.in,v 1.19 1997/09/04 01:54:26 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -8,20 +8,21 @@ mainmenu_option next_comment
 comment 'Platform support'
 define_bool CONFIG_PPC y
 
-if [ "`uname`" != "Linux" ]; then
+if [ "`uname`" != "Linux" -o "`uname -m`" != "ppc" ]; then
   define_bool CONFIG_CROSSCOMPILE y
 else
   define_bool CONFIG_NATIVE y
 fi
 
-bool 'Build PowerMac Kernel (not PReP)?' CONFIG_PMAC
-bool 'Build PReP Kernel (not PowerMac)?' CONFIG_PREP
+bool 'Build PowerMac Kernel (not PReP or CHRP)?' CONFIG_PMAC
+bool 'Build PReP Kernel (not PowerMac or CHRP)?' CONFIG_PREP
+bool 'Build CHRP Kernel (not PReP or PowerMac)?' CONFIG_CHRP
 
 choice 'Processor type' \
-	"Common		CONFIG_MCOMMON \
-	 601		CONFIG_M601	\
-	 603		CONFIG_M603	\
-	 604		CONFIG_M604" Common
+	"Common		CONFIG_COMMON \
+	 601		CONFIG_601	\
+	 603		CONFIG_603	\
+	 604		CONFIG_604" Common
 endmenu
 
 mainmenu_option next_comment

@@ -395,7 +395,9 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
 		return smp_cross_call_avoidance(mm);
-	} else if(mm != current->mm && mm->count == 1) {
+	}
+#if 0 /* XXX Disabled until further notice... */
+	else if(mm != current->mm && mm->count == 1) {
 		/* Try to handle two special cases to avoid cross calls
 		 * in common scenerios where we are swapping process
 		 * pages out.
@@ -405,6 +407,7 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
 	}
+#endif
 	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 
 local_flush_and_out:

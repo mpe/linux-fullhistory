@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.13 1997/07/17 02:20:38 davem Exp $
+/* $Id: ioctl32.c,v 1.17 1997/09/03 11:54:49 ecd Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -23,6 +23,7 @@
 #include <linux/vt.h>
 #include <linux/fs.h>
 #include <linux/fd.h>
+#include <linux/if_ppp.h>
 
 #include <asm/types.h>
 #include <asm/uaccess.h>
@@ -31,6 +32,13 @@
 #include <asm/vuid_event.h>
 #include <asm/rtc.h>
 #include <asm/openpromio.h>
+
+/*
+ * XXX: for DaveM:
+ * This is the kludge to know what size of buffer to
+ * copy back to the user... (ecd)
+ */
+int ifr_data_len;
 
 /* As gcc will warn about casting u32 to some ptr, we have to cast it to
  * unsigned long first, and that's what is A() for.
@@ -102,6 +110,7 @@ static inline int dev_ifconf(unsigned int fd, u32 arg)
 
 	if (copy_from_user(&ifc32, (struct ifconf32 *)A(arg), sizeof(struct ifconf32)))
 		return -EFAULT;
+
 	ifc.ifc_len = ((ifc32.ifc_len / sizeof (struct ifreq32)) + 1) * sizeof (struct ifreq);
 	ifc.ifc_buf = kmalloc (ifc.ifc_len, GFP_KERNEL);
 	if (!ifc.ifc_buf) return -ENOMEM;
@@ -145,7 +154,8 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 	unsigned long old_fs;
 	int err;
 	
-	if (cmd == SIOCSIFMAP) {
+	switch (cmd) {
+	case SIOCSIFMAP:
 		if (copy_from_user(&ifr, (struct ifreq32 *)A(arg), sizeof(ifr.ifr_name)) ||
 		    __get_user(ifr.ifr_map.mem_start, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_start)) ||
 		    __get_user(ifr.ifr_map.mem_end, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_end)) ||
@@ -154,9 +164,20 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 		    __get_user(ifr.ifr_map.dma, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.dma)) ||
 		    __get_user(ifr.ifr_map.port, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.port)))
 			return -EFAULT;
-	} else {
+		break;
+	case SIOCGPPPSTATS:
+	case SIOCGPPPCSTATS:
+	case SIOCGPPPVER:
 		if (copy_from_user(&ifr, (struct ifreq32 *)A(arg), sizeof(struct ifreq32)))
 			return -EFAULT;
+		ifr.ifr_data = (__kernel_caddr_t)get_free_page(GFP_KERNEL);
+		if (!ifr.ifr_data)
+			return -EAGAIN;
+		break;
+	default:
+		if (copy_from_user(&ifr, (struct ifreq32 *)A(arg), sizeof(struct ifreq32)))
+			return -EFAULT;
+		break;
 	}
 	old_fs = get_fs();
 	set_fs (KERNEL_DS);
@@ -177,6 +198,21 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 			if (copy_to_user((struct ifreq32 *)A(arg), &ifr, sizeof(struct ifreq32)))
 				return -EFAULT;
 			break;
+		case SIOCGPPPSTATS:
+		case SIOCGPPPCSTATS:
+		case SIOCGPPPVER:
+		{
+			u32 data;
+			__get_user(data, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_data));
+			/*
+			 * XXX: for DaveM:
+			 * Here we use 'ifr_data_len' to know what size of buffer to
+			 * copy back to the user... (ecd)
+			 */
+			if (copy_to_user((char *)A(data), ifr.ifr_data, ifr_data_len))
+				return -EFAULT;
+			break;
+		}
 		case SIOCGIFMAP:
 			if (copy_to_user((struct ifreq32 *)A(arg), &ifr, sizeof(ifr.ifr_name)) ||
 			    __put_user(ifr.ifr_map.mem_start, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_start)) ||
@@ -481,6 +517,74 @@ static inline int fbiogscursor(unsigned int fd, unsigned int cmd, u32 arg)
 	return ret;
 }
 	
+static int hdio_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	unsigned long old_fs = get_fs();
+	unsigned long kval;
+	unsigned int *uvp;
+	int error;
+
+	set_fs(KERNEL_DS);
+	error = sys_ioctl(fd, cmd, (long)&kval);
+	set_fs(old_fs);
+
+	if(error == 0) {
+		uvp = (unsigned int *)A(arg);
+		if(put_user(kval, uvp))
+			error = -EFAULT;
+	}
+	return error;
+}
+
+struct ppp_option_data32 {
+	__kernel_caddr_t32	ptr;
+	__u32			length;
+	int			transmit;
+};
+#define PPPIOCSCOMPRESS32	_IOW('t', 77, struct ppp_option_data32)
+
+static int ppp_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	unsigned long old_fs = get_fs();
+	struct ppp_option_data32 data32;
+	struct ppp_option_data data;
+	int err;
+
+	switch (cmd) {
+	case PPPIOCSCOMPRESS32:
+		if (copy_from_user(&data32, (struct ppp_option_data32 *)A(arg), sizeof(struct ppp_option_data32)))
+			return -EFAULT;
+		data.ptr = kmalloc (data32.length, GFP_KERNEL);
+		if (!data.ptr)
+			return -ENOMEM;
+		if (copy_from_user(data.ptr, (__u8 *)A(data32.ptr), data32.length)) {
+			err = -EFAULT;
+			goto out;
+		}
+		data.length = data32.length;
+		data.transmit = data32.transmit;
+		break;
+	default:
+		printk("ppp_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
+		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		return -EINVAL;
+	}
+	old_fs = get_fs();
+	set_fs (KERNEL_DS);
+	err = sys_ioctl (fd, cmd, (unsigned long)&data);
+	set_fs (old_fs);
+	if (err)
+		goto out;
+	switch (cmd) {
+	case PPPIOCSCOMPRESS32:
+	default:
+		break;
+	}
+out:
+	kfree(data.ptr);
+	return err;
+}
+
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	struct file * filp;
@@ -527,6 +631,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case SIOCSIFDSTADDR:
 	case SIOCGIFNETMASK:
 	case SIOCSIFNETMASK:
+	case SIOCGPPPSTATS:
+	case SIOCGPPPCSTATS:
+	case SIOCGPPPVER:
 		error = dev_ifsioc(fd, cmd, arg);
 		goto out;
 		
@@ -555,6 +662,16 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		
 	case FBIOSCURSOR32:
 		error = fbiogscursor(fd, cmd, arg);
+		goto out;
+
+	case HDIO_GET_KEEPSETTINGS:
+	case HDIO_GET_UNMASKINTR:
+	case HDIO_GET_DMA:
+	case HDIO_GET_32BIT:
+	case HDIO_GET_MULTCOUNT:
+	case HDIO_GET_NOWERR:
+	case HDIO_GET_NICE:
+		error = hdio_ioctl_trans(fd, cmd, arg);
 		goto out;
 
 	/* List here exlicitly which ioctl's are known to have
@@ -619,6 +736,23 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case FIBMAP:
 	case FIGETBSZ:
 	
+	/* 0x03 -- HD/IDE ioctl's used by hdparm and friends.
+	 *         Some need translations, these do not.
+	 */
+	case HDIO_GET_IDENTITY:
+	case HDIO_SET_DMA:
+	case HDIO_SET_KEEPSETTINGS:
+	case HDIO_SET_UNMASKINTR:
+	case HDIO_SET_NOWERR:
+	case HDIO_SET_32BIT:
+	case HDIO_SET_MULTCOUNT:
+	case HDIO_DRIVE_CMD:
+	case HDIO_SET_PIO_MODE:
+	case HDIO_SCAN_HWIF:
+	case HDIO_SET_NICE:
+	case BLKROSET:
+	case BLKROGET:
+
 	/* 0x02 -- Floppy ioctls */
 	case FDSETEMSGTRESH:
 	case FDFLUSH:
@@ -729,11 +863,40 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case SIOCSARP:
 	case SIOCGARP:
 	case SIOCDARP:
+	case OLD_SIOCSARP:
+	case OLD_SIOCGARP:
+	case OLD_SIOCDARP:
+	case SIOCSRARP:
+	case SIOCGRARP:
+	case SIOCDRARP:
 	case SIOCADDDLCI:
 	case SIOCDELDLCI:
+
+	/* PPP stuff */
+	case PPPIOCGFLAGS:
+	case PPPIOCSFLAGS:
+	case PPPIOCGASYNCMAP:
+	case PPPIOCSASYNCMAP:
+	case PPPIOCGUNIT:
+	case PPPIOCGRASYNCMAP:
+	case PPPIOCSRASYNCMAP:
+	case PPPIOCGMRU:
+	case PPPIOCSMRU:
+	case PPPIOCSMAXCID:
+	case PPPIOCGXASYNCMAP:
+	case PPPIOCSXASYNCMAP:
+	case PPPIOCXFERUNIT:
+	case PPPIOCGNPMODE:
+	case PPPIOCSNPMODE:
+	case PPPIOCGDEBUG:
+	case PPPIOCSDEBUG:
+	case PPPIOCGIDLE:
 		error = sys_ioctl (fd, cmd, (unsigned long)arg);
 		goto out;
-		break;
+
+	case PPPIOCSCOMPRESS32:
+		error = ppp_ioctl (fd, cmd, (unsigned long)arg);
+		goto out;
 
 	default:
 		printk("sys32_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",

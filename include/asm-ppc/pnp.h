@@ -17,10 +17,11 @@
 #ifndef _PNP_
 #define _PNP_
 
+#ifndef __ASSEMBLY__
 #define MAX_MEM_REGISTERS 9
 #define MAX_IO_PORTS 20
 #define MAX_IRQS 7
-#define MAX_DMA_CHANNELS 7
+/*#define MAX_DMA_CHANNELS 7*/
 
 /* Interrupt controllers */
 
@@ -638,4 +639,5 @@ typedef union _PnP_TAG_PACKET {
 
   } PnP_TAG_PACKET;
 
+#endif /* __ASSEMBLY__ */
 #endif  /* ndef _PNP_ */

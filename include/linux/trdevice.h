@@ -33,7 +33,7 @@ extern int		tr_header(struct sk_buff *skb, struct device *dev,
 				   void *saddr, unsigned len);
 extern int		tr_rebuild_header(struct sk_buff *skb);
 extern unsigned short	tr_type_trans(struct sk_buff *skb, struct device *dev);
-
+extern void             tr_reformat(struct sk_buff *, unsigned int);
 extern struct device    * init_trdev(struct device *, int);
 
 #endif

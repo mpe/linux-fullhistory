@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.22 1997/08/05 19:19:36 davem Exp $
+/*  $Id: signal.c,v 1.24 1997/09/02 20:53:03 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -67,7 +67,7 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 	regs->tpc = pc;
 	regs->tnpc = npc;
 	__get_user(regs->y, &((*grp)[MC_Y]));
-	__get_user(tstate, &((*grp)[MC_Y]));
+	__get_user(tstate, &((*grp)[MC_TSTATE]));
 	regs->tstate &= ~(TSTATE_ICC | TSTATE_XCC);
 	regs->tstate |= (tstate & (TSTATE_ICC | TSTATE_XCC));
 	__get_user(regs->u_regs[UREG_G1], (&(*grp)[MC_G1]));
@@ -94,11 +94,18 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 	__get_user(fenab, &(ucp->uc_mcontext.mc_fpregs.mcfpu_enab));
 	if(fenab) {
 		unsigned long *fpregs = (unsigned long *)(regs+1);
-		copy_from_user(fpregs, &(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs),
-			       (sizeof(unsigned long) * 32));
+		unsigned long fprs;
+		__get_user(fprs, &(ucp->uc_mcontext.mc_fpregs.mcfpu_fprs));
+		if (fprs & FPRS_DL)
+			copy_from_user(fpregs, &(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs),
+			       	       (sizeof(unsigned int) * 32));
+		if (fprs & FPRS_DU)
+			copy_from_user(fpregs+16, ((unsigned long *)&(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs))+16,
+			       	       (sizeof(unsigned int) * 32));
 		__get_user(fpregs[32], &(ucp->uc_mcontext.mc_fpregs.mcfpu_fsr));
 		__get_user(fpregs[33], &(ucp->uc_mcontext.mc_fpregs.mcfpu_gsr));
-		regs->fprs = FPRS_FEF;
+		regs->fprs = fprs;
+		regs->tstate |= TSTATE_PEF;
 	}
 	return;
 do_sigsegv:
@@ -113,7 +120,7 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 	mc_gregset_t *grp;
 	mcontext_t *mcp;
 	unsigned long fp, i7;
-	unsigned char fenab = (current->flags & PF_USEDFPU);
+	unsigned char fenab = (current->tss.flags & SPARC_FLAG_USEDFPU);
 
 	synchronize_user_stack();
 	if(tp->w_saved || clear_user(ucp, sizeof(*ucp)))
@@ -154,11 +161,25 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 	__put_user(fenab, &(mcp->mc_fpregs.mcfpu_enab));
 	if(fenab) {
 		unsigned long *fpregs = (unsigned long *)(regs+1);
-		copy_to_user(&(mcp->mc_fpregs.mcfpu_fregs), fpregs,
-			     (sizeof(unsigned long) * 32));
+		unsigned long fprs;
+		
+		fprs = (regs->fprs & FPRS_FEF) | 
+		       (current->tss.flags & (SPARC_FLAG_USEDFPUL | SPARC_FLAG_USEDFPUU));
+		if (fprs & FPRS_DL)
+			copy_to_user(&(mcp->mc_fpregs.mcfpu_fregs), fpregs,
+				     (sizeof(unsigned int) * 32));
+		else
+			clear_user(&(mcp->mc_fpregs.mcfpu_fregs),
+				     (sizeof(unsigned int) * 32));
+		if (fprs & FPRS_DU)
+			copy_to_user(((unsigned long *)&(mcp->mc_fpregs.mcfpu_fregs))+16, fpregs+16,
+				     (sizeof(unsigned int) * 32));
+		else
+			clear_user(((unsigned long *)&(mcp->mc_fpregs.mcfpu_fregs))+16,
+				     (sizeof(unsigned int) * 32));
 		__put_user(fpregs[32], &(mcp->mc_fpregs.mcfpu_fsr));
 		__put_user(fpregs[33], &(mcp->mc_fpregs.mcfpu_gsr));
-		__put_user(FPRS_FEF, &(mcp->mc_fpregs.mcfpu_fprs));
+		__put_user(fprs, &(mcp->mc_fpregs.mcfpu_fprs));
 	}
 	return;
 do_sigsegv:
@@ -241,11 +262,19 @@ static inline void
 restore_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	unsigned long *fpregs = (unsigned long *)(regs+1);
-	copy_from_user(fpregs, &fpu->si_float_regs[0],
-		       (sizeof(unsigned int) * 64));
+	unsigned long fprs;
+	
+	__get_user(fprs, &fpu->si_fprs);
+	if (fprs & FPRS_DL)
+		copy_from_user(fpregs, &fpu->si_float_regs[0],
+		       	       (sizeof(unsigned int) * 32));
+	if (fprs & FPRS_DU)
+		copy_from_user(fpregs+16, &fpu->si_float_regs[32],
+		       	       (sizeof(unsigned int) * 32));
 	__get_user(fpregs[32], &fpu->si_fsr);
 	__get_user(fpregs[33], &fpu->si_gsr);
-	regs->fprs = FPRS_FEF;
+	regs->fprs = fprs;
+	regs->tstate |= TSTATE_PEF;
 }
 
 void do_sigreturn(struct pt_regs *regs)
@@ -312,11 +341,26 @@ static inline void
 save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	unsigned long *fpregs = (unsigned long *)(regs+1);
-	copy_to_user(&fpu->si_float_regs[0], fpregs,
-		     (sizeof(unsigned int) * 64));
+	unsigned long fprs;
+	
+	fprs = (regs->fprs & FPRS_FEF) | 
+		(current->tss.flags & (SPARC_FLAG_USEDFPUL | SPARC_FLAG_USEDFPUU));
+	if (fprs & FPRS_DL)
+		copy_to_user(&fpu->si_float_regs[0], fpregs,
+		     	     (sizeof(unsigned int) * 32));
+	else
+		clear_user(&fpu->si_float_regs[0],
+		     	     (sizeof(unsigned int) * 32));
+	if (fprs & FPRS_DU)
+		copy_to_user(&fpu->si_float_regs[32], fpregs+16,
+		     	     (sizeof(unsigned int) * 32));
+	else
+		clear_user(&fpu->si_float_regs[32],
+		     	     (sizeof(unsigned int) * 32));
 	__put_user(fpregs[32], &fpu->si_fsr);
 	__put_user(fpregs[33], &fpu->si_gsr);
-	regs->fprs = 0;
+	__put_user(fprs, &fpu->si_fprs);
+	regs->tstate &= ~TSTATE_PEF;
 }
 
 static inline void
@@ -329,7 +373,7 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
 	sigframe_size = NF_ALIGNEDSZ;
-	if (!(current->flags & PF_USEDFPU))
+	if (!(current->tss.flags & SPARC_FLAG_USEDFPU))
 		sigframe_size -= sizeof(__siginfo_fpu_t);
 
 	sf = (struct new_signal_frame *)
@@ -347,7 +391,7 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	/* 2. Save the current process state */
 	copy_to_user(&sf->info.si_regs, regs, sizeof (*regs));
 
-	if (current->flags & PF_USEDFPU) {
+	if (current->tss.flags & SPARC_FLAG_USEDFPU) {
 		save_fpu_state(regs, &sf->fpu_state);
 		__put_user((u64)&sf->fpu_state, &sf->fpu_save);
 	} else {

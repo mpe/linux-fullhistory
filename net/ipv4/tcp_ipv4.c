@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.52 1997/07/23 15:19:10 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.61 1997/09/02 09:46:55 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -33,6 +33,13 @@
  *		Andi Kleen :		Add support for syncookies and fixed
  *					some bugs: ip options weren't passed to
  *					the TCP layer, missed a check for an ACK bit.
+ *		Andi Kleen :		Implemented fast path mtu discovery.
+ *	     				Fixed many serious bugs in the
+ *					open_request handling and moved
+ *					most of it into the af independent code.
+ *					Added tail drop and some other bugfixes.
+ *					Added new listen sematics (ifdefed by
+ *					NEW_LISTEN for now)
  */
 
 #include <linux/config.h>
@@ -52,6 +59,9 @@ extern int sysctl_tcp_tsack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_syncookies;
+
+/* Define this to check TCP sequence numbers in ICMP packets. */
+#define ICMP_PARANOIA 1
 
 static void tcp_v4_send_reset(struct sk_buff *skb);
 
@@ -517,9 +527,11 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	if (!tcp_unique_address(rt->rt_src, sk->num, rt->rt_dst,
-				usin->sin_port))
+				usin->sin_port)) {
+		ip_rt_put(rt);
 		return -EADDRNOTAVAIL;
-  
+	}
+
 	lock_sock(sk);
 	sk->dst_cache = &rt->u.dst;
 	sk->daddr = rt->rt_dst;
@@ -673,6 +685,76 @@ out:
 	return retval;
 }
 
+
+/*
+ * Do a linear search in the socket open_request list. 
+ * This should be replaced with a global hash table.
+ */
+static struct open_request *tcp_v4_search_req(struct tcp_opt *tp, 
+				      void *header,
+				      struct tcphdr *th,
+				      struct open_request **prevp)
+{
+	struct iphdr *iph = header;
+	struct open_request *req, *prev;  
+	__u16 rport = th->source; 
+
+	/*	assumption: the socket is not in use.
+	 *	as we checked the user count on tcp_rcv and we're
+	 *	running from a soft interrupt.
+	 */
+	prev = (struct open_request *) (&tp->syn_wait_queue); 
+	for (req = prev->dl_next; req; req = req->dl_next) {
+		if (req->af.v4_req.rmt_addr == iph->saddr &&
+		    req->af.v4_req.loc_addr == iph->daddr &&
+		    req->rmt_port == rport) {
+			*prevp = prev; 
+			return req; 
+		}
+		prev = req; 
+	}
+	return NULL; 
+}
+
+
+/* 
+ * This routine does path mtu discovery as defined in RFC1197.
+ */
+static inline void do_pmtu_discovery(struct sock *sk,
+				    struct iphdr *ip,
+				    struct tcphdr *th)
+{
+	int new_mtu; 
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+
+	/* Don't interested in TCP_LISTEN and open_requests (SYN-ACKs
+	 * send out by Linux are always <576bytes so they should go through
+	 * unfragmented).
+	 */
+	if (sk->state == TCP_LISTEN)
+		return; 
+
+	/* We don't check in the destentry if pmtu discovery is forbidden
+	 * on this route. We just assume that no packet_to_big packets
+	 * are send back when pmtu discovery is not active.
+     	 * There is a small race when the user changes this flag in the
+	 * route, but I think that's acceptable.
+	 */
+	if (sk->ip_pmtudisc != IP_PMTUDISC_DONT && sk->dst_cache) {
+		new_mtu = sk->dst_cache->pmtu - 
+			(ip->ihl<<2) - tp->tcp_header_len; 
+		if (new_mtu < sk->mss && new_mtu > 0) {
+			sk->mss = new_mtu;
+			/* Resend the TCP packet because it's  
+			 * clear that the old packet has been
+			 * dropped. This is the new "fast" path mtu
+			 * discovery.
+			 */
+			tcp_simple_retransmit(sk);
+		}
+	}
+}
+
 /*
  * This routine is called by the ICMP module when it gets some
  * sort of error condition.  If err < 0 then the socket should
@@ -685,61 +767,125 @@ out:
 void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 {
 	struct iphdr *iph = (struct iphdr*)dp;
-	struct tcphdr *th = (struct tcphdr*)(dp+(iph->ihl<<2));
+	struct tcphdr *th; 
 	struct tcp_opt *tp;
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 	struct sock *sk;
+	__u32 seq; 
+
+#if 0
+	/* check wrong - icmp.c should pass in len */
+	if (skb->len < 8+(iph->ihl << 2)+sizeof(struct tcphdr)) {
+		icmp_statistics.IcmpInErrors++;
+		return;
+	}
+#endif
+
+	th = (struct tcphdr*)(dp+(iph->ihl<<2));
 
 	sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source);
+	if (sk == NULL) {
+		icmp_statistics.IcmpInErrors++;
+		return; 
+	}
 
-	if (sk == NULL)
-		return;
-
+	/* pointless, because we have no way to retry when sk is locked.
+	   But the socket should be really locked here for better interaction
+	   with the socket layer. This needs to be solved for SMP
+	   (I would prefer an "ICMP backlog"). */
+	/* lock_sock(sk); */ 
 	tp = &sk->tp_pinfo.af_tcp;
-	if (type == ICMP_SOURCE_QUENCH) {
+
+	seq = ntohl(th->seq);
+
+#ifdef ICMP_PARANOIA
+	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
+		if (net_ratelimit()) 
+			printk(KERN_DEBUG "icmp packet outside the tcp window:"
+					  " s:%d %u,%u,%u\n",
+			       (int)sk->state, seq, tp->snd_una, tp->snd_nxt); 
+		goto out; 
+	}
+#endif
+
+	switch (type) {
+	case ICMP_SOURCE_QUENCH:
 		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
 		tp->snd_cwnd = tp->snd_ssthresh;
 		tp->high_seq = tp->snd_nxt;
-		return;
-	}
-
-	if (type == ICMP_PARAMETERPROB) {
+		goto out;
+	case ICMP_PARAMETERPROB:
 		sk->err=EPROTO;
 		sk->error_report(sk);
-	}
-
-	/* FIXME: What about the IP layer options size here? */
-	/* FIXME: add a timeout here, to cope with broken devices that
-		  drop all DF=1 packets. Do some more sanity checking 
-		  here to prevent DOS attacks?
-		  This code should kick the tcp_output routine to
-		  retransmit a packet immediately because we know that
-		  the last packet has been dropped. -AK */
-	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
-		if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
-			int new_mtu = sk->dst_cache->pmtu - sizeof(struct iphdr) - tp->tcp_header_len;
-			if (new_mtu < sk->mss && new_mtu > 0) {
-				sk->mss = new_mtu;
-			}
+		break; 
+	case ICMP_DEST_UNREACH:
+		if (code == ICMP_FRAG_NEEDED) { /* PMTU discovery (RFC1191) */
+			do_pmtu_discovery(sk, iph, th); 
+			goto out; 
 		}
-		return;
+		break; 
 	}
 
 	/* If we've already connected we will keep trying
 	 * until we time out, or the user gives up.
 	 */
-	if (code <= NR_ICMP_UNREACH) {
-		if(icmp_err_convert[code].fatal || sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
+	if (code <= NR_ICMP_UNREACH) { 
+		int fatal = 0; 
+
+		if (sk->state == TCP_LISTEN) {
+			struct open_request *req, *prev;
+	
+			/* Prevent race conditions with accept()
+			 * icmp is unreliable. 
+			 * This is the easiest solution for now - for
+			 * very big servers it might prove inadequate.
+			 */
+			if (sk->sock_readers) {
+				/* XXX: add a counter here to profile this. 
+				 * If too many ICMPs get dropped on busy
+				 * servers this needs to be solved differently.
+				 */
+				goto out;
+			}
+ 
+			req = tcp_v4_search_req(tp, iph, th, &prev); 
+			if (!req)
+				goto out;
+#ifdef ICMP_PARANOIA
+			if (seq != req->snt_isn) {
+				if (net_ratelimit())
+					printk(KERN_DEBUG "icmp packet for openreq "
+					       "with wrong seq number:%d:%d\n",
+					       seq, req->snt_isn);
+				goto out;
+			}
+#endif
+ 			if (req->sk) {	/* not yet accept()ed */
+				sk = req->sk;
+			} else {
+				tcp_synq_unlink(tp, req, prev);
+				tcp_openreq_free(req);
+				fatal = 1; 
+			}
+		} else if (sk->state == TCP_SYN_SENT 
+			   || sk->state == TCP_SYN_RECV)
+			fatal = 1; 
+		
+		if(icmp_err_convert[code].fatal || fatal) {
 			sk->err = icmp_err_convert[code].errno;
-			if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
+			if (fatal) {
 				tcp_statistics.TcpAttemptFails++;
-				tcp_set_state(sk,TCP_CLOSE);
+				if (sk->state != TCP_LISTEN)
+					tcp_set_state(sk,TCP_CLOSE);
 				sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
 			}
 		} else	/* Only an error on timeout */
 			sk->err_soft = icmp_err_convert[code].errno;
 	}
+
+out:
+	/* release_sock(sk); */
 }
 
 /* This routine computes an IPv4 TCP checksum. */
@@ -872,16 +1018,18 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	th->dest = req->rmt_port;
 	skb->seq = req->snt_isn;
 	skb->end_seq = skb->seq + 1;
-	th->seq = ntohl(skb->seq);
+	th->seq = htonl(skb->seq);
 	th->ack_seq = htonl(req->rcv_isn + 1);
-	if (req->rcv_wnd == 0) {
+	if (req->rcv_wnd == 0) { /* ignored for retransmitted syns */
+		__u8 rcv_wscale; 
 		/* Set this up on the first call only */
 		req->window_clamp = skb->dst->window;
 		tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
 			&req->rcv_wnd,
 			&req->window_clamp,
 			req->wscale_ok,
-			&req->rcv_wscale);
+			&rcv_wscale);
+		req->rcv_wscale = rcv_wscale; 
 	}
 	th->window = htons(req->rcv_wnd);
 
@@ -912,10 +1060,33 @@ static void tcp_v4_or_free(struct open_request *req)
 			sizeof(struct ip_options) + req->af.v4_req.opt->optlen);
 }
 
+static inline void syn_flood_warning(struct sk_buff *skb)
+{
+	static unsigned long warntime;
+	
+	if (jiffies - warntime > HZ*60) {
+		warntime = jiffies;
+		printk(KERN_INFO 
+		       "possible SYN flooding on port %d. Sending cookies.\n",  
+		       ntohs(skb->h.th->dest));
+	}
+}
+
+int sysctl_max_syn_backlog = 1024; 
+int sysctl_tcp_syn_taildrop = 1;
+
 struct or_calltable or_ipv4 = {
 	tcp_v4_send_synack,
 	tcp_v4_or_free
 };
+
+#ifdef NEW_LISTEN
+#define BACKLOG(sk) ((sk)->tp_pinfo.af_tcp.syn_backlog) /* lvalue! */
+#define BACKLOGMAX(sk) sysctl_max_syn_backlog
+#else
+#define BACKLOG(sk) ((sk)->ack_backlog)
+#define BACKLOGMAX(sk) ((sk)->max_ack_backlog)
+#endif
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, 
 						__u32 isn)
@@ -936,35 +1107,33 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	if (sk->dead) 
 		goto dead; 
 
-	if (sk->ack_backlog >= sk->max_ack_backlog) {
+	/* XXX: Check against a global syn pool counter. */
+	if (BACKLOG(sk) > BACKLOGMAX(sk)) {
 #ifdef CONFIG_SYN_COOKIES
 		if (sysctl_tcp_syncookies) {
-			static unsigned long warntime;
-
-			if (jiffies - warntime > HZ*60) {
-				warntime = jiffies;
-				printk(KERN_INFO 
-				       "possible SYN flooding on port %d. Sending cookies.\n", ntohs(skb->h.th->dest));
-			}
+			syn_flood_warning(skb);
 			want_cookie = 1; 
 		} else 
 #endif
-		{
-			SOCK_DEBUG(sk, "dropping syn ack:%d max:%d\n", sk->ack_backlog,
-				   sk->max_ack_backlog);
+		if (sysctl_tcp_syn_taildrop) {
+			struct open_request *req;
+
+			req = tcp_synq_unlink_tail(&sk->tp_pinfo.af_tcp);
+			tcp_openreq_free(req);
 			tcp_statistics.TcpAttemptFails++;
-			goto exit;
+		} else {
+			goto error;
 		}
 	} else { 
 		if (isn == 0)
 			isn = tcp_v4_init_sequence(sk, skb);
-		sk->ack_backlog++;
+		BACKLOG(sk)++;
 	}
 
 	req = tcp_openreq_alloc();
 	if (req == NULL) {
-		tcp_statistics.TcpAttemptFails++;
-		goto exit;
+		if (!want_cookie) BACKLOG(sk)--;
+		goto error;
 	}
 
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
@@ -972,7 +1141,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	req->rcv_isn = skb->seq;
  	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
-	tcp_parse_options(th,&tp, want_cookie);
+	tcp_parse_options(th,&tp,want_cookie);
 	if (tp.saw_tstamp)
 		req->ts_recent = tp.rcv_tsval;
 	req->mss = tp.in_mss;
@@ -1023,15 +1192,16 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	}
 
 	sk->data_ready(sk, 0);
-
 exit:
-	kfree_skb(skb, FREE_READ);
 	return 0;
 
 dead:
 	SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
 	tcp_statistics.TcpAttemptFails++;
 	return -ENOTCONN;
+error:
+	tcp_statistics.TcpAttemptFails++;
+	goto exit;
 }
 
 struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
@@ -1042,13 +1212,16 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	struct sock *newsk;
 	int snd_mss;
 
-	newsk = sk_alloc(GFP_ATOMIC);
-	if (newsk == NULL) {
-		if (dst) 
-			dst_release(dst);
-		return NULL;
-	}
-
+#ifdef NEW_LISTEN
+	if (sk->ack_backlog > sk->max_ack_backlog)
+		goto exit; /* head drop */
+#endif
+	newsk = sk_alloc(AF_INET, GFP_ATOMIC);
+	if (!newsk) 
+		goto exit;
+#ifdef NEW_LISTEN
+	sk->ack_backlog++;
+#endif
 	memcpy(newsk, sk, sizeof(*newsk));
 
 	/* Or else we die! -DaveM */
@@ -1132,7 +1305,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 				    newsk->opt && newsk->opt->srr ? 
 				    newsk->opt->faddr : newsk->daddr,
 				    newsk->saddr, newsk->ip_tos, NULL)) {
-			kfree(newsk);
+			sk_free(newsk);
 			return NULL;
 		}
 	        dst = &rt->u.dst;
@@ -1179,73 +1352,11 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	tcp_v4_hash(newsk);
 	add_to_prot_sklist(newsk);
 	return newsk;
-}
 
-static inline struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
-{
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct open_request *req = tp->syn_wait_queue;
-
-	/*	assumption: the socket is not in use.
-	 *	as we checked the user count on tcp_rcv and we're
-	 *	running from a soft interrupt.
-	 */
-	if(!req) {
-#ifdef CONFIG_SYN_COOKIES
-		goto checkcookie; 
-#else
-		return sk;
-#endif
-	}
-
-	while(req) {
-		if (req->af.v4_req.rmt_addr == skb->nh.iph->saddr &&
-		    req->af.v4_req.loc_addr == skb->nh.iph->daddr &&
-		    req->rmt_port == skb->h.th->source) {
-			u32 flg;
-
-			if (req->sk) {
-				/*	socket already created but not
-				 *	yet accepted()...
-				 */
-				sk = req->sk;
-				goto ende;
-			}
-
-			/* Check for syn retransmission */
-			flg = *(((u32 *)skb->h.th) + 3);
-			flg &= __constant_htonl(0x001f0000);
-			if ((flg == __constant_htonl(0x00020000)) &&
-			    (!after(skb->seq, req->rcv_isn))) {
-				/*	retransmited syn
-				 *	FIXME: must send an ack
-				 */
-				return NULL;
-			}
-
-			if (!skb->h.th->ack)
-				return sk; 
-
-			sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
-			tcp_dec_slow_timer(TCP_SLT_SYNACK);
-			if (sk == NULL)
-				return NULL;
-
-			req->expires = 0UL;
-			req->sk = sk;
-			goto ende;
-		}
-		req = req->dl_next;
-	}
-
-#ifdef CONFIG_SYN_COOKIES
-checkcookie:       
-	sk = cookie_v4_check(sk, skb, opt);
-#endif
-ende:	skb_orphan(skb);
-	if (sk)
-		skb_set_owner_r(skb, sk);
-	return sk;
+exit:
+	if (dst) 
+		dst_release(dst);
+	return NULL;
 }
 
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
@@ -1256,47 +1367,49 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	 *	socket locking is here for SMP purposes as backlog rcv
 	 *	is currently called with bh processing disabled.
 	 */
-	lock_sock(sk);
-
-	if (sk->state == TCP_ESTABLISHED)
-	{
+	lock_sock(sk); 
+	
+	if (sk->state == TCP_ESTABLISHED) { /* Fast path */
 		if (tcp_rcv_established(sk, skb, skb->h.th, skb->len))
 			goto reset;
-		goto ok;
+	} else {
+		/* Check for embryonic sockets (open_requests)
+		 * We check packets with only the SYN bit set
+		 * against the open_request queue too: This
+		 * increases connection latency a bit, but is
+		 * required to detect retransmitted SYNs.  
+		 */
+		/* FIXME: need to check for multicast syns
+		 * here to satisfy RFC1122 4.2.3.10, p. 104:
+		 * discard bcast/mcast SYN. I'm not sure if
+		 * they're filtered out at the IP layer (I
+		 * think not) 
+		 */
+		if (sk->state == TCP_LISTEN && 
+		    ((u32 *)skb->h.th)[3] & __constant_htonl(0x00120000)) {
+			struct sock *nsk;
+			
+			/* Find possible connection requests. */
+			nsk = tcp_check_req(sk, skb, &(IPCB(skb)->opt));
+			if (nsk == NULL)
+				goto discard;
+			
+			release_sock(sk);
+			lock_sock(nsk); 
+			sk = nsk; 
+		}
+
+		if (tcp_rcv_state_process(sk, skb, skb->h.th, 
+					  &(IPCB(skb)->opt), skb->len))
+			goto reset; 
 	}
-
-	/*
-	 * We check packets with only the SYN bit set against the
-	 * open_request queue too: This increases connection latency a bit,
-	 * but is required to detect retransmitted SYNs.
-	 *
-	 * The ACK/SYN bit check is probably not needed here because
-	 * it is checked later again (we play save now).
-	 */
-	if (sk->state == TCP_LISTEN && (skb->h.th->ack || skb->h.th->syn)) {
-	   	struct sock *nsk;
-
-	   	/* Find possible connection requests. */
-	   	nsk = tcp_v4_check_req(sk, skb, &(IPCB(skb)->opt));
-	  	if (nsk == NULL)
-			goto discard_it;
-	    
-	   	release_sock(sk);
-	 	lock_sock(nsk);
-		sk = nsk;
-	}
-
-	if (tcp_rcv_state_process(sk, skb, skb->h.th, &(IPCB(skb)->opt), skb->len) == 0)
-		goto ok;
+	release_sock(sk); 
+	return 0;
 
 reset:
 	tcp_v4_send_reset(skb);
-
-discard_it:
-	/* Discard frame. */
-	kfree_skb(skb, FREE_READ);
-
-ok:
+discard:
+	kfree_skb(skb, FREE_READ); 
 	release_sock(sk);
 	return 0;
 }
@@ -1327,8 +1440,8 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,saddr,daddr,skb->csum)) {
 			struct iphdr * iph = skb->nh.iph;
-			printk(KERN_DEBUG "TCPv4 bad checksum from %08x:%04x to %08x:%04x, len=%d/%d/%d\n",
-			       saddr, ntohs(th->source), daddr,
+			printk(KERN_DEBUG "TCPv4 bad checksum from %I:%04x to %I:%04x, len=%d/%d/%d\n",
+			       &saddr, ntohs(th->source), &daddr,
 			       ntohs(th->dest), len, skb->len, ntohs(iph->tot_len));
 					goto discard_it;
 		}
@@ -1435,6 +1548,12 @@ struct tcp_func ipv4_specific = {
 	ip_getsockopt,
 	v4_addr2sockaddr,
 	tcp_v4_send_reset,
+	tcp_v4_search_req,
+#ifdef CONFIG_SYNCOOKIES
+	cookie_v4_check,
+#else
+	NULL,
+#endif
 	sizeof(struct sockaddr_in)
 };
 
@@ -1461,6 +1580,7 @@ static int tcp_v4_init_sock(struct sock *sk)
 	tp->snd_wscale = 0;
 	tp->sacks = 0;
 	tp->saw_tstamp = 0;
+	tp->syn_backlog = 0;
 
 	/*
 	 * See draft-stevens-tcpca-spec-01 for discussion of the
@@ -1484,8 +1604,7 @@ static int tcp_v4_init_sock(struct sock *sk)
   	sk->dummy_th.doff=sizeof(struct tcphdr)>>2;
 
 	/* Init SYN queue. */
-	tp->syn_wait_queue = NULL;
-	tp->syn_wait_last = &tp->syn_wait_queue;
+	tcp_synq_init(tp);
 
 	sk->tp_pinfo.af_tcp.af_specific = &ipv4_specific;
 

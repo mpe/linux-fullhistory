@@ -1,0 +1,9 @@
+Index of files in Documentation/powerpc.  If you think something about
+Linux/PPC needs an entry here, needs correction of you've written one
+please mail me.
+                                        Cort Dougan (cort@cs.nmt.edu)
+
+00-INDEX
+	- this file
+ppc_htab.txt
+	- info about the Linux/PPC /proc/ppc_htab entry

@@ -1,9 +1,9 @@
-/* $Id: entry.S,v 1.61 1997/08/15 06:44:16 davem Exp $
+/* $Id: entry.S,v 1.65 1997/08/29 15:51:29 jj Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
- * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ * Copyright (C) 1996 Eddie C. Dost        (ecd@skynet.be)
+ * Copyright (C) 1996 Miguel de Icaza      (miguel@nuclecu.unam.mx)
  * Copyright (C) 1996,1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  */
 
@@ -17,6 +17,7 @@
 #include <asm/page.h>
 #include <asm/signal.h>
 #include <asm/pgtable.h>
+#include <asm/processor.h>
 
 /* #define SYSCALL_TRACING */
 
@@ -115,24 +116,33 @@ sparc64_itlb_refbit_catch:
 	stxa		%g5, [%g0] ASI_ITLB_DATA_IN		! TLB load
 	retry
 
+#define FPDIS_OFF (((PAGE_SIZE<<1)-((64*4)+(2*8))) & ~(64 - 1))
 	/* This is trivial with the new code... */
 	.align		32
 	.globl		do_fpdis
 do_fpdis:
-	wr		%g0, FPRS_FEF, %fprs
-	ldx		[%g6 + AOFF_task_flags], %g2
-	sethi		%hi(0x00100000), %g4		! XXX PF_USEDFPU
-	andcc		%g2, %g4, %g0
-
-	bne,a,pt	%xcc, fpload_fromkstk
-	 sethi		%hi((((PAGE_SIZE<<1)-((64*4)+(2*8))) & ~(64 - 1))), %g2
-	fzero		%f0
-	fzero		%f2
+	ldx		[%g6 + AOFF_task_tss + AOFF_thread_flags], %g5		! Load	Group
+	sethi		%hi(TSTATE_PEF), %g4					! IEU0
+	sethi		%hi(FPDIS_OFF), %g3					! IEU1
+	wr		%g0, FPRS_FEF, %fprs					! LSU	Group+4bubbles
+	andcc		%g5, SPARC_FLAG_USEDFPU, %g0				! IEU1	Group
+	or		%g3, %lo(FPDIS_OFF), %g2				! IEU0
+	sethi		%hi(empty_zero_page), %g1				! IEU0	Group
+	add		%g6, %g2, %g2						! IEU1
+	be,a,pn		%icc, 1f						! CTI
+	 clr		%g7							! IEU0	Group
+	add		%g2, 0x100, %g1						! IEU1
+	ldx		[%g2 + 0x108], %g7					! Load
+1:	andcc		%g5, SPARC_FLAG_USEDFPUL, %g0				! IEU1	Group
+	bne,pn		%icc, 2f						! CTI
+	 fzero		%f0							! FPA
+	andcc		%g5, SPARC_FLAG_USEDFPUU, %g0				! IEU1  Group
+	bne,pn		%icc, 1f						! CTI
+	 fzero		%f2							! FPA
 	faddd		%f0, %f2, %f4
 	fmuld		%f0, %f2, %f6
 	faddd		%f0, %f2, %f8
 	fmuld		%f0, %f2, %f10
-
 	faddd		%f0, %f2, %f12
 	fmuld		%f0, %f2, %f14
 	faddd		%f0, %f2, %f16
@@ -141,7 +151,6 @@ do_fpdis:
 	fmuld		%f0, %f2, %f22
 	faddd		%f0, %f2, %f24
 	fmuld		%f0, %f2, %f26
-
 	faddd		%f0, %f2, %f28
 	fmuld		%f0, %f2, %f30
 	faddd		%f0, %f2, %f32
@@ -150,52 +159,89 @@ do_fpdis:
 	fmuld		%f0, %f2, %f38
 	faddd		%f0, %f2, %f40
 	fmuld		%f0, %f2, %f42
-
 	faddd		%f0, %f2, %f44
 	fmuld		%f0, %f2, %f46
-	ldx		[%g6 + AOFF_task_flags], %g2
 	faddd		%f0, %f2, %f48
 	fmuld		%f0, %f2, %f50
-	or		%g2, %g4, %g2
 	faddd		%f0, %f2, %f52
 	fmuld		%f0, %f2, %f54
-
-	stx		%g2, [%g6 + AOFF_task_flags]
 	faddd		%f0, %f2, %f56
-	sethi		%hi(empty_zero_page), %g3
 	fmuld		%f0, %f2, %f58
-
-	faddd		%f0, %f2, %f60
-	ldx		[%g3], %fsr			! wheee, empty_zero_page
+	b,pt		%xcc, fpdis_exit2
+	 faddd		%f0, %f2, %f60
+1:	mov		SECONDARY_CONTEXT, %g3
+	faddd		%f0, %f2, %f4
+	fmuld		%f0, %f2, %f6
+	ldxa		[%g3] ASI_DMMU, %g5
+	stxa		%g0, [%g3] ASI_DMMU
+	faddd		%f0, %f2, %f8
+	fmuld		%f0, %f2, %f10
+	flush		%g2
+	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	membar		#StoreLoad | #LoadLoad
+	ldda		[%g2 + 0x080] %asi, %f32
+	ldda		[%g2 + 0x0c0] %asi, %f48
+	faddd		%f0, %f2, %f12
+	fmuld		%f0, %f2, %f14
+	faddd		%f0, %f2, %f16
+	fmuld		%f0, %f2, %f18
+	faddd		%f0, %f2, %f20
+	fmuld		%f0, %f2, %f22
+	faddd		%f0, %f2, %f24
+	fmuld		%f0, %f2, %f26
+	faddd		%f0, %f2, %f28
+	fmuld		%f0, %f2, %f30
 	b,pt		%xcc, fpdis_exit
-	 wr		%g0, 0, %gsr
-
-fpload_fromkstk:
-	or		%g2, %lo((((PAGE_SIZE<<1)-((64*4)+(2*8))) & ~(64 - 1))), %g2
-	add		%g6, %g2, %g2
+	 membar		#Sync
+2:	andcc		%g5, SPARC_FLAG_USEDFPUU, %g0
+	bne,pt		%icc, 3f
+	 fzero		%f32
 	mov		SECONDARY_CONTEXT, %g3
-	ldxa		[%g3] ASI_DMMU, %g7
+	fzero		%f34
+	ldxa		[%g3] ASI_DMMU, %g5
+	stxa		%g0, [%g3] ASI_DMMU
+	faddd		%f32, %f34, %f36
+	fmuld		%f32, %f34, %f38
+	flush		%g2
+	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
+	membar		#StoreLoad | #LoadLoad
+	ldda		[%g2 + 0x000] %asi, %f0
+	ldda		[%g2 + 0x040] %asi, %f16
+	faddd		%f32, %f34, %f40
+	fmuld		%f32, %f34, %f42
+	faddd		%f32, %f34, %f44
+	fmuld		%f32, %f34, %f46
+	faddd		%f32, %f34, %f48
+	fmuld		%f32, %f34, %f50
+	faddd		%f32, %f34, %f52
+	fmuld		%f32, %f34, %f54
+	faddd		%f32, %f34, %f56
+	fmuld		%f32, %f34, %f58
+	faddd		%f32, %f34, %f60
+	fmuld		%f32, %f34, %f62
+	b,pt		%xcc, fpdis_exit
+	 membar		#Sync
+3:	mov		SECONDARY_CONTEXT, %g3
+	ldxa		[%g3] ASI_DMMU, %g5
 	stxa		%g0, [%g3] ASI_DMMU
 	flush		%g2
 	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
 	membar		#StoreLoad | #LoadLoad
-
 	ldda		[%g2 + 0x000] %asi, %f0
 	ldda		[%g2 + 0x040] %asi, %f16
 	ldda		[%g2 + 0x080] %asi, %f32
 	ldda		[%g2 + 0x0c0] %asi, %f48
-	ldx		[%g2 + 0x100], %fsr
-	ldx		[%g2 + 0x108], %g4
 	membar		#Sync
-	wr		%g4, 0, %gsr
-
-	stxa		%g7, [%g3] ASI_DMMU
-	flush		%g2
 fpdis_exit:
+	stxa		%g5, [%g3] ASI_DMMU
+	flush		%g2
+fpdis_exit2:
+	wr		%g7, 0, %gsr
+	ldx		[%g1], %fsr
 	rdpr		%tstate, %g3
-	sethi		%hi(TSTATE_PEF), %g4
 	or		%g3, %g4, %g3		! anal...
 	wrpr		%g3, %tstate
+	wr		%g0, FPRS_FEF, %fprs	! clean DU/DL bits
 	retry
 
 	/* The registers for cross calls will be:
@@ -232,7 +278,10 @@ do_ivec:
 	sllx		%g3, 3, %g3
 	ldx		[%g1 + %g3], %g2
 	brz,pn		%g2, do_ivec_spurious
-	 nop
+	 sethi		%hi(0x80000000), %g5
+
+	or		%g2, %g5, %g2
+	stx		%g2, [%g1 + %g3]
 
 	/* No branches, worse case we don't know about this interrupt
 	 * yet, so we would just write a zero into the softint register
@@ -386,10 +435,8 @@ floppy_dosoftint:
 #endif /* CONFIG_BLK_DEV_FD */
 
 	/* XXX Here is stuff we still need to write... -DaveM XXX */
-	.globl		indirect_syscall, netbsd_syscall, solaris_syscall
-indirect_syscall:
+	.globl		netbsd_syscall
 netbsd_syscall:
-solaris_syscall:
 	retl
 	 nop
 

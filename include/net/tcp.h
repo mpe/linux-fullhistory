@@ -243,23 +243,25 @@ struct tcp_v6_open_req {
 };
 #endif
 
+/* this structure is too big */
 struct open_request {
-	struct open_request	*dl_next;
-	struct open_request	**dl_pprev;
+	struct open_request	*dl_next; /* Must be first member! */
 	__u32			rcv_isn;
 	__u32			snt_isn;
 	__u16			rmt_port;
 	__u16			mss;
-	__u8			snd_wscale;
-	__u8			rcv_wscale;
-	char			sack_ok;
-	char			tstamp_ok;
-	char			wscale_ok;
+	__u8			retrans;
+	__u8			__pad;
+	unsigned snd_wscale : 4, 
+		rcv_wscale : 4, 
+		sack_ok : 1,
+		tstamp_ok : 1,
+		wscale_ok : 1;
+	/* The following two fields can be easily recomputed I think -AK */
 	__u32			window_clamp;	/* window clamp at creation time */
 	__u32			rcv_wnd;	/* rcv_wnd offered first time */
 	__u32			ts_recent;
 	unsigned long		expires;
-	int			retrans;
 	struct or_calltable	*class;
 	struct sock		*sk;
 	union {
@@ -329,6 +331,13 @@ struct tcp_func {
 							 struct sockaddr *);
 
 	void			(*send_reset)		(struct sk_buff *skb);
+
+	struct open_request *   (*search_open_req)	(struct tcp_opt *, void *, 
+							 struct tcphdr *,
+							 struct open_request **);
+
+	struct sock *		(*cookie_check)		(struct sock *, struct sk_buff *,
+							 void *);
 
 	int sockaddr_len;
 };
@@ -447,6 +456,7 @@ extern void tcp_read_wakeup(struct sock *);
 extern void tcp_write_xmit(struct sock *);
 extern void tcp_time_wait(struct sock *);
 extern void tcp_do_retransmit(struct sock *, int);
+extern void tcp_simple_retransmit(struct sock *);
 
 /* tcp_output.c */
 
@@ -473,6 +483,9 @@ extern void tcp_clear_xmit_timers(struct sock *);
 extern void tcp_retransmit_timer(unsigned long);
 extern void tcp_delack_timer(unsigned long);
 extern void tcp_probe_timer(unsigned long);
+
+extern struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb, 
+				  void *);
 
 
 /*
@@ -670,21 +683,59 @@ extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
 	(*window_clamp) = min(65535<<(*rcv_wscale),*window_clamp);
 }
 
-extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req)
+#define SYNQ_DEBUG 1
+
+extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req, struct open_request *prev)
 {
-	if(req->dl_next)
-		req->dl_next->dl_pprev = req->dl_pprev;
-	else
-		tp->syn_wait_last = req->dl_pprev;
-	*req->dl_pprev = req->dl_next;
+#ifdef SYNQ_DEBUG
+	if (prev->dl_next != req) {
+		printk(KERN_DEBUG "synq_unlink: bad prev ptr: %p\n",prev);
+		return;
+	}
+#endif
+	if(!req->dl_next) {
+#ifdef SYNQ_DEBUG
+		if (tp->syn_wait_last != (void*) req)
+			printk(KERN_DEBUG "synq_unlink: bad last ptr %p,%p\n",
+			       req,tp->syn_wait_last);
+#endif
+		tp->syn_wait_last = (struct open_request **)prev;
+	}
+	prev->dl_next = req->dl_next;
 }
 
 extern __inline__ void tcp_synq_queue(struct tcp_opt *tp, struct open_request *req)
-{
+{ 
+#ifdef SYNQ_DEBUG
+	if (*tp->syn_wait_last != NULL)
+	    printk("synq_queue: last ptr doesn't point to last req.\n"); 
+#endif
 	req->dl_next = NULL;
-	req->dl_pprev = tp->syn_wait_last;
-	*tp->syn_wait_last = req;
+	*tp->syn_wait_last = req; 
 	tp->syn_wait_last = &req->dl_next;
+}
+
+extern __inline__ void tcp_synq_init(struct tcp_opt *tp)
+{
+	tp->syn_wait_queue = NULL;
+	tp->syn_wait_last = &tp->syn_wait_queue;
+}
+
+extern __inline__ struct open_request *tcp_synq_unlink_tail(struct tcp_opt *tp)
+{
+	struct open_request *head = tp->syn_wait_queue;
+#ifdef SYNQ_DEBUG
+	if (!head) {
+		printk(KERN_DEBUG "tail drop on empty queue? - bug\n"); 
+		return NULL;
+	}
+#endif
+	printk(KERN_DEBUG "synq tail drop with expire=%ld\n", 
+	       head->expires-jiffies);
+	if (head->dl_next == NULL)
+		tp->syn_wait_last = &tp->syn_wait_queue;
+	tp->syn_wait_queue = head->dl_next;
+	return head;
 }
 
 extern void __tcp_inc_slow_timer(struct tcp_sl_timer *slt);

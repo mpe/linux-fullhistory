@@ -1,10 +1,14 @@
 /* keyboard.c: Sun keyboard driver.
  *
- * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
+ *
  * Added vuid event generation and /dev/kbd device for SunOS
  * compatibility - Miguel (miguel@nuclecu.unam.mx)
+ *
+ * Added PCI 8042 controller support -DaveM
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
@@ -16,11 +20,11 @@
 #include <linux/fcntl.h>
 #include <linux/poll.h>
 #include <linux/random.h>
+#include <linux/delay.h>
 #include <linux/init.h>
 
 #include <asm/kbio.h>
 #include <asm/vuid_event.h>
-#include <asm/delay.h>
 #include <asm/bitops.h>
 #include <asm/oplib.h>
 #include <asm/uaccess.h>
@@ -28,6 +32,15 @@
 #include <linux/kbd_kern.h>
 #include <linux/kbd_diacr.h>
 #include <linux/vt_kern.h>
+
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#include <linux/bios32.h>
+#include <asm/pbm.h>
+#include <asm/ebus.h>
+#endif
+
+#include "sunkbd.h"
 
 #define SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -63,6 +76,7 @@ extern void reset_vc(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
 
+struct l1a_kbd_state l1a_state = { 0, 0 };
 unsigned char kbd_read_mask = 0x01;	  /* modified by psaux.c */
 unsigned char aux_device_present = 0x00;  /* To make kernel/ksyms.c happy */
 
@@ -208,7 +222,23 @@ static unsigned char sunkbd_clickp;
 #define KEY_ALT         0x86
 #define KEY_L1          0x87
 
-extern void kbd_put_char(unsigned char ch);
+/* Do to kbd_init() being called before rs_init(), and kbd_init() doing:
+ *
+ *	init_bh(KEYBOARD_BH, kbd_bh);
+ *	mark_bh(KEYBOARD_BH);
+ *
+ * this might well be called before some driver has claimed interest in
+ * handling the keyboard input/output. So we need to assign an initial nop.
+ *
+ * Otherwise this would lead to the following (DaveM might want to look at):
+ *
+ *	sparc64_dtlb_refbit_catch(),
+ *	do_sparc64_fault(),
+ *	kernel NULL pointer dereference at do_sparc64_fault + 0x2c0 ;-(
+ */
+static void nop_kbd_put_char(unsigned char c) { }
+static void (*kbd_put_char)(unsigned char) = nop_kbd_put_char;
+
 static inline void send_cmd(unsigned char c)
 {
 	kbd_put_char(c);
@@ -1425,12 +1455,17 @@ file_operations kbd_fops =
 	NULL,			/* revalidate */
 };
 
-__initfunc(void keyboard_zsinit(void))
+__initfunc(void keyboard_zsinit(void (*put_char)(unsigned char)))
 {
 	int timeout = 0;
 
+	kbd_put_char = put_char;
+	if (!kbd_put_char)
+		panic("keyboard_zsinit: no put_char parameter");
+
 	/* Test out the leds */
 	sunkbd_type = 255;
+	send_cmd(SKBDCMD_RESET);
 	send_cmd(SKBDCMD_RESET);
 	while((sunkbd_type==255) && timeout < 500000) {
 		udelay(100);

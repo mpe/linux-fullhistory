@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.8 1997/06/20 11:54:41 davem Exp $ */
+/* $Id: sigcontext.h,v 1.9 1997/08/19 14:18:38 jj Exp $ */
 #ifndef __SPARC64_SIGCONTEXT_H
 #define __SPARC64_SIGCONTEXT_H
 
@@ -31,7 +31,6 @@ struct sigcontext32 {
 	int sigc_oswins;       /* outstanding windows */
 
 	/* stack ptrs for each regwin buf */
-	/* XXX 32-bit ptrs pinhead... */
 	unsigned sigc_spbuf[SUNOS_MAXWIN];
 
 	/* Windows to restore after signal */
@@ -75,11 +74,7 @@ typedef struct {
 	unsigned   int si_float_regs [64];
 	unsigned   long si_fsr;
 	unsigned   long si_gsr;
-	unsigned   int si_fpqdepth;
-	struct {
-		unsigned int *insn_addr;
-		unsigned int insn;
-	} si_fpqueue [16];
+	unsigned   long si_fprs;
 } __siginfo_fpu_t;
 
 #endif /* !(__ASSEMBLY__) */

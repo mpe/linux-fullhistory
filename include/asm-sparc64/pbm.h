@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.4 1997/08/15 06:44:52 davem Exp $
+/* $Id: pbm.h,v 1.7 1997/08/25 06:01:14 davem Exp $
  * pbm.h: U2P PCI bus module pseudo driver software state.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -13,12 +13,28 @@
 #include <asm/psycho.h>
 #include <asm/oplib.h>
 
+struct linux_pbm_info;
+
+/* This is what we use to determine what the PROM has assigned so
+ * far, so that we can perform assignments for addresses which
+ * were not taken care of by OBP.  See psycho.c for details.
+ * Per-PBM these are ordered by start address.
+ */
+struct pci_vma {
+	struct pci_vma			*next;
+	struct linux_pbm_info		*pbm;
+	unsigned int			start;
+	unsigned int			end;
+	unsigned int			base_reg;
+	unsigned int			_pad;
+};
+
 struct linux_psycho;
 
 struct linux_pbm_info {
 	struct linux_psycho		*parent;
-	unsigned long			*pbm_IO;
-	unsigned long			*pbm_mem;
+	struct pci_vma			*IO_assignments;
+	struct pci_vma			*MEM_assignments;
 	int				prom_node;
 	char				prom_name[64];
 	struct linux_prom_pci_ranges	pbm_ranges[PROMREG_MAX];
@@ -41,6 +57,45 @@ struct linux_psycho {
 	struct linux_pbm_info		pbm_B;
 };
 
+/* PCI devices which are not bridges have this placed in their pci_dev
+ * sysdata member.  This makes OBP aware PCI device drivers easier to
+ * code.
+ */
+struct pcidev_cookie {
+	struct linux_pbm_info		*pbm;
+	int				prom_node;
+};
+
 extern struct linux_psycho *psycho_root;
+
+/* Special PCI IRQ encoding, this just makes life easier for the generic
+ * irq registry layer, there is already enough crap in there due to sbus,
+ * fhc, and dcookies.
+ */
+#define PCI_IRQ_IDENT		0x80000000	/* This tells irq.c what we are        */
+#define PCI_IRQ_IMAP_OFF	0x7ff00000	/* Offset from first PSYCHO imap       */
+#define PCI_IRQ_IMAP_OFF_SHFT	20
+#define PCI_IRQ_BUSNO		0x000f8000	/* PSYCHO instance, currently unused   */
+#define PCI_IRQ_BUSNO_SHFT	15
+#define PCI_IRQ_IGN		0x000007c0	/* PSYCHO "Int Group Number"           */
+#define PCI_IRQ_INO		0x0000003f	/* PSYCHO INO                          */
+
+#define PCI_IRQ_P(__irq)	(((__irq) & PCI_IRQ_IDENT) != 0)
+
+extern __inline__ unsigned int pci_irq_encode(unsigned long imap_off,
+					      unsigned long psycho_instance,
+					      unsigned long ign,
+					      unsigned long ino)
+{
+	unsigned int irq;
+
+	irq  = PCI_IRQ_IDENT;
+	irq |= ((imap_off << PCI_IRQ_IMAP_OFF_SHFT) & PCI_IRQ_IMAP_OFF);
+	irq |= ((psycho_instance << PCI_IRQ_BUSNO_SHFT) & PCI_IRQ_BUSNO);
+	irq |= ((ign << 6) & PCI_IRQ_IGN);
+	irq |= (ino & PCI_IRQ_INO);
+
+	return irq;
+}
 
 #endif /* !(__SPARC64_PBM_H) */

@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.29 1997/07/15 09:48:48 jj Exp $
+/* $Id: fb.h,v 1.33 1997/08/25 07:50:29 jj Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -122,6 +122,7 @@ typedef struct fbinfo {
 		struct tcx_info   tcx;
 		struct leo_info	  leo;
 		struct ffb_info   ffb;
+		void		 *private;
 	} info;		        /* per frame information */
 	int    space;           /* I/O space this card resides in */
 	int    blanked;		/* true if video blanked */
@@ -134,6 +135,7 @@ typedef struct fbinfo {
 	int    emulations[4];   /* possible emulations (-1 N/A) */
 	int    prom_node;	/* node of the device in prom tree */
 	int    base_depth;	/* depth of fb->base piece */
+	int    linebytes;	/* number of bytes in a row */
 	struct cg_cursor cursor;	/* kernel state of hw cursor */
 	int    (*mmap)(struct inode *, struct file *, struct vm_area_struct *,
 		       long fb_base, struct fbinfo *);
@@ -149,16 +151,20 @@ typedef struct fbinfo {
 	void   (*setcursormap)(struct fbinfo *, unsigned char *, 
 			unsigned char *, unsigned char *);
 	unsigned long (*postsetup)(struct fbinfo *, unsigned long);
+	void (*clear_fb)(int);
+	void (*set_other_palette)(int);
 	void	(*blitc)(unsigned short, int, int);
 	void	(*setw)(int, int, unsigned short, int);
 	void	(*cpyw)(int, int, unsigned short *, int);
 	void	(*fill)(int, int, int *);
+	void 	(*draw_penguin)(int,int,int);
 	unsigned char *color_map;
 	struct openpromfs_dev proc_entry;
 } fbinfo_t;
 
 #define CM(i, j) [3*(i)+(j)]
 
+extern unsigned char sparc_color_table[];
 extern unsigned char reverse_color_table[];
 
 #define CHARATTR_TO_SUNCOLOR(attr) \
@@ -196,13 +202,13 @@ extern unsigned long get_phys (unsigned long addr);
 extern int get_iospace (unsigned long addr);
 extern void render_screen(void);
 
-extern void sun_hw_hide_cursor(void);
-extern void sun_hw_set_cursor(int, int);
-extern int sun_hw_scursor(struct fbcursor *,fbinfo_t *);
-extern int sun_hw_cursor_shown;
+extern void sbus_hw_hide_cursor(void);
+extern void sbus_hw_set_cursor(int, int);
+extern int sbus_hw_scursor(struct fbcursor *,fbinfo_t *);
+extern int sbus_hw_cursor_shown;
 extern int sun_prom_console_id;
 
-extern unsigned long sun_cg_postsetup(fbinfo_t *, unsigned long);
+extern unsigned long cg_postsetup(fbinfo_t *, unsigned long);
 
 #define FB_DEV(x) (MINOR(x) / 32)
 
@@ -215,5 +221,13 @@ extern void leo_setup (fbinfo_t *, int, u32, int);
 extern void tcx_setup (fbinfo_t *, int, int, u32, struct linux_sbus_device *);
 extern void creator_setup (fbinfo_t *, int, int, unsigned long, int);
 extern int io_remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot, int space);
+
+extern unsigned char linux_logo_red[];
+extern unsigned char linux_logo_green[];
+extern unsigned char linux_logo_blue[];
+extern unsigned char linux_logo[];
+extern unsigned char linux_logo_bw[];
+extern unsigned int linux_logo_colors;
+extern char logo_banner[];
 
 #endif __SPARC_FB_H_

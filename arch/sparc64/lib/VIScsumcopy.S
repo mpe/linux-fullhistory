@@ -1,4 +1,4 @@
-/* $Id: VIScsumcopy.S,v 1.1 1997/08/09 18:14:29 jj Exp $
+/* $Id: VIScsumcopy.S,v 1.2 1997/08/19 15:25:22 jj Exp $
  * VIScsumcopy.S: High bandwidth IP checksumming with simultaneous
  *            copying utilizing the UltraSparc Visual Instruction Set.
  *
@@ -875,6 +875,6 @@ ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
 end:
 
 	.section	__ex_table
-	.align		8
-	.xword		csum_partial_copy_vis, 0, end, cpc_handler
+	.align		4
+	.word		csum_partial_copy_vis, 0, end, cpc_handler
 #endif

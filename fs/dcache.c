@@ -365,21 +365,19 @@ void d_move(struct dentry * dentry, struct dentry * target)
 	if (!dentry->d_inode)
 		printk("VFS: moving negative dcache entry\n");
 
-	/* Switch the hashes.. */
-	oldhead = dentry->d_hash.prev;
+	/* Move the dentry to the target hash queue */
 	list_del(&dentry->d_hash);
 	list_add(&dentry->d_hash, &target->d_hash);
+
+	/* Unhash the target: dput() will then get rid of it */
 	list_del(&target->d_hash);
-	list_add(&target->d_hash, oldhead);
+	INIT_LIST_HEAD(&target->d_hash);
 
 	/* Switch the parents and the names.. */
 	switch(dentry->d_parent, target->d_parent);
 	switch(dentry->d_name.name, target->d_name.name);
 	switch(dentry->d_name.len, target->d_name.len);
 	switch(dentry->d_name.hash, target->d_name.hash);
-
-	/* Mark the (now overwritten) target deleted. */
-	d_delete(target);
 }
 
 /*

@@ -126,7 +126,7 @@ static void scroll()
 	for ( i = ( lines - 1 ) * cols * 2; i < lines * cols * 2; i += 2 )
 		vidmem[i] = ' ';
 }
-#if 0
+
 tstc(void)
 {
 	return (CRT_tstc() );
@@ -138,7 +138,7 @@ getc(void)
 		if (CRT_tstc()) return (CRT_getc());
 	}
 }
-#endif
+
 void 
 putc(const char c)
 {
@@ -378,6 +378,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
   Elf32_Shdr *sh, *strtab_shdr;
   char *strtab;
   unsigned long i;
+  extern unsigned long start(void);
 
   
   output_data = (char *)0x0;	/* Points to 0 */
@@ -405,16 +406,17 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
   clear_bufs();
   makecrc();
 
+  puts("Cksum: ");  puthex(cksum);  puts("\n");
   puts("Loaded at: ");  puthex(load_addr); puts(" ");  puthex(num_words+load_addr);
   puts("\n");
-  /*puts("Relocated to start: ");  puthex(start); puts(" ");
-  puthex(num_words+start);
-  puts("\n");*/
-  puts("Cksum: ");  puthex(cksum);  puts("\n");
+  puts("Boot code relocated to: ");  puthex((unsigned long)start); puts(" ");
+  puthex((unsigned long)(num_words+start));
+  puts("\n");
   if (residual) {
     _bcopy((char *)residual, (char *)&hold_residual, sizeof(hold_residual));
     puts("Residual data at: ");  puthex((unsigned long)residual); puts(" ");
-    puthex((unsigned long)(residual->ResidualLength + residual));  puts("\n");
+    puthex((unsigned long)((unsigned long)(residual->ResidualLength) + residual));  puts("\n");
+    puts("Residual data relocated to: ");  puthex((unsigned long)&hold_residual); puts("\n");
   }
 
   /*
@@ -487,7 +489,39 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	  puts(" "); puthex(initrd_end); puts("\n");
   }
 
-  /* make the moto firmware print something */
+
+  CRT_tstc();  /* Forces keyboard to be initialized */
+  puts("\nLinux/PPC load: ");
+  timer = 0;
+  cp = cmd_line;
+  while (timer++ < 5*1000) {
+	  if (tstc()) {
+		  while ((ch = getc()) != '\n' && ch != '\r') {
+			  if (ch == '\b') {
+				  if (cp != cmd_line) {
+					  cp--;
+					  puts("\b \b");
+				  }
+			  } else {
+				  *cp++ = ch;
+				  putc(ch);
+			  }
+		  }
+		  break;  /* Exit 'timer' loop */
+	  }
+	  udelay(1000);  /* 1 msec */
+  }
+  *cp = 0;
+  puts("\n");
+
+  /* mappings on early boot can only handle 16M */
+  if ( (int)(&cmd_line[0]) > (16<<20))
+	  puts("cmd_line > 16M\n");
+  if ( (int)&hold_residual > (16<<20))
+	  puts("hold_residual > 16M\n");
+  if ( initrd_start > (16<<20))
+	  puts("initrd_start > 16M\n");
+       
   
   puts("Uncompressing Linux...");
   method = get_method(0);
