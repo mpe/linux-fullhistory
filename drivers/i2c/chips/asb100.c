@@ -246,9 +246,12 @@ static ssize_t set_in_##reg(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct asb100_data *data = i2c_get_clientdata(client); \
 	unsigned long val = simple_strtoul(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->in_##reg[nr] = IN_TO_REG(val); \
 	asb100_write_value(client, ASB100_REG_IN_##REG(nr), \
 		data->in_##reg[nr]); \
+	up(&data->update_lock); \
 	return count; \
 }
 
@@ -329,8 +332,11 @@ static ssize_t set_fan_min(struct device *dev, const char *buf,
 	struct i2c_client *client = to_i2c_client(dev);
 	struct asb100_data *data = i2c_get_clientdata(client);
 	u32 val = simple_strtoul(buf, NULL, 10);
+
+	down(&data->update_lock);
 	data->fan_min[nr] = FAN_TO_REG(val, DIV_FROM_REG(data->fan_div[nr]));
 	asb100_write_value(client, ASB100_REG_FAN_MIN(nr), data->fan_min[nr]);
+	up(&data->update_lock);
 	return count;
 }
 
@@ -343,11 +349,14 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct asb100_data *data = i2c_get_clientdata(client);
-	unsigned long min = FAN_FROM_REG(data->fan_min[nr],
-			DIV_FROM_REG(data->fan_div[nr]));
+	unsigned long min;
 	unsigned long val = simple_strtoul(buf, NULL, 10);
 	int reg;
 	
+	down(&data->update_lock);
+
+	min = FAN_FROM_REG(data->fan_min[nr],
+			DIV_FROM_REG(data->fan_div[nr]));
 	data->fan_div[nr] = DIV_TO_REG(val);
 
 	switch(nr) {
@@ -373,6 +382,9 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 	data->fan_min[nr] =
 		FAN_TO_REG(min, DIV_FROM_REG(data->fan_div[nr]));
 	asb100_write_value(client, ASB100_REG_FAN_MIN(nr), data->fan_min[nr]);
+
+	up(&data->update_lock);
+
 	return count;
 }
 
@@ -450,6 +462,8 @@ static ssize_t set_##reg(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct asb100_data *data = i2c_get_clientdata(client); \
 	unsigned long val = simple_strtoul(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	switch (nr) { \
 	case 1: case 2: \
 		data->reg[nr] = LM75_TEMP_TO_REG(val); \
@@ -460,6 +474,7 @@ static ssize_t set_##reg(struct device *dev, const char *buf, \
 	} \
 	asb100_write_value(client, ASB100_REG_TEMP_##REG(nr+1), \
 			data->reg[nr]); \
+	up(&data->update_lock); \
 	return count; \
 }
 
@@ -560,9 +575,12 @@ static ssize_t set_pwm1(struct device *dev, const char *buf, size_t count)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct asb100_data *data = i2c_get_clientdata(client);
 	unsigned long val = simple_strtoul(buf, NULL, 10);
+
+	down(&data->update_lock);
 	data->pwm &= 0x80; /* keep the enable bit */
 	data->pwm |= (0x0f & ASB100_PWM_TO_REG(val));
 	asb100_write_value(client, ASB100_REG_PWM1, data->pwm);
+	up(&data->update_lock);
 	return count;
 }
 
@@ -578,9 +596,12 @@ static ssize_t set_pwm_enable1(struct device *dev, const char *buf,
 	struct i2c_client *client = to_i2c_client(dev);
 	struct asb100_data *data = i2c_get_clientdata(client);
 	unsigned long val = simple_strtoul(buf, NULL, 10);
+
+	down(&data->update_lock);
 	data->pwm &= 0x0f; /* keep the duty cycle bits */
 	data->pwm |= (val ? 0x80 : 0x00);
 	asb100_write_value(client, ASB100_REG_PWM1, data->pwm);
+	up(&data->update_lock);
 	return count;
 }
 

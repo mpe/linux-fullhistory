@@ -416,10 +416,9 @@ static ssize_t set_fan_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int	val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->fan_min[nr] = FAN_TO_REG(val);
 	lm85_write_value(client, LM85_REG_FAN_MIN(nr), data->fan_min[nr]);
 	up(&data->update_lock);
@@ -499,10 +498,9 @@ static ssize_t set_pwm(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int	val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->pwm[nr] = PWM_TO_REG(val);
 	lm85_write_value(client, LM85_REG_PWM(nr), data->pwm[nr]);
 	up(&data->update_lock);
@@ -560,10 +558,9 @@ static ssize_t set_in_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int	val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->in_min[nr] = INS_TO_REG(nr, val);
 	lm85_write_value(client, LM85_REG_IN_MIN(nr), data->in_min[nr]);
 	up(&data->update_lock);
@@ -579,10 +576,9 @@ static ssize_t set_in_max(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int	val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->in_max[nr] = INS_TO_REG(nr, val);
 	lm85_write_value(client, LM85_REG_IN_MAX(nr), data->in_max[nr]);
 	up(&data->update_lock);
@@ -643,10 +639,9 @@ static ssize_t set_temp_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int	val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_min[nr] = TEMP_TO_REG(val);
 	lm85_write_value(client, LM85_REG_TEMP_MIN(nr), data->temp_min[nr]);
 	up(&data->update_lock);
@@ -662,10 +657,9 @@ static ssize_t set_temp_max(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int	val;
+	long val = simple_strtol(buf, NULL, 10);	
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_max[nr] = TEMP_TO_REG(val);
 	lm85_write_value(client, LM85_REG_TEMP_MAX(nr), data->temp_max[nr]);
 	up(&data->update_lock);
@@ -718,10 +712,9 @@ static ssize_t set_pwm_auto_channels(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int     val;
+	long val = simple_strtol(buf, NULL, 10);   
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->autofan[nr].config = (data->autofan[nr].config & (~0xe0))
 		| ZONE_TO_REG(val) ;
 	lm85_write_value(client, LM85_REG_AFAN_CONFIG(nr),
@@ -739,10 +732,9 @@ static ssize_t set_pwm_auto_pwm_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int     val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->autofan[nr].min_pwm = PWM_TO_REG(val);
 	lm85_write_value(client, LM85_REG_AFAN_MINPWM(nr),
 		data->autofan[nr].min_pwm);
@@ -759,10 +751,9 @@ static ssize_t set_pwm_auto_pwm_minctl(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int     val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->autofan[nr].min_off = val;
 	lm85_write_value(client, LM85_REG_AFAN_SPIKE1, data->smooth[0]
 		| data->syncpwm3
@@ -783,10 +774,9 @@ static ssize_t set_pwm_auto_pwm_freq(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int     val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->autofan[nr].freq = FREQ_TO_REG(val);
 	lm85_write_value(client, LM85_REG_AFAN_RANGE(nr),
 		(data->zone[nr].range << 4)
@@ -865,10 +855,10 @@ static ssize_t set_temp_auto_temp_off(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int    min, val;
+	int min;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	min = TEMP_FROM_REG(data->zone[nr].limit);
 	data->zone[nr].off_desired = TEMP_TO_REG(val);
 	data->zone[nr].hyst = HYST_TO_REG(min - val);
@@ -895,10 +885,9 @@ static ssize_t set_temp_auto_temp_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int    val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->zone[nr].limit = TEMP_TO_REG(val);
 	lm85_write_value(client, LM85_REG_AFAN_LIMIT(nr),
 		data->zone[nr].limit);
@@ -939,11 +928,11 @@ static ssize_t set_temp_auto_temp_max(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int    min, val;
+	int min;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
 	min = TEMP_FROM_REG(data->zone[nr].limit);
-	val = simple_strtol(buf, NULL, 10);
 	data->zone[nr].max_desired = TEMP_TO_REG(val);
 	data->zone[nr].range = RANGE_TO_REG(
 		val - min);
@@ -963,10 +952,9 @@ static ssize_t set_temp_auto_temp_crit(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm85_data *data = i2c_get_clientdata(client);
-	int     val;
+	long val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->zone[nr].critical = TEMP_TO_REG(val);
 	lm85_write_value(client, LM85_REG_AFAN_CRITICAL(nr),
 		data->zone[nr].critical);

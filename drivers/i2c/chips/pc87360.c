@@ -259,6 +259,7 @@ static ssize_t set_fan_min(struct device *dev, const char *buf,
 	struct pc87360_data *data = i2c_get_clientdata(client);
 	long fan_min = simple_strtol(buf, NULL, 10);
 
+	down(&data->update_lock);
 	fan_min = FAN_TO_REG(fan_min, FAN_DIV_FROM_REG(data->fan_status[nr]));
 
 	/* If it wouldn't fit, change clock divisor */
@@ -275,6 +276,7 @@ static ssize_t set_fan_min(struct device *dev, const char *buf,
 	/* Write new divider, preserve alarm bits */
 	pc87360_write_value(data, LD_FAN, NO_BANK, PC87360_REG_FAN_STATUS(nr),
 			    data->fan_status[nr] & 0xF9);
+	up(&data->update_lock);
 
 	return count;
 }
@@ -336,10 +338,13 @@ static ssize_t set_pwm##offset(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->pwm[offset-1] = PWM_TO_REG(val, \
 			      FAN_CONFIG_INVERT(data->fan_conf, offset-1)); \
 	pc87360_write_value(data, LD_FAN, NO_BANK, PC87360_REG_PWM(offset-1), \
 			    data->pwm[offset-1]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static DEVICE_ATTR(pwm##offset, S_IWUSR | S_IRUGO, \
@@ -378,9 +383,12 @@ static ssize_t set_in##offset##_min(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->in_min[offset] = IN_TO_REG(val, data->in_vref); \
 	pc87360_write_value(data, LD_IN, offset, PC87365_REG_IN_MIN, \
 			    data->in_min[offset]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static ssize_t set_in##offset##_max(struct device *dev, const char *buf, \
@@ -389,10 +397,13 @@ static ssize_t set_in##offset##_max(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->in_max[offset] = IN_TO_REG(val, \
 			       data->in_vref); \
 	pc87360_write_value(data, LD_IN, offset, PC87365_REG_IN_MAX, \
 			    data->in_max[offset]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static DEVICE_ATTR(in##offset##_input, S_IRUGO, \
@@ -451,9 +462,12 @@ static ssize_t set_temp##offset##_min(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->in_min[offset+7] = IN_TO_REG(val, data->in_vref); \
 	pc87360_write_value(data, LD_IN, offset+7, PC87365_REG_TEMP_MIN, \
 			    data->in_min[offset+7]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static ssize_t set_temp##offset##_max(struct device *dev, const char *buf, \
@@ -462,9 +476,12 @@ static ssize_t set_temp##offset##_max(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->in_max[offset+7] = IN_TO_REG(val, data->in_vref); \
 	pc87360_write_value(data, LD_IN, offset+7, PC87365_REG_TEMP_MAX, \
 			    data->in_max[offset+7]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static ssize_t set_temp##offset##_crit(struct device *dev, const char *buf, \
@@ -473,9 +490,12 @@ static ssize_t set_temp##offset##_crit(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->in_crit[offset-4] = IN_TO_REG(val, data->in_vref); \
 	pc87360_write_value(data, LD_IN, offset+7, PC87365_REG_TEMP_CRIT, \
 			    data->in_crit[offset-4]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static DEVICE_ATTR(temp##offset##_input, S_IRUGO, \
@@ -552,9 +572,12 @@ static ssize_t set_temp##offset##_min(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->temp_min[offset-1] = TEMP_TO_REG(val); \
 	pc87360_write_value(data, LD_TEMP, offset-1, PC87365_REG_TEMP_MIN, \
 			    data->temp_min[offset-1]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static ssize_t set_temp##offset##_max(struct device *dev, const char *buf, \
@@ -563,9 +586,12 @@ static ssize_t set_temp##offset##_max(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->temp_max[offset-1] = TEMP_TO_REG(val); \
 	pc87360_write_value(data, LD_TEMP, offset-1, PC87365_REG_TEMP_MAX, \
 			    data->temp_max[offset-1]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static ssize_t set_temp##offset##_crit(struct device *dev, const char *buf, \
@@ -574,9 +600,12 @@ static ssize_t set_temp##offset##_crit(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct pc87360_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->temp_crit[offset-1] = TEMP_TO_REG(val); \
 	pc87360_write_value(data, LD_TEMP, offset-1, PC87365_REG_TEMP_CRIT, \
 			    data->temp_crit[offset-1]); \
+	up(&data->update_lock); \
 	return count; \
 } \
 static DEVICE_ATTR(temp##offset##_input, S_IRUGO, \

@@ -726,10 +726,9 @@ static ssize_t set_in_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->in_min[nr] = INS_TO_REG(nr, val);
 	adm1026_write_value(client, ADM1026_REG_IN_MIN[nr], data->in_min[nr]);
 	up(&data->update_lock);
@@ -745,10 +744,9 @@ static ssize_t set_in_max(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->in_max[nr] = INS_TO_REG(nr, val);
 	adm1026_write_value(client, ADM1026_REG_IN_MAX[nr], data->in_max[nr]);
 	up(&data->update_lock);
@@ -818,10 +816,9 @@ static ssize_t set_in16_min(struct device *dev, const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->in_min[16] = INS_TO_REG(16, val + NEG12_OFFSET);
 	adm1026_write_value(client, ADM1026_REG_IN_MIN[16], data->in_min[16]);
 	up(&data->update_lock);
@@ -837,10 +834,9 @@ static ssize_t set_in16_max(struct device *dev, const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->in_max[16] = INS_TO_REG(16, val+NEG12_OFFSET);
 	adm1026_write_value(client, ADM1026_REG_IN_MAX[16], data->in_max[16]);
 	up(&data->update_lock);
@@ -873,10 +869,9 @@ static ssize_t set_fan_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->fan_min[nr] = FAN_TO_REG(val, data->fan_div[nr]);
 	adm1026_write_value(client, ADM1026_REG_FAN_MIN(nr),
 		data->fan_min[nr]);
@@ -1009,10 +1004,9 @@ static ssize_t set_temp_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_min[nr] = TEMP_TO_REG(val);
 	adm1026_write_value(client, ADM1026_REG_TEMP_MIN[nr],
 		data->temp_min[nr]);
@@ -1029,10 +1023,9 @@ static ssize_t set_temp_max(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_max[nr] = TEMP_TO_REG(val);
 	adm1026_write_value(client, ADM1026_REG_TEMP_MAX[nr],
 		data->temp_max[nr]);
@@ -1083,10 +1076,9 @@ static ssize_t set_temp_offset(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_offset[nr] = TEMP_TO_REG(val);
 	adm1026_write_value(client, ADM1026_REG_TEMP_OFFSET[nr],
 		data->temp_offset[nr]);
@@ -1136,10 +1128,9 @@ static ssize_t set_temp_auto_point1_temp(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_tmin[nr] = TEMP_TO_REG(val);
 	adm1026_write_value(client, ADM1026_REG_TEMP_TMIN[nr],
 		data->temp_tmin[nr]);
@@ -1190,9 +1181,8 @@ static ssize_t set_temp_crit_enable(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
-	val = simple_strtol(buf, NULL, 10);
 	if ((val == 1) || (val==0)) {
 		down(&data->update_lock);
 		data->config1 = (data->config1 & ~CFG1_THERM_HOT) | (val << 4);
@@ -1223,10 +1213,9 @@ static ssize_t set_temp_crit(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->temp_crit[nr] = TEMP_TO_REG(val);
 	adm1026_write_value(client, ADM1026_REG_TEMP_THERM[nr],
 		data->temp_crit[nr]);
@@ -1261,10 +1250,9 @@ static ssize_t set_analog_out_reg(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->analog_out = DAC_TO_REG(val);
 	adm1026_write_value(client, ADM1026_REG_DAC, data->analog_out);
 	up(&data->update_lock);
@@ -1317,11 +1305,10 @@ static ssize_t set_alarm_mask(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 	unsigned long mask;
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->alarm_mask = val & 0x7fffffff;
 	mask = data->alarm_mask
 		| (data->gpio_mask & 0x10000 ? 0x80000000 : 0);
@@ -1354,11 +1341,10 @@ static ssize_t set_gpio(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 	long   gpio;
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->gpio = val & 0x1ffff;
 	gpio = data->gpio;
 	adm1026_write_value(client, ADM1026_REG_GPIO_STATUS_0_7,gpio & 0xff);
@@ -1383,11 +1369,10 @@ static ssize_t set_gpio_mask(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 	long   mask;
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->gpio_mask = val & 0x1ffff;
 	mask = data->gpio_mask;
 	adm1026_write_value(client, ADM1026_REG_GPIO_MASK_0_7,mask & 0xff);
@@ -1411,11 +1396,11 @@ static ssize_t set_pwm_reg(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
 
 	if (data->pwm1.enable == 1) {
+		int val = simple_strtol(buf, NULL, 10);
+
 		down(&data->update_lock);
-		val = simple_strtol(buf, NULL, 10);
 		data->pwm1.pwm = PWM_TO_REG(val);
 		adm1026_write_value(client, ADM1026_REG_PWM, data->pwm1.pwm);
 		up(&data->update_lock);
@@ -1432,10 +1417,9 @@ static ssize_t set_auto_pwm_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 
 	down(&data->update_lock);
-	val = simple_strtol(buf, NULL, 10);
 	data->pwm1.auto_pwm_min = SENSORS_LIMIT(val,0,255);
 	if (data->pwm1.enable == 2) { /* apply immediately */
 		data->pwm1.pwm = PWM_TO_REG((data->pwm1.pwm & 0x0f) |
@@ -1459,10 +1443,9 @@ static ssize_t set_pwm_enable(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int     val;
+	int val = simple_strtol(buf, NULL, 10);
 	int     old_enable;
 
-	val = simple_strtol(buf, NULL, 10);
 	if ((val >= 0) && (val < 3)) {
 		down(&data->update_lock);
 		old_enable = data->pwm1.enable;

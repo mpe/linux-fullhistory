@@ -877,18 +877,8 @@ static int inode_doinit_with_dentry(struct inode *inode, struct dentry *opt_dent
 	isec->initialized = 1;
 
 out:
-	if (inode->i_sock) {
-		struct socket *sock = SOCKET_I(inode);
-		if (sock->sk) {
-			isec->sclass = socket_type_to_security_class(sock->sk->sk_family,
-			                                             sock->sk->sk_type,
-			                                             sock->sk->sk_protocol);
-		} else {
-			isec->sclass = SECCLASS_SOCKET;
-		}
-	} else {
+	if (isec->sclass == SECCLASS_FILE)
 		isec->sclass = inode_mode_to_security_class(inode->i_mode);
-	}
 
 	if (hold_sem)
 		up(&isec->sem);
@@ -2979,18 +2969,15 @@ out:
 static void selinux_socket_post_create(struct socket *sock, int family,
 				       int type, int protocol, int kern)
 {
-	int err;
 	struct inode_security_struct *isec;
 	struct task_security_struct *tsec;
 
-	err = inode_doinit(SOCK_INODE(sock));
-	if (err < 0)
-		return;
 	isec = SOCK_INODE(sock)->i_security;
 
 	tsec = current->security;
 	isec->sclass = socket_type_to_security_class(family, type, protocol);
 	isec->sid = kern ? SECINITSID_KERNEL : tsec->sid;
+	isec->initialized = 1;
 
 	return;
 }
@@ -3158,14 +3145,12 @@ static int selinux_socket_accept(struct socket *sock, struct socket *newsock)
 	if (err)
 		return err;
 
-	err = inode_doinit(SOCK_INODE(newsock));
-	if (err < 0)
-		return err;
 	newisec = SOCK_INODE(newsock)->i_security;
 
 	isec = SOCK_INODE(sock)->i_security;
 	newisec->sclass = isec->sclass;
 	newisec->sid = isec->sid;
+	newisec->initialized = 1;
 
 	return 0;
 }
