@@ -49,6 +49,10 @@ In addition, the following text indicates that the option:
 
 	BUGS=	Relates to possible processor bugs on the said processor.
 	KNL 	Is a kernel start-up parameter.
+	BOOT	Is a boot loader parameter.
+
+Parameters denoted with BOOT are actually interpreted by the boot
+loader, and have no meaning to the kernel directly.
 
 Note that ALL kernel parameters listed below are CASE SENSITIVE, and that
 a trailing = on the name of any parameter states that that parameter will
@@ -228,6 +232,8 @@ running once the system is up.
 
 	init=		[KNL]
 
+	initrd=		[BOOT] Specify the location of the initial ramdisk. 
+
 	ip=		[PNP]
 
 	isp16=		[HW,CD]
@@ -292,11 +298,12 @@ running once the system is up.
 
 	megaraid=	[HW,SCSI]
  
-	mem=		[KNL] force use XX Mb of memory when the kernel is not
-			able to see the whole system memory or for test.
+	mem=nn[KMG]	[KNL,BOOT] force use of a specific amount of
+			memory; to be used when the kernel is not able
+			to see the whole system memory or for test.
 
 	memfrac=	[KNL]
- 
+
 	mga=		[HW,DRM]
 
 	mpu401=		[HW,SOUND]
@@ -512,8 +519,11 @@ running once the system is up.
  
 	video=		[FB] frame buffer configuration.
 
-	vga=		[KNL] on ix386, enable to choose a peculiar video mode
-			(use vga=ask for menu).
+	vga=		[BOOT] on ix386, select a particular video mode
+			(use vga=ask for menu).  This is actually a
+			boot loader parameter; the value is passed to
+			the kernel using a special protocol.  See
+			linux/Documentation/i386/boot.txt for information.
 
 	vmhalt=		[KNL,S390]
 

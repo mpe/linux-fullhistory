@@ -92,8 +92,6 @@ struct bh_free_head {
 };
 static struct bh_free_head free_list[NR_SIZES];
 
-kmem_cache_t *bh_cachep;
-
 static int grow_buffers(int size);
 static void __refile_buffer(struct buffer_head *);
 
@@ -2302,12 +2300,6 @@ void __init buffer_init(unsigned long mempages)
 	for(i = 0; i < NR_LIST; i++)
 		lru_list[i] = NULL;
 
-	bh_cachep = kmem_cache_create("buffer_head",
-				      sizeof(struct buffer_head),
-				      0,
-				      SLAB_HWCACHE_ALIGN, NULL, NULL);
-	if(!bh_cachep)
-		panic("Cannot create buffer head SLAB cache\n");
 }
 
 

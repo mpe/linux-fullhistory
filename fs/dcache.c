@@ -1168,7 +1168,7 @@ out:
 	return ino;
 }
 
-void __init dcache_init(unsigned long mempages)
+static void __init dcache_init(unsigned long mempages)
 {
 	struct list_head *d;
 	unsigned long order;
@@ -1225,4 +1225,56 @@ void __init dcache_init(unsigned long mempages)
 		d++;
 		i--;
 	} while (i);
+}
+
+/* SLAB cache for __getname() consumers */
+kmem_cache_t *names_cachep;
+
+/* SLAB cache for files_struct structures */
+kmem_cache_t *files_cachep;
+
+/* SLAB cache for file structures */
+kmem_cache_t *filp_cachep;
+
+/* SLAB cache for dquot structures */
+kmem_cache_t *dquot_cachep;
+
+/* SLAB cache for buffer_head structures */
+kmem_cache_t *bh_cachep;
+
+void __init vfs_caches_init(unsigned long mempages)
+{
+	bh_cachep = kmem_cache_create("buffer_head",
+			sizeof(struct buffer_head), 0,
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(!bh_cachep)
+		panic("Cannot create buffer head SLAB cache\n");
+
+	names_cachep = kmem_cache_create("names_cache", 
+			PAGE_SIZE, 0, 
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!names_cachep)
+		panic("Cannot create names SLAB cache");
+
+	files_cachep = kmem_cache_create("files_cache", 
+			 sizeof(struct files_struct), 0, 
+			 SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!files_cachep) 
+		panic("Cannot create files SLAB cache");
+
+	filp_cachep = kmem_cache_create("filp", 
+			sizeof(struct file), 0,
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(!filp_cachep)
+		panic("Cannot create filp SLAB cache");
+
+#if defined (CONFIG_QUOTA)
+	dquot_cachep = kmem_cache_create("dquot", 
+			sizeof(struct dquot), sizeof(unsigned long) * 4,
+			SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!dquot_cachep)
+		panic("Cannot create dquot SLAB cache");
+#endif
+
+	dcache_init(mempages);
 }

@@ -180,8 +180,6 @@ static inline void close_files(struct files_struct * files)
 	}
 }
 
-extern kmem_cache_t *files_cachep;  
-
 void put_files_struct(struct files_struct *files)
 {
 	if (atomic_dec_and_test(&files->count)) {

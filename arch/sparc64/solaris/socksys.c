@@ -1,4 +1,4 @@
-/* $Id: socksys.c,v 1.15 2000/07/13 08:06:38 davem Exp $
+/* $Id: socksys.c,v 1.16 2000/07/27 00:03:48 davem Exp $
  * socksys.c: /dev/inet/ stuff for Solaris emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)

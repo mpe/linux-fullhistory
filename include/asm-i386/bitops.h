@@ -134,7 +134,9 @@ extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
 
 	if (!size)
 		return 0;
-	__asm__("movl $-1,%%eax\n\t"
+	/* This looks at memory. Mark it volatile to tell gcc not to move it around */
+	__asm__ __volatile__(
+		"movl $-1,%%eax\n\t"
 		"xorl %%edx,%%edx\n\t"
 		"repe; scasl\n\t"
 		"je 1f\n\t"

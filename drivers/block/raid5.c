@@ -1488,7 +1488,7 @@ static void handle_stripe(struct stripe_head *sh)
 }
 
 
-static int raid5_make_request (request_queue_t *q, mddev_t *mddev, int rw, struct buffer_head * bh)
+static int raid5_make_request (mddev_t *mddev, int rw, struct buffer_head * bh)
 {
 	raid5_conf_t *conf = (raid5_conf_t *) mddev->private;
 	const unsigned int raid_disks = conf->raid_disks;

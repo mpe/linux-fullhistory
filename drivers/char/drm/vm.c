@@ -147,7 +147,6 @@ void drm_vm_open(struct vm_area_struct *vma)
 	DRM_DEBUG("0x%08lx,0x%08lx\n",
 		  vma->vm_start, vma->vm_end - vma->vm_start);
 	atomic_inc(&dev->vma_count);
-	MOD_INC_USE_COUNT;
 
 #if DRM_DEBUG_CODE
 	vma_entry = drm_alloc(sizeof(*vma_entry), DRM_MEM_VMAS);
@@ -172,7 +171,6 @@ void drm_vm_close(struct vm_area_struct *vma)
 
 	DRM_DEBUG("0x%08lx,0x%08lx\n",
 		  vma->vm_start, vma->vm_end - vma->vm_start);
-	MOD_DEC_USE_COUNT;
 	atomic_dec(&dev->vma_count);
 
 #if DRM_DEBUG_CODE

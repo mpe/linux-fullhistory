@@ -181,9 +181,13 @@ struct hd_geometry {
 #define HDIO_GET_DMA		0x030b	/* get use-dma flag */
 #define HDIO_GET_NICE		0x030c	/* get nice flags */
 #define HDIO_GET_IDENTITY	0x030d	/* get IDE identification info */
-#define HDIO_DRIVE_CMD_AEB	0x031e
-#define HDIO_DRIVE_TASK		0x031e
+
+#define HDIO_DRIVE_RESET	0x031c	/* execute a device reset */
+#define HDIO_TRISTATE_HWIF	0x031d	/* execute a channel tristate */
+#define HDIO_DRIVE_TASK		0x031e	/* execute task and special drive command */
 #define HDIO_DRIVE_CMD		0x031f	/* execute a special drive command */
+
+#define HDIO_DRIVE_CMD_AEB	HDIO_DRIVE_TASK
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x032n/0x033n */
 #define HDIO_SET_MULTCOUNT	0x0321	/* change IDE blockmode */

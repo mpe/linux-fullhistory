@@ -898,7 +898,7 @@ PROMISE PDC20246/PDC20262/PDC20267 support
 CONFIG_BLK_DEV_PDC202XX
   Promise Ultra33 or PDC20246
   Promise Ultra66 or PDC20262
-  Promise Ultra100 or PDC20267
+  Promise Ultra100 or PDC20265/PDC20267
 
   This driver adds up to 4 more EIDE devices sharing a single
   interrupt. This add-on card is a bootable PCI UDMA controller. Since
@@ -918,11 +918,11 @@ CONFIG_BLK_DEV_PDC202XX
 
 Special UDMA Feature (EXPERIMENTAL)
 CONFIG_PDC202XX_BURST
-  For PDC20246, PDC20262 and PDC20267 Ultra DMA chipsets. Designed
-  originally for PDC20246/Ultra33 that has BIOS setup failures when
-  using 3 or more cards.
+  For PDC20246, PDC20262, PDC20265 and PDC20267 Ultra DMA chipsets.
+  Designed originally for PDC20246/Ultra33 that has BIOS setup
+  failures when using 3 or more cards.
 
-  Unknown for PDC20267 Ultra DMA 100.
+  Unknown for PDC20265/PDC20267 Ultra DMA 100.
 
   Please read the comments at the top of drivers/ide/pdc202xx.c
 

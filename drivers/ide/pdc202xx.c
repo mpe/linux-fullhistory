@@ -101,11 +101,18 @@ char *pdc202xx_ultra_verbose (u32 drive_pci, u16 slow_cable)
 	return(pdc202xx_dma_verbose(drive_pci));
 }
 
-static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count)
+char *pdc202xx_interrupt_verbose (u8 sc1d)
 {
-	char *p = buffer;
+	char *p = NULL;
+	p += sprintf(p,"0x%02x        ", sc1d);
+	return (char *)p;
+}
 
-	u32 bibma  = pci_resource_start(bmide_dev, 4);
+static char * pdc202xx_info (char *buf, struct pci_dev *dev)
+{
+	char *p = buf;
+
+	u32 bibma  = pci_resource_start(dev, 4);
 	u32 reg60h = 0, reg64h = 0, reg68h = 0, reg6ch = 0;
 	u16 reg50h = 0, pmask = (1<<10), smask = (1<<11);
 	u8 hi = 0, lo = 0;
@@ -125,15 +132,18 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 	u8 sc1e	= inb_p((unsigned short)bibma + 0x1e);
 	u8 sc1f	= inb_p((unsigned short)bibma + 0x1f);
 
-	pci_read_config_word(bmide_dev, 0x50, &reg50h);
-	pci_read_config_dword(bmide_dev, 0x60, &reg60h);
-	pci_read_config_dword(bmide_dev, 0x64, &reg64h);
-	pci_read_config_dword(bmide_dev, 0x68, &reg68h);
-	pci_read_config_dword(bmide_dev, 0x6c, &reg6ch);
+	pci_read_config_word(dev, 0x50, &reg50h);
+	pci_read_config_dword(dev, 0x60, &reg60h);
+	pci_read_config_dword(dev, 0x64, &reg64h);
+	pci_read_config_dword(dev, 0x68, &reg68h);
+	pci_read_config_dword(dev, 0x6c, &reg6ch);
 
-	switch(bmide_dev->device) {
+	switch(dev->device) {
 		case PCI_DEVICE_ID_PROMISE_20267:
 			p += sprintf(p, "\n                                PDC20267 Chipset.\n");
+			break;
+		case PCI_DEVICE_ID_PROMISE_20265:
+			p += sprintf(p, "\n                                PDC20265 Chipset.\n");
 			break;
 		case PCI_DEVICE_ID_PROMISE_20262:
 			p += sprintf(p, "\n                                PDC20262 Chipset.\n");
@@ -174,10 +184,12 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 		(sc1b & 0x01) ? "MASTER" : "PCI   ");
 	p += sprintf(p, "                %s                     %s\n",
 		(sc1d & 0x08) ? "Error       " :
+		((sc1d & 0x05) == 0x05) ? "Not My INTR " :
 		(sc1d & 0x04) ? "Interrupting" :
 		(sc1d & 0x02) ? "FIFO Full   " :
 		(sc1d & 0x01) ? "FIFO Empty  " : "????????????",
 		(sc1d & 0x80) ? "Error       " :
+		((sc1d & 0x50) == 0x50) ? "Not My INTR " :
 		(sc1d & 0x40) ? "Interrupting" :
 		(sc1d & 0x20) ? "FIFO Full   " :
 		(sc1d & 0x10) ? "FIFO Empty  " : "????????????");
@@ -195,12 +207,26 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 #if 0
 	p += sprintf(p, "--------------- Can ATAPI DMA ---------------\n");
 #endif
-	
+	return (char *)p;
+}
+
+static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count)
+{
+	char *p = buffer;
+	p = pdc202xx_info(buffer, bmide_dev);
 	return p-buffer;	/* => must be less than 4k! */
 }
 #endif  /* defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS) */
 
 byte pdc202xx_proc = 0;
+
+const char *pdc_quirk_drives[] = {
+	"QUANTUM FIREBALLlct08 08",
+	"QUANTUM FIREBALLP KA6.4",
+	"QUANTUM FIREBALLP LM20.4",
+	"QUANTUM FIREBALLP LM20.5",
+	NULL
+};
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
@@ -313,6 +339,26 @@ static void decode_registers (byte registers, byte value)
 }
 
 #endif /* PDC202XX_DECODE_REGISTER_INFO */
+
+static int check_in_drive_lists (ide_drive_t *drive, const char **list)
+{
+	struct hd_driveid *id = drive->id;
+
+	if (pdc_quirk_drives == list) {
+		while (*list) {
+			if (strstr(id->model, *list++)) {
+				return 2;
+			}
+		}
+	} else {
+		while (*list) {
+			if (!strcmp(*list++,id->model)) {
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
 
 static int pdc202xx_tune_chipset (ide_drive_t *drive, byte speed)
 {
@@ -473,7 +519,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	byte CLKSPD		= IN_BYTE(high_16 + 0x11);
 	byte udma_33		= ultra ? (inb(high_16 + 0x001f) & 1) : 0;
 	byte udma_66		= ((eighty_ninty_three(drive)) && udma_33) ? 1 : 0;
-	byte udma_100		= ((dev->device == PCI_DEVICE_ID_PROMISE_20267) && udma_66) ? 1 : 0;
+	byte udma_100		= (((dev->device == PCI_DEVICE_ID_PROMISE_20265) || (dev->device == PCI_DEVICE_ID_PROMISE_20267)) && udma_66) ? 1 : 0;
 
 	/*
 	 * Set the control register to use the 66Mhz system
@@ -655,14 +701,37 @@ no_dma_set:
 	return HWIF(drive)->dmaproc(dma_func, drive);
 }
 
+int pdc202xx_quirkproc (ide_drive_t *drive)
+{
+	return ((int) check_in_drive_lists(drive, pdc_quirk_drives));
+}
+
 /*
  * pdc202xx_dmaproc() initiates/aborts (U)DMA read/write operations on a drive.
  */
 int pdc202xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
+	byte dma_stat = 0, sc1d = 0;
+	unsigned long high_16	= pci_resource_start(HWIF(drive)->pci_dev, 4);
+	unsigned long dma_base	= HWIF(drive)->dma_base;
+
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
+		case ide_dma_test_irq:	/* returns 1 if dma irq issued, 0 otherwise */
+			dma_stat = inb(dma_base+2);
+			sc1d = inb(high_16 + 0x001d);
+			if (HWIF(drive)->channel) {
+				if ((sc1d & 0x50) == 0x50) goto somebody_else;
+				else if ((sc1d & 0x40) == 0x40)
+					return (dma_stat & 4) == 4;
+			} else {
+				if ((sc1d & 0x05) == 0x05) goto somebody_else;
+				else if ((sc1d & 0x04) == 0x04)
+					return (dma_stat & 4) == 4;
+			}
+somebody_else:
+			return (dma_stat & 4) == 4;	/* return 1 if INTR asserted */
 		case ide_dma_lostirq:
 		case ide_dma_timeout:
 			if (HWIF(drive)->resetproc != NULL)
@@ -696,6 +765,7 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 	byte secondary_mode	= inb(high_16 + 0x001b);
 
 	if ((dev->device == PCI_DEVICE_ID_PROMISE_20262) ||
+	    (dev->device == PCI_DEVICE_ID_PROMISE_20265) ||
 	    (dev->device == PCI_DEVICE_ID_PROMISE_20267)) {
 		int i = 0;
 		/*
@@ -725,7 +795,7 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 		byte irq = 0, irq2 = 0;
 		pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
 		pci_read_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, &irq2);	/* 0xbc */
-		if ((irq != irq2) && (dev->device != PCI_DEVICE_ID_PROMISE_20267)) {
+		if ((irq != irq2) && (dev->device != PCI_DEVICE_ID_PROMISE_20265) && (dev->device != PCI_DEVICE_ID_PROMISE_20267)) {
 			pci_write_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, irq);	/* 0xbc */
 			printk("%s: pci-config space interrupt mirror fixed.\n", name);
 		}
@@ -779,17 +849,21 @@ unsigned int __init ata66_pdc202xx (ide_hwif_t *hwif)
 	unsigned short CIS;
 
 	pci_read_config_word(hwif->pci_dev, 0x50, &CIS);
-        return ((CIS & mask) ? 0 : 1);
+	return ((CIS & mask) ? 0 : 1);
 }
 
 void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 {
 	hwif->tuneproc	= &pdc202xx_tune_drive;
 	hwif->speedproc	= &pdc202xx_tune_chipset;
+	hwif->quirkproc	= &pdc202xx_quirkproc;
 
 	if ((hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20262) ||
-	    (hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20267))
+	    (hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20265) ||
+	    (hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20267)) {
 		hwif->resetproc	= &pdc202xx_reset;
+		hwif->tri_proc	= &pdc202xx_tristate;
+	}
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {

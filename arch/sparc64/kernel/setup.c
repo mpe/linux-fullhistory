@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.54 2000/05/09 17:40:14 davem Exp $
+/*  $Id: setup.c,v 1.55 2000/07/24 14:13:13 anton Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -443,8 +443,6 @@ char reboot_command[256];
 extern unsigned long phys_base;
 
 static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
-
-extern struct consw sun_serial_con;
 
 void register_prom_callbacks(void)
 {

@@ -193,8 +193,6 @@ extern void update_atime (struct inode *);
 
 extern void buffer_init(unsigned long);
 extern void inode_init(unsigned long);
-extern void file_table_init(void);
-extern void dcache_init(unsigned long);
 
 /* bh state bits */
 #define BH_Uptodate	0	/* 1 if the buffer contains valid data */
@@ -881,6 +879,9 @@ extern struct file *filp_open(const char *, int, int);
 extern struct file * dentry_open(struct dentry *, struct vfsmount *, int);
 extern int filp_close(struct file *, fl_owner_t id);
 extern char * getname(const char *);
+
+/* fs/dcache.c */
+extern void vfs_caches_init(unsigned long);
 
 #define __getname()	kmem_cache_alloc(names_cachep, SLAB_KERNEL)
 #define putname(name)	kmem_cache_free(names_cachep, (void *)(name))

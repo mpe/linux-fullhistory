@@ -31,13 +31,10 @@
  */
 
 #include <linux/config.h>
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#endif
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include "drmP.h"
 #include "tdfx_drv.h"
-EXPORT_SYMBOL(tdfx_init);
-EXPORT_SYMBOL(tdfx_cleanup);
 
 #define TDFX_NAME	 "tdfx"
 #define TDFX_DESC	 "3dfx Banshee/Voodoo3+"
@@ -94,7 +91,7 @@ static drm_ioctl_desc_t	      tdfx_ioctls[] = {
 	[DRM_IOCTL_NR(DRM_IOCTL_LOCK)]	     = { tdfx_lock,	  1, 0 },
 	[DRM_IOCTL_NR(DRM_IOCTL_UNLOCK)]     = { tdfx_unlock,	  1, 0 },
 	[DRM_IOCTL_NR(DRM_IOCTL_FINISH)]     = { drm_finish,	  1, 0 },
-#ifdef DRM_AGP
+#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
 	[DRM_IOCTL_NR(DRM_IOCTL_AGP_ACQUIRE)]   = {drm_agp_acquire, 1, 1},
 	[DRM_IOCTL_NR(DRM_IOCTL_AGP_RELEASE)]   = {drm_agp_release, 1, 1},
 	[DRM_IOCTL_NR(DRM_IOCTL_AGP_ENABLE)]    = {drm_agp_enable,  1, 1},
@@ -114,9 +111,6 @@ static char		      *tdfx = NULL;
 MODULE_AUTHOR("VA Linux Systems, Inc.");
 MODULE_DESCRIPTION("tdfx");
 MODULE_PARM(tdfx, "s");
-
-module_init(tdfx_init);
-module_exit(tdfx_cleanup);
 
 #ifndef MODULE
 /* tdfx_options is called by the kernel to parse command-line options
@@ -230,7 +224,7 @@ static int tdfx_takedown(drm_device_t *dev)
 		}
 		dev->magiclist[i].head = dev->magiclist[i].tail = NULL;
 	}
-#ifdef DRM_AGP
+#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
 				/* Clear AGP information */
 	if (dev->agp) {
 		drm_agp_mem_t *temp;
@@ -330,7 +324,7 @@ int tdfx_init(void)
 
 	drm_mem_init();
 	drm_proc_init(dev);
-#ifdef DRM_AGP
+#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
 	dev->agp    = drm_agp_init();
 #endif
 	if((retcode = drm_ctxbitmap_init(dev))) {
@@ -368,7 +362,7 @@ void tdfx_cleanup(void)
 	}
 	drm_ctxbitmap_cleanup(dev);
 	tdfx_takedown(dev);
-#ifdef DRM_AGP
+#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
 	if (dev->agp) {
 		drm_agp_uninit();
 		drm_free(dev->agp, sizeof(*dev->agp), DRM_MEM_AGPLISTS);
@@ -376,6 +370,10 @@ void tdfx_cleanup(void)
 	}
 #endif
 }
+
+module_init(tdfx_init);
+module_exit(tdfx_cleanup);
+
 
 int tdfx_version(struct inode *inode, struct file *filp, unsigned int cmd,
 		  unsigned long arg)
@@ -418,7 +416,6 @@ int tdfx_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -433,12 +430,14 @@ int tdfx_open(struct inode *inode, struct file *filp)
 int tdfx_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev    = priv->dev;
+	drm_device_t  *dev;
 	int	      retcode = 0;
+
+	lock_kernel();
+	dev = priv->dev;
 
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
-		MOD_DEC_USE_COUNT;
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {
@@ -454,6 +453,8 @@ int tdfx_release(struct inode *inode, struct file *filp)
 		}
 		spin_unlock(&dev->count_lock);
 	}
+
+	unlock_kernel();
 	return retcode;
 }
 

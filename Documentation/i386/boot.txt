@@ -2,7 +2,7 @@
 		     ----------------------------
 
 		    H. Peter Anvin <hpa@zytor.com>
-		 Updated as of protocol version 2.02
+			Last update 2000-07-27
 
 On the i386 platform, the Linux kernel uses a rather complicated boot
 convention.  This has evolved partially due to historical aspects, as
@@ -98,7 +98,7 @@ sectors (1K) and then examine the bootup sector size.
 The header looks like:
 
 Offset	Proto	Name		Meaning
-Size
+/Size
 
 01F1/1	ALL	setup_sects	The size of the setup in sectors
 01F2/2	ALL	root_flags	If set, the root is mounted readonly
@@ -120,7 +120,7 @@ Size
 0218/4	2.00+	ramdisk_image	initrd load address (set by boot loader)
 021C/4	2.00+	ramdisk_size	initrd size (set by boot loader)
 0220/4	2.00+	bootsect_kludge	DO NOT USE - for bootsect.S use only
-0224/4	2.01+	heap_end_ptr	Free memory after setup end
+0224/2	2.01+	heap_end_ptr	Free memory after setup end
 0226/2	N/A	pad1		Unused
 0228/4	2.02+	cmd_line_ptr	32-bit pointer to the kernel command line
 
@@ -267,8 +267,8 @@ Such a boot loader should enter the following fields in the header:
 		}
 
 		/* It is recommended to clear memory up to the 32K mark */
-		memset(0x90000 + (setup_sects-1)*512, 0,
-		       (64-setup_sects-1)*512);
+		memset(0x90000 + (setup_sects+1)*512, 0,
+		       (64-(setup_sects+1))*512);
 	}
 
 
@@ -296,7 +296,11 @@ much a requirement for these kernels to load the real-mode part at
 If the command line provided by the boot loader is entered by the
 user, the user may expect the following command line options to work.
 They should normally not be deleted from the kernel command line even
-though not all of them are actually meaningful to the kernel.
+though not all of them are actually meaningful to the kernel.  Boot
+loader authors who need additional command line options for the boot
+loader itself should get them registered in
+linux/Documentation/kernel-parameters.txt to make sure they will not
+conflict with actual kernel options now or in the future.
 
   vga=<mode>
 	<mode> here is either an integer (in C notation, either
@@ -311,11 +315,13 @@ though not all of them are actually meaningful to the kernel.
 	or G (meaning << 10, << 20 or << 30).  This specifies to the
 	kernel the memory size.  This affects the possible placement
 	of an initrd, since an initrd should be placed near end of
-	memory.
+	memory.  Note that this is an option to *both* the kernel and
+	the bootloader!
 
   initrd=<file>
 	An initrd should be loaded.  The meaning of <file> is
-	obviously bootloader-dependent.
+	obviously bootloader-dependent, and some boot loaders
+	(e.g. LILO) do not have such a command.
 
 In addition, some boot loaders add the following options to the
 user-specified command line:
@@ -340,10 +346,14 @@ located at *segment* offset 0x20 from the start of the real mode
 kernel.  This means that if you loaded your real-mode kernel code at
 0x90000, the kernel entry point is 9020:0000.
 
-At entry, ds = es = ss = fs = gs should point to the start of the
-real-mode kernel code (0x9000 if the code is loaded at 0x90000), and
-sp should be set up properly, normally pointing to the top of the
-heap.  In our example from above, we would do:
+At entry, ds = es = ss should point to the start of the real-mode
+kernel code (0x9000 if the code is loaded at 0x90000), sp should be
+set up properly, normally pointing to the top of the heap, and
+interrupts should be disabled.  Furthermore, to guard against bugs in
+the kernel, it is recommended that the boot loader sets fs = gs = ds =
+es = ss.
+
+In our example from above, we would do:
 
 	/* Note: in the case of the "old" kernel protocol, base_ptr must
 	   be == 0x90000 at this point; see the previous sample code */
@@ -354,7 +364,7 @@ heap.  In our example from above, we would do:
 
 	/* Set up the real-mode kernel stack */
 	_SS = seg;
-	_SP = 0x9000;	/* Load SP right after loading SS! */
+	_SP = 0x9000;	/* Load SP immediately after loading SS! */
 
 	_DS = _ES = _FS = _GS = seg;
 	jmp_far(seg+0x20, 0);	/* Run the kernel */

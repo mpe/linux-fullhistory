@@ -16,6 +16,6 @@ O_OBJS   := math.o ashldi3.o
 .S.o:
 	$(CC) $(AFLAGS) -ansi -c $< -o $*.o
 
-CFLAGS += -I. -I$(TOPDIR)/include/math-emu -w
+EXTRA_CFLAGS = -I. -I$(TOPDIR)/include/math-emu -w
 
 include $(TOPDIR)/Rules.make

@@ -1,4 +1,4 @@
-/* $Id: ffb_drv.c,v 1.4 2000/07/13 08:06:39 davem Exp $
+/* $Id: ffb_drv.c,v 1.5 2000/07/26 01:03:57 davem Exp $
  * ffb_drv.c: Creator/Creator3D direct rendering driver.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)
@@ -162,6 +162,9 @@ static int ffb_takedown(drm_device_t *dev)
 					       drm_order(map->size)
 					       - PAGE_SHIFT,
 					       DRM_MEM_SAREA);
+				break;
+
+			default:
 				break;
 			};
 

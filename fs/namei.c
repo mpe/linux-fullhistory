@@ -1954,20 +1954,3 @@ struct inode_operations page_symlink_inode_operations = {
 	readlink:	page_readlink,
 	follow_link:	page_follow_link,
 };
-
-/* SLAB cache for name blocks */
-kmem_cache_t *names_cachep;
-
-static int __init namecache_init(void)
-{
-	names_cachep = kmem_cache_create("names_cache",
-			PAGE_SIZE,
-			0,
-			SLAB_HWCACHE_ALIGN,
-			NULL, NULL);
-	if (!names_cachep)
-		panic("Cannot create names cache");
-	return 0;
-}
-
-module_init(namecache_init)

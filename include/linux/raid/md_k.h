@@ -212,13 +212,12 @@ struct mddev_s
 	md_wait_queue_head_t		recovery_wait;
 
 	struct md_list_head		all_mddevs;
-	request_queue_t			queue;
 };
 
 struct mdk_personality_s
 {
 	char *name;
-	int (*make_request)(request_queue_t *q, mddev_t *mddev, int rw, struct buffer_head * bh);
+	int (*make_request)(mddev_t *mddev, int rw, struct buffer_head * bh);
 	int (*run)(mddev_t *mddev);
 	int (*stop)(mddev_t *mddev);
 	int (*status)(char *page, mddev_t *mddev);

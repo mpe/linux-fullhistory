@@ -542,8 +542,8 @@ rb_out:
 	return new_disk;
 }
 
-static int raid1_make_request (request_queue_t *q, mddev_t *mddev, int rw,
-						 struct buffer_head * bh)
+static int raid1_make_request (mddev_t *mddev, int rw,
+			       struct buffer_head * bh)
 {
 	raid1_conf_t *conf = mddev_to_conf(mddev);
 	struct buffer_head *bh_req, *bhl;
@@ -551,6 +551,7 @@ static int raid1_make_request (request_queue_t *q, mddev_t *mddev, int rw,
 	int disks = MD_SB_DISKS;
 	int i, sum_bhs = 0, sectors;
 	struct mirror_info *mirror;
+	request_queue_t *q;
 
 	if (!buffer_locked(bh))
 		BUG();

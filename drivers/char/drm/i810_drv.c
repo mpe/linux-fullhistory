@@ -30,17 +30,10 @@
  */
 
 #include <linux/config.h>
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#endif
 #include "drmP.h"
 #include "i810_drv.h"
 #include <linux/sched.h>
 #include <linux/smp_lock.h>
-
-
-EXPORT_SYMBOL(i810_init);
-EXPORT_SYMBOL(i810_cleanup);
 
 #define I810_NAME	 "i810"
 #define I810_DESC	 "Intel I810"
@@ -133,9 +126,6 @@ static char		      *i810 = NULL;
 MODULE_AUTHOR("VA Linux Systems, Inc.");
 MODULE_DESCRIPTION("Intel I810");
 MODULE_PARM(i810, "s");
-
-module_init(i810_init);
-module_exit(i810_cleanup);
 
 #ifndef MODULE
 /* i810_options is called by the kernel to parse command-line options
@@ -430,6 +420,10 @@ void i810_cleanup(void)
 	}
 }
 
+module_init(i810_init);
+module_exit(i810_cleanup);
+
+
 int i810_version(struct inode *inode, struct file *filp, unsigned int cmd,
 		  unsigned long arg)
 {
@@ -471,7 +465,6 @@ int i810_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -552,7 +545,6 @@ int i810_release(struct inode *inode, struct file *filp)
 	up(&dev->struct_sem);
 	
 	drm_free(priv, sizeof(*priv), DRM_MEM_FILES);
-   	MOD_DEC_USE_COUNT;
    	atomic_inc(&dev->total_close);
    	spin_lock(&dev->count_lock);
    	if (!--dev->open_count) {

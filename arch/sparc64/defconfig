@@ -460,6 +460,7 @@ CONFIG_NLS=y
 #
 # Native Language Support
 #
+CONFIG_NLS_DEFAULT="iso8859-1"
 # CONFIG_NLS_CODEPAGE_437 is not set
 # CONFIG_NLS_CODEPAGE_737 is not set
 # CONFIG_NLS_CODEPAGE_775 is not set
@@ -476,6 +477,10 @@ CONFIG_NLS=y
 # CONFIG_NLS_CODEPAGE_866 is not set
 # CONFIG_NLS_CODEPAGE_869 is not set
 # CONFIG_NLS_CODEPAGE_874 is not set
+# CONFIG_NLS_CODEPAGE_932 is not set
+# CONFIG_NLS_CODEPAGE_936 is not set
+# CONFIG_NLS_CODEPAGE_949 is not set
+# CONFIG_NLS_CODEPAGE_950 is not set
 # CONFIG_NLS_ISO8859_1 is not set
 # CONFIG_NLS_ISO8859_2 is not set
 # CONFIG_NLS_ISO8859_3 is not set
@@ -488,6 +493,7 @@ CONFIG_NLS=y
 # CONFIG_NLS_ISO8859_14 is not set
 # CONFIG_NLS_ISO8859_15 is not set
 # CONFIG_NLS_KOI8_R is not set
+# CONFIG_NLS_UTF8 is not set
 
 #
 # Watchdog

@@ -1296,6 +1296,7 @@ static int uhci_submit_urb(struct urb *urb)
 	struct uhci *uhci;
 	unsigned long flags;
 	struct urb *u;
+	int bustime;
 
 	if (!urb)
 		return -EINVAL;
@@ -1325,13 +1326,40 @@ static int uhci_submit_urb(struct urb *urb)
 		ret = uhci_submit_control(urb);
 		break;
 	case PIPE_INTERRUPT:
-		ret = uhci_submit_interrupt(urb);
+		if (urb->bandwidth == 0) {	/* not yet checked/allocated */
+			bustime = usb_check_bandwidth (urb->dev, urb);
+			if (bustime < 0)
+				ret = bustime;
+			else {
+				ret = uhci_submit_interrupt(urb);
+				if (ret == -EINPROGRESS)
+					usb_claim_bandwidth (urb->dev, urb, bustime, 0);
+			}
+		} else {	/* bandwidth is already set */
+			ret = uhci_submit_interrupt(urb);
+		}
 		break;
 	case PIPE_BULK:
 		ret = uhci_submit_bulk(urb, u);
 		break;
 	case PIPE_ISOCHRONOUS:
-		ret = uhci_submit_isochronous(urb);
+		if (urb->bandwidth == 0) {	/* not yet checked/allocated */
+			if (urb->number_of_packets <= 0) {
+				ret = -EINVAL;
+				break;
+			}
+			bustime = usb_check_bandwidth (urb->dev, urb);
+			if (bustime < 0) {
+				ret = bustime;
+				break;
+			}
+
+			ret = uhci_submit_isochronous(urb);
+			if (ret == -EINPROGRESS)
+				usb_claim_bandwidth (urb->dev, urb, bustime, 1);
+		} else {	/* bandwidth is already set */
+			ret = uhci_submit_isochronous(urb);
+		}
 		break;
 	}
 
@@ -1387,6 +1415,10 @@ static void uhci_transfer_result(struct urb *urb)
 	case PIPE_CONTROL:
 	case PIPE_BULK:
 	case PIPE_ISOCHRONOUS:
+		/* Release bandwidth for Interrupt or Isoc. transfers */
+		/* Spinlock needed ? */
+		if (urb->bandwidth)
+			usb_release_bandwidth (urb->dev, urb, 1);
 		uhci_unlink_generic(urb);
 		break;
 	case PIPE_INTERRUPT:
@@ -1394,8 +1426,13 @@ static void uhci_transfer_result(struct urb *urb)
 		urb->complete(urb);
 		if (urb->interval)
 			uhci_reset_interrupt(urb);
-		else
+		else {
+			/* Release bandwidth for Interrupt or Isoc. transfers */
+			/* Spinlock needed ? */
+			if (urb->bandwidth)
+				usb_release_bandwidth (urb->dev, urb, 0);
 			uhci_unlink_generic(urb);
+		}
 		return;		/* <-- Note the return */
 	}
 
@@ -1475,6 +1512,21 @@ static int uhci_unlink_urb(struct urb *urb)
 	/* Short circuit the virtual root hub */
 	if (usb_pipedevice(urb->pipe) == uhci->rh.devnum)
 		return rh_unlink_urb(urb);
+
+	/* Release bandwidth for Interrupt or Isoc. transfers */
+	/* Spinlock needed ? */
+	if (urb->bandwidth) {
+		switch (usb_pipetype(urb->pipe)) {
+		case PIPE_INTERRUPT:
+			usb_release_bandwidth (urb->dev, urb, 0);
+			break;
+		case PIPE_ISOCHRONOUS:
+			usb_release_bandwidth (urb->dev, urb, 1);
+			break;
+		default:
+			break;
+		}
+	}
 
 	if (urb->status == -EINPROGRESS) {
 		uhci_unlink_generic(urb);

@@ -124,37 +124,6 @@ static struct gendisk md_gendisk=
 	fops: &md_fops,
 };
 
-void md_plug_device (request_queue_t *mdqueue, kdev_t dev)
-{
-	mdk_rdev_t * rdev;
-	struct md_list_head *tmp;
-	request_queue_t *q;
-	mddev_t *mddev;
-
-	if (!md_test_and_set_bit(0, (atomic_t *)&mdqueue->plugged)) {
- 		mddev = kdev_to_mddev(dev);
-		ITERATE_RDEV(mddev,rdev,tmp) {
-			q = blk_get_queue(rdev->dev);
-			generic_unplug_device(q);
-		}
-		queue_task(&mdqueue->plug_tq, &tq_disk);
-	}
-}
-
-static void md_unplug_device (void * data)
-{
-	mdk_rdev_t * rdev;
-	struct md_list_head *tmp;
-	mddev_t *mddev = (mddev_t *)data;
-	request_queue_t *mdqueue = &mddev->queue, *q;
-
-	clear_bit(0, (atomic_t *)&mdqueue->plugged);
-	ITERATE_RDEV(mddev,rdev,tmp) {
-		q = blk_get_queue(rdev->dev);
-		generic_unplug_device(q);
-	}
-}
-
 /*
  * Enables to iterate over all existing md arrays
  */
@@ -199,28 +168,12 @@ void del_mddev_mapping (mddev_t * mddev, kdev_t dev)
 	mddev_map[minor].data = NULL;
 }
 
-static request_queue_t *md_get_queue (kdev_t dev)
-{
-	mddev_t *mddev = kdev_to_mddev(dev);
-
-	if (!mddev)
-		return NULL;
-	return &mddev->queue;
-}
-
-static void do_md_request (request_queue_t * q)
-{
-	printk(KERN_ALERT "Got md request, not good...");
-	BUG();
-	return;
-}
-
 static int md_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 {
 	mddev_t *mddev = kdev_to_mddev(bh->b_rdev);
 
 	if (mddev && mddev->pers)
-		return mddev->pers->make_request(q, mddev, rw, bh);
+		return mddev->pers->make_request(mddev, rw, bh);
 	else {
 		buffer_IO_error(bh);
 		return -1;
@@ -229,7 +182,6 @@ static int md_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 
 static mddev_t * alloc_mddev (kdev_t dev)
 {
-	request_queue_t *q;
 	mddev_t *mddev;
 
 	if (MAJOR(dev) != MD_MAJOR) {
@@ -248,15 +200,6 @@ static mddev_t * alloc_mddev (kdev_t dev)
 	init_MUTEX(&mddev->resync_sem);
 	MD_INIT_LIST_HEAD(&mddev->disks);
 	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
-
-	q = &mddev->queue;
-	blk_init_queue(q, DEVICE_REQUEST);
-	blk_queue_pluggable(q, md_plug_device);
-	blk_queue_make_request(q, md_make_request);
-	
-	q->plug_tq.sync = 0;
-	q->plug_tq.routine = &md_unplug_device;
-	q->plug_tq.data = mddev;
 
 	/*
 	 * The 'base' mddev is the one with data NULL.
@@ -808,7 +751,6 @@ static void free_mddev (mddev_t *mddev)
 	del_mddev_mapping(mddev, MKDEV(MD_MAJOR, mdidx(mddev)));
 	md_list_del(&mddev->all_mddevs);
 	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
-	blk_cleanup_queue(&mddev->queue);
 	kfree(mddev);
 	MOD_DEC_USE_COUNT;
 }
@@ -3657,7 +3599,9 @@ int md__init md_init (void)
 				MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR,
 				&md_fops, NULL);
 
-	blk_dev[MAJOR_NR].queue = md_get_queue;
+	/* forward all md request to md_make_request */
+	blk_queue_make_request(BLK_DEFAULT_QUEUE(MAJOR_NR), md_make_request);
+	
 
 	read_ahead[MAJOR_NR] = INT_MAX;
 	md_gendisk.next = gendisk_head;

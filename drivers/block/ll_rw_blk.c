@@ -5,6 +5,7 @@
  * Copyright (C) 1994,      Karl Keyte: Added support for disk statistics
  * Elevator latency, (C) 2000  Andrea Arcangeli <andrea@suse.de> SuSE
  * Queue request tables / lock, selectable elevator, Jens Axboe <axboe@suse.de>
+ * kernel-doc documentation started by NeilBrown <neilb@cse.unsw.edu.au> -  July2000
  */
 
 /*
@@ -171,10 +172,19 @@ static int __blk_cleanup_queue(struct list_head *head)
 	return i;
 }
 
-/*
- * Hopefully the low level driver has finished any outstanding requests
- * first...
- */
+/**
+ * blk_cleanup_queue: - release a &request_queue_t when it is no longer needed
+ * @q:    the request queue to be released
+ *
+ * Description:  blk_cleanup_queue is the pair to blk_init_queue().  It should
+ *     be called when a request queue is being released; typically when a block
+ *     device is being de-registered.
+ *     Currently, its primary task it to free all the &struct request structures
+ *     that were allocated to the queue.
+ * Caveat:
+ *     Hopefully the low level driver will have finished any outstanding requests
+ *     first...
+ **/
 void blk_cleanup_queue(request_queue_t * q)
 {
 	int count = QUEUE_NR_REQUESTS;
@@ -188,15 +198,77 @@ void blk_cleanup_queue(request_queue_t * q)
 	memset(q, 0, sizeof(*q));
 }
 
+/**
+ * blk_queue_headactive - indicate whether head of request queue may be active
+ * @q:       The queue which this applies to.
+ * @active:  A flag indication where the head of the queue is active.
+ *
+ * Description:
+ *    The driver for a block device may choose to leave the currently active request
+ *    on the request queue, removing it only when it has completed.  The queue
+ *    handling routines assume this by default and will not involved the head of the
+ *    request queue in any merging or reordering of requests.
+ *
+ *    If a driver removes requests from the queue before processing them, then it may
+ *    indicate that it does so, there by allowing the head of the queue to be involved
+ *    in merging and reordering.  This is done be calling blk_queue_headactive() with an
+ *    @active flag of %1.
+ *
+ *    If a driver processes several requests at once, it must remove them (or at least all
+ *    but one of them) from the request queue.
+ *
+ *    When a queue is plugged (see blk_queue_pluggable()) the head will be assumed to
+ *    be inactive.
+ **/
+ 
 void blk_queue_headactive(request_queue_t * q, int active)
 {
 	q->head_active = active;
 }
 
+/**
+ * blk_queue_pluggable - define a plugging function for a request queue
+ * @q:   the request queue to which the function will apply
+ * @plug: the function to be called to plug a queue
+ *
+ * Description:
+ *   A request queue will be "plugged" if a request is added to it while it
+ *   is empty.  This allows a number of requests to be added before any are
+ *   processed, thus providing an opportunity for these requests to be merged
+ *   or re-ordered.
+ *   The default plugging function (generic_plug_device()) sets the "plugged" flag
+ *   for the queue and adds a task the the $tq_disk task queue to unplug the
+ *   queue and call the request function at a later time.
+ *
+ *   A device driver may provide an alternate plugging function by passing it to
+ *   blk_queue_pluggable().   This function should set the "plugged" flag if it
+ *   want calls to the request_function to be blocked, and should place a
+ *   task on $tq_disk which will unplug the queue.  Alternately it can simply
+ *   do nothing and there-by disable plugging of the device.
+ **/
+
 void blk_queue_pluggable (request_queue_t * q, plug_device_fn *plug)
 {
 	q->plug_device_fn = plug;
 }
+
+
+/**
+ * blk_queue_make_request - define an alternate make_request function for a device
+ * @q:  the request queue for the device to be affected
+ * @mfn: the alternate make_request function
+ *
+ * Description:
+ *    The normal way for &struct buffer_heads to be passes to a device driver it to
+ *    collect into requests on a request queue, and allow the device driver to select
+ *    requests off that queue when it is ready.  This works well for many block devices.
+ *    However some block devices (typically virtual devices such as md or lvm) do not benefit
+ *    from the processes on the request queue, and are served best by having the requests passed
+ *    directly to them.  This can be achived by providing a function to blk_queue_make_request().
+ *    If this is done, then the rest of the &request_queue_t structure is unused (unless the alternate
+ *    make_request function explicitly uses it).  In particular, there is no need to call
+ *    blk_init_queue() if blk_queue_make_request() has been called.
+ **/
 
 void blk_queue_make_request(request_queue_t * q, make_request_fn * mfn)
 {
@@ -259,12 +331,6 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
  */
 static void generic_plug_device(request_queue_t *q, kdev_t dev)
 {
-#ifdef CONFIG_BLK_DEV_MD
-	if (MAJOR(dev) == MD_MAJOR) {
-		spin_unlock_irq(&io_request_lock);
-		BUG();
-	}
-#endif
 	/*
 	 * no need to replug device
 	 */
@@ -273,6 +339,28 @@ static void generic_plug_device(request_queue_t *q, kdev_t dev)
 
 	q->plugged = 1;
 	queue_task(&q->plug_tq, &tq_disk);
+}
+
+/*
+ * remove the plug and let it rip..
+ */
+static inline void __generic_unplug_device(request_queue_t *q)
+{
+	if (q->plugged) {
+		q->plugged = 0;
+		if (!list_empty(&q->queue_head))
+			q->request_fn(q);
+	}
+}
+
+static void generic_unplug_device(void *data)
+{
+	request_queue_t *q = (request_queue_t *) data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	__generic_unplug_device(q);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static void blk_init_free_list(request_queue_t *q)
@@ -295,6 +383,42 @@ static void blk_init_free_list(request_queue_t *q)
 	spin_lock_init(&q->request_lock);
 }
 
+/**
+ * blk_init_queue  - prepare a request queue for use with a block device
+ * @q:    The &request_queue_t to be initialised
+ * @rfn:  The function to be called to process requests that have been
+ *        placed on the queue.
+ *
+ * Description:
+ *    If a block device wishes to use the stand request handling procedures,
+ *    which sorts requests and coalesces adjactent requests, then it must
+ *    call blk_init_queue().  The function @rfn will be called when there
+ *    are requests on the queue that need to be processed.  If the device
+ *    supports plugging, then @rfn may not be called immediately that requests
+ *    are available on the queue, but may be called at some time later instead.
+ *
+ *    @rfn is not required, or even expected, to remove all requests off the queue, but
+ *    only as many as it can handle at a time.  If it does leave requests on the queue,
+ *    it is responsible for arranging that the requests get dealt with eventually.
+ *
+ *    A global spin lock $io_spin_lock must held while manipulating the requests
+ *    on the request queue.
+ *
+ *    The request on the head of the queue is by default assumed to be potentially active,
+ *    and it is not considered for re-ordering or merging.  This behaviour can
+ *    be changed with blk_queue_headactive().
+ *
+ * Note:
+ *    blk_init_queue() does not need to be called if
+ *    blk_queue_make_request() has been called to register an alternate
+ *    request handler.  Ofcourse, it may be called if the handler wants
+ *    to still use the fields on &request_queue_t, but in a non-standard
+ *    way.
+ *
+ *    blk_init_queue() should be paired with a blk_cleanup-queue() call
+ *    when the block device is deactivated (such as at module unload).
+ **/
+static int __make_request(request_queue_t * q, int rw,  struct buffer_head * bh);
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
 	INIT_LIST_HEAD(&q->queue_head);
@@ -306,7 +430,7 @@ void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 	q->back_merge_fn       	= ll_back_merge_fn;
 	q->front_merge_fn      	= ll_front_merge_fn;
 	q->merge_requests_fn	= ll_merge_requests_fn;
-	q->make_request_fn	= NULL;
+	q->make_request_fn	= __make_request;
 	q->plug_tq.sync		= 0;
 	q->plug_tq.routine	= &generic_unplug_device;
 	q->plug_tq.data		= q;
@@ -321,27 +445,6 @@ void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 	q->head_active    	= 1;
 }
 
-/*
- * remove the plug and let it rip..
- */
-static inline void __generic_unplug_device(request_queue_t *q)
-{
-	if (q->plugged) {
-		q->plugged = 0;
-		if (!list_empty(&q->queue_head))
-			q->request_fn(q);
-	}
-}
-
-void generic_unplug_device(void *data)
-{
-	request_queue_t *q = (request_queue_t *) data;
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock, flags);
-	__generic_unplug_device(q);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-}
 
 #define blkdev_free_rq(list) list_entry((list)->next, struct request, table);
 /*
@@ -574,7 +677,7 @@ static inline void attempt_front_merge(request_queue_t * q,
 	attempt_merge(q, blkdev_entry_to_request(prev), max_sectors, max_segments);
 }
 
-static inline void __make_request(request_queue_t * q, int rw,
+static int __make_request(request_queue_t * q, int rw,
 				  struct buffer_head * bh)
 {
 	unsigned int sector, count;
@@ -730,10 +833,13 @@ get_rq:
 	req->e = elevator;
 	add_request(q, req, head, latency);
 out:
+	if (!q->plugged)
+		(q->request_fn)(q);
 	spin_unlock_irq(&io_request_lock);
-	return;
+	return 0;
 end_io:
 	bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
+	return 0;
 }
 
 void generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
@@ -771,20 +877,12 @@ void generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 	 * still free to implement/resolve their own stacking
 	 * by explicitly returning 0)
 	 */
-	while (q->make_request_fn) {
-		if (q->make_request_fn(q, rw, bh) == 0)
-			return;
+	while (q->make_request_fn(q, rw, bh))
+		/* NOTE: we don't repeat the blk_size check even though we now have a
+		 * new device.  stacking drivers are expected to know what
+		 * they are doing.
+		 */
 		q = blk_get_queue(bh->b_rdev);
-	}
-	/*
-	 * Does the block device want us to queue
-	 * the IO request? (normal case)
-	 */
-	__make_request(q, rw, bh);
-	spin_lock_irq(&io_request_lock);
-	if (q && !q->plugged)
-		(q->request_fn)(q);
-	spin_unlock_irq(&io_request_lock);
 }
 
 /* This function can be used to request a number of buffers from a block
@@ -1052,5 +1150,4 @@ EXPORT_SYMBOL(blk_queue_headactive);
 EXPORT_SYMBOL(blk_queue_pluggable);
 EXPORT_SYMBOL(blk_queue_make_request);
 EXPORT_SYMBOL(generic_make_request);
-EXPORT_SYMBOL(generic_unplug_device);
 EXPORT_SYMBOL(blkdev_release_request);

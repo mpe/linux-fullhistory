@@ -423,6 +423,14 @@ static int dma_timer_expiry (ide_drive_t *drive)
 	printk("%s: dma_timer_expiry: dma status == 0x%02x\n", drive->name, dma_stat);
 #endif /* DEBUG */
 
+#if 1
+	HWGROUP(drive)->expiry = NULL;	/* one free ride for now */
+#endif
+
+	if (dma_stat & 2) {	/* ERROR */
+		byte stat = GET_STAT();
+		return ide_error(drive, "dma_timer_expiry", stat);
+	}
 	if (dma_stat & 1)	/* DMAing */
 		return WAIT_CMD;
 	return 0;
@@ -495,6 +503,12 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			return (dma_stat & 7) != 4;	/* verify good DMA status */
 		case ide_dma_test_irq: /* returns 1 if dma irq issued, 0 otherwise */
 			dma_stat = inb(dma_base+2);
+#if 0	/* do not set unless you know what you are doing */
+			if (dma_stat & 4) {
+				byte stat = GET_STAT();
+				outb(dma_base+2, dma_stat & 0xE4);
+			}
+#endif
 			return (dma_stat & 4) == 4;	/* return 1 if INTR asserted */
 		case ide_dma_bad_drive:
 		case ide_dma_good_drive:

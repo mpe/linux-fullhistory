@@ -396,35 +396,11 @@ void
 smp_do_timer(struct pt_regs *regs)
 {
         int cpu = smp_processor_id();
-        int user = user_mode(regs);
 	struct cpuinfo_ia64 *data = &cpu_data[cpu];
 
-	extern void update_one_process(struct task_struct *, unsigned long, unsigned long, 
-				       unsigned long, int);
         if (!--data->prof_counter) {
 		irq_enter(cpu, TIMER_IRQ);
-
-		update_one_process(current, 1, user, !user, cpu);
-		if (current->pid) { 
-			if (--current->counter < 0) {
-				current->counter = 0;
-				current->need_resched = 1;
-			}
-
-			if (user) {
-				if (current->nice > 0) {
-					kstat.cpu_nice++;
-					kstat.per_cpu_nice[cpu]++;
-				} else {
-					kstat.cpu_user++;
-					kstat.per_cpu_user[cpu]++;
-				}
-			} else {
-				kstat.cpu_system++;
-				kstat.per_cpu_system[cpu]++;
-			}
-		} 
-		
+		update_process_times(user_mode(regs));
 		data->prof_counter = data->prof_multiplier;
 		irq_exit(cpu, TIMER_IRQ);
 	}

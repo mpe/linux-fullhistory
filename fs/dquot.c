@@ -64,8 +64,6 @@ int max_dquots = NR_DQUOTS;
 static char quotamessage[MAX_QUOTA_MESSAGE];
 static char *quotatypes[] = INITQFNAMES;
 
-static kmem_cache_t *dquot_cachep;
-
 static inline struct quota_mount_options *sb_dqopt(struct super_block *sb)
 {
 	return &sb->s_dquot;
@@ -1344,13 +1342,6 @@ put_all:
 void __init dquot_init_hash(void)
 {
 	printk(KERN_NOTICE "VFS: Diskquotas version %s initialized\n", __DQUOT_VERSION__);
-
-	dquot_cachep = kmem_cache_create("dquot", sizeof(struct dquot),
-					 sizeof(unsigned long) * 4,
-					 SLAB_HWCACHE_ALIGN, NULL, NULL);
-
-	if (!dquot_cachep)
-		panic("Cannot create dquot SLAB cache\n");
 
 	memset(dquot_hash, 0, sizeof(dquot_hash));
 	memset((caddr_t)&dqstats, 0, sizeof(dqstats));

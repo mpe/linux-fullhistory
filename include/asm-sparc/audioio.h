@@ -586,6 +586,7 @@ int BAL_TO_OSS(int value, unsigned char balance)
   return ((r << 8) + l);
 }
 
+#ifdef __KERNEL__
 /* OSS mixer ioctl port handling */
 static __inline__
 int OSS_PORT_AUDIO(struct sparcaudio_driver *drv, unsigned int set) 
@@ -642,4 +643,5 @@ void OSS_TWIDDLE_IPORT(struct sparcaudio_driver *drv, unsigned int ioctl,
     }
   }
 }
+#endif /* __KERNEL__ */
 #endif /* _AUDIOIO_H_ */

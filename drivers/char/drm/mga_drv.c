@@ -31,15 +31,10 @@
  */
 
 #include <linux/config.h>
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#endif
 #include "drmP.h"
 #include "mga_drv.h"
 #include <linux/sched.h>
 #include <linux/smp_lock.h>
-EXPORT_SYMBOL(mga_init);
-EXPORT_SYMBOL(mga_cleanup);
 
 #define MGA_NAME	 "mga"
 #define MGA_DESC	 "Matrox g200/g400"
@@ -132,9 +127,6 @@ static char		      *mga = NULL;
 MODULE_AUTHOR("VA Linux Systems, Inc.");
 MODULE_DESCRIPTION("Matrox g200/g400");
 MODULE_PARM(mga, "s");
-
-module_init(mga_init);
-module_exit(mga_cleanup);
 
 #ifndef MODULE
 /* mga_options is called by the kernel to parse command-line options passed
@@ -444,6 +436,10 @@ void mga_cleanup(void)
 	}
 }
 
+module_init(mga_init);
+module_exit(mga_cleanup);
+
+
 int mga_version(struct inode *inode, struct file *filp, unsigned int cmd,
 		  unsigned long arg)
 {
@@ -485,7 +481,6 @@ int mga_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -566,7 +561,6 @@ int mga_release(struct inode *inode, struct file *filp)
 	up(&dev->struct_sem);
 	
 	drm_free(priv, sizeof(*priv), DRM_MEM_FILES);
-   	MOD_DEC_USE_COUNT;
    	atomic_inc(&dev->total_close);
    	spin_lock(&dev->count_lock);
    	if (!--dev->open_count) {

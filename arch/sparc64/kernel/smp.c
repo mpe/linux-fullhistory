@@ -673,10 +673,6 @@ static unsigned long current_tick_offset;
 #define prof_multiplier(__cpu)		cpu_data[(__cpu)].multiplier
 #define prof_counter(__cpu)		cpu_data[(__cpu)].counter
 
-extern void update_one_process(struct task_struct *p, unsigned long ticks,
-			       unsigned long user, unsigned long system,
-			       int cpu);
-
 void smp_percpu_timer_interrupt(struct pt_regs *regs)
 {
 	unsigned long compare, tick, pstate;
@@ -707,30 +703,8 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 				irq_exit(cpu, 0);
 			}
 
-			if (current->pid) {
-				unsigned int *inc, *inc2;
+			update_process_times(user);
 
-				update_one_process(current, 1, user, !user, cpu);
-				if (--current->counter <= 0) {
-					current->counter = 0;
-					current->need_resched = 1;
-				}
-
-				if (user) {
-					if (current->nice > 0) {
-						inc = &kstat.cpu_nice;
-						inc2 = &kstat.per_cpu_nice[cpu];
-					} else {
-						inc = &kstat.cpu_user;
-						inc2 = &kstat.per_cpu_user[cpu];
-					}
-				} else {
-					inc = &kstat.cpu_system;
-					inc2 = &kstat.per_cpu_system[cpu];
-				}
-				atomic_inc((atomic_t *)inc);
-				atomic_inc((atomic_t *)inc2);
-			}
 			prof_counter(cpu) = prof_multiplier(cpu);
 		}
 

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.44 2000/07/15 00:04:27 davem Exp $
+# $Id: Makefile,v 1.45 2000/07/18 15:24:28 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -12,7 +12,7 @@
 # line...
 SHELL  =/bin/bash
 
-CC		:= sparc64-linux-gcc
+CC		:= $(shell if gcc -m64 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo gcc; else echo sparc64-linux-gcc; fi )
 
 NEW_GCC := $(shell if $(CC) -m64 -mcmodel=medlow -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo y; else echo n; fi; )
 NEW_GAS := $(shell if $(LD) --version 2>&1 | grep 'elf64_sparc' > /dev/null; then echo y; else echo n; fi)

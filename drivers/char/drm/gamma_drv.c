@@ -30,15 +30,11 @@
  */
 
 #include <linux/config.h>
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#endif
-#include "drmP.h"
-#include "gamma_drv.h"
+#include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/smp_lock.h>	/* For (un)lock_kernel */
-EXPORT_SYMBOL(gamma_init);
-EXPORT_SYMBOL(gamma_cleanup);
+#include "drmP.h"
+#include "gamma_drv.h"
 
 #ifndef PCI_DEVICE_ID_3DLABS_GAMMA
 #define PCI_DEVICE_ID_3DLABS_GAMMA 0x0008
@@ -122,10 +118,6 @@ MODULE_PARM(gamma, "s");
 MODULE_PARM(devices, "i");
 MODULE_PARM_DESC(devices,
 		 "devices=x, where x is the number of MX chips on card\n");
-
-module_init(gamma_init);
-module_exit(gamma_cleanup);
-
 #ifndef MODULE
 /* gamma_options is called by the kernel to parse command-line options
  * passed via the boot-loader (e.g., LILO).  It calls the insmod option
@@ -406,6 +398,10 @@ void gamma_cleanup(void)
 	gamma_takedown(dev);
 }
 
+module_init(gamma_init);
+module_exit(gamma_cleanup);
+
+
 int gamma_version(struct inode *inode, struct file *filp, unsigned int cmd,
 		  unsigned long arg)
 {
@@ -447,7 +443,6 @@ int gamma_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
-		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -462,13 +457,14 @@ int gamma_open(struct inode *inode, struct file *filp)
 int gamma_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev    = priv->dev;
+	drm_device_t  *dev;
 	int	      retcode = 0;
 
-	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	lock_kernel();
+	dev = priv->dev;
+
+	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
-		MOD_DEC_USE_COUNT;
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {

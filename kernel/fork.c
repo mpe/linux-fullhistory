@@ -35,9 +35,6 @@ int last_pid;
 /* SLAB cache for mm_struct's. */
 kmem_cache_t *mm_cachep;
 
-/* SLAB cache for files structs */
-kmem_cache_t *files_cachep; 
-
 struct task_struct *pidhash[PIDHASH_SZ];
 
 /* UID task count cache, to prevent walking entire process list every
@@ -809,15 +806,4 @@ bad_fork_cleanup_count:
 bad_fork_free:
 	free_task_struct(p);
 	goto bad_fork;
-}
-
-void __init filescache_init(void)
-{
-	files_cachep = kmem_cache_create("files_cache", 
-					 sizeof(struct files_struct),
-					 0, 
-					 SLAB_HWCACHE_ALIGN,
-					 NULL, NULL);
-	if (!files_cachep) 
-		panic("Cannot create files cache");
 }

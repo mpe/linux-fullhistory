@@ -121,7 +121,7 @@ static int linear_stop (mddev_t *mddev)
 	return 0;
 }
 
-static int linear_make_request (request_queue_t *q, mddev_t *mddev,
+static int linear_make_request (mddev_t *mddev,
 			int rw, struct buffer_head * bh)
 {
         linear_conf_t *conf = mddev_to_conf(mddev);

@@ -12,9 +12,6 @@
 #include <linux/module.h>
 #include <linux/smp_lock.h>
 
-/* SLAB cache for filp's. */
-static kmem_cache_t *filp_cache;
-
 /* sysctl tunables... */
 struct files_stat_struct files_stat = {0, 0, NR_FILE};
 
@@ -24,20 +21,6 @@ static LIST_HEAD(anon_list);
 static LIST_HEAD(free_list);
 /* public *and* exported. Not pretty! */
 spinlock_t files_lock = SPIN_LOCK_UNLOCKED;
-
-void __init file_table_init(void)
-{
-	filp_cache = kmem_cache_create("filp", sizeof(struct file),
-				       0,
-				       SLAB_HWCACHE_ALIGN, NULL, NULL);
-	if(!filp_cache)
-		panic("VFS: Cannot alloc filp SLAB cache.");
-	/*
-	 * We could allocate the reserved files here, but really
-	 * shouldn't need to: the normal boot process will create
-	 * plenty of free files.
-	 */
-}
 
 /* Find an unused file structure and return a pointer to it.
  * Returns NULL, if there are no more free file structures or
@@ -78,7 +61,7 @@ struct file * get_empty_filp(void)
 	 */
 	if (files_stat.nr_files < files_stat.max_files) {
 		file_list_unlock();
-		f = kmem_cache_alloc(filp_cache, SLAB_KERNEL);
+		f = kmem_cache_alloc(filp_cachep, SLAB_KERNEL);
 		file_list_lock();
 		if (f) {
 			files_stat.nr_files++;

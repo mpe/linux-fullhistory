@@ -54,9 +54,9 @@
 #define ARTTIM1 	0x55
 #define DRWTIM1		0x56
 #define ARTTIM23	0x57
-#define   ARTTIM23_INTR_CH1	0x04
 #define   ARTTIM23_DIS_RA2	0x04
 #define   ARTTIM23_DIS_RA3	0x08
+#define   ARTTIM23_INTR_CH1	0x10
 #define ARTTIM2		0x57
 #define ARTTIM3		0x57
 #define DRWTIM23	0x58
@@ -160,7 +160,6 @@ static int cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
 				((reg7b&0x00)==0x00)?(((reg7b&0x0A)==0x0A)?"5":"2"):"X"):"?" );
 	p += sprintf(p, "PIO Mode:       %s                %s               %s                 %s\n",
 		"?", "?", "?", "?");
-
 	p += sprintf(p, "                %s                     %s\n",
 		(reg50 & CFR_INTR_CH0) ? "interrupting" : "polling     ",
 		(reg57 & ARTTIM23_INTR_CH1) ? "interrupting" : "polling");
@@ -589,9 +588,45 @@ no_dma_set:
 
 static int cmd64x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
+	byte dma_stat		= 0;
+	byte dma_alt_stat	= 0;
+	byte mask		= (HWIF(drive)->channel) ? MRDMODE_INTR_CH1 : MRDMODE_INTR_CH0;
+	unsigned long dma_base	= HWIF(drive)->dma_base;
+	struct pci_dev *dev	= HWIF(drive)->pci_dev;
+	byte jack_slap		= ((dev->device == PCI_DEVICE_ID_CMD_648) || (dev->device == PCI_DEVICE_ID_CMD_649)) ? 1 : 0;
+
 	switch (func) {
 		case ide_dma_check:
 			return cmd64x_config_drive_for_dma(drive);
+		case ide_dma_end: /* returns 1 on error, 0 otherwise */
+			drive->waiting_for_dma = 0;
+			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
+			dma_stat = inb(dma_base+2);		/* get DMA status */
+			outb(dma_stat|6, dma_base+2);		/* clear the INTR & ERROR bits */
+			if (jack_slap) {
+				byte dma_intr	= 0;
+				byte dma_mask	= (HWIF(drive)->channel) ? ARTTIM23_INTR_CH1 : CFR_INTR_CH0;
+				byte dma_reg	= (HWIF(drive)->channel) ? ARTTIM2 : CFR;
+				(void) pci_read_config_byte(dev, dma_reg, &dma_intr);
+				/*
+				 * DAMN BMIDE is not connected to PCI space!
+				 * Have to manually jack-slap that bitch!
+				 * To allow the PCI side to read incoming interrupts.
+				 */
+				(void) pci_write_config_byte(dev, dma_reg, dma_intr|dma_mask);	/* clear the INTR bit */
+			}
+			ide_destroy_dmatable(drive);		/* purge DMA mappings */
+			return (dma_stat & 7) != 4;		/* verify good DMA status */
+		case ide_dma_test_irq:	/* returns 1 if dma irq issued, 0 otherwise */
+			dma_stat = inb(dma_base+2);
+			(void) pci_read_config_byte(dev, MRDMODE, &dma_alt_stat);
+#ifdef DEBUG
+			printk("%s: dma_stat: 0x%02x dma_alt_stat: 0x%02x mask: 0x%02x\n", drive->name, dma_stat, dma_alt_stat, mask);
+#endif
+			if (!(dma_alt_stat & mask)) {
+				return 0;
+			}
+			return (dma_stat & 4) == 4;	/* return 1 if INTR asserted */
 		default:
 			break;
 	}
@@ -609,17 +644,22 @@ static int cmd646_1_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	unsigned long dma_base = hwif->dma_base;
 	byte dma_stat;
 
-	if (func == ide_dma_end) {
-		drive->waiting_for_dma = 0;
-		dma_stat = inb(dma_base+2);		/* get DMA status */
-		outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
-		outb(dma_stat|6, dma_base+2);		/* clear the INTR & ERROR bits */
-		ide_destroy_dmatable(drive);		/* and free any DMA resources */
-		return (dma_stat & 7) != 4;		/* verify good DMA status */
+	switch (func) {
+		case ide_dma_check:
+			return cmd64x_config_drive_for_dma(drive);
+		case ide_dma_end:
+			drive->waiting_for_dma = 0;
+			dma_stat = inb(dma_base+2);		/* get DMA status */
+			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
+			outb(dma_stat|6, dma_base+2);		/* clear the INTR & ERROR bits */
+			ide_destroy_dmatable(drive);		/* and free any DMA resources */
+			return (dma_stat & 7) != 4;		/* verify good DMA status */
+		default:
+			break;
 	}
 
 	/* Other cases are done by generic IDE-DMA code. */
-	return cmd64x_dmaproc(func, drive);
+	return ide_dmaproc(func, drive);
 }
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 
@@ -670,6 +710,7 @@ unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 #ifdef __sparc_v9__
 	(void) pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 0x10);
 #endif
+
 
 	/* Setup interrupts. */
 	(void) pci_read_config_byte(dev, MRDMODE, &mrdmode);
@@ -728,8 +769,8 @@ void __init ide_init_cmd64x (ide_hwif_t *hwif)
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
 	class_rev &= 0xff;
 
-	hwif->tuneproc = &cmd64x_tuneproc;
-	hwif->speedproc = &cmd64x_tune_chipset;
+	hwif->tuneproc	= &cmd64x_tuneproc;
+	hwif->speedproc	= &cmd64x_tune_chipset;
 	hwif->drives[0].autotune = 1;
 	hwif->drives[1].autotune = 1;
 

@@ -306,13 +306,15 @@ $(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h include/config/MARKE
 modules_install:
 	@( \
 	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE); \
+	mkdir -p $$MODLIB; \
+	rm -f $$MODLIB/build; \
+	ln -s $TOPDIR $$MODLIB/build; \
 	cd modules; \
 	MODULES=""; \
 	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \
 		mkdir -p $$MODLIB/$$2; cp $$These $$MODLIB/$$2; \
 		echo Installing modules under $$MODLIB/$$2; \
 	}; \
-	mkdir -p $$MODLIB; \
 	\
 	if [ -f BLOCK_MODULES ]; then inst_mod BLOCK_MODULES block; fi; \
 	if [ -f NET_MODULES   ]; then inst_mod NET_MODULES   net;   fi; \

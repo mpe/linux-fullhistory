@@ -45,6 +45,7 @@ extern char *ide_dmafunc_verbose(ide_dma_action_t dmafunc);
 const char *quirk_drives[] = {
 	"QUANTUM FIREBALLlct08 08",
 	"QUANTUM FIREBALLP KA6.4",
+	"QUANTUM FIREBALLP LM20.4",
 	"QUANTUM FIREBALLP LM20.5",
         NULL
 };
@@ -222,6 +223,14 @@ static unsigned int pci_rev_check_hpt3xx (struct pci_dev *dev)
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
 	class_rev &= 0xff;
 	return ((int) (class_rev > 0x02) ? 1 : 0);
+}
+
+static unsigned int pci_rev2_check_hpt3xx (struct pci_dev *dev)
+{
+	unsigned int class_rev;
+	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
+	class_rev &= 0xff;
+	return ((int) (class_rev > 0x01) ? 1 : 0);
 }
 
 static int check_in_drive_lists (ide_drive_t *drive, const char **list)
@@ -469,6 +478,11 @@ int hpt3xx_quirkproc (ide_drive_t *drive)
 
 void hpt3xx_intrproc (ide_drive_t *drive)
 {
+	if (drive->quirk_list) {
+		/* drives in the quirk_list may not like intr setups/cleanups */
+	} else {
+		OUT_BYTE((drive)->ctl|2, HWIF(drive)->io_ports[IDE_CONTROL_OFFSET]);
+	}
 }
 
 void hpt3xx_maskproc (ide_drive_t *drive, int mask)
@@ -556,11 +570,15 @@ no_dma_set:
  */
 int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
-	byte reg50h = 0, reg52h = 0, reg5ah = 0;
+	byte reg50h = 0, reg52h = 0, reg5ah = 0, dma_stat = 0;
+	unsigned long dma_base = HWIF(drive)->dma_base;
 
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
+		case ide_dma_test_irq:	/* returns 1 if dma irq issued, 0 otherwise */
+			dma_stat = inb(dma_base+2);
+			return (dma_stat & 4) == 4;	/* return 1 if INTR asserted */
 		case ide_dma_lostirq:
 			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
 			pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
@@ -650,6 +668,10 @@ void __init ide_init_hpt366 (ide_hwif_t *hwif)
 	hwif->quirkproc	= &hpt3xx_quirkproc;
 	hwif->intrproc	= &hpt3xx_intrproc;
 	hwif->maskproc	= &hpt3xx_maskproc;
+
+	if (pci_rev2_check_hpt3xx(hwif->pci_dev)) {
+		/* do nothing now but will split device types */
+	}
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {

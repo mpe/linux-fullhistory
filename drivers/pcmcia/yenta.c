@@ -596,7 +596,7 @@ static void yenta_clear_maps(pci_socket_t *socket)
 /*
  * Initialize the standard cardbus registers
  */
-static int yenta_config_init(pci_socket_t *socket)
+static void yenta_config_init(pci_socket_t *socket)
 {
 	u16 bridge;
 	struct pci_dev *dev = socket->dev;

@@ -622,10 +622,6 @@ smp_commence(void)
 }
 
 
-extern void update_one_process(struct task_struct *p, unsigned long ticks,
-			       unsigned long user, unsigned long system,
-			       int cpu);
-
 void
 smp_percpu_timer_interrupt(struct pt_regs *regs)
 {
@@ -643,26 +639,7 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 		   which would be a Bad Thing.  */
 		irq_enter(cpu, RTC_IRQ);
 
-		update_one_process(current, 1, user, !user, cpu);
-		if (current->pid) {
-			if (--current->counter <= 0) {
-				current->counter = 0;
-				current->need_resched = 1;
-			}
-
-			if (user) {
-				if (current->nice > 0) {
-					kstat.cpu_nice++;
-					kstat.per_cpu_nice[cpu]++;
-				} else {
-					kstat.cpu_user++;
-					kstat.per_cpu_user[cpu]++;
-				}
-			} else {
-				kstat.cpu_system++;
-				kstat.per_cpu_system[cpu]++;
-			}
-		}
+		update_process_times(user);
 
 		data->prof_counter = data->prof_multiplier;
 		irq_exit(cpu, RTC_IRQ);

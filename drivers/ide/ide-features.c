@@ -39,8 +39,6 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
 
-#define SETFEATURES_CONTROL_REG		(0)	/* some arch's may need */
-
 /*
  * A Verbose noise maker for debugging on the attempted transfer rates.
  */
@@ -310,7 +308,7 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	OUT_BYTE(speed, IDE_NSECTOR_REG);
 	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
 	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
-	if ((IDE_CONTROL_REG) && (SETFEATURES_CONTROL_REG))
+	if ((IDE_CONTROL_REG) && (drive->quirk_list == 2))
 		OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
 	udelay(1);
 	/*

@@ -9,6 +9,7 @@
 
 O_TARGET := math-emu.o
 O_OBJS   := math.o
-CFLAGS += -I. -I$(TOPDIR)/include/math-emu -w
+
+EXTRA_CFLAGS = -I. -I$(TOPDIR)/include/math-emu -w
 
 include $(TOPDIR)/Rules.make

@@ -45,6 +45,8 @@ static drm_file_t *drm_find_file(drm_device_t *dev, drm_magic_t magic)
 
 	down(&dev->struct_sem);
 	for (pt = dev->magiclist[hash].head; pt; pt = pt->next) {
+		if (pt->priv->authenticated)
+			continue;
 		if (pt->magic == magic) {
 			retval = pt->priv;
 			break;

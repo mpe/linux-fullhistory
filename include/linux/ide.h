@@ -143,6 +143,7 @@ typedef unsigned char	byte;	/* used everywhere */
 
 #define GET_ERR()		IN_BYTE(IDE_ERROR_REG)
 #define GET_STAT()		IN_BYTE(IDE_STATUS_REG)
+#define GET_ALTSTAT()		IN_BYTE(IDE_CONTROL_REG)
 #define OK_STAT(stat,good,bad)	(((stat)&((good)|(bad)))==(good))
 #define BAD_R_STAT		(BUSY_STAT   | ERR_STAT)
 #define BAD_W_STAT		(BAD_R_STAT  | WRERR_STAT)
@@ -341,6 +342,7 @@ typedef struct ide_drive_s {
 	int		lun;		/* logical unit */
 	int		crc_count;	/* crc counter to reduce drive speed */
 	byte		quirk_list;	/* drive is considered quirky if set for a specific host */
+	byte		suspend_reset;	/* drive suspend mode flag, soft-reset recovers */
 	byte		init_speed;	/* transfer rate set at boot */
 	byte		current_speed;	/* current transfer rate set */
 	byte		dn;		/* now wide spread use */

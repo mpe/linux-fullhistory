@@ -481,13 +481,27 @@ void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecoun
  */
 static inline int drive_is_ready (ide_drive_t *drive)
 {
+	byte stat = 0;
 	if (drive->waiting_for_dma)
 		return HWIF(drive)->dmaproc(ide_dma_test_irq, drive);
 #if 0
 	udelay(1);	/* need to guarantee 400ns since last command was issued */
 #endif
-//	if (GET_STAT() & BUSY_STAT)	/* Note: this may clear a pending IRQ!! */
-	if (IN_BYTE(IDE_ALTSTATUS_REG) & BUSY_STAT)
+
+#ifdef CONFIG_IDEPCI_SHARE_IRQ
+	/*
+	 * We do a passive status test under shared PCI interrupts on
+	 * cards that truly share the ATA side interrupt, but may also share
+	 * an interrupt with another pci card/device.  We make no assumptions
+	 * about possible isa-pnp and pci-pnp issues yet.
+	 */
+	if (IDE_CONTROL_REG)
+		stat = GET_ALTSTAT();
+	else
+#endif /* CONFIG_IDEPCI_SHARE_IRQ */
+	stat = GET_STAT();	/* Note: this may clear a pending IRQ!! */
+
+	if (stat & BUSY_STAT)
 		return 0;	/* drive busy:  definitely not interrupting */
 	return 1;		/* drive ready: *might* be interrupting */
 }
@@ -2635,6 +2649,22 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			}
 			drive->nice1 = (arg >> IDE_NICE_1) & 1;
 			return 0;
+		case HDIO_DRIVE_RESET:
+			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
+			(void) ide_do_reset(drive);
+			if (drive->suspend_reset) {
+/*
+ *				APM WAKE UP todo !!
+ *				int nogoodpower = 1;
+ *				while(nogoodpower) {
+ *					check_power1() or check_power2()
+ *					nogoodpower = 0;
+ *				} 
+ *				HWIF(drive)->multiproc(drive);
+ */
+				return ide_revalidate_disk(inode->i_rdev);
+			}
+			return 0;
 
 		case BLKROSET:
 		case BLKROGET:
@@ -3469,6 +3499,7 @@ int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int versio
 		drive->nice1 = 1;
 	}
 	drive->revalidate = 1;
+	drive->suspend_reset = 0;
 #ifdef CONFIG_PROC_FS
 	ide_add_proc_entries(drive->proc, generic_subdriver_entries, drive);
 	ide_add_proc_entries(drive->proc, driver->proc, drive);

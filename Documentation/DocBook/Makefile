@@ -67,6 +67,7 @@ APISOURCES :=	$(TOPDIR)/drivers/char/videodev.c \
 		$(TOPDIR)/drivers/net/8390.c \
 		$(TOPDIR)/drivers/char/serial.c \
 		$(TOPDIR)/drivers/pci/pci.c \
+		$(TOPDIR)/drivers/block/ll_rw_blk.c \
 		$(TOPDIR)/drivers/sound/sound_core.c \
 		$(TOPDIR)/drivers/sound/sound_firmware.c \
 		$(TOPDIR)/drivers/net/wan/syncppp.c \

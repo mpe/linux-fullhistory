@@ -240,8 +240,6 @@ void kunmap_high(struct page *page)
  * This will be moved to the block layer in 2.5.
  */
 
-extern kmem_cache_t *bh_cachep;
-
 static inline void copy_from_high_bh (struct buffer_head *to,
 			 struct buffer_head *from)
 {

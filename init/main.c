@@ -92,7 +92,6 @@ extern void mca_init(void);
 extern void sbus_init(void);
 extern void ppc_init(void);
 extern void sysctl_init(void);
-extern void filescache_init(void);
 extern void signals_init(void);
 extern void bdev_init(void);
 extern int init_pcmcia_ds(void);
@@ -563,8 +562,7 @@ asmlinkage void __init start_kernel(void)
 	mempages = num_physpages;
 
 	fork_init(mempages);
-	filescache_init();
-	dcache_init(mempages);
+	vfs_caches_init(mempages);
 	vma_init();
 	buffer_init(mempages);
 	page_cache_init(mempages);
@@ -572,7 +570,6 @@ asmlinkage void __init start_kernel(void)
 	signals_init();
 	bdev_init();
 	inode_init(mempages);
-	file_table_init();
 #if defined(CONFIG_SYSVIPC)
 	ipc_init();
 #endif

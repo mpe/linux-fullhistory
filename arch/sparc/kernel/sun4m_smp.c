@@ -439,10 +439,6 @@ void smp4m_cross_call_irq(void)
 extern unsigned int prof_multiplier[NR_CPUS];
 extern unsigned int prof_counter[NR_CPUS];
 
-extern void update_one_process(struct task_struct *p, unsigned long ticks,
-			       unsigned long user, unsigned long system,
-			       int cpu);
-
 extern void sparc_do_profile(unsigned long pc, unsigned long o7);
 
 void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
@@ -458,29 +454,10 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 		int user = user_mode(regs);
 
 		irq_enter(cpu, 0);
-		if(current->pid) {
-			update_one_process(current, 1, user, !user, cpu);
-
-			if(--current->counter <= 0) {
-				current->counter = 0;
-				current->need_resched = 1;
-			}
-
-			if(user) {
-				if(current->nice > 0) {
-					kstat.cpu_nice++;
-					kstat.per_cpu_nice[cpu]++;
-				} else {
-					kstat.cpu_user++;
-					kstat.per_cpu_user[cpu]++;
-				}
-			} else {
-				kstat.cpu_system++;
-				kstat.per_cpu_system[cpu]++;
-			}
-		}
-		prof_counter[cpu] = prof_multiplier[cpu];
+		update_process_times(user);
 		irq_exit(cpu, 0);
+
+		prof_counter[cpu] = prof_multiplier[cpu];
 	}
 }
 
