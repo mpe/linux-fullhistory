@@ -941,7 +941,7 @@ int rose_rx_call_request(struct sk_buff *skb, struct net_device *dev, struct ros
 	/*
 	 * We can't accept the Call Request.
 	 */
-	if (!sk || sk->sk_ack_backlog == sk->sk_max_ack_backlog ||
+	if (sk == NULL || sk_acceptq_is_full(sk) ||
 	    (make = rose_make_new(sk)) == NULL) {
 		rose_transmit_clear_request(neigh, lci, ROSE_NETWORK_CONGESTION, 120);
 		return 0;

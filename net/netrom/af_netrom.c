@@ -925,7 +925,7 @@ int nr_rx_frame(struct sk_buff *skb, struct net_device *dev)
 
 	user = (ax25_address *)(skb->data + 21);
 
-	if (!sk || sk->sk_ack_backlog == sk->sk_max_ack_backlog ||
+	if (sk == NULL || sk_acceptq_is_full(sk) ||
 	    (make = nr_make_new(sk)) == NULL) {
 		nr_transmit_refusal(skb, 0);
 		if (sk)

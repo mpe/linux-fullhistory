@@ -835,7 +835,7 @@ int rfcomm_connect_ind(struct rfcomm_session *s, u8 channel, struct rfcomm_dlc *
 		return 0;
 
 	/* Check for backlog size */
-	if (parent->sk_ack_backlog > parent->sk_max_ack_backlog) {
+	if (sk_acceptq_is_full(parent)) {
 		BT_DBG("backlog full %d", parent->sk_ack_backlog); 
 		goto done;
 	}
