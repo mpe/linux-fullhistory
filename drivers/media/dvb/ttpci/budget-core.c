@@ -415,8 +415,7 @@ int ttpci_budget_init(struct budget *budget, struct saa7146_dev *dev,
 err:
 	i2c_del_adapter(&budget->i2c_adap);
 
-	if (budget->grabbing)
-		vfree(budget->grabbing);
+	vfree(budget->grabbing);
 
 	dvb_unregister_adapter(budget->dvb_adapter);
 
