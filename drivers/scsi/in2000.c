@@ -117,32 +117,15 @@
 
 #include <linux/blk.h>
 #include <linux/stat.h>
-#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "sd.h"
 #include "hosts.h"
 
-
-#define IN2000_VERSION    "1.32"
-#define IN2000_DATE       "28/March/1998"
-
-/*
- * Note - the following defines have been moved to 'in2000.h':
- *
- *    PROC_INTERFACE
- *    PROC_STATISTICS
- *    SYNC_DEBUG
- *    DEBUGGING_ON
- *    DEBUG_DEFAULTS
- *    FAST_READ_IO
- *    FAST_WRITE_IO
- *
- */
-
+#define IN2000_VERSION    "1.33"
+#define IN2000_DATE       "26/August/1998"
 
 #include "in2000.h"
-
 
 
 /*
@@ -404,6 +387,10 @@ DB(DB_QUEUE_COMMAND,printk("Q-%d-%02x-%ld(",cmd->target,cmd->cmnd[0],cmd->pid))
 
    cmd->SCp.Status = ILLEGAL_STATUS_BYTE;
 
+/* We need to disable interrupts before messing with the input
+ * queue and calling in2000_execute().
+ */
+
    save_flags(flags);
    cli();
 
@@ -443,20 +430,19 @@ DB(DB_QUEUE_COMMAND,printk(")Q-%ld ",cmd->pid))
  * already connected, we give up immediately. Otherwise, look through
  * the input_Q, using the first command we find that's intended
  * for a currently non-busy target/lun.
+ * Note that this function is always called with interrupts already
+ * disabled (either from in2000_queuecommand() or in2000_intr()).
  */
 static void in2000_execute (struct Scsi_Host *instance)
 {
 struct IN2000_hostdata *hostdata;
 Scsi_Cmnd *cmd, *prev;
-unsigned long flags;
 int i;
 unsigned short *sp;
 unsigned short f;
 unsigned short flushbuf[16];
 
 
-   save_flags(flags);
-   cli();
    hostdata = (struct IN2000_hostdata *)instance->hostdata;
 
 DB(DB_EXECUTE,printk("EX("))
@@ -465,7 +451,6 @@ DB(DB_EXECUTE,printk("EX("))
 
 DB(DB_EXECUTE,printk(")EX-0 "))
 
-      restore_flags(flags);
       return;
       }
 
@@ -489,7 +474,6 @@ DB(DB_EXECUTE,printk(")EX-0 "))
 
 DB(DB_EXECUTE,printk(")EX-1 "))
 
-      restore_flags(flags);
       return;
       }
 
@@ -717,7 +701,6 @@ no:
       
 DB(DB_EXECUTE,printk("%s%ld)EX-2 ",(cmd->SCp.phase)?"d:":"",cmd->pid))
 
-   restore_flags(flags);
 }
 
 
@@ -842,15 +825,10 @@ int i;
 }
 
 
-/* It appears that the Linux interrupt dispatcher calls this
- * function in a non-reentrant fashion. What that means to us
- * is that we can use an SA_INTERRUPT type of interrupt (which
- * is faster), and do an sti() right away to let timer, serial,
- * etc. ints happen.
- *
- * WHOA! Wait a minute, pardner! Does this hold when more than
- * one card has been detected?? I doubt it. Maybe better
- * re-think the multiple card capability....
+/* We need to use spin_lock_irqsave() & spin_unlock_irqrestore() in this
+ * function in order to work in an SMP environment. (I'd be surprised
+ * if the driver is ever used by anyone on a real multi-CPU motherboard,
+ * but it _does_ need to be able to compile and run in an SMP kernel.)
  */
 
 static void in2000_intr (int irqnum, void * dev_id, struct pt_regs *ptregs)
@@ -863,6 +841,7 @@ int i,j;
 unsigned long length;
 unsigned short *sp;
 unsigned short f;
+unsigned long flags;
 
    for (instance = instance_list; instance; instance = instance->next) {
       if (instance->irq == irqnum)
@@ -873,6 +852,10 @@ unsigned short f;
       return;
       }
    hostdata = (struct IN2000_hostdata *)instance->hostdata;
+
+/* Get the spin_lock and disable further ints, for SMP */
+
+   CLISPIN_LOCK(flags);
 
 #ifdef PROC_STATISTICS
    hostdata->int_cnt++;
@@ -1008,6 +991,9 @@ DB(DB_FIFO,printk("{W:%02x} ",read1_io(IO_FIFO_COUNT)))
             }
 
       write1_io(0, IO_LED_OFF);
+
+/* release the SMP spin_lock and restore irq state */
+      CLISPIN_UNLOCK(flags);
       return;
       }
 
@@ -1023,6 +1009,9 @@ DB(DB_FIFO,printk("{W:%02x} ",read1_io(IO_FIFO_COUNT)))
    if (!cmd && (sr != CSR_RESEL_AM && sr != CSR_TIMEOUT && sr != CSR_SELECT)) {
       printk("\nNR:wd-intr-1\n");
       write1_io(0, IO_LED_OFF);
+
+/* release the SMP spin_lock and restore irq state */
+      CLISPIN_UNLOCK(flags);
       return;
       }
 
@@ -1084,13 +1073,10 @@ DB(DB_TRANSFER,printk("(%p,%d)",cmd->SCp.ptr,cmd->SCp.this_residual))
 /* Respond to the specific WD3393 interrupt - there are quite a few! */
 
    switch (sr) {
-      unsigned long flags;
 
       case CSR_TIMEOUT:
 DB(DB_INTR,printk("TIMEOUT"))
 
-	 save_flags(flags);
-         cli();
          if (hostdata->state == S_RUNNING_LEVEL2)
             hostdata->connected = NULL;
          else {
@@ -1108,7 +1094,6 @@ CHECK_NULL(cmd,"csr_timeout")
  * are commands waiting to be executed.
  */
 
-         restore_flags(flags);
          in2000_execute(instance);
          break;
 
@@ -1116,7 +1101,6 @@ CHECK_NULL(cmd,"csr_timeout")
 /* Note: this interrupt should not occur in a LEVEL2 command */
 
       case CSR_SELECT:
-         cli();
 DB(DB_INTR,printk("SELECT"))
          hostdata->connected = cmd = (Scsi_Cmnd *)hostdata->selecting;
 CHECK_NULL(cmd,"csr_select")
@@ -1206,7 +1190,6 @@ DB(DB_INTR,printk("%02x",cmd->SCp.Status))
       case CSR_SRV_REQ  |PHS_MESS_IN:
 DB(DB_INTR,printk("MSG_IN="))
 
-         cli();
          msg = read_1_byte(hostdata);
          sr = read_3393(hostdata,WD_SCSI_STATUS);  /* clear interrupt */
 
@@ -1355,8 +1338,6 @@ printk("sync_xfer=%02x",hostdata->sync_xfer[cmd->target]);
 /* Note: this interrupt will occur only after a LEVEL2 command */
 
       case CSR_SEL_XFER_DONE:
-         save_flags(flags);
-         cli();
 
 /* Make sure that reselection is enabled at this point - it may
  * have been turned off for the command that just completed.
@@ -1383,7 +1364,6 @@ DB(DB_INTR,printk(":%d.%d",cmd->SCp.Status,lun))
  * there are commands waiting to be executed.
  */
 
-            restore_flags(flags);
             in2000_execute(instance);
             }
          else {
@@ -1442,8 +1422,6 @@ DB(DB_INTR,printk("%02x",hostdata->outgoing_msg[0]))
  * so we treat it as a normal command-complete-disconnect.
  */
 
-	 save_flags(flags);
-         cli();
 
 /* Make sure that reselection is enabled at this point - it may
  * have been turned off for the command that just completed.
@@ -1453,6 +1431,9 @@ DB(DB_INTR,printk("%02x",hostdata->outgoing_msg[0]))
          if (cmd == NULL) {
             printk(" - Already disconnected! ");
             hostdata->state = S_UNCONNECTED;
+
+/* release the SMP spin_lock and restore irq state */
+            CLISPIN_UNLOCK(flags);
             return;
             }
 DB(DB_INTR,printk("UNEXP_DISC-%ld",cmd->pid))
@@ -1469,14 +1450,11 @@ DB(DB_INTR,printk("UNEXP_DISC-%ld",cmd->pid))
  * there are commands waiting to be executed.
  */
 
-         restore_flags(flags);
          in2000_execute(instance);
          break;
 
 
       case CSR_DISC:
-         save_flags(flags);
-         cli();
 
 /* Make sure that reselection is enabled at this point - it may
  * have been turned off for the command that just completed.
@@ -1521,15 +1499,12 @@ DB(DB_INTR,printk(":%d",cmd->SCp.Status))
  * there are commands waiting to be executed.
  */
 
-         restore_flags(flags);
          in2000_execute(instance);
          break;
 
 
       case CSR_RESEL_AM:
 DB(DB_INTR,printk("RESEL"))
-
-         cli();
 
    /* First we have to make sure this reselection didn't */
    /* happen during Arbitration/Selection of some other device. */
@@ -1633,16 +1608,12 @@ DB(DB_INTR,printk("-%ld",cmd->pid))
 
 DB(DB_INTR,printk("} "))
 
+/* release the SMP spin_lock and restore irq state */
+   CLISPIN_UNLOCK(flags);
+
 }
 
-static void do_in2000_intr(int irq, void *dev_id, struct pt_regs *regs)
-{
-   unsigned long flags;
 
-   spin_lock_irqsave(&io_request_lock, flags);
-   in2000_intr(irq, dev_id, regs);
-   spin_unlock_irqrestore(&io_request_lock, flags);
-}
 
 #define RESET_CARD         0
 #define RESET_CARD_AND_BUS 1
@@ -1827,7 +1798,6 @@ unsigned long timeout;
       cmd->result = DID_ABORT << 16;
       cmd->scsi_done(cmd);
 
-/*      sti();*/
       in2000_execute (instance);
 
       restore_flags(flags);
@@ -1858,7 +1828,6 @@ unsigned long timeout;
  * broke.
  */
 
-/*   sti();*/
    in2000_execute (instance);
 
    restore_flags(flags);
@@ -1876,7 +1845,7 @@ static char setup_buffer[SETUP_BUFFER_SIZE];
 static char setup_used[MAX_SETUP_ARGS];
 static int done_setup = 0;
 
-void in2000_setup (char *str, int *ints)
+in2000__INITFUNC( void in2000_setup (char *str, int *ints) )
 {
 int i;
 char *p1,*p2;
@@ -1908,7 +1877,7 @@ char *p1,*p2;
 /* check_setup_args() returns index if key found, 0 if not
  */
 
-static int check_setup_args(char *key, int *flags, int *val, char *buf)
+in2000__INITFUNC( static int check_setup_args(char *key, int *flags, int *val, char *buf) )
 {
 int x;
 char *cp;
@@ -1940,21 +1909,21 @@ char *cp;
  * special macros declared in 'asm/io.h'. We use readb() and readl()
  * when reading from the card's BIOS area in in2000_detect().
  */
-static const unsigned int *bios_tab[] = {
+static const unsigned int *bios_tab[] in2000__INITDATA = {
    (unsigned int *)0xc8000,
    (unsigned int *)0xd0000,
    (unsigned int *)0xd8000,
    0
    };
 
-static const unsigned short base_tab[] = {
+static const unsigned short base_tab[] in2000__INITDATA = {
    0x220,
    0x200,
    0x110,
    0x100,
    };
 
-static const int int_tab[] = {
+static const int int_tab[] in2000__INITDATA = {
    15,
    14,
    11,
@@ -1962,7 +1931,7 @@ static const int int_tab[] = {
    };
 
 
-int in2000_detect(Scsi_Host_Template * tpnt)
+in2000__INITFUNC( int in2000_detect(Scsi_Host_Template * tpnt) )
 {
 struct Scsi_Host *instance;
 struct IN2000_hostdata *hostdata;
@@ -2068,7 +2037,7 @@ char buf[32];
       write1_io(0,IO_FIFO_READ);             /* start fifo out in read mode */
       write1_io(0,IO_INTR_MASK);    /* allow all ints */
       x = int_tab[(switches & (SW_INT0 | SW_INT1)) >> SW_INT_SHIFT];
-      if (request_irq(x, do_in2000_intr, SA_INTERRUPT, "in2000", NULL)) {
+      if (request_irq(x, in2000_intr, SA_INTERRUPT, "in2000", NULL)) {
          printk("in2000_detect: Unable to allocate IRQ.\n");
          detect_count--;
          continue;

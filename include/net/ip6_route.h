@@ -12,23 +12,6 @@
 #include <net/flow.h>
 #include <net/ip6_fib.h>
 
-/*
- *	Structure for assync processing of operations on the routing
- *	table
- */
-
-struct rt6_req {
-	int			operation;
-	struct rt6_info		*ptr;
-
-	struct rt6_req		*next;
-	struct rt6_req		*prev;
-
-#define RT_OPER_ADD		1
-#define RT_OPER_DEL		2
-};
-
-
 struct pol_chain {
 	int			type;
 	int			priority;
@@ -53,8 +36,7 @@ extern void			ip6_route_cleanup(void);
 
 extern int			ipv6_route_ioctl(unsigned int cmd, void *arg);
 
-extern struct rt6_info *	ip6_route_add(struct in6_rtmsg *rtmsg,
-					      int *err);
+extern int			ip6_route_add(struct in6_rtmsg *rtmsg);
 extern int			ip6_del_rt(struct rt6_info *);
 
 extern int			ip6_rt_addr_add(struct in6_addr *addr,
@@ -85,15 +67,15 @@ extern struct rt6_info *	rt6_add_dflt_router(struct in6_addr *gwaddr,
 
 extern void			rt6_purge_dflt_routers(int lst_resort);
 
-extern struct rt6_info *	rt6_redirect(struct in6_addr *dest,
+extern void			rt6_redirect(struct in6_addr *dest,
 					     struct in6_addr *saddr,
-					     struct in6_addr *target,
-					     struct device *dev,
+					     struct neighbour *neigh,
 					     int on_link);
 
-extern void			rt6_pmtu_discovery(struct in6_addr *addr,
+extern void			rt6_pmtu_discovery(struct in6_addr *daddr,
+						   struct in6_addr *saddr,
 						   struct device *dev,
-						   int pmtu);
+						   u32 pmtu);
 
 struct nlmsghdr;
 struct netlink_callback;
@@ -103,22 +85,25 @@ extern int inet6_rtm_delroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *a
 extern int inet6_rtm_getroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 
 extern void rt6_ifdown(struct device *dev);
+extern void rt6_mtu_change(struct device *dev, unsigned mtu);
 
 /*
  *	Store a destination cache entry in a socket
  *	For UDP/RAW sockets this is done on udp_connect.
  */
 
-extern __inline__ void ip6_dst_store(struct sock *sk, struct dst_entry *dst)
+extern __inline__ void ip6_dst_store(struct sock *sk, struct dst_entry *dst,
+				     struct in6_addr *daddr)
 {
 	struct ipv6_pinfo *np;
 	struct rt6_info *rt;
-		
+
 	np = &sk->net_pinfo.af_inet6;
 	dst_release(xchg(&sk->dst_cache,dst));
-	
+
 	rt = (struct rt6_info *) dst;
-	
+
+	np->daddr_cache = daddr;
 	np->dst_cookie = rt->rt6i_node ? rt->rt6i_node->fn_sernum : 0;
 }
 

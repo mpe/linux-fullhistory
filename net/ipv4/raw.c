@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.36 1998/05/08 21:06:29 davem Exp $
+ * Version:	$Id: raw.c,v 1.37 1998/08/26 12:04:07 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -152,7 +152,7 @@ void raw_err (struct sock *sk, struct sk_buff *skb)
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 
-	if (sk->ip_recverr && !atomic_read(&sk->sock_readers)) {
+	if (sk->ip_recverr) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (skb2 && sock_queue_err_skb(sk, skb2))
 			kfree_skb(skb);
@@ -194,10 +194,6 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb)
 	
 	skb->h.raw = skb->nh.raw;
 
-	if (atomic_read(&sk->sock_readers)) {
-		__skb_queue_tail(&sk->back_log, skb);
-		return 0;
-	}
 	raw_rcv_skb(sk, skb);
 	return 0;
 }
@@ -379,10 +375,33 @@ done:
 
 static void raw_close(struct sock *sk, unsigned long timeout)
 {
+	/* Observation: when raw_close is called, processes have
+	   no access to socket anymore. But net still has.
+	   Step one, detach it from networking:
+
+	   A. Remove from hash tables.
+	 */
 	sk->state = TCP_CLOSE;
+	raw_v4_unhash(sk);
+        /*
+	   B. Raw sockets may have direct kernel refereneces. Kill them.
+	 */
 	ip_ra_control(sk, 0, NULL);
+
+	/* In this point socket cannot receive new packets anymore */
+
+
+	/* But we still have packets pending on receive
+	   queue and probably, our own packets waiting in device queues.
+	   sock_destroy will drain receive queue, but transmitted
+	   packets will delay socket destruction.
+	   Set sk->dead=1 in order to prevent wakeups, when these
+	   packet will be freed.
+	 */
 	sk->dead=1;
 	destroy_sock(sk);
+
+	/* That's all. No races here. */
 }
 
 /* This gets rid of all the nasties in af_inet. -DaveM */
@@ -474,14 +493,8 @@ done:
 static int raw_init(struct sock *sk)
 {
 	struct raw_opt *tp = &(sk->tp_pinfo.tp_raw4);
-	if (sk->num == IPPROTO_ICMP) {
+	if (sk->num == IPPROTO_ICMP)
 		memset(&tp->filter, 0, sizeof(tp->filter));
-
-		/* By default block ECHO and TIMESTAMP requests */
-
-		set_bit(ICMP_ECHO, &tp->filter);
-		set_bit(ICMP_TIMESTAMP, &tp->filter);
-	}
 	return 0;
 }
 

@@ -23,7 +23,8 @@
 
 struct rt6_info;
 
-struct fib6_node {
+struct fib6_node
+{
 	struct fib6_node	*parent;
 	struct fib6_node	*left;
 	struct fib6_node	*right;
@@ -43,12 +44,14 @@ struct fib6_node {
  *
  */
 
-struct rt6key {
+struct rt6key
+{
 	struct in6_addr	addr;
 	int		plen;
 };
 
-struct rt6_info {
+struct rt6_info
+{
 	union {
 		struct dst_entry	dst;
 		struct rt6_info		*next;
@@ -56,21 +59,16 @@ struct rt6_info {
 
 #define rt6i_dev			u.dst.dev
 #define rt6i_nexthop			u.dst.neighbour
-#define rt6i_use			u.dst.use
-#define rt6i_ref			u.dst.refcnt
-
-#define rt6i_tstamp			u.dst.lastuse
 
 	struct fib6_node		*rt6i_node;
 
 	struct in6_addr			rt6i_gateway;
 	
-	int				rt6i_keylen;
-
 	u32				rt6i_flags;
 	u32				rt6i_metric;
 	u8				rt6i_hoplimit;
 	unsigned long			rt6i_expires;
+	atomic_t			rt6i_ref;
 
 	union {
 		struct flow_rule	*rt6iu_flowr;
@@ -84,6 +82,33 @@ struct rt6_info {
 	struct rt6key			rt6i_src;
 };
 
+struct fib6_walker_t
+{
+	struct fib6_walker_t *prev, *next;
+	struct fib6_node *root, *node;
+	struct rt6_info *leaf;
+	unsigned char state;
+	unsigned char prune;
+	int (*func)(struct fib6_walker_t *);
+	void *args;
+};
+
+extern struct fib6_walker_t fib6_walker_list;
+
+extern __inline__ void fib6_walker_link(struct fib6_walker_t *w)
+{
+	w->next = fib6_walker_list.next;
+	w->prev = &fib6_walker_list;
+	w->next->prev = w;
+	w->prev->next = w;
+}
+
+extern __inline__ void fib6_walker_unlink(struct fib6_walker_t *w)
+{
+	w->next->prev = w->prev;
+	w->prev->next = w->next;
+	w->prev = w->next = w;
+}
 
 struct rt6_statistics {
 	__u32		fib_nodes;
@@ -96,8 +121,6 @@ struct rt6_statistics {
 #define RTN_TL_ROOT	0x0001
 #define RTN_ROOT	0x0002		/* tree root node		*/
 #define RTN_RTINFO	0x0004		/* node with valid routing info	*/
-
-#define RTN_TAG		0x0100
 
 /*
  *	priority levels (or metrics)
@@ -128,11 +151,16 @@ extern struct fib6_node		*fib6_lookup(struct fib6_node *root,
 					     struct in6_addr *daddr,
 					     struct in6_addr *saddr);
 
-#define RT6_FILTER_RTNODES	1
+struct fib6_node		*fib6_locate(struct fib6_node *root,
+					     struct in6_addr *daddr, int dst_len,
+					     struct in6_addr *saddr, int src_len);
 
-extern void			fib6_walk_tree(struct fib6_node *root,
-					       f_pnode func, void *arg,
-					       int filter);
+extern void			fib6_clean_tree(struct fib6_node *root,
+						int (*func)(struct rt6_info *, void *arg),
+						int prune, void *arg);
+
+extern int			fib6_walk(struct fib6_walker_t *w);
+extern int			fib6_walk_continue(struct fib6_walker_t *w);
 
 extern int			fib6_add(struct fib6_node *root,
 					 struct rt6_info *rt);

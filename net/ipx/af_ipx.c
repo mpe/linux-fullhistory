@@ -1749,7 +1749,6 @@ static int ipx_create(struct socket *sock, int protocol)
 
 	sock_init_data(sock, sk);
 	sk->destruct	= NULL;
-	sk->mtu		= IPX_MTU;
 	sk->no_check 	= 1;		/* Checksum off by default */
 
 	MOD_INC_USE_COUNT;

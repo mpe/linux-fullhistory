@@ -48,17 +48,13 @@ struct inet_protocol
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 struct inet6_protocol 
 {
-	int	(*handler)(struct sk_buff *skb, struct device *dev,
-			struct in6_addr *saddr,
-			struct in6_addr *daddr,
-			struct ipv6_options *opt, 
-			unsigned short len,
-			int redo, struct inet6_protocol *protocol);
+	int	(*handler)(struct sk_buff *skb,
+			unsigned long len);
 
-	void	(*err_handler)(struct sk_buff *skb, int type, int code, unsigned char *buff,
-			__u32 info, struct in6_addr *saddr,
-			struct in6_addr *daddr,
-			struct inet6_protocol *protocol);
+	void	(*err_handler)(struct sk_buff *skb, struct ipv6hdr *hdr,
+			       struct inet6_skb_parm *opt,
+			       int type, int code, unsigned char *buff,
+			       __u32 info);
 	struct inet6_protocol *next;
 	unsigned char	protocol;
 	unsigned char	copy:1;

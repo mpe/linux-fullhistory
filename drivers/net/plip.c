@@ -244,8 +244,8 @@ plip_init_dev(struct device *dev, struct parport *pb))
 					 plip_wakeup, plip_interrupt, 
 					 PARPORT_DEV_LURK, dev);
 
-	printk(version);
-	printk("%s: Parallel port at %#3lx, using IRQ %d\n", dev->name,
+	printk(KERN_INFO "%s", version);
+	printk(KERN_INFO "%s: Parallel port at %#3lx, using IRQ %d\n", dev->name,
 	       dev->base_addr, dev->irq);
 
 	/* Fill in the generic fields of the device structure. */
@@ -537,7 +537,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 		/* Malloc up new buffer. */
 		rcv->skb = dev_alloc_skb(rcv->length.h);
 		if (rcv->skb == NULL) {
-			printk(KERN_WARNING "%s: Memory squeeze.\n", dev->name);
+			printk(KERN_ERR "%s: Memory squeeze.\n", dev->name);
 			return ERROR;
 		}
 		skb_put(rcv->skb,rcv->length.h);
@@ -662,7 +662,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 	unsigned int cx;
 
 	if (snd->skb == NULL || (lbuf = snd->skb->data) == NULL) {
-		printk(KERN_ERR "%s: send skb lost\n", dev->name);
+		printk(KERN_DEBUG "%s: send skb lost\n", dev->name);
 		snd->state = PLIP_PK_DONE;
 		snd->skb = NULL;
 		return ERROR;
@@ -817,7 +817,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	unsigned char c0;
 
 	if (dev == NULL) {
-		printk(KERN_ERR "plip_interrupt: irq %d for unknown device.\n", irq);
+		printk(KERN_DEBUG "plip_interrupt: irq %d for unknown device.\n", irq);
 		return;
 	}
 
@@ -861,7 +861,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	case PLIP_CN_ERROR:
 		spin_unlock_irq(&nl->lock);
-		printk(KERN_WARNING "%s: receive interrupt in error state\n", dev->name);
+		printk(KERN_ERR "%s: receive interrupt in error state\n", dev->name);
 		break;
 	}
 }
@@ -1083,7 +1083,8 @@ plip_get_stats(struct device *dev)
 	return r;
 }
 
-static int plip_config(struct device *dev, struct ifmap *map)
+static int
+plip_config(struct device *dev, struct ifmap *map)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct pardevice *pardev = nl->pardev;
@@ -1091,8 +1092,8 @@ static int plip_config(struct device *dev, struct ifmap *map)
 	if (dev->flags & IFF_UP)
 		return -EBUSY;
 
-	printk(KERN_INFO "plip: Warning, changing irq with ifconfig will be obsoleted.\n");
-	printk(KERN_INFO "plip: Next time, please set with /proc/parport/*/irq instead.\n");
+	printk(KERN_WARNING "plip: Warning, changing irq with ifconfig will be obsoleted.\n");
+	printk(KERN_WARNING "plip: Next time, please set with /proc/parport/*/irq instead.\n");
 
 	if (map->irq != (unsigned char)-1) {
 		pardev->port->irq = dev->irq = map->irq;
@@ -1177,7 +1178,7 @@ void plip_setup(char *str, int *ints)
 			/* disable driver on "parport=" or "parport=0" */
 			parport[0] = -2;
 		} else {
-			printk(KERN_WARNING "warning: 'plip=0x%x' ignored\n", 
+			printk(KERN_WARNINGING "warning: 'plip=0x%x' ignored\n", 
 			       ints[1]);
 		}
 	}

@@ -98,7 +98,7 @@ static __inline__ int netlink_locked(struct sock *sk)
 	return atomic_read(&sk->protinfo.af_netlink.locks);
 }
 
-static __inline__ struct sock *netlink_lookup(int protocol, pid_t pid)
+static __inline__ struct sock *netlink_lookup(int protocol, u32 pid)
 {
 	struct sock *sk;
 
@@ -116,10 +116,8 @@ extern struct proto_ops netlink_ops;
 
 static void netlink_insert(struct sock *sk)
 {
-	cli();
 	sk->next = nl_table[sk->protocol];
 	nl_table[sk->protocol] = sk;
-	sti();
 }
 
 static void netlink_remove(struct sock *sk)
@@ -154,24 +152,8 @@ static int netlink_create(struct socket *sock, int protocol)
 	sock_init_data(sock,sk);
 	sk->destruct = NULL;
 	
-	sk->mtu=4096;
 	sk->protocol=protocol;
 	return 0;
-}
-
-static void netlink_destroy_timer(unsigned long data)
-{
-	struct sock *sk=(struct sock *)data;
-
-	if (!netlink_locked(sk) && !atomic_read(&sk->wmem_alloc)
-	    && !atomic_read(&sk->rmem_alloc)) {
-		sk_free(sk);
-		return;
-	}
-	
-	sk->timer.expires=jiffies+10*HZ;
-	add_timer(&sk->timer);
-	printk(KERN_DEBUG "netlink sk destroy delayed\n");
 }
 
 static int netlink_release(struct socket *sock, struct socket *peer)
@@ -223,11 +205,7 @@ static int netlink_release(struct socket *sock, struct socket *peer)
 	}
 
 	if (atomic_read(&sk->rmem_alloc) || atomic_read(&sk->wmem_alloc)) {
-		sk->timer.data=(unsigned long)sk;
-		sk->timer.expires=jiffies+HZ;
-		sk->timer.function=netlink_destroy_timer;
-		add_timer(&sk->timer);
-		printk(KERN_DEBUG "impossible 333\n");
+		printk(KERN_DEBUG "netlink_release: impossible event. Please, report.\n");
 		return 0;
 	}
 
@@ -270,7 +248,7 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr, int addr_len
 		return -EINVAL;
 
 	/* Only superuser is allowed to listen multicasts */
-	if (nladdr->nl_groups && !suser())
+	if (nladdr->nl_groups && !capable(CAP_NET_ADMIN))
 		return -EPERM;
 
 	if (sk->protinfo.af_netlink.pid) {
@@ -315,7 +293,7 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 		return -EINVAL;
 
 	/* Only superuser is allowed to send multicasts */
-	if (!suser() && nladdr->nl_groups)
+	if (nladdr->nl_groups && !capable(CAP_NET_ADMIN))
 		return -EPERM;
 
 	sk->protinfo.af_netlink.dst_pid = nladdr->nl_pid;
@@ -344,11 +322,12 @@ static int netlink_getname(struct socket *sock, struct sockaddr *addr, int *addr
 	return 0;
 }
 
-int netlink_unicast(struct sock *ssk, struct sk_buff *skb, pid_t pid, int nonblock)
+int netlink_unicast(struct sock *ssk, struct sk_buff *skb, u32 pid, int nonblock)
 {
 	struct sock *sk;
 	int len = skb->len;
 	int protocol = ssk->protocol;
+	struct wait_queue wait = { current, NULL };
 
 retry:
 	for (sk = nl_table[protocol]; sk; sk = sk->next) {
@@ -366,17 +345,23 @@ retry:
 		}
 #endif
 
-		cli();
+		if (!nonblock) {
+			add_wait_queue(sk->sleep, &wait);
+			current->state = TASK_INTERRUPTIBLE;
+		}
+
 		if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) {
 			if (nonblock) {
-				sti();
 				netlink_unlock(sk);
 				kfree_skb(skb);
 				return -EAGAIN;
 			}
-			interruptible_sleep_on(sk->sleep);
+
+			schedule();
+
+			current->state = TASK_RUNNING;
+			remove_wait_queue(sk->sleep, &wait);
 			netlink_unlock(sk);
-			sti();
 
 			if (signal_pending(current)) {
 				kfree_skb(skb);
@@ -384,8 +369,12 @@ retry:
 			}
 			goto retry;
 		}
-		sti();
-Nprintk("unicast_deliver %d\n", skb->len);
+
+		if (!nonblock) {
+			current->state = TASK_RUNNING;
+			remove_wait_queue(sk->sleep, &wait);
+		}
+
 		skb_orphan(skb);
 		skb_set_owner_r(skb, sk);
 		skb_queue_tail(&sk->receive_queue, skb);
@@ -417,8 +406,8 @@ Nprintk("broadcast_deliver %d\n", skb->len);
 	return -1;
 }
 
-void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, pid_t pid,
-		       unsigned group, int allocation)
+void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, u32 pid,
+		       u32 group, int allocation)
 {
 	struct sock *sk;
 	struct sk_buff *skb2 = NULL;
@@ -472,7 +461,7 @@ void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, pid_t pid,
 	kfree_skb(skb);
 }
 
-void netlink_set_err(struct sock *ssk, pid_t pid, unsigned group, int code)
+void netlink_set_err(struct sock *ssk, u32 pid, u32 group, int code)
 {
 	struct sock *sk;
 	int protocol = ssk->protocol;
@@ -496,33 +485,27 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_nl *addr=msg->msg_name;
-	pid_t dst_pid;
-	unsigned dst_groups;
+	u32 dst_pid;
+	u32 dst_groups;
 	struct sk_buff *skb;
-	int err;
 
 	if (msg->msg_flags&MSG_OOB)
 		return -EOPNOTSUPP;
 
-	if (msg->msg_flags&~MSG_DONTWAIT) {
-		printk("1 %08x\n", msg->msg_flags);
+	if (msg->msg_flags&~(MSG_DONTWAIT|MSG_NOSIGNAL|MSG_ERRQUEUE))
 		return -EINVAL;
-	}
 
 	if (msg->msg_namelen) {
-		if (addr->nl_family != AF_NETLINK) {
-			printk("2 %08x\n", addr->nl_family);
+		if (addr->nl_family != AF_NETLINK)
 			return -EINVAL;
-		}
 		dst_pid = addr->nl_pid;
 		dst_groups = addr->nl_groups;
-		if (dst_groups && !suser())
+		if (dst_groups && !capable(CAP_NET_ADMIN))
 			return -EPERM;
 	} else {
 		dst_pid = sk->protinfo.af_netlink.dst_pid;
 		dst_groups = sk->protinfo.af_netlink.dst_groups;
 	}
-
 
 	if (!sk->protinfo.af_netlink.pid)
 		netlink_autobind(sock);
@@ -536,17 +519,24 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	NETLINK_CB(skb).dst_pid = dst_pid;
 	NETLINK_CB(skb).dst_groups = dst_groups;
 	memcpy(NETLINK_CREDS(skb), &scm->creds, sizeof(struct ucred));
-	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+
+	/* What can I do? Netlink is asynchronous, so that
+	   we will have to save current capabilities to
+	   check them, when this message will be delivered
+	   to corresponding kernel module.   --ANK (980802)
+	 */
+	NETLINK_CB(skb).eff_cap = current->cap_effective;
+
+	if (memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len)) {
+		kfree_skb(skb);
+		return -EFAULT;
+	}
 
 	if (dst_groups) {
 		atomic_inc(&skb->users);
 		netlink_broadcast(sk, skb, dst_pid, dst_groups, GFP_KERNEL);
 	}
-	err = netlink_unicast(sk, skb, dst_pid, msg->msg_flags&MSG_DONTWAIT);
-	if (err < 0) {
-		printk("3\n");
-	}
-	return err;
+	return netlink_unicast(sk, skb, dst_pid, msg->msg_flags&MSG_DONTWAIT);
 }
 
 static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, int len,
@@ -594,7 +584,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (sk->protinfo.af_netlink.cb
 	    && atomic_read(&sk->rmem_alloc) <= sk->rcvbuf/2)
 		netlink_dump(sk);
-	return err ? err : copied;
+	return err ? : copied;
 }
 
 /*
@@ -651,11 +641,11 @@ static int netlink_dump(struct sock *sk)
 	skb = sock_rmalloc(sk, NLMSG_GOODSIZE, 0, GFP_KERNEL);
 	if (!skb)
 		return -ENOBUFS;
-	
+
 	cb = sk->protinfo.af_netlink.cb;
 
 	len = cb->dump(skb, cb);
-	
+
 	if (len > 0) {
 		skb_queue_tail(&sk->receive_queue, skb);
 		sk->data_ready(sk, len);
@@ -667,7 +657,7 @@ static int netlink_dump(struct sock *sk)
 	memcpy(NLMSG_DATA(nlh), &len, sizeof(len));
 	skb_queue_tail(&sk->receive_queue, skb);
 	sk->data_ready(sk, skb->len);
-	
+
 	cb->done(cb);
 	sk->protinfo.af_netlink.cb = NULL;
 	netlink_destroy_callback(cb);
@@ -769,167 +759,6 @@ int netlink_post(int unit, struct sk_buff *skb)
 
 #endif
 
-#if 0
-
-/* What a pity... It was good code, but at the moment it
-   results in unnecessary complications.
- */
-
-/*
- *	"High" level netlink interface. (ANK)
- *	
- *	Features:
- *		- standard message format.
- *		- pseudo-reliable delivery. Messages can be still lost, but
- *		  user level will know that they were lost and can
- *		  recover (f.e. gated could reread FIB and device list)
- *		- messages are batched.
- */
-
-/*
- *	Try to deliver queued messages.
- */
-
-static void nlmsg_delayed_flush(struct sock *sk)
-{
-	nlmsg_flush(sk, GFP_ATOMIC);
-}
-
-static void nlmsg_flush(struct sock *sk, int allocation)
-{
-	struct sk_buff *skb;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	while ((skb=skb_dequeue(&sk->write_queue)) != NULL) {
-		if (skb->users != 1) {
-			skb_queue_head(&sk->write_queue, skb);
-			break;
-		}
-		restore_flags(flags);
-		netlink_broadcast(sk, skb, 0, NETLINK_CB(skb).dst_groups, allocation);
-		cli();
-	}
-	start_bh_atomic();
-	restore_flags(flags);
-	if (skb) {
-		if (sk->timer.function)
-			del_timer(&sk->timer)
-		sk->timer.expires = jiffies + (sk->protinfo.af_netlink.delay ? : HZ/2);
-		sk->timer.function = (void (*)(unsigned long))nlmsg_delayed_flush;
-		sk->timer.data = (unsigned long)sk;
-		add_timer(&sk->timer);
-	}
-	end_bh_atomic();
-}
-
-/*
- *	Allocate room for new message. If it is impossible, return NULL.
- */
-
-void *nlmsg_broadcast(struct sock *sk, struct sk_buff **skbp,
-		      unsigned long type, int len,
-		      unsigned groups, int allocation)
-{
-	struct nlmsghdr *nlh;
-	struct sk_buff *skb;
-	int	rlen;
-	unsigned long flags;
-
-	rlen = NLMSG_SPACE(len);
-
-	save_flags(flags);
-	cli();
-	skb = sk->write_queue.tail;
-	if (skb == sk->write_queue.head)
-		skb = NULL;
-	if (skb == NULL || skb_tailroom(skb) < rlen || NETLINK_CB(skb).dst_groups != groups) {
-		restore_flags(flags);
-
-		if (skb)
-			nlmsg_flush(sk, allocation);
-
-		skb = sock_wmalloc(rlen > NLMSG_GOODSIZE ? rlen : NLMSG_GOODSIZE,
-				   sk, 0, allocation);
-
-		if (skb==NULL) {
-			printk (KERN_WARNING "nlmsg at unit %d overrunned\n", sk->protocol);
-			return NULL;
-		}
-
-		NETLINK_CB(skb).dst_groups = groups;
-		cli();
-		skb_queue_tail(&sk->write_queue, skb);
-	}
-	atomic_inc(&skb->users);
-	restore_flags(flags);
-
-	nlh = (struct nlmsghdr*)skb_put(skb, rlen);
-	nlh->nlmsg_type = type;
-	nlh->nlmsg_len = NLMSG_LENGTH(len);
-	nlh->nlmsg_seq = 0;
-	nlh->nlmsg_pid = 0;
-	*skbp = skb;
-	return nlh->nlmsg_data;
-}
-
-struct sk_buff* nlmsg_alloc(unsigned long type, int len,
-			    unsigned long seq, unsigned long pid, int allocation)
-{
-	struct nlmsghdr	*nlh;
-	struct sk_buff *skb;
-	int		rlen;
-
-	rlen = NLMSG_SPACE(len);
-
-	skb = alloc_skb(rlen, allocation);
-	if (skb==NULL)
-		return NULL;
-
-	nlh = (struct nlmsghdr*)skb_put(skb, rlen);
-	nlh->nlmsg_type = type;
-	nlh->nlmsg_len = NLMSG_LENGTH(len);
-	nlh->nlmsg_seq = seq;
-	nlh->nlmsg_pid = pid;
-	return skb;
-}
-
-void nlmsg_release(struct sk_buff *skb)
-{
-	atomic_dec(skb->users);
-}
-
-
-/*
- *	Kick message queue.
- *	Two modes:
- *		- synchronous (delay==0). Messages are delivered immediately.
- *		- delayed. Do not deliver, but start delivery timer.
- */
-
-void __nlmsg_transmit(struct sock *sk, int allocation)
-{
-	start_bh_atomic();
-	if (!sk->protinfo.af_netlink.delay) {
-		if (sk->timer.function) {
-			del_timer(&sk->timer);
-			sk->timer.function = NULL;
-		}
-		end_bh_atomic();
-		nlmsg_flush(sk, allocation);
-		return;
-	}
-	if (!sk->timer.function) {
-		sk->timer.expires = jiffies + sk->protinfo.af_netlink.delay;
-		sk->timer.function = (void (*)(unsigned long))nlmsg_delayed_flush;
-		sk->timer.data = (unsigned long)sk;
-		add_timer(&sk->timer);
-	}
-	end_bh_atomic();
-}
-
-#endif
 
 #ifdef CONFIG_PROC_FS
 static int netlink_read_proc(char *buffer, char **start, off_t offset,

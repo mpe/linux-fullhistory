@@ -468,7 +468,6 @@ static int x25_create(struct socket *sock, int protocol)
 
 	sock->ops    = &x25_proto_ops;
 	sk->protocol = protocol;
-	sk->mtu      = X25_DEFAULT_PACKET_SIZE;	/* X25_PS128 */
 
 	x25->t21   = sysctl_x25_call_request_timeout;
 	x25->t22   = sysctl_x25_reset_request_timeout;
@@ -507,7 +506,6 @@ static struct sock *x25_make_new(struct sock *osk)
 	sk->sndbuf      = osk->sndbuf;
 	sk->debug       = osk->debug;
 	sk->state       = TCP_ESTABLISHED;
-	sk->mtu         = osk->mtu;
 	sk->sleep       = osk->sleep;
 	sk->zapped      = osk->zapped;
 

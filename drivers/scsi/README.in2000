@@ -1,4 +1,19 @@
 
+UPDATE NEWS: version 1.33 - 26 Aug 98
+
+   Interrupt management in this driver has become, over
+   time, increasingly odd and difficult to explain - this
+   has been mostly due to my own mental inadequacies. In
+   recent kernels, it has failed to function at all when
+   compiled for SMP. I've fixed that problem, and after
+   taking a fresh look at interrupts in general, greatly
+   reduced the number of places where they're fiddled
+   with. Done some heavy testing and it looks very good.
+   The driver now makes use of the __initfunc() and
+   __initdata macros to save about 4k of kernel memory.
+   Once again, the same code works for both 2.0.xx and
+   2.1.xx kernels.
+
 UPDATE NEWS: version 1.32 - 28 Mar 98
 
    Removed the check for legal IN2000 hardware versions:

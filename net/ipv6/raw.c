@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.20 1998/07/15 05:05:41 davem Exp $
+ *	$Id: raw.c,v 1.21 1998/08/26 12:05:13 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -156,9 +156,8 @@ static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	/* Check if the address belongs to the host. */
 	if (addr_type == IPV6_ADDR_MAPPED) {
-		v4addr = addr->sin6_addr.s6_addr32[3];
-		if (inet_addr_type(v4addr) != RTN_LOCAL)
-			return(-EADDRNOTAVAIL);
+		/* Raw sockets are IPv6 only */
+		return(-EADDRNOTAVAIL);
 	} else {
 		if (addr_type != IPV6_ADDR_ANY) {
 			/* ipv4 addr of the socket is invalid.  Only the
@@ -182,10 +181,11 @@ static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	return 0;
 }
 
-void rawv6_err(struct sock *sk, int type, int code, unsigned char *buff,
-	       struct in6_addr *saddr, struct in6_addr *daddr)
+void rawv6_err(struct sock *sk, struct sk_buff *skb, struct ipv6hdr *hdr,
+	       struct inet6_skb_parm *opt,
+	       int type, int code, unsigned char *buff, u32 info)
 {
-	if (sk == NULL) 
+	if (sk == NULL)
 		return;
 }
 
@@ -193,12 +193,12 @@ static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
 	if (sock_queue_rcv_skb(sk,skb)<0) {
-		/* ip_statistics.IpInDiscards++; */
+		ipv6_statistics.Ip6InDiscards++;
 		kfree_skb(skb);
 		return 0;
 	}
 
-	/* ip_statistics.IpInDelivers++; */
+	ipv6_statistics.Ip6InDelivers++;
 	return 0;
 }
 
@@ -209,21 +209,10 @@ static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
  *	maybe we could have the network decide uppon a hint if it 
  *	should call raw_rcv for demultiplexing
  */
-int rawv6_rcv(struct sk_buff *skb, struct device *dev,
-	      struct in6_addr *saddr, struct in6_addr *daddr,
-	      struct ipv6_options *opt, unsigned short len)
+int rawv6_rcv(struct sock *sk, struct sk_buff *skb, unsigned long len)
 {
-	struct sock *sk;
-
-	sk = skb->sk;
-
 	if (sk->ip_hdrincl)
 		skb->h.raw = skb->nh.raw;
-
-	if (atomic_read(&sk->sock_readers)) {
-		__skb_queue_tail(&sk->back_log, skb);
-		return 0;
-	}
 
 	rawv6_rcv_skb(sk, skb);
 	return 0;
@@ -255,8 +244,12 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (!skb)
 		goto out;
 	
-	copied = min(len, skb->tail - skb->h.raw);
-	
+	copied = skb->tail - skb->h.raw;
+  	if (copied > len) {
+  		copied = len;
+  		msg->msg_flags |= MSG_TRUNC;
+  	}
+
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
 	if (err)
@@ -269,7 +262,7 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		       sizeof(struct in6_addr));
 	}
 
-	if (msg->msg_controllen)
+	if (sk->net_pinfo.af_inet6.rxopt.all)
 		datagram_recv_ctl(sk, msg, skb);
 	err = copied;
 
@@ -332,11 +325,9 @@ static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 			csum = (__u16 *) (buff + opt->offset);
 			*csum = hdr->cksum;
 		} else {
-			/* 
-			 *  FIXME 
-			 *  signal an error to user via sk->err
-			 */
-			printk(KERN_DEBUG "icmp: cksum offset too big\n");
+			if (net_ratelimit())
+				printk(KERN_DEBUG "icmp: cksum offset too big\n");
+			return -EINVAL;
 		}
 	}	
 	return 0; 
@@ -345,10 +336,10 @@ static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 
 static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
-	struct ipv6_options opt_space;
+	struct ipv6_txoptions opt_space;
 	struct sockaddr_in6 * sin6 = (struct sockaddr_in6 *) msg->msg_name;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-	struct ipv6_options *opt = NULL;
+	struct ipv6_txoptions *opt = NULL;
 	struct in6_addr *saddr = NULL;
 	struct flowi fl;
 	int addr_len = msg->msg_namelen;
@@ -360,11 +351,8 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 	/* Rough check on arithmetic overflow,
 	   better check is made in ip6_build_xmit
-
-	   When jumbo header will be implemeted we will remove it
-	   at all (len will be size_t)
 	 */
-	if (len < 0 || len > 0xFFFF)
+	if (len < 0)
 		return -EMSGSIZE;
 
 	/* Mirror BSD error message compatibility */
@@ -394,14 +382,6 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			return(-EINVAL);
 
 		daddr = &sin6->sin6_addr;
-		
-		/* BUGGGG If route is not cloned, this check always
-		   fails, hence dst_cache only slows down tramsmission --ANK
-		 */
-		if (sk->dst_cache && ipv6_addr_cmp(daddr, &np->daddr)) {
-			dst_release(sk->dst_cache);
-			sk->dst_cache = NULL;
-		}		
 	} else {
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
@@ -422,12 +402,14 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 	if (msg->msg_controllen) {
 		opt = &opt_space;
-		memset(opt, 0, sizeof(struct ipv6_options));
+		memset(opt, 0, sizeof(struct ipv6_txoptions));
 
 		err = datagram_send_ctl(msg, &fl.oif, &saddr, opt, &hlimit);
 		if (err < 0)
 			return err;
 	}
+	if (opt == NULL || !(opt->opt_nflen|opt->opt_flen))
+		opt = np->opt;
 
 	raw_opt = &sk->tp_pinfo.tp_raw;
 
@@ -594,8 +576,9 @@ static int rawv6_getsockopt(struct sock *sk, int level, int optname,
 
 static void rawv6_close(struct sock *sk, unsigned long timeout)
 {
+	/* See for explanation: raw_close in ipv4/raw.c */
 	sk->state = TCP_CLOSE;
-	ipv6_sock_mc_close(sk);
+	raw_v6_unhash(sk);
 	if (sk->num == IPPROTO_RAW)
 		ip6_ra_control(sk, -1, NULL);
 	sk->dead = 1;
@@ -619,7 +602,7 @@ struct proto rawv6_prot = {
 	datagram_poll,			/* poll */
 	NULL,				/* ioctl */
 	rawv6_init_sk,			/* init */
-	NULL,				/* destroy */
+	inet6_destroy_sock,		/* destroy */
 	NULL,				/* shutdown */
 	rawv6_setsockopt,		/* setsockopt */
 	rawv6_getsockopt,		/* getsockopt */

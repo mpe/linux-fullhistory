@@ -8,6 +8,8 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
+ * Version:	$Id: af_unix.c,v 1.68 1998/08/26 13:18:35 davem Exp $
+ *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
  *		Niibe Yutaka	:	async I/O support.
@@ -27,6 +29,10 @@
  *		Andreas Schwab	:	Replace inode by dentry for proper
  *					reference counting
  *		Kirk Petersen	:	Made this a module
+ *	    Christoph Rohland	:	Elegant non-blocking accept/connect algorithm.
+ *					Lots of bug fixes.
+ *	     Alexey Kuznetosv	:	Repaired (I hope) bugs introduces
+ *					by above two patches.
  *
  * Known differences from reference BSD that was tested:
  *
@@ -102,6 +108,7 @@ unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 #define UNIX_ABSTRACT(sk)	((sk)->protinfo.af_unix.addr->hash!=UNIX_HASH_SIZE)
 
 static void unix_destroy_socket(unix_socket *sk);
+static void unix_stream_write_space(struct sock *sk);
 
 extern __inline__ unsigned unix_hash_fold(unsigned hash)
 {
@@ -120,7 +127,7 @@ extern __inline__ int unix_our_peer(unix_socket *sk, unix_socket *osk)
 
 extern __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
 {
-	return (sk->type==osk->type);
+	return (unix_peer(osk) == NULL || unix_our_peer(sk, osk));
 }
 
 extern __inline__ void unix_lock(unix_socket *sk)
@@ -128,9 +135,9 @@ extern __inline__ void unix_lock(unix_socket *sk)
 	atomic_inc(&sk->sock_readers);
 }
 
-extern __inline__ int unix_unlock(unix_socket *sk)
+extern __inline__ void unix_unlock(unix_socket *sk)
 {
-	return atomic_dec_and_test(&sk->sock_readers);
+	atomic_dec(&sk->sock_readers);
 }
 
 extern __inline__ int unix_locked(unix_socket *sk)
@@ -257,7 +264,6 @@ static void unix_destroy_timer(unsigned long data)
 	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		sk_free(sk);
-		unix_remove_socket(sk);
 	
 		/* socket destroyed, decrement count		      */
 		MOD_DEC_USE_COUNT;
@@ -291,9 +297,6 @@ static int unix_release_sock (unix_socket *sk)
 
 	skpair=unix_peer(sk);
 
-	/* Try to flush out this socket. Throw out buffers at least */
-	unix_destroy_socket(sk);
-
 	if (skpair!=NULL)
 	{
 		if (sk->type==SOCK_STREAM && unix_our_peer(sk, skpair))
@@ -304,6 +307,9 @@ static int unix_release_sock (unix_socket *sk)
 		unix_unlock(skpair); /* It may now die */
 	}
 
+	/* Try to flush out this socket. Throw out buffers at least */
+	unix_destroy_socket(sk);
+
 	/*
 	 * Fixme: BSD difference: In BSD all sockets connected to use get
 	 *	  ECONNRESET and we die on the spot. In Linux we behave
@@ -311,6 +317,8 @@ static int unix_release_sock (unix_socket *sk)
 	 *	  dereference.
 	 *
 	 * Can't we simply set sock->err?
+	 *
+	 *	  What the above comment does talk about? --ANK(980817)
 	 */
 
 	unix_gc();		/* Garbage collect fds */	
@@ -321,13 +329,12 @@ static void unix_destroy_socket(unix_socket *sk)
 {
 	struct sk_buff *skb;
 
+	unix_remove_socket(sk);
+
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 	{
 		if(sk->state==TCP_LISTEN)
-		{
-			unix_unlock(sk);
 			unix_release_sock(skb->sk);
-		}
 		/* passed fds are erased in the kfree_skb hook	      */
 		kfree_skb(skb);
 	}
@@ -338,10 +345,9 @@ static void unix_destroy_socket(unix_socket *sk)
 		sk->protinfo.af_unix.dentry=NULL;
 	}
 	
-	if(unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
+	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		sk_free(sk);
-		unix_remove_socket(sk);
 	
 		/* socket destroyed, decrement count		      */
 		MOD_DEC_USE_COUNT;
@@ -366,8 +372,6 @@ static int unix_listen(struct socket *sock, int backlog)
 	if (!sk->protinfo.af_unix.addr)
 		return -EINVAL;			/* No listens on an unbound socket */
 	sk->max_ack_backlog=backlog;
-	if (sk->ack_backlog < backlog)
-		sk->state_change(sk);
 	sk->state=TCP_LISTEN;
 	sock->flags |= SO_ACCEPTCON;
 	/* set credentials so connect can copy them */
@@ -380,61 +384,60 @@ static int unix_listen(struct socket *sock, int backlog)
 extern struct proto_ops unix_stream_ops;
 extern struct proto_ops unix_dgram_ops;
 
-static int unix_create1(struct socket *sock, struct sock **skp, int protocol)
+static struct sock * unix_create1(struct socket *sock, int stream)
 {
 	struct sock *sk;
 
-	if (protocol && protocol != PF_UNIX)
-		return -EPROTONOSUPPORT;
-
-	if (sock)
-	{
-		sock->state = SS_UNCONNECTED;
-
-		switch (sock->type)
-		{
-		case SOCK_STREAM:
-			sock->ops = &unix_stream_ops;
-			break;
-		/*
-		 *	Believe it or not BSD has AF_UNIX, SOCK_RAW though
-		 *	nothing uses it.
-		 */
-		case SOCK_RAW:
-			sock->type=SOCK_DGRAM;
-		case SOCK_DGRAM:
-			sock->ops = &unix_dgram_ops;
-			break;
-		default:
-			return -ESOCKTNOSUPPORT;
-		}
-	}
+	MOD_INC_USE_COUNT;
 	sk = sk_alloc(PF_UNIX, GFP_KERNEL, 1);
-	if (!sk)
-		return -ENOMEM;
+	if (!sk) {
+		MOD_DEC_USE_COUNT;
+		return NULL;
+	}
 
 	sock_init_data(sock,sk);
+
+	if (stream)
+		sk->write_space = unix_stream_write_space; 
 
 	sk->destruct = unix_destruct_addr;
 	sk->protinfo.af_unix.family=PF_UNIX;
 	sk->protinfo.af_unix.dentry=NULL;
-	atomic_set(&sk->sock_readers, 1);	/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
-	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
-	if (skp)
-		*skp =sk;
-	
-	/* socket created, increment count */
-	MOD_INC_USE_COUNT;
 
-	return 0;
+	return sk;
 }
 
 static int unix_create(struct socket *sock, int protocol)
 {
-	return unix_create1(sock, NULL, protocol);
+	int stream = 0;
+
+	if (protocol && protocol != PF_UNIX)
+		return -EPROTONOSUPPORT;
+
+	sock->state = SS_UNCONNECTED;
+
+	switch (sock->type) {
+	case SOCK_STREAM:
+		sock->ops = &unix_stream_ops;
+		stream = 1;
+		break;
+		/*
+		 *	Believe it or not BSD has AF_UNIX, SOCK_RAW though
+		 *	nothing uses it.
+		 */
+	case SOCK_RAW:
+		sock->type=SOCK_DGRAM;
+	case SOCK_DGRAM:
+		sock->ops = &unix_dgram_ops;
+		break;
+	default:
+		return -ESOCKTNOSUPPORT;
+	}
+
+	return unix_create1(sock, stream) ? 0 : -ENOMEM;
 }
 
 static int unix_release(struct socket *sock, struct socket *peer)
@@ -665,6 +668,22 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (addr_len < 0)
 		return addr_len;
 
+	/* First of all allocate resources.
+	   If we will make it after state checks,
+	   we will have to recheck all again in any case.
+	 */
+
+	/*  Find listening sock */
+	other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
+
+	/* create new sock for complete connection */
+	newsk = unix_create1(NULL, 1);
+
+	/* Allocate skb for sending to listening sock */
+	skb = NULL;
+	if (newsk)
+		skb = sock_wmalloc(newsk, 1, 0, GFP_KERNEL);
+
 	switch (sock->state) 
 	{
 		case SS_UNCONNECTED:
@@ -672,37 +691,25 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 			break;
 		case SS_CONNECTED:
 			/* Socket is already connected */
-			return -EISCONN;
+			err = -EISCONN;
+			goto out;
 		default:
-			return(-EINVAL);
+			err = -EINVAL;
+			goto out;
 	}
 
-	/*
-	 *	Now ready to connect
-	 */
-	 
-	sk->state=TCP_CLOSE;
-	
-	/*  Find listening sock */
-	other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
-	if(other==NULL)
+	err = -EINVAL;
+	if (sk->state != TCP_CLOSE)
 		goto out;
 
-	/* create new sock for complete connection */
-	err = unix_create1(NULL, &newsk, PF_UNIX);
-	if (newsk == NULL)
+	/* Check that listener is in valid state. */
+	err = -ECONNREFUSED;
+	if (other == NULL || other->dead || other->state != TCP_LISTEN)
 		goto out;
 
-	/* Allocate skb for sending to listening sock */
-	skb=sock_alloc_send_skb(newsk, 0, 0, flags&O_NONBLOCK, &err);
-	if(skb==NULL)
-		/*
-		 * if it gives EAGAIN we should give back
-		 * EINPROGRESS. But this should not happen since the
-		 * socket should have some writespace left (it did not
-		 * allocate any memory until now)
-		 */
-		goto out_release;
+	err = -ENOMEM;
+	if (newsk == NULL || skb == NULL)
+		goto out;
 
 	UNIXCB(skb).attr = MSG_SYN;
 
@@ -715,7 +722,7 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	sk->state=TCP_ESTABLISHED;
 	/* Set credentials */
 	sk->peercred = other->peercred;
-	
+
 	/* set up newly created sock */
 	unix_peer(newsk)=sk;
 	unix_lock(newsk);
@@ -738,12 +745,16 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	other->ack_backlog++;
 	skb_queue_tail(&other->receive_queue,skb);
 	other->data_ready(other,0);		/* Wake up !	      */
-
+	unix_unlock(other);
 	return 0;
 
-out_release:
-	unix_destroy_socket(newsk);
 out:
+	if (skb)
+		kfree_skb(skb);
+	if (newsk)
+		unix_destroy_socket(newsk);
+	if (other)
+		unix_unlock(other);
 	return err;
 }
 
@@ -803,13 +814,14 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 			kfree_skb(skb);
 			continue;
 		}
-		break;
+		tsk = skb->sk;
+		sk->ack_backlog--;
+		kfree_skb(skb);
+		if (!tsk->dead) 
+			break;
+		unix_release_sock(tsk);
 	}
 
-	tsk=skb->sk;
-	sk->ack_backlog--;
-	unix_unlock(sk);	/* No longer locked to master	   */
-	kfree_skb(skb);
 
 	/* attach accepted sock to socket */
 	newsock->state=SS_CONNECTED;
@@ -1015,8 +1027,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		size=len-sent;
 
 		/* Keep two messages in the pipe so it schedules better */
-		if (size > (sk->sndbuf - sizeof(struct sk_buff)) / 2)
-			size = (sk->sndbuf - sizeof(struct sk_buff)) / 2;
+		if (size > sk->sndbuf/2 - 16)
+			size = sk->sndbuf/2 - 16;
 
 		/*
 		 *	Keep to page sized kmalloc()'s as various people
@@ -1024,8 +1036,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		 *	much.
 		 */
 
-		if (size > 3500)
-			limit = 3500;	/* Fall back to a page if we can't grab a big buffer this instant */
+		if (size > 4096-16)
+			limit = 4096-16; /* Fall back to a page if we can't grab a big buffer this instant */
 		else
 			limit = 0;	/* Otherwise just grab and wait */
 
@@ -1056,8 +1068,12 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		if (scm->fp)
 			unix_attach_fds(scm, skb);
 
-		/* N.B. this could fail with -EFAULT */
-		memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size);
+		if (memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size)) {
+			kfree_skb(skb);
+			if (sent)
+				goto out;
+			return -EFAULT;
+		}
 
 		other=unix_peer(sk);
 
@@ -1247,8 +1263,12 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		}
 
 		chunk = min(skb->len, size);
-		/* N.B. This could fail with -EFAULT */
-		memcpy_toiovec(msg->msg_iov, skb->data, chunk);
+		if (memcpy_toiovec(msg->msg_iov, skb->data, chunk)) {
+			skb_queue_head(&sk->receive_queue, skb);
+			if (copied == 0)
+				copied = -EFAULT;
+			break;
+		}
 		copied += chunk;
 		size -= chunk;
 
@@ -1299,28 +1319,20 @@ static int unix_shutdown(struct socket *sock, int mode)
 	struct sock *sk = sock->sk;
 	unix_socket *other=unix_peer(sk);
 	
-	mode++;
+	mode = (mode+1)&(RCV_SHUTDOWN|SEND_SHUTDOWN);
 
-	if (mode&SEND_SHUTDOWN)
-	{
-		sk->shutdown|=SEND_SHUTDOWN;
+	if (mode) {
+		sk->shutdown |= mode;
 		sk->state_change(sk);
-		if(other && sk->type == SOCK_STREAM && other->state != TCP_LISTEN)
-		{
-			if (unix_our_peer(sk, other))
-				other->shutdown|=RCV_SHUTDOWN;
-			other->state_change(other);
-		}
-	}
-	other=unix_peer(sk);
-	if(mode&RCV_SHUTDOWN)
-	{
-		sk->shutdown|=RCV_SHUTDOWN;
-		sk->state_change(sk);
-		if(other && sk->type != SOCK_DGRAM && other->state != TCP_LISTEN)
-		{
-			if (unix_our_peer(sk, other))
-				other->shutdown|=SEND_SHUTDOWN;
+		if (other && sk->type == SOCK_STREAM &&
+		    unix_our_peer(sk, other)) {
+			int peer_mode = 0;
+
+			if (mode&RCV_SHUTDOWN)
+				peer_mode |= SEND_SHUTDOWN;
+			if (mode&SEND_SHUTDOWN)
+				peer_mode |= RCV_SHUTDOWN;
+			other->shutdown |= mode;
 			other->state_change(other);
 		}
 	}
@@ -1388,10 +1400,19 @@ static unsigned int unix_poll(struct file * file, struct socket *sock, poll_tabl
 	 * we set writable also when the other side has shut down the
 	 * connection. This prevents stuck sockets.
 	 */
-	if (sk->sndbuf - atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
+	if (sk->sndbuf - (int)atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
 			mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 
 	return mask;
+}
+
+static void unix_stream_write_space(struct sock *sk)
+{
+	if (sk->dead)  
+		return;
+	wake_up_interruptible(sk->sleep);
+	if (sk->sndbuf - (int)atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
+		sock_wake_async(sk->socket, 2);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -1433,7 +1454,7 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 		}
 		buffer[len++]='\n';
 		
-		pos+=len;
+		pos = begin + len;
 		if(pos<offset)
 		{
 			len=0;

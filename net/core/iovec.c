@@ -215,7 +215,7 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata, struct iovec *iov,
 			partial_cnt = 0;
 		}
 
-		if (len - copy > 0)
+		if (len > copy)
 		{
 			partial_cnt = copy % 4;
 			if (partial_cnt)

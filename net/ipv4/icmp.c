@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.44 1998/06/16 04:38:27 davem Exp $
+ *	Version: $Id: icmp.c,v 1.45 1998/08/26 12:03:35 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -47,6 +47,9 @@
  *					into the dest entry and use a token
  *					bucket filter (thanks to ANK). Make
  *					the rates sysctl configurable.
+ *		Yu Tianli	:	Fixed two ugly bugs in icmp_send
+ *					- IP option length was accounted wrongly
+ *					- ICMP header length was not accounted at all.
  *
  * RFC1122 (Host Requirements -- Comm. Layer) Status:
  * (boy, are there a lot of rules for ICMP)
@@ -363,7 +366,7 @@ int xrlim_allow(struct dst_entry *dst, int timeout)
 
 	now = jiffies;
 	dst->rate_tokens += now - dst->rate_last;
-	if (dst->rate_tokens > 6*timeout)
+	if (dst->rate_tokens > XRLIM_BURST_FACTOR*timeout)
 		dst->rate_tokens = XRLIM_BURST_FACTOR*timeout;
 	if (dst->rate_tokens >= timeout) {
 		dst->rate_tokens -= timeout;
@@ -537,7 +540,17 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	/*
 	 *	Construct source address and options.
 	 */
-	
+
+#ifdef CONFIG_IP_ROUTE_NAT	
+	/*
+	 *	Restore original addresses if packet has been translated.
+	 */
+	if (rt->rt_flags&RTCF_NAT && IPCB(skb_in)->flags&IPSKB_TRANSLATED) {
+		iph->daddr = rt->key.dst;
+		iph->saddr = rt->key.src;
+	}
+#endif
+
 	saddr = iph->daddr;
 	if (!(rt->rt_flags & RTCF_LOCAL))
 		saddr = 0;
@@ -587,8 +600,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	room = rt->u.dst.pmtu;
 	if (room > 576)
 		room = 576;
-	room -= sizeof(struct iphdr) - icmp_param.replyopts.optlen;
-	
+	room -= sizeof(struct iphdr) + icmp_param.replyopts.optlen;
+	room -= sizeof(struct icmphdr);
+
 	icmp_param.data_len=(iph->ihl<<2)+skb_in->len;
 	if (icmp_param.data_len > room)
 		icmp_param.data_len = room;

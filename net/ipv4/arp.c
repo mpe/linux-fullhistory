@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.67 1998/06/19 13:22:31 davem Exp $
+ * Version:	$Id: arp.c,v 1.70 1998/08/26 12:03:18 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -760,7 +760,7 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 		r->arp_flags |= ATF_COM;
 	if (dev == NULL) {
 		struct rtable * rt;
-		if ((err = ip_route_output(&rt, ip, 0, 1, 0)) != 0)
+		if ((err = ip_route_output(&rt, ip, 0, RTO_ONLINK, 0)) != 0)
 			return err;
 		dev = rt->u.dst.dev;
 		ip_rt_put(rt);
@@ -843,11 +843,21 @@ int arp_req_delete(struct arpreq *r, struct device * dev)
 		return -EINVAL;
 	}
 
+	if (dev == NULL) {
+		struct rtable * rt;
+		if ((err = ip_route_output(&rt, ip, 0, RTO_ONLINK, 0)) != 0)
+			return err;
+		dev = rt->u.dst.dev;
+		ip_rt_put(rt);
+		if (!dev)
+			return -EINVAL;
+	}
 	err = -ENXIO;
 	start_bh_atomic();
 	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 0);
 	if (neigh) {
-		err = neigh_update(neigh, NULL, NUD_FAILED, 1, 0);
+		if (neigh->nud_state&~NUD_NOARP)
+			err = neigh_update(neigh, NULL, NUD_FAILED, 1, 0);
 		neigh_release(neigh);
 	}
 	end_bh_atomic();
@@ -867,7 +877,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 	switch(cmd) {
 		case SIOCDARP:
 		case SIOCSARP:
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 		case SIOCGARP:
 			err = copy_from_user(&r, arg, sizeof(struct arpreq));
@@ -899,10 +909,8 @@ int arp_ioctl(unsigned int cmd, void *arg)
 		err = -EINVAL;
 		if ((r.arp_flags & ATF_COM) && r.arp_ha.sa_family != dev->type)
 			goto out;
-	} else if (cmd != SIOCSARP) {
-		/* dev has not been set ... */
-		printk(KERN_ERR "arp_ioctl: invalid, null device\n");
-		err = -EINVAL;
+	} else if (cmd == SIOCGARP) {
+		err = -ENODEV;
 		goto out;
 	}
 
@@ -911,7 +919,6 @@ int arp_ioctl(unsigned int cmd, void *arg)
 	        err = arp_req_delete(&r, dev);
 		break;
 	case SIOCSARP:
-		/* This checks for dev == NULL */
 		err = arp_req_set(&r, dev);
 		break;
 	case SIOCGARP:

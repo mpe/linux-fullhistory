@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.121 1998/07/15 04:39:12 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.127 1998/08/26 12:04:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -50,6 +50,9 @@
  *		Andi Kleen:		Make sure we never ack data there is not
  *					enough room for. Also make this condition
  *					a fatal error if it might still happen.
+ *		Andi Kleen:		Add tcp_measure_rcv_mss to make 
+ *					connections with MSS<min(MTU,ann. MSS)
+ *					work without delayed acks. 
  */
 
 #include <linux/config.h>
@@ -214,7 +217,7 @@ extern __inline__ void tcp_replace_ts_recent(struct sock *sk, struct tcp_opt *tp
 
 #define PAWS_24DAYS	(HZ * 60 * 60 * 24 * 24)
 
-extern __inline__ int tcp_paws_discard(struct tcp_opt *tp, struct tcphdr *th, __u16 len)
+extern __inline__ int tcp_paws_discard(struct tcp_opt *tp, struct tcphdr *th, unsigned len)
 {
 	/* ts_recent must be younger than 24 days */
 	return (((jiffies - tp->ts_recent_stamp) >= PAWS_24DAYS) ||
@@ -346,9 +349,11 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 	  			switch(opcode) {
 				case TCPOPT_MSS:
 					if(opsize==TCPOLEN_MSS && th->syn) {
-						tp->in_mss = ntohs(*(__u16 *)ptr);
-						if (tp->in_mss == 0)
-							tp->in_mss = 536;
+						u16 in_mss = ntohs(*(__u16 *)ptr);
+						if (in_mss == 0)
+							in_mss = 536;
+						if (tp->mss_clamp > in_mss)
+							tp->mss_clamp = in_mss;
 					}
 					break;
 				case TCPOPT_WINDOW:
@@ -863,7 +868,7 @@ void tcp_timewait_kill(struct tcp_tw_bucket *tw)
  * reconnects and SYN/RST bits being set in the TCP header.
  */
 int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
-			       struct tcphdr *th, void *opt, __u16 len)
+			       struct tcphdr *th, unsigned len)
 {
 	/*	RFC 1122:
 	 *	"When a connection is [...] on TIME-WAIT state [...]
@@ -893,7 +898,7 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 			return 0;
 		skb_set_owner_r(skb, sk);
 		af_specific = sk->tp_pinfo.af_tcp.af_specific;
-		if(af_specific->conn_request(sk, skb, opt, isn) < 0)
+		if(af_specific->conn_request(sk, skb, isn) < 0)
 			return 1; /* Toss a reset back. */
 		return 0; /* Discard the frame. */
 	}
@@ -1309,7 +1314,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			tp->delayed_acks++;
 
 			/* Tiny-grams with PSH set make us ACK quickly. */
-			if(skb->h.th->psh && (skb->len < (sk->mss >> 1)))
+			if(skb->h.th->psh && (skb->len < (tp->mss_cache >> 1)))
 				tp->ato = HZ/50;
 		}
 		/* This may have eaten into a SACK block. */
@@ -1429,7 +1434,6 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk, unsigned int len)
 		}
 	}
 
-	/* We no longer have anyone receiving data on this connection. */
 	tcp_data_queue(sk, skb);
 
 	if (before(tp->rcv_nxt, tp->copied_seq)) {
@@ -1464,6 +1468,26 @@ static void tcp_data_snd_check(struct sock *sk)
 	}
 }
 
+/* 
+ * Adapt the MSS value used to make delayed ack decision to the 
+ * real world. 
+ */ 
+static __inline__ void tcp_measure_rcv_mss(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	unsigned int len = skb->len, lss; 
+
+	if (len > tp->rcv_mss) 
+		tp->rcv_mss = len; 
+	lss = tp->last_seg_size; 
+	tp->last_seg_size = 0; 
+	if (len >= 536) {
+		if (len == lss) 
+			tp->rcv_mss = len; 
+		tp->last_seg_size = len; 
+	}
+}
+
 /*
  * Check if sending an ack is needed.
  */
@@ -1486,7 +1510,7 @@ static __inline__ void __tcp_ack_snd_check(struct sock *sk)
 	 */
 
 	    /* Two full frames received or... */
-	if (((tp->rcv_nxt - tp->rcv_wup) >= sk->mss * MAX_DELAY_ACK) ||
+	if (((tp->rcv_nxt - tp->rcv_wup) >= tp->rcv_mss * MAX_DELAY_ACK) ||
 	    /* We will update the window "significantly" or... */
 	    tcp_raise_window(sk) ||
 	    /* We entered "quick ACK" mode or... */
@@ -1595,11 +1619,14 @@ static int prune_queue(struct sock *sk)
 
 	SOCK_DEBUG(sk, "prune_queue: c=%x\n", tp->copied_seq);
 
+	net_statistics.PruneCalled++; 
+
 	/* First Clean the out_of_order queue. */
 	/* Start with the end because there are probably the least
 	 * useful packets (crossing fingers).
 	 */
 	while ((skb = __skb_dequeue_tail(&tp->out_of_order_queue))) { 
+		net_statistics.OfoPruned += skb->len; 
 		kfree_skb(skb);
 		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf)
 			return 0;
@@ -1620,6 +1647,9 @@ static int prune_queue(struct sock *sk)
 				   tp->last_ack_sent);
 			return -1;
 		}
+
+		net_statistics.RcvPruned += skb->len; 
+
 		__skb_unlink(skb, skb->list);
 		tp->rcv_nxt = TCP_SKB_CB(skb)->seq;
 		SOCK_DEBUG(sk, "prune_queue: removing %x-%x (c=%x)\n",
@@ -1633,7 +1663,7 @@ static int prune_queue(struct sock *sk)
 }
 
 int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
-			struct tcphdr *th, __u16 len)
+			struct tcphdr *th, unsigned len)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	int queued = 0;
@@ -1704,7 +1734,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				goto discard;
 			}
 			
-			skb_pull(skb,th->doff*4);
+			__skb_pull(skb,th->doff*4);
+
+			tcp_measure_rcv_mss(sk, skb); 
 
 			/* DO NOT notify forward progress here.
 			 * It saves dozen of CPU instructions in fast path. --ANK
@@ -1719,7 +1751,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			tcp_delack_estimator(tp);
 
 			/* Tiny-grams with PSH set make us ACK quickly. */
-			if(th->psh && (skb->len < (sk->mss >> 1)))
+			if(th->psh && (skb->len < (tp->mss_cache >> 1)))
 				tp->ato = HZ/50;
 
 			tp->delayed_acks++;
@@ -1766,6 +1798,25 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	/* step 7: process the segment text */
 	queued = tcp_data(skb, sk, len);
+
+	/* This must be after tcp_data() does the skb_pull() to
+	 * remove the header size from skb->len.
+	 *
+	 * Dave!!! Phrase above (and all about rcv_mss) has 
+	 * nothing to do with reality. rcv_mss must measure TOTAL
+	 * size, including sacks, IP options etc. Hence, measure_rcv_mss
+	 * must occure before pulling etc, otherwise it will flap
+	 * like hell. Even putting it before tcp_data is wrong,
+	 * it should use skb->tail - skb->nh.raw instead.
+	 *					--ANK (980805)
+	 * 
+	 * BTW I broke it. Now all TCP options are handled equally
+	 * in mss_clamp calculations (i.e. ignored, rfc1122),
+	 * and mss_cache does include all of them (i.e. tstamps)
+	 * except for sacks, to calulate effective mss faster.
+	 * 					--ANK (980805)
+	 */
+	tcp_measure_rcv_mss(sk, skb); 
 
 	/* Be careful, tcp_data() may have put this into TIME_WAIT. */
 	if(sk->state != TCP_CLOSE) {
@@ -1853,7 +1904,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
  */
 	
 int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
-			  struct tcphdr *th, void *opt, __u16 len)
+			  struct tcphdr *th, unsigned len)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	int queued = 0;
@@ -1868,7 +1919,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			return 1;
 		
 		if(th->syn) {
-			if(tp->af_specific->conn_request(sk, skb, opt, 0) < 0)
+			if(tp->af_specific->conn_request(sk, skb, 0) < 0)
 				return 1;
 
 			/* Now we have several options: In theory there is 
@@ -1961,28 +2012,6 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			/* Can't be earlier, doff would be wrong. */
 			tcp_send_ack(sk);
 
-			/* Check for the case where we tried to advertise
-			 * a window including timestamp options, but did not
-			 * end up using them for this connection.
-			 */
-			if((tp->tstamp_ok == 0) && sysctl_tcp_timestamps)
-				sk->mss += TCPOLEN_TSTAMP_ALIGNED;
-			
-			/* Now limit it if the other end negotiated a smaller
-			 * value.
-			 */
-			if (tp->in_mss) {
-				int real_mss = tp->in_mss;
-
-				/* We store MSS locally with the timestamp bytes
-				 * subtracted, TCP's advertise it with them
-				 * included.  Account for this fact.
-				 */
-				if(tp->tstamp_ok)
-					real_mss -= TCPOLEN_TSTAMP_ALIGNED;
-				sk->mss = min(sk->mss, real_mss);
-			}
-
 			sk->dport = th->source;
 			tp->copied_seq = tp->rcv_nxt;
 
@@ -1990,9 +2019,6 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				sk->state_change(sk);
 				sock_wake_async(sk->socket, 0);
 			}
-
-			/* Drop through step 6 */
-			goto step6;
 		} else {
 			if(th->syn && !th->rst) {
 				/* The previous version of the code
@@ -2017,11 +2043,20 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				tp->snd_wl1 = TCP_SKB_CB(skb)->seq;
 				
 				tcp_send_synack(sk);
-				goto discard;
-			}		
-
+			} else
+				break; 
 		}
-		break;
+
+		/* tp->tcp_header_len and tp->mss_clamp
+		   probably changed, synchronize mss.
+		   */
+		tcp_sync_mss(sk, tp->pmtu_cookie);
+		tp->rcv_mss = tp->mss_cache;
+
+		if (sk->state == TCP_SYN_RECV)
+			goto discard;
+		
+		goto step6; 
 	}
 
 	/*   Parse the tcp_options present on this header.
@@ -2167,6 +2202,11 @@ step6:
 		
 	case TCP_ESTABLISHED: 
 		queued = tcp_data(skb, sk, len);
+
+		/* This must be after tcp_data() does the skb_pull() to
+		 * remove the header size from skb->len.
+		 */
+		tcp_measure_rcv_mss(sk, skb); 
 		break;
 	}
 

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.27 1998/03/08 05:56:57 davem Exp $
+ *	$Id: sit.c,v 1.28 1998/08/26 12:05:22 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -434,7 +434,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		ip_rt_put(rt);
 		goto tx_error;
 	}
-	if (mtu >= 576) {
+	if (mtu >= IPV6_MIN_MTU) {
 		if (skb->dst && mtu < skb->dst->pmtu) {
 			struct rt6_info *rt6 = (struct rt6_info*)skb->dst;
 			if (mtu < rt6->u.dst.pmtu) {
@@ -475,6 +475,8 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 			tunnel->recursion--;
 			return 0;
 		}
+		if (skb->sk)
+			skb_set_owner_w(new_skb, skb->sk);
 		dev_kfree_skb(skb);
 		skb = new_skb;
 	}
@@ -491,7 +493,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	iph 			=	skb->nh.iph;
 	iph->version		=	4;
 	iph->ihl		=	sizeof(struct iphdr)>>2;
-	if (mtu > 576)
+	if (mtu > IPV6_MIN_MTU)
 		iph->frag_off	=	__constant_htons(IP_DF);
 	else
 		iph->frag_off	=	0;
@@ -608,7 +610,7 @@ static struct net_device_stats *ipip6_tunnel_get_stats(struct device *dev)
 
 static int ipip6_tunnel_change_mtu(struct device *dev, int new_mtu)
 {
-	if (new_mtu < 576 || new_mtu > 0xFFF8 - sizeof(struct iphdr))
+	if (new_mtu < IPV6_MIN_MTU || new_mtu > 0xFFF8 - sizeof(struct iphdr))
 		return -EINVAL;
 	dev->mtu = new_mtu;
 	return 0;
@@ -662,8 +664,8 @@ static int ipip6_tunnel_init(struct device *dev)
 	if (tdev) {
 		dev->hard_header_len = tdev->hard_header_len + sizeof(struct iphdr);
 		dev->mtu = tdev->mtu - sizeof(struct iphdr);
-		if (dev->mtu < 576)
-			dev->mtu = 576;
+		if (dev->mtu < IPV6_MIN_MTU)
+			dev->mtu = IPV6_MIN_MTU;
 	}
 	dev->iflink = tunnel->parms.link;
 

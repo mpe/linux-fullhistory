@@ -21,6 +21,10 @@ struct flowi {
 			struct in6_addr *	saddr;
 		} ip6_u;
 	} nl_u;
+#define fl6_dst		nl_u.ip6_u.daddr
+#define fl6_src		nl_u.ip6_u.saddr
+#define fl4_dst		nl_u.ip4_u.daddr
+#define fl4_src		nl_u.ip4_u.saddr
 
 	int	oif;
 

@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.35 1998/05/13 06:23:24 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.36 1998/08/26 12:04:03 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -55,6 +55,8 @@
 #include <net/raw.h>
 #include <linux/notifier.h>
 #include <linux/if_arp.h>
+#include <linux/ip_fw.h>
+#include <linux/firewall.h>
 #include <net/ipip.h>
 #include <net/checksum.h>
 
@@ -1044,18 +1046,18 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
 
 	dev = rt->u.dst.dev;
 
-	if (skb->len+encap > dev->mtu && (ntohs(iph->frag_off) & IP_DF)) {
+	if (skb->len+encap > rt->u.dst.pmtu /* && (ntohs(iph->frag_off) & IP_DF) */) {
+		/* Do not fragment multicasts. Alas, IPv4 does not
+		   allow to send ICMP, so that packets will disappear
+		   to blackhole.
+		 */
+
 		ip_statistics.IpFragFails++;
 		ip_rt_put(rt);
 		return;
 	}
 
 	encap += dev->hard_header_len;
-
-	if (skb->len+encap > 65534) {
-		ip_rt_put(rt);
-		return;
-	}
 
 	if (skb_headroom(skb) < encap || skb_cloned(skb) || !last)
 		skb2 = skb_realloc_headroom(skb, (encap + 15)&~15);
@@ -1076,17 +1078,36 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
 
 	dst_release(skb2->dst);
 	skb2->dst = &rt->u.dst;
-
 	iph = skb2->nh.iph;
 	ip_decrease_ttl(iph);
 
+#ifdef CONFIG_FIREWALL
+	if (call_fw_firewall(PF_INET, vif->dev, skb2->nh.iph, NULL, &skb2) < FW_ACCEPT) {
+		kfree_skb(skb2);
+		return;
+	}
+	if (call_out_firewall(PF_INET, vif->dev, skb2->nh.iph, NULL, &skb2) < FW_ACCEPT) {
+		kfree_skb(skb2);
+		return;
+	}
+#endif
 	if (vif->flags & VIFF_TUNNEL) {
 		ip_encap(skb2, vif->local, vif->remote);
+#ifdef CONFIG_FIREWALL
+		/* Double output firewalling on tunnels: one is on tunnel
+		   another one is on real device.
+		 */
+		if (call_out_firewall(PF_INET, dev, skb2->nh.iph, NULL, &skb2) < FW_ACCEPT) {
+			kfree_skb(skb2);
+			return;
+		}
+#endif
 		((struct ip_tunnel *)vif->dev->priv)->stat.tx_packets++;
 		((struct ip_tunnel *)vif->dev->priv)->stat.tx_bytes+=skb2->len;
 	}
 
 	IPCB(skb2)->flags |= IPSKB_FORWARDED;
+
 
 	/*
 	 * RFC1584 teaches, that DVMRP/PIM router must deliver packets locally
@@ -1351,21 +1372,12 @@ ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtmsg *rtm)
 	struct rtnexthop *nhp;
 	struct device *dev = vif_table[c->mfc_parent].dev;
 	u8 *b = skb->tail;
-
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	if (dev) {
-		u8 *o = skb->tail;
-		RTA_PUT(skb, RTA_IIF, 4, &dev->ifindex);
-		rtm->rtm_optlen += skb->tail - o;
-	}
-#else
 	struct rtattr *mp_head;
 
 	if (dev)
 		RTA_PUT(skb, RTA_IIF, 4, &dev->ifindex);
 
 	mp_head = (struct rtattr*)skb_put(skb, RTA_LENGTH(0));
-#endif
 
 	for (ct = c->mfc_minvif; ct < c->mfc_maxvif; ct++) {
 		if (c->mfc_ttls[ct] < 255) {
@@ -1376,15 +1388,10 @@ ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtmsg *rtm)
 			nhp->rtnh_hops = c->mfc_ttls[ct];
 			nhp->rtnh_ifindex = vif_table[ct].dev->ifindex;
 			nhp->rtnh_len = sizeof(*nhp);
-#ifdef CONFIG_RTNL_OLD_IFINFO
-			rtm->rtm_nhs++;
-#endif
 		}
 	}
-#ifndef CONFIG_RTNL_OLD_IFINFO
 	mp_head->rta_type = RTA_MULTIPATH;
 	mp_head->rta_len = skb->tail - (u8*)mp_head;
-#endif
 	rtm->rtm_type = RTN_MULTICAST;
 	return 1;
 

@@ -537,7 +537,7 @@ insert:
 	if (s == NULL)
 		goto errout;
 	memset(s, 0, sizeof(*s));
-	memcpy(s->dst, dst, sizeof(*dst));
+	memcpy(s->dst, dst, sizeof(s->dst));
 	s->dpi = pinfo->dpi;
 	s->protocol = pinfo->protocol;
 	s->tunnelid = pinfo->tunnelid;
@@ -590,7 +590,6 @@ static void rsvp_walk(struct tcf_proto *tp, struct tcf_walker *arg)
 static int rsvp_dump(struct tcf_proto *tp, unsigned long fh,
 		     struct sk_buff *skb, struct tcmsg *t)
 {
-	struct rsvp_head *head = tp->root;
 	struct rsvp_filter *f = (struct rsvp_filter*)fh;
 	struct rsvp_session *s;
 	unsigned char	 *b = skb->tail;

@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.22 1998/05/08 21:06:26 davem Exp $
+ *	Version: $Id: devinet.c,v 1.23 1998/08/26 12:03:21 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -533,8 +533,6 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 				inet_del_ifa(in_dev, ifap, 0);
 				ifa->ifa_broadcast = 0;
 				ifa->ifa_anycast = 0;
-				ifa->ifa_prefixlen = 32;
-				ifa->ifa_mask = inet_make_mask(32);
 			}
 
 			ifa->ifa_address =
@@ -545,6 +543,9 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 				ifa->ifa_mask = inet_make_mask(ifa->ifa_prefixlen);
 				if ((dev->flags&IFF_BROADCAST) && ifa->ifa_prefixlen < 31)
 					ifa->ifa_broadcast = ifa->ifa_address|~ifa->ifa_mask;
+			} else {
+				ifa->ifa_prefixlen = 32;
+				ifa->ifa_mask = inet_make_mask(32);
 			}
 			ret = inet_set_ifa(dev, ifa);
 			break;
@@ -702,6 +703,16 @@ static int inetdev_event(struct notifier_block *this, unsigned long event, void 
 	case NETDEV_UNREGISTER:
 		inetdev_destroy(in_dev);
 		break;
+	case NETDEV_CHANGENAME:
+		if (in_dev->ifa_list) {
+			struct in_ifaddr *ifa;
+			for (ifa = in_dev->ifa_list; ifa; ifa = ifa->ifa_next)
+				memcpy(ifa->ifa_label, dev->name, IFNAMSIZ);
+			/* Do not notify about label change, this event is
+			   not interesting to applications using netlink.
+			 */
+		}
+		break;
 	}
 
 	return NOTIFY_DONE;
@@ -716,7 +727,7 @@ struct notifier_block ip_netdev_notifier={
 #ifdef CONFIG_RTNETLINK
 
 static int inet_fill_ifaddr(struct sk_buff *skb, struct in_ifaddr *ifa,
-			    pid_t pid, u32 seq, int event)
+			    u32 pid, u32 seq, int event)
 {
 	struct ifaddrmsg *ifm;
 	struct nlmsghdr  *nlh;
@@ -729,7 +740,7 @@ static int inet_fill_ifaddr(struct sk_buff *skb, struct in_ifaddr *ifa,
 	ifm->ifa_flags = ifa->ifa_flags|IFA_F_PERMANENT;
 	ifm->ifa_scope = ifa->ifa_scope;
 	ifm->ifa_index = ifa->ifa_dev->dev->ifindex;
-	if (ifa->ifa_prefixlen)
+	if (ifa->ifa_address)
 		RTA_PUT(skb, IFA_ADDRESS, 4, &ifa->ifa_address);
 	if (ifa->ifa_local)
 		RTA_PUT(skb, IFA_LOCAL, 4, &ifa->ifa_local);

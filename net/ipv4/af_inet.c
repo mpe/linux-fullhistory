@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.74 1998/05/08 21:06:24 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.75 1998/08/26 12:03:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -177,6 +177,8 @@ static __inline__ void kill_sk_now(struct sock *sk)
 	if(sk->opt)
 		kfree(sk->opt);
 	dst_release(sk->dst_cache);
+	if (atomic_read(&sk->omem_alloc))
+		printk(KERN_DEBUG "kill_sk_now: optmem leakage (%d bytes) detected.\n", atomic_read(&sk->omem_alloc));
 	sk_free(sk);
 }
 
@@ -576,6 +578,24 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr * uaddr,
 	return(0);
 }
 
+static void inet_wait_for_connect(struct sock *sk)
+{
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(sk->sleep, &wait);
+	current->state = TASK_INTERRUPTIBLE;
+	while (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
+		if (signal_pending(current))
+			break;
+		if (sk->err)
+			break;
+		schedule();
+		current->state = TASK_INTERRUPTIBLE;
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(sk->sleep, &wait);
+}
+
 /*
  *	Connect to a remote host. There is regrettably still a little
  *	TCP 'magic' in here.
@@ -623,6 +643,13 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK)) 
 	  	return (-EINPROGRESS);
 
+#if 1
+	if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
+		inet_wait_for_connect(sk);
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+	}
+#else
 	cli();
 	while(sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
 		interruptible_sleep_on(sk->sleep);
@@ -639,6 +666,7 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 		}
 	}
 	sti();
+#endif
 
 	sock->state = SS_CONNECTED;
 	if ((sk->state != TCP_ESTABLISHED) && sk->err) {
@@ -876,7 +904,6 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case FIOGETOWN:
 		case SIOCGPGRP:
 			return put_user(sk->proc, (int *)arg);
-			return(0);			
 		case SIOCGSTAMP:
 			if(sk->stamp.tv_sec==0)
 				return -ENOENT;

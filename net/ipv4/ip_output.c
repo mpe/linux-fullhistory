@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.59 1998/07/15 05:05:15 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.61 1998/08/26 12:03:54 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -171,14 +171,7 @@ int ip_mc_output(struct sk_buff *skb)
 	 */
 
 	if (rt->rt_flags&RTCF_MULTICAST && (!sk || sk->ip_mc_loop)) {
-#ifndef CONFIG_IP_MROUTE
-#if 1
-		/* It should never occur. Delete it eventually. --ANK */
-		if (!(rt->rt_flags&RTCF_LOCAL) || (dev->flags&IFF_LOOPBACK))
-			printk(KERN_DEBUG "ip_mc_output (mc): it should never occur\n");
-		else
-#endif
-#else
+#ifdef CONFIG_IP_MROUTE
 		/* Small optimization: do not loopback not local frames,
 		   which returned after forwarding; they will be  dropped
 		   by ip_mr_input in any case.
@@ -199,15 +192,8 @@ int ip_mc_output(struct sk_buff *skb)
 		}
 	}
 
-	if (rt->rt_flags&RTCF_BROADCAST) {
-#if 1
-		/* It should never occur. Delete it eventually. --ANK */
-		if (!(rt->rt_flags&RTCF_LOCAL) || (dev->flags&IFF_LOOPBACK))
-			printk(KERN_DEBUG "ip_mc_output (brd): it should never occur!\n");
-		else
-#endif
+	if (rt->rt_flags&RTCF_BROADCAST)
 		dev_loopback_xmit(skb);
-	}
 
 	return ip_finish_output(skb);
 }
@@ -281,8 +267,6 @@ void ip_queue_xmit(struct sk_buff *skb)
 	iph->ihl      = 5;
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
-	if(sk->ip_pmtudisc == IP_PMTUDISC_WANT && !(rt->u.dst.mxlock & (1 << RTAX_MTU)))
-		iph->frag_off |= __constant_htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
 	iph->saddr    = rt->rt_src;
@@ -316,6 +300,8 @@ void ip_queue_xmit(struct sk_buff *skb)
 		kfree_skb(skb);
 		if (skb2 == NULL)
 			return;
+		if (sk)
+			skb_set_owner_w(skb, sk);
 		skb = skb2;
 		iph = skb->nh.iph;
 	}
@@ -326,6 +312,9 @@ void ip_queue_xmit(struct sk_buff *skb)
 	if (tot_len > rt->u.dst.pmtu)
 		goto fragment;
 
+	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT && !(rt->u.dst.mxlock & (1 << RTAX_MTU)))
+		iph->frag_off |= __constant_htons(IP_DF);
+
 	/* Add an IP checksum. */
 	ip_send_check(iph);
 
@@ -334,7 +323,15 @@ void ip_queue_xmit(struct sk_buff *skb)
 	return;
 
 fragment:
-	if ((iph->frag_off & htons(IP_DF)) != 0) {
+	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
+	    !(rt->u.dst.mxlock & (1 << RTAX_MTU)) &&
+	    tot_len > (iph->ihl<<2) + sizeof(struct tcphdr)+16) {
+		/* Reject packet ONLY if TCP might fragment
+		   it itself, if were careful enough.
+		   Test is not precise (f.e. it does not take sacks
+		   into account). Actually, tcp should make it. --ANK (980801)
+		 */
+		iph->frag_off |= __constant_htons(IP_DF);
 		printk(KERN_DEBUG "sending pkt_too_big to self\n");
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(rt->u.dst.pmtu));
@@ -701,7 +698,6 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 	unsigned int mtu, hlen, left, len; 
 	int offset;
 	int not_last_frag;
-	u16 dont_fragment;
 	struct rtable *rt = (struct rtable*)skb->dst;
 
 	dev = rt->u.dst.dev;
@@ -726,10 +722,14 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 	 *	The protocol doesn't seem to say what to do in the case that the
 	 *	frame + options doesn't fit the mtu. As it used to fall down dead
 	 *	in this case we were fortunate it didn't happen
+	 *
+	 *	It is impossible, because mtu>=68. --ANK (980801)
 	 */
 
+#ifdef CONFIG_NET_PARANOIA
 	if (mtu<8) 
 		goto fail;
+#endif
 
 	/*
 	 *	Fragment the datagram.
@@ -737,14 +737,6 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 
 	offset = (ntohs(iph->frag_off) & IP_OFFSET) << 3;
 	not_last_frag = iph->frag_off & htons(IP_MF);
-
-	/*
-	 *	Nice moment: if DF is set and we are here,
-	 *	it means that packet should be fragmented and
-	 *	DF is set on fragments. If it works,
-	 *	path MTU discovery can be done by ONE segment(!). --ANK
-	 */
-	dont_fragment = iph->frag_off & htons(IP_DF);
 
 	/*
 	 *	Keep copying data until we run out.
@@ -805,7 +797,7 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		 *	Fill in the new header fields.
 		 */
 		iph = skb2->nh.iph;
-		iph->frag_off = htons((offset >> 3))|dont_fragment;
+		iph->frag_off = htons((offset >> 3));
 
 		/* ANK: dirty, but effective trick. Upgrade options only if
 		 * the segment to be fragmented was THE FIRST (otherwise,
@@ -858,11 +850,6 @@ static int ip_reply_glue_bits(const void *dptr, char *to, unsigned int offset,
 	int len; 
 	int hdrflag = 1; 
 
-#if 0
-	printk("ip_reply_glue_bits: offset=%u,flen=%u iov[0].l=%u,iov[1].len=%u\n",
-	       offset,fraglen,dp->iov[0].iov_len,dp->iov[1].iov_len);
-#endif
-
 	iov = &dp->iov[0]; 
 	if (offset >= iov->iov_len) { 
 		offset -= iov->iov_len;
@@ -871,12 +858,6 @@ static int ip_reply_glue_bits(const void *dptr, char *to, unsigned int offset,
 	}
 	len = iov->iov_len - offset;
 	if (fraglen > len) { /* overlapping. */ 
-#if 1
-		if (iov > &dp->iov[0]) {
-			printk("frag too long! (o=%u,fl=%u)\n",offset,fraglen);
-			return -1;
-		}
-#endif
 		dp->csum = csum_partial_copy_nocheck(iov->iov_base+offset, to, len,
 					     dp->csum);
 		offset = 0;

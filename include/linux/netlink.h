@@ -16,8 +16,8 @@ struct sockaddr_nl
 {
 	sa_family_t	nl_family;	/* AF_NETLINK	*/
 	unsigned short	nl_pad;		/* zero		*/
-	__kernel_pid_t	nl_pid;		/* process pid	*/
-	unsigned	nl_groups;	/* multicast groups mask */
+	__u32		nl_pid;		/* process pid	*/
+       	__u32		nl_groups;	/* multicast groups mask */
 };
 
 struct nlmsghdr
@@ -26,7 +26,7 @@ struct nlmsghdr
 	__u16		nlmsg_type;	/* Message content */
 	__u16		nlmsg_flags;	/* Additional flags */
 	__u32		nlmsg_seq;	/* Sequence number */
-	__kernel_pid_t	nlmsg_pid;	/* Sending process PID */
+	__u32		nlmsg_pid;	/* Sending process PID */
 };
 
 /* Flags values */
@@ -64,7 +64,7 @@ struct nlmsghdr
 #define NLMSG_DATA(nlh)  ((void*)(((char*)nlh) + NLMSG_LENGTH(0)))
 #define NLMSG_NEXT(nlh,len)	 ((len) -= NLMSG_ALIGN((nlh)->nlmsg_len), \
 				  (struct nlmsghdr*)(((char*)(nlh)) + NLMSG_ALIGN((nlh)->nlmsg_len)))
-#define NLMSG_OK(nlh,len) ((nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && \
+#define NLMSG_OK(nlh,len) ((len) > 0 && (nlh)->nlmsg_len >= sizeof(struct nlmsghdr) && \
 			   (nlh)->nlmsg_len <= (len))
 #define NLMSG_PAYLOAD(nlh,len) ((nlh)->nlmsg_len - NLMSG_SPACE((len)))
 
@@ -86,10 +86,11 @@ struct nlmsgerr
 struct netlink_skb_parms
 {
 	struct ucred		creds;		/* Skb credentials	*/
-	pid_t			pid;
-	unsigned		groups;
-	pid_t			dst_pid;
-	unsigned		dst_groups;
+	__u32			pid;
+	__u32			groups;
+	__u32			dst_pid;
+	__u32			dst_groups;
+	kernel_cap_t		eff_cap;
 };
 
 #define NETLINK_CB(skb)		(*(struct netlink_skb_parms*)&((skb)->cb))
@@ -102,10 +103,10 @@ extern int netlink_post(int unit, struct sk_buff *skb);
 extern int init_netlink(void);
 extern struct sock *netlink_kernel_create(int unit, void (*input)(struct sock *sk, int len));
 extern void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err);
-extern int netlink_unicast(struct sock *ssk, struct sk_buff *skb, pid_t pid, int nonblock);
-extern void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, pid_t pid,
-			      unsigned group, int allocation);
-extern void netlink_set_err(struct sock *ssk, pid_t pid, unsigned group, int code);
+extern int netlink_unicast(struct sock *ssk, struct sk_buff *skb, __u32 pid, int nonblock);
+extern void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, __u32 pid,
+			      __u32 group, int allocation);
+extern void netlink_set_err(struct sock *ssk, __u32 pid, __u32 group, int code);
 
 /*
  *	skb should fit one page. This choice is good for headerless malloc.
@@ -125,28 +126,8 @@ struct netlink_callback
 	long		args[4];
 };
 
-#if 0
-
-void* nlmsg_broadcast(struct sock*, unsigned long type, int len, unsigned groups);
-struct skb_buff *nlmsg_alloc(unsigned long type, int len,
-			     unsigned long seq, unsigned long pid, int allocation);
-void __nlmsg_transmit(struct sock*, int allocation);
-
-extern __inline__ void nlmsg_release(struct sk_buff *skb)
-{
-	atomic_dec(skb->users);
-}
-
-extern __inline__ void nlmsg_transmit(struct sk_buff *sk, int allocation)
-{
-	if (sk->write_queue.qlen)
-		__nlmsg_transmit(sk, allocation);
-}
-
-#endif
-
 extern __inline__ struct nlmsghdr *
-__nlmsg_put(struct sk_buff *skb, pid_t pid, u32 seq, int type, int len)
+__nlmsg_put(struct sk_buff *skb, u32 pid, u32 seq, int type, int len)
 {
 	struct nlmsghdr *nlh;
 	int size = NLMSG_LENGTH(len);

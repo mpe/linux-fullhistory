@@ -4,6 +4,9 @@
 #include <linux/in6.h>
 #include <asm/byteorder.h>
 
+/* The latest drafts declared increase in minimal mtu up to 1280. */
+
+#define IPV6_MIN_MTU	1280
 
 /*
  *	Advanced API
@@ -58,8 +61,6 @@ struct ipv6_opt_hdr {
 #define ipv6_optlen(p)  (((p)->hdrlen+1) << 3)
 #endif
 
-
-
 /*
  *	routing header type 0 (used in cmsghdr struct)
  */
@@ -72,10 +73,11 @@ struct rt0_hdr {
 #define rt0_type		rt_hdr.type;
 };
 
-#ifdef __KERNEL__
-
 /*
  *	IPv6 fixed header
+ *
+ *	BEWARE, it is incorrect. The first 4 bits of flow_lbl
+ *	are glued to priority now, forming "class".
  */
 
 struct ipv6hdr {
@@ -87,7 +89,7 @@ struct ipv6hdr {
 				priority:4;
 #else
 #error	"Please fix <asm/byteorder.h>"
-#endif						
+#endif
 	__u8			flow_lbl[3];
 
 	__u16			payload_len;
@@ -98,27 +100,23 @@ struct ipv6hdr {
 	struct	in6_addr	daddr;
 };
 
-/*
- *	The length of this struct cannot be greater than the length of
- *	the proto_priv field in a sk_buff which is currently
- *	defined to be 16 bytes.
- *	Pointers take upto 8 bytes (sizeof(void *) is 8 on the alpha).
+#ifdef __KERNEL__
+
+/* 
+   This structure contains results of exthdrs parsing
+   as offsets from skb->nh.
  */
-struct ipv6_options 
+
+struct inet6_skb_parm
 {
-	/* length of extension headers   */
-
-	__u16			opt_flen;	/* after fragment hdr */
-	__u16			opt_nflen;	/* before fragment hdr */
-
-	/* 
-	 * protocol options 
-	 * usually carried in IPv6 extension headers
-	 */
-
-	struct ipv6_rt_hdr		*srcrt;	/* Routing Header */
+	int			iif;
+	__u16			ra;
+	__u16			hop;
+	__u16			auth;
+	__u16			dst0;
+	__u16			srcrt;
+	__u16			dst1;
 };
-
 
 #endif
 

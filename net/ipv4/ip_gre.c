@@ -684,7 +684,7 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	else if (skb->protocol == __constant_htons(ETH_P_IPV6)) {
 		struct rt6_info *rt6 = (struct rt6_info*)skb->dst;
 
-		if (rt6 && mtu < rt6->u.dst.pmtu && mtu >= 576) {
+		if (rt6 && mtu < rt6->u.dst.pmtu && mtu >= IPV6_MIN_MTU) {
 			if ((tunnel->parms.iph.daddr && !MULTICAST(tunnel->parms.iph.daddr)) ||
 			    rt6->rt6i_dst.plen == 128) {
 				rt6->rt6i_flags |= RTF_MODIFIED;
@@ -692,7 +692,7 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 			}
 		}
 
-		if (mtu >= 576 && mtu < skb->len - tunnel->hlen + gre_hlen) {
+		if (mtu >= IPV6_MIN_MTU && mtu < skb->len - tunnel->hlen + gre_hlen) {
 			icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
 			ip_rt_put(rt);
 			goto tx_error;
@@ -722,6 +722,8 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 			tunnel->recursion--;
 			return 0;
 		}
+		if (skb->sk)
+			skb_set_owner_w(new_skb, skb->sk);
 		dev_kfree_skb(skb);
 		skb = new_skb;
 	}

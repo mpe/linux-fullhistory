@@ -5,7 +5,6 @@
 #include <linux/netlink.h>
 
 #define RTNL_DEBUG 1
-/* #define CONFIG_RTNL_OLD_IFINFO 1 */
 
 
 /****
@@ -66,14 +65,14 @@ struct rtattr
 
 #define RTA_ALIGNTO	4
 #define RTA_ALIGN(len) ( ((len)+RTA_ALIGNTO-1) & ~(RTA_ALIGNTO-1) )
-#define RTA_OK(rta,len) ((rta)->rta_len >= sizeof(struct rtattr) && \
+#define RTA_OK(rta,len) ((len) > 0 && (rta)->rta_len >= sizeof(struct rtattr) && \
 			 (rta)->rta_len <= (len))
 #define RTA_NEXT(rta,attrlen)	((attrlen) -= RTA_ALIGN((rta)->rta_len), \
 				 (struct rtattr*)(((char*)(rta)) + RTA_ALIGN((rta)->rta_len)))
 #define RTA_LENGTH(len)	(RTA_ALIGN(sizeof(struct rtattr)) + (len))
 #define RTA_SPACE(len)	RTA_ALIGN(RTA_LENGTH(len))
 #define RTA_DATA(rta)   ((void*)(((char*)(rta)) + RTA_LENGTH(0)))
-#define RTA_PAYLOAD(rta) ((rta)->rta_len - RTA_LENGTH(0))
+#define RTA_PAYLOAD(rta) ((int)((rta)->rta_len) - RTA_LENGTH(0))
 
 
 
@@ -91,18 +90,9 @@ struct rtmsg
 
 	unsigned char		rtm_table;	/* Routing table id */
 	unsigned char		rtm_protocol;	/* Routing protocol; see below	*/
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	unsigned char		rtm_nhs;	/* Number of nexthops */
-#else
 	unsigned char		rtm_scope;	/* See below */	
-#endif
 	unsigned char		rtm_type;	/* See below	*/
 
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	unsigned short		rtm_optlen;	/* Byte length of rtm_opt */
-	unsigned char		rtm_scope;	/* See below */	
-	unsigned char		rtm_whatsit;	/* Unused byte */
-#endif
 	unsigned		rtm_flags;
 };
 
@@ -176,9 +166,6 @@ enum rt_scope_t
 #define RTM_F_NOTIFY		0x100	/* Notify user of route change	*/
 #define RTM_F_CLONED		0x200	/* This route is cloned		*/
 #define RTM_F_EQUALIZE		0x400	/* Multipath equalizer: NI	*/
-#ifdef CONFIG_RTNL_OLD_IFINFO
-#define RTM_F_NOPMTUDISC	0x800	/* Do not make PMTU discovery	*/
-#endif
 
 /* Reserved table identifiers */
 
@@ -206,17 +193,10 @@ enum rtattr_type_t
 	RTA_GATEWAY,
 	RTA_PRIORITY,
 	RTA_PREFSRC,
-#ifndef CONFIG_RTNL_OLD_IFINFO
 	RTA_METRICS,
 	RTA_MULTIPATH,
 	RTA_PROTOINFO,
 	RTA_FLOW,
-#else
-	RTA_WINDOW,
-	RTA_RTT,
-	RTA_MTU,
-	RTA_IFNAME,
-#endif
 	RTA_CACHEINFO
 };
 
@@ -253,17 +233,11 @@ struct rtnexthop
 #define RTNH_ALIGNTO	4
 #define RTNH_ALIGN(len) ( ((len)+RTNH_ALIGNTO-1) & ~(RTNH_ALIGNTO-1) )
 #define RTNH_OK(rtnh,len) ((rtnh)->rtnh_len >= sizeof(struct rtnexthop) && \
-			   (rtnh)->rtnh_len <= (len))
+			   ((int)(rtnh)->rtnh_len) <= (len))
 #define RTNH_NEXT(rtnh)	((struct rtnexthop*)(((char*)(rtnh)) + RTNH_ALIGN((rtnh)->rtnh_len)))
 #define RTNH_LENGTH(len) (RTNH_ALIGN(sizeof(struct rtnexthop)) + (len))
 #define RTNH_SPACE(len)	RTNH_ALIGN(RTNH_LENGTH(len))
 #define RTNH_DATA(rtnh)   ((struct rtattr*)(((char*)(rtnh)) + RTNH_LENGTH(0)))
-
-#ifdef CONFIG_RTNL_OLD_IFINFO
-#define RTM_RTNH(r) ((struct rtnexthop*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct rtmsg)) \
-					   + NLMSG_ALIGN((r)->rtm_optlen)))
-#define RTM_NHLEN(nlh,r) ((nlh)->nlmsg_len - NLMSG_SPACE(sizeof(struct rtmsg)) - NLMSG_ALIGN((r)->rtm_optlen))
-#endif
 
 /* RTM_CACHEINFO */
 
@@ -424,35 +398,6 @@ struct rtgenmsg
  * on network protocol.
  */
 
-#ifdef CONFIG_RTNL_OLD_IFINFO
-struct ifinfomsg
-{
-	unsigned char	ifi_family;		/* Dummy	*/
-	unsigned char	ifi_addrlen;		/* Length of HW address */
-	unsigned short	ifi_pad__;
-	int		ifi_index;		/* Link index	*/
-	int		ifi_link;		/* Physical device */
-	char		ifi_name[IFNAMSIZ];
-	struct sockaddr	ifi_address;		/* HW address	*/
-	struct sockaddr	ifi_broadcast;		/* HW broadcast	*/
-	unsigned	ifi_flags;		/* IFF_* flags	*/
-	int		ifi_mtu;		/* Link mtu	*/
-	char		ifi_qdiscname[IFNAMSIZ];/* Id of packet scheduler */
-	int		ifi_qdisc;		/* Packet scheduler handle */
-};
-
-enum
-{
-	IFLA_UNSPEC,
-	IFLA_ADDRESS,
-	IFLA_BROADCAST,
-	IFLA_IFNAME,
-	IFLA_QDISC,
-	IFLA_STATS
-};
-
-#else
-
 struct ifinfomsg
 {
 	unsigned char	ifi_family;
@@ -474,8 +419,6 @@ enum
 	IFLA_QDISC,
 	IFLA_STATS
 };
-
-#endif
 
 
 #define IFLA_MAX IFLA_STATS
@@ -588,7 +531,7 @@ struct rtnetlink_link
 
 extern struct rtnetlink_link * rtnetlink_links[NPROTO];
 extern int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb);
-extern int rtnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, int echo);
+extern int rtnetlink_send(struct sk_buff *skb, u32 pid, u32 group, int echo);
 
 extern void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data);
 

@@ -497,7 +497,6 @@ static int sock_fasync(int fd, struct file *filp, int on)
 {
 	struct fasync_struct *fa, *fna=NULL, **prev;
 	struct socket *sock;
-	unsigned long flags;
 	
 	if (on)
 	{
@@ -509,9 +508,8 @@ static int sock_fasync(int fd, struct file *filp, int on)
 	sock = socki_lookup(filp->f_dentry->d_inode);
 	
 	prev=&(sock->fasync_list);
-	
-	save_flags(flags);
-	cli();
+
+	lock_sock(sock->sk); 
 	
 	for (fa=*prev; fa!=NULL; prev=&fa->fa_next,fa=*prev)
 		if (fa->fa_file==filp)
@@ -523,7 +521,7 @@ static int sock_fasync(int fd, struct file *filp, int on)
 		{
 			fa->fa_fd=fd;
 			kfree_s(fna,sizeof(struct fasync_struct));
-			restore_flags(flags);
+			release_sock(sock->sk); 
 			return 0;
 		}
 		fna->fa_file=filp;
@@ -540,7 +538,8 @@ static int sock_fasync(int fd, struct file *filp, int on)
 			kfree_s(fa,sizeof(struct fasync_struct));
 		}
 	}
-	restore_flags(flags);
+
+	release_sock(sock->sk); 
 	return 0;
 }
 
@@ -1305,7 +1304,8 @@ out:
 /*
  *	Perform a file control on a socket file descriptor.
  *
- *	FIXME: does this need an fd lock ?
+ *	Doesn't aquire a fd lock, because no network fcntl
+ *	function sleeps currently.
  */
 
 int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)

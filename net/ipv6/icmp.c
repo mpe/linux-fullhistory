@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.18 1998/05/07 15:42:59 davem Exp $
+ *	$Id: icmp.c,v 1.19 1998/08/26 12:04:52 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -58,16 +58,15 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+struct icmpv6_mib icmpv6_statistics;
+
 /*
  *	ICMP socket for flow control.
  */
 
 struct socket *icmpv6_socket;
 
-int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
-	       struct in6_addr *saddr, struct in6_addr *daddr,
-	       struct ipv6_options *opt, unsigned short len,
-	       int redo, struct inet6_protocol *protocol);
+int icmpv6_rcv(struct sk_buff *skb, unsigned long len);
 
 static struct inet6_protocol icmpv6_protocol = 
 {
@@ -79,8 +78,6 @@ static struct inet6_protocol icmpv6_protocol =
 	NULL,			/* data			*/
 	"ICMPv6"	       	/* name			*/
 };
-
-
 
 struct icmpv6_msg {
 	struct icmp6hdr		icmph;
@@ -105,8 +102,11 @@ static int icmpv6_getfrag(const void *data, struct in6_addr *saddr,
 
 	/* 
 	 *	in theory offset must be 0 since we never send more 
-	 *	than 576 bytes on an error or more than the path mtu
+	 *	than IPV6_MIN_MTU bytes on an error or more than the path mtu
 	 *	on an echo reply. (those are the rules on RFC 1883)
+	 *
+	 * 	Luckily, this statement is obsolete after
+	 *	draft-ietf-ipngwg-icmp-v2-00           --ANK (980730)
 	 */
 
 	if (offset) {
@@ -143,13 +143,36 @@ void icmpv6_param_prob(struct sk_buff *skb, int code, void *pos)
 	kfree_skb(skb);
 }
 
-static inline int is_icmp(struct ipv6hdr *hdr, int len)
-{
-	__u8 nexthdr = hdr->nexthdr; 
+/*
+ * Figure out, may we reply to this packet with icmp error.
+ *
+ * We do not reply, if:
+ *	- it was icmp error message.
+ *	- it is truncated, so that it is known, that protocol is ICMPV6
+ *	  (i.e. in the middle of some exthdr)
+ *	- it is not the first fragment. BTW IPv6 specs say nothing about
+ *	  this case, but it is clear, that our reply would be useless
+ *	  for sender.
+ *
+ *	--ANK (980726)
+ */
 
-	if (!ipv6_skip_exthdr((struct ipv6_opt_hdr *)(hdr+1), &nexthdr, len))
-		return 0; 
-	return nexthdr == IPPROTO_ICMP; 
+static int is_ineligible(struct ipv6hdr *hdr, int len)
+{
+	u8 *ptr;
+	__u8 nexthdr = hdr->nexthdr;
+
+	if (len < (int)sizeof(*hdr))
+		return 1;
+
+	ptr = ipv6_skip_exthdr((struct ipv6_opt_hdr *)(hdr+1), &nexthdr, len - sizeof(*hdr));
+	if (!ptr)
+		return 0;
+	if (nexthdr == IPPROTO_ICMPV6) {
+		struct icmp6hdr *ihdr =	(struct icmp6hdr *)ptr;
+		return (ptr - (u8*)hdr) > len || !(ihdr->icmp6_type & 0x80); 
+	}
+	return nexthdr == NEXTHDR_FRAGMENT;
 }
 
 int sysctl_icmpv6_time = 1*HZ; 
@@ -160,31 +183,37 @@ int sysctl_icmpv6_time = 1*HZ;
 static inline int icmpv6_xrlim_allow(struct sock *sk, int type,
 				     struct flowi *fl)
 {
-#if 0
-	struct dst_entry *dst; 
-	int allow = 0;
-#endif
+	struct dst_entry *dst;
+	int res = 0;
+
 	/* Informational messages are not limited. */
 	if (type & 0x80)
-		return 1; 
+		return 1;
 
-#if 0 /* not yet, first fix routing COW */
+	/* Do not limit pmtu discovery, it would break it. */
+	if (type == ICMPV6_PKT_TOOBIG)
+		return 1;
 
 	/* 
 	 * Look up the output route.
 	 * XXX: perhaps the expire for routing entries cloned by
 	 * this lookup should be more aggressive (not longer than timeout).
 	 */
-	dst = ip6_route_output(sk, fl, 1);
-	if (dst->error) 
+	dst = ip6_route_output(sk, fl);
+	if (dst->error)
 		ipv6_statistics.Ip6OutNoRoutes++;
-	else 
-		allow = xrlim_allow(dst, sysctl_icmpv6_time);
+	else {
+		struct rt6_info *rt = (struct rt6_info *)dst;
+		int tmo = sysctl_icmpv6_time;
+
+		/* Give more bandwidth to wider prefixes. */
+		if (rt->rt6i_dst.plen < 128)
+			tmo >>= ((128 - rt->rt6i_dst.plen)>>5);
+
+		res = xrlim_allow(dst, tmo);
+	}
 	dst_release(dst);
-	return allow;
-#else
-	return 1;
-#endif
+	return res;
 }
 
 /*
@@ -196,7 +225,7 @@ static inline int icmpv6_xrlim_allow(struct sock *sk, int type,
 
 static __inline__ int opt_unrec(struct sk_buff *skb, __u32 offset)
 {
-	char *buff = skb->nh.raw;
+	u8 *buff = skb->nh.raw;
 
 	return ( ( *(buff + offset) & 0xC0 ) == 0x80 );
 }
@@ -215,7 +244,6 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	struct icmpv6_msg msg;
 	struct flowi fl;
 	int addr_type = 0;
-	int optlen;
 	int len;
 
 	/*
@@ -237,7 +265,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	
 	addr_type = ipv6_addr_type(&hdr->daddr);
 
-	if (ipv6_chk_addr(&hdr->daddr, NULL, 0))
+	if (ipv6_chk_addr(&hdr->daddr, skb->dev, 0))
 		saddr = &hdr->daddr;
 
 	/*
@@ -275,8 +303,9 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	/* 
 	 *	Never answer to a ICMP packet.
 	 */
-	if (is_icmp(hdr, (u8*)skb->tail - (u8*)hdr)) {
-		printk(KERN_DEBUG "icmpv6_send: no reply to icmp\n"); 
+	if (is_ineligible(hdr, (u8*)skb->tail - (u8*)hdr)) {
+		if (net_ratelimit())
+			printk(KERN_DEBUG "icmpv6_send: no reply to icmp error/fragment\n"); 
 		return;
 	}
 
@@ -303,34 +332,22 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	msg.data = skb->nh.raw;
 	msg.csum = 0;
 	msg.daddr = &hdr->saddr;
-        /*
-	if (skb->opt)
-		optlen = skb->opt->optlen;
-	else
-	*/
 
-	optlen = 0;
-
-	len = min(skb->tail - ((unsigned char *) hdr), 
-		  576 - sizeof(struct ipv6hdr) - sizeof(struct icmp6hdr)
-		  - optlen);
+	len = min((skb->tail - ((unsigned char *) hdr)) + sizeof(struct icmp6hdr), 
+		  IPV6_MIN_MTU - sizeof(struct icmp6hdr));
 
 	if (len < 0) {
 		printk(KERN_DEBUG "icmp: len problem\n");
 		return;
 	}
 
-	len += sizeof(struct icmp6hdr);
-
 	msg.len = len;
 
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
-
-	/* Oops! We must purge cached dst, otherwise
-	   all the following ICMP messages will go there :) --ANK
-	 */
-	dst_release(xchg(&sk->dst_cache, NULL));
+	if (type >= ICMPV6_DEST_UNREACH && type <= ICMPV6_PARAMPROB)
+		(&icmpv6_statistics.Icmp6OutDestUnreachs)[type-1]++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }
 
 static void icmpv6_echo_reply(struct sk_buff *skb)
@@ -374,37 +391,40 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
-
-	/* Oops! We must purge cached dst, otherwise
-	   all the following ICMP messages will go there :) --ANK
-	 */
-	dst_release(xchg(&sk->dst_cache, NULL));
+	icmpv6_statistics.Icmp6OutEchoReplies++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }
 
 static void icmpv6_notify(struct sk_buff *skb,
-			  int type, int code, unsigned char *buff, int len,
-			  struct in6_addr *saddr, struct in6_addr *daddr, 
-			  struct inet6_protocol *protocol)
+			  int type, int code, unsigned char *buff, int len)
 {
+	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
+	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 	struct ipv6hdr *hdr = (struct ipv6hdr *) buff;
 	struct inet6_protocol *ipprot;
 	struct sock *sk;
-	struct ipv6_opt_hdr *pb;
+	u8 *pb;
 	__u32 info = 0;
 	int hash;
 	u8 nexthdr;
 
 	nexthdr = hdr->nexthdr;
 
-	pb = (struct ipv6_opt_hdr *) (hdr + 1);
 	len -= sizeof(struct ipv6hdr);
 	if (len < 0)
 		return;
 
 	/* now skip over extension headers */
-	pb = ipv6_skip_exthdr(pb, &nexthdr, len);
+	pb = ipv6_skip_exthdr((struct ipv6_opt_hdr *) (hdr + 1), &nexthdr, len);
 	if (!pb)
 		return;
+
+	/* BUGGG_FUTURE: we should try to parse exthdrs in this packet.
+	   Without this we will not able f.e. to make source routed
+	   pmtu discovery.
+	   Corresponding argument (opt) to notifiers is already added.
+	   --ANK (980726)
+	 */
 
 	hash = nexthdr & (MAX_INET_PROTOS - 1);
 
@@ -414,9 +434,8 @@ static void icmpv6_notify(struct sk_buff *skb,
 		if (ipprot->protocol != nexthdr)
 			continue;
 
-		if (ipprot->err_handler) 
-			ipprot->err_handler(skb, type, code, (u8*)pb, info,
-					    saddr, daddr, ipprot);
+		if (ipprot->err_handler)
+			ipprot->err_handler(skb, hdr, NULL, type, code, pb, info);
 		return;
 	}
 
@@ -428,7 +447,7 @@ static void icmpv6_notify(struct sk_buff *skb,
 		return;
 
 	while((sk = raw_v6_lookup(sk, nexthdr, daddr, saddr))) {
-		rawv6_err(sk, type, code, (char*)pb, saddr, daddr);
+		rawv6_err(sk, skb, hdr, NULL, type, code, pb, info);
 		sk = sk->next;
 	}
 }
@@ -437,14 +456,17 @@ static void icmpv6_notify(struct sk_buff *skb,
  *	Handle icmp messages
  */
 
-int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
-	       struct in6_addr *saddr, struct in6_addr *daddr,
-	       struct ipv6_options *opt, unsigned short len,
-	       int redo, struct inet6_protocol *protocol)
+int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 {
+	struct device *dev = skb->dev;
+	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
+	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 	struct ipv6hdr *orig_hdr;
 	struct icmp6hdr *hdr = (struct icmp6hdr *) skb->h.raw;
 	int ulen;
+	int type;
+
+	icmpv6_statistics.Icmp6InMsgs++;
 
 	/* Perform checksum. */
 	switch (skb->ip_summed) {	
@@ -480,8 +502,15 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	 *	length of original packet carried in skb
 	 */
 	ulen = skb->tail - (unsigned char *) (hdr + 1);
-	
-	switch (hdr->icmp6_type) {
+
+	type = hdr->icmp6_type;
+
+	if (type >= ICMPV6_DEST_UNREACH && type <= ICMPV6_PARAMPROB)
+		(&icmpv6_statistics.Icmp6InDestUnreachs)[type-ICMPV6_DEST_UNREACH]++;
+	else if (type >= ICMPV6_ECHO_REQUEST && type <= NDISC_REDIRECT)
+		(&icmpv6_statistics.Icmp6InEchos)[type-ICMPV6_ECHO_REQUEST]++;
+
+	switch (type) {
 
 	case ICMPV6_ECHO_REQUEST:
 		icmpv6_echo_reply(skb);
@@ -492,9 +521,14 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 		break;
 
 	case ICMPV6_PKT_TOOBIG:
+		/* BUGGG_FUTURE: if packet contains rthdr, we cannot update
+		   standard destination cache. Seems, only "advanced"
+		   destination cache will allow to solve this problem
+		   --ANK (980726)
+		 */
 		orig_hdr = (struct ipv6hdr *) (hdr + 1);
 		if (ulen >= sizeof(struct ipv6hdr))
-			rt6_pmtu_discovery(&orig_hdr->daddr, dev,
+			rt6_pmtu_discovery(&orig_hdr->daddr, &orig_hdr->saddr, dev,
 					   ntohl(hdr->icmp6_mtu));
 
 		/*
@@ -504,10 +538,8 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	case ICMPV6_DEST_UNREACH:
 	case ICMPV6_TIME_EXCEED:
 	case ICMPV6_PARAMPROB:
-
-		icmpv6_notify(skb, hdr->icmp6_type, hdr->icmp6_code,
-			      (char *) (hdr + 1), ulen,
-			      saddr, daddr, protocol);
+		icmpv6_notify(skb, type, hdr->icmp6_code,
+			      (char *) (hdr + 1), ulen);
 		break;
 
 	case NDISC_ROUTER_SOLICITATION:
@@ -515,7 +547,7 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	case NDISC_NEIGHBOUR_SOLICITATION:
 	case NDISC_NEIGHBOUR_ADVERTISEMENT:
 	case NDISC_REDIRECT:
-		ndisc_rcv(skb, dev, saddr, daddr, opt, len);		
+		ndisc_rcv(skb, len);
 		break;
 
 	case ICMPV6_MGM_QUERY:
@@ -530,23 +562,26 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 		break;
 
 	default:
-		printk(KERN_DEBUG "icmpv6: msg of unkown type\n");
+		if (net_ratelimit())
+			printk(KERN_DEBUG "icmpv6: msg of unkown type\n");
 		
 		/* informational */
-		if (hdr->icmp6_type & 0x80)
-			goto discard_it;
+		if (type & 0x80)
+			break;
 
 		/* 
 		 * error of unkown type. 
 		 * must pass to upper level 
 		 */
 
-		icmpv6_notify(skb, hdr->icmp6_type, hdr->icmp6_code,
-			      (char *) (hdr + 1), ulen,
-			      saddr, daddr, protocol);	
+		icmpv6_notify(skb, type, hdr->icmp6_code,
+			      (char *) (hdr + 1), ulen);
 	};
+	kfree_skb(skb);
+	return 0;
 
 discard_it:
+	icmpv6_statistics.Icmp6InErrors++;
 	kfree_skb(skb);
 	return 0;
 }
@@ -597,7 +632,7 @@ static struct icmp6_err {
 } tab_unreach[] = {
 	{ ENETUNREACH,	0},	/* NOROUTE		*/
 	{ EACCES,	1},	/* ADM_PROHIBITED	*/
-	{ EOPNOTSUPP,	1},	/* NOT_NEIGHBOUR	*/
+	{ 0,		0},	/* Was NOT_NEIGHBOUR, now reserved */
 	{ EHOSTUNREACH,	0},	/* ADDR_UNREACH		*/
 	{ ECONNREFUSED,	1},	/* PORT_UNREACH		*/
 };

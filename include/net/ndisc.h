@@ -60,12 +60,7 @@ extern int			ndisc_init(struct net_proto_family *ops);
 
 extern void			ndisc_cleanup(void);
 
-extern int			ndisc_rcv(struct sk_buff *skb,
-					  struct device *dev,
-					  struct in6_addr *saddr,
-					  struct in6_addr *daddr,
-					  struct ipv6_options *opt,
-					  unsigned short len);
+extern int			ndisc_rcv(struct sk_buff *skb, unsigned long len);
 
 extern void			ndisc_send_ns(struct device *dev,
 					      struct neighbour *neigh,

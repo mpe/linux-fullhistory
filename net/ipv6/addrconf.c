@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.43 1998/07/15 05:05:32 davem Exp $
+ *	$Id: addrconf.c,v 1.45 1998/08/26 12:04:41 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -38,6 +38,7 @@
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>
 #endif
+#include <linux/delay.h>
 
 #include <linux/proc_fs.h>
 #include <net/sock.h>
@@ -53,7 +54,6 @@
 #include <linux/rtnetlink.h>
 
 #include <asm/uaccess.h>
-#include <asm/delay.h>
 
 /* Set to 3 to get tracing... */
 #define ACONF_DEBUG 2
@@ -100,7 +100,7 @@ struct ipv6_devconf ipv6_devconf =
 {
 	0,				/* forwarding		*/
 	IPV6_DEFAULT_HOPLIMIT,		/* hop limit		*/
-	576,				/* mtu			*/
+	IPV6_MIN_MTU,			/* mtu			*/
 	1,				/* accept RAs		*/
 	1,				/* accept redirects	*/
 	1,				/* autoconfiguration	*/
@@ -114,7 +114,7 @@ static struct ipv6_devconf ipv6_devconf_dflt =
 {
 	0,				/* forwarding		*/
 	IPV6_DEFAULT_HOPLIMIT,		/* hop limit		*/
-	576,				/* mtu			*/
+	IPV6_MIN_MTU,			/* mtu			*/
 	1,				/* accept RAs		*/
 	1,				/* accept redirects	*/
 	1,				/* autoconfiguration	*/
@@ -185,7 +185,7 @@ static struct inet6_dev * ipv6_add_dev(struct device *dev)
 	struct inet6_dev *ndev, **bptr, *iter;
 	int hash;
 
-	if (dev->mtu < 576)
+	if (dev->mtu < IPV6_MIN_MTU)
 		return NULL;
 
 	ndev = kmalloc(sizeof(struct inet6_dev), gfp_any());
@@ -548,7 +548,6 @@ addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
 		      unsigned long expires, unsigned flags)
 {
 	struct in6_rtmsg rtmsg;
-	int err;
 
 	memset(&rtmsg, 0, sizeof(rtmsg));
 	memcpy(&rtmsg.rtmsg_dst, pfx, sizeof(struct in6_addr));
@@ -566,7 +565,7 @@ addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
 	if (dev->type == ARPHRD_SIT && (dev->flags&IFF_POINTOPOINT))
 		rtmsg.rtmsg_flags |= RTF_NONEXTHOP;
 
-	ip6_route_add(&rtmsg, &err);
+	ip6_route_add(&rtmsg);
 }
 
 /* Create "default" multicast route to the interface */
@@ -574,7 +573,6 @@ addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
 static void addrconf_add_mroute(struct device *dev)
 {
 	struct in6_rtmsg rtmsg;
-	int err;
 
 	memset(&rtmsg, 0, sizeof(rtmsg));
 	ipv6_addr_set(&rtmsg.rtmsg_dst,
@@ -584,13 +582,12 @@ static void addrconf_add_mroute(struct device *dev)
 	rtmsg.rtmsg_ifindex = dev->ifindex;
 	rtmsg.rtmsg_flags = RTF_UP|RTF_ADDRCONF;
 	rtmsg.rtmsg_type = RTMSG_NEWROUTE;
-	ip6_route_add(&rtmsg, &err);
+	ip6_route_add(&rtmsg);
 }
 
 static void sit_route_add(struct device *dev)
 {
 	struct in6_rtmsg rtmsg;
-	int err;
 
 	memset(&rtmsg, 0, sizeof(rtmsg));
 
@@ -602,7 +599,7 @@ static void sit_route_add(struct device *dev)
 	rtmsg.rtmsg_flags	= RTF_UP|RTF_NONEXTHOP;
 	rtmsg.rtmsg_ifindex	= dev->ifindex;
 
-	ip6_route_add(&rtmsg, &err);
+	ip6_route_add(&rtmsg);
 }
 
 static void addrconf_add_lroute(struct device *dev)
@@ -690,13 +687,12 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 	else
 		rt_expires = jiffies + valid_lft * HZ;
 
-	rt = rt6_lookup(&pinfo->prefix, NULL, dev->ifindex, RTF_LINKRT);
+	rt = rt6_lookup(&pinfo->prefix, NULL, dev->ifindex, 1);
 
 	if (rt && ((rt->rt6i_flags & (RTF_GATEWAY | RTF_DEFAULT)) == 0)) {
 		if (rt->rt6i_flags&RTF_EXPIRES) {
 			if (pinfo->onlink == 0 || valid_lft == 0) {
 				ip6_del_rt(rt);
-				rt = NULL;
 			} else {
 				rt->rt6i_expires = rt_expires;
 			}
@@ -705,6 +701,8 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 		addrconf_prefix_route(&pinfo->prefix, pinfo->prefix_len,
 				      dev, rt_expires, RTF_ADDRCONF|RTF_EXPIRES);
 	}
+	if (rt)
+		dst_release(&rt->u.dst);
 
 	/* Try to figure out our local address for this prefix */
 
@@ -1118,11 +1116,17 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		break;
 
 	case NETDEV_CHANGEMTU:
-		/* BUGGG... Should scan FIB to change pmtu on routes. --ANK */
-		if (dev->mtu >= 576)
-			break;
+		if (dev->mtu >= IPV6_MIN_MTU) {
+			struct inet6_dev *idev;
 
-		/* MTU falled under 576. Stop IPv6 on this interface. */
+			if ((idev = ipv6_find_idev(dev)) == NULL)
+				break;
+			idev->cnf.mtu6 = dev->mtu;
+			rt6_mtu_change(dev, dev->mtu);
+			break;
+		}
+
+		/* MTU falled under IPV6_MIN_MTU. Stop IPv6 on this interface. */
 
 	case NETDEV_DOWN:
 	case NETDEV_UNREGISTER:
@@ -1240,7 +1244,6 @@ static void addrconf_rs_timer(unsigned long data)
 		add_timer(&ifp->timer);
 	} else {
 		struct in6_rtmsg rtmsg;
-		int err;
 
 		printk(KERN_DEBUG "%s: no IPv6 routers present\n",
 		       ifp->idev->dev->name);
@@ -1253,7 +1256,7 @@ static void addrconf_rs_timer(unsigned long data)
 
 		rtmsg.rtmsg_ifindex = ifp->idev->dev->ifindex;
 
-		ip6_route_add(&rtmsg, &err);
+		ip6_route_add(&rtmsg);
 	}
 }
 
@@ -1501,7 +1504,7 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 }
 
 static int inet6_fill_ifaddr(struct sk_buff *skb, struct inet6_ifaddr *ifa,
-			    pid_t pid, u32 seq, int event)
+			     u32 pid, u32 seq, int event)
 {
 	struct ifaddrmsg *ifm;
 	struct nlmsghdr  *nlh;
@@ -1659,8 +1662,11 @@ int addrconf_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
 
 		addrconf_forward_change(idev);
 
-		if (*valp)
+		if (*valp) {
+			start_bh_atomic();
 			rt6_purge_dflt_routers(0);
+			end_bh_atomic();
+		}
 	}
 
         return ret;

@@ -138,10 +138,14 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
 	{
+		err = -EINVAL;
+
+		if ((unsigned long)(((char*)cmsg - (char*)msg->msg_control)
+				    + cmsg->cmsg_len) > msg->msg_controllen)
+			goto error;
+
 		if (cmsg->cmsg_level != SOL_SOCKET)
 			continue;
-
-		err = -EINVAL;
 
 		switch (cmsg->cmsg_type)
 		{

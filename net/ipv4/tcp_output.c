@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.92 1998/06/19 13:22:44 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.93 1998/08/26 12:04:32 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -117,7 +117,7 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 			 * is never scaled.
 			 */
 			th->window	= htons(tp->rcv_wnd);
-			tcp_syn_build_options((__u32 *)(th + 1), sk->mss,
+			tcp_syn_build_options((__u32 *)(th + 1), tp->mss_clamp,
 					      sysctl_tcp_timestamps,
 					      sysctl_tcp_sack,
 					      sysctl_tcp_window_scaling,
@@ -227,6 +227,65 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	return 0;
 }
 
+/* This function synchronize snd mss to current pmtu/exthdr set.
+
+   tp->user_mss is mss set by user by TCP_MAXSEG. It does NOT counts
+   for TCP options, but includes only bare TCP header.
+
+   tp->mss_clamp is mss negotiated at connection setup.
+   It is minumum of user_mss and mss received with SYN.
+   It also does not include TCP options.
+
+   tp->pmtu_cookie is last pmtu, seen by this function.
+
+   tp->mss_cache is current effective sending mss, including
+   all tcp options except for SACKs. It is evaluated,
+   taking into account current pmtu, but never exceeds
+   tp->mss_clamp.
+
+   NOTE1. rfc1122 clearly states that advertised MSS
+   DOES NOT include either tcp or ip options.
+
+   NOTE2. tp->pmtu_cookie and tp->mss_cache are READ ONLY outside
+   this function.			--ANK (980731)
+ */
+
+int tcp_sync_mss(struct sock *sk, u32 pmtu)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	int mss_now;
+
+	/* Calculate base mss without TCP options:
+	   It is MMS_S - sizeof(tcphdr) of rfc1122
+	*/
+	mss_now = pmtu - tp->af_specific->net_header_len - sizeof(struct tcphdr);
+
+	/* Clamp it (mss_clamp does not include tcp options) */
+	if (mss_now > tp->mss_clamp)
+		mss_now = tp->mss_clamp;
+
+	/* Now subtract TCP options size, not including SACKs */
+	mss_now -= tp->tcp_header_len - sizeof(struct tcphdr);
+
+	/* Now subtract optional transport overhead */
+	mss_now -= tp->ext_header_len;
+
+	/* It we got too small (or even negative) value,
+	   clamp it by 8 from below. Why 8 ?
+	   Well, it could be 1 with the same success,
+	   but if IP accepted segment of length 1,
+	   it would love 8 even more 8)		--ANK (980731)
+	 */
+	if (mss_now < 8)
+		mss_now = 8;
+
+	/* And store cached results */
+	tp->pmtu_cookie = pmtu;
+	tp->mss_cache = mss_now;
+	return mss_now;
+}
+
+
 /* This routine writes packets to the network.  It advances the
  * send_head.  This happens as incoming acks open up the remote
  * window for us.
@@ -334,7 +393,7 @@ void tcp_write_xmit(struct sock *sk)
 u32 __tcp_select_window(struct sock *sk, u32 cur_win)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	unsigned int mss = sk->mss;
+	unsigned int mss = tp->mss_cache;
 	int free_space;
 	u32 window;
 
@@ -624,7 +683,7 @@ void tcp_send_fin(struct sock *sk)
 		 */
 		if(tp->send_head == skb &&
 		   !sk->nonagle &&
-		   skb->len < (sk->mss >> 1) &&
+		   skb->len < (tp->mss_cache >> 1) &&
 		   tp->packets_out &&
 		   !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG)) {
 			update_send_head(sk);
@@ -738,20 +797,15 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 
 	skb->dst = dst_clone(dst);
 
-	if (sk->user_mss)
-		mss = min(mss, sk->user_mss);
-	if (req->tstamp_ok)
-		mss -= TCPOLEN_TSTAMP_ALIGNED;
-
 	/* Don't offer more than they did.
 	 * This way we don't have to memorize who said what.
 	 * FIXME: maybe this should be changed for better performance
 	 * with syncookies.
 	 */
 	req->mss = min(mss, req->mss);
-	if (req->mss < 1) {
-		printk(KERN_DEBUG "initial req->mss below 1\n");
-		req->mss = 1;
+	if (req->mss < 8) {
+		printk(KERN_DEBUG "initial req->mss below 8\n");
+		req->mss = 8;
 	}
 
 	tcp_header_size = (sizeof(struct tcphdr) + TCPOLEN_MSS +
@@ -796,16 +850,13 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 	return skb;
 }
 
-void tcp_connect(struct sock *sk, struct sk_buff *buff, int mss)
+void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 {
 	struct dst_entry *dst = sk->dst_cache;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	/* Reserve space for headers. */
 	skb_reserve(buff, MAX_HEADER + sk->prot->max_header);
-
-	if (sk->priority == 0)
-		sk->priority = dst->priority;
 
 	tp->snd_wnd = 0;
 	tp->snd_wl1 = 0;
@@ -821,17 +872,25 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mss)
 	tp->tcp_header_len = sizeof(struct tcphdr) +
 		(sysctl_tcp_timestamps ? TCPOLEN_TSTAMP_ALIGNED : 0);
 
-	mss -= tp->tcp_header_len;
+	/* If user gave his TCP_MAXSEG, record it to clamp */
+	if (tp->user_mss)
+		tp->mss_clamp = tp->user_mss;
+	tcp_sync_mss(sk, mtu);
 
-	if (sk->user_mss)
-		mss = min(mss, sk->user_mss);
-
-	if (mss < 1) {
-		printk(KERN_DEBUG "initial sk->mss below 1\n");
-		mss = 1;	/* Sanity limit */
-	}
-
-	sk->mss = mss;
+	/* Now unpleasant action: if initial pmtu is too low
+	   set lower clamp. I am not sure that it is good.
+	   To be more exact, I do not think that clamping at value, which
+	   is apparently transient and may improve in future is good idea.
+	   It would be better to wait until peer will returns its MSS
+	   (probably 65535 too) and now advertise something sort of 65535
+	   or at least first hop device mtu. Is it clear, what I mean?
+	   We should tell peer what maximal mss we expect to RECEIVE,
+	   it has nothing to do with pmtu.
+	   I am afraid someone will be confused by such huge value.
+	                                                   --ANK (980731)
+	 */
+	if (tp->mss_cache + tp->tcp_header_len - sizeof(struct tcphdr) < tp->mss_clamp )
+		tp->mss_clamp = tp->mss_cache + tp->tcp_header_len - sizeof(struct tcphdr);
 
 	TCP_SKB_CB(buff)->flags = TCPCB_FLAG_SYN;
 	TCP_SKB_CB(buff)->sacked = 0;
@@ -842,7 +901,7 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mss)
 	tp->snd_nxt = TCP_SKB_CB(buff)->end_seq;
 
 	tp->window_clamp = dst->window;
-	tcp_select_initial_window(sock_rspace(sk)/2,sk->mss,
+	tcp_select_initial_window(sock_rspace(sk)/2,tp->mss_clamp,
 		&tp->rcv_wnd,
 		&tp->window_clamp,
 		sysctl_tcp_window_scaling,

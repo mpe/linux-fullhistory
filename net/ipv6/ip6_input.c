@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.10 1998/07/15 05:05:34 davem Exp $
+ *	$Id: ip6_input.c,v 1.11 1998/08/26 12:04:59 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -37,144 +37,21 @@
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
 
-static int ipv6_dest_opt(struct sk_buff **skb_ptr, struct device *dev,
-			 __u8 *nhptr, struct ipv6_options *opt);
-
-struct hdrtype_proc {
-	u8	type;
-	int	(*func) (struct sk_buff **, struct device *dev, __u8 *ptr,
-			 struct ipv6_options *opt);
-} hdrproc_lst[] = {
-
-  /*
-	TODO
-
-	{NEXTHDR_HOP,		ipv6_hop_by_hop}
-	{NEXTHDR_ROUTING,	ipv6_routing_header},
-   */
-	{NEXTHDR_FRAGMENT,	ipv6_reassembly},
-  
-	{NEXTHDR_DEST,		ipv6_dest_opt},
-   /*	
-	{NEXTHDR_AUTH,		ipv6_auth_hdr},
-	{NEXTHDR_ESP,		ipv6_esp_hdr},
-    */
-	{NEXTHDR_MAX,		NULL}
-};
-
-/* New header structures */
-
-
-struct tlvtype_proc {
-	u8	type;
-	int	(*func) (struct sk_buff *, struct device *dev, __u8 *ptr,
-			 struct ipv6_options *opt);
-	/*
-	 *	these functions do NOT update skb->h.raw
-	 */
-
-} tlvprocdestopt_lst[] = {
-	{255,			NULL}
-};
-
-int ip6_dstopt_unknown(struct sk_buff *skb, struct ipv6_tlvtype *hdr)
-{
-	struct in6_addr *daddr;
-	int pos;
-
-	/*
-	 *	unkown destination option type
-	 */
-	
-	pos = (__u8 *) hdr - (__u8 *) skb->nh.raw;
-	
-	/* I think this is correct please check - IPM */
-
-	switch ((hdr->type & 0xC0) >> 6) {
-	case 0: /* ignore */
-		skb->h.raw += hdr->len+2;
-		return 1;
-		
-	case 1: /* drop packet */
-		break;
-
-	case 2: /* send ICMP PARM PROB regardless and drop packet */
-		icmpv6_send(skb, ICMPV6_PARAMPROB, ICMPV6_UNK_OPTION,
-			    pos, skb->dev);
-		break;
-		
-	case 3: /* Send ICMP if not a multicast address and drop packet */
-		daddr = &skb->nh.ipv6h->daddr;
-		if (!(ipv6_addr_type(daddr) & IPV6_ADDR_MULTICAST))
-			icmpv6_send(skb, ICMPV6_PARAMPROB,
-				    ICMPV6_UNK_OPTION, pos, skb->dev);
-	};
-	
-	kfree_skb(skb);
-	return 0;
-}
-
-static int ip6_parse_tlv(struct tlvtype_proc *procs, struct sk_buff *skb,
-			 struct device *dev, __u8 *nhptr,
-			 struct ipv6_options *opt, void *lastopt)
-{
-	struct ipv6_tlvtype *hdr;
-	struct tlvtype_proc *curr;
-
-	while ((hdr=(struct ipv6_tlvtype *)skb->h.raw) != lastopt) {
-		switch (hdr->type) {
-		case 0: /* TLV encoded Pad1 */
-			skb->h.raw++;
-			break;
-
-		case 1: /* TLV encoded PadN */
-			skb->h.raw += hdr->len+2;
-			break;
-
-		default: /* Other TLV code so scan list */
-			for (curr=procs; curr->type != 255; curr++) {
-				if (curr->type == (hdr->type)) {
-					curr->func(skb, dev, nhptr, opt);
-					skb->h.raw += hdr->len+2;
-					break;
-				}
-			}
-			if (curr->type==255) {
-				if (ip6_dstopt_unknown(skb, hdr) == 0)
-					return 0;
-			}
-			break;
-		}
-	}
-	return 1;
-}
-
-static int ipv6_dest_opt(struct sk_buff **skb_ptr, struct device *dev,
-			 __u8 *nhptr, struct ipv6_options *opt)
-{
-	struct sk_buff *skb=*skb_ptr;
-	struct ipv6_destopt_hdr *hdr = (struct ipv6_destopt_hdr *) skb->h.raw;
-	int res = 0;
-	void *lastopt=skb->h.raw+hdr->hdrlen+sizeof(struct ipv6_destopt_hdr);
-
-	skb->h.raw += sizeof(struct ipv6_destopt_hdr);
-	if (ip6_parse_tlv(tlvprocdestopt_lst, skb, dev, nhptr, opt, lastopt))
-		res = hdr->nexthdr;
-	skb->h.raw+=hdr->hdrlen;
-
-	return res;
-}
-
 
 int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct ipv6hdr *hdr;
-	int pkt_len;
+	u32 		pkt_len;
 
-	if (skb->pkt_type == PACKET_OTHERHOST) {
-		kfree_skb(skb);
-		return 0;
-	}
+	if (skb->pkt_type == PACKET_OTHERHOST)
+		goto drop;
+
+	ipv6_statistics.Ip6InReceives++;
+
+	/* Store incoming device index. When the packet will
+	   be queued, we cannot refer to skb->dev anymore.
+	 */
+	((struct inet6_skb_parm *)skb->cb)->iif = dev->ifindex;
 
 	hdr = skb->nh.ipv6h;
 
@@ -183,16 +60,31 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	pkt_len = ntohs(hdr->payload_len);
 
-	if (pkt_len + sizeof(struct ipv6hdr) > skb->len)
-		goto err;
+	/* pkt_len may be zero if Jumbo payload option is present */
+	if (pkt_len || hdr->nexthdr != NEXTHDR_HOP) {
+		if (pkt_len + sizeof(struct ipv6hdr) > skb->len)
+			goto truncated;
+		skb_trim(skb, pkt_len + sizeof(struct ipv6hdr));
+	}
 
-	skb_trim(skb, pkt_len + sizeof(struct ipv6hdr));
+	if (hdr->nexthdr == NEXTHDR_HOP) {
+		skb->h.raw = (u8*)(hdr+1);
+		if (!ipv6_parse_hopopts(skb, &hdr->nexthdr)) {
+			ipv6_statistics.Ip6InHdrErrors++;
+			return 0;
+		}
+	}
 
-	ip6_route_input(skb);
-	
-	return 0;
+	if (skb->dst == NULL)
+		ip6_route_input(skb);
+
+	return skb->dst->input(skb);
+
+truncated:
+	ipv6_statistics.Ip6InTruncatedPkts++;
 err:
 	ipv6_statistics.Ip6InHdrErrors++;
+drop:
 	kfree_skb(skb);
 	return 0;
 }
@@ -217,8 +109,7 @@ static __inline__ int icmpv6_filter(struct sock *sk, struct sk_buff *skb)
  *	without calling rawv6.c)
  */
 static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
-				      struct ipv6_options *opt,
-				      int nexthdr, int len)
+				      int nexthdr, unsigned long len)
 {
 	struct in6_addr *saddr;
 	struct in6_addr *daddr;
@@ -253,8 +144,8 @@ static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
 				continue;
 
 			buff = skb_clone(skb, GFP_ATOMIC);
-			buff->sk = sk2;
-			rawv6_rcv(buff, skb->dev, saddr, daddr, opt, len);
+			if (buff)
+				rawv6_rcv(sk2, buff, len);
 		}
 	}
 
@@ -270,10 +161,8 @@ static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
 
 int ip6_input(struct sk_buff *skb)
 {
-	struct ipv6_options *opt = (struct ipv6_options *) skb->cb;
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	struct inet6_protocol *ipprot;
-	struct hdrtype_proc *hdrt;
 	struct sock *raw_sk;
 	__u8 *nhptr;
 	int nexthdr;
@@ -281,7 +170,7 @@ int ip6_input(struct sk_buff *skb)
 	u8 hash;
 	int len;
 	
-	skb->h.raw += sizeof(struct ipv6hdr);
+	skb->h.raw = skb->nh.raw + sizeof(struct ipv6hdr);
 
 	/*
 	 *	Parse extension headers
@@ -290,64 +179,55 @@ int ip6_input(struct sk_buff *skb)
 	nexthdr = hdr->nexthdr;
 	nhptr = &hdr->nexthdr;
 
-	/*
-	 *	check for extension headers
-	 */
-
-st_loop:
-
-	for (hdrt=hdrproc_lst; hdrt->type != NEXTHDR_MAX; hdrt++) {
-		if (hdrt->type == nexthdr) {
-			if ((nexthdr = hdrt->func(&skb, skb->dev, nhptr, opt))) {
-				nhptr = skb->h.raw;
-				hdr = skb->nh.ipv6h;
-				goto st_loop;
-			}
-			return 0;
-		}
+	/* Skip  hop-by-hop options, they are already parsed. */
+	if (nexthdr == NEXTHDR_HOP) {
+		nhptr = (u8*)(hdr+1);
+		nexthdr = *nhptr;
+		skb->h.raw += (nhptr[1]+1)<<3;
 	}
 
+	/* This check is sort of optimization.
+	   It would be stupid to detect for optional headers,
+	   which are missing with probability of 200%
+	 */
+	if (nexthdr != IPPROTO_TCP && nexthdr != IPPROTO_UDP) {
+		nhptr = ipv6_parse_exthdrs(&skb, nhptr);
+		if (nhptr == NULL)
+			return 0;
+		nexthdr = *nhptr;
+		hdr = skb->nh.ipv6h;
+	}
 	len = skb->tail - skb->h.raw;
 
-	raw_sk = ipv6_raw_deliver(skb, opt, nexthdr, len);
+	raw_sk = ipv6_raw_deliver(skb, nexthdr, len);
 
 	hash = nexthdr & (MAX_INET_PROTOS - 1);
 	for (ipprot = (struct inet6_protocol *) inet6_protos[hash]; 
 	     ipprot != NULL; 
 	     ipprot = (struct inet6_protocol *) ipprot->next) {
 		struct sk_buff *buff = skb;
-		
+
 		if (ipprot->protocol != nexthdr)
 			continue;
-		
+
 		if (ipprot->copy || raw_sk)
 			buff = skb_clone(skb, GFP_ATOMIC);
-		
-		
-		ipprot->handler(buff, skb->dev, &hdr->saddr, &hdr->daddr,
-				opt, len, 0, ipprot);
+
+		ipprot->handler(buff, len);
 		found = 1;
 	}
-	
+
 	if (raw_sk) {
-		skb->sk = raw_sk;
-		rawv6_rcv(skb, skb->dev, &hdr->saddr, &hdr->daddr, opt, len);
+		rawv6_rcv(raw_sk, skb, len);
 		found = 1;
 	}
-	
+
 	/*
 	 *	not found: send ICMP parameter problem back
 	 */
-	
 	if (!found) {
-		unsigned long offset;
-#if IP6_DEBUG >= 2
-		printk(KERN_DEBUG "proto not found %d\n", nexthdr);
-#endif
-		offset = nhptr - (u8*) hdr;
-		icmpv6_send(skb, ICMPV6_PARAMPROB, ICMPV6_UNK_NEXTHDR,
-			    offset, skb->dev);
-		kfree_skb(skb);
+		ipv6_statistics.Ip6InUnknownProtos++;
+		icmpv6_param_prob(skb, ICMPV6_UNK_NEXTHDR, nhptr);
 	}
 
 	return 0;
@@ -358,6 +238,8 @@ int ip6_mc_input(struct sk_buff *skb)
 	struct ipv6hdr *hdr;	
 	int deliver = 0;
 	int discard = 1;
+
+	ipv6_statistics.Ip6InMcastPkts++;
 
 	hdr = skb->nh.ipv6h;
 	if (ipv6_chk_mcast_addr(skb->dev, &hdr->daddr))

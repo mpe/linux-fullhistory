@@ -232,8 +232,7 @@ struct device
 	
 	unsigned short		flags;	/* interface flags (a la BSD)	*/
 	unsigned short		gflags;
-	unsigned short		metric;	/* routing metric (not used)	*/
-	unsigned short		mtu;	/* interface MTU value		*/
+	unsigned		mtu;	/* interface MTU value		*/
 	unsigned short		type;	/* interface hardware type	*/
 	unsigned short		hard_header_len;	/* hardware hdr length	*/
 	void			*priv;	/* pointer to private data	*/

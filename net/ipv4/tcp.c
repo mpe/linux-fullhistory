@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.116 1998/07/26 03:06:54 davem Exp $
+ * Version:	$Id: tcp.c,v 1.119 1998/08/26 12:04:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -201,6 +201,7 @@
  *					tcp_do_sendmsg to avoid burstiness.
  *		Eric Schenk	:	Fix fast close down bug with
  *					shutdown() followed by close().
+ *		Andi Kleen :	Make poll agree with SIGIO
  *					
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -383,13 +384,14 @@
  *
  * ICMP messages (4.2.3.9)
  *   MUST act on ICMP errors. (does)
- *   MUST slow transmission upon receipt of a Source Quench. (does)
+ *   MUST slow transmission upon receipt of a Source Quench. (doesn't anymore 
+ *   because that is deprecated now by the IETF, can be turned on)
  *   MUST NOT abort connection upon receipt of soft Destination
  *     Unreachables (0, 1, 5), Time Exceededs and Parameter
  *     Problems. (doesn't)
  *   SHOULD report soft Destination Unreachables etc. to the
- *     application. (does, but may drop them in the ICMP error handler
- *	during an accept())
+ *     application. (does, except during SYN_RECV and may drop messages
+ *     in some rare cases before accept() - ICMP is unreliable)	
  *   SHOULD abort connection upon receipt of hard Destination Unreachable
  *     messages (2, 3, 4). (does, but see above)
  *
@@ -397,7 +399,7 @@
  *   MUST reject as an error OPEN for invalid remote IP address. (does)
  *   MUST ignore SYN with invalid source address. (does)
  *   MUST silently discard incoming SYN for broadcast/multicast
- *     address. (I'm not sure if it does. Someone should check this.)
+ *     address. (does)
  *
  * Asynchronous Reports (4.2.4.1)
  * MUST provide mechanism for reporting soft errors to application
@@ -537,6 +539,21 @@ static unsigned int tcp_listen_poll(struct sock *sk, poll_table *wait)
 }
 
 /*
+ *	Compute minimal free write space needed to queue new packets. 
+ */
+static inline int tcp_min_write_space(struct sock *sk, struct tcp_opt *tp)
+{
+	int space;
+#if 1 /* This needs benchmarking and real world tests */
+	space = max(tp->mss_cache + 128, MIN_WRITE_SPACE);
+#else /* 2.0 way */
+	/* More than half of the socket queue free? */
+	space = atomic_read(&sk->wmem_alloc) / 2;
+#endif
+	return space;
+}
+
+/*
  *	Wait for a TCP event.
  *
  *	Note that we don't need to lock the socket, as the upper poll layers
@@ -557,9 +574,7 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 	if (sk->err)
 		mask = POLLERR;
 	/* Connected? */
-	if ((1 << sk->state) & ~(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
-		int space;
-
+	if ((1 << sk->state) & ~(TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE)) {
 		if (sk->shutdown & RCV_SHUTDOWN)
 			mask |= POLLHUP;
 		
@@ -569,22 +584,30 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 		     sk->urginline || !tp->urg_data))
 			mask |= POLLIN | POLLRDNORM;
 
-#if 1 /* This needs benchmarking and real world tests */
-		space = (sk->dst_cache ? sk->dst_cache->pmtu : sk->mss) + 128;
-		if (space < 2048) /* XXX */
-			space = 2048;
-#else /* 2.0 way */
-		/* More than half of the socket queue free? */
-		space = atomic_read(&sk->wmem_alloc) / 2;
-#endif
 		/* Always wake the user up when an error occurred */
-		if (sock_wspace(sk) >= space || sk->err)
+		if (sock_wspace(sk) >= tcp_min_write_space(sk, tp) || sk->err)
 			mask |= POLLOUT | POLLWRNORM;
 		if (tp->urg_data & URG_VALID)
-		    	mask |= POLLPRI;
+			mask |= POLLPRI;
 	}
 	return mask;
 }
+
+/*
+ *	Socket write_space callback.
+ *	This (or rather the sock_wake_async) should agree with poll. 
+ */
+void tcp_write_space(struct sock *sk)
+{
+	if (sk->dead)
+		return; 
+
+	wake_up_interruptible(sk->sleep);
+	if (sock_wspace(sk) >=
+	    tcp_min_write_space(sk, &(sk->tp_pinfo.af_tcp)))
+		sock_wake_async(sk->socket, 2);
+}
+
 
 int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
@@ -1025,7 +1048,7 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 		 * which don't advertize a larger window.
 		 */
 		if((copied >= rcv_window_now) &&
-		   ((rcv_window_now + sk->mss) <= tp->window_clamp))
+		   ((rcv_window_now + tp->mss_cache) <= tp->window_clamp))
 			tcp_read_wakeup(sk);
 	}
 }
@@ -1543,16 +1566,18 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 
 	tcp_synq_unlink(tp, req, prev);
 	newsk = req->sk;
+	req->class->destructor(req);
 	tcp_openreq_free(req);
 	sk->ack_backlog--; 
 
-	/* FIXME: need to check here if newsk has already
-	 * an soft_err or err set.
-	 * We have two options here then: reply (this behaviour matches
-	 * Solaris) or return the error to the application (old Linux)
-	 */
+	/*
+	 * This does not pass any already set errors on the new socket
+	 * to the user, but they will be returned on the first socket operation
+	 * after the accept.
+	 */ 
+
 	error = 0;
- out:
+out:
 	release_sock(sk);
 	sk->err = error;
 	return newsk;
@@ -1586,7 +1611,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
  */
 	  		if(val<1||val>MAX_WINDOW)
 				return -EINVAL;
-			sk->user_mss=val;
+			tp->user_mss=val;
 			return 0;
 		case TCP_NODELAY:
 			sk->nonagle=(val==0)?0:1;
@@ -1614,7 +1639,7 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 
 	switch(optname) {
 		case TCP_MAXSEG:
-			val=sk->user_mss;
+			val=tp->user_mss;
 			break;
 		case TCP_NODELAY:
 			val=sk->nonagle;
@@ -1640,7 +1665,7 @@ void tcp_set_keepalive(struct sock *sk, int val)
 
 extern void __skb_cb_too_small_for_tcp(int, int);
 
-__initfunc(void tcp_init(void))
+void __init tcp_init(void)
 {
 	struct sk_buff *skb = NULL;
 

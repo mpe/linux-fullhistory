@@ -91,85 +91,90 @@ bitrev(int b)
 int
 mace_probe(struct device *dev)
 {
-    int j, rev;
-    struct mace_data *mp;
-    struct device_node *maces;
-    unsigned char *addr;
+	int j, rev;
+	struct mace_data *mp;
+	struct device_node *mace;
+	unsigned char *addr;
+	static int maces_found = 0;
+	static struct device_node *next_mace;
 
-    maces = find_devices("mace");
-    if (maces == 0)
-	return ENODEV;
+	if (!maces_found) {
+		next_mace = find_devices("mace");
+		maces_found = 1;
+	}
+	mace = next_mace;
+	if (mace == 0)
+		return -ENODEV;
+	next_mace = mace->next;
 
-    do {
-	if (maces->n_addrs != 3 || maces->n_intrs != 3) {
-	    printk(KERN_ERR "can't use MACE %s: expect 3 addrs and 3 intrs\n",
-		   maces->full_name);
-	    continue;
+	if (mace->n_addrs != 3 || mace->n_intrs != 3) {
+		printk(KERN_ERR "can't use MACE %s: expect 3 addrs and 3 intrs\n",
+		       mace->full_name);
+		return -ENODEV;
 	}
 
 	if (dev == NULL)
-	    dev = init_etherdev(0, PRIV_BYTES);
+		dev = init_etherdev(0, PRIV_BYTES);
 	else {
-	    /* XXX this doesn't look right (but it's never used :-) */
-	    dev->priv = kmalloc(PRIV_BYTES, GFP_KERNEL);
-	    if (dev->priv == 0)
-		return -ENOMEM;
+		dev->priv = kmalloc(PRIV_BYTES, GFP_KERNEL);
+		if (dev->priv == 0)
+			return -ENOMEM;
 	}
 
 	mp = (struct mace_data *) dev->priv;
-	dev->base_addr = maces->addrs[0].address;
+	dev->base_addr = mace->addrs[0].address;
 	mp->mace = (volatile struct mace *)
-		ioremap(maces->addrs[0].address, 0x1000);
-	dev->irq = maces->intrs[0].line;
+		ioremap(mace->addrs[0].address, 0x1000);
+	dev->irq = mace->intrs[0].line;
 
 	if (request_irq(dev->irq, mace_interrupt, 0, "MACE", dev)) {
-	    printk(KERN_ERR "MACE: can't get irq %d\n", dev->irq);
-	    return -EAGAIN;
+		printk(KERN_ERR "MACE: can't get irq %d\n", dev->irq);
+		return -EAGAIN;
 	}
-	if (request_irq(maces->intrs[1].line, mace_txdma_intr, 0, "MACE-txdma",
+	if (request_irq(mace->intrs[1].line, mace_txdma_intr, 0, "MACE-txdma",
 			dev)) {
-	    printk(KERN_ERR "MACE: can't get irq %d\n", maces->intrs[1].line);
-	    return -EAGAIN;
+		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[1].line);
+		return -EAGAIN;
 	}
-	if (request_irq(maces->intrs[2].line, mace_rxdma_intr, 0, "MACE-rxdma",
+	if (request_irq(mace->intrs[2].line, mace_rxdma_intr, 0, "MACE-rxdma",
 			dev)) {
-	    printk(KERN_ERR "MACE: can't get irq %d\n", maces->intrs[2].line);
-	    return -EAGAIN;
+		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[2].line);
+		return -EAGAIN;
 	}
 
-	addr = get_property(maces, "mac-address", NULL);
+	addr = get_property(mace, "mac-address", NULL);
 	if (addr == NULL) {
-	    addr = get_property(maces, "local-mac-address", NULL);
-	    if (addr == NULL) {
-		printk(KERN_ERR "Can't get mac-address for MACE at %lx\n",
-		       dev->base_addr);
-		return -EAGAIN;
-	    }
+		addr = get_property(mace, "local-mac-address", NULL);
+		if (addr == NULL) {
+			printk(KERN_ERR "Can't get mac-address for MACE at %lx\n",
+			       dev->base_addr);
+			return -EAGAIN;
+		}
 	}
 
 	printk(KERN_INFO "%s: MACE at", dev->name);
 	rev = addr[0] == 0 && addr[1] == 0xA0;
 	for (j = 0; j < 6; ++j) {
-	    dev->dev_addr[j] = rev? bitrev(addr[j]): addr[j];
-	    printk("%c%.2x", (j? ':': ' '), dev->dev_addr[j]);
+		dev->dev_addr[j] = rev? bitrev(addr[j]): addr[j];
+		printk("%c%.2x", (j? ':': ' '), dev->dev_addr[j]);
 	}
 	printk("\n");
 
 	mp = (struct mace_data *) dev->priv;
 	mp->maccc = ENXMT | ENRCV;
 	mp->tx_dma = (volatile struct dbdma_regs *)
-		ioremap(maces->addrs[1].address, 0x1000);
-	mp->tx_dma_intr = maces->intrs[1].line;
+		ioremap(mace->addrs[1].address, 0x1000);
+	mp->tx_dma_intr = mace->intrs[1].line;
 	mp->rx_dma = (volatile struct dbdma_regs *)
-		ioremap(maces->addrs[2].address, 0x1000);
-	mp->rx_dma_intr = maces->intrs[2].line;
+		ioremap(mace->addrs[2].address, 0x1000);
+	mp->rx_dma_intr = mace->intrs[2].line;
 
 	mp->tx_cmds = (volatile struct dbdma_cmd *) DBDMA_ALIGN(mp + 1);
 	mp->rx_cmds = mp->tx_cmds + NCMDS_TX * N_TX_RING + 1;
 
 	memset(&mp->stats, 0, sizeof(mp->stats));
 	memset((char *) mp->tx_cmds, 0,
-	      (NCMDS_TX*N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
+	       (NCMDS_TX*N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
 	init_timer(&mp->tx_timeout);
 	mp->timeout_active = 0;
 
@@ -182,9 +187,7 @@ mace_probe(struct device *dev)
 
 	ether_setup(dev);
 
-    } while ((maces = maces->next) != 0);
-
-    return 0;
+	return 0;
 }
 
 static void mace_reset(struct device *dev)

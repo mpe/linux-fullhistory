@@ -552,7 +552,6 @@ static int rose_create(struct socket *sock, int protocol)
 
 	sock->ops    = &rose_proto_ops;
 	sk->protocol = protocol;
-	sk->mtu      = ROSE_MTU;	/* 253 */
 
 	init_timer(&rose->timer);
 	init_timer(&rose->idletimer);
@@ -593,7 +592,6 @@ static struct sock *rose_make_new(struct sock *osk)
 	sk->sndbuf   = osk->sndbuf;
 	sk->debug    = osk->debug;
 	sk->state    = TCP_ESTABLISHED;
-	sk->mtu      = osk->mtu;
 	sk->sleep    = osk->sleep;
 	sk->zapped   = osk->zapped;
 

@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.36 1998/07/15 05:05:06 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.37 1998/08/26 12:03:57 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -28,6 +28,7 @@
 #include <net/sock.h>
 #include <net/ip.h>
 #include <net/icmp.h>
+#include <net/tcp.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/igmp.h>
@@ -36,6 +37,9 @@
 #include <linux/route.h>
 #include <linux/mroute.h>
 #include <net/route.h>
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#include <net/transp_v6.h>
+#endif
 
 #include <asm/uaccess.h>
 
@@ -140,6 +144,10 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc)
 	struct cmsghdr *cmsg;
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if ((unsigned long)(((char*)cmsg - (char*)msg->msg_control)
+				    + cmsg->cmsg_len) > msg->msg_controllen) {
+			return -EINVAL;
+		}
 		if (cmsg->cmsg_level != SOL_IP)
 			continue;
 		switch (cmsg->cmsg_type) {
@@ -255,22 +263,30 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_OPTIONS:
 		{
 			struct ip_options * opt = NULL;
-			struct ip_options * old_opt;
 			if (optlen > 40 || optlen < 0)
 				return -EINVAL;
 			err = ip_options_get(&opt, optval, optlen, 1);
 			if (err)
 				return err;
-			/*
-			 * ANK: I'm afraid that receive handler may change
-			 * options from under us.
-			 */
-			cli();
-			old_opt = sk->opt;
-			sk->opt = opt;
-			sti();
-			if (old_opt)
-				kfree_s(old_opt, sizeof(struct ip_options) + old_opt->optlen);
+			start_bh_atomic();
+			if (sk->type == SOCK_STREAM) {
+				struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+				if (sk->family == PF_INET ||
+				    ((tcp_connected(sk->state) || sk->state == TCP_SYN_SENT)
+				     && sk->daddr != LOOPBACK4_IPV6)) {
+#endif
+					if (opt)
+						tp->ext_header_len = opt->optlen;
+					tcp_sync_mss(sk, tp->pmtu_cookie);
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+				}
+#endif
+			}
+			opt = xchg(&sk->opt, opt);
+			end_bh_atomic();
+			if (opt)
+				kfree_s(opt, sizeof(struct ip_options) + opt->optlen);
 			return 0;
 		}
 		case IP_PKTINFO:
@@ -497,11 +513,11 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			{
 				unsigned char optbuf[sizeof(struct ip_options)+40];
 				struct ip_options * opt = (struct ip_options*)optbuf;
-				cli();
+				start_bh_atomic();
 				opt->optlen = 0;
 				if (sk->opt)
 					memcpy(optbuf, sk->opt, sizeof(struct ip_options)+sk->opt->optlen);
-				sti();
+				end_bh_atomic();
 				if (opt->optlen == 0) 
 					return put_user(0, optlen);
 
@@ -511,7 +527,7 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 				if(put_user(len, optlen))
 					return -EFAULT;
 				if(copy_to_user(optval, opt->__data, len))
-					    return -EFAULT;
+					return -EFAULT;
 				return 0;
 			}
 		case IP_PKTINFO:

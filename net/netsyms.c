@@ -264,6 +264,7 @@ EXPORT_SYMBOL(tcp_close);
 EXPORT_SYMBOL(tcp_accept);
 EXPORT_SYMBOL(tcp_write_wakeup);
 EXPORT_SYMBOL(tcp_read_wakeup);
+EXPORT_SYMBOL(tcp_write_space);
 EXPORT_SYMBOL(tcp_poll);
 EXPORT_SYMBOL(tcp_ioctl);
 EXPORT_SYMBOL(tcp_shutdown);

@@ -16,6 +16,7 @@
  *		Alan Cox <gw4pts@gw4pts.ampr.org>
  *		David Hinds <dhinds@allegro.stanford.edu>
  *		Alexey Kuznetsov <kuznet@ms2.inr.ac.ru>
+ *		Adam Sulmicki <adam@cfar.umd.edu>
  *
  *	Changes:
  *		Alan Cox	:	device private ioctl copies fields back.
@@ -51,7 +52,10 @@
  *		Andi Kleen	:	Fix error reporting for SIOCGIFCONF
  *	    Michael Chastain	:	Fix signed/unsigned for SIOCGIFCONF
  *		Cyrus Durgin	:	Cleaned for KMOD
- *
+ *		Adam Sulmicki   :	Bug Fix : Network Device Unload
+ *					A network device unload needs to purge
+ *					the backlog queue.
+ *	Paul Rusty Russel	:	SIOCSIFNAME
  */
 
 #include <asm/uaccess.h>
@@ -154,6 +158,8 @@ int netdev_fastroute_obstacles;
 struct net_fastroute_stats dev_fastroute_stat;
 #endif
 
+static void dev_clear_backlog(struct device *dev);
+
 
 /******************************************************************************************
 
@@ -171,6 +177,16 @@ int netdev_nit=0;
  *	Add a protocol ID to the list. Now that the input handler is
  *	smarter we can dispense with all the messy stuff that used to be
  *	here.
+ *
+ *	BEWARE!!! Protocol handlers, mangling input packets,
+ *	MUST BE last in hash buckets and checking protocol handlers
+ *	MUST start from promiscous ptype_all chain in net_bh.
+ *	It is true now, do not change it.
+ *	Explantion follows: if protocol handler, mangling packet, will
+ *	be the first on list, it is not able to sense, that packet
+ *	is cloned and should be copied-on-write, so that it will
+ *	change it and subsequent readers will get broken packet.
+ *							--ANK (980803)
  */
  
 void dev_add_pack(struct packet_type *pt)
@@ -448,7 +464,8 @@ int dev_close(struct device *dev)
 	/*
 	 *	Device is now down.
 	 */
-	 
+	dev_clear_backlog(dev);
+
 	dev->flags&=~(IFF_UP|IFF_RUNNING);
 #ifdef CONFIG_NET_FASTROUTE
 	dev_clear_fastroute(dev);
@@ -457,7 +474,6 @@ int dev_close(struct device *dev)
 	/*
 	 *	Tell people we are going down
 	 */
-	 
 	notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
 
 	return(0);
@@ -685,6 +701,45 @@ static void netdev_wakeup(void)
 }
 #endif
 
+static void dev_clear_backlog(struct device *dev)
+{
+	struct sk_buff *prev, *curr;
+
+	/*
+	 *
+	 *  Let now clear backlog queue. -AS
+	 *
+	 *  We are competing here both with netif_rx() and net_bh().
+	 *  We don't want either of those to mess with skb ptrs
+	 *  while we work on them, thus cli()/sti().
+	 *
+	 *  It looks better to use net_bh trick, at least
+	 *  to be sure, that we keep interrupt latency really low. --ANK (980727)
+	 */ 
+
+	if (backlog.qlen) {
+		start_bh_atomic();
+		curr = backlog.next;
+		while ( curr != (struct sk_buff *)(&backlog) ) {
+			unsigned long flags;
+			curr=curr->next;
+			if ( curr->prev->dev == dev ) {
+				prev = curr->prev;
+				spin_lock_irqsave(&skb_queue_lock, flags);
+				__skb_unlink(prev, &backlog);
+				spin_unlock_irqrestore(&skb_queue_lock, flags);
+				kfree_skb(prev);
+			}
+		}
+		end_bh_atomic();
+#ifdef CONFIG_NET_HW_FLOWCONTROL
+		if (netdev_dropping)
+			netdev_wakeup();
+#else
+		netdev_dropping = 0;
+#endif
+	}
+}
 
 /*
  *	Receive a packet from a device driver and queue it for the upper
@@ -1320,7 +1375,7 @@ int dev_change_flags(struct device *dev, unsigned flags)
 	 */
 
 	dev->flags = (flags & (IFF_DEBUG|IFF_NOTRAILERS|IFF_RUNNING|IFF_NOARP|
-			       IFF_SLAVE|IFF_MASTER|
+			       IFF_NODYNARP|IFF_SLAVE|IFF_MASTER|
 			       IFF_MULTICAST|IFF_PORTSEL|IFF_AUTOMEDIA)) |
 				       (dev->flags & (IFF_UP|IFF_VOLATILE|IFF_PROMISC|IFF_ALLMULTI));
 
@@ -1391,12 +1446,11 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			return dev_change_flags(dev, ifr->ifr_flags);
 		
 		case SIOCGIFMETRIC:	/* Get the metric on the interface (currently unused) */
-			ifr->ifr_metric = dev->metric;
+			ifr->ifr_metric = 0;
 			return 0;
 			
 		case SIOCSIFMETRIC:	/* Set the metric on the interface (currently unused) */
-			dev->metric = ifr->ifr_metric;
-			return 0;
+			return -EOPNOTSUPP;
 	
 		case SIOCGIFMTU:	/* Get the MTU of a device */
 			ifr->ifr_mtu = dev->mtu;
@@ -1419,10 +1473,8 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 				dev->mtu = ifr->ifr_mtu;
 				err = 0;
 			}
-			if (!err && dev->flags&IFF_UP) {
-				printk(KERN_DEBUG "SIFMTU %s(%s)\n", dev->name, current->comm);
+			if (!err && dev->flags&IFF_UP)
 				notifier_call_chain(&netdev_chain, NETDEV_CHANGEMTU, dev);
-			}
 			return err;
 
 		case SIOCGIFHWADDR:
@@ -1484,9 +1536,20 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			return 0;
 
 		case SIOCSIFTXQLEN:
-			if(ifr->ifr_qlen<2 || ifr->ifr_qlen>1024)
+			/* Why <2? 0 and 1 are valid values. --ANK (980807) */
+			if(/*ifr->ifr_qlen<2 ||*/ ifr->ifr_qlen>1024)
 				return -EINVAL;
 			dev->tx_queue_len = ifr->ifr_qlen;
+			return 0;
+
+		case SIOCSIFNAME:
+			if (dev->flags&IFF_UP)
+				return -EBUSY;
+			if (dev_get(ifr->ifr_newname))
+				return -EEXIST;
+			memcpy(dev->name, ifr->ifr_newname, IFNAMSIZ);
+			dev->name[IFNAMSIZ-1] = 0;
+			notifier_call_chain(&netdev_chain, NETDEV_CHANGENAME, dev);
 			return 0;
 
 		/*
@@ -1597,6 +1660,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCDELMULTI:
 		case SIOCSIFHWBROADCAST:
 		case SIOCSIFTXQLEN:
+		case SIOCSIFNAME:
 			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			dev_load(ifr.ifr_name);
@@ -1668,6 +1732,17 @@ int register_netdevice(struct device *dev)
 	struct device *d, **dp;
 
 	if (dev_boot_phase) {
+		/* This is NOT bug, but I am not sure, that all the
+		   devices, initialized before netdev module is started
+		   are sane. 
+
+		   Now they are chained to device boot list
+		   and probed later. If a module is initialized
+		   before netdev, but assumes that dev->init
+		   is really called by register_netdev(), it will fail.
+
+		   So that this message should be printed for a while.
+		 */
 		printk(KERN_INFO "early initialization of device %s is deferred\n", dev->name);
 
 		/* Check for existence, and append to tail of chain */

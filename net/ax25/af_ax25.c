@@ -849,7 +849,6 @@ int ax25_create(struct socket *sock, int protocol)
 	sk->destruct = ax25_free_sock;
 	sock->ops    = &ax25_proto_ops;
 	sk->protocol = protocol;
-	sk->mtu      = AX25_MTU;	/* 256 */
 
 	ax25->sk          = sk;
 	sk->protinfo.ax25 = ax25;
@@ -892,7 +891,6 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	sk->sndbuf   = osk->sndbuf;
 	sk->debug    = osk->debug;
 	sk->state    = TCP_ESTABLISHED;
-	sk->mtu      = osk->mtu;
 	sk->sleep    = osk->sleep;
 	sk->zapped   = osk->zapped;
 

@@ -212,7 +212,7 @@ extern int		fib_semantic_match(int type, struct fib_info *,
 extern struct fib_info	*fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 					 const struct nlmsghdr *, int *err);
 extern int fib_nh_match(struct rtmsg *r, struct nlmsghdr *, struct kern_rta *rta, struct fib_info *fi);
-extern int fib_dump_info(struct sk_buff *skb, pid_t pid, u32 seq, int event,
+extern int fib_dump_info(struct sk_buff *skb, u32 pid, u32 seq, int event,
 			 u8 tb_id, u8 type, u8 scope, void *dst, int dst_len, u8 tos,
 			 struct fib_info *fi);
 extern int fib_sync_down(u32 local, struct device *dev, int force);

@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.22 1998/07/15 05:05:39 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.23 1998/08/26 12:05:04 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -110,7 +110,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		    int optlen)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-	int val, err;
+	int val, valbool;
 	int retv = -ENOPROTOOPT;
 
 	if(level==SOL_IP && sk->type != SOCK_RAW)
@@ -119,19 +119,20 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 	if(level!=SOL_IPV6)
 		goto out;
 
-	if (optval == NULL) {
+	if (optval == NULL)
 		val=0;
-	} else {
-		err = get_user(val, (int *) optval);
-		if(err)
-			return err;
-	}
-	
+	else if (get_user(val, (int *) optval))
+		return -EFAULT;
+
+	valbool = (val!=0);
 
 	switch (optname) {
 
 	case IPV6_ADDRFORM:
 		if (val == PF_INET) {
+			struct ipv6_txoptions *opt;
+			struct sk_buff *pktopt;
+
 			if (sk->protocol != IPPROTO_UDP &&
 			    sk->protocol != IPPROTO_TCP)
 				goto out;
@@ -140,7 +141,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				retv = ENOTCONN;
 				goto out;
 			}
-			
+
 			if (!(ipv6_addr_type(&np->daddr) & IPV6_ADDR_MAPPED)) {
 				retv = -EADDRNOTAVAIL;
 				goto out;
@@ -153,10 +154,17 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				tp->af_specific = &ipv4_specific;
 				sk->socket->ops = &inet_stream_ops;
 				sk->family = PF_INET;
+				tcp_sync_mss(sk, tp->pmtu_cookie);
 			} else {
 				sk->prot = &udp_prot;
 				sk->socket->ops = &inet_dgram_ops;
 			}
+			opt = xchg(&np->opt, NULL);
+			if (opt)
+				sock_kfree_s(sk, opt, opt->tot_len);
+			pktopt = xchg(&np->pktoptions, NULL);
+			if (pktopt)
+				kfree_skb(pktopt);
 			retv = 0;
 		} else {
 			retv = -EINVAL;
@@ -164,15 +172,85 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		break;
 
 	case IPV6_PKTINFO:
-		np->rxinfo = val;
+		np->rxopt.bits.rxinfo = valbool;
 		retv = 0;
 		break;
 
 	case IPV6_HOPLIMIT:
-		np->rxhlim = val;
+		np->rxopt.bits.rxhlim = valbool;
 		retv = 0;
 		break;
 
+	case IPV6_RTHDR:
+		retv = -EINVAL;
+		if (val >= 0 && val <= 2) {
+			np->rxopt.bits.srcrt = val;
+			retv = 0;
+		}
+		break;
+
+	case IPV6_HOPOPTS:
+		np->rxopt.bits.hopopts = valbool;
+		retv = 0;
+		break;
+
+	case IPV6_AUTHHDR:
+		np->rxopt.bits.authhdr = valbool;
+		retv = 0;
+		break;
+
+	case IPV6_DSTOPTS:
+		np->rxopt.bits.dstopts = valbool;
+		retv = 0;
+		break;
+
+	case IPV6_PKTOPTIONS:
+	{
+		struct ipv6_txoptions *opt = NULL;
+		struct msghdr msg;
+		int junk;
+		struct in6_addr *saddr;
+
+		if (optlen == 0)
+			goto update;
+
+		opt = sock_kmalloc(sk, sizeof(*opt) + optlen, GFP_KERNEL);
+		retv = -ENOBUFS;
+		if (opt == NULL)
+			break;
+
+		memset(opt, 0, sizeof(*opt));
+		opt->tot_len = sizeof(*opt) + optlen;
+		retv = -EFAULT;
+		if (copy_from_user(opt+1, optval, optlen))
+			goto done;
+
+		msg.msg_controllen = optlen;
+		msg.msg_control = (void*)(opt+1);
+
+		retv = datagram_send_ctl(&msg, &junk, &saddr, opt, &junk);
+		if (retv)
+			goto done;
+update:
+		retv = 0;
+		start_bh_atomic();
+		if (opt && sk->type == SOCK_STREAM) {
+			struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+			if ((tcp_connected(sk->state) || sk->state == TCP_SYN_SENT)
+			    && sk->daddr != LOOPBACK4_IPV6) {
+				tp->ext_header_len = opt->opt_flen + opt->opt_nflen;
+				tcp_sync_mss(sk, tp->pmtu_cookie);
+			}
+		}
+		opt = xchg(&np->opt, opt);
+		dst_release(xchg(&sk->dst_cache, NULL));
+		end_bh_atomic();
+
+done:
+		if (opt)
+			sock_kfree_s(sk, opt, opt->tot_len);
+		break;
+	}
 	case IPV6_UNICAST_HOPS:
 		if (val > 255 || val < -1)
 			retv = -EINVAL;
@@ -190,10 +268,9 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 			retv = 0;
 		}
 		break;
-		break;
 
 	case IPV6_MULTICAST_LOOP:
-		np->mc_loop = (val != 0);
+		np->mc_loop = valbool;
 		retv = 0;
 		break;
 
@@ -229,12 +306,10 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 	case IPV6_DROP_MEMBERSHIP:
 	{
 		struct ipv6_mreq mreq;
-		int err;
 
-		err = copy_from_user(&mreq, optval, sizeof(struct ipv6_mreq));
-		if(err)
+		if (copy_from_user(&mreq, optval, sizeof(struct ipv6_mreq)))
 			return -EFAULT;
-		
+
 		if (optname == IPV6_ADD_MEMBERSHIP)
 			retv = ipv6_sock_mc_join(sk, mreq.ipv6mr_ifindex, &mreq.ipv6mr_multiaddr);
 		else
@@ -253,10 +328,44 @@ out:
 int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval, 
 		    int *optlen)
 {
+	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
+	int len;
+
 	if(level==SOL_IP && sk->type != SOCK_RAW)
 		return udp_prot.getsockopt(sk, level, optname, optval, optlen);
 	if(level!=SOL_IPV6)
 		return -ENOPROTOOPT;
+	if (get_user(len, optlen))
+		return -EFAULT;
+	switch (optname) {
+	case IPV6_PKTOPTIONS:
+	{
+		struct msghdr msg;
+		struct sk_buff *skb;
+
+		start_bh_atomic();
+		skb = np->pktoptions;
+		if (skb)
+			atomic_inc(&skb->users);
+		end_bh_atomic();
+
+		if (skb) {
+			int err;
+
+			msg.msg_control = optval;
+			msg.msg_controllen = len;
+			msg.msg_flags = 0;
+			err = datagram_recv_ctl(sk, &msg, skb);
+			kfree_skb(skb);
+			if (err)
+				return err;
+			len -= msg.msg_controllen;
+		} else
+			len = 0;
+		return put_user(len, optlen);
+	}
+	default:
+	}
 	return -EINVAL;
 }
 

@@ -475,7 +475,6 @@ static int nr_create(struct socket *sock, int protocol)
 
 	sock->ops    = &nr_proto_ops;
 	sk->protocol = protocol;
-	sk->mtu      = NETROM_MTU;	/* 236 */
 
 	skb_queue_head_init(&nr->ack_queue);
 	skb_queue_head_init(&nr->reseq_queue);
@@ -522,7 +521,6 @@ static struct sock *nr_make_new(struct sock *osk)
 	sk->sndbuf   = osk->sndbuf;
 	sk->debug    = osk->debug;
 	sk->state    = TCP_ESTABLISHED;
-	sk->mtu      = osk->mtu;
 	sk->sleep    = osk->sleep;
 	sk->zapped   = osk->zapped;
 

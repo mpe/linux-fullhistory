@@ -54,15 +54,16 @@
 
 static inline void wait_for_packet(struct sock * sk)
 {
-	unsigned long flags;
+	struct wait_queue wait = { current, NULL };
 
-	release_sock(sk);
-	save_flags(flags);
-	cli();
+	add_wait_queue(sk->sleep, &wait);
+	current->state = TASK_INTERRUPTIBLE;
+
 	if (skb_peek(&sk->receive_queue) == NULL)
-		interruptible_sleep_on(sk->sleep);
-	restore_flags(flags);
-	lock_sock(sk);
+		schedule();
+
+	current->state = TASK_RUNNING;
+	remove_wait_queue(sk->sleep, &wait);
 }
 
 /*
@@ -84,6 +85,14 @@ static inline int connection_based(struct sock *sk)
  *	This function will lock the socket if a skb is returned, so the caller
  *	needs to unlock the socket in that case (usually by calling skb_free_datagram)
  *
+ *	* It does not lock socket since today. This function is
+ *	* free of race conditions. This measure should/can improve
+ *	* significantly datagram socket latencies at high loads,
+ *	* when data copying to user space takes lots of time.
+ *	* (BTW I've just killed the last cli() in IP/IPv6/core/netlink/packet
+ *	*  8) Great win.)
+ *	*			                    --ANK (980729)
+ *
  *	The order of the tests when we find no data waiting are specified
  *	quite explicitly by POSIX 1003.1g, don't change them without having
  *	the standard around please.
@@ -94,7 +103,6 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 	int error;
 	struct sk_buff *skb;
 
-	lock_sock(sk);
 restart:
 	while(skb_queue_empty(&sk->receive_queue))	/* No data */
 	{
@@ -129,13 +137,24 @@ restart:
 	   will suddenly eat the receive_queue */
 	if (flags & MSG_PEEK)
 	{
-		unsigned long flags;
-		save_flags(flags);
-		cli();
+		unsigned long cpu_flags;
+
+		/* It is the only POTENTIAL race condition
+		   in this function. skb may be stolen by
+		   another receiver after peek, but before
+		   incrementing use count, provided kernel
+		   is reentearble (it is not) or this function
+		   is called by interrupts.
+
+		   Protect it with global skb spinlock,
+		   though for now even this is overkill.
+		                                --ANK (980728)
+		 */
+		spin_lock_irqsave(&skb_queue_lock, cpu_flags);
 		skb = skb_peek(&sk->receive_queue);
 		if(skb!=NULL)
 			atomic_inc(&skb->users);
-		restore_flags(flags);
+		spin_unlock_irqrestore(&skb_queue_lock, cpu_flags);
 	} else
 		skb = skb_dequeue(&sk->receive_queue);
 
@@ -144,7 +163,6 @@ restart:
 	return skb;
 
 no_packet:
-	release_sock(sk);
 	*err = error;
 	return NULL;
 }
@@ -152,7 +170,6 @@ no_packet:
 void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 {
 	kfree_skb(skb);
-	release_sock(sk);
 }
 
 /*
@@ -184,6 +201,10 @@ int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
  *	Datagram poll: Again totally generic. This also handles
  *	sequenced packet sockets providing the socket receive queue
  *	is only ever holding data ready to receive.
+ *
+ *	Note: when you _don't_ use this routine for this protocol,
+ *	and you use a different write policy from sock_writeable()
+ *	then please supply your own write_space callback.
  */
 
 unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *wait)
@@ -199,7 +220,7 @@ unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *
 		mask |= POLLERR;
 	if (sk->shutdown & RCV_SHUTDOWN)
 		mask |= POLLHUP;
-
+	
 	/* readable? */
 	if (!skb_queue_empty(&sk->receive_queue))
 		mask |= POLLIN | POLLRDNORM;
@@ -214,15 +235,8 @@ unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *
 	}
 
 	/* writable? */
-	if (!(sk->shutdown & SEND_SHUTDOWN)) {
-		if (sk->prot) {
-			if (sock_wspace(sk) >= MIN_WRITE_SPACE)
-				mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
-		} else {
-			if (sk->sndbuf - atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
-				mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
-		}
-	}
+	if (sock_writeable(sk))
+		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 
 	return mask;
 }

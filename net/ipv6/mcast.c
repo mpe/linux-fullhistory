@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.16 1998/05/07 15:43:10 davem Exp $
+ *	$Id: mcast.c,v 1.17 1998/08/26 12:05:06 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -79,7 +79,7 @@ int ipv6_sock_mc_join(struct sock *sk, int ifindex, struct in6_addr *addr)
 	if (!(ipv6_addr_type(addr) & IPV6_ADDR_MULTICAST))
 		return -EINVAL;
 
-	mc_lst = kmalloc(sizeof(struct ipv6_mc_socklist), GFP_KERNEL);
+	mc_lst = sock_kmalloc(sk, sizeof(struct ipv6_mc_socklist), GFP_KERNEL);
 
 	if (mc_lst == NULL)
 		return -ENOMEM;
@@ -91,13 +91,15 @@ int ipv6_sock_mc_join(struct sock *sk, int ifindex, struct in6_addr *addr)
 	if (ifindex == 0) {
 		struct rt6_info *rt;
 		rt = rt6_lookup(addr, NULL, 0, 0);
-		if (rt)
+		if (rt) {
 			dev = rt->rt6i_dev;
+			dst_release(&rt->u.dst);
+		}
 	} else
 		dev = dev_get_by_index(ifindex);
 
 	if (dev == NULL) {
-		kfree(mc_lst);
+		sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
 		return -ENODEV;
 	}
 
@@ -108,7 +110,7 @@ int ipv6_sock_mc_join(struct sock *sk, int ifindex, struct in6_addr *addr)
 	err = ipv6_dev_mc_inc(dev, addr);
 
 	if (err) {
-		kfree(mc_lst);
+		sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
 		return err;
 	}
 
@@ -133,7 +135,7 @@ int ipv6_sock_mc_drop(struct sock *sk, int ifindex, struct in6_addr *addr)
 			*lnk = mc_lst->next;
 			if ((dev = dev_get_by_index(ifindex)) != NULL)
 				ipv6_dev_mc_dec(dev, &mc_lst->addr);
-			kfree(mc_lst);
+			sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
 			return 0;
 		}
 	}
@@ -153,7 +155,7 @@ void ipv6_sock_mc_close(struct sock *sk)
 			ipv6_dev_mc_dec(dev, &mc_lst->addr);
 
 		np->ipv6_mc_list = mc_lst->next;
-		kfree(mc_lst);
+		sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
 	}
 }
 
@@ -308,11 +310,19 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 {
 	unsigned long delay = resptime;
 
+	/* Do not start timer for addresses with link/host scope */
+	if (ipv6_addr_type(&ma->mca_addr)&(IPV6_ADDR_LINKLOCAL|IPV6_ADDR_LOOPBACK))
+		return;
+
 	if (del_timer(&ma->mca_timer))
 		delay = ma->mca_timer.expires - jiffies;
 
-	if (delay >= resptime)
-		delay = net_random() % resptime;
+	if (delay >= resptime) {
+		if (resptime)
+			delay = net_random() % resptime;
+		else
+			delay = 1;
+	}
 
 	ma->mca_flags |= MAF_TIMER_RUNNING;
 	ma->mca_timer.expires = jiffies + delay;
@@ -325,10 +335,16 @@ int igmp6_event_query(struct sk_buff *skb, struct icmp6hdr *hdr, int len)
 	struct in6_addr *addrp;
 	unsigned long resptime;
 
-	if (len < sizeof(struct icmp6hdr) + sizeof(struct ipv6hdr))
+	if (len < sizeof(struct icmp6hdr) + sizeof(struct in6_addr))
 		return -EINVAL;
 
-	resptime = hdr->icmp6_maxdelay;
+	/* Drop queries with not link local source */
+	if (!(ipv6_addr_type(&skb->nh.ipv6h->saddr)&IPV6_ADDR_LINKLOCAL))
+		return -EINVAL;
+
+	resptime = ntohs(hdr->icmp6_maxdelay);
+	/* Translate milliseconds to jiffies */
+	resptime = (resptime<<10)/(1024000/HZ);
 
 	addrp = (struct in6_addr *) (hdr + 1);
 
@@ -365,7 +381,15 @@ int igmp6_event_report(struct sk_buff *skb, struct icmp6hdr *hdr, int len)
 	struct device *dev;
 	int hash;
 
-	if (len < sizeof(struct icmp6hdr) + sizeof(struct ipv6hdr))
+	/* Our own report looped back. Ignore it. */
+	if (skb->pkt_type == PACKET_LOOPBACK)
+		return 0;
+
+	if (len < sizeof(struct icmp6hdr) + sizeof(struct in6_addr))
+		return -EINVAL;
+
+	/* Drop reports with not link local source */
+	if (!(ipv6_addr_type(&skb->nh.ipv6h->saddr)&IPV6_ADDR_LINKLOCAL))
 		return -EINVAL;
 
 	addrp = (struct in6_addr *) (hdr + 1);
@@ -399,14 +423,25 @@ void igmp6_send(struct in6_addr *addr, struct device *dev, int type)
         struct sk_buff *skb;
         struct icmp6hdr *hdr;
 	struct inet6_ifaddr *ifp;
-	struct in6_addr *addrp; 
-	int err, len, plen;
+	struct in6_addr *snd_addr;
+	struct in6_addr *addrp;
+	struct in6_addr all_routers;
+	int err, len, payload_len, full_len;
+	u8 ra[8] = { IPPROTO_ICMPV6, 0,
+		     IPV6_TLV_ROUTERALERT, 0, 0, 0,
+		     IPV6_TLV_PADN, 0 };
+
+	snd_addr = addr;
+	if (type == ICMPV6_MGM_REDUCTION) {
+		snd_addr = &all_routers;
+		ipv6_addr_all_routers(&all_routers);
+	}
 
 	len = sizeof(struct icmp6hdr) + sizeof(struct in6_addr);
+	payload_len = len + sizeof(ra);
+	full_len = sizeof(struct ipv6hdr) + payload_len;
 
-	plen = sizeof(struct ipv6hdr) + len;
-
-	skb = sock_alloc_send_skb(sk, dev->hard_header_len + plen + 15, 0, 0, &err);
+	skb = sock_alloc_send_skb(sk, dev->hard_header_len + full_len + 15, 0, 0, &err);
 
 	if (skb == NULL)
 		return;
@@ -414,8 +449,8 @@ void igmp6_send(struct in6_addr *addr, struct device *dev, int type)
 	skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
 	if (dev->hard_header) {
 		unsigned char ha[MAX_ADDR_LEN];
-		ndisc_mc_map(addr, ha, dev, 1);
-		dev->hard_header(skb, dev, ETH_P_IPV6, ha, NULL, plen);
+		ndisc_mc_map(snd_addr, ha, dev, 1);
+		dev->hard_header(skb, dev, ETH_P_IPV6, ha, NULL, full_len);
 	}
 
 	ifp = ipv6_get_lladdr(dev);
@@ -428,11 +463,9 @@ void igmp6_send(struct in6_addr *addr, struct device *dev, int type)
 		return;
 	}
 
-	ip6_nd_hdr(sk, skb, dev, &ifp->addr, addr, IPPROTO_ICMPV6, len);
+	ip6_nd_hdr(sk, skb, dev, &ifp->addr, snd_addr, NEXTHDR_HOP, payload_len);
 
-	/*
-	 *	need hop-by-hop router alert option.
-	 */
+	memcpy(skb_put(skb, sizeof(ra)), ra, sizeof(ra));
 
 	hdr = (struct icmp6hdr *) skb_put(skb, sizeof(struct icmp6hdr));
 	memset(hdr, 0, sizeof(struct icmp6hdr));
@@ -441,11 +474,16 @@ void igmp6_send(struct in6_addr *addr, struct device *dev, int type)
 	addrp = (struct in6_addr *) skb_put(skb, sizeof(struct in6_addr));
 	ipv6_addr_copy(addrp, addr);
 
-	hdr->icmp6_cksum = csum_ipv6_magic(&ifp->addr, addr, len,
+	hdr->icmp6_cksum = csum_ipv6_magic(&ifp->addr, snd_addr, len,
 					   IPPROTO_ICMPV6,
 					   csum_partial((__u8 *) hdr, len, 0));
 
 	dev_queue_xmit(skb);
+	if (type == ICMPV6_MGM_REDUCTION)
+		icmpv6_statistics.Icmp6OutGroupMembReductions++;
+	else
+		icmpv6_statistics.Icmp6OutGroupMembResponses++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }
 
 static void igmp6_join_group(struct ifmcaddr6 *ma)
@@ -455,7 +493,7 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 
 	addr_type = ipv6_addr_type(&ma->mca_addr);
 
-	if ((addr_type & IPV6_ADDR_LINKLOCAL))
+	if ((addr_type & (IPV6_ADDR_LINKLOCAL|IPV6_ADDR_LOOPBACK)))
 		return;
 
 	igmp6_send(&ma->mca_addr, ma->dev, ICMPV6_MGM_REPORT);

@@ -27,6 +27,11 @@
 #include <net/dst.h>
 #include <linux/in_route.h>
 #include <linux/rtnetlink.h>
+#include <linux/route.h>
+
+#ifndef __KERNEL__
+#warning This file is not supposed to be used outside of kernel.
+#endif
 
 #define RT_HASH_DIVISOR	    	256
 
@@ -36,7 +41,6 @@
  */
 #define RT_CACHE_BUBBLE_THRESHOLD	(5*HZ)
 
-#include <linux/route.h>
 
 #define RTO_ONLINK	0x01
 #define RTO_TPROXY	0x80000000
@@ -87,7 +91,8 @@ struct rtable
 #endif
 };
 
-#ifdef __KERNEL__
+extern struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
+
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,
 				       u32 src, u8 tos, struct device *dev);
@@ -130,8 +135,5 @@ extern __inline__ int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32
 	*rp = NULL;
 	return ip_route_output(rp, dst, src, tos, oif);
 }
-
-#endif
-
 
 #endif	/* _ROUTE_H */

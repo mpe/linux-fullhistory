@@ -1129,7 +1129,6 @@ asmlinkage void __init start_kernel(void)
 	mtrr_init ();
 #endif
 
-	sock_init();
 #ifdef CONFIG_SYSCTL
 	sysctl_init();
 #endif
@@ -1199,6 +1198,9 @@ static int init(void * unused)
 #ifdef CONFIG_BLK_DEV_INITRD
 	int real_root_mountflags;
 #endif
+
+	/* Networking initialization needs a process context */ 
+	sock_init();
 
 	/* Launch bdflush from here, instead of the old syscall way. */
 	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);

@@ -5,7 +5,7 @@
  *
  *		The options processing module for ip.c
  *
- * Version:	$Id: ip_options.c,v 1.13 1998/02/12 07:43:12 davem Exp $
+ * Version:	$Id: ip_options.c,v 1.14 1998/08/26 12:03:51 davem Exp $
  *
  * Authors:	A.N.Kuznetsov
  *		
@@ -451,7 +451,7 @@ eol:
 
 error:
 	if (skb) {
-		icmp_send(skb, ICMP_PARAMETERPROB, 0, pp_ptr-iph);
+		icmp_send(skb, ICMP_PARAMETERPROB, 0, htonl((pp_ptr-iph)<<24));
 		kfree_skb(skb);
 	}
 	return -EINVAL;
@@ -579,7 +579,7 @@ int ip_options_rcv_srr(struct sk_buff *skb)
 	if (rt->rt_type == RTN_UNICAST) {
 		if (!opt->is_strictroute)
 			return 0;
-		icmp_send(skb, ICMP_PARAMETERPROB, 0, 16);
+		icmp_send(skb, ICMP_PARAMETERPROB, 0, htonl(16<<24));
 		return -EINVAL;
 	}
 	if (rt->rt_type != RTN_LOCAL)
@@ -587,7 +587,7 @@ int ip_options_rcv_srr(struct sk_buff *skb)
 
 	for (srrptr=optptr[2], srrspace = optptr[1]; srrptr <= srrspace; srrptr += 4) {
 		if (srrptr + 3 > srrspace) {
-			icmp_send(skb, ICMP_PARAMETERPROB, 0, opt->srr+2);
+			icmp_send(skb, ICMP_PARAMETERPROB, 0, htonl((opt->srr+2)<<24));
 			return -EINVAL;
 		}
 		memcpy(&nexthop, &optptr[srrptr-1], 4);

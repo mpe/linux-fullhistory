@@ -27,6 +27,9 @@
  */
 #define ENET_CRCPOLY 0x04c11db7
 
+/* switch to use multicast code lifted from sunhme driver */
+#define SUNHME_MULTICAST
+
 /* a bunch of constants for the "Heathrow" interrupt controller.
    These really should be in an include file somewhere */
 #define IoBaseHeathrow ((unsigned *)0xf3000000)
@@ -51,7 +54,7 @@
 #define XXDEBUG(args)
 
 struct bmac_data {
-/*     volatile struct bmac *bmac; */
+	/* volatile struct bmac *bmac; */
 	struct sk_buff_head *queue;
 	volatile struct dbdma_regs *tx_dma;
 	int tx_dma_intr;
@@ -82,7 +85,7 @@ typedef struct bmac_reg_entry {
 	unsigned short reg_offset;
 } bmac_reg_entry_t;
 
-#define N_REG_ENTRIES 30
+#define N_REG_ENTRIES 31
 
 bmac_reg_entry_t reg_entries[N_REG_ENTRIES] = {
 	{"MEMADD", MEMADD},
@@ -98,6 +101,7 @@ bmac_reg_entry_t reg_entries[N_REG_ENTRIES] = {
 	{"PAPAT", PAPAT},
 	{"TXSFD", TXSFD},
 	{"JAM", JAM},
+	{"TXCFG", TXCFG},
 	{"TXMAX", TXMAX},
 	{"TXMIN", TXMIN},
 	{"PAREG", PAREG},
@@ -133,8 +137,8 @@ static unsigned char dummy_buf[RX_BUFLEN];
  * buffers on a 16 byte boundary.
  */
 #define PRIV_BYTES	(sizeof(struct bmac_data) \
-			 + (N_RX_RING + N_TX_RING + 4) * sizeof(struct dbdma_cmd) \
-			 + sizeof(struct sk_buff_head))
+	+ (N_RX_RING + N_TX_RING + 4) * sizeof(struct dbdma_cmd) \
+	+ sizeof(struct sk_buff_head))
 
 static unsigned char bitrev(unsigned char b);
 static int bmac_open(struct device *dev);
@@ -263,6 +267,7 @@ bmac_reset_chip(struct device *dev)
 	udelay(50000);
 	
 	out_le32(heathrowFCR, fcrValue);
+	udelay(50000);
 }
 
 static void
@@ -273,7 +278,7 @@ bmac_init_registers(struct device *dev)
 	unsigned short *pWord16;
 	int i;
 
-/* XXDEBUG(("bmac: enter init_registers\n")); */
+	/* XXDEBUG(("bmac: enter init_registers\n")); */
 
 	bmwrite(dev, TXRST, TxResetBit);
 
@@ -468,6 +473,7 @@ bmac_init_tx_ring(struct bmac_data *bp)
 	if (!bp->tx_allocated) {
 		/* zero out tx cmds, alloc space for double buffering */
 		addr = (char *)kmalloc(ETHERMTU * N_TX_RING, GFP_DMA);
+		if (addr == NULL) return 0;
 		for (i = 0; i < N_TX_RING; i++, addr += ETHERMTU) bp->tx_double[i] = addr;
 		bp->tx_allocated = 1;
 	}
@@ -500,6 +506,7 @@ bmac_init_rx_ring(struct bmac_data *bp)
 	if (!bp->rx_allocated) {
 		for (i = 0; i < N_RX_RING; i++) {
 			bp->rx_bufs[i] = dev_alloc_skb(RX_BUFLEN+2);
+			if (bp->rx_bufs[i] == NULL) return 0;
 			skb_reserve(bp->rx_bufs[i], 2);
 		}
 		bp->rx_allocated = 1;
@@ -531,8 +538,8 @@ static int bmac_transmit_packet(struct sk_buff *skb, struct device *dev)
 	int i;
 
 	/* see if there's a free slot in the tx ring */
-/* XXDEBUG(("bmac_xmit_start: empty=%d fill=%d\n", */
-/* 	     bp->tx_empty, bp->tx_fill)); */
+	/* XXDEBUG(("bmac_xmit_start: empty=%d fill=%d\n", */
+	/* 	     bp->tx_empty, bp->tx_fill)); */
 	i = bp->tx_fill + 1;
 	if (i >= N_TX_RING) i = 0;
 	if (i == bp->tx_empty) {
@@ -637,8 +644,8 @@ static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 		XXDEBUG(("bmac_txdma_intr\n"));
 	}
 
-/*     del_timer(&bp->tx_timeout); */
-/*     bp->timeout_active = 0; */
+	/*     del_timer(&bp->tx_timeout); */
+	/*     bp->timeout_active = 0; */
 
 	while (1) {
 		cp = &bp->tx_cmds[bp->tx_empty];
@@ -655,8 +662,8 @@ static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 		bp->tx_bufs[bp->tx_empty] = NULL;
 		bp->tx_fullup = 0;
 		dev->tbusy = 0;
-/* XXDEBUG(("bmac_intr: cleared tbusy, empty=%d fill=%d\n", */
-/* 		 i, bp->tx_fill)); */
+		/* XXDEBUG(("bmac_intr: cleared tbusy, empty=%d fill=%d\n", */
+		/* 		 i, bp->tx_fill)); */
 		mark_bh(NET_BH);
 		if (++bp->tx_empty >= N_TX_RING) bp->tx_empty = 0;
 		if (bp->tx_empty == bp->tx_fill) break;
@@ -678,7 +685,7 @@ static struct net_device_stats *bmac_stats(struct device *dev)
 	return &p->stats;
 }
 
-#if 0
+#ifndef SUNHME_MULTICAST
 /* Real fast bit-reversal algorithm, 6-bit values */
 static int reverse6[64] = {
 	0x0,0x20,0x10,0x30,0x8,0x28,0x18,0x38,
@@ -743,98 +750,98 @@ bmac_addhash(struct bmac_data *bp, unsigned char *addr)
 	unsigned int	 crc;
 	unsigned short	 mask;
 
-	if (!(*addr 
-	      crc = bmac_crc((unsigned short *)addr) & 0x3f; /* Big-endian alert! */
-	      crc = reverse6[crc];	/* Hyperfast bit-reversing algorithm */
-	      if (bp->hash_use_count[crc]++) return; /* This bit is already set */
-	      mask = crc % 16;
-	      mask = (unsigned char)1 << mask;
-	      bp->hash_use_count[crc/16] |= mask;
-	      }
+	if (!(*addr)) return;
+	crc = bmac_crc((unsigned short *)addr) & 0x3f; /* Big-endian alert! */
+	crc = reverse6[crc];	/* Hyperfast bit-reversing algorithm */
+	if (bp->hash_use_count[crc]++) return; /* This bit is already set */
+	mask = crc % 16;
+	mask = (unsigned char)1 << mask;
+	bp->hash_use_count[crc/16] |= mask;
+}
 
-	    static void
-	    bmac_removehash(struct bmac_data *bp, unsigned char *addr)
-	    {	
-		    unsigned int crc;
-		    unsigned char mask;
+static void
+bmac_removehash(struct bmac_data *bp, unsigned char *addr)
+{	
+	unsigned int crc;
+	unsigned char mask;
 
-		    /* Now, delete the address from the filter copy, as indicated */
-		    crc = bmac_crc((unsigned short *)addr) & 0x3f; /* Big-endian alert! */
-		    crc = reverse6[crc];	/* Hyperfast bit-reversing algorithm */
-		    if (bp->hash_use_count[crc] == 0) return; /* That bit wasn't in use! */
-		    if (--bp->hash_use_count[crc]) return; /* That bit is still in use */
-		    mask = crc % 16;
-		    mask = ((unsigned char)1 << mask) ^ 0xffff; /* To turn off bit */
-		    bp->hash_table_mask[crc/16] &= mask;
-	    }
+	/* Now, delete the address from the filter copy, as indicated */
+	crc = bmac_crc((unsigned short *)addr) & 0x3f; /* Big-endian alert! */
+	crc = reverse6[crc];	/* Hyperfast bit-reversing algorithm */
+	if (bp->hash_use_count[crc] == 0) return; /* That bit wasn't in use! */
+	if (--bp->hash_use_count[crc]) return; /* That bit is still in use */
+	mask = crc % 16;
+	mask = ((unsigned char)1 << mask) ^ 0xffff; /* To turn off bit */
+	bp->hash_table_mask[crc/16] &= mask;
+}
 
 /*
  * Sync the adapter with the software copy of the multicast mask
  *  (logical address filter).
  */
 
-		    static void
-		    bmac_rx_off(struct device *dev)
-		    {
-			    unsigned short rx_cfg;
+static void
+bmac_rx_off(struct device *dev)
+{
+	unsigned short rx_cfg;
 
-			    rx_cfg = bmread(dev, RXCFG);
-			    rx_cfg &= ~RxMACEnable;
-			    bmwrite(dev, RXCFG, rx_cfg);
-			    do {
-				    rx_cfg = bmread(dev, RXCFG);
-			    }  while (rx_cfg & RxMACEnable);
-		    }
+	rx_cfg = bmread(dev, RXCFG);
+	rx_cfg &= ~RxMACEnable;
+	bmwrite(dev, RXCFG, rx_cfg);
+	do {
+		rx_cfg = bmread(dev, RXCFG);
+	}  while (rx_cfg & RxMACEnable);
+}
 
-			    unsigned short
-			    bmac_rx_on(struct device *dev, int hash_enable, int promisc_enable)
-			    {
-				    unsigned short rx_cfg;
+unsigned short
+bmac_rx_on(struct device *dev, int hash_enable, int promisc_enable)
+{
+	unsigned short rx_cfg;
 
-				    rx_cfg = bmread(dev, RXCFG);
-				    rx_cfg |= RxMACEnable;
-				    if (hash_enable) rx_cfg |= RxHashFilterEnable;
-				    else rx_cfg &= ~RxHashFilterEnable;
-				    if (promisc_enable) rx_cfg |= RxPromiscEnable;
-				    else rx_cfg &= ~RxPromiscEnable;
-				    bmwrite(dev, RXRST, RxResetValue);
-				    bmwrite(dev, RXFIFOCSR, 0);	/* first disable rxFIFO */
-				    bmwrite(dev, RXFIFOCSR, RxFIFOEnable ); 
-				    bmwrite(dev, RXCFG, rx_cfg );
-				    return rx_cfg;
-			    }
+	rx_cfg = bmread(dev, RXCFG);
+	rx_cfg |= RxMACEnable;
+	if (hash_enable) rx_cfg |= RxHashFilterEnable;
+	else rx_cfg &= ~RxHashFilterEnable;
+	if (promisc_enable) rx_cfg |= RxPromiscEnable;
+	else rx_cfg &= ~RxPromiscEnable;
+	bmwrite(dev, RXRST, RxResetValue);
+	bmwrite(dev, RXFIFOCSR, 0);	/* first disable rxFIFO */
+	bmwrite(dev, RXFIFOCSR, RxFIFOEnable ); 
+	bmwrite(dev, RXCFG, rx_cfg );
+	return rx_cfg;
+}
 
-				    static void
-				    bmac_update_hash_table_mask(struct device *dev, struct bmac_data *bp)
-				    {
-					    bmwrite(dev, BHASH3, bp->hash_table_mask[0]); /* bits 15 - 0 */
-					    bmwrite(dev, BHASH2, bp->hash_table_mask[1]); /* bits 31 - 16 */
-					    bmwrite(dev, BHASH1, bp->hash_table_mask[2]); /* bits 47 - 32 */
-					    bmwrite(dev, BHASH0, bp->hash_table_mask[3]); /* bits 63 - 48 */
-				    }
+static void
+bmac_update_hash_table_mask(struct device *dev, struct bmac_data *bp)
+{
+	bmwrite(dev, BHASH3, bp->hash_table_mask[0]); /* bits 15 - 0 */
+	bmwrite(dev, BHASH2, bp->hash_table_mask[1]); /* bits 31 - 16 */
+	bmwrite(dev, BHASH1, bp->hash_table_mask[2]); /* bits 47 - 32 */
+	bmwrite(dev, BHASH0, bp->hash_table_mask[3]); /* bits 63 - 48 */
+}
 
 #if 0
-					    static void
-					    bmac_add_multi(struct device *dev,
-							   struct bmac_data *bp, unsigned char *addr)
-					    {
-/* XXDEBUG(("bmac: enter bmac_add_multi\n")); */
-						    bmac_addhash(bp, addr);
-						    bmac_rx_off(dev);
-						    bmac_update_hash_table_mask(dev, bp);
-						    bmac_rx_on(dev, 1, (dev->flags & IFF_PROMISC)? 1 : 0);
-/* XXDEBUG(("bmac: exit bmac_add_multi\n")); */
-					    }
+static void
+bmac_add_multi(struct device *dev,
+	       struct bmac_data *bp, unsigned char *addr)
+{
+	/* XXDEBUG(("bmac: enter bmac_add_multi\n")); */
+	bmac_addhash(bp, addr);
+	bmac_rx_off(dev);
+	bmac_update_hash_table_mask(dev, bp);
+	bmac_rx_on(dev, 1, (dev->flags & IFF_PROMISC)? 1 : 0);
+	/* XXDEBUG(("bmac: exit bmac_add_multi\n")); */
+}
 
-						    static void
-						    bmac_remove_multi(struct device *dev,
-								      struct bmac_data *bp, unsigned char *addr)
-						    {
-							    bmac_removehash(bp, addr);
-							    bmac_rx_off(dev);
-							    bmac_update_hash_table_mask(dev, bp);
-							    bmac_rx_on(dev, 1, (dev->flags & IFF_PROMISC)? 1 : 0);
-						    }
+static void
+bmac_remove_multi(struct device *dev,
+		  struct bmac_data *bp, unsigned char *addr)
+{
+	bmac_removehash(bp, addr);
+	bmac_rx_off(dev);
+	bmac_update_hash_table_mask(dev, bp);
+	bmac_rx_on(dev, 1, (dev->flags & IFF_PROMISC)? 1 : 0);
+}
 #endif
 
 /* Set or clear the multicast filter for this adaptor.
@@ -843,134 +850,138 @@ bmac_addhash(struct bmac_data *bp, unsigned char *addr)
     num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 			best-effort filtering.
  */
-							    static void bmac_set_multicast(struct device *dev)
-							    {
-								    struct dev_mc_list *dmi;
-								    struct bmac_data *bp = (struct bmac_data *) dev->priv;
-								    int num_addrs = dev->mc_count;
-								    unsigned short rx_cfg;
-								    int i;
+static void bmac_set_multicast(struct device *dev)
+{
+	struct dev_mc_list *dmi;
+	struct bmac_data *bp = (struct bmac_data *) dev->priv;
+	int num_addrs = dev->mc_count;
+	unsigned short rx_cfg;
+	int i;
 
-								    XXDEBUG(("bmac: enter bmac_set_multicast, n_addrs=%d\n", num_addrs));
+	XXDEBUG(("bmac: enter bmac_set_multicast, n_addrs=%d\n", num_addrs));
 
-								    if((dev->flags & IFF_ALLMULTI) || (dev->mc_count > 64)) {
-									    for (i=0; i<4; i++) bp->hash_table_mask[i] = 0xffff;
-									    bmac_update_hash_table_mask(dev, bp);
-									    rx_cfg = bmac_rx_on(dev, 1, 0);
-									    XXDEBUG(("bmac: all multi, rx_cfg=%#08x\n"));
-								    } else if if ((dev->flags & IFF_PROMISC) || (num_addrs < 0)) {
-									    rx_cfg = bmread(dev, RXCFG);
-									    rx_cfg |= RxPromiscEnable;
-									    bmwrite(dev, RXCFG, rx_cfg);
-									    rx_cfg = bmac_rx_on(dev, 0, 1);
-									    XXDEBUG(("bmac: promisc mode enabled, rx_cfg=%#08x\n", rx_cfg));
-								    } else {
-									    for (i=0; i<4; i++) bp->hash_table_mask[i] = 0;
-									    for (i=0; i<64; i++) bp->hash_use_count[i] = 0;
-									    if (num_addrs == 0) {
-										    rx_cfg = bmac_rx_on(dev, 0, 0);
-										    XXDEBUG(("bmac: multi disabled, rx_cfg=%#08x\n", rx_cfg));
-									    } else {
-										    for (dmi=dev->mc_list; dmi!=NULL; dmi=dmi->next)
-											    bmac_addhash(bp, dmi->dmi_addr);
-										    bmac_update_hash_table_mask(dev, bp);
-										    rx_cfg = bmac_rx_on(dev, 1, 0);
-										    XXDEBUG(("bmac: multi enabled, rx_cfg=%#08x\n", rx_cfg));
-									    }
-								    }
-/* XXDEBUG(("bmac: exit bmac_set_multicast\n")); */
-							    }
-#endif
+	if((dev->flags & IFF_ALLMULTI) || (dev->mc_count > 64)) {
+		for (i=0; i<4; i++) bp->hash_table_mask[i] = 0xffff;
+		bmac_update_hash_table_mask(dev, bp);
+		rx_cfg = bmac_rx_on(dev, 1, 0);
+		XXDEBUG(("bmac: all multi, rx_cfg=%#08x\n"));
+	} else if ((dev->flags & IFF_PROMISC) || (num_addrs < 0)) {
+		rx_cfg = bmread(dev, RXCFG);
+		rx_cfg |= RxPromiscEnable;
+		bmwrite(dev, RXCFG, rx_cfg);
+		rx_cfg = bmac_rx_on(dev, 0, 1);
+		XXDEBUG(("bmac: promisc mode enabled, rx_cfg=%#08x\n", rx_cfg));
+	} else {
+		for (i=0; i<4; i++) bp->hash_table_mask[i] = 0;
+		for (i=0; i<64; i++) bp->hash_use_count[i] = 0;
+		if (num_addrs == 0) {
+			rx_cfg = bmac_rx_on(dev, 0, 0);
+			XXDEBUG(("bmac: multi disabled, rx_cfg=%#08x\n", rx_cfg));
+		} else {
+			for (dmi=dev->mc_list; dmi!=NULL; dmi=dmi->next)
+				bmac_addhash(bp, dmi->dmi_addr);
+			bmac_update_hash_table_mask(dev, bp);
+			rx_cfg = bmac_rx_on(dev, 1, 0);
+			XXDEBUG(("bmac: multi enabled, rx_cfg=%#08x\n", rx_cfg));
+		}
+	}
+	/* XXDEBUG(("bmac: exit bmac_set_multicast\n")); */
+}
+#else /* ifdef SUNHME_MULTICAST */
 
 /* The version of set_multicast below was lifted from sunhme.c */
 
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
 #define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
-								    static void bmac_set_multicast(struct device *dev)
-								    {
-									    struct dev_mc_list *dmi = dev->mc_list;
-									    char *addrs;
-									    int i, j, bit, byte;
-									    unsigned short rx_cfg;
-									    u32 crc, poly = CRC_POLYNOMIAL_LE;
+static void bmac_set_multicast(struct device *dev)
+{
+	struct dev_mc_list *dmi = dev->mc_list;
+	char *addrs;
+	int i, j, bit, byte;
+	unsigned short rx_cfg;
+	u32 crc, poly = CRC_POLYNOMIAL_LE;
     
-									    /* Let the transmits drain. */
-/*     while(dev->tbusy) schedule(); */
+	/* Let the transmits drain. */
+	/*     while(dev->tbusy) schedule(); */
     
-									    /* Lock out others. */
-/*     set_bit(0, (void *) &dev->tbusy); */
+	/* Lock out others. */
+	/*     set_bit(0, (void *) &dev->tbusy); */
     
-									    if((dev->flags & IFF_ALLMULTI) || (dev->mc_count > 64)) {
-										    bmwrite(dev, BHASH0, 0xffff);
-										    bmwrite(dev, BHASH1, 0xffff);
-										    bmwrite(dev, BHASH2, 0xffff);
-										    bmwrite(dev, BHASH3, 0xffff);
-									    } else if(dev->flags & IFF_PROMISC) {
-										    rx_cfg = bmread(dev, RXCFG);
-										    rx_cfg |= RxPromiscEnable;
-										    bmwrite(dev, RXCFG, rx_cfg);
-									    } else {
-										    u16 hash_table[4];
+	if((dev->flags & IFF_ALLMULTI) || (dev->mc_count > 64)) {
+		bmwrite(dev, BHASH0, 0xffff);
+		bmwrite(dev, BHASH1, 0xffff);
+		bmwrite(dev, BHASH2, 0xffff);
+		bmwrite(dev, BHASH3, 0xffff);
+	} else if(dev->flags & IFF_PROMISC) {
+		rx_cfg = bmread(dev, RXCFG);
+		rx_cfg |= RxPromiscEnable;
+		bmwrite(dev, RXCFG, rx_cfg);
+	} else {
+		u16 hash_table[4];
 	
-										    for(i = 0; i < 4; i++) hash_table[i] = 0;
+		rx_cfg = bmread(dev, RXCFG);
+		rx_cfg &= ~RxPromiscEnable;
+		bmwrite(dev, RXCFG, rx_cfg);
+
+		for(i = 0; i < 4; i++) hash_table[i] = 0;
 	
-										    for(i = 0; i < dev->mc_count; i++) {
-											    addrs = dmi->dmi_addr;
-											    dmi = dmi->next;
+		for(i = 0; i < dev->mc_count; i++) {
+			addrs = dmi->dmi_addr;
+			dmi = dmi->next;
 	    
-											    if(!(*addrs & 1))
-												    continue;
+			if(!(*addrs & 1))
+				continue;
 	    
-											    crc = 0xffffffffU;
-											    for(byte = 0; byte < 6; byte++) {
-												    for(bit = *addrs++, j = 0; j < 8; j++, bit >>= 1) {
-													    int test;
+			crc = 0xffffffffU;
+			for(byte = 0; byte < 6; byte++) {
+				for(bit = *addrs++, j = 0; j < 8; j++, bit >>= 1) {
+					int test;
 		    
-													    test = ((bit ^ crc) & 0x01);
-													    crc >>= 1;
-													    if(test)
-														    crc = crc ^ poly;
-												    }
-											    }
-											    crc >>= 26;
-											    hash_table[crc >> 4] |= 1 << (crc & 0xf);
-										    }
-										    bmwrite(dev, BHASH0, hash_table[0]);
-										    bmwrite(dev, BHASH1, hash_table[1]);
-										    bmwrite(dev, BHASH2, hash_table[2]);
-										    bmwrite(dev, BHASH3, hash_table[3]);
-									    }
+					test = ((bit ^ crc) & 0x01);
+					crc >>= 1;
+					if(test)
+						crc = crc ^ poly;
+				}
+			}
+			crc >>= 26;
+			hash_table[crc >> 4] |= 1 << (crc & 0xf);
+		}
+		bmwrite(dev, BHASH0, hash_table[0]);
+		bmwrite(dev, BHASH1, hash_table[1]);
+		bmwrite(dev, BHASH2, hash_table[2]);
+		bmwrite(dev, BHASH3, hash_table[3]);
+	}
     
-									    /* Let us get going again. */
-/*     dev->tbusy = 0; */
-								    }
+	/* Let us get going again. */
+	/*     dev->tbusy = 0; */
+}
+#endif /* SUNHME_MULTICAST */
 
+static int miscintcount = 0;
 
-									    static int miscintcount = 0;
+static void bmac_misc_intr(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct device *dev = (struct device *) dev_id;
+	struct bmac_data *bp = (struct bmac_data *)dev->priv;
+	unsigned int status = bmread(dev, STATUS);
+	if (miscintcount++ < 10) {
+		XXDEBUG(("bmac_misc_intr\n"));
+	}
+	/* XXDEBUG(("bmac_misc_intr, status=%#08x\n", status)); */
+	/*     bmac_txdma_intr_inner(irq, dev_id, regs); */
+	/*   if (status & FrameReceived) bp->stats.rx_dropped++; */
+	if (status & RxErrorMask) bp->stats.rx_errors++;
+	if (status & RxCRCCntExp) bp->stats.rx_crc_errors++;
+	if (status & RxLenCntExp) bp->stats.rx_length_errors++;
+	if (status & RxOverFlow) bp->stats.rx_over_errors++;
+	if (status & RxAlignCntExp) bp->stats.rx_frame_errors++;
 
-									    static void bmac_misc_intr(int irq, void *dev_id, struct pt_regs *regs)
-									    {
-										    struct device *dev = (struct device *) dev_id;
-										    struct bmac_data *bp = (struct bmac_data *)dev->priv;
-										    unsigned int status = bmread(dev, STATUS);
-										    if (miscintcount++ < 10) {
-											    XXDEBUG(("bmac_misc_intr\n"));
-										    }
-/* XXDEBUG(("bmac_misc_intr, status=%#08x\n", status)); */
-/*     bmac_txdma_intr_inner(irq, dev_id, regs); */
-/*   if (status & FrameReceived) bp->stats.rx_dropped++; */
-										    if (status & RxErrorMask) bp->stats.rx_errors++;
-										    if (status & RxCRCCntExp) bp->stats.rx_crc_errors++;
-										    if (status & RxLenCntExp) bp->stats.rx_length_errors++;
-										    if (status & RxOverFlow) bp->stats.rx_over_errors++;
-										    if (status & RxAlignCntExp) bp->stats.rx_frame_errors++;
-
-/*   if (status & FrameSent) bp->stats.tx_dropped++; */
-										    if (status & TxErrorMask) bp->stats.tx_errors++;
-										    if (status & TxUnderrun) bp->stats.tx_fifo_errors++;
-										    if (status & TxNormalCollExp) bp->stats.collisions++;
-									    }
+	/*   if (status & FrameSent) bp->stats.tx_dropped++; */
+	if (status & TxErrorMask) bp->stats.tx_errors++;
+	if (status & TxUnderrun) bp->stats.tx_fifo_errors++;
+	if (status & TxNormalCollExp) bp->stats.collisions++;
+}
 
 /*
  * Procedure for reading EEPROM 
@@ -988,464 +999,467 @@ bmac_addhash(struct bmac_data *bp, unsigned char *addr)
 #define SROMAddressBits		6
 #define EnetAddressOffset	20
 
-										    static unsigned char
-										    bmac_clock_out_bit(struct device *dev)
-										    {
-											    unsigned short         data;
-											    unsigned short         val;
+static unsigned char
+bmac_clock_out_bit(struct device *dev)
+{
+	unsigned short         data;
+	unsigned short         val;
 
-											    bmwrite(dev, SROMCSR, ChipSelect | Clk);
-											    udelay(DelayValue);
+	bmwrite(dev, SROMCSR, ChipSelect | Clk);
+	udelay(DelayValue);
     
-											    data = bmread(dev, SROMCSR);
-											    udelay(DelayValue);
-											    val = (data >> SD0ShiftCount) & 1;
+	data = bmread(dev, SROMCSR);
+	udelay(DelayValue);
+	val = (data >> SD0ShiftCount) & 1;
 
-											    bmwrite(dev, SROMCSR, ChipSelect);
-											    udelay(DelayValue);
+	bmwrite(dev, SROMCSR, ChipSelect);
+	udelay(DelayValue);
     
-											    return val;
-										    }
+	return val;
+}
 
-											    static void
-											    bmac_clock_in_bit(struct device *dev, unsigned int val)
-											    {
-												    unsigned short		data;    
+static void
+bmac_clock_in_bit(struct device *dev, unsigned int val)
+{
+	unsigned short		data;    
 
-												    if (val != 0 && val != 1) return;
+	if (val != 0 && val != 1) return;
     
-												    data = (val << SDIShiftCount);
-												    bmwrite(dev, SROMCSR, data | ChipSelect  );
-												    udelay(DelayValue);
+	data = (val << SDIShiftCount);
+	bmwrite(dev, SROMCSR, data | ChipSelect  );
+	udelay(DelayValue);
     
-												    bmwrite(dev, SROMCSR, data | ChipSelect | Clk );
-												    udelay(DelayValue);
+	bmwrite(dev, SROMCSR, data | ChipSelect | Clk );
+	udelay(DelayValue);
 
-												    bmwrite(dev, SROMCSR, data | ChipSelect);
-												    udelay(DelayValue);
-											    }
+	bmwrite(dev, SROMCSR, data | ChipSelect);
+	udelay(DelayValue);
+}
 
-												    static void
-												    reset_and_select_srom(struct device *dev)
-												    {
-													    /* first reset */
-													    bmwrite(dev, SROMCSR, 0);
-													    udelay(DelayValue);
+static void
+reset_and_select_srom(struct device *dev)
+{
+	/* first reset */
+	bmwrite(dev, SROMCSR, 0);
+	udelay(DelayValue);
     
-													    /* send it the read command (110) */
-													    bmac_clock_in_bit(dev, 1);
-													    bmac_clock_in_bit(dev, 1);
-													    bmac_clock_in_bit(dev, 0);
-												    }
+	/* send it the read command (110) */
+	bmac_clock_in_bit(dev, 1);
+	bmac_clock_in_bit(dev, 1);
+	bmac_clock_in_bit(dev, 0);
+}
 
-													    static unsigned short
-													    read_srom(struct device *dev, unsigned int addr, unsigned int addr_len)
-													    {
-														    unsigned short data, val;
-														    int i;
+static unsigned short
+read_srom(struct device *dev, unsigned int addr, unsigned int addr_len)
+{
+	unsigned short data, val;
+	int i;
     
-														    /* send out the address we want to read from */
-														    for (i = 0; i < addr_len; i++)	{
-															    val = addr >> (addr_len-i-1);
-															    bmac_clock_in_bit(dev, val & 1);
-														    }
+	/* send out the address we want to read from */
+	for (i = 0; i < addr_len; i++)	{
+		val = addr >> (addr_len-i-1);
+		bmac_clock_in_bit(dev, val & 1);
+	}
     
-														    /* Now read in the 16-bit data */
-														    data = 0;
-														    for (i = 0; i < 16; i++)	{
-															    val = bmac_clock_out_bit(dev);
-															    data <<= 1;
-															    data |= val;
-														    }
-														    bmwrite(dev, SROMCSR, 0);
+	/* Now read in the 16-bit data */
+	data = 0;
+	for (i = 0; i < 16; i++)	{
+		val = bmac_clock_out_bit(dev);
+		data <<= 1;
+		data |= val;
+	}
+	bmwrite(dev, SROMCSR, 0);
     
-														    return data;
-													    }
+	return data;
+}
 
 /*
  * It looks like Cogent and SMC use different methods for calculating
  * checksums. What a pain.. 
  */
 
-														    static int
-														    bmac_verify_checksum(struct device *dev)
-														    {
-															    unsigned short data, storedCS;
+static int
+bmac_verify_checksum(struct device *dev)
+{
+	unsigned short data, storedCS;
     
-															    reset_and_select_srom(dev);
-															    data = read_srom(dev, 3, SROMAddressBits);
-															    storedCS = ((data >> 8) & 0x0ff) | ((data << 8) & 0xff00);
+	reset_and_select_srom(dev);
+	data = read_srom(dev, 3, SROMAddressBits);
+	storedCS = ((data >> 8) & 0x0ff) | ((data << 8) & 0xff00);
     
-															    return 0;
-														    }
+	return 0;
+}
 
 
-															    static void
-															    bmac_get_station_address(struct device *dev, unsigned char *ea)
-															    {
-																    int i;
-																    unsigned short data;
+static void
+bmac_get_station_address(struct device *dev, unsigned char *ea)
+{
+	int i;
+	unsigned short data;
 
-																    for (i = 0; i < 6; i++)	
-																    {
-																	    reset_and_select_srom(dev);
-																	    data = read_srom(dev, i + EnetAddressOffset/2, SROMAddressBits);
-																	    ea[2*i]   = bitrev(data & 0x0ff);
-																	    ea[2*i+1] = bitrev((data >> 8) & 0x0ff);
-																    }
-															    }
+	for (i = 0; i < 6; i++)	
+		{
+			reset_and_select_srom(dev);
+			data = read_srom(dev, i + EnetAddressOffset/2, SROMAddressBits);
+			ea[2*i]   = bitrev(data & 0x0ff);
+			ea[2*i+1] = bitrev((data >> 8) & 0x0ff);
+		}
+}
 
-																    static int bmac_reset_and_enable(struct device *dev, int enable)
-																    {
-																	    struct bmac_data *bp = dev->priv;
-																	    unsigned long flags;
+static int bmac_reset_and_enable(struct device *dev, int enable)
+{
+	struct bmac_data *bp = dev->priv;
+	unsigned long flags;
 
-																	    save_flags(flags); cli();
-																	    bp->reset_and_enabled = 0;
-																	    bmac_reset_chip(dev);
-																	    if (enable) {
-																		    if (!bmac_init_tx_ring(bp) || !bmac_init_rx_ring(bp)) return 0;
-																		    if (!bmac_init_chip(dev)) return 0;
-																		    bmac_start_chip(dev);
-																		    bmwrite(dev, INTDISABLE, EnableNormal);
-																		    bp->reset_and_enabled = 1;
-/* 	{ */
-/* 	    unsigned char random_packet[100]; */
-/* 	    unsigned int i; */
-/* 	    struct sk_buff *skb = dev_alloc_skb(RX_BUFLEN+2); */
-/* 	    unsigned char *data = skb_put(skb, sizeof(random_packet)); */
-/* XXDEBUG(("transmitting random packet\n")); */
-/* 	    for (i = 0; i < sizeof(random_packet); i++) data[i] = i; */
-/* 	    bmac_transmit_packet(skb, dev); */
-/* XXDEBUG(("done transmitting random packet\n")); */
-/* 	} */
-																	    }
-																	    restore_flags(flags);
-																	    return 1;
-																    }
+	save_flags(flags); cli();
+	bp->reset_and_enabled = 0;
+	bmac_reset_chip(dev);
+	if (enable) {
+		if (!bmac_init_tx_ring(bp) || !bmac_init_rx_ring(bp)) return 0;
+		if (!bmac_init_chip(dev)) return 0;
+		bmac_start_chip(dev);
+		bmwrite(dev, INTDISABLE, EnableNormal);
+		bp->reset_and_enabled = 1;
+		/* 	{ */
+		/* 	    unsigned char random_packet[100]; */
+		/* 	    unsigned int i; */
+		/* 	    struct sk_buff *skb = dev_alloc_skb(RX_BUFLEN+2); */
+		/* 	    unsigned char *data = skb_put(skb, sizeof(random_packet)); */
+		/* XXDEBUG(("transmitting random packet\n")); */
+		/* 	    for (i = 0; i < sizeof(random_packet); i++) data[i] = i; */
+		/* 	    bmac_transmit_packet(skb, dev); */
+		/* XXDEBUG(("done transmitting random packet\n")); */
+		/* 	} */
+	}
+	restore_flags(flags);
+	return 1;
+}
 
-																	    int
-																	    bmac_probe(struct device *dev)
-																	    {
-																		    int j, rev;
-																		    struct bmac_data *bp;
-																		    struct device_node *bmacs;
-																		    unsigned char *addr;
+int
+bmac_probe(struct device *dev)
+{
+	int j, rev;
+	struct bmac_data *bp;
+	struct device_node *bmacs;
+	unsigned char *addr;
+	static struct device_node *all_bmacs = NULL, *next_bmac;
 
-																		    bmacs = find_devices("bmac");
-																		    if (bmacs == NULL) return ENODEV;
+	if (all_bmacs == NULL)
+		all_bmacs = next_bmac = find_devices("bmac");
+	bmacs = next_bmac;
+	if (bmacs == NULL) return -ENODEV;
+	next_bmac = bmacs->next;
 
-																		    bmac_devs = dev; /* KLUDGE!! */
+	bmac_devs = dev; /* KLUDGE!! */
 
-																		    if (bmacs->n_addrs != 3 || bmacs->n_intrs != 3) {
-																			    printk(KERN_ERR "can't use BMAC %s: expect 3 addrs and 3 intrs\n",
-																				   bmacs->full_name);
-																			    return EINVAL;
-																		    }
+	if (bmacs->n_addrs != 3 || bmacs->n_intrs != 3) {
+		printk(KERN_ERR "can't use BMAC %s: expect 3 addrs and 3 intrs\n",
+		       bmacs->full_name);
+		return -EINVAL;
+	}
     
-																		    if (dev == NULL) {
-																			    dev = init_etherdev(NULL, PRIV_BYTES);
-																			    bmac_devs = dev;  /*KLUDGE!!*/
-																		    } else {
-																			    /* XXX this doesn't look right (but it's never used :-) */
-																			    dev->priv = kmalloc(PRIV_BYTES, GFP_KERNEL);
-																			    if (dev->priv == 0) return -ENOMEM;
-																		    }
+	if (dev == NULL) {
+		dev = init_etherdev(NULL, PRIV_BYTES);
+		bmac_devs = dev;  /*KLUDGE!!*/
+	} else {
+		/* XXX this doesn't look right (but it's never used :-) */
+		dev->priv = kmalloc(PRIV_BYTES, GFP_KERNEL);
+		if (dev->priv == 0) return -ENOMEM;
+	}
     
-																		    dev->base_addr = bmacs->addrs[0].address;
-																		    dev->irq = bmacs->intrs[0].line;
+	dev->base_addr = bmacs->addrs[0].address;
+	dev->irq = bmacs->intrs[0].line;
     
-																		    bmwrite(dev, INTDISABLE, DisableAll);
+	bmwrite(dev, INTDISABLE, DisableAll);
+    
+	addr = get_property(bmacs, "mac-address", NULL);
+	if (addr == NULL) {
+		addr = get_property(bmacs, "local-mac-address", NULL);
+		if (addr == NULL) {
+			printk(KERN_ERR "Can't get mac-address for BMAC at %lx\n",
+			       dev->base_addr);
+			return -EAGAIN;
+		}
+	}
+    
+	printk(KERN_INFO "%s: BMAC at", dev->name);
+	rev = addr[0] == 0 && addr[1] == 0xA0;
+	for (j = 0; j < 6; ++j) {
+		dev->dev_addr[j] = rev? bitrev(addr[j]): addr[j];
+		printk("%c%.2x", (j? ':': ' '), dev->dev_addr[j]);
+	}
+	XXDEBUG((", base_addr=%#0lx", dev->base_addr));
+	printk("\n");
+    
+	dev->open = bmac_open;
+	dev->stop = bmac_close;
+	dev->hard_start_xmit = bmac_output;
+	dev->get_stats = bmac_stats;
+	dev->set_multicast_list = bmac_set_multicast;
+	dev->set_mac_address = bmac_set_address;
 
-																		    if (request_irq(dev->irq, bmac_misc_intr, 0, "BMAC-misc", dev)) {
-																			    printk(KERN_ERR "BMAC: can't get irq %d\n", dev->irq);
-																			    return -EAGAIN;
-																		    }
-																		    if (request_irq(bmacs->intrs[1].line, bmac_txdma_intr, 0, "BMAC-txdma",
-																				    dev)) {
-																			    printk(KERN_ERR "BMAC: can't get irq %d\n", bmacs->intrs[1].line);
-																			    return -EAGAIN;
-																		    }
-																		    if (request_irq(bmacs->intrs[2].line, bmac_rxdma_intr, 0, "BMAC-rxdma",
-																				    dev)) {
-																			    printk(KERN_ERR "BMAC: can't get irq %d\n", bmacs->intrs[2].line);
-																			    return -EAGAIN;
-																		    }
+	bmac_get_station_address(dev, addr);
+	if (bmac_verify_checksum(dev) != 0) return -EINVAL;
     
-																		    addr = get_property(bmacs, "mac-address", NULL);
-																		    if (addr == NULL) {
-																			    addr = get_property(bmacs, "local-mac-address", NULL);
-																			    if (addr == NULL) {
-																				    printk(KERN_ERR "Can't get mac-address for BMAC at %lx\n",
-																					   dev->base_addr);
-																				    return -EAGAIN;
-																			    }
-																		    }
+	ether_setup(dev);
     
-																		    printk(KERN_INFO "%s: BMAC at", dev->name);
-																		    rev = addr[0] == 0 && addr[1] == 0xA0;
-																		    for (j = 0; j < 6; ++j) {
-																			    dev->dev_addr[j] = rev? bitrev(addr[j]): addr[j];
-																			    printk("%c%.2x", (j? ':': ' '), dev->dev_addr[j]);
-																		    }
-																		    XXDEBUG((", base_addr=%#0lx", dev->base_addr));
-																		    printk("\n");
+	bp = (struct bmac_data *) dev->priv;
+	memset(bp, 0, sizeof(struct bmac_data));
+	bp->tx_dma = (volatile struct dbdma_regs *) bmacs->addrs[1].address;
+	bp->tx_dma_intr = bmacs->intrs[1].line;
+	bp->rx_dma = (volatile struct dbdma_regs *) bmacs->addrs[2].address;
+	bp->rx_dma_intr = bmacs->intrs[2].line;
     
-																		    dev->open = bmac_open;
-																		    dev->stop = bmac_close;
-																		    dev->hard_start_xmit = bmac_output;
-																		    dev->get_stats = bmac_stats;
-																		    dev->set_multicast_list = bmac_set_multicast;
-																		    dev->set_mac_address = bmac_set_address;
+	bp->tx_cmds = (volatile struct dbdma_cmd *) DBDMA_ALIGN(bp + 1);
+	bp->rx_cmds = bp->tx_cmds + N_TX_RING + 1;
 
-																		    bmac_get_station_address(dev, addr);
-																		    if (bmac_verify_checksum(dev) != 0) return EINVAL;
+	bp->queue = (struct sk_buff_head *)(bp->rx_cmds + N_RX_RING + 1);
+	skb_queue_head_init(bp->queue);
     
-																		    ether_setup(dev);
-    
-																		    bp = (struct bmac_data *) dev->priv;
-																		    memset(bp, 0, sizeof(struct bmac_data));
-																		    bp->tx_dma = (volatile struct dbdma_regs *) bmacs->addrs[1].address;
-																		    bp->tx_dma_intr = bmacs->intrs[1].line;
-																		    bp->rx_dma = (volatile struct dbdma_regs *) bmacs->addrs[2].address;
-																		    bp->rx_dma_intr = bmacs->intrs[2].line;
-    
-																		    bp->tx_cmds = (volatile struct dbdma_cmd *) DBDMA_ALIGN(bp + 1);
-																		    bp->rx_cmds = bp->tx_cmds + N_TX_RING + 1;
+	memset(&bp->stats, 0, sizeof(bp->stats));
+	memset((char *) bp->tx_cmds, 0,
+	       (N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
+	/*     init_timer(&bp->tx_timeout); */
+	/*     bp->timeout_active = 0; */
 
-																		    bp->queue = (struct sk_buff_head *)(bp->rx_cmds + N_RX_RING + 1);
-																		    skb_queue_head_init(bp->queue);
+	if (request_irq(dev->irq, bmac_misc_intr, 0, "BMAC-misc", dev)) {
+		printk(KERN_ERR "BMAC: can't get irq %d\n", dev->irq);
+		return -EAGAIN;
+	}
+	if (request_irq(bmacs->intrs[1].line, bmac_txdma_intr, 0, "BMAC-txdma",
+			dev)) {
+		printk(KERN_ERR "BMAC: can't get irq %d\n", bmacs->intrs[1].line);
+		return -EAGAIN;
+	}
+	if (request_irq(bmacs->intrs[2].line, bmac_rxdma_intr, 0, "BMAC-rxdma",
+			dev)) {
+		printk(KERN_ERR "BMAC: can't get irq %d\n", bmacs->intrs[2].line);
+		return -EAGAIN;
+	}
     
-																		    memset(&bp->stats, 0, sizeof(bp->stats));
-																		    memset((char *) bp->tx_cmds, 0,
-																			   (N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
-/*     init_timer(&bp->tx_timeout); */
-/*     bp->timeout_active = 0; */
+	if (!bmac_reset_and_enable(dev, 0)) return -ENOMEM;
     
-																		    if (!bmac_reset_and_enable(dev, 0)) return EINVAL;
-
 #ifdef CONFIG_PROC_FS
-																		    proc_net_register(&(struct proc_dir_entry) {
-																			    PROC_NET_BMAC, 4, "bmac",
-																				    S_IFREG | S_IRUGO, 1, 0, 0,
-																				    0, &proc_net_inode_operations,
-																				    bmac_proc_info
-																				    });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_BMAC, 4, "bmac",
+			S_IFREG | S_IRUGO, 1, 0, 0,
+			0, &proc_net_inode_operations,
+			bmac_proc_info
+			});
 #endif
 
-																		    return 0;
-																	    }
+	return 0;
+}
 
-																		    static int bmac_open(struct device *dev)
-																		    {
-/* XXDEBUG(("bmac: enter open\n")); */
-																			    /* reset the chip */
-																			    bmac_reset_and_enable(dev, 1);
+static int bmac_open(struct device *dev)
+{
+	/* XXDEBUG(("bmac: enter open\n")); */
+	/* reset the chip */
+	bmac_reset_and_enable(dev, 1);
 
-																			    dev->flags |= IFF_UP | IFF_RUNNING;
+	dev->flags |= IFF_UP | IFF_RUNNING;
 
-																			    return 0;
-																		    }
+	return 0;
+}
 
-																			    static int bmac_close(struct device *dev)
-																			    {
-																				    struct bmac_data *bp = (struct bmac_data *) dev->priv;
-																				    volatile struct dbdma_regs *rd = bp->rx_dma;
-																				    volatile struct dbdma_regs *td = bp->tx_dma;
-																				    unsigned short config;
-																				    int i;
+static int bmac_close(struct device *dev)
+{
+	struct bmac_data *bp = (struct bmac_data *) dev->priv;
+	volatile struct dbdma_regs *rd = bp->rx_dma;
+	volatile struct dbdma_regs *td = bp->tx_dma;
+	unsigned short config;
+	int i;
 
-																				    dev->flags &= ~(IFF_UP | IFF_RUNNING);
+	dev->flags &= ~(IFF_UP | IFF_RUNNING);
 
-																				    /* disable rx and tx */
-																				    config = bmread(dev, RXCFG);
-																				    bmwrite(dev, RXCFG, (config & ~RxMACEnable));
+	/* disable rx and tx */
+	config = bmread(dev, RXCFG);
+	bmwrite(dev, RXCFG, (config & ~RxMACEnable));
 
-																				    config = bmread(dev, TXCFG);
-																				    bmwrite(dev, TXCFG, (config & ~TxMACEnable));
+	config = bmread(dev, TXCFG);
+	bmwrite(dev, TXCFG, (config & ~TxMACEnable));
 
-																				    bmwrite(dev, INTDISABLE, DisableAll); /* disable all intrs */
+	bmwrite(dev, INTDISABLE, DisableAll); /* disable all intrs */
 
-																				    /* disable rx and tx dma */
-																				    st_le32(&rd->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE));	/* clear run bit */
-																				    st_le32(&td->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE));	/* clear run bit */
+	/* disable rx and tx dma */
+	st_le32(&rd->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE));	/* clear run bit */
+	st_le32(&td->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE));	/* clear run bit */
 
-																				    /* free some skb's */
-																				    XXDEBUG(("bmac: free rx bufs\n"));
-																				    for (i=0; i<N_RX_RING; i++) {
-																					    if (bp->rx_bufs[i] != NULL) {
-																						    dev_kfree_skb(bp->rx_bufs[i]);
-																						    bp->rx_bufs[i] = NULL;
-																					    }
-																				    }
-																				    bp->rx_allocated = 0;
-																				    XXDEBUG(("bmac: free doubles\n"));/*MEMORY LEAK BELOW!!! FIX!!! */
-																				    if (bp->tx_double[0] != NULL) kfree(bp->tx_double[0]);
-																				    XXDEBUG(("bmac: free tx bufs\n"));
-																				    for (i = 0; i<N_TX_RING; i++) {
-																					    if (bp->tx_bufs[i] != NULL) {
-																						    dev_kfree_skb(bp->tx_bufs[i]);
-																						    bp->tx_bufs[i] = NULL;
-																					    }
-																				    }
-																				    bp->tx_allocated = 0;
-																				    bp->reset_and_enabled = 0;
-																				    XXDEBUG(("bmac: all bufs freed\n"));
+	/* free some skb's */
+	XXDEBUG(("bmac: free rx bufs\n"));
+	for (i=0; i<N_RX_RING; i++) {
+		if (bp->rx_bufs[i] != NULL) {
+			dev_kfree_skb(bp->rx_bufs[i]);
+			bp->rx_bufs[i] = NULL;
+		}
+	}
+	bp->rx_allocated = 0;
+	XXDEBUG(("bmac: free doubles\n"));/*MEMORY LEAK BELOW!!! FIX!!! */
+	if (bp->tx_double[0] != NULL) kfree(bp->tx_double[0]);
+	XXDEBUG(("bmac: free tx bufs\n"));
+	for (i = 0; i<N_TX_RING; i++) {
+		if (bp->tx_bufs[i] != NULL) {
+			dev_kfree_skb(bp->tx_bufs[i]);
+			bp->tx_bufs[i] = NULL;
+		}
+	}
+	bp->tx_allocated = 0;
+	bp->reset_and_enabled = 0;
+	XXDEBUG(("bmac: all bufs freed\n"));
 
-																				    return 0;
-																			    }
+	return 0;
+}
 
-																				    static void
-																				    bmac_start(struct device *dev)
-																				    {
-																					    struct bmac_data *bp = dev->priv;
-																					    int i;
-																					    struct sk_buff *skb;
-																					    unsigned long flags;
+static void
+bmac_start(struct device *dev)
+{
+	struct bmac_data *bp = dev->priv;
+	int i;
+	struct sk_buff *skb;
+	unsigned long flags;
     
-																					    save_flags(flags); cli();
-																					    while (1) {
-																						    i = bp->tx_fill + 1;
-																						    if (i >= N_TX_RING) i = 0;
-																						    if (i == bp->tx_empty) break;
-																						    skb = skb_dequeue(bp->queue);
-																						    if (skb == NULL) break;
-																						    bmac_transmit_packet(skb, dev);
-																					    }
-																					    restore_flags(flags);
-																				    }
+	save_flags(flags); cli();
+	while (1) {
+		i = bp->tx_fill + 1;
+		if (i >= N_TX_RING) i = 0;
+		if (i == bp->tx_empty) break;
+		skb = skb_dequeue(bp->queue);
+		if (skb == NULL) break;
+		bmac_transmit_packet(skb, dev);
+	}
+	restore_flags(flags);
+}
 
-																					    static int
-																					    bmac_output(struct sk_buff *skb, struct device *dev)
-																					    {
-																						    struct bmac_data *bp = dev->priv;
-																						    skb_queue_tail(bp->queue, skb);
-																						    bmac_start(dev);
-																						    return 0;
-																					    }
+static int
+bmac_output(struct sk_buff *skb, struct device *dev)
+{
+	struct bmac_data *bp = dev->priv;
+	skb_queue_tail(bp->queue, skb);
+	bmac_start(dev);
+	return 0;
+}
 
-																						    static void bmac_tx_timeout(unsigned long data)
-																						    {
-																							    struct device *dev = (struct device *) data;
-																							    struct bmac_data *bp = (struct bmac_data *) dev->priv;
-																							    volatile struct dbdma_regs *td = bp->tx_dma;
-																							    volatile struct dbdma_regs *rd = bp->rx_dma;
-																							    volatile struct dbdma_cmd *cp;
-																							    unsigned long flags;
-																							    unsigned short config, oldConfig;
-																							    int i;
+static void bmac_tx_timeout(unsigned long data)
+{
+	struct device *dev = (struct device *) data;
+	struct bmac_data *bp = (struct bmac_data *) dev->priv;
+	volatile struct dbdma_regs *td = bp->tx_dma;
+	volatile struct dbdma_regs *rd = bp->rx_dma;
+	volatile struct dbdma_cmd *cp;
+	unsigned long flags;
+	unsigned short config, oldConfig;
+	int i;
 
-																							    XXDEBUG(("bmac: tx_timeout called\n"));
-																							    save_flags(flags); cli();
-																							    bp->timeout_active = 0;
+	XXDEBUG(("bmac: tx_timeout called\n"));
+	save_flags(flags); cli();
+	bp->timeout_active = 0;
 
-																							    /* update various counters */
-/*     bmac_handle_misc_intrs(bp, 0); */
+	/* update various counters */
+/*     	bmac_handle_misc_intrs(bp, 0); */
 
-																							    cp = &bp->tx_cmds[bp->tx_empty];
-/*     XXDEBUG((KERN_DEBUG "bmac: tx dmastat=%x %x runt=%d pr=%x fs=%x fc=%x\n", */
+	cp = &bp->tx_cmds[bp->tx_empty];
+/*	XXDEBUG((KERN_DEBUG "bmac: tx dmastat=%x %x runt=%d pr=%x fs=%x fc=%x\n", */
 /* 	   ld_le32(&td->status), ld_le16(&cp->xfer_status), bp->tx_bad_runt, */
 /* 	   mb->pr, mb->xmtfs, mb->fifofc)); */
 
-																							    /* turn off both tx and rx and reset the chip */
-																							    config = bmread(dev, RXCFG);
-																							    bmwrite(dev, RXCFG, (config & ~RxMACEnable));
-																							    config = bmread(dev, TXCFG);
-																							    bmwrite(dev, TXCFG, (config & ~TxMACEnable));
-																							    out_le32(&td->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE|ACTIVE|DEAD));
-																							    printk(KERN_ERR "bmac: transmit timeout - resetting\n");
-																							    bmac_reset_chip(dev);
+	/* turn off both tx and rx and reset the chip */
+	config = bmread(dev, RXCFG);
+	bmwrite(dev, RXCFG, (config & ~RxMACEnable));
+	config = bmread(dev, TXCFG);
+	bmwrite(dev, TXCFG, (config & ~TxMACEnable));
+	out_le32(&td->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE|ACTIVE|DEAD));
+	printk(KERN_ERR "bmac: transmit timeout - resetting\n");
+	bmac_reset_chip(dev);
 
-																							    /* restart rx dma */
-																							    cp = bus_to_virt(ld_le32(&rd->cmdptr));
-																							    out_le32(&rd->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE|ACTIVE|DEAD));
-																							    out_le16(&cp->xfer_status, 0);
-																							    out_le32(&rd->cmdptr, virt_to_bus(cp));
-																							    out_le32(&rd->control, DBDMA_SET(RUN|WAKE));
+	/* restart rx dma */
+	cp = bus_to_virt(ld_le32(&rd->cmdptr));
+	out_le32(&rd->control, DBDMA_CLEAR(RUN|PAUSE|FLUSH|WAKE|ACTIVE|DEAD));
+	out_le16(&cp->xfer_status, 0);
+	out_le32(&rd->cmdptr, virt_to_bus(cp));
+	out_le32(&rd->control, DBDMA_SET(RUN|WAKE));
 
-																							    /* fix up the transmit side */
-																							    XXDEBUG((KERN_DEBUG "bmac: tx empty=%d fill=%d fullup=%d\n",
-																								     bp->tx_empty, bp->tx_fill, bp->tx_fullup));
-																							    i = bp->tx_empty;
-																							    ++bp->stats.tx_errors;
-																							    if (i != bp->tx_fill) {
-																								    dev_kfree_skb(bp->tx_bufs[i]);
-																								    bp->tx_bufs[i] = NULL;
-																								    if (++i >= N_TX_RING) i = 0;
-																								    bp->tx_empty = i;
-																							    }
-																							    bp->tx_fullup = 0;
-																							    dev->tbusy = 0;
-																							    mark_bh(NET_BH);
-																							    XXDEBUG((KERN_DEBUG "bmac: clearing tbusy\n"));
-																							    if (i != bp->tx_fill) {
-																								    cp = &bp->tx_cmds[i];
-																								    out_le16(&cp->xfer_status, 0);
-																								    out_le16(&cp->command, OUTPUT_LAST);
-																								    out_le32(&td->cmdptr, virt_to_bus(cp));
-																								    out_le32(&td->control, DBDMA_SET(RUN));
-/* 	bmac_set_timeout(dev); */
-																								    XXDEBUG((KERN_DEBUG "bmac: starting %d\n", i));
-																							    }
+	/* fix up the transmit side */
+	XXDEBUG((KERN_DEBUG "bmac: tx empty=%d fill=%d fullup=%d\n",
+		 bp->tx_empty, bp->tx_fill, bp->tx_fullup));
+	i = bp->tx_empty;
+	++bp->stats.tx_errors;
+	if (i != bp->tx_fill) {
+		dev_kfree_skb(bp->tx_bufs[i]);
+		bp->tx_bufs[i] = NULL;
+		if (++i >= N_TX_RING) i = 0;
+		bp->tx_empty = i;
+	}
+	bp->tx_fullup = 0;
+	dev->tbusy = 0;
+	mark_bh(NET_BH);
+	XXDEBUG((KERN_DEBUG "bmac: clearing tbusy\n"));
+	if (i != bp->tx_fill) {
+		cp = &bp->tx_cmds[i];
+		out_le16(&cp->xfer_status, 0);
+		out_le16(&cp->command, OUTPUT_LAST);
+		out_le32(&td->cmdptr, virt_to_bus(cp));
+		out_le32(&td->control, DBDMA_SET(RUN));
+		/* 	bmac_set_timeout(dev); */
+		XXDEBUG((KERN_DEBUG "bmac: starting %d\n", i));
+	}
 
-																							    /* turn it back on */
-																							    oldConfig = bmread(dev, RXCFG);		
-																							    bmwrite(dev, RXCFG, oldConfig | RxMACEnable ); 
-																							    oldConfig = bmread(dev, TXCFG);		
-																							    bmwrite(dev, TXCFG, oldConfig | TxMACEnable );  
+	/* turn it back on */
+	oldConfig = bmread(dev, RXCFG);		
+	bmwrite(dev, RXCFG, oldConfig | RxMACEnable ); 
+	oldConfig = bmread(dev, TXCFG);		
+	bmwrite(dev, TXCFG, oldConfig | TxMACEnable );  
 
-																							    restore_flags(flags);
-																						    }
+	restore_flags(flags);
+}
 
 #if 0
-																							    static void dump_dbdma(volatile struct dbdma_cmd *cp,int count)
-																							    {
-																								    int i,*ip;
+static void dump_dbdma(volatile struct dbdma_cmd *cp,int count)
+{
+	int i,*ip;
 	
-																								    for (i=0;i< count;i++)
-																								    {
-																									    ip = (int*)(cp+i);
+	for (i=0;i< count;i++) {
+		ip = (int*)(cp+i);
 	
-																									    printk("dbdma req 0x%x addr 0x%x baddr 0x%x xfer/res 0x%x\n",
-																										   ld_le32(ip+0),
-																										   ld_le32(ip+1),
-																										   ld_le32(ip+2),
-																										   ld_le32(ip+3));
-																								    }
+		printk("dbdma req 0x%x addr 0x%x baddr 0x%x xfer/res 0x%x\n",
+		       ld_le32(ip+0),
+		       ld_le32(ip+1),
+		       ld_le32(ip+2),
+		       ld_le32(ip+3));
+	}
 
-																							    }
+}
 #endif
 
-																								    static int
-																								    bmac_proc_info ( char *buffer, char **start, off_t offset, int length, int dummy)
-																								    {
-																									    int len = 0;
-																									    off_t pos   = 0;
-																									    off_t begin = 0;
-																									    int i;
+static int
+bmac_proc_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	int len = 0;
+	off_t pos   = 0;
+	off_t begin = 0;
+	int i;
 
-																									    if (bmac_devs == NULL) return (-ENOSYS);
+	if (bmac_devs == NULL) return (-ENOSYS);
 
-																									    len += sprintf(buffer, "BMAC counters & registers\n");
+	len += sprintf(buffer, "BMAC counters & registers\n");
 
-																									    for (i = 0; i<N_REG_ENTRIES; i++) {
-																										    len += sprintf(buffer + len, "%s: %#08x\n",
-																												   reg_entries[i].name,
-																												   bmread(bmac_devs, reg_entries[i].reg_offset));
-																										    pos = begin + len;
+	for (i = 0; i<N_REG_ENTRIES; i++) {
+		len += sprintf(buffer + len, "%s: %#08x\n",
+			       reg_entries[i].name,
+			       bmread(bmac_devs, reg_entries[i].reg_offset));
+		pos = begin + len;
     
-																										    if (pos < offset) {
-																											    len = 0;
-																											    begin = pos;
-																										    }
+		if (pos < offset) {
+			len = 0;
+			begin = pos;
+		}
     
-																										    if (pos > offset+length) break;
-																									    }
+		if (pos > offset+length) break;
+	}
   
-																									    *start = buffer + (offset - begin);
-																									    len -= (offset - begin);
+	*start = buffer + (offset - begin);
+	len -= (offset - begin);
   
-																									    if (len > length) len = length;
+	if (len > length) len = length;
   
-																									    return len;
-																								    }
+	return len;
+}

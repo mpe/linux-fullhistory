@@ -35,7 +35,14 @@ struct in6_addr
 		__u16		u6_addr16[8];
 		__u32		u6_addr32[4];
 #if (~0UL) > 0xffffffff
+#ifndef __RELAX_IN6_ADDR_ALIGNMENT
+		/* Alas, protocols do not respect 64bit alignmnet.
+		   rsvp/pim/... are broken. However, it is good
+		   idea to force correct alignment always, when
+		   it is possible.
+		 */
 		__u64		u6_addr64[2];
+#endif
 #endif
 	} in6_u;
 #define s6_addr			in6_u.u6_addr8
@@ -101,19 +108,34 @@ struct ipv6_mreq {
 #define IPPROTO_DSTOPTS		60	/* IPv6 destination options	*/
 
 /*
+ *	IPv6 TLV options.
+ */
+#define IPV6_TLV_PAD0		0
+#define IPV6_TLV_PADN		1
+#define IPV6_TLV_ROUTERALERT	20
+#define IPV6_TLV_JUMBO		194
+
+/*
  *	IPV6 socket options
  */
 
 #define IPV6_ADDRFORM		1
 #define IPV6_PKTINFO		2
-#define IPV6_RXHOPOPTS		3 /* obsolete name */
-#define IPV6_RXDSTOPTS		4 /* obsolete name */
-#define IPV6_HOPOPTS		IPV6_RXHOPOPTS  /* new name */
-#define IPV6_DSTOPTS		IPV6_RXDSTOPTS  /* new name */
-#define IPV6_RXSRCRT		5
+#define IPV6_HOPOPTS		3
+#define IPV6_DSTOPTS		4
+#define IPV6_RTHDR		5
 #define IPV6_PKTOPTIONS		6
 #define IPV6_CHECKSUM		7
 #define IPV6_HOPLIMIT		8
+#define IPV6_NEXTHOP		9
+#define IPV6_AUTHHDR		10
+
+#if 0
+/* Aliases for obsolete names */
+#define IPV6_RXHOPOPTS		IPV6_HOPOPTS
+#define IPV6_RXDSTOPTS		IPV6_DSTOPTS
+#define IPV6_RXSRCRT		IPV6_RTHDR
+#endif
 
 /*
  *	Alternative names

@@ -68,8 +68,7 @@
 #include <net/ndisc.h>
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
-
-
+#include <net/icmp.h>
 
 #include <net/checksum.h>
 #include <linux/proc_fs.h>
@@ -350,6 +349,9 @@ void ndisc_send_na(struct device *dev, struct neighbour *neigh,
 							      len, 0));
 
 	dev_queue_xmit(skb);
+
+	icmpv6_statistics.Icmp6OutNeighborAdvertisements++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }        
 
 void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
@@ -410,6 +412,9 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 							      len, 0));
 	/* send it! */
 	dev_queue_xmit(skb);
+
+	icmpv6_statistics.Icmp6OutNeighborSolicits++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }
 
 void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
@@ -458,6 +463,9 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 
 	/* send it! */
 	dev_queue_xmit(skb);
+
+	icmpv6_statistics.Icmp6OutRouterSolicits++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }
 		   
 
@@ -575,6 +583,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 
 	if (rt && lifetime == 0) {
 		ip6_del_rt(rt);
+		dst_release(&rt->u.dst);
 		rt = NULL;
 	}
 
@@ -582,11 +591,6 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		ND_PRINTK2("ndisc_rdisc: adding default router\n");
 
 		rt = rt6_add_dflt_router(&skb->nh.ipv6h->saddr, skb->dev);
-
-#if 1
-		/* BUGGGGG! Previous routine can return invalid pointer. */
-		rt = rt6_get_dflt_router(&skb->nh.ipv6h->saddr, skb->dev);
-#endif
 		if (rt == NULL) {
 			ND_PRINTK1("route_add failed\n");
 			return;
@@ -595,6 +599,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		neigh = rt->rt6i_nexthop;
 		if (neigh == NULL) {
 			ND_PRINTK1("nd: add default router: null neighbour\n");
+			dst_release(&rt->u.dst);
 			return;
 		}
 		neigh->flags |= NTF_ROUTER;
@@ -658,7 +663,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 				
 				mtu = htonl(*(__u32 *)(opt+4));
 
-				if (mtu < 576 || mtu > skb->dev->mtu) {
+				if (mtu < IPV6_MIN_MTU || mtu > skb->dev->mtu) {
 					ND_PRINTK0("NDISC: router "
 						   "announcement with mtu = %d\n",
 						   mtu);
@@ -671,10 +676,7 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 					if (rt)
 						rt->u.dst.pmtu = mtu;
 
-					/* BUGGG... Scan routing tables and
-					   adjust mtu on routes going
-					   via this device
-					 */
+					rt6_mtu_change(skb->dev, mtu);
 				}
 			}
                         break;
@@ -689,6 +691,8 @@ static void ndisc_router_discovery(struct sk_buff *skb)
                 optlen -= len;
                 opt += len;
         }
+	if (rt)
+		dst_release(&rt->u.dst);
 }
 
 static void ndisc_redirect_rcv(struct sk_buff *skb)
@@ -698,7 +702,6 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 	struct in6_addr *dest;
 	struct in6_addr *target;	/* new first hop to destination */
 	struct neighbour *neigh;
-	struct rt6_info *rt;
 	int on_link = 0;
 	int optlen;
 
@@ -740,20 +743,21 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 	if (!in6_dev || in6_dev->cnf.forwarding || !in6_dev->cnf.accept_redirects)
 		return;
 
-	/* passed validation tests
+	/* passed validation tests */
 
-	   NOTE We should not install redirect if sender did not supply
-	   ll address on link, which requires it. It would break, if
-	   we have non-transitive address resolution protocol.
-	   Fix it later. --ANK
+	/*
+	   We install redirect only if nexthop state is valid.
 	 */
-	rt = rt6_redirect(dest, &skb->nh.ipv6h->saddr, target, skb->dev, on_link);
 
-	if (rt == NULL)
-		return;
-
-	neigh = rt->rt6i_nexthop;
-	ndisc_update(neigh, (u8*)(dest + 1), optlen, ND_OPT_TARGET_LL_ADDR);
+	neigh = __neigh_lookup(&nd_tbl, target, skb->dev, 1);
+	if (neigh) {
+		ndisc_update(neigh, (u8*)(dest + 1), optlen, ND_OPT_TARGET_LL_ADDR);
+		if (neigh->nud_state&NUD_VALID)
+			rt6_redirect(dest, &skb->nh.ipv6h->saddr, neigh, on_link);
+		else
+			__neigh_event_send(neigh, NULL);
+		neigh_release(neigh);
+	}
 }
 
 void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
@@ -773,17 +777,21 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	int hlen;
 
 	dev = skb->dev;
-	rt = rt6_lookup(&skb->nh.ipv6h->saddr, NULL, dev->ifindex, 0);
+	rt = rt6_lookup(&skb->nh.ipv6h->saddr, NULL, dev->ifindex, 1);
 
-	if (rt == NULL || rt->u.dst.error) {
-		ND_PRINTK1("ndisc_send_redirect: hostunreach\n");
+	if (rt == NULL)
 		return;
-	}
 
 	if (rt->rt6i_flags & RTF_GATEWAY) {
 		ND_PRINTK1("ndisc_send_redirect: not a neighbour\n");
+		dst_release(&rt->u.dst);
 		return;
 	}
+	if (!xrlim_allow(&rt->u.dst, 1*HZ)) {
+		dst_release(&rt->u.dst);
+		return;
+	}
+	dst_release(&rt->u.dst);
 
 	if (dev->addr_len) {
 		if (neigh->nud_state&NUD_VALID) {
@@ -797,7 +805,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 		}
 	}
 
-	rd_len = min(536 - len, ntohs(skb->nh.ipv6h->payload_len) + 8);
+	rd_len = min(IPV6_MIN_MTU-sizeof(struct ipv6hdr)-len, ntohs(skb->nh.ipv6h->payload_len) + 8);
 	rd_len &= ~0x7;
 	len += rd_len;
 
@@ -814,14 +822,14 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 		ND_PRINTK1("ndisc_send_redirect: alloc_skb failed\n");
 		return;
 	}
-	
+
 	hlen = 0;
 
 	if (ndisc_build_ll_hdr(buff, dev, &skb->nh.ipv6h->saddr, NULL, len) == 0) {
 		kfree_skb(buff);
 		return;
 	}
-	
+
 	ip6_nd_hdr(sk, buff, dev, &ifp->addr, &skb->nh.ipv6h->saddr,
 		   IPPROTO_ICMPV6, len);
 
@@ -838,9 +846,9 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	ipv6_addr_copy(addrp, target);
 	addrp++;
 	ipv6_addr_copy(addrp, &skb->nh.ipv6h->daddr);
-	
+
 	opt = (u8*) (addrp + 1);
-		
+
 	/*
 	 *	include target_address option
 	 */
@@ -858,12 +866,15 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	opt += 6;
 
 	memcpy(opt, &skb->nh.ipv6h, rd_len - 8);
-	
+
 	icmph->icmp6_cksum = csum_ipv6_magic(&ifp->addr, &skb->nh.ipv6h->saddr,
 					     len, IPPROTO_ICMPV6,
 					     csum_partial((u8 *) icmph, len, 0));
 
 	dev_queue_xmit(buff);
+
+	icmpv6_statistics.Icmp6OutRedirects++;
+	icmpv6_statistics.Icmp6OutMsgs++;
 }
 
 static __inline__ struct neighbour *
@@ -894,15 +905,15 @@ static __inline__ int ndisc_recv_na(struct neighbour *neigh, struct sk_buff *skb
 
 static void pndisc_redo(struct sk_buff *skb)
 {
-	ndisc_rcv(skb, skb->dev, &skb->nh.ipv6h->saddr, &skb->nh.ipv6h->daddr,
-		  NULL, skb->len);
+	ndisc_rcv(skb, skb->len);
 	kfree_skb(skb);
 }
 
-int ndisc_rcv(struct sk_buff *skb, struct device *dev,
-	      struct in6_addr *saddr, struct in6_addr *daddr,
-	      struct ipv6_options *opt, unsigned short len)
+int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 {
+	struct device *dev = skb->dev;
+	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
+	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 	struct nd_msg *msg = (struct nd_msg *) skb->h.raw;
 	struct neighbour *neigh;
 	struct inet6_ifaddr *ifp;
@@ -977,7 +988,7 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 
 					if (neigh) {
 						ndisc_send_na(dev, neigh, saddr, &msg->target,
-							      1, 0, inc, inc);
+							      0, 0, inc, inc);
 						neigh_release(neigh);
 					}
 				} else {
@@ -1023,13 +1034,14 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 					/*
 					 *	Change: router to host
 					 */
-#if 0					
 					struct rt6_info *rt;
-					rt = ndisc_get_dflt_router(skb->dev,
-								   saddr);
-					if (rt)
-						ndisc_del_dflt_router(rt);
-#endif
+					rt = rt6_get_dflt_router(saddr, skb->dev);
+					if (rt) {
+						/* It is safe only because
+						   we aer in BH */
+						dst_release(&rt->u.dst);
+						ip6_del_rt(rt);
+					}
 				}
 			} else {
 				if (msg->icmph.icmp6_router)

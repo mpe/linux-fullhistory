@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.22 1998/03/08 05:56:27 davem Exp $
+ *	Version: $Id: ipip.c,v 1.23 1998/08/26 12:04:00 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -551,6 +551,8 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 			tunnel->recursion--;
 			return 0;
 		}
+		if (skb->sk)
+			skb_set_owner_w(new_skb, skb->sk);
 		dev_kfree_skb(skb);
 		skb = new_skb;
 	}

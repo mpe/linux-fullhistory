@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.31 1998/05/17 02:19:15 freitag Exp $
+ * Version:	$Id: ip_input.c,v 1.33 1998/08/26 12:03:47 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -115,38 +115,31 @@
  *		2 of the License, or (at your option) any later version.
  */
 
-#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/config.h>
 
+#include <linux/net.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
-#include <linux/proc_fs.h>
-#include <linux/stat.h>
 
 #include <net/snmp.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/route.h>
-#include <net/tcp.h>
-#include <net/udp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
 #include <net/icmp.h>
 #include <net/raw.h>
 #include <net/checksum.h>
-#include <linux/igmp.h>
 #include <linux/ip_fw.h>
 #ifdef CONFIG_IP_MASQUERADE
 #include <net/ip_masq.h>
@@ -154,7 +147,6 @@
 #include <linux/firewall.h>
 #include <linux/mroute.h>
 #include <linux/netlink.h>
-#include <linux/ipsec.h>
 
 /*
  *	SNMP management statistics
@@ -199,6 +191,9 @@ static __inline__ int icmp_filter(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
+/*
+ *	Process Router Attention IP option
+ */ 
 int ip_call_ra_chain(struct sk_buff *skb)
 {
 	struct ip_ra_chain *ra;
@@ -229,6 +224,9 @@ int ip_call_ra_chain(struct sk_buff *skb)
 	return 0;
 }
 
+/*
+ * 	Deliver IP Packets to the higher protocol layers.
+ */ 
 int ip_local_deliver(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
@@ -282,9 +280,11 @@ int ip_local_deliver(struct sk_buff *skb)
         skb->h.raw = skb->nh.raw + iph->ihl*4;
 
 	/*
-	 *	Deliver to raw sockets. This is fun as to avoid copies we want to make no surplus copies.
+	 *	Deliver to raw sockets. This is fun as to avoid copies we want to make no 
+	 *	surplus copies.
 	 *
 	 *	RFC 1122: SHOULD pass TOS value up to the transport layer.
+	 *	-> It does. And not only TOS, but all IP header.
 	 */
  
 	/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
@@ -309,10 +309,7 @@ int ip_local_deliver(struct sk_buff *skb)
 					skb1 = skb_clone(skb, GFP_ATOMIC);
 					if(skb1)
 					{
-						if(ipsec_sk_policy(raw_sk,skb1))	
-							raw_rcv(raw_sk, skb1);
-						else
-							kfree_skb(skb1);
+						raw_rcv(raw_sk, skb1);
 					}
 				}
 				raw_sk = sknext;
@@ -372,10 +369,8 @@ int ip_local_deliver(struct sk_buff *skb)
 
 	if(raw_sk!=NULL)	/* Shift to last raw user */
 	{
-		if(ipsec_sk_policy(raw_sk, skb))
-			raw_rcv(raw_sk, skb);
-		else
-			kfree_skb(skb);
+		raw_rcv(raw_sk, skb);
+
 	}
 	else if (!flag)		/* Free and report errors */
 	{
@@ -386,15 +381,16 @@ int ip_local_deliver(struct sk_buff *skb)
 	return(0);
 }
 
+/*
+ * 	Main IP Receive routine.
+ */ 
 int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct iphdr *iph = skb->nh.iph;
-	struct ip_options * opt = NULL;
-	int err;
 
 	/*
-	 * When interface is in promisc. mode, drop all the crap
-	 * that it receives, do not truing to analyse it.
+	 * 	When the interface is in promisc. mode, drop all the crap
+	 * 	that it receives, do not try to analyse it.
 	 */
 	if (skb->pkt_type == PACKET_OTHERHOST)
 		goto drop;
@@ -412,24 +408,32 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	4.	Doesn't have a bogus length
 	 */
 
-	if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4
-#ifndef CONFIG_IP_ROUTER
-	    || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0
-#endif
-		|| skb->len < ntohs(iph->tot_len))
-		goto inhdr_error;
+	if (skb->len < sizeof(struct iphdr))
+		goto inhdr_error; 
+	if (iph->ihl < 5 || iph->version != 4 || ip_fast_csum((u8 *)iph, iph->ihl) != 0)
+		goto inhdr_error; 
+
+	{
+	__u32 len = ntohs(iph->tot_len); 
+	if (skb->len < len)
+		goto inhdr_error; 
 
 	/*
 	 *	Our transport medium may have padded the buffer out. Now we know it
 	 *	is IP we can trim to the true length of the frame.
 	 *	Note this now means skb->len holds ntohs(iph->tot_len).
 	 */
-	__skb_trim(skb, ntohs(iph->tot_len));
 
+	__skb_trim(skb, len);
+	}
+	
+	/*
+	 *	Initialise the virtual path cache for the packet. It describes
+	 *	how the packet travels inside Linux networking.
+	 */ 
 	if (skb->dst == NULL) {
-		err = ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, dev);
-		if (err)
-			goto drop;
+		if (ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, dev))
+			goto drop; 
 #ifdef CONFIG_CPU_IS_SLOW
 		if (net_cpu_congestion > 10 && !(iph->tos&IPTOS_RELIABILITY) &&
 		    IPTOS_PREC(iph->tos) < IPTOS_PREC_INTERNETCONTROL) {
@@ -449,6 +453,21 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif
 
 	if (iph->ihl > 5) {
+		struct ip_options *opt;
+
+		/* It looks as overkill, because not all
+		   IP options require packet mangling.
+		   But it is the easiest for now, especially taking
+		   into account that combination of IP options
+		   and running sniffer is extremely rare condition.
+		                                      --ANK (980813)
+		*/
+		   
+		skb = skb_cow(skb, skb_headroom(skb));
+		if (skb == NULL)
+			return 0;
+		iph = skb->nh.iph;
+
 		skb->ip_summed = 0;
 		if (ip_options_compile(NULL, skb))
 			goto inhdr_error;
@@ -458,8 +477,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			struct in_device *in_dev = dev->ip_ptr;
 			if (in_dev && !IN_DEV_SOURCE_ROUTE(in_dev)) {
 				if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
-					printk(KERN_INFO "source route option %08lx -> %08lx\n",
-					       ntohl(iph->saddr), ntohl(iph->daddr));
+					printk(KERN_INFO "source route option %d.%d.%d.%d -> %d.%d.%d.%d\n",
+					       NIPQUAD(iph->saddr), NIPQUAD(iph->daddr));
 				goto drop;
 			}
 			if (ip_options_rcv_srr(skb))

@@ -9,6 +9,9 @@
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
+ *
+ *	Fixes:
+ *	Vitaly E. Lavrov	releasing NULL neighbor in neigh_add.
  */
 
 #include <linux/config.h>
@@ -1033,7 +1036,8 @@ int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 					   ndm->ndm_state,
 					   nlh->nlmsg_flags&NLM_F_REPLACE, 0);
 		}
-		neigh_release(n);
+		if (n)
+			neigh_release(n);
 		end_bh_atomic();
 		return err;
 	}
@@ -1043,7 +1047,7 @@ int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 
 
 static int neigh_fill_info(struct sk_buff *skb, struct neighbour *n,
-			    pid_t pid, u32 seq, int event)
+			   u32 pid, u32 seq, int event)
 {
 	unsigned long now = jiffies;
 	struct ndmsg *ndm;

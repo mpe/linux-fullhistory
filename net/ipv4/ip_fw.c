@@ -1512,14 +1512,14 @@ static int dump_rule(char *buffer,
 		    "%9s "			/* Chain name */
 		    "%08lX/%08lX->%08lX/%08lX "	/* Source & Destination IPs */
 		    "%.16s "			/* Interface */
-		    "%hX %hX "			/* fw_flg and fw_invflg fields */
-		    "%hu "			/* Protocol */
+		    "%X %X "			/* fw_flg and fw_invflg fields */
+		    "%u "			/* Protocol */
 		    "%-9u %-9u %-9u %-9u "	/* Packet & byte counters */
-		    "%hu-%hu %hu-%hu "		/* Source & Dest port ranges */
+		    "%u-%u %u-%u "		/* Source & Dest port ranges */
 		    "A%02X X%02X "		/* TOS and and xor masks */
 		    "%08X "			/* Redirection port */
 		    "%u "			/* fw_mark field */
-		    "%hu "			/* output size */
+		    "%u "			/* output size */
 		    "%9s\n",			/* Target */
 		    chainlabel,
 		    ntohl(rule->ipfw.fw_src.s_addr),

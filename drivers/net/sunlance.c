@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.79 1998/06/04 09:54:58 jj Exp $
+/* $Id: sunlance.c,v 1.81 1998/08/10 09:08:23 jj Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -1135,9 +1135,10 @@ __initfunc(int sparc_lance_probe (struct device *dev))
 		return ENODEV;
 	called++;
 
-	if (idprom->id_machtype == (SM_SUN4|SM_4_330)) {
+	if ((idprom->id_machtype == (SM_SUN4|SM_4_330)) ||
+	    (idprom->id_machtype == (SM_SUN4|SM_4_470))) {
 		memset (&sdev, 0, sizeof(sdev));
-		sdev.reg_addrs[0].phys_addr = SUN4_300_ETH_PHYSADDR;
+		sdev.reg_addrs[0].phys_addr = sun4_eth_physaddr;
 		sdev.irqs[0] = 6;
 		return sparc_lance_init(dev, &sdev, 0, 0);
 	}

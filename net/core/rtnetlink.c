@@ -12,6 +12,8 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
+ *	Fixes:
+ *	Vitaly E. Lavrov		RTA_OK arithmetics was wrong.
  */
 
 #include <linux/config.h>
@@ -29,6 +31,7 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/capability.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
 
@@ -135,47 +138,8 @@ int rtnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, int echo)
 	return err;
 }
 
-#ifdef CONFIG_RTNL_OLD_IFINFO
 static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
-				 int type, pid_t pid, u32 seq)
-{
-	struct ifinfomsg *r;
-	struct nlmsghdr  *nlh;
-	unsigned char	 *b = skb->tail;
-
-	nlh = NLMSG_PUT(skb, pid, seq, type, sizeof(*r));
-	if (pid) nlh->nlmsg_flags |= NLM_F_MULTI;
-	r = NLMSG_DATA(nlh);
-	r->ifi_addrlen = dev->addr_len;
-	r->ifi_address.sa_family = dev->type;
-	memcpy(&r->ifi_address.sa_data, dev->dev_addr, dev->addr_len);
-	r->ifi_broadcast.sa_family = dev->type;
-	memcpy(&r->ifi_broadcast.sa_data, dev->broadcast, dev->addr_len);
-	r->ifi_flags = dev->flags;
-	r->ifi_mtu = dev->mtu;
-	r->ifi_index = dev->ifindex;
-	r->ifi_link = dev->iflink;
-	strncpy(r->ifi_name, dev->name, IFNAMSIZ-1);
-	r->ifi_qdiscname[0] = 0;
-	r->ifi_qdisc = dev->qdisc_sleeping->handle;
-	if (dev->qdisc_sleeping)
-		strcpy(r->ifi_qdiscname, dev->qdisc_sleeping->ops->id);
-	if (dev->get_stats) {
-		struct net_device_stats *stats = dev->get_stats(dev);
-		if (stats)
-			RTA_PUT(skb, IFLA_STATS, sizeof(*stats), stats);
-	}
-	nlh->nlmsg_len = skb->tail - b;
-	return skb->len;
-
-nlmsg_failure:
-rtattr_failure:
-	skb_trim(skb, b - skb->data);
-	return -1;
-}
-#else
-static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
-				 int type, pid_t pid, u32 seq)
+				 int type, u32 pid, u32 seq)
 {
 	struct ifinfomsg *r;
 	struct nlmsghdr  *nlh;
@@ -218,7 +182,6 @@ rtattr_failure:
 	skb_trim(skb, b - skb->data);
 	return -1;
 }
-#endif
 
 int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
@@ -266,12 +229,7 @@ int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 void rtmsg_ifinfo(int type, struct device *dev)
 {
 	struct sk_buff *skb;
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	int size = NLMSG_SPACE(sizeof(struct ifinfomsg)+
-			       RTA_LENGTH(sizeof(struct net_device_stats)));
-#else
 	int size = NLMSG_GOODSIZE;
-#endif
 
 	skb = alloc_skb(size, GFP_KERNEL);
 	if (!skb)
@@ -287,7 +245,7 @@ void rtmsg_ifinfo(int type, struct device *dev)
 
 static int rtnetlink_done(struct netlink_callback *cb)
 {
-	if (NETLINK_CREDS(cb->skb)->uid == 0 && cb->nlh->nlmsg_flags&NLM_F_ATOMIC)
+	if (cap_raised(NETLINK_CB(cb->skb).eff_cap, CAP_NET_ADMIN) && cb->nlh->nlmsg_flags&NLM_F_ATOMIC)
 		rtnl_shunlock();
 	return 0;
 }
@@ -342,13 +300,13 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 	sz_idx = type>>2;
 	kind = type&3;
 
-	if (kind != 2 && NETLINK_CREDS(skb)->uid) {
+	if (kind != 2 && !cap_raised(NETLINK_CB(skb).eff_cap, CAP_NET_ADMIN)) {
 		*errp = -EPERM;
 		return -1;
 	}
 
 	if (kind == 2 && nlh->nlmsg_flags&NLM_F_DUMP) {
-		int rlen;
+		u32 rlen;
 
 		if (link->dumpit == NULL)
 			link = &(rtnetlink_links[PF_UNSPEC][type]);
@@ -357,12 +315,13 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 			goto err_inval;
 
 		/* Super-user locks all the tables to get atomic snapshot */
-		if (NETLINK_CREDS(skb)->uid == 0 && nlh->nlmsg_flags&NLM_F_ATOMIC)
+		if (cap_raised(NETLINK_CB(skb).eff_cap, CAP_NET_ADMIN)
+		    && nlh->nlmsg_flags&NLM_F_ATOMIC)
 			atomic_inc(&rtnl_rlockct);
 		if ((*errp = netlink_dump_start(rtnl, skb, nlh,
 						link->dumpit,
 						rtnetlink_done)) != 0) {
-			if (NETLINK_CREDS(skb)->uid == 0 && nlh->nlmsg_flags&NLM_F_ATOMIC)
+			if (cap_raised(NETLINK_CB(skb).eff_cap, CAP_NET_ADMIN) && nlh->nlmsg_flags&NLM_F_ATOMIC)
 				atomic_dec(&rtnl_rlockct);
 			return -1;
 		}
@@ -431,7 +390,7 @@ extern __inline__ int rtnetlink_rcv_skb(struct sk_buff *skb)
 	struct nlmsghdr * nlh;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
-		int rlen;
+		u32 rlen;
 
 		nlh = (struct nlmsghdr *)skb->data;
 		if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len)

@@ -5,7 +5,7 @@
  *
  *		Dumb Network Address Translation.
  *
- * Version:	$Id: ip_nat_dumb.c,v 1.3 1998/03/15 03:31:44 davem Exp $
+ * Version:	$Id: ip_nat_dumb.c,v 1.4 1998/08/26 12:03:49 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -17,6 +17,8 @@
  * Fixes:
  *		Rani Assaf	:	A zero checksum is a special case
  *					only in UDP
+ * 		Rani Assaf	:	Added ICMP messages rewriting
+ *
  *
  * NOTE:	It is just working model of real NAT.
  */
@@ -36,9 +38,6 @@
 #include <linux/udp.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
-#ifdef CONFIG_IP_MASQUERADE
-#include <net/ip_masq.h>
-#endif
 #include <net/checksum.h>
 #include <linux/route.h>
 #include <net/route.h>
@@ -68,20 +67,48 @@ ip_do_nat(struct sk_buff *skb)
 
 		switch(iph->protocol) {
 		case IPPROTO_TCP:
-			cksum  = (u16*)&((struct tcphdr*)(((char*)iph) + iph->ihl*4))->check;
+			cksum  = (u16*)&((struct tcphdr*)(((char*)iph) + (iph->ihl<<2)))->check;
+			if ((u8*)(cksum+1) > skb->tail)
+				goto truncated;
 			check  = csum_tcpudp_magic(iph->saddr, iph->daddr, 0, 0, ~(*cksum));
 			*cksum = csum_tcpudp_magic(~osaddr, ~odaddr, 0, 0, ~check);
 			break;
 		case IPPROTO_UDP:
-			cksum  = (u16*)&((struct udphdr*)(((char*)iph) + iph->ihl*4))->check;
+			cksum  = (u16*)&((struct udphdr*)(((char*)iph) + (iph->ihl<<2)))->check;
+			if ((u8*)(cksum+1) > skb->tail)
+				goto truncated;
 			if ((check = *cksum) != 0) {
 				check = csum_tcpudp_magic(iph->saddr, iph->daddr, 0, 0, ~check);
 				check = csum_tcpudp_magic(~osaddr, ~odaddr, 0, 0, ~check);
 				*cksum = check ? : 0xFFFF;
 			}
+			break;
+		case IPPROTO_ICMP:
+		{
+			struct icmphdr *icmph = (struct icmphdr*)((char*)iph + (iph->ihl<<2));
+			struct   iphdr *ciph;
+
+			if ((icmph->type != ICMP_DEST_UNREACH) &&
+			    (icmph->type != ICMP_TIME_EXCEEDED) &&
+			    (icmph->type != ICMP_PARAMETERPROB)) break;
+
+			ciph = (struct iphdr *) (icmph + 1);
+
+			if ((u8*)(ciph+1) > skb->tail)
+				goto truncated;
+
+			if (rt->rt_flags&RTCF_DNAT && ciph->saddr == odaddr)
+				ciph->saddr = iph->daddr;
+			if (rt->rt_flags&RTCF_SNAT && ciph->daddr == osaddr)
+				ciph->daddr = iph->saddr;
+			break;
+		}
 		default:
 			break;
 		}
 	}
 	return 0;
+
+truncated:
+	return -EINVAL;
 }

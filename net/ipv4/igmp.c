@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.26 1998/03/08 05:56:19 davem Exp $
+ *	Version: $Id: igmp.c,v 1.27 1998/08/26 12:03:39 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -563,7 +563,7 @@ int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 		goto done;
 	}
 
-	iml = (struct ip_mc_socklist *)kmalloc(sizeof(*iml), GFP_KERNEL);
+	iml = (struct ip_mc_socklist *)sock_kmalloc(sk, sizeof(*iml), GFP_KERNEL);
 
 	err = -EADDRINUSE;
 	for (i=sk->ip_mc_list; i; i=i->next) {
@@ -590,7 +590,7 @@ int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 done:
 	rtnl_shunlock();
 	if (iml)
-		kfree(iml);
+		sock_kfree_s(sk, iml, sizeof(*iml));
 	return err;
 }
 
@@ -613,7 +613,7 @@ int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr)
 			in_dev = inetdev_by_index(iml->multi.imr_ifindex);
 			if (in_dev)
 				ip_mc_dec_group(in_dev, imr->imr_multiaddr.s_addr);
-			kfree_s(iml, sizeof(*iml));
+			sock_kfree_s(sk, iml, sizeof(*iml));
 			return 0;
 		}
 	}
@@ -633,7 +633,7 @@ void ip_mc_drop_socket(struct sock *sk)
 		sk->ip_mc_list = iml->next;
 		if ((in_dev = inetdev_by_index(iml->multi.imr_ifindex)) != NULL)
 			ip_mc_dec_group(in_dev, iml->multi.imr_multiaddr.s_addr);
-		kfree_s(iml, sizeof(*iml));
+		sock_kfree_s(sk, iml, sizeof(*iml));
 	}
 }
 

@@ -5,7 +5,7 @@
  *
  *		IPv4 FIB: lookup engine and maintenance routines.
  *
- * Version:	$Id: fib_hash.c,v 1.4 1998/07/15 05:05:08 davem Exp $
+ * Version:	$Id: fib_hash.c,v 1.5 1998/08/26 12:03:27 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -713,7 +713,7 @@ static void rtmsg_fib(int event, struct fib_node* f, int z, int tb_id,
 		      struct nlmsghdr *n, struct netlink_skb_parms *req)
 {
 	struct sk_buff *skb;
-	pid_t pid = req ? req->pid : 0;
+	u32 pid = req ? req->pid : 0;
 	int size = NLMSG_SPACE(sizeof(struct rtmsg)+256);
 
 	skb = alloc_skb(size, GFP_KERNEL);

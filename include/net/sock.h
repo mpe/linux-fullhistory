@@ -87,6 +87,8 @@
 
 #include <asm/atomic.h>
 
+#define MIN_WRITE_SPACE	2048
+
 /* The AF_UNIX specific socket options */
 struct unix_opt {
 	int 			family;
@@ -134,6 +136,7 @@ struct ipv6_pinfo {
 	struct in6_addr 	saddr;
 	struct in6_addr 	rcv_saddr;
 	struct in6_addr		daddr;
+	struct in6_addr		*daddr_cache;
 
 	__u32			flow_lbl;
 	int			hop_limit;
@@ -141,21 +144,28 @@ struct ipv6_pinfo {
 	int			mcast_oif;
 	__u8			priority;
 
-
-	/* sockopt flags */
-
-	__u8			recvsrcrt:1,
-	                        rxinfo:1,
+	/* pktoption flags */
+	union {
+		struct {
+			__u8	srcrt:2,
+			        rxinfo:1,
 				rxhlim:1,
 				hopopts:1,
 				dstopts:1,
-				mc_loop:1,
-                                unused:2;
+                                authhdr:1,
+                                unused:1;
+		} bits;
+		__u8		all;
+	} rxopt;
+
+	/* sockopt flags */
+	__u8			mc_loop:1;
 
 	struct ipv6_mc_socklist	*ipv6_mc_list;
 	__u32			dst_cookie;
 
-	struct ipv6_options	*opt;
+	struct ipv6_txoptions	*opt;
+	struct sk_buff		*pktoptions;
 };
 
 struct raw6_opt {
@@ -207,6 +217,10 @@ struct tcp_opt {
 	__u32	snd_wl2;	/* Ack sequence for update		*/
 	__u32	snd_wnd;	/* The window we expect to receive	*/
 	__u32	max_window;
+	__u32	pmtu_cookie;	/* Last pmtu seen by socket		*/
+	__u16	mss_cache;	/* Cached effective mss, not including SACKS */
+	__u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
+	__u16	ext_header_len;	/* Dave, do you allow mw to use this hole? 8) --ANK */
 	__u8	pending;	/* pending events			*/
 	__u8	retransmits;
 	__u32	last_ack_sent;	/* last ack we sent			*/
@@ -226,6 +240,7 @@ struct tcp_opt {
  	__u32	snd_ssthresh;	/* Slow start size threshold		*/
 	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
 	__u8	delayed_acks;
+	__u16	user_mss;  	/* mss requested by user in ioctl */
 
 	/* Two commonly used timers in both sender and receiver paths. */
  	struct timer_list	retransmit_timer;	/* Resend (no ack)	*/
@@ -252,7 +267,6 @@ struct tcp_opt {
 		wscale_ok,	/* Wscale seen on SYN packet		*/
 		sack_ok;	/* SACK seen on SYN packet		*/
 	char	saw_tstamp;	/* Saw TIMESTAMP on last packet		*/
-        __u16	in_mss;		/* MSS option received from sender	*/
         __u8	snd_wscale;	/* Window scaling received from sender	*/
         __u8	rcv_wscale;	/* Window scaling to send to receiver	*/
         __u32	rcv_tsval;	/* Time stamp value             	*/
@@ -269,6 +283,9 @@ struct tcp_opt {
 	__u32	fin_seq;
 	__u32	urg_seq;
 	__u32	urg_data;
+
+	__u32	last_seg_size;	/* Size of last incoming segment */
+	__u32	rcv_mss;	/* MSS used for delayed ACK decisions */ 
 
 	struct open_request	*syn_wait_queue;
 	struct open_request	**syn_wait_last;
@@ -390,12 +407,6 @@ struct sock {
 
 	struct proto		*prot;
 
-	/* mss is min(mtu, max_window)
-	 * XXX Fix this, mtu only used in one TCP place and that is it -DaveM
-	 */
-	unsigned short		mtu;       /* mss negotiated in the syn's */
-	unsigned short		mss;       /* current eff. mss - can change */
-	unsigned short		user_mss;  /* mss requested by user in ioctl */
 	unsigned short		shutdown;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
@@ -868,6 +879,26 @@ extern __inline__ int sock_error(struct sock *sk)
 	return -err;
 }
 
+extern __inline__ unsigned long sock_wspace(struct sock *sk)
+{
+	int amt = 0;
+
+	if (!(sk->shutdown & SEND_SHUTDOWN)) {
+		amt = sk->sndbuf - atomic_read(&sk->wmem_alloc);
+		if (amt < 0) 
+			amt = 0;
+	}
+	return amt;
+}
+
+/*
+ *	Default write policy as shown to user space via poll/select/SIGIO
+ *	Kernel internally doesn't use the MIN_WRITE_SPACE threshold.
+ */
+extern __inline__ int sock_writeable(struct sock *sk) 
+{
+	return sock_wspace(sk) >= MIN_WRITE_SPACE;
+}
 
 /* 
  *	Declarations from timer.c 

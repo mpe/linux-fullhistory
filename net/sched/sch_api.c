@@ -7,6 +7,10 @@
  *		2 of the License, or (at your option) any later version.
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ *
+ * Fixes:
+ *
+ * Rani Assaf <rani@magic.metawire.com> :980802: JIFFIES and CPU clock sources are repaired.
  */
 
 #include <linux/config.h>
@@ -506,7 +510,7 @@ process_existing:
 }
 
 static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q,
-			 pid_t pid, u32 seq, unsigned flags, int event)
+			 u32 pid, u32 seq, unsigned flags, int event)
 {
 	struct tcmsg *tcm;
 	struct nlmsghdr  *nlh;
@@ -538,7 +542,7 @@ static int qdisc_notify(struct sk_buff *oskb, struct nlmsghdr *n,
 			 struct Qdisc *old, struct Qdisc *new)
 {
 	struct sk_buff *skb;
-	pid_t pid = oskb ? NETLINK_CB(oskb).pid : 0;
+	u32 pid = oskb ? NETLINK_CB(oskb).pid : 0;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb)
@@ -715,7 +719,7 @@ out:
 
 static int tc_fill_tclass(struct sk_buff *skb, struct Qdisc *q,
 			  unsigned long cl,
-			  pid_t pid, u32 seq, unsigned flags, int event)
+			  u32 pid, u32 seq, unsigned flags, int event)
 {
 	struct tcmsg *tcm;
 	struct nlmsghdr  *nlh;
@@ -745,7 +749,7 @@ static int tclass_notify(struct sk_buff *oskb, struct nlmsghdr *n,
 			  struct Qdisc *q, unsigned long cl, int event)
 {
 	struct sk_buff *skb;
-	pid_t pid = oskb ? NETLINK_CB(oskb).pid : 0;
+	u32 pid = oskb ? NETLINK_CB(oskb).pid : 0;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb)
@@ -850,7 +854,7 @@ int psched_clock_scale;
 #endif
 
 #ifdef PSCHED_WATCHER
-u32 psched_time_mark;
+PSCHED_WATCHER psched_time_mark;
 
 static void psched_tick(unsigned long);
 
@@ -864,10 +868,10 @@ static void psched_tick(unsigned long dummy)
 	PSCHED_GET_TIME(dummy_stamp);
 	psched_timer.expires = jiffies + 4*HZ;
 #else
-	unsigned long jiffies = now;
+	unsigned long now = jiffies;
 	psched_time_base = ((u64)now)<<PSCHED_JSCALE;
 	psched_time_mark = now;
-	psched_timer.expires = jiffies + 60*60*HZ;
+	psched_timer.expires = now + 60*60*HZ;
 #endif
 	add_timer(&psched_timer);
 }
@@ -883,7 +887,7 @@ __initfunc(int psched_calibrate_clock(void))
 	unsigned long stop;
 
 #if CPU == 586 || CPU == 686
-	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC)
+	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC))
 		return -1;
 #endif
 
@@ -895,7 +899,7 @@ __initfunc(int psched_calibrate_clock(void))
 	PSCHED_GET_TIME(stamp);
 	do_gettimeofday(&tv);
 	while (jiffies < stop)
-		boundary();
+		barrier();
 	PSCHED_GET_TIME(stamp1);
 	do_gettimeofday(&tv1);
 	end_bh_atomic();
@@ -910,7 +914,7 @@ __initfunc(int psched_calibrate_clock(void))
 	while ((delay>>=1) != 0)
 		psched_clock_scale++;
 	psched_us_per_tick = 1<<psched_clock_scale;
-	psched_clock_per_hz = (delay*(1000000/HZ))>>psched_clock_scale;
+	psched_clock_per_hz = (psched_tick_per_us*(1000000/HZ))>>psched_clock_scale;
 	return 0;
 }
 #endif

@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.12 1998/07/15 05:05:02 davem Exp $
+ *	$Id: ipv6.h,v 1.13 1998/08/26 12:02:11 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -86,43 +86,9 @@ struct frag_hdr {
 
 #include <net/sock.h>
 
-extern struct ipv6_mib	ipv6_statistics;
-
-struct ipv6_frag {
-	__u16			offset;
-	__u16			len;
-	struct sk_buff		*skb;
-
-	struct frag_hdr		*fhdr;
-
-	struct ipv6_frag	*next;
-};
-
-/*
- *	Equivalent of ipv4 struct ipq
- */
-
-struct frag_queue {
-
-	struct frag_queue	*next;
-	struct frag_queue	*prev;
-
-	__u32			id;		/* fragment id		*/
-	struct in6_addr		saddr;
-	struct in6_addr		daddr;
-	struct timer_list	timer;		/* expire timer		*/
-	struct ipv6_frag	*fragments;
-	struct device		*dev;
-	__u8			last_in;	/* has last segment arrived? */
-	__u8			nexthdr;
-	__u8			*nhptr;
-};
-
-struct ipv6_tlvtype
-{
-	u8 type;
-	u8 len;
-};
+extern struct ipv6_mib		ipv6_statistics;
+extern struct icmpv6_mib	icmpv6_statistics;
+extern struct udp_mib		udp_stats_in6;
 
 struct ip6_ra_chain
 {
@@ -134,24 +100,44 @@ struct ip6_ra_chain
 
 extern struct ip6_ra_chain	*ip6_ra_chain;
 
+/*
+   This structure is prepared by protocol, when parsing
+   ancillary data and passed to IPv6.
+ */
+
+struct ipv6_txoptions
+{
+	/* Length of this structure */
+	int			tot_len;
+
+	/* length of extension headers   */
+
+	__u16			opt_flen;	/* after fragment hdr */
+	__u16			opt_nflen;	/* before fragment hdr */
+
+	struct ipv6_opt_hdr	*hopopt;
+	struct ipv6_opt_hdr	*dst0opt;
+	struct ipv6_rt_hdr	*srcrt;	/* Routing Header */
+	struct ipv6_opt_hdr	*auth;
+	struct ipv6_opt_hdr	*dst1opt;
+
+	/* Option buffer, as read by IPV6_PKTOPTIONS, starts here. */
+};
+
+
 extern int 			ip6_ra_control(struct sock *sk, int sel,
 					       void (*destructor)(struct sock *));
 
 
 extern int			ip6_call_ra_chain(struct sk_buff *skb, int sel);
 
-extern int 			ip6_dstopt_unknown(struct sk_buff *skb,
-						   struct ipv6_tlvtype *hdr);
+extern u8 *			ipv6_reassembly(struct sk_buff **skb, u8 *nhptr);
 
-extern int			ipv6_routing_header(struct sk_buff **skb, 
-						    struct device *dev,
-						    __u8 *nhptr, 
-						    struct ipv6_options *opt);
+extern u8 *			ipv6_parse_hopopts(struct sk_buff *skb, u8 *nhptr);
 
-extern int			ipv6_reassembly(struct sk_buff **skb, 
-						struct device *dev, 
-						__u8 *nhptr,
-						struct ipv6_options *opt);
+extern u8 *			ipv6_parse_exthdrs(struct sk_buff **skb, u8 *nhptr);
+
+extern struct ipv6_txoptions *  ipv6_dup_options(struct sock *sk, struct ipv6_txoptions *opt);
 
 #define IPV6_FRAG_TIMEOUT	(60*HZ)		/* 60 seconds */
 
@@ -226,7 +212,7 @@ extern int			ipv6_rcv(struct sk_buff *skb,
 extern int			ip6_xmit(struct sock *sk,
 					 struct sk_buff *skb,
 					 struct flowi *fl,
-					 struct ipv6_options *opt);
+					 struct ipv6_txoptions *opt);
 
 extern int			ip6_nd_hdr(struct sock *sk,
 					   struct sk_buff *skb,
@@ -240,7 +226,7 @@ extern int			ip6_build_xmit(struct sock *sk,
 					       const void *data,
 					       struct flowi *fl,
 					       unsigned length,
-					       struct ipv6_options *opt,
+					       struct ipv6_txoptions *opt,
 					       int hlimit, int flags);
 
 /*
@@ -256,28 +242,27 @@ extern int			ip6_mc_input(struct sk_buff *skb);
  *	Extension header (options) processing
  */
 
-extern int			ipv6opt_bld_rthdr(struct sk_buff *skb,
-						  struct ipv6_options *opt,
-						  struct in6_addr *addr,
-						  int proto);
+extern u8 *			ipv6_build_nfrag_opts(struct sk_buff *skb,
+						      u8 *prev_hdr,
+						      struct ipv6_txoptions *opt,
+						      struct in6_addr *daddr,
+						      u32 jumbolen);
+extern u8 *			ipv6_build_frag_opts(struct sk_buff *skb,
+						     u8 *prev_hdr,
+						     struct ipv6_txoptions *opt);
+extern void 			ipv6_push_nfrag_opts(struct sk_buff *skb,
+						     struct ipv6_txoptions *opt,
+						     u8 *proto,
+						     struct in6_addr **daddr_p);
+extern void			ipv6_push_frag_opts(struct sk_buff *skb,
+						    struct ipv6_txoptions *opt,
+						    u8 *proto);
 
-extern int			ipv6opt_srcrt_co(struct sockaddr_in6 *sin6, 
-						 int len, 
-						 struct ipv6_options *opt);
-
-extern int			ipv6opt_srcrt_cl(struct sockaddr_in6 *sin6, 
-						 int num_addrs, 
-						 struct ipv6_options *opt);
-
-extern int			ipv6opt_srt_tosin(struct ipv6_options *opt,
-						  struct sockaddr_in6 *sin6,
-						  int len);
-
-extern void			ipv6opt_free(struct ipv6_options *opt);
-
-extern struct ipv6_opt_hdr *	ipv6_skip_exthdr(struct ipv6_opt_hdr *hdr, 
+extern u8 *			ipv6_skip_exthdr(struct ipv6_opt_hdr *hdr, 
 					         u8 *nexthdrp, int len);
 
+extern struct ipv6_txoptions *	ipv6_invert_rthdr(struct sock *sk,
+						  struct ipv6_rt_hdr *hdr);
 
 
 /*

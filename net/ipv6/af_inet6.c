@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.36 1998/06/10 07:29:25 davem Exp $
+ *	$Id: af_inet6.c,v 1.37 1998/08/26 12:04:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -64,6 +64,7 @@ extern int raw6_get_info(char *, char **, off_t, int, int);
 extern int tcp6_get_info(char *, char **, off_t, int, int);
 extern int udp6_get_info(char *, char **, off_t, int, int);
 extern int afinet6_get_info(char *, char **, off_t, int, int);
+extern int afinet6_get_snmp(char *, char **, off_t, int, int);
 #endif
 
 #ifdef CONFIG_SYSCTL
@@ -243,8 +244,47 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 static int inet6_release(struct socket *sock, struct socket *peer)
 {
+	struct sock *sk = sock->sk;
+
+	if (sk == NULL)
+		return -EINVAL;
+
+	/* Free mc lists */
+	ipv6_sock_mc_close(sk);
+
+	/* Huh! MOD_DEC_USE_COUNT was here :-(
+	   It is impossible by two reasons: socket destroy
+	   may be delayed and inet_release may sleep and
+	   return to nowhere then. It should be moved to
+	   inet6_destroy_sock(), but we have no explicit constructor :-(
+	                                    --ANK (980802)
+	 */
 	MOD_DEC_USE_COUNT;
 	return inet_release(sock, peer);
+}
+
+int inet6_destroy_sock(struct sock *sk)
+{
+	struct sk_buff *skb;
+	struct ipv6_txoptions *opt;
+
+	/*
+	 *	Release destination entry
+	 */
+
+	dst_release(xchg(&sk->dst_cache,NULL));
+
+	/* Release rx options */
+
+	if ((skb = xchg(&sk->net_pinfo.af_inet6.pktoptions, NULL)) != NULL)
+		kfree_skb(skb);
+
+	/* Free tx options */
+
+	if ((opt = xchg(&sk->net_pinfo.af_inet6.opt, NULL)) != NULL)
+		sock_kfree_s(sk, opt, opt->tot_len);
+
+	return 0;
 }
 
 /*
@@ -412,6 +452,12 @@ static struct proc_dir_entry proc_net_sockstat6 = {
 	0, &proc_net_inode_operations,
 	afinet6_get_info
 };
+static struct proc_dir_entry proc_net_snmp6 = {
+	PROC_NET_SNMP6, 5, "snmp6",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	afinet6_get_snmp
+};
 #endif	/* CONFIG_PROC_FS */
 
 #ifdef MODULE
@@ -445,7 +491,7 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 
 	printk(KERN_INFO "IPv6 v0.2 for NET3.037\n");
 
-	if (sizeof(struct ipv6_options) > sizeof(dummy_skb->cb))
+	if (sizeof(struct inet6_skb_parm) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "inet6_proto_init: size fault\n");
 #ifdef MODULE
@@ -490,6 +536,7 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_net_tcp6);
 	proc_net_register(&proc_net_udp6);
 	proc_net_register(&proc_net_sockstat6);
+	proc_net_register(&proc_net_snmp6);
 #endif
 
 	/* Now the userspace is allowed to create INET6 sockets. */
@@ -526,6 +573,7 @@ void cleanup_module(void)
 	proc_net_unregister(proc_net_tcp6.low_ino);
 	proc_net_unregister(proc_net_udp6.low_ino);
 	proc_net_unregister(proc_net_sockstat6.low_ino);
+	proc_net_unregister(proc_net_snmp6.low_ino);
 #endif
 	/* Cleanup code parts. */
 	sit_cleanup();

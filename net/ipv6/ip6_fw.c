@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fw.c,v 1.9 1998/02/12 07:43:42 davem Exp $
+ *	$Id: ip6_fw.c,v 1.10 1998/08/26 12:04:57 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -300,14 +300,19 @@ int ip6_fw_msg_add(struct ip6_fw_msg *msg)
 	rl->info.uli_u.data = msg->u.data;
 
 	rtmsg.rtmsg_flags = RTF_NONEXTHOP|RTF_POLICY;
-	rt = ip6_route_add(&rtmsg, &err);
+	err = ip6_route_add(&rtmsg);
 
-	/* BUGGGG! rt can point to nowhere. */
-	if (rt == NULL) {
+	if (err) {
 		ip6_fwrule_free(rl);
-		return -ENOMEM;
+		return err;
 	}
 
+	/* The rest will not work for now. --ABK (989725) */
+
+#ifndef notdef
+	ip6_fwrule_free(rl);
+	return -EPERM;
+#else
 	rt->u.dst.error = -EPERM;
 
 	if (msg->policy == IP6_FW_ACCEPT) {
@@ -327,6 +332,7 @@ int ip6_fw_msg_add(struct ip6_fw_msg *msg)
 	rt->rt6i_flowr = flow_clone((struct flow_rule *)rl);
 
 	return 0;
+#endif
 }
 
 static int ip6_fw_msgrcv(int unit, struct sk_buff *skb)

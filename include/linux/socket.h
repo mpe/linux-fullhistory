@@ -88,20 +88,27 @@ struct cmsghdr {
 
 /*
  *	Get the next cmsg header
+ *
+ *	PLEASE, do not touch this function. If you think, that it is
+ *	incorrect, grep kernel sources and think about consequences
+ *	before trying to improve it.
+ *
+ *	Now it always returns valid, not truncated ancillary object
+ *	HEADER. But caller still MUST check, that cmsg->cmsg_len is
+ *	inside range, given by msg->msg_controllen before using
+ *	ansillary object DATA.				--ANK (980731)
  */
  
 __KINLINE struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size,
 					       struct cmsghdr *__cmsg)
 {
-	unsigned char * __ptr;
+	struct cmsghdr * __ptr;
 
-	if (__cmsg->cmsg_len < sizeof(struct cmsghdr))
-		return NULL;
-	__ptr = ((unsigned char *) __cmsg) +  CMSG_ALIGN(__cmsg->cmsg_len);
-	if (__ptr >= (unsigned char *) __ctl + __size)
+	__ptr = (struct cmsghdr*)(((unsigned char *) __cmsg) +  CMSG_ALIGN(__cmsg->cmsg_len));
+	if ((unsigned long)((char*)(__ptr+1) - (char *) __ctl) > __size)
 		return NULL;
 
-	return (struct cmsghdr *) __ptr;
+	return __ptr;
 }
 
 __KINLINE struct cmsghdr * cmsg_nxthdr (struct msghdr *__msg, struct cmsghdr *__cmsg)

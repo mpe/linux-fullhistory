@@ -4,6 +4,8 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
+ *	Version:	$Id: skbuff.c,v 1.53 1998/08/19 13:32:44 freitag Exp $
+ *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
  *		Dave Platt	:	Interrupt stacking fix.
@@ -96,14 +98,14 @@ void skb_under_panic(struct sk_buff *skb, int sz, void *here)
 
 void show_net_buffers(void)
 {
-	printk(KERN_INFO "Networking buffers in use          : %u\n",
+	printk("Networking buffers in use          : %u\n",
 	       atomic_read(&net_skbcount));
-	printk(KERN_INFO "Total network buffer allocations   : %u\n",
+	printk("Total network buffer allocations   : %u\n",
 	       atomic_read(&net_allocs));
-	printk(KERN_INFO "Total failed network buffer allocs : %u\n",
+	printk("Total failed network buffer allocs : %u\n",
 	       atomic_read(&net_fails));
 #ifdef CONFIG_INET
-	printk(KERN_INFO "IP fragment buffer size            : %u\n",
+	printk("IP fragment buffer size            : %u\n",
 	       atomic_read(&ip_frag_mem));
 #endif	
 }
@@ -365,7 +367,7 @@ void skb_add_mtu(int mtu)
 }
 #endif
 
-__initfunc(void skb_init(void))
+void __init skb_init(void)
 {
 	skbuff_head_cache = kmem_cache_create("skbuff_head_cache",
 					      sizeof(struct sk_buff),

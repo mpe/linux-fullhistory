@@ -147,12 +147,12 @@ extern psched_time_t	psched_time_base;
 
 #if PSCHED_CLOCK_SOURCE == PSCHED_JIFFIES
 
-#define PSCHED_WATCHER
+#define PSCHED_WATCHER unsigned long
 
-extern unsigned long psched_time_mark;
+extern PSCHED_WATCHER psched_time_mark;
 
 #if HZ == 100
-#define PSCHED_JSCALE 7
+#define PSCHED_JSCALE 13
 #elif HZ == 1024
 #define PSCHED_JSCALE 10
 #else
@@ -179,9 +179,9 @@ extern int psched_clock_scale;
 
 #elif defined (__alpha__)
 
-#define PSCHED_WATCHER
+#define PSCHED_WATCHER u32
 
-extern u32 psched_time_mark;
+extern PSCHED_WATCHER psched_time_mark;
 
 #define PSCHED_GET_TIME(stamp) \
 ({ u32 __res; \

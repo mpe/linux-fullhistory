@@ -144,6 +144,7 @@ static int netlink_open(struct inode * inode, struct file * file)
 
 out:
 	open_map &= ~(1<<minor);
+	MOD_DEC_USE_COUNT;
 	return err;
 }
 

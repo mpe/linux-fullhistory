@@ -78,6 +78,7 @@ struct tcp_bind_bucket {
 	unsigned short		flags;
 #define TCPB_FLAG_LOCKED	0x0001
 #define TCPB_FLAG_FASTREUSE	0x0002
+#define TCPB_FLAG_GOODSOCKNUM	0x0004
 
 	struct tcp_bind_bucket	*next;
 	struct sock		*owners;
@@ -230,11 +231,8 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 	return tcp_lhashfn(sk->num);
 }
 
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-#define NETHDR_SIZE	sizeof(struct ipv6hdr)
-#else
-#define NETHDR_SIZE	sizeof(struct iphdr) + 40
-#endif
+/* Note, that it is > than ipv6 header */
+#define NETHDR_SIZE	(sizeof(struct iphdr) + 40)
 
 /*
  * 40 is maximal IP options size
@@ -257,7 +255,6 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
 #define MAX_DELAY_ACK	2
-#define MIN_WRITE_SPACE	2048
 #define TCP_WINDOW_DIFF	2048
 
 /* urg_data states */
@@ -354,7 +351,7 @@ struct tcp_v4_open_req {
 struct tcp_v6_open_req {
 	struct in6_addr		loc_addr;
 	struct in6_addr		rmt_addr;
-	struct ipv6_options	*opt;
+	struct sk_buff		*pktopts;
 	int			iif;
 };
 #endif
@@ -400,6 +397,13 @@ extern kmem_cache_t *tcp_openreq_cachep;
 /*
  *	Pointers to address related TCP functions
  *	(i.e. things that depend on the address family)
+ *
+ * 	BUGGG_FUTURE: all the idea behind this struct is wrong.
+ *	It mixes socket frontend with transport function.
+ *	With port sharing between IPv6/v4 it gives the only advantage,
+ *	only poor IPv6 needs to permanently recheck, that it
+ *	is still IPv6 8)8) It must be cleaned up as soon as possible.
+ *						--ANK (980802)
  */
 
 struct tcp_func {
@@ -414,7 +418,7 @@ struct tcp_func {
 
 	int			(*conn_request)		(struct sock *sk,
 							 struct sk_buff *skb,
-							 void *opt, __u32 isn);
+							 __u32 isn);
 
 	struct sock *		(*syn_recv_sock)	(struct sock *sk,
 							 struct sk_buff *skb,
@@ -423,6 +427,10 @@ struct tcp_func {
 	
 	struct sock *		(*get_sock)		(struct sk_buff *skb,
 							 struct tcphdr *th);
+
+	__u16			net_header_len;
+
+
 
 	int			(*setsockopt)		(struct sock *sk, 
 							 int level, 
@@ -490,22 +498,24 @@ extern int			tcp_ioctl(struct sock *sk,
 extern int			tcp_rcv_state_process(struct sock *sk, 
 						      struct sk_buff *skb,
 						      struct tcphdr *th,
-						      void *opt, __u16 len);
+						      unsigned len);
 
 extern int			tcp_rcv_established(struct sock *sk, 
 						    struct sk_buff *skb,
 						    struct tcphdr *th, 
-						    __u16 len);
+						    unsigned len);
 
 extern int			tcp_timewait_state_process(struct tcp_tw_bucket *tw,
 							   struct sk_buff *skb,
 							   struct tcphdr *th,
-							   void *opt, __u16 len);
+							   unsigned len);
 
 extern void			tcp_close(struct sock *sk, 
 					  unsigned long timeout);
 extern struct sock *		tcp_accept(struct sock *sk, int flags);
 extern unsigned int		tcp_poll(struct file * file, struct socket *sock, struct poll_table_struct *wait);
+extern void			tcp_write_space(struct sock *sk); 
+
 extern int			tcp_getsockopt(struct sock *sk, int level, 
 					       int optname, char *optval, 
 					       int *optlen);
@@ -536,12 +546,11 @@ extern void		       	tcp_v4_send_check(struct sock *sk,
 
 extern int			tcp_v4_conn_request(struct sock *sk,
 						    struct sk_buff *skb,
-						    void *ptr, __u32 isn);
+						    __u32 isn);
 
 extern struct sock *		tcp_create_openreq_child(struct sock *sk,
 							 struct open_request *req,
-							 struct sk_buff *skb,
-							 int mss);
+							 struct sk_buff *skb);
 
 extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct sk_buff *skb,
@@ -628,30 +637,25 @@ struct tcp_sl_timer {
 
 extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
  
+extern int tcp_sync_mss(struct sock *sk, u32 pmtu);
+
 /* Compute the current effective MSS, taking SACKs and IP options,
  * and even PMTU discovery events into account.
  */
+
 static __inline__ unsigned int tcp_current_mss(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	struct dst_entry *dst = sk->dst_cache;
-	unsigned int mss_now = sk->mss; 
+	int mss_now = tp->mss_cache; 
 
-	if(dst && (sk->mtu < dst->pmtu)) {
-		unsigned int mss_distance = (sk->mtu - sk->mss);
-
-		/* PMTU discovery event has occurred. */
-		sk->mtu = dst->pmtu;
-		mss_now = sk->mss = sk->mtu - mss_distance;
-	}
+	if (dst && dst->pmtu != tp->pmtu_cookie)
+		mss_now = tcp_sync_mss(sk, dst->pmtu);
 
 	if(tp->sack_ok && tp->num_sacks)
 		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
 			    (tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
-	if(sk->opt)
-		mss_now -= sk->opt->optlen;
-
-	return mss_now; 
+	return mss_now > 8 ? mss_now : 8;
 }
 
 /* Compute the actual receive window we are currently advertising.
@@ -715,7 +719,12 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
  * skbuff.h:skbuff->cb[xxx] size appropriately.
  */
 struct tcp_skb_cb {
-	struct inet_skb_parm	header;	/* For incoming frames		*/
+	union {
+		struct inet_skb_parm	h4;
+#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
+		struct inet6_skb_parm	h6;
+#endif
+	} header;	/* For incoming frames		*/
 	__u32		seq;		/* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
 	unsigned long	when;		/* used to compute rtt's	*/
@@ -787,7 +796,7 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	 *
 	 * 	Don't use the nagle rule for urgent data.
 	 */
-	if (!sk->nonagle && skb->len < (sk->mss >> 1) && tp->packets_out &&
+	if (!sk->nonagle && skb->len < (tp->mss_cache >> 1) && tp->packets_out &&
 	    !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG))
 		nagle_check = 0;
 
@@ -913,8 +922,6 @@ extern __inline__ void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sa
 	 * SACKs don't matter, we never delay an ACK when we
 	 * have any of those going out.
 	 */
-	if(ts)
-		mss += TCPOLEN_TSTAMP_ALIGNED;
 	*ptr++ = htonl((TCPOPT_MSS << 24) | (TCPOLEN_MSS << 16) | mss);
 	if (ts) {
 		if(sack)

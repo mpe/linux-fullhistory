@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.40 1998/03/08 05:56:20 davem Exp $
+ * Version:	$Id: ip_forward.c,v 1.41 1998/08/26 12:03:42 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -79,10 +79,8 @@ int ip_forward(struct sk_buff *skb)
 	int fw_res = 0;
 #endif
 
-	if (IPCB(skb)->opt.router_alert) {
-		if (ip_call_ra_chain(skb))
-			return 0;
-	}
+	if (IPCB(skb)->opt.router_alert && ip_call_ra_chain(skb))
+		return 0;
 
 	if (skb->pkt_type != PACKET_HOST)
 		goto drop;
@@ -110,7 +108,7 @@ int ip_forward(struct sk_buff *skb)
                 goto local_pkt;
 #endif
 
-	if (ip_decrease_ttl(iph) <= 0)
+	if (iph->ttl <= 1)
                 goto too_many_hops;
 
 	if (opt->is_strictroute && rt->rt_dst != rt->rt_gateway)
@@ -121,22 +119,30 @@ int ip_forward(struct sk_buff *skb)
 	 *	after asking the firewall permission to do so.
 	 */
 
-	skb->priority = rt->u.dst.priority;
+	skb->priority = rt_tos2priority(iph->tos);
 	dev2 = rt->u.dst.dev;
-	mtu = dev2->mtu;
+	mtu = rt->u.dst.pmtu;
 
 #ifdef CONFIG_NET_SECURITY
 	call_fw_firewall(PF_SECURITY, dev2, NULL, &mtu, NULL);
 #endif	
 	
 	/*
-	 *	In IP you never have to forward a frame on the interface that it 
-	 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
+	 *	We now generate an ICMP HOST REDIRECT giving the route
 	 *	we calculated.
 	 */
 	if (rt->rt_flags&RTCF_DOREDIRECT && !opt->srr)
 		ip_rt_send_redirect(skb);
-	
+
+	/* We are about to mangle packet. Copy it! */
+	if ((skb = skb_cow(skb, dev2->hard_header_len)) == NULL)
+		return -1;
+	iph = skb->nh.iph;
+	opt = &(IPCB(skb)->opt);
+
+	/* Decrease ttl after skb cow done */
+	ip_decrease_ttl(iph);
+
 	/*
 	 * We now may allocate a new buffer, and copy the datagram into it.
 	 * If the indicated interface is up and running, kick it.
@@ -147,14 +153,6 @@ int ip_forward(struct sk_buff *skb)
 
 #ifdef CONFIG_IP_ROUTE_NAT
 	if (rt->rt_flags & RTCF_NAT) {
-		if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
-			struct sk_buff *skb2;
-			skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
-			kfree_skb(skb);
-			if (skb2 == NULL)
-				return -1;
-			skb = skb2;
-		}
 		if (ip_do_nat(skb)) {
 			kfree_skb(skb);
 			return -1;
@@ -243,18 +241,6 @@ skip_call_fw_firewall:
 	}
 #endif
 
-	if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
-		struct sk_buff *skb2;
-		skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
-		kfree_skb(skb);
-
-		if (skb2 == NULL) {
-			NETDEBUG(printk(KERN_ERR "\nIP: No memory available for IP forward\n"));
-			return -1;
-		}
-		skb = skb2;
-		iph = skb2->nh.iph;
-	}
 
 #ifdef CONFIG_FIREWALL
 	if ((fw_res = call_out_firewall(PF_INET, dev2, iph, NULL,&skb)) < FW_ACCEPT) {

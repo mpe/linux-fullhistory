@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.5 1998/04/28 06:21:57 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.6 1998/08/26 12:03:30 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -44,10 +44,6 @@
 #include <net/ip_fib.h>
 
 #define FRprintk(a...)
-
-#ifndef CONFIG_RTNL_OLD_IFINFO
-#define RTA_IFNAME RTA_IIF
-#endif
 
 struct fib_rule
 {
@@ -91,7 +87,7 @@ int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		    rtm->rtm_tos == r->r_tos &&
 		    (!rtm->rtm_type || rtm->rtm_type == r->r_action) &&
 		    (!rta[RTA_PRIORITY-1] || memcmp(RTA_DATA(rta[RTA_PRIORITY-1]), &r->r_preference, 4) == 0) &&
-		    (!rta[RTA_IFNAME-1] || strcmp(RTA_DATA(rta[RTA_IFNAME-1]), r->r_ifname) == 0) &&
+		    (!rta[RTA_IIF-1] || strcmp(RTA_DATA(rta[RTA_IIF-1]), r->r_ifname) == 0) &&
 		    (!rtm->rtm_table || (r && rtm->rtm_table == r->r_table))) {
 			*rp = r->r_next;
 			if (r != &default_rule && r != &main_rule && r != &local_rule)
@@ -126,7 +122,7 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	    (rtm->rtm_tos & ~IPTOS_TOS_MASK))
 		return -EINVAL;
 
-	if (rta[RTA_IFNAME-1] && RTA_PAYLOAD(rta[RTA_IFNAME-1]) > IFNAMSIZ)
+	if (rta[RTA_IIF-1] && RTA_PAYLOAD(rta[RTA_IIF-1]) > IFNAMSIZ)
 		return -EINVAL;
 
 	table_id = rtm->rtm_table;
@@ -159,9 +155,9 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	if (rta[RTA_PRIORITY-1])
 		memcpy(&new_r->r_preference, RTA_DATA(rta[RTA_PRIORITY-1]), 4);
 	new_r->r_table = table_id;
-	if (rta[RTA_IFNAME-1]) {
+	if (rta[RTA_IIF-1]) {
 		struct device *dev;
-		memcpy(new_r->r_ifname, RTA_DATA(rta[RTA_IFNAME-1]), IFNAMSIZ);
+		memcpy(new_r->r_ifname, RTA_DATA(rta[RTA_IIF-1]), IFNAMSIZ);
 		new_r->r_ifname[IFNAMSIZ-1] = 0;
 		new_r->r_ifindex = -1;
 		dev = dev_get(new_r->r_ifname);
@@ -339,10 +335,6 @@ extern __inline__ int inet_fill_rule(struct sk_buff *skb,
 	rtm->rtm_table = r->r_table;
 	rtm->rtm_protocol = 0;
 	rtm->rtm_scope = 0;
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	rtm->rtm_nhs = 0;
-	rtm->rtm_optlen = 0;
-#endif
 	rtm->rtm_type = r->r_action;
 	rtm->rtm_flags = r->r_flags;
 
@@ -351,7 +343,7 @@ extern __inline__ int inet_fill_rule(struct sk_buff *skb,
 	if (r->r_src_len)
 		RTA_PUT(skb, RTA_SRC, 4, &r->r_src);
 	if (r->r_ifname[0])
-		RTA_PUT(skb, RTA_IFNAME, IFNAMSIZ, &r->r_ifname);
+		RTA_PUT(skb, RTA_IIF, IFNAMSIZ, &r->r_ifname);
 	if (r->r_preference)
 		RTA_PUT(skb, RTA_PRIORITY, 4, &r->r_preference);
 	if (r->r_srcmap)

@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.54 1998/07/15 05:05:22 davem Exp $
+ * Version:	$Id: route.c,v 1.57 1998/08/26 12:04:09 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -48,6 +48,7 @@
  *					route.c and rewritten from scratch.
  *		Andi Kleen	:	Load-limit warning messages.
  *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
+ *	Vitaly E. Lavrov	:	Race condition in ip_route_input_slow.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -89,6 +90,8 @@
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>
 #endif
+
+#define IP_MAX_MTU	0xFFF0
 
 #define RT_GC_TIMEOUT (300*HZ)
 
@@ -166,7 +169,7 @@ __u8 ip_tos2prio[16] = {
  * Route cache.
  */
 
-static struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
+struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
 
 static struct rtable * rt_intern_hash(unsigned hash, struct rtable * rth);
 
@@ -246,6 +249,13 @@ static __inline__ void rt_free(struct rtable *rt)
 	dst_free(&rt->u.dst);
 }
 
+static __inline__ int rt_fast_clean(struct rtable *rth)
+{
+	/* Kill broadcast/multicast entries very aggresively, if they
+	   collide in hash table with more useful entries */
+	return ((rth->rt_flags&(RTCF_BROADCAST|RTCF_MULTICAST))
+		&& rth->key.iif && rth->u.rt_next);
+}
 
 static void rt_check_expire(unsigned long dummy)
 {
@@ -255,43 +265,30 @@ static void rt_check_expire(unsigned long dummy)
 	unsigned long now = jiffies;
 
 	for (i=0; i<RT_HASH_DIVISOR/5; i++) {
+		unsigned tmo = ip_rt_gc_timeout;
+
 		rover = (rover + 1) & (RT_HASH_DIVISOR-1);
 		rthp = &rt_hash_table[rover];
 
 		while ((rth = *rthp) != NULL) {
-			struct rtable * rth_next = rth->u.rt_next;
-
 			/*
 			 * Cleanup aged off entries.
 			 */
 
 			if (!atomic_read(&rth->u.dst.use) &&
-			    (now - rth->u.dst.lastuse > ip_rt_gc_timeout)) {
-				*rthp = rth_next;
-#if RT_CACHE_DEBUG >= 2
-				printk("rt_check_expire clean %02x@%08x\n", rover, rth->rt_dst);
-#endif
+			    (now - rth->u.dst.lastuse > tmo
+			     || rt_fast_clean(rth))) {
+				*rthp = rth->u.rt_next;
 				rt_free(rth);
 				continue;
 			}
 
-			if (!rth_next)
-				break;
-
-			if ( (long)(rth_next->u.dst.lastuse - rth->u.dst.lastuse) > RT_CACHE_BUBBLE_THRESHOLD ||
-			    ((long)(rth->u.dst.lastuse - rth_next->u.dst.lastuse) < 0 &&
-			     atomic_read(&rth->u.dst.refcnt) < atomic_read(&rth_next->u.dst.refcnt))) {
-#if RT_CACHE_DEBUG >= 2
-				printk("rt_check_expire bubbled %02x@%08x<->%08x\n", rover, rth->rt_dst, rth_next->rt_dst);
-#endif
-				*rthp = rth_next;
- 				rth->u.rt_next = rth_next->u.rt_next;
-				rth_next->u.rt_next = rth;
-				rthp = &rth_next->u.rt_next;
-				continue;
-			}
+			tmo >>= 1;
 			rthp = &rth->u.rt_next;
 		}
+
+		if ((jiffies - now) > 0)
+			break;
 	}
 	rt_periodic_timer.expires = now + ip_rt_gc_interval;
 	add_timer(&rt_periodic_timer);
@@ -305,21 +302,14 @@ static void rt_run_flush(unsigned long dummy)
 	rt_deadline = 0;
 
 	for (i=0; i<RT_HASH_DIVISOR; i++) {
-		int nr=0;
-
 		if ((rth = xchg(&rt_hash_table[i], NULL)) == NULL)
 			continue;
 
 		for (; rth; rth=next) {
 			next = rth->u.rt_next;
-			nr++;
 			rth->u.rt_next = NULL;
 			rt_free(rth);
 		}
-#if RT_CACHE_DEBUG >= 2
-		if (nr > 0)
-			printk("rt_cache_flush: %d@%02x\n", nr, i);
-#endif
 	}
 }
   
@@ -384,17 +374,23 @@ static int rt_garbage_collect(void)
 	expire++;
 
 	for (i=0; i<RT_HASH_DIVISOR; i++) {
+		unsigned tmo;
 		if (!rt_hash_table[i])
 			continue;
+		tmo = expire;
 		for (rthp=&rt_hash_table[i]; (rth=*rthp); rthp=&rth->u.rt_next)	{
 			if (atomic_read(&rth->u.dst.use) ||
-			    now - rth->u.dst.lastuse < expire)
+			    (now - rth->u.dst.lastuse < tmo && !rt_fast_clean(rth))) {
+				tmo >>= 1;
 				continue;
+			}
 			*rthp = rth->u.rt_next;
 			rth->u.rt_next = NULL;
 			rt_free(rth);
 			break;
 		}
+		if ((jiffies-now)>0)
+			break;
 	}
 
 	last_gc = now;
@@ -411,8 +407,6 @@ static struct rtable *rt_intern_hash(unsigned hash, struct rtable * rt)
 {
 	struct rtable	*rth, **rthp;
 	unsigned long	now = jiffies;
-
-	rt->u.dst.priority = rt_tos2priority(rt->key.tos);
 
 	start_bh_atomic();
 
@@ -793,19 +787,17 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res)
 	if (fi) {
 		if (FIB_RES_GW(*res) && FIB_RES_NH(*res).nh_scope == RT_SCOPE_LINK)
 			rt->rt_gateway = FIB_RES_GW(*res);
-#ifndef CONFIG_RTNL_OLD_IFINFO
 		rt->u.dst.mxlock = fi->fib_metrics[RTAX_LOCK-1];
 		rt->u.dst.pmtu = fi->fib_mtu;
 		if (fi->fib_mtu == 0) {
 			rt->u.dst.pmtu = rt->u.dst.dev->mtu;
+			if (rt->u.dst.pmtu > IP_MAX_MTU)
+				rt->u.dst.pmtu = IP_MAX_MTU;
 			if (rt->u.dst.mxlock&(1<<RTAX_MTU) &&
 			    rt->rt_gateway != rt->rt_dst &&
 			    rt->u.dst.pmtu > 576)
 				rt->u.dst.pmtu = 576;
 		}
-#else
-		rt->u.dst.pmtu	= fi->fib_mtu ? : rt->u.dst.dev->mtu;
-#endif
 		rt->u.dst.window= fi->fib_window ? : 0;
 		rt->u.dst.rtt	= fi->fib_rtt ? : TCP_TIMEOUT_INIT;
 #ifdef CONFIG_NET_CLS_ROUTE
@@ -813,6 +805,8 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res)
 #endif
 	} else {
 		rt->u.dst.pmtu	= rt->u.dst.dev->mtu;
+		if (rt->u.dst.pmtu > IP_MAX_MTU)
+			rt->u.dst.pmtu = IP_MAX_MTU;
 		rt->u.dst.window= 0;
 		rt->u.dst.rtt	= TCP_TIMEOUT_INIT;
 	}
@@ -930,7 +924,7 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	if (MULTICAST(saddr) || BADCLASS(saddr) || LOOPBACK(saddr))
 		goto martian_source;
 
-	if (daddr == 0xFFFFFFFF)
+	if (daddr == 0xFFFFFFFF || (saddr == 0 && daddr == 0))
 		goto brd_input;
 
 	/* Accept zero addresses only to limited broadcast;
@@ -991,6 +985,11 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 		fib_select_multipath(&key, &res);
 #endif
 	out_dev = FIB_RES_DEV(res)->ip_ptr;
+	if (out_dev == NULL) {
+		if (net_ratelimit())
+			printk(KERN_CRIT "Bug in ip_route_input_slow(). Please, report\n");
+		return -EINVAL;
+	}
 
 	err = fib_validate_source(saddr, daddr, tos, FIB_RES_OIF(res), dev, &spec_dst);
 	if (err < 0)
@@ -1312,15 +1311,14 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 			   tables are looked up with only one purpose:
 			   to catch if destination is gatewayed, rather than
 			   direct. Moreover, if MSG_DONTROUTE is set,
-			   we send packet, no matter of routing tables
-			   of ifaddr state. --ANK
+			   we send packet, ignoring both routing tables
+			   and ifaddr state. --ANK
 
 
 			   We could make it even if oif is unknown,
 			   likely IPv6, but we do not.
 			 */
 
-			printk(KERN_DEBUG "Dest not on link. Forcing...\n");
 			if (key.src == 0)
 				key.src = inet_select_addr(dev_out, 0, RT_SCOPE_LINK);
 			goto make_route;
@@ -1475,7 +1473,7 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 
 #ifdef CONFIG_RTNETLINK
 
-static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int nowait)
+static int rt_fill_info(struct sk_buff *skb, u32 pid, u32 seq, int event, int nowait)
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
 	struct rtmsg *r;
@@ -1485,11 +1483,7 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 #ifdef CONFIG_IP_MROUTE
 	struct rtattr *eptr;
 #endif
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	unsigned char 	 *o;
-#else
 	struct rtattr *mx;
-#endif
 
 	nlh = NLMSG_PUT(skb, pid, seq, event, sizeof(*r));
 	r = NLMSG_DATA(nlh);
@@ -1503,11 +1497,6 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 	r->rtm_scope = RT_SCOPE_UNIVERSE;
 	r->rtm_protocol = RTPROT_UNSPEC;
 	r->rtm_flags = (rt->rt_flags&~0xFFFF) | RTM_F_CLONED;
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	r->rtm_nhs = 0;
-
-	o = skb->tail;
-#endif
 	RTA_PUT(skb, RTA_DST, 4, &rt->rt_dst);
 	if (rt->key.src) {
 		r->rtm_src_len = 32;
@@ -1521,11 +1510,6 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 		RTA_PUT(skb, RTA_PREFSRC, 4, &rt->rt_src);
 	if (rt->rt_dst != rt->rt_gateway)
 		RTA_PUT(skb, RTA_GATEWAY, 4, &rt->rt_gateway);
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	RTA_PUT(skb, RTA_MTU, sizeof(unsigned), &rt->u.dst.pmtu);
-	RTA_PUT(skb, RTA_WINDOW, sizeof(unsigned), &rt->u.dst.window);
-	RTA_PUT(skb, RTA_RTT, sizeof(unsigned), &rt->u.dst.rtt);
-#else
 	mx = (struct rtattr*)skb->tail;
 	RTA_PUT(skb, RTA_METRICS, 0, NULL);
 	if (rt->u.dst.mxlock)
@@ -1539,7 +1523,6 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 	mx->rta_len = skb->tail - (u8*)mx;
 	if (mx->rta_len == RTA_LENGTH(0))
 		skb_trim(skb, (u8*)mx - skb->data);
-#endif
 	ci.rta_lastuse = jiffies - rt->u.dst.lastuse;
 	ci.rta_used = atomic_read(&rt->u.dst.refcnt);
 	ci.rta_clntref = atomic_read(&rt->u.dst.use);
@@ -1549,9 +1532,6 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 	eptr = (struct rtattr*)skb->tail;
 #endif
 	RTA_PUT(skb, RTA_CACHEINFO, sizeof(ci), &ci);
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	r->rtm_optlen = skb->tail - o;
-#endif
 	if (rt->key.iif) {
 #ifdef CONFIG_IP_MROUTE
 		u32 dst = rt->rt_dst;
@@ -1573,9 +1553,6 @@ static int rt_fill_info(struct sk_buff *skb, pid_t pid, u32 seq, int event, int 
 #endif
 		{
 			RTA_PUT(skb, RTA_IIF, sizeof(int), &rt->key.iif);
-#ifdef CONFIG_RTNL_OLD_IFINFO
-			r->rtm_optlen = skb->tail - o;
-#endif
 		}
 	}
 

@@ -52,11 +52,14 @@ struct ipv6_mib
 {
 	unsigned long	Ip6InReceives;
  	unsigned long	Ip6InHdrErrors;
+ 	unsigned long	Ip6InTooBigErrors;
+ 	unsigned long	Ip6InNoRoutes;
  	unsigned long	Ip6InAddrErrors;
- 	unsigned long	Ip6ForwDatagrams;
  	unsigned long	Ip6InUnknownProtos;
+ 	unsigned long	Ip6InTruncatedPkts;
  	unsigned long	Ip6InDiscards;
  	unsigned long	Ip6InDelivers;
+ 	unsigned long	Ip6OutForwDatagrams;
  	unsigned long	Ip6OutRequests;
  	unsigned long	Ip6OutDiscards;
  	unsigned long	Ip6OutNoRoutes;
@@ -67,6 +70,8 @@ struct ipv6_mib
  	unsigned long	Ip6FragOKs;
  	unsigned long	Ip6FragFails;
  	unsigned long	Ip6FragCreates;
+ 	unsigned long	Ip6InMcastPkts;
+ 	unsigned long	Ip6OutMcastPkts;
 };
  
 struct icmp_mib
@@ -97,6 +102,43 @@ struct icmp_mib
  	unsigned long	IcmpOutTimestampReps;
  	unsigned long	IcmpOutAddrMasks;
  	unsigned long	IcmpOutAddrMaskReps;
+};
+
+struct icmpv6_mib
+{
+	unsigned long	Icmp6InMsgs;
+	unsigned long	Icmp6InErrors;
+
+	unsigned long	Icmp6InDestUnreachs;
+	unsigned long	Icmp6InPktTooBigs;
+	unsigned long	Icmp6InTimeExcds;
+	unsigned long	Icmp6InParmProblems;
+
+	unsigned long	Icmp6InEchos;
+	unsigned long	Icmp6InEchoReplies;
+	unsigned long	Icmp6InGroupMembQueries;
+	unsigned long	Icmp6InGroupMembResponses;
+	unsigned long	Icmp6InGroupMembReductions;
+	unsigned long	Icmp6InRouterSolicits;
+	unsigned long	Icmp6InRouterAdvertisements;
+	unsigned long	Icmp6InNeighborSolicits;
+	unsigned long	Icmp6InNeighborAdvertisements;
+	unsigned long	Icmp6InRedirects;
+
+	unsigned long	Icmp6OutMsgs;
+
+	unsigned long	Icmp6OutDestUnreachs;
+	unsigned long	Icmp6OutPktTooBigs;
+	unsigned long	Icmp6OutTimeExcds;
+	unsigned long	Icmp6OutParmProblems;
+
+	unsigned long	Icmp6OutEchoReplies;
+	unsigned long	Icmp6OutRouterSolicits;
+	unsigned long	Icmp6OutNeighborSolicits;
+	unsigned long	Icmp6OutNeighborAdvertisements;
+	unsigned long	Icmp6OutRedirects;
+	unsigned long	Icmp6OutGroupMembResponses;
+	unsigned long	Icmp6OutGroupMembReductions;
 };
  
 struct tcp_mib
@@ -131,6 +173,9 @@ struct linux_mib
 	unsigned long	SyncookiesRecv;
 	unsigned long	SyncookiesFailed;
 	unsigned long	EmbryonicRsts;
+	unsigned long	PruneCalled; 
+	unsigned long	RcvPruned;
+	unsigned long	OfoPruned;
 };
  	
 #endif

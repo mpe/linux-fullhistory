@@ -1017,7 +1017,6 @@ static int atalk_create(struct socket *sock, int protocol)
 
 	sk->destruct = NULL;
 	/* Checksums on by default */
-	sk->mtu = DDP_MAXSZ;
 	sk->zapped = 1;
 
 	return (0);

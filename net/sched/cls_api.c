@@ -291,7 +291,7 @@ static int tfilter_notify(struct sk_buff *oskb, struct nlmsghdr *n,
 			  struct tcf_proto *tp, unsigned long fh, int event)
 {
 	struct sk_buff *skb;
-	pid_t pid = oskb ? NETLINK_CB(oskb).pid : 0;
+	u32 pid = oskb ? NETLINK_CB(oskb).pid : 0;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb)

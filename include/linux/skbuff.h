@@ -537,6 +537,19 @@ extern __inline__ struct sk_buff *dev_alloc_skb(unsigned int length)
 	return skb;
 }
 
+extern __inline__ struct sk_buff *
+skb_cow(struct sk_buff *skb, unsigned int headroom)
+{
+	headroom = (headroom+15)&~15;
+
+	if ((unsigned)skb_headroom(skb) < headroom || skb_cloned(skb)) {
+		struct sk_buff *skb2 = skb_realloc_headroom(skb, headroom);
+		kfree_skb(skb);
+		skb = skb2;
+	}
+	return skb;
+}
+
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern unsigned int		datagram_poll(struct file *file, struct socket *sock, struct poll_table_struct *wait);
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);

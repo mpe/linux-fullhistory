@@ -35,7 +35,6 @@ struct dst_entry
 	atomic_t		use;		/* client references	*/
 	struct device	        *dev;
 	int			obsolete;
-	__u32			priority;
 	unsigned long		lastuse;
 	unsigned		mxlock;
 	unsigned		window;

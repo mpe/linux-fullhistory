@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: FIB frontend.
  *
- * Version:	$Id: fib_frontend.c,v 1.11 1998/06/11 03:15:40 davem Exp $
+ * Version:	$Id: fib_frontend.c,v 1.12 1998/08/26 12:03:24 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -300,10 +300,8 @@ static int inet_check_attr(struct rtmsg *r, struct rtattr **rta)
 		if (attr) {
 			if (RTA_PAYLOAD(attr) < 4)
 				return -EINVAL;
-#ifndef	CONFIG_RTNL_OLD_IFINFO
 			if (i != RTA_MULTIPATH && i != RTA_METRICS)
-#endif
-			rta[i-1] = (struct rtattr*)RTA_DATA(attr);
+				rta[i-1] = (struct rtattr*)RTA_DATA(attr);
 		}
 	}
 	return 0;
@@ -527,6 +525,14 @@ static void fib_del_ifaddr(struct in_ifaddr *ifa)
 #undef BRD1_OK
 }
 
+static void fib_disable_ip(struct device *dev, int force)
+{
+	if (fib_sync_down(0, dev, force))
+		fib_flush();
+	rt_cache_flush(0);
+	arp_ifdown(dev);
+}
+
 static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct in_ifaddr *ifa = (struct in_ifaddr*)ptr;
@@ -537,8 +543,15 @@ static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, 
 		rt_cache_flush(-1);
 		break;
 	case NETDEV_DOWN:
-		fib_del_ifaddr(ifa);
-		rt_cache_flush(-1);
+		if (ifa->ifa_dev && ifa->ifa_dev->ifa_list == NULL) {
+			/* Last address was deleted from this interface.
+			   Disable IP.
+			 */
+			fib_disable_ip(ifa->ifa_dev->dev, 1);
+		} else {
+			fib_del_ifaddr(ifa);
+			rt_cache_flush(-1);
+		}
 		break;
 	}
 	return NOTIFY_DONE;
@@ -563,18 +576,10 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 		rt_cache_flush(-1);
 		break;
 	case NETDEV_DOWN:
-		if (fib_sync_down(0, dev, 0))
-			fib_flush();
-		rt_cache_flush(0);
-		arp_ifdown(dev);
+		fib_disable_ip(dev, 0);
 		break;
 	case NETDEV_UNREGISTER:
-		if (in_dev->ifa_list)
-			printk("About to crash!\n");
-		if (fib_sync_down(0, dev, 1))
-			fib_flush();
-		rt_cache_flush(0);
-		arp_ifdown(dev);
+		fib_disable_ip(dev, 1);
 		break;
 	case NETDEV_CHANGEMTU:
 	case NETDEV_CHANGE:

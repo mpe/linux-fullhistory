@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	@(#)sock.c	1.0.17	06/02/93
+ * Version:	$Id: sock.c,v 1.70 1998/08/26 12:03:07 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -78,6 +78,7 @@
  *              Chris Evans     :       Call suser() check last on F_SETOWN
  *		Jay Schulist	:	Added SO_ATTACH_FILTER and SO_DETACH_FILTER.
  *		Andi Kleen	:	Add sock_kmalloc()/sock_kfree_s()
+ *		Andi Kleen	:	Fix write_space callback
  *
  * To Fix:
  *
@@ -445,6 +446,7 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		case SO_RCVLOWAT:
 		case SO_SNDLOWAT:
 			v.val=1;
+			break; 
 
 		case SO_PASSCRED:
 			v.val = sock->passcred;
@@ -615,19 +617,6 @@ unsigned long sock_rspace(struct sock *sk)
 }
 
 
-/* FIXME: this is also insane. See above comment */
-unsigned long sock_wspace(struct sock *sk)
-{
-	int amt = 0;
-
-	if (sk != NULL && !(sk->shutdown & SEND_SHUTDOWN)) {
-		amt = sk->sndbuf - atomic_read(&sk->wmem_alloc);
-		if (amt < 0) 
-			amt = 0;
-	}
-	return amt;
-}
-
 /* It is almost wait_for_tcp_memory minus release_sock/lock_sock.
    I think, these locks should be removed for datagram sockets.
  */
@@ -746,17 +735,15 @@ void __release_sock(struct sock *sk)
  
 void sklist_remove_socket(struct sock **list, struct sock *sk)
 {
-	unsigned long flags;
 	struct sock *s;
 
-	save_flags(flags);
-	cli();
+	start_bh_atomic();
 
 	s= *list;
 	if(s==sk)
 	{
 		*list = s->next;
-		restore_flags(flags);
+		end_bh_atomic();
 		return;
 	}
 	while(s && s->next)
@@ -764,22 +751,19 @@ void sklist_remove_socket(struct sock **list, struct sock *sk)
 		if(s->next==sk)
 		{
 			s->next=sk->next;
-			restore_flags(flags);
-			return;
+			break;
 		}
 		s=s->next;
 	}
-	restore_flags(flags);
+	end_bh_atomic();
 }
 
 void sklist_insert_socket(struct sock **list, struct sock *sk)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
+	start_bh_atomic();
 	sk->next= *list;
 	*list=sk;
-	restore_flags(flags);
+	end_bh_atomic();
 }
 
 /*
@@ -914,6 +898,10 @@ int sock_no_getsockopt(struct socket *sock, int level, int optname,
 	return -EOPNOTSUPP;
 }
 
+/* 
+ * Note: if you add something that sleeps here then change sock_fcntl()
+ *       to do proper fd locking.
+ */
 int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
@@ -971,12 +959,15 @@ void sock_def_callback2(struct sock *sk, int len)
 	}
 }
 
-void sock_def_callback3(struct sock *sk)
+void sock_def_write_space(struct sock *sk)
 {
 	if(!sk->dead)
 	{
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
+
+		/* Should agree with poll, otherwise some programs break */ 
+		if (sock_writeable(sk))
+			sock_wake_async(sk->socket, 2);
 	}
 }
 
@@ -1011,7 +1002,7 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 
 	sk->state_change	=	sock_def_callback1;
 	sk->data_ready		=	sock_def_callback2;
-	sk->write_space		=	sock_def_callback3;
+	sk->write_space		=	sock_def_write_space;
 	sk->error_report	=	sock_def_callback1;
 	sk->destruct            =       sock_def_destruct;
 

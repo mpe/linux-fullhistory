@@ -103,7 +103,6 @@ static int spx_create(struct socket *sock, int protocol)
 	spx_sock_init(sk);
 	sk->data_ready  = spx_rcv;
 	sk->destruct 	= NULL;
-        sk->mtu 	= IPX_MTU;
         sk->no_check 	= 1;
 
         MOD_INC_USE_COUNT;
