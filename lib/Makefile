@@ -6,17 +6,12 @@
 # unless it's something special (ie not a .c file).
 #
 
-# gcc2 doesn't understand some options..
-# GCC_OPT = -fcombine-regs
-
 AR	=ar
 AS	=as
 LD	=ld
 LDFLAGS	=-s -x
-CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer $(GCC_OPT) \
-	-finline-functions -nostdinc -I../include
-CPP	=gcc -E -nostdinc -I../include
+CC	=gcc -nostdinc -I../include
+CPP	=cpp -nostdinc -I../include
 
 .c.s:
 	$(CC) $(CFLAGS) \

@@ -183,8 +183,13 @@ check_table:
 		dir_entry++;
 		goto check_dir;
 	}
-	if (try_to_swap_out(page_entry + (unsigned long *) pg_table))
+	if (try_to_swap_out(page_entry + (unsigned long *) pg_table)) {
+		if (! task[dir_entry >> 4])
+			printk("swapping out page from non-existent task\n\r");
+		else
+			task[dir_entry >> 4]->rss--;
 		return 1;
+	}
 	goto check_table;
 no_swap:
 	printk("Out of swap-memory\n\r");

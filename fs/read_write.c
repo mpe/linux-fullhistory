@@ -4,18 +4,39 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <sys/stat.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/dirent.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/minix_fs.h>
 #include <asm/segment.h>
 
-int sys_lseek(unsigned int fd,off_t offset, unsigned int origin)
+/*
+ * Count is not yet used: but we'll probably support reading several entries
+ * at once in the future. Use count=1 in the library for future expansions.
+ */
+int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 {
 	struct file * file;
-	int tmp;
+	struct inode * inode;
+
+	if (fd >= NR_OPEN || !(file = current->filp[fd]) ||
+	    !(inode = file->f_inode))
+		return -EBADF;
+	if (file->f_op && file->f_op->readdir) {
+		verify_area(dirent, sizeof (*dirent));
+		return file->f_op->readdir(inode,file,dirent);
+	}
+	return -EBADF;
+}
+
+int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
+{
+	struct file * file;
+	int tmp, mem_dev;
 
 	if (fd >= NR_OPEN || !(file=current->filp[fd]) || !(file->f_inode))
 		return -EBADF;
@@ -25,21 +46,25 @@ int sys_lseek(unsigned int fd,off_t offset, unsigned int origin)
 		return -ESPIPE;
 	if (file->f_op && file->f_op->lseek)
 		return file->f_op->lseek(file->f_inode,file,offset,origin);
+	mem_dev = S_ISCHR(file->f_inode->i_mode);
+
 /* this is the default handler if no lseek handler is present */
 	switch (origin) {
 		case 0:
-			if (offset<0) return -EINVAL;
+			if (offset<0 && !mem_dev) return -EINVAL;
 			file->f_pos=offset;
 			break;
 		case 1:
-			if (file->f_pos+offset<0) return -EINVAL;
+			if (file->f_pos+offset<0 && !mem_dev) return -EINVAL;
 			file->f_pos += offset;
 			break;
 		case 2:
-			if ((tmp=file->f_inode->i_size+offset) < 0)
+			if ((tmp=file->f_inode->i_size+offset)<0 && !mem_dev)
 				return -EINVAL;
 			file->f_pos = tmp;
 	}
+	if (mem_dev && file->f_pos < 0)
+		return 0;
 	return file->f_pos;
 }
 

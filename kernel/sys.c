@@ -457,11 +457,15 @@ int sys_getrusage(int who, struct rusage *ru)
 		r.ru_utime.tv_usec = CT_TO_USECS(current->utime);
 		r.ru_stime.tv_sec = CT_TO_SECS(current->stime);
 		r.ru_stime.tv_usec = CT_TO_USECS(current->stime);
+		r.ru_minflt = current->min_flt;
+		r.ru_majflt = current->maj_flt;
 	} else {
 		r.ru_utime.tv_sec = CT_TO_SECS(current->cutime);
 		r.ru_utime.tv_usec = CT_TO_USECS(current->cutime);
 		r.ru_stime.tv_sec = CT_TO_SECS(current->cstime);
 		r.ru_stime.tv_usec = CT_TO_USECS(current->cstime);
+		r.ru_minflt = current->cmin_flt;
+		r.ru_majflt = current->cmaj_flt;
 	}
 	lp = (unsigned long *) &r;
 	lpend = (unsigned long *) (&r+1);

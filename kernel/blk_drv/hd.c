@@ -16,6 +16,8 @@
  *  in the early extended-partition checks and added DM partitions
  */
 
+#include <errno.h>
+
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -43,7 +45,7 @@ static void recal_intr(void);
 static void bad_rw_intr(void);
 
 static int recalibrate = 0;
-static int reset = 1;
+static int reset = 0;
 
 /*
  *  This struct defines the HD's and their types.
@@ -77,28 +79,103 @@ extern void rd_load(void);
 
 static unsigned int current_minor;
 
-static void check_partition(unsigned int dev)
+/*
+ * Create devices for each logical partition in an extended partition.
+ * The logical partitions form a linked list, with each entry being
+ * a partition table with two entries.  The first entry
+ * is the real data partition (with a start relative to the partition
+ * table start).  The second is a pointer to the next logical partition
+ * (with a start relative to the entire extended partition).
+ * We do not create a Linux partition for the partition tables, but
+ * only for the actual data partitions.
+ */
+static void extended_partition(unsigned int dev)
 {
-	int minor, i;
 	struct buffer_head *bh;
 	struct partition *p;
+	unsigned long first_sector, this_sector;
 
+	first_sector = hd[MINOR(dev)].start_sect;
+	this_sector = first_sector;
+
+	while (1) {
+		if ((current_minor & 0x3f) >= 60)
+			return;
+		if (!(bh = bread(dev,0))) {
+			printk("Unable to read partition table of device %04x\n",dev);
+			return;
+		}
+	  /*
+	   * This block is from a device that we're about to stomp on.
+	   * So make sure nobody thinks this block is usable.
+	   */
+		bh->b_dirt=0;
+		bh->b_uptodate=0;
+		if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
+			p = 0x1BE + (void *)bh->b_data;
+		/*
+		 * Process the first entry, which should be the real
+		 * data partition.
+		 */
+			if (p->sys_ind == EXTENDED_PARTITION ||
+			    !(hd[current_minor].nr_sects = p->nr_sects))
+				goto done;  /* shouldn't happen */
+			hd[current_minor].start_sect = this_sector + p->start_sect;
+			printk("  Logical part %d start %d size %d end %d\n\r", 
+			       current_minor, hd[current_minor].start_sect, 
+			       hd[current_minor].nr_sects,
+			       hd[current_minor].start_sect + 
+			       hd[current_minor].nr_sects);
+			current_minor++;
+			p++;
+		/*
+		 * Process the second entry, which should be a link
+		 * to the next logical partition.  Create a minor
+		 * for this just long enough to get the next partition
+		 * table.  The minor will be reused for the real
+		 * data partition.
+		 */
+			if (p->sys_ind != EXTENDED_PARTITION ||
+			    !(hd[current_minor].nr_sects = p->nr_sects))
+				goto done;  /* no more logicals in this partition */
+			hd[current_minor].start_sect = first_sector + p->start_sect;
+			this_sector = first_sector + p->start_sect;
+			dev = 0x0300 | current_minor;
+			brelse(bh);
+		} else
+			goto done;
+	}
+done:
+	brelse(bh);
+}
+
+static void check_partition(unsigned int dev)
+{
+	int i, minor = current_minor;
+	struct buffer_head *bh;
+	struct partition *p;
+	unsigned long first_sector;
+
+	first_sector = hd[MINOR(dev)].start_sect;
 	if (!(bh = bread(dev,0))) {
 		printk("Unable to read partition table of device %04x\n",dev);
 		return;
 	}
-	minor = current_minor;
+	printk("Drive %d:\n\r",minor >> 6);
+	current_minor += 4;  /* first "extra" minor */
 	if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
 		p = 0x1BE + (void *)bh->b_data;
-		for (i=0 ; i<4 ; i++,p++) {
-			if (!(hd[i+minor].nr_sects = p->nr_sects))
+		for (i=1 ; i<=4 ; minor++,i++,p++) {
+			if (!(hd[minor].nr_sects = p->nr_sects))
 				continue;
-			hd[i+minor].start_sect = p->start_sect;
+			hd[minor].start_sect = first_sector + p->start_sect;
+			printk(" part %d start %d size %d end %d \n\r", i, 
+			       hd[minor].start_sect, hd[minor].nr_sects, 
+			       hd[minor].start_sect + hd[minor].nr_sects);
 			if ((current_minor & 0x3f) >= 60)
 				continue;
 			if (p->sys_ind == EXTENDED_PARTITION) {
-				current_minor += 4;
-				check_partition(0x0300 | (i+minor));
+				extended_partition(0x0300 | minor);
 			}
 		}
 		/*
@@ -106,14 +183,20 @@ static void check_partition(unsigned int dev)
 		 */
 		if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
 			p = 0x1BE + (void *)bh->b_data;
-			for (i=4; i<16; i++) {
+			for (i = 4 ; i < 16 ; i++, current_minor++) {
 				p--;
 				if ((current_minor & 0x3f) >= 60)
 					break;
-				if (!(hd[current_minor+4].start_sect = p->start_sect))
+				if (!(p->start_sect && p->nr_sects))
 					continue;
-				hd[current_minor+4].nr_sects = p->nr_sects;
-				current_minor++;
+				hd[current_minor].start_sect = p->start_sect;
+				hd[current_minor].nr_sects = p->nr_sects;
+				printk(" DM part %d start %d size %d end %d\n\r",
+				       current_minor,
+				       hd[current_minor].start_sect, 
+				       hd[current_minor].nr_sects,
+				       hd[current_minor].start_sect + 
+				       hd[current_minor].nr_sects);
 			}
 		}
 	} else
@@ -140,16 +223,6 @@ int sys_setup(void * BIOS)
 		hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
 		hd_info[drive].sect = *(unsigned char *) (14+BIOS);
 		BIOS += 16;
-	}
-	if (hd_info[1].cyl)
-		NR_HD=2;
-	else
-		NR_HD=1;
-#endif
-	for (i=0 ; i<NR_HD ; i++) {
-		hd[i<<6].start_sect = 0;
-		hd[i<<6].nr_sects = hd_info[i].head*
-				hd_info[i].sect*hd_info[i].cyl;
 	}
 
 	/*
@@ -181,10 +254,14 @@ int sys_setup(void * BIOS)
 			NR_HD = 1;
 	else
 		NR_HD = 0;
-	for (i = NR_HD ; i < 2 ; i++) {
-		hd[i<<6].start_sect = 0;
-		hd[i<<6].nr_sects = 0;
+#endif
+	for (i = 0 ; i < (MAX_HD<<6) ; i++) {
+		hd[i].start_sect = 0;
+		hd[i].nr_sects = 0;
 	}
+	for (i = 0 ; i < NR_HD ; i++)
+		hd[i<<6].nr_sects = hd_info[i].head*
+				hd_info[i].sect*hd_info[i].cyl;
 	for (drive=0 ; drive<NR_HD ; drive++) {
 		current_minor = 1+(drive<<6);
 		check_partition(0x0300+(drive<<6));
@@ -252,7 +329,7 @@ static int drive_busy(void)
 	unsigned int i;
 	unsigned char c;
 
-	for (i = 0; i < 50000; i++) {
+	for (i = 0; i < 500000 ; i++) {
 		c = inb_p(HD_STATUS);
 		c &= (BUSY_STAT | READY_STAT | SEEK_STAT);
 		if (c == (READY_STAT | SEEK_STAT))
@@ -299,15 +376,25 @@ repeat:
 		do_hd_request();
 }
 
+/*
+ * Ok, don't know what to do with the unexpected interrupts: on some machines
+ * doing a reset and a retry seems to result in an eternal loop. Right now I
+ * ignore it, and just set the timeout.
+ */
 void unexpected_hd_interrupt(void)
 {
 	printk("Unexpected HD interrupt\n\r");
+	SET_TIMER;
+#if 0
 	reset = 1;
 	do_hd_request();
+#endif
 }
 
 static void bad_rw_intr(void)
 {
+	if (!CURRENT)
+		return;
 	if (++CURRENT->errors >= MAX_ERRORS)
 		end_request(0);
 	if (CURRENT->errors > MAX_ERRORS/2)
@@ -361,19 +448,24 @@ static void recal_intr(void)
 	do_hd_request();
 }
 
+/*
+ * This is another of the error-routines I don't know what to do with. The
+ * best idea seems to just set reset, and start all over again.
+ */
 static void hd_times_out(void)
 {	
 	do_hd = NULL;
 	reset = 1;
 	if (!CURRENT)
 		return;
-	printk("HD timeout");
+	printk("HD timeout\n\r");
+	cli();
 	if (++CURRENT->errors >= MAX_ERRORS)
 		end_request(0);
 	do_hd_request();
 }
 
-void do_hd_request(void)
+static void do_hd_request(void)
 {
 	int i,r;
 	unsigned int block,dev;
@@ -434,4 +526,28 @@ void hd_init(void)
 	outb_p(inb_p(0x21)&0xfb,0x21);
 	outb(inb_p(0xA1)&0xbf,0xA1);
 	timer_table[HD_TIMER].fn = hd_times_out;
+}
+
+int hd_ioctl(int dev, int cmd, int arg)
+{
+	struct hd_geometry *loc = (void *) arg;
+
+	if (!loc)
+		return -EINVAL;
+	dev = MINOR(dev) >> 6;
+	if (dev >= NR_HD)
+		return -EINVAL;
+
+	switch (cmd) {
+		case HDIO_REQ:
+			put_fs_byte(hd_info[dev].head,
+				(char *) &loc->heads);
+			put_fs_byte(hd_info[dev].sect,
+				(char *) &loc->sectors);
+			put_fs_word(hd_info[dev].cyl,
+				(short *) &loc->cylinders);
+			return 0;
+		default:
+			return -EINVAL;
+	}
 }

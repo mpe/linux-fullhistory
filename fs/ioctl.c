@@ -10,6 +10,7 @@
 
 #include <linux/sched.h>
 
+extern int hd_ioctl(int dev, int cmd, int arg);
 extern int tty_ioctl(int dev, int cmd, int arg);
 extern int pipe_ioctl(struct inode *pino, int cmd, int arg);
 
@@ -21,7 +22,7 @@ static ioctl_ptr ioctl_table[]={
 	NULL,		/* nodev */
 	NULL,		/* /dev/mem */
 	NULL,		/* /dev/fd */
-	NULL,		/* /dev/hd */
+	hd_ioctl,       /* /dev/hd */
 	tty_ioctl,	/* /dev/ttyx */
 	tty_ioctl,	/* /dev/tty */
 	NULL,		/* /dev/lp */

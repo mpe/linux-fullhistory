@@ -5,15 +5,16 @@
 # removes any old dependencies. DON'T put your own dependencies here
 # unless it's something special (ie not a .c file).
 #
+# Note 2! The CFLAGS definition is now inherited from the
+# parent makefile.
+#
 
 AR	=ar
 AS	=as
 LD	=ld
 LDFLAGS	=-s -x
-CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer \
-	-finline-functions -nostdinc -I../../include
-CPP	=gcc -E -nostdinc -I../../include
+CC	=gcc -nostdinc -I../../include
+CPP	=cpp -nostdinc -I../../include
 
 .c.s:
 	$(CC) $(CFLAGS) \
@@ -42,15 +43,17 @@ dep:
 
 ### Dependencies:
 floppy.s floppy.o : floppy.c ../../include/linux/sched.h ../../include/linux/head.h \
-  ../../include/linux/fs.h ../../include/sys/types.h ../../include/linux/mm.h \
+  ../../include/linux/fs.h ../../include/sys/types.h \
+  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h \
   ../../include/linux/kernel.h ../../include/signal.h \
   ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
   ../../include/sys/resource.h ../../include/linux/fdreg.h \
   ../../include/asm/system.h ../../include/asm/io.h \
   ../../include/asm/segment.h blk.h 
-hd.s hd.o : hd.c ../../include/linux/config.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/linux/mm.h \
+hd.s hd.o : hd.c ../../include/errno.h ../../include/linux/config.h \
+  ../../include/linux/sched.h ../../include/linux/head.h \
+  ../../include/linux/fs.h ../../include/sys/types.h \
+  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h \
   ../../include/linux/kernel.h ../../include/signal.h \
   ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
   ../../include/sys/resource.h ../../include/linux/timer.h \
@@ -58,13 +61,15 @@ hd.s hd.o : hd.c ../../include/linux/config.h ../../include/linux/sched.h \
   ../../include/asm/io.h ../../include/asm/segment.h blk.h 
 ll_rw_blk.s ll_rw_blk.o : ll_rw_blk.c ../../include/errno.h ../../include/linux/sched.h \
   ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/linux/mm.h \
-  ../../include/linux/kernel.h ../../include/signal.h \
-  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/asm/system.h blk.h 
+  ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
+  ../../include/linux/mm.h ../../include/linux/kernel.h \
+  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h \
+  ../../include/time.h ../../include/sys/resource.h \
+  ../../include/asm/system.h blk.h 
 ramdisk.s ramdisk.o : ramdisk.c ../../include/string.h ../../include/linux/config.h \
   ../../include/linux/sched.h ../../include/linux/head.h \
-  ../../include/linux/fs.h ../../include/sys/types.h ../../include/linux/mm.h \
+  ../../include/linux/fs.h ../../include/sys/types.h \
+  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h \
   ../../include/linux/kernel.h ../../include/signal.h \
   ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
   ../../include/sys/resource.h ../../include/linux/minix_fs.h \

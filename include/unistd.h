@@ -50,6 +50,12 @@
 #define _PC_VDISABLE		8
 #define _PC_CHOWN_RESTRICTED	9
 
+#if 0
+/* XXX - <sys/stat.h> illegally <sys/types.h> already.
+ * The rest of these includes are also illegal (too much pollution).
+ */
+#include <sys/types.h>
+#endif
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/times.h>
@@ -148,7 +154,9 @@
 #define __NR_uselib	86
 #define __NR_swapon	87
 #define __NR_reboot	88
+#define __NR_readdir	89
 
+/* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \
 type name(void) \
 { \
@@ -206,19 +214,26 @@ return -1; \
 
 #endif /* __LIBRARY__ */
 
+/* XXX - illegal. */
 extern int errno;
 
-int access(const char * filename, mode_t mode);
+/* XXX - several non-POSIX functions here, and POSIX functions that are
+ * supposed to be declared elsewhere.  Non-promotion of short types in
+ * prototypes may cause trouble.  Arg names should be prefixed by
+ * underscores.
+ */
+int access(const char * filename, mode_t mode);	/* XXX - short type */
 int acct(const char * filename);
-int alarm(int sec);
 int brk(void * end_data_segment);
+/* XXX - POSIX says unsigned alarm(unsigned sec) */
+int alarm(int sec);
 void * sbrk(ptrdiff_t increment);
 int chdir(const char * filename);
-int chmod(const char * filename, mode_t mode);
-int chown(const char * filename, uid_t owner, gid_t group);
+int chmod(const char * filename, mode_t mode);	/* XXX - short type */
+int chown(const char * filename, uid_t owner, gid_t group); /* XXX - shorts */
 int chroot(const char * filename);
 int close(int fildes);
-int creat(const char * filename, mode_t mode);
+int creat(const char * filename, mode_t mode);	/* XXX - short type */
 int dup(int fildes);
 int execve(const char * filename, char ** argv, char ** envp);
 int execv(const char * pathname, char ** argv);
@@ -229,27 +244,28 @@ int execle(const char * pathname, char * arg0, ...);
 volatile void exit(int status);
 volatile void _exit(int status);
 int fcntl(int fildes, int cmd, ...);
-int fork(void);
-int getpid(void);
-int getuid(void);
-int geteuid(void);
-int getgid(void);
-int getegid(void);
+pid_t fork(void);
+pid_t getpid(void);
+uid_t getuid(void);
+uid_t geteuid(void);
+gid_t getgid(void);
+gid_t getegid(void);
 int ioctl(int fildes, int cmd, ...);
 int kill(pid_t pid, int signal);
 int link(const char * filename1, const char * filename2);
-int lseek(int fildes, off_t offset, int origin);
-int mknod(const char * filename, mode_t mode, dev_t dev);
+off_t lseek(int fildes, off_t offset, int origin);
+int mknod(const char * filename, mode_t mode, dev_t dev); /* XXX - shorts */
 int mount(const char * specialfile, const char * dir, int rwflag);
 int nice(int val);
 int open(const char * filename, int flag, ...);
 int pause(void);
 int pipe(int * fildes);
+/* XXX**2 - POSIX says unsigned count */
 int read(int fildes, char * buf, off_t count);
 int setpgrp(void);
-int setpgid(pid_t pid,pid_t pgid);
-int setuid(uid_t uid);
-int setgid(gid_t gid);
+int setpgid(pid_t pid,pid_t pgid);	/* XXX - short types */
+int setuid(uid_t uid);		/* XXX - short type */
+int setgid(gid_t gid);		/* XXX - short type */
 void (*signal(int sig, void (*fn)(int)))(int);
 int stat(const char * filename, struct stat * stat_buf);
 int fstat(int fildes, struct stat * stat_buf);
@@ -266,6 +282,7 @@ int ustat(dev_t dev, struct ustat * ubuf);
 int utime(const char * filename, struct utimbuf * times);
 pid_t waitpid(pid_t pid,int * wait_stat,int options);
 pid_t wait(int * wait_stat);
+/* XXX**2 - POSIX says unsigned count */
 int write(int fildes, const char * buf, off_t count);
 int dup2(int oldfd, int newfd);
 int getppid(void);

@@ -41,7 +41,7 @@ int pipe_read(struct inode * inode, struct file * filp, char * buf, int count)
 			put_fs_byte(((char *)inode->i_size)[size++],buf++);
 	}
 	wake_up(& PIPE_WRITE_WAIT(*inode));
-	return read;
+	return read?read:-EAGAIN;
 }
 	
 int pipe_write(struct inode * inode, struct file * filp, char * buf, int count)

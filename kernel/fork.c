@@ -112,6 +112,8 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->leader = 0;		/* process leadership doesn't inherit */
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
+	p->min_flt = p->maj_flt = 0;
+	p->cmin_flt = p->cmaj_flt = 0;
 	p->start_time = jiffies;
 	p->tss.back_link = 0;
 	p->tss.esp0 = PAGE_SIZE + (long) p;

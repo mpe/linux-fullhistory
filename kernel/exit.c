@@ -48,9 +48,6 @@ inline int send_sig(long sig,struct task_struct * p,int priv)
 		/* we have to make sure that the process stops. */
 		if (p->state == TASK_INTERRUPTIBLE || p->state == TASK_RUNNING)
 			p->state = TASK_STOPPED;
-
-		if (p == current)
-			schedule();
 	}
 	return 0;
 }
@@ -66,8 +63,8 @@ void release(struct task_struct * p)
 		return;
 	}
 	for (i=1 ; i<NR_TASKS ; i++)
-		if (task[i]==p) {
-			task[i]=NULL;
+		if (task[i] == p) {
+			task[i] = NULL;
 			/* Update links */
 			if (p->p_osptr)
 				p->p_osptr->p_ysptr = p->p_ysptr;
@@ -75,8 +72,7 @@ void release(struct task_struct * p)
 				p->p_ysptr->p_osptr = p->p_osptr;
 			else
 				p->p_pptr->p_cptr = p->p_osptr;
-			free_page((long)p);
-			schedule();
+			free_page((long) p);
 			return;
 		}
 	panic("trying to release non-existent task");
@@ -218,15 +214,18 @@ int kill_proc(int pid, int sig, int priv)
 int sys_kill(int pid,int sig)
 {
 	struct task_struct **p = NR_TASKS + task;
-	int err, retval = 0;
+	int err, retval = 0, count = 0;
 
 	if (!pid)
-		return(kill_pg(current->pid,sig,0));
+		return(kill_pg(current->pgrp,sig,0));
 	if (pid == -1) {
 		while (--p > &FIRST_TASK)
-			if (err = send_sig(sig,*p,0))
-				retval = err;
-		return(retval);
+			if ((*p)->pid > 1 && *p != current) {
+				++count;
+				if ((err = send_sig(sig,*p,0)) != -EPERM)
+					retval = err;
+			}
+		return(count ? retval : -ESRCH);
 	}
 	if (pid < 0) 
 		return(kill_pg(-pid,sig,0));
@@ -292,6 +291,7 @@ volatile void do_exit(long code)
 	current->library = NULL;
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
+	current->rss = 0;
 	/* 
 	 * Check to see if any process groups have become orphaned
 	 * as a result of our exiting, and if they have any stopped
@@ -319,38 +319,28 @@ volatile void do_exit(long code)
 	 *	as a result of our exiting, and if they have any stopped
 	 *	jons, send them a SIGUP and then a SIGCONT.  (POSIX 3.2.2.2)
 	 */
-	if (p = current->p_cptr) {
-		while (1) {
-		        p->flags &= ~PF_PTRACED;
-			p->p_pptr = task[1];
-			if (p->state == TASK_ZOMBIE)
-				task[1]->signal |= (1<<(SIGCHLD-1));
-			/*
-			 * process group orphan check
-			 * Case ii: Our child is in a different pgrp 
-			 * than we are, and it was the only connection
-			 * outside, so the child pgrp is now orphaned.
-			 */
-			if ((p->pgrp != current->pgrp) &&
-			    (p->session == current->session) &&
-			    is_orphaned_pgrp(p->pgrp) &&
-			    has_stopped_jobs(p->pgrp)) {
-				kill_pg(p->pgrp,SIGHUP,1);
-				kill_pg(p->pgrp,SIGCONT,1);
-			}
-			if (p->p_osptr) {
-				p = p->p_osptr;
-				continue;
-			}
-			/*
-			 * This is it; link everything into init's children 
-			 * and leave 
-			 */
-			p->p_osptr = task[1]->p_cptr;
-			task[1]->p_cptr->p_ysptr = p;
-			task[1]->p_cptr = current->p_cptr;
-			current->p_cptr = 0;
-			break;
+	while (p = current->p_cptr) {
+		current->p_cptr = p->p_osptr;
+		p->p_ysptr = NULL;
+	        p->flags &= ~PF_PTRACED;
+		p->p_pptr = task[1];
+		p->p_osptr = task[1]->p_cptr;
+		task[1]->p_cptr->p_ysptr = p;
+		task[1]->p_cptr = p;
+		if (p->state == TASK_ZOMBIE)
+			task[1]->signal |= (1<<(SIGCHLD-1));
+		/*
+		 * process group orphan check
+		 * Case ii: Our child is in a different pgrp 
+		 * than we are, and it was the only connection
+		 * outside, so the child pgrp is now orphaned.
+		 */
+		if ((p->pgrp != current->pgrp) &&
+		    (p->session == current->session) &&
+		    is_orphaned_pgrp(p->pgrp) &&
+		    has_stopped_jobs(p->pgrp)) {
+			kill_pg(p->pgrp,SIGHUP,1);
+			kill_pg(p->pgrp,SIGCONT,1);
 		}
 	}
 	if (current->leader) {
@@ -413,8 +403,10 @@ repeat:
 				p->exit_code = 0;
 				return p->pid;
 			case TASK_ZOMBIE:
-				current->cutime += p->utime;
-				current->cstime += p->stime;
+				current->cutime += p->utime + p->cutime;
+				current->cstime += p->stime + p->cstime;
+				current->cmin_flt += p->min_flt + p->cmin_flt;
+				current->cmaj_flt += p->maj_flt + p->cmaj_flt;
 				flag = p->pid;
 				if (stat_addr)
 					put_fs_long(p->exit_code, stat_addr);

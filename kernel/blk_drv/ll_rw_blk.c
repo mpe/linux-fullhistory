@@ -83,8 +83,8 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 		req->bh->b_dirt = 0;
 	if (!(tmp = dev->current_request)) {
 		dev->current_request = req;
-		sti();
 		(dev->request_fn)();
+		sti();
 		return;
 	}
 	for ( ; tmp->next ; tmp = tmp->next) {

@@ -19,7 +19,6 @@
  * KBD_UK for British extended keyboard
  * KBD_DK for Danish keyboard
  */
-#define KBD_FINNISH
 
 .text
 .globl _hard_reset_now

@@ -167,20 +167,35 @@ static void sysbeep(void);
 #define RESPONSE "\033[?1;2c"
 
 static char * translations[] = {
-/* normal 7-bit ascii */
+/* 8-bit Latin-1 mapped to the PC charater set: '\0' means non-printable */
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	" !\"#$%&'()*+,-./0123456789:;<=>?"
 	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
-	"`abcdefghijklmnopqrstuvwxyz{|}~ ",
+	"`abcdefghijklmnopqrstuvwxyz{|}~\0"
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	"\040\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
+	"\370\361\375\376\376\346\024\371\376\376\247\257\254\253\376\250"
+	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
+	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
+	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
+	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
 /* vt100 graphics */
-	" !\"#$%&'()*+,-./\333123456789:;<=>?"
-	"@ABCDEFGH\017JKLMNOPQRSTUVWXYZ[\\]^ "
-	/* '   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o */
-	"\004\261\007\007\007\007\370\361\040\007\331\277\332\300\305\007"
-	/* p   q   r   s   t   u   v   w   x   y   z   {   |   }   ~     */
-	"\007\304\007\007\303\264\301\302\263\007\007\007\007\007\234 "
-	
-      /*"\004\261\007\007\007\007\370\361\007\007\275\267\326\323\327\304"
-        "\304\304\304\304\307\266\320\322\272\363\362\343\\007\234\007 " */
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	" !\"#$%&'()*+,-./0123456789:;<=>?"
+	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^ "
+	"\004\261\007\007\007\007\370\361\007\007\275\267\326\323\327\304"
+	"\304\304\304\304\307\266\320\322\272\363\362\343\007\234\007\0"
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+	"\040\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
+	"\370\361\375\376\376\346\024\371\376\376\247\257\254\253\376\250"
+	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
+	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
+	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
+	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230"
 };
 
 #define NORM_TRANS (translations[0])
@@ -394,10 +409,10 @@ static void csi_m(int currcons )
 			  else
 			  { /* check if forground == background */
 			    if (vc_cons[currcons].vc_bold_attr != -1)
-			      attr = (vc_cons[currcons].vc_bold_attr&0x0f)|(0xf0&(attr));
+				attr = (vc_cons[currcons].vc_bold_attr&0x0f)|(0xf0&(attr));
 			    else
 			    { short newattr = (attr&0xf0)|(0xf&(~attr));
-			      attr = ((newattr&0xf)==((attr>>4)&0xf)? 
+				attr = ((newattr&0xf)==((attr>>4)&0xf)? 
 			        (attr&0xf0)|(((attr&0xf)+1)%0xf):
 			        newattr);
 			    }    
@@ -456,7 +471,7 @@ static void respond(int currcons, struct tty_struct * tty)
 		p++;
 	}
 	sti();
-	copy_to_cooked(tty);
+	TTY_READ_FLUSH(tty);
 }
 
 static void insert_char(int currcons)
@@ -571,13 +586,14 @@ void con_write(struct tty_struct * tty)
 			state = ESnormal;
 		switch(state) {
 			case ESnormal:
-				if (c > 31 && c < 127) {
+				if (translate[c]) {
+					c = translate[c];
 					while (x >= video_num_columns) {
 						x -= video_num_columns;
 						pos -= video_size_row;
 						lf(currcons);
 					}
-					*(char *) pos = translate[c-32];
+					*(char *) pos = c;
 					*(char *) (pos+1) = attr;
 					pos += 2;
 					x++;
@@ -823,7 +839,7 @@ void con_write(struct tty_struct * tty)
 
 void do_keyboard_interrupt(void)
 {
-	copy_to_cooked(TTY_TABLE(0));
+	TTY_READ_FLUSH(TTY_TABLE(0));
 	timer_active &= ~(1<<BLANK_TIMER);
 	if (console_blanked) {
 		timer_table[BLANK_TIMER].expires = 0;

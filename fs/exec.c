@@ -216,6 +216,7 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int retval;
 	int sh_bang = 0;
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
+	int ch;
 
 	if ((0xffff & eip[1]) != 0x000f)
 		panic("execve called from supervisor mode");
@@ -348,6 +349,15 @@ restart_interp:
 	}
 /* OK, This is the point of no return */
 /* note that current->library stays unchanged by an exec */
+	for (i=0; (ch = get_fs_byte(filename++)) != '\0';)
+		if (ch == '/')
+			i = 0;
+		else
+			if (i < 8)
+				current->comm[i++] = ch;
+	if (i < 8)
+		current->comm[i] = '\0';
+	
 	if (current->executable)
 		iput(current->executable);
 	current->executable = inode;
@@ -374,6 +384,7 @@ restart_interp:
 		(current->end_data = ex.a_data +
 		(current->end_code = ex.a_text));
 	current->start_stack = p;
+	current->rss = (LIBRARY_OFFSET - p + PAGE_SIZE-1) / PAGE_SIZE;
 	current->suid = current->euid = e_uid;
 	current->sgid = current->egid = e_gid;
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */

@@ -217,6 +217,22 @@ empty_8042:
 	jnz	empty_8042	! yes - loop
 	ret
 
+getkey:
+	in	al,#0x60	! Quick and dirty...
+	.word	0x00eb,0x00eb		! jmp $+2, jmp $+2
+	mov	bl,al
+	in	al,#0x61
+	.word	0x00eb,0x00eb
+	mov	ah,al
+	or	al,#0x80
+	out	#0x61,al
+	.word	0x00eb,0x00eb
+	mov	al,ah
+	out	#0x61,al
+	.word	0x00eb,0x00eb
+	mov	al,bl
+	ret
+
 ! Routine trying to recognize type of SVGA-board present (if any)
 ! and if it recognize one gives the choices of resolution it offers.
 ! If one is found the resolution chosen is given by al,ah (rows,cols).
@@ -233,7 +249,7 @@ flush:	in	al,#0x60		! Flush the keyboard buffer
 	cmp	al,#0x82
 	jb	nokey
 	jmp	flush
-nokey:	in	al,#0x60
+nokey:	call getkey
 	cmp	al,#0x82
 	jb	nokey
 	cmp	al,#0xe0
@@ -481,7 +497,7 @@ tbl:	pop	bx
 	call	prtstr
 	pop	si
 	add	cl,#0x80
-nonum:	in	al,#0x60	! Quick and dirty...
+nonum:	call	getkey
 	cmp	al,#0x82
 	jb	nonum
 	cmp	al,#0x8b

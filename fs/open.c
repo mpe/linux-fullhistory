@@ -29,6 +29,11 @@ int sys_utime(char * filename, struct utimbuf * times)
 	if (!(inode=namei(filename)))
 		return -ENOENT;
 	if (times) {
+		if (current->euid != inode->i_uid &&
+		    !permission(inode,MAY_WRITE)) {
+			iput(inode);
+			return -EPERM;
+		}
 		actime = get_fs_long((unsigned long *) &times->actime);
 		modtime = get_fs_long((unsigned long *) &times->modtime);
 	} else

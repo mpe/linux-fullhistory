@@ -260,11 +260,11 @@ int tty_ioctl(int dev, int cmd, int arg)
 			switch (arg) {
 			case TCOOFF:
 				tty->stopped = 1;
-				TTY_WRITE(tty);
+				TTY_WRITE_FLUSH(tty);
 				return 0;
 			case TCOON:
 				tty->stopped = 0;
-				TTY_WRITE(tty);
+				TTY_WRITE_FLUSH(tty);
 				return 0;
 			case TCIOFF:
 				if (STOP_CHAR(tty))

@@ -25,7 +25,7 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 		if (FULL(to->read_q)) {
 			if (FULL(to->secondary))
 				break;
-			copy_to_cooked(to);
+			TTY_READ_FLUSH(to);
 			continue;
 		}
 		GETCH(from->write_q,c);
@@ -33,7 +33,7 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 		if (current->signal & ~current->blocked)
 			break;
 	}
-	copy_to_cooked(to);
+	TTY_READ_FLUSH(to);
 	wake_up(&from->write_q->proc_list);
 }
 

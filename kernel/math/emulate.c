@@ -1,5 +1,5 @@
 /*
- * linux/kernel/math/math_emulate.c
+ * linux/kernel/math/emulate.c
  *
  * (C) 1991 Linus Torvalds
  */
@@ -29,8 +29,6 @@
  * to 80-bit temporary reals, and do with them as they please. I wanted to
  * hide most of the 387-specific things here.
  */
-
-#include <linux/config.h>
 
 #ifdef KERNEL_MATH_EMULATION
 
@@ -172,12 +170,10 @@ static void do_emu(struct info * info)
 			real_to_real(&tmp,&ST(0));
 			return;
 		case 0x1a:
-			fcom(PST(code & 7),&tmp);
-			real_to_real(&tmp,&ST(0));
+			fcom(PST(code & 7),PST(0));
 			return;
 		case 0x1b:
-			fcom(PST(code & 7),&tmp);
-			real_to_real(&tmp,&ST(0));
+			fcom(PST(code & 7),PST(0));
 			fpop();
 			return;
 		case 0x1c:
@@ -201,7 +197,7 @@ static void do_emu(struct info * info)
 			return;
 		case 0x38:
 			fpush();
-			ST(0) = ST((code & 7)+1);
+			ST(0) = ST((code+1) & 7);
 			return;
 		case 0x39:
 			fxchg(&ST(0),&ST(code & 7));

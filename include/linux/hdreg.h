@@ -64,4 +64,10 @@ struct partition {
 	unsigned int nr_sects;		/* nr of sectors in partition */
 };
 
+#define HDIO_REQ 0x301
+struct hd_geometry {
+      unsigned char heads;
+      unsigned char sectors;
+      unsigned short cylinders;
+};
 #endif

@@ -78,10 +78,11 @@ extern int * blk_size[NR_BLK_DEV];
 #define DEVICE_OFF(device) floppy_off(DEVICE_NR(device))
 
 #elif (MAJOR_NR == 3)
-/* harddisk */
+/* harddisk: timeout is 6 seconds.. */
 #define DEVICE_NAME "harddisk"
 #define DEVICE_INTR do_hd
 #define DEVICE_TIMEOUT HD_TIMER
+#define TIMEOUT_VALUE 600
 #define DEVICE_REQUEST do_hd_request
 #define DEVICE_NR(device) (MINOR(device)>>6)
 #define DEVICE_ON(device)
@@ -101,10 +102,18 @@ void (*DEVICE_INTR)(void) = NULL;
 #endif
 #ifdef DEVICE_TIMEOUT
 
-#define SET_INTR(x) if (DEVICE_INTR = (x)) { \
-timer_table[DEVICE_TIMEOUT].expires = jiffies + 200; \
-timer_active |= 1<<DEVICE_TIMEOUT; \
-} else timer_active &= ~(1<<DEVICE_TIMEOUT)
+#define SET_TIMER \
+((timer_table[DEVICE_TIMEOUT].expires = jiffies + TIMEOUT_VALUE), \
+(timer_active |= 1<<DEVICE_TIMEOUT))
+
+#define CLEAR_TIMER \
+timer_active &= ~(1<<DEVICE_TIMEOUT)
+
+#define SET_INTR(x) \
+if (DEVICE_INTR = (x)) \
+	SET_TIMER; \
+else \
+	CLEAR_TIMER;
 
 #else
 
