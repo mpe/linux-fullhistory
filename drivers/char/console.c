@@ -25,20 +25,20 @@
  *     'void do_blank_screen(int)'
  *     'void do_unblank_screen(void)'
  *     'void poke_blanked_console(void)'
+ *
+ *     'unsigned short *screen_pos(int currcons, int w_offset, int viewed)'
+ *     'void complement_pos(int currcons, int offset)'
+ *     'void invert_screen(int currcons, int offset, int count, int shift)'
+ *
  *     'void scrollback(int lines)'
  *     'void scrollfront(int lines)'
- *     'int do_screendump(int arg, int mode)'
  *
  *     'int con_get_font(char *)' 
- *     'int con_set_font(char *)' 
- *     'int con_get_trans(char *)'
- *     'int con_set_trans(char *)'
+ *     'int con_set_font(char *)'
  *
- *     'int set_selection(const int arg)'
- *     'int paste_selection(struct tty_struct *tty)'
- *     'int sel_loadlut(const int arg)'
+ *     'void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry)'
  *     'int mouse_reporting(void)'
- * 
+ *
  * Hopefully this will be a rather complete VT102 implementation.
  *
  * Beeping thanks to John T Kohl.
@@ -104,40 +104,9 @@
 
 #include "kbd_kern.h"
 #include "vt_kern.h"
+#include "consolemap.h"
+#include "selection.h"
 
-#ifdef __alpha__
- 
-static inline void scrwritew(unsigned short val, unsigned short * addr)
-{
-	if ((long) addr < 0)
-		*addr = val;
-	else
-		writew(val, (unsigned long) addr);
-}
-
-static inline unsigned short scrreadw(unsigned short * addr)
-{
-	if ((long) addr < 0)
-		return *addr;
-	return readw((unsigned long) addr);
-}
-
-#else
-
-static inline void scrwritew(unsigned short val, unsigned short * addr)
-{
-	*addr = val;
-}
-
-static inline unsigned short scrreadw(unsigned short * addr)
-{
-	return *addr;
-}
-
-#endif
-
-#define writew(x,y) scrwritew((x),(y))
-#define readw(x) scrreadw(x)
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -148,23 +117,6 @@ static int console_refcount;
 static struct tty_struct *console_table[MAX_NR_CONSOLES];
 static struct termios *console_termios[MAX_NR_CONSOLES];
 static struct termios *console_termios_locked[MAX_NR_CONSOLES];
-
-#ifdef CONFIG_SELECTION
-#include <linux/ctype.h>
-
-/* Routines for selection control. */
-int set_selection(const int arg, struct tty_struct *tty);
-int paste_selection(struct tty_struct *tty);
-static void clear_selection(void);
-static void highlight_pointer(const int currcons, const int where);
-
-/* Variables for selection control. */
-/* Use a dynamic buffer, instead of static (Dec 1994) */
-static int sel_cons = 0;
-static int sel_start = -1;
-static int sel_end;
-static char *sel_buffer = NULL;
-#endif /* CONFIG_SELECTION */
 
 #define NPAR 16
 
@@ -194,11 +146,13 @@ static unsigned char	video_type;		/* Type of display being used	*/
 static unsigned long	video_mem_base;		/* Base of video memory		*/
 static unsigned long	video_mem_term;		/* End of video memory		*/
 static unsigned char	video_page;		/* Initial video page (unused)  */
+       /* these two also used in vesa_blank.c */
        unsigned short	video_port_reg;		/* Video register select port	*/
        unsigned short	video_port_val;		/* Video register value port	*/
-static unsigned long	video_num_columns;	/* Number of text columns	*/
-static unsigned long	video_num_lines;	/* Number of text lines		*/
-static unsigned long	video_size_row;
+       /* these three also used in selection.c */
+       unsigned long	video_num_columns;	/* Number of text columns	*/
+       unsigned long	video_num_lines;	/* Number of text lines		*/
+       unsigned long	video_size_row;
 static unsigned long	video_screen_size;
 static int can_do_color = 0;
 static int printable = 0;			/* Is console ready for printing? */
@@ -260,10 +214,10 @@ struct vc_data {
 	unsigned long	vc_utf_char;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
 	unsigned char * vc_translate;
-	unsigned char *	vc_G0_charset;
-	unsigned char *	vc_G1_charset;
-	unsigned char *	vc_saved_G0;
-	unsigned char *	vc_saved_G1;
+	unsigned char 	vc_G0_charset;
+	unsigned char 	vc_G1_charset;
+	unsigned char 	vc_saved_G0;
+	unsigned char 	vc_saved_G1;
 	/* additional information is in vt_kern.h */
 };
 
@@ -342,7 +296,7 @@ static void memsetw(void * s, unsigned short c, unsigned int count)
 	count /= 2;
 	while (count) {
 		count--;
-		writew(c, addr++);
+		scr_writew(c, addr++);
 	}
 }
 
@@ -352,7 +306,7 @@ static inline void memcpyw(unsigned short *to, unsigned short *from,
 	count /= 2;
 	while (count) {
 		count--;
-		writew(readw(from++), to++);
+		scr_writew(scr_readw(from++), to++);
 	}
 }
 
@@ -522,81 +476,6 @@ void vc_disallocate(unsigned int currcons)
 #define VT100ID "\033[?1;2c"
 #define VT102ID "\033[?6c"
 
-static unsigned char * translations[] = {
-/* 8-bit Latin-1 mapped to the PC character set: '\0' means non-printable */
-(unsigned char *)
-	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	"\0\0\0\0\0\0\0\0\0\0\376\0\0\0\0\0"
-	" !\"#$%&'()*+,-./0123456789:;<=>?"
-	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
-	"`abcdefghijklmnopqrstuvwxyz{|}~\0"
-	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	"\377\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
-	"\370\361\375\376\376\346\024\371\376\376\247\257\254\253\376\250"
-	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
-	"\376\245\376\376\376\376\231\376\350\376\376\376\232\376\376\341"
-	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
-	"\376\244\225\242\223\376\224\366\355\227\243\226\201\376\376\230",
-/* vt100 graphics */
-(unsigned char *)
-	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	"\0\0\0\0\0\0\0\0\0\0\376\0\0\0\0\0"
-	" !\"#$%&'()*+,-./0123456789:;<=>?"
-	"@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^ "
-	"\004\261\007\007\007\007\370\361\007\007\331\277\332\300\305\304"
-	"\304\304\137\137\303\264\301\302\263\363\362\343\330\234\007\0"
-	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-	"\377\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
-	"\370\361\375\376\376\346\024\371\376\376\247\257\254\253\376\250"
-	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
-	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
-	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
-	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
-/* IBM graphics: minimal translations (BS, CR, LF, LL, SO, SI and ESC) */
-(unsigned char *)
-	"\000\001\002\003\004\005\006\007\000\011\000\013\000\000\000\000"
-	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
-	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
-	"\060\061\062\063\064\065\066\067\070\071\072\073\074\075\076\077"
-	"\100\101\102\103\104\105\106\107\110\111\112\113\114\115\116\117"
-	"\120\121\122\123\124\125\126\127\130\131\132\133\134\135\136\137"
-	"\140\141\142\143\144\145\146\147\150\151\152\153\154\155\156\157"
-	"\160\161\162\163\164\165\166\167\170\171\172\173\174\175\176\177"
-	"\200\201\202\203\204\205\206\207\210\211\212\213\214\215\216\217"
-	"\220\221\222\223\224\225\226\227\230\231\232\233\234\235\236\237"
-	"\240\241\242\243\244\245\246\247\250\251\252\253\254\255\256\257"
-	"\260\261\262\263\264\265\266\267\270\271\272\273\274\275\276\277"
-	"\300\301\302\303\304\305\306\307\310\311\312\313\314\315\316\317"
-	"\320\321\322\323\324\325\326\327\330\331\332\333\334\335\336\337"
-	"\340\341\342\343\344\345\346\347\350\351\352\353\354\355\356\357"
-	"\360\361\362\363\364\365\366\367\370\371\372\373\374\375\376\377",
- /* USER: customizable mappings, initialized as the previous one (IBM) */
-(unsigned char *)
-	"\000\001\002\003\004\005\006\007\010\011\000\013\000\000\016\017"
-	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
-	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
-	"\060\061\062\063\064\065\066\067\070\071\072\073\074\075\076\077"
-	"\100\101\102\103\104\105\106\107\110\111\112\113\114\115\116\117"
-	"\120\121\122\123\124\125\126\127\130\131\132\133\134\135\136\137"
-	"\140\141\142\143\144\145\146\147\150\151\152\153\154\155\156\157"
-	"\160\161\162\163\164\165\166\167\170\171\172\173\174\175\176\177"
-	"\200\201\202\203\204\205\206\207\210\211\212\213\214\215\216\217"
-	"\220\221\222\223\224\225\226\227\230\231\232\233\234\235\236\237"
-	"\240\241\242\243\244\245\246\247\250\251\252\253\254\255\256\257"
-	"\260\261\262\263\264\265\266\267\270\271\272\273\274\275\276\277"
-	"\300\301\302\303\304\305\306\307\310\311\312\313\314\315\316\317"
-	"\320\321\322\323\324\325\326\327\330\331\332\333\334\335\336\337"
-	"\340\341\342\343\344\345\346\347\350\351\352\353\354\355\356\357"
-	"\360\361\362\363\364\365\366\367\370\371\372\373\374\375\376\377"
-};
-
-#define NORM_TRANS (translations[0])
-#define GRAF_TRANS (translations[1])
-#define NULL_TRANS (translations[2])
-#define USER_TRANS (translations[3])
-
 static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				       8,12,10,14, 9,13,11,15 };
 
@@ -641,9 +520,9 @@ static unsigned short __origin;		/* offset of currently displayed screen */
 static inline void __set_origin(unsigned short offset)
 {
 	unsigned long flags;
-#ifdef CONFIG_SELECTION
+
 	clear_selection();
-#endif /* CONFIG_SELECTION */
+
 	save_flags(flags); cli();
 	__origin = offset;
 	outb_p(12, video_port_reg);
@@ -740,12 +619,12 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			count = (video_num_lines-1)*video_num_columns;
 			while (count) {
 				count--;
-				writew(readw(s++),d++);
+				scr_writew(scr_readw(s++),d++);
 			}
 			count = video_num_columns;
 			while (count) {
 				count--;
-				writew(video_erase_char, d++);
+				scr_writew(video_erase_char, d++);
 			}
 			scr_end -= origin-video_mem_start;
 			pos -= origin-video_mem_start;
@@ -759,7 +638,7 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			count = video_num_columns;
 			while (count) {
 				count--;
-				writew(video_erase_char, d++);
+				scr_writew(video_erase_char, d++);
 			}
 		}
 		set_origin(currcons);
@@ -770,12 +649,12 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 
 		while (count) {
 			count--;
-			writew(readw(s++), d++);
+			scr_writew(scr_readw(s++), d++);
 		}
 		count = video_num_columns;
 		while (count) {
 			count--;
-			writew(video_erase_char, d++);
+			scr_writew(video_erase_char, d++);
 		}
 	}
 }
@@ -792,12 +671,12 @@ static void scrdown(int currcons, unsigned int t, unsigned int b)
 	count = (b-t-1)*video_num_columns;
 	while (count) {
 		count--;
-		writew(readw(--s), --d);
+		scr_writew(scr_readw(--s), --d);
 	}
 	count = video_num_columns;
 	while (count) {
 		count--;
-		writew(video_erase_char, --d);
+		scr_writew(video_erase_char, --d);
 	}
 	has_scrolled = 1;
 }
@@ -873,7 +752,7 @@ static void csi_J(int currcons, int vpar)
 	}
 	while (count) {
 		count--;
-		writew(video_erase_char, start++);
+		scr_writew(video_erase_char, start++);
 	}
 	need_wrap = 0;
 }
@@ -901,7 +780,7 @@ static void csi_K(int currcons, int vpar)
 	}
 	while (count) {
 		count--;
-		writew(video_erase_char, start++);
+		scr_writew(video_erase_char, start++);
 	}
 	need_wrap = 0;
 }
@@ -919,7 +798,7 @@ static void csi_X(int currcons, int vpar) /* erase the following vpar positions 
 
 	while (count) {
 		count--;
-		writew(video_erase_char, start++);
+		scr_writew(video_erase_char, start++);
 	}
 	need_wrap = 0;
 }
@@ -934,7 +813,7 @@ static void update_attr(int currcons)
 			attr = (attr & 0xf0) | halfcolor;
 	}
 	if (reverse ^ decscnm)
-		attr = (attr & 0x88) | (((attr >> 4) | (attr << 4)) & 0x77);
+		attr = reverse_video_char(attr);
 	if (blink)
 		attr ^= 0x80;
 	if (intensity == 2)
@@ -946,7 +825,7 @@ static void update_attr(int currcons)
 			attr = (attr & 0xf0) | 0x08;
 	}
 	if (decscnm)
-		video_erase_char = (((color & 0x88) | (((color >> 4) | (color << 4)) & 0x77)) << 8) | ' ';
+		video_erase_char = (reverse_video_char(color) << 8) | ' ';
 	else
 		video_erase_char = (color << 8) | ' ';
 }
@@ -989,7 +868,7 @@ static void csi_m(int currcons)
 				  * control chars if defined, don't set
 				  * bit 8 on output.
 				  */
-				translate = (charset == 0
+				translate = set_translate(charset == 0
 						? G0_charset
 						: G1_charset);
 				disp_ctrl = 0;
@@ -999,7 +878,7 @@ static void csi_m(int currcons)
 				  * Select first alternate font, let's
 				  * chars < 32 be displayed as ROM chars.
 				  */
-				translate = NULL_TRANS;
+				translate = set_translate(NULL_MAP);
 				disp_ctrl = 1;
 				toggle_meta = 0;
 				break;
@@ -1007,7 +886,7 @@ static void csi_m(int currcons)
 				  * Select second alternate font, toggle
 				  * high bit before displaying as ROM char.
 				  */
-				translate = NULL_TRANS;
+				translate = set_translate(NULL_MAP);
 				disp_ctrl = 1;
 				toggle_meta = 1;
 				break;
@@ -1072,9 +951,17 @@ static void cursor_report(int currcons, struct tty_struct * tty)
 	respond_string(buf, tty);
 }
 
-#ifdef CONFIG_SELECTION
-static void mouse_report(int currcons, struct tty_struct * tty,
-			 int butt, int mrx, int mry)
+static inline void status_report(struct tty_struct * tty)
+{
+	respond_string("\033[0n", tty);	/* Terminal ok */
+}
+
+static inline void respond_ID(struct tty_struct * tty)
+{
+	respond_string(VT102ID, tty);
+}
+
+void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry)
 {
 	char buf[8];
 
@@ -1082,31 +969,83 @@ static void mouse_report(int currcons, struct tty_struct * tty,
 		(char)('!' + mry));
 	respond_string(buf, tty);
 }
-#endif
 
-static inline void status_report(int currcons, struct tty_struct * tty)
+/* invoked via ioctl(TIOCLINUX) */
+int mouse_reporting(void)
 {
-	respond_string("\033[0n", tty);	/* Terminal ok */
+	int currcons = fg_console;
+
+	return report_mouse;
 }
 
-static inline void respond_ID(int currcons, struct tty_struct * tty)
+static inline unsigned short *screenpos(int currcons, int offset, int viewed)
 {
-	respond_string(VT102ID, tty);
+	unsigned short *p = (unsigned short *)(origin + offset);
+	if (viewed && currcons == fg_console)
+		p -= (__real_origin - __origin);
+	return p;
 }
 
-static void invert_screen(int currcons) {
+/* Note: inverting the screen twice should revert to the original state */
+void invert_screen(int currcons, int offset, int count, int viewed)
+{
 	unsigned short *p;
 
+	count /= 2;
+	p = screenpos(currcons, offset, viewed);
 	if (can_do_color)
-		for (p = (unsigned short *)origin; p < (unsigned short *)scr_end; p++) {
-			unsigned short old = readw(p);
-			writew((old & 0x88ff) | (((old >> 4) | ((old & 0xff00) << 4)) & 0x7700), p);
+		while (count--) {
+			unsigned short old = scr_readw(p);
+			scr_writew(reverse_video_short(old), p);
+			p++;
 		}
 	else
-		for (p = (unsigned short *)origin; p < (unsigned short *)scr_end; p++) {
-			unsigned short old = readw(p);
-			writew(old ^ ((old & 0x0700 == 0x0100) ? 0x7000 : 0x7700), p);
+		while (count--) {
+			unsigned short old = scr_readw(p);
+			scr_writew(old ^ ((old & 0x0700 == 0x0100)
+					  ? 0x7000 : 0x7700), p);
 		}
+}
+
+/* used by selection: complement pointer position */
+void complement_pos(int currcons, int offset)
+{
+	static unsigned short *p = NULL;
+	static unsigned short old = 0;
+
+	if (p)
+		scr_writew(old, p);
+	if (offset == -1)
+		p = NULL;
+	else {
+		p = screenpos(currcons, offset, 1);
+		old = scr_readw(p);
+		scr_writew(old ^ 0x7700, p);
+	}
+}
+
+/* used by selection */
+unsigned short screen_word(int currcons, int offset, int viewed)
+{
+	return scr_readw(screenpos(currcons, offset, viewed));
+}
+
+/* used by vcs - note the word offset */
+unsigned short *screen_pos(int currcons, int w_offset, int viewed)
+{
+	return screenpos(currcons, 2 * w_offset, viewed);
+}
+
+void getconsxy(int currcons, char *p)
+{
+	p[0] = x;
+	p[1] = y;
+}
+
+void putconsxy(int currcons, char *p)
+{
+	gotoxy(currcons, p[0], p[1]);
+	set_cursor(currcons);
 }
 
 static void set_mode(int currcons, int on_off)
@@ -1132,7 +1071,7 @@ static void set_mode(int currcons, int on_off)
 			case 5:			/* Inverted screen on/off */
 				if (decscnm != on_off) {
 					decscnm = on_off;
-					invert_screen(currcons);
+					invert_screen(currcons, 0, video_screen_size, 0);
 					update_attr(currcons);
 				}
 				break;
@@ -1211,8 +1150,8 @@ static void insert_char(int currcons)
 	unsigned short * p = (unsigned short *) pos;
 
 	while (i++ < video_num_columns) {
-		tmp = readw(p);
-		writew(old, p);
+		tmp = scr_readw(p);
+		scr_writew(old, p);
 		old = tmp;
 		p++;
 	}
@@ -1231,10 +1170,10 @@ static void delete_char(int currcons)
 	unsigned short * p = (unsigned short *) pos;
 
 	while (++i < video_num_columns) {
-		writew(readw(p+1), p);
+		scr_writew(scr_readw(p+1), p);
 		p++;
 	}
-	writew(video_erase_char, p);
+	scr_writew(video_erase_char, p);
 	need_wrap = 0;
 }
 
@@ -1309,7 +1248,7 @@ static void restore_cur(int currcons)
 	color		= s_color;
 	G0_charset	= saved_G0;
 	G1_charset	= saved_G1;
-	translate	= charset ? G1_charset : G0_charset;
+	translate	= set_translate(charset ? G1_charset : G0_charset);
 	update_attr(currcons);
 	need_wrap = 0;
 }
@@ -1323,9 +1262,9 @@ static void reset_terminal(int currcons, int do_clear)
 	bottom		= video_num_lines;
 	vc_state	= ESnormal;
 	ques		= 0;
-	translate	= NORM_TRANS;
-	G0_charset	= NORM_TRANS;
-	G1_charset	= GRAF_TRANS;
+	translate	= set_translate(NORM_MAP);
+	G0_charset	= NORM_MAP;
+	G1_charset	= GRAF_MAP;
 	charset		= 0;
 	need_wrap	= 0;
 	report_mouse	= 0;
@@ -1412,11 +1351,10 @@ static int con_write(struct tty_struct * tty, int from_user,
 	    }
 	    return 0;
 	}
-#ifdef CONFIG_SELECTION
-	/* clear the selection */
+
 	if (currcons == sel_cons)
 		clear_selection();
-#endif /* CONFIG_SELECTION */
+
 	disable_bh(KEYBOARD_BH);
 	while (!tty->stopped &&	count) {
 		c = from_user ? get_fs_byte(buf) : *buf;
@@ -1426,7 +1364,6 @@ static int con_write(struct tty_struct * tty, int from_user,
 		    /* Combine UTF-8 into Unicode */
 		    /* Incomplete characters silently ignored */
 		    if(c > 0x7f) {   
-			/* UTF-8 to Latin-1 decoding */
 			if (utf_count > 0 && (c & 0xc0) == 0x80) {
 				utf_char = (utf_char << 6) | (c & 0x3f);
 				utf_count--;
@@ -1448,18 +1385,15 @@ static int con_write(struct tty_struct * tty, int from_user,
 			utf_count = 0;
 
 		    /* Now try to find out how to display it */
-		    if (c > 0xff) {
-			tc = conv_uni_to_pc(c);
-			if (tc == -2)
-			  continue;
-			vc_state = ESnormal;
-			if (tc == -1)
-			  tc = 0376; 	/* small square: symbol not found */
-			ok = 1;
-		    } else {
-			tc = NORM_TRANS[c];
+		    tc = conv_uni_to_pc(c);
+		    if (tc == -1 || tc == -2)
+		      continue;
+		    if (tc == -3 || tc == -4) {	/* hashtable not valid */
+						/* or symbol not found */
+			tc = (c <= 0xff) ? translate[c] : 040;
 			ok = 0;
-		    }
+		    } else
+		        ok = 1;
 		} else {	/* no utf */
 		    tc = translate[toggle_meta ? (c|0x80) : c];
 		    ok = 0;
@@ -1483,7 +1417,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 			}
 			if (decim)
 				insert_char(currcons);
-			writew((attr << 8) + tc, (unsigned short *) pos);
+			scr_writew((attr << 8) + tc, (unsigned short *) pos);
 			if (x == video_num_columns - 1)
 				need_wrap = decawm;
 			else {
@@ -1522,12 +1456,12 @@ static int con_write(struct tty_struct * tty, int from_user,
 				continue;
 			case 14:
 				charset = 1;
-				translate = G1_charset;
+				translate = set_translate(G1_charset);
 				disp_ctrl = 1;
 				continue;
 			case 15:
 				charset = 0;
-				translate = G0_charset;
+				translate = set_translate(G0_charset);
 				disp_ctrl = 0;
 				continue;
 			case 24: case 26:
@@ -1567,7 +1501,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 					tab_stop[x >> 5] |= (1 << (x & 31));
 					continue;
 				  case 'Z':
-					respond_ID(currcons,tty);
+					respond_ID(tty);
 					continue;
 				  case '7':
 					save_cur(currcons);
@@ -1628,7 +1562,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 					case 'n':
 						if (!ques)
 							if (par[0] == 5)
-								status_report(currcons,tty);
+								status_report(tty);
 							else if (par[0] == 6)
 								cursor_report(currcons,tty);
 						continue;
@@ -1692,7 +1626,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 						continue;
 					case 'c':
 						if (!par[0])
-							respond_ID(currcons,tty);
+							respond_ID(tty);
 						continue;
 					case 'g':
 						if (!par[0])
@@ -1775,28 +1709,28 @@ static int con_write(struct tty_struct * tty, int from_user,
 				continue;
 			case ESsetG0:
 				if (c == '0')
-					G0_charset = GRAF_TRANS;
+					G0_charset = GRAF_MAP;
 				else if (c == 'B')
-					G0_charset = NORM_TRANS;
+					G0_charset = NORM_MAP;
 				else if (c == 'U')
-					G0_charset = NULL_TRANS;
+					G0_charset = NULL_MAP;
 				else if (c == 'K')
-					G0_charset = USER_TRANS;
+					G0_charset = USER_MAP;
 				if (charset == 0)
-					translate = G0_charset;
+					translate = set_translate(G0_charset);
 				vc_state = ESnormal;
 				continue;
 			case ESsetG1:
 				if (c == '0')
-					G1_charset = GRAF_TRANS;
+					G1_charset = GRAF_MAP;
 				else if (c == 'B')
-					G1_charset = NORM_TRANS;
+					G1_charset = NORM_MAP;
 				else if (c == 'U')
-					G1_charset = NULL_TRANS;
+					G1_charset = NULL_MAP;
 				else if (c == 'K')
-					G1_charset = USER_TRANS;
+					G1_charset = USER_MAP;
 				if (charset == 1)
-					translate = G1_charset;
+					translate = set_translate(G1_charset);
 				vc_state = ESnormal;
 				continue;
 			default:
@@ -1859,7 +1793,7 @@ void console_print(const char * b)
 			if (c == 10 || c == 13)
 				continue;
 		}
-		writew((attr << 8) + c, (unsigned short *) pos);
+		scr_writew((attr << 8) + c, (unsigned short *) pos);
 		if (x == video_num_columns - 1) {
 			need_wrap = 1;
 			continue;
@@ -2189,9 +2123,9 @@ void update_screen(int new_console)
 		return;
 	}
 	lock = 1;
-#ifdef CONFIG_SELECTION
+
 	clear_selection();
-#endif /* CONFIG_SELECTION */
+
 	if (!console_blanked)
 		get_scrmem(fg_console);
 	else
@@ -2204,59 +2138,6 @@ void update_screen(int new_console)
 	set_leds();
 	compute_shiftstate();
 	lock = 0;
-}
-
-/*
- * do_screendump is used for three tasks:
- *   if (mode==0) is the old ioctl(TIOCLINUX,0)
- *   if (mode==1) dumps wd,hg, cursor position, and all the char-attr pairs
- *   if (mode==2) restores what mode1 got.
- * the new modes are needed for a fast and complete dump-restore cycle,
- * needed to implement root-window menus in text mode (A Rubini Nov 1994)
- */
-int do_screendump(unsigned long arg, int mode)
-{
-	char *sptr, *buf = (char *)arg;
-	int currcons, l, chcount;
-
-	l = verify_area(VERIFY_READ, buf, 2);
-	if (l)
-		return l;
-	currcons = get_fs_byte(buf+1);
-	currcons = (currcons ? currcons-1 : fg_console);
-	if (!vc_cons_allocated(currcons))
-		return -EIO;
-	
-	/* mode 0 needs 2+wd*ht, modes 1 and 2 need 4+2*wd*ht */
-	chcount=video_num_columns*video_num_lines;
-	l = verify_area(mode==2 ? VERIFY_READ :VERIFY_WRITE,
-		buf, (2+chcount)*(mode ? 2 : 1));
-	if (l)
-		return l;
-	if (mode<2) {
-	put_fs_byte((char)(video_num_lines),buf++);   
-	put_fs_byte((char)(video_num_columns),buf++);
-	    }
-#ifdef CONFIG_SELECTION
-	clear_selection();
-#endif
-	switch(mode) {
-	    case 0:
-			sptr = (char *) origin;
-			for (l=chcount; l>0 ; l--, sptr++)
-				put_fs_byte(*sptr++,buf++);	
-			break;
-	    case 1:
-			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++);
-/*XXX*/			memcpy_tofs(buf,(char *)origin,2*chcount);
-			break;
-	    case 2:
-			gotoxy(currcons, get_fs_byte(buf+2), get_fs_byte(buf+3));
-			buf+=4; /* ioctl#, console#, x,y */
-/*XXX*/			memcpy_fromfs((char *)origin,buf,2*chcount);
-			break;
-	    }
-	return(0);
 }
 
 /*
@@ -2283,289 +2164,6 @@ int con_open(struct tty_struct *tty, struct file * filp)
 	return 0;
 }
 
-#ifdef CONFIG_SELECTION
-/* correction factor for when screen is hardware-scrolled */
-#define	hwscroll_offset (currcons == fg_console ? ((__real_origin - __origin) << 1) : 0)
-
-/* set reverse video on characters s-e of console with selection. */
-static void highlight(const int currcons, const int s, const int e)
-{
-	unsigned char *p, *p1, *p2;
-
-	p1 = (unsigned char *)origin - hwscroll_offset + s + 1;
-	p2 = (unsigned char *)origin - hwscroll_offset + e + 1;
-
-	for (p = p1; p <= p2; p += 2)
-		*p = (*p & 0x88) | ((*p << 4) & 0x70) | ((*p >> 4) & 0x07);
-}
-
-/* use complementary color to show the pointer */
-static void highlight_pointer(const int currcons, const int where)
-{
-	unsigned char *p;
-	static unsigned char *prev=NULL;
-
-	if (where==-1) /* remove the pointer */
-	{
-		if (prev)
-		{
-			*prev ^= 0x77;
-			prev=NULL;
-		}
-	}
-	else
-	{
-		p = (unsigned char *)origin - hwscroll_offset + where + 1;
-		*p ^= 0x77;
-		if (prev) *prev ^= 0x77; /* remove the previous one */
-		prev=p;
-	}
-}
-
-
-/*
- * This function uses a 128-bit look up table
- * WARNING: This depends on both endianness and the ascii code
- */
-static unsigned long inwordLut[4]={
-  0x00000000, /* control chars     */
-  0x03FF0000, /* digits            */
-  0x87FFFFFE, /* uppercase and '_' */
-  0x07FFFFFE  /* lowercase         */
-};
-static inline int inword(const char c) {
-   return ( inwordLut[(c>>5)&3] >> (c&0x1F) ) & 1;
-}
-
-/* set inwordLut contents. Invoked by ioctl(). */
-int sel_loadlut(const int arg)
-{
-    memcpy_fromfs(inwordLut,(unsigned long *)(arg+4),16);
-    return 0;
-}
-
-/* does screen address p correspond to character at LH/RH edge of screen? */
-static inline int atedge(const int p)
-{
-	return (!(p % video_size_row) || !((p + 2) % video_size_row));
-}
-
-/* constrain v such that v <= u */
-static inline unsigned short limit(const unsigned short v, const unsigned short u)
-{
-/* gcc miscompiles the ?: operator, so don't use it.. */
-	if (v > u)
-		return u;
-	return v;
-}
-
-/* invoked via ioctl(TIOCLINUX) */
-int mouse_reporting(void)
-{
-	int currcons = fg_console;
-
-	return report_mouse;
-}
-
-/* set the current selection. Invoked by ioctl(). */
-int set_selection(const int arg, struct tty_struct *tty)
-{
-	unsigned short *args, xs, ys, xe, ye;
-	int currcons = fg_console;
-	int sel_mode, new_sel_start, new_sel_end, spc;
-	char *bp, *obp, *spos;
-	int i, ps, pe;
-	char *off = (char *)origin - hwscroll_offset;
-
-	unblank_screen();
-	args = (unsigned short *)(arg + 1);
-	xs = get_fs_word(args++) - 1;
-	ys = get_fs_word(args++) - 1;
-	xe = get_fs_word(args++) - 1;
-	ye = get_fs_word(args++) - 1;
-	sel_mode = get_fs_word(args);
-
-	xs = limit(xs, video_num_columns - 1);
-	ys = limit(ys, video_num_lines - 1);
-	xe = limit(xe, video_num_columns - 1);
-	ye = limit(ye, video_num_lines - 1);
-	ps = ys * video_size_row + (xs << 1);
-	pe = ye * video_size_row + (xe << 1);
-
-	if (report_mouse && (sel_mode & 16)) {
-		mouse_report(currcons, tty, sel_mode & 15, xs, ys);
-		return 0;
-	}
-
-	if (ps > pe)	/* make sel_start <= sel_end */
-	{
-		int tmp = ps;
-		ps = pe;
-		pe = tmp;
-	}
-
-	switch (sel_mode)
-	{
-		case 0:	/* character-by-character selection */
-			new_sel_start = ps;
-			new_sel_end = pe;
-			break;
-		case 1:	/* word-by-word selection */
-			spc = isspace(*(off + ps));
-			for (new_sel_start = ps; ; ps -= 2)
-			{
-				if ((spc && !isspace(*(off + ps))) ||
-				    (!spc && !inword(*(off + ps))))
-					break;
-				new_sel_start = ps;
-				if (!(ps % video_size_row))
-					break;
-			}
-			spc = isspace(*(off + pe));
-			for (new_sel_end = pe; ; pe += 2)
-			{
-				if ((spc && !isspace(*(off + pe))) ||
-				    (!spc && !inword(*(off + pe))))
-					break;
-				new_sel_end = pe;
-				if (!((pe + 2) % video_size_row))
-					break;
-			}
-			break;
-		case 2:	/* line-by-line selection */
-			new_sel_start = ps - ps % video_size_row;
-			new_sel_end = pe + video_size_row
-				    - pe % video_size_row - 2;
-			break;
-		case 3: /* pointer highlight */
-			if (sel_cons != currcons)
-			{
-				clear_selection();
-				sel_cons = currcons;
-			}
-			highlight_pointer(sel_cons,pe);
-			return 0; /* nothing more */
-		default:
-			return -EINVAL;
-	}
-	/* remove the pointer */
-	highlight_pointer(sel_cons,-1);
-	/* select to end of line if on trailing space */
-	if (new_sel_end > new_sel_start &&
-		!atedge(new_sel_end) && isspace(*(off + new_sel_end)))
-	{
-		for (pe = new_sel_end + 2; ; pe += 2)
-		{
-			if (!isspace(*(off + pe)) || atedge(pe))
-				break;
-		}
-		if (isspace(*(off + pe)))
-			new_sel_end = pe;
-	}
-	if (sel_cons != currcons)
-	{
-		clear_selection();
-		sel_cons = currcons;
-	}
-	if (sel_start == -1)	/* no current selection */
-		highlight(sel_cons, new_sel_start, new_sel_end);
-	else if (new_sel_start == sel_start)
-	{
-		if (new_sel_end == sel_end)	/* no action required */
-			return 0;
-		else if (new_sel_end > sel_end)	/* extend to right */
-			highlight(sel_cons, sel_end + 2, new_sel_end);
-		else				/* contract from right */
-			highlight(sel_cons, new_sel_end + 2, sel_end);
-	}
-	else if (new_sel_end == sel_end)
-	{
-		if (new_sel_start < sel_start)	/* extend to left */
-			highlight(sel_cons, new_sel_start, sel_start - 2);
-		else				/* contract from left */
-			highlight(sel_cons, sel_start, new_sel_start - 2);
-	}
-	else	/* some other case; start selection from scratch */
-	{
-		clear_selection();
-		highlight(sel_cons, new_sel_start, new_sel_end);
-	}
-	sel_start = new_sel_start;
-	sel_end = new_sel_end;
-
-	/* realloc the buffer (it seems to be efficient, anyway) */
-	if (sel_buffer) kfree(sel_buffer);
-	sel_buffer = kmalloc((sel_end-sel_start)/2+2, GFP_KERNEL);
-	if (!sel_buffer)
-	{
-		printk("selection: kmalloc() failed\n");
-		clear_selection();
-		return (0); /* is it right? */
-	}
-	obp = bp = sel_buffer;
-	for (i = sel_start; i <= sel_end; i += 2)
-	{
-		spos = (char *)off + i;
-		*bp++ = *spos;
-		if (!isspace(*spos))
-			obp = bp;
-		if (! ((i + 2) % video_size_row))
-		{
-			/* strip trailing blanks from line and add newline,
-			   unless non-space at end of line. */
-			if (obp != bp)
-			{
-				bp = obp;
-				*bp++ = '\r';
-			}
-			obp = bp;
-		}
-	}
-	*bp = '\0';
-	return 0;
-}
-
-/* insert the contents of the selection buffer into the queue of the
-   tty associated with the current console. Invoked by ioctl(). */
-int paste_selection(struct tty_struct *tty)
-{
-	struct wait_queue wait = { current, NULL };
-	char	*bp = sel_buffer;
-	int	c, l;
-	struct vt_struct *vt = (struct vt_struct *) tty->driver_data;
-	
-	if (!bp || !bp[0])
-		return 0;
-	unblank_screen();
-	c = strlen(sel_buffer);
-	current->state = TASK_INTERRUPTIBLE;
-	add_wait_queue(&vt->paste_wait, &wait);
-	while (c) {
-		if (test_bit(TTY_THROTTLED, &tty->flags)) {
-			schedule();
-			continue;
-		}
-		l = MIN(c, tty->ldisc.receive_room(tty));
-		tty->ldisc.receive_buf(tty, bp, 0, l);
-		c -= l;
-		bp += l;
-	}
-	current->state = TASK_RUNNING;
-	return 0;
-}
-
-/* remove the current selection highlight, if any, from the console holding
-   the selection. */
-static void clear_selection()
-{
-	highlight_pointer(sel_cons, -1); /* hide the pointer */
-	if (sel_start != -1)
-	{
-		highlight(sel_cons, sel_start, sel_end);
-		sel_start = -1;
-	}
-}
-#endif /* CONFIG_SELECTION */
 
 /*
  * PIO_FONT support.
@@ -2668,43 +2266,11 @@ static int set_get_font(char * arg, int set)
 
 int con_set_font (char *arg)
 {
+	hashtable_contents_valid = 0;
 	return set_get_font (arg,1);
 }
 
 int con_get_font (char *arg)
 {
 	return set_get_font (arg,0);
-}
-
-/*
- * Load customizable translation table (USER_TRANS[]). All checks are here,
- * so we need only include 'return con_set_trans(arg)' in the ioctl handler
- * arg points to a 256 byte translation table.
- */
-int con_set_trans(char * arg)
-{
-	int i;
-
-	i = verify_area(VERIFY_READ, (void *)arg, E_TABSZ);
-	if (i)
-		return i;
-
-	for (i=0; i<E_TABSZ ; i++) USER_TRANS[i] = get_fs_byte(arg+i);
-	USER_TRANS[012]=0;
-	USER_TRANS[014]=0;
-	USER_TRANS[015]=0;
-	USER_TRANS[033]=0;
-	return 0;
-}
-
-int con_get_trans(char * arg)
-{
-	int i;
-
-	i = verify_area(VERIFY_WRITE, (void *)arg, E_TABSZ);
-	if (i)
-		return i;
-
-	for (i=0; i<E_TABSZ ; i++) put_fs_byte(USER_TRANS[i],arg+i);
-	return 0;
 }

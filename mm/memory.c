@@ -222,7 +222,7 @@ int clone_page_tables(struct task_struct * tsk)
 	pgd_t * pg_dir;
 
 	pg_dir = pgd_offset(current, 0);
-	mem_map[MAP_NR(pg_dir)]++;
+	pgd_reuse(pg_dir);
 	SET_PAGE_DIR(tsk, pg_dir);
 	return 0;
 }
@@ -265,6 +265,7 @@ static inline int copy_one_pmd(pmd_t * old_pmd, pmd_t * new_pmd)
 	}
 	old_pte = pte_offset(old_pmd, 0);
 	if (pte_inuse(old_pte)) {
+		pte_reuse(old_pte);
 		*new_pmd = *old_pmd;
 		return 0;
 	}
@@ -293,6 +294,7 @@ static inline int copy_one_pgd(pgd_t * old_pgd, pgd_t * new_pgd)
 	}
 	old_pmd = pmd_offset(old_pgd, 0);
 	if (pmd_inuse(old_pmd)) {
+		pmd_reuse(old_pmd);
 		*new_pgd = *old_pgd;
 		return 0;
 	}

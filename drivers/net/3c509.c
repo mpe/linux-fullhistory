@@ -228,7 +228,7 @@ int el3_probe(struct device *dev)
 
 	{
 		char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
-		printk("%s: 3c509 at %#3.3x tag %d, %s port, address ",
+		printk("%s: 3c509 at %#3.3lx tag %d, %s port, address ",
 			   dev->name, dev->base_addr, current_tag, if_names[dev->if_port]);
 	}
 

@@ -370,16 +370,6 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		prev_scancode = 0;
 		goto end_kbd_intr;
 	}
-	if (scancode == 0xff) {
-		/* the calculator keys on a FOCUS 9000 generate 0xff */
-#ifndef KBD_IS_FOCUS_9000
-#ifdef KBD_REPORT_ERR
-		printk("keyboard error\n");
-#endif
-#endif
-		prev_scancode = 0;
-		goto end_kbd_intr;
-	}
 
 	tty = ttytab[fg_console];
  	kbd = kbd_table + fg_console;
@@ -389,6 +379,20 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		   the key_down array, so that we have the correct
 		   values when finishing RAW mode or when changing VT's */
  	}
+
+	if (scancode == 0xff) {
+	        /* in scancode mode 1, my ESC key generates 0xff */
+		/* the calculator keys on a FOCUS 9000 generate 0xff */
+#ifndef KBD_IS_FOCUS_9000
+#ifdef KBD_REPORT_ERR
+		if (!raw_mode)
+		  printk("keyboard error\n");
+#endif
+#endif
+		prev_scancode = 0;
+		goto end_kbd_intr;
+	}
+
 	if (scancode == 0xe0 || scancode == 0xe1) {
 		prev_scancode = scancode;
 		goto end_kbd_intr;
@@ -414,7 +418,8 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		  prev_scancode = 0;
 	      } else {
 #ifdef KBD_REPORT_UNKN
-		  printk("keyboard: unknown e1 escape sequence\n");
+		  if (!raw_mode)
+		    printk("keyboard: unknown e1 escape sequence\n");
 #endif
 		  prev_scancode = 0;
 		  goto end_kbd_intr;
@@ -729,7 +734,7 @@ static void SAK(void)
 	 * work.
 	 */
 	reset_vc(fg_console);
-	unblank_screen();	/* not in interrupt routine? */
+	do_unblank_screen();	/* not in interrupt routine? */
 #endif
 }
 

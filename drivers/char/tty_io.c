@@ -60,6 +60,7 @@
 
 #include "kbd_kern.h"
 #include "vt_kern.h"
+#include "selection.h"
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define TTY_DEV MKDEV(TTYAUX_MAJOR,0)
@@ -69,14 +70,6 @@
 #define TTY_PARANOIA_CHECK
 #define CHECK_TTY_COUNT
 
-#ifdef CONFIG_SELECTION
-extern int set_selection(const int arg, struct tty_struct *tty);
-extern int paste_selection(struct tty_struct *tty);
-extern int sel_loadlut(const int arg);
-extern int mouse_reporting(void);
-extern int shift_state;
-#endif /* CONFIG_SELECTION */
-extern int do_screendump(unsigned long arg, int mode);
 extern void do_blank_screen(int nopowersave);
 extern void do_unblank_screen(void);
 extern void set_vesa_blanking(const unsigned long arg);
@@ -1247,6 +1240,7 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 	return 0;	
 }
 
+#if 0
 /*
  * XXX does anyone use this anymore?!?
  */
@@ -1278,6 +1272,7 @@ static int do_get_ps_info(unsigned long arg)
 			put_fs_long(0, (unsigned long *)(ts->present+n));
 	return(0);			
 }
+#endif
 
 static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg)
@@ -1452,21 +1447,23 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				return retval;
 			switch (retval = get_fs_byte((char *)arg))
 			{
-				case 0: 
-					return do_screendump(arg,0);
+				case 0:
+				case 8:
+				case 9:
+					printk("TIOCLINUX (0/8/9) ioctl is gone - use /dev/vcs\n");
+					return -EINVAL;
+#if 0
 				case 1:
 					printk("Deprecated TIOCLINUX (1) ioctl\n");
 					return do_get_ps_info(arg);
-#ifdef CONFIG_SELECTION
+#endif
 				case 2:
 					return set_selection(arg, tty);
 				case 3:
 					return paste_selection(tty);
-#endif /* CONFIG_SELECTION */
 				case 4:
 					do_unblank_screen();
 					return 0;
-#ifdef CONFIG_SELECTION
 				case 5:
 					return sel_loadlut(arg);
 				case 6:
@@ -1481,16 +1478,13 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				case 7:
 					put_fs_byte(mouse_reporting(),arg);
 					return 0;
-#endif /* CONFIG_SELECTION */
-				case 8: /* second arg is 1 or 2 */
-				case 9: /* both are explained in console.c */
-					return do_screendump(arg,retval-7);
 				case 10:
 					set_vesa_blanking(arg);
 					return 0;
 				default: 
 					return -EINVAL;
 			}
+
 		case TIOCTTYGSTRUCT:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
 						sizeof(struct tty_struct));
@@ -1742,5 +1736,6 @@ long tty_init(long kmem_start)
 	kmem_start = cy_init(kmem_start);
 #endif
 	kmem_start = pty_init(kmem_start);
+	kmem_start = vcs_init(kmem_start);
 	return kmem_start;
 }

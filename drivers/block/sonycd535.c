@@ -44,7 +44,7 @@
  * include/linux/cdrom.h).  With this interface, CDROMs can be
  * accessed and standard audio CDs can be played back normally.
  *
- * This interface is (unfortunatly) a polled interface.  This is
+ * This interface is (unfortunately) a polled interface.  This is
  * because most Sony interfaces are set up with DMA and interrupts
  * disables.  Some (like mine) do not even have the capability to
  * handle interrupts or DMA.  For this reason you will see a lot of
@@ -65,7 +65,7 @@
  *
  * This ugly hack waits for something to happen, sleeping a little
  * between every try.  it also handles attentions, which are
- * asyncronous events from the drive informing the driver that a disk
+ * asynchronous events from the drive informing the driver that a disk
  * has been inserted, removed, etc.
  *
  * One thing about these drives: They talk in MSF (Minute Second Frame) format.
@@ -93,10 +93,11 @@
 
 
 #include <linux/config.h>
-#ifdef CONFIG_CDU535
+#if defined(CONFIG_CDU535) || defined(MODULE)
 
 #ifdef MODULE
 # include <linux/module.h>
+# include <linux/malloc.h>
 # include <linux/version.h>
 #endif
 
@@ -130,16 +131,25 @@
 #endif
 
 /*
- * this is the base address of the interface card for the Sony CDU535
+ * this is the base address of the interface card for the Sony CDU-535
  * CDROM drive.  If your jumpers are set for an address other than
  * this one (the default), change the following line to the
  * proper address.
  */
 #ifndef CDU535_ADDRESS
-#define CDU535_ADDRESS	(0x340)
+# define CDU535_ADDRESS	(0x340)
 #endif
 
-#define DEBUG	1
+#ifndef CDU535_HANDLE
+# define CDU535_HANDLE			"cdu535"
+#endif
+#ifndef CDU535_MESSAGE_NAME
+# define CDU535_MESSAGE_NAME	"Sony CDU-535"
+#endif
+
+#ifndef DEBUG
+# define DEBUG	1
+#endif
 
 /*
  *  SONY535_BUFFER_SIZE determines the size of internal buffer used
@@ -440,10 +450,10 @@ check_drive_status(void)
  *  should be placed in the cmd[] array, number of bytes in the command is
  *  stored in nCmd.  The response from the command will be stored in the
  *  response array.  The number of bytes you expect back (excluding status)
- *  should be passed in nReponse.  Finally, some
+ *  should be passed in nResponse.  Finally, some
  *  commands set bit 7 of the return status even when there is no second
  *  status byte, on these commands set ignoreStatusBit7 TRUE.
- *    If the command was sent and data recieved back, then we return 0,
+ *    If the command was sent and data received back, then we return 0,
  *  else we return TIME_OUT.  You still have to check the status yourself.
  *    You should call check_drive_status() before calling this routine
  *  so that you do not lose notifications of disk changes, etc.
@@ -843,7 +853,7 @@ do_cdu535_request(void)
 			break;
 
 		default:
-			panic("Unkown SONY CD cmd");
+			panic("Unknown SONY CD cmd");
 		}
 	}
 }
@@ -1432,7 +1442,8 @@ init_module(void)
 		if (do_sony_cmd(cmd_buff, 1, status, (Byte *) & drive_config, 28, 1) == 0) {
 			/* was able to get the configuration, set drive mode as rest of init */
 #if DEBUG > 0
-			if ( (status[0] & 0x7f) != 0 )
+			/* 0x50 == CADDY_NOT_INSERTED | NOT_SPINNING */
+			if ( (status[0] & 0x7f) != 0 && (status[0] & 0x7f) != 0x50 )
 				printk("Inquiry command returned status = 0x%x\n", status[0]);
 #endif
 			cmd_buff[0] = SONY535_SET_DRIVE_MODE;
@@ -1448,8 +1459,9 @@ init_module(void)
 					   drive_config.product_rev_level);
 				printk("  using %d byte buffer\n", sony_buffer_size);
 
-				if (register_blkdev(MAJOR_NR, "cdu-535", &cdu_fops)) {
-					printk("Unable to get major %d for sony CDU-535 cd\n", MAJOR_NR);
+				if (register_blkdev(MAJOR_NR, CDU535_HANDLE, &cdu_fops)) {
+					printk("Unable to get major %d for %s\n",
+							MAJOR_NR, CDU535_MESSAGE_NAME);
 #ifndef MODULE
 					return mem_start;
 #else
@@ -1482,19 +1494,17 @@ init_module(void)
 		}
 	}
 
+	if (!initialized) {
+		printk("Did not find a " CDU535_MESSAGE_NAME " drive\n");
+#ifdef MODULE
+		return -EIO;
+#endif
+	} else {
+		request_region(sony_cd_base_io, 4, CDU535_HANDLE);
+	}
 #ifndef MODULE
-	if (!initialized)
-		printk("Did not find a Sony CDU-535 drive\n");
-	else
-		snarf_region(sony_cd_base_io, 4);
 	return mem_start;
 #else
-	if (!initialized) {
-		printk("Did not find a Sony CDU-535 drive\n");
-		return -EIO;
-	} else {
-		snarf_region(sony_cd_base_io, 4);
-	}
 	return 0;
 #endif
 }
@@ -1519,7 +1529,8 @@ sonycd535_setup(char *strings, int *ints)
 		irq_used = ints[2];
 #endif
 	if ((strings != NULL) && (*strings != '\0'))
-		printk("Sony CDU-535: Warning: Unknown interface type: %s\n", strings);
+		printk("%s: Warning: Unknown interface type: %s\n",
+				strings, CDU535_MESSAGE_NAME);
 }
 
 #else /* MODULE */
@@ -1527,21 +1538,21 @@ sonycd535_setup(char *strings, int *ints)
 void 
 cleanup_module(void)
 {
-	int     i;
+	int i;
 	if (MOD_IN_USE) {
 		printk("Sony 535 module in use, cannot remove\n");
 		return;
 	}
-	if (unregister_blkdev(MAJOR_NR, "cdu-535") == (-EINVAL)) {
-		printk("Uh oh, couldn't unregister cdu-535\n");
-		return;
-	}
+	release_region(sony_cd_base_io, 4);
 	kfree_s(sony_toc, sizeof (*sony_toc));
 	kfree_s(last_sony_subcode, sizeof (*last_sony_subcode));
 	for (i = 0; i < sony_buffer_sectors; i++)
 		kfree_s(sony_buffer[i], 2048);
 	kfree_s(sony_buffer, 4 * sony_buffer_sectors);
-	printk("cdu-535 module released\n");
+	if (unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)
+		printk("Uh oh, couldn't unregister " CDU535_HANDLE "\n");
+	else
+		printk(CDU535_HANDLE " module released\n");
 }
 #endif	/* MODULE */
 

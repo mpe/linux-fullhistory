@@ -219,7 +219,6 @@ bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE n
 fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
-bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION n
   
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE n
 if [ "$CONFIG_QIC02_TAPE" = "y" ]; then

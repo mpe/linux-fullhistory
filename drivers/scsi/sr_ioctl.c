@@ -15,7 +15,8 @@
 
 #define IOCTL_RETRIES 3
 /* The CDROM is fairly slow, so we need a little extra time */
-#define IOCTL_TIMEOUT 2000
+/* In fact, it is very slow if it has to spin up first */
+#define IOCTL_TIMEOUT 3000
 
 extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 

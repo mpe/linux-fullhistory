@@ -4,6 +4,8 @@
 #include <linux/interrupt.h>
 #include <linux/keyboard.h>
 
+extern int shift_state;
+
 extern char *func_table[MAX_NR_FUNC];
 extern char func_buf[];
 extern char *funcbufptr;

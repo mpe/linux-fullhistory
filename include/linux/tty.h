@@ -278,6 +278,10 @@ extern long lp_init(long);
 extern long con_init(long);
 extern long pty_init(long);
 extern long tty_init(long);
+extern long vcs_init(long);
+#ifdef CONFIG_CYCLADES
+extern long cy_init(long);
+#endif
 
 extern int tty_paranoia_check(struct tty_struct *tty, dev_t device,
 			      const char *routine);

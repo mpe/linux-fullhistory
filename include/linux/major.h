@@ -24,7 +24,7 @@
  *  4 - /dev/tty*
  *  5 - /dev/tty; /dev/cua*
  *  6 - lp
- *  7 -                                               UNUSED
+ *  7 - /dev/vcs*
  *  8 -                        scsi disk
  *  9 - scsi tape
  * 10 - mice
@@ -57,7 +57,7 @@
 #define TTY_MAJOR	4
 #define TTYAUX_MAJOR	5
 #define LP_MAJOR	6
-/* unused: 7 */
+#define VCS_MAJOR	7
 #define SCSI_DISK_MAJOR	8
 #define SCSI_TAPE_MAJOR	9
 #define MOUSE_MAJOR	10

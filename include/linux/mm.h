@@ -185,7 +185,7 @@ extern void do_no_page(struct vm_area_struct * vma, unsigned long address, int w
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
 extern void show_mem(void);
-extern void oom(struct task_struct * task);
+extern void oom(struct task_struct * tsk);
 extern void si_meminfo(struct sysinfo * val);
 
 /* vmalloc.c */

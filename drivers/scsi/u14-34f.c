@@ -1,6 +1,10 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      11 Feb 1995 rev. 1.17 for linux 1.1.91
+ *          U14F qualified to run with 32 sglists.
+ *          Now DEBUG_RESET is disabled by default.
+ *
  *       9 Feb 1995 rev. 1.16 for linux 1.1.90
  *          Use host->wish_block instead of host->block.
  *
@@ -69,8 +73,8 @@
  *
  *  Here a sample configuration using two U14F boards:
  *
- U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 16, Mbox 16, CmdLun 2, C1.
- U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 16, Mbox 16, CmdLun 2, C1.
+ U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 32, Mbox 16, CmdLun 2, C1.
+ U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 32, Mbox 16, CmdLun 2, C1.
  *
  *  The boot controller must have its BIOS enabled, while other boards can
  *  have their BIOS disabled, or enabled to an higher address.
@@ -159,12 +163,14 @@
 #undef  DEBUG_DETECT
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_STATISTICS
+#undef  DEBUG_RESET
 
 #define MAX_TARGET 8
 #define MAX_IRQ 16
 #define MAX_BOARDS 4
 #define MAX_MAILBOXES 16
-#define MAX_SGLIST 16
+#define MAX_SGLIST 32
+#define MAX_SAFE_SGLIST 16
 #define MAX_CMD_PER_LUN 2
 
 #define FALSE 0
@@ -427,7 +433,6 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (HD(j)->subversion == ESA) {
       sh[j]->dma_channel = NO_DMA;
       sh[j]->unchecked_isa_dma = FALSE;
-      sh[j]->hostt->use_clustering = ENABLE_CLUSTERING;
       sprintf(BN(j), "U34F%d", j);
       }
    else {
@@ -435,8 +440,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
 #if defined (HAVE_OLD_U14F_FIRMWARE)
       sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
-#else
-      sh[j]->hostt->use_clustering = ENABLE_CLUSTERING;
+      sh[j]->sg_tablesize = MAX_SAFE_SGLIST;
 #endif
 
       sh[j]->dma_channel = dma_channel;
@@ -456,6 +460,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
          printk("%s: firmware %s is outdated, BIOS rev. should be 2.01.\n", 
                 BN(j), &HD(j)->board_id[32]);
          sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
+         sh[j]->sg_tablesize = MAX_SAFE_SGLIST;
          }
       }
 
@@ -737,7 +742,11 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
 
    outb(CMD_RESET, sh[j]->io_port + REG_LCL_INTR);
    printk("%s: reset, board reset done, enabling interrupts.\n", BN(j));
+
+#if defined (DEBUG_RESET)
    do_trace = TRUE;
+#endif
+
    HD(j)->in_reset = TRUE;
    sti();
    time = jiffies;

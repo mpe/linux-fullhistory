@@ -420,7 +420,6 @@ asmlinkage void start_kernel(void)
 
 	printk(linux_banner);
 
-	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */
 		init();
 /*

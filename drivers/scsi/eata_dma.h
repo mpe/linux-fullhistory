@@ -2,21 +2,16 @@
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
 * (c) 1993,94,95 Michael Neuffer                        *
 *********************************************************
-* last change: 95/01/30                                 *
+* last change: 95/02/13                                 *
 ********************************************************/
 
 
 #ifndef _EATA_DMA_H
 #define _EATA_DMA_H
 
-#include "../block/blk.h"
-#include "scsi.h"
-#include "hosts.h"
-#include <linux/scsicam.h>
-
 #define VER_MAJOR 2
 #define VER_MINOR 3
-#define VER_SUB   "0a"
+#define VER_SUB   "1a"
 
 /************************************************************************
  * Here you can configure your drives that are using a non-standard     *
@@ -44,6 +39,7 @@
  ************************************************************************/
 
 #define CHECKPAL        0        /* EISA pal checking on/off            */
+#define EATA_DMA_PROC   0        /* proc-fs support                     */
 
 /************************************************************************
  * Debug options.                                                       * 
@@ -132,19 +128,22 @@ int eata_release(struct Scsi_Host *);
 #define C_P_L_CURRENT_MAX 10  /* Until this limit in the mm is removed    
 			       * Kernels < 1.1.86 died horrible deaths
 			       * if you used values >2. The memory management
-			       * of pl.86 seems to cope with 10. 
+			       * since pl1.1.86 seems to cope with up to 10
+			       * queued commands per device. 
 			       */
 #define C_P_L_DIV          4  /* 1 <= C_P_L_DIV <= 8            
 			       * You can use this parameter to fine-tune
 			       * the driver. Depending on the number of 
-			       * devices and their ability to queue commands
-			       * you will get the best results with a value
+			       * devices and their speed and ability to queue 
+			       * commands, you will get the best results with a
+			       * value
 			       * ~= numdevices-(devices_unable_to_queue_commands/2)
-			       * The reason for this is that the disk driver tents 
-			       * to flood the queue, so that other drivers have 
-			       * problems to queue commands themselves. This can 
-			       * for example result in the effect that the tape
-			       * stops during disk accesses. 
+			       * The reason for this is that the disk driver 
+			       * tends to flood the queue, so that other 
+			       * drivers have problems to queue commands 
+			       * themselves. This can for example result in 
+			       * the effect that the tape stops during disk 
+			       * accesses. 
 			       */
 
 #define FREE       0

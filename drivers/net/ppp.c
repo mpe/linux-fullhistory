@@ -1485,7 +1485,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
     error = verify_area (VERIFY_WRITE, (void *) l, sizeof (temp_i));
     if (error == 0) {
       put_fs_long (ppp->dev->base_addr, l);
-      PRINTKN (3,(KERN_INFO "ppp_ioctl: get unit: %d", ppp->dev->base_addr));
+      PRINTKN (3,(KERN_INFO "ppp_ioctl: get unit: %ld", ppp->dev->base_addr));
     }
     break;
 

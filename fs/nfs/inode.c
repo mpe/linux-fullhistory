@@ -29,7 +29,7 @@
 #include <linux/errno.h>
 #include <linux/locks.h>
 
-extern int close_fp(struct file *filp, unsigned int fd);
+extern int close_fp(struct file *filp);
 
 static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
@@ -54,8 +54,7 @@ static void nfs_put_inode(struct inode * inode)
 
 void nfs_put_super(struct super_block *sb)
 {
-        /* No locks should be open on this, so 0 should be safe as a fd. */
-	close_fp(sb->u.nfs_sb.s_server.file, 0);
+	close_fp(sb->u.nfs_sb.s_server.file);
 	lock_super(sb);
 	sb->s_dev = 0;
 	unlock_super(sb);

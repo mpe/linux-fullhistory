@@ -307,12 +307,15 @@ void scan_scsis (struct Scsi_Host * shpnt)
   struct Scsi_Device_Template * sdtpnt;
   Scsi_Cmnd  SCmd;
 
+  memset(&SCmd, 0,  sizeof(SCmd));
   ++in_scan_scsis;
   lun = 0;
   type = -1;
   SCmd.next = NULL;
   SCmd.prev = NULL;
   SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device), GFP_ATOMIC);
+  SCmd.device = SDpnt;  /* This was really needed! (DB) */
+  memset(SDpnt, 0, sizeof(Scsi_Device));
   SDtail = scsi_devices;
   if(scsi_devices) {
     while(SDtail->next) SDtail = SDtail->next;
@@ -1913,36 +1916,51 @@ int scsi_free(void *obj, unsigned int len)
    pool */
 
 static unsigned long scsi_init_memory_start = 0;
+static unsigned long scsi_memory_lower_value = 0;
+static unsigned long scsi_memory_upper_value = 0;
 int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
 
 void * scsi_init_malloc(unsigned int size, int priority)
 {
   unsigned long retval;
-  if(scsi_loadable_module_flag) {
+#if 0 /* Use the statically allocated memory instead of kmalloc  (DB) */
+  if(scsi_loadable_module_flag && !(priority & GFP_DMA))
+#else
+  if(scsi_loadable_module_flag)
+#endif
     retval = (unsigned long) kmalloc(size, priority);
-  } else {
+  else {
     /*
      * Keep all memory aligned on 16-byte boundaries. Some host adaptors
      * (e.g. BusLogic BT-445S) require DMA buffers to be aligned that way.
      */
     size = (size + 15) & ~15;
-    retval = scsi_init_memory_start;
-    scsi_init_memory_start += size;
-  }
+
+    if(scsi_loadable_module_flag &&
+       (scsi_init_memory_start + size) > scsi_memory_upper_value) {
+       retval = 0;
+       printk("scsi_init_malloc: no more statically allocated memory.\n");
+       }
+    else {
+       retval = scsi_init_memory_start;
+       scsi_init_memory_start += size;
+       }
+    }
   return (void *) retval;
 }
 
 
 void scsi_init_free(char * ptr, unsigned int size)
-{ /* FIXME - not right.  We need to compare addresses to see whether this was
-     kmalloc'd or not */
-  if((unsigned long) ptr > scsi_init_memory_start) {
-    kfree(ptr);
-  } else {
-    size = (size + 15) & ~15; /* Use the same alignment as scsi_init_malloc(). */
+{ /* We need to compare addresses to see whether this was kmalloc'd or not */
+
+  if((unsigned long) ptr >= scsi_init_memory_start ||
+     (unsigned long) ptr <  scsi_memory_lower_value) kfree(ptr);
+  else {
+    size = (size + 15) & ~15; /* Use the same alignment as scsi_init_malloc() */
+
     if(((unsigned long) ptr) + size == scsi_init_memory_start)
       scsi_init_memory_start = (unsigned long) ptr;
-  }
+    }
 }
 
 /*
@@ -1967,6 +1985,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	scsi_loadable_module_flag = 0;
 	/* Align everything on 16-byte boundaries. */
 	scsi_init_memory_start = (memory_start + 15) & ~ 15;
+	scsi_memory_lower_value = scsi_init_memory_start;
 
 	timer_table[SCSI_TIMER].fn = scsi_main_timeout;
 	timer_table[SCSI_TIMER].expires = 0;
@@ -2068,7 +2087,20 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	    (*sdtpnt->finish)();
 
 	scsi_loadable_module_flag = 1;
+
+#if 0   /* This allocates statically some extra memory to be used for modules,
+           until the kmalloc problem is fixed (DB) */
+
+        scsi_memory_upper_value = scsi_init_memory_start + 
+                     2 * (scsi_init_memory_start - scsi_memory_lower_value);
+
+        printk ("scsi memory: lower %p, upper %p.\n", 
+             (void *)scsi_memory_lower_value, (void *)scsi_memory_upper_value);
+
+	return scsi_memory_upper_value;
+#else
 	return scsi_init_memory_start;
+#endif
 	}
 
 static void print_inquiry(unsigned char *data)
@@ -2292,7 +2324,8 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
      commands */
 
   for(sdpnt = scsi_devices; sdpnt; sdpnt = sdpnt->next)
-    if(sdpnt->host->hostt == tpnt && *sdpnt->host->hostt->usage_count) return;
+    if(sdpnt->host->hostt == tpnt && sdpnt->host->hostt->usage_count
+                                 && *sdpnt->host->hostt->usage_count) return;
 
   for(shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next)
     {

@@ -1,3 +1,4 @@
+#define THREE_LEVEL
 /*
  *  linux/mm/swap.c
  *
@@ -387,11 +388,89 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, p
  */
 #define SWAP_RATIO	128
 
+static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
+	unsigned long address, unsigned long size, unsigned long offset)
+{
+	pte_t * pte;
+	unsigned long end;
+
+	if (pmd_none(*dir))
+		return 0;
+	if (pmd_bad(*dir)) {
+		printk("swap_out_pmd: bad pmd (%08lx)\n", pmd_val(*dir));
+		pmd_clear(dir);
+		return 0;
+	}
+	pte = pte_offset(dir, address);
+	offset += address & PMD_MASK;
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	do {
+		switch (try_to_swap_out(vma, offset+address-vma->vm_start, pte)) {
+			case 0:
+				break;
+
+			case 1:
+				vma->vm_task->mm->rss--;
+				/* continue with the following page the next time */
+				vma->vm_task->mm->swap_address = address + offset + PAGE_SIZE;
+				return 1;
+
+			default:
+				vma->vm_task->mm->rss--;
+				break;
+		}
+		address += PAGE_SIZE;
+		pte++;
+	} while (address < end);
+	return 0;
+}
+
+static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
+	unsigned long address, unsigned long size)
+{
+	pmd_t * pmd;
+	unsigned long offset, end;
+
+	if (pgd_none(*dir))
+		return 0;
+	if (pgd_bad(*dir)) {
+		printk("swap_out_pgd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_clear(dir);
+		return 0;
+	}
+	pmd = pmd_offset(dir, address);
+	offset = address & PGDIR_MASK;
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	do {
+		if (swap_out_pmd(vma, pmd, address, end - address, offset))
+			return 1;
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
+	} while (address < end);
+	return 0;
+}
+
+static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
+	unsigned long start, unsigned long end)
+{
+	while (start < end) {
+		if (swap_out_pgd(vma, pgdir, start, end - start))
+			return 1;
+		start = (start + PGDIR_SIZE) & PGDIR_MASK;
+		pgdir++;
+	}
+	return 0;
+}
+
 static int swap_out_process(struct task_struct * p)
 {
-	pgd_t *pgdir;
 	unsigned long address;
-	unsigned long offset;
 	struct vm_area_struct* vma;
 
 	/*
@@ -409,60 +488,14 @@ static int swap_out_process(struct task_struct * p)
 	if (address < vma->vm_start)
 		address = vma->vm_start;
 
-	pgdir = PAGE_DIR_OFFSET(p, address);
-	offset = address & ~PGDIR_MASK;
-	address &= PGDIR_MASK;
-	for ( ; address < TASK_SIZE ; pgdir++, address = address + PGDIR_SIZE, offset = 0) {
-		pte_t *pg_table;
-
-		if (pgd_none(*pgdir))
-			continue;
-		if (pgd_bad(*pgdir)) {
-			printk("Bad page directory at address %08lx: %08lx\n", address, pgd_val(*pgdir));
-			pgd_clear(pgdir);
-			continue;
-		}
-		pg_table = (pte_t *) pgd_page(*pgdir);
-		if (mem_map[MAP_NR((unsigned long) pg_table)] & MAP_PAGE_RESERVED)
-			continue;
-		pg_table += offset >> PAGE_SHIFT;
-
-		/*
-		 * Go through this page table.
-		 */
-		for( ; offset < ~PGDIR_MASK ; pg_table++, offset += PAGE_SIZE) {
-			/*
-			 * Update vma again..
-			 */
-			for (;;) {
-				if (address+offset < vma->vm_end)
-					break;
-				vma = vma->vm_next;
-				if (!vma)
-					return 0;
-			}
-
-			switch(try_to_swap_out(vma, offset+address-vma->vm_start, pg_table)) {
-				case 0:
-					break;
-
-				case 1:
-					p->mm->rss--;
-					/* continue with the following page the next time */
-					p->mm->swap_address = address + offset + PAGE_SIZE;
-					return 1;
-
-				default:
-					p->mm->rss--;
-					break;
-			}
-		}
+	for (;;) {
+		if (swap_out_vma(vma, pgd_offset(p, address), address, vma->vm_end))
+			return 1;
+		vma = vma->vm_next;
+		if (!vma)
+			return 0;
+		address = vma->vm_start;
 	}
-	/*
-	 * Finish work with this process, if we reached the end of the page
-	 * directory.
-	 */
-	return 0;
 }
 
 static int swap_out(unsigned int priority)
@@ -748,77 +781,157 @@ void show_free_areas(void)
 /*
  * Trying to stop swapping from a file is fraught with races, so
  * we repeat quite a bit here when we have to pause. swapoff()
- * isn't exactly timing-critical, so who cares?
+ * isn't exactly timing-critical, so who cares (but this is /really/
+ * inefficient, ugh).
+ *
+ * We return 1 after having slept, which makes the process start over
+ * from the beginning for this process..
+ */
+static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
+	pte_t *dir, unsigned int type, unsigned long page)
+{
+	pte_t pte = *dir;
+
+	if (pte_none(pte))
+		return 0;
+	if (pte_present(pte)) {
+		unsigned long page = pte_page(pte);
+		if (page >= high_memory)
+			return 0;
+		if (!in_swap_cache(page))
+			return 0;
+		if (SWP_TYPE(in_swap_cache(page)) != type)
+			return 0;
+		delete_from_swap_cache(page);
+		*dir = pte_mkdirty(pte);
+		return 0;
+	}
+	if (SWP_TYPE(pte_val(pte)) != type)
+		return 0;
+	read_swap_page(pte_val(pte), (char *) page);
+	if (pte_val(*dir) != pte_val(pte)) {
+		free_page(page);
+		return 1;
+	}
+	*dir = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
+	++vma->vm_task->mm->rss;
+	swap_free(pte_val(pte));
+	return 1;
+}
+
+static inline int unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
+	unsigned long address, unsigned long size, unsigned long offset,
+	unsigned int type, unsigned long page)
+{
+	pte_t * pte;
+	unsigned long end;
+
+	if (pmd_none(*dir))
+		return 0;
+	if (pmd_bad(*dir)) {
+		printk("unuse_pmd: bad pmd (%08lx)\n", pmd_val(*dir));
+		pmd_clear(dir);
+		return 0;
+	}
+	pte = pte_offset(dir, address);
+	offset += address & PMD_MASK;
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	do {
+		if (unuse_pte(vma, offset+address-vma->vm_start, pte, type, page))
+			return 1;
+		address += PAGE_SIZE;
+		pte++;
+	} while (address < end);
+	return 0;
+}
+
+static inline int unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
+	unsigned long address, unsigned long size,
+	unsigned int type, unsigned long page)
+{
+	pmd_t * pmd;
+	unsigned long offset, end;
+
+	if (pgd_none(*dir))
+		return 0;
+	if (pgd_bad(*dir)) {
+		printk("unuse_pgd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_clear(dir);
+		return 0;
+	}
+	pmd = pmd_offset(dir, address);
+	offset = address & PGDIR_MASK;
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	do {
+		if (unuse_pmd(vma, pmd, address, end - address, offset, type, page))
+			return 1;
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
+	} while (address < end);
+	return 0;
+}
+
+static int unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
+	unsigned long start, unsigned long end,
+	unsigned int type, unsigned long page)
+{
+	while (start < end) {
+		if (unuse_pgd(vma, pgdir, start, end - start, type, page))
+			return 1;
+		start = (start + PGDIR_SIZE) & PGDIR_MASK;
+		pgdir++;
+	}
+	return 0;
+}
+
+static int unuse_process(struct task_struct * p, unsigned int type, unsigned long page)
+{
+	struct vm_area_struct* vma;
+
+	/*
+	 * Go through process' page directory.
+	 */
+	vma = p->mm->mmap;
+	while (vma) {
+		pgd_t * pgd = pgd_offset(p, vma->vm_start);
+		if (unuse_vma(vma, pgd, vma->vm_start, vma->vm_end, type, page))
+			return 1;
+		vma = vma->vm_next;
+	}
+	return 0;
+}
+
+/*
+ * To avoid races, we repeat for each process after having
+ * swapped something in. That gets rid of a few pesky races,
+ * and "swapoff" isn't exactly timing critical.
  */
 static int try_to_unuse(unsigned int type)
 {
 	int nr;
-	unsigned long tmp = 0;
-	struct task_struct *p;
+	unsigned long page = get_free_page(GFP_KERNEL);
 
-	nr = 0;	
-/*
- * When we have to sleep, we restart the whole algorithm from the same
- * task we stopped in. That at least rids us of all races.
- */
-repeat:
-	for (; nr < NR_TASKS ; nr++) {
-		pgd_t * page_dir;
-		int i;
-
-		p = task[nr];
-		if (!p)
-			continue;
-		page_dir = PAGE_DIR_OFFSET(p, 0);
-		for (i = 0 ; i < PTRS_PER_PAGE ; page_dir++, i++) {
-			int j;
-			pte_t *page_table;
-
-			if (pgd_none(*page_dir))
+	if (!page)
+		return -ENOMEM;
+	nr = 0;
+	while (nr < NR_TASKS) {
+		if (task[nr]) {
+			if (unuse_process(task[nr], type, page)) {
+				page = get_free_page(GFP_KERNEL);
+				if (!page)
+					return -ENOMEM;
 				continue;
-			if (pgd_bad(*page_dir)) {
-				printk("bad page directory entry [%d] %08lx\n", i, pgd_val(*page_dir));
-				pgd_clear(page_dir);
-				continue;
-			}
-			page_table = (pte_t *) pgd_page(*page_dir);
-			if (mem_map[MAP_NR((unsigned long) page_table)] & MAP_PAGE_RESERVED)
-				continue;
-			for (j = 0 ; j < PTRS_PER_PAGE ; page_table++, j++) {
-				pte_t pte;
-				pte = *page_table;
-				if (pte_none(pte))
-					continue;
-				if (pte_present(pte)) {
-					unsigned long page = pte_page(pte);
-					if (page >= high_memory)
-						continue;
-					if (!in_swap_cache(page))
-						continue;
-					if (SWP_TYPE(in_swap_cache(page)) != type)
-						continue;
-					delete_from_swap_cache(page);
-					*page_table = pte_mkdirty(pte);
-					continue;
-				}
-				if (SWP_TYPE(pte_val(pte)) != type)
-					continue;
-				if (!tmp) {
-					if (!(tmp = __get_free_page(GFP_KERNEL)))
-						return -ENOMEM;
-					goto repeat;
-				}
-				read_swap_page(pte_val(pte), (char *) tmp);
-				if (pte_val(*page_table) != pte_val(pte))
-					goto repeat;
-				*page_table = pte_mkwrite(pte_mkdirty(mk_pte(tmp, PAGE_COPY)));
-				++p->mm->rss;
-				swap_free(pte_val(pte));
-				tmp = 0;
 			}
 		}
+		nr++;
 	}
-	free_page(tmp);
+	free_page(page);
 	return 0;
 }
 

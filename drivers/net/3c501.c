@@ -270,7 +270,7 @@ el1_probe1(struct device *dev, int ioaddr)
     if (autoirq)
 	dev->irq = autoirq;
 
-    printk("%s: %s EtherLink at %#x, using %sIRQ %d.\n",
+    printk("%s: %s EtherLink at %#lx, using %sIRQ %d.\n",
 	   dev->name, mname, dev->base_addr,
 	   autoirq ? "auto":"assigned ", dev->irq);
 	   

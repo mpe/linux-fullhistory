@@ -17,12 +17,12 @@
 	$(CC) $(CFLAGS) -c $<
 
 OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
-	tty_ioctl.o pty.o vt.o mem.o \
-	defkeymap.o uni_to_437.o vesa_blank.o
+	tty_ioctl.o pty.o vt.o mem.o vc_screen.o \
+	defkeymap.o consolemap.o vesa_blank.o selection.o
 
 SRCS  = tty_io.c n_tty.c console.c keyboard.c serial.c \
-	tty_ioctl.c pty.c vt.c mem.c \
-	defkeymap.c uni_to_437.c vesa_blank.c
+	tty_ioctl.c pty.c vt.c mem.c vc_screen.c \
+	defkeymap.c consolemap.c vesa_blank.c selection.c
 
 
 ifdef CONFIG_CYCLADES

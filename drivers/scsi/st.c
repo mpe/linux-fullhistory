@@ -54,7 +54,7 @@
 
 #define ST_BLOCK_SIZE 1024
 
-#define ST_MAX_BUFFERS 2
+#define ST_MAX_BUFFERS (2 + ST_EXTRA_DEVS)
 
 #define ST_BUFFER_BLOCKS 32
 
@@ -1948,7 +1948,7 @@ static void st_init()
   }
 
   /* Allocate the buffers */
-  st_nbr_buffers = st_template.dev_noticed;
+  st_nbr_buffers = st_template.dev_noticed + ST_EXTRA_DEVS;
   if (st_nbr_buffers > st_max_buffers)
     st_nbr_buffers = st_max_buffers;
   st_buffers = (ST_buffer **) scsi_init_malloc(st_nbr_buffers * 

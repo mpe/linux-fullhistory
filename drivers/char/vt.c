@@ -24,10 +24,13 @@
 #include "kbd_kern.h"
 #include "vt_kern.h"
 #include "diacr.h"
+#include "selection.h"
 
 extern struct tty_driver console_driver;
+extern int sel_cons;
 
 #define VT_IS_IN_USE(i)	(console_driver.table[i] && console_driver.table[i]->count)
+#define VT_BUSY(i)	(VT_IS_IN_USE(i) || i == fg_console || i == sel_cons)
 
 /*
  * Console (vt and kd) routines, as defined by USL SVR4 manual, and by
@@ -62,6 +65,9 @@ extern unsigned int keymap_count;
  */
 extern int con_set_trans(char * table);
 extern int con_get_trans(char * table);
+extern void con_clear_unimap(struct unimapinit *ui);
+extern int con_set_unimap(ushort ct, struct unipair *list);
+extern int con_get_unimap(ushort ct, ushort *uct, struct unipair *list);
 extern int con_set_font(char * fontmap);
 extern int con_get_font(char * fontmap);
 
@@ -792,12 +798,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (arg == 0) {
 		    /* disallocate all unused consoles, but leave 0 */
 		    for (i=1; i<MAX_NR_CONSOLES; i++)
-		      if (! VT_IS_IN_USE(i) && i != fg_console)
+		      if (! VT_BUSY(i))
 			vc_disallocate(i);
 		} else {
 		    /* disallocate a single console, if possible */
 		    arg--;
-		    if (VT_IS_IN_USE(arg) || arg == fg_console)
+		    if (VT_BUSY(arg))
 		      return -EBUSY;
 		    if (arg)			      /* leave 0 */
 		      vc_disallocate(arg);
@@ -836,12 +842,61 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (!perm)
 			return -EPERM;
 		return con_set_trans((char *)arg);
-		/* con_set_trans() defined in console.c */
 
 	case GIO_SCRNMAP:
 		return con_get_trans((char *)arg);
-		/* con_get_trans() defined in console.c */
 
+	case PIO_UNIMAPCLR:
+	      { struct unimapinit ui;
+		if (!perm)
+			return -EPERM;
+		i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct unimapinit));
+		if (i)
+		  return i;
+		memcpy_fromfs(&ui, (void *)arg, sizeof(struct unimapinit));
+		con_clear_unimap(&ui);
+		return 0;
+	      }
+
+	case PIO_UNIMAP:
+	      { struct unimapdesc *ud;
+		u_short ct;
+		struct unipair *list;
+
+		if (!perm)
+			return -EPERM;
+		i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct unimapdesc));
+		if (i == 0) {
+		    ud = (struct unimapdesc *) arg;
+		    ct = get_fs_word(&ud->entry_ct);
+		    list = (struct unipair *) get_fs_long(&ud->entries);
+		    i = verify_area(VERIFY_READ, (void *) list,
+				    ct*sizeof(struct unipair));
+		}
+		if (i)
+		  return i;
+		return con_set_unimap(ct, list);
+	      }
+
+	case GIO_UNIMAP:
+	      { struct unimapdesc *ud;
+		u_short ct;
+		struct unipair *list;
+
+		i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct unimapdesc));
+		if (i == 0) {
+		    ud = (struct unimapdesc *) arg;
+		    ct = get_fs_word(&ud->entry_ct);
+		    list = (struct unipair *) get_fs_long(&ud->entries);
+		    if (ct)
+		      i = verify_area(VERIFY_WRITE, (void *) list,
+				      ct*sizeof(struct unipair));
+		}
+		if (i)
+		  return i;
+		return con_get_unimap(ct, &(ud->entry_ct), list);
+	      }
+ 
 	default:
 		return -ENOIOCTLCMD;
 	}

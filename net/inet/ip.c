@@ -2052,19 +2052,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
 
-#ifdef CONFIG_IP_MULTICAST
-	if(optname==IP_MULTICAST_TTL)
-	{
-		unsigned char ucval;
-		ucval=get_fs_byte((unsigned char *)optval);
-		printk("MC TTL %d\n", ucval);
-		if(ucval<1||ucval>255)
-	 		return -EINVAL;
-		sk->ip_mc_ttl=(int)ucval;
-		return 0;
-	}
-#endif
-
 	switch(optname)
 	{
 		case IP_TOS:
@@ -2082,19 +2069,16 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->ip_ttl=val;
 			return 0;
 #ifdef CONFIG_IP_MULTICAST
-#ifdef GCC_WORKS
 		case IP_MULTICAST_TTL: 
 		{
 			unsigned char ucval;
 
 			ucval=get_fs_byte((unsigned char *)optval);
-			printk("MC TTL %d\n", ucval);
 			if(ucval<1||ucval>255)
                                 return -EINVAL;
 			sk->ip_mc_ttl=(int)ucval;
 	                return 0;
 		}
-#endif
 		case IP_MULTICAST_LOOP: 
 		{
 			unsigned char ucval;

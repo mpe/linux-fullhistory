@@ -206,11 +206,6 @@ bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE y
 fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
-bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION n
-bool 'VESA Power Saving Protocol Support' CONFIG_VESA_PSPM n
-if [ "$CONFIG_VESA_PSPM" = "y" ]; then
-bool 'VESA PSPM Force Off' CONFIG_PSPM_FORCE_OFF n
-fi
 
 
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE n

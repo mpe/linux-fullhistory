@@ -216,9 +216,6 @@ int next_scsi_host = 0;
 void
 scsi_unregister(struct Scsi_Host * sh){
 	struct Scsi_Host * shpnt;
-	int j;
-
-	j = sh->extra_bytes;
 
 	if(scsi_hostlist == sh)
 		scsi_hostlist = sh->next;
@@ -227,8 +224,14 @@ scsi_unregister(struct Scsi_Host * sh){
 		while(shpnt->next != sh) shpnt = shpnt->next;
 		shpnt->next = shpnt->next->next;
 	};
+
+        /* If we are removing the last host registered, it is safe to reuse
+           its host number (this avoids "holes" at boot time) (DB) */
+        if (max_scsi_hosts == next_scsi_host && !scsi_loadable_module_flag)
+           max_scsi_hosts--;
+
 	next_scsi_host--;
-	scsi_init_free((char *) sh, sizeof(struct Scsi_Host) + j);
+	scsi_init_free((char *) sh, sizeof(struct Scsi_Host) + sh->extra_bytes);
 }
 
 /* We call this when we come across a new host adapter. We only do this

@@ -1,6 +1,11 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      11 Feb 1995 rev. 1.17 for linux 1.1.91
+ *          Now DEBUG_RESET is disabled by default.
+ *          Register a board even if it does not assert DMA protocol support
+ *          (DPT SK2011B does not report correctly the dmasup bit).
+ *
  *       9 Feb 1995 rev. 1.16 for linux 1.1.90
  *          Use host->wish_block instead of host->block.
  *          New list of Data Out SCSI commands.
@@ -124,6 +129,7 @@
 #undef  DEBUG_DETECT
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_STATISTICS
+#undef  DEBUG_RESET
 
 #define MAX_TARGET 8
 #define MAX_IRQ 16
@@ -390,9 +396,9 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    if (*port_base & EISA_RANGE) {
 
-      if (!info.haaval || info.ata || info.drqvld || !info.dmasup) {
-         printk("%s: unusable EISA board found (%d%d%d%d), detaching.\n", 
-                name, info.haaval, info.ata, info.drqvld, info.dmasup);
+      if (!info.haaval || info.ata || info.drqvld) {
+         printk("%s: unusable EISA board found (%d%d%d), detaching.\n", 
+                name, info.haaval, info.ata, info.drqvld);
          return FALSE;
          }
 
@@ -401,15 +407,18 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       }
    else {
 
-      if (!info.haaval || info.ata || !info.drqvld || !info.dmasup) {
-         printk("%s: unusable ISA board found (%d%d%d%d), detaching.\n",
-                name, info.haaval, info.ata, info.drqvld, info.dmasup);
+      if (!info.haaval || info.ata || !info.drqvld) {
+         printk("%s: unusable ISA board found (%d%d%d), detaching.\n",
+                name, info.haaval, info.ata, info.drqvld);
          return FALSE;
          }
 
       subversion = ISA;
       dma_channel = dma_channel_table[3 - info.drqx];
       }
+
+   if (!info.dmasup)
+      printk("%s: warning, DMA protocol support not asserted.\n", name);
 
    if (subversion == ESA && !info.irq_tr)
       printk("%s: warning, LEVEL triggering is suggested for IRQ %u.\n",
@@ -799,7 +808,11 @@ int eata2x_reset (Scsi_Cmnd *SCarg) {
       }
 
    printk("%s: reset, board reset done, enabling interrupts.\n", BN(j));
+
+#if defined (DEBUG_RESET)
    do_trace = TRUE;
+#endif
+
    HD(j)->in_reset = TRUE;
    sti();
    time = jiffies;

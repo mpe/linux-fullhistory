@@ -269,7 +269,6 @@ struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list */
 	struct file_lock *fl_nextlink;
 	struct task_struct *fl_owner;	/* NULL if on free list, for sanity checks */
-        unsigned int fl_fd;             /* File descriptor for this lock */
 	struct wait_queue *fl_wait;
 	char fl_type;
 	char fl_whence;

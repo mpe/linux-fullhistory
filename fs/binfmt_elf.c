@@ -38,7 +38,7 @@
 #include <linux/config.h>
 
 #include <linux/unistd.h>
-typedef int (*sysfun_p)();
+typedef int (*sysfun_p)(int);
 extern sysfun_p sys_call_table[];
 #define SYS(name)	(sys_call_table[__NR_##name])
 

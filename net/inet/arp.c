@@ -841,7 +841,7 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	/*
 	 *	Find an entry
 	 */
-	entry = arp_lookup(paddr, 0);
+	entry = arp_lookup(paddr, 1);
 
 	if (entry != NULL) 	/* It exists */
 	{

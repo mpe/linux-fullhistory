@@ -1,3 +1,4 @@
+#define THREE_LEVEL
 /*
  *	linux/mm/mprotect.c
  *
@@ -17,44 +18,69 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 
+static inline void change_pte_range(pmd_t * pmd, unsigned long address,
+	unsigned long size, pgprot_t newprot)
+{
+	pte_t * pte;
+	unsigned long end;
+
+	if (pmd_none(*pmd))
+		return;
+	if (pmd_bad(*pmd)) {
+		printk("change_pte_range: bad pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_clear(pmd);
+		return;
+	}
+	pte = pte_offset(pmd, address);
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	do {
+		pte_t entry = *pte;
+		if (pte_present(entry))
+			*pte = pte_modify(entry, newprot);
+		address += PAGE_SIZE;
+		pte++;
+	} while (address < end);
+}
+
+static inline void change_pmd_range(pgd_t * pgd, unsigned long address,
+	unsigned long size, pgprot_t newprot)
+{
+	pmd_t * pmd;
+	unsigned long end;
+
+	if (pgd_none(*pgd))
+		return;
+	if (pgd_bad(*pgd)) {
+		printk("change_pmd_range: bad pgd (%08lx)\n", pgd_val(*pgd));
+		pgd_clear(pgd);
+		return;
+	}
+	pmd = pmd_offset(pgd, address);
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	do {
+		change_pte_range(pmd, address, end - address, newprot);
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
+	} while (address < end);
+}
+
 static void change_protection(unsigned long start, unsigned long end, pgprot_t newprot)
 {
 	pgd_t *dir;
-	pte_t *page_table, entry;
-	unsigned long offset;
-	int nr;
 
-	dir = PAGE_DIR_OFFSET(current, start);
-	offset = (start >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
-	nr = (end - start) >> PAGE_SHIFT;
-	while (nr > 0) {
-		if (pgd_none(*dir)) {
-			dir++;
-			nr = nr - PTRS_PER_PAGE + offset;
-			offset = 0;
-			continue;
-		}
-		if (pgd_bad(*dir)) {
-			printk("Bad page dir entry %08lx\n", pgd_val(*dir));
-			pgd_clear(dir);
-			dir++;
-			nr = nr - PTRS_PER_PAGE + offset;
-			offset = 0;
-			continue;
-		}
-		page_table = offset + (pte_t *) pgd_page(*dir);
-		offset = PTRS_PER_PAGE - offset;
-		if (offset > nr)
-			offset = nr;
-		nr = nr - offset;
-		do {
-			entry = *page_table;
-			if (pte_present(entry))
-				*page_table = pte_modify(entry, newprot);
-			++page_table;
-		} while (--offset);
+	dir = pgd_offset(current, start);
+	while (start < end) {
+		change_pmd_range(dir, start, end - start, newprot);
+		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
+	invalidate();
 	return;
 }
 

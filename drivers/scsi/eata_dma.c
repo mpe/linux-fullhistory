@@ -44,10 +44,10 @@
  * Thanks also to Greg Hosler who did a lot of testing and  *
  * found quite a number of bugs during the development.     *
  ************************************************************
- *  last change: 95/01/30                                   *
+ *  last change: 95/02/13       OS: Linux 1.1.91 or higher  *
  ************************************************************/
 
-/* Look in eata_dma.h for configuration information */
+/* Look in eata_dma.h for configuration and revision information */
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -63,12 +63,17 @@
 #include <linux/pci.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include "eata_dma.h"
+#include "../block/blk.h"
 #include "scsi.h"
 #include "sd.h"
+#include "hosts.h"
+#include <linux/scsicam.h>
+#include "eata_dma.h"
 
-#if 0
-#include "eata_dma_proc.c"
+#if EATA_DMA_PROC  
+#include "eata_dma_proc.h"  /* If you're interested send me a mail */ 
+ulong  reads[13];           /* /proc/scsi probably won't get       */ 
+ulong  writes[13];          /* into the kernel before pl. 1.3      */
 #endif
 
 static uint ISAbases[] =
@@ -85,7 +90,7 @@ static unchar reg_IRQL[] =
 static struct eata_sp status[MAXIRQ];	/* Statuspacket array   */
 
 static uint internal_command_finished = TRUE;
-
+static unchar HBA_interpret = FALSE;
 static struct geom_emul geometry;	/* Drive 1 & 2 geometry */
 
 static ulong int_counter = 0;
@@ -95,6 +100,10 @@ void eata_scsi_done (Scsi_Cmnd * SCpnt)
 {
     return;
 }	
+
+#if EATA_DMA_PROC 
+#include "eata_dma_proc.c"
+#endif
 
 int eata_release(struct Scsi_Host *sh)
 {
@@ -235,7 +244,10 @@ void eata_int_handler(int irq, struct pt_regs * regs)
  
 	restore_flags(flags);
 	if(cmd->scsi_done != eata_scsi_done) cmd->scsi_done(cmd);
-	else internal_command_finished = TRUE;
+	else {
+	    internal_command_finished = TRUE;
+	    HBA_interpret = FALSE;
+	}
 	save_flags(flags);
 	cli();
     }
@@ -337,7 +349,7 @@ int eata_queue(Scsi_Cmnd * cmd, void *(done) (Scsi_Cmnd *))
 	cp->DataIn = TRUE;	/* Input mode  */
     }
 
-    if (done == (void *) eata_scsi_done) 
+    if (done == (void *) eata_scsi_done && HBA_interpret == TRUE) 
         cp->Interpret = TRUE;   /* Interpret command */
    
     if (cmd->use_sg) {
@@ -699,7 +711,7 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	return (FALSE);
     }
 
-    if(gc->HAA_valid == FALSE || ntohl(gc->len) == 0x1c || ntohl(gc->len) == 0x1e) 
+    if(gc->HAA_valid == FALSE || ntohl(gc->len) <= 0x1e) 
         gc->MAX_CHAN = 0;
 
     if(strncmp("PM2322", &buff[16], 6) && strncmp("PM3021", &buff[16], 6)
@@ -746,7 +758,6 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 		   "This might be a PM2012 with a defective Firmware\n");
     }
 
-    
     size = sizeof(hostdata) + ((sizeof(struct eata_ccb) * ntohs(gc->queuesiz))/
 			       (gc->MAX_CHAN + 1));
 
@@ -824,11 +835,14 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	else
 	    hd->primary = TRUE;
 
-	if (hd->bustype != 'I')
+	if (hd->bustype != 'I') {
 	    sh->unchecked_isa_dma = FALSE;
-	else
+	    sh->wish_block = FALSE;        
+	}
+	else {
 	    sh->unchecked_isa_dma = TRUE;   /* We're doing ISA DMA */
-
+	    sh->wish_block = TRUE;          /* This will reduce performance */
+	}
 	if((hd->primary == TRUE) && (i == 0) && HARDCODED){                  
 	  geometry.drv[0].heads = HEADS0;          
 	  geometry.drv[0].sectors = SECTORS0;      

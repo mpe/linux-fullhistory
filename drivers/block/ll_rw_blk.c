@@ -399,9 +399,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	int correct_size;
 	struct blk_dev_struct * dev;
 	int i;
-#if defined(CONFIG_CDU535) && defined(CONFIG_CDU31A)
-	int sonycd_save_mem_start;
-#endif
 
 	/* Make sure that the first block contains something reasonable */
 	while (!*bh) {
@@ -545,24 +542,12 @@ long blk_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_BLK_DEV_XD
 	mem_start = xd_init(mem_start,mem_end);
 #endif
-#if defined(CONFIG_CDU535) && defined(CONFIG_CDU31A)
-	{  /* since controllers for 535 and 31A can be at same location
-	    * we have to be careful.
-	    */
-		sonycd_save_mem_start = mem_start;
-		mem_start = cdu31a_init(mem_start,mem_end);
-		if ( mem_start == sonycd_save_mem_start ) {  /* CDU31A not found */
-			mem_start = sony535_init(mem_start,mem_end);
-		}
-	}
-#else
 #ifdef CONFIG_CDU31A
 	mem_start = cdu31a_init(mem_start,mem_end);
 #endif
 #ifdef CONFIG_CDU535
 	mem_start = sony535_init(mem_start,mem_end);
 #endif
-#endif  /* CONFIG_CDU31A && CONFIG_CDU535 */
 #ifdef CONFIG_MCD
 	mem_start = mcd_init(mem_start,mem_end);
 #endif

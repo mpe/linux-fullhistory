@@ -67,7 +67,7 @@ extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 
-extern int close_fp(struct file *filp, unsigned int fd);
+extern int close_fp(struct file *filp);
 extern void (* iABI_hook)(struct pt_regs * regs);
 
 struct symbol_table symbol_table = {
