@@ -57,6 +57,7 @@ unsigned int multiuser_mount = 0;
 unsigned int extended_security = 0;
 unsigned int ntlmv2_support = 0;
 unsigned int sign_CIFS_PDUs = 1;
+extern struct task_struct * oplockThread; /* remove sparse warning */
 struct task_struct * oplockThread = NULL;
 unsigned int CIFSMaxBufSize = CIFS_MAX_MSGSIZE;
 module_param(CIFSMaxBufSize, int, 0);
@@ -72,6 +73,12 @@ module_param(cifs_max_pending, int, 0);
 MODULE_PARM_DESC(cifs_max_pending,"Simultaneous requests to server. Default: 50 Range: 2 to 256");
 
 static DECLARE_COMPLETION(cifs_oplock_exited);
+
+extern mempool_t *cifs_sm_req_poolp;
+extern mempool_t *cifs_req_poolp;
+extern mempool_t *cifs_mid_poolp;
+
+extern kmem_cache_t *cifs_oplock_cachep;
 
 static int
 cifs_read_super(struct super_block *sb, void *data,
