@@ -176,7 +176,9 @@
  *		Marc Tamsky	:	Closing in closing fixes.
  *		Mike Shaver	:	RFC1122 verifications.
  *		Alan Cox	:	rcv_saddr errors.
- *		Alan Cox	:	Block double connect()
+ *		Alan Cox	:	Block double connect().
+ *		Alan Cox	:	Small hooks for enSKIP.
+ *		Alexey Kuznetsov:	Path MTU discovery.
  *
  *
  * To Fix:
@@ -184,8 +186,6 @@
  *		so it doesn't iterate over the queue, also spot packets with no funny
  *		options arriving in order and process directly.
  *
- *		Implement RFC 1191 [Path MTU discovery]
- *		Look at the effect of implementing RFC 1337 suggestions and their impact.
  *		Rewrite output state machine to use a single queue and do low window
  *		situations as per the spec (RFC 1122)
  *		Speed up input assembly algorithm.
@@ -674,19 +674,25 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 *	currently this is done (less efficiently) elsewhere.
 		 */
 
-		iph->id = htons(ip_id_count++);
-		ip_send_check(iph);
-		
 		/*
 		 *	Put a MAC header back on (may cause ARPing)
 		 */
 		 
-		if(skb->localroute)
-			rt=ip_rt_local(iph->daddr,NULL,NULL);
-		else
-			rt=ip_rt_route(iph->daddr,NULL,NULL);
+	        {
+			/* ANK: UGLY, but the bug, that was here, should be fixed.
+			 */
+			struct options *  opt = (struct options*)skb->proto_priv;
+			rt = ip_check_route(&sk->ip_route_cache, opt->srr?opt->faddr:iph->daddr, skb->localroute);
+	        }
+
+		iph->id = htons(ip_id_count++);
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+		if (rt && ntohs(iph->tot_len) > rt->rt_mtu)
+			iph->frag_off &= ~htons(IP_DF);
+#endif
+		ip_send_check(iph);
 			
-		if(rt==NULL)	/* Deep poo */
+		if (rt==NULL)	/* Deep poo */
 		{
 			if(skb->sk)
 			{
@@ -698,11 +704,20 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		{
 			dev=rt->rt_dev;
 			skb->raddr=rt->rt_gateway;
-			if(skb->raddr==0)
-				skb->raddr=iph->daddr;
 			skb->dev=dev;
 			skb->arp=1;
-			if(dev->hard_header)
+			if (rt->rt_hh)
+			{
+				memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);
+				if (!rt->rt_hh->hh_uptodate)
+				{
+					skb->arp = 0;
+#if RT_CACHE_DEBUG >= 2
+					printk("tcp_do_retransmit: hh miss %08x via %08x\n", iph->daddr, rt->rt_gateway);
+#endif
+				}
+			}
+			else if (dev->hard_header)
 			{
 				if(dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, skb->len)<0)
 					skb->arp=0;
@@ -869,8 +884,7 @@ static int tcp_write_timeout(struct sock *sk)
 		 *	Attempt to recover if arp has changed (unlikely!) or
 		 *	a route has shifted (not supported prior to 1.3).
 		 */
-		arp_destroy (sk->daddr, 0);
-		/*ip_route_check (sk->daddr);*/
+		ip_rt_advice(&sk->ip_route_cache, 0);
 	}
 	
 	/*
@@ -1040,13 +1054,15 @@ static void retransmit_timer(unsigned long data)
 void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 	__u32 saddr, struct inet_protocol *protocol)
 {
-	struct tcphdr *th;
+	struct tcphdr *th = (struct tcphdr *)header;
 	struct sock *sk;
-	struct iphdr *iph=(struct iphdr *)header;
-  
-	header+=4*iph->ihl;
-   
-
+	
+	/*
+	 *	This one is _WRONG_. FIXME urgently.
+	 */
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY	 
+	struct iphdr *iph=(struct iphdr *)(header-sizeof(struct iphdr));
+#endif  
 	th =(struct tcphdr *)header;
 	sk = get_sock(&tcp_prot, th->source, daddr, th->dest, saddr);
 
@@ -1070,6 +1086,27 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 		sk->err=EPROTO;
 		sk->error_report(sk);
 	}
+
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
+	{
+		struct rtable * rt;
+		/*
+		 * Ugly trick to pass MTU to protocol layer.
+		 * Really we should add argument "info" to error handler.
+		 */
+		unsigned short new_mtu = ntohs(iph->id);
+
+		if ((rt = sk->ip_route_cache) != NULL)
+			if (rt->rt_mtu > new_mtu)
+				rt->rt_mtu = new_mtu;
+
+		if (sk->mtu > new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr))
+			sk->mtu = new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr);
+
+		return;
+	}
+#endif
 
 	/*
 	 * If we've already connected we will keep trying
@@ -1553,7 +1590,7 @@ static void tcp_send_ack(u32 sequence, u32 ack,
 	 */
 	 
 	tmp = sk->prot->build_header(buff, sk->saddr, daddr, &dev,
-				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
+				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0) 
 	{
   		buff->free = 1;
@@ -1787,6 +1824,24 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 		/* 
 		 *	Now we need to check if we have a half built packet. 
 		 */
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+		/*
+		 *	FIXME:  I'm almost sure that this fragment is BUG,
+		 *		but it works... I do not know why 8) --ANK
+		 *
+		 *	Really, we should rebuild all the queues...
+		 *	It's difficult. Temprorary hack is to send all
+		 *	queued segments with allowed fragmentation.
+		 */
+		{
+			int new_mss = min(sk->mtu, sk->max_window);
+			if (new_mss < sk->mss)
+			{
+				tcp_send_partial(sk);
+				sk->mss = new_mss;
+			}
+		}
+#endif
 	
 			if ((skb = tcp_dequeue_partial(sk)) != NULL) 
 			{
@@ -1800,11 +1855,10 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				if (!(flags & MSG_OOB)) 
 				{
 					copy = min(sk->mss - (skb->len - hdrlen), seglen);
-					/* FIXME: this is really a bug. */
 					if (copy <= 0) 
 					{
-						printk("TCP: **bug**: \"copy\" <= 0: %d - (%ld - %d) <= %d\n", sk->mss, skb->len, hdrlen, seglen);
-				  		copy = 0;
+						printk("TCP: **bug**: \"copy\" <= 0\n");
+				  		return -EFAULT;
 					}		  
 					memcpy_fromfs(skb_put(skb,copy), from, copy);
 					from += copy;
@@ -1922,7 +1976,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			 */
 		
 			tmp = prot->build_header(skb, sk->saddr, sk->daddr, &dev,
-				 IPPROTO_TCP, sk->opt, skb->truesize,sk->ip_tos,sk->ip_ttl);
+				 IPPROTO_TCP, sk->opt, skb->truesize,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 			if (tmp < 0 ) 
 			{
 				sock_wfree(sk, skb);
@@ -1931,6 +1985,9 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 					return(copied);
 				return(tmp);
 			}
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+			skb->ip_hdr->frag_off |= htons(IP_DF);
+#endif
 			skb->dev = dev;
 			skb->h.th =(struct tcphdr *)skb_put(skb,sizeof(struct tcphdr));
 			tmp = tcp_build_header(skb->h.th, sk, seglen-copy);
@@ -2038,7 +2095,7 @@ static void tcp_read_wakeup(struct sock *sk)
 	 */
 
 	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
-			       IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
+			       IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0) 
 	{
   		buff->free = 1;
@@ -2560,7 +2617,7 @@ static void tcp_send_fin(struct sock *sk)
 
 	tmp = prot->build_header(buff,sk->saddr, sk->daddr, &dev,
 			   IPPROTO_TCP, sk->opt,
-			   sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl);
+			   sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0) 
 	{
 		int t;
@@ -2715,7 +2772,7 @@ static void tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *t
 	 */
 
 	tmp = prot->build_header(buff, saddr, daddr, &ndev, IPPROTO_TCP, opt,
-			   sizeof(struct tcphdr),tos,ttl);
+			   sizeof(struct tcphdr),tos,ttl,NULL);
 	if (tmp < 0) 
 	{
   		buff->free = 1;
@@ -2919,6 +2976,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 
 	memcpy(newsk, sk, sizeof(*newsk));
 	newsk->opt = NULL;
+	newsk->ip_route_cache  = NULL;
 	if (opt && opt->optlen) {
 	  sk->opt = (struct options*)kmalloc(sizeof(struct options)+opt->optlen, GFP_ATOMIC);
 	  if (!sk->opt) {
@@ -3022,7 +3080,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 * 	Note use of sk->user_mss, since user has no direct access to newsk 
 	 */
 
-	rt=ip_rt_route(saddr, NULL,NULL);
+	rt = ip_rt_route(newsk->opt && newsk->opt->srr ? newsk->opt->faddr : saddr, 0);
+	newsk->ip_route_cache = rt;
 	
 	if(rt!=NULL && (rt->rt_flags&RTF_WINDOW))
 		newsk->window_clamp = rt->rt_window;
@@ -3031,19 +3090,10 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		
 	if (sk->user_mss)
 		newsk->mtu = sk->user_mss;
-	else if(rt!=NULL && (rt->rt_flags&RTF_MSS))
-		newsk->mtu = rt->rt_mss - sizeof(struct iphdr) - sizeof(struct tcphdr);
+	else if (rt)
+		newsk->mtu = rt->rt_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr);
 	else 
-	{
-#ifdef CONFIG_INET_SNARL	/* Sub Nets Are Local */
-		if ((saddr ^ daddr) & default_mask(saddr))
-#else
-		if ((saddr ^ daddr) & dev->pa_mask)
-#endif
-			newsk->mtu = 576 - sizeof(struct iphdr) - sizeof(struct tcphdr);
-		else
-			newsk->mtu = MAX_WINDOW;
-	}
+		newsk->mtu = 576 - sizeof(struct iphdr) - sizeof(struct tcphdr);
 
 	/*
 	 *	But not bigger than device MTU 
@@ -3051,6 +3101,20 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 
 	newsk->mtu = min(newsk->mtu, dev->mtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 
+#ifdef CONFIG_SKIP
+	
+	/*
+	 *	SKIP devices set their MTU to 65535. This is so they can take packets
+	 *	unfragmented to security process then fragment. They could lie to the
+	 *	TCP layer about a suitable MTU, but its easier to let skip sort it out
+	 *	simply because the final package we want unfragmented is going to be
+	 *
+	 *	[IPHDR][IPSP][Security data][Modified TCP data][Security data]
+	 */
+	 
+	if(skip_pick_mtu!=NULL)		/* If SKIP is loaded.. */
+		sk->mtu=skip_pick_mtu(sk->mtu,dev);
+#endif
 	/*
 	 *	This will min with what arrived in the packet 
 	 */
@@ -3080,7 +3144,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 */
 
 	tmp = sk->prot->build_header(buff, newsk->saddr, newsk->daddr, &ndev,
-			       IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl);
+			       IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&newsk->ip_route_cache);
 
 	/*
 	 *	Something went wrong. 
@@ -3281,6 +3345,13 @@ static void tcp_write_xmit(struct sock *sk)
 			iph = skb->ip_hdr;
 			th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
 			size = skb->len - (((unsigned char *) th) - skb->data);
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+			if (size > sk->mtu - sizeof(struct iphdr))
+			{
+				iph->frag_off &= ~htons(IP_DF);
+				ip_send_check(iph);
+			}
+#endif
 			
 			th->ack_seq = ntohl(sk->acked_seq);
 			th->window = ntohs(tcp_select_window(sk));
@@ -4522,29 +4593,17 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	 *	Put in the IP header and routing stuff.
 	 */
 	 
-	if (sk->localroute)
-		rt=ip_rt_local(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
-	else
-		rt=ip_rt_route(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
-
-	/*
-	 *	When we connect we enforce receive requirements too.
-	 */
-	 
-	sk->rcv_saddr=sk->saddr;
-	
-	/*
-	 *	We need to build the routing stuff from the things saved in skb. 
-	 */
-
 	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
-					IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl);
+		IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0) 
 	{
 		sock_wfree(sk, buff);
 		release_sock(sk);
 		return(-ENETUNREACH);
 	}
+	if ((rt = sk->ip_route_cache) != NULL && !sk->saddr)
+		sk->saddr = rt->rt_src;
+	sk->rcv_saddr = sk->saddr;
 
 	t1 = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
 
@@ -4571,19 +4630,11 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
 	if (sk->user_mss)
 		sk->mtu = sk->user_mss;
-	else if(rt!=NULL && (rt->rt_flags&RTF_MSS))
-		sk->mtu = rt->rt_mss;
+	else if (rt)
+		sk->mtu = rt->rt_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr);
 	else 
-	{
-#ifdef CONFIG_INET_SNARL
-		if ((sk->saddr ^ sk->daddr) & default_mask(sk->saddr))
-#else
-		if ((sk->saddr ^ sk->daddr) & dev->pa_mask)
-#endif
-			sk->mtu = 576 - sizeof(struct iphdr) - sizeof(struct tcphdr);
-		else
-			sk->mtu = MAX_WINDOW;
-	}
+		sk->mtu = 576 - sizeof(struct iphdr) - sizeof(struct tcphdr);
+
 	/*
 	 *	but not bigger than device MTU 
 	 */
@@ -4592,6 +4643,21 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 		sk->mtu = 32;	/* Sanity limit */
 		
 	sk->mtu = min(sk->mtu, dev->mtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
+
+#ifdef CONFIG_SKIP
+	
+	/*
+	 *	SKIP devices set their MTU to 65535. This is so they can take packets
+	 *	unfragmented to security process then fragment. They could lie to the
+	 *	TCP layer about a suitable MTU, but its easier to let skip sort it out
+	 *	simply because the final package we want unfragmented is going to be
+	 *
+	 *	[IPHDR][IPSP][Security data][Modified TCP data][Security data]
+	 */
+	 
+	if(skip_pick_mtu!=NULL)		/* If SKIP is loaded.. */
+		sk->mtu=skip_pick_mtu(sk->mtu,dev);
+#endif
 	
 	/*
 	 *	Put in the TCP options to say MTU. 
@@ -5222,7 +5288,7 @@ static void tcp_write_wakeup(struct sock *sk)
 
 	    	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
 					 IPPROTO_TCP, sk->opt, buff->truesize,
-					 sk->ip_tos,sk->ip_ttl);
+					 sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	    	if (tmp < 0) 
 	    	{
 			sock_wfree(sk, buff);
@@ -5321,7 +5387,7 @@ static void tcp_write_wakeup(struct sock *sk)
 		 */
 		 
 		tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
-				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
+				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 		if (tmp < 0) 
 		{
 			sock_wfree(sk, buff);

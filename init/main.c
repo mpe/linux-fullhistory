@@ -2,6 +2,8 @@
  *  linux/init/main.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ *  GK 2/5/95  -  Changed to support mounting root fs via NFS
  */
 
 #define __KERNEL_SYSCALLS__
@@ -26,6 +28,7 @@
 #include <linux/ioport.h>
 #include <linux/hdreg.h>
 #include <linux/mm.h>
+#include <linux/major.h>
 
 #include <asm/bugs.h>
 
@@ -61,7 +64,7 @@ extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
-extern void buslogic_setup(char *str, int *ints);
+extern void BusLogic_Setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
@@ -117,6 +120,11 @@ int rows, cols;
 
 int ramdisk_size;
 int root_mountflags = MS_RDONLY;
+
+#ifdef CONFIG_ROOT_NFS
+char nfs_root_name[256] = { 0, };
+extern int nfs_root_init(char *name);
+#endif
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -204,7 +212,7 @@ struct {
 	{ "aic7xxx=", aic7xxx_setup},
 #endif
 #ifdef CONFIG_SCSI_BUSLOGIC
-	{ "buslogic=", buslogic_setup},
+	{ "BusLogic=", BusLogic_Setup},
 #endif
 #ifdef CONFIG_SCSI_NCR53C406A
 	{ "ncr53c406a=", NCR53c406a_setup},
@@ -297,9 +305,8 @@ void calibrate_delay(void)
 	int ticks;
 	int loopbit;
 	int lps_precision = LPS_PREC;
-#ifdef __SMP__
+
 	loops_per_sec = (1<<12);
-#endif		
 
 	printk("Calibrating delay loop.. ");
 	while (loops_per_sec <<= 1) {
@@ -350,10 +357,14 @@ void calibrate_delay(void)
 static void parse_options(char *line)
 {
 	char *next;
+#ifdef CONFIG_ROOT_NFS
+	char *devnames[] = { "nfs", "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+	int devnums[]    = { 0x0FF, 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
+#else
 	static const char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
 	static int devnums[]    = { 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
+#endif
 	int args, envs;
-
 	if (!*line)
 		return;
 	args = 0;
@@ -384,6 +395,20 @@ static void parse_options(char *line)
 			}
 			continue;
 		}
+#ifdef CONFIG_ROOT_NFS
+		if (!strncmp(line,"nfsroot=",8)) {
+			int n = 255 - strlen (NFS_ROOT);
+			line += 8;
+			if (line [0] == '/' || (line [0] >= '0' && line [0] <= '9')){
+				strncpy (nfs_root_name, line, 255);
+				continue;
+			}
+			if (strlen (line) >= n)
+			        line [n] = 0;
+			sprintf (nfs_root_name, NFS_ROOT, line);
+			continue;
+		}
+#endif
 		if (!strcmp(line,"ro")) {
 			root_mountflags |= MS_RDONLY;
 			continue;

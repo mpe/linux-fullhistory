@@ -139,7 +139,7 @@ else
   endif
 endif
 
-ifneq ($(CONFIG_PPP),n)
+ifdef CONFIG_PPP
   M_OBJS += bsd_comp.o
 endif
 

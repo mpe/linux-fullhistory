@@ -262,7 +262,7 @@ o	IPX uses sock_alloc_send_skb			[TESTED]
 o	Recvmsg for all IP, sendmsg for TCP		[IN]
 	(nearly ready to go all *msg())
 
--------->>>>> 1.3.38 <<<<<<--------
+-------->>>>> 1.3.41 <<<<<<--------
 
 o	ip udp/raw nonblock bug fixed			[TESTED]
 o	ICMP lockup fix					[IN]
@@ -271,7 +271,15 @@ o	bind() for SOCK_PACKET				[IN]
 o	set_mac_addr fixed up				[IN]
 o	BSD SIOCSIFADDR, AF_UNSPEC behaviour		[IN]
 o	Updated this list				[IN]
-
+o	Massive ARP/cache/routing rewrite [ANK]		[IN]
+o	AX.25 connect return fixed in using sock_error	[IN]
+o	Proper netlink device major(36)			[IN]
+o	First parts of the SKIP support			[IN, not useful]
+o	TCP ICMP (SOSS should work again)		[IN]
+o	IPFW support for TOS changing (Al Longyear)	[IN]
+o	DECNET PPP test code				[IN]
+o	NFS root					[IN]
+o	Path MTU discovery [ANK]			[IN]
 
 ---------- Things I thought Linus had for a while and not merged ----------------
 
@@ -280,33 +288,29 @@ o	Updated this list				[IN]
 
 o	Improved IPX support for lwared.
 o	Decnet pre pre pre pre pre Alpha 0.0.
-o	Faster routing/caching support.
 
 ---------- Things pending for me to merge --------------
 
-o	IPFW support for TOS changing (Al Longyear)
 o	AF_UNIX garbage collect code
 o	Faster closedown option for heavy use sites (me)
 o	Tom May's insw_and_checksum()			
 o	IPX PPP support
-o	DECNET PPP test code
-o	SPARC patches [Dave]
+o	SPARC patches [Dave] [partly in]
+o	Path MTU and other goodies [ANK]
 
 --------------- Things That Need Doing Before 1.4 ------------------
 
-o	inet_error for other layers
 o	Finish merging the bridge code
 o	Fast checksum/copy on outgoing TCP
 o	Fast dev_grab_next() transmit reload function
-	and dev_push_failed() ??
-o	Faster ip_forward last hit cache		[PENDING(GuruA0)]
-o	L2 ip routing cache				[PENDING(btv)]
+	and dev_push_failed() ??			[Causes deadlock
+							cases with slow box, heavy networking]
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
 o	Clean up RAW AX.25 sockets.
 o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
 o	Tidy BPQ support to use a bpqip tunnel device
-o	Strange eth0-eth3 bug 
+o	Strange eth0-eth3 bug 				[Matti fixed ??]
 o	Finish IPIP bug fixes				[Done hopefully]
 o	Why doesnt the PROTO_UNREACH get sent ?		[Should now work]
 o	Kill off old ip_queue_xmit/ip_send stuff.

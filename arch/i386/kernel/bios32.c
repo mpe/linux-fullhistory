@@ -383,6 +383,12 @@ const char *pcibios_strerror (int error)
 		case PCIBIOS_BAD_REGISTER_NUMBER:
 			return "BAD_REGISTER_NUMBER";
 
+                case PCIBIOS_SET_FAILED:          
+			return "SET_FAILED";
+
+                case PCIBIOS_BUFFER_TOO_SMALL:    
+			return "BUFFER_TOO_SMALL";
+
 		default:
 			sprintf (buf, "UNKNOWN RETURN 0x%x", error);
 			return buf;

@@ -332,7 +332,7 @@ int is_orphaned_pgrp(int pgrp)
 	return(1);	/* (sighing) "Often!" */
 }
 
-static int has_stopped_jobs(int pgrp)
+static inline int has_stopped_jobs(int pgrp)
 {
 	struct task_struct * p;
 
@@ -345,7 +345,7 @@ static int has_stopped_jobs(int pgrp)
 	return(0);
 }
 
-static void forget_original_parent(struct task_struct * father)
+static inline void forget_original_parent(struct task_struct * father)
 {
 	struct task_struct * p;
 
@@ -358,7 +358,7 @@ static void forget_original_parent(struct task_struct * father)
 	}
 }
 
-void exit_files(struct task_struct *tsk)
+static inline void __exit_files(struct task_struct *tsk)
 {
 	struct files_struct * files = tsk->files;
 
@@ -378,7 +378,12 @@ void exit_files(struct task_struct *tsk)
 	}
 }
 
-void exit_fs(struct task_struct *tsk)
+void exit_files(struct task_struct *tsk)
+{
+  __exit_files(tsk);
+}
+
+static inline void __exit_fs(struct task_struct *tsk)
 {
 	struct fs_struct * fs = tsk->fs;
 
@@ -392,7 +397,12 @@ void exit_fs(struct task_struct *tsk)
 	}
 }
 
-void exit_sighand(struct task_struct *tsk)
+void exit_fs(struct task_struct *tsk)
+{
+  __exit_fs(tsk);
+}
+
+static inline void __exit_sighand(struct task_struct *tsk)
 {
 	struct signal_struct * sig = tsk->sig;
 
@@ -404,7 +414,12 @@ void exit_sighand(struct task_struct *tsk)
 	}
 }
 
-static void exit_mm(void)
+void exit_sighand(struct task_struct *tsk)
+{
+  __exit_sighand(tsk);
+}
+
+static inline void exit_mm(void)
 {
 	struct mm_struct * mm = current->mm;
 
@@ -497,9 +512,9 @@ fake_volatile:
 	del_timer(&current->real_timer);
 	sem_exit();
 	exit_mm();
-	exit_files(current);
-	exit_fs(current);
-	exit_sighand(current);
+	__exit_files(current);
+	__exit_fs(current);
+	__exit_sighand(current);
 	exit_thread();
 	exit_notify();
 	current->state = TASK_ZOMBIE;
@@ -544,6 +559,11 @@ asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct
 		if (flag)
 			return flag;
 	}
+	if (ru) {
+		flag = verify_area(VERIFY_WRITE, ru, sizeof(*ru));
+		if (flag)
+			return flag;
+	}
 	add_wait_queue(&current->wait_chldexit,&wait);
 repeat:
 	flag=0;
@@ -568,12 +588,12 @@ repeat:
 					continue;
 				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
 					continue;
+				if (ru != NULL)
+					getrusage(p, RUSAGE_BOTH, ru);
 				if (stat_addr)
 					put_user((p->exit_code << 8) | 0x7f,
 						stat_addr);
 				p->exit_code = 0;
-				if (ru != NULL)
-					getrusage(p, RUSAGE_BOTH, ru);
 				retval = p->pid;
 				goto end_wait4;
 			case TASK_ZOMBIE:
@@ -581,9 +601,9 @@ repeat:
 				current->cstime += p->stime + p->cstime;
 				if (ru != NULL)
 					getrusage(p, RUSAGE_BOTH, ru);
-				flag = p->pid;
 				if (stat_addr)
 					put_user(p->exit_code, stat_addr);
+				retval = p->pid;
 				if (p->p_opptr != p->p_pptr) {
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
@@ -594,7 +614,6 @@ repeat:
 #ifdef DEBUG_PROC_TREE
 				audit_ptree();
 #endif
-				retval = flag;
 				goto end_wait4;
 			default:
 				continue;

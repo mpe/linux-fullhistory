@@ -400,8 +400,8 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
  *	Temporary
  */
  
-static int udp_sendmsg(struct sock *sk, struct msghdr *msg,
-	int len, int noblock, int flags)
+static int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock, 
+	int flags)
 {
 	if(msg->msg_iovlen==1)
 		return udp_sendto(sk,msg->msg_iov[0].iov_base,len, noblock, flags, msg->msg_name, msg->msg_namelen);
@@ -541,7 +541,6 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
 	struct rtable *rt;
-	__u32 sa;
 	if (addr_len < sizeof(*usin)) 
 	  	return(-EINVAL);
 
@@ -553,19 +552,18 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;			/* Must turn broadcast on first */
   	
-  	rt=(sk->localroute?ip_rt_local:ip_rt_route)((__u32)usin->sin_addr.s_addr, NULL, &sa);
-  	if(rt==NULL)
+  	rt=ip_rt_route((__u32)usin->sin_addr.s_addr, sk->localroute);
+  	if (rt==NULL)
   		return -ENETUNREACH;
   	if(!sk->saddr)
-	  	sk->saddr = sa;		/* Update source address */
+	  	sk->saddr = rt->rt_src;		/* Update source address */
 	if(!sk->rcv_saddr)
-		sk->rcv_saddr = sa;
+		sk->rcv_saddr = rt->rt_src;
 	sk->daddr = usin->sin_addr.s_addr;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
 	udp_cache_zap();
 	sk->ip_route_cache = rt;
-	sk->ip_route_stamp = rt_stamp;
 	return(0);
 }
 

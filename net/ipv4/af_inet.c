@@ -402,6 +402,7 @@ void destroy_sock(struct sock *sk)
 	{
 		if(sk->opt)
 			kfree(sk->opt);
+		ip_rt_put(sk->ip_route_cache);
 		/*
 		 *	This one is pure paranoia. I'll take it out
 		 *	later once I know the bug is buried.
@@ -915,6 +916,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		sk->daddr = 0;
 		sk->dummy_th.dest = 0;
 	}
+	ip_rt_put(sk->ip_route_cache);
 	sk->ip_route_cache=NULL;
 	return(0);
 }
@@ -1236,6 +1238,9 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCDARP:
 		case SIOCGARP:
 		case SIOCSARP:
+		case OLD_SIOCDARP:
+		case OLD_SIOCGARP:
+		case OLD_SIOCSARP:
 			return(arp_ioctl(cmd,(void *) arg));
 		case SIOCDRARP:
 		case SIOCGRARP:
@@ -1569,5 +1574,11 @@ void inet_proto_init(struct net_proto *pro)
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		rt_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_RTCACHE, 8, "rt_cache",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		rt_cache_get_info
 	});
 }

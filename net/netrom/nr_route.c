@@ -524,7 +524,7 @@ static struct device *nr_ax25_dev_get(char *devname)
 		return dev;
 
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ETHER)
-		if (arp_query((unsigned char *)&callsign, dev->pa_addr, ARPHRD_AX25))
+		if (arp_query((unsigned char *)&callsign, dev->pa_addr, dev))
 			return dev;
 	
 	return NULL;

@@ -58,7 +58,7 @@
 #endif
 
 #ifdef CONFIG_SCSI_BUSLOGIC
-#include "buslogic.h"
+#include "BusLogic.h"
 #endif
 
 #ifdef CONFIG_SCSI_EATA_DMA
@@ -167,7 +167,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_AHA152X
     AHA152X,
 #endif
-/* Buslogic must come before aha1542.c */
+/* BusLogic must come before aha1542.c */
 #ifdef CONFIG_SCSI_BUSLOGIC
     BUSLOGIC,
 #endif

@@ -878,12 +878,12 @@ asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
 	if(err)
 		return err;
 		
+	iov.iov_base=buff;
+	iov.iov_len=len;
 	msg.msg_name=NULL;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
 	msg.msg_accrights=NULL;
-	iov.iov_base=buff;
-	iov.iov_len=1;
 	return(sock->ops->sendmsg(sock, &msg, len, (file->f_flags & O_NONBLOCK), flags));
 }
 

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 41
+SUBLEVEL = 42
 
 ARCH = i386
 
@@ -9,8 +9,7 @@ ARCH = i386
 # because it makes re-config very ugly and too many fundamental files depend
 # on "CONFIG_SMP"
 #
-# NOTE! SMP is experimental, and gcc-2.5.8 is recommended. See the file
-# Documentation/SMP.
+# NOTE! SMP is experimental. See the file Documentation/SMP.txt
 #
 # SMP = 1
 
@@ -60,6 +59,15 @@ endif
 #
 
 ROOT_DEV = CURRENT
+
+#
+# NFS_ROOT_NAME specifies the default name of the directory to mount
+# as root via NFS, if the kernel does not get the "root=" option from
+# the boot loader. The "%s" will be replaced by the IP-number of the
+# local system.
+#
+
+NFS_ROOT = -DNFS_ROOT="\"/tftpboot/%s\""
 
 #
 # INSTALL_PATH specifies where to place the updated kernel and system map
@@ -126,10 +134,21 @@ endif
 
 include arch/$(ARCH)/Makefile
 
+ifdef SMP
+
+.S.s:
+	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -E -o $*.s $<
+.S.o:
+	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c -o $*.o $<
+
+else
+
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.s $<
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
+
+endif
 
 Version: dummy
 	@rm -f include/linux/compile.h
@@ -200,7 +219,7 @@ init/version.o: init/version.c include/linux/compile.h
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
 
 init/main.o: init/main.c
-	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
+	$(CC) $(CFLAGS) $(PROFILING) $(NFS_ROOT) -c -o $*.o $<
 
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs

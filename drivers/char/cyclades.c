@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.3.2 $$Date: 1995/09/08 22:07:14 $";
+"$Revision: 1.36.3.4 $$Date: 1995/11/13 20:45:10 $";
 /*
  *  linux/drivers/char/cyclades.c
  *
@@ -24,6 +24,19 @@ static char rcsid[] =
  *   int cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
+ * Revision 1.36.3.4  1995/11/13  20:45:10  bentson
+ * Changes by Corey Minyard <minyard@wf-rch.cirr.com> distributed
+ * in 1.3.41 kernel to remove a possible race condition, extend
+ * some error messages, and let the driver run as a loadable module
+ * Change by Alan Wendt <alan@ez0.ezlink.com> to remove a
+ * possible race condition.
+ * Change by Marcio Saito <marcio@cyclades.com> to fix PCI addressing.
+ *
+ * Revision 1.36.3.3  1995/11/13  19:44:48  bentson
+ * Changes by Linus Torvalds in 1.3.33 kernel distribution
+ * required due to reordering of driver initialization.
+ * Drivers are now initialized *after* memory management.
+ *
  * Revision 1.36.3.2  1995/09/08  22:07:14  bentson
  * remove printk from ISR; fix typo
  *
@@ -452,12 +465,13 @@ SP(char *data){
         console_print(data);
     restore_flags(flags);
 }
-char scrn[2];
 void
 CP(char data){
   unsigned long flags;
+  char scrn[2];
     save_flags(flags); cli();
         scrn[0] = data;
+        scrn[1] = '\0';
         console_print(scrn);
     restore_flags(flags);
 }/* CP */
@@ -1296,8 +1310,10 @@ shutdown(struct cyclades_port * info)
      */
     save_flags(flags); cli();
 	if (info->xmit_buf){
-	    free_page((unsigned long) info->xmit_buf);
-	    info->xmit_buf = 0;
+            unsigned long temp;
+            temp = info->xmit_buf;
+            info->xmit_buf = 0;
+	    free_page((unsigned long) temp);
 	}
 
 	base_addr[CyCAR<<index] = (u_char)channel;
@@ -2693,7 +2709,7 @@ cy_init_card(unsigned char *true_base_addr,int index)
            and this must be a Cyclom-16Y, not a Cyclom-32Ye.
         */
         if (chip_number == 4
-        && *(true_base_addr + cy_chip_offset[0] + CyGFRCR) == 0){
+        && *(true_base_addr + (cy_chip_offset[0]<<index) + (CyGFRCR<<index)) == 0){
 	    return chip_number;
         }
 

@@ -216,8 +216,8 @@ int init_netlink(void)
 {
 	int ct;
 
-	if(register_chrdev(NET_MAJOR,"netlink", &netlink_fops)) {
-		printk("netlink: unable to get major %d\n", NET_MAJOR);
+	if(register_chrdev(NETLINK_MAJOR,"netlink", &netlink_fops)) {
+		printk("netlink: unable to get major %d\n", NETLINK_MAJOR);
 		return -EIO;
 	}
 	for(ct=0;ct<MAX_LINKS;ct++)

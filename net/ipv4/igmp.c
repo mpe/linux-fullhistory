@@ -103,7 +103,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 	if(skb==NULL)
 		return;
 	tmp=ip_build_header(skb, INADDR_ANY, address, &dev, IPPROTO_IGMP, NULL,
-				28 , 0, 1);
+				28 , 0, 1, NULL);
 	if(tmp<0)
 	{
 		kfree_skb(skb, FREE_WRITE);

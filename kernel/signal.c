@@ -90,7 +90,7 @@ asmlinkage int sys_sigpending(sigset_t *set)
  * isn't actually ignored, but does automatic child reaping, while
  * SIG_DFL is explicitly said by POSIX to force the signal to be ignored..
  */
-static void check_pending(int signum)
+static inline void check_pending(int signum)
 {
 	struct sigaction *p;
 

@@ -38,14 +38,54 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 	--------------------------
 
 
+	8390 based Network Modules		(Paul Gortmaker, Nov 12, 1995)
+	--------------------------
+
+(Includes: smc-ultra, ne, wd, 3c503, hp, hp-plus, e2100 and ac3200)
+
+The 8390 series of network drivers now support multiple card systems without 
+reloading the same module multiple times (memory efficient!) This is done by 
+specifying multiple comma separated values, such as:
+
+	insmod 3c503.o io=0x280,0x300,0x330,0x350  xcvr=0,1,0,1
+
+The above would have the one module controlling four 3c503 cards, with card 2
+and 4 using external transcievers. The "insmod" manual describes the usage
+of comma separated value lists.
+
+It is *STRONGLY RECOMMENDED* that you supply "io=" instead of autoprobing.
+If an "io=" argument is not supplied, then the ISA drivers will complain
+about autoprobing being not recommended, and begrudgingly autoprobe for
+a *SINGLE CARD ONLY* -- if you want to use multiple cards you *have* to 
+supply an "io=0xNNN,0xQQQ,..." argument.
+
+The ne module is an exception to the above. A NE2000 is essentially an
+8390 chip, some bus glue and some RAM. Because of this, the ne probe is
+more invasive than the rest, and so at boot we make sure the ne probe is 
+done last of all the 8390 cards (so that it won't trip over other 8390 based
+cards) With modules we can't ensure that all other non-ne 8390 cards have
+already been found. Because of this, the ne module REQUIRES an "io=0xNNN" 
+argument passed in via insmod. It will refuse to autoprobe.
+
+It is also worth noting that auto-IRQ probably isn't as reliable during 
+the flurry of interrupt activity on a running machine. Cards such as the 
+ne2000 that can't get the IRQ setting from an EEPROM or configuration
+register are probably best supplied with an "irq=M" argument as well.
+
+
+----------------------------------------------------------------------
+Card/Module List - Configurable Parameters and Default Values
+----------------------------------------------------------------------
+
 3c501.c:
 	io  = 0x280	IO base address
 	irq = 5		IRQ
 	(Probes ports:	0x280, 0x300)
 
 3c503.c:
-	io = 0x300
-	irq = 0
+	io = 0		(It will complain if you don't supply an "io=0xNNN")
+	irq = 0		(IRQ software selected by driver using autoIRQ)
+	xcvr = 0	(Use xcvr=1 to select external transceiver.)
 	(Probes ports: 0x300, 0x310, 0x330, 0x350, 0x250, 0x280, 0x2A0, 0x2E0)
 
 3c505.c:
@@ -69,8 +109,8 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 	(No public options, several other modules need this one)
 
 ac3200.c:
-	io = 0
-	irq = 0
+	io = 0		(Checks 0x1000 to 0x8fff in 0x1000 intervals)
+	irq = 0		(Read from config register)
 	(EISA probing..)
 
 apricot.c:
@@ -101,14 +141,10 @@ atp.c: *Not modularized*
 	(Probes ports: 0x378, 0x278, 0x3BC;
 	 fixed IRQs: 5 and 7			)
 
-
-auto_irq.c: *Static kernel component*
-
-
 de4x5.c:
 	io = 0x000b
 	irq = 10
-	is_not_dec = 0  -- For SMC card using DEC 21140 set this to 1
+	is_not_dec = 0  -- For non-DEC card using DEC 21040/21041/21140 chip, set this to 1
 	(EISA, and PCI probing)
 
 de600.c:
@@ -130,8 +166,10 @@ dummy.c:
 	No options
 
 e2100.c:
-	io = 0x300
-	irq = 0
+	io = 0		(It will complain if you don't supply an "io=0xNNN")
+	irq = 0		(IRQ software selected by driver)
+	mem = 0		(Override default shared memory start of 0xd0000)
+	xcvr = 0	(Use xcvr=1 to select external transceiver.)
 	(Probes ports: 0x300, 0x280, 0x380, 0x220)
 
 eepro.c:
@@ -158,13 +196,13 @@ ewrk3.c:
 		0x300,        0x340, 0x360, 0x380, 0x3A0, 0x3C0)
 
 hp-plus.c:
-	io = 0x200
-	irq = 0
+	io = 0		(It will complain if you don't supply an "io=0xNNN")
+	irq = 0		(IRQ read from configuration register)
 	(Probes ports: 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340)
 
 hp.c:
-	io = 0x300
-	irq = 0
+	io = 0		(It will complain if you don't supply an "io=0xNNN")
+	irq = 0		(IRQ software selected by driver using autoIRQ)
 	(Probes ports: 0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240)
 
 hp100.c:
@@ -184,8 +222,8 @@ lance.c: *Not modularized*
 loopback.c: *Static kernel component*
 
 ne.c:
-	io = 0x300
-	irq = 0
+	io = 0		(Explicitly *requires* an "io=0xNNN" value)
+	irq = 0		(Tries to determine configured IRQ via autoIRQ)
 	(Probes ports: 0x300, 0x280, 0x320, 0x340, 0x360)
 
 net_init.c: *Static kernel component*
@@ -225,8 +263,8 @@ slip.c:
 
 
 smc-ultra.c:
-	io = 0x200
-	irq = 0
+	io = 0		(It will complain if you don't supply an "io=0xNNN")
+	irq = 0		(IRQ val. read from EEPROM)
 	(Probes ports:	0x200, 0x220, 0x240, 0x280, 0x300, 0x340, 0x380)
 
 tulip.c: *Partial modularization*
@@ -240,11 +278,12 @@ wavelan.c:
 	irq = 0		(Not honoured, if changed..)
 
 wd.c:
-	io = 0x300
-	irq = 0
+	io = 0		(It will complain if you don't supply an "io=0xNNN")
+	irq = 0		(IRQ val. read from EEPROM, ancient cards use autoIRQ)
 	mem = 0		(Force shared-memory on address 0xC8000, or whatever..)
-	(Probes ports:	0x300, 0x280, 0x380, 0x240,
-	 uses AUTOIRQ)
+	mem_end = 0	(Force non-std. mem. size via supplying mem_end val.)
+			(eg. for 32k WD8003EBT, use mem=0xd0000 mem_end=0xd8000)
+	(Probes ports:	0x300, 0x280, 0x380, 0x240)
 
 znet.c: *Not modularized*
 	(Only one device on  Zenith Z-Note (notebook?) systems,

@@ -54,9 +54,12 @@
 /* end multicast support change */
 
 /* ARP cache control calls. */
-#define SIOCDARP	0x8950		/* delete ARP table entry	*/
-#define SIOCGARP	0x8951		/* get ARP table entry		*/
-#define SIOCSARP	0x8952		/* set ARP table entry		*/
+#define OLD_SIOCDARP	0x8950		/* old delete ARP table entry	*/
+#define OLD_SIOCGARP	0x8951		/* old get ARP table entry	*/
+#define OLD_SIOCSARP	0x8952		/* old set ARP table entry	*/
+#define SIOCDARP	0x8953		/* delete ARP table entry	*/
+#define SIOCGARP	0x8954		/* get ARP table entry		*/
+#define SIOCSARP	0x8955		/* set ARP table entry		*/
 
 /* RARP cache control calls. */
 #define SIOCDRARP	0x8960		/* delete RARP table entry	*/

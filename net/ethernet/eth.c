@@ -89,7 +89,7 @@ void eth_setup(char *str, int *ints)
 int eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	   void *daddr, void *saddr, unsigned len)
 {
-	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,14);
+	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,ETH_HLEN);
 
 	/* 
 	 *	Set the protocol type. For a packet of type ETH_P_802_3 we put the length
@@ -175,7 +175,7 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	unsigned char *rawp;
 	
 	skb->mac.raw=skb->data;
-	skb_pull(skb,14);	
+	skb_pull(skb,dev->hard_header_len);
 	eth= skb->mac.ethernet;
 	
 	if(*eth->h_dest&1)
@@ -218,28 +218,48 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 }
 
 /*
- *	Header caching for ethernet. Try to find and cache a header to avoid arp overhead.
+ * Upper level calls this function to bind hardware header cache entry.
+ * If the call is successful, then corresponding Address Resolution Protocol
+ * (maybe, not ARP) takes responsibility for updating cache content.
  */
- 
-void eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr)
+
+void eth_header_cache_bind(struct hh_cache ** hhp, struct device *dev,
+			   unsigned short htype, __u32 daddr)
 {
-	int v=arp_find_cache(sk->ip_hcache_data, daddr, dev);
-	if(v!=1)
-		sk->ip_hcache_state=0;	/* Try when arp resolves */
-	else
+	struct hh_cache *hh;
+
+	if (htype != ETH_P_IP)
 	{
-		memcpy(sk->ip_hcache_data+6, dev->dev_addr, ETH_ALEN);
-		sk->ip_hcache_data[12]=ETH_P_IP>>8;
-		sk->ip_hcache_data[13]=ETH_P_IP&0xFF;
-		sk->ip_hcache_state=1;
-		sk->ip_hcache_stamp=arp_cache_stamp;
-		sk->ip_hcache_ver=&arp_cache_stamp;
+		printk("eth_header_cache_bind: %04x cache is not implemented\n", htype);
+		return;
+	}
+	if (arp_bind_cache(hhp, dev, htype, daddr))
+		return;
+	if ((hh=*hhp) != NULL)
+	{
+		memcpy(hh->hh_data+6, dev->dev_addr, ETH_ALEN);
+		hh->hh_data[12] = htype>>8;
+		hh->hh_data[13] = htype&0xFF;
 	}
 }
 
 /*
+ * Called by Address Resolution module to notify changes in address.
+ */
+
+void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned char * haddr)
+{
+	if (hh->hh_type != ETH_P_IP)
+	{
+		printk("eth_header_cache_update: %04x cache is not implemented\n", hh->hh_type);
+		return;
+	}
+	memcpy(hh->hh_data, haddr, ETH_ALEN);
+	hh->hh_uptodate = 1;
+}
+
+/*
  *	Copy from an ethernet device memory space to an sk_buff while checksumming if IP
- *	The magic "34" is Rx_addr+Tx_addr+type_field+sizeof(struct iphdr) == 6+6+2+20.
  */
  
 void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int base)
@@ -261,13 +281,15 @@ void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int 
 	 * We have to use the smaller of length and ip_length because it
 	 * can happen that ip_length > length.
 	 */
-	memcpy(dest->data,src,34);	/* ethernet is always >= 34 */
-	length -= 34;
-	iph=(struct iphdr*)(src+14);	/* 14 = Rx_addr+Tx_addr+type_field */
+	memcpy(dest->data,src,sizeof(struct iphdr)+ETH_HLEN);	/* ethernet is always >= 34 */
+	length -= sizeof(struct iphdr) + ETH_HLEN;
+	iph=(struct iphdr*)(src+ETH_HLEN);
 	ip_length = ntohs(iph->tot_len) - sizeof(struct iphdr);
-	if (ip_length <= length)
+
+	/* Also watch out for bogons - min IP size is 8 (rfc-1042) */
+	if ((ip_length <= length) && (ip_length > 7))
 		length=ip_length;
 
-	dest->csum=csum_partial_copy(src+34,dest->data+34,length,base);
+	dest->csum=csum_partial_copy(src+sizeof(struct iphdr)+ETH_HLEN,dest->data+sizeof(struct iphdr)+ETH_HLEN,length,base);
 	dest->ip_summed=1;
 }

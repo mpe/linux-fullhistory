@@ -496,8 +496,18 @@ extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
 extern void ll_rw_page(int rw, kdev_t dev, unsigned long nr, char * buffer);
 extern void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buffer);
 extern int is_read_only(kdev_t dev);
-extern void brelse(struct buffer_head * buf);
-extern void bforget(struct buffer_head * buf);
+extern void __brelse(struct buffer_head *buf);
+extern inline void brelse(struct buffer_head *buf)
+{
+	if (buf)
+		__brelse(buf);
+}
+extern void __bforget(struct buffer_head *buf);
+extern inline void bforget(struct buffer_head *buf)
+{
+	if (buf)
+		__bforget(buf);
+}
 extern void set_blocksize(kdev_t dev, int size);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
 extern unsigned long bread_page(unsigned long addr,kdev_t dev,int b[],int size,int no_share);

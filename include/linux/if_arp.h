@@ -41,6 +41,8 @@
 #define ARPHRD_PPP	512
 #define ARPHRD_TUNNEL	768		/* IPIP tunnel			*/
 #define ARPHRD_TUNNEL6	769		/* IPIP6 tunnel			*/
+#define ARPHRD_FRAD	770		/* Frame Relay			*/
+#define ARPHRD_SKIP	771		/* SKIP vif			*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/
@@ -51,6 +53,14 @@
 
 /* ARP ioctl request. */
 struct arpreq {
+  struct sockaddr	arp_pa;		/* protocol address		*/
+  struct sockaddr	arp_ha;		/* hardware address		*/
+  int			arp_flags;	/* flags			*/
+  struct sockaddr       arp_netmask;    /* netmask (only for proxy arps) */
+  char			arp_dev[16];
+};
+
+struct arpreq_old {
   struct sockaddr	arp_pa;		/* protocol address		*/
   struct sockaddr	arp_ha;		/* hardware address		*/
   int			arp_flags;	/* flags			*/

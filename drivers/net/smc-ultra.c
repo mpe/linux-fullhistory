@@ -35,6 +35,10 @@
 	This driver does not support the programmed-I/O data transfer mode of
 	the EtherEZ.  That support (if available) is smc-ez.c.  Nor does it
 	use the non-8390-compatible "Altego" mode. (No support currently planned.)
+
+	Changelog:
+
+	Paul Gortmaker	: multiple card support for module users.
 */
 
 static const char *version =
@@ -117,6 +121,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 	int checksum = 0;
 	const char *model_name;
 	unsigned char eeprom_irq = 0;
+	static unsigned version_printed = 0;
 	/* Values from various config regs. */
 	unsigned char num_pages, irqreg, addr;
 	unsigned char idreg = inb(ioaddr + 7);
@@ -135,10 +140,14 @@ int ultra_probe1(struct device *dev, int ioaddr)
 	if ((checksum & 0xff) != 0xFF)
 		return ENODEV;
 
-	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct ei_device));
-	if (dev == NULL) /* Still.. */
-		return ENOMEM; /* Out of memory ?? */
+	/* We should have a "dev" from Space.c or the static module table. */
+	if (dev == NULL) {
+		printk("smc-ultra.c: Passed a NULL device.\n");
+		dev = init_etherdev(0, 0);
+	}
+
+	if (ei_debug  &&  version_printed++ == 0)
+		printk(version);
 
 	model_name = (idreg & 0xF0) == 0x20 ? "SMC Ultra" : "SMC EtherEZ";
 
@@ -175,7 +184,12 @@ int ultra_probe1(struct device *dev, int ioaddr)
 		eeprom_irq = 1;
 	}
 
-
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {
+		printk (", no memory for dev->priv.\n");
+                return -ENOMEM;
+        }
+ 
 	/* OK, we are certain this is going to work.  Setup the device. */
 	request_region(ioaddr, ULTRA_IO_EXTENT, model_name);
 
@@ -190,8 +204,6 @@ int ultra_probe1(struct device *dev, int ioaddr)
 		num_pages = num_pages_tbl[(addr >> 4) & 3];
 	}
 
-	ethdev_init(dev);
-
 	ei_status.name = model_name;
 	ei_status.word16 = 1;
 	ei_status.tx_start_page = START_PG;
@@ -204,8 +216,6 @@ int ultra_probe1(struct device *dev, int ioaddr)
 
 	printk(",%s IRQ %d memory %#lx-%#lx.\n", eeprom_irq ? "" : "assigned ",
 		   dev->irq, dev->mem_start, dev->mem_end-1);
-	if (ei_debug > 0)
-		printk(version);
 
 	ei_status.reset_8390 = &ultra_reset_8390;
 	ei_status.block_input = &ultra_block_input;
@@ -222,7 +232,6 @@ static int
 ultra_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
-	int rc;
 
 	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name))
 		return -EAGAIN;
@@ -230,8 +239,7 @@ ultra_open(struct device *dev)
 	outb(ULTRA_MEMENB, ioaddr);	/* Enable memory, 16 bit mode. */
 	outb(0x80, ioaddr + 5);
 	outb(0x01, ioaddr + 6);		/* Enable interrupts and memory. */
-	rc = ei_open(dev);
-	if (rc != 0) return rc;
+	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -330,39 +338,67 @@ ultra_close_card(struct device *dev)
 	return 0;
 }
 
+
 #ifdef MODULE
-static char devicename[9] = { 0, };
-static struct device dev_ultra = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, ultra_probe };
+#define MAX_ULTRA_CARDS	4	/* Max number of Ultra cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_ULTRA_CARDS] = { 0, };
+static struct device dev_ultra[MAX_ULTRA_CARDS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-static int io = 0x200;
-static int irq = 0;
+static int io[MAX_ULTRA_CARDS] = { 0, };
+static int irq[MAX_ULTRA_CARDS]  = { 0, };
 
-int init_module(void)
+/* This is set up so that only a single autoprobe takes place per call.
+ISA device autoprobes on a running machine are not recommended. */
+int
+init_module(void)
 {
-	if (io == 0)
-		printk("smc-ultra: You should not use auto-probing with insmod!\n");
-	dev_ultra.base_addr = io;
-	dev_ultra.irq       = irq;
-	if (register_netdev(&dev_ultra) != 0) {
-		printk("smc-ultra: register_netdev() returned non-zero.\n");
-		return -EIO;
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) {
+		struct device *dev = &dev_ultra[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->init = ultra_probe;
+		if (io[this_dev] == 0)  {
+			if (this_dev != 0) break; /* only autoprobe 1st one */
+			printk(KERN_NOTICE "smc-ultra.c: Presently autoprobing (not recommended) for a single card.\n");
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "smc-ultra.c: No SMC Ultra card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
+		}
+		found++;
 	}
+
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	int ioaddr = dev_ultra.base_addr - ULTRA_NIC_OFFSET;
+	int this_dev;
 
-	unregister_netdev(&dev_ultra);
-
-	/* If we don't do this, we can't re-insmod it later. */
-    	release_region(ioaddr, ULTRA_IO_EXTENT);
+	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) {
+		struct device *dev = &dev_ultra[this_dev];
+		if (dev->priv != NULL) {
+			/* NB: ultra_close_card() does free_irq + irq2dev */
+			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
+			kfree(dev->priv);
+			dev->priv = NULL;
+			release_region(ioaddr, ULTRA_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 #endif /* MODULE */
 

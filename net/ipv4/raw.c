@@ -35,6 +35,8 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+ 
+#include <linux/config.h> 
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <linux/types.h>
@@ -56,8 +58,6 @@
 #include <net/icmp.h>
 #include <net/udp.h>
 #include <net/checksum.h>
-
-#include <linux/config.h>
 
 #ifdef CONFIG_IP_MROUTE
 struct sock *mroute_socket=NULL;
@@ -240,8 +240,8 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
  *	Temporary
  */
  
-static int raw_sendmsg(struct sock *sk, struct msghdr *msg,
-	int len, int noblock, int flags)
+static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock, 
+	int flags)
 {
 	if(msg->msg_iovlen==1)
 		return raw_sendto(sk,msg->msg_iov[0].iov_base,len, noblock, flags, msg->msg_name, msg->msg_namelen);

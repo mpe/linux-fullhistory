@@ -50,6 +50,7 @@
  * 32 -                        philips/lms cm206 cdrom
  * 33 -                        ide2
  * 34 - z8530 driver           ide3
+ * 36 - netlink
  */
 
 #define UNNAMED_MAJOR	0
@@ -97,6 +98,7 @@
 #define CM206_CDROM_MAJOR 32
 #define IDE2_MAJOR	33
 #define IDE3_MAJOR	34
+#define NETLINK_MAJOR	36
 
 /*
  * Tests for SCSI devices.

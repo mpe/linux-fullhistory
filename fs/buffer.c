@@ -428,7 +428,7 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		bh->b_next->b_prev = bh;
 }
 
-static struct buffer_head * find_buffer(kdev_t dev, int block, int size)
+static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 {		
 	struct buffer_head * tmp;
 
@@ -807,10 +807,8 @@ void refile_buffer(struct buffer_head * buf)
 /*
  * Release a buffer head
  */
-void brelse(struct buffer_head * buf)
+void __brelse(struct buffer_head * buf)
 {
-	if (!buf)
-		return;
 	wait_on_buffer(buf);
 
 	/* If dirty, mark the time this buffer should be written back */
@@ -828,10 +826,8 @@ void brelse(struct buffer_head * buf)
 /*
  * bforget() is like brelse(), except is throws the buffer away
  */
-void bforget(struct buffer_head * buf)
+void __bforget(struct buffer_head * buf)
 {
-	if (!buf)
-		return;
 	wait_on_buffer(buf);
 	if (buf->b_count != 1) {
 		printk("Aieee... bforget(): count = %d\n", buf->b_count);
@@ -1044,7 +1040,7 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
  * "address" points to the new page we can use to move things
  * around..
  */
-static unsigned long try_to_align(struct buffer_head ** bh, int nrbuf,
+static inline unsigned long try_to_align(struct buffer_head ** bh, int nrbuf,
 	unsigned long address)
 {
 	while (nrbuf-- > 0)

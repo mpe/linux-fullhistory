@@ -18,7 +18,9 @@
 
 	Changelog:
 
-	Paul Gortmaker	: multiple card support for module users
+	Paul Gortmaker	: multiple card support for module users, support
+			  for non-standard memory sizes.
+			 
 
 */
 
@@ -121,8 +123,11 @@ int wd_probe1(struct device *dev, int ioaddr)
 		|| (checksum & 0xff) != 0xFF)
 		return ENODEV;
 
-	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct ei_device));
+	/* We should have a "dev" from Space.c or the static module table. */
+	if (dev == NULL) {
+		printk("wd.c: Passed a NULL device.\n");
+		dev = init_etherdev(0, 0);
+	}
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -246,20 +251,32 @@ int wd_probe1(struct device *dev, int ioaddr)
 		return EAGAIN;
 	}
 
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {	
+		printk (" unable to get memory for dev->priv.\n");
+		free_irq(dev->irq);
+		return -ENOMEM;
+	}
+
 	/* OK, were are certain this is going to work.  Setup the device. */
 	request_region(ioaddr, WD_IO_EXTENT,"wd");
-	ethdev_init(dev);
 
 	ei_status.name = model_name;
 	ei_status.word16 = word16;
 	ei_status.tx_start_page = WD_START_PG;
 	ei_status.rx_start_page = WD_START_PG + TX_PAGES;
-	ei_status.stop_page = word16 ? WD13_STOP_PG : WD03_STOP_PG;
 
 	/* Don't map in the shared memory until the board is actually opened. */
 	dev->rmem_start = dev->mem_start + TX_PAGES*256;
-	dev->mem_end = dev->rmem_end
-		= dev->mem_start + (ei_status.stop_page - WD_START_PG)*256;
+
+	/* Some cards (eg WD8003EBT) can be jumpered for more (32k!) memory. */
+	if (dev->mem_end != 0) {
+		ei_status.stop_page = (dev->mem_end - dev->mem_start)/256;
+	} else {
+		ei_status.stop_page = word16 ? WD13_STOP_PG : WD03_STOP_PG;
+		dev->mem_end = dev->mem_start + (ei_status.stop_page - WD_START_PG)*256;
+	}
+	dev->rmem_end = dev->mem_end;
 
 	printk(" %s, IRQ %d, shared memory at %#lx-%#lx.\n",
 		   model_name, dev->irq, dev->mem_start, dev->mem_end-1);
@@ -286,7 +303,6 @@ static int
 wd_open(struct device *dev)
 {
   int ioaddr = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
-  int rc;
 
   /* Map in the shared memory. Always set register 0 last to remain
 	 compatible with very old boards. */
@@ -297,8 +313,7 @@ wd_open(struct device *dev)
 	  outb(ei_status.reg5, ioaddr+WD_CMDREG5);
   outb(ei_status.reg0, ioaddr); /* WD_CMDREG */
 
-  rc = ei_open(dev);
-  if (rc != 0) return rc;
+  ei_open(dev);
   MOD_INC_USE_COUNT;
   return 0;
 }
@@ -392,11 +407,11 @@ wd_close_card(struct device *dev)
 
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
-	NS8390_init(dev, 0);
-	dev->start = 0;
+	ei_close(dev);
 
 	/* Change from 16-bit to 8-bit shared memory so reboot works. */
-	outb(ei_status.reg5, wd_cmdreg + WD_CMDREG5 );
+	if (ei_status.word16)
+		outb(ei_status.reg5, wd_cmdreg + WD_CMDREG5 );
 
 	/* And disable the shared memory. */
 	outb(ei_status.reg0 & ~WD_MEMENB, wd_cmdreg);
@@ -406,12 +421,12 @@ wd_close_card(struct device *dev)
 	return 0;
 }
 
-
+
 #ifdef MODULE
-#define MAX_WD_MODS	4	/* Max number of wd modules allowed */
-#define NAMELEN		9	/* # of chars for storing dev->name */
-static char namelist[NAMELEN * MAX_WD_MODS] = { 0, };
-static struct device dev_wd80x3[MAX_WD_MODS] = {
+#define MAX_WD_CARDS	4	/* Max number of wd cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_WD_CARDS] = { 0, };
+static struct device dev_wd[MAX_WD_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -420,31 +435,36 @@ static struct device dev_wd80x3[MAX_WD_MODS] = {
 	},
 };
 
-static int io[MAX_WD_MODS] = { 0, };
-static int irq[MAX_WD_MODS]  = { 0, };
-static int mem[MAX_WD_MODS] = { 0, };
+static int io[MAX_WD_CARDS] = { 0, };
+static int irq[MAX_WD_CARDS]  = { 0, };
+static int mem[MAX_WD_CARDS] = { 0, };
+static int mem_end[MAX_WD_CARDS] = { 0, };	/* for non std. mem size */
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */
 int
 init_module(void)
 {
-	int this_dev;
+	int this_dev, found = 0;
 
-	for (this_dev = 0; this_dev < MAX_WD_MODS; this_dev++) {
-		dev_wd80x3[this_dev].name = namelist+(NAMELEN*this_dev);
-		dev_wd80x3[this_dev].irq = irq[this_dev];
-		dev_wd80x3[this_dev].base_addr = io[this_dev];
-		dev_wd80x3[this_dev].mem_start = mem[this_dev];
-		dev_wd80x3[this_dev].init = wd_probe;
+	for (this_dev = 0; this_dev < MAX_WD_CARDS; this_dev++) {
+		struct device *dev = &dev_wd[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->mem_start = mem[this_dev];
+		dev->mem_end = mem_end[this_dev];
+		dev->init = wd_probe;
 		if (io[this_dev] == 0)  {
 			if (this_dev != 0) break; /* only autoprobe 1st one */
 			printk(KERN_NOTICE "wd.c: Presently autoprobing (not recommended) for a single card.\n");
 		}
-		if (register_netdev(&dev_wd80x3[this_dev]) != 0) {
-			printk(KERN_WARNING "modules: No wd80x3 card found (i/o = 0x%x).\n", io[this_dev]);
-			return -EIO;
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "wd.c: No wd80x3 card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
 		}
+		found++;
 	}
 
 	return 0;
@@ -455,12 +475,16 @@ cleanup_module(void)
 {
 	int this_dev;
 
-	for (this_dev = 0; this_dev < MAX_WD_MODS; this_dev++) {
-		if (dev_wd80x3[this_dev].priv != NULL) {
-			int ioaddr = dev_wd80x3[this_dev].base_addr - WD_NIC_OFFSET;
-			unregister_netdev(&dev_wd80x3[this_dev]);
-			free_irq(dev_wd80x3[this_dev].irq);
+	for (this_dev = 0; this_dev < MAX_WD_CARDS; this_dev++) {
+		struct device *dev = &dev_wd[this_dev];
+		if (dev->priv != NULL) {
+			int ioaddr = dev->base_addr - WD_NIC_OFFSET;
+			kfree(dev->priv);
+			dev->priv = NULL;
+			free_irq(dev->irq);
+			irq2dev_map[dev->irq] = NULL;
 			release_region(ioaddr, WD_IO_EXTENT);
+			unregister_netdev(dev);
 		}
 	}
 }

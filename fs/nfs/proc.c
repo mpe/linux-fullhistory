@@ -818,7 +818,8 @@ retry:
  * Here are a few RPC-assist functions.
  */
 
-static int *nfs_rpc_header(int *p, int procedure, int ruid)
+int *rpc_header(int *p, int procedure, int program, int version,
+					int uid, int gid, int *groups)
 {
 	int *p1, *p2;
 	int i;
@@ -832,18 +833,18 @@ static int *nfs_rpc_header(int *p, int procedure, int ruid)
 	*p++ = htonl(++xid);
 	*p++ = htonl(RPC_CALL);
 	*p++ = htonl(RPC_VERSION);
-	*p++ = htonl(NFS_PROGRAM);
-	*p++ = htonl(NFS_VERSION);
+	*p++ = htonl(program);
+	*p++ = htonl(version);
 	*p++ = htonl(procedure);
 	*p++ = htonl(RPC_AUTH_UNIX);
 	p1 = p++;
 	*p++ = htonl(CURRENT_TIME); /* traditional, could be anything */
 	p = xdr_encode_string(p, (char *) sys);
-	*p++ = htonl(ruid ? current->uid : current->fsuid);
-	*p++ = htonl(current->egid);
+	*p++ = htonl(uid);
+	*p++ = htonl(gid);
 	p2 = p++;
-	for (i = 0; i < 16 && i < NGROUPS && current->groups[i] != NOGROUP; i++)
-		*p++ = htonl(current->groups[i]);
+	for (i = 0; i < 16 && i < NGROUPS && groups[i] != NOGROUP; i++)
+		*p++ = htonl(groups[i]);
 	*p2 = htonl(i);
 	*p1 = htonl((p - (p1 + 1)) << 2);
 	*p++ = htonl(RPC_AUTH_NULL);
@@ -851,7 +852,16 @@ static int *nfs_rpc_header(int *p, int procedure, int ruid)
 	return p;
 }
 
-static int *nfs_rpc_verify(int *p)
+
+static int *nfs_rpc_header(int *p, int procedure, int ruid)
+{
+	return rpc_header(p, procedure, NFS_PROGRAM, NFS_VERSION,
+			(ruid ? current->uid : current->fsuid),
+			current->egid, current->groups);
+}
+
+
+int *rpc_verify(int *p)
 {
 	unsigned int n;
 
@@ -882,7 +892,14 @@ static int *nfs_rpc_verify(int *p)
 	}
 	return p;
 }
-	
+
+
+static int *nfs_rpc_verify(int *p)
+{
+	return rpc_verify(p);
+}
+
+
 /*
  * We need to translate between nfs status return values and
  * the local errno values which may not be the same.

@@ -25,6 +25,7 @@
 #include <linux/socket.h>
 #include <linux/ip.h>
 #include <linux/netdevice.h>
+#include <net/route.h>
 
 #ifndef _SNMP_H
 #include <net/snmp.h>
@@ -84,13 +85,13 @@ struct ipq
 extern void		ip_print(const struct iphdr *ip);
 extern int		ip_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void		ip_route_check(__u32 daddr); 
-extern int 		ip_send(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr);
+extern int 		ip_send(struct rtable *rt, struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr);
 extern int 		ip_build_header(struct sk_buff *skb,
 					__u32 saddr,
 					__u32 daddr,
 					struct device **dev, int type,
 					struct options *opt, int len,
-					int tos,int ttl);
+					int tos,int ttl,struct rtable **rp);
 extern int		ip_rcv(struct sk_buff *skb, struct device *dev,
 			       struct packet_type *pt);
 extern int		ip_options_echo(struct options * dopt, struct options * sopt,

@@ -25,6 +25,7 @@
     Changelog:
 
     Paul Gortmaker	: add support for the 2nd 8kB of RAM on 16 bit cards.
+    Paul Gortmaker	: multiple card support for module users.
 
 */
 
@@ -182,16 +183,24 @@ el2_probe1(struct device *dev, int ioaddr)
 	return ENODEV;
     }
 
-    if (dev == NULL)
-	dev = init_etherdev(0, sizeof(struct ei_device));
+    /* We should have a "dev" from Space.c or the static module table. */
+    if (dev == NULL) {
+	printk("3c503.c: Passed a NULL device.\n");
+	dev = init_etherdev(0, 0);
+    }
 
     if (ei_debug  &&  version_printed++ == 0)
 	printk(version);
 
     dev->base_addr = ioaddr;
-    ethdev_init(dev);
 
-    printk("%s: 3c503 at i/o base %#3x, node address", dev->name, ioaddr);
+    /* Allocate dev->priv and fill in 8390 specific dev fields. */
+    if (ethdev_init(dev)) {
+	printk ("3c503: unable to allocate memory for dev->priv.\n");
+	return -ENOMEM;
+     }
+
+    printk("%s: 3c503 at i/o base %#3x, node ", dev->name, ioaddr);
 
     /* Retrieve and print the ethernet address. */
     for (i = 0; i < 6; i++)
@@ -220,6 +229,7 @@ el2_probe1(struct device *dev, int ioaddr)
 #else
     ei_status.interface_num = dev->mem_end & 0xf;
 #endif
+    printk(", using %sternal xcvr.\n", ei_status.interface_num == 0 ? "in" : "ex");
 
     if ((membase_reg & 0xf0) == 0) {
 	dev->mem_start = 0;
@@ -241,7 +251,7 @@ el2_probe1(struct device *dev, int ioaddr)
 		writel(test_val, mem_base + i);
 		if (readl(mem_base) != 0xba5eba5e
 		    || readl(mem_base + i) != test_val) {
-		    printk(" memory failure or memory address conflict.\n");
+		    printk("3c503.c: memory failure or memory address conflict.\n");
 		    dev->mem_start = 0;
 		    ei_status.name = "3c503-PIO";
 		    break;
@@ -292,7 +302,7 @@ el2_probe1(struct device *dev, int ioaddr)
     if (dev->irq == 2)
 	dev->irq = 9;
     else if (dev->irq > 5 && dev->irq != 9) {
-	printk("\n3c503: configured interrupt %d invalid, will use autoIRQ.\n",
+	printk("3c503: configured interrupt %d invalid, will use autoIRQ.\n",
 	       dev->irq);
 	dev->irq = 0;
     }
@@ -304,7 +314,7 @@ el2_probe1(struct device *dev, int ioaddr)
     dev->stop = &el2_close;
 
     if (dev->mem_start)
-	printk("\n%s: %s - %dkB RAM, 8kB shared mem window at %#6lx-%#6lx.\n",
+	printk("%s: %s - %dkB RAM, 8kB shared mem window at %#6lx-%#6lx.\n",
 		dev->name, ei_status.name, (wordlength+1)<<3,
 		dev->mem_start, dev->mem_end-1);
 
@@ -344,8 +354,11 @@ el2_open(struct device *dev)
 	    return -EAGAIN;
 	}
     }
+
     el2_init_card(dev);
-    return ei_open(dev);
+    ei_open(dev);
+    MOD_INC_USE_COUNT;
+    return 0;
 }
 
 static int
@@ -356,9 +369,8 @@ el2_close(struct device *dev)
     irq2dev_map[dev->irq] = NULL;
     outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
 
-    NS8390_init(dev, 0);
-    dev->start = 0;
-
+    ei_close(dev);
+    MOD_DEC_USE_COUNT;
     return 0;
 }
 
@@ -526,56 +538,69 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
     }
     outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
 }
+
+
 #ifdef MODULE
-static struct device el2_drv =
-{"3c503", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_probe };
-       
-static struct device el2pio_drv =
-{"3c503pio", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_pio_probe };
+#define MAX_EL2_CARDS	4	/* Max number of EL2 cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_EL2_CARDS] = { 0, };
+static struct device dev_el2[MAX_EL2_CARDS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-static int io = 0x300;
-static int irq = 0;
+static int io[MAX_EL2_CARDS] = { 0, };
+static int irq[MAX_EL2_CARDS]  = { 0, };
+static int xcvr[MAX_EL2_CARDS] = { 0, };	/* choose int. or ext. xcvr */
 
-static int no_pio = 1;
-int init_module(void)
+/* This is set up so that only a single autoprobe takes place per call.
+ISA device autoprobes on a running machine are not recommended. */
+int
+init_module(void)
 {
-	int rc1, rc2;
-	el2_drv.base_addr = io;
-	el2_drv.irq       = irq;
-	el2pio_drv.base_addr = io;
-	el2pio_drv.irq       = irq;
+	int this_dev, found = 0;
 
-	if (io == 0)
-	    printk("3c503: You should not use auto-probing with insmod!\n");
-
-	rc2 = 0;
-	no_pio = 1;
-	rc1 = register_netdev(&el2_drv);
-	if (rc1 != 0) {
-	    rc2 = register_netdev(&el2pio_drv);
-	    no_pio = 0;
+	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
+		struct device *dev = &dev_el2[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->mem_end = xcvr[this_dev];	/* low 4bits = xcvr sel. */
+		dev->init = el2_probe;
+		if (io[this_dev] == 0)  {
+			if (this_dev != 0) break; /* only autoprobe 1st one */
+			printk(KERN_NOTICE "3c503.c: Presently autoprobing (not recommended) for a single card.\n");
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "3c503.c: No 3c503 card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
+		}
+		found++;
 	}
 
-	if (rc1 != 0 && rc2 != 0)
-		return -EIO;
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	int ioaddr;
+	int this_dev;
 
-	if (no_pio) {
-		ioaddr = el2_drv.base_addr;
-		unregister_netdev(&el2_drv);
-	} else {
-		ioaddr = el2pio_drv.base_addr;
-		unregister_netdev(&el2pio_drv);
+	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
+		struct device *dev = &dev_el2[this_dev];
+		if (dev->priv != NULL) {
+			/* NB: el2_close() handles free_irq + irq2dev map */
+			kfree(dev->priv);
+			dev->priv = NULL;
+			release_region(dev->base_addr, EL2_IO_EXTENT);
+			unregister_netdev(dev);
+		}
 	}
-
-	/* If we don't do this, we can't re-insmod it later. */
-	release_region(ioaddr, EL2_IO_EXTENT);
 }
 #endif /* MODULE */
 

@@ -289,22 +289,6 @@ struct pci_dev_info *pci_lookup_dev(unsigned int vendor, unsigned int dev)
 	}
 }
 
-
-const char *pci_strbioserr (int error)
-{
-	switch (error) {
-	      case PCIBIOS_SUCCESSFUL:		return "SUCCESSFUL";
-	      case PCIBIOS_FUNC_NOT_SUPPORTED:	return "FUNC_NOT_SUPPORTED";
-	      case PCIBIOS_BAD_VENDOR_ID:	return "SUCCESSFUL";
-	      case PCIBIOS_DEVICE_NOT_FOUND:	return "DEVICE_NOT_FOUND";
-	      case PCIBIOS_BAD_REGISTER_NUMBER:	return "BAD_REGISTER_NUMBER";
-	      case PCIBIOS_SET_FAILED:		return "SET_FAILED";
-	      case PCIBIOS_BUFFER_TOO_SMALL:	return "BUFFER_TOO_SMALL";
-	      default:				return "Unknown error status";
-	}
-}
-
-
 const char *pci_strclass (unsigned int class)
 {
 	switch (class >> 8) {

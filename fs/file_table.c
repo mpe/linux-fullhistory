@@ -19,7 +19,7 @@ int nr_files = 0;
 /*
  * Insert a new file structure at the head of the list of available ones.
  */
-static void insert_file_free(struct file *file)
+static inline void insert_file_free(struct file *file)
 {
 	file->f_count = 0;
 	file->f_next = first_file;
@@ -32,7 +32,7 @@ static void insert_file_free(struct file *file)
 /*
  * Remove a file structure from the list of available ones.
  */
-static void remove_file_free(struct file *file)
+static inline void remove_file_free(struct file *file)
 {
 	if (first_file == file)
 		first_file = first_file->f_next;
@@ -44,7 +44,7 @@ static void remove_file_free(struct file *file)
 /*
  * Insert a file structure at the end of the list of available ones.
  */
-static void put_last_free(struct file *file)
+static inline void put_last_free(struct file *file)
 {
 	file->f_prev = first_file->f_prev;
 	file->f_prev->f_next = file;

@@ -32,12 +32,13 @@ extern int ethif_init(struct device *dev);
 extern int ethdev_init(struct device *dev);
 extern void NS8390_init(struct device *dev, int startp);
 extern int ei_open(struct device *dev);
+extern int ei_close(struct device *dev);
 extern void ei_interrupt(int irq, struct pt_regs *regs);
 
 #ifndef HAVE_AUTOIRQ
 /* From auto_irq.c */
 extern struct device *irq2dev_map[16];
-extern void autoirq_setup(int waittime);
+extern int autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 #endif
 

@@ -239,7 +239,7 @@ extern __inline int smp_processor_id(void)
  *	processes are run.
  */
  
-#define PROC_CHANGE_PENALTY	5		/* Schedule penalty */
+#define PROC_CHANGE_PENALTY	20		/* Schedule penalty */
 
 #endif
 #endif

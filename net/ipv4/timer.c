@@ -146,8 +146,6 @@ void net_timer (unsigned long data)
 			/* We've waited long enough, close the socket. */
 			sk->state = TCP_CLOSE;
 			delete_timer (sk);
-			/* Kill the ARP entry in case the hardware has changed. */
-			arp_destroy (sk->daddr, 0);
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->shutdown = SHUTDOWN_MASK;

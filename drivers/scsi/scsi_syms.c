@@ -53,6 +53,8 @@ struct symbol_table scsi_symbol_table = {
     X(scsi_ioctl),
     X(print_command),
     X(print_sense),
+    X(print_msg),
+    X(print_status),
     X(dma_free_sectors),
     X(kernel_scsi_ioctl),
     X(need_isa_buffer),

@@ -132,8 +132,9 @@ init_etherdev(struct device *dev, int sizeof_priv)
 }
 
 
-static int eth_mac_addr(struct device *dev, struct sockaddr *addr)
+static int eth_mac_addr(struct device *dev, void *p)
 {
+	struct sockaddr *addr=p;
 	if(dev->start)
 		return -EBUSY;
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
@@ -164,7 +165,8 @@ void ether_setup(struct device *dev)
 	dev->hard_header	= eth_header;
 	dev->rebuild_header = eth_rebuild_header;
 	dev->set_mac_address = eth_mac_addr;
-	dev->header_cache = eth_header_cache;
+	dev->header_cache_bind = eth_header_cache_bind;
+	dev->header_cache_update = eth_header_cache_update;
 
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len = ETH_HLEN;

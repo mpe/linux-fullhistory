@@ -97,14 +97,20 @@ ethif_probe(struct device *dev)
 #if defined(CONFIG_EL2) || defined(EL2)	/* 3c503 */
 	&& el2_probe(dev)
 #endif
-#if defined(CONFIG_NE2000) || defined(NE2000)
-	&& ne_probe(dev)
-#endif
 #if defined(CONFIG_HPLAN) || defined(HPLAN)
 	&& hp_probe(dev)
 #endif
 #if defined(CONFIG_HPLAN_PLUS)
 	&& hp_plus_probe(dev)
+#endif
+#ifdef CONFIG_AC3200		/* Ansel Communications EISA 3200. */
+	&& ac3200_probe(dev)
+#endif
+#ifdef CONFIG_E2100		/* Cabletron E21xx series. */
+	&& e2100_probe(dev)
+#endif
+#if defined(CONFIG_NE2000) || defined(NE2000)
+	&& ne_probe(dev)
 #endif
 #ifdef CONFIG_AT1500
 	&& at1500_probe(dev)
@@ -147,12 +153,6 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_ELPLUS		/* 3c505 */
 	&& elplus_probe(dev)
-#endif
-#ifdef CONFIG_AC3200		/* Ansel Communications EISA 3200. */
-	&& ac3200_probe(dev)
-#endif
-#ifdef CONFIG_E2100		/* Cabletron E21xx series. */
-	&& e2100_probe(dev)
 #endif
 #ifdef CONFIG_DE600		/* D-Link DE-600 adapter */
 	&& de600_probe(dev)

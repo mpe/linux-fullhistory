@@ -113,10 +113,10 @@ else
 endif
 
 ifeq ($(CONFIG_SCSI_BUSLOGIC),y)
-L_OBJS += buslogic.o
+L_OBJS += BusLogic.o
 else
   ifeq ($(CONFIG_SCSI_BUSLOGIC),m)
-  M_OBJS += buslogic.o
+  M_OBJS += BusLogic.o
   endif
 endif
 

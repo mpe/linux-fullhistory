@@ -37,6 +37,7 @@
 #include <linux/tcp.h>		/* struct tcphdr */
 #include <linux/config.h>
 
+#include <linux/netdevice.h>
 #include <linux/skbuff.h>	/* struct sk_buff */
 #include <net/protocol.h>		/* struct inet_protocol */
 #ifdef CONFIG_AX25
@@ -226,19 +227,6 @@ struct sock
 	struct timer_list	ack_timer;		/* TCP delayed ack timer */
 	int			ip_xmit_timeout;	/* Why the timeout is running */
 	struct rtable		*ip_route_cache;	/* Cached output route */
-	unsigned long		ip_route_stamp;		/* Route cache stamp */
-	unsigned long		ip_route_daddr;		/* Target address */
-	unsigned long		ip_route_saddr;		/* Source address */
-	int			ip_route_local;		/* State of locality flag */
-	unsigned long		ip_hcache_stamp;	/* Header cache stamp */
-	unsigned long 		*ip_hcache_ver;		/* Pointer to version of cache */
-	char			ip_hcache_data[16];	/* Cached header */
-	int			ip_hcache_state;	/* Have we a cached header */
-	unsigned char		ip_option_len;		/* Length of IP options */
-	unsigned char		ip_option_flen;		/* Second fragment option length */
-	unsigned char		ip_opt_next_strict;	/* Next hop is strict route */
-	unsigned long		ip_opt_next_hop;	/* Next hop if forced */
-	unsigned char 		*ip_opt_ptr[2];		/* IP option pointers */
 	unsigned char		ip_hdrincl;		/* Include headers ? */
 #ifdef CONFIG_IP_MULTICAST  
 	int			ip_mc_ttl;		/* Multicasting TTL */
@@ -286,7 +274,7 @@ struct proto
 					__u32 daddr,
 					struct device **dev, int type,
 					struct options *opt, int len,
-					int tos, int ttl);
+					int tos, int ttl, struct rtable ** rp);
 	int			(*connect)(struct sock *sk,
 				        struct sockaddr_in *usin, int addr_len);
 	struct sock *		(*accept) (struct sock *sk, int flags);

@@ -86,6 +86,7 @@ enum net_directory_inos {
 	PROC_NET_NR_NEIGH,
 	PROC_NET_NR,
 	PROC_NET_SOCKSTAT,
+	PROC_NET_RTCACHE,
 	PROC_NET_LAST
 };
 

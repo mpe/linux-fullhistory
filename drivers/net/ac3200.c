@@ -97,13 +97,16 @@ int ac3200_probe(struct device *dev)
 	else if (ioaddr > 0)		/* Don't probe at all. */
 		return ENXIO;
 
-	/* If you have a pre-pl15 machine you should delete this line. */
+	/* If you have a pre 0.99pl15 machine you should delete this line. */
 	if ( ! EISA_bus)
 		return ENXIO;
 
-	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000)
+	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
+		if (check_region(ioaddr, AC_IO_EXTENT))
+			continue;
 		if (ac_probe1(ioaddr, dev) == 0)
 			return 0;
+	}
 
 	return ENODEV;
 }
@@ -138,6 +141,13 @@ static int ac_probe1(int ioaddr, struct device *dev)
 			return ENODEV;
 		}
 
+
+	/* We should have a "dev" from Space.c or the static module table. */
+	if (dev == NULL) {
+		printk("ac3200.c: Passed a NULL device.\n");
+		dev = init_etherdev(0, 0);
+	}
+
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
 		dev->dev_addr[i] = inb(ioaddr + AC_SA_PROM + i);
 
@@ -157,6 +167,13 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200")) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return EAGAIN;
+	}
+
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {
+		printk (" unable to allocate memory for dev->priv.\n");
+		free_irq(dev->irq);
+		return -ENOMEM;
 	}
 
 	request_region(ioaddr, AC_IO_EXTENT, "ac3200");
@@ -179,8 +196,6 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	dev->rmem_start = dev->mem_start + TX_PAGES*256;
 	dev->mem_end = dev->rmem_end = dev->mem_start
 		+ (AC_STOP_PG - AC_START_PG)*256;
-
-	ethdev_init(dev);
 
 	ei_status.name = "AC3200";
 	ei_status.tx_start_page = AC_START_PG;
@@ -208,7 +223,6 @@ static int ac_probe1(int ioaddr, struct device *dev)
 
 static int ac_open(struct device *dev)
 {
-	int rc;
 #ifdef notyet
 	/* Someday we may enable the IRQ and shared memory here. */
 	int ioaddr = dev->base_addr;
@@ -217,8 +231,7 @@ static int ac_open(struct device *dev)
 		return -EAGAIN;
 #endif
 
-	rc = ei_open(dev);
-	if (rc != 0) return rc;
+	ei_open(dev);
 
 	MOD_INC_USE_COUNT;
 
@@ -293,7 +306,7 @@ static int ac_close_card(struct device *dev)
 	irq2dev_map[dev->irq] = 0;
 #endif
 
-	NS8390_init(dev, 0);
+	ei_close(dev);
 
 	MOD_DEC_USE_COUNT;
 
@@ -301,35 +314,64 @@ static int ac_close_card(struct device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-static struct device dev_ac3200 = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, ac3200_probe };
+#define MAX_AC32_CARDS	4	/* Max number of AC32 cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_AC32_CARDS] = { 0, };
+static struct device dev_ac32[MAX_AC32_CARDS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-static int io = 0;
-static int irq = 0;
+static int io[MAX_AC32_CARDS] = { 0, };
+static int irq[MAX_AC32_CARDS]  = { 0, };
+static int mem[MAX_AC32_CARDS] = { 0, };
 
-int init_module(void)
+int
+init_module(void)
 {
-	dev_ac3200.base_addr = io;
-	dev_ac3200.irq       = irq;
-	if (register_netdev(&dev_ac3200) != 0) {
-		printk("ac3200: register_netdev() returned non-zero.\n");
-		return -EIO;
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
+		struct device *dev = &dev_ac32[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->mem_start = mem[this_dev];		/* Currently ignored by driver */
+		dev->init = ac3200_probe;
+		/* Default is to only install one card. */
+		if (io[this_dev] == 0 && this_dev != 0) break;
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "ac3200.c: No ac3200 card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
+		}
+		found++;
 	}
+
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	unregister_netdev(&dev_ac3200);
+	int this_dev;
 
-	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_ac3200.irq);
-	release_region(dev_ac3200.base_addr, AC_IO_EXTENT);
+	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
+		struct device *dev = &dev_ac32[this_dev];
+		if (dev->priv != NULL) {
+			kfree(dev->priv);
+			dev->priv = NULL;
+			/* Someday free_irq + irq2dev may be in ac_close_card() */
+			free_irq(dev->irq);
+			irq2dev_map[dev->irq] = NULL;
+			release_region(dev->base_addr, AC_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 #endif /* MODULE */
 

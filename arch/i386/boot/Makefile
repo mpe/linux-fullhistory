@@ -15,6 +15,10 @@ ifdef CONFIG_KERNEL_ELF
 CFLAGS := $(CFLAGS) -D__BFD__
 endif
 
+ifdef SMP
+CFLAGS := $(CFLAGS) -D__SMP__
+endif
+
 zImage: $(CONFIGURE) bootsect setup compressed/vmlinux tools/build
 ifdef CONFIG_KERNEL_ELF
 	$(OBJDUMP) $(OBJDUMP_FLAGS) -o $(ZIMAGE_OFFSET) compressed/vmlinux > compressed/vmlinux.out

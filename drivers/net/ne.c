@@ -21,6 +21,7 @@
     Paul Gortmaker	: use ENISR_RDC to monitor Tx PIO uploads, made
 			  sanity checks and bad clone support optional.
     Paul Gortmaker	: new reset code, reset card after probe at boot.
+    Paul Gortmaker	: multiple card support for module users.
 
 */
 
@@ -52,6 +53,9 @@ static const char *version =
 
 /* Do we implement the read before write bugfix ? */
 /* #define NE_RW_BUGFIX */
+
+/* Do we have a non std. amount of memory? (in units of 256 byte pages) */
+/* #define PACKETBUF_MEMSIZE	0x40 */
 
 /* ---- No user-serviceable parts below ---- */
 
@@ -88,6 +92,9 @@ bad_clone_list[] = {
 
 int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
+
+static int ne_open(struct device *dev);
+static int ne_close(struct device *dev);
 
 static void ne_reset_8390(struct device *dev);
 static void ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
@@ -155,6 +162,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     int start_page, stop_page;
     int neX000, ctron;
     int reg0 = inb_p(ioaddr);
+    static unsigned version_printed = 0;
 
     if (reg0 == 0xFF)
 	return ENODEV;
@@ -172,6 +180,9 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	    return ENODEV;
 	}
     }
+
+    if (ei_debug  &&  version_printed++ == 0)
+	printk(version);
 
     printk("NE*000 ethercard probe at %#3x:", ioaddr);
 
@@ -236,11 +247,6 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	stop_page = NE1SM_STOP_PG;
     }
 
-    for(i = 0; i < ETHER_ADDR_LEN; i++) {
-	dev->dev_addr[i] = SA_prom[i];
-	printk(" %2.2x", SA_prom[i]);
-    }
-
     neX000 = (SA_prom[14] == 0x57  &&  SA_prom[15] == 0x57);
     ctron =  (SA_prom[0] == 0x00 && SA_prom[1] == 0x00 && SA_prom[2] == 0x1d);
 
@@ -248,7 +254,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     if (neX000) {
 	name = (wordlength == 2) ? "NE2000" : "NE1000";
     } else if (ctron) {
-	name = "Cabletron";
+	name = (wordlength == 2) ? "Ctron-8" : "Ctron-16";
 	start_page = 0x01;
 	stop_page = (wordlength == 2) ? 0x40 : 0x20;
     } else {
@@ -279,9 +285,11 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     }
 
-
-    if (dev == NULL)
-	dev = init_etherdev(0, sizeof(struct ei_device));
+    /* We should have a "dev" from Space.c or the static module table. */
+    if (dev == NULL) {
+	printk("ne.c: Passed a NULL device.\n");
+	dev = init_etherdev(0, 0);
+    }
 
     if (dev->irq < 2) {
 	autoirq_setup(0);
@@ -297,11 +305,16 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	/* Fixup for users that don't know that IRQ 2 is really IRQ 9,
 	   or don't know which one to set. */
 	dev->irq = 9;
+
+    if (! dev->irq) {
+	printk(" failed to detect IRQ line.\n");
+	return EAGAIN;
+    }
     
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
-	int irqval = request_irq (dev->irq, ei_interrupt, 0, wordlength==2 ? "ne2000":"ne1000");
+	int irqval = request_irq(dev->irq, ei_interrupt, 0, name);
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 	    return EAGAIN;
@@ -310,17 +323,22 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     dev->base_addr = ioaddr;
 
-    request_region(ioaddr, NE_IO_EXTENT, wordlength==2 ? "ne2000":"ne1000");
+    /* Allocate dev->priv and fill in 8390 specific dev fields. */
+    if (ethdev_init(dev)) {
+	printk (" unable to get memory for dev->priv.\n");
+	free_irq(dev->irq);
+	return -ENOMEM;
+    }
+ 
+    request_region(ioaddr, NE_IO_EXTENT, name);
 
-    for(i = 0; i < ETHER_ADDR_LEN; i++)
+    for(i = 0; i < ETHER_ADDR_LEN; i++) {
+	printk(" %2.2x", SA_prom[i]);
 	dev->dev_addr[i] = SA_prom[i];
+    }
 
-    ethdev_init(dev);
     printk("\n%s: %s found at %#x, using IRQ %d.\n",
 	   dev->name, name, ioaddr, dev->irq);
-
-    if (ei_debug > 0)
-	printk(version);
 
     ei_status.name = name;
     ei_status.tx_start_page = start_page;
@@ -337,7 +355,27 @@ static int ne_probe1(struct device *dev, int ioaddr)
     ei_status.block_input = &ne_block_input;
     ei_status.block_output = &ne_block_output;
     ei_status.get_8390_hdr = &ne_get_8390_hdr;
+    dev->open = &ne_open;
+    dev->stop = &ne_close;
     NS8390_init(dev, 0);
+    return 0;
+}
+
+static int
+ne_open(struct device *dev)
+{
+    ei_open(dev);
+    MOD_INC_USE_COUNT;
+    return 0;
+}
+
+static int
+ne_close(struct device *dev)
+{
+    if (ei_debug > 1)
+	printk("%s: Shutting down ethercard.\n", dev->name);
+    ei_close(dev);
+    MOD_DEC_USE_COUNT;
     return 0;
 }
 
@@ -568,36 +606,71 @@ ne_block_output(struct device *dev, int count,
     return;
 }
 
+
 #ifdef MODULE
-static char devicename[9] = { 0, };
-static struct device dev_ne2000 = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, ne_probe };
+#define MAX_NE_CARDS	4	/* Max number of NE cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_NE_CARDS] = { 0, };
+static struct device dev_ne[MAX_NE_CARDS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-static int io = 0x300;
-static int irq = 0;
+static int io[MAX_NE_CARDS] = { 0, };
+static int irq[MAX_NE_CARDS]  = { 0, };
 
-int init_module(void)
+/* This is set up so that no autoprobe takes place. We can't guarantee
+that the ne2k probe is the last 8390 based probe to take place (as it
+is at boot) and so the probe will get confused by any other 8390 cards.
+ISA device autoprobes on a running machine are not recommended anyway. */
+
+int
+init_module(void)
 {
-	if (io == 0)
-		printk("ne: You should not use auto-probing with insmod!\n");
-	dev_ne2000.base_addr = io;
-	dev_ne2000.irq       = irq;
-	if (register_netdev(&dev_ne2000) != 0)
-		return -EIO;
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
+		struct device *dev = &dev_ne[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->init = ne_probe;
+		if (io[this_dev] == 0)  {
+			if (this_dev != 0) break; /* only complain once */
+			printk(KERN_NOTICE "ne.c: Module autoprobing not allowed. Append \"io=0xNNN\" value(s).\n");
+			return -EPERM;
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "ne.c: No NE*000 card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
+		}
+		found++;
+	}
+
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	unregister_netdev(&dev_ne2000);
+	int this_dev;
 
-	/* If we don't do this, we can't re-insmod it later. */
-	free_irq(dev_ne2000.irq);
-	release_region(dev_ne2000.base_addr, NE_IO_EXTENT);
+	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
+		struct device *dev = &dev_ne[this_dev];
+		if (dev->priv != NULL) {
+			kfree(dev->priv);
+			dev->priv = NULL;
+			free_irq(dev->irq);
+			irq2dev_map[dev->irq] = NULL;
+			release_region(dev->base_addr, NE_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 #endif /* MODULE */
 

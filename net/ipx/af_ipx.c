@@ -304,7 +304,7 @@ ipxitf_down(ipx_interface *intrfc)
 }
 
 static int 
-ipxitf_device_event(unsigned long event, void *ptr)
+ipxitf_device_event(struct notifier_block *notifier, unsigned long event, void *ptr)
 {
 	struct device *dev = ptr;
 	ipx_interface *i, *tmp;

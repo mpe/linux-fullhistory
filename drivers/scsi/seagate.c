@@ -406,6 +406,33 @@ const char *seagate_st0x_info(struct Scsi_Host * shpnt) {
 	return buffer;
 }
 
+int seagate_st0x_proc_info(char *buffer, char **start, off_t offset,
+                               int length, int hostno, int inout)
+{
+       const char *info = seagate_st0x_info(NULL);
+       int len;
+       int pos;
+       int begin;
+
+       if (inout) return(-ENOSYS);
+
+       begin = 0;
+       strcpy(buffer,info);
+       strcat(buffer,"\n");
+
+       pos = len = strlen(buffer);
+
+       if (pos<offset) {
+               len = 0;
+               begin = pos;
+               }
+
+       *start = buffer + (offset - begin);
+       len -= (offset - begin);
+       if ( len > length ) len = length;
+       return(len);
+}
+
 /*
  * These are our saved pointers for the outstanding command that is 
  * waiting for a reconnect

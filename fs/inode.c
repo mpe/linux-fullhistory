@@ -31,7 +31,7 @@ static inline struct inode_hash_entry * const hash(kdev_t dev, int i)
 	return hash_table + hashfn(dev, i);
 }
 
-static void insert_inode_free(struct inode *inode)
+static inline void insert_inode_free(struct inode *inode)
 {
 	inode->i_next = first_inode;
 	inode->i_prev = first_inode->i_prev;
@@ -40,7 +40,7 @@ static void insert_inode_free(struct inode *inode)
 	first_inode = inode;
 }
 
-static void remove_inode_free(struct inode *inode)
+static inline void remove_inode_free(struct inode *inode)
 {
 	if (first_inode == inode)
 		first_inode = first_inode->i_next;
@@ -63,7 +63,7 @@ void insert_inode_hash(struct inode *inode)
 	h->inode = inode;
 }
 
-static void remove_inode_hash(struct inode *inode)
+static inline void remove_inode_hash(struct inode *inode)
 {
 	struct inode_hash_entry *h;
 	h = hash(inode->i_dev, inode->i_ino);
@@ -77,7 +77,7 @@ static void remove_inode_hash(struct inode *inode)
 	inode->i_hash_prev = inode->i_hash_next = NULL;
 }
 
-static void put_last_free(struct inode *inode)
+static inline void put_last_free(struct inode *inode)
 {
 	remove_inode_free(inode);
 	inode->i_prev = first_inode->i_prev;
@@ -225,7 +225,7 @@ static void write_inode(struct inode * inode)
 	unlock_inode(inode);
 }
 
-static void read_inode(struct inode * inode)
+static inline void read_inode(struct inode * inode)
 {
 	lock_inode(inode);
 	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->read_inode)

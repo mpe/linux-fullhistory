@@ -29,7 +29,7 @@
 int nr_tasks=1;
 int nr_running=1;
 
-static int find_empty_process(void)
+static inline int find_empty_process(void)
 {
 	int i;
 	struct task_struct *p;
@@ -75,7 +75,7 @@ repeat:
 	return last_pid;
 }
 
-static int dup_mmap(struct mm_struct * mm)
+static inline int dup_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt, **p, *tmp;
 
@@ -110,7 +110,7 @@ static int dup_mmap(struct mm_struct * mm)
 	return 0;
 }
 
-static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
+static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_VM) {
 		SET_PAGE_DIR(tsk, current->mm->pgd);
@@ -134,7 +134,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	return 0;
 }
 
-static int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
+static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_FS) {
 		current->fs->count++;
@@ -152,7 +152,7 @@ static int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 	return 0;
 }
 
-static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
+static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 {
 	int i;
 
@@ -175,7 +175,7 @@ static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 	return 0;
 }
 
-static int copy_sighand(unsigned long clone_flags, struct task_struct * tsk)
+static inline int copy_sighand(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_SIGHAND) {
 		current->sig->count++;

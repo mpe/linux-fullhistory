@@ -15,6 +15,9 @@ fi
 bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_INET" = "y" ]; then
   tristate 'NFS filesystem support' CONFIG_NFS_FS
+  if [ "$CONFIG_NFS_FS" = "y" ]; then
+    bool 'Root file system on NFS' CONFIG_ROOT_NFS
+  fi
 fi
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS

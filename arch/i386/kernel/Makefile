@@ -14,8 +14,15 @@ LD86    =ld86 -0
 
 #.S.s:
 #	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
+
+ifdef SMP
+
+.S.o:
+	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c $< -o $*.o
+else
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
+endif
 
 all: kernel.o head.o
 
@@ -24,11 +31,18 @@ O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
             ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o
 
 ifdef SMP
+
 O_OBJS += smp.o
-endif
+
+head.o: head.S $(TOPDIR)/include/linux/tasks.h
+	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c $*.S -o $*.o
+
+else
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h
 	$(CC) -D__ASSEMBLY__ -traditional -c $*.S -o $*.o
+
+endif
 
 hexify:
 	$(HOSTCC) hexify.c -o hexify
@@ -48,10 +62,10 @@ trampoline32.o: trampoline32.s
 	$(AS386) -o $@ $<
 
 trampoline.s: trampoline.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Makefile
-	$(CPP) -traditional $< -o $@
+	$(CPP) -D__SMP__ -traditional $< -o $@
 
 trampoline32.s: trampoline32.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Makefile
-	$(CPP) -traditional $< -o $@
+	$(CPP) -D__SMP__ -traditional $< -o $@
 
 clean:
 	rm -f trampoline hexify

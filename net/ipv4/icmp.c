@@ -362,9 +362,51 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			case ICMP_PORT_UNREACH:
 				break;
 			case ICMP_FRAG_NEEDED:
+#ifdef CONFIG_NO_PATH_MTU_DISCOVERY
 				printk("ICMP: %s: fragmentation needed and DF set.\n",
 								in_ntoa(iph->daddr));
 				break;
+#else
+			{
+				unsigned short old_mtu = ntohs(iph->tot_len);
+				unsigned short new_mtu = ntohs(icmph->un.echo.sequence);
+
+				if (new_mtu < 68 || new_mtu >= old_mtu)
+				{
+					/*
+					 * 	It is either dumb router, which does not
+					 *	understand Path MTU Disc. protocol
+					 *	or broken (f.e. Linux<=1.3.37 8) router.
+					 *	Try to guess...
+					 *	The table is taken from RFC-1191.
+					 */
+					if (old_mtu > 32000)
+						new_mtu = 32000;
+					else if (old_mtu > 17914)
+						new_mtu = 17914;
+					else if (old_mtu > 8166)
+						new_mtu = 8166;
+					else if (old_mtu > 4352)
+						new_mtu = 4352;
+					else if (old_mtu > 2002)
+						new_mtu = 2002;
+					else if (old_mtu > 1492)
+						new_mtu = 1492;
+					else if (old_mtu > 576)
+						new_mtu = 576;
+					else if (old_mtu > 296)
+						new_mtu = 296;
+					else
+						new_mtu = 68;
+				}
+				/*
+				 * Ugly trick to pass MTU to protocol layer.
+				 * Really we should add argument "info" to error handler.
+				 */
+				iph->id = htons(new_mtu);
+				break;
+			}
+#endif
 			case ICMP_SR_FAILED:
 				printk("ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr));
 				break;
@@ -427,9 +469,6 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 
 static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev, __u32 source, __u32 daddr, int len)
 {
-#ifndef CONFIG_IP_FORWARD
-	struct rtable *rt;
-#endif
 	struct iphdr *iph;
 	unsigned long ip;
 
@@ -472,16 +511,8 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 			 *	(not some confused thing sending our
 			 *	address)
 			 */
-			rt = ip_rt_route(ip, NULL, NULL);
-			if (!rt)
-				break;
-			if (rt->rt_gateway != source || 
-				((icmph->un.gateway^dev->pa_addr)&dev->pa_mask) ||
-				ip_chk_addr(icmph->un.gateway))
-				break;
 			printk("ICMP redirect from %s\n", in_ntoa(source));
-			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev,0, 0, 0, 0);
+			ip_rt_redirect(source, ip, icmph->un.gateway, dev);
 			break;
 		case ICMP_REDIR_NETTOS:
 		case ICMP_REDIR_HOSTTOS:

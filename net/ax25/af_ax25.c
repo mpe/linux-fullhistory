@@ -661,7 +661,7 @@ struct device *ax25rtr_get_dev(ax25_address *addr)
 						return dev;
 					break;
 				case ARPHRD_ETHER:
-					if (arp_query((unsigned char *)&dev_addr, dev->pa_addr, ARPHRD_AX25))
+					if (arp_query((unsigned char *)&dev_addr, dev->pa_addr, dev))
 						if (ax25cmp(addr, &dev_addr) == 0)
 							return dev;
 					break;
@@ -1669,7 +1669,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 
 	skb->sk = NULL;		/* Initially we don't know who its for */
 
-	if (!arp_query((unsigned char *)&port_call, dev->pa_addr, ARPHRD_AX25)) {
+	if (!arp_query((unsigned char *)&port_call, dev->pa_addr, dev)) {
 		kfree_skb(skb, FREE_READ);	/* We have no port callsign */
 		return 0;
 	}

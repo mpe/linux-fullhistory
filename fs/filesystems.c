@@ -21,8 +21,14 @@
 #include <linux/sysv_fs.h>
 #include <linux/hpfs_fs.h>
 #include <linux/smb_fs.h>
+#include <linux/major.h>
 
 extern void device_setup(void);
+
+#ifdef CONFIG_ROOT_NFS
+extern int nfs_root_init(char *nfsname);
+extern char nfs_root_name [];
+#endif
 
 /* This may be used only once, enforced by 'static int callable' */
 asmlinkage int sys_setup(void)
@@ -100,6 +106,14 @@ asmlinkage int sys_setup(void)
 		{hpfs_read_super, "hpfs", 1, NULL});
 #endif
 
+#ifdef CONFIG_ROOT_NFS
+	if (nfs_root_name [0]){
+		if (nfs_root_init(nfs_root_name) < 0) {
+			printk(KERN_ERR "Root-NFS: Unable to mount NFS filesystem as /, using /dev/fd0 instead\n");
+			ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
+		}
+	}
+#endif
 	mount_root();
 	return 0;
 }

@@ -215,8 +215,6 @@ extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 /* mmap.c */
 extern unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
-extern struct vm_area_struct * find_vma (struct task_struct *, unsigned long);
-extern struct vm_area_struct * find_vma_intersection (struct task_struct *, unsigned long, unsigned long);
 extern void merge_segments(struct task_struct *, unsigned long, unsigned long);
 extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
 extern void remove_shared_vm_struct(struct vm_area_struct *);
@@ -244,6 +242,40 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 
 #define GFP_LEVEL_MASK 0xf
 
+#define avl_empty	(struct vm_area_struct *) NULL
+
+/* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
+static inline struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
+{
+	struct vm_area_struct * result = NULL;
+	struct vm_area_struct * tree;
+
+	if (!task->mm)
+		return NULL;
+	for (tree = task->mm->mmap_avl ; ; ) {
+		if (tree == avl_empty)
+			return result;
+		if (tree->vm_end > addr) {
+			if (tree->vm_start <= addr)
+				return tree;
+			result = tree;
+			tree = tree->vm_avl_left;
+		} else
+			tree = tree->vm_avl_right;
+	}
+}
+
+/* Look up the first VMA which intersects the interval start_addr..end_addr-1,
+   NULL if none.  Assume start_addr < end_addr. */
+static inline struct vm_area_struct * find_vma_intersection (struct task_struct * task, unsigned long start_addr, unsigned long end_addr)
+{
+	struct vm_area_struct * vma;
+
+	vma = find_vma(task,start_addr);
+	if (!vma || end_addr <= vma->vm_start)
+		return NULL;
+	return vma;
+}
 
 /*
  * vm_ops not present page codes for shared memory.

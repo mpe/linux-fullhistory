@@ -55,7 +55,6 @@ static const char *version =
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
-#include <linux/skbuff.h>
 
 #include "8390.h"
 
@@ -118,16 +117,25 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 int ei_open(struct device *dev)
 {
     struct ei_device *ei_local = (struct ei_device *) dev->priv;
-    
-    if ( ! ei_local) {
-		printk("%s: Opening a non-existent physical device\n", dev->name);
-		return ENXIO;
+
+    /* This can't happen unless somebody forgot to call ethdev_init(). */
+    if (ei_local == NULL) {
+	printk(KERN_EMERG "%s: ei_open passed a non-existent device!\n", dev->name);
+	return -ENXIO;
     }
     
     irq2dev_map[dev->irq] = dev;
     NS8390_init(dev, 1);
     dev->start = 1;
     ei_local->irqlock = 0;
+    return 0;
+}
+
+/* Opposite of above. Only used when "ifconfig <devname> down" is done. */
+int ei_close(struct device *dev)
+{
+    NS8390_init(dev, 0);
+    dev->start = 0;
     return 0;
 }
 
@@ -603,10 +611,6 @@ int ethdev_init(struct device *dev)
 		ei_local->pingpong = ei_pingpong;
     }
     
-    /* The open call may be overridden by the card-specific code. */
-    if (dev->open == NULL)
-		dev->open = &ei_open;
-    /* We should have a dev->stop entry also. */
     dev->hard_start_xmit = &ei_start_xmit;
     dev->get_stats	= get_stats;
 #ifdef HAVE_MULTICAST

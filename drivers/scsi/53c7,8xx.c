@@ -894,7 +894,7 @@ static int ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	    &irq))) {
 	printk ("scsi-ncr53c7,8xx : error %s not initializing due to error reading configuration space\n"
 		"        perhaps you specified an incorrect PCI bus, device, or function.\n"
-		, pci_strbioserr(error));
+		, pcibios_strerror(error));
 	return -1;
     }
 

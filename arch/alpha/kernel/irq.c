@@ -352,8 +352,39 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 static inline void isa_device_interrupt(unsigned long vector,
 					struct pt_regs * regs)
 {
-	unsigned long pic;
+#if defined(CONFIG_ALPHA_APECS)
+#	define IACK_SC	APECS_IACK_SC
+#elif defined(CONFIG_ALPHA_LCA)
+#	define IACK_SC	LCA_IACK_SC
+#endif
 	int j;
+
+	/*
+	 * Generate a PCI interrupt acknowledge cycle.  The PIC will
+	 * respond with the interrupt vector of the highest priority
+	 * interrupt that is pending.  The PALcode sets up the
+	 * interrupts vectors such that irq level L generates vector
+	 * L.
+	 */
+	j = *(volatile int *) IACK_SC;
+	j &= 0xff;
+	if (j == 7) {
+	    if (!(inb(0x20) & 0x80)) {
+		/* it's only a passive release... */
+		return;
+	    }
+	}
+	device_interrupt(j, j, regs);
+#if 0
+	unsigned long pic;
+
+	/*
+	 * It seems to me that the probability of two or more *device*
+	 * interrupts occuring at almost exactly the same time is
+	 * pretty low.  So why pay the price of checking for
+	 * additional interrupts here if the common case can be
+	 * handled so much easier?
+	 */
 	/* 
 	 *  The first read of gives you *all* interrupting lines.
 	 *  Therefore, read the mask register and and out those lines
@@ -369,6 +400,7 @@ static inline void isa_device_interrupt(unsigned long vector,
 		pic &= pic - 1;
 		device_interrupt(j, j, regs);
 	}
+#endif
 }
 
 static inline void cabriolet_and_eb66p_device_interrupt(unsigned long vector,

@@ -748,14 +748,11 @@ CONFIG_SCSI_AIC7XXX
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
-  This is support for the BusLogic family of SCSI host adaptors.  If
-  it doesn't work out of the box, you may have to change some settings
-  in drivers/scsi/buslogic.h. Please read the SCSI-HOWTO, available
-  via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  This is support for BusLogic MultiMaster SCSI Host Adaptors.  Consult
+  the documentation in drivers/scsi/README.BusLogic for more information.
+  BusLogic FlashPoint SCSI Host Adapters are not supported by this driver.
+  If this driver does not work correctly without modification, please
+  consult the author.  This driver is not currently available as a module.
  
 EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
 CONFIG_SCSI_EATA_DMA

@@ -21,7 +21,7 @@
  */
 
 /*
- *  ==FILEVERSION 4==
+ *  ==FILEVERSION 5==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, increment the number above.
@@ -50,6 +50,8 @@
 #define PPP_VERSION	"2.2.0"
 #define PPP_MAGIC	0x5002	/* Magic value for the ppp structure */
 #define PROTO_IPX	0x002b	/* protocol numbers */
+#define PROTO_DNA_RT    0x0027  /* DNA Routing */
+
 
 /*
  * Bit definitions for flags.

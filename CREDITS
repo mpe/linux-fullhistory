@@ -336,11 +336,11 @@ S: Laval, Quebec
 S: Canada H7Y 1V9
 
 N: David Gentzel
-E: gentzel@nova.enet.dec.com
-D: BusLogic driver and original UltraStor driver
+E: gentzel@telerama.lm.com
+D: Original BusLogic driver and original UltraStor driver
 S: Whitfield Software Services
-S: 631 Idlewood Avenue
-S: Carnegie, Pennsylvania 15106-1126
+S: 600 North Bell Avenue, Suite 160
+S: Carnegie, Pennsylvania 15106-4304
 S: USA
 
 N: Philip Gladstone
@@ -1077,7 +1077,8 @@ S: Germany
 
 N: Leonard N. Zubkoff
 E: lnz@dandelion.com
-D: XFree86 and BusLogic driver additions
+D: BusLogic SCSI driver
+D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148
 S: USA

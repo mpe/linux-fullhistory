@@ -88,7 +88,7 @@ int tunnel_init(struct device *dev)
 	dev->addr_len=0;
 	dev->hard_header_len=0;
 	dev->hard_header=NULL;
-	dev->header_cache=NULL;
+	dev->header_cache_bind=NULL;
 	dev->rebuild_header=NULL;
 	/* End of stomp 8) */
 	return 0;
@@ -271,7 +271,6 @@ tunnel_get_stats(struct device *dev)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 static int tunnel_probe(struct device *dev)
 {

@@ -5,7 +5,16 @@
  * Randolph Bentson <bentson@grieg.seaslug.org>.
  *
  * This file contains the general definitions for the cyclades.c driver
+ *$Log: cyclades.h,v $
+ * Revision 1.5  1995/11/13  21:13:31  bentson
+ * changes suggested by Michael Chastain <mec@duracef.shout.net>
+ * to support use of this file in non-kernel applications
+ *
+ *
  */
+
+#ifndef _LINUX_CYCLADES_H
+#define _LINUX_CYCLADES_H
 
 /* PCI vendor and device ID's */
 
@@ -16,6 +25,27 @@
 #ifndef PCI_DEVICE_ID_CYCLOMY
 #define	PCI_DEVICE_ID_CYCLOMY	0x0100
 #endif
+
+struct cyclades_monitor {
+        unsigned long           int_count;
+        unsigned long           char_count;
+        unsigned long           char_max;
+        unsigned long           char_last;
+};
+
+#define CYCLADES_MAGIC  0x4359
+
+#define CYGETMON                0x435901
+#define CYGETTHRESH             0x435902
+#define CYSETTHRESH             0x435903
+#define CYGETDEFTHRESH          0x435904
+#define CYSETDEFTHRESH          0x435905
+#define CYGETTIMEOUT            0x435906
+#define CYSETTIMEOUT            0x435907
+#define CYGETDEFTIMEOUT         0x435908
+#define CYSETDEFTIMEOUT         0x435909
+
+#ifdef __KERNEL__
 
 /* Per card data structure */
 
@@ -31,13 +61,6 @@ struct cyclades_chip {
   int filler;
 };
 
-struct cyclades_monitor {
-        unsigned long           int_count;
-        unsigned long           char_count;
-        unsigned long           char_max;
-        unsigned long           char_last;
-};
-
 /*
  * This is our internal structure for each serial port's state.
  * 
@@ -46,9 +69,6 @@ struct cyclades_monitor {
  *
  * For definitions of the flags field, see tty.h
  */
-
-#include <linux/termios.h>
-#include <linux/tqueue.h>
 
 struct cyclades_port {
 	int                     magic;
@@ -86,18 +106,6 @@ struct cyclades_port {
 	struct wait_queue	*close_wait;
         struct cyclades_monitor mon;
 };
-
-#define CYCLADES_MAGIC  0x4359
-
-#define CYGETMON                0x435901
-#define CYGETTHRESH             0x435902
-#define CYSETTHRESH             0x435903
-#define CYGETDEFTHRESH          0x435904
-#define CYSETDEFTHRESH          0x435905
-#define CYGETTIMEOUT            0x435906
-#define CYSETTIMEOUT            0x435907
-#define CYGETDEFTIMEOUT         0x435908
-#define CYSETDEFTIMEOUT         0x435909
 
 /*
  * Events are used to schedule things to happen at timer-interrupt
@@ -281,3 +289,6 @@ struct cyclades_port {
 #define CyMAX_CHAR_FIFO	12
 
 /***************************************************************************/
+
+#endif /* __KERNEL__ */
+#endif /* _LINUX_CYCLADES_H */

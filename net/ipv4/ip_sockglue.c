@@ -283,10 +283,12 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				/*
 				 *	Not set so scan.
 				 */
-				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,NULL, &route_src))!=NULL)
+				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
 				{
 					dev=rt->rt_dev;
-					rt->rt_use--;
+					route_src = rt->rt_src;
+					ATOMIC_DECR(&rt->rt_use);
+					ip_rt_put(rt);
 				}
 			}
 			else
@@ -335,10 +337,12 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
  
 			if(mreq.imr_interface.s_addr==INADDR_ANY) 
 			{
-				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,NULL, &route_src))!=NULL)
+				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
 			        {
 					dev=rt->rt_dev;
-					rt->rt_use--;
+					ATOMIC_DECR(&rt->rt_use);
+					route_src = rt->rt_src;
+					ip_rt_put(rt);
 				}
 			}
 			else 

@@ -43,8 +43,8 @@
  * Direction bits.
  */
 #define _IOC_NONE	0U
-#define _IOC_READ	1U
-#define _IOC_WRITE	2U
+#define _IOC_WRITE	1U
+#define _IOC_READ	2U
 
 #define _IOC(dir,type,nr,size) \
 	(((dir)  << _IOC_DIRSHIFT) | \

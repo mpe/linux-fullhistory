@@ -266,7 +266,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 		sti();
 
 		arp_send(ARPOP_RREPLY, ETH_P_RARP, sip, dev, dev->pa_addr, sha, 
-			dev->dev_addr);
+			dev->dev_addr, sha);
 	}
 	else
 		sti();
@@ -288,6 +288,7 @@ static int rarp_req_set(struct arpreq *req)
 	int htype, hlen;
 	unsigned long ip;
 	struct rtable *rt;
+	struct device * dev;
   
 	memcpy_fromfs(&r, req, sizeof(r));
   
@@ -326,9 +327,11 @@ static int rarp_req_set(struct arpreq *req)
  *	Is it reachable directly ?
  */
   
-	rt = ip_rt_route(ip, NULL, NULL);
+	rt = ip_rt_route(ip, 0);
 	if (rt == NULL)
 		return -ENETUNREACH;
+	dev = rt->rt_dev;
+	ip_rt_put(rt);
 
 /*
  *	Is there an existing entry for this address?  Find out...
@@ -366,7 +369,7 @@ static int rarp_req_set(struct arpreq *req)
 	entry->hlen = hlen;
 	entry->htype = htype;
 	memcpy(&entry->ha, &r.arp_ha.sa_data, hlen);
-	entry->dev = rt->rt_dev;
+	entry->dev = dev;
 
 	sti();  
 
@@ -574,5 +577,4 @@ void cleanup_module(void)
 		rarp_release_entry(rt);
 	}
 }
-
 #endif

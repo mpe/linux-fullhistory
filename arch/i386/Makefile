@@ -56,6 +56,10 @@ CFLAGS := $(CFLAGS) -m386
 endif
 endif
 
+ifdef SMP
+CFLAGS := $(CFLAGS) -D__SMP__
+endif
+
 HEAD := arch/i386/kernel/head.o
 
 SUBDIRS := $(SUBDIRS) arch/i386/kernel arch/i386/mm arch/i386/lib

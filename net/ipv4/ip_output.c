@@ -86,7 +86,7 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	/*
 	 *	Put a MAC header on the packet
 	 */
-	ip_send(newskb, skb->ip_hdr->daddr, len, dev, skb->ip_hdr->saddr);
+	ip_send(NULL,newskb, skb->ip_hdr->daddr, len, dev, skb->ip_hdr->saddr);
 	/*
 	 *	Add the rest of the data space.	
 	 */
@@ -110,7 +110,7 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
  *	Take an skb, and fill in the MAC header.
  */
 
-int ip_send(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr)
+int ip_send(struct rtable * rt, struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr)
 {
 	int mac = 0;
 
@@ -123,6 +123,18 @@ int ip_send(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32
 		 *  	(rebuild header will sort this out)
 		 */
 		skb_reserve(skb,(dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
+		if (rt && dev == rt->rt_dev && rt->rt_hh)
+		{
+			memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);
+			if (rt->rt_hh->hh_uptodate)
+				return dev->hard_header_len;
+#if RT_CACHE_DEBUG >= 2
+			printk("ip_send: hh miss %08x via %08x\n", daddr, rt->rt_gateway);
+#endif
+			skb->arp = 0;
+			skb->raddr = daddr;
+			return -dev->hard_header_len;
+		}
 		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
 		if (mac < 0)
 		{
@@ -134,7 +146,7 @@ int ip_send(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32
 	return mac;
 }
 
-static int ip_send_room(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr)
+static int ip_send_room(struct rtable * rt, struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr)
 {
 	int mac = 0;
 
@@ -143,6 +155,18 @@ static int ip_send_room(struct sk_buff *skb, __u32 daddr, int len, struct device
 	if (dev->hard_header)
 	{
 		skb_reserve(skb,MAX_HEADER);
+		if (rt && dev == rt->rt_dev && rt->rt_hh)
+		{
+			memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);
+			if (rt->rt_hh->hh_uptodate)
+				return dev->hard_header_len;
+#if RT_CACHE_DEBUG >= 2
+			printk("ip_send_room: hh miss %08x via %08x\n", daddr, rt->rt_gateway);
+#endif
+			skb->arp = 0;
+			skb->raddr = daddr;
+			return -dev->hard_header_len;
+		}
 		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
 		if (mac < 0)
 		{
@@ -163,14 +187,15 @@ int ip_id_count = 0;
  * routing/ARP tables to select a device struct.
  */
 int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
-		struct device **dev, int type, struct options *opt, int len, int tos, int ttl)
+		struct device **dev, int type, struct options *opt,
+		int len, int tos, int ttl, struct rtable ** rp)
 {
 	struct rtable *rt;
 	__u32 raddr;
 	int tmp;
-	__u32 src;
 	struct iphdr *iph;
 	__u32 final_daddr = daddr;
+
 
 	if (opt && opt->srr)
 		daddr = opt->faddr;
@@ -183,12 +208,22 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 	if(MULTICAST(daddr) && *dev==NULL && skb->sk && *skb->sk->ip_mc_name)
 		*dev=dev_get(skb->sk->ip_mc_name);
 #endif
+	if (rp)
+	{
+		rt = ip_check_route(rp, daddr, skb->localroute);
+		/*
+		 * If rp != NULL rt_put following below should not
+		 * release route, so that...
+		 */
+		if (rt)
+			ATOMIC_INCR(&rt->rt_refcnt);
+	}
+	else
+		rt = ip_rt_route(daddr, skb->localroute);
+
+
 	if (*dev == NULL)
 	{
-		if(skb->localroute)
-			rt = ip_rt_local(daddr, NULL, &src);
-		else
-			rt = ip_rt_route(daddr, NULL, &src);
 		if (rt == NULL)
 		{
 			ip_statistics.IpOutNoRoutes++;
@@ -196,43 +231,24 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 		}
 
 		*dev = rt->rt_dev;
-		/*
-		 *	If the frame is from us and going off machine it MUST MUST MUST
-		 *	have the output device ip address and never the loopback
-		 */
-		if (LOOPBACK(saddr) && !LOOPBACK(daddr))
-			saddr = src;/*rt->rt_dev->pa_addr;*/
-		raddr = rt->rt_gateway;
-
 	}
-	else
+
+	if ((LOOPBACK(saddr) && !LOOPBACK(daddr)) || !saddr)
+		saddr = rt ? rt->rt_src : (*dev)->pa_addr;
+
+	raddr = rt ? rt->rt_gateway : 0;
+
+	if (opt && opt->is_strictroute && rt && (rt->rt_flags & RTF_GATEWAY))
 	{
-		/*
-		 *	We still need the address of the first hop.
-		 */
-		if(skb->localroute)
-			rt = ip_rt_local(daddr, NULL, &src);
-		else
-			rt = ip_rt_route(daddr, NULL, &src);
-		/*
-		 *	If the frame is from us and going off machine it MUST MUST MUST
-		 *	have the output device ip address and never the loopback
-		 */
-		if (LOOPBACK(saddr) && !LOOPBACK(daddr))
-			saddr = src;/*rt->rt_dev->pa_addr;*/
-
-		raddr = (rt == NULL) ? 0 : rt->rt_gateway;
+		ip_rt_put(rt);
+		ip_statistics.IpOutNoRoutes++;
+		return -ENETUNREACH;
 	}
-
-	/*
-	 *	No source addr so make it our addr
-	 */
-	if (saddr == 0)
-		saddr = src;
 
 	/*
 	 *	No gateway so aim at the real destination
 	 */
+
 	if (raddr == 0)
 		raddr = daddr;
 
@@ -240,10 +256,12 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 	 *	Now build the MAC header.
 	 */
 
-	if(type==IPPROTO_TCP)
-		tmp = ip_send_room(skb, raddr, len, *dev, saddr);
+	if (type==IPPROTO_TCP)
+		tmp = ip_send_room(rt, skb, raddr, len, *dev, saddr);
 	else
-		tmp = ip_send(skb, raddr, len, *dev, saddr);
+		tmp = ip_send(rt, skb, raddr, len, *dev, saddr);
+
+	ip_rt_put(rt);
 
 	/*
 	 *	Book keeping
@@ -285,11 +303,6 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 
 	if (!opt || !opt->optlen)
 		return sizeof(struct iphdr) + tmp;
-	if (opt->is_strictroute && rt && rt->rt_gateway) 
-	{
-		ip_statistics.IpOutNoRoutes++;
-		return -ENETUNREACH;
-	}
 	iph->ihl += opt->optlen>>2;
 	ip_options_build(skb, opt, final_daddr, (*dev)->pa_addr, 0);
 	return iph->ihl*4 + tmp;
@@ -563,8 +576,9 @@ int ip_build_xmit(struct sock *sk,
 	__u32 saddr;
 	unsigned short id;
 	struct iphdr *iph;
-	int local=0;
-	struct device *dev;
+	__u32 raddr;
+	struct device *dev = NULL;
+	struct hh_cache * hh=NULL;
 	int nfrags=0;
 	__u32 true_daddr = daddr;
 
@@ -588,60 +602,17 @@ int ip_build_xmit(struct sock *sk,
 	else
 	{
 #endif	
-		/*
-		 *	Perform the IP routing decisions
-		 */
-	 
-		if(sk->localroute || flags&MSG_DONTROUTE)
-			local=1;
-	
-		rt = sk->ip_route_cache;
-		
-		/*
-		 *	See if the routing cache is outdated. We need to clean this up once we are happy it is reliable
-		 *	by doing the invalidation actively in the route change and header change.
-		 */
-	
-		saddr=sk->ip_route_saddr;	 
-		if(!rt || sk->ip_route_stamp != rt_stamp ||
-		   daddr!=sk->ip_route_daddr || sk->ip_route_local!=local ||
-		   (sk->saddr && sk->saddr != saddr))
-		{
-			if(local)
-				rt = ip_rt_local(daddr, NULL, &saddr);
-			else
-				rt = ip_rt_route(daddr, NULL, &saddr);
-			sk->ip_route_local=local;
-			sk->ip_route_daddr=daddr;
-			sk->ip_route_saddr=saddr;
-			sk->ip_route_stamp=rt_stamp;
-			sk->ip_route_cache=rt;
-			sk->ip_hcache_ver=NULL;
-			sk->ip_hcache_state= 0;
-		}
-		else if(rt)
-		{
-			/*
-			 *	Attempt header caches only if the cached route is being reused. Header cache
-			 *	is not ultra cheap to set up. This means we only set it up on the second packet,
-			 *	so one shot communications are not slowed. We assume (seems reasonable) that 2 is
-			 *	probably going to be a stream of data.
-			 */
-			if(rt->rt_dev->header_cache && sk->ip_hcache_state!= -1)
-			{
-				if(sk->ip_hcache_ver==NULL || sk->ip_hcache_stamp!=*sk->ip_hcache_ver)
-					rt->rt_dev->header_cache(rt->rt_dev,sk,saddr,daddr);
-				else
-					/* Can't cache. Remember this */
-					sk->ip_hcache_state= -1;
-			}
-		}
-		
+		rt = ip_check_route(&sk->ip_route_cache, daddr,
+				    sk->localroute || (flags&MSG_DONTROUTE) ||
+				    (opt && opt->is_strictroute));
 		if (rt == NULL) 
 		{
-	 		ip_statistics.IpOutNoRoutes++;
+			ip_statistics.IpOutNoRoutes++;
 			return(-ENETUNREACH);
 		}
+		saddr = rt->rt_src;
+
+		hh = rt->rt_hh;
 	
 		if (sk->saddr && (!LOOPBACK(sk->saddr) || LOOPBACK(daddr)))
 			saddr = sk->saddr;
@@ -649,10 +620,13 @@ int ip_build_xmit(struct sock *sk,
 		dev=rt->rt_dev;
 #ifdef CONFIG_IP_MULTICAST
 	}
+	if (rt && !dev)
+		dev = rt->rt_dev;
 #endif		
 	if (user_saddr)
 		saddr = user_saddr;
 
+	raddr = rt ? rt->rt_gateway : daddr;
 	/*
 	 *	Now compute the buffer space we require
 	 */ 
@@ -662,16 +636,10 @@ int ip_build_xmit(struct sock *sk,
 	 *	choice RAW frames within 20 bytes of maximum size(rare) to the long path
 	 */
 
-	length += 20;
+	length += sizeof(struct iphdr);
 	if (!sk->ip_hdrincl && opt) 
-	{
 		length += opt->optlen;
-		if (opt->is_strictroute && rt && rt->rt_gateway) 
-		{
-			ip_statistics.IpOutNoRoutes++;
-			return -ENETUNREACH;
-		}
-	}
+
 	if(length <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
 	{	
 		int error;
@@ -687,12 +655,19 @@ int ip_build_xmit(struct sock *sk,
 		skb->sk=sk;
 		skb->arp=0;
 		skb->saddr=saddr;
-		skb->raddr=(rt&&rt->rt_gateway)?rt->rt_gateway:daddr;
+		skb->raddr = raddr;
 		skb_reserve(skb,(dev->hard_header_len+15)&~15);
-		if(sk->ip_hcache_state>0)
+		if (hh)
 		{
-			memcpy(skb_push(skb,dev->hard_header_len),sk->ip_hcache_data,dev->hard_header_len);
 			skb->arp=1;
+			memcpy(skb_push(skb,dev->hard_header_len),hh->hh_data,dev->hard_header_len);
+			if (!hh->hh_uptodate)
+			{
+				skb->arp = 0;
+#if RT_CACHE_DEBUG >= 2
+				printk("ip_build_xmit: hh miss %08x via %08x\n", rt->rt_dst, rt->rt_gateway);
+#endif				
+			}
 		}
 		else if(dev->hard_header)
 		{
@@ -747,7 +722,7 @@ int ip_build_xmit(struct sock *sk,
 		}
 		return 0;
 	}
-	length-=20;
+	length -= sizeof(struct iphdr);
 	if (sk && !sk->ip_hdrincl && opt) 
 	{
 		length -= opt->optlen;
@@ -847,7 +822,7 @@ int ip_build_xmit(struct sock *sk,
 		skb->sk = sk;
 		skb->arp = 0;
 		skb->saddr = saddr;
-		skb->raddr = (rt&&rt->rt_gateway) ? rt->rt_gateway : daddr;
+		skb->raddr = raddr;
 		skb_reserve(skb,(dev->hard_header_len+15)&~15);
 		data = skb_put(skb, fraglen-dev->hard_header_len);
 
@@ -858,10 +833,17 @@ int ip_build_xmit(struct sock *sk,
 		 *	pointer to speed header cache builds for identical targets.
 		 */
 		 
-		if(sk->ip_hcache_state>0)
+		if (hh)
 		{
-			memcpy(skb_push(skb,dev->hard_header_len),sk->ip_hcache_data, dev->hard_header_len);
 			skb->arp=1;
+			memcpy(skb_push(skb,dev->hard_header_len),hh->hh_data,dev->hard_header_len);
+			if (!hh->hh_uptodate)
+			{
+				skb->arp = 0;
+#if RT_CACHE_DEBUG >= 2
+				printk("ip_build_xmit: hh miss %08x via %08x\n", rt->rt_dst, rt->rt_gateway);
+#endif				
+			}
 		}
 		else if (dev->hard_header)
 		{
@@ -958,15 +940,15 @@ int ip_build_xmit(struct sock *sk,
 			if(sk==NULL || sk->ip_mc_loop)
 			{
 				if(skb->daddr==IGMP_ALL_HOSTS || (dev->flags&IFF_ALLMULTI))
-					ip_loopback(rt?rt->rt_dev:dev,skb);
+					ip_loopback(dev,skb);
 				else 
 				{
-					struct ip_mc_list *imc=rt?rt->rt_dev->ip_mc_list:dev->ip_mc_list;
+					struct ip_mc_list *imc=dev->ip_mc_list;
 					while(imc!=NULL) 
 					{
 						if(imc->multiaddr==daddr) 
 						{
-							ip_loopback(rt?rt->rt_dev:dev,skb);
+							ip_loopback(dev,skb);
 							break;
 						}
 						imc=imc->next;

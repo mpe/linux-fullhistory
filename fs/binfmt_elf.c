@@ -345,8 +345,8 @@ static unsigned int load_aout_interp(struct exec * interp_ex,
 #define INTERPRETER_ELF 2
 
 
-static int
-load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static inline int
+do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct elfhdr elf_ex;
 	struct elfhdr interp_elf_ex;
@@ -370,8 +370,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned int elf_stack;
 	char passed_fileno[6];
 	
-	MOD_INC_USE_COUNT;
-
 	ibcs2_interpreter = 0;
 	status = 0;
 	load_addr = 0;
@@ -379,7 +377,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	if (elf_ex.e_ident[0] != 0x7f ||
 	    strncmp(&elf_ex.e_ident[1], "ELF",3) != 0) {
-		MOD_DEC_USE_COUNT;
 		return  -ENOEXEC;
 	}
 	
@@ -390,7 +387,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
 	   (!bprm->inode->i_op || !bprm->inode->i_op->default_file_ops ||
 	    !bprm->inode->i_op->default_file_ops->mmap)){
-		MOD_DEC_USE_COUNT;
 		return -ENOEXEC;
 	}
 	
@@ -399,7 +395,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	elf_phdata = (struct elf_phdr *) kmalloc(elf_ex.e_phentsize * 
 						 elf_ex.e_phnum, GFP_KERNEL);
 	if (elf_phdata == NULL) {
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	
@@ -407,7 +402,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			   elf_ex.e_phentsize * elf_ex.e_phnum, 1);
 	if (retval < 0) {
 		kfree (elf_phdata);
-		MOD_DEC_USE_COUNT;
 		return retval;
 	}
 	
@@ -420,7 +414,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	if (elf_exec_fileno < 0) {
 		kfree (elf_phdata);
-		MOD_DEC_USE_COUNT;
 		return elf_exec_fileno;
 	}
 	
@@ -438,7 +431,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			{
 				kfree (elf_phdata);
 				kfree(elf_interpreter);
-				MOD_DEC_USE_COUNT;
 				return -EINVAL;
 			}
 
@@ -451,7 +443,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 							   GFP_KERNEL);
 			if (elf_interpreter == NULL) {
 				kfree (elf_phdata);
-				MOD_DEC_USE_COUNT;
 				return -ENOMEM;
 			}
 			
@@ -484,7 +475,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(retval < 0) {
 				kfree (elf_phdata);
 				kfree(elf_interpreter);
-				MOD_DEC_USE_COUNT;
 				return retval;
 			}
 		}
@@ -509,7 +499,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  {
 		    kfree(elf_interpreter);
 		    kfree(elf_phdata);
-		    MOD_DEC_USE_COUNT;
 		    return -ELIBBAD;
 		  }
 	}
@@ -534,7 +523,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			      kfree(elf_interpreter);
 			}
 			kfree (elf_phdata);
-			MOD_DEC_USE_COUNT;
 			return -E2BIG;
 		}
 	}
@@ -587,7 +575,6 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    printk("Unable to load interpreter\n");
 		    kfree(elf_phdata);
 		    send_sig(SIGSEGV, current, 0);
-		    MOD_DEC_USE_COUNT;
 		    return 0;
 		  }
 		}
@@ -709,15 +696,25 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	start_thread(regs, elf_entry, bprm->p);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
-	MOD_DEC_USE_COUNT;
 	return 0;
+}
+
+static int
+load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+{
+	int retval;
+
+	MOD_INC_USE_COUNT;
+	retval = do_load_elf_binary(bprm, regs);
+	MOD_DEC_USE_COUNT;
+	return retval;
 }
 
 /* This is really simpleminded and specialized - we are loading an
    a.out library that is given an ELF header. */
 
-static int
-load_elf_library(int fd){
+static inline int
+do_load_elf_library(int fd){
 	struct file * file;
 	struct elfhdr elf_ex;
 	struct elf_phdr *elf_phdata  =  NULL;
@@ -729,47 +726,46 @@ load_elf_library(int fd){
 	int error;
 	int i,j, k;
 
-	MOD_INC_USE_COUNT;
 	len = 0;
 	file = current->files->fd[fd];
 	inode = file->f_inode;
 	elf_bss = 0;
 	
-	set_fs(KERNEL_DS);
-	if (file->f_op->read(inode, file, (char *) &elf_ex, sizeof(elf_ex)) != sizeof(elf_ex)) {
-		SYS(close)(fd);
-		MOD_DEC_USE_COUNT;
+	if (!file || !file->f_op)
 		return -EACCES;
-	}
+
+	/* seek to the beginning of the file */
+	if (file->f_op->lseek) {
+		if ((error = file->f_op->lseek(inode, file, 0, 0)) != 0)
+			return -ENOEXEC;
+	} else
+		file->f_pos = 0;
+
+	set_fs(KERNEL_DS);
+	error = file->f_op->read(inode, file, (char *) &elf_ex, sizeof(elf_ex));
 	set_fs(USER_DS);
-	
-	if (elf_ex.e_ident[0] != 0x7f ||
-	    strncmp(&elf_ex.e_ident[1], "ELF",3) != 0) {
-		MOD_DEC_USE_COUNT;
+	if (error != sizeof(elf_ex))
 		return -ENOEXEC;
-	}
-	
+
+	if (elf_ex.e_ident[0] != 0x7f ||
+	    strncmp(&elf_ex.e_ident[1], "ELF",3) != 0)
+		return -ENOEXEC;
+
 	/* First of all, some simple consistency checks */
 	if(elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
 	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
-	   (!inode->i_op || !inode->i_op->default_file_ops->mmap)){
-		MOD_DEC_USE_COUNT;
+	   (!inode->i_op || !inode->i_op->default_file_ops->mmap))
 		return -ENOEXEC;
-	}
 	
 	/* Now read in all of the header information */
 	
-	if(sizeof(struct elf_phdr) * elf_ex.e_phnum > PAGE_SIZE) {
-		MOD_DEC_USE_COUNT;
+	if(sizeof(struct elf_phdr) * elf_ex.e_phnum > PAGE_SIZE)
 		return -ENOEXEC;
-	}
 	
 	elf_phdata =  (struct elf_phdr *) 
 		kmalloc(sizeof(struct elf_phdr) * elf_ex.e_phnum, GFP_KERNEL);
-	if (elf_phdata == NULL) {
-		MOD_DEC_USE_COUNT;
+	if (elf_phdata == NULL)
 		return -ENOMEM;
-	}
 	
 	retval = read_exec(inode, elf_ex.e_phoff, (char *) elf_phdata,
 			   sizeof(struct elf_phdr) * elf_ex.e_phnum, 1);
@@ -780,7 +776,6 @@ load_elf_library(int fd){
 	
 	if(j != 1)  {
 		kfree(elf_phdata);
-		MOD_DEC_USE_COUNT;
 		return -ENOEXEC;
 	}
 	
@@ -800,7 +795,6 @@ load_elf_library(int fd){
 	SYS(close)(fd);
 	if (error != (elf_phdata->p_vaddr & 0xfffff000)) {
 		kfree(elf_phdata);
-		MOD_DEC_USE_COUNT;
 		return error;
 	}
 
@@ -813,10 +807,19 @@ load_elf_library(int fd){
 		  PROT_READ|PROT_WRITE|PROT_EXEC,
 		  MAP_FIXED|MAP_PRIVATE, 0);
 	kfree(elf_phdata);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
+static int load_elf_library(int fd)
+{
+	int retval;
+
+	MOD_INC_USE_COUNT;
+	retval = do_load_elf_library(fd);
+	MOD_DEC_USE_COUNT;
+	return retval;
+}
+	
 /*
  * ELF core dumper
  *

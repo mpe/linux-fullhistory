@@ -11,6 +11,10 @@ OBJECTS = $(HEAD) inflate.o unzip.o misc.o
 
 CFLAGS = -O2 -DSTDC_HEADERS
 
+ifdef SMP
+CFLAGS := $(CFLAGS) -D__SMP__
+endif
+
 ifdef CONFIG_KERNEL_ELF
 TARGET=--target elf32-i386
 INPUT_DATA=input_data
@@ -22,8 +26,17 @@ all: vmlinux
 vmlinux: piggy.o $(OBJECTS)
 	$(LD) $(ZLINKFLAGS) -o vmlinux $(OBJECTS) piggy.o
 
+ifdef SMP
+
+head.o: head.S $(TOPDIR)/include/linux/tasks.h
+	$(CC) -D__SMP__ -traditional -c head.S
+
+else
+
 head.o: head.S $(TOPDIR)/include/linux/tasks.h
 	$(CC) -traditional -c head.S
+
+endif
 
 ifdef CONFIG_KERNEL_ELF
 

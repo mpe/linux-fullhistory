@@ -1,3 +1,7 @@
+Fri Nov 10 15:29:49 1995  Leonard N. Zubkoff (lnz@dandelion.com)
+
+	* Released new BusLogic driver.
+
 Wed Aug  9 22:37:04 1995  Andries Brouwer  <aeb@cwi.nl>
 
 	As a preparation for new device code, separated the various

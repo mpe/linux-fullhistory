@@ -6,6 +6,8 @@
 
 /*
  * super.c contains code to handle the super-block tables.
+ *
+ * GK 2/5/95  -  Changed to support mounting the root fs via NFS
  */
 #include <stdarg.h>
 
@@ -33,6 +35,10 @@ extern int root_mountflags;
 struct super_block super_blocks[NR_SUPER];
 
 static int do_remount_sb(struct super_block *sb, int flags, char * data);
+
+#ifdef CONFIG_ROOT_NFS
+extern int nfs_root_mount(struct super_block *sb);
+#endif
 
 /* this is initialized in init/main.c */
 kdev_t ROOT_DEV;
@@ -677,6 +683,35 @@ void mount_root(void)
 	int retval;
 
 	memset(super_blocks, 0, sizeof(super_blocks));
+#ifdef CONFIG_ROOT_NFS
+	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
+		ROOT_DEV = 0;
+		if ((fs_type = get_fs_type("nfs"))) {
+			sb = &super_blocks[0];
+			sb->s_dev = get_unnamed_dev();
+			sb->s_flags = root_mountflags & ~MS_RDONLY;
+			if (nfs_root_mount(sb) >= 0) {
+				inode = sb->s_mounted;
+				inode->i_count += 3 ;
+				sb->s_covered = inode;
+				sb->s_rd_only = 0;
+				sb->s_dirt = 0;
+				sb->s_type = fs_type;
+				current->fs->pwd = inode;
+				current->fs->root = inode;
+				ROOT_DEV = sb->s_dev;
+				printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
+				return;
+			}
+			sb->s_dev = 0;
+		}
+		if (!ROOT_DEV) {
+			printk(KERN_ERR "VFS: Unable to mount root fs via NFS, trying floppy.\n");
+			ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
+		}
+	}
+#endif
+
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");

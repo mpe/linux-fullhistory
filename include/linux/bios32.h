@@ -24,7 +24,7 @@
 
 /*
  * Error values that may be returned by the PCI bios.  Use
- * pci_strbioserr() to convert to a printable string.
+ * pcibios_strerror() to convert to a printable string.
  */
 #define PCIBIOS_SUCCESSFUL		0x00
 #define PCIBIOS_FUNC_NOT_SUPPORTED	0x81

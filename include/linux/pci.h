@@ -541,7 +541,6 @@ extern unsigned long pci_init (unsigned long mem_start, unsigned long mem_end);
 
 extern struct pci_dev_info *pci_lookup_dev (unsigned int vendor,
 					    unsigned int dev);
-extern const char *pci_strbioserr (int error);
 extern const char *pci_strclass (unsigned int class);
 extern const char *pci_strvendor (unsigned int vendor);
 extern const char *pci_strdev (unsigned int vendor, unsigned int device);

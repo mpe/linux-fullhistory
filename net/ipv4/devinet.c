@@ -227,3 +227,16 @@ struct device *ip_dev_find(unsigned long addr)
 	}
 	return NULL;
 }
+
+struct device *dev_getbytype(unsigned short type)
+{
+	struct device *dev;
+
+	for (dev = dev_base; dev != NULL; dev = dev->next) 
+	{
+		if (dev->type == type && !(dev->flags&(IFF_LOOPBACK|IFF_NOARP)))
+			return(dev);
+	}
+	return(NULL);
+}
+

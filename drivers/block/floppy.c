@@ -2440,14 +2440,21 @@ static int make_raw_rw_request(void)
 		raw_cmd->flags |= FD_RAW_READ;
 		COMMAND = FM_MODE(floppy,FD_READ);
 	} else if ((unsigned long)CURRENT->buffer < MAX_DMA_ADDRESS) {
+		unsigned long dma_limit;
 		int direct, indirect;
 
 		indirect= transfer_size(ssize,max_sector,max_buffer_sectors*2) -
 			sector_t;
 
-		max_size = minimum(buffer_chain_size(),
-				   (MAX_DMA_ADDRESS - 
-				    ((unsigned long) CURRENT->buffer))>>9);
+		/*
+		 * Do NOT use minimum() here---MAX_DMA_ADDRESS is 64 bits wide
+		 * on a 64 bit machine!
+		 */
+		max_size = buffer_chain_size();
+		dma_limit = (MAX_DMA_ADDRESS - ((unsigned long) CURRENT->buffer)) >> 9;
+		if ((unsigned long) max_size > dma_limit) {
+			max_size = dma_limit;
+		}
 		/* 64 kb boundaries */
 		if (CROSS_64KB(CURRENT->buffer, max_size << 9))
 			max_size = (K_64 - ((long) CURRENT->buffer) % K_64)>>9;
@@ -3033,8 +3040,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 			return -EPERM;
 		LOCK_FDC(drive,1);
 		for (cnt = 0; cnt < N_DRIVE; cnt++){
-			if (TYPE(drive_state[cnt].fd_device) ==
-			    type &&
+			if (TYPE(drive_state[cnt].fd_device) == type &&
 			    drive_state[cnt].fd_ref)
 				set_bit(drive, &fake_change);
 		}
@@ -3047,7 +3053,9 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 		for (cnt = 0; cnt < N_DRIVE; cnt++){
 			if (TYPE(drive_state[cnt].fd_device) == type &&
 			    drive_state[cnt].fd_ref)
-				check_disk_change(drive_state[cnt].fd_device);
+				check_disk_change(
+					MKDEV(FLOPPY_MAJOR,
+					      drive_state[cnt].fd_device));
 		}
 	} else {
 		LOCK_FDC(drive,1);
@@ -3125,7 +3133,7 @@ static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
 				DPRINT1("warning: obsolete ioctl 0x%x\n",ocmd);
 				DPRINT("please recompile your program\n");
 				/* these ioctls only existed
-				 * in two (development)
+				 * in six (development)
 				 * kernels anyways. That's why we
 				 * complain about these, and not about
 				 * the much older 0x00xx ioctl's
@@ -3206,12 +3214,12 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return -EPERM;
 
 	/* verify writability of result, and fail early */
-	if (_IOC_DIR(cmd) & _IOC_WRITE)
+	if (_IOC_DIR(cmd) & _IOC_READ)
 		ECALL(verify_area(VERIFY_WRITE,(void *) param, size));
 		
 	/* copyin */
 	CLEARSTRUCT(&inparam);
-	if (_IOC_DIR(cmd) & _IOC_READ)
+	if (_IOC_DIR(cmd) & _IOC_WRITE)
 		ECALL(fd_copyin((void *)param, &inparam, size))
 
 	switch (cmd) {
@@ -3304,7 +3312,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return -EINVAL;
 	}
 
-	if (_IOC_DIR(cmd) & _IOC_WRITE)
+	if (_IOC_DIR(cmd) & _IOC_READ)
 		return fd_copyout((void *)param, outparam, size);
 	else
 		return 0;
@@ -3479,11 +3487,10 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	}
 
 	UDRS->fd_device = MINOR(inode->i_rdev);
-
-	if (old_dev && old_dev != inode->i_rdev) {
+	if (old_dev != -1 && old_dev != MINOR(inode->i_rdev)) {
 		if (buffer_drive == drive)
 			buffer_track = -1;
-		invalidate_buffers(old_dev);
+		invalidate_buffers(MKDEV(FLOPPY_MAJOR,old_dev));
 	}
 
 	/* Allow ioctls if we have write-permissions even if read-only open */
@@ -3831,6 +3838,7 @@ int floppy_init(void)
 		CLEARSTRUCT(UDRS);
 		CLEARSTRUCT(UDRWE);
 		UDRS->flags = FD_VERIFY | FD_DISK_NEWCHANGE | FD_DISK_CHANGED;
+		UDRS->fd_device = -1;
 		floppy_track_buffer = NULL;
 		max_buffer_sectors = 0;
 	}

@@ -104,7 +104,7 @@ int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
  * force the transfer to start only after we have put all the requests
  * on the list.
  */
-static void plug_device(struct blk_dev_struct * dev, struct request * plug)
+static inline void plug_device(struct blk_dev_struct * dev, struct request * plug)
 {
 	unsigned long flags;
 
@@ -121,7 +121,7 @@ static void plug_device(struct blk_dev_struct * dev, struct request * plug)
 /*
  * remove the plug and let it rip..
  */
-static void unplug_device(struct blk_dev_struct * dev)
+static inline void unplug_device(struct blk_dev_struct * dev)
 {
 	struct request * req;
 	unsigned long flags;

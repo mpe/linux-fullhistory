@@ -59,6 +59,23 @@ struct ip_fw
 #define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
 	unsigned short fw_pts[IP_FW_MAX_PORTS]; /* Array of port numbers to match */
 	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
+	unsigned short fw_priority;		/* Revised packet priority */
+};
+
+struct ip_fw_old
+{
+	struct ip_fw  *fw_next;			/* Next firewall on chain */
+	struct in_addr fw_src, fw_dst;		/* Source and destination IP addr */
+	struct in_addr fw_smsk, fw_dmsk;	/* Mask for src and dest IP addr */
+	struct in_addr fw_via;			/* IP address of interface "via" */
+	unsigned short fw_flg;			/* Flags word */
+	unsigned short fw_nsp, fw_ndp;          /* N'of src ports and # of dst ports */
+						/* in ports array (dst ports follow */
+    						/* src ports; max of 10 ports in all; */
+    						/* count of 0 means match all ports) */
+#define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
+	unsigned short fw_pts[IP_FW_MAX_PORTS]; /* Array of port numbers to match */
+	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
 };
 
 /*

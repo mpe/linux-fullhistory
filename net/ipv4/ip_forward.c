@@ -90,6 +90,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
 	struct   options * opt	= (struct options*)skb->proto_priv;
+	struct hh_cache *hh = NULL;
 	int encap = 0;		/* Encap length */
 #ifdef CONFIG_FIREWALL
 	int fw_res = 0;		/* Forwarding result */	
@@ -159,7 +160,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 * and give it to the IP sender for further processing.
 		 */
 
-		rt = ip_rt_route(target_addr, NULL, NULL);
+		rt = ip_rt_route(target_addr, 0);
+
 		if (rt == NULL)
 		{
 			/*
@@ -181,31 +183,22 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 
 		raddr = rt->rt_gateway;
 	
-		if (raddr != 0)
-		{
+		if (opt->is_strictroute && (rt->rt_flags & RTF_GATEWAY)) {
 			/*
 			 *	Strict routing permits no gatewaying
 			 */
 	
-		        if (opt->is_strictroute)
-			{
-				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0, dev);
-				return -1;
-			}
-		
-			/*
-			 *	There is a gateway so find the correct route for it.
-			 *	Gateways cannot in turn be gatewayed.
-			 */
+			ip_rt_put(rt);
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0, dev);
+			return -1;
 		}
-		else
-			raddr = target_addr;
 
 		/*
 		 *	Having picked a route we can now send the frame out.
 		 */
 
 		dev2 = rt->rt_dev;
+		hh = rt->rt_hh;
 		/*
 		 *	In IP you never have to forward a frame on the interface that it 
 		 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
@@ -227,6 +220,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		raddr=skb->raddr;
 		if(is_frag&16)		/* VIFF_TUNNEL mode */
 			encap=20;
+		rt=NULL;
 	}
 #endif	
 	
@@ -250,7 +244,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 
 		if (skb->len+encap > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) {
 		  ip_statistics.IpFragFails++;
-		  icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev2->mtu, dev);
+		  icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(dev2->mtu), dev);
+		  ip_rt_put(rt);
 		  return -1;
 		}
 
@@ -271,6 +266,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			if (skb2 == NULL)
 			{
 				NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
+				ip_rt_put(rt);
 				return -1;
 			}
 		
@@ -286,7 +282,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			}
 			else
 #endif			
-		 		ip_send(skb2,raddr,skb->len,dev2,dev2->pa_addr);
+		 		ip_send(rt,skb2,raddr,skb->len,dev2,dev2->pa_addr);
 
 			/*
 			 *	We have to copy the bytes over as the new header wouldn't fit
@@ -320,7 +316,18 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #endif
 				skb->arp=1;
 				skb->raddr=raddr;
-				if(dev2->hard_header)
+				if (hh)
+				{
+					memcpy(skb_push(skb, dev2->hard_header_len), hh->hh_data, dev2->hard_header_len);
+					if (!hh->hh_uptodate)
+					{
+#if RT_CACHE_DEBUG >= 2
+						printk("ip_forward: hh miss %08x via %08x\n", target_addr, rt->rt_gateway);
+#endif						
+						skb->arp = 0;
+					}
+				}
+				else if (dev2->hard_header)
 				{
 					if(dev2->hard_header(skb, dev2, ETH_P_IP, NULL, NULL, skb->len)<0)
 						skb->arp=0;
@@ -418,7 +425,11 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		}
 	}
 	else
+	{
+	        ip_rt_put(rt);
 		return -1;
+	}
+	ip_rt_put(rt);
 	
 	/*
 	 *	Tell the caller if their buffer is free.

@@ -171,7 +171,7 @@ void ext_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 
 #define inode_bmap(inode,nr) ((inode)->u.ext_i.i_data[(nr)])
 
-static int block_bmap(struct buffer_head * bh, int nr)
+static inline int block_bmap(struct buffer_head * bh, int nr)
 {
 	int tmp;
 

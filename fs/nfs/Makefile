@@ -9,6 +9,11 @@
 
 O_TARGET := nfs.o
 O_OBJS   := proc.o sock.o rpcsock.o inode.o file.o dir.o symlink.o mmap.o
+
+ifdef CONFIG_ROOT_NFS
+O_OBJS += nfsroot.o
+endif
+
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

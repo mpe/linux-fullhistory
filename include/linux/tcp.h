@@ -17,10 +17,6 @@
 #ifndef _LINUX_TCP_H
 #define _LINUX_TCP_H
 
-
-#define HEADER_SIZE	128		/* maximum header size		*/
-
-
 struct tcphdr {
 	__u16	source;
 	__u16	dest;

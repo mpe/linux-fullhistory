@@ -24,11 +24,10 @@
 #ifndef _LINUX_NETDEVICE_H
 #define _LINUX_NETDEVICE_H
 
+#include <linux/config.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/skbuff.h>
-
-#include <linux/config.h>
 
 /* for future expansion when we will have different priorities. */
 #define DEV_NUMBUFFS	3
@@ -59,6 +58,19 @@ struct dev_mc_list
 	char dmi_addr[MAX_ADDR_LEN];
 	unsigned short dmi_addrlen;
 	unsigned short dmi_users;
+};
+
+struct hh_cache
+{
+	struct hh_cache *hh_next;
+	unsigned long	hh_refcnt;	/* number of users */
+	void		*hh_arp;	/* Opaque pointer, used by
+					 * any address resolution module,
+					 * not only ARP.
+					 */
+	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
+	char		hh_uptodate;	/* hh_data is valid */
+	char		hh_data[16];    /* cached hardware header */
 };
 
 /*
@@ -162,12 +174,14 @@ struct device
   void			  (*set_multicast_list)(struct device *dev,
   					 int num_addrs, void *addrs);
 #define HAVE_SET_MAC_ADDR  		 
-  int			  (*set_mac_address)(struct device *dev, struct sockaddr *addr);
+  int			  (*set_mac_address)(struct device *dev, void *addr);
 #define HAVE_PRIVATE_IOCTL
   int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr, int cmd);
 #define HAVE_SET_CONFIG
   int			  (*set_config)(struct device *dev, struct ifmap *map);
-  void			  (*header_cache)(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr);
+#define HAVE_HEADER_CACHE
+  void			  (*header_cache_bind)(struct hh_cache **hhp, struct device *dev, unsigned short htype, __u32 daddr);
+  void			  (*header_cache_update)(struct hh_cache *hh, struct device *dev, unsigned char *  haddr);
 };
 
 
@@ -201,6 +215,7 @@ extern struct device	*ip_dev_check(unsigned long daddr);
 extern unsigned long	ip_my_addr(void);
 extern unsigned long	ip_get_mask(unsigned long addr);
 extern struct device 	*ip_dev_find(unsigned long addr);
+extern struct device    *dev_getbytype(unsigned short type);
 
 extern void		dev_add_pack(struct packet_type *pt);
 extern void		dev_remove_pack(struct packet_type *pt);

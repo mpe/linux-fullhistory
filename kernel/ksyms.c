@@ -126,7 +126,7 @@ extern void (* iABI_hook)(struct pt_regs * regs);
 
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
-#ifdef CONFIG_MODVERSIONS
+#ifdef MODVERSIONS
 	{ (void *)1 /* Version version :-) */,
 		SYMBOL_NAME_STR (Using_Versions) },
 #endif
@@ -226,7 +226,8 @@ struct symbol_table symbol_table = {
 	X(getblk),
 	X(bread),
 	X(breada),
-	X(brelse),
+	X(__brelse),
+	X(__bforget),
 	X(ll_rw_block),
 	X(__wait_on_buffer),
 	X(dcache_lookup),
@@ -387,6 +388,7 @@ struct symbol_table symbol_table = {
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		
 	/* If 8390 NIC support is built in, we will need these. */
 	X(ei_open),
+	X(ei_close),
 	X(ei_debug),
 	X(ei_interrupt),
 	X(ethdev_init),

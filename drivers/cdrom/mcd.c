@@ -62,22 +62,11 @@
 
 */
 
-#include <linux/config.h>
+
+#include <linux/module.h>
 
 #ifdef MODULE
-# include <linux/module.h>
-#endif
-
-#include <linux/version.h>
-
-#ifdef MODULE
-# ifndef CONFIG_MODVERSIONS
-    char kernel_version[]= UTS_RELEASE;
-# endif
 #define mcd_init init_module
-#else
-# define MOD_INC_USE_COUNT
-# define MOD_DEC_USE_COUNT
 #endif
 
 #include <linux/errno.h>

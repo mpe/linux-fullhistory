@@ -196,8 +196,8 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	__u16			src_port=0, dst_port=0, icmp_type=0;
 	unsigned short		f_prt=0, prt;
 	char			notcpsyn=1, notcpack=1, match;
-	unsigned short		f_flag;
 	unsigned short		offset;
+	int			answer, priority;
 
 	/*
 	 *	If the chain is empty follow policy. The BSD one
@@ -465,24 +465,39 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			break;
 	} /* Loop */
 	
-	if(opt == 1)
-		return 0;
-
+	answer = FW_BLOCK;
+	
 	/*
 	 * We rely on policy defined in the rejecting entry or, if no match
 	 * was found, we rely on the general policy variable for this type
 	 * of firewall.
 	 */
 
-	if(f!=NULL)	/* A match was found */
-		f_flag=f->fw_flg;
+	if(f!=NULL) 
+	{
+		policy=f->fw_flg;
+		priority=f->fw_priority;
+	}
 	else
-		f_flag=policy;
-	if(f_flag&IP_FW_F_ACCEPT)
-		return ((f_flag&IP_FW_F_MASQ)?FW_MASQUERADE:FW_ACCEPT);
-	if(f_flag&IP_FW_F_ICMPRPL)
-		return FW_REJECT;
-	return FW_BLOCK;
+		priority=0xFF00;
+
+	if(opt != 1) 
+	{
+		if(policy&IP_FW_F_ACCEPT)
+			answer=(policy&IP_FW_F_MASQ)?FW_MASQUERADE:FW_ACCEPT;
+		else
+			if(policy&IP_FW_F_ICMPRPL)
+				answer = FW_REJECT;
+	}
+
+	if (answer == 0) { /* Adjust priority and recompute checksum */
+		__u8 old_tos = ip->tos;
+		ip->tos = (old_tos & (priority>>8)) ^ priority;
+		if (ip->tos != old_tos)
+		 	ip_send_check(ip);
+	}
+
+	return answer;
 }
 
 #ifdef CONFIG_IP_MASQUERADE
@@ -1022,7 +1037,7 @@ static void free_fw_chain(struct ip_fw *volatile* chainptr)
 
 /* Volatiles to keep some of the compiler versions amused */
 
-static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl)
+static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int len)
 {
 	struct ip_fw *ftmp;
 	struct ip_fw *chtmp=NULL;
@@ -1046,8 +1061,11 @@ static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl)
 		return( ENOMEM );
 	}
 
-	memcpy(ftmp, frwl, sizeof( struct ip_fw ) );
+	memcpy(ftmp, frwl, len);
+	if (len == sizeof (struct ip_fw_old))
+		ftmp->fw_priority = 0xFF00; /* and_mask, xor_mask */
 
+	ftmp->fw_priority = (ftmp->fw_priority & 0xFFFC) | 0x0300;
 	ftmp->fw_pcnt=0L;
 	ftmp->fw_bcnt=0L;
 
@@ -1286,7 +1304,7 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 {
 
-	if ( len != sizeof(struct ip_fw) )
+	if ( len != sizeof(struct ip_fw) && len != sizeof(struct ip_fw_old))
 	{
 #ifdef DEBUG_CONFIG_IP_FIREWALL
 		printk("ip_fw_ctl: len=%d, want %d\n",len, sizeof(struct ip_fw));
@@ -1370,7 +1388,7 @@ int ip_acct_ctl(int stage, void *m, int len)
 		switch (stage) 
 		{
 			case IP_ACCT_ADD:
-				return( add_to_chain(&ip_acct_chain,frwl));
+				return( add_to_chain(&ip_acct_chain,frwl,len));
 		    	case IP_ACCT_DEL:
 				return( del_from_chain(&ip_acct_chain,frwl));
 			default:
@@ -1489,9 +1507,9 @@ int ip_fw_ctl(int stage, void *m, int len)
 		switch (stage) 
 		{
 			case IP_FW_ADD_BLK:
-				return(add_to_chain(&ip_fw_blk_chain,frwl));
+				return(add_to_chain(&ip_fw_blk_chain,frwl,len));
 			case IP_FW_ADD_FWD:
-				return(add_to_chain(&ip_fw_fwd_chain,frwl));
+				return(add_to_chain(&ip_fw_fwd_chain,frwl,len));
 			case IP_FW_DEL_BLK:
 				return(del_from_chain(&ip_fw_blk_chain,frwl));
 			case IP_FW_DEL_FWD: 
@@ -1565,6 +1583,7 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
 		for (p = 0; p < IP_FW_MAX_PORTS; p++)
 			len+=sprintf(buffer+len, " %u", i->fw_pts[p]);
+		len+=sprintf(buffer+len, " M%04X", i->fw_priority);
 		buffer[len++]='\n';
 		buffer[len]='\0';
 		pos=begin+len;

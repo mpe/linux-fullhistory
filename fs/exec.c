@@ -953,12 +953,22 @@ static int load_aout_library(int fd)
 	file = current->files->fd[fd];
 	inode = file->f_inode;
 	
-	set_fs(KERNEL_DS);
-	if (file->f_op->read(inode, file, (char *) &ex, sizeof(ex)) != sizeof(ex)) {
+	if (!file || !file->f_op)
 		return -EACCES;
-	}
+
+	/* Seek into the file */
+	if (file->f_op->lseek) {
+		if ((error = file->f_op->lseek(inode, file, 0, 0)) != 0)
+			return -ENOEXEC;
+	} else
+		file->f_pos = 0;
+
+	set_fs(KERNEL_DS);
+	error = file->f_op->read(inode, file, (char *) &ex, sizeof(ex));
 	set_fs(USER_DS);
-	
+	if (error != sizeof(ex))
+		return -ENOEXEC;
+
 	/* We come in here for the regular a.out style of shared libraries */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || N_TRSIZE(ex) ||
 	    N_DRSIZE(ex) || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||

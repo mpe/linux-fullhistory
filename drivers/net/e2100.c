@@ -139,6 +139,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 {
 	int i, status;
 	unsigned char *station_addr = dev->dev_addr;
+	static unsigned version_printed = 0;
 
 	/* First check the station address for the Ctron prefix. */
 	if (inb(ioaddr + E21_SAPROM + 0) != 0x00
@@ -160,6 +161,15 @@ int e21_probe1(struct device *dev, int ioaddr)
 	inb(ioaddr + E21_MEDIA); 		/* Point to media selection. */
 	outb(0, ioaddr + E21_ASIC); 	/* and disable the secondary interface. */
 
+	if (ei_debug  &&  version_printed++ == 0)
+		printk(version);
+
+	/* We should have a "dev" from Space.c or the static module table. */
+	if (dev == NULL) {
+		printk("e2100.c: Passed a NULL device.\n");
+		dev = init_etherdev(0, 0);
+	}
+
 	printk("%s: E21** at %#3x,", dev->name, ioaddr);
 	for (i = 0; i < 6; i++)
 		printk(" %02X", station_addr[i]);
@@ -178,13 +188,17 @@ int e21_probe1(struct device *dev, int ioaddr)
 	} else if (dev->irq == 2)	/* Fixup luser bogosity: IRQ2 is really IRQ9 */
 		dev->irq = 9;
 
+	/* Allocate dev->priv and fill in 8390 specific dev fields. */
+	if (ethdev_init(dev)) {
+		printk (" unable to get memory for dev->priv.\n");
+		return -ENOMEM;
+	}
+
 	/* Grab the region so we can find a different board if IRQ select fails. */
 	request_region(ioaddr, E21_IO_EXTENT, "e2100");
 
 	/* The 8390 is at the base address. */
 	dev->base_addr = ioaddr;
-
-	ethdev_init(dev);
 
 	ei_status.name = "E2100";
 	ei_status.word16 = 1;
@@ -223,9 +237,6 @@ int e21_probe1(struct device *dev, int ioaddr)
 	printk(", IRQ %d, %s media, memory @ %#lx.\n", dev->irq,
 		   dev->if_port ? "secondary" : "primary", dev->mem_start);
 
-	if (ei_debug > 0)
-		printk(version);
-
 	ei_status.reset_8390 = &e21_reset_8390;
 	ei_status.block_input = &e21_block_input;
 	ei_status.block_output = &e21_block_output;
@@ -241,7 +252,6 @@ static int
 e21_open(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
-	int rc;
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "e2100")) {
 		return EBUSY;
@@ -257,8 +267,7 @@ e21_open(struct device *dev)
 	inb(ioaddr + E21_MEM_BASE);
 	outb(0, ioaddr + E21_ASIC + ((dev->mem_start >> 17) & 7));
 
-	rc = ei_open(dev);
-	if (rc != 0) return rc;
+	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -338,8 +347,8 @@ e21_close(struct device *dev)
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
-    free_irq(dev->irq);
-    dev->irq = ei_status.saved_irq;
+	free_irq(dev->irq);
+	dev->irq = ei_status.saved_irq;
 
 	/* Shut off the interrupt line and secondary interface. */
 	inb(ioaddr + E21_IRQ_LOW);
@@ -347,9 +356,9 @@ e21_close(struct device *dev)
 	inb(ioaddr + E21_IRQ_HIGH); 			/* High IRQ bit, and if_port. */
 	outb(0, ioaddr + E21_ASIC);
 
-    irq2dev_map[dev->irq] = NULL;
+	irq2dev_map[dev->irq] = NULL;
 
-	NS8390_init(dev, 0);
+	ei_close(dev);
 
 	/* Double-check that the memory has been turned off, because really
 	   really bad things happen if it isn't. */
@@ -365,37 +374,70 @@ struct netdev_entry e21_drv =
 {"e21", e21_probe1, E21_IO_EXTENT, e21_probe_list};
 #endif
 
+
 #ifdef MODULE
-static char devicename[9] = { 0, };
-static struct device dev_e2100 = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, e2100_probe };
+#define MAX_E21_CARDS	4	/* Max number of E21 cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_E21_CARDS] = { 0, };
+static struct device dev_e21[MAX_E21_CARDS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-static int io = 0x300;
-static int irq = 0;
+static int io[MAX_E21_CARDS] = { 0, };
+static int irq[MAX_E21_CARDS]  = { 0, };
+static int mem[MAX_E21_CARDS] = { 0, };
+static int xcvr[MAX_E21_CARDS] = { 0, };		/* choose int. or ext. xcvr */
 
-int init_module(void)
+/* This is set up so that only a single autoprobe takes place per call.
+ISA device autoprobes on a running machine are not recommended. */
+int
+init_module(void)
 {
-	if (io == 0)
-		printk("e2100: You should not use auto-probing with insmod!\n");
-	dev_e2100.base_addr = io;
-	dev_e2100.irq       = irq;
-	if (register_netdev(&dev_e2100) != 0) {
-		printk("e2100: register_netdev() returned non-zero.\n");
-		return -EIO;
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < MAX_E21_CARDS; this_dev++) {
+		struct device *dev = &dev_e21[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->mem_start = mem[this_dev];
+		dev->mem_end = xcvr[this_dev];	/* low 4bits = xcvr sel. */
+		dev->init = e2100_probe;
+		if (io[this_dev] == 0)  {
+			if (this_dev != 0) break; /* only autoprobe 1st one */
+			printk(KERN_NOTICE "e2100.c: Presently autoprobing (not recommended) for a single card.\n");
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "e2100.c: No E2100 card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
+		}
+		found++;
 	}
+
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	unregister_netdev(&dev_e2100);
+	int this_dev;
 
-	/* If we don't do this, we can't re-insmod it later. */
-	release_region(dev_e2100.base_addr, E21_IO_EXTENT);
+	for (this_dev = 0; this_dev < MAX_E21_CARDS; this_dev++) {
+		struct device *dev = &dev_e21[this_dev];
+		if (dev->priv != NULL) {
+			/* NB: e21_close() handles free_irq + irq2dev map */
+			kfree(dev->priv);
+			dev->priv = NULL;
+			release_region(dev->base_addr, E21_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 #endif /* MODULE */
 

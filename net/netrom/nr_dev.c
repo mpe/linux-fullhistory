@@ -112,7 +112,7 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 
 	skb_device_unlock(skb);
 
-	if (!arp_query(bp + 7, raddr, ARPHRD_NETROM)) {
+	if (!arp_query(bp + 7, raddr, dev)) {
 		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 		return 1;

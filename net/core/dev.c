@@ -39,6 +39,8 @@
  *		Alan Cox	:	Device lock protection.
  *		Alan Cox	: 	Fixed nasty side effect of device close changes.
  *		Rudi Cilibrasi	:	Pass the right thing to set_mac_address()
+ *		Dave Miller	:	32bit quantity for the device lock to make it work out
+ *					on a Sparc.
  *
  */
 

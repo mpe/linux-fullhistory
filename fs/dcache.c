@@ -130,7 +130,7 @@ static inline void add_hash(struct dir_cache_entry * de, struct hash_list * hash
 /*
  * Find a directory cache entry given all the necessary info.
  */
-static struct dir_cache_entry * find_entry(struct inode * dir, const char * name, int len, struct hash_list * hash)
+static inline struct dir_cache_entry * find_entry(struct inode * dir, const char * name, int len, struct hash_list * hash)
 {
 	struct dir_cache_entry * de = hash->next;
 

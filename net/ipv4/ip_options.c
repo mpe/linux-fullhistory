@@ -118,14 +118,14 @@ int ip_options_echo(struct options * dopt, struct options * sopt,
 		memcpy(dptr, sptr+sopt->ts, optlen);
 		if (soffset <= optlen) 
 		{
-			if (dopt->ts_needaddr) 
+			if (sopt->ts_needaddr) 
 			{
 				if (soffset + 3 > optlen)
 					return -EINVAL;
 				dopt->ts_needaddr = 1;
 				soffset += 4;
 			}
-			if (dopt->ts_needtime) 
+			if (sopt->ts_needtime) 
 			{
 				if (soffset + 3 > optlen)
 					return -EINVAL;
@@ -376,10 +376,8 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 				      case IPOPT_TS_TSONLY:
 					opt->ts = optptr - iph;
 					if (skb) 
-					{
 						timeptr = (__u32*)&optptr[ts->ptr-1];
-						opt->is_changed = 1;
-					}
+					opt->ts_needtime = 1;
 					ts->ptr += 4;
 					break;
 				      case IPOPT_TS_TSANDADDR:

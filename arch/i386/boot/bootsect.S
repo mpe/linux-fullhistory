@@ -47,7 +47,7 @@ SWAP_DEV = 0
 #define RAMDISK 0
 #endif 
 #ifndef CONFIG_ROOT_RDONLY
-#define CONFIG_ROOT_RDONLY 0
+#define CONFIG_ROOT_RDONLY 1
 #endif
 
 ! ld86 requires an entry symbol. This may as well be the usual one.

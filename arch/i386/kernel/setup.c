@@ -103,8 +103,8 @@ void setup_arch(char **cmdline_p,
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
 #endif
-	if (MOUNT_ROOT_RDONLY)
-		root_mountflags |= MS_RDONLY;
+	if (!MOUNT_ROOT_RDONLY)
+		root_mountflags &= ~MS_RDONLY;
 	memory_start = (unsigned long) &_end;
 	init_task.mm->start_code = TASK_SIZE;
 	init_task.mm->end_code = TASK_SIZE + (unsigned long) &_etext;

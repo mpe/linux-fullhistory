@@ -17,7 +17,16 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 
-static int anon_map(struct inode *, struct file *, struct vm_area_struct *);
+/*
+ * Map memory not associated with any file into a process
+ * address space.  Adjacent memory is merged.
+ */
+static inline int anon_map(struct inode *ino, struct file * file, struct vm_area_struct * vma)
+{
+	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
+		return -ENOMEM;
+	return 0;
+}
 
 /*
  * description of effects of mapping type and prot in current implementation.
@@ -212,7 +221,6 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
  *   vm_avl_height   1+max(heightof(left),heightof(right))
  * The empty tree is represented as NULL.
  */
-#define avl_empty	(struct vm_area_struct *) NULL
 
 /* Since the trees are balanced, their height will never be large. */
 #define avl_maxheight	41	/* why this? a small exercise */
@@ -225,64 +233,8 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
  *    foreach node in tree->vm_avl_right: node->vm_avl_key >= tree->vm_avl_key.
  */
 
-/* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
-struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
-{
-#if 0 /* equivalent, but slow */
-	struct vm_area_struct * vma;
-
-	if (!task->mm)
-		return NULL;
-	for (vma = task->mm->mmap ; ; vma = vma->vm_next) {
-		if (!vma)
-			return NULL;
-		if (vma->vm_end > addr)
-			return vma;
-	}
-#else
-	struct vm_area_struct * result = NULL;
-	struct vm_area_struct * tree;
-
-	if (!task->mm)
-		return NULL;
-	for (tree = task->mm->mmap_avl ; ; ) {
-		if (tree == avl_empty)
-			return result;
-		if (tree->vm_end > addr) {
-			if (tree->vm_start <= addr)
-				return tree;
-			result = tree;
-			tree = tree->vm_avl_left;
-		} else
-			tree = tree->vm_avl_right;
-	}
-#endif
-}
-
-/* Look up the first VMA which intersects the interval start_addr..end_addr-1,
-   NULL if none.  Assume start_addr < end_addr. */
-struct vm_area_struct * find_vma_intersection (struct task_struct * task, unsigned long start_addr, unsigned long end_addr)
-{
-	struct vm_area_struct * vma;
-
-#if 0 /* equivalent, but slow */
-	for (vma = task->mm->mmap; vma; vma = vma->vm_next) {
-		if (end_addr <= vma->vm_start)
-			break;
-		if (start_addr < vma->vm_end)
-			return vma;
-	}
-	return NULL;
-#else
-	vma = find_vma(task,start_addr);
-	if (!vma || end_addr <= vma->vm_start)
-		return NULL;
-	return vma;
-#endif
-}
-
 /* Look up the nodes at the left and at the right of a given node. */
-static void avl_neighbours (struct vm_area_struct * node, struct vm_area_struct * tree, struct vm_area_struct ** to_the_left, struct vm_area_struct ** to_the_right)
+static inline void avl_neighbours (struct vm_area_struct * node, struct vm_area_struct * tree, struct vm_area_struct ** to_the_left, struct vm_area_struct ** to_the_right)
 {
 	vm_avl_key_t key = node->vm_avl_key;
 
@@ -328,7 +280,7 @@ static void avl_neighbours (struct vm_area_struct * node, struct vm_area_struct 
  * nodes[0]..nodes[k-1] such that
  * nodes[0] is the root and nodes[i+1] = nodes[i]->{vm_avl_left|vm_avl_right}.
  */
-static void avl_rebalance (struct vm_area_struct *** nodeplaces_ptr, int count)
+static inline void avl_rebalance (struct vm_area_struct *** nodeplaces_ptr, int count)
 {
 	for ( ; count > 0 ; count--) {
 		struct vm_area_struct ** nodeplace = *--nodeplaces_ptr;
@@ -405,7 +357,7 @@ static void avl_rebalance (struct vm_area_struct *** nodeplaces_ptr, int count)
 }
 
 /* Insert a node into a tree. */
-static void avl_insert (struct vm_area_struct * new_node, struct vm_area_struct ** ptree)
+static inline void avl_insert (struct vm_area_struct * new_node, struct vm_area_struct ** ptree)
 {
 	vm_avl_key_t key = new_node->vm_avl_key;
 	struct vm_area_struct ** nodeplace = ptree;
@@ -432,7 +384,7 @@ static void avl_insert (struct vm_area_struct * new_node, struct vm_area_struct 
 /* Insert a node into a tree, and
  * return the node to the left of it and the node to the right of it.
  */
-static void avl_insert_neighbours (struct vm_area_struct * new_node, struct vm_area_struct ** ptree,
+static inline void avl_insert_neighbours (struct vm_area_struct * new_node, struct vm_area_struct ** ptree,
 	struct vm_area_struct ** to_the_left, struct vm_area_struct ** to_the_right)
 {
 	vm_avl_key_t key = new_node->vm_avl_key;
@@ -462,7 +414,7 @@ static void avl_insert_neighbours (struct vm_area_struct * new_node, struct vm_a
 }
 
 /* Removes a node out of a tree. */
-static void avl_remove (struct vm_area_struct * node_to_delete, struct vm_area_struct ** ptree)
+static inline void avl_remove (struct vm_area_struct * node_to_delete, struct vm_area_struct ** ptree)
 {
 	vm_avl_key_t key = node_to_delete->vm_avl_key;
 	struct vm_area_struct ** nodeplace = ptree;
@@ -957,15 +909,4 @@ void merge_segments (struct task_struct * task, unsigned long start_addr, unsign
 		kfree_s(mpnt, sizeof(*mpnt));
 		mpnt = prev;
 	}
-}
-
-/*
- * Map memory not associated with any file into a process
- * address space.  Adjacent memory is merged.
- */
-static int anon_map(struct inode *ino, struct file * file, struct vm_area_struct * vma)
-{
-	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
-		return -ENOMEM;
-	return 0;
 }
