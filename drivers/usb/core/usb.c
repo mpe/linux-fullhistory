@@ -615,6 +615,33 @@ static int usb_hotplug (struct device *dev, char **envp, int num_envp,
 					alt->desc.bInterfaceSubClass,
 					alt->desc.bInterfaceProtocol))
 			return -ENOMEM;
+
+		if (add_hotplug_env_var(envp, num_envp, &i,
+					buffer, buffer_size, &length,
+					"MODALIAS=usb:v%04Xp%04Xdl%04Xdh%04Xdc%02Xdsc%02Xdp%02Xic%02Xisc%02Xip%02X",
+					le16_to_cpu(usb_dev->descriptor.idVendor),
+					le16_to_cpu(usb_dev->descriptor.idProduct),
+					le16_to_cpu(usb_dev->descriptor.bcdDevice),
+					le16_to_cpu(usb_dev->descriptor.bcdDevice),
+					usb_dev->descriptor.bDeviceClass,
+					usb_dev->descriptor.bDeviceSubClass,
+					usb_dev->descriptor.bDeviceProtocol,
+					alt->desc.bInterfaceClass,
+					alt->desc.bInterfaceSubClass,
+					alt->desc.bInterfaceProtocol))
+			return -ENOMEM;
+ 	} else {
+		if (add_hotplug_env_var(envp, num_envp, &i,
+					buffer, buffer_size, &length,
+					"MODALIAS=usb:v%04Xp%04Xdl%04Xdh%04Xdc%02Xdsc%02Xdp%02Xic*isc*ip*",
+					le16_to_cpu(usb_dev->descriptor.idVendor),
+					le16_to_cpu(usb_dev->descriptor.idProduct),
+					le16_to_cpu(usb_dev->descriptor.bcdDevice),
+					le16_to_cpu(usb_dev->descriptor.bcdDevice),
+					usb_dev->descriptor.bDeviceClass,
+					usb_dev->descriptor.bDeviceSubClass,
+					usb_dev->descriptor.bDeviceProtocol))
+			return -ENOMEM;
 	}
 
 	envp[i] = NULL;
