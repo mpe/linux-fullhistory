@@ -187,15 +187,7 @@ void poly_add_1(FPU_REG *src)
    for the use of this function in poly_atan. Simple truncation
    is used here instead of round-to-nearest. */
 
-#ifdef OBSOLETE
-char round = (src->sigl & 3) == 3;
-#endif OBSOLETE
-
 shrx(&src->sigl, 1);
-
-#ifdef OBSOLETE
-if ( round ) significand(src)++;   /* Round to even */
-#endif OBSOLETE
 
 src->sigh |= 0x80000000;
 

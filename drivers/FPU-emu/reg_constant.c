@@ -66,7 +66,7 @@ static void fld_const(FPU_REG const *c)
       return;
     }
   push();
-  reg_move(c, FPU_st0_ptr);
+  reg_move(c, st_new_ptr);
   clear_C1();
 }
 

@@ -26,6 +26,7 @@
  *		Alan Cox	:	Make ARP add its own protocol entry
  *
  *              Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
+ *		Stephen Henson	:	Add AX25 support to arp_get_info()
  */
 
 #include <linux/types.h>
@@ -846,6 +847,13 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length)
 /*
  *	Convert hardware address to XX:XX:XX:XX ... form.
  */
+#ifdef CONFIG_AX25
+
+			if(entry->htype==ARPHRD_AX25)
+			     strcpy(hbuffer,ax2asc((ax25_address *)entry->ha));
+			else {
+#endif
+
 			for(k=0,j=0;k<HBUFFERLEN-3 && j<entry->hlen;j++)
 			{
 				hbuffer[k++]=hexbuf[ (entry->ha[j]>>4)&15 ];
@@ -854,6 +862,9 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length)
 			}
 			hbuffer[--k]=0;
 	
+#ifdef CONFIG_AX25
+			}
+#endif
 			size = sprintf(buffer+len,
 				"%-17s0x%-10x0x%-10x%s\n",
 				in_ntoa(entry->ip),
@@ -926,9 +937,6 @@ static int arp_req_set(struct arpreq *req)
 	 */
 	
 	switch (r.arp_ha.sa_family) {
-		case 0:
-			/* Moan about this. ARP family 0 is NetROM and _will_ be needed */
-			printk("Application using old BSD convention for arp set. Please recompile it.\n");
 		case ARPHRD_ETHER:
 			htype = ARPHRD_ETHER;
 			hlen = ETH_ALEN;

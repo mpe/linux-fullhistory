@@ -25,9 +25,9 @@
 _reg_div:
 	pushl	%ebp
 	movl	%esp,%ebp
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	subl	$28,%esp	/* Needed by divide_kernel */
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 	pushl	%esi
 	pushl	%edi
@@ -214,11 +214,11 @@ LDiv_negative_result:
 	xorl	%eax,%eax		/* Valid result */
 
 LDiv_exit:
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	leal	-40(%ebp),%esp
 #else
 	leal	-12(%ebp),%esp
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 	popl	%ebx
 	popl	%edi

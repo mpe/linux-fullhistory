@@ -122,24 +122,12 @@ static unsigned char const type_table[64] = {
 #endif NO_UNDOC_CODE
 
 
-/* Be careful when using any of these global variables...
-   they might change if swapping is triggered */
-unsigned char  FPU_rm;
-char	       FPU_st0_tag;
-FPU_REG       *FPU_st0_ptr;
-
-/* ######## To be shifted */
-unsigned long FPU_entry_op_cs;
-unsigned short FPU_data_selector;
-
-
-#ifdef PARANOID
+#ifdef RE_ENTRANT_CHECKING
 char emulating=0;
-#endif PARANOID
+#endif RE_ENTRANT_CHECKING
 
 static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 			overrides *override);
-
 
 asmlinkage void math_emulate(long arg)
 {
@@ -147,14 +135,23 @@ asmlinkage void math_emulate(long arg)
   unsigned short code;
   fpu_addr_modes addr_modes;
   int unmasked;
+  FPU_REG loaded_data;
+  void *data_address;
+  struct address data_sel_off;
+  struct address entry_sel_off;
+  unsigned long code_base = 0;
+  unsigned long code_limit = 0;  /* Initialized to stop compiler warnings */
+  char	       st0_tag;
+  FPU_REG      *st0_ptr;
+  struct desc_struct code_descriptor;
 
-#ifdef PARANOID
+#ifdef RE_ENTRANT_CHECKING
   if ( emulating )
     {
       printk("ERROR: wm-FPU-emu is not RE-ENTRANT!\n");
     }
   RE_ENTRANT_CHECK_ON;
-#endif PARANOID
+#endif RE_ENTRANT_CHECKING
 
   if (!current->used_math)
     {
@@ -172,34 +169,51 @@ asmlinkage void math_emulate(long arg)
 
   SETUP_DATA_AREA(arg);
 
-  addr_modes.vm86 = (FPU_EFLAGS & 0x00020000) != 0;
-  addr_modes.p286 = (!addr_modes.vm86
-		     && current->ldt
-		     && (current->ldt[FPU_CS >> 3].b & 0xf000) == 0xf000
-		     && (current->ldt[FPU_CS >> 3].b & (1 << 22)) == 0);
-  addr_modes.mode16 = addr_modes.vm86 | addr_modes.p286;
-
-  if ( addr_modes.vm86 )
-    FPU_EIP += FPU_CS << 4;
-  else if ( addr_modes.p286 )
-    FPU_EIP += LDT_BASE_ADDR(FPU_CS);
-
   FPU_ORIG_EIP = FPU_EIP;
 
-  if ( !addr_modes.mode16 )
+  if ( (FPU_EFLAGS & 0x00020000) != 0 )
     {
-      /* user code space? */
-      if (FPU_CS == KERNEL_CS)
+      /* Virtual 8086 mode */
+      addr_modes.default_mode = VM86;
+      FPU_EIP += code_base = FPU_CS << 4;
+      code_limit = code_base + 0xffff;  /* Assumes code_base <= 0xffff0000 */
+    }
+  else if ( FPU_CS == USER_CS && FPU_DS == USER_DS )
+    {
+      addr_modes.default_mode = 0;
+    }
+  else if ( FPU_CS == KERNEL_CS )
+    {
+      printk("math_emulate: %04x:%08lx\n",FPU_CS,FPU_EIP);
+      panic("Math emulation needed in kernel");
+    }
+  else
+    {
+
+      if ( (FPU_CS & 4) != 4 )   /* Must be in the LDT */
 	{
-	  printk("math_emulate: %04x:%08lx\n",FPU_CS,FPU_EIP);
-	  panic("Math emulation needed in kernel");
+	  /* Can only handle segmented addressing via the LDT
+	     for now, and it must be 16 bit */
+	  printk("FPU emulator: Unsupported addressing mode\n");
+	  math_abort(FPU_info, SIGILL);
 	}
 
-      /* We cannot handle multiple segments yet */
-      if (FPU_CS != USER_CS || FPU_DS != USER_DS)
+      if ( SEG_D_SIZE(code_descriptor = LDT_DESCRIPTOR(FPU_CS)) )
 	{
-	  math_abort(FPU_info,SIGILL);
+	  /* The above test may be wrong, the book is not clear */
+	  /* Segmented 32 bit protected mode */
+	  addr_modes.default_mode = SEG32;
 	}
+      else
+	{
+	  /* 16 bit protected mode */
+	  addr_modes.default_mode = PM16;
+	}
+      FPU_EIP += code_base = SEG_BASE_ADDR(code_descriptor);
+      code_limit = code_base
+	+ (SEG_LIMIT(code_descriptor)+1) * SEG_GRANULARITY(code_descriptor)
+	  - 1;
+      if ( code_limit < code_base ) code_limit = 0xffffffff;
     }
 
   FPU_lookahead = 1;
@@ -220,14 +234,17 @@ asmlinkage void math_emulate(long arg)
 
 do_another_FPU_instruction:
 
+  no_ip_update = 0;
+
   FPU_EIP++;  /* We have fetched the prefix and first code bytes. */
 
-#ifdef PECULIAR_486
-  /* It would be more logical to do this only in get_address(),
-     but although it is supposed to be undefined for many fpu
-     instructions, an 80486 behaves as if this were done here: */
-  FPU_data_selector = FPU_DS;
-#endif PECULIAR_486
+  if ( addr_modes.default_mode )
+    {
+      /* This checks for the minimum instruction bytes.
+	 We also need to check any extra (address mode) code access. */
+      if ( FPU_EIP > code_limit )
+	math_abort(FPU_info,SIGSEGV);
+    }
 
   if ( (byte1 & 0xf8) != 0xd8 )
     {
@@ -273,9 +290,8 @@ do_another_FPU_instruction:
 	   *  via the cs selector and operand selector, so we do the same.
 	   */
 	do_the_FPU_interrupt:
-	  cs_selector &= 0xffff0000;
-	  cs_selector |= status_word();
-      	  operand_selector = tag_word();
+	  instruction_address.selector = status_word();
+      	  operand_address.selector = tag_word();
 	  partial_status = 0;
 	  top = 0;
 	  {
@@ -288,11 +304,6 @@ do_another_FPU_instruction:
 
 	  FPU_EIP = FPU_ORIG_EIP;	/* Point to current FPU instruction. */
 
-	  if ( addr_modes.vm86 )
-	    FPU_EIP -= FPU_CS << 4;
-	  else if ( addr_modes.p286 )
-	    FPU_EIP -= LDT_BASE_ADDR(FPU_CS);
-
 	  RE_ENTRANT_CHECK_OFF;
 	  current->tss.trap_no = 16;
 	  current->tss.error_code = 0;
@@ -301,57 +312,74 @@ do_another_FPU_instruction:
 	}
     }
 
-  FPU_entry_eip = FPU_ORIG_EIP;
-
-  FPU_entry_op_cs = (byte1 << 24) | (FPU_modrm << 16) | (FPU_CS & 0xffff) ;
+  entry_sel_off.offset = FPU_ORIG_EIP;
+  entry_sel_off.selector = FPU_CS;
+  entry_sel_off.opcode = (byte1 << 8) | FPU_modrm;
 
   FPU_rm = FPU_modrm & 7;
 
   if ( FPU_modrm < 0300 )
     {
       /* All of these instructions use the mod/rm byte to get a data address */
-      if ( addr_modes.vm86
+
+      if ( (addr_modes.default_mode & SIXTEEN)
 	  ^ (addr_modes.override.address_size == ADDR_SIZE_PREFIX) )
-	get_address_16(FPU_modrm, &FPU_EIP, addr_modes);
+	data_address = get_address_16(FPU_modrm, &FPU_EIP, &data_sel_off,
+				      addr_modes);
       else
-	get_address(FPU_modrm, &FPU_EIP, addr_modes);
+	data_address = get_address(FPU_modrm, &FPU_EIP, &data_sel_off,
+				   addr_modes);
+
+      if ( addr_modes.default_mode )
+	{
+	  if ( FPU_EIP-1 > code_limit )
+	    math_abort(FPU_info,SIGSEGV);
+	}
 
       if ( !(byte1 & 1) )
 	{
 	  unsigned short status1 = partial_status;
-	  FPU_st0_ptr = &st(0);
-	  FPU_st0_tag = FPU_st0_ptr->tag;
+
+	  st0_ptr = &st(0);
+	  st0_tag = st0_ptr->tag;
 
 	  /* Stack underflow has priority */
-	  if ( NOT_EMPTY_0 )
+	  if ( NOT_EMPTY_ST0 )
 	    {
+	      if ( addr_modes.default_mode & PROTECTED )
+		{
+		  /* This table works for 16 and 32 bit protected mode */
+		  if ( access_limit < data_sizes_16[(byte1 >> 1) & 3] )
+		    math_abort(FPU_info,SIGSEGV);
+		}
+
 	      unmasked = 0;  /* Do this here to stop compiler warnings. */
 	      switch ( (byte1 >> 1) & 3 )
 		{
 		case 0:
-		  unmasked = reg_load_single();
+		  unmasked = reg_load_single((float *)data_address,
+					     &loaded_data);
 		  break;
 		case 1:
-		  reg_load_int32();
+		  reg_load_int32((long *)data_address, &loaded_data);
 		  break;
 		case 2:
-		  unmasked = reg_load_double();
+		  unmasked = reg_load_double((double *)data_address,
+					     &loaded_data);
 		  break;
 		case 3:
-		  reg_load_int16();
+		  reg_load_int16((short *)data_address, &loaded_data);
 		  break;
 		}
 	      
 	      /* No more access to user memory, it is safe
 		 to use static data now */
-	      FPU_st0_ptr = &st(0);
-	      FPU_st0_tag = FPU_st0_ptr->tag;
 
 	      /* NaN operands have the next priority. */
 	      /* We have to delay looking at st(0) until after
 		 loading the data, because that data might contain an SNaN */
-	      if ( (FPU_st0_tag == TW_NaN) ||
-		  (FPU_loaded_data.tag == TW_NaN) )
+	      if ( (st0_tag == TW_NaN) ||
+		  (loaded_data.tag == TW_NaN) )
 		{
 		  /* Restore the status word; we might have loaded a
 		     denormal. */
@@ -371,13 +399,13 @@ do_another_FPU_instruction:
 			 identical to an 80486 */
 		      if ( (FPU_modrm & 0x28) == 0x20 )
 			/* fdiv or fsub */
-			real_2op_NaN(&FPU_loaded_data, FPU_st0_ptr,
-				     FPU_st0_ptr);
+			real_2op_NaN(&loaded_data, st0_ptr,
+				     st0_ptr);
 		      else
 #endif PECULIAR_486
 			/* fadd, fdivr, fmul, or fsubr */
-			real_2op_NaN(FPU_st0_ptr, &FPU_loaded_data,
-				     FPU_st0_ptr);
+			real_2op_NaN(st0_ptr, &loaded_data,
+				     st0_ptr);
 		    }
 		  goto reg_mem_instr_done;
 		}
@@ -388,11 +416,11 @@ do_another_FPU_instruction:
 		  if ( (FPU_modrm & 0x38) == 0x38 )
 		    {
 		      /* fdivr */
-		      if ( (FPU_st0_tag == TW_Zero) &&
-			  (FPU_loaded_data.tag == TW_Valid) )
+		      if ( (st0_tag == TW_Zero) &&
+			  (loaded_data.tag == TW_Valid) )
 			{
-			  if ( divide_by_zero(FPU_loaded_data.sign,
-					      FPU_st0_ptr) )
+			  if ( divide_by_zero(loaded_data.sign,
+					      st0_ptr) )
 			    {
 			      /* We use the fact here that the unmasked
 				 exception in the loaded data was for a
@@ -410,42 +438,42 @@ do_another_FPU_instruction:
 		{
 		case 0:         /* fadd */
 		  clear_C1();
-		  reg_add(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+		  reg_add(st0_ptr, &loaded_data, st0_ptr,
 			  control_word);
 		  break;
 		case 1:         /* fmul */
 		  clear_C1();
-		  reg_mul(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+		  reg_mul(st0_ptr, &loaded_data, st0_ptr,
 			  control_word);
 		  break;
 		case 2:         /* fcom */
-		  compare_st_data();
+		  compare_st_data(&loaded_data);
 		  break;
 		case 3:         /* fcomp */
-		  if ( !compare_st_data() && !unmasked )
+		  if ( !compare_st_data(&loaded_data) && !unmasked )
 		    pop();
 		  break;
 		case 4:         /* fsub */
 		  clear_C1();
-		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+		  reg_sub(st0_ptr, &loaded_data, st0_ptr,
 			  control_word);
 		  break;
 		case 5:         /* fsubr */
 		  clear_C1();
-		  reg_sub(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
+		  reg_sub(&loaded_data, st0_ptr, st0_ptr,
 			  control_word);
 		  break;
 		case 6:         /* fdiv */
 		  clear_C1();
-		  reg_div(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+		  reg_div(st0_ptr, &loaded_data, st0_ptr,
 			  control_word);
 		  break;
 		case 7:         /* fdivr */
 		  clear_C1();
-		  if ( FPU_st0_tag == TW_Zero )
+		  if ( st0_tag == TW_Zero )
 		    partial_status = status1;  /* Undo any denorm tag,
 					       zero-divide has priority. */
-		  reg_div(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
+		  reg_div(&loaded_data, st0_ptr, st0_ptr,
 			  control_word);
 		  break;
 		}
@@ -463,19 +491,19 @@ do_another_FPU_instruction:
 	      else
 		stack_underflow();
 	    }
+	reg_mem_instr_done:
+	  operand_address = data_sel_off;
 	}
       else
 	{
-	  load_store_instr(((FPU_modrm & 0x38) | (byte1 & 6)) >> 1,
-			   addr_modes);
+	  if ( !(no_ip_update =
+		 load_store_instr(((FPU_modrm & 0x38) | (byte1 & 6)) >> 1,
+				  addr_modes, data_address)) )
+	    {
+	      operand_address = data_sel_off;
+	    }
 	}
 
-    reg_mem_instr_done:
-
-#ifndef PECULIAR_486
-      *(unsigned short *)&operand_selector = FPU_data_selector;
-#endif PECULIAR_486
-      ;
     }
   else
     {
@@ -485,38 +513,39 @@ do_another_FPU_instruction:
 #ifdef PECULIAR_486
       /* This is supposed to be undefined, but a real 80486 seems
 	 to do this: */
-      FPU_data_address = 0;
+      operand_address.offset = 0;
+      operand_address.selector = FPU_DS;
 #endif PECULIAR_486
 
-      FPU_st0_ptr = &st(0);
-      FPU_st0_tag = FPU_st0_ptr->tag;
+      st0_ptr = &st(0);
+      st0_tag = st0_ptr->tag;
       switch ( type_table[(int) instr_index] )
 	{
 	case _NONE_:   /* also _REGIc: _REGIn */
 	  break;
 	case _REG0_:
-	  if ( !NOT_EMPTY_0 )
+	  if ( !NOT_EMPTY_ST0 )
 	    {
 	      stack_underflow();
 	      goto FPU_instruction_done;
 	    }
 	  break;
 	case _REGIi:
-	  if ( !NOT_EMPTY_0 || !NOT_EMPTY(FPU_rm) )
+	  if ( !NOT_EMPTY_ST0 || !NOT_EMPTY(FPU_rm) )
 	    {
 	      stack_underflow_i(FPU_rm);
 	      goto FPU_instruction_done;
 	    }
 	  break;
 	case _REGIp:
-	  if ( !NOT_EMPTY_0 || !NOT_EMPTY(FPU_rm) )
+	  if ( !NOT_EMPTY_ST0 || !NOT_EMPTY(FPU_rm) )
 	    {
 	      stack_underflow_pop(FPU_rm);
 	      goto FPU_instruction_done;
 	    }
 	  break;
 	case _REGI_:
-	  if ( !NOT_EMPTY_0 || !NOT_EMPTY(FPU_rm) )
+	  if ( !NOT_EMPTY_ST0 || !NOT_EMPTY(FPU_rm) )
 	    {
 	      stack_underflow();
 	      goto FPU_instruction_done;
@@ -532,17 +561,14 @@ do_another_FPU_instruction:
 	  goto FPU_instruction_done;
 	}
       (*st_instr_table[(int) instr_index])();
-    }
 
 FPU_instruction_done:
+      ;
+    }
 
-  ip_offset = FPU_entry_eip;
-  cs_selector = FPU_entry_op_cs;
-  data_operand_offset = (unsigned long)FPU_data_address;
-#ifdef PECULIAR_486
-  *(unsigned short *)&operand_selector = FPU_data_selector;
-#endif PECULIAR_486
-  
+  if ( ! no_ip_update )
+    instruction_address = entry_sel_off;
+
 FPU_fwait_done:
 
 #ifdef DEBUG
@@ -553,16 +579,14 @@ FPU_fwait_done:
 
   if (FPU_lookahead && !need_resched)
     {
-      FPU_ORIG_EIP = FPU_EIP;
+      FPU_ORIG_EIP = FPU_EIP - code_base;
       if ( valid_prefix(&byte1, (unsigned char **)&FPU_EIP,
 			&addr_modes.override) )
 	goto do_another_FPU_instruction;
     }
 
-  if ( addr_modes.vm86 )
-    FPU_EIP -= FPU_CS << 4;
-  else if ( addr_modes.p286 )
-    FPU_EIP -= LDT_BASE_ADDR(FPU_CS);
+  if ( addr_modes.default_mode )
+    FPU_EIP -= code_base;
 
   RE_ENTRANT_CHECK_OFF;
 }

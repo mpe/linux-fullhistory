@@ -63,13 +63,16 @@ extern void trig_a(void);
 extern void trig_b(void);
 
 /* get_address.c */
-extern void get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
-			fpu_addr_modes);
-extern void get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
-			   fpu_addr_modes);
+extern void *get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
+			 struct address *addr,
+			 fpu_addr_modes);
+extern void *get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
+			    struct address *addr,
+			    fpu_addr_modes);
 
 /* load_store.c */
-extern void load_store_instr(char type, fpu_addr_modes addr_modes);
+extern int load_store_instr(unsigned char type, fpu_addr_modes addr_modes,
+			     void *address);
 
 /* poly_2xm1.c */
 extern int poly_2xm1(FPU_REG const *arg, FPU_REG *result);
@@ -96,7 +99,7 @@ extern int reg_sub(FPU_REG const *a, FPU_REG const *b,
 
 /* reg_compare.c */
 extern int compare(FPU_REG const *b);
-extern int compare_st_data(void);
+extern int compare_st_data(FPU_REG const *b);
 extern void fcom_st(void);
 extern void fcompst(void);
 extern void fcompp(void);
@@ -108,26 +111,26 @@ extern void fucompp(void);
 extern void fconst(void);
 
 /* reg_ld_str.c */
-extern int reg_load_extended(void);
-extern int reg_load_double(void);
-extern int reg_load_single(void);
-extern void reg_load_int64(void);
-extern void reg_load_int32(void);
-extern void reg_load_int16(void);
-extern void reg_load_bcd(void);
-extern int reg_store_extended(void);
-extern int reg_store_double(void);
-extern int reg_store_single(void);
-extern int reg_store_int64(void);
-extern int reg_store_int32(void);
-extern int reg_store_int16(void);
-extern int reg_store_bcd(void);
+extern int reg_load_extended(long double *addr, FPU_REG *loaded_data);
+extern int reg_load_double(double *dfloat, FPU_REG *loaded_data);
+extern int reg_load_single(float *single, FPU_REG *loaded_data);
+extern void reg_load_int64(long long *_s, FPU_REG *loaded_data);
+extern void reg_load_int32(long *_s, FPU_REG *loaded_data);
+extern void reg_load_int16(short *_s, FPU_REG *loaded_data);
+extern void reg_load_bcd(char *s, FPU_REG *loaded_data);
+extern int reg_store_extended(long double *d, FPU_REG *st0_ptr);
+extern int reg_store_double(double *dfloat, FPU_REG *st0_ptr);
+extern int reg_store_single(float *single, FPU_REG *st0_ptr);
+extern int reg_store_int64(long long *d, FPU_REG *st0_ptr);
+extern int reg_store_int32(long *d, FPU_REG *st0_ptr);
+extern int reg_store_int16(short *d, FPU_REG *st0_ptr);
+extern int reg_store_bcd(char *d, FPU_REG *st0_ptr);
 extern int round_to_int(FPU_REG *r);
-extern char *fldenv(fpu_addr_modes addr_modes);
-extern void frstor(fpu_addr_modes addr_modes);
+extern char *fldenv(fpu_addr_modes addr_modes, char *address);
+extern void frstor(fpu_addr_modes addr_modes, char *address);
 extern unsigned short tag_word(void);
-extern char *fstenv(fpu_addr_modes addr_modes);
-extern void fsave(fpu_addr_modes addr_modes);
+extern char *fstenv(fpu_addr_modes addr_modes, char *address);
+extern void fsave(fpu_addr_modes addr_modes, char *address);
 
 /* reg_mul.c */
 extern int reg_mul(FPU_REG const *a, FPU_REG const *b,

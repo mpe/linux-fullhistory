@@ -19,12 +19,16 @@
 
 
 #include <linux/stddef.h>
+#include <linux/head.h>
 
 #include <asm/segment.h>
 
 #include "fpu_system.h"
 #include "exception.h"
 #include "fpu_emu.h"
+
+
+#define FPU_WRITE_BIT 0x10
 
 static int reg_offset[] = {
 	offsetof(struct info,___eax),
@@ -52,7 +56,7 @@ static int reg_offset_vm86[] = {
 #define VM86_REG_(x) (*(unsigned short *) \
 		      (reg_offset_vm86[((unsigned)x)]+(char *) FPU_info))
 
-static int reg_offset_p286[] = {
+static int reg_offset_pm[] = {
 	offsetof(struct info,___cs),
 	offsetof(struct info,___ds),
 	offsetof(struct info,___es),
@@ -62,12 +66,12 @@ static int reg_offset_p286[] = {
 	offsetof(struct info,___ds)
       };
 
-#define P286_REG_(x) (*(unsigned short *) \
-		      (reg_offset_p286[((unsigned)x)]+(char *) FPU_info))
+#define PM_REG_(x) (*(unsigned short *) \
+		      (reg_offset_pm[((unsigned)x)]+(char *) FPU_info))
 
 
 /* Decode the SIB byte. This function assumes mod != 0 */
-static void *sib(int mod, unsigned long *fpu_eip)
+static int sib(int mod, unsigned long *fpu_eip)
 {
   unsigned char ss,index,base;
   long offset;
@@ -117,14 +121,14 @@ static void *sib(int mod, unsigned long *fpu_eip)
       (*fpu_eip) += 4;
     }
 
-  return (void *) offset;
+  return offset;
 }
 
 
-static unsigned long mode16_segment(fpu_addr_modes addr_modes)
+static unsigned long vm86_segment(unsigned char segment,
+				  unsigned short *selector)
 { 
-  int segment = addr_modes.override.segment - 1;
-
+  segment--;
 #ifdef PARANOID
   if ( segment > PREFIX_SS_ )
     {
@@ -132,11 +136,61 @@ static unsigned long mode16_segment(fpu_addr_modes addr_modes)
       math_abort(FPU_info,SIGSEGV);
     }
 #endif PARANOID
-  if ( addr_modes.vm86 )
-    return (unsigned long)VM86_REG_(segment) << 4;
-  else if ( addr_modes.p286 )
-    return (unsigned long)LDT_BASE_ADDR(P286_REG_(segment));
-  return 0;
+  *selector = VM86_REG_(segment);
+  return (unsigned long)VM86_REG_(segment) << 4;
+}
+
+
+/* This should work for 16 and 32 bit protected mode. */
+static long pm_address(unsigned char FPU_modrm, unsigned char segment,
+		       unsigned short *selector, long offset)
+{ 
+  struct desc_struct descriptor;
+  unsigned long base_address, limit, address, seg_top;
+
+  segment--;
+#ifdef PARANOID
+  if ( segment > PREFIX_SS_ )
+    {
+      EXCEPTION(EX_INTERNAL|0x132);
+      math_abort(FPU_info,SIGSEGV);
+    }
+#endif PARANOID
+
+  *selector = PM_REG_(segment);
+
+  descriptor = LDT_DESCRIPTOR(PM_REG_(segment));
+  base_address = SEG_BASE_ADDR(descriptor);
+  address = base_address + offset;
+  limit = base_address
+	+ (SEG_LIMIT(descriptor)+1) * SEG_GRANULARITY(descriptor) - 1;
+  if ( limit < base_address ) limit = 0xffffffff;
+
+  if ( SEG_EXPAND_DOWN(descriptor) )
+    {
+      if ( SEG_G_BIT(descriptor) )
+	seg_top = 0xffffffff;
+      else
+	{
+	  seg_top = base_address + (1 << 20);
+	  if ( seg_top < base_address ) seg_top = 0xffffffff;
+	}
+      access_limit =
+	(address <= limit) || (address >= seg_top) ? 0 :
+	  ((seg_top-address) >= 255 ? 255 : seg_top-address);
+    }
+  else
+    {
+      access_limit =
+	(address > limit) || (address < base_address) ? 0 :
+	  ((limit-address) >= 254 ? 255 : limit-address+1);
+    }
+  if ( SEG_EXECUTE_ONLY(descriptor) ||
+      (!SEG_WRITE_PERM(descriptor) && (FPU_modrm & FPU_WRITE_BIT)) )
+    {
+      access_limit = 0;
+    }
+  return address;
 }
 
 
@@ -157,117 +211,132 @@ static unsigned long mode16_segment(fpu_addr_modes addr_modes)
 
 */
 
-void get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
-		 fpu_addr_modes addr_modes)
+void *get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
+		  struct address *addr,
+/*		  unsigned short *selector, unsigned long *offset, */
+		  fpu_addr_modes addr_modes)
 {
   unsigned char mod;
+  unsigned rm = FPU_modrm & 7;
   long *cpu_reg_ptr;
-  int offset = 0;     /* Initialized just to stop compiler warnings. */
-
-#ifndef PECULIAR_486
-  /* This is a reasonable place to do this */
-  FPU_data_selector = FPU_DS;
-#endif PECULIAR_486
+  int address = 0;     /* Initialized just to stop compiler warnings. */
 
   /* Memory accessed via the cs selector is write protected
-     in protected mode. */
-#define FPU_WRITE_BIT 0x10
-  if ( !addr_modes.vm86 && (FPU_modrm & FPU_WRITE_BIT)
+     in `non-segmented' 32 bit protected mode. */
+  if ( !addr_modes.default_mode && (FPU_modrm & FPU_WRITE_BIT)
       && (addr_modes.override.segment == PREFIX_CS_) )
     {
       math_abort(FPU_info,SIGSEGV);
     }
 
+  addr->selector = FPU_DS;   /* Default, for 32 bit non-segmented mode. */
+
   mod = (FPU_modrm >> 6) & 3;
 
-  if (FPU_rm == 4 && mod != 3)
+  if (rm == 4 && mod != 3)
     {
-      FPU_data_address = sib(mod, fpu_eip);
-      return;
+      address = sib(mod, fpu_eip);
     }
-
-  cpu_reg_ptr = & REG_(FPU_rm);
-  switch (mod)
+  else
     {
-    case 0:
-      if (FPU_rm == 5)
+      cpu_reg_ptr = & REG_(rm);
+      switch (mod)
 	{
-	  /* Special case: disp32 */
+	case 0:
+	  if (rm == 5)
+	    {
+	      /* Special case: disp32 */
+	      RE_ENTRANT_CHECK_OFF;
+	      FPU_code_verify_area(4);
+	      address = get_fs_long((unsigned long *) (*fpu_eip));
+	      (*fpu_eip) += 4;
+	      RE_ENTRANT_CHECK_ON;
+	      addr->offset = address;
+	      return (void *) address;
+	    }
+	  else
+	    {
+	      address = *cpu_reg_ptr;  /* Just return the contents
+					  of the cpu register */
+	      addr->offset = address;
+	      return (void *) address;
+	    }
+	case 1:
+	  /* 8 bit signed displacement */
+	  RE_ENTRANT_CHECK_OFF;
+	  FPU_code_verify_area(1);
+	  address = (signed char) get_fs_byte((char *) (*fpu_eip));
+	  RE_ENTRANT_CHECK_ON;
+	  (*fpu_eip)++;
+	  break;
+	case 2:
+	  /* 32 bit displacement */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(4);
-	  offset = get_fs_long((unsigned long *) (*fpu_eip));
+	  address = (signed) get_fs_long((unsigned long *) (*fpu_eip));
 	  (*fpu_eip) += 4;
 	  RE_ENTRANT_CHECK_ON;
-	  FPU_data_address = (void *) offset;
-	  return;
+	  break;
+	case 3:
+	  /* Not legal for the FPU */
+	  EXCEPTION(EX_Invalid);
 	}
-      else
-	{
-	  FPU_data_address = (void *)*cpu_reg_ptr;  /* Just return the contents
-						   of the cpu register */
-	  return;
-	}
-    case 1:
-      /* 8 bit signed displacement */
-      RE_ENTRANT_CHECK_OFF;
-      FPU_code_verify_area(1);
-      offset = (signed char) get_fs_byte((char *) (*fpu_eip));
-      RE_ENTRANT_CHECK_ON;
-      (*fpu_eip)++;
-      break;
-    case 2:
-      /* 32 bit displacement */
-      RE_ENTRANT_CHECK_OFF;
-      FPU_code_verify_area(4);
-      offset = (signed) get_fs_long((unsigned long *) (*fpu_eip));
-      (*fpu_eip) += 4;
-      RE_ENTRANT_CHECK_ON;
-      break;
-    case 3:
-      /* Not legal for the FPU */
-      EXCEPTION(EX_Invalid);
+      address += *cpu_reg_ptr;
     }
 
-  if ( addr_modes.mode16 )
+  addr->offset = address;
+
+  switch ( addr_modes.default_mode )
     {
-      offset += mode16_segment(addr_modes);
+    case 0:
+      break;
+    case VM86:
+      address += vm86_segment(addr_modes.override.segment,
+			      (unsigned short *)&(addr->selector));
+      break;
+    case PM16:
+    case SEG32:
+      address = pm_address(FPU_modrm, addr_modes.override.segment,
+			   (unsigned short *)&(addr->selector), address);
+      break;
+    default:
+      EXCEPTION(EX_INTERNAL|0x133);
     }
 
-  FPU_data_address = offset + (char *)*cpu_reg_ptr;
+  return (void *)address;
 }
 
 
-void get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
-		      fpu_addr_modes addr_modes)
+void *get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
+		     struct address *addr,
+/*		     unsigned short *selector, unsigned long *offset, */
+		     fpu_addr_modes addr_modes)
 {
   unsigned char mod;
-  int offset = 0;     /* Default used for mod == 0 */
-
-#ifndef PECULIAR_486
-  /* This is a reasonable place to do this */
-  FPU_data_selector = FPU_DS;
-#endif PECULIAR_486
+  unsigned rm = FPU_modrm & 7;
+  int address = 0;     /* Default used for mod == 0 */
 
   /* Memory accessed via the cs selector is write protected
-     in protected mode. */
-#define FPU_WRITE_BIT 0x10
-  if ( !addr_modes.vm86 && (FPU_modrm & FPU_WRITE_BIT)
+     in `non-segmented' 32 bit protected mode. */
+  if ( !addr_modes.default_mode && (FPU_modrm & FPU_WRITE_BIT)
       && (addr_modes.override.segment == PREFIX_CS_) )
     {
       math_abort(FPU_info,SIGSEGV);
     }
+
+  addr->selector = FPU_DS;   /* Default, for 32 bit non-segmented mode. */
 
   mod = (FPU_modrm >> 6) & 3;
 
   switch (mod)
     {
     case 0:
-      if (FPU_rm == 6)
+      if (rm == 6)
 	{
 	  /* Special case: disp16 */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(2);
-	  offset = (unsigned short)get_fs_word((unsigned short *) (*fpu_eip));
+	  address = (unsigned short)get_fs_word((unsigned short *) (*fpu_eip));
 	  (*fpu_eip) += 2;
 	  RE_ENTRANT_CHECK_ON;
 	  goto add_segment;
@@ -277,7 +346,7 @@ void get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
       /* 8 bit signed displacement */
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(1);
-      offset = (signed char) get_fs_byte((signed char *) (*fpu_eip));
+      address = (signed char) get_fs_byte((signed char *) (*fpu_eip));
       RE_ENTRANT_CHECK_ON;
       (*fpu_eip)++;
       break;
@@ -285,7 +354,7 @@ void get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
       /* 16 bit displacement */
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(2);
-      offset = (unsigned) get_fs_word((unsigned short *) (*fpu_eip));
+      address = (unsigned) get_fs_word((unsigned short *) (*fpu_eip));
       (*fpu_eip) += 2;
       RE_ENTRANT_CHECK_ON;
       break;
@@ -294,47 +363,61 @@ void get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
       EXCEPTION(EX_Invalid);
       break;
     }
-  switch ( FPU_rm )
+  switch ( rm )
     {
     case 0:
-      offset += FPU_info->___ebx + FPU_info->___esi;
+      address += FPU_info->___ebx + FPU_info->___esi;
       break;
     case 1:
-      offset += FPU_info->___ebx + FPU_info->___edi;
+      address += FPU_info->___ebx + FPU_info->___edi;
       break;
     case 2:
-      offset += FPU_info->___ebp + FPU_info->___esi;
+      address += FPU_info->___ebp + FPU_info->___esi;
       if ( addr_modes.override.segment == PREFIX_DEFAULT )
 	addr_modes.override.segment = PREFIX_SS_;
       break;
     case 3:
-      offset += FPU_info->___ebp + FPU_info->___edi;
+      address += FPU_info->___ebp + FPU_info->___edi;
       if ( addr_modes.override.segment == PREFIX_DEFAULT )
 	addr_modes.override.segment = PREFIX_SS_;
       break;
     case 4:
-      offset += FPU_info->___esi;
+      address += FPU_info->___esi;
       break;
     case 5:
-      offset += FPU_info->___edi;
+      address += FPU_info->___edi;
       break;
     case 6:
-      offset += FPU_info->___ebp;
+      address += FPU_info->___ebp;
       if ( addr_modes.override.segment == PREFIX_DEFAULT )
 	addr_modes.override.segment = PREFIX_SS_;
       break;
     case 7:
-      offset += FPU_info->___ebx;
+      address += FPU_info->___ebx;
       break;
     }
 
  add_segment:
-  offset &= 0xffff;
+  address &= 0xffff;
 
-  if ( addr_modes.mode16 )
+  addr->offset = address;
+
+  switch ( addr_modes.default_mode )
     {
-      offset += mode16_segment(addr_modes);
+    case 0:
+      break;
+    case VM86:
+      address += vm86_segment(addr_modes.override.segment,
+			      (unsigned short *)&(addr->selector));
+      break;
+    case PM16:
+    case SEG32:
+      address = pm_address(FPU_modrm, addr_modes.override.segment,
+			   (unsigned short *)&(addr->selector), address);
+      break;
+    default:
+      EXCEPTION(EX_INTERNAL|0x131);
     }
 
-  FPU_data_address = (void *)offset ;
+  return (void *)address ;
 }

@@ -281,6 +281,14 @@ static struct device ppp0_dev = {
 #define NEXT_DEV (&ppp0_dev)
 #endif   /* PPP */
 
+#ifdef CONFIG_DUMMY
+    extern int dummy_init(struct device *dev);
+    static struct device dummy_dev = {
+	"dummy", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, dummy_init, };
+#   undef	NEXT_DEV
+#   define	NEXT_DEV	(&dummy_dev)
+#endif
+
 #ifdef LOOPBACK
     extern int loopback_init(struct device *dev);
     static struct device loopback_dev = {

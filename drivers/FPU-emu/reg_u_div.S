@@ -29,7 +29,7 @@
 /* #define	dSIGH(x)	4(x) */
 
 
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 /*
 	Local storage on the stack:
 	Result:		FPU_accum_3:FPU_accum_2:FPU_accum_1:FPU_accum_0
@@ -65,7 +65,7 @@ FPU_result_2:
 	.long	0
 FPU_ovfl_flag:
 	.byte	0
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 
 .text
@@ -78,9 +78,9 @@ FPU_ovfl_flag:
 _reg_u_div:
 	pushl	%ebp
 	movl	%esp,%ebp
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	subl	$28,%esp
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 	pushl	%esi
 	pushl	%edi

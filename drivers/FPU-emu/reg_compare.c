@@ -24,10 +24,15 @@
 int compare(FPU_REG const *b)
 {
   int diff;
+  char	       st0_tag;
+  FPU_REG      *st0_ptr;
 
-  if ( FPU_st0_ptr->tag | b->tag )
+  st0_ptr = &st(0);
+  st0_tag = st0_ptr->tag;
+
+  if ( st0_tag | b->tag )
     {
-      if ( FPU_st0_ptr->tag == TW_Zero )
+      if ( st0_tag == TW_Zero )
 	{
 	  if ( b->tag == TW_Zero ) return COMP_A_eq_B;
 	  if ( b->tag == TW_Valid )
@@ -42,23 +47,23 @@ int compare(FPU_REG const *b)
 	}
       else if ( b->tag == TW_Zero )
 	{
-	  if ( FPU_st0_ptr->tag == TW_Valid )
+	  if ( st0_tag == TW_Valid )
 	    {
-	      return ((FPU_st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B
+	      return ((st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B
 		      : COMP_A_lt_B)
 #ifdef DENORM_OPERAND
-		| ((FPU_st0_ptr->exp <= EXP_UNDER )
+		| ((st0_ptr->exp <= EXP_UNDER )
 		   ? COMP_Denormal : 0 )
 #endif DENORM_OPERAND
 		  ;
 	    }
 	}
 
-      if ( FPU_st0_ptr->tag == TW_Infinity )
+      if ( st0_tag == TW_Infinity )
 	{
 	  if ( (b->tag == TW_Valid) || (b->tag == TW_Zero) )
 	    {
-	      return ((FPU_st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B
+	      return ((st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B
 		      : COMP_A_lt_B)
 #ifdef DENORM_OPERAND
 	      | (((b->tag == TW_Valid) && (b->exp <= EXP_UNDER)) ?
@@ -69,19 +74,19 @@ int compare(FPU_REG const *b)
 	  else if ( b->tag == TW_Infinity )
 	    {
 	      /* The 80486 book says that infinities can be equal! */
-	      return (FPU_st0_ptr->sign == b->sign) ? COMP_A_eq_B :
-		((FPU_st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B);
+	      return (st0_ptr->sign == b->sign) ? COMP_A_eq_B :
+		((st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B);
 	    }
 	  /* Fall through to the NaN code */
 	}
       else if ( b->tag == TW_Infinity )
 	{
-	  if ( (FPU_st0_ptr->tag == TW_Valid) || (FPU_st0_ptr->tag == TW_Zero) )
+	  if ( (st0_tag == TW_Valid) || (st0_tag == TW_Zero) )
 	    {
 	      return ((b->sign == SIGN_POS) ? COMP_A_lt_B : COMP_A_gt_B)
 #ifdef DENORM_OPERAND
-		| (((FPU_st0_ptr->tag == TW_Valid)
-		    && (FPU_st0_ptr->exp <= EXP_UNDER)) ?
+		| (((st0_tag == TW_Valid)
+		    && (st0_ptr->exp <= EXP_UNDER)) ?
 		   COMP_Denormal : 0)
 #endif DENORM_OPERAND
 		  ;
@@ -91,9 +96,9 @@ int compare(FPU_REG const *b)
 
       /* The only possibility now should be that one of the arguments
 	 is a NaN */
-      if ( (FPU_st0_ptr->tag == TW_NaN) || (b->tag == TW_NaN) )
+      if ( (st0_tag == TW_NaN) || (b->tag == TW_NaN) )
 	{
-	  if ( ((FPU_st0_ptr->tag == TW_NaN) && !(FPU_st0_ptr->sigh & 0x40000000))
+	  if ( ((st0_tag == TW_NaN) && !(st0_ptr->sigh & 0x40000000))
 	      || ((b->tag == TW_NaN) && !(b->sigh & 0x40000000)) )
 	    /* At least one arg is a signaling NaN */
 	    return COMP_No_Comp | COMP_SNaN | COMP_NaN;
@@ -106,51 +111,51 @@ int compare(FPU_REG const *b)
     }
   
 #ifdef PARANOID
-  if (!(FPU_st0_ptr->sigh & 0x80000000)) EXCEPTION(EX_Invalid);
+  if (!(st0_ptr->sigh & 0x80000000)) EXCEPTION(EX_Invalid);
   if (!(b->sigh & 0x80000000)) EXCEPTION(EX_Invalid);
 #endif PARANOID
 
   
-  if (FPU_st0_ptr->sign != b->sign)
+  if (st0_ptr->sign != b->sign)
     {
-      return ((FPU_st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B)
+      return ((st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B)
 #ifdef DENORM_OPERAND
 	|
-	  ( ((FPU_st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
+	  ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
 	   COMP_Denormal : 0)
 #endif DENORM_OPERAND
 	    ;
     }
 
-  diff = FPU_st0_ptr->exp - b->exp;
+  diff = st0_ptr->exp - b->exp;
   if ( diff == 0 )
     {
-      diff = FPU_st0_ptr->sigh - b->sigh;  /* Works only if ms bits are
+      diff = st0_ptr->sigh - b->sigh;  /* Works only if ms bits are
 					      identical */
       if ( diff == 0 )
 	{
-	diff = FPU_st0_ptr->sigl > b->sigl;
+	diff = st0_ptr->sigl > b->sigl;
 	if ( diff == 0 )
-	  diff = -(FPU_st0_ptr->sigl < b->sigl);
+	  diff = -(st0_ptr->sigl < b->sigl);
 	}
     }
 
   if ( diff > 0 )
     {
-      return ((FPU_st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B)
+      return ((st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B)
 #ifdef DENORM_OPERAND
 	|
-	  ( ((FPU_st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
+	  ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
 	   COMP_Denormal : 0)
 #endif DENORM_OPERAND
 	    ;
     }
   if ( diff < 0 )
     {
-      return ((FPU_st0_ptr->sign == SIGN_POS) ? COMP_A_lt_B : COMP_A_gt_B)
+      return ((st0_ptr->sign == SIGN_POS) ? COMP_A_lt_B : COMP_A_gt_B)
 #ifdef DENORM_OPERAND
 	|
-	  ( ((FPU_st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
+	  ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
 	   COMP_Denormal : 0)
 #endif DENORM_OPERAND
 	    ;
@@ -159,7 +164,7 @@ int compare(FPU_REG const *b)
   return COMP_A_eq_B
 #ifdef DENORM_OPERAND
     |
-      ( ((FPU_st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
+      ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
        COMP_Denormal : 0)
 #endif DENORM_OPERAND
 	;
@@ -168,11 +173,11 @@ int compare(FPU_REG const *b)
 
 
 /* This function requires that st(0) is not empty */
-int compare_st_data(void)
+int compare_st_data(FPU_REG const *loaded_data)
 {
   int f, c;
 
-  c = compare(&FPU_loaded_data);
+  c = compare(loaded_data);
 
   if (c & COMP_NaN)
     {
@@ -214,7 +219,7 @@ static int compare_st_st(int nr)
 {
   int f, c;
 
-  if ( !NOT_EMPTY_0 || !NOT_EMPTY(nr) )
+  if ( !NOT_EMPTY(0) || !NOT_EMPTY(nr) )
     {
       setcc(SW_C3 | SW_C2 | SW_C0);
       /* Stack fault */
@@ -264,7 +269,7 @@ static int compare_u_st_st(int nr)
 {
   int f, c;
 
-  if ( !NOT_EMPTY_0 || !NOT_EMPTY(nr) )
+  if ( !NOT_EMPTY(0) || !NOT_EMPTY(nr) )
     {
       setcc(SW_C3 | SW_C2 | SW_C0);
       /* Stack fault */
@@ -340,10 +345,7 @@ void fcompp()
       return;
     }
   if ( !compare_st_st(1) )
-    {
-      pop(); FPU_st0_ptr = &st(0);
-      pop();
-    }
+      poppop();
 }
 
 
@@ -369,10 +371,7 @@ void fucompp()
   if (FPU_rm == 1)
     {
       if ( !compare_u_st_st(1) )
-	{
-	  pop(); FPU_st0_ptr = &st(0);
-	  pop();
-	}
+	poppop();
     }
   else
     FPU_illegal();

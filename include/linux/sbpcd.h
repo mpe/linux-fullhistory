@@ -8,6 +8,8 @@
  *                                 sbpcd=0x230,SoundBlaster
  *                             or
  *                                 sbpcd=0x300,LaserMate
+ *                             or
+ *                                 sbpcd=0x330,SPEA
  * these strings are case sensitive !!!
  */
 
@@ -17,6 +19,7 @@
  * set SBPRO to 1 for "true" SoundBlaster card
  * set SBPRO to 0 for "poor" (no sound) interface cards
  *                and for "compatible" soundcards.
+ * set SBPRO to 2 for the SPEA Media FX card
  *
  * most "compatible" sound boards like Galaxy need to set SBPRO to 0 !!!
  * if SBPRO gets set wrong, the drive will get found - but any
@@ -33,6 +36,7 @@
  * put your CDROM port base address here:
  * SBPRO addresses typically are 0x0230 (=0x220+0x10), 0x0250, ...
  * LASERMATE (CI-101P) adresses typically are 0x0300, 0x0310, ...
+ * SPEA addresses are 0x320, 0x330, 0x340, 0x350
  * there are some soundcards on the market with 0x0630, 0x0650, ...
  *
  * example: if your SBPRO audio address is 0x220, specify 0x230.
@@ -52,7 +56,7 @@
  * Debug output levels
  */
 #define DBG_INF		1	/* necessary information */
-#define DBG_IRQ		2	/* interrupt trace */
+#define DBG_BSZ		2	/* BLOCK_SIZE trace */
 #define DBG_REA		3	/* "read" status trace */
 #define DBG_CHK		4	/* "media check" trace */
 #define DBG_TIM		5	/* datarate timer test */
@@ -75,7 +79,8 @@
 #define DBG_XA 		22	/* XA mode debugging */
 #define DBG_LCK		23	/* door (un)lock info */
 #define DBG_SQ 		24	/* dump SubQ frame */
-#define DBG_000		25	/* unnecessary information */
+#define DBG_AUD		25      /* "read audio" debugging */
+#define DBG_000		26      /* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -199,6 +204,16 @@
 #define READ_M1  0x01 /* "data mode 1": 2048 bytes per frame */
 #define READ_M2  0x02 /* "data mode 2": 12+2048+280 bytes per frame */
 #define READ_SC  0x04 /* "subchannel info": 96 bytes per frame */
+#define READ_AU  0x08 /* "audio frame": 2352 bytes per frame */
+
+/*
+ * preliminary extensions to cdrom.h for transfering audio frames:
+ */
+#define CDROMREADAUDIO 0xE0 /* IOCTL function (arg = &cdrom_aud) */
+
+struct cdrom_aud { u_int lba; /* frame address */
+                   u_char *buf; /* frame buffer (2352 bytes) */
+                 };
 
 /*
  * sense byte: used only if new_drive
@@ -401,17 +416,6 @@ Read XA Parameter:
 #define SBPCD_DIS_IRQ 0
 
 /*
- * we don't use the IRQ line - leave it free for the sound driver
- */
-#define SBPCD_USE_IRQ	0
-
-/*
- * you can set the interrupt number of your interface board here:
- * It is not used at this time. No need to set it correctly.
- */
-#define SBPCD_INTR_NR	7            
-
-/*
  * "write byte to port"
  */
 #define OUT(x,y) outb(y,x)
@@ -463,9 +467,3 @@ typedef union _blk
 BLK;
 
 /*==========================================================================*/
-
-
-
-
-
-

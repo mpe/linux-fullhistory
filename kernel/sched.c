@@ -517,6 +517,8 @@ static void second_overflow(void)
 	if (xtime.tv_sec > last_rtc_update + 660)
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
+	  else
+	    last_rtc_update = xtime.tv_sec - 600; /* do it again in one min */
 }
 
 /*

@@ -19,10 +19,6 @@
 
 #include "blk.h"
 
-#ifdef CONFIG_SBPCD
-extern u_long sbpcd_init(u_long, u_long);
-#endif CONFIG_SBPCD
-
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory

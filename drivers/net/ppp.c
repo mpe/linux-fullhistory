@@ -94,6 +94,7 @@ static char ppp_warning[] = KERN_WARNING "PPP: ALERT! not INUSE! %d\n";
 int ppp_init(struct device *);
 static void ppp_init_ctrl_blk(struct ppp *);
 static int ppp_dev_open(struct device *);
+static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr);
 static int ppp_dev_close(struct device *);
 static void ppp_kick_tty(struct ppp *);
 
@@ -264,6 +265,7 @@ ppp_init(struct device *dev)
   dev->mtu             = PPP_MTU;
   dev->hard_start_xmit = ppp_xmit;
   dev->open            = ppp_dev_open;
+  dev->do_ioctl        = ppp_dev_ioctl;
   dev->stop            = ppp_dev_close;
   dev->get_stats       = ppp_get_stats;
   dev->hard_header     = ppp_header;
@@ -601,6 +603,32 @@ ppp_dev_close(struct device *dev)
   return 0;
 }
 
+static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr)
+{
+  struct ppp *ppp = &ppp_ctrl[dev->base_addr];
+  int    error;
+
+  struct stats
+  {
+    struct ppp_stats  ppp_stats;
+    struct slcompress slhc;
+  } *result;
+
+  error = verify_area (VERIFY_READ,
+		       ifr->ifr_ifru.ifru_data,
+		       sizeof (struct stats));
+
+  if (error == 0) {
+    result = (struct stats *) ifr->ifr_ifru.ifru_data;
+
+    memcpy_tofs (&result->ppp_stats, &ppp->stats, sizeof (struct ppp_stats));
+    if (ppp->slcomp)
+      memcpy_tofs (&result->slhc,    ppp->slcomp, sizeof (struct slcompress));
+  }
+
+  return error;
+}
+
 /*************************************************************
  * TTY OUTPUT
  *    The following function delivers a fully-formed PPP
@@ -882,6 +910,8 @@ static void ppp_receive_buf(struct tty_struct *tty, unsigned char *cp,
   if (ppp_debug >= 5) {
     ppp_print_buffer ("receive buffer", cp, count, KERNEL_DS);
   }
+
+  ppp->stats.rbytes += count;
  
   while (count-- > 0) {
     c = *cp++;
@@ -1367,7 +1397,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set mru to %x\n", temp_i));
       temp_i = (int) get_fs_long (l);
       if (ppp->mru != temp_i)
-	ppp_changedmtu (ppp, ppp->mtu, temp_i);
+	ppp_changedmtu (ppp, ppp->dev->mtu, temp_i);
     }
     break;
 

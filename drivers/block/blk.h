@@ -82,6 +82,9 @@ extern int * blksize_size[MAX_BLKDEV];
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern unsigned long cdu31a_init(unsigned long mem_start, unsigned long mem_end);
 extern unsigned long mcd_init(unsigned long mem_start, unsigned long mem_end);
+#ifdef CONFIG_SBPCD
+extern unsigned long sbpcd_init(unsigned long, unsigned long);
+#endif CONFIG_SBPCD
 extern int is_read_only(int dev);
 extern void set_device_ro(int dev,int flag);
 

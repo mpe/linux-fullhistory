@@ -42,20 +42,28 @@ void Un_impl(void)
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
   printk("Unimplemented FPU Opcode at eip=%p : ", (void *) address);
-  while ( 1 )
+  if ( FPU_CS == USER_CS )
     {
-      byte1 = get_fs_byte((unsigned char *) address);
-      if ( (byte1 & 0xf8) == 0xd8 ) break;
-      printk("[%02x]", byte1);
-      address++;
+      while ( 1 )
+	{
+	  byte1 = get_fs_byte((unsigned char *) address);
+	  if ( (byte1 & 0xf8) == 0xd8 ) break;
+	  printk("[%02x]", byte1);
+	  address++;
+	}
+      printk("%02x ", byte1);
+      FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
+      
+      if (FPU_modrm >= 0300)
+	printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
+      else
+	printk("/%d\n", (FPU_modrm >> 3) & 7);
     }
-  printk("%02x ", byte1);
-  FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
-
-  if (FPU_modrm >= 0300)
-    printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
   else
-    printk("/%d\n", (FPU_modrm >> 3) & 7);
+    {
+      printk("cs selector = %04x\n", FPU_CS);
+    }
+
   RE_ENTRANT_CHECK_ON;
 
   EXCEPTION(EX_Invalid);
@@ -85,29 +93,36 @@ void emu_printall()
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
   printk("At %p:", (void *) address);
-#define MAX_PRINTED_BYTES 20
-  for ( i = 0; i < MAX_PRINTED_BYTES; i++ )
+  if ( FPU_CS == USER_CS )
     {
-      byte1 = get_fs_byte((unsigned char *) address);
-      if ( (byte1 & 0xf8) == 0xd8 )
+#define MAX_PRINTED_BYTES 20
+      for ( i = 0; i < MAX_PRINTED_BYTES; i++ )
 	{
-	  printk(" %02x", byte1);
-	  break;
+	  byte1 = get_fs_byte((unsigned char *) address);
+	  if ( (byte1 & 0xf8) == 0xd8 )
+	    {
+	      printk(" %02x", byte1);
+	      break;
+	    }
+	  printk(" [%02x]", byte1);
+	  address++;
 	}
-      printk(" [%02x]", byte1);
-      address++;
+      if ( i == MAX_PRINTED_BYTES )
+	printk(" [more..]\n");
+      else
+	{
+	  FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
+	  
+	  if (FPU_modrm >= 0300)
+	    printk(" %02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
+	  else
+	    printk(" /%d, mod=%d rm=%d\n",
+		   (FPU_modrm >> 3) & 7, (FPU_modrm >> 6) & 3, FPU_modrm & 7);
+	}
     }
-  if ( i == MAX_PRINTED_BYTES )
-    printk(" [more..]\n");
   else
     {
-      FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
-
-      if (FPU_modrm >= 0300)
-	printk(" %02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
-      else
-	printk(" /%d, mod=%d rm=%d\n",
-	       (FPU_modrm >> 3) & 7, (FPU_modrm >> 6) & 3, FPU_modrm & 7);
+      printk("%04x\n", FPU_CS);
     }
 
   partial_status = status_word();
@@ -181,6 +196,7 @@ printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
       printk("%s\n", tag_desc[(int) (unsigned) r->tag]);
     }
 
+#ifdef OBSOLETE
   printk("[data] %c .%04lx %04lx %04lx %04lx e%+-6ld ",
 	 FPU_loaded_data.sign ? '-' : '+',
 	 (long)(FPU_loaded_data.sigh >> 16),
@@ -189,6 +205,7 @@ printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
 	 (long)(FPU_loaded_data.sigl & 0xFFFF),
 	 FPU_loaded_data.exp - EXP_BIAS + 1);
   printk("%s\n", tag_desc[(int) (unsigned) FPU_loaded_data.tag]);
+#endif OBSOLETE
   RE_ENTRANT_CHECK_ON;
 
 }
@@ -214,7 +231,6 @@ static struct {
  error was detected.
 
  Internal error types:
-       0      in load_store.c
        0x14   in fpu_etc.c
        0x1nn  in a *.c file:
               0x101  in reg_add_sub.c
@@ -244,7 +260,13 @@ static struct {
 	      0x126  in fpu_entry.c
 	      0x127  in poly_2xm1.c
 	      0x128  in fpu_entry.c
+	      0x129  in fpu_entry.c
 	      0x130  in get_address.c
+	      0x131  in get_address.c
+	      0x132  in get_address.c
+	      0x133  in get_address.c
+	      0x140  in load_store.c
+	      0x141  in load_store.c
        0x2nn  in an *.S file:
               0x201  in reg_u_add.S
               0x202  in reg_u_div.S
@@ -583,7 +605,7 @@ void stack_overflow(void)
     {
       /* The masked response */
       top--;
-      reg_move(&CONST_QNaN, FPU_st0_ptr = &st(0));
+      reg_move(&CONST_QNaN, &st(0));
     }
 
   EXCEPTION(EX_StackOver);
@@ -599,7 +621,7 @@ void stack_underflow(void)
  if ( control_word & CW_Invalid )
     {
       /* The masked response */
-      reg_move(&CONST_QNaN, FPU_st0_ptr);
+      reg_move(&CONST_QNaN, &st(0));
     }
 
   EXCEPTION(EX_StackUnder);

@@ -18,7 +18,7 @@
 
 OBJS  = sched.o sys_call.o traps.o irq.o dma.o fork.o \
  	panic.o printk.o vsprintf.o sys.o module.o ksyms.o exit.o \
-	signal.o mktime.o ptrace.o ioport.o itimer.o \
+	signal.o ptrace.o ioport.o itimer.o \
 	info.o ldt.o time.o tqueue.o vm86.o
 
 all: kernel.o

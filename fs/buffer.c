@@ -44,6 +44,9 @@ extern int check_cdu31a_media_change(int, int);
 #ifdef CONFIG_MCD
 extern int check_mcd_media_change(int, int);
 #endif
+#ifdef CONFIG_SBPCD
+extern int check_sbpcd_media_change(int, int);
+#endif
 
 #define NR_SIZES 4
 static char buffersize_index[9] = {-1,  0,  1, -1,  2, -1, -1, -1, 3};
@@ -331,6 +334,12 @@ void check_disk_change(dev_t dev)
 #if defined(CONFIG_MCD)
          case MITSUMI_CDROM_MAJOR:
 		i = check_mcd_media_change(dev, 0);
+		break;
+#endif
+
+#if defined(CONFIG_SBPCD)
+         case MATSUSHITA_CDROM_MAJOR:
+		i = check_sbpcd_media_change(dev, 0);
 		break;
 #endif
 

@@ -90,6 +90,7 @@ extern int last_retran;
 extern void sort_send(struct sock *sk);
 
 #define min(a,b)	((a)<(b)?(a):(b))
+#define LOOPBACK(x)	(((x) & htonl(0xff000000)) == htonl(0x7f000000))
 
 /*
  *	SNMP management statistics
@@ -226,7 +227,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 		 *	If the frame is from us and going off machine it MUST MUST MUST
 		 *	have the output device ip address and never the loopback
 		 */
-		if (saddr == htonl(0x7F000001L) && daddr != htonl(0x7F000001L))
+		if (LOOPBACK(saddr) && !LOOPBACK(daddr))
 			saddr = src;/*rt->rt_dev->pa_addr;*/
 		raddr = rt->rt_gateway;
 
@@ -245,7 +246,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 		 *	If the frame is from us and going off machine it MUST MUST MUST
 		 *	have the output device ip address and never the loopback
 		 */
-		if (saddr == 0x0100007FL && daddr != 0x0100007FL) 
+		if (LOOPBACK(saddr) && !LOOPBACK(daddr))
 			saddr = src;/*rt->rt_dev->pa_addr;*/
 
 		raddr = (rt == NULL) ? 0 : rt->rt_gateway;

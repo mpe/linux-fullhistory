@@ -47,7 +47,7 @@ Please report bugs, etc to me at:
 
 
 --Bill Metzenthen
-  March 1994
+  June 1994
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------
@@ -80,20 +80,24 @@ emulate each FPU instruction to completion without interruption.
 However, it may happen that when the emulator is accessing the user
 memory space, swapping may be needed. In this case the emulator may be
 temporarily suspended while disk i/o takes place. During this time
-another process may use the emulator, thereby changing some static
-variables (eg FPU_st0_ptr, etc). The code which accesses user memory
-is confined to five files:
+another process may use the emulator, thereby perhaps changing static
+variables. The code which accesses user memory is confined to five
+files:
     fpu_entry.c
     reg_ld_str.c
     load_store.c
     get_address.c
     errors.c
+As from version 1.12 of the emulator, no static variables are used
+(apart from those in the kernel's per-process tables). The emulator is
+therefore now fully re-entrant, rather than having just the restricted
+form of re-entrancy which is required by the Linux kernel.
 
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version beta 1.11) and the 80486 FPU (apart from bugs). Some of the
-more important differences are listed below:
+(version 1.12) and the 80486 FPU (apart from bugs). Some of the more
+important differences are listed below:
 
 The Roundup flag does not have much meaning for the transcendental
 functions and its 80486 value with these functions is likely to differ
@@ -154,6 +158,11 @@ crashes dosemu under Linux and also brings Windows down with a general
 protection fault message when run under the MS-DOS prompt of Windows
 3.1. (The program simply reads data from a valid address).
 
+The emulator supports 16-bit protected mode, with one difference from
+an 80486DX.  A 80486DX will allow some floating point instructions to
+write a few bytes below the lowest address of the stack.  The emulator
+will not allow this in 16-bit protected mode: no instructions are
+allowed to write outside the bounds set by the protection.
 
 ----------------------- Performance of wm-FPU-emu -----------------------
 
@@ -322,6 +331,7 @@ Hamish Coleman, t933093@minyos.xx.rmit.oz.au
 Bruce Evans, bde@kralizec.zeta.org.au
 Timo Korvola, Timo.Korvola@hut.fi
 Rick Lyons, rick@razorback.brisnet.org.au
+Rick, jrs@world.std.com
  
 ...and numerous others who responded to my request for help with
 a real 80486.

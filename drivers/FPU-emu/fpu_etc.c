@@ -17,22 +17,22 @@
 #include "reg_constant.h"
 
 
-static void fchs(void)
+static void fchs(FPU_REG *st0_ptr)
 {
-  if ( NOT_EMPTY_0 )
+  if ( st0_ptr->tag ^ TW_Empty )
     {
-      FPU_st0_ptr->sign ^= SIGN_POS^SIGN_NEG;
+      st0_ptr->sign ^= SIGN_POS^SIGN_NEG;
       clear_C1();
     }
   else
     stack_underflow();
 }
 
-static void fabs(void)
+static void fabs(FPU_REG *st0_ptr)
 {
-  if ( FPU_st0_tag ^ TW_Empty )
+  if ( st0_ptr->tag ^ TW_Empty )
     {
-      FPU_st0_ptr->sign = SIGN_POS;
+      st0_ptr->sign = SIGN_POS;
       clear_C1();
     }
   else
@@ -40,25 +40,25 @@ static void fabs(void)
 }
 
 
-static void ftst_(void)
+static void ftst_(FPU_REG *st0_ptr)
 {
-  switch (FPU_st0_tag)
+  switch (st0_ptr->tag)
     {
     case TW_Zero:
       setcc(SW_C3);
       break;
     case TW_Valid:
-      if (FPU_st0_ptr->sign == SIGN_POS)
+      if (st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
         setcc(SW_C0);
 
 #ifdef DENORM_OPERAND
-      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+      if ( (st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
 	{
 #ifdef PECULIAR_486
 	  /* This is wierd! */
-	  if (FPU_st0_ptr->sign == SIGN_POS)
+	  if (st0_ptr->sign == SIGN_POS)
 	    setcc(SW_C3);
 #endif PECULIAR_486
 	  return;
@@ -71,7 +71,7 @@ static void ftst_(void)
       EXCEPTION(EX_Invalid);
       break;
     case TW_Infinity:
-      if (FPU_st0_ptr->sign == SIGN_POS)
+      if (st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
         setcc(SW_C0);
@@ -87,10 +87,10 @@ static void ftst_(void)
     }
 }
 
-static void fxam(void)
+static void fxam(FPU_REG *st0_ptr)
 {
   int c=0;
-  switch (FPU_st0_tag)
+  switch (st0_ptr->tag)
     {
     case TW_Empty:
       c = SW_C3|SW_C0;
@@ -100,7 +100,7 @@ static void fxam(void)
       break;
     case TW_Valid:
       /* This will need to be changed if TW_Denormal is ever used. */
-      if ( FPU_st0_ptr->exp <= EXP_UNDER )
+      if ( st0_ptr->exp <= EXP_UNDER )
         c = SW_C2|SW_C3;  /* Denormal */
       else
         c = SW_C2;
@@ -112,16 +112,18 @@ static void fxam(void)
       c = SW_C2|SW_C0;
       break;
     }
-  if (FPU_st0_ptr->sign == SIGN_NEG)
+  if (st0_ptr->sign == SIGN_NEG)
     c |= SW_C1;
   setcc(c);
 }
 
-static FUNC const fp_etc_table[] = {
-  fchs, fabs, FPU_illegal, FPU_illegal, ftst_, fxam, FPU_illegal, FPU_illegal
+
+static FUNC_ST0 const fp_etc_table[] = {
+  fchs, fabs, (FUNC_ST0)FPU_illegal, (FUNC_ST0)FPU_illegal,
+  ftst_, fxam, (FUNC_ST0)FPU_illegal, (FUNC_ST0)FPU_illegal
 };
 
 void fp_etc()
 {
-  (fp_etc_table[FPU_rm])();
+  (fp_etc_table[FPU_rm])(&st(0));
 }

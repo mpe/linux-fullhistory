@@ -46,6 +46,13 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 
+/*
+ * Define this if things work differently on a i386 and a i486:
+ * it will (on a i486) warn about kernel memory accesses that are
+ * done without a 'verify_area(VERIFY_WRITE,..)'
+ */
+#undef CONFIG_TEST_VERIFY_AREA
+
 unsigned long high_memory = 0;
 
 extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
@@ -902,10 +909,15 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 			} else 
 				user_esp = regs->esp;
 		}
-		if (error_code & PAGE_PRESENT)
+		if (error_code & PAGE_PRESENT) {
+#ifdef CONFIG_TEST_VERIFY_AREA
+			if (regs->cs == KERNEL_CS)
+				printk("WP fault at %08x\n", regs->eip);
+#endif
 			do_wp_page(error_code, address, current, user_esp);
-		else
+		} else {
 			do_no_page(error_code, address, current, user_esp);
+		}
 		return;
 	}
 	address -= TASK_SIZE;
@@ -1124,6 +1136,9 @@ void mem_init(unsigned long start_low_mem,
 	invalidate();
 	if (wp_works_ok < 0)
 		wp_works_ok = 0;
+#ifdef CONFIG_TEST_VERIFY_AREA
+	wp_works_ok = 0;
+#endif
 	return;
 }
 

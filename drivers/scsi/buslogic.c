@@ -562,7 +562,6 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 	if (bufflen != sizeof SCpnt->sense_buffer) {
 	    buslogic_printk("Wrong buffer length supplied for request sense (%d)\n",
 			    bufflen);
-	    panic("buslogic.c: wrong buffer length for request sense");
 	}
 #endif
 	SCpnt->result = 0;
@@ -781,6 +780,7 @@ static int setup_mailboxes(unsigned int base, struct Scsi_Host *SHpnt)
 	buslogic_printk("buslogic_detect: failed setting up mailboxes\n");
     }
     ok = TRUE;
+    return ok;
   must_be_adaptec:
     INTR_RESET(base);
     printk("- must be Adaptec\n"); /* So that the adaptec detect looks clean */
@@ -888,7 +888,6 @@ static int getconfig(unsigned int base, unsigned char *irq,
 /* Query the board to find out the model. */
 static int buslogic_query(unsigned int base, int *trans)
 {
-#if 0
     unsigned const char inquiry_cmd[] = { CMD_INQUIRY };
     unsigned char inquiry_result[4];
     int i;
@@ -899,14 +898,18 @@ static int buslogic_query(unsigned int base, int *trans)
     buslogic_out(base, inquiry_cmd, sizeof inquiry_cmd);
     buslogic_in(base, inquiry_result, 4);
     WAIT_UNTIL(INTERRUPT(base), CMDC);
+    INTR_RESET(base);
+
+    buslogic_printk("Inquiry Bytes: %X %X %X %X\n",
+		    inquiry_result[0],inquiry_result[1],
+		    inquiry_result[2],inquiry_result[3]);
     while (0) {
       fail:
-	buslogic_printk("buslogic_detect: query card type\n");
+	buslogic_printk("buslogic_query: query board settings\n");
+	return TRUE;
     }
-    INTR_RESET(base);
-#endif
 
-    *trans = BIOS_TRANSLATION_6432;	/* Default case */
+    *trans = BIOS_TRANSLATION_6432;     /* Default case */
 
     return FALSE;
 }
@@ -1018,8 +1021,13 @@ int buslogic_detect(int hostnum)
 
 	    host[irq - 9] = SHpnt;
 	    SHpnt->this_id = id;
+#ifdef CONFIG_NO_BUGGY_BUSLOGIC
 	    /* Only type 'A' (AT/ISA) bus adapters use unchecked DMA. */
 	    SHpnt->unchecked_isa_dma = (bus_type == 'A');
+#else
+	    /* bugs in the firmware with 16M+. Gaah */
+	    SHpnt->unchecked_isa_dma = 1;
+#endif
 	    SHpnt->sg_tablesize = max_sg;
 	    if (SHpnt->sg_tablesize > BUSLOGIC_MAX_SG)
 		SHpnt->sg_tablesize = BUSLOGIC_MAX_SG;

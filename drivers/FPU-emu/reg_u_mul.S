@@ -27,7 +27,7 @@
 
 
 
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 /*  Local storage on the stack: */
 #define FPU_accum_0	-4(%ebp)	/* ms word */
 #define FPU_accum_1	-8(%ebp)
@@ -40,7 +40,7 @@ FPU_accum_0:
 	.long	0
 FPU_accum_1:
 	.long	0
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 
 .text
@@ -50,9 +50,9 @@ FPU_accum_1:
 _reg_u_mul:
 	pushl	%ebp
 	movl	%esp,%ebp
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	subl	$8,%esp
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 	pushl	%esi
 	pushl	%edi

@@ -1137,7 +1137,7 @@ static int inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		return -EINVAL;
 	if(size==0)
 		return 0;
-	err=verify_area(VERIFY_READ,ubuf,size);
+	err=verify_area(VERIFY_WRITE,ubuf,size);
 	if(err)
 		return err;
 
@@ -1259,6 +1259,8 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCSIFMAP:
 		case SIOCGIFMAP:
 		case SIOCDEVPRIVATE:
+		case SIOCSIFSLAVE:
+		case SIOCGIFSLAVE:
 			return(dev_ioctl(cmd,(void *) arg));
 
 		default:

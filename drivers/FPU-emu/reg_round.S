@@ -82,7 +82,7 @@
 #define	UNMASKED_UNDERFLOW $2
 
 
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 /*	Make the code re-entrant by putting
 	local storage on the stack: */
 #define FPU_bits_lost	(%esp)
@@ -97,7 +97,7 @@ FPU_bits_lost:
 	.byte	0
 FPU_denormal:
 	.byte	0
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 
 .text
@@ -127,9 +127,9 @@ fpu_reg_round:			/* Normal entry point */
 
 fpu_reg_round_sqrt:		/* Entry point from wm_sqrt.S */
 
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	pushl	%ebx		/* adjust the stack pointer */
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 #ifdef PARANOID
 /* Cannot use this here yet */
@@ -417,9 +417,9 @@ xL_Store_significand:
 	jge	L_overflow
 
 fpu_reg_round_exit:
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	popl	%ebx		/* adjust the stack pointer */
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 fpu_Arith_exit:
 	popl	%ebx

@@ -19,6 +19,19 @@
    of the stack frame of math_emulate() */
 #define SETUP_DATA_AREA(arg)    FPU_info = (struct info *) &arg
 
+#define LDT_DESCRIPTOR(s)       (current->ldt[(s) >> 3])
+#define SEG_D_SIZE(x)           ((x).b & (3 << 21))
+#define SEG_G_BIT(x)            ((x).b & (1 << 23))
+#define SEG_GRANULARITY(x)      (((x).b & (1 << 23)) ? 4096 : 1)
+#define SEG_286_MODE(x)         ((x).b & ( 0xff000000 | 0xf0000 | (1 << 23)))
+#define SEG_BASE_ADDR(s)        (((s).b & 0xff000000) \
+				 | (((s).b & 0xff) << 16) | ((s).a >> 16))
+#define SEG_LIMIT(s)            (((s).b & 0xff0000) | ((s).a & 0xffff))
+#define SEG_EXECUTE_ONLY(s)     (((s).b & ((1 << 11) | (1 << 9))) == (1 << 11))
+#define SEG_WRITE_PERM(s)       (((s).b & ((1 << 11) | (1 << 9))) == (1 << 9))
+#define SEG_EXPAND_DOWN(s)      (((s).b & ((1 << 11) | (1 << 10))) \
+				 == (1 << 10))
+
 #define I387			(current->tss.i387)
 #define FPU_info		(I387.soft.info)
 
@@ -30,22 +43,24 @@
 #define FPU_EIP			(FPU_info->___eip)
 #define FPU_ORIG_EIP		(FPU_info->___orig_eip)
 
-#define LDT_BASE_ADDR(s)	((current->ldt[(s) >> 3].b & 0xff000000)     \
-				 | ((current->ldt[(s) >> 3].b & 0xff) << 16) \
-				 | (current->ldt[(s) >> 3].a >> 16))
-
 #define FPU_lookahead           (I387.soft.lookahead)
-#define FPU_entry_eip           (I387.soft.entry_eip)
+
+/* nz if ip_offset and cs_selector are not to be set for the current
+   instruction. */
+#define no_ip_update            (((char *)&(I387.soft.twd))[0])
+#define FPU_rm                  (((unsigned char *)&(I387.soft.twd))[1])
+
+/* Number of bytes of data which can be legally accessed by the current
+   instruction. This only needs to hold a number <= 108, so a byte will do. */
+#define access_limit            (((unsigned char *)&(I387.soft.twd))[2])
 
 #define partial_status       	(I387.soft.swd)
 #define control_word		(I387.soft.cwd)
 #define regs			(I387.soft.regs)
 #define top			(I387.soft.top)
 
-#define ip_offset		(I387.soft.fip)
-#define cs_selector		(I387.soft.fcs)
-#define data_operand_offset	(I387.soft.foo)
-#define operand_selector	(I387.soft.fos)
+#define instruction_address     (*(struct address *)&I387.soft.fip)
+#define operand_address         (*(struct address *)&I387.soft.foo)
 
 #define FPU_verify_area(x,y,z)  if ( verify_area(x,y,z) ) \
                                 math_abort(FPU_info,SIGSEGV)
@@ -63,8 +78,5 @@
    past the upper boundary of a legal code area. */
 #define	FPU_code_verify_area(z) FPU_verify_area(VERIFY_READ,(void *)FPU_EIP,z)
 #endif
-
-/* ######## temporary and ugly ;-) */
-#define FPU_data_address        ((void *)(I387.soft.twd))
 
 #endif

@@ -1267,7 +1267,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				return -ENODEV;
 			}
 			cli();
-			if(slave->flags&(IFF_UP|IFF_RUNNING)!=(IFF_UP|IFF_RUNNING))
+			if((slave->flags&(IFF_UP|IFF_RUNNING))!=(IFF_UP|IFF_RUNNING))
 			{
 				restore_flags(flags);
 				return -EINVAL;
@@ -1275,7 +1275,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			if(dev->flags&IFF_SLAVE)
 			{
 				restore_flags(flags);
-				return -EINVAL;
+				return -EBUSY;
 			}
 			if(dev->slave!=NULL)
 			{

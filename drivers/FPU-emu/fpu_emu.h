@@ -60,14 +60,18 @@
 #include <linux/math_emu.h>
 #include <linux/linkage.h>
 
-#ifdef PARANOID
+/*
+#define RE_ENTRANT_CHECKING
+ */
+
+#ifdef RE_ENTRANT_CHECKING
 extern char emulating;
 #  define RE_ENTRANT_CHECK_OFF emulating = 0
 #  define RE_ENTRANT_CHECK_ON emulating = 1
 #else
 #  define RE_ENTRANT_CHECK_OFF
 #  define RE_ENTRANT_CHECK_ON
-#endif PARANOID
+#endif RE_ENTRANT_CHECKING
 
 #define FWAIT_OPCODE 0x9b
 #define OP_SIZE_PREFIX 0x66
@@ -89,46 +93,43 @@ extern char emulating;
 #define PREFIX_SS_ 6
 #define PREFIX_DEFAULT 7
 
-/* These are to defeat the default action, giving the instruction
-   no net effect: */
-#define NO_NET_DATA_EFFECT \
-      { FPU_data_address = (void *)data_operand_offset; \
-	FPU_data_selector = operand_selector; }
-#define NO_NET_INSTR_EFFECT \
-      { FPU_entry_eip = ip_offset; \
-	FPU_entry_op_cs = cs_selector; }
-
-
+struct address {
+  unsigned int offset;
+  unsigned int selector:16;
+  unsigned int opcode:11;
+  unsigned int empty:5;
+};
 typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;
+typedef void (*FUNC_ST0)(FPU_REG *st0_ptr);
 typedef struct { unsigned char address_size, operand_size, segment; }
         overrides;
-/* This structure is 48 bits: */
+/* This structure is 32 bits: */
 typedef struct { overrides override;
-		 unsigned char mode16, vm86, p286; } fpu_addr_modes;
+		 unsigned char default_mode; } fpu_addr_modes;
+/* PROTECTED has a restricted meaning in the emulator; it is used
+   to signal that the emulator needs to do special things to ensure
+   that protection is respected in a segmented model. */
+#define PROTECTED 4
+#define SIXTEEN   1         /* We rely upon this being 1 (true) */
+#define VM86      SIXTEEN
+#define PM16      (SIXTEEN | PROTECTED)
+#define SEG32     PROTECTED
+extern unsigned char const data_sizes_16[32];
 
 #define	st(x)	( regs[((top+x) &7 )] )
 
 #define	STACK_OVERFLOW	(st_new_ptr = &st(-1), st_new_ptr->tag != TW_Empty)
 #define	NOT_EMPTY(i)	(st(i).tag != TW_Empty)
-#define	NOT_EMPTY_0	(FPU_st0_tag ^ TW_Empty)
+#define	NOT_EMPTY_ST0	(st0_tag ^ TW_Empty)
 
-extern unsigned char FPU_rm;
-
-extern	char	FPU_st0_tag;
-extern	FPU_REG	*FPU_st0_ptr;
-
-/* ###### These need to be shifted to somewhere safe. */
-/* extern void  *FPU_data_address; has been shifted */
-extern unsigned short FPU_data_selector;
-extern unsigned long FPU_entry_op_cs;
-
-extern  FPU_REG  FPU_loaded_data;
-
-#define pop()	{ FPU_st0_ptr->tag = TW_Empty; top++; }
+#define pop()	{ regs[(top++ & 7 )].tag = TW_Empty; }
+#define poppop() { regs[((top + 1) & 7 )].tag \
+		     = regs[(top & 7 )].tag = TW_Empty; \
+		   top += 2; }
 
 /* push() does not affect the tags */
-#define push()	{ top--; FPU_st0_ptr = st_new_ptr; }
+#define push()	{ top--; }
 
 
 #define reg_move(x, y) { \

@@ -26,8 +26,7 @@ void fclex(void)
   partial_status &= ~(SW_Backward|SW_Summary|SW_Stack_Fault|SW_Precision|
 		   SW_Underflow|SW_Overflow|SW_Zero_Div|SW_Denorm_Op|
 		   SW_Invalid);
-  NO_NET_DATA_EFFECT;
-  FPU_entry_eip = ip_offset;               /* We want no net effect */
+  no_ip_update = 1;
 }
 
 /* Needs to be externally visible */
@@ -43,11 +42,12 @@ void finit()
     }
   /* The behaviour is different to that detailed in
      Section 15.1.6 of the Intel manual */
-  data_operand_offset = 0;
-  operand_selector = 0;
-  NO_NET_DATA_EFFECT;
-  FPU_entry_op_cs = 0;
-  FPU_entry_eip = ip_offset = 0;
+  operand_address.offset = 0;
+  operand_address.selector = 0;
+  instruction_address.offset = 0;
+  instruction_address.selector = 0;
+  instruction_address.opcode = 0;
+  no_ip_update = 1;
 }
 
 /*
@@ -71,7 +71,7 @@ void finit_()
 static void fstsw_ax(void)
 {
   *(short *) &FPU_EAX = status_word();
-  NO_NET_INSTR_EFFECT;
+  no_ip_update = 1;
 }
 
 static FUNC const fstsw_table[] = {
@@ -108,10 +108,9 @@ void fld_i_()
     { reg_move(&st(FPU_rm), st_new_ptr); push(); }
   else
     {
-      if ( control_word & EX_Invalid )
+      if ( control_word & CW_Invalid )
 	{
 	  /* The masked response */
-	  push();
 	  stack_underflow();
 	}
       else
@@ -125,9 +124,9 @@ void fxch_i()
 {
   /* fxch st(i) */
   FPU_REG t;
-  register FPU_REG *sti_ptr = &st(FPU_rm);
+  register FPU_REG *sti_ptr = &st(FPU_rm), *st0_ptr = &st(0);
 
-  if ( FPU_st0_tag == TW_Empty )
+  if ( st0_ptr->tag == TW_Empty )
     {
       if ( sti_ptr->tag == TW_Empty )
 	{
@@ -136,20 +135,20 @@ void fxch_i()
 	  return;
 	}
       if ( control_word & CW_Invalid )
-	reg_move(sti_ptr, FPU_st0_ptr);   /* Masked response */
+	reg_move(sti_ptr, st0_ptr);   /* Masked response */
       stack_underflow_i(FPU_rm);
       return;
     }
   if ( sti_ptr->tag == TW_Empty )
     {
       if ( control_word & CW_Invalid )
-	reg_move(FPU_st0_ptr, sti_ptr);   /* Masked response */
+	reg_move(st0_ptr, sti_ptr);   /* Masked response */
       stack_underflow();
       return;
     }
   clear_C1();
-  reg_move(FPU_st0_ptr, &t);
-  reg_move(sti_ptr, FPU_st0_ptr);
+  reg_move(st0_ptr, &t);
+  reg_move(sti_ptr, st0_ptr);
   reg_move(&t, sti_ptr);
 }
 
@@ -172,14 +171,14 @@ void ffreep()
 void fst_i_()
 {
   /* fst st(i) */
-  reg_move(FPU_st0_ptr, &st(FPU_rm));
+  reg_move(&st(0), &st(FPU_rm));
 }
 
 
 void fstp_i()
 {
   /* fstp st(i) */
-  reg_move(FPU_st0_ptr, &st(FPU_rm));
+  reg_move(&st(0), &st(FPU_rm));
   pop();
 }
 

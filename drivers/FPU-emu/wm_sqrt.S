@@ -29,7 +29,7 @@
 #include "fpu_asm.h"
 
 
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 /*	Local storage on the stack: */
 #define FPU_accum_3	-4(%ebp)	/* ms word */
 #define FPU_accum_2	-8(%ebp)
@@ -70,7 +70,7 @@ FPU_fsqrt_arg_1:
 	.long	0
 FPU_fsqrt_arg_0:
 	.long	0		/* ls word, at most the ms bit is set */
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 
 
 .text
@@ -80,9 +80,9 @@ FPU_fsqrt_arg_0:
 _wm_sqrt:
 	pushl	%ebp
 	movl	%esp,%ebp
-#ifdef REENTRANT_FPU
+#ifndef NON_REENTRANT_FPU
 	subl	$28,%esp
-#endif REENTRANT_FPU
+#endif NON_REENTRANT_FPU
 	pushl	%esi
 	pushl	%edi
 	pushl	%ebx
