@@ -739,8 +739,7 @@ static void lance_set_multicast (struct device *dev)
 	mark_bh(NET_BH);
 }
 
-
-__initfunc(int a2065_probe(struct device *dev))
+int __init a2065_probe(struct device *dev)
 {
 	unsigned int key, is_cbm;
 	const struct ConfigDev *cd;

@@ -117,7 +117,7 @@ MODULE_PARM(irq, "i");
 MODULE_PARM(shmem, "i");
 MODULE_PARM(device, "s");
 #else
-__initfunc(void com90xx_setup(char *str, int *ints));
+void __init com90xx_setup(char *str, int *ints);
 char __initdata com90xx_explicit = 0;
 
 extern struct device arcnet_devs[];
@@ -179,7 +179,7 @@ static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata = {
 	0
 };
 
-__initfunc(int arc90xx_probe(struct device *dev))
+int __init arc90xx_probe(struct device *dev)
 {
 	static int init_once = 0;
 	static int numports = sizeof(ports) / sizeof(ports[0]), numshmems = sizeof(shmems) / sizeof(shmems[0]);
@@ -399,7 +399,7 @@ __initfunc(int arc90xx_probe(struct device *dev))
 			 */
 			airqmask = probe_irq_on();
 			AINTMASK(NORXflag);
-			udelay(1);
+			mdelay(1);
 			AINTMASK(0);
 			airq = probe_irq_off(airqmask);
 
@@ -493,7 +493,7 @@ __initfunc(int arc90xx_probe(struct device *dev))
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
-__initfunc(static int arc90xx_found(struct device *dev, int ioaddr, int airq, u_long shmem, int more))
+static int __init arc90xx_found(struct device *dev, int ioaddr, int airq, u_long shmem, int more)
 {
 	struct arcnet_local *lp;
 	u_long first_mirror, last_mirror;
@@ -1121,7 +1121,7 @@ void cleanup_module(void)
 
 #else
 
-__initfunc(void com90xx_setup(char *str, int *ints))
+void __init com90xx_setup(char *str, int *ints)
 {
 	struct device *dev;
 

@@ -83,7 +83,7 @@ Applications
 2.	Opposite case. Just forget all that you know about routing
 	tables. Every rule is supplied with its own gateway, device
 	info. record. This approach is not appropriate for automated
-	route maintanance, but it is ideal for manual configuration.
+	route maintenance, but it is ideal for manual configuration.
 
 	HOWTO:  iproute addrule [ from PREFIX ] [ to PREFIX ] [ tos TOS ]
 		[ dev INPUTDEV] [ pref PREFERENCE ] route [ gw GATEWAY ]

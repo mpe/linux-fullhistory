@@ -86,7 +86,7 @@ static int  irport_is_receiving(struct irda_device *idev);
 static void irport_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
 static int  irport_raw_write(struct irda_device *idev, __u8 *buf, int len);
 
-__initfunc(int irport_init(void))
+int __init irport_init(void)
 {
  	int i;
 

@@ -1074,7 +1074,7 @@ static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *
 	return 0;
 }
 
-__initfunc(int myri_sbus_probe(struct device *dev))
+int __init myri_sbus_probe(struct device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

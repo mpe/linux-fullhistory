@@ -183,7 +183,6 @@
  * ES1946	yes		This is a PCI chip; not handled by this driver
  */
 
-#include <linux/config.h>
 #include <linux/delay.h>
 
 #include "sound_config.h"

@@ -64,7 +64,7 @@ static void irtty_receive_buf(struct tty_struct *, const unsigned char *,
 			      char *, int);
 char *driver_name = "irtty";
 
-__initfunc(int irtty_init(void))
+int __init irtty_init(void)
 {
 	int status;
 	

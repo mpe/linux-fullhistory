@@ -336,7 +336,7 @@ void cleanup_module(void)
 #else
 
 
-__initfunc(void dmascc_setup(char *str, int *ints))
+void __init dmascc_setup(char *str, int *ints)
 {
    int i;
 
@@ -350,7 +350,7 @@ __initfunc(void dmascc_setup(char *str, int *ints))
 
 /* Initialization functions */
 
-__initfunc(int dmascc_init(void))
+int __init dmascc_init(void)
 {
   int h, i, j, n;
   int base[MAX_NUM_DEVS], tcmd[MAX_NUM_DEVS], t0[MAX_NUM_DEVS],
@@ -453,8 +453,7 @@ __initfunc(int dmascc_init(void))
   return -EIO;
 }
 
-
-__initfunc(int setup_adapter(int io, int h, int n))
+int __init setup_adapter(int io, int h, int n)
 {
   int i, irq, chip;
   struct scc_info *info;

@@ -61,7 +61,7 @@ static struct dongle dongle_plus = {
 	actisys_init_qos,
 };
 
-__initfunc(int actisys_init(void))
+int __init actisys_init(void)
 {
 	int ret;
 

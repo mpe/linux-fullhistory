@@ -927,7 +927,7 @@ static void b_exint(struct pi_local *lp)
 /* Probe for a PI card. */
 /* This routine also initializes the timer chip */
 
-__initfunc(static int hw_probe(int ioaddr))
+static int __init hw_probe(int ioaddr)
 {
     int time = 1000;		/* Number of milliseconds for test */
     unsigned long start_time, end_time;
@@ -1182,7 +1182,7 @@ static void chipset_init(struct device *dev)
 }
 
 
-__initfunc(int pi_init(void))
+int __init pi_init(void)
 {
     int *port;
     int ioaddr = 0;

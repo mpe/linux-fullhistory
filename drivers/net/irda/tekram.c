@@ -56,7 +56,7 @@ static struct dongle dongle = {
 	tekram_init_qos,
 };
 
-__initfunc(int tekram_init(void))
+int __init tekram_init(void)
 {
 	return irda_device_register_dongle(&dongle);
 }

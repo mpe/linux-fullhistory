@@ -117,7 +117,7 @@ static int e21_close(struct device *dev);
 	station address).
  */
 
-__initfunc(int e2100_probe(struct device *dev))
+int  __init e2100_probe(struct device *dev)
 {
 	int *port;
 	int base_addr = dev->base_addr;
@@ -137,7 +137,7 @@ __initfunc(int e2100_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(int e21_probe1(struct device *dev, int ioaddr))
+int __init e21_probe1(struct device *dev, int ioaddr)
 {
 	int i, status;
 	unsigned char *station_addr = dev->dev_addr;

@@ -295,6 +295,8 @@ static int fat_readdirx(
 	char bufname[14];
 	char *ptname = bufname;
 	int dotoffset = 0;
+	unsigned long *furrfu = &lpos;
+	unsigned long dummy;
 
 	cpos = filp->f_pos;
 /* Fake . and .. for the root directory. */
@@ -305,8 +307,11 @@ static int fat_readdirx(
 			cpos++;
 			filp->f_pos++;
 		}
-		if (cpos == 2)
+		if (cpos == 2) {
+			dummy = 2;
+			furrfu = &dummy;
 			cpos = 0;
+		}
 	}
 	if (cpos & (sizeof(struct msdos_dir_entry)-1))
 		return -ENOENT;
@@ -440,7 +445,7 @@ ParseLong:
 	if (!long_slots||shortnames) {
 		if (both)
 			bufname[i] = '\0';
-		if (filldir(dirent, bufname, i, lpos, inum) < 0)
+		if (filldir(dirent, bufname, i, *furrfu, inum) < 0)
 			goto FillFailed;
 	} else {
 		char longname[275];
@@ -451,11 +456,12 @@ ParseLong:
 			memcpy(&longname[long_len+1], bufname, i);
 			long_len += i;
 		}
-		if (filldir(dirent, longname, long_len, lpos, inum) < 0)
+		if (filldir(dirent, longname, long_len, *furrfu, inum) < 0)
 			goto FillFailed;
 	}
 
 RecEnd:
+	furrfu = &lpos;
 	filp->f_pos = cpos;
 	goto GetNew;
 EODir:

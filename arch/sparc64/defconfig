@@ -264,6 +264,12 @@ CONFIG_UNIX98_PTYS=y
 CONFIG_UNIX98_PTY_COUNT=256
 
 #
+# Video For Linux
+#
+CONFIG_VIDEO_DEV=y
+CONFIG_VIDEO_BT848=y
+
+#
 # Filesystems
 #
 # CONFIG_QUOTA is not set

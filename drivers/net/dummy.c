@@ -80,7 +80,7 @@ static int dummy_accept_fastpath(struct device *dev, struct dst_entry *dst)
 }
 #endif
 
-__initfunc(int dummy_init(struct device *dev))
+int __init dummy_init(struct device *dev)
 {
 	/* Initialize the device structure. */
 	dev->hard_start_xmit	= dummy_xmit;
@@ -127,7 +127,7 @@ static struct net_device_stats *dummy_get_stats(struct device *dev)
 
 #ifdef MODULE
 
-__initfunc(static int dummy_probe(struct device *dev))
+static int __init dummy_probe(struct device *dev)
 {
 	dummy_init(dev);
 	return 0;

@@ -65,7 +65,7 @@ struct net_local
  *	hardware it would have to check what was present.
  */
  
-__initfunc(int ethertap_probe(struct device *dev))
+int __init ethertap_probe(struct device *dev)
 {
 	memcpy(dev->dev_addr, "\xFE\xFD\x00\x00\x00\x00", 6);
 	if (dev->mem_start & 0xf)

@@ -2282,7 +2282,7 @@ static void vc_init(unsigned int currcons, unsigned int rows, unsigned int cols,
 struct tty_driver console_driver;
 static int console_refcount;
 
-__initfunc(unsigned long con_init(unsigned long kmem_start))
+unsigned long __init con_init(unsigned long kmem_start)
 {
 	const char *display_desc = NULL;
 	unsigned int currcons = 0;

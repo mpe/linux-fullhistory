@@ -770,7 +770,7 @@ static int mcdx_media_changed(struct cdrom_device_info * cdi, int disc_nr)
 	return 1;
 }
 
-__initfunc(void mcdx_setup(char *str, int *pi))
+void __init mcdx_setup(char *str, int *pi)
 {
 	if (pi[0] > 0) mcdx_drive_map[0][0] = pi[1];
 	if (pi[0] > 1) mcdx_drive_map[0][1] = pi[2];
@@ -1013,7 +1013,7 @@ void cleanup_module(void)
 
 /* Support functions ************************************************/
 
-__initfunc(int mcdx_init_drive(int drive))
+int __init mcdx_init_drive(int drive)
 {
 	struct s_version version;
 	struct s_drive_stuff* stuffp;
@@ -1174,7 +1174,7 @@ __initfunc(int mcdx_init_drive(int drive))
 	return 0;
 }
 
-__initfunc(int mcdx_init(void))
+int __init mcdx_init(void)
 {
 	int drive;
 #ifdef MODULE

@@ -124,7 +124,7 @@ static unsigned char hi_irq_map[] __initdata = {11, 12, 0, 14, 0, 0, 0, 15};
  *	PROM for a match against the Racal-Interlan assigned value.
  */
 
-__initfunc(int es_probe(struct device *dev))
+int __init es_probe(struct device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -151,7 +151,7 @@ __initfunc(int es_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(int es_probe1(struct device *dev, int ioaddr))
+int __init es_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	unsigned long eisa_id;

@@ -73,6 +73,9 @@ static struct super_block * coda_read_super(struct super_block *sb,
 
         if ( sbi->sbi_sb ) {
 		printk("Already mounted\n");
+		unlock_super(sb);
+		EXIT;  
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
@@ -96,7 +99,6 @@ static struct super_block * coda_read_super(struct super_block *sb,
 	        printk("coda_read_super: coda_get_rootfid failed with %d\n",
 		       error);
 		sb->s_dev = 0;
-	        unlock_super(sb);
 		goto error;
 	}	  
 	printk("coda_read_super: rootfid is %s\n", coda_f2s(&fid));
@@ -106,7 +108,6 @@ static struct super_block * coda_read_super(struct super_block *sb,
         if ( error || !root ) {
 	    printk("Failure of coda_cnode_make for root: error %d\n", error);
 	    sb->s_dev = 0;
-	    unlock_super(sb);
 	    goto error;
 	} 
 
@@ -119,6 +120,7 @@ static struct super_block * coda_read_super(struct super_block *sb,
         return sb;
 
  error:
+	unlock_super(sb);
 	EXIT;  
 	MOD_DEC_USE_COUNT;
 	if (sbi) {
@@ -143,7 +145,6 @@ static void coda_put_super(struct super_block *sb)
         sb->s_dev = 0;
 	coda_cache_clear_all(sb);
 	sb_info = coda_sbp(sb);
-/*	sb_info->sbi_vcomm->vc_inuse = 0; You can not do this: psdev_release would see usagecount == 0 and would refuse to decrease MOD_USE_COUNT --pavel */ 
 	coda_super_info.sbi_sb = NULL;
 	printk("Coda: Bye bye.\n");
 	memset(sb_info, 0, sizeof(* sb_info));
@@ -207,7 +208,7 @@ static void coda_delete_inode(struct inode *inode)
 	EXIT;
 }
 
-static int  coda_notify_change(struct dentry *de, struct iattr *iattr)
+static int coda_notify_change(struct dentry *de, struct iattr *iattr)
 {
 	struct inode *inode = de->d_inode;
         struct coda_inode_info *cii;
@@ -236,21 +237,32 @@ static int  coda_notify_change(struct dentry *de, struct iattr *iattr)
         return error;
 }
 
-/*  we need _something_ for this routine. Let's mimic AFS */
 static int coda_statfs(struct super_block *sb, struct statfs *buf, 
 		       int bufsiz)
 {
 	struct statfs tmp;
+	int error;
 
+	memset(&tmp, 0, sizeof(struct statfs));
+
+	error = venus_statfs(sb, &tmp);
+
+	if (error) {
+		/* fake something like AFS does */
+		tmp.f_blocks = 9000000;
+		tmp.f_bfree  = 9000000;
+		tmp.f_bavail = 9000000;
+		tmp.f_files  = 9000000;
+		tmp.f_ffree  = 9000000;
+	}
+
+	/* and fill in the rest */
 	tmp.f_type = CODA_SUPER_MAGIC;
 	tmp.f_bsize = 1024;
-	tmp.f_blocks = 9000000;
-	tmp.f_bfree = 9000000;
-	tmp.f_bavail = 9000000 ;
-	tmp.f_files = 9000000;
-	tmp.f_ffree = 9000000;
-	tmp.f_namelen = 0;
+	tmp.f_namelen = CODA_MAXNAMLEN;
+
 	copy_to_user(buf, &tmp, bufsiz);
+
 	return 0; 
 }
 

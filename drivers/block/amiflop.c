@@ -1755,13 +1755,13 @@ static struct file_operations floppy_fops = {
 	NULL,			/* revalidate */
 };
 
-__initfunc(void amiga_floppy_setup (char *str, int *ints))
+void __init amiga_floppy_setup (char *str, int *ints)
 {
 	printk (KERN_INFO "amiflop: Setting default df0 to %x\n", ints[1]);
 	fd_def_df0 = ints[1];
 }
 
-__initfunc(static int fd_probe_drives(void))
+static int __init fd_probe_drives(void)
 {
 	int drive,drives,nomem;
 
@@ -1791,7 +1791,7 @@ __initfunc(static int fd_probe_drives(void))
 	return -ENOMEM;
 }
 
-__initfunc(int amiga_floppy_init(void))
+int __init amiga_floppy_init(void)
 {
   int i;
 

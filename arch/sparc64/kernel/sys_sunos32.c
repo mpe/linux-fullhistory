@@ -711,7 +711,7 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	struct inode  *inode;
 	struct file   *file;
 
-	file = current->files->fd [fd];
+	file = fcheck(fd);
 	if(!file)
 		return 0;
 

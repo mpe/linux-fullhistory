@@ -29,20 +29,21 @@ extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd,
 				unsigned long arg);
 extern asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count);
 extern void start_tty(struct tty_struct *tty);
-
 static struct tty_struct *get_tty(int fd)
 {
 	struct file *filp;
+	struct tty_struct *ttyp = NULL;
 
-	if(!(filp = fcheck(fd)))
-		return ((struct tty_struct *) 0);
-	if(filp->private_data) {
-		struct tty_struct *ttyp = (struct tty_struct *) filp->private_data;
+	read_lock(&current->files->file_lock);
+	filp = fcheck(fd);
+	if(filp && filp->private_data) {
+		ttyp = (struct tty_struct *) filp->private_data;
 
-		if(ttyp->magic == TTY_MAGIC)
-			return ttyp;
+		if(ttyp->magic != TTY_MAGIC)
+			ttyp =NULL;
 	}
-	return ((struct tty_struct *) 0);
+	read_unlock(&current->files->file_lock);
+	return ttyp;
 }
 
 static struct tty_struct *get_real_tty(struct tty_struct *tp)

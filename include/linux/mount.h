@@ -21,7 +21,7 @@ struct quota_mount_options
 	struct file *files[MAXQUOTAS];		/* fp's to quotafiles */
 	time_t inode_expire[MAXQUOTAS];		/* expiretime for inode-quota */
 	time_t block_expire[MAXQUOTAS];		/* expiretime for block-quota */
-	char rsquash[MAXQUOTAS];		/* for quotas threath root as any other user */
+	char rsquash[MAXQUOTAS];		/* for quotas treat root as any other user */
 };
 
 struct vfsmount

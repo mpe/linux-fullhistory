@@ -123,7 +123,7 @@ struct netdev_entry hpplus_drv =
 {"hpplus", hpp_probe1, HP_IO_EXTENT, hpplus_portlist};
 #else
 
-__initfunc(int hp_plus_probe(struct device *dev))
+int __init hp_plus_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -146,7 +146,7 @@ __initfunc(int hp_plus_probe(struct device *dev))
 #endif
 
 /* Do the interesting part of the probe at a single address. */
-__initfunc(int hpp_probe1(struct device *dev, int ioaddr))
+int __init hpp_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	unsigned char checksum = 0;

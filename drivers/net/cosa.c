@@ -362,7 +362,7 @@ static void debug_status_out(struct cosa_data *cosa, int status);
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(static int cosa_init(void))
+static int __init cosa_init(void)
 #endif
 {
 	int i;

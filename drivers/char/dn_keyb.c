@@ -570,7 +570,7 @@ static struct miscdevice apollo_mouse = {
         APOLLO_MOUSE_MINOR, "apollomouse", &apollo_mouse_fops
 };
 
-__initfunc(int dn_keyb_init(void)) {
+int __init dn_keyb_init(void){
 
 /*  printk("dn_keyb_init\n"); */
 

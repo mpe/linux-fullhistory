@@ -81,8 +81,7 @@ static void ariadne2_block_output(struct device *dev, const int count,
 				  const unsigned char *buf,
 				  const int start_page);
 
-
-__initfunc(int ariadne2_probe(struct device *dev))
+int __init ariadne2_probe(struct device *dev)
 {
     unsigned int key;
     const struct ConfigDev *cd;
@@ -101,8 +100,8 @@ __initfunc(int ariadne2_probe(struct device *dev))
     return -ENODEV;
 }
 
-__initfunc(static int ariadne2_init(struct device *dev, unsigned int key,
-				    unsigned long board))
+static int __init ariadne2_init(struct device *dev, unsigned int key,
+				    unsigned long board)
 {
     int i;
     unsigned char SA_prom[32];

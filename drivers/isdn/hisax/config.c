@@ -442,8 +442,8 @@ HiSax_mod_inc_use_count(void)
 #ifdef MODULE
 #define HiSax_init init_module
 #else
-__initfunc(void
-HiSax_setup(char *str, int *ints))
+void __init 
+HiSax_setup(char *str, int *ints)
 {
 	int i, j, argc;
 
@@ -1236,8 +1236,8 @@ HiSax_reportcard(int cardnr)
 }
 
 
-__initfunc(int
-HiSax_init(void))
+int __init 
+HiSax_init(void)
 {
 	int i;
 

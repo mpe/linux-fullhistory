@@ -324,8 +324,8 @@ end:
 
 /* Check for a network adaptor of this type, and return '0' if one exists.
  */
-__initfunc(int
-bionet_probe(struct device *dev)) {
+int __init 
+bionet_probe(struct device *dev){
 	unsigned char station_addr[6];
 	static unsigned version_printed = 0;
 	static int no_more_found = 0; /* avoid "Probing for..." printed 4 times */

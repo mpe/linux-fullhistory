@@ -157,7 +157,7 @@ static void memcpyw(u16 *dest, u16 *src, int len)
 
 #endif
 
-__initfunc(int hydra_probe(struct device *dev))
+int __init hydra_probe(struct device *dev)
 {
 	struct hydra_private *priv;
 	u32 board;

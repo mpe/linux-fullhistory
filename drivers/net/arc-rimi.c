@@ -100,7 +100,7 @@ MODULE_PARM(irq, "i");
 MODULE_PARM(device, "s");
 MODULE_PARM (node, "i");
 #else
-__initfunc(void arcrimi_setup (char *str, int *ints));
+void __init arcrimi_setup (char *str, int *ints);
 extern struct device arcnet_devs[];
 extern char arcnet_dev_names[][10];
 extern int arcnet_num_devs;
@@ -140,7 +140,7 @@ static const char *version =
  * them.  In fact, we can't even get their node ID automatically.  So, we
  * need to be passed a specific shmem address, IRQ, and node ID.
  */
-__initfunc(int arcrimi_probe(struct device *dev))
+int __init arcrimi_probe(struct device *dev)
 {
   BUGLVL(D_NORMAL) printk(version);
   BUGMSG(D_NORMAL,"Given: node %02Xh, shmem %lXh, irq %d\n",
@@ -167,7 +167,7 @@ __initfunc(int arcrimi_probe(struct device *dev))
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
-__initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem))
+int __init arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
 {
   struct arcnet_local *lp;
   u_long first_mirror,last_mirror;
@@ -797,7 +797,7 @@ void cleanup_module(void)
 
 #else
 
-__initfunc(void arcrimi_setup (char *str, int *ints))
+void __init arcrimi_setup (char *str, int *ints)
 {
   struct device *dev;
 

@@ -31,7 +31,7 @@ baycom_par:
   Its devices are called bcp0 through bcp3.
 
 baycom_epp:
-  This driver supports the epp modem.
+  This driver supports the EPP modem.
   Its devices are called bce0 through bce3.
   This driver is work-in-progress.
 
@@ -60,10 +60,10 @@ picpar: This is a redesign of the par96 modem by Henning Rech, DF9IC. The modem
         an additional power supply. Furthermore, it incorporates a carrier
         detect circuitry.
 
-epp:    This is a high speed modem adaptor that connects to an enhanced parallel port.
+EPP:    This is a high-speed modem adaptor that connects to an enhanced parallel port.
         Its target audience is users working over a high speed hub (76.8kbit/s).
 
-eppfpga: This is a redesign of the epp adaptor.
+eppfpga: This is a redesign of the EPP adaptor.
 
 
 

@@ -744,8 +744,8 @@ extern struct foreign_interface amd7930_foreign_interface;
 extern struct foreign_interface dbri_foreign_interface;
 #endif
 
-__initfunc(int
-setup_foreign(struct IsdnCard *card))
+int __init 
+setup_foreign(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

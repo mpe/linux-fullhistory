@@ -800,16 +800,16 @@ static int coda_dentry_revalidate(struct dentry *de, int flags)
 
 	shrink_dcache_parent(de);
 
+	/* propagate for a flush */
+	if (cii->c_flags & C_FLUSH) 
+		coda_flag_inode_children(inode, C_FLUSH);
+
 	if (de->d_count > 1) {
 		/* pretend it's valid, but don't change the flags */
 		CDEBUG(D_DOWNCALL, "BOOM for: ino %ld, %s\n",
 		       de->d_inode->i_ino, coda_f2s(&cii->c_fid));
 		return 1;
 	}
-
-	/* propagate for a flush */
-	if (cii->c_flags & C_FLUSH) 
-		coda_flag_inode_children(inode, C_FLUSH);
 
 	/* clear the flags. */
 	cii->c_flags &= ~(C_VATTR | C_PURGE | C_FLUSH);

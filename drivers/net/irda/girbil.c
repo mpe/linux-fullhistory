@@ -76,7 +76,7 @@ static struct dongle dongle = {
 	girbil_init_qos,
 };
 
-__initfunc(int girbil_init(void))
+int __init girbil_init(void)
 {
 	return irda_device_register_dongle(&dongle);
 }

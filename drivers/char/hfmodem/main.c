@@ -159,7 +159,7 @@ static void parptt_wakeup(void *handle)
 }
 
 /* --------------------------------------------------------------------- */
-__initfunc(static int check_lpt(struct hfmodem_state *dev, unsigned int iobase))
+static int __init check_lpt(struct hfmodem_state *dev, unsigned int iobase)
 {
 	struct parport *pp = parport_enumerate();
 
@@ -178,7 +178,7 @@ __initfunc(static int check_lpt(struct hfmodem_state *dev, unsigned int iobase))
 enum uart { c_uart_unknown, c_uart_8250, c_uart_16450, c_uart_16550, c_uart_16550A };
 static const char *uart_str[] __initdata = { "unknown", "8250", "16450", "16550", "16550A" };
 
-__initfunc(static enum uart check_uart(unsigned int iobase))
+static enum uart __init check_uart(unsigned int iobase)
 {
         unsigned char b1,b2,b3;
         enum uart u;
@@ -214,7 +214,7 @@ __initfunc(static enum uart check_uart(unsigned int iobase))
 
 /* --------------------------------------------------------------------- */
 
-__initfunc(static int check_midi(unsigned int iobase))
+static int __init check_midi(unsigned int iobase)
 {
         unsigned long timeout;
         unsigned long flags;
@@ -262,7 +262,7 @@ static void output_status(struct hfmodem_state *dev, int ptt)
 
 /* --------------------------------------------------------------------- */
 
-__initfunc(static void output_check(struct hfmodem_state *dev))
+static void __init output_check(struct hfmodem_state *dev)
 {
         enum uart u = c_uart_unknown;
 
@@ -624,7 +624,7 @@ MODULE_PARM_DESC(rdtsc_ok, "Set to 0 to disable the use of the rdtsc instruction
 
 #endif
 
-__initfunc(int init_module(void))
+int __init init_module(void)
 {
 	int i;
 
@@ -677,7 +677,7 @@ void cleanup_module(void)
 
 static int hw = 0;
 
-__initfunc(void hfmodem_setup(char *str, int *ints))
+void __init hfmodem_setup(char *str, int *ints)
 {
         if (ints[0] < 7) {
                 printk(KERN_WARNING "%s: setup: too few parameters\n", hfmodem_drvname);
@@ -698,7 +698,7 @@ __initfunc(void hfmodem_setup(char *str, int *ints))
         hfmodem_refclock_setscale(ints[ints[0]-2], ints[ints[0]-1], ints[ints[0]]);
 }
 
-__initfunc(void hfmodem_init(void))
+void __init hfmodem_init(void)
 {
         int i;
 

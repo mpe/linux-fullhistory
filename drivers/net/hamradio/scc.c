@@ -2193,7 +2193,7 @@ struct proc_dir_entry scc_proc_dir_entry =
 /* * 			Init SCC driver 			      * */
 /* ******************************************************************** */
 
-__initfunc(int scc_init (void))
+int __init scc_init (void)
 {
 	int chip, chan, k, result;
 	char devname[10];

@@ -533,7 +533,7 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-__initfunc(int baycom_par_init(void))
+int __init baycom_par_init(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -593,7 +593,7 @@ MODULE_DESCRIPTION("Baycom par96 and picpar amateur radio modem driver");
 
 #endif
 
-__initfunc(int init_module(void))
+int __init init_module(void)
 {
 	int i;
 
@@ -633,7 +633,7 @@ void cleanup_module(void)
  * mode: par96,picpar
  */
 
-__initfunc(void baycom_par_setup(char *str, int *ints))
+void __init baycom_par_setup(char *str, int *ints)
 {
 	int i;
 

@@ -1294,7 +1294,7 @@ static void cleanup(int level)
    check_region, 15 bits of one port and 6 of another make things
    likely enough to accept the region on the first hit...
  */
-__initfunc(int probe_base_port(int base))
+int __init probe_base_port(int base)
 {
   int b=0x300, e=0x370;		/* this is the range of start addresses */
   volatile int fool, i;
@@ -1314,7 +1314,7 @@ __initfunc(int probe_base_port(int base))
 
 #if !defined(MODULE) || defined(AUTO_PROBE_MODULE)
 /* Probe for irq# nr. If nr==0, probe for all possible irq's. */
-__initfunc(int probe_irq(int nr)) {
+int __init probe_irq(int nr){
   int irqs, irq;
   outw(dc_normal | READ_AHEAD, r_data_control);	/* disable irq-generation */
   sti(); 
@@ -1328,7 +1328,7 @@ __initfunc(int probe_irq(int nr)) {
 }
 #endif
 
-__initfunc(int cm206_init(void))
+int __init cm206_init(void)
 {
   uch e=0;
   long int size=sizeof(struct cm206_struct);
@@ -1413,7 +1413,7 @@ __initfunc(int cm206_init(void))
 
 static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
 
-__initfunc(void parse_options(void))
+void __init parse_options(void)
 {
   int i;
   for (i=0; i<2; i++) {
@@ -1447,7 +1447,7 @@ void cleanup_module(void)
 
 /* This setup function accepts either `auto' or numbers in the range
  * 3--11 (for irq) or 0x300--0x370 (for base port) or both. */
-__initfunc(void cm206_setup(char *s, int *p))
+void __init cm206_setup(char *s, int *p)
 {
   int i;
   if (!strcmp(s, "auto")) auto_probe=1;

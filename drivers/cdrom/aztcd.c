@@ -1087,7 +1087,7 @@ static int aztGetToc(int multi)
 #ifdef AZT_KERNEL_PRIOR_2_1
 void aztcd_setup(char *str, int *ints)
 #else
-__initfunc(void aztcd_setup(char *str, int *ints))
+void __init aztcd_setup(char *str, int *ints)
 #endif
 {  if (ints[0] > 0)
       azt_port = ints[1];
@@ -1617,7 +1617,7 @@ static int  aztcd_release(struct inode * inode, struct file * file)
 #ifdef AZT_KERNEL_PRIOR_2_1
 int aztcd_init(void)
 #else
-__initfunc(int aztcd_init(void))
+int __init aztcd_init(void)
 #endif
 {       long int count, max_count;
 	unsigned char result[50];

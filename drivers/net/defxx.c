@@ -446,11 +446,8 @@ static inline void dfx_port_read_long(
  *   the device structure.
  */
 
-__initfunc(int dfx_probe(
-	struct device *dev
-	))
-
-	{
+int __init dfx_probe(struct device *dev)
+{
 	int				i;				/* used in for loops */
 	int				version_disp;	/* was version info string already displayed? */
 	int				port_len;		/* length of port address range (in bytes) */
@@ -641,12 +638,8 @@ __initfunc(int dfx_probe(
  *   None
  */
 
-__initfunc(struct device *dfx_alloc_device(
-	struct device	*dev,
-	u16				iobase
-	))
-
-	{
+struct device __init *dfx_alloc_device( struct device *dev, u16 iobase)
+{
 	struct device *tmp_dev;		/* pointer to a device structure */
 
 	DBG_printk("In dfx_alloc_device...\n");
@@ -736,11 +729,8 @@ __initfunc(struct device *dfx_alloc_device(
  *   enabled yet.
  */
 
-__initfunc(void dfx_bus_init(
-	struct device *dev
-	))
-
-	{
+void __init dfx_bus_init(struct device *dev)
+{
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
 	u8			val;	/* used for I/O read/writes */
 
@@ -871,11 +861,8 @@ __initfunc(void dfx_bus_init(
  *   None
  */
 
-__initfunc(void dfx_bus_config_check(
-	DFX_board_t *bp
-	))
-
-	{
+void __init dfx_bus_config_check(DFX_board_t *bp)
+{
 	int	status;				/* return code from adapter port control call */
 	u32	slot_id;			/* EISA-bus hardware id (DEC3001, DEC3002,...) */
 	u32	host_data;			/* LW data returned from port control call */
@@ -975,11 +962,8 @@ __initfunc(void dfx_bus_config_check(
  *   returning from this routine.
  */
 
-__initfunc(int dfx_driver_init(
-	struct device *dev
-	))
-
-	{
+int __init dfx_driver_init(struct device *dev)
+{
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
 	int			alloc_size;			/* total buffer size needed */
 	char		*top_v, *curr_v;	/* virtual addrs into memory block */

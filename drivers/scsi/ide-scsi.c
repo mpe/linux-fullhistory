@@ -1,7 +1,7 @@
 /*
- * linux/drivers/scsi/ide-scsi.c	Version 0.6		Jan  27, 1998
+ * linux/drivers/scsi/ide-scsi.c	Version 0.9		Jul   4, 1999
  *
- * Copyright (C) 1996 - 1998 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1996 - 1999 Gadi Oxman <gadio@netvision.net.il>
  */
 
 /*
@@ -25,10 +25,11 @@
  *                       Fix MODE_SENSE_6/MODE_SELECT_6/INQUIRY translation.
  * Ver 0.7   Dec 04 98   Ignore commands where lun != 0 to avoid multiple
  *                        detection of devices with CONFIG_SCSI_MULTI_LUN
- * Ver 0.8   Feb 05 99   Optical media need translation too. 
+ * Ver 0.8   Feb 05 99   Optical media need translation too. Reverse 0.7.
+ * Ver 0.9   Jul 04 99   Fix a bug in SG_SET_TRANSFORM.
  */
 
-#define IDESCSI_VERSION "0.6"
+#define IDESCSI_VERSION "0.9"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -631,9 +632,13 @@ int idescsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 {
 	ide_drive_t *drive = idescsi_drives[dev->id];
 	idescsi_scsi_t *scsi = drive->driver_data;
+	int enable = (int) arg;
 
 	if (cmd == SG_SET_TRANSFORM) {
-		set_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
+		if (enable)
+			set_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
+		else
+			clear_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
 		return 0;
 	} else if (cmd == SG_GET_TRANSFORM)
 		return put_user(test_bit(IDESCSI_SG_TRANSFORM, &scsi->transform), (int *) arg);

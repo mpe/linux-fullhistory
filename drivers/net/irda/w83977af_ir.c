@@ -105,7 +105,7 @@ static int  w83977af_net_close(struct device *dev);
  *    Initialize chip. Just try to find out how many chips we are dealing with
  *    and where they are
  */
-__initfunc(int w83977af_init(void))
+int __init w83977af_init(void)
 {
         int i;
 

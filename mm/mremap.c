@@ -57,11 +57,13 @@ static inline pte_t *alloc_one_pte(struct mm_struct *mm, unsigned long addr)
 	return pte;
 }
 
-static inline int copy_one_pte(pte_t * src, pte_t * dst)
+static inline int copy_one_pte(struct mm_struct *mm, pte_t * src, pte_t * dst)
 {
 	int error = 0;
-	pte_t pte = *src;
+	pte_t pte;
 
+	spin_lock(&mm->page_table_lock);
+	pte = *src;
 	if (!pte_none(pte)) {
 		error++;
 		if (dst) {
@@ -70,6 +72,7 @@ static inline int copy_one_pte(pte_t * src, pte_t * dst)
 			error--;
 		}
 	}
+	spin_unlock(&mm->page_table_lock);
 	return error;
 }
 
@@ -80,7 +83,7 @@ static int move_one_page(struct mm_struct *mm, unsigned long old_addr, unsigned 
 
 	src = get_one_pte(mm, old_addr);
 	if (src)
-		error = copy_one_pte(src, alloc_one_pte(mm, new_addr));
+		error = copy_one_pte(mm, src, alloc_one_pte(mm, new_addr));
 	return error;
 }
 
@@ -134,14 +137,12 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			new_vma->vm_start = new_addr;
 			new_vma->vm_end = new_addr+new_len;
 			new_vma->vm_offset = vma->vm_offset + (addr - vma->vm_start);
-			lock_kernel();
 			if (new_vma->vm_file)
-				atomic_inc(&new_vma->vm_file->f_count);
+				get_file(new_vma->vm_file);
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
-			unlock_kernel();
 			do_munmap(addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {

@@ -150,8 +150,8 @@ static void set_multicast_list(struct device *dev);
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
-__initfunc(int
-atp_init(struct device *dev))
+int __init 
+atp_init(struct device *dev)
 {
 	int *port, ports[] = {0x378, 0x278, 0x3bc, 0};
 	int base_addr = dev->base_addr;
@@ -173,7 +173,7 @@ atp_init(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(static int atp_probe1(struct device *dev, short ioaddr))
+static int __init atp_probe1(struct device *dev, short ioaddr)
 {
 	int saved_ctrl_reg, status;
 
@@ -259,7 +259,7 @@ __initfunc(static int atp_probe1(struct device *dev, short ioaddr))
 }
 
 /* Read the station address PROM, usually a word-wide EEPROM. */
-__initfunc(static void get_node_ID(struct device *dev))
+static void __init get_node_ID(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
 	int sa_offset = 0;
@@ -291,7 +291,7 @@ __initfunc(static void get_node_ID(struct device *dev))
  * DO :	 _________X_______X
  */
 
-__initfunc(static unsigned short eeprom_op(short ioaddr, unsigned int cmd))
+static unsigned short __init eeprom_op(short ioaddr, unsigned int cmd)
 {
 	unsigned eedata_out = 0;
 	int num_bits = EE_CMD_SIZE;

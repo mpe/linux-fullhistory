@@ -1339,7 +1339,7 @@ static inline void elp_init(struct device *dev)
  * Called only by elp_autodetect
  ************************************************************/
 
-__initfunc(static int elp_sense(struct device *dev))
+static int __init elp_sense(struct device *dev)
 {
 	int timeout;
 	int addr = dev->base_addr;
@@ -1406,7 +1406,7 @@ __initfunc(static int elp_sense(struct device *dev))
  * Called only by eplus_probe
  *************************************************************/
 
-__initfunc(static int elp_autodetect(struct device *dev))
+static int __init elp_autodetect(struct device *dev)
 {
 	int idx = 0;
 
@@ -1450,7 +1450,7 @@ __initfunc(static int elp_autodetect(struct device *dev))
  * work at all if it was in a weird state).
  */
 
-__initfunc(int elplus_probe(struct device *dev))
+int __init elplus_probe(struct device *dev)
 {
 	elp_device *adapter;
 	int i, tries, tries1, timeout, okay;

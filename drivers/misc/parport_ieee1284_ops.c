@@ -708,7 +708,36 @@ size_t parport_ieee1284_epp_write_data (struct parport *port,
 					const void *buffer, size_t len,
 					int flags)
 {
-	return 0; /* FIXME */
+	/* This is untested */
+	unsigned char *bp = (unsigned char *) buffer;
+	size_t ret = 0;
+
+	parport_frob_control (port,
+			      PARPORT_CONTROL_STROBE |
+			      PARPORT_CONTROL_AUTOFD |
+			      PARPORT_CONTROL_SELECT,
+			      PARPORT_CONTROL_STROBE |
+			      PARPORT_CONTROL_SELECT);
+	port->ops->data_forward (port);
+	for (; len > 0; len--, bp++) {
+		parport_write_data (port, *bp);
+
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY))
+			break;
+
+		/* Strobe data */
+		parport_frob_control (port, PARPORT_CONTROL_AUTOFD,
+				      PARPORT_CONTROL_AUTOFD);
+
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+			break;
+
+		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
+		ret++;
+	}
+
+	return ret;
 }
 
 /* EPP mode, reverse channel, data. */
@@ -716,7 +745,34 @@ size_t parport_ieee1284_epp_read_data (struct parport *port,
 				       void *buffer, size_t len,
 				       int flags)
 {
-	return 0; /* FIXME */
+	/* This is untested. */
+	unsigned char *bp = (unsigned char *) buffer;
+	unsigned ret = 0;
+
+	parport_frob_control (port,
+			      PARPORT_CONTROL_STROBE |
+			      PARPORT_CONTROL_AUTOFD |
+			      PARPORT_CONTROL_SELECT, 0);
+	port->ops->data_reverse (port);
+	for (; len > 0; len--, bp++) {
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY))
+			break;
+
+		parport_frob_control (port, PARPORT_CONTROL_AUTOFD,
+				      PARPORT_CONTROL_AUTOFD);
+
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+			break;
+
+		*bp = parport_read_data (port);
+
+		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
+		ret++;
+	}
+	port->ops->data_forward (port);
+
+	return ret;
 }
 
 /* EPP mode, forward channel, addresses. */
@@ -724,7 +780,36 @@ size_t parport_ieee1284_epp_write_addr (struct parport *port,
 					const void *buffer, size_t len,
 					int flags)
 {
-	return 0; /* FIXME */
+	/* This is untested */
+	unsigned char *bp = (unsigned char *) buffer;
+	size_t ret = 0;
+
+	parport_frob_control (port,
+			      PARPORT_CONTROL_STROBE |
+			      PARPORT_CONTROL_SELECT |
+			      PARPORT_CONTROL_AUTOFD,
+			      PARPORT_CONTROL_STROBE |
+			      PARPORT_CONTROL_SELECT);
+	port->ops->data_forward (port);
+	for (; len > 0; len--, bp++) {
+		parport_write_data (port, *bp);
+
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY))
+			break;
+
+		/* Strobe data */
+		parport_frob_control (port, PARPORT_CONTROL_SELECT,
+				      PARPORT_CONTROL_SELECT);
+
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+			break;
+
+		parport_frob_control (port, PARPORT_CONTROL_SELECT, 0);
+		ret++;
+	}
+
+	return ret;
 }
 
 /* EPP mode, reverse channel, addresses. */
@@ -732,5 +817,32 @@ size_t parport_ieee1284_epp_read_addr (struct parport *port,
 				       void *buffer, size_t len,
 				       int flags)
 {
-	return 0; /* FIXME */
+	/* This is untested. */
+	unsigned char *bp = (unsigned char *) buffer;
+	unsigned ret = 0;
+
+	parport_frob_control (port,
+			      PARPORT_CONTROL_STROBE |
+			      PARPORT_CONTROL_SELECT |
+			      PARPORT_CONTROL_AUTOFD, 0);
+	port->ops->data_reverse (port);
+	for (; len > 0; len--, bp++) {
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY))
+			break;
+
+		parport_frob_control (port, PARPORT_CONTROL_SELECT,
+				      PARPORT_CONTROL_SELECT);
+
+		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+			break;
+
+		*bp = parport_read_data (port);
+
+		parport_frob_control (port, PARPORT_CONTROL_SELECT, 0);
+		ret++;
+	}
+	port->ops->data_forward (port);
+
+	return ret;
 }

@@ -1486,8 +1486,8 @@ static int sonycd535_block_size = CDU535_BLOCK_SIZE;
 /*
  * Initialize the driver.
  */
-__initfunc(int
-sony535_init(void))
+int __init 
+sony535_init(void)
 {
 	struct s535_sony_drive_config drive_config;
 	Byte cmd_buff[3];
@@ -1655,8 +1655,8 @@ sony535_init(void))
  *
  * the address value has to be the existing CDROM port address.
  */
-__initfunc(void
-sonycd535_setup(char *strings, int *ints))
+void __init 
+sonycd535_setup(char *strings, int *ints)
 {
 	/* if IRQ change and default io base desired,
 	 * then call with io base of 0

@@ -1050,6 +1050,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 
     SCpnt->transfersize = rscsi_disks[dev].sector_size;
     SCpnt->underflow = this_count << 9;
+    SCpnt->cmd_len = 0;
     scsi_do_cmd (SCpnt, (void *) cmd, buff,
 		 this_count * rscsi_disks[dev].sector_size,
 		 rw_intr,

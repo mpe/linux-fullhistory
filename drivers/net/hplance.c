@@ -67,7 +67,7 @@ static struct hplance_private *root_hplance_dev = NULL;
 #endif
 
 /* Find all the HP Lance boards and initialise them... */
-__initfunc(int hplance_probe(struct device *dev))
+int __init hplance_probe(struct device *dev)
 {
         int cards = 0, called = 0;
 
@@ -98,7 +98,7 @@ __initfunc(int hplance_probe(struct device *dev))
 }
 
 /* Initialise a single lance board at the given select code */
-__initfunc (static int hplance_init(struct device *dev, int scode))
+static int __init hplance_init(struct device *dev, int scode)
 {
         /* const char *name = dio_scodetoname(scode); */
         static const char name[] = "HP LANCE";

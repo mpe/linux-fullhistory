@@ -561,8 +561,8 @@ bad:
 /* Check for a network adaptor of this type, and return '0' if one exists.
  */
 
-__initfunc(extern int
-pamsnet_probe (dev))
+extern int __init 
+pamsnet_probe (dev)
 	struct device *dev;
 {
 	int i;

@@ -84,7 +84,7 @@ struct netdev_entry netcard_drv =
 {"hp", hp_probe1, HP_IO_EXTENT, hppclan_portlist};
 #else
 
-__initfunc(int hp_probe(struct device *dev))
+int __init hp_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -106,7 +106,7 @@ __initfunc(int hp_probe(struct device *dev))
 }
 #endif
 
-__initfunc(int hp_probe1(struct device *dev, int ioaddr))
+int __init hp_probe1(struct device *dev, int ioaddr)
 {
 	int i, board_id, wordmode;
 	const char *name;

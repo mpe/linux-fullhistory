@@ -476,10 +476,8 @@ static char   *adapter_name = '\0';        /* If no PROM when loadable module
     outw(CSR0, DEPCA_ADDR);\
     outw(STOP, DEPCA_DATA)
 
-
-
-__initfunc(int
-depca_probe(struct device *dev))
+int __init 
+depca_probe(struct device *dev)
 {
   int tmp = num_depcas, status = -ENODEV;
   u_long iobase = dev->base_addr;
@@ -512,8 +510,8 @@ depca_probe(struct device *dev))
   return status;
 }
 
-__initfunc(static int
-depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot))
+static int __init 
+depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot)
 {
   struct depca_private *lp;
   int i, j, offset, netRAM, mem_len, status=0;
@@ -1250,8 +1248,8 @@ static void SetMulticastFilter(struct device *dev)
 /*
 ** Microchannel bus I/O device probe
 */
-__initfunc(static void
-mca_probe(struct device *dev, u_long ioaddr))
+static void __init 
+mca_probe(struct device *dev, u_long ioaddr)
 {
     unsigned char pos[2];
     unsigned char where;
@@ -1399,8 +1397,8 @@ responding.\n", dev->name, iobase);
 /*
 ** ISA bus I/O device probe
 */
-__initfunc(static void
-isa_probe(struct device *dev, u_long ioaddr))
+static void __init 
+isa_probe(struct device *dev, u_long ioaddr)
 {
   int i = num_depcas, maxSlots;
   s32 ports[] = DEPCA_IO_PORTS;
@@ -1438,8 +1436,8 @@ isa_probe(struct device *dev, u_long ioaddr))
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
 */
-__initfunc(static void
-eisa_probe(struct device *dev, u_long ioaddr))
+static void __init 
+eisa_probe(struct device *dev, u_long ioaddr)
 {
   int i, maxSlots;
   u_long iobase;
@@ -1485,8 +1483,8 @@ eisa_probe(struct device *dev, u_long ioaddr))
 ** are not available then insert a new device structure at the end of
 ** the current list.
 */
-__initfunc(static struct device *
-alloc_device(struct device *dev, u_long iobase))
+static struct device * __init 
+alloc_device(struct device *dev, u_long iobase)
 {
     struct device *adev = NULL;
     int fixed = 0, new_dev = 0;
@@ -1530,8 +1528,8 @@ alloc_device(struct device *dev, u_long iobase))
 ** If at end of eth device list and can't use current entry, malloc
 ** one up. If memory could not be allocated, print an error message.
 */
-__initfunc(static struct device *
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
+static struct device * __init 
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
 {
     struct device *new;
 
@@ -1556,8 +1554,8 @@ insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
     return dev;
 }
 
-__initfunc(static int
-depca_dev_index(char *s))
+static int __init 
+depca_dev_index(char *s)
 {
     int i=0, j=0;
 
@@ -1576,8 +1574,8 @@ depca_dev_index(char *s))
 ** and Boot (readb) ROM. This will also give us a clue to the network RAM
 ** base address.
 */
-__initfunc(static void
-DepcaSignature(char *name, u_long paddr))
+static void __init 
+DepcaSignature(char *name, u_long paddr)
 {
   u_int i,j,k;
   const char *signatures[] = DEPCA_SIGNATURE;
@@ -1629,8 +1627,8 @@ DepcaSignature(char *name, u_long paddr))
 ** PROM address counter is correctly positioned at the start of the
 ** ethernet address for later read out.
 */
-__initfunc(static int
-DevicePresent(u_long ioaddr))
+static int __init 
+DevicePresent(u_long ioaddr)
 {
   union {
     struct {
@@ -1682,8 +1680,8 @@ DevicePresent(u_long ioaddr))
 ** reason: access the upper half of the PROM with x=0; access the lower half
 ** with x=1.
 */
-__initfunc(static int
-get_hw_addr(struct device *dev))
+static int __init 
+get_hw_addr(struct device *dev)
 {
   u_long ioaddr = dev->base_addr;
   int i, k, tmp, status = 0;
@@ -1771,8 +1769,8 @@ static int load_packet(struct device *dev, struct sk_buff *skb)
 /*
 ** Look for a particular board name in the EISA configuration space
 */
-__initfunc(static int
-EISA_signature(char *name, s32 eisa_id))
+static int __init 
+EISA_signature(char *name, s32 eisa_id)
 {
   u_int i;
   const char *signatures[] = DEPCA_SIGNATURE;

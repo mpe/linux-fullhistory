@@ -67,6 +67,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_IBMOL),y)
+L_OBJS += olympic.o
+else
+  ifeq ($(CONFIG_IBMOL),m)
+  M_OBJS += olympic.o
+  endif
+endif
+
 ifeq ($(CONFIG_SKTR),y)
 L_OBJS += sktr.o
 else
@@ -422,6 +430,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUNBMAC),y)
+L_OBJS += sunbmac.o
+else
+  ifeq ($(CONFIG_SUNBMAC),m)
+  M_OBJS += sunbmac.o
+  endif
+endif
+
 ifeq ($(CONFIG_MYRI_SBUS),y)
 L_OBJS += myri_sbus.o
 else
@@ -563,6 +579,14 @@ L_OBJS += wavelan.o
 else
   ifeq ($(CONFIG_WAVELAN),m)
   M_OBJS += wavelan.o
+  endif
+endif
+
+ifeq ($(CONFIG_ARLAN),y)
+LX_OBJS += arlan.o arlan-proc.o
+else
+  ifeq ($(CONFIG_ARLAN),m)
+  MX_OBJS += arlan.o arlan-proc.o
   endif
 endif
 
@@ -763,6 +787,19 @@ else
   M_OBJS += hostess_sv11.o
   endif
 endif
+
+ifeq ($(CONFIG_SEALEVEL_4021),y)
+L_OBJS += sealevel.o
+CONFIG_85230_BUILTIN = y
+CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_SEALEVEL_4021),m)
+  CONFIG_85230_MODULE = y
+  CONFIG_SYNCPPP_MODULE = y
+  M_OBJS += sealevel.o
+  endif
+endif
+
 
 ifeq ($(CONFIG_COSA),y)
 L_OBJS += cosa.o
@@ -1061,15 +1098,6 @@ ifeq ($(CONFIG_CYCLADES_SYNC),y)
   L_OBJS += cycx_main.o
   ifeq ($(CONFIG_CYCLOMX_X25),y)
     L_OBJS += cycx_x25.o
-  endif
-endif
-
-ifeq ($(CONFIG_CYCLADES_SYNC),m)
-  MX_OBJS += cycx_drv.o
-  M_OBJS += cyclomx.o
-  CYCLOMX_OBJS = cycx_main.o
-  ifeq ($(CONFIG_CYCLOMX_X25),y)
-    CYCLOMX_OBJS += cycx_x25.o
   endif
 endif
 

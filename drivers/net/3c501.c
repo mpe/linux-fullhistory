@@ -210,7 +210,7 @@ struct net_local
 struct netdev_entry el1_drv = {"3c501", el1_probe1, EL1_IO_EXTENT, netcard_portlist};
 #else
 
-__initfunc(int el1_probe(struct device *dev))
+int __init el1_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -237,7 +237,7 @@ __initfunc(int el1_probe(struct device *dev))
  *	The actual probe.
  */
 
-__initfunc(static int el1_probe1(struct device *dev, int ioaddr))
+static int __init el1_probe1(struct device *dev, int ioaddr)
 {
 	struct net_local *lp;
 	const char *mname;		/* Vendor name */

@@ -937,7 +937,7 @@ static int ax_open_dev(struct device *dev)
 }
 
 /* Initialize AX25 control device -- register AX25 line discipline */
-__initfunc(int mkiss_init_ctrl_dev(void))
+int __init mkiss_init_ctrl_dev(void)
 {
 	int status;
 
@@ -1154,7 +1154,7 @@ static void mkiss_set_termios(struct tty_struct *tty, struct termios *old_termio
 /* * 			Init MKISS driver 			      * */
 /* ******************************************************************** */
 
-__initfunc(static int mkiss_init(void))
+static int __init mkiss_init(void)
 {
 	memset(&mkiss_driver, 0, sizeof(struct tty_driver));
 

@@ -3896,7 +3896,7 @@ static struct file_operations floppy_fops = {
 
 /* Determine the floppy disk controller type */
 /* This routine was written by David C. Niemi */
-__initfunc(static char get_fdc_version(void))
+static char __init get_fdc_version(void)
 {
 	int r;
 
@@ -3974,7 +3974,7 @@ __initfunc(static char get_fdc_version(void))
 
 /* lilo configuration */
 
-__initfunc(static void floppy_set_flags(int *ints,int param, int param2))
+static void __init floppy_set_flags(int *ints,int param, int param2)
 {
 	int i;
 
@@ -3987,7 +3987,7 @@ __initfunc(static void floppy_set_flags(int *ints,int param, int param2))
 	DPRINT("%s flag 0x%x\n", param2 ? "Setting" : "Clearing", param);
 }
 
-__initfunc(static void daring(int *ints,int param, int param2))
+static void __init daring(int *ints,int param, int param2)
 {
 	int i;
 
@@ -4003,7 +4003,7 @@ __initfunc(static void daring(int *ints,int param, int param2))
 	DPRINT("Assuming %s floppy hardware\n", param ? "standard" : "broken");
 }
 
-__initfunc(static void set_cmos(int *ints, int dummy, int dummy2))
+static void __init set_cmos(int *ints, int dummy, int dummy2)
 {
 	int current_drive=0;
 
@@ -4063,7 +4063,7 @@ static struct param_table {
 	{ "L40SX", 0, &print_unex, 0, 0 } };
 
 #define FLOPPY_SETUP
-__initfunc(void floppy_setup(char *str, int *ints))
+void __init floppy_setup(char *str, int *ints)
 {
 	int i;
 	int param;
@@ -4101,7 +4101,7 @@ __initfunc(void floppy_setup(char *str, int *ints))
 static int have_no_fdc= -EIO;
 
 
-__initfunc(int floppy_init(void))
+int __init floppy_init(void)
 {
 	int i,unit,drive;
 
@@ -4362,7 +4362,7 @@ extern char *get_options(char *str, int *ints);
 
 char *floppy=NULL;
 
-__initfunc(static void parse_floppy_cfg_string(char *cfg))
+static void __init parse_floppy_cfg_string(char *cfg)
 {
 	char *ptr;
 	int ints[11];
@@ -4378,7 +4378,7 @@ __initfunc(static void parse_floppy_cfg_string(char *cfg))
 	}
 }
 
-__initfunc(static void mod_setup(char *pattern, void (*setup)(char *, int *)))
+static void __init mod_setup(char *pattern, void (*setup)(char *, int *))
 {
 	unsigned long i;
 	char c;

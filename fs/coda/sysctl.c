@@ -71,6 +71,7 @@ struct coda_permission_stats	coda_permission_stat;
 struct coda_cache_inv_stats	coda_cache_inv_stat;
 struct coda_upcall_stats_entry  coda_upcall_stat[CODA_NCALLS];
 struct coda_upcallstats         coda_callstats;
+int                             coda_upcall_timestamping = 0;
 
 /* keep this in sync with coda.h! */
 char *coda_upcall_names[] = {
@@ -103,9 +104,12 @@ char *coda_upcall_names[] = {
 	"purgeuser   ",   /* 26 */
 	"zapfile     ",   /* 27 */
 	"zapdir      ",   /* 28 */
-	"zapvnode    ",   /* 28 */
+	"noop2       ",   /* 29 */
 	"purgefid    ",   /* 30 */
-	"open_by_path"    /* 31 */
+	"open_by_path",   /* 31 */
+	"resolve     ",   /* 32 */
+	"reintegrate ",   /* 33 */
+	"statfs      "    /* 34 */
 };
 
 
@@ -133,8 +137,7 @@ void reset_coda_cache_inv_stats( void )
 void do_time_stats( struct coda_upcall_stats_entry * pentry, 
 		    unsigned long runtime )
 {
-	
-	unsigned long time = runtime * 1000 /HZ;	/* time in ms */
+	unsigned long time = runtime;	/* time in us */
 	CDEBUG(D_SPECIAL, "time: %ld\n", time);
 
 	if ( pentry->count == 0 ) {
@@ -221,9 +224,12 @@ int do_reset_coda_vfs_stats( ctl_table * table, int write, struct file * filp,
 {
 	if ( write ) {
 		reset_coda_vfs_stats();
+
+		filp->f_pos += *lenp;
+	} else {
+		*lenp = 0;
 	}
-  
-	*lenp = 0;
+
 	return 0;
 }
 
@@ -232,10 +238,19 @@ int do_reset_coda_upcall_stats( ctl_table * table, int write,
 				size_t * lenp )
 {
 	if ( write ) {
+        	if (*lenp > 0) {
+			char c;
+                	if (get_user(c, (char *)buffer))
+			       	return -EFAULT;
+                        coda_upcall_timestamping = (c == '1');
+                }
 		reset_coda_upcall_stats();
+
+		filp->f_pos += *lenp;
+	} else {
+		*lenp = 0;
 	}
-  
-	*lenp = 0;
+
 	return 0;
 }
 
@@ -245,9 +260,12 @@ int do_reset_coda_permission_stats( ctl_table * table, int write,
 {
 	if ( write ) {
 		reset_coda_permission_stats();
+
+		filp->f_pos += *lenp;
+	} else {
+		*lenp = 0;
 	}
-  
-	*lenp = 0;
+
 	return 0;
 }
 
@@ -257,9 +275,12 @@ int do_reset_coda_cache_inv_stats( ctl_table * table, int write,
 {
 	if ( write ) {
 		reset_coda_cache_inv_stats();
+
+		filp->f_pos += *lenp;
+	} else {
+		*lenp = 0;
 	}
   
-	*lenp = 0;
 	return 0;
 }
 
@@ -347,12 +368,12 @@ int coda_upcall_stats_get_info( char * buffer, char ** start, off_t offset,
 	if ( offset < 160) 
 		len += sprintf( buffer + len,"%-79s\n",	"======================");
 	if ( offset < 240) 
-		len += sprintf( buffer + len,"%-79s\n",	"upcall\t\t    count\tavg time(ms)\tstd deviation(ms)");
+		len += sprintf( buffer + len,"%-79s\n",	"upcall              count       avg time(us)    std deviation(us)");
 	if ( offset < 320) 
-		len += sprintf( buffer + len,"%-79s\n",	"------\t\t    -----\t------------\t-----------------");
+		len += sprintf( buffer + len,"%-79s\n",	"------              -----       ------------    -----------------");
 	pos = 320; 
 	for ( i = 0 ; i < CODA_NCALLS ; i++ ) {
-		tmplen += sprintf(tmpbuf,"%s\t%9d\t%10ld\t%10ld", 
+		tmplen += sprintf(tmpbuf,"%s    %9d       %10ld      %10ld", 
 				  coda_upcall_names[i],
 				  coda_upcall_stat[i].count, 
 				  get_time_average(&coda_upcall_stat[i]),
@@ -499,6 +520,7 @@ static void coda_proc_modcount(struct inode *inode, int fill)
 		MOD_INC_USE_COUNT;
 	else
 		MOD_DEC_USE_COUNT;
+			
 }
 
 #endif

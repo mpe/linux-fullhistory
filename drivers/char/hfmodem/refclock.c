@@ -66,7 +66,7 @@ static int rdtsc_ok = 1;
 /* --------------------------------------------------------------------- */
 
 #ifdef __i386__
-__initfunc(static void i386_capability(void))
+static void __init i386_capability(void)
 {
 	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC)
 		rdtsc_ok = 1;
@@ -77,7 +77,7 @@ __initfunc(static void i386_capability(void))
 
 /* --------------------------------------------------------------------- */
 
-__initfunc(void hfmodem_refclock_probe(void))
+void __init hfmodem_refclock_probe(void)
 {
 #ifdef __i386__
 	if (rdtsc_ok) {

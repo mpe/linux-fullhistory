@@ -67,6 +67,7 @@ extern int ewrk3_probe(struct device *);
 extern int de4x5_probe(struct device *);
 extern int el1_probe(struct device *);
 extern int wavelan_probe(struct device *);
+extern int arlan_probe(struct device *);
 extern int el16_probe(struct device *);
 extern int elmc_probe(struct device *);
 extern int skmca_probe(struct device *);
@@ -147,7 +148,7 @@ struct devprobe
  * autoprobe (i.e. a probe that fails to find a card when autoprobing
  * will not be asked to autoprobe again).  It exits when a card is found.
  */
-__initfunc(static int probe_list(struct device *dev, struct devprobe *plist))
+static int __init probe_list(struct device *dev, struct devprobe *plist)
 {
 	struct devprobe *p = plist;
 	unsigned long base_addr = dev->base_addr;
@@ -359,6 +360,9 @@ struct devprobe isa_probes[] __initdata = {
 #ifdef CONFIG_WAVELAN		/* WaveLAN */
 	{wavelan_probe, 0},
 #endif
+#ifdef CONFIG_ARLAN		/* Aironet */
+	{arlan_probe, 0},
+#endif
 #ifdef CONFIG_EL16		/* 3c507 */
 	{el16_probe, 0},
 #endif
@@ -474,7 +478,7 @@ struct devprobe arm_probes[] __initdata = {
  * Unified ethernet device probe, segmented per architecture and
  * per bus interface.
  */
-__initfunc(static int ethif_probe(struct device *dev))
+static int __init ethif_probe(struct device *dev)
 {
 	unsigned long base_addr = dev->base_addr;
 
@@ -522,7 +526,7 @@ __initfunc(static int ethif_probe(struct device *dev))
 }
 
 #ifdef CONFIG_FDDI
-__initfunc(static int fddiif_probe(struct device *dev))
+static int __init fddiif_probe(struct device *dev)
 {
     unsigned long base_addr = dev->base_addr;
 
@@ -719,6 +723,7 @@ struct device eql_dev = {
 #ifdef CONFIG_TR
 /* Token-ring device probe */
 extern int ibmtr_probe(struct device *);
+extern int olympic_probe(struct device *);
 
 static int
 trif_probe(struct device *dev)
@@ -726,6 +731,9 @@ trif_probe(struct device *dev)
     if (1
 #ifdef CONFIG_IBMTR
 	&& ibmtr_probe(dev)
+#endif
+#ifdef CONFIG_IBMOL
+	&& olympic_probe(dev)
 #endif
 #ifdef CONFIG_SKTR
 	&& sktr_probe(dev)

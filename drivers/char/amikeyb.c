@@ -295,7 +295,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	}
 }
 
-__initfunc(int amiga_keyb_init(void))
+int __init amiga_keyb_init(void)
 {
     if (!AMIGAHW_PRESENT(AMI_KEYBOARD))
         return -EIO;
@@ -343,6 +343,6 @@ int amiga_kbdrate( struct kbd_repeat *k )
 }
 
 /* for "kbd-reset" cmdline param */
-__initfunc(void amiga_kbd_reset_setup(char *str, int *ints))
+void __init amiga_kbd_reset_setup(char *str, int *ints)
 {
 }

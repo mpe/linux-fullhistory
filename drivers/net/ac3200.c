@@ -95,7 +95,7 @@ static int ac_close_card(struct device *dev);
 	or the unique value in the station address PROM.
 	*/
 
-__initfunc(int ac3200_probe(struct device *dev))
+int __init ac3200_probe(struct device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -117,7 +117,7 @@ __initfunc(int ac3200_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(static int ac_probe1(int ioaddr, struct device *dev))
+static int __init ac_probe1(int ioaddr, struct device *dev)
 {
 	int i;
 

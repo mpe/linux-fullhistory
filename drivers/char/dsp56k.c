@@ -519,8 +519,7 @@ static struct file_operations dsp56k_fops = {
 
 
 /****** Init and module functions ******/
-
-__initfunc(int dsp56k_init(void))
+int __init dsp56k_init(void)
 {
 	if(!MACH_IS_ATARI || !ATARIHW_PRESENT(DSP56K)) {
 		printk("DSP56k driver: Hardware not present\n");

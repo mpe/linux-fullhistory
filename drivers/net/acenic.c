@@ -177,7 +177,7 @@ static struct device *root_dev = NULL;
 
 static int probed __initdata = 0;
 
-__initfunc(int acenic_probe (struct device *dev))
+int __init acenic_probe (struct device *dev)
 {
 	int boards_found = 0;
 	int version_disp;
@@ -423,7 +423,7 @@ static inline void ace_issue_cmd(struct ace_regs *regs, struct cmd *cmd)
 }
 
 
-__initfunc(static int ace_init(struct device *dev, int board_idx))
+static int __init ace_init(struct device *dev, int board_idx)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -1574,7 +1574,7 @@ static struct net_device_stats *ace_get_stats(struct device *dev)
 }
 
 
-__initfunc(void ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
+void __init ace_copy(struct ace_regs *regs, void *src, u32 dest, int size)
 {
 	unsigned long tdest;
 	u32 *wsrc;
@@ -1609,7 +1609,7 @@ __initfunc(void ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
 }
 
 
-__initfunc(void ace_clear(struct ace_regs *regs, u32 dest, int size))
+void __init ace_clear(struct ace_regs *regs, u32 dest, int size)
 {
 	unsigned long tdest;
 	short tsize = 0, i;
@@ -1642,7 +1642,7 @@ __initfunc(void ace_clear(struct ace_regs *regs, u32 dest, int size))
  * This operation requires the NIC to be halted and is performed with
  * interrupts disabled and with the spinlock hold.
  */
-__initfunc(int ace_load_firmware(struct device *dev))
+int __init ace_load_firmware(struct device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;

@@ -1,6 +1,6 @@
                      Berkshire Products PC Watchdog Card
                    Support for ISA Cards  Revision A and C
-           Documentation and Driver by Ken Hollis <khollis@nurk.org>
+           Documentation and Driver by Ken Hollis <kenji@bitgate.com>
 
  The PC Watchdog is a card that offers the same type of functionality that
  the WDT card does, only it doesn't require an IRQ to run.  Furthermore,
@@ -15,7 +15,7 @@
  The Watchdog Driver will automatically find your watchdog card, and will
  attach a running driver for use with that card.  After the watchdog
  drivers have initialized, you can then talk to the card using the PC
- Watchdog program, available from ftp.bitgate.com:/pub/bitgate/pcwd.
+ Watchdog program, available from http://ftp.bitgate.com/pcwd/.
 
  I suggest putting a "watchdog -d" before the beginning of an fsck, and
  a "watchdog -e -t 1" immediately after the end of an fsck.  (Remember
@@ -128,4 +128,7 @@ int main(int argc, char *argv[])
  And that's all she wrote!
 
  -- Ken Hollis
-    (khollis@nurk.org)
+    (kenji@bitgate.com)
+
+(This documentation may be out of date.  Check
+ http://ftp.bitgate.com/pcwd/ for the absolute latest additions.)

@@ -2324,8 +2324,8 @@ static void scm_detach_fds32(struct msghdr *kmsg, struct scm_cookie *scm)
 			break;
 		}
 		/* Bump the usage count and install the file. */
-		atomic_inc(&fp[i]->f_count);
-		current->files->fd[new_fd] = fp[i];
+		get_file(fp[i]);
+		fd_install(new_fd, fp[i]);
 	}
 
 	if (i > 0) {

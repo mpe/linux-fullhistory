@@ -601,7 +601,7 @@ int dlci_init(struct device *dev)
 	return(0);
 }
 
-__initfunc(int dlci_setup(void))
+int __init dlci_setup(void)
 {
 	int i;
 

@@ -87,7 +87,7 @@ MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
 MODULE_PARM(device, "s");
 #else
-__initfunc(void com90io_setup (char *str, int *ints));
+void __init com90io_setup (char *str, int *ints);
 extern struct device arcnet_devs[];
 extern char arcnet_dev_names[][10];
 extern int arcnet_num_devs;
@@ -193,7 +193,7 @@ static const char *version =
  * it's where we were told it was, and even autoirq
  */
 
-__initfunc(int arc90io_probe(struct device *dev))
+int __init arc90io_probe(struct device *dev)
 {
   int ioaddr=dev->base_addr,status,delayval;
   unsigned long airqmask;
@@ -287,7 +287,7 @@ __initfunc(int arc90io_probe(struct device *dev))
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
-__initfunc(int arc90io_found(struct device *dev,int ioaddr,int airq))
+int __init arc90io_found(struct device *dev,int ioaddr,int airq)
 {
   struct arcnet_local *lp;
 
@@ -914,7 +914,7 @@ void cleanup_module(void)
 
 #else
 
-__initfunc(void com90io_setup (char *str, int *ints))
+void __init com90io_setup (char *str, int *ints)
 {
   struct device *dev;
 

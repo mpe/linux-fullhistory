@@ -60,7 +60,7 @@ static int mouse_irq = MOUSE_IRQ;
 MODULE_PARM(mouse_irq, "i");
 #endif
 
-__initfunc(void bmouse_setup(char *str, int *ints))
+void __init bmouse_setup(char *str, int *ints)
 {
 	if (ints[0] > 0)
 		mouse_irq=ints[1];
@@ -252,7 +252,7 @@ static struct miscdevice bus_mouse = {
 	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
 };
 
-__initfunc(int bus_mouse_init(void))
+int __init bus_mouse_init(void)
 {
 	if (check_region(LOGIBM_BASE, LOGIBM_EXTENT)) {
 	  mouse.present = 0;

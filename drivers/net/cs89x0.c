@@ -145,8 +145,8 @@ static int set_mac_address(struct device *dev, void *addr);
 struct netdev_entry netcard_drv =
 {"netcard", cs89x0_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
-__initfunc(int
-cs89x0_probe(struct device *dev))
+int __init 
+cs89x0_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -195,8 +195,8 @@ writeword(struct device *dev, int portno, int value)
 	outw(value, dev->base_addr + portno);
 }
 
-__initfunc(static int
-wait_eeprom_ready(struct device *dev))
+static int __init 
+wait_eeprom_ready(struct device *dev)
 {
 	int timeout = jiffies;
 	/* check to see if the EEPROM is ready, a timeout is used -
@@ -208,8 +208,8 @@ wait_eeprom_ready(struct device *dev))
 	return 0;
 }
 
-__initfunc(static int
-get_eeprom_data(struct device *dev, int off, int len, int *buffer))
+static int __init 
+get_eeprom_data(struct device *dev, int off, int len, int *buffer)
 {
 	int i;
 
@@ -226,8 +226,8 @@ get_eeprom_data(struct device *dev, int off, int len, int *buffer))
         return 0;
 }
 
-__initfunc(static int
-get_eeprom_cksum(int off, int len, int *buffer))
+static int  __init 
+get_eeprom_cksum(int off, int len, int *buffer)
 {
 	int i, cksum;
 
@@ -244,7 +244,7 @@ get_eeprom_cksum(int off, int len, int *buffer))
    probes on the ISA bus.  A good device probes avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-__initfunc(static int cs89x0_probe1(struct device *dev, int ioaddr))
+static int __init cs89x0_probe1(struct device *dev, int ioaddr)
 {
 	struct net_local *lp;
 	static unsigned version_printed = 0;
@@ -390,10 +390,8 @@ __initfunc(static int cs89x0_probe1(struct device *dev, int ioaddr))
 	return 0;
 }
 
-
-
-__initfunc(void
-reset_chip(struct device *dev))
+void  __init 
+reset_chip(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;

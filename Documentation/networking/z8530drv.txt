@@ -252,7 +252,7 @@ device scc0	# the device for the following params
 
 speed 1200		# the default baudrate
 clock dpll		# clock source: 
-			# 	dpll     = normal halfduplex operation
+			# 	dpll     = normal half duplex operation
 			# 	external = MODEM provides own Rx/Tx clock
 			#	divider  = use full duplex divider if
 			#		   installed (1)

@@ -309,7 +309,7 @@ static struct miscdevice amiga_mouse = {
 	AMIGAMOUSE_MINOR, "amigamouse", &amiga_mouse_fops
 };
 
-__initfunc(int amiga_mouse_init(void))
+int __init amiga_mouse_init(void)
 {
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_MOUSE))
 		return -ENODEV;

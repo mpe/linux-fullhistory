@@ -1106,8 +1106,8 @@ static int (*dc_infoblock[])(struct device *dev, u_char, u_char *) = {
 ** Autoprobing in modules is allowed here. See the top of the file for
 ** more info.
 */
-__initfunc(int
-de4x5_probe(struct device *dev))
+int __init 
+de4x5_probe(struct device *dev)
 {
     u_long iobase = dev->base_addr;
 
@@ -1121,8 +1121,8 @@ de4x5_probe(struct device *dev))
     return (dev->priv ? 0 : -ENODEV);
 }
 
-__initfunc(static int
-de4x5_hw_init(struct device *dev, u_long iobase))
+static int __init 
+de4x5_hw_init(struct device *dev, u_long iobase)
 {
     struct bus_type *lp = &bus;
     int i, status=0;
@@ -2054,8 +2054,8 @@ SetMulticastFilter(struct device *dev)
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
 */
-__initfunc(static void
-eisa_probe(struct device *dev, u_long ioaddr))
+static void __init 
+eisa_probe(struct device *dev, u_long ioaddr)
 {
     int i, maxSlots, status, device;
     u_char irq;
@@ -2136,8 +2136,8 @@ eisa_probe(struct device *dev, u_long ioaddr))
 */
 #define PCI_LAST_DEV  32
 
-__initfunc(static void
-pci_probe(struct device *dev, u_long ioaddr))
+static void __init 
+pci_probe(struct device *dev, u_long ioaddr)
 {
     u_char pb, pbus, dev_num, dnum, timer;
     u_short vendor, index, status;
@@ -2248,8 +2248,8 @@ pci_probe(struct device *dev, u_long ioaddr))
 ** DECchips, we can find the base SROM irrespective of the BIOS scan direction.
 ** For single port cards this is a time waster...
 */
-__initfunc(static void
-srom_search(struct pci_dev *dev))
+static void __init 
+srom_search(struct pci_dev *dev)
 {
     u_char pb;
     u_short vendor, status;
@@ -2307,8 +2307,8 @@ srom_search(struct pci_dev *dev))
     return;
 }
 
-__initfunc(static void
-link_modules(struct device *dev, struct device *tmp))
+static void __init 
+link_modules(struct device *dev, struct device *tmp)
 {
     struct device *p=dev;
 
@@ -5559,17 +5559,15 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     switch(ioc->cmd) {
     case DE4X5_GET_HWADDR:           /* Get the hardware address */
 	ioc->len = ETH_ALEN;
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
 	for (i=0; i<ETH_ALEN; i++) {
 	    tmp.addr[i] = dev->dev_addr[i];
 	}
-	copy_to_user(ioc->data, tmp.addr, ioc->len);
+	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
 	break;
 
     case DE4X5_SET_HWADDR:           /* Set the hardware address */
 	if (!capable(CAP_NET_ADMIN)) return -EPERM;
-	if (verify_area(VERIFY_READ, ioc->data, ETH_ALEN)) return -EFAULT;
-	copy_from_user(tmp.addr, ioc->data, ETH_ALEN);
+	if (copy_from_user(tmp.addr, ioc->data, ETH_ALEN)) return -EFAULT;
 	for (i=0; i<ETH_ALEN; i++) {
 	    dev->dev_addr[i] = tmp.addr[i];
 	}
@@ -5612,9 +5610,8 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     case DE4X5_GET_STATS:            /* Get the driver statistics */
 	ioc->len = sizeof(lp->pktStats);
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
 	spin_lock_irqsave(&lp->lock, flags);
-	copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
+	if (copy_to_user(ioc->data, &lp->pktStats, ioc->len)) return -EFAULT; 
 	spin_unlock_irqrestore(&lp->lock, flags);
 	break;
 
@@ -5627,14 +5624,12 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     case DE4X5_GET_OMR:              /* Get the OMR Register contents */
 	tmp.addr[0] = inl(DE4X5_OMR);
-	if (verify_area(VERIFY_WRITE, ioc->data, 1)) return -EFAULT;
-	copy_to_user(ioc->data, tmp.addr, 1);
+	if (copy_to_user(ioc->data, tmp.addr, 1)) return -EFAULT;
 	break;
 
     case DE4X5_SET_OMR:              /* Set the OMR Register contents */
 	if (!capable(CAP_NET_ADMIN)) return -EPERM;
-	if (verify_area(VERIFY_READ, ioc->data, 1)) return -EFAULT;
-	copy_from_user(tmp.addr, ioc->data, 1);
+	if (copy_from_user(tmp.addr, ioc->data, 1)) return -EFAULT;
 	outl(tmp.addr[0], DE4X5_OMR);
 	break;
 
@@ -5649,8 +5644,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	tmp.lval[6] = inl(DE4X5_STRR); j+=4;
 	tmp.lval[7] = inl(DE4X5_SIGR); j+=4;
 	ioc->len = j;
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
-	copy_to_user(ioc->data, tmp.addr, ioc->len);
+	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
 	break;
 	
 #define DE4X5_DUMP              0x0f /* Dump the DE4X5 Status */
@@ -5739,8 +5733,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	tmp.addr[j++] = dev->tbusy;
 	
 	ioc->len = j;
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
-	copy_to_user(ioc->data, tmp.addr, ioc->len);
+	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
 	break;
 
 */
@@ -5863,8 +5856,8 @@ count_adapters(void)
 ** If at end of eth device list and can't use current entry, malloc
 ** one up. If memory could not be allocated, print an error message.
 */
-__initfunc(static struct device *
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
+static struct device * __init 
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
 {
     struct device *new;
 

@@ -146,7 +146,7 @@ static void memcpyw(u_short *dest, u_short *src, int len)
 }
 
 
-__initfunc(int ariadne_probe(struct device *dev))
+int __init ariadne_probe(struct device *dev)
 {
     unsigned int key;
     const struct ConfigDev *cd;

@@ -1771,7 +1771,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 
 /* Initialize the 'unit' variable for drive 'drive' */
 
-__initfunc(static void fd_probe( int drive ))
+static void __init fd_probe( int drive )
 {
 	UD.connected = 0;
 	UDT  = NULL;
@@ -1814,7 +1814,7 @@ __initfunc(static void fd_probe( int drive ))
  * declared absent.
  */
 
-__initfunc(static int fd_test_drive_present( int drive ))
+static int __init fd_test_drive_present( int drive )
 {
 	unsigned long timeout;
 	unsigned char status;
@@ -1861,7 +1861,7 @@ __initfunc(static int fd_test_drive_present( int drive ))
  * floppies, additionally start the disk-change and motor-off timers.
  */
 
-__initfunc(static void config_types( void ))
+static void __init config_types( void )
 {
 	int drive, cnt = 0;
 
@@ -2006,7 +2006,7 @@ static struct file_operations floppy_fops = {
 	floppy_revalidate,	/* revalidate */
 };
 
-__initfunc(int atari_floppy_init (void))
+int __init atari_floppy_init (void)
 {
 	int i;
 
@@ -2075,7 +2075,7 @@ __initfunc(int atari_floppy_init (void))
 }
 
 
-__initfunc(void atari_floppy_setup( char *str, int *ints ))
+void __init atari_floppy_setup( char *str, int *ints )
 {
 	int i;
 	

@@ -147,7 +147,7 @@ static void	mc32_set_multicast_list(struct device *dev);
  * (detachable devices only).
  */
 
-__initfunc(int mc32_probe(struct device *dev))
+int __init mc32_probe(struct device *dev)
 {
 	static int current_mca_slot = -1;
 	int i;
@@ -183,7 +183,7 @@ __initfunc(int mc32_probe(struct device *dev))
  * probes on the ISA bus. A good device probes avoids doing writes, and
  * verifies that the correct device exists and functions.
  */
-__initfunc(static int mc32_probe1(struct device *dev, int slot))
+static int __init mc32_probe1(struct device *dev, int slot)
 {
 	static unsigned version_printed = 0;
 	int i;

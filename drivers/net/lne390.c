@@ -100,7 +100,7 @@ static unsigned int shmem_mapB[] __initdata = {0xff, 0xfe, 0x0e, 0xfff, 0xffe, 0
  *	PROM for a match against the value assigned to Mylex.
  */
 
-__initfunc(int lne390_probe(struct device *dev))
+int __init lne390_probe(struct device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -127,7 +127,7 @@ __initfunc(int lne390_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(int lne390_probe1(struct device *dev, int ioaddr))
+int __init lne390_probe1(struct device *dev, int ioaddr)
 {
 	int i, revision;
 	unsigned long eisa_id;

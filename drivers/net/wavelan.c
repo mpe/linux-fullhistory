@@ -64,8 +64,8 @@ wv_irq_to_psa(int	irq)
 /*
  * Translate PSA irq parameter to irq number 
  */
-__initfunc(static int
-wv_psa_to_irq(u_char	irqval))
+static int __init 
+wv_psa_to_irq(u_char irqval)
 {
   int	irq;
 
@@ -2087,12 +2087,6 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	{
 	  struct iw_range	range;
 
-	  /* Verify the user buffer. */
-	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
-			    sizeof(struct iw_range));
-	  if(ret)
-	    break;
-
 	  /* Set the length (useless:  it's constant). */
 	  wrq->u.data.length = sizeof(struct iw_range);
 
@@ -2118,8 +2112,8 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	  range.max_qual.noise = MMR_SILENCE_LVL;
 
 	  /* Copy structure to the user buffer. */
-	  copy_to_user(wrq->u.data.pointer, &range,
-		       sizeof(struct iw_range));
+	  if (copy_to_user(wrq->u.data.pointer, &range, sizeof(struct iw_range)))
+	  	ret = -EFAULT;
 	}
       break;
 
@@ -2136,18 +2130,12 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	    { SIOCGIPHISTO, 0,	    IW_PRIV_TYPE_INT | 16, "gethisto" },
 	  };
 
-	  /* Verify the user buffer. */
-	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
-			    sizeof(priv));
-	  if(ret)
-	    break;
-
 	  /* Set the number of available ioctls. */
 	  wrq->u.data.length = 4;
 
 	  /* Copy structure to the user buffer. */
-	  copy_to_user(wrq->u.data.pointer, (u_char *) priv,
-		       sizeof(priv));
+	  if (copy_to_user(wrq->u.data.pointer, (u_char *) priv, sizeof(priv)))
+	  	ret = -EFAULT;
 	}
       break;
 
@@ -2169,14 +2157,11 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	  struct sockaddr	address[IW_MAX_SPY];
 	  int			i;
 
-	  /* Verify where the user has set his addresses. */
-	  ret = verify_area(VERIFY_READ, wrq->u.data.pointer,
-			    sizeof(struct sockaddr) * lp->spy_number);
-	  if(ret)
-	    break;
 	  /* Copy addresses to the driver. */
-	  copy_from_user(address, wrq->u.data.pointer,
-			 sizeof(struct sockaddr) * lp->spy_number);
+	  if (copy_from_user(address, wrq->u.data.pointer, sizeof(struct sockaddr) * lp->spy_number)) {
+	  	ret = -EFAULT;
+	  	break;
+	  }
 
 	  /* Copy addresses to the lp structure. */
 	  for(i = 0; i < lp->spy_number; i++)
@@ -2215,13 +2200,6 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	  struct sockaddr	address[IW_MAX_SPY];
 	  int			i;
 
-	  /* Verify the user buffer. */
-	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
-			    (sizeof(iw_qual) + sizeof(struct sockaddr))
-			    * IW_MAX_SPY);
-	  if(ret)
-	    break;
-
 	  /* Copy addresses from the lp structure. */
 	  for(i = 0; i < lp->spy_number; i++)
 	    {
@@ -2231,13 +2209,18 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
 	    }
 
 	  /* Copy addresses to the user buffer. */
-	  copy_to_user(wrq->u.data.pointer, address,
-		       sizeof(struct sockaddr) * lp->spy_number);
-
+	  if (copy_to_user(wrq->u.data.pointer, address, sizeof(struct sockaddr) * lp->spy_number)) {
+	  	ret = -EFAULT;
+	  	break;
+	  }
+	  	
 	  /* Copy stats to the user buffer (just after). */
-	  copy_to_user(wrq->u.data.pointer +
+	  if (copy_to_user(wrq->u.data.pointer +
 		       (sizeof(struct sockaddr) * lp->spy_number),
-		       lp->spy_stat, sizeof(iw_qual) * lp->spy_number);
+		       lp->spy_stat, sizeof(iw_qual) * lp->spy_number)) {
+		       		ret = -EFAULT;
+		       		break;
+	  }
 
 	  /* Reset updated flags. */
 	  for(i = 0; i < lp->spy_number; i++)
@@ -2283,14 +2266,11 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
       /* Are there addresses to copy? */
       if(lp->his_number > 0)
 	{
-	  /* Verify where the user has set his addresses. */
-	  ret = verify_area(VERIFY_READ, wrq->u.data.pointer,
-			    sizeof(char) * lp->his_number);
-	  if(ret)
-	    break;
 	  /* Copy interval ranges to the driver */
-	  copy_from_user(lp->his_range, wrq->u.data.pointer,
-			 sizeof(char) * lp->his_number);
+	  if (copy_from_user(lp->his_range, wrq->u.data.pointer, sizeof(char) * lp->his_number)) {
+	  	ret = -EFAULT;
+	  	break;
+	  }
 
 	  /* Reset structure. */
 	  memset(lp->his_sum, 0x00, sizeof(long) * 16);
@@ -2304,15 +2284,10 @@ wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
       /* Give back the distribution statistics */
       if((lp->his_number > 0) && (wrq->u.data.pointer != (caddr_t) 0))
 	{
-	  /* Verify the user buffer. */
-	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
-			    sizeof(long) * 16);
-	  if(ret)
-	    break;
-
 	  /* Copy data to the user buffer. */
-	  copy_to_user(wrq->u.data.pointer, lp->his_sum,
-		       sizeof(long) * lp->his_number);
+	  if (copy_to_user(wrq->u.data.pointer, lp->his_sum, sizeof(long) * lp->his_number)) 
+			ret = -EFAULT;
+			
 	}	/* if(pointer != NULL) */
       break;
 #endif	/* HISTOGRAM */
@@ -4015,8 +3990,8 @@ wavelan_close(device *	dev)
  * device structure
  * (called by wavelan_probe() and via init_module()).
  */
-__initfunc(static int
-wavelan_config(device *	dev))
+static int __init 
+wavelan_config(device *	dev)
 {
   u_long	ioaddr = dev->base_addr;
   u_char	irq_mask;
@@ -4132,8 +4107,8 @@ wavelan_config(device *	dev))
  * We follow the example in drivers/net/ne.c.
  * (called in "Space.c")
  */
-__initfunc(int
-wavelan_probe(device *	dev))
+int __init 
+wavelan_probe(device *	dev)
 {
   short		base_addr;
   mac_addr	mac;		/* MAC address (check existence of WaveLAN) */
@@ -4265,6 +4240,11 @@ init_module(void)
 
 	  /* Create device and set basic arguments. */
 	  dev = kmalloc(sizeof(struct device), GFP_KERNEL);
+	  if(dev==NULL)
+	  {
+	  	ret = -ENOMEM;
+	  	break;
+	  }
 	  memset(dev, 0x00, sizeof(struct device));
 	  dev->name = name[i];
 	  dev->base_addr = io[i];

@@ -22,7 +22,6 @@
  *    driver, you'll probably need the Compaq Array Controller Interface
  *    Specificiation (Document number ECG086/1198)
  */
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.14		Dec  30, 1998
+ * linux/drivers/block/ide-tape.c	Version 1.15		Jul   4, 1999
  *
- * Copyright (C) 1995 - 1998 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1995 - 1999 Gadi Oxman <gadio@netvision.net.il>
  *
  * This driver was constructed as a student project in the software laboratory
  * of the faculty of electrical engineering in the Technion - Israel's
@@ -214,6 +214,9 @@
  * Ver 1.13  Jan  2 98   Add "speed == 0" work-around for HP COLORADO 5GB
  * Ver 1.14  Dec 30 98   Partial fixes for the Sony/AIWA tape drives.
  *                       Replace cli()/sti() with hwgroup spinlocks.
+ * Ver 1.15  Mar 25 99   Fix SMP race condition by replacing hwgroup
+ *                        spinlock with private per-tape spinlock.
+ *                       Fix use of freed memory.
  *
  * Here are some words from the first releases of hd.c, which are quoted
  * in ide.c and apply here as well:
@@ -697,6 +700,7 @@ typedef struct {
 	int excess_bh_size;			/* Wasted space in each stage */
 
 	unsigned int flags;			/* Status/Action flags */
+	spinlock_t spinlock;			/* protects the ide-tape queue */
 } idetape_tape_t;
 
 /*
@@ -1443,7 +1447,7 @@ static void idetape_add_stage_tail (ide_drive_t *drive,idetape_stage_t *stage)
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_add_stage_tail\n");
 #endif /* IDETAPE_DEBUG_LOG */
-	spin_lock_irqsave(&HWGROUP(drive)->spinlock, flags);
+	spin_lock_irqsave(&tape->spinlock, flags);
 	stage->next=NULL;
 	if (tape->last_stage != NULL)
 		tape->last_stage->next=stage;
@@ -1454,7 +1458,7 @@ static void idetape_add_stage_tail (ide_drive_t *drive,idetape_stage_t *stage)
 		tape->next_stage=tape->last_stage;
 	tape->nr_stages++;
 	tape->nr_pending_stages++;
-	spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+	spin_unlock_irqrestore(&tape->spinlock, flags);
 }
 
 /*
@@ -1556,7 +1560,9 @@ static void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	ide_drive_t *drive = hwgroup->drive;
 	struct request *rq = hwgroup->rq;
 	idetape_tape_t *tape = drive->driver_data;
+	unsigned long flags;
 	int error;
+	int remove_stage = 0;
 
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_end_request\n");
@@ -1571,6 +1577,7 @@ static void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	if (error)
 		tape->failed_pc = NULL;
 
+	spin_lock_irqsave(&tape->spinlock, flags);
 	if (tape->active_data_request == rq) {		/* The request was a pipelined data transfer request */
 		tape->active_stage = NULL;
 		tape->active_data_request = NULL;
@@ -1581,7 +1588,7 @@ static void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 				if (error == IDETAPE_ERROR_EOD)
 					idetape_abort_pipeline (drive);
 			}
-			idetape_remove_stage_head (drive);
+			remove_stage = 1;
 		}
 		if (tape->next_stage != NULL) {
 			idetape_active_next_stage (drive);
@@ -1599,6 +1606,9 @@ static void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 			idetape_increase_max_pipeline_stages (drive);
 	}
 	ide_end_drive_cmd (drive, 0, 0);
+	if (remove_stage)
+		idetape_remove_stage_head (drive);
+	spin_unlock_irqrestore(&tape->spinlock, flags);
 }
 
 /*
@@ -2340,6 +2350,7 @@ static int idetape_queue_pc_tail (ide_drive_t *drive,idetape_pc_t *pc)
 static void idetape_wait_for_request (ide_drive_t *drive, struct request *rq)
 {
 	DECLARE_MUTEX_LOCKED(sem);
+	idetape_tape_t *tape = drive->driver_data;
 
 #if IDETAPE_DEBUG_BUGS
 	if (rq == NULL || !IDETAPE_RQ_CMD (rq->cmd)) {
@@ -2348,9 +2359,9 @@ static void idetape_wait_for_request (ide_drive_t *drive, struct request *rq)
 	}
 #endif /* IDETAPE_DEBUG_BUGS */
 	rq->sem = &sem;
-	spin_unlock(&HWGROUP(drive)->spinlock);
+	spin_unlock(&tape->spinlock);
 	down(&sem);
-	spin_lock_irq(&HWGROUP(drive)->spinlock);
+	spin_lock_irq(&tape->spinlock);
 }
 
 /*
@@ -2424,10 +2435,10 @@ static int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks)
 		 */
 		return (idetape_queue_rw_tail (drive, IDETAPE_READ_RQ, blocks, tape->merge_stage->bh));
 	}
-	spin_lock_irqsave(&HWGROUP(drive)->spinlock, flags);
+	spin_lock_irqsave(&tape->spinlock, flags);
 	if (tape->active_stage == tape->first_stage)
 		idetape_wait_for_request(drive, tape->active_data_request);
-	spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+	spin_unlock_irqrestore(&tape->spinlock, flags);
 
 	rq_ptr = &tape->first_stage->rq;
 	bytes_read = tape->tape_block_size * (rq_ptr->nr_sectors - rq_ptr->current_nr_sectors);
@@ -2476,12 +2487,12 @@ static int idetape_add_chrdev_write_request (ide_drive_t *drive, int blocks)
 	 *	Pay special attention to possible race conditions.
 	 */
 	while ((new_stage = idetape_kmalloc_stage (tape)) == NULL) {
-		spin_lock_irqsave(&HWGROUP(drive)->spinlock, flags);
+		spin_lock_irqsave(&tape->spinlock, flags);
 		if (idetape_pipeline_active (tape)) {
 			idetape_wait_for_request(drive, tape->active_data_request);
-			spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+			spin_unlock_irqrestore(&tape->spinlock, flags);
 		} else {
-			spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+			spin_unlock_irqrestore(&tape->spinlock, flags);
 			idetape_insert_pipeline_into_queue (drive);
 			if (idetape_pipeline_active (tape))
 				continue;
@@ -2538,11 +2549,11 @@ static void idetape_discard_read_pipeline (ide_drive_t *drive)
 	if (tape->first_stage == NULL)
 		return;
 
-	spin_lock_irqsave(&HWGROUP(drive)->spinlock, flags);
+	spin_lock_irqsave(&tape->spinlock, flags);
 	tape->next_stage = NULL;
 	if (idetape_pipeline_active (tape))
 		idetape_wait_for_request(drive, tape->active_data_request);
-	spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+	spin_unlock_irqrestore(&tape->spinlock, flags);
 
 	while (tape->first_stage != NULL)
 		idetape_remove_stage_head (drive);
@@ -2562,7 +2573,7 @@ static void idetape_wait_for_pipeline (ide_drive_t *drive)
 	if (!idetape_pipeline_active (tape))
 		idetape_insert_pipeline_into_queue (drive);
 
-	spin_lock_irqsave(&HWGROUP(drive)->spinlock, flags);
+	spin_lock_irqsave(&tape->spinlock, flags);
 	if (!idetape_pipeline_active (tape))
 		goto abort;
 #if IDETAPE_DEBUG_BUGS
@@ -2572,7 +2583,7 @@ static void idetape_wait_for_pipeline (ide_drive_t *drive)
 #endif /* IDETAPE_DEBUG_BUGS */
 	idetape_wait_for_request(drive, &tape->last_stage->rq);
 abort:
-	spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+	spin_unlock_irqrestore(&tape->spinlock, flags);
 }
 
 static void idetape_pad_zeros (ide_drive_t *drive, int bcount)
@@ -2817,10 +2828,10 @@ static int idetape_space_over_filemarks (ide_drive_t *drive,short mt_op,int mt_c
 			 *	Wait until the first read-ahead request
 			 *	is serviced.
 			 */
-			spin_lock_irqsave(&HWGROUP(drive)->spinlock, flags);
+			spin_lock_irqsave(&tape->spinlock, flags);
 			if (tape->active_stage == tape->first_stage)
 				idetape_wait_for_request(drive, tape->active_data_request);
-			spin_unlock_irqrestore(&HWGROUP(drive)->spinlock, flags);
+			spin_unlock_irqrestore(&tape->spinlock, flags);
 
 			if (tape->first_stage->rq.errors == IDETAPE_ERROR_FILEMARK)
 				count++;
@@ -3564,6 +3575,8 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	u16 speed;
 	struct idetape_id_gcw gcw;
 
+	memset (tape, 0, sizeof (idetape_tape_t));
+	spin_lock_init(&tape->spinlock);
 	drive->driver_data = tape;
 	drive->ready_stat = 0;			/* An ATAPI device ignores DRDY */
 #ifdef CONFIG_BLK_DEV_IDEPCI

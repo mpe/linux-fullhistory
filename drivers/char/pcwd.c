@@ -34,6 +34,9 @@
  * 971222       Changed open/close for temperature handling
  *              Michael Meskes <meskes@debian.org>.
  * 980112       Used minor numbers from include/linux/miscdevice.h
+ * 990605	Made changes to code to support Firmware 1.22a, added
+ *		fairly useless proc entry.
+ * 990610	removed said useless proc code for the merge <alan>
  */
 
 #include <linux/module.h>
@@ -55,6 +58,7 @@
 #include <linux/mm.h>
 #include <linux/watchdog.h>
 #include <linux/init.h>
+#include <linux/proc_fs.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -67,7 +71,7 @@
  */
 static int pcwd_ioports[] = { 0x270, 0x350, 0x370, 0x000 };
 
-#define WD_VER                  "1.0 (11/18/96)"
+#define WD_VER                  "1.10 (06/05/99)"
 
 /*
  * It should be noted that PCWD_REVISION_B was removed because A and B
@@ -99,7 +103,7 @@ static int is_open, initial_status, supports_temp, mode_debug;
  * This routine checks the "current_readport" to see if the card lies there.
  * If it does, it returns accordingly.
  */
-__initfunc(static int pcwd_checkcard(void))
+static int __init pcwd_checkcard(void)
 {
 	int card_dat, prev_card_dat, found = 0, count = 0, done = 0;
 
@@ -228,10 +232,9 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 	int i, cdat, rv;
 	static struct watchdog_info ident=
 	{
-		/* FIXME: should set A/C here */
 		WDIOF_OVERHEAT|WDIOF_CARDRESET,
 		1,
-		"PCWD."
+		"PCWD"
 	};
 
 	switch(cmd) {
@@ -408,8 +411,11 @@ static ssize_t pcwd_read(struct file *file, char *buf, size_t count,
 	switch(MINOR(file->f_dentry->d_inode->i_rdev)) 
 	{
 		case TEMP_MINOR:
-		        /* c is in celsius, we need fahrenheit */
-		        cp = (c*9/5)+32;
+			/*
+			 * Convert metric to Fahrenheit, since this was
+			 * the decided 'standard' for this return value.
+			 */
+			cp = (c * 9 / 5) + 32;
 			if(copy_to_user(buf, &cp, 1))
 				return -EFAULT;
 			return 1;
@@ -450,7 +456,7 @@ static inline int get_revision(void)
 	return(PCWD_REVISION_C);
 }
 
-__initfunc(static int send_command(int cmd))
+static int __init send_command(int cmd)
 {
 	int i;
 
@@ -506,6 +512,38 @@ static void debug_off(void)
 	mode_debug = 0;
 }
 
+static int pcwd_proc_get_info(char *buffer, char **start, off_t offset,
+	int length, int inout)
+{
+	int len;
+	off_t begin = 0;
+	
+	revision = get_revision();
+	len = sprintf(buffer, "Version = " WD_VER "\n");
+	
+	if (revision == PCWD_REVISION_A)
+		len += sprintf(buffer + len, "Revision = A\n");
+	else
+		len += sprintf(buffer + len, "Revision = C\n");
+	
+	if (supports_temp) {
+		unsigned short c = inb(current_readport);
+		
+		len += sprintf(buffer + len, "Temp = Yes\n"
+			"Current temp = %d (Celsius)\n",
+			c);
+	} else
+		len += sprintf(buffer + len, "Temp = No\n");
+	
+	*start = buffer + (offset);
+	len -= offset;
+
+	if (len > length)
+		len = length;
+	
+	return len;
+}
+
 static struct file_operations pcwd_fops = {
 	NULL,		/* Seek */
 	pcwd_read,	/* Read */
@@ -539,14 +577,14 @@ static struct miscdevice temp_miscdev = {
 #ifdef	MODULE
 int init_module(void)
 #else
-__initfunc(int pcwatchdog_init(void))
+int __init pcwatchdog_init(void)
 #endif
 {
 	int i, found = 0;
 
 	revision = PCWD_REVISION_A;
 
-	printk("pcwd: v%s Ken Hollis (khollis@nurk.org)\n", WD_VER);
+	printk("pcwd: v%s Ken Hollis (kenji@bitgate.com)\n", WD_VER);
 
 	/* Initial variables */
 	is_open = 0;
@@ -588,6 +626,9 @@ __initfunc(int pcwatchdog_init(void))
 		printk("pcwd: Unable to get revision.\n");
 		return -1;
 	}
+
+	if (supports_temp)
+		printk("pcwd: Temperature Option Detected.\n");
 
 	debug_off();
 

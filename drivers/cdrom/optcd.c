@@ -1966,7 +1966,7 @@ static int opt_media_change(kdev_t dev)
 
 /* Returns 1 if a drive is detected with a version string
    starting with "DOLPHIN". Otherwise 0. */
-__initfunc(static int version_ok(void))
+static int __init version_ok(void)
 {
 	char devname[100];
 	int count, i, ch, status;
@@ -2022,7 +2022,7 @@ static struct file_operations opt_fops = {
 
 
 /* Get kernel parameter when used as a kernel driver */
-__initfunc(void optcd_setup(char *str, int *ints))
+void __init optcd_setup(char *str, int *ints)
 {
 	if (ints[0] > 0)
 		optcd_port = ints[1];
@@ -2030,7 +2030,7 @@ __initfunc(void optcd_setup(char *str, int *ints))
 
 /* Test for presence of drive and initialize it. Called at boot time
    or during module initialisation. */
-__initfunc(int optcd_init(void))
+int __init optcd_init(void)
 {
 	int status;
 

@@ -991,8 +991,8 @@ ack_intr:
 /*
  *	Download the board firmware
  */
-__initfunc(static int
-dgrs_download(struct device *dev0))
+static int __init 
+dgrs_download(struct device *dev0)
 {
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;
 	int		is;
@@ -1150,8 +1150,8 @@ dgrs_download(struct device *dev0))
 /*
  *	Probe (init) a board
  */
-__initfunc(int
-dgrs_probe1(struct device *dev))
+int __init 
+dgrs_probe1(struct device *dev)
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 	int		i;
@@ -1224,8 +1224,8 @@ dgrs_probe1(struct device *dev))
 	return (0);
 }
 
-__initfunc(int
-dgrs_initclone(struct device *dev))
+int __init 
+dgrs_initclone(struct device *dev)
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 	int		i;
@@ -1239,7 +1239,7 @@ dgrs_initclone(struct device *dev))
 	return (0);
 }
 
-__initfunc(static int
+static int __init 
 dgrs_found_device(
 	struct device	*dev,
 	int		io,
@@ -1247,7 +1247,7 @@ dgrs_found_device(
 	int		irq,
 	ulong		plxreg,
 	ulong		plxdma
-))
+)
 {
 	DGRS_PRIV	*priv;
 
@@ -1360,8 +1360,8 @@ dgrs_found_device(
  */
 static int is2iv[8] __initdata = { 0, 3, 5, 7, 10, 11, 12, 15 };
 
-__initfunc(static int
-dgrs_scan(struct device *dev))
+static int __init 
+dgrs_scan(struct device *dev)
 {
 	int	cards_found = 0;
 	uint	io;
@@ -1614,8 +1614,8 @@ cleanup_module(void)
 
 #else
 
-__initfunc(int
-dgrs_probe(struct device *dev))
+int __init 
+dgrs_probe(struct device *dev)
 {
 	int	cards_found;
 

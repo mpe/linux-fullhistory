@@ -36,11 +36,10 @@ extern asmlinkage int sys_setsid(void);
 
 asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 {
-	struct file *filp;
 	int ret = -EBADF;
 
 	lock_kernel();
-	if (fd >= SUNOS_NR_OPEN || !(filp = current->files->fd [fd]))
+	if (fd >= SUNOS_NR_OPEN || !fcheck(fd))
 		goto out;
 
 	/* First handle an easy compat. case for tty ldisc. */

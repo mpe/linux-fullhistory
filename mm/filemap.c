@@ -1475,7 +1475,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	 * If a task terminates while we're swapping the page, the vma and
 	 * and file could be released ... increment the count to be safe.
 	 */
-	atomic_inc(&file->f_count);
+	get_file(file);
 	result = do_write_page(inode, file, (const char *) page, offset);
 	fput(file);
 	return result;

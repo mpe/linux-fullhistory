@@ -1,4 +1,4 @@
-
+#include <linux/config.h>
 #include "arlan.h"
 
 #ifdef CONFIG_PROC_FS

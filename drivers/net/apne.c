@@ -121,7 +121,7 @@ static const char *version =
 
 static int apne_owned = 0;	/* signal if card already owned */
 
-__initfunc(int apne_probe(struct device *dev))
+int __init apne_probe(struct device *dev)
 {
 #ifndef MANUAL_CONFIG
 	char tuple[8];
@@ -161,8 +161,7 @@ __initfunc(int apne_probe(struct device *dev))
 
 }
 
-
-__initfunc(static int apne_probe1(struct device *dev, int ioaddr))
+static int __init apne_probe1(struct device *dev, int ioaddr)
 {
     int i;
     unsigned char SA_prom[32];

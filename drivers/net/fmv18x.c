@@ -132,8 +132,8 @@ static void set_multicast_list(struct device *dev);
 struct netdev_entry fmv18x_drv =
 {"fmv18x", fmv18x_probe1, FMV18X_IO_EXTENT, fmv18x_probe_list};
 #else
-__initfunc(int
-fmv18x_probe(struct device *dev))
+int __init 
+fmv18x_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -163,7 +163,7 @@ fmv18x_probe(struct device *dev))
    that can be done is checking a few bits and then diving right into MAC
    address check. */
 
-__initfunc(int fmv18x_probe1(struct device *dev, short ioaddr))
+int __init fmv18x_probe1(struct device *dev, short ioaddr)
 {
 	char irqmap[4] = {3, 7, 10, 15};
 	char irqmap_pnp[8] = {3, 4, 5, 7, 9, 10, 11, 15};

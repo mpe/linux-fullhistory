@@ -202,7 +202,7 @@ static struct miscdevice atixl_mouse = {
 };
 
 
-__initfunc(int atixl_busmouse_init(void))
+int __init atixl_busmouse_init(void)
 {
 	unsigned char a,b,c;
 

@@ -27,7 +27,7 @@
 /* Florian Coosmann (FGC)                                ^ current = 1       */
 /* Additionally, we now use locking technique. This prevents race condition  */
 /* in case of paging and multiple read/write on the same pipe. (FGC)         */
-
+/* Reads with count = 0 should always return 0. Julian Bradfield 1999-06-07. */
 
 static ssize_t do_pipe_read(struct file * filp, char * buf, size_t count)
 {
@@ -144,8 +144,11 @@ static ssize_t pipe_read(struct file * filp, char * buf, size_t count, loff_t *p
 {
 	ssize_t retval;
 
+
 	if (ppos != &filp->f_pos)
 		return -ESPIPE;
+
+	if ( !count ) return 0;
 
 	lock_kernel();
 	retval = do_pipe_read(filp, buf, count);

@@ -240,7 +240,7 @@ static int cmd646_1_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	return cmd646_dmaproc(func, drive);
 }
 
-__initfunc(void ide_init_cmd646 (ide_hwif_t *hwif))
+void __init ide_init_cmd646 (ide_hwif_t *hwif)
 {
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned char mrdmode;

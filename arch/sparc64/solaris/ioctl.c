@@ -367,15 +367,8 @@ static inline int solaris_sockmod(unsigned int fd, unsigned int cmd, u32 arg)
 static inline int solaris_timod(unsigned int fd, unsigned int cmd, u32 arg,
                                     int len, int *len_p)
 {
-        struct file *filp;
         struct inode *ino;
 	int ret;
-
-        filp = current->files->fd[fd];
-        if (! filp ||
-	    ! (ino = filp->f_dentry->d_inode) ||
-	    ! ino->i_sock)
-		return TBADF;
 		
 	switch (cmd & 0xff) {
 	case 141: /* TI_OPTMGMT */
@@ -459,7 +452,7 @@ static inline int solaris_timod(unsigned int fd, unsigned int cmd, u32 arg,
 	return TNOTSUPPORT;
 }
 
-static inline int solaris_S(unsigned int fd, unsigned int cmd, u32 arg)
+static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd, u32 arg)
 {
 	char *p;
 	int ret;
@@ -470,9 +463,7 @@ static inline int solaris_S(unsigned int fd, unsigned int cmd, u32 arg)
         struct sol_socket_struct *sock;
         struct module_info *mi;
 
-        filp = current->files->fd[fd];
-        if (! filp ||
-	    ! (ino = filp->f_dentry->d_inode) ||
+        if (! (ino = filp->f_dentry->d_inode) ||
 	    ! ino->i_sock)
 		return -EBADF;
         sock = filp->private_data;
@@ -696,14 +687,14 @@ asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	struct file *filp;
 	int error = -EBADF;
 
-	lock_kernel();
-	filp = fcheck(fd);
+	filp = fget(fd);
 	if (!filp)
 		goto out;
 
+	lock_kernel();
 	error = -EFAULT;
 	switch ((cmd >> 8) & 0xff) {
-	case 'S': error = solaris_S(fd, cmd, arg); break;
+	case 'S': error = solaris_S(filp, fd, cmd, arg); break;
 	case 'T': error = solaris_T(fd, cmd, arg); break;
 	case 'i': error = solaris_i(fd, cmd, arg); break;
 	case 'r': error = solaris_r(fd, cmd, arg); break;
@@ -714,6 +705,8 @@ asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		error = -ENOSYS;
 		break;
 	}
+	unlock_kernel();
+	fput(filp);
 out:
 	if (error == -ENOSYS) {
 		unsigned char c = cmd>>8;
@@ -723,6 +716,5 @@ out:
 		       (int)fd, (unsigned int)cmd, c, (unsigned int)arg);
 		error = -EINVAL;
 	}
-	unlock_kernel();
 	return error;
 }

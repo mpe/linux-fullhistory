@@ -18,6 +18,7 @@
  *	         Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
  */
  
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>

@@ -88,7 +88,7 @@ static int  uircc_net_close(struct device *dev);
  *    Initialize chip. Just try to find out how many chips we are dealing with
  *    and where they are
  */
-__initfunc(int uircc_init(void))
+int __init uircc_init(void)
 {
 	int i;
 

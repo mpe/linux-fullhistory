@@ -2216,7 +2216,7 @@ static int qic02_tape_open_no_use_count(struct inode * inode, struct file * filp
     }
     
 	/* Only one at a time from here on... */
-    if (atomic_read(&filp->f_count)>1) 	/* filp->f_count==1 for the first open() */
+    if (file_count(filp)>1) 	/* filp->f_count==1 for the first open() */
     {
 	return -EBUSY;
     }

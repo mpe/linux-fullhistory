@@ -31,7 +31,7 @@ static inline int mlock_fixup_start(struct vm_area_struct * vma,
 	vma->vm_offset += vma->vm_start - n->vm_start;
 	n->vm_flags = newflags;
 	if (n->vm_file)
-		atomic_inc(&n->vm_file->f_count);
+		get_file(n->vm_file);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -52,7 +52,7 @@ static inline int mlock_fixup_end(struct vm_area_struct * vma,
 	n->vm_offset += n->vm_start - vma->vm_start;
 	n->vm_flags = newflags;
 	if (n->vm_file)
-		atomic_inc(&n->vm_file->f_count);
+		get_file(n->vm_file);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -179,7 +179,6 @@ asmlinkage int sys_mlock(unsigned long start, size_t len)
 	int error = -ENOMEM;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	len = (len + (start & ~PAGE_MASK) + ~PAGE_MASK) & PAGE_MASK;
 	start &= PAGE_MASK;
 
@@ -200,7 +199,6 @@ asmlinkage int sys_mlock(unsigned long start, size_t len)
 
 	error = do_mlock(start, len, 1);
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return error;
 }
@@ -210,11 +208,9 @@ asmlinkage int sys_munlock(unsigned long start, size_t len)
 	int ret;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	len = (len + (start & ~PAGE_MASK) + ~PAGE_MASK) & PAGE_MASK;
 	start &= PAGE_MASK;
 	ret = do_mlock(start, len, 0);
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return ret;
 }
@@ -254,7 +250,6 @@ asmlinkage int sys_mlockall(int flags)
 	int ret = -EINVAL;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	if (!flags || (flags & ~(MCL_CURRENT | MCL_FUTURE)))
 		goto out;
 
@@ -272,7 +267,6 @@ asmlinkage int sys_mlockall(int flags)
 
 	ret = do_mlockall(flags);
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return ret;
 }
@@ -282,9 +276,7 @@ asmlinkage int sys_munlockall(void)
 	int ret;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	ret = do_mlockall(0);
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return ret;
 }

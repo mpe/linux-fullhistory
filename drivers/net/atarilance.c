@@ -370,9 +370,9 @@ void *slow_memcpy( void *dst, const void *src, size_t len )
 }
 
 
-__initfunc(int atarilance_probe( struct device *dev ))
-
-{	int i;
+int __init atarilance_probe( struct device *dev )
+{	
+    int i;
 	static int found = 0;
 
 	if (!MACH_IS_ATARI || found)
@@ -393,9 +393,9 @@ __initfunc(int atarilance_probe( struct device *dev ))
 
 /* Derived from hwreg_present() in atari/config.c: */
 
-__initfunc(static int addr_accessible( volatile void *regp, int wordflag, int writeflag ))
-
-{	int		ret;
+static int __init addr_accessible( volatile void *regp, int wordflag, int writeflag )
+{
+	int		ret;
 	long	flags;
 	long	*vbr, save_berr;
 
@@ -443,10 +443,10 @@ __initfunc(static int addr_accessible( volatile void *regp, int wordflag, int wr
 }
 
 
-__initfunc(static unsigned long lance_probe1( struct device *dev,
-								   struct lance_addr *init_rec ))
-
-{	volatile unsigned short *memaddr =
+static unsigned long __init lance_probe1( struct device *dev,
+								   struct lance_addr *init_rec )
+{
+	volatile unsigned short *memaddr =
 		(volatile unsigned short *)init_rec->memaddr;
 	volatile unsigned short *ioaddr =
 		(volatile unsigned short *)init_rec->ioaddr;

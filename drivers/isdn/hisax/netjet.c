@@ -858,8 +858,8 @@ setstack_tiger(struct PStack *st, struct BCState *bcs)
 }
 
  
-__initfunc(void
-inittiger(struct IsdnCardState *cs))
+void __init 
+inittiger(struct IsdnCardState *cs)
 {
 	if (!(cs->bcs[0].hw.tiger.send = kmalloc(NETJET_DMA_SIZE * sizeof(unsigned int),
 		GFP_KERNEL | GFP_DMA))) {
@@ -1050,8 +1050,8 @@ NETjet_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 
 static 	struct pci_dev *dev_netjet __initdata = NULL;
 
-__initfunc(int
-setup_netjet(struct IsdnCard *card))
+int __init 
+setup_netjet(struct IsdnCard *card)
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;

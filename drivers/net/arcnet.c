@@ -471,9 +471,16 @@ arcnet_open(struct device *dev)
 
 #ifdef CONFIG_ARCNET_1051
   /* Initialize the RFC1051-encap protocol driver */
-  lp->sdev=(struct device *)kmalloc(sizeof(struct device),GFP_KERNEL);
+  lp->sdev=(struct device *)kmalloc(sizeof(struct device)+10,GFP_KERNEL);
+  if(lp->sdev = NULL)
+  {
+  	if(lp->edev)
+  		kfree(lp->edev);
+  	lp->edev=NULL;
+  	return -ENOMEM;
+  }
   memcpy(lp->sdev,dev,sizeof(struct device));
-  lp->sdev->name=(char *)kmalloc(10,GFP_KERNEL);
+  lp->sdev->name=(char *)(lp+1);
   sprintf(lp->sdev->name,"%ss",dev->name);
   lp->sdev->init=arcnetS_init;
   register_netdevice(lp->sdev);
@@ -562,7 +569,6 @@ arcnet_close(struct device *dev)
   /* free the RFC1051-encap protocol device */
   lp->sdev->priv=NULL;
   unregister_netdevice(lp->sdev);
-  kfree(lp->sdev->name);
   kfree(lp->sdev);
   lp->sdev=NULL;
 #endif
@@ -1991,7 +1997,7 @@ struct device arcnet_devs[MAX_ARCNET_DEVS];
 int arcnet_num_devs=0;
 char arcnet_dev_names[MAX_ARCNET_DEVS][10];
 
-__initfunc(void arcnet_init(void))
+void __init arcnet_init(void)
 {
   int c;
 
@@ -2041,7 +2047,7 @@ __initfunc(void arcnet_init(void))
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(static int init_module(void))
+static int __init init_module(void)
 #endif
 {
 #ifdef ALPHA_WARNING

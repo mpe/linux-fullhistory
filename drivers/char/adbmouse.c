@@ -242,7 +242,7 @@ static struct miscdevice adb_mouse = {
     ADB_MOUSE_MINOR, "adbmouse", &adb_mouse_fops
 };
 
-__initfunc(int adb_mouse_init(void))
+int __init adb_mouse_init(void)
 {
     mouse.active = 0;
     mouse.ready = 0;
@@ -268,7 +268,7 @@ __initfunc(int adb_mouse_init(void))
  * option, which is about using ADB keyboard buttons to emulate
  * mouse buttons. -- paulus
  */
-__initfunc(void adb_mouse_setup(char *str, int *ints))
+void __init adb_mouse_setup(char *str, int *ints)
 {
 	if (ints[0] >= 1) {
 		adb_emulate_buttons = ints[1] > 0;

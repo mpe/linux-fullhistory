@@ -64,7 +64,7 @@ char ft_dat[] __initdata = "$Date: 1997/11/06 00:38:08 $";
 /*  Called by modules package when installing the driver
  *  or by kernel during the initialization phase
  */
-__initfunc(int ftape_init(void))
+int __init ftape_init(void)
 {
 	TRACE_FUN(ft_t_flow);
 

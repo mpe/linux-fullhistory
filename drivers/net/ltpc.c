@@ -1018,7 +1018,7 @@ static struct net_device_stats *ltpc_get_stats(struct device *dev)
 
 /* initialization stuff */
   
-__initfunc(int ltpc_probe_dma(int base))
+int __init ltpc_probe_dma(int base)
 {
 	int dma = 0;
   	int timeout;
@@ -1088,7 +1088,7 @@ __initfunc(int ltpc_probe_dma(int base))
 	return dma;
 }
 
-__initfunc(int ltpc_probe(struct device *dev))
+int __init ltpc_probe(struct device *dev)
 {
 	int err;
 	int x=0,y=0;
@@ -1250,7 +1250,7 @@ __initfunc(int ltpc_probe(struct device *dev))
 }
 
 /* handles "ltpc=io,irq,dma" kernel command lines */
-__initfunc(void ltpc_setup(char *str, int *ints))
+void __init ltpc_setup(char *str, int *ints)
 {
 	if (ints[0] == 0) {
 		if (str && !strncmp(str, "auto", 4)) {

@@ -315,7 +315,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		if (error)
 			goto unmap_and_free_vma;
 		vma->vm_file = file;
-		atomic_inc(&file->f_count);
+		get_file(file);
 	}
 
 	/*
@@ -549,7 +549,7 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_file = area->vm_file;
 		mpnt->vm_pte = area->vm_pte;
 		if (mpnt->vm_file)
-			atomic_inc(&mpnt->vm_file->f_count);
+			get_file(mpnt->vm_file);
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
@@ -680,9 +680,9 @@ int do_munmap(unsigned long addr, size_t len)
 		size = end - st;
 
 		lock_kernel();
-
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
+		unlock_kernel();
 
 		remove_shared_vm_struct(mpnt);
 		mm->map_count--;
@@ -695,8 +695,6 @@ int do_munmap(unsigned long addr, size_t len)
 		 * Fix the mapping, and free the old area if it wasn't reused.
 		 */
 		extra = unmap_fixup(mpnt, st, size, extra);
-
-		unlock_kernel();
 	}
 
 	/* Release the extra vma struct if it wasn't used */
@@ -789,10 +787,8 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	flags = vma->vm_flags;
 	addr = vma->vm_start;
 
-	lock_kernel();		/* kswapd, ugh */
 	insert_vm_struct(mm, vma);
 	merge_segments(mm, vma->vm_start, vma->vm_end);
-	unlock_kernel();
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {

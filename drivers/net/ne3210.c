@@ -95,7 +95,7 @@ static unsigned int shmem_map[] __initdata = {0xff0, 0xfe0, 0xfff0, 0xd8, 0xffe0
  *	PROM for a match against the value assigned to Novell.
  */
 
-__initfunc(int ne3210_probe(struct device *dev))
+int __init ne3210_probe(struct device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -122,7 +122,7 @@ __initfunc(int ne3210_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(int ne3210_probe1(struct device *dev, int ioaddr))
+int __init ne3210_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	unsigned long eisa_id;

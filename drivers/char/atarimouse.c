@@ -159,7 +159,7 @@ static struct miscdevice atari_mouse = {
     ATARIMOUSE_MINOR, "atarimouse", &atari_mouse_fops
 };
 
-__initfunc(int atari_mouse_init(void))
+int __init atari_mouse_init(void)
 {
 	int r;
 
@@ -182,7 +182,7 @@ __initfunc(int atari_mouse_init(void))
 #define	MIN_THRESHOLD 1
 #define	MAX_THRESHOLD 20	/* more seems not reasonable... */
 
-__initfunc(void atari_mouse_setup( char *str, int *ints ))
+void __init atari_mouse_setup( char *str, int *ints )
 {
     if (ints[0] < 1) {
 	printk( "atari_mouse_setup: no arguments!\n" );

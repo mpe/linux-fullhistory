@@ -212,7 +212,7 @@ void cleanup_module(void)
 
 #endif
 
-__initfunc(int acq_init(void))
+int __init acq_init(void)
 {
 	printk("WDT driver for Acquire single board computer initialising.\n");
 

@@ -820,8 +820,8 @@ adapter_init(struct device *dev)
  *
  * Check if there is a DE-620 connected
  */
-__initfunc(int
-de620_probe(struct device *dev))
+int __init 
+de620_probe(struct device *dev)
 {
 	static struct net_device_stats de620_netstats;
 	int i;
@@ -913,8 +913,8 @@ de620_probe(struct device *dev))
  */
 #define sendit(dev,data) de620_set_register(dev, W_EIP, data | EIPRegister);
 
-__initfunc(static unsigned short
-ReadAWord(struct device *dev, int from))
+static unsigned short __init 
+ReadAWord(struct device *dev, int from)
 {
 	unsigned short data;
 	int nbits;
@@ -956,8 +956,8 @@ ReadAWord(struct device *dev, int from))
 	return data;
 }
 
-__initfunc(static int
-read_eeprom(struct device *dev))
+static int __init 
+read_eeprom(struct device *dev)
 {
 	unsigned short wrd;
 

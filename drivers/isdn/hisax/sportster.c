@@ -204,8 +204,8 @@ Sportster_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-get_io_range(struct IsdnCardState *cs))
+int __init 
+get_io_range(struct IsdnCardState *cs)
 {
 	int i, j, adr;
 	
@@ -230,8 +230,8 @@ get_io_range(struct IsdnCardState *cs))
 	}
 }
 
-__initfunc(int
-setup_sportster(struct IsdnCard *card))
+int __init 
+setup_sportster(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

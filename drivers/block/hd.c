@@ -113,7 +113,7 @@ unsigned long read_timer(void)
 }
 #endif
 
-__initfunc(void hd_setup(char *str, int *ints))
+void __init hd_setup(char *str, int *ints)
 {
 	int hdind = 0;
 
@@ -783,7 +783,7 @@ static struct file_operations hd_fops = {
 	block_fsync		/* fsync */
 };
 
-__initfunc(int hd_init(void))
+int __init hd_init(void)
 {
 	if (register_blkdev(MAJOR_NR,"hd",&hd_fops)) {
 		printk("hd: unable to get major %d for hard disk\n",MAJOR_NR);

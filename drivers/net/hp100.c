@@ -106,6 +106,7 @@
 #include <linux/types.h>
 #include <linux/config.h>  /* for CONFIG_PCI */
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #if LINUX_VERSION_CODE >= 0x020100
 #define LINUX_2_1
@@ -347,7 +348,7 @@ static void wait( void )
  *  since this could cause problems when the card is not installed.
  */
  
-__initfunc(int hp100_probe( struct device *dev ))
+int __init hp100_probe( struct device *dev )
 {
   int base_addr = dev ? dev -> base_addr : 0;
   int ioaddr = 0;
@@ -524,9 +525,9 @@ __initfunc(int hp100_probe( struct device *dev ))
 
 
 #ifdef LINUX_2_1
-__initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev ))
+static int __init hp100_probe1( struct device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev )
 #else
-__initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn ))
+static int __init hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn )
 #endif
 {
   int i;

@@ -621,7 +621,7 @@ static int bpq_device_event(struct notifier_block *this,unsigned long event, voi
  * Initialize driver. To be called from af_ax25 if not compiled as a
  * module
  */
-__initfunc(int bpq_init(void))
+int __init bpq_init(void)
 {
 	struct device *dev;
 

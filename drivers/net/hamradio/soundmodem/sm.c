@@ -640,9 +640,9 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 /* --------------------------------------------------------------------- */
 
 #ifdef MODULE
-__initfunc(static int sm_init(void))
+static int __init sm_init(void)
 #else /* MODULE */
-__initfunc(int sm_init(void))
+int __init sm_init(void)
 #endif /* MODULE */
 {
 	int i, j, found = 0;
@@ -724,7 +724,7 @@ MODULE_DESCRIPTION("Soundcard amateur radio modem driver");
 
 #endif
 
-__initfunc(int init_module(void))
+int __init init_module(void)
 {
 	if (mode) {
 		if (iobase == -1)
@@ -778,7 +778,7 @@ void cleanup_module(void)
  * modem: afsk1200, fsk9600
  */
 
-__initfunc(void sm_setup(char *str, int *ints))
+void __init sm_setup(char *str, int *ints)
 {
 	int i;
 

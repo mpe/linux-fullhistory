@@ -212,9 +212,17 @@ CONFIG_SCSI_NCR53C8XX_SYNC=20
 # Network device support
 #
 CONFIG_NETDEVICES=y
+
+#
+# ARCnet devices
+#
 # CONFIG_ARCNET is not set
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
+
+#
+# Ethernet (10 or 100Mbit)
+#
 CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
@@ -234,14 +242,22 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_VIA_RHINE is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
-# CONFIG_DLCI is not set
 # CONFIG_PPP is not set
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
+
+#
+# Token ring devices
+#
 # CONFIG_TR is not set
+
+#
+# Wan interfaces
+#
 # CONFIG_HOSTESS_SV11 is not set
 # CONFIG_COSA is not set
-# CONFIG_RCPCI is not set
+# CONFIG_SEALEVEL_4021 is not set
+# CONFIG_DLCI is not set
 # CONFIG_WAN_DRIVERS is not set
 # CONFIG_LAPBETHER is not set
 # CONFIG_X25_ASY is not set

@@ -146,7 +146,7 @@ static void ne_block_output(struct device *dev, const int count,
  * Note that at boot, this probe only picks up one card at a time.
  */
 
-__initfunc (int ne2_probe(struct device *dev))
+int __init ne2_probe(struct device *dev)
 {
 	static int current_mca_slot = -1;
 	int i;
@@ -198,8 +198,7 @@ static int ne2_procinfo(char *buf, int slot, struct device *dev)
 	return len;
 }
 
-
-__initfunc (static int ne2_probe1(struct device *dev, int slot))
+static int __init ne2_probe1(struct device *dev, int slot)
 {
 	int i, base_addr, irq;
 	unsigned char POS;

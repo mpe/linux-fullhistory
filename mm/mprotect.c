@@ -103,7 +103,7 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	n->vm_flags = newflags;
 	n->vm_page_prot = prot;
 	if (n->vm_file)
-		atomic_inc(&n->vm_file->f_count);
+		get_file(n->vm_file);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -126,7 +126,7 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	n->vm_flags = newflags;
 	n->vm_page_prot = prot;
 	if (n->vm_file)
-		atomic_inc(&n->vm_file->f_count);
+		get_file(n->vm_file);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -212,7 +212,6 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		return 0;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 
 	vma = find_vma(current->mm, start);
 	error = -EFAULT;
@@ -249,7 +248,6 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 	}
 	merge_segments(current->mm, start, end);
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return error;
 }

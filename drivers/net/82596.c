@@ -878,7 +878,7 @@ static void print_eth(char *add)
 	printk("type %2.2X%2.2X\n", (unsigned char) add[12], (unsigned char) add[13]);
 }
 
-__initfunc(int i82596_probe(struct device *dev))
+int __init i82596_probe(struct device *dev)
 {
 	int i;
 	struct i596_private *lp;

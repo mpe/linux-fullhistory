@@ -517,7 +517,7 @@ struct cyclades_card {
     int num_chips;	/* 0 if card absent, -1 if Z/PCI, else Y */
     int first_line;	/* minor number of first channel on card */
     int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
-    int	inact_ctrl;	/* FW Inactivity control - 0 disabled, 1 enabled */
+    int	intr_enabled;	/* FW Interrupt flag - 0 disabled, 1 enabled */
 };
 
 struct cyclades_chip {

@@ -163,7 +163,7 @@ static int sjcd_cleanup(void);
  * Set up device, i.e., use command line data to set
  * base address.
  */
-__initfunc(void sjcd_setup( char *str, int *ints ))
+void __init sjcd_setup( char *str, int *ints )
 {
    if (ints[0] > 0)
       sjcd_base = ints[1];
@@ -1457,7 +1457,7 @@ static struct {
  * Test for presence of drive and initialize it. Called at boot time.
  * Probe cdrom, find out version and status.
  */
-__initfunc(int sjcd_init( void )){
+int __init sjcd_init( void ){
   int i;
 
   printk(KERN_INFO "SJCD: Sanyo CDR-H94A cdrom driver version %d.%d.\n", SJCD_VERSION_MAJOR,

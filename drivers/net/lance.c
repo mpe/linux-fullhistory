@@ -420,7 +420,7 @@ int lance_probe(struct device *dev)
 	return -ENODEV;
 }
 
-__initfunc(int lance_probe1(struct device *dev, int ioaddr, int irq, int options))
+int __init lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 {
 	struct lance_private *lp;
 	short dma_channels;					/* Mark spuriously-busy DMA channels */
@@ -499,6 +499,8 @@ __initfunc(int lance_probe1(struct device *dev, int ioaddr, int irq, int options
 		
 	lp = (struct lance_private *)(((unsigned long)kmalloc(sizeof(*lp)+7,
 										   GFP_DMA | GFP_KERNEL)+7) & ~7);
+	if(lp==NULL)
+		return -ENODEV;
 	if (lance_debug > 6) printk(" (#0x%05lx)", (unsigned long)lp);
 	memset(lp, 0, sizeof(*lp));
 	dev->priv = lp;

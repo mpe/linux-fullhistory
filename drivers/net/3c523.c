@@ -319,7 +319,7 @@ static int elmc_open(struct device *dev)
  * Check to see if there's an 82586 out there.
  */
 
-__initfunc(static int check586(struct device *dev, unsigned long where, unsigned size))
+static int __init check586(struct device *dev, unsigned long where, unsigned size)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	char *iscp_addrs[2];
@@ -422,7 +422,7 @@ static int elmc_getinfo(char *buf, int slot, void *d)
 
 /*****************************************************************/
 
-__initfunc(int elmc_probe(struct device *dev))
+int __init elmc_probe(struct device *dev)
 {
 	static int slot = 0;
 	int base_addr = dev ? dev->base_addr : 0;

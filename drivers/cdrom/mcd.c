@@ -230,8 +230,7 @@ static struct cdrom_device_info mcd_info = {
 };
 
 
-
-__initfunc(void mcd_setup(char *str, int *ints))
+void __init mcd_setup(char *str, int *ints)
 {
    if (ints[0] > 0)
       mcd_port = ints[1];
@@ -1155,7 +1154,7 @@ static void cleanup(int level)
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
-__initfunc(int mcd_init(void))
+int __init mcd_init(void)
 {
 	int count;
 	unsigned char result[3];

@@ -627,8 +627,8 @@ de600_rx_intr(struct device *dev)
 	 */
 }
 
-__initfunc(int
-de600_probe(struct device *dev))
+int __init 
+de600_probe(struct device *dev)
 {
 	int	i;
 	static struct net_device_stats de600_netstats;

@@ -305,7 +305,7 @@ struct netdev_entry netcard_drv =
 	device and return success.
 	*/
 
-__initfunc(int el16_probe(struct device *dev))
+int __init el16_probe(struct device *dev)
 {
 	int base_addr = dev ? dev->base_addr : 0;
 	int i;
@@ -326,7 +326,7 @@ __initfunc(int el16_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(int el16_probe1(struct device *dev, int ioaddr))
+int __init el16_probe1(struct device *dev, int ioaddr)
 {
 	static unsigned char init_ID_done = 0, version_printed = 0;
 	int i, irq, irqval;

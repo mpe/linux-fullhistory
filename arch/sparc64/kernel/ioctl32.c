@@ -1696,9 +1696,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	int error = -EBADF;
 
 	lock_kernel();
-	filp = fcheck(fd);
+	filp = fget(fd);
 	if(!filp)
-		goto out;
+		goto out2;
 
 	if (!filp->f_op || !filp->f_op->ioctl) {
 		error = sys_ioctl (fd, cmd, arg);
@@ -2381,6 +2381,8 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		break;
 	}
 out:
+	fput(filp);
+out2:
 	unlock_kernel();
 	return error;
 }

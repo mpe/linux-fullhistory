@@ -90,8 +90,8 @@ static void el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
    If the ethercard isn't found there is an optional probe for
    ethercard jumpered to programmed-I/O mode.
    */
-__initfunc(int
-el2_probe(struct device *dev))
+int __init 
+el2_probe(struct device *dev)
 {
     int *addr, addrs[] = { 0xddffe, 0xd9ffe, 0xcdffe, 0xc9ffe, 0};
     int base_addr = dev->base_addr;
@@ -125,8 +125,8 @@ el2_probe(struct device *dev))
 #ifndef HAVE_DEVLIST
 /*  Try all of the locations that aren't obviously empty.  This touches
     a lot of locations, and is much riskier than the code above. */
-__initfunc(int
-el2_pio_probe(struct device *dev))
+int __init 
+el2_pio_probe(struct device *dev)
 {
     int i;
     int base_addr = dev ? dev->base_addr : 0;
@@ -151,8 +151,8 @@ el2_pio_probe(struct device *dev))
 /* Probe for the Etherlink II card at I/O port base IOADDR,
    returning non-zero on success.  If found, set the station
    address and memory parameters in DEVICE. */
-__initfunc(int
-el2_probe1(struct device *dev, int ioaddr))
+int __init 
+el2_probe1(struct device *dev, int ioaddr)
 {
     int i, iobase_reg, membase_reg, saved_406, wordlength;
     static unsigned version_printed = 0;

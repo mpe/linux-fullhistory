@@ -5,7 +5,7 @@
  * This module provides support for the Arlan 655 card made by Aironet
  */
 
-
+#include <linux/config.h>
 #include "arlan.h"
 
 static const char *arlan_version = "C.Jennigs 97 & Elmer.Joandi@ut.ee  Oct'98, http://www.ylenurme.ee/~elmer/655/";

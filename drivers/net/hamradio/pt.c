@@ -474,8 +474,7 @@ static void chipset_init(struct device *dev)
 } /* chipset_init() */
 
 
-
-__initfunc(int pt_init(void))
+int __init pt_init(void)
 {
     int *port;
     int ioaddr = 0;
@@ -537,7 +536,7 @@ __initfunc(int pt_init(void))
 /*
  * Probe for PT card.  Also initialises the timers
  */
-__initfunc(static int hw_probe(int ioaddr))
+static int __init hw_probe(int ioaddr)
 {
     int time = 1000;		/* Number of milliseconds to test */
     int a = 1;

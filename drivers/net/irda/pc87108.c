@@ -127,7 +127,7 @@ static int  pc87108_net_close(struct device *dev);
  *    Initialize chip. Just try to find out how many chips we are dealing with
  *    and where they are
  */
-__initfunc(int pc87108_init(void))
+int __init pc87108_init(void)
 {
 	int i;
 

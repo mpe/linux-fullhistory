@@ -96,7 +96,7 @@ MODULE_PARM(timeout,"i");
 MODULE_PARM(backplane,"i");
 MODULE_PARM(clock,"i");
 #else
-__initfunc(void com20020_setup (char *str, int *ints));
+void __init com20020_setup (char *str, int *ints);
 extern struct device arcnet_devs[];
 extern char arcnet_dev_names[][10];
 extern int arcnet_num_devs;
@@ -224,7 +224,7 @@ static const char *version =
  * it's where we were told it was, and even autoirq
  */
 
-__initfunc(int arc20020_probe(struct device *dev))
+int __init arc20020_probe(struct device *dev)
 {
   int ioaddr=dev->base_addr,status,delayval;
   unsigned long airqmask;
@@ -327,7 +327,7 @@ __initfunc(int arc20020_probe(struct device *dev))
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
-__initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
+int __init arc20020_found(struct device *dev,int ioaddr,int airq)
 {
   struct arcnet_local *lp;
   
@@ -1035,7 +1035,7 @@ void cleanup_module(void)
 
 #else
 
-__initfunc(void com20020_setup (char *str, int *ints))
+void __init com20020_setup (char *str, int *ints)
 {
   struct device *dev;
 

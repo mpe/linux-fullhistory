@@ -90,8 +90,9 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 
 		/* Set up arguments and perform rpc call */
 		nfs_readreq_setup(&rqst, NFS_FH(dentry), offset, buffer, rsize);
-		result = rpc_call(NFS_CLIENT(inode), NFSPROC_READ,
-					&rqst.ra_args, &rqst.ra_res, flags);
+		lock_kernel();
+		result = rpc_call(NFS_CLIENT(inode), NFSPROC_READ, &rqst.ra_args, &rqst.ra_res, flags);
+		unlock_kernel();
 
 		/*
 		 * Even if we had a partial success we can't mark the page

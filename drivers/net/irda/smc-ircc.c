@@ -100,7 +100,7 @@ static inline void serial_out(int port, int offset, int value)
  *    Initialize chip. Just try to find out how many chips we are dealing with
  *    and where they are
  */
-__initfunc(int ircc_init(void))
+int __init ircc_init(void)
 {
 	int i;
 

@@ -28,6 +28,9 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
       tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
    fi
    tristate 'Cyclades async mux support' CONFIG_CYCLADES
+   if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_CYCLADES" != "n" ]; then
+      bool '  Cyclades-Z interrupt mode operation (EXPERIMENTAL)' CONFIG_CYZ_INTR
+   fi
    bool 'Stallion multiport serial support' CONFIG_STALDRV
    if [ "$CONFIG_STALDRV" = "y" ]; then
      tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
@@ -80,6 +83,9 @@ if [ "$CONFIG_QIC02_TAPE" != "n" ]; then
     comment '   from the tpqic02-support package.  It is available at'
     comment '   metalab.unc.edu or ftp://titus.cfw.com/pub/Linux/util/'
   fi
+  dep_tristate 'Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV
+  dep_tristate ' Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
+  dep_tristate '  Include support for LML33' CONFIG_VIDEO_LML33 $CONFIG_VIDEO_ZORAN
 fi
 
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
@@ -112,6 +118,7 @@ comment 'Video For Linux'
 
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
+  dep_tristate 'ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV
   dep_tristate 'AIMSlab RadioTrack (aka RadioReveal) support' CONFIG_RADIO_RTRACK $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_RTRACK" = "y" ]; then
     hex '  RadioTrack i/o port (0x20f or 0x30f)' CONFIG_RADIO_RTRACK_PORT 20f
@@ -124,11 +131,14 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_AZTECH" = "y" ]; then
     hex '  Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
   fi
-  dep_tristate 'ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV
-  dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
   dep_tristate 'GemTek Radio Card support' CONFIG_RADIO_GEMTEK $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_GEMTEK" = "y" ]; then
     hex '  GemTek i/o port (0x20c, 0x30c, 0x24c or 0x34c)' CONFIG_RADIO_GEMTEK_PORT 34c
+  fi
+  dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
+  dep_tristate 'TerraTec ActiveRadio ISA Standalone' CONFIG_RADIO_TERRATEC $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_RADIO_TERRATEC" = "y" ]; then
+    hex '  Terratec i/o port (normally 0x590)' CONFIG_RADIO_TERRATEC_PORT 590
   fi
   if [ "$CONFIG_PCI" != "n" ]; then
     dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV

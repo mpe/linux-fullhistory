@@ -203,7 +203,7 @@ configuration options are available on the command line:
 * io=###              - specify IO address (200h-360h)
 * irq=##              - specify interrupt level
 * mmode=#####         - specify memory base address
-* dma=#               - specify dma channel
+* dma=#               - specify DMA channel
 * media=rj45          - specify media type
    or media=2
    or media=aui
@@ -412,33 +412,33 @@ its ability to communicate across the ISA bus based on the system resources
 assigned during hardware configuration.  The following tests are performed:
 
    * IO Register Read/Write Test
-     The IO Register Read/Write test insures that the CS8900/20 can be 
+     The IO Register Read/Write test ensures that the CS8900/20 can be 
      accessed in IO mode, and that the IO base address is correct.
 
    * Shared Memory Test
-     The Shared Memory test insures the CS8900/20 can be accessed in memory 
+     The Shared Memory test ensures the CS8900/20 can be accessed in memory 
      mode and that the range of memory addresses assigned does not conflict 
      with other devices in the system.
 
    * Interrupt Test
-     The Interrupt test insures there are no conflicts with the assigned IRQ
+     The Interrupt test ensures there are no conflicts with the assigned IRQ
      signal.
 
    * EEPROM Test
-     The EEPROM test insures the EEPROM can be read.
+     The EEPROM test ensures the EEPROM can be read.
 
    * Chip RAM Test
-     The Chip RAM test insures the 4K of memory internal to the CS8900/20 is
+     The Chip RAM test ensures the 4 K of memory internal to the CS8900/20 is
      working properly.
 
    * Internal Loop-back Test
-     The Internal Loop Back test insures the adapter's transmitter and 
+     The Internal Loop Back test ensures the adapter's transmitter and 
      receiver are operating properly.  If this test fails, make sure the 
      adapter's cable is connected to the network (check for LED activity for 
      example).
 
    * Boot PROM Test
-     The Boot PROM  test insures the Boot PROM is present, and can be read.
+     The Boot PROM test ensures the Boot PROM is present, and can be read.
      Failure indicates the Boot PROM  was not successfully read due to a
      hardware problem or due to a conflicts on the Boot PROM address
      assignment. (Test only applies if the adapter is configured to use the
@@ -564,7 +564,7 @@ Crystal's CS89XX Technical Application Support can be reached at:
 Telephone  :(800) 888-5016 (from inside U.S. and Canada)
            :(512) 442-7555 (from outside the U.S. and Canada)
 Fax	   :(512) 912-3871
-Email	   :ethernet@crystal.cirrus.com
+E-mail	   :ethernet@crystal.cirrus.com
 WWW        :http://www.crystal.com
 
 

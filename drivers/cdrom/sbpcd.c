@@ -3215,7 +3215,7 @@ static int cc_SubChanInfo(int frame, int count, u_char *buffer)
 }
 #endif FUTURE
 /*==========================================================================*/
-__initfunc(static void check_datarate(void))
+static void __init check_datarate(void)
 {
 	int i=0;
 	
@@ -3285,7 +3285,7 @@ static int c2_ReadError(int fam)
 }
 #endif
 /*==========================================================================*/
-__initfunc(static void ask_mail(void))
+static void __init ask_mail(void)
 {
 	int i;
 	
@@ -3304,7 +3304,7 @@ __initfunc(static void ask_mail(void))
 	msg(DBG_INF,"infobuf =%s\n", msgbuf);
 }
 /*==========================================================================*/
-__initfunc(static int check_version(void))
+static int __init check_version(void)
 {
 	int i, j, l;
 	int teac_possible=0;
@@ -3602,7 +3602,7 @@ static void switch_drive(int i)
 /*
  * probe for the presence of an interface card
  */
-__initfunc(static int check_card(int port))
+static int __init check_card(int port)
 {
 #undef N_RESPO
 #define N_RESPO 20
@@ -3706,7 +3706,7 @@ __initfunc(static int check_card(int port))
 /*
  * probe for the presence of drives on the selected controller
  */
-__initfunc(static int check_drives(void))
+static int __init check_drives(void)
 {
 	int i, j;
 	
@@ -5458,9 +5458,9 @@ static struct cdrom_device_info sbpcd_info = {
  *
  */
 #if (SBPCD_ISSUE-1)
-__initfunc(static void sbpcd_setup(const char *s, int *p))
+static void __init sbpcd_setup(const char *s, int *p)
 #else
-__initfunc(void sbpcd_setup(const char *s, int *p))
+void __init sbpcd_setup(const char *s, int *p)
 #endif
 {
 	setup_done++;
@@ -5512,7 +5512,7 @@ __initfunc(void sbpcd_setup(const char *s, int *p))
  *        port 0x330, we have to use an offset of 8; so, the real CDROM port
  *        address is 0x338.
  */
-__initfunc(static int config_spea(void))
+static int __init config_spea(void)
 {
 	/*
          * base address offset between configuration port and CDROM port,
@@ -5571,7 +5571,7 @@ __initfunc(static int config_spea(void))
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int SBPCD_INIT(void))
+int __init SBPCD_INIT(void)
 #endif MODULE
 {
 	int i=0, j=0;

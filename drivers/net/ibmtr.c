@@ -171,7 +171,7 @@ const char *channel_def[] __initdata = {
 	"ISA", "MCA", "ISA P&P" 
 };
 
-__initfunc(char *adapter_def(char type))
+char __init *adapter_def(char type)
 {
 	switch (type) 
 	{
@@ -221,7 +221,7 @@ static unsigned int ibmtr_portlist[] __initdata = {
 
 static __u32 ibmtr_mem_base = 0xd0000;
 
-__initfunc(static void PrtChanID(char *pcid, short stride) )
+static void __init PrtChanID(char *pcid, short stride) 
 {
 	short i, j;
 	for (i=0, j=0; i<24; i++, j+=stride)
@@ -229,7 +229,7 @@ __initfunc(static void PrtChanID(char *pcid, short stride) )
 	printk("\n");
 }
 
-__initfunc(static void HWPrtChanID (__u32 pcid, short stride))
+static void __init HWPrtChanID (__u32 pcid, short stride)
 {
 	short i, j;
 	for (i=0, j=0; i<24; i++, j+=stride)
@@ -250,7 +250,7 @@ __initfunc(static void HWPrtChanID (__u32 pcid, short stride))
  *	which references it.
  */
  
-__initfunc(int ibmtr_probe(struct device *dev))
+int __init ibmtr_probe(struct device *dev)
 {
         int i;
         int base_addr = dev ? dev->base_addr : 0;
@@ -293,7 +293,7 @@ __initfunc(int ibmtr_probe(struct device *dev))
         return -ENODEV;
 }
 
-__initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
+static int __init ibmtr_probe1(struct device *dev, int PIOaddr)
 {
 	unsigned char segment=0, intr=0, irq=0, i=0, j=0, cardpresent=NOTOK,temp=0;
 	__u32 t_mmio=0;
@@ -748,7 +748,7 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 
 /* query the adapter for the size of shared RAM  */
 
-__initfunc(static unsigned char get_sram_size(struct tok_info *adapt_info))
+static unsigned char __init get_sram_size(struct tok_info *adapt_info)
 {
 
 	unsigned char avail_sram_code;
@@ -767,7 +767,7 @@ __initfunc(static unsigned char get_sram_size(struct tok_info *adapt_info))
 		return 1<<((readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
 }
 
-__initfunc(static int trdev_init(struct device *dev))
+static int __init trdev_init(struct device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 

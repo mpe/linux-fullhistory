@@ -218,7 +218,7 @@ static struct enet_statistics *cops_get_stats (struct device *dev);
  *      If dev->base_addr in [1..0x1ff], always return failure.
  *        otherwise go with what we pass in.
  */
-__initfunc(int cops_probe(struct device *dev))
+int __init cops_probe(struct device *dev)
 {
 	int i;
         int base_addr = dev ? dev->base_addr : 0;
@@ -252,7 +252,7 @@ __initfunc(int cops_probe(struct device *dev))
  *      probes on the ISA bus. A good device probes avoids doing writes, and
  *      verifies that the correct device exists and functions.
  */
-__initfunc(static int cops_probe1(struct device *dev, int ioaddr))
+static int __init cops_probe1(struct device *dev, int ioaddr)
 {
         struct cops_local *lp;
 	static unsigned version_printed = 0;
@@ -348,7 +348,7 @@ __initfunc(static int cops_probe1(struct device *dev, int ioaddr))
         return 0;
 }
 
-__initfunc(static int cops_irq (int ioaddr, int board))
+static int __init cops_irq (int ioaddr, int board)
 {       /*
          * This does not use the IRQ to determine where the IRQ is. We just
          * assume that when we get a correct status response that it's the IRQ.

@@ -60,7 +60,7 @@ static struct param_table {
 	{ "mach2",     &ft_mach2,          CONFIG_FT_MACH2,          0,     1}
 };
 
-__initfunc(void ftape_setup(char *str, int *ints))
+void __init ftape_setup(char *str, int *ints)
 {
 	int i;
 	int param;

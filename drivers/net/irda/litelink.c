@@ -60,7 +60,7 @@ static struct dongle dongle = {
 	litelink_init_qos,
 };
 
-__initfunc(int litelink_init(void))
+int __init litelink_init(void)
 {
 	return irda_device_register_dongle(&dongle);
 }

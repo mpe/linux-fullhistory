@@ -52,7 +52,7 @@ static struct dongle dongle = {
 	esi_qos_init,
 };
 
-__initfunc(int esi_init(void))
+int __init esi_init(void)
 {
 	return irda_device_register_dongle(&dongle);
 }

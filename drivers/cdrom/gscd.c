@@ -194,7 +194,7 @@ static int check_gscd_med_chg (kdev_t full_dev)
 }
 
 
-__initfunc(void gscd_setup (char *str, int *ints))
+void __init gscd_setup (char *str, int *ints)
 {
   if (ints[0] > 0) 
   {
@@ -851,7 +851,7 @@ int  i;
      return;
 }
 
-__initfunc(int find_drives (void))
+int __init find_drives (void)
 {
 int *pdrv;
 int drvnum;
@@ -902,7 +902,7 @@ int i;
     return drvnum;
 }    
 
-__initfunc(void init_cd_drive ( int num ))
+void __init init_cd_drive ( int num )
 {
 char resp [50];
 int  i;
@@ -994,7 +994,7 @@ void cleanup_module (void)
 
 
 /* Test for presence of drive and initialize it.  Called only at boot time. */
-__initfunc(int gscd_init (void))
+int __init gscd_init (void)
 {
    return my_gscd_init ();
 }
@@ -1002,7 +1002,7 @@ __initfunc(int gscd_init (void))
 
 /* This is the common initialisation for the GoldStar drive. */
 /* It is called at boot time AND for module init.           */
-__initfunc(int my_gscd_init (void))
+int __init my_gscd_init (void)
 {
 int i;
 int result;

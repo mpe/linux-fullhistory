@@ -322,7 +322,7 @@ static inline void forget_pte(pte_t page)
 	}
 }
 
-static inline int zap_pte_range(pmd_t * pmd, unsigned long address, unsigned long size)
+static inline int zap_pte_range(struct mm_struct *mm, pmd_t * pmd, unsigned long address, unsigned long size)
 {
 	pte_t * pte;
 	int freed;
@@ -344,18 +344,20 @@ static inline int zap_pte_range(pmd_t * pmd, unsigned long address, unsigned lon
 		pte_t page;
 		if (!size)
 			break;
+		spin_lock(&mm->page_table_lock);
 		page = *pte;
 		pte++;
 		size--;
+		pte_clear(pte-1);
+		spin_unlock(&mm->page_table_lock);
 		if (pte_none(page))
 			continue;
-		pte_clear(pte-1);
 		freed += free_pte(page);
 	}
 	return freed;
 }
 
-static inline int zap_pmd_range(pgd_t * dir, unsigned long address, unsigned long size)
+static inline int zap_pmd_range(struct mm_struct *mm, pgd_t * dir, unsigned long address, unsigned long size)
 {
 	pmd_t * pmd;
 	unsigned long end;
@@ -375,7 +377,7 @@ static inline int zap_pmd_range(pgd_t * dir, unsigned long address, unsigned lon
 		end = PGDIR_SIZE;
 	freed = 0;
 	do {
-		freed += zap_pte_range(pmd, address, end - address);
+		freed += zap_pte_range(mm, pmd, address, end - address);
 		address = (address + PMD_SIZE) & PMD_MASK; 
 		pmd++;
 	} while (address < end);
@@ -393,7 +395,7 @@ void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long s
 
 	dir = pgd_offset(mm, address);
 	while (address < end) {
-		freed += zap_pmd_range(dir, address, end - address);
+		freed += zap_pmd_range(mm, dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}

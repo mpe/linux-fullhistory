@@ -2525,7 +2525,7 @@ static _INLINE_ int autoconfig(struct esp_struct * info, int *region_start)
 /*
  * The serial driver boot-time initialization code!
  */
-__initfunc(int espserial_init(void))
+int __init espserial_init(void)
 {
 	int i, offset;
 	int region_start;

@@ -326,8 +326,8 @@ void coda_flag_inode_children(struct inode *inode, int flag)
 	while ( alias != &inode->i_dentry ) {
 		alias_de = list_entry(alias, struct dentry, d_alias);
 		coda_flag_children(alias_de, flag);
-		shrink_dcache_parent(alias_de);
 		alias = alias->next;
+		shrink_dcache_parent(alias_de);
 	}
 
 }

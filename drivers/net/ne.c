@@ -177,7 +177,7 @@ struct netdev_entry netcard_drv =
  * the card.
  */
 
-__initfunc(int ne_probe(struct device *dev))
+int __init ne_probe(struct device *dev)
 {
 	int base_addr = dev ? dev->base_addr : 0;
 
@@ -209,7 +209,7 @@ __initfunc(int ne_probe(struct device *dev))
 #endif
 
 #ifdef CONFIG_PCI
-__initfunc(static int ne_probe_pci(struct device *dev))
+static int __init ne_probe_pci(struct device *dev)
 {
 	int i;
 
@@ -243,7 +243,7 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 }
 #endif  /* CONFIG_PCI */
 
-__initfunc(static int ne_probe1(struct device *dev, int ioaddr))
+static int __init ne_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	unsigned char SA_prom[32];

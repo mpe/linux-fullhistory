@@ -334,8 +334,8 @@ Asus_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_asuscom(struct IsdnCard *card))
+int __init 
+setup_asuscom(struct IsdnCard *card)
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;
