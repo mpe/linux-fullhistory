@@ -58,10 +58,7 @@ sb_dsp_command (sb_devc * devc, unsigned char val)
   int             i;
   unsigned long   limit;
 
-  limit = jiffies + HZ / 10;	/*
-				   * The timeout is 0.1 seconds
-				 */
-
+  limit = jiffies + HZ / 10;	/* Timeout */
   /*
    * Note! the i<500000 is an emergency exit. The sb_dsp_command() is sometimes
    * called while interrupts are disabled. This means that the timer is
@@ -173,7 +170,8 @@ sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 	break;
 
       default:
-	printk ("Sound Blaster: Unexpected interrupt\n");
+	/* printk ("Sound Blaster: Unexpected interrupt\n"); */
+	;
       }
 /*
  * Acknowledge interrupts 
@@ -633,6 +631,7 @@ sb_dsp_detect (struct address_info *hw_config)
 		for (i = 0; i < 10000; i++)
 		  inb (DSP_DATA_AVAIL);
 		devc->caps = SB_NO_AUDIO | SB_NO_MIDI;	/* Mixer only */
+		devc->model = MDL_AZTECH;
 	      }
 	}
     }
@@ -666,6 +665,7 @@ sb_dsp_init (struct address_info *hw_config)
   sb_devc        *devc;
   int             n;
   char            name[100];
+  extern int      sb_be_quiet;
 
 /*
  * Check if we had detected a SB device earlier
@@ -776,7 +776,7 @@ sb_dsp_init (struct address_info *hw_config)
 	{
 	  devc->model = hw_config->card_subtype = MDL_SBPRO;
 	  if (hw_config->name == NULL)
-	    hw_config->name = "Sound Blaster Pro";
+	    hw_config->name = "Sound Blaster Pro (8 BIT ONLY)";
 	}
       break;
 
@@ -809,10 +809,33 @@ sb_dsp_init (struct address_info *hw_config)
 #endif
 
   if (hw_config->name == NULL)
-    hw_config->name = "Sound Blaster";
+    hw_config->name = "Sound Blaster (8 BIT/MONO ONLY)";
 
   sprintf (name, "%s (%d.%d)", hw_config->name, devc->major, devc->minor);
   conf_printf (name, hw_config);
+
+/*
+ * Assuming that a soundcard is Sound Blaster (compatible) is the most common
+ * configuration error and the mother of all problems. Usually soundcards
+ * emulate SB Pro but in addition they have a 16 bit native mode which should be
+ * used in Unix. See Readme.cards for more information about configuring OSS/Free
+ * properly.
+ */
+  if (devc->model <= MDL_SBPRO)
+    if (devc->major == 3 && devc->minor != 1)	/* "True" SB Pro should have v3.1. */
+      {
+	printk ("This soundcard doesn't seem to be fully Sound Blaster Pro compatible.\n");
+	printk ("Almost certainly there is another way to configure OSS so that\n");
+	printk ("it works properly with OSS (for example in 16 bit mode).\n");
+      }
+    else if (!sb_be_quiet && devc->model == MDL_SBPRO)
+      {
+	printk ("SB DSP version is just %d.%d which means that your card is\n",
+		devc->major, devc->minor);
+	printk ("several years old (8 bit only device)\n");
+	printk ("or alternatively the sound driver is incorrectly configured.\n");
+      }
+
   hw_config->card_subtype = devc->model;
   last_devc = devc;		/* For SB MPU detection */
 

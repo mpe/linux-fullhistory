@@ -10,7 +10,7 @@ int DMAbuf_rmchars(int dev, int buff_no, int c);
 int DMAbuf_start_output(int dev, int buff_no, int l);
 int DMAbuf_move_wrpointer(int dev, int l);
 /* int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local); */
-void DMAbuf_init(void);
+void DMAbuf_init(int dev, int dma1, int dma2);
 void DMAbuf_deinit(int dev);
 int DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode);
 int DMAbuf_open_dma (int dev);
@@ -20,7 +20,7 @@ void DMAbuf_outputintr(int dev, int underflow_flag);
 struct dma_buffparms;
 int DMAbuf_space_in_queue (int dev);
 int DMAbuf_activate_recording (int dev, struct dma_buffparms *dmap);
-int DMAbuf_get_buffer_pointer (int dev, struct dma_buffparms *dmap);
+int DMAbuf_get_buffer_pointer (int dev, struct dma_buffparms *dmap, int direction);
 void DMAbuf_launch_output(int dev, struct dma_buffparms *dmap);
 int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 void DMAbuf_start_devices(unsigned int devmask);
@@ -52,7 +52,8 @@ int sequencer_open (int dev, struct fileinfo *file);
 void sequencer_release (int dev, struct fileinfo *file);
 int sequencer_ioctl (int dev, struct fileinfo *file,
 	   unsigned int cmd, caddr_t arg);
-int sequencer_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
+int sequencer_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
+
 void sequencer_init (void);
 void sequencer_timer(unsigned long dummy);
 int note_to_freq(int note_num);
@@ -60,8 +61,6 @@ unsigned long compute_finetune(unsigned long base_freq, int bend, int range,
 			       int vibrato_bend);
 void seq_input_event(unsigned char *event, int len);
 void seq_copy_to_input (unsigned char *event, int len);
-
-int sequencer_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 
 /*
  *	System calls for the /dev/midi
@@ -73,11 +72,10 @@ int MIDIbuf_open (int dev, struct fileinfo *file);
 void MIDIbuf_release (int dev, struct fileinfo *file);
 int MIDIbuf_ioctl (int dev, struct fileinfo *file,
 	   unsigned int cmd, caddr_t arg);
-int MIDIbuf_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
+int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
+
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 void MIDIbuf_init(void);
-
-int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 
 /*
  *
@@ -85,7 +83,9 @@ int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wa
  */
 
 /*	From soundcard.c	*/
+#ifndef __bsdi__
 void tenmicrosec(int *osp);
+#endif
 void request_sound_timer (int count);
 void sound_stop_timer(void);
 int snd_set_irq_handler (int interrupt_level, void(*iproc)(int, void*, struct pt_regs *), char *name, int *osp);
@@ -205,7 +205,7 @@ void	 ad1848_control(int cmd, int arg);
 #define AD1848_REROUTE(oldctl, newctl) \
 		ad1848_control(AD1848_MIXER_REROUTE, ((oldctl)<<8)|(newctl))
 
-void     ad1848_interrupt (int irq, void *dev_id, struct pt_regs * dummy);
+void adintr(int irq, void *dev_id, struct pt_regs * dummy);
 void attach_ms_sound(struct address_info * hw_config);
 int probe_ms_sound(struct address_info *hw_config);
 void attach_pnp_ad1848(struct address_info * hw_config);

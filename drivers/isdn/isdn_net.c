@@ -374,7 +374,7 @@ isdn_net_stat_callback(int idx, int cmd)
 							return 1;
 						}
 					}
-					if (clear_bit(0, (void *) &(p->dev.tbusy)))
+					if (test_and_clear_bit(0, (void *) &(p->dev.tbusy)))
 						mark_bh(NET_BH);
 				}
 				return 1;

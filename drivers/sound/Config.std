@@ -44,7 +44,7 @@ if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
          fi
       fi
 
-      if [ "$CONFIG_MIDI" = "y" ]; then
+      if [ "$CONFIG_MPU401" = "y" ]; then
          bool 'Audio Excel DSP 16 (MPU401 emulation)' CONFIG_AEDSP16_MPU401
          if [ "$CONFIG_AEDSP16_MPU401" = "y" ]; then
 	    comment 'Audio Excel DSP 16 [MPU-401]'

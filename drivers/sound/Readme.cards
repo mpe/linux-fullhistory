@@ -43,8 +43,8 @@ IMPORTANT!	This document covers only cards that were "known" when
 
 
 
-THE BIGGEST MISTAKE YOU CAN DO
-==============================
+THE BIGGEST MISTAKES YOU CAN DO
+===============================
 
 1. Assuming that the card is Sound Blaster compatible when it's not.
 --------------------------------------------------------------------
@@ -106,21 +106,24 @@ for PnP models of soudcards even you have managed to wake up the card properly.
 Many PnP cards are simply too much different than their original non PnP
 ancestors which are covered by this document.
 
+
 Cards that are not (fully) supported by this driver
 ===================================================
 
 See http://www.4front-tech.com/ossfree for information about soundcards 
 to be supported in future. 
 
+
 How to use sound without recompiling kernel and/or sound driver
----------------------------------------------------------------
+===============================================================
 
 There is commercial sound driver which should be released during Apr 96.
 It comes in precompiled form and doesn't require recompiling of kernel. See
 http://www.4Front-tech.com/oss.html for more info.
 
+
 Configuring PnP cards
----------------------
+=====================
 
 New versions of most soundcards use so called ISA PnP protocol for
 soft configuring their I/O, IRQ, DMA and shared memory resources.
@@ -170,8 +173,9 @@ See http://www.4front-tech.com/linux.html for more info. This is the way
 you probably like to do it if you don't waste hours of time in recompiling
 kernel and the required tools.
 
+
 Read this before trying to configure the driver
------------------------------------------------
+===============================================
 
 There are currently many cards that work with this driver. Some of the cards
 have native support while others work since they emulate some other
@@ -196,12 +200,14 @@ Sound Blasters
 	SB 1.0 to 2.0
 	SB Pro
 	SB 16
-	SB32/AWE
-		Configure SB32/AWE just like SB16. See lowlevel/README.awe
+	SB32/64/AWE
+		Configure SB32/64/AWE just like SB16. See lowlevel/README.awe
 		for information about using the wave table synth.
+	        NOTE! AWE63/Gold and 16/32/AWE "PnP" cards need to be activated
+		      using isapnptools before they work with OSS/Free.
 	SB16 compatible cards by other manufacturers than Creative.
 		You have been fooled since there are _no_ SB16 compatible
-		cards on the market (Feb 96). It's likely that your card
+		cards on the market (May 97). It's likely that your card
 		is compatible just with SB Pro but there is also a non-SB-
 		compatible 16 bit mode. Usually it's MSS/WSS but it could also
 		be a proprietary one like MV Jazz16 or ESS ES688. OPTi
@@ -237,7 +243,7 @@ Gravis Ultrasound (GUS)
 	GUS + the 16 bit option
 	GUS MAX
 	GUS ACE (No MIDI port and audio recording)
-	GUS PnP (in GUS MAX compatible mode)
+	GUS PnP (with RAM)
 
 MPU-401	and compatibles
 	The driver works both with the full (intelligent mode) MPU-401
@@ -266,10 +272,6 @@ Windows Sound System (MSS/WSS)
 	Enabling the MSS support with these cards is likely to
 	cause a conflict. So check if your card is listed in this file before
 	enabling the MSS support.
-
-6850 UART MIDI
-	This UART chip is used in the MIDI interface of some (rare)
-	soundcards. It's supported by the driver in case you need it.
 
 Yamaha FM synthesizers (OPL2, OPL3 (not OPL3-SA) and OPL4)
 	Most soundcards have a FM synthesizer chip. The OPL2 is a 2
@@ -321,7 +323,9 @@ Ensoniq SoundScape and compatibles
 	Several companies (including Ensoniq, Reveal and Spea) are selling
 	cards based on this architecture.
 
-	NOTE! The new PnP SoundScape is not supported yet.
+	NOTE! The SoundScape PnP is not supported by OSS/Free. Ensoniq VIVO and
+	VIVO90 cards are not compatible with Soundscapes so the Soundscape driver
+	will not work with them. You may want to use OSS/Linux with these cards.
 
 MAD16 and Mozart based cards
 	The Mozart (OAK OTI-601), MAD16 (OPTi 82C928), MAD16 Pro (OPTi 82C929),
@@ -332,20 +336,32 @@ MAD16 and Mozart based cards
 	interface chip performs address decoding for the other chips.
 	NOTE! Tropez Plus is not MAD16 but CS4232 based.
 	NOTE! MAD16 PnP cards (82C924, 82C925, 82C931) are not MAD16 compatible
-	in the PnP mode. You will have to use them in MAD16 mode after having
-	initialized them using isapnptools or DOS.
+	in the PnP mode. You will have to use them in MSS mode after having
+	initialized them using isapnptools or DOS. 82C931 probably requires
+	initialization using DOS/Windows (running isapnptools is not enough).
+	It's possible to use 82C931 with OSS/Free by jumpering it to non-PnP
+	mode (provided that the card has a jumper for this). In non-PnP mode
+	82C931 is compatible with 82C930 and should work with the MAD16 driver
+	(without need to use isapnptools or DOS to initialize it). All OPTi
+	chips are supported by OSS/Linux (both in PnP and non-PnP modes).
 
 Audio Excel DSP16 
 	Support for this card was written by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). The AEDSP16 driver included in
 	the lowlevel/ directory. To use it you should use the "new" config
 	script and to enable the "Additional low level drivers" option.
-Crystal CS4232 and 4236 based cards such as AcerMagic S23, TB Tropez _Plus_ and 
+
+Crystal CS4232 and CS4236 based cards such as AcerMagic S23, TB Tropez _Plus_ and 
 	many PC motherboards (Compaq, HP, Intel, ...)
 	CS4232 is a PnP multimedia chip which contains a CS3231A codec,
 	SB and MPU401 emulations. There is support for OPL3 too.
 	Unfortunately the MPU401 mode doesn't work (I don't know how to
-	initialize it). CS4236 is an enhanced (compatible) version of 4232.
+	initialize it). CS4236 is an enhanced (compatible) version of CS4232.
+	NOTE! Don't ever try to use isapnptools with CS4232 since this just
+	freezes your machine (due to chip bugs). If you have problems in getting
+	CS4232 working you could try initializing it with DOS (CS4232C.EXE) and
+	then booting Linux using loadlin. CS4232C.EXE loads a secret firmware
+	patch which is not documented by Crystal.
 
 Turtle Beach Maui and Tropez "classic"
 	This driver version supports sample, patch and program loading commands
@@ -354,9 +370,13 @@ Turtle Beach Maui and Tropez "classic"
 	the Tropez is based on the MAD16 chip (see above).
 	NOTE! You will have to use the "old" config script when configuring
 	Maui or Tropez.
+	NOTE! Tropez Plus is different card than Tropez "classic" and will not
+	work fully in Linux. You can get audio features working by configuring
+	the card as a CS4232 based card (above).
+
 
 Jumpers and software configuration
-----------------------------------
+==================================
 
 Some of the earliest soundcards were jumper configurable. You have to
 configure the driver use I/O, IRQ and DMA settings
@@ -388,8 +408,9 @@ how the card must be initialized. It cannot initialize unknown cards
 even if they are otherwise compatible with some other cards (like SB,
 MPU401 or Windows Sound System).
 
+
 What if your card was not listed above?
----------------------------------------
+=======================================
 
 The first thing to do is to look at the major IC chips on the card.
 Many of the latest soundcards are based on some standard chips. If you
@@ -518,8 +539,19 @@ select some options automatically as well.
 	  that doesn't really have a MPU401 could cause some trouble. If your
 	  card was in the list of supported cards (above), please look at
 	  the card specific instructions later in this file.
+
+	  In MOST cases this MPU401 driver should only be used with "true"
+	  MIDI-only MPU401 professional cards. In most other cases there
+	  is another way to get the MPU401 compatible interface of a
+	  soundcard to work.
+	  Support for the MPU401 compatible MIDI port of SB16, ESS1688
+	  and MV Jazz16 cards is included in the SB driver. Use it instead
+	  of this separate MPU401 driver with these cards. As well 
+	  Soundscape, PSS and Maui drivers include their own MPU401
+	  options.
+
 	  It's safe to answer 'y' if you have a true MPU401 MIDI interface
-	  card.
+	  card. 
   "6850 UART Midi support",
 	- It's safe to answer 'n' to this question in all cases. The 6850
 	  UART interface is so rarely used.

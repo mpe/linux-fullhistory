@@ -32,6 +32,7 @@ int getrusage(struct task_struct *, int, struct rusage *);
 
 static inline void generate(unsigned long sig, struct task_struct * p)
 {
+	unsigned flags;
 	unsigned long mask = 1 << (sig-1);
 	struct sigaction * sa = sig + p->sig->action - 1;
 
@@ -40,7 +41,7 @@ static inline void generate(unsigned long sig, struct task_struct * p)
 	 * be handled immediately (ie non-blocked and untraced)
 	 * and that is ignored (either explicitly or by default)
 	 */
-	spin_lock_irq(&p->sig->siglock);
+	spin_lock_irqsave(&p->sig->siglock, flags);
 	if (!(mask & p->blocked) && !(p->flags & PF_PTRACED)) {
 		/* don't bother with ignored signals (but SIGCHLD is special) */
 		if (sa->sa_handler == SIG_IGN && sig != SIGCHLD)
@@ -56,7 +57,7 @@ static inline void generate(unsigned long sig, struct task_struct * p)
 	if (p->state == TASK_INTERRUPTIBLE && (p->signal & ~p->blocked))
 		wake_up_process(p);
 out:
-	spin_unlock_irq(&p->sig->siglock);
+	spin_unlock_irqrestore(&p->sig->siglock, flags);
 }
 
 /*
@@ -67,10 +68,11 @@ void force_sig(unsigned long sig, struct task_struct * p)
 {
 	sig--;
 	if (p->sig) {
+		unsigned flags;
 		unsigned long mask = 1UL << sig;
 		struct sigaction *sa = p->sig->action + sig;
 
-		spin_lock_irq(&p->sig->siglock);
+		spin_lock_irqsave(&p->sig->siglock, flags);
 
 		spin_lock(&p->sigmask_lock);
 		p->signal |= mask;
@@ -82,7 +84,7 @@ void force_sig(unsigned long sig, struct task_struct * p)
 		if (p->state == TASK_INTERRUPTIBLE)
 			wake_up_process(p);
 
-		spin_unlock_irq(&p->sig->siglock);
+		spin_unlock_irqrestore(&p->sig->siglock, flags);
 	}
 }
 
@@ -97,7 +99,8 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 		return -EPERM;
 
 	if (sig && p->sig) {
-		spin_lock_irq(&p->sigmask_lock);
+		unsigned flags;
+		spin_lock_irqsave(&p->sigmask_lock, flags);
 		if ((sig == SIGKILL) || (sig == SIGCONT)) {
 			if (p->state == TASK_STOPPED)
 				wake_up_process(p);
@@ -107,7 +110,7 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 		}
 		if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU)
 			p->signal &= ~(1<<(SIGCONT-1));
-		spin_unlock_irq(&p->sigmask_lock);
+		spin_unlock_irqrestore(&p->sigmask_lock, flags);
 
 		/* Actually generate the signal */
 		generate(sig,p);

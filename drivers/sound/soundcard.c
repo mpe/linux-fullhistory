@@ -139,8 +139,8 @@ sound_release (struct inode *inode, struct file *file)
   sound_release_sw (dev, &files[dev]);
 #ifdef MODULE
   MOD_DEC_USE_COUNT;
-#endif
   return 0;
+#endif
 }
 
 static int
@@ -156,7 +156,7 @@ sound_ioctl (struct inode *inode, struct file *file,
 
   files[dev].flags = file->f_flags;
 
-  if (_SIOC_DIR (cmd) != _SIOC_NONE)
+  if (_SIOC_DIR (cmd) != _SIOC_NONE && _SIOC_DIR (cmd) != 0)
     {
       /*
          * Have to validate the address given by the process.
@@ -196,7 +196,7 @@ sound_ioctl (struct inode *inode, struct file *file,
   if (ptr != NULL && alloced)
     vfree (ptr);
 
-  return err;
+  return ((err < 0) ? err : 0);
 }
 
 static int
@@ -229,7 +229,7 @@ sound_select (struct inode *inode, struct file *file, int sel_type, poll_table *
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
-      return audio_select (dev, &files[dev], sel_type, wait);
+      return DMAbuf_select (dev >> 4, &files[dev], sel_type, wait);
       break;
 #endif
 
@@ -275,19 +275,13 @@ sound_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
       return -EINVAL;
     }
 
-  if ((vma->vm_flags & (VM_READ | VM_WRITE)) == (VM_READ | VM_WRITE))
-    {
-      printk ("Sound: Cannot do read/write mmap()\n");
-      return -EINVAL;
-    }
-
-  if (vma->vm_flags & VM_READ)
-    {
-      dmap = audio_devs[dev]->dmap_in;
-    }
-  else if (vma->vm_flags & VM_WRITE)
+  if (vma->vm_flags & VM_WRITE)	/* Map write and read/write to the output buf */
     {
       dmap = audio_devs[dev]->dmap_out;
+    }
+  else if (vma->vm_flags & VM_READ)
+    {
+      dmap = audio_devs[dev]->dmap_in;
     }
   else
     {
@@ -379,20 +373,10 @@ soundcard_init (void)
 #ifdef CONFIG_AUDIO
   if (num_audiodevs)		/* Audio devices present */
     {
-      DMAbuf_init ();
       audio_init_devices ();
     }
 #endif
 
-#ifdef CONFIG_MIDI
-  if (num_midis)
-    MIDIbuf_init ();
-#endif
-
-#ifdef CONFIG_SEQUENCER
-  if (num_midis + num_synths)
-    sequencer_init ();
-#endif
 
 }
 
@@ -616,9 +600,15 @@ sound_close_dma (int chn)
 
 #ifdef CONFIG_SEQUENCER
 
+static void
+do_sequencer_timer (unsigned long dummy)
+{
+  sequencer_timer (0);
+}
+
 
 static struct timer_list seq_timer =
-{NULL, NULL, 0, 0, sequencer_timer};
+{NULL, NULL, 0, 0, do_sequencer_timer};
 
 void
 request_sound_timer (int count)
@@ -681,33 +671,31 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
   dmap->raw_buf = NULL;
 
-  if (debugmem)
-    printk ("sound: buffsize[%d] = %lu\n", dev, audio_devs[dev]->buffsize);
+  dmap->buffsize = dma_buffsize;
 
-  audio_devs[dev]->buffsize = dma_buffsize;
-
-  if (audio_devs[dev]->buffsize > dma_pagesize)
-    audio_devs[dev]->buffsize = dma_pagesize;
+  if (dmap->buffsize > dma_pagesize)
+    dmap->buffsize = dma_pagesize;
 
   start_addr = NULL;
 
 /*
  * Now loop until we get a free buffer. Try to get smaller buffer if
- * it fails.
+ * it fails. Don't accept smaller than 8k buffer for performance
+ * reasons.
  */
 
-  while (start_addr == NULL && audio_devs[dev]->buffsize > PAGE_SIZE)
+  while (start_addr == NULL && dmap->buffsize > PAGE_SIZE)
     {
       int             sz, size;
 
       for (sz = 0, size = PAGE_SIZE;
-	   size < audio_devs[dev]->buffsize;
+	   size < dmap->buffsize;
 	   sz++, size <<= 1);
 
-      audio_devs[dev]->buffsize = PAGE_SIZE * (1 << sz);
+      dmap->buffsize = PAGE_SIZE * (1 << sz);
 
       if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, MAX_DMA_ADDRESS)) == NULL)
-	audio_devs[dev]->buffsize /= 2;
+	dmap->buffsize /= 2;
     }
 
   if (start_addr == NULL)
@@ -718,7 +706,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
   else
     {
       /* make some checks */
-      end_addr = start_addr + audio_devs[dev]->buffsize - 1;
+      end_addr = start_addr + dmap->buffsize - 1;
 
       if (debugmem)
 	printk ("sound: start 0x%lx, end 0x%lx\n",
@@ -731,9 +719,9 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 	  || end_addr >= (char *) (MAX_DMA_ADDRESS))
 	{
 	  printk (
-		   "sound: Got invalid address 0x%lx for %ldb DMA-buffer\n",
+		   "sound: Got invalid address 0x%lx for %db DMA-buffer\n",
 		   (long) start_addr,
-		   audio_devs[dev]->buffsize);
+		   dmap->buffsize);
 	  return -EFAULT;
 	}
     }
@@ -761,11 +749,11 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap, int chan)
     return;			/* Don't free mmapped buffer. Will use it next time */
 
   for (sz = 0, size = PAGE_SIZE;
-       size < audio_devs[dev]->buffsize;
+       size < dmap->buffsize;
        sz++, size <<= 1);
 
   start_addr = (unsigned long) dmap->raw_buf;
-  end_addr = start_addr + audio_devs[dev]->buffsize;
+  end_addr = start_addr + dmap->buffsize;
 
   for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
     {
@@ -775,6 +763,33 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap, int chan)
   free_pages ((unsigned long) dmap->raw_buf, sz);
   dmap->raw_buf = NULL;
 }
+
+
+/* Intel version !!!!!!!!! */
+int 
+sound_start_dma (int dev, struct dma_buffparms *dmap, int chan,
+		 unsigned long physaddr,
+		 int count, int dma_mode, int autoinit)
+{
+  unsigned long   flags;
+
+  /* printk("Start DMA%d %d, %d\n", chan, (int)(physaddr-dmap->raw_buf_phys), count); */
+  if (autoinit)
+    dma_mode |= DMA_AUTOINIT;
+  save_flags (flags);
+  cli ();
+  disable_dma (chan);
+  clear_dma_ff (chan);
+  set_dma_mode (chan, dma_mode);
+  set_dma_addr (chan, physaddr);
+  set_dma_count (chan, count);
+  enable_dma (chan);
+  restore_flags (flags);
+
+  return 0;
+}
+
+#endif
 
 void
 conf_printf (char *name, struct address_info *hw_config)
@@ -817,29 +832,3 @@ conf_printf2 (char *name, int base, int irq, int dma, int dma2)
 
   printk ("\n");
 }
-
-/* Intel version !!!!!!!!! */
-int 
-sound_start_dma (int dev, struct dma_buffparms *dmap, int chan,
-		 unsigned long physaddr,
-		 int count, int dma_mode, int autoinit)
-{
-  unsigned long   flags;
-
-/* printk("Start DMA %d, %d\n", (int)(physaddr-dmap->raw_buf_phys), count); */
-  if (autoinit)
-    dma_mode |= DMA_AUTOINIT;
-  save_flags (flags);
-  cli ();
-  disable_dma (chan);
-  clear_dma_ff (chan);
-  set_dma_mode (chan, dma_mode);
-  set_dma_addr (chan, physaddr);
-  set_dma_count (chan, count);
-  enable_dma (chan);
-  restore_flags (flags);
-
-  return 0;
-}
-
-#endif

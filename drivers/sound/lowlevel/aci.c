@@ -22,9 +22,9 @@
  *        First version written.
  *   1995-12-31  Markus Kuhn
  *        Second revision, general code cleanup.
- *   1997-05-16	 Hannu Savolainen
+ *   1996-05-16	 Hannu Savolainen
  *	  Integrated with other parts of the driver.
- *   1997-05-28  Markus Kuhn
+ *   1996-05-28  Markus Kuhn
  *        Initialize CS4231A mixer, make ACI first mixer,
  *        use new private mixer API for solo mode.
  */

@@ -1183,6 +1183,7 @@ attach_mpu401 (struct address_info *hw_config)
 
   irq2dev[devc->irq] = num_midis;
   midi_devs[num_midis++] = &mpu401_midi_operations[devc->devno];
+  sequencer_init ();
 }
 
 static int

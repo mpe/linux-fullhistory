@@ -59,16 +59,16 @@
 #define CMD_GEN_HOST_ACK        0x80
 #define CMD_GEN_MPU_ACK         0x81
 #define CMD_GET_BOARD_TYPE      0x82
-#define CMD_SET_CONTROL         0x88
-#define CMD_GET_CONTROL         0x89
+#define CMD_SET_CONTROL         0x88	/* Old firmware only */
+#define CMD_GET_CONTROL         0x89	/* Old firmware only */
 #define 	CTL_MASTER_VOL          0
 #define 	CTL_MIC_MODE            2
 #define 	CTL_SYNTH_VOL           4
 #define 	CTL_WAVE_VOL            7
-#define CMD_SET_MT32            0x96
-#define CMD_GET_MT32            0x97
-#define CMD_SET_EXTMIDI         0x9b
-#define CMD_GET_EXTMIDI         0x9c
+#define CMD_SET_EXTMIDI		0x8a
+#define CMD_GET_EXTMIDI		0x8b
+#define CMD_SET_MT32            0x8c
+#define CMD_GET_MT32            0x8d
 
 #define CMD_ACK			0x80
 
@@ -78,15 +78,16 @@ typedef struct sscape_info
     int             ok;		/* Properly detected */
     int             failed;
     int             dma_allocated;
-    int             my_audiodev;
+    int             codec_audiodev;
     int             opened;
     int            *osp;
   }
-
 sscape_info;
-static struct sscape_info dev_info =
+
+static struct sscape_info adev_info =
 {0};
-static struct sscape_info *devc = &dev_info;
+static struct sscape_info *devc = &adev_info;
+static int      sscape_mididev = -1;
 
 static struct wait_queue *sscape_sleeper = NULL;
 static volatile struct snd_wait sscape_sleep_flag =
@@ -270,19 +271,7 @@ set_control (struct sscape_info *devc, int ctrl, int value)
   host_close (devc);
 }
 
-static int
-get_board_type (struct sscape_info *devc)
-{
-  int             tmp;
 
-  host_open (devc);
-  if (!host_command1 (devc, CMD_GET_BOARD_TYPE))
-    tmp = -1;
-  else
-    tmp = host_read (devc);
-  host_close (devc);
-  return tmp;
-}
 
 
 
@@ -297,11 +286,11 @@ do_dma (struct sscape_info *devc, int dma_chan, unsigned long buf, int blk_size,
       return;
     }
 
-  audio_devs[devc->my_audiodev]->flags &= ~DMA_AUTOMODE;
-  DMAbuf_start_dma (devc->my_audiodev,
+  audio_devs[devc->codec_audiodev]->flags &= ~DMA_AUTOMODE;
+  DMAbuf_start_dma (devc->codec_audiodev,
 		    buf,
 		    blk_size, mode);
-  audio_devs[devc->my_audiodev]->flags |= DMA_AUTOMODE;
+  audio_devs[devc->codec_audiodev]->flags |= DMA_AUTOMODE;
 
   temp = devc->dma << 4;	/* Setup DMA channel select bits */
   if (devc->dma <= 3)
@@ -384,7 +373,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 {
   unsigned long   flags;
   unsigned char   temp;
-  int             done, timeout_val;
+  volatile int    done, timeout_val;
   static unsigned char codec_dma_bits = 0;
 
   if (flag & CPF_FIRST)
@@ -418,13 +407,19 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
   /*
    * Transfer one code block using DMA
    */
-  memcpy (audio_devs[devc->my_audiodev]->dmap_out->raw_buf, block, size);
+  if (audio_devs[devc->codec_audiodev]->dmap_out->raw_buf == NULL)
+    {
+      printk ("SSCAPE: Error: DMA buffer not available\n");
+      return 0;
+    }
+
+  memcpy (audio_devs[devc->codec_audiodev]->dmap_out->raw_buf, block, size);
 
   save_flags (flags);
   cli ();
 /******** INTERRUPTS DISABLED NOW ********/
   do_dma (devc, SSCAPE_DMA_A,
-	  audio_devs[devc->my_audiodev]->dmap_out->raw_buf_phys,
+	  audio_devs[devc->codec_audiodev]->dmap_out->raw_buf_phys,
 	  size, DMA_MODE_WRITE);
 
   /*
@@ -432,17 +427,16 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
    */
   sscape_sleep_flag.opts = WK_NONE;
   done = 0;
-  timeout_val = 100;
+  timeout_val = 30;
   while (!done && timeout_val-- > 0)
     {
       int             resid;
 
-
       {
 	unsigned long   tlimit;
 
-	if (1)
-	  current->timeout = tlimit = jiffies + (1);
+	if (HZ / 50)
+	  current->timeout = tlimit = jiffies + (HZ / 50);
 	else
 	  tlimit = (unsigned long) -1;
 	sscape_sleep_flag.opts = WK_SLEEP;
@@ -509,7 +503,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	  x = inb (PORT (HOST_DATA));
 	  if (x == 0xff || x == 0xfe)	/* OBP startup acknowledge */
 	    {
-	      printk ("Soundscape: Acknowledge = %x\n", x);
+	      DDB (printk ("Soundscape: Acknowledge = %x\n", x));
 	      done = 1;
 	    }
 	}
@@ -555,9 +549,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	  return 0;
 	}
 
-      printk ("SoundScape board of type %d initialized OK\n",
-	      get_board_type (devc));
-
+      printk ("SoundScape board initialized OK\n");
       set_control (devc, CTL_MASTER_VOL, 100);
       set_control (devc, CTL_SYNTH_VOL, 100);
 
@@ -633,7 +625,7 @@ static coproc_operations sscape_coproc_operations =
   sscape_coproc_close,
   sscape_coproc_ioctl,
   sscape_coproc_reset,
-  &dev_info
+  &adev_info
 };
 
 static int      sscape_detected = 0;
@@ -678,6 +670,7 @@ attach_sscape (struct address_info *hw_config)
   if (sscape_detected != hw_config->io_base)
     return;
 
+  request_region (devc->base + 2, 6, "SoundScape");
   if (old_hardware)
     {
       valid_interrupts = valid_interrupts_old;
@@ -765,13 +758,17 @@ attach_sscape (struct address_info *hw_config)
     hw_config->irq *= -1;	/* Restore it */
 
     if (num_midis == (prev_devs + 1))	/* The MPU driver installed itself */
-      midi_devs[prev_devs]->coproc = &sscape_coproc_operations;
+      {
+	sscape_mididev = prev_devs;
+	midi_devs[prev_devs]->coproc = &sscape_coproc_operations;
+      }
   }
 #endif
 
   sscape_write (devc, GA_INTENA_REG, 0x80);	/* Master IRQ enable */
   devc->ok = 1;
   devc->failed = 0;
+
 }
 
 static int
@@ -841,17 +838,13 @@ int
 probe_sscape (struct address_info *hw_config)
 {
 
-  devc->base = hw_config->io_base;
-  devc->irq = hw_config->irq;
-  devc->dma = hw_config->dma;
-
   if (sscape_detected != 0 && sscape_detected != hw_config->io_base)
     return 0;
 
-  devc->failed = 1;
-
-  if (!detect_ga (devc))
-    return 0;
+  devc->base = hw_config->io_base;
+  devc->irq = hw_config->irq;
+  devc->dma = hw_config->dma;
+  devc->osp = hw_config->osp;
 
 #ifdef SSCAPE_DEBUG1
   /*
@@ -866,6 +859,12 @@ probe_sscape (struct address_info *hw_config)
   }
 #endif
 
+
+  devc->failed = 1;
+
+  if (!detect_ga (devc))
+    return 0;
+
   if (old_hardware)		/* Check that it's really an old Spea/Reveal card. */
     {
       unsigned char   tmp;
@@ -877,8 +876,6 @@ probe_sscape (struct address_info *hw_config)
 	  for (cc = 0; cc < 200000; ++cc)
 	    inb (devc->base + ODIE_ADDR);
 	}
-      else
-	old_hardware = 0;
     }
 
 
@@ -891,6 +888,7 @@ int
 probe_ss_ms_sound (struct address_info *hw_config)
 {
   int             i, irq_bits = 0xff;
+  int             ad_flags = 0;
 
   if (devc->failed)
     {
@@ -917,7 +915,9 @@ probe_ss_ms_sound (struct address_info *hw_config)
     }
 
 
-  return ad1848_detect (hw_config->io_base, NULL, hw_config->osp);
+  if (old_hardware)
+    ad_flags = 0x12345677;	/* Tell that we may have a CS4248 chip (Spea-V7 Media FX) */
+  return ad1848_detect (hw_config->io_base, &ad_flags, hw_config->osp);
 }
 
 void
@@ -970,8 +970,13 @@ attach_ss_ms_sound (struct address_info *hw_config)
 	       devc->osp);
 
   if (num_audiodevs == (prev_devs + 1))		/* The AD1848 driver installed itself */
-    audio_devs[prev_devs]->coproc = &sscape_coproc_operations;
-  devc->my_audiodev = prev_devs;
+    {
+      audio_devs[prev_devs]->coproc = &sscape_coproc_operations;
+      devc->codec_audiodev = prev_devs;
+
+      /* Set proper routings here (what are they) */
+      AD1848_REROUTE (SOUND_MIXER_LINE1, SOUND_MIXER_LINE);
+    }
 
 #ifdef SSCAPE_DEBUG5
   /*
@@ -991,10 +996,10 @@ attach_ss_ms_sound (struct address_info *hw_config)
 void
 unload_sscape (struct address_info *hw_config)
 {
+  release_region (devc->base + 2, 6);
 #if defined(CONFIG_MPU_EMU) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
 #endif
-  snd_release_irq (hw_config->irq);
 }
 
 void
@@ -1006,6 +1011,7 @@ unload_ss_ms_sound (struct address_info *hw_config)
 		 devc->dma,
 		 0);
 }
+
 
 
 #endif

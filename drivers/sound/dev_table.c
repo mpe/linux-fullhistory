@@ -15,6 +15,7 @@
 
 #define _DEV_TABLE_C_
 #include "sound_config.h"
+int             sb_be_quiet = 0;
 
 int             sound_started = 0;
 
@@ -43,20 +44,15 @@ start_services (void)
 #ifdef CONFIG_AUDIO
   if (num_audiodevs)		/* Audio devices present */
     {
-      DMAbuf_init ();
+      int             dev;
+
+      for (dev = 0; dev < num_audiodevs; dev++)
+	{
+	}
       audio_init_devices ();
     }
 #endif
 
-#ifdef CONFIG_MIDI
-  if (num_midis)
-    MIDIbuf_init ();
-#endif
-
-#ifdef CONFIG_SEQUENCER
-  if (num_midis + num_synths)
-    sequencer_init ();
-#endif
   return;
 }
 
@@ -493,17 +489,11 @@ sound_install_audiodrv (int vers,
 /*
  *    Hardcoded defaults
  */
-  op->buffsize = DSP_BUFFSIZE;
-
   audio_devs[num_audiodevs] = op;
   num = num_audiodevs++;
 
-  DMAbuf_init ();
+  DMAbuf_init (num, dma1, dma2);
 
-  op->dmap_out->dma = dma1;
-  op->dmap_in->dma = dma2;
-
-  DMAbuf_init ();
   audio_init_devices ();
   return num;
 #else

@@ -283,7 +283,7 @@ detect_pas_hw (struct address_info *hw_config)
   foo = board_id ^ 0xe0;
 
   pas_write (foo, 0x0B8B);
-  foo = inb (0x0B8B);
+  foo = pas_read (0x0B8B);
   pas_write (board_id, 0x0B8B);
 
   if (board_id != foo)

@@ -12,6 +12,8 @@
 
 /* Internal header file for autofs */
 
+#define DEBUG_WAITLIST 1
+
 #include <linux/auto_fs.h>
 
 /* This is the range of ioctl() numbers we claim as ours */
@@ -120,7 +122,10 @@ struct autofs_symlink {
 #define END_OF_TIME ((time_t)((unsigned long)((time_t)(~0UL)) >> 1))
 #endif
 
+#define AUTOFS_SBI_MAGIC 0x6d4a556d
+
 struct autofs_sb_info {
+	u32 magic;
 	struct file *pipe;
 	pid_t oz_pgrp;
 	int catatonic;
@@ -136,6 +141,15 @@ struct autofs_sb_info {
 static inline int autofs_oz_mode(struct autofs_sb_info *sbi) {
 	return sbi->catatonic || current->pgrp == sbi->oz_pgrp;
 }
+
+/* Debug the mysteriously disappearing wait list */
+
+#ifdef DEBUG_WAITLIST
+#define CHECK_WAITLIST(S,O) autofs_check_waitlist_integrity(S,O)
+void autofs_check_waitlist_integrity(struct autofs_sb_info *,char *);
+#else
+#define CHECK_WAITLIST(S,O)
+#endif
 
 /* Hash operations */
 

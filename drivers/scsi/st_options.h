@@ -3,7 +3,7 @@
 
    Copyright 1995 Kai Makisara.
 
-   Last modified: Thu Dec 14 21:51:27 1995 by root@kai.makisara.fi
+   Last modified: Tue May 27 22:29:15 1997 by makisara@home
 */
 
 #ifndef _ST_OPTIONS_H
@@ -88,8 +88,14 @@
    files and the file number status is retained. */
 #define ST_FAST_MTEOM 0
 
+/* If ST_SCSI2LOGICAL is nonzero, the logical block addresses are used for
+   MTIOCPOS and MTSEEK by default. Vendor addresses are used if ST_SCSI2LOGICAL
+   is zero. */
+#define ST_SCSI2LOGICAL 0
+
 /* If ST_SYSV is non-zero, the tape behaves according to the SYS V semantics.
    The default is BSD semantics. */
 #define ST_SYSV 0
+
 
 #endif

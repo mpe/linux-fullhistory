@@ -178,7 +178,7 @@ nfs_writepage_sync(struct inode *inode, struct page *page,
 			wsize = count;
 
 		result = nfs_proc_write(NFS_SERVER(inode), NFS_FH(inode),
-					offset, wsize, IS_SWAPFILE(inode),
+					IS_SWAPFILE(inode), offset, wsize,
 					buffer, &fattr);
 
 		if (result < 0) {

@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Wed Jan  1 15:44:49 1997 by makisara@kai.makisara.fi
+Last modified: Tue May 27 22:29:24 1997 by makisara@home
 
 
 BASICS
@@ -159,6 +159,15 @@ where
         buffers is bounded also by the number of drives detected)
 
 
+MODULE PARAMETERS
+
+The same parameters can be also set when the driver is loaded as a
+module. The keywords are:
+
+buffer_kbs=xxx             the buffer size in kilobytes is set to xxx
+write_threshold_kbs=xxx    the write threshold in kilobytes set to xxx
+max_buffers=xxx            the maximum number of tape buffer set to xxx
+
 IOCTLS
 
 The tape is positioned and the drive parameters are set with ioctls
@@ -253,6 +262,7 @@ MTSETDRVBUFFER
 		the device dependent address. It is recommended to set
 		this flag unless there are tapes using the device
 		dependent (from the old times) (global)
+	     MT_ST_SYSV sets the SYSV sematics (mode)
 	     MT_ST_DEBUGGING debugging (global; debugging must be
 		compiled into the driver)
 	MT_ST_SETBOOLEANS
@@ -272,6 +282,16 @@ MTSETDRVBUFFER
 	   MT_ST_CLEAR_DEFAULT (0xfffff), the default will not be used
 	   any more. Otherwise the lower-most bits of the value contain
 	   the new value of the parameter.
+	MT_ST_SET_TIMEOUT
+	   Set the normal timeout in seconds for this device. The
+	   default is 900 seconds (15 minutes). The timeout should be
+	   long enough for the retries done by the device while
+	   reading/writing.
+	MT_ST_SET_LONG_TIMEOUT
+	   Set the long timeout that is used for operations that are
+	   known to take a long time. The default is 14000 seconds
+	   (3.9 hours). For erase this value is further multiplied by
+	   eight.
 
 The following ioctl uses the structure mtpos:
 MTIOCPOS Reads the current position from the drive. Uses
@@ -331,3 +351,23 @@ within file can be obtained if ST_IN_FILE_POS is defined at compile
 time or the MT_ST_CAN_BSR bit is set for the drive with an ioctl.
 (The driver always backs over a filemark crossed by read ahead if the
 user does not request data that far.)
+
+
+DEBUGGING HINTS
+
+To enable debugging messages, edit st.c and #define DEBUG 1. As seen
+above, debugging can be switched off with an ioctl if debugging is
+compiled into the driver. The debugging output is not not voluminuous.
+
+If the tape seems to hang, I would be very interested to hear where
+the driver is waiting. With the command 'ps -l' you can see the state
+of the process using the tape. If the state is D, the process is
+waiting for something. The field WCHAN tells where the driver is
+waiting. If you have the current System.map in the correct place (in
+/boot for the procps I use) or have updated /etc/psdatabase (for kmem
+ps), ps writes the function name in the WCHAN field. If not, you have
+to look up the function from System.map.
+
+Note also that the timeouts are very long compared to most other
+drivers. This means that the Linux driver may appear hung although the
+real reason is that the tape firmware has got confused.

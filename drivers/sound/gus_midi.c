@@ -248,6 +248,7 @@ gus_midi_init (void)
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &gus_midi_operations;
+  sequencer_init ();
   return;
 }
 

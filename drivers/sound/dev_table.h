@@ -70,6 +70,7 @@ struct dma_buffparms {
 
   	char     *raw_buf;
     	unsigned long   raw_buf_phys;
+	int buffsize;
 
      	/*
          * Device state tables
@@ -85,6 +86,8 @@ struct dma_buffparms {
 #define DMA_SYNCING	0x00000040
 #define DMA_DIRTY	0x00000080
 #define DMA_POST	0x00000100
+#define DMA_NODMA	0x00000200
+#define DMA_NOTIMEOUT	0x00000400
 
 	int      open_mode;
 
@@ -109,6 +112,7 @@ struct dma_buffparms {
 	int	 underrun_count;
 	unsigned long	 byte_counter;
 	unsigned long	 user_counter;
+	unsigned long	 max_byte_counter;
 	int	 data_rate; /* Bytes/second */
 
 	int	 mapping_flags;
@@ -120,6 +124,9 @@ struct dma_buffparms {
 	OS_DMA_PARMS
 #endif
 	int     applic_profile;	/* Application profile (APF_*) */
+	int	 buf_flags[MAX_SUB_BUFFERS];
+#define		 BUFF_EOF		0x00000001 /* Increment eof count */
+#define		 BUFF_DIRTY		0x00000002 /* Buffer written */
 };
 
 /*
@@ -156,6 +163,8 @@ struct audio_driver {
 	int (*set_speed)(int dev, int speed);
 	unsigned int (*set_bits)(int dev, unsigned int bits);
 	short (*set_channels)(int dev, short channels);
+	void (*postprocess_write)(int dev); 	/* Device spesific postprocessing for written data */
+	void (*preprocess_read)(int dev); 	/* Device spesific preprocessing for read data */
 };
 
 struct audio_operations {
@@ -167,13 +176,12 @@ struct audio_operations {
 #define DMA_DUPLEX		0x04
 #define DMA_PSEUDO_AUTOMODE	0x08
 #define DMA_HARDSTOP		0x10
-#define DMA_NODMA		0x20
 #define DMA_EXACT		0x40
+#define DMA_NORESET		0x80
 	int  format_mask;	/* Bitmask for supported audio formats */
 	void *devc;		/* Driver specific info */
 	struct audio_driver *d;
 	void *portc;		/* Driver spesific info */
-	long buffsize;
 	struct dma_buffparms *dmap_in, *dmap_out;
 	struct coproc_operations *coproc;
 	int mixer_dev;
@@ -181,6 +189,7 @@ struct audio_operations {
  	int open_mode;
 	int go;
 	int min_fragment;	/* 0 == unlimited */
+	int max_fragment;	/* 0 == unlimited */
 	int parent_dev;		/* 0 -> no parent, 1 to n -> parent=parent_dev+1 */
 };
 
@@ -292,7 +301,7 @@ struct sound_timer_operations {
 	struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
 	struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL}; int num_midis = 0;
 
-#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
+#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS) && !defined(VMIDI)
 	extern struct sound_timer_operations default_sound_timer;
 	struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = 
 		{&default_sound_timer, NULL}; 
@@ -313,6 +322,15 @@ struct sound_timer_operations {
 	  {"PSSMPU", 0, SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu, unload_pss_mpu},
 	  {"PSSMSS", 0, SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss, unload_pss_mss},
 #endif
+
+#ifdef CONFIG_GUS16
+		{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
+#endif
+#ifdef CONFIG_GUSHW
+		{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
+		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
+#endif
+
 #ifdef CONFIG_MSS
 		{"MSS", 0, SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 	/* Compaq Deskpro XL */
@@ -358,15 +376,6 @@ struct sound_timer_operations {
 #	endif
 #endif
 
-
-
-#ifdef CONFIG_GUS16
-		{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
-#endif
-#ifdef CONFIG_GUSHW
-		{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
-		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
-#endif
 #ifdef CONFIG_SSCAPEHW
 		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
 		{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
@@ -376,6 +385,10 @@ struct sound_timer_operations {
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
+
+
+
+
 
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 	};
@@ -439,6 +452,10 @@ struct sound_timer_operations {
 
 
 #ifdef CONFIG_MSS
+#	ifndef MSS_DMA2
+#	define MSS_DMA2 -1
+#	endif
+
 #	ifdef DESKPROXL
 		{SNDCARD_DESKPROXL, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
 #	else

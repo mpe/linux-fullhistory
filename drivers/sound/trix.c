@@ -339,9 +339,19 @@ probe_trix_sb (struct address_info *hw_config)
 void
 attach_trix_sb (struct address_info *hw_config)
 {
+  extern int      sb_be_quiet;
+  int             old_quiet;
+
 #ifdef CONFIG_SBDSP
   hw_config->driver_use_1 = SB_NO_MIDI | SB_NO_MIXER | SB_NO_RECORDING;
+
+  /* Prevent false alarms */
+  old_quiet = sb_be_quiet;
+  sb_be_quiet = 1;
+
   sb_dsp_init (hw_config);
+
+  sb_be_quiet = old_quiet;
 #endif
 }
 

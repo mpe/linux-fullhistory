@@ -294,6 +294,7 @@ attach_uart6850 (struct address_info *hw_config)
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &uart6850_operations;
+  sequencer_init ();
 }
 
 static int

@@ -21,9 +21,6 @@
 #include "ulaw.h"
 #include "coproc.h"
 
-#define ON		1
-#define OFF		0
-
 #define NEUTRAL8	0x80
 #define NEUTRAL16	0x00
 
@@ -31,11 +28,12 @@ static int      audio_mode[MAX_AUDIO_DEV];
 static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in nonblocking mode */
 
 #define		AM_NONE		0
-#define		AM_WRITE	1
-#define 	AM_READ		2
+#define		AM_WRITE	OPEN_WRITE
+#define 	AM_READ		OPEN_READ
+static int      dma_ioctl (int dev, unsigned int cmd, caddr_t arg);
 
 
-static int      audio_format[MAX_AUDIO_DEV];
+static int      local_format[MAX_AUDIO_DEV], audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
 #define CNV_MU_LAW	0x00000001
@@ -44,7 +42,6 @@ set_format (int dev, int fmt)
 {
   if (fmt != AFMT_QUERY)
     {
-
       local_conversion[dev] = 0;
 
       if (!(audio_devs[dev]->format_mask & fmt))	/* Not supported */
@@ -57,10 +54,10 @@ set_format (int dev, int fmt)
 	  fmt = AFMT_U8;	/* This is always supported */
 
       audio_format[dev] = audio_devs[dev]->d->set_bits (dev, fmt);
+      local_format[dev] = fmt;
     }
-
-  if (local_conversion[dev])	/* This shadows the HW format */
-    return local_conversion[dev];
+  else
+    return local_format[dev];
 
   return audio_format[dev];
 }
@@ -98,7 +95,6 @@ audio_open (int dev, struct fileinfo *file)
 
   local_conversion[dev] = 0;
 
-
   if (dev_type == SND_DEV_AUDIO)
     {
       set_format (dev, AFMT_MU_LAW);
@@ -127,19 +123,12 @@ sync_output (int dev)
   /* Align the write pointer with fragment boundaries */
   if ((l = dmap->user_counter % dmap->fragment_size) > 0)
     {
-      char           *ptr;
-      int             err, dummylen, len = dmap->fragment_size - l;
+      int             len;
+      unsigned long   offs = dmap->user_counter % dmap->bytes_in_use;
 
-      if ((err = DMAbuf_getwrbuffer (dev, &ptr, &dummylen, 1)) >= 0)
-	if (dummylen >= len && ((long) ptr % dmap->fragment_size) == l)
-	  {
-	    if ((ptr + len) > (dmap->raw_buf + audio_devs[dev]->buffsize))
-	      printk ("audio: Buffer error 1\n");
-	    if (ptr < dmap->raw_buf)
-	      printk ("audio: Buffer error 11\n");
-	    memset (ptr, dmap->neutral_byte, len);
-	    DMAbuf_move_wrpointer (dev, len);
-	  }
+      len = dmap->fragment_size - l;
+      memset (dmap->raw_buf + offs, dmap->neutral_byte, len);
+      DMAbuf_move_wrpointer (dev, len);
     }
 
 /*
@@ -153,7 +142,7 @@ sync_output (int dev)
     {
       p = (p + 1) % dmap->nbufs;
       if (((dmap->raw_buf + p * dmap->fragment_size) + dmap->fragment_size) >
-	  (dmap->raw_buf + audio_devs[dev]->buffsize))
+	  (dmap->raw_buf + dmap->buffsize))
 	printk ("audio: Buffer error 2\n");
 
       memset (dmap->raw_buf + p * dmap->fragment_size,
@@ -241,7 +230,7 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 
   while (c)
     {
-      if ((err = DMAbuf_getwrbuffer (dev, &dma_buf, &buf_size, dev_nblock[dev]) < 0))
+      if ((err = DMAbuf_getwrbuffer (dev, &dma_buf, &buf_size, dev_nblock[dev])) < 0)
 	{
 	  /* Handle nonblocking mode */
 	  if (dev_nblock[dev] && err == -EAGAIN)
@@ -250,17 +239,18 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 	}
 
       l = c;
+
       if (l > buf_size)
 	l = buf_size;
 
       if (!audio_devs[dev]->d->copy_user)
 	{
 	  if ((dma_buf + l) >
-	   (audio_devs[dev]->dmap_out->raw_buf + audio_devs[dev]->buffsize))
+	      (audio_devs[dev]->dmap_out->raw_buf + audio_devs[dev]->dmap_out->buffsize))
 	    printk ("audio: Buffer error 3 (%lx,%d), (%lx, %d)\n",
 		    (long) dma_buf, l,
 		    (long) audio_devs[dev]->dmap_out->raw_buf,
-		    (int) audio_devs[dev]->buffsize);
+		    (int) audio_devs[dev]->dmap_out->buffsize);
 	  if (dma_buf < audio_devs[dev]->dmap_out->raw_buf)
 	    printk ("audio: Buffer error 13\n");
 	  copy_from_user (dma_buf, &(buf)[p], l);
@@ -541,44 +531,8 @@ void
 audio_init_devices (void)
 {
   /*
-     * NOTE! This routine could be called several times during boot.
+   * NOTE! This routine could be called several times during boot.
    */
-}
-
-int
-audio_select (int dev, struct fileinfo *file, int sel_type, poll_table * wait)
-{
-  dev = dev >> 4;
-
-  switch (sel_type)
-    {
-    case SEL_IN:
-      if (!(audio_devs[dev]->open_mode & OPEN_READ))
-	return 0;
-      if (audio_mode[dev] & AM_WRITE && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	{
-	  return 0;		/* Not recording */
-	}
-
-      return DMAbuf_select (dev, file, sel_type, wait);
-      break;
-
-    case SEL_OUT:
-      if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
-	return 0;
-      if (audio_mode[dev] & AM_READ && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	{
-	  return 0;		/* Wrong direction */
-	}
-
-      return DMAbuf_select (dev, file, sel_type, wait);
-      break;
-
-    case SEL_EX:
-      return 0;
-    }
-
-  return 0;
 }
 
 
@@ -632,11 +586,11 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
          * of sound (using the current speed, sample size and #channels).
        */
 
-      bsz = dsp_dev->buffsize;
+      bsz = dmap->buffsize;
       while (bsz > sz)
 	bsz /= 2;
 
-      if (bsz == dsp_dev->buffsize)
+      if (bsz == dmap->buffsize)
 	bsz /= 2;		/* Needs at least 2 buffers */
 
 /*
@@ -668,17 +622,23 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
          * The process has specified the buffer size with SNDCTL_DSP_SETFRAGMENT or
          * the buffer size computation has already been done.
        */
-      if (dmap->fragment_size > (audio_devs[dev]->buffsize / 2))
-	dmap->fragment_size = (audio_devs[dev]->buffsize / 2);
+      if (dmap->fragment_size > (dmap->buffsize / 2))
+	dmap->fragment_size = (dmap->buffsize / 2);
       bsz = dmap->fragment_size;
     }
 
-  bsz &= ~0x03;			/* Force size which is multiple of 4 bytes */
+  if (audio_devs[dev]->min_fragment)
+    if (bsz < (1 << audio_devs[dev]->min_fragment))
+      bsz = 1 << audio_devs[dev]->min_fragment;
+  if (audio_devs[dev]->max_fragment)
+    if (bsz > (1 << audio_devs[dev]->max_fragment))
+      bsz = 1 << audio_devs[dev]->max_fragment;
+  bsz &= ~0x07;			/* Force size which is multiple of 8 bytes */
 #ifdef OS_DMA_ALIGN_CHECK
   OS_DMA_ALIGN_CHECK (bsz);
 #endif
 
-  n = dsp_dev->buffsize / bsz;
+  n = dmap->buffsize / bsz;
   if (n > MAX_SUB_BUFFERS)
     n = MAX_SUB_BUFFERS;
   if (n > dmap->max_fragments)
@@ -693,6 +653,8 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
   dmap->nbufs = n;
   dmap->bytes_in_use = n * bsz;
   dmap->fragment_size = bsz;
+  dmap->max_byte_counter = (dmap->data_rate * 60 * 60) +
+    dmap->bytes_in_use;		/* Approximately one hour */
 
   if (dmap->raw_buf)
     {
@@ -751,6 +713,8 @@ dma_set_fragment (int dev, struct dma_buffparms *dmap, caddr_t arg, int fact)
 
   if (count == 0)
     count = MAX_SUB_BUFFERS;
+  else if (count < MAX_SUB_BUFFERS)
+    count++;
 
   if (bytes < 4 || bytes > 17)	/* <16 || > 512k */
     return -EINVAL;
@@ -762,6 +726,10 @@ dma_set_fragment (int dev, struct dma_buffparms *dmap, caddr_t arg, int fact)
     if (bytes < audio_devs[dev]->min_fragment)
       bytes = audio_devs[dev]->min_fragment;
 
+  if (audio_devs[dev]->max_fragment > 0)
+    if (bytes > audio_devs[dev]->max_fragment)
+      bytes = audio_devs[dev]->max_fragment;
+
 #ifdef OS_DMA_MINBITS
   if (bytes < OS_DMA_MINBITS)
     bytes = OS_DMA_MINBITS;
@@ -770,16 +738,16 @@ dma_set_fragment (int dev, struct dma_buffparms *dmap, caddr_t arg, int fact)
   dmap->fragment_size = (1 << bytes);
   dmap->max_fragments = count;
 
-  if (dmap->fragment_size > audio_devs[dev]->buffsize)
-    dmap->fragment_size = audio_devs[dev]->buffsize;
+  if (dmap->fragment_size > dmap->buffsize)
+    dmap->fragment_size = dmap->buffsize;
 
-  if (dmap->fragment_size == audio_devs[dev]->buffsize &&
+  if (dmap->fragment_size == dmap->buffsize &&
       audio_devs[dev]->flags & DMA_AUTOMODE)
     dmap->fragment_size /= 2;	/* Needs at least 2 buffers */
 
   dmap->subdivision = 1;	/* Disable SNDCTL_DSP_SUBDIVIDE */
   if (arg)
-    return (*(int *) arg = bytes | (count << 16));
+    return (*(int *) arg = bytes | ((count - 1) << 16));
   else
     return 0;
 }
@@ -797,16 +765,18 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
     case SNDCTL_DSP_SUBDIVIDE:
       {
 	int             fact;
-	int             ret;
+	int             ret = 0;
 
 	fact = *(int *) arg;
 
-	ret = dma_subdivide (dev, dmap_out, arg, fact);
+	if (audio_devs[dev]->open_mode & OPEN_WRITE)
+	  ret = dma_subdivide (dev, dmap_out, arg, fact);
 	if (ret < 0)
 	  return ret;
 
-	if (audio_devs[dev]->flags & DMA_DUPLEX &&
-	    audio_devs[dev]->open_mode & OPEN_READ)
+	if (audio_devs[dev]->open_mode != OPEN_WRITE ||
+	    (audio_devs[dev]->flags & DMA_DUPLEX &&
+	     audio_devs[dev]->open_mode & OPEN_READ))
 	  ret = dma_subdivide (dev, dmap_in, arg, fact);
 
 	return ret;
@@ -822,6 +792,10 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
 	if (cmd == SNDCTL_DSP_GETISPACE &&
 	    !(audio_devs[dev]->open_mode & OPEN_READ))
+	  return -EINVAL;
+
+	if (cmd == SNDCTL_DSP_GETOSPACE &&
+	    !(audio_devs[dev]->open_mode & OPEN_WRITE))
 	  return -EINVAL;
 
 	if (cmd == SNDCTL_DSP_GETISPACE && audio_devs[dev]->flags & DMA_DUPLEX)
@@ -843,14 +817,14 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	      info->fragments = 0;
 	    else
 	      {
-		info->fragments = dmap->nbufs - dmap->qlen;
+		info->fragments = DMAbuf_space_in_queue (dev);
 		if (audio_devs[dev]->d->local_qlen)
 		  {
 		    int             tmp = audio_devs[dev]->d->local_qlen (dev);
 
 		    if (tmp && info->fragments)
 		      tmp--;	/*
-				   * This buffer has been counted twice
+				 * This buffer has been counted twice
 				 */
 		    info->fragments -= tmp;
 		  }
@@ -904,6 +878,7 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
 			       dmap_in->fragment_size, dmap_in->nbufs)) < 0)
 	      return -err;
 
+	    dmap_in->dma_mode = DMODE_INPUT;
 	    audio_devs[dev]->enable_bits = bits;
 	    DMAbuf_activate_recording (dev, dmap_in);
 	  }
@@ -919,7 +894,9 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
 		reorganize_buffers (dev, dmap_out, 0);
 	      }
 
+	    dmap_out->dma_mode = DMODE_OUTPUT;
 	    ;
+	    audio_devs[dev]->enable_bits = bits;
 	    dmap_out->counts[dmap_out->qhead] = dmap_out->fragment_size;
 	    DMAbuf_launch_output (dev, dmap_out);
 	    ;
@@ -950,20 +927,24 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
       {
 	count_info      info;
 	unsigned long   flags;
+	struct dma_buffparms *dmap = dmap_in;
 
 	if (!(audio_devs[dev]->open_mode & OPEN_READ))
 	  return -EINVAL;
 
 	save_flags (flags);
 	cli ();
-	info.bytes = audio_devs[dev]->dmap_in->byte_counter;
-	info.ptr = DMAbuf_get_buffer_pointer (dev, audio_devs[dev]->dmap_in) & ~3;
-	info.blocks = audio_devs[dev]->dmap_in->qlen;
+	info.bytes = dmap->byte_counter;
+	info.ptr = DMAbuf_get_buffer_pointer (dev, dmap, DMODE_INPUT) & ~3;
+	if (info.ptr < dmap->fragment_size && dmap->qtail != 0)
+	  info.bytes += dmap->bytes_in_use;	/* Pointer wrap not handled yet */
+
+	info.blocks = dmap->qlen;
 	info.bytes += info.ptr;
 	memcpy ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 
-	if (audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED)
-	  audio_devs[dev]->dmap_in->qlen = 0;	/* Reset interrupt counter */
+	if (dmap->mapping_flags & DMA_MAP_MAPPED)
+	  dmap->qlen = 0;	/* Reset interrupt counter */
 	restore_flags (flags);
 	return 0;
       }
@@ -973,20 +954,23 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
       {
 	count_info      info;
 	unsigned long   flags;
+	struct dma_buffparms *dmap = dmap_out;
 
 	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
 	  return -EINVAL;
 
 	save_flags (flags);
 	cli ();
-	info.bytes = audio_devs[dev]->dmap_out->byte_counter;
-	info.ptr = DMAbuf_get_buffer_pointer (dev, audio_devs[dev]->dmap_out) & ~3;
-	info.blocks = audio_devs[dev]->dmap_out->qlen;
+	info.bytes = dmap->byte_counter;
+	info.ptr = DMAbuf_get_buffer_pointer (dev, dmap, DMODE_OUTPUT) & ~3;
+	if (info.ptr < dmap->fragment_size && dmap->qhead != 0)
+	  info.bytes += dmap->bytes_in_use;	/* Pointer wrap not handled yet */
+	info.blocks = dmap->qlen;
 	info.bytes += info.ptr;
 	memcpy ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 
-	if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)
-	  audio_devs[dev]->dmap_out->qlen = 0;	/* Reset interrupt counter */
+	if (dmap->mapping_flags & DMA_MAP_MAPPED)
+	  dmap->qlen = 0;	/* Reset interrupt counter */
 
 	restore_flags (flags);
 	return 0;
@@ -1004,18 +988,23 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
       break;
 
     case SNDCTL_DSP_GETBLKSIZE:
-      if (!(dmap_out->flags & DMA_ALLOC_DONE))
-	{
-	  if (audio_devs[dev]->open_mode & OPEN_WRITE)
-	    reorganize_buffers (dev, dmap_out,
-				(audio_devs[dev]->open_mode == OPEN_READ));
-	  if (audio_devs[dev]->flags & DMA_DUPLEX &&
-	      audio_devs[dev]->open_mode & OPEN_READ)
-	    reorganize_buffers (dev, dmap_in,
-				(audio_devs[dev]->open_mode == OPEN_READ));
-	}
+      {
+	int             fragment_size;
+	struct dma_buffparms *dmap = dmap_out;
 
-      return (*(int *) arg = dmap_out->fragment_size);
+	if (audio_devs[dev]->open_mode & OPEN_WRITE)
+	  reorganize_buffers (dev, dmap_out,
+			      (audio_devs[dev]->open_mode == OPEN_READ));
+	if (audio_devs[dev]->open_mode != OPEN_WRITE ||
+	    (audio_devs[dev]->flags & DMA_DUPLEX &&
+	     audio_devs[dev]->open_mode & OPEN_READ))
+	  reorganize_buffers (dev, dmap_in,
+			      (audio_devs[dev]->open_mode == OPEN_READ));
+	if (audio_devs[dev]->open_mode == OPEN_READ)
+	  dmap = dmap_in;
+	fragment_size = dmap->fragment_size;
+	return (*(int *) arg = fragment_size);
+      }
       break;
 
     case SNDCTL_DSP_SETFRAGMENT:

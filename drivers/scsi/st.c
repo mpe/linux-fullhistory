@@ -11,7 +11,7 @@
   Copyright 1992 - 1997 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Wed Jan  1 15:26:54 1997 by makisara@kai.makisara.fi
+  Last modified: Tue May 27 22:29:00 1997 by makisara@home
   Some small formal changes - aeb, 950809
 */
 
@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/mtio.h>
@@ -48,14 +49,23 @@
 #include "st.h"
 #include "constants.h"
 
+#ifdef MODULE
+MODULE_PARM(buffer_kbs, "i");
+MODULE_PARM(write_threshold_kbs, "i");
+MODULE_PARM(max_buffers, "i");
+static int buffer_kbs = 0;
+static int write_threshold_kbs = 0;
+static int max_buffers = 0;
+#endif
+
 /* The default definitions have been moved to st_options.h */
 
-#define ST_BLOCK_SIZE 1024
+#define ST_KILOBYTE 1024
 
 #include "st_options.h"
 
-#define ST_BUFFER_SIZE (ST_BUFFER_BLOCKS * ST_BLOCK_SIZE)
-#define ST_WRITE_THRESHOLD (ST_WRITE_THRESHOLD_BLOCKS * ST_BLOCK_SIZE)
+#define ST_BUFFER_SIZE (ST_BUFFER_BLOCKS * ST_KILOBYTE)
+#define ST_WRITE_THRESHOLD (ST_WRITE_THRESHOLD_BLOCKS * ST_KILOBYTE)
 
 /* The buffer size should fit into the 24 bits for length in the
    6-byte SCSI read and write commands. */
@@ -220,6 +230,7 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
     }
     else
       (STp->buffer)->last_result = SCpnt->result;
+#if 0
     if ((STp->buffer)->writing) {
       /* Process errors before releasing request */
       (STp->buffer)->last_result_fatal = st_chk_result(SCpnt);
@@ -227,6 +238,10 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
     }
     else
       SCpnt->request.rq_status = RQ_SCSI_DONE;
+#else
+    SCpnt->request.rq_status = RQ_SCSI_DONE;
+    (STp->buffer)->last_SCpnt = SCpnt;
+#endif
 
 #if DEBUG
     STp->write_pending = 0;
@@ -286,6 +301,9 @@ write_behind_check(Scsi_Tape *STp)
 
   down(&(STp->sem));
 
+  (STp->buffer)->last_result_fatal = st_chk_result((STp->buffer)->last_SCpnt);
+  ((STp->buffer)->last_SCpnt)->request.rq_status = RQ_INACTIVE;
+
   if (STbuffer->writing < STbuffer->buffer_bytes)
     memcpy(STbuffer->b_data,
 	   STbuffer->b_data + STbuffer->writing,
@@ -327,7 +345,7 @@ cross_eof(Scsi_Tape *STp, int forward)
 	   TAPE_NR(STp->devt), forward ? "forward" : "backward");
 #endif
 
-  SCpnt = st_do_scsi(NULL, STp, cmd, 0, ST_TIMEOUT, MAX_RETRIES);
+  SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout, MAX_RETRIES);
   if (!SCpnt)
     return (-EBUSY);
 
@@ -387,7 +405,7 @@ flush_write_buffer(Scsi_Tape *STp)
     cmd[3] = blks >> 8;
     cmd[4] = blks;
 
-    SCpnt = st_do_scsi(NULL, STp, cmd, transfer, ST_TIMEOUT, MAX_WRITE_RETRIES);
+    SCpnt = st_do_scsi(NULL, STp, cmd, transfer, STp->timeout, MAX_WRITE_RETRIES);
     if (!SCpnt)
       return (-EBUSY);
 
@@ -594,7 +612,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
 
-    SCpnt = st_do_scsi(NULL, STp, cmd, 0, ST_LONG_TIMEOUT, MAX_READY_RETRIES);
+    SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->long_timeout, MAX_READY_RETRIES);
     if (!SCpnt) {
 	if (scsi_tapes[dev].device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
@@ -608,7 +626,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       memset ((void *) &cmd[0], 0, 10);
       cmd[0] = TEST_UNIT_READY;
 
-      SCpnt = st_do_scsi(SCpnt, STp, cmd, 0, ST_LONG_TIMEOUT, MAX_READY_RETRIES);
+      SCpnt = st_do_scsi(SCpnt, STp, cmd, 0, STp->long_timeout, MAX_READY_RETRIES);
 
       (STp->device)->was_reset = 0;
       STp->partition = STp->new_partition = 0;
@@ -649,7 +667,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       memset ((void *) &cmd[0], 0, 10);
       cmd[0] = READ_BLOCK_LIMITS;
 
-      SCpnt = st_do_scsi(SCpnt, STp, cmd, 6, ST_TIMEOUT, MAX_READY_RETRIES);
+      SCpnt = st_do_scsi(SCpnt, STp, cmd, 6, STp->timeout, MAX_READY_RETRIES);
 
       if (!SCpnt->result && !SCpnt->sense_buffer[0]) {
 	STp->max_block = ((STp->buffer)->b_data[1] << 16) |
@@ -675,7 +693,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     cmd[0] = MODE_SENSE;
     cmd[4] = 12;
 
-    SCpnt = st_do_scsi(SCpnt, STp, cmd, 12, ST_TIMEOUT, MAX_READY_RETRIES);
+    SCpnt = st_do_scsi(SCpnt, STp, cmd, 12, STp->timeout, MAX_READY_RETRIES);
 
     if ((STp->buffer)->last_result_fatal != 0) {
 #if DEBUG
@@ -807,7 +825,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	static int
 scsi_tape_close(struct inode * inode, struct file * filp)
 {
-    int result;
+    int result = 0, result2;
     static unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
@@ -823,7 +841,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
     STps = &(STp->ps[STp->partition]);
 
     if (STp->can_partitions &&
-	update_partition(inode) < 0) {
+	(result = update_partition(inode)) < 0) {
 #if DEBUG
       if (debugging)
 	printk(ST_DEB_MSG "st%d: update_partition at close failed.\n", dev);
@@ -850,7 +868,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	cmd[0] = WRITE_FILEMARKS;
 	cmd[4] = 1 + STp->two_fm;
 
-	SCpnt = st_do_scsi(NULL, STp, cmd, 0, ST_TIMEOUT, MAX_WRITE_RETRIES);
+	SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout, MAX_WRITE_RETRIES);
 	if (!SCpnt)
 	  goto out;
 
@@ -862,8 +880,12 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	     ((SCpnt->sense_buffer[0] & 0x80) != 0 &&
 	      (SCpnt->sense_buffer[3] | SCpnt->sense_buffer[4] |
 	       SCpnt->sense_buffer[5] |
-	       SCpnt->sense_buffer[6]) == 0)))  /* Filter out successful write at EOM */
-	  printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
+	       SCpnt->sense_buffer[6]) == 0))) {
+	    /* Filter out successful write at EOM */
+	    printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
+	    if (result == 0)
+		result = (-EIO);
+	}
 	else {
 	  if (STps->drv_file >= 0)
 	      STps->drv_file++ ;
@@ -884,9 +906,10 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	STps = &(STp->ps[STp->partition]);
 	if (!STm->sysv || STps->rw != ST_READING) {
 	    if (STp->can_bsr)
-		flush_buffer(inode, filp, 0);
+		result = flush_buffer(inode, filp, 0);
 	    else if (STps->eof == ST_FM_HIT) {
-		if (cross_eof(STp, FALSE)) {
+		result = cross_eof(STp, FALSE);
+		if (result) {
 		    if (STps->drv_file >= 0)
 			STps->drv_file++;
 		    STps->drv_block = 0;
@@ -896,7 +919,8 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 		    STps->eof = ST_NOEOF;
 	    }
 	}
-	else if ((STps->eof == ST_NOEOF && !cross_eof(STp, TRUE)) ||
+	else if ((STps->eof == ST_NOEOF &&
+		  !(result = cross_eof(STp, TRUE))) ||
 		 STps->eof == ST_FM_HIT) {
 	    if (STps->drv_file >= 0)
 		STps->drv_file++;
@@ -906,8 +930,11 @@ scsi_tape_close(struct inode * inode, struct file * filp)
     }
 
 out:
-    if (STp->rew_at_close)
-      st_int_ioctl(inode, MTREW, 1);
+    if (STp->rew_at_close) {
+      result2 = st_int_ioctl(inode, MTREW, 1);
+      if (result == 0)
+	  result = result2;
+    }
 
     if (STp->door_locked == ST_LOCKED_AUTO)
       st_int_ioctl(inode, MTUNLOCK, 0);
@@ -923,7 +950,7 @@ out:
     if(st_template.module)
 	__MOD_DEC_USE_COUNT(st_template.module);
 
-    return 0;
+    return result;
 }
 
 
@@ -1083,7 +1110,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf,
       cmd[3] = blks >> 8;
       cmd[4] = blks;
 
-      SCpnt = st_do_scsi(SCpnt, STp, cmd, transfer, ST_TIMEOUT, MAX_WRITE_RETRIES);
+      SCpnt = st_do_scsi(SCpnt, STp, cmd, transfer, STp->timeout, MAX_WRITE_RETRIES);
       if (!SCpnt)
 	return (-EBUSY);
 
@@ -1177,7 +1204,8 @@ st_write(struct inode * inode, struct file * filp, const char * buf,
     }
 
     if (STm->do_async_writes &&
-	((STp->buffer)->buffer_bytes >= STp->write_threshold ||
+	(((STp->buffer)->buffer_bytes >= STp->write_threshold &&
+	  (STp->buffer)->buffer_bytes >= STp->block_size) ||
 	 STp->block_size == 0) ) {
       /* Schedule an asynchronous write */
       if (!SCpnt) {
@@ -1211,7 +1239,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf,
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data,
 		   (STp->buffer)->writing,
-		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
+		   st_sleep_done, STp->timeout, MAX_WRITE_RETRIES);
     }
     else if (SCpnt != NULL)
       SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
@@ -1270,7 +1298,7 @@ read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
     cmd[4] = blks;
 
     SCpnt = *aSCpnt;
-    SCpnt = st_do_scsi(SCpnt, STp, cmd, bytes, ST_TIMEOUT, MAX_RETRIES);
+    SCpnt = st_do_scsi(SCpnt, STp, cmd, bytes, STp->timeout, MAX_RETRIES);
     *aSCpnt = SCpnt;
     if (!SCpnt)
 	return (-EBUSY);
@@ -1572,6 +1600,8 @@ st_log_options(Scsi_Tape *STp, ST_mode *STm, int dev)
 "st%d:    defs for wr: %d, no block limits: %d, partitions: %d, s2 log: %d\n",
 	 dev, STm->defaults_for_writes, STp->omit_blklims, STp->can_partitions,
 	 STp->scsi2_logical);
+  printk(KERN_INFO
+"st%d:    sysv: %d\n", dev, STm->sysv);
 #if DEBUG
   printk(KERN_INFO
 	 "st%d:    debugging: %d\n",
@@ -1615,6 +1645,7 @@ st_set_options(struct inode * inode, long options)
     if ((STp->device)->scsi_level >= SCSI_2)
       STp->can_partitions = (options & MT_ST_CAN_PARTITIONS) != 0;
     STp->scsi2_logical    = (options & MT_ST_SCSI2LOGICAL) != 0;
+    STm->sysv		  = (options & MT_ST_SYSV) != 0;
 #if DEBUG
     debugging = (options & MT_ST_DEBUGGING) != 0;
 #endif
@@ -1645,6 +1676,8 @@ st_set_options(struct inode * inode, long options)
       STp->can_partitions = value;
     if ((options & MT_ST_SCSI2LOGICAL) != 0)
       STp->scsi2_logical = value;
+    if ((options & MT_ST_SYSV) != 0)
+      STm->sysv = value;
 #if DEBUG
     if ((options & MT_ST_DEBUGGING) != 0)
       debugging = value;
@@ -1652,7 +1685,7 @@ st_set_options(struct inode * inode, long options)
     st_log_options(STp, STm, dev);
   }
   else if (code == MT_ST_WRITE_THRESHOLD) {
-    value = (options & ~MT_ST_OPTIONS) * ST_BLOCK_SIZE;
+    value = (options & ~MT_ST_OPTIONS) * ST_KILOBYTE;
     if (value < 1 || value > st_buffer_size) {
       printk(KERN_WARNING "st%d: Write threshold %d too small or too large.\n",
 	     dev, value);
@@ -1672,6 +1705,19 @@ st_set_options(struct inode * inode, long options)
       STm->default_blksize = value;
       printk(KERN_INFO "st%d: Default block size set to %d bytes.\n",
 	     dev, STm->default_blksize);
+    }
+  }
+  else if (code == MT_ST_TIMEOUTS) {
+    value = (options & ~MT_ST_OPTIONS);
+    if ((value & MT_ST_SET_LONG_TIMEOUT) != 0) {
+      STp->long_timeout = (value & ~MT_ST_SET_LONG_TIMEOUT) * HZ;
+      printk(KERN_INFO "st%d: Long timeout set to %d seconds.\n", dev,
+	     (value & ~MT_ST_SET_LONG_TIMEOUT));
+    }
+    else {
+      STp->timeout = value * HZ;
+      printk(KERN_INFO "st%d: Normal timeout set to %d seconds.\n", dev,
+	     value);
     }
   }
   else if (code == MT_ST_DEF_OPTIONS) {
@@ -1746,7 +1792,7 @@ st_compression(Scsi_Tape * STp, int state)
   cmd[2] = COMPRESSION_PAGE;
   cmd[4] = COMPRESSION_PAGE_LENGTH + MODE_HEADER_LENGTH;
 
-  SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], ST_TIMEOUT, 0);
+  SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], STp->timeout, 0);
   if (SCpnt == NULL)
     return (-EBUSY);
   dev = TAPE_NR(SCpnt->request.rq_dev);
@@ -1789,7 +1835,7 @@ st_compression(Scsi_Tape * STp, int state)
   (STp->buffer)->b_data[0] = 0;  /* Reserved data length */
   (STp->buffer)->b_data[1] = 0;  /* Reserved media type byte */
   (STp->buffer)->b_data[MODE_HEADER_LENGTH] &= 0x3f;
-  SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], ST_TIMEOUT, 0);
+  SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], STp->timeout, 0);
 
   if ((STp->buffer)->last_result_fatal != 0) {
 #if DEBUG
@@ -1817,7 +1863,7 @@ st_compression(Scsi_Tape * STp, int state)
 st_int_ioctl(struct inode * inode,
 	     unsigned int cmd_in, unsigned long arg)
 {
-   int timeout = ST_LONG_TIMEOUT;
+   int timeout;
    long ltmp;
    int i, ioctl_result;
    int chg_eof = TRUE;
@@ -1831,6 +1877,7 @@ st_int_ioctl(struct inode * inode,
    STp = &(scsi_tapes[dev]);
    if (STp->ready != ST_READY && cmd_in != MTLOAD)
      return (-EIO);
+   timeout = STp->long_timeout;
    STps = &(STp->ps[STp->partition]);
    fileno = STps->drv_file;
    blkno = STps->drv_block;
@@ -1961,7 +2008,7 @@ st_int_ioctl(struct inode * inode,
        cmd[2] = (arg >> 16);
        cmd[3] = (arg >> 8);
        cmd[4] = arg;
-       timeout = ST_TIMEOUT;
+       timeout = STp->timeout;
 #if DEBUG
        if (debugging) {
 	 if (cmd_in == MTWEOF)
@@ -1981,7 +2028,7 @@ st_int_ioctl(struct inode * inode,
        cmd[0] = REZERO_UNIT;
 #if ST_NOWAIT
        cmd[1] = 1;  /* Don't wait for completion */
-       timeout = ST_TIMEOUT;
+       timeout = STp->timeout;
 #endif
 #if DEBUG
        if (debugging)
@@ -2012,9 +2059,9 @@ st_int_ioctl(struct inode * inode,
        }
 #if ST_NOWAIT
        cmd[1] = 1;  /* Don't wait for completion */
-       timeout = ST_TIMEOUT;
+       timeout = STp->timeout;
 #else
-       timeout = ST_LONG_TIMEOUT * 8;
+       timeout = STp->long_timeout;
 #endif
 #if DEBUG
        if (debugging) {
@@ -2037,7 +2084,7 @@ st_int_ioctl(struct inode * inode,
        cmd[0] = START_STOP;
 #if ST_NOWAIT
        cmd[1] = 1;  /* Don't wait for completion */
-       timeout = ST_TIMEOUT;
+       timeout = STp->timeout;
 #endif
        cmd[4] = 3;
 #if DEBUG
@@ -2076,9 +2123,9 @@ st_int_ioctl(struct inode * inode,
        cmd[1] = 1;  /* To the end of tape */
 #if ST_NOWAIT
        cmd[1] |= 2;  /* Don't wait for completion */
-       timeout = ST_TIMEOUT;
+       timeout = STp->timeout;
 #else
-       timeout = ST_LONG_TIMEOUT * 8;
+       timeout = STp->long_timeout * 8;
 #endif
 #if DEBUG
        if (debugging)
@@ -2147,7 +2194,7 @@ st_int_ioctl(struct inode * inode,
        (STp->buffer)->b_data[9] = (ltmp >> 16);
        (STp->buffer)->b_data[10] = (ltmp >> 8);
        (STp->buffer)->b_data[11] = ltmp;
-       timeout = ST_TIMEOUT;
+       timeout = STp->timeout;
 #if DEBUG
        if (debugging) {
 	 if (cmd_in == MTSETBLK || cmd_in == SET_DENS_AND_BLK)
@@ -2338,7 +2385,7 @@ get_location(struct inode * inode, unsigned int *block, int *partition,
       if (!logical && !STp->scsi2_logical)
 	scmd[1] = 1;
     }
-    SCpnt = st_do_scsi(NULL, STp, scmd, 20, ST_TIMEOUT, MAX_READY_RETRIES);
+    SCpnt = st_do_scsi(NULL, STp, scmd, 20, STp->timeout, MAX_READY_RETRIES);
     if (!SCpnt)
       return (-EBUSY);
 
@@ -2394,13 +2441,14 @@ set_location(struct inode * inode, unsigned int block, int partition,
     int dev = TAPE_NR(inode->i_rdev);
     int result, p;
     unsigned int blk;
-    int timeout = ST_LONG_TIMEOUT;
+    int timeout;
     unsigned char scmd[10];
     Scsi_Cmnd *SCpnt;
 
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
       return (-EIO);
+    timeout = STp->long_timeout;
     STps = &(STp->ps[STp->partition]);
 
 #if DEBUG
@@ -2457,7 +2505,7 @@ set_location(struct inode * inode, unsigned int block, int partition,
      }
 #if ST_NOWAIT
     scmd[1] |= 1;  /* Don't wait for completion */
-    timeout = ST_TIMEOUT;
+    timeout = STp->timeout;
 #endif
 
     SCpnt = st_do_scsi(NULL, STp, scmd, 20, timeout, MAX_READY_RETRIES);
@@ -2554,7 +2602,7 @@ nbr_partitions(struct inode * inode)
     cmd[2] = PART_PAGE;
     cmd[4] = 200;
 
-    SCpnt = st_do_scsi(SCpnt, STp, cmd, 200, ST_TIMEOUT, MAX_READY_RETRIES);
+    SCpnt = st_do_scsi(SCpnt, STp, cmd, 200, STp->timeout, MAX_READY_RETRIES);
     if (SCpnt == NULL)
       return (-EBUSY);
     SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
@@ -2628,7 +2676,7 @@ partition_tape(struct inode * inode, int size)
     cmd[1] = 0x10;
     cmd[4] = length + MODE_HEADER_LENGTH;
 
-    SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], ST_LONG_TIMEOUT, MAX_READY_RETRIES);
+    SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], STp->long_timeout, MAX_READY_RETRIES);
     if (SCpnt == NULL)
       return (-EBUSY);
     SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
@@ -2979,13 +3027,13 @@ normalize_buffer(ST_buffer *STbuffer)
 /* Set the boot options. Syntax: st=xxx,yyy
    where xxx is buffer size in 1024 byte blocks and yyy is write threshold
    in 1024 byte blocks. */
-	void
-st_setup(char *str, int *ints)
+	__initfunc( void
+st_setup(char *str, int *ints))
 {
   if (ints[0] > 0 && ints[1] > 0)
-    st_buffer_size = ints[1] * ST_BLOCK_SIZE;
+    st_buffer_size = ints[1] * ST_KILOBYTE;
   if (ints[0] > 1 && ints[2] > 0) {
-    st_write_threshold = ints[2] * ST_BLOCK_SIZE;
+    st_write_threshold = ints[2] * ST_KILOBYTE;
     if (st_write_threshold > st_buffer_size)
       st_write_threshold = st_buffer_size;
   }
@@ -3045,12 +3093,14 @@ static int st_attach(Scsi_Device * SDp){
    tpnt->can_partitions = 0;
    tpnt->two_fm = ST_TWO_FM;
    tpnt->fast_mteom = ST_FAST_MTEOM;
-   tpnt->scsi2_logical = 0;
+   tpnt->scsi2_logical = ST_SCSI2LOGICAL;
    tpnt->write_threshold = st_write_threshold;
    tpnt->default_drvbuffer = 0xff; /* No forced buffering */
    tpnt->partition = 0;
    tpnt->new_partition = 0;
    tpnt->nbr_partitions = 0;
+   tpnt->timeout = ST_TIMEOUT;
+   tpnt->long_timeout = ST_LONG_TIMEOUT;
 
    for (i=0; i < ST_NBR_MODES; i++) {
      STm = &(tpnt->modes[i]);
@@ -3099,7 +3149,7 @@ static int st_detect(Scsi_Device * SDp)
 
 static int st_registered = 0;
 
-/* Driver initialization */
+/* Driver initialization (not __initfunc because may be called later) */
 static int st_init()
 {
   int i;
@@ -3213,8 +3263,25 @@ static void st_detach(Scsi_Device * SDp)
 #ifdef MODULE
 
 int init_module(void) {
+  int result;
+
   st_template.module = &__this_module;
-  return scsi_register_module(MODULE_SCSI_DEV, &st_template);
+  result = scsi_register_module(MODULE_SCSI_DEV, &st_template);
+  if (result)
+      return result;
+
+  if (buffer_kbs > 0)
+      st_buffer_size = buffer_kbs * ST_KILOBYTE;
+  if (write_threshold_kbs > 0)
+      st_write_threshold = write_threshold_kbs * ST_KILOBYTE;
+  if (st_write_threshold > st_buffer_size)
+      st_write_threshold = st_buffer_size;
+  if (max_buffers > 0)
+      st_max_buffers = max_buffers;
+printk(KERN_INFO "st: bufsize %d, wrt %d, max buffers %d.\n",
+st_buffer_size, st_write_threshold, st_max_buffers);
+
+  return 0;
 }
 
 void cleanup_module( void)

@@ -55,12 +55,12 @@ pcm_set_speed (int arg)
   if (pcm_channels & 2)
     {
       foo = (596590 + (arg / 2)) / arg;
-      arg = 596590 / foo;
+      arg = (596590 + (foo / 2)) / foo;
     }
   else
     {
       foo = (1193180 + (arg / 2)) / arg;
-      arg = 1193180 / foo;
+      arg = (1193180 + (foo / 2)) / foo;
     }
 
   pcm_speed = arg;

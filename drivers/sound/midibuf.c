@@ -12,6 +12,7 @@
  */
 #include <linux/config.h>
 
+#define MIDIBUF_C
 
 #include "sound_config.h"
 

@@ -1,5 +1,11 @@
-Changelog for version 3.8-beta8
--------------------------------
+Changelog for version 3.8
+--------------------------
+
+Since 3.8-beta21
+- Fixed all known bugs (I think).
+
+Since 3.8-beta8
+- Lot of fixes to audio playback code in dmabuf.c
 
 Since 3.8-beta6
 - Fixed the famous Quake delay bug.

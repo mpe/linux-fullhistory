@@ -345,7 +345,7 @@ out:
  * to be.  This works out OK, because we now do proper aging on page
  * contents. 
  */
-int try_to_free_page(int priority, int dma, int wait)
+static inline int do_try_to_free_page(int priority, int dma, int wait)
 {
 	static int state = 0;
 	int i=6;
@@ -379,6 +379,22 @@ int try_to_free_page(int priority, int dma, int wait)
 	return 0;
 }
 
+/*
+ * This is REALLY ugly.
+ *
+ * We need to make the locks finer granularity, but right
+ * now we need this so that we can do page allocations
+ * without holding the kernel lock etc.
+ */
+int try_to_free_page(int priority, int dma, int wait)
+{
+	int retval;
+
+	lock_kernel();
+	retval = do_try_to_free_page(priority,dma,wait);
+	unlock_kernel();
+	return retval;
+}
 
 /*
  * The background pageout daemon.

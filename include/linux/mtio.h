@@ -225,6 +225,9 @@ struct mtconfiginfo {
 #define MT_ST_WRITE_THRESHOLD	0x20000000
 #define MT_ST_DEF_BLKSIZE	0x50000000
 #define MT_ST_DEF_OPTIONS	0x60000000
+#define MT_ST_TIMEOUTS		0x70000000
+#define MT_ST_SET_TIMEOUT	(MT_ST_TIMEOUTS | 0x000000)
+#define MT_ST_SET_LONG_TIMEOUT	(MT_ST_TIMEOUTS | 0x100000)
 
 #define MT_ST_BUFFER_WRITES	0x1
 #define MT_ST_ASYNC_WRITES	0x2
@@ -238,6 +241,7 @@ struct mtconfiginfo {
 #define MT_ST_NO_BLKLIMS	0x200
 #define MT_ST_CAN_PARTITIONS    0x400
 #define MT_ST_SCSI2LOGICAL      0x800
+#define MT_ST_SYSV              0x1000
 
 /* The mode parameters to be controlled. Parameter chosen with bits 20-28 */
 #define MT_ST_CLEAR_DEFAULT	0xfffff

@@ -346,6 +346,7 @@ attach_uart401 (struct address_info *hw_config)
   strcpy (midi_devs[num_midis]->info.name, name);
   midi_devs[num_midis]->converter->id = "UART401";
   num_midis++;
+  sequencer_init ();
   devc->opened = 0;
 }
 

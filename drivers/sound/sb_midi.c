@@ -52,6 +52,7 @@ sb_midi_open (int dev, int mode,
   restore_flags (flags);
 
   devc->irq_mode = IMODE_MIDI;
+  devc->midi_broken = 0;
 
   sb_dsp_reset (devc);
 
@@ -96,9 +97,16 @@ sb_midi_out (int dev, unsigned char midi_byte)
   sb_devc        *devc = midi_devs[dev]->devc;
 
   if (devc == NULL)
-    return -ENXIO;
+    return 1;
 
-  sb_dsp_command (devc, midi_byte);
+  if (devc->midi_broken)
+    return 1;
+
+  if (!sb_dsp_command (devc, midi_byte))
+    {
+      devc->midi_broken = 1;
+      return 1;
+    }
 
   return 1;
 }
@@ -220,6 +228,7 @@ sb_dsp_midi_init (sb_devc * devc)
 
   midi_devs[num_midis]->converter->id = "SBMIDI";
   num_midis++;
+  sequencer_init ();
 }
 
 #endif

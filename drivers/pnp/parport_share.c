@@ -220,6 +220,7 @@ struct ppd *parport_register_device(struct parport *port, const char *name,
 	tmp->preempt = pf;
 	tmp->wakeup = kf;
 	tmp->private = handle;
+	tmp->flags = flags;
 	tmp->irq_func = irq_func;
 	tmp->ctr = port->ctr;
 	tmp->ecr = port->ecr;

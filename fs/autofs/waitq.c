@@ -16,6 +16,46 @@
 #include <linux/file.h>
 #include "autofs_i.h"
 
+#ifdef DEBUG_WAITLIST
+#ifndef i386
+#error Only i386 implemented
+#endif
+
+static inline int sane_pointer(void *p)
+{
+	return (p == NULL) || ((unsigned) p > 0xc0000000);
+}
+
+void autofs_check_waitlist_integrity(struct autofs_sb_info *sbi, char *op)
+{
+	struct autofs_wait_queue **wqp, *wq;
+
+	if ( sbi->magic != AUTOFS_SBI_MAGIC ) {
+		printk("autofs: CHECK_WAITLIST with bogus sbi pointer: %p\n",
+		       sbi);
+		return;
+	}
+
+	wqp = &(sbi->queues);
+	while ( (wq = *wqp) ) {
+		if ( !sane_pointer(wq) ) {
+			printk("autofs(%s): wait queue pointer corrupt: ", op);
+			wqp = &(sbi->queues);
+			do {
+				wq = *wqp;
+				printk(" %p", wq);
+				wqp = &(wq->next);
+			} while ( sane_pointer(*wqp) );
+			printk("\n");
+			*wqp = NULL;
+			break;
+		} else {
+			wqp = &(wq->next);
+		}
+	}
+}
+#endif
+
 /* We make this a static variable rather than a part of the superblock; it
    is better if we don't reassign numbers easily even across filesystems */
 static int autofs_next_wait_queue = 1;
@@ -95,6 +135,8 @@ int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name
 	struct autofs_wait_queue *wq;
 	int status;
 
+	CHECK_WAITLIST(sbi,"wait");
+
 	for ( wq = sbi->queues ; wq ; wq = wq->next ) {
 		if ( wq->hash == hash &&
 		     wq->len == len &&
@@ -147,6 +189,8 @@ int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name
 int autofs_wait_release(struct autofs_sb_info *sbi, unsigned long wait_queue_token, int status)
 {
 	struct autofs_wait_queue *wq, **wql;
+
+	CHECK_WAITLIST(sbi,"release");
 
 	for ( wql = &sbi->queues ; (wq = *wql) ; wql = &wq->next ) {
 		if ( wq->wait_queue_token == wait_queue_token )

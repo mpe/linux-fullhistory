@@ -16,6 +16,7 @@
 #include "sound_config.h"
 
 static int      in_use = 0;	/* Total # of open devices */
+unsigned long   seq_time = 0;	/* Time for /dev/sequencer */
 
 /*
  * Table for configurable mixer volume handling
@@ -167,17 +168,22 @@ init_status (void)
   status_ptr = 0;
 
 #ifdef SOUND_UNAME_A
-  put_status ("Sound Driver:" SOUND_VERSION_STRING
+  put_status ("OSS/Free" SOUND_VERSION_STRING
 	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY ",\n"
 	      SOUND_UNAME_A ")"
 	      "\n");
 #else
-  put_status ("Sound Driver:" SOUND_VERSION_STRING
+  put_status ("OSS/Free:" SOUND_VERSION_STRING
 	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY "@"
 	      SOUND_CONFIG_HOST "." SOUND_CONFIG_DOMAIN ")"
 	      "\n");
 #endif
 
+#ifdef MODULE
+  put_status ("Load type: Driver loaded as a module.\n");
+#else
+  put_status ("Load type: Driver compiled into kernel\n");
+#endif
   put_status ("Kernel: ");
   put_status (system_utsname.sysname);
   put_status (" ");
@@ -189,6 +195,9 @@ init_status (void)
   put_status (" ");
   put_status (system_utsname.machine);
   put_status ("\n");
+#ifdef MODULE
+  put_status ("Driver loaded as a module\n");
+#endif
 
 
   if (!put_status ("Config options: "))

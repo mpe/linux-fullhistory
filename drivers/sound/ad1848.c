@@ -71,6 +71,7 @@ typedef struct
     int             irq_ok;
     mixer_ents     *mix_devices;
     int             mixer_output_port;
+    int             c930_password_port;
   }
 ad1848_info;
 
@@ -107,7 +108,7 @@ static int      ad_format_mask[8 /*devc->model */ ] =
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM
 };
 
-static ad1848_info dev_info[MAX_AUDIO_DEV];
+static ad1848_info adev_info[MAX_AUDIO_DEV];
 
 #define io_Index_Addr(d)	((d)->base)
 #define io_Indexed_Data(d)	((d)->base+1)
@@ -200,7 +201,6 @@ wait_for_calibration (ad1848_info * devc)
   if (ad_read (devc, 11) & 0x20)
     if (devc->model != MD_1845)
       printk ("ad1848: Auto calibration timed out(3).\n");
-  ad_write (devc, 9, ad_read (devc, 9) & ~0x18);	/* Disable autocalibration */
 }
 
 static void
@@ -215,7 +215,6 @@ ad_mute (ad1848_info * devc)
   for (i = 6; i < 8; i++)
     {
       prev = devc->saved_regs[i] = ad_read (devc, i);
-      ad_write (devc, i, prev | 0x80);
     }
 
 }
@@ -223,21 +222,6 @@ ad_mute (ad1848_info * devc)
 static void
 ad_unmute (ad1848_info * devc)
 {
-  int             i, dummy;
-
-/*
- * Let's have some delay
- */
-  for (i = 0; i < 1000; i++)
-    dummy = inb (devc->base);
-
-  /*
-   * Restore back old volume registers (unmute)
-   */
-  for (i = 6; i < 8; i++)
-    {
-      ad_write (devc, i, devc->saved_regs[i] & ~0x80);
-    }
 }
 
 static void
@@ -295,7 +279,6 @@ ad_leave_MCE (ad1848_info * devc)
     wait_for_calibration (devc);
   restore_flags (flags);
 }
-
 
 static int
 ad1848_set_recmask (ad1848_info * devc, int mask)
@@ -381,16 +364,32 @@ change_bits (ad1848_info * devc, unsigned char *regval, int dev, int chn, int ne
 {
   unsigned char   mask;
   int             shift;
+  int             mute;
+  int             mutemask;
+  int             set_mute_bit;
+
+  set_mute_bit = (newval == 0);
 
   if (devc->mix_devices[dev][chn].polarity == 1)	/* Reverse */
     newval = 100 - newval;
 
   mask = (1 << devc->mix_devices[dev][chn].nbits) - 1;
   shift = devc->mix_devices[dev][chn].bitpos;
-  newval = (int) ((newval * mask) + 50) / 100;	/* Scale it */
 
-  *regval &= ~(mask << shift);	/* Clear bits */
-  *regval |= (newval & mask) << shift;	/* Set new value */
+  if (devc->mix_devices[dev][chn].mutepos == 8)
+    {				/* if there is no mute bit */
+      mute = 0;			/* No mute bit; do nothing special */
+      mutemask = ~0;		/* No mute bit; do nothing special */
+    }
+  else
+    {
+      mute = (set_mute_bit << devc->mix_devices[dev][chn].mutepos);
+      mutemask = ~(1 << devc->mix_devices[dev][chn].mutepos);
+    }
+
+  newval = (int) ((newval * mask) + 50) / 100;	/* Scale it */
+  *regval &= (~(mask << shift)) & (mutemask);	/* Clear bits */
+  *regval |= ((newval & mask) << shift) | mute;		/* Set new value */
 }
 
 static int
@@ -969,13 +968,12 @@ ad1848_start_input (int dev, unsigned long buf, int count, int intrflag)
   save_flags (flags);
   cli ();
 
-  if (devc->model == MD_1848 || !devc->dual_dma)	/* Single DMA channel mode */
+  if (devc->model == MD_1848)
     {
       ad_write (devc, 15, (unsigned char) (cnt & 0xff));
       ad_write (devc, 14, (unsigned char) ((cnt >> 8) & 0xff));
     }
   else
-    /* Dual DMA channel mode */
     {
       ad_write (devc, 31, (unsigned char) (cnt & 0xff));
       ad_write (devc, 30, (unsigned char) ((cnt >> 8) & 0xff));
@@ -1007,6 +1005,8 @@ ad1848_prepare_for_output (int dev, int bsize, int bcount)
   if (portc->channels > 1)
     fs |= 0x10;
 
+  ad_enter_MCE (devc);		/* Enables changes to the format select reg */
+
   if (devc->model == MD_1845)	/* Use alternate speed select registers */
     {
       fs &= 0xf0;		/* Mask off the rate select bits */
@@ -1017,13 +1017,14 @@ ad1848_prepare_for_output (int dev, int bsize, int bcount)
 
   old_fs = ad_read (devc, 8);
 
-  ad_enter_MCE (devc);		/* Enables changes to the format select reg */
-
   if (devc->model == MD_4232)
     {
       tmp = ad_read (devc, 16);
       ad_write (devc, 16, tmp | 0x30);
     }
+
+  if (devc->model == MD_IWAVE)
+    ad_write (devc, 17, 0xc2);	/* Disable variable frequency select */
 
   ad_write (devc, 8, fs);
   /*
@@ -1075,6 +1076,8 @@ ad1848_prepare_for_input (int dev, int bsize, int bcount)
   if (portc->channels > 1)
     fs |= 0x10;
 
+  ad_enter_MCE (devc);		/* Enables changes to the format select reg */
+
   if (devc->model == MD_1845)	/* Use alternate speed select registers */
     {
       fs &= 0xf0;		/* Mask off the rate select bits */
@@ -1083,32 +1086,21 @@ ad1848_prepare_for_input (int dev, int bsize, int bcount)
       ad_write (devc, 23, portc->speed & 0xff);		/* Speed LSB */
     }
 
-  old_fs = ad_read (devc, 8);
-
-  ad_enter_MCE (devc);		/* Enables changes to the format select reg */
-
   if (devc->model == MD_4232)
     {
       tmp = ad_read (devc, 16);
       ad_write (devc, 16, tmp | 0x30);
     }
 
-  ad_write (devc, 8, fs);
-  /*
-   * Write to I8 starts resynchronization. Wait until it completes.
-   */
-  timeout = 0;
-  while (timeout < 100 && inb (devc->base) != 0x80)
-    timeout++;
-  timeout = 0;
-  while (timeout < 10000 && inb (devc->base) == 0x80)
-    timeout++;
+  if (devc->model == MD_IWAVE)
+    ad_write (devc, 17, 0xc2);	/* Disable variable frequency select */
 
   /*
-     * If mode >= 2 (CS4231), set I28 also. It's the capture format register.
+   * If mode >= 2 (CS4231), set I28. It's the capture format register.
    */
   if (devc->model != MD_1848)
     {
+      old_fs = ad_read (devc, 28);
       ad_write (devc, 28, fs);
 
       /*
@@ -1118,6 +1110,43 @@ ad1848_prepare_for_input (int dev, int bsize, int bcount)
       while (timeout < 100 && inb (devc->base) != 0x80)
 	timeout++;
 
+      timeout = 0;
+      while (timeout < 10000 && inb (devc->base) == 0x80)
+	timeout++;
+
+      if (devc->model != MD_1848 && devc->model != MD_1845)
+	{
+	  /*
+	   * CS4231 compatible devices don't have separate sampling rate selection
+	   * register for recording an playback. The I8 register is shared so we have to
+	   * set the speed encoding bits of it too.
+	   */
+	  unsigned char   tmp = portc->speed_bits | (ad_read (devc, 8) & 0xf0);
+
+	  ad_write (devc, 8, tmp);
+	  /*
+	   * Write to I8 starts resynchronization. Wait until it completes.
+	   */
+	  timeout = 0;
+	  while (timeout < 100 && inb (devc->base) != 0x80)
+	    timeout++;
+
+	  timeout = 0;
+	  while (timeout < 10000 && inb (devc->base) == 0x80)
+	    timeout++;
+	}
+    }
+  else
+    {				/* For AD1848 set I8. */
+
+      old_fs = ad_read (devc, 8);
+      ad_write (devc, 8, fs);
+      /*
+       * Write to I8 starts resynchronization. Wait until it completes.
+       */
+      timeout = 0;
+      while (timeout < 100 && inb (devc->base) != 0x80)
+	timeout++;
       timeout = 0;
       while (timeout < 10000 && inb (devc->base) == 0x80)
 	timeout++;
@@ -1176,14 +1205,14 @@ ad1848_halt_input (int dev)
   {
     int             tmout;
 
-    disable_dma (audio_devs[dev]->dmap_out->dma);
+    disable_dma (audio_devs[dev]->dmap_in->dma);
 
     for (tmout = 0; tmout < 100000; tmout++)
       if (ad_read (devc, 11) & 0x10)
 	break;
     ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Stop capture */
 
-    enable_dma (audio_devs[dev]->dmap_out->dma);
+    enable_dma (audio_devs[dev]->dmap_in->dma);
     devc->audio_mode &= ~PCM_ENABLE_INPUT;
   }
 
@@ -1306,6 +1335,9 @@ ad1848_init_hw (ad1848_info * devc)
       for (i = 16; i < 32; i++)
 	ad_write (devc, i, init_values[i]);
 
+      if (devc->model == MD_IWAVE)
+	ad_write (devc, 16, 0x30);	/* Playback and capture counters enabled */
+
     }
 
   if (devc->model > MD_1848)
@@ -1321,6 +1353,7 @@ ad1848_init_hw (ad1848_info * devc)
       if (devc->model == MD_IWAVE)
 	{			/* Some magic Interwave specific initialization */
 	  ad_write (devc, 12, 0x6c);	/* Select codec mode 3 */
+	  ad_write (devc, 16, 0x30);	/* Playback and capture counters enabled */
 	  ad_write (devc, 17, 0xc2);	/* Alternate feature enable */
 	}
     }
@@ -1347,11 +1380,12 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 {
 
   unsigned char   tmp;
-  ad1848_info    *devc = &dev_info[nr_ad1848_devs];
+  ad1848_info    *devc = &adev_info[nr_ad1848_devs];
   unsigned char   tmp1 = 0xff, tmp2 = 0xff;
   int             optiC930 = 0;	/* OPTi 82C930 flag */
   int             interwave = 0;
   int             ad1847_flag = 0;
+  int             cs4248_flag = 0;
 
   int             i;
 
@@ -1364,16 +1398,22 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 	  interwave = 1;
 	  *ad_flags = 0;
 	}
+
+      if (*ad_flags == 0x12345677)
+	{
+	  cs4248_flag = 1;
+	  *ad_flags = 0;
+	}
     }
 
   if (nr_ad1848_devs >= MAX_AUDIO_DEV)
     {
-      DDB (printk ("ad1848 detect error - step 0\n"));
+      printk ("ad1848 - Too many audio devices\n");
       return 0;
     }
   if (check_region (io_base, 4))
     {
-      printk ("\n\nad1848.c: Port %x not free.\n\n", io_base);
+      printk ("ad1848.c: Port %x not free.\n", io_base);
       return 0;
     }
 
@@ -1386,6 +1426,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   devc->chip_name = "AD1848";
   devc->model = MD_1848;	/* AD1848 or CS4248 */
   devc->levels = NULL;
+  devc->c930_password_port = 0;
   devc->debug_flag = 0;
 
   /*
@@ -1413,17 +1454,15 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 
   DDB (printk ("ad1848_detect() - step A\n"));
 
+  if (inb (devc->base) == 0x80)	/* Not ready. Let's wait */
+    ad_leave_MCE (devc);
+
   if ((inb (devc->base) & 0x80) != 0x00)	/* Not a AD1848 */
     {
       DDB (printk ("ad1848 detect error - step A (%02x)\n",
 		   (int) inb (devc->base)));
       return 0;
     }
-
-  DDB (printk ("ad1848: regs: "));
-  for (i = 0; i < 32; i++)
-    DDB (printk ("%02x ", ad_read (devc, i)));
-  DDB (printk ("\n"));
 
   /*
      * Test if it's possible to change contents of the indirect registers.
@@ -1480,6 +1519,8 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   /*
      * The original AD1848/CS4248 has just 15 indirect registers. This means
      * that I0 and I16 should return the same value (etc.).
+     * However this doesn't work with CS4248. Actually it seems to be impossible
+     * to detect if the chip is a CS4231 or CS4248.
      * Ensure that the Mode2 enable bit of I12 is 0. Otherwise this test fails
      * with CS4231.
    */
@@ -1512,6 +1553,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
     *ad_flags = 0;
   else
     ad_write (devc, 12, 0x40);	/* Set mode2, clear 0x80 */
+
 
   if (ad_flags)
     *ad_flags = 0;
@@ -1630,6 +1672,15 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 			devc->chip_name = "AD1845";
 			devc->model = MD_1845;
 		      }
+		    else if (cs4248_flag)
+		      {
+			if (ad_flags)
+			  *ad_flags |= AD_F_CS4248;
+
+			devc->chip_name = "CS4248";
+			devc->model = MD_1848;
+			ad_write (devc, 12, ad_read (devc, 12) & ~0x40);	/* Mode2 off */
+		      }
 
 		    ad_write (devc, 23, tmp);	/* Restore */
 		  }
@@ -1686,7 +1737,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
   int             my_dev;
   char            dev_name[100];
 
-  ad1848_info    *devc = &dev_info[nr_ad1848_devs];
+  ad1848_info    *devc = &adev_info[nr_ad1848_devs];
 
   ad1848_port_info *portc = NULL;
 
@@ -1749,7 +1800,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
   if (irq > 0)
     {
       irq2dev[irq] = devc->dev_no = my_dev;
-      if (snd_set_irq_handler (devc->irq, ad1848_interrupt,
+      if (snd_set_irq_handler (devc->irq, adintr,
 			       "SoundPort",
 			       NULL) < 0)
 	{
@@ -1819,7 +1870,7 @@ ad1848_control (int cmd, int arg)
   if (nr_ad1848_devs < 1)
     return;
 
-  devc = &dev_info[nr_ad1848_devs - 1];
+  devc = &adev_info[nr_ad1848_devs - 1];
 
   switch (cmd)
     {
@@ -1871,9 +1922,9 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
   ad1848_info    *devc = NULL;
 
   for (i = 0; devc == NULL && i < nr_ad1848_devs; i++)
-    if (dev_info[i].base == io_base)
+    if (adev_info[i].base == io_base)
       {
-	devc = &dev_info[i];
+	devc = &adev_info[i];
 	dev = devc->dev_no;
       }
 
@@ -1898,7 +1949,7 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
 }
 
 void
-ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
+adintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   unsigned char   status;
   ad1848_info    *devc;
@@ -1937,7 +1988,7 @@ interrupt_again:		/* Jump back here if int status doesn't reset */
   status = inb (io_Status (devc));
 
   if (status == 0x80)
-    printk ("ad1848_interrupt: Why?\n");
+    printk ("adintr: Why?\n");
   if (devc->model == MD_1848)
     outb ((0), io_Status (devc));	/* Clear interrupt status */
 
@@ -1952,6 +2003,8 @@ interrupt_again:		/* Jump back here if int status doesn't reset */
 
 	  alt_stat = 0;
 
+	  if (devc->c930_password_port)
+	    outb ((0xe4), devc->c930_password_port);	/* Password */
 	  outb ((11), 0xe0e);
 	  c930_stat = inb (0xe0f);
 
@@ -1972,6 +2025,8 @@ interrupt_again:		/* Jump back here if int status doesn't reset */
 	  save_flags (flags);
 	  cli ();
 
+	  if (devc->c930_password_port)
+	    outb ((0xe4), devc->c930_password_port);	/* Password */
 	  outb ((11), 0xe0e);
 	  outb ((~c930_stat), 0xe0f);
 	  restore_flags (flags);
@@ -2319,7 +2374,6 @@ attach_ms_sound (struct address_info *hw_config)
     -1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20
   };
   char            bits, dma2_bit = 0;
-  int             ad_flags = 0;
 
   static char     dma_bits[4] =
   {
@@ -2347,7 +2401,10 @@ attach_ms_sound (struct address_info *hw_config)
 
   bits = interrupt_bits[hw_config->irq];
   if (bits == -1)
-    return;
+    {
+      printk ("MSS: Bad IRQ %d\n", hw_config->irq);
+      return;
+    }
 
   outb ((bits | 0x40), config_port);
   if ((inb (version_port) & 0x40) == 0)
@@ -2357,7 +2414,7 @@ attach_ms_sound (struct address_info *hw_config)
  * Handle the capture DMA channel
  */
 
-  if (ad_flags & AD_F_CS4231 && dma2 != -1 && dma2 != dma)
+  if (dma2 != -1 && dma2 != dma)
     {
       if (!((dma == 0 && dma2 == 1) ||
 	    (dma == 1 && dma2 == 0) ||
@@ -2382,7 +2439,12 @@ attach_ms_sound (struct address_info *hw_config)
 	}
     }
   else
-    dma2 = dma;
+    {
+      dma2 = dma;
+    }
+
+  hw_config->dma = dma;
+  hw_config->dma2 = dma2;
 
   outb ((bits | dma_bits[dma] | dma2_bit), config_port);	/* Write IRQ+DMA setup */
 

@@ -297,20 +297,14 @@ static int get_uptime(char * buffer)
 static int get_meminfo(char * buffer)
 {
 	struct sysinfo i;
-	int len;
 
 	si_meminfo(&i);
 	si_swapinfo(&i);
-	len = sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
-		"Mem:  %8lu %8lu %8lu %8lu %8lu %8lu\n"
-		"Swap: %8lu %8lu %8lu\n",
-		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram, page_cache_size*PAGE_SIZE,
-		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
+
 	/*
-	 * Tagged format, for easy grepping and expansion. The above will go away
-	 * eventually, once the tools have been updated.
+	 * Tagged format, for easy grepping and expansion.
 	 */
-	return len + sprintf(buffer+len,
+	return sprintf(buffer,
 		"MemTotal:  %8lu kB\n"
 		"MemFree:   %8lu kB\n"
 		"MemShared: %8lu kB\n"

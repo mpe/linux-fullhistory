@@ -1433,6 +1433,7 @@ alloc_new_slab:
 			/* Someone may have stolen our objs.  Doesn't matter, we'll
 			 * just come back here again.
 			 */
+			spin_lock_irq(&cachep->c_spinlock);
 			goto try_again;
 		}
 		/* Couldn't grow, but some objs may have been freed. */

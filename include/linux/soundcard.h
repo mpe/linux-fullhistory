@@ -33,7 +33,7 @@
  * Use ioctl(fd, OSS_GETVERSION, &int) to get the version number of
  * the currently active driver.
  */
-#define SOUND_VERSION	0x0307f1
+#define SOUND_VERSION	0x030800
 #define OPEN_SOUND_SYSTEM
 
 /* In Linux we need to be prepared for cross compiling */
@@ -76,7 +76,7 @@
  */
 
 #ifndef _SIOWR
-#if defined(_IOWR) && !defined(sun) && !defined(sparc)
+#if defined(_IOWR) && (defined(_AIX) || (!defined(sun) && !defined(sparc) && !defined(__INCioctlh) && !defined(__Lynx__)))
 /* Use already defined ioctl defines if they exist (except with Sun) */
 #define	SIOCPARM_MASK	IOCPARM_MASK
 #define	SIOC_VOID	IOC_VOID
@@ -127,7 +127,7 @@
 #define SNDCTL_SEQ_GETOUTCOUNT		_SIOR ('Q', 4, int)
 #define SNDCTL_SEQ_GETINCOUNT		_SIOR ('Q', 5, int)
 #define SNDCTL_SEQ_PERCMODE		_SIOW ('Q', 6, int)
-#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Obsolete */
+#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Obsolete. Don't use. */
 #define SNDCTL_SEQ_TESTMIDI		_SIOW ('Q', 8, int)
 #define SNDCTL_SEQ_RESETSAMPLES		_SIOW ('Q', 9, int)
 #define SNDCTL_SEQ_NRSYNTHS		_SIOR ('Q',10, int)
@@ -140,10 +140,25 @@
 #define SNDCTL_SEQ_OUTOFBAND		_SIOW ('Q',18, struct seq_event_rec)
 #define SNDCTL_SEQ_GETTIME		_SIOR ('Q',19, int)
 #define SNDCTL_SYNTH_ID			_SIOWR('Q',20, struct synth_info)
+#define SNDCTL_SYNTH_CONTROL		_SIOWR('Q',21, struct synth_control)
+#define SNDCTL_SYNTH_REMOVESAMPLE	_SIOWR('Q',22, struct remove_sample)
 
-	struct seq_event_rec {
-			unsigned char arr[8];
-		};
+typedef struct synth_control
+{
+	int devno;	/* Synthesizer # */
+	char data[4000]; /* Device spesific command/data record */
+}synth_control;
+
+typedef struct remove_sample
+{
+	int devno;	/* Synthesizer # */
+	int bankno;	/* MIDI bank # (0=General MIDI) */
+	int instrno;	/* MIDI instrument number */
+} remove_sample;
+
+typedef struct seq_event_rec {
+		unsigned char arr[8];
+} seq_event_rec;
 
 #define SNDCTL_TMR_TIMEBASE		_SIOWR('T', 1, int)
 #define SNDCTL_TMR_START		_SIO  ('T', 2)

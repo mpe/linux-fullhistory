@@ -333,7 +333,7 @@ maui_load_patch (int dev, int format, const char *addr,
     {
       unsigned char   data;
 
-      get_user (data, (unsigned char *) &((addr)[hdr_size + i]));
+      get_user (*(unsigned char *) &data, (unsigned char *) &((addr)[hdr_size + i]));
       if (i == 0 && !(data & 0x80))
 	return -EINVAL;
 

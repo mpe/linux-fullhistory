@@ -343,4 +343,3 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
   	swap_free(entry);
   	return;
 }
-

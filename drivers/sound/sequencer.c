@@ -24,6 +24,9 @@ static int      sequencer_ok = 0;
 static struct sound_timer_operations *tmr;
 static int      tmr_no = -1;	/* Currently selected timer */
 static int      pending_timer = -1;	/* For timer change operation */
+extern unsigned long seq_time;
+
+static int      obsolete_api_used = 0;
 
 /*
  * Local counts for number of synth and MIDI devices. These are initialized
@@ -56,7 +59,6 @@ static int      midi_written[MAX_MIDI_DEV] =
 
 unsigned long   prev_input_time = 0;
 int             prev_event_time;
-unsigned long   seq_time = 0;
 
 #include "tuning.h"
 
@@ -312,6 +314,9 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 	      return -EINVAL;
 	    }
 	  ev_size = 4;
+
+	  if (event_rec[0] != SEQ_MIDIPUTC)
+	    obsolete_api_used = 1;
 	}
 
       if (event_rec[0] == SEQ_MIDIPUTC)
@@ -498,11 +503,12 @@ alloc_voice (int dev, int chn, int note)
 static void
 seq_chn_voice_event (unsigned char *event_rec)
 {
-  unsigned char   dev = event_rec[1];
-  unsigned char   cmd = event_rec[2];
-  unsigned char   chn = event_rec[3];
-  unsigned char   note = event_rec[4];
-  unsigned char   parm = event_rec[5];
+#define dev event_rec[1]
+#define cmd event_rec[2]
+#define chn event_rec[3]
+#define note event_rec[4]
+#define parm event_rec[5]
+
   int             voice = -1;
 
   if ((int) dev > max_synthdev)
@@ -570,6 +576,11 @@ seq_chn_voice_event (unsigned char *event_rec)
 
     default:;
     }
+#undef dev
+#undef cmd
+#undef chn
+#undef note
+#undef parm
 }
 
 
@@ -1105,6 +1116,7 @@ sequencer_open (int dev, struct fileinfo *file)
       return -EBUSY;
     }
   sequencer_busy = 1;
+  obsolete_api_used = 0;
   restore_flags (flags);
 
   max_mididev = num_midis;
@@ -1322,6 +1334,8 @@ sequencer_release (int dev, struct fileinfo *file)
   if (seq_mode == SEQ_2)
     tmr->close (tmr_no);
 
+  if (obsolete_api_used)
+    printk ("/dev/music: Obsolete (4 byte) API was used by this program\n");
   sequencer_busy = 0;
 }
 
@@ -1628,6 +1642,8 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_RESETSAMPLES:
+    case SNDCTL_SYNTH_REMOVESAMPLE:
+    case SNDCTL_SYNTH_CONTROL:
       {
 	int             err;
 
@@ -1870,7 +1886,7 @@ note_to_freq (int note_num)
    */
 
   int             note, octave, note_freq;
-  int             notes[] =
+  static int      notes[] =
   {
     261632, 277189, 293671, 311132, 329632, 349232,
     369998, 391998, 415306, 440000, 466162, 493880
@@ -1937,6 +1953,8 @@ compute_finetune (unsigned long base_freq, int bend, int range,
     }
 
   semitones = bend / 100;
+  if (semitones > 99)
+    semitones = 99;
   cents = bend % 100;
 
   amount = (int) (semitone_tuning[semitones] * multiplier * cent_tuning[cents])
@@ -1955,6 +1973,10 @@ sequencer_init (void)
   if (sequencer_ok)
     return;
 
+#ifdef CONFIG_MIDI
+  MIDIbuf_init ();
+#endif
+
 
   queue = (unsigned char *) (sound_mem_blocks[sound_nblocks] = vmalloc (SEQ_MAX_QUEUE * EV_SZ));
   sound_mem_sizes[sound_nblocks] = SEQ_MAX_QUEUE * EV_SZ;
@@ -1971,7 +1993,7 @@ sequencer_init (void)
   sound_mem_sizes[sound_nblocks] = SEQ_MAX_QUEUE * IEV_SZ;
   if (sound_nblocks < 1024)
     sound_nblocks++;;
-  if (queue == NULL)
+  if (iqueue == NULL)
     {
       printk ("Sound: Can't allocate memory for sequencer input queue\n");
       return;

@@ -123,7 +123,7 @@ gusintr (int irq, void *dev_id, struct pt_regs *dummy)
 
 #ifdef CONFIG_GUSMAX
   if (have_gus_max)
-    ad1848_interrupt (irq, NULL, NULL);
+    adintr (irq, NULL, NULL);
 #endif
 
   while (1)

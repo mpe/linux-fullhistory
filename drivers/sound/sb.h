@@ -105,6 +105,7 @@ typedef struct sb_devc {
 	/* MIDI fields */
 	   int my_mididev;
 	   int input_opened;
+	   int midi_broken;
 	   void (*midi_input_intr) (int dev, unsigned char data);
 	} sb_devc;
 

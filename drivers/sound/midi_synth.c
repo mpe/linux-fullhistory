@@ -537,7 +537,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
     {
       unsigned char   data;
 
-      get_user (data, (unsigned char *) &((addr)[hdr_size + i]));
+      get_user (*(unsigned char *) &data, (unsigned char *) &((addr)[hdr_size + i]));
 
       eox_seen = (i > 0 && data & 0x80);	/* End of sysex */
 

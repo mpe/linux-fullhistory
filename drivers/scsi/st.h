@@ -20,6 +20,7 @@ typedef struct {
   int writing;
   int last_result;
   int last_result_fatal;
+  Scsi_Cmnd *last_SCpnt;
   unsigned char *b_data;
   int orig_size;
   unsigned char *orig_b_data;
@@ -78,6 +79,8 @@ typedef struct {
   unsigned char scsi2_logical;
   unsigned char default_drvbuffer;  /* 0xff = don't touch, value 3 bits */
   int write_threshold;
+  int timeout;			/* timeout for normal commands */
+  int long_timeout;		/* timeout for commands known to take long time*/
 
   /* Mode characteristics */
   ST_mode modes[ST_NBR_MODES];

@@ -190,30 +190,33 @@ static int autofs_root_symlink(struct inode *dir, const char *name, int len, con
 	DPRINTK(("autofs_root_symlink: %s <- ", symname));
 	autofs_say(name,len);
 
-	iput(dir);
-	
-	if ( !autofs_oz_mode(sbi) )
+	if ( !autofs_oz_mode(sbi) ) {
+		iput(dir);
 		return -EPERM;
-
-	if ( autofs_hash_lookup(dh,hash,name,len) )
+	}
+	if ( autofs_hash_lookup(dh,hash,name,len) ) {
+		iput(dir);
 		return -EEXIST;
-
+	}
 	n = find_first_zero_bit(sbi->symlink_bitmap,AUTOFS_MAX_SYMLINKS);
-	if ( n >= AUTOFS_MAX_SYMLINKS )
+	if ( n >= AUTOFS_MAX_SYMLINKS ) {
+		iput(dir);
 		return -ENOSPC;
-
+	}
 	set_bit(n,sbi->symlink_bitmap);
 	sl = &sbi->symlink[n];
 	sl->len = strlen(symname);
 	sl->data = kmalloc(slsize = sl->len+1, GFP_KERNEL);
 	if ( !sl->data ) {
 		clear_bit(n,sbi->symlink_bitmap);
+		iput(dir);
 		return -ENOSPC;
 	}
 	ent = kmalloc(sizeof(struct autofs_dir_ent), GFP_KERNEL);
 	if ( !ent ) {
 		kfree(sl->data);
 		clear_bit(n,sbi->symlink_bitmap);
+		iput(dir);
 		return -ENOSPC;
 	}
 	ent->name = kmalloc(len, GFP_KERNEL);
@@ -221,6 +224,7 @@ static int autofs_root_symlink(struct inode *dir, const char *name, int len, con
 		kfree(sl->data);
 		kfree(ent);
 		clear_bit(n,sbi->symlink_bitmap);
+		iput(dir);
 		return -ENOSPC;
 	}
 	memcpy(sl->data,symname,slsize);
@@ -231,6 +235,7 @@ static int autofs_root_symlink(struct inode *dir, const char *name, int len, con
 	memcpy(ent->name,name,ent->len = len);
 
 	autofs_hash_insert(dh,ent);
+	iput(dir);
 
 	return 0;
 }
@@ -243,15 +248,19 @@ static int autofs_root_unlink(struct inode *dir, const char *name, int len)
 	struct autofs_dir_ent *ent;
 	unsigned int n;
 
+	iput(dir);		/* Nothing below can sleep */
+
 	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
 
 	ent = autofs_hash_lookup(dh,hash,name,len);
 	if ( !ent )
 		return -ENOENT;
+
 	n = ent->ino - AUTOFS_FIRST_SYMLINK;
 	if ( n >= AUTOFS_MAX_SYMLINKS || !test_bit(n,sbi->symlink_bitmap) )
 		return -EINVAL;	/* Not a symlink inode, can't unlink */
+
 	autofs_hash_delete(ent);
 	clear_bit(n,sbi->symlink_bitmap);
 	kfree(sbi->symlink[n].data);

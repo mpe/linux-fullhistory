@@ -236,6 +236,7 @@ pas_midi_init (void)
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &pas_midi_operations;
+  sequencer_init ();
 }
 
 void

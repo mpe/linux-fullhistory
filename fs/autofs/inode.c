@@ -150,6 +150,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	DPRINTK(("autofs: starting up, sbi = %p\n",sbi));
 
 	s->u.generic_sbp = sbi;
+	sbi->magic = AUTOFS_SBI_MAGIC;
 	sbi->catatonic = 0;
 	sbi->exp_timeout = 0;
 	sbi->oz_pgrp = current->pgrp;

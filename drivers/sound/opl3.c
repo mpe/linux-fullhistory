@@ -112,6 +112,7 @@ opl3_ioctl (int dev,
 	struct sbi_instrument ins;
 
 	memcpy ((char *) &ins, (&((char *) arg)[0]), sizeof (ins));
+	printk("Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	  {
@@ -1168,6 +1169,7 @@ opl3_init (int ioaddr, int *osp)
   opl3_operations.info = &devc->fm_info;
 
   synth_devs[num_synths++] = &opl3_operations;
+  sequencer_init ();
   devc->v_alloc = &opl3_operations.alloc;
   devc->chn_info = &opl3_operations.chn_info[0];
 

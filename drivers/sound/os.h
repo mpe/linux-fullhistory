@@ -7,6 +7,7 @@
 #undef NO_INLINE_ASM
 #define SHORT_BANNERS
 #define MANUAL_PNP
+#undef DO_TIMINGS
 
 #ifdef MODULE
 #define __NO_VERSION__
@@ -20,6 +21,7 @@
 #define LINUX21X
 #endif
 
+#ifdef __KERNEL__
 #include <linux/utsname.h>
 #include <linux/string.h>
 #include <linux/fs.h>
@@ -37,6 +39,10 @@
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
 #include <linux/poll.h>
+#include <linux/pci.h>
+#include <linux/bios32.h>
+#else
+#endif
 
 #include <linux/wrapper.h>
 
