@@ -33,19 +33,10 @@ static int hfs_get_block(struct inode *, long, struct buffer_head *, int);
 /*================ Global variables ================*/
 
 static struct file_operations hfs_file_operations = {
-	NULL,			/* lseek - default */
-	hfs_file_read,		/* read */
-	hfs_file_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	file_fsync,		/* fsync - default */
-        NULL,			/* fasync - default */
-        NULL			/* lock - none */
+	read:		hfs_file_read,
+	write:		hfs_file_write,
+	mmap:		generic_file_mmap,
+	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_file_inode_operations = {

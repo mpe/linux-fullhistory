@@ -1003,17 +1003,12 @@ static unsigned int usbdev_poll(struct file *file, struct poll_table_struct *wai
 }
 
 static struct file_operations usbdevfs_device_file_operations = {
-	usbdev_lseek,    /* lseek   */
-	usbdev_read,     /* read    */
-	NULL,            /* write   */
-	NULL,            /* readdir */
-	usbdev_poll,     /* poll    */
-	usbdev_ioctl,    /* ioctl   */
-	NULL,            /* mmap    */
-	usbdev_open,     /* open    */
-	NULL,            /* flush   */
-	usbdev_release,  /* release */
-	NULL             /* fsync   */
+	llseek:		usbdev_lseek,
+	read:		usbdev_read,
+	poll:		usbdev_poll,
+	ioctl:		usbdev_ioctl,
+	open:		usbdev_open,
+	release:	usbdev_release,
 };
 
 struct inode_operations usbdevfs_device_inode_operations = {

@@ -153,7 +153,7 @@ err_nolock_nocleanup:
  * depending on the access mode of the file...
  */
 static struct file_operations def_fifo_fops = {
-	open:	fifo_open,	/* will set read or write pipe_fops */
+	open:		fifo_open,	/* will set read or write pipe_fops */
 };
 
 struct inode_operations fifo_inode_operations = {

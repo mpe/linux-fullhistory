@@ -56,13 +56,11 @@ static ssize_t proc_spec_atm_read(struct file *file,char *buf,size_t count,
     loff_t *pos);
 
 static struct file_operations proc_dev_atm_operations = {
-	NULL,			/* lseek */
-	proc_dev_atm_read,	/* read */
+	read:		proc_dev_atm_read,
 };
 
 static struct file_operations proc_spec_atm_operations = {
-	NULL,			/* lseek */
-	proc_spec_atm_read,	/* read */
+	read:		proc_spec_atm_read,
 };
 
 static struct inode_operations proc_dev_atm_inode_operations = {

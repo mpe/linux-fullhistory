@@ -2002,19 +2002,10 @@ wavefront_ioctl(struct inode *inode, struct file *file,
 }
 
 static /*const*/ struct file_operations wavefront_fops = {
-	&wavefront_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&wavefront_ioctl,
-	NULL,  /* mmap */
-	&wavefront_open,
-	NULL,  /* flush */
-	&wavefront_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		wavefront_llseek,
+	ioctl:		wavefront_ioctl,
+	open:		wavefront_open,
+	release:	wavefront_release,
 };
 
 

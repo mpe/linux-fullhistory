@@ -2765,18 +2765,12 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 
 /* These are (most) of the interface functions: */
 static struct file_operations qic02_tape_fops = {
-	qic02_tape_lseek,		/* not allowed */
-	qic02_tape_read,		/* read */
-	qic02_tape_write,		/* write */
-	NULL,				/* readdir not allowed */
-	NULL,				/* poll ??? */
-	qic02_tape_ioctl,		/* ioctl */
-	NULL,				/* mmap not allowed */
-	qic02_tape_open,		/* open */
-	NULL,				/* flush */
-	qic02_tape_release,		/* release */
-	NULL,				/* fsync */
-	NULL,				/* fasync */
+	llseek:		qic02_tape_lseek,	/* not allowed */
+	read:		qic02_tape_read,
+	write:		qic02_tape_write,
+	ioctl:		qic02_tape_ioctl,
+	open:		qic02_tape_open,
+	release:	qic02_tape_release,
 };
 
 

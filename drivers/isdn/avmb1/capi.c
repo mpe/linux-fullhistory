@@ -511,18 +511,13 @@ capi_release(struct inode *inode, struct file *file)
 
 static struct file_operations capi_fops =
 {
-	capi_llseek,
-	capi_read,
-	capi_write,
-	NULL,			/* capi_readdir */
-	capi_poll,
-	capi_ioctl,
-	NULL,			/* capi_mmap */
-	capi_open,
-        NULL,                   /* capi_flush */
-	capi_release,
-	NULL,			/* capi_fsync */
-	NULL,			/* capi_fasync */
+	llseek:		capi_llseek,
+	read:		capi_read,
+	write:		capi_write,
+	poll:		capi_poll,
+	ioctl:		capi_ioctl,
+	open:		capi_open,
+	release:	capi_release,
 };
 
 /* -------- /proc functions ----------------------------------- */

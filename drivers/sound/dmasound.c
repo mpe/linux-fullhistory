@@ -4605,16 +4605,10 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 static struct file_operations mixer_fops =
 {
-	sound_lseek,
-	NULL,			/* mixer_read */
-	NULL,			/* mixer_write */
-	NULL,			/* mixer_readdir */
-	NULL,			/* mixer_poll */
-	mixer_ioctl,
-	NULL,			/* mixer_mmap */
-	mixer_open,
-	NULL,			/* flush */
-	mixer_release,
+	llseek:		sound_lseek,
+	ioctl:		mixer_ioctl,
+	open:		mixer_open,
+	release:	mixer_release,
 };
 
 
@@ -5231,20 +5225,14 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 static struct file_operations sq_fops =
 {
-	sound_lseek,
+	llseek:		sound_lseek,
+	write:		sq_write,
+	ioctl:		sq_ioctl,
+	open:		sq_open,
+	release:	sq_release,
 #ifdef CONFIG_PPC
-	sq_read,			/* sq_read */
-#else
-	NULL,			/* sq_read */
+	read:		sq_read,			/* sq_read */
 #endif
-	sq_write,
-	NULL,			/* sq_readdir */
-	NULL,			/* sq_poll */
-	sq_ioctl,
-	NULL,			/* sq_mmap */
-	sq_open,
-	NULL,			/* flush */
-	sq_release,
 };
 
 
@@ -5449,16 +5437,10 @@ static ssize_t state_read(struct file *file, char *buf, size_t count,
 
 static struct file_operations state_fops =
 {
-	sound_lseek,
-	state_read,
-	NULL,			/* state_write */
-	NULL,			/* state_readdir */
-	NULL,			/* state_poll */
-	NULL,			/* state_ioctl */
-	NULL,			/* state_mmap */
-	state_open,
-	NULL,			/* flush */
-	state_release,
+	llseek:		sound_lseek,
+	read:		state_read,
+	open:		state_open,
+	release:	state_release,
 };
 
 

@@ -763,18 +763,11 @@ ioctl_scanner(struct inode *inode, struct file *file,
 
 static struct
 file_operations usb_scanner_fops = {
-	NULL,		/* seek */
-	read_scanner,
-	write_scanner,
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	ioctl_scanner,
-	NULL,		/* mmap */
-	open_scanner,
-	NULL,		/* flush */
-	close_scanner,
-	NULL,         
-	NULL,           /* fasync */
+	read:		read_scanner,
+	write:		write_scanner,
+	ioctl:		ioctl_scanner,
+	open:		open_scanner,
+	release:	close_scanner,
 };
 
 static struct

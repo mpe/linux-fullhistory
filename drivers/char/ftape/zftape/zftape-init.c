@@ -121,17 +121,12 @@ static int  zft_write(struct inode *ino, struct file *fp, const char *buff,
 
 static struct file_operations zft_cdev =
 {
-	NULL,			/* llseek */
-	zft_read,		/* read */
-	zft_write,		/* write */
-	NULL,			/* readdir */
-	NULL,		       	/* select */
-	zft_ioctl,		/* ioctl */
-	zft_mmap,		/* mmap */
-	zft_open,		/* open */
-	NULL,			/* flush */
-	zft_close,		/* release */
-	NULL,			/* fsync */
+	read:		zft_read,
+	write:		zft_write,
+	ioctl:		zft_ioctl,
+	mmap:		zft_mmap,
+	open:		zft_open,
+	release:	zft_close,
 };
 
 /*      Open floppy tape device

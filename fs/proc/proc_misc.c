@@ -592,9 +592,8 @@ static ssize_t write_profile(struct file * file, const char * buf,
 }
 
 static struct file_operations proc_profile_operations = {
-	NULL,           /* lseek */
-	read_profile,
-	write_profile,
+	read:		read_profile,
+	write:		write_profile,
 };
 
 static struct inode_operations proc_profile_inode_operations = {

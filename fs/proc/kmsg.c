@@ -46,17 +46,10 @@ static unsigned int kmsg_poll(struct file *file, poll_table * wait)
 
 
 static struct file_operations proc_kmsg_operations = {
-	NULL,		/* kmsg_lseek */
-	kmsg_read,
-	NULL,		/* kmsg_write */
-	NULL,		/* kmsg_readdir */
-	kmsg_poll,	/* kmsg_poll */
-	NULL,		/* kmsg_ioctl */
-	NULL,		/* mmap */
-	kmsg_open,
-	NULL,		/* flush */
-	kmsg_release,
-	NULL		/* can't fsync */
+	read:		kmsg_read,
+	poll:		kmsg_poll,
+	open:		kmsg_open,
+	release:	kmsg_release,
 };
 
 struct inode_operations proc_kmsg_inode_operations = {

@@ -98,8 +98,7 @@ static int read_bus_i2c(char *buf, char **start, off_t offset, int len,
 /* To implement the dynamic /proc/bus/i2c-? files, we need our own 
    implementation of the read hook */
 static struct file_operations i2cproc_operations = {
-	NULL,
-	i2cproc_bus_read,
+	read:		i2cproc_bus_read,
 };
 
 static struct inode_operations i2cproc_inode_operations = {

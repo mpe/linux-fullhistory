@@ -83,17 +83,11 @@ static int nvram_release(struct inode *inode, struct file *file)
 }
 
 struct file_operations nvram_fops = {
-	nvram_llseek,
-	read_nvram,
-	write_nvram,
-	NULL,		/* nvram_readdir */
-	NULL,		/* nvram_select */
-	NULL,		/* nvram_ioctl */
-	NULL,		/* nvram_mmap */
-	nvram_open,
-	NULL,		/* flush */
-	nvram_release,
-	NULL		/* fsync */
+	llseek:		nvram_llseek,
+	read:		read_nvram,
+	write:		write_nvram,
+	open:		nvram_open,
+	release:	nvram_release,
 };
 
 static struct miscdevice nvram_dev = {

@@ -338,19 +338,14 @@ static int udf_open_file(struct inode * inode, struct file * filp)
 }
 
 static struct file_operations udf_file_operations = {
-	udf_file_llseek,		/* llseek */
-	generic_file_read,		/* read */
-	udf_file_write,			/* write */
-	NULL,					/* readdir */
-	NULL,					/* poll */
-	udf_ioctl,				/* ioctl */
-	generic_file_mmap,		/* mmap */
-	udf_open_file,			/* open */
-	NULL,					/* flush */
-	udf_release_file,		/* release */
-	udf_sync_file,			/* fsync */
-	NULL,					/* fasync */
-	NULL					/* lock */
+	llseek:		udf_file_llseek,
+	read:		generic_file_read,
+	write:		udf_file_write,
+	ioctl:		udf_ioctl,
+	mmap:		generic_file_mmap,
+	open:		udf_open_file,
+	release:	udf_release_file,
+	fsync:		udf_sync_file,
 };
 
 struct inode_operations udf_file_inode_operations = {
@@ -379,19 +374,12 @@ struct inode_operations udf_file_inode_operations = {
 };
 
 static struct file_operations udf_file_operations_adinicb = {
-	udf_file_llseek,		/* llseek */
-	generic_file_read,		/* read */
-	udf_file_write_adinicb,	/* write */
-	NULL,					/* readdir */
-	NULL,					/* poll */
-	udf_ioctl,				/* ioctl */
-	NULL,					/* mmap */
-	NULL, 					/* open */
-	NULL,					/* flush */
-	udf_release_file,		/* release */
-	udf_sync_file_adinicb,	/* fsync */
-	NULL,					/* fasync */
-	NULL					/* lock */
+	llseek:		udf_file_llseek,
+	read:		generic_file_read,
+	write:		udf_file_write_adinicb,
+	ioctl:		udf_ioctl,
+	release:	udf_release_file,
+	fsync:		udf_sync_file_adinicb,
 };
 
 struct inode_operations udf_file_inode_operations_adinicb = {

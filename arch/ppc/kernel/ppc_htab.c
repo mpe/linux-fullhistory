@@ -45,17 +45,9 @@ extern unsigned long pte_misses;
 extern unsigned long pte_errors;
 
 static struct file_operations ppc_htab_operations = {
-    ppc_htab_lseek,	/* lseek   */
-    ppc_htab_read,	/* read	   */
-    ppc_htab_write,	/* write   */
-    NULL,		/* readdir */
-    NULL,		/* poll    */
-    NULL,		/* ioctl   */
-    NULL,		/* mmap	   */
-    NULL,		/* no special open code	   */
-    NULL,		/* flush */
-    NULL,		/* no special release code */
-    NULL		/* can't fsync */
+	llseek:		ppc_htab_lseek,
+	read:		ppc_htab_read,
+	write:		ppc_htab_write,
 };
 
 /*

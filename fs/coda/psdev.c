@@ -315,19 +315,11 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 
 
 static struct file_operations coda_psdev_fops = {
-      NULL,                  /* llseek */
-      coda_psdev_read,       /* read */
-      coda_psdev_write,      /* write */
-      NULL,		     /* coda_psdev_readdir */
-      coda_psdev_poll,       /* poll */
-      NULL,                  /* ioctl */
-      NULL,		     /* coda_psdev_mmap */
-      coda_psdev_open,       /* open */
-      NULL,
-      coda_psdev_release,    /* release */
-      NULL,                  /* fsync */
-      NULL,                  /* fasync */
-      NULL                   /* lock */
+	read:		coda_psdev_read,
+	write:		coda_psdev_write,
+	poll:		coda_psdev_poll,
+	open:		coda_psdev_open,
+	release:	coda_psdev_release,
 };
 
 

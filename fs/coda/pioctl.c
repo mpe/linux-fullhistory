@@ -55,17 +55,9 @@ struct inode_operations coda_ioctl_inode_operations =
 };
 
 struct file_operations coda_ioctl_operations = {
-	NULL,		        /* lseek - default should work for coda */
-	NULL,                   /* read */
-	NULL,                   /* write */
-	NULL,          		/* readdir */
-	NULL,			/* select - default */
-	coda_pioctl,	        /* ioctl */
-	NULL,                   /* mmap */
-	coda_ioctl_open,        /* open */
-	NULL,
-	coda_ioctl_release,     /* release */
-	NULL,		        /* fsync */
+	ioctl:		coda_pioctl,
+	open:		coda_ioctl_open,
+	release:	coda_ioctl_release,
 };
 
 /* the coda pioctl inode ops */

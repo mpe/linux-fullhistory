@@ -98,19 +98,12 @@ static int dtlk_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations dtlk_fops =
 {
-	NULL,			/* lseek */
-	dtlk_read,
-	dtlk_write,
-	NULL,			/* readdir */
-	dtlk_poll,
-	dtlk_ioctl,
-	NULL,			/* mmap */
-	dtlk_open,
-	NULL,			/* flush */
-	dtlk_release,
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	NULL			/* lock */
+	read:		dtlk_read,
+	write:		dtlk_write,
+	poll:		dtlk_poll,
+	ioctl:		dtlk_ioctl,
+	open:		dtlk_open,
+	release:	dtlk_release,
 };
 
 /* local prototypes */

@@ -777,19 +777,11 @@ static inline int	stli_initpcibrd(int brdtype, struct pci_dev *devp);
  *	board. This is also a very useful debugging tool.
  */
 static struct file_operations	stli_fsiomem = {
-	NULL,		/* llseek */
-	stli_memread,	/* read */
-	stli_memwrite,	/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	stli_memioctl,	/* ioctl */
-	NULL,		/* mmap */
-	stli_memopen,	/* open */
-	NULL,		/* flush */
-	stli_memclose,	/* release */
-	NULL,		/* fsync */
-	NULL,		/* fasync */
-	NULL		/* lock */
+	read:		stli_memread,
+	write:		stli_memwrite,
+	ioctl:		stli_memioctl,
+	open:		stli_memopen,
+	release:	stli_memclose,
 };
 
 /*****************************************************************************/

@@ -128,18 +128,14 @@ flash_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations flash_fops = {
-	flash_llseek,
-	flash_read,
-	NULL,		/* no write to the Flash, use mmap
-			 * and play flash dependent tricks.
-			 */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	flash_mmap,
-	flash_open,
-	NULL,		/* flush */
-	flash_release
+	/* no write to the Flash, use mmap
+	 * and play flash dependent tricks.
+	 */
+	llseek:		flash_llseek,
+	read:		flash_read,
+	ioctl:		flash_mmap,
+	mmap:		flash_open,
+	flush:		flash_release,
 };
 
 static struct miscdevice flash_dev = { FLASH_MINOR, "flash", &flash_fops };

@@ -429,21 +429,14 @@ shmiq_qcntl_close (struct inode *inode, struct file *filp)
 }
 
 
-static struct
-file_operations shmiq_fops =
+static struct file_operations shmiq_fops =
 {
-        NULL,                   /* seek */
-        NULL,                   /* read */
-        NULL,                   /* write */
-        NULL,                   /* readdir */
-        shmiq_qcntl_poll,       /* poll */
-        shmiq_qcntl_ioctl,      /* ioctl */
-        shmiq_qcntl_mmap,       /* mmap */
-        shmiq_qcntl_open,       /* open */
-	NULL,			/* flush */
-        shmiq_qcntl_close,      /* close */
-        NULL,                   /* fsync */
-        shmiq_qcntl_fasync,     /* fasync */
+	poll:		shmiq_qcntl_poll,
+	ioctl:		shmiq_qcntl_ioctl,
+	mmap:		shmiq_qcntl_mmap,
+	open:		shmiq_qcntl_open,
+	release:	shmiq_qcntl_close,
+	fasync:		shmiq_qcntl_fasync,
 };
 
 void

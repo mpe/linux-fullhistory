@@ -22,17 +22,8 @@
  * the isofs filesystem.
  */
 static struct file_operations isofs_file_operations = {
-	NULL,			/* lseek - default */
-	generic_file_read,	/* read */
-	NULL,			/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* no special open is needed */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL			/* fsync */
+	read:		generic_file_read,
+	mmap:		generic_file_mmap,
 };
 
 struct inode_operations isofs_file_inode_operations = {

@@ -271,17 +271,11 @@ static int slm_get_pagesize( int device, int *w, int *h );
 static struct timer_list slm_timer = { NULL, NULL, 0, 0, slm_test_ready };
 
 static struct file_operations slm_fops = {
-	NULL,			/* lseek - default */
-	slm_read,		/* read - status reading */
-	slm_write,		/* write - printing data write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	slm_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	slm_open,		/* open */
-	NULL,			/* flush */
-	slm_release,		/* release */
-	NULL			/* fsync */
+	read:		slm_read,
+	write:		slm_write,
+	ioctl:		slm_ioctl,
+	open:		slm_open,
+	release:	slm_release,
 };
 
 

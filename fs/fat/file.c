@@ -31,17 +31,10 @@
 #define Printk(x) printk x
 
 static struct file_operations fat_file_operations = {
-	NULL,			/* lseek - default */
-	fat_file_read,		/* read */
-	fat_file_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select v2.0.x/poll v2.1.x - default */
-	NULL,			/* ioctl - default */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* no special open is needed */
-	NULL,			/* flush */
-	NULL,			/* release */
-	file_fsync		/* fsync */
+	read:		fat_file_read,
+	write:		fat_file_write,
+	mmap:		generic_file_mmap,
+	fsync:		file_fsync,
 };
 
 struct inode_operations fat_file_inode_operations = {

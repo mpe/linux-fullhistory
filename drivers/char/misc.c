@@ -116,16 +116,7 @@ static int misc_open(struct inode * inode, struct file * file)
 }
 
 static struct file_operations misc_fops = {
-        NULL,		/* seek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-        misc_open,
-	NULL,		/* flush */
-        NULL		/* release */
+	open:		misc_open,
 };
 
 int misc_register(struct miscdevice * misc)

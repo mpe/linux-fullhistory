@@ -37,10 +37,12 @@
 typedef struct { unsigned long long pte; } pte_t;
 typedef struct { unsigned long long pmd; } pmd_t;
 typedef struct { unsigned long long pgd; } pgd_t;
+#define PTE_MASK	(~(unsigned long long) (PAGE_SIZE-1))
 #else
 typedef struct { unsigned long pte; } pte_t;
 typedef struct { unsigned long pmd; } pmd_t;
 typedef struct { unsigned long pgd; } pgd_t;
+#define PTE_MASK	PAGE_MASK
 #endif
 
 typedef struct { unsigned long pgprot; } pgprot_t;

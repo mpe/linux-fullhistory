@@ -550,17 +550,12 @@ fb_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations fb_fops = {
-	NULL,		/* lseek	*/
-	fb_read,	/* read		*/
-	fb_write,	/* write	*/
-	NULL,		/* readdir 	*/
-	NULL,		/* poll 	*/
-	fb_ioctl,	/* ioctl 	*/
-	fb_mmap,	/* mmap		*/
-	fb_open,	/* open 	*/
-	NULL,		/* flush	*/
-	fb_release,	/* release 	*/
-	NULL		/* fsync 	*/
+	read:		fb_read,
+	write:		fb_write,
+	ioctl:		fb_ioctl,
+	mmap:		fb_mmap,
+	open:		fb_open,
+	release:	fb_release,
 };
 
 int

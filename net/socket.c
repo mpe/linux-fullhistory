@@ -106,18 +106,15 @@ static int sock_fasync(int fd, struct file *filp, int on);
  */
 
 static struct file_operations socket_file_ops = {
-	sock_lseek,
-	sock_read,
-	sock_write,
-	NULL,			/* readdir */
-	sock_poll,
-	sock_ioctl,
-	sock_mmap,
-	sock_no_open,		/* special open code to disallow open via /proc */
-	NULL,			/* flush */
-	sock_close,
-	NULL,			/* no fsync */
-	sock_fasync
+	llseek:		sock_lseek,
+	read:		sock_read,
+	write:		sock_write,
+	poll:		sock_poll,
+	ioctl:		sock_ioctl,
+	mmap:		sock_mmap,
+	open:		sock_no_open,	/* special open code to disallow open via /proc */
+	release:	sock_close,
+	fasync:		sock_fasync
 };
 
 /*

@@ -170,18 +170,10 @@ sgi_usemaclone_release(struct inode *inode, struct file *filp)
 }
 
 struct file_operations sgi_usemaclone_fops = {
-	NULL,			/* llseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	NULL,			/* readdir */
-	sgi_usemaclone_poll,	/* poll */
-	sgi_usemaclone_ioctl,	/* ioctl */
-	NULL,			/* mmap */
-	sgi_usemaclone_open,	/* open */
-	NULL,			/* flush */
-	sgi_usemaclone_release,	/* release */
-	NULL,			/* fsync */
-	NULL			/* lock */
+	poll:		sgi_usemaclone_poll,
+	ioctl:		sgi_usemaclone_ioctl,
+	open:		sgi_usemaclone_open,
+	release:	sgi_usemaclone_release,
 };
 
 static struct miscdevice dev_usemaclone = {

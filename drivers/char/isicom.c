@@ -109,18 +109,9 @@ static char linuxb_to_isib[] = {
  */
 
 static struct file_operations ISILoad_fops = {
-	NULL,	/*	lseek	*/
-	NULL,	/*	read	*/
-	NULL,	/*	write	*/
-	NULL,	/*	readdir	*/
-	NULL,	/*	select	*/
-	ISILoad_ioctl,
-	NULL,	/*	mmap	*/
-	ISILoad_open,
-	NULL,	/*	flush	*/
-	ISILoad_release,
-	NULL,	/*	fsync	*/
-	NULL,	/*	fasync	*/
+	ioctl:		ISILoad_ioctl,
+	open:		ISILoad_open,
+	release:	ISILoad_release,
 };
 
 struct miscdevice isiloader_device = {

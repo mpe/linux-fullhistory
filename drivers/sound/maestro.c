@@ -2023,19 +2023,10 @@ static int ess_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int
 }
 
 static /*const*/ struct file_operations ess_mixer_fops = {
-	&ess_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&ess_ioctl_mixdev,
-	NULL,  /* mmap */
-	&ess_open_mixdev,
-	NULL,	/* flush */
-	&ess_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		ess_llseek,
+	ioctl:		ess_ioctl_mixdev,
+	open:		ess_open_mixdev,
+	release:	ess_release_mixdev,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2893,19 +2884,14 @@ ess_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations ess_audio_fops = {
-	&ess_llseek,
-	&ess_read,
-	&ess_write,
-	NULL,  /* readdir */
-	&ess_poll,
-	&ess_ioctl,
-	&ess_mmap,
-	&ess_open,
-	NULL,	/* flush */
-	&ess_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		ess_llseek,
+	read:		ess_read,
+	write:		ess_write,
+	poll:		ess_poll,
+	ioctl:		ess_ioctl,
+	mmap:		ess_mmap,
+	open:		ess_open,
+	release:	ess_release,
 };
 
 static int

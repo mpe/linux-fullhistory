@@ -338,17 +338,8 @@ static int initrd_release(struct inode *inode,struct file *file)
 
 
 static struct file_operations initrd_fops = {
-	NULL,		/* lseek */
-	initrd_read,	/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL, 		/* ioctl */
-	NULL,		/* mmap */
-	NULL,		/* open */
-	NULL,		/* flush */
-	initrd_release,	/* release */
-	NULL		/* fsync */ 
+	read:		initrd_read,
+	release:	initrd_release,
 };
 
 #endif

@@ -112,16 +112,7 @@ void phone_unregister_device(struct phone_device *pfd)
 
 static struct file_operations phone_fops =
 {
-	NULL,
-	NULL,
-	NULL,
-	NULL,			/* readdir */
-	NULL,
-	NULL,
-	NULL,
-	phone_open,
-	NULL,			/* flush */
-	NULL
+	open:		phone_open,
 };
 
 /*

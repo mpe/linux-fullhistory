@@ -33,31 +33,15 @@ int	raw_ctl_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 
 static struct file_operations raw_fops = {
-	NULL,		/* llseek */
-	raw_read,	/* read */
-	raw_write,	/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	raw_open,	/* open */
-	NULL,		/* flush */
-	raw_release,	/* release */
-	NULL		/* fsync */
+	read:		raw_read,
+	write:		raw_write,
+	open:		raw_open,
+	release:	raw_release,
 };
 
 static struct file_operations raw_ctl_fops = {
-	NULL,		/* llseek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	raw_ctl_ioctl,	/* ioctl */
-	NULL,		/* mmap */
-	raw_open,	/* open */
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* fsync */
+	ioctl:		raw_ctl_ioctl,
+	open:		raw_open,
 };
 
 void __init raw_init(void)

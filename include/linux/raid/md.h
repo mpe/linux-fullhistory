@@ -28,10 +28,8 @@
 #include <linux/types.h>
 #include <asm/bitops.h>
 #include <linux/module.h>
-#include <linux/mm.h>
 #include <linux/hdreg.h>
 #include <linux/sysctl.h>
-#include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
 #include <linux/delay.h>

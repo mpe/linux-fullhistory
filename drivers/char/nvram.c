@@ -393,16 +393,12 @@ static int nvram_read_proc( char *buffer, char **start, off_t offset,
 #endif /* CONFIG_PROC_FS */
 
 static struct file_operations nvram_fops = {
-	nvram_llseek,
-	nvram_read,
-	nvram_write,
-	NULL,			/* No readdir */
-	NULL,			/* No poll */
-	nvram_ioctl,
-	NULL,			/* No mmap */
-	nvram_open,
-	NULL,			/* flush */
-	nvram_release
+	llseek:		nvram_llseek,
+	read:		nvram_read,
+	write:		nvram_write,
+	ioctl:		nvram_ioctl,
+	open:		nvram_open,
+	release:	nvram_release,
 };
 
 static struct miscdevice nvram_dev = {

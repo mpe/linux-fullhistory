@@ -645,24 +645,14 @@ static unsigned int lp_poll (struct file *filp, struct poll_table_struct *wait)
 #endif /* IEEE 1284 support */
 
 static struct file_operations lp_fops = {
-	lp_lseek,
+	write:		lp_write,
+	ioctl:		lp_ioctl,
+	open:		lp_open,
+	release:	lp_release,
 #ifdef CONFIG_PARPORT_1284
-	lp_read,
-#else
-	NULL,
+	read:		lp_read,
+	poll:		lp_poll,
 #endif
-	lp_write,
-	NULL,		/* lp_readdir */
-#ifdef CONFIG_PARPORT_1284
-	lp_poll,
-#else
-	NULL,
-#endif
-	lp_ioctl,
-	NULL,		/* lp_mmap */
-	lp_open,
-	NULL,		/* flush */
-	lp_release
 };
 
 /* --- support for console on the line printer ----------------- */

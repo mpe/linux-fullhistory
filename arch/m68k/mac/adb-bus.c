@@ -2498,16 +2498,11 @@ static int adb_write(struct inode *inode, struct file *file,
 }
 
 static struct file_operations adb_fops = {
-	adb_lseek,
-	adb_read,
-	adb_write,
-	NULL,		/* no readdir */
-	NULL,		/* no poll yet */
-	NULL,		/* no ioctl yet */
-	NULL,		/* no mmap */
-	adb_open,
-	NULL,		/* flush */
-	adb_release
+	llseek:		adb_lseek,
+	read:		adb_read,
+	write:		adb_write,
+	open:		adb_open,
+	release:	adb_release,
 };
 
 int adbdev_register(int subtype, struct file_operations *fops)
@@ -2683,16 +2678,11 @@ static int adb_write(struct inode *inode, struct file *file,
 }
 
 static struct file_operations adb_fops = {
-	adb_lseek,
-	adb_read,
-	adb_write,
-	NULL,		/* no readdir */
-	NULL,		/* no select */
-	NULL,		/* no ioctl */
-	NULL,		/* no mmap */
-	adb_open,
-	NULL,		/* flush */
-	adb_release
+	llseek:		adb_lseek,
+	read:		adb_read,
+	write:		adb_write,
+	open:		adb_open,
+	release:	adb_release,
 };
 
 static struct miscdevice adb_dev = {

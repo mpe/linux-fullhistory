@@ -1180,19 +1180,10 @@ static int cm_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int 
 }
 
 static /*const*/ struct file_operations cm_mixer_fops = {
-	&cm_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&cm_ioctl_mixdev,
-	NULL,  /* mmap */
-	&cm_open_mixdev,
-	NULL,	/* flush */
-	&cm_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		cm_llseek,
+	ioctl:		cm_ioctl_mixdev,
+	open:		cm_open_mixdev,
+	release:	cm_release_mixdev,
 };
 
 /* --------------------------------------------------------------------- */
@@ -1801,19 +1792,14 @@ static int cm_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations cm_audio_fops = {
-	&cm_llseek,
-	&cm_read,
-	&cm_write,
-	NULL,  /* readdir */
-	&cm_poll,
-	&cm_ioctl,
-	&cm_mmap,
-	&cm_open,
-	NULL,	/* flush */
-	&cm_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		cm_llseek,
+	read:		cm_read,
+	write:		cm_write,
+	poll:		cm_poll,
+	ioctl:		cm_ioctl,
+	mmap:		cm_mmap,
+	open:		cm_open,
+	release:	cm_release,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2080,19 +2066,12 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations cm_midi_fops = {
-	&cm_llseek,
-	&cm_midi_read,
-	&cm_midi_write,
-	NULL,  /* readdir */
-	&cm_midi_poll,
-	NULL,  /* ioctl */
-	NULL,  /* mmap */
-	&cm_midi_open,
-	NULL,	/* flush */
-	&cm_midi_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		cm_llseek,
+	read:		cm_midi_read,
+	write:		cm_midi_write,
+	poll:		cm_midi_poll,
+	open:		cm_midi_open,
+	release:	cm_midi_release,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2252,19 +2231,10 @@ static int cm_dmfm_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations cm_dmfm_fops = {
-	&cm_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&cm_dmfm_ioctl,
-	NULL,  /* mmap */
-	&cm_dmfm_open,
-	NULL,	/* flush */
-	&cm_dmfm_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		cm_llseek,
+	ioctl:		cm_dmfm_ioctl,
+	open:		cm_dmfm_open,
+	release:	cm_dmfm_release,
 };
 
 /* --------------------------------------------------------------------- */

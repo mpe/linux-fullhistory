@@ -90,17 +90,7 @@ static int wandev_get_info(char* buf, char** start, off_t offs, int len);
  */
 static struct file_operations router_fops =
 {
-	NULL,			/* lseek   */
-	router_proc_read,	/* read	   */
-	NULL,			/* write   */
-	NULL,			/* readdir */
-	NULL,			/* select  */
-	NULL,			/* ioctl   */
-	NULL,			/* mmap	   */
-	NULL,			/* no special open code	   */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* can't fsync */
+	read:		router_proc_read,
 };
 
 static struct inode_operations router_inode =
@@ -131,17 +121,8 @@ static struct inode_operations router_inode =
 
 static struct file_operations wandev_fops =
 {
-	NULL,			/* lseek   */
-	router_proc_read,	/* read	   */
-	NULL,			/* write   */
-	NULL,			/* readdir */
-	NULL,			/* select  */
-	wanrouter_ioctl,	/* ioctl   */
-	NULL,			/* mmap	   */
-	NULL,			/* no special open code	   */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* can't fsync */
+	read:		router_proc_read,
+	ioctl:		wanrouter_ioctl,
 };
 
 static struct inode_operations wandev_inode =

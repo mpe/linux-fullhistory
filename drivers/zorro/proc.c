@@ -73,17 +73,8 @@ proc_bus_zorro_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 }
 
 static struct file_operations proc_bus_zorro_operations = {
-	proc_bus_zorro_lseek,
-	proc_bus_zorro_read,
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* can't fsync */
+	llseek:		proc_bus_zorro_lseek,
+	read:		proc_bus_zorro_read,
 };
 
 static struct inode_operations proc_bus_zorro_inode_operations = {

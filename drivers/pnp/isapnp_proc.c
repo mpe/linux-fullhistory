@@ -202,19 +202,12 @@ static unsigned int isapnp_info_entry_poll(struct file *file, poll_table * wait)
 
 static struct file_operations isapnp_info_entry_operations =
 {
-	isapnp_info_entry_lseek,	/* lseek */
-	isapnp_info_entry_read,		/* read */
-	isapnp_info_entry_write,	/* write */
-	NULL,				/* readdir */
-	isapnp_info_entry_poll,		/* poll */
-	NULL,				/* ioctl - default */
-	NULL,				/* mmap */
-	isapnp_info_entry_open,		/* open */
-	NULL,				/* flush */
-	isapnp_info_entry_release,	/* release */
-	NULL,				/* can't fsync */
-	NULL,				/* fasync */
-	NULL,				/* lock */
+	llseek:		isapnp_info_entry_lseek,
+	read:		isapnp_info_entry_read,
+	write:		isapnp_info_entry_write,
+	poll:		isapnp_info_entry_poll,
+	open:		isapnp_info_entry_open,
+	release:	isapnp_info_entry_release,
 };
 
 static struct inode_operations isapnp_info_entry_inode_operations =
@@ -277,19 +270,8 @@ static ssize_t isapnp_proc_bus_read(struct file *file, char *buf, size_t nbytes,
 
 static struct file_operations isapnp_proc_bus_file_operations =
 {
-	isapnp_proc_bus_lseek,		/* lseek */
-	isapnp_proc_bus_read,		/* read */
-	NULL,				/* write */
-	NULL,				/* readdir */
-	NULL,				/* poll */
-	NULL,				/* ioctl - default */
-	NULL,				/* mmap */
-	NULL,				/* open */
-	NULL,				/* flush */
-	NULL,				/* release */
-	NULL,				/* can't fsync */
-	NULL,				/* fasync */
-	NULL,				/* lock */
+	llseek:		isapnp_proc_bus_lseek,
+	read:		isapnp_proc_bus_read,
 };
 
 static struct inode_operations isapnp_proc_bus_inode_operations =

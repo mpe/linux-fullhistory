@@ -388,14 +388,13 @@ static char *usb_device_dump(char *start, char *end, struct usb_device *usbdev,
 	 * index = parent's connector number;
 	 * count = device count at this level
 	 */
-	/* If this is the root hub, display the bandwidth information but not the descriptors */
+	/* If this is the root hub, display the bandwidth information */
 	if (level == 0)
 		start += sprintf(start, format_bandwidth, bus->bandwidth_allocated, 
 				FRAME_TIME_MAX_USECS_ALLOC,
 				(100 * bus->bandwidth_allocated + FRAME_TIME_MAX_USECS_ALLOC / 2) / FRAME_TIME_MAX_USECS_ALLOC,
 			         bus->bandwidth_int_reqs, bus->bandwidth_isoc_reqs);
-	else 
-		start = usb_dump_desc(start, end, usbdev);
+	start = usb_dump_desc(start, end, usbdev);
 	if (start > end)
 		return start + sprintf(start, "(truncated)\n");
 	/* Now look at all of this device's children. */
@@ -514,15 +513,9 @@ static long long usb_device_lseek(struct file * file, long long offset, int orig
 }
 
 struct file_operations usbdevfs_devices_fops = {
-	usb_device_lseek,   /* lseek   */
-	usb_device_read,    /* read    */
-	NULL,               /* write   */
-	NULL,               /* readdir */
-	usb_device_poll,    /* poll    */
-	NULL,               /* ioctl   */
-	NULL,               /* mmap    */
-	usb_device_open,    /* open    */
-	NULL,               /* flush   */
-	usb_device_release, /* release */
-	NULL                /* fsync   */
+	llseek:		usb_device_lseek,
+	read:		usb_device_read,
+	poll:		usb_device_poll,
+	open:		usb_device_open,
+	release:	usb_device_release,
 };

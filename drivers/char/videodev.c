@@ -302,22 +302,16 @@ void video_unregister_device(struct video_device *vfd)
 
 static struct file_operations video_fops=
 {
-	video_lseek,
-	video_read,
-	video_write,
-	NULL,	/* readdir */
-#if LINUX_VERSION_CODE >= 0x020100
-	video_poll,	/* poll */
-#else
-	NULL,
+	llseek:		video_lseek,
+	read:		video_read,
+	write:		video_write,
+	ioctl:		video_ioctl,
+	mmap:		video_mmap,
+	open:		video_open,
+	release:	video_release,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
+	poll:		video_poll,
 #endif
-	video_ioctl,
-	video_mmap,
-	video_open,
-#if LINUX_VERSION_CODE >= 0x020100
-	NULL,		/* flush */
-#endif
-	video_release
 };
 
 /*

@@ -3029,19 +3029,14 @@ static int vwsnd_audio_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations vwsnd_audio_fops = {
-	&vwsnd_audio_llseek,
-	&vwsnd_audio_read,
-	&vwsnd_audio_write,
-	NULL,				/* readdir */
-	&vwsnd_audio_poll,
-	&vwsnd_audio_ioctl,
-	&vwsnd_audio_mmap,
-	&vwsnd_audio_open,
-	NULL,				/* flush */
-	&vwsnd_audio_release,
-	NULL,				/* fsync */
-	NULL,				/* fasync */
-	NULL,				/* lock */
+	llseek:		vwsnd_audio_llseek,
+	read:		vwsnd_audio_read,
+	write:		vwsnd_audio_write,
+	poll:		vwsnd_audio_poll,
+	ioctl:		vwsnd_audio_ioctl,
+	mmap:		vwsnd_audio_mmap,
+	open:		vwsnd_audio_open,
+	release:	vwsnd_audio_release,
 };
 
 /*****************************************************************************/
@@ -3238,19 +3233,10 @@ static int vwsnd_mixer_ioctl(struct inode *ioctl,
 }
 
 static struct file_operations vwsnd_mixer_fops = {
-	&vwsnd_mixer_llseek,
-	NULL,				/* read */
-	NULL,				/* write */
-	NULL,				/* readdir */
-	NULL,				/* poll */
-	&vwsnd_mixer_ioctl,
-	NULL,				/* mmap */
-	&vwsnd_mixer_open,
-	NULL,				/* flush */
-	&vwsnd_mixer_release,
-	NULL,				/* fsync */
-	NULL,				/* fasync */
-	NULL,				/* lock */
+	llseek:		vwsnd_mixer_llseek,
+	ioctl:		vwsnd_mixer_ioctl,
+	open:		vwsnd_mixer_open,
+	release:	vwsnd_mixer_release,
 };
 
 /*****************************************************************************/

@@ -88,18 +88,12 @@ static ssize_t irda_write(struct file *file, const char *buffer,
 static u_int irda_poll(struct file *file, poll_table *wait);
 
 static struct file_operations irda_fops = {
-	NULL,	       /* seek */
-	irda_read,     /* read */
-	irda_write,    /* write */
-	NULL,	       /* readdir */
-	irda_poll,     /* poll */
-	irda_ioctl,    /* ioctl */
-	NULL,	       /* mmap */
-	irda_open,
-	NULL,
-	irda_close,
-	NULL,
-	NULL,          /* fasync */
+	read:		irda_read,
+	write:		irda_write,
+	poll:		irda_poll,
+	ioctl:		irda_ioctl,
+	open:		irda_open,
+	release:	irda_close,
 };
 
 /* IrTTP */

@@ -24,18 +24,9 @@ static ssize_t bfs_file_write(struct file * f, const char * buf, size_t count, l
 }
 
 static struct file_operations bfs_file_operations = {
-	llseek:			NULL,
 	read:			generic_file_read,
 	write:			bfs_file_write,
-	readdir:		NULL,
-	poll:			NULL,
-	ioctl:			NULL,
 	mmap:			generic_file_mmap,
-	open:			NULL,
-	flush:			NULL,
-	release:		NULL,
-	fsync:			NULL,
-	fasync:			NULL,
 };
 
 static int bfs_move_block(unsigned long from, unsigned long to, kdev_t dev)

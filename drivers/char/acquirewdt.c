@@ -166,16 +166,11 @@ static int acq_notify_sys(struct notifier_block *this, unsigned long code,
  
  
 static struct file_operations acq_fops = {
-	NULL,
-	acq_read,
-	acq_write,
-	NULL,		/* No Readdir */
-	NULL,		/* No Select */
-	acq_ioctl,
-	NULL,		/* No mmap */
-	acq_open,
-	NULL,		/* flush */
-	acq_close
+	read:		acq_read,
+	write:		acq_write,
+	ioctl:		acq_ioctl,
+	open:		acq_open,
+	release:	acq_close,
 };
 
 static struct miscdevice acq_miscdev=

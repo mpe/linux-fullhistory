@@ -398,36 +398,15 @@ static struct dentry *cramfs_follow_link(struct dentry *dentry, struct dentry *b
  * A regular file can be read and mmap'ed.
  */
 static struct file_operations cramfs_file_operations = {
-	NULL,			/* lseek - default */
-	generic_file_read,	/* read */
-	NULL,			/* write - bad */
-	NULL,			/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
+	read:		generic_file_read,
+	mmap:		generic_file_mmap,
 };
 
 /*
  * A directory can only readdir
  */
 static struct file_operations cramfs_directory_operations = {
-	NULL,			/* lseek - default */
-	NULL,			/* read */
-	NULL,			/* write - bad */
-	cramfs_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
+	readdir:	cramfs_readdir,
 };
 
 static struct inode_operations cramfs_file_inode_operations = {

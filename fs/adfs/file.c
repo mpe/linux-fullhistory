@@ -56,22 +56,12 @@ adfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
  * the adfs filesystem.
  */
 static struct file_operations adfs_file_operations = {
-	NULL,			/* lseek		*/
-	generic_file_read,	/* read			*/
+	read:		generic_file_read,
+	mmap:		generic_file_mmap,
+	fsync:		file_fsync,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-	adfs_file_write,	/* write		*/
-#else
-	NULL,
+	write:		adfs_file_write,
 #endif
-	NULL,			/* readdir		*/
-	NULL,			/* poll			*/
-	NULL,			/* ioctl		*/
-	generic_file_mmap,	/* mmap			*/
-	NULL,			/* open			*/
-	NULL,			/* flush		*/
-	NULL,			/* release		*/
-	file_fsync,		/* fsync		*/
-	NULL,			/* fasync		*/
 };
 
 struct inode_operations adfs_file_inode_operations = {

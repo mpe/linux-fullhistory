@@ -56,19 +56,12 @@ struct inode_operations coda_file_inode_operations = {
 };
 
 struct file_operations coda_file_operations = {
-	NULL,		        /* lseek - default should work for coda */
-	coda_file_read,         /* read */
-	coda_file_write,        /* write */
-	NULL,          		/* readdir */
-	NULL,			/* select - default */
-	NULL,		        /* ioctl */
-	coda_file_mmap,         /* mmap */
-	coda_open,              /* open */
-	NULL,
-	coda_release,           /* release */
-	coda_fsync,		/* fsync */
-	NULL,                   /* fasync */
-	NULL                    /* lock */
+	read:		coda_file_read,
+	write:		coda_file_write,
+	mmap:		coda_file_mmap,
+	open:		coda_open,
+	release:	coda_release,
+	fsync:		coda_fsync,
 };
 
 /*  File file operations */
@@ -213,12 +206,14 @@ int coda_fsync(struct file *coda_file, struct dentry *coda_dentry)
 	      S_ISLNK(coda_inode->i_mode)))
 		return -EINVAL;
 
+	lock_kernel();
         cnp = ITOC(coda_inode);
         CHECK_CNODE(cnp);
 
         cont_inode = cnp->c_ovp;
         if ( cont_inode == NULL ) {
                 printk("coda_file_write: cached inode is 0!\n");
+		unlock_kernel();
                 return -1; 
         }
 
@@ -235,6 +230,7 @@ int coda_fsync(struct file *coda_file, struct dentry *coda_dentry)
 	up(&cont_inode->i_sem);
 
         coda_restore_codafile(coda_inode, coda_file, cont_inode, &cont_file);
+	unlock_kernel();
         return result;
 }
 /* 

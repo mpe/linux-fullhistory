@@ -1894,19 +1894,10 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 }
 
 static /*const*/ struct file_operations usb_mixer_fops = {
-	&usb_audio_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&usb_audio_ioctl_mixdev,
-	NULL,  /* mmap */
-	&usb_audio_open_mixdev,
-	NULL,   /* flush */
-	&usb_audio_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		usb_audio_llseek,
+	ioctl:		usb_audio_ioctl_mixdev,
+	open:		usb_audio_open_mixdev,
+	release:	usb_audio_release_mixdev,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2504,19 +2495,14 @@ static int usb_audio_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations usb_audio_fops = {
-	&usb_audio_llseek,
-	&usb_audio_read,
-	&usb_audio_write,
-	NULL,  /* readdir */
-	&usb_audio_poll,
-	&usb_audio_ioctl,
-	&usb_audio_mmap,
-	&usb_audio_open,
-	NULL,   /* flush */
-	&usb_audio_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		usb_audio_llseek,
+	read:		usb_audio_read,
+	write:		usb_audio_write,
+	poll:		usb_audio_poll,
+	ioctl:		usb_audio_ioctl,
+	mmap:		usb_audio_mmap,
+	open:		usb_audio_open,
+	release:	usb_audio_release,
 };
 
 /* --------------------------------------------------------------------- */

@@ -9,18 +9,7 @@
 static int efs_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations efs_dir_operations = {
-	NULL,			/* lseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	efs_readdir,		/* readdir */
-	NULL,			/* poll */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
+	readdir:	efs_readdir,
 };
 
 extern int efs_get_block(struct inode *, long, struct buffer_head *, int);

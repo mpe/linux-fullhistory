@@ -74,16 +74,12 @@ extern
 static int i2cdev_cleanup(void);
 
 static struct file_operations i2cdev_fops = {
-	i2cdev_lseek,
-	i2cdev_read,
-	i2cdev_write,
-	NULL,			/* i2cdev_readdir	*/
-	NULL,			/* i2cdev_select	*/
-	i2cdev_ioctl,
-	NULL,			/* i2cdev_mmap		*/
-	i2cdev_open,
-	NULL,			/* i2cdev_flush		*/
-	i2cdev_release,
+	llseek:		i2cdev_lseek,
+	read:		i2cdev_read,
+	write:		i2cdev_write,
+	ioctl:		i2cdev_ioctl,
+	open:		i2cdev_open,
+	release:	i2cdev_release,
 };
 
 #define I2CDEV_ADAPS_MAX I2C_ADAP_MAX

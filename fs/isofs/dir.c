@@ -28,16 +28,7 @@ static int isofs_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations isofs_dir_operations =
 {
-	NULL,			/* lseek - default */
-	NULL,			/* read */
-	NULL,			/* write - bad */
-	isofs_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* fsync */
+	readdir:	isofs_readdir,
 };
 
 /*

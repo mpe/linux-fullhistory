@@ -2024,17 +2024,13 @@ isdn_close(struct inode *ino, struct file *filep)
 
 static struct file_operations isdn_fops =
 {
-	isdn_lseek,
-	isdn_read,
-	isdn_write,
-	NULL,                   /* isdn_readdir */
-	isdn_poll,              /* isdn_poll */
-	isdn_ioctl,             /* isdn_ioctl */
-	NULL,                   /* isdn_mmap */
-	isdn_open,
-	NULL,			/* flush */
-	isdn_close,
-	NULL                    /* fsync */
+	llseek:		isdn_lseek,
+	read:		isdn_read,
+	write:		isdn_write,
+	poll:		isdn_poll,
+	ioctl:		isdn_ioctl,
+	open:		isdn_open,
+	release:	isdn_close,
 };
 
 char *

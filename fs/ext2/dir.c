@@ -31,18 +31,10 @@ static ssize_t ext2_dir_read (struct file * filp, char * buf,
 static int ext2_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations ext2_dir_operations = {
-	NULL,			/* lseek - default */
-	ext2_dir_read,		/* read */
-	NULL,			/* write - bad */
-	ext2_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	ext2_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	ext2_sync_file,		/* fsync */
-	NULL,			/* fasync */
+	read:		ext2_dir_read,
+	readdir:	ext2_readdir,
+	ioctl:		ext2_ioctl,
+	fsync:		ext2_sync_file,
 };
 
 /*

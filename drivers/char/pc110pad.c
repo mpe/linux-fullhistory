@@ -627,19 +627,13 @@ static int pad_ioctl(struct inode *inode, struct file * file,
 
 
 static struct file_operations pad_fops = {
-	NULL,		/* pad_seek */
-	read_pad,
-	write_pad,
-	NULL, 		/* pad_readdir */
-	pad_poll,
-	pad_ioctl,
-	NULL,		/* pad_mmap */
-	open_pad,
-	NULL,		/* flush */
-	close_pad,
-	NULL,		/* fsync */
-	fasync_pad,
-	NULL		/* lock */
+	read:		read_pad,
+	write:		write_pad,
+	poll:		pad_poll,
+	ioctl:		pad_ioctl,
+	open:		open_pad,
+	release:	close_pad,
+	fasync:		fasync_pad,
 };
 
 

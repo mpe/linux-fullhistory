@@ -447,18 +447,8 @@ romfs_readpage(struct dentry * dentry, struct page * page)
 /* Mapping from our types to the kernel */
 
 static struct file_operations romfs_file_operations = {
-	NULL,			/* lseek - default */
-        generic_file_read,	/* read */
-	NULL,			/* write - bad */
-	NULL,			/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
+	read:		generic_file_read,
+	mmap:		generic_file_mmap,
 };
 
 static struct inode_operations romfs_file_inode_operations = {
@@ -483,10 +473,7 @@ static struct inode_operations romfs_file_inode_operations = {
 };
 
 static struct file_operations romfs_dir_operations = {
-	NULL,			/* lseek - default */
-        NULL,			/* read */
-	NULL,			/* write - bad */
-	romfs_readdir,		/* readdir */
+	readdir:	romfs_readdir,
 };
 
 /* Merged dir/symlink op table.  readdir/lookup/readlink/follow_link

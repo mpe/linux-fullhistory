@@ -1522,16 +1522,12 @@ envctrl_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations envctrl_fops = {
-	envctrl_llseek,
-	envctrl_read,
-	envctrl_write,
-	NULL,		/* readdir */
-	NULL,		/* poll */	
-	envctrl_ioctl,
-	NULL,		/* mmap */
-	envctrl_open,
-	NULL,		/* flush */
-	envctrl_release
+	llseek:		envctrl_llseek,
+	read:		envctrl_read,
+	write:		envctrl_write,
+	ioctl:		envctrl_ioctl,
+	open:		envctrl_open,
+	release:	envctrl_release,
 };
 
 static struct miscdevice envctrl_dev = {

@@ -881,18 +881,13 @@ static int cfg_fasync(int fd, struct file *fp, int on)
 
 static struct file_operations config_fops =
 {
-	cfg_llseek,
-	cfg_read,
-	cfg_write,
-	NULL,
-	NULL /*cfg_poll*/,
-	cfg_ioctl,
-	NULL,		/* No mmap */
-	cfg_open,
-	NULL,		/* No flush */
-	cfg_release,
-	NULL,
-	cfg_fasync
+	llseek:		cfg_llseek,
+	read:		cfg_read,
+	write:		cfg_write,
+	ioctl:		cfg_ioctl,
+	open:		cfg_open,
+	release:	cfg_release,
+	fasync:		cfg_fasync,
 };
 
 static struct miscdevice i2o_miscdev = {

@@ -574,19 +574,11 @@ static int pcwd_proc_get_info(char *buffer, char **start, off_t offset,
 }
 
 static struct file_operations pcwd_fops = {
-	NULL,		/* Seek */
-	pcwd_read,	/* Read */
-	pcwd_write,	/* Write */
-	NULL,		/* Readdir */
-	NULL,		/* Poll */
-	pcwd_ioctl,	/* IOctl */
-	NULL,		/* MMAP */
-	pcwd_open,	/* Open */
-	NULL,		/* flush */
-	pcwd_close,	/* Release */
-	NULL,		/* Fsync */
-	NULL,		/* Fasync */
-	NULL,		/* Lock */
+	read:		pcwd_read,
+	write:		pcwd_write,
+	ioctl:		pcwd_ioctl,
+	open:		pcwd_open,
+	release:	pcwd_close,
 };
 
 static struct miscdevice pcwd_miscdev = {

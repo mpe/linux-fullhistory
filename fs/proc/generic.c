@@ -32,9 +32,9 @@ int proc_match(int len, const char *name,struct proc_dir_entry * de)
 }
 
 static struct file_operations proc_file_operations = {
-    proc_file_lseek,	/* lseek   */
-    proc_file_read,	/* read	   */
-    proc_file_write,	/* write   */
+	llseek:		proc_file_lseek,
+	read:		proc_file_read,
+	write:		proc_file_write,
 };
 
 static struct inode_operations proc_file_inode_operations = {
@@ -337,10 +337,7 @@ int proc_readdir(struct file * filp,
  * the /proc directory.
  */
 static struct file_operations proc_dir_operations = {
-	NULL,			/* lseek - default */
-	NULL,			/* read - bad */
-	NULL,			/* write - bad */
-	proc_readdir,		/* readdir */
+	readdir:		proc_readdir,
 };
 
 /*

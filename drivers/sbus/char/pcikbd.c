@@ -889,18 +889,12 @@ static unsigned int aux_poll(struct file *file, poll_table * wait)
 }
 
 struct file_operations psaux_fops = {
-	NULL,		/* seek */
-	aux_read,
-	aux_write,
-	NULL, 		/* readdir */
-	aux_poll,
-	NULL, 		/* ioctl */
-	NULL,		/* mmap */
-	aux_open,
-	NULL,		/* flush */
-	aux_release,
-	NULL,
-	aux_fasync,
+	read:		aux_read,
+	write:		aux_write,
+	poll:		aux_poll,
+	open:		aux_open,
+	release:	aux_release,
+	fasync:		aux_fasync,
 };
 
 static int aux_no_open(struct inode *inode, struct file *file)
@@ -909,14 +903,7 @@ static int aux_no_open(struct inode *inode, struct file *file)
 }
 
 struct file_operations psaux_no_fops = {
-	NULL,		/* seek */
-	NULL,
-	NULL,
-	NULL, 		/* readdir */
-	NULL,
-	NULL, 		/* ioctl */
-	NULL,		/* mmap */
-	aux_no_open,
+	open:		aux_no_open,
 };
 
 static struct miscdevice psaux_mouse = {

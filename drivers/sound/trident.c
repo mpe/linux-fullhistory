@@ -1832,19 +1832,14 @@ static int trident_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations trident_audio_fops = {
-	&trident_llseek,
-	&trident_read,
-	&trident_write,
-	NULL,	/* readdir */
-	&trident_poll,
-	&trident_ioctl,
-	&trident_mmap,
-	&trident_open,
-	NULL,	/* flush */
-	&trident_release,
-	NULL,	/* fsync */
-	NULL,	/* fasync */
-	NULL,	/* lock */
+	llseek:		trident_llseek,
+	read:		trident_read,
+	write:		trident_write,
+	poll:		trident_poll,
+	ioctl:		trident_ioctl,
+	mmap:		trident_mmap,
+	open:		trident_open,
+	release:	trident_release,
 };
 
 /* trident specific AC97 functions */
@@ -1994,19 +1989,10 @@ static int trident_ioctl_mixdev(struct inode *inode, struct file *file, unsigned
 }
 
 static /*const*/ struct file_operations trident_mixer_fops = {
-	&trident_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&trident_ioctl_mixdev,
-	NULL,  /* mmap */
-	&trident_open_mixdev,
-	NULL,	/* flush */
-	&trident_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		trident_llseek,
+	ioctl:		trident_ioctl_mixdev,
+	open:		trident_open_mixdev,
+	release:	trident_release_mixdev,
 };
 
 /* AC97 codec initialisation. */

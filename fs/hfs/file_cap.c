@@ -47,19 +47,9 @@ static void cap_info_truncate(struct inode *);
 /*================ Global variables ================*/
 
 static struct file_operations hfs_cap_info_operations = {
-	NULL,			/* lseek - default */
-	cap_info_read,		/* read */
-	cap_info_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap - not yet */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	file_fsync,		/* fsync - default */
-	NULL,			/* fasync - default */
-	NULL			/* lock - none */
+	read:		cap_info_read,
+	write:		cap_info_write,
+	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_cap_info_inode_operations = {

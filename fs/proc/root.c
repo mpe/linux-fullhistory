@@ -143,10 +143,7 @@ static int proc_root_readdir(struct file * filp,
  * directory handling functions for that..
  */
 static struct file_operations proc_root_operations = {
-	NULL,			/* lseek - default */
-	NULL,			/* read - bad */
-	NULL,			/* write - bad */
-	proc_root_readdir,	/* readdir */
+	readdir: proc_root_readdir,
 };
 
 /*

@@ -41,19 +41,14 @@ static int  nfs_file_flush(struct file *);
 static int  nfs_fsync(struct file *, struct dentry *dentry);
 
 static struct file_operations nfs_file_operations = {
-	NULL,			/* lseek - default */
-	nfs_file_read,		/* read */
-	nfs_file_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	nfs_file_mmap,		/* mmap */
-	nfs_open,		/* open */
-	nfs_file_flush,		/* flush */
-	nfs_release,		/* release */
-	nfs_fsync,		/* fsync */
-	NULL,			/* fasync */
-	nfs_lock,		/* lock */
+	read:		nfs_file_read,
+	write:		nfs_file_write,
+	mmap:		nfs_file_mmap,
+	open:		nfs_open,
+	flush:		nfs_file_flush,
+	release:	nfs_release,
+	fsync:		nfs_fsync,
+	lock:		nfs_lock,
 };
 
 struct inode_operations nfs_file_inode_operations = {
@@ -146,11 +141,13 @@ nfs_fsync(struct file *file, struct dentry *dentry)
 
 	dfprintk(VFS, "nfs: fsync(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
+	lock_kernel();
 	status = nfs_wb_file(inode, file);
 	if (!status) {
 		status = file->f_error;
 		file->f_error = 0;
 	}
+	unlock_kernel();
 	return status;
 }
 

@@ -47,17 +47,9 @@ extern int ncp_symlink(struct inode *, struct dentry *, const char *);
 		      
 static struct file_operations ncp_dir_operations =
 {
-	NULL,			/* lseek - default */
-	ncp_dir_read,		/* read - bad */
-	NULL,			/* write - bad */
-	ncp_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	ncp_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* fsync */
+	read:		ncp_dir_read,
+	readdir:	ncp_readdir,
+	ioctl:		ncp_ioctl,
 };
 
 struct inode_operations ncp_dir_inode_operations =

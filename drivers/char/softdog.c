@@ -158,18 +158,10 @@ static int softdog_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations softdog_fops=
 {
-	NULL,		/* Seek */
-	NULL,		/* Read */
-	softdog_write,	/* Write */
-	NULL,		/* Readdir */
-	NULL,		/* Select */
-	softdog_ioctl,	/* Ioctl */
-	NULL,		/* MMap */
-	softdog_open,
-	NULL,		/* flush */
-	softdog_release,
-	NULL,		
-	NULL		/* Fasync */
+	write:		softdog_write,
+	ioctl:		softdog_ioctl,
+	open:		softdog_open,
+	release:	softdog_release,
 };
 
 static struct miscdevice softdog_miscdev=

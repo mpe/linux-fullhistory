@@ -360,17 +360,13 @@ static int jsf_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations jsf_fops = {
-	jsf_lseek,
-	jsf_read,
-	jsf_write,
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	jsf_ioctl,
-	jsf_mmap,
-	jsf_open,
-	NULL,		/* flush */
-	jsf_release,
-	NULL		/* fsync */
+	llseek:		jsf_lseek,
+	read:		jsf_read,
+	write:		jsf_write,
+	ioctl:		jsf_ioctl,
+	mmap:		jsf_mmap,
+	open:		jsf_open,
+	release:	jsf_release,
 };
 
 static struct miscdevice jsf_dev = { JSF_MINOR, "jsflash", &jsf_fops };

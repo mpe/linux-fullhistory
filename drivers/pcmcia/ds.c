@@ -853,12 +853,12 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 /*====================================================================*/
 
 static struct file_operations ds_fops = {
-    open:	ds_open,
-    release:	ds_release,
-    ioctl:	ds_ioctl,
-    read:	ds_read,
-    write:	ds_write,
-    poll:	ds_poll
+	 open:		ds_open,
+	 release:	ds_release,
+	 ioctl:		ds_ioctl,
+	 read:		ds_read,
+	 write:		ds_write,
+	 poll:		ds_poll,
 };
 
 EXPORT_SYMBOL(register_pccard_driver);

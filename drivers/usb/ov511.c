@@ -1,6 +1,7 @@
 /*
  * OmniVision OV511 Camera-to-USB Bridge Driver
- * Copyright 1999/2000 Mark W. McClelland
+ * Copyright (c) 1999/2000 Mark W. McClelland
+ * Many improvements by Bret Wallach
  *
  * Based on the Linux CPiA driver.
  * 
@@ -11,7 +12,7 @@
  *    DEBUG - Debugging code.
  *    FIXME - Something that is broken or needs improvement.
  *
- * Version: 1.06
+ * Version: 1.07
  *
  * Please see the file: linux/Documentation/usb/ov511.txt 
  * and the website at:  http://people.delphi.com/mmcclelland/linux/ 
@@ -58,7 +59,7 @@
 #include <linux/wrapper.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
-
+#include <linux/time.h>
 #include <asm/io.h>
 
 #include "usb.h"
@@ -70,9 +71,9 @@
 
 /* Video Size 640 x 480 x 3 bytes for RGB */
 #define MAX_FRAME_SIZE (640 * 480 * 3)
+#define MAX_DATA_SIZE (MAX_FRAME_SIZE + sizeof(struct timeval))
 
-// FIXME - Force CIF to make some apps happy for the moment. Should find a 
-//         better way to do this.
+// FIXME - Should find a better way to do this.
 #define DEFAULT_WIDTH 640
 #define DEFAULT_HEIGHT 480
 
@@ -206,7 +207,7 @@ int ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char val
 		0, (__u16)reg, &value, 1, HZ);	
 			
 #if 0
-	PDEBUG("reg write: 0x%02X:0x%02X", reg, value);
+	PDEBUG("reg write: 0x%02X:0x%02X, 0x%x", reg, value, rc);
 #endif
 			
 	return rc;
@@ -261,10 +262,10 @@ int ov511_i2c_write(struct usb_device *dev, unsigned char reg, unsigned char val
 
 		if((rc&2) == 0) /* Ack? */
 			break;
-
+#if 0
 		/* I2C abort */	
 		ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
-
+#endif
 		if (--retries < 0) return -1;
 	}
 
@@ -331,6 +332,58 @@ int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 	return (value);
 }
 
+
+// This version doesn't always work
+#if 0
+ /* returns: negative is error, pos or zero is data */
+ int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
+ {
+	int rc, value;
+
+	/* Select camera register */
+	rc = ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_2_BYTE, reg);
+	if (rc < 0) return rc;
+ 
+
+	/* Initiate 2-byte write cycle */
+	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x03);
+	if (rc < 0) return rc;
+ 
+
+	/* Initiate 2-byte read cycle */
+	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
+	if (rc < 0) return rc;
+ 
+ 	value = ov511_reg_read(dev, OV511_REG_I2C_DATA_PORT);
+ #if 0
+ 	PDEBUG("i2c read: 0x%02X:0x%02X", reg, value);
+ #endif
+ 		
+ 	return (value);
+ }
+#endif
+
+static int ov511_write_regvals(struct usb_device *dev,
+			       struct ov511_regvals * pRegvals)
+{
+	int ret;
+	while(pRegvals->bus != OV511_DONE_BUS) {
+		if (pRegvals->bus == OV511_REG_BUS) {
+			if ((ret = ov511_reg_write(dev, pRegvals->reg,
+			                           pRegvals->val)) < 0)
+				return ret;
+		} else if (pRegvals->bus == OV511_I2C_BUS) {
+			if ((ret = ov511_i2c_write(dev, pRegvals->reg, 
+			                           pRegvals->val)) < 0)
+				return ret;
+		} else {
+		  err("Bad regval array");
+		}
+		pRegvals++;
+	}
+	return 0;
+}
+
 #if 0
 static void ov511_dump_i2c_range( struct usb_device *dev, int reg1, int regn)
 {
@@ -383,18 +436,6 @@ static void ov511_dump_regs( struct usb_device *dev)
 
 }
 #endif
-
-int ov511_i2c_reset(struct usb_device *dev)
-{
-	int rc;
-
-	PDEBUG("Reset 7610");
-	rc = ov511_i2c_write(dev, 0x12, 0x80);
-	if (rc < 0)
-		err("i2c reset: command failed");
-
-	return rc;
-}
 
 int ov511_reset(struct usb_device *dev, unsigned char reset_type)
 {
@@ -480,6 +521,21 @@ int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 static inline int ov7610_set_picture(struct usb_ov511 *ov511,
                                      struct video_picture *p)
 {
+	int ret;
+
+	/* Stop the camera */
+	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x3d) < 0) {
+		err("reset: command failed");
+		return -EIO;
+	}
+
+	if((ret = ov511_i2c_read(ov511->dev, OV7610_REG_COM_B)) < 0)
+		return -EIO;
+#if 0
+	if(ov511_i2c_write(ov511->dev, OV7610_REG_COM_B, ret & 0xfe) < 0)
+		return -EIO;
+#endif
+
 	if(ov511_i2c_write(ov511->dev, OV7610_REG_SAT, p->colour >> 8) < 0)
 		return -EIO;
 
@@ -489,6 +545,12 @@ static inline int ov7610_set_picture(struct usb_ov511 *ov511,
 	if(ov511_i2c_write(ov511->dev, OV7610_REG_BRT, p->brightness >> 8) < 0)
 		return -EIO;
 
+	/* Restart the camera */
+	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x0) < 0) {
+		err("reset: command failed");
+		return -EIO;
+	}
+
 	return 0;
 }
 
@@ -496,6 +558,12 @@ static inline int ov7610_get_picture(struct usb_ov511 *ov511,
                                      struct video_picture *p)
 {
 	int ret;
+
+	/* Stop the camera */
+	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x3d) < 0) {
+		err("reset: command failed");
+		return -EIO;
+	}
 
 	if((ret = ov511_i2c_read(ov511->dev, OV7610_REG_SAT)) < 0) return -EIO;
 	p->colour = ret << 8;
@@ -511,43 +579,71 @@ static inline int ov7610_get_picture(struct usb_ov511 *ov511,
 	p->depth = 24;
 	p->palette = VIDEO_PALETTE_RGB24;
 
+	/* Restart the camera */
+	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x0) < 0) {
+		err("reset: command failed");
+		return -EIO;
+	}
+
 	return 0;
 }
 
 static int ov511_mode_init_regs(struct usb_ov511 *ov511,
-				int width, int height, int mode)
+				int width, int height, int mode, int sub_flag)
 {
 	int rc = 0;
 	struct usb_device *dev = ov511->dev;
 
 #if 0
-	PDEBUG("ov511_mode_init_regs(ov511, %d, %d, %d)", width, height, mode);
+	PDEBUG("ov511_mode_init_regs(ov511, %d, %d, %d, %d)",
+	       width, height, mode, sub_flag);
 #endif
-	ov511_set_packet_size(ov511, 0);
 
-	/* Set mode consistent registers */
-	ov511_i2c_write(dev, 0x0f, 0x03);
-	ov511_i2c_write(dev, 0x10, 0xff);
-	ov511_i2c_write(dev, 0x13, 0x01);
-	ov511_i2c_write(dev, 0x16, 0x06);
-	ov511_i2c_write(dev, 0x20, 0x1c);
-	ov511_i2c_write(dev, 0x24, 0x2e); /* 10 */
-	ov511_i2c_write(dev, 0x25, 0x7c); /* 8a */
-	ov511_i2c_write(dev, 0x26, 0x00); /* was 0x70 */
-	ov511_i2c_write(dev, 0x28, 0x24); /* 24 */
-	ov511_i2c_write(dev, 0x2b, 0xac);
-	ov511_i2c_write(dev, 0x2c, 0xfe);
-	ov511_i2c_write(dev, 0x2d, 0x93);
-	ov511_i2c_write(dev, 0x34, 0x8b);
+//	ov511_set_packet_size(ov511, 0);
+	if (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x3d) < 0) {
+		err("reset: command failed");
+		return -EIO;
+	}
+
+	if (mode == VIDEO_PALETTE_GREY) {
+		ov511_reg_write(dev, 0x16, 0);
+		ov511_i2c_write(dev, 0xe, 0x44);
+		ov511_i2c_write(dev, 0x13, 0x21);
+	} else {
+		ov511_reg_write(dev, 0x16, 1);
+		ov511_i2c_write(dev, 0xe, 0x4);
+		ov511_i2c_write(dev, 0x13, 0x1);
+	}
 
 	if (width == 640 && height == 480) {
-		ov511_reg_write(dev, 0x12, 0x4f);
-		ov511_reg_write(dev, 0x13, 0x3d);
+		if (sub_flag) {
+			ov511_i2c_write(ov511->dev, 0x17, 0x38+(ov511->subx>>2));
+			ov511_i2c_write(ov511->dev, 0x18,
+					0x3a+((ov511->subx+ov511->subw)>>2));
+			ov511_i2c_write(ov511->dev, 0x19, 0x5+(ov511->suby>>1));
+			ov511_i2c_write(ov511->dev, 0x1a,
+					0x5+((ov511->suby+ov511->subh)>>1));
+			ov511_reg_write(ov511->dev, 0x12, (ov511->subw>>3)-1);
+			ov511_reg_write(ov511->dev, 0x13, (ov511->subh>>3)-1);
+			ov511_i2c_write(dev, 0x11, 0x01);
+		} else {
+			ov511_i2c_write(ov511->dev, 0x17, 0x38);
+			ov511_i2c_write(ov511->dev, 0x18, 0x3a + (640>>2));
+			ov511_i2c_write(ov511->dev, 0x19, 0x5);
+			ov511_i2c_write(ov511->dev, 0x1c, + (480>>1));
+			ov511_reg_write(dev, 0x12, 0x4f);
+			ov511_reg_write(dev, 0x13, 0x3d);
+			if (mode == VIDEO_PALETTE_GREY) {
+			  ov511_i2c_write(dev, 0x11, 4); /* check */
+			} else {
+			  ov511_i2c_write(dev, 0x11, 6); /* check */
+			}
+		}
+
 		ov511_reg_write(dev, 0x14, 0x00);
 		ov511_reg_write(dev, 0x15, 0x00);
 		ov511_reg_write(dev, 0x18, 0x03);
 
-		ov511_i2c_write(dev, 0x11, 0x01);
 		ov511_i2c_write(dev, 0x12, 0x24);
 		ov511_i2c_write(dev, 0x14, 0x04);
 		ov511_i2c_write(dev, 0x35, 0x9e);
@@ -558,7 +654,12 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 		ov511_reg_write(dev, 0x15, 0x00);
 		ov511_reg_write(dev, 0x18, 0x03);
 
-		ov511_i2c_write(dev, 0x11, 0x00);
+		if (mode == VIDEO_PALETTE_GREY) {
+		  ov511_i2c_write(dev, 0x11, 1); /* check */
+		} else {
+		  ov511_i2c_write(dev, 0x11, 1); /* check */
+		}
+
 		ov511_i2c_write(dev, 0x12, 0x04);
 		ov511_i2c_write(dev, 0x14, 0x24);
 		ov511_i2c_write(dev, 0x35, 0x1e);
@@ -566,7 +667,13 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 		err("Unknown mode (%d, %d): %d", width, height, mode);
 		rc = -EINVAL;
 	}
-	ov511_set_packet_size(ov511, 993);
+
+//	ov511_set_packet_size(ov511, 993);
+
+	if (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x00) < 0) {
+		PDEBUG("reset: command failed");
+		return -EIO;
+	}
 
 	return rc;
 }
@@ -633,24 +740,19 @@ this data is scrambled.
 #define HDIV 8
 #define WDIV (256/HDIV)
 
-static void ov511_parse_data(unsigned char * pIn0,
-			     unsigned char * pOut0,
-			     int iWidth,
-			     int iSegment)
-			    
+
+static void ov511_parse_data_rgb24(unsigned char * pIn0,
+				   unsigned char * pOut0,
+				   int iOutY,
+				   int iOutUV,
+				   int iHalf,
+				   int iWidth)
+ 			    			    
 {
 #ifndef OV511_DUMPPIX
     int k, l, m;
     unsigned char * pIn;
     unsigned char * pOut, * pOut1;
-
-    int iHalf = (iSegment / (iWidth / 32)) & 1;
-    int iY     = iSegment / (iWidth / WDIV);
-    int jY     = iSegment - iY * (iWidth / WDIV);
-    int iOutY  = (iY*HDIV*iWidth + jY*WDIV) * 3;
-    int iUV    = iSegment / (iWidth / WDIV * 2);
-    int jUV    = iSegment - iUV * (iWidth / WDIV * 2);
-    int iOutUV = (iUV*HDIV*2*iWidth + jUV*WDIV/2) * 3;
 
     /* Just copy the Y's if in the first stripe */
     if (!iHalf) {
@@ -723,11 +825,47 @@ static void ov511_parse_data(unsigned char * pIn0,
 #else
 	/* Just dump pix data straight out for debug */
 	int i;
-	pOut0 += iSegment * 384;
+	pOut0 += iSegmentY * 384;
 	for(i=0; i<384; i++) {
 	  *pOut0++ = *pIn0++;
 	}
 #endif
+}
+
+/***************************************************************
+
+For 640x480 RAW BW images, data shows up in 1200 256 byte segments.
+The segments represent 4 squares of 8x8 pixels as
+follows:
+
+  0  1 ...  7    64  65 ...  71   ...  192 193 ... 199
+  8  9 ... 15    72  73 ...  79        200 201 ... 207
+       ...              ...                    ...
+ 56 57 ... 63   120 121     127        248 249 ... 255
+
+****************************************************************/ 
+static void ov511_parse_data_grey(unsigned char * pIn0,
+				  unsigned char * pOut0,
+				  int iOutY,
+				  int iWidth)
+			    
+{
+    int k, l, m;
+    unsigned char * pIn;
+    unsigned char * pOut, * pOut1;
+
+    pIn = pIn0;
+    pOut = pOut0 + iOutY;
+    for(k=0; k<4; k++) {
+      pOut1 = pOut;
+      for(l=0; l<8; l++) {
+	for(m=0; m<8; m++) {
+	  *pOut1++ = *pIn++;
+	}
+	pOut1 += iWidth - 8;
+      }
+      pOut += 8;
+    }
 }
 
 static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
@@ -741,12 +879,13 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		int n = urb->iso_frame_desc[i].actual_length;
 		int st = urb->iso_frame_desc[i].status;
 		urb->iso_frame_desc[i].actual_length = 0;
-		urb->iso_frame_desc[i].status = 0;		
+		urb->iso_frame_desc[i].status = 0;
 		cdata = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
 
 		aPackNum[i] = n ? cdata[992] : -1;
 
 		if (!n || ov511->curframe == -1) continue;
+
 		if (st)
 			PDEBUG("data error: [%d] len=%d, status=%d", i, n, st);
 
@@ -757,33 +896,35 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		     cdata[4] | cdata[5] | cdata[6] | cdata[7]) == 0 &&
 		    (cdata[8] & 8) && (cdata[8] & 0x80)) {
 
+		    struct timeval *ts;
+		    ts = (struct timeval *)(frame->data + MAX_FRAME_SIZE);
+		    do_gettimeofday(ts);
 #if 0
-		    PDEBUG("Found Frame End!, packnum = %d", (int)(cdata[992]));
-		    PDEBUG("Current frame = %d", ov511->curframe);
+		    PDEBUG("Frame End, curframe = %d, packnum=%d, hw=%d, vw=%d",
+			   ov511->curframe, (int)(cdata[992]),
+			   (int)(cdata[9]), (int)(cdata[10]));
 #endif
 
 		    if (frame->scanstate == STATE_LINES) {
 		        int iFrameNext;
+				frame->grabstate = FRAME_DONE;
 		        if (waitqueue_active(&frame->wq)) {
+			  		frame->grabstate = FRAME_DONE;
+			 	 	wake_up_interruptible(&frame->wq);
+				}
+				/* If next frame is ready or grabbing, point to it */
+				iFrameNext = (ov511->curframe + 1) % OV511_NUMFRAMES;
+				if (ov511->frame[iFrameNext].grabstate== FRAME_READY ||
+				    ov511->frame[iFrameNext].grabstate== FRAME_GRABBING) {
+				  ov511->curframe = iFrameNext;
+				  ov511->frame[iFrameNext].scanstate = STATE_SCANNING;
+				} else {
 #if 0
-			  PDEBUG("About to wake up waiting processes");
+				  PDEBUG("Frame not ready? state = %d",
+					 ov511->frame[iFrameNext].grabstate);
 #endif
-			  frame->grabstate = FRAME_DONE;
-			  wake_up_interruptible(&frame->wq);
-			}
-			/* If next frame is ready or grabbing, point to it */
-			iFrameNext = (ov511->curframe + 1) % OV511_NUMFRAMES;
-			if (ov511->frame[iFrameNext].grabstate== FRAME_READY ||
-			    ov511->frame[iFrameNext].grabstate== FRAME_GRABBING) {
-			  ov511->curframe = iFrameNext;
-			  frame->scanstate = STATE_SCANNING;
-			} else {
-#if 0
-			  PDEBUG("Frame not ready? state = %d",
-				 ov511->frame[iFrameNext].grabstate);
-#endif
-			  ov511->curframe = -1;
-			}
+				  ov511->curframe = -1;
+				}
 		    }
 		}
 
@@ -792,8 +933,8 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 			  cdata[4] | cdata[5] | cdata[6] | cdata[7]) == 0 &&
 			 (cdata[8] & 8)) {
 #if 0
-			PDEBUG("ov511: Found Frame Start!, packnum = %d", (int)(cdata[992]));
-			PDEBUG("ov511: Frame Header Byte = 0x%x", (int)(cdata[8]));
+			PDEBUG("ov511: Found Frame Start!, framenum = %d",
+			       ov511->curframe);
 #endif
 		    frame->scanstate = STATE_LINES;
 			frame->segment = 0;
@@ -808,26 +949,67 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 			if (frame->segment) {
 			  pData = ov511->scratch;
 			  iPix = - ov511->scratchlen;
-			  memmove(pData + ov511->scratchlen, cdata, iPix+384);
-		  } else {
+			  memmove(pData + ov511->scratchlen, cdata,
+				  iPix+frame->segsize);
+			} else {
 			  pData = &cdata[iPix = 9];
-		  }
+		 	}
 
 			/* Parse the segments */
-			while(iPix <= 992 - 384 &&
+			while(iPix <= 992 - frame->segsize &&
 			      frame->segment < frame->width * frame->height / 256) {
-			  ov511_parse_data(pData, frame->data,
-					   frame->width,
-					   frame->segment);
+			  int iSegY;
+			  int iSegUV;
+			  int iY, jY, iUV, jUV;
+			  int iOutY, iOutUV;
+			  unsigned char * pOut;
+
+			  iSegY = iSegUV = frame->segment;
+			  pOut = frame->data;
+			  
 			  frame->segment++;
-			  iPix += 384;
+			  iPix += frame->segsize;
+
+			  if (frame->sub_flag) {
+			    int iSeg1;
+			    iSeg1 = iSegY / (ov511->subw / 32);
+			    iSeg1 *= frame->width / 32;
+			    iSegY = iSeg1 + (iSegY % (ov511->subw / 32));
+			    if (iSegY >= frame->width * ov511->subh / 256)
+			      break;
+
+			    iSeg1 = iSegUV / (ov511->subw / 16);
+			    iSeg1 *= frame->width / 16;
+			    iSegUV = iSeg1 + (iSegUV % (ov511->subw / 16));
+
+			    pOut += (ov511->subx +
+				     ov511->suby * frame->width) * frame->depth;
+			  }
+
+			  iY     = iSegY / (frame->width / WDIV);
+			  jY     = iSegY - iY * (frame->width / WDIV);
+			  iOutY  = (iY*HDIV*frame->width + jY*WDIV) * frame->depth;
+			  iUV    = iSegUV / (frame->width / WDIV * 2);
+			  jUV    = iSegUV - iUV * (frame->width / WDIV * 2);
+			  iOutUV = (iUV*HDIV*2*frame->width + jUV*WDIV/2) * frame->depth;
+
+			  if (frame->format == VIDEO_PALETTE_GREY) {
+			    ov511_parse_data_grey(pData, pOut, iOutY, frame->width);
+			  } else if (frame->format == VIDEO_PALETTE_RGB24) {
+			    ov511_parse_data_rgb24(pData, pOut, iOutY, iOutUV, iY & 1,
+						   frame->width);
+			  }
 			  pData = &cdata[iPix];
-		}
+			}
 
 			/* Save extra data for next time */
 			if (frame->segment < frame->width * frame->height / 256) {
-			  memmove(ov511->scratch, pData, 992 - iPix);
 			  ov511->scratchlen = 992 - iPix;
+			  if (ov511->scratchlen < frame->segsize) {
+			    memmove(ov511->scratch, pData, ov511->scratchlen);
+			  } else {
+			    ov511->scratchlen = 0;
+			  }
 			}
 		}
 	}
@@ -845,7 +1027,9 @@ static void ov511_isoc_irq(struct urb *urb)
 	int len;
 	struct usb_ov511 *ov511 = urb->context;
 	struct ov511_sbuf *sbuf;
-	int i;
+
+	if (!ov511->dev)
+		return;
 
 	if (!ov511->streaming) {
 		PDEBUG("hmmm... not streaming, but got interrupt\n");
@@ -855,14 +1039,10 @@ static void ov511_isoc_irq(struct urb *urb)
 	sbuf = &ov511->sbuf[ov511->cursbuf];
 
 	/* Copy the data received into our scratch buffer */
-	if (ov511->curframe >= 0) {
+	if (ov511->curframe >= 0)
 	  len = ov511_move_data(ov511, urb);
-	}
-
-	for (i = 0; i < FRAMES_PER_DESC; i++) {
-		sbuf->urb->iso_frame_desc[i].status = 0;
-		sbuf->urb->iso_frame_desc[i].actual_length = 0;
-	}
+	else if (waitqueue_active(&ov511->wq))
+	  wake_up_interruptible(&ov511->wq);
 	
 	/* Move to the next sbuf */
 	ov511->cursbuf = (ov511->cursbuf + 1) % OV511_NUMSBUF;
@@ -872,7 +1052,6 @@ static void ov511_isoc_irq(struct urb *urb)
 
 static int ov511_init_isoc(struct usb_ov511 *ov511)
 {
-	struct usb_device *dev = ov511->dev;
 	urb_t *urb;
 	int fx, err;
 	
@@ -891,9 +1070,9 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 		return -ENOMEM;
 	}
 	ov511->sbuf[0].urb = urb;
-	urb->dev = dev;
+	urb->dev = ov511->dev;
 	urb->context = ov511;
-	urb->pipe = usb_rcvisocpipe(dev, OV511_ENDPOINT_ADDRESS);
+	urb->pipe = usb_rcvisocpipe(ov511->dev, OV511_ENDPOINT_ADDRESS);
 	urb->transfer_flags = USB_ISO_ASAP;
 	urb->transfer_buffer = ov511->sbuf[0].data;
  	urb->complete = ov511_isoc_irq;
@@ -910,9 +1089,9 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 		return -ENOMEM;
 	}
 	ov511->sbuf[1].urb = urb;
-	urb->dev = dev;
+	urb->dev = ov511->dev;
 	urb->context = ov511;
-	urb->pipe = usb_rcvisocpipe(dev, OV511_ENDPOINT_ADDRESS);
+	urb->pipe = usb_rcvisocpipe(ov511->dev, OV511_ENDPOINT_ADDRESS);
 	urb->transfer_flags = USB_ISO_ASAP;
 	urb->transfer_buffer = ov511->sbuf[1].data;
  	urb->complete = ov511_isoc_irq;
@@ -928,10 +1107,10 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 
 	err = usb_submit_urb(ov511->sbuf[0].urb);
 	if (err)
-		err("ov511_init_isoc: usb_run_isoc(0) ret %d", err);
+		err("ov511_init_isoc: usb_submit_urb(0) ret %d", err);
 	err = usb_submit_urb(ov511->sbuf[1].urb);
 	if (err)
-		err("ov511_init_isoc: usb_run_isoc(1) ret %d", err);
+		err("ov511_init_isoc: usb_submit_urb(1) ret %d", err);
 
 	ov511->streaming = 1;
 
@@ -941,26 +1120,36 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 
 static void ov511_stop_isoc(struct usb_ov511 *ov511)
 {
-	if (!ov511->streaming)
+	if (!ov511->streaming || !ov511->dev)
 		return;
 
 	ov511_set_packet_size(ov511, 0);
-	
-	/* Unschedule all of the iso td's */
-	usb_unlink_urb(ov511->sbuf[1].urb);
-	usb_unlink_urb(ov511->sbuf[0].urb);
 
 	ov511->streaming = 0;
 
-	/* Delete them all */
-	usb_free_urb(ov511->sbuf[1].urb);
-	usb_free_urb(ov511->sbuf[0].urb);
+	/* Unschedule all of the iso td's */
+	if (ov511->sbuf[1].urb) {
+		ov511->sbuf[1].urb->next = NULL;
+		usb_unlink_urb(ov511->sbuf[1].urb);
+		usb_free_urb(ov511->sbuf[1].urb);
+		ov511->sbuf[1].urb = NULL;
+	}
+	if (ov511->sbuf[0].urb) {
+		ov511->sbuf[0].urb->next = NULL;
+		usb_unlink_urb(ov511->sbuf[0].urb);
+		usb_free_urb(ov511->sbuf[0].urb);
+		ov511->sbuf[0].urb = NULL;
+	}
 }
 
 static int ov511_new_frame(struct usb_ov511 *ov511, int framenum)
 {
+#if 1
 	struct ov511_frame *frame;
 	int width, height;
+
+	if (!ov511->dev)
+		return -1;
 
 	/* If we're not grabbing a frame right now and the other frame is */
 	/*  ready to be grabbed into, then use it instead */
@@ -988,13 +1177,13 @@ static int ov511_new_frame(struct usb_ov511 *ov511, int framenum)
 	if (height > DEFAULT_HEIGHT)
 		height = DEFAULT_HEIGHT;
 	height = (height / 4) * 4;	/* Multiple of 4 */
-	
+
 //	/* We want a fresh frame every 30 we get */
 //	ov511->compress = (ov511->compress + 1) % 30;
 
+#endif
 	return 0;
 }
-
 
 
 /* Video 4 Linux API */
@@ -1004,23 +1193,24 @@ static int ov511_open(struct video_device *dev, int flags)
 	struct usb_ov511 *ov511 = (struct usb_ov511 *)dev;
 
 	PDEBUG("ov511_open");
-	
+
 	down(&ov511->lock);
 	if (ov511->user)
 		goto out_unlock;
-		
+
 	ov511->frame[0].grabstate = FRAME_UNUSED;
 	ov511->frame[1].grabstate = FRAME_UNUSED;
 
 	err = -ENOMEM;
-	
-	/* Allocate memory for the frame buffers */				
-	ov511->fbuf = rvmalloc(2 * MAX_FRAME_SIZE);
+
+	/* Allocate memory for the frame buffers */
+	ov511->fbuf = rvmalloc(2 * MAX_DATA_SIZE);
 	if (!ov511->fbuf)
 		goto open_err_ret;
 
 	ov511->frame[0].data = ov511->fbuf;
-	ov511->frame[1].data = ov511->fbuf + MAX_FRAME_SIZE;
+	ov511->frame[1].data = ov511->fbuf + MAX_DATA_SIZE;
+	ov511->sub_flag = 0;
 
 	PDEBUG("frame [0] @ %p", ov511->frame[0].data);
 	PDEBUG("frame [1] @ %p", ov511->frame[1].data);
@@ -1051,7 +1241,7 @@ open_err_on2:
 open_err_on1:
 	kfree (ov511->sbuf[0].data);
 open_err_on0:
-	rvfree(ov511->fbuf, 2 * MAX_FRAME_SIZE);
+	rvfree(ov511->fbuf, 2 * MAX_DATA_SIZE);
 open_err_ret:
 	return err;
 out_unlock:
@@ -1073,12 +1263,17 @@ static void ov511_close(struct video_device *dev)
 
 	ov511_stop_isoc(ov511);
 
-	rvfree(ov511->fbuf, 2 * MAX_FRAME_SIZE);
+	rvfree(ov511->fbuf, 2 * MAX_DATA_SIZE);
 
 	kfree(ov511->sbuf[1].data);
 	kfree(ov511->sbuf[0].data);
 
 	up(&ov511->lock);
+
+	if (!ov511->dev) {
+		video_unregister_device(&ov511->vdev);
+		kfree(ov511);
+	}
 }
 
 static int ov511_init_done(struct video_device *dev)
@@ -1091,13 +1286,16 @@ static long ov511_write(struct video_device *dev, const char *buf, unsigned long
 	return -EINVAL;
 }
 
-// FIXME - Needs much work!!!
 static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 {
 	struct usb_ov511 *ov511 = (struct usb_ov511 *)vdev;
 #if 0	
 	PDEBUG("IOCtl: 0x%X", cmd);
 #endif	
+
+	if (!ov511->dev)
+		return -EIO;	
+
 	switch (cmd) {
 		case VIDIOCGCAP:
 		{
@@ -1109,8 +1307,8 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 			b.audios = 0;
 			b.maxwidth = DEFAULT_WIDTH;
 			b.maxheight = DEFAULT_HEIGHT;
-			b.minwidth = 8;
-			b.minheight = 4;
+			b.minwidth = 32;
+			b.minheight = 16;
 
 			if (copy_to_user(arg, &b, sizeof(b)))
 				return -EFAULT;
@@ -1173,6 +1371,42 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 
 			return 0;
 		}
+		case VIDIOCGCAPTURE:
+		{
+			int vf;
+			if (copy_from_user(&vf, arg, sizeof(vf)))
+				return -EFAULT;
+			ov511->sub_flag = vf;
+			return 0;
+		}
+		case VIDIOCSCAPTURE:
+		{
+			struct video_capture vc;
+
+			if (copy_from_user(&vc, arg, sizeof(vc)))
+				return -EFAULT;
+			if (vc.flags)
+				return -EINVAL;
+			if (vc.decimation)
+				return -EINVAL;
+			vc.x /= 4;
+			vc.x *= 4;
+			vc.y /= 2;
+			vc.y *= 2;
+			vc.width /= 32;
+			vc.width *= 32;
+			if (vc.width == 0) vc.width = 32;
+			vc.height /= 16;
+			vc.height *= 16;
+			if (vc.height == 0) vc.height = 16;
+
+			ov511->subx = vc.x;
+			ov511->suby = vc.y;
+			ov511->subw = vc.width;
+			ov511->subh = vc.height;
+
+			return 0;
+		}
 		case VIDIOCSWIN:
 		{
 			struct video_window vw;
@@ -1213,10 +1447,10 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 			struct video_mbuf vm;
 
 			memset(&vm, 0, sizeof(vm));
-			vm.size = MAX_FRAME_SIZE * 2;
+			vm.size = 2 * MAX_DATA_SIZE;
 			vm.frames = 2;
 			vm.offsets[0] = 0;
-			vm.offsets[1] = MAX_FRAME_SIZE;
+			vm.offsets[1] = MAX_FRAME_SIZE + sizeof (struct timeval);
 
 			if (copy_to_user((void *)arg, (void *)&vm, sizeof(vm)))
 				return -EFAULT;
@@ -1236,7 +1470,8 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 				vm.frame, vm.width, vm.height, vm.format);
 #endif
 
-			if (vm.format != VIDEO_PALETTE_RGB24)
+			if (vm.format != VIDEO_PALETTE_RGB24 &&
+			    vm.format != VIDEO_PALETTE_GREY)
 				return -EINVAL;
 
 			if ((vm.frame != 0) && (vm.frame != 1))
@@ -1247,18 +1482,27 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 
 			/* Don't compress if the size changed */
 			if ((ov511->frame[vm.frame].width != vm.width) ||
-			    (ov511->frame[vm.frame].height != vm.height)) {
-				ov511->compress = 0;
+			    (ov511->frame[vm.frame].height != vm.height) ||
+			    (ov511->frame[vm.frame].format != vm.format) ||
+			    (ov511->frame[vm.frame].sub_flag !=
+			     ov511->sub_flag)) {
+				/* If we're collecting previous frame wait
+				   before changing modes */
+				interruptible_sleep_on(&ov511->wq);
+				if (signal_pending(current)) return -EINTR;
 				ov511_mode_init_regs(ov511,
-						     vm.width, vm.height, 0);
-#if 0
-				PDEBUG("ov511: Setting frame %d to (%d, %d) : %d",
-				       vm.frame, vm.width, vm.height, 0);
-#endif
+						     vm.width, vm.height,
+						     vm.format, ov511->sub_flag);
 			}
 
 			ov511->frame[vm.frame].width = vm.width;
 			ov511->frame[vm.frame].height = vm.height;
+			ov511->frame[vm.frame].format = vm.format;
+			ov511->frame[vm.frame].sub_flag = ov511->sub_flag;
+			ov511->frame[vm.frame].segsize =
+			  vm.format == VIDEO_PALETTE_RGB24 ? 384 : 256;
+			ov511->frame[vm.frame].depth =
+			  vm.format == VIDEO_PALETTE_RGB24 ? 3 : 1;
 
 			/* Mark it as ready */
 			ov511->frame[vm.frame].grabstate = FRAME_READY;
@@ -1273,7 +1517,8 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 				return -EFAULT;
 
 #if 0
-			PDEBUG("syncing to frame %d", frame);
+			PDEBUG("syncing to frame %d, grabstate = %d", frame,
+			       ov511->frame[frame].grabstate);
 #endif
 			switch (ov511->frame[frame].grabstate) {
 				case FRAME_UNUSED:
@@ -1282,6 +1527,9 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 				case FRAME_GRABBING:
 				case FRAME_ERROR:
 redo:
+				if (!ov511->dev)
+					return -EIO;
+
 				do {
 #if 0
 					init_waitqueue_head(&ov511->frame[frame].wq);
@@ -1351,6 +1599,9 @@ static long ov511_read(struct video_device *dev, char *buf, unsigned long count,
 	if (!dev || !buf)
 		return -EFAULT;
 
+	if (!ov511->dev)
+		return -EIO;
+
 	/* See if a frame is completed, then use it. */
 	if (ov511->frame[0].grabstate >= FRAME_DONE)	/* _DONE or _ERROR */
 		frmx = 0;
@@ -1376,6 +1627,9 @@ static long ov511_read(struct video_device *dev, char *buf, unsigned long count,
 	frame = &ov511->frame[frmx];
 
 restart:
+	if (!ov511->dev)
+		return -EIO;
+
 	while (frame->grabstate == FRAME_GRABBING) {
 		interruptible_sleep_on(&ov511->frame[frmx].wq);
 		if (signal_pending(current))
@@ -1422,9 +1676,12 @@ static int ov511_mmap(struct video_device *dev, const char *adr, unsigned long s
 	unsigned long start = (unsigned long)adr;
 	unsigned long page, pos;
 
+	if (!ov511->dev)
+		return -EIO;
+
 	PDEBUG("mmap: %ld (%lX) bytes", size, size);
 
-	if (size > (((2 * MAX_FRAME_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
+	if (size > (((2 * MAX_DATA_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
 		return -EINVAL;
 
 	pos = (unsigned long)ov511->fbuf;
@@ -1444,11 +1701,10 @@ static int ov511_mmap(struct video_device *dev, const char *adr, unsigned long s
 	return 0;
 }
 
-// FIXME - needs V4L ID to be assigned
 static struct video_device ov511_template = {
 	"OV511 USB Camera",
 	VID_TYPE_CAPTURE,
-	VID_HARDWARE_CPIA,  /* FIXME */
+	VID_HARDWARE_OV511,
 	ov511_open,
 	ov511_close,
 	ov511_read,
@@ -1471,25 +1727,17 @@ static int ov7610_configure(struct usb_device *dev)
 	if(ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_READ,
 	                        OV7610_I2C_READ_ID) < 0)
 		return -1;
-	
-	/* Reset the camera chip */
-	if (ov511_i2c_reset(dev) < 0)
-		return -1;
 
-#if 0
-	if(usb_ov511_reg_write(dev, OV511_REG_I2C_CLOCK_PRESCALER,
-	                            OV511_I2C_CLOCK_PRESCALER))
-		return -1;
-#endif
-	
 	if (ov511_reset(dev, OV511_RESET_NOREGS) < 0)
 		return -1;
 	
+	if (ov511_i2c_write(dev, 0x12, 0x80) < 0) return -1;
+	schedule_timeout (1 + 150 * HZ / 1000);
+
 	/* Dummy read to sync I2C */
 	if(ov511_i2c_read(dev, 0x00) < 0)
 		return -1;
-	
-
+ 
 	if((ov511_i2c_read(dev, OV7610_REG_ID_HIGH) != 0x7F) ||
 	   (ov511_i2c_read(dev, OV7610_REG_ID_LOW) != 0xA2)) {
 		err("Failed to read OV7610 ID. You might not have an OV7610,");
@@ -1504,6 +1752,74 @@ static int ov7610_configure(struct usb_device *dev)
 static int ov511_configure(struct usb_ov511 *ov511)
 {
 	struct usb_device *dev = ov511->dev;
+	int rc;
+
+	static struct ov511_regvals aRegvalsInit[] =
+	{{OV511_REG_BUS,  OV511_REG_SYSTEM_RESET, 0x7f},
+	 {OV511_REG_BUS,  OV511_REG_SYSTEM_INIT, 0x01},
+	 {OV511_REG_BUS,  OV511_REG_SYSTEM_RESET, 0x7f},
+	 {OV511_REG_BUS,  OV511_REG_SYSTEM_INIT, 0x01},
+	 {OV511_REG_BUS,  OV511_REG_SYSTEM_RESET, 0x3f},
+	 {OV511_REG_BUS,  OV511_REG_SYSTEM_INIT, 0x01},
+	 {OV511_REG_BUS,  OV511_REG_SYSTEM_RESET, 0x3d},
+	 {OV511_DONE_BUS, 0x0, 0x00},
+	};
+	static struct ov511_regvals aRegvalsNorm[] =
+	{{OV511_REG_BUS, 0x20, 1},
+#if 1
+	 {OV511_REG_BUS, 0x52, 0x02},
+	 {OV511_REG_BUS, 0x52, 0x00},
+	 {OV511_REG_BUS, 0x31, 0x1f}, /* 0f */
+	 {OV511_REG_BUS, 0x70, 0x3f},
+	 {OV511_REG_BUS, 0x71, 0x3f},
+	 {OV511_REG_BUS, 0x72, 0x01},
+	 {OV511_REG_BUS, 0x73, 0x01},
+	 {OV511_REG_BUS, 0x74, 0x01},
+	 {OV511_REG_BUS, 0x75, 0x01},
+	 {OV511_REG_BUS, 0x76, 0x01},
+	 {OV511_REG_BUS, 0x77, 0x01},
+	 {OV511_REG_BUS, 0x78, 0x06},
+	 {OV511_REG_BUS, 0x79, 0x03},
+
+
+	 {OV511_I2C_BUS, 0x10, 0xff},
+	 {OV511_I2C_BUS, 0x16, 0x06},
+	 {OV511_I2C_BUS, 0x28, 0x24}, /* 24 */
+	 {OV511_I2C_BUS, 0x2b, 0xac},
+	 {OV511_I2C_BUS, 0x5, 0x00},
+	 {OV511_I2C_BUS, 0x6, 0x00},
+#if 0
+#endif
+	 {OV511_I2C_BUS, 0x12, 0x00},
+	 {OV511_I2C_BUS, 0x13, 0x00},
+	 {OV511_I2C_BUS, 0x38, 0x81},
+	 {OV511_I2C_BUS, 0x28, 0x24}, /* 0c */
+	 {OV511_I2C_BUS, 0x05, 0x00},
+	 {OV511_I2C_BUS, 0x0f, 0x05},
+	 {OV511_I2C_BUS, 0x15, 0x01},
+	 {OV511_I2C_BUS, 0x20, 0x1c},
+	 {OV511_I2C_BUS, 0x23, 0x2a},
+	 {OV511_I2C_BUS, 0x24, 0x10},
+	 {OV511_I2C_BUS, 0x25, 0x8a},
+	 {OV511_I2C_BUS, 0x26, 0x90},
+	 {OV511_I2C_BUS, 0x27, 0xc2},
+	 {OV511_I2C_BUS, 0x29, 0x03}, /* 91 */
+	 {OV511_I2C_BUS, 0x2a, 0x04},
+	 {OV511_I2C_BUS, 0x2c, 0xfe},
+	 {OV511_I2C_BUS, 0x2d, 0x93}, /* d7 */
+	 {OV511_I2C_BUS, 0x30, 0x71},
+	 {OV511_I2C_BUS, 0x31, 0x60},
+	 {OV511_I2C_BUS, 0x32, 0x26},
+	 {OV511_I2C_BUS, 0x33, 0x20},
+	 {OV511_I2C_BUS, 0x34, 0x48},
+	 {OV511_I2C_BUS, 0x12, 0x24},
+	 {OV511_I2C_BUS, 0x13, 0x01},
+	 {OV511_I2C_BUS, 0x11, 0x01},
+	 {OV511_I2C_BUS, 0x0c, 0x24},
+	 {OV511_I2C_BUS, 0x0d, 0x24},
+#endif
+	 {OV511_DONE_BUS, 0x0, 0x00},
+	};
 
 	/* Set altsetting 0 */
 	if (usb_set_interface(dev, ov511->iface, 0) < 0) {
@@ -1515,25 +1831,15 @@ static int ov511_configure(struct usb_ov511 *ov511)
 
 	init_waitqueue_head(&ov511->frame[0].wq);
 	init_waitqueue_head(&ov511->frame[1].wq);
+	init_waitqueue_head(&ov511->wq);
 
 	if (video_register_device(&ov511->vdev, VFL_TYPE_GRABBER) == -1) {
 		err("video_register_device failed");
 		return -EBUSY;
 	}
 
-	/* Reset in case driver was unloaded and reloaded without unplug */
-	if (ov511_reset(dev, OV511_RESET_ALL) < 0)
-		goto error;
-
-	/* Initialize system */
-	if (ov511_reg_write(dev, OV511_REG_SYSTEM_INIT, 0x01) < 0) {
-		err("enable system: command failed");
-		goto error;
-	}
-
-	/* This seems to be necessary */
-	if (ov511_reset(dev, OV511_RESET_ALL) < 0)
-		goto error;
+	if ((rc = ov511_write_regvals(dev, aRegvalsInit)))
+		return rc;
 
 	if(ov7610_configure(dev) < 0) {
 		err("failed to configure OV7610");
@@ -1558,7 +1864,10 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	ov511->frame[1].bytes_read = 0;
 
 	/* Initialize to DEFAULT_WIDTH, DEFAULT_HEIGHT, YUV4:2:0 */
-	ov511_mode_init_regs(ov511, DEFAULT_WIDTH, DEFAULT_HEIGHT, 0);
+	if ((rc = ov511_write_regvals(dev, aRegvalsNorm))) return rc;
+	if ((rc = ov511_mode_init_regs(ov511, DEFAULT_WIDTH, DEFAULT_HEIGHT,
+				       VIDEO_PALETTE_RGB24, 0)) < 0) return rc;
+
 
 	return 0;
 	
@@ -1624,6 +1933,9 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	case 3:
 		printk("ov511: Camera is a D-Link DSB-C300\n");
 		break;
+	case 5:
+		printk("ov511: Camera is a Puretek PT-6007\n");
+		break;
 	case 21:
 		printk("ov511: Camera is a Creative Labs WebCam 3\n");
 		break;
@@ -1661,13 +1973,49 @@ static void ov511_disconnect(struct usb_device *dev, void *ptr)
 
 	struct usb_ov511 *ov511 = (struct usb_ov511 *) ptr;
 
-	video_unregister_device(&ov511->vdev);
+//	video_unregister_device(&ov511->vdev);
+
+	/* We don't want people trying to open up the device */
+	if (!ov511->user)
+		video_unregister_device(&ov511->vdev);
 
 	usb_driver_release_interface(&ov511_driver,
 		&ov511->dev->actconfig->interface[ov511->iface]);
 
+	ov511->dev = NULL;
+	ov511->frame[0].grabstate = FRAME_ERROR;
+	ov511->frame[1].grabstate = FRAME_ERROR;
+	ov511->curframe = -1;
+
+	/* This will cause the process to request another frame */
+	if (waitqueue_active(&ov511->frame[0].wq))
+		wake_up_interruptible(&ov511->frame[0].wq);
+	if (waitqueue_active(&ov511->frame[1].wq))
+		wake_up_interruptible(&ov511->frame[1].wq);
+	if (waitqueue_active(&ov511->wq))
+		wake_up_interruptible(&ov511->wq);
+
+	ov511->streaming = 0;
+
+	/* Unschedule all of the iso td's */
+	if (ov511->sbuf[1].urb) {
+		ov511->sbuf[1].urb->next = NULL;
+		usb_unlink_urb(ov511->sbuf[1].urb);
+		usb_free_urb(ov511->sbuf[1].urb);
+		ov511->sbuf[1].urb = NULL;
+	}
+	if (ov511->sbuf[0].urb) {
+		ov511->sbuf[0].urb->next = NULL;
+		usb_unlink_urb(ov511->sbuf[0].urb);
+		usb_free_urb(ov511->sbuf[0].urb);
+		ov511->sbuf[0].urb = NULL;
+	}	
+
 	/* Free the memory */
-	kfree(ov511); ov511 = NULL;
+	if (!ov511->user) {
+		kfree(ov511);
+		ov511 = NULL;
+	}
 }
 
 static struct usb_driver ov511_driver = {

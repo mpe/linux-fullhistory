@@ -3217,17 +3217,12 @@ __setup("st=", st_setup);
 
 static struct file_operations st_fops =
 {
-	NULL,			/* lseek - default */
-	st_read,		/* read - general block-dev read */
-	st_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	st_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	scsi_tape_open,		/* open */
-	scsi_tape_flush,	/* flush */
-	scsi_tape_close,	/* release */
-	NULL			/* fsync */
+	read:		st_read,
+	write:		st_write,
+	ioctl:		st_ioctl,
+	open:		scsi_tape_open,
+	flush:		scsi_tape_flush,
+	release:	scsi_tape_close,
 };
 
 static int st_attach(Scsi_Device * SDp)

@@ -934,19 +934,13 @@ static void sg_debug(const Sg_device * sdp, const Sg_fd * sfp, int part_of)
 }
 
 static struct file_operations sg_fops = {
-    NULL,            /* lseek */
-    sg_read,         /* read */
-    sg_write,        /* write */
-    NULL,            /* readdir */
-    sg_poll,         /* poll */
-    sg_ioctl,        /* ioctl */
-    NULL,            /* mmap */
-    sg_open,         /* open */
-    NULL,            /* flush */
-    sg_release,      /* release, was formerly sg_close */
-    NULL,            /* fsync */
-    sg_fasync,       /* fasync */
-    NULL,            /* lock */
+	 read:		sg_read,
+	 write:		sg_write,
+	 poll:		sg_poll,
+	 ioctl:		sg_ioctl,
+	 open:		sg_open,
+	 release:	sg_release,
+	 fasync:	sg_fasync,
 };
 
 

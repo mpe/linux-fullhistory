@@ -178,18 +178,8 @@ int ufs_check_dir_entry (const char * function,	struct inode * dir,
 }
 
 static struct file_operations ufs_dir_operations = {
-	NULL,			/* lseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	ufs_readdir,		/* readdir */
-	NULL,			/* select */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	file_fsync,		/* fsync */
-	NULL,			/* fasync */
+	readdir:	ufs_readdir,
+	fsync:		file_fsync,
 };
 
 struct inode_operations ufs_dir_inode_operations = {

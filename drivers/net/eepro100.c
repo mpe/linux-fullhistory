@@ -1294,7 +1294,7 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		{
 			struct descriptor *last_cmd = sp->last_cmd;
 			sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
-			clear_suspend(last_cmd);
+			last_cmd->cmd_status &= cpu_to_le32(~(CmdSuspend | CmdIntr));
 		}
 		if (sp->cur_tx - sp->dirty_tx >= TX_QUEUE_LIMIT)
 			sp->tx_full = 1;

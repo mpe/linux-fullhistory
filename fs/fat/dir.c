@@ -41,17 +41,10 @@ static ssize_t fat_dir_read(struct file * filp, char * buf,
 }
 
 struct file_operations fat_dir_operations = {
-	NULL,			/* lseek - default */
-	fat_dir_read,		/* read */
-	NULL,			/* write - bad */
-	fat_readdir,		/* readdir */
-	NULL,			/* select v2.0.x/poll v2.1.x - default */
-	fat_dir_ioctl,		/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	file_fsync		/* fsync */
+	read:		fat_dir_read,
+	readdir:	fat_readdir,
+	ioctl:		fat_dir_ioctl,
+	fsync:		file_fsync,
 };
 
 /*

@@ -100,6 +100,7 @@ int udf_sync_file(struct file * file, struct dentry *dentry)
 	int wait, err = 0;
 	struct inode *inode = dentry->d_inode;
 
+	lock_kernel();
 	if (S_ISLNK(inode->i_mode) && !(inode->i_blocks)) 
 	{
 		/*
@@ -116,10 +117,16 @@ int udf_sync_file(struct file * file, struct dentry *dentry)
 	}
 skip:
 	err |= udf_sync_inode (inode);
+	unlock_kernel();
 	return err ? -EIO : 0;
 }
 
 int udf_sync_file_adinicb(struct file * file, struct dentry *dentry)
 {
-	return udf_sync_inode(dentry->d_inode) ? -EIO : 0;
+	int ret;
+
+	lock_kernel();
+	ret = udf_sync_inode(dentry->d_inode) ? -EIO : 0;
+	unlock_kernel();
+	return ret;
 }

@@ -925,19 +925,10 @@ static int solo1_ioctl_mixdev(struct inode *inode, struct file *file, unsigned i
 }
 
 static /*const*/ struct file_operations solo1_mixer_fops = {
-	&solo1_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&solo1_ioctl_mixdev,
-	NULL,  /* mmap */
-	&solo1_open_mixdev,
-	NULL,  /* flush */
-	&solo1_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		solo1_llseek,
+	ioctl:		solo1_ioctl_mixdev,
+	open:		solo1_open_mixdev,
+	release:	solo1_release_mixdev,
 };
 
 /* --------------------------------------------------------------------- */
@@ -1583,19 +1574,14 @@ static int solo1_open(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations solo1_audio_fops = {
-	&solo1_llseek,
-	&solo1_read,
-	&solo1_write,
-	NULL,  /* readdir */
-	&solo1_poll,
-	&solo1_ioctl,
-	&solo1_mmap,
-	&solo1_open,
-	NULL,  /* flush */
-	&solo1_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		solo1_llseek,
+	read:		solo1_read,
+	write:		solo1_write,
+	poll:		solo1_poll,
+	ioctl:		solo1_ioctl,
+	mmap:		solo1_mmap,
+	open:		solo1_open,
+	release:	solo1_release,
 };
 
 /* --------------------------------------------------------------------- */
@@ -1929,19 +1915,12 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations solo1_midi_fops = {
-	&solo1_llseek,
-	&solo1_midi_read,
-	&solo1_midi_write,
-	NULL,  /* readdir */
-	&solo1_midi_poll,
-	NULL,  /* ioctl */
-	NULL,  /* mmap */
-	&solo1_midi_open,
-	NULL,  /* flush */
-	&solo1_midi_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		solo1_llseek,
+	read:		solo1_midi_read,
+	write:		solo1_midi_write,
+	poll:		solo1_midi_poll,
+	open:		solo1_midi_open,
+	release:	solo1_midi_release,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2117,19 +2096,10 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations solo1_dmfm_fops = {
-	&solo1_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&solo1_dmfm_ioctl,
-	NULL,  /* mmap */
-	&solo1_dmfm_open,
-	NULL,  /* flush */
-	&solo1_dmfm_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		solo1_llseek,
+	ioctl:		solo1_dmfm_ioctl,
+	open:		solo1_dmfm_open,
+	release:	solo1_dmfm_release,
 };
 
 /* --------------------------------------------------------------------- */

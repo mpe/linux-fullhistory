@@ -277,17 +277,11 @@ out:
 
 static struct file_operations ncp_file_operations =
 {
-	NULL,			/* lseek - default */
-	ncp_file_read,		/* read */
-	ncp_file_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	ncp_ioctl,		/* ioctl */
-	ncp_mmap,		/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	ncp_fsync,		/* fsync */
+	read:		ncp_file_read,
+	write:		ncp_file_write,
+	ioctl:		ncp_ioctl,
+	mmap:		ncp_mmap,
+	fsync:		ncp_fsync,
 };
 
 struct inode_operations ncp_file_inode_operations =

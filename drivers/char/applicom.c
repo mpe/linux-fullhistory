@@ -98,17 +98,12 @@ static int ac_release(struct inode *inode, struct file *file);
 static void ac_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 
 struct file_operations ac_fops={
-	ac_llseek,      /* llseek */
-	ac_read,        /* read */
-	ac_write,       /* write */
-	NULL,           /* readdir */
-	NULL,           /* poll */
-       	ac_ioctl,       /* ioctl */
-       	NULL,           /* mmap */
-	ac_open,        /* open */
-	NULL,           /* flush */
-	ac_release,     /* release */
-	NULL            /* fsync */
+	llseek:		ac_llseek,
+	read:		ac_read,
+	write:		ac_write,
+	ioctl:		ac_ioctl,
+	open:		ac_open,
+	release:	ac_release,
 };
 
 struct miscdevice ac_miscdev={

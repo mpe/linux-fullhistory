@@ -205,8 +205,7 @@ static ssize_t pid_maps_read(struct file * file, char * buf,
 }
 
 static struct file_operations proc_maps_operations = {
-	NULL,		/* array_lseek */
-	pid_maps_read,
+	read:		pid_maps_read,
 };
 
 struct inode_operations proc_maps_inode_operations = {
@@ -257,8 +256,7 @@ static ssize_t proc_info_read(struct file * file, char * buf,
 }
 
 static struct file_operations proc_info_file_operations = {
-    NULL,			/* lseek   */
-    proc_info_read,		/* read	   */
+	read:		proc_info_read,
 };
 
 static struct inode_operations proc_info_inode_operations = {
@@ -347,9 +345,8 @@ static ssize_t mem_write(struct file * file, const char * buf,
 }
 
 static struct file_operations proc_mem_operations = {
-	NULL,		/* lseek - default */
-	mem_read,
-	mem_write,
+	read:		mem_read,
+	write:		mem_write,
 };
 
 static struct inode_operations proc_mem_inode_operations = {
@@ -760,10 +757,8 @@ out:
 }
 
 static struct file_operations proc_fd_operations = {
-	NULL,			/* lseek - default */
-	proc_dir_read,		/* read - bad */
-	NULL,			/* write - bad */
-	proc_readfd,		/* readdir */
+	read: proc_dir_read,		/* read - bad */
+	readdir: proc_readfd,		/* readdir */
 };
 
 /*
@@ -881,10 +876,8 @@ out:
 }
 
 static struct file_operations proc_base_operations = {
-	NULL,			/* lseek - default */
-	proc_dir_read,		/* read - bad */
-	NULL,			/* write - bad */
-	proc_base_readdir,	/* readdir */
+	read: proc_dir_read,		/* read - bad */
+	readdir: proc_base_readdir,	/* readdir */
 };
 
 static struct inode_operations proc_base_inode_operations = {

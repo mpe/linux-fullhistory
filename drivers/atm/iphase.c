@@ -64,7 +64,6 @@
 #include <asm/byteorder.h>  
 #include <math.h>  
 #include <linux/vmalloc.h>  
-#include <linux/time.h>
 #include "iphase.h"		  
 #include "suni.h"		  
 #define swap(x) (((x & 0xff) << 8) | ((x & 0xff00) >> 8))  

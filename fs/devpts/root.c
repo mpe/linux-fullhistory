@@ -21,10 +21,7 @@ static struct dentry *devpts_root_lookup(struct inode *,struct dentry *);
 static int devpts_revalidate(struct dentry *, int);
 
 static struct file_operations devpts_root_operations = {
-	NULL,                   /* llseek */
-	NULL,                   /* read */
-	NULL,                   /* write */
-	devpts_root_readdir,    /* readdir */
+	readdir:	devpts_root_readdir,
 };
 
 struct inode_operations devpts_root_inode_operations = {

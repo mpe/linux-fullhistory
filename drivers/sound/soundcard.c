@@ -778,16 +778,14 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 
 struct file_operations oss_sound_fops =
 {
-	sound_lseek,
-	sound_read,
-	sound_write,
-	NULL,			/* sound_readdir */
-	sound_poll,
-	sound_ioctl,
-	sound_mmap,
-	sound_open,
-	NULL,			/* flush */
-	sound_release
+	llseek:		sound_lseek,
+	read:		sound_read,
+	write:		sound_write,
+	poll:		sound_poll,
+	ioctl:		sound_ioctl,
+	mmap:		sound_mmap,
+	open:		sound_open,
+	release:	sound_release,
 };
 
 /*

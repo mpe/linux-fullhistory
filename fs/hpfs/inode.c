@@ -10,19 +10,12 @@
 
 static const struct file_operations hpfs_file_ops =
 {
-	NULL,				/* lseek - default */
-	generic_file_read,		/* read */
-	hpfs_file_write,		/* write */
-	NULL,				/* readdir - bad */
-	NULL,				/* poll - default */
-	NULL,				/* ioctl - default */
-	generic_file_mmap,		/* mmap */
-	hpfs_open,			/* open */
-	NULL,				/* flush */
-	hpfs_file_release,		/* release */
-	hpfs_file_fsync,		/* fsync */
-	NULL,				/* fasync */
-	NULL,				/* lock */
+	read:		generic_file_read,
+	write:		hpfs_file_write,
+	mmap:		generic_file_mmap,
+	open:		hpfs_open,
+	release:	hpfs_file_release,
+	fsync:		hpfs_file_fsync,
 };
 
 static const struct inode_operations hpfs_file_iops =
@@ -49,19 +42,12 @@ static const struct inode_operations hpfs_file_iops =
 
 static const struct file_operations hpfs_dir_ops =
 {
-	hpfs_dir_lseek,			/* lseek */
-	hpfs_dir_read,			/* read */
-	NULL,				/* write - bad */
-	hpfs_readdir,			/* readdir */
-	NULL,				/* poll - default */
-	NULL,				/* ioctl - default */
-	NULL,				/* mmap */
-	hpfs_open,			/* open */
-	NULL,				/* flush */
-	hpfs_dir_release,		/* no special release code */
-	hpfs_file_fsync,		/* fsync */
-	NULL,				/* fasync */
-	NULL,				/* lock */
+	llseek:		hpfs_dir_lseek,
+	read:		hpfs_dir_read,
+	readdir:	hpfs_readdir,
+	open:		hpfs_open,
+	release:	hpfs_dir_release,
+	fsync:		hpfs_file_fsync,
 };
 
 static const struct inode_operations hpfs_dir_iops =

@@ -570,16 +570,13 @@ static unsigned int pp_poll (struct file * file, poll_table * wait)
 }
 
 static struct file_operations pp_fops = {
-	pp_lseek,
-	pp_read,
-	pp_write,
-	NULL,	/* pp_readdir */
-	pp_poll,
-	pp_ioctl,
-	NULL,	/* pp_mmap */
-	pp_open,
-	NULL,   /* pp_flush */
-	pp_release
+	llseek:		pp_lseek,
+	read:		pp_read,
+	write:		pp_write,
+	poll:		pp_poll,
+	ioctl:		pp_ioctl,
+	open:		pp_open,
+	release:	pp_release,
 };
 
 static int __init ppdev_init (void)

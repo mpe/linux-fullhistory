@@ -531,20 +531,9 @@ static struct real_driver sx_real_driver = {
  */
 
 static struct file_operations sx_fw_fops = {
-	NULL,	/*	lseek	*/
-	NULL,	/*	read	*/
-	NULL,	/*	write	*/
-	NULL,	/*	readdir	*/
-	NULL,	/*	select	*/
-	sx_fw_ioctl,
-	NULL,	/*	mmap	*/
-	sx_fw_open,
-#ifndef TWO_ZERO
-	NULL,	/*	flush	*/
-#endif
-	sx_fw_release,
-	NULL,	/*	fsync	*/
-	NULL,	/*	fasync	*/
+	ioctl:		sx_fw_ioctl,
+	open:		sx_fw_open,
+	release:	sx_fw_release,
 };
 
 struct miscdevice sx_fw_device = {

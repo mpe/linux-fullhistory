@@ -400,21 +400,21 @@ static int usbdevfs_bus_readdir(struct file *filp, void *dirent, filldir_t filld
 }
 
 static struct file_operations usbdevfs_root_file_operations = {
-	readdir: usbdevfs_root_readdir
+	readdir: usbdevfs_root_readdir,
 };
 
 static struct inode_operations usbdevfs_root_inode_operations = {
 	default_file_ops: &usbdevfs_root_file_operations,
-	lookup: usbdevfs_root_lookup
+	lookup: usbdevfs_root_lookup,
 };
 
 static struct file_operations usbdevfs_bus_file_operations = {
-	readdir: usbdevfs_bus_readdir
+	readdir: usbdevfs_bus_readdir,
 };
 
 static struct inode_operations usbdevfs_bus_inode_operations = {
 	default_file_ops: &usbdevfs_bus_file_operations,
-	lookup: usbdevfs_bus_lookup
+	lookup: usbdevfs_bus_lookup,
 };
 
 static void usbdevfs_read_inode(struct inode *inode)

@@ -320,16 +320,12 @@ static int wdt_notify_sys(struct notifier_block *this, unsigned long code,
  
  
 static struct file_operations wdt_fops = {
-	wdt_llseek,
-	wdt_read,
-	wdt_write,
-	NULL,		/* No Readdir */
-	NULL,		/* No Select */
-	wdt_ioctl,
-	NULL,		/* No mmap */
-	wdt_open,
-	NULL,		/* flush */
-	wdt_release
+	llseek:		wdt_llseek,
+	read:		wdt_read,
+	write:		wdt_write,
+	ioctl:		wdt_ioctl,
+	open:		wdt_open,
+	release:	wdt_release,
 };
 
 static struct miscdevice wdt_miscdev=

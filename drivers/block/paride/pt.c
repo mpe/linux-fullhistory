@@ -262,18 +262,11 @@ static char pt_scratch[512];            /* scratch block buffer */
 /* kernel glue structures */
 
 static struct file_operations pt_fops = {
-        NULL,                   /* lseek - default */
-        pt_read,                /* read */
-        pt_write,               /* write */
-        NULL,                   /* readdir - bad */
-        NULL,                   /* select */
-        pt_ioctl,               /* ioctl */
-        NULL,                   /* mmap */
-        pt_open,                /* open */
-	NULL,			/* flush */
-        pt_release,             /* release */
-        NULL,                   /* fsync */
-        NULL,                   /* fasync */
+	read:		pt_read,
+	write:		pt_write,
+	ioctl:		pt_ioctl,
+	open:		pt_open,
+	release:	pt_release,
 };
 
 void pt_init_units( void )

@@ -608,16 +608,10 @@ static int openprom_release(struct inode * inode, struct file * file)
 }
 
 static struct file_operations openprom_fops = {
-	openprom_lseek,
-	NULL,			/* openprom_read */
-	NULL,			/* openprom_write */
-	NULL,			/* openprom_readdir */
-	NULL,			/* openprom_poll */
-	openprom_ioctl,
-	NULL,			/* openprom_mmap */
-	openprom_open,
-	NULL,			/* flush */
-	openprom_release
+	llseek:		openprom_lseek,
+	ioctl:		openprom_ioctl,
+	open:		openprom_open,
+	release:	openprom_release,
 };
 
 static struct miscdevice openprom_dev = {

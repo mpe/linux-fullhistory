@@ -43,10 +43,7 @@ static struct dentry *autofs_dir_lookup(struct inode *dir,struct dentry *dentry)
 }
 
 static struct file_operations autofs_dir_operations = {
-	NULL,			/* llseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	autofs_dir_readdir,	/* readdir */
+	readdir:	autofs_dir_readdir,
 };
 
 struct inode_operations autofs_dir_inode_operations = {

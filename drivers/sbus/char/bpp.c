@@ -834,19 +834,11 @@ static int bpp_ioctl(struct inode *inode, struct file *f, unsigned int cmd,
 }
 
 static struct file_operations bpp_fops = {
-	NULL,		/* bpp_lseek */
-	bpp_read,
-	bpp_write,
-	NULL,		/* bpp_readdir */
-	NULL,		/* bpp_select */
-	bpp_ioctl,
-	NULL,		/* bpp_mmap */
-	bpp_open,
-	NULL,		/* flush */
-	bpp_release,
-  NULL,   /* fsync */
-  NULL,   /* fasync */
-  NULL,   /* lock */
+	read:		bpp_read,
+	write:		bpp_write,
+	ioctl:		bpp_ioctl,
+	open:		bpp_open,
+	release:	bpp_release,
 };
 
 #if defined(__i386__)

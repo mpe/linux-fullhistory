@@ -405,23 +405,10 @@ static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *d)
 }
 
 static struct file_operations ntfs_file_operations_nommap = {
-	NULL, /* lseek */
-	ntfs_read,
+	read:		ntfs_read,
 #ifdef CONFIG_NTFS_RW
-	ntfs_write,
-#else
-	NULL,
+	write:		ntfs_write,
 #endif
-	NULL, /* readdir */
-	NULL, /* select */
-	NULL, /* ioctl */
-	NULL, /* mmap */
-	NULL, /* open */
-	NULL, /* flush */
-	NULL, /* release */
-	NULL, /* fsync */
-	NULL, /* fasync */
-	NULL, /* lock */
 };
 
 static struct inode_operations ntfs_inode_operations_nobmap = {
@@ -584,23 +571,11 @@ ntfs_bmap(struct inode *ino,int block)
 }
 
 static struct file_operations ntfs_file_operations = {
-	NULL, /* lseek */
-	ntfs_read,
+	read:		ntfs_read,
+	mmap:		generic_file_mmap,
 #ifdef CONFIG_NTFS_RW
-	ntfs_write,
-#else
-	NULL,
+	write:		ntfs_write,
 #endif
-	NULL, /* readdir */
-	NULL, /* select */
-	NULL, /* ioctl */
-	generic_file_mmap,
-	NULL, /* open */
-	NULL, /* flush */
-	NULL, /* release */
-	NULL, /* fsync */
-	NULL, /* fasync */
-	NULL, /* lock */
 };
 
 static struct inode_operations ntfs_inode_operations = {
@@ -625,10 +600,7 @@ static struct inode_operations ntfs_inode_operations = {
 };
 
 static struct file_operations ntfs_dir_operations = {
-	NULL, /* lseek */
-	NULL, /* read */
-	NULL, /* write */
-	ntfs_readdir, /* readdir */
+	readdir:	ntfs_readdir,
 };
 
 static struct inode_operations ntfs_dir_inode_operations = {

@@ -367,19 +367,13 @@ printk("smb_file_permission: mode=%x, mask=%x\n", mode, mask);
 
 static struct file_operations smb_file_operations =
 {
-	NULL,			/* lseek - default */
-	smb_file_read,		/* read */
-	smb_file_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	smb_ioctl,		/* ioctl */
-	smb_file_mmap,		/* mmap(struct file*, struct vm_area_struct*) */
-	smb_file_open,		/* open(struct inode*, struct file*) */
-	NULL,			/* flush */
-	smb_file_release,	/* release(struct inode*, struct file*) */
-	smb_fsync,		/* fsync(struct file*, struct dentry*) */
-	NULL,			/* fasync(struct file*, int) */
-	NULL			/* lock(struct file*, int, struct file_lock*) */
+	read:		smb_file_read,
+	write:		smb_file_write,
+	ioctl:		smb_ioctl,
+	mmap:		smb_file_mmap,
+	open:		smb_file_open,
+	release:	smb_file_release,
+	fsync:		smb_fsync,
 };
 
 struct inode_operations smb_file_inode_operations =

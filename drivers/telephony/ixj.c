@@ -3922,20 +3922,12 @@ static int ixj_fasync(int fd, struct file *file_p, int mode)
 
 struct file_operations ixj_fops =
 {
-	NULL,			/* ixj_lseek */
-	ixj_enhanced_read,
-	ixj_enhanced_write,
-	NULL,			/* ixj_readdir */
-	ixj_poll,
-	ixj_ioctl,
-	NULL,			/* ixj_mmap */
-//  ixj_open,
-	NULL,			/* ixj_open */
-	NULL,			/* ixj_flush */
-	ixj_release,
-	NULL,			/* ixj_fsync */
-	ixj_fasync,		/* ixj_fasync */
-	NULL			/* lock */
+	read:		ixj_enhanced_read,
+	write:		ixj_enhanced_write,
+	poll:		ixj_poll,
+	ioctl:		ixj_ioctl,
+	release:	ixj_release,
+	fasync:		ixj_fasync,
 };
 
 static int ixj_linetest(int board)

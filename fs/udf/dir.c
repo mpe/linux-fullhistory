@@ -50,19 +50,9 @@ static int do_udf_readdir(struct inode *, struct file *, filldir_t, void *);
 /* readdir and lookup functions */
 
 static struct file_operations udf_dir_operations = {
-	NULL,			/* lllseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	udf_readdir,	/* readdir */
-	NULL,			/* poll */
-	udf_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	udf_sync_file,	/* fsync */
-	NULL,			/* fasync */
-	NULL			/* lock */
+	readdir:	udf_readdir,
+	ioctl:		udf_ioctl,
+	fsync:		udf_sync_file,
 };
 
 struct inode_operations udf_dir_inode_operations = {

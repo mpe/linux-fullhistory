@@ -86,17 +86,10 @@ struct inode_operations coda_dir_inode_operations =
 };
 
 struct file_operations coda_dir_operations = {
-        NULL,                   /* lseek */
-        NULL,                   /* read -- bad  */
-        NULL,                   /* write */
-        coda_readdir,           /* readdir */
-        NULL,                   /* select */
-        NULL,                   /* ioctl */
-        NULL,                   /* mmap */
-        coda_open,              /* open */
-	NULL,
-        coda_release,           /* release */
-	coda_fsync,             /* fsync */
+	readdir:	coda_readdir,
+	open:		coda_open,
+	release:	coda_release,
+	fsync:		coda_fsync,
 };
 
 

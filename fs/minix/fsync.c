@@ -148,10 +148,7 @@ static int V1_minix_sync_file(struct inode * inode, struct file * file)
 {
 	int wait, err = 0;
 	
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
-	     S_ISLNK(inode->i_mode)))
-		return -EINVAL;
-
+	lock_kernel();
 	for (wait=0; wait<=1; wait++)
 	{
 		err |= V1_sync_direct(inode, wait);
@@ -159,6 +156,7 @@ static int V1_minix_sync_file(struct inode * inode, struct file * file)
 		err |= V1_sync_dindirect(inode, inode->u.minix_i.u.i1_data + 8, wait);
 	}
 	err |= minix_sync_inode (inode);
+	unlock_kernel();
 	return (err < 0) ? -EIO : 0;
 }
 
@@ -309,10 +307,7 @@ static int V2_minix_sync_file(struct inode * inode, struct file * file)
 {
 	int wait, err = 0;
 	
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
-	     S_ISLNK(inode->i_mode)))
-		return -EINVAL;
-
+	lock_kernel();
 	for (wait=0; wait<=1; wait++)
 	{
 		err |= V2_sync_direct(inode, wait);
@@ -324,6 +319,7 @@ static int V2_minix_sync_file(struct inode * inode, struct file * file)
 		      (unsigned long *) inode->u.minix_i.u.i2_data + 9, wait);
 	}
 	err |= minix_sync_inode (inode);
+	unlock_kernel();
 	return (err < 0) ? -EIO : 0;
 }
 
@@ -336,6 +332,10 @@ int minix_sync_file(struct file * file, struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
 	
+	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+	     S_ISLNK(inode->i_mode)))
+		return -EINVAL;
+
 	if (INODE_VERSION(inode) == MINIX_V1)
 		return V1_minix_sync_file(inode, file);
 	else

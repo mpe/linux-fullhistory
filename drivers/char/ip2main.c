@@ -185,16 +185,11 @@ static struct termios    * TermiosLocked[IP2_MAX_PORTS];
 /* This is the driver descriptor for the ip2ipl device, which is used to
  * download the loadware to the boards.
  */
-static struct file_operations
-ip2_ipl = {
-	NULL,
-	ip2_ipl_read,
-	ip2_ipl_write,
-	NULL,
-	NULL,
-	ip2_ipl_ioctl,
-	NULL,
-	ip2_ipl_open,
+static struct file_operations ip2_ipl = {
+	read:		ip2_ipl_read,
+	write:		ip2_ipl_write,
+	ioctl:		ip2_ipl_ioctl,
+	open:		ip2_ipl_open,
 }; 
 
 static long irq_counter = 0;

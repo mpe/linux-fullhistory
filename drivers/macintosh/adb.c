@@ -635,16 +635,11 @@ out:
 }
 
 static struct file_operations adb_fops = {
-	adb_lseek,
-	adb_read,
-	adb_write,
-	NULL,		/* no readdir */
-	NULL,		/* no poll yet */
-	NULL,		/* no ioctl yet */
-	NULL,		/* no mmap */
-	adb_open,
-	NULL,		/* flush */
-	adb_release
+	llseek:		adb_lseek,
+	read:		adb_read,
+	write:		adb_write,
+	open:		adb_open,
+	release:	adb_release,
 };
 
 void adbdev_init()

@@ -287,18 +287,10 @@ graphics_ops_post_init (int slot)
 #endif
 
 struct file_operations sgi_graphics_fops = {
-	NULL,			/* llseek */
-	NULL,			/* read */
-	NULL,			/* write */
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	sgi_graphics_ioctl,	/* ioctl */
-	sgi_graphics_mmap,	/* mmap */
-	sgi_graphics_open,	/* open */
-	NULL,			/* flush */
-	sgi_graphics_close,	/* release */
-	NULL,			/* fsync */
-	NULL			/* lock */
+	ioctl:		sgi_graphics_ioctl,
+	mmap:		sgi_graphics_mmap,
+	open:		sgi_graphics_open,
+	release:	sgi_graphics_close,
 };
 
 /* /dev/graphics */

@@ -166,16 +166,13 @@ static int netlink_ioctl(struct inode *inode, struct file *file,
 
 
 static struct file_operations netlink_fops = {
-	netlink_lseek,
-	netlink_read,
-	netlink_write,
-	NULL,		/* netlink_readdir */
-	netlink_poll,
-	netlink_ioctl,
-	NULL,		/* netlink_mmap */
-	netlink_open,
-	NULL,		/* flush */
-	netlink_release
+	llseek:		netlink_lseek,
+	read:		netlink_read,
+	write:		netlink_write,
+	poll:		netlink_poll,
+	ioctl:		netlink_ioctl,
+	open:		netlink_open,
+	release:	netlink_release,
 };
 
 int __init init_netlink(void)

@@ -539,16 +539,12 @@ static int ppp_ioctl(struct inode *inode, struct file *file,
 }
 
 static struct file_operations ppp_device_fops = {
-	NULL,		/* seek */
-	ppp_read,
-	ppp_write,
-	NULL,		/* readdir */
-	ppp_poll,
-	ppp_ioctl,
-	NULL,		/* mmap */
-	ppp_open,
-	NULL,		/* flush */
-	ppp_release
+	read:		ppp_read,
+	write:		ppp_write,
+	poll:		ppp_poll,
+	ioctl:		ppp_ioctl,
+	open:		ppp_open,
+	release:	ppp_release
 };
 
 #define PPP_MAJOR	108

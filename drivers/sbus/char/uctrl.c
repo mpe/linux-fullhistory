@@ -238,16 +238,10 @@ void uctrl_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static struct file_operations uctrl_fops = {
-	uctrl_llseek,
-	NULL,           /* read */
-	NULL,           /* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */	
-	uctrl_ioctl,
-	NULL,		/* mmap */
-	uctrl_open,
-	NULL,		/* flush */
-	uctrl_release
+	llseek:		uctrl_llseek,
+	ioctl:		uctrl_ioctl,
+	open:		uctrl_open,
+	release:	uctrl_release,
 };
 
 static struct miscdevice uctrl_dev = {

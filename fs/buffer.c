@@ -323,7 +323,9 @@ int file_fsync(struct file *filp, struct dentry *dentry)
 	struct inode * inode = dentry->d_inode;
 	struct super_block * sb;
 	kdev_t dev;
+	int ret;
 
+	lock_kernel();
 	/* sync the inode to buffers */
 	write_inode_now(inode);
 
@@ -335,7 +337,9 @@ int file_fsync(struct file *filp, struct dentry *dentry)
 
 	/* .. finally sync the buffers to disk */
 	dev = inode->i_dev;
-	return sync_buffers(dev, 1);
+	ret = sync_buffers(dev, 1);
+	unlock_kernel();
+	return ret;
 }
 
 asmlinkage long sys_fsync(unsigned int fd)
@@ -345,7 +349,6 @@ asmlinkage long sys_fsync(unsigned int fd)
 	struct inode * inode;
 	int err;
 
-	lock_kernel();
 	err = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -371,7 +374,6 @@ asmlinkage long sys_fsync(unsigned int fd)
 out_putf:
 	fput(file);
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -382,7 +384,6 @@ asmlinkage long sys_fdatasync(unsigned int fd)
 	struct inode * inode;
 	int err;
 
-	lock_kernel();
 	err = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -408,7 +409,6 @@ asmlinkage long sys_fdatasync(unsigned int fd)
 out_putf:
 	fput(file);
 out:
-	unlock_kernel();
 	return err;
 }
 

@@ -57,18 +57,9 @@ const struct hfs_name hfs_dbl_reserved2[] = {
 #define PCNT_ROOTINFO	(&hfs_dbl_reserved2[1])
 
 static struct file_operations hfs_dbl_dir_operations = {
-	NULL,			/* lseek - default */
-	hfs_dir_read,		/* read - invalid */
-	NULL,			/* write - bad */
-	dbl_readdir,		/* readdir */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap - none */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	file_fsync,		/* fsync - default */
-        NULL,			/* fasync - default */
+	read:		hfs_dir_read,
+	readdir:	dbl_readdir,
+	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_dbl_dir_inode_operations = {

@@ -44,19 +44,10 @@ static ssize_t affs_file_write_ofs(struct file *filp, const char *buf, size_t cn
 static int alloc_ext_cache(struct inode *inode);
 
 static struct file_operations affs_file_operations = {
-	NULL,			/* lseek - default */
-	generic_file_read,	/* read */
-	affs_file_write,	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* no special open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	file_fsync,		/* brute force, but works */
-	NULL,			/* fasync */
-	NULL			/* lock */
+	read:		generic_file_read,
+	write:		affs_file_write,
+	mmap:		generic_file_mmap,
+	fsync:		file_fsync,
 };
 
 struct inode_operations affs_file_inode_operations = {
@@ -81,19 +72,9 @@ struct inode_operations affs_file_inode_operations = {
 };
 
 static struct file_operations affs_file_operations_ofs = {
-	NULL,			/* lseek - default */
-	affs_file_read_ofs,	/* read */
-	affs_file_write_ofs,	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	file_fsync,		/* brute force, but works */
-	NULL,			/* fasync */
-	NULL			/* lock */
+	read:		affs_file_read_ofs,
+	write:		affs_file_write_ofs,
+	fsync:		file_fsync,
 };
 
 struct inode_operations affs_file_inode_operations_ofs = {

@@ -641,7 +641,6 @@ static int dabusb_ioctl (struct inode *inode, struct file *file, unsigned int cm
 	pbulk_transfer_t pbulk;
 	int ret = 0;
 	int version = DABUSB_VERSION;
-	DECLARE_WAITQUEUE (wait, current);
 
 	dbg("dabusb_ioctl");
 
@@ -694,23 +693,11 @@ static int dabusb_ioctl (struct inode *inode, struct file *file, unsigned int cm
 
 static struct file_operations dabusb_fops =
 {
-	dabusb_llseek,
-	dabusb_read,
-	NULL,			/* write */
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	dabusb_ioctl,
-	NULL,			/* mmap */
-	dabusb_open,
-	NULL,			/* flush */
-	dabusb_release,
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,38)
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
-#endif
-	NULL			/* lock */
+	llseek:		dabusb_llseek,
+	read:		dabusb_read,
+	ioctl:		dabusb_ioctl,
+	open:		dabusb_open,
+	release:	dabusb_release,
 };
 
 static int dabusb_find_struct (void)

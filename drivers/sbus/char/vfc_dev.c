@@ -627,16 +627,11 @@ static int vfc_lseek(struct inode *inode, struct file *file,
 }
 
 static struct file_operations vfc_fops = {
-	vfc_lseek,   /* vfc_lseek */
-	NULL,        /* vfc_write */
-	NULL,        /* vfc_read */
-	NULL,        /* vfc_readdir */
-	NULL,        /* vfc_select */
-	vfc_ioctl,   
-	vfc_mmap, 
-	vfc_open,
-	NULL,	     /* flush */
-	vfc_release,
+	llseek:		vfc_lseek,
+	ioctl:		vfc_ioctl,
+	mmap:		vfc_mmap,
+	open:		vfc_open,
+	release:	vfc_release,
 };
 
 static int vfc_probe(void)

@@ -462,101 +462,73 @@ pipe_rdwr_open(struct inode *inode, struct file *filp)
  * are also used in linux/fs/fifo.c to do operations on FIFOs.
  */
 struct file_operations connecting_fifo_fops = {
-	pipe_lseek,
-	connect_read,
-	bad_pipe_w,
-	NULL,		/* no readdir */
-	connect_poll,
-	pipe_ioctl,
-	NULL,		/* no mmap on pipes.. surprise */
-	pipe_read_open,
-	NULL,		/* flush */
-	pipe_read_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		connect_read,
+	write:		bad_pipe_w,
+	poll:		connect_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_read_open,
+	release:	pipe_read_release,
 };
 
 struct file_operations read_fifo_fops = {
-	pipe_lseek,
-	pipe_read,
-	bad_pipe_w,
-	NULL,		/* no readdir */
-	fifo_poll,
-	pipe_ioctl,
-	NULL,		/* no mmap on pipes.. surprise */
-	pipe_read_open,
-	NULL,		/* flush */
-	pipe_read_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		pipe_read,
+	write:		bad_pipe_w,
+	poll:		fifo_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_read_open,
+	release:	pipe_read_release,
 };
 
 struct file_operations write_fifo_fops = {
-	pipe_lseek,
-	bad_pipe_r,
-	pipe_write,
-	NULL,		/* no readdir */
-	fifo_poll,
-	pipe_ioctl,
-	NULL,		/* mmap */
-	pipe_write_open,
-	NULL,		/* flush */
-	pipe_write_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		bad_pipe_r,
+	write:		pipe_write,
+	poll:		fifo_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_write_open,
+	release:	pipe_write_release,
 };
 
 struct file_operations rdwr_fifo_fops = {
-	pipe_lseek,
-	pipe_read,
-	pipe_write,
-	NULL,		/* no readdir */
-	fifo_poll,
-	pipe_ioctl,
-	NULL,		/* mmap */
-	pipe_rdwr_open,
-	NULL,		/* flush */
-	pipe_rdwr_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		pipe_read,
+	write:		pipe_write,
+	poll:		fifo_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_rdwr_open,
+	release:	pipe_rdwr_release,
 };
 
 struct file_operations read_pipe_fops = {
-	pipe_lseek,
-	pipe_read,
-	bad_pipe_w,
-	NULL,		/* no readdir */
-	pipe_poll,
-	pipe_ioctl,
-	NULL,		/* no mmap on pipes.. surprise */
-	pipe_read_open,
-	NULL,		/* flush */
-	pipe_read_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		pipe_read,
+	write:		bad_pipe_w,
+	poll:		pipe_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_read_open,
+	release:	pipe_read_release,
 };
 
 struct file_operations write_pipe_fops = {
-	pipe_lseek,
-	bad_pipe_r,
-	pipe_write,
-	NULL,		/* no readdir */
-	pipe_poll,
-	pipe_ioctl,
-	NULL,		/* mmap */
-	pipe_write_open,
-	NULL,		/* flush */
-	pipe_write_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		bad_pipe_r,
+	write:		pipe_write,
+	poll:		pipe_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_write_open,
+	release:	pipe_write_release,
 };
 
 struct file_operations rdwr_pipe_fops = {
-	pipe_lseek,
-	pipe_read,
-	pipe_write,
-	NULL,		/* no readdir */
-	pipe_poll,
-	pipe_ioctl,
-	NULL,		/* mmap */
-	pipe_rdwr_open,
-	NULL,		/* flush */
-	pipe_rdwr_release,
-	NULL
+	llseek:		pipe_lseek,
+	read:		pipe_read,
+	write:		pipe_write,
+	poll:		pipe_poll,
+	ioctl:		pipe_ioctl,
+	open:		pipe_rdwr_open,
+	release:	pipe_rdwr_release,
 };
 
 static struct inode * get_pipe_inode(void)

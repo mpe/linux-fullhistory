@@ -743,19 +743,9 @@ static unsigned int	sc26198_baudtable[] = {
  *	to get at port stats - only not using the port device itself.
  */
 static struct file_operations	stl_fsiomem = {
-	NULL,		/* llseek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	stl_memioctl,	/* ioctl */
-	NULL,		/* mmap */
-	stl_memopen,	/* open */
-	NULL,		/* flush */
-	stl_memclose,	/* release */
-	NULL,		/* fsync */
-	NULL,		/* fasync */
-	NULL		/* lock */
+	ioctl:		stl_memioctl,
+	open:		stl_memopen,
+	release:	stl_memclose,
 };
 
 /*****************************************************************************/

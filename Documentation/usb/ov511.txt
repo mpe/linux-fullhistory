@@ -15,12 +15,13 @@ SUPPORTED CAMERAS:
 ________________________________________________________
 Manufacturer     | Model          | Custom ID | Status
 -----------------+----------------+-----------+---------
-MediaForte       | MV300          | 0         | Untested
+MediaForte       | MV300          | 0         | Working
 D-Link           | DSB-C300       | 3         | Working
+Puretek          | PT-6007        | 5         | Untested
 Creative Labs    | WebCam 3       | 21        | Working
 Lifeview         | RoboCam        | 100       | Untested
 AverMedia        | InterCam Elite | 102       | Working
-MediaForte       | MV300          | 112       | Untested
+MediaForte       | MV300          | 112       | Working
 --------------------------------------------------------
 
 Any camera using the OV511 and the OV7610 CCD should work with this driver. The
@@ -78,7 +79,9 @@ directory:
 	make
 	make install
 
-Now you should be able to run xawtv. Right click for the options dialog.
+Now you should be able to run xawtv. Right click for the options dialog. If
+you get a scrambled image it is likely that you made a mistake in Xawtv.ad.
+Try setting the size to 320x240 if all else fails.
 
 WORKING FEATURES:
  o Color streaming/capture at 640x480 and 320x240

@@ -290,18 +290,12 @@ repeat:
 }
 
 struct file_operations qp_fops = {
-	NULL,		/* seek */
-	read_qp,
-	write_qp,
-	NULL, 		/* readdir */
-	poll_qp,
-	NULL, 		/* ioctl */
-	NULL,		/* mmap */
-	open_qp,
-	NULL,		/* flush */
-	release_qp,
-	NULL,
-	fasync_qp,
+	read:		read_qp,
+	write:		write_qp,
+	poll:		poll_qp,
+	open:		open_qp,
+	release:	release_qp,
+	fasync:		fasync_qp,
 };
 
 /*

@@ -343,18 +343,12 @@ busmouse_poll(struct file *file, poll_table *wait)
 
 struct file_operations busmouse_fops=
 {
-	NULL,			/* busmouse_seek */
-	busmouse_read,
-	busmouse_write,
-	NULL,			/* busmouse_readdir */
-	busmouse_poll,
-	NULL,			/* busmouse_ioctl */
-	NULL,			/* busmouse_mmap */
-	busmouse_open,
-	NULL,			/* busmouse_flush */
-	busmouse_release,
-	NULL,
-	busmouse_fasync,
+	read:		busmouse_read,
+	write:		busmouse_write,
+	poll:		busmouse_poll,
+	open:		busmouse_open,
+	release:	busmouse_release,
+	fasync:		busmouse_fasync,
 };
 
 int

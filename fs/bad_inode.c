@@ -30,19 +30,19 @@ static int return_EIO(void)
 
 static struct file_operations bad_file_ops =
 {
-	EIO_ERROR,		/* lseek */
-	EIO_ERROR,		/* read */
-	EIO_ERROR,		/* write */
-	EIO_ERROR,		/* readdir */
-	EIO_ERROR,		/* select */
-	EIO_ERROR,		/* ioctl */
-	EIO_ERROR,		/* mmap */
-	EIO_ERROR,		/* open */
-	EIO_ERROR,		/* flush */
-	EIO_ERROR,		/* release */
-	EIO_ERROR,		/* fsync */
-	EIO_ERROR,		/* fasync */
-	EIO_ERROR,		/* lock */
+	llseek:		EIO_ERROR,
+	read:		EIO_ERROR,
+	write:		EIO_ERROR,
+	readdir:	EIO_ERROR,
+	poll:		EIO_ERROR,
+	ioctl:		EIO_ERROR,
+	mmap:		EIO_ERROR,
+	open:		EIO_ERROR,
+	flush:		EIO_ERROR,
+	release:	EIO_ERROR,
+	fsync:		EIO_ERROR,
+	fasync:		EIO_ERROR,
+	lock:		EIO_ERROR,
 };
 
 struct inode_operations bad_inode_ops =

@@ -206,7 +206,6 @@ static unsigned int usblp_poll(struct file *file, struct poll_table_struct *wait
 
 static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
-	DECLARE_WAITQUEUE(wait, current);
 	struct usblp *usblp = file->private_data;
 	int retval, timeout, writecount = 0;
 
@@ -267,7 +266,6 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct usblp *usblp = file->private_data;
-	DECLARE_WAITQUEUE(wait, current);
 
 	if (!usblp->bidir)
 		return -EINVAL;
@@ -423,7 +421,7 @@ static struct file_operations usblp_fops = {
 	write:		usblp_write,
 	open:		usblp_open,
 	release:	usblp_release,
-	poll:		usblp_poll
+	poll:		usblp_poll,
 };
 
 static struct usb_driver usblp_driver = {

@@ -260,18 +260,10 @@ static char pg_scratch[512];            /* scratch block buffer */
 /* kernel glue structures */
 
 static struct file_operations pg_fops = {
-	NULL,                   /* lseek - default */
-	pg_read,                /* read */
-	pg_write,               /* write */
-	NULL,                   /* readdir - bad */
-	NULL,                   /* select */
-	NULL,                   /* ioctl */
-	NULL,                   /* mmap */
-	pg_open,                /* open */
-	NULL,			/* flush */
-	pg_release,             /* release */
-	NULL,                   /* fsync */
-	NULL,                   /* fasync */
+	read:		pg_read,
+	write:		pg_write,
+	open:		pg_open,
+	release:	pg_release,
 };
 
 void pg_init_units( void )

@@ -358,33 +358,23 @@ static loff_t tty_lseek(struct file * file, loff_t offset, int orig)
 }
 
 static struct file_operations tty_fops = {
-	tty_lseek,
-	tty_read,
-	tty_write,
-	NULL,		/* tty_readdir */
-	tty_poll,
-	tty_ioctl,
-	NULL,		/* tty_mmap */
-	tty_open,
-	NULL,		/* flush */
-	tty_release,
-	NULL,		/* tty_fsync */
-	tty_fasync
+	llseek:		tty_lseek,
+	read:		tty_read,
+	write:		tty_write,
+	poll:		tty_poll,
+	ioctl:		tty_ioctl,
+	open:		tty_open,
+	release:	tty_release,
+	fasync:		tty_fasync,
 };
 
 static struct file_operations hung_up_tty_fops = {
-	tty_lseek,
-	hung_up_tty_read,
-	hung_up_tty_write,
-	NULL,		/* hung_up_tty_readdir */
-	hung_up_tty_poll,
-	hung_up_tty_ioctl,
-	NULL,		/* hung_up_tty_mmap */
-	NULL,		/* hung_up_tty_open */
-	NULL,		/* flush */
-	tty_release,	/* hung_up_tty_release */
-	NULL,		/* hung_up_tty_fsync  */
-	NULL		/* hung_up_tty_fasync */
+	llseek:		tty_lseek,
+	read:		hung_up_tty_read,
+	write:		hung_up_tty_write,
+	poll:		hung_up_tty_poll,
+	ioctl:		hung_up_tty_ioctl,
+	release:	tty_release,
 };
 
 /*

@@ -5839,18 +5839,11 @@ static ide_module_t idetape_module = {
  *	Our character device supporting functions, passed to register_chrdev.
  */
 static struct file_operations idetape_fops = {
-	NULL,			/* lseek - default */
-	idetape_chrdev_read,	/* read  */
-	idetape_chrdev_write,	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll */
-	idetape_chrdev_ioctl,	/* ioctl */
-	NULL,			/* mmap */
-	idetape_chrdev_open,	/* open */
-	NULL,			/* flush */
-	idetape_chrdev_release,	/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
+	read:		idetape_chrdev_read,
+	write:		idetape_chrdev_write,
+	ioctl:		idetape_chrdev_ioctl,
+	open:		idetape_chrdev_open,
+	release:	idetape_chrdev_release,
 };
 
 /*

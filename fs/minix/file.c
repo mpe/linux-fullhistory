@@ -41,18 +41,10 @@ minix_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
  * the minix filesystem.
  */
 static struct file_operations minix_file_operations = {
-	NULL,			/* lseek - default */
-	generic_file_read,	/* read */
-	minix_file_write,	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* no special open is needed */
-	NULL,			/* flush */
-	NULL,			/* release */
-	minix_sync_file,	/* fsync */
-	NULL,			/* fasync */
+	read:		generic_file_read,
+	write:		minix_file_write,
+	mmap:		generic_file_mmap,
+	fsync:		minix_sync_file,
 };
 
 struct inode_operations minix_file_inode_operations = {

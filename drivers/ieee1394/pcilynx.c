@@ -681,12 +681,12 @@ static ssize_t mem_write(struct file*, const char*, size_t, loff_t*);
 
 
 static struct file_operations aux_ops = {
-        /* FIXME: should have custom llseek with bounds checking*/
-        read:     mem_read,
-        write:    mem_write,
-        poll:     aux_poll,
-        open:     mem_open,
-        release:  mem_release
+	/* FIXME: should have custom llseek with bounds checking */
+	read:		mem_read,
+	write:		mem_write,
+	poll:		aux_poll,
+	open:		mem_open,
+	release:	mem_release,
 };
 
 

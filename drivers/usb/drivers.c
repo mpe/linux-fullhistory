@@ -112,15 +112,6 @@ static long long usb_driver_lseek(struct file * file, long long offset, int orig
 }
 
 struct file_operations usbdevfs_drivers_fops = {
-	usb_driver_lseek, /* lseek   */
-	usb_driver_read,  /* read    */
-	NULL,             /* write   */
-	NULL,             /* readdir */
-	NULL,             /* poll    */
-	NULL,             /* ioctl   */
-	NULL,             /* mmap    */
-	NULL,             /* open    */
-	NULL,             /* flush   */
-	NULL,             /* release */
-	NULL              /* fsync   */
+	llseek:		usb_driver_lseek,
+	read:		usb_driver_read,
 };

@@ -1062,16 +1062,13 @@ static int agp_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations agp_fops =
 {
-	agp_lseek,
-	agp_read,
-	agp_write,
-	NULL,
-	NULL,
-	agp_ioctl,
-	agp_mmap,
-	agp_open,
-	NULL,
-	agp_release
+	llseek:		agp_lseek,
+	read:		agp_read,
+	write:		agp_write,
+	ioctl:		agp_ioctl,
+	mmap:		agp_mmap,
+	open:		agp_open,
+	release:	agp_release,
 };
 
 static struct miscdevice agp_miscdev =

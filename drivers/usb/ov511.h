@@ -166,17 +166,15 @@
 
 /* Prototypes */
 int usb_ov511_reg_read(struct usb_device *dev, unsigned char reg);
-int usb_ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char value);
+int usb_ov511_reg_write(struct usb_device *dev,
+                        unsigned char reg,
+                        unsigned char value);
 
 
 enum {
 	STATE_SCANNING,		/* Scanning for start */
 	STATE_HEADER,		/* Parsing header */
 	STATE_LINES,		/* Parsing lines */
-};
-
-struct ov511_frame_header {
-	// FIXME - nothing here yet
 };
 
 struct usb_device;
@@ -194,16 +192,29 @@ enum {
 	FRAME_ERROR,		/* Something bad happened while processing */
 };
 
+struct ov511_regvals {
+	enum {
+	  OV511_DONE_BUS,
+	  OV511_REG_BUS,
+	  OV511_I2C_BUS,
+	} bus;
+	unsigned char reg;
+	unsigned char val;
+};
+
 struct ov511_frame {
 	char *data;		/* Frame buffer */
 
-	struct ov511_frame_header header;	/* Header from stream */
-
+	int depth;		/* Bytes per pixel */
 	int width;		/* Width application is expecting */
 	int height;		/* Height */
 
 	int hdrwidth;		/* Width the frame actually is */
 	int hdrheight;		/* Height */
+
+	int sub_flag;		/* Sub-capture mode for this frame? */
+	int format;		/* Format for this frame */
+	int segsize;		/* How big is each segment from the camera? */
 
 	volatile int grabstate;	/* State of grabbing */
 	int scanstate;		/* State of scanning */
@@ -241,6 +252,12 @@ struct usb_ov511 {
 
 	char *fbuf;			/* Videodev buffer area */
 
+	int sub_flag;		/* Pix Array subcapture on flag */
+	int subx;		/* Pix Array subcapture x offset */
+	int suby;		/* Pix Array subcapture y offset */
+	int subw;		/* Pix Array subcapture width */
+	int subh;		/* Pix Array subcapture height */
+
 	int curframe;		/* Current receiving sbuf */
 	struct ov511_frame frame[OV511_NUMFRAMES];	
 
@@ -250,6 +267,8 @@ struct usb_ov511 {
 	/* Scratch space from the Isochronous pipe */
 	unsigned char scratch[SCRATCH_BUF_SIZE];
 	int scratchlen;
+
+	wait_queue_head_t wq;	/* Processes waiting */
 };
 
 #endif

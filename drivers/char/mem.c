@@ -491,87 +491,47 @@ static int open_port(struct inode * inode, struct file * filp)
 #define open_kmem	open_mem
 
 static struct file_operations mem_fops = {
-	memory_lseek,
-	read_mem,
-	write_mem,
-	NULL,		/* mem_readdir */
-	NULL,		/* mem_poll */
-	NULL,		/* mem_ioctl */
-	mmap_mem,
-	open_mem,
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* fsync */
+	llseek:		memory_lseek,
+	read:		read_mem,
+	write:		write_mem,
+	mmap:		mmap_mem,
+	open:		open_mem,
 };
 
 static struct file_operations kmem_fops = {
-	memory_lseek,
-	read_kmem,
-	write_kmem,
-	NULL,		/* kmem_readdir */
-	NULL,		/* kmem_poll */
-	NULL,		/* kmem_ioctl */
-	mmap_kmem,
-	open_kmem,
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* fsync */
+	llseek:		memory_lseek,
+	read:		read_kmem,
+	write:		write_kmem,
+	mmap:		mmap_kmem,
+	open:		open_kmem,
 };
 
 static struct file_operations null_fops = {
-	null_lseek,
-	read_null,
-	write_null,
-	NULL,		/* null_readdir */
-	NULL,		/* null_poll */
-	NULL,		/* null_ioctl */
-	NULL,		/* null_mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* fsync */
+	llseek:		null_lseek,
+	read:		read_null,
+	write:		write_null,
 };
 
 #if !defined(CONFIG_PPC) && !defined(__mc68000__)
 static struct file_operations port_fops = {
-	memory_lseek,
-	read_port,
-	write_port,
-	NULL,		/* port_readdir */
-	NULL,		/* port_poll */
-	NULL,		/* port_ioctl */
-	NULL,		/* port_mmap */
-	open_port,
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* fsync */
+	llseek:		memory_lseek,
+	read:		read_port,
+	write:		write_port,
+	open:		open_port,
 };
 #endif
 
 static struct file_operations zero_fops = {
-	zero_lseek,
-	read_zero,
-	write_zero,
-	NULL,		/* zero_readdir */
-	NULL,		/* zero_poll */
-	NULL,		/* zero_ioctl */
-	mmap_zero,
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL		/* no special release code */
+	llseek:		zero_lseek,
+	read:		read_zero,
+	write:		write_zero,
+	mmap:		mmap_zero,
 };
 
 static struct file_operations full_fops = {
-	full_lseek,
-	read_full,
-	write_full,
-	NULL,		/* full_readdir */
-	NULL,		/* full_poll */
-	NULL,		/* full_ioctl */	
-	NULL,		/* full_mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL		/* no special release code */
+	llseek:		full_lseek,
+	read:		read_full,
+	write:		write_full,
 };
 
 static int memory_open(struct inode * inode, struct file * filp)
@@ -612,17 +572,7 @@ static int memory_open(struct inode * inode, struct file * filp)
 }
 
 static struct file_operations memory_fops = {
-	NULL,		/* lseek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	memory_open,	/* just a selector for the real open */
-	NULL,		/* flush */
-	NULL,		/* release */
-	NULL		/* fsync */
+	open:		memory_open,	/* just a selector for the real open */
 };
 
 int __init chr_dev_init(void)

@@ -297,17 +297,10 @@ vcs_open(struct inode *inode, struct file *filp)
 }
 
 static struct file_operations vcs_fops = {
-	vcs_lseek,	/* lseek */
-	vcs_read,	/* read */
-	vcs_write,	/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	vcs_open,	/* open */
-	NULL,		/* flush */
-	NULL,		/* release */
-	NULL		/* fsync */
+	llseek:		vcs_lseek,
+	read:		vcs_read,
+	write:		vcs_write,
+	open:		vcs_open,
 };
 
 int __init vcs_init(void)

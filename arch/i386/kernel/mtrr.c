@@ -1469,19 +1469,10 @@ static int mtrr_close (struct inode *ino, struct file *file)
 
 static struct file_operations mtrr_fops =
 {
-    NULL,        /*  Seek              */
-    mtrr_read,   /*  Read              */
-    mtrr_write,  /*  Write             */
-    NULL,        /*  Readdir           */
-    NULL,        /*  Poll              */
-    mtrr_ioctl,  /*  IOctl             */
-    NULL,        /*  MMAP              */
-    NULL,	 /*  Open              */
-    NULL,        /*  Flush             */
-    mtrr_close,  /*  Release           */
-    NULL,        /*  Fsync             */
-    NULL,        /*  Fasync            */
-    NULL,        /*  Lock              */
+	 read:		mtrr_read,
+	 write:		mtrr_write,
+	 ioctl:		mtrr_ioctl,
+	 release:	mtrr_close,
 };
 
 static struct inode_operations proc_mtrr_inode_operations = {

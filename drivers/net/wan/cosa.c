@@ -313,23 +313,16 @@ static int cosa_fasync(struct inode *inode, struct file *file, int on);
 #endif
 
 static struct file_operations cosa_fops = {
-	cosa_lseek,
-	cosa_read,
-	cosa_write,
-	NULL,	/* readdir */
-	cosa_poll,
-	cosa_chardev_ioctl,
-	NULL,	/* mmap */
-	cosa_open,
-	NULL,	/* flush */
-	cosa_release,
-	NULL,	/* fsync */
+	llseek:		cosa_lseek,
+	read:		cosa_read,
+	write:		cosa_write,
+	poll:		cosa_poll,
+	ioctl:		cosa_chardev_ioctl,
+	open:		cosa_open,
+	release:	cosa_release,
 #ifdef COSA_FASYNC_WORKING
-	cosa_fasync,
-#else
-	NULL,
+	fasync:		cosa_fasync,
 #endif
-	NULL	/* lock */
 };
 
 /* Ioctls */

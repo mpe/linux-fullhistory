@@ -1122,20 +1122,11 @@ static void intr(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static struct file_operations dev_fileops = {
-	NULL,		/* llseek */
-	dev_read,	/* read */
-	dev_write,	/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	dev_ioctl,	/* ioctl */
-	NULL,		/* mmap */
-	dev_open,	/* open */
-#ifndef LINUX20
-	NULL,		/* flush */
-#endif
-	dev_release,	/* release */
-	NULL,		/* fsync */
-	NULL,		/* fasync */
+	read:		dev_read,
+	write:		dev_write,
+	ioctl:		dev_ioctl,
+	open:		dev_open,
+	release:	dev_release,
 };
 
 static int reset_dsp(void)

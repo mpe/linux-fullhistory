@@ -138,7 +138,6 @@ struct atm_cirange {
 #include <linux/time.h> /* struct timeval */
 #include <linux/net.h>
 #include <linux/skbuff.h> /* struct sk_buff */
-#include <linux/atm.h>
 #include <linux/uio.h>
 #include <net/sock.h>
 #include <asm/atomic.h>

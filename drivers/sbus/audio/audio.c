@@ -1959,18 +1959,9 @@ static void sparcaudioctl_release(struct inode * inode, struct file * file)
 #endif
 
 static struct file_operations sparcaudioctl_fops = {
-        NULL,
-        NULL,
-        NULL,
-        NULL,                   /* sparcaudio_readdir */
-        sparcaudio_select,
-        sparcaudio_ioctl,
-        NULL,                   /* sparcaudio_mmap */
-        NULL,
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x200ff
-        NULL,                   /* sparcaudio_flush */
-#endif
-        sparcaudioctl_release,
+	poll:		sparcaudio_select,
+	ioctl:		sparcaudio_ioctl,
+	release:	sparcaudioctl_release,
 };
 
 static int sparcaudio_open(struct inode * inode, struct file * file)
@@ -2170,18 +2161,13 @@ static void sparcaudio_release(struct inode * inode, struct file * file)
 #endif
 
 static struct file_operations sparcaudio_fops = {
-	sparcaudio_lseek,
-	sparcaudio_read,
-	sparcaudio_write,
-	NULL,			/* sparcaudio_readdir */
-	sparcaudio_select,
-	sparcaudio_ioctl,
-	NULL,			/* sparcaudio_mmap */
-	sparcaudio_open,
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x200ff
-        NULL,                   /* sparcaudio_flush */
-#endif
-	sparcaudio_release
+	llseek:		sparcaudio_lseek,
+	read:		sparcaudio_read,
+	write:		sparcaudio_write,
+	poll:		sparcaudio_select,
+	ioctl:		sparcaudio_ioctl,
+	open:		sparcaudio_open,
+	release:	sparcaudio_release,
 };
 
 #if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100

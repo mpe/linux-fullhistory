@@ -48,19 +48,9 @@ static void hdr_truncate(struct inode *);
 /*================ Global variables ================*/
 
 static struct file_operations hfs_hdr_operations = {
-	NULL,			/* lseek - default */
-	hdr_read,		/* read */
-	hdr_write,		/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap - XXX: not yet */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	file_fsync,		/* fsync - default */
-        NULL,			/* fasync - default */
-        NULL			/* lock - none */
+	read:		hdr_read,
+	write:		hdr_write,
+	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_hdr_inode_operations = {

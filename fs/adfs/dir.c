@@ -195,18 +195,9 @@ adfs_dir_no_read(struct file *filp, char *buf, size_t siz, loff_t *ppos)
 }
 
 static struct file_operations adfs_dir_operations = {
-	NULL,			/* lseek - default	*/
-	adfs_dir_no_read,	/* read			*/
-	NULL,			/* write - bad		*/
-	adfs_readdir,		/* readdir		*/
-	NULL,			/* poll - default	*/
-	NULL,			/* ioctl		*/
-	NULL,			/* mmap			*/
-	NULL,			/* no special open code	*/
-	NULL,			/* flush		*/
-	NULL,			/* no special release code */
-	file_fsync,		/* fsync		*/
-	NULL,			/* fasync		*/
+	read:		adfs_dir_no_read,
+	readdir:	adfs_readdir,
+	fsync:		file_fsync,
 };
 
 static int

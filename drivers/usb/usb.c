@@ -1759,16 +1759,7 @@ static int usb_open(struct inode * inode, struct file * file)
 }
 
 static struct file_operations usb_fops = {
-	NULL,		/* seek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	usb_open,
-	NULL,		/* flush */
-	NULL		/* release */
+	open:		usb_open,
 };
 
 int usb_major_init(void)

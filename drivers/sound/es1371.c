@@ -1182,19 +1182,10 @@ static int es1371_ioctl_mixdev(struct inode *inode, struct file *file, unsigned 
 }
 
 static /*const*/ struct file_operations es1371_mixer_fops = {
-	&es1371_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&es1371_ioctl_mixdev,
-	NULL,  /* mmap */
-	&es1371_open_mixdev,
-	NULL,	/* flush */
-	&es1371_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		es1371_llseek,
+	ioctl:		es1371_ioctl_mixdev,
+	open:		es1371_open_mixdev,
+	release:	es1371_release_mixdev,
 };
 
 /* --------------------------------------------------------------------- */
@@ -1875,19 +1866,14 @@ static int es1371_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations es1371_audio_fops = {
-	&es1371_llseek,
-	&es1371_read,
-	&es1371_write,
-	NULL,  /* readdir */
-	&es1371_poll,
-	&es1371_ioctl,
-	&es1371_mmap,
-	&es1371_open,
-	NULL,	/* flush */
-	&es1371_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		es1371_llseek,
+	read:		es1371_read,
+	write:		es1371_write,
+	poll:		es1371_poll,
+	ioctl:		es1371_ioctl,
+	mmap:		es1371_mmap,
+	open:		es1371_open,
+	release:	es1371_release,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2267,19 +2253,13 @@ static int es1371_release_dac(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations es1371_dac_fops = {
-	&es1371_llseek,
-	NULL,  /* read */
-	&es1371_write_dac,
-	NULL,  /* readdir */
-	&es1371_poll_dac,
-	&es1371_ioctl_dac,
-	&es1371_mmap_dac,
-	&es1371_open_dac,
-	NULL,	/* flush */
-	&es1371_release_dac,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		es1371_llseek,
+	write:		es1371_write_dac,
+	poll:		es1371_poll_dac,
+	ioctl:		es1371_ioctl_dac,
+	mmap:		es1371_mmap_dac,
+	open:		es1371_open_dac,
+	release:	es1371_release_dac,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2542,19 +2522,12 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 }
 
 static /*const*/ struct file_operations es1371_midi_fops = {
-	&es1371_llseek,
-	&es1371_midi_read,
-	&es1371_midi_write,
-	NULL,  /* readdir */
-	&es1371_midi_poll,
-	NULL,  /* ioctl */
-	NULL,  /* mmap */
-	&es1371_midi_open,
-	NULL,	/* flush */
-	&es1371_midi_release,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
+	llseek:		es1371_llseek,
+	read:		es1371_midi_read,
+	write:		es1371_midi_write,
+	poll:		es1371_midi_poll,
+	open:		es1371_midi_open,
+	release:	es1371_midi_release,
 };
 
 /* --------------------------------------------------------------------- */

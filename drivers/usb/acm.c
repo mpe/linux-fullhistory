@@ -223,21 +223,25 @@ static void acm_read_bulk(struct urb *urb)
 
 	if (!ACM_READY(acm)) return;
 
+	if (urb->status)
+		dbg("nonzero read bulk status received: %d", urb->status);
+
 	if (!urb->status & !acm->throttle)  {
 		for (i = 0; i < urb->actual_length && !acm->throttle; i++)
 			tty_insert_flip_char(tty, data[i], 0);
 		tty_flip_buffer_push(tty);
-	} else
-		dbg("nonzero read bulk status received: %d", urb->status);
+	}
 
-	if (!acm->throttle) {
-		urb->actual_length = 0;
-		if (usb_submit_urb(urb))
-			dbg("failed resubmitting read urb");
-	} else {
+	if (acm->throttle) {
 		memmove(data, data + i, urb->actual_length - i);
 		urb->actual_length -= i;
+		return;
 	}
+
+	urb->actual_length = 0;
+
+	if (usb_submit_urb(urb))
+		dbg("failed resubmitting read urb");
 }
 
 static void acm_write_bulk(struct urb *urb)

@@ -24,8 +24,7 @@
 
 #include <linux/fs.h>
 #include <linux/locks.h>
-
-
+#include <linux/smp_lock.h>
 
 
 #define blocksize	(EXT2_BLOCK_SIZE(inode->i_sb))
@@ -130,6 +129,7 @@ int ext2_sync_file(struct file * file, struct dentry *dentry)
 	int wait, err = 0;
 	struct inode *inode = dentry->d_inode;
 
+	lock_kernel();
 	if (S_ISLNK(inode->i_mode) && !(inode->i_blocks))
 		/*
 		 * Don't sync fast links!
@@ -152,5 +152,6 @@ int ext2_sync_file(struct file * file, struct dentry *dentry)
 	}
 skip:
 	err |= ext2_sync_inode (inode);
+	unlock_kernel();
 	return err ? -EIO : 0;
 }

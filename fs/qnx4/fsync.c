@@ -156,10 +156,12 @@ int qnx4_sync_file(struct file *file, struct dentry *dentry)
 	      S_ISLNK(inode->i_mode)))
 		return -EINVAL;
 
+	lock_kernel();
 	for (wait = 0; wait <= 1; wait++) {
 		err |= sync_direct(inode, wait);
 	}
 	err |= qnx4_sync_inode(inode);
+	unlock_kernel();
 	return (err < 0) ? -EIO : 0;
 }
 

@@ -166,18 +166,10 @@ static int mixcomwd_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations mixcomwd_fops=
 {
-	NULL,		/* Seek */
-	NULL,		/* Read */
-	mixcomwd_write,	/* Write */
-	NULL,		/* Readdir */
-	NULL,		/* Select */
-	mixcomwd_ioctl,	/* Ioctl */
-	NULL,		/* MMap */
-	mixcomwd_open,
-	NULL,		/* flush */
-	mixcomwd_release,
-	NULL,		
-	NULL		/* Fasync */
+	write:		mixcomwd_write,
+	ioctl:		mixcomwd_ioctl,
+	open:		mixcomwd_open,
+	release:	mixcomwd_release,
 };
 
 static struct miscdevice mixcomwd_miscdev=

@@ -157,7 +157,7 @@ int chrdev_open(struct inode * inode, struct file * filp)
  * depending on the special file...
  */
 static struct file_operations def_chr_fops = {
-	open:	chrdev_open
+	open:		chrdev_open,
 };
 
 static struct inode_operations chrdev_inode_operations = {

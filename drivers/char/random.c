@@ -1637,29 +1637,16 @@ random_ioctl(struct inode * inode, struct file * file,
 }
 
 struct file_operations random_fops = {
-	NULL,		/* random_lseek */
-	random_read,
-	random_write,
-	NULL,		/* random_readdir */
-	random_poll,	/* random_poll */
-	random_ioctl,
-	NULL,		/* random_mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL		/* no special release code */
+	read:		random_read,
+	write:		random_write,
+	poll:		random_poll,
+	ioctl:		random_ioctl,
 };
 
 struct file_operations urandom_fops = {
-	NULL,		/* unrandom_lseek */
-	urandom_read,
-	random_write,
-	NULL,		/* urandom_readdir */
-	NULL,		/* urandom_poll */
-	random_ioctl,
-	NULL,		/* urandom_mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL		/* no special release code */
+	read:		urandom_read,
+	write:		random_write,
+	ioctl:		random_ioctl,
 };
 
 /***************************************************************

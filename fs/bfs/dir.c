@@ -76,18 +76,9 @@ static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 }
 
 static struct file_operations bfs_dir_operations = {
-	llseek:			NULL,
 	read:			bfs_dir_read,
-	write:			NULL,
 	readdir:		bfs_readdir,
-	poll:			NULL,
-	ioctl:			NULL,
-	mmap:			NULL,
-	open:			NULL,
-	flush:			NULL,
-	release:		NULL,
 	fsync:			file_fsync,
-	fasync:			NULL,
 };
 
 extern void dump_imap(const char *, struct super_block *);

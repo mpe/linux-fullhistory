@@ -121,18 +121,11 @@ static int ufs_release_file (struct inode * inode, struct file * filp)
  * the ufs filesystem.
  */
 static struct file_operations ufs_file_operations = {
-	ufs_file_lseek,	/* lseek */
-	generic_file_read,	/* read */
-	ufs_file_write, 	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	NULL, 			/* ioctl */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* no special open is needed */
-	NULL,			/* flush */
-	ufs_release_file,	/* release */
-	NULL, 			/* fsync */
-	NULL,			/* fasync */
+	llseek:		ufs_file_lseek,
+	read:		generic_file_read,
+	write:		ufs_file_write,
+	mmap:		generic_file_mmap,
+	release:	ufs_release_file,
 };
 
 struct inode_operations ufs_file_inode_operations = {

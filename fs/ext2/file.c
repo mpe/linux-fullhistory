@@ -137,18 +137,14 @@ static int ext2_open_file (struct inode * inode, struct file * filp)
  * the ext2 filesystem.
  */
 static struct file_operations ext2_file_operations = {
-	ext2_file_lseek,	/* lseek */
-	generic_file_read,	/* read */
-	ext2_file_write,	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	ext2_ioctl,		/* ioctl */
-	generic_file_mmap,	/* mmap */
-	ext2_open_file,
-	NULL,			/* flush */
-	ext2_release_file,	/* release */
-	ext2_sync_file,		/* fsync */
-	NULL,			/* fasync */
+	llseek:		ext2_file_lseek,
+	read:		generic_file_read,
+	write:		ext2_file_write,
+	ioctl:		ext2_ioctl,
+	mmap:		generic_file_mmap,
+	open:		ext2_open_file,
+	release:	ext2_release_file,
+	fsync:		ext2_sync_file,
 };
 
 struct inode_operations ext2_file_inode_operations = {

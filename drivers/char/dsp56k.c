@@ -501,18 +501,11 @@ static int dsp56k_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations dsp56k_fops = {
-	NULL,    /* no special dsp56k_lseek */
-	dsp56k_read,
-	dsp56k_write,
-	NULL,    /* no special dsp56k_readdir */
-	NULL,    /* dsp56k_poll? */
-	dsp56k_ioctl,
-	NULL,    /* no special dsp56k_mmap */
-	dsp56k_open,
-	NULL,	/* flush */
-	dsp56k_release,
-	NULL,    /* no special dsp56k_fsync */
-	NULL,    /* no special dsp56k_fasync */
+	read:		dsp56k_read,
+	write:		dsp56k_write,
+	ioctl:		dsp56k_ioctl,
+	open:		dsp56k_open,
+	release:	dsp56k_release,
 };
 
 

@@ -23,17 +23,9 @@ static ssize_t minix_dir_read(struct file * filp, char * buf,
 static int minix_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations minix_dir_operations = {
-	NULL,			/* lseek - default */
-	minix_dir_read,		/* read */
-	NULL,			/* write - bad */
-	minix_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	file_fsync		/* default fsync */
+	read:		minix_dir_read,
+	readdir:	minix_readdir,
+	fsync:		file_fsync,
 };
 
 /*
