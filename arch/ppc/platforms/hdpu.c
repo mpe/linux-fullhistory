@@ -34,6 +34,7 @@
 #include <asm/ppcboot.h>
 #include <platforms/hdpu.h>
 #include <linux/mv643xx.h>
+#include <linux/hdpu_features.h>
 #include <linux/device.h>
 #include <linux/mtd/physmap.h>
 
@@ -55,6 +56,7 @@ static void parse_bootinfo(unsigned long r3,
 			   unsigned long r4, unsigned long r5,
 			   unsigned long r6, unsigned long r7);
 static void hdpu_set_l1pe(void);
+static void hdpu_cpustate_set(unsigned char new_state);
 static void hdpu_cpustate_set(unsigned char new_state);
 #ifdef CONFIG_SMP
 static spinlock_t timebase_lock = SPIN_LOCK_UNLOCKED;
@@ -250,6 +252,8 @@ static void __init hdpu_setup_bridge(void)
 		    MV64360_PCI_ACC_CNTL_RDSIZE_256_BYTES;
 #endif
 	}
+	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_INIT_PCI);
+
 
 	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_INIT_PCI);
 
@@ -258,6 +262,7 @@ static void __init hdpu_setup_bridge(void)
 	pci_dram_offset = 0;	/* System mem at same addr on PCI & cpu bus */
 	ppc_md.pci_swizzle = common_swizzle;
 	ppc_md.pci_map_irq = hdpu_map_irq;
+	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_INIT_REG);
 
 	ppc_md.pci_exclude_device = mv64x60_pci_exclude_device;
 
@@ -328,6 +333,15 @@ static void __init hdpu_fixup_mpsc_pdata(struct platform_device *pd)
 		pdata->default_baud = ppcboot_bd.bi_baudrate;
 	else
 		pdata->default_baud = HDPU_DEFAULT_BAUD;
+#if defined(CONFIG_HDPU_FEATURES)
+static void __init hdpu_fixup_cpustate_pdata(struct platform_device *pd)
+{
+	struct platform_device *pds[1];
+	pds[0] = pd;
+	mv64x60_pd_fixup(&bh, pds, 1);
+}
+#endif
+
 	pdata->brg_clk_src = HDPU_MPSC_CLK_SRC;
 	pdata->brg_clk_freq = HDPU_MPSC_CLK_FREQ;
 }
@@ -340,6 +354,10 @@ static int __init hdpu_platform_notify(struct device *dev)
 	} dev_map[] = {
 		{
 		MPSC_CTLR_NAME ".0", hdpu_fixup_mpsc_pdata},
+#if defined(CONFIG_HDPU_FEATURES)
+		{
+		HDPU_CPUSTATE_NAME ".0", hdpu_fixup_cpustate_pdata},
+#endif
 #if defined(CONFIG_MV643XX_ETH)
 		{
 		MV643XX_ETH_NAME ".0", hdpu_fixup_eth_pdata},
@@ -403,6 +421,7 @@ static void __init hdpu_setup_arch(void)
 #endif
 
 	printk("SKY HDPU Compute Blade \n");
+	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_OK);
 
 	if (ppc_md.progress)
 		ppc_md.progress("hdpu_setup_arch: exit", 0);
@@ -441,6 +460,8 @@ unsigned long __init hdpu_find_end_of_memory(void)
 	return mv64x60_get_mem_size(CONFIG_MV64X60_NEW_BASE,
 				    MV64x60_TYPE_MV64360);
 }
+	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_RESET);
+
 
 static void hdpu_reset_board(void)
 {
@@ -485,6 +506,8 @@ static void hdpu_restart(char *cmd)
 	hdpu_reset_board();
 
 	while (i-- > 0) ;
+	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_HALT);
+
 	panic("restart failed\n");
 }
 
@@ -753,6 +776,8 @@ smp_hdpu_message_pass(int target, int msg, unsigned long data, int wait)
 			mv64x60_write(&bh, MV64360_CPU1_DOORBELL, 1 << msg);
 		break;
 	}
+	hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR | CPUSTATE_KERNEL_CPU1_KICK);
+
 }
 
 static void smp_hdpu_kick_cpu(int nr)
@@ -817,6 +842,9 @@ static void smp_hdpu_setup_cpu(int cpu_nr)
 {
 	if (cpu_nr == 0) {
 		if (ppc_md.progress)
+		hdpu_cpustate_set(CPUSTATE_KERNEL_MAJOR |
+				  CPUSTATE_KERNEL_CPU1_OK);
+
 			ppc_md.progress("smp_hdpu_setup_cpu 0", 0);
 		mv64x60_write(&bh, MV64360_CPU0_DOORBELL_CLR, 0xff);
 		mv64x60_write(&bh, MV64360_CPU0_DOORBELL_MASK, 0xff);
@@ -931,6 +959,13 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	platform_notify = hdpu_platform_notify;
 #endif
 	return;
+static void hdpu_cpustate_set(unsigned char new_state)
+{
+	unsigned int state = (new_state << 21);
+	mv64x60_write(&bh, MV64x60_GPP_VALUE_CLR, (0xff << 21));
+	mv64x60_write(&bh, MV64x60_GPP_VALUE_CLR, state);
+}
+
 }
 
 #if defined(CONFIG_SERIAL_TEXT_DEBUG) && defined(CONFIG_SERIAL_MPSC_CONSOLE)
@@ -971,6 +1006,49 @@ static struct mtd_partition hdpu_partitions[] = {
 	 .mask_flags = 0,
 	 },{
 	 .name = "bootEnv",
+#ifdef CONFIG_HDPU_FEATURES
+
+static struct resource hdpu_cpustate_resources[] = {
+	[0] = {
+	       .name = "addr base",
+	       .start = MV64x60_GPP_VALUE_SET,
+	       .end = MV64x60_GPP_VALUE_CLR + 1,
+	       .flags = IORESOURCE_MEM,
+	       },
+};
+
+static struct resource hdpu_nexus_resources[] = {
+	[0] = {
+	       .name = "nexus register",
+	       .start = HDPU_NEXUS_ID_BASE,
+	       .end = HDPU_NEXUS_ID_BASE + HDPU_NEXUS_ID_SIZE,
+	       .flags = IORESOURCE_MEM,
+	       },
+};
+
+static struct platform_device hdpu_cpustate_device = {
+	.name = HDPU_CPUSTATE_NAME,
+	.id = 0,
+	.num_resources = ARRAY_SIZE(hdpu_cpustate_resources),
+	.resource = hdpu_cpustate_resources,
+};
+
+static struct platform_device hdpu_nexus_device = {
+	.name = HDPU_NEXUS_NAME,
+	.id = 0,
+	.num_resources = ARRAY_SIZE(hdpu_nexus_resources),
+	.resource = hdpu_nexus_resources,
+};
+
+static int __init hdpu_add_pds(void)
+{
+	platform_device_register(&hdpu_cpustate_device);
+	platform_device_register(&hdpu_nexus_device);
+	return 0;
+}
+
+arch_initcall(hdpu_add_pds);
+#endif
 	 .size = 0x00040000,
 	 .offset = 0x03EC0000,
 	 .mask_flags = 0,
