@@ -26,7 +26,7 @@ struct request request[NR_REQUEST];
 /*
  * used to wait on when there are no free requests
  */
-struct task_struct * wait_for_request = NULL;
+struct wait_queue * wait_for_request = NULL;
 
 /* blk_dev_struct is:
  *	do_request-address
@@ -207,7 +207,7 @@ found:	sti();
 /* fill up the request-info, and add it to the queue */
 	req->dev = bh->b_dev;
 	req->cmd = rw;
-	req->errors=0;
+	req->errors = 0;
 	req->sector = bh->b_blocknr<<1;
 	req->nr_sectors = 2;
 	req->buffer = bh->b_data;
@@ -251,7 +251,7 @@ repeat:
 	req->sector = page<<3;
 	req->nr_sectors = 8;
 	req->buffer = buffer;
-	req->waiting = current;
+	req->waiting = &current->wait;
 	req->bh = NULL;
 	req->next = NULL;
 	current->state = TASK_UNINTERRUPTIBLE;
@@ -332,7 +332,7 @@ repeat:
 		req->sector = b[i] << 1;
 		req->nr_sectors = 2;
 		req->buffer = buf;
-		req->waiting = current;
+		req->waiting = &current->wait;
 		req->bh = NULL;
 		req->next = NULL;
 		current->state = TASK_UNINTERRUPTIBLE;

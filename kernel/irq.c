@@ -36,8 +36,15 @@ struct sigaction irq_sigaction[16] = {
 	{ NULL, 0, 0, NULL },
 };
 
+void irq13(void);
+
 /*
  * This builds up the IRQ handler stubs using some ugly macros in irq.h
+ *
+ * These macros create the low-level assembly IRQ routines that do all
+ * the operations that are needed to keep the AT interrupt-controller
+ * happy. They are also written to be fast - and to disable interrupts
+ * as little as humanly possible.
  */
 BUILD_IRQ(FIRST,0,0x01)
 BUILD_IRQ(FIRST,1,0x02)
@@ -62,9 +69,9 @@ BUILD_IRQ(SECOND,15,0x80)
  * particular interrupt is disabled when this is called.
  *
  * The routine has to call the appropriate handler (disabling
- * interrupts if needed first), and then re-enable this interrupt-
- * line if the handler was ok. If no handler exists, the IRQ isn't
- * re-enabled.
+ * interrupts if needed first). If no handler exists, we return
+ * an error value, telling the low-level IRQ routines not to
+ * re-enable this IRQ line.
  *
  * Note similarities on a very low level between this and the
  * do_signal() function. Naturally this is simplified, but they
@@ -73,22 +80,24 @@ BUILD_IRQ(SECOND,15,0x80)
  * (signal) number as argument, but the cpl value at the time of
  * the interrupt.
  */
-void do_IRQ(int irq, struct pt_regs * regs)
+int do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 	void (*handler)(int);
+	unsigned int esp;
 
 	if (!(handler = sa->sa_handler))
-		return;
+		return -1;	/* the irq isn't re-enabled */
+	__asm__ __volatile__("movl %%esp,%0":"=r" (esp));
+	if (esp < 200+(unsigned long)(current+1)) {
+		printk("Stack overflow on IRQ%d: shutting down\n",irq);
+		return -1;
+	}
 	if (sa->sa_flags & SA_INTERRUPT)
 		cli();
 	handler(regs->cs & 3);
-	cli();
-	if (irq < 8)
-		outb(inb_p(0x21) & ~(1<<irq),0x21);
-	else
-		outb(inb_p(0xA1) & ~(1<<(irq-8)),0xA1);
 	sti();
+	return 0;		/* re-enable the irq when returning */
 }
 
 int irqaction(unsigned int irq, struct sigaction * new)
@@ -150,6 +159,14 @@ void free_irq(unsigned int irq)
 	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
 }
 
+extern void math_error(void);
+
+static void math_error_irq(int cpl)
+{
+	outb(0,0xF0);
+	math_error();
+}
+
 void init_IRQ(void)
 {
 	set_trap_gate(0x20,IRQ0_interrupt);
@@ -161,11 +178,13 @@ void init_IRQ(void)
 	set_trap_gate(0x26,IRQ6_interrupt);
 	set_trap_gate(0x27,IRQ7_interrupt);
 	set_trap_gate(0x28,IRQ8_interrupt);
-	set_trap_gate(0x29,IRQ10_interrupt);
+	set_trap_gate(0x29,IRQ9_interrupt);
 	set_trap_gate(0x2a,IRQ10_interrupt);
 	set_trap_gate(0x2b,IRQ11_interrupt);
 	set_trap_gate(0x2c,IRQ12_interrupt);
 	set_trap_gate(0x2d,IRQ13_interrupt);
 	set_trap_gate(0x2e,IRQ14_interrupt);
 	set_trap_gate(0x2f,IRQ15_interrupt);
+	if (request_irq(13,math_error_irq))
+		printk("Unable to get IRQ13 for math-error handler\n");
 }

@@ -421,6 +421,7 @@ int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 	if (stat_addr)
 		verify_area(stat_addr,4);
 repeat:
+	current->signal &= ~(1<<(SIGCHLD-1));
 	flag=0;
  	for (p = current->p_cptr ; p ; p = p->p_osptr) {
 		if (pid>0) {

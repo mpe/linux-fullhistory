@@ -246,5 +246,6 @@ long chr_dev_init(long mem_start, long mem_end)
 	chrdev_fops[1] = &mem_fops;
 	mem_start = tty_init(mem_start);
 	mem_start = lp_init(mem_start);
+	mem_start = mouse_init(mem_start);
 	return mem_start;
 }

@@ -30,7 +30,7 @@ struct tty_queue {
 	unsigned long data;
 	unsigned long head;
 	unsigned long tail;
-	struct task_struct * proc_list;
+	struct wait_queue * proc_list;
 	unsigned char buf[TTY_BUF_SIZE];
 };
 
@@ -126,11 +126,36 @@ struct tty_struct {
 /*
  * so that interrupts won't be able to mess up the
  * queues, copy_to_cooked must be atomic with repect
- * to itself, as must tty->write. These are the flag bits.
+ * to itself, as must tty->write. These are the flag
+ * bit-numbers. Use the set_bit() and clear_bit()
+ * macros to make it all atomic.
  */
-#define TTY_WRITE_BUSY 1
-#define TTY_READ_BUSY 2
-#define TTY_CR_PENDING 4
+#define TTY_WRITE_BUSY 0
+#define TTY_READ_BUSY 1
+#define TTY_CR_PENDING 2
+
+/*
+ * These have to be done with inline assembly: that way the bit-setting
+ * is guaranteed to be atomic. Both set_bit and clear_bit return 0
+ * if the bit-setting went ok, != 0 if the bit already was set/cleared.
+ */
+extern inline int set_bit(int nr,int * addr)
+{
+	char ok;
+
+	__asm__ __volatile__("btsl %1,%2\n\tsetb %0":
+		"=q" (ok):"r" (nr),"m" (*(addr)));
+	return ok;
+}
+
+extern inline int clear_bit(int nr, int * addr)
+{
+	char ok;
+
+	__asm__ __volatile__("btrl %1,%2\n\tsetnb %0":
+		"=q" (ok):"r" (nr),"m" (*(addr)));
+	return ok;
+}
 
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
 #define TTY_READ_FLUSH(tty) tty_read_flush((tty))

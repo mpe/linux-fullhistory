@@ -751,7 +751,7 @@ end_rename:
 int minix_rename(struct inode * old_dir, const char * old_name, int old_len,
 	struct inode * new_dir, const char * new_name, int new_len)
 {
-	static struct task_struct * wait = NULL;
+	static struct wait_queue * wait = NULL;
 	static int lock = 0;
 	int result;
 

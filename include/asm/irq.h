@@ -46,10 +46,24 @@
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
 	"1:\tmovb $0x20,%al\n\t" \
-	"outb %al,$0xA0" \
+	"outb %al,$0xA0\n\t" \
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
 	"1:\toutb %al,$0x20\n\t"
+
+#define UNBLK_FIRST(mask) \
+	"inb $0x21,%al\n\t" \
+	"jmp 1f\n" \
+	"1:\tjmp 1f\n" \
+	"1:\tandb $~(" #mask "),%al\n\t" \
+	"outb %al,$0x21\n\t"
+
+#define UNBLK_SECOND(mask) \
+	"inb $0xA1,%al\n\t" \
+	"jmp 1f\n" \
+	"1:\tjmp 1f\n" \
+	"1:\tandb $~(" #mask "),%al\n\t" \
+	"outb %al,$0xA1\n\t"
 
 #define IRQ_NAME2(nr) nr##_interrupt()
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
@@ -70,6 +84,11 @@ __asm__( \
 	"pushl $" #nr "\n\t" \
 	"call _do_IRQ\n\t" \
 	"addl $8,%esp\n\t" \
+	"testl %eax,%eax\n\t" \
+	"jne ret_from_sys_call\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	"sti\n\t" \
 	"jmp ret_from_sys_call");
 
 #endif

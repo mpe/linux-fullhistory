@@ -90,32 +90,24 @@ int get_tty_queue(struct tty_queue * queue)
 
 void tty_write_flush(struct tty_struct * tty)
 {
-	unsigned long flags;
-
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	if (!EMPTY(tty->write_q) && !(TTY_WRITE_BUSY & tty->flags)) {
-		tty->flags |= TTY_WRITE_BUSY;
-		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
-		tty->write(tty);
-		cli();
-		tty->flags &= ~TTY_WRITE_BUSY;
-	}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	if (EMPTY(tty->write_q))
+		return;
+	if (set_bit(TTY_WRITE_BUSY,&tty->flags))
+		return;
+	tty->write(tty);
+	if (clear_bit(TTY_WRITE_BUSY,&tty->flags))
+		printk("tty_write_flush: bit already cleared\n");
 }
 
 void tty_read_flush(struct tty_struct * tty)
 {
-	unsigned long flags;
-
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	if (!EMPTY(tty->read_q) && !(TTY_READ_BUSY & tty->flags)) {
-		tty->flags |= TTY_READ_BUSY;
-		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
-		copy_to_cooked(tty);
-		cli();
-		tty->flags &= ~TTY_READ_BUSY;
-	}
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	if (EMPTY(tty->read_q))
+		return;
+	if (set_bit(TTY_READ_BUSY, &tty->flags))
+		return;
+	copy_to_cooked(tty);
+	if (clear_bit(TTY_READ_BUSY, &tty->flags))
+		printk("tty_read_flush: bit already cleared\n");
 }
 
 void change_console(unsigned int new_console)
@@ -296,6 +288,28 @@ int tty_signal(int sig, struct tty_struct *tty)
 	return -ERESTARTSYS;
 }
 
+static void wait_for_canon_input(struct tty_struct * tty)
+{
+	while (1) {
+		TTY_READ_FLUSH(tty);
+		if (tty->link)
+			if (tty->link->count)
+				TTY_WRITE_FLUSH(tty->link);
+			else
+				return;
+		if (current->signal & ~current->blocked)
+			return;
+		if (FULL(tty->read_q))
+			return;
+		if (tty->secondary->data)
+			return;
+		cli();
+		if (!tty->secondary->data)
+			interruptible_sleep_on(&tty->secondary->proc_list);
+		sti();
+	}
+}
+
 static int read_chan(unsigned int channel, struct file * file, char * buf, int nr)
 {
 	struct tty_struct * tty;
@@ -315,66 +329,61 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 			return -EIO;
 		else
 			return(tty_signal(SIGTTIN, tty));
-	time = 10L*tty->termios.c_cc[VTIME];
-	minimum = tty->termios.c_cc[VMIN];
-	if (L_CANON(tty)) {
-		minimum = nr;
-		current->timeout = 0xffffffff;
-		time = 0;
-	} else if (minimum)
-		current->timeout = 0xffffffff;
+	if (L_CANON(tty))
+		minimum = time = current->timeout = 0;
 	else {
-		minimum = nr;
-		if (time)
-			current->timeout = time + jiffies;
-		time = 0;
+		time = 10L*tty->termios.c_cc[VTIME];
+		minimum = tty->termios.c_cc[VMIN];
+		if (minimum)
+			current->timeout = 0xffffffff;
+		else {
+			if (time)
+				current->timeout = time + jiffies;
+			else
+				current->timeout = 0;
+			time = 0;
+			minimum = 1;
+		}
 	}
 	if (file->f_flags & O_NONBLOCK)
 		time = current->timeout = 0;
+	else if (L_CANON(tty))
+		wait_for_canon_input(tty);
 	if (minimum>nr)
 		minimum = nr;
-	TTY_READ_FLUSH(tty);
 	while (nr>0) {
-		if (tty->link && tty->link->write)
+		TTY_READ_FLUSH(tty);
+		if (tty->link)
 			TTY_WRITE_FLUSH(tty->link);
-		cli();
-		if (EMPTY(tty->secondary) || (L_CANON(tty) &&
-		    !FULL(tty->read_q) && !tty->secondary->data)) {
-			if (!current->timeout)
-				break;
-			if (current->signal & ~current->blocked) 
-				break;
-			if (tty->link && !tty->link->count)
-				break;
-			interruptible_sleep_on(&tty->secondary->proc_list);
-			sti();
-			TTY_READ_FLUSH(tty);
-			continue;
-		}
-		sti();
-		do {
-			c = get_tty_queue(tty->secondary);
+		while (nr > 0 && ((c = get_tty_queue(tty->secondary)) >= 0)) {
 			if ((EOF_CHAR(tty) != __DISABLED_CHAR &&
 			     c==EOF_CHAR(tty)) || c==10)
 				tty->secondary->data--;
 			if ((EOF_CHAR(tty) != __DISABLED_CHAR &&
 			     c==EOF_CHAR(tty)) && L_CANON(tty))
 				break;
-			else {
-				put_fs_byte(c,b++);
-				if (!--nr)
-					break;
-			}
+			put_fs_byte(c,b++);
+			nr--;
+			if (time)
+				current->timeout = time+jiffies;
 			if (c==10 && L_CANON(tty))
 				break;
-		} while (nr>0 && !EMPTY(tty->secondary));
+		};
 		wake_up(&tty->read_q->proc_list);
-		if (L_CANON(tty) || b-buf >= minimum)
+		if (b-buf >= minimum || !current->timeout)
 			break;
-		if (time)
-			current->timeout = time+jiffies;
+		if (current->signal & ~current->blocked) 
+			break;
+		if (tty->link && !tty->link->count)
+			break;
+		TTY_READ_FLUSH(tty);
+		if (tty->link)
+			TTY_WRITE_FLUSH(tty->link);
+		cli();
+		if (EMPTY(tty->secondary))
+			interruptible_sleep_on(&tty->secondary->proc_list);
+		sti();
 	}
-	sti();
 	TTY_READ_FLUSH(tty);
 	if (tty->link && tty->link->write)
 		TTY_WRITE_FLUSH(tty->link);
@@ -433,8 +442,8 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 					c='\n';
 				else if (c=='\n' && O_NLRET(tty))
 					c='\r';
-				if (c=='\n' && !(tty->flags & TTY_CR_PENDING) && O_NLCR(tty)) {
-					tty->flags |= TTY_CR_PENDING;
+				if (c=='\n' && O_NLCR(tty) &&
+				    !set_bit(TTY_CR_PENDING,&tty->flags)) {
 					put_tty_queue(13,tty->write_q);
 					continue;
 				}
@@ -442,7 +451,7 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 					c=toupper(c);
 			}
 			b++; nr--;
-			tty->flags &= ~TTY_CR_PENDING;
+			clear_bit(TTY_CR_PENDING,&tty->flags);
 			put_tty_queue(c,tty->write_q);
 		}
 		if (nr>0)
@@ -516,6 +525,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 	if (!tty->count && !(tty->link && tty->link->count)) {
 		flush_input(tty);
 		flush_output(tty);
+		tty->stopped = 0;
 	}
 	if (IS_A_PTY_MASTER(dev)) {
 		if (tty->count)
@@ -540,7 +550,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 	if (retval) {
 		tty->count--;
 		if (IS_A_PTY_MASTER(dev) && tty->link)
-			tty->link->count++;
+			tty->link->count--;
 	}
 	return retval;
 }
@@ -579,12 +589,45 @@ static void tty_release(struct inode * inode, struct file * filp)
 			redirect = NULL;
 }
 
+static int tty_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+{
+	int dev;
+	struct tty_struct * tty;
+
+	dev = filp->f_rdev;
+	if (MAJOR(dev) != 4) {
+		printk("tty_select: tty pseudo-major != 4\n");
+		return 0;
+	}
+	dev = MINOR(filp->f_rdev);
+	tty = TTY_TABLE(dev);
+	switch (sel_type) {
+		case SEL_IN:
+			if (!EMPTY(tty->secondary))
+				return 1;
+			if (tty->link && !tty->link->count)
+				return 1;
+			select_wait(&tty->secondary->proc_list, wait);
+			return 0;
+		case SEL_OUT:
+			if (!FULL(tty->write_q))
+				return 1;
+			select_wait(&tty->write_q->proc_list, wait);
+			return 0;
+		case SEL_EX:
+			if (tty->link && !tty->link->count)
+				return 1;
+			return 0;
+	}
+	return 0;
+}
+
 static struct file_operations tty_fops = {
 	tty_lseek,
 	tty_read,
 	tty_write,
 	NULL,		/* tty_readdir */
-	NULL,		/* tty_select */
+	tty_select,
 	tty_ioctl,
 	tty_open,
 	tty_release

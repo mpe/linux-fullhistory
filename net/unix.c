@@ -53,7 +53,7 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size,
 			   int nonblock);
 static int unix_proto_write(struct socket *sock, char *ubuf, int size,
 			    int nonblock);
-static int unix_proto_select(struct socket *sock, int which);
+static int unix_proto_select(struct socket *sock, int sel_type, select_table * wait);
 static int unix_proto_ioctl(struct socket *sock, unsigned int cmd,
 			    unsigned long arg);
 
@@ -519,11 +519,11 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 }
 
 static int
-unix_proto_select(struct socket *sock, int which)
+unix_proto_select(struct socket *sock, int sel_type, select_table * wait)
 {
 	struct unix_proto_data *upd, *peerupd;
 
-	if (which == SEL_IN) {
+	if (sel_type == SEL_IN) {
 		upd = UN_DATA(sock);
 		PRINTK("unix_proto_select: there is%s data available\n",
 		       UN_BUF_AVAIL(upd) ? "" : " no");
@@ -533,10 +533,10 @@ unix_proto_select(struct socket *sock, int which)
 			PRINTK("unix_proto_select: socket not connected (read EOF)\n");
 			return 1;
 		}
-		else
-			return 0;
+		select_wait(sock->wait,wait);
+		return 0;
 	}
-	if (which == SEL_OUT) {
+	if (sel_type == SEL_OUT) {
 		if (sock->state != SS_CONNECTED) {
 			PRINTK("unix_proto_select: socket not connected (write EOF)\n");
 			return 1;
@@ -544,7 +544,10 @@ unix_proto_select(struct socket *sock, int which)
 		peerupd = UN_DATA(sock->conn);
 		PRINTK("unix_proto_select: there is%s space available\n",
 		       UN_BUF_SPACE(peerupd) ? "" : " no");
-		return (UN_BUF_SPACE(peerupd) > 0);
+		if (UN_BUF_SPACE(peerupd) > 0)
+			return 1;
+		select_wait(sock->wait,wait);
+		return 0;
 	}
 	/* SEL_EX */
 	PRINTK("unix_proto_select: there are no exceptions here?!\n");

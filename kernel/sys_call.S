@@ -37,8 +37,6 @@
  *	40(%esp) - %oldss
  */
 
-SIG_CHLD	= 17
-
 EBX		= 0x00
 ECX		= 0x04
 EDX		= 0x08
@@ -86,7 +84,7 @@ ENOSYS = 38
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
 .globl _double_fault,_coprocessor_segment_overrun
 .globl _invalid_TSS,_segment_not_present,_stack_segment
-.globl _general_protection,_irq13,_reserved
+.globl _general_protection,_reserved
 .globl _alignment_check,_page_fault
 .globl ret_from_sys_call
 
@@ -109,59 +107,17 @@ ENOSYS = 38
 	movl $0x17,%edx; \
 	mov %dx,%fs
 
-#define ACK_FIRST(mask) \
-	inb $0x21,%al; \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	orb $(mask),%al; \
-	outb %al,$0x21; \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	movb $0x20,%al; \
-	outb %al,$0x20
-
-#define ACK_SECOND(mask) \
-	inb $0xA1,%al; \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	orb $(mask),%al; \
-	outb %al,$0xA1; \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	movb $0x20,%al; \
-	outb %al,$0xA0 \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	outb %al,$0x20
-
-#define UNBLK_FIRST(mask) \
-	inb $0x21,%al; \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	andb $~(mask),%al; \
-	outb %al,$0x21
-
-#define UNBLK_SECOND(mask) \
-	inb $0xA1,%al; \
-	jmp 1f; \
-1:	jmp 1f; \
-1:	andb $~(mask),%al; \
-	outb %al,$0xA1
-
-.align 2
-bad_sys_call:
-	movl $-ENOSYS,EAX(%esp)
-	jmp ret_from_sys_call
 .align 2
 reschedule:
 	pushl $ret_from_sys_call
 	jmp _schedule
 .align 2
 _system_call:
-	pushl %eax		# save orig_eax
+	pushl %eax			# save orig_eax
 	SAVE_ALL
+	movl $-ENOSYS,EAX(%esp)
 	cmpl _NR_syscalls,%eax
-	jae bad_sys_call
+	jae ret_from_sys_call
 	call _sys_call_table(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 ret_from_sys_call:
@@ -212,16 +168,6 @@ ret_from_sys_call:
 	iret
 
 .align 2
-_irq13:
-	pushl %eax
-	xorb %al,%al
-	outb %al,$0xF0
-	movb $0x20,%al
-	outb %al,$0x20
-	jmp 1f
-1:	jmp 1f
-1:	outb %al,$0xA0
-	popl %eax
 _coprocessor_error:
 	pushl $-1		# mark this as an int. 
 	SAVE_ALL

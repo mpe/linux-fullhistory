@@ -57,7 +57,6 @@ void general_protection(void);
 void page_fault(void);
 void coprocessor_error(void);
 void reserved(void);
-void irq13(void);
 void alignment_check(void);
 
 static void die(char * str,long esp_ptr,long nr)
@@ -199,5 +198,4 @@ void trap_init(void)
 	set_trap_gate(17,&alignment_check);
 	for (i=18;i<48;i++)
 		set_trap_gate(i,&reserved);
-	set_trap_gate(45,&irq13);
 }

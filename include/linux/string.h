@@ -273,7 +273,7 @@ extern char * ___strtok;
 
 extern inline char * strtok(char * s,const char * ct)
 {
-register char * __res __asm__("si");
+register char * __res;
 __asm__("testl %1,%1\n\t"
 	"jne 1f\n\t"
 	"testl %0,%0\n\t"
@@ -324,12 +324,7 @@ __asm__("testl %1,%1\n\t"
 	"jne 8f\n\t"
 	"movl %0,%1\n"
 	"8:"
-#if __GNUC__ == 2
-	:"=r" (__res)
-#else
-	:"=b" (__res)
-#endif
-	,"=S" (___strtok)
+	:"=b" (__res),"=S" (___strtok)
 	:"0" (___strtok),"1" (s),"g" (ct)
 	:"ax","cx","dx","di");
 return __res;

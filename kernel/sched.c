@@ -35,7 +35,7 @@ static void show_task(int nr,struct task_struct * p)
 {
 	int i,j = 4096-sizeof(struct task_struct);
 
-	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",nr,p->pid,
+	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",(p == current)?-nr:nr,p->pid,
 		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
 	i=0;
 	while (i<j && !((char *)(p+1))[i])
@@ -136,11 +136,11 @@ void schedule(void)
 			if ((*p)->timeout && (*p)->timeout < jiffies)
 				if ((*p)->state == TASK_INTERRUPTIBLE) {
 					(*p)->timeout = 0;
-					(*p)->state = TASK_RUNNING;
+					wake_one_task(*p);
 				}
 			if (((*p)->signal & ~(*p)->blocked) &&
-			(*p)->state==TASK_INTERRUPTIBLE)
-				(*p)->state=TASK_RUNNING;
+			    (*p)->state==TASK_INTERRUPTIBLE)
+				wake_one_task(*p);
 		}
 
 /* this is the scheduler proper: */
@@ -181,59 +181,68 @@ int sys_pause(void)
 	return -EINTR;
 }
 
+void wake_one_task(struct task_struct * p)
+{
+	p->state = TASK_RUNNING;
+	if (p->counter > current->counter)
+		need_resched = 1;
+}
+
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
  * with signals or similar.
  */
-void wake_up(struct task_struct **p)
+void wake_up(struct wait_queue **q)
 {
-	struct task_struct * wakeup_ptr, * tmp;
+	struct wait_queue *tmp, *next;
+	struct task_struct * p;
+	unsigned long flags;
 
-	if (p && *p) {
-		wakeup_ptr = *p;
-		*p = NULL;
-		while (wakeup_ptr && wakeup_ptr != task[0]) {
-			if (wakeup_ptr->state == TASK_ZOMBIE)
+	if (!q || !(next = *q))
+		return;
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	do {
+		tmp = next;
+		next = tmp->next;
+		if (p = tmp->task) {
+			if (p->state == TASK_ZOMBIE)
 				printk("wake_up: TASK_ZOMBIE\n");
-			else if (wakeup_ptr->state != TASK_STOPPED) {
-				wakeup_ptr->state = TASK_RUNNING;
-				if (wakeup_ptr->counter > current->counter)
+			else if (p->state != TASK_STOPPED) {
+				p->state = TASK_RUNNING;
+				if (p->counter > current->counter)
 					need_resched = 1;
 			}
-			tmp = wakeup_ptr->next_wait;
-			wakeup_ptr->next_wait = task[0];
-			wakeup_ptr = tmp;
 		}
-	}
+		tmp->next = NULL;
+	} while (next && next != *q);
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
 }
 
-static inline void __sleep_on(struct task_struct **p, int state)
+static inline void __sleep_on(struct wait_queue **p, int state)
 {
-	unsigned int flags;
+	unsigned long flags;
 
 	if (!p)
 		return;
 	if (current == task[0])
 		panic("task[0] trying to sleep");
-	__asm__("pushfl ; popl %0":"=r" (flags));
-	current->next_wait = *p;
-	task[0]->next_wait = NULL;
-	*p = current;
+	if (current->wait.next)
+		printk("__sleep_on: wait->next exists\n");
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
 	current->state = state;
+	add_wait_queue(p,&current->wait);
 	sti();
 	schedule();
-	if (current->next_wait != task[0])
-		wake_up(p);
-	current->next_wait = NULL;
+	remove_wait_queue(p,&current->wait);
 	__asm__("pushl %0 ; popfl"::"r" (flags));
 }
 
-void interruptible_sleep_on(struct task_struct **p)
+void interruptible_sleep_on(struct wait_queue **p)
 {
 	__sleep_on(p,TASK_INTERRUPTIBLE);
 }
 
-void sleep_on(struct task_struct **p)
+void sleep_on(struct wait_queue **p)
 {
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
@@ -243,7 +252,7 @@ void sleep_on(struct task_struct **p)
  * proper. They are here because the floppy needs a timer, and this
  * was the easiest way of doing it.
  */
-static struct task_struct * wait_motor[4] = {NULL,NULL,NULL,NULL};
+static struct wait_queue * wait_motor[4] = {NULL,NULL,NULL,NULL};
 static int  mon_timer[4]={0,0,0,0};
 static int moff_timer[4]={0,0,0,0};
 unsigned char current_DOR = 0x0C;

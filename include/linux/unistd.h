@@ -116,6 +116,7 @@
 #define __NR_lstat		107
 #define __NR_fstat		108
 #define __NR_uname		109
+#define __NR_iopl		110
 
 extern int errno;
 

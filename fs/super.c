@@ -11,7 +11,7 @@
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/ext_fs.h>
-/* #include <linux/msdos_fs.h> */
+#include <linux/msdos_fs.h>
 #include <linux/kernel.h>
 #include <linux/stat.h>
 #include <asm/system.h>
@@ -38,7 +38,7 @@ int ROOT_DEV = 0;
 static struct file_system_type file_systems[] = {
 	{minix_read_super,"minix"},
 	{ext_read_super,"ext"},
- /*	{msdos_read_super,"msdos"}, */
+	{msdos_read_super,"msdos"},
 	{NULL,NULL}
 };
 
@@ -65,10 +65,8 @@ void lock_super(struct super_block * sb)
 
 void free_super(struct super_block * sb)
 {
-	cli();
 	sb->s_lock = 0;
 	wake_up(&(sb->s_wait));
-	sti();
 }
 
 void wait_on_super(struct super_block * sb)

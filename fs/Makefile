@@ -7,7 +7,7 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-SUBDIRS	=minix ext
+SUBDIRS	=minix ext msdos
 
 .c.s:
 	$(CC) $(CFLAGS) -S $<

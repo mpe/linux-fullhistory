@@ -197,8 +197,9 @@ int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode)
 {
 	const char * basename;
-	int namelen,error;
+	int namelen,error,i;
 	struct inode * dir, *inode;
+	struct task_struct ** p;
 
 	if ((flag & O_TRUNC) && !(flag & O_ACCMODE))
 		flag |= O_WRONLY;
@@ -258,6 +259,20 @@ int open_namei(const char * pathname, int flag, int mode,
 		iput(inode);
 		return -EPERM;
 	}
+ 	if ((inode->i_count > 1) && (flag & O_ACCMODE))
+ 		for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+ 			if (!*p)
+ 				continue;
+ 			if (inode == (*p)->executable) {
+ 				iput(inode);
+ 				return -ETXTBSY;
+ 			}
+ 			for (i=0; i < (*p)->numlibraries; i++)
+ 				if (inode == (*p)->libraries[i].library) {
+ 					iput(inode);
+ 					return -ETXTBSY;
+ 				}
+ 		}
 	if (flag & O_TRUNC)
 		if (inode->i_op && inode->i_op->truncate) {
 			inode->i_size = 0;

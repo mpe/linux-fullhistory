@@ -117,6 +117,28 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 	}
 }
 
+static int pipe_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+{
+	switch (sel_type) {
+		case SEL_IN:
+			if (!PIPE_EMPTY(*inode) || !PIPE_WRITERS(*inode))
+				return 1;
+			select_wait(&PIPE_READ_WAIT(*inode), wait);
+			return 0;
+		case SEL_OUT:
+			if (!PIPE_FULL(*inode) || !PIPE_WRITERS(*inode))
+				return 1;
+			select_wait(&PIPE_WRITE_WAIT(*inode), wait);
+			return 0;
+		case SEL_EX:
+			if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
+				return 1;
+			select_wait(&inode->i_wait,wait);
+			return 0;
+	}
+	return 0;
+}
+
 /*
  * Ok, these three routines NOW keep track of readers/writers,
  * Linus previously did it with inode->i_count checking.
@@ -150,7 +172,7 @@ struct file_operations read_pipe_fops = {
 	pipe_read,
 	bad_pipe_rw,
 	pipe_readdir,
-	NULL,		/* pipe_select */
+	pipe_select,
 	pipe_ioctl,
 	NULL,		/* no special open code */
 	pipe_read_release
@@ -161,7 +183,7 @@ struct file_operations write_pipe_fops = {
 	bad_pipe_rw,
 	pipe_write,
 	pipe_readdir,
-	NULL,		/* pipe_select */
+	pipe_select,
 	pipe_ioctl,
 	NULL,		/* no special open code */
 	pipe_write_release
@@ -172,7 +194,7 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_read,
 	pipe_write,
 	pipe_readdir,
-	NULL,		/* pipe_select */
+	pipe_select,
 	pipe_ioctl,
 	NULL,		/* no special open code */
 	pipe_rdwr_release

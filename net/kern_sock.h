@@ -33,7 +33,7 @@ struct socket {
 	struct socket *conn;		/* server socket connected to */
 	struct socket *iconn;		/* incomplete client connections */
 	struct socket *next;
-	struct task_struct **wait;	/* ptr to place to wait on */
+	struct wait_queue **wait;	/* ptr to place to wait on */
 	void *dummy;
 };
 
@@ -52,7 +52,7 @@ struct proto_ops {
 		       int *usockaddr_len, int peer);
 	int (*read)(struct socket *sock, char *ubuf, int size, int nonblock);
 	int (*write)(struct socket *sock, char *ubuf, int size, int nonblock);
-	int (*select)(struct socket *sock, int which);
+	int (*select)(struct socket *sock, int sel_type, select_table * wait);
 	int (*ioctl)(struct socket *sock, unsigned int cmd, unsigned long arg);
 };
 

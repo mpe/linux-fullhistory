@@ -62,6 +62,7 @@ struct user{
   struct pt_regs * u_ar0;	/* Used by gdb to help find the values for */
 				/* the registers. */
   struct user_i387_struct* u_fpstate;	/* Math Co-processor pointer. */
+  unsigned long magic;		/* To uniquely identify a core file */
 };
 #define NBPG 4096
 #define UPAGES 1

@@ -240,7 +240,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 
 		if (child == current)
 			return -EPERM;
-		if ((!current->dumpable || (current->uid != child->euid) ||
+		if ((!child->dumpable || (current->uid != child->euid) ||
 	 	    (current->gid != child->egid)) && !suser())
 			return -EPERM;
 		/* the same process cannot be attached many times */

@@ -6,6 +6,9 @@
 #ifndef _FS_H
 #define _FS_H
 
+#include <linux/limits.h>
+#include <linux/wait.h>
+
 #include <sys/types.h>
 #include <sys/dirent.h>
 #include <sys/vfs.h>
@@ -41,17 +44,6 @@ void buffer_init(long buffer_end);
 #define MAJOR(a) (((unsigned)(a))>>8)
 #define MINOR(a) ((a)&0xff)
 
-#define NR_OPEN 32
-#define NR_INODE 128
-#define NR_FILE 128
-#define NR_SUPER 8
-#define NR_HASH 307
-#define NR_BUFFERS nr_buffers
-#define BLOCK_SIZE 1024
-#define BLOCK_SIZE_BITS 10
-#define MAX_CHRDEV 16
-#define MAX_BLKDEV 16
-
 #ifndef NULL
 #define NULL ((void *) 0)
 #endif
@@ -78,6 +70,7 @@ void buffer_init(long buffer_end);
 #define MS_NOSUID    2 /* ignore suid and sgid bits */
 #define MS_NODEV     4 /* disallow access to device special files */
 #define MS_NOEXEC    8 /* disallow program execution */
+#define MS_SYNC     16 /* writes are synced at once */
 
 /*
  * Note that read-only etc flags are inode-specific: setting some file-system
@@ -89,6 +82,7 @@ void buffer_init(long buffer_end);
 #define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
+#define IS_SYNC(inode) ((inode)->i_flags & MS_SYNC)
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -108,7 +102,7 @@ struct buffer_head {
 	unsigned char b_dirt;		/* 0-clean,1-dirty */
 	unsigned char b_count;		/* users using this block */
 	unsigned char b_lock;		/* 0 - ok, 1 -locked */
-	struct task_struct * b_wait;
+	struct wait_queue * b_wait;
 	struct buffer_head * b_prev;
 	struct buffer_head * b_next;
 	struct buffer_head * b_prev_free;
@@ -131,8 +125,8 @@ struct inode {
 	unsigned long i_data[16];
 	struct inode_operations * i_op;
 	struct super_block * i_sb;
-	struct task_struct * i_wait;
-	struct task_struct * i_wait2;	/* for pipes */
+	struct wait_queue * i_wait;
+	struct wait_queue * i_wait2;	/* for pipes */
 	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;
@@ -154,18 +148,6 @@ struct file {
 	off_t f_pos;
 };
 
-typedef struct {
-	struct task_struct * old_task;
-	struct task_struct ** wait_address;
-} wait_entry;
-
-typedef struct select_table_struct {
-	int nr, woken;
-	struct task_struct * current;
-	struct select_table_struct * next_table;
-	wait_entry entry[NR_OPEN*3];
-} select_table;
-
 struct super_block {
 	unsigned long s_ninodes;
 	unsigned long s_nzones;
@@ -182,7 +164,7 @@ struct super_block {
 	struct inode * s_covered;
 	struct inode * s_mounted;
 	unsigned long s_time;
-	struct task_struct * s_wait;
+	struct wait_queue * s_wait;
 	unsigned char s_lock;
 	unsigned char s_rd_only;
 	unsigned char s_dirt;

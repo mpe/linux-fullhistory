@@ -66,7 +66,7 @@ int copy_mem(int nr,struct task_struct * p)
 
 static int find_empty_process(void)
 {
-	int i;
+	int i, task_nr;
 
 	repeat:
 		if ((++last_pid) & 0xffff0000)
@@ -75,9 +75,16 @@ static int find_empty_process(void)
 			if (task[i] && ((task[i]->pid == last_pid) ||
 				        (task[i]->pgrp == last_pid)))
 				goto repeat;
+/* Only the super-user can fill the last available slot */
+	task_nr = 0;
 	for(i=1 ; i<NR_TASKS ; i++)
 		if (!task[i])
-			return i;
+			if (task_nr)
+				return task_nr;
+			else
+				task_nr = i;
+	if (task_nr && suser())
+		return task_nr;
 	return -EAGAIN;
 }
 
@@ -105,6 +112,8 @@ int sys_fork(long ebx,long ecx,long edx,
 	}
 	task[nr] = p;
 	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
+	p->wait.task = p;
+	p->wait.next = NULL;
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~PF_PTRACED;
 	p->pid = last_pid;
@@ -125,7 +134,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
 	p->tss.eip = eip;
-	p->tss.eflags = eflags;
+	p->tss.eflags = eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
 	p->tss.eax = 0;
 	p->tss.ecx = ecx;
 	p->tss.edx = edx;

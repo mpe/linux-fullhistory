@@ -34,6 +34,8 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # KEYBOARD = -DKBD_DK -DKBDFLAGS=0
 # KEYBOARD = -DKBD_DK_LATIN1 -DKBDFLAGS=0x9F
 # KEYBOARD = -DKBD_DVORAK -DKBDFLAGS=0
+# KEYBOARD = -DKBD_SG -DKBDFLAGS=0
+# KEYBOARD = -DKBD_SG_LATIN1 -DKBDFLAGS=0x9F
 
 #
 # comment this line if you don't want the emulation-code
@@ -66,7 +68,7 @@ CPP	=$(CC) -E
 AR	=ar
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
-FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o
+FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o fs/msdos/msdos.o
 DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
 		 kernel/blk_drv/scsi/scsi.a
 MATH		=kernel/math/math.a
@@ -89,7 +91,7 @@ subdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.96c.pl1-`cat .version`\" > include/linux/config_rel.h
+	@echo \#define UTS_RELEASE \"0.96c.pl2-`cat .version`\" > include/linux/config_rel.h
 	@echo \#define UTS_VERSION \"`date +%D`\" > include/linux/config_ver.h
 	touch include/linux/config.h
 

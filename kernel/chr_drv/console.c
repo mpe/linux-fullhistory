@@ -212,7 +212,7 @@ static int console_blanked = 0;
 	if (currcons == fg_console) \
 		(fg) = (v)
 
-int blankinterval = 5*60*HZ;
+int blankinterval = 10*60*HZ;
 static int screen_size = 0;
 
 static void sysbeep(void);
@@ -315,7 +315,7 @@ static void set_origin(int currcons)
 {
 	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM)
 		return;
-	if (currcons != fg_console || vtmode == KD_GRAPHICS)
+	if (currcons != fg_console || console_blanked || vtmode == KD_GRAPHICS)
 		return;
 	cli();
 	outb_p(12, video_port_reg);
@@ -609,7 +609,7 @@ static inline void hide_cursor(int currcons)
 
 static inline void set_cursor(int currcons)
 {
-	if (currcons != fg_console)
+	if (currcons != fg_console || console_blanked)
 		return;
 	cli();
 	if (deccm) {
@@ -1217,18 +1217,9 @@ void con_write(struct tty_struct * tty)
 				state = ESnormal;
 		}
 	}
-	timer_active &= ~(1<<BLANK_TIMER);
 	if (vtmode == KD_GRAPHICS)
 		return;
 	set_cursor(currcons);
-	if (currcons == fg_console)
-		if (console_blanked) {
-			timer_table[BLANK_TIMER].expires = 0;
-			timer_active |= 1<<BLANK_TIMER;
-		} else if (blankinterval) {
-			timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-			timer_active |= 1<<BLANK_TIMER;
-		}
 }
 
 void do_keyboard_interrupt(void)
@@ -1514,4 +1505,14 @@ void console_print(const char * b)
 		pos+=2;
 	}
 	set_cursor(currcons);
+	if (vt_cons[fg_console].vt_mode == KD_GRAPHICS)
+		return;
+	timer_active &= ~(1<<BLANK_TIMER);
+	if (console_blanked) {
+		timer_table[BLANK_TIMER].expires = 0;
+		timer_active |= 1<<BLANK_TIMER;
+	} else if (blankinterval) {
+		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
+		timer_active |= 1<<BLANK_TIMER;
+	}
 }

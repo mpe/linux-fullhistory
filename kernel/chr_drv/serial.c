@@ -33,6 +33,8 @@ struct serial_struct serial_table[NR_SERIALS] = {
 	{ PORT_UNKNOWN, 3, 0x2E8, 3, NULL},
 };
 
+static void send_intr(struct serial_struct * info);
+
 static void modem_status_intr(struct serial_struct * info)
 {
 	unsigned char status = inb(info->port+6);
@@ -40,12 +42,12 @@ static void modem_status_intr(struct serial_struct * info)
 	if (!(info->tty->termios.c_cflag & CLOCAL)) {
 		if ((status & 0x88) == 0x08 && info->tty->pgrp > 0)
 			kill_pg(info->tty->pgrp,SIGHUP,1);
-#if 0
-		if ((status & 0x10) == 0x10)
-			info->tty->stopped = 0;
-		else
-			info->tty->stopped = 1;
-#endif
+
+		if (info->tty->termios.c_cflag & CRTSCTS)
+			info->tty->stopped = !(status & 0x10);
+
+		if (!info->tty->stopped)
+			send_intr(info);
 	}
 }
 
@@ -83,6 +85,8 @@ static void send_intr(struct serial_struct * info)
 	struct tty_queue * queue = info->tty->write_q;
 	int c, i = 0;
 
+	if (info->tty->stopped) return;
+
 	timer_active &= ~(1 << timer);
 	while (inb_p(info->port+5) & 0x20) {
 		if (queue->tail == queue->head)
@@ -90,8 +94,8 @@ static void send_intr(struct serial_struct * info)
 		c = queue->buf[queue->tail];
 		queue->tail++;
 		queue->tail &= TTY_BUF_SIZE-1;
-		outb(c,port);
-		if ((info->type != PORT_16550A) || (++i >= 14))
+  		outb(c,port);
+		if ((info->type != PORT_16550A) || (++i >= 14) || info->tty->stopped)
 			break;
 	}
 	timer_table[timer].expires = jiffies + 10;
@@ -303,10 +307,15 @@ static void startup(unsigned short port)
 	outb_p(0x03,port+3);	/* reset DLAB */
 	outb_p(0x0f,port+4);	/* set DTR,RTS, OUT_2 */
 	outb_p(0x0f,port+1);	/* enable all intrs */
-	inb_p(port+5);
-	inb_p(port+0);
+	inb_p(port+2);
 	inb_p(port+6);
-	inb(port+2);
+	inb_p(port+2);
+	inb_p(port+5);
+	do {		/* drain all of the stuck characters out of the port */
+		inb_p(port+0);
+	} while (inb_p(port+5) & 1 == 1);
+	inb_p(port+2);
+	inb_p(port+5);
 }
 
 void change_speed(unsigned int line)
@@ -416,6 +425,7 @@ int set_serial_info(unsigned int line, struct serial_struct * info)
 		retval = request_irq(new_irq,handler);
 		if (retval)
 			return retval;
+		info->irq = new_irq;
 		free_irq(irq);
 	}
 	cli();
@@ -455,18 +465,24 @@ long rs_init(long kmem_start)
 	for (i = 0, info = serial_table; i < NR_SERIALS; i++,info++) {
 		info->tty = (tty_table+64) + i;
 		init(info);
+		if (info->type == PORT_UNKNOWN)
+			continue;
+		printk("serial port at 0x%04x (irq = %d)",info->port,info->irq);
 		switch (info->type) {
 			case PORT_8250:
-				printk("serial port at 0x%04x is a 8250\n", info->port);
+				printk(" is a 8250\n");
 				break;
 			case PORT_16450:
-				printk("serial port at 0x%04x is a 16450\n", info->port);
+				printk(" is a 16450\n");
 				break;
 			case PORT_16550:
-				printk("serial port at 0x%04x is a 16550\n", info->port);
+				printk(" is a 16550\n");
 				break;
 			case PORT_16550A:
-				printk("serial port at 0x%04x is a 16550A\n", info->port);
+				printk(" is a 16550A\n");
+				break;
+			default:
+				printk("\n");
 				break;
 		}
 	}

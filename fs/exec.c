@@ -101,6 +101,7 @@ int core_dump(long signr, struct pt_regs * regs)
 	has_dumped = 1;
 /* write and seek example: from kernel space */
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	dump.magic = CMAGIC;
 	dump.u_tsize = current->end_code / PAGE_SIZE;
 	dump.u_dsize = (current->brk - current->end_code) / PAGE_SIZE;
 	dump.u_ssize =((current->start_stack +(PAGE_SIZE-1)) / PAGE_SIZE) -
@@ -168,6 +169,8 @@ int sys_uselib(const char * library)
 	struct inode * inode;
 	struct buffer_head * bh;
 	struct exec ex;
+	int i;
+	struct file * f;
 
 	if (get_limit(0x17) != TASK_SIZE)
 		return -EINVAL;
@@ -183,6 +186,15 @@ int sys_uselib(const char * library)
 		iput(inode);
 		return -EACCES;
 	}
+ 	if (inode->i_count > 1) {		/* check for writers */
+ 		f=0+file_table;
+ 		for (i=0 ; i<NR_FILE ; i++,f++ )
+ 			if (f->f_count && (f->f_mode & 2))
+ 				if (inode == f->f_inode) {
+ 					iput(inode);
+ 					return -ETXTBSY;
+ 				}
+ 	}
 	if (!(bh = bread(inode->i_dev,bmap(inode,0)))) {
 		iput(inode);
 		return -EACCES;
@@ -391,6 +403,7 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int sh_bang = 0;
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
 	int ch;
+	struct file * f;
 
 	if ((0xffff & eip[1]) != 0x000f)
 		panic("execve called from supervisor mode");
@@ -398,6 +411,15 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 		page[i]=0;
 	if (!(inode=namei(filename)))		/* get executables inode */
 		return -ENOENT;
+	if (inode->i_count > 1) {		/* check for writers */
+		f=0+file_table;
+		for (i=0 ; i<NR_FILE ; i++,f++ )
+			if (f->f_count && (f->f_mode & 2))
+				if (inode == f->f_inode) {
+					retval = -ETXTBSY;
+					goto exec_error2;
+				}
+	}
 	argc = count(argv);
 	envc = count(envp);
 	

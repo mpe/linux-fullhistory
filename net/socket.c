@@ -44,8 +44,7 @@ static int sock_write(struct inode *inode, struct file *file, char *buf,
 static int sock_readdir(struct inode *inode, struct file *file,
 			struct dirent *dirent, int count);
 static void sock_close(struct inode *inode, struct file *file);
-/*static*/ int sock_select(struct inode *inode, struct file *file, int which,
-		       select_table *seltable);
+static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned int arg);
 
@@ -64,7 +63,7 @@ static struct file_operations socket_file_ops = {
 
 static struct socket sockets[NSOCKETS];
 #define last_socket (sockets + NSOCKETS - 1)
-static struct task_struct *socket_wait_free = NULL;
+static struct wait_queue *socket_wait_free = NULL;
 
 /*
  * obtains the first available file descriptor and sets it up for use
@@ -289,37 +288,41 @@ sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	return sock->ops->ioctl(sock, cmd, arg);
 }
 
-/*static*/ int
-sock_select(struct inode *inode, struct file *file, int which,
-	    select_table *seltable)
+static int
+sock_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
 {
 	struct socket *sock;
 
 	PRINTK("sock_select: inode = 0x%x, kind = %s\n", inode,
-	       (which == SEL_IN) ? "in" :
-	       (which == SEL_OUT) ? "out" : "ex");
+	       (sel_type == SEL_IN) ? "in" :
+	       (sel_type == SEL_OUT) ? "out" : "ex");
 	if (!(sock = socki_lookup(inode))) {
-		printk("sock_write: can't find socket for inode!\n");
-		return -EBADF;
+		printk("sock_select: can't find socket for inode!\n");
+		return 0;
 	}
 
 	/*
 	 * handle server sockets specially
 	 */
 	if (sock->flags & SO_ACCEPTCON) {
-		if (which == SEL_IN) {
+		if (sel_type == SEL_IN) {
 			PRINTK("sock_select: %sconnections pending\n",
 			       sock->iconn ? "" : "no ");
+			if (sock->iconn)
+				return 1;
+			select_wait(&inode->i_wait, wait);
 			return sock->iconn ? 1 : 0;
 		}
 		PRINTK("sock_select: nothing else for server socket\n");
+		select_wait(&inode->i_wait, wait);
 		return 0;
 	}
-
 	/*
 	 * we can't return errors to select, so its either yes or no.
 	 */
-	return sock->ops->select(sock, which) ? 1 : 0;
+	if (sock->ops && sock->ops->select)
+		return sock->ops->select(sock, sel_type, wait);
+	return 0;
 }
 
 void
