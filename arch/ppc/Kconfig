@@ -538,6 +538,11 @@ config CHESTNUT
 config SPRUCE
 	bool "IBM-Spruce"
 
+config HDPU
+	bool "Sky-HDPU"
+	help
+	  Select HDPU if configuring a Sky Computers Compute Blade.
+
 config EV64260
 	bool "Marvell-EV64260BP"
 	help
@@ -748,7 +753,7 @@ config GT64260
 
 config MV64360
 	bool
-	depends on KATANA || RADSTONE_PPC7D
+	depends on KATANA || RADSTONE_PPC7D || HDPU
 	default y
 
 config MV64360
