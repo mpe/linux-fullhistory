@@ -108,6 +108,9 @@ static void smp_flush_cache(void)
 
 int agp_backend_acquire(void)
 {
+	if (agp_bridge.type == NOT_SUPPORTED) {
+		return -EINVAL;
+	}
 	atomic_inc(&agp_bridge.agp_in_use);
 
 	if (atomic_read(&agp_bridge.agp_in_use) != 1) {
@@ -120,6 +123,9 @@ int agp_backend_acquire(void)
 
 void agp_backend_release(void)
 {
+	if (agp_bridge.type == NOT_SUPPORTED) {
+		return;
+	}
 	atomic_dec(&agp_bridge.agp_in_use);
 	MOD_DEC_USE_COUNT;
 }
@@ -224,7 +230,7 @@ void agp_free_memory(agp_memory * curr)
 {
 	int i;
 
-	if (curr == NULL) {
+	if ((agp_bridge.type == NOT_SUPPORTED) || (curr == NULL)) {
 		return;
 	}
 	if (curr->is_bound == TRUE) {
@@ -255,6 +261,9 @@ agp_memory *agp_allocate_memory(size_t page_count, u32 type)
 	agp_memory *new;
 	int i;
 
+	if (agp_bridge.type == NOT_SUPPORTED) {
+		return NULL;
+	}
 	if ((atomic_read(&agp_bridge.current_memory_agp) + page_count) >
 	    agp_bridge.max_memory_agp) {
 		return NULL;
@@ -334,6 +343,10 @@ static int agp_return_size(void)
 void agp_copy_info(agp_kern_info * info)
 {
 	memset(info, 0, sizeof(agp_kern_info));
+	if (agp_bridge.type == NOT_SUPPORTED) {
+		info->chipset = agp_bridge.type;
+		return;
+	}
 	info->version.major = agp_bridge.version->major;
 	info->version.minor = agp_bridge.version->minor;
 	info->device = agp_bridge.dev;
@@ -357,7 +370,8 @@ int agp_bind_memory(agp_memory * curr, off_t pg_start)
 {
 	int ret_val;
 
-	if ((curr == NULL) || (curr->is_bound == TRUE)) {
+	if ((agp_bridge.type == NOT_SUPPORTED) ||
+	    (curr == NULL) || (curr->is_bound == TRUE)) {
 		return -EINVAL;
 	}
 	if (curr->is_flushed == FALSE) {
@@ -378,7 +392,7 @@ int agp_unbind_memory(agp_memory * curr)
 {
 	int ret_val;
 
-	if (curr == NULL) {
+	if ((agp_bridge.type == NOT_SUPPORTED) || (curr == NULL)) {
 		return -EINVAL;
 	}
 	if (curr->is_bound != TRUE) {
@@ -623,7 +637,7 @@ static int agp_generic_create_gatt_table(void)
 	}
 	table_end = table + ((PAGE_SIZE * (1 << page_order)) - 1);
 
-	for (page = virt_to_page(table); page < get_mem_map(table_end); page++)
+	for (page = virt_to_page(table); page < virt_to_page(table_end); page++)
 		set_bit(PG_reserved, &page->flags);
 
 	agp_bridge.gatt_table_real = (unsigned long *) table;
@@ -633,7 +647,7 @@ static int agp_generic_create_gatt_table(void)
 	CACHE_FLUSH();
 
 	if (agp_bridge.gatt_table == NULL) {
-		for (page = virt_to_page(table); page < get_mem_map(table_end); page++)
+		for (page = virt_to_page(table); page < virt_to_page(table_end); page++)
 			clear_bit(PG_reserved, &page->flags);
 
 		free_pages((unsigned long) table, page_order);
@@ -690,7 +704,7 @@ static int agp_generic_free_gatt_table(void)
 	table = (char *) agp_bridge.gatt_table_real;
 	table_end = table + ((PAGE_SIZE * (1 << page_order)) - 1);
 
-	for (page = virt_to_page(table); page < get_mem_map(table_end); page++)
+	for (page = virt_to_page(table); page < virt_to_page(table_end); page++)
 		clear_bit(PG_reserved, &page->flags);
 
 	free_pages((unsigned long) agp_bridge.gatt_table_real, page_order);
@@ -789,6 +803,7 @@ static void agp_generic_free_by_type(agp_memory * curr)
 
 void agp_enable(u32 mode)
 {
+	if (agp_bridge.type == NOT_SUPPORTED) return;
 	agp_bridge.agp_enable(mode);
 }
 
@@ -2264,6 +2279,27 @@ static int __init agp_find_supported_device(void)
 			agp_bridge.type = INTEL_I810;
 			return intel_i810_setup(i810_dev);
 
+		 case PCI_DEVICE_ID_INTEL_815_0:
+		   /* The i815 can operate either as an i810 style
+		    * integrated device, or as an AGP4X motherboard.
+		    *
+		    * This only addresses the first mode:
+		    */
+			i810_dev = pci_find_device(PCI_VENDOR_ID_INTEL,
+						   PCI_DEVICE_ID_INTEL_815_1,
+						   NULL);
+			if (i810_dev == NULL) {
+				printk(KERN_ERR PFX "agpgart: Detected an "
+				       "Intel i815, but could not find the"
+				       " secondary device.\n");
+				agp_bridge.type = NOT_SUPPORTED;
+				return -ENODEV;
+			}
+			printk(KERN_INFO PFX "agpgart: Detected an Intel i815 "
+			       "Chipset.\n");
+			agp_bridge.type = INTEL_I810;
+			return intel_i810_setup(i810_dev);
+
 		default:
 			break;
 		}
@@ -2454,11 +2490,13 @@ static int __init agp_init(void)
 	       AGPGART_VERSION_MAJOR, AGPGART_VERSION_MINOR);
 
 	ret_val = agp_backend_initialize();
-	if (ret_val)
+	if (ret_val) {
+		agp_bridge.type = NOT_SUPPORTED;
 		return ret_val;
-
+	}
 	ret_val = agp_frontend_initialize();
 	if (ret_val) {
+		agp_bridge.type = NOT_SUPPORTED;
 		agp_backend_cleanup();
 		return ret_val;
 	}

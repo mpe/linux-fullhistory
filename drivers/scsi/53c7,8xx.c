@@ -5389,9 +5389,10 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
      * to use vverify()?
      */
 
-    if (MAP_NR(insn) < 1 || MAP_NR(insn + 8) > MAP_NR(high_memory) || 
+    if (virt_to_phys((void *)insn) < PAGE_SIZE || 
+	virt_to_phys((void *)(insn + 8)) > virt_to_phys(high_memory) ||
 	((((dcmd = (insn[0] >> 24) & 0xff) & DCMD_TYPE_MMI) == DCMD_TYPE_MMI) &&
-	MAP_NR(insn + 12) > MAP_NR(high_memory))) {
+	virt_to_phys((void *)(insn + 12)) > virt_to_phys(high_memory))) {
 	size = 0;
 	sprintf (buf, "%s%p: address out of range\n",
 	    prefix, insn);
@@ -6381,8 +6382,7 @@ dump_events (struct Scsi_Host *host, int count) {
 
 static int 
 check_address (unsigned long addr, int size) {
-    return (MAP_NR(addr) < 1 || MAP_NR(addr + size) > MAP_NR(high_memory) ?
-	    -1 : 0);
+    return (virt_to_phys((void *)addr) < PAGE_SIZE || virt_to_phys((void *)(addr + size)) > virt_to_phys(high_memory) ?  -1 : 0);
 }
 
 #ifdef MODULE

@@ -94,7 +94,7 @@ static __inline__ void list_del(struct list_head *entry)
 
 /**
  * list_del_init - deletes entry from list and reinitialize it.
- * @entry: the element to delete from the list.n 
+ * @entry: the element to delete from the list.
  */
 static __inline__ void list_del_init(struct list_head *entry)
 {

@@ -80,7 +80,6 @@ struct raid5_private_data {
 	int			buffer_size;
 	int			chunk_size, level, algorithm;
 	int			raid_disks, working_disks, failed_disks;
-	int			sector_count;
 	unsigned long		next_sector;
 	atomic_t		nr_handle;
 	struct stripe_head	*next_free_stripe;

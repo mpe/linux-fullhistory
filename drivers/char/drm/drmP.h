@@ -139,6 +139,11 @@ typedef struct wait_queue *wait_queue_head_t;
 #define module_exit(x)  void cleanup_module(void) { x(); }
 #endif
 
+				/* virt_to_page added in 2.4.0-test6 */
+#ifndef virt_to_page
+#define virt_to_page(kaddr) (mem_map + MAP_NR(kaddr))
+#endif
+
 				/* Generic cmpxchg added in 2.3.x */
 #ifndef __HAVE_ARCH_CMPXCHG
 				/* Include this here so that driver can be
@@ -558,6 +563,9 @@ extern unsigned long drm_vm_nopage(struct vm_area_struct *vma,
 extern unsigned long drm_vm_shm_nopage(struct vm_area_struct *vma,
 				       unsigned long address,
 				       int write_access);
+extern unsigned long drm_vm_shm_nopage_lock(struct vm_area_struct *vma,
+					    unsigned long address,
+					    int write_access);
 extern unsigned long drm_vm_dma_nopage(struct vm_area_struct *vma,
 				       unsigned long address,
 				       int write_access);
@@ -569,6 +577,9 @@ extern struct page *drm_vm_nopage(struct vm_area_struct *vma,
 extern struct page *drm_vm_shm_nopage(struct vm_area_struct *vma,
 				      unsigned long address,
 				      int write_access);
+extern struct page *drm_vm_shm_nopage_lock(struct vm_area_struct *vma,
+					   unsigned long address,
+					   int write_access);
 extern struct page *drm_vm_dma_nopage(struct vm_area_struct *vma,
 				      unsigned long address,
 				      int write_access);
@@ -578,9 +589,7 @@ extern void	     drm_vm_close(struct vm_area_struct *vma);
 extern int	     drm_mmap_dma(struct file *filp,
 				  struct vm_area_struct *vma);
 extern int	     drm_mmap(struct file *filp, struct vm_area_struct *vma);
-extern struct vm_operations_struct drm_vm_ops;
-extern struct vm_operations_struct drm_vm_shm_ops;
-extern struct vm_operations_struct drm_vm_dma_ops;
+
 
 				/* Proc support (proc.c) */
 extern int	     drm_proc_init(drm_device_t *dev);

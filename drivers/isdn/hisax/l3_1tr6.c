@@ -883,7 +883,7 @@ down1tr6(struct PStack *st, int pr, void *arg)
 		} else {
 			proc->chan = chan;
 			chan->proc = proc;
-			proc->para.setup = chan->setup;
+			memcpy (&proc->para.setup, &chan->setup, sizeof (chan->setup));
 			proc->callref = cr;
 		}
 	} else {

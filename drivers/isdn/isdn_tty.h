@@ -57,6 +57,8 @@
 #define REG_CPPP     12
 #define BIT_CPPP    128
 
+#define REG_DXMT     13
+#define BIT_DXMT      1
 #define REG_T70      13
 #define BIT_T70       2
 #define BIT_T70_EXT  32
@@ -113,7 +115,7 @@ extern void isdn_tty_carrier_timeout(void);
 extern void isdn_tty_modem_xmit(void);
 extern int isdn_tty_modem_init(void);
 extern void isdn_tty_readmodem(void);
-extern int isdn_tty_find_icall(int, int, setup_parm);
+extern int isdn_tty_find_icall(int, int, setup_parm *);
 extern void isdn_tty_cleanup_xmit(modem_info *);
 extern int isdn_tty_stat_callback(int, isdn_ctrl *);
 extern int isdn_tty_rcv_skb(int, int, int, struct sk_buff *);

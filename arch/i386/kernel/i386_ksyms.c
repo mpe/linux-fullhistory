@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/apm_bios.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -24,6 +25,7 @@
 #include <asm/irq.h>
 #include <asm/mmx.h>
 #include <asm/desc.h>
+#include <asm/pgtable.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern spinlock_t rtc_lock;
@@ -142,3 +144,14 @@ EXPORT_SYMBOL(screen_info);
 EXPORT_SYMBOL(get_wchan);
 
 EXPORT_SYMBOL(rtc_lock);
+
+#undef memcpy
+#undef memset
+extern void * memset(void *,int,__kernel_size_t);
+extern void * memcpy(void *,const void *,__kernel_size_t);
+EXPORT_SYMBOL_NOVERS(memcpy);
+EXPORT_SYMBOL_NOVERS(memset);
+
+#ifdef CONFIG_X86_PAE
+EXPORT_SYMBOL(empty_zero_page);
+#endif

@@ -5,8 +5,8 @@
 
 struct dev_info {
 	kdev_t		dev;
-	int		size;
-	unsigned int	offset;
+	unsigned long	size;
+	unsigned long	offset;
 };
 
 typedef struct dev_info dev_info_t;

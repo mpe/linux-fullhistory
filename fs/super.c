@@ -1566,15 +1566,22 @@ static void chroot_fs_refs(struct dentry *old_root,
 			   struct vfsmount *new_rootmnt)
 {
 	struct task_struct *p;
+	struct fs_struct *fs;
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		/* FIXME - unprotected usage of ->fs + (harmless) race */
-		if (!p->fs) continue;
-		if (p->fs->root == old_root && p->fs->rootmnt == old_rootmnt)
-			set_fs_root(p->fs, new_rootmnt, new_root);
-		if (p->fs->pwd == old_root && p->fs->pwdmnt == old_rootmnt)
-			set_fs_pwd(p->fs, new_rootmnt, new_root);
+		task_lock(p);
+		fs = p->fs;
+		if (fs) {
+			atomic_inc(&fs->count);
+			task_unlock(p);
+			if (fs->root==old_root && fs->rootmnt==old_rootmnt)
+				set_fs_root(fs, new_rootmnt, new_root);
+			if (fs->pwd==old_root && fs->pwdmnt==old_rootmnt)
+				set_fs_pwd(fs, new_rootmnt, new_root);
+			put_fs_struct(fs);
+		} else
+			task_unlock(p);
 	}
 	read_unlock(&tasklist_lock);
 }

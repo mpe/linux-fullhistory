@@ -26,6 +26,7 @@
 #define SAMPLE_ROUNDUP 0
 
 #include "sound_config.h"
+#include <linux/wrapper.h>
 
 #define DMAP_FREE_ON_CLOSE      0
 #define DMAP_KEEP_ON_CLOSE      1
@@ -114,7 +115,7 @@ static int sound_alloc_dmap(struct dma_buffparms *dmap)
 	dmap->raw_buf = start_addr;
 	dmap->raw_buf_phys = virt_to_bus(start_addr);
 
-	for (page = virt_to_page(start_addr); page <= get_mem_map(end_addr); page++)
+	for (page = virt_to_page(start_addr); page <= virt_to_page(end_addr); page++)
 		mem_map_reserve(page);
 	return 0;
 }
@@ -134,7 +135,7 @@ static void sound_free_dmap(struct dma_buffparms *dmap)
 	start_addr = (unsigned long) dmap->raw_buf;
 	end_addr = start_addr + dmap->buffsize;
 
-	for (page = virt_to_page(start_addr); page <= get_mem_map(end_addr); page++)
+	for (page = virt_to_page(start_addr); page <= virt_to_page(end_addr); page++)
 		mem_map_unreserve(page);
 
 	free_pages((unsigned long) dmap->raw_buf, sz);

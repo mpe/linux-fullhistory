@@ -707,7 +707,7 @@ static int init_i596_mem(struct net_device *dev)
 	spin_lock_irqsave (&lp->lock, flags);
 
 	if (wait_cmd(dev,lp,1000,"timed out waiting to issue RX_START")) {
-		spin_unlock_irqrestore ((&lp->lock, flags);
+		spin_unlock_irqrestore (&lp->lock, flags);
 		goto failed;
 	}
 	DEB(DEB_INIT,printk("%s: Issuing RX_START\n", dev->name));

@@ -804,11 +804,10 @@ int filp_close(struct file *filp, fl_owner_t id)
  * or not in the open-files bitmap.  dup2 uses this to retain the fd
  * without races.
  */
-int do_close(unsigned int fd, int release)
+int do_close(struct files_struct *files, unsigned int fd, int release)
 {
 	int error;
 	struct file * filp;
-	struct files_struct * files = current->files;
 
 	error = -EBADF;
 	write_lock(&files->file_lock);
@@ -829,7 +828,7 @@ out_unlock:
 
 asmlinkage long sys_close(unsigned int fd)
 {
-	return do_close(fd, 1);
+	return do_close(current->files, fd, 1);
 }
 
 /*

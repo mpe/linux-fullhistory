@@ -128,10 +128,16 @@ static inline int dup_mmap(struct mm_struct * mm)
 	struct vm_area_struct * mpnt, *tmp, **pprev;
 	int retval;
 
-	/* Kill me slowly. UGLY! FIXME! */
-	memcpy(&mm->start_code, &current->mm->start_code, 15*sizeof(unsigned long));
-
 	flush_cache_mm(current->mm);
+	mm->locked_vm = 0;
+	mm->mmap = NULL;
+	mm->mmap_cache = NULL;
+	mm->map_count = 0;
+	mm->context = 0;
+	mm->cpu_vm_mask = 0;
+	mm->swap_cnt = 0;
+	mm->swap_address = 0;
+	mm->segments = NULL;
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		struct file *file;
@@ -189,6 +195,22 @@ fail_nomem:
 	return retval;
 }
 
+#define allocate_mm()	(kmem_cache_alloc(mm_cachep, SLAB_KERNEL))
+
+static struct mm_struct * mm_init(struct mm_struct * mm)
+{
+	atomic_set(&mm->mm_users, 1);
+	atomic_set(&mm->mm_count, 1);
+	init_MUTEX(&mm->mmap_sem);
+	mm->page_table_lock = SPIN_LOCK_UNLOCKED;
+	mm->pgd = pgd_alloc();
+	if (mm->pgd)
+		return mm;
+	kmem_cache_free(mm_cachep, mm);
+	return NULL;
+}
+	
+
 /*
  * Allocate and initialize an mm_struct.
  */
@@ -196,17 +218,10 @@ struct mm_struct * mm_alloc(void)
 {
 	struct mm_struct * mm;
 
-	mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
+	mm = allocate_mm();
 	if (mm) {
 		memset(mm, 0, sizeof(*mm));
-		atomic_set(&mm->mm_users, 1);
-		atomic_set(&mm->mm_count, 1);
-		init_MUTEX(&mm->mmap_sem);
-		mm->page_table_lock = SPIN_LOCK_UNLOCKED;
-		mm->pgd = pgd_alloc();
-		if (mm->pgd)
-			return mm;
-		kmem_cache_free(mm_cachep, mm);
+		return mm_init(mm);
 	}
 	return NULL;
 }
@@ -287,7 +302,13 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 
 	retval = -ENOMEM;
 	mm = mm_alloc();
+	mm = allocate_mm();
 	if (!mm)
+		goto fail_nomem;
+
+	/* Copy the current MM stuff.. */
+	memcpy(mm, current->mm, sizeof(*mm));
+	if (!mm_init(mm))
 		goto fail_nomem;
 
 	tsk->mm = mm;
@@ -304,10 +325,11 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	if (retval)
 		goto free_pt;
 
+	init_new_context(tsk,mm);
+
 good_mm:
 	tsk->mm = mm;
 	tsk->active_mm = mm;
-	init_new_context(tsk,mm);
 	return 0;
 
 free_pt:

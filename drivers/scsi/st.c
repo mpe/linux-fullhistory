@@ -12,10 +12,13 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Sat Jun 17 15:21:49 2000 by makisara@kai.makisara.local
+   Last modified: Sun Aug  6 23:02:13 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
+
+   Reminder: write_lock_irqsave() can be replaced by write_lock() when the old SCSI
+   error handling will be discarded.
  */
 
 #include <linux/module.h>
@@ -141,7 +144,7 @@ static Scsi_Tape **scsi_tapes = NULL;
 
 static int modes_defined;
 
-static ST_buffer *new_tape_buffer(int, int);
+static ST_buffer *new_tape_buffer(int, int, int);
 static int enlarge_buffer(ST_buffer *, int, int);
 static void normalize_buffer(ST_buffer *);
 static int append_to_buffer(const char *, ST_buffer *, int);
@@ -587,10 +590,11 @@ static int set_mode_densblk(Scsi_Tape * STp, ST_mode * STm)
 }
 
 
-/* Open the device */
-static int scsi_tape_open(struct inode *inode, struct file *filp)
+/* Open the device. Needs to be called with BKL only because of incrementing the SCSI host
+   module count. */
+static int st_open(struct inode *inode, struct file *filp)
 {
-	unsigned short flags;
+	unsigned short st_flags;
 	int i, need_dma_buffer, new_session = FALSE;
 	int retval;
 	unsigned char cmd[MAX_COMMAND_SIZE];
@@ -600,27 +604,31 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 	ST_partstat *STps;
 	int dev = TAPE_NR(inode->i_rdev);
 	int mode = TAPE_MODE(inode->i_rdev);
+	unsigned long flags;
 
-	read_lock(&st_dev_arr_lock);
+	write_lock_irqsave(&st_dev_arr_lock, flags);
 	STp = scsi_tapes[dev];
 	if (dev >= st_template.dev_max || STp == NULL) {
-		read_unlock(&st_dev_arr_lock);
+		write_unlock_irqrestore(&st_dev_arr_lock, flags);
 		return (-ENXIO);
 	}
-	read_unlock(&st_dev_arr_lock);
 
-	if (!scsi_block_when_processing_errors(STp->device)) {
-		return -ENXIO;
-	}
 	if (STp->in_use) {
+		write_unlock_irqrestore(&st_dev_arr_lock, flags);
 		DEB( printk(ST_DEB_MSG "st%d: Device already in use.\n", dev); )
 		return (-EBUSY);
 	}
 	STp->in_use = 1;
+	write_unlock_irqrestore(&st_dev_arr_lock, flags);
 	STp->rew_at_close = STp->autorew_dev = (MINOR(inode->i_rdev) & 0x80) == 0;
 
 	if (STp->device->host->hostt->module)
 		__MOD_INC_USE_COUNT(STp->device->host->hostt->module);
+
+	if (!scsi_block_when_processing_errors(STp->device)) {
+		retval = (-ENXIO);
+		goto err_out;
+	}
 
 	if (mode != STp->current_mode) {
                 DEBC(printk(ST_DEB_MSG "st%d: Mode change from %d to %d.\n",
@@ -632,16 +640,17 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 
 	/* Allocate a buffer for this user */
 	need_dma_buffer = STp->restr_dma;
-	read_lock(&st_dev_arr_lock);
+	write_lock_irqsave(&st_dev_arr_lock, flags);
 	for (i = 0; i < st_nbr_buffers; i++)
 		if (!st_buffers[i]->in_use &&
 		    (!need_dma_buffer || st_buffers[i]->dma)) {
 			STp->buffer = st_buffers[i];
+			(STp->buffer)->in_use = 1;
 			break;
 		}
-	read_unlock(&st_dev_arr_lock);
+	write_unlock_irqrestore(&st_dev_arr_lock, flags);
 	if (i >= st_nbr_buffers) {
-		STp->buffer = new_tape_buffer(FALSE, need_dma_buffer);
+		STp->buffer = new_tape_buffer(FALSE, need_dma_buffer, TRUE);
 		if (STp->buffer == NULL) {
 			printk(KERN_WARNING "st%d: Can't allocate tape buffer.\n", dev);
 			retval = (-EBUSY);
@@ -649,7 +658,6 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 		}
 	}
 
-	(STp->buffer)->in_use = 1;
 	(STp->buffer)->writing = 0;
 	(STp->buffer)->syscall_result = 0;
 	(STp->buffer)->use_sg = STp->device->host->sg_tablesize;
@@ -663,8 +671,8 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 			(STp->buffer)->buffer_size += (STp->buffer)->sg[i].length;
 	}
 
-	flags = filp->f_flags;
-	STp->write_prot = ((flags & O_ACCMODE) == O_RDONLY);
+	st_flags = filp->f_flags;
+	STp->write_prot = ((st_flags & O_ACCMODE) == O_RDONLY);
 
 	STp->dirty = 0;
 	for (i = 0; i < ST_NBR_PARTITIONS; i++) {
@@ -813,7 +821,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 
                 DEBC(printk(ST_DEB_MSG "st%d: Write protected\n", dev));
 
-		if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
+		if ((st_flags & O_ACCMODE) == O_WRONLY || (st_flags & O_ACCMODE) == O_RDWR) {
 			retval = (-EROFS);
 			goto err_out;
 		}
@@ -864,7 +872,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 
 
 /* Flush the tape buffer before close */
-static int scsi_tape_flush(struct file *filp)
+static int st_flush(struct file *filp)
 {
 	int result = 0, result2;
 	unsigned char cmd[MAX_COMMAND_SIZE];
@@ -982,17 +990,18 @@ static int scsi_tape_flush(struct file *filp)
 }
 
 
-/* Close the device and release it */
-static int scsi_tape_close(struct inode *inode, struct file *filp)
+/* Close the device and release it. BKL is not needed: this is the only thread
+   accessing this tape. */
+static int st_release(struct inode *inode, struct file *filp)
 {
 	int result = 0;
 	Scsi_Tape *STp;
+	unsigned long flags;
 
 	kdev_t devt = inode->i_rdev;
 	int dev;
 
 	dev = TAPE_NR(devt);
-	lock_kernel();
 	read_lock(&st_dev_arr_lock);
 	STp = scsi_tapes[dev];
 	read_unlock(&st_dev_arr_lock);
@@ -1002,13 +1011,18 @@ static int scsi_tape_close(struct inode *inode, struct file *filp)
 
 	if (STp->buffer != NULL) {
 		normalize_buffer(STp->buffer);
+		write_lock_irqsave(&st_dev_arr_lock, flags);
 		(STp->buffer)->in_use = 0;
+		STp->buffer = NULL;
+	}
+	else {
+		write_lock_irqsave(&st_dev_arr_lock, flags);
 	}
 
 	STp->in_use = 0;
+	write_unlock_irqrestore(&st_dev_arr_lock, flags);
 	if (STp->device->host->hostt->module)
 		__MOD_DEC_USE_COUNT(STp->device->host->hostt->module);
-	unlock_kernel();
 
 	return result;
 }
@@ -1452,8 +1466,11 @@ static long read_tape(Scsi_Tape *STp, long count, Scsi_Request ** aSRpnt)
 
 				if (SRpnt->sr_sense_buffer[2] & 0x20) {	/* ILI */
 					if (STp->block_size == 0) {
-						if (transfer <= 0)
-							transfer = 0;
+						if (transfer < 0) {
+							if (STps->drv_block >= 0)
+								STps->drv_block += 1;
+							return (-ENOMEM);
+						}
 						(STp->buffer)->buffer_bytes = bytes - transfer;
 					} else {
 						scsi_release_request(SRpnt);
@@ -3112,7 +3129,7 @@ static int st_ioctl(struct inode *inode, struct file *file,
 /* Try to allocate a new tape buffer. Calling function must not hold
    dev_arr_lock. */
 static ST_buffer *
- new_tape_buffer(int from_initialization, int need_dma)
+ new_tape_buffer(int from_initialization, int need_dma, int in_use)
 {
 	int i, priority, b_size, order, got = 0, segs = 0;
 	unsigned long flags;
@@ -3205,7 +3222,7 @@ static ST_buffer *
                     "st: segment sizes: first %d, last %d bytes.\n",
                     tb->sg[0].length, tb->sg[segs - 1].length);
 	)
-	tb->in_use = 0;
+	tb->in_use = in_use;
 	tb->dma = need_dma;
 	tb->buffer_size = got;
 	tb->writing = 0;
@@ -3429,9 +3446,9 @@ static struct file_operations st_fops =
 	read:		st_read,
 	write:		st_write,
 	ioctl:		st_ioctl,
-	open:		scsi_tape_open,
-	flush:		scsi_tape_flush,
-	release:	scsi_tape_close,
+	open:		st_open,
+	flush:		st_flush,
+	release:	st_release,
 };
 
 static int st_attach(Scsi_Device * SDp)
@@ -3595,7 +3612,7 @@ static int st_attach(Scsi_Device * SDp)
 	if (target_nbr > st_max_buffers)
 		target_nbr = st_max_buffers;
 	for (i=st_nbr_buffers; i < target_nbr; i++)
-		if (!new_tape_buffer(TRUE, TRUE)) {
+		if (!new_tape_buffer(TRUE, TRUE, FALSE)) {
 			printk(KERN_INFO "st: Unable to allocate new static buffer.\n");
 			break;
 		}

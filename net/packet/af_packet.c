@@ -1568,7 +1568,7 @@ static void free_pg_vec(unsigned long *pg_vec, unsigned order, unsigned len)
 
 			pend = virt_to_page(pg_vec[i] + (PAGE_SIZE << order) - 1);
 			for (page = virt_to_page(pg_vec[i]); page <= pend; page++)
-				mem_map_unreserve(page);
+				clear_bit(PG_reserved, &page->flags);
 			free_pages(pg_vec[i], order);
 		}
 	}
@@ -1623,7 +1623,7 @@ static int packet_set_ring(struct sock *sk, struct tpacket_req *req, int closing
 
 			pend = virt_to_page(pg_vec[i] + (PAGE_SIZE << order) - 1);
 			for (page = virt_to_page(pg_vec[i]); page <= pend; page++)
-				mem_map_reserve(page);
+				set_bit(PG_reserved, &page->flags);
 		}
 		/* Page vector is allocated */
 

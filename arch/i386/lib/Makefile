@@ -7,7 +7,8 @@
 
 L_TARGET = lib.a
 L_OBJS  = checksum.o old-checksum.o delay.o \
-	usercopy.o getuser.o putuser.o iodebug.o
+	usercopy.o getuser.o putuser.o iodebug.o \
+	memcpy.o
 
 ifdef CONFIG_X86_USE_3DNOW
 L_OBJS += mmx.o

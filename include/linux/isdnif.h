@@ -1,5 +1,5 @@
-/* $Id: isdnif.h,v 1.33 2000/01/20 19:59:43 keil Exp $
- *
+/* $Id: isdnif.h,v 1.35 2000/06/16 13:19:38 keil Exp $
+
  * Linux ISDN subsystem
  *
  * Definition of the interface between the subsystem and its low-level drivers.
@@ -135,6 +135,20 @@
 /* STAT_INVOKE_BRD callback. The ll_id is set to 0, the other fields */
 /* are supplied by the network and not by the HL.                    */   
 /*********************************************************************/
+
+/*****************/
+/* NI1 commands */ 
+/*****************/
+#define NI1_CMD_INVOKE       ((0x00 << 8) | ISDN_PTYPE_NI1)   /* invoke a supplementary service */
+#define NI1_CMD_INVOKE_ABORT ((0x01 << 8) | ISDN_PTYPE_NI1)   /* abort a invoke cmd */
+
+/*******************************/
+/* NI1 Status callback values */
+/*******************************/
+#define NI1_STAT_INVOKE_RES  ((0x80 << 8) | ISDN_PTYPE_NI1)   /* Result for invocation */
+#define NI1_STAT_INVOKE_ERR  ((0x81 << 8) | ISDN_PTYPE_NI1)   /* Error Return for invocation */
+#define NI1_STAT_INVOKE_BRD  ((0x82 << 8) | ISDN_PTYPE_NI1)   /* Deliver invoke broadcast info */
+
 typedef struct
   { ulong ll_id; /* ID supplied by LL when executing    */
 		 /* a command and returned by HL for    */
@@ -150,7 +164,7 @@ typedef struct
                  /* error value when error callback     */
     int datalen; /* length of cmd or stat data          */
     u_char *data;/* pointer to data delivered or send   */
-  } dss1_cmd_stat;
+  } isdn_cmd_stat;
 
 /*
  * Commands from linklevel to lowlevel
@@ -412,13 +426,16 @@ typedef struct {
 		setup_parm setup;/* For SETUP msg			*/
 		capi_msg cmsg;	/* For CAPI like messages		*/
 		char display[85];/* display message data		*/ 
-		dss1_cmd_stat dss1_io; /* DSS1 IO-parameter/result	*/
+		isdn_cmd_stat isdn_io; /* ISDN IO-parameter/result	*/
 		aux_s aux;	/* for modem commands/indications	*/
 #ifdef CONFIG_ISDN_TTY_FAX
 		T30_s	*fax;	/* Pointer to ttys fax struct		*/
 #endif
 	} parm;
 } isdn_ctrl;
+
+#define dss1_io    isdn_io
+#define ni1_io     isdn_io
 
 /*
  * The interface-struct itself (initialized at load-time of lowlevel-driver)

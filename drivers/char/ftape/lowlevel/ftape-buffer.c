@@ -50,7 +50,7 @@ static inline void *dmaalloc(size_t size)
 	if (addr) {
 		struct page *page;
 
-		for (page = virt_to_page(addr); page < get_mem_map(addr+size); page++)
+		for (page = virt_to_page(addr); page < virt_to_page(addr+size); page++)
 			mem_map_reserve(page);
 	}
 	return (void *)addr;

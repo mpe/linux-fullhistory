@@ -132,7 +132,7 @@ asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 	struct file * file;
 	struct files_struct * files = current->files;
 
-	write_lock(&current->files->file_lock);
+	write_lock(&files->file_lock);
 	if (!(file = fcheck(oldfd)))
 		goto out_unlock;
 	err = newfd;
@@ -158,7 +158,7 @@ asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 	FD_SET(newfd, files->open_fds);
 	write_unlock(&files->file_lock);
 	
-	do_close(newfd, 0);
+	do_close(files, newfd, 0);
 
 	write_lock(&files->file_lock);
 	allocate_fd(files, file, newfd);
@@ -167,7 +167,7 @@ asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 out:
 	return err;
 out_unlock:
-	write_unlock(&current->files->file_lock);
+	write_unlock(&files->file_lock);
 	goto out;
 }
 

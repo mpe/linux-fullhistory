@@ -631,7 +631,7 @@ static void raid5_build_block (struct stripe_head *sh, struct buffer_head *bh, i
 	raid5_conf_t *conf = sh->raid_conf;
 	char *b_data;
 	struct page *b_page;
-	int block = sh->sector / (sh->size >> 9);
+	unsigned long block = sh->sector / (sh->size >> 9);
 
 	b_data = bh->b_data;
 	b_page = bh->b_page;
@@ -715,12 +715,13 @@ static int raid5_error (mddev_t *mddev, kdev_t dev)
  * Input: a 'big' sector number,
  * Output: index of the data and parity disk, and the sector # in them.
  */
-static unsigned long raid5_compute_sector(int r_sector, unsigned int raid_disks,
+static unsigned long raid5_compute_sector(unsigned long r_sector, unsigned int raid_disks,
 			unsigned int data_disks, unsigned int * dd_idx,
 			unsigned int * pd_idx, raid5_conf_t *conf)
 {
-	unsigned int stripe;
-	int chunk_number, chunk_offset;
+	unsigned long stripe;
+	unsigned long chunk_number;
+	unsigned int chunk_offset;
 	unsigned long new_sector;
 	int sectors_per_chunk = conf->chunk_size >> 9;
 

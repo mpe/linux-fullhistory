@@ -74,17 +74,18 @@ static void isdn_ppp_ccp_reset_ack_rcvd(struct ippp_struct *is,
 
 
 #ifdef CONFIG_ISDN_MPP
-static int isdn_ppp_bundle(struct ippp_struct *, int unit);
-static void isdn_ppp_mask_queue(isdn_net_dev * dev, long mask);
-static void isdn_ppp_cleanup_mpqueue(isdn_net_dev * dev, long min);
-static void isdn_ppp_cleanup_sqqueue(isdn_net_dev * dev, isdn_net_local *, long min);
-static void isdn_ppp_free_sqqueue(isdn_net_dev *);
-static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
-				 int BEbyte, long *sqno, int min_sqno);
-static void isdn_ppp_free_mpqueue(isdn_net_dev *);
-#endif
+static ippp_bundle * isdn_ppp_bundle_arr = NULL;
+ 
+static int isdn_ppp_mp_bundle_array_init(void);
+static int isdn_ppp_mp_init( isdn_net_local * lp, ippp_bundle * add_to );
+static void isdn_ppp_mp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, 
+							struct sk_buff *skb);
+static void isdn_ppp_mp_cleanup( isdn_net_local * lp );
 
-char *isdn_ppp_revision = "$Revision: 1.69 $";
+static int isdn_ppp_bundle(struct ippp_struct *, int unit);
+#endif	/* CONFIG_ISDN_MPP */
+  
+char *isdn_ppp_revision = "$Revision: 1.77 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 
@@ -119,7 +120,6 @@ isdn_ppp_frame_log(char *info, char *data, int len, int maxlen,int unit,int slot
 int
 isdn_ppp_free(isdn_net_local * lp)
 {
-	isdn_net_local *master_lp = lp;
 	unsigned long flags;
 	struct ippp_struct *is;
 
@@ -130,17 +130,18 @@ isdn_ppp_free(isdn_net_local * lp)
 	cli();
 
 #ifdef CONFIG_ISDN_MPP
-	if (lp->next == lp) {	/* last link in queue? */
-		master_lp->netdev->ib.bundled = 0;
-		isdn_ppp_free_mpqueue(master_lp->netdev);
-		isdn_ppp_free_sqqueue(master_lp->netdev);
-	}
+	spin_lock(&lp->netdev->pb->lock);
 #endif
-
 	isdn_net_rm_from_bundle(lp);
+#ifdef CONFIG_ISDN_MPP
+	if (lp->netdev->pb->ref_ct == 1)	/* last link in queue? */
+		isdn_ppp_mp_cleanup(lp);
+
+	lp->netdev->pb->ref_ct--;
+	spin_unlock(&lp->netdev->pb->lock);
+#endif /* CONFIG_ISDN_MPP */
 
 	is = ippp_table[lp->ppp_slot];
-	
 	if ((is->state & IPPP_CONNECT))
 		isdn_ppp_closewait(lp->ppp_slot);	/* force wakeup on ippp device */
 	else if (is->state & IPPP_ASSIGNED)
@@ -153,7 +154,6 @@ isdn_ppp_free(isdn_net_local * lp)
 	lp->ppp_slot = -1;      /* is this OK ?? */
 
 	restore_flags(flags);
-
 	return 0;
 }
 
@@ -170,7 +170,6 @@ isdn_ppp_bind(isdn_net_local * lp)
 
 	save_flags(flags);
 	cli();
-
 	if (lp->pppbind < 0) {  /* device bounded to ippp device ? */
 		isdn_net_dev *net_dev = dev->netdev;
 		char exclusive[ISDN_MAX_CHANNELS];	/* exclusive flags */
@@ -207,20 +206,16 @@ isdn_ppp_bind(isdn_net_local * lp)
 		printk(KERN_ERR "isdn_ppp_bind: illegal interface name %s.\n", lp->name);
 		return -1;
 	}
+	
 	lp->ppp_slot = i;
-
-	/* reset some values */
-	lp->netdev->ib.bundled = 0;
-	lp->netdev->ib.next_num = 0;
-	lp->netdev->ib.modify = 0;
-	lp->netdev->ib.last = NULL;
-	lp->netdev->ib.min = 0;
-	lp->netdev->ib.sq = NULL;
-
 	is = ippp_table[i];
 	is->lp = lp;
 	is->unit = unit;
 	is->state = IPPP_OPEN | IPPP_ASSIGNED;	/* assigned to a netdevice but not connected */
+#ifdef CONFIG_ISDN_MPP
+	if (isdn_ppp_mp_init(lp, NULL) < 0)
+		return -ENOMEM;
+#endif /* CONFIG_ISDN_MPP */
 
 	restore_flags(flags);
 
@@ -313,7 +308,6 @@ isdn_ppp_open(int min, struct file *file)
 	is->mp_seqno = 0;       /* MP sequence number */
 	is->pppcfg = 0;         /* ppp configuration */
 	is->mpppcfg = 0;        /* mppp configuration */
-	is->range = 0x1000000;  /* MP: 24 bit range */
 	is->last_link_seqno = -1;	/* MP: maybe set to Bundle-MIN, when joining a bundle ?? */
 	is->unit = -1;          /* set, when we have our interface */
 	is->mru = 1524;         /* MRU, default 1524 */
@@ -810,6 +804,11 @@ isdn_ppp_init(void)
 {
 	int i,
 	 j;
+	 
+#ifdef CONFIG_ISDN_MPP
+	if( isdn_ppp_mp_bundle_array_init() < 0 )
+		return -ENOMEM;
+#endif /* CONFIG_ISDN_MPP */
 
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		if (!(ippp_table[i] = (struct ippp_struct *)
@@ -841,6 +840,12 @@ isdn_ppp_cleanup(void)
 
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++)
 		kfree(ippp_table[i]);
+
+#ifdef CONFIG_ISDN_MPP
+	if (isdn_ppp_bundle_arr)
+		kfree(isdn_ppp_bundle_arr);
+#endif /* CONFIG_ISDN_MPP */
+
 }
 
 /*
@@ -866,9 +871,16 @@ static int isdn_ppp_strip_proto(struct sk_buff *skb)
 void isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff *skb)
 {
 	struct ippp_struct *is;
+	int slot;
 	int proto;
 
-	is = ippp_table[lp->ppp_slot];
+	slot = lp->ppp_slot;
+	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
+		printk(KERN_ERR "isdn_ppp_receive: lp->ppp_slot %d\n", lp->ppp_slot);
+		kfree_skb(skb);
+		return;
+	}
+	is = ippp_table[slot];
 
 	if (is->debug & 0x4) {
 		printk(KERN_DEBUG "ippp_receive: is:%08lx lp:%08lx slot:%d unit:%d len:%d\n",
@@ -890,7 +902,6 @@ void isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buf
 
 #ifdef CONFIG_ISDN_MPP
 	if (!(is->mpppcfg & SC_REJ_MP_PROT)) {
-		int sqno_end;
 
 		if(is->compflags & SC_LINK_DECOMP_ON) {	
 			if(proto == PPP_COMPFRAG) {
@@ -906,150 +917,12 @@ void isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buf
 		}
 
 		if (proto == PPP_MP) {
-			isdn_net_local *lpq;
-			long sqno, min_sqno, tseq;
-
-			u_char BEbyte = skb->data[0];
-			if (is->debug & 0x8)
-				printk(KERN_DEBUG "recv: %d/%04x/%d -> %02x %02x %02x %02x %02x %02x\n", lp->ppp_slot, proto,
-				       (int) skb->len, (int) skb->data[0], (int) skb->data[1], (int) skb->data[2],
-				       (int) skb->data[3], (int) skb->data[4], (int) skb->data[5]);
-			if (!(is->mpppcfg & SC_IN_SHORT_SEQ)) {
-				sqno = ((int) skb->data[1] << 16) + ((int) skb->data[2] << 8) + (int) skb->data[3];
-				skb_pull(skb, 4);
-			} else {
-				sqno = (((int) skb->data[0] & 0xf) << 8) + (int) skb->data[1];
-				skb_pull(skb, 2);
-			}
-
-			/*
-			 * new sequence number lower than last number? (this is only allowed
-			 * for overflow case)
-			 */
-			if ((tseq = is->last_link_seqno) >= sqno) {
-				int range = is->range;
-				if (tseq + 1024 < range + sqno)	/* redundancy check .. not MP conform */
-					printk(KERN_WARNING "isdn_ppp_receive, MP, detected overflow with sqno: %ld, last: %ld !!!\n", sqno, tseq);
-				else {
-					sqno += range;
-					is->last_link_seqno = sqno;
-				}
-			} else {
-				/* here, we should also add an redundancy check */
-				is->last_link_seqno = sqno;
-			}
-
-			/* 
-			 * step over all links to find lowest link number
-			 */
-			for (min_sqno = LONG_MAX, lpq = net_dev->queue;;) {
-				long lls = ippp_table[lpq->ppp_slot]->last_link_seqno;
-				if (lls >= 0 && lls < min_sqno)
-					min_sqno = lls;
-				lpq = lpq->next;
-				if (lpq == net_dev->queue)
-					break;
-			}
-
-			/*
-			 * for the case, that the last frame numbers of all 
-			 * links are overflowed: mask/reduce the sequenece number to
-			 * 'normal' numbering.
-			 */
-			if (min_sqno >= ippp_table[lpq->ppp_slot]->range) {
-				int mask = ippp_table[lpq->ppp_slot]->range-1;	/* range is power of two, so a mask will do the job */
-				isdn_ppp_mask_queue(net_dev, mask);
-				net_dev->ib.next_num &= mask;
-				{
-					struct sqqueue *q = net_dev->ib.sq;
-					while (q) {
-						q->sqno_start &= mask;
-						q->sqno_end &= mask;
-					}
-				}
-				min_sqno &= mask;
-				for (lpq = net_dev->queue;;) {
-					if(ippp_table[lpq->ppp_slot]->last_link_seqno >= 0)
-						ippp_table[lpq->ppp_slot]->last_link_seqno &= mask;
-					lpq = lpq->next;
-					if (lpq == net_dev->queue)
-						break;
-				}
-			}
-			if ((BEbyte & (MP_BEGIN_FRAG | MP_END_FRAG)) != (MP_BEGIN_FRAG | MP_END_FRAG)) {
-				static int dmes = 0;
-				if( !dmes ) {
-					printk(KERN_DEBUG "ippp: trying ;) to fill mp_queue %d .. UNTESTED!!\n", lp->ppp_slot);
-					dmes = 1;
-				}
-				if ((sqno_end = isdn_ppp_fill_mpqueue(net_dev, &skb, BEbyte, &sqno, min_sqno)) < 0) {
-					net_dev->ib.modify = 1;	/* block timeout-timer */
-					isdn_ppp_cleanup_sqqueue(net_dev, lp, min_sqno);
-					net_dev->ib.modify = 0;
-					return;	/* no packet complete */
-				}
-			} else
-				sqno_end = sqno;
-
-			if (is->debug & 0x40)
-				printk(KERN_DEBUG "min_sqno: %ld sqno_end %d next: %ld\n", min_sqno, sqno_end, net_dev->ib.next_num);
-
-			/*
-			 * MP buffer management .. reorders incoming packets ..
-			 * lotsa mem-copies and not heavily tested.
-			 *
-			 * first check whether there is more than one link in the bundle
-			 * then check whether the number is in order
-			 */
-			net_dev->ib.modify = 1;	/* block timeout-timer */
-			if (net_dev->ib.bundled && net_dev->ib.next_num != sqno) {
-				/*
-				 * packet is not 'in order'
-				 */
-				struct sqqueue *q;
-
-				q = (struct sqqueue *) kmalloc(sizeof(struct sqqueue), GFP_ATOMIC);
-				if (!q) {
-					net_dev->ib.modify = 0;
-					printk(KERN_WARNING "ippp/MPPP: Bad! Can't alloc sq node!\n");
-					dev_kfree_skb(skb);
-					return;	/* discard */
-				}
-				q->skb = skb;
-				q->sqno_end = sqno_end;
-				q->sqno_start = sqno;
-				q->timer = jiffies + (ISDN_TIMER_1SEC) * 5;	/* timeout after 5 seconds */
-
-				if (!net_dev->ib.sq) {
-					net_dev->ib.sq = q;
-					q->next = NULL;
-				} else {
-					struct sqqueue *ql = net_dev->ib.sq;
-					if (ql->sqno_start > q->sqno_start) {
-						q->next = ql;
-						net_dev->ib.sq = q;
-					} else {
-						while (ql->next && ql->next->sqno_start < q->sqno_start)
-							ql = ql->next;
-						q->next = ql->next;
-						ql->next = q;
-					}
-				}
-			} else {
-				/*
-				 * packet was 'in order' .. push it higher
-				 */
-				net_dev->ib.next_num = sqno_end + 1;
-				proto = isdn_ppp_strip_proto(skb);
-				isdn_ppp_push_higher(net_dev, lp, skb, proto);
-			}
-			isdn_ppp_cleanup_sqqueue(net_dev, lp, min_sqno);
-			net_dev->ib.modify = 0;
-
-		} else
+			isdn_ppp_mp_receive(net_dev, lp, skb);
+		} 
+		else
 			isdn_ppp_push_higher(net_dev, lp, skb, proto);
 	} else
-#endif
+#endif /* CONFIG_ISDN_MPP */
 		isdn_ppp_push_higher(net_dev, lp, skb, proto);
 }
 
@@ -1061,8 +934,16 @@ static void
 isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff *skb, int proto)
 {
 	struct net_device *dev = &net_dev->dev;
-	struct ippp_struct *is = ippp_table[lp->ppp_slot];
+	struct ippp_struct *is;
+	int slot;
 
+	slot = lp->ppp_slot;
+	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
+		printk(KERN_ERR "isdn_ppp_push_higher: lp->ppp_slot %d\n", lp->ppp_slot);
+		kfree_skb(skb);
+		return;
+	}
+	is = ippp_table[slot];
 	if (is->debug & 0x10) {
 		printk(KERN_DEBUG "push, skb %d %04x\n", (int) skb->len, proto);
 		isdn_ppp_frame_log("rpush", skb->data, skb->len, 32,is->unit,lp->ppp_slot);
@@ -1219,11 +1100,18 @@ isdn_ppp_xmit(struct sk_buff *skb, struct net_device *netdev)
 	isdn_net_dev *nd;
 	unsigned int proto = PPP_IP;     /* 0x21 */
 	struct ippp_struct *ipt,*ipts;
+	int slot;
 
 	mlp = (isdn_net_local *) (netdev->priv);
-
 	nd = mlp->netdev;       /* get master lp */
-	ipts = ippp_table[mlp->ppp_slot];
+
+	slot = mlp->ppp_slot;
+	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
+		printk(KERN_ERR "isdn_ppp_xmit: lp->ppp_slot %d\n", mlp->ppp_slot);
+		kfree_skb(skb);
+		return 0;
+	}
+	ipts = ippp_table[slot];
 
 	if (!(ipts->pppcfg & SC_ENABLE_IP)) {	/* PPP connected ? */
 		if (ipts->debug & 0x1)
@@ -1247,12 +1135,18 @@ isdn_ppp_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 	lp = isdn_net_get_locked_lp(nd);
 	if (!lp) {
-		printk(KERN_WARNING "%s: all channels busy - requeuing!\n", lp->name);
+		printk(KERN_WARNING "%s: all channels busy - requeuing!\n", netdev->name);
 		return 1;
 	}
 	/* we have our lp locked from now on */
 
-	ipt = ippp_table[lp->ppp_slot];
+	slot = lp->ppp_slot;
+	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
+		printk(KERN_ERR "isdn_ppp_xmit: lp->ppp_slot %d\n", lp->ppp_slot);
+		kfree_skb(skb);
+		return 0;
+	}
+	ipt = ippp_table[slot];
 	lp->huptimer = 0;
 
 	/*
@@ -1399,351 +1293,466 @@ isdn_ppp_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 #ifdef CONFIG_ISDN_MPP
 
-/*
- * free SQ queue
- * -------------
- * Note: We need two queues for MPPP. The SQ queue holds fully (re)assembled frames,
- * that can't be delivered, because there is an outstanding earlier frame
+/* this is _not_ rfc1990 header, but something we convert both short and long
+ * headers to for convinience's sake:
+ * 	byte 0 is flags as in rfc1990
+ *	bytes 1...4 is 24-bit seqence number converted to host byte order 
  */
-static void
-isdn_ppp_free_sqqueue(isdn_net_dev * p)
+#define MP_HEADER_LEN	5
+
+#define MP_LONGSEQ_MASK		0x00ffffff
+#define MP_SHORTSEQ_MASK	0x00000fff
+#define MP_LONGSEQ_MAX		MP_LONGSEQ_MASK
+#define MP_SHORTSEQ_MAX		MP_SHORTSEQ_MASK
+#define MP_LONGSEQ_MAXBIT	((MP_LONGSEQ_MASK+1)>>1)
+#define MP_SHORTSEQ_MAXBIT	((MP_SHORTSEQ_MASK+1)>>1)
+
+/* sequence-wrap safe comparisions (for long sequence)*/ 
+#define MP_LT(a,b)	((a-b)&MP_LONGSEQ_MAXBIT)
+#define MP_LE(a,b) 	!((b-a)&MP_LONGSEQ_MAXBIT)
+#define MP_GT(a,b) 	((b-a)&MP_LONGSEQ_MAXBIT)
+#define MP_GE(a,b)	!((a-b)&MP_LONGSEQ_MAXBIT)
+
+#define MP_SEQ(f)	((*(u32*)(f->data+1)))
+#define MP_FLAGS(f)	(f->data[0])
+
+static int isdn_ppp_mp_bundle_array_init(void)
 {
-	struct sqqueue *q = p->ib.sq;
-
-	p->ib.sq = NULL;
-	while (q) {
-		struct sqqueue *qn = q->next;
-		if (q->skb)
-			dev_kfree_skb(q->skb);
-		kfree(q);
-		q = qn;
-	}
-
+	int i;
+	int sz = ISDN_MAX_CHANNELS*sizeof(ippp_bundle);
+	if( (isdn_ppp_bundle_arr = (ippp_bundle*)kmalloc(sz, 
+							GFP_KERNEL)) == NULL )
+		return -ENOMEM;
+	memset(isdn_ppp_bundle_arr, 0, sz);
+	for( i = 0; i < ISDN_MAX_CHANNELS; i++ )
+		spin_lock_init(&isdn_ppp_bundle_arr[i].lock);
+	return 0;
 }
 
-/*
- * free MP queue
- * -------------
- * Note: The MP queue holds all frame fragments of frames, that can't be
- * reassembled, because there is at least one missing fragment.
- */
-static void 
-isdn_ppp_free_mpqueue(isdn_net_dev * p)
+static ippp_bundle * isdn_ppp_mp_bundle_alloc(void)
 {
-	struct mpqueue *q = p->mp_last;
-	p->mp_last = NULL;
+	int i;
+	for( i = 0; i < ISDN_MAX_CHANNELS; i++ )
+		if (isdn_ppp_bundle_arr[i].ref_ct <= 0)
+			return (isdn_ppp_bundle_arr + i);
+	return NULL;
+}
 
-	while (q) {
-		struct mpqueue *ql = q->next;
-		dev_kfree_skb(q->skb);
-		kfree(q);
-		q = ql;
+static int isdn_ppp_mp_init( isdn_net_local * lp, ippp_bundle * add_to )
+{
+	struct ippp_struct * is = ippp_table[lp->ppp_slot];
+   
+	if (add_to) {
+		if( lp->netdev->pb )
+			lp->netdev->pb->ref_ct--;
+		lp->netdev->pb = add_to;
+	} else {		/* first link in a bundle */
+		is->mp_seqno = 0;
+		if ((lp->netdev->pb = isdn_ppp_mp_bundle_alloc()) == NULL)
+			return -ENOMEM;
+		lp->next = lp->last = lp;	/* nobody else in a queue */
+		lp->netdev->pb->frags = NULL;
+		lp->netdev->pb->frames = 0;
+		lp->netdev->pb->seq = LONG_MAX;
 	}
+	lp->netdev->pb->ref_ct++;
+	
+	is->last_link_seqno = 0;
+	return 0;
+}
+
+static u32 isdn_ppp_mp_get_seq( int short_seq, 
+					struct sk_buff * skb, u32 last_seq );
+struct sk_buff * isdn_ppp_mp_discard( ippp_bundle * mp,
+			struct sk_buff * from, struct sk_buff * to );
+void isdn_ppp_mp_reassembly( isdn_net_dev * net_dev, isdn_net_local * lp,
+				struct sk_buff * from, struct sk_buff * to );
+static void isdn_ppp_mp_free_skb( ippp_bundle * mp, struct sk_buff * skb );
+static void isdn_ppp_mp_print_recv_pkt( int slot, struct sk_buff * skb );
+
+static void isdn_ppp_mp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, 
+							struct sk_buff *skb)
+{
+	struct ippp_struct *is;
+	isdn_net_local * lpq;
+	ippp_bundle * mp;
+	isdn_mppp_stats * stats;
+	struct sk_buff * newfrag, * frag, * start, *nextf;
+	u32 newseq, minseq, thisseq;
+	unsigned long flags;
+	int slot;
+
+	spin_lock_irqsave(&net_dev->pb->lock, flags);
+    	mp = net_dev->pb;
+        stats = &mp->stats;
+	slot = lp->ppp_slot;
+	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
+		printk(KERN_ERR "isdn_ppp_mp_receive: lp->ppp_slot %d\n", lp->ppp_slot);
+		stats->frame_drops++;
+		dev_kfree_skb(skb);
+		spin_unlock_irqrestore(&mp->lock, flags);
+		return;
+	}
+	is = ippp_table[slot];
+    	if( ++mp->frames > stats->max_queue_len )
+		stats->max_queue_len = mp->frames;
+	
+	if (is->debug & 0x8)
+		isdn_ppp_mp_print_recv_pkt(lp->ppp_slot, skb);
+
+	newseq = isdn_ppp_mp_get_seq(is->mpppcfg & SC_IN_SHORT_SEQ, 
+						skb, is->last_link_seqno);
+
+
+	/* if this packet seq # is less than last already processed one,
+	 * toss it right away, but check for sequence start case first 
+	 */
+	if( mp->seq > MP_LONGSEQ_MAX && (newseq & MP_LONGSEQ_MAXBIT) ) {
+		mp->seq = newseq;	/* the first packet: required for
+					 * rfc1990 non-compliant clients --
+					 * prevents constant packet toss */
+	} else if( MP_LT(newseq, mp->seq) ) {
+		stats->frame_drops++;
+		isdn_ppp_mp_free_skb(mp, skb);
+		spin_unlock_irqrestore(&mp->lock, flags);
+		return;
+	}
+	
+	/* find the minimum received sequence number over all links */
+	is->last_link_seqno = minseq = newseq;
+	for (lpq = net_dev->queue;;) {
+		slot = lpq->ppp_slot;
+		if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
+			printk(KERN_ERR "isdn_ppp_mp_receive: lpq->ppp_slot %d\n", lpq->ppp_slot);
+		} else {
+			u32 lls = ippp_table[slot]->last_link_seqno;
+			if (MP_LT(lls, minseq))
+				minseq = lls;
+		}
+		if ((lpq = lpq->next) == net_dev->queue)
+			break;
+	}
+	if (MP_LT(minseq, mp->seq))
+		minseq = mp->seq;	/* can't go beyond already processed
+					 * packets */
+	newfrag = skb;
+
+  	/* if this new fragment is before the first one, then enqueue it now. */
+  	if ((frag = mp->frags) == NULL || MP_LT(newseq, MP_SEQ(frag))) {
+		newfrag->next = frag;
+    		mp->frags = frag = newfrag;
+    		newfrag = NULL;
+  	}
+
+  	start = MP_FLAGS(frag) & MP_BEGIN_FRAG &&
+				MP_SEQ(frag) == mp->seq ? frag : NULL;
+
+	/* 
+	 * main fragment traversing loop
+	 *
+	 * try to accomplish several tasks:
+	 * - insert new fragment into the proper sequence slot (once that's done
+	 *   newfrag will be set to NULL)
+	 * - reassemble any complete fragment sequence (non-null 'start'
+	 *   indicates there is a continguous sequence present)
+	 * - discard any incomplete sequences that are below minseq -- due
+	 *   to the fact that sender always increment sequence number, if there
+	 *   is an incomplete sequence below minseq, no new fragments would
+	 *   come to complete such sequence and it should be discarded
+	 *
+	 * loop completes when we accomplished the following tasks:
+	 * - new fragment is inserted in the proper sequence ('newfrag' is 
+	 *   set to NULL)
+	 * - we hit a gap in the sequence, so no reassembly/processing is 
+	 *   possible ('start' would be set to NULL)
+	 *
+	 * algorightm for this code is derived from code in the book
+	 * 'PPP Design And Debugging' by James Carlson (Addison-Wesley)
+	 */
+  	while (start != NULL || newfrag != NULL) {
+
+    		thisseq = MP_SEQ(frag);
+    		nextf = frag->next;
+
+    		/* drop any duplicate fragments */
+    		if (newfrag != NULL && thisseq == newseq) {
+      			isdn_ppp_mp_free_skb(mp, newfrag);
+      			newfrag = NULL;
+    		}
+
+    		/* insert new fragment before next element if possible. */
+    		if (newfrag != NULL && (nextf == NULL || 
+						MP_LT(newseq, MP_SEQ(nextf)))) {
+      			newfrag->next = nextf;
+      			frag->next = nextf = newfrag;
+      			newfrag = NULL;
+    		}
+
+    		if (start != NULL) {
+	    		/* check for misplaced start */
+      			if (start != frag && (MP_FLAGS(frag) & MP_BEGIN_FRAG)) {
+				printk(KERN_WARNING"isdn_mppp(seq %d): new "
+				      "BEGIN flag with no prior END", thisseq);
+				stats->seqerrs++;
+				stats->frame_drops++;
+				start = isdn_ppp_mp_discard(mp, start,frag);
+				nextf = frag->next;
+      			}
+    		} else if (MP_LE(thisseq, minseq)) {		
+      			if (MP_FLAGS(frag) & MP_BEGIN_FRAG)
+				start = frag;
+      			else {
+				if (MP_FLAGS(frag) & MP_END_FRAG)
+	  				stats->frame_drops++;
+				if( mp->frags == frag )
+					mp->frags = nextf;	
+				isdn_ppp_mp_free_skb(mp, frag);
+				frag = nextf;
+				continue;
+      			}
+		}
+		
+		/* if start is non-null and we have end fragment, then
+		 * we have full reassembly sequence -- reassemble 
+		 * and process packet now
+		 */
+    		if (start != NULL && (MP_FLAGS(frag) & MP_END_FRAG)) {
+      			minseq = mp->seq = (thisseq+1) & MP_LONGSEQ_MASK;
+      			/* Reassemble the packet then dispatch it */
+			isdn_ppp_mp_reassembly(net_dev, lp, start, nextf);
+      
+      			start = NULL;
+      			frag = NULL;
+
+      			mp->frags = nextf;
+    		}
+
+		/* check if need to update start pointer: if we just
+		 * reassembled the packet and sequence is contiguous
+		 * then next fragment should be the start of new reassembly
+		 * if sequence is contiguous, but we haven't reassembled yet,
+		 * keep going.
+		 * if sequence is not contiguous, either clear everyting
+		 * below low watermark and set start to the next frag or
+		 * clear start ptr.
+		 */ 
+    		if (nextf != NULL && 
+		    ((thisseq+1) & MP_LONGSEQ_MASK) == MP_SEQ(nextf)) {
+      			/* if we just reassembled and the next one is here, 
+			 * then start another reassembly. */
+
+      			if (frag == NULL) {
+				if (MP_FLAGS(nextf) & MP_BEGIN_FRAG)
+	  				start = nextf;
+				else
+				{
+	  				printk(KERN_WARNING"isdn_mppp(seq %d):"
+						" END flag with no following "
+						"BEGIN", thisseq);
+					stats->seqerrs++;
+				}
+			}
+
+    		} else {
+			if ( nextf != NULL && frag != NULL &&
+						MP_LT(thisseq, minseq)) {
+				/* we've got a break in the sequence
+				 * and we not at the end yet
+				 * and we did not just reassembled
+				 *(if we did, there wouldn't be anything before)
+				 * and we below the low watermark 
+			 	 * discard all the frames below low watermark 
+				 * and start over */
+				stats->frame_drops++;
+				mp->frags = isdn_ppp_mp_discard(mp,start,nextf);
+			}
+			/* break in the sequence, no reassembly */
+      			start = NULL;
+    		}
+	  			
+    		frag = nextf;
+  	}	/* while -- main loop */
+	
+  	if (mp->frags == NULL)
+    		mp->frags = frag;
+		
+	/* rather straighforward way to deal with (not very) possible 
+	 * queue overflow */
+	if (mp->frames > MP_MAX_QUEUE_LEN) {
+		stats->overflows++;
+		while (mp->frames > MP_MAX_QUEUE_LEN) {
+			frag = mp->frags->next;
+			isdn_ppp_mp_free_skb(mp, mp->frags);
+			mp->frags = frag;
+		}
+	}
+	spin_unlock_irqrestore(&mp->lock, flags);
+}
+
+static void isdn_ppp_mp_cleanup( isdn_net_local * lp )
+{
+	struct sk_buff * frag = lp->netdev->pb->frags;
+	struct sk_buff * nextfrag;
+    	while( frag ) {
+		nextfrag = frag->next;
+		isdn_ppp_mp_free_skb(lp->netdev->pb, frag);
+		frag = nextfrag;
+	}
+	lp->netdev->pb->frags = NULL;
+}
+
+static u32 isdn_ppp_mp_get_seq( int short_seq, 
+					struct sk_buff * skb, u32 last_seq )
+{
+	u32 seq;
+	int flags = skb->data[0] & (MP_BEGIN_FRAG | MP_END_FRAG);
+   
+   	if( !short_seq )
+	{
+		seq = ntohl(*(u32*)skb->data) & MP_LONGSEQ_MASK;
+		skb_push(skb,1);
+	}
+	else
+	{
+		/* convert 12-bit short seq number to 24-bit long one 
+	 	*/
+		seq = ntohs(*(u16*)skb->data) & MP_SHORTSEQ_MASK;
+	
+		/* check for seqence wrap */
+		if( !(seq &  MP_SHORTSEQ_MAXBIT) && 
+		     (last_seq &  MP_SHORTSEQ_MAXBIT) && 
+		     (unsigned long)last_seq <= MP_LONGSEQ_MAX )
+			seq |= (last_seq + MP_SHORTSEQ_MAX+1) & 
+					(~MP_SHORTSEQ_MASK & MP_LONGSEQ_MASK);
+		else
+			seq |= last_seq & (~MP_SHORTSEQ_MASK & MP_LONGSEQ_MASK);
+		
+		skb_push(skb, 3);	/* put converted seqence back in skb */
+	}
+	*(u32*)(skb->data+1) = seq; 	/* put seqence back in _host_ byte
+					 * order */
+	skb->data[0] = flags;	        /* restore flags */
+	return seq;
+}
+
+struct sk_buff * isdn_ppp_mp_discard( ippp_bundle * mp,
+			struct sk_buff * from, struct sk_buff * to )
+{
+	if( from )
+		while (from != to) {
+	  		struct sk_buff * next = from->next;
+			isdn_ppp_mp_free_skb(mp, from);
+	  		from = next;
+		}
+	return from;
+}
+
+void isdn_ppp_mp_reassembly( isdn_net_dev * net_dev, isdn_net_local * lp,
+				struct sk_buff * from, struct sk_buff * to )
+{
+	ippp_bundle * mp = net_dev->pb;
+	int proto;
+	struct sk_buff * skb;
+	unsigned int tot_len;
+
+	if( MP_FLAGS(from) == (MP_BEGIN_FRAG | MP_END_FRAG) ) {
+		if( ippp_table[lp->ppp_slot]->debug & 0x40 )
+			printk(KERN_DEBUG"isdn_mppp: reassembly: frame %d, "
+					"len %d\n", MP_SEQ(from), from->len );
+		skb = from;
+		skb_pull(skb, MP_HEADER_LEN);
+		mp->frames--;	
+	} else {
+		struct sk_buff * frag;
+		int n;
+
+		for(tot_len=n=0, frag=from; frag != to; frag=frag->next, n++)
+			tot_len += frag->len - MP_HEADER_LEN;
+
+		if( ippp_table[lp->ppp_slot]->debug & 0x40 )
+			printk(KERN_DEBUG"isdn_mppp: reassembling frames %d "
+				"to %d, len %d\n", MP_SEQ(from), 
+				(MP_SEQ(from)+n-1) & MP_LONGSEQ_MASK, tot_len );
+		if( (skb = dev_alloc_skb(tot_len)) == NULL ) {
+			printk(KERN_ERR "isdn_mppp: cannot allocate sk buff "
+					"of size %d\n", tot_len);
+			isdn_ppp_mp_discard(mp, from, to);
+			return;
+		}
+
+		while( from != to ) {
+			unsigned int len = from->len - MP_HEADER_LEN;
+
+			memcpy(skb_put(skb,len), from->data+MP_HEADER_LEN, len);
+			frag = from->next;
+			isdn_ppp_mp_free_skb(mp, from);
+			from = frag; 
+		}
+	}
+   	proto = isdn_ppp_strip_proto(skb);
+	isdn_ppp_push_higher(net_dev, lp, skb, proto);
+}
+
+static void isdn_ppp_mp_free_skb(ippp_bundle * mp, struct sk_buff * skb)
+{
+	dev_kfree_skb(skb);
+	mp->frames--;
+}
+
+static void isdn_ppp_mp_print_recv_pkt( int slot, struct sk_buff * skb )
+{
+	printk(KERN_DEBUG "mp_recv: %d/%d -> %02x %02x %02x %02x %02x %02x\n", 
+		slot, (int) skb->len, 
+		(int) skb->data[0], (int) skb->data[1], (int) skb->data[2],
+		(int) skb->data[3], (int) skb->data[4], (int) skb->data[5]);
 }
 
 static int
 isdn_ppp_bundle(struct ippp_struct *is, int unit)
 {
 	char ifn[IFNAMSIZ + 1];
-	long flags;
 	isdn_net_dev *p;
 	isdn_net_local *lp, *nlp;
+	int rc;
+	unsigned long flags;
 
 	sprintf(ifn, "ippp%d", unit);
 	p = isdn_net_findif(ifn);
-	if (!p)
-		return -1;
+	if (!p) {
+		printk(KERN_ERR "ippp_bundle: cannot find %s\n", ifn);
+		return -EINVAL;
+	}
 
-	save_flags(flags);
-	cli();
-	isdn_timer_ctrl(ISDN_TIMER_IPPP, 1);	/* enable timer for ippp/MP */
+    	spin_lock_irqsave(&p->pb->lock, flags);
 
 	nlp = is->lp;
 	lp = p->queue;
+	if( nlp->ppp_slot < 0 || nlp->ppp_slot >= ISDN_MAX_CHANNELS ||
+		lp->ppp_slot < 0 || lp->ppp_slot >= ISDN_MAX_CHANNELS ) {
+		printk(KERN_ERR "ippp_bundle: binding to invalid slot %d\n",
+			nlp->ppp_slot < 0 || nlp->ppp_slot >= ISDN_MAX_CHANNELS ? 
+			nlp->ppp_slot : lp->ppp_slot );
+		rc = -EINVAL;
+		goto out;
+ 	}
+
 	isdn_net_add_to_bundle(p, nlp);
-	p->ib.bundled = 1;
 
 	ippp_table[nlp->ppp_slot]->unit = ippp_table[lp->ppp_slot]->unit;
-/* maybe also SC_CCP stuff */
+
+	/* maybe also SC_CCP stuff */
 	ippp_table[nlp->ppp_slot]->pppcfg |= ippp_table[lp->ppp_slot]->pppcfg &
-	    (SC_ENABLE_IP | SC_NO_TCP_CCID | SC_REJ_COMP_TCP);
-
+		(SC_ENABLE_IP | SC_NO_TCP_CCID | SC_REJ_COMP_TCP);
 	ippp_table[nlp->ppp_slot]->mpppcfg |= ippp_table[lp->ppp_slot]->mpppcfg &
-	    (SC_MP_PROT | SC_REJ_MP_PROT | SC_OUT_SHORT_SEQ | SC_IN_SHORT_SEQ);
-	restore_flags(flags);
-	return 0;
+		(SC_MP_PROT | SC_REJ_MP_PROT | SC_OUT_SHORT_SEQ | SC_IN_SHORT_SEQ);
+	rc = isdn_ppp_mp_init(nlp, p->pb);
+out:
+	spin_unlock_irqrestore(&p->pb->lock, flags);
+	return rc;
 }
-
-/*
- * Mask sequence numbers in MP queue
- */
-static void
-isdn_ppp_mask_queue(isdn_net_dev * dev, long mask)
-{
-	struct mpqueue *q = dev->mp_last;
-	while (q) {
-		q->sqno &= mask;
-		q = q->next;
-	}
-}
-
-/*
- * put a fragment at the right place into the MP queue 
- * Also checks, whether this fragment completes a frame. In this case
- * the fragments are copied together into one SKB
- */
-static int
-isdn_ppp_fill_mpqueue(isdn_net_dev * dev, struct sk_buff **skb, int BEbyte, long *sqnop, int min_sqno)
-{
-	struct mpqueue *qe,
-	*q1,
-	*q;
-	long cnt,
-	 flags;
-	int pktlen,
-	 sqno_end;
-	int sqno = *sqnop;
-
-	q1 = (struct mpqueue *) kmalloc(sizeof(struct mpqueue), GFP_ATOMIC);
-	if (!q1) {
-		printk(KERN_WARNING "isdn_ppp_fill_mpqueue: Can't alloc struct memory.\n");
-		save_flags(flags);
-		cli();
-		isdn_ppp_cleanup_mpqueue(dev, min_sqno);
-		restore_flags(flags);
-		return -1;
-	}
-	q1->skb = *skb;
-	q1->sqno = sqno;
-	q1->BEbyte = BEbyte;
-	q1->time = jiffies;
-
-	save_flags(flags);
-	cli();
-
-	if (!(q = dev->mp_last)) {
-		dev->mp_last = q1;
-		q1->next = NULL;
-		q1->last = NULL;
-		isdn_ppp_cleanup_mpqueue(dev, min_sqno);	/* not necessary */
-		restore_flags(flags);
-		return -1;	/* -1 is not an error. Just says, that this fragment hasn't complete a full frame */
-	}
-	for (;;) {              /* the faster way would be to step from the queue-end to the start */
-		if (sqno > q->sqno) {
-			if (q->next) {
-				q = q->next;
-				continue;
-			}
-			q->next = q1;
-			q1->next = NULL;
-			q1->last = q;
-			break;
-		}
-		if (sqno == q->sqno)
-			printk(KERN_WARNING "isdn_fill_mpqueue: illegal sqno received!!\n");
-		q1->last = q->last;
-		q1->next = q;
-		if (q->last) {
-			q->last->next = q1;
-		} else
-			dev->mp_last = q1;
-		q->last = q1;
-		break;
-	}
-
-/* now we check whether we completed a packet with this fragment */
-	pktlen = -q1->skb->len;
-	q = q1;
-	cnt = q1->sqno;
-	while (!(q->BEbyte & MP_END_FRAG)) {
-		cnt++;
-		if (!(q->next) || q->next->sqno != cnt) {
-			isdn_ppp_cleanup_mpqueue(dev, min_sqno);
-			restore_flags(flags);
-			return -1;
-		}
-		pktlen += q->skb->len;
-		q = q->next;
-	}
-	pktlen += q->skb->len;
-	qe = q;
-
-	q = q1;
-	cnt = q1->sqno;
-	while (!(q->BEbyte & MP_BEGIN_FRAG)) {
-		cnt--;
-		if (!(q->last) || q->last->sqno != cnt) {
-			isdn_ppp_cleanup_mpqueue(dev, min_sqno);
-			restore_flags(flags);
-			return -1;
-		}
-		pktlen += q->skb->len;
-		q = q->last;
-	}
-	pktlen += q->skb->len;
-
-	if (q->last)
-		q->last->next = qe->next;
-	else
-		dev->mp_last = qe->next;
-
-	if (qe->next)
-		qe->next->last = q->last;
-	qe->next = NULL;
-	sqno_end = qe->sqno;
-	*sqnop = q->sqno;
-
-	isdn_ppp_cleanup_mpqueue(dev, min_sqno);
-	restore_flags(flags);
-
-	*skb = dev_alloc_skb(pktlen + 40);	/* not needed: +40 for VJ compression .. */
-
-	if (!(*skb)) {
-		while (q) {
-			struct mpqueue *ql = q->next;
-			dev_kfree_skb(q->skb);
-			kfree(q);
-			q = ql;
-		}
-		return -2;
-	}
-	cnt = 0;
-	skb_put(*skb, pktlen);
-	while (q) {
-		struct mpqueue *ql = q->next;
-		memcpy((*skb)->data + cnt, q->skb->data, q->skb->len);
-		cnt += q->skb->len;
-		dev_kfree_skb(q->skb);
-		kfree(q);
-		q = ql;
-	}
-
-	return sqno_end;
-}
-
-/*
- * check sq-queue, whether we have still buffered the next packet(s)
- * or packets with a sqno less or equal to min_sqno
- * net_dev: master netdevice , lp: 'real' local connection
- */
-static void
-isdn_ppp_cleanup_sqqueue(isdn_net_dev * net_dev, isdn_net_local * lp, long min_sqno)
-{
-	struct sqqueue *q;
-
-	while ((q = net_dev->ib.sq) && (q->sqno_start == net_dev->ib.next_num || q->sqno_end <= min_sqno)) {
-		int proto;
-		if (q->sqno_start != net_dev->ib.next_num) {
-			printk(KERN_DEBUG "ippp: MP, stepping over missing frame: %ld\n", net_dev->ib.next_num);
-#ifdef CONFIG_ISDN_PPP_VJ
-			slhc_toss(ippp_table[net_dev->local->ppp_slot]->slcomp);
-#endif
-		}
-		proto = isdn_ppp_strip_proto(q->skb);
-		isdn_ppp_push_higher(net_dev, lp, q->skb, proto);
-		net_dev->ib.sq = q->next;
-		net_dev->ib.next_num = q->sqno_end + 1;
-		kfree(q);
-	}
-}
-
-/*
- * remove stale packets from list
- */
-static void
-isdn_ppp_cleanup_mpqueue(isdn_net_dev * dev, long min_sqno)
-{
-#ifdef CONFIG_ISDN_PPP_VJ
-	int toss = 0;
-#endif
-	/* currently we just discard ancient packets. 
-	   To do: 
-	   Maybe, as long as there's no B-packet in front and sqno <= min_sqno: discard.
-	   If sqno < min_sqno and there are gaps: discard (the gaps won't be filled anyway).
-	   Packets with sqno > min_sqno: Larger than mp_mrru: If sum of all pktlen of pending
-	   packets large than mrru: discard - packets need to be consecutive, though, if not 
-	   there could be an B and an E-packet in between.
-	*/
-
-	struct mpqueue *ql,
-	*q = dev->mp_last;
-	while(q && (q->sqno < min_sqno) ) {
-		if ( (q->BEbyte & MP_END_FRAG) || 
-			 (q->next && (q->next->sqno <= min_sqno) && (q->next->BEbyte & MP_BEGIN_FRAG)) ) {
-			printk(KERN_DEBUG "ippp: freeing stale packet(s), min_sq: %ld!\n",min_sqno);
-			if ((dev->mp_last = q->next))
-				q->next->last = NULL;
-			while (q) {
-				ql = q->last;
-				printk(KERN_DEBUG "ippp, freeing packet with sqno: %ld\n",q->sqno);
-				dev_kfree_skb(q->skb);
-				kfree(q);
-#ifdef CONFIG_ISDN_PPP_VJ
-				toss = 1;
-#endif
-				q = ql;
-			}
-			q = dev->mp_last;
-		} else
-			q = q->next;
-	}
-#ifdef CONFIG_ISDN_PPP_VJ
-	/* did we free a stale frame ? */
-	if (toss)
-		slhc_toss(ippp_table[dev->local->ppp_slot]->slcomp);
-#endif
-}
-#endif
-
-/*
- * a buffered packet timed-out?
- */
-void
-isdn_ppp_timer_timeout(void)
-{
-#ifdef CONFIG_ISDN_MPP
-	isdn_net_dev *net_dev = dev->netdev;
-	struct sqqueue *q,
-	*ql = NULL,
-	*qn;
-
-	while (net_dev) {
-		isdn_net_local *lp = net_dev->local;
-		if (net_dev->ib.modify || lp->master) {	/* interface locked or slave? */
-			net_dev = net_dev->next;
-			continue;
-		}
-		q = net_dev->ib.sq;
-		while (q) {
-			if (q->sqno_start == net_dev->ib.next_num || q->timer < jiffies) {
-
-#ifdef CONFIG_ISDN_PPP_VJ
-				/* did we step over a missing frame ? */
-				if (q->sqno_start != net_dev->ib.next_num)
-					slhc_toss(ippp_table[lp->ppp_slot]->slcomp);
-#endif
-
-				ql = net_dev->ib.sq;
-				net_dev->ib.sq = q->next;
-				net_dev->ib.next_num = q->sqno_end + 1;
-				q->next = NULL;
-				for (; ql;) {
-					int proto = isdn_ppp_strip_proto(ql->skb);
-					isdn_ppp_push_higher(net_dev, lp, ql->skb, proto);
-					qn = ql->next;
-					kfree(ql);
-					ql = qn;
-				}
-				q = net_dev->ib.sq;
-			} else
-				q = q->next;
-		}
-		net_dev = net_dev->next;
-	}
-#endif
-}
-
+  
+#endif /* CONFIG_ISDN_MPP */
+  
 /*
  * network device ioctl handlers
  */

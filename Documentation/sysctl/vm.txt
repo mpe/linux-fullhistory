@@ -168,7 +168,7 @@ the system pretends there's always enough memory.
 
 This feature can be very useful because there are a lot of
 programs that malloc() huge amounts of memory "just-in-case"
-and don't much of it.
+and don't use much of it.
 
 Look at: mm/mmap.c::vm_enough_memory() for more information.
 

@@ -49,6 +49,8 @@ struct pppcallinfo
 #define MP_END_FRAG    0x40
 #define MP_BEGIN_FRAG  0x80
 
+#define MP_MAX_QUEUE_LEN	16
+
 #define ISDN_PPP_COMP_MAX_OPTIONS 16
 
 #define IPPP_COMP_FLAG_XMIT 0x1
@@ -131,34 +133,27 @@ extern int isdn_ppp_unregister_compressor(struct isdn_ppp_compressor *);
 extern int isdn_ppp_dial_slave(char *);
 extern int isdn_ppp_hangup_slave(char *);
 
-struct ippp_bundle {
+typedef struct {
+  unsigned long seqerrs;
+  unsigned long frame_drops;
+  unsigned long overflows;
+  unsigned long max_queue_len;
+} isdn_mppp_stats;
+
+typedef struct {
   int mp_mrru;                        /* unused                             */
-  struct mpqueue *last;               /* currently defined in isdn_net_dev  */
-  int min;                            /* currently calculated 'on the fly'  */
-  long next_num;                      /* we wanna see this seq.-number next */
-  struct sqqueue *sq;
-  int modify:1;                       /* set to 1 while modifying sqqueue   */
-  int bundled:1;                      /* bundle active ?                    */
-};
+  struct sk_buff * frags;	/* fragments sl list -- use skb->next */
+  long frames;			/* number of frames in the frame list */
+  unsigned int seq;		/* last processed packet seq #: any packets
+  				 * with smaller seq # will be dropped
+				 * unconditionally */
+  spinlock_t lock;
+  int ref_ct;				 
+  /* statistics */
+  isdn_mppp_stats stats;
+} ippp_bundle;
 
 #define NUM_RCV_BUFFS     64
-
-struct sqqueue {
-  struct sqqueue *next;
-  long sqno_start;
-  long sqno_end;
-  struct sk_buff *skb;
-  long timer;
-};
-
-struct mpqueue {
-  struct mpqueue *next;
-  struct mpqueue *last;
-  long sqno;
-  struct sk_buff *skb;
-  int BEbyte;
-  unsigned long time;
-};
 
 struct ippp_buf_queue {
   struct ippp_buf_queue *next;
@@ -214,9 +209,8 @@ struct ippp_struct {
   struct isdn_net_local_s *lp;
   int unit;
   int minor;
-  long last_link_seqno;
+  unsigned int last_link_seqno;
   long mp_seqno;
-  long range;
 #ifdef CONFIG_ISDN_PPP_VJ
   unsigned char *cbuf;
   struct slcompress *slcomp;

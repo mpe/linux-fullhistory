@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.92 2000/06/21 09:54:29 keil Exp $
+/* $Id: isdn_tty.c,v 1.93 2000/08/05 09:58:26 armin Exp $
 
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -66,7 +66,7 @@ static int bit2si[8] =
 static int si2bit[8] =
 {4, 1, 4, 4, 4, 4, 4, 4};
 
-char *isdn_tty_revision = "$Revision: 1.92 $";
+char *isdn_tty_revision = "$Revision: 1.93 $";
 
 
 /* isdn_tty_try_read() is called from within isdn_tty_rcv_skb()
@@ -1183,6 +1183,7 @@ isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * buf, int co
 	int c;
 	int total = 0;
 	modem_info *info = (modem_info *) tty->driver_data;
+	atemu *m = &info->emu;
 
 	if (isdn_tty_paranoia_check(info, tty->device, "isdn_tty_write"))
 		return 0;
@@ -1203,8 +1204,6 @@ isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * buf, int co
 		    || (info->vonline & 3)
 #endif
 			) {
-			atemu *m = &info->emu;
-
 #ifdef CONFIG_ISDN_AUDIO
 			if (!info->vonline)
 #endif
@@ -1262,7 +1261,9 @@ isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * buf, int co
 					isdn_command(&c);
 				}
 				info->vonline = 0;
-				printk(KERN_DEBUG "fax dle cc/c %d/%d\n", cc,c);
+#ifdef ISDN_DEBUG_MODEM_VOICE
+				printk(KERN_DEBUG "fax dle cc/c %d/%d\n", cc, c);
+#endif
 				info->xmit_count += cc;
 			} else
 #endif
@@ -1284,9 +1285,14 @@ isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * buf, int co
 		count -= c;
 		total += c;
 	}
-	if ((info->xmit_count) || (skb_queue_len(&info->xmit_queue)))
-		isdn_timer_ctrl(ISDN_TIMER_MODEMXMIT, 1);
 	atomic_dec(&info->xmit_lock);
+	if ((info->xmit_count) || (skb_queue_len(&info->xmit_queue))) {
+		if (m->mdmreg[REG_DXMT] & BIT_DXMT) {
+			isdn_tty_senddown(info);
+			isdn_tty_tint(info);
+		}
+		isdn_timer_ctrl(ISDN_TIMER_MODEMXMIT, 1);
+	}
 	if (from_user)
 		up(&info->write_sem);
 	return total;
@@ -2157,7 +2163,7 @@ isdn_tty_match_icall(char *cid, atemu *emu, int di)
 		while (1) {
 			if ((q = strchr(p, ';')))
 				*q = '\0';
-			if ((tmp = isdn_wildmat(cid, isdn_map_eaz2msn(p, di))) > ret)
+			if ((tmp = isdn_msncmp(cid, isdn_map_eaz2msn(p, di))) > ret)
 				ret = tmp;
 #ifdef ISDN_DEBUG_MODEM_ICALL
 			printk(KERN_DEBUG "m_fi: lmsnX=%s mmsn=%s -> tmp=%d\n",
@@ -2176,7 +2182,7 @@ isdn_tty_match_icall(char *cid, atemu *emu, int di)
 		return ret;
 	} else {
 		int tmp;
-		tmp = isdn_wildmat(cid, isdn_map_eaz2msn(emu->msn, di));
+		tmp = isdn_msncmp(cid, isdn_map_eaz2msn(emu->msn, di));
 #ifdef ISDN_DEBUG_MODEM_ICALL
 			printk(KERN_DEBUG "m_fi: mmsn=%s -> tmp=%d\n",
 			       isdn_map_eaz2msn(emu->msn, di), tmp);
@@ -2197,7 +2203,7 @@ isdn_tty_match_icall(char *cid, atemu *emu, int di)
  *      CID is longer.
  */
 int
-isdn_tty_find_icall(int di, int ch, setup_parm setup)
+isdn_tty_find_icall(int di, int ch, setup_parm *setup)
 {
 	char *eaz;
 	int i;
@@ -2208,18 +2214,18 @@ isdn_tty_find_icall(int di, int ch, setup_parm setup)
 	char *nr;
 	ulong flags;
 
-	if (!setup.phone[0]) {
+	if (!setup->phone[0]) {
 		nr = "0";
 		printk(KERN_INFO "isdn_tty: Incoming call without OAD, assuming '0'\n");
 	} else
-		nr = setup.phone;
-	si1 = (int) setup.si1;
-	si2 = (int) setup.si2;
-	if (!setup.eazmsn[0]) {
+		nr = setup->phone;
+	si1 = (int) setup->si1;
+	si2 = (int) setup->si2;
+	if (!setup->eazmsn[0]) {
 		printk(KERN_WARNING "isdn_tty: Incoming call without CPN, assuming '0'\n");
 		eaz = "0";
 	} else
-		eaz = setup.eazmsn;
+		eaz = setup->eazmsn;
 #ifdef ISDN_DEBUG_MODEM_ICALL
 	printk(KERN_DEBUG "m_fi: eaz=%s si1=%d si2=%d\n", eaz, si1, si2);
 #endif
@@ -2261,8 +2267,8 @@ isdn_tty_find_icall(int di, int ch, setup_parm setup)
 					strcpy(dev->num[idx], nr);
 					strcpy(info->emu.cpn, eaz);
 					info->emu.mdmreg[REG_SI1I] = si2bit[si1];
-					info->emu.mdmreg[REG_PLAN] = setup.plan;
-					info->emu.mdmreg[REG_SCREEN] = setup.screen;
+					info->emu.mdmreg[REG_PLAN] = setup->plan;
+					info->emu.mdmreg[REG_SCREEN] = setup->screen;
 					isdn_info_update();
 					restore_flags(flags);
 					printk(KERN_INFO "isdn_tty: call from %s, -> RING on ttyI%d\n", nr,
@@ -2369,11 +2375,21 @@ isdn_tty_stat_callback(int i, isdn_ctrl *c)
 #ifdef ISDN_TTY_STAT_DEBUG
 				printk(KERN_DEBUG "tty_STAT_BCONN ttyI%d\n", info->line);
 #endif
+				/* Wake up any processes waiting
+				 * for incoming call of this device when
+				 * DCD follow the state of incoming carrier
+				 */
+				if (info->blocked_open &&
+				   (info->emu.mdmreg[REG_DCD] & BIT_DCD)) {
+					wake_up_interruptible(&info->open_wait);
+				}
+
 				/* Schedule CONNECT-Message to any tty
 				 * waiting for it and
 				 * set DCD-bit of its modem-status.
 				 */
-				if (TTY_IS_ACTIVE(info)) {
+				if (TTY_IS_ACTIVE(info) ||
+				    (info->blocked_open && (info->emu.mdmreg[REG_DCD] & BIT_DCD))) {
 					info->msr |= UART_MSR_DCD;
 					info->emu.charge = 0;
 					if (info->dialing & 0xf)
@@ -2827,8 +2843,8 @@ isdn_tty_get_msnstr(char *n, char **p)
 	int limit = ISDN_MSNLEN - 1;
 
 	while (((*p[0] >= '0' && *p[0] <= '9') ||
-	       /* Why a comma ??? */
-	       (*p[0] == ',')) &&
+		/* Why a comma ??? */
+		(*p[0] == ',') || (*p[0] == ':')) &&
 		(limit--))
 		*n++ = *p[0]++;
 	*n = '\0';

@@ -448,7 +448,7 @@ static int raid1_read_balance (raid1_conf_t *conf, struct buffer_head *bh)
 {
 	int new_disk = conf->last_used;
 	const int sectors = bh->b_size >> 9;
-	const long this_sector = bh->b_blocknr * sectors;
+	const unsigned long this_sector = bh->b_rsector;
 	int disk = new_disk;
 	unsigned long new_distance;
 	unsigned long current_distance;

@@ -76,20 +76,17 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 #ifndef CONFIG_SMP
 	mm->context = 0;
 #else
-	/* Make sure not to do anything during a clone-vm operation */
-	if ((current == tsk) || (current->mm != mm)) {
-		mm->context = (unsigned long)kmalloc(smp_num_cpus * 
-					sizeof(unsigned long), GFP_KERNEL);
-		/*
-	 	 * Init the "context" values so that a tlbpid allocation 
-	 	 * happens on the first switch.
-	 	 */
-		if (mm->context)
-			memset((void *)mm->context, 0, smp_num_cpus * 
-							sizeof(unsigned long));
-		else
-			printk("Warning: init_new_context failed\n");
-	}
+	mm->context = (unsigned long)kmalloc(smp_num_cpus * 
+				sizeof(unsigned long), GFP_KERNEL);
+	/*
+ 	 * Init the "context" values so that a tlbpid allocation 
+	 * happens on the first switch.
+ 	 */
+	if (mm->context)
+		memset((void *)mm->context, 0, smp_num_cpus * 
+						sizeof(unsigned long));
+	else
+		printk("Warning: init_new_context failed\n");
 #endif
 }
 

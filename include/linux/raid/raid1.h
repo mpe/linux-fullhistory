@@ -48,7 +48,7 @@ struct raid1_private_data {
 	md_wait_queue_head_t	wait_buffer;
 
 	/* for use when syncing mirrors: */
-	int	start_active, start_ready,
+	unsigned long	start_active, start_ready,
 		start_pending, start_future;
 	int	cnt_done, cnt_active, cnt_ready,
 		cnt_pending, cnt_future;

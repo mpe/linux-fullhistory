@@ -3081,7 +3081,7 @@ dss1down(struct PStack *st, int pr, void *arg)
 		if ((proc = dss1_new_l3_process(st, cr))) {
 			proc->chan = chan;
 			chan->proc = proc;
-			proc->para.setup = chan->setup;
+			memcpy (&proc->para.setup, &chan->setup, sizeof (chan->setup));
 			proc->callref = cr;
 		}
 	} else {

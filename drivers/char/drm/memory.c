@@ -32,6 +32,7 @@
 #define __NO_VERSION__
 #include <linux/config.h>
 #include "drmP.h"
+#include <linux/wrapper.h>
 
 typedef struct drm_mem_stats {
 	const char	  *name;
@@ -246,7 +247,12 @@ unsigned long drm_alloc_pages(int order, int area)
 	for (addr = address, sz = bytes;
 	     sz > 0;
 	     addr += PAGE_SIZE, sz -= PAGE_SIZE) {
+#if LINUX_VERSION_CODE >= 0x020400
+				/* Argument type changed in 2.4.0-test6/pre8 */
 		mem_map_reserve(virt_to_page(addr));
+#else
+		mem_map_reserve(MAP_NR(addr));
+#endif
 	}
 	
 	return address;
@@ -267,7 +273,12 @@ void drm_free_pages(unsigned long address, int order, int area)
 		for (addr = address, sz = bytes;
 		     sz > 0;
 		     addr += PAGE_SIZE, sz -= PAGE_SIZE) {
+#if LINUX_VERSION_CODE >= 0x020400
+				/* Argument type changed in 2.4.0-test6/pre8 */
 			mem_map_unreserve(virt_to_page(addr));
+#else
+			mem_map_unreserve(MAP_NR(addr));
+#endif
 		}
 		free_pages(address, order);
 	}

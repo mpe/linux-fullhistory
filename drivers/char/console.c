@@ -586,12 +586,12 @@ void redraw_screen(int new_console, int is_switch)
 	}
 
 	if (redraw) {
+		int update;
 		set_origin(currcons);
-		if (sw->con_switch(vc_cons[currcons].d) && vcmode != KD_GRAPHICS) {
-			/* Update the screen contents */
-			set_palette(currcons);
+		update = sw->con_switch(vc_cons[currcons].d);
+		set_palette(currcons);
+		if (update && vcmode != KD_GRAPHICS)
 			do_update_region(currcons, origin, screenbuf_size/2);
-		}
 	}
 	set_cursor(currcons);
 	if (is_switch) {
@@ -2940,7 +2940,9 @@ EXPORT_SYMBOL(video_scan_lines);
 EXPORT_SYMBOL(vc_resize);
 EXPORT_SYMBOL(fg_console);
 EXPORT_SYMBOL(console_blank_hook);
-
+#ifdef CONFIG_VT
+EXPORT_SYMBOL(vt_cons);
+#endif
 #ifndef VT_SINGLE_DRIVER
 EXPORT_SYMBOL(take_over_console);
 EXPORT_SYMBOL(give_up_console);

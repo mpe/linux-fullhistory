@@ -38,6 +38,7 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
+#include <linux/wrapper.h>
 
 #include "coproc.h"
 
@@ -849,7 +850,7 @@ static int sscape_alloc_dma(sscape_info *devc)
 	devc->raw_buf = start_addr;
 	devc->raw_buf_phys = virt_to_bus(start_addr);
 
-	for (page = virt_to_page(start_addr); page <= get_mem_map(end_addr); page++)
+	for (page = virt_to_page(start_addr); page <= virt_to_page(end_addr); page++)
 		mem_map_reserve(page);
 	return 1;
 }
@@ -865,7 +866,7 @@ static void sscape_free_dma(sscape_info *devc)
 	start_addr = (unsigned long) devc->raw_buf;
 	end_addr = start_addr + devc->buffsize;
 
-	for (page = virt_to_page(start_addr); page <= get_mem_map(end_addr); page++)
+	for (page = virt_to_page(start_addr); page <= virt_to_page(end_addr); page++)
 		mem_map_unreserve(page);
 
 	free_pages((unsigned long) devc->raw_buf, sz);

@@ -17,6 +17,7 @@
 #include <linux/elfcore.h>
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
+#include <asm/io.h>
 
 
 static int open_kcore(struct inode * inode, struct file * filp)
@@ -47,7 +48,7 @@ static ssize_t read_kcore(struct file *file, char *buf, size_t count, loff_t *pp
 
 	memset(&dump, 0, sizeof(struct user));
 	dump.magic = CMAGIC;
-	dump.u_dsize = max_mapnr;
+	dump.u_dsize = (virt_to_phys(high_memory) >> PAGE_SHIFT);
 #if defined (__i386__)
 	dump.start_code = PAGE_OFFSET;
 #endif
@@ -55,7 +56,7 @@ static ssize_t read_kcore(struct file *file, char *buf, size_t count, loff_t *pp
 	dump.start_data = PAGE_OFFSET;
 #endif
 
-	memsize = (max_mapnr + 1) << PAGE_SHIFT;
+	memsize = virt_to_phys(high_memory);
 	if (p >= memsize)
 		return 0;
 	if (count > memsize - p)

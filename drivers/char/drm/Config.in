@@ -5,7 +5,7 @@
 # Direct Rendering Infrastructure (DRI) in XFree86 4.x.
 #
 
-tristate 'Direct Rendering Manager (XFree86 DRI support)' CONFIG_DRM
+bool 'Direct Rendering Manager (XFree86 DRI support)' CONFIG_DRM
 if [ "$CONFIG_DRM" != "n" ]; then
     tristate '  3dfx Banshee/Voodoo3+' CONFIG_DRM_TDFX
     tristate '  3dlabs GMX 2000' CONFIG_DRM_GAMMA

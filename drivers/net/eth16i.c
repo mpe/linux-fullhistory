@@ -663,7 +663,7 @@ static int eth16i_probe_port(int ioaddr)
 {
 	int i;
 	int retcode;
-	unsigned char dummy_packet[64] = { 0 };
+	unsigned char dummy_packet[64];
 
 	/* Powerup the chip */
 	outb(0xc0 | POWERUP, ioaddr + CONFIG_REG_1);
@@ -679,6 +679,7 @@ static int eth16i_probe_port(int ioaddr)
 
 	dummy_packet[12] = 0x00;
 	dummy_packet[13] = 0x04;
+	memset(dummy_packet + 14, 0, sizeof(dummy_packet) - 14);
 
 	eth16i_select_regbank(2, ioaddr);
 

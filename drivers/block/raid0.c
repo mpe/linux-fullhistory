@@ -28,7 +28,7 @@
 static int create_strip_zones (mddev_t *mddev)
 {
 	int i, c, j, j1, j2;
-	int current_offset, curr_zone_offset;
+	unsigned long current_offset, curr_zone_offset;
 	raid0_conf_t *conf = mddev_to_conf(mddev);
 	mdk_rdev_t *smallest, *rdev1, *rdev2, *rdev;
  
@@ -226,12 +226,12 @@ static int raid0_stop (mddev_t *mddev)
 static int raid0_make_request (mddev_t *mddev,
 			       int rw, struct buffer_head * bh)
 {
-	unsigned int sect_in_chunk, chunksize_bits, chunk, chunk_size;
+	unsigned int sect_in_chunk, chunksize_bits,  chunk_size;
 	raid0_conf_t *conf = mddev_to_conf(mddev);
 	struct raid0_hash *hash;
 	struct strip_zone *zone;
 	mdk_rdev_t *tmp_dev;
-	unsigned long block, rsect;
+	unsigned long chunk, block, rsect;
 
 	chunk_size = mddev->param.chunk_size >> 10;
 	chunksize_bits = ffz(~chunk_size);

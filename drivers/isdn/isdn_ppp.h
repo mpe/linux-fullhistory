@@ -22,7 +22,6 @@
 
 #include <linux/ppp_defs.h>     /* for PPP_PROTOCOL */
 #include <linux/isdn_ppp.h>	/* for isdn_ppp info */
-extern void isdn_ppp_timer_timeout(void);
 extern int isdn_ppp_read(int, struct file *, char *, int);
 extern int isdn_ppp_write(int, struct file *, const char *, int);
 extern int isdn_ppp_open(int, struct file *);

@@ -276,7 +276,6 @@ typedef struct {
 #define ISDN_TIMER_MODEMXMIT   8
 #define ISDN_TIMER_NETDIAL    16 
 #define ISDN_TIMER_NETHANGUP  32
-#define ISDN_TIMER_IPPP       64 
 #define ISDN_TIMER_KEEPALIVE 128 /* Cisco-Keepalive */
 #define ISDN_TIMER_CARRIER   256 /* Wait for Carrier */
 #define ISDN_TIMER_FAST      (ISDN_TIMER_MODEMREAD | ISDN_TIMER_MODEMPLUS | \
@@ -323,7 +322,7 @@ typedef struct {
 typedef struct isdn_net_local_s {
   ulong                  magic;
   char                   name[10];     /* Name of device                   */
-  struct net_device_stats stats;        /* Ethernet Statistics              */
+  struct net_device_stats stats;       /* Ethernet Statistics              */
   int                    isdn_device;  /* Index to isdn-device             */
   int                    isdn_channel; /* Index to isdn-channel            */
   int			 ppp_slot;     /* PPPD device slot number          */
@@ -421,8 +420,8 @@ typedef struct isdn_net_dev_s {
   void *next;                          /* Pointer to next isdn-interface   */
   struct net_device dev;               /* interface to upper levels        */
 #ifdef CONFIG_ISDN_PPP
-  struct mpqueue *mp_last; 
-  struct ippp_bundle ib;
+  ippp_bundle * pb;		/* pointer to the common bundle structure
+   			         * with the the per-bundle data */
 #endif
 #ifdef CONFIG_ISDN_X25
   struct concap_proto  *cprot; /* connection oriented encapsulation protocol */
@@ -690,5 +689,6 @@ extern isdn_dev *dev;
 /* Utility-Macros */
 #define MIN(a,b) ((a<b)?a:b)
 #define MAX(a,b) ((a>b)?a:b)
+
 #endif /* __KERNEL__ */
 #endif /* isdn_h */
