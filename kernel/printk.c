@@ -231,7 +231,9 @@ asmlinkage int printk(const char *fmt, ...)
 			msg_level = -1;
 	}
 	__restore_flags(flags);
+#if 0	/* debugging - avoid this if we're deadlocked */
 	wake_up_interruptible(&log_wait);
+#endif
 	return i;
 }
 

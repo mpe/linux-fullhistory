@@ -149,18 +149,14 @@ typedef struct {
 #define write_lock(rw) \
 	asm volatile("\n1:\t" \
 		     "lock ; btsl $31,%0\n\t" \
-		     "jc 3f\n\t" \
-		     "testl $0x7fffffff,%0\n\t" \
-		     "jne 4f\n" \
-		     "2:\n" \
+		     "jc 4f\n" \
+		     "2:\ttestl $0x7fffffff,%0\n\t" \
+		     "jne 3f\n" \
 		     ".section .text.lock,\"ax\"\n" \
-		     "3:\ttestl $-1,%0\n\t" \
-		     "js 3b\n\t" \
-		     "lock ; btsl $31,%0\n\t" \
-		     "jc 3b\n" \
-		     "4:\ttestl $0x7fffffff,%0\n\t" \
+		     "3:\tlock ; btrl $31,%0\n" \
+		     "4:\tcmp $0,%0\n\t" \
 		     "jne 4b\n\t" \
-		     "jmp 2b\n" \
+		     "jmp 1b\n" \
 		     ".previous" \
 		     :"=m" (__dummy_lock(&(rw)->lock)))
 

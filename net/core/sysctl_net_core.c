@@ -16,14 +16,15 @@ extern __u32 sysctl_rmem_default;
 ctl_table core_table[] = {
 	{NET_CORE_WMEM_MAX, "wmem_max",
 	 &sysctl_wmem_max, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+	 &proc_dointvec},
 	{NET_CORE_RMEM_MAX, "rmem_max",
 	 &sysctl_rmem_max, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+	 &proc_dointvec},
 	{NET_CORE_WMEM_DEFAULT, "wmem_default",
 	 &sysctl_wmem_default, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+	 &proc_dointvec},
 	{NET_CORE_RMEM_DEFAULT, "rmem_default",
 	 &sysctl_rmem_default, sizeof(int), 0644, NULL,
-         &proc_dointvec},
+	 &proc_dointvec},
+	{ 0 }
 };

@@ -122,7 +122,7 @@ static void show_registers(struct pt_regs *regs)
 	unsigned long esp;
 	unsigned short ss;
 	unsigned long *stack, addr, module_start, module_end;
-	extern char start_kernel, _etext;
+	extern char _stext, _etext;
 
 	esp = (unsigned long) &regs->esp;
 	ss = KERNEL_DS;
@@ -130,8 +130,8 @@ static void show_registers(struct pt_regs *regs)
 		esp = regs->esp;
 		ss = regs->xss & 0xffff;
 	}
-	printk("CPU:    %d\n", smp_processor_id());
-	printk("EIP:    %04x:[<%08lx>]\nEFLAGS: %08lx\n", 0xffff & regs->xcs,regs->eip,regs->eflags);
+	printk("CPU:    %d\nEIP:    %04x:[<%08lx>]\nEFLAGS: %08lx\n",
+		smp_processor_id(), 0xffff & regs->xcs, regs->eip, regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
 	printk("esi: %08lx   edi: %08lx   ebp: %08lx   esp: %08lx\n",
@@ -165,7 +165,7 @@ static void show_registers(struct pt_regs *regs)
 		 * down the cause of the crash will be able to figure
 		 * out the call path that was taken.
 		 */
-		if (((addr >= (unsigned long) &start_kernel) &&
+		if (((addr >= (unsigned long) &_stext) &&
 		     (addr <= (unsigned long) &_etext)) ||
 		    ((addr >= module_start) && (addr <= module_end))) {
 			if (i && ((i % 8) == 0))
