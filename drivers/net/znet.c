@@ -1,6 +1,6 @@
 /* znet.c: An Zenith Z-Note ethernet driver for linux. */
 
-static char *version = "znet.c:v1.01 7/1/94 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "znet.c:v1.02 9/23/94 becker@cesdis.gsfc.nasa.gov\n";
 
 /*
 	Written by Donald Becker.
@@ -81,7 +81,7 @@ static char *version = "znet.c:v1.01 7/1/94 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/if_arp.h>
 
 #ifndef ZNET_DEBUG
-#define ZNET_DEBUG 3
+#define ZNET_DEBUG 1
 #endif
 static unsigned int znet_debug = ZNET_DEBUG;
 

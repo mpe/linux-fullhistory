@@ -1,13 +1,16 @@
 /* 3c507.c: An EtherLink16 device driver for Linux. */
 /*
-	Written 1993 by Donald Becker.
-	Copyright 1993 United States Government as represented by the Director,
-	National Security Agency.  This software may only be used and distributed
-	according to the terms of the GNU Public License as modified by SRC,
-	incorporated herein by reference.
+	Written 1993,1994 by Donald Becker.
 
-	The author may be reached as becker@super.org or
-	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	Copyright 1993 United States Government as represented by the
+	Director, National Security Agency.
+
+	This software may be used and distributed according to the terms
+	of the GNU Public License, incorporated herein by reference.
+
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
 	Thanks go to jennings@Montrouge.SMR.slb.com ( Patrick Jennings)
 	and jrs@world.std.com (Rick Sladkey) for testing and bugfixes.
@@ -21,7 +24,7 @@
 */
 
 static char *version =
-	"3c507.c:v0.99-15f 2/17/94 Donald Becker (becker@super.org)\n";
+	"3c507.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 
@@ -32,8 +35,8 @@ static char *version =
 	that filled in the gaping holes of the Intel documentation.  Three cheers
 	for Russ Nelson.
 
-	Intel Microcommunications Databook, Vol. 1, 1990. It provides just enough
-	info that the casual reader might think that it documents the i82586.
+	Intel Microcommunications Databook, Vol. 1, 1990.  It provides just enough
+	info that the casual reader might think that it documents the i82586 :-<.
 */
 
 #include <linux/kernel.h>
@@ -56,11 +59,19 @@ static char *version =
 #include <linux/skbuff.h>
 #include <linux/malloc.h>
 
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+									unsigned long *mem_startp);
+
+
 /* use 0 for production, 1 for verification, 2..7 for debug */
 #ifndef NET_DEBUG
 #define NET_DEBUG 1
 #endif
 static unsigned int net_debug = NET_DEBUG;
+
+/* A zero-terminated list of common I/O addresses to be probed. */
+static unsigned int netcard_portlist[] =
+	{ 0x300, 0x320, 0x340, 0x280, 0};
 
 /*
   			Details of the i82586.
@@ -130,6 +141,7 @@ struct net_local {
 #define ROM_CONFIG	13
 #define MEM_CONFIG	14
 #define IRQ_CONFIG	15
+#define EL16_IO_EXTENT 16
 
 /* The ID port is used at boot-time to locate the ethercard. */
 #define ID_PORT		0x100
@@ -267,7 +279,7 @@ unsigned short init_words[] = {
 
 extern int el16_probe(struct device *dev);	/* Called from Space.c */
 
-static int	el16_probe1(struct device *dev, short ioaddr);
+static int	el16_probe1(struct device *dev, int ioaddr);
 static int	el16_open(struct device *dev);
 static int	el16_send_packet(struct sk_buff *skb, struct device *dev);
 static void	el16_interrupt(int reg_ptr);
@@ -279,6 +291,11 @@ static void hardware_send_packet(struct device *dev, void *buf, short length);
 void init_82586_mem(struct device *dev);
 
 
+#ifdef HAVE_DEVLIST
+struct netdev_entry netcard_drv =
+{"3c507", el16_probe1, EL16_IO_EXTENT, netcard_portlist};
+#endif
+
 /* Check for a network adaptor of this type, and return '0' iff one exists.
 	If dev->base_addr == 0, probe all likely locations.
 	If dev->base_addr == 1, always return failure.
@@ -288,54 +305,56 @@ void init_82586_mem(struct device *dev);
 int
 el16_probe(struct device *dev)
 {
-	/* Don't probe all settable addresses, 0x[23][0-F]0, just common ones. */
-	int *port, ports[] = {0x300, 0x320, 0x340, 0x280, 0};
-	int base_addr = dev->base_addr;
-	ushort lrs_state = 0xff, i;
+	int base_addr = dev ? dev->base_addr : 0;
+	int i;
 
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
 		return el16_probe1(dev, base_addr);
-	else if (base_addr > 0)
+	else if (base_addr != 0)
 		return ENXIO;		/* Don't probe at all. */
 
-	/* Send the ID sequence to the ID_PORT to enable the board. */
-	outb(0x00, ID_PORT);
-	for(i = 0; i < 255; i++) {
-		outb(lrs_state, ID_PORT);
-		lrs_state <<= 1;
-		if (lrs_state & 0x100)
-			lrs_state ^= 0xe7;
-	}
-	outb(0x00, ID_PORT);
-
-	for (port = &ports[0]; *port; port++) {
-		short ioaddr = *port;
-#if 0
-		/* This is my original code. */
-		if (inb(ioaddr) == '*' && inb(ioaddr+1) == '3'
-			&& inb(ioaddr+2) == 'C' && inb(ioaddr+3) == 'O'
-			&& el16_probe1(dev, *port) == 0)
+	for (i = 0; netcard_portlist[i]; i++) {
+		int ioaddr = netcard_portlist[i];
+		if (check_region(ioaddr, EL16_IO_EXTENT))
+			continue;
+		if (el16_probe1(dev, ioaddr) == 0)
 			return 0;
-#else
-	/* This is code from jennings@Montrouge.SMR.slb.com, done so that
-	   the string can be printed out. */
-		char res[5];
-		res[0] = inb(ioaddr); res[1] = inb(ioaddr+1);
-		res[2] = inb(ioaddr+2); res[3] = inb(ioaddr+3);
-		res[4] = 0;
-		if (res[0] == '*' && res[1] == '3'
-			&& res[2] == 'C' && res[3] == 'O'
-			&& el16_probe1(dev, *port) == 0)
-		  return 0;
-#endif
 	}
 
 	return ENODEV;			/* ENODEV would be more accurate. */
 }
 
-int el16_probe1(struct device *dev, short ioaddr)
+int el16_probe1(struct device *dev, int ioaddr)
 {
+	static unsigned char init_ID_done = 0, version_printed = 0;
 	int i, irq, irqval;
+
+	if (init_ID_done == 0) {
+		ushort lrs_state = 0xff;
+		/* Send the ID sequence to the ID_PORT to enable the board(s). */
+		outb(0x00, ID_PORT);
+		for(i = 0; i < 255; i++) {
+			outb(lrs_state, ID_PORT);
+			lrs_state <<= 1;
+			if (lrs_state & 0x100)
+				lrs_state ^= 0xe7;
+		}
+		outb(0x00, ID_PORT);
+		init_ID_done = 1;
+	}
+
+	if (inb(ioaddr) == '*' && inb(ioaddr+1) == '3'
+		&& inb(ioaddr+2) == 'C' && inb(ioaddr+3) == 'O')
+		;
+	else
+		return ENODEV;
+
+	/* Allocate a new 'dev' if needed. */
+	if (dev == NULL)
+		dev = init_etherdev(0, sizeof(struct net_local), 0);
+
+	if (net_debug  &&  version_printed++ == 0)
+		printk(version);
 
 	printk("%s: 3c507 at %#x,", dev->name, ioaddr);
 
@@ -351,7 +370,7 @@ int el16_probe1(struct device *dev, short ioaddr)
 	}
 	
 	/* We've committed to using the board, and can start filling in *dev. */
-	snarf_region(ioaddr, 16);
+	snarf_region(ioaddr, EL16_IO_EXTENT);
 	dev->base_addr = ioaddr;
 
 	outb(0x01, ioaddr + MISC_CTRL);
@@ -394,7 +413,8 @@ int el16_probe1(struct device *dev, short ioaddr)
 		printk(version);
 
 	/* Initialize the device structure. */
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= el16_open;

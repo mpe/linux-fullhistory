@@ -1,13 +1,10 @@
 /* netdrv_init.c: Initialization for network devices. */
 /*
-	Written 1993 by Donald Becker.
-	Copyright 1993 United States Government as represented by the Director,
-	National Security Agency.  This software may only be used and distributed
-	according to the terms of the GNU Public License as modified by SRC,
-	incorporated herein by reference.
+	Written 1993,1994 by Donald Becker.
 
-	The author may be reached as becker@super.org or
-	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	The author may be reached as becker@cesdis.gsfc.nasa.gov or
+	C/O Center of Excellence in Space Data and Information Sciences
+		Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
 	This file contains the initialization for the "pl14+" style ethernet
 	drivers.  It should eventually replace most of drivers/net/Space.c.
@@ -94,8 +91,11 @@ init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
 	int i;
 
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct device) + sizeof("eth%d   ")
-			+ sizeof_private;
+		int alloc_size = sizeof(struct device) + sizeof("eth%d  ")
+			+ sizeof_private + 3;
+
+		alloc_size &= ~3;		/* Round to dword boundary. */
+
 		if (mem_startp && *mem_startp ) {
 			dev = (struct device *)*mem_startp;
 			*mem_startp += alloc_size;

@@ -1,28 +1,37 @@
 /* at1700.c: A network device driver for  the Allied Telesis AT1700.
 
-   Written 1993 by Donald Becker.  This is a alpha test limited release.
-   This version may only be used and distributed according to the terms of the
-   GNU Public License, incorporated herein by reference.
+	Written 1993-94 by Donald Becker.
 
-   The author may be reached as becker@super.org or
-   C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	Copyright 1993 United States Government as represented by the
+	Director, National Security Agency.
 
-   This is a device driver for the Allied Telesis AT1700, which is a
-   straightforward Fujitsu MB86965 implementation.
-*/
+	This software may be used and distributed according to the terms
+	of the GNU Public License, incorporated herein by reference.
 
-static char *version =
-	"at1700.c:v0.06 3/3/94  Donald Becker (becker@super.org)\n";
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-#include <linux/config.h>
+	This is a device driver for the Allied Telesis AT1700, which is a
+	straight-forward Fujitsu MB86965 implementation.
 
-/*
   Sources:
     The Fujitsu MB86695 datasheet.
 
-	After this driver was written, ATI provided their EEPROM configuration
-	code header file.  Thanks to Gerry Sockins of ATI.
+	After the initial version of this driver was written Gerry Sockins of
+	ATI provided their EEPROM configurationcode header file.
+    Thanks to NIIBE Yutaka <gniibe@mri.co.jp> for bug fixes.
+
+  Bugs:
+	The MB86695 has a design flaw that makes all probes unreliable.  Not
+	only is it difficult to detect, it also moves around in I/O space in
+	response to inb()s from other device probes!
 */
+
+static char *version =
+	"at1700.c:v1.10 9/24/94  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+
+#include <linux/config.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -43,19 +52,16 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+									unsigned long *mem_startp);
 
-#ifndef HAVE_AUTOIRQ
-/* From auto_irq.c, in ioport.h for later versions. */
-extern void autoirq_setup(int waittime);
-extern int autoirq_report(int waittime);
-/* The map from IRQ number (as passed to the interrupt handler) to
-   'struct device'. */
-extern struct device *irq2dev_map[16];
-#endif
+/* This unusual address order is used to verify the CONFIG register. */
+static int at1700_probe_list[] =
+{0x260, 0x280, 0x2a0, 0x240, 0x340, 0x320, 0x380, 0x300, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
-#define NET_DEBUG 2
+#define NET_DEBUG 1
 #endif
 static unsigned int net_debug = NET_DEBUG;
 
@@ -87,6 +93,9 @@ struct net_local {
 #define MODE13			13
 #define EEPROM_Ctrl 	16
 #define EEPROM_Data 	17
+#define IOCONFIG		19
+#define RESET			31		/* Write to reset some parts of the chip. */
+#define AT1700_IO_EXTENT	32
 
 /*  EEPROM_Ctrl bits. */
 #define EE_SHIFT_CLK	0x40	/* EEPROM shift clock, in reg. 16. */
@@ -124,20 +133,26 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
+#ifdef HAVE_DEVLIST
+/* Support for a alternate probe manager, which will eliminate the
+   boilerplate below. */
+struct netdev_entry at1700_drv =
+{"at1700", at1700_probe1, AT1700_IO_EXTENT, at1700_probe_list};
+#else
 int
 at1700_probe(struct device *dev)
 {
-	short ports[] = {0x300, 0x280, 0x380, 0x320, 0x340, 0x260, 0x2a0, 0x240, 0};
-	short *port, base_addr = dev->base_addr;
+	int i;
+	int base_addr = dev ? dev->base_addr : 0;
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return at1700_probe1(dev, base_addr);
-	else if (base_addr > 0)		/* Don't probe at all. */
+	else if (base_addr != 0)	/* Don't probe at all. */
 		return ENXIO;
 
-	for (port = &ports[0]; *port; port++) {
-		int ioaddr = *port;
-		if (check_region(ioaddr, 32))
+	for (i = 0; at1700_probe_list[i]; i++) {
+		int ioaddr = at1700_probe_list[i];
+		if (check_region(ioaddr, AT1700_IO_EXTENT))
 			continue;
 		if (at1700_probe1(dev, ioaddr) == 0)
 			return 0;
@@ -145,6 +160,7 @@ at1700_probe(struct device *dev)
 
 	return ENODEV;
 }
+#endif
 
 /* The Fujitsu datasheet suggests that the NIC be probed for by checking its
    "signature", the default bit pattern after a reset.  This *doesn't* work --
@@ -156,29 +172,24 @@ at1700_probe(struct device *dev)
 
 int at1700_probe1(struct device *dev, short ioaddr)
 {
-	unsigned short signature[4]         = {0xffff, 0xffff, 0x7ff7, 0xff5f};
-	unsigned short signature_invalid[4] = {0xffff, 0xffff, 0x7ff7, 0xdf0f};
 	char irqmap[8] = {3, 4, 5, 9, 10, 11, 14, 15};
-	unsigned short *station_address = (unsigned short *)dev->dev_addr;
 	unsigned int i, irq;
 
 	/* Resetting the chip doesn't reset the ISA interface, so don't bother.
 	   That means we have to be careful with the register values we probe for.
 	   */
-	for (i = 0; i < 4; i++)
-		if ((inw(ioaddr + 2*i) | signature_invalid[i]) != signature[i]) {
-			if (net_debug > 2)
-				printk("AT1700 signature match failed at %d (%04x vs. %04x)\n",
-					   i, inw(ioaddr + 2*i), signature[i]);
-			return -ENODEV;
-		}
-	if (read_eeprom(ioaddr, 4) != 0x0000
-		|| read_eeprom(ioaddr, 5) & 0x00ff != 0x00F4)
+#ifdef notdef
+	printk("at1700 probe at %#x, eeprom is %4.4x %4.4x %4.4x ctrl %4.4x.\n",
+		   ioaddr, read_eeprom(ioaddr, 4), read_eeprom(ioaddr, 5),
+		   read_eeprom(ioaddr, 6), inw(ioaddr + EEPROM_Ctrl));
+#endif
+	if (at1700_probe_list[inb(ioaddr + IOCONFIG) & 0x07] != ioaddr
+		|| read_eeprom(ioaddr, 4) != 0x0000
+		|| read_eeprom(ioaddr, 5) & 0xff00 != 0xF400)
 		return -ENODEV;
 
-	/* Grab the region so that we can find another board if the IRQ request
-	   fails. */
-	snarf_region(ioaddr, 32);
+	/* Reset the internal state machines. */
+	outb(0, ioaddr + RESET);
 
 	irq = irqmap[(read_eeprom(ioaddr, 12)&0x04)
 				 | (read_eeprom(ioaddr, 0)>>14)];
@@ -190,6 +201,14 @@ int at1700_probe1(struct device *dev, short ioaddr)
 		return EAGAIN;
 	}
 
+	/* Allocate a new 'dev' if needed. */
+	if (dev == NULL)
+		dev = init_etherdev(0, sizeof(struct net_local), 0);
+
+	/* Grab the region so that we can find another board if the IRQ request
+	   fails. */
+	snarf_region(ioaddr, AT1700_IO_EXTENT);
+
 	printk("%s: AT1700 found at %#3x, IRQ %d, address ", dev->name,
 		   ioaddr, irq);
 
@@ -200,7 +219,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 	for(i = 0; i < 3; i++) {
 		unsigned short eeprom_val = read_eeprom(ioaddr, 4+i);
 		printk("%04x", eeprom_val);
-		station_address[i] = ntohs(eeprom_val);
+		((unsigned short *)dev->dev_addr)[i] = ntohs(eeprom_val);
 	}
 
 	/* The EEPROM word 12 bit 0x0400 means use regular 100 ohm 10baseT signals,
@@ -214,8 +233,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 		ushort setup_value = read_eeprom(ioaddr, 12);
 
 		dev->if_port = setup_value >> 8;
-		printk(" %s interface (%04x).\n", porttype[(dev->if_port>>3) & 3],
-			   setup_value);
+		printk(" %s interface.\n", porttype[(dev->if_port>>3) & 3]);
 	}
 
 	/* Set the station address in bank zero. */
@@ -243,7 +261,8 @@ int at1700_probe1(struct device *dev, short ioaddr)
 		printk(version);
 
 	/* Initialize the device structure. */
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= net_open;
@@ -252,7 +271,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 	dev->get_stats	= net_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
 
-	/* Fill in the fields of the device structure with ethernet-generic values. */
+	/* Fill in the fields of 'dev' with ethernet-generic values. */
 	   
 	ether_setup(dev);
 	return 0;
@@ -400,7 +419,9 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 			lp->tx_queue_len = 0;
 			dev->trans_start = jiffies;
 			lp->tx_started = 1;
-		} else if (lp->tx_queue_len < 4096 - 1502)	/* Room for one more packet? */
+			dev->tbusy = 0;
+		} else if (lp->tx_queue_len < 4096 - 1502)
+			/* Yes, there is room for one more packet. */
 			dev->tbusy = 0;
 
 		/* Turn on Tx interrupts back on. */
@@ -453,10 +474,12 @@ net_interrupt(int reg_ptr)
 				/* Turn on Tx interrupts off. */
 				outb(0x00, ioaddr + TX_INTR);
 				dev->tbusy = 0;
+				mark_bh(NET_BH);	/* Inform upper layers. */
 			}
 		}
 	}
 
+	dev->interrupt = 0;
 	return;
 }
 
@@ -499,7 +522,7 @@ net_rx(struct device *dev)
 				lp->stats.rx_errors++;
 				break;
 			}
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = alloc_skb(pkt_len+1, GFP_ATOMIC);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet (len %d).\n",
 					   dev->name, pkt_len);
@@ -535,6 +558,7 @@ net_rx(struct device *dev)
 		for (i = 0; i < 20; i++) {
 			if ((inb(ioaddr + RX_MODE) & 0x40) == 0x40)
 				break;
+			inw(ioaddr + DATAPORT);				/* dummy status read */
 			outb(0x05, ioaddr + 14);
 		}
 
@@ -592,9 +616,9 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	short ioaddr = dev->base_addr;
 	if (num_addrs) {
-		outw(3, ioaddr + RX_MODE);	/* Enable promiscuous mode */
+		outb(3, ioaddr + RX_MODE);	/* Enable promiscuous mode */
 	} else
-		outw(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
+		outb(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
 }
 
 /*
@@ -603,5 +627,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
  *  version-control: t
  *  kept-new-versions: 5
  *  tab-width: 4
+ *  c-indent-level: 4
  * End:
  */

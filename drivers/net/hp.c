@@ -1,19 +1,25 @@
 /* hp.c: A HP LAN ethernet driver for linux. */
 /*
-	Written 1993 by Donald Becker.
+	Written 1993-94 by Donald Becker.
+
 	Copyright 1993 United States Government as represented by the
-	Director, National Security Agency.	 This software may be used and
-	distributed according to the terms of the GNU Public License,
-	incorporated herein by reference.
+	Director, National Security Agency.
 
-	This is a driver for the HP LAN adaptors.
+	This software may be used and distributed according to the terms
+	of the GNU Public License, incorporated herein by reference.
 
-	The Author may be reached as becker@super.org or
-	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+	This is a driver for the HP PC-LAN adaptors.
+
+	Sources:
+	  The Crynwr packet driver.
 */
 
 static char *version =
-	"hp.c:v0.99.15k 3/3/94 Donald Becker (becker@super.org)\n";
+	"hp.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -26,10 +32,12 @@ static char *version =
 #include <linux/netdevice.h>
 #include "8390.h"
 
-#ifndef HAVE_PORTRESERVE
-#define check_region(ioaddr, size)				0
-#define snarf_region(ioaddr, size);				do ; while (0)
-#endif
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+									unsigned long *mem_startp);
+
+/* A zero-terminated list of I/O addresses to be probed. */
+static unsigned int hppclan_portlist[] =
+{ 0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240, 0};
 
 #define HP_IO_EXTENT	32
 
@@ -46,7 +54,7 @@ static char *version =
 #define HP_16BSTOP_PG	0xFF	/* Same, for 16 bit cards. */
 
 int hp_probe(struct device *dev);
-int hpprobe1(struct device *dev, int ioaddr);
+int hp_probe1(struct device *dev, int ioaddr);
 
 static void hp_reset_8390(struct device *dev);
 static int hp_block_input(struct device *dev, int count,
@@ -63,32 +71,37 @@ static char irqmap[16] = { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0};
 /*	Probe for an HP LAN adaptor.
 	Also initialize the card and fill in STATION_ADDR with the station
 	address. */
+#ifdef HAVE_DEVLIST
+struct netdev_entry netcard_drv =
+{"hp", hp_probe1, HP_IO_EXTENT, hppclan_portlist};
+#else
 
 int hp_probe(struct device *dev)
 {
-	int *port, ports[] = {0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240, 0};
-	short ioaddr = dev->base_addr;
+	int i;
+	int base_addr = dev ? dev->base_addr : 0;
 
-	if (ioaddr > 0x1ff)			/* Check a single specified location. */
-		return hpprobe1(dev, ioaddr);
-	else if (ioaddr > 0)				/* Don't probe at all. */
+	if (base_addr > 0x1ff)		/* Check a single specified location. */
+		return hp_probe1(dev, base_addr);
+	else if (base_addr != 0)	/* Don't probe at all. */
 		return ENXIO;
 
-	for (port = &ports[0]; *port; port++) {
-		if (check_region(*port, HP_IO_EXTENT))
+	for (i = 0; hppclan_portlist[i]; i++) {
+		int ioaddr = hppclan_portlist[i];
+		if (check_region(ioaddr, HP_IO_EXTENT))
 			continue;
-		if (hpprobe1(dev, *port) == 0) {
+		if (hp_probe1(dev, ioaddr) == 0)
 			return 0;
-		}
 	}
+
 	return ENODEV;
 }
+#endif
 
-int hpprobe1(struct device *dev, int ioaddr)
+int hp_probe1(struct device *dev, int ioaddr)
 {
 	int i, board_id, wordmode;
 	char *name;
-	unsigned char *station_addr = dev->dev_addr;
 
 	/* Check for the HP physical address, 08 00 09 xx xx xx. */
 	/* This really isn't good enough: we may pick up HP LANCE boards
@@ -100,7 +113,7 @@ int hpprobe1(struct device *dev, int ioaddr)
 		return ENODEV;
 
 	/* Set up the parameters based on the board ID.
-	   If you have additional mappings, please mail them to becker@super.org. */
+	   If you have additional mappings, please mail them to me -djb. */
 	if ((board_id = inb(ioaddr + HP_ID)) & 0x80) {
 		name = "HP27247";
 		wordmode = 1;
@@ -109,13 +122,16 @@ int hpprobe1(struct device *dev, int ioaddr)
 		wordmode = 0;
 	}
 
+	if (dev == NULL)
+		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+
 	/* Grab the region so we can find another board if something fails. */
 	snarf_region(ioaddr, HP_IO_EXTENT);
 
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
 
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
-		printk(" %2.2x", station_addr[i] = inb(ioaddr + i));
+		printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
 	/* Snarf the interrupt now.  Someday this could be moved to open(). */
 	if (dev->irq < 2) {

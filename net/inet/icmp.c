@@ -23,6 +23,7 @@
  *		Alan Cox	:	Removed old debugging junk
  *		Alan Cox	:	Fixed the ICMP error status of net/host unreachable
  *	Gerhard Koerting	:	Fixed broadcast ping properly
+ *		Ulrich Kunitz	:	Fixed ICMP timestamp reply
  *
  * 
  *
@@ -424,8 +425,21 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	int size, offset;
 	unsigned long *timeptr, midtime;
 	struct device *ndev=NULL;
- 
-	size = dev->hard_header_len + 64 + len;
+
+        if (len != 20)
+	{
+		printk(
+		  "ICMP: Size (%d) of ICMP_TIMESTAMP request should be 20!\n",
+		  len);
+		icmp_statistics.IcmpInErrors++;		
+#if 1
+                /* correct answers are possible for everything >= 12 */
+	  	if (len < 12)
+#endif
+			return;
+	}
+
+	size = dev->hard_header_len + 84;
 
 	if (! (skb2 = alloc_skb(size, GFP_ATOMIC))) 
 	{
@@ -454,14 +468,14 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	/*
 	 *	Re-adjust length according to actual IP header size. 
 	 */
-	skb2->len = offset + len;
+	skb2->len = offset + 20;
  
 	/*
 	 *	Build ICMP_TIMESTAMP Response message. 
 	 */
 
 	icmphr = (struct icmphdr *) ((char *) (skb2 + 1) + offset);
-	memcpy((char *) icmphr, (char *) icmph, len);
+	memcpy((char *) icmphr, (char *) icmph, 12);
 	icmphr->type = ICMP_TIMESTAMPREPLY;
 	icmphr->code = icmphr->checksum = 0;
 
@@ -473,7 +487,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	 */
 	timeptr [1] = timeptr [2] = htonl(midtime);
 
-	icmphr->checksum = ip_compute_csum((unsigned char *) icmphr, len);
+	icmphr->checksum = ip_compute_csum((unsigned char *) icmphr, 20);
 
 	/*
 	 *	Ship it out - free it when done 

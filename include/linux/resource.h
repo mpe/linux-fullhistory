@@ -54,7 +54,7 @@ struct	rusage {
 
 #define RLIM_NLIMITS	6
 
-#define RLIM_INFINITY	0x7FFFFFFF
+#define RLIM_INFINITY	((long)(~0UL>>1))
 
 struct rlimit {
 	int	rlim_cur;

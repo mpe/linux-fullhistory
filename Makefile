@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 52
+SUBLEVEL = 53
 
 ARCH = i386
 
@@ -136,7 +136,11 @@ tools/version.h: $(CONFIGURE) Makefile
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
-	@echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\" >> tools/version.h
+	@if [ -x /bin/dnsdomainname ]; then \
+	   echo \#define LINUX_COMPILE_DOMAIN \"`dnsdomainname`\"; \
+	 else \
+	   echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\"; \
+	 fi >> tools/version.h
 	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> tools/version.h
 
 tools/build: tools/build.c $(CONFIGURE)

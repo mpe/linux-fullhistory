@@ -1081,20 +1081,32 @@ static void reset_terminal(int currcons, int do_clear)
 }
 
 /*
- * Turn the Scroll-Lock LED on when the tty is stopped (with a ^S)
+ * Turn the Scroll-Lock LED on when the tty is stopped
  */
 static void con_stop(struct tty_struct *tty)
 {
-	set_vc_kbd_led(kbd_table + fg_console, VC_SCROLLOCK);
+	int console_num;
+	if (!tty)
+		return;
+	console_num = MINOR(tty->device) - (tty->driver.minor_start);
+	if (console_num < 0 || console_num >= NR_CONSOLES)
+		return;
+	set_vc_kbd_led(kbd_table + console_num, VC_SCROLLOCK);
 	set_leds();
 }
 
 /*
- * Turn the Scroll-Lock LED off when the console is started (with a ^Q)
+ * Turn the Scroll-Lock LED off when the console is started
  */
 static void con_start(struct tty_struct *tty)
 {
-	clr_vc_kbd_led(kbd_table + fg_console, VC_SCROLLOCK);
+	int console_num;
+	if (!tty)
+		return;
+	console_num = MINOR(tty->device) - (tty->driver.minor_start);
+	if (console_num < 0 || console_num >= NR_CONSOLES)
+		return;
+	clr_vc_kbd_led(kbd_table + console_num, VC_SCROLLOCK);
 	set_leds();
 }
 

@@ -1,34 +1,33 @@
 /* 8390.c: A general NS8390 ethernet driver core for linux. */
 /*
-  Written 1992,1993 by Donald Becker.
+	Written 1992-94 by Donald Becker.
   
-  Copyright 1993 United States Government as represented by the
-  Director, National Security Agency.	 This software may be used and
-  distributed according to the terms of the GNU Public License,
-  incorporated herein by reference.
+	Copyright 1993 United States Government as represented by the
+	Director, National Security Agency.
+
+	This software may be used and distributed according to the terms
+	of the GNU Public License, incorporated herein by reference.
+
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
   
   This is the chip-specific code for many 8390-based ethernet adaptors.
   This is not a complete driver, it must be combined with board-specific
   code such as ne.c, wd.c, 3c503.c, etc.
-  
-  The Author may be reached as becker@super.org or
-  C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
   */
 
 static char *version =
-    "8390.c:v0.99-15e 2/16/94 Donald Becker (becker@super.org)\n";
+    "8390.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 #include <linux/config.h>
 
 /*
   Braindamage remaining:
-  Much of this code should be cleaned up post-1.00, but it has been
-  extensively beta tested in the current form.
+  Much of this code should have been cleaned up, but every attempt 
+  has broken some clone part.
   
   Sources:
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
-  The NE* programming info came from the Crynwr packet driver, and figuring
-  out that the those boards are similar to the NatSemi evaluation board
-  described in AN-729.	Thanks NS, no thanks to Novell/Eagle.
   */
 
 #include <linux/config.h>
@@ -302,7 +301,11 @@ void ei_interrupt(int reg_ptr)
     }
     
     if (interrupts && ei_debug) {
-		printk("%s: unknown interrupt %#2x\n", dev->name, interrupts);
+		if (boguscount == 9)
+			printk("%s: Too much work at interrupt, status %#2.2x\n",
+				   dev->name, interrupts);
+		else
+			printk("%s: unknown interrupt %#2x\n", dev->name, interrupts);
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
 		outb_p(0xff, e8390_base + EN0_ISR); /* Ack. all intrs. */
     }

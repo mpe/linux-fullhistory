@@ -1,21 +1,24 @@
 /* wd.c: A WD80x3 ethernet driver for linux. */
 /*
-	Written 1993 by Donald Becker.
-	Copyright 1993 United States Government as represented by the
-	Director, National Security Agency.	 This software may be used and
-	distributed according to the terms of the GNU Public License,
-	incorporated herein by reference.
-	
-	This is a driver for WD8003 and WD8013 "compatible" ethercards.
+	Written 1993-94 by Donald Becker.
 
-	The Author may be reached as becker@super.org or
-	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	Copyright 1993 United States Government as represented by the
+	Director, National Security Agency.
+
+	This software may be used and distributed according to the terms
+	of the GNU Public License, incorporated herein by reference.
+
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+	This is a driver for WD8003 and WD8013 "compatible" ethercards.
 
 	Thanks to Russ Nelson (nelson@crnwyr.com) for loaning me a WD8013.
 */
 
 static char *version =
-	"wd.c:v0.99-14 11/21/93 Donald Becker (becker@super.org)\n";
+	"wd.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -27,15 +30,15 @@ static char *version =
 
 #include <linux/netdevice.h>
 #include "8390.h"
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+									unsigned long *mem_startp);
 
-/* Compatibility definitions for earlier kernel versions. */
-#ifndef HAVE_PORTRESERVE
-#define check_region(ioaddr, size)		0
-#define snarf_region(ioaddr, size)		do ; while (0)
-#endif
+/* A zero-terminated list of I/O addresses to be probed. */
+static unsigned int wd_portlist[] =
+{0x300, 0x280, 0x380, 0x240, 0};
 
 int wd_probe(struct device *dev);
-int wdprobe1(int ioaddr, struct device *dev);
+int wd_probe1(struct device *dev, int ioaddr);
 
 static int wd_open(struct device *dev);
 static void wd_reset_8390(struct device *dev);
@@ -56,56 +59,67 @@ static int wd_close_card(struct device *dev);
 #define WD_CMDREG5		5		/* Offset to 16-bit-only ASIC register 5. */
 #define	 ISA16			0x80	/* Enable 16 bit access from the ISA bus. */
 #define	 NIC16			0x40	/* Enable 16 bit access from the 8390. */
-#define WD_NIC_OFFSET	16		/* Offset to the 8390 NIC from the base_addr. */
+#define WD_NIC_OFFSET	16		/* Offset to the 8390 from the base_addr. */
+#define WD_IO_EXTENT	32
+
 
 /*	Probe for the WD8003 and WD8013.  These cards have the station
 	address PROM at I/O ports <base>+8 to <base>+13, with a checksum
 	following. A Soundblaster can have the same checksum as an WDethercard,
 	so we have an extra exclusionary check for it.
 
-	The wdprobe1() routine initializes the card and fills the
+	The wd_probe1() routine initializes the card and fills the
 	station address field. */
+
+#ifdef HAVE_DEVLIST
+struct netdev_entry wd_drv =
+{"wd", wd_probe1, WD_IO_EXTENT, wd_portlist};
+#else
 
 int wd_probe(struct device *dev)
 {
-	int *port, ports[] = {0x300, 0x280, 0x380, 0x240, 0};
-	short ioaddr = dev->base_addr;
+	int i;
+	int base_addr = dev ? dev->base_addr : 0;
 
-	if (ioaddr < 0)
-		return ENXIO;			/* Don't probe at all. */
-	if (ioaddr > 0x100)
-		return ! wdprobe1(ioaddr, dev);
+	if (base_addr > 0x1ff)		/* Check a single specified location. */
+		return wd_probe1(dev, base_addr);
+	else if (base_addr != 0)	/* Don't probe at all. */
+		return ENXIO;
 
-	for (port = &ports[0]; *port; port++) {
-		if (check_region(*port, 32))
+	for (i = 0; wd_portlist[i]; i++) {
+		int ioaddr = wd_portlist[i];
+		if (check_region(ioaddr, WD_IO_EXTENT))
 			continue;
-		if (inb(*port + 8) != 0xff
-			&& inb(*port + 9) != 0xff /* Extra check to avoid soundcard. */
-			&& wdprobe1(*port, dev))
+		if (wd_probe1(dev, ioaddr) == 0)
 			return 0;
 	}
-	dev->base_addr = ioaddr;
+
 	return ENODEV;
 }
+#endif
 
-int wdprobe1(int ioaddr, struct device *dev)
+int wd_probe1(struct device *dev, int ioaddr)
 {
 	int i;
-	unsigned char *station_addr = dev->dev_addr;
 	int checksum = 0;
 	int ancient = 0;			/* An old card without config registers. */
 	int word16 = 0;				/* 0 = 8 bit, 1 = 16 bit */
 	char *model_name;
-	
+
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);
-	if ((checksum & 0xff) != 0xFF)
-		return 0;
-	
+	if (inb(ioaddr + 8) == 0xff 	/* Extra check to avoid soundcard. */
+		|| inb(ioaddr + 9) == 0xff
+		|| (checksum & 0xff) != 0xFF)
+		return ENODEV;
+
+	if (dev == NULL)
+		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+
 	printk("%s: WD80x3 at %#3x, ", dev->name, ioaddr);
 	for (i = 0; i < 6; i++)
-		printk(" %2.2X", station_addr[i] = inb(ioaddr + 8 + i));
-	
+		printk(" %2.2X", dev->dev_addr[i] = inb(ioaddr + 8 + i));
+
 	/* The following PureData probe code was contributed by
 	   Mike Jagdis <jaggy@purplet.demon.co.uk>. Puredata does software
 	   configuration differently from others so we have to check for them.
@@ -113,7 +127,7 @@ int wdprobe1(int ioaddr, struct device *dev)
 	   */
 	if (inb(ioaddr+0) == 'P' && inb(ioaddr+1) == 'D') {
 		unsigned char reg5 = inb(ioaddr+5);
-		
+
 		switch (inb(ioaddr+2)) {
 		case 0x03: word16 = 0; model_name = "PDI8023-8";	break;
 		case 0x05: word16 = 0; model_name = "PDUC8023";	break;
@@ -160,7 +174,7 @@ int wdprobe1(int ioaddr, struct device *dev)
 				   word16 ? 16 : 8, (inb(ioaddr+1) & 0x01) ? 16 : 8);
 #endif
 	}
-	
+
 #if defined(WD_SHMEM) && WD_SHMEM > 0x80000
 	/* Allow a compile-time override.	 */
 	dev->mem_start = WD_SHMEM;
@@ -181,17 +195,17 @@ int wdprobe1(int ioaddr, struct device *dev)
 		}
 	}
 #endif
-	
+
 	/* The 8390 isn't at the base address -- the ASIC regs are there! */
 	dev->base_addr = ioaddr+WD_NIC_OFFSET;
-	
+
 	if (dev->irq < 2) {
 		int irqmap[] = {9,3,5,7,10,11,15,4};
 		int reg1 = inb(ioaddr+1);
 		int reg4 = inb(ioaddr+4);
 		if (ancient || reg1 == 0xff) {	/* Ack!! No way to read the IRQ! */
 			short nic_addr = ioaddr+WD_NIC_OFFSET;
-			
+
 			/* We have an old-style ethercard that doesn't report its IRQ
 			   line.  Do autoirq to find the IRQ line. Note that this IS NOT
 			   a reliable way to trigger an interrupt. */
@@ -204,7 +218,7 @@ int wdprobe1(int ioaddr, struct device *dev)
 			outb(E8390_RREAD+E8390_START, nic_addr); /* Trigger it... */
 			dev->irq = autoirq_report(2);
 			outb_p(0x00, nic_addr+EN0_IMR);	/* Mask all intrs. again. */
-			
+
 			if (ei_debug > 2)
 				printk(" autoirq is %d", dev->irq);
 			if (dev->irq < 2)
@@ -213,42 +227,42 @@ int wdprobe1(int ioaddr, struct device *dev)
 			dev->irq = irqmap[((reg4 >> 5) & 0x03) + (reg1 & 0x04)];
 	} else if (dev->irq == 2)		/* Fixup bogosity: IRQ2 is really IRQ9 */
 		dev->irq = 9;
-	
+
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
 	if (request_irq(dev->irq, ei_interrupt, 0, "wd")) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
-		return 0;
+		return EAGAIN;
 	}
-	
+
 	/* OK, were are certain this is going to work.  Setup the device. */
-	snarf_region(ioaddr, 32);
+	snarf_region(ioaddr, WD_IO_EXTENT);
 	ethdev_init(dev);
-	
+
 	ei_status.name = model_name;
 	ei_status.word16 = word16;
 	ei_status.tx_start_page = WD_START_PG;
 	ei_status.rx_start_page = WD_START_PG + TX_PAGES;
 	ei_status.stop_page = word16 ? WD13_STOP_PG : WD03_STOP_PG;
-	
+
 	/* Don't map in the shared memory until the board is actually opened. */
 	dev->rmem_start = dev->mem_start + TX_PAGES*256;
 	dev->mem_end = dev->rmem_end
 		= dev->mem_start + (ei_status.stop_page - WD_START_PG)*256;
-	
+
 	printk(" %s, IRQ %d, shared memory at %#lx-%#lx.\n",
 		   model_name, dev->irq, dev->mem_start, dev->mem_end-1);
 	if (ei_debug > 0)
 		printk(version);
-	
+
 	ei_status.reset_8390 = &wd_reset_8390;
 	ei_status.block_input = &wd_block_input;
 	ei_status.block_output = &wd_block_output;
 	dev->open = &wd_open;
 	dev->stop = &wd_close_card;
 	NS8390_init(dev, 0);
-	
-	return dev->base_addr;
+
+	return 0;
 }
 
 static int

@@ -1,23 +1,26 @@
 /* ne.c: A general non-shared-memory NS8390 ethernet driver for linux. */
 /*
-    Written 1992,1993 by Donald Becker.
+    Written 1992-94 by Donald Becker.
 
     Copyright 1993 United States Government as represented by the
-    Director, National Security Agency.  This software may be used and
-    distributed according to the terms of the GNU Public License,
-    incorporated herein by reference.
+    Director, National Security Agency.
 
-    This driver should work with many 8390-based ethernet boards.  Currently
-    it support the NE1000, NE2000, clones, and some Cabletron products.
+    This software may be used and distributed according to the terms
+    of the GNU Public License, incorporated herein by reference.
 
-    The Author may be reached as becker@super.org or
-    C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+    The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+    Center of Excellence in Space Data and Information Sciences
+        Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+    This driver should work with many programmed-I/O 8390-based ethernet
+    boards.  Currently it support the NE1000, NE2000, many clones,
+    and some Cabletron products.
 */
 
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
 static char *version =
-    "ne.c:v0.99-15k 3/3/94 Donald Becker (becker@super.org)\n";
+    "ne.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -28,11 +31,28 @@ static char *version =
 
 #include <linux/netdevice.h>
 #include "8390.h"
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+				    unsigned long *mem_startp);
+
+
+/* A zero-terminated list of I/O addresses to be probed. */
+static unsigned int netcard_portlist[] =
+{ 0x300, 0x280, 0x320, 0x340, 0x360, 0};
+
+/* A list of bad clones that we none-the-less recognize. */
+static struct { char *name8, *name16; unsigned char SAprefix[4];}
+bad_clone_list[] = {
+    {"DE100", "DE200", {0x00, 0xDE, 0x01,}},
+    {"DE120", "DE220", {0x00, 0x80, 0xc8,}},
+    {"DFI1000", "DFI2000", {'D', 'F', 'I',}}, /* Original, eh?  */
+    {0,}
+};
 
 #define NE_BASE	 (dev->base_addr)
 #define NE_CMD	 	0x00
 #define NE_DATAPORT	0x10	/* NatSemi-defined port window offset. */
 #define NE_RESET	0x1f	/* Issue a read to reset, a write to clear. */
+#define NE_IO_EXTENT	0x20
 
 #define NE1SM_START_PG	0x20	/* First page of TX buffer */
 #define NE1SM_STOP_PG 	0x40	/* Last page +1 of RX ring */
@@ -40,7 +60,7 @@ static char *version =
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
 int ne_probe(struct device *dev);
-static int neprobe1(int ioaddr, struct device *dev, int verbose);
+static int ne_probe1(struct device *dev, int ioaddr);
 
 static void ne_reset_8390(struct device *dev);
 static int ne_block_input(struct device *dev, int count,
@@ -70,44 +90,47 @@ static void ne_block_output(struct device *dev, const int count,
 	E2010	 starts at 0x100 and ends at 0x4000.
 	E2010-x starts at 0x100 and ends at 0xffff.  */
 
+#ifdef HAVE_DEVLIST
+struct netdev_entry netcard_drv =
+{"ne", ne_probe1, NE_IO_EXTENT, netcard_portlist};
+#else
+
 int ne_probe(struct device *dev)
 {
-    int *port, ports[] = {0x300, 0x280, 0x320, 0x340, 0x360, 0};
-    short ioaddr = dev->base_addr;
+    int i;
+    int base_addr = dev ? dev->base_addr : 0;
 
-    if (ioaddr < 0)
-	return ENXIO;		/* Don't probe at all. */
-    if (ioaddr > 0x100)
-	return ! neprobe1(ioaddr, dev, 1);
+    if (base_addr > 0x1ff)	/* Check a single specified location. */
+	return ne_probe1(dev, base_addr);
+    else if (base_addr != 0)	/* Don't probe at all. */
+	return ENXIO;
 
-    for (port = &ports[0]; *port; port++) {
-#ifdef HAVE_PORTRESERVE
-	if (check_region(*port, 32))
+    for (i = 0; netcard_portlist[i]; i++) {
+	int ioaddr = netcard_portlist[i];
+	if (check_region(ioaddr, NE_IO_EXTENT))
 	    continue;
-#endif
-	if (inb_p(*port) != 0xff && neprobe1(*port, dev, 0)) {
-	    dev->base_addr = *port;
+	if (ne_probe1(dev, ioaddr) == 0)
 	    return 0;
-	}
     }
-    dev->base_addr = ioaddr;
+
     return ENODEV;
 }
+#endif
 
-static int neprobe1(int ioaddr, struct device *dev, int verbose)
+static int ne_probe1(struct device *dev, int ioaddr)
 {
     int i;
     unsigned char SA_prom[32];
     int wordlength = 2;
-    char *name;
+    char *name = NULL;
     int start_page, stop_page;
-    int neX000, ctron, dlink, dfi;
+    int neX000, ctron;
     int reg0 = inb(ioaddr);
 
     if ( reg0 == 0xFF)
-	return 0;
+	return ENODEV;
 
-    /* Do a quick preliminary check that we have a 8390. */
+    /* Do a preliminary verification that we have a 8390. */
     {	int regd;
 	outb_p(E8390_NODMA+E8390_PAGE1+E8390_STOP, ioaddr + E8390_CMD);
 	regd = inb_p(ioaddr + 0x0d);
@@ -117,14 +140,13 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	if (inb_p(ioaddr + EN0_COUNTER0) != 0) {
 	    outb_p(reg0, ioaddr);
 	    outb(regd, ioaddr + 0x0d);	/* Restore the old values. */
-	    return 0;
+	    return ENODEV;
 	}
     }
 
     printk("NE*000 ethercard probe at %#3x:", ioaddr);
 
-    /* Read the 16 bytes of station address prom, returning 1 for
-       an eight-bit interface and 2 for a 16-bit interface.
+    /* Read the 16 bytes of station address PROM.
        We must first initialize registers, similar to NS8390_init(eifdev, 0).
        We can't reliably read the SAPROM address without this.
        (I learned the hard way!). */
@@ -162,43 +184,53 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	/* Un-double the SA_prom values. */
 	for (i = 0; i < 16; i++)
 	    SA_prom[i] = SA_prom[i+i];
+	start_page = NESM_START_PG;
+	stop_page = NESM_STOP_PG;
+    } else {
+	start_page = NE1SM_START_PG;
+	stop_page = NE1SM_STOP_PG;
     }
 
-#if defined(show_all_SAPROM)
-    /* If your ethercard isn't detected define this to see the SA_PROM. */
-    for(i = 0; i < sizeof(SA_prom); i++)
-	printk(" %2.2x", SA_prom[i]);
-#else
     for(i = 0; i < ETHER_ADDR_LEN; i++) {
 	dev->dev_addr[i] = SA_prom[i];
 	printk(" %2.2x", SA_prom[i]);
     }
-#endif
 
     neX000 = (SA_prom[14] == 0x57  &&  SA_prom[15] == 0x57);
     ctron =  (SA_prom[0] == 0x00 && SA_prom[1] == 0x00 && SA_prom[2] == 0x1d);
-    dlink =  (SA_prom[0] == 0x00 && SA_prom[1] == 0xDE && SA_prom[2] == 0x01);
-    dfi   =  (SA_prom[0] == 'D' && SA_prom[1] == 'F' && SA_prom[2] == 'I');
 
     /* Set up the rest of the parameters. */
-    if (neX000 || dlink || dfi) {
-	if (wordlength == 2) {
-	    name = dlink ? "DE200" : "NE2000";
-	    start_page = NESM_START_PG;
-	    stop_page = NESM_STOP_PG;
-	} else {
-	    name = dlink ? "DE100" : "NE1000";
-	    start_page = NE1SM_START_PG;
-	    stop_page = NE1SM_STOP_PG;
-	}
+    if (neX000) {
+	name = (wordlength == 2) ? "NE2000" : "NE1000";
     } else if (ctron) {
 	name = "Cabletron";
 	start_page = 0x01;
 	stop_page = (wordlength == 2) ? 0x40 : 0x20;
     } else {
-	printk(" not found.\n");
-	return 0;
+	/* Ack!  Well, there might be a *bad* NE*000 clone there.
+	   Check for total bogus addresses. */
+	for (i = 0; bad_clone_list[i].name8; i++) {
+	    if (SA_prom[0] == bad_clone_list[i].SAprefix[0] &&
+		SA_prom[1] == bad_clone_list[i].SAprefix[1] &&
+		SA_prom[2] == bad_clone_list[i].SAprefix[2]) {
+		if (wordlength == 2) {
+		    name = bad_clone_list[i].name16;
+		} else {
+		    name = bad_clone_list[i].name8;
+		}
+		break;
+	    }
+	}
+	if (bad_clone_list[i].name8 == NULL) {
+	    printk(" not found (invalid signature %2.2x %2.2x).\n",
+		   SA_prom[14], SA_prom[15]);
+	    return ENXIO;
+	}
     }
+
+
+    if (dev == NULL)
+	dev = init_etherdev(0, sizeof(struct ei_device), 0);
 
     if (dev->irq < 2) {
 	autoirq_setup(0);
@@ -221,15 +253,16 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	int irqval = request_irq (dev->irq, ei_interrupt, 0, "ne");
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
-	    return 0;
+	    return EAGAIN;
 	}
     }
 
     dev->base_addr = ioaddr;
 
-#ifdef HAVE_PORTRESERVE
-    snarf_region(ioaddr, 32);
-#endif
+    snarf_region(ioaddr, NE_IO_EXTENT);
+
+    for(i = 0; i < ETHER_ADDR_LEN; i++)
+	dev->dev_addr[i] = SA_prom[i];
 
     ethdev_init(dev);
     printk("\n%s: %s found at %#x, using IRQ %d.\n",
@@ -253,7 +286,7 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
     ei_status.block_input = &ne_block_input;
     ei_status.block_output = &ne_block_output;
     NS8390_init(dev, 0);
-    return dev->base_addr;
+    return 0;
 }
 
 /* Hard reset the card.  This used to pause for the same period that a
@@ -289,9 +322,10 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 
     if (ei_status.dmaing) {
 	if (ei_debug > 0)
-	    printk("%s: DMAing conflict in ne_block_input."
-		   "[DMAstat:%1x][irqlock:%1x]\n",
-		   dev->name, ei_status.dmaing, ei_status.irqlock);
+	    printk("%s: DMAing conflict in ne_block_input "
+		   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+		   dev->name, ei_status.dmaing, ei_status.irqlock,
+		   dev->interrupt);
 	return 0;
     }
     ei_status.dmaing |= 0x01;
@@ -348,8 +382,9 @@ ne_block_output(struct device *dev, int count,
     if (ei_status.dmaing) {
 	if (ei_debug > 0)
 	    printk("%s: DMAing conflict in ne_block_output."
-		   "[DMAstat:%1x][irqlock:%1x]\n",
-		   dev->name, ei_status.dmaing, ei_status.irqlock);
+		   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
+		   dev->name, ei_status.dmaing, ei_status.irqlock,
+		   dev->interrupt);
 	return;
     }
     ei_status.dmaing |= 0x02;

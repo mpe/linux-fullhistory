@@ -41,12 +41,12 @@ struct ei_device {
   void (*reset_8390)(struct device *);
   void (*block_output)(struct device *, int, const unsigned char *, int);
   int  (*block_input)(struct device *, int, char *, int);
-  int open:1;
-  int word16:1;	/* We have the 16-bit (vs 8-bit) version of the card. */
-  int txing:1;			/* Transmit Active */
-  int dmaing:2;			/* Remote DMA Active */
-  int irqlock:1;		/* 8390's intrs disabled when '1'. */
-  int pingpong:1;		/* Using the ping-pong driver */
+  unsigned open:1;
+  unsigned word16:1;  /* We have the 16-bit (vs 8-bit) version of the card. */
+  unsigned txing:1;		/* Transmit Active */
+  unsigned dmaing:2;		/* Remote DMA Active */
+  unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
+  unsigned pingpong:1;		/* Using the ping-pong driver */
   unsigned char tx_start_page, rx_start_page, stop_page;
   unsigned char current_page;	/* Read pointer in buffer  */
   unsigned char interface_num;	/* Net port (AUI, 10bT.) to use. */

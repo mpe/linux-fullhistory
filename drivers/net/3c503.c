@@ -1,22 +1,29 @@
 /* 3c503.c: A shared-memory NS8390 ethernet driver for linux. */
 /*
-    Written 1992,1993 by Donald Becker.
+    Written 1992-94 by Donald Becker.
 
     Copyright 1993 United States Government as represented by the
     Director, National Security Agency.  This software may be used and
     distributed according to the terms of the GNU Public License,
     incorporated herein by reference.
 
+    The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+    Center of Excellence in Space Data and Information Sciences
+       Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
     This driver should work with the 3c503 and 3c503/16.  It should be used
     in shared memory mode for best performance, although it may also work
     in programmed-I/O mode.
 
-    The Author may be reached as becker@super.org or
-    C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+    Sources:
+    EtherLink II Technical Reference Guide,
+    3Com Corporation, 5400 Bayfront Plaza, Santa Clara CA 95052-8145
+    
+    The Crynwr 3c503 packet driver.
 */
 
 static char *version =
-    "3c503.c:v0.99.15k 3/3/93 Donald Becker (becker@super.org)\n";
+    "3c503.c:v1.10 9/23/93  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -31,9 +38,27 @@ static char *version =
 #include "8390.h"
 #include "3c503.h"
 
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+				    unsigned long *mem_startp);
+
 int el2_probe(struct device *dev);
-int el2_pio_autoprobe(struct device *dev);
-int el2probe1(int ioaddr, struct device *dev);
+int el2_pio_probe(struct device *dev);
+int el2_probe1(struct device *dev, int ioaddr);
+
+/* A zero-terminated list of I/O addresses to be probed in PIO mode. */
+static unsigned int netcard_portlist[] =
+	{ 0x300,0x310,0x330,0x350,0x250,0x280,0x2a0,0x2e0,0};
+
+#define EL2_IO_EXTENT	16
+
+#ifdef HAVE_DEVLIST
+/* The 3c503 uses two entries, one for the safe memory-mapped probe and
+   the other for the typical I/O probe. */
+struct netdev_entry el2_drv =
+{"3c503", el2_probe, EL1_IO_EXTENT, 0};
+struct netdev_entry el2pio_drv =
+{"3c503pio", el2_pioprobe1, EL1_IO_EXTENT, netcard_portlist};
+#endif
 
 static int el2_open(struct device *dev);
 static int el2_close(struct device *dev);
@@ -52,19 +77,16 @@ static int el2_block_input(struct device *dev, int count, char *buf,
    If the ethercard isn't found there is an optional probe for
    ethercard jumpered to programmed-I/O mode.
    */
-
-static int ports[] = {0x300,0x310,0x330,0x350,0x250,0x280,0x2a0,0x2e0,0};
-
 int
 el2_probe(struct device *dev)
 {
     int *addr, addrs[] = { 0xddffe, 0xd9ffe, 0xcdffe, 0xc9ffe, 0};
-    short ioaddr = dev->base_addr;
+    int base_addr = dev->base_addr;
 
-    if (ioaddr < 0)
-	return ENXIO;		/* Don't probe at all. */
-    if (ioaddr > 0)
-	return ! el2probe1(ioaddr, dev);
+    if (base_addr > 0x1ff)	/* Check a single specified location. */
+	return el2_probe1(dev, base_addr);
+    else if (base_addr != 0)		/* Don't probe at all. */
+	return ENXIO;
 
     for (addr = addrs; *addr; addr++) {
 	int i;
@@ -75,86 +97,99 @@ el2_probe(struct device *dev)
 		break;
 	if (base_bits != 1)
 	    continue;
-#ifdef HAVE_PORTRESERVE
-	if (check_region(ports[i], 16))
+	if (check_region(netcard_portlist[i], EL2_IO_EXTENT))
 	    continue;
-#endif
-	if (el2probe1(ports[i], dev))
+	if (el2_probe1(dev, netcard_portlist[i]) == 0)
 	    return 0;
     }
-#ifndef no_probe_nonshared_memory
-    return el2_pio_autoprobe(dev);
+#if ! defined(no_probe_nonshared_memory) && ! defined (HAVE_DEVLIST)
+    return el2_pio_probe(dev);
 #else
     return ENODEV;
 #endif
 }
 
+#ifndef HAVE_DEVLIST
 /*  Try all of the locations that aren't obviously empty.  This touches
     a lot of locations, and is much riskier than the code above. */
 int
-el2_pio_autoprobe(struct device *dev)
+el2_pio_probe(struct device *dev)
 {
     int i;
-    for (i = 0; i < 8; i++) {
-#ifdef HAVE_PORTRESERVE
-	if (check_region(ports[i], 16))
+    int base_addr = dev ? dev->base_addr : 0;
+
+    if (base_addr > 0x1ff)	/* Check a single specified location. */
+	return el2_probe1(dev, base_addr);
+    else if (base_addr != 0)	/* Don't probe at all. */
+	return ENXIO;
+
+    for (i = 0; netcard_portlist[i]; i++) {
+	int ioaddr = netcard_portlist[i];
+	if (check_region(ioaddr, EL2_IO_EXTENT))
 	    continue;
-#endif
-	/* Reset and/or avoid any lurking NE2000 */
-	if (inb_p(ports[i] + 0x408) == 0xff)
-	    continue;
-	if (inb(ports[i] + 0x403) == (0x80 >> i) /* Preliminary check */
-	    && el2probe1(ports[i], dev))
+	if (el2_probe1(dev, ioaddr) == 0)
 	    return 0;
     }
+
     return ENODEV;
 }
+#endif
 
 /* Probe for the Etherlink II card at I/O port base IOADDR,
    returning non-zero on success.  If found, set the station
    address and memory parameters in DEVICE. */
 int
-el2probe1(int ioaddr, struct device *dev)
+el2_probe1(struct device *dev, int ioaddr)
 {
     int i, iobase_reg, membase_reg, saved_406;
-    unsigned char *station_addr = dev->dev_addr;
+    static unsigned version_printed = 0;
+
+    /* Reset and/or avoid any lurking NE2000 */
+    if (inb(ioaddr + 0x408) == 0xff)
+	return ENODEV;
 
     /* We verify that it's a 3C503 board by checking the first three octets
        of its ethernet address. */
-    printk("3c503 probe at %#3x:", ioaddr);
     iobase_reg = inb(ioaddr+0x403);
     membase_reg = inb(ioaddr+0x404);
-    /* Verify ASIC register that should be 0 or have a single bit set. */
+    /* ASIC location registers should be 0 or have only a single bit set. */
     if (   (iobase_reg  & (iobase_reg - 1))
 	|| (membase_reg & (membase_reg - 1))) {
-	printk("  not found.\n");
-	return 0;
+	return ENODEV;
     }
     saved_406 = inb_p(ioaddr + 0x406);
     outb_p(ECNTRL_RESET|ECNTRL_THIN, ioaddr + 0x406); /* Reset it... */
     outb_p(ECNTRL_THIN, ioaddr + 0x406);
     /* Map the station addr PROM into the lower I/O ports. */
     outb(ECNTRL_SAPROM|ECNTRL_THIN, ioaddr + 0x406);
-    for (i = 0; i < ETHER_ADDR_LEN; i++) {
-	printk(" %2.2X", (station_addr[i] = inb(ioaddr + i)));
-    }
-    if ( station_addr[0] != 0x02
-	|| station_addr[1] != 0x60
-	|| station_addr[2] != 0x8c) {
-	printk("  3C503 not found.\n");
+    if (   inb(ioaddr + 0) != 0x02
+	|| inb(ioaddr + 1) != 0x60
+	|| inb(ioaddr + 2) != 0x8c) {
 	/* Restore the register we frobbed. */
 	outb(saved_406, ioaddr + 0x406);
-	return 0;
+	return ENODEV;
     }
 
-#ifdef HAVE_PORTRESERVE
-    snarf_region(ioaddr, 16);
-#endif
+    snarf_region(ioaddr, EL2_IO_EXTENT);
+
+    if (dev == NULL)
+	dev = init_etherdev(0, sizeof(struct ei_device), 0);
+
+    if (ei_debug  &&  version_printed++ == 0)
+	printk(version);
+
+    dev->base_addr = ioaddr;
     ethdev_init(dev);
+
+    printk("%s: 3c503 at %#3x,", dev->name, ioaddr);
+
+    /* Retrive and print the ethernet address. */
+    for (i = 0; i < 6; i++)
+	printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
     /* Map the 8390 back into the window. */
     outb(ECNTRL_THIN, ioaddr + 0x406);
-    dev->base_addr = ioaddr;
+
     /* Probe for, turn on and clear the board's shared memory. */
     if (ei_debug > 2) printk(" memory jumpers %2.2x ", membase_reg);
     outb(EGACFR_NORM, ioaddr + 0x405);	/* Enable RAM */
@@ -231,10 +266,11 @@ el2probe1(int ioaddr, struct device *dev)
     else
 	printk("\n%s: %s using programmed I/O (REJUMPER for SHARED MEMORY).\n",
 	       dev->name, ei_status.name);
+
     if (ei_debug > 1)
 	printk(version);
 
-    return ioaddr;
+    return 0;
 }
 
 static int
@@ -425,5 +461,6 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
  * Local variables:
  *  version-control: t
  *  kept-new-versions: 5
+ *  c-indent-level: 4
  * End:
  */

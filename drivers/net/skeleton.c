@@ -1,13 +1,16 @@
-/* skeleton.c: A sample network driver core for linux. */
+/* skeleton.c: A network driver outline for linux. */
 /*
-	Written 1993 by Donald Becker.
-	Copyright 1993 United States Government as represented by the Director,
-	National Security Agency.  This software may only be used and distributed
-	according to the terms of the GNU Public License as modified by SRC,
-	incorporated herein by reference.
+	Written 1993-94 by Donald Becker.
 
-	The author may be reached as becker@super.org or
-	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	Copyright 1993 United States Government as represented by the
+	Director, National Security Agency.
+
+	This software may be used and distributed according to the terms
+	of the GNU Public License, incorporated herein by reference.
+
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
 	This file is an outline for writing a network device driver for the
 	the Linux operating system.
@@ -19,7 +22,7 @@
 */
 
 static char *version =
-	"skeleton.c:v0.05 11/16/93 Donald Becker (becker@super.org)\n";
+	"skeleton.c:v1.51 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 /* Always include 'config.h' first in case the user wants to turn on
    or override something. */
@@ -59,20 +62,13 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+									unsigned long *mem_startp);
 
-#ifndef HAVE_AUTOIRQ
-/* From auto_irq.c, in ioport.h for later versions. */
-extern void autoirq_setup(int waittime);
-extern int autoirq_report(int waittime);
-/* The map from IRQ number (as passed to the interrupt handler) to
-   'struct device'. */
-extern struct device *irq2dev_map[16];
-#endif
-
-#ifndef HAVE_PORTRESERVE
-#define check_region(ioaddr, size) 		0
-#define	snarf_region(ioaddr, size);		do ; while (0)
-#endif
+/* First, a few definitions that the brave might change. */
+/* A zero-terminated list of I/O addresses to be probed. */
+static unsigned int netcard_portlist[] =
+   { 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
@@ -80,14 +76,14 @@ extern struct device *irq2dev_map[16];
 #endif
 static unsigned int net_debug = NET_DEBUG;
 
+/* The number of low I/O ports used by the ethercard. */
+#define NETCARD_IO_EXTENT	32
+
 /* Information that need to be kept for each board. */
 struct net_local {
 	struct enet_statistics stats;
 	long open_time;				/* Useless example local info. */
 };
-
-/* The number of low I/O ports used by the ethercard. */
-#define ETHERCARD_TOTAL_SIZE	16
 
 /* The station (ethernet) address prefix, used for IDing the board. */
 #define SA_ADDR0 0x00
@@ -98,7 +94,7 @@ struct net_local {
 
 extern int netcard_probe(struct device *dev);
 
-static int netcard_probe1(struct device *dev, short ioaddr);
+static int netcard_probe1(struct device *dev, int ioaddr);
 static int net_open(struct device *dev);
 static int	net_send_packet(struct sk_buff *skb, struct device *dev);
 static void net_interrupt(int reg_ptr);
@@ -119,54 +115,75 @@ extern void chipset_init(struct device *dev, int startp);
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
+#ifdef HAVE_DEVLIST
+/* Support for a alternate probe manager, which will eliminate the
+   boilerplate below. */
+struct netdev_entry netcard_drv =
+{"netcard", netcard_probe1, NETCARD_IO_EXTENT, netcard_portlist};
+#else
 int
 netcard_probe(struct device *dev)
 {
-	int *port, ports[] = {0x300, 0x280, 0};
-	int base_addr = dev->base_addr;
+	int i;
+	int base_addr = dev ? dev->base_addr : 0;
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return netcard_probe1(dev, base_addr);
-	else if (base_addr > 0)		/* Don't probe at all. */
+	else if (base_addr != 0)	/* Don't probe at all. */
 		return ENXIO;
 
-	for (port = &ports[0]; *port; port++) {
-		int ioaddr = *port;
-		if (check_region(ioaddr, ETHERCARD_TOTAL_SIZE))
+	for (i = 0; netcard_portlist[i]; i++) {
+		int ioaddr = netcard_portlist[i];
+		if (check_region(ioaddr, NETCARD_IO_EXTENT))
 			continue;
-		if (inb(ioaddr) != 0x57)
-			continue;
-		dev->base_addr = ioaddr;
 		if (netcard_probe1(dev, ioaddr) == 0)
 			return 0;
 	}
 
-	dev->base_addr = base_addr;
 	return ENODEV;
 }
+#endif
 
-int netcard_probe1(struct device *dev, short ioaddr)
+/* This is the real probe routine.  Linux has a history of friendly device
+   probes on the ISA bus.  A good device probes avoids doing writes, and
+   verifies that the correct device exists and functions.  */
+
+static int netcard_probe1(struct device *dev, int ioaddr)
 {
-	unsigned char station_addr[6];
+	static unsigned version_printed = 0;
 	int i;
 
-	/* Read the station address PROM.  */
-	for (i = 0; i < 6; i++) {
-		station_addr[i] = inb(ioaddr + i);
-	}
-	/* Check the first three octets of the S.A. for the manufacturer's code. */ 
-	if (station_addr[0] != SA_ADDR0
-		||	 station_addr[1] != SA_ADDR1 || station_addr[2] != SA_ADDR2) {
+	/* For ethernet adaptors the first three octets of the station address contains
+	   the manufacturer's unique code.  That might be a good probe method.
+	   Ideally you would add additional checks.  */ 
+	if (inb(ioaddr + 0) != SA_ADDR0
+		||	 inb(ioaddr + 1) != SA_ADDR1
+		||	 inb(ioaddr + 2) != SA_ADDR2) {
 		return ENODEV;
 	}
 
-	printk("%s: %s found at %#3x, IRQ %d.\n", dev->name,
-		   "network card", dev->base_addr, dev->irq);
+	/* Allocate a new 'dev' if needed. */
+	if (dev == NULL)
+		dev = init_etherdev(0, sizeof(struct net_local), 0);
+
+	if (net_debug  &&  version_printed++ == 0)
+		printk(version);
+
+	printk("%s: %s found at %#3x, ", dev->name, "network card", ioaddr);
+
+	/* Fill in the 'dev' fields. */
+	dev->base_addr = ioaddr;
+
+	/* Retrive and print the ethernet address. */
+	for (i = 0; i < 6; i++)
+		printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
 #ifdef jumpered_interrupts
 	/* If this board has jumpered interrupts, snarf the interrupt vector
 	   now.	 There is no point in waiting since no other device can use
-	   the interrupt, and this marks the irq as busy. */
+	   the interrupt, and this marks the irq as busy.
+	   Jumpered interrupts are typically not reported by the boards, and
+	   we must used autoIRQ to find them. */
 
 	if (dev->irq == -1)
 		;			/* Do nothing: a user-level program will set it. */
@@ -190,15 +207,51 @@ int netcard_probe1(struct device *dev, short ioaddr)
 		 }
 	 }
 #endif	/* jumpered interrupt */
+#ifdef jumpered_dma
+	/* If we use a jumpered DMA channel, that should be probed for and
+	   allocated here as well.  See lance.c for an example. */
+	if (dev->dma == 0) {
+		if (request_dma(dev->dma, "netcard")) {
+			printk("DMA %d allocation failed.\n", dev->dma);
+			return EAGAIN;
+		} else
+			printk(", assigned DMA %d.\n", dev->dma);
+	} else {
+		short dma_status, new_dma_status;
+
+		/* Read the DMA channel status registers. */
+		dma_status = ((inb(DMA1_STAT_REG) >> 4) & 0x0f) |
+			(inb(DMA2_STAT_REG) & 0xf0);
+		/* Trigger a DMA request, perhaps pause a bit. */
+		outw(0x1234, ioaddr + 8);
+		/* Re-read the DMA status registers. */
+		new_dma_status = ((inb(DMA1_STAT_REG) >> 4) & 0x0f) |
+			(inb(DMA2_STAT_REG) & 0xf0);
+		/* Eliminate the old and floating requests and DMA4, the cascade. */
+		new_dma_status ^= dma_status;
+		new_dma_status &= ~0x10;
+		for (i = 7; i > 0; i--)
+			if (test_bit(new_dma, &new_dma_status)) {
+				dev->dma = i;
+				break;
+			}
+		if (i <= 0) {
+			printk("DMA probe failed.\n");
+			return EAGAIN;
+		} 
+		if (request_dma(dev->dma, "netcard")) {
+			printk("probed DMA %d allocation failed.\n", dev->dma);
+			return EAGAIN;
+		}
+	}
+#endif	/* jumpered DMA */
 
 	/* Grab the region so we can find another board if autoIRQ fails. */
-	snarf_region(ioaddr, ETHERCARD_TOTAL_SIZE);
-
-	if (net_debug)
-		printk(version);
+	snarf_region(ioaddr, NETCARD_IO_EXTENT);
 
 	/* Initialize the device structure. */
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	memset(dev->priv, 0, sizeof(struct net_local));
 
 	dev->open		= net_open;
@@ -207,8 +260,7 @@ int netcard_probe1(struct device *dev, short ioaddr)
 	dev->get_stats	= net_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
 
-	/* Fill in the fields of the device structure with ethernet-generic values. */
-	
+	/* Fill in the fields of the device structure with ethernet values. */
 	ether_setup(dev);
 
 	return 0;
@@ -234,15 +286,14 @@ net_open(struct device *dev)
 		return -EAGAIN;
 	}
 
-
-	/* Always snarf a DMA channel after the IRQ. */
+	/* Always snarf the DMA channel after the IRQ, and clean up on failure. */
 	if (request_dma(dev->dma,"skeleton ethernet")) {
 		free_irq(dev->irq);
 		return -EAGAIN;
 	}
 	irq2dev_map[dev->irq] = dev;
 
-	/* Reset the hardware here. */
+	/* Reset the hardware here.  Don't forget to set the station address. */
 	/*chipset_init(dev, 1);*/
 	outb(0x00, ioaddr);
 	lp->open_time = jiffies;
@@ -337,6 +388,7 @@ net_interrupt(int reg_ptr)
 		}
 	} while (++boguscount < 20) ;
 
+	dev->interrupt = 0;
 	return;
 }
 

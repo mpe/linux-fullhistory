@@ -45,8 +45,8 @@
 #define set_flags(X,new,mask) \
 ((X) = ((X) & ~(mask)) | ((new) & (mask)))
 
-#define SAFE_MASK	(0xDD5)
-#define RETURN_MASK	(0xDFF)
+#define SAFE_MASK	(0x40DD5)
+#define RETURN_MASK	(0x40DFF)
 
 asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 {

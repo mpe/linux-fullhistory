@@ -1,6 +1,6 @@
 /* 3c501.c: A 3Com 3c501 ethernet driver for linux. */
 /*
-    Copyright (C) 1992,1993  Donald Becker
+    Written 1992,1993,1994  Donald Becker
 
     Copyright 1993 United States Government as represented by the
     Director, National Security Agency.  This software may be used and
@@ -11,13 +11,13 @@
     Do not purchase this card, even as a joke.  It's performance is horrible,
     and it breaks in many ways.  
 
-    The Author may be reached as becker@super.org or
-    C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
-    I'll only accept bug fixes, not reports, for the 3c501 driver.
+    The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+    Center of Excellence in Space Data and Information Sciences
+       Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
 static char *version =
-    "3c501.c: 3/3/94 Donald Becker (becker@super.org).\n";
+    "3c501.c: 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov).\n";
 
 /*
   Braindamage remaining:
@@ -32,6 +32,7 @@ static char *version =
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
+#include <linux/string.h>
 #include <linux/ioport.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -46,16 +47,18 @@ static char *version =
 #include "../../tools/version.h"
 #endif
 
-#ifndef HAVE_AUTOIRQ
-/* From auto_irq.c, should be in a *.h file. */
-extern void autoirq_setup(int waittime);
-extern int autoirq_report(int waittime);
-extern struct device *irq2dev_map[16];
-#endif
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+				    unsigned long *mem_startp);
+
+/* A zero-terminated list of I/O addresses to be probed.
+   The 3c501 can be at many locations, but here are the popular ones. */
+static unsigned int netcard_portlist[] =
+   { 0x280, 0x300, 0};
 
 
 /* Index to functions. */
 int el1_probe(struct device *dev);
+static int  el1_probe1(struct device *dev, int ioaddr);
 static int  el_open(struct device *dev);
 static int  el_start_xmit(struct sk_buff *skb, struct device *dev);
 static void el_interrupt(int reg_ptr);
@@ -65,37 +68,34 @@ static int  el1_close(struct device *dev);
 static struct enet_statistics *el1_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
-#define EL_NAME "EtherLink 3c501"
+#define EL1_IO_EXTENT	16
 
 #ifndef EL_DEBUG
 #define EL_DEBUG  2	/* use 0 for production, 1 for devel., >2 for debug */
 #endif			/* Anything above 5 is wordy death! */
 static int el_debug = EL_DEBUG;
-static int el_base;
-static struct device *eldev;	/* Only for consistency checking.  */
  
-/* We could easily have this struct kmalloc()ed per-board, but
-   who would want more than one 3c501?. */
-static struct {
+/* Board-specific info in dev->priv. */
+struct net_local {
     struct enet_statistics stats;
     int tx_pkt_start;		/* The length of the current Tx packet. */
     int collisions;		/* Tx collisions this packet */
-} el_status;			/* This should be stored per-board */
+};
 
 
-#define RX_STATUS (el_base + 0x06)
+#define RX_STATUS (ioaddr + 0x06)
 #define RX_CMD	  RX_STATUS
-#define TX_STATUS (el_base + 0x07)
+#define TX_STATUS (ioaddr + 0x07)
 #define TX_CMD	  TX_STATUS
-#define GP_LOW 	  (el_base + 0x08)
-#define GP_HIGH   (el_base + 0x09)
-#define RX_BUF_CLR (el_base + 0x0A)
-#define RX_LOW	  (el_base + 0x0A)
-#define RX_HIGH   (el_base + 0x0B)
-#define SAPROM	  (el_base + 0x0C)
-#define AX_STATUS (el_base + 0x0E)
+#define GP_LOW 	  (ioaddr + 0x08)
+#define GP_HIGH   (ioaddr + 0x09)
+#define RX_BUF_CLR (ioaddr + 0x0A)
+#define RX_LOW	  (ioaddr + 0x0A)
+#define RX_HIGH   (ioaddr + 0x0B)
+#define SAPROM	  (ioaddr + 0x0C)
+#define AX_STATUS (ioaddr + 0x0E)
 #define AX_CMD	  AX_STATUS
-#define DATAPORT  (el_base + 0x0F)
+#define DATAPORT  (ioaddr + 0x0F)
 #define TX_RDY 0x08		/* In TX_STATUS */
 
 #define EL1_DATAPTR	0x08
@@ -128,37 +128,64 @@ static struct {
 #define RX_GOOD	0x30		/* Good packet 0x20, or simple overflow 0x10. */
 
 
+/* The boilerplate probe code. */
+#ifdef HAVE_DEVLIST
+struct netdev_entry el1_drv =
+{"3c501", el1_probe1, EL1_IO_EXTENT, netcard_portlist};
+#else
 int
 el1_probe(struct device *dev)
 {
     int i;
-    int ioaddr;
+    int base_addr = dev ? dev->base_addr : 0;
+
+    if (base_addr > 0x1ff)	/* Check a single specified location. */
+	return el1_probe1(dev, base_addr);
+    else if (base_addr != 0)	/* Don't probe at all. */
+	return ENXIO;
+
+    for (i = 0; netcard_portlist[i]; i++) {
+	int ioaddr = netcard_portlist[i];
+	if (check_region(ioaddr, EL1_IO_EXTENT))
+	    continue;
+	if (el1_probe1(dev, ioaddr) == 0)
+	    return 0;
+    }
+
+    return ENODEV;
+}
+#endif
+
+/* The actual probe. */ 
+static int
+el1_probe1(struct device *dev, int ioaddr)
+{
+    char *mname;		/* Vendor name */
     unsigned char station_addr[6];
     int autoirq = 0;
-
-    eldev = dev;		/* Store for debugging. */
-    el_base = dev->base_addr;
-
-    if (el_base < 0x40)		/* Invalid?  Probe for it. */
-	el_base = 0x280;
-
-    ioaddr = el_base;
+    int i;
 
     /* Read the station address PROM data from the special port.  */
     for (i = 0; i < 6; i++) {
 	outw(i, ioaddr + EL1_DATAPTR);
 	station_addr[i] = inb(ioaddr + EL1_SAPROM);
     }
-    /* Check the first three octets of the S.A. for 3Com's code. */ 
-    if (station_addr[0] != 0x02  ||  station_addr[1] != 0x60
-	|| station_addr[2] != 0x8c) {
+    /* Check the first three octets of the S.A. for 3Com's prefix, or
+       for the Sager NP943 prefix. */ 
+    if (station_addr[0] == 0x02  &&  station_addr[1] == 0x60
+	&& station_addr[2] == 0x8c) {
+	mname = "3c501";
+    } else if (station_addr[0] == 0x00  &&  station_addr[1] == 0x80
+	&& station_addr[2] == 0xC8) {
+	mname = "NP943";
+    } else
 	return ENODEV;
-    }
 
-#ifdef HAVE_PORTRESERVE
     /* Grab the region so we can find the another board if autoIRQ fails. */
-    snarf_region(ioaddr, 16);
-#endif
+    snarf_region(ioaddr, EL1_IO_EXTENT);
+
+    if (dev == NULL)
+	dev = init_etherdev(0, sizeof(struct net_local), 0);
 
     /* We auto-IRQ by shutting off the interrupt line and letting it float
        high. */
@@ -175,24 +202,32 @@ el1_probe(struct device *dev)
 	autoirq = autoirq_report(1);
 
 	if (autoirq == 0) {
-	    printk("%s: 3c501 probe failed to detect IRQ line.\n", dev->name);
+	    printk("%s probe at %#x failed to detect IRQ line.\n",
+		   mname, ioaddr);
 	    return EAGAIN;
 	}
-	dev->irq = autoirq;
     }
 
     outb(AX_RESET+AX_LOOP, AX_CMD);			/* Loopback mode. */
 
-    dev->base_addr = el_base;
+    dev->base_addr = ioaddr;
     memcpy(dev->dev_addr, station_addr, ETH_ALEN);
     if (dev->mem_start & 0xf)
 	el_debug = dev->mem_start & 0x7;
+    if (autoirq)
+	dev->irq = autoirq;
 
-    printk("%s: 3c501 EtherLink at %#x, using %sIRQ %d, melting ethernet.\n",
-	   dev->name, dev->base_addr, autoirq ? "auto":"assigned ", dev->irq);
+    printk("%s: %s EtherLink at %#x, using %sIRQ %d, melting ethernet.\n",
+	   dev->name, mname, dev->base_addr,
+	   autoirq ? "auto":"assigned ", dev->irq);
 
     if (el_debug)
 	printk("%s", version);
+
+    /* Initialize the device structure. */
+    if (dev->priv == NULL)
+	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+    memset(dev->priv, 0, sizeof(struct net_local));
 
     /* The EL1-specific entries in the device structure. */
     dev->open = &el_open;
@@ -210,36 +245,33 @@ el1_probe(struct device *dev)
 static int
 el_open(struct device *dev)
 {
+    int ioaddr = dev->base_addr;
 
-  if (el_debug > 2)
-      printk("%s: Doing el_open()...", dev->name);
+    if (el_debug > 2)
+	printk("%s: Doing el_open()...", dev->name);
 
-  if (request_irq(dev->irq, &el_interrupt, 0, "3c501")) {
-      if (el_debug > 2)
-	  printk("interrupt busy, exiting el_open().\n");
-      return -EAGAIN;
-  }
-  irq2dev_map[dev->irq] = dev;
+    if (request_irq(dev->irq, &el_interrupt, 0, "3c501")) {
+	return -EAGAIN;
+    }
+    irq2dev_map[dev->irq] = dev;
 
-  el_reset(dev);
+    el_reset(dev);
 
-  dev->start = 1;
+    dev->start = 1;
 
-  outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
-  if (el_debug > 2)
-     printk("finished el_open().\n");
+    outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
 #ifdef MODULE
-  MOD_INC_USE_COUNT;
+    MOD_INC_USE_COUNT;
 #endif       
-  return (0);
+    return 0;
 }
 
 static int
 el_start_xmit(struct sk_buff *skb, struct device *dev)
 {
-    unsigned long flags;
-    
-    save_flags(flags);
+    struct net_local *lp = (struct net_local *)dev->priv;
+    int ioaddr = dev->base_addr;
+
     if (dev->tbusy) {
 	if (jiffies - dev->trans_start < 20) {
 	    if (el_debug > 2)
@@ -249,18 +281,12 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (el_debug)
 	    printk ("%s: transmit timed out, txsr %#2x axsr=%02x rxsr=%02x.\n",
 		    dev->name, inb(TX_STATUS), inb(AX_STATUS), inb(RX_STATUS));
-	el_status.stats.tx_errors++;
-#ifdef oldway
-	el_reset(dev);
-#else
-	cli();
+	lp->stats.tx_errors++;
 	outb(TX_NORM, TX_CMD);
 	outb(RX_NORM, RX_CMD);
 	outb(AX_OFF, AX_CMD);	/* Just trigger a false interrupt. */
-#endif
 	outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
 	dev->tbusy = 0;
-	restore_flags(flags);
 	dev->trans_start = jiffies;
     }
 
@@ -269,28 +295,21 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
     }
 
-    if (skb->len <= 0)
-	return 0;
-
     /* Avoid timer-based retransmission conflicts. */
-    cli();
     if (set_bit(0, (void*)&dev->tbusy) != 0)
-    {
 	printk("%s: Transmitter access conflict.\n", dev->name);
-	restore_flags(flags);
-    } else {
+    else {
 	int gp_start = 0x800 - (ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
 	unsigned char *buf = skb->data;
 
-	el_status.tx_pkt_start = gp_start;
-    	el_status.collisions = 0;
+	lp->tx_pkt_start = gp_start;
+    	lp->collisions = 0;
 
 	outb(AX_SYS, AX_CMD);
 	inb(RX_STATUS);
 	inb(TX_STATUS);
-	outb(0x00, RX_BUF_CLR);	/* Set rx packet area to 0. */
+	outw(0x00, RX_BUF_CLR);	/* Set rx packet area to 0. */
 	outw(gp_start, GP_LOW);
-	restore_flags(flags);
 	outsb(DATAPORT,buf,skb->len);
 	outw(gp_start, GP_LOW);
 	outb(AX_XMIT, AX_CMD);		/* Trigger xmit.  */
@@ -310,18 +329,18 @@ static void
 el_interrupt(int reg_ptr)
 {
     int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
-    /*struct device *dev = (struct device *)(irq2dev_map[irq]);*/
-    struct device *dev = eldev;
+    struct device *dev = (struct device *)(irq2dev_map[irq]);
+    struct net_local *lp;
+    int ioaddr;
     int axsr;			/* Aux. status reg. */
-    short ioaddr;
 
-    if (eldev->irq != irq) {
-	printk (EL_NAME ": irq %d for unknown device\n", irq);
+    if (dev == NULL  ||  dev->irq != irq) {
+	printk ("3c501 driver: irq %d for unknown device.\n", irq);
 	return;
     }
 
     ioaddr = dev->base_addr;
-
+    lp = (struct net_local *)dev->priv;
     axsr = inb(AX_STATUS);
 
     if (el_debug > 3)
@@ -348,18 +367,18 @@ el_interrupt(int reg_ptr)
 		printk("%s: Transmit failed 16 times, ethernet jammed?\n",
 		       dev->name);
 	    outb(AX_SYS, AX_CMD);
-	    el_status.stats.tx_aborted_errors++;
+	    lp->stats.tx_aborted_errors++;
 	} else if (txsr & TX_COLLISION) {	/* Retrigger xmit. */
 	    if (el_debug > 6)
 		printk(" retransmitting after a collision.\n");
 	    outb(AX_SYS, AX_CMD);
-	    outw(el_status.tx_pkt_start, GP_LOW);
+	    outw(lp->tx_pkt_start, GP_LOW);
 	    outb(AX_XMIT, AX_CMD);
-	    el_status.stats.collisions++;
+	    lp->stats.collisions++;
 	    dev->interrupt = 0;
 	    return;
 	} else {
-	    el_status.stats.tx_packets++;
+	    lp->stats.tx_packets++;
 	    if (el_debug > 6)
 		printk(" Tx succeeded %s\n",
 		       (txsr & TX_RDY) ? "." : "but tx is busy!");
@@ -374,24 +393,24 @@ el_interrupt(int reg_ptr)
 
 	/* Just reading rx_status fixes most errors. */
 	if (rxsr & RX_MISSED)
-	    el_status.stats.rx_missed_errors++;
+	    lp->stats.rx_missed_errors++;
 	if (rxsr & RX_RUNT) {	/* Handled to avoid board lock-up. */
-	    el_status.stats.rx_length_errors++;
+	    lp->stats.rx_length_errors++;
 	    if (el_debug > 5) printk(" runt.\n");
 	} else if (rxsr & RX_GOOD) {
-	    el_receive(eldev);
+	    el_receive(dev);
 	} else {			/* Nothing?  Something is broken! */
 	    if (el_debug > 2)
 		printk("%s: No packet seen, rxsr=%02x **resetting 3c501***\n",
 		       dev->name, rxsr);
-	    el_reset(eldev);
+	    el_reset(dev);
 	}
 	if (el_debug > 3)
 	    printk(".\n");
     }
 
     outb(AX_RX, AX_CMD);
-    outb(0x00, RX_BUF_CLR);
+    outw(0x00, RX_BUF_CLR);
     inb(RX_STATUS);		/* Be certain that interrupts are cleared. */
     inb(TX_STATUS);
     dev->interrupt = 0;
@@ -404,6 +423,8 @@ el_interrupt(int reg_ptr)
 static void
 el_receive(struct device *dev)
 {
+    struct net_local *lp = (struct net_local *)dev->priv;
+    int ioaddr = dev->base_addr;
     int pkt_len;
     struct sk_buff *skb;
 
@@ -415,7 +436,7 @@ el_receive(struct device *dev)
     if ((pkt_len < 60)  ||  (pkt_len > 1536)) {
 	if (el_debug)
 	  printk("%s: bogus packet, length=%d\n", dev->name, pkt_len);
-	el_status.stats.rx_over_errors++;
+	lp->stats.rx_over_errors++;
 	return;
     }
     outb(AX_SYS, AX_CMD);
@@ -424,7 +445,7 @@ el_receive(struct device *dev)
     outw(0x00, GP_LOW);
     if (skb == NULL) {
 	printk("%s: Memory squeeze, dropping packet.\n", dev->name);
-	el_status.stats.rx_dropped++;
+	lp->stats.rx_dropped++;
 	return;
     } else {
 	skb->len = pkt_len;
@@ -433,7 +454,7 @@ el_receive(struct device *dev)
 	insb(DATAPORT, skb->data, pkt_len);
 
 	netif_rx(skb);
-	el_status.stats.rx_packets++;
+	lp->stats.rx_packets++;
     }
     return;
 }
@@ -441,6 +462,8 @@ el_receive(struct device *dev)
 static void 
 el_reset(struct device *dev)
 {
+    int ioaddr = dev->base_addr;
+
     if (el_debug> 2)
 	printk("3c501 reset...");
     outb(AX_RESET, AX_CMD);	/* Reset the chip */
@@ -448,10 +471,10 @@ el_reset(struct device *dev)
     {
 	int i;
 	for (i = 0; i < 6; i++)	/* Set the station address. */
-	    outb(dev->dev_addr[i], el_base + i);
+	    outb(dev->dev_addr[i], ioaddr + i);
     }
     
-    outb(0, RX_BUF_CLR);		/* Set rx packet area to 0. */
+    outw(0, RX_BUF_CLR);		/* Set rx packet area to 0. */
     cli();			/* Avoid glitch on writes to CMD regs */
     outb(TX_NORM, TX_CMD);		/* tx irq on done, collision */
     outb(RX_NORM, RX_CMD);	/* Set Rx commands. */
@@ -487,7 +510,8 @@ el1_close(struct device *dev)
 static struct enet_statistics *
 el1_get_stats(struct device *dev)
 {
-    return &el_status.stats;
+    struct net_local *lp = (struct net_local *)dev->priv;
+    return &lp->stats;
 }
 
 /* Set or clear the multicast filter for this adaptor.
@@ -499,6 +523,8 @@ el1_get_stats(struct device *dev)
 static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
+    int ioaddr = dev->base_addr;
+
     if (num_addrs > 0) {
 	outb(RX_MULT, RX_CMD);
 	inb(RX_STATUS);		/* Clear status. */
@@ -510,14 +536,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	inb(RX_STATUS);
     }
 }
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer  -m486 -c -o 3c501.o 3c501.c"
- *  kept-new-versions: 5
- * End:
- */
-
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 static struct device dev_3c501 = {
@@ -545,3 +563,10 @@ cleanup_module(void)
 	}
 }
 #endif /* MODULE */
+
+/*
+ * Local variables:
+ *  compile-command: "gcc -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer  -m486 -c -o 3c501.o 3c501.c"
+ *  kept-new-versions: 5
+ * End:
+ */

@@ -209,7 +209,9 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end, int 
 				  size + 1024, 1, 0, NULL,
 			/* Here is NFS_SLACK_SPACE..., hack */
 				  &addrlen);
-	if (result < addrlen) {
+	if (result < 0) {
+		printk("NFS: notice message: result=%d\n", result);
+	} else if (result < addrlen) {
 		printk("NFS: just caught a too small read memory size..., email to NET channel\n");
 		printk("NFS: result=%d,addrlen=%d\n", result, addrlen);
 		result = -EIO;

@@ -217,8 +217,8 @@ if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	COPY(ebx);
 	COPY(esp); COPY(ebp);
 	COPY(edi); COPY(esi);
-	regs->eflags &= ~0xCD5;
-	regs->eflags |= context.eflags & 0xCD5;
+	regs->eflags &= ~0x40DD5;
+	regs->eflags |= context.eflags & 0x40DD5;
 	regs->orig_eax = -1;		/* disable syscall checks */
 	return context.eax;
 badframe:

@@ -19,7 +19,7 @@
 */
 
 static char *version =
-"hp-plus.c:v0.04 6/16/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+"hp-plus.c:v1.10 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 #include <linux/string.h>		/* Important -- this inlines word moves. */
@@ -38,6 +38,12 @@ static char *version =
 #endif
 
 #include "8390.h"
+extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+									unsigned long *mem_startp);
+
+/* A zero-terminated list of I/O addresses to be probed. */
+static unsigned int hpplus_portlist[] =
+{0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0}
 
 /*
    The HP EtherTwist chip implementation is a fairly routine DP8390
@@ -64,10 +70,6 @@ static char *version =
    register.
 */
 
-#define HPP_PROBE_LIST {0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0}
-
-#define HP_IO_EXTENT	32
-
 #define HP_ID			0x00	/* ID register, always 0x4850. */
 #define HP_PAGING		0x02	/* Registers visible @ 8-f, see PageName. */ 
 #define HPP_OPTION		0x04	/* Bitmapped options, see HP_Option.	*/
@@ -75,6 +77,7 @@ static char *version =
 #define HPP_IN_ADDR		0x0A	/* I/O input location in Perf_Page.		*/
 #define HP_DATAPORT		0x0c	/* I/O data transfer in Perf_Page.		*/
 #define NIC_OFFSET		0x10	/* Offset to the 8390 registers.		*/
+#define HP_IO_EXTENT	32
 
 #define HP_START_PG		0x00	/* First page of TX buffer */
 #define HP_STOP_PG		0x80	/* Last page +1 of RX ring */
@@ -111,26 +114,34 @@ static void hpp_io_block_output(struct device *dev, int count,
 
 /*	Probe a list of addresses for an HP LAN+ adaptor.
 	This routine is almost boilerplate. */
+#ifdef HAVE_DEVLIST
+/* Support for a alternate probe manager, which will eliminate the
+   boilerplate below. */
+struct netdev_entry hpplus_drv =
+{"hpplus", hpp_probe1, HP_IO_EXTENT, hpplus_portlist};
+#else
 
 int hp_plus_probe(struct device *dev)
 {
-	int *port, ports[] = HPP_PROBE_LIST;
-	short ioaddr = dev->base_addr;
+	int i;
+	int base_addr = dev ? dev->base_addr : 0;
 
-	if (ioaddr > 0x1ff)			/* Check a single specified location. */
-		return hpp_probe1(dev, ioaddr);
-	else if (ioaddr > 0)				/* Don't probe at all. */
+	if (base_addr > 0x1ff)		/* Check a single specified location. */
+		return hpp_probe1(dev, base_addr);
+	else if (base_addr != 0)	/* Don't probe at all. */
 		return ENXIO;
 
-	for (port = &ports[0]; *port; port++) {
-		if (check_region(*port, HP_IO_EXTENT))
+	for (i = 0; hpplus_portlist[i]; i++) {
+		int ioaddr = hpplus_portlist[i];
+		if (check_region(ioaddr, HP_IO_EXTENT))
 			continue;
-		if (hpp_probe1(dev, *port) == 0) {
+		if (hpp_probe1(dev, ioaddr) == 0)
 			return 0;
-		}
 	}
+
 	return ENODEV;
 }
+#endif
 
 /* Do the interesting part of the probe at a single address. */
 int hpp_probe1(struct device *dev, int ioaddr)
@@ -138,7 +149,6 @@ int hpp_probe1(struct device *dev, int ioaddr)
 	int i;
 	unsigned char checksum = 0;
 	char *name = "HP-PC-LAN+";
-	unsigned char *station_addr = dev->dev_addr;
 	int mem_start;
 
 	/* Check for the HP+ signature, 50 48 0x 53. */
@@ -146,7 +156,9 @@ int hpp_probe1(struct device *dev, int ioaddr)
 		|| (inw(ioaddr + HP_PAGING) & 0xfff0) != 0x5300)
 		return ENODEV;
 
-	/* OK, we think that we have it.  Get and checksum the physical address. */
+    if (dev == NULL)
+		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+
 	printk("%s: %s at %#3x,", dev->name, name, ioaddr);
 
 	/* Retrieve and checksum the station address. */
@@ -154,7 +166,7 @@ int hpp_probe1(struct device *dev, int ioaddr)
 
 	for(i = 0; i < ETHER_ADDR_LEN; i++) {
 		unsigned char inval = inb(ioaddr + 8 + i);
-		station_addr[i] = inval;
+		dev->dev_addr[i] = inval;
 		checksum += inval;
 		printk(" %2.2x", inval);
 	}

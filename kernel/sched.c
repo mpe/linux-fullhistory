@@ -600,7 +600,7 @@ static void do_timer(struct pt_regs * regs)
 	unsigned long mask;
 	struct timer_struct *tp;
 
-	long ltemp;
+	long ltemp, psecs;
 
 	/* Advance the phase, once it gets to one microsecond, then
 	 * advance the tick more.
@@ -679,12 +679,20 @@ static void do_timer(struct pt_regs * regs)
 	/*
 	 * check the cpu time limit on the process.
 	 */
-	if ((current->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
-	    (((current->stime + current->utime) / HZ) >= current->rlim[RLIMIT_CPU].rlim_cur))
-		send_sig(SIGXCPU, current, 1);
 	if ((current->rlim[RLIMIT_CPU].rlim_max != RLIM_INFINITY) &&
 	    (((current->stime + current->utime) / HZ) >= current->rlim[RLIMIT_CPU].rlim_max))
 		send_sig(SIGKILL, current, 1);
+	if ((current->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
+	    (((current->stime + current->utime) % HZ) == 0)) {
+		psecs = (current->stime + current->utime) / HZ;
+		/* send when equal */
+		if (psecs == current->rlim[RLIMIT_CPU].rlim_cur)
+			send_sig(SIGXCPU, current, 1);
+		/* and every five seconds thereafter. */
+		else if ((psecs > current->rlim[RLIMIT_CPU].rlim_cur) &&
+		        ((psecs - current->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
+			send_sig(SIGXCPU, current, 1);
+	}
 
 	if (current != task[0] && 0 > --current->counter) {
 		current->counter = 0;

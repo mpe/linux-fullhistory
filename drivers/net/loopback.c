@@ -9,7 +9,7 @@
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
- *		Donald Becker, <becker@super.org>
+ *		Donald Becker, <becker@cesdis.gsfc.nasa.gov>
  *
  *		Alan Cox	:	Fixed oddments for NET3.014
  *
