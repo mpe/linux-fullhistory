@@ -2038,7 +2038,6 @@ int ide_register_subdriver(ide_drive_t *drive, ide_driver_t *driver)
 		(drive->autotune == IDE_TUNE_AUTO)) {
 		/* DMA timings and setup moved to ide-probe.c */
 		drive->dsc_overlap = (drive->next != drive && driver->supports_dsc_overlap);
-		drive->nice1 = 1;
 	}
 #ifdef CONFIG_PROC_FS
 	if (drive->driver != &idedefault_driver)

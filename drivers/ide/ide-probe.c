@@ -862,6 +862,13 @@ static void probe_hwif(ide_hwif_t *hwif)
 				drive->autotune == IDE_TUNE_AUTO)
 				/* auto-tune PIO mode */
 				hwif->tuneproc(drive, 255);
+
+			if (drive->autotune != IDE_TUNE_DEFAULT &&
+			    drive->autotune != IDE_TUNE_AUTO)
+				continue;
+
+			drive->nice1 = 1;
+
 			/*
 			 * MAJOR HACK BARF :-/
 			 *
@@ -871,9 +878,7 @@ static void probe_hwif(ide_hwif_t *hwif)
 			 * Move here to prevent module loading clashing.
 			 */
 	//		drive->autodma = hwif->autodma;
-			if ((hwif->ide_dma_check) &&
-				((drive->autotune == IDE_TUNE_DEFAULT) ||
-				(drive->autotune == IDE_TUNE_AUTO))) {
+			if (hwif->ide_dma_check) {
 				/*
 				 * Force DMAing for the beginning of the check.
 				 * Some chipsets appear to do interesting
