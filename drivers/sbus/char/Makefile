@@ -51,12 +51,34 @@ endif
 
 O_TARGET := sunchar.o
 O_OBJ    := ${FB_OBJS} suncons.o sbuscons.o pcicons.o sunfb.o
-O_OBJS   := ${O_OBJ} sunkbd.o sunkeymap.o sunmouse.o sunserial.o zs.o
+O_OBJS   := ${O_OBJ} sunkbd.o sunkbdmap.o sunmouse.o sunserial.o zs.o
 M_OBJS   :=
 
 ifeq ($(ARCH),sparc64)
+
+ifeq ($(CONFIG_PCI),y)
+
 O_OBJS += su.o pcikbd.o
+
+ifeq ($(CONFIG_SAB82532),y)
+O_OBJS += sab82532.o
+else
+  ifeq ($(CONFIG_SAB82532),m)
+  M_OBJS += sab82532.o
+  endif
 endif
+
+endif # eq($(CONFIG_PCI,y)
+
+ifeq ($(CONFIG_OBP_FLASH),y)
+O_OBJS += flash.o
+else
+  ifeq ($(CONFIG_OBP_FLASH),m)
+  M_OBJS += flash.o
+  endif
+endif
+
+endif # eq($(ARCH),sparc64)
 
 ifeq ($(CONFIG_SUN_OPENPROMIO),y)
 O_OBJS += openprom.o
@@ -90,14 +112,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_SAB82532),y)
-O_OBJS += sab82532.o
-else
-  ifeq ($(CONFIG_SAB82532),m)
-  M_OBJS += sab82532.o
-  endif
-endif
-
 # Add PCI console/fb drivers here.
 #
 ifeq ($(CONFIG_PCI),y)
@@ -105,6 +119,8 @@ O_OBJS += mach64.o
 endif
 
 include $(TOPDIR)/Rules.make
+
+sunkbdmap.o: sunkeymap.c
 
 vfc.o: vfc_dev.o vfc_i2c.o
 	$(LD) -r -o vfc.o vfc_dev.o vfc_i2c.o

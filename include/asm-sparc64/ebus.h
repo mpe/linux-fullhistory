@@ -1,4 +1,4 @@
-/* $Id: ebus.h,v 1.3 1997/09/05 23:00:14 ecd Exp $
+/* $Id: ebus.h,v 1.4 1998/01/10 18:26:08 ecd Exp $
  * ebus.h: PCI to Ebus pseudo driver software state.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
@@ -12,6 +12,7 @@
 struct linux_ebus_child {
 	struct linux_ebus_child		*next;
 	struct linux_ebus_device	*parent;
+	struct linux_ebus		*bus;
 	int				 prom_node;
 	char				 prom_name[64];
 	unsigned long			 base_address[PROMREG_MAX];
@@ -23,7 +24,7 @@ struct linux_ebus_child {
 struct linux_ebus_device {
 	struct linux_ebus_device	*next;
 	struct linux_ebus_child		*children;
-	struct linux_ebus		*parent;
+	struct linux_ebus		*bus;
 	int				 prom_node;
 	char				 prom_name[64];
 	unsigned long			 base_address[PROMREG_MAX];

@@ -74,12 +74,12 @@ extern inline void end_bh_atomic(void)
 
 #else /* __SMP__ */
 
-extern atomic_t __sparc_bh_counter;
+extern atomic_t __ppc_bh_counter;
 
 #define start_bh_atomic() \
-	do { atomic_inc(&__sparc_bh_counter); synchronize_irq(); } while(0)
+	do { atomic_inc(&__ppc_bh_counter); synchronize_irq(); } while(0)
 
-#define end_bh_atomic()		atomic_dec(&__sparc_bh_counter)
+#define end_bh_atomic()		atomic_dec(&__ppc_bh_counter)
 
 #include <asm/spinlock.h>
 
@@ -132,13 +132,13 @@ do {	unsigned long flags;				\
 #define softirq_trylock()					\
 ({								\
 	int ret = 1;						\
-	if(atomic_add_return(1, &__sparc_bh_counter) != 1) {	\
-		atomic_dec(&__sparc_bh_counter);		\
+	if(atomic_add_return(1, &__ppc_bh_counter) != 1) {	\
+		atomic_dec(&__ppc_bh_counter);		\
 		ret = 0;					\
 	}							\
 	ret;							\
 })
-#define softirq_endlock()	atomic_dec(&__sparc_bh_counter)
+#define softirq_endlock()	atomic_dec(&__ppc_bh_counter)
 #define clear_active_bhs(mask)				\
 do {	unsigned long flags;				\
 	spin_lock_irqsave(&global_bh_lock, flags);	\

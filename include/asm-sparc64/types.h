@@ -1,4 +1,4 @@
-/* $Id: types.h,v 1.1 1996/11/20 12:03:51 davem Exp $ */
+/* $Id: types.h,v 1.2 1997/12/22 13:28:33 mj Exp $ */
 #ifndef _SPARC64_TYPES_H
 #define _SPARC64_TYPES_H
 
@@ -42,6 +42,8 @@ typedef unsigned int u32;
 
 typedef __signed__ long s64;
 typedef unsigned long u64;
+
+#define BITS_PER_LONG 64
 
 #endif /* __KERNEL__ */
 

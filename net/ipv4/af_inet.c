@@ -912,29 +912,6 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGIFPFLAGS:	
 		case SIOCSIFFLAGS:
 			return(devinet_ioctl(cmd,(void *) arg));
-		case SIOCGIFCONF:
-		case SIOCGIFFLAGS:
-		case SIOCADDMULTI:
-		case SIOCDELMULTI:
-		case SIOCGIFMETRIC:
-		case SIOCSIFMETRIC:
-		case SIOCGIFMEM:
-		case SIOCSIFMEM:
-		case SIOCGIFMTU:
-		case SIOCSIFMTU:
-		case SIOCSIFLINK:
-		case SIOCGIFHWADDR:
-		case SIOCSIFHWADDR:
-		case SIOCSIFMAP:
-		case SIOCGIFMAP:
-		case SIOCSIFSLAVE:
-		case SIOCGIFSLAVE:
-		case SIOCGIFINDEX:
- 		case SIOCGIFNAME:
- 		case SIOCGIFCOUNT:
-		case SIOCSIFHWBROADCAST:
-			return(dev_ioctl(cmd,(void *) arg));
-
 		case SIOCGIFBR:
 		case SIOCSIFBR:
 #ifdef CONFIG_BRIDGE		
@@ -971,9 +948,9 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 				return(dev_ioctl(cmd,(void *) arg));
 #endif
 
-			if (sk->prot->ioctl==NULL) 
-				return(-EINVAL);
-			return(sk->prot->ioctl(sk, cmd, arg));
+			if (sk->prot->ioctl==NULL || (err=sk->prot->ioctl(sk, cmd, arg))==-ENOIOCTLCMD)
+				return(dev_ioctl(cmd,(void *) arg));		
+			return err;
 	}
 	/*NOTREACHED*/
 	return(0);

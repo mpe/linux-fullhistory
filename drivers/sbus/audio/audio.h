@@ -82,12 +82,13 @@ typedef struct audio_info {
 /*
  * Audio encoding types
  */
-#define	AUDIO_ENCODING_NONE	(0)	/* no encoding assigned	*/
-#define	AUDIO_ENCODING_ULAW	(1)	/* u-law encoding	*/
-#define	AUDIO_ENCODING_ALAW	(2)	/* A-law encoding	*/
-#define	AUDIO_ENCODING_LINEAR	(3)	/* Linear PCM encoding	*/
-#define	AUDIO_ENCODING_DVI	(104)	/* DVI ADPCM		*/
-#define	AUDIO_ENCODING_LINEAR8	(105)	/* 8 bit UNSIGNED	*/
+#define	AUDIO_ENCODING_NONE	(0)	/* no encoding assigned	  */
+#define	AUDIO_ENCODING_ULAW	(1)	/* u-law encoding	  */
+#define	AUDIO_ENCODING_ALAW	(2)	/* A-law encoding	  */
+#define	AUDIO_ENCODING_LINEAR	(3)	/* Linear PCM encoding	  */
+#define	AUDIO_ENCODING_DVI	(104)	/* DVI ADPCM		  */
+#define	AUDIO_ENCODING_LINEAR8	(105)	/* 8 bit UNSIGNED	  */
+#define	AUDIO_ENCODING_LINEARLE	(106)	/* Linear PCM LE encoding */
 
 /*
  * These ranges apply to record, play, and monitor gain values
@@ -136,6 +137,8 @@ typedef struct audio_info {
 #define	AUDIO_LINE_IN		0x02	/* input from line in	 */
 #define	AUDIO_CD		0x04	/* input from on-board CD inputs */
 #define	AUDIO_INTERNAL_CD_IN	AUDIO_CD	/* input from internal CDROM */
+/* Supposedly an undocumented feature of the 4231 */
+#define AUDIO_ANALOG_LOOPBACK   0x40
 
 
 /*
@@ -150,6 +153,14 @@ typedef struct audio_info {
 	    *__x__++ = ~0);						\
 }
 
+
+/*
+ * These allow testing for what the user wants to set 
+ */
+#define AUD_INITVALUE   (~0)
+#define Modify(X)       ((unsigned int)(X) != AUD_INITVALUE)
+#define Modifys(X)      ((X) != (unsigned short)AUD_INITVALUE)
+#define Modifyc(X)      ((X) != (unsigned char)AUD_INITVALUE)
 
 /*
  * Parameter for the AUDIO_GETDEV ioctl to determine current
@@ -192,6 +203,16 @@ typedef struct audio_device {
 #define	AUDIO_SETINFO	_IOWR('A', 2, audio_info_t)
 #define	AUDIO_DRAIN	_IO('A', 3)
 #define	AUDIO_GETDEV	_IOR('A', 4, audio_device_t)
+#define	AUDIO_GETDEV_SUNOS	_IOR('A', 4, int)
+
+/* Define possible audio hardware configurations for 
+ * old SunOS-style AUDIO_GETDEV ioctl */
+
+#define AUDIO_DEV_UNKNOWN       (0)     /* not defined */
+#define AUDIO_DEV_AMD           (1)     /* audioamd device */
+#define AUDIO_DEV_SPEAKERBOX    (2)     /* dbri device with speakerbox */
+#define AUDIO_DEV_CODEC         (3)     /* dbri device (internal speaker) */
+#define AUDIO_DEV_CS4231        (5)     /* cs4231 device */
 
 /*
  * The following ioctl sets the audio device into an internal loopback mode,
@@ -213,8 +234,6 @@ struct audtrace_hdr {
 	char _f[8];		/* filler */
 };
 #endif
-
-
 
 /*
  *	Linux kernel internal implementation.
@@ -245,10 +264,17 @@ struct sparcaudio_driver
 
 	/* Support for a circular queue of output buffers. */
 	__u8 **output_buffers;
-	size_t *output_sizes;
+	size_t *output_sizes, output_size;
 	int num_output_buffers, output_front, output_rear;
 	int output_count, output_active;
 	struct wait_queue *output_write_wait, *output_drain_wait;
+
+	/* Support for a circular queue of input buffers. */
+	__u8 **input_buffers;
+	int input_offset;
+	int num_input_buffers, input_front, input_rear;
+	int input_count, input_active;
+	struct wait_queue *input_read_wait;
 };
 
 struct sparcaudio_operations
@@ -272,6 +298,77 @@ struct sparcaudio_operations
 
 	/* Return driver name/version to caller. (/dev/audio specific) */
 	void (*sunaudio_getdev)(struct sparcaudio_driver *, audio_device_t *);
+
+        /* Get and set the output volume. (0-255) */
+        int (*set_output_volume)(struct sparcaudio_driver *, int);
+        int (*get_output_volume)(struct sparcaudio_driver *);
+
+        /* Get and set the input volume. (0-255) */
+        int (*set_input_volume)(struct sparcaudio_driver *, int);
+        int (*get_input_volume)(struct sparcaudio_driver *);
+
+        /* Get and set the monitor volume. (0-255) */
+        int (*set_monitor_volume)(struct sparcaudio_driver *, int);
+        int (*get_monitor_volume)(struct sparcaudio_driver *);
+
+        /* Get and set the output balance. (0-64) */
+        int (*set_output_balance)(struct sparcaudio_driver *, int);
+        int (*get_output_balance)(struct sparcaudio_driver *);
+
+        /* Get and set the input balance. (0-64) */
+        int (*set_input_balance)(struct sparcaudio_driver *, int);
+        int (*get_input_balance)(struct sparcaudio_driver *);
+
+        /* Get and set the output channels. (1-4) */
+        int (*set_output_channels)(struct sparcaudio_driver *, int);
+        int (*get_output_channels)(struct sparcaudio_driver *);
+
+        /* Get and set the input channels. (1-4) */
+        int (*set_input_channels)(struct sparcaudio_driver *, int);
+        int (*get_input_channels)(struct sparcaudio_driver *);
+
+        /* Get and set the output precision. (8-32) */
+        int (*set_output_precision)(struct sparcaudio_driver *, int);
+        int (*get_output_precision)(struct sparcaudio_driver *);
+
+        /* Get and set the input precision. (8-32) */
+        int (*set_input_precision)(struct sparcaudio_driver *, int);
+        int (*get_input_precision)(struct sparcaudio_driver *);
+
+        /* Get and set the output port. () */
+        int (*set_output_port)(struct sparcaudio_driver *, int);
+        int (*get_output_port)(struct sparcaudio_driver *);
+
+        /* Get and set the input port. () */
+        int (*set_input_port)(struct sparcaudio_driver *, int);
+        int (*get_input_port)(struct sparcaudio_driver *);
+
+        /* Get and set the output encoding. () */
+        int (*set_output_encoding)(struct sparcaudio_driver *, int);
+        int (*get_output_encoding)(struct sparcaudio_driver *);
+
+        /* Get and set the input encoding. () */
+        int (*set_input_encoding)(struct sparcaudio_driver *, int);
+        int (*get_input_encoding)(struct sparcaudio_driver *);
+
+        /* Get and set the output rate. () */
+        int (*set_output_rate)(struct sparcaudio_driver *, int);
+        int (*get_output_rate)(struct sparcaudio_driver *);
+
+        /* Get and set the input rate. () */
+        int (*set_input_rate)(struct sparcaudio_driver *, int);
+        int (*get_input_rate)(struct sparcaudio_driver *);
+
+	/* Return driver number to caller. (SunOS /dev/audio specific) */
+	int (*sunaudio_getdev_sunos)(struct sparcaudio_driver *);
+
+	/* Get available ports */
+	int (*get_output_ports)(struct sparcaudio_driver *);
+	int (*get_input_ports)(struct sparcaudio_driver *);
+
+	/* Get and set output mute */
+	int (*set_output_muted)(struct sparcaudio_driver *, int);
+	int (*get_output_muted)(struct sparcaudio_driver *);
 };
 
 extern int register_sparcaudio_driver(struct sparcaudio_driver *);
@@ -282,6 +379,6 @@ extern int sparcaudio_init(void);
 extern int amd7930_init(void);
 extern int cs4231_init(void);
 
-#endif
+#endif  /* __KERNEL__ */
 
-#endif
+#endif  /* _AUDIO_H */

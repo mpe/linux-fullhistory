@@ -1,4 +1,4 @@
-/* $Id: kgdb.h,v 1.7 1995/11/27 02:43:18 davem Exp $
+/* $Id: kgdb.h,v 1.8 1998/01/07 06:33:44 baccala Exp $
  * kgdb.h: Defines and declarations for serial line source level
  *         remote debugging of the Linux kernel using gdb.
  *
@@ -83,8 +83,12 @@ struct kgdb_frame {
         ldd     [%reg + REGWIN_SZ + KGDB_I4], %i4; \
         ldd     [%reg + REGWIN_SZ + KGDB_I6], %i6;
 
-#define LOAD_KGDB_SREGS(reg, reg_y_and_psr, reg_pc_and_npc) \
-        ldd     [%reg + REGWIN_SZ + KGDB_Y], %reg_y_and_psr; \
-        ldd     [%reg + REGWIN_SZ + KGDB_PC], %reg_pc_and_npc;
+#define LOAD_KGDB_SREGS(reg, reg_y, reg_psr, reg_wim, reg_tbr, reg_pc, reg_npc) \
+	ld	[%reg + REGWIN_SZ + KGDB_Y], %reg_y; \
+	ld	[%reg + REGWIN_SZ + KGDB_PSR], %reg_psr; \
+	ld	[%reg + REGWIN_SZ + KGDB_WIM], %reg_wim; \
+	ld	[%reg + REGWIN_SZ + KGDB_TBR], %reg_tbr; \
+	ld	[%reg + REGWIN_SZ + KGDB_PC], %reg_pc; \
+	ld	[%reg + REGWIN_SZ + KGDB_NPC], %reg_npc;
 
 #endif /* !(_SPARC_KGDB_H) */

@@ -35,6 +35,7 @@
 extern void nfs_renew_times(struct dentry *);
 
 #define NFS_PARANOIA 1
+/* #define NFS_DEBUG_VERBOSE 1 */
 
 /*
  * Head for a dircache entry. Currently still very simple; when
@@ -458,6 +459,28 @@ inode->i_ino, inode->i_count, inode->i_nlink);
 }
 
 /*
+ * Called to free the inode from the dentry. We must flush
+ * any pending writes for this dentry before freeing the inode.
+ */
+static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
+{
+	if (NFS_WRITEBACK(inode)) {
+#ifdef NFS_PARANOIA
+printk("nfs_dentry_iput: pending writes for %s/%s, i_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
+#endif
+		while (nfs_find_dentry_request(inode, dentry)) {
+#ifdef NFS_PARANOIA
+printk("nfs_dentry_iput: flushing %s/%s\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+#endif
+			nfs_flush_dirty_pages(inode, 0, 0, 0);
+		}
+	}
+	iput(inode);
+}
+
+/*
  * Called when the dentry is being freed to release private memory.
  */
 static void nfs_dentry_release(struct dentry *dentry)
@@ -471,8 +494,52 @@ struct dentry_operations nfs_dentry_operations = {
 	NULL,			/* d_hash */
 	NULL,			/* d_compare */
 	nfs_dentry_delete,	/* d_delete(struct dentry *) */
+	nfs_dentry_iput,	/* d_iput(struct dentry *, struct inode *) */
 	nfs_dentry_release	/* d_release(struct dentry *) */
 };
+
+#ifdef NFS_PARANOIA
+/*
+ * Display all dentries holding the specified inode.
+ */
+static void show_dentry(struct inode * inode)
+{
+	struct dentry *parent = inode->i_sb->s_root;
+	struct dentry *this_parent = parent;
+	struct list_head *next;
+
+repeat:
+	next = this_parent->d_subdirs.next;
+resume:
+	while (next != &this_parent->d_subdirs) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
+		if (dentry->d_inode == inode) {
+			int unhashed = list_empty(&dentry->d_hash);
+			printk("show_dentry: %s/%s, d_count=%d%s\n",
+				dentry->d_parent->d_name.name,
+				dentry->d_name.name, dentry->d_count,
+				unhashed ? "(unhashed)" : "");
+		}
+		/*
+		 * Descend a level if the d_subdirs list is non-empty.
+		 */
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+			goto repeat;
+		}
+	}
+	/*
+	 * All done at this level ... ascend and resume the search.
+	 */
+	if (this_parent != parent) {
+		next = this_parent->d_child.next; 
+		this_parent = this_parent->d_parent;
+		goto resume;
+	}
+}
+#endif
 
 /*
  * Whenever a lookup succeeds, we know the parent directories
@@ -531,10 +598,12 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 		inode = nfs_fhget(dentry->d_sb, &fhandle, &fattr);
 		if (inode) {
 #ifdef NFS_PARANOIA
-if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink))
+if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
 printk("nfs_lookup: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
+show_dentry(inode);
+}
 #endif
 	    no_entry:
 			d_add(dentry, inode);
@@ -564,10 +633,12 @@ static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 	inode = nfs_fhget(dentry->d_sb, fhandle, fattr);
 	if (inode) {
 #ifdef NFS_PARANOIA
-if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink))
+if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
 printk("nfs_instantiate: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
+show_dentry(inode);
+}
 #endif
 		d_instantiate(dentry, inode);
 		nfs_renew_times(dentry);
@@ -682,10 +753,6 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 
-	nfs_invalidate_dircache(dir);
-	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
-				dentry->d_name.name, &sattr, &fhandle, &fattr);
-
 	/*
 	 * Always drop the dentry, we can't always depend on
 	 * the fattr returned by the server (AIX seems to be
@@ -693,6 +760,9 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	 * depending on potentially bogus information.
 	 */
 	d_drop(dentry);
+	nfs_invalidate_dircache(dir);
+	error = nfs_proc_mkdir(NFS_DSERVER(dentry), NFS_FH(dentry->d_parent),
+				dentry->d_name.name, &sattr, &fhandle, &fattr);
 out:
 	return error;
 }

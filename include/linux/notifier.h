@@ -97,6 +97,7 @@ extern __inline__ int notifier_call_chain(struct notifier_block **n, unsigned lo
 #define NETDEV_UNREGISTER	0x0006
 #define NETDEV_CHANGEMTU	0x0007
 #define NETDEV_CHANGEADDR	0x0008
+#define NETDEV_GOING_DOWN	0x0009
 
 #define SYS_DOWN	0x0001	/* Notify of system down */
 #define SYS_RESTART	SYS_DOWN

@@ -1,4 +1,4 @@
-/* $Id: pcicons.c,v 1.9 1997/08/28 02:23:24 ecd Exp $
+/* $Id: pcicons.c,v 1.10 1997/10/04 08:52:57 ecd Exp $
  * pcicons.c: PCI specific probing and console operations layer.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -37,14 +37,9 @@ static int x_margin = 0;
 static int y_margin = 0;
 static int skip_bytes;
 
-static void pci_cursor_blink(unsigned long);
-static __u32 *cursor_screen_pos;
-static __u32 cursor_bits;
+static __u64 *cursor_screen_pos;
+static __u64 cursor_bits[2];
 static int cursor_pos = -1;
-static int cursor_off = 1;
-static struct timer_list pci_cursor_timer = {
-	NULL, NULL, 0, 0, pci_cursor_blink
-};
 
 extern int serial_console;
 
@@ -219,52 +214,24 @@ static void pci_set_scrmem(int currcons, long offset)
 static void pci_invert_cursor(int cpos)
 {
 	fbinfo_t *fb = &fbinfo[0];
-	unsigned char color;
-	__u32 *screen, mask;
-	int i;
-
-	del_timer(&pci_cursor_timer);
+	__u64 *screen;
 
 	if (cpos == -1) {
-		if (cursor_off)
-			return;
 		screen = cursor_screen_pos;
-		mask = cursor_bits;
-	} else {
-		screen = (__u32 *)(fb->base + fbuf_offset(cpos)
-					    + 14 * fb->linebytes);
-
-		color = CHARATTR_TO_SUNCOLOR(
-					vc_cons[fg_console].d->vc_color << 8);
-
-		mask = (color ^ (color >> 4)) & 0x0f;
-		mask |= mask << 8;
-		mask |= mask << 16;
-
-		cursor_screen_pos = screen;
-		cursor_bits = mask;
-
-		pci_cursor_timer.expires = jiffies + (HZ >> 2);
-		add_timer(&pci_cursor_timer);
+		*screen = cursor_bits[0];
+		screen = (__u64 *)((unsigned long)screen + fb->linebytes);
+		*screen = cursor_bits[1];
+		return;
 	}
 
-	for (i = 0; i < 2; i++) {
-		screen[0] ^= mask;
-		screen[1] ^= mask;
-		screen = (__u32 *)((unsigned long)screen + fb->linebytes);
-	}
-}
+	screen = (__u64 *)(fb->base + fbuf_offset(cpos) + 14 * fb->linebytes);
+	cursor_screen_pos = screen;
 
-static void pci_cursor_blink(unsigned long ignored)
-{
-	unsigned long flags;
-
-	save_flags(flags); cli();
-	if (cursor_pos != -1) {
-		pci_invert_cursor(cursor_pos);
-		cursor_off = 1 - cursor_off;
-	}
-	restore_flags(flags);
+	cursor_bits[0] = *screen;
+	*screen = 0x0000000000000000;
+	screen = (__u64 *)((unsigned long)screen + fb->linebytes);
+	cursor_bits[1] = *screen;
+	*screen = 0x0000000000000000;
 }
 
 static void pci_hide_cursor(void)
@@ -275,11 +242,8 @@ static void pci_hide_cursor(void)
 		return;
 
 	save_flags(flags); cli();
-	if (cursor_pos != -1) {
+	if (cursor_pos != -1)
 		pci_invert_cursor(-1);
-		cursor_pos = -1;
-	}
-	cursor_off = 1;
 	restore_flags(flags);
 }
 
@@ -300,7 +264,6 @@ static void pci_set_cursor(int currcons)
 		if (old_cursor != -1)
 			pci_invert_cursor(-1);
 		pci_invert_cursor(cursor_pos);
-		cursor_off = 0;
 	}
 	restore_flags(flags);
 }

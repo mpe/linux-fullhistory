@@ -1,4 +1,4 @@
-/* $Id: ipc.c,v 1.1 1997/09/03 12:29:29 jj Exp $
+/* $Id: ipc.c,v 1.2 1997/09/18 10:38:27 rth Exp $
  * ipc.c: Solaris IPC emulation
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -53,7 +53,7 @@ asmlinkage long solaris_shmsys(int cmd, u32 arg1, u32 arg2, u32 arg3)
 {
 	int (*sys_ipc)(unsigned,int,int,unsigned long,void *,long) = 
 		(int (*)(unsigned,int,int,unsigned long,void *,long))SYS(ipc);
-	unsigned long old_fs;
+	mm_segment_t old_fs;
 	unsigned long raddr;
 	int ret;
 		

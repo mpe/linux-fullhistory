@@ -50,11 +50,12 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 struct qcam_device {
 	struct video_device vdev;
+	struct pardevice *pdev;
+	struct parport *pport;
 	int width, height;
 	int bpp;
 	int mode;
 	int contrast, brightness, whitebal;
-	int port;
 	int port_mode;
 	int transfer_scale;
 	int top, left;

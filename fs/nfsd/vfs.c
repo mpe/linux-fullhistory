@@ -190,20 +190,24 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	inode = dentry->d_inode;
 
 	/* The size case is special... */
-	if ((iap->ia_valid & ATTR_SIZE) && S_ISREG(inode->i_mode)) {
+	if (iap->ia_valid & ATTR_SIZE) {
+if (!S_ISREG(inode->i_mode))
+printk("nfsd_setattr: size change??\n");
 		if (iap->ia_size < inode->i_size) {
 			err = nfsd_permission(fhp->fh_export, dentry, MAY_TRUNC);
 			if (err != 0)
 				goto out;
 		}
-		if ((err = get_write_access(inode)) != 0)
-			return nfserrno(-err);
+		err = get_write_access(inode);
+		if (err)
+			goto out_nfserr;
+		/* N.B. Should we update the inode cache here? */
 		inode->i_size = iap->ia_size;
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
 		mark_inode_dirty(inode);
 		put_write_access(inode);
-		iap->ia_valid &= ATTR_SIZE;
+		iap->ia_valid &= ~ATTR_SIZE;
 		iap->ia_valid |= ATTR_MTIME;
 		iap->ia_mtime = CURRENT_TIME;
 	}
@@ -232,13 +236,17 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 		iap->ia_ctime = CURRENT_TIME;
 		err = notify_change(dentry, iap);
 		if (err)
-			return nfserrno(-err);
+			goto out_nfserr;
 		if (EX_ISSYNC(fhp->fh_export))
 			write_inode_now(inode);
 	}
 	err = 0;
 out:
 	return err;
+
+out_nfserr:
+	err = nfserrno(-err);
+	goto out;
 }
 
 /*

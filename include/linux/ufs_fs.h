@@ -8,6 +8,7 @@
  *
  * Clean swab support by Fare <rideau@ens.fr>
  * just hope no one is using NNUUXXI on __?64 structure elements
+ * 64-bit clean thanks to Maciej W. Rozycki <macro@ds2.pg.gda.pl>
  */
 
 #ifndef __LINUX_UFS_FS_H
@@ -91,6 +92,11 @@
 #define ufs_lbn(sb, block)		((block) >> (sb)->u.ufs_sb.s_lshift)
 #define ufs_boff(sb, block)		((block) & ~((sb)->u.ufs_sb.s_lmask))
 #define ufs_dbn(sb, block, boff)	((block) + ufs_boff((sb), (boff)))
+
+struct ufs_timeval {
+	__s32	tv_sec;
+	__s32	tv_usec;
+};
 
 struct ufs_direct {
 	__u32  d_ino;			/* inode number of this entry */
@@ -184,13 +190,13 @@ struct ufs_superblock {
 	__u8	fs_fsmnt[MAXMNTLEN];	/* name mounted on */
 /* these fields retain the current block allocation info */
 	__u32	fs_cgrotor;	/* last cg searched */
-	struct ufs_csum * fs_csp[MAXCSBUFS];	/* list of fs_cs info buffers */
+	__u32	fs_csp[MAXCSBUFS];	/* list of fs_cs info buffers */
 	__u32	fs_cpc;		/* cyl per cycle in postbl */
 	__u16	fs_opostbl[16][8];	/* old rotation block list head */	
 	__s32	fs_sparecon[55];	/* reserved for future constants */
 	__s32	fs_state;		/* file system state time stamp */
-	__s64	fs_qbmask;		/* ~usb_bmask */
-	__s64	fs_qfmask;		/* ~usb_fmask */
+	__u32	fs_qbmask[2];		/* ~usb_bmask */
+	__u32	fs_qfmask[2];		/* ~usb_fmask */
 	__s32	fs_postblformat;	/* format of positional layout tables */
 	__s32	fs_nrpos;		/* number of rotational positions */
 	__s32	fs_postbloff;		/* (__s16) rotation block list head */
@@ -208,9 +214,9 @@ struct ufs_inode {
 	__u16	ui_suid;		/*  0x4 */
 	__u16	ui_sgid;		/*  0x6 */
 	__u64	ui_size;		/*  0x8 */
-	struct timeval ui_atime;	/* 0x10 access */
-	struct timeval ui_mtime;	/* 0x18 modification */
-	struct timeval ui_ctime;	/* 0x20 creation */
+	struct ufs_timeval ui_atime;	/* 0x10 access */
+	struct ufs_timeval ui_mtime;	/* 0x18 modification */
+	struct ufs_timeval ui_ctime;	/* 0x20 creation */
 	__u32	ui_db[UFS_NDADDR];	/* 0x28 data blocks */
 	__u32	ui_ib[UFS_NINDIR];	/* 0x58 indirect blocks */
 	__u32	ui_flags;		/* 0x64 unused -- "status flags (chflags)" ??? */

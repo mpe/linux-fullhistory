@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.12 1997/02/04 07:29:21 davem Exp $
+/* $Id: sbus.h,v 1.13 1997/11/19 15:12:18 jj Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -69,10 +69,12 @@ struct linux_sbus {
 	struct linux_sbus_device *devices;   /* Link to devices on this SBus */
 	struct iommu_struct *iommu;          /* IOMMU for this sbus if applicable */
 	int prom_node;                       /* PROM device tree node for this SBus */
-	char prom_name[64];                  /* Usually "sbus" or "sbi" */
+	char prom_name[16];                  /* Usually "sbus" or "sbi" */
 	int clock_freq;
 	struct linux_prom_ranges sbus_ranges[PROMREG_MAX];
 	int num_sbus_ranges;
+	int devid;
+	int board;
 };
 
 extern struct linux_sbus *SBus_chain;

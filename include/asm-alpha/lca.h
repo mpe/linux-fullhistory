@@ -130,6 +130,37 @@
 
 #define HAE_ADDRESS	LCA_IOC_HAE
 
+/* LCA PMR Power Management register defines */
+#define LCA_PMR_ADDR	(IDENT_ADDR + 0x120000098UL)
+#define LCA_PMR_PDIV    0x7                     /* Primary clock divisor */
+#define LCA_PMR_ODIV    0x38                    /* Override clock divisor */
+#define LCA_PMR_INTO    0x40                    /* Interrupt override */
+#define LCA_PMR_DMAO    0x80                    /* DMA override */
+#define LCA_PMR_OCCEB   0xffff0000L             /* Override cycle counter - even
+ bits */
+#define LCA_PMR_OCCOB   0xffff000000000000L     /* Override cycle counter - even
+ bits */
+#define LCA_PMR_PRIMARY_MASK    0xfffffffffffffff8
+/* LCA PMR Macros */
+
+#define READ_PMR        (*(volatile unsigned long *)LCA_PMR_ADDR)
+#define WRITE_PMR(d)    (*((volatile unsigned long *)LCA_PMR_ADDR) = (d))
+
+#define GET_PRIMARY(r)  ((r) & LCA_PMR_PDIV)
+#define GET_OVERRIDE(r) (((r) >> 3) & LCA_PMR_PDIV)
+#define SET_PRIMARY_CLOCK(r, c) ((r) = (((r) & LCA_PMR_PRIMARY_MASK) | (c)))
+
+/* LCA PMR Divisor values */
+#define DIV_1   0x0
+#define DIV_1_5 0x1
+#define DIV_2   0x2
+#define DIV_4   0x3
+#define DIV_8   0x4
+#define DIV_16  0x5
+#define DIV_MIN DIV_1
+#define DIV_MAX DIV_16
+
+
 #ifdef __KERNEL__
 
 /*

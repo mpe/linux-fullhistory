@@ -846,10 +846,6 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 	return -EOPNOTSUPP;
 }
 
-/* Dummy functions for now */
-#define wrfpcr(x)	do { } while (0)
-#define rdfpcr()	0
-
 asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 					unsigned long nbytes,
 					int *start, void *arg)

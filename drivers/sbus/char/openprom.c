@@ -526,8 +526,7 @@ static int openprom_ioctl(struct inode * inode, struct file * file,
 	}
 }
 
-static long long openprom_lseek(struct inode * inode, struct file * file,
-			  long long offset, int origin)
+static long long openprom_lseek(struct file * file, long long offset, int origin)
 {
 	return -ESPIPE;
 }

@@ -164,6 +164,8 @@ int shrink_mmap(int priority, int dma)
 
 				/* is it a page cache page? */
 				if (page->inode) {
+					if (page->inode == &swapper_inode)
+						panic ("Shrinking a swap cache page");
 					remove_page_from_hash_queue(page);
 					remove_page_from_inode_queue(page);
 					__free_page(page);
@@ -208,6 +210,8 @@ unsigned long page_unuse(unsigned long page)
 		return count;
 	if (!p->inode)
 		return count;
+	if (PageSwapCache(p))
+		panic ("Doing a normal page_unuse of a swap cache page");
 	remove_page_from_hash_queue(p);
 	remove_page_from_inode_queue(p);
 	free_page(page);

@@ -40,10 +40,6 @@ struct prefix_info {
 
 #define IN6_ADDR_HSIZE		16
 
-extern struct inet6_ifaddr	*inet6_addr_lst[IN6_ADDR_HSIZE];
-extern struct ifmcaddr6		*inet6_mcast_lst[IN6_ADDR_HSIZE];
-extern struct inet6_dev		*inet6_dev_lst[IN6_ADDR_HSIZE];
-
 extern void			addrconf_init(void);
 extern void			addrconf_cleanup(void);
 
@@ -55,7 +51,8 @@ extern int			addrconf_add_ifaddr(void *arg);
 extern int			addrconf_del_ifaddr(void *arg);
 extern int			addrconf_set_dstaddr(void *arg);
 
-extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr);
+extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr,
+					      struct device *dev, int nd);
 extern struct inet6_ifaddr *	ipv6_get_saddr(struct dst_entry *dst, 
 					       struct in6_addr *daddr);
 extern struct inet6_ifaddr *	ipv6_get_lladdr(struct device *dev);
@@ -64,10 +61,10 @@ extern struct inet6_ifaddr *	ipv6_get_lladdr(struct device *dev);
  *	multicast prototypes (mcast.c)
  */
 extern int			ipv6_sock_mc_join(struct sock *sk, 
-						  struct device *dev, 
+						  int ifindex, 
 						  struct in6_addr *addr);
 extern int			ipv6_sock_mc_drop(struct sock *sk,
-						  struct device *dev, 
+						  int ifindex, 
 						  struct in6_addr *addr);
 extern void			ipv6_sock_mc_close(struct sock *sk);
 
@@ -75,6 +72,10 @@ extern int			ipv6_dev_mc_inc(struct device *dev,
 						struct in6_addr *addr);
 extern int			ipv6_dev_mc_dec(struct device *dev,
 						struct in6_addr *addr);
+extern void			ipv6_mc_up(struct inet6_dev *idev);
+extern void			ipv6_mc_down(struct inet6_dev *idev);
+extern void			ipv6_mc_destroy_dev(struct inet6_dev *idev);
+extern void			addrconf_dad_failure(struct inet6_ifaddr *ifp);
 
 extern int			ipv6_chk_mcast_addr(struct device *dev,
 						    struct in6_addr *addr);
@@ -115,22 +116,32 @@ static __inline__ int ipv6_devindex_hash(int ifindex)
  *	compute link-local solicited-node multicast address
  */
 
-static __inline__ void addrconf_addr_solict_mult(struct in6_addr *addr,
-						 struct in6_addr *solicited)
+extern __inline__ void addrconf_addr_solict_mult_old(struct in6_addr *addr,
+						     struct in6_addr *solicited)
 {
 	ipv6_addr_set(solicited,
 		      __constant_htonl(0xFF020000), 0,
 		      __constant_htonl(0x1), addr->s6_addr32[3]);
 }
 
-static __inline__ void ipv6_addr_all_nodes(struct in6_addr *addr)
+extern __inline__ void addrconf_addr_solict_mult_new(struct in6_addr *addr,
+						     struct in6_addr *solicited)
+{
+	ipv6_addr_set(solicited,
+		      __constant_htonl(0xFF020000), 0,
+		      __constant_htonl(0x1),
+		      __constant_htonl(0xFF000000) | addr->s6_addr32[3]);
+}
+
+
+extern __inline__ void ipv6_addr_all_nodes(struct in6_addr *addr)
 {
 	ipv6_addr_set(addr,
 		      __constant_htonl(0xFF020000), 0, 0,
 		      __constant_htonl(0x1));
 }
 
-static __inline__ void ipv6_addr_all_routers(struct in6_addr *addr)
+extern __inline__ void ipv6_addr_all_routers(struct in6_addr *addr)
 {
 	ipv6_addr_set(addr,
 		      __constant_htonl(0xFF020000), 0, 0,

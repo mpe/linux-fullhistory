@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.19 1997/06/27 14:52:54 jj Exp $
+/* $Id: tree.c,v 1.22 1997/09/25 02:19:22 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -229,36 +229,40 @@ int prom_getname (int node, char *buffer, int len)
 	return 0;
 }
 
-/* Return the first property type for node 'node'.
- */
-char * prom_firstprop(int node, char *buffer)
+/* Interal version of nextprop that does not alter return values. */
+char * __prom_nextprop(int node, char * oprop)
 {
 	unsigned long flags;
-	char *ret;
+	char *prop;
 
-	if(node == -1) return "";
-	save_flags(flags); cli();
-	ret = prom_nodeops->no_nextprop(node, (char *) 0x0);
+	save_and_cli(flags);
+	prop = prom_nodeops->no_nextprop(node, oprop);
 	restore_current();
 	restore_flags(flags);
-	return ret;
+
+	return prop;
+}
+
+/* Return the first property name for node 'node'. */
+/* buffer is unused argument, but as v9 uses it, we need to have the same interface */
+char * prom_firstprop(int node, char *bufer)
+{
+	if (node == 0 || node == -1)
+		return "";
+
+	return __prom_nextprop(node, "");
 }
 
 /* Return the property type string after property type 'oprop'
- * at node 'node' .  Returns NULL string if no more
+ * at node 'node' .  Returns empty string if no more
  * property types for this node.
  */
 char * prom_nextprop(int node, char *oprop, char *buffer)
 {
-	char *ret;
-	unsigned long flags;
+	if (node == 0 || node == -1)
+		return "";
 
-	if(node == -1) return "";
-	save_flags(flags); cli();
-	ret = prom_nodeops->no_nextprop(node, oprop);
-	restore_current();
-	restore_flags(flags);
-	return ret;
+	return __prom_nextprop(node, oprop);
 }
 
 int prom_finddevice(char *name)

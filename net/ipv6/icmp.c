@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.11 1997/09/20 20:48:26 davem Exp $
+ *	$Id: icmp.c,v 1.12 1997/12/13 21:53:10 kuznet Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -179,7 +179,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	
 	addr_type = ipv6_addr_type(&hdr->daddr);
 
-	if (ipv6_chk_addr(&hdr->daddr))
+	if (ipv6_chk_addr(&hdr->daddr, NULL, 0))
 		saddr = &hdr->daddr;
 
 	/*

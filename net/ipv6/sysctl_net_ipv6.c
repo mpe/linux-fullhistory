@@ -18,12 +18,6 @@ struct ipv6_config ipv6_config =
 	1,				/* accept RAs		*/
 	1,				/* accept redirects	*/
 
-	3,				/* nd_max_mcast_solicit	*/
-	3,				/* nd_max_ucast_solicit	*/
-	RETRANS_TIMER,			/* nd_retrans_time	*/
-	RECHABLE_TIME,			/* nd_base_reach_time	*/
-	(5 * HZ),			/* nd_delay_probe_time	*/
-
 	1,				/* autoconfiguration	*/
 	1,				/* dad transmits	*/
 	MAX_RTR_SOLICITATIONS,		/* router solicits	*/
@@ -72,26 +66,6 @@ ctl_table ipv6_table[] = {
 
 	{NET_IPV6_ACCEPT_REDIRECTS, "accept_redirects",
          &ipv6_config.accept_redirects, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ND_MAX_MCAST_SOLICIT, "nd_max_mcast_solicit",
-         &ipv6_config.nd_max_mcast_solicit, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ND_MAX_UCAST_SOLICIT, "nd_max_ucast_solicit",
-         &ipv6_config.nd_max_ucast_solicit, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ND_RETRANS_TIME, "nd_retrans_time",
-         &ipv6_config.nd_retrans_time, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ND_REACHABLE_TIME, "nd_base_reachble_time",
-         &ipv6_config.nd_base_reachable_time, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-
-	{NET_IPV6_ND_DELAY_PROBE_TIME, "nd_delay_first_probe_time",
-         &ipv6_config.nd_delay_probe_time, sizeof(int), 0644, NULL,
          &proc_dointvec},
 
 	{NET_IPV6_AUTOCONF, "autoconf",

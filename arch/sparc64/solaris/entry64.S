@@ -1,4 +1,4 @@
-/* $Id: entry64.S,v 1.3 1997/09/03 12:29:12 jj Exp $
+/* $Id: entry64.S,v 1.4 1997/09/09 17:13:50 jj Exp $
  * entry64.S:  Solaris syscall emulation entry point.
  *
  * Copyright (C) 1996,1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
@@ -25,12 +25,12 @@
 solaris_syscall_trace:
 	call		syscall_trace
 	 nop
-	mov		%i0, %o0
-	mov		%i1, %o1
-	mov		%i2, %o2
-	mov		%i3, %o3
+	srl		%i0, 0, %o0
+	mov		%i4, %o4
+	srl		%i1, 0, %o1
+	mov		%i5, %o5
 	b,pt		%xcc, 2f
-	 mov		%i4, %o4
+	 srl		%i2, 0, %o2
 
 solaris_sucks:
 /* Solaris is a big system which needs to be able to do all the things
@@ -41,6 +41,7 @@ solaris_sucks:
 	mov		%i2, %i1
 	srl		%o0, 0, %o0
 	mov		%i3, %i2
+	movrz		%g1, 256, %g1 /* Ensure we don't loop forever */
 	mov		%i4, %i3
 	mov		%i5, %i4
 	ba,pt		%xcc, solaris_sparc_syscall
@@ -55,7 +56,7 @@ solaris_reg:
 	call		solaris_register
 	 nop
 	ba,pt		%xcc, 1f
-	 mov		%i0, %o0
+	 mov		%i4, %o4
 
 linux_syscall_for_solaris:
 	sll		%l7, 2, %l4
@@ -66,46 +67,35 @@ linux_syscall_for_solaris:
 	.align	32
 	.globl	solaris_sparc_syscall
 solaris_sparc_syscall:
-#ifdef DEBUG_SOLARIS
-	mov		%g1, %o0
-	call		entry_printk
-	 add		%sp, STACK_BIAS + REGWIN_SZ, %o1
-#endif
 	ldub		[%g6 + AOFF_task_personality + ASIZ_task_personality - 1], %l0
 	cmp		%g1, 255
 	bg,pn		%icc, solaris_unimplemented
 	 srl		%g1, 0, %g1
 	sethi		%hi(solaris_sys_table), %l7
 	brz,pn		%g1, solaris_sucks
-	 mov		%i0, %o0
+	 mov		%i4, %o4
 	sll		%g1, 2, %l4
 	cmp		%l0, 1
 	bne,pn		%icc, solaris_reg
-1:	 mov		%i1, %o1				
+1:	 srl		%i0, 0, %o0
 	lduw		[%l7 + %l4], %l7
-	mov		%i2, %o2				
+	srl		%i1, 0, %o1
 	ldx		[%g6 + AOFF_task_flags], %l5
-!	st		%g0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_FPRS]
 	cmp		%l7, NR_SYSCALLS
 	bleu,a,pn	%xcc, linux_syscall_for_solaris
 	 sethi		%hi(sys_call_table32), %l6
 	andcc		%l7, 1, %g0
 	bne,a,pn	%icc, 10f
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
-10:	mov		%i3, %o3
-	mov		%i4, %o4
+10:	srl		%i2, 0, %o2
+	mov		%i5, %o5
 	andn		%l7, 3, %l7
 	andcc		%l5, 0x20, %g0				
 	bne,pn		%icc, solaris_syscall_trace		
 	 mov		%i0, %l5
 2:	call		%l7
-	 mov		%i5, %o5
+	 srl		%i3, 0, %o3
 ret_from_solaris:
-#ifdef DEBUG_SOLARIS
-	call		exit_printk
-	 mov		%o0, %l0
-	mov		%l0, %o0
-#endif
 	stx		%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
 	ldx		[%g6 + AOFF_task_flags], %l6
 	sra		%o0, 0, %o0

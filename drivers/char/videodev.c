@@ -52,11 +52,14 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
 	{"bttv", init_bttv_cards},
 #endif	
+#ifdef CONFIG_VIDEO_CQCAM
+	{"c-qcam", init_colour_qcams},
+#endif	
 #ifdef CONFIG_VIDEO_BWQCAM
-	{"bttv", init_bw_qcams},
+	{"bw-qcam", init_bw_qcams},
 #endif	
 #ifdef CONFIG_VIDEO_PMS
-	{"bttv", init_pms_cards},
+	{"PMS", init_pms_cards},
 #endif	
 	{"end", NULL}
 };

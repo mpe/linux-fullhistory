@@ -43,7 +43,7 @@
 
 #define IFF_PORTSEL	0x2000          /* can set media type		*/
 #define IFF_AUTOMEDIA	0x4000		/* auto media select active	*/
-
+#define IFF_NODYNARP	0x8000		/* use static ARP only (HIPPI)	*/
 /*
  * The ifaddr structure contains information about one address
  * of an interface.  They are maintained by the different address

@@ -67,7 +67,7 @@
 */
 
 /*
-**	20 September 1997, version 2.5c
+**	2 January 1998, version 2.5f
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -504,7 +504,7 @@ struct ncr_driver_setup {
 	unsigned master_parity	: 1;
 	unsigned scsi_parity	: 1;
 	unsigned disconnection	: 1;
-	unsigned special_features : 1;
+	unsigned special_features : 2;
 	unsigned ultra_scsi	: 2;
 	unsigned force_sync_nego: 1;
 	unsigned reverse_probe: 1;
@@ -520,6 +520,7 @@ struct ncr_driver_setup {
 	u_char	settle_delay;
 	u_char	diff_support;
 	u_char	irqm;
+	u_char	bus_check;
 };
 
 static struct ncr_driver_setup
@@ -578,7 +579,8 @@ struct Symbios_nvram {
 	u_short	flags1;
 #define SYMBIOS_SCAN_HI_LO	(1)
 	u_short	word10;		/* 0x00 */
-	u_short	word12;		/* 0x00 */
+	u_short	flags3;		/* 0x00 */
+#define SYMBIOS_REMOVABLE_FLAGS	(3)		/* 0=none, 1=bootable, 2=all */
 	u_char	host_id;
 	u_char	byte15;		/* 0x04 */
 	u_short	word16;		/* 0x0410 */
@@ -693,7 +695,7 @@ typedef struct {
 	ncr_slot  slot;
 	ncr_chip  chip;
 	ncr_nvram *nvram;
-	int attached;
+	int attach_done;
 } ncr_device;
 
 /*==========================================================
@@ -1883,7 +1885,7 @@ struct script {
 	ncrcmd	prepare2	[ 24];
 	ncrcmd	setmsg		[  5];
 	ncrcmd  clrack		[  2];
-	ncrcmd  dispatch	[ 33];
+	ncrcmd  dispatch	[ 38];
 	ncrcmd	no_data		[ 17];
 	ncrcmd  checkatn	[ 10];
 	ncrcmd  command		[ 15];
@@ -1985,6 +1987,7 @@ static	int	ncr_snooptest	(ncb_p np);
 static	void	ncr_timeout	(ncb_p np);
 static  void    ncr_wakeup      (ncb_p np, u_long code);
 static	void	ncr_start_reset	(ncb_p np, int settle_delay);
+static	int	ncr_reset_scsi_bus (ncb_p np, int enab_int, int settle_delay);
 
 #ifdef SCSI_NCR_USER_COMMAND_SUPPORT
 static	void	ncr_usercmd	(ncb_p np);
@@ -2380,8 +2383,21 @@ static	struct script script0 __initdata = {
 		0,
 	SCR_RETURN ^ IFTRUE (WHEN (SCR_DATA_OUT)),
 		0,
-	SCR_RETURN ^ IFTRUE (IF (SCR_DATA_IN)),
+	/*
+	**	DEL 397 - 53C875 Rev 3 - Part Number 609-0392410 - ITEM 4.
+	**	Possible data corruption during Memory Write and Invalidate.
+	**	This work-around resets the addressing logic prior to the 
+	**	start of the first MOVE of a DATA IN phase.
+	**	(See README.ncr53c8xx for more information)
+	*/
+	SCR_JUMPR ^ IFFALSE (IF (SCR_DATA_IN)),
+		20,
+	SCR_COPY (4),
+		RADDR (scratcha),
+		RADDR (scratcha),
+	SCR_RETURN,
 		0,
+
 	SCR_JUMP ^ IFTRUE (IF (SCR_MSG_OUT)),
 		PADDR (msg_out),
 	SCR_JUMP ^ IFTRUE (IF (SCR_MSG_IN)),
@@ -4602,7 +4618,11 @@ printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%x, io_port=0x%x, irq=%d\n",
 	**	Then enable disconnects.
 	*/
 	save_flags(flags); cli();
-	ncr_start_reset(np, driver_setup.settle_delay);
+	if (ncr_reset_scsi_bus(np, 0, driver_setup.settle_delay) != 0) {
+		printf("%s: FATAL ERROR: CHECK SCSI BUS - CABLES, TERMINATION, DEVICE POWER etc.!\n", ncr_name(np));
+		restore_flags(flags);
+		goto attach_error;
+	}
 	ncr_exception (np);
 	restore_flags(flags);
 
@@ -4669,6 +4689,16 @@ attach_error:
 		printf("%s: releasing IO region %x[%d]\n", ncr_name(np), np->port, 128);
 #endif
 		release_region(np->port, 128);
+	}
+	if (np->irq) {
+#ifdef DEBUG_NCR53C8XX
+		printf("%s: freeing irq %d\n", ncr_name(np), np->irq);
+#endif
+#if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
+		free_irq(np->irq, np);
+#else
+		free_irq(np->irq);
+#endif
 	}
 	scsi_unregister(instance);
 
@@ -5191,19 +5221,62 @@ static void ncr_start_reset(ncb_p np, int settle_delay)
 	save_flags(flags); cli();
 
 	if (!np->settle_time) {
-		if (bootverbose > 1)
-			printf("%s: resetting, command processing suspended for %d seconds\n",
-				ncr_name(np), settle_delay);
-		np->settle_time	= jiffies + settle_delay * HZ;
-		OUTB (nc_istat, SRST);
-		DELAY (1000);
-		OUTB (nc_istat, 0);
-		OUTW (nc_sien, RST);
-		OUTB (nc_scntl1, CRST);
-		DELAY (100);
+		(void) ncr_reset_scsi_bus(np, 1, settle_delay);
 	}
-
 	restore_flags(flags);
+}
+
+static int ncr_reset_scsi_bus(ncb_p np, int enab_int, int settle_delay)
+{
+	u_int32 term;
+	int retv = 0;
+
+	np->settle_time	= jiffies + settle_delay * HZ;
+
+	if (bootverbose > 1)
+		printf("%s: resetting, "
+			"command processing suspended for %d seconds\n",
+			ncr_name(np), settle_delay);
+
+	OUTB (nc_istat, SRST);
+	DELAY (1000);
+	OUTB (nc_istat, 0);
+	if (enab_int)
+		OUTW (nc_sien, RST);
+	OUTB (nc_scntl1, CRST);
+	DELAY (100);
+
+	if (!driver_setup.bus_check)
+		goto out;
+	/*
+	**	Check for no terminators or SCSI bus shorts to ground.
+	**	Read SCSI data bus, data parity bits and control signals.
+	**	We are expecting RESET to be TRUE and other signals to be 
+	**	FALSE.
+	*/
+	term =	INB(nc_sstat0);				/* rst, sdp0 */
+	term =	((term & 2) << 7) + ((term & 1) << 16);
+	term |= ((INB(nc_sstat2) & 0x01) << 25) |	/* sdp1 */
+		(INW(nc_sbdl) << 9) |			/* d15-0 */
+		INB(nc_sbcl);	/* req, ack, bsy, sel, atn, msg, cd, io */
+
+	if (!(np->features & FE_WIDE))
+		term &= 0x3ffff;
+
+	if (term != (2<<7)) {
+		printf("%s: suspicious SCSI data while resetting the BUS.\n",
+			ncr_name(np));
+		printf("%s: %sdp0,d7-0,rst,req,ack,bsy,sel,atn,msg,c/d,i/o = "
+			"0x%lx, expecting 0x%lx\n",
+			ncr_name(np),
+			(np->features & FE_WIDE) ? "dp1,d15-8," : "",
+			(u_long)term, (u_long)(2<<7));
+		if (driver_setup.bus_check == 1)
+			retv = 1;
+	}
+out:
+	OUTB (nc_scntl1, 0);
+	return retv;
 }
 
 /*==========================================================
@@ -5618,10 +5691,12 @@ void ncr_complete (ncb_p np, ccb_p cp)
 	**	Check the status.
 	*/
 	if (   (cp->host_status == HS_COMPLETE)
-		&& (cp->scsi_status == S_GOOD)) {
-
+		&& (cp->scsi_status == S_GOOD ||
+		    cp->scsi_status == S_COND_MET)) {
 		/*
-		**	All went well.
+		**	All went well (GOOD status).
+		**	CONDITION MET status is returned on 
+		**	`Pre-Fetch' or `Search data' success.
 		*/
 		cmd->result = ScsiResult(DID_OK, cp->scsi_status);
 
@@ -5716,7 +5791,8 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		}
 
 	} else if ((cp->host_status == HS_COMPLETE)
-		&& (cp->scsi_status == S_BUSY)) {
+		&& (cp->scsi_status == S_BUSY ||
+		    cp->scsi_status == S_CONFLICT)) {
 
 		/*
 		**   Target is busy.
@@ -6250,7 +6326,7 @@ static void ncr_setsync (ncb_p np, ccb_p cp, u_char scntl3, u_char sxfer)
 		if	(tp->period < 500)	scsi = "FAST-40";
 		else if	(tp->period < 1000)	scsi = "FAST-20";
 		else if	(tp->period < 2000)	scsi = "FAST-10";
-		else				scsi = "SLOW";
+		else				scsi = "FAST-5";
 
 		printf ("%s %sSCSI %d.%d MB/s (%d ns, offset %d)\n", scsi,
 			tp->widedone > 1 ? "WIDE " : "",
@@ -6929,9 +7005,16 @@ void ncr_exception (ncb_p np)
 			ncr_int_sir (np);
 			return;
 		}
-		if (!(sist & (SBMC|PAR)) && !(dstat & SSI))
-			printf("%s: unknown interrupt(s) ignored sist=%x dstat=%x\n",
-				ncr_name(np), sist, dstat);
+		/*
+		**  DEL 397 - 53C875 Rev 3 - Part Number 609-0392410 - ITEM 2.
+		*/
+		if (!(sist & (SBMC|PAR)) && !(dstat & SSI)) {
+			printf(	"%s: unknown interrupt(s) ignored, "
+				"ISTAT=%x DSTAT=%x SIST=%x\n",
+				ncr_name(np), istat, dstat, sist);
+			return;
+		}
+
 		OUTONB (nc_dcntl, (STD|NOCOM));
 		return;
 	};
@@ -6958,6 +7041,11 @@ void ncr_exception (ncb_p np)
 
 	if ((sist & STO) &&
 		!(dstat & (MDPE|BF|ABRT))) {
+	/*
+	**	DEL 397 - 53C875 Rev 3 - Part Number 609-0392410 - ITEM 1.
+	*/
+		OUTONB (nc_ctest3, CLF);
+
 		ncr_int_sto (np);
 		return;
 	};
@@ -8915,6 +9003,8 @@ void ncr53c8xx_setup(char *str, int *ints)
 			driver_setup.irqm	= val;
 		else if	(!strncmp(cur, "pcifix:", 7))
 			driver_setup.pci_fix_up	= val;
+		else if	(!strncmp(cur, "buschk:", 7))
+			driver_setup.bus_check	= val;
 #ifdef SCSI_NCR_NVRAM_SUPPORT
 		else if	(!strncmp(cur, "nvram:", 6))
 			driver_setup.use_nvram	= val;
@@ -8958,9 +9048,9 @@ static void ncr_print_driver_setup(void)
 )
 {
 #define YesNo(y)	y ? 'y' : 'n'
-	printk("ncr53c8xx: setup=disc:%c,specf:%c,ultra:%c,tags:%d,sync:%d,burst:%d,wide:%c,diff:%d\n",
+	printk("ncr53c8xx: setup=disc:%c,specf:%d,ultra:%c,tags:%d,sync:%d,burst:%d,wide:%c,diff:%d\n",
 			YesNo(driver_setup.disconnection),
-			YesNo(driver_setup.special_features),
+			driver_setup.special_features,
 			YesNo(driver_setup.ultra_scsi),
 			driver_setup.default_tags,
 			driver_setup.default_sync,
@@ -9059,10 +9149,10 @@ ncr_attach_using_nvram(Scsi_Host_Template *tpnt, int nvram_index, int count, ncr
 			    h->device_id == devp->chip.device_id)
 				break;
 		}
-		if (j < count && !devp->attached &&
-		    !ncr_attach (tpnt, attach_count, devp)) {
-			attach_count++;
-			devp->attached = 1;
+		if (j < count && !devp->attach_done) {
+			if (!ncr_attach (tpnt, attach_count, devp))
+				attach_count++;
+			devp->attach_done = 1;
 		}
 	}
 
@@ -9171,8 +9261,6 @@ if (ncr53c8xx)
 #endif
 			printf(KERN_INFO "ncr53c8xx: 53c%s detected %s\n",
 				device[count].chip.name, msg);
-
-			device[count].attached = 0;
 			++count;
 		}
 	}
@@ -9185,9 +9273,9 @@ if (ncr53c8xx)
 	** so try to attach them here.
 	*/
 	for (i= 0; i < count; i++) {
-		if ((!device[i].attached) && (!ncr_attach (tpnt, attach_count, &device[i]))) {
+		if (!device[i].attach_done && 
+		    !ncr_attach (tpnt, attach_count, &device[i])) {
  			attach_count++;
-			device[i].attached = 1;
 		}
 	}
 
@@ -9281,10 +9369,10 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY;
 		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
 	}
-       if (io_port >= 0x10000000) {
+	if (io_port >= 0x10000000) {
 		io_port = (io_port & 0x00FFFFFF) | 0x01000000;
 		pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
-       }
+	}
 	if (base >= 0x10000000) {
 		base = (base & 0x00FFFFFF) | 0x01000000;
 		pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_1, base);
@@ -9339,8 +9427,12 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	/*
 	 * Fix some features according to driver setup.
 	 */
-	if (!driver_setup.special_features)
+	if (!(driver_setup.special_features & 1))
 		chip->features &= ~FE_SPECIAL_SET;
+	else {
+		if (driver_setup.special_features & 2)
+			chip->features &= ~FE_WRIE;
+	}
 	if (driver_setup.ultra_scsi < 2 && (chip->features & FE_ULTRA2)) {
 		chip->features |=  FE_ULTRA;
 		chip->features &= ~FE_ULTRA2;
@@ -9359,7 +9451,12 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 #if defined(__i386) && !defined(MODULE)
 	if ((driver_setup.pci_fix_up & 1) &&
 	    (chip->features & FE_CLSE) && cache_line_size == 0) {
-	    	switch(boot_cpu_data.x86) {
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)
+		extern char x86;
+		switch(x86) {
+#else
+		switch(boot_cpu_data.x86) {
+#endif
 		case 4:	cache_line_size = 4; break;
 		case 5:	cache_line_size = 8; break;
 		}
@@ -9446,7 +9543,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	device->slot.base_2	= base_2;
 	device->slot.io_port	= io_port;
 	device->slot.irq	= irq;
-	device->attached	= 0;
+	device->attach_done	= 0;
 #ifdef SCSI_NCR_NVRAM_SUPPORT
 	if (!nvram)
 		goto out;

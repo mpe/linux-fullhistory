@@ -19,7 +19,8 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  */
- 
+
+#include <linux/config.h> 
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -37,6 +38,8 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/proc_fs.h>
+#include <linux/init.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <linux/skbuff.h>
@@ -52,6 +55,9 @@
  *	that a casual user application can add/delete multicasts used by 
  *	protocols without doing damage to the protocols when it deletes the
  *	entries. It also helps IP as it tracks overlapping maps.
+ *
+ *	BUGGGG! IPv6 calls dev_mac_add/delete from BH, it means
+ *	that all the functions in this file are racy. [NOT FIXED] --ANK
  */
  
 
@@ -82,64 +88,81 @@ void dev_mc_upload(struct device *dev)
  *	Delete a device level multicast
  */
  
-void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
+int dev_mc_delete(struct device *dev, void *addr, int alen, int glbl)
 {
-	struct dev_mc_list **dmi;
+	struct dev_mc_list *dmi, **dmip;
 
-	for(dmi=&dev->mc_list;*dmi!=NULL;dmi=&(*dmi)->next)
-	{
+	for (dmip=&dev->mc_list; (dmi=*dmip)!=NULL; dmip=&dmi->next) {
 		/*
 		 *	Find the entry we want to delete. The device could
 		 *	have variable length entries so check these too.
 		 */
-		if(memcmp((*dmi)->dmi_addr,addr,(*dmi)->dmi_addrlen)==0 && alen==(*dmi)->dmi_addrlen)
-		{
-			struct dev_mc_list *tmp= *dmi;
-			if(--(*dmi)->dmi_users && !all)
-				return;
+		if (memcmp(dmi->dmi_addr,addr,dmi->dmi_addrlen)==0 && alen==dmi->dmi_addrlen) {
+			if (glbl) {
+				int old_glbl = dmi->dmi_gusers;
+				dmi->dmi_gusers = 0;
+				if (old_glbl == 0)
+					return -ENOENT;
+			}
+			if(--dmi->dmi_users)
+				return 0;
+
 			/*
 			 *	Last user. So delete the entry.
 			 */
-			*dmi=(*dmi)->next;
+			*dmip = dmi->next;
 			dev->mc_count--;
-			kfree_s(tmp,sizeof(*tmp));
+			kfree_s(dmi,sizeof(*dmi));
 			/*
 			 *	We have altered the list, so the card
 			 *	loaded filter is now wrong. Fix it
 			 */
 			dev_mc_upload(dev);
-			return;
+			return 0;
 		}
 	}
+	return -ENOENT;
 }
 
 /*
  *	Add a device level multicast
  */
  
-void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
+int dev_mc_add(struct device *dev, void *addr, int alen, int glbl)
 {
 	struct dev_mc_list *dmi;
 
-	for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
-	{
-		if(memcmp(dmi->dmi_addr,addr,dmi->dmi_addrlen)==0 && dmi->dmi_addrlen==alen)
-		{
-			if(!newonly)
-				dmi->dmi_users++;
-			return;
+	for(dmi=dev->mc_list; dmi!=NULL; dmi=dmi->next) {
+		if (memcmp(dmi->dmi_addr,addr,dmi->dmi_addrlen)==0 && dmi->dmi_addrlen==alen) {
+			if (glbl) {
+				int old_glbl = dmi->dmi_gusers;
+				dmi->dmi_gusers = 1;
+				if (old_glbl)
+					return 0;
+			}
+			dmi->dmi_users++;
+			return 0;
 		}
 	}
-	dmi=(struct dev_mc_list *)kmalloc(sizeof(*dmi),GFP_KERNEL);
-	if(dmi==NULL)
-		return;	/* GFP_KERNEL so can't happen anyway */
+
+	/* GFP_ATOMIC!! It is used by IPv6 from interrupt,
+	   when new address arrives.
+
+	   Particularly, it means that this part of code is weirdly
+	   racy, and needs numerous *_bh_atomic --ANK
+	 */
+	dmi=(struct dev_mc_list *)kmalloc(sizeof(*dmi), GFP_ATOMIC);
+	if (dmi==NULL)
+		return -ENOBUFS;
 	memcpy(dmi->dmi_addr, addr, alen);
 	dmi->dmi_addrlen=alen;
 	dmi->next=dev->mc_list;
 	dmi->dmi_users=1;
+	dmi->dmi_gusers=glbl ? 1 : 0;
 	dev->mc_list=dmi;
 	dev->mc_count++;
 	dev_mc_upload(dev);
+	return 0;
 }
 
 /*
@@ -148,13 +171,64 @@ void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 
 void dev_mc_discard(struct device *dev)
 {
-	while(dev->mc_list!=NULL)
-	{
+	while (dev->mc_list!=NULL) {
 		struct dev_mc_list *tmp=dev->mc_list;
-		dev->mc_list=dev->mc_list->next;
-		if (tmp->dmi_users)
+		dev->mc_list=tmp->next;
+		if (tmp->dmi_users > tmp->dmi_gusers)
 			printk("dev_mc_discard: multicast leakage! dmi_users=%d\n", tmp->dmi_users);
 		kfree_s(tmp,sizeof(*tmp));
 	}
 	dev->mc_count=0;
 }
+
+#ifdef CONFIG_PROC_FS
+static int dev_mc_read_proc(char *buffer, char **start, off_t offset,
+			    int length, int *eof, void *data)
+{
+	off_t pos=0, begin=0;
+	struct dev_mc_list *m;
+	int len=0;
+	struct device *dev;
+	
+	for (dev = dev_base; dev; dev = dev->next) {
+		for (m = dev->mc_list; m; m = m->next) {
+			int i;
+
+			len += sprintf(buffer+len,"%-4d %-15s %-5d %-5d ", dev->ifindex, dev->name,
+				       m->dmi_users, m->dmi_gusers);
+
+			for (i=0; i<m->dmi_addrlen; i++)
+				len += sprintf(buffer+len, "%02x", m->dmi_addr[i]);
+
+			len+=sprintf(buffer+len, "\n");
+
+			pos=begin+len;
+			if (pos < offset) {
+				len=0;
+				begin=pos;
+			}
+			if (pos > offset+length)
+				goto done;
+		}
+	}
+	*eof = 1;
+
+done:
+	*start=buffer+(offset-begin);
+	len-=(offset-begin);
+	if(len>length)
+		len=length;
+	return len;
+}
+#endif
+
+__initfunc(void dev_mcast_init(void))
+{
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry *ent;
+
+	ent = create_proc_entry("net/dev_mcast", 0, 0);
+	ent->read_proc = dev_mc_read_proc;
+#endif
+}
+

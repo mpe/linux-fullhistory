@@ -1,4 +1,4 @@
-/* $Id: pcikbd.h,v 1.1 1997/08/24 02:53:25 davem Exp $
+/* $Id: pcikbd.h,v 1.2 1997/12/25 21:13:14 geert Exp $
  * pcikbd.h: PCI/PC 8042 keyboard/mouse driver stuff.  Mostly snarfed
  *           from the existing driver by Martin Mares.
  *
@@ -28,7 +28,7 @@
  *	Internal variables of the driver
  */
 
-extern unsigned char kbd_read_mask;
+extern unsigned char pckbd_read_mask;
 extern unsigned char aux_device_present;
 
 extern unsigned long pcikbd_iobase;

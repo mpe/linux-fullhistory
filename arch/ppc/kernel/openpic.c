@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/init.h>
 #include <linux/openpic.h>
 #include <asm/ptrace.h>
 #include <asm/signal.h>
@@ -28,21 +29,12 @@
 #undef REGISTER_DEBUG
 
 
-#define VEC_TIMER	0x40	/* and up */
-#define VEC_IPI		0x50	/* and up */
-#define VEC_SOURCE	0x10	/* and up */
-#define VEC_SPURIOUS	99
+volatile struct OpenPIC *OpenPIC = NULL;
+u_int OpenPIC_NumInitSenses __initdata = 0;
+u_char *OpenPIC_InitSenses __initdata = NULL;
 
-
-volatile struct OpenPIC *OpenPIC;
-
-static u_int Version;
 static u_int NumProcessors;
 static u_int NumSources;
-static u_int VendorID;
-static u_int DeviceID;
-static u_int Stepping;
-static u_int TimerFrequency;
 
 
     /*
@@ -181,24 +173,17 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
      *  Initialize the OpenPIC
      */
 
-void openpic_init(void)
+__initfunc(void openpic_init(void))
 {
     u_int t, i;
+    u_int vendorid, devid, stepping, timerfreq;
     const char *version, *vendor, *device;
 
-    if (!OpenPIC) {
-	printk("No OpenPIC present\n");
-	return;
-    }
+    if (!OpenPIC)
+	panic("No OpenPIC found");
 
     t = openpic_read(&OpenPIC->Global.Feature_Reporting0);
-    Version = t & OPENPIC_FEATURE_VERSION_MASK;
-    NumProcessors = ((t & OPENPIC_FEATURE_LAST_PROCESSOR_MASK) >>
-		     OPENPIC_FEATURE_LAST_PROCESSOR_SHIFT) + 1;
-    NumSources = ((t & OPENPIC_FEATURE_LAST_SOURCE_MASK) >>
-		  OPENPIC_FEATURE_LAST_SOURCE_SHIFT) + 1;
-
-    switch (Version) {
+    switch (t & OPENPIC_FEATURE_VERSION_MASK) {
 	case 1:
 	    version = "1.0";
 	    break;
@@ -206,19 +191,23 @@ void openpic_init(void)
 	    version = "1.2";
 	    break;
 	default:
-	    version = "?.?";
+	    version = "?";
 	    break;
     }
+    NumProcessors = ((t & OPENPIC_FEATURE_LAST_PROCESSOR_MASK) >>
+		     OPENPIC_FEATURE_LAST_PROCESSOR_SHIFT) + 1;
+    NumSources = ((t & OPENPIC_FEATURE_LAST_SOURCE_MASK) >>
+		  OPENPIC_FEATURE_LAST_SOURCE_SHIFT) + 1;
     printk("OpenPIC Version %s (%d CPUs and %d IRQ sources) at %p\n", version,
 	   NumProcessors, NumSources, OpenPIC);
 
     t = openpic_read(&OpenPIC->Global.Vendor_Identification);
-    VendorID = t & OPENPIC_VENDOR_ID_VENDOR_ID_MASK;
-    DeviceID = (t & OPENPIC_VENDOR_ID_DEVICE_ID_MASK) >>
-	       OPENPIC_VENDOR_ID_DEVICE_ID_SHIFT;
-    Stepping = (t & OPENPIC_VENDOR_ID_STEPPING_MASK) >>
+    vendorid = t & OPENPIC_VENDOR_ID_VENDOR_ID_MASK;
+    devid = (t & OPENPIC_VENDOR_ID_DEVICE_ID_MASK) >>
+	    OPENPIC_VENDOR_ID_DEVICE_ID_SHIFT;
+    stepping = (t & OPENPIC_VENDOR_ID_STEPPING_MASK) >>
 	       OPENPIC_VENDOR_ID_STEPPING_SHIFT;
-    switch (VendorID) {
+    switch (vendorid) {
 	case OPENPIC_VENDOR_ID_APPLE:
 	    vendor = "Apple";
 	    break;
@@ -226,7 +215,7 @@ void openpic_init(void)
 	    vendor = "Unknown";
 	    break;
     }
-    switch (DeviceID) {
+    switch (devid) {
 	case OPENPIC_DEVICE_ID_APPLE_HYDRA:
 	    device = "Hydra";
 	    break;
@@ -234,20 +223,20 @@ void openpic_init(void)
 	    device = "Unknown";
 	    break;
     }
-    printk("OpenPIC Vendor %d (%s), Device %d (%s), Stepping %d\n", VendorID,
-	   vendor, DeviceID, device, Stepping);
+    printk("OpenPIC Vendor %d (%s), Device %d (%s), Stepping %d\n", vendorid,
+	   vendor, devid, device, stepping);
 
-    TimerFrequency = openpic_read(&OpenPIC->Global.Timer_Frequency);
+    timerfreq = openpic_read(&OpenPIC->Global.Timer_Frequency);
     printk("OpenPIC timer frequency is ");
-    if (TimerFrequency)
-	printk("%d Hz\n", TimerFrequency);
+    if (timerfreq)
+	printk("%d Hz\n", timerfreq);
     else
 	printk("not set\n");
 
     /* Initialize timer interrupts */
     for (i = 0; i < OPENPIC_NUM_TIMERS; i++) {
 	/* Disabled, Priority 0 */
-	openpic_inittimer(i, 0, VEC_TIMER+i);
+	openpic_inittimer(i, 0, OPENPIC_VEC_TIMER+i);
 	/* No processor */
 	openpic_maptimer(i, 0);
     }
@@ -255,23 +244,24 @@ void openpic_init(void)
     /* Initialize IPI interrupts */
     for (i = 0; i < OPENPIC_NUM_IPI; i++) {
 	/* Disabled, Priority 0 */
-	openpic_initipi(i, 0, VEC_IPI+i);
+	openpic_initipi(i, 0, OPENPIC_VEC_IPI+i);
     }
 
     /* Initialize external interrupts */
     /* SIOint (8259 cascade) is special */
-    openpic_initirq(0, 8, VEC_SOURCE, 1, 1); /* 0,1 gives interrupt storm */
+    openpic_initirq(0, 8, OPENPIC_VEC_SOURCE, 1, 1);
     /* Processor 0 */
     openpic_mapirq(0, 1<<0);
     for (i = 1; i < NumSources; i++) {
 	/* Enabled, Priority 8 */
-	openpic_initirq(i, 8, VEC_SOURCE+i, 0, 1);
+	openpic_initirq(i, 8, OPENPIC_VEC_SOURCE+i, 0,
+			i < OpenPIC_NumInitSenses ? OpenPIC_InitSenses[i] : 1);
 	/* Processor 0 */
 	openpic_mapirq(i, 1<<0);
     }
 
     /* Initialize the spurious interrupt */
-    openpic_set_spurious(VEC_SPURIOUS);
+    openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
 
     if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
 		    "OpenPIC cascade", NULL))
@@ -340,9 +330,6 @@ void openpic_eoi(void)
 void openpic_eoi(u_int cpu)
 #endif
 {
-#if 0
-printk("++openpic_eoi:\n");
-#endif
     check_arg_cpu(cpu);
     openpic_write(&OpenPIC->THIS_CPU.EOI, 0);
 }

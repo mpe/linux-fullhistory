@@ -122,7 +122,6 @@ static void aarp_send_query(struct aarp_entry *a)
 
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
-	skb->arp	=	1;
 	skb->dev	=	dev;
 	
 	/*
@@ -181,7 +180,6 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));	 
-	skb->arp	=	1;
 	skb->dev	=	dev;
 	
 	/*
@@ -243,7 +241,6 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
 	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
 	
-	skb->arp	=	1;
 	skb->dev	=	dev;
 	
 	/*

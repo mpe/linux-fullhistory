@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.6 1997/04/01 02:22:58 davem Exp $
+ *	$Id: ipv6.h,v 1.8 1997/12/29 19:52:09 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -94,12 +94,6 @@ struct ipv6_config {
 	int		accept_ra;
 	int		accept_redirects;
 	
-	int		nd_max_mcast_solicit;
-	int		nd_max_ucast_solicit;
-	int		nd_retrans_time;
-	int		nd_base_reachable_time;
-	int		nd_delay_probe_time;
-
 	int		autoconf;
 	int		dad_transmits;
 	int		rtr_solicits;
@@ -236,7 +230,7 @@ extern int			ip6_build_xmit(struct sock *sk,
 					       inet_getfrag_t getfrag,
 					       const void *data,
 					       struct flowi *fl,
-					       unsigned short length,
+					       unsigned length,
 					       struct ipv6_options *opt,
 					       int hlimit, int flags);
 
@@ -244,6 +238,7 @@ extern int			ip6_build_xmit(struct sock *sk,
  *	skb processing functions
  */
 
+extern int			ip6_output(struct sk_buff *skb);
 extern int			ip6_forward(struct sk_buff *skb);
 extern int			ip6_input(struct sk_buff *skb);
 extern int			ip6_mc_input(struct sk_buff *skb);

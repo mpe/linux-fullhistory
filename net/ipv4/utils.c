@@ -6,7 +6,7 @@
  *		Various kernel-resident INET utility functions; mainly
  *		for format conversion and debugging output.
  *
- * Version:	$Id: utils.c,v 1.5 1997/09/17 18:50:31 freitag Exp $
+ * Version:	$Id: utils.c,v 1.6 1997/12/13 21:53:03 kuznet Exp $
  *
  * Author:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
@@ -89,24 +89,3 @@ __u32 in_aton(const char *str)
 	return(htonl(l));
 }
 
-/* 
- * This enforces a rate limit: not more than one kernel message
- * every 5secs to make a denial-of-service attack impossible.
- *
- * All warning printk()s should be guarded by this function. 
- */ 
-int net_ratelimit(void)
-{
-	static unsigned long last_msg; 
-	static int missed; 
-	
-	if ((jiffies - last_msg) >= 5*HZ) {
-		if (missed)	
-			printk(KERN_WARNING "ipv4: (%d messages suppressed. Flood?)\n", missed);
-		missed = 0; 
-		last_msg = jiffies;
-		return 1;
-	}
-	missed++; 
-	return 0; 
-}

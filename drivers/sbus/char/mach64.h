@@ -1,4 +1,4 @@
-/* $Id: mach64.h,v 1.3 1997/08/24 12:13:07 ecd Exp $
+/* $Id: mach64.h,v 1.4 1997/10/04 08:51:30 ecd Exp $
  * mach64.h: Ultra/PCI mach64 driver constants etc.
  *
  * Copyright 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -42,6 +42,9 @@ struct mach64_info {
 #define CRTC_FIFO               0x001e
 #define CRTC_EXT_DISP           0x001f
 
+#define SHARED_CNTL		0x0030  /* Dword offset 0C */
+#define SHARED_MEM_CONFIG	0x0034  /* Dword offset 0D */
+
 #define OVR_CLR                 0x0040  /* Dword offset 10 */
 #define OVR_WID_LEFT_RIGHT      0x0044  /* Dword offset 11 */
 #define OVR_WID_TOP_BOTTOM      0x0048  /* Dword offset 12 */
@@ -60,6 +63,7 @@ struct mach64_info {
 
 #define BUS_CNTL                0x00A0  /* Dword offset 28 */
 
+#define EXT_MEM_CNTL		0x00AC	/* Dword offset 2B */
 #define MEM_CNTL                0x00B0  /* Dword offset 2C */
 
 #define MEM_VGA_WP_SEL          0x00B4  /* Dword offset 2D */
@@ -359,6 +363,8 @@ struct mach64_info {
 #define MEM_SIZE_6M		0x00000004
 #define MEM_SIZE_8M		0x00000005
 #define MEM_SIZE_ALIAS_GTB	0x0000000F
+#define MEM_SIZE_512K_GTB	0x00000000
+#define MEM_SIZE_1M_GTB		0x00000001
 #define MEM_SIZE_2M_GTB		0x00000003
 #define MEM_SIZE_4M_GTB		0x00000007
 #define MEM_SIZE_6M_GTB		0x00000009

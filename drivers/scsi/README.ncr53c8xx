@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-23 August 1997
+2 January 1998
 ===============================================================================
 
 1.  Introduction
@@ -30,6 +30,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       10.3 Advised boot setup commands
       10.4 PCI configuration fix-up boot option
       10.5 Serial NVRAM support boot option
+      10.6 SCSI BUS checking boot option
 11. Some constants and flags of the ncr53c8xx.h header file
 12. Installation
       12.1 Provided files
@@ -38,6 +39,8 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 14. Known problems
       14.1 Tagged commands with Iomega Jaz device
       14.2 Device names change when another controller is added
+      14.3 Using only 8 bit devices with a WIDE SCSI controller.
+      14.4 Possible data corruption during a Memory Write and Invalidate
 15. SCSI problem troubleshooting
 16. Synchonous transfer negotiation tables
       16.1 Synchronous timings for 53C875 and 53C860 Ultra-SCSI controllers
@@ -490,7 +493,9 @@ CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
 
 10.1 Syntax
 
-Setup commands can be passed to the driver at boot time.
+Setup commands can be passed to the driver either at boot time or as a 
+string variable using 'insmod'.
+
 A boot setup command for the ncr53c8xx driver begins with the driver name 
 "ncr53c8xx=". The kernel syntax parser then expects an optionnal list of
 integers separated with comma followed by an optionnal list of  comma- 
@@ -502,7 +507,14 @@ lilo: linux root=/dev/hda2 ncr53c8xx=tags:4,sync:10,debug:0x200
 - set synchronous negotiation speed to 10 Mega-transfers / second.
 - set DEBUG_NEGO flag.
 
-For the moment, the integer list of arguments is disgarded by the driver. 
+Since comma seems not to be allowed when defining a string variable using  
+'insmod', the driver also accepts <space> as option separator. 
+The following command will install driver module with the same options as 
+above.
+
+insmod ncr53c8xx.o ncr53c8xx="tags:4 sync:10 debug:0x200"
+
+For the moment, the integer list of arguments is discarded by the driver. 
 It will be used in the future in order to allow a per controller setup.
 
 Each string argument must be specified as "keyword:value". Only lower-case 
@@ -525,8 +537,12 @@ Scsi disconnections
 Special features
    Only apply to 810A, 825A, 860 and 875 controllers.
    Have no effect with normal 810 and 825.
-      specf:y    enabled
-      specf:n    disabled
+      specf:y    (or 1) enabled
+      specf:n    (or 0) disabled
+      specf:3           enabled except Memory Write And Invalidate
+   The default driver setup is 'specf:3'. As a consequence, option 'specf:y' 
+   must be specified in the boot setup command to enable Memory Write And 
+   Invalidate.
 
 Ultra SCSI support
    Only apply to 860 and 875 controllers.
@@ -628,6 +644,7 @@ Fix up PCI configuration space
     pcifix:<option bits>
 
     Available option bits:
+        0x0:   No attempt to fix PCI configuration space registers values.
         0x1:   Set PCI cache-line size register if not set.
         0x2:   Set write and invalidate bit in PCI command register.
         0x4:   Increase if necessary PCI latency timer according to burst max.
@@ -637,6 +654,14 @@ Fix up PCI configuration space
 Serial NVRAM
     nvram:n     do not look for serial NVRAM
     nvram:y     test controllers for onboard serial NVRAM
+
+Check SCSI BUS 
+    buschk:<option bits>
+
+    Available option bits:
+        0x0:   No check.
+        0x1:   Check and donnot attach the controller on error.  
+        0x2:   Check and just warn on error.
 
 Boot fail safe
     safe:y	load the following assumed fail safe initial setup
@@ -660,13 +685,14 @@ Boot fail safe
   settle time			10 seconds		settle:10
   differential support		from BIOS settings	diff:1
   irq mode			from BIOS settings	irqm:1
+  SCSI BUS check		donnot attach on error	buschk:1
 
 10.3 Advised boot setup commands
 
 If the driver has been configured with default options, the equivalent 
 boot setup is:
 
-   ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
+   ncr53c8xx=mpar:y,spar:y,disc:y,specf:3,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
              tags:0,sync:50,debug:0,burst:7,led:0,wide:1,settle:2,diff:0,irqm:0
 
 For an installation diskette or a safe but not fast system,
@@ -679,7 +705,7 @@ boot setup can be:
 
 My personnal system works flawlessly with the following equivalent setup:
 
-   ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
+   ncr53c8xx=mpar:y,spar:y,disc:y,specf:1,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
              tags:8,sync:12,debug:0,burst:7,led:1,wide:1,settle:2,diff:0,irqm:0
 
 The driver prints its actual setup when verbosity level is 2. You can try 
@@ -763,6 +789,21 @@ My Atlas Wide only boots cleanly in 8 bits asynchronous data transfer
 mode. However, it works flawlessly at 20 MB/second with the driver.
 Using "nvram=0x7" allows me to boot in 8 bits/async and to let the driver 
 use its setup for synchronous and wide negotiations.
+
+
+10.6 SCSI BUS checking boot option.
+
+When this option is set to a non-zero value, the driver checks SCSI lines 
+logic state, 100 micro-seconds after having asserted the SCSI RESET line.
+The driver just reads SCSI lines and checks all lines read FALSE except RESET.
+Since SCSI devices shall release the BUS at most 800 nano-seconds after SCSI 
+RESET has been asserted, any signal to TRUE may indicate a SCSI BUS problem.
+Unfortunately, the following common SCSI BUS problems are not detected:
+- Only 1 terminator installed.
+- Misplaced terminators.
+- Bad quality terminators.
+On the other hand, either bad cabling, broken devices, not conformant 
+devices, ... may cause a SCSI signal to be wrong when te driver reads it.
 
 
 11. Some constants and flags of the ncr53c8xx.h header file
@@ -952,6 +993,50 @@ If your controllers do not have NvRAM, you can:
 - Make appropriate changes in the fstab.
 - Use the 'scsidev' tool from Eric Youngdale.
 
+14.3 Using only 8 bit devices with a WIDE SCSI controller.
+
+When only 8 bit NARROW devices are connected to a 16 bit WIDE SCSI controller, 
+you must ensure that lines of the wide part of the SCSI BUS are pulled-up.
+This can be achieved by ENABLING the WIDE TERMINATOR portion of the SCSI 
+controller card.
+The TYAN 1365 documentation revision 1.2 is not correct about such settings.
+(page 10, figure 3.3).
+
+14.4 Possible data corruption during a Memory Write and Invalidate
+
+This problem is described in SYMBIOS DEL 397, Part Number 69-039241, ITEM 4.
+
+In some complex situations, 53C875 chips revision <= 3 may start a PCI 
+Write and Invalidate Command at a not cache-line-aligned 4 DWORDS boundary.
+This is only possible when Cache Line Size is 8 DWORDS or greater.
+Pentium systems use a 8 DWORDS cache line size and so are concerned by 
+this chip bug, unlike i486 systems that use a 4 DWORDS cache line size.
+
+When this situation occurs, the chip may complete the Write and Invalidate 
+command after having only filled part of the last cache line involved in 
+the transfer, leaving to data corruption the remainder of this cache line.
+
+Not using Write And Invalidate obviously gets rid of this chip bug, and so 
+it is now the default setting of the driver.
+However, for people like me who want to enable this feature, I have added 
+part of a work-around suggested by SYMBIOS. This work-around resets the 
+addressing logic when the DATA IN phase is entered and so prevents the bug 
+from being triggered for the first SCSI MOVE of the phase. This work-around 
+should be enough according to the following:
+
+The only driver internal data structure that is greater than 8 DWORDS  and 
+that is moved by the SCRIPTS processor is the 'CCB header' that contains 
+the context of the SCSI transfer. This data structure is aligned on 8 DWORDS 
+boundary (Pentium Cache Line Size), and so is immune to this chip bug, at 
+least on Pentium systems.
+But the conditions of this bug can be met when a SCSI read command is 
+performed using a buffer that is 4 DWORDS but not cache-line aligned.
+This cannot happen under Linux when scatter/gather lists are used since 
+they only refer to system buffers that are well aligned. So, a work around 
+may only be needed under Linux when a scatter/gather list is not used and 
+when the SCSI DATA IN phase is reentered after a phase mismatch.
+
+ 
 15. SCSI problem troubleshooting
 
 Most SCSI problems are due to a non conformant SCSI bus or to buggy
@@ -1216,8 +1301,14 @@ header
 controller set up
 
 00 30 00 00 00 00 07 00 00 00 00 00 00 00 07 04 10 04 00 00
-                   |     |                 |
-                   |     |                  -- host ID
+                   |     |           |     |
+                   |     |           |      -- host ID
+                   |     |           |
+                   |     |            --Removable Media Support
+                   |     |               0x00 = none
+                   |     |               0x01 = Bootable Device
+                   |     |               0x02 = All with Media
+                   |     |
                    |      --flag bits 2
                    |        0x00000001= scan order hi->low
                    |            (default 0x00 - scan low->hi)
@@ -1230,6 +1321,7 @@ remaining bytes unknown - they do not appear to change in my
 current set up for any of the controllers.
 
 default set up is identical for 53c810a and 53c875 NVRAM
+(Removable Media added Symbios BIOS version 4.09)
 -----------------------------------------------------------
 boot configuration
 

@@ -37,10 +37,16 @@
 
 #ifdef CONFIG_XMON
 extern void xmon(struct pt_regs *);
-extern void (*xmon_fault_handler)(void);
+extern void (*xmon_fault_handler)(struct pt_regs *);
 extern int xmon_dabr_match(struct pt_regs *);
-int xmon_kernel_faults;
+int xmon_kernel_faults = 0;
 #endif
+
+unsigned long htab_reloads = 0; /* updated by head.S:hash_page() */
+unsigned long htab_evicts = 0;  /* updated by head.S:hash_page() */
+unsigned long pte_misses = 0; /* updated by do_page_fault() */
+unsigned long pte_errors = 0; /* updated by do_page_fault() */
+unsigned int probingmem = 0;
 
 extern void die_if_kernel(char *, struct pt_regs *, long);
 void bad_page_fault(struct pt_regs *, unsigned long);
@@ -56,9 +62,19 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	struct vm_area_struct * vma;
 	struct mm_struct *mm = current->mm;
 
+	/*printk("address: %08lx code: %08lx %s%s%s%s%s%s\n",
+	       address,error_code,
+	       (error_code&0x40000000)?"604 tlb&htab miss ":"",
+	       (error_code&0x20000000)?"603 tlbmiss ":"",
+	       (error_code&0x02000000)?"write ":"",
+	       (error_code&0x08000000)?"prot ":"",
+	       (error_code&0x95700000)?"I/O ":"",
+	       (regs->trap == 0x400)?"instr":"data"
+	       );*/
+	       
 #ifdef CONFIG_XMON
 	if (xmon_fault_handler && regs->trap == 0x300) {
-		xmon_fault_handler();
+		xmon_fault_handler(regs);
 		return;
 	}
 	if (error_code & 0x00400000) {
@@ -96,7 +112,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 		goto bad_area;
 
 good_area:
-	if (error_code & 0xb5700000)
+	if (error_code & 0x95700000)
 		/* an error such as lwarx to I/O controller space,
 		   address matching DABR, eciwx, etc. */
 		goto bad_area;
@@ -115,10 +131,18 @@ good_area:
 	}
 	handle_mm_fault(current, vma, address, error_code & 0x02000000);
 	up(&mm->mmap_sem);
+	/*
+	 * keep track of tlb+htab misses that are good addrs but
+	 * just need pte's created via handle_mm_fault()
+	 * -- Cort
+	 */
+	pte_misses++;
 	return;
 
 bad_area:
+
 	up(&mm->mmap_sem);
+	pte_errors++;	
 	bad_page_fault(regs, address);
 }
 
@@ -126,7 +150,32 @@ void
 bad_page_fault(struct pt_regs *regs, unsigned long address)
 {
 	unsigned long fixup;
-
+#if 0	
+	extern unsigned long video_mem_base;
+	extern unsigned long video_mem_term;
+	
+	/*
+	 * Remap video IO areas for buggy X servers.
+	 * The S3 server wants direct access to video memory
+	 * at 0x8000 0000 and 0xc000 0000 on prep systems, but
+	 * we don't allow that AND we remap the io areas so it's not
+	 * even there!
+	 * So, for this task only give a virtual=physical mapping of the
+	 * video mem.
+	 * -- Cort
+	 */
+	if ( is_prep && user_mode(regs) )
+	{
+			printk("%s/%d: fault on %x\n",
+			       current->comm,current->pid,address);
+			printk("mapping: %x -> %x\n",
+			       address&PAGE_MASK, address&PAGE_MASK);
+			map_page(current,address&PAGE_MASK,address&PAGE_MASK,
+				 _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE|_PAGE_NO_CACHE|_PAGE_WRITETHRU);
+			return;
+	}
+#endif	
+	
 	if (user_mode(regs)) {
 		force_sig(SIGSEGV, current);
 		return;

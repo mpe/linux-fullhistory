@@ -28,6 +28,13 @@
  *
  * Yves Arrouye      :  remove removal of trailing spaces in get_array.
  *			<Yves.Arrouye@marin.fdn.fr>
+
+ * Jerome Forissier  :  added per-cpu time information to /proc/stat
+ *                      and /proc/<pid>/cpu extension
+ *                      <forissier@isia.cma.fr>
+ *			- Incorporation and non-SMP safe operation
+ *			of forissier patch in 2.1.78 by 
+ *			Hans Marcus <crowbar@concepts.nl>
  */
 
 #include <linux/types.h>
@@ -222,6 +229,32 @@ static int get_kstat(char * buffer)
 	ticks = jiffies * smp_num_cpus;
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat.interrupts[i];
+#ifdef __SMP__
+	len = sprintf(buffer,
+		"cpu  %u %u %u %lu\n",
+		kstat.cpu_user,
+		kstat.cpu_nice,
+		kstat.cpu_system,
+		jiffies*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system));
+	for (i = 0 ; i < smp_num_cpus; i++)
+		len += sprintf(buffer + len, "cpu%d %u %u %u %lu\n",
+			i,
+			kstat.per_cpu_user[cpu_logical_map[i]],
+			kstat.per_cpu_nice[cpu_logical_map[i]],
+			kstat.per_cpu_system[cpu_logical_map[i]],
+			jiffies - (  kstat.per_cpu_user[cpu_logical_map[i]] \
+			           + kstat.per_cpu_nice[cpu_logical_map[i]] \
+			           + kstat.per_cpu_system[cpu_logical_map[i]]));
+	len += sprintf(buffer + len,
+		"disk %u %u %u %u\n"
+		"disk_rio %u %u %u %u\n"
+		"disk_wio %u %u %u %u\n"
+		"disk_rblk %u %u %u %u\n"
+		"disk_wblk %u %u %u %u\n"
+		"page %u %u\n"
+		"swap %u %u\n"
+		"intr %u",
+#else
 	len = sprintf(buffer,
 		"cpu  %u %u %u %lu\n"
 		"disk %u %u %u %u\n"
@@ -236,6 +269,7 @@ static int get_kstat(char * buffer)
 		kstat.cpu_nice,
 		kstat.cpu_system,
 		ticks - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
+#endif
 		kstat.dk_drive[0], kstat.dk_drive[1],
 		kstat.dk_drive[2], kstat.dk_drive[3],
 		kstat.dk_drive_rio[0], kstat.dk_drive_rio[1],
@@ -1077,6 +1111,33 @@ out:
 	return retval;
 }
 
+#ifdef __SMP__
+static int get_pidcpu(int pid, char * buffer)
+{
+	struct task_struct * tsk = current ;
+	int i, len;
+	
+	if (pid != tsk->pid)
+		tsk = find_task_by_pid(pid);
+
+	if (tsk == NULL)
+		return 0;
+
+	len = sprintf(buffer,
+		"cpu  %lu %lu\n",
+		tsk->times.tms_utime,
+		tsk->times.tms_stime);
+		
+	for (i = 0 ; i < smp_num_cpus; i++)
+		len += sprintf(buffer + len, "cpu%d %lu %lu\n",
+			i,
+			tsk->per_cpu_utime[cpu_logical_map[i]],
+			tsk->per_cpu_stime[cpu_logical_map[i]]);
+
+	return len;
+}
+#endif
+
 #ifdef CONFIG_MODULES
 extern int get_module_list(char *);
 extern int get_ksyms_list(char *, char **, off_t, int);
@@ -1206,6 +1267,10 @@ static int get_process_array(char * page, int pid, int type)
 			return get_stat(pid, page);
 		case PROC_PID_STATM:
 			return get_statm(pid, page);
+#ifdef __SMP__
+		case PROC_PID_CPU:
+			return get_pidcpu(pid, page);
+#endif
 	}
 	return -EBADF;
 }

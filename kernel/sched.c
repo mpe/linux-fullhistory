@@ -1031,8 +1031,10 @@ static inline void do_it_prof(struct task_struct * p, unsigned long ticks)
 }
 
 void update_one_process(struct task_struct *p,
-	unsigned long ticks, unsigned long user, unsigned long system)
+	unsigned long ticks, unsigned long user, unsigned long system, int cpu)
 {
+	p->per_cpu_utime[cpu] += user;
+	p->per_cpu_stime[cpu] += system;
 	do_process_times(p, user, system);
 	do_it_virt(p, user);
 	do_it_prof(p, ticks);
@@ -1058,7 +1060,7 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 			kstat.cpu_user += user;
 		kstat.cpu_system += system;
 	}
-	update_one_process(p, ticks, user, system);
+	update_one_process(p, ticks, user, system, 0);
 #endif
 }
 

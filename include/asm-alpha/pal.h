@@ -7,7 +7,6 @@
 #define PAL_halt	  0
 #define PAL_cflush	  1
 #define PAL_draina	  2
-#define PAL_cobratt	  9
 #define PAL_bpt		128
 #define PAL_bugchk	129
 #define PAL_chmk	131
@@ -27,6 +26,8 @@
 /*
  * OSF specific PAL-code
  */
+#define PAL_cserve	 9
+#define PAL_wripir	13
 #define PAL_rdmces	16
 #define PAL_wrmces	17
 #define PAL_wrfen	43

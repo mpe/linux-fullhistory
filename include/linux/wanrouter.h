@@ -4,6 +4,7 @@
 *		Drivers and is completely hardware-independent.
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
+*		Jaspreet Singh	<jaspreet@sangoma.com>
 *
 * Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
@@ -12,7 +13,16 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* May 29, 1997 	Jaspreet Singh	Added 'tx_int_enabled' tp 'wan_device_t'
+* Nov 06, 1997	Jaspreet Singh	Changed Router Driver version to 1.1 from 1.0
+* Oct 20, 1997	Jaspreet Singh	Added 'cir','bc','be' and 'mc' to 'wanif_conf_t'
+*				Added 'enable_IPX' and 'network_number' to 
+*				'wan_device_t'.  Also added defines for
+*				UDP PACKET TYPE, Interrupt test, critical values*				for RACE conditions.
+* Oct 05, 1997	Jaspreet Singh	Added 'dlci_num' and 'dlci[100]' to 
+*				'wan_fr_conf_t' to configure a list of dlci(s)
+*				for a NODE 
+* Jul 07, 1997	Jaspreet Singh	Added 'ttl' to 'wandev_conf_t' & 'wan_device_t'
+* May 29, 1997 	Jaspreet Singh	Added 'tx_int_enabled' to 'wan_device_t'
 * May 21, 1997	Jaspreet Singh	Added 'udp_port' to 'wan_device_t'
 * Apr 25, 1997  Farhan Thawar   Added 'udp_port' to 'wandev_conf_t'
 * Jan 16, 1997	Gene Kozin	router_devlist made public
@@ -23,7 +33,7 @@
 
 #define	ROUTER_NAME	"wanrouter"	/* in case we ever change it */
 #define	ROUTER_VERSION	1		/* version number */
-#define	ROUTER_RELEASE	0		/* release (minor version) number */
+#define	ROUTER_RELEASE	1		/* release (minor version) number */
 #define	ROUTER_IOCTL	'W'		/* for IOCTL calls */
 #define	ROUTER_MAGIC	0x524D4157L	/* signature: 'WANR' reversed */
 
@@ -52,6 +62,27 @@ enum router_ioctls
 #define	WAN_IFNAME_SZ	15	/* max length of the interface name */
 #define	WAN_DRVNAME_SZ	15	/* max length of the link driver name */
 #define	WAN_ADDRESS_SZ	31	/* max length of the WAN media address */
+
+/* Defines for UDP PACKET TYPE */
+#define UDP_PTPIPE_TYPE 	0x01
+#define UDP_FPIPE_TYPE		0x02
+#define UDP_DRVSTATS_TYPE 	0x03
+#define UDP_INVALID_TYPE  	0x04
+
+/* Command return code */
+#define CMD_OK		0		/* normal firmware return code */
+#define CMD_TIMEOUT	0xFF		/* firmware command timed out */
+
+/* UDP Packet Management */
+#define UDP_PKT_FRM_STACK	0x00
+#define UDP_PKT_FRM_NETWORK	0x01
+
+/* Maximum interrupt test counter */
+#define MAX_INTR_TEST_COUNTER	100
+
+/* Critical Values for RACE conditions*/
+#define CRITICAL_IN_ISR		0xA1
+#define CRITICAL_INTR_HANDLED	0xB1
 
 /****** Data Types **********************************************************/
 
@@ -87,15 +118,14 @@ typedef struct wan_x25_conf
  */
 typedef struct wan_fr_conf
 {
-	unsigned cir;		/* committed information rate */
 	unsigned signalling;	/* local in-channel signalling type */
 	unsigned t391;		/* link integrity verification timer */
 	unsigned t392;		/* polling verification timer */
 	unsigned n391;		/* full status polling cycle counter */
 	unsigned n392;		/* error threshold counter */
 	unsigned n393;		/* monitored events counter */
-	unsigned dlci;		/* first DLC number (access node) */
 	unsigned dlci_num;	/* number of DLCs (access node) */
+	unsigned  dlci[100];    /* List of all DLCIs */
 } wan_fr_conf_t;
 
 /*----------------------------------------------------------------------------
@@ -133,12 +163,15 @@ typedef struct wandev_conf
 	unsigned bps;		/* data transfer rate */
 	unsigned mtu;		/* maximum transmit unit size */
         unsigned udp_port;      /* UDP port for management */
+	unsigned char ttl;	/* Time To Live for UDP security */
         char interface;		/* RS-232/V.35, etc. */
 	char clocking;		/* external/internal */
 	char line_coding;	/* NRZ/NRZI/FM0/FM1, etc. */
 	char station;		/* DTE/DCE, primary/secondary, etc. */
 	char connection;	/* permanent/switched/on-demand */
 	unsigned hw_opt[4];	/* other hardware options */
+	unsigned char enable_IPX;	/* Enable or Disable IPX */
+	unsigned long network_number;	/* Network Number for IPX */
 	unsigned reserved[4];
 				/****** arbitrary data ***************/
 	unsigned data_size;	/* data buffer size */
@@ -261,6 +294,10 @@ typedef struct wanif_conf
 	char addr[WAN_ADDRESS_SZ+1];	/* media address, ASCIIZ */
 	unsigned idle_timeout;		/* sec, before disconnecting */
 	unsigned hold_timeout;		/* sec, before re-connecting */
+	unsigned cir;			/* Committed Information Rate fwd,bwd*/
+	unsigned bc;			/* Committed Burst Size fwd, bwd */
+	unsigned be;			/* Excess Burst Size fwd, bwd */ 
+	char mc;			/* Multicast on or off */
 	int reserved[8];		/* reserved for future extensions */
 } wanif_conf_t;
 
@@ -289,13 +326,16 @@ typedef struct wan_device
 	unsigned bps;			/* data transfer rate */
 	unsigned mtu;			/* max physical transmit unit size */
 	unsigned udp_port;              /* UDP port for management */
-        unsigned tx_int_enabled; 	/* Transmit Interrupt enabled or not */
+        unsigned char ttl;		/* Time To Live for UDP security */
+	unsigned enable_tx_int; 	/* Transmit Interrupt enabled or not */
 	char interface;			/* RS-232/V.35, etc. */
 	char clocking;			/* external/internal */
 	char line_coding;		/* NRZ/NRZI/FM0/FM1, etc. */
 	char station;			/* DTE/DCE, primary/secondary, etc. */
 	char connection;		/* permanent/switched/on-demand */
 	unsigned hw_opt[4];		/* other hardware options */
+	unsigned char enable_IPX;	/* Enable or Disable IPX */
+	unsigned long network_number;	/* Network Number for IPX */
 					/****** status and statistics *******/
 	char state;			/* device state */
 	unsigned modem_status;		/* modem status */

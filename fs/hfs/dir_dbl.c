@@ -180,6 +180,7 @@ static int dbl_lookup(struct inode * dir, struct dentry *dentry)
 	}
 	
 done:
+	dentry->d_op = &hfs_dentry_operations;
 	d_add(dentry, inode);
 	return 0;
 }

@@ -523,6 +523,15 @@ FUNC(memmove)
 
 #endif /* FASTER_REVERSE */
 
+/* NOTE: This code is executed just for the cases,
+         where %src (=%o1) & 3 is != 0.
+	 We need to align it to 4. So, for (%src & 3)
+	 1 we need to do ldub,lduh
+	 2 lduh
+	 3 just ldub
+         so even if it looks weird, the branches
+         are correct here. -jj
+ */
 78:	/* dword_align */
 
 	andcc		%o1, 1, %g0

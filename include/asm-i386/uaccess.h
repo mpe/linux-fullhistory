@@ -107,36 +107,38 @@ extern void __get_user_4(void);
 		:"=a" (ret),"=d" (x) \
 		:"0" (ptr))
 
-#define get_user(x,ptr) \
-({	int __ret_gu;    \
-	switch(sizeof (*(ptr))) {     \
-	case 1:  __get_user_x(1,__ret_gu,x,ptr); break; \
-	case 2:  __get_user_x(2,__ret_gu,x,ptr); break; \
-	case 4:  __get_user_x(4,__ret_gu,x,ptr); break; \
-	default: __get_user_x(X,__ret_gu,x,ptr); break; \
-	} \
-	__ret_gu; \
+/* Careful: we have to cast the result to the type of the pointer for sign reasons */
+#define get_user(x,ptr)							\
+({	int __ret_gu,__val_gu;						\
+	switch(sizeof (*(ptr))) {					\
+	case 1:  __get_user_x(1,__ret_gu,__val_gu,ptr); break;		\
+	case 2:  __get_user_x(2,__ret_gu,__val_gu,ptr); break;		\
+	case 4:  __get_user_x(4,__ret_gu,__val_gu,ptr); break;		\
+	default: __get_user_x(X,__ret_gu,__val_gu,ptr); break;		\
+	}								\
+	(x) = (__typeof__(*(ptr)))__val_gu;				\
+	__ret_gu;							\
 })
 
 extern void __put_user_1(void);
 extern void __put_user_2(void);
 extern void __put_user_4(void);
 
-#define __put_user_x(size,ret,x,ptr) \
-	__asm__ __volatile__("call __put_user_" #size \
-		:"=a" (ret) \
-		:"0" (ptr),"d" (x) \
+#define __put_user_x(size,ret,x,ptr)					\
+	__asm__ __volatile__("call __put_user_" #size			\
+		:"=a" (ret)						\
+		:"0" (ptr),"d" (x)					\
 		:"cx")
 
-#define put_user(x,ptr) \
-({	int __ret_pu;    \
-	switch(sizeof (*(ptr))) {     \
-	case 1:  __put_user_x(1,__ret_pu,(char)(x),ptr); break; \
-	case 2:  __put_user_x(2,__ret_pu,(short)(x),ptr); break; \
-	case 4:  __put_user_x(4,__ret_pu,(int)(x),ptr); break; \
-	default: __put_user_x(X,__ret_pu,x,ptr); break; \
-	} \
-	__ret_pu; \
+#define put_user(x,ptr)							\
+({	int __ret_pu;							\
+	switch(sizeof (*(ptr))) {					\
+	case 1:  __put_user_x(1,__ret_pu,(char)(x),ptr); break;		\
+	case 2:  __put_user_x(2,__ret_pu,(short)(x),ptr); break;	\
+	case 4:  __put_user_x(4,__ret_pu,(int)(x),ptr); break;		\
+	default: __put_user_x(X,__ret_pu,x,ptr); break;			\
+	}								\
+	__ret_pu;							\
 })
 
 #define __get_user(x,ptr) get_user(x,ptr)

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.3 1997/07/17 02:20:48 davem Exp $
+/* $Id: sys_sunos32.c,v 1.7 1997/12/11 15:15:19 jj Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -297,35 +297,28 @@ asmlinkage int sunos_getdtablesize(void)
 	return SUNOS_NR_OPEN;
 }
 
-#define _S(nr) (1<<((nr)-1))
 
-#define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
+#define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
 asmlinkage u32 sunos_sigblock(u32 blk_mask)
 {
-	unsigned long flags;
 	u32 old;
 
-	lock_kernel();
-	save_and_cli(flags);
-	old = (u32) current->blocked;
-	current->blocked |= (blk_mask & _BLOCKABLE);
-	restore_flags(flags);
-	unlock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
+	old = (u32) current->blocked.sig[0];
+	current->blocked.sig[0] |= (blk_mask & _BLOCKABLE);
+	spin_unlock_irq(&current->sigmask_lock);
 	return old;
 }
 
 asmlinkage u32 sunos_sigsetmask(u32 newmask)
 {
-	unsigned long flags;
 	u32 retval;
 
-	lock_kernel();
-	save_and_cli(flags);
-	retval = (u32) current->blocked;
-	current->blocked = (newmask & _BLOCKABLE);
-	restore_flags(flags);
-	unlock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
+	retval = (u32) current->blocked.sig[0];
+	current->blocked.sig[0] = (newmask & _BLOCKABLE);
+	spin_unlock_irq(&current->sigmask_lock);
 	return retval;
 }
 
@@ -379,8 +372,6 @@ static int sunos_filldir(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 {
 	struct file * file;
-	struct dentry * dentry;
-	struct inode * inode;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
 	int error = -EBADF;
@@ -392,14 +383,6 @@ asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 
 	file = current->files->fd[fd];
 	if(!file)
-		goto out;
-
-	dentry = file->f_dentry;
-	if(!dentry)
-		goto out;
-
-	inode = dentry->d_inode;
-	if(!inode)
 		goto out;
 
 	error = -ENOTDIR;
@@ -415,7 +398,7 @@ asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 	buf.count = cnt;
 	buf.error = 0;
 
-	error = file->f_op->readdir(inode, file, &buf, sunos_filldir);
+	error = file->f_op->readdir(file, &buf, sunos_filldir);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -472,8 +455,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, u32 u_dirent,
 				   int cnt, u32 u_basep)
 {
 	struct file * file;
-	struct dentry * dentry;
-	struct inode * inode;
 	struct sunos_direntry * lastdirent;
 	struct sunos_direntry_callback buf;
 	int error = -EBADF;
@@ -486,14 +467,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, u32 u_dirent,
 
 	file = current->files->fd[fd];
 	if(!file)
-		goto out;
-
-	dentry = file->f_dentry;
-	if(!dentry)
-		goto out;
-
-	inode = dentry->d_inode;
-	if(!inode)
 		goto out;
 
 	error = -ENOTDIR;
@@ -509,7 +482,7 @@ asmlinkage int sunos_getdirentries(unsigned int fd, u32 u_dirent,
 	buf.count = cnt;
 	buf.error = 0;
 
-	error = file->f_op->readdir(inode, file, &buf, sunos_filldirentry);
+	error = file->f_op->readdir(file, &buf, sunos_filldirentry);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -1140,7 +1113,7 @@ asmlinkage int sunos_msgsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 arg4)
 	struct sparc_stackf32 *sp;
 	struct msqid_ds kds;
 	struct msgbuf *kmbuf;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	u32 arg5;
 	int rval;
 
@@ -1264,7 +1237,8 @@ extern asmlinkage int sys_shmget (key_t key, int size, int shmflg);
 asmlinkage int sunos_shmsys(int op, u32 arg1, u32 arg2, u32 arg3)
 {
 	struct shmid_ds ksds;
-	unsigned long raddr, old_fs = get_fs();
+	unsigned long raddr;
+	mm_segment_t old_fs = get_fs();
 	int rval;
 
 	lock_kernel();
@@ -1328,20 +1302,20 @@ static inline int check_nonblock(int ret, int fd)
 	return ret;
 }
 
-extern asmlinkage int sys32_read(unsigned int fd, u32 buf, int count);
-extern asmlinkage int sys32_write(unsigned int fd, u32 buf,int count);
-extern asmlinkage int sys32_recv(int fd, u32 ubuf, int size, unsigned flags);
-extern asmlinkage int sys32_send(int fd, u32 buff, int len, unsigned flags);
-extern asmlinkage int sys32_accept(int fd, u32 sa, u32 addrlen);
+extern asmlinkage int sys_read(unsigned int fd, char *buf, unsigned long count);
+extern asmlinkage int sys_write(unsigned int fd, char *buf, unsigned long count);
+extern asmlinkage int sys_recv(int fd, void *ubuf, size_t size, unsigned flags);
+extern asmlinkage int sys_send(int fd, void *buff, size_t len, unsigned flags);
+extern asmlinkage int sys_accept(int fd, struct sockaddr *sa, int *addrlen);
 extern asmlinkage int sys32_readv(u32 fd, u32 vector, s32 count);
 extern asmlinkage int sys32_writev(u32 fd, u32 vector, s32 count);
 
-asmlinkage int sunos_read(unsigned int fd, u32 buf, int count)
+asmlinkage int sunos_read(unsigned int fd, u32 buf, u32 count)
 {
 	int ret;
 
 	lock_kernel();
-	ret = check_nonblock(sys32_read(fd, buf, count), fd);
+	ret = check_nonblock(sys_read(fd, (char *)A(buf), count), fd);
 	unlock_kernel();
 	return ret;
 }
@@ -1356,12 +1330,12 @@ asmlinkage int sunos_readv(u32 fd, u32 vector, s32 count)
 	return ret;
 }
 
-asmlinkage int sunos_write(unsigned int fd, u32 buf, int count)
+asmlinkage int sunos_write(unsigned int fd, u32 buf, u32 count)
 {
 	int ret;
 
 	lock_kernel();
-	ret = check_nonblock(sys32_write(fd, buf, count), fd);
+	ret = check_nonblock(sys_write(fd, (char *)A(buf), count), fd);
 	unlock_kernel();
 	return ret;
 }
@@ -1381,7 +1355,7 @@ asmlinkage int sunos_recv(int fd, u32 ubuf, int size, unsigned flags)
 	int ret;
 
 	lock_kernel();
-	ret = check_nonblock(sys32_recv(fd, ubuf, size, flags), fd);
+	ret = check_nonblock(sys_recv(fd, (void *)A(ubuf), size, flags), fd);
 	unlock_kernel();
 	return ret;
 }
@@ -1391,7 +1365,7 @@ asmlinkage int sunos_send(int fd, u32 buff, int len, unsigned flags)
 	int ret;
 
 	lock_kernel();
-	ret = check_nonblock(sys32_send(fd, buff, len, flags), fd);
+	ret = check_nonblock(sys_send(fd, (void *)A(buff), len, flags), fd);
 	unlock_kernel();
 	return ret;
 }
@@ -1401,78 +1375,48 @@ asmlinkage int sunos_accept(int fd, u32 sa, u32 addrlen)
 	int ret;
 
 	lock_kernel();
-	ret = check_nonblock(sys32_accept(fd, sa, addrlen), fd);
+	ret = check_nonblock(sys_accept(fd, (struct sockaddr *)A(sa), (int *)A(addrlen)), fd);
 	unlock_kernel();
 	return ret;
 }
 
 #define SUNOS_SV_INTERRUPT 2
 
-extern void check_pending(int signum);
-
-asmlinkage int sunos_sigaction(int signum, u32 action, u32 oldaction)
+asmlinkage int sunos_sigaction (int sig, u32 act, u32 oact)
 {
-	struct sigaction32 new_sa, old_sa;
-	struct sigaction *p;
-	const int sigaction_size = sizeof (struct sigaction32) - sizeof (u32);
+	struct k_sigaction new_ka, old_ka;
+	int ret;
 
 	current->personality |= PER_BSD;
-	if(signum < 1 || signum > 32)
-		return -EINVAL;
 
-	p = signum - 1 + current->sig->action;
+	if (act) {
+		old_sigset_t32 mask;
 
-	if(action) {
-		if (signum==SIGKILL || signum==SIGSTOP)
-			return -EINVAL;
-		memset(&new_sa, 0, sizeof(struct sigaction32));
-		if(copy_from_user(&new_sa, (struct sigaction32 *)A(action),
-				  sigaction_size))
+		if (get_user((long)new_ka.sa.sa_handler, &((struct old_sigaction32 *)A(act))->sa_handler) ||
+		    __get_user(new_ka.sa.sa_flags, &((struct old_sigaction32 *)A(act))->sa_flags))
 			return -EFAULT;
-		if (((__sighandler_t)A(new_sa.sa_handler) != SIG_DFL) &&
-		     (__sighandler_t)A(new_sa.sa_handler) != SIG_IGN) {
-			if(verify_area(VERIFY_READ,
-				       (__sighandler_t)A(new_sa.sa_handler), 1))
-				return -EFAULT;
-		}
-		new_sa.sa_flags ^= SUNOS_SV_INTERRUPT;
+		__get_user(mask, &((struct old_sigaction32 *)A(act))->sa_mask);
+		new_ka.sa.sa_restorer = NULL;
+		new_ka.ka_restorer = NULL;
+		siginitset(&new_ka.sa.sa_mask, mask);
+		new_ka.sa.sa_flags ^= SUNOS_SV_INTERRUPT;
 	}
 
-	if (oldaction) {
-		/* In the clone() case we could copy half consistant
-		 * state to the user, however this could sleep and
-		 * deadlock us if we held the signal lock on SMP.  So for
-		 * now I take the easy way out and do no locking.
-		 * But then again we don't support SunOS lwp's anyways ;-)
-		 */
-		old_sa.sa_handler = (unsigned)(u64)(p->sa_handler);
-		old_sa.sa_mask = (sigset_t32)(p->sa_mask);
-		old_sa.sa_flags = (unsigned)(p->sa_flags);
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
 
-		if (old_sa.sa_flags & SA_RESTART)
-			old_sa.sa_flags &= ~SA_RESTART;
-		else
-			old_sa.sa_flags |= SUNOS_SV_INTERRUPT;
-		if (copy_to_user((struct sigaction32 *)A(oldaction),
-				 &old_sa, sigaction_size))
-			 return -EFAULT;
+	if (!ret && oact) {
+		old_ka.sa.sa_flags ^= SUNOS_SV_INTERRUPT;
+		if (put_user((long)old_ka.sa.sa_handler, &((struct old_sigaction32 *)A(oact))->sa_handler) ||
+		    __put_user(old_ka.sa.sa_flags, &((struct old_sigaction32 *)A(oact))->sa_flags))
+			return -EFAULT;
+		__put_user(old_ka.sa.sa_mask.sig[0], &((struct old_sigaction32 *)A(oact))->sa_mask);
 	}
 
-	if (action) {
-		spin_lock_irq(&current->sig->siglock);
-		p->sa_handler = (__sighandler_t)A(new_sa.sa_handler);
-		p->sa_mask = (sigset_t)(new_sa.sa_mask);
-		p->sa_flags = new_sa.sa_flags;
-		p->sa_restorer = (void (*)(void))0;
-		check_pending(signum);
-		spin_unlock_irq(&current->sig->siglock);
-	}
-	return 0;
+	return ret;
 }
 
-
-extern asmlinkage int sys32_setsockopt(int fd, int level, int optname,
-				     u32 optval, int optlen);
+extern asmlinkage int sys_setsockopt(int fd, int level, int optname,
+				     char *optval, int optlen);
 extern asmlinkage int sys32_getsockopt(int fd, int level, int optname,
 				     u32 optval, u32 optlen);
 
@@ -1488,7 +1432,7 @@ asmlinkage int sunos_setsockopt(int fd, int level, int optname, u32 optval,
 		if (tr_opt >=2 && tr_opt <= 6)
 			tr_opt += 30;
 	}
-	ret = sys32_setsockopt(fd, level, tr_opt, optval, optlen);
+	ret = sys_setsockopt(fd, level, tr_opt, (char *)A(optval), optlen);
 	unlock_kernel();
 	return ret;
 }

@@ -29,6 +29,7 @@
 #include <asm/types.h>
 #include <asm/byteorder.h>
 #include <net/ip.h>
+#include <asm/uaccess.h>
 #include <asm/checksum.h>
 
 #ifndef _HAVE_ARCH_IPV6_CSUM
@@ -89,6 +90,21 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 	return csum_fold(csum);
 }
 
+#endif
+
+#ifndef _HAVE_ARCH_COPY_AND_CSUM_FROM_USER
+extern __inline__
+unsigned int csum_and_copy_from_user (const char *src, char *dst,
+				      int len, int sum, int *err_ptr)
+{
+	if (verify_area(VERIFY_READ, src, len) == 0)
+		return csum_partial_copy_from_user(src, dst, len, sum, err_ptr);
+
+	if (len)
+		*err_ptr = -EFAULT;
+
+	return sum;
+}
 #endif
 
 #endif

@@ -85,16 +85,20 @@ isn't, use the old method using environment variables.
 	This is needed on HP Omnibooks, which don't have a workable
 	DMA channel for the floppy driver. This option is also useful
 	if you frequently get "Unable to allocate DMA memory" messages.
-	Indeed, dma memory needs to be continuous in physical, and is
-	thus harder to find, whereas non-dma buffers may be allocated
-	in virtual memory. However, I advise against this if you have
-	an FDC without a FIFO (8272A or 82072). 82072A and later are
-	OK. You also need at least a 486 to use nodma.
+	Indeed, dma memory needs to be continuous in physical memory,
+	and is thus harder to find, whereas non-dma buffers may be
+	allocated in virtual memory. However, I advise against this if
+	you have an FDC without a FIFO (8272A or 82072). 82072A and
+	later are OK). You also need at least a 486 to use nodma.
 	If you use nodma mode, I suggest you also set the FIFO
 	threshold to 10 or lower, in order to limit the number of data
 	transfer interrupts.
-	
- floppy=dma
+
+	If you have a FIFO-able FDC, the floppy driver automatically
+	falls back on non DMA mode if no DMA-able memory can be found.
+	If you want to avoid this, explicitely ask for 'yesdma'.
+
+ floppy=yesdma
 	Tells the floppy driver that a workable DMA channel is available
 	(the default).
 

@@ -1,28 +1,12 @@
 #ifndef _PPC_PAGE_H
 #define _PPC_PAGE_H
 
-#include <linux/config.h>
-
 /* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT	12
 #define PAGE_SIZE	(1UL << PAGE_SHIFT)
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 
-/* This handles the memory map.. */
-
-/*
- * these virtual mappings for prep and pmac
- * on the prep machine the io areas are at different physical locations
- * than their virtual address.  On the pmac and chrp the io areas
- * are mapped 1-1 virtual/physical.
- * -- Cort
- */
-#if defined(CONFIG_PREP) || defined(CONFIG_CHRP)
-#define KERNELBASE	0x90000000
-#endif
-#ifdef CONFIG_PMAC
-#define KERNELBASE	0xc0000000
-#endif
+/* KERNELBASE comes from arch/ppc/Makefile */
 #define PAGE_OFFSET	KERNELBASE
 
 
@@ -85,7 +69,7 @@ typedef unsigned long pgprot_t;
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
 
-#define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
+#define MAP_NR(addr)		(((unsigned long)addr-PAGE_OFFSET) >> PAGE_SHIFT)
 #define MAP_PAGE_RESERVED	(1<<15)
 
 extern unsigned long get_prezerod_page(void);

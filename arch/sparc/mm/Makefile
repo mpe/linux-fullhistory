@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.26 1997/06/24 15:48:06 jj Exp $
+# $Id: Makefile,v 1.27 1997/11/07 15:01:27 jj Exp $
 # Makefile for the linux Sparc-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -10,7 +10,7 @@
 O_TARGET := mm.o
 O_OBJS   := fault.o init.o sun4c.o srmmu.o hypersparc.o viking.o \
 	    tsunami.o loadmmu.o generic.o asyncd.o extable.o \
-	    turbosparc.o
+	    turbosparc.o iommu.o io-unit.o
 
 include $(TOPDIR)/Rules.make
 

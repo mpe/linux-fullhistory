@@ -34,7 +34,7 @@
 
 #include <linux/config.h>
 
-#define DLINFO_ITEMS 12
+#define DLINFO_ITEMS 13
 
 #include <linux/elf.h>
 
@@ -112,21 +112,40 @@ create_elf_tables(char *p, int argc, int envc,
 	elf_caddr_t *argv;
 	elf_caddr_t *envp;
 	elf_addr_t *sp, *csp;
+	char *k_platform, *u_platform;
+	long hwcap;
+	size_t platform_len = 0;
+
+	/*
+	 * Get hold of platform and hardware capabilities masks for
+	 * the machine we are running on.  In some cases (Sparc), 
+	 * this info is impossible to get, in others (i386) it is
+	 * merely difficult.
+	 */
+
+	hwcap = ELF_HWCAP;
+	k_platform = ELF_PLATFORM;
+
+	if (k_platform) {
+		platform_len = strlen(k_platform) + 1;
+		u_platform = p - platform_len;
+		__copy_to_user(u_platform, k_platform, platform_len);
+	} else
+		u_platform = p;
 
 	/*
 	 * Force 16 byte _final_ alignment here for generality.
 	 * Leave an extra 16 bytes free so that on the PowerPC we
 	 * can move the aux table up to start on a 16-byte boundary.
 	 */
-	sp = (elf_addr_t *) ((~15UL & (unsigned long) p) - 16UL);
+	sp = (elf_addr_t *)((~15UL & (unsigned long)(u_platform)) - 16UL);
 	csp = sp;
-	csp -= exec ? DLINFO_ITEMS*2 : 2;
+	csp -= ((exec ? DLINFO_ITEMS*2 : 4) + (k_platform ? 2 : 0));
 	csp -= envc+1;
 	csp -= argc+1;
 	csp -= (!ibcs ? 3 : 1);	/* argc itself */
-	if ((unsigned long)csp & 15UL) {
+	if ((unsigned long)csp & 15UL)
 		sp -= ((unsigned long)csp & 15UL) / sizeof(*sp);
-	}
 
 	/*
 	 * Put the ELF interpreter info on the stack
@@ -137,21 +156,27 @@ create_elf_tables(char *p, int argc, int envc,
 
 	sp -= 2;
 	NEW_AUX_ENT(0, AT_NULL, 0);
+	if (k_platform) {
+		sp -= 2;
+		NEW_AUX_ENT(0, AT_PLATFORM, (elf_addr_t)(unsigned long) u_platform);
+	}
+	sp -= 2;
+	NEW_AUX_ENT(0, AT_HWCAP, hwcap);
 
 	if (exec) {
 		sp -= 11*2;
 
-		NEW_AUX_ENT (0, AT_PHDR, load_addr + exec->e_phoff);
-		NEW_AUX_ENT (1, AT_PHENT, sizeof (struct elf_phdr));
-		NEW_AUX_ENT (2, AT_PHNUM, exec->e_phnum);
-		NEW_AUX_ENT (3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
-		NEW_AUX_ENT (4, AT_BASE, interp_load_addr);
-		NEW_AUX_ENT (5, AT_FLAGS, 0);
-		NEW_AUX_ENT (6, AT_ENTRY, (elf_addr_t) exec->e_entry);
-		NEW_AUX_ENT (7, AT_UID, (elf_addr_t) current->uid);
-		NEW_AUX_ENT (8, AT_EUID, (elf_addr_t) current->euid);
-		NEW_AUX_ENT (9, AT_GID, (elf_addr_t) current->gid);
-		NEW_AUX_ENT (10, AT_EGID, (elf_addr_t) current->egid);
+		NEW_AUX_ENT(0, AT_PHDR, load_addr + exec->e_phoff);
+		NEW_AUX_ENT(1, AT_PHENT, sizeof (struct elf_phdr));
+		NEW_AUX_ENT(2, AT_PHNUM, exec->e_phnum);
+		NEW_AUX_ENT(3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
+		NEW_AUX_ENT(4, AT_BASE, interp_load_addr);
+		NEW_AUX_ENT(5, AT_FLAGS, 0);
+		NEW_AUX_ENT(6, AT_ENTRY, (elf_addr_t) exec->e_entry);
+		NEW_AUX_ENT(7, AT_UID, (elf_addr_t) current->uid);
+		NEW_AUX_ENT(8, AT_EUID, (elf_addr_t) current->euid);
+		NEW_AUX_ENT(9, AT_GID, (elf_addr_t) current->gid);
+		NEW_AUX_ENT(10, AT_EGID, (elf_addr_t) current->egid);
 	}
 #undef NEW_AUX_ENT
 
@@ -592,7 +617,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* OK, This is the point of no return */
 	current->mm->end_data = 0;
 	current->mm->end_code = 0;
-	current->mm->start_mmap = ELF_START_MMAP;
 	current->mm->mmap = NULL;
 	elf_entry = (unsigned long) elf_ex.e_entry;
 
@@ -699,7 +723,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	kfree(elf_phdata);
 
 	if (interpreter_type != INTERPRETER_AOUT) sys_close(elf_exec_fileno);
-	current->personality = (ibcs2_interpreter ? PER_SVR4 : PER_LINUX);
+	SET_PERSONALITY(ibcs2_interpreter);
 
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_DEC_USE_COUNT(current->exec_domain->module);

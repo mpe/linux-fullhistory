@@ -128,8 +128,9 @@ extern __inline__ struct fib_table *fib_new_table(int id)
 
 extern __inline__ int fib_lookup(const struct rt_key *key, struct fib_result *res)
 {
-	if (local_table->tb_lookup(local_table, key, res))
-		return main_table->tb_lookup(main_table, key, res);
+	if (local_table->tb_lookup(local_table, key, res) &&
+	    main_table->tb_lookup(main_table, key, res))
+		return -ENETUNREACH;
 	return 0;
 }
 
@@ -180,7 +181,7 @@ extern int fib_nh_match(struct rtmsg *r, struct nlmsghdr *, struct kern_rta *rta
 extern int fib_dump_info(struct sk_buff *skb, pid_t pid, u32 seq, int event,
 			 u8 tb_id, u8 type, u8 scope, void *dst, int dst_len, u8 tos,
 			 struct fib_info *fi);
-extern int fib_sync_down(u32 local, struct device *dev);
+extern int fib_sync_down(u32 local, struct device *dev, int force);
 extern int fib_sync_up(struct device *dev);
 extern int fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 			       struct kern_rta *rta, struct rtentry *r);

@@ -29,8 +29,8 @@ addr_limit = 12
 __get_user_1:
 	movl %esp,%edx
 	andl $0xffffe000,%edx
-	cmpl %eax,addr_limit(%edx)
-	jnb bad_get_user
+	cmpl addr_limit(%edx),%eax
+	jae bad_get_user
 1:	movzbl (%eax),%edx
 	xorl %eax,%eax
 	ret
@@ -42,8 +42,8 @@ __get_user_2:
 	movl %esp,%edx
 	jc bad_get_user
 	andl $0xffffe000,%edx
-	cmpl %eax,addr_limit(%edx)
-	jnb bad_get_user
+	cmpl addr_limit(%edx),%eax
+	jae bad_get_user
 2:	movzwl -1(%eax),%edx
 	xorl %eax,%eax
 	ret
@@ -55,8 +55,8 @@ __get_user_4:
 	movl %esp,%edx
 	jc bad_get_user
 	andl $0xffffe000,%edx
-	cmpl %eax,addr_limit(%edx)
-	jnb bad_get_user
+	cmpl addr_limit(%edx),%eax
+	jae bad_get_user
 3:	movl -3(%eax),%edx
 	xorl %eax,%eax
 	ret

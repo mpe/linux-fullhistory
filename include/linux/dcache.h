@@ -71,9 +71,10 @@ struct dentry {
 
 struct dentry_operations {
 	int (*d_revalidate)(struct dentry *);
-	int (*d_hash) (struct dentry *,struct qstr *);
-	int (*d_compare) (struct dentry *,struct qstr *, struct qstr *);
+	int (*d_hash) (struct dentry *, struct qstr *);
+	int (*d_compare) (struct dentry *, struct qstr *, struct qstr *);
 	void (*d_delete)(struct dentry *);
+	void (*d_iput)(struct dentry *, struct inode *);
 	void (*d_release)(struct dentry *);
 };
 

@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.45 1997/12/04 03:55:17 freitag Exp $
+ * Version:	$Id: udp.c,v 1.47 1997/12/27 20:41:16 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -620,7 +620,18 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	u8  tos;
 	int err;
 
-	if (len>65535)
+	/* This check is ONLY to check for arithmetic overflow
+	   on integer(!) len. Not more! Real check will be made
+	   in ip_build_xmit --ANK
+
+	   BTW socket.c -> af_*.c -> ... make multiple
+	   invalid conversions size_t -> int. We MUST repair it f.e.
+	   by replacing all of them with size_t and revise all
+	   the places sort of len += sizeof(struct iphdr)
+	   If len was ULONG_MAX-10 it would be cathastrophe  --ANK
+	 */
+
+	if (len < 0 || len > 0xFFFF)
 		return -EMSGSIZE;
 
 	/* 
@@ -632,7 +643,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT))
 	  	return -EINVAL;
-
 
 	/*
 	 *	Get and verify the address. 
@@ -653,13 +663,27 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		ufh.uh.dest = usin->sin_port;
 		if (ufh.uh.dest == 0)
 			return -EINVAL;
-		/* XXX: is a one-behind cache for the dst_entry worth it? */
+		/* XXX: is a one-behind cache for the dst_entry worth it?
+
+		   Nope. ip_route_output is slower than nothing, but it
+		   is enough fast to forget about caching its results.
+		   Really, checking route validity in general case
+		   is not much faster complete lookup.
+		   It was main reason why I removed it from 2.1.
+		   The second reason was that idle sockets held
+		   a lot of stray destinations.		--ANK
+		 */
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
 			return -EINVAL;
 		ufh.daddr = sk->daddr;
 		ufh.uh.dest = sk->dummy_th.dest;
-		rt = (struct rtable *)sk->dst_cache;
+
+		/*
+		   BUGGG Khm... And who will validate it? Fixing it fastly...
+		                                                        --ANK
+		 */
+		rt = (struct rtable *)dst_check(&sk->dst_cache, 0);
   	}
 
 	ipc.addr = sk->saddr;
@@ -689,7 +713,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		tos |= 1;
 		rt = NULL; /* sorry */
 	}
-		
+
 	if (MULTICAST(daddr)) {
 		if (!ipc.oif)
 			ipc.oif = sk->ip_mc_index;
@@ -777,7 +801,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		}
 
 		default:
-			return(-EINVAL);
+			return(-ENOIOCTLCMD);
 	}
 	return(0);
 }

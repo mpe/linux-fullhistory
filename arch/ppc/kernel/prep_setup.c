@@ -28,6 +28,9 @@
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/ioport.h>
+#ifdef CONFIG_ABSTRACT_CONSOLE
+#include <linux/console.h>
+#endif
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -36,15 +39,21 @@
 #include <asm/pgtable.h>
 #include <asm/ide.h>
 
+#ifdef CONFIG_SOUND
+#include <../drivers/sound/sound_config.h>
+#include <../drivers/sound/dev_table.h>
+#endif
+
 /* for the mac fs */
 kdev_t boot_dev;
+/* used in nasty hack for sound - see prep_setup_arch() -- Cort */
+long ppc_cs4232_dma, ppc_cs4232_dma2;
+unsigned long empty_zero_page[1024];
 
 extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
 extern int probingmem;
 extern unsigned long loops_per_sec;
-
-unsigned long empty_zero_page[1024];
 extern unsigned char aux_device_present;
 
 #ifdef CONFIG_BLK_DEV_RAM
@@ -52,9 +61,6 @@ extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
-
-
-extern char saved_command_line[256];
 
 void prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
@@ -75,68 +81,25 @@ prep_get_cpuinfo(char *buffer)
 	extern char *Motherboard_map_name;
 	extern RESIDUAL res;
 	int i;
-	int pvr = _get_PVR();
 	int len;
-	char *model;
-  
-	switch (pvr>>16)
-	{
-	case 1:
-		model = "601";
-		break;
-	case 3:
-		model = "603";
-		break;
-	case 4:
-		model = "604";
-		break;
-	case 6:
-		model = "603e";
-		break;
-	case 7:
-		model = "603ev";
-		break;
-	default:
-		model = "unknown";
-		break;
-	}
   
 #ifdef __SMP__
 #define CD(X)		(cpu_data[n].X)  
 #else
 #define CD(X) (X)
-#define CPUN 0
 #endif
   
-	len = sprintf(buffer,"processor\t: %d\n"
-		      "cpu\t\t: %s\n"
-		      "revision\t: %d.%d\n"
-		      "upgrade\t\t: %s\n"
-		      "clock\t\t: %dMHz\n"
-		      "bus clock\t: %dMHz\n"
-		      "machine\t\t: %s (sn %s)\n"
-		      "pci map\t\t: %s\n",
-		      CPUN,
-		      model,
-		      MAJOR(pvr), MINOR(pvr),
-		      (inb(IBM_EQUIP_PRESENT) & 2) ? "not upgrade" : "upgrade",
-		      (res.VitalProductData.ProcessorHz > 1024) ?
-		      res.VitalProductData.ProcessorHz>>20 :
-		      res.VitalProductData.ProcessorHz,
-		      (res.VitalProductData.ProcessorBusHz > 1024) ?
-		      res.VitalProductData.ProcessorBusHz>>20 :
-		      res.VitalProductData.ProcessorBusHz,
-		      res.VitalProductData.PrintableModel,
-		      res.VitalProductData.Serial,
-		      Motherboard_map_name
-		);
-  
+	len = sprintf(buffer,"machine\t\t: PReP %s\n",Motherboard_map_name);
+	
+	if ( res.ResidualLength == 0 )
+		return len;
+
 	/* print info about SIMMs */
 	len += sprintf(buffer+len,"simms\t\t: ");
 	for ( i = 0 ; (res.ActualNumMemories) && (i < MAX_MEMS) ; i++ )
 	{
 		if ( res.Memories[i].SIMMSize != 0 )
-			len += sprintf(buffer+len,"%d:%dM ",i,
+			len += sprintf(buffer+len,"%d:%ldM ",i,
 				       (res.Memories[i].SIMMSize > 1024) ?
 				       res.Memories[i].SIMMSize>>20 :
 				       res.Memories[i].SIMMSize);
@@ -148,11 +111,11 @@ prep_get_cpuinfo(char *buffer)
 	switch(res.VitalProductData.TLBAttrib)
 	{
 	case CombinedTLB:
-		len += sprintf(buffer+len," %d entries\n",
+		len += sprintf(buffer+len," %ld entries\n",
 			       res.VitalProductData.TLBSize);
 		break;
 	case SplitTLB:
-		len += sprintf(buffer+len," (split I/D) %d/%d entries\n",
+		len += sprintf(buffer+len," (split I/D) %ld/%ld entries\n",
 			       res.VitalProductData.I_TLBSize,
 			       res.VitalProductData.D_TLBSize);
 		break;
@@ -166,12 +129,12 @@ prep_get_cpuinfo(char *buffer)
 	switch(res.VitalProductData.CacheAttrib)
 	{
 	case CombinedCAC:
-		len += sprintf(buffer+len,"%dkB LineSize\n",
+		len += sprintf(buffer+len,"%ldkB LineSize %ldB\n",
 			       res.VitalProductData.CacheSize,
 			       res.VitalProductData.CacheLineSize);
 		break;
 	case SplitCAC:
-		len += sprintf(buffer+len,"(split I/D) %dkB/%dkB Linesize %dB/%dB\n",
+		len += sprintf(buffer+len,"(split I/D) %ldkB/%ldkB Linesize %ldB/%ldB\n",
 			       res.VitalProductData.I_CacheSize,
 			       res.VitalProductData.D_CacheSize,
 			       res.VitalProductData.D_CacheLineSize,
@@ -194,54 +157,17 @@ prep_get_cpuinfo(char *buffer)
 		len += sprintf(buffer+len,"l2\t\t: not present\n");
 	}
 
-
-	len += sprintf(buffer+len, "bogomips\t: %lu.%02lu\n",
-		       CD(loops_per_sec+2500)/500000,
-		       (CD(loops_per_sec+2500)/5000) % 100);
-  
-	/*
-	 * Ooh's and aah's info about zero'd pages in idle task
-	 */ 
-	{
-		extern unsigned int zerocount, zerototal, zeropage_hits,zeropage_calls;
-		len += sprintf(buffer+len,"zero pages\t: total %u (%uKb) "
-			       "current: %u (%uKb) hits: %u/%u (%lu%%)\n",
-			       zerototal, (zerototal*PAGE_SIZE)>>10,
-			       zerocount, (zerocount*PAGE_SIZE)>>10,
-			       zeropage_hits,zeropage_calls,
-			       /* : 1 below is so we don't div by zero */
-			       (zeropage_hits*100) /
-			            ((zeropage_calls)?zeropage_calls:1));
-	}
 	return len;
 }
 
 __initfunc(void
-prep_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
-	   unsigned long * memory_end_p))
+prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	extern char cmd_line[];
-	extern char _etext[], _edata[], _end[];
-	extern int panic_timeout;
 	unsigned char reg;
-
-	/* Save unparsed command line copy for /proc/cmdline */
-	strcpy( saved_command_line, cmd_line );
-	*cmdline_p = cmd_line;
-  
-	*memory_start_p = (unsigned long) Hash+Hash_size;
-	(unsigned long *)*memory_end_p = (unsigned long *)(res.TotalMemory+KERNELBASE);
 
 	/* init to some ~sane value until calibrate_delay() runs */
 	loops_per_sec = 50000000;
-	
-	/* reboot on panic */	
-	panic_timeout = 180;
-	
-	init_task.mm->start_code = PAGE_OFFSET;
-	init_task.mm->end_code = (unsigned long) _etext;
-	init_task.mm->end_data = (unsigned long) _edata;
-	init_task.mm->brk = (unsigned long) _end;	
 	
 	aux_device_present = 0xaa;
 	/* Set up floppy in PS/2 mode */
@@ -250,24 +176,19 @@ prep_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	reg = (reg & 0x3F) | 0x40;
 	outb(reg, SIO_CONFIG_RD);
 	outb(reg, SIO_CONFIG_RD);	/* Have to write twice to change! */
-	
-	switch ( _machine )
+
+	/* we should determine this according to what we find! -- Cort */
+	switch ( _prep_type )
 	{
-	case _MACH_IBM:
+	case _PREP_IBM:
 		ROOT_DEV = to_kdev_t(0x0301); /* hda1 */
 		break;
-	case _MACH_Motorola:
+	case _PREP_Motorola:
 		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
 		break;
 	}
 	
 #ifdef CONFIG_BLK_DEV_RAM
-#if 0
-	ROOT_DEV = to_kdev_t(0x0200); /* floppy */  
-	rd_prompt = 1;
-	rd_doload = 1;
-	rd_image_start = 0;
-#endif
 	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
 	if ( initrd_start )
 	{
@@ -282,13 +203,62 @@ prep_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 #endif
 
 	printk("Boot arguments: %s\n", cmd_line);
-
-	print_residual_device_info();
 	
-	request_region(0x20,0x20,"pic1");
+#ifdef CONFIG_CS4232
+	/*
+	 * setup proper values for the cs4232 driver so we don't have
+	 * to recompile for the motorola or ibm workstations sound systems.
+	 * This is a really nasty hack, but unless we change the driver
+	 * it's the only way to support both addrs from one binary.
+	 * -- Cort
+	 */
+	if ( is_prep )
+	{
+		extern struct card_info snd_installed_cards[];
+		struct card_info  *snd_ptr;
+
+		for ( snd_ptr = snd_installed_cards; 
+		      snd_ptr < &snd_installed_cards[num_sound_cards];
+		      snd_ptr++ )
+		{
+			if ( snd_ptr->card_type == SNDCARD_CS4232 )
+			{
+				if ( _prep_type == _PREP_Motorola )
+				{
+					snd_ptr->config.io_base = 0x830;
+					snd_ptr->config.irq = 10;
+					snd_ptr->config.dma = ppc_cs4232_dma = 6;
+					snd_ptr->config.dma2 = ppc_cs4232_dma2 = 7;
+				}
+				if ( _prep_type == _PREP_IBM )
+				{
+					snd_ptr->config.io_base = 0x530;
+					snd_ptr->config.irq =  5;
+					snd_ptr->config.dma = ppc_cs4232_dma = 1;
+					/* this is wrong - but leave it for now */
+					snd_ptr->config.dma2 = ppc_cs4232_dma2 = 7;
+				}
+			}
+		}
+	}
+#endif /* CONFIG_CS4232 */	
+	
+
+	/*print_residual_device_info();*/
+        request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
+
+#ifdef CONFIG_ABSTRACT_CONSOLE
+#ifdef CONFIG_VGA_CONSOLE
+        conswitchp = &vga_con;
+#endif
+#ifdef CONFIG_FB
+	/* Frame buffer device based console */
+	conswitchp = &fb_con;
+#endif
+#endif
 }

@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.22 1997/10/29 20:27:24 kuznet Exp $
+ *	Version: $Id: igmp.c,v 1.24 1997/12/17 20:14:10 kuznet Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -131,19 +131,12 @@ static __inline__ void igmp_stop_timer(struct ip_mc_list *im)
 	}
 }
 
-extern __inline__ unsigned int random(void)
-{
-	static unsigned long seed=152L;
-	seed=seed*69069L+1;
-	return seed^jiffies;
-}
-
 static __inline__ void igmp_start_timer(struct ip_mc_list *im, int max_delay)
 {
 	int tv;
 	if (im->tm_running)
 		return;
-	tv=random() % max_delay;
+	tv=net_random() % max_delay;
 	im->timer.expires=jiffies+tv+2;
 	im->tm_running=1;
 	add_timer(&im->timer);
@@ -186,7 +179,6 @@ static int igmp_send_report(struct device *dev, u32 group, int type)
 	skb->dst = &rt->u.dst;
 
 	skb_reserve(skb, (dev->hard_header_len+15)&~15);
-	ip_ll_header(skb);
 
 	skb->nh.iph = iph = (struct iphdr *)skb_put(skb, sizeof(struct iphdr)+4);
 
@@ -342,22 +334,6 @@ int igmp_rcv(struct sk_buff *skb, unsigned short len)
 
 #endif
 
-/*
- *	Map a multicast IP onto multicast MAC for type ethernet.
- */
-
-extern __inline__ void ip_mc_map(u32 addr, char *buf)
-{
-	addr=ntohl(addr);
-	buf[0]=0x01;
-	buf[1]=0x00;
-	buf[2]=0x5e;
-	buf[5]=addr&0xFF;
-	addr>>=8;
-	buf[4]=addr&0xFF;
-	addr>>=8;
-	buf[3]=addr&0x7F;
-}
 
 /*
  *	Add a filter to a device
@@ -365,15 +341,18 @@ extern __inline__ void ip_mc_map(u32 addr, char *buf)
 
 static void ip_mc_filter_add(struct in_device *in_dev, u32 addr)
 {
-	char buf[6];
+	char buf[MAX_ADDR_LEN];
 	struct device *dev = in_dev->dev;
 
-	if (!(dev->flags & IFF_MULTICAST))
-		return;
-	if (dev->type!=ARPHRD_ETHER && dev->type!=ARPHRD_FDDI)
-		return; /* Only do ethernet or FDDI for now */
-	ip_mc_map(addr, buf);
-	dev_mc_add(dev,buf,ETH_ALEN,0);
+	/* Checking for IFF_MULTICAST here is WRONG-WRONG-WRONG.
+	   We will get multicast token leakage, when IFF_MULTICAST
+	   is changed. This check should be done in dev->set_multicast_list
+	   routine. Something sort of:
+	   if (dev->mc_list && dev->flags&IFF_MULTICAST) { do it; }
+	   --ANK
+	 */
+	if (arp_mc_map(addr, buf, dev, 0) == 0)
+		dev_mc_add(dev,buf,dev->addr_len,0);
 }
 
 /*
@@ -382,18 +361,19 @@ static void ip_mc_filter_add(struct in_device *in_dev, u32 addr)
 
 static void ip_mc_filter_del(struct in_device *in_dev, u32 addr)
 {
-	char buf[6];
+	char buf[MAX_ADDR_LEN];
 	struct device *dev = in_dev->dev;
 
-	if (dev->type!=ARPHRD_ETHER && dev->type!=ARPHRD_FDDI)
-		return; /* Only do ethernet or FDDI for now */
-	ip_mc_map(addr,buf);
-	dev_mc_delete(dev,buf,ETH_ALEN,0);
+	if (arp_mc_map(addr, buf, dev, 0) == 0)
+		dev_mc_delete(dev,buf,dev->addr_len,0);
 }
 
 static void igmp_group_dropped(struct ip_mc_list *im)
 {
-	ip_mc_filter_del(im->interface, im->multiaddr);
+	if (im->loaded) {
+		im->loaded = 0;
+		ip_mc_filter_del(im->interface, im->multiaddr);
+	}
 
 #ifdef CONFIG_IP_MULTICAST
 	if (LOCAL_MCAST(im->multiaddr))
@@ -410,7 +390,10 @@ static void igmp_group_dropped(struct ip_mc_list *im)
 
 static void igmp_group_added(struct ip_mc_list *im)
 {
-	ip_mc_filter_add(im->interface, im->multiaddr);
+	if (im->loaded == 0) {
+		im->loaded = 1;
+		ip_mc_filter_add(im->interface, im->multiaddr);
+	}
 
 #ifdef CONFIG_IP_MULTICAST
 	if (LOCAL_MCAST(im->multiaddr))
@@ -458,13 +441,13 @@ void ip_mc_inc_group(struct in_device *in_dev, u32 addr)
 	im->timer.function=&igmp_timer_expire;
 	im->unsolicit_count = IGMP_Unsolicited_Report_Count;
 	im->reporter = 0;
+	im->loaded = 0;
 #endif
 	im->next=in_dev->mc_list;
 	in_dev->mc_list=im;
-	if (in_dev->dev->flags & IFF_UP) {
-		igmp_group_added(im);
+	igmp_group_added(im);
+	if (in_dev->dev->flags & IFF_UP)
 		ip_rt_multicast_event(in_dev);
-	}
 	return;
 }
 
@@ -480,10 +463,9 @@ int ip_mc_dec_group(struct in_device *in_dev, u32 addr)
 		if (i->multiaddr==addr) {
 			if (--i->users == 0) {
 				*ip = i->next;
-				if (in_dev->dev->flags & IFF_UP) {
-					igmp_group_dropped(i);
+				igmp_group_dropped(i);
+				if (in_dev->dev->flags & IFF_UP)
 					ip_rt_multicast_event(in_dev);
-				}
 				kfree_s(i, sizeof(*i));
 			}
 			return 0;
@@ -500,6 +482,8 @@ void ip_mc_down(struct in_device *in_dev)
 
 	for (i=in_dev->mc_list; i; i=i->next)
 		igmp_group_dropped(i);
+
+	ip_mc_dec_group(in_dev, IGMP_ALL_HOSTS);
 }
 
 /* Device going up */
@@ -507,6 +491,8 @@ void ip_mc_down(struct in_device *in_dev)
 void ip_mc_up(struct in_device *in_dev)
 {
 	struct ip_mc_list *i;
+
+	ip_mc_inc_group(in_dev, IGMP_ALL_HOSTS);
 
 	for (i=in_dev->mc_list; i; i=i->next)
 		igmp_group_added(i);
@@ -522,17 +508,9 @@ void ip_mc_destroy_dev(struct in_device *in_dev)
 
 	while ((i = in_dev->mc_list) != NULL) {
 		in_dev->mc_list = i->next;
+		igmp_group_dropped(i);
 		kfree_s(i, sizeof(*i));
 	}
-}
-
-/* Initialize multicasting on an IP interface */
-
-void ip_mc_init_dev(struct in_device *in_dev)
-{
-	in_dev->mc_list = NULL;
-	in_dev->mr_v1_seen = 0;
-	ip_mc_inc_group(in_dev, IGMP_ALL_HOSTS);
 }
 
 static struct in_device * ip_mc_find_dev(struct ip_mreqn *imr)
@@ -697,9 +675,10 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 				begin=pos;
 			}
 			if(pos>offset+length)
-				break;
+				goto done;
 		}
 	}
+done:
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
 	if(len>length)

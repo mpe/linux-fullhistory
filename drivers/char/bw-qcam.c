@@ -1,7 +1,10 @@
 /*
  *    QuickCam Driver For Video4Linux.
  *
+ *	This version only works as a module.
+ *
  *	Video4Linux conversion work by Alan Cox.
+ *	Parport compatibility by Phil Blundell.
  */
 
 /* qcam-lib.c -- Library for programming with the Connectix QuickCam.
@@ -44,41 +47,41 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
-#include <linux/ioport.h>
-#include <asm/io.h>
+#include <linux/parport.h>
 #include <linux/sched.h>
-#include <linux/videodev.h>
 #include <linux/version.h>
+#include <linux/videodev.h>
 #include <asm/uaccess.h>
 
 #include "bw-qcam.h"
 
 extern __inline__ int read_lpstatus(struct qcam_device *q)
 {
-	return inb_p(q->port+1);
+	return parport_read_status(q->pport);
 }
 
 extern __inline__ int read_lpcontrol(struct qcam_device *q)
 {
-	return inb_p(q->port+2);
+	return parport_read_control(q->pport);
 }
 
 extern __inline__ int read_lpdata(struct qcam_device *q)
 {
-	return inb_p(q->port);
+	return parport_read_data(q->pport);
 }
 
 extern __inline__ void write_lpdata(struct qcam_device *q, int d)
 {
-	outb_p(d, q->port);
+	parport_write_data(q->pport, d);
 }
 
-extern __inline__ void write_lpcontrol(struct qcam_device *q,int d)
+extern __inline__ void write_lpcontrol(struct qcam_device *q, int d)
 {
-	outb(d, q->port+2);
+	parport_write_control(q->pport, d);
 }
 
 static int qc_waithand(struct qcam_device *q, int val);
@@ -122,21 +125,25 @@ static int qc_calibrate(struct qcam_device *q)
 /* Initialize the QuickCam driver control structure.  This is where
  * defaults are set for people who don't have a config file.*/
 
-static struct qcam_device *qcam_init(int port)
+static struct qcam_device *qcam_init(struct parport *port)
 {
 	struct qcam_device *q;
 	
-	if(check_region(port,3))
+	q = kmalloc(sizeof(struct qcam_device), GFP_KERNEL);
+
+	q->pport = port;
+	q->pdev = parport_register_device(port, "bw-qcam", NULL, NULL,
+					  NULL, 0, NULL);
+	if (q->pdev == NULL) 
 	{
-		printk(KERN_ERR "qcam: I/O port 0x%03X in use.\n", port);
+		printk(KERN_ERR "bw-qcam: couldn't register for %s.\n",
+		       port->name);
+		kfree(q);
 		return NULL;
 	}
 	
-	q = kmalloc(sizeof(struct qcam_device), GFP_KERNEL);
-	
 	memcpy(&q->vdev, &qcam_template, sizeof(qcam_template));
 
-	q->port = port;		/* Port 0 == Autoprobe */
 	q->port_mode = (QC_ANY | QC_NOTSET);
 	q->width = 320;
 	q->height = 240;
@@ -295,7 +302,7 @@ static int qc_detect(struct qcam_device *q)
 
 	/* Be liberal in what you accept...  */
 
-	if (count > 20 && count < 250)
+	if (count > 30 && count < 200)
 		return 1;	/* found */
 	else
 		return 0;	/* not found */
@@ -742,7 +749,9 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			qcam->bpp = p.depth;
 			
 			qc_setscanmode(qcam);
+			parport_claim_or_block(qcam->pdev);
 			qc_set(qcam);
+			parport_release(qcam->pdev);
 			return 0;
 		}
 		case VIDIOCSWIN:
@@ -816,9 +825,11 @@ static long qcam_read(struct video_device *v, char *buf, unsigned long count,  i
 {
 	struct qcam_device *qcam=(struct qcam_device *)v;
 	int len;
+	parport_claim_or_block(qcam->pdev);
 	/* Probably should have a semaphore against multiple users */
 	qc_reset(qcam);
 	len=qc_capture(qcam, buf,count);
+	parport_release(qcam->pdev);
 	return len;
 }
 
@@ -840,72 +851,83 @@ static struct video_device qcam_template=
 	0
 };
 
+#define MAX_CAMS 4
+static struct qcam_device *qcams[MAX_CAMS];
+static unsigned int num_cams = 0;
 
-#ifdef MODULE
-
-int io=0x378;
-
-MODULE_PARM(io,"i");
-
-static struct qcam_device *qcam;
-
-int init_module(void)
+int init_bwqcam(struct parport *port)
 {
-	qcam=qcam_init(io);
+	struct qcam_device *qcam;
+
+	if (num_cams == MAX_CAMS)
+	{
+		printk(KERN_ERR "Too many Quickcams (max %d)\n", MAX_CAMS);
+		return -ENOSPC;
+	}
+
+	qcam=qcam_init(port);
 	if(qcam==NULL)
 		return -ENODEV;
 		
+	parport_claim_or_block(qcam->pdev);
+
 	qc_reset(qcam);
 	
 	if(qc_detect(qcam)==0)
 	{
+		parport_release(qcam->pdev);
+		parport_unregister_device(qcam->pdev);
 		kfree(qcam);
-		printk(KERN_ERR "bw_qcam: No quickcam detected at 0x%03X\n", io);
 		return -ENODEV;
 	}
 	qc_calibrate(qcam);
+
+	parport_release(qcam->pdev);
 	
-	printk(KERN_INFO "Connectix Quickcam at 0x%03X\n", qcam->port);
+	printk(KERN_INFO "Connectix Quickcam on %s\n", qcam->pport->name);
 	
 	if(video_register_device(&qcam->vdev)==-1)
+	{
+		parport_unregister_device(qcam->pdev);
+		kfree(qcam);
 		return -ENODEV;
+	}
+
+	qcams[num_cams++] = qcam;
+
 	return 0;
+}
+
+void close_bwqcam(struct qcam_device *qcam)
+{
+	video_unregister_device(&qcam->vdev);
+	parport_unregister_device(qcam->pdev);
+	kfree(qcam);
+}
+
+#ifdef MODULE
+int init_module(void)
+{
+	struct parport *port;
+
+	for (port = parport_enumerate(); port; port=port->next)
+		init_bwqcam(port);
+
+	return (num_cams)?0:-ENODEV;
 }
 
 void cleanup_module(void)
 {
-	video_unregister_device(&qcam->vdev);
-	kfree(qcam);
+	unsigned int i;
+	for (i = 0; i < num_cams; i++)
+		close_bwqcam(qcams[i]);
 }
-
 #else
-
-void init_bw_qcams(void)
+__initfunc(int init_bwqcams(struct video_init *unused))
 {
-	int io_ports[3]={0x278,0x378, 0x3BC};
-	struct qcam_device *qcam;
-	int i;
-	
-	for(i=0;i<3;i++)
-	{
-		qcam=qcam_init(io_ports[i]);
-		if(qcam==NULL)
-			continue;
-		
-		qc_reset(qcam);
-	
-		if(qc_detect(qcam)==0)
-		{
-			kfree(qcam);
-			continue;
-		}
-		qc_calibrate(qcam);
-	
-		printk(KERN_INFO "Connectix Quickcam at 0x%03X\n", qcam->port);
-	
-		if(video_register_device(&qcam->vdev)==-1)
-			return -ENODEV;
-	}
-}
+	struct parport *port;
 
+	for (port = parport_enumerate(); port; port=port->next)
+		init_bwqcam(port);
+}
 #endif

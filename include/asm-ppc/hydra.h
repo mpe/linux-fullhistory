@@ -1,11 +1,7 @@
 /*
- *  linux/hydra.h -- Mac I/O `Hydra' definitions
+ *  asm-ppc/hydra.h -- Mac I/O `Hydra' definitions
  *
  *  Copyright (C) 1997 Geert Uytterhoeven
- *
- *  This file is subject to the terms and conditions of the GNU General Public
- *  License.  See the file COPYING in the main directory of this archive
- *  for more details.
  *
  *  This file is based on the following documentation:
  *
@@ -98,8 +94,9 @@ extern volatile struct Hydra *Hydra;
 #define HYDRA_INT_EXT7		18
 #define HYDRA_INT_SPARE		19
 
+extern int hydra_init(void);
+extern void macio_adb_init(void);
+
 #endif /* __KERNEL__ */
-volatile struct Hydra *find_hydra(void);
-void hydra_post_openpic_init(void);
 
 #endif /* _ASMPPC_HYDRA_H */

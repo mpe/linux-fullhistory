@@ -2,7 +2,8 @@
 keymaps 0-2,4-5,8,12
 # We use the Command (pretzel) key as Alt, and the Option key as AltGr.
 #
-keycode 0x00 =
+keycode 0x00 = a
+	altgr   keycode 0x00 = Hex_A
 keycode 0x01 = s               
 keycode 0x02 = d
 	altgr   keycode 0x02 = Hex_D   
@@ -162,9 +163,6 @@ keycode 0x58 = KP_6
 keycode 0x59 = KP_7            
 	alt     keycode 0x59 = Ascii_7         
 	altgr   keycode 0x59 = Hex_7
-# keycode 0 (A) is remapped to here         
-keycode 0x5a = a
-	altgr   keycode 0x00 = Hex_A
 keycode 0x5b = KP_8            
 	alt     keycode 0x5b = Ascii_8         
 	altgr   keycode 0x5b = Hex_8         

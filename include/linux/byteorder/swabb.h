@@ -6,7 +6,10 @@
  * SWAp Bytes Bizarrely
  *	swaHHXX[ps]?(foo)
  *
- * Support for obNUXIous vax-endian and other bizarre architectures...
+ * Support for obNUXIous pdp-endian and other bizarre architectures.
+ * Will Linux ever run on such ancient beasts? if not, this file
+ * will be but a programming pearl. Still, it's a reminder that
+ * cpu_to_beXX and beXX_to_cpu should be well distinguished.
  *
  */
 
@@ -15,13 +18,11 @@
  * swahw32	swap 16-bit half-words in a 32-bit word
  * swahb32	swap 8-bit halves of each 16-bit half-word in a 32-bit word
  *
- * No 64-bit support yet. I don't know VAX conventions for long longs.
+ * No 64-bit support yet. I don't know NUXI conventions for long longs.
  * I guarantee it will be a mess when it's there, though :->
- * It will be even worse if there are conflicting 64-bit conventions for vaxen
+ * It will be even worse if there are conflicting 64-bit conventions.
+ * Hopefully, no one ever used 64-bit objects on NUXI machines.
  *
- * Note that if communicating with vax machines becomes useful in some kernel
- * FS driver, we'd have to move that mess into byteorder/swab.h, and
- * create cpu_to_ve32 and suches. Ouch.
  */
 
 
@@ -31,8 +32,8 @@
 		(((__u32)(x) & (__u32)0xffff0000UL) >> 16) ))
 #define ___swahb32(x) \
 	((__u32)( \
-		(((__u32)(x) & (__u32)0x00ff00ffUL) << 16) | \
-		(((__u32)(x) & (__u32)0xff00ff00UL) >> 16) ))
+		(((__u32)(x) & (__u32)0x00ff00ffUL) << 8) | \
+		(((__u32)(x) & (__u32)0xff00ff00UL) >> 8) ))
 
 /*
  * provide defaults when no architecture-specific optimization is detected

@@ -158,6 +158,15 @@ static struct proc_dir_entry proc_pid_ringbuf = {
 };
 #endif
 
+#ifdef __SMP__
+static struct proc_dir_entry proc_pid_cpu = {
+	PROC_PID_CPU, 3, "cpu",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations,
+	NULL, proc_pid_fill_inode,
+};
+#endif
+
 void proc_base_init(void)
 {
 #if CONFIG_AP1000
@@ -174,4 +183,17 @@ void proc_base_init(void)
 	proc_register(&proc_pid, &proc_pid_stat);
 	proc_register(&proc_pid, &proc_pid_statm);
 	proc_register(&proc_pid, &proc_pid_maps);
+#ifdef __SMP__	
+	proc_register(&proc_pid, &proc_pid_cpu);
+#endif	
 };
+
+
+
+
+
+
+
+
+
+

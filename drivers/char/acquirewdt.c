@@ -46,7 +46,6 @@ static int acq_is_open=0;
  
 #define WDT_STOP 0x43
 #define WDT_START 0x443
-#define WATCHDOG_MINOR 130
 
 #define WD_TIMO (100*60)		/* 1 minute */
 
@@ -181,7 +180,7 @@ static struct file_operations acq_fops = {
 static struct miscdevice acq_miscdev=
 {
 	WATCHDOG_MINOR,
-	"Acquire WDT",
+	"watchdog",
 	&acq_fops
 };
 

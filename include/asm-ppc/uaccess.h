@@ -4,6 +4,7 @@
 #ifndef __ASSEMBLY__
 #include <linux/sched.h>
 #include <linux/errno.h>
+#include <asm/processor.h>
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
@@ -16,15 +17,17 @@
  * For historical reasons, these macros are grossly misnamed.
  */
 
-#define KERNEL_DS	(0)
-#define USER_DS		(1)
+#define KERNEL_DS	((mm_segment_t) { 0 })
+#define USER_DS		((mm_segment_t) { 1 })
 
-#define get_fs()	(current->tss.fs)
 #define get_ds()	(KERNEL_DS)
+#define get_fs()	(current->tss.fs)
 #define set_fs(val)	(current->tss.fs = (val))
 
+#define segment_eq(a,b)	((a).seg == (b).seg)
+
+#define __kernel_ok (segment_eq(get_fs(), KERNEL_DS))
 #define __user_ok(addr,size) (((size) <= 0x80000000)&&((addr) <= 0x80000000-(size)))
-#define __kernel_ok	(get_fs() == KERNEL_DS)
 #define __access_ok(addr,size) (__kernel_ok || __user_ok((addr),(size)))
 #define access_ok(type,addr,size) __access_ok((unsigned long)(addr),(size))
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.64 1997/10/30 23:52:24 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.65 1997/12/13 21:52:58 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -819,6 +819,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	if (after(ack, tp->snd_nxt) || before(ack, tp->snd_una))
 		goto uninteresting_ack;
 
+	dst_confirm(sk->dst_cache);
+
 	/* If there is data set flag 1 */
 	if (len != th->doff*4) {
 		flag |= FLAG_DATA;
@@ -1087,6 +1089,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	if (skb->seq == tp->rcv_nxt) {
 		/* Ok. In sequence. */
 queue_and_out:
+		dst_confirm(sk->dst_cache);
 		skb_queue_tail(&sk->receive_queue, skb);
 		tp->rcv_nxt = skb->end_seq;
 		tcp_ofo_queue(sk);
@@ -1387,6 +1390,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			
 			skb_pull(skb,th->doff*4);
 			
+			/* DO NOT notify forward progress here.
+			 * It saves dozen of CPU instructions in fast path. --ANK
+			 */
 			skb_queue_tail(&sk->receive_queue, skb);
 			tp->rcv_nxt = skb->end_seq;
 

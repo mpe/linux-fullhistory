@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.12 1997/08/28 02:23:19 ecd Exp $
+/*  $Id: setup.c,v 1.18 1997/12/18 02:43:00 ecd Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -36,6 +36,10 @@
 #include <asm/pgtable.h>
 #include <asm/idprom.h>
 #include <asm/head.h>
+
+#ifdef CONFIG_IP_PNP
+#include <net/ipconfig.h>
+#endif
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -236,19 +240,34 @@ extern int root_mountflags;
 char saved_command_line[256];
 char reboot_command[256];
 
-#ifdef CONFIG_ROOT_NFS
-extern char nfs_root_addrs[];
-#endif
-
 unsigned long phys_base;
 
 static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
 
+#if 0
+#include <linux/console.h>
+
+static void prom_cons_write(struct console *con, const char *str, unsigned count)
+{
+        while (count--)
+                prom_printf("%c", *str++);
+}
+
+static struct console prom_console = {
+        "PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
+};
+#endif
+
 __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
+	extern int serial_console;  /* in console.c, of course */
 	unsigned long lowest_paddr;
 	int total, i;
+
+#if 0
+	register_console(&prom_console);
+#endif
 
 	/* Initialize PROM console and command line. */
 	*cmdline_p = prom_getbootargs();
@@ -330,62 +349,58 @@ __initfunc(void setup_arch(char **cmdline_p,
 	init_task.mm->context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
 
-#ifdef CONFIG_ROOT_NFS	
-	if (!*nfs_root_addrs) {
+#ifdef CONFIG_IP_PNP
+	if (!ic_set_manually) {
 		int chosen = prom_finddevice ("/chosen");
 		u32 cl, sv, gw;
-		char *p = nfs_root_addrs;
 		
 		cl = prom_getintdefault (chosen, "client-ip", 0);
 		sv = prom_getintdefault (chosen, "server-ip", 0);
 		gw = prom_getintdefault (chosen, "gateway-ip", 0);
 		if (cl && sv) {
-			strcpy (p, in_ntoa (cl));
-			p += strlen (p);
-			*p++ = ':';
-			strcpy (p, in_ntoa (sv));
-			p += strlen (p);
-			*p++ = ':';
-			if (gw) {
-				strcpy (p, in_ntoa (gw));
-				p += strlen (p);
-			}
-			strcpy (p, "::::none");
+			ic_myaddr = cl;
+			ic_servaddr = sv;
+			if (gw)
+				ic_gateway = gw;
+			ic_bootp_flag = ic_rarp_flag = 0;
 		}
 	}
 #endif
 
 #ifdef CONFIG_SUN_SERIAL
-	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
-#endif
-	{
-		extern int serial_console;  /* in console.c, of course */
-#if !CONFIG_SUN_SERIAL
-		serial_console = 0;
-#else
-		switch (console_fb) {
-		case 0: /* Let's get our io devices from prom */
-			{
-				int idev = prom_query_input_device();
-				int odev = prom_query_output_device();
-				if (idev == PROMDEV_IKBD && odev == PROMDEV_OSCREEN) {
-					serial_console = 0;
-				} else if (idev == PROMDEV_ITTYA && odev == PROMDEV_OTTYA) {
-					serial_console = 1;
-				} else if (idev == PROMDEV_ITTYB && odev == PROMDEV_OTTYB) {
-					serial_console = 2;
-				} else {
-					prom_printf("Inconsistent console\n");
-					prom_halt();
-				}
+	switch (console_fb) {
+	case 0: /* Let's get our io devices from prom */
+		{
+			int idev = prom_query_input_device();
+			int odev = prom_query_output_device();
+			if (idev == PROMDEV_IKBD && odev == PROMDEV_OSCREEN) {
+				serial_console = 0;
+			} else if (idev == PROMDEV_ITTYA && odev == PROMDEV_OTTYA) {
+				serial_console = 1;
+			} else if (idev == PROMDEV_ITTYB && odev == PROMDEV_OTTYB) {
+				serial_console = 2;
+			} else {
+				prom_printf("Inconsistent console: "
+					    "input %d, output %d\n",
+					    idev, odev);
+				prom_halt();
 			}
-			break;
-		case 1: serial_console = 0; break; /* Force one of the framebuffers as console */
-		case 2: serial_console = 1; break; /* Force ttya as console */
-		case 3: serial_console = 2; break; /* Force ttyb as console */
 		}
-#endif
+		break;
+	case 1: /* Force one of the framebuffers as console */
+		serial_console = 0;
+		break;
+	case 2: /* Force ttya as console */
+		serial_console = 1;
+		break;
+	case 3: /* Force ttyb as console */
+		serial_console = 2;
+		break;
 	}
+	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
+#else
+	serial_console = 0;
+#endif
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

@@ -12,10 +12,13 @@
 # Rewritten by Cort Dougan and Paul Mackerras
 #
 
-ifeq ($(CONFIG_PMAC),y)
-KERNELBASE	=0xc0000000
-else
+ifdef CONFIG_CHRP
+# XXX for now
 KERNELBASE	=0x90000000
+KERNELLOAD	=0x90010000
+else
+KERNELBASE	=0xc0000000 
+KERNELLOAD	=0xc0000000 
 endif
 
 # PowerPC (cross) tools
@@ -26,10 +29,11 @@ CHECKS		= checks
 endif
 
 ASFLAGS		=
-LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELBASE) -Bstatic
+LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELLOAD) -Bstatic
 CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
 CFLAGS		:= $(CFLAGS) -D__powerpc__ -fsigned-char -msoft-float -pipe \
-		-fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple -mstring
+		-fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple -mstring \
+		-DKERNELBASE=$(KERNELBASE)
 CPP		= $(CC) -E $(CFLAGS)
 
 ifdef CONFIG_601
@@ -56,30 +60,39 @@ SUBDIRS += arch/ppc/xmon
 CORE_FILES += arch/ppc/xmon/x.o
 endif
 
-ifdef CONFIG_PMAC
-MAKEBOOT = $(MAKE) -C arch/$(ARCH)/coffboot
-else
-# PReP and CHRP systems
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
-endif
+MAKECOFFBOOT = $(MAKE) -C arch/$(ARCH)/coffboot
+MAKECHRPBOOT = $(MAKE) -C arch/$(ARCH)/chrpboot
 
 checks:
 	@$(MAKE) -C arch/$(ARCH)/kernel checks
 
 BOOT_TARGETS = netboot znetboot zImage floppy install \
-	vmlinux.coff znetboot.initrd zImage.initrd
+	vmlinux.coff znetboot.initrd zImage.initrd vmlinux.coff.initrd
 
 $(BOOT_TARGETS): $(CHECKS) vmlinux
+	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
+	@$(MAKECHRPBOOT) $@
+
+pmac_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s pmac_defconfig arch/ppc/defconfig
+
+prep_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s prep_defconfig arch/ppc/defconfig
 
 tags:
 	etags */*.c include/{asm,linux}/*.h arch/ppc/kernel/*.{c,h}
 
 archclean:
-	rm -f arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h
-	rm -f arch/ppc/kernel/checks
+	rm -f arch/ppc/kernel/{mk_defs,ppc_defs.h,find_name,checks}
+	@$(MAKECOFFBOOT) clean
 	@$(MAKEBOOT) clean
+	@$(MAKECHRPBOOT) clean
 
 archdep:
 	$(MAKEBOOT) fastdep
+	$(MAKECHRPBOOT) fastdep
 

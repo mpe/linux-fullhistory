@@ -309,12 +309,14 @@ static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 	}
 	if(offset >= 16 && offset < 784) {
 		offset -= 16; offset >>= 2;
-		pt_os_succ_return(regs, *(((unsigned long *)(&t->reg_window[0]))+offset), addr);
+		if (t->w_saved)
+			pt_os_succ_return(regs, *(((unsigned long *)(&t->reg_window[0]))+offset), addr);
 		return;
 	}
 	if(offset >= 784 && offset < 832) {
 		offset -= 784; offset >>= 2;
-		pt_os_succ_return(regs, *(((unsigned long *)(&t->rwbuf_stkptrs[0]))+offset), addr);
+		if (t->w_saved)
+			pt_os_succ_return(regs, *(((unsigned long *)(&t->rwbuf_stkptrs[0]))+offset), addr);
 		return;
 	}
 	switch(offset) {
@@ -399,12 +401,14 @@ static inline void write_sunos_user(struct pt_regs *regs, unsigned long offset,
 		goto failure;
 	if(offset >= 16 && offset < 784) {
 		offset -= 16; offset >>= 2;
-		*(((unsigned long *)(&t->reg_window[0]))+offset) = value;
+		if (t->w_saved)
+			*(((unsigned long *)(&t->reg_window[0]))+offset) = value;
 		goto success;
 	}
 	if(offset >= 784 && offset < 832) {
 		offset -= 784; offset >>= 2;
-		*(((unsigned long *)(&t->rwbuf_stkptrs[0]))+offset) = value;
+		if (t->w_saved)
+			*(((unsigned long *)(&t->rwbuf_stkptrs[0]))+offset) = value;
 		goto success;
 	}
 	switch(offset) {
@@ -964,7 +968,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		addr = 1;
 
 	case PTRACE_CONT: { /* restart after signal. */
-		if (data > NSIG) {
+		if (data > _NSIG) {
 			pt_error_return(regs, EIO);
 			goto out;
 		}
@@ -1016,7 +1020,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	}
 
 	case PTRACE_SUNDETACH: { /* detach a process that was attached. */
-		if ((unsigned long) data > NSIG) {
+		if ((unsigned long) data > _NSIG) {
 			pt_error_return(regs, EIO);
 			goto out;
 		}
@@ -1063,10 +1067,7 @@ asmlinkage void syscall_trace(void)
 		current->pid, current->exit_code);
 #endif
 	if (current->exit_code) {
-		spin_lock_irq(&current->sigmask_lock);
-		current->signal |= (1 << (current->exit_code - 1));
-		spin_unlock_irq(&current->sigmask_lock);
+		send_sig (current->exit_code, current, 1);
+		current->exit_code = 0;
 	}
-
-	current->exit_code = 0;
 }

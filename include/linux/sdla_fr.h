@@ -1,7 +1,8 @@
 /*****************************************************************************
 * sdla_fr.h	Sangoma frame relay firmware API definitions.
 *
-* Author:	Gene Kozin	<74604.152@compuserve.com>
+* Author:	Jaspreet Singh  <jaspreet@sangoma.com>
+*		Gene Kozin	<74604.152@compuserve.com>
 *
 * Copyright:	(c) 1995-1996 Sangoma Technologies Inc.
 *
@@ -10,6 +11,9 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Oct 12, 1997	Jaspreet Singh	Added FR_READ_DLCI_IB_MAPPING
+* Jul 21, 1997 	Jaspreet Singh	Changed FRRES_TOO_LONG and FRRES_TOO_MANY to 
+*				0x05 and 0x06 respectively.
 * Dec 23, 1996	Gene Kozin	v2.0
 * Apr 29, 1996	Gene Kozin	v1.0 (merged version S502 & S508 definitions).
 * Sep 26, 1995	Gene Kozin	Initial version.
@@ -94,6 +98,7 @@ typedef struct fr_cmd
 #define FR_SET_MODEM_STATUS	0x31
 #define FR_READ_ERROR_STATS	0x32
 #define FR_FLUSH_ERROR_STATS	0x33
+#define FR_READ_DLCI_IB_MAPPING 0x34
 #define FR_READ_CODE_VERSION	0x40
 #define	FR_SET_INTR_MODE	0x50
 #define	FR_READ_INTR_MODE	0x51
@@ -104,8 +109,8 @@ typedef struct fr_cmd
 #define	FRRES_INOPERATIVE	0x02	/* channel inoperative */
 #define	FRRES_DLCI_INACTIVE	0x03	/* DLCI is inactive */
 #define	FRRES_DLCI_INVALID	0x04	/* DLCI is not configured */
-#define	FRRES_TOO_LONG		0x04
-#define	FRRES_TOO_MANY		0x05
+#define	FRRES_TOO_LONG		0x05
+#define	FRRES_TOO_MANY		0x06
 #define	FRRES_CIR_OVERFLOW	0x07	/* Tx throughput has exceeded CIR */
 #define	FRRES_BUFFER_OVERFLOW	0x08
 #define	FRRES_MODEM_FAILURE	0x10	/* DCD and/or CTS dropped */
@@ -160,6 +165,7 @@ typedef struct	fr508_flags
 	unsigned char iflag	PACKED;	/* 10h: interrupt flag */
 	unsigned char imask	PACKED;	/* 11h: interrupt mask */
 	unsigned long tse_offs	PACKED;	/* 12h: Tx status element */
+	unsigned short dlci	PACKED; /* 16h: DLCI NUMBER */
 } fr508_flags_t;
 
 /* 'event' field defines */

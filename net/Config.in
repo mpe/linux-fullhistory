@@ -11,7 +11,6 @@ if [ "$CONFIG_NETLINK" = "y" ]; then
 fi
 bool 'Network firewalls' CONFIG_FIREWALL
 bool 'Network aliasing'  CONFIG_NET_ALIAS
-bool 'Socket Filtering'  CONFIG_FILTER
 tristate 'Unix domain sockets' CONFIG_UNIX
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
@@ -43,19 +42,15 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI
 #  fi
   tristate 'WAN router' CONFIG_WAN_ROUTER
+  bool 'Fast switching (read help!)' CONFIG_NET_FASTROUTE
+  bool 'Forwarding between high speed interfaces' CONFIG_NET_HW_FLOWCONTROL
   bool 'CPU is too slow to handle full bandwidth' CONFIG_CPU_IS_SLOW
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'QoS and/or fair queueing' CONFIG_NET_SCHED
   if [ "$CONFIG_NET_SCHED" = "y" ]; then
-    tristate 'CBQ packet scheduler' CONFIG_NET_SCH_CBQ
-    tristate 'CSZ packet scheduler' CONFIG_NET_SCH_CSZ
-    tristate 'HFQ packet scheduler' CONFIG_NET_SCH_HFQ
-    tristate 'RED queueing discipline' CONFIG_NET_SCH_RED
-    tristate 'SFQ queueing discipline' CONFIG_NET_SCH_SFQ
-    tristate 'auxiliary TBF queue' CONFIG_NET_SCH_TBF
-    tristate 'auxiliary FIFO queue' CONFIG_NET_SCH_PFIFO
-    tristate 'auxiliary PRIO queue' CONFIG_NET_SCH_PRIO
+    source net/sched/Config.in
   fi
+  bool 'Network code profiler' CONFIG_NET_PROFILE
   fi
 fi
 endmenu

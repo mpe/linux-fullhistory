@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.33 1997/08/19 14:18:36 jj Exp $
+/* $Id: processor.h,v 1.40 1997/10/24 11:57:59 jj Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #ifndef __ASM_SPARC64_PROCESSOR_H
 #define __ASM_SPARC64_PROCESSOR_H
 
+#include <asm/asi.h>
 #include <asm/a.out.h>
 #include <asm/pstate.h>
 #include <asm/ptrace.h>
@@ -26,23 +27,42 @@
 /* User lives in his very own context, and cannot reference us. */
 #define TASK_SIZE	((1UL << (PAGE_SHIFT - 3)) * PGDIR_SIZE)
 
+#define COPY_TASK_STRUCT(dst, src)										\
+do {														\
+	if (src->tss.w_saved)											\
+		*dst = *src;											\
+	else {													\
+		memcpy (dst, src, ((const unsigned long)(&((struct task_struct *)0)->tss.reg_window)));		\
+		memcpy ((char *)dst + ((const unsigned long)(&((struct task_struct *)0)->tss.sig_address)),	\
+			(char *)src + ((const unsigned long)(&((struct task_struct *)0)->tss.sig_address)),	\
+			sizeof(struct task_struct) - 								\
+			  ((const unsigned long)(&((struct task_struct *)0)->tss.sig_address)));		\
+	}													\
+} while (0)
+
 #ifndef __ASSEMBLY__
 
 #define NSWINS		8
 
+typedef struct {
+	unsigned long seg;
+} mm_segment_t;
+
 /* The Sparc processor specific thread struct. */
 struct thread_struct {
 /*DC1*/	unsigned long ksp __attribute__ ((aligned(16)));
-	unsigned long kpc;
-/*DC2*/	unsigned long wstate;
-	unsigned int cwp;
-	unsigned int ctx;
+	unsigned int kpc;
+	unsigned short wstate;
+	unsigned short cwp;
 
-/*DC3*/	unsigned int flags;
-	unsigned int new_signal;
-	unsigned long current_ds;
-/*DC4*/	unsigned long w_saved;
-	struct pt_regs *kregs;
+/*DC2*/	unsigned short flags;
+	unsigned short ctx;
+	unsigned short w_saved;
+	unsigned short new_signal;
+	mm_segment_t current_ds;
+
+/*DC3*/	struct pt_regs *kregs;
+	unsigned long *utraps;
 
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
 	unsigned long rwbuf_stkptrs[NSWINS] __attribute__ ((aligned (8)));
@@ -50,7 +70,6 @@ struct thread_struct {
 	unsigned long sig_address __attribute__ ((aligned (8)));
 	unsigned long sig_desc;
 	struct sigstack sstk_info;
-	struct exec core_exec;     /* just what it says. */
 };
 
 #endif /* !(__ASSEMBLY__) */
@@ -66,19 +85,19 @@ struct thread_struct {
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
 		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
-#define INIT_TSS  {							\
-/* ksp, kpc, wstate, cwp, secctx */ 					\
-   0,   0,   0,	     0,	  0,						\
-/* flags,              new_signal, current_ds, */			\
-   SPARC_FLAG_KTHREAD, 0,          USER_DS,				\
-/* w_saved, kregs, */							\
-   0,       0,								\
-/* reg_window */							\
-   { { { 0, }, { 0, } }, }, 						\
-/* rwbuf_stkptrs */							\
-   { 0, 0, 0, 0, 0, 0, 0, 0, },						\
-/* sig_address, sig_desc, sstk_info, core_exec */			\
-   0,           0,        { 0, 0, }, { 0, },				\
+#define INIT_TSS  {						\
+/* ksp, kpc, wstate, cwp */ 					\
+   0,   0,   0,	     0,						\
+/* flags,              ctx, w_saved, new_signal, current_ds, */	\
+   SPARC_FLAG_KTHREAD, 0,   0,       0,          KERNEL_DS,	\
+/* kregs,   utraps, */						\
+   0,       0,							\
+/* reg_window */						\
+   { { { 0, }, { 0, } }, }, 					\
+/* rwbuf_stkptrs */						\
+   { 0, 0, 0, 0, 0, 0, 0, 0, },					\
+/* sig_address, sig_desc, sstk_info */				\
+   0,           0,        { 0, 0, },				\
 }
 
 #ifndef __ASSEMBLY__
@@ -89,15 +108,29 @@ extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 	return t->kpc;
 }
 
+/* On Uniprocessor, even in RMO processes see TSO semantics */
+#ifdef __SMP__
+#define TSTATE_INITIAL_MM	TSTATE_TSO
+#else
+#define TSTATE_INITIAL_MM	TSTATE_RMO
+#endif
+
 /* Do necessary setup to start up a newly executed thread. */
 #define start_thread(regs, pc, sp) \
 do { \
-	regs->tstate = (regs->tstate & (TSTATE_CWP)) | (TSTATE_IE); \
+	regs->tstate = (regs->tstate & (TSTATE_CWP)) | (TSTATE_INITIAL_MM|TSTATE_IE) | (ASI_PNF << 24); \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
 	current->tss.flags &= ~SPARC_FLAG_32BIT; \
 	current->tss.wstate = (1 << 3); \
+	if (current->tss.utraps) { \
+		if (*(current->tss.utraps) < 2) \
+			kfree (current->tss.utraps); \
+		else \
+			(*(current->tss.utraps))--; \
+		current->tss.utraps = NULL; \
+	} \
 	__asm__ __volatile__( \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x08]\n\t" \
@@ -128,12 +161,19 @@ do { \
 	pc &= 0x00000000ffffffffUL; \
 	sp &= 0x00000000ffffffffUL; \
 \
-	regs->tstate = (regs->tstate & (TSTATE_CWP))|(TSTATE_IE|TSTATE_AM); \
+	regs->tstate = (regs->tstate & (TSTATE_CWP))|(TSTATE_INITIAL_MM|TSTATE_IE|TSTATE_AM); \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
 	current->tss.flags |= SPARC_FLAG_32BIT; \
 	current->tss.wstate = (2 << 3); \
+	if (current->tss.utraps) { \
+		if (*(current->tss.utraps) < 2) \
+			kfree (current->tss.utraps); \
+		else \
+			(*(current->tss.utraps))--; \
+		current->tss.utraps = NULL; \
+	} \
 	zero = 0; \
 	__asm__ __volatile__( \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \

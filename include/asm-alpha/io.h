@@ -80,6 +80,10 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/apecs.h>		/* get chip-specific definitions */
 #elif defined(CONFIG_ALPHA_CIA)
 # include <asm/cia.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_T2)
+# include <asm/t2.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_PYXIS)
+# include <asm/pyxis.h>		/* get chip-specific definitions */
 #else
 # include <asm/jensen.h>
 #endif

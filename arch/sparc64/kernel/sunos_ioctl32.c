@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl32.c,v 1.4 1997/07/17 02:20:43 davem Exp $
+/* $Id: sunos_ioctl32.c,v 1.5 1997/09/18 10:37:57 rth Exp $
  * sunos_ioctl32.c: SunOS ioctl compatability on sparc64.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -100,7 +100,7 @@ asmlinkage int sunos_ioctl (int fd, u32 cmd, u32 arg)
 		goto out;
 
 	if(cmd == TIOCSETD) {
-		unsigned long old_fs = get_fs();
+		mm_segment_t old_fs = get_fs();
 		int *p, ntty = N_TTY;
 		int tmp;
 

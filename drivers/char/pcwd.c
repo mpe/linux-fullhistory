@@ -33,6 +33,7 @@
  * 971210       Disable board on initialisation in case board already ticking.
  * 971222       Changed open/close for temperature handling
  *              Michael Meskes <meskes@debian.org>.
+ * 980112       Used minor numbers from include/linux/miscdevice.h
  */
 
 #include <linux/module.h>
@@ -67,10 +68,6 @@
 static int pcwd_ioports[] = { 0x270, 0x350, 0x370, 0x000 };
 
 #define WD_VER                  "1.0 (11/18/96)"
-#define	WD_MINOR		130	/* Minor device number */
-#ifndef	TEMP_MINOR
-#define	TEMP_MINOR		131	/* Uses the same as WDT */
-#endif
 
 /*
  * It should be noted that PCWD_REVISION_B was removed because A and B
@@ -382,7 +379,7 @@ static int pcwd_open(struct inode *ino, struct file *filep)
 {
         switch (MINOR(ino->i_rdev))
         {
-                case WD_MINOR:
+                case WATCHDOG_MINOR:
                     if (is_open)
                         return -EBUSY;
                     MOD_INC_USE_COUNT;
@@ -424,7 +421,7 @@ static ssize_t pcwd_read(struct file *file, char *buf, size_t count,
 static int pcwd_close(struct inode *ino, struct file *filep)
 {
 	MOD_DEC_USE_COUNT;
-	if (MINOR(ino->i_rdev)==WD_MINOR)
+	if (MINOR(ino->i_rdev)==WATCHDOG_MINOR)
 	{
 	        is_open = 0;
 #ifndef CONFIG_WATCHDOG_NOWAYOUT
@@ -527,8 +524,8 @@ static struct file_operations pcwd_fops = {
 };
 
 static struct miscdevice pcwd_miscdev = {
-	WD_MINOR,
-	"pcwatchdog",
+	WATCHDOG_MINOR,
+	"watchdog",
 	&pcwd_fops
 };
 

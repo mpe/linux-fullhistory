@@ -32,6 +32,11 @@
 #include <asm/system.h>
 
 /*
+ * Set of msr bits that gdb can change on behalf of a process.
+ */
+#define MSR_DEBUGCHANGE	(MSR_FE0 | MSR_SE | MSR_BE | MSR_FE1)
+
+/*
  * does not yet catch signals sent when the child dies.
  * in exit.c or in signal.c.
  */
@@ -41,7 +46,7 @@
  */
 static inline long get_reg(struct task_struct *task, int regno)
 {
-	if (regno <= PT_CCR)
+	if (regno <= PT_MQ)
 		return ((unsigned long *)task->tss.regs)[regno];
 	return (0);
 }
@@ -52,7 +57,10 @@ static inline long get_reg(struct task_struct *task, int regno)
 static inline int put_reg(struct task_struct *task, int regno,
 			  unsigned long data)
 {
-	if (regno <= PT_CCR) {
+	if (regno <= PT_MQ) {
+		if (regno == PT_MSR)
+			data = (data & MSR_DEBUGCHANGE)
+				| (task->tss.regs->msr & ~MSR_DEBUGCHANGE);
 		((unsigned long *)task->tss.regs)[regno] = data;
 		return 0;
 	}
@@ -408,13 +416,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			    
 			if (addr == PT_ORIG_R3)
 				goto out;
-#if 0 /* Let this check be in 'put_reg' */				
-			if (addr == PT_SR) {
-				data &= SR_MASK;
-				data <<= 16;
-				data |= get_reg(child, PT_SR) & ~(SR_MASK << 16);
-			}
-#endif			
 			if (addr < PT_FPR0) {
 				if (put_reg(child, addr, data))
 					goto out;
@@ -433,7 +434,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
 			ret = -EIO;
-			if ((unsigned long) data >= NSIG)
+			if ((unsigned long) data >= _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
@@ -465,7 +466,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
 			ret = -EIO;
-			if ((unsigned long) data >= NSIG)
+			if ((unsigned long) data >= _NSIG)
 				goto out;
 			child->flags &= ~PF_TRACESYS;
 			set_single_step(child);
@@ -478,7 +479,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
 			ret = -EIO;
-			if ((unsigned long) data >= NSIG)
+			if ((unsigned long) data >= _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
@@ -516,9 +517,10 @@ asmlinkage void syscall_trace(void)
 	 * for normal use.  strace only continues with a signal if the
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
-	if (current->exit_code)
-		current->signal |= (1 << (current->exit_code - 1));
-	current->exit_code = 0;
+	if (current->exit_code) {
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
+	}
 out:
 	unlock_kernel();
 }

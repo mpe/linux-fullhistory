@@ -6,9 +6,6 @@
  * Bus) which connects to the keyboard and mouse.  The CUDA also
  * controls system power and the RTC (real time clock) chip.
  *
- * This file also contains routines to support access to ADB
- * devices via the /dev/adb interface.
- *
  * Copyright (C) 1996 Paul Mackerras.
  */
 #include <stdarg.h>
@@ -18,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/sched.h>
 #include <asm/prom.h>
+#include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/io.h>
 #include <asm/system.h>
@@ -58,10 +56,6 @@ static volatile unsigned char *via;
 #define IER_CLR		0		/* clear bits in IER */
 #define SR_INT		0x04		/* Shift register full/empty */
 
-static struct adb_handler {
-    void (*handler)(unsigned char *, int, struct pt_regs *);
-} adb_handler[16];
-
 static enum cuda_state {
     idle,
     sent_first_byte,
@@ -71,8 +65,8 @@ static enum cuda_state {
     awaiting_reply
 } cuda_state;
 
-static struct cuda_request *current_req;
-static struct cuda_request *last_req;
+static struct adb_request *current_req;
+static struct adb_request *last_req;
 static unsigned char cuda_rbuf[16];
 static unsigned char *reply_ptr;
 static int reading_reply;
@@ -82,6 +76,8 @@ static int init_via(void);
 static void cuda_start(void);
 static void via_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void cuda_input(unsigned char *buf, int nb, struct pt_regs *regs);
+static int cuda_adb_send_request(struct adb_request *req, int sync);
+static int cuda_adb_autopoll(int on);
 
 void
 via_cuda_init()
@@ -89,15 +85,10 @@ via_cuda_init()
     struct device_node *vias;
 
     vias = find_devices("via-cuda");
-    if (vias == 0) {
-	printk(KERN_WARNING "Warning: no via-cuda\n");
-	vias = find_devices("via-pmu");
-	if (vias == 0)
-	    return;
-	printk(KERN_WARNING "Found via-pmu, using it as via-cuda\n");
-    }
+    if (vias == 0)
+	return;
     if (vias->next != 0)
-	printk("Warning: only using 1st via-cuda\n");
+	printk(KERN_WARNING "Warning: only using 1st via-cuda\n");
 
 #if 0
     { int i;
@@ -111,21 +102,34 @@ via_cuda_init()
     printk("\n"); }
 #endif
 
-    if (vias->n_addrs != 1 || vias->n_intrs != 1)
-	panic("via-cuda: expecting 1 address and 1 interrupt");
+    if (vias->n_addrs != 1 || vias->n_intrs != 1) {
+	printk(KERN_ERR "via-cuda: expecting 1 address (%d) and 1 interrupt (%d)\n",
+	       vias->n_addrs, vias->n_intrs);
+	if (vias->n_addrs < 1 || vias->n_intrs < 1)
+	    return;
+    }
     via = (volatile unsigned char *) vias->addrs->address;
 
-    if (!init_via())
-	panic("init_via failed");
+    if (!init_via()) {
+	printk(KERN_ERR "init_via failed\n");
+	return;
+    }
 
     cuda_state = idle;
 
-    if (request_irq(vias->intrs[0], via_interrupt, 0, "VIA", (void *)0))
-	panic("VIA: can't get irq %d\n", vias->intrs[0]);
+    if (request_irq(vias->intrs[0], via_interrupt, 0, "VIA", (void *)0)) {
+	printk(KERN_ERR "VIA: can't get irq %d\n", vias->intrs[0]);
+	return;
+    }
 
     /* Clear and enable interrupts */
     via[IFR] = 0x7f; eieio();	/* clear interrupts by writing 1s */
     via[IER] = IER_SET|SR_INT; eieio();	/* enable interrupt from SR */
+
+    /* Set function pointers */
+    adb_hardware = ADB_VIACUDA;
+    adb_send_request = cuda_adb_send_request;
+    adb_autopoll = cuda_adb_autopoll;
 }
 
 #define WAIT_FOR(cond, what)				\
@@ -178,9 +182,42 @@ init_via()
     return 1;
 }
 
+/* Send an ADB command */
+static int
+cuda_adb_send_request(struct adb_request *req, int sync)
+{
+    int i;
+
+    for (i = req->nbytes; i > 0; --i)
+	req->data[i] = req->data[i-1];
+    req->data[0] = ADB_PACKET;
+    ++req->nbytes;
+    req->reply_expected = 1;
+    i = cuda_send_request(req);
+    if (i)
+	return i;
+    if (sync) {
+	while (!req->complete)
+	    cuda_poll();
+    }
+    return 0;
+}
+
+/* Enable/disable autopolling */
+static int
+cuda_adb_autopoll(int on)
+{
+    struct adb_request req;
+
+    cuda_request(&req, NULL, 3, CUDA_PACKET, CUDA_AUTOPOLL, on);
+    while (!req.complete)
+	cuda_poll();
+    return 0;
+}
+
 /* Construct and send a cuda request */
 int
-cuda_request(struct cuda_request *req, void (*done)(struct cuda_request *),
+cuda_request(struct adb_request *req, void (*done)(struct adb_request *),
 	     int nbytes, ...)
 {
     va_list list;
@@ -197,13 +234,13 @@ cuda_request(struct cuda_request *req, void (*done)(struct cuda_request *),
 }
 
 int
-cuda_send_request(struct cuda_request *req)
+cuda_send_request(struct adb_request *req)
 {
     unsigned long flags;
 
     req->next = 0;
     req->sent = 0;
-    req->got_reply = 0;
+    req->complete = 0;
     req->reply_len = 0;
     save_flags(flags); cli();
 
@@ -225,7 +262,7 @@ static void
 cuda_start()
 {
     unsigned long flags;
-    struct cuda_request *req;
+    struct adb_request *req;
 
     /* assert cuda_state == idle */
     /* get the packet to send */
@@ -261,7 +298,7 @@ static void
 via_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
     int x, status;
-    struct cuda_request *req;
+    struct adb_request *req;
 
     if ((via[IFR] & SR_INT) == 0)
 	return;
@@ -351,7 +388,7 @@ via_interrupt(int irq, void *arg, struct pt_regs *regs)
 	if (reading_reply) {
 	    req = current_req;
 	    req->reply_len = reply_ptr - req->reply;
-	    req->got_reply = 1;
+	    req->complete = 1;
 	    current_req = req->next;
 	    if (req->done)
 		(*req->done)(req);
@@ -377,21 +414,11 @@ via_interrupt(int irq, void *arg, struct pt_regs *regs)
 static void
 cuda_input(unsigned char *buf, int nb, struct pt_regs *regs)
 {
-    int i, id;
-    static int dump_cuda_input = 0;
+    int i;
 
     switch (buf[0]) {
     case ADB_PACKET:
-	id = buf[2] >> 4;
-	if (dump_cuda_input) {
-	    printk(KERN_INFO "adb packet: ");
-	    for (i = 0; i < nb; ++i)
-		printk(" %x", buf[i]);
-	    printk(", id = %d\n", id);
-	}
-	if (adb_handler[id].handler != 0) {
-	    (*adb_handler[id].handler)(buf, nb, regs);
-	}
+	adb_input(buf+2, nb-2, regs, buf[1] & 0x40);
 	break;
 
     default:
@@ -400,16 +427,4 @@ cuda_input(unsigned char *buf, int nb, struct pt_regs *regs)
 	    printk(" %.2x", buf[i]);
 	printk("\n");
     }
-}
-
-/* Ultimately this should return the number of devices with
-   the given default id. */
-int
-adb_register(int default_id,
-	     void (*handler)(unsigned char *, int, struct pt_regs *))
-{
-    if (adb_handler[default_id].handler != 0)
-	panic("Two handlers for ADB device %d\n", default_id);
-    adb_handler[default_id].handler = handler;
-    return 1;
 }

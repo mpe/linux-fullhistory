@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.35 1996/12/19 08:08:22 davem Exp $
+/* $Id: page.h,v 1.37 1997/11/28 15:59:21 jj Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -8,14 +8,15 @@
 #ifndef _SPARC_PAGE_H
 #define _SPARC_PAGE_H
 
-#include <linux/config.h>
-#include <asm/head.h>       /* for KERNBASE */
-
 #define PAGE_SHIFT   12
 #define PAGE_SIZE    (1 << PAGE_SHIFT)
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
+
+#include <linux/config.h>
+#include <asm/head.h>       /* for KERNBASE */
+
 #ifndef __ASSEMBLY__
 
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
@@ -29,8 +30,8 @@ extern unsigned long page_offset;
 extern unsigned long (*mmu_v2p)(unsigned long);
 extern unsigned long (*mmu_p2v)(unsigned long);
 
-#define __pa(x)    mmu_v2p((unsigned long)(x))
-#define __va(x)    mmu_p2v((unsigned long)(x))
+#define __pa(x)    (mmu_v2p((unsigned long)(x)))
+#define __va(x)    ((void *)(mmu_p2v((unsigned long)(x))))
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in

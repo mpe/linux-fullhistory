@@ -1,4 +1,4 @@
-/* $Id: reg.h,v 1.2 1997/06/24 23:19:55 davem Exp $
+/* $Id: reg.h,v 1.4 1997/09/14 08:40:29 davem Exp $
  * linux/asm-sparc64/reg.h
  * Layout of the registers as expected by gdb on the Sparc
  * we should replace the user.h definitions with those in
@@ -15,69 +15,7 @@
 #define __SPARC64_REG_H
 
 struct regs {
-	int     r_psr;
-#define r_ps r_psr
-        int     r_pc; 
-        int     r_npc;
-        int     r_y;  
-        int     r_g1; 
-        int     r_g2;
-        int     r_g3;
-        int     r_g4;
-        int     r_g5;
-        int     r_g6;
-        int     r_g7;
-        int     r_o0;
-        int     r_o1;
-        int     r_o2;
-        int     r_o3;
-        int     r_o4;
-        int     r_o5;
-        int     r_o6;
-        int     r_o7;
-};
-
-struct fpq {
-        unsigned int *addr;
-        unsigned ing instr;
-};
-
-struct  fq {
-        union {
-                double  whole;
-                struct  fpq fpq;
-        } FQu;
-};
-
-#define FPU_REGS_TYPE unsigned int
-#define FPU_FSR_TYPE unsigned
-
-struct fp_status {
-        union {
-                FPU_REGS_TYPE Fpu_regs[32];
-                double  Fpu_dregs[16];
-        } fpu_fr;
-        FPU_FSR_TYPE Fpu_fsr;
-        unsigned Fpu_flags;
-        unsigned Fpu_extra;
-        unsigned Fpu_qcnt;
-        struct fq Fpu_q[16];
-};
-
-#define fpu_regs  f_fpstatus.fpu_fr.Fpu_regs
-#define fpu_dregs f_fpstatus.fpu_fr.Fpu_dregs
-#define fpu_fsr   f_fpstatus.Fpu_fsr
-#define fpu_flags f_fpstatus.Fpu_flags
-#define fpu_extra f_fpstatus.Fpu_extra
-#define fpu_q     f_fpstatus.Fpu_q
-#define fpu_qcnt  f_fpstatus.Fpu_qcnt
-
-struct fpu {
-        struct fp_status f_fpstatus;
-};
-
-struct regs64 {
-        unsigned long r_g1; 
+        unsigned long r_g1;
         unsigned long r_g2;
         unsigned long r_g3;
         unsigned long r_g4;
@@ -92,17 +30,23 @@ struct regs64 {
         unsigned long r_o5;
         unsigned long r_o6;
         unsigned long r_o7;
-        unsigned long tstate;
-        unsigned long tpc;
-        unsigned long tnpc;
-        unsigned int  y;
-        unsigned int  fprs;
+        unsigned long __pad;
+        unsigned long r_tstate;
+        unsigned long r_tpc;
+        unsigned long r_tnpc;
+        unsigned int  r_y;
+        unsigned int  r_fprs;
 };
 
-struct fp_status64 {
-        unsigned long regs[32];
-        unsigned long fsr;
+struct fp_status {
+        unsigned long fpu_fr[32];
+        unsigned long Fpu_fsr;
 };
 
+struct fpu {
+	struct fp_status f_fpstatus;
+};
+
+#define fpu_regs  f_fpstatus.fpu_fr
 
 #endif /* __SPARC64_REG_H */

@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.4 1997/09/05 22:59:53 ecd Exp $
+/* $Id: pcikbd.c,v 1.12 1997/12/27 16:28:27 jj Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -8,6 +8,7 @@
  * to the original authors.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -19,6 +20,7 @@
 #include <linux/random.h>
 #include <linux/miscdevice.h>
 #include <linux/kbd_ll.h>
+#include <linux/delay.h>
 #include <linux/init.h>
 
 #include <asm/ebus.h>
@@ -26,7 +28,6 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
-#include <asm/keyboard.h>
 
 #include "pcikbd.h"
 #include "sunserial.h"
@@ -35,6 +36,7 @@ static int kbd_node;
 static int beep_node;
 
 static unsigned long pcikbd_iobase = 0;
+static unsigned long pcibeep_iobase = 0;
 static unsigned int pcikbd_irq;
 
 /* used only by send_data - set by keyboard_interrupt */
@@ -42,12 +44,31 @@ static volatile unsigned char reply_expected = 0;
 static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
 
+unsigned char pckbd_read_mask = KBD_STAT_OBF;
+
+extern int pcikbd_init(void);
+extern void pci_compute_shiftstate(void);
+extern int pci_setkeycode(unsigned int, unsigned int);
+extern int pci_getkeycode(unsigned int);
+extern void pci_setledstate(struct kbd_struct *, unsigned int);
+extern unsigned char pci_getledstate(void);
+
+static __inline__ unsigned char pcikbd_inb(unsigned long port)
+{
+	return inb(port);
+}
+
+static __inline__ void pcikbd_outb(unsigned char val, unsigned long port)
+{
+	outb(val, port);
+}
+
 static inline void kb_wait(void)
 {
 	unsigned long start = jiffies;
 
 	do {
-		if(!(inb(pcikbd_iobase + KBD_STATUS_REG) & KBD_STAT_IBF))
+		if(!(pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG) & KBD_STAT_IBF))
 			return;
 	} while (jiffies - start < KBC_TIMEOUT);
 }
@@ -167,6 +188,19 @@ static unsigned char e0_keys[128] = {
   0, 0, 0, 0, 0, 0, 0, 0			      /* 0x78-0x7f */
 };
 
+/* Simple translation table for the SysRq keys */
+
+#ifdef CONFIG_MAGIC_SYSRQ
+unsigned char pcikbd_sysrq_xlate[128] =
+	"\000\0331234567890-=\177\t"			/* 0x00 - 0x0f */
+	"qwertyuiop[]\r\000as"				/* 0x10 - 0x1f */
+	"dfghjkl;'`\000\\zxcv"				/* 0x20 - 0x2f */
+	"bnm,./\000*\000 \000\201\202\203\204\205"	/* 0x30 - 0x3f */
+	"\206\207\210\211\212\000\000789-456+1"		/* 0x40 - 0x4f */
+	"230\177\000\000\213\214\000\000\000\000\000\000\000\000\000\000" /* 0x50 - 0x5f */
+	"\r\000/";					/* 0x60 - 0x6f */
+#endif
+
 static unsigned int prev_scancode = 0;
 
 int pcikbd_setkeycode(unsigned int scancode, unsigned int keycode)
@@ -268,25 +302,17 @@ pcikbd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned char status;
 
-	/*
-	 * This IRQ might be shared with the 16550A serial chip,
-	 * so we check dev_id to see if it was for us.
-	 * (See also drivers/sbus/char/su.c).
-	 */
-	if (dev_id)
-		return;
-
-	/* kbd_pt_regs = regs; */
-	status = inb(pcikbd_iobase + KBD_STATUS_REG);
+	kbd_pt_regs = regs;
+	status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 	do {
 		unsigned char scancode;
 
-		if(status & kbd_read_mask & KBD_STAT_MOUSE_OBF)
+		if(status & pckbd_read_mask & KBD_STAT_MOUSE_OBF)
 			break;
-		scancode = inb(pcikbd_iobase + KBD_DATA_REG);
+		scancode = pcikbd_inb(pcikbd_iobase + KBD_DATA_REG);
 		if((status & KBD_STAT_OBF) && do_acknowledge(scancode))
-			/* handle_scancode(scancode) */;
-		status = inb(pcikbd_iobase + KBD_STATUS_REG);
+			handle_scancode(scancode);
+		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 	} while(status & KBD_STAT_OBF);
 	mark_bh(KEYBOARD_BH);
 }
@@ -300,7 +326,7 @@ static int send_data(unsigned char data)
 		kb_wait();
 		acknowledge = resend = 0;
 		reply_expected = 1;
-		outb(data, pcikbd_iobase + KBD_DATA_REG);
+		pcikbd_outb(data, pcikbd_iobase + KBD_DATA_REG);
 		start = jiffies;
 		do {
 			if(acknowledge)
@@ -325,10 +351,10 @@ __initfunc(static int pcikbd_wait_for_input(void))
 	unsigned long start = jiffies;
 
 	do {
-		status = inb(pcikbd_iobase + KBD_STATUS_REG);
+		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 		if(!(status & KBD_STAT_OBF))
 			continue;
-		data = inb(pcikbd_iobase + KBD_DATA_REG);
+		data = pcikbd_inb(pcikbd_iobase + KBD_DATA_REG);
 		if(status & (KBD_STAT_GTO | KBD_STAT_PERR))
 			continue;
 		return (data & 0xff);
@@ -341,18 +367,55 @@ __initfunc(static void pcikbd_write(int address, int data))
 	int status;
 
 	do {
-		status = inb(pcikbd_iobase + KBD_STATUS_REG);
+		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 	} while (status & KBD_STAT_IBF);
-	outb(data, pcikbd_iobase + address);
+	pcikbd_outb(data, pcikbd_iobase + address);
 }
 
-__initfunc(static char *do_pcikbd_hwinit(void))
+/* Timer routine to turn off the beep after the interval expires. */
+static void pcikbd_kd_nosound(unsigned long __unused)
+{
+	outl(0, pcibeep_iobase);
+}
+
+/*
+ * Initiate a keyboard beep. If the frequency is zero, then we stop
+ * the beep. Any other frequency will start a monotone beep. The beep
+ * will be stopped by a timer after "ticks" jiffies. If ticks is 0,
+ * then we do not start a timer.
+ */
+static void pcikbd_kd_mksound(unsigned int hz, unsigned int ticks)
+{
+	unsigned long flags;
+	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
+						 pcikbd_kd_nosound };
+
+	save_flags(flags); cli();
+	del_timer(&sound_timer);
+	if (hz) {
+		outl(1, pcibeep_iobase);
+		if (ticks) {
+			sound_timer.expires = jiffies + ticks;
+			add_timer(&sound_timer);
+		}
+	} else
+		outl(0, pcibeep_iobase);
+	restore_flags(flags);
+}
+
+static void nop_kd_mksound(unsigned int hz, unsigned int ticks)
+{
+}
+
+extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
+
+__initfunc(static char *do_pcikbd_init_hw(void))
 {
 	while(pcikbd_wait_for_input() != -1)
 		;
 
 	pcikbd_write(KBD_CNTL_REG, KBD_CCMD_SELF_TEST);
-	if(pcikbd_wait_for_input() != 0xff)
+	if(pcikbd_wait_for_input() != 0x55)
 		return "Keyboard failed self test";
 
 	pcikbd_write(KBD_CNTL_REG, KBD_CCMD_KBD_TEST);
@@ -388,23 +451,12 @@ __initfunc(static char *do_pcikbd_hwinit(void))
 	return NULL; /* success */
 }
 
-__initfunc(void pcikbd_hwinit(void))
-{
-	char *msg;
-
-	disable_irq(pcikbd_irq);
-	msg = do_pcikbd_hwinit();
-	enable_irq(pcikbd_irq);
-
-	if(msg)
-		printk("8042: keyboard init failure [%s]\n", msg);
-}
-
-__initfunc(int pcikbd_probe(void))
+__initfunc(void pcikbd_init_hw(void))
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
 	struct linux_ebus_child *child;
+	char *msg;
 
 	for_all_ebusdev(edev, ebus) {
 		if(!strcmp(edev->prom_name, "8042")) {
@@ -415,29 +467,57 @@ __initfunc(int pcikbd_probe(void))
 		}
 	}
 	printk("pcikbd_probe: no 8042 found\n");
-	return -ENODEV;
+	return;
 
 found:
 	pcikbd_iobase = child->base_address[0];
 	if (check_region(pcikbd_iobase, sizeof(unsigned long))) {
 		printk("8042: can't get region %lx, %d\n",
 		       pcikbd_iobase, (int)sizeof(unsigned long));
-		return -ENODEV;
+		return;
 	}
 	request_region(pcikbd_iobase, sizeof(unsigned long), "8042 controller");
 
 	pcikbd_irq = child->irqs[0];
 	if (request_irq(pcikbd_irq, &pcikbd_interrupt,
-			SA_SHIRQ, "keyboard", NULL)) {
+			SA_SHIRQ, "keyboard", (void *)pcikbd_iobase)) {
 		printk("8042: cannot register IRQ %x\n", pcikbd_irq);
-		return -ENODEV;
+		return;
 	}
 
 	printk("8042(kbd): iobase[%016lx] irq[%x]\n", pcikbd_iobase, pcikbd_irq);
 
-	/* pcikbd_init(); */
-	kbd_read_mask = KBD_STAT_OBF;
-	return 0;
+	kd_mksound = nop_kd_mksound;
+	for_all_ebusdev(edev, ebus) {
+		if(!strcmp(edev->prom_name, "beeper"))
+			break;
+	}
+
+	/*
+	 * XXX: my 3.1.3 PROM does not give me the beeper node for the audio
+	 *      auxio register, though I know it is there... (ecd)
+	 */
+	if (!edev)
+		pcibeep_iobase = (pcikbd_iobase & ~(0xffffff)) | 0x722000;
+	else
+		pcibeep_iobase = edev->base_address[0];
+
+	if (check_region(pcibeep_iobase, sizeof(unsigned int))) {
+		printk("8042: can't get region %lx, %d\n",
+		       pcibeep_iobase, (int)sizeof(unsigned int));
+	} else {
+		request_region(pcibeep_iobase, sizeof(unsigned int), "speaker");
+		kd_mksound = pcikbd_kd_mksound;
+		printk("8042(speaker): iobase[%016lx]%s\n", pcibeep_iobase,
+		       edev ? "" : " (forced)");
+	}
+
+	disable_irq(pcikbd_irq);
+	msg = do_pcikbd_init_hw();
+	enable_irq(pcikbd_irq);
+
+	if(msg)
+		printk("8042: keyboard init failure [%s]\n", msg);
 }
 
 
@@ -450,8 +530,6 @@ static int ms_node;
 
 static unsigned long pcimouse_iobase = 0;
 static unsigned int pcimouse_irq;
-
-#define PSMOUSE_MINOR      1		/* Minor device # for this mouse */
 
 #define AUX_BUF_SIZE	2048
 
@@ -467,6 +545,16 @@ static struct aux_queue *queue;
 static int aux_ready = 0;
 static int aux_count = 0;
 static int aux_present = 0;
+
+static __inline__ unsigned char pcimouse_inb(unsigned long port)
+{
+	return inb(port);
+}
+
+static __inline__ void pcimouse_outb(unsigned char val, unsigned long port)
+{
+	outb(val, port);
+}
 
 /*
  *	Shared subroutines
@@ -491,11 +579,11 @@ static inline int queue_empty(void)
 	return queue->head == queue->tail;
 }
 
-static int fasync_aux(struct inode *inode, struct file *filp, int on)
+static int aux_fasync(struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper(inode, filp, on, &queue->fasync);
+	retval = fasync_helper(filp, on, &queue->fasync);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -521,11 +609,11 @@ static int poll_aux_status(void)
 {
 	int retries=0;
 
-	while ((inb(pcimouse_iobase + KBD_STATUS_REG) &
+	while ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) &
 		(KBD_STAT_IBF | KBD_STAT_OBF)) && retries < MAX_RETRIES) {
- 		if ((inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF)
+ 		if ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF)
 		    == AUX_STAT_OBF)
-			inb(pcimouse_iobase + KBD_DATA_REG);
+			pcimouse_inb(pcimouse_iobase + KBD_DATA_REG);
 		current->state = TASK_INTERRUPTIBLE;
 		current->timeout = jiffies + (5*HZ + 99) / 100;
 		schedule();
@@ -541,9 +629,10 @@ static int poll_aux_status(void)
 static void aux_write_dev(int val)
 {
 	poll_aux_status();
-	outb(KBD_CCMD_WRITE_MOUSE, pcimouse_iobase + KBD_CNTL_REG);/* Write magic cookie */
+	pcimouse_outb(KBD_CCMD_WRITE_MOUSE, pcimouse_iobase + KBD_CNTL_REG);/* Write magic cookie */
 	poll_aux_status();
-	outb_p(val, pcimouse_iobase + KBD_DATA_REG);		 /* Write data */
+	pcimouse_outb(val, pcimouse_iobase + KBD_DATA_REG);		 /* Write data */
+	udelay(1);
 }
 
 /*
@@ -555,8 +644,8 @@ __initfunc(static int aux_write_ack(int val))
 	aux_write_dev(val);
 	poll_aux_status();
 
-	if ((inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF) == AUX_STAT_OBF)
-		return (inb(pcimouse_iobase + KBD_DATA_REG));
+	if ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF) == AUX_STAT_OBF)
+		return (pcimouse_inb(pcimouse_iobase + KBD_DATA_REG));
 	return 0;
 }
 
@@ -567,9 +656,9 @@ __initfunc(static int aux_write_ack(int val))
 static void aux_write_cmd(int val)
 {
 	poll_aux_status();
-	outb(KBD_CCMD_WRITE_MODE, pcimouse_iobase + KBD_CNTL_REG);
+	pcimouse_outb(KBD_CCMD_WRITE_MODE, pcimouse_iobase + KBD_CNTL_REG);
 	poll_aux_status();
-	outb(val, pcimouse_iobase + KBD_DATA_REG);
+	pcimouse_outb(val, pcimouse_iobase + KBD_DATA_REG);
 }
 
 /*
@@ -607,18 +696,10 @@ void pcimouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
 
-	/*
-	 * This IRQ might be shared with the 16550A serial chip,
-	 * so we check dev_id to see if it was for us.
-	 * (See also drivers/sbus/char/su.c).
-	 */
-	if (dev_id)
+	if ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF) != AUX_STAT_OBF)
 		return;
 
-	if ((inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF) != AUX_STAT_OBF)
-		return;
-
-	add_mouse_randomness(queue->buf[head] = inb(pcimouse_iobase + KBD_DATA_REG));
+	add_mouse_randomness(queue->buf[head] = pcimouse_inb(pcimouse_iobase + KBD_DATA_REG));
 	if (head != maxhead) {
 		head++;
 		head &= AUX_BUF_SIZE-1;
@@ -630,9 +711,9 @@ void pcimouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	wake_up_interruptible(&queue->proc_list);
 }
 
-static int release_aux(struct inode * inode, struct file * file)
+static int aux_release(struct inode * inode, struct file * file)
 {
-	fasync_aux(inode, file, 0);
+	aux_fasync(file, 0);
 	if (--aux_count)
 		return 0;
 	aux_start_atomic();
@@ -642,7 +723,7 @@ static int release_aux(struct inode * inode, struct file * file)
 	poll_aux_status();
 
 	/* Disable Aux device */
-	outb(KBD_CCMD_MOUSE_DISABLE, pcimouse_iobase + KBD_CNTL_REG);
+	pcimouse_outb(KBD_CCMD_MOUSE_DISABLE, pcimouse_iobase + KBD_CNTL_REG);
 	poll_aux_status();
 	aux_end_atomic();
 
@@ -655,10 +736,11 @@ static int release_aux(struct inode * inode, struct file * file)
  * Enable auxiliary device.
  */
 
-static int open_aux(struct inode * inode, struct file * file)
+static int aux_open(struct inode * inode, struct file * file)
 {
 	if (!aux_present)
 		return -ENODEV;
+
 	aux_start_atomic();
 	if (aux_count++) {
 		aux_end_atomic();
@@ -674,7 +756,7 @@ static int open_aux(struct inode * inode, struct file * file)
 	MOD_INC_USE_COUNT;
 
 	poll_aux_status();
-	outb(KBD_CCMD_MOUSE_ENABLE, pcimouse_iobase+KBD_CNTL_REG);    /* Enable Aux */
+	pcimouse_outb(KBD_CCMD_MOUSE_ENABLE, pcimouse_iobase+KBD_CNTL_REG);    /* Enable Aux */
 	aux_write_dev(AUX_ENABLE_DEV);			    /* Enable aux device */
 	aux_write_cmd(AUX_INTS_ON);			    /* Enable controller ints */
 	poll_aux_status();
@@ -688,31 +770,31 @@ static int open_aux(struct inode * inode, struct file * file)
  * Write to the aux device.
  */
 
-static long write_aux(struct inode * inode, struct file * file,
-	const char * buffer, unsigned long count)
+static ssize_t aux_write(struct file * file, const char * buffer,
+			 size_t count, loff_t *ppos)
 {
-	int retval = 0;
+	ssize_t retval = 0;
 
 	if (count) {
-		int written = 0;
+		ssize_t written = 0;
 
 		aux_start_atomic();
 		do {
 			char c;
 			if (!poll_aux_status())
 				break;
-			outb(KBD_CCMD_WRITE_MOUSE, pcimouse_iobase + KBD_CNTL_REG);
+			pcimouse_outb(KBD_CCMD_WRITE_MOUSE, pcimouse_iobase + KBD_CNTL_REG);
 			if (!poll_aux_status())
 				break;
 			get_user(c, buffer++);
-			outb(c, pcimouse_iobase + KBD_DATA_REG);
+			pcimouse_outb(c, pcimouse_iobase + KBD_DATA_REG);
 			written++;
 		} while (--count);
 		aux_end_atomic();
 		retval = -EIO;
 		if (written) {
 			retval = written;
-			inode->i_mtime = CURRENT_TIME;
+			file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		}
 	}
 
@@ -727,11 +809,11 @@ static long write_aux(struct inode * inode, struct file * file,
  * Put bytes from input queue to buffer.
  */
 
-static long read_aux(struct inode * inode, struct file * file,
-	char * buffer, unsigned long count)
+static ssize_t aux_read(struct file * file, char * buffer,
+		        size_t count, loff_t *ppos)
 {
 	struct wait_queue wait = { current, NULL };
-	int i = count;
+	ssize_t i = count;
 	unsigned char c;
 
 	if (queue_empty()) {
@@ -754,7 +836,7 @@ repeat:
 	}
 	aux_ready = !queue_empty();
 	if (count-i) {
-		inode->i_atime = CURRENT_TIME;
+		file->f_dentry->d_inode->i_atime = CURRENT_TIME;
 		return count-i;
 	}
 	if (signal_pending(current))
@@ -772,16 +854,16 @@ static unsigned int aux_poll(struct file *file, poll_table * wait)
 
 struct file_operations psaux_fops = {
 	NULL,		/* seek */
-	read_aux,
-	write_aux,
+	aux_read,
+	aux_write,
 	NULL, 		/* readdir */
 	aux_poll,
 	NULL, 		/* ioctl */
 	NULL,		/* mmap */
-	open_aux,
-	release_aux,
+	aux_open,
+	aux_release,
 	NULL,
-	fasync_aux,
+	aux_fasync,
 };
 
 static struct miscdevice psaux_mouse = {
@@ -816,7 +898,7 @@ found:
 
 	pcimouse_irq = child->irqs[0];
 	if (request_irq(pcimouse_irq, &pcimouse_interrupt,
-		        SA_SHIRQ, "mouse", NULL)) {
+		        SA_SHIRQ, "mouse", (void *)pcimouse_iobase)) {
 		printk("8042: Cannot register IRQ %x\n", pcimouse_irq);
 		return -ENODEV;
 	}
@@ -826,7 +908,7 @@ found:
 
 	printk("8042: PS/2 auxiliary pointing device detected.\n");
 	aux_present = 1;
-	kbd_read_mask = AUX_STAT_OBF;
+	pckbd_read_mask = AUX_STAT_OBF;
 
 	misc_register(&psaux_mouse);
 	queue = (struct aux_queue *) kmalloc(sizeof(*queue), GFP_KERNEL);
@@ -834,39 +916,25 @@ found:
 	queue->head = queue->tail = 0;
 	queue->proc_list = NULL;
 	aux_start_atomic();
-	outb(KBD_CCMD_MOUSE_ENABLE, pcimouse_iobase + KBD_CNTL_REG);
+	pcimouse_outb(KBD_CCMD_MOUSE_ENABLE, pcimouse_iobase + KBD_CNTL_REG);
+	aux_write_ack(AUX_RESET);
 	aux_write_ack(AUX_SET_SAMPLE);
 	aux_write_ack(100);
 	aux_write_ack(AUX_SET_RES);
 	aux_write_ack(3);
 	aux_write_ack(AUX_SET_SCALE21);
 	poll_aux_status();
-	outb(KBD_CCMD_MOUSE_DISABLE, pcimouse_iobase + KBD_CNTL_REG);
+	pcimouse_outb(KBD_CCMD_MOUSE_DISABLE, pcimouse_iobase + KBD_CNTL_REG);
 	poll_aux_status();
-	outb(KBD_CCMD_WRITE_MODE, pcimouse_iobase + KBD_CNTL_REG);
+	pcimouse_outb(KBD_CCMD_WRITE_MODE, pcimouse_iobase + KBD_CNTL_REG);
 	poll_aux_status();
-	outb(AUX_INTS_OFF, pcimouse_iobase + KBD_DATA_REG);
+	pcimouse_outb(AUX_INTS_OFF, pcimouse_iobase + KBD_DATA_REG);
 	poll_aux_status();
 	aux_end_atomic();
 
 	return 0;
 }
 
-
-__initfunc(static int ps2_init(void))
-{
-	int err;
-
-	err = pcikbd_probe();
-	if (err)
-		return err;
-
-	err = pcimouse_init();
-	if (err)
-		return err;
-
-	return 0;
-}
 
 __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 {
@@ -959,6 +1027,12 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 	return -ENODEV;
 
 found:
-        sunserial_setinitfunc(memory_start, ps2_init);
+        sunkbd_setinitfunc(memory_start, pcimouse_init);
+        sunkbd_setinitfunc(memory_start, pcikbd_init);
+	kbd_ops.compute_shiftstate = pci_compute_shiftstate;
+	kbd_ops.setledstate = pci_setledstate;
+	kbd_ops.getledstate = pci_getledstate;
+	kbd_ops.setkeycode = pci_setkeycode;
+	kbd_ops.getkeycode = pci_getkeycode;
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.4 1997/09/04 14:57:31 jj Exp $
+/* $Id: misc.c,v 1.6 1997/12/14 23:40:15 ecd Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -283,7 +283,7 @@ asmlinkage int solaris_sysconf(int id)
 			linux_cpus[smp_processor_id()].prom_node,
 			"clock-frequency", 167000000);
 #ifdef __SMP__	
-	case SOLARIS_CONFIG_NPROC_CONF:	return NCPUS;
+	case SOLARIS_CONFIG_NPROC_CONF:	return NR_CPUS;
 	case SOLARIS_CONFIG_NPROC_ONLN:	return smp_num_cpus;
 #else
 	case SOLARIS_CONFIG_NPROC_CONF:	return 1;
@@ -446,18 +446,3 @@ int init_solaris_emul(void)
 }
 #endif
 
-#ifdef DEBUG_SOLARIS
-void entry_printk(int sysno, struct pt_regs *regs)
-{
-	printk ("Entering %d\n", sysno);
-	printk ("%08x %08x %08x %08x\n", (int)regs->u_regs[UREG_I0],
-					 (int)regs->u_regs[UREG_I1],
-					 (int)regs->u_regs[UREG_I2],
-					 (int)regs->u_regs[UREG_I3]);
-}
-
-void exit_printk(unsigned long ret)
-{
-	printk ("Returning %016lx\n", ret);
-}
-#endif

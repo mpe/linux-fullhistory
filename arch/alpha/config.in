@@ -6,7 +6,10 @@ mainmenu_name "Kernel configuration of Linux for Alpha machines"
 
 # clear all implied options (don't want default values for those):
 unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
-unset CONFIG_PCI CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS
+unset CONFIG_ALPHA_EV4 CONFIG_ALPHA_EV5
+unset CONFIG_PCI CONFIG_ALPHA_EISA
+unset CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS CONFIG_ALPHA_CIA
+unset CONFIG_ALPHA_T2 CONFIG_ALPHA_PYXIS
 unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
 
 mainmenu_option next_comment
@@ -46,19 +49,29 @@ choice 'Alpha system type' \
 	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
 	 Mikasa		CONFIG_ALPHA_MIKASA		\
+	 Noritake	CONFIG_ALPHA_NORITAKE		\
 	 Alcor		CONFIG_ALPHA_ALCOR		\
+	 Miata		CONFIG_ALPHA_MIATA		\
+	 Sable		CONFIG_ALPHA_SABLE		\
+	 AlphaBook1	CONFIG_ALPHA_BOOK1		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
+
+if [ "$CONFIG_ALPHA_BOOK1" = "y" ]
+then
+	define_bool CONFIG_ALPHA_NONAME y
+fi
 if [ "$CONFIG_ALPHA_NONAME" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
 	-o "$CONFIG_ALPHA_EB66P" = "y" -o "$CONFIG_ALPHA_P2K" = "y" ]
 then
 	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV4 y
 	define_bool CONFIG_ALPHA_LCA y
 fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
-	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
-	-o "$CONFIG_ALPHA_XL" = "y" ]
+	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_XL" = "y" ]
 then
 	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV4 y
 	define_bool CONFIG_ALPHA_APECS y
 fi
 if [ "$CONFIG_ALPHA_EB164" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
@@ -67,16 +80,56 @@ then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_CIA y
-else
+fi
+if [ "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" ]
+then
+	choice 'CPU daughtercard' \
+		"Pinnacle	CONFIG_ALPHA_PINNACLE \
+		Primo		CONFIG_ALPHA_PRIMO" Primo
+	if [ "$CONFIG_ALPHA_PRIMO" = "y" ]
+	then
+		define_bool CONFIG_ALPHA_EV5 y
+		define_bool CONFIG_ALPHA_CIA y
+	else
+		define_bool CONFIG_ALPHA_EV4 y
+		define_bool CONFIG_ALPHA_APECS y
+	fi
+	define_bool CONFIG_PCI y
+fi
+if [ "$CONFIG_ALPHA_SABLE" = "y" ]
+then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV4 y
+	define_bool CONFIG_ALPHA_T2 y
+fi
+if [ "$CONFIG_ALPHA_MIATA" = "y" ]
+then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_EV5 y
+	define_bool CONFIG_ALPHA_PYXIS y
+fi
+if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
+then
+	define_bool CONFIG_ALPHA_EV4 y
+fi
+if [ "$CONFIG_ALPHA_EV4" = "y" ]
+then
 	# EV45 and older do not support all rounding modes in hw:
 	define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 fi
 
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" \
-	-o "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_ALCOR" = "y" ]
+	-o "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_ALCOR" = "y" \
+	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_MIATA" = "y" \
+	-o "$CONFIG_ALPHA_NORITAKE" = "y" -o "$CONFIG_ALPHA_PC164" = "y" ]
 then
 	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+fi
+if [ "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
+	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" ]
+then
+	define_bool CONFIG_ALPHA_EISA y
 fi
 if [ "$CONFIG_ALPHA_XL" = "y" ]
 then

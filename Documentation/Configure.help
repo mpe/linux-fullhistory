@@ -1,4 +1,4 @@
-# Maintained by Axel Boldt (boldt@math.ucsb.edu) 
+# Maintained by Axel Boldt (boldt@math.ucsb.edu)
 #
 # This version of the Linux kernel configuration help texts
 # corresponds to the kernel versions 2.1.x. Be aware that these are
@@ -3515,28 +3515,6 @@ CONFIG_SDLA
   sdla.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
-WAN Router
-CONFIG_WAN_ROUTER
-  Wide Area Networks (WANs), such as X.25, frame relay and leased
-  lines, are used to interconnect Local Area Networks (LANs) over vast
-  distances with data transfer rates significantly higher than those
-  achievable with commonly used asynchronous modem connections.
-  Usually, a quite expensive external device called `WAN router' is
-  needed to connect to a WAN.
-  As an alternative, WAN routing can be built into the Linux
-  kernel.  With relatively inexpensive WAN interface cards available
-  on the market, a perfectly usable router can be built for less than
-  half the price of an external router.  If you have one of those
-  cards (with appropriate WAN Link Driver) and wish to use your Linux
-  box as a WAN router, you may say 'Y' to this option.  You will also
-  need a wan-tools package available via FTP (user: anonymous) from
-  ftp.sangoma.com.  Read Documentation/networking/wan-router.txt for
-  more information.
-  WAN routing is always built as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module is called wanrouter.o.  For general information about 
-  modules read Documentation/modules.txt.
-
 CPU is too slow to handle full bandwidth
 CONFIG_CPU_IS_SLOW
 ###
@@ -3640,68 +3618,79 @@ CONFIG_NET_SCH_PRIO
 ### schedulers?
 ###
 
+WAN Router
+CONFIG_WAN_ROUTER
+      Wide Area Networks (WANs), such as X.25, frame relay and leased
+  lines, are used to interconnect Local Area Networks (LANs) over vast
+  distances with data transfer rates significantly higher than those
+  achievable with commonly used asynchronous modem connections.
+  Usually, a quite expensive external device called `WAN router' is
+  needed to connect to WAN.
+      As an alternative, WAN router can be build into Linux kernel.
+  With relatively inexpensive WAN interface cards available on the
+  market, a perfectly usable router can be built for less than half a
+  price of an external router.  If you have one of those cards (with
+  appropriate WAN Link Driver) and wish to use your Linux box as a WAN
+  router, you may say 'Y' to this option.  You will also need a
+  wan-tools package available via FTP (user: anonymous) from
+  ftp.sangoma.com.  Read Documentation/networking/wan-router.txt for
+  more information.
+      WAN router is always built as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  For general information about modules read Documentation/modules.txt.
+
 WAN Drivers
 CONFIG_WAN_DRIVERS
-  Say Y to this option if you are planning to use your Linux box as a
-  WAN ( = Wide Area Network) router ( = device used to interconnect
-  local area networks over wide area communication links, such as
-  leased lines and public data networks, e.g. X.25 and frame relay)
-  and you will be offered a list of WAN drivers currently available.
-  For more information, read
-  Documentation/networking/wan-router.txt. Note that the answer to
-  this question won't directly affect the kernel: saying N will just
-  cause this configure script to skip all the questions about WAN
-  drivers. If unsure, say N.
+      Say 'Y' to this option if you are planning to use your Linux box
+  as a WAN router ( = device used to interconnect local area networks
+  over wide area communication links, such as leased lines and public
+  data networks, e.g. X.25 and frame relay) and you will be offered a
+  list of WAN drivers currently available.  For more information, read
+  Documentation/networking/wan-router.txt.
 
 Sangoma WANPIPE(tm) multiprotocol cards
 CONFIG_VENDOR_SANGOMA
-  WANPIPE from Sangoma Technologies Inc. (http://www.sangoma.com; to
-  browse the WWW, you need to have access to a machine on the Internet
-  that has a program like lynx or netscape) is a family of intelligent
-  multiprotocol WAN adapters with data transfer rates up to T1 (1.544
-  Mbps).  They are also known as Synchronous Data Link Adapters (SDLA)
-  and designated S502E(A), S503 or S508. These cards support the X.25,
-  Frame Relay, and PPP protocols. If you have one or more of these
-  cards, say Y to this option and read
-  Documentation/networking/wanpipe.txt.  The next questions will ask
-  you about the protocols you want the driver to support. The driver
-  will be compiled as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want).  The module will
-  be called wanpipe.o.  For general information about modules read
-  Documentation/modules.txt.
+      WANPIPE from Sangoma Technologies Inc. (http://www.sangoma.com)
+  is a family of intelligent multiprotocol WAN adapter with data
+  transfer rates up to T1 (1.544 Mbps).  They are also known as
+  Synchronous Data Link Adapters (SDLA) and designated S502E(A), S503
+  or S508.  If you have one of these cards, say 'Y' to this option.
+      WANPIPE driver is always built as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  For general information about modules read Documentation/modules.txt.
 
 Maximum number of cards
 CONFIG_WANPIPE_CARDS
-  Enter number of WANPIPE adapters installed in your machine.  The
-  driver can support up to 8 cards.  You may enter more than you
+      Enter number of WANPIPE adapters installed in your machine.  The
+  driver can support up to 8 cards.  You may enter more that you
   actually have if you plan to add more cards in the future without
   re-compiling the driver, but remember that in this case you'll waste
   some kernel memory (about 1K per card).
 
 WANPIPE X.25 support
 CONFIG_WANPIPE_X25
-  Say Y to this option, if you are planning to connect a WANPIPE card
-  to an X.25 network. You should then also have said Y to "CCITT X.25
-  Packet Layer" and "LAPB Data Link Driver", above. If you say N, the
-  X.25 support will not be included in the driver (saves about 16K of
-  kernel memory).
+      Say 'Y' to this option, if you are planning to connect WANPIPE
+  card to an X.25 network.  If you say 'N', the X.25 support will not
+  be included in the driver (saves about 16K of kernel memory).
 
 WANPIPE Frame Relay support
 CONFIG_WANPIPE_FR
-  Say Y to this option, if you are planning to connect a WANPIPE card
-  to a frame relay network. You should then also have said Y to "Frame
-  Relay (DLCI) support", above. If you say N, the frame relay
+      Say 'Y' to this option, if you are planning to connect WANPIPE
+  card to a frame relay network.  If you say 'N', the frame relay
   support will not be included in the driver (saves about 16K of
   kernel memory).
 
 WANPIPE PPP support
 CONFIG_WANPIPE_PPP
-  Say Y to this option, if you are planning to connect a WANPIPE card
-  to a leased line using Point-to-Point protocol (PPP). You should
-  then also have said Y to "PPP (point-to-point) support", above. If
-  you say N, the PPP support will not be included in the driver (saves
+      Say 'Y' to this option, if you are planning to connect WANPIPE
+  card to a leased line using Point-to-Point protocol (PPP).  If you
+  say 'N', the PPP support will not be included in the driver (saves
   about 16K of kernel memory).
 
+
+ Sun LANCE Ethernet support
+ CONFIG_SUN_LANCE
+   This is support for lance ethernet cards on Sun workstations such as
 Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
   This is support for lance ethernet cards on Sun workstations such as
@@ -7565,6 +7554,13 @@ CONFIG_VIDEO_BWQCAM
   removed from the running kernel whenever you want). If you want to
   compile it as a module, say M here and read
   Documentation/modules.txt.
+
+Colour QuickCam Video For Linux
+CONFIG_VIDEO_CQCAM
+  This is the video4linux driver for the colour version of the Connectix
+  Quickcam.  If you have one of these cameras, say Y here, otherwise say N.
+  This driver does not work with the original monochrome Quickcam,
+  Quickcam VC or QuickClip.  It is also available as a module (c-qcam.o).
 
 Mediavision Pro Movie Studio Video For Linux
 CONFIG_VIDEO_PMS

@@ -38,6 +38,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/hwrpb.h>
 
 /*
  * Initial task structure. Make this a per-architecture thing,
@@ -86,7 +87,7 @@ out:
 	return ret;
 }
 
-void machine_restart(char * __unused)
+static void finish_shutdown(void)
 {
 #ifdef CONFIG_RTC  /* reset rtc to defaults */
 	unsigned char control;
@@ -105,7 +106,6 @@ void machine_restart(char * __unused)
         CMOS_READ(RTC_INTR_FLAGS);
 	restore_flags(flags);
 #endif
-
 #if defined(CONFIG_ALPHA_SRM) && defined(CONFIG_ALPHA_ALCOR)
 	/* who said DEC engineer's have no sense of humor? ;-)) */
 	*(int *) GRU_RESET = 0x0000dead;
@@ -114,12 +114,50 @@ void machine_restart(char * __unused)
 	halt();
 }
 
+void machine_restart(char * __unused)
+{
+#if defined(CONFIG_ALPHA_SRM)
+	extern struct hwrpb_struct *hwrpb;
+	struct percpu_struct *cpup;
+	unsigned long flags;
+	
+	cpup = (struct percpu_struct *)
+	  ((unsigned long)hwrpb + hwrpb->processor_offset);
+	flags = cpup->flags;
+	flags &= ~0x0000000000ff0001UL; /* clear reason to "default" */
+	flags |=  0x0000000000020000UL; /* this is "cold bootstrap" */
+/*	flags |=  0x0000000000030000UL; *//* this is "warm bootstrap" */
+	cpup->flags = flags;					       
+	mb();						
+#endif /* SRM */                                        
+
+	finish_shutdown();
+}
+
 void machine_halt(void)
 {
+#if defined(CONFIG_ALPHA_SRM)
+	extern struct hwrpb_struct *hwrpb;
+	struct percpu_struct *cpup;
+	unsigned long flags;
+	
+	cpup = (struct percpu_struct *)
+	  ((unsigned long)hwrpb + hwrpb->processor_offset);
+	flags = cpup->flags;
+	flags &= ~0x0000000000ff0001UL; /* clear reason to "default" */
+	flags |=  0x0000000000040000UL; /* this is "remain halted" */
+	cpup->flags = flags;					       
+	mb();						
+
+	finish_shutdown();
+#endif /* SRM */                                        
 }
 
 void machine_power_off(void)
 {
+	/* None of the machines we support, at least, has switchable 
+	   power supplies.  */
+	machine_halt();
 }
 
 void show_regs(struct pt_regs * regs)

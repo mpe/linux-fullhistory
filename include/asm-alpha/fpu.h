@@ -81,4 +81,7 @@ ieee_swcr_to_fpcr(unsigned long sw)
 	return fp;
 }
 
+extern unsigned long rdfpcr(void);
+extern void wrfpcr(unsigned long);
+
 #endif /* __ASM_ALPHA_FPU_H */

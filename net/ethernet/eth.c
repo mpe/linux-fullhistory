@@ -55,6 +55,7 @@
 #include <net/arp.h>
 #include <net/sock.h>
 #include <net/ipv6.h>
+#include <net/ip.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/checksum.h>
@@ -120,7 +121,7 @@ int eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	 *	Anyway, the loopback-device should never use this function... 
 	 */
 
-	if (dev->flags & IFF_LOOPBACK) 
+	if (dev->flags & (IFF_LOOPBACK|IFF_NOARP)) 
 	{
 		memset(eth->h_dest, 0, dev->addr_len);
 		return(dev->hard_header_len);
@@ -140,24 +141,16 @@ int eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
  *	Rebuild the Ethernet MAC header. This is called after an ARP
  *	(or in future other address resolution) has completed on this
  *	sk_buff. We now let ARP fill in the other fields.
+ *
+ *	This routine CANNOT use cached dst->neigh!
+ *	Really, it is used only when dst->neigh is wrong.
  */
- 
+
 int eth_rebuild_header(struct sk_buff *skb)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb->data;
 	struct device *dev = skb->dev;
- 	struct neighbour *neigh = NULL;
 
-	/*
-	 *	Only ARP/IP and NDISC/IPv6 are currently supported
-	 */
-	
- 	if (skb->dst)
- 		neigh = skb->dst->neighbour;
- 
- 	if (neigh)
- 		return neigh->ops->resolve(eth->h_dest, skb);
- 
 	switch (eth->h_proto)
 	{
 #ifdef CONFIG_INET
@@ -170,11 +163,10 @@ int eth_rebuild_header(struct sk_buff *skb)
 		       dev->name, (int)eth->h_proto);
 		
 		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
-		return 0;
 		break;
 	}
 
-	return 0;	
+	return 0;
 }
 
 
@@ -204,9 +196,12 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	/*
 	 *	This ALLMULTI check should be redundant by 1.4
 	 *	so don't forget to remove it.
+	 *
+	 *	Seems, you forgot to remove it. All silly devices
+	 *	seems to set IFF_PROMISC.
 	 */
 	 
-	else if(dev->flags&(IFF_PROMISC|IFF_ALLMULTI))
+	else if(dev->flags&(IFF_PROMISC/*|IFF_ALLMULTI*/))
 	{
 		if(memcmp(eth->h_dest,dev->dev_addr, ETH_ALEN))
 			skb->pkt_type=PACKET_OTHERHOST;
@@ -239,38 +234,18 @@ int eth_header_parse(struct sk_buff *skb, unsigned char *haddr)
 	return ETH_ALEN;
 }
 
-int eth_header_cache(struct dst_entry *dst, struct neighbour *neigh,
-		     struct hh_cache *hh)
+int eth_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
 	unsigned short type = hh->hh_type;
-	struct ethhdr *eth = (struct ethhdr*)hh->hh_data;
-	struct device *dev = dst->dev;
+	struct ethhdr *eth = (struct ethhdr*)(((u8*)hh->hh_data) + 2);
+	struct device *dev = neigh->dev;
 
-	if (type == ETH_P_802_3)
+	if (type == __constant_htons(ETH_P_802_3))
 		return -1;
-	
-	eth->h_proto = htons(type);
 
+	eth->h_proto = type;
 	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
-
-	if (dev->flags & IFF_LOOPBACK) {
-		memset(eth->h_dest, 0, dev->addr_len);
-		hh->hh_uptodate = 1;
-		return 0;
-	}
-
-	if (type != ETH_P_IP) 
-	{
-		printk(KERN_DEBUG "%s: unable to resolve type %X addresses.\n",dev->name,(int)eth->h_proto);
-		hh->hh_uptodate = 0;
-		return 0;
-	}
-
-#ifdef CONFIG_INET
-	hh->hh_uptodate = arp_find_1(eth->h_dest, dst, neigh);
-#else
-	hh->hh_uptodate = 0;
-#endif
+	memcpy(eth->h_dest, neigh->ha, dev->addr_len);
 	return 0;
 }
 
@@ -280,13 +255,7 @@ int eth_header_cache(struct dst_entry *dst, struct neighbour *neigh,
 
 void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned char * haddr)
 {
-	if (hh->hh_type != ETH_P_IP)
-	{
-		printk(KERN_DEBUG "eth_header_cache_update: %04x cache is not implemented\n", hh->hh_type);
-		return;
-	}
-	memcpy(hh->hh_data, haddr, ETH_ALEN);
-	hh->hh_uptodate = 1;
+	memcpy(((u8*)hh->hh_data) + 2, haddr, dev->addr_len);
 }
 
 #ifndef CONFIG_IP_ROUTER

@@ -5,8 +5,7 @@
 #include <linux/in.h>
 
 /*
- * NFS client parameters
- * Part of this is duplicated in rpc_clnt and is therefore obsolete.
+ * NFS client parameters stored in the superblock.
  */
 struct nfs_server {
 	struct rpc_clnt *	client;		/* RPC client handle */
@@ -18,7 +17,7 @@ struct nfs_server {
 	unsigned int		acregmax;
 	unsigned int		acdirmin;
 	unsigned int		acdirmax;
-	char			hostname[256];	/* remote hostname */
+	char *			hostname;	/* remote hostname */
 };
 
 /*

@@ -244,7 +244,8 @@ typedef struct X25Status
 	unsigned short ogc_map	PACKED;	/* 06h: Outgoing Chan. map */
 	TX25TimeStamp tstamp	PACKED;	/* 08h: timestamp (BCD) */
 	unsigned char iflags	PACKED;	/* 0Dh: interrupt flags */
-	unsigned char resrv[2]	PACKED;	/* 0Eh: */
+	unsigned char imask     PACKED; /* 0Eh: interrupt mask  */
+	unsigned char resrv	PACKED;	/* 0Eh: */
 	unsigned char gflags	PACKED;	/* 10h: misc. HDLC/X25 flags */
 	unsigned char cflags[X25_MAX_CHAN] PACKED; /* channel status bytes */
 } TX25Status;

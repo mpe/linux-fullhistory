@@ -131,8 +131,8 @@ int main(int argc, char *argv[])
   argptr++;
 
   /* skip elf header in input file */
-  if ( !prep )
-	  lseek(in_fd, elfhdr_size, SEEK_SET);
+  /*if ( !prep )*/
+  lseek(in_fd, elfhdr_size, SEEK_SET);
   
   /* write prep partition if necessary */
   if ( prep )
@@ -164,7 +164,7 @@ void write_prep_partition(int in, int out)
   bzero( block, sizeof block );
  
   /* set entry point and boot image size skipping over elf header */
-  *entry = cpu_to_le32(0x400+65536);
+  *entry = cpu_to_le32(0x400/*+65536*/);
   *length = cpu_to_le32(info.st_size+0x400);
 
   /* sets magic number for msdos partition (used by linux) */

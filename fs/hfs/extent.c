@@ -693,10 +693,8 @@ void hfs_extent_adj(struct hfs_fork *fork)
 				fork->lsize =
 					fork->psize >> HFS_SECTOR_SIZE_BITS;
 			}
-			fork->entry->dirt = 1;
 		} else if (blks < fork->psize) {
 			shrink_fork(fork, ablocks);
-			fork->entry->dirt = 1;
 		}
 	}
 }
@@ -738,7 +736,6 @@ int hfs_extent_map(struct hfs_fork *fork, int block, int create)
 	if (block >= fork->psize) {
 		if (create) {
 			grow_fork(fork, ablock + 1);
-			fork->entry->dirt = 1;
 		} else {
 			return 0;
 		}

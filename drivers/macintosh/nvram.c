@@ -28,30 +28,40 @@ static long long nvram_llseek(struct file *file, loff_t offset, int origin)
 	return file->f_pos;
 }
 
-static long read_nvram(struct inode *inode, struct file *file,
-	char *buf, unsigned long count)
+static ssize_t read_nvram(struct file *file, char *buf,
+			  size_t count, loff_t *ppos)
 {
-	unsigned int i = file->f_pos;
+	unsigned int i;
 	char *p = buf;
 
-	for (; count > 0 && i < NVRAM_SIZE; ++i, ++p, --count)
-		put_user(nvram_read_byte(i), p);
-	file->f_pos = i;
+	if (verify_area(VERIFY_WRITE, buf, count))
+		return -EFAULT;
+	if (*ppos >= NVRAM_SIZE)
+		return 0;
+	for (i = *ppos; count > 0 && i < NVRAM_SIZE; ++i, ++p, --count)
+		if (__put_user(nvram_read_byte(i), p))
+			return -EFAULT;
+	*ppos = i;
 	return p - buf;
 }
 
-static long write_nvram(struct inode *inode, struct file *file,
-	const char *buf, unsigned long count)
+static ssize_t write_nvram(struct file *file, const char *buf,
+			   size_t count, loff_t *ppos)
 {
-	unsigned int i = file->f_pos;
+	unsigned int i;
 	const char *p = buf;
 	char c;
 
-	for (; count > 0 && i < NVRAM_SIZE; ++i, ++p, --count) {
-		get_user(c, p);
-		nvram_write_byte(i, c);
+	if (verify_area(VERIFY_READ, buf, count))
+		return -EFAULT;
+	if (*ppos >= NVRAM_SIZE)
+		return 0;
+	for (i = *ppos; count > 0 && i < NVRAM_SIZE; ++i, ++p, --count) {
+		if (__get_user(c, p))
+			return -EFAULT;
+		nvram_write_byte(c, i);
 	}
-	file->f_pos = i;
+	*ppos = i;
 	return p - buf;
 }
 

@@ -163,7 +163,8 @@ static void sun4m_enable_pil_irq(unsigned int pil)
 	sun4m_interrupts->clear = cpu_pil_to_imask[pil];
 }
 
-void sun4m_send_ipi(int cpu, int level)
+#ifdef __SMP__
+static void sun4m_send_ipi(int cpu, int level)
 {
 	unsigned long mask;
 
@@ -171,7 +172,7 @@ void sun4m_send_ipi(int cpu, int level)
 	sun4m_interrupts->cpu_intregs[cpu].set = mask;
 }
 
-void sun4m_clear_ipi(int cpu, int level)
+static void sun4m_clear_ipi(int cpu, int level)
 {
 	unsigned long mask;
 
@@ -179,10 +180,11 @@ void sun4m_clear_ipi(int cpu, int level)
 	sun4m_interrupts->cpu_intregs[cpu].clear = mask;
 }
 
-void sun4m_set_udt(int cpu)
+static void sun4m_set_udt(int cpu)
 {
 	sun4m_interrupts->undirected_target = cpu;
 }
+#endif
 
 #define OBIO_INTR	0x20
 #define TIMER_IRQ  	(OBIO_INTR | 10)

@@ -129,6 +129,7 @@ void swap_free(unsigned long entry)
 
 	if (!entry)
 		goto out;
+
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
 		goto out;

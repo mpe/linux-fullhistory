@@ -1,7 +1,8 @@
-/* $Id: viking.S,v 1.3 1997/05/04 10:02:14 ecd Exp $
+/* $Id: viking.S,v 1.6 1997/11/27 15:42:32 jj Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
+ * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
  */
 
 #include <asm/ptrace.h>
@@ -36,6 +37,20 @@
 	.globl	viking_flush_tlb_all, viking_flush_tlb_mm
 	.globl	viking_flush_tlb_range, viking_flush_tlb_page
 
+	.globl	viking_c_mxcc_flush_page
+	.globl	viking_c_flush_page, viking_c_flush_chunk
+
+viking_c_flush_page:
+viking_c_flush_chunk:
+	sethi	%hi(KERNBASE), %g2
+	cmp	%o0, %g2
+	bgeu	2f
+	 sub	%o0, %g2, %g3
+	sethi	%hi(C_LABEL(page_contig_offset)), %g2
+	ld	[%g2 + %lo(C_LABEL(page_contig_offset))], %g2
+	ba	2f
+	 sub	%o0, %g2, %g3
+
 viking_flush_page:
 viking_flush_chunk:
 	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
@@ -56,13 +71,14 @@ viking_flush_chunk:
 	sub	%o0, %o1, %g2
 	ld	[%g3 + 4], %o0
 	add	%g2, %o0, %g3
-	srl	%g3, 12, %g1		! ppage >> 12
+2:	srl	%g3, 12, %g1		! ppage >> 12
 
 	clr	%o1			! set counter, 0 - 127
 	sethi	%hi(KERNBASE + PAGE_SIZE - 0x80000000), %o3
 	sethi	%hi(0x80000000), %o4
 	sethi	%hi(VIKING_PTAG_VALID | VIKING_PTAG_DIRTY), %o5
-	sethi	%hi(PAGE_SIZE), %o0
+	sethi	%hi(2*PAGE_SIZE), %o0
+	sethi	%hi(PAGE_SIZE), %g7
 	clr	%o2			! block counter, 0 - 3
 5:
 	sll	%o1, 5, %g4
@@ -83,20 +99,16 @@ viking_flush_chunk:
 
 	add	%g4, %o3, %g2		! (KERNBASE + PAGE_SIZE) | (set << 5)
 	ld	[%g2], %g3
+	ld	[%g2 + %g7], %g3
 	add	%g2, %o0, %g2
 	ld	[%g2], %g3
+	ld	[%g2 + %g7], %g3
 	add	%g2, %o0, %g2
 	ld	[%g2], %g3
+	ld	[%g2 + %g7], %g3
 	add	%g2, %o0, %g2
 	ld	[%g2], %g3
-	add	%g2, %o0, %g2
-	ld	[%g2], %g3
-	add	%g2, %o0, %g2
-	ld	[%g2], %g3
-	add	%g2, %o0, %g2
-	ld	[%g2], %g3
-	add	%g2, %o0, %g2
-	ld	[%g2], %g3
+	ld	[%g2 + %g7], %g3
 
 	b	8f
 	 inc	%o1
@@ -115,6 +127,15 @@ viking_flush_chunk:
 	retl
 	 nop
 
+viking_c_mxcc_flush_page:
+	sethi	%hi(KERNBASE), %g2
+	cmp	%o0, %g2
+	bgeu	2f
+	 sub	%o0, %g2, %g3
+	sethi	%hi(C_LABEL(page_contig_offset)), %g2
+	ld	[%g2 + %lo(C_LABEL(page_contig_offset))], %g2
+	ba	2f
+	 sub	%o0, %g2, %g3
 
 viking_mxcc_flush_page:
 	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
@@ -134,17 +155,12 @@ viking_mxcc_flush_page:
 	ld	[%g3], %o1
 	sub	%o0, %o1, %g2
 	ld	[%g3 + 4], %o0
-	sethi   %hi(PAGE_SIZE), %g4
 	add	%g2, %o0, %g3
-	add	%g3, %g4, %g3			! ppage + PAGE_SIZE
-
+2:	sub	%g3, -PAGE_SIZE, %g3		! ppage + PAGE_SIZE
 	mov	0x10, %g2			! set cacheable bit
-	sethi	%hi(MXCC_SRCSTREAM), %o2
-	or	%o2, %lo(MXCC_SRCSTREAM), %o2
-	sethi	%hi(MXCC_DESSTREAM), %o3
+	sethi	%hi(MXCC_SRCSTREAM), %o3	! assume %hi(MXCC_SRCSTREAM) == %hi(MXCC_DESTSTREAM)
+	or	%o3, %lo(MXCC_SRCSTREAM), %o2
 	or	%o3, %lo(MXCC_DESSTREAM), %o3
-
-5:
 	sub	%g3, MXCC_STREAM_SIZE, %g3
 6:
 	stda	%g2, [%o2] ASI_M_MXCC
@@ -168,7 +184,6 @@ viking_flush_cache_page:
 	 nop
 
 viking_flush_tlb_all:
-	WINDOW_FLUSH(%g4, %g5)
 	mov	0x400, %g1
 	retl
 	 sta	%g0, [%g1] ASI_M_FLUSH_PROBE
@@ -179,16 +194,15 @@ viking_flush_tlb_mm:
 	lda	[%g1] ASI_M_MMUREGS, %g5
 #ifndef __SMP__
 	cmp	%o1, -1
-	be	viking_flush_tlb_mm_out
+	be	1f
 #endif
-	WINDOW_FLUSH(%g2, %g3)
-
 	mov	0x300, %g2
 	sta	%o1, [%g1] ASI_M_MMUREGS
 	sta	%g0, [%g2] ASI_M_FLUSH_PROBE
-viking_flush_tlb_mm_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+1:	retl
+	 nop
 
 viking_flush_tlb_range:
 	mov	SRMMU_CTX_REG, %g1
@@ -196,42 +210,39 @@ viking_flush_tlb_range:
 	lda	[%g1] ASI_M_MMUREGS, %g5
 #ifndef __SMP__
 	cmp	%o3, -1
-	be	viking_flush_tlb_range_out
+	be	2f
 #endif
-	WINDOW_FLUSH(%g2, %g3)
-
 	srl	%o1, SRMMU_PGDIR_SHIFT, %o1
 	sta	%o3, [%g1] ASI_M_MMUREGS
 	sll	%o1, SRMMU_PGDIR_SHIFT, %o1
 	sethi	%hi(1 << SRMMU_PGDIR_SHIFT), %o4
 	add	%o1, 0x200, %o1
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
-1:
-	add	%o1, %o4, %o1
+1:	add	%o1, %o4, %o1
 	cmp	%o1, %o2
 	blu,a	1b
 	 sta	%g0, [%o1] ASI_M_FLUSH_PROBE
-viking_flush_tlb_range_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+2:	retl
+	 nop
 
 viking_flush_tlb_page:
 	ld	[%o0 + 0x00], %o0	/* XXX vma->vm_mm GROSS XXX */
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
-	and	%o1, PAGE_MASK, %o1
 	lda	[%g1] ASI_M_MMUREGS, %g5
 #ifndef __SMP__
 	cmp	%o3, -1
-	be	viking_flush_tlb_page_out
+	be	1f
 #endif
-	WINDOW_FLUSH(%g2, %g3)
-
+	and	%o1, PAGE_MASK, %o1
 	sta	%o3, [%g1] ASI_M_MMUREGS
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
-viking_flush_tlb_page_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+1:	retl
+	 nop
 
 viking_flush_page_to_ram:
 viking_flush_page_for_dma:

@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.6 1997/08/07 08:06:40 davem Exp $
+/* $Id: irq.h,v 1.7 1997/09/07 02:56:44 davem Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -49,7 +49,8 @@ extern void set_irq_udt(int);
 
 extern int request_fast_irq(unsigned int irq,
 			    void (*handler)(int, void *, struct pt_regs *),
-			    unsigned long flags, __const__ char *devname);
+			    unsigned long flags, __const__ char *devname,
+			    void *dev_id);
 
 extern __inline__ void set_softint(unsigned long bits)
 {

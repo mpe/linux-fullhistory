@@ -37,12 +37,16 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/major.h>
+#ifdef CONFIG_ABSTRACT_CONSOLE
+#include <linux/console.h>
+#endif
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/ide.h>
 #include <asm/pci-bridge.h>
+#include <asm/adb.h>
 #include "time.h"
 
 /*
@@ -55,31 +59,17 @@
 
 extern int root_mountflags;
 
-extern char command_line[];
-extern char saved_command_line[256];
-
 unsigned char drive_info;
 
 #define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 - slightly silly choice */
 
-extern unsigned long find_available_memory(void);
+static void gc_init(const char *, int);
 
-void pmac_setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p)
+void
+pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
 {
-	extern unsigned long *end_of_DRAM;
 	struct device_node *cpu;
 	int *fp;
-
-	strcpy(saved_command_line, command_line);
-	*cmdline_p = command_line;
-
-	*memory_start_p = find_available_memory();
-	*memory_end_p = (unsigned long) end_of_DRAM;
-
-	set_prom_callback();
-
-	*memory_start_p = copy_device_tree(*memory_start_p, *memory_end_p);
 
 	/* Set loops_per_sec to a half-way reasonable value,
 	   for use until calibrate_delay gets called. */
@@ -90,6 +80,7 @@ void pmac_setup_arch(char **cmdline_p,
 			switch (_get_PVR() >> 16) {
 			case 4:		/* 604 */
 			case 9:		/* 604e */
+			case 10:	/* mach V (604ev5) */
 			case 20:	/* 620 */
 				loops_per_sec = *fp;
 				break;
@@ -99,10 +90,33 @@ void pmac_setup_arch(char **cmdline_p,
 		} else
 			loops_per_sec = 50000000;
 	}
+
+	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+	gc_init("gc", 0);
+	gc_init("ohare", 1);
+
+#ifdef CONFIG_ABSTRACT_CONSOLE
+	/* Frame buffer device based console */
+	conswitchp = &fb_con;
+#endif
 }
 
-char *bootpath;
-char bootdevice[256];
+static void gc_init(const char *name, int isohare)
+{
+	struct device_node *np;
+
+	for (np = find_devices(name); np != NULL; np = np->next) {
+		if (np->n_addrs > 0)
+			ioremap(np->addrs[0].address, np->addrs[0].size);
+		if (isohare) {
+			printk(KERN_INFO "Twiddling the magic ohare bits\n");
+			out_le32(OMAGICPLACE, OMAGICCONT);
+		}
+	}
+}
+
+extern char *bootpath;
+extern char *bootdevice;
 void *boot_host;
 int boot_target;
 int boot_part;
@@ -111,31 +125,15 @@ kdev_t boot_dev;
 unsigned long
 powermac_init(unsigned long mem_start, unsigned long mem_end)
 {
-	struct device_node *chosen_np, *ohare_np;
-
-	mem_start = pmac_find_bridges(mem_start, mem_end);
-	ohare_np = find_devices("ohare");
-	if (ohare_np != NULL) {
-		printk(KERN_INFO "Twiddling the magic ohare bits\n");
-		out_le32(OMAGICPLACE, OMAGICCONT);
-	}
 	pmac_nvram_init();
-	via_cuda_init();
-	pmac_read_rtc_time();
-	pmac_find_display();
-	bootpath = NULL;
-	chosen_np = find_devices("chosen");
-	if (chosen_np != NULL)
-		bootpath = (char *) get_property(chosen_np, "bootpath", NULL);
-	if (bootpath != NULL) {
-		/*
-		 * There's a bug in the prom.  (Why am I not surprised.)
-		 * If you pass a path like scsi/sd@1:0 to canon, it returns
-		 * something like /bandit@F2000000/gc@10/53c94@10000/sd@0,0
-		 * That is, the scsi target number doesn't get preserved.
-		 */
-		call_prom("canon", 3, 1, bootpath, bootdevice, sizeof(bootdevice));
+	adb_init();
+	if (_machine == _MACH_Pmac) {
+		pmac_read_rtc_time();
 	}
+#ifdef CONFIG_PMAC_CONSOLE
+	pmac_find_display();
+#endif
+
 	return mem_start;
 }
 
@@ -146,9 +144,17 @@ note_scsi_host(struct device_node *node, void *host)
 	char *p;
 
 	l = strlen(node->full_name);
-	if (strncmp(node->full_name, bootdevice, l) == 0
+	if (bootpath != NULL && bootdevice != NULL
+	    && strncmp(node->full_name, bootdevice, l) == 0
 	    && (bootdevice[l] == '/' || bootdevice[l] == 0)) {
 		boot_host = host;
+		/*
+		 * There's a bug in OF 1.0.5.  (Why am I not surprised.)
+		 * If you pass a path like scsi/sd@1:0 to canon, it returns
+		 * something like /bandit@F2000000/gc@10/53c94@10000/sd@0,0
+		 * That is, the scsi target number doesn't get preserved.
+		 * So we pick the target number out of bootpath and use that.
+		 */
 		p = strstr(bootpath, "/sd@");
 		if (p != NULL) {
 			p += 4;
@@ -159,6 +165,28 @@ note_scsi_host(struct device_node *node, void *host)
 		}
 	}
 }
+
+#ifdef CONFIG_SCSI
+/* Find the device number for the disk (if any) at target tgt
+   on host adaptor host.
+   XXX this really really should be in drivers/scsi/sd.c. */
+#include <linux/blkdev.h>
+#include "../../../drivers/scsi/scsi.h"
+#include "../../../drivers/scsi/sd.h"
+#include "../../../drivers/scsi/hosts.h"
+
+int sd_find_target(void *host, int tgt)
+{
+    Scsi_Disk *dp;
+    int i;
+
+    for (dp = rscsi_disks, i = 0; i < sd_template.dev_max; ++i, ++dp)
+        if (dp->device != NULL && dp->device->host == host
+            && dp->device->id == tgt)
+            return MKDEV(SCSI_DISK_MAJOR, i << 4);
+    return 0;
+}
+#endif
 
 void find_boot_device(void)
 {
@@ -230,42 +258,8 @@ void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 int
 pmac_get_cpuinfo(char *buffer)
 {
-	int pvr = _get_PVR();
-	char *model;
-	struct device_node *cpu;
-	int l, *fp;
-
-	l = 0;
-	cpu = find_type_devices("cpu");
-	if (cpu != 0) {
-		fp = (int *) get_property(cpu, "clock-frequency", NULL);
-		if (fp != 0)
-			l += sprintf(buffer, "%dMHz ", *fp / 1000000);
-	}
-
-	switch (pvr>>16) {
-	case 1:
-		model = "601";
-		break;
-	case 3:
-		model = "603";
-		break;
-	case 4:
-		model = "604";
-		break;
-	case 6:
-		model = "603e";
-		break;
-	case 7:
-		model = "603ev";
-		break;
-	case 9:
-		model = "604e";
-		break;
-	default:
-		model = "unknown";
-		break;
-	}
-	return l + sprintf(buffer+l, "PowerPC %s rev %d.%d\n", model,
-			   (pvr & 0xff00) >> 8, pvr & 0xff);
+	int len;
+	/* should find motherboard type here as well */
+	len = sprintf(buffer,"machine\t\t: PowerMac\n");
+	return len;
 }

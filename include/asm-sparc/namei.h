@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.8 1997/09/05 12:38:51 jj Exp $
+/* $Id: namei.h,v 1.10 1997/09/24 16:20:36 jj Exp $
  * linux/include/asm-sparc/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -14,37 +14,48 @@
 static inline struct dentry *
 __sparc_lookup_dentry(const char *name, int follow_link)
 {
-	int error;
 	struct dentry *base;
+	char *emul;
 
 	switch (current->personality) {
 	case PER_BSD:
+		emul = SPARC_BSD_EMUL; break;
 	case PER_SVR4:
-		break;
+		emul = SPARC_SOL_EMUL; break;
 	default:
-		return ERR_PTR(-ENOENT);
+		return NULL;
 	}
 
-	base = lookup_dentry ((current->personality == PER_BSD) ?
-			SPARC_BSD_EMUL : SPARC_SOL_EMUL,
-			dget (current->fs->root), 1);
+	base = lookup_dentry (emul, dget (current->fs->root), 1);
 			
-	if (IS_ERR (base)) return base;
+	if (IS_ERR (base)) return NULL;
 	
 	base = lookup_dentry (name, base, follow_link);
-
-	if (IS_ERR (base)) return base;
-
+	
+	if (IS_ERR (base)) return NULL;
+	
 	if (!base->d_inode) {
-		dput(base);
-		return ERR_PTR(-ENOENT);
+		struct dentry *fromroot;
+		
+		fromroot = lookup_dentry (name, dget (current->fs->root), follow_link);
+		
+		if (IS_ERR (fromroot)) return base;
+		
+		if (fromroot->d_inode) {
+			dput(base);
+			return fromroot;
+		}
+		
+		dput(fromroot);
 	}
-        
-        return base;
+	
+	return base;
 }
 
 #define __prefix_lookup_dentry(name, follow_link)				\
-	dentry = __sparc_lookup_dentry (name, follow_link);			\
-	if (!IS_ERR (dentry)) return dentry;
+	if (current->personality) {						\
+		dentry = __sparc_lookup_dentry (name, follow_link);		\
+		if (dentry) return dentry;					\
+	}
 
 #endif /* __SPARC_NAMEI_H */

@@ -1,10 +1,12 @@
-/* $Id: sparc64_ksyms.c,v 1.21 1997/09/03 12:29:07 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.27 1997/11/19 07:57:46 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  */
 
+/* Tell string.h we don't want memcpy etc. as cpp defines */
+#define EXPORT_SYMTAB_STROPS
 #define PROMLIB_INTERNAL
 
 #include <linux/config.h>
@@ -12,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/in6.h>
+#include <linux/pci.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -30,9 +33,13 @@
 #include <asm/user.h>
 #include <asm/uaccess.h>
 #include <asm/checksum.h>
+#include <asm/fpumacro.h>
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #include <asm/dma.h>
+#endif
+#ifdef CONFIG_PCI
+#include <asm/ebus.h>
 #endif
 #include <asm/a.out.h>
 #include <asm/svr4.h>
@@ -43,6 +50,7 @@ struct poll {
 	short revents;
 };
 
+extern void die_if_kernel(char *str, struct pt_regs *regs);
 extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
@@ -68,6 +76,7 @@ extern int svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs);
 extern int svr4_setcontext(svr4_ucontext_t *uc, struct pt_regs *regs);
 extern int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 extern int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg);
+extern int (*handle_mathemu)(struct pt_regs *, struct fpustate *);
                 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -123,6 +132,10 @@ EXPORT_SYMBOL(mmu_release_scsi_sgl);
 EXPORT_SYMBOL(SBus_chain);
 EXPORT_SYMBOL(dma_chain);
 #endif
+#if CONFIG_PCI
+EXPORT_SYMBOL(ebus_chain);
+EXPORT_SYMBOL(pci_devices);
+#endif
 
 /* Solaris/SunOS binary compatibility */
 EXPORT_SYMBOL(_sigpause_common);
@@ -130,6 +143,9 @@ EXPORT_SYMBOL(sunos_mmap);
 
 /* Should really be in linux/kernel/ksyms.c */
 EXPORT_SYMBOL(dump_thread);
+
+/* math-emu wants this */
+EXPORT_SYMBOL(die_if_kernel);
 
 /* prom symbols */
 EXPORT_SYMBOL(idprom);
@@ -188,6 +204,10 @@ EXPORT_SYMBOL(svr4_setcontext);
 EXPORT_SYMBOL(linux_cpus);
 EXPORT_SYMBOL(sys_ioctl);
 EXPORT_SYMBOL(sys32_ioctl);
+#endif
+
+#ifdef CONFIG_MATHEMU_MODULE
+EXPORT_SYMBOL(handle_mathemu);
 #endif
 
 /* Special internal versions of library functions. */

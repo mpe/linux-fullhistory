@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.33 1997/11/28 15:32:03 alan Exp $
+ * Version:	$Id: ip_forward.c,v 1.37 1997/12/18 17:01:11 kuznet Exp $
  *
  * Authors:	see ip.c
  *
@@ -112,7 +112,7 @@ int ip_forward(struct sk_buff *skb)
 	if (ip_decrease_ttl(iph) <= 0)
                 goto too_many_hops;
 
-	if (opt->is_strictroute && (rt->rt_flags&RTF_GATEWAY))
+	if (opt->is_strictroute && rt->rt_dst != rt->rt_gateway)
                 goto sr_failed;
 
 	/*
@@ -141,51 +141,44 @@ int ip_forward(struct sk_buff *skb)
 	 * If the indicated interface is up and running, kick it.
 	 */
 
-	if (dev2->flags & IFF_UP) {
-		if (skb->len > mtu && (ntohs(iph->frag_off) & IP_DF))
-			goto frag_needed;
+	if (skb->len > mtu && (ntohs(iph->frag_off) & IP_DF))
+		goto frag_needed;
 
 #ifdef CONFIG_IP_ROUTE_NAT
-		if (rt->rt_flags & RTCF_NAT) {
-			if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
-				struct sk_buff *skb2;
-				skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
-				kfree_skb(skb, FREE_WRITE);
-				skb = skb2;
-			}
-			if (ip_do_nat(skb)) {
-				kfree_skb(skb, FREE_WRITE);
+	if (rt->rt_flags & RTCF_NAT) {
+		if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
+			struct sk_buff *skb2;
+			skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
+			kfree_skb(skb, FREE_WRITE);
+			if (skb2 == NULL)
 				return -1;
-			}
+			skb = skb2;
 		}
+		if (ip_do_nat(skb)) {
+			kfree_skb(skb, FREE_WRITE);
+			return -1;
+		}
+	}
 #endif
 
 #ifdef CONFIG_IP_MASQUERADE
-		if(!(IPCB(skb)->flags&IPSKB_MASQUERADED)) {
-
-			if (rt->rt_flags&RTCF_VALVE) {
-				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PKT_FILTERED, 0);
-				kfree_skb(skb, FREE_READ);
-				return -1;
-			}
-
-			/* 
-			 *	Check that any ICMP packets are not for a 
-			 *	masqueraded connection.  If so rewrite them
-			 *	and skip the firewall checks
-			 */
-			if (iph->protocol == IPPROTO_ICMP) {
-				__u32 maddr;
+	if(!(IPCB(skb)->flags&IPSKB_MASQUERADED)) {
+		/* 
+		 *	Check that any ICMP packets are not for a 
+		 *	masqueraded connection.  If so rewrite them
+		 *	and skip the firewall checks
+		 */
+		if (iph->protocol == IPPROTO_ICMP) {
+			__u32 maddr;
 #ifdef CONFIG_IP_MASQUERADE_ICMP
-#define icmph ((struct icmphdr *)((char *)iph + (iph->ihl<<2)))
-			    if ((icmph->type==ICMP_DEST_UNREACH)||
-				(icmph->type==ICMP_SOURCE_QUENCH)||
-				(icmph->type==ICMP_TIME_EXCEEDED))
-			        {
+			struct icmphdr *icmph = (struct icmphdr *)((char*)iph + (iph->ihl << 2));
+			if ((icmph->type==ICMP_DEST_UNREACH)||
+			    (icmph->type==ICMP_SOURCE_QUENCH)||
+			    (icmph->type==ICMP_TIME_EXCEEDED))
+			{
 #endif
 				maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
-				fw_res = ip_fw_masq_icmp(&skb, maddr);
-			        if (fw_res < 0) {
+			        if (fw_res = ip_fw_masq_icmp(&skb, maddr) < 0) {
 					kfree_skb(skb, FREE_READ);
 					return -1;
 				}
@@ -196,9 +189,9 @@ int ip_forward(struct sk_buff *skb)
 #ifdef CONFIG_IP_MASQUERADE_ICMP
 			       }
 #endif				
-			}
-			if (rt->rt_flags&RTCF_MASQ)
-				goto skip_call_fw_firewall;
+		}
+		if (rt->rt_flags&RTCF_MASQ)
+			goto skip_call_fw_firewall;
 #endif /* CONFIG_IP_MASQUERADE */
 
 #ifdef CONFIG_FIREWALL
@@ -217,21 +210,21 @@ int ip_forward(struct sk_buff *skb)
 #endif
 
 #ifdef CONFIG_IP_MASQUERADE
-		}
+	}
 
 skip_call_fw_firewall:
-		/*
-		 * If this fragment needs masquerading, make it so...
-		 * (Don't masquerade de-masqueraded fragments)
-		 */
-		if (!(IPCB(skb)->flags&IPSKB_MASQUERADED) &&
-		    (fw_res==FW_MASQUERADE || rt->rt_flags&RTCF_MASQ)) {
-			u32 maddr;
+	/*
+	 * If this fragment needs masquerading, make it so...
+	 * (Don't masquerade de-masqueraded fragments)
+	 */
+	if (!(IPCB(skb)->flags&IPSKB_MASQUERADED) &&
+	    (fw_res==FW_MASQUERADE || rt->rt_flags&RTCF_MASQ)) {
+		u32 maddr;
 
 #ifdef CONFIG_IP_ROUTE_NAT
-			maddr = (rt->rt_flags&RTCF_MASQ) ? rt->rt_src_map : 0;
+		maddr = (rt->rt_flags&RTCF_MASQ) ? rt->rt_src_map : 0;
 
-			if (maddr == 0)
+		if (maddr == 0)
 #endif
 			maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
 
@@ -245,48 +238,55 @@ skip_call_fw_firewall:
 				iph = skb->nh.iph;
 				opt = &(IPCB(skb)->opt);
 			}
-		}
+	}
 #endif
 
-		if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
-			struct sk_buff *skb2;
-			skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
-			kfree_skb(skb, FREE_WRITE);
+	if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
+		struct sk_buff *skb2;
+		skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
+		kfree_skb(skb, FREE_WRITE);
 
-			if (skb2 == NULL) {
-				NETDEBUG(printk(KERN_ERR "\nIP: No memory available for IP forward\n"));
-				return -1;
-			}
-			skb = skb2;
-			iph = skb2->nh.iph;
-		}
-
-#ifdef CONFIG_FIREWALL
-		if ((fw_res = call_out_firewall(PF_INET, dev2, iph, NULL,&skb)) < FW_ACCEPT) {
-			/* FW_ACCEPT and FW_MASQUERADE are treated equal:
-			   masquerading is only supported via forward rules */
-			if (fw_res == FW_REJECT)
-				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
-			kfree_skb(skb,FREE_WRITE);
+		if (skb2 == NULL) {
+			NETDEBUG(printk(KERN_ERR "\nIP: No memory available for IP forward\n"));
 			return -1;
 		}
+		skb = skb2;
+		iph = skb2->nh.iph;
+	}
+
+#ifdef CONFIG_FIREWALL
+	if ((fw_res = call_out_firewall(PF_INET, dev2, iph, NULL,&skb)) < FW_ACCEPT) {
+		/* FW_ACCEPT and FW_MASQUERADE are treated equal:
+		   masquerading is only supported via forward rules */
+		if (fw_res == FW_REJECT)
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
+		kfree_skb(skb,FREE_WRITE);
+		return -1;
+	}
 #endif
 
-		ip_statistics.IpForwDatagrams++;
+	ip_statistics.IpForwDatagrams++;
 
-		if (opt->optlen == 0) {
-			ip_send(skb);
-			return 0;
+	if (opt->optlen == 0) {
+#ifdef CONFIG_NET_FASTROUTE
+		if (rt->rt_flags&RTCF_FAST && !netdev_fastroute_obstacles) {
+			unsigned h = ((*(u8*)&rt->key.dst)^(*(u8*)&rt->key.src))&NETDEV_FASTROUTE_HMASK;
+			/* Time to switch to functional programming :-) */
+			dst_release(xchg(&skb->dev->fastpath[h], dst_clone(&rt->u.dst)));
 		}
-	        ip_forward_options(skb);
+#endif
 		ip_send(skb);
+		return 0;
 	}
+
+	ip_forward_options(skb);
+	ip_send(skb);
 	return 0;
 
 #ifdef CONFIG_TRANSPARENT_PROXY
 local_pkt:
-#endif
 	return ip_local_deliver(skb);
+#endif
 
 frag_needed:
 	ip_statistics.IpFragFails++;

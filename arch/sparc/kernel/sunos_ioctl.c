@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.28 1997/02/15 01:17:05 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.29 1997/09/18 10:37:31 rth Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -45,8 +45,8 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 
 	/* First handle an easy compat. case for tty ldisc. */
 	if(cmd == TIOCSETD) {
-		int *p, ntty = N_TTY;
-		int tmp, oldfs;
+		int *p, ntty = N_TTY, tmp;
+		mm_segment_t oldfs;
 
 		p = (int *) arg;
 		ret = -EFAULT;

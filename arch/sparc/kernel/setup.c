@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.85 1997/05/27 06:45:54 davem Exp $
+/*  $Id: setup.c,v 1.87 1997/12/18 02:42:42 ecd Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -25,6 +25,7 @@
 #include <linux/blk.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/console.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -118,7 +119,9 @@ extern void rs_kgdb_hook(int tty_num); /* sparc/serial.c */
 unsigned int boot_flags;
 #define BOOTME_DEBUG  0x1
 #define BOOTME_SINGLE 0x2
-#define BOOTME_KGDB   0x4
+#define BOOTME_KGDBA  0x4
+#define BOOTME_KGDBB  0x8
+#define BOOTME_KGDB   0xc
 
 #ifdef CONFIG_SUN_CONSOLE
 extern char *console_fb_path;
@@ -188,15 +191,14 @@ __initfunc(static void boot_flags_init(char *commands))
 				process_switch(*commands++);
 		} else if (strlen(commands) >= 9
 			   && !strncmp(commands, "kgdb=tty", 8)) {
-			boot_flags |= BOOTME_KGDB;
 			switch (commands[8]) {
 #ifdef CONFIG_SUN_SERIAL
 			case 'a':
-				rs_kgdb_hook(0);
+				boot_flags |= BOOTME_KGDBA;
 				prom_printf("KGDB: Using serial line /dev/ttya.\n");
 				break;
 			case 'b':
-				rs_kgdb_hook(1);
+				boot_flags |= BOOTME_KGDBB;
 				prom_printf("KGDB: Using serial line /dev/ttyb.\n");
 				break;
 #endif
@@ -207,7 +209,6 @@ __initfunc(static void boot_flags_init(char *commands))
 #endif
 			default:
 				printk("KGDB: Unknown tty line.\n");
-				boot_flags &= ~BOOTME_KGDB;
 				break;
 			}
 			commands += 9;
@@ -273,8 +274,6 @@ extern unsigned ramdisk_size;
 
 extern int root_mountflags;
 
-extern void register_console(void (*proc)(const char *));
-
 char saved_command_line[256];
 char reboot_command[256];
 enum sparc_cpu sparc_cpu_model;
@@ -282,6 +281,16 @@ enum sparc_cpu sparc_cpu_model;
 struct tt_entry *sparc_ttable;
 
 static struct pt_regs fake_swapper_regs = { 0, 0, 0, 0, { 0, } };
+
+static void prom_cons_write(struct console *con, const char *str, unsigned count)
+{
+	while (count--)
+		prom_printf("%c", *str++);
+}
+
+static struct console prom_console = {
+	"PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
+};
 
 __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
@@ -335,7 +344,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 		printk("SUN4U\n");
 		break;
 	case ap1000:
-		register_console((void (*) (const char *))prom_printf);
+		register_console(&prom_console);
 		printk("AP1000\n");
 		packed = 1;
 		break;
@@ -345,16 +354,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	};
 
 	boot_flags_init(*cmdline_p);
-	if((boot_flags&BOOTME_DEBUG) && (linux_dbvec!=0) && 
-	   ((*(short *)linux_dbvec) != -1)) {
-		printk("Booted under KADB. Syncing trap table.\n");
-		(*(linux_dbvec->teach_debugger))();
-	}
-	if((boot_flags & BOOTME_KGDB)) {
-		set_debug_traps();
-		prom_printf ("Breakpoint!\n");
-		breakpoint();
-	}
 
 	idprom_init();
 	load_mmu();
@@ -410,6 +409,56 @@ __initfunc(void setup_arch(char **cmdline_p,
 	}
 not_relevant:
 		
+#ifdef CONFIG_SUN_SERIAL
+	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
+#endif
+	{
+		extern int serial_console;  /* in console.c, of course */
+#if !CONFIG_SUN_SERIAL
+		serial_console = 0;
+#else
+		switch (console_fb) {
+		case 0: /* Let get our io devices from prom */
+			{
+				int idev = prom_query_input_device();
+				int odev = prom_query_output_device();
+				if (idev == PROMDEV_IKBD && odev == PROMDEV_OSCREEN) {
+					serial_console = 0;
+				} else if (idev == PROMDEV_ITTYA && odev == PROMDEV_OTTYA) {
+					serial_console = 1;
+				} else if (idev == PROMDEV_ITTYB && odev == PROMDEV_OTTYB) {
+					serial_console = 2;
+				} else {
+					prom_printf("Inconsistent console\n");
+					prom_halt();
+				}
+			}
+			break;
+		case 1: serial_console = 0; break; /* Force one of the framebuffers as console */
+		case 2: serial_console = 1; break; /* Force ttya as console */
+		case 3: serial_console = 2; break; /* Force ttyb as console */
+		}
+#endif
+	}
+
+	if ((boot_flags & BOOTME_KGDBA)) {
+		rs_kgdb_hook(0);
+	}
+	if ((boot_flags & BOOTME_KGDBB)) {
+		rs_kgdb_hook(1);
+	}
+
+	if((boot_flags&BOOTME_DEBUG) && (linux_dbvec!=0) && 
+	   ((*(short *)linux_dbvec) != -1)) {
+		printk("Booted under KADB. Syncing trap table.\n");
+		(*(linux_dbvec->teach_debugger))();
+	}
+	if((boot_flags & BOOTME_KGDB)) {
+		set_debug_traps();
+		prom_printf ("Breakpoint!\n");
+		breakpoint();
+	}
+
 	if (!root_flags)
 		root_mountflags &= ~MS_RDONLY;
 	ROOT_DEV = to_kdev_t(root_dev);
@@ -443,37 +492,6 @@ not_relevant:
 	init_task.mm->context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
 
-#ifdef CONFIG_SUN_SERIAL
-	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
-#endif
-	{
-		extern int serial_console;  /* in console.c, of course */
-#if !CONFIG_SUN_SERIAL
-		serial_console = 0;
-#else
-		switch (console_fb) {
-		case 0: /* Let get our io devices from prom */
-			{
-				int idev = prom_query_input_device();
-				int odev = prom_query_output_device();
-				if (idev == PROMDEV_IKBD && odev == PROMDEV_OSCREEN) {
-					serial_console = 0;
-				} else if (idev == PROMDEV_ITTYA && odev == PROMDEV_OTTYA) {
-					serial_console = 1;
-				} else if (idev == PROMDEV_ITTYB && odev == PROMDEV_OTTYB) {
-					serial_console = 2;
-				} else {
-					prom_printf("Inconsistent console\n");
-					prom_halt();
-				}
-			}
-			break;
-		case 1: serial_console = 0; break; /* Force one of the framebuffers as console */
-		case 2: serial_console = 1; break; /* Force ttya as console */
-		case 3: serial_console = 2; break; /* Force ttyb as console */
-		}
-#endif
-	}
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

@@ -17,6 +17,7 @@ typedef struct { int counter; } atomic_t;
 #define atomic_set(v,i)		(((v)->counter) = (i))
 
 extern void atomic_add(int a, atomic_t *v);
+extern int  atomic_add_return(int a, atomic_t *v);
 extern void atomic_sub(int a, atomic_t *v);
 extern void atomic_inc(atomic_t *v);
 extern int  atomic_inc_return(atomic_t *v);

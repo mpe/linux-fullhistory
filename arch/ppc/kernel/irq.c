@@ -38,17 +38,22 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
+#include <asm/gg2.h>
 
 #undef SHOW_IRQ
-#define OPENPIC_DEBUG
 
 unsigned lost_interrupts = 0;
 unsigned int local_irq_count[NR_CPUS];
 static struct irqaction irq_action[NR_IRQS];
 static int spurious_interrupts = 0;
-int __ppc_bh_counter;
 static unsigned int cached_irq_mask = 0xffffffff;
 static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
+spinlock_t irq_controller_lock;
+#ifdef __SMP__
+atomic_t __ppc_bh_counter = ATOMIC_INIT(0);
+#else
+int __ppc_bh_counter = 0;
+#endif
 
 #define cached_21	(((char *)(&cached_irq_mask))[3])
 #define cached_A1	(((char *)(&cached_irq_mask))[2])
@@ -57,7 +62,8 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
  * These are set to the appropriate functions by init_IRQ()
  */
 void (*mask_and_ack_irq)(int irq_nr);
-void (*set_irq_mask)(int irq_nr);
+void (*mask_irq)(unsigned int irq_nr);
+void (*unmask_irq)(unsigned int irq_nr);
 
 
 /* prep */
@@ -72,8 +78,6 @@ extern unsigned long route_pci_interrupts(void);
 #define KEYBOARD_IRQ	20	/* irq number for command-power interrupt */
 #define PMAC_IRQ_MASK	(~ld_le32(IRQ_ENABLE))
 
-/* chrp */
-volatile struct Hydra *Hydra = NULL;
 
 void i8259_mask_and_ack_irq(int irq_nr)
 {
@@ -97,10 +101,14 @@ void i8259_mask_and_ack_irq(int irq_nr)
 
 void pmac_mask_and_ack_irq(int irq_nr)
 {
+	unsigned long bit = 1UL << irq_nr;
+
 	spin_lock(&irq_controller_lock);
-	cached_irq_mask |= 1 << irq_nr;
-	out_le32(IRQ_ENABLE, ld_le32(IRQ_ENABLE) & ~(1 << irq_nr));
-	out_le32(IRQ_ACK, 1U << irq_nr);
+	cached_irq_mask |= bit;
+	lost_interrupts &= ~bit;
+	out_le32(IRQ_ACK, bit);
+	out_le32(IRQ_ENABLE, ~cached_irq_mask);
+	out_le32(IRQ_ACK, bit);
 	spin_unlock(&irq_controller_lock);
 }
 
@@ -109,11 +117,10 @@ void chrp_mask_and_ack_irq(int irq_nr)
 	/* spinlocks are done by i8259_mask_and_ack() - Cort */
 	if (is_8259_irq(irq_nr))
 	    i8259_mask_and_ack_irq(irq_nr);
-	openpic_eoi(0);	
 }
 
 
-void i8259_set_irq_mask(int irq_nr)
+static void i8259_set_irq_mask(int irq_nr)
 {
 	if (irq_nr > 7) {
 		outb(cached_A1,0xA1);
@@ -122,8 +129,10 @@ void i8259_set_irq_mask(int irq_nr)
 	}
 }
 
-void pmac_set_irq_mask(int irq_nr)
+static void pmac_set_irq_mask(int irq_nr)
 {
+	unsigned long bit = 1UL << irq_nr;
+
 	/* this could be being enabled or disabled - so use cached_irq_mask */
 	out_le32(IRQ_ENABLE, ~cached_irq_mask /* enable all unmasked */ );
 	/*
@@ -131,39 +140,53 @@ void pmac_set_irq_mask(int irq_nr)
 	 * when the device interrupt is already on *doesn't* set
 	 * the bit in the flag register or request another interrupt.
 	 */
-	if ((ld_le32(IRQ_LEVEL) & (1UL<<irq_nr)) && !(ld_le32(IRQ_FLAG) & (1UL<<irq_nr)))
-		lost_interrupts |= (1UL<<irq_nr);
-}
-
-void chrp_set_irq_mask(int irq_nr)
-{
-	if (is_8259_irq(irq_nr)) {
-		i8259_set_irq_mask(irq_nr);
-	} else
-	{
-		/* disable? */
-		if ( cached_irq_mask & (1UL<<irq_nr) )
-			openpic_disable_irq(irq_to_openpic(irq_nr));
-		/* enable */
-		else
-			openpic_disable_irq(irq_to_openpic(irq_nr));
-	}
+	if ((bit & ~cached_irq_mask)
+	    && (ld_le32(IRQ_LEVEL) & bit) && !(ld_le32(IRQ_FLAG) & bit))
+		lost_interrupts |= bit;
 }
 
 /*
  * These have to be protected by the spinlock
  * before being called.
  */
-static inline void mask_irq(unsigned int irq_nr)
+static void i8259_mask_irq(unsigned int irq_nr)
 {
 	cached_irq_mask |= 1 << irq_nr;
-	set_irq_mask(irq_nr);
+	i8259_set_irq_mask(irq_nr);
 }
 
-static inline void unmask_irq(unsigned int irq_nr)
+static void i8259_unmask_irq(unsigned int irq_nr)
 {
 	cached_irq_mask &= ~(1 << irq_nr);
-	set_irq_mask(irq_nr);
+	i8259_set_irq_mask(irq_nr);
+}
+
+static void pmac_mask_irq(unsigned int irq_nr)
+{
+	cached_irq_mask |= 1 << irq_nr;
+	pmac_set_irq_mask(irq_nr);
+}
+
+static void pmac_unmask_irq(unsigned int irq_nr)
+{
+	cached_irq_mask &= ~(1 << irq_nr);
+	pmac_set_irq_mask(irq_nr);
+}
+
+static void chrp_mask_irq(unsigned int irq_nr)
+{
+	if (is_8259_irq(irq_nr))
+		i8259_mask_irq(irq_nr);
+	else
+		openpic_disable_irq(irq_to_openpic(irq_nr));
+}
+
+static void chrp_unmask_irq(unsigned int irq_nr)
+{
+	if (is_8259_irq(irq_nr))
+		i8259_unmask_irq(irq_nr);
+	else
+		openpic_enable_irq(irq_to_openpic(irq_nr));
 }
 
 void disable_irq(unsigned int irq_nr)
@@ -205,10 +228,166 @@ int get_irq_list(char *buf)
 	len+=sprintf(buf+len, "IPI: %8lu received\n",
 		ipi_count);
 #endif
-	len += sprintf(buf+len, "99: %10u    spurious or short\n",
+	len += sprintf(buf+len, "99: %10u   spurious or short\n",
 		       spurious_interrupts);
 	return len;
 }
+
+
+#ifdef __SMP__
+/* Who has global_irq_lock. */
+unsigned char global_irq_holder = NO_PROC_ID;
+
+/* This protects IRQ's. */
+spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
+unsigned long previous_irqholder;
+
+/* This protects BH software state (masks, things like that). */
+spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
+
+/* Global IRQ locking depth. */
+atomic_t global_irq_count = ATOMIC_INIT(0);
+
+#undef INIT_STUCK
+#define INIT_STUCK 100000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
+
+void wait_on_irq(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+	int local_count = local_irq_count[cpu];
+
+	/* Are we the only one in an interrupt context? */
+	while (local_count != atomic_read(&global_irq_count)) {
+		/*
+		 * No such luck. Now we need to release the lock,
+		 * _and_ release our interrupt context, because
+		 * otherwise we'd have dead-locks and live-locks
+		 * and other fun things.
+		 */
+		atomic_sub(local_count, &global_irq_count);
+		spin_unlock(&global_irq_lock);
+
+		/*
+		 * Wait for everybody else to go away and release
+		 * their things before trying to get the lock again.
+		 */
+		for (;;) {
+			STUCK;
+			if (atomic_read(&global_irq_count))
+				continue;
+			if (*((unsigned char *)&global_irq_lock))
+				continue;
+			if (spin_trylock(&global_irq_lock))
+				break;
+		}
+		atomic_add(local_count, &global_irq_count);
+	}
+}
+
+#define irq_active(cpu) \
+	(global_irq_count != local_irq_count[cpu])
+
+/*
+ * This is called when we want to synchronize with
+ * interrupts. We may for example tell a device to
+ * stop sending interrupts: but to make sure there
+ * are no interrupts that are executing on another
+ * CPU we need to call this function.
+ *
+ * On UP this is a no-op.
+ */
+void synchronize_irq(void)
+{
+	int cpu = smp_processor_id();
+	int local_count = local_irq_count[cpu];
+
+	/* Do we need to wait? */
+	if (local_count != atomic_read(&global_irq_count)) {
+		/* The stupid way to do this */
+		cli();
+		sti();
+	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 10000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {\
+ll_printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
+
+void get_irqlock(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+	if (!spin_trylock(&global_irq_lock)) {
+		/* do we already hold the lock? */
+		if ((unsigned char) cpu == global_irq_holder)
+			return;
+		/* Uhhuh.. Somebody else got it. Wait.. */
+		do {
+			do {
+				STUCK;
+				barrier();
+			} while (*((unsigned char *)&global_irq_lock));
+		} while (!spin_trylock(&global_irq_lock));
+	}
+	
+	/*
+	 * Ok, we got the lock bit.
+	 * But that's actually just the easy part.. Now
+	 * we need to make sure that nobody else is running
+	 * in an interrupt context. 
+	 */
+	wait_on_irq(cpu, where);
+	/*
+	 * Finally.
+	 */
+	global_irq_holder = cpu;
+	previous_irqholder = where;
+}
+
+void __global_cli(void)
+{
+	int cpu = smp_processor_id();
+	unsigned long where;
+	__asm__("mr %0,31" : "=r" (where)); /* get lr */
+	__cli();
+	get_irqlock(cpu, where);
+}
+
+void __global_sti(void)
+{
+	release_irqlock(smp_processor_id());
+	__sti();
+}
+
+unsigned long __global_save_flags(void)
+{
+	return global_irq_holder == (unsigned char) smp_processor_id();
+}
+
+void __global_restore_flags(unsigned long flags)
+{
+	switch (flags) {
+	case 0:
+		release_irqlock(smp_processor_id());
+		__sti();
+		break;
+	case 1:
+		__global_cli();
+		break;
+	default:
+		printk("global_restore_flags: %08lx (%08lx)\n",
+			flags, (&flags)[-1]);
+	}
+}
+#endif /* __SMP__ */
+
 
 asmlinkage void do_IRQ(struct pt_regs *regs)
 {
@@ -217,9 +396,14 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 	struct irqaction *action;
 	int cpu = smp_processor_id();
 	int status;
+	int openpic_eoi_done = 0;
+
+#ifdef __SMP__
+	if ( cpu != 0 )
+		panic("cpu %d received interrupt", cpu);
+#endif /* __SMP__ */		
 
 	hardirq_enter(cpu);
-
 
 	/*
 	 * I'll put this ugly mess of code into a function
@@ -232,7 +416,6 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 	{
 	case _MACH_Pmac:
 		bits = ld_le32(IRQ_FLAG) | lost_interrupts;
-		lost_interrupts = 0;
 		for (irq = NR_IRQS - 1; irq >= 0; --irq)
 			if (bits & (1U << irq))
 				break;
@@ -246,30 +429,37 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 			 * 
 			 * This should go in the above mask/ack code soon. -- Cort
 			 */
-			irq = (*(volatile unsigned char *)0xfec80000) & 0x0f;
+			irq = *(volatile unsigned char *)GG2_INT_ACK_SPECIAL;
+			/*
+			 * Acknowledge as soon as possible to allow i8259
+			 * interrupt nesting
+			 */
+			openpic_eoi(0);
+			openpic_eoi_done = 1;
 		}
-		else if (irq >= 64)
+		else if (irq >= OPENPIC_VEC_TIMER)
 		{
 			/*
 			 *  OpenPIC interrupts >64 will be used for other purposes
 			 *  like interprocessor interrupts and hardware errors
 			 */
-#ifdef OPENPIC_DEBUG
-			printk("OpenPIC interrupt %d\n", irq);
-#endif
-			if (irq==99)
+			if (irq == OPENPIC_VEC_SPURIOUS) {
+				/*
+				 * Spurious interrupts should never be
+				 * acknowledged
+				 */
 				spurious_interrupts++;
-		}
-		else {
-			/*
-			 *  Here we should process IPI timer
-			 *  for now the interrupt is dismissed.
-			 */
+				openpic_eoi_done = 1;
+			} else {
+				/*
+				 * Here we should process IPI timer
+				 * for now the interrupt is dismissed.
+				 */
+			}
 			goto out;
 		}
 		break;
-	case _MACH_IBM:
-	case _MACH_Motorola:
+	case _MACH_prep:
 #if 1
 		outb(0x0C, 0x20);
 		irq = inb(0x20) & 7;
@@ -314,12 +504,11 @@ retry_cascade:
 	status = 0;
 	action = irq_action + irq;
 	kstat.interrupts[irq]++;
-	if ( action && action->handler)
-	{
+	if (action->handler) {
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
 		status |= action->flags;
-			action->handler(irq, action->dev_id, regs);
+		action->handler(irq, action->dev_id, regs);
 		/*if (status & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);*/
 		__cli(); /* in case the handler turned them on */
@@ -337,6 +526,8 @@ retry_cascade:
 		goto retry_cascade;
 	/* do_bottom_half is called if necessary from int_return in head.S */
 out:
+	if (_machine == _MACH_chrp && !openpic_eoi_done)
+		openpic_eoi(0);
 	hardirq_exit(cpu);
 }
 
@@ -369,6 +560,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	restore_flags(flags);
 	return 0;
 }
+
 void free_irq(unsigned int irq, void *dev_id)
 {
 	struct irqaction * action = irq + irq_action;
@@ -411,17 +603,15 @@ __initfunc(static void i8259_init(void))
 {
 	/* init master interrupt controller */
 	outb(0x11, 0x20); /* Start init sequence */
-	outb(0x40, 0x21); /* Vector base */
-	/*outb(0x04, 0x21);*/ /* edge tiggered, Cascade (slave) on IRQ2 */
-	outb(0x0C, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
+	outb(0x00, 0x21); /* Vector base */
+	outb(0x04, 0x21); /* edge tiggered, Cascade (slave) on IRQ2 */
 	outb(0x01, 0x21); /* Select 8086 mode */
 	outb(0xFF, 0x21); /* Mask all */
 	
 	/* init slave interrupt controller */
 	outb(0x11, 0xA0); /* Start init sequence */
-	outb(0x48, 0xA1); /* Vector base */
-	/*outb(0x02, 0xA1);*/ /* edge triggered, Cascade (slave) on IRQ2 */
-	outb(0x0A, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
+	outb(0x08, 0xA1); /* Vector base */
+	outb(0x02, 0xA1); /* edge triggered, Cascade (slave) on IRQ2 */
 	outb(0x01, 0xA1); /* Select 8086 mode */
 	outb(0xFF, 0xA1); /* Mask all */
 	outb(cached_A1, 0xA1);
@@ -439,17 +629,30 @@ __initfunc(void init_IRQ(void))
 	{
 	case _MACH_Pmac:
 		mask_and_ack_irq = pmac_mask_and_ack_irq;
-		set_irq_mask = pmac_set_irq_mask;
+		mask_irq = pmac_mask_irq;
+		unmask_irq = pmac_unmask_irq;
 		
 		*IRQ_ENABLE = 0;
 #ifdef CONFIG_XMON
 		request_irq(KEYBOARD_IRQ, xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
 		break;
-	case _MACH_Motorola:
-	case _MACH_IBM:
+	case _MACH_chrp:
+		mask_and_ack_irq = chrp_mask_and_ack_irq;
+		mask_irq = chrp_mask_irq;
+		unmask_irq = chrp_unmask_irq;
+		ioremap(GG2_INT_ACK_SPECIAL, 1);
+		openpic_init();
+		i8259_init();
+#ifdef CONFIG_XMON
+		request_irq(openpic_to_irq(HYDRA_INT_ADB_NMI),
+			    xmon_irq, 0, "NMI", 0);
+#endif	/* CONFIG_XMON */
+		break;
+	case _MACH_prep:
 		mask_and_ack_irq = i8259_mask_and_ack_irq;
-		set_irq_mask = i8259_set_irq_mask;
+		mask_irq = i8259_mask_irq;
+		unmask_irq = i8259_unmask_irq;
 		
 		i8259_init();
 		route_pci_interrupts();
@@ -472,46 +675,20 @@ __initfunc(void init_IRQ(void))
 			/*
 			 * On Carolina, irq 15 and 13 must be level (scsi/ide/net).
 			 */
-			if ( _machine == _MACH_IBM )
+			if ( _prep_type == _PREP_IBM )
 				irq_mode2 |= 0xa0;
 			/*
 			 * Sound on the Powerstack reportedly needs to be edge triggered
 			 */
-			if ( _machine == _MACH_Motorola )
+			if ( _prep_type == _PREP_Motorola )
 			{
-				/*irq_mode2 &= ~0x04L;
+				irq_mode2 &= ~0x04L;
+				irq_mode2 = 0xca;
 				outb( irq_mode1 , 0x4d0 );
-				outb( irq_mode2 , 0x4d1 );*/
+				outb( irq_mode2 , 0x4d1 );
 			}
 
 		}
-		break;
-	case _MACH_chrp:
-		mask_and_ack_irq = chrp_mask_and_ack_irq;
-		set_irq_mask = chrp_set_irq_mask;
-		if ((Hydra = find_hydra())) {
-			printk("Hydra Mac I/O at %p\n", Hydra);
-			out_le32(&Hydra->Feature_Control, HYDRA_FC_SCC_CELL_EN |
-				 HYDRA_FC_SCSI_CELL_EN |
-				 HYDRA_FC_SCCA_ENABLE |
-				 HYDRA_FC_SCCB_ENABLE |
-				 HYDRA_FC_ARB_BYPASS |
-				 HYDRA_FC_MPIC_ENABLE |
-				 HYDRA_FC_SLOW_SCC_PCLK |
-				 HYDRA_FC_MPIC_IS_MASTER);
-			OpenPIC = (volatile struct OpenPIC *)&Hydra->OpenPIC;
-		} else if (!OpenPIC /* && find_xxx */) {
-			printk("Unknown openpic implementation\n");
-			/* other OpenPIC implementations */
-			/* ... */
- 		}
-		if (OpenPIC)
-		    openpic_init();
-		else
-		    panic("No OpenPIC found");
-		if (Hydra)
-		    hydra_post_openpic_init();
-		i8259_init();
 		break;
 	}
 }

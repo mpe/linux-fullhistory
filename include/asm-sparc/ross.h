@@ -1,4 +1,4 @@
-/* $Id: ross.h,v 1.12 1997/03/10 09:16:57 davem Exp $
+/* $Id: ross.h,v 1.13 1998/01/07 06:49:11 baccala Exp $
  * ross.h: Ross module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
 #define _SPARC_ROSS_H
 
 #include <asm/asi.h>
+#include <asm/page.h>
 
 /* Ross made Hypersparcs have a %psr 'impl' field of '0001'.  The 'vers'
  * field has '1111'.

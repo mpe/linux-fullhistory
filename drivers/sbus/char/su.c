@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.3 1997/09/03 11:54:56 ecd Exp $
+/* $Id: su.c,v 1.4 1997/09/07 15:40:19 ecd Exp $
  * su.c: Small serial driver for keyboard/mouse interface on Ultra/AX
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -149,16 +149,6 @@ su_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct su_struct *info = (struct su_struct *)dev_id;
 	unsigned char status;
-
-	/*
-	 * We might share interrupts with ps2kbd/ms driver,
-	 * in case we want to use the 16550A as general serial
-	 * driver in the presence of ps2 devices, so do a
-	 * sanity check here, needs to be done in ps2kbd/ms
-	 * driver, too.
-	 */
-	if (!info || info->magic != SERIAL_MAGIC)
-		return;
 
 #ifdef SERIAL_DEBUG_INTR
 	printk("su_interrupt(%d)...", irq);
@@ -644,12 +634,12 @@ __initfunc(int su_probe (unsigned long *memory_start))
 				 * Does it match?
 				 */
 				if (sunode == kbnode) {
-					info->kbd_node = kbnode;
+					info->kbd_node = sunode;
 					++info;
 					++devices;
 				}
 				if (sunode == msnode) {
-					info->ms_node = msnode;
+					info->ms_node = sunode;
 					++info;
 					++devices;
 				}
@@ -674,5 +664,15 @@ __initfunc(int su_probe (unsigned long *memory_start))
 found:
         sunserial_setinitfunc(memory_start, su_init);
         rs_ops.rs_change_mouse_baud = su_change_mouse_baud;
+	sunkbd_setinitfunc(memory_start, sun_kbd_init);
+	kbd_ops.compute_shiftstate = sun_compute_shiftstate;
+	kbd_ops.setledstate = sun_setledstate;
+	kbd_ops.getledstate = sun_getledstate;
+	kbd_ops.setkeycode = sun_setkeycode;
+	kbd_ops.getkeycode = sun_getkeycode;
+	sunkbd_install_keymaps(memory_start, sun_key_maps, sun_keymap_count,
+			       sun_func_buf, sun_func_table,
+			       sun_funcbufsize, sun_funcbufleft,
+			       sun_accent_table, sun_accent_table_size);
 	return 0;
 }

@@ -89,6 +89,7 @@ typedef void			(*rpc_action)(struct rpc_task *);
 #define RPC_TASK_ROOTCREDS	0x0100		/* force root creds */
 #define RPC_TASK_DYNAMIC	0x0200		/* task was kmalloc'ed */
 #define RPC_TASK_KILLED		0x0400		/* task was killed */
+#define RPC_TASK_NFSWRITE	0x1000		/* an NFS writeback */
 
 #define RPC_IS_RUNNING(t)	((t)->tk_flags & RPC_TASK_RUNNING)
 #define RPC_IS_ASYNC(t)		((t)->tk_flags & RPC_TASK_ASYNC)
@@ -145,6 +146,9 @@ void *		rpc_allocate(unsigned int flags, unsigned int);
 void		rpc_free(void *);
 int		rpciod_up(void);
 void		rpciod_down(void);
+#ifdef RPC_DEBUG
+void		rpc_show_tasks(void);
+#endif
 
 extern __inline__ void *
 rpc_malloc(struct rpc_task *task, unsigned int size)

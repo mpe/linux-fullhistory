@@ -22,24 +22,17 @@ struct in_device
 	struct ip_mc_list	*mc_list;	/* IP multicast filter chain    */
 	unsigned long		mr_v1_seen;
 	unsigned		flags;
+	struct neigh_parms	*arp_parms;
 };
 
 
 #define IN_DEV_RPFILTER(in_dev)	(ipv4_config.rfc1812_filter && ((in_dev)->flags&IFF_IP_RPFILTER))
 #define IN_DEV_MFORWARD(in_dev)	(ipv4_config.multicast_route && ((in_dev)->flags&IFF_IP_MFORWARD))
-#define IN_DEV_PROXY_ARP(in_dev)	((in_dev)->flags&IFF_IP_PROXYARP)
-
-#if 1
-#define IN_DEV_FORWARD(in_dev)		(IS_ROUTER)
-#define IN_DEV_RX_REDIRECTS(in_dev)	(ipv4_config.accept_redirects)
-#define IN_DEV_TX_REDIRECTS(in_dev)	(1)
-#define IN_DEV_SHARED_MEDIA(in_dev)	(ipv4_config.rfc1620_redirects)
-#else
-#define IN_DEV_FORWARD(in_dev)	(ipv4_config.ip_forwarding==1 && ((in_dev)->flags&IFF_IP_FORWARD))
-#define IN_DEV_RX_REDIRECTS(in_dev)	((in_dev)->flags&IFF_IP_RXREDIRECTS)
-#define IN_DEV_TX_REDIRECTS(in_dev)	((in_dev)->flags&IFF_IP_TXREDIRECTS)
-#define IN_DEV_SHARED_MEDIA(in_dev)	((in_dev)->flags&IFF_IP_SHAREDMEDIA)
-#endif
+#define IN_DEV_PROXY_ARP(in_dev)	(ipv4_config.proxy_arp || (in_dev)->flags&IFF_IP_PROXYARP)
+#define IN_DEV_FORWARD(in_dev)		(IS_ROUTER || ((in_dev)->flags&IFF_IP_FORWARD))
+#define IN_DEV_SHARED_MEDIA(in_dev)	(ipv4_config.rfc1620_redirects || (in_dev)->flags&IFF_IP_SHAREDMEDIA)
+#define IN_DEV_RX_REDIRECTS(in_dev)	(ipv4_config.accept_redirects || (in_dev)->flags&IFF_IP_RXREDIRECTS)
+#define IN_DEV_TX_REDIRECTS(in_dev)	(/*ipv4_config.send_redirects ||*/ (in_dev)->flags&IFF_IP_TXREDIRECTS)
 
 struct in_ifaddr
 {

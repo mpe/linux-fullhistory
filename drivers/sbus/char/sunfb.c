@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.28 1997/08/22 15:55:23 jj Exp $
+/* $Id: sunfb.c,v 1.29 1997/09/20 20:47:26 davem Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -45,7 +45,7 @@ extern void set_other_palette (int);
 extern void set_cursor (int);
 
 #define FB_SETUP(err) \
-	int minor = FB_DEV (inode->i_rdev); \
+	int minor = FB_DEV (file->f_dentry->d_inode->i_rdev); \
 \
 	if (minor >= fbinfos || \
 	    fbinfo [minor].type.fb_type == FBTYPE_NOTYPE) \
@@ -229,7 +229,7 @@ fb_ioctl (struct inode *inode, struct file *file, uint cmd, unsigned long arg)
 }
 
 static int
-fb_close (struct inode * inode, struct file *filp)
+fb_close (struct inode * inode, struct file *file)
 {
 	fbinfo_t *fb;
 	struct fbcursor cursor;
@@ -255,7 +255,7 @@ fb_close (struct inode * inode, struct file *filp)
 
 	if (fb->open)
 		fb->open = 0;
-	fb_ioctl (inode, filp, FBIOSCURPOS, (unsigned long) &cursor);
+	fb_ioctl (inode, file, FBIOSCURPOS, (unsigned long) &cursor);
 	set_other_palette (minor);
 	if (!minor) {
 		render_screen ();
@@ -266,7 +266,7 @@ fb_close (struct inode * inode, struct file *filp)
 }
 
 static int
-fb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
+fb_mmap (struct file *file, struct vm_area_struct *vma)
 {
 	fbinfo_t *fb;
 	FB_SETUP(ENXIO)
@@ -276,7 +276,7 @@ fb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
 	if (fb->mmap){
 		int v;
 		
-		v = (*fb->mmap)(inode, file, vma, fb->base, fb);
+		v = (*fb->mmap)(file->f_dentry->d_inode, file, vma, fb->base, fb);
 		if (v)
 			return v;
 		vma->vm_flags |= VM_IO;

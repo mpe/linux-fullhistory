@@ -799,7 +799,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		addr = 1;
 
 	case PTRACE_CONT: { /* restart after signal. */
-		if ((unsigned long) data > NSIG) {
+		if ((unsigned long) data > _NSIG) {
 			pt_error_return(regs, EIO);
 			goto out;
 		}
@@ -851,7 +851,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	}
 
 	case PTRACE_SUNDETACH: { /* detach a process that was attached. */
-		if ((unsigned long) data > NSIG) {
+		if ((unsigned long) data > _NSIG) {
 			pt_error_return(regs, EIO);
 			goto out;
 		}
@@ -898,9 +898,7 @@ asmlinkage void syscall_trace(void)
 		current->pid, current->exit_code);
 #endif
 	if (current->exit_code) {
-		spin_lock_irq(&current->sigmask_lock);
-		current->signal |= (1 << (current->exit_code - 1));
-		spin_unlock_irq(&current->sigmask_lock);
+		send_sig (current->exit_code, current, 1);
+		current->exit_code = 0;
 	}
-	current->exit_code = 0;
 }

@@ -121,7 +121,10 @@ static int nr_rebuild_header(struct sk_buff *skb)
 	unsigned char *bp = skb->data;
 
 	if (arp_find(bp + 7, skb)) {
+#if 0
+		/* BUGGGG! If arp_find returned 1, skb does not exist. --ANK*/
 		kfree_skb(skb, FREE_WRITE);
+#endif
 		return 1;
 	}
 

@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.12 1997/06/24 16:30:35 davem Exp $ */
+/* $Id: ptrace.h,v 1.13 1997/09/17 17:27:51 davem Exp $ */
 #ifndef _SPARC64_PTRACE_H
 #define _SPARC64_PTRACE_H
 
@@ -114,7 +114,9 @@ extern void show_regs(struct pt_regs *);
 #include <asm/asm_offsets.h>
 #endif
 
+#ifdef __KERNEL__
 #define STACK_BIAS		2047
+#endif
 
 /* These are for pt_regs. */
 #define PT_V9_G0     0x00

@@ -62,6 +62,18 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
  * code think we're on a VGA color display.
  */
 struct screen_info screen_info = {
+#if defined(CONFIG_ALPHA_BOOK1)
+  /* the AlphaBook1 has LCD video fixed at 800x600, 37 rows and 100 cols */
+	0, 37,			/* orig-x, orig-y */
+	{ 0, 0 },		/* unused */
+	0,			/* orig-video-page */
+	0,			/* orig-video-mode */
+        100,			/* orig-video-cols */
+	0,0,0,			/* ega_ax, ega_bx, ega_cx */
+        37,			/* orig-video-lines */
+	1,			/* orig-video-isVGA */
+	16			/* orig-video-points */
+#else
 	0, 25,			/* orig-x, orig-y */
 	{ 0, 0 },		/* unused */
 	0,			/* orig-video-page */
@@ -71,6 +83,7 @@ struct screen_info screen_info = {
 	25,			/* orig-video-lines */
 	1,			/* orig-video-isVGA */
 	16			/* orig-video-points */
+#endif
 };
 
 /*
@@ -166,6 +179,10 @@ void setup_arch(char **cmdline_p,
 	*memory_start_p = apecs_init(*memory_start_p, *memory_end_p);
 #elif defined(CONFIG_ALPHA_CIA)
 	*memory_start_p = cia_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_PYXIS)
+	*memory_start_p = pyxis_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_T2)
+	*memory_start_p = t2_init(*memory_start_p, *memory_end_p);
 #endif
 }
 
@@ -175,7 +192,8 @@ void setup_arch(char **cmdline_p,
 int get_cpuinfo(char *buffer)
 {
 	const char *cpu_name[] = {
-		"EV3", "EV4", "Unknown 1", "LCA4", "EV5", "EV45"
+		"EV3", "EV4", "Unknown 1", "LCA4", "EV5", "EV45", "EV56",
+		"EV6", "PCA56"
 	};
 #	define SYSTYPE_NAME_BIAS	20
 	const char *systype_name[] = {
@@ -185,8 +203,9 @@ int get_cpuinfo(char *buffer)
 		"ADU", "Cobra", "Ruby", "Flamingo", "5", "Jensen",
 		"Pelican", "8", "Sable", "AXPvme", "Noname",
 		"Turbolaser", "Avanti", "Mustang", "Alcor", "16",
-		"Mikasa", "18", "EB66", "EB64+", "21", "22", "23",
-		"24", "25", "EB164"
+		"Mikasa", "18", "EB66", "EB64+", "AlphaBook1",
+		"Rawhide", "Lego", "Lynx", "25", "EB164", "Noritake",
+		"Cortex", "29", "Miata", "31", "Takara", "Yukon"
 	};
 	struct percpu_struct *cpu;
 	unsigned int cpu_index;

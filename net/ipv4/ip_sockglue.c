@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.29 1997/11/28 15:32:39 alan Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.30 1997/12/29 19:52:39 kuznet Exp $
  *
  * Authors:	see ip.c
  *
@@ -32,7 +32,6 @@
 #include <linux/igmp.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
-#include <net/checksum.h>
 #include <linux/route.h>
 #include <linux/mroute.h>
 #include <net/route.h>

@@ -1,14 +1,15 @@
+
 /*
  *  linux/arch/ppc/kernel/process.c
- *
- *  PowerPC version 
- *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *
  *  Derived from "arch/i386/kernel/process.c"
  *    Copyright (C) 1995  Linus Torvalds
  *
  *  Updated and modified by Cort Dougan (cort@cs.nmt.edu) and
  *  Paul Mackerras (paulus@cs.anu.edu.au)
+ *
+ *  PowerPC version 
+ *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
@@ -38,15 +39,17 @@
 #include <asm/io.h>
 #include <asm/smp_lock.h>
 #include <asm/processor.h>
+#include <asm/mmu.h>
+#include <asm/prom.h>
 
 int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs);
 void switch_to(struct task_struct *, struct task_struct *);
-extern unsigned long _get_SP(void);
 
+extern unsigned long _get_SP(void);
+extern spinlock_t scheduler_lock;
 
 #undef SHOW_TASK_SWITCHES 1
 #undef CHECK_STACK 1
-#undef IDLE_ZERO 1
 
 unsigned long
 kernel_stack_top(struct task_struct *tsk)
@@ -67,6 +70,9 @@ static struct signal_struct init_signals = INIT_SIGNALS;
 
 struct mm_struct init_mm = INIT_MM;
 union task_union init_task_union = { INIT_TASK };
+
+/* only used to get secondary processor up */
+struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 int
 dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
@@ -145,17 +151,30 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 {
 	struct thread_struct *new_tss, *old_tss;
 	int s = _disable_interrupts();
-
 #if CHECK_STACK
 	check_stack(prev);
 	check_stack(new);
 #endif
 
 #ifdef SHOW_TASK_SWITCHES
-	printk("%s/%d (%x) -> %s/%d (%x) ctx %x\n",
-	       prev->comm,prev->pid,prev->tss.regs->nip,
-	       new->comm,new->pid,new->tss.regs->nip,new->mm->context);
+	printk("%s/%d -> %s/%d cpu %d\n",
+	       prev->comm,prev->pid,
+	       new->comm,new->pid,new->processor);
 #endif
+#ifdef __SMP__
+	/* bad news if last_task_used_math changes processors right now -- Cort */
+	if ( (last_task_used_math == new) &&
+	     (new->processor != new->last_processor) )
+		panic("last_task_used_math switched processors");
+	/* be noisy about processor changes for debugging -- Cort */
+	if ( new->last_processor != new->processor )
+		printk("switch_to(): changing cpu's %d -> %d %s/%d\n",
+		       new->last_processor,new->processor,
+		       new->comm,new->pid);
+	
+	prev->last_processor = prev->processor;
+	current_set[smp_processor_id()] = new;
+#endif /* __SMP__ */
 	new_tss = &new->tss;
 	old_tss = &current->tss;
 	_switch(old_tss, new_tss, new->mm->context);
@@ -181,7 +200,13 @@ void show_regs(struct pt_regs * regs)
 	printk("TASK = %p[%d] '%s' mm->pgd %p ",
 	       current, current->pid, current->comm, current->mm->pgd);
 	printk("Last syscall: %ld ", current->tss.last_syscall);
-	printk("\nlast math %p\n", last_task_used_math);
+	printk("\nlast math %p", last_task_used_math);
+	
+#ifdef __SMP__	
+	printk(" CPU: %d last CPU: %d", current->processor,current->last_processor);
+#endif /* __SMP__ */
+	
+	printk("\n");
 	for (i = 0;  i < 32;  i++)
 	{
 		long r;
@@ -226,7 +251,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	    struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
-
+	
 	/* Copy registers */
 	childregs = ((struct pt_regs *)
 		     ((unsigned long)p + sizeof(union task_union)
@@ -245,7 +270,6 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		/* Provided stack is in user space */
 		childregs->gpr[1] = usp;
 	}
-
 	p->tss.last_syscall = -1;
 
 	/*
@@ -321,6 +345,10 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 
 	lock_kernel();
 	ret = do_fork(SIGCHLD, regs->gpr[1], regs);
+#if 0/*def __SMP__*/
+	if ( ret ) /* drop scheduler lock in child */
+		scheduler_lock.lock = 0L;
+#endif /* __SMP__ */	
 	unlock_kernel();
 	return ret;
 }
@@ -332,6 +360,7 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	int error;
 	char * filename;
 	
+	lock_kernel();
 	filename = getname((char *) a0);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -353,6 +382,16 @@ asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
 
 	lock_kernel();
 	res = do_fork(clone_flags, regs->gpr[1], regs);
+#ifdef __SMP__
+	/* When we clone the idle task we keep the same pid but
+	 * the return value of 0 for both causes problems.
+	 * -- Cort
+	 */
+	if ((current->pid == 0) && (current == &init_task))
+		res = 1;
+	if ( 0 /*res*/ ) /* drop scheduler lock in child */
+		scheduler_lock.lock = 0L;
+#endif /* __SMP__ */	
 	unlock_kernel();
 	return res;
 }
@@ -377,7 +416,6 @@ print_backtrace(unsigned long *sp)
 	printk("\n");
 }
 
-#if 0
 /*
  * Low level print for debugging - Cort
  */
@@ -394,15 +432,37 @@ int ll_printk(const char *fmt, ...)
         return i;
 }
 
-char *vidmem = (char *)0xC00B8000;
 int lines = 24, cols = 80;
 int orig_x = 0, orig_y = 0;
 
 void ll_puts(const char *s)
 {
 	int x,y;
+	char *vidmem = (char *)(_ISA_MEM_BASE + 0xB8000) /*0xC00B8000*/;
 	char c;
+	extern int mem_init_done;
 
+	if ( mem_init_done ) /* assume this means we can printk */
+	{
+		printk(s);
+		return;
+	}
+
+#if 0	
+	if ( have_of )
+	{
+		prom_print(s);
+		return;
+	}
+#endif
+
+	/*
+	 * can't ll_puts on chrp without openfirmware yet.
+	 * vidmem just needs to be setup for it.
+	 * -- Cort
+	 */
+	if ( ! is_prep )
+		return;
 	x = orig_x;
 	y = orig_y;
 
@@ -430,4 +490,3 @@ void ll_puts(const char *s)
 	orig_x = x;
 	orig_y = y;
 }
-#endif /* CONFIG_PREP */

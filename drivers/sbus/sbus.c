@@ -65,13 +65,16 @@ fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
 
 	base = (unsigned long) sbus_dev->reg_addrs[0].phys_addr;
 	if(base>=SUN_SBUS_BVADDR ||
-	   sparc_cpu_model == sun4m ||
-	   sparc_cpu_model == sun4u) {
+	   (sparc_cpu_model != sun4c &&
+	   sparc_cpu_model != sun4)) {
 		/* Ahh, we can determine the slot and offset */
 		if(sparc_cpu_model == sun4u) {
 			/* A bit tricky on the SYSIO. */
 			sbus_dev->slot = sbus_dev->reg_addrs[0].which_io;
 			sbus_dev->offset = sbus_dev_offset(base);
+		} else if (sparc_cpu_model == sun4d) {
+			sbus_dev->slot = sbus_dev->reg_addrs[0].which_io;
+			sbus_dev->offset = base;
 		} else {
 			sbus_dev->slot = sbus_dev_slot(base);
 			sbus_dev->offset = sbus_dev_offset(base);
@@ -181,18 +184,19 @@ no_regs:
 extern unsigned long sun_console_init(unsigned long);
 extern unsigned long iommu_init(int iommu_node, unsigned long memstart,
 				unsigned long memend, struct linux_sbus *sbus);
-extern void iommu_sun4d_init(int sbi_node, struct linux_sbus *sbus);
+extern unsigned long iounit_init(int sbi_node, int iounit_node, unsigned long memstart,
+				unsigned long memend, struct linux_sbus *sbus);
 #ifdef CONFIG_SUN_OPENPROMIO
 extern int openprom_init(void);
 #endif
 #ifdef CONFIG_SUN_MOSTEK_RTC
 extern int rtc_init(void);
 #endif
-#ifdef CONFIG_SPARCAUDIO
-extern int sparcaudio_init(void);
-#endif
 #ifdef CONFIG_SUN_AUXIO
 extern void auxio_probe(void);
+#endif
+#ifdef CONFIG_OBP_FLASH
+extern int flash_init(void);
 #endif
 
 __initfunc(static unsigned long 
@@ -247,7 +251,7 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	memory_start = ((memory_start + 7) & (~7));
 
 	topnd = prom_getchild(prom_root_node);
-
+	
 	/* Finding the first sbus is a special case... */
 	iommund = 0;
 	if(sparc_cpu_model == sun4u) {
@@ -287,19 +291,10 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	sbus->next = 0;
 	this_sbus=nd;
 
-	if(sparc_cpu_model != sun4u)
-		/* Have IOMMU will travel.
-		 *
-		 * XXX This should be per sbus on sun4d...
-		 */
-		if(iommund) {
-			if (sparc_cpu_model == sun4d)
-				iommu_sun4d_init(this_sbus, sbus);
-			else
-				memory_start = iommu_init(iommund,
-							  memory_start, memory_end,
-							  sbus);
-	}
+	if(iommund && sparc_cpu_model != sun4u && sparc_cpu_model != sun4d)
+		memory_start = iommu_init(iommund,
+					  memory_start, memory_end,
+					  sbus);
 
 	/* Loop until we find no more SBUS's */
 	while(this_sbus) {
@@ -311,7 +306,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			memory_start = iommu_init(this_sbus,
 						  memory_start, memory_end,
 						  sbus);
-
+#ifndef __sparc_v9__						  
+		else if (sparc_cpu_model == sun4d)
+			memory_start = iounit_init(this_sbus, iommund,
+						   memory_start, memory_end,
+						   sbus);
+#endif						   
 #ifdef E3000_DEBUG
 		prom_printf("1");
 #endif
@@ -323,9 +323,16 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			      (((sbus_clock/1000)%1000) + 1000) : 0));
 
 		prom_getstring(this_sbus, "name", lbuf, sizeof(lbuf));
+		lbuf[sizeof(sbus->prom_name) - 1] = 0;
 		sbus->prom_node = this_sbus;
 		strcpy(sbus->prom_name, lbuf);
 		sbus->clock_freq = sbus_clock;
+#ifndef __sparc_v9__		
+		if (sparc_cpu_model == sun4d) {
+			sbus->devid = prom_getint(iommund, "device-id");
+			sbus->board = prom_getint(iommund, "board#");
+		}
+#endif
 		
 #ifdef E3000_DEBUG
 		prom_printf("psri()");
@@ -458,6 +465,12 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			break;
 		}
 	} /* while(this_sbus) */
+	if (sparc_cpu_model == sun4d) {
+		extern unsigned long sun4d_init_sbi_irq(unsigned long);
+		
+		memory_start = sun4d_init_sbi_irq(memory_start);
+	}
+	
 #ifdef E3000_DEBUG
 	prom_printf("sbus_init: No more sbus's, calling sun_console_init()\n");
 #endif
@@ -471,15 +484,15 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 #ifdef CONFIG_SUN_MOSTEK_RTC
 	rtc_init();
 #endif
-#ifdef CONFIG_SPARCAUDIO
-	sparcaudio_init();
-#endif
 #ifdef CONFIG_SUN_BPP
 	bpp_init();
 #endif
 #ifdef CONFIG_SUN_AUXIO
 	if (sparc_cpu_model == sun4u)
 		auxio_probe ();
+#endif
+#ifdef CONFIG_OBP_FLASH
+	flash_init();
 #endif
 #ifdef __sparc_v9__
 	if (sparc_cpu_model == sun4u) {

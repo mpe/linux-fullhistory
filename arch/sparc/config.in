@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.38 1997/09/04 01:54:33 davem Exp $
+# $Id: config.in,v 1.51 1998/01/08 04:16:54 baccala Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -28,6 +28,7 @@ bool 'Support for AP1000 multicomputer' CONFIG_AP1000
 
 if [ "$CONFIG_AP1000" = "y" ]; then
 	define_bool CONFIG_NO_KEYBOARD y
+	define_bool CONFIG_FDDI y
 	define_bool CONFIG_APFDDI y
 	define_bool CONFIG_APBLOCK y
 	define_bool CONFIG_APBIF y
@@ -39,6 +40,7 @@ else
 	define_bool CONFIG_SUN_MOUSE y
 	define_bool CONFIG_SERIAL y
 	define_bool CONFIG_SUN_SERIAL y
+	define_bool CONFIG_SERIAL_CONSOLE y
 	define_bool CONFIG_SUN_KEYBOARD y
 	define_bool CONFIG_SUN_CONSOLE y
 	define_bool CONFIG_SUN_AUXIO y
@@ -50,6 +52,7 @@ fi
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
@@ -78,12 +81,22 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
 fi
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+tristate 'Network block device support' CONFIG_BLK_DEV_NBD
 
 endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
 	source net/Config.in
 fi
+
+mainmenu_option next_comment
+comment 'ISDN subsystem'
+
+tristate 'ISDN support' CONFIG_ISDN
+if [ "$CONFIG_ISDN" != "n" ]; then
+  source drivers/isdn/Config.in
+fi
+endmenu
 
 mainmenu_option next_comment
 comment 'SCSI support'
@@ -115,6 +128,8 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	endmenu
 fi
 endmenu
+
+source drivers/fc4/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
 	mainmenu_option next_comment
@@ -162,7 +177,9 @@ source fs/nls/Config.in
 mainmenu_option next_comment
 comment 'Watchdog'
 
-bool 'Software watchdog' CONFIG_SOFT_WATCHDOG
+tristate 'Software watchdog' CONFIG_SOFT_WATCHDOG
+endmenu
+
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
@@ -170,4 +187,5 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
 	int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu

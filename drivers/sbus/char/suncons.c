@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.73 1997/08/25 07:50:33 jj Exp $
+/* $Id: suncons.c,v 1.77 1997/12/19 07:32:59 ecd Exp $
  * suncons.c: Sparc platform console generic layer.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -100,13 +100,11 @@ static void nop_console_restore_palette(void)
 static unsigned long nop_con_type_init(unsigned long mem_start,
 				       const char **display_desc)
 {
-	prom_printf("YIEEE: nop_con_type_init called!\n");
 	return mem_start;
 }
 
 static void nop_con_type_init_finish(void)
 {
-	prom_printf("YIEEE: nop_con_type_init_finish called!\n");
 }
 
 static void nop_vesa_blank(void)
@@ -323,12 +321,17 @@ __initfunc(static unsigned long finish_console_init(unsigned long memory_start))
 extern void pci_console_inithook(void);
 #endif
 
+__initfunc(int con_is_present(void))
+{
+	return serial_console ? 0 : 1;
+}
+
 __initfunc(unsigned long sun_console_init(unsigned long memory_start))
 {
 	int i;
 
 	/* Nothing to do in this case. */
-	if(serial_console)
+	if (!con_is_present())
 		return memory_start;
 
 	fbinfo = (fbinfo_t *)memory_start;
@@ -358,7 +361,7 @@ extern int pci_console_probe(void);
 __initfunc(unsigned long pci_console_init(unsigned long memory_start))
 {
 	/* Nothing to do in this case. */
-	if(serial_console)
+	if (!con_is_present())
 		return memory_start;
 
 	if(pci_console_probe()) {
@@ -369,8 +372,6 @@ __initfunc(unsigned long pci_console_init(unsigned long memory_start))
 	memory_start = finish_console_init(memory_start);
 
 	con_type_init_finish();
-	register_console(&vt_console_driver);
-
 	return memory_start;
 }
 #endif

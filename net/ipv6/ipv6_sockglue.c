@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.15 1997/10/29 20:27:54 kuznet Exp $
+ *	$Id: ipv6_sockglue.c,v 1.16 1997/12/13 21:53:13 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -166,7 +166,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		} else {
 			struct inet6_ifaddr *ifp;
 
-			ifp = ipv6_chk_addr(&addr);
+			ifp = ipv6_chk_addr(&addr, NULL, 0);
 
 			if (ifp == NULL) {
 				retv = -EADDRNOTAVAIL;
@@ -182,39 +182,16 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 	case IPV6_DROP_MEMBERSHIP:
 	{
 		struct ipv6_mreq mreq;
-		struct device *dev = NULL;
 		int err;
 
 		err = copy_from_user(&mreq, optval, sizeof(struct ipv6_mreq));
 		if(err)
 			return -EFAULT;
 		
-		if (mreq.ipv6mr_ifindex == 0) {
-#if 0
-			struct in6_addr mcast;
-			struct dest_entry *dc;
-
-			ipv6_addr_set(&mcast, __constant_htonl(0xff000000),
-				      0, 0, 0);
-			dc = ipv6_dst_route(&mcast, NULL, 0);
-
-			if (dc)
-			{
-				dev = dc->rt.rt_dev;
-				ipv6_dst_unlock(dc);
-			}
-#endif
-		} else {
-			dev = dev_get_by_index(mreq.ipv6mr_ifindex);
-		}
-
-		if (dev == NULL)
-			return -ENODEV;
-		
 		if (optname == IPV6_ADD_MEMBERSHIP)
-			retv = ipv6_sock_mc_join(sk, dev, &mreq.ipv6mr_multiaddr);
+			retv = ipv6_sock_mc_join(sk, mreq.ipv6mr_ifindex, &mreq.ipv6mr_multiaddr);
 		else
-			retv = ipv6_sock_mc_drop(sk, dev, &mreq.ipv6mr_multiaddr);
+			retv = ipv6_sock_mc_drop(sk, mreq.ipv6mr_ifindex, &mreq.ipv6mr_multiaddr);
 	}
 	};
 

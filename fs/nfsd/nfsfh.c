@@ -1089,8 +1089,10 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 {
 	struct inode * inode = dentry->d_inode;
 
-	dprintk("nfsd: fh_compose(exp %x/%ld dentry %p)\n",
-			exp->ex_dev, exp->ex_ino, dentry);
+	dprintk("nfsd: fh_compose(exp %x/%ld %s/%s, ino=%ld)\n",
+		exp->ex_dev, exp->ex_ino,
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		(inode ? inode->i_ino : 0));
 
 	/*
 	 * N.B. We shouldn't need to init the fh -- the call to fh_compose

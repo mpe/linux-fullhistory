@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.8 1997/09/05 22:59:39 ecd Exp $
+/* $Id: ebus.c,v 1.17 1998/01/10 18:26:13 ecd Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -17,7 +17,14 @@
 #include <asm/oplib.h>
 #include <asm/bpp.h>
 
+#undef PROM_DEBUG
 #undef DEBUG_FILL_EBUS_DEV
+
+#ifdef PROM_DEBUG
+#define dprintf	prom_printf
+#else
+#define dprintf	printk
+#endif
 
 struct linux_ebus *ebus_chain = 0;
 
@@ -36,8 +43,12 @@ extern int sparcaudio_init(void);
 #ifdef CONFIG_SUN_AUXIO
 extern void auxio_probe(void);
 #endif
+#ifdef CONFIG_OBP_FLASH
+extern int flash_init(void);
+#endif
 
-extern unsigned int psycho_irq_build(unsigned int full_ino);
+extern unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
+				     unsigned int full_ino);
 
 static inline unsigned long
 ebus_alloc(unsigned long *memory_start, size_t size)
@@ -47,6 +58,7 @@ ebus_alloc(unsigned long *memory_start, size_t size)
 	*memory_start = (*memory_start + 7) & ~(7);
 	mem = *memory_start;
 	*memory_start += size;
+	memset((void *)mem, 0, size);
 	return mem;
 }
 
@@ -79,19 +91,19 @@ __initfunc(void fill_ebus_child(int node, struct linux_ebus_child *dev))
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++)
-			dev->irqs[i] = psycho_irq_build(irqs[i]);
+			dev->irqs[i] = psycho_irq_build(dev->bus->parent, irqs[i]);
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
-	printk("child '%s': address%s\n", dev->prom_name,
+	dprintf("child '%s': address%s\n", dev->prom_name,
 	       dev->num_addrs > 1 ? "es" : "");
 	for (i = 0; i < dev->num_addrs; i++)
-		printk("        %016lx\n", dev->base_address[i]);
+		dprintf("        %016lx\n", dev->base_address[i]);
 	if (dev->num_irqs) {
-		printk("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
+		dprintf("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
 		for (i = 0; i < dev->num_irqs; i++)
-			printk(" %08x", dev->irqs[i]);
-		printk("\n");
+			dprintf(" %08x", dev->irqs[i]);
+		dprintf("\n");
 	}
 #endif
 }
@@ -121,7 +133,7 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 	for (i = 0; i < dev->num_addrs; i++) {
 		n = (regs[i].which_io - 0x10) >> 2;
 
-		dev->base_address[i] = dev->parent->self->base_address[n];
+		dev->base_address[i] = dev->bus->self->base_address[n];
 		dev->base_address[i] += (unsigned long)regs[i].phys_addr;
 	}
 
@@ -131,19 +143,19 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++)
-			dev->irqs[i] = psycho_irq_build(irqs[i]);
+			dev->irqs[i] = psycho_irq_build(dev->bus->parent, irqs[i]);
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
-	printk("'%s': address%s\n", dev->prom_name,
+	dprintf("'%s': address%s\n", dev->prom_name,
 	       dev->num_addrs > 1 ? "es" : "");
 	for (i = 0; i < dev->num_addrs; i++)
-		printk("  %016lx\n", dev->base_address[i]);
+		dprintf("  %016lx\n", dev->base_address[i]);
 	if (dev->num_irqs) {
-		printk("  IRQ%s", dev->num_irqs > 1 ? "s" : "");
+		dprintf("  IRQ%s", dev->num_irqs > 1 ? "s" : "");
 		for (i = 0; i < dev->num_irqs; i++)
-			printk(" %08x", dev->irqs[i]);
-		printk("\n");
+			dprintf(" %08x", dev->irqs[i]);
+		dprintf("\n");
 	}
 #endif
 	if ((node = prom_getchild(node))) {
@@ -153,6 +165,7 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 		child = dev->children;
 		child->next = 0;
 		child->parent = dev;
+		child->bus = dev->bus;
 		fill_ebus_child(node, child);
 
 		while ((node = prom_getsibling(node))) {
@@ -162,6 +175,7 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 			child = child->next;
 			child->next = 0;
 			child->parent = dev;
+			child->bus = dev->bus;
 			fill_ebus_child(node, child);
 		}
 	}
@@ -195,6 +209,9 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 	}
 	if (!pdev) {
 		printk("ebus: No EBus's found.\n");
+#ifdef PROM_DEBUG
+		dprintf("ebus: No EBus's found.\n");
+#endif
 		return memory_start;
 	}
 
@@ -206,7 +223,10 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 	ebus->next = 0;
 
 	while (ebusnd) {
-		printk("ebus%d:\n", num_ebus);
+		printk("ebus%d:", num_ebus);
+#ifdef PROM_DEBUG
+		dprintf("ebus%d:", num_ebus);
+#endif
 
 		prom_getstring(ebusnd, "name", lbuf, sizeof(lbuf));
 		ebus->prom_node = ebusnd;
@@ -250,20 +270,34 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 				addr += (u64)rp->parent_phys_hi << 32UL;
 				*base++ = (unsigned long)__va(addr);
 
+				printk(" %lx[%x]", (unsigned long)__va(addr),
+				       regs[reg].size_lo);
+#ifdef PROM_DEBUG
+				dprintf(" %lx[%x]", (unsigned long)__va(addr),
+				        regs[reg].size_lo);
+#endif
 				break;
 			}
 		}
+		printk("\n");
+#ifdef PROM_DEBUG
+		dprintf("\n");
+#endif
 
 		prom_ebus_ranges_init(ebus);
 
 		nd = prom_getchild(ebusnd);
+		if (!nd)
+			goto next_ebus;
+
 		ebus->devices = (struct linux_ebus_device *)
-			ebus_alloc(&memory_start, sizeof(struct linux_ebus_device));
+				ebus_alloc(&memory_start,
+					   sizeof(struct linux_ebus_device));
 
 		dev = ebus->devices;
 		dev->next = 0;
 		dev->children = 0;
-		dev->parent = ebus;
+		dev->bus = ebus;
 		memory_start = fill_ebus_device(nd, dev, memory_start);
 
 		while ((nd = prom_getsibling(nd))) {
@@ -273,10 +307,11 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 			dev = dev->next;
 			dev->next = 0;
 			dev->children = 0;
-			dev->parent = ebus;
+			dev->bus = ebus;
 			memory_start = fill_ebus_device(nd, dev, memory_start);
 		}
 
+	next_ebus:
 		for (pdev = pdev->next; pdev; pdev = pdev->next) {
 			if ((pdev->vendor == PCI_VENDOR_ID_SUN) &&
 			    (pdev->device == PCI_DEVICE_ID_SUN_EBUS))
@@ -312,6 +347,9 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 #ifdef CONFIG_SUN_AUXIO
 	if (sparc_cpu_model == sun4u)
 		auxio_probe();
+#endif
+#ifdef CONFIG_OBP_FLASH
+	flash_init();
 #endif
 #ifdef __sparc_v9__
 	if (sparc_cpu_model == sun4u) {

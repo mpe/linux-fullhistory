@@ -1,5 +1,4 @@
-/*
- * linux/fs/hfs/dir_cap.c
+/* linux/fs/hfs/dir_cap.c
  *
  * Copyright (C) 1995-1997  Paul H. Hargrove
  * This file may be distributed under the terms of the GNU Public License.
@@ -222,6 +221,7 @@ static int cap_lookup(struct inode * dir, struct dentry *dentry)
 	}
 
 done:
+	dentry->d_op = &hfs_dentry_operations;
 	d_add(dentry, inode);
 	return 0;
 }

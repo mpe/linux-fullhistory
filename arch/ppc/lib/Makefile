@@ -8,4 +8,9 @@
 O_TARGET = lib.o
 O_OBJS  = checksum.o string.o strcase.o
 
+ifdef SMP
+O_OBJS += locks.o
+endif
+
+
 include $(TOPDIR)/Rules.make

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.18 1997/09/14 08:32:24 davem Exp $
+ *	$Id: udp.c,v 1.21 1997/12/29 19:52:52 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -27,6 +27,7 @@
 #include <linux/ipv6.h>
 #include <linux/icmpv6.h>
 #include <linux/init.h>
+#include <asm/uaccess.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
@@ -282,16 +283,11 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 static void udpv6_close(struct sock *sk, unsigned long timeout)
 {
-	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-
 	lock_sock(sk);
 	sk->state = TCP_CLOSE;
-
-	if (np->dst)
-		dst_release(np->dst);
-
 	ipv6_sock_mc_close(sk);
 	udp_v6_unhash(sk);
+	sk->dead = 1;
 	release_sock(sk);
 	destroy_sock(sk);
 }
@@ -649,6 +645,16 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 
 	int err;
 	
+	/* Rough check on arithmetic overflow,
+	   better check is made in ip6_build_xmit
+
+	   When jumbo header will be implemeted we will change it
+	   to something sort of (len will be size_t)
+	   ulen > SIZE_T_MAX - sizeof(struct udphdr)
+	 */
+	if (ulen < 0 || ulen > 0xFFFF - sizeof(struct udphdr))
+		return -EMSGSIZE;
+
 	if (msg->msg_flags & ~(MSG_DONTROUTE|MSG_DONTWAIT))
 		return(-EINVAL);
 
@@ -665,9 +671,12 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		udh.uh.dest = sin6->sin6_port;
 		daddr = &sin6->sin6_addr;
 
-		if (np->dst && ipv6_addr_cmp(daddr, &np->daddr)) {
-			dst_release(np->dst);
-			np->dst = NULL;
+		/* BUGGGG! If route is not cloned, this check always
+		   fails, hence dst_cache only slows down transmission --ANK
+		 */
+		if (sk->dst_cache && ipv6_addr_cmp(daddr, &np->daddr)) {
+			dst_release(sk->dst_cache);
+			sk->dst_cache = NULL;
 		}
 	} else {
 		if (sk->state != TCP_ESTABLISHED)

@@ -1,4 +1,4 @@
-/* $Id: winfixup.S,v 1.19 1997/08/08 08:33:37 jj Exp $
+/* $Id: winfixup.S,v 1.22 1997/10/24 11:57:48 jj Exp $
  *
  * winfixup.S: Handle cases where user stack pointer is found to be bogus.
  *
@@ -48,6 +48,10 @@ fill_fixup:
 	 * most things are where they need to be, we also have the address
 	 * which triggered the fault handy as well.
 	 *
+	 * Also note that we must preserve %l5 and %l6.  If the user was
+	 * returning from a system call, we must make it look this way
+	 * after we process the fill fault on the users stack.
+	 *
 	 * First, get into the window where the original restore was executed.
 	 */
 
@@ -65,15 +69,23 @@ fill_fixup:
 	rdpr		%pstate, %l1			! Prepare to change globals.
 
 	mov		%g6, %o7			! Get current.
-	mov		%g5, %l5			! Fault address
-	clr		%l4				! It was a load, not a store
+	andn		%l1, PSTATE_MM, %l1		! We want to be in RMO
+	srlx		%g5, PAGE_SHIFT, %o1		! Fault address
 	wrpr		%g0, 0x0, %tl			! Out of trap levels.
 	wrpr		%l1, (PSTATE_IE | PSTATE_AG | PSTATE_RMO), %pstate
 	sethi		%uhi(PAGE_OFFSET), %g4		! Prepare page_offset global reg
 	mov		%o7, %g6
-	b,pt		%xcc, window_scheisse_merge	! And merge.
+	sllx		%g4, 32, %g4			! and finish it...
+	clr		%o2
 
-	 sllx		%g4, 32, %g4			! and finish it...
+	/* This is the same as below, except we handle this a bit special
+	 * since we must preserve %l5 and %l6, see comment above.
+	 */
+	sllx		%o1, PAGE_SHIFT, %o1
+	call		do_sparc64_fault
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	b,pt		%xcc, rtrap
+	 nop						! yes, nop is correct
 
 	/* Be very careful about usage of the alternate globals here.
 	 * You cannot touch %g4/%g5 as that has the fault information
@@ -84,59 +96,59 @@ fill_fixup:
 	 * do not touch %g7 or %g2 so we handle the two cases fine.
 	 */
 spill_fixup:
-	ld		[%g6 + AOFF_task_tss + AOFF_thread_flags], %g1
+	lduh		[%g6 + AOFF_task_tss + AOFF_thread_flags], %g1
 	andcc		%g1, SPARC_FLAG_32BIT, %g0
-	ldx		[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %g1
+	lduh		[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %g1
+
 	sll		%g1, 3, %g3
 	add		%g6, %g3, %g3
 	stx		%sp, [%g3 + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
 	sll		%g1, 7, %g3
-
 	bne,pt		%xcc, 1f
 	 add		%g6, %g3, %g3
 	stx		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
 	stx		%l1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
+
 	stx		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
 	stx		%l3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
 	stx		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
 	stx		%l5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
-
 	stx		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
 	stx		%l7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
 	stx		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x40]
 	stx		%i1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x48]
+
 	stx		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x50]
 	stx		%i3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x58]
 	stx		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x60]
 	stx		%i5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x68]
-
 	stx		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x70]
 	b,pt		%xcc, 2f
 	 stx		%i7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x78]
 1:	stw		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
+
 	stw		%l1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x04]
 	stw		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
 	stw		%l3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x0c]
 	stw		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
-
 	stw		%l5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x14]
 	stw		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
 	stw		%l7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x1c]
 	stw		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
+
 	stw		%i1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x24]
 	stw		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
 	stw		%i3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x2c]
 	stw		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
-
 	stw		%i5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x34]
 	stw		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
 	stw		%i7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x3c]
 2:	add		%g1, 1, %g1
-	stx		%g1, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]
+
+	sth		%g1, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]
 	rdpr		%tstate, %g1
 	andcc		%g1, TSTATE_PRIV, %g0
 	saved
-
 	and		%g1, TSTATE_CWP, %g1
 	be,a,pn		%xcc, window_scheisse_from_user_common
 	 or		%g4, 0x4, %g4			! we know it was a write
@@ -146,7 +158,6 @@ window_scheisse_from_user_common:
 	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
 109:	 or		%g7, %lo(109b), %g7
-window_scheisse_merge:
 	srlx		%l5, PAGE_SHIFT, %o1
 
 	and		%l4, 0x4, %o2
@@ -173,10 +184,15 @@ fill_fixup_mna:
 	andcc		%g1, TSTATE_PRIV, %g0
 	be,pt		%xcc, window_mna_from_user_common
 	 and		%g1, TSTATE_CWP, %g1
+
+	/* Please, see fill_fixup commentary about why we must preserve
+	 * %l5 and %l6 to preserve absolute correct semantics.
+	 */
 	rdpr		%wstate, %g2			! Grab user mode wstate.
 	wrpr		%g1, %cwp			! Get into the right window.
 	sll		%g2, 3, %g2			! NORMAL-->OTHER
 	wrpr		%g0, 0x0, %canrestore		! Standard etrap stuff.
+
 	wrpr		%g2, 0x0, %wstate		! This must be consistant.
 	wrpr		%g0, 0x0, %otherwin		! We know this.
 	mov		PRIMARY_CONTEXT, %g1		! Change contexts...
@@ -185,23 +201,28 @@ fill_fixup_mna:
 	rdpr		%pstate, %l1			! Prepare to change globals.
 	mov		%g4, %o5			! Setup args for
 	mov		%g5, %o4			! final call to do_sparc64_fault.
+	andn		%l1, PSTATE_MM, %l1		! We want to be in RMO
+
 	mov		%g6, %o7			! Stash away current.
 	wrpr		%g0, 0x0, %tl			! Out of trap levels.
 	wrpr		%l1, (PSTATE_IE | PSTATE_AG | PSTATE_RMO), %pstate
 	sethi		%uhi(PAGE_OFFSET), %g4		! Set page_offset global reg.
 	mov		%o7, %g6			! Get current back.
-	b,pt		%xcc, window_mna_merge		! And merge.
-	 sllx		%g4, 32, %g4			! Finish it.
+	sllx		%g4, 32, %g4			! Finish it.
+	call		mem_address_unaligned
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 
+	b,pt		%xcc, rtrap
+	 nop						! yes, the nop is correct
 spill_fixup_mna:
-	ld		[%g6 + AOFF_task_tss + AOFF_thread_flags], %g1
+	lduh		[%g6 + AOFF_task_tss + AOFF_thread_flags], %g1
 	andcc		%g1, SPARC_FLAG_32BIT, %g0
-	ldx		[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %g1
+	lduh		[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %g1
 	sll		%g1, 3, %g3
 	add		%g6, %g3, %g3
 	stx		%sp, [%g3 + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
-	sll		%g1, 7, %g3
 
+	sll		%g1, 7, %g3
 	bne,pt		%xcc, 1f
 	 add		%g6, %g3, %g3
 	stx		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
@@ -209,8 +230,8 @@ spill_fixup_mna:
 	stx		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
 	stx		%l3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
 	stx		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
-	stx		%l5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
 
+	stx		%l5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
 	stx		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
 	stx		%l7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
 	stx		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x40]
@@ -218,8 +239,8 @@ spill_fixup_mna:
 	stx		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x50]
 	stx		%i3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x58]
 	stx		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x60]
-	stx		%i5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x68]
 
+	stx		%i5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x68]
 	stx		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x70]
 	stx		%i7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x78]
 	b,pt		%xcc, 2f
@@ -227,16 +248,15 @@ spill_fixup_mna:
 1:	std		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
 	std		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
 	std		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
-	std		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
 
+	std		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
 	std		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
 	std		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
 	std		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
 	std		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
 	add		%g1, 1, %g1
-2:	stx		%g1, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]
+2:	sth		%g1, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]
 	rdpr		%tstate, %g1
-	nop
 
 	andcc		%g1, TSTATE_PRIV, %g0
 	saved
@@ -248,7 +268,6 @@ window_mna_from_user_common:
 	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
 109:	 or		%g7, %lo(109b), %g7
-window_mna_merge:
 	call		mem_address_unaligned
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap

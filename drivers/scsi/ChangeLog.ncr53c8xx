@@ -1,3 +1,30 @@
+Fri Jan 2 18:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* Revision 2.5f
+	- Use FAST-5 instead of SLOW for slow scsi devices according to 
+	  new SPI-2 draft.
+	- Make some changes in order to accomodate with 875 rev <= 3 
+	  device errata listing 397. Minor consequences are:
+	  . Leave use of PCI Write and Invalidate under user control.
+	    Now, by default the driver does not enable PCI MWI and option
+	    'specf:y' is required in order to enable this feature.
+	  . Memory Read Line is not enabled for 875 and 875-like chips.
+	  . Programmed burst length set to 64 DWORDS (instead of 128).
+	    (Note: SYMBIOS uses 32 DWORDS for the SDMS BIOS)
+
+Sun Oct 26 12:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.5e
+	- Add 'buschk' boot option.
+	  This option enables checking of SCSI BUS data lines after SCSI 
+	  RESET (set by default). (Submitted by Richard Waltham).
+	- Update the README file.
+
+Sat Oct 4 18:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.5d
+	- Dispatch CONDITION MET and RESERVATION CONFLICT scsi status 
+	  as OK driver status.
+	- Update the README file and the Symbios NVRAM format definition 
+	  with removable media flags values (available with SDMS 4.09).
+
 Sat Sep 20 21:00 1997 Gerard Roudier (groudier@club-internet.fr)
 	* revision 2.5c
 	- Several PCI configuration registers fix-ups for powerpc.

@@ -57,11 +57,12 @@ static void set_brk(unsigned long start, unsigned long end)
  * macros to write out all the necessary info.
  */
 #define DUMP_WRITE(addr,nr) \
-while (file.f_op->write(inode,&file,(char *)(addr),(nr)) != (nr)) goto close_coredump
+while (file.f_op->write(&file,(char *)(addr),(nr),&file.f_pos) != (nr)) \
+	goto close_coredump
 
 #define DUMP_SEEK(offset) \
 if (file.f_op->llseek) { \
-	if (file.f_op->llseek(inode,&file,(offset),0) != (offset)) \
+	if (file.f_op->llseek(&file,(offset),0) != (offset)) \
  		goto close_coredump; \
 } else file.f_pos = (offset)
 
@@ -81,7 +82,7 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
 	struct file file;
-	unsigned short fs;
+	mm_segment_t fs;
 	int has_dumped = 0;
 	char corefile[6+sizeof(current->comm)];
 	unsigned long dump_start, dump_size;
@@ -256,7 +257,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 	unsigned long rlim;
-	int retval;
+int retval;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -285,8 +286,6 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 		return retval;
 
 	/* OK, This is the point of no return */
-	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
-
 	current->mm->end_code = ex.a_text +
 		(current->mm->start_code = N_TXTADDR(ex));
 	current->mm->end_data = ex.a_data +
@@ -420,13 +419,13 @@ do_load_aout32_library(int fd)
 
 	/* Seek into the file */
 	if (file->f_op->llseek) {
-		if ((error = file->f_op->llseek(inode, file, 0, 0)) != 0)
+		if ((error = file->f_op->llseek(file, 0, 0)) != 0)
 			return -ENOEXEC;
 	} else
 		file->f_pos = 0;
 
 	set_fs(KERNEL_DS);
-	error = file->f_op->read(inode, file, (char *) &ex, sizeof(ex));
+	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &file->f_pos);
 	set_fs(USER_DS);
 	if (error != sizeof(ex))
 		return -ENOEXEC;

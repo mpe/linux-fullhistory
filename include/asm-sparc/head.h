@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.32 1996/12/04 00:12:48 ecd Exp $ */
+/* $Id: head.h,v 1.33 1997/10/04 08:54:22 ecd Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -111,4 +111,4 @@
 #define WINDOW_FILL \
         rd %psr, %l0; rd %wim, %l3; b fill_window_entry; andcc %l0, PSR_PS, %g0;
 
-#endif __SPARC_HEAD_H
+#endif /* __SPARC_HEAD_H */

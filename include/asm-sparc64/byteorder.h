@@ -1,3 +1,4 @@
+/* $Id: byteorder.h,v 1.8 1997/12/18 02:44:14 ecd Exp $ */
 #ifndef _SPARC64_BYTEORDER_H
 #define _SPARC64_BYTEORDER_H
 
@@ -26,7 +27,8 @@ static __inline__ __u32 ___arch__swab32p(__u32 *addr)
 	return ret;
 }
 
-static __inline__ __u64 ___arch__swab64p(__u64 *addr) {
+static __inline__ __u64 ___arch__swab64p(__u64 *addr)
+{
 	__u64 ret;
 
 	__asm__ __volatile__ ("ldxa [%1] %2, %0"
@@ -40,6 +42,8 @@ static __inline__ __u64 ___arch__swab64p(__u64 *addr) {
 #define __arch__swab64p(x) ___arch__swab64p(x)
 
 #define __BYTEORDER_HAS_U64__
+
+#endif /* __GNUC__ */
 
 #include <linux/byteorder/big_endian.h>
 

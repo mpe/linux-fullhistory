@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.151 1997/08/28 11:10:54 jj Exp $
+/* $Id: srmmu.c,v 1.156 1997/11/28 14:23:42 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -25,11 +25,11 @@
 #include <asm/cache.h>
 #include <asm/oplib.h>
 #include <asm/sbus.h>
-#include <asm/iommu.h>
 #include <asm/asi.h>
 #include <asm/msi.h>
 #include <asm/a.out.h>
 #include <asm/mmu_context.h>
+#include <asm/io-unit.h>
 
 /* Now the cpu specific definitions. */
 #include <asm/viking.h>
@@ -47,6 +47,10 @@ int vac_badbits;
 
 extern unsigned long sparc_iobase_vaddr;
 
+extern unsigned long sun4d_dma_base;
+extern unsigned long sun4d_dma_size;
+extern unsigned long sun4d_dma_vbase;
+
 #ifdef __SMP__
 #define FLUSH_BEGIN(mm)
 #define FLUSH_END
@@ -55,10 +59,14 @@ extern unsigned long sparc_iobase_vaddr;
 #define FLUSH_END	}
 #endif
 
+static int phys_mem_contig;
+long page_contig_offset;
+
 static void (*ctxd_set)(ctxd_t *ctxp, pgd_t *pgdp);
 static void (*pmd_set)(pmd_t *pmdp, pte_t *ptep);
 
-static void (*flush_page_for_dma)(unsigned long page);
+void (*flush_page_for_dma)(unsigned long page);
+int flush_page_for_dma_global = 1;
 static void (*flush_chunk)(unsigned long chunk);
 #ifdef __SMP__
 static void (*local_flush_page_for_dma)(unsigned long page);
@@ -93,9 +101,63 @@ static struct srmmu_trans *srmmu_p2v_hash[SRMMU_HASHSZ];
 
 #define srmmu_ahashfn(addr)	((addr) >> 24)
 
-static int viking_mxcc_present = 0;
+int viking_mxcc_present = 0;
 
-void srmmu_frob_mem_map(unsigned long start_mem)
+/* Physical memory can be _very_ non-contiguous on the sun4m, especially
+ * the SS10/20 class machines and with the latest openprom revisions.
+ * So we have to do a quick lookup.
+ * We use the same for SS1000/SC2000 as a fall back, when phys memory is
+ * non-contiguous.
+ */
+static inline unsigned long srmmu_v2p(unsigned long vaddr)
+{
+	struct srmmu_trans *tp = srmmu_v2p_hash[srmmu_ahashfn(vaddr)];
+
+	if(tp)
+		return (vaddr - tp->vbase + tp->pbase);
+	else
+		return 0xffffffffUL;
+}
+
+static inline unsigned long srmmu_p2v(unsigned long paddr)
+{
+	struct srmmu_trans *tp = srmmu_p2v_hash[srmmu_ahashfn(paddr)];
+
+	if(tp)
+		return (paddr - tp->pbase + tp->vbase);
+	else
+		return 0xffffffffUL;
+}
+
+/* Physical memory on most SS1000/SC2000 can be contiguous, so we handle that case
+ * as a special case to make things faster.
+ */
+static inline unsigned long srmmu_c_v2p(unsigned long vaddr)
+{
+	if (vaddr >= KERNBASE) return vaddr - KERNBASE;
+	return (vaddr - page_contig_offset);
+}
+
+static inline unsigned long srmmu_c_p2v(unsigned long paddr)
+{
+	if (paddr < (0xfd000000 - KERNBASE)) return paddr + KERNBASE;
+	return (paddr + page_contig_offset);
+}
+
+/* In general all page table modifications should use the V8 atomic
+ * swap instruction.  This insures the mmu and the cpu are in sync
+ * with respect to ref/mod bits in the page tables.
+ */
+static inline unsigned long srmmu_swap(unsigned long *addr, unsigned long value)
+{
+	__asm__ __volatile__("swap [%2], %0" : "=&r" (value) : "0" (value), "r" (addr));
+	return value;
+}
+
+/* Functions really use this, not srmmu_swap directly. */
+#define srmmu_set_entry(ptr, newentry) srmmu_swap((unsigned long *) (ptr), (newentry))
+
+__initfunc(void srmmu_frob_mem_map(unsigned long start_mem))
 {
 	unsigned long bank_start, bank_end;
 	unsigned long addr;
@@ -119,44 +181,12 @@ void srmmu_frob_mem_map(unsigned long start_mem)
 			bank_start += PAGE_SIZE;
 		}
 	}
+	if (sparc_cpu_model == sun4d) {
+		for (addr = PAGE_OFFSET; MAP_NR(addr) < max_mapnr; addr += PAGE_SIZE)
+			if (addr < sun4d_dma_vbase || addr >= sun4d_dma_vbase + sun4d_dma_size)
+				clear_bit(PG_DMA, &mem_map[MAP_NR(addr)].flags);
+	}
 }
-
-/* Physical memory can be _very_ non-contiguous on the sun4m, especially
- * the SS10/20 class machines and with the latest openprom revisions.
- * So we have to do a quick lookup.
- */
-static inline unsigned long srmmu_v2p(unsigned long vaddr)
-{
-	struct srmmu_trans *tp = srmmu_v2p_hash[srmmu_ahashfn(vaddr)];
-
-	if(tp)
-		return (vaddr - tp->vbase + tp->pbase);
-	else
-		return 0xffffffffUL;
-}
-
-static inline unsigned long srmmu_p2v(unsigned long paddr)
-{
-	struct srmmu_trans *tp = srmmu_p2v_hash[srmmu_ahashfn(paddr)];
-
-	if(tp)
-		return (paddr - tp->pbase + tp->vbase);
-	else
-		return 0xffffffffUL;
-}
-
-/* In general all page table modifications should use the V8 atomic
- * swap instruction.  This insures the mmu and the cpu are in sync
- * with respect to ref/mod bits in the page tables.
- */
-static inline unsigned long srmmu_swap(unsigned long *addr, unsigned long value)
-{
-	__asm__ __volatile__("swap [%2], %0" : "=&r" (value) : "0" (value), "r" (addr));
-	return value;
-}
-
-/* Functions really use this, not srmmu_swap directly. */
-#define srmmu_set_entry(ptr, newentry) srmmu_swap((unsigned long *) (ptr), (newentry))
 
 /* The very generic SRMMU page table operations. */
 static unsigned int srmmu_pmd_align(unsigned int addr) { return SRMMU_PMD_ALIGN(addr); }
@@ -180,6 +210,15 @@ static unsigned long srmmu_pmd_page(pmd_t pmd)
 
 static unsigned long srmmu_pte_page(pte_t pte)
 { return srmmu_device_memory(pte_val(pte))?~0:srmmu_p2v((pte_val(pte) & SRMMU_PTE_PMASK) << 4); }
+
+static unsigned long srmmu_c_pgd_page(pgd_t pgd)
+{ return srmmu_device_memory(pgd_val(pgd))?~0:srmmu_c_p2v((pgd_val(pgd) & SRMMU_PTD_PMASK) << 4); }
+
+static unsigned long srmmu_c_pmd_page(pmd_t pmd)
+{ return srmmu_device_memory(pmd_val(pmd))?~0:srmmu_c_p2v((pmd_val(pmd) & SRMMU_PTD_PMASK) << 4); }
+
+static unsigned long srmmu_c_pte_page(pte_t pte)
+{ return srmmu_device_memory(pte_val(pte))?~0:srmmu_c_p2v((pte_val(pte) & SRMMU_PTE_PMASK) << 4); }
 
 static int srmmu_pte_none(pte_t pte)          
 { return !(pte_val(pte) & 0xFFFFFFF); }
@@ -227,6 +266,9 @@ static pte_t srmmu_pte_mkyoung(pte_t pte)     { return __pte(pte_val(pte) | SRMM
 static pte_t srmmu_mk_pte(unsigned long page, pgprot_t pgprot)
 { return __pte(((srmmu_v2p(page)) >> 4) | pgprot_val(pgprot)); }
 
+static pte_t srmmu_c_mk_pte(unsigned long page, pgprot_t pgprot)
+{ return __pte(((srmmu_c_v2p(page)) >> 4) | pgprot_val(pgprot)); }
+
 static pte_t srmmu_mk_pte_phys(unsigned long page, pgprot_t pgprot)
 { return __pte(((page) >> 4) | pgprot_val(pgprot)); }
 
@@ -250,6 +292,21 @@ static void srmmu_pmd_set(pmd_t * pmdp, pte_t * ptep)
 	set_pte((pte_t *)pmdp, (SRMMU_ET_PTD | (srmmu_v2p((unsigned long) ptep) >> 4)));
 }
 
+static void srmmu_c_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
+{ 
+	set_pte((pte_t *)ctxp, (SRMMU_ET_PTD | (srmmu_c_v2p((unsigned long) pgdp) >> 4)));
+}
+
+static void srmmu_c_pgd_set(pgd_t * pgdp, pmd_t * pmdp)
+{
+	set_pte((pte_t *)pgdp, (SRMMU_ET_PTD | (srmmu_c_v2p((unsigned long) pmdp) >> 4)));
+}
+
+static void srmmu_c_pmd_set(pmd_t * pmdp, pte_t * ptep)
+{
+	set_pte((pte_t *)pmdp, (SRMMU_ET_PTD | (srmmu_c_v2p((unsigned long) ptep) >> 4)));
+}
+
 static pte_t srmmu_pte_modify(pte_t pte, pgprot_t newprot)
 {
 	return __pte((pte_val(pte) & SRMMU_CHG_MASK) | pgprot_val(newprot));
@@ -271,6 +328,18 @@ static pmd_t *srmmu_pmd_offset(pgd_t * dir, unsigned long address)
 static pte_t *srmmu_pte_offset(pmd_t * dir, unsigned long address)
 {
 	return (pte_t *) srmmu_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
+}
+
+/* Find an entry in the second-level page table.. */
+static pmd_t *srmmu_c_pmd_offset(pgd_t * dir, unsigned long address)
+{
+	return (pmd_t *) srmmu_c_pgd_page(*dir) + ((address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1));
+}
+
+/* Find an entry in the third-level page table.. */ 
+static pte_t *srmmu_c_pte_offset(pmd_t * dir, unsigned long address)
+{
+	return (pte_t *) srmmu_c_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
 }
 
 /* This must update the context table entry for this process. */
@@ -560,7 +629,7 @@ static pte_t *srmmu_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
-	return (pte_t *) srmmu_pmd_page(*pmd) + address;
+	return (pte_t *) pmd_page(*pmd) + address;
 }
 
 static void srmmu_pmd_free_kernel(pmd_t *pmd)
@@ -617,7 +686,7 @@ static pte_t *srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
-	return ((pte_t *) srmmu_pmd_page(*pmd)) + address;
+	return ((pte_t *) pmd_page(*pmd)) + address;
 }
 
 /* Real three-level page tables on SRMMU. */
@@ -646,7 +715,7 @@ static pmd_t *srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 		pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
 		return NULL;
 	}
-	return (pmd_t *) srmmu_pgd_page(*pgd) + address;
+	return (pmd_t *) pgd_page(*pgd) + address;
 }
 
 static void srmmu_pgd_free(pgd_t *pgd)
@@ -789,8 +858,8 @@ void srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr, int bus_ty
 
 	physaddr &= PAGE_MASK;
 	pgdp = srmmu_pgd_offset(init_task.mm, virt_addr);
-	pmdp = srmmu_pmd_offset(pgdp, virt_addr);
-	ptep = srmmu_pte_offset(pmdp, virt_addr);
+	pmdp = pmd_offset(pgdp, virt_addr);
+	ptep = pte_offset(pmdp, virt_addr);
 	tmp = (physaddr >> 4) | SRMMU_ET_PTE;
 
 	/* I need to test whether this is consistent over all
@@ -814,21 +883,12 @@ void srmmu_unmapioaddr(unsigned long virt_addr)
 	pte_t *ptep;
 
 	pgdp = srmmu_pgd_offset(init_task.mm, virt_addr);
-	pmdp = srmmu_pmd_offset(pgdp, virt_addr);
-	ptep = srmmu_pte_offset(pmdp, virt_addr);
+	pmdp = pmd_offset(pgdp, virt_addr);
+	ptep = pte_offset(pmdp, virt_addr);
 
 	/* No need to flush uncacheable page. */
-	set_pte(ptep, srmmu_mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
+	set_pte(ptep, mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
 	flush_tlb_all();
-}
-
-static char *srmmu_lockarea(char *vaddr, unsigned long len)
-{
-	return vaddr;
-}
-
-static void srmmu_unlockarea(char *vaddr, unsigned long len)
-{
 }
 
 /* This is used in many routines below. */
@@ -1131,10 +1191,12 @@ static void cypress_flush_chunk(unsigned long chunk)
 	cypress_flush_page_to_ram(chunk);
 }
 
+#if NOTUSED
 /* Cypress is also IO cache coherent. */
 static void cypress_flush_page_for_dma(unsigned long page)
 {
 }
+#endif
 
 /* Cypress has unified L2 VIPT, from which both instructions and data
  * are stored.  It does not have an onboard icache of any sort, therefore
@@ -1220,6 +1282,9 @@ extern void viking_flush_sig_insns(struct mm_struct *mm, unsigned long addr);
 extern void viking_flush_page(unsigned long page);
 extern void viking_mxcc_flush_page(unsigned long page);
 extern void viking_flush_chunk(unsigned long chunk);
+extern void viking_c_flush_page(unsigned long page);
+extern void viking_c_mxcc_flush_page(unsigned long page);
+extern void viking_c_flush_chunk(unsigned long chunk);
 extern void viking_mxcc_flush_chunk(unsigned long chunk);
 extern void viking_flush_tlb_all(void);
 extern void viking_flush_tlb_mm(struct mm_struct *mm);
@@ -1343,184 +1408,6 @@ static void hypersparc_init_new_context(struct mm_struct *mm)
 	hyper_flush_whole_icache();
 	if(mm == current->mm)
 		srmmu_set_context(mm->context);
-}
-
-/* IOMMU things go here. */
-
-#define LONG_ALIGN(x) (((x)+(sizeof(long))-1)&~((sizeof(long))-1))
-
-#define IOPERM        (IOPTE_CACHE | IOPTE_WRITE | IOPTE_VALID)
-#define MKIOPTE(phys) (((((phys)>>4) & IOPTE_PAGE) | IOPERM) & ~IOPTE_WAZ)
-
-static inline void srmmu_map_dvma_pages_for_iommu(struct iommu_struct *iommu,
-						  unsigned long kern_end)
-{
-	unsigned long first = page_offset;
-	unsigned long last = kern_end;
-	iopte_t *iopte = iommu->page_table;
-
-	iopte += ((first - iommu->start) >> PAGE_SHIFT);
-	while(first <= last) {
-		*iopte++ = __iopte(MKIOPTE(srmmu_v2p(first)));
-		first += PAGE_SIZE;
-	}
-}
-
-unsigned long iommu_init(int iommund, unsigned long memory_start,
-			 unsigned long memory_end, struct linux_sbus *sbus)
-{
-	unsigned int impl, vers, ptsize;
-	unsigned long tmp;
-	struct iommu_struct *iommu;
-	struct linux_prom_registers iommu_promregs[PROMREG_MAX];
-
-	memory_start = LONG_ALIGN(memory_start);
-	iommu = (struct iommu_struct *) memory_start;
-	memory_start += sizeof(struct iommu_struct);
-	prom_getproperty(iommund, "reg", (void *) iommu_promregs,
-			 sizeof(iommu_promregs));
-	iommu->regs = (struct iommu_regs *)
-		sparc_alloc_io(iommu_promregs[0].phys_addr, 0, (PAGE_SIZE * 3),
-			       "IOMMU registers", iommu_promregs[0].which_io, 0x0);
-	if(!iommu->regs)
-		panic("Cannot map IOMMU registers.");
-	impl = (iommu->regs->control & IOMMU_CTRL_IMPL) >> 28;
-	vers = (iommu->regs->control & IOMMU_CTRL_VERS) >> 24;
-	tmp = iommu->regs->control;
-	tmp &= ~(IOMMU_CTRL_RNGE);
-	switch(page_offset & 0xf0000000) {
-	case 0xf0000000:
-		tmp |= (IOMMU_RNGE_256MB | IOMMU_CTRL_ENAB);
-		iommu->plow = iommu->start = 0xf0000000;
-		break;
-	case 0xe0000000:
-		tmp |= (IOMMU_RNGE_512MB | IOMMU_CTRL_ENAB);
-		iommu->plow = iommu->start = 0xe0000000;
-		break;
-	case 0xd0000000:
-	case 0xc0000000:
-		tmp |= (IOMMU_RNGE_1GB | IOMMU_CTRL_ENAB);
-		iommu->plow = iommu->start = 0xc0000000;
-		break;
-	case 0xb0000000:
-	case 0xa0000000:
-	case 0x90000000:
-	case 0x80000000:
-		tmp |= (IOMMU_RNGE_2GB | IOMMU_CTRL_ENAB);
-		iommu->plow = iommu->start = 0x80000000;
-		break;
-	}
-	iommu->regs->control = tmp;
-	iommu_invalidate(iommu->regs);
-	iommu->end = 0xffffffff;
-
-	/* Allocate IOMMU page table */
-	ptsize = iommu->end - iommu->start + 1;
-	ptsize = (ptsize >> PAGE_SHIFT) * sizeof(iopte_t);
-
-	/* Stupid alignment constraints give me a headache. */
-	memory_start = PAGE_ALIGN(memory_start);
-	memory_start = (((memory_start) + (ptsize - 1)) & ~(ptsize - 1));
-	iommu->lowest = iommu->page_table = (iopte_t *) memory_start;
-	memory_start += ptsize;
-
-	/* Initialize new table. */
-	flush_cache_all();
-	memset(iommu->page_table, 0, ptsize);
-	srmmu_map_dvma_pages_for_iommu(iommu, memory_end);
-	if(viking_mxcc_present) {
-		unsigned long start = (unsigned long) iommu->page_table;
-		unsigned long end = (start + ptsize);
-		while(start < end) {
-			viking_mxcc_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	} else if(flush_page_for_dma == viking_flush_page) {
-		unsigned long start = (unsigned long) iommu->page_table;
-		unsigned long end = (start + ptsize);
-		while(start < end) {
-			viking_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	}
-	flush_tlb_all();
-	iommu->regs->base = srmmu_v2p((unsigned long) iommu->page_table) >> 4;
-	iommu_invalidate(iommu->regs);
-
-	sbus->iommu = iommu;
-	printk("IOMMU: impl %d vers %d page table at %p of size %d bytes\n",
-	       impl, vers, iommu->page_table, ptsize);
-	return memory_start;
-}
-
-void iommu_sun4d_init(int sbi_node, struct linux_sbus *sbus)
-{
-	u32 *iommu;
-	struct linux_prom_registers iommu_promregs[PROMREG_MAX];
-
-	prom_getproperty(sbi_node, "reg", (void *) iommu_promregs,
-			 sizeof(iommu_promregs));
-	iommu = (u32 *)
-		sparc_alloc_io(iommu_promregs[2].phys_addr, 0, (PAGE_SIZE * 16),
-			       "XPT", iommu_promregs[2].which_io, 0x0);
-	if(!iommu)
-		panic("Cannot map External Page Table.");
-
-	/* Initialize new table. */
-	flush_cache_all();
-	memset(iommu, 0, 16 * PAGE_SIZE);
-	if(viking_mxcc_present) {
-		unsigned long start = (unsigned long) iommu;
-		unsigned long end = (start + 16 * PAGE_SIZE);
-		while(start < end) {
-			viking_mxcc_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	} else if(flush_page_for_dma == viking_flush_page) {
-		unsigned long start = (unsigned long) iommu;
-		unsigned long end = (start + 16 * PAGE_SIZE);
-		while(start < end) {
-			viking_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	}
-	flush_tlb_all();
-
-	sbus->iommu = (struct iommu_struct *)iommu;
-}
-
-static __u32 srmmu_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
-{
-	unsigned long page = ((unsigned long) vaddr) & PAGE_MASK;
-
-	while(page < ((unsigned long)(vaddr + len))) {
-		flush_page_for_dma(page);
-		page += PAGE_SIZE;
-	}
-	return (__u32)vaddr;
-}
-
-static void srmmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
-{
-        unsigned long page;
-
-	while(sz >= 0) {
-		page = ((unsigned long) sg[sz].addr) & PAGE_MASK;
-		while(page < (unsigned long)(sg[sz].addr + sg[sz].len)) {
-			flush_page_for_dma(page);
-			page += PAGE_SIZE;
-		}
-		sg[sz].dvma_addr = (__u32) (sg[sz].addr);
-		sz--;
-	}
-}
-
-static void srmmu_release_scsi_one(__u32 vaddr, unsigned long len, struct linux_sbus *sbus)
-{
-}
-
-static void srmmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
-{
 }
 
 static unsigned long mempool;
@@ -1651,63 +1538,6 @@ void srmmu_inherit_prom_mappings(unsigned long start,unsigned long end)
 		start += PAGE_SIZE;
 	}
 }
-
-#ifdef CONFIG_SBUS
-static void srmmu_map_dma_area(unsigned long addr, int len)
-{
-	unsigned long page, end;
-	pgprot_t dvma_prot;
-	struct iommu_struct *iommu = SBus_chain->iommu;
-	iopte_t *iopte = iommu->page_table;
-	iopte_t *iopte_first = iopte;
-
-	if(viking_mxcc_present)
-		dvma_prot = __pgprot(SRMMU_CACHE | SRMMU_ET_PTE | SRMMU_PRIV);
-	else
-		dvma_prot = __pgprot(SRMMU_ET_PTE | SRMMU_PRIV);
-
-	iopte += ((addr - iommu->start) >> PAGE_SHIFT);
-	end = PAGE_ALIGN((addr + len));
-	while(addr < end) {
-		page = get_free_page(GFP_KERNEL);
-		if(!page) {
-			prom_printf("alloc_dvma: Cannot get a dvma page\n");
-			prom_halt();
-		} else {
-			pgd_t *pgdp;
-			pmd_t *pmdp;
-			pte_t *ptep;
-
-			pgdp = srmmu_pgd_offset(init_task.mm, addr);
-			pmdp = srmmu_pmd_offset(pgdp, addr);
-			ptep = srmmu_pte_offset(pmdp, addr);
-
-			set_pte(ptep, pte_val(srmmu_mk_pte(page, dvma_prot)));
-
-			iopte_val(*iopte++) = MKIOPTE(srmmu_v2p(page));
-		}
-		addr += PAGE_SIZE;
-	}
-	flush_cache_all();
-	if(viking_mxcc_present) {
-		unsigned long start = ((unsigned long) iopte_first) & PAGE_MASK;
-		unsigned long end = PAGE_ALIGN(((unsigned long) iopte));
-		while(start < end) {
-			viking_mxcc_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	} else if(flush_page_for_dma == viking_flush_page) {
-		unsigned long start = ((unsigned long) iopte_first) & PAGE_MASK;
-		unsigned long end = PAGE_ALIGN(((unsigned long) iopte));
-		while(start < end) {
-			viking_flush_page(start);
-			start += PAGE_SIZE;
-		}
-	}
-	flush_tlb_all();
-	iommu_invalidate(iommu->regs);
-}
-#endif
 
 /* #define DEBUG_MAP_KERNEL */
 
@@ -2068,6 +1898,59 @@ check_and_return:
 			srmmu_p2v_hash[srmmu_ahashfn(addr)] = &srmmu_map[entry];
 	}
 
+	page_contig_offset = page_offset - (0xfd000000 - KERNBASE);
+	phys_mem_contig = 1;
+	for(entry = 0; srmmu_map[entry].size; entry++)
+		if (srmmu_map[entry].pbase != srmmu_c_v2p (srmmu_map[entry].vbase)) {
+			phys_mem_contig = 0;
+			break;
+		}
+	if (phys_mem_contig) {
+		printk ("SRMMU: Physical memory is contiguous, bypassing VA<->PA hashes\n");
+		pte_page = srmmu_c_pte_page;
+		pmd_page = srmmu_c_pmd_page;
+		pgd_page = srmmu_c_pgd_page;
+		mk_pte = srmmu_c_mk_pte;
+		pte_offset = srmmu_c_pte_offset;
+		pmd_offset = srmmu_c_pmd_offset;
+		if (ctxd_set == srmmu_ctxd_set)
+			ctxd_set = srmmu_c_ctxd_set;
+		pgd_set = srmmu_c_pgd_set;
+		pmd_set = srmmu_c_pmd_set;
+		mmu_v2p = srmmu_c_v2p;
+		mmu_p2v = srmmu_c_p2v;
+		if (flush_chunk == viking_flush_chunk)
+			flush_chunk = viking_c_flush_chunk;
+	}
+	
+	if (sparc_cpu_model == sun4d) {
+		int i, j = -1;
+		unsigned long bank_start, bank_end;
+		
+		sun4d_dma_vbase = 0;
+		sun4d_dma_size = IOUNIT_DMA_SIZE - IOUNIT_DVMA_SIZE;
+		for (i = 0; srmmu_map[i].size; i++) {
+			bank_start = srmmu_map[i].vbase;
+			bank_end = bank_start + srmmu_map[i].size;
+			if (bank_start <= KERNBASE && bank_end > KERNBASE)
+				j = i;
+			else if (srmmu_map[i].size >= sun4d_dma_size) {
+				sun4d_dma_vbase = srmmu_map[i].vbase;
+				break;
+			}
+		}
+		if (!sun4d_dma_vbase && j != -1) {
+			if (srmmu_map[j].size >= sun4d_dma_size + 0x1000000)
+				sun4d_dma_vbase = srmmu_map[j].vbase + 0x1000000;
+			else {
+				sun4d_dma_vbase = srmmu_map[j].vbase;
+				if (srmmu_map[j].size < sun4d_dma_size)
+					sun4d_dma_size = srmmu_map[j].size;
+			}
+		}
+		sun4d_dma_base = IOUNIT_DMA_BASE - srmmu_v2p(sun4d_dma_vbase);
+	}
+
 	return; /* SUCCESS! */
 }
 
@@ -2104,7 +1987,7 @@ unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	physmem_mapped_contig = 0;	    /* for init.c:taint_real_pages()   */
 
 	if (sparc_cpu_model == sun4d)
-		num_contexts = 65536; /* We now it is Viking */
+		num_contexts = 65536; /* We know it is Viking */
 	else {
 		/* Find the number of contexts on the srmmu. */
 		cpunode = prom_getchild(prom_root_node);
@@ -2381,11 +2264,6 @@ static void poke_hypersparc(void)
 	hyper_flush_whole_icache();
 	clear = srmmu_get_faddr();
 	clear = srmmu_get_fstatus();
-
-#ifdef __SMP__
-	/* Avoid unnecessary cross calls. */
-	flush_page_for_dma = local_flush_page_for_dma;
-#endif
 }
 
 __initfunc(static void init_hypersparc(void))
@@ -2407,7 +2285,7 @@ __initfunc(static void init_hypersparc(void))
 
 	flush_page_to_ram = hypersparc_flush_page_to_ram;
 	flush_sig_insns = hypersparc_flush_sig_insns;
-	flush_page_for_dma = hypersparc_flush_page_for_dma;
+	flush_page_for_dma = NULL /* hypersparc_flush_page_for_dma */;
 
 	flush_chunk = hypersparc_flush_chunk; /* local flush _only_ */
 
@@ -2480,7 +2358,7 @@ __initfunc(static void init_cypress_common(void))
 
 	flush_page_to_ram = cypress_flush_page_to_ram;
 	flush_sig_insns = cypress_flush_sig_insns;
-	flush_page_for_dma = cypress_flush_page_for_dma;
+	flush_page_for_dma = NULL /* cypress_flush_page_for_dma */;
 	sparc_update_rootmmu_dir = cypress_update_rootmmu_dir;
 
 	update_mmu_cache = srmmu_vac_update_mmu_cache;
@@ -2671,7 +2549,7 @@ __initfunc(static void init_turbosparc(void))
 #endif
 
 	flush_sig_insns = turbosparc_flush_sig_insns;
-	flush_page_for_dma = hypersparc_flush_page_for_dma;
+	flush_page_for_dma = NULL /* turbosparc_flush_page_for_dma */;
 
 	poke_srmmu = poke_turbosparc;
 }
@@ -2761,6 +2639,9 @@ static void poke_viking(void)
 #ifdef __SMP__
 	/* Avoid unnecessary cross calls. */
 	flush_cache_all = local_flush_cache_all;
+	flush_cache_mm = local_flush_cache_mm;
+	flush_cache_range = local_flush_cache_range;
+	flush_cache_page = local_flush_cache_page;
 	flush_page_to_ram = local_flush_page_to_ram;
 	flush_sig_insns = local_flush_sig_insns;
 	flush_page_for_dma = local_flush_page_for_dma;
@@ -2796,6 +2677,9 @@ __initfunc(static void init_viking(void))
 		 * which we use the IOMMU.
 		 */
 		flush_page_for_dma = viking_flush_page;
+		/* Also, this is so far the only chip which actually uses
+		   the page argument to flush_page_for_dma */
+		flush_page_for_dma_global = 0;
 	} else {
 		srmmu_name = "TI Viking/MXCC";
 		viking_mxcc_present = 1;
@@ -2803,7 +2687,7 @@ __initfunc(static void init_viking(void))
 		flush_chunk = viking_mxcc_flush_chunk; /* local flush _only_ */
 
 		/* MXCC vikings lack the DMA snooping bug. */
-		flush_page_for_dma = viking_flush_page_for_dma;
+		flush_page_for_dma = NULL /* viking_flush_page_for_dma */;
 	}
 
 	flush_cache_all = viking_flush_cache_all;
@@ -2951,9 +2835,12 @@ static void smp_flush_page_for_dma(unsigned long page)
 
 #endif
 
-/* Load up routines and constants for sun4m mmu */
+/* Load up routines and constants for sun4m and sun4d mmu */
 __initfunc(void ld_mmu_srmmu(void))
 {
+	extern void ld_mmu_iommu(void);
+	extern void ld_mmu_iounit(void);
+	
 	/* First the constants */
 	pmd_shift = SRMMU_PMD_SHIFT;
 	pmd_size = SRMMU_PMD_SIZE;
@@ -3031,18 +2918,7 @@ __initfunc(void ld_mmu_srmmu(void))
 	pte_mkyoung = srmmu_pte_mkyoung;
 	update_mmu_cache = srmmu_update_mmu_cache;
 	destroy_context = srmmu_destroy_context;
-	mmu_lockarea = srmmu_lockarea;
-	mmu_unlockarea = srmmu_unlockarea;
-
-	mmu_get_scsi_one = srmmu_get_scsi_one;
-	mmu_get_scsi_sgl = srmmu_get_scsi_sgl;
-	mmu_release_scsi_one = srmmu_release_scsi_one;
-	mmu_release_scsi_sgl = srmmu_release_scsi_sgl;
-
-#ifdef CONFIG_SBUS
-	mmu_map_dma_area = srmmu_map_dma_area;
-#endif
-
+	
 	mmu_info = srmmu_mmu_info;
         mmu_v2p = srmmu_v2p;
         mmu_p2v = srmmu_p2v;
@@ -3085,6 +2961,11 @@ __initfunc(void ld_mmu_srmmu(void))
 	flush_tlb_page = smp_flush_tlb_page;
 	flush_page_to_ram = smp_flush_page_to_ram;
 	flush_sig_insns = smp_flush_sig_insns;
-	flush_page_for_dma = smp_flush_page_for_dma;
+	if (flush_page_for_dma)
+		flush_page_for_dma = smp_flush_page_for_dma;
 #endif
+	if (sparc_cpu_model == sun4d)
+		ld_mmu_iounit();
+	else
+		ld_mmu_iommu();
 }

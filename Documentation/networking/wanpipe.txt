@@ -1,9 +1,9 @@
 ------------------------------------------------------------------------------
 WANPIPE(tm) Multiprotocol WAN Driver for Linux WAN Router
 ------------------------------------------------------------------------------
-Release 3.1.0
-January 30, 1997
-Author: Gene Kozin <genek@compuserve.com>
+Release 4.1
+November 17, 1997
+Author: Jaspreet Singh <jaspreet@sangoma.com>
 Copyright (c) 1995-1997 Sangoma Technologies Inc.
 ------------------------------------------------------------------------------
 
@@ -23,8 +23,13 @@ package to be able to use Linux WAN Router and WANPIPE driver.  The package
 is available via the Internet from Sangoma Technologies' anonymous FTP server:
 
 	ftp.sangoma.com/pub/linux/wantools-X.Y.Z.tgz
+			or
+	ftp.sangoma.com/pub/linux/wanpipe-X.Y.Z.tgz
 
-For technical questions and/or comments please e-mail to genek@compuserve.com.
+The name of the package differ only due to naming convention.  The functionalityof wantools and wanpipe packages are the same.  The latest version of WAN 
+Drivers is wanpipe-2.0.0.
+
+For technical questions and/or comments please e-mail to jaspreet@sangoma.com.
 For general inquiries please contact Sangoma Technologies Inc. by
 
 	Hotline:	1-800-388-2475	(USA and Canada, toll free)
@@ -53,10 +58,13 @@ Ave, Cambridge, MA 02139, USA.
 
 NEW IN THIS RELEASE
 
- o Implemented as WAN Link Driver compliant with Linux WAN Router interface
- o Added support for X.25 protocol
- o Miscellaneous bug fixes and performance improvements
-
+ o This Version of WANPIPE supports only the S508 and S508/FT1 cards.  IF YOU
+   OWN A S502E OR A S508 CARD THEN PLEASE CONTACT SANGOMA TECHNOLOGIES FOR AN
+   UPGRADE.
+ o Protection of "enable_irq()" while "disable_irq()" has been enabled from 
+   any other routine (for Frame Relay, PPP and X25).
+ o Added additional Stats for Fpipemon and Ppipemon.
+ o Improved Load Sharing for multiple boards
 
 
 FILE LIST
@@ -64,22 +72,38 @@ FILE LIST
 drivers/net:
 	README.wanpipe	This file
 	sdladrv.c	SDLA support module source code
-	wpmain.c	WANPIPE driver module main source code
-	wpx.c		WANPIPE driver module X.25 source code
-	wpf.c		WANPIPE driver module frame relay source code
-	wpp.c		WANPIPE driver module PPP source code
+	sdla_fr.c	SDLA Frame Relay source code
+	sdla_ppp.c	SDLA PPP source code
+	sdla_x25.c	SDLA X25 source code
+	sdlamain.c	SDLA support source code
+
+include/linux:
 	sdla_x25.h	SDLA X.25 firmware API definitions
 	sdla_fr.h	SDLA frame relay firmware API definitions
 	sdla_ppp.h	SDLA PPP firmware API definitions
-
-include/linux:
 	wanpipe.h	WANPIPE API definitions
 	sdladrv.h	SDLA support module API definitions
 	sdlasfm.h	SDLA firmware module definitions
-
+	router.h	
 
 
 REVISION HISTORY
+
+4.1	November 28, 1997
+        o Protection of "enable_irq()" while "disable_irq()" has been enabled 
+	  from any other routine (for Frame Relay, PPP and X25).
+        o Added additional Stats for Fpipemon and Ppipemon
+	o Improved Load Sharing for multiple boards
+
+
+4.0	November 06, 1997
+ 	o Implemented better protection of RACE conditions by critical flags for
+ 	  FRAME RELAY, PPP and X25.
+ 	o DLCI List interrupt mode implemented for DLCI specific CIR.
+ 	o IPX support for FRAME RELAY, PPP and X25.
+ 	o IPX Server Support (MARS) for FRAME RELAY, PPP and X25.
+ 	o More driver specific stats included. 
+	o MULTICAST for FRAME RELAY and PPP.
 
 3.1.0	January 30, 1997
 

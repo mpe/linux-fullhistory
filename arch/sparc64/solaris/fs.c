@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.4 1997/09/04 15:46:26 jj Exp $
+/* $Id: fs.c,v 1.6 1997/10/13 03:54:05 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -10,6 +10,7 @@
 #include <linux/smp_lock.h>
 #include <linux/limits.h>
 #include <linux/resource.h>
+#include <linux/quotaops.h>
 
 #include <asm/uaccess.h>
 #include <asm/string.h>
@@ -82,7 +83,7 @@ asmlinkage int solaris_stat(u32 filename, u32 statbuf)
 	int ret;
 	struct stat s;
 	char *filenam;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_newstat)(char *,struct stat *) = 
 		(int (*)(char *,struct stat *))SYS(stat);
 	
@@ -110,7 +111,7 @@ asmlinkage int solaris_lstat(u32 filename, u32 statbuf)
 	int ret;
 	struct stat s;
 	char *filenam;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_newlstat)(char *,struct stat *) = 
 		(int (*)(char *,struct stat *))SYS(lstat);
 	
@@ -136,7 +137,7 @@ asmlinkage int solaris_fstat(unsigned int fd, u32 statbuf)
 {
 	int ret;
 	struct stat s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_newfstat)(unsigned,struct stat *) = 
 		(int (*)(unsigned,struct stat *))SYS(fstat);
 	
@@ -187,7 +188,7 @@ asmlinkage int solaris_statfs(u32 path, u32 buf, int len, int fstype)
 {
 	int ret;
 	struct statfs s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_statfs)(const char *,struct statfs *) = 
 		(int (*)(const char *,struct statfs *))SYS(statfs);
 	struct sol_statfs *ss = (struct sol_statfs *)A(buf);
@@ -229,7 +230,7 @@ asmlinkage int solaris_fstatfs(u32 fd, u32 buf, int len, int fstype)
 {
 	int ret;
 	struct statfs s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_fstatfs)(unsigned,struct statfs *) = 
 		(int (*)(unsigned,struct statfs *))SYS(fstatfs);
 	struct sol_statfs *ss = (struct sol_statfs *)A(buf);
@@ -276,7 +277,7 @@ struct sol_statvfs {
 static int report_statvfs(struct inode *inode, u32 buf)
 {
 	struct statfs s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int error;
 	struct sol_statvfs *ss = (struct sol_statvfs *)A(buf);
 			
@@ -418,7 +419,7 @@ asmlinkage int solaris_fcntl(unsigned fd, unsigned cmd, u32 arg)
 	case SOL_F_SETLKW:
 		{
 			struct flock f;
-			unsigned long old_fs = get_fs();
+			mm_segment_t old_fs = get_fs();
 
 			switch (cmd) {
 			case SOL_F_GETLK: cmd = F_GETLK; break;
@@ -515,16 +516,7 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	if (inode->i_sb && inode->i_sb->dq_op) {
-		inode->i_sb->dq_op->initialize(inode, -1);
-		error = -EDQUOT;
-		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
-			goto out;
-		error = notify_change(inode, &newattrs);
-		if (error)
-			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
-	} else
-		error = notify_change(inode, &newattrs);
+	DQUOT_TRANSFER(inode, newattrs);
 out:
 	return error;
 }
@@ -690,7 +682,7 @@ asmlinkage long solaris_llseek(struct pt_regs *regs, u32 off_hi, u32 off_lo, int
 	int (*sys_llseek)(unsigned int, unsigned long, unsigned long, loff_t *, unsigned int) =
 		(int (*)(unsigned int, unsigned long, unsigned long, loff_t *, unsigned int))SYS(_llseek);
 	int ret;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	loff_t retval;
 	
 	set_fs(KERNEL_DS);

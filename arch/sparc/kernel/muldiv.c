@@ -1,4 +1,4 @@
-/* $Id: muldiv.c,v 1.4 1997/04/11 00:42:08 davem Exp $
+/* $Id: muldiv.c,v 1.5 1997/12/15 20:07:20 ecd Exp $
  * muldiv.c: Hardware multiply/division illegal instruction trap
  *		for sun4c/sun4 (which do not have those instructions)
  *
@@ -69,18 +69,23 @@ static inline void maybe_flush_windows(unsigned int rs1, unsigned int rs2,
 	ret;									\
 })
 
-static inline unsigned long *fetch_reg_addr(unsigned int reg, struct pt_regs *regs)
+static inline int
+store_reg(unsigned int result, unsigned int reg, struct pt_regs *regs)
 {
 	struct reg_window *win;
 
-	if(!reg)
-		return NULL;
-	else if(reg < 16)
-		return &regs->u_regs[reg];
-	win = (struct reg_window *) regs->u_regs[UREG_FP];
-	return &win->locals[reg - 16];
+	if (!reg)
+		return 0;
+	if (reg < 16) {
+		regs->u_regs[reg] = result;
+		return 0;
+	} else {
+		/* need to use put_user() in this case: */
+		win = (struct reg_window *)regs->u_regs[UREG_FP];
+		return (put_user(result, &win->locals[reg - 16]));
+	}
 }
-
+		
 extern void handle_hw_divzero (struct pt_regs *regs, unsigned long pc,
 			       unsigned long npc, unsigned long psr);
 
@@ -90,7 +95,6 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 	unsigned int insn;
 	int inst;
 	unsigned int rs1, rs2, rdv;
-	unsigned long *rd;
 
 	if (!pc) return -1; /* This happens to often, I think */
 	if (get_user (insn, (unsigned int *)pc)) return -1;
@@ -109,7 +113,6 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 		rs2 = fetch_reg(rs2, regs);
 	}
 	rs1 = fetch_reg(rs1, regs);
-	rd = fetch_reg_addr(rdv, regs);
 	switch (inst) {
 	case 10: /* umul */
 #ifdef DEBUG_MULDIV	
@@ -127,9 +130,8 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 #ifdef DEBUG_MULDIV
 		printk ("0x%x%08x\n", rs2, rs1);
 #endif
-		if (rd) {
-			if (put_user (rs1, rd)) return -1;
-		}
+		if (store_reg(rs1, rdv, regs))
+			return -1;
 		regs->y = rs2;
 		break;
 	case 11: /* smul */
@@ -148,9 +150,8 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 #ifdef DEBUG_MULDIV
 		printk ("0x%x%08x\n", rs2, rs1);
 #endif
-		if (rd) {
-			if (put_user (rs1, rd)) return -1;
-		}
+		if (store_reg(rs1, rdv, regs))
+			return -1;
 		regs->y = rs2;
 		break;
 	case 14: /* udiv */
@@ -179,8 +180,8 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 #ifdef DEBUG_MULDIV
 		printk ("0x%x\n", rs1);
 #endif
-		if (rd)
-                        if (put_user (rs1, rd)) return -1;
+		if (store_reg(rs1, rdv, regs))
+			return -1;
 		break;
 	case 15: /* sdiv */
 #ifdef DEBUG_MULDIV
@@ -208,8 +209,8 @@ int do_user_muldiv(struct pt_regs *regs, unsigned long pc)
 #ifdef DEBUG_MULDIV
 		printk ("0x%x\n", rs1);
 #endif
-		if (rd)
-                        if (put_user (rs1, rd)) return -1;
+		if (store_reg(rs1, rdv, regs))
+			return -1;
 		break;
 	}
 	if (is_foocc (insn)) {

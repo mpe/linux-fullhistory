@@ -1,7 +1,7 @@
 /*
  * drivers/sbus/audio/audio.c
  *
- * Copyright (C) 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
+ * Copyright (C) 1996,1997 Thomas K. Dyas (tdyas@eden.rutgers.edu)
  *
  * This is the audio midlayer that sits between the VFS character
  * devices and the low-level audio hardware device drivers.
@@ -19,6 +19,8 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
+#include <linux/soundcard.h>
+#include <asm/uaccess.h>
 
 #include "audio.h"
 
@@ -42,33 +44,47 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv)
 	if (!drv->ops || !drv->ops->start_output || !drv->ops->stop_output)
 		return -EINVAL;
 
-	/* Setup the circular queue of output buffers. */
+	/* Setup the circular queues of output and input buffers
+	 *
+	 * Each buffer is a single page, but output buffers might
+	 * be partially filled (by a write with count < PAGE_SIZE),
+	 * so each output buffer also has a paired output size.
+	 *
+	 * Input buffers, on the other hand, always fill completely,
+	 * so we don't need input counts - each contains PAGE_SIZE
+	 * bytes of audio data.
+	 *
+	 * TODO: Make number of input/output buffers tunable parameters
+	 */
+
 	drv->num_output_buffers = 32;
 	drv->output_front = 0;
 	drv->output_rear = 0;
 	drv->output_count = 0;
 	drv->output_active = 0;
-	drv->output_buffers = kmalloc(32 * sizeof(__u8 *), GFP_KERNEL);
-	drv->output_sizes = kmalloc(32 * sizeof(size_t), GFP_KERNEL);
-	if (!drv->output_buffers || !drv->output_sizes) {
-		if (drv->output_buffers)
-			kfree(drv->output_buffers);
-		if (drv->output_sizes)
-			kfree(drv->output_sizes);
-		return -ENOMEM;
-	}
+	drv->output_buffers = kmalloc(drv->num_output_buffers * sizeof(__u8 *), GFP_KERNEL);
+	drv->output_sizes = kmalloc(drv->num_output_buffers * sizeof(size_t), GFP_KERNEL);
+	if (!drv->output_buffers || !drv->output_sizes) goto kmalloc_failed1;
 
 	/* Allocate the pages for each output buffer. */
 	for (i = 0; i < drv->num_output_buffers; i++) {
 		drv->output_buffers[i] = (void *) __get_free_page(GFP_KERNEL);
-		if (!drv->output_buffers[i]) {
-			int j;
-			for (j = 0; j < i; j++)
-				free_page((unsigned long) drv->output_buffers[j]);
-			kfree(drv->output_buffers);
-			kfree(drv->output_sizes);
-			return -ENOMEM;
-		}
+		if (!drv->output_buffers[i]) goto kmalloc_failed2;
+	}
+
+	/* Setup the circular queue of input buffers. */
+	drv->num_input_buffers = 32;
+	drv->input_front = 0;
+	drv->input_rear = 0;
+	drv->input_count = 0;
+	drv->input_active = 0;
+	drv->input_buffers = kmalloc(drv->num_input_buffers * sizeof(__u8 *), GFP_KERNEL);
+	if (!drv->input_buffers) goto kmalloc_failed3;
+
+	/* Allocate the pages for each input buffer. */
+	for (i = 0; i < drv->num_input_buffers; i++) {
+		drv->input_buffers[i] = (void *) __get_free_page(GFP_KERNEL);
+		if (!drv->input_buffers[i]) goto kmalloc_failed4;
 	}
 
 	/* Ensure that the driver is marked as not being open. */
@@ -78,6 +94,28 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv)
 
 	driver = drv;
 	return 0;
+
+
+kmalloc_failed4:
+	for (i--; i >= 0; i--)
+		free_page((unsigned long) drv->input_buffers[i]);
+
+kmalloc_failed3:
+	if (drv->input_buffers)
+		kfree(drv->input_buffers);
+	i = drv->num_output_buffers;
+
+kmalloc_failed2:
+	for (i--; i >= 0; i--)
+		free_page((unsigned long) drv->output_buffers[i]);
+
+kmalloc_failed1:
+	if (drv->output_buffers)
+		kfree(drv->output_buffers);
+	if (drv->output_sizes)
+		kfree(drv->output_sizes);
+
+	return -ENOMEM;
 }
 
 int unregister_sparcaudio_driver(struct sparcaudio_driver *drv)
@@ -93,6 +131,11 @@ int unregister_sparcaudio_driver(struct sparcaudio_driver *drv)
 		free_page((unsigned long) driver->output_buffers[i]);
 	kfree(driver->output_buffers);
 	kfree(driver->output_sizes);
+
+        /* Deallocate the queue of input buffers. */
+        for (i = 0; i < driver->num_input_buffers; i++)
+                free_page((unsigned long) driver->input_buffers[i]);
+        kfree(driver->input_buffers);
 
 	MOD_DEC_USE_COUNT;
 
@@ -116,6 +159,7 @@ static void sparcaudio_output_done_task(void * arg)
 void sparcaudio_output_done(struct sparcaudio_driver * drv)
 {
 	/* Point the queue after the "done" buffer. */
+	drv->output_size -= drv->output_sizes[drv->output_front];
 	drv->output_front = (drv->output_front + 1) % drv->num_output_buffers;
 	drv->output_count--;
 
@@ -146,7 +190,23 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv)
 
 void sparcaudio_input_done(struct sparcaudio_driver * drv)
 {
-	/* XXX Implement! */
+	/* Point the queue after the "done" buffer. */
+	drv->input_front = (drv->input_front + 1) % drv->num_input_buffers;
+	drv->input_count++;
+
+	/* If the input queue is full, shutdown the driver. */
+	if (drv->input_count == drv->num_input_buffers) {
+		/* Stop the lowlevel driver from inputing. */
+		drv->ops->stop_input(drv);
+		drv->input_active = 0;
+	} else {
+		/* Otherwise, give the driver the next buffer. */
+		drv->ops->start_input(drv, drv->input_buffers[drv->input_front],
+				      PAGE_SIZE);
+	}
+
+	/* Wake up any tasks that are waiting. */
+	wake_up_interruptible(&drv->input_read_wait);
 }
 
 
@@ -155,34 +215,85 @@ void sparcaudio_input_done(struct sparcaudio_driver * drv)
  *	VFS layer interface
  */
 
-static int sparcaudio_lseek(struct inode * inode, struct file * file,
-			    off_t offset, int origin)
+static loff_t sparcaudio_llseek(struct file * file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 
-static int sparcaudio_read(struct inode * inode, struct file * file,
-			   char *buf, int count)
+static ssize_t sparcaudio_read(struct file * file,
+			       char *buf, size_t count, loff_t *ppos)
 {
-	/* XXX Implement me! */
-	return -EINVAL;
+	int bytes_to_copy;
+
+	if (! file->f_mode & FMODE_READ)
+		return -EINVAL;
+
+	if (driver->input_count == 0) {
+		interruptible_sleep_on(&driver->input_read_wait);
+		if (signal_pending(current))
+			return -EINTR;
+	}
+
+	bytes_to_copy = PAGE_SIZE - driver->input_offset;
+	if (bytes_to_copy > count)
+		bytes_to_copy = count;
+
+	copy_to_user_ret(buf, driver->input_buffers[driver->input_rear]+driver->input_offset,
+			 bytes_to_copy, -EFAULT);
+	driver->input_offset += bytes_to_copy;
+
+	if (driver->input_offset >= PAGE_SIZE) {
+		driver->input_rear = (driver->input_rear + 1) % driver->num_input_buffers;
+		driver->input_count--;
+		driver->input_offset = 0;
+	}
+
+	return bytes_to_copy;
 }
 
-static int sparcaudio_write(struct inode * inode, struct file * file,
-			    const char *buf, int count)
+static void sparcaudio_reorganize_buffers(struct sparcaudio_driver * driver)
+{
+  /* It may never matter but if it does this routine will pack */
+  /* buffers to free space for more data */
+}
+
+static void sparcaudio_sync_output(struct sparcaudio_driver * driver)
 {
 	unsigned long flags;
-	int bytes_written = 0, bytes_to_copy, err;
+
+	/* If the low-level driver is not active, activate it. */
+	save_and_cli(flags);
+	if (! driver->output_active) {
+		driver->ops->start_output(driver,
+				driver->output_buffers[driver->output_front],
+				driver->output_sizes[driver->output_front]);
+		driver->output_active = 1;
+	}
+	restore_flags(flags);
+}
+
+static ssize_t sparcaudio_write(struct file * file, const char *buf,
+				size_t count, loff_t *ppos)
+{
+	int bytes_written = 0, bytes_to_copy;
 
 	/* Ensure that we have something to write. */
-	if (count < 1)
+	if (count < 1) {
+		sparcaudio_sync_output(driver);
 		return 0;
+	}
 
 	/* Loop until all output is written to device. */
 	while (count > 0) {
 		/* Check to make sure that an output buffer is available. */
+		/* If not, make valiant attempt */
+		if (driver->output_count == driver->num_output_buffers)
+			sparcaudio_reorganize_buffers(driver);
+
 		if (driver->output_count == driver->num_output_buffers) {
-			interruptible_sleep_on(&driver->output_write_wait);
+ 			/* We need buffers, so... */
+			sparcaudio_sync_output(driver);
+ 			interruptible_sleep_on(&driver->output_write_wait);
 			if (signal_pending(current))
 				return bytes_written > 0 ? bytes_written : -EINTR;
 		}
@@ -202,15 +313,11 @@ static int sparcaudio_write(struct inode * inode, struct file * file,
 		driver->output_sizes[driver->output_rear] = bytes_to_copy;
 		driver->output_rear = (driver->output_rear + 1) % driver->num_output_buffers;
 		driver->output_count++;
+		driver->output_size += bytes_to_copy;
 
-		/* If the low-level driver is not active, activate it. */
-		save_and_cli(flags);
-		if (! driver->output_active) {
-			driver->ops->start_output(driver, driver->output_buffers[driver->output_front],
-						  driver->output_sizes[driver->output_front]);
-			driver->output_active = 1;
-		}
-		restore_flags(flags);
+		/* Activate the driver if more than page of data is waiting. */
+		if (driver->output_size > 4096)
+			sparcaudio_sync_output(driver);
 	}
 
 	/* Return the number of bytes written to the caller. */
@@ -221,8 +328,10 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 			    unsigned int cmd, unsigned long arg)
 {
 	int retval = 0;
+	struct audio_info ainfo;
 
 	switch (cmd) {
+	case SNDCTL_DSP_SYNC:
 	case AUDIO_DRAIN:
 		if (driver->output_count > 0) {
 			interruptible_sleep_on(&driver->output_drain_wait);
@@ -239,17 +348,380 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 			copy_to_user_ret((audio_device_t *)arg, &tmp, sizeof(tmp), -EFAULT);
 		} else
 			retval = -EINVAL;
+
+		printk(KERN_INFO "sparcaudio_ioctl: AUDIO_GETDEV\n");
 		break;
+
+	case AUDIO_GETDEV_SUNOS:
+		if (driver->ops->sunaudio_getdev_sunos) {
+			int tmp=driver->ops->sunaudio_getdev_sunos(driver);
+
+			copy_to_user_ret((int *)arg, &tmp, sizeof(tmp), -EFAULT);
+		} else
+			retval = -EINVAL;
+
+		printk(KERN_INFO "sparcaudio_ioctl: AUDIO_GETDEV_SUNOS\n");
+		break;
+
+	case AUDIO_GETINFO:
+
+		AUDIO_INITINFO(&ainfo);
+
+		if (driver->ops->get_input_rate)
+		  ainfo.record.sample_rate =
+		    driver->ops->get_input_rate(driver);
+		if (driver->ops->get_input_channels)
+		  ainfo.record.channels =
+		    driver->ops->get_input_channels(driver);
+		if (driver->ops->get_input_precision)
+		  ainfo.record.precision =
+		    driver->ops->get_input_precision(driver);
+		if (driver->ops->get_input_encoding)
+		  ainfo.record.encoding =
+		    driver->ops->get_input_encoding(driver);
+		if (driver->ops->get_input_volume)
+		  ainfo.record.gain =
+		    driver->ops->get_input_volume(driver);
+		if (driver->ops->get_input_port)
+		  ainfo.record.port =
+		    driver->ops->get_input_port(driver);
+		if (driver->ops->get_input_ports)
+		  ainfo.record.avail_ports =
+		    driver->ops->get_input_ports(driver);
+		ainfo.record.buffer_size = PAGE_SIZE;
+		ainfo.record.samples = 0;
+		ainfo.record.eof = 0;
+		ainfo.record.pause = 0;
+		ainfo.record.error = 0;
+		ainfo.record.waiting = 0;
+		if (driver->ops->get_input_balance)
+		  ainfo.record.balance =
+		    driver->ops->get_input_balance(driver);
+		ainfo.record.minordev = 4;
+		ainfo.record.open = 1;
+		ainfo.record.active = 0;
+
+		if (driver->ops->get_output_rate)
+		  ainfo.play.sample_rate =
+		    driver->ops->get_output_rate(driver);
+		if (driver->ops->get_output_channels)
+		  ainfo.play.channels =
+		    driver->ops->get_output_channels(driver);
+		if (driver->ops->get_output_precision)
+		  ainfo.play.precision =
+		    driver->ops->get_output_precision(driver);
+		if (driver->ops->get_output_encoding)
+		  ainfo.play.encoding =
+		    driver->ops->get_output_encoding(driver);
+		if (driver->ops->get_output_volume)
+		  ainfo.play.gain =
+		    driver->ops->get_output_volume(driver);
+		if (driver->ops->get_output_port)
+		  ainfo.play.port =
+		    driver->ops->get_output_port(driver);
+		if (driver->ops->get_output_ports)
+		  ainfo.play.avail_ports =
+		    driver->ops->get_output_ports(driver);
+		ainfo.play.buffer_size = PAGE_SIZE;
+		ainfo.play.samples = 0;
+		ainfo.play.eof = 0;
+		ainfo.play.pause = 0;
+		ainfo.play.error = 0;
+		ainfo.play.waiting = waitqueue_active(&driver->open_wait);
+		if (driver->ops->get_output_balance)
+		  ainfo.play.balance =
+		    driver->ops->get_output_balance(driver);
+		ainfo.play.minordev = 4;
+		ainfo.play.open = 1;
+		ainfo.play.active = driver->output_active;
+
+		if (driver->ops->get_monitor_volume)
+		  ainfo.monitor_gain =
+		    driver->ops->get_monitor_volume(driver);
+
+		if (driver->ops->get_output_muted)
+		  ainfo.output_muted =
+		    driver->ops->get_output_muted(driver);
+
+		printk("sparcaudio_ioctl: AUDIO_GETINFO\n");
+
+		copy_to_user_ret((struct audio_info *)arg, &ainfo,
+				 sizeof(ainfo), -EFAULT);
+
+		break;
+
+	case AUDIO_SETINFO:
+	  {
+	    audio_info_t curinfo;
+
+	    copy_from_user_ret(&ainfo, (audio_info_t *) arg, sizeof(audio_info_t), -EFAULT);
+
+	    /* Without these there's no point in trying */
+	    if (!driver->ops->get_input_precision ||
+		!driver->ops->get_input_channels ||
+		!driver->ops->get_input_rate ||
+		!driver->ops->get_input_encoding ||
+		!driver->ops->get_output_precision ||
+		!driver->ops->get_output_channels ||
+                !driver->ops->get_output_rate ||
+                !driver->ops->get_output_encoding) 
+	      {
+		retval = -EINVAL;
+		break;
+	      }
+
+	    /* Do bounds checking for things which always apply.
+	     * Follow with enforcement of basic tenets of certain
+	     * encodings. Everything over and above generic is
+	     * enforced by the driver, which can assume that
+	     * Martian cases are taken care of here. */
+	    if (Modify(ainfo.play.gain) && 
+		((ainfo.play.gain > AUDIO_MAX_GAIN) || 
+		 (ainfo.play.gain < AUDIO_MIN_GAIN))) {
+	      /* Need to differentiate this from e.g. the above error */
+	      retval = -EINVAL;
+	      break;
+	    }
+	    if (Modify(ainfo.record.gain) &&
+		((ainfo.record.gain > AUDIO_MAX_GAIN) ||
+		 (ainfo.record.gain < AUDIO_MIN_GAIN))) {
+	      retval = -EINVAL;
+	      break;
+	    }
+	    if (Modify(ainfo.monitor_gain) &&
+		((ainfo.monitor_gain > AUDIO_MAX_GAIN) ||
+		 (ainfo.monitor_gain < AUDIO_MIN_GAIN))) {
+	      retval = -EINVAL;
+	      break;
+	    }
+	    /* Don't need to check less than zero on these */
+	    if (Modifyc(ainfo.play.balance) &&
+		(ainfo.play.balance > AUDIO_RIGHT_BALANCE)) {
+	      retval = -EINVAL;
+	      break;
+	    }
+	    if (Modifyc(ainfo.record.balance) &&
+		(ainfo.record.balance > AUDIO_RIGHT_BALANCE)) {
+	      retval = -EINVAL;
+	      break;
+	    }
+	    
+	    /* If any of these changed, record them all, then make
+	     * changes atomically. If something fails, back it all out. */
+	    if (Modify(ainfo.record.precision) || 
+		Modify(ainfo.record.sample_rate) ||
+		Modify(ainfo.record.channels) ||
+		Modify(ainfo.record.encoding) || 
+		Modify(ainfo.play.precision) || 
+		Modify(ainfo.play.sample_rate) ||
+		Modify(ainfo.play.channels) ||
+		Modify(ainfo.play.encoding)) 
+	      {
+		/* If they're trying to change something we
+		 * have no routine for, they lose */
+		if ((!driver->ops->set_input_encoding && 
+		    Modify(ainfo.record.encoding)) ||
+		    (!driver->ops->set_input_rate && 
+		    Modify(ainfo.record.sample_rate)) ||
+		    (!driver->ops->set_input_precision && 
+		    Modify(ainfo.record.precision)) ||
+		    (!driver->ops->set_input_channels && 
+		    Modify(ainfo.record.channels))) {
+		  retval = -EINVAL;
+		  break;
+		}		  
+
+		curinfo.record.encoding = (Modify(ainfo.record.encoding) ? 
+					   ainfo.record.encoding :
+					   driver->ops->get_input_encoding(driver));	    
+		curinfo.record.sample_rate = (Modify(ainfo.record.sample_rate) ? 
+					   ainfo.record.sample_rate :
+					   driver->ops->get_input_rate(driver));	   
+		curinfo.record.precision = (Modify(ainfo.record.precision) ? 
+					   ainfo.record.precision :
+					   driver->ops->get_input_precision(driver));	   
+		curinfo.record.channels = (Modify(ainfo.record.channels) ? 
+					   ainfo.record.channels :
+					   driver->ops->get_input_channels(driver));	   
+		switch (curinfo.record.encoding) {
+		case AUDIO_ENCODING_ALAW:
+		case AUDIO_ENCODING_ULAW:
+		  if (Modify(ainfo.record.precision) && 
+		      ainfo.record.precision != 8) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  if (Modify(ainfo.record.channels) && 
+		      ainfo.record.channels != 1) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  break;
+		case AUDIO_ENCODING_LINEAR:
+		case AUDIO_ENCODING_LINEARLE:
+		  if (Modify(ainfo.record.precision) && 
+		      ainfo.record.precision != 16) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  if (Modify(ainfo.record.channels) && 
+		      (ainfo.record.channels != 1 && 
+		       ainfo.record.channels != 2)) 
+		    {
+		      retval = -EINVAL;
+		      break;
+		    }
+		  break;
+		case AUDIO_ENCODING_LINEAR8:
+		  if (Modify(ainfo.record.precision) && 
+		      ainfo.record.precision != 8) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  if (Modify(ainfo.record.channels) && 
+		      (ainfo.record.channels != 1 && 
+		       ainfo.record.channels != 2)) 
+		    {
+		      retval = -EINVAL;
+		      break;
+		    }
+		}
+
+		if (retval < 0)
+		  break;
+
+		/* If they're trying to change something we
+		 * have no routine for, they lose */
+		if ((!driver->ops->set_output_encoding && 
+		    Modify(ainfo.play.encoding)) ||
+		    (!driver->ops->set_output_rate && 
+		    Modify(ainfo.play.sample_rate)) ||
+		    (!driver->ops->set_output_precision && 
+		    Modify(ainfo.play.precision)) ||
+		    (!driver->ops->set_output_channels && 
+		    Modify(ainfo.play.channels))) {
+		  retval = -EINVAL;
+		  break;
+		}		  
+
+		curinfo.play.encoding = (Modify(ainfo.play.encoding) ? 
+					 ainfo.play.encoding : 
+					 driver->ops->get_output_encoding(driver));
+		curinfo.play.sample_rate = (Modify(ainfo.play.sample_rate) ? 
+					   ainfo.play.sample_rate :
+					   driver->ops->get_output_rate(driver));	   
+		curinfo.play.precision = (Modify(ainfo.play.precision) ? 
+					   ainfo.play.precision :
+					   driver->ops->get_output_precision(driver));	   
+		curinfo.play.channels = (Modify(ainfo.play.channels) ? 
+					   ainfo.play.channels :
+					   driver->ops->get_output_channels(driver));	   
+		switch (curinfo.play.encoding) {
+		case AUDIO_ENCODING_ALAW:
+		case AUDIO_ENCODING_ULAW:
+		  if (Modify(ainfo.play.precision) && 
+		      ainfo.play.precision != 8) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  if (Modify(ainfo.play.channels) && 
+		      ainfo.play.channels != 1) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  break;
+		case AUDIO_ENCODING_LINEAR:
+		case AUDIO_ENCODING_LINEARLE:
+		  if (Modify(ainfo.play.precision) && 
+		      ainfo.play.precision != 16) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  if (Modify(ainfo.play.channels) && 
+		      (ainfo.play.channels != 1 && 
+		       ainfo.play.channels != 2)) 
+		    {
+		      retval = -EINVAL;
+		      break;
+		    }
+		  break;
+		case AUDIO_ENCODING_LINEAR8:
+		  if (Modify(ainfo.play.precision) && 
+		      ainfo.play.precision != 8) {
+		    retval = -EINVAL;
+		    break;
+		  }
+		  if (Modify(ainfo.play.channels) && 
+		      (ainfo.play.channels != 1 && 
+		       ainfo.play.channels != 2)) 
+		    {
+		      retval = -EINVAL;
+		      break;
+		    }
+		}
+		
+		if (retval < 0)
+		  break;
+
+		/* If we got this far, we're at least sane with
+		 * respect to generics. Try the changes. */
+		if ((driver->ops->set_input_precision(driver, ainfo.record.precision) < 0) ||
+		    (driver->ops->set_output_precision(driver, ainfo.play.precision) < 0) ||
+		    (driver->ops->set_input_channels(driver, ainfo.record.channels) < 0) ||
+		    (driver->ops->set_output_channels(driver, ainfo.play.channels) < 0) ||
+		    (driver->ops->set_input_rate(driver, ainfo.record.sample_rate) < 0) ||
+		    (driver->ops->set_output_rate(driver, ainfo.play.sample_rate) < 0) ||
+		    (driver->ops->set_input_encoding(driver, ainfo.record.encoding) < 0) ||
+		    (driver->ops->set_output_encoding(driver, ainfo.play.encoding) < 0)) 
+		  {
+		    /* Pray we can set it all back. If not, uh... */
+		    driver->ops->set_input_precision(driver, curinfo.record.precision);
+		    driver->ops->set_output_precision(driver, curinfo.play.precision);
+		    driver->ops->set_input_channels(driver, curinfo.record.channels);
+		    driver->ops->set_output_channels(driver, curinfo.play.channels);
+		    driver->ops->set_input_rate(driver, curinfo.record.sample_rate);
+		    driver->ops->set_output_rate(driver, curinfo.play.sample_rate);
+		    driver->ops->set_input_encoding(driver, curinfo.record.encoding); 
+		    driver->ops->set_output_encoding(driver, curinfo.play.encoding);
+		  }
+
+	    }
+
+	    printk("sparcaudio_ioctl: AUDIO_SETINFO\n");
+	    break;
+	  }
 
 	default:
 		if (driver->ops->ioctl)
 			retval = driver->ops->ioctl(inode,file,cmd,arg,driver);
-		else
+		else {
 			retval = -EINVAL;
+
+			printk("sparcaudio_ioctl: 0x%x\n", cmd);
+		}
 	}
 
 	return retval;
 }
+
+static int sparcaudioctl_release(struct inode * inode, struct file * file)
+{
+	MOD_DEC_USE_COUNT;
+
+	return 0;
+}
+
+static struct file_operations sparcaudioctl_fops = {
+	NULL,
+	NULL,
+	NULL,
+	NULL,			/* sparcaudio_readdir */
+	NULL,			/* sparcaudio_select */
+	sparcaudio_ioctl,
+	NULL,			/* sparcaudio_mmap */
+	NULL,
+	sparcaudioctl_release
+};
 
 static int sparcaudio_open(struct inode * inode, struct file * file)
 {
@@ -258,6 +730,15 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 	/* A low-level audio driver must exist. */
 	if (!driver)
 		return -ENODEV;
+
+	if (MINOR(inode->i_rdev) == 5) {
+
+		file->f_op = &sparcaudioctl_fops;
+
+		MOD_INC_USE_COUNT;
+
+		return 0;
+	}
 
 	/* We only support minor #4 (/dev/audio) right now. */
 	if (MINOR(inode->i_rdev) != 4)
@@ -285,9 +766,18 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 	}
 
 	/* Mark the driver as locked for read and/or write. */
-	if (file->f_mode & FMODE_READ)
+	if (file->f_mode & FMODE_READ) {
+		driver->input_offset = 0;
+		driver->input_front = 0;
+		driver->input_rear = 0;
+		driver->input_count = 0;
+		driver->ops->start_input(driver, driver->input_buffers[driver->input_front],
+					 PAGE_SIZE);
+		driver->input_active = 1;
 		driver->flags |= SDF_OPEN_READ;
+	}
 	if (file->f_mode & FMODE_WRITE) {
+		driver->output_size = 0;
 		driver->output_front = 0;
 		driver->output_rear = 0;
 		driver->output_count = 0;
@@ -308,8 +798,15 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 	return 0;
 }
 
-static void sparcaudio_release(struct inode * inode, struct file * file)
+static int sparcaudio_release(struct inode * inode, struct file * file)
 {
+        /* Anything in the queue? */
+        sparcaudio_sync_output(driver);
+
+	/* Stop input */
+	driver->ops->stop_input(driver);
+	driver->input_active = 0;
+
 	/* Wait for any output still in the queue to be played. */
 	if (driver->output_count > 0)
 		interruptible_sleep_on(&driver->output_drain_wait);
@@ -331,10 +828,12 @@ static void sparcaudio_release(struct inode * inode, struct file * file)
 	MOD_DEC_USE_COUNT;
 
 	wake_up_interruptible(&driver->open_wait);
+
+	return 0;
 }
 
 static struct file_operations sparcaudio_fops = {
-	sparcaudio_lseek,
+	sparcaudio_llseek,
 	sparcaudio_read,
 	sparcaudio_write,
 	NULL,			/* sparcaudio_readdir */

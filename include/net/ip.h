@@ -28,6 +28,7 @@
 #include <linux/inetdevice.h>
 #include <linux/in_route.h>
 #include <net/route.h>
+#include <net/arp.h>
 
 #ifndef _SNMP_H
 #include <net/snmp.h>
@@ -96,7 +97,7 @@ extern int		ip_acct_output(struct sk_buff *skb);
 #else
 #define ip_acct_output	dev_queue_xmit
 #endif
-extern void		ip_fragment(struct sk_buff *skb, int, int (*out)(struct sk_buff*));
+extern void		ip_fragment(struct sk_buff *skb, int (*out)(struct sk_buff*));
 extern struct sk_buff *	ip_reply(struct sk_buff *skb, int payload);
 extern int		ip_do_nat(struct sk_buff *skb);
 extern void		ip_send_check(struct iphdr *ip);
@@ -109,33 +110,13 @@ extern int		ip_build_xmit(struct sock *sk,
 						   unsigned int,
 						   unsigned int),
 				      const void *frag,
-				      unsigned short int length,
+				      unsigned length,
 				      struct ipcm_cookie *ipc,
 				      struct rtable *rt,
 				      int flags);
 
+extern int __ip_finish_output(struct sk_buff *skb);
 
-static __inline__
-void ip_send(struct sk_buff *skb)
-{
-	ip_ll_header(skb);
-
-	if (skb->len > skb->dev->mtu + skb->dev->hard_header_len)
-		ip_fragment(skb, 0, ip_acct_output);
-	else
-		ip_acct_output(skb);
-}
-
-static __inline__
-int ip_decrease_ttl(struct iphdr *iph)
-{
-	u16 check = iph->check;
-	check = ntohs(check) + 0x0100;
-	if ((check & 0xFF00) == 0)
-		check++;		/* carry overflow */
-	iph->check = htons(check);
-	return --iph->ttl;
-}
 
 extern struct ip_mib	ip_statistics;
 
@@ -159,6 +140,72 @@ extern struct ipv4_config ipv4_config;
 extern int sysctl_local_port_range[2];
 
 #define IS_ROUTER	(ip_statistics.IpForwarding == 1)
+
+extern __inline__ int ip_finish_output(struct sk_buff *skb)
+{
+	struct dst_entry *dst = skb->dst;
+	struct device *dev = dst->dev;
+	struct hh_cache *hh = dst->hh;
+
+	skb->dev = dev;
+	skb->protocol = __constant_htons(ETH_P_IP);
+
+	if (hh) {
+#ifdef __alpha__
+		/* Alpha has disguisting memcpy. Help it. */
+	        u64 *aligned_hdr = (u64*)(skb->data - 16);
+		u64 *aligned_hdr0 = hh->hh_data;
+		aligned_hdr[0] = aligned_hdr0[0];
+		aligned_hdr[1] = aligned_hdr0[1];
+#else
+		memcpy(skb->data - 16, hh->hh_data, 16);
+#endif
+	        skb_push(skb, dev->hard_header_len);
+		return hh->hh_output(skb);
+	} else if (dst->neighbour)
+		return dst->neighbour->output(skb);
+
+	printk(KERN_DEBUG "khm\n");
+	kfree_skb(skb, FREE_WRITE);
+	return -EINVAL;
+}
+
+extern __inline__ void ip_send(struct sk_buff *skb)
+{
+	if (skb->len > skb->dst->pmtu)
+		ip_fragment(skb, __ip_finish_output);
+	else
+		ip_finish_output(skb);
+}
+
+static __inline__
+int ip_decrease_ttl(struct iphdr *iph)
+{
+	u16 check = iph->check;
+	check = ntohs(check) + 0x0100;
+	if ((check & 0xFF00) == 0)
+		check++;		/* carry overflow */
+	iph->check = htons(check);
+	return --iph->ttl;
+}
+
+/*
+ *	Map a multicast IP onto multicast MAC for type ethernet.
+ */
+
+extern __inline__ void ip_eth_mc_map(u32 addr, char *buf)
+{
+	addr=ntohl(addr);
+	buf[0]=0x01;
+	buf[1]=0x00;
+	buf[2]=0x5e;
+	buf[5]=addr&0xFF;
+	addr>>=8;
+	buf[4]=addr&0xFF;
+	addr>>=8;
+	buf[3]=addr&0x7F;
+}
+
 
 extern int	ip_call_ra_chain(struct sk_buff *skb);
 

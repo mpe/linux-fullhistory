@@ -104,6 +104,7 @@ static int serial_refcount;
 
 static void probe_sccs(void);
 static void change_speed(struct mac_serial *info);
+static void rs_wait_until_sent(struct tty_struct *tty, int timeout);
 
 static struct tty_struct *serial_table[NUM_CHANNELS];
 static struct termios *serial_termios[NUM_CHANNELS];
@@ -325,7 +326,7 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 
 		if (!tty)
 			continue;
-		queue_task(&tty->flip.tqueue, &tq_timer);
+		tty_flip_buffer_push(tty);
 
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
 			static int flip_buf_ovf;
@@ -398,7 +399,8 @@ static _INLINE_ void status_handle(struct mac_serial *info)
 		if (status & DCD) {
 			wake_up_interruptible(&info->open_wait);
 		} else if (!(info->flags & ZILOG_CALLOUT_ACTIVE)) {
-			queue_task(&info->tqueue_hangup, &tq_scheduler);
+			if (info->tty)
+				tty_hangup(info->tty);
 		}
 	}
 
@@ -546,27 +548,6 @@ static void do_softint(void *private_)
 			(tty->ldisc.write_wakeup)(tty);
 		wake_up_interruptible(&tty->write_wait);
 	}
-}
-
-/*
- * This routine is called from the scheduler tqueue when the interrupt
- * routine has signalled that a hangup has occurred.  The path of
- * hangup processing is:
- *
- * 	serial interrupt routine -> (scheduler tqueue) ->
- * 	do_serial_hangup() -> tty->hangup() -> rs_hangup()
- * 
- */
-static void do_serial_hangup(void *private_)
-{
-	struct mac_serial	*info = (struct mac_serial *) private_;
-	struct tty_struct	*tty;
-	
-	tty = info->tty;
-	if (!tty)
-		return;
-
-	tty_hangup(tty);
 }
 
 static void rs_timer(void)
@@ -1196,21 +1177,25 @@ static int set_modem_info(struct mac_serial *info, unsigned int cmd,
 }
 
 /*
- * This routine sends a break character out the serial port.
+ * rs_break - turn transmit break condition on/off
  */
-static void send_break(	struct mac_serial * info, int duration)
+static void rs_break(struct tty_struct *tty, int break_state)
 {
+	struct mac_serial *info = (struct mac_serial *) tty->driver_data;
+	unsigned long flags;
+
+	if (serial_paranoia_check(info, tty->device, "rs_break"))
+		return;
 	if (!info->port)
 		return;
-	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + duration;
-	cli();
-	info->curregs[5] |= SND_BRK;
+
+	save_flags(flags); cli();
+	if (break_state == -1)
+		info->curregs[5] |= SND_BRK;
+	else
+		info->curregs[5] &= ~SND_BRK;
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
-	schedule();
-	info->curregs[5] &= ~SND_BRK;
-	write_zsreg(info->zs_channel, 5, info->curregs[5]);
-	sti();
+	restore_flags(flags);
 }
 
 static int rs_ioctl(struct tty_struct *tty, struct file * file,
@@ -1218,7 +1203,6 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 {
 	int error;
 	struct mac_serial * info = (struct mac_serial *)tty->driver_data;
-	int retval;
 
 	if (serial_paranoia_check(info, tty->device, "rs_ioctl"))
 		return -ENODEV;
@@ -1231,31 +1215,6 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	}
 	
 	switch (cmd) {
-		case TCSBRK:	/* SVID version: non-zero arg --> no break */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			if (!arg)
-				send_break(info, HZ/4);	/* 1/4 second */
-			return 0;
-		case TCSBRKP:	/* support for POSIX tcsendbreak() */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			send_break(info, arg ? arg*(HZ/10) : HZ/4);
-			return 0;
-		case TIOCGSOFTCAR:
-			return put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);
-		case TIOCSSOFTCAR:
-			error = get_user(arg, (int *) arg);
-			if (error)
-				return error;
-			tty->termios->c_cflag =
-				((tty->termios->c_cflag & ~CLOCAL) |
-				 (arg ? CLOCAL : 0));
-			return 0;
 		case TIOCMGET:
 			error = verify_area(VERIFY_WRITE, (void *) arg,
 				sizeof(unsigned int));
@@ -1326,7 +1285,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 {
 	struct mac_serial * info = (struct mac_serial *)tty->driver_data;
 	unsigned long flags;
-	unsigned long timeout;
 
 	if (!info || serial_paranoia_check(info, tty->device, "rs_close"))
 		return;
@@ -1395,14 +1353,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		 * Before we drop DTR, make sure the SCC transmitter
 		 * has completely drained.
 		 */
-		timeout = jiffies+HZ;
-		while ((read_zsreg(info->zs_channel, 1) & ALL_SNT) == 0) {
-			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + info->timeout;
-			schedule();
-			if (jiffies > timeout)
-				break;
-		}
+		rs_wait_until_sent(tty, info->timeout);
 	}
 
 	shutdown(info);
@@ -1413,14 +1364,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	tty->closing = 0;
 	info->event = 0;
 	info->tty = 0;
-	if (tty->ldisc.num != ldiscs[N_TTY].num) {
-		if (tty->ldisc.close)
-			(tty->ldisc.close)(tty);
-		tty->ldisc = ldiscs[N_TTY];
-		tty->termios->c_line = N_TTY;
-		if (tty->ldisc.open)
-			(tty->ldisc.open)(tty);
-	}
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
@@ -1433,6 +1376,42 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 			 ZILOG_CLOSING);
 	wake_up_interruptible(&info->close_wait);
 	restore_flags(flags);
+}
+
+/*
+ * rs_wait_until_sent() --- wait until the transmitter is empty
+ */
+static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
+{
+	struct mac_serial *info = (struct mac_serial *) tty->driver_data;
+	unsigned long orig_jiffies, char_time;
+
+	if (serial_paranoia_check(info, tty->device, "rs_wait_until_sent"))
+		return;
+
+	orig_jiffies = jiffies;
+	/*
+	 * Set the check interval to be 1/5 of the estimated time to
+	 * send a single character, and make it at least 1.  The check
+	 * interval should also be less than the timeout.
+	 */
+	char_time = (info->timeout - HZ/50) / info->xmit_fifo_size;
+	char_time = char_time / 5;
+	if (char_time == 0)
+		char_time = 1;
+	if (timeout)
+		char_time = MIN(char_time, timeout);
+	while ((read_zsreg(info->zs_channel, 1) & ALL_SNT) == 0) {
+		current->state = TASK_INTERRUPTIBLE;
+		current->counter = 0;	/* make us low-priority */
+		current->timeout = jiffies + char_time;
+		schedule();
+		if (signal_pending(current))
+			break;
+		if (timeout && ((orig_jiffies + timeout) < jiffies))
+			break;
+	}
+	current->state = TASK_RUNNING;
 }
 
 /*
@@ -1473,10 +1452,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	if (info->flags & ZILOG_CLOSING) {
 		interruptible_sleep_on(&info->close_wait);
 #ifdef SERIAL_DO_RESTART
-		if (info->flags & ZILOG_HUP_NOTIFY)
-			return -EAGAIN;
-		else
-			return -ERESTARTSYS;
+		return ((info->flags & ZILOG_HUP_NOTIFY) ?
+			-EAGAIN : -ERESTARTSYS);
 #else
 		return -EAGAIN;
 #endif
@@ -1618,6 +1595,21 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	info->tty = tty;
 
 	/*
+	 * If the port is the middle of closing, bail out now
+	 */
+	if (tty_hung_up_p(filp) ||
+	    (info->flags & ZILOG_CLOSING)) {
+		if (info->flags & ZILOG_CLOSING)
+			interruptible_sleep_on(&info->close_wait);
+#ifdef SERIAL_DO_RESTART
+		return ((info->flags & ZILOG_HUP_NOTIFY) ?
+			-EAGAIN : -ERESTARTSYS);
+#else
+		return -EAGAIN;
+#endif
+	}
+
+	/*
 	 * Start up serial port
 	 */
 	retval = startup(info);
@@ -1757,6 +1749,8 @@ int rs_init(void)
 	serial_driver.stop = rs_stop;
 	serial_driver.start = rs_start;
 	serial_driver.hangup = rs_hangup;
+	serial_driver.break_ctl = rs_break;
+	serial_driver.wait_until_sent = rs_wait_until_sent;
 
 	/*
 	 * The callout device is just like normal device except for
@@ -1809,8 +1803,6 @@ int rs_init(void)
 		info->blocked_open = 0;
 		info->tqueue.routine = do_softint;
 		info->tqueue.data = info;
-		info->tqueue_hangup.routine = do_serial_hangup;
-		info->tqueue_hangup.data = info;
 		info->callout_termios =callout_driver.init_termios;
 		info->normal_termios = serial_driver.init_termios;
 		info->open_wait = 0;

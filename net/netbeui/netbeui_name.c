@@ -58,7 +58,9 @@ static void nb_defend(struct device *dev, const char *name)
 	if(nskb==NULL)
 		return;
 	/* Build a name defence packet */
-	dev_queue_xmit(nskb,dev,SOPRI_INTERACTIVE);
+	nskb->dev = dev;
+	nskb->priority = TC_PRIO_CONTROL;
+	dev_queue_xmit(nskb);
 }
 
 void netbeui_heard_name(struct device *dev, struct sk_buff *skb)
@@ -151,7 +153,9 @@ void netbeui_name_query(struct dev *dev, struct sk_buff *skb)
 		if(nskb!=NULL)
 		{
 			/* Build a name reply packet */
-			dev_queue_xmit(nskb,dev,SOPRI_INTERACTIVE);
+			nskb->dev = dev;
+			nskb->priority = TC_PRIO_CONTROL;
+			dev_queue_xmit(nskb);
 		}
 	}
 	kfree_skb(skb, FREE_READ);

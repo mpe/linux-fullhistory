@@ -3,6 +3,7 @@
 *		User-level API definitions.
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
+*		Jaspreet Singh	<jaspreet@sangoma.com>
 *
 * Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
@@ -11,6 +12,15 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Nov 26, 1997	Jaspreet Singh	Added 'load_sharing' structure.  Also added 
+*				'devs_struct','dev_to_devtint_next' to 'sdla_t'	
+* Nov 24, 1997	Jaspreet Singh	Added 'irq_dis_if_send_count', 
+*				'irq_dis_poll_count' to 'sdla_t'.
+* Nov 06, 1997	Jaspreet Singh	Added a define called 'INTR_TEST_MODE'
+* Oct 20, 1997	Jaspreet Singh	Added 'buff_intr_mode_unbusy' and 
+*				'dlci_intr_mode_unbusy' to 'sdla_t'
+* Oct 18, 1997	Jaspreet Singh	Added structure to maintain global driver
+*				statistics.
 * Jan 15, 1997	Gene Kozin	Version 3.1.0
 *				 o added UDP management stuff
 * Jan 02, 1997	Gene Kozin	Version 3.0.0
@@ -61,6 +71,46 @@ typedef struct wum_header
 	unsigned char reserved[6];	/* 0Ah: reserved */
 } wum_header_t;
 
+/*************************************************************************
+ Data Structure for global statistics
+*************************************************************************/
+
+typedef struct global_stats
+{
+	unsigned long isr_entry;
+	unsigned long isr_already_critical;		
+	unsigned long isr_rx;
+	unsigned long isr_tx;
+	unsigned long isr_intr_test;
+	unsigned long isr_spurious;
+	unsigned long isr_enable_tx_int;
+	unsigned long rx_intr_corrupt_rx_bfr;
+	unsigned long rx_intr_on_orphaned_DLCI;
+	unsigned long rx_intr_dev_not_started;
+	unsigned long tx_intr_dev_not_started;
+	unsigned long poll_entry;
+	unsigned long poll_already_critical;
+	unsigned long poll_processed;
+	unsigned long poll_tbusy_bad_status;
+	unsigned long poll_host_disable_irq;
+	unsigned long poll_host_enable_irq;
+
+} global_stats_t;
+
+/* This structure is used for maitaining a circular linked list of all
+ * interfaces(devices) per card. It is used in the Interrupt Service routine
+ * for a transmit interrupt where the start of the loop to dev_tint all
+ * interfaces changes.
+ */
+typedef struct load_sharing
+{
+        struct device*  dev_ptr;
+        struct load_sharing* next;
+} load_sharing_t;
+
+/* This is used for interrupt testing */
+#define INTR_TEST_MODE	0x02
+
 #define	WUM_SIGNATURE_L	0x50495046
 #define	WUM_SIGNATURE_H	0x444E3845
 
@@ -100,8 +150,21 @@ typedef struct sdla
 	wan_device_t wandev;		/* WAN device data space */
 	unsigned open_cnt;		/* number of open interfaces */
 	unsigned long state_tick;	/* link state timestamp */
-/*	unsigned tx_int_enabled; */	/* tranmit interrupt enabled or not */
+	unsigned intr_mode;		/* Type of Interrupt Mode */
 	char in_isr;			/* interrupt-in-service flag */
+	char buff_int_mode_unbusy;	/* flag for carrying out dev_tint */  
+	char dlci_int_mode_unbusy;	/* flag for carrying out dev_tint */
+	unsigned short irq_dis_if_send_count; /* Disabling irqs in if_send*/
+	unsigned short irq_dis_poll_count;   /* Disabling irqs in poll routine*/
+	global_stats_t statistics;	/* global statistics */
+	
+	/* The following is used as  a pointer to the structure in our 
+	   circular linked list which changes the start of the loop for 
+	   dev_tint of all interfaces */
+	
+	load_sharing_t* dev_to_devtint_next;
+	load_sharing_t* devs_struct;	
+
 	void* mbox;			/* -> mailbox */
 	void* rxmb;			/* -> receive mailbox */
 	void* flags;			/* -> adapter status flags */
@@ -123,7 +186,7 @@ typedef struct sdla
 			void* rxmb_last;	/* -> last Rx buffer */
 			unsigned rx_base;	/* S508 receive buffer base */
 			unsigned rx_top;	/* S508 receive buffer end */
-			unsigned short node_dlci;
+			unsigned short node_dlci[100];
 			unsigned short dlci_num;
 		} f;
 		struct			/****** PPP-specific data ***********/

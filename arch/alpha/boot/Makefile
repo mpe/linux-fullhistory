@@ -26,6 +26,7 @@ endif
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 OBJECTS = head.o main.o
+BPOBJECTS = head.o bootp.o
 TARGETS = vmlinux.gz tools/objstrip # also needed by aboot & milo
 VMLINUX = $(TOPDIR)/vmlinux
 OBJSTRIP = tools/objstrip
@@ -44,6 +45,9 @@ bootimage:	tools/mkbb tools/lxboot tools/bootlx vmlinux.nh
 	( cat tools/lxboot tools/bootlx vmlinux.nh ) > bootimage
 	tools/mkbb bootimage tools/lxboot
 
+bootpfile:	tools/bootph vmlinux.nh
+	( cat tools/bootph vmlinux.nh ) > bootpfile
+
 srmboot:	bootdevice bootimage
 	dd if=bootimage of=$(BOOTDEV) bs=512 seek=1 skip=1
 	tools/mkbb $(BOOTDEV) tools/lxboot
@@ -58,6 +62,8 @@ vmlinux.gz: vmlinux
 # A raw binary without header.  Used by raw boot.
 #
 main.o: ksize.h
+
+bootp.o: ksize.h
 
 ksize.h: $(OBJSTRIP) vmlinux.nh
 	echo "#define KERNEL_SIZE `$(OBJSTRIP) -p vmlinux.nh /dev/null`" > $@
@@ -82,6 +88,9 @@ tools/lxboot: $(OBJSTRIP) bootloader
 tools/bootlx: bootloader $(OBJSTRIP)
 	$(OBJSTRIP) -vb bootloader tools/bootlx
 
+tools/bootph: bootpheader $(OBJSTRIP)
+	$(OBJSTRIP) -vb bootpheader tools/bootph
+
 $(OBJSTRIP): $(OBJSTRIP).c
 	$(HOSTCC) $(OBJSTRIP).c -o $(OBJSTRIP)
 
@@ -95,8 +104,15 @@ bootloader: $(OBJECTS)
 		-o bootloader && strip bootloader || \
 		(rm -f bootloader && exit 1)
 
+bootpheader: $(BPOBJECTS)
+	$(LD) $(LINKFLAGS) \
+		$(BPOBJECTS) \
+		$(LIBS) \
+		-o bootpheader && strip bootpheader || \
+		(rm -f bootpheader && exit 1)
+
 clean:
 	rm -f $(TARGETS) bootloader bootimage vmlinux.nh \
-		tools/mkbb tools/bootlx tools/lxboot
+		tools/mkbb tools/bootlx tools/lxboot ksize.h
 
 dep:

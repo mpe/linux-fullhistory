@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.5 1997/10/27 16:08:02 mj Exp $
+ *  $Id: ipconfig.c,v 1.6 1998/01/09 17:19:46 mj Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -799,6 +799,9 @@ __initfunc(static void ic_do_bootp_ext(u8 *ext))
 				ic_bootp_string(root_server_path, ext+1, *ext, sizeof(root_server_path));
 			break;
 	}
+
+	if (ic_gateway == INADDR_NONE && b->relay_ip)
+		ic_gateway = b->relay_ip;
 }
 
 

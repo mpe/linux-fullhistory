@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.33 1997/05/21 10:21:55 jj Exp $ */
+/* $Id: unistd.h,v 1.36 1997/12/14 23:24:43 ecd Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -83,8 +83,8 @@
 #define __NR_getpagesize         64 /* Common                                      */
 #define __NR_msync               65 /* Common in newer 1.3.x revs...               */
 /* #define __NR_ni_syscall       66    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall       67    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall       68    ENOSYS under SunOS                          */
+#define __NR_pread               67 /* Linux Specific                              */
+#define __NR_pwrite              68 /* Linux Specific                              */
 #define __NR_sbrk                69 /* SunOS Specific                              */
 #define __NR_sstk                70 /* SunOS Specific                              */
 #define __NR_mmap                71 /* Common                                      */
@@ -117,13 +117,13 @@
 #define __NR_connect             98 /* Common                                      */
 #define __NR_accept              99 /* Common                                      */
 #define __NR_getpriority        100 /* Common                                      */
-#define __NR_send               101 /* Common                                      */
-#define __NR_recv               102 /* Common                                      */
-/* #define __NR_ni_syscall      103    ENOSYS under SunOS                          */
-#define __NR_bind               104 /* Common                                      */
-#define __NR_setsockopt         105 /* Common                                      */
-#define __NR_listen             106 /* Common                                      */
-/* #define __NR_ni_syscall      107    ENOSYS under SunOS                          */
+#define __NR_rt_sigreturn	101 /* Linux Specific                              */
+#define __NR_rt_sigaction	102 /* Linux Specific                              */
+#define __NR_rt_sigprocmask	103 /* Linux Specific                              */
+#define __NR_rt_sigpending	104 /* Linux Specific                              */
+#define __NR_rt_sigtimedwait	105 /* Linux Specific                              */
+#define __NR_rt_sigqueueinfo	106 /* Linux Specific                              */
+#define __NR_rt_sigsuspend	107 /* Linux Specific                              */
 #define __NR_sigvec             108 /* SunOS Specific                              */
 #define __NR_sigblock           109 /* SunOS Specific                              */
 #define __NR_sigsetmask         110 /* SunOS Specific                              */
@@ -163,7 +163,7 @@
 #define __NR_getrlimit          144 /* Common                                      */
 #define __NR_setrlimit          145 /* Common                                      */
 #define __NR_killpg             146 /* SunOS Specific                              */
-/* #define __NR_ni_syscall      147    ENOSYS under SunOS                          */
+#define __NR_prctl		147 /* ENOSYS under SunOS                          */
 /* #define __NR_ni_syscall      148    ENOSYS under SunOS                          */
 /* #define __NR_ni_syscall      149    ENOSYS under SunOS                          */
 #define __NR_getsockname        150 /* Common                                      */
@@ -272,7 +272,6 @@
 #define __NR_fdatasync          253
 #define __NR_nfsservctl         254
 #define __NR_aplib              255
-#define __NR_prctl              256
 
 #define _syscall0(type,name) \
 type name(void) \

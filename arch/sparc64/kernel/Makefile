@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.34 1997/08/12 04:12:36 ecd Exp $
+# $Id: Makefile,v 1.35 1997/09/20 21:48:58 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -71,8 +71,8 @@ check_asm: dummy
 	@rm -f tmp.[ci]
 	#$(CC) -o check_asm check_asm.c
 	# <hack> Until we can do this natively, a hack has to take place
-	$(CC) -mmedlow -S -o check_asm.s check_asm.c
-	$(HOSTCC) -o check_asm check_asm.s
+	$(CC) -mmedlow -ffixed-g4 -S -o check_asm.s check_asm.c
+	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
 	@rm -f check_asm.s
 	# </hack>
 	./check_asm > asm_offsets.h

@@ -1,12 +1,9 @@
-/* $Id: page.h,v 1.15 1997/08/09 04:56:54 davem Exp $ */
+/* $Id: page.h,v 1.16 1997/11/28 15:59:34 jj Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
 
 #define PAGE_SHIFT   13
-
-#ifdef __KERNEL__
-
 #ifndef __ASSEMBLY__
 /* I have my suspicions... -DaveM */
 #define PAGE_SIZE    (1UL << PAGE_SHIFT)
@@ -15,6 +12,8 @@
 #endif
 
 #define PAGE_MASK    (~(PAGE_SIZE-1))
+
+#ifdef __KERNEL__
 
 #ifndef __ASSEMBLY__
 

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.63 1997/08/13 04:44:15 paulus Exp $ */
+/* $Id: pgtable.h,v 1.64 1997/11/07 15:01:44 jj Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -376,6 +376,7 @@ __get_phys (unsigned long addr)
 	case sun4c:
 		return sun4c_get_pte (addr) << PAGE_SHIFT;
 	case sun4m:
+	case sun4d:
 		return ((srmmu_get_pte (addr) & 0xffffff00) << 4);
 	default:
 		return 0;
@@ -389,6 +390,7 @@ __get_iospace (unsigned long addr)
 	case sun4c:
 		return -1; /* Don't check iospace on sun4c */
 	case sun4m:
+	case sun4d:
 		return (srmmu_get_pte (addr) >> 28);
 	default:
 		return -1;

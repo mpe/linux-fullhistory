@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.37 1997/08/21 09:13:18 davem Exp $
+/* $Id: etrap.S,v 1.39 1997/10/24 11:57:47 jj Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -79,11 +79,11 @@ etrap_irq:	rdpr			%tstate, %g1						! Single 	Group
 		andcc			%l0, FPRS_FEF, %g0					! IEU1		Group
 		be,pn			%icc, 6f						! CTI
 		 st			%l0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_FPRS]	! Store
-		ld			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l4		! Load		Group
+		lduh			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l4		! Load		Group
 		stx			%fsr, [%sp + FPU_OFF + 0x100] 				! Single	Group
 		or			%l4, %l0, %l4						! IEU0		Group
 		ba,pt			%xcc, 3f						! CTI
-		 st			%l4, [%g6 + AOFF_task_tss + AOFF_thread_flags]		! Store
+		 sth			%l4, [%g6 + AOFF_task_tss + AOFF_thread_flags]		! Store
 2:		rd			%fprs, %l0						! Single	Group+4bubbles
 		andcc			%l0, FPRS_FEF, %g0					! IEU1		Group
 		be,pn			%icc, 6f						! CTI
@@ -107,7 +107,7 @@ etrap_irq:	rdpr			%tstate, %g1						! Single 	Group
 5:		membar			#Sync							! Memory	
 6:		wr			%g0, 0x0, %fprs						! Single	Group+4bubbles
 		wrpr			%g0, 0x0, %tl						! Single	Group+4bubbles
-		mov			%g1, %l1						! IEU0		Group
+		andn			%g1, PSTATE_MM, %l1					! IEU0		Group
 		mov			%g4, %l4						! IEU1
 		mov			%g5, %l5						! IEU0		Group
 		mov			%g7, %l2						! IEU1

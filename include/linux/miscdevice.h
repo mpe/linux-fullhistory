@@ -9,6 +9,8 @@
 #define ATARIMOUSE_MINOR 5
 #define SUN_MOUSE_MINOR 6
 #define PC110PAD_MINOR 9
+#define WATCHDOG_MINOR		130	/* Watchdog timer     */
+#define TEMP_MINOR		131	/* Temperature Sensor */
 #define RTC_MINOR 135
 #define SUN_OPENPROM_MINOR 139
 #define NVRAM_MINOR 144

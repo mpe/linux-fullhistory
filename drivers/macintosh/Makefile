@@ -14,12 +14,12 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 
 L_TARGET := macintosh.a
 M_OBJS   :=
-L_OBJS   := via-cuda.o adb.o nvram.o
+L_OBJS   := via-cuda.o adb.o nvram.o macio-adb.o
 
-ifeq ($(CONFIG_SERIAL),y)
+ifeq ($(CONFIG_SERIAL)$(CONFIG_PMAC),yy)
   LX_OBJS += macserial.o
 else
-  ifeq ($(CONFIG_SERIAL),m)
+  ifeq ($(CONFIG_SERIAL)$(CONFIG_PMAC),my)
     MX_OBJS += macserial.o
   endif
 endif
@@ -30,7 +30,19 @@ endif
 
 ifdef CONFIG_VT
   ifdef CONFIG_PMAC_CONSOLE
-    L_OBJS += pmac-cons.o control.o platinum.o valkyrie.o
+    L_OBJS += pmac-cons.o
+    ifdef CONFIG_CONTROL_VIDEO
+      L_OBJS += control.o
+    endif
+    ifdef CONFIG_PLATINUM_VIDEO
+      L_OBJS += platinum.o
+    endif
+    ifdef CONFIG_VALKYRIE_VIDEO
+      L_OBJS += valkyrie.o
+    endif
+    ifdef CONFIG_CHIPS_VIDEO
+      L_OBJS += chips.o
+    endif
     ifdef CONFIG_ATY_VIDEO
       L_OBJS += aty.o
     endif

@@ -1,7 +1,8 @@
 /*****************************************************************************
 * sdla_fr.c	WANPIPE(tm) Multiprotocol WAN Link Driver. Frame relay module.
 *
-* Author:	Gene Kozin	<genek@compuserve.com>
+* Author(s):	Gene Kozin	
+*		Jaspreet Singh		<jaspreet@sangoma.com>
 *
 * Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
@@ -10,26 +11,52 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-*
-* Jun 29, 1997  Alan Cox	 o Hacked up vendor source 1.0.3 to remove
-*				   C++ style comments, and a massive security
-*				   hole (the UDP management junk).
-*
+* Nov 26, 1997	Jaspreet Singh	o Improved load sharing with multiple boards
+*				o Added Cli() to protect enabling of interrupts
+*				  while polling is called.
+* Nov 24, 1997	Jaspreet Singh	o Added counters to avoid enabling of interrupts
+*				  when they have been disabled by another
+*				  interface or routine (eg. wpf_poll).
+* Nov 06, 1997	Jaspreet Singh	o Added INTR_TEST_MODE to avoid polling	
+*				  routine disable interrupts during interrupt
+*				  testing.
+* Oct 20, 1997  Jaspreet Singh  o Added hooks in for Router UP time.
+* Oct 16, 1997  Jaspreet Singh  o The critical flag is used to maintain flow
+*                                 control by avoiding RACE conditions.  The
+*                                 cli() and restore_flags() are taken out.
+*                                 The fr_channel structure is appended for 
+*                                 Driver Statistics.
+* Oct 15, 1997  Farhan Thawar    o updated if_send() and receive for IPX
+* Aug 29, 1997  Farhan Thawar    o Removed most of the cli() and sti()
+*                                o Abstracted the UDP management stuff
+*                                o Now use tbusy and critical more intelligently
+* Jul 21, 1997  Jaspreet Singh	 o Can configure T391, T392, N391, N392 & N393
+*				   through router.conf.
+*				 o Protected calls to sdla_peek() by adDing 
+*				   save_flags(), cli() and restore_flags().
+*				 o Added error message for Inactive DLCIs in
+*				   fr_event() and update_chan_state().
+*				 o Fixed freeing up of buffers using kfree() 
+*			           when packets are received.
+* Jul 07, 1997	Jaspreet Singh	 o Added configurable TTL for UDP packets 
+*				 o Added ability to discard multicast and 
+*				   broadcast source addressed packets
+* Jun 27, 1997	Jaspreet Singh	 o Added FT1 monitor capabilities 
+*				   New case (0x44) statement in if_send routine *				   Added a global variable rCount to keep track
+*			 	   of FT1 status enabled on the board.
 * May 29, 1997	Jaspreet Singh	 o Fixed major Flow Control Problem
 *				   With multiple boards a problem was seen where
 *				   the second board always stopped transmitting
 *				   packet after running for a while. The code
 *				   got into a stage where the interrupts were
 *				   disabled and dev->tbusy was set to 1.
-*				   This caused the If_send() routine to get into
-*				   the if clause for set_bit(0,dev->tbusy) 
+*                  		   This caused the If_send() routine to get into*                                  the if clause for it(0,dev->tbusy) 
 *				   forever.
 *				   The code got into this stage due to an 
 *				   interrupt occuring within the if clause for 
 *				   set_bit(0,dev->tbusy).  Since an interrupt 
 *				   disables furhter transmit interrupt and 
-* 				   makes dev->tbusy = 0, this effect was undone
-*                                  by making dev->tbusy = 1 in the if clause.
+* 				   makes dev->tbusy = 0, this effect was undone *                                  by making dev->tbusy = 1 in the if clause.
 *				   The Fix checks to see if Transmit interrupts
 *				   are disabled then do not make dev->tbusy = 1
 * 	   			   Introduced a global variable: int_occur and
@@ -51,7 +78,7 @@
 * Jan 30, 1997	Gene Kozin	Version 3.1.0
 *				 o implemented exec() entry point
 *				 o fixed a bug causing driver configured as
-*				   a FR switch to be stuck in WAN_DISCONNECTED
+*				   a FR switch to be stuck in WAN_
 *				   mode
 * Jan 02, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
@@ -60,115 +87,237 @@
 #error	This code MUST be compiled as a kernel module!
 #endif
 
+#include <linux/config.h>	/* OS configuration options */
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
 #include <linux/string.h>	/* inline memset(), etc. */
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
+#include <linux/init.h>		/* __initfunc */
 #include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <linux/if_arp.h>	/* ARPHRD_* defines */
-#include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/io.h>		/* for inb(), outb(), etc. */
 #include <asm/uaccess.h>
+#include <linux/time.h>	 	/* for do_gettimeofday */	
 
 #define	_GNUC_
 #include <linux/sdla_fr.h>	/* frame relay firmware API definitions */
-
 /****** Defines & Macros ****************************************************/
 
-#define	CMD_OK		0	/* normal firmware return code */
-#define	CMD_TIMEOUT	0xFF	/* firmware command timed out */
-#define	MAX_CMD_RETRY	10	/* max number of firmware retries */
+#define	MAX_CMD_RETRY	10		/* max number of firmware retries */
 
-#define	FR_HEADER_LEN	8	/* max encapsulation header size */
-#define	FR_CHANNEL_MTU	1500	/* unfragmented logical channel MTU */
+#define	FR_HEADER_LEN	8		/* max encapsulation header size */
+#define	FR_CHANNEL_MTU	1500		/* unfragmented logical channel MTU */
 
 /* Q.922 frame types */
-#define	Q922_UI		0x03	/* Unnumbered Info frame */
-#define	Q922_XID	0xAF	/* ??? */
+#define	Q922_UI		0x03		/* Unnumbered Info frame */
+#define	Q922_XID	0xAF		/* ??? */
 
+/* DLCI configured or not */
+#define DLCI_NOT_CONFIGURED	0x00
+#define DLCI_CONFIG_PENDING	0x01
+#define DLCI_CONFIGURED		0x02
+
+/* CIR enabled or not */
+#define CIR_ENABLED	0x00
+#define CIR_DISABLED	0x01
+
+/* Interrupt mode for DLCI = 0 */
+#define BUFFER_INTR_MODE	0x00
+#define DLCI_LIST_INTR_MODE	0x01
+
+/* Transmit Interrupt Status */
+#define DISABLED 		0x00
+#define WAITING_TO_BE_ENABLED	0x01
+
+/* For handle_IPXWAN() */
+#define CVHexToAscii(b) (((unsigned char)(b) > (unsigned char)9) ? ((unsigned char)'A' + ((unsigned char)(b) - (unsigned char)10)) : ((unsigned char)'0' + (unsigned char)(b)))
+ 
 /****** Data Structures *****************************************************/
 
 /* This is an extention of the 'struct device' we create for each network
  * interface to keep the rest of channel-specific data.
  */
-typedef struct fr_channel {
-	char name[WAN_IFNAME_SZ + 1];	/* interface name, ASCIIZ */
-	unsigned dlci;		/* logical channel number */
-	unsigned cir;		/* committed information rate */
-	char state;		/* channel state */
+typedef struct fr_channel
+{
+	char name[WAN_IFNAME_SZ+1];	/* interface name, ASCIIZ */
+	unsigned dlci_configured  ;	/* check whether configured or not */
+	unsigned cir_status;		/* check whether CIR enabled or not */
+	unsigned dlci;			/* logical channel number */
+	unsigned cir;			/* committed information rate */
+	unsigned bc;			/* committed burst size */
+	unsigned be;			/* excess burst size */
+	unsigned mc;			/* multicast support on or off */
+	unsigned tx_int_status;		/* Transmit Interrupt Status */	
+	unsigned short pkt_length;	/* Packet Length */
+	unsigned long router_start_time;/* Router start time in seconds */
+	unsigned long tick_counter;	/* counter for transmit time out */
+	char dev_pending_devtint;	/* interface pending dev_tint() */
+	char state;			/* channel state */
+	void* dlci_int_interface;	/* pointer to the DLCI Interface */ 
+	unsigned long IB_addr;		/* physical address of Interface Byte */
 	unsigned long state_tick;	/* time of the last state change */
-	sdla_t *card;		/* -> owner */
-	struct enet_statistics ifstats;		/* interface statistics */
+	sdla_t* card;			/* -> owner */
+	struct enet_statistics ifstats;	/* interface statistics */
+	
+	unsigned long if_send_entry;
+	unsigned long if_send_skb_null;
+	unsigned long if_send_broadcast;
+	unsigned long if_send_multicast;
+	unsigned long if_send_critical_ISR;
+	unsigned long if_send_critical_non_ISR;
+	unsigned long if_send_busy;
+	unsigned long if_send_busy_timeout;
+	unsigned long if_send_FPIPE_request;
+	unsigned long if_send_DRVSTATS_request;
+	unsigned long if_send_wan_disconnected;
+	unsigned long if_send_dlci_disconnected;
+	unsigned long if_send_no_bfrs;
+	unsigned long if_send_adptr_bfrs_full;
+	unsigned long if_send_bfrs_passed_to_adptr;
+
+	unsigned long rx_intr_no_socket;
+	unsigned long rx_intr_dev_not_started;
+	unsigned long rx_intr_FPIPE_request;
+	unsigned long rx_intr_DRVSTATS_request;
+	unsigned long rx_intr_bfr_not_passed_to_stack;
+	unsigned long rx_intr_bfr_passed_to_stack;
+
+	unsigned long UDP_FPIPE_mgmt_kmalloc_err;
+	unsigned long UDP_FPIPE_mgmt_direction_err;
+	unsigned long UDP_FPIPE_mgmt_adptr_type_err;
+	unsigned long UDP_FPIPE_mgmt_adptr_cmnd_OK;
+	unsigned long UDP_FPIPE_mgmt_adptr_cmnd_timeout;
+	unsigned long UDP_FPIPE_mgmt_adptr_send_passed;
+	unsigned long UDP_FPIPE_mgmt_adptr_send_failed;
+	unsigned long UDP_FPIPE_mgmt_not_passed_to_stack;
+	unsigned long UDP_FPIPE_mgmt_passed_to_stack;
+	unsigned long UDP_FPIPE_mgmt_no_socket;
+	unsigned long UDP_DRVSTATS_mgmt_kmalloc_err;
+	unsigned long UDP_DRVSTATS_mgmt_adptr_cmnd_OK;
+	unsigned long UDP_DRVSTATS_mgmt_adptr_cmnd_timeout;
+	unsigned long UDP_DRVSTATS_mgmt_adptr_send_passed;
+	unsigned long UDP_DRVSTATS_mgmt_adptr_send_failed;
+	unsigned long UDP_DRVSTATS_mgmt_not_passed_to_stack;
+	unsigned long UDP_DRVSTATS_mgmt_passed_to_stack;
+	unsigned long UDP_DRVSTATS_mgmt_no_socket;
+	unsigned long router_up_time;
 } fr_channel_t;
 
-typedef struct dlci_status {
-	unsigned short dlci PACKED;
-	unsigned char state PACKED;
+typedef struct dlci_status
+{
+	unsigned short dlci	PACKED;
+	unsigned char state	PACKED;
 } dlci_status_t;
 
+typedef struct dlci_IB_mapping
+{
+	unsigned short dlci		PACKED;
+	unsigned long  addr_value	PACKED;
+} dlci_IB_mapping_t;
+
+/* This structure is used for DLCI list Tx interrupt mode.  It is used to
+   enable interrupt bit and set the packet length for transmission
+ */
+typedef struct fr_dlci_interface 
+{
+	unsigned char gen_interrupt	PACKED;
+	unsigned short packet_length	PACKED;
+	unsigned char reserved		PACKED;
+} fr_dlci_interface_t; 
+
+static unsigned short num_frames;
+static unsigned long curr_trace_addr;
+static unsigned long start_trace_addr;
+static unsigned short available_buffer_space;
 static char TracingEnabled;
-/* variable for checking interrupts within the ISR routine */
-static int int_occur = 0;
+
+/* variable for keeping track of enabling/disabling FT1 monitor status */
+static int rCount = 0;
+
+extern void disable_irq(unsigned int);
+extern void enable_irq(unsigned int);
+
+/* variable for keeping track of number of interrupts generated during 
+ * interrupt test routine 
+ */
+static int Intr_test_counter;
+
 /****** Function Prototypes *************************************************/
 
 /* WAN link driver entry points. These are called by the WAN router module. */
-static int update(wan_device_t * wandev);
-static int new_if(wan_device_t * wandev, struct device *dev,
-		  wanif_conf_t * conf);
-static int del_if(wan_device_t * wandev, struct device *dev);
+static int update (wan_device_t* wandev);
+static int new_if (wan_device_t* wandev, struct device* dev,
+	wanif_conf_t* conf);
+static int del_if (wan_device_t* wandev, struct device* dev);
 
 /* WANPIPE-specific entry points */
-static int wpf_exec(struct sdla *card, void *u_cmd, void *u_data);
+static int wpf_exec (struct sdla* card, void* u_cmd, void* u_data);
 
 /* Network device interface */
-static int if_init(struct device *dev);
-static int if_open(struct device *dev);
-static int if_close(struct device *dev);
-static int if_header(struct sk_buff *skb, struct device *dev,
-	    unsigned short type, void *daddr, void *saddr, unsigned len);
-static int if_rebuild_hdr(struct sk_buff *skb);
-static int if_send(struct sk_buff *skb, struct device *dev);
-static struct enet_statistics *if_stats(struct device *dev);
+static int if_init   (struct device* dev);
+static int if_open   (struct device* dev);
+static int if_close  (struct device* dev);
+static int if_header (struct sk_buff* skb, struct device* dev,
+	unsigned short type, void* daddr, void* saddr, unsigned len);
+static int if_rebuild_hdr (struct sk_buff* skb);
+static int if_send (struct sk_buff* skb, struct device* dev);
+static struct enet_statistics* if_stats (struct device* dev);
 
 /* Interrupt handlers */
-static void fr502_isr(sdla_t * card);
-static void fr508_isr(sdla_t * card);
-static void fr502_rx_intr(sdla_t * card);
-static void fr508_rx_intr(sdla_t * card);
-static void tx_intr(sdla_t * card);
-static void spur_intr(sdla_t * card);
+static void fr502_isr (sdla_t* card);
+static void fr508_isr (sdla_t* card);
+static void fr502_rx_intr (sdla_t* card);
+static void fr508_rx_intr (sdla_t* card);
+static void tx_intr (sdla_t* card);
+static void spur_intr (sdla_t* card);
 
 /* Background polling routines */
-static void wpf_poll(sdla_t * card);
+static void wpf_poll (sdla_t* card);
 
 /* Frame relay firmware interface functions */
-static int fr_read_version(sdla_t * card, char *str);
-static int fr_configure(sdla_t * card, fr_conf_t * conf);
-static int fr_set_intr_mode(sdla_t * card, unsigned mode, unsigned mtu);
-static int fr_comm_enable(sdla_t * card);
-static int fr_comm_disable(sdla_t * card);
-static int fr_get_err_stats(sdla_t * card);
-static int fr_get_stats(sdla_t * card);
-static int fr_add_dlci(sdla_t * card, int dlci, int num);
-static int fr_activate_dlci(sdla_t * card, int dlci, int num);
-static int fr_issue_isf(sdla_t * card, int isf);
-static int fr502_send(sdla_t * card, int dlci, int attr, int len, void *buf);
-static int fr508_send(sdla_t * card, int dlci, int attr, int len, void *buf);
+static int fr_read_version (sdla_t* card, char* str);
+static int fr_configure (sdla_t* card, fr_conf_t *conf);
+static int fr_dlci_configure (sdla_t* card, fr_dlc_conf_t *conf, unsigned dlci);
+static int fr_set_intr_mode (sdla_t* card, unsigned mode, unsigned mtu);
+static int fr_comm_enable (sdla_t* card);
+static int fr_comm_disable (sdla_t* card);
+static int fr_get_err_stats (sdla_t* card);
+static int fr_get_stats (sdla_t* card);
+static int fr_add_dlci (sdla_t* card, int dlci, int num);
+static int fr_activate_dlci (sdla_t* card, int dlci, int num);
+static int fr_issue_isf (sdla_t* card, int isf);
+static int fr502_send (sdla_t* card, int dlci, int attr, int len, void *buf);
+static int fr508_send (sdla_t* card, int dlci, int attr, int len, void *buf);
 
 /* Firmware asynchronous event handlers */
-static int fr_event(sdla_t * card, int event, fr_mbox_t * mbox);
-static int fr_modem_failure(sdla_t * card, fr_mbox_t * mbox);
-static int fr_dlci_change(sdla_t * card, fr_mbox_t * mbox);
+static int fr_event (sdla_t* card, int event, fr_mbox_t* mbox);
+static int fr_modem_failure (sdla_t *card, fr_mbox_t* mbox);
+static int fr_dlci_change (sdla_t *card, fr_mbox_t* mbox);
 
 /* Miscellaneous functions */
-static int update_chan_state(struct device *dev);
-static void set_chan_state(struct device *dev, int state);
-static struct device *find_channel(sdla_t * card, unsigned dlci);
-static int is_tx_ready(sdla_t * card);
-static unsigned int dec_to_uint(unsigned char *str, int len);
+static int update_chan_state (struct device* dev);
+static void set_chan_state (struct device* dev, int state);
+static struct device* find_channel (sdla_t* card, unsigned dlci);
+static int is_tx_ready (sdla_t* card, fr_channel_t* chan);
+static unsigned int dec_to_uint (unsigned char* str, int len);
+static int reply_udp( unsigned char *data, unsigned int mbox_len );
+
+static int intr_test( sdla_t* card );
+static void init_chan_statistics( fr_channel_t* chan );
+static void init_global_statistics( sdla_t* card );
+static void read_DLCI_IB_mapping( sdla_t* card, fr_channel_t* chan );
+
+/* Udp management functions */
+static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t* card, struct sk_buff *skb, struct device* dev, int dlci, fr_channel_t* chan);
+static int process_udp_driver_call(char udp_pkt_src, sdla_t* card, struct sk_buff *skb, struct device* dev, int dlci, fr_channel_t* chan);
+static int udp_pkt_type( struct sk_buff *skb, sdla_t* card );
+
+/* IPX functions */
+static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_number, unsigned char incoming);
+static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char enable_IPX, unsigned long network_number);
 
 /****** Public Functions ****************************************************/
 
@@ -198,22 +347,23 @@ __initfunc(int wpf_init(sdla_t * card, wandev_conf_t * conf))
 		return -EINVAL;
 	}
 	/* Initialize protocol-specific fields of adapter data space */
-	switch (card->hw.fwid) {
-	case SFID_FR502:
-		card->mbox = (void *) (card->hw.dpmbase + FR502_MBOX_OFFS);
-		card->rxmb = (void *) (card->hw.dpmbase + FR502_RXMB_OFFS);
-		card->flags = (void *) (card->hw.dpmbase + FR502_FLAG_OFFS);
-		card->isr = &fr502_isr;
-		break;
+	switch (card->hw.fwid) 
+	{
+		case SFID_FR502:
+			card->mbox = (void *) (card->hw.dpmbase + FR502_MBOX_OFFS);
+			card->rxmb = (void *) (card->hw.dpmbase + FR502_RXMB_OFFS);
+			card->flags = (void *) (card->hw.dpmbase + FR502_FLAG_OFFS);
+			card->isr = &fr502_isr;
+			break;
 
-	case SFID_FR508:
-		card->mbox = (void *) (card->hw.dpmbase + FR508_MBOX_OFFS);
-		card->flags = (void *) (card->hw.dpmbase + FR508_FLAG_OFFS);
-		card->isr = &fr508_isr;
-		break;
+		case SFID_FR508:
+			card->mbox = (void *) (card->hw.dpmbase + FR508_MBOX_OFFS);
+			card->flags = (void *) (card->hw.dpmbase + FR508_FLAG_OFFS);
+			card->isr = &fr508_isr;
+			break;
 
-	default:
-		return -EINVAL;
+		default:
+			return -EINVAL;
 	}
 
 	/* Read firmware version.  Note that when adapter initializes, it
@@ -243,21 +393,28 @@ __initfunc(int wpf_init(sdla_t * card, wandev_conf_t * conf))
 	u.cfg.cir_fwd = 16;
 	u.cfg.cir_bwd = u.cfg.bc_fwd = u.cfg.bc_bwd = u.cfg.cir_fwd;
 	u.cfg.options = 0x0081;	/* direct Rx, no CIR check */
-	switch (conf->u.fr.signalling) {
-	case WANOPT_FR_Q933:
-		u.cfg.options |= 0x0200;
-		break;
-	case WANOPT_FR_LMI:
-		u.cfg.options |= 0x0400;
-		break;
+	
+	switch (conf->u.fr.signalling) 
+	{
+		case WANOPT_FR_Q933:
+			u.cfg.options |= 0x0200;
+			break;
+		case WANOPT_FR_LMI:
+			u.cfg.options |= 0x0400;
+			break;
 	}
-	if (conf->station == WANOPT_CPE) {
+
+	if (conf->station == WANOPT_CPE) 
+	{
 		u.cfg.options |= 0x8000;	/* auto config DLCI */
-	} else {
+	}
+	else
+	{
 		u.cfg.station = 1;	/* switch emulation mode */
 		card->u.f.node_dlci = conf->u.fr.dlci ? conf->u.fr.dlci : 16;
 		card->u.f.dlci_num = min(max(conf->u.fr.dlci_num, 1), 100);
 	}
+
 	if (conf->clocking == WANOPT_INTERNAL)
 		u.cfg.port |= 0x0001
 		    ;
@@ -279,7 +436,8 @@ __initfunc(int wpf_init(sdla_t * card, wandev_conf_t * conf))
 		return -EIO
 		    ;
 
-	if (card->hw.fwid == SFID_FR508) {
+	if (card->hw.fwid == SFID_FR508) 
+	{
 		fr_buf_info_t *buf_info =
 		(void *) (card->hw.dpmbase + FR508_RXBC_OFFS);
 
@@ -392,6 +550,32 @@ static int new_if(wan_device_t * wandev, struct device *dev, wanif_conf_t * conf
 		kfree(chan);
 		return err;
 	}
+
+	/* place cir,be,bc and other channel specific information into the
+	 * chan structure 
+         */
+	if (conf->cir) 
+	{
+		chan->cir = max( 1, min( conf->cir, 512 ) );
+		chan->cir_status = CIR_ENABLED; 
+
+		if (conf->bc)
+			chan->bc = max( 1, min( conf->bc, 512 ) );
+		if (conf->be)
+			chan->be = max( 0, min( conf->be, 511) ); 
+
+	}
+	else
+		chan->cir_status = CIR_DISABLED;
+
+	chan->mc = conf->mc;
+
+	chan->dlci_configured = DLCI_NOT_CONFIGURED;	
+
+	chan->tx_int_status = DISABLED;	
+
+	init_chan_statistics( chan );
+
 	/* prepare network device data space for registration */
 	dev->name = chan->name;
 	dev->init = &if_init;
@@ -503,34 +687,146 @@ static int if_init(struct device *dev)
  *
  * Return 0 if O.k. or errno.
  */
+
 static int if_open(struct device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
+	struct device *dev2;
 	int err = 0;
-
+	fr508_flags_t *flags = card->flags;
+	struct timeval tv;
+	
 	if (dev->start)
-		return -EBUSY	/* only one open is allowed */
-		    ;
+		return -EBUSY;	/* only one open is allowed */
+
 	if (test_and_set_bit(0, (void *) &card->wandev.critical))
 		return -EAGAIN;
-	;
-	if (!card->open_cnt) {
-		if ((fr_comm_enable(card)) ||
-		    (fr_set_intr_mode(card, 0x03, card->wandev.mtu))) {
+
+	if (!card->open_cnt) 
+	{
+		Intr_test_counter = 0;
+		card->intr_mode = INTR_TEST_MODE;
+		err = intr_test( card );
+		
+		if ((err) || (Intr_test_counter !=(MAX_INTR_TEST_COUNTER +1))) {
+			printk(KERN_INFO 
+				"%s: Interrupt Test Failed, Counter: %i\n", 
+				card->devname, Intr_test_counter);
 			err = -EIO;
-			goto done;
+			card->wandev.critical = 0;
+			return err;
 		}
+
+		printk(KERN_INFO "%s: Interrupt Test Passed, Counter: %i\n"
+			,card->devname, Intr_test_counter);
+		
+		/* The following allocates and intializes a circular
+		 * link list of interfaces per card.
+		 */
+		
+		card->devs_struct = kmalloc(sizeof(load_sharing_t), GFP_KERNEL);
+		if (card->devs_struct == NULL)
+			return -ENOMEM;	
+		card->dev_to_devtint_next = card->devs_struct;
+		
+		for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave) {
+			(card->devs_struct)->dev_ptr = dev2;
+			if(dev2->slave == NULL)
+				(card->devs_struct)->next = card->dev_to_devtint_next;
+			else {
+				(card->devs_struct)->next = kmalloc(
+					sizeof(load_sharing_t), GFP_KERNEL);
+				if ((card->devs_struct)->next == NULL)
+					return -ENOMEM;	
+				card->devs_struct = (card->devs_struct)->next;
+			}	
+		}
+
+		card->devs_struct = card->dev_to_devtint_next;
+	
+		card->intr_mode = BUFFER_INTR_MODE;	
+
+		/* 
+		check all the interfaces for the device to see if CIR has
+	 	been enabled for any DLCI(s). If so then use the DLCI list
+		Interrupt mode for fr_set_intr_mode(), otherwise use the			default global interrupt mode
+		*/ 
+	
+		for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave) {
+			
+			if( ((fr_channel_t *)dev2->priv)->cir_status 
+							== CIR_ENABLED)  {
+				card->intr_mode = DLCI_LIST_INTR_MODE;
+				break;
+			}
+		}
+
+		/* 
+		 *	If you enable comms and then set ints, you get a Tx int as you
+		 *	perform the SET_INT_TRIGGERS command. So, we only set int
+		 *	triggers and then adjust the interrupt mask (to disable Tx ints)		before enabling comms. 
+		 */
+		if (card->intr_mode == BUFFER_INTR_MODE) 
+		{
+			if (fr_set_intr_mode(card, 0x03, card->wandev.mtu)) 
+			{
+				err = -EIO;
+				card->wandev.critical = 0;
+				return err;
+			}
+
+			printk( KERN_INFO 
+				"%s: Global Buffering Tx Interrupt Mode\n"
+				, card->devname);
+
+		} 
+		else if (card->intr_mode == DLCI_LIST_INTR_MODE) 
+		{	
+			if (fr_set_intr_mode(card, 0x83, card->wandev.mtu)) 
+			{
+				err = -EIO;
+				card->wandev.critical = 0;
+				return err;
+			}
+
+			printk( KERN_INFO "%s: DLCI list Tx Interrupt Mode\n", 
+				card->devname);
+
+		}
+
+		flags->imask &= ~0x02;
+	
+		if (fr_comm_enable(card)) 
+		{
+			err = -EIO;
+			card->wandev.critical = 0;
+			return err;
+		}	
+
 		wanpipe_set_state(card, WAN_CONNECTED);
 
-		if (card->wandev.station == WANOPT_CPE) {
+		if (card->wandev.station == WANOPT_CPE) 
+		{
 			/* CPE: issue full status enquiry */
 			fr_issue_isf(card, FR_ISF_FSE);
-		} else {	/* FR switch: activate DLCI(s) */
-			fr_add_dlci(card,
-				card->u.f.node_dlci, card->u.f.dlci_num);
-			fr_activate_dlci(card,
-				card->u.f.node_dlci, card->u.f.dlci_num);
+		}
+		else
+		{	/* FR switch: activate DLCI(s) */
+		
+			/* For Switch emulation we have to ADD and ACTIVATE
+			 * the DLCI(s) that were configured with the SET_DLCI_
+			 * CONFIGURATION command. Add and Activate will fail if
+			 * DLCI specified is not included in the list.
+			 *
+			 * Also If_open is called once for each interface. But
+			 * it does not get in here for all the interface. So
+		 	 * we have to pass the entire list of DLCI(s) to add 
+			 * activate routines.  
+			 */ 
+	
+			fr_add_dlci(card, card->u.f.node_dlci[0], card->u.f.dlci_num);
+			fr_activate_dlci(card, card->u.f.node_dlci, card->u.f.dlci_num);
 		}
 	}
 	dev->mtu = min(dev->mtu, card->wandev.mtu - FR_HEADER_LEN);
@@ -540,7 +836,8 @@ static int if_open(struct device *dev)
 	wanpipe_open(card);
 	update_chan_state(dev);
 
-      done:
+	do_gettimeofday( &tv );
+	chan->router_start_time = tv.tv_sec;
 	card->wandev.critical = 0;
 	return err;
 }
@@ -636,6 +933,33 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 	sdla_t *card = chan->card;
 	int retry = 0, err;
 	struct device *dev2;
+    	fr508_flags_t* adptr_flags = card->flags;
+	fr_dlci_interface_t* dlci_interface = chan->dlci_int_interface;
+	unsigned long host_cpu_flags;
+	int send_data = 0;
+   	++chan->if_send_entry;
+
+    	if (dev->tbusy) 
+    	{
+		/* If our device stays busy for at least 5 seconds then we will
+                 * kick start the device by making dev->tbusy = 0.  We expect
+                 * that our device never stays busy more than 5 seconds. So this                 * is only used as a last resort.
+                 */
+		
+		++chan->if_send_busy;
+		++chan->ifstats.collisions;
+
+		if ((jiffies - chan->tick_counter) < (5*HZ))
+			return 1;
+
+		printk(KERN_INFO "%s: Transmit timed out\n", chan->name);
+		
+		++chan->if_send_busy_timeout;
+
+		/* unbusy all the interfaces on the card */
+       		for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave)
+			dev2->tbusy = 0;
+    	}
 
 	if (test_and_set_bit(0, (void *) &card->wandev.critical)) {
 #ifdef _DEBUG_
@@ -645,60 +969,221 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
 	}
-	if (test_and_set_bit(0, (void *) &dev->tbusy)) {
-#ifdef _DEBUG_
-		printk(KERN_INFO "%s: Tx collision on interface %s!\n",
-		       card->devname, dev->name);
-#endif
-		++chan->ifstats.collisions;
-		++card->wandev.stats.collisions;
+    	disable_irq(card->hw.irq);
+	++card->irq_dis_if_send_count;
 
-		retry = 1;
-		if (card->wandev.tx_int_enabled) {
-			for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave) {
-				dev2->tbusy = 1;
+	if (test_and_set_bit(0, (void*)&card->wandev.critical)) 
+	{
+		if (card->wandev.critical == CRITICAL_IN_ISR) 
+		{	
+			++chan->if_send_critical_ISR;
+
+			if (card->intr_mode == DLCI_LIST_INTR_MODE)
+			{
+				/* The enable_tx_int flag is set here so that if
+			 	 * the critical flag is set due to an interrupt 
+				 * then we want to enable transmit interrupts 
+				 * again.
+			 	 */ 
+		
+				card->wandev.enable_tx_int = 1;
+
+				/* Setting this flag to WAITING_TO_BE_ENABLED 
+				 * specifies that interrupt bit has to be 
+				 * enabled for that particular interface. 
+				 * (delayed interrupt)
+			 	 */
+				
+				chan->tx_int_status = WAITING_TO_BE_ENABLED;
+
+				/* This is used for enabling dynamic calculation
+				 * of CIRs relative to the packet length.
+			 	 */
+	
+	       			chan->pkt_length = skb->len;			
+				dev->tbusy = 1;
+				chan->tick_counter = jiffies;
 			}
+			else
+			{
+				card->wandev.enable_tx_int = 1;
+				dev->tbusy = 1;
+				chan->tick_counter = jiffies;
+			}
+			save_flags(host_cpu_flags);
+			cli();
+			if ((!(--card->irq_dis_if_send_count)) && 
+					(!card->irq_dis_poll_count))
+				enable_irq(card->hw.irq);
+			restore_flags(host_cpu_flags);
+			return 1;
 		}
-	} else if (card->wandev.state != WAN_CONNECTED) {
+
+		++chan->if_send_critical_non_ISR;
+		++chan->ifstats.tx_dropped;
+		dev_kfree_skb(skb, FREE_WRITE);
+		save_flags(host_cpu_flags);
+		cli();
+                if ((!(--card->irq_dis_if_send_count)) &&
+					 (!card->irq_dis_poll_count))
+                	enable_irq(card->hw.irq);
+		restore_flags(host_cpu_flags);
+		return 0;
+	}
+ 	
+	card->wandev.critical = 0x21;
+    
+	if (card->wandev.state != WAN_CONNECTED) 
+	{
+		++chan->if_send_wan_disconnected;
 		++chan->ifstats.tx_dropped;
 		++card->wandev.stats.tx_dropped;
-	} else if (chan->state != WAN_CONNECTED) {
+	}
+	else if (chan->state != WAN_CONNECTED)
+	{
+		++chan->if_send_dlci_disconnected;
 		update_chan_state(dev);
 		++chan->ifstats.tx_dropped;
 		++card->wandev.stats.tx_dropped;
-	} else if (!is_tx_ready(card)) {
+	}
+	else if (!is_tx_ready(card, chan)) 
+	{
+		if (card->intr_mode == DLCI_LIST_INTR_MODE )
+		{
+			dlci_interface->gen_interrupt |= 0x40;
+			dlci_interface->packet_length = skb->len;	
+		}  
+       		dev->tbusy = 1;
+		chan->tick_counter = jiffies;
+
+		adptr_flags->imask |= 0x02;
+
+		++ chan->if_send_no_bfrs;
 		retry = 1;
-		if (card->wandev.tx_int_enabled) {
-			for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave) {
-				dev2->tbusy = 1;
+	}
+	else 
+	{
+		send_data = 1;
+		/* If it's an IPX packet */
+		if( sendpacket[1] == 0x00 &&
+		    sendpacket[2] == 0x80 &&
+		    sendpacket[6] == 0x81 &&
+		    sendpacket[7] == 0x37) 
+		{
+			if( card->wandev.enable_IPX ) 
+			{
+				switch_net_numbers(sendpacket, 
+					card->wandev.network_number, 0);
+			}
+			else
+			{
+				/* increment some statistic here! */
+				send_data = 0;
 			}
 		}
-	} else {
-		err = (card->hw.fwid == SFID_FR508) ?
-		    fr508_send(card, chan->dlci, 0, skb->len, skb->data) :
-		    fr502_send(card, chan->dlci, 0, skb->len, skb->data);
-		if (err) {
-			++chan->ifstats.tx_errors;
-			++card->wandev.stats.tx_errors;
-		} else {
-			++chan->ifstats.tx_packets;
-			++card->wandev.stats.tx_packets;
+
+		if (send_data)
+		{
+        		err = (card->hw.fwid == SFID_FR508) ?
+        		fr508_send(card, chan->dlci, 0, skb->len, skb->data) :
+        		fr502_send(card, chan->dlci, 0, skb->len, skb->data);
+
+			if (err) 
+			{
+				if (card->intr_mode == DLCI_LIST_INTR_MODE) 
+				{
+					dlci_interface->gen_interrupt |= 0x40;
+					dlci_interface->packet_length = skb->len;	
+				} 
+                		dev->tbusy = 1;
+				chan->tick_counter = jiffies;
+            			adptr_flags->imask |= 0x02;
+				retry = 1;
+           			++ chan->if_send_adptr_bfrs_full;
+				++ chan->ifstats.tx_errors;
+            			++ card->wandev.stats.tx_errors;
+			} 
+			else
+			{
+				++ chan->if_send_bfrs_passed_to_adptr;
+				++chan->ifstats.tx_packets;
+				++card->wandev.stats.tx_packets;
+			}
 		}
 	}
-	if (!retry) {
+
+	if (!retry)
 		dev_kfree_skb(skb, FREE_WRITE);
-		dev->tbusy = 0;
-	}
+
 	card->wandev.critical = 0;
+	save_flags(host_cpu_flags);
+	cli();
+        if ((!(--card->irq_dis_if_send_count)) && (!card->irq_dis_poll_count))
+        	enable_irq(card->hw.irq);
+	restore_flags(host_cpu_flags);
 	return retry;
 }
+
+/*
+ *	If incoming is 0 (outgoing)- if the net numbers is ours make it 0
+ *	if incoming is 1 - if the net number is 0 make it ours 
+ *
+ */
+ 
+static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_number, unsigned char incoming)
+{
+	unsigned long pnetwork_number;
+
+	pnetwork_number = (unsigned long)((sendpacket[14] << 24) + 
+			  (sendpacket[15] << 16) + (sendpacket[16] << 8) + 
+			  sendpacket[17]);
+
+	if (!incoming) {
+		if( pnetwork_number == network_number) {
+			sendpacket[14] = sendpacket[15] = sendpacket[16] = 
+					 sendpacket[17] = 0x00;
+		}
+	} else {
+		if( pnetwork_number == 0) {
+			sendpacket[14] = (unsigned char)(network_number >> 24);
+			sendpacket[15] = (unsigned char)((network_number & 
+					 0x00FF0000) >> 16);
+			sendpacket[16] = (unsigned char)((network_number & 
+					 0x0000FF00) >> 8);
+			sendpacket[17] = (unsigned char)(network_number & 
+					 0x000000FF);
+		}
+	}
+
+
+	pnetwork_number = (unsigned long)((sendpacket[26] << 24) + 
+			  (sendpacket[27] << 16) + (sendpacket[28] << 8) + 
+			  sendpacket[29]);
+
+	if( !incoming ) {
+		if( pnetwork_number == network_number) {
+			sendpacket[26] = sendpacket[27] = sendpacket[28] = 
+					 sendpacket[29] = 0x00;
+		}
+	} else {
+		if( pnetwork_number == 0 ) {
+			sendpacket[26] = (unsigned char)(network_number >> 24);
+			sendpacket[27] = (unsigned char)((network_number & 
+					 0x00FF0000) >> 16);
+			sendpacket[28] = (unsigned char)((network_number & 
+					 0x0000FF00) >> 8);
+			sendpacket[29] = (unsigned char)(network_number & 
+					 0x000000FF);
+		}
+	}
+} /* switch_net_numbers */
 
 
 /*============================================================================
  * Get ethernet-style interface statistics.
  * Return a pointer to struct enet_statistics.
  */
-static struct enet_statistics *if_stats(struct device *dev)
+static struct net_device_stats *if_stats(struct device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 
@@ -714,18 +1199,19 @@ static void fr502_isr(sdla_t * card)
 {
 	fr502_flags_t *flags = card->flags;
 
-	switch (flags->iflag) {
-	case 0x01:		/* receive interrupt */
-		fr502_rx_intr(card);
-		break;
+	switch (flags->iflag) 
+	{
+		case 0x01:		/* receive interrupt */
+			fr502_rx_intr(card);
+			break;
 
-	case 0x02:		/* transmit interrupt */
-		flags->imask &= ~0x02;
-		tx_intr(card);
-		break;
+		case 0x02:		/* transmit interrupt */
+			flags->imask &= ~0x02;
+			tx_intr(card);
+			break;
 
-	default:
-		spur_intr(card);
+		default:
+			spur_intr(card);
 	}
 	flags->iflag = 0;
 }
@@ -737,36 +1223,186 @@ static void fr508_isr(sdla_t * card)
 {
 	fr508_flags_t *flags = card->flags;
 	fr_buf_ctl_t *bctl;
+	char *ptr = &flags->iflag;
+	struct device* dev = card->wandev.dev;
+	struct device* dev2;
+	int i;
+	unsigned long host_cpu_flags;
+	unsigned disable_tx_intr =1;
+	fr_channel_t* chan;
+	fr_dlci_interface_t* dlci_interface;	
 
-	if (int_occur) {
-#ifdef _DEBUG_
-		printk(KERN_INFO "%s:Interrupt Occurred within an ISR\n", card->devname);
-#endif
+	/* This flag prevents nesting of interrupts.  See sdla_isr() routine
+         * in sdlamain.c. 
+	 */
+	card->in_isr = 1;
+	
+	++card->statistics.isr_entry;
+
+	if (test_and_set_bit(0, (void*)&card->wandev.critical)) 
+	{
+ 		printk(KERN_INFO "fr508_isr: %s, wandev.critical set to 0x%02X, int type = 0x%02X\n", card->devname, card->wandev.critical, flags->iflag);
+		++card->statistics.isr_already_critical;
+		card->in_isr = 0;
 		return;
 	}
 	int_occur = 1;
+
+	/* For all interrupts set the critical flag to CRITICAL_RX_INTR.
+         * If the if_send routine is called with this flag set it will set
+         * the enable transmit flag to 1. (for a delayed interrupt)
+         */
+	card->wandev.critical = CRITICAL_IN_ISR;
+
+	card->dlci_int_mode_unbusy = 0;
+	card->buff_int_mode_unbusy = 0;	
+
 	switch (flags->iflag) {
-	case 0x01:		/* receive interrupt */
-		fr508_rx_intr(card);
-		break;
+		case 0x01:  /* receive interrupt */
+	    		++card->statistics.isr_rx;
+            		fr508_rx_intr(card);
+            		break;
 
-	case 0x02:		/* transmit interrupt */
-		bctl = (void *) (flags->tse_offs - FR_MB_VECTOR +
-				 card->hw.dpmbase);
-		bctl->flag = 0x90;	/* disable further Tx interrupts */
-		tx_intr(card);
-		break;
+		case 0x02:  /* transmit interrupt */
+	    		++card->statistics.isr_tx;  
+	    		bctl = (void*)(flags->tse_offs - FR_MB_VECTOR + 
+				card->hw.dpmbase);
+			bctl->flag = 0xA0;
+		
+			if (card->intr_mode == DLCI_LIST_INTR_MODE )
+			{
+				/* Find the structure and make it unbusy */
+				dev = find_channel( card, flags->dlci);
+				dev->tbusy = 0;
 
-	default:
-		spur_intr(card);
-	}
-	int_occur = 0;
+				/* This is used to perform devtint at the
+				 * end of the isr 
+				 */
+				card->dlci_int_mode_unbusy = 1;
+	
+				/* check to see if any other interfaces are
+				 * busy. If so then do not disable the tx
+				 * interrupts 
+				 */		 
+				for (dev2 = card->wandev.dev; dev2; 
+						dev2 = dev2->slave)
+				{
+					if ( dev2->tbusy == 1)
+					{
+						disable_tx_intr = 0;
+						break;
+            				}
+				}
+				if (disable_tx_intr)
+					flags->imask &= ~0x02;
+				  
+			}
+			else if (card->intr_mode == BUFFER_INTR_MODE) 
+			{
+				for (dev2 = card->wandev.dev; dev2; 
+							dev2 = dev2->slave) 
+				{
+					if ( !dev2 || !dev2->start ) 
+					{
+						++card->statistics.
+						tx_intr_dev_not_started;
+						continue;
+					}
+					if(dev2->tbusy)
+					{
+						card->buff_int_mode_unbusy = 1;
+						((fr_channel_t*)dev2->priv)->dev_pending_devtint = 1;
+						dev2->tbusy = 0;
+					} else 
+						((fr_channel_t*)dev2->priv)->dev_pending_devtint = 0;
+				}
+				flags->imask &= ~0x02;	
+			}
+            		break;
+
+		case 0x08:
+	    		Intr_test_counter++;
+			++card->statistics.isr_intr_test;
+	    		break;	
+
+		default:
+	    		++card->statistics.isr_spurious;
+            		spur_intr(card);
+	    		printk(KERN_INFO "%s: Interrupt Type 0x%02X!\n", 
+				card->devname, flags->iflag);
+	    
+			printk(KERN_INFO "%s: ID Bytes = ",card->devname);
+ 	    		for(i = 0; i < 8; i ++)
+				printk(KERN_INFO "0x%02X ", *(ptr + 0x28 + i));
+	   	 	printk(KERN_INFO "\n");	
+            
+			break;
+    	}
+
+	card->wandev.critical = CRITICAL_INTR_HANDLED;
+	if (card->wandev.enable_tx_int) 
+	{
+		if( card->intr_mode == DLCI_LIST_INTR_MODE )
+		{	
+			for (dev2 = card->wandev.dev; dev2; dev2 = dev2->slave)
+			{
+	 			chan = dev2->priv;
+				if ( chan->tx_int_status == 
+						WAITING_TO_BE_ENABLED ) 
+				{
+					dlci_interface = 
+						chan->dlci_int_interface;
+					dlci_interface->gen_interrupt |= 0x40;
+					dlci_interface->packet_length = 
+							chan->pkt_length;	
+					chan->tx_int_status = DISABLED;
+				}
+			}
+		}
+		card->wandev.enable_tx_int = 0;
+		flags->imask |= 0x02;
+		++card->statistics.isr_enable_tx_int;
+   	}
+	save_flags(host_cpu_flags);
+	cli();
+	card->in_isr = 0;
+	card->wandev.critical = 0xD1;
 	flags->iflag = 0;
+	card->wandev.critical = 0;
+	restore_flags(host_cpu_flags);
+
+	/*
+	 *	Device is now ready to send. The instant this is executed the If_Send
+	 *	routine is called. That is why this is put at the bottom of the ISR
+	 *	to prevent a endless loop condition caused by repeated Interrupts and
+	 *	enable_tx_int flag.
+	 */
+
+	if(card->dlci_int_mode_unbusy)
+		dev_tint(dev);
+	
+	if(card->buff_int_mode_unbusy)
+	{
+		for (;;) 
+		{
+			if (((fr_channel_t*)((card->devs_struct)->dev_ptr)->priv)->dev_pending_devtint == 1){
+		
+				((fr_channel_t*)((card->devs_struct)->dev_ptr)->priv)->dev_pending_devtint=0;
+				dev_tint((card->devs_struct)->dev_ptr);
+			}
+			if ((card->devs_struct)->next == card->dev_to_devtint_next)
+				break;
+			card->devs_struct = (card->devs_struct)->next;
+		}
+		card->devs_struct = (card->dev_to_devtint_next)->next;
+		card->dev_to_devtint_next = card->devs_struct; 
+	}
 }
 
 /*============================================================================
  * Receive interrupt handler.
  */
+
 static void fr502_rx_intr(sdla_t * card)
 {
 	fr_mbox_t *mbox = card->rxmb;
@@ -787,12 +1423,12 @@ static void fr502_rx_intr(sdla_t * card)
 		/* Invalid channel, discard packet */
 		printk(KERN_INFO "%s: receiving on orphaned DLCI %d!\n",
 		       card->devname, dlci);
-		goto rx_done;
+		sdla_mapmem(&card->hw, FR_MB_VECTOR);
 	}
 	chan = dev->priv;
 	if (!dev->start) {
 		++chan->ifstats.rx_dropped;
-		goto rx_done;
+		sdla_mapmem(&card->hw, FR_MB_VECTOR);
 	}
 	/* Allocate socket buffer */
 	skb = dev_alloc_skb(len);
@@ -800,7 +1436,7 @@ static void fr502_rx_intr(sdla_t * card)
 		printk(KERN_INFO "%s: no socket buffers available!\n",
 		       card->devname);
 		++chan->ifstats.rx_dropped;
-		goto rx_done;
+		sdla_mapmem(&card->hw, FR_MB_VECTOR);
 	}
 	/* Copy data to the socket buffer */
 	buf = skb_put(skb, len);
@@ -820,7 +1456,6 @@ static void fr502_rx_intr(sdla_t * card)
 		++chan->ifstats.rx_packets;
 		++card->wandev.stats.rx_packets;
 	}
-      rx_done:
 	sdla_mapmem(&card->hw, FR_MB_VECTOR);
 }
 
@@ -835,68 +1470,133 @@ static void fr508_rx_intr(sdla_t * card)
 	fr_channel_t *chan;
 	unsigned dlci, len, offs;
 	void *buf;
+	unsigned rx_count = 0;
+	fr508_flags_t* flags = card->flags;
+	char *ptr = &flags->iflag;
+	int i, err;
 
 	if (frbuf->flag != 0x01) {
 		printk(KERN_INFO "%s: corrupted Rx buffer @ 0x%X!\n",
 		       card->devname, (unsigned) frbuf);
+		printk(KERN_INFO "%s: ID Bytes = ",card->devname);
+ 		for(i = 0; i < 8; i ++)
+			printk(KERN_INFO "0x%02X ", *(ptr + 0x28 + i));
+		printk(KERN_INFO "\n");
+	
+		++card->statistics.rx_intr_corrupt_rx_bfr;
 		return;
 	}
-	len = frbuf->length;
-	dlci = frbuf->dlci;
-	offs = frbuf->offset;
 
-	/* Find network interface for this packet */
-	dev = find_channel(card, dlci);
-	if (dev == NULL) {
-		/* Invalid channel, discard packet */
-		printk(KERN_INFO "%s: receiving on orphaned DLCI %d!\n",
-		       card->devname, dlci);
-		goto rx_done;
-	}
-	chan = dev->priv;
-	if (!dev->start) {
-		++chan->ifstats.rx_dropped;
-		goto rx_done;
-	}
-	/* Allocate socket buffer */
-	skb = dev_alloc_skb(len);
-	if (skb == NULL) {
-		printk(KERN_INFO "%s: no socket buffers available!\n",
-		       card->devname);
-		++chan->ifstats.rx_dropped;
-		goto rx_done;
-	}
-	/* Copy data to the socket buffer */
-	if ((offs + len) > card->u.f.rx_top + 1) {
-		unsigned tmp = card->u.f.rx_top - offs + 1;
+	do
+	{
+		len  = frbuf->length;
+		dlci = frbuf->dlci;
+		offs = frbuf->offset;
 
-		buf = skb_put(skb, tmp);
-		sdla_peek(&card->hw, offs, buf, tmp);
-		offs = card->u.f.rx_base;
-		len -= tmp;
-	}
-	buf = skb_put(skb, len);
-	sdla_peek(&card->hw, offs, buf, len);
-	/* Decapsulate packet and pass it up the protocol stack */
-	skb->dev = dev;
-	buf = skb_pull(skb, 1);	/* remove hardware header */
-	if (!wan_type_trans(skb, dev)) {
-		/* can't decapsulate packet */
-		dev_kfree_skb(skb, FREE_READ);
-		++chan->ifstats.rx_errors;
-		++card->wandev.stats.rx_errors;
-	} else {
-		netif_rx(skb);
-		++chan->ifstats.rx_packets;
-		++card->wandev.stats.rx_packets;
-	}
-      rx_done:
-	/* Release buffer element and calculate a pointer to the next one */
-	frbuf->flag = 0;
-	card->rxmb = ++frbuf;
-	if ((void *) frbuf > card->u.f.rxmb_last)
-		card->rxmb = card->u.f.rxmb_base
-		    ;
+		/* Find network interface for this packet */
+		dev = find_channel(card, dlci);
+		chan = dev->priv;
+        
+		if (dev == NULL) 
+		{
+			/* Invalid channel, discard packet */
+			printk(KERN_INFO "%s: receiving on orphaned DLCI %d!\n"
+				, card->devname, dlci);
+			++card->statistics.rx_intr_on_orphaned_DLCI; 
+        	}
+		else
+		{
+	   		skb = dev_alloc_skb(len); 
+ 			if (!dev->start || (skb == NULL)) 
+ 			{ 
+				++chan->ifstats.rx_dropped;
+				if(dev->start) 
+				{
+					printk(KERN_INFO 
+					"%s: no socket buffers available!\n", 
+					card->devname);
+		    			++chan->rx_intr_no_socket;
+                		
+				} 
+				else
+					++ chan->rx_intr_dev_not_started;
+			} 
+			else
+			{
+				/* Copy data to the socket buffer */
+				if ((offs + len) > card->u.f.rx_top + 1) 
+				{
+					unsigned tmp = card->u.f.rx_top - 
+							offs + 1;
+
+					buf = skb_put(skb, tmp);
+					sdla_peek(&card->hw, offs, buf, tmp);
+					offs = card->u.f.rx_base;
+                    			len -= tmp;
+                		}
+
+				buf = skb_put(skb, len);
+				sdla_peek(&card->hw, offs, buf, len);
+#ifdef CONFIG_SANGOMA_MANAGER
+				if (management_check(skb,card))
+				{
+					++chan->rx_intr_DRVSTATS_request;
+				}				
+				else
+#endif				
+				if (handle_IPXWAN(skb->data,card->devname, card->wandev.enable_IPX, card->wandev.network_number)) 
+				{
+					if (card->wandev.enable_IPX) 
+					{
+						fr508_send(card, dlci, 0, skb->len, skb->data);
+					} else {
+						/* increment some statistic! */
+					}
+				}
+				else 
+				{
+                    			/* Decapsulate packet and pass it up the
+				   	   protocol stack */
+					skb->dev = dev;
+
+					/* remove hardware header */
+					buf = skb_pull(skb, 1); 
+				
+					if (!wan_type_trans(skb, dev)) 
+					{
+						/* can't decapsulate packet */
+						dev_kfree_skb(skb, FREE_READ);
+						++chan->rx_intr_bfr_not_passed_to_stack;
+ 						++chan->ifstats.rx_errors;
+		                        	++card->wandev.stats.rx_errors;
+					}
+					else
+					{
+						netif_rx(skb);
+						++ chan->rx_intr_bfr_passed_to_stack;
+						++ chan->ifstats.rx_packets;
+						++ card->wandev.stats.rx_packets;
+					}
+                		}
+            		}
+       		}
+
+        	/* Release buffer element and calculate a pointer to the next 
+		   one */
+        	frbuf->flag = 0;
+		card->rxmb = ++frbuf;
+        
+		if ((void*)frbuf > card->u.f.rxmb_last)
+			card->rxmb = card->u.f.rxmb_base;
+
+		/* The loop put in is temporary, that is why the break is
+ 		 * placed here. (?????)
+		 */
+		break;
+
+	        frbuf = card->rxmb;
+
+    	} while (frbuf->flag && ((++ rx_count) < 4));
 }
 
 /*============================================================================
@@ -908,20 +1608,26 @@ static void fr508_rx_intr(sdla_t * card)
 static void tx_intr(sdla_t * card)
 {
 	struct device *dev = card->wandev.dev;
-	int v = 0;
 
-	for (; dev; dev = dev->slave) {
-		if (!dev || !dev->start)
-			continue;
-		v += dev->tbusy;
-		dev->tbusy = 0;
+	if (card->intr_mode == BUFFER_INTR_MODE) 
+	{ 
+		for (; dev; dev = dev->slave) 
+		{
+			if ( !dev || !dev->start ) 
+			{ 
+				++ card->statistics.tx_intr_dev_not_started;
+				continue;
+			}
+	
+			dev->tbusy = 0;
+			dev_tint(dev);
+		}
 	}
-	card->wandev.tx_int_enabled = 0;
-	if (v)
-		mark_bh(NET_BH);
-/*
-   printk(KERN_INFO "%s: transmit interrupt!\n", card->devname);
- */
+	else
+	{
+		dev->tbusy = 0;
+		dev_tint(dev);
+	}
 }
 
 /*============================================================================
@@ -934,6 +1640,105 @@ static void spur_intr(sdla_t * card)
 {
 	printk(KERN_INFO "%s: spurious interrupt!\n", card->devname);
 }
+
+/*
+  Return 0 for non-IPXWAN packet
+         1 for IPXWAN packet or IPX is not enabled!
+
+*/
+
+static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char enable_IPX, unsigned long network_number)
+{
+	int i;
+
+	if( sendpacket[1] == 0x00 &&
+	    sendpacket[2] == 0x80 &&
+	    sendpacket[6] == 0x81 &&
+	    sendpacket[7] == 0x37) { 
+
+		if(!enable_IPX) {
+			return 1;
+		}
+	} else {
+		return 0;
+	}
+
+	if( sendpacket[24] == 0x90 &&
+	    sendpacket[25] == 0x04)
+	{
+		if( sendpacket[10] == 0x02 &&
+		    sendpacket[42] == 0x00)
+		{
+			printk(KERN_INFO "%s: Received IPXWAN Timer Request packet\n",devname);
+
+			for(i = 49; sendpacket[i] == 0x00; i += 5)
+			{
+				if( sendpacket[i + 4] != 0x02)
+				{
+					sendpacket[i + 1] = 0;
+				}
+			}
+
+			if( sendpacket[i] == 0x04 )
+			{
+				i += 8;
+			}
+
+			for(; sendpacket[i] == 0x80 ;)
+			{
+				sendpacket[i + 1] = 0;
+				i += (sendpacket[i + 2] << 8) + (sendpacket[i + 3]) + 4;
+			}
+
+			sendpacket[42] = 0x01;
+
+			printk(KERN_INFO "%s: Sending IPXWAN Timer Response\n",devname);
+		}
+		else if( sendpacket[42] == 0x02 )
+		{
+			printk(KERN_INFO "%s: Received IPXWAN Information Request packet\n",devname);
+
+			sendpacket[42] = 0x03;
+
+			sendpacket[59] = 'F';
+			sendpacket[60] = 'P';
+			sendpacket[61] = 'I';
+			sendpacket[62] = 'P';
+			sendpacket[63] = 'E';
+			sendpacket[64] = '-';
+			sendpacket[65] = CVHexToAscii(network_number >> 28);
+			sendpacket[66] = CVHexToAscii((network_number & 0x0F000000)>> 24);
+			sendpacket[67] = CVHexToAscii((network_number & 0x00F00000)>> 20);
+			sendpacket[68] = CVHexToAscii((network_number & 0x000F0000)>> 16);
+			sendpacket[69] = CVHexToAscii((network_number & 0x0000F000)>> 12);
+			sendpacket[70] = CVHexToAscii((network_number & 0x00000F00)>> 8);
+			sendpacket[71] = CVHexToAscii((network_number & 0x000000F0)>> 4);
+			sendpacket[72] = CVHexToAscii(network_number & 0x0000000F);
+			for(i = 73; i < 107; i+= 1)
+			{
+				sendpacket[i] = 0;
+			}
+
+			printk(KERN_INFO "%s: Sending IPXWAN Information Response packet\n",devname);
+		}
+		else
+		{
+			printk(KERN_INFO "%s: Unknown IPXWAN packet!\n",devname);
+			return 0;
+		}
+
+		sendpacket[43] = (unsigned char)(network_number >> 24);
+		sendpacket[44] = (unsigned char)((network_number & 0x00FF0000) >> 16);
+		sendpacket[45] = (unsigned char)((network_number & 0x0000FF00) >> 8);
+		sendpacket[46] = (unsigned char)(network_number & 0x000000FF);
+
+		return 1;
+	}
+
+	switch_net_numbers(sendpacket, network_number ,1);
+	return 0;
+}
+
 
 /****** Background Polling Routines  ****************************************/
 
@@ -948,18 +1753,40 @@ static void spur_intr(sdla_t * card)
  * 1. This routine may be called on interrupt context with all interrupts
  *    enabled. Beware!
  */
+
 static void wpf_poll(sdla_t * card)
 {
-	static unsigned long last_poll;
-	fr502_flags_t *flags;
+	fr508_flags_t *flags;
+	unsigned long host_cpu_flags;
 
-	if ((jiffies - last_poll) < HZ)
-		return
-		    ;
+	++card->statistics.poll_entry;
 
-	flags = card->flags;
+ 	if (((jiffies - card->state_tick) < HZ) || 
+				(card->intr_mode == INTR_TEST_MODE))
+		return;
+
+	disable_irq(card->hw.irq);
+	++card->irq_dis_poll_count;
+
+	if (test_and_set_bit(0, (void *)&card->wandev.critical)) 
+	{
+		++ card->statistics.poll_already_critical;
+		save_flags(host_cpu_flags);
+		cli();
+		if ((!card->irq_dis_if_send_count) &&
+                		(!(--card->irq_dis_poll_count)))
+                	enable_irq(card->hw.irq);
+		restore_flags(host_cpu_flags);
+
+		return;
+	}
+
+	card->wandev.critical = 0x11;
+
+	++ card->statistics.poll_processed;
+
 	if (flags->event) {
-		fr_mbox_t *mbox = card->mbox;
+		fr_mbox_t* mbox = card->mbox;
 		int err;
 
 		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
@@ -968,8 +1795,18 @@ static void wpf_poll(sdla_t * card)
 		if (err)
 			fr_event(card, err, mbox);
 	}
-	last_poll = jiffies;
+
+	card->wandev.critical = 0;
+
+	save_flags(host_cpu_flags);
+	cli();
+        if ((!card->irq_dis_if_send_count) && (!(--card->irq_dis_poll_count)))
+		enable_irq(card->hw.irq);
+	restore_flags(host_cpu_flags);
+
+	card->state_tick = jiffies;
 }
+
 
 /****** Frame Relay Firmware-Specific Functions *****************************/
 
@@ -1005,23 +1842,47 @@ static int fr_configure(sdla_t * card, fr_conf_t * conf)
 {
 	fr_mbox_t *mbox = card->mbox;
 	int retry = MAX_CMD_RETRY;
-	int dlci = card->u.f.node_dlci;
 	int dlci_num = card->u.f.dlci_num;
 	int err, i;
 
 	do {
 		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
 		memcpy(mbox->data, conf, sizeof(fr_conf_t));
-		if (dlci_num)
-			for (i = 0; i < dlci_num; ++i)
-				((fr_conf_t *) mbox->data)->dlci[i] = dlci + i
-				    ;
+
+		if (dlci_num) for (i = 0; i < dlci_num; ++i)
+			((fr_conf_t*)mbox->data)->dlci[i] = 
+					card->u.f.node_dlci[i]; 
+		
 		mbox->cmd.command = FR_SET_CONFIG;
 		mbox->cmd.length =
 		    sizeof(fr_conf_t) + dlci_num * sizeof(short);
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
 	}
 	while (err && retry-- && fr_event(card, err, mbox));
+	return err;
+}
+
+/*============================================================================
+ * Set DLCI configuration.
+ */
+static int fr_dlci_configure (sdla_t* card, fr_dlc_conf_t *conf, unsigned dlci)
+{
+	fr_mbox_t* mbox = card->mbox;
+	int retry = MAX_CMD_RETRY;
+	int err;
+
+	do
+	{
+		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
+		memcpy(mbox->data, conf, sizeof(fr_dlc_conf_t));
+		mbox->cmd.dlci = (unsigned short) dlci; 
+		mbox->cmd.command = FR_SET_CONFIG;
+		mbox->cmd.length = 0x0E;
+
+		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
+	
+	} while (err && retry--);
+	
 	return err;
 }
 
@@ -1112,12 +1973,12 @@ static int fr_get_err_stats(sdla_t * card)
 	while (err && retry-- && fr_event(card, err, mbox));
 
 	if (!err) {
-		fr_comm_stat_t *stats = (void *) mbox->data;
+		fr_comm_stat_t* stats = (void*)mbox->data;
 
-		card->wandev.stats.rx_over_errors = stats->rx_overruns;
-		card->wandev.stats.rx_crc_errors = stats->rx_bad_crc;
-		card->wandev.stats.rx_missed_errors = stats->rx_aborts;
-		card->wandev.stats.rx_length_errors = stats->rx_too_long;
+		card->wandev.stats.rx_over_errors    = stats->rx_overruns;
+		card->wandev.stats.rx_crc_errors     = stats->rx_bad_crc;
+		card->wandev.stats.rx_missed_errors  = stats->rx_aborts;
+		card->wandev.stats.rx_length_errors  = stats->rx_too_long;
 		card->wandev.stats.tx_aborted_errors = stats->tx_aborts;
 	}
 	return err;
@@ -1153,6 +2014,7 @@ static int fr_get_stats(sdla_t * card)
 /*============================================================================
  * Add DLCI(s) (Access Node only!). 
  */
+ 
 static int fr_add_dlci(sdla_t * card, int dlci, int num)
 {
 	fr_mbox_t *mbox = card->mbox;
@@ -1164,8 +2026,8 @@ static int fr_add_dlci(sdla_t * card, int dlci, int num)
 
 		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
 		for (i = 0; i < num; ++i)
-			dlci_list[i] = dlci + i
-			    ;
+			dlci_list[i] = card->u.f.node_dlci[i];
+
 		mbox->cmd.length = num * sizeof(short);
 		mbox->cmd.command = FR_ADD_DLCI;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
@@ -1188,8 +2050,8 @@ static int fr_activate_dlci(sdla_t * card, int dlci, int num)
 
 		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
 		for (i = 0; i < num; ++i)
-			dlci_list[i] = dlci + i
-			    ;
+			dlci_list[i] = card->u.f.node_dlci[i];
+
 		mbox->cmd.length = num * sizeof(short);
 		mbox->cmd.command = FR_ACTIVATE_DLCI;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
@@ -1262,13 +2124,8 @@ static int fr508_send(sdla_t * card, int dlci, int attr, int len, void *buf)
 	if (!err) {
 		fr_buf_ctl_t *frbuf = (void *) (*(unsigned long *) mbox->data -
 					FR_MB_VECTOR + card->hw.dpmbase);
-		unsigned long flags;
-
-		save_flags(flags);
-		cli();
 		sdla_poke(&card->hw, frbuf->offset, buf, len);
 		frbuf->flag = 0x01;
-		restore_flags(flags);
 	}
 	return err;
 }
@@ -1284,33 +2141,51 @@ static int fr508_send(sdla_t * card, int dlci, int attr, int len, void *buf)
  */
 static int fr_event(sdla_t * card, int event, fr_mbox_t * mbox)
 {
-	switch (event) {
-	case FRRES_MODEM_FAILURE:
-		return fr_modem_failure(card, mbox);
+	fr508_flags_t* flags = card->flags;
+	char *ptr = &flags->iflag;
+	int i;
 
-	case FRRES_CHANNEL_DOWN:
-		wanpipe_set_state(card, WAN_DISCONNECTED);
-		return 1;
+	switch (event) 
+	{
+		case FRRES_MODEM_FAILURE:
+			return fr_modem_failure(card, mbox);
 
-	case FRRES_CHANNEL_UP:
-		wanpipe_set_state(card, WAN_CONNECTED);
-		return 1;
+		case FRRES_CHANNEL_DOWN:
+			wanpipe_set_state(card, WAN_DISCONNECTED);
+			return 1;
 
-	case FRRES_DLCI_CHANGE:
-		return fr_dlci_change(card, mbox);
+		case FRRES_CHANNEL_UP:
+			wanpipe_set_state(card, WAN_CONNECTED);
+			return 1;
 
-	case FRRES_DLCI_MISMATCH:
-		printk(KERN_INFO "%s: DLCI list mismatch!\n", card->devname);
-		return 1;
+		case FRRES_DLCI_CHANGE:
+			return fr_dlci_change(card, mbox);
 
-	case CMD_TIMEOUT:
-		printk(KERN_ERR "%s: command 0x%02X timed out!\n",
-		       card->devname, mbox->cmd.command);
-		break;
+		case FRRES_DLCI_MISMATCH:
+			printk(KERN_INFO "%s: DLCI list mismatch!\n", card->devname);
+			return 1;
 
-	default:
-		printk(KERN_INFO "%s: command 0x%02X returned 0x%02X!\n",
-		       card->devname, mbox->cmd.command, event);
+		case CMD_TIMEOUT:
+			printk(KERN_ERR "%s: command 0x%02X timed out!\n",
+			       card->devname, mbox->cmd.command);
+			printk(KERN_INFO "%s: ID Bytes = ",card->devname);
+ 	    		for(i = 0; i < 8; i ++)
+				printk(KERN_INFO "0x%02X ", *(ptr + 0x28 + i));
+	   	 	printk(KERN_INFO "\n");	
+            		break;
+
+		case FRRES_DLCI_INACTIVE:
+			printk(KERN_ERR "%s: DLCI %u is inactive!\n", 
+				card->devname, mbox->cmd.dlci);
+			break;
+ 
+		case FRRES_CIR_OVERFLOW:
+			break;
+		case FRRES_BUFFER_OVERFLOW:
+			break; 
+		default:
+			printk(KERN_INFO "%s: command 0x%02X returned 0x%02X!\n",
+				card->devname, mbox->cmd.command, event);
 	}
 	return 0;
 }
@@ -1324,10 +2199,11 @@ static int fr_modem_failure(sdla_t * card, fr_mbox_t * mbox)
 {
 	printk(KERN_INFO "%s: physical link down! (modem error 0x%02X)\n",
 	       card->devname, mbox->data[0]);
-	switch (mbox->cmd.command) {
-	case FR_WRITE:
-	case FR_READ:
-		return 0;
+	switch (mbox->cmd.command) 
+	{
+		case FR_WRITE:
+		case FR_READ:
+			return 0;
 	}
 	return 1;
 }
@@ -1341,24 +2217,90 @@ static int fr_dlci_change(sdla_t * card, fr_mbox_t * mbox)
 {
 	dlci_status_t *status = (void *) mbox->data;
 	int cnt = mbox->cmd.length / sizeof(dlci_status_t);
-
+	fr_dlc_conf_t cfg;
+	fr_channel_t *chan;
+	struct device* dev2;
+	
 	for (; cnt; --cnt, ++status) {
 		unsigned short dlci = status->dlci;
 		struct device *dev = find_channel(card, dlci);
 
-		if (status->state & 0x01) {
-			printk(KERN_INFO
-			       "%s: DLCI %u has been deleted!\n",
-			       card->devname, dlci);
-			if (dev && dev->start)
-				set_chan_state(dev, WAN_DISCONNECTED);
-		} else if (status->state & 0x02) {
-			printk(KERN_INFO
-			       "%s: DLCI %u becomes active!\n",
-			       card->devname, dlci);
-			if (dev && dev->start)
-				set_chan_state(dev, WAN_CONNECTED);
+		if (dev == NULL)
+		{
+			printk(KERN_INFO "%s: CPE contains unconfigured DLCI= %d\n", 
+				card->devname, dlci); 	
 		}
+		else
+		{
+			if (status->state & 0x01) 
+			{
+				printk(KERN_INFO
+				       "%s: DLCI %u has been deleted!\n",
+				       card->devname, dlci);
+				if (dev && dev->start)
+					set_chan_state(dev, WAN_DISCONNECTED);
+			}
+			else if (status->state & 0x02) 
+			{
+				printk(KERN_INFO
+					"%s: DLCI %u becomes active!\n",
+					card->devname, dlci);
+				chan = dev->priv;
+				/* This flag is used for configuring specific 
+				   DLCI(s) when they become active.
+			 	*/ 
+				chan->dlci_configured = DLCI_CONFIG_PENDING;
+			
+				if (dev && dev->start)
+					set_chan_state(dev, WAN_CONNECTED);
+			}
+		}
+	}
+	
+	for (dev2 =card->wandev.dev; dev2; dev2 = dev2->slave)
+	{	
+		chan = dev2->priv;
+		
+		if (chan->dlci_configured == DLCI_CONFIG_PENDING)
+		{
+			memset(&cfg, 0, sizeof(cfg));
+	
+			if ( chan->cir_status == CIR_DISABLED) 
+			{
+				cfg.cir_fwd = cfg.cir_bwd  = 16;
+				cfg.bc_fwd = cfg.bc_bwd = 16;
+				cfg.conf_flags = 0x0001;	
+				printk(KERN_INFO "%s: CIR Disabled for %s\n", 
+					card->devname, chan->name);	
+			}
+			else if (chan->cir_status == CIR_ENABLED) 
+			{	
+				cfg.cir_fwd = cfg.cir_bwd = chan->cir;
+				cfg.bc_fwd  = cfg.bc_bwd  = chan->bc;
+				cfg.be_fwd  = cfg.be_bwd  = chan->be;
+				cfg.conf_flags = 0x0000;
+				printk(KERN_INFO "%s: CIR Enabled for %s\n",
+					card->devname, chan->name);
+			
+			}
+			
+			if (fr_dlci_configure( card, &cfg , chan->dlci))
+			{
+				printk(KERN_INFO 
+					"%s: DLCI Configure failed for %d\n",
+					card->devname, chan->dlci);
+				return 1;	
+			}
+			
+			chan->dlci_configured = DLCI_CONFIGURED;
+			
+			/*
+			 *	Read the interface byte mapping into the channel 
+			 *	structure.
+			 */
+			if (card->intr_mode == DLCI_LIST_INTR_MODE)
+				read_DLCI_IB_mapping( card, chan );
+		}		
 	}
 	return 1;
 }
@@ -1375,6 +2317,7 @@ static int update_chan_state(struct device *dev)
 	fr_mbox_t *mbox = card->mbox;
 	int retry = MAX_CMD_RETRY;
 	int err;
+	int dlci_found = 0;
 
 	do {
 		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
@@ -1387,12 +2330,19 @@ static int update_chan_state(struct device *dev)
 		unsigned short *list = (void *) mbox->data;
 		int cnt = mbox->cmd.length / sizeof(short);
 
-		for (; cnt; --cnt, ++list) {
-			if (*list == chan->dlci) {
+		for (; cnt; --cnt, ++list) 
+		{
+			if (*list == chan->dlci) 
+			{
+				dlci_found = 1;
 				set_chan_state(dev, WAN_CONNECTED);
 				break;
 			}
 		}
+
+		if(!dlci_found) 
+			printk(KERN_INFO "%s: DLCI %u is inactive\n", 
+				card->devname, chan->dlci);
 	}
 	return err;
 }
@@ -1408,22 +2358,25 @@ static void set_chan_state(struct device *dev, int state)
 
 	save_flags(flags);
 	cli();
-	if (chan->state != state) {
-		switch (state) {
-		case WAN_CONNECTED:
-			printk(KERN_INFO "%s: interface %s connected!\n",
-			       card->devname, dev->name);
-			break;
 
-		case WAN_CONNECTING:
-			printk(KERN_INFO "%s: interface %s connecting...\n",
-			       card->devname, dev->name);
-			break;
-
-		case WAN_DISCONNECTED:
-			printk(KERN_INFO "%s: interface %s disconnected!\n",
-			       card->devname, dev->name);
-			break;
+	if (chan->state != state) 
+	{
+		switch (state) 
+		{
+			case WAN_CONNECTED:
+				printk(KERN_INFO "%s: interface %s connected!\n"
+					, card->devname, dev->name);
+				break;
+			case WAN_CONNECTING:
+				printk(KERN_INFO 
+					"%s: interface %s connecting...\n",
+					card->devname, dev->name);
+				break;
+			case WAN_DISCONNECTED:
+				printk (KERN_INFO 
+					"%s: interface %s disconnected!\n",
+					card->devname, dev->name);
+				break;
 		}
 		chan->state = state;
 	}
@@ -1452,20 +2405,19 @@ static struct device *find_channel(sdla_t * card, unsigned dlci)
  * Return:	1 - Tx buffer(s) available
  *		0 - no buffers available
  */
+
 static int is_tx_ready(sdla_t * card)
 {
-	if (card->hw.fwid == SFID_FR508) {
-		fr508_flags_t *flags = card->flags;
+	if (card->hw.fwid == SFID_FR508) 
+	{
 		unsigned char sb = inb(card->hw.port);
 
 		if (sb & 0x02)
 			return 1;
-		flags->imask |= 0x02;
-		card->wandev.tx_int_enabled = 1;
 	} else {
-		fr502_flags_t *flags = card->flags;
+		fr502_flags_t* flags = card->flags;
 
-		if (flags->tx_ready)
+		if (flags->tx_ready) 
 			return 1;
 		flags->imask |= 0x02;
 	}
@@ -1485,6 +2437,112 @@ static unsigned int dec_to_uint(unsigned char *str, int len)
 	for (val = 0; len && is_digit(*str); ++str, --len)
 		val = (val * 10) + (*str - (unsigned) '0');
 	return val;
+}
+
+/*==============================================================================
+ * Perform the Interrupt Test by running the READ_CODE_VERSION command MAX_INTR_
+ * TEST_COUNTER times.
+ */
+static int intr_test( sdla_t* card )
+{
+	fr_mbox_t* mb = card->mbox;
+	int err,i;
+
+	/*
+	 *	 The critical flag is unset here because we want to get into the
+	 *	ISR without the flag already set. The If_open sets the flag.
+	 */
+	 
+	card->wandev.critical = 0;
+
+	err = fr_set_intr_mode( card, 0x08, card->wandev.mtu );
+	
+	if (err == CMD_OK) 
+	{
+		for ( i = 0; i < MAX_INTR_TEST_COUNTER; i++ ) 
+		{
+ 			/* Run command READ_CODE_VERSION */
+			memset(&mb->cmd, 0, sizeof(fr_cmd_t));
+			mb->cmd.length  = 0;
+			mb->cmd.command = 0x40;
+			err = sdla_exec(mb) ? mb->cmd.result : CMD_TIMEOUT;
+			
+			if (err != CMD_OK) 
+				fr_event(card, err, mb);
+		}
+	}
+	else
+		return err;	
+
+	err = fr_set_intr_mode( card, 0, card->wandev.mtu );
+
+	if( err != CMD_OK ) 
+		return err;
+
+	card->wandev.critical = 1;
+	return 0;
+}
+
+/*==============================================================================
+ * Initializes the Statistics values in the Sdla_t structure.
+ */
+
+void init_global_statistics( sdla_t* card )
+{
+	/* Intialize global statistics for a card */
+	card->statistics.isr_entry 		  = 0;
+	card->statistics.isr_already_critical 	  = 0;
+	card->statistics.isr_rx			  = 0;
+	card->statistics.isr_tx			  = 0;
+	card->statistics.isr_intr_test		  = 0;
+	card->statistics.isr_spurious		  = 0;
+	card->statistics.isr_enable_tx_int	  = 0;
+	card->statistics.rx_intr_corrupt_rx_bfr	  = 0;
+	card->statistics.rx_intr_on_orphaned_DLCI = 0;
+	card->statistics.tx_intr_dev_not_started  = 0;
+	card->statistics.poll_entry		  = 0;
+	card->statistics.poll_already_critical	  = 0;
+	card->statistics.poll_processed		  = 0;
+}
+
+static void read_DLCI_IB_mapping( sdla_t* card, fr_channel_t* chan )
+{
+	fr_mbox_t* mbox = card->mbox;
+	int retry = MAX_CMD_RETRY;	
+	dlci_IB_mapping_t* result; 
+	int err, counter, found;	
+
+	do {
+		memset(&mbox->cmd, 0, sizeof(fr_cmd_t));
+		mbox->cmd.command = FR_READ_DLCI_IB_MAPPING;
+		
+		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
+	
+	} while (err && retry-- && fr_event(card, err, mbox));
+
+	if( mbox->cmd.result != 0)
+		printk(KERN_INFO "%s: Read DLCI IB Mapping failed\n", 
+			chan->name);
+
+	counter = mbox->cmd.length / sizeof(dlci_IB_mapping_t);
+	result = (void *)mbox->data;
+	
+	found = 0;
+	for (; counter; --counter, ++result) {
+		if ( result->dlci == chan->dlci ) {
+			printk( KERN_INFO "%s: DLCI= %d, IB addr = %lx for %s\n"
+				,card->devname,result->dlci, result->addr_value
+				,chan->name);
+			chan->IB_addr = result->addr_value;
+			chan->dlci_int_interface = (void*)(card->hw.dpmbase + 
+					( chan->IB_addr & 0x00001FFF));
+			found = 1;
+			break;	
+		} 
+	}
+	if (!found)
+		printk( KERN_INFO "%s: DLCI %d not found by IB MAPPING cmd\n", 
+		card->devname, chan->dlci);
 }
 
 /****** End *****************************************************************/

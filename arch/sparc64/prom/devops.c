@@ -1,4 +1,4 @@
-/* $Id: devops.c,v 1.2 1997/02/25 12:40:20 jj Exp $
+/* $Id: devops.c,v 1.3 1997/10/29 07:43:28 ecd Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -13,7 +13,7 @@
 
 /* Open the device described by the string 'dstr'.  Returns the handle
  * to that device used for subsequent operations on that device.
- * Returns -1 on failure.
+ * Returns 0 on failure.
  */
 int
 prom_devopen(char *dstr)

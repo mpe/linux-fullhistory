@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.6 1997/08/12 16:32:48 davem Exp $
+/* $Id: tree.c,v 1.10 1998/01/10 22:39:00 ecd Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -195,6 +195,7 @@ int
 prom_getname (int node, char *buffer, int len)
 {
 	int i, sbus = 0;
+	int pci = 0, ebus = 0, ide = 0;
 	struct linux_prom_registers *reg;
 	struct linux_prom64_registers reg64[PROMREG_MAX];
 	
@@ -203,9 +204,37 @@ prom_getname (int node, char *buffer, int len)
 		if (i > 0) {
 			buffer [i] = 0;
 			if (!strcmp (buffer, "sbus"))
-				break;
+				goto getit;
 		}
 	}
+	if ((pci = prom_getparent (node))) {
+		i = prom_getproperty (pci, "name", buffer, len);
+		if (i > 0) {
+			buffer [i] = 0;
+			if (!strcmp (buffer, "pci"))
+				goto getit;
+		}
+		pci = 0;
+	}
+	if ((ebus = prom_getparent (node))) {
+		i = prom_getproperty (ebus, "name", buffer, len);
+		if (i > 0) {
+			buffer[i] = 0;
+			if (!strcmp (buffer, "ebus"))
+				goto getit;
+		}
+		ebus = 0;
+	}
+	if ((ide = prom_getparent (node))) {
+		i = prom_getproperty (ide, "name", buffer, len);
+		if (i > 0) {
+			buffer [i] = 0;
+			if (!strcmp (buffer, "ide"))
+				goto getit;
+		}
+		ide = 0;
+	}
+getit:
 	i = prom_getproperty (node, "name", buffer, len);
 	if (i <= 0) {
 		buffer [0] = 0;
@@ -220,8 +249,28 @@ prom_getname (int node, char *buffer, int len)
 	if (sbus) {
 		reg = (struct linux_prom_registers *)reg64;
 		sprintf (buffer, "@%x,%x", reg[0].which_io, (uint)reg[0].phys_addr);
+	} else if (pci) {
+		int dev, fn;
+		reg = (struct linux_prom_registers *)reg64;
+		fn = (reg[0].which_io >> 8) & 0x07;
+		dev = (reg[0].which_io >> 11) & 0x1f;
+		if (fn)
+			sprintf (buffer, "@%x,%x", dev, fn);
+		else
+			sprintf (buffer, "@%x", dev);
+	} else if (ebus) {
+		reg = (struct linux_prom_registers *)reg64;
+		sprintf (buffer, "@%x,%x", reg[0].which_io, reg[0].phys_addr);
+	} else if (ide) {
+		reg = (struct linux_prom_registers *)reg64;
+		sprintf (buffer, "@%x,%x", reg[0].which_io, reg[0].phys_addr);
+	} else if (i == 4) {	/* Happens on 8042's children on Ultra/PCI. */
+		reg = (struct linux_prom_registers *)reg64;
+		sprintf (buffer, "@%x", reg[0].which_io);
 	} else {
-		sprintf (buffer, "@%x,%x", (unsigned int)(reg64[0].phys_addr >> 36), (unsigned int)(reg64[0].phys_addr));
+		sprintf (buffer, "@%x,%x",
+			 (unsigned int)(reg64[0].phys_addr >> 36),
+			 (unsigned int)(reg64[0].phys_addr));
 	}
 	return 0;
 }
@@ -318,9 +367,9 @@ int
 prom_pathtoinode(char *path)
 {
 	int node, inst;
-	
+
 	inst = prom_devopen (path);
-	if (inst == -1) return 0;
+	if (inst == 0) return 0;
 	node = prom_inst2pkg (inst);
 	prom_devclose (inst);
 	if (node == -1) return 0;

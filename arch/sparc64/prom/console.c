@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.8 1997/08/16 08:00:16 davem Exp $
+/* $Id: console.c,v 1.9 1997/10/29 07:41:43 ecd Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -91,6 +91,14 @@ prom_query_input_device()
 	memset(propb, 0, sizeof(propb));
 	st_p = prom_finddevice ("/options");
 	prom_getproperty(st_p, "input-device", propb, sizeof(propb));
+
+	/*
+	 * If we get here with propb == 'keyboard', we are on ttya, as
+	 * the PROM defaulted to this due to 'no input device'.
+	 */
+	if (!strncmp(propb, "keyboard", 8))
+		return PROMDEV_ITTYA;
+
 	if (strncmp (propb, "tty", 3) || !propb[3])
 		return PROMDEV_I_UNK;
 	switch (propb[3]) {
@@ -120,6 +128,14 @@ prom_query_output_device()
 	memset(propb, 0, sizeof(propb));
 	st_p = prom_finddevice ("/options");
 	prom_getproperty(st_p, "output-device", propb, sizeof(propb));
+
+	/*
+	 * If we get here with propb == 'screen', we are on ttya, as
+	 * the PROM defaulted to this due to 'no input device'.
+	 */
+	if (!strncmp(propb, "screen", 6))
+		return PROMDEV_OTTYA;
+
 	if (strncmp (propb, "tty", 3) || !propb[3])
 		return PROMDEV_O_UNK;
 	switch (propb[3]) {

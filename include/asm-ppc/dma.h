@@ -3,9 +3,11 @@
  * Written by Hennus Bergman, 1992.
  * High DMA channel support & info by Hannu Savolainen
  * and John Boyd, Nov. 1992.
+ * Changes for ppc sound by Christoph Nadig
  */
 
 #include <linux/config.h>
+#include <asm/io.h>
 
 /*
  * Note: Adapted for PowerPC by Gary Thomas
@@ -31,8 +33,31 @@
 /* Doesn't really apply... */
 #define MAX_DMA_ADDRESS      0xFFFFFFFF
 
-#if defined(CONFIG_PREP) || defined(CONFIG_CHRP)
-#include <asm/io.h>		/* need byte IO */
+#if defined(CONFIG_MACH_SPECIFIC)
+
+#if defined(CONFIG_PREP)
+#define DMA_MODE_READ 0x44
+#define DMA_MODE_WRITE 0x48
+#define ISA_DMA_THRESHOLD 0x00ffffff
+#endif /* CONFIG_PREP */
+
+#if defined(CONFIG_CHRP)
+#define DMA_MODE_READ 0x44
+#define DMA_MODE_WRITE 0x48
+#define ISA_DMA_THRESHOLD ~0L
+#endif /* CONFIG_CHRP */
+
+#ifdef CONFIG_PMAC
+#define DMA_MODE_READ 1
+#define DMA_MODE_WRITE 2
+#define ISA_DMA_THRESHOLD ~0L
+#endif /* CONFIG_PMAC */
+
+#else
+/* in arch/ppc/kernel/setup.c -- Cort */
+extern unsigned long DMA_MODE_WRITE, DMA_MODE_READ;
+extern unsigned long ISA_DMA_THRESHOLD;
+#endif
 
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
@@ -92,8 +117,20 @@
  *
  */
 
-#define POWERSTACK_SND_DMA 6
-#define POWERSTACK_SND_DMA2 7
+/* used in nasty hack for sound - see prep_setup_arch() -- Cort */
+extern long ppc_cs4232_dma, ppc_cs4232_dma2;
+#ifdef CONFIG_CS4232
+#define SND_DMA1 ppc_cs4232_dma
+#define SND_DMA2 ppc_cs4232_dma2
+#else
+#ifdef CONFIG_MSS
+#define SND_DMA1 MSS_DMA
+#define SND_DMA2 MSS_DMA2
+#else
+#define SND_DMA1 -1
+#define SND_DMA2 -1
+#endif
+#endif
 
 /* 8237 DMA controllers */
 #define IO_DMA1_BASE	0x00	/* 8 bit slave DMA, channels 0..3 */
@@ -159,8 +196,6 @@
 #define DMA1_EXT_REG               0x40B
 #define DMA2_EXT_REG               0x4D6
 
-#define DMA_MODE_READ	0x44	/* I/O to memory, no autoinit, increment, single mode */
-#define DMA_MODE_WRITE	0x48	/* memory to I/O, no autoinit, increment, single mode */
 #define DMA_MODE_CASCADE 0xC0   /* pass thru DREQ->HRQ, DACK<-HLDA only */
 
 /* enable/disable a specific DMA channel */
@@ -235,20 +270,24 @@ static __inline__ void set_dma_page(unsigned int dmanr, int pagenr)
 			break;
 		case 3:
 			dma_outb(pagenr, DMA_LO_PAGE_3);
+			dma_outb(pagenr>>8, DMA_HI_PAGE_3); 
 			break;
 	        case 5:
-			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_5);
+		        if (SND_DMA1 == 5 || SND_DMA2 == 5)
+				dma_outb(pagenr, DMA_LO_PAGE_5);
+			else
+				dma_outb(pagenr & 0xfe, DMA_LO_PAGE_5);
                         dma_outb(pagenr>>8, DMA_HI_PAGE_5);
 			break;
 		case 6:
-		        if (POWERSTACK_SND_DMA == 6 || POWERSTACK_SND_DMA2 == 6)
+		        if (SND_DMA1 == 6 || SND_DMA2 == 6)
 				dma_outb(pagenr, DMA_LO_PAGE_6);
 			else
 				dma_outb(pagenr & 0xfe, DMA_LO_PAGE_6);
 			dma_outb(pagenr>>8, DMA_HI_PAGE_6);
 			break;
 		case 7:
-			if (POWERSTACK_SND_DMA == 7 || POWERSTACK_SND_DMA2 == 7)
+			if (SND_DMA1 == 7 || SND_DMA2 == 7)
 				dma_outb(pagenr, DMA_LO_PAGE_7);
 			else
 				dma_outb(pagenr & 0xfe, DMA_LO_PAGE_7);
@@ -267,7 +306,7 @@ static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int phys)
 	    dma_outb( phys & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
             dma_outb( (phys>>8) & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
 	}  else  {
-	  if (dmanr == POWERSTACK_SND_DMA || dmanr == POWERSTACK_SND_DMA2) {
+	  if (dmanr == SND_DMA1 || dmanr == SND_DMA2) {
 	    dma_outb( phys  & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
 	    dma_outb( (phys>>8)  & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
 	    dma_outb( (dmanr&3), DMA2_EXT_REG);
@@ -295,7 +334,7 @@ static __inline__ void set_dma_count(unsigned int dmanr, unsigned int count)
 	    dma_outb( count & 0xff, ((dmanr&3)<<1) + 1 + IO_DMA1_BASE );
 	    dma_outb( (count>>8) & 0xff, ((dmanr&3)<<1) + 1 + IO_DMA1_BASE );
         } else {
-	  if (dmanr == POWERSTACK_SND_DMA || dmanr == POWERSTACK_SND_DMA2) {
+	  if (dmanr == SND_DMA1 || dmanr == SND_DMA2) {
 	    dma_outb( count & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
 	    dma_outb( (count>>8) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
 	  } else {
@@ -325,17 +364,9 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 	count = 1 + dma_inb(io_port);
 	count += dma_inb(io_port) << 8;
 	
-	return (dmanr<=3)? count : (count<<1);
+	return (dmanr <= 3 || dmanr == SND_DMA1 || dmanr == SND_DMA2)
+	  ? count : (count<<1);
 }
-
-#endif /* CONFIG_PREP || CONFIG_CHRP */
-
-#ifdef CONFIG_PMAC
-
-#define DMA_MODE_READ	1
-#define DMA_MODE_WRITE	2
-
-#endif /* CONFIG_PMAC */
 
 /* These are in kernel/dma.c: */
 extern void free_dma(unsigned int dmanr);	/* release it again */

@@ -1,4 +1,4 @@
-/* $Id: keyboard.h,v 1.1 1997/09/04 05:50:39 ecd Exp $
+/* $Id: keyboard.h,v 1.2 1997/09/07 15:40:49 ecd Exp $
  * linux/include/asm-sparc64/keyboard.h
  *
  * Created Aug 29 1997 by Eddie C. Dost (ecd@skynet.be)
@@ -26,15 +26,23 @@ extern void pcikbd_leds(unsigned char leds);
 extern void pcikbd_init_hw(void);
 extern unsigned char pcikbd_sysrq_xlate[128];
 
-#define kbd_setkeycode		pcikbd_setkeycode
-#define kbd_getkeycode		pcikbd_getkeycode
-#define kbd_pretranslate	pcikbd_pretranslate
-#define kbd_translate		pcikbd_translate
-#define kbd_unexpected_up	pcikbd_unexpected_up
-#define kbd_leds		pcikbd_leds
-#define kbd_init_hw		pcikbd_init_hw
-#define kbd_sysrq_xlate		pcikbd_sysrq_xlate
-#define kbd_init		pcikbd_init
+#define kbd_setkeycode			pcikbd_setkeycode
+#define kbd_getkeycode			pcikbd_getkeycode
+#define kbd_pretranslate		pcikbd_pretranslate
+#define kbd_translate			pcikbd_translate
+#define kbd_unexpected_up		pcikbd_unexpected_up
+#define kbd_leds			pcikbd_leds
+#define kbd_init_hw			pcikbd_init_hw
+#define kbd_sysrq_xlate			pcikbd_sysrq_xlate
+#define kbd_init			pcikbd_init
+
+#define compute_shiftstate		pci_compute_shiftstate
+#define keyboard_wait_for_keypress	pci_wait_for_keypress
+#define getkeycode			pci_getkeycode
+#define setkeycode			pci_setkeycode
+#define getledstate			pci_getledstate
+#define setledstate			pci_setledstate
+#define register_leds			pci_register_leds
 
 #define SYSRQ_KEY 0x54
 

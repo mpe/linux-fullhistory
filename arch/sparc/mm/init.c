@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.49 1997/04/17 21:49:31 jj Exp $
+/*  $Id: init.c,v 1.50 1998/01/10 18:19:42 ecd Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -227,9 +227,10 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	addr = KERNBASE;
 	while(addr < start_mem) {
 #ifdef CONFIG_BLK_DEV_INITRD
-		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end)
+		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end) {
 			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
-		else
+			num_physpages--;
+		} else
 #endif	
 			mem_map[MAP_NR(addr)].flags |= (1<<PG_reserved);
 		addr += PAGE_SIZE;

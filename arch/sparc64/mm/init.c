@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.55 1997/08/24 01:22:29 davem Exp $
+/*  $Id: init.c,v 1.60 1998/01/10 18:19:51 ecd Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -116,9 +116,10 @@ void show_mem(void)
 /* IOMMU support, the ideas are right, the code should be cleaned a bit still... */
 
 /* This keeps track of pages used in sparc_alloc_dvma() invocations. */
-static unsigned long dvma_map_pages[0x10000000 >> 16] = { 0, };
-static unsigned long dvma_pages_current_offset = 0;
-static int dvma_pages_current_index = 0;
+/* NOTE: All of these are inited to 0 in bss, don't need to make data segment bigger */
+static unsigned long dvma_map_pages[0x10000000 >> 16];
+static unsigned long dvma_pages_current_offset;
+static int dvma_pages_current_index;
 
 /* #define E3000_DEBUG */
 
@@ -664,8 +665,9 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
 	pte_t *pte;
 
-	pte = (pte_t *) get_free_page(GFP_KERNEL);
+	pte = (pte_t *) __get_free_page(GFP_KERNEL);
 	if(pte) {
+		clear_page((unsigned long)pte);
 		pmd_set(pmd, pte);
 		return pte + offset;
 	}
@@ -834,7 +836,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	allocate_ptable_skeleton(IOBASE_VADDR, IOBASE_VADDR + 0x4000000);
 	allocate_ptable_skeleton(DVMA_VADDR, DVMA_VADDR + 0x4000000);
 	inherit_prom_mappings();
-	
+
 	/* Ok, we can use our TLB miss and window trap handlers safely. */
 	setup_tba((unsigned long)init_mm.pgd);
 
@@ -854,9 +856,9 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	membar("#Sync");
 
 	inherit_locked_prom_mappings(1);
-	
+
 	flush_tlb_all();
-	
+
 	start_mem = free_area_init(PAGE_ALIGN(mempool), end_mem);
 
 	return device_scan (PAGE_ALIGN (start_mem));
@@ -881,6 +883,8 @@ __initfunc(static void taint_real_pages(unsigned long start_mem, unsigned long e
 			if((phys_addr >= base) && (phys_addr < limit) &&
 			   ((phys_addr + PAGE_SIZE) < limit))
 				mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
+			if (phys_addr >= 0xf0000000)
+				mem_map[MAP_NR(addr)].flags &= ~(1<<PG_DMA);
 		}
 	}
 }
@@ -903,9 +907,10 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	addr = PAGE_OFFSET;
 	while(addr < start_mem) {
 #ifdef CONFIG_BLK_DEV_INITRD
-		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end)
+		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end) {
 			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
-		else
+			num_physpages--;
+		} else
 #endif	
 			mem_map[MAP_NR(addr)].flags |= (1<<PG_reserved);
 		addr += PAGE_SIZE;

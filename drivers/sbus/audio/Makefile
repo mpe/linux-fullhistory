@@ -25,11 +25,11 @@ endif
 
 ifeq ($(CONFIG_SPARCAUDIO_AMD7930),y)
 M=y
-O_OBJS += amd7930.o
+OX_OBJS += amd7930.o
 else
   ifeq ($(CONFIG_SPARCAUDIO_AMD7930),m)
   MM=y
-  M_OBJS += amd7930.o
+  MX_OBJS += amd7930.o
   endif
 endif
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.76 1997/12/07 04:44:19 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.77 1997/12/13 21:53:00 kuznet Exp $
  *
  *		IPv4 specific functions
  *
@@ -48,13 +48,14 @@
 #include <linux/fcntl.h>
 #include <linux/random.h>
 #include <linux/ipsec.h>
-#include <linux/inet.h>
 
 #include <net/icmp.h>
 #include <net/tcp.h>
 #include <net/ipv6.h>
 
 #include <asm/segment.h>
+
+#include <linux/inet.h>
 
 extern int sysctl_tcp_sack;
 extern int sysctl_tcp_tsack;
@@ -1467,14 +1468,6 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
-#ifdef CONFIG_FILTER
-	if (sk->filter)
-	{
-		if (sk_filter(skb, sk->filter_data, sk->filter))
-			return -EPERM;	/* Toss packet */
-	}
-#endif /* CONFIG_FILTER */
-
 	skb_set_owner_r(skb, sk);
 
 	/*
@@ -1610,6 +1603,10 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 	rt = (struct rtable*)skb->dst;
 
 	/* Force route checking if want_rewrite */
+	/* The idea is good, the implementation is disguisting.
+	   Well, if I made bind on this socket, you cannot randomly ovewrite
+	   its source address. --ANK
+	 */
 	if (want_rewrite) {
 		int tmp;
 		__u32 old_saddr = rt->rt_src;
@@ -1639,9 +1636,6 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 		dst_release(skb->dst);
 		skb->dst = &rt->u.dst;
 	}
-
-	/* Discard the surplus MAC header. */
-	skb_pull(skb, skb->nh.raw-skb->data);
 
 	iph = skb->nh.iph;
 	th = skb->h.th;

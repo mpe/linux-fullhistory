@@ -2,6 +2,7 @@
 * sdlamain.c	WANPIPE(tm) Multiprotocol WAN Link Driver.  Main module.
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
+*		Jaspreet Singh	<jaspreet@sangoma.com>
 *
 * Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *
@@ -10,6 +11,21 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Nov 28, 1997	Jaspreet Singh	Changed DRV_RELEASE to 1
+* Nov 10, 1997	Jaspreet Singh	Changed sti() to restore_flags();
+* Nov 06, 1997 	Jaspreet Singh	Changed DRV_VERSION to 4 and DRV_RELEASE to 0
+* Oct 20, 1997 	Jaspreet Singh	Modified sdla_isr routine so that card->in_isr
+*				assignments are taken out and placed in the
+*				sdla_ppp.c, sdla_fr.c and sdla_x25.c isr
+*				routines. Took out 'wandev->tx_int_enabled' and
+*				replaced it with 'wandev->enable_tx_int'. 
+* May 29, 1997	Jaspreet Singh	Flow Control Problem
+*				added "wandev->tx_int_enabled=1" line in the
+*				init module. This line intializes the flag for 
+*				preventing Interrupt disabled with device set to
+*				busy
+* Jan 15, 1997	Gene Kozin	Version 3.1.0
+*				 o added UDP management stuff
 * Jan 02, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
@@ -39,8 +55,8 @@
 #define	STATIC		static
 #endif
 
-#define	DRV_VERSION	3		/* version number */
-#define	DRV_RELEASE	0		/* release (minor version) number */
+#define	DRV_VERSION	4		/* version number */
+#define	DRV_RELEASE	1		/* release (minor version) number */
 #define	MAX_CARDS	8		/* max number of adapters */
 
 #ifndef	CONFIG_WANPIPE_CARDS		/* configurable option */
@@ -132,6 +148,7 @@ int init_module (void)
 		wandev->magic    = ROUTER_MAGIC;
 		wandev->name     = card->devname;
 		wandev->private  = card;
+		wandev->enable_tx_int = 0;
 		wandev->setup    = &setup;
 		wandev->shutdown = &shutdown;
 		wandev->ioctl    = &ioctl;
@@ -388,7 +405,7 @@ static int ioctl (wan_device_t* wandev, unsigned cmd, unsigned long arg)
 /****** Driver IOCTL Hanlers ************************************************/
 
 /*============================================================================
- * Dump adpater memory to user buffer.
+ * Dump adapter memory to user buffer.
  * o verify request structure
  * o copy request structure to kernel data space
  * o verify length/offset
@@ -403,6 +420,7 @@ static int ioctl_dump (sdla_t* card, sdla_dump_t* u_dump)
 	sdla_dump_t dump;
 	unsigned winsize;
 	unsigned long oldvec;	/* DPM window vector */
+	unsigned long flags;
 	int err = 0;
 
 	if(copy_from_user((void*)&dump, (void*)u_dump, sizeof(sdla_dump_t)))
@@ -413,6 +431,7 @@ static int ioctl_dump (sdla_t* card, sdla_dump_t* u_dump)
 		return -EINVAL;
 		
 	winsize = card->hw.dpmsize;
+	save_flags(flags);
         cli();				/* >>> critical section start <<< */
 	oldvec = card->hw.vector;
 	while (dump.length)
@@ -438,7 +457,7 @@ static int ioctl_dump (sdla_t* card, sdla_dump_t* u_dump)
 		(char*)dump.ptr += len;
 	}
 	sdla_mapmem(&card->hw, oldvec);	/* restore DPM window position */
-	sti();				/* >>> critical section end <<< */
+	restore_flags(flags);		/* >>> critical section end <<< */
 	return err;
 }
 
@@ -483,10 +502,10 @@ STATIC void sdla_isr (int irq, void* dev_id, struct pt_regs *regs)
 		;
 		return;
 	}
-	card->in_isr = 1;
+
 	sdla_intack(&card->hw);
-	if (card->isr) card->isr(card);
-	card->in_isr = 0;
+	if (card->isr) 
+		card->isr(card);
 
 #undef	card
 }
@@ -507,13 +526,13 @@ STATIC void sdla_poll (void* data)
 		sdla_t* card = &card_array[i];
 
 		if ((card->wandev.state != WAN_UNCONFIGURED) && card->poll &&
-		    !test_and_set_bit(0, (void*)&card->wandev.critical))
+		    !card->wandev.critical)
 		{
 			card->poll(card);
-			card->wandev.critical = 0;
 		}
 	}
-	if (active) queue_task(&sdla_tq, &tq_scheduler);
+	if (active)
+		queue_task(&sdla_tq, &tq_scheduler);
 }
 
 /*============================================================================

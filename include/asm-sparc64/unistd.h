@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.7 1997/06/16 05:37:44 davem Exp $ */
+/* $Id: unistd.h,v 1.14 1997/12/11 15:16:08 jj Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -68,7 +68,7 @@
 #define __NR_geteuid             49 /* SunOS calls getuid()                        */
 #define __NR_getegid             50 /* SunOS calls getgid()                        */
 #define __NR_acct                51 /* Common                                      */
-/* #define __NR_ni_syscall       52    ENOSYS under SunOS                          */
+#define __NR_memory_ordering	 52 /* Linux Specific				   */
 #define __NR_mctl                53 /* SunOS specific                              */
 #define __NR_ioctl               54 /* Common                                      */
 #define __NR_reboot              55 /* Common                                      */
@@ -83,8 +83,8 @@
 #define __NR_getpagesize         64 /* Common                                      */
 #define __NR_msync               65 /* Common in newer 1.3.x revs...               */
 /* #define __NR_ni_syscall       66    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall       67    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall       68    ENOSYS under SunOS                          */
+#define __NR_pread               67 /* Linux Specific                              */
+#define __NR_pwrite              68 /* Linux Specific                              */
 #define __NR_sbrk                69 /* SunOS Specific                              */
 #define __NR_sstk                70 /* SunOS Specific                              */
 #define __NR_mmap                71 /* Common                                      */
@@ -117,13 +117,13 @@
 #define __NR_connect             98 /* Common                                      */
 #define __NR_accept              99 /* Common                                      */
 #define __NR_getpriority        100 /* Common                                      */
-#define __NR_send               101 /* Common                                      */
-#define __NR_recv               102 /* Common                                      */
-/* #define __NR_ni_syscall      103    ENOSYS under SunOS                          */
-#define __NR_bind               104 /* Common                                      */
-#define __NR_setsockopt         105 /* Common                                      */
-#define __NR_listen             106 /* Common                                      */
-/* #define __NR_ni_syscall      107    ENOSYS under SunOS                          */
+#define __NR_rt_sigreturn       101 /* Linux Specific                              */
+#define __NR_rt_sigaction       102 /* Linux Specific                              */
+#define __NR_rt_sigprocmask     103 /* Linux Specific                              */
+#define __NR_rt_sigpending      104 /* Linux Specific                              */
+#define __NR_rt_sigtimedwait    105 /* Linux Specific                              */
+#define __NR_rt_sigqueueinfo    106 /* Linux Specific                              */
+#define __NR_rt_sigsuspend      107 /* Linux Specific                              */
 #define __NR_sigvec             108 /* SunOS Specific                              */
 #define __NR_sigblock           109 /* SunOS Specific                              */
 #define __NR_sigsetmask         110 /* SunOS Specific                              */
@@ -163,9 +163,9 @@
 #define __NR_getrlimit          144 /* Common                                      */
 #define __NR_setrlimit          145 /* Common                                      */
 #define __NR_killpg             146 /* SunOS Specific                              */
-/* #define __NR_ni_syscall      147    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall      148    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall      149    ENOSYS under SunOS                          */
+#define __NR_prctl		147 /* ENOSYS under SunOS                          */
+#define __NR_pciconfig_read	148 /* ENOSYS under SunOS                          */
+#define __NR_pciconfig_write	149 /* ENOSYS under SunOS                          */
 #define __NR_getsockname        150 /* Common                                      */
 #define __NR_getmsg             151 /* SunOS Specific                              */
 #define __NR_putmsg             152 /* SunOS Specific                              */
@@ -180,7 +180,7 @@
 #define __NR_getfh              161 /* SunOS Specific                              */
 #define __NR_getdomainname      162 /* SunOS Specific                              */
 #define __NR_setdomainname      163 /* Common                                      */
-/* #define __NR_ni_syscall      164    ENOSYS under SunOS                          */
+#define __NR_utrap_install	164 /* SYSV ABI/v9 required			   */
 #define __NR_quotactl           165 /* Common                                      */
 #define __NR_exportfs           166 /* SunOS Specific                              */
 #define __NR_mount              167 /* Common                                      */
@@ -200,7 +200,7 @@
 #define __NR_aiowait            181 /* SunOS Specific                              */
 #define __NR_aiocancel          182 /* SunOS Specific                              */
 #define __NR_sigpending         183 /* Common                                      */
-/* #define __NR_ni_syscall      184    ENOSYS under SunOS                          */
+#define __NR_query_module	184 /* Linux Specific				   */
 #define __NR_setpgid            185 /* Common                                      */
 #define __NR_pathconf           186 /* SunOS Specific                              */
 #define __NR_fpathconf          187 /* SunOS Specific                              */
@@ -272,14 +272,13 @@
 #define __NR_fdatasync          253
 #define __NR_nfsservctl         254
 #define __NR_aplib              255
-#define __NR_prctl              256
 
 #define _syscall0(type,name) \
 type name(void) \
 { \
 long __res; \
 __asm__ __volatile__ ("mov %0, %%g1\n\t" \
-		      "t 0x11\n\t" \
+		      "t 0x6d\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res)\
@@ -297,7 +296,7 @@ type name(type1 arg1) \
 long __res; \
 __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "mov %1, %%o0\n\t" \
-		      "t 0x11\n\t" \
+		      "t 0x6d\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)) \
@@ -316,7 +315,7 @@ long __res; \
 __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "mov %1, %%o0\n\t" \
 		      "mov %2, %%o1\n\t" \
-		      "t 0x11\n\t" \
+		      "t 0x6d\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
@@ -336,7 +335,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "mov %1, %%o0\n\t" \
 		      "mov %2, %%o1\n\t" \
 		      "mov %3, %%o2\n\t" \
-		      "t 0x11\n\t" \
+		      "t 0x6d\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
@@ -359,7 +358,7 @@ __asm__ __volatile__ ("mov %0, %%g1\n\t" \
 		      "mov %2, %%o1\n\t" \
 		      "mov %3, %%o2\n\t" \
 		      "mov %4, %%o3\n\t" \
-		      "t 0x11\n\t" \
+		      "t 0x6d\n\t" \
 		      "sub %%g0,%%o0, %0\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
@@ -385,7 +384,7 @@ __asm__ __volatile__ ("mov %1, %%o0\n\t" \
 		      "mov %4, %%o3\n\t" \
 		      "mov %5, %%o4\n\t" \
 		      "mov %6, %%g1\n\t" \
-		      "t 0x11\n\t" \
+		      "t 0x6d\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res) \
@@ -450,13 +449,13 @@ static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned lo
 			   "mov %1, %%g1\n\t"
 			   "mov %2, %%o0\n\t"    /* Clone flags. */
 			   "mov 0, %%o1\n\t"     /* usp arg == 0 */
-			   "t 0x11\n\t"          /* Linux/Sparc clone(). */
+			   "t 0x6d\n\t"          /* Linux/Sparc clone(). */
 			   "brz,a,pn %%o1, 1f\n\t"           /* The parent, just return. */
 			   " mov %%o0, %0\n\t"
 			   "jmpl %%g2, %%o7\n\t" /* Call the function. */
 			   " mov %%g3, %%o0\n\t" /* Get back the arg in delay. */
 			   "mov %3, %%g1\n\t"
-			   "t 0x11\n\t"          /* Linux/Sparc exit(). */
+			   "t 0x6d\n\t"          /* Linux/Sparc exit(). */
 			   /* Notreached by child. */
 			   "1:" :
 			   "=r" (retval) :

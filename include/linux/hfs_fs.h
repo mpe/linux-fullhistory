@@ -208,8 +208,6 @@ struct hfs_cap_info {
 
 #ifdef __KERNEL__
 
-#if defined(CONFIG_HFS_FS) || defined(CONFIG_HFS_FS_MODULE)
-
 typedef ssize_t hfs_rwret_t;
 typedef size_t hfs_rwarg_t;
 
@@ -221,7 +219,6 @@ struct hfs_cat_key;
 struct hfs_cat_entry;
 extern struct hfs_cat_entry *hfs_cat_get(struct hfs_mdb *,
 					 const struct hfs_cat_key *);
-extern void hfs_tolower(unsigned char *, int);
 
 /* dir.c */
 extern hfs_rwret_t hfs_dir_read(struct file *, char *, hfs_rwarg_t,
@@ -280,7 +277,7 @@ extern const struct hfs_hdr_layout hfs_sngl_hdr_layout;
 
 /* inode.c */
 extern void hfs_put_inode(struct inode *);
-extern int hfs_notify_change(struct inode *, struct iattr *);
+extern int hfs_notify_change(struct dentry *, struct iattr *);
 extern struct inode *hfs_iget(struct hfs_cat_entry *, ino_t, struct dentry *);
 
 extern void hfs_cap_ifill(struct inode *, ino_t);
@@ -304,6 +301,7 @@ extern int hfs_mac2seven(char *, const struct hfs_name *);
 extern int hfs_mac2eight(char *, const struct hfs_name *);
 extern int hfs_mac2alpha(char *, const struct hfs_name *);
 extern int hfs_mac2triv(char *, const struct hfs_name *);
+extern void hfs_tolower(unsigned char *, int);
 
 #define	HFS_I(X)	(&((X)->u.hfs_i))
 #define	HFS_SB(X)	(&((X)->u.hfs_sb))
@@ -322,41 +320,5 @@ extern __inline__ int hfs_namein(struct inode *dir, char *out,
 	return len;
 }
 
-static __inline__ struct dentry 
-*hfs_lookup_dentry(const char *name, const int len, 
-		   struct dentry *base)
-{
-  struct qstr this;
-
-  this.name = name;
-  this.len = len;
-  this.hash = full_name_hash(name, len);
-
-  return d_lookup(base, &this);
-}
-
-/* drop a dentry for one of the special subdirectories */
-static __inline__ void hfs_drop_special(const struct hfs_name *name,
-					struct dentry *base,
-					struct dentry *dentry)
-{
-  struct dentry *dparent, *de;
-  
-  dparent = hfs_lookup_dentry(name->Name, name->Len, base);
-  if (dparent) {
-    de = hfs_lookup_dentry(dentry->d_name.name, dentry->d_name.len,
-			   dparent);
-    dput(dparent);
-
-    if (de) {
-      if (!de->d_inode)
-	d_drop(de);
-      dput(de);
-    }
-  }
-}
-
-#endif
 #endif /* __KERNEL__ */
-
 #endif

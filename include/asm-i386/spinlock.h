@@ -64,12 +64,11 @@ typedef struct { } rwlock_t;
 
 typedef struct {
 	volatile unsigned int lock;
-	unsigned long previous;
 } spinlock_t;
 
-#define SPIN_LOCK_UNLOCKED { 0, 0 }
+#define SPIN_LOCK_UNLOCKED { 0 }
 
-#define spin_lock_init(x)	do { (x)->lock = 0; (x)->previous = 0; } while(0)
+#define spin_lock_init(x)	do { (x)->lock = 0; } while(0)
 #define spin_unlock_wait(x)	do { barrier(); } while(((volatile spinlock_t *)(x))->lock)
 
 typedef struct { unsigned long a[100]; } __dummy_lock_t;

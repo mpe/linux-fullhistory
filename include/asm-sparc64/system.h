@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.36 1997/08/19 14:18:33 jj Exp $ */
+/* $Id: system.h,v 1.37 1997/10/20 00:14:22 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -154,17 +154,17 @@ do {	__label__ switch_continue;						\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"					\
 	"rdpr	%%wstate, %%o5\n\t"						\
 	"stx	%%o6, [%%g6 + %3]\n\t"						\
-	"stx	%%o5, [%%g6 + %2]\n\t"						\
+	"stw	%%o7, [%%g6 + %4]\n\t"						\
+	"sth	%%o5, [%%g6 + %2]\n\t"						\
 	"rdpr	%%cwp, %%o5\n\t"						\
-	"stx	%%o7, [%%g6 + %4]\n\t"						\
-	"st	%%o5, [%%g6 + %5]\n\t"						\
+	"sth	%%o5, [%%g6 + %5]\n\t"						\
 	"membar #Sync\n\t"							\
 	"mov	%0, %%g6\n\t"							\
-	"ld	[%0 + %5], %%g1\n\t"						\
+	"lduh	[%0 + %5], %%g1\n\t"						\
 	"wrpr	%%g1, %%cwp\n\t"						\
-	"ldx	[%%g6 + %2], %%o5\n\t"						\
 	"ldx	[%%g6 + %3], %%o6\n\t"						\
-	"ldx	[%%g6 + %4], %%o7\n\t"						\
+	"lduw	[%%g6 + %4], %%o7\n\t"						\
+	"lduh	[%%g6 + %2], %%o5\n\t"						\
 	"mov	%%g6, %0\n\t"							\
 	"wrpr	%%o5, 0x0, %%wstate\n\t"					\
 	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"					\

@@ -288,10 +288,12 @@ static inline void adjust_forks(struct hfs_cat_entry *entry,
 		    (descr->length != entry->u.file.data_fork.lsize)) {
 			entry->u.file.data_fork.lsize = descr->length;
 			hfs_extent_adj(&entry->u.file.data_fork);
+			hfs_cat_mark_dirty(entry);
 		} else if ((descr->id == HFS_HDR_RSRC) &&
 			   (descr->length != entry->u.file.rsrc_fork.lsize)) {
 			entry->u.file.rsrc_fork.lsize = descr->length;
 			hfs_extent_adj(&entry->u.file.rsrc_fork);
+			hfs_cat_mark_dirty(entry);
 		}
 	}
 }
@@ -326,37 +328,37 @@ static void set_dates(struct hfs_cat_entry *entry, struct inode *inode,
 		tmp = hfs_u_to_mtime(ntohl(dates[0]));
 		if (entry->create_date != tmp) {
 			entry->create_date = tmp;
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 		tmp = hfs_u_to_mtime(ntohl(dates[1]));
 		if (entry->modify_date != tmp) {
 			entry->modify_date = tmp;
 			inode->i_ctime = inode->i_atime = inode->i_mtime =
 				ntohl(dates[1]);
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 		tmp = hfs_u_to_mtime(ntohl(dates[2]));
 		if (entry->backup_date != tmp) {
 			entry->backup_date = tmp;
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 	} else {
 		tmp = hfs_h_to_mtime(dates[0]);
 		if (entry->create_date != tmp) {
 			entry->create_date = tmp;
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 		tmp = hfs_h_to_mtime(dates[1]);
 		if (entry->modify_date != tmp) {
 			entry->modify_date = tmp;
 			inode->i_ctime = inode->i_atime = inode->i_mtime = 
 				hfs_h_to_utime(dates[1]);
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 		tmp = hfs_h_to_mtime(dates[2]);
 		if (entry->backup_date != tmp) {
 			entry->backup_date = tmp;
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 	}
 }
@@ -800,7 +802,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 
 				if (new_flags != entry->u.file.flags) {
 					entry->u.file.flags = new_flags;
-					entry->dirt = 1;
+					hfs_cat_mark_dirty(entry);
 					hfs_file_fix_mode(entry);
 				}
 			}
@@ -811,7 +813,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 			break;
 
 		case HFS_HDR_FINFO:
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 			break;
 
 		case HFS_HDR_MACI:
@@ -820,7 +822,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 
 				if (entry->u.dir.flags != new_flags) {
 					entry->u.dir.flags = new_flags;
-					entry->dirt = 1;
+					hfs_cat_mark_dirty(entry);
 				}
 			} else {
 				hfs_u8 new_flags = tmp[3];
@@ -828,7 +830,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 				
 				if (changed) {
 					entry->u.file.flags = new_flags;
-					entry->dirt = 1;
+					hfs_cat_mark_dirty(entry);
 					if (changed & HFS_FIL_LOCK) {
 						hfs_file_fix_mode(entry);
 					}
@@ -932,6 +934,7 @@ static void hdr_truncate(struct inode *inode)
 		if (fork->lsize != descr->length) {
 			fork->lsize = descr->length;
 			hfs_extent_adj(fork);
+			hfs_cat_mark_dirty(HFS_I(inode)->entry);
 		}
 	}
 }

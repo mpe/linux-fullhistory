@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.75 1997/05/08 20:57:37 davem Exp $
+/*  $Id: irq.c,v 1.77 1997/11/19 15:33:05 jj Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -101,10 +101,10 @@ void (*set_irq_udt)(int);
  *
  */
 #define MAX_STATIC_ALLOC	4
-static struct irqaction static_irqaction[MAX_STATIC_ALLOC];
-static int static_irq_count = 0;
+struct irqaction static_irqaction[MAX_STATIC_ALLOC];
+int static_irq_count = 0;
 
-static struct irqaction *irq_action[NR_IRQS+1] = {
+struct irqaction *irq_action[NR_IRQS+1] = {
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
 };
@@ -114,6 +114,11 @@ int get_irq_list(char *buf)
 	int i, len = 0;
 	struct irqaction * action;
 
+	if (sparc_cpu_model == sun4d) {
+		extern int sun4d_get_irq_list(char *);
+		
+		return sun4d_get_irq_list(buf);
+	}
 	for (i = 0 ; i < (NR_IRQS+1) ; i++) {
 	        action = *(i + irq_action);
 		if (!action) 
@@ -242,6 +247,11 @@ void free_irq(unsigned int irq, void *dev_id)
         unsigned long flags;
 	unsigned int cpu_irq;
 	
+	if (sparc_cpu_model == sun4d) {
+		extern void sun4d_free_irq(unsigned int, void *);
+		
+		return sun4d_free_irq(irq, dev_id);
+	}
 	cpu_irq = irq & NR_IRQS;
 	action = *(cpu_irq + irq_action);
         if (cpu_irq > 14) {  /* 14 irq levels on the sparc */
@@ -531,29 +541,28 @@ void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
 void handler_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action;
-	unsigned int cpu_irq = irq & NR_IRQS;
 	int cpu = smp_processor_id();
 #ifdef __SMP__
 	extern void smp_irq_rotate(int cpu);
 #endif
 	
-	disable_pil_irq(cpu_irq);
+	disable_pil_irq(irq);
 #ifdef __SMP__
 	/* Only rotate on lower priority IRQ's (scsi, ethernet, etc.). */
 	if(irq < 10)
 		smp_irq_rotate(cpu);
 #endif
-	irq_enter(cpu, cpu_irq, regs);
-	action = *(cpu_irq + irq_action);
-	kstat.interrupts[cpu_irq]++;
+	irq_enter(cpu, irq, regs);
+	action = *(irq + irq_action);
+	kstat.interrupts[irq]++;
 	do {
 		if (!action || !action->handler)
 			unexpected_irq(irq, 0, regs);
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
 	} while (action);
-	irq_exit(cpu, cpu_irq);
-	enable_pil_irq(cpu_irq);
+	irq_exit(cpu, irq);
+	enable_pil_irq(irq);
 }
 
 #ifdef CONFIG_BLK_DEV_FD
@@ -669,12 +678,22 @@ int request_irq(unsigned int irq,
 	unsigned long flags;
 	unsigned int cpu_irq;
 	
+	if (sparc_cpu_model == sun4d) {
+		extern int sun4d_request_irq(unsigned int, 
+					     void (*)(int, void *, struct pt_regs *),
+					     unsigned long, const char *, void *);
+		return sun4d_request_irq(irq, handler, irqflags, devname, dev_id);
+	}
 	cpu_irq = irq & NR_IRQS;
 	if(cpu_irq > 14)
 		return -EINVAL;
 
 	if (!handler)
 	    return -EINVAL;
+	    
+	if (irqflags & SA_DCOOKIE)
+		dev_id = ((struct devid_cookie *)dev_id)->real_dev_id;
+	
 	action = *(cpu_irq + irq_action);
 	if (action) {
 		if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
@@ -751,6 +770,7 @@ __initfunc(void init_IRQ(void))
 {
 	extern void sun4c_init_IRQ( void );
 	extern void sun4m_init_IRQ( void );
+	extern void sun4d_init_IRQ( void );
     
 	switch(sparc_cpu_model) {
 	case sun4c:
@@ -759,6 +779,10 @@ __initfunc(void init_IRQ(void))
 
 	case sun4m:
 		sun4m_init_IRQ();
+		break;
+		
+	case sun4d:
+		sun4d_init_IRQ();
 		break;
 
 	case ap1000:

@@ -1,8 +1,0 @@
-#!/bin/bash
-
-N=`basename $PWD`
-date=`date +'%y%m%d'`
-cd ../
-mkdir -p dist
-echo Diff of: $N against $N.ORIG '->' $N-$date-ppc.patch 
-diff -uNr -X $N/arch/ppc/ignore $N.ORIG $N > dist/$N-$date-ppc.patch

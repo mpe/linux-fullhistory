@@ -175,100 +175,16 @@ int new_page_tables(struct task_struct * tsk)
 	return 0;
 }
 
-static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
-{
-	pte_t pte = *old_pte;
-	unsigned long page_nr;
-
-	if (pte_none(pte))
-		return;
-	if (!pte_present(pte)) {
-		swap_duplicate(pte_val(pte));
-		set_pte(new_pte, pte);
-		return;
-	}
-	page_nr = MAP_NR(pte_page(pte));
-	if (page_nr >= max_mapnr || PageReserved(mem_map+page_nr)) {
-		set_pte(new_pte, pte);
-		return;
-	}
-	if (cow)
-		pte = pte_wrprotect(pte);
-	if (delete_from_swap_cache(&mem_map[page_nr]))
-		pte = pte_mkdirty(pte);
-	set_pte(new_pte, pte_mkold(pte));
-	set_pte(old_pte, pte);
-	atomic_inc(&mem_map[page_nr].count);
-}
-
-static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long address, unsigned long size, int cow)
-{
-	pte_t * src_pte, * dst_pte;
-	unsigned long end;
-
-	if (pmd_none(*src_pmd))
-		return 0;
-	if (pmd_bad(*src_pmd)) {
-		printk("copy_pte_range: bad pmd (%08lx)\n", pmd_val(*src_pmd));
-		pmd_clear(src_pmd);
-		return 0;
-	}
-	src_pte = pte_offset(src_pmd, address);
-	if (pmd_none(*dst_pmd)) {
-		if (!pte_alloc(dst_pmd, 0))
-			return -ENOMEM;
-	}
-	dst_pte = pte_offset(dst_pmd, address);
-	address &= ~PMD_MASK;
-	end = address + size;
-	if (end >= PMD_SIZE)
-		end = PMD_SIZE;
-	do {
-		/* I would like to switch arguments here, to make it
-		 * consistent with copy_xxx_range and memcpy syntax.
-		 */
-		copy_one_pte(src_pte++, dst_pte++, cow);
-		address += PAGE_SIZE;
-	} while (address < end);
-	return 0;
-}
-
-static inline int copy_pmd_range(pgd_t *dst_pgd, pgd_t *src_pgd, unsigned long address, unsigned long size, int cow)
-{
-	pmd_t * src_pmd, * dst_pmd;
-	unsigned long end;
-	int error = 0;
-
-	if (pgd_none(*src_pgd))
-		return 0;
-	if (pgd_bad(*src_pgd)) {
-		printk("copy_pmd_range: bad pgd (%08lx)\n", pgd_val(*src_pgd));
-		pgd_clear(src_pgd);
-		return 0;
-	}
-	src_pmd = pmd_offset(src_pgd, address);
-	if (pgd_none(*dst_pgd)) {
-		if (!pmd_alloc(dst_pgd, 0))
-			return -ENOMEM;
-	}
-	dst_pmd = pmd_offset(dst_pgd, address);
-	address &= ~PGDIR_MASK;
-	end = address + size;
-	if (end > PGDIR_SIZE)
-		end = PGDIR_SIZE;
-	do {
-		error = copy_pte_range(dst_pmd++, src_pmd++, address, end - address, cow);
-		if (error)
-			break;
-		address = (address + PMD_SIZE) & PMD_MASK; 
-	} while (address < end);
-	return error;
-}
+#define PTE_TABLE_MASK	((PTRS_PER_PTE-1) * sizeof(pte_t))
+#define PMD_TABLE_MASK	((PTRS_PER_PMD-1) * sizeof(pmd_t))
 
 /*
  * copy one vm_area from one task to the other. Assumes the page tables
  * already present in the new task to be cleared in the whole range
  * covered by this vma.
+ *
+ * 08Jan98 Merged into one routine from several inline routines to reduce
+ *         variable count and make things faster. -jj
  */
 int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 			struct vm_area_struct *vma)
@@ -276,18 +192,103 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 	pgd_t * src_pgd, * dst_pgd;
 	unsigned long address = vma->vm_start;
 	unsigned long end = vma->vm_end;
-	int error = 0, cow;
+	unsigned long cow = (vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE;
+	
+	src_pgd = pgd_offset(src, address)-1;
+	dst_pgd = pgd_offset(dst, address)-1;
+	
+	for (;;) {
+		pmd_t * src_pmd, * dst_pmd;
 
-	cow = (vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE;
-	src_pgd = pgd_offset(src, address);
-	dst_pgd = pgd_offset(dst, address);
-	while (address < end) {
-		error = copy_pmd_range(dst_pgd++, src_pgd++, address, end - address, cow);
-		if (error)
-			break;
-		address = (address + PGDIR_SIZE) & PGDIR_MASK;
+		src_pgd++; dst_pgd++;
+		
+		/* copy_pmd_range */
+		
+		if (pgd_none(*src_pgd))
+			goto skip_copy_pmd_range;
+		if (pgd_bad(*src_pgd)) {
+			printk("copy_pmd_range: bad pgd (%08lx)\n", 
+				pgd_val(*src_pgd));
+			pgd_clear(src_pgd);
+skip_copy_pmd_range:	address = (address + PGDIR_SIZE) & PGDIR_MASK;
+			if (address >= end)
+				goto out;
+			continue;
+		}
+		if (pgd_none(*dst_pgd)) {
+			if (!pmd_alloc(dst_pgd, 0))
+				goto nomem;
+		}
+		
+		src_pmd = pmd_offset(src_pgd, address);
+		dst_pmd = pmd_offset(dst_pgd, address);
+
+		do {
+			pte_t * src_pte, * dst_pte;
+		
+			/* copy_pte_range */
+		
+			if (pmd_none(*src_pmd))
+				goto skip_copy_pte_range;
+			if (pmd_bad(*src_pmd)) {
+				printk("copy_pte_range: bad pmd (%08lx)\n", pmd_val(*src_pmd));
+				pmd_clear(src_pmd);
+skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
+				if (address >= end)
+					goto out;
+				goto cont_copy_pmd_range;
+			}
+			if (pmd_none(*dst_pmd)) {
+				if (!pte_alloc(dst_pmd, 0))
+					goto nomem;
+			}
+			
+			src_pte = pte_offset(src_pmd, address);
+			dst_pte = pte_offset(dst_pmd, address);
+			
+			do {
+				pte_t pte = *src_pte;
+				unsigned long page_nr;
+				
+				/* copy_one_pte */
+
+				if (pte_none(pte))
+					goto cont_copy_pte_range;
+				if (!pte_present(pte)) {
+					swap_duplicate(pte_val(pte));
+					set_pte(dst_pte, pte);
+					goto cont_copy_pte_range;
+				}
+				page_nr = MAP_NR(pte_page(pte));
+				if (page_nr >= max_mapnr || 
+				    PageReserved(mem_map+page_nr)) {
+					set_pte(dst_pte, pte);
+					goto cont_copy_pte_range;
+				}
+				if (cow)
+					pte = pte_wrprotect(pte);
+				if (delete_from_swap_cache(&mem_map[page_nr]))
+					pte = pte_mkdirty(pte);
+				set_pte(dst_pte, pte_mkold(pte));
+				set_pte(src_pte, pte);
+				atomic_inc(&mem_map[page_nr].count);
+			
+cont_copy_pte_range:		address += PAGE_SIZE;
+				if (address >= end)
+					goto out;
+				src_pte++;
+				dst_pte++;
+			} while ((unsigned long)src_pte & PTE_TABLE_MASK);
+		
+cont_copy_pmd_range:	src_pmd++;
+			dst_pmd++;
+		} while ((unsigned long)src_pmd & PMD_TABLE_MASK);
 	}
-	return error;
+out:
+	return 0;
+
+nomem:
+	return -ENOMEM;
 }
 
 /*
@@ -299,7 +300,11 @@ static inline int free_pte(pte_t page)
 		unsigned long addr = pte_page(page);
 		if (MAP_NR(addr) >= max_mapnr || PageReserved(mem_map+MAP_NR(addr)))
 			return 0;
-		free_page(addr);
+		/* 
+		 * free_page() used to be able to clear swap cache
+		 * entries.  We may now have to do it manually.  
+		 */
+		free_page_and_swap_cache(addr);
 		return 1;
 	}
 	swap_free(pte_val(page));
@@ -542,7 +547,7 @@ int remap_page_range(unsigned long from, unsigned long phys_addr, unsigned long 
 static void put_page(pte_t * page_table, pte_t pte)
 {
 	if (!pte_none(*page_table)) {
-		free_page(pte_page(pte));
+		free_page_and_swap_cache(pte_page(pte));
 		return;
 	}
 /* no need for flush_tlb */
@@ -609,7 +614,8 @@ static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 {
 	pte_t pte;
 	unsigned long old_page, new_page;
-
+	struct page * page_map;
+	
 	new_page = __get_free_page(GFP_KERNEL);
 	pte = *page_table;
 	if (!pte_present(pte))
@@ -620,6 +626,11 @@ static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (MAP_NR(old_page) >= max_mapnr)
 		goto bad_wp_page;
 	tsk->min_flt++;
+
+	page_map = mem_map + MAP_NR(old_page);
+	if (PageSwapCache(page_map))
+		delete_from_swap_cache(page_map);
+	
 	/*
 	 * Do we need to copy?
 	 */

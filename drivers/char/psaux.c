@@ -30,6 +30,9 @@
  * 3-Jul-96, 22-Aug-96 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
  *
  * Cleanup by Martin Mares, 01-Jun-97 (now uses the new PC kbd include)
+ *
+ * Renamed misc. name to "psaux",more in keeping with Documentation/devices.txt
+ * 13-Jan-1998, Richard Gooch <rgooch@atnf.csiro.au>
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
@@ -589,7 +592,7 @@ struct file_operations psaux_fops = {
  * forget about the Aux port and use the *_qp functions.
  */
 static struct miscdevice psaux_mouse = {
-	PSMOUSE_MINOR, "ps2aux", &psaux_fops
+	PSMOUSE_MINOR, "psaux", &psaux_fops
 };
 
 __initfunc(int psaux_init(void))

@@ -15,15 +15,21 @@
 #ifndef _NET_IF_INET6_H
 #define _NET_IF_INET6_H
 
-#define DAD_COMPLETE	0x00
-#define DAD_INCOMPLETE	0x01
-#define DAD_STATUS	0x01
-
-#define ADDR_STATUS	0x06
-#define ADDR_DEPRECATED 0x02
-#define ADDR_INVALID	0x04
+/* These flags match corresponding IFA_F_* flags but ADDR_INVALID,
+   which is invisible externally.
+ */
 
 #define ADDR_PERMANENT	0x80
+
+#define DAD_COMPLETE	0x00
+#define DAD_INCOMPLETE	0x40
+#define DAD_STATUS	0x40
+
+#define ADDR_STATUS	0x21
+#define ADDR_DEPRECATED 0x20
+#define ADDR_INVALID	0x01
+
+
 
 #define IF_RA_RCVD	0x20
 #define IF_RS_SENT	0x10
@@ -53,22 +59,25 @@ struct inet6_ifaddr
 };
 
 
-struct ipv6_mc_socklist {
+struct ipv6_mc_socklist
+{
 	struct in6_addr		addr;
-	struct device		*dev;
+	int			ifindex;
 	struct ipv6_mc_socklist *next;
 };
 
 #define MAF_TIMER_RUNNING	0x01
 #define MAF_LAST_REPORTER	0x02
+#define MAF_LOADED		0x04
 
-struct ifmcaddr6 {
+struct ifmcaddr6
+{
 	struct in6_addr		mca_addr;
 	struct device		*dev;
 	struct ifmcaddr6	*next;
 	struct ifmcaddr6	*if_next;
 	struct timer_list	mca_timer;
-	unsigned long		mca_flags;
+	unsigned		mca_flags;
 	atomic_t		mca_users;	
 };
 
@@ -76,8 +85,6 @@ struct ifmcaddr6 {
 #define	IFA_LINK	IPV6_ADDR_LINKLOCAL
 #define	IFA_SITE	IPV6_ADDR_SITELOCAL
 #define	IFA_GLOBAL	0x0000U
-
-extern int		in6_ifnum;
 
 struct inet6_dev 
 {
@@ -90,11 +97,12 @@ struct inet6_dev
 	__u32			router:1,
 				unused:31;
 
+	struct neigh_parms	*nd_parms;
 	struct inet6_dev	*next;
 };
 
 
-extern __inline__ void ipv6_mc_map(struct in6_addr *addr, char *buf)
+extern __inline__ void ipv6_eth_mc_map(struct in6_addr *addr, char *buf)
 {
 	/*
 	 *	+-------+-------+-------+-------+-------+-------+

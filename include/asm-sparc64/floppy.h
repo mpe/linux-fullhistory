@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.4 1997/09/05 23:00:15 ecd Exp $
+/* $Id: floppy.h,v 1.7 1997/09/07 03:34:08 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -42,6 +42,7 @@ struct sun_flpy_controller {
 /* You'll only ever find one controller on a SparcStation anyways. */
 static struct sun_flpy_controller *sun_fdc = NULL;
 volatile unsigned char *fdc_status;
+static struct linux_sbus_device *floppy_sdev = NULL;
 
 struct sun_floppy_ops {
 	unsigned char	(*fd_inb) (unsigned long port);
@@ -215,10 +216,25 @@ static int sun_fd_request_irq(void)
 	int error;
 
 	if(!once) {
+		struct devid_cookie dcookie;
+
 		once = 1;
-		error = request_fast_irq(FLOPPY_IRQ, floppy_hardint, SA_INTERRUPT, "floppy");
+
+		dcookie.real_dev_id = NULL;
+		dcookie.imap = dcookie.iclr = 0;
+		dcookie.pil = -1;
+		dcookie.bus_cookie = floppy_sdev->my_bus;
+
+		error = request_fast_irq(FLOPPY_IRQ, floppy_hardint,
+					 (SA_INTERRUPT | SA_SBUS | SA_DCOOKIE),
+					 "floppy", &dcookie);
+
+		if(error == 0)
+			FLOPPY_IRQ = dcookie.ret_ino;
+
 		return ((error == 0) ? 0 : -1);
-	} else return 0;
+	}
+	return 0;
 }
 
 static void sun_fd_enable_irq(void)
@@ -364,14 +380,16 @@ static unsigned long sun_floppy_init(void)
 	char state[128];
 	int fd_node, num_regs;
 	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev;
+	struct linux_sbus_device *sdev = NULL;
 
-	FLOPPY_IRQ = 11;
 	for_all_sbusdev (sdev, bus) {
 		if (!strcmp(sdev->prom_name, "SUNW,fdtwo")) 
 			break;
 	}
-	if (!bus) {
+	if(sdev) {
+		floppy_sdev = sdev;
+		FLOPPY_IRQ = sdev->irqs[0].pri;
+	} else {
 #ifdef CONFIG_PCI
 		struct linux_ebus *ebus;
 		struct linux_ebus_device *edev;
@@ -424,7 +442,8 @@ static unsigned long sun_floppy_init(void)
 	}
 	fd_node = sdev->prom_node;
 	prom_getproperty(fd_node, "status", state, sizeof(state));
-	if(!strcmp(state, "disabled")) return -1;
+	if(!strncmp(state, "disabled", 8))
+		return -1;
 	num_regs = prom_getproperty(fd_node, "reg", (char *) fd_regs, sizeof(fd_regs));
 	num_regs = (num_regs / sizeof(fd_regs[0]));
 	prom_apply_sbus_ranges(sdev->my_bus, fd_regs, num_regs, sdev);

@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.13 1997/04/11 00:42:22 davem Exp $
+/* $Id: uaccess.h,v 1.14 1997/09/18 10:42:02 rth Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -21,15 +21,18 @@
  *
  * "For historical reasons, these macros are grossly misnamed." -Linus
  */
-#define KERNEL_DS   0
-#define USER_DS     -1
+
+#define KERNEL_DS   ((mm_segment_t) { 0 })
+#define USER_DS     ((mm_segment_t) { -1 })
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
 
-#define get_fs() (current->tss.current_ds)
-#define get_ds() (KERNEL_DS)
-#define set_fs(val) ((current->tss.current_ds) = (val))
+#define get_ds()	(KERNEL_DS)
+#define get_fs()	(current->tss.current_ds)
+#define set_fs(val)	((current->tss.current_ds) = (val))
+
+#define segment_eq(a,b)	((a).seg == (b).seg)
 
 /* We have there a nice not-mapped page at page_offset - PAGE_SIZE, so that this test
  * can be fairly lightweight.
@@ -37,8 +40,8 @@
  * large size and address near to page_offset - a fault will break his intentions.
  */
 #define __user_ok(addr,size) ((addr) < stack_top)
-#define __kernel_ok (get_fs() == KERNEL_DS)
-#define __access_ok(addr,size) (__user_ok((addr) & get_fs(),(size)))
+#define __kernel_ok (segment_eq(get_fs(), KERNEL_DS))
+#define __access_ok(addr,size) (__user_ok((addr) & get_fs().seg,(size)))
 #define access_ok(type,addr,size) __access_ok((unsigned long)(addr),(size))
 
 extern inline int verify_area(int type, const void * addr, unsigned long size)

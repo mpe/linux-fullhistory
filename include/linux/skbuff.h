@@ -86,8 +86,7 @@ struct sk_buff
   
 	unsigned int 	len;			/* Length of actual data			*/
 	unsigned int	csum;			/* Checksum 					*/
-	volatile char 	used,			/* Are we in use ?				*/
-			arp;			/* Has IP/ARP resolution finished		*/
+	volatile char 	used;
 	unsigned char	tries,			/* Times tried					*/
   			inclone,		/* Inline clone					*/
   			pkt_type,		/* Packet class					*/
@@ -484,33 +483,6 @@ extern __inline__ void skb_trim(struct sk_buff *skb, unsigned int len)
 	}
 }
 
-/* dev_tint can lock buffer at any moment,
- * so that cli(), unlink it and sti(),
- * now it is safe.
- */
-
-extern __inline__ int skb_steal(struct sk_buff *skb)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	if (skb->next) {
-		skb_unlink(skb);
-		atomic_dec(&skb->users);
-	}
-	restore_flags(flags);
-	return 1;
-}
-
-extern __inline__ void __skb_steal(struct sk_buff *skb)
-{
-	if (skb->next) {
-		skb_unlink(skb);
-		atomic_dec(&skb->users);
-	}
-}
-
 extern __inline__ void skb_orphan(struct sk_buff *skb)
 {
 	if (skb->destructor)
@@ -524,6 +496,16 @@ extern __inline__ void skb_queue_purge(struct sk_buff_head *list)
 	struct sk_buff *skb;
 	while ((skb=skb_dequeue(list))!=NULL)
 		kfree_skb(skb,0);
+}
+
+extern __inline__ struct sk_buff *dev_alloc_skb(unsigned int length)
+{
+	struct sk_buff *skb;
+
+	skb = alloc_skb(length+16, GFP_ATOMIC);
+	if (skb)
+		skb_reserve(skb,16);
+	return skb;
 }
 
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);

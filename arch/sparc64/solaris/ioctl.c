@@ -1,4 +1,4 @@
-/* $Id: ioctl.c,v 1.2 1997/09/04 00:59:22 davem Exp $
+/* $Id: ioctl.c,v 1.4 1997/09/18 10:38:24 rth Exp $
  * ioctl.c: Solaris ioctl emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -15,6 +15,7 @@
 #include <linux/smp_lock.h>
 #include <linux/ioctl.h>
 #include <linux/fs.h>
+#include <linux/netdevice.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
@@ -92,7 +93,9 @@ static u32 linux_to_solaris_cflag(u32 cflag)
 		case B460800: baud = 6; break;
 		case B614400: baud = 7; break;
 		case B921600: baud = 8; break;
-		/* case B1843200: baud = 9; break; */
+#if 0		
+		case B1843200: baud = 9; break;
+#endif
 		}
 		cflag |= 0x200000 | baud;
 	}
@@ -120,7 +123,7 @@ static int solaris_to_linux_termio(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	int ret;
 	struct solaris_termio s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	
 	if (copy_from_user (&s, (struct solaris_termio *)A(arg), sizeof(struct solaris_termio)))
 		return -EFAULT;
@@ -135,7 +138,7 @@ static inline int linux_to_solaris_termios(unsigned int fd, unsigned int cmd, u3
 {
 	int ret;
 	struct solaris_termios s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 
 	set_fs(KERNEL_DS);	
 	ret = sys_ioctl(fd, cmd, (unsigned long)&s);
@@ -156,7 +159,7 @@ static int solaris_to_linux_termios(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	int ret;
 	struct solaris_termios s;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 
 	set_fs(KERNEL_DS);
 	ret = sys_ioctl(fd, TCGETS, (unsigned long)&s);
@@ -232,7 +235,7 @@ static inline int solaris_S(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	char *p;
 	int ret;
-	unsigned long old_fs;
+	mm_segment_t old_fs;
 	struct strioctl si;
 	
 	switch (cmd & 0xff) {
@@ -275,6 +278,117 @@ static inline int solaris_S(unsigned int fd, unsigned int cmd, u32 arg)
 	}
 	return -ENOSYS;
 }
+
+static inline int solaris_s(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	switch (cmd & 0xff) {
+	case 0: /* SIOCSHIWAT */
+	case 2: /* SIOCSLOWAT */
+		return 0; /* We don't support them */
+	case 1: /* SIOCGHIWAT */
+	case 3: /* SIOCGLOWAT */
+		put_user_ret (0, (u32 *)A(arg), -EFAULT);
+		return 0; /* Lie */
+	case 7: /* SIOCATMARK */
+		return sys_ioctl(fd, SIOCATMARK, arg);
+	case 8: /* SIOCSPGRP */
+		return sys_ioctl(fd, SIOCSPGRP, arg);
+	case 9: /* SIOCGPGRP */
+		return sys_ioctl(fd, SIOCGPGRP, arg);
+	}
+	return -ENOSYS;
+}
+
+static inline int solaris_r(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	switch (cmd & 0xff) {
+	case 10: /* SIOCADDRT */
+		return sys32_ioctl(fd, SIOCADDRT, arg);
+	case 11: /* SIOCDELRT */
+		return sys32_ioctl(fd, SIOCDELRT, arg);
+	}
+	return -ENOSYS;
+}
+
+static inline int solaris_i(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	switch (cmd & 0xff) {
+	case 12: /* SIOCSIFADDR */
+		return sys32_ioctl(fd, SIOCSIFADDR, arg);
+	case 13: /* SIOCGIFADDR */
+		return sys32_ioctl(fd, SIOCGIFADDR, arg);
+	case 14: /* SIOCSIFDSTADDR */
+		return sys32_ioctl(fd, SIOCSIFDSTADDR, arg);
+	case 15: /* SIOCGIFDSTADDR */
+		return sys32_ioctl(fd, SIOCGIFDSTADDR, arg);
+	case 16: /* SIOCSIFFLAGS */
+		return sys32_ioctl(fd, SIOCSIFFLAGS, arg);
+	case 17: /* SIOCGIFFLAGS */
+		return sys32_ioctl(fd, SIOCGIFFLAGS, arg);
+	case 18: /* SIOCSIFMEM */
+		return sys32_ioctl(fd, SIOCSIFMEM, arg);
+	case 19: /* SIOCGIFMEM */
+		return sys32_ioctl(fd, SIOCGIFMEM, arg);
+	case 20: /* SIOCGIFCONF */
+		return sys32_ioctl(fd, SIOCGIFCONF, arg);
+	case 21: /* SIOCSIFMTU */
+		return sys32_ioctl(fd, SIOCSIFMTU, arg);
+	case 22: /* SIOCGIFMTU */
+		return sys32_ioctl(fd, SIOCGIFMTU, arg);
+	case 23: /* SIOCGIFBRDADDR */
+		return sys32_ioctl(fd, SIOCGIFBRDADDR, arg);
+	case 24: /* SIOCSIFBRDADDR */
+		return sys32_ioctl(fd, SIOCSIFBRDADDR, arg);
+	case 25: /* SIOCGIFNETMASK */
+		return sys32_ioctl(fd, SIOCGIFNETMASK, arg);
+	case 26: /* SIOCSIFNETMASK */
+		return sys32_ioctl(fd, SIOCSIFNETMASK, arg);
+	case 27: /* SIOCGIFMETRIC */
+		return sys32_ioctl(fd, SIOCGIFMETRIC, arg);
+	case 28: /* SIOCSIFMETRIC */
+		return sys32_ioctl(fd, SIOCSIFMETRIC, arg);
+	case 30: /* SIOCSARP */
+		return sys32_ioctl(fd, SIOCSARP, arg);
+	case 31: /* SIOCGARP */
+		return sys32_ioctl(fd, SIOCGARP, arg);
+	case 32: /* SIOCDARP */
+		return sys32_ioctl(fd, SIOCDARP, arg);
+	case 52: /* SIOCGETNAME */
+	case 53: /* SIOCGETPEER */
+		{
+			struct sockaddr uaddr;
+			int uaddr_len = sizeof(struct sockaddr), ret;
+			long args[3];
+			mm_segment_t old_fs = get_fs();
+			int (*sys_socketcall)(int, unsigned long *) =
+				(int (*)(int, unsigned long *))SYS(socketcall);
+			
+			args[0] = fd; args[1] = (long)&uaddr; args[2] = (long)&uaddr_len;
+			set_fs(KERNEL_DS);
+			ret = sys_socketcall(((cmd & 0xff) == 52) ? SYS_GETSOCKNAME : SYS_GETPEERNAME,
+					args);
+			set_fs(old_fs);
+			if (ret >= 0)
+				copy_to_user_ret((char *)A(arg), &uaddr, uaddr_len, -EFAULT);
+			return ret;
+		}
+#if 0		
+	case 86: /* SIOCSOCKSYS */
+		return socksys_syscall(fd, arg);
+#endif		
+	case 87: /* SIOCGIFNUM */
+		{
+			struct device *d;
+			int i = 0;
+			
+			for (d = dev_base; d; d = d->next) i++;
+			put_user_ret (i, (int *)A(arg), -EFAULT);
+			return 0;
+		}
+	}
+	return -ENOSYS;
+}
+
 /* }}} */
 
 asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
@@ -288,15 +402,13 @@ asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	filp = current->files->fd[fd];
 	if(!filp) goto out;
 
-	if (!filp->f_op || !filp->f_op->ioctl) {
-		error = sys_ioctl (fd, cmd, (unsigned long)arg);
-		goto out;
-	}
-	
 	error = -EFAULT;
 	switch ((cmd >> 8) & 0xff) {
 	case 'S': error = solaris_S(fd, cmd, arg); break;
 	case 'T': error = solaris_T(fd, cmd, arg); break;
+	case 'i': error = solaris_i(fd, cmd, arg); break;
+	case 'r': error = solaris_r(fd, cmd, arg); break;
+	case 's': error = solaris_s(fd, cmd, arg); break;
 	case 't': error = solaris_t(fd, cmd, arg); break;
 	default:
 		error = -ENOSYS;

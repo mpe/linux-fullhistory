@@ -57,9 +57,9 @@ if [ "$CONFIG_IP_MULTICAST" = "y" ]; then
     bool 'IP: PIM-SM version 2 support' CONFIG_IP_PIMSM_V2
   fi
 fi
-tristate 'IP: aliasing support' CONFIG_IP_ALIAS
+bool 'IP: aliasing support' CONFIG_IP_ALIAS
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  if [ "$CONFIG_NETLINK" = "y" ]; then
+  if [ "$CONFIG_RTNETLINK" = "y" ]; then
     bool 'IP: ARP daemon support (EXPERIMENTAL)' CONFIG_ARPD
   fi
 fi

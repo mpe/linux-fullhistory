@@ -1,7 +1,8 @@
-/* $Id: ranges.c,v 1.8 1997/02/04 07:28:29 davem Exp $
+/* $Id: ranges.c,v 1.10 1997/12/19 12:37:18 jj Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/init.h>
@@ -22,7 +23,9 @@ prom_adjust_regs(struct linux_prom_registers *regp, int nregs,
 
 	for(regc=0; regc < nregs; regc++) {
 		for(rngc=0; rngc < nranges; rngc++)
-			if(regp[regc].which_io == rangep[rngc].ot_child_space)
+			if(regp[regc].which_io == rangep[rngc].ot_child_space &&
+			   regp[regc].phys_addr >= rangep[rngc].ot_child_base &&
+			   regp[regc].phys_addr + regp[regc].reg_size <= rangep[rngc].ot_child_base + rangep[rngc].or_size)
 				break; /* Fount it */
 		if(rngc==nranges) /* oops */
 			prom_printf("adjust_regs: Could not find range with matching bus type...\n");
@@ -39,10 +42,15 @@ prom_adjust_ranges(struct linux_prom_ranges *ranges1, int nranges1,
 
 	for(rng1c=0; rng1c < nranges1; rng1c++) {
 		for(rng2c=0; rng2c < nranges2; rng2c++)
-			if(ranges1[rng1c].ot_child_space ==
-			   ranges2[rng2c].ot_child_space) break;
+			if(ranges1[rng1c].ot_parent_space == ranges2[rng2c].ot_child_space &&
+			   ranges1[rng1c].ot_parent_base >= ranges2[rng2c].ot_child_base &&
+			   ranges2[rng2c].ot_child_base + ranges2[rng2c].or_size - ranges1[rng1c].ot_parent_base > 0U)
+			break;
 		if(rng2c == nranges2) /* oops */
 			prom_printf("adjust_ranges: Could not find matching bus type...\n");
+		else if (ranges1[rng1c].ot_parent_base + ranges1[rng1c].or_size > ranges2[rng2c].ot_child_base + ranges2[rng2c].or_size)
+			ranges1[rng1c].or_size =
+				ranges2[rng2c].ot_child_base + ranges2[rng2c].or_size - ranges1[rng1c].ot_parent_base;
 		ranges1[rng1c].ot_parent_space = ranges2[rng2c].ot_parent_space;
 		ranges1[rng1c].ot_parent_base += ranges2[rng2c].ot_parent_base;
 	}

@@ -75,8 +75,12 @@ nfsd_stat_init(void)
 {
 	struct proc_dir_entry	*ent;
 
-	if ((ent = svc_proc_register(&nfsd_svcstats)) != 0)
+	if ((ent = svc_proc_register(&nfsd_svcstats)) != 0) {
 		ent->read_proc = nfsd_proc_read;
+#ifdef MODULE
+		ent->fill_inode = nfsd_modcount;
+#endif
+	}
 }
 
 void

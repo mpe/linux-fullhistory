@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fw.c,v 1.7 1997/10/06 23:09:54 davem Exp $
+ *	$Id: ip6_fw.c,v 1.8 1997/12/13 21:53:11 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -302,6 +302,7 @@ int ip6_fw_msg_add(struct ip6_fw_msg *msg)
 	rtmsg.rtmsg_flags = RTF_NONEXTHOP|RTF_POLICY;
 	rt = ip6_route_add(&rtmsg, &err);
 
+	/* BUGGGG! rt can point to nowhere. */
 	if (rt == NULL) {
 		ip6_fwrule_free(rl);
 		return -ENOMEM;

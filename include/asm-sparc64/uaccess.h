@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.22 1997/08/19 15:25:35 jj Exp $ */
+/* $Id: uaccess.h,v 1.24 1997/12/15 15:05:14 jj Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -17,13 +17,21 @@
 
 #ifndef __ASSEMBLY__
 
-/* Sparc is not segmented, however we need to be able to fool verify_area()
- * when doing system calls from kernel mode legitimately.
+/*
+ * Sparc64 is segmented, though more like the M68K than the I386. 
+ * We use the secondary ASI to address user memory, which references a
+ * completely different VM map, thus there is zero chance of the user
+ * doing something queer and tricking us into poking kernel memory.
+ *
+ * What is left here is basically what is needed for the other parts of
+ * the kernel that expect to be able to manipulate, erum, "segments".
+ * Or perhaps more properly, permissions.
  *
  * "For historical reasons, these macros are grossly misnamed." -Linus
  */
-#define KERNEL_DS   0x00
-#define USER_DS     0x2B /* har har har */
+
+#define KERNEL_DS   ((mm_segment_t) { 0x00 })
+#define USER_DS     ((mm_segment_t) { 0x2B })	/* har har har */
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
@@ -31,24 +39,29 @@
 #define get_fs() (current->tss.current_ds)
 #define get_ds() (KERNEL_DS)
 
+#define segment_eq(a,b)  ((a).seg == (b).seg)
+
 extern spinlock_t scheduler_lock;
 
-#define set_fs(val)				\
-do {	spin_lock(&scheduler_lock);		\
-	current->tss.current_ds = (val);	\
-	if ((val) == KERNEL_DS) {		\
-		flushw_user ();			\
-		current->tss.ctx = 0;		\
-	} else {				\
-		current->tss.ctx = (current->mm->context & 0x1fff); \
-	}					\
-	spitfire_set_secondary_context(current->tss.ctx); \
-	__asm__ __volatile__("flush %g6");	\
-	spin_unlock(&scheduler_lock);		\
+#define set_fs(val)								\
+do {										\
+	if (current->tss.current_ds.seg != val.seg) {				\
+		spin_lock(&scheduler_lock);					\
+		current->tss.current_ds = (val);				\
+		if (segment_eq((val), KERNEL_DS)) {				\
+			flushw_user ();						\
+			current->tss.ctx = 0;					\
+		} else {							\
+			current->tss.ctx = (current->mm->context & 0x1fff);	\
+		}								\
+		spitfire_set_secondary_context(current->tss.ctx); 		\
+		__asm__ __volatile__("flush %g6");				\
+		spin_unlock(&scheduler_lock);					\
+	}									\
 } while(0)
 
 #define __user_ok(addr,size) 1
-#define __kernel_ok (get_fs() == KERNEL_DS)
+#define __kernel_ok (segment_eq(get_fs(), KERNEL_DS))
 #define __access_ok(addr,size) 1
 #define access_ok(type,addr,size) 1
 

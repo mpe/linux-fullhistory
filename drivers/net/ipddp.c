@@ -195,6 +195,8 @@ static int ipddp_rebuild_header(struct sk_buff *skb)
         struct ipddp_route *rt;
         struct at_addr *our_addr;
 
+	/* Wow! I'll eat my hat if this routine is really called. --ANK */
+
 	/*
          * Find appropriate route to use, based only on IP number.
          */

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.17 1997/09/04 01:54:43 davem Exp $
+# $Id: config.in,v 1.36 1998/01/10 19:04:30 ecd Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -39,6 +39,7 @@ else
 	define_bool CONFIG_SUN_MOUSE y
 	define_bool CONFIG_SERIAL y
 	define_bool CONFIG_SUN_SERIAL y
+	define_bool CONFIG_SERIAL_CONSOLE y
 	define_bool CONFIG_SUN_KEYBOARD y
 	define_bool CONFIG_SUN_CONSOLE y
 	define_bool CONFIG_SUN_AUXIO y
@@ -48,8 +49,10 @@ else
 fi
 
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
+bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
 tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
@@ -64,7 +67,24 @@ fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel Quad FPU (long double) and subnormal float/double emulation' CONFIG_MATHEMU
+fi
 endmenu
+
+if [ "$CONFIG_PCI" = "y" ]; then
+  tristate 'Parallel port support' CONFIG_PARPORT
+  if [ "$CONFIG_PARPORT" != "n" ]; then
+    dep_tristate '  Ultra/AX-style hardware' CONFIG_PARPORT_AX $CONFIG_PARPORT
+    if [ "$CONFIG_PARPORT_AX" != "n" ]; then
+      bool '  Support foreign hardware' CONFIG_PARPORT_OTHER
+    fi
+    dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
+    if [ "$CONFIG_PRINTER" != "n" ]; then
+      bool '    Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
+    fi
+  fi
+fi
 
 mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
@@ -75,7 +95,8 @@ bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR
   tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
-#  tristate '   RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
+  tristate '   RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
+  tristate '   RAID-4/RAID-5 mode' CONFIG_MD_RAID5
 fi
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
@@ -84,6 +105,7 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
 fi
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+tristate 'Network block device support' CONFIG_BLK_DEV_NBD
 
 if [ "$CONFIG_PCI" = "y" ]; then
 	tristate 'Ultra/PCI IDE disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
@@ -94,7 +116,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
 	  dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
 	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
 	  define_bool CONFIG_IDE_CHIPSETS y
-	  define_bool CONFIG_BLK_DEV_NS87415 y
+	  define_bool CONFIG_BLK_DEV_NS87415_AX y
 	fi
 fi
 
@@ -144,11 +166,26 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	    bool '   Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
 	    int  '   Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 15
 	  fi
+	  dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
+	  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
+	    bool '  detect and read serial NVRAMs' CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+	    bool '  enable tagged command queueing' CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+	    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 12
+	    int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 10
+	    if [ "$CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE" != "y" ]; then
+	      bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
+	    fi
+	    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	      bool '  assume boards are SYMBIOS compatible' CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+	    fi
+	  fi
 	fi
 
 	endmenu
 fi
 endmenu
+
+source drivers/fc4/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
 	mainmenu_option next_comment
@@ -197,11 +234,18 @@ source fs/Config.in
 source fs/nls/Config.in
 
 mainmenu_option next_comment
+comment 'Watchdog'
+
+tristate 'Software watchdog' CONFIG_SOFT_WATCHDOG
+endmenu
+
+mainmenu_option next_comment
 comment 'Kernel hacking'
 
 bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
 	int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 bool 'ECache flush trap support at ta 0x72' CONFIG_EC_FLUSH_TRAP
 endmenu

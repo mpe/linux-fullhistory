@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.47 1997/08/10 04:49:24 davem Exp $
+/* $Id: rtrap.S,v 1.49 1997/12/14 23:24:24 ecd Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -65,27 +65,24 @@ C_LABEL(ret_trap_lockless_ipi):
 
 	wr	%t_psr, 0x0, %psr
 	b	ret_trap_kernel
-	 mov	1, %o0
+	 nop
 
 1:
-	ld	[%curptr + AOFF_task_processor], %o1
 	ld	[%twin_tmp1 + %lo(C_LABEL(need_resched))], %g2
-	sll	%o0, %o1, %o0
-
-	andcc	%g2, %o0, %g0
+	orcc	%g2, %g0, %g0
 	be	signal_p
-	 nop
+	 ld	[%curptr + AOFF_task_sigpending], %g2
 
 	call	C_LABEL(schedule)
 	 nop
 
+	ld	[%curptr + AOFF_task_sigpending], %g2
 signal_p:
-	ld	[%curptr + AOFF_task_signal], %g2
-	ld	[%curptr + AOFF_task_blocked], %o0
-	andncc	%g2, %o0, %g0
-	be,a	ret_trap_continue
+	cmp	%g2, 0
+	bz,a	ret_trap_continue
 	 ld	[%sp + REGWIN_SZ + PT_PSR], %t_psr
 
+	clr	%o0
 	mov	%l5, %o2
 	mov	%l6, %o3
 	call	C_LABEL(do_signal)
@@ -110,7 +107,8 @@ ret_trap_continue:
 	call	C_LABEL(try_to_clear_window_buffer)
 	 add	%sp, REGWIN_SZ, %o0
 
-	b,a	signal_p
+	b	signal_p
+	 ld	[%curptr + AOFF_task_sigpending], %g2
 
 ret_trap_nobufwins:
 	/* Load up the user's out registers so we can pull
@@ -179,7 +177,8 @@ ret_trap_unaligned_pc:
 	call	C_LABEL(do_memaccess_unaligned)
 	 nop
 
-	b,a	signal_p
+	b	signal_p
+	 ld	[%curptr + AOFF_task_sigpending], %g2
 
 ret_trap_kernel:
 		/* Will the rett land us in the invalid window? */
@@ -228,7 +227,8 @@ ret_trap_user_stack_is_bolixed:
 	call	C_LABEL(window_ret_fault)
 	 add	%sp, REGWIN_SZ, %o0
 
-	b,a	signal_p
+	b	signal_p
+	 ld	[%curptr + AOFF_task_sigpending], %g2
 
 	.globl	C_LABEL(sun4c_rett_stackchk)
 C_LABEL(sun4c_rett_stackchk):

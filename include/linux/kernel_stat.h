@@ -2,6 +2,7 @@
 #define _LINUX_KERNEL_STAT_H
 
 #include <asm/irq.h>
+#include <linux/tasks.h>
 
 /*
  * 'kernel_stat.h' contains the definitions needed for doing
@@ -12,7 +13,10 @@
 #define DK_NDRIVE 4
 
 struct kernel_stat {
-	unsigned int cpu_user, cpu_nice, cpu_system;
+	unsigned int cpu_user, cpu_nice, cpu_system;	
+	unsigned int per_cpu_user[NR_CPUS],
+	             per_cpu_nice[NR_CPUS],
+	             per_cpu_system[NR_CPUS];
 	unsigned int dk_drive[DK_NDRIVE];
 	unsigned int dk_drive_rio[DK_NDRIVE];
 	unsigned int dk_drive_wio[DK_NDRIVE];

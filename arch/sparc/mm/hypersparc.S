@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.10 1997/05/27 19:29:58 jj Exp $
+/* $Id: hypersparc.S,v 1.12 1997/11/27 15:42:30 jj Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -135,8 +135,7 @@ hypersparc_flush_cache_range:
 	mov	SRMMU_CTX_REG, %g7
 	lda	[%g7] ASI_M_MMUREGS, %o3
 	sta	%o0, [%g7] ASI_M_MMUREGS
-	sethi	%hi(PAGE_SIZE), %g7		/* XXX ick, stupid stalls... */
-	sub	%o2, %g7, %o0
+	add	%o2, -PAGE_SIZE, %o0
 1:
 	or	%o0, 0x400, %g7
 	lda	[%g7] ASI_M_FLUSH_PROBE, %g7
@@ -157,10 +156,9 @@ hypersparc_flush_cache_range:
 	bne	2b
 	 sta	%g0, [%o2 + %g5] ASI_M_FLUSH_PAGE
 3:
-	sethi	%hi(PAGE_SIZE), %g7
 	cmp	%o2, %o1
 	bne	1b
-	 sub	%o2, %g7, %o0
+	 add	%o2, -PAGE_SIZE, %o0
 	mov	SRMMU_FAULT_STATUS, %g5
 	lda	[%g5] ASI_M_MMUREGS, %g0
 	mov	SRMMU_CTX_REG, %g7
@@ -191,10 +189,9 @@ hypersparc_flush_cache_page:
 	or	%o1, 0x400, %o5
 	lda	[%o5] ASI_M_FLUSH_PROBE, %g1
 	orcc	%g0, %g1, %g0
-	sethi	%hi(PAGE_SIZE), %g7
 	be	2f
 	 add	%o4, %o4, %o5
-	add	%o1, %g7, %o1
+	sub	%o1, -PAGE_SIZE, %o1
 	add	%o4, %o5, %g1
 	add	%o4, %g1, %g2
 	add	%o4, %g2, %g3
@@ -242,9 +239,8 @@ hypersparc_flush_chunk:
 	orcc	%g5, 0, %g0
 	be	2f
 	 add	%o4, %g1, %g2
-	sethi	%hi(PAGE_SIZE), %g5
 	add	%o4, %g2, %g3
-	add	%o0, %g5, %o0
+	sub	%o0, -PAGE_SIZE, %o0
 	add	%o4, %g3, %g4
 	add	%o4, %g4, %g5
 	add	%o4, %g5, %g7

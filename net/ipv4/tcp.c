@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.75 1997/10/16 02:57:34 davem Exp $
+ * Version:	$Id: tcp.c,v 1.76 1997/12/30 19:43:17 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -659,7 +659,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			return put_user(amount, (int *)arg);
 		}
 		default:
-			return(-EINVAL);
+			return(-ENOIOCTLCMD);
 	};
 }
 
@@ -814,7 +814,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			struct sk_buff *skb;
 
 			if (err)
-				return (err);
+				return -EFAULT;
 
 			/* Stop on errors. */
 			if (sk->err) {
@@ -950,7 +950,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 				skb->h.th->urg_ptr = ntohs(copy);
 			}
 
-			skb->csum = csum_partial_copy_from_user(from,
+			skb->csum = csum_and_copy_from_user(from,
 					skb_put(skb, copy), copy, 0, &err);
 
 			from += copy;
@@ -968,7 +968,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 	sk->err = 0;
 
 	if (err)
-		return (err);
+		return -EFAULT;
 
 	return copied;
 }

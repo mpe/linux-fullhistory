@@ -333,7 +333,7 @@ static struct file_operations wdt_fops = {
 static struct miscdevice wdt_miscdev=
 {
 	WATCHDOG_MINOR,
-	"wdt",
+	"watchdog",
 	&wdt_fops
 };
 

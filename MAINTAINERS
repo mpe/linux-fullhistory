@@ -442,6 +442,12 @@ P:	Jens Maurer
 M:	jmaurer@cck.uni-kl.de
 S:	Maintained
 
+PCI SUBSYSTEM
+P:	Martin Mares
+M:	mj@atrey.karlin.mff.cuni.cz
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 PCNET32 NETWORK DRIVER
 P:	Thomas Bogendoerfer
 M:	tsbogend@alpha.franken.de
@@ -537,7 +543,7 @@ S:	Maintained
 
 SVGA HANDLING:
 P:	Martin Mares
-M:	mj@k332.feld.cvut.cz
+M:	mj@atrey.karlin.mff.cuni.cz
 L:	linux-video@atrey.karlin.mff.cuni.cz
 S:	Maintained
 

@@ -59,6 +59,22 @@ static inline void d_free(struct dentry *dentry)
 }
 
 /*
+ * Release the dentry's inode, using the fileystem
+ * d_iput() operation if defined.
+ */
+static inline void dentry_iput(struct dentry * dentry)
+{
+	struct inode *inode = dentry->d_inode;
+	if (inode) {
+		dentry->d_inode = NULL;
+		if (dentry->d_op && dentry->d_op->d_iput)
+			dentry->d_op->d_iput(dentry, inode);
+		else
+			iput(inode);
+	}
+}
+
+/*
  * dput()
  *
  * This is complicated by the fact that we do not want to put
@@ -104,13 +120,10 @@ repeat:
 		list_del(&dentry->d_lru);
 	}
 	if (list_empty(&dentry->d_hash)) {
-		struct inode *inode = dentry->d_inode;
 		struct dentry * parent;
+
 		list_del(&dentry->d_child);
-		if (inode) {
-			dentry->d_inode = NULL;
-			iput(inode);
-		}
+		dentry_iput(dentry);
 		parent = dentry->d_parent;
 		d_free(dentry);
 		if (dentry == parent)
@@ -260,12 +273,7 @@ static inline void prune_one_dentry(struct dentry * dentry)
 
 	list_del(&dentry->d_hash);
 	list_del(&dentry->d_child);
-	if (dentry->d_inode) {
-		struct inode * inode = dentry->d_inode;
-
-		dentry->d_inode = NULL;
-		iput(inode);
-	}
+	dentry_iput(dentry);
 	parent = dentry->d_parent;
 	d_free(dentry);
 	dput(parent);
@@ -637,11 +645,7 @@ void d_delete(struct dentry * dentry)
 	 * Are we the only user?
 	 */
 	if (dentry->d_count == 1) {
-		struct inode * inode = dentry->d_inode;
-		if (inode) {
-			dentry->d_inode = NULL;
-			iput(inode);
-		}
+		dentry_iput(dentry);
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/* $Id: sbuscons.c,v 1.7 1997/08/28 09:30:07 davem Exp $
+/* $Id: sbuscons.c,v 1.10 1998/01/07 06:37:22 baccala Exp $
  * sbuscons.c: Routines specific to SBUS frame buffer consoles.
  *
  * Copyright (C) 1995 Peter Zaitcev (zaitcev@lab.ipmce.su)
@@ -1168,7 +1168,7 @@ static int sbus_blitc(uint charattr, unsigned long addr)
 		const int cpl = chars_per_line;
 		/* The register assignment is important here, do not modify without touching the assembly code as well */
 		register unsigned int x1 __asm__("g4"), x2 __asm__("g5"), x3 __asm__("g2"), x4 __asm__("g3"), flags __asm__("g7");
-		register unsigned int *dst __asm__("g1");
+		register unsigned int *dst;
 #else		
 		const int ipl = ints_per_line;
 		unsigned int data2, data3, data4;
@@ -1182,9 +1182,9 @@ static int sbus_blitc(uint charattr, unsigned long addr)
 		if (j == ' ') /* space is quite common, so we optimize a bit */ {
 #ifdef ASM_BLITC
 #define BLITC_SPACE \
-		"\n\t std	%%g4, [%%g1]" \
-		"\n\t std	%%g4, [%%g1 + %0]" \
-		"\n\t add	%%g1, %1, %%g1"
+		"\n\t std	%3, [%0]" \
+		"\n\t std	%3, [%0 + %1]" \
+		"\n\t add	%0, %2, %0"
 #define BLITC_SPC \
 		"\n\t std	%0, [%1]" \
 		"\n\t std	%0, [%1 + %2]"
@@ -1195,7 +1195,7 @@ static int sbus_blitc(uint charattr, unsigned long addr)
 			x3 = cpl << 1;
 			
 			__asm__ __volatile__ (
-				"\n\t mov	%2, %3"
+				"\n\t mov	%3, %4"
 				BLITC_SPACE
 				BLITC_SPACE
 				BLITC_SPACE
@@ -1203,12 +1203,19 @@ static int sbus_blitc(uint charattr, unsigned long addr)
 				BLITC_SPACE
 				BLITC_SPACE
 				BLITC_SPACE
-					: : "r" (cpl), "r" (x3), "r" (x1), "r" (x2));
+				: "=r" (dst)
+				: "r" (cpl), "r" (x3), "r" (x1), "r" (x2));
 			__save_and_cli (flags);
 			if (idx != cursor_pos)
-				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (dst), "r" (cpl));
+				__asm__ __volatile__ (
+					BLITC_SPC
+					: /* no outputs */
+					: "r" (x1), "r" (dst), "r" (cpl));
 			else
-				__asm__ __volatile__ (BLITC_SPC : : "r" (x1), "r" (under_cursor), "i" (8));
+				__asm__ __volatile__ (BLITC_SPC
+					: /* no outputs */
+					: "r" (x1), "r" (under_cursor),
+					  "i" (8));
 			__restore_flags (flags);
 #else
 			bgmask = attrib >> 4;

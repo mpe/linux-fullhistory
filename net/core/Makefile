@@ -10,14 +10,10 @@
 O_TARGET := core.o
 
 O_OBJS	:= sock.o skbuff.o iovec.o datagram.o dst.o scm.o \
-	neighbour.o rtnetlink.o
+	neighbour.o rtnetlink.o utils.o
 
 ifeq ($(CONFIG_SYSCTL),y)
 O_OBJS += sysctl_net_core.o
-endif
-
-ifdef CONFIG_FILTER
-O_OBJS += filter.o
 endif
 
 ifdef CONFIG_NET
@@ -28,6 +24,10 @@ ifdef CONFIG_FIREWALL
 OX_OBJS += firewall.o
 endif
 
+endif
+
+ifdef CONFIG_NET_PROFILE
+OX_OBJS += profile.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -97,18 +97,6 @@ int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 int fddi_rebuild_header(struct sk_buff	*skb)
 {
 	struct fddihdr *fddi = (struct fddihdr *)skb->data;
-#if 0
- 	struct neighbour *neigh = NULL;
-
-	if (skb->dst)
-		neigh = skb->dst->neighbour;
-
-	if (neigh)
-		return neigh->ops->resolve(fddi->daddr, skb);
-#endif
-	/*
-	 * Only ARP/IP is currently supported
-	 */
 
 	if (fddi->hdr.llc_snap.ethertype != __constant_htons(ETH_P_IP))
 	{

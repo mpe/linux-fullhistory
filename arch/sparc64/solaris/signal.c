@@ -1,4 +1,4 @@
-/* $Id: signal.c,v 1.2 1997/09/03 12:29:19 jj Exp $
+/* $Id: signal.c,v 1.5 1997/12/15 15:04:59 jj Exp $
  * signal.c: Signal emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -74,11 +74,11 @@ static long sig_handler(int sig, u32 arg, int one_shot)
 {
 	struct sigaction sa, old;
 	int ret;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_sigaction)(int,struct sigaction *,struct sigaction *) = 
 		(int (*)(int,struct sigaction *,struct sigaction *))SYS(sigaction);
 	
-	sa.sa_mask = 0L;
+	sigemptyset(&sa.sa_mask);
 	sa.sa_restorer = NULL;
 	sa.sa_handler = (__sighandler_t)A(arg);
 	sa.sa_flags = 0;
@@ -99,13 +99,14 @@ static long solaris_sigset(int sig, u32 arg)
 {
 	if (arg != 2) /* HOLD */ {
 		spin_lock_irq(&current->sigmask_lock);
-		current->blocked &= ~_S(sig);
+		sigdelsetmask(&current->blocked, _S(sig));
+		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 		return sig_handler (sig, arg, 0);
 	} else {
-		sigset_t n = _S(sig) & _BLOCKABLE;
 		spin_lock_irq(&current->sigmask_lock);
-		current->blocked |= n;
+		sigaddsetmask(&current->blocked, (_S(sig) & ~_BLOCKABLE));
+		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 		return 0;
 	}
@@ -119,7 +120,8 @@ static inline long solaris_sighold(int sig)
 static inline long solaris_sigrelse(int sig)
 {
 	spin_lock_irq(&current->sigmask_lock);
-	current->blocked &= ~_S(sig);
+	sigdelsetmask(&current->blocked, _S(sig));
+	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	return 0;
 }
@@ -162,14 +164,14 @@ static inline int mapin(u32 *p, sigset_t *q)
 	u32 x;
 	int sig;
 	
-	*q = 0L;
+	sigemptyset(q);
 	x = p[0];
 	for (i = 1; i <= SOLARIS_NSIGNALS; i++) {
 		if (x & 1) {
 			sig = solaris_to_linux_signals[i];
 			if (sig == -1)
 				return -EINVAL;
-			*q |= 1L << (sig - 1);
+			sigaddsetmask(q, (1L << (sig - 1)));
 		}
 		x >>= 1;
 		if (i == 32)
@@ -181,14 +183,12 @@ static inline int mapin(u32 *p, sigset_t *q)
 static inline int mapout(sigset_t *q, u32 *p)
 {
 	int i;
-	sigset_t x;
 	int sig;
 	
 	p[0] = 0;
 	p[1] = 0;
-	x = *q;
-	for (i = 1; i <= 32; i++, x >>= 1) {
-		if (x & 1) {
+	for (i = 1; i <= 32; i++) {
+		if (sigismember(q, sigmask(i))) {
 			sig = linux_to_solaris_signals[i];
 			if (sig == -1)
 				return -EINVAL;
@@ -199,13 +199,12 @@ static inline int mapout(sigset_t *q, u32 *p)
 		}
 	}
 	return 0;
-	
 }
 
 asmlinkage int solaris_sigprocmask(int how, u32 in, u32 out)
 {
 	sigset_t in_s, *ins, out_s, *outs;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int ret;
 	int (*sys_sigprocmask)(int,sigset_t *,sigset_t *) = 
 		(int (*)(int,sigset_t *,sigset_t *))SYS(sigprocmask);
@@ -243,7 +242,7 @@ asmlinkage long do_sol_sigsuspend(u32 mask)
 	if (copy_from_user (tmp, (sol_sigset_t *)A(mask), 2*sizeof(u32)))
 		return -EFAULT;
 	if (mapin (tmp, &s)) return -EINVAL;
-	return (long)s;
+	return (long)s.sig[0];
 }
 
 struct sol_sigaction {
@@ -258,7 +257,7 @@ asmlinkage int solaris_sigaction(int sig, u32 act, u32 old)
 	u32 tmp, tmp2[4];
 	struct sigaction s, s2;
 	int ret;
-	unsigned long old_fs = get_fs();
+	mm_segment_t old_fs = get_fs();
 	int (*sys_sigaction)(int,struct sigaction *,struct sigaction *) = 
 		(int (*)(int,struct sigaction *,struct sigaction *))SYS(sigaction);
 	
@@ -311,12 +310,13 @@ asmlinkage int solaris_sigpending(int which, u32 set)
 	u32 tmp[4];
 	switch (which) {
 	case 1: /* sigpending */
-		lock_kernel();
-		s = current->blocked & current->signal;
-		unlock_kernel();
+		spin_lock_irq(&current->sigmask_lock);
+		sigandsets(&s, &current->blocked, &current->signal);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
 		break;
 	case 2: /* sigfillset - I just set signals which have linux equivalents */
-		s = 0x7fffffff;
+		sigfillset(&s);
 		break;
 	default: return -EINVAL;
 	}

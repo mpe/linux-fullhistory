@@ -56,9 +56,9 @@ unsigned int clock_transl[] = { MOTO_RTC_SECONDS,0 /* alarm */,
 
 int prep_cmos_clock_read(int addr)
 {
-	if ( _machine == _MACH_IBM )
+	if ( _prep_type == _PREP_IBM )
 		return CMOS_READ(addr);
-	else if ( _machine == _MACH_Motorola )
+	else if ( _prep_type == _PREP_Motorola )
 	{
 		outb(clock_transl[addr]>>8, NVRAM_AS1);
 		outb(clock_transl[addr], NVRAM_AS0);
@@ -71,12 +71,12 @@ int prep_cmos_clock_read(int addr)
 
 void prep_cmos_clock_write(unsigned long val, int addr)
 {
-	if ( _machine == _MACH_IBM )
+	if ( _prep_type == _PREP_IBM )
 	{
 		CMOS_WRITE(val,addr);
 		return;
 	}
-	else if ( _machine == _MACH_Motorola )
+	else if ( _prep_type == _PREP_Motorola )
 	{
 		outb(clock_transl[addr]>>8, NVRAM_AS1);
 		outb(clock_transl[addr], NVRAM_AS0);

@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: FIB frontend.
  *
- * Version:	$Id: fib_frontend.c,v 1.4 1997/11/09 20:05:23 kuznet Exp $
+ * Version:	$Id: fib_frontend.c,v 1.6 1997/12/13 21:52:48 kuznet Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -477,7 +477,7 @@ static void fib_del_ifaddr(struct in_ifaddr *ifa)
 			   First of all, we scan fib_info list searching
 			   for stray nexthop entries, then ignite fib_flush.
 			*/
-			if (fib_sync_down(ifa->ifa_local, NULL))
+			if (fib_sync_down(ifa->ifa_local, NULL, 0))
 				fib_flush();
 		}
 	}
@@ -523,14 +523,18 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 		rt_cache_flush(2*HZ);
 		break;
 	case NETDEV_DOWN:
-		if (fib_sync_down(0, dev))
+		if (fib_sync_down(0, dev, 0))
 			fib_flush();
 		rt_cache_flush(0);
+		arp_ifdown(dev);
 		break;
 	case NETDEV_UNREGISTER:
 		if (in_dev->ifa_list)
 			printk("About to crash!\n");
+		if (fib_sync_down(0, dev, 1))
+			fib_flush();
 		rt_cache_flush(0);
+		arp_ifdown(dev);
 		break;
 	}
 	return NOTIFY_DONE;

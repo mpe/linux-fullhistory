@@ -382,7 +382,6 @@ void ax25_queue_xmit(struct sk_buff *skb)
 
 	skb->protocol = htons(ETH_P_AX25);
 	skb->dev      = ax25_fwd_dev(skb->dev);
-	skb->arp      = 1;
 
 	ptr  = skb_push(skb, 1);
 	*ptr = 0x00;			/* KISS */

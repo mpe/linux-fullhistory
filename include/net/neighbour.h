@@ -4,8 +4,41 @@
 /*
  *	Generic neighbour manipulation
  *
- *	authors:
+ *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
+ *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
+ */
+
+/* The following flags & states are exported to user space,
+   so that they should be moved to include/linux/ directory.
+ */
+
+/*
+ *	Neighbor Cache Entry Flags
+ */
+
+#define NTF_PROXY	0x08	/* == ATF_PUBL */
+#define NTF_ROUTER	0x80
+
+/*
+ *	Neighbor Cache Entry States.
+ */
+
+#define NUD_INCOMPLETE	0x01
+#define NUD_REACHABLE	0x02
+#define NUD_STALE	0x04
+#define NUD_DELAY	0x08
+#define NUD_PROBE	0x10
+#define NUD_FAILED	0x20
+
+/* Dummy states */
+#define NUD_NOARP	0x40
+#define NUD_PERMANENT	0x80
+#define NUD_NONE	0x00
+
+/* NUD_NOARP & NUD_PERMANENT are pseudostates, they never change
+   and make no address resolution or NUD.
+   NUD_PERMANENT is also cannot be deleted by garbage collectors.
  */
 
 #ifdef __KERNEL__
@@ -13,37 +46,152 @@
 #include <asm/atomic.h>
 #include <linux/skbuff.h>
 
-/*
- *	flags
- *
- */
-#define NTF_COMPLETE	0x02
-#define NTF_PERMANENT	0x04
+#define NUD_IN_TIMER	(NUD_INCOMPLETE|NUD_DELAY|NUD_PROBE)
+#define NUD_VALID	(NUD_PERMANENT|NUD_NOARP|NUD_REACHABLE|NUD_PROBE|NUD_STALE|NUD_DELAY)
+#define NUD_CONNECTED	(NUD_PERMANENT|NUD_NOARP|NUD_REACHABLE)
 
-struct neighbour {
+struct neigh_parms
+{
+	struct neigh_parms *next;
+	void	*sysctl_table;
+	int	base_reachable_time;
+	int	retrans_time;
+	int	gc_staletime;
+	int	reachable_time;
+	int	delay_probe_time;
+
+	int	queue_len;
+	int	ucast_probes;
+	int	app_probes;
+	int	mcast_probes;
+	int	anycast_delay;
+	int	proxy_delay;
+	int	proxy_qlen;
+	int	locktime;
+};
+
+struct neigh_statistics
+{
+	unsigned long allocs;
+	unsigned long res_failed;
+	unsigned long rcv_probes_mcast;
+	unsigned long rcv_probes_ucast;
+};
+
+struct neighbour
+{
 	struct neighbour	*next;
-	struct neighbour	*prev;
 	struct neigh_table	*tbl;
+	struct neigh_parms	*parms;
 	struct device		*dev;
-	unsigned long		lastused;
-	unsigned long		flags;
+	unsigned long		used;
+	unsigned long		confirmed;
+	unsigned long		updated;
+	__u8			flags;
+	__u8			nud_state;
+	__u8			type;
+	__u8			probes;
 	unsigned char		ha[MAX_ADDR_LEN];
 	struct hh_cache		*hh;
 	atomic_t		refcnt;
-	struct neigh_ops	*ops;
+	int			(*output)(struct sk_buff *skb);
 	struct sk_buff_head	arp_queue;
-	char			primary_key[0];
+	struct timer_list	timer;
+	struct neigh_ops	*ops;
+	u8			primary_key[0];
 };
 
-struct neigh_ops {
+struct neigh_ops
+{
 	int			family;
-	unsigned int		(*hash)(void *primary_key);
-	int			(*resolve)(unsigned char *h_dest,
-					   struct sk_buff *skb);
 	void			(*destructor)(struct neighbour *);
+	void			(*solicit)(struct neighbour *, struct sk_buff*);
+	void			(*error_report)(struct neighbour *, struct sk_buff*);
+	int			(*output)(struct sk_buff*);
+	int			(*connected_output)(struct sk_buff*);
+	int			(*hh_output)(struct sk_buff*);
+	int			(*queue_xmit)(struct sk_buff*);
 };
 
-extern struct neighbour		*neigh_alloc(int size, struct neigh_ops *);
+struct pneigh_entry
+{
+	struct pneigh_entry	*next;
+	struct device		*dev;
+	u8			key[0];
+};
+
+#define NEIGH_HASHMASK		0x1F
+#define PNEIGH_HASHMASK		0xF
+
+/*
+ *	neighbour table manipulation
+ */
+
+
+struct neigh_table
+{
+	struct neigh_table	*next;
+	int			family;
+	int			entry_size;
+	int			key_len;
+	int			(*constructor)(struct neighbour *);
+	int			(*pconstructor)(struct pneigh_entry *);
+	void			(*pdestructor)(struct pneigh_entry *);
+	void			(*proxy_redo)(struct sk_buff *skb);
+	struct neigh_parms	parms;
+	/* HACK. gc_* shoul follow parms without a gap! */
+	int			gc_interval;
+	int			gc_thresh1;
+	int			gc_thresh2;
+	int			gc_thresh3;
+	unsigned long		last_flush;
+	struct timer_list 	gc_timer;
+	struct timer_list 	proxy_timer;
+	struct sk_buff_head	proxy_queue;
+	int			entries;
+	atomic_t		lock;
+	unsigned long		last_rand;
+	struct neigh_parms	*parms_list;
+	struct neigh_statistics	stats;
+	struct neighbour	*hash_buckets[NEIGH_HASHMASK+1];
+	struct pneigh_entry	*phash_buckets[PNEIGH_HASHMASK+1];
+};
+
+extern void			neigh_table_init(struct neigh_table *tbl);
+extern int			neigh_table_clear(struct neigh_table *tbl);
+extern struct neighbour		*__neigh_lookup(struct neigh_table *tbl,
+					       const void *pkey, struct device *dev,
+					       int creat);
+extern void			neigh_destroy(struct neighbour *neigh);
+extern int			__neigh_event_send(struct neighbour *neigh, struct sk_buff *skb);
+extern int			neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int arp);
+extern int			neigh_ifdown(struct neigh_table *tbl, struct device *dev);
+extern int			neigh_resolve_output(struct sk_buff *skb);
+extern int			neigh_connected_output(struct sk_buff *skb);
+extern int			neigh_compat_output(struct sk_buff *skb);
+extern struct neighbour 	*neigh_event_ns(struct neigh_table *tbl,
+						u8 *lladdr, void *saddr,
+						struct device *dev);
+
+extern struct neigh_parms	*neigh_parms_alloc(struct neigh_table *tbl);
+extern void			neigh_parms_release(struct neigh_table *tbl, struct neigh_parms *parms);
+extern unsigned long		neigh_rand_reach_time(unsigned long base);
+
+extern void			pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
+					       struct sk_buff *skb);
+extern struct pneigh_entry	*pneigh_lookup(struct neigh_table *tbl, const void *key, struct device *dev, int creat);
+extern int			pneigh_delete(struct neigh_table *tbl, const void *key, struct device *dev);
+
+struct netlink_callback;
+struct nlmsghdr;
+extern int neigh_dump_info(struct sk_buff *skb, struct netlink_callback *cb);
+extern int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
+extern int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
+extern void neigh_app_ns(struct neighbour *n);
+
+extern void 			*neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
+						       int p_id, int pdev_id, char *p_name);
+extern void			neigh_sysctl_unregister(struct neigh_parms *p);
 
 /*
  *	Neighbour references
@@ -51,122 +199,66 @@ extern struct neighbour		*neigh_alloc(int size, struct neigh_ops *);
  *	When neighbour pointers are passed to "client" code the
  *	reference count is increased. The count is 0 if the node
  *	is only referenced by the corresponding table.
- *
- *	Nodes cannot be unlinked from the table if their
- *	reference count != 0.
- *
- *	i.e. you can't reclaim a neighbour if it is being used by a
- *	dst_cache or routing entry - hopefully those will react
- *	to memory shortage and GC their unused entries
  */
 
-
-static __inline__ void neigh_release(struct neighbour *neigh)
+extern __inline__ void neigh_release(struct neighbour *neigh)
 {
-	if (atomic_dec_and_test(&neigh->refcnt))
-		neigh->lastused = jiffies;
+	if (atomic_dec_and_test(&neigh->refcnt) && neigh->tbl == NULL)
+		neigh_destroy(neigh);
 }
 
-static __inline__ struct neighbour * neighbour_clone(struct neighbour *neigh)
+extern __inline__ struct neighbour * neigh_clone(struct neighbour *neigh)
 {
 	if (neigh)
 		atomic_inc(&neigh->refcnt);
 	return neigh;
 }
 
-#define NT_MASK_QUEUE	0x01
-#define NT_MASK_GC	0x02
-
-/*
- *	neighbour table manipulation
- */
-
-struct neigh_table {
-	int			tbl_size;	/* num. of hash	buckets	*/
-	int			tbl_entries;	/* entry count		*/
-	struct neighbour	**hash_buckets;
-	atomic_t		tbl_lock;
-	unsigned int		tbl_bh_mask;	/* bh mask		*/
-	struct neigh_ops	*neigh_ops;
-	struct neighbour	*request_queue; /* pending inserts	*/
-};
-
-extern void			neigh_table_init(struct neigh_table *tbl,
-						 struct neigh_ops *ops,
-						 int size);
-extern void			neigh_table_destroy(struct neigh_table *tbl);
-
-extern void			neigh_table_run_bh(struct neigh_table *tbl);
-
-extern void			neigh_table_ins(struct neigh_table *tbl,
-						struct neighbour *neigh);
-
-extern void			neigh_queue_ins(struct neigh_table *tbl,
-						struct neighbour *neigh);
-
-extern void			neigh_unlink(struct neighbour *neigh);
-
-extern struct neighbour *	neigh_lookup(struct neigh_table *tbl,
-					     void *pkey, int key_len,
-					     struct device *dev);
-
-extern void			neigh_destroy(struct neighbour *neigh);
-
-static __inline__ void neigh_insert(struct neigh_table *tbl,
-				    struct neighbour *neigh)
+extern __inline__ void neigh_confirm(struct neighbour *neigh)
 {
-	start_bh_atomic();
-	if (atomic_read(&tbl->tbl_lock) == 1)
-	{
-		neigh_table_ins(tbl, neigh);
-	}
-	else
-	{
-		tbl->tbl_bh_mask |= NT_MASK_QUEUE;
-		neigh_queue_ins(tbl, neigh);
-	}
-	end_bh_atomic();	
+	if (neigh)
+		neigh->confirmed = jiffies;
 }
 
 
-
-typedef int (*ntbl_examine_t) (struct neighbour *neigh, void *arg);
-
-/*
- *	examine every element of a neighbour table.
- *	For every neighbour the callback function will be called.
- *
- *	parameters:
- *		max	:	max bucket index (<= tbl_size, 0 all)
- *		filter	:	(neigh->flags & (~filter)) -> call func
- *		args	:	opaque pointer
- *
- *	return values
- *		0		nop
- *		!0		unlink node from table and destroy it
- */
-
-extern void			ntbl_walk_table(struct neigh_table *tbl,
-						ntbl_examine_t func,
-						unsigned long filter,
-						int max, void *args);
-
-static __inline__ void neigh_table_lock(struct neigh_table *tbl)
+extern __inline__ struct neighbour *
+neigh_lookup(struct neigh_table *tbl, const void *pkey, struct device *dev)
 {
-	atomic_inc(&tbl->tbl_lock);
-}
-
-extern void			neigh_tbl_run_bh(struct neigh_table *tbl);
-
-static __inline__ void neigh_table_unlock(struct neigh_table *tbl)
-{
+	struct neighbour *neigh;
 	start_bh_atomic();
-	if (atomic_dec_and_test(&tbl->tbl_lock) && tbl->tbl_bh_mask)
-	{
-		neigh_tbl_run_bh(tbl);
-	}
+	neigh = __neigh_lookup(tbl, pkey, dev, 0);
 	end_bh_atomic();
+	return neigh;
 }
+
+extern __inline__ int neigh_is_connected(struct neighbour *neigh)
+{
+	return neigh->nud_state&NUD_CONNECTED;
+}
+
+extern __inline__ int neigh_is_valid(struct neighbour *neigh)
+{
+	return neigh->nud_state&NUD_VALID;
+}
+
+extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
+{
+	neigh->used = jiffies;
+	if (!(neigh->nud_state&(NUD_CONNECTED|NUD_DELAY|NUD_PROBE)))
+		return __neigh_event_send(neigh, skb);
+	return 0;
+}
+
+extern __inline__ int neigh_table_lock(struct neigh_table *tbl)
+{
+	atomic_inc(&tbl->lock);
+}
+
+extern __inline__ int neigh_table_unlock(struct neigh_table *tbl)
+{
+	atomic_dec(&tbl->lock);
+}
+
 
 #endif
 #endif

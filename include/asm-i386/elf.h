@@ -70,4 +70,24 @@ typedef struct user_i387_struct elf_fpregset_t;
 	pr_reg[15] = regs->esp;				\
 	pr_reg[16] = regs->xss;
 
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  This could be done in userspace,
+   but it's not easy, and we've already done it here.  */
+
+#define ELF_HWCAP	(boot_cpu_data.x86_capability)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.
+
+   For the moment, we have only optimizations for the Intel generations,
+   but that could change... */
+
+#define ELF_PLATFORM  ("i386\0i486\0i586\0i686"+((boot_cpu_data.x86-3)*5))
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ibcs2) \
+	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#endif
+
 #endif

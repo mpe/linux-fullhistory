@@ -52,6 +52,7 @@
 #include <linux/malloc.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
+
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
 #include <asm/uaccess.h>
@@ -66,50 +67,11 @@
  */
 #define IS_SOFT 0
 
+#define NFS_PARANOIA 1
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
 static void			nfs_wback_lock(struct rpc_task *task);
 static void			nfs_wback_result(struct rpc_task *task);
-
-/*
- * This struct describes a file region to be written.
- * It's kind of a pity we have to keep all these lists ourselves, rather
- * than sticking an extra pointer into struct page.
- */
-struct nfs_wreq {
-	struct rpc_listitem	wb_list;	/* linked list of req's */
-	struct rpc_task		wb_task;	/* RPC task */
-	struct dentry *		wb_dentry;	/* dentry referenced */
-	struct inode *		wb_inode;	/* inode referenced */
-	struct page *		wb_page;	/* page to be written */
-	unsigned int		wb_offset;	/* offset within page */
-	unsigned int		wb_bytes;	/* dirty range */
-	pid_t			wb_pid;		/* owner process */
-	unsigned short		wb_flags;	/* status flags */
-
-	struct nfs_writeargs *	wb_args;	/* NFS RPC stuff */
-	struct nfs_fattr *	wb_fattr;	/* file attributes */
-};
-#define wb_status		wb_task.tk_status
-
-#define WB_NEXT(req)		((struct nfs_wreq *) ((req)->wb_list.next))
-
-/*
- * Various flags for wb_flags
- */
-#define NFS_WRITE_WANTLOCK	0x0001	/* needs to lock page */
-#define NFS_WRITE_LOCKED	0x0002	/* holds lock on page */
-#define NFS_WRITE_CANCELLED	0x0004	/* has been cancelled */
-#define NFS_WRITE_UNCOMMITTED	0x0008	/* written but uncommitted (NFSv3) */
-#define NFS_WRITE_INVALIDATE	0x0010	/* invalidate after write */
-#define NFS_WRITE_INPROGRESS	0x0020	/* RPC call in progress */
-
-#define WB_INPROGRESS(req)	((req)->wb_flags & NFS_WRITE_INPROGRESS)
-#define WB_WANTLOCK(req)	((req)->wb_flags & NFS_WRITE_WANTLOCK)
-#define WB_HAVELOCK(req)	((req)->wb_flags & NFS_WRITE_LOCKED)
-#define WB_CANCELLED(req)	((req)->wb_flags & NFS_WRITE_CANCELLED)
-#define WB_UNCOMMITTED(req)	((req)->wb_flags & NFS_WRITE_UNCOMMITTED)
-#define WB_INVALIDATE(req)	((req)->wb_flags & NFS_WRITE_INVALIDATE)
 
 /*
  * Cache parameters
@@ -144,8 +106,13 @@ nfs_unlock_page(struct page *page)
 	/* async swap-out support */
 	if (test_and_clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&page->count);
-	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags))
-		swap_after_unlock_page(page->pg_swap_entry);
+	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags)) {
+		/*
+		 * We're doing a swap, so check that this page is
+		 * swap-cached and do the necessary cleanup. 
+		 */
+		swap_after_unlock_page(page->offset);
+	}
 #endif
 }
 
@@ -282,6 +249,27 @@ find_write_request(struct inode *inode, struct page *page)
 }
 
 /*
+ * Find any requests for the specified dentry.
+ */
+int
+nfs_find_dentry_request(struct inode *inode, struct dentry *dentry)
+{
+	struct nfs_wreq	*head, *req;
+	int found = 0;
+
+	req = head = NFS_WRITEBACK(inode);
+	while (req != NULL) {
+		if (req->wb_dentry == dentry) {
+			found = 1;
+			break;
+		}
+		if ((req = WB_NEXT(req)) == head)
+			break;
+	}
+	return found;
+}
+
+/*
  * Find a failed write request by pid
  */
 static struct nfs_wreq *
@@ -400,7 +388,7 @@ create_write_request(struct dentry *dentry, struct inode *inode,
 	memset(wreq, 0, sizeof(*wreq));
 
 	task = &wreq->wb_task;
-	rpc_init_task(task, clnt, nfs_wback_result, 0);
+	rpc_init_task(task, clnt, nfs_wback_result, RPC_TASK_NFSWRITE);
 	task->tk_calldata = wreq;
 	task->tk_action = nfs_wback_lock;
 
@@ -612,14 +600,18 @@ done:
 /*
  * Flush out a dirty page.
  */ 
-static inline void
+static void
 nfs_flush_request(struct nfs_wreq *req)
 {
 	struct page	*page = req->wb_page;
 
-	dprintk("NFS:      nfs_flush_request(%x/%ld, @%ld)\n",
-				page->inode->i_dev, page->inode->i_ino,
-				page->offset);
+#ifdef NFS_DEBUG_VERBOSE
+if (req->wb_inode != page->inode)
+printk("NFS: inode %ld no longer has page %p\n", req->wb_inode->i_ino, page);
+#endif
+	dprintk("NFS:      nfs_flush_request(%s/%s, @%ld)\n",
+		req->wb_dentry->d_parent->d_name.name,
+		req->wb_dentry->d_name.name, page->offset);
 
 	req->wb_flags |= NFS_WRITE_WANTLOCK;
 	if (!test_and_set_bit(PG_locked, &page->flags)) {
@@ -656,7 +648,7 @@ nfs_flush_pages(struct inode *inode, pid_t pid, off_t offset, off_t len,
 			if (rqoffset < end && offset < rqend
 			 && (pid == 0 || req->wb_pid == pid)) {
 				if (!WB_HAVELOCK(req)) {
-#ifdef NFS_PARANOIA
+#ifdef NFS_DEBUG_VERBOSE
 printk("nfs_flush: flushing inode=%ld, %d @ %lu\n",
 req->wb_inode->i_ino, req->wb_bytes, rqoffset);
 #endif
@@ -664,11 +656,6 @@ req->wb_inode->i_ino, req->wb_bytes, rqoffset);
 				}
 				last = req;
 			}
-		} else {
-#ifdef NFS_PARANOIA
-printk("nfs_flush_pages: in progress inode=%ld, %d @ %lu\n",
-req->wb_inode->i_ino, req->wb_bytes, rqoffset);
-#endif
 		}
 		if (invalidate)
 			req->wb_flags |= NFS_WRITE_INVALIDATE;

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.23 1997/10/29 20:27:52 kuznet Exp $
+ *	$Id: af_inet6.c,v 1.24 1997/12/13 21:53:08 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -209,7 +209,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			 */
 			v4addr = LOOPBACK4_IPV6;
 			if (!(addr_type & IPV6_ADDR_MULTICAST))	{
-				if (ipv6_chk_addr(&addr->sin6_addr) == NULL)
+				if (ipv6_chk_addr(&addr->sin6_addr, NULL, 0) == NULL)
 					return(-EADDRNOTAVAIL);
 			}
 		}
@@ -282,7 +282,7 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
-	int err;
+	int err = -EINVAL;
 	int pid;
 
 	switch(cmd) 
@@ -318,47 +318,6 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	  
 		return(ipv6_route_ioctl(cmd,(void *)arg));
 
-	case SIOCGIFCONF:
-	case SIOCGIFFLAGS:
-	case SIOCSIFFLAGS:
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-/*
-
-  this ioctls deal with addresses
-  must process the addr info before
-  calling dev_ioctl to perform dev specific functions
-
-	case SIOCGIFADDR:
-	case SIOCSIFADDR:
-
-
-	case SIOCGIFDSTADDR:
-
-	case SIOCGIFBRDADDR:
-	case SIOCSIFBRDADDR:
-	case SIOCGIFNETMASK:
-	case SIOCSIFNETMASK:
-	*/
-
-	case SIOCGIFMETRIC:
-	case SIOCSIFMETRIC:
-	case SIOCGIFMEM:
-	case SIOCSIFMEM:
-	case SIOCGIFMTU:
-	case SIOCSIFMTU:
-	case SIOCSIFLINK:
-	case SIOCGIFHWADDR:
-	case SIOCSIFHWADDR:
-	case SIOCSIFMAP:
-	case SIOCGIFMAP:
-	case SIOCSIFSLAVE:
-	case SIOCGIFSLAVE:
-	case SIOCGIFINDEX:
-	case SIOCGIFNAME:
-	case SIOCGIFCOUNT:
-		return(dev_ioctl(cmd,(void *) arg));		
-		
 	case SIOCSIFADDR:
 		return addrconf_add_ifaddr((void *) arg);
 	case SIOCDIFADDR:
@@ -370,9 +329,9 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		    (cmd <= (SIOCDEVPRIVATE + 15)))
 			return(dev_ioctl(cmd,(void *) arg));
 		
-		if (sk->prot->ioctl==NULL) 
-			return(-EINVAL);
-		return(sk->prot->ioctl(sk, cmd, arg));
+		if(sk->prot->ioctl==0 || (err=sk->prot->ioctl(sk, cmd, arg))==-ENOIOCTLCMD)
+			return(dev_ioctl(cmd,(void *) arg));		
+		return err;
 	}
 	/*NOTREACHED*/
 	return(0);

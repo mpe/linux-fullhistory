@@ -2,14 +2,16 @@
  * This file contains miscellaneous low-level functions.
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *
- *  This program is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU General Public License
- *  as published by the Free Software Foundation; either version
- *  2 of the License, or (at your option) any later version.
+ * Largely rewritten by Cort Dougan (cort@cs.nmt.edu)
+ * and Paul Mackerras.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version
+ * 2 of the License, or (at your option) any later version.
  *
  */
 
-#include <linux/config.h>
 #include <linux/sys.h>
 #include <asm/unistd.h>
 #include <asm/errno.h>
@@ -26,7 +28,21 @@
 	addi	r4,r4,0x1000; \
 	bdnz	0b
 	
-_TEXT()
+	.text
+
+/*
+ * Returns (address we're running at) - (address we were linked at)
+ * for use before the text and data are mapped to KERNELBASE.
+ */
+_GLOBAL(reloc_offset)
+	mflr	r0
+	bl	1f
+1:	mflr	r3
+	lis	r4,1b@ha
+	addi	r4,r4,1b@l
+	subf	r3,r4,r3
+	mtlr	r0
+	blr
 
 /*
  * Disable interrupts
@@ -64,24 +80,6 @@ _GLOBAL(_hard_sti)
 	mtmsr	r3		/* Update machine state */
 	blr
 
-#if 0
-/*
- * Restore 'flags'
- *	__restore_flags(long val)
- */
-_GLOBAL(__restore_flags)
-	andi.	r0,r3,MSR_EE	/* enabling interrupts? */
-	beq	2f
-	lis	r4,lost_interrupts@ha
-	lwz	r4,lost_interrupts@l(r4)
-	cmpi	0,r4,0
-	bne	do_lost_interrupts
-2:	sync			/* Some chip revs have problems here... */
-	mtmsr	r3
-	isync
-	blr
-#endif
-	
 /*
  * We were about to enable interrupts but we have to simulate
  * some interrupts that were lost by enable_irq first.
@@ -151,6 +149,13 @@ _GLOBAL(atomic_add)
 	stwcx.	r5,0,r4		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	blr
+_GLOBAL(atomic_add_return)
+10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
+	add	r5,r5,r3	/* Perform 'add' operation */
+	stwcx.	r5,0,r4		/* Update with new value */
+	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	mr	r3,r5
+	blr
 _GLOBAL(atomic_sub)
 10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
 	sub	r5,r5,r3	/* Perform 'add' operation */
@@ -209,11 +214,29 @@ _GLOBAL(atomic_set_mask)
 /*
  * I/O string operations
  *
+ * insb(port, buf, len)
+ * outsb(port, buf, len)
  * insw(port, buf, len)
  * outsw(port, buf, len)
  * insl(port, buf, len)
  * outsl(port, buf, len)
  */
+_GLOBAL(_insb)
+	mtctr	r5
+	subi	r4,r4,1
+00:	lbz	r5,0(r3)
+	stbu	r5,1(r4)
+	bdnz	00b
+	blr
+
+_GLOBAL(_outsb)
+	mtctr	r5
+	subi	r4,r4,1
+00:	lbzu	r5,1(r4)
+	stb	r5,0(r3)
+	bdnz	00b
+	blr	
+
 _GLOBAL(_insw)
 	mtctr	r5
 	subi	r4,r4,2
@@ -325,6 +348,33 @@ cvt_df:
 	stfs	0,0(r4)
 	blr
 
+
+_GLOBAL(lock_dcache)
+	mfspr	r3,PVR		/* nop on 601 */
+	rlwinm	r3,r3,16,16,31
+	cmpwi	0,r3,1
+	beqlr-
+	mfspr	r3,HID0
+	ori	r3,r3,HID0_DLOCK
+	mtspr	HID0,r3
+	sync
+	isync
+	blr
+
+_GLOBAL(unlock_dcache)
+	mfspr	r3,PVR		/* nop on 601 */
+	rlwinm	r3,r3,16,16,31
+	cmpwi	0,r3,1
+	beqlr-
+	mfspr	r3,HID0
+	li	r4,HID0_DLOCK
+	andc	r3,r3,r4
+	mtspr	HID0,r3
+	sync
+	isync
+	blr
+	
+
 /*
  * Create a kernel thread
  *   __kernel_thread(flags, fn, arg)
@@ -387,7 +437,7 @@ sys_call_table:
 	.long sys_mknod
 	.long sys_chmod		/* 15 */
 	.long sys_chown
-	.long sys_break
+	.long /*sys_break*/ sys_ni_syscall
 	.long sys_stat
 	.long sys_lseek
 	.long sys_getpid	/* 20 */
@@ -401,11 +451,11 @@ sys_call_table:
 	.long sys_fstat
 	.long sys_pause
 	.long sys_utime		/* 30 */
-	.long sys_stty
-	.long sys_gtty
+	.long /*sys_stty*/ sys_ni_syscall
+	.long /*sys_gtty*/ sys_ni_syscall
 	.long sys_access
 	.long sys_nice
-	.long sys_ftime		/* 35 */
+	.long /*sys_ftime*/ sys_ni_syscall		/* 35 */
 	.long sys_sync
 	.long sys_kill
 	.long sys_rename
@@ -414,7 +464,7 @@ sys_call_table:
 	.long sys_dup
 	.long sys_pipe
 	.long sys_times
-	.long sys_prof
+	.long /*sys_prof*/ sys_ni_syscall
 	.long sys_brk		/* 45 */
 	.long sys_setgid
 	.long sys_getgid
@@ -422,13 +472,13 @@ sys_call_table:
 	.long sys_geteuid
 	.long sys_getegid	/* 50 */
 	.long sys_acct
-	.long sys_phys
-	.long sys_lock
+	.long /*sys_phys*/ sys_ni_syscall
+	.long /*sys_lock*/ sys_ni_syscall
 	.long sys_ioctl
 	.long sys_fcntl		/* 55 */
-	.long sys_mpx
+	.long /*sys_mpx*/ sys_ni_syscall
 	.long sys_setpgid
-	.long sys_ulimit
+	.long /*sys_ulimit*/ sys_ni_syscall
 	.long sys_olduname
 	.long sys_umask		/* 60 */
 	.long sys_chroot
@@ -468,7 +518,7 @@ sys_call_table:
 	.long sys_fchown	/* 95 */
 	.long sys_getpriority
 	.long sys_setpriority
-	.long sys_profil
+	.long /*sys_profil*/ sys_ni_syscall
 	.long sys_statfs
 	.long sys_fstatfs	/* 100 */
 	.long sys_ioperm
@@ -539,7 +589,8 @@ sys_call_table:
 	.long sys_query_module
 	.long sys_poll
 	.long sys_nfsservctl
+	.long sys_setresgid	
+	.long sys_getresgid	/* 170 */
 	.long sys_prctl
-	.long sys_debug
 	.space (NR_syscalls-171)*4
 

@@ -14,8 +14,11 @@ extern void map_aty_display(struct device_node *);
 extern void aty_init(void);
 extern int aty_setmode(struct vc_mode *mode, int doit);
 extern void aty_set_palette(unsigned char red[], unsigned char green[],
-			    unsigned char blue[], int index, int ncolors);
+	unsigned char blue[], int index, int ncolors);
 extern void aty_set_blanking(int blank_mode);
+
+extern void ati_set_origin(unsigned short offset);
+extern int ati_vram(void);
 
 /*
  * most of the rest of this file comes from ATI sample code
@@ -49,6 +52,9 @@ extern void aty_set_blanking(int blank_mode);
 #define CRTC_FIFO               0x001e
 #define CRTC_EXT_DISP           0x001f
 
+#define DSP_CONFIG              0x0020  /* Dword offset 08 */
+#define DSP_ON_OFF              0x0024  /* Dword offset 09 */
+
 #define OVR_CLR                 0x0040  /* Dword offset 10 */
 #define OVR_WID_LEFT_RIGHT      0x0044  /* Dword offset 11 */
 #define OVR_WID_TOP_BOTTOM      0x0048  /* Dword offset 12 */
@@ -59,6 +65,8 @@ extern void aty_set_blanking(int blank_mode);
 #define CUR_HORZ_VERT_POSN      0x006C  /* Dword offset 1B */
 #define CUR_HORZ_VERT_OFF       0x0070  /* Dword offset 1C */
 
+#define MON_SENSE		0x0078
+
 #define SCRATCH_REG0            0x0080  /* Dword offset 20 */
 #define SCRATCH_REG1            0x0084  /* Dword offset 21 */
 
@@ -67,6 +75,7 @@ extern void aty_set_blanking(int blank_mode);
 
 #define BUS_CNTL                0x00A0  /* Dword offset 28 */
 
+#define EXT_MEM_CNTL			0x00AC	/* Dword offset 2B */
 #define MEM_CNTL                0x00B0  /* Dword offset 2C */
 
 #define MEM_VGA_WP_SEL          0x00B4  /* Dword offset 2D */
@@ -181,9 +190,9 @@ extern void aty_set_blanking(int blank_mode);
 #define CRTC_PIX_BY_2_EN	0x00000020
 #define CRTC_BLANK		0x00000040
 
-#define CRTC_PIX_WIDTH_MASK		0x00000700
-#define CRTC_PIX_WIDTH_4BPP		0x00000100
-#define CRTC_PIX_WIDTH_8BPP		0x00000200
+#define CRTC_PIX_WIDTH_MASK	0x00000700
+#define CRTC_PIX_WIDTH_4BPP	0x00000100
+#define CRTC_PIX_WIDTH_8BPP	0x00000200
 #define CRTC_PIX_WIDTH_15BPP	0x00000300
 #define CRTC_PIX_WIDTH_16BPP	0x00000400
 #define CRTC_PIX_WIDTH_24BPP	0x00000500
@@ -251,6 +260,15 @@ extern void aty_set_blanking(int blank_mode);
 #define HWCURSOR_ENABLE         0x80
 #define GUI_ENGINE_ENABLE       0x100
 #define BLOCK_WRITE_ENABLE      0x200
+
+/* DSP_CONFIG register constants */
+#define DSP_XCLKS_PER_QW        0x00003fff
+#define DSP_LOOP_LATENCY        0x000f0000
+#define DSP_PRECISION           0x00700000
+
+/* DSP_ON_OFF register constants */
+#define DSP_OFF                 0x000007ff
+#define DSP_ON                  0x07ff0000
 
 /* CLOCK_CNTL register constants */
 #define CLOCK_SEL		0x0f
@@ -592,23 +610,23 @@ extern void aty_set_blanking(int blank_mode);
 #define MACH64_NUM_FREQS	50
 
 /* Wait until "v" queue entries are free */
-#define aty_WaitQueue(v)    { while ((aty_ld_rev(FIFO_STAT) & 0xffff) > \
+#define aty_WaitQueue(v)    { while ((aty_ld_le32(FIFO_STAT) & 0xffff) > \
 			 ((unsigned short)(0x8000 >> (v)))); }
 
 /* Wait until GP is idle and queue is empty */
 #define aty_WaitIdleEmpty() { aty_WaitQueue(16); \
-			  while ((aty_ld_rev(GUI_STAT) & 1) != 0); }
+			  while ((aty_ld_le32(GUI_STAT) & 1) != 0); }
 
 #define SKIP_2(_v) ((((_v)<<1)&0xfff8)|((_v)&0x3)|(((_v)&0x80)>>5))
 
 #define MACH64_BIT_BLT(_srcx, _srcy, _dstx, _dsty, _w, _h, _dir) \
 { \
     aty_WaitQueue(5); \
-    aty_st_rev(SRC_Y_X, (((_srcx) << 16) | ((_srcy) & 0x0000ffff))); \
-    aty_st_rev(SRC_WIDTH1, (_w)); \
-    aty_st_rev(DST_CNTL, (_dir)); \
-    aty_st_rev(DST_Y_X, (((_dstx) << 16) | ((_dsty) & 0x0000ffff))); \
-    aty_st_rev(DST_HEIGHT_WIDTH, (((_w) << 16) | ((_h) & 0x0000ffff))); \
+    aty_st_le32(SRC_Y_X, (((_srcx) << 16) | ((_srcy) & 0x0000ffff))); \
+    aty_st_le32(SRC_WIDTH1, (_w)); \
+    aty_st_le32(DST_CNTL, (_dir)); \
+    aty_st_le32(DST_Y_X, (((_dstx) << 16) | ((_dsty) & 0x0000ffff))); \
+    aty_st_le32(DST_HEIGHT_WIDTH, (((_w) << 16) | ((_h) & 0x0000ffff))); \
 }
 #endif /* REGMACH64_H */
 

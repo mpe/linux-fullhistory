@@ -135,11 +135,10 @@ static void add_bridges(struct device_node *dev, unsigned long *mem_ptr)
 		bp = (struct bridge_data *) *mem_ptr;
 		*mem_ptr += sizeof(struct bridge_data);
 		bp->cfg_addr = (volatile unsigned int *)
-			(dev->addrs[0].address + 0x800000);
+			ioremap(dev->addrs[0].address + 0x800000, 0x1000);
 		bp->cfg_data = (volatile unsigned char *)
-			(dev->addrs[0].address + 0xc00000);
-		bp->io_base = (void *) dev->addrs[0].address;
-		ioremap(dev->addrs[0].address, 0x800000);
+			ioremap(dev->addrs[0].address + 0xc00000, 0x1000);
+		bp->io_base = (void *) ioremap(dev->addrs[0].address, 0x10000);
 		bp->bus_number = bus_range[0];
 		bp->max_bus = bus_range[1];
 		bp->next = bridge_list;
@@ -328,96 +327,4 @@ int pmac_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 	udelay(2);
 	out_le32((volatile unsigned int *)bp->cfg_data, val);
 	return PCIBIOS_SUCCESSFUL;
-}
-
-int pmac_pcibios_find_device(unsigned short vendor, unsigned short dev_id,
-			unsigned short index, unsigned char *bus_ptr,
-			unsigned char *dev_fn_ptr)
-{
-	int bus, unit, fn, num, devfn;
-	unsigned int x, vendev;
-	unsigned char h;
-
-	if (vendor == 0xffff)
-		return PCIBIOS_BAD_VENDOR_ID;
-	vendev = (dev_id << 16) + vendor;
-	num = 0;
-	for (bus = 0; bus <= max_bus; ++bus) {
-		if (bridges[bus] == 0)
-			continue;
-		unit = fn = 0;
-		if (bus == bridges[bus]->bus_number)
-			unit = 11;
-		while (unit < 32) {
-			devfn = PCI_DEVFN(unit, fn);
-			if (pcibios_read_config_dword(bus, devfn,
-						      PCI_VENDOR_ID, &x)
-			    == PCIBIOS_SUCCESSFUL && x == vendev) {
-				if (index == num) {
-					*bus_ptr = bus;
-					*dev_fn_ptr = devfn;
-					return PCIBIOS_SUCCESSFUL;
-				}
-				++num;
-			}
-			if (fn != 0) {
-				if (++fn >= 8) {
-					++unit;
-					fn = 0;
-				}
-				continue;
-			}
-			if (pcibios_read_config_byte(bus, devfn,
-						     PCI_HEADER_TYPE, &h)
-			    == PCIBIOS_SUCCESSFUL && (h & 0x80) != 0)
-				++fn;
-			else
-				++unit;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-int pmac_pcibios_find_class(unsigned int class_code, unsigned short index,
-		       unsigned char *bus_ptr, unsigned char *dev_fn_ptr)
-{
-	int bus, unit, fn, num, devfn;
-	unsigned int x;
-	unsigned char h;
-
-	num = 0;
-	for (bus = 0; bus <= max_bus; ++bus) {
-		if (bridges[bus] == 0)
-			continue;
-		unit = fn = 0;
-		if (bus == bridges[bus]->bus_number)
-			unit = 11;
-		while (unit < 32) {
-			devfn = PCI_DEVFN(unit, fn);
-			if (pcibios_read_config_dword(bus, devfn,
-						      PCI_CLASS_REVISION, &x)
-			    == PCIBIOS_SUCCESSFUL && (x >> 8) == class_code) {
-				if (index == num) {
-					*bus_ptr = bus;
-					*dev_fn_ptr = devfn;
-					return PCIBIOS_SUCCESSFUL;
-				}
-				++num;
-			}
-			if (fn != 0) {
-				if (++fn >= 8) {
-					++unit;
-					fn = 0;
-				}
-				continue;
-			}
-			if (pcibios_read_config_byte(bus, devfn,
-						     PCI_HEADER_TYPE, &h)
-			    == PCIBIOS_SUCCESSFUL && (h & 0x80) != 0)
-				++fn;
-			else
-				++unit;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
 }

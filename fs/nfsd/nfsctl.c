@@ -222,6 +222,21 @@ MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
 extern int (*do_nfsservctl)(int, void *, void *);
 
 /*
+ * This is called as the fill_inode function when an inode
+ * is going into (fill = 1) or out of service (fill = 0).
+ *
+ * We use it here to make sure the module can't be unloaded
+ * while a /proc inode is in use.
+ */
+void nfsd_modcount(struct inode *inode, int fill)
+{
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+}
+
+/*
  * Initialize the module
  */
 int

@@ -16,14 +16,47 @@
 #define IBM_L2_INVALIDATE 0x814
 #define IBM_SYS_CTL       0x81c
 
-extern unsigned long io_base;
 #define SLOW_DOWN_IO
-#define _IO_BASE io_base
 
-extern unsigned long pci_dram_offset;
+#define PMAC_ISA_IO_BASE 	0
+#define PMAC_ISA_MEM_BASE 	0
+#define PMAC_PCI_DRAM_OFFSET 	0
+#define CHRP_ISA_IO_BASE 	0xf8000000
+#define CHRP_ISA_MEM_BASE 	0xf7000000
+#define CHRP_PCI_DRAM_OFFSET 	0
+#define PREP_ISA_IO_BASE 	0x80000000
+#define PREP_ISA_MEM_BASE 	0xd0000000
+/*#define PREP_ISA_MEM_BASE 	0xc0000000*/
+#define PREP_PCI_DRAM_OFFSET 	0x80000000
+
+#if defined(CONFIG_MACH_SPECIFIC)
+#ifdef CONFIG_PREP
+#define _IO_BASE	PREP_ISA_IO_BASE
+#define _ISA_MEM_BASE	PREP_ISA_MEM_BASE
+#define PCI_DRAM_OFFSET PREP_PCI_DRAM_OFFSET
+#endif /* CONFIG_PREP */
+
+#ifdef CONFIG_CHRP
+#define _IO_BASE	CHRP_ISA_IO_BASE
+#define _ISA_MEM_BASE	CHRP_ISA_MEM_BASE
+#define PCI_DRAM_OFFSET CHRP_PCI_DRAM_OFFSET
+#endif /* CONFIG_CHRP */
+
+#ifdef CONFIG_PMAC
+#define _IO_BASE	PMAC_ISA_IO_BASE
+#define _ISA_MEM_BASE	PMAC_ISA_MEM_BASE
+#define PCI_DRAM_OFFSET PMAC_PCI_DRAM_OFFSET
+#endif /* CONFIG_PMAC */
+
+#else /* CONFIG_MACH_SPECIFIC */
+extern unsigned long isa_io_base;
+#define _IO_BASE isa_io_base
+extern unsigned long isa_mem_base;
+#define _ISA_MEM_BASE isa_mem_base
 #undef PCI_DRAM_OFFSET
 #define PCI_DRAM_OFFSET  pci_dram_offset
-
+extern unsigned long pci_dram_offset;
+#endif /* CONFIG_MACH_SPECIFIC */
 #define readb(addr) (*(volatile unsigned char *) (addr))
 #define readw(addr) ld_le16((volatile unsigned short *)(addr))
 #define readl(addr) ld_le32((volatile unsigned *)addr)
@@ -58,6 +91,10 @@ extern void _insw(volatile unsigned short *port, void *buf, int ns);
 extern void _outsw(volatile unsigned short *port, const void *buf, int ns);
 extern void _insl(volatile unsigned long *port, void *buf, int nl);
 extern void _outsl(volatile unsigned long *port, const void *buf, int nl);
+
+#define memset_io(a,b,c)	memset((a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),(b),(c))
+#define memcpy_toio(a,b,c)	memcpy((a),(b),(c))
 
 #ifdef __KERNEL__
 /*

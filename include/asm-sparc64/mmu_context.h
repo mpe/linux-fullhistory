@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.19 1997/08/07 02:54:08 davem Exp $ */
+/* $Id: mmu_context.h,v 1.20 1997/09/18 10:42:08 rth Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -54,7 +54,8 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 			get_new_mmu_context(mm, &tlb_context_cache);
 
 		/* Don't worry, set_fs() will restore it... */
-		tsk->tss.ctx = (tsk->tss.current_ds ?
+		/* Sigh, damned include loops... just poke seg directly.  */
+		tsk->tss.ctx = (tsk->tss.current_ds.seg ?
 				(mm->context & 0x1fff) : 0);
 	} else
 		tsk->tss.ctx = 0;

@@ -10,7 +10,6 @@
 #include <linux/malloc.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
-#include <linux/config.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>

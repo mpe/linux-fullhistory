@@ -13,15 +13,11 @@
 #include <linux/ctype.h>
 #include <linux/fs.h>
 #include <linux/sysctl.h>
-#if LINUX_VERSION_CODE >= 0x020100
+
 #include <asm/uaccess.h>
-#else
-# include <linux/mm.h>
-# define copy_from_user		memcpy_fromfs
-# define copy_to_user		memcpy_tofs
-# define access_ok		!verify_area
-#endif
 #include <linux/sunrpc/types.h>
+#include <linux/sunrpc/sched.h>
+#include <linux/sunrpc/stats.h>
 
 /*
  * Declare the debug flags here
@@ -39,17 +35,23 @@ static ctl_table		sunrpc_table[];
 void
 rpc_register_sysctl(void)
 {
-	if (sunrpc_table_header)
-		return;
-	sunrpc_table_header = register_sysctl_table(sunrpc_table, 1);
+	if (!sunrpc_table_header) {
+		sunrpc_table_header = register_sysctl_table(sunrpc_table, 1);
+#ifdef MODULE
+		if (sunrpc_table[0].de)
+			sunrpc_table[0].de->fill_inode = rpc_modcount;
+#endif
+	}
+			
 }
 
 void
 rpc_unregister_sysctl(void)
 {
-	if (!sunrpc_table_header)
-		return;
-	unregister_sysctl_table(sunrpc_table_header);
+	if (sunrpc_table_header) {
+		unregister_sysctl_table(sunrpc_table_header);
+		sunrpc_table_header = NULL;
+	}
 }
 
 int
@@ -93,6 +95,10 @@ proc_dodebug(ctl_table *table, int write, struct file *file,
 		while (left && isspace(*p))
 			left--, p++;
 		*(unsigned int *) table->data = value;
+		/* Display the RPC tasks on writing to rpc_debug */
+		if (table->ctl_name == CTL_RPCDEBUG) {
+			rpc_show_tasks();
+		}
 	} else {
 		if (!access_ok(VERIFY_WRITE, buffer, left))
 			return -EFAULT;

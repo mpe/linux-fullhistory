@@ -96,7 +96,6 @@ struct arpreq_old {
 #define ATF_NETMASK     0x20            /* want to use a netmask (only
 					   for proxy entries) */
 #define ATF_DONTPUB	0x40		/* don't answer this addresses	*/
-#define ATF_MAGIC	0x80		/* automatically added entry	*/
 
 /*
  *	This structure defines an ethernet arp header.
@@ -120,22 +119,6 @@ struct arphdr
 	unsigned char		ar_tip[4];		/* target IP address		*/
 #endif
 
-};
-
-/* Support for the user space arp daemon, arpd */
-
-#define ARPD_UPDATE	0x01
-#define ARPD_LOOKUP	0x02
-#define ARPD_FLUSH	0x03
-
-struct arpd_request
-{
-	unsigned short	req;			/* request type */
-	__u32		ip;			/* ip address of entry */
-	unsigned long	dev;			/* Device entry is tied to */
-	unsigned long	stamp;
-	unsigned long	updated;
-	unsigned char	ha[MAX_ADDR_LEN];	/* Hardware address */
 };
 
 #endif	/* _LINUX_IF_ARP_H */

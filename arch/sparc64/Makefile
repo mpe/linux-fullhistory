@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.22 1997/08/29 15:51:53 jj Exp $
+# $Id: Makefile,v 1.24 1997/10/02 16:31:16 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -38,10 +38,18 @@ ifneq ($(CONFIG_SOLARIS_EMUL),n)
   SUBDIRS += arch/sparc64/solaris
 endif
 
+ifneq ($(CONFIG_MATHEMU),n)
+  SUBDIRS += arch/sparc64/math-emu
+endif
+
 CORE_FILES := arch/sparc64/kernel/kernel.o arch/sparc64/mm/mm.o $(CORE_FILES)
 
 ifeq ($(CONFIG_SOLARIS_EMUL),y)
   CORE_FILES += arch/sparc64/solaris/solaris.o
+endif
+
+ifeq ($(CONFIG_MATHEMU),y)
+  CORE_FILES += arch/sparc64/math-emu/math-emu.o
 endif
 
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc64/prom/promlib.a \

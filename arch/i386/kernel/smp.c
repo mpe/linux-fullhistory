@@ -55,7 +55,7 @@
 extern unsigned long start_kernel, _etext;
 extern void update_one_process( struct task_struct *p,
 				unsigned long ticks, unsigned long user,
-				unsigned long system);
+				unsigned long system, int cpu);
 /*
  *	Some notes on processor bugs:
  *
@@ -1346,8 +1346,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 
 		irq_enter(cpu, 0);
 		if (p->pid) {
-
-			update_one_process(p, 1, user, system);
+			update_one_process(p, 1, user, system, cpu);
 
 			p->counter -= 1;
 			if (p->counter < 0) {
@@ -1360,6 +1359,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 				kstat.cpu_user += user;
 
 			kstat.cpu_system += system;
+			kstat.per_cpu_system[cpu] += system;
 
 		} else {
 #ifdef __SMP_PROF__
@@ -1382,7 +1382,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 	 * we might want to decouple profiling from the 'long path',
 	 * and do the profiling totally in assembly.
 	 *
-	 * Currently this isnt too much of an issue (performancewise),
+	 * Currently this isnt too much of an issue (performance wise),
 	 * we can take more than 100K local irqs per second on a 100 MHz P5.
 	 */
 }

@@ -23,6 +23,12 @@
  *          Nick Kralevich <nickkral@cal.alumni.berkeley.edu>, 21 Jul 97
  *          Fixed a condition where user and group quotas could get mixed up.
  *
+ *          Chris Rankin <rankinc@bellsouth.net>, 31 Dec 97, 2-4 Jan 98
+ *          Fixed kernel API so that the user can get the quota for any
+ *          group s/he belongs to. Also return useful error codes when
+ *          turning quotas off, and fixed sync_dquot() so that all devices
+ *          are synced when dev==NODEV. 
+ *
  * (C) Copyright 1994, 1995 Marco van Wieringen 
  *
  */
@@ -273,7 +279,7 @@ int sync_dquots(kdev_t dev, short type)
 
 	dqstats.syncs++;
 	for (i = 0; i < nr_dquots * 2; i++, dquot = dquot->dq_next) {
-		if (dev == NODEV || dquot->dq_count == 0 || dquot->dq_dev != dev)
+		if ((dev != NODEV && dquot->dq_dev != dev) || dquot->dq_count == 0 )
 			continue;
 		if (type != -1 && dquot->dq_type != type)
 			continue;
@@ -592,13 +598,13 @@ static int set_dqblk(kdev_t dev, int id, short type, int flags, struct dqblk *dq
 	}
 	if ((dquot = dqget(dev, id, type)) != NODQUOT) {
 		lock_dquot(dquot);
-		if (id > 0 && ((flags & SET_QUOTA) || (flags & SET_QLIMIT))) {
+		if (id > 0 && (flags & (SET_QUOTA|SET_QLIMIT))) {
 			dquot->dq_bhardlimit = dq_dqblk.dqb_bhardlimit;
 			dquot->dq_bsoftlimit = dq_dqblk.dqb_bsoftlimit;
 			dquot->dq_ihardlimit = dq_dqblk.dqb_ihardlimit;
 			dquot->dq_isoftlimit = dq_dqblk.dqb_isoftlimit;
 		}
-		if ((flags & SET_QUOTA) || (flags & SET_USE)) {
+		if (flags & (SET_QUOTA|SET_USE)) {
 			if (dquot->dq_isoftlimit &&
 			    dquot->dq_curinodes < dquot->dq_isoftlimit &&
 			    dq_dqblk.dqb_curinodes >= dquot->dq_isoftlimit)
@@ -917,12 +923,18 @@ int quota_off(kdev_t dev, short type)
 	struct vfsmount *vfsmnt;
 	short cnt;
 
+	if ( !(vfsmnt = lookup_vfsmnt(dev)) )
+		return -ENODEV;
+
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
 		if (type != -1 && cnt != type)
 			continue;
-		if ((vfsmnt = lookup_vfsmnt(dev)) == (struct vfsmount *)NULL ||
-	     	     vfsmnt->mnt_quotas[cnt] == (struct file *)NULL)
-			continue;
+		if (vfsmnt->mnt_quotas[cnt] == (struct file *)NULL)
+		{
+			if(type == -1)
+				continue;
+			return -ESRCH;
+		}
 		vfsmnt->mnt_sb->dq_op = (struct dquot_operations *)NULL;
 		reset_dquot_ptrs(dev, cnt);
 		invalidate_dquots(dev, cnt);
@@ -1027,7 +1039,7 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 			break;
 		case Q_GETQUOTA:
 			if (((type == USRQUOTA && current->uid != id) ||
-			     (type == GRPQUOTA && current->gid != id)) && !fsuser())
+			     (type == GRPQUOTA && in_group_p(id))) && !fsuser())
 				goto out;
 			break;
 		default:
@@ -1036,7 +1048,7 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 	}
 
 	ret = -EINVAL;
-	dev = 0;
+	dev = NODEV;
 	if (special != NULL || (cmds != Q_SYNC && cmds != Q_GETSTATS)) {
 		mode_t mode;
 		struct dentry * dentry;

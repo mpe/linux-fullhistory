@@ -1,7 +1,8 @@
-/* $Id: psycho.c,v 1.22 1997/08/31 03:51:40 davem Exp $
+/* $Id: psycho.c,v 1.31 1998/01/10 18:26:15 ecd Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
+ * Copyright (C) 1998 Eddie C. Dost   (ecd@skynet.be)
  */
 
 #include <linux/config.h>
@@ -10,6 +11,16 @@
 
 #include <asm/ebus.h>
 #include <asm/sbus.h> /* for sanity check... */
+
+#undef PROM_DEBUG
+#undef FIXUP_REGS_DEBUG
+#undef FIXUP_IRQ_DEBUG
+
+#ifdef PROM_DEBUG
+#define dprintf	prom_printf
+#else
+#define dprintf printk
+#endif
 
 #ifndef CONFIG_PCI
 
@@ -49,6 +60,28 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 #include <asm/uaccess.h>
 
 struct linux_psycho *psycho_root = NULL;
+struct linux_psycho **psycho_index_map;
+int linux_num_psycho = 0;
+static struct linux_pbm_info *bus2pbm[256];
+
+static int pbm_read_config_byte(struct linux_pbm_info *pbm,
+				unsigned char bus, unsigned char devfn,
+				unsigned char where, unsigned char *value);
+static int pbm_read_config_word(struct linux_pbm_info *pbm,
+				unsigned char bus, unsigned char devfn,
+				unsigned char where, unsigned short *value);
+static int pbm_read_config_dword(struct linux_pbm_info *pbm,
+				 unsigned char bus, unsigned char devfn,
+				 unsigned char where, unsigned int *value);
+static int pbm_write_config_byte(struct linux_pbm_info *pbm,
+				 unsigned char bus, unsigned char devfn,
+				 unsigned char where, unsigned char value);
+static int pbm_write_config_word(struct linux_pbm_info *pbm,
+				 unsigned char bus, unsigned char devfn,
+				 unsigned char where, unsigned short value);
+static int pbm_write_config_dword(struct linux_pbm_info *pbm,
+				  unsigned char bus, unsigned char devfn,
+				  unsigned char where, unsigned int value);
 
 /* This is used to make the scan_bus in the generic PCI code be
  * a nop, as we need to control the actual bus probing sequence.
@@ -69,10 +102,22 @@ static unsigned long psycho_iommu_init(struct linux_psycho *psycho,
 	unsigned long control, i;
 	unsigned long *iopte;
 
+	/*
+	 * Invalidate TLB Entries.
+	 */
+	control = psycho->psycho_regs->iommu_control;
+	control |= IOMMU_CTRL_DENAB;
+	psycho->psycho_regs->iommu_control = control;
+	for(i = 0; i < 16; i++) {
+		psycho->psycho_regs->iommu_data[i] = 0;
+	}
+	control &= ~(IOMMU_CTRL_DENAB);
+	psycho->psycho_regs->iommu_control = control;
+
 	memory_start = (tsbbase + ((32 * 1024) * 8));
 	iopte = (unsigned long *)tsbbase;
 
-	for(i = 0; i < (65536 / 2); i++) {
+	for(i = 0; i < (32 * 1024); i++) {
 		*iopte = (IOPTE_VALID | IOPTE_64K |
 			  IOPTE_CACHE | IOPTE_WRITE);
 		*iopte |= (i << 16);
@@ -94,20 +139,25 @@ extern void prom_pbm_ranges_init(int node, struct linux_pbm_info *pbm);
 unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 {
 	struct linux_prom64_registers pr_regs[3];
+	struct linux_psycho *psycho;
 	char namebuf[128];
 	u32 portid;
 	int node;
 
 	printk("PSYCHO: Probing for controllers.\n");
+#ifdef PROM_DEBUG
+	dprintf("PSYCHO: Probing for controllers.\n");
+#endif
 
 	memory_start = long_align(memory_start);
 	node = prom_getchild(prom_root_node);
 	while((node = prom_searchsiblings(node, "pci")) != 0) {
-		struct linux_psycho *psycho = (struct linux_psycho *)memory_start;
 		struct linux_psycho *search;
 		struct linux_pbm_info *pbm = NULL;
 		u32 busrange[2];
 		int err, is_pbm_a;
+
+		psycho = (struct linux_psycho *)memory_start;
 
 		portid = prom_getintdefault(node, "upa-portid", 0xff);
 		for(search = psycho_root; search; search = search->next) {
@@ -123,7 +173,8 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 			}
 		}
 
-		memory_start = long_align(memory_start + sizeof(struct linux_psycho));
+		memory_start = long_align(memory_start +
+					  sizeof(struct linux_psycho));
 
 		memset(psycho, 0, sizeof(*psycho));
 
@@ -131,8 +182,12 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 		psycho_root = psycho;
 
 		psycho->upa_portid = portid;
+		psycho->index = linux_num_psycho++;
 
-		/* Map in PSYCHO register set and report the presence of this PSYCHO. */
+		/*
+		 * Map in PSYCHO register set and report the presence
+		 * of this PSYCHO.
+		 */
 		err = prom_getproperty(node, "reg",
 				       (char *)&pr_regs[0], sizeof(pr_regs));
 		if(err == 0 || err == -1) {
@@ -141,7 +196,10 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 			prom_halt();
 		}
 
-		/* Third REG in property is base of entire PSYCHO register space. */
+		/*
+		 * Third REG in property is base of entire PSYCHO
+		 * register space.
+		 */
 		psycho->psycho_regs = sparc_alloc_io((pr_regs[2].phys_addr & 0xffffffff),
 						     NULL, sizeof(struct psycho_regs),
 						     "PSYCHO Registers",
@@ -154,11 +212,18 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 
 		printk("PSYCHO: Found controller, main regs at %p\n",
 		       psycho->psycho_regs);
-#if 0
-		printk("PSYCHO: Interrupt retry [%016lx]\n",
-		       psycho->psycho_regs->irq_retry);
+#ifdef PROM_DEBUG
+		dprintf("PSYCHO: Found controller, main regs at %p\n",
+			psycho->psycho_regs);
 #endif
+
 		psycho->psycho_regs->irq_retry = 0xff;
+
+#if 0
+		psycho->psycho_regs->ecc_control |= 1;
+		psycho->psycho_regs->sbuf_a_control = 0;
+		psycho->psycho_regs->sbuf_b_control = 0;
+#endif
 
 		/* Now map in PCI config space for entire PSYCHO. */
 		psycho->pci_config_space =
@@ -172,7 +237,12 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 		}
 
 		/* Report some more info. */
-		printk("PSYCHO: PCI config space at %p\n", psycho->pci_config_space);
+		printk("PSYCHO: PCI config space at %p\n",
+		       psycho->pci_config_space);
+#ifdef PROM_DEBUG
+		dprintf("PSYCHO: PCI config space at %p\n",
+			psycho->pci_config_space);
+#endif
 
 		memory_start = psycho_iommu_init(psycho, memory_start);
 
@@ -222,6 +292,13 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 		prom_printf("Fatal error, neither SBUS nor PCI bus found.\n");
 		prom_halt();
 	}
+
+	psycho_index_map = (struct linux_psycho **)long_align(memory_start);
+	memory_start = long_align(memory_start + linux_num_psycho
+					       * sizeof(struct linux_psycho *));
+
+	for (psycho = psycho_root; psycho; psycho = psycho->next)
+		psycho_index_map[psycho->index] = psycho;
 
 	return memory_start;
 }
@@ -361,18 +438,118 @@ static inline struct pcidev_cookie *pci_devcookie_alloc(void)
 	return pci_init_alloc(sizeof(struct pcidev_cookie));
 }
 
+
+static void
+pbm_reconfigure_bridges(struct linux_pbm_info *pbm, unsigned char bus)
+{
+	unsigned int devfn, l, class;
+	unsigned char hdr_type = 0;
+
+	for (devfn = 0; devfn < 0xff; ++devfn) {
+		if (PCI_FUNC(devfn) == 0) {
+			pbm_read_config_byte(pbm, bus, devfn,
+					     PCI_HEADER_TYPE, &hdr_type);
+		} else if (!(hdr_type & 0x80)) {
+			/* not a multi-function device */
+			continue;
+		}
+
+		/* Check if there is anything here. */
+		pbm_read_config_dword(pbm, bus, devfn, PCI_VENDOR_ID, &l);
+		if (l == 0xffffffff || l == 0x00000000) {
+			hdr_type = 0;
+			continue;
+		}
+
+		/* See if this is a bridge device. */
+		pbm_read_config_dword(pbm, bus, devfn,
+				      PCI_CLASS_REVISION, &class);
+
+		if ((class >> 16) == PCI_CLASS_BRIDGE_PCI) {
+			unsigned int buses;
+
+			pbm_read_config_dword(pbm, bus, devfn,
+					      PCI_PRIMARY_BUS, &buses);
+
+			/*
+			 * First reconfigure everything underneath the bridge.
+			 */
+			pbm_reconfigure_bridges(pbm, (buses >> 8) & 0xff);
+
+			/*
+			 * Unconfigure this bridges bus numbers,
+			 * pci_scan_bus() will fix this up properly.
+			 */
+			buses &= 0xff000000;
+			pbm_write_config_dword(pbm, bus, devfn,
+					       PCI_PRIMARY_BUS, buses);
+		}
+	}
+}
+
+static void pbm_fixup_busno(struct linux_pbm_info *pbm, unsigned char bus)
+{
+	unsigned int nbus;
+
+	/*
+	 * First, reconfigure all bridge devices underneath this pbm.
+	 */
+	pbm_reconfigure_bridges(pbm, pbm->pci_first_busno);
+
+	/*
+	 * Now reconfigure the pbm to it's new bus number and set up
+	 * our bus2pbm mapping for this pbm.
+	 */
+	nbus = pbm->pci_last_busno - pbm->pci_first_busno;
+
+	pbm_write_config_byte(pbm, pbm->pci_first_busno, 0, 0x40, bus);
+
+	pbm->pci_first_busno = bus;
+	pbm_write_config_byte(pbm, bus, 0, 0x41, 0xff);
+
+	do {
+		bus2pbm[bus++] = pbm;
+	} while (nbus--);
+}
+
+
 static void pbm_probe(struct linux_pbm_info *pbm, unsigned long *mstart)
 {
+	static struct pci_bus *pchain = NULL;
 	struct pci_bus *pbus = &pbm->pci_bus;
+	static unsigned char busno = 0;
 
 	/* PSYCHO PBM's include child PCI bridges in bus-range property,
 	 * but we don't scan each of those ourselves, Linux generic PCI
 	 * probing code will find child bridges and link them into this
 	 * pbm's root PCI device hierarchy.
 	 */
-	pbus->number = pbm->pci_first_busno;
+
+	pbus->number = pbus->secondary = busno;
 	pbus->sysdata = pbm;
+
+	pbm_fixup_busno(pbm, busno);
+
 	pbus->subordinate = pci_scan_bus(pbus, mstart);
+
+	/*
+	 * Set the maximum subordinate bus of this pbm.
+	 */
+	pbm->pci_last_busno = pbus->subordinate;
+	pbm_write_config_byte(pbm, busno, 0, 0x41, pbm->pci_last_busno);
+
+	busno = pbus->subordinate + 1;
+
+	/*
+	 * Fixup the chain of primary PCI busses.
+	 */
+	if (pchain) {
+		pchain->next = &pbm->pci_bus;
+		pchain = pchain->next;
+	} else {
+		pchain = &pci_root;
+		memcpy(pchain, &pbm->pci_bus, sizeof(pci_root));
+	}
 }
 
 static int pdev_to_pnode_sibtraverse(struct linux_pbm_info *pbm,
@@ -432,8 +609,6 @@ static void fill_in_pbm_cookies(struct linux_pbm_info *pbm)
 		for(pdev = pbus->devices; pdev; pdev = pdev->sibling)
 			pdev_cookie_fillin(pbm, pdev);
 }
-
-/* #define RECORD_ASSIGNMENTS_DEBUG */
 
 /* Walk PROM device tree under PBM, looking for 'assigned-address'
  * properties, and recording them in pci_vma's linked in via
@@ -534,8 +709,6 @@ static void record_assignments(struct linux_pbm_info *pbm)
 	assignment_walk_siblings(pbm, prom_getchild(pbm->prom_node));
 }
 
-/* #define FIXUP_REGS_DEBUG */
-
 static void fixup_regs(struct pci_dev *pdev,
 		       struct linux_pbm_info *pbm,
 		       struct linux_prom_pci_registers *pregs,
@@ -556,12 +729,14 @@ static void fixup_regs(struct pci_dev *pdev,
 		if(bustype == 0) {
 			/* Config space cookie, nothing to do. */
 			if(preg != 0)
-				prom_printf("fixup_doit: strange, config space not 0\n");
+				printk("%s: strange, config space not 0\n",
+				       __FUNCTION__);
 			continue;
 		} else if(bustype == 3) {
 			/* XXX add support for this... */
-			prom_printf("fixup_doit: Warning, ignoring 64-bit PCI "
-				    "memory space, tell DaveM.\n");
+			printk("%s: Warning, ignoring 64-bit PCI memory space, "
+			       "tell Eddie C. Dost (ecd@skynet.be).\n",
+			       __FUNCTION__);
 			continue;
 		}
 		bsreg = (pregs[preg].phys_hi & 0xff);
@@ -574,8 +749,13 @@ static void fixup_regs(struct pci_dev *pdev,
 		if((bsreg < PCI_BASE_ADDRESS_0) ||
 		   (bsreg > (PCI_BASE_ADDRESS_5 + 4)) ||
 		   (bsreg & 3)) {
-			prom_printf("fixup_doit: Warning, ignoring bogus basereg [%x]\n",
-				    bsreg);
+			printk("%s: [%04x:%04x]: "
+			       "Warning, ignoring bogus basereg [%x]\n",
+			       __FUNCTION__, pdev->vendor, pdev->device, bsreg);
+			printk("  PROM reg: %08x.%08x.%08x %08x.%08x\n",
+			       pregs[preg].phys_hi, pregs[preg].phys_mid,
+			       pregs[preg].phys_lo, pregs[preg].size_hi,
+			       pregs[preg].size_lo);
 			continue;
 		}
 
@@ -740,22 +920,22 @@ static void fixup_regs(struct pci_dev *pdev,
 					  pdev->devfn,
 					  PCI_COMMAND, &l);
 #ifdef FIXUP_REGS_DEBUG
-		prom_printf("[");
+		dprintf("[");
 #endif
 		if(IO_seen) {
 #ifdef FIXUP_REGS_DEBUG
-			prom_printf("IO ");
+			dprintf("IO ");
 #endif
 			l |= PCI_COMMAND_IO;
 		}
 		if(MEM_seen) {
 #ifdef FIXUP_REGS_DEBUG
-			prom_printf("MEM");
+			dprintf("MEM");
 #endif
 			l |= PCI_COMMAND_MEMORY;
 		}
 #ifdef FIXUP_REGS_DEBUG
-		prom_printf("]");
+		dprintf("]");
 #endif
 		pcibios_write_config_dword(pdev->bus->number,
 					   pdev->devfn,
@@ -763,7 +943,7 @@ static void fixup_regs(struct pci_dev *pdev,
 	}
 
 #ifdef FIXUP_REGS_DEBUG
-	prom_printf("REG_FIXUP[%s]: ", pci_strdev(pdev->vendor, pdev->device));
+	dprintf("REG_FIXUP[%04x,%04x]: ", pdev->vendor, pdev->device);
 	for(preg = 0; preg < 6; preg++) {
 		if(pdev->base_address[preg] != 0)
 			prom_printf("%d[%016lx] ", preg, pdev->base_address[preg]);
@@ -814,7 +994,7 @@ static unsigned long psycho_pcislot_imap_offset(unsigned long ino)
 }
 
 /* Exported for EBUS probing layer. */
-unsigned int psycho_irq_build(unsigned int full_ino)
+unsigned int psycho_irq_build(struct linux_pbm_info *pbm, unsigned int full_ino)
 {
 	unsigned long imap_off, ign, ino;
 
@@ -906,10 +1086,8 @@ unsigned int psycho_irq_build(unsigned int full_ino)
 	}
 	imap_off -= imap_offset(imap_a_slot0);
 
-	return pci_irq_encode(imap_off, 0 /* XXX */, ign, ino);
+	return pci_irq_encode(imap_off, pbm->parent->index, ign, ino);
 }
-
-/* #define FIXUP_IRQ_DEBUG */
 
 static void fixup_irq(struct pci_dev *pdev,
 		      struct linux_pbm_info *pbm,
@@ -920,24 +1098,30 @@ static void fixup_irq(struct pci_dev *pdev,
 	int err;
 
 #ifdef FIXUP_IRQ_DEBUG
-	printk("fixup_irq[%s:%s]: ",
-	       pci_strvendor(pdev->vendor),
-	       pci_strdev(pdev->vendor, pdev->device));
+	dprintf("fixup_irq[%04x:%04x]: ", pdev->vendor, pdev->device);
 #endif
 	err = prom_getproperty(node, "interrupts", (void *)&prom_irq, sizeof(prom_irq));
 	if(err == 0 || err == -1) {
-		prom_printf("fixup_irq: No interrupts property for dev[%s:%s]\n",
-			    pci_strvendor(pdev->vendor),
-			    pci_strdev(pdev->vendor, pdev->device));
+		prom_printf("fixup_irq: No interrupts property for dev[%04x:%04x]\n",
+			    pdev->vendor, pdev->device);
 		prom_halt();
 	}
 
 	/* See if fully specified already (ie. for onboard devices like hme) */
 	if(((prom_irq & PSYCHO_IMAP_IGN) >> 6) == pbm->parent->upa_portid) {
-		pdev->irq = psycho_irq_build(prom_irq);
+		pdev->irq = psycho_irq_build(pbm, prom_irq);
 #ifdef FIXUP_IRQ_DEBUG
-		printk("fully specified prom_irq[%x] pdev->irq[%x]",
-		       prom_irq, pdev->irq);
+		dprintf("fully specified prom_irq[%x] pdev->irq[%x]",
+		        prom_irq, pdev->irq);
+#endif
+	/* See if onboard device interrupt (i.e. bit 5 set) */
+	} else if((prom_irq & PSYCHO_IMAP_INO) & 0x20) {
+		pdev->irq = psycho_irq_build(pbm,
+					     (pbm->parent->upa_portid << 6)
+					     | prom_irq);
+#ifdef FIXUP_IRQ_DEBUG
+		dprintf("partially specified prom_irq[%x] pdev->irq[%x]",
+		        prom_irq, pdev->irq);
 #endif
 	} else {
 		unsigned int bus, slot, line;
@@ -952,20 +1136,25 @@ static void fixup_irq(struct pci_dev *pdev,
 			if(pbm == &pbm->parent->pbm_A)
 				slot = (pdev->devfn >> 3) - 1;
 			else
-				slot = ((pdev->devfn >> 3) >> 1) - 1;
+				slot = (pdev->devfn >> 3) - 2;
 		} else {
 			/* Underneath a bridge, use slot number of parent
 			 * bridge.
 			 */
-			slot = (pdev->bus->self->devfn >> 3) - 1;
+			if(pbm == &pbm->parent->pbm_A)
+				slot = (pdev->bus->self->devfn >> 3) - 1;
+			else
+				slot = (pdev->bus->self->devfn >> 3) - 2;
 
 			/* Use low slot number bits of child as IRQ line. */
-			line = ((pdev->devfn >> 3) & 3);
+			line = (line + ((pdev->devfn >> 3) - 4)) % 4;
 		}
 		slot = (slot << 2);
 
-		pdev->irq = psycho_irq_build((((portid << 6) & PSYCHO_IMAP_IGN) |
-					     (bus | slot | line)));
+		pdev->irq = psycho_irq_build(pbm,
+					     (((portid << 6) & PSYCHO_IMAP_IGN)
+					     | (bus | slot | line)));
+
 #ifdef FIXUP_IRQ_DEBUG
 		do {
 			unsigned char iline, ipin;
@@ -978,15 +1167,24 @@ static void fixup_irq(struct pci_dev *pdev,
 						       pdev->devfn,
 						       PCI_INTERRUPT_LINE,
 						       &iline);
-			printk("FIXED portid[%x] bus[%x] slot[%x] line[%x] irq[%x] "
-			       "iline[%x] ipin[%x] prom_irq[%x]",
-			       portid, bus>>4, slot>>2, line, pdev->irq,
-			       iline, ipin, prom_irq);
+			dprintf("FIXED portid[%x] bus[%x] slot[%x] line[%x] irq[%x] "
+			        "iline[%x] ipin[%x] prom_irq[%x]",
+			        portid, bus>>4, slot>>2, line, pdev->irq,
+			        iline, ipin, prom_irq);
 		} while(0);
 #endif
 	}
+
+	/*
+	 * Write the INO to config space PCI_INTERRUPT_LINE.
+	 */
+	(void)pcibios_write_config_byte(pdev->bus->number,
+					pdev->devfn,
+					PCI_INTERRUPT_LINE,
+					pdev->irq & PCI_IRQ_INO);
+
 #ifdef FIXUP_IRQ_DEBUG
-	printk("\n");
+	dprintf("\n");
 #endif
 }
 
@@ -1093,15 +1291,11 @@ static void psycho_final_fixup(struct linux_psycho *psycho)
 	/* Second, fixup base address registers and IRQ lines... */
 	fixup_addr_irq(&psycho->pbm_A);
 	fixup_addr_irq(&psycho->pbm_B);
-
-#if 0
-	prom_halt();
-#endif
 }
 
 unsigned long pcibios_fixup(unsigned long memory_start, unsigned long memory_end)
 {
-	struct linux_psycho *psycho = psycho_root;
+	struct linux_psycho *psycho;
 
 	pci_probe_enable = 1;
 
@@ -1117,11 +1311,13 @@ unsigned long pcibios_fixup(unsigned long memory_start, unsigned long memory_end
 	 * XXX apps that need to get at PCI configuration space.
 	 */
 
-	/* Probe busses under PBM A. */
-	pbm_probe(&psycho->pbm_A, &memory_start);
+	for (psycho = psycho_root; psycho; psycho = psycho->next) {
+		/* Probe busses under PBM B. */
+		pbm_probe(&psycho->pbm_B, &memory_start);
 
-	/* Probe busses under PBM B. */
-	pbm_probe(&psycho->pbm_B, &memory_start);
+		/* Probe busses under PBM A. */
+		pbm_probe(&psycho->pbm_A, &memory_start);
+	}
 
 	pci_init_alloc_init(&memory_start);
 
@@ -1130,15 +1326,17 @@ unsigned long pcibios_fixup(unsigned long memory_start, unsigned long memory_end
 	 * sysdata with a pointer to the PBM (for pci_bus's) or
 	 * a pci_dev cookie (PBM+PROM_NODE, for pci_dev's).
 	 */
-	fill_in_pbm_cookies(&psycho->pbm_A);
-	fill_in_pbm_cookies(&psycho->pbm_B);
+	for (psycho = psycho_root; psycho; psycho = psycho->next) {
+		fill_in_pbm_cookies(&psycho->pbm_A);
+		fill_in_pbm_cookies(&psycho->pbm_B);
 
-	/* See what OBP has taken care of already. */
-	record_assignments(&psycho->pbm_A);
-	record_assignments(&psycho->pbm_B);
+		/* See what OBP has taken care of already. */
+		record_assignments(&psycho->pbm_A);
+		record_assignments(&psycho->pbm_B);
 
-	/* Now, fix it all up. */
-	psycho_final_fixup(psycho);
+		/* Now, fix it all up. */
+		psycho_final_fixup(psycho);
+	}
 
 	pci_init_alloc_fini();
 
@@ -1153,113 +1351,124 @@ volatile int pci_poke_faulted = 0;
  * XXX space exists, on Ultra we can have many of them, especially with
  * XXX 'dual-pci' boards on Sunfire/Starfire/Wildfire.
  */
-static char *pci_mkaddr(unsigned char bus, unsigned char device_fn,
-			unsigned char where)
+static void *
+pci_mkaddr(struct linux_pbm_info *pbm, unsigned char bus,
+	   unsigned char devfn, unsigned char where)
 {
-	unsigned long ret = (unsigned long) psycho_root->pci_config_space;
+	unsigned long ret;
+
+	if (!pbm)
+		return NULL;
+
+	ret = (unsigned long) pbm->parent->pci_config_space;
 
 	ret |= (1 << 24);
-	ret |= ((bus & 0xff) << 16);
-	ret |= ((device_fn & 0xff) << 8);
-	ret |= (where & 0xfc);
-	return (unsigned char *)ret;
+	ret |= (bus << 16);
+	ret |= (devfn << 8);
+	ret |= where;
+
+	return (void *)ret;
 }
 
-static inline int out_of_range(unsigned char bus, unsigned char device_fn)
+static inline int
+out_of_range(struct linux_pbm_info *pbm, unsigned char bus, unsigned char devfn)
 {
-	return ((bus == 0 && PCI_SLOT(device_fn) > 4) ||
-		(bus == 1 && PCI_SLOT(device_fn) > 6) ||
+	return (((pbm == &pbm->parent->pbm_B) && PCI_SLOT(devfn) > 4) ||
+		((pbm == &pbm->parent->pbm_A) && PCI_SLOT(devfn) > 6) ||
 		(pci_probe_enable == 0));
 }
 
-int pcibios_read_config_byte (unsigned char bus, unsigned char device_fn,
-			      unsigned char where, unsigned char *value)
+static int
+pbm_read_config_byte(struct linux_pbm_info *pbm,
+		     unsigned char bus, unsigned char devfn,
+		     unsigned char where, unsigned char *value)
 {
-	unsigned char *addr = pci_mkaddr(bus, device_fn, where);
-	unsigned int word, trapped;
+	unsigned char *addr = pci_mkaddr(pbm, bus, devfn, where);
+	unsigned int trapped;
+	unsigned char byte;
 
 	*value = 0xff;
 
-	if(out_of_range(bus, device_fn))
+	if (!addr)
+		return PCIBIOS_SUCCESSFUL;
+
+	if (out_of_range(pbm, bus, devfn))
 		return PCIBIOS_SUCCESSFUL;
 
 	pci_poke_in_progress = 1;
 	pci_poke_faulted = 0;
 	__asm__ __volatile__("membar #Sync\n\t"
-			     "lduwa [%1] %2, %0\n\t"
+			     "lduba [%1] %2, %0\n\t"
 			     "membar #Sync"
-			     : "=r" (word)
+			     : "=r" (byte)
 			     : "r" (addr), "i" (ASI_PL));
 	pci_poke_in_progress = 0;
 	trapped = pci_poke_faulted;
 	pci_poke_faulted = 0;
-	if(!trapped) {
-		switch(where & 3) {
-		case 0:
-			*value = word & 0xff;
-			break;
-		case 1:
-			*value = (word >> 8) & 0xff;
-			break;
-		case 2:
-			*value = (word >> 16) & 0xff;
-			break;
-		case 3:
-			*value = (word >> 24) & 0xff;
-			break;
-		};
-	}
+	if(!trapped)
+		*value = byte;
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int pcibios_read_config_word (unsigned char bus, unsigned char device_fn,
-			      unsigned char where, unsigned short *value)
+static int
+pbm_read_config_word(struct linux_pbm_info *pbm,
+		     unsigned char bus, unsigned char devfn,
+		     unsigned char where, unsigned short *value)
 {
-	unsigned short *addr = (unsigned short *)pci_mkaddr(bus, device_fn, where);
-	unsigned int word, trapped;
+	unsigned short *addr = pci_mkaddr(pbm, bus, devfn, where);
+	unsigned int trapped;
+	unsigned short word;
 
 	*value = 0xffff;
 
-	if(out_of_range(bus, device_fn))
+	if (!addr)
 		return PCIBIOS_SUCCESSFUL;
+
+	if (out_of_range(pbm, bus, devfn))
+		return PCIBIOS_SUCCESSFUL;
+
+	if (where & 0x01) {
+		printk("pcibios_read_config_word: misaligned reg [%x]\n",
+		       where);
+		return PCIBIOS_SUCCESSFUL;
+	}
 
 	pci_poke_in_progress = 1;
 	pci_poke_faulted = 0;
 	__asm__ __volatile__("membar #Sync\n\t"
-			     "lduwa [%1] %2, %0\n\t"
+			     "lduha [%1] %2, %0\n\t"
 			     "membar #Sync"
 			     : "=r" (word)
 			     : "r" (addr), "i" (ASI_PL));
 	pci_poke_in_progress = 0;
 	trapped = pci_poke_faulted;
 	pci_poke_faulted = 0;
-	if(!trapped) {
-		switch(where & 3) {
-		case 0:
-			*value = word & 0xffff;
-			break;
-		case 2:
-			*value = (word >> 16) & 0xffff;
-			break;
-		default:
-			printk("pcibios_read_config_word: misaligned "
-			       "reg [%x]\n", where);
-			break;
-		};
-	}
+	if(!trapped)
+		*value = word;
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
-			       unsigned char where, unsigned int *value)
+static int
+pbm_read_config_dword(struct linux_pbm_info *pbm,
+		      unsigned char bus, unsigned char devfn,
+		      unsigned char where, unsigned int *value)
 {
-	unsigned int *addr = (unsigned int *)pci_mkaddr(bus, device_fn, where);
+	unsigned int *addr = pci_mkaddr(pbm, bus, devfn, where);
 	unsigned int word, trapped;
 
 	*value = 0xffffffff;
 
-	if(out_of_range(bus, device_fn))
+	if (!addr)
 		return PCIBIOS_SUCCESSFUL;
+
+	if (out_of_range(pbm, bus, devfn))
+		return PCIBIOS_SUCCESSFUL;
+
+	if (where & 0x03) {
+		printk("pcibios_read_config_dword: misaligned reg [%x]\n",
+		       where);
+		return PCIBIOS_SUCCESSFUL;
+	}
 
 	pci_poke_in_progress = 1;
 	pci_poke_faulted = 0;
@@ -1276,12 +1485,17 @@ int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int pcibios_write_config_byte (unsigned char bus, unsigned char device_fn,
-			       unsigned char where, unsigned char value)
+static int
+pbm_write_config_byte(struct linux_pbm_info *pbm,
+		      unsigned char bus, unsigned char devfn,
+		      unsigned char where, unsigned char value)
 {
-	unsigned char *addr = pci_mkaddr(bus, device_fn, where);
+	unsigned char *addr = pci_mkaddr(pbm, bus, devfn, where);
 
-	if(out_of_range(bus, device_fn))
+	if (!addr)
+		return PCIBIOS_SUCCESSFUL;
+
+	if (out_of_range(pbm, bus, devfn))
 		return PCIBIOS_SUCCESSFUL;
 
 	pci_poke_in_progress = 1;
@@ -1299,13 +1513,24 @@ int pcibios_write_config_byte (unsigned char bus, unsigned char device_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int pcibios_write_config_word (unsigned char bus, unsigned char device_fn,
-			       unsigned char where, unsigned short value)
+static int
+pbm_write_config_word(struct linux_pbm_info *pbm,
+		      unsigned char bus, unsigned char devfn,
+		      unsigned char where, unsigned short value)
 {
-	unsigned short *addr = (unsigned short *)pci_mkaddr(bus, device_fn, where);
+	unsigned short *addr = pci_mkaddr(pbm, bus, devfn, where);
 
-	if(out_of_range(bus, device_fn))
+	if (!addr)
 		return PCIBIOS_SUCCESSFUL;
+
+	if (out_of_range(pbm, bus, devfn))
+		return PCIBIOS_SUCCESSFUL;
+
+	if (where & 0x01) {
+		printk("pcibios_write_config_word: misaligned reg [%x]\n",
+		       where);
+		return PCIBIOS_SUCCESSFUL;
+	}
 
 	pci_poke_in_progress = 1;
 	__asm__ __volatile__("membar #Sync\n\t"
@@ -1317,13 +1542,24 @@ int pcibios_write_config_word (unsigned char bus, unsigned char device_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
-				unsigned char where, unsigned int value)
+static int
+pbm_write_config_dword(struct linux_pbm_info *pbm,
+		       unsigned char bus, unsigned char devfn,
+		       unsigned char where, unsigned int value)
 {
-	unsigned int *addr = (unsigned int *)pci_mkaddr(bus, device_fn, where);
+	unsigned int *addr = pci_mkaddr(pbm, bus, devfn, where);
 
-	if(out_of_range(bus, device_fn))
+	if (!addr)
 		return PCIBIOS_SUCCESSFUL;
+
+	if (out_of_range(pbm, bus, devfn))
+		return PCIBIOS_SUCCESSFUL;
+
+	if (where & 0x03) {
+		printk("pcibios_write_config_dword: misaligned reg [%x]\n",
+		       where);
+		return PCIBIOS_SUCCESSFUL;
+	}
 
 	pci_poke_in_progress = 1;
 	__asm__ __volatile__("membar #Sync\n\t"
@@ -1333,6 +1569,42 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 			     : "r" (value), "r" (addr), "i" (ASI_PL));
 	pci_poke_in_progress = 0;
 	return PCIBIOS_SUCCESSFUL;
+}
+
+int pcibios_read_config_byte (unsigned char bus, unsigned char devfn,
+			      unsigned char where, unsigned char *value)
+{
+	return pbm_read_config_byte(bus2pbm[bus], bus, devfn, where, value);
+}
+
+int pcibios_read_config_word (unsigned char bus, unsigned char devfn,
+			      unsigned char where, unsigned short *value)
+{
+	return pbm_read_config_word(bus2pbm[bus], bus, devfn, where, value);
+}
+
+int pcibios_read_config_dword (unsigned char bus, unsigned char devfn,
+			       unsigned char where, unsigned int *value)
+{
+	return pbm_read_config_dword(bus2pbm[bus], bus, devfn, where, value);
+}
+
+int pcibios_write_config_byte (unsigned char bus, unsigned char devfn,
+			       unsigned char where, unsigned char value)
+{
+	return pbm_write_config_byte(bus2pbm[bus], bus, devfn, where, value);
+}
+
+int pcibios_write_config_word (unsigned char bus, unsigned char devfn,
+			       unsigned char where, unsigned short value)
+{
+	return pbm_write_config_word(bus2pbm[bus], bus, devfn, where, value);
+}
+
+int pcibios_write_config_dword (unsigned char bus, unsigned char devfn,
+			        unsigned char where, unsigned int value)
+{
+	return pbm_write_config_dword(bus2pbm[bus], bus, devfn, where, value);
 }
 
 asmlinkage int sys_pciconfig_read(unsigned long bus,
@@ -1346,19 +1618,22 @@ asmlinkage int sys_pciconfig_read(unsigned long bus,
 	unsigned int uint;
 	int err = 0;
 
+	if(!suser())
+		return -EPERM;
+
 	lock_kernel();
 	switch(len) {
 	case 1:
 		pcibios_read_config_byte(bus, dfn, off, &ubyte);
-		put_user(ubyte, buf);
+		put_user(ubyte, (unsigned char *)buf);
 		break;
 	case 2:
 		pcibios_read_config_word(bus, dfn, off, &ushort);
-		put_user(ushort, buf);
+		put_user(ushort, (unsigned short *)buf);
 		break;
 	case 4:
 		pcibios_read_config_dword(bus, dfn, off, &uint);
-		put_user(uint, buf);
+		put_user(uint, (unsigned int *)buf);
 		break;
 
 	default:
@@ -1380,6 +1655,9 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 	unsigned short ushort;
 	unsigned int uint;
 	int err = 0;
+
+	if(!suser())
+		return -EPERM;
 
 	lock_kernel();
 	switch(len) {

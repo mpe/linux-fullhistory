@@ -35,204 +35,6 @@
 	/* I think I have an erection...  Once _AGAIN_ the SunSoft
 	 * engineers are caught asleep at the keyboard, tsk tsk...
 	 */
-#define CSUMCOPY_ECACHE_LOAD(off, t0, t1, t2, t3, t4, t5, t6, t7)			\
-	ldxa		[%src + off + 0x00] %asi, t0;					\
-	ldxa		[%src + off + 0x08] %asi, t1;					\
-	ldxa		[%src + off + 0x10] %asi, t2;					\
-	ldxa		[%src + off + 0x18] %asi, t3;					\
-	ldxa		[%src + off + 0x20] %asi, t4;					\
-	ldxa		[%src + off + 0x28] %asi, t5;					\
-	ldxa		[%src + off + 0x30] %asi, t6;					\
-	ldxa		[%src + off + 0x38] %asi, t7;					\
-	nop; nop; /* DO NOT TOUCH THIS!!!!! */
-
-#define CSUMCOPY_EC_STALIGNED_LDNXT(off, t0, t1, t2, t3, t4, t5, t6, t7)		\
-	stx		t0, [%dst + off - 0x40];					\
-	addcc		%sum, t0, %sum;							\
-	bcc,pt		%xcc, 11f;							\
-	 ldxa		[%src + off + 0x00] %asi, t0;					\
-	add		%sum, 1, %sum;							\
-11:	stx		t1, [%dst + off - 0x38];					\
-	addcc		%sum, t1, %sum;							\
-	bcc,pt		%xcc, 12f;							\
-	 ldxa		[%src + off + 0x08] %asi, t1;					\
-	add		%sum, 1, %sum;							\
-12:	stx		t2, [%dst + off - 0x30];					\
-	addcc		%sum, t2, %sum;							\
-	bcc,pt		%xcc, 13f;							\
-	 ldxa		[%src + off + 0x10] %asi, t2;					\
-	add		%sum, 1, %sum;							\
-13:	stx		t3, [%dst + off - 0x28];					\
-	addcc		%sum, t3, %sum;							\
-	bcc,pt		%xcc, 14f;							\
-	 ldxa		[%src + off + 0x18] %asi, t3;					\
-	add		%sum, 1, %sum;							\
-14:	stx		t4, [%dst + off - 0x20];					\
-	addcc		%sum, t4, %sum;							\
-	bcc,pt		%xcc, 15f;							\
-	 ldxa		[%src + off + 0x20] %asi, t4;					\
-	add		%sum, 1, %sum;							\
-15:	stx		t5, [%dst + off - 0x18];					\
-	addcc		%sum, t5, %sum;							\
-	bcc,pt		%xcc, 16f;							\
-	 ldxa		[%src + off + 0x28] %asi, t5;					\
-	add		%sum, 1, %sum;							\
-16:	stx		t6, [%dst + off - 0x10];					\
-	addcc		%sum, t6, %sum;							\
-	bcc,pt		%xcc, 17f;							\
-	 ldxa		[%src + off + 0x30] %asi, t6;					\
-	add		%sum, 1, %sum;							\
-17:	stx		t7, [%dst + off - 0x08];					\
-	addcc		%sum, t7, %sum;							\
-	bcc,pt		%xcc, 18f;							\
-	 ldxa		[%src + off + 0x38] %asi, t7;					\
-	add		%sum, 1, %sum;							\
-18:
-
-#define CSUMCOPY_EC_STUNALIGN_LDNXT(off, t0, t1, t2, t3, t4, t5, t6, t7)		\
-	stw		t0, [%dst + off - 0x3c];					\
-	addcc		%sum, t0, %sum;							\
-	srlx		t0, 32, t0;							\
-	stw		t0, [%dst + off - 0x40];					\
-	bcc,pt		%xcc, 21f;							\
-	 ldxa		[%src + off + 0x00] %asi, t0;					\
-	add		%sum, 1, %sum;							\
-21:	stw		t1, [%dst + off - 0x34];					\
-	addcc		%sum, t1, %sum;							\
-	srlx		t1, 32, t1;							\
-	stw		t1, [%dst + off - 0x38];					\
-	bcc,pt		%xcc, 22f;							\
-	 ldxa		[%src + off + 0x08] %asi, t1;					\
-	add		%sum, 1, %sum;							\
-22:	stw		t2, [%dst + off - 0x2c];					\
-	addcc		%sum, t2, %sum;							\
-	srlx		t2, 32, t2;							\
-	stw		t2, [%dst + off - 0x30];					\
-	bcc,pt		%xcc, 23f;							\
-	 ldxa		[%src + off + 0x10] %asi, t2;					\
-	add		%sum, 1, %sum;							\
-23:	stw		t3, [%dst + off - 0x24];					\
-	addcc		%sum, t3, %sum;							\
-	srlx		t3, 32, t3;							\
-	stw		t3, [%dst + off - 0x28];					\
-	bcc,pt		%xcc, 24f;							\
-	 ldxa		[%src + off + 0x18] %asi, t3;					\
-	add		%sum, 1, %sum;							\
-24:	stw		t4, [%dst + off - 0x1c];					\
-	addcc		%sum, t4, %sum;							\
-	srlx		t4, 32, t4;							\
-	stw		t4, [%dst + off - 0x20];					\
-	bcc,pt		%xcc, 25f;							\
-	 ldxa		[%src + off + 0x20] %asi, t4;					\
-	add		%sum, 1, %sum;							\
-25:	stw		t5, [%dst + off - 0x14];					\
-	addcc		%sum, t5, %sum;							\
-	srlx		t5, 32, t5;							\
-	stw		t5, [%dst + off - 0x18];					\
-	bcc,pt		%xcc, 26f;							\
-	 ldxa		[%src + off + 0x28] %asi, t5;					\
-	add		%sum, 1, %sum;							\
-26:	stw		t6, [%dst + off - 0x0c];					\
-	addcc		%sum, t6, %sum;							\
-	srlx		t6, 32, t6;							\
-	stw		t6, [%dst + off - 0x10];					\
-	bcc,pt		%xcc, 27f;							\
-	 ldxa		[%src + off + 0x30] %asi, t6;					\
-	add		%sum, 1, %sum;							\
-27:	stw		t7, [%dst + off - 0x04];					\
-	addcc		%sum, t7, %sum;							\
-	srlx		t7, 32, t7;							\
-	stw		t7, [%dst + off - 0x08];					\
-	bcc,pt		%xcc, 28f;							\
-	 ldxa		[%src + off + 0x38] %asi, t7;					\
-	add		%sum, 1, %sum;							\
-28:
-
-#define CSUMCOPY_EC_STALIGNED(off, t0, t1, t2, t3, t4, t5, t6, t7)			\
-	addcc		%sum, t0, %sum;							\
-	bcc,pt		%xcc, 31f;							\
-	 stx		t0, [%dst + off + 0x00];					\
-	add		%sum, 1, %sum;							\
-31:	addcc		%sum, t1, %sum;							\
-	bcc,pt		%xcc, 32f;							\
-	 stx		t1, [%dst + off + 0x08];					\
-	add		%sum, 1, %sum;							\
-32:	addcc		%sum, t2, %sum;							\
-	bcc,pt		%xcc, 33f;							\
-	 stx		t2, [%dst + off + 0x10];					\
-	add		%sum, 1, %sum;							\
-33:	addcc		%sum, t3, %sum;							\
-	bcc,pt		%xcc, 34f;							\
-	 stx		t3, [%dst + off + 0x18];					\
-	add		%sum, 1, %sum;							\
-34:	addcc		%sum, t4, %sum;							\
-	bcc,pt		%xcc, 35f;							\
-	 stx		t4, [%dst + off + 0x20];					\
-	add		%sum, 1, %sum;							\
-35:	addcc		%sum, t5, %sum;							\
-	bcc,pt		%xcc, 36f;							\
-	 stx		t5, [%dst + off + 0x28];					\
-	add		%sum, 1, %sum;							\
-36:	addcc		%sum, t6, %sum;							\
-	bcc,pt		%xcc, 37f;							\
-	 stx		t6, [%dst + off + 0x30];					\
-	add		%sum, 1, %sum;							\
-37:	addcc		%sum, t7, %sum;							\
-	bcc,pt		%xcc, 38f;							\
-	 stx		t7, [%dst + off + 0x38];					\
-	add		%sum, 1, %sum;							\
-38:
-
-#define CSUMCOPY_EC_STUNALIGN(off, t0, t1, t2, t3, t4, t5, t6, t7)			\
-	stw		t0, [%dst + off + 0x04];					\
-	addcc		%sum, t0, %sum;							\
-	srlx		t0, 32, t0;							\
-	bcc,pt		%xcc, 41f;							\
-	 stw		t0, [%dst + off + 0x00];					\
-	add		%sum, 1, %sum;							\
-41:	stw		t1, [%dst + off + 0x0c];					\
-	addcc		%sum, t1, %sum;							\
-	srlx		t1, 32, t1;							\
-	bcc,pt		%xcc, 42f;							\
-	 stw		t1, [%dst + off + 0x08];					\
-	add		%sum, 1, %sum;							\
-42:	stw		t2, [%dst + off + 0x14];					\
-	addcc		%sum, t2, %sum;							\
-	srlx		t2, 32, t2;							\
-	bcc,pt		%xcc, 43f;							\
-	 stw		t2, [%dst + off + 0x10];					\
-	add		%sum, 1, %sum;							\
-43:	stw		t3, [%dst + off + 0x1c];					\
-	addcc		%sum, t3, %sum;							\
-	srlx		t3, 32, t3;							\
-	bcc,pt		%xcc, 44f;							\
-	 stw		t3, [%dst + off + 0x18];					\
-	add		%sum, 1, %sum;							\
-44:	stw		t4, [%dst + off + 0x24];					\
-	addcc		%sum, t4, %sum;							\
-	srlx		t4, 32, t4;							\
-	bcc,pt		%xcc, 45f;							\
-	 stw		t4, [%dst + off + 0x20];					\
-	add		%sum, 1, %sum;							\
-45:	stw		t5, [%dst + off + 0x2c];					\
-	addcc		%sum, t5, %sum;							\
-	srlx		t5, 32, t5;							\
-	bcc,pt		%xcc, 46f;							\
-	 stw		t5, [%dst + off + 0x28];					\
-	add		%sum, 1, %sum;							\
-46:	stw		t6, [%dst + off + 0x34];					\
-	addcc		%sum, t6, %sum;							\
-	srlx		t6, 32, t6;							\
-	bcc,pt		%xcc, 47f;							\
-	 stw		t6, [%dst + off + 0x30];					\
-	add		%sum, 1, %sum;							\
-47:	stw		t7, [%dst + off + 0x3c];					\
-	addcc		%sum, t7, %sum;							\
-	srlx		t7, 32, t7;							\
-	bcc,pt		%xcc, 48f;							\
-	 stw		t7, [%dst + off + 0x38];					\
-	add		%sum, 1, %sum;							\
-48:
 
 #define CSUMCOPY_LASTCHUNK(off, t0, t1)							\
 	ldxa		[%src - off - 0x08] %asi, t0;					\
@@ -296,6 +98,7 @@ cc_end_cruft:
 	 add		%sum, 1, %sum		! IEU1
 
 cc_fixit:
+	cmp		%len, 6			! IEU1	Group
 	bl,a,pn		%icc, ccte		! CTI
 	 andcc		%len, 0xf, %g7		! IEU1	Group
 	andcc		%src, 2, %g0		! IEU1	Group
@@ -316,17 +119,17 @@ cc_fixit:
 	sll		%g3, 16, %g3		! IEU0	Group
 	srl		%sum, 16, %sum		! IEU0	Group
 	or		%g3, %sum, %sum		! IEU0	Group (regdep)
-1:	be,pt		%icc, cc_dword_aligned	! CTI
-	 andn		%len, 0xff, %g2		! IEU1
+1:	be,pt		%icc, ccmerge		! CTI
+	 andcc		%len, 0xf0, %g1		! IEU1
 	lduwa		[%src + 0x00] %asi, %g4	! Load	Group
 	sub		%len, 4, %len		! IEU0
 	add		%src, 4, %src		! IEU1
 	add		%dst, 4, %dst		! IEU0	Group
 	addcc		%g4, %sum, %sum		! IEU1	Group + 1 bubble
 	stw		%g4, [%dst - 0x4]	! Store
-	bcc,pt		%xcc, cc_dword_aligned	! CTI
-	 andn		%len, 0xff, %g2		! IEU0	Group
-	b,pt		%xcc, cc_dword_aligned	! CTI	4 clocks (mispredict)
+	bcc,pt		%xcc, ccmerge		! CTI
+	 andcc		%len, 0xf0, %g1		! IEU1	Group
+	b,pt		%xcc, ccmerge		! CTI	4 clocks (mispredict)
 	 add		%sum, 1, %sum		! IEU0
 
 	.align		32
@@ -342,26 +145,8 @@ csum_partial_copy_sparc64:			/* %o0=src, %o1=dest, %o2=len, %o3=sum */
 	 cmp		%len, 256		! IEU1	Group
 	bgeu,pt		%icc, csum_partial_copy_vis ! CTI
 	 andcc		%src, 7, %g0		! IEU1	Group
-	be,pt		%icc, cc_dword_aligned	! CTI
-	 andn		%len, 0xff, %g2		! IEU0
-	b,pt		%xcc, cc_fixit		! CTI	Group
-	 cmp		%len, 6			! IEU1
-cc_dword_aligned:
-	brz,pn		%g2, 3f			! CTI	Group
-	 andcc		%dst, 4, %g0		! IEU1	Group (brz uses IEU1)
-	be,pn		%icc, ccdbl + 4		! CTI
-5:	CSUMCOPY_ECACHE_LOAD(       0x00,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STUNALIGN_LDNXT(0x40,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STUNALIGN_LDNXT(0x80,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STUNALIGN_LDNXT(0xc0,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STUNALIGN(      0xc0,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-10:
-	sub		%len, 256, %len		! IEU0	Group
-	add		%src, 256, %src		! IEU1
-	andncc		%len, 0xff, %g0		! IEU1	Group
-	bne,pt		%icc, 5b		! CTI
-	 add		%dst, 256, %dst		! IEU0
-3:	andcc		%len, 0xf0, %g1		! IEU1	Group
+	bne,pn		%icc, cc_fixit		! CTI
+	 andcc		%len, 0xf0, %g1		! IEU1	Group
 ccmerge:be,pn		%icc, ccte		! CTI
 	 andcc		%len, 0xf, %g7		! IEU1	Group
 	sll		%g1, 2, %o4		! IEU0
@@ -396,19 +181,6 @@ ccfold:	sllx		%sum, 32, %o0		! IEU0	Group
 	 add		%o0, 1, %o0		! IEU1	4 clocks (mispredict)
 1:	retl					! CTI	Group brk forced
 	 sllx		%g4, 32,%g4		! IEU0	Group
-ccdbl:	CSUMCOPY_ECACHE_LOAD(       0x00,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STALIGNED_LDNXT(0x40,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STALIGNED_LDNXT(0x80,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STALIGNED_LDNXT(0xc0,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-	CSUMCOPY_EC_STALIGNED(      0xc0,%o4,%o5,%g2,%g3,%g4,%g5,%g1,%g7)
-11:
-	sub		%len, 256, %len		! IEU0	Group
-	add		%src, 256, %src		! IEU1
-	andncc		%len, 0xff, %g0		! IEU1	Group	
-	bne,pt		%icc, ccdbl		! CTI
-	 add		%dst, 256, %dst		! IEU0
-	b,pt		%xcc, ccmerge		! CTI	Group
-	 andcc		%len, 0xf0, %g1		! IEU1
 
 ccslow:	mov	0, %g5
 	brlez,pn %len, 4f

@@ -6,7 +6,6 @@
  * bios code.
  */
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
@@ -19,9 +18,8 @@
  * BIOS32-style PCI interface:
  */
 
-#ifdef CONFIG_ALPHA_LCA
-
 #define vulp	volatile unsigned long *
+#define vuip	volatile unsigned int *
 
 /*
  * Machine check reasons.  Defined according to PALcode sources
@@ -102,11 +100,11 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 			return -1;
 		}
 
-		*((volatile unsigned long*) LCA_IOC_CONF) = 0;
+		*((vulp) LCA_IOC_CONF) = 0;
 		addr = (1 << (11 + device)) | (func << 8) | where;
 	} else {
 		/* type 1 configuration cycle: */
-		*((volatile unsigned long*) LCA_IOC_CONF) = 1;
+		*((vulp) LCA_IOC_CONF) = 1;
 		addr = (bus << 16) | (device_fn << 8) | where;
 	}
 	*pci_addr = addr;
@@ -123,13 +121,13 @@ static unsigned int conf_read(unsigned long addr)
 	cli();
 
 	/* reset status register to avoid loosing errors: */
-	stat0 = *((volatile unsigned long*)LCA_IOC_STAT0);
-	*((volatile unsigned long*)LCA_IOC_STAT0) = stat0;
+	stat0 = *(vulp)LCA_IOC_STAT0;
+	*(vulp)LCA_IOC_STAT0 = stat0;
 	mb();
 
 	/* access configuration space: */
 
-	value = *((volatile unsigned int*)addr);
+	value = *(vuip)addr;
 	draina();
 
 	stat0 = *((unsigned long*)LCA_IOC_STAT0);
@@ -141,7 +139,7 @@ static unsigned int conf_read(unsigned long addr)
 		}
 
 		/* reset error status: */
-		*((volatile unsigned long*)LCA_IOC_STAT0) = stat0;
+		*(vulp)LCA_IOC_STAT0 = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 
@@ -160,13 +158,13 @@ static void conf_write(unsigned long addr, unsigned int value)
 	cli();
 
 	/* reset status register to avoid loosing errors: */
-	stat0 = *((volatile unsigned long*)LCA_IOC_STAT0);
-	*((volatile unsigned long*)LCA_IOC_STAT0) = stat0;
+	stat0 = *(vulp)LCA_IOC_STAT0;
+	*(vulp)LCA_IOC_STAT0 = stat0;
 	mb();
 
 	/* access configuration space: */
 
-	*((volatile unsigned int*)addr) = value;
+	*(vuip)addr = value;
 	draina();
 
 	stat0 = *((unsigned long*)LCA_IOC_STAT0);
@@ -178,7 +176,7 @@ static void conf_write(unsigned long addr, unsigned int value)
 		}
 
 		/* reset error status: */
-		*((volatile unsigned long*)LCA_IOC_STAT0) = stat0;
+		*(vulp)LCA_IOC_STAT0 = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 	}
@@ -310,13 +308,12 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 }
 
 
-
-
 /*
  * Constants used during machine-check handling.  I suppose these
  * could be moved into lca.h but I don't see much reason why anybody
  * else would want to use them.
  */
+
 #define ESR_EAV		(1UL<< 0)	/* error address valid */
 #define ESR_CEE		(1UL<< 1)	/* correctable error */
 #define ESR_UEE		(1UL<< 2)	/* uncorrectable error */
@@ -338,53 +335,60 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 
 void mem_error (unsigned long esr, unsigned long ear)
 {
-    printk("    %s %s error to %s occurred at address %x\n",
-	   (esr & ESR_CEE) ? "Correctable" : ((esr & ESR_UEE) ? "Uncorrectable" : "A"),
-	   (esr & ESR_WRE) ? "write" : "read",
-	   (esr & ESR_SOR) ? "memory" : "b-cache",
-	   (unsigned) (ear & 0x1ffffff8));
-    if (esr & ESR_CTE) {
-	printk("    A b-cache tag parity error was detected.\n");
-    }
-    if (esr & ESR_MSE) {
-	printk("    Several other correctable errors occurred.\n");
-    }
-    if (esr & ESR_MHE) {
-	printk("    Several other uncorrectable errors occurred.\n");
-    }
-    if (esr & ESR_NXM) {
-	printk("    Attempted to access non-existent memory.\n");
-    }
+	printk("    %s %s error to %s occurred at address %x\n",
+	       *((esr & ESR_CEE) ? "Correctable" :
+		 (esr & ESR_UEE) ? "Uncorrectable" : "A"),
+	       (esr & ESR_WRE) ? "write" : "read",
+	       (esr & ESR_SOR) ? "memory" : "b-cache",
+	       (unsigned) (ear & 0x1ffffff8));
+	if (esr & ESR_CTE) {
+		printk("    A b-cache tag parity error was detected.\n");
+	}
+	if (esr & ESR_MSE) {
+		printk("    Several other correctable errors occurred.\n");
+	}
+	if (esr & ESR_MHE) {
+		printk("    Several other uncorrectable errors occurred.\n");
+	}
+	if (esr & ESR_NXM) {
+		printk("    Attempted to access non-existent memory.\n");
+	}
 }
 
 
 void ioc_error (__u32 stat0, __u32 stat1)
 {
-    const char *pci_cmd[] = {
-	"Interrupt Acknowledge", "Special", "I/O Read", "I/O Write",
-	"Rsvd 1", "Rsvd 2", "Memory Read", "Memory Write", "Rsvd3", "Rsvd4",
-	"Configuration Read", "Configuration Write", "Memory Read Multiple",
-	"Dual Address", "Memory Read Line", "Memory Write and Invalidate"
-    };
-    const char *err_name[] = {
-	"exceeded retry limit", "no device", "bad data parity", "target abort",
-	"bad address parity", "page table read error", "invalid page", "data error"
-    };
-    unsigned code = (stat0 & IOC_CODE) >> IOC_CODE_SHIFT;
-    unsigned cmd  = (stat0 & IOC_CMD)  >> IOC_CMD_SHIFT;
+	static const char * const pci_cmd[] = {
+		"Interrupt Acknowledge", "Special", "I/O Read", "I/O Write",
+		"Rsvd 1", "Rsvd 2", "Memory Read", "Memory Write", "Rsvd3",
+		"Rsvd4", "Configuration Read", "Configuration Write",
+		"Memory Read Multiple", "Dual Address", "Memory Read Line",
+		"Memory Write and Invalidate"
+	};
+	static const char * const err_name[] = {
+		"exceeded retry limit", "no device", "bad data parity",
+		"target abort", "bad address parity", "page table read error",
+		"invalid page", "data error"
+	};
+	unsigned code = (stat0 & IOC_CODE) >> IOC_CODE_SHIFT;
+	unsigned cmd  = (stat0 & IOC_CMD)  >> IOC_CMD_SHIFT;
 
-    printk("    %s initiated PCI %s cycle to address %x failed due to %s.\n",
-	   code > 3 ? "PCI" : "CPU", pci_cmd[cmd], stat1, err_name[code]);
-    if (code == 5 || code == 6) {
-	printk("    (Error occurred at PCI memory address %x.)\n", (stat0 & ~IOC_P_NBR));
-    }
-    if (stat0 & IOC_LOST) {
-	printk("    Other PCI errors occurred simultaneously.\n");
-    }
+	printk("    %s initiated PCI %s cycle to address %x"
+	       " failed due to %s.\n",
+	       code > 3 ? "PCI" : "CPU", pci_cmd[cmd], stat1, err_name[code]);
+
+	if (code == 5 || code == 6) {
+		printk("    (Error occurred at PCI memory address %x.)\n",
+		       (stat0 & ~IOC_P_NBR));
+	}
+	if (stat0 & IOC_LOST) {
+		printk("    Other PCI errors occurred simultaneously.\n");
+	}
 }
 
 
-void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
+void lca_machine_check (unsigned long vector, unsigned long la,
+			struct pt_regs *regs)
 {
 	unsigned long * ptr;
 	const char * reason;
@@ -403,21 +407,21 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	 * revision level, which we ignore for now.
 	 */
 	switch (el.c->code & 0xffffffff) {
-	      case MCHK_K_TPERR:	reason = "tag parity error"; break;
-	      case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
-	      case MCHK_K_HERR:		reason = "access to non-existent memory"; break;
-	      case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
-	      case MCHK_K_ECC_NC:	reason = "non-correctable ECC error"; break;
-	      case MCHK_K_CACKSOFT:	reason = "MCHK_K_CACKSOFT"; break; /* what's this? */
-	      case MCHK_K_BUGCHECK:	reason = "illegal exception in PAL mode"; break;
-	      case MCHK_K_OS_BUGCHECK:	reason = "callsys in kernel mode"; break;
-	      case MCHK_K_DCPERR:	reason = "d-cache parity error"; break;
-	      case MCHK_K_ICPERR:	reason = "i-cache parity error"; break;
-	      case MCHK_K_SIO_SERR:	reason = "SIO SERR occurred on on PCI bus"; break;
-	      case MCHK_K_SIO_IOCHK:	reason = "SIO IOCHK occurred on ISA bus"; break;
-	      case MCHK_K_DCSR:		reason = "MCHK_K_DCSR"; break;
-	      case MCHK_K_UNKNOWN:
-	      default:
+	case MCHK_K_TPERR:	reason = "tag parity error"; break;
+	case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
+	case MCHK_K_HERR:	reason = "access to non-existent memory"; break;
+	case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
+	case MCHK_K_ECC_NC:	reason = "non-correctable ECC error"; break;
+	case MCHK_K_CACKSOFT:	reason = "MCHK_K_CACKSOFT"; break; /* what's this? */
+	case MCHK_K_BUGCHECK:	reason = "illegal exception in PAL mode"; break;
+	case MCHK_K_OS_BUGCHECK: reason = "callsys in kernel mode"; break;
+	case MCHK_K_DCPERR:	reason = "d-cache parity error"; break;
+	case MCHK_K_ICPERR:	reason = "i-cache parity error"; break;
+	case MCHK_K_SIO_SERR:	reason = "SIO SERR occurred on on PCI bus"; break;
+	case MCHK_K_SIO_IOCHK:	reason = "SIO IOCHK occurred on ISA bus"; break;
+	case MCHK_K_DCSR:	reason = "MCHK_K_DCSR"; break;
+	case MCHK_K_UNKNOWN:
+	default:
 		sprintf(buf, "reason for machine-check unknown (0x%lx)",
 			el.c->code & 0xffffffff);
 		reason = buf;
@@ -427,19 +431,20 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	wrmces(rdmces());	/* reset machine check pending flag */
 
 	switch (el.c->size) {
-	      case sizeof(struct el_lca_mcheck_short):
+	case sizeof(struct el_lca_mcheck_short):
 		printk(KERN_CRIT
 		       "  Reason: %s (short frame%s, dc_stat=%lx):\n",
-		       reason, el.c->retry ? ", retryable" : "", el.s->dc_stat);
+		       reason, el.c->retry ? ", retryable" : "",
+		       el.s->dc_stat);
 		if (el.s->esr & ESR_EAV) {
-		    mem_error(el.s->esr, el.s->ear);
+			mem_error(el.s->esr, el.s->ear);
 		}
 		if (el.s->ioc_stat0 & IOC_ERR) {
-		    ioc_error(el.s->ioc_stat0, el.s->ioc_stat1);
+			ioc_error(el.s->ioc_stat0, el.s->ioc_stat1);
 		}
 		break;
 
-	      case sizeof(struct el_lca_mcheck_long):
+	case sizeof(struct el_lca_mcheck_long):
 		printk(KERN_CRIT "  Reason: %s (long frame%s):\n",
 		       reason, el.c->retry ? ", retryable" : "");
 		printk(KERN_CRIT
@@ -447,14 +452,14 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
 		printk(KERN_CRIT "    car: %lx\n", el.l->car);
 		if (el.l->esr & ESR_EAV) {
-		    mem_error(el.l->esr, el.l->ear);
+			mem_error(el.l->esr, el.l->ear);
 		}
 		if (el.l->ioc_stat0 & IOC_ERR) {
-		    ioc_error(el.l->ioc_stat0, el.l->ioc_stat1);
+			ioc_error(el.l->ioc_stat0, el.l->ioc_stat1);
 		}
 		break;
 
-	      default:
+	default:
 		printk(KERN_CRIT "  Unknown errorlog size %d\n", el.c->size);
 	}
 
@@ -462,9 +467,51 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 
 	ptr = (unsigned long *) la;
 	for (i = 0; i < el.c->size / sizeof(long); i += 2) {
-	    printk(KERN_CRIT " +%8lx %016lx %016lx\n",
-		   i*sizeof(long), ptr[i], ptr[i+1]);
+		printk(KERN_CRIT " +%8lx %016lx %016lx\n",
+		       i*sizeof(long), ptr[i], ptr[i+1]);
 	}
 }
 
-#endif /* CONFIG_ALPHA_LCA */
+/*
+ * The following routines are needed to support the SPEED changing
+ * necessary to successfully manage the thermal problem on the AlphaBook1.
+ */
+
+void
+lca_clock_print(void)
+{
+        long    pmr_reg;
+
+        pmr_reg = READ_PMR;
+
+        printk("Status of clock control:\n");
+        printk("\tPrimary clock divisor\t0x%x\n", GET_PRIMARY(pmr_reg));
+        printk("\tOverride clock divisor\t0x%x\n", GET_OVERRIDE(pmr_reg));
+        printk("\tInterrupt override is %s\n",
+	       (pmr_reg & LCA_PMR_INTO) ? "on" : "off"); 
+        printk("\tDMA override is %s\n",
+	       (pmr_reg & LCA_PMR_DMAO) ? "on" : "off"); 
+
+}
+
+int
+lca_get_clock(void)
+{
+        long    pmr_reg;
+
+        pmr_reg = READ_PMR;
+        return(GET_PRIMARY(pmr_reg));
+
+}
+
+void
+lca_clock_fiddle(int divisor)
+{
+        long    pmr_reg;
+
+        pmr_reg = READ_PMR;
+        SET_PRIMARY_CLOCK(pmr_reg, divisor);
+	/* lca_norm_clock = divisor; */
+        WRITE_PMR(pmr_reg);
+        mb();
+}

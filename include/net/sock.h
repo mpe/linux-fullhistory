@@ -168,14 +168,6 @@ struct ipv6_pinfo
 	struct device		*oif;
 
 	struct ipv6_mc_socklist	*ipv6_mc_list;
-	/* 
-	 * destination cache entry pointer
-	 * contains a pointer to neighbour cache
-	 * and other info related to network level 
-	 * (ex. PMTU)
-	 */
-	
-	struct dst_entry	*dst;
 	__u32			dst_cookie;
 
 	struct ipv6_options	*opt;
@@ -785,6 +777,9 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *sk,
 						     unsigned long fallback,
 						     int noblock,
 						     int *errcode);
+extern void *sock_kmalloc(struct sock *sk, int size, int priority);
+extern void sock_kfree_s(struct sock *sk, void *mem, int size);
+
 
 /*
  * Functions to fill in entries in struct proto_ops when a protocol

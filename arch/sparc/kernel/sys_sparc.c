@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.35 1997/04/16 05:56:09 davem Exp $
+/* $Id: sys_sparc.c,v 1.38 1998/01/09 16:42:48 jj Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -17,6 +17,7 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/utsname.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -248,52 +249,98 @@ sparc_breakpoint (struct pt_regs *regs)
 	unlock_kernel();
 }
 
-extern void check_pending(int signum);
-
 asmlinkage int
-sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
+sparc_sigaction (int sig, const struct old_sigaction *act,
+		 struct old_sigaction *oact)
 {
-	struct sigaction new_sa, *p;
+	struct k_sigaction new_ka, old_ka;
+	int ret;
 
-	if(signum < 0) {
+	if (sig < 0) {
 		current->tss.new_signal = 1;
-		signum = -signum;
+		sig = -sig;
 	}
-	if(signum<1 || signum>32)
-		return -EINVAL;
 
-	p = signum - 1 + current->sig->action;
-	if(action) {
-		if(verify_area(VERIFY_READ,action,sizeof(struct sigaction)))
+	if (act) {
+		unsigned long mask;
+
+		if (verify_area(VERIFY_READ, act, sizeof(*act)) ||
+		    __get_user(new_ka.sa.sa_handler, &act->sa_handler) ||
+		    __get_user(new_ka.sa.sa_restorer, &act->sa_restorer))
 			return -EFAULT;
-		if (signum==SIGKILL || signum==SIGSTOP)
-			return -EINVAL;
-		if(copy_from_user(&new_sa, action, sizeof(struct sigaction)))
-			return -EFAULT;	
-		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			if(verify_area(VERIFY_READ, new_sa.sa_handler, 1))
-				return -EFAULT;
-		}
+		__get_user(new_ka.sa.sa_flags, &act->sa_flags);
+		__get_user(mask, &act->sa_mask);
+		siginitset(&new_ka.sa.sa_mask, mask);
+		new_ka.ka_restorer = NULL;
 	}
 
-	if (oldaction) {
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
 		/* In the clone() case we could copy half consistant
 		 * state to the user, however this could sleep and
 		 * deadlock us if we held the signal lock on SMP.  So for
 		 * now I take the easy way out and do no locking.
 		 */
-		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
-			return -EFAULT;	
+		if (verify_area(VERIFY_WRITE, oact, sizeof(*oact)) ||
+		    __put_user(old_ka.sa.sa_handler, &oact->sa_handler) ||
+		    __put_user(old_ka.sa.sa_restorer, &oact->sa_restorer))
+			return -EFAULT;
+		__put_user(old_ka.sa.sa_flags, &oact->sa_flags);
+		__put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask);
 	}
 
-	if (action) {
-		spin_lock_irq(&current->sig->siglock);
-		*p = new_sa;
-		check_pending(signum);
-		spin_unlock_irq(&current->sig->siglock);
+	return ret;
+}
+
+asmlinkage int
+sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
+		 void *restorer, size_t sigsetsize)
+{
+	struct k_sigaction new_ka, old_ka;
+	int ret;
+
+	/* XXX: Don't preclude handling different sized sigset_t's.  */
+	if (sigsetsize != sizeof(sigset_t))
+		return -EINVAL;
+
+	if (act) {
+		new_ka.ka_restorer = restorer;
+		if (copy_from_user(&new_ka.sa, act, sizeof(*act)))
+			return -EFAULT;
 	}
+
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
+		if (copy_to_user(oact, &old_ka.sa, sizeof(*oact)))
+			return -EFAULT;
+	}
+
+	return ret;
+}
+
+/* Just in case some old old binary calls this. */
+asmlinkage int sys_pause(void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
+}
+
+asmlinkage int sys_getdomainname(char *name, int len)
+{
+	int nlen = strlen(system_utsname.domainname);
+
+	if (nlen < len)
+		len = nlen;
+	if(len > __NEW_UTS_LEN)
+		return -EFAULT;
+	if(copy_to_user(name, system_utsname.domainname, len))
+		return -EFAULT;
 	return 0;
 }
+
 
 #ifndef CONFIG_AP1000
 /* only AP+ systems have sys_aplib */

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.12 1997/05/15 18:55:09 davem Exp $
+ *	$Id: datagram.c,v 1.13 1997/12/13 21:53:09 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -89,7 +89,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			if (!ipv6_addr_any(&src_info->ipi6_addr)) {
 				struct inet6_ifaddr *ifp;
 
-				ifp = ipv6_chk_addr(&src_info->ipi6_addr);
+				ifp = ipv6_chk_addr(&src_info->ipi6_addr, *src_dev, 0);
 
 				if (ifp == NULL) {
 					err = -EINVAL;

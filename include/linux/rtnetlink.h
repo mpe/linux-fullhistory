@@ -54,9 +54,6 @@ struct rtattr
 {
 	unsigned short	rta_len;
 	unsigned short	rta_type;
-/*
-	unsigned char	rta_data[0];
- */
 };
 
 enum rtattr_type_t
@@ -72,10 +69,11 @@ enum rtattr_type_t
 	RTA_WINDOW,
 	RTA_RTT,
 	RTA_MTU,
-	RTA_IFNAME
+	RTA_IFNAME,
+	RTA_CACHEINFO
 };
 
-#define RTA_MAX RTA_IFNAME
+#define RTA_MAX RTA_CACHEINFO
 
 /* Macros to handle rtattributes */
 
@@ -89,6 +87,14 @@ enum rtattr_type_t
 #define RTA_SPACE(len)	RTA_ALIGN(RTA_LENGTH(len))
 #define RTA_DATA(rta)   ((void*)(((char*)(rta)) + RTA_LENGTH(0)))
 
+struct rta_cacheinfo
+{
+	__u32	rta_clntref;
+	__u32	rta_lastuse;
+	__s32	rta_expires;
+	__u32	rta_error;
+	__u32	rta_used;
+};
 
 /*
  * "struct rtnexthop" describres all necessary nexthop information,
@@ -104,9 +110,6 @@ struct rtnexthop
 	unsigned char		rtnh_flags;
 	unsigned char		rtnh_hops;
 	int			rtnh_ifindex;
-/*
-	struct rtattr		rtnh_data[0];
- */
 };
 
 /* rtnh_flags */
@@ -141,10 +144,6 @@ struct rtmsg
 	unsigned char		rtm_scope;	/* See below */	
 	unsigned char		rtm_whatsit;	/* Unused byte */
 	unsigned		rtm_flags;
-/*
-	struct rtattr		rtm_opt[0];
-	struct rtnexthop	rtm_nh[0];
- */
 };
 
 #define RTM_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct rtmsg))))
@@ -191,8 +190,9 @@ enum
  */
 
 #define RTPROT_GATED	8	/* Apparently, GateD */
-#define RTPROT_RA	9	/* RDISC router advertisment */
-
+#define RTPROT_RA	9	/* RDISC/ND router advertisments */
+#define RTPROT_MRT	10	/* Merit MRT */
+#define RTPROT_ZEBRA	11	/* Zebra */
 
 /* rtm_scope
 
@@ -209,6 +209,7 @@ enum rt_scope_t
 {
 	RT_SCOPE_UNIVERSE=0,
 /* User defined values f.e. "site" */
+	RT_SCOPE_SITE=200,
 	RT_SCOPE_LINK=253,
 	RT_SCOPE_HOST=254,
 	RT_SCOPE_NOWHERE=255
@@ -245,9 +246,6 @@ struct ifaddrmsg
 	unsigned char	ifa_flags;	/* Flags			*/
 	unsigned char	ifa_scope;	/* See above			*/
 	int		ifa_index;	/* Link index			*/
-/*
-	struct rtattr	ifa_data[0];
- */
 };
 
 enum
@@ -257,14 +255,25 @@ enum
 	IFA_LOCAL,
 	IFA_LABEL,
 	IFA_BROADCAST,
-	IFA_ANYCAST
+	IFA_ANYCAST,
+	IFA_CACHEINFO
 };
 
-#define IFA_MAX IFA_ANYCAST
+#define IFA_MAX IFA_CACHEINFO
 
 /* ifa_flags */
 
-#define IFA_F_SECONDARY	1
+#define IFA_F_SECONDARY		0x01
+
+#define IFA_F_DEPRECATED	0x20
+#define IFA_F_TENTATIVE		0x40
+#define IFA_F_PERMANENT		0x80
+
+struct ifa_cacheinfo
+{
+	__s32	ifa_prefered;
+	__s32	ifa_valid;
+};
 
 
 #define IFA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ifaddrmsg))))
@@ -283,12 +292,11 @@ enum
 
 struct ndmsg
 {
-	unsigned char	nd_family;
-	int		nd_ifindex;	/* Link index			*/
-	unsigned	nd_flags;
-/*
-	struct rtattr	nd_data[0];
- */
+	unsigned char	ndm_family;
+	int		ndm_ifindex;	/* Link index			*/
+	__u16		ndm_state;
+	__u8		ndm_flags;
+	__u8		ndm_type;
 };
 
 enum
@@ -296,11 +304,20 @@ enum
 	NDA_UNSPEC,
 	NDA_DST,
 	NDA_LLADDR,
+	NDA_CACHEINFO
 };
 
-#define NDA_MAX NDA_LLADDR
+#define NDA_MAX NDA_CACHEINFO
 
 #define NDA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
+
+struct nda_cacheinfo
+{
+	__u32		ndm_confirmed;
+	__u32		ndm_used;
+	__u32		ndm_updated;
+	__u32		ndm_refcnt;
+};
 
 /****
  *		General form of address family dependent message.
@@ -336,6 +353,20 @@ struct ifinfomsg
 	int		ifi_qdisc;		/* Packet scheduler handle */
 };
 
+enum
+{
+	IFLA_UNSPEC,
+	IFLA_ADDRESS,
+	IFLA_BROADCAST,
+	IFLA_IFNAME,
+	IFLA_QDISC,
+	IFLA_STATS
+};
+
+#define IFLA_MAX IFLA_STATS
+
+#define IFLA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ifinfomsg))))
+
 /* ifi_flags.
 
    IFF_* flags.
@@ -367,16 +398,15 @@ struct ifinfomsg
 
 #define RTMGRP_LINK		1
 #define RTMGRP_NOTIFY		2
+#define RTMGRP_NEIGH		4
 
 #define RTMGRP_IPV4_IFADDR	0x10
-#define RTMGRP_IPV4_NDISC	0x20
+#define RTMGRP_IPV4_MROUTE	0x20
 #define RTMGRP_IPV4_ROUTE	0x40
-#define RTMGRP_IPV4_MROUTE	0x80
 
 #define RTMGRP_IPV6_IFADDR	0x100
-#define RTMGRP_IPV6_NDISC	0x200
+#define RTMGRP_IPV6_MROUTE	0x200
 #define RTMGRP_IPV6_ROUTE	0x400
-#define RTMGRP_IPV6_MROUTE	0x800
 
 
 #ifdef __KERNEL__
@@ -394,6 +424,7 @@ struct kern_rta
 	unsigned	*rta_rtt;
 	unsigned	*rta_mtu;
 	unsigned char	*rta_ifname;
+	struct rta_cacheinfo *rta_ci;
 };
 
 struct kern_ifa

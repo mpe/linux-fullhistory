@@ -119,6 +119,7 @@ struct netlink_callback
 	struct nlmsghdr	*nlh;
 	int		(*dump)(struct sk_buff * skb, struct netlink_callback *cb);
 	int		(*done)(struct netlink_callback *cb);
+	int		family;
 	long		args[4];
 };
 

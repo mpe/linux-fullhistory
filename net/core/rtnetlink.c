@@ -134,6 +134,22 @@ static int rtnetlink_get_ifa(struct kern_ifa *ifa, struct rtattr *attr, int attr
 	return 0;
 }
 
+static int rtnetlink_get_ga(struct rtattr **rta, int sz,
+			    struct rtattr *attr, int attrlen)
+{
+	while (RTA_OK(attr, attrlen)) {
+		int type = attr->rta_type;
+		if (type > 0) {
+			if (type > sz)
+				return -EINVAL;
+			rta[type-1] = attr;
+		}
+		attr = RTA_NEXT(attr, attrlen);
+	}
+	return 0;
+}
+
+
 void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const void *data)
 {
 	struct rtattr *rta;
@@ -150,6 +166,7 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 {
 	struct ifinfomsg *r;
 	struct nlmsghdr  *nlh;
+	unsigned char	 *b = skb->tail;
 
 	nlh = NLMSG_PUT(skb, pid, seq, type, sizeof(*r));
 	if (pid) nlh->nlmsg_flags |= NLM_F_MULTI;
@@ -168,9 +185,17 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 	r->ifi_qdisc = dev->qdisc_sleeping->handle;
 	if (dev->qdisc_sleeping->ops)
 		strcpy(r->ifi_qdiscname, dev->qdisc_sleeping->ops->id);
+	if (dev->get_stats) {
+		struct net_device_stats *stats = dev->get_stats(dev);
+		if (stats)
+			RTA_PUT(skb, IFLA_STATS, sizeof(*stats), stats);
+	}
+	nlh->nlmsg_len = skb->tail - b;
 	return skb->len;
 
 nlmsg_failure:
+rtattr_failure:
+	skb_put(skb, b - skb->tail);
 	return -1;
 }
 
@@ -191,10 +216,38 @@ int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
+int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
+{
+	int idx;
+	int s_idx = cb->family;
+
+	if (s_idx == 0)
+		s_idx = 1;
+	for (idx=1; idx<NPROTO; idx++) {
+		int type = cb->nlh->nlmsg_type-RTM_BASE;
+		if (idx < s_idx || idx == AF_PACKET)
+			continue;
+		if (rtnetlink_links[idx] == NULL ||
+		    rtnetlink_links[idx][type].dumpit == NULL)
+			continue;
+		if (idx > s_idx)
+			memset(&cb->args[0], 0, sizeof(cb->args));
+		if (rtnetlink_links[idx][type].dumpit(skb, cb) == 0)
+			continue;
+		if (skb_tailroom(skb) < 256)
+			break;
+	}
+	cb->family = idx;
+
+	return skb->len;
+}
+
+
 void rtmsg_ifinfo(int type, struct device *dev)
 {
 	struct sk_buff *skb;
-	int size = NLMSG_SPACE(sizeof(struct ifinfomsg));
+	int size = NLMSG_SPACE(sizeof(struct ifinfomsg)+
+			       RTA_LENGTH(sizeof(struct net_device_stats)));
 
 	skb = alloc_skb(size, GFP_KERNEL);
 	if (!skb)
@@ -223,9 +276,11 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 	union {
 		struct kern_rta rta;
 		struct kern_ifa ifa;
+		struct rtattr	*ga[RTA_MAX-1];
 	} u;
 	struct rtmsg *rtm;
 	struct ifaddrmsg *ifm;
+	struct ndmsg *ndm;
 	int exclusive = 0;
 	int family;
 	int type;
@@ -307,13 +362,22 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 				      nlh->nlmsg_len - NLMSG_LENGTH(sizeof(*ifm))) < 0)
 			goto err_inval;
 		break;
-	
-	case RTM_NEWLINK:
-	case RTM_DELLINK:
-	case RTM_GETLINK:
 	case RTM_NEWNEIGH:
 	case RTM_DELNEIGH:
 	case RTM_GETNEIGH:
+		ndm = NLMSG_DATA(nlh);
+		if (nlh->nlmsg_len < sizeof(*ndm))
+			goto err_inval;
+
+		if (nlh->nlmsg_len > NLMSG_LENGTH(sizeof(*ndm)) &&
+		    rtnetlink_get_ga(u.ga, NDA_MAX, NDA_RTA(ndm),
+				      nlh->nlmsg_len - NLMSG_LENGTH(sizeof(*ndm))) < 0)
+			goto err_inval;
+		break;
+
+	case RTM_NEWLINK:
+	case RTM_DELLINK:
+	case RTM_GETLINK:
 		/* Not urgent and even not necessary */
 	default:
 		goto err_inval;
@@ -399,6 +463,35 @@ static void rtnetlink_rcv(struct sock *sk, int len)
 	rtnl_shunlock();
 }
 
+static struct rtnetlink_link link_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
+{
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+	{ NULL,			rtnetlink_dump_ifinfo,	},
+	{ NULL,			NULL,			},
+
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+	{ NULL,			rtnetlink_dump_all,	},
+	{ NULL,			NULL,			},
+
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+	{ NULL,			rtnetlink_dump_all,	},
+	{ NULL,			NULL,			},
+
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+	{ NULL,			neigh_dump_info,	},
+	{ NULL,			NULL,			},
+
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+	{ NULL,			NULL,			},
+};
+
+
 static int rtnetlink_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct device *dev = ptr;
@@ -429,6 +522,8 @@ __initfunc(void rtnetlink_init(void))
 	if (rtnl == NULL)
 		panic("rtnetlink_init: cannot initialize rtnetlink\n");
 	register_netdevice_notifier(&rtnetlink_dev_notifier);
+	rtnetlink_links[AF_UNSPEC] = link_rtnetlink_table;
+	rtnetlink_links[AF_PACKET] = link_rtnetlink_table;
 }
 
 

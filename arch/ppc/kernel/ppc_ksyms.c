@@ -5,6 +5,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/bios32.h>
+#include <linux/interrupt.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -14,23 +15,24 @@
 #include <asm/bitops.h>
 #include <asm/checksum.h>
 #include <asm/pgtable.h>
+#include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pci-bridge.h>
 
-void transfer_to_handler();
-void int_return();
-void syscall_trace();
-void do_IRQ();
-void MachineCheckException();
-void AlignmentException();
-void ProgramCheckException();
-void SingleStepException();
-void FloatingPointCheckException();
-void sys_sigreturn();
+extern void transfer_to_handler(void);
+extern void int_return(void);
+extern void syscall_trace(void);
+extern void do_IRQ(struct pt_regs *regs);
+extern void MachineCheckException(struct pt_regs *regs);
+extern void AlignmentException(struct pt_regs *regs);
+extern void ProgramCheckException(struct pt_regs *regs);
+extern void SingleStepException(struct pt_regs *regs);
+extern int sys_sigreturn(struct pt_regs *regs);
 extern unsigned lost_interrupts;
 extern void do_lost_interrupts(unsigned long);
+extern int do_signal(sigset_t *, struct pt_regs *);
 
 EXPORT_SYMBOL(do_signal);
 EXPORT_SYMBOL(syscall_trace);
@@ -45,6 +47,12 @@ EXPORT_SYMBOL(SingleStepException);
 EXPORT_SYMBOL(sys_sigreturn);
 EXPORT_SYMBOL(lost_interrupts);
 EXPORT_SYMBOL(do_lost_interrupts);
+EXPORT_SYMBOL(__ppc_bh_counter);
+
+#if !defined(CONFIG_MACH_SPECIFIC)
+EXPORT_SYMBOL(isa_io_base);
+EXPORT_SYMBOL(pci_dram_offset);
+#endif
 
 EXPORT_SYMBOL(atomic_add);
 EXPORT_SYMBOL(atomic_sub);
@@ -126,11 +134,12 @@ EXPORT_SYMBOL(giveup_fpu);
 EXPORT_SYMBOL(flush_icache_range);
 EXPORT_SYMBOL(xchg_u32);
 
+EXPORT_SYMBOL(adb_request);
+EXPORT_SYMBOL(adb_autopoll);
+EXPORT_SYMBOL(adb_register);
 EXPORT_SYMBOL(cuda_request);
 EXPORT_SYMBOL(cuda_send_request);
-EXPORT_SYMBOL(adb_register);
 EXPORT_SYMBOL(abort);
-EXPORT_SYMBOL(call_prom);
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_path_device);

@@ -82,7 +82,11 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 0;
 	/* Deal with page aging.  Pages age from being unused; they
 	 * rejuvenate on being accessed.  Only swap old pages (age==0
-	 * is oldest). */
+	 * is oldest).
+	 *
+	 * This test will no longer work once swap cached pages can be
+	 * shared!  
+	 */
 	if ((pte_dirty(pte) && delete_from_swap_cache(page_map)) 
 	    || pte_young(pte))  {
 		set_pte(page_table, pte_mkold(pte));
@@ -93,6 +97,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	if (page_map->age)
 		return 0;
 	if (pte_dirty(pte)) {
+		if (PageSwapCache(page_map))
+			panic ("Can't still be swap cached!!!");
 		if (vma->vm_ops && vma->vm_ops->swapout) {
 			pid_t pid = tsk->pid;
 			vma->vm_mm->rss--;
@@ -108,9 +114,19 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			tsk->nswap++;
 			rw_swap_page(WRITE, entry, (char *) page, wait);
 		}
+		/* 
+		 * For now, this is safe, because the test above makes
+		 * sure that this page is currently not swap-cached.  
+		 */
+		if (PageSwapCache(page_map))
+			panic ("Page became cached after IO");
 		free_page(page);
 		return 1;	/* we slept: the process may not exist any more */
 	}
+	/* 
+	 * Eventually, find_in_swap_cache will be able to return true
+	 * even for pages shared with other processes.  
+	 */
         if ((entry = find_in_swap_cache(page_map)))  {
 		if (atomic_read(&page_map->count) != 1) {
 			set_pte(page_table, pte_mkdirty(pte));
@@ -129,6 +145,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	pte_clear(page_table);
 	flush_tlb_page(vma, address);
 	entry = page_unuse(page);
+	if (PageSwapCache(page_map))
+		panic ("How can this page _still_ be cached?");
 	free_page(page);
 	return entry;
 }

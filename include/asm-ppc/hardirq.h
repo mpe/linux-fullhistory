@@ -21,7 +21,8 @@ extern spinlock_t global_irq_lock;
 extern atomic_t global_irq_count;
 
 #define release_irqlock(cpu)				\
-do {	if(global_irq_holder == (unsigned char) cpu) {	\
+do {							\
+	if(global_irq_holder == (unsigned char) cpu) {	\
 		global_irq_holder = NO_PROC_ID;		\
 		spin_unlock(&global_irq_lock);		\
 	}						\

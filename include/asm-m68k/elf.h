@@ -40,7 +40,7 @@ typedef struct user_m68kfp_struct elf_fpregset_t;
    the loader.  We need to make sure that it is out of the way of the program
    that it will "exec", and that there is sufficient room for the brk.  */
 
-#define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
+#define ELF_ET_DYN_BASE         0xD0000000UL
 
 #define ELF_CORE_COPY_REGS(pr_reg, regs)				\
 	/* Bleech. */							\
@@ -67,5 +67,21 @@ typedef struct user_m68kfp_struct elf_fpregset_t;
 	  pr_reg[12] = sw->a5;						\
 	  pr_reg[13] = sw->a6;						\
 	}
+
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  */
+
+#define ELF_HWCAP	(0)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.  */
+
+#define ELF_PLATFORM  (NULL)
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ibcs2) \
+	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#endif
 
 #endif

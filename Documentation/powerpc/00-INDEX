@@ -7,5 +7,8 @@ please mail me.
 	- this file
 ppc_htab.txt
 	- info about the Linux/PPC /proc/ppc_htab entry
+smp.txt
+	- use and state info about Linux/PPC on MP machines
 sound.txt
 	- info on sound support under Linux/PPC
+

@@ -13,11 +13,17 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/hydra.h>
+#include <asm/prom.h>
+#include <asm/gg2.h>
 
 /* LongTrail */
 #define pci_config_addr(bus, dev, offset) \
-	(0xfec00000 | ((bus)<<16) | ((dev)<<8) | (offset))
+	(GG2_PCI_CONFIG_BASE | ((bus)<<16) | ((dev)<<8) | (offset))
 
+volatile struct Hydra *Hydra = NULL;
+
+
+#if 1
 int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned char *val)
 {
@@ -44,6 +50,7 @@ int chrp_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
     *val = in_le16((unsigned short *)pci_config_addr(bus, dev_fn, offset));
     return PCIBIOS_SUCCESSFUL;
 }
+
 
 int chrp_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 				   unsigned char offset, unsigned int *val)
@@ -77,80 +84,207 @@ int chrp_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 int chrp_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned int val)
 {
-    if (bus > 7)
+   if (bus > 7)
 	return PCIBIOS_DEVICE_NOT_FOUND;
     out_le32((unsigned int *)pci_config_addr(bus, dev_fn, offset), val);
     return PCIBIOS_SUCCESSFUL;
 }
+#else
+volatile unsigned int *pci_config_address=(volatile unsigned int *)0xfec00cf8;
+volatile unsigned char *pci_config_data=(volatile unsigned char *)0xfee00cfc;
 
-int chrp_pcibios_find_device(unsigned short vendor, unsigned short dev_id,
-			     unsigned short index, unsigned char *bus_ptr,
-			     unsigned char *dev_fn_ptr)
+#define DEV_FN_MAX (31<<3)
+
+int chrp_pcibios_read_config_byte(unsigned char bus, 
+                                      unsigned char dev_fn,
+                                      unsigned char offset, 
+                                      unsigned char *val)
 {
-    int num, devfn;
-    unsigned int x, vendev;
-
-    if (vendor == 0xffff)
-	return PCIBIOS_BAD_VENDOR_ID;
-    vendev = (dev_id << 16) + vendor;
-    num = 0;
-    for (devfn = 0;  devfn < 32;  devfn++) {
-	chrp_pcibios_read_config_dword(0, devfn<<3, PCI_VENDOR_ID, &x);
-	if (x == vendev) {
-	    if (index == num) {
-		*bus_ptr = 0;
-		*dev_fn_ptr = devfn<<3;
-		return PCIBIOS_SUCCESSFUL;
-	    }
-	    ++num;
-	}
-    }
-    return PCIBIOS_DEVICE_NOT_FOUND;
+        if (dev_fn >= DEV_FN_MAX) return PCIBIOS_DEVICE_NOT_FOUND;
+        out_be32(pci_config_address,
+                 0x80|(bus<<8)|(dev_fn<<16)|((offset&~3)<<24));
+        *val = in_8(pci_config_data+(offset&3));
+        return PCIBIOS_SUCCESSFUL;
 }
 
-int chrp_pcibios_find_class(unsigned int class_code, unsigned short index,
-			    unsigned char *bus_ptr, unsigned char *dev_fn_ptr)
+int chrp_pcibios_read_config_word(unsigned char bus, 
+                                      unsigned char dev_fn,
+                                      unsigned char offset, 
+                                      unsigned short *val)
 {
-    int devnr, x, num;
-
-    num = 0;
-    for (devnr = 0;  devnr < 32;  devnr++) {
-	chrp_pcibios_read_config_dword(0, devnr<<3, PCI_CLASS_REVISION, &x);
-	if ((x>>8) == class_code) {
-	    if (index == num) {
-		*bus_ptr = 0;
-		*dev_fn_ptr = devnr<<3;
-		return PCIBIOS_SUCCESSFUL;
-	    }
-	    ++num;
-	}
-    }
-    return PCIBIOS_DEVICE_NOT_FOUND;
+        if (dev_fn >= DEV_FN_MAX) return PCIBIOS_DEVICE_NOT_FOUND;
+        if (offset&1)return PCIBIOS_BAD_REGISTER_NUMBER;
+        out_be32(pci_config_address,
+                 0x80|(bus<<8)|(dev_fn<<16)|((offset&~3)<<24));
+        *val = in_le16((volatile unsigned short *)
+                       (pci_config_data+(offset&3)));
+        return PCIBIOS_SUCCESSFUL;
 }
 
-__initfunc(volatile struct Hydra *find_hydra(void))
+int chrp_pcibios_read_config_dword(unsigned char bus, 
+                                       unsigned char dev_fn,
+                                       unsigned char offset, 
+                                       unsigned int *val)
+{
+        if (dev_fn >= DEV_FN_MAX) return PCIBIOS_DEVICE_NOT_FOUND;
+        if (offset&3)return PCIBIOS_BAD_REGISTER_NUMBER;
+        out_be32(pci_config_address,
+                 0x80|(bus<<8)|(dev_fn<<16)|(offset<<24));
+        *val = in_le32((volatile unsigned int *)(pci_config_data));
+        return PCIBIOS_SUCCESSFUL;
+}
+
+int chrp_pcibios_write_config_byte(unsigned char bus, 
+                                       unsigned char dev_fn,
+                                       unsigned char offset, 
+                                       unsigned char val) 
+{
+        if (dev_fn >= DEV_FN_MAX) return PCIBIOS_DEVICE_NOT_FOUND;
+        out_be32(pci_config_address,
+                 0x80|(bus<<8)|(dev_fn<<16)|((offset&~3)<<24));
+        out_8(pci_config_data+(offset&3),val);
+        return PCIBIOS_SUCCESSFUL;
+}
+
+int chrp_pcibios_write_config_word(unsigned char bus, 
+                                       unsigned char dev_fn,
+                                       unsigned char offset, 
+                                       unsigned short val) 
+{
+        if (dev_fn >= DEV_FN_MAX) return PCIBIOS_DEVICE_NOT_FOUND;
+        if (offset&1)return PCIBIOS_BAD_REGISTER_NUMBER;
+        out_be32(pci_config_address,
+                 0x80|(bus<<8)|(dev_fn<<16)|((offset&~3)<<24));
+        out_le16((volatile unsigned short *)(pci_config_data+(offset&3)),val);
+        return PCIBIOS_SUCCESSFUL;
+}
+
+int chrp_pcibios_write_config_dword(unsigned char bus, 
+                                        unsigned char dev_fn,
+                                        unsigned char offset, 
+                                        unsigned int val) 
+{
+        if (dev_fn >= DEV_FN_MAX) return PCIBIOS_DEVICE_NOT_FOUND;
+        if (offset&3)return PCIBIOS_BAD_REGISTER_NUMBER;
+        out_be32(pci_config_address,
+                 0x80|(bus<<8)|(dev_fn<<16)|(offset<<24));
+        out_le32((volatile unsigned int *)pci_config_data,val);
+        return PCIBIOS_SUCCESSFUL;
+}
+#endif
+
+    /*
+     *  Temporary fixes for PCI devices. These should be replaced by OF query
+     *  code -- Geert
+     */
+
+static u_char hydra_openpic_initsenses[] __initdata = {
+    1,	/* HYDRA_INT_SIO */
+    0,	/* HYDRA_INT_SCSI_DMA */
+    0,	/* HYDRA_INT_SCCA_TX_DMA */
+    0,	/* HYDRA_INT_SCCA_RX_DMA */
+    0,	/* HYDRA_INT_SCCB_TX_DMA */
+    0,	/* HYDRA_INT_SCCB_RX_DMA */
+    1,	/* HYDRA_INT_SCSI */
+    1,	/* HYDRA_INT_SCCA */
+    1,	/* HYDRA_INT_SCCB */
+    1,	/* HYDRA_INT_VIA */
+    1,	/* HYDRA_INT_ADB */
+    0,	/* HYDRA_INT_ADB_NMI */
+    	/* all others are 1 (= default) */
+};
+
+__initfunc(int hydra_init(void))
+{
+	struct device_node *np;
+
+	np = find_devices("mac-io");
+	if (np == NULL || np->n_addrs == 0) {
+		printk(KERN_WARNING "Warning: no mac-io found\n");
+		return 0;
+	}
+	Hydra = ioremap(np->addrs[0].address, np->addrs[0].size);
+	printk("Hydra Mac I/O at %x\n", np->addrs[0].address);
+	out_le32(&Hydra->Feature_Control, (HYDRA_FC_SCC_CELL_EN |
+					   HYDRA_FC_SCSI_CELL_EN |
+					   HYDRA_FC_SCCA_ENABLE |
+					   HYDRA_FC_SCCB_ENABLE |
+					   HYDRA_FC_ARB_BYPASS |
+					   HYDRA_FC_MPIC_ENABLE |
+					   HYDRA_FC_SLOW_SCC_PCLK |
+					   HYDRA_FC_MPIC_IS_MASTER));
+	OpenPIC = (volatile struct OpenPIC *)&Hydra->OpenPIC;
+	OpenPIC_InitSenses = hydra_openpic_initsenses;
+	OpenPIC_NumInitSenses = sizeof(hydra_openpic_initsenses);
+	return 1;
+}
+
+
+extern int chrp_ide_irq;
+
+__initfunc(int w83c553f_init(void))
 {
     u_char bus, dev;
-    volatile struct Hydra *hydra = 0;
-    if (chrp_pcibios_find_device(PCI_VENDOR_ID_APPLE,
-				 PCI_DEVICE_ID_APPLE_HYDRA, 0, &bus, &dev)
-	== PCIBIOS_SUCCESSFUL)
-	chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
-				       (unsigned int *)&hydra);
-    return hydra;
-}
+    unsigned char t8;
+    unsigned short t16;
+    unsigned int t32;
+    if (pcibios_find_device(PCI_VENDOR_ID_WINBOND,
+			    PCI_DEVICE_ID_WINBOND_83C553, 0, &bus, &dev)
+	== PCIBIOS_SUCCESSFUL) {
+	dev++;
+	chrp_pcibios_read_config_dword(bus, dev, PCI_VENDOR_ID, &t32);
+	if (t32 == (PCI_DEVICE_ID_WINBOND_82C105<<16) + PCI_VENDOR_ID_WINBOND) {
+#if 0
+	    printk("Enabling SL82C105 IDE on W83C553F\n");
+	    /*
+	     *  FIXME: this doesn't help :-(
+	     */
 
-__initfunc(void hydra_post_openpic_init(void))
-{
-    openpic_set_sense(HYDRA_INT_SCSI_DMA, 0);
-    openpic_set_sense(HYDRA_INT_SCCA_TX_DMA, 0);
-    openpic_set_sense(HYDRA_INT_SCCA_RX_DMA, 0);
-    openpic_set_sense(HYDRA_INT_SCCB_TX_DMA, 0);
-    openpic_set_sense(HYDRA_INT_SCCB_RX_DMA, 0);
-    openpic_set_sense(HYDRA_INT_SCSI, 1);
-    openpic_set_sense(HYDRA_INT_SCCA, 1);
-    openpic_set_sense(HYDRA_INT_SCCB, 1);
-    openpic_set_sense(HYDRA_INT_VIA, 1);
-    openpic_set_sense(HYDRA_INT_ADB, 1);
-    openpic_set_sense(HYDRA_INT_ADB_NMI, 0);
+	    /* I/O mapping */
+	    chrp_pcibios_read_config_word(bus, dev, PCI_COMMAND, &t16);
+	    t16 |= PCI_COMMAND_IO;
+	    chrp_pcibios_write_config_word(bus, dev, PCI_COMMAND, t16);
+
+	    /* Standard IDE registers */
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
+					    0xffffffff);
+	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_0, &t32);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_0,
+					    0x000001f0 | 1);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
+					    0xffffffff);
+	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_1, &t32);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_1,
+					    0x000003f4 | 1);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
+					    0xffffffff);
+	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_2, &t32);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_2,
+					    0x00000170 | 1);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
+					    0xffffffff);
+	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_3, &t32);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_3,
+					    0x00000374 | 1);
+
+	    /* IDE Bus Master Control */
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
+					    0xffffffff);
+	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_4, &t32);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_4,
+					    0x1000 | 1);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
+					    0xffffffff);
+	    chrp_pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_5, &t32);
+	    chrp_pcibios_write_config_dword(bus, dev, PCI_BASE_ADDRESS_5,
+					    0x1010 | 1);
+
+	    /* IDE Interrupt */
+	    chrp_pcibios_read_config_byte(bus, dev, PCI_INTERRUPT_LINE, &t8);
+	    chrp_ide_irq = t8;
+#endif
+	    return 1;
+	}
+    }
+    return 0;
 }

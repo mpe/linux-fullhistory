@@ -123,7 +123,6 @@ typedef struct page {
 	struct wait_queue *wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
-	unsigned long pg_swap_entry;
 	unsigned long map_nr;	/* page->map_nr == page - mem_map */
 } mem_map_t;
 

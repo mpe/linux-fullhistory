@@ -138,6 +138,7 @@ nfs_put_super(struct super_block *sb)
 	 */
 	nfs_invalidate_dircache_sb(sb);
 
+	kfree(server->hostname);
 	sb->s_dev = 0;
 	unlock_super(sb);
 	MOD_DEC_USE_COUNT;
@@ -222,6 +223,10 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->acregmax = data->acregmax*HZ;
 	server->acdirmin = data->acdirmin*HZ;
 	server->acdirmax = data->acdirmax*HZ;
+
+	server->hostname = kmalloc(strlen(data->hostname) + 1, GFP_KERNEL);
+	if (!server->hostname)
+		goto out_unlock;
 	strcpy(server->hostname, data->hostname);
 
 	/* Which protocol do we use? */
@@ -308,6 +313,7 @@ out_no_client:
 
 out_no_xprt:
 	printk("NFS: cannot create RPC transport.\n");
+	kfree(server->hostname);
 out_unlock:
 	unlock_super(sb);
 	goto out_fail;

@@ -28,8 +28,8 @@ addr_limit = 12
 __put_user_1:
 	movl %esp,%ecx
 	andl $0xffffe000,%ecx
-	cmpl %eax,addr_limit(%ecx)
-	jnb bad_put_user
+	cmpl addr_limit(%ecx),%eax
+	jae bad_put_user
 1:	movb %dl,(%eax)
 	xorl %eax,%eax
 	ret
@@ -41,8 +41,8 @@ __put_user_2:
 	movl %esp,%ecx
 	jc bad_put_user
 	andl $0xffffe000,%ecx
-	cmpl %eax,addr_limit(%ecx)
-	jnb bad_put_user
+	cmpl addr_limit(%ecx),%eax
+	jae bad_put_user
 2:	movw %dx,-1(%eax)
 	xorl %eax,%eax
 	ret
@@ -54,8 +54,8 @@ __put_user_4:
 	movl %esp,%ecx
 	jc bad_put_user
 	andl $0xffffe000,%ecx
-	cmpl %eax,addr_limit(%ecx)
-	jnb bad_put_user
+	cmpl addr_limit(%ecx),%eax
+	jae bad_put_user
 3:	movl %edx,-3(%eax)
 	xorl %eax,%eax
 	ret

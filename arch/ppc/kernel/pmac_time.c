@@ -2,9 +2,7 @@
  * Support for periodic interrupts (100 per second) and for getting
  * the current time from the RTC on Power Macintoshes.
  *
- * At present, we use the decrementer register in the 601 CPU
- * for our periodic interrupts.  This will probably have to be
- * changed for other processors.
+ * We use the decrementer register for our periodic interrupts.
  *
  * Paul Mackerras	August 1996.
  * Copyright (C) 1996 Paul Mackerras.
@@ -15,15 +13,77 @@
 #include <linux/param.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 
 #include "time.h"
 
-
 /* Apparently the RTC stores seconds since 1 Jan 1904 */
 #define RTC_OFFSET	2082844800
+
+/*
+ * Calibrate the decrementer frequency with the VIA timer 1.
+ */
+#define VIA_TIMER_FREQ_6	4700000	/* time 1 frequency * 6 */
+
+/* VIA registers */
+#define RS		0x200		/* skip between registers */
+#define T1CL		(4*RS)		/* Timer 1 ctr/latch (low 8 bits) */
+#define T1CH		(5*RS)		/* Timer 1 counter (high 8 bits) */
+#define T1LL		(6*RS)		/* Timer 1 latch (low 8 bits) */
+#define T1LH		(7*RS)		/* Timer 1 latch (high 8 bits) */
+#define ACR		(11*RS)		/* Auxiliary control register */
+#define IFR		(13*RS)		/* Interrupt flag register */
+
+/* Bits in ACR */
+#define T1MODE		0xc0		/* Timer 1 mode */
+#define T1MODE_CONT	0x40		/*  continuous interrupts */
+
+/* Bits in IFR and IER */
+#define T1_INT		0x40		/* Timer 1 interrupt */
+
+static int via_calibrate_decr(void)
+{
+	struct device_node *vias;
+	volatile unsigned char *via;
+	int count = VIA_TIMER_FREQ_6 / HZ;
+	unsigned int dstart, dend;
+
+	vias = find_devices("via-cuda");
+	if (vias == 0)
+		vias = find_devices("via-pmu");
+	if (vias == 0 || vias->n_addrs == 0)
+		return 0;
+	via = (volatile unsigned char *) vias->addrs[0].address;
+
+	/* set timer 1 for continuous interrupts */
+	out_8(&via[ACR], (via[ACR] & ~T1MODE) | T1MODE_CONT);
+	/* set the counter to a small value */
+	out_8(&via[T1CH], 2);
+	/* set the latch to `count' */
+	out_8(&via[T1LL], count);
+	out_8(&via[T1LH], count >> 8);
+	/* wait until it hits 0 */
+	while ((in_8(&via[IFR]) & T1_INT) == 0)
+		;
+	dstart = get_dec();
+	/* clear the interrupt & wait until it hits 0 again */
+	in_8(&via[T1CL]);
+	while ((in_8(&via[IFR]) & T1_INT) == 0)
+		;
+	dend = get_dec();
+
+	decrementer_count = (dstart - dend) / 6;
+	count_period_num = 60;
+	count_period_den = decrementer_count * 6 * HZ / 100000;
+
+	printk(KERN_INFO "via_calibrate_decr: decrementer_count = %u (%u ticks)\n",
+	       decrementer_count, dstart - dend);
+
+	return 1;
+}
 
 /*
  * Query the OF and get the decr frequency.
@@ -34,6 +94,9 @@ void pmac_calibrate_decr(void)
 {
 	struct device_node *cpu;
 	int freq, *fp, divisor;
+
+	if (via_calibrate_decr())
+		return;
 
 	/*
 	 * The cpu node should have a timebase-frequency property
@@ -57,11 +120,11 @@ void pmac_calibrate_decr(void)
 unsigned long
 pmac_get_rtc_time(void)
 {
-	struct cuda_request req;
+	struct adb_request req;
 
 	/* Get the time from the RTC */
 	cuda_request(&req, NULL, 2, CUDA_PACKET, CUDA_GET_TIME);
-	while (!req.got_reply)
+	while (!req.complete)
 		cuda_poll();
 	if (req.reply_len != 7)
 		printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
@@ -84,4 +147,5 @@ pmac_read_rtc_time(void)
 {
 	xtime.tv_sec = pmac_get_rtc_time();
 	xtime.tv_usec = 0;
+	last_rtc_update = xtime.tv_sec;
 }

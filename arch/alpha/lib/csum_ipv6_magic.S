@@ -58,10 +58,14 @@ csum_ipv6_magic:
 	addq	$3,$1,$3	# .. e1 :
 	addq	$0,$3,$0	# e0    :
 	unop			#       :
-	extwl	$0,2,$1		# e0    :
+	extwl	$0,2,$1		# e0    : fold 18-bit value
 	zapnot	$0,3,$0		# .. e1 :
 	addq	$0,$1,$0	# e0    :
-	not	$0,$0		# e1    :
+	unop			#       :
+	extwl	$0,2,$1		# e0    : fold 17-bit value
+	zapnot	$0,3,$0		# .. e1 :
+	addq	$0,$1,$0	# e0    :
+	not	$0,$0		# e1    : and compliment.
 	zapnot	$0,3,$0		# e0    :
 	ret			# .. e1 :
 

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.16 1997/06/27 14:55:04 jj Exp $
+/* $Id: oplib.h,v 1.18 1997/09/24 11:34:18 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *

@@ -1,0 +1,20 @@
+                 Information about Linux/PPC SMP mode
+=====================================================================
+
+This document and the related code was written by me (Cort Dougan), please
+email me (cort@cs.nmt.edu) if you have questions, comments or corrections.
+
+SMP support for Linux/PPC is still in its early stages and likely to
+be buggy for a while.  If you want to help by writing code or testing
+different hardware please email me!
+
+1. State of Supported Hardware
+
+  UMAX s900
+    The second processor on this machine boots up just fine and
+    enters its idle loop.  Hopefully a completely working SMP kernel
+    on this machine will be done shortly.
+
+  BeBox
+    BeBox support hasn't been added to the 2.1.X kernels from 2.0.X
+    but work is being done and SMP support for BeBox is in the works.

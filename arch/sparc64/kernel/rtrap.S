@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.33 1997/08/21 09:13:22 davem Exp $
+/* $Id: rtrap.S,v 1.37 1997/12/11 15:14:54 jj Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -55,11 +55,11 @@ rtrap:		sethi			%hi(bh_active), %l2
 		ldda			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x0c0] %asi, %f48
 1:		membar			#Sync
 		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x100], %fsr
-rt_continue:	ld			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
+rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		ldx			[%sp + PTREGS_OFF + PT_V9_G1], %g1
 		ldx			[%sp + PTREGS_OFF + PT_V9_G2], %g2
 		ldx			[%sp + PTREGS_OFF + PT_V9_G3], %g3
-		mov			%g6, %l6
+		mov			%g6, %o5
 		ldx			[%sp + PTREGS_OFF + PT_V9_G4], %g4
 		ldx			[%sp + PTREGS_OFF + PT_V9_G5], %g5
 		ldx			[%sp + PTREGS_OFF + PT_V9_G6], %g6
@@ -88,10 +88,10 @@ rt_continue:	ld			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		wrpr			%o2, %g0, %tnpc
 		mov			PRIMARY_CONTEXT, %l7
 		brnz,pn			%l3, kern_rtt
-		 mov			SECONDARY_CONTEXT, %l5
+		 mov			SECONDARY_CONTEXT, %o4
 		stxa			%l0, [%l7] ASI_DMMU
-		stxa			%l0, [%l5] ASI_DMMU
-		flush			%l6
+		stxa			%l0, [%o4] ASI_DMMU
+		flush			%o5
 		rdpr			%wstate, %l1
 
 		rdpr			%otherwin, %l2
@@ -106,30 +106,25 @@ rt_continue:	ld			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		retry
 kern_rtt:	restore
 		retry
-to_user:	lduw			[%g6 + AOFF_task_processor], %o0
-		mov			1, %o1
-		sethi			%hi(need_resched), %l0
+to_user:	sethi			%hi(need_resched), %l0
 		ldx			[%l0 + %lo(need_resched)], %l0
-		sllx			%o1, %o0, %o1
 		wrpr			%l7, PSTATE_IE, %pstate
-		andcc			%o1, %l0, %g0
-		be,pt			%xcc, check_signal
-		 ldx			[%g6 + AOFF_task_signal], %l0
+		orcc			%g0, %l0, %g0
+		be,a,pt			%xcc, check_signal
+		 lduw			[%g6 + AOFF_task_sigpending], %l0
 
 		call			schedule
 		 nop
-		ldx			[%g6 + AOFF_task_signal], %l0
-		nop
-check_signal:	ldx			[%g6 + AOFF_task_blocked], %o0
-		ld			[%sp + PTREGS_OFF + PT_V9_FPRS], %l2
-		andncc			%l0, %o0, %g0
-		be,pt			%xcc, check_user_wins
-		 ldx			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		lduw			[%g6 + AOFF_task_sigpending], %l0
+check_signal:	ld			[%sp + PTREGS_OFF + PT_V9_FPRS], %l2
+		brz,a,pt		%l0, check_user_wins
+		 lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		clr			%o0
 		mov			%l5, %o2  
 		mov			%l6, %o3
 		call			do_signal
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o1
-		ldx			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
 		clr			%l6
 check_user_wins:brz,pt			%o2, 1f
 		 sethi			%hi(TSTATE_PEF), %o3
@@ -142,7 +137,7 @@ check_user_wins:brz,pt			%o2, 1f
 		be,a,pt			%icc, rt_continue
 		 andn			%l1, %o3, %l1		! If fprs.FEF is not set, disable tstate.PEF
 		ldx			[%sp + PTREGS_OFF + TRACEREG_SZ + 0x108], %o3
-		ld			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l2
+		lduh			[%g6 + AOFF_task_tss + AOFF_thread_flags], %l2
 		wr			%g0, FPRS_FEF, %fprs
 		wr			%o3, 0, %gsr
 		andcc			%l2, SPARC_FLAG_USEDFPUL, %g0

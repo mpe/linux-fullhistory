@@ -1,12 +1,19 @@
 ------------------------------------------------------------------------------
 WAN Router for Linux Operating System
 ------------------------------------------------------------------------------
+Version 2.0.1 - Nov 28, 1997
+Version 2.0.0 - Nov 06, 1997
 Version 1.0.3 - June 3, 1997
 Version 1.0.1 - January 30, 1997
 Author: Jaspreet Singh <jaspreet@sangoma.com>
 	Gene Kozin <genek@compuserve.com>
 Copyright (c) 1995-1997 Sangoma Technologies Inc.
 ------------------------------------------------------------------------------
+
+
+WARNING:  This Version of WANPIPE supports only the S508 and S508/FT1 cards.  
+IF YOU OWN A S502E OR A S508 CARD THEN PLEASE CONTACT SANGOMA TECHNOLOGIES FOR 
+AN UPGRADE.
 
 INTRODUCTION
 
@@ -73,10 +80,14 @@ assist WAN device driver writer by providing common services, such as:
 To ba able to use Linux WAN Router you will also need a WAN Tools package
 available from
 
-	ftp.sangoma.com/pub/linux/wantools-X.Y.Z.tgz
+	ftp.sangoma.com/pub/linux/vX.Y.Z/wantools-X.Y.Z.tgz
+			or
+	ftp.sangoma.com/pub/linux/vX.Y.Z/wanpipe-X.Y.Z.tgz
+
+where vX.Y.Z represent the linux kernel version number.
 
 For technical questions and/or comments regarding this product please e-mail
-to genek@compuserve.com or dm@sangoma.com.
+to jaspreet@sangoma.com or dm@sangoma.com.
 
 
 
@@ -117,19 +128,55 @@ product.
 
 
 REVISION HISTORY
+
+2.0.1	Nov 28, 1997	      -	Protection of "enable_irq()" while
+                                "disable_irq()" has been enabled from any other
+                                routine (for Frame Relay, PPP and X25).
+			      - Added additional Stats for Fpipemon and Ppipemon                              - Improved Load Sharing for multiple boards.
+
+
+2.0.0   Nov 07, 1997          - Implemented protection of RACE conditions by
+                                critical flags for FRAME RELAY and PPP.
+                              - DLCI List interrupt mode implemented.
+                              - IPX support in FRAME RELAY and PPP.
+                              - IPX Server Support (MARS)
+                              - More driver specific stats included in FPIPEMON
+                                and PIPEMON.
+
+1.0.5   July 28, 1997         - Configurable T391,T392,N391,N392,N393 for Frame
+                                Relay in router.conf.
+                              - Configurable Memory Address through router.conf
+                                for Frame Relay, PPP and X.25. (commenting this
+                                out enables auto-detection).
+                              - Fixed freeing up received buffers using kfree()
+                                for Frame Relay and X.25.
+                              - Protect sdla_peek() by calling save_flags(),
+                                cli() and restore_flags().
+                              - Changed number of Trace elements from 32 to 20
+                              - Added DLCI specific data monitoring in FPIPEMON.
+
+1.0.4   July 10, 1997         - S508/FT1 monitoring capability in fpipemon and
+                                ppipemon utilities.
+                              - Configurable TTL for UDP packets.
+                              - Multicast and Broadcast IP source addresses are
+                                silently discarded.
+
 1.0.3	June 3, 1997
-	o UDP port for multiple boards (Frame relay, PPP)
-	o Continuous Transmission of Configure Request Packet for PPP (this
-	  support is only added for 508 cards)
-	o Connection Timeout for PPP changed from 900 to 0
-	o Flow Control for multiple boards and multiple channels (Frame Relay)
+	 		      -	UDP port for multiple boards (Frame relay, PPP)
+	 			Continuous Transmission of Configure Request 
+			      -	Packet for PPP (this support is only added for 
+			   	508 cards)
+	 		      -	Connection Timeout for PPP changed from 900 to 0
+	 	              -	Flow Control for multiple boards and multiple 
+				channels (Frame Relay)
 
 1.0.1	January 30, 1997
 
-	o Implemented user-readable status and statistics via /proc filesystem
+			      -	Implemented user-readable status and statistics
+				via /proc filesystem
 
 1.0.0	December 31, 1996
 
-	o Initial version
+			      -	Initial version
 
 >>>>>> END <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

@@ -40,6 +40,7 @@
 #define ST_DEC_EB66P		-19	/* EB66 systype		*/
 #define ST_DEC_EBPC64		-20	/* Cabriolet (AlphaPC64) systype */
 #define ST_DEC_EB164		 26	/* EB164 systype	*/
+#define ST_DEC_MIATA		 30	/* MIATA systype        */
 
 struct pcb_struct {
 	unsigned long ksp;

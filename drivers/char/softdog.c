@@ -37,7 +37,6 @@
 #include <linux/init.h>
 #include <asm/uaccess.h>
 
-#define WATCHDOG_MINOR	130
 #define TIMER_MARGIN	60		/* (secs) Default is 1 minute */
 
 static int soft_margin = TIMER_MARGIN;	/* in seconds */
@@ -177,7 +176,7 @@ static struct file_operations softdog_fops=
 static struct miscdevice softdog_miscdev=
 {
 	WATCHDOG_MINOR,
-	"softdog",
+	"watchdog",
 	&softdog_fops
 };
 

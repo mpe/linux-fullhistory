@@ -8,7 +8,6 @@
  *  copied and modified from intel version
  *
  */
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -24,21 +23,41 @@
 #include <asm/io.h>
 #include <asm/processor.h>
 #include <asm/nvram.h>
-
+#include <asm/prom.h>
 #include "time.h"
+
+static int nvram_as1 = NVRAM_AS1;
+static int nvram_as0 = NVRAM_AS0;
+static int nvram_data = NVRAM_DATA;
+
+void chrp_time_init(void)
+{
+	struct device_node *rtcs;
+	int base;
+
+	rtcs = find_compatible_devices("rtc", "pnpPNP,b00");
+	if (rtcs == NULL || rtcs->addrs == NULL)
+		return;
+	base = ((int *)rtcs->addrs)[2];
+	nvram_as1 = 0;
+	nvram_as0 = base;
+	nvram_data = base + 1;
+}
 
 int chrp_cmos_clock_read(int addr)
 {
-	outb(addr>>8, NVRAM_AS1);
-	outb(addr, NVRAM_AS0);
-	return (inb(NVRAM_DATA));
+	if (nvram_as1 != 0)
+		outb(addr>>8, nvram_as1);
+	outb(addr, nvram_as0);
+	return (inb(nvram_data));
 }
 
 void chrp_cmos_clock_write(unsigned long val, int addr)
 {
-	outb(addr>>8, NVRAM_AS1);
-	outb(addr, NVRAM_AS0);
-	outb(val,NVRAM_DATA);
+	if (nvram_as1 != 0)
+		outb(addr>>8, nvram_as1);
+	outb(addr, nvram_as0);
+	outb(val, nvram_data);
 	return;
 }
 
@@ -50,7 +69,7 @@ int chrp_set_rtc_time(unsigned long nowtime)
 	unsigned char save_control, save_freq_select;
 	struct rtc_time tm;
 
-	to_tm(nowtime, &tm);
+	to_tm(nowtime + 10*60*60, &tm);	/* XXX for now */
 
 	save_control = chrp_cmos_clock_read(RTC_CONTROL); /* tell the clock it's being set */
 
@@ -127,6 +146,31 @@ unsigned long chrp_get_rtc_time(void)
 	  }
 	if ((year += 1900) < 1970)
 		year += 100;
-	return mktime(year, mon, day, hour, min, sec);
+	return mktime(year, mon, day, hour, min, sec) - 10*60*60 /* XXX for now */;
 }
 
+
+void chrp_calibrate_decr(void)
+{
+	struct device_node *cpu;
+	int freq, *fp, divisor;
+
+	/*
+	 * The cpu node should have a timebase-frequency property
+	 * to tell us the rate at which the decrementer counts.
+	 */
+	freq = 16666000;		/* hardcoded default */
+	cpu = find_type_devices("cpu");
+	if (cpu != 0) {
+		fp = (int *) get_property(cpu, "timebase-frequency", NULL);
+		if (fp != 0)
+			freq = *fp;
+	}
+
+	freq *= 60;	/* try to make freq/1e6 an integer */
+        divisor = 60;
+        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
+        decrementer_count = freq / HZ / divisor;
+        count_period_num = divisor;
+        count_period_den = freq / 1000000;
+}

@@ -147,7 +147,7 @@ struct mm_struct {
 	struct semaphore mmap_sem;
 	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
-	unsigned long start_brk, brk, start_stack, start_mmap;
+	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	unsigned long rss, total_vm, locked_vm;
 	unsigned long def_flags;
@@ -159,7 +159,7 @@ struct mm_struct {
 		MUTEX,					\
 		0,					\
 		0, 0, 0, 0,				\
-		0, 0, 0, 0,				\
+		0, 0, 0, 				\
 		0, 0, 0, 0,				\
 		0, 0, 0,				\
 		0, 0 }
@@ -231,6 +231,7 @@ struct task_struct {
 	struct timer_list real_timer;
 	struct tms times;
 	unsigned long start_time;
+	long per_cpu_utime[NR_CPUS], per_cpu_stime[NR_CPUS];
 /* mm fault and swap info: this can arguably be seen as either mm-specific or thread-specific */
 	unsigned long min_flt, maj_flt, nswap, cmin_flt, cmaj_flt, cnswap;
 	int swappable:1;
@@ -328,6 +329,7 @@ struct task_struct {
 /* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	{0,0,0,0},0, \
+/* per cpu times */ {0, 0, }, {0, 0, }, \
 /* flt */	0,0,0,0,0,0, \
 /* swp */	0,0,0,0,0, \
 /* rlimits */   INIT_RLIMITS, \

@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
- * Version:	$Id: fib_semantics.c,v 1.5 1997/10/10 22:40:50 davem Exp $
+ * Version:	$Id: fib_semantics.c,v 1.6 1997/12/13 21:52:49 kuznet Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -184,7 +184,6 @@ fib_get_nhs(struct fib_info *fi, const struct nlmsghdr *nlh, const struct rtmsg 
 	struct rtnexthop *nhp = RTM_RTNH(r);
 	int nhlen = RTM_NHLEN(nlh, r);
 
-printk("get nhs %d/%d\n", r->rtm_nhs, nhlen);	
 	change_nexthops(fi) {
 		int attrlen = nhlen - sizeof(struct rtnexthop);
 		if (attrlen < 0 || (nhlen -= nhp->rtnh_len) < 0)
@@ -194,8 +193,6 @@ printk("get nhs %d/%d\n", r->rtm_nhs, nhlen);
 		nh->nh_weight = nhp->rtnh_hops + 1;
 		if (attrlen)
 			nh->nh_gw = fib_get_attr32(RTNH_DATA(nhp), attrlen, RTA_GATEWAY);
-printk("Got nh: via %08x dev %d w %d fl %02x\n", nh->nh_gw, nh->nh_oif,
-       nh->nh_weight, nh->nh_flags);
 		nhp = RTNH_NEXT(nhp);
 	} endfor_nexthops(fi);
 	return 0;
@@ -457,6 +454,15 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 
 link_it:
 	if ((ofi = fib_find_info(fi)) != NULL) {
+		if (fi->fib_nh[0].nh_scope != ofi->fib_nh[0].nh_scope) {
+			printk("nh %d/%d gw=%08x/%08x dev=%s/%s\n",
+			       fi->fib_nh[0].nh_scope,
+			       ofi->fib_nh[0].nh_scope,
+			       fi->fib_nh[0].nh_gw,
+			       ofi->fib_nh[0].nh_gw,
+			       fi->fib_nh[0].nh_dev->name,
+			       ofi->fib_nh[0].nh_dev->name);
+		}
 		kfree(fi);
 		ofi->fib_refcnt++;
 		return ofi;
@@ -743,9 +749,13 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
    - device went down -> we must shutdown all nexthops going via it.
  */
 
-int fib_sync_down(u32 local, struct device *dev)
+int fib_sync_down(u32 local, struct device *dev, int force)
 {
 	int ret = 0;
+	int scope = RT_SCOPE_NOWHERE;
+	
+	if (force)
+		scope = -1;
 
 	for_fib_info() {
 		if (local && fi->fib_prefsrc == local) {
@@ -758,7 +768,7 @@ int fib_sync_down(u32 local, struct device *dev)
 				if (nh->nh_flags&RTNH_F_DEAD)
 					dead++;
 				else if (nh->nh_dev == dev &&
-					 nh->nh_scope != RT_SCOPE_NOWHERE) {
+					 nh->nh_scope != scope) {
 					nh->nh_flags |= RTNH_F_DEAD;
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 					fi->fib_power -= nh->nh_power;

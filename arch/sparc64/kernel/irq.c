@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.39 1997/08/31 03:11:18 davem Exp $
+/* $Id: irq.c,v 1.47 1998/01/10 18:26:17 ecd Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -57,6 +57,7 @@ struct ino_bucket {
 	unsigned int ino;
 	unsigned int *imap;
 	unsigned int *iclr;
+	unsigned char *imap_refcnt;
 };
 
 #define INO_HASHSZ	(NUM_HARD_IVECS >> 2)
@@ -114,9 +115,15 @@ int get_irq_list(char *buf)
 	}
 #if 0
 #ifdef CONFIG_PCI
-	len += sprintf(buf + len, "ISTAT: PCI[%016lx] OBIO[%016lx]\n",
-		       psycho_root->psycho_regs->pci_istate,
-		       psycho_root->psycho_regs->obio_istate);
+	{
+		struct linux_psycho *p;
+		for (p = psycho_root; p; p = p->next)
+			len += sprintf(buf + len,
+				       "ISTAT[%d]: PCI[%016lx] OBIO[%016lx]\n",
+				       p->index,
+				       p->psycho_regs->pci_istate,
+				       p->psycho_regs->obio_istate);
+	}
 #endif
 #endif
 	return len;
@@ -229,10 +236,10 @@ unsigned char psycho_ino_to_pil[] = {
 	13, /* Audio Record */
 	14, /* Audio Playback */
 	15, /* PowerFail */
-	12, /* Keyboard/Mouse/Serial */
+	9,  /* Keyboard/Mouse/Serial */
 	11, /* Floppy */
 	2,  /* Spare Hardware */
-	12, /* Keyboard */
+	9,  /* Keyboard */
 	4,  /* Mouse */
 	12, /* Serial */
 	10, /* Timer 0 */
@@ -411,7 +418,7 @@ static void get_irq_translations(int *cpu_irq, int *ivindex_fixup,
 		offset += ((unsigned long)pregs);
 		*imap = ((unsigned int *)offset) + 1;
 		*iclr = (unsigned int *)
-			(((unsigned long)pregs) + psycho_imap_offset(irq));
+			(((unsigned long)pregs) + psycho_iclr_offset(irq));
 		return;
 	}
 #endif
@@ -449,9 +456,16 @@ static void pci_irq_frobnicate(int *cpu_irq, int *ivindex_fixup,
 			       unsigned int **imap, unsigned int **iclr,
 			       unsigned int irq)
 {
-	struct linux_psycho *psycho = psycho_root;
-	struct psycho_regs *pregs = psycho->psycho_regs;
+	struct linux_psycho *psycho;
+	struct psycho_regs *pregs;
 	unsigned long addr, imoff;
+
+	psycho = psycho_by_index((irq & PCI_IRQ_BUSNO) >> PCI_IRQ_BUSNO_SHFT);
+	if (!psycho) {
+		printk("get_irq_translations: BAD PSYCHO BUSNO[%x]\n", irq);
+		panic("Bad PSYCHO IRQ frobnication...");
+	}
+	pregs = psycho->psycho_regs;
 
 	addr = (unsigned long) &pregs->imap_a_slot0;
 	imoff = (irq & PCI_IRQ_IMAP_OFF) >> PCI_IRQ_IMAP_OFF_SHFT;
@@ -515,7 +529,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	unsigned long flags;
 	unsigned int *imap, *iclr;
 	void *bus_id = NULL;
-	int ivindex, ivindex_fixup, cpu_irq = -1;
+	int ivindex, ivindex_fixup, cpu_irq = -1, pending;
 	
 	if(!handler)
 	    return -EINVAL;
@@ -605,7 +619,10 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 		return -ENOMEM;
 	}
 
+	pending = ((ivector_to_mask[ivindex] & 0x80000000) != 0);
 	ivector_to_mask[ivindex] = (1 << cpu_irq);
+	if(pending)
+		ivector_to_mask[ivindex] |= 0x80000000;
 
 	if(dcookie) {
 		dcookie->ret_ino = ivindex;
@@ -625,6 +642,11 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 		*(cpu_irq + irq_action) = action;
 
 	enable_irq(ivindex);
+
+	/* We ate the IVEC already, this makes sure it does not get lost. */
+	if(pending)
+		set_softint(1 << cpu_irq);
+
 	restore_flags(flags);
 #ifdef __SMP__
 	if(irqs_have_been_distributed)
@@ -638,6 +660,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	struct irqaction *action;
 	struct irqaction *tmp = NULL;
 	unsigned long flags;
+	unsigned int *imap = NULL;
 	unsigned int cpu_irq;
 	int ivindex = -1;
 
@@ -685,8 +708,8 @@ void free_irq(unsigned int irq, void *dev_id)
 
 	if(action->flags & SA_IMAP_MASKED) {
 		struct ino_bucket *bucket = (struct ino_bucket *)action->mask;
-		unsigned int *imap = bucket->imap;
 
+		imap = bucket->imap;
 		if(imap != NULL) {
 			ivindex = bucket->ino;
 			ivector_to_mask[ivindex] = 0;
@@ -696,8 +719,27 @@ void free_irq(unsigned int irq, void *dev_id)
 	}
 
 	kfree(action);
-	if(ivindex != -1)
-		disable_irq(ivindex);
+
+	if(ivindex != -1) {
+		struct ino_bucket *bp;
+		int i, count = 0;
+
+		/* The trick is that we can't turn the thing off when there
+		 * are potentially other sub-irq level references.
+		 */
+		if(imap != NULL) {
+			for(i = 0; i < INO_HASHSZ; i++) {
+				bp = ino_hash[i];
+				while(bp) {
+					if(bp->imap == imap)
+						count++;
+					bp = bp->next;
+				}
+			}
+		}
+		if(count < 2)
+			disable_irq(ivindex);
+	}
 
 	restore_flags(flags);
 }
@@ -863,12 +905,21 @@ void synchronize_irq(void)
 void report_spurious_ivec(struct pt_regs *regs)
 {
 	extern unsigned long ivec_spurious_cookie;
-	static int times = 0;
 
+#if 0
 	printk("IVEC: Spurious interrupt vector (%016lx) received at (%016lx)\n",
 	       ivec_spurious_cookie, regs->tpc);
-	if(times++ > 1)
-		prom_halt();
+#endif
+
+	/* We can actually see this on Ultra/PCI PCI cards, which are bridges
+	 * to other devices.  Here a single IMAP enabled potentially multiple
+	 * unique interrupt sources (which each do have a unique ICLR register.
+	 *
+	 * So what we do is just register that the IVEC arrived, when registered
+	 * for real the request_irq() code will check the high bit and signal
+	 * a local CPU interrupt for it.
+	 */
+	ivector_to_mask[ivec_spurious_cookie] |= (0x80000000);
 }
 
 void unexpected_irq(int irq, void *dev_cookie, struct pt_regs *regs)
@@ -899,6 +950,7 @@ void unexpected_irq(int irq, void *dev_cookie, struct pt_regs *regs)
 
 void handler_irq(int irq, struct pt_regs *regs)
 {
+	struct ino_bucket *bucket = NULL;
 	struct irqaction *action;
 	int cpu = smp_processor_id();
 
@@ -911,20 +963,19 @@ void handler_irq(int irq, struct pt_regs *regs)
 		unexpected_irq(irq, 0, regs);
 	} else {
 		do {
-			struct ino_bucket *bucket = NULL;
-			unsigned int ino = 0;
+			unsigned long *swmask = NULL;
 
 			if(action->flags & SA_IMAP_MASKED) {
 				bucket = (struct ino_bucket *)action->mask;
 
-				ino = bucket->ino;
-				if(!(ivector_to_mask[ino] & 0x80000000))
+				swmask = &ivector_to_mask[bucket->ino];
+				if(!(*swmask & 0x80000000))
 					continue;
 			}
 
 			action->handler(irq, action->dev_id, regs);
-			if(bucket) {
-				ivector_to_mask[ino] &= ~(0x80000000);
+			if(swmask) {
+				*swmask &= ~(0x80000000);
 				*(bucket->iclr) = SYSIO_ICLR_IDLE;
 			}
 		} while((action = action->next) != NULL);
@@ -938,12 +989,14 @@ extern void floppy_interrupt(int irq, void *dev_cookie, struct pt_regs *regs);
 void sparc_floppy_irq(int irq, void *dev_cookie, struct pt_regs *regs)
 {
 	struct irqaction *action = *(irq + irq_action);
+	struct ino_bucket *bucket;
 	int cpu = smp_processor_id();
 
 	irq_enter(cpu, irq);
+	bucket = (struct ino_bucket *)action->mask;
 	floppy_interrupt(irq, dev_cookie, regs);
-	if(action->flags & SA_IMAP_MASKED)
-		*((unsigned int *)action->mask) = SYSIO_ICLR_IDLE;
+	ivector_to_mask[bucket->ino] &= ~(0x80000000);
+	*(bucket->iclr) = SYSIO_ICLR_IDLE;
 	irq_exit(cpu, irq);
 }
 #endif
@@ -975,28 +1028,60 @@ static void install_fast_irq(unsigned int cpu_irq,
 
 int request_fast_irq(unsigned int irq,
 		     void (*handler)(int, void *, struct pt_regs *),
-		     unsigned long irqflags, const char *name)
+		     unsigned long irqflags, const char *name, void *dev_id)
 {
 	struct irqaction *action;
+	struct devid_cookie *dcookie = NULL;
+	struct ino_bucket *bucket = NULL;
 	unsigned long flags;
-	unsigned int cpu_irq, *imap, *iclr;
-	int ivindex = -1;
-
-	/* XXX This really is not the way to do it, the "right way"
-	 * XXX is to have drivers set SA_SBUS or something like that
-	 * XXX in irqflags and we base our decision here on whether
-	 * XXX that flag bit is set or not.
-	 *
-	 * In this case nobody can have a fast interrupt at the level
-	 * where TICK interrupts live.
-	 */
-	if(irq == 14)
-		return -EINVAL;
-	cpu_irq = sysio_ino_to_pil[irq];
+	unsigned int *imap, *iclr;
+	void *bus_id = NULL;
+	int ivindex, ivindex_fixup, cpu_irq = -1;
 
 	if(!handler)
 		return -EINVAL;
-	imap = sysio_irq_to_imap(irq);
+
+	imap = iclr = NULL;
+	ivindex_fixup = 0;
+#ifdef CONFIG_PCI
+	if(PCI_IRQ_P(irq)) {
+		pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
+	} else
+#endif
+	if(irqflags & SA_DCOOKIE) {
+		if(!dev_id) {
+			printk("request_fast_irq: SA_DCOOKIE but dev_id is NULL!\n");
+			panic("Bogus irq registry.");
+		}
+		dcookie		= dev_id;
+		dev_id		= dcookie->real_dev_id;
+		cpu_irq		= dcookie->pil;
+		imap		= dcookie->imap;
+		iclr		= dcookie->iclr;
+		bus_id		= dcookie->bus_cookie;
+		get_irq_translations(&cpu_irq, &ivindex_fixup, &imap,
+				     &iclr, bus_id, irqflags, irq);
+	} else {
+		/* XXX NOTE: This code is maintained for compatability until I can
+		 * XXX       verify that all drivers sparc64 will use are updated
+		 * XXX       to use the new IRQ registry dcookie interface.  -DaveM
+		 */
+		if(irq == 14)
+			cpu_irq = irq;
+		else
+			cpu_irq = sysio_ino_to_pil[irq];
+		imap = sysio_irq_to_imap(irq);
+		if(!imap) {
+			printk("request_irq: BAD, null imap for old style "
+			       "irq registry IRQ[%x].\n", irq);
+			panic("Bad IRQ registery...");
+		}
+		iclr = sysio_imap_to_iclr(imap);
+	}
+
+	ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
+	ivindex += ivindex_fixup;
+
 	action = *(cpu_irq + irq_action);
 	if(action) {
 		if(action->flags & SA_SHIRQ)
@@ -1023,28 +1108,35 @@ int request_fast_irq(unsigned int irq,
 	}
 	install_fast_irq(cpu_irq, handler);
 
-	if(imap) {
-		ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
-		ivector_to_mask[ivindex] = (1 << cpu_irq);
-		iclr = sysio_imap_to_iclr(imap);
-		action->mask = (unsigned long) iclr;
-		irqflags |= SA_IMAP_MASKED;
-		add_ino_hash(ivindex, imap, iclr, irqflags);
-	} else
-		action->mask = 0;
+	bucket = add_ino_hash(ivindex, imap, iclr, irqflags);
+	if(!bucket) {
+		kfree(action);
+		restore_flags(flags);
+		return -ENOMEM;
+	}
 
+	ivector_to_mask[ivindex] = (1 << cpu_irq);
+
+	if(dcookie) {
+		dcookie->ret_ino = ivindex;
+		dcookie->ret_pil = cpu_irq;
+	}
+
+	action->mask = (unsigned long) bucket;
 	action->handler = handler;
-	action->flags = irqflags;
+	action->flags = irqflags | SA_IMAP_MASKED;
 	action->dev_id = NULL;
 	action->name = name;
 	action->next = NULL;
 
 	*(cpu_irq + irq_action) = action;
-
-	if(ivindex != -1)
-		enable_irq(ivindex);
+	enable_irq(ivindex);
 
 	restore_flags(flags);
+#ifdef __SMP__
+	if(irqs_have_been_distributed)
+		distribute_irqs();
+#endif
 	return 0;
 }
 

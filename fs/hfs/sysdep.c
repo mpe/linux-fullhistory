@@ -18,6 +18,16 @@
 #include <linux/hfs_fs_i.h>
 #include <linux/hfs_fs.h>
 
+static int hfs_hash_dentry(struct dentry *, struct qstr *);
+static int hfs_compare_dentry (struct dentry *, struct qstr *, struct qstr *);
+struct dentry_operations hfs_dentry_operations =
+{
+	NULL,	                /* d_validate(struct dentry *) */
+	hfs_hash_dentry,	/* d_hash */
+	hfs_compare_dentry,    	/* d_compare */
+	NULL	                /* d_delete(struct dentry *) */
+};
+
 /*
  * hfs_buffer_get()
  *
@@ -43,10 +53,51 @@ hfs_buffer hfs_buffer_get(hfs_sysmdb sys_mdb, int block, int read) {
 	return tmp;
 }
 
-/* catalog.c needs a re-write. as a kludge, we throw away all of 
- * the dcache if we need more entries. */
-int hfs_prune_entry(struct hfs_cat_entry *entry)
+/* dentry case-handling: just lowercase everything */
+
+/* should we use hfs_strhash? if so, it probably needs to be beefed 
+ * up a little. */
+static int hfs_hash_dentry(struct dentry *dentry, struct qstr *this)
 {
-        shrink_dcache_sb(entry->mdb->sys_mdb);
-	return 1;
+        unsigned char name[HFS_NAMELEN];
+	int len = this->len;
+	
+	if (len > HFS_NAMELEN)
+	        return 0;
+  
+	strncpy(name, this->name, len);
+	hfs_tolower(name, len);
+	this->hash = full_name_hash(name, len);
+	return 0;
+}
+
+static int hfs_compare_dentry(struct dentry *dentry, struct qstr *a, 
+			      struct qstr *b)
+{
+	struct hfs_name s1, s2;
+
+	if (a->len != b->len) return 1;
+
+	if ((s1.Len = s2.Len = a->len) > HFS_NAMELEN)
+	  return 1;
+
+	strncpy(s1.Name, a->name, s1.Len);
+	strncpy(s2.Name, b->name, s2.Len);
+	return hfs_streq(&s1, &s2);
+}
+
+
+/* toss a catalog entry. this does it by dropping the dentry. */
+void hfs_cat_prune(struct hfs_cat_entry *entry)
+{
+        int i;
+
+	for (i = 0; i < 4; i++) {
+	       struct dentry *de = entry->sys_entry[i];
+	       if (de) {
+			dget(de);
+		 	d_drop(de);
+		 	dput(de);
+	       }
+	}
 }

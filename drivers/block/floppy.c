@@ -148,11 +148,32 @@ static int allowed_drive_mask = 0x33;
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-static int use_virtual_dma=0; /* virtual DMA for Intel */
+static int can_use_virtual_dma=2;
+/* =======
+ * can use virtual DMA:
+ * 0 = use of virtual DMA disallowed by config
+ * 1 = use of virtual DMA prescribed by config
+ * 2 = no virtual DMA preference configured.  By default try hard DMA,
+ * but fall back on virtual DMA when not enough memory available
+ */
+
+static int use_virtual_dma=0;
+/* =======
+ * use virtual DMA
+ * 0 using hard DMA
+ * 1 using virtual DMA
+ * This variable is set to virtual when a DMA mem problem arises, and
+ * reset back in floppy_grab_irq_and_dma.
+ * It is not safe to reset it in other circumstances, because the floppy
+ * driver may have several buffers in use at once, and we do currently not
+ * record each buffers capabilities
+ */
+
 static unsigned short virtual_dma_port=0x3f0;
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int set_dor(int fdc, char mask, char data);
 static inline int __get_order(unsigned long size);
+#define K_64	0x10000		/* 64KB */
 #include <asm/floppy.h>
 
 
@@ -188,6 +209,20 @@ static inline int __get_order(unsigned long size)
 #ifndef fd_dma_mem_alloc
 #define fd_dma_mem_alloc(size) __get_dma_pages(GFP_KERNEL,__get_order(size))
 #endif
+
+static inline void fallback_on_nodma_alloc(char **addr, size_t l)
+{
+#ifdef FLOPPY_CAN_FALLBACK_ON_NODMA
+	if(*addr)
+		return; /* we have the memory */
+	if(can_use_virtual_dma != 2)
+		return; /* no fallback allowed */
+	printk("DMA memory shortage. Temporarily falling back on virtual DMA\n");
+	*addr = (char *) nodma_mem_alloc(l);
+#else
+	return;
+#endif
+}
 
 /* End dma memory related stuff */
 
@@ -258,7 +293,6 @@ static inline int DRIVE(kdev_t x) {
  */
 #define MAX_DISK_SIZE 4 /* 3984*/
 
-#define K_64	0x10000		/* 64KB */
 
 /*
  * globals used by 'result()'
@@ -1015,17 +1049,20 @@ static void setup_DMA(void)
 		FDCS->reset=1;
 		return;
 	}
-	if (CROSS_64KB(raw_cmd->kernel_data, raw_cmd->length)) {
-		printk("DMA crossing 64-K boundary %p-%p\n",
-		       raw_cmd->kernel_data,
-		       raw_cmd->kernel_data + raw_cmd->length);
+#endif
+	INT_OFF;
+	fd_disable_dma();
+#ifdef fd_dma_setup
+	if(fd_dma_setup(raw_cmd->kernel_data, raw_cmd->length, 
+			(raw_cmd->flags & FD_RAW_READ)?
+			DMA_MODE_READ : DMA_MODE_WRITE,
+			FDCS->address) < 0) {
+		INT_ON;
 		cont->done(0);
 		FDCS->reset=1;
 		return;
 	}
-#endif
-	INT_OFF;
-	fd_disable_dma();
+#else	
 	fd_clear_dma_ff();
 	fd_cacheflush(raw_cmd->kernel_data, raw_cmd->length);
 	fd_set_dma_mode((raw_cmd->flags & FD_RAW_READ)?
@@ -1034,6 +1071,7 @@ static void setup_DMA(void)
 	fd_set_dma_count(raw_cmd->length);
 	virtual_dma_port = FDCS->address;
 	fd_enable_dma();
+#endif
 	INT_ON;
 	floppy_disable_hlt();
 }
@@ -1844,19 +1882,29 @@ static void floppy_ready(void)
 		DPRINT("calling disk change from floppy_ready\n");
 	}
 #endif
-
 	if (!(raw_cmd->flags & FD_RAW_NO_MOTOR) &&
 	   disk_change(current_drive) &&
 	   !DP->select_delay)
 		twaddle(); /* this clears the dcl on certain drive/controller
 			    * combinations */
 
+#ifdef fd_chose_dma_mode
+	if ((raw_cmd->flags & FD_RAW_READ) || 
+	    (raw_cmd->flags & FD_RAW_WRITE))
+		fd_chose_dma_mode(raw_cmd->kernel_data,
+				  raw_cmd->length);
+#endif
+
 	if (raw_cmd->flags & (FD_RAW_NEED_SEEK | FD_RAW_NEED_DISK)){
 		perpendicular_mode();
 		fdc_specify(); /* must be done here because of hut, hlt ... */
 		seek_floppy();
-	} else
+	} else {
+		if ((raw_cmd->flags & FD_RAW_READ) || 
+		    (raw_cmd->flags & FD_RAW_WRITE))
+			fdc_specify();
 		setup_rw_floppy();
+	}
 }
 
 static void floppy_start(void)
@@ -2403,6 +2451,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 #endif
 }
 
+#if 0
 static inline int check_dma_crossing(char *start, 
 				     unsigned long length, char *message)
 {
@@ -2413,6 +2462,7 @@ static inline int check_dma_crossing(char *start,
 	} else
 		return 0;
 }
+#endif
 
 /*
  * Formulate a read/write request.
@@ -2571,9 +2621,9 @@ static int make_raw_rw_request(void)
 					indirect, direct, sector_t);
 				return 0;
 			}
-			check_dma_crossing(raw_cmd->kernel_data, 
+/*			check_dma_crossing(raw_cmd->kernel_data, 
 					   raw_cmd->length, 
-					   "end of make_raw_request [1]");
+					   "end of make_raw_request [1]");*/
 			return 2;
 		}
 	}
@@ -2619,8 +2669,8 @@ static int make_raw_rw_request(void)
 	raw_cmd->length = ((raw_cmd->length -1)|(ssize-1))+1;
 	raw_cmd->length <<= 9;
 #ifdef FLOPPY_SANITY_CHECK
-	check_dma_crossing(raw_cmd->kernel_data, raw_cmd->length, 
-			   "end of make_raw_request");
+	/*check_dma_crossing(raw_cmd->kernel_data, raw_cmd->length, 
+	  "end of make_raw_request");*/
 	if ((raw_cmd->length < current_count_sectors << 9) ||
 	    (raw_cmd->kernel_data != CURRENT->buffer &&
 	     CT(COMMAND) == FD_WRITE &&
@@ -3008,6 +3058,8 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 			if (ptr->length <= 0)
 				return -EINVAL;
 			ptr->kernel_data =(char*)fd_dma_mem_alloc(ptr->length);
+			fallback_on_nodma_alloc(&ptr->kernel_data,
+						ptr->length);
 			if (!ptr->kernel_data)
 				return -ENOMEM;
 			ptr->buffer_length = ptr->length;
@@ -3578,18 +3630,22 @@ static int floppy_open(struct inode * inode, struct file * filp)
 			try = 32; /* Only 24 actually useful */
 
 		tmp=(char *)fd_dma_mem_alloc(1024 * try);
-		if (!tmp) {
+		if (!tmp && !floppy_track_buffer) {
 			try >>= 1; /* buffer only one side */
 			INFBOUND(try, 16);
 			tmp= (char *)fd_dma_mem_alloc(1024*try);
 		}
-		if (!tmp) {
+		if(!tmp &&  !floppy_track_buffer) {
+			fallback_on_nodma_alloc(&tmp, 2048 * try);
+		}
+		if (!tmp && !floppy_track_buffer) {
 			DPRINT("Unable to allocate DMA memory\n");
 			RETERR(ENXIO);
 		}
-		if (floppy_track_buffer)
-			fd_dma_mem_free((unsigned long)tmp,try*1024);
-		else {
+		if (floppy_track_buffer) {
+			if(tmp)
+				fd_dma_mem_free((unsigned long)tmp,try*1024);
+		} else {
 			buffer_min = buffer_max = -1;
 			floppy_track_buffer = tmp;
 			max_buffer_sectors = try;
@@ -3886,9 +3942,9 @@ static struct param_table {
 	{ "silent_dcl_clear", floppy_set_flags, 0, 1, FD_SILENT_DCL_CLEAR },
 	{ "debug", floppy_set_flags, 0, 1, FD_DEBUG },
 
-	{ "nodma", 0, &use_virtual_dma, 1, 0 },
-	{ "omnibook", 0, &use_virtual_dma, 1, 0 },
-	{ "dma", 0, &use_virtual_dma, 0, 0 },
+	{ "nodma", 0, &can_use_virtual_dma, 1, 0 },
+	{ "omnibook", 0, &can_use_virtual_dma, 1, 0 },
+	{ "yesdma", 0, &can_use_virtual_dma, 0, 0 },
 
 	{ "fifo_depth", 0, &fifo_depth, 0xa, 0 },
 	{ "nofifo", 0, &no_fifo, 0x20, 0 },
@@ -3937,6 +3993,7 @@ __initfunc(void floppy_setup(char *str, int *ints))
 
 static int have_no_fdc= -EIO;
 
+
 __initfunc(int floppy_init(void))
 {
 	int i,unit,drive;
@@ -3972,6 +4029,7 @@ __initfunc(int floppy_init(void))
 #endif
 	}
 
+	use_virtual_dma = can_use_virtual_dma & 1;
 	fdc_state[0].address = FDC1;
 	if (fdc_state[0].address == -1) {
 		unregister_blkdev(MAJOR_NR,"fd");
@@ -4017,6 +4075,8 @@ __initfunc(int floppy_init(void))
 			FDCS->address = -1;
 			continue;
 		}
+		if(can_use_virtual_dma == 2 && FDCS->version < FDC_82072A)
+			can_use_virtual_dma = 0;
 
 		have_no_fdc = 0;
 		/* Not all FDCs seem to be able to handle the version command
@@ -4032,7 +4092,7 @@ __initfunc(int floppy_init(void))
 	initialising=0;
 	if (have_no_fdc) {
 		DPRINT("no floppy controllers found\n");
-		unregister_blkdev(MAJOR_NR,"fd");
+		unregister_blkdev(MAJOR_NR,"fd");		
 	}
 	return have_no_fdc;
 }
@@ -4063,6 +4123,7 @@ static int floppy_grab_irq_and_dma(void)
 		usage_count--;
 		return -1;
 	}
+
 	for (fdc=0; fdc< N_FDC; fdc++){
 		if (FDCS->address != -1){
 			if (check_region(FDCS->address, 6) < 0 ||

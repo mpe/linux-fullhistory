@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.138 1997/04/15 09:00:50 davem Exp $
+/* $Id: entry.S,v 1.142 1998/01/07 06:33:47 baccala Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -92,8 +92,8 @@ C_LABEL(trap_low):
 	/* Load new kgdb register set. */
 	LOAD_KGDB_GLOBALS(sp)
 	LOAD_KGDB_INS(sp)
-	LOAD_KGDB_SREGS(sp, l0, l2)
-	wr	%l0, 0x0, %y
+	LOAD_KGDB_SREGS(sp, l4, l0, l3, l5, l1, l2)
+	wr      %l4, 0x0, %y
 
 	sethi	%hi(in_trap_handler), %l4
 	ld	[%lo(in_trap_handler) + %l4], %l5
@@ -108,7 +108,7 @@ C_LABEL(trap_low):
 	STORE_PT_INS(sp)
 	STORE_PT_GLOBALS(sp)
 	STORE_PT_YREG(sp, g2)
-	STORE_PT_PRIV(sp, l1, l2, l3)
+	STORE_PT_PRIV(sp, l0, l1, l2)
 
 	RESTORE_ALL
 
@@ -283,7 +283,7 @@ bad_trap_handler:
  */
 
 	.align	4
-	.globl	real_irq_entry
+	.globl	real_irq_entry, patch_handler_irq
 real_irq_entry:
 	SAVE_ALL
 
@@ -299,6 +299,7 @@ real_irq_continue:
 	wr	%g2, PSR_ET, %psr
 	WRITE_PAUSE
 	mov	%l7, %o0		! irq level
+patch_handler_irq:
 	call	C_LABEL(handler_irq)
 	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
 	wr	%l0, PSR_ET, %psr
@@ -1109,7 +1110,7 @@ C_LABEL(sys_ptrace):
 	call	C_LABEL(do_ptrace)
 	 add	%sp, REGWIN_SZ, %o0
 
-	ld	[%curptr + 0x14], %l5
+	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
 	be	1f
 	 nop
@@ -1143,7 +1144,7 @@ C_LABEL(sys_sigpause):
 	call	C_LABEL(do_sigpause)
 	 add	%sp, REGWIN_SZ, %o1
 
-	ld	[%curptr + 0x14], %l5
+	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
 	be	1f
 	 nop
@@ -1161,7 +1162,26 @@ C_LABEL(sys_sigsuspend):
 	call	C_LABEL(do_sigsuspend)
 	 add	%sp, REGWIN_SZ, %o0
 
-	ld	[%curptr + 0x14], %l5
+	ld	[%curptr + AOFF_task_flags], %l5
+	andcc	%l5, 0x20, %g0
+	be	1f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+1:
+	/* We are returning to a signal handler. */
+	RESTORE_ALL
+
+	.align	4
+	.globl	C_LABEL(sys_rt_sigsuspend)
+C_LABEL(sys_rt_sigsuspend):
+	/* Note: %o0, %o1 already have correct value... */
+	call	C_LABEL(do_rt_sigsuspend)
+	 add	%sp, REGWIN_SZ, %o2
+
+	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
 	be	1f
 	 nop
@@ -1179,7 +1199,7 @@ C_LABEL(sys_sigreturn):
 	call	C_LABEL(do_sigreturn)
 	 add	%sp, REGWIN_SZ, %o0
 
-	ld	[%curptr + 0x14], %l5
+	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
 	be	1f
 	 nop
@@ -1191,6 +1211,24 @@ C_LABEL(sys_sigreturn):
 	/* We don't want to muck with user registers like a
 	 * normal syscall, just return.
 	 */
+	RESTORE_ALL
+
+	.align	4
+	.globl	C_LABEL(sys_rt_sigreturn)
+C_LABEL(sys_rt_sigreturn):
+	call	C_LABEL(do_rt_sigreturn)
+	 add	%sp, REGWIN_SZ, %o0
+
+	ld	[%curptr + AOFF_task_flags], %l5
+	andcc	%l5, 0x20, %g0
+	be	1f
+	 nop
+
+	call	C_LABEL(syscall_trace)
+	 nop
+
+1:
+	/* We are returning to a signal handler. */
 	RESTORE_ALL
 
 	/* Now that we have a real sys_clone, sys_fork() is
@@ -1301,7 +1339,7 @@ syscall_is_too_hard:
 	mov	%i1, %o1
 	mov	%i2, %o2
 
-	ld	[%curptr + 0x14], %l5
+	ld	[%curptr + AOFF_task_flags], %l5
 	mov	%i3, %o3
 	andcc	%l5, 0x20, %g0
 	mov	%i4, %o4
@@ -1315,7 +1353,7 @@ syscall_is_too_hard:
 
 	.globl	C_LABEL(ret_sys_call)
 C_LABEL(ret_sys_call):
-	ld	[%curptr + 0x14], %l6
+	ld	[%curptr + AOFF_task_flags], %l6
 	cmp	%o0, -ENOIOCTLCMD
 	ld	[%sp + REGWIN_SZ + PT_PSR], %g3
 	set	PSR_C, %g2

@@ -1,4 +1,4 @@
-/* $Id: creator.c,v 1.12 1997/08/25 07:50:27 jj Exp $
+/* $Id: creator.c,v 1.13 1997/10/17 04:14:40 davem Exp $
  * creator.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -194,7 +194,7 @@ ffb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	unsigned long map_offset = 0;
 	int i;
 	int alignment;
-	struct vm_area_struct *vmm;
+	struct vm_area_struct *vmm = NULL;
 
 	size = vma->vm_end - vma->vm_start;
         if (vma->vm_offset & ~PAGE_MASK)

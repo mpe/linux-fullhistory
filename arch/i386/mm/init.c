@@ -72,7 +72,7 @@ pte_t __bad_page(void)
 void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
-	int shared = 0;
+	int shared = 0, cached = 0;
 
 	printk("Mem-info:\n");
 	show_free_areas();
@@ -82,6 +82,8 @@ void show_mem(void)
 		total++;
 		if (PageReserved(mem_map+i))
 			reserved++;
+		if (PageSwapCache(mem_map+i))
+			cached++;
 		else if (!atomic_read(&mem_map[i].count))
 			free++;
 		else
@@ -91,6 +93,7 @@ void show_mem(void)
 	printk("%d free pages\n",free);
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
+	printk("%d pages swap cached\n",cached);
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();

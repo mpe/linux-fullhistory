@@ -18,16 +18,16 @@
  */
 
 struct cpuinfo_x86 {
-	u8	x86;		/* CPU family */
-	u8	x86_vendor;	/* CPU vendor */
-	u8	x86_model;
-	u8	x86_mask;
+	__u8	x86;		/* CPU family */
+	__u8	x86_vendor;	/* CPU vendor */
+	__u8	x86_model;
+	__u8	x86_mask;
 	char	wp_works_ok;	/* It doesn't on 386's */
 	char	hlt_works_ok;	/* Problems on some 486Dx4's and old 386's */
 	char	hard_math;
 	char	rfu;
 	int	cpuid_level;	/* Maximum supported CPUID level, -1=no CPUID */
-	u32	x86_capability;
+	__u32	x86_capability;
 	char	x86_vendor_id[16];
 	char	x86_model_id[64];
 	int	fdiv_bug;

@@ -98,4 +98,36 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 	_dest[32] = _dump.regs[EF_PS];				\
 }
 
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  This is trivial on Alpha, 
+   but not so on other machines. */
+
+#define ELF_HWCAP							\
+({									\
+	/* Sadly, most folks don't yet have assemblers that know about	\
+	   amask.  This is "amask v0, v0" */				\
+	register long _v0 __asm("$0") = -1;				\
+	__asm(".long 0x47e00c20" : "=r"(_v0) : "0"(_v0));		\
+	~_v0;								\
+})
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.  
+
+   This might do with checking bwx simultaneously...  */
+
+#define ELF_PLATFORM				\
+({						\
+	/* Or "implver v0" ... */		\
+	register long _v0 __asm("$0");		\
+	__asm(".long 0x47e03d80" : "=r"(_v0));	\
+	_v0 == 0 ? "ev4" : "ev5";		\
+})
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ibcs2) \
+	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#endif
+
 #endif

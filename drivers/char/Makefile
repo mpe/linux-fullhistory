@@ -317,6 +317,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIDEO_CQCAM),y)
+L_OBJS += c-qcam.o
+else
+  ifeq ($(CONFIG_VIDEO_CQCAM),m)
+    M_OBJS += c-qcam.o
+  endif
+endif
+
 ifeq ($(CONFIG_VIDEO_PMS),y)
 L_OBJS += pms.o
 else

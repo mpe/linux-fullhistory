@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.81 1997/07/20 05:59:31 davem Exp $
+/* $Id: sys_sunos.c,v 1.83 1997/12/14 23:24:28 ecd Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -348,35 +348,28 @@ asmlinkage long sunos_getdtablesize(void)
 {
 	return SUNOS_NR_OPEN;
 }
-#define _S(nr) (1<<((nr)-1))
 
-#define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
+#define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
 asmlinkage unsigned long sunos_sigblock(unsigned long blk_mask)
 {
-	unsigned long flags;
 	unsigned long old;
 
-	lock_kernel();
-	save_and_cli(flags);
-	old = current->blocked;
-	current->blocked |= (blk_mask & _BLOCKABLE);
-	restore_flags(flags);
-	unlock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
+	old = current->blocked.sig[0];
+	current->blocked.sig[0] |= (blk_mask & _BLOCKABLE);
+	spin_unlock_irq(&current->sigmask_lock);
 	return old;
 }
 
 asmlinkage unsigned long sunos_sigsetmask(unsigned long newmask)
 {
-	unsigned long flags;
 	unsigned long retval;
 
-	lock_kernel();
-	save_and_cli(flags);
-	retval = current->blocked;
-	current->blocked = newmask & _BLOCKABLE;
-	restore_flags(flags);
-	unlock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
+	retval = current->blocked.sig[0];
+	current->blocked.sig[0] = (newmask & _BLOCKABLE);
+	spin_unlock_irq(&current->sigmask_lock);
 	return retval;
 }
 
@@ -430,8 +423,6 @@ static int sunos_filldir(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 {
 	struct file * file;
-	struct dentry * dentry;
-	struct inode * inode;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
 	int error = -EBADF;
@@ -442,14 +433,6 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 
 	file = current->files->fd[fd];
 	if(!file)
-		goto out;
-
-	dentry = file->f_dentry;
-	if(!dentry)
-		goto out;
-
-	inode = dentry->d_inode;
-	if(!inode)
 		goto out;
 
 	error = -ENOTDIR;
@@ -464,7 +447,7 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(inode, file, &buf, sunos_filldir);
+	error = file->f_op->readdir(file, &buf, sunos_filldir);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -520,8 +503,6 @@ static int sunos_filldirentry(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsigned int *basep)
 {
 	struct file * file;
-	struct dentry * dentry;
-	struct inode * inode;
 	struct sunos_direntry * lastdirent;
 	struct sunos_direntry_callback buf;
 	int error = -EBADF;
@@ -532,14 +513,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 
 	file = current->files->fd[fd];
 	if(!file)
-		goto out;
-
-	dentry = file->f_dentry;
-	if(!dentry)
-		goto out;
-
-	inode = dentry->d_inode;
-	if(!inode)
 		goto out;
 
 	error = -ENOTDIR;
@@ -554,7 +527,7 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(inode, file, &buf, sunos_filldirentry);
+	error = file->f_op->readdir(file, &buf, sunos_filldirentry);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -1254,58 +1227,47 @@ asmlinkage int sunos_accept(int fd, struct sockaddr *sa, int *addrlen)
 
 #define SUNOS_SV_INTERRUPT 2
 
-extern void check_pending(int signum);
-
-asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
-	struct sigaction *oldaction)
+asmlinkage int
+sunos_sigaction(int sig, const struct old_sigaction *act,
+		struct old_sigaction *oact)
 {
-	struct sigaction new_sa, *p;
-	const int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
+	struct k_sigaction new_ka, old_ka;
+	int ret;
 
 	current->personality |= PER_BSD;
-	if(signum < 1 || signum > 32)
-		return -EINVAL;
 
-	p = signum - 1 + current->sig->action;
+	if(act) {
+		old_sigset_t mask;
 
-	if(action) {
-		if(copy_from_user(&new_sa, action, sigaction_size))
+		if (verify_area(VERIFY_READ, act, sizeof(*act)) ||
+		    __get_user(new_ka.sa.sa_handler, &act->sa_handler) ||
+		    __get_user(new_ka.sa.sa_flags, &act->sa_flags))
 			return -EFAULT;
-		if (signum==SIGKILL || signum==SIGSTOP)
-			return -EINVAL;
-		memset(&new_sa, 0, sizeof(struct sigaction));
-		if(copy_from_user(&new_sa, action, sigaction_size))
-			return -EFAULT;
-		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			if(verify_area(VERIFY_READ, new_sa.sa_handler, 1))
-				return -EFAULT;
-		}
-		new_sa.sa_flags ^= SUNOS_SV_INTERRUPT;
+		__get_user(mask, &act->sa_mask);
+		new_ka.sa.sa_restorer = NULL;
+		new_ka.ka_restorer = NULL;
+		siginitset(&new_ka.sa.sa_mask, mask);
+		new_ka.sa.sa_flags ^= SUNOS_SV_INTERRUPT;
 	}
 
-	if (oldaction) {
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
 		/* In the clone() case we could copy half consistant
 		 * state to the user, however this could sleep and
 		 * deadlock us if we held the signal lock on SMP.  So for
 		 * now I take the easy way out and do no locking.
 		 * But then again we don't support SunOS lwp's anyways ;-)
 		 */
-		if (copy_to_user(oldaction, p, sigaction_size))
+		old_ka.sa.sa_flags ^= SUNOS_SV_INTERRUPT;
+		if (verify_area(VERIFY_WRITE, oact, sizeof(*oact)) ||
+		    __put_user(old_ka.sa.sa_handler, &oact->sa_handler) ||
+		    __put_user(old_ka.sa.sa_flags, &oact->sa_flags))
 			 return -EFAULT;
-
-		if (oldaction->sa_flags & SA_RESTART)
-			oldaction->sa_flags &= ~SA_RESTART;
-		else
-			oldaction->sa_flags |= SUNOS_SV_INTERRUPT;
+		__put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask);
 	}
 
-	if (action) {
-		spin_lock_irq(&current->sig->siglock);
-		*p = new_sa;
-		check_pending(signum);
-		spin_unlock_irq(&current->sig->siglock);
-	}
-	return 0;
+	return ret;
 }
 
 

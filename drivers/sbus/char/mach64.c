@@ -1,4 +1,4 @@
-/* $Id: mach64.c,v 1.8 1997/08/25 07:50:34 jj Exp $
+/* $Id: mach64.c,v 1.11 1997/10/17 04:13:35 davem Exp $
  * mach64.c: Ultra/PCI Mach64 console driver.
  *
  * Just about all of this is from the PPC/mac driver, see that for
@@ -22,13 +22,18 @@
 #include <asm/pbm.h>
 #include <asm/fbio.h>
 #include <asm/sbus.h>
+#include <asm/pgtable.h>
 
 #include "pcicons.h"
 #include "mach64.h"
 #include "fb.h"
 
+static unsigned int mach64_pci_membase;
+static unsigned int mach64_pci_iobase;
+
+#define MACH64_LE_FBOFF	0x000000
 #define MACH64_REGOFF	0x7ffc00
-#define MACH64_FBOFF	0x800000
+#define MACH64_BE_FBOFF	0x800000
 
 static inline void mach64_waitq(int entries)
 {
@@ -69,7 +74,35 @@ static int
 mach64_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	    long base, fbinfo_t *fb)
 {
-	return -ENOSYS;
+	unsigned long addr, size;
+
+	size = vma->vm_end - vma->vm_start;
+	if (vma->vm_offset & ~PAGE_MASK)
+		return -ENXIO;
+
+	if (vma->vm_offset == mach64_pci_iobase) {
+		addr = __pa(pcivga_iobase);
+		size = PAGE_SIZE;
+	} else if (vma->vm_offset >= (mach64_pci_membase + 0x800000)) {
+		addr = __pa(pcivga_membase) - mach64_pci_membase
+			+ vma->vm_offset;
+		pgprot_val(vma->vm_page_prot) |= _PAGE_IE;
+	} else if (vma->vm_offset >= mach64_pci_membase) {
+		addr = __pa(pcivga_membase) - mach64_pci_membase
+			+ vma->vm_offset;
+	} else {
+		return -EINVAL;
+	}
+
+	pgprot_val(vma->vm_page_prot) &= ~(_PAGE_CACHE);
+	pgprot_val(vma->vm_page_prot) |= _PAGE_E;
+	vma->vm_flags |= (VM_SHM | VM_LOCKED);
+
+	if (remap_page_range(vma->vm_start, addr, size, vma->vm_page_prot))
+		return -EAGAIN;
+
+	vma->vm_dentry = dget(file->f_dentry);
+	return 0;
 }
 
 static void
@@ -113,11 +146,29 @@ mach64_unblank(fbinfo_t *fb)
 
 static struct mach64_info mach64;
 
+void mach64_test(fbinfo_t *fb)
+{
+	unsigned int x;
+	int i;
+
+	for (i = 0; i < mach64.total_vram; i += 4)
+		writel(i, pcivga_membase + i);
+
+	for (i = 0; i < mach64.total_vram; i += 4)
+		if ((x = readl(pcivga_membase + i)) != i) {
+			printk("vga mem read error @ %08x: exp %x, rd %x\n",
+			       i, i, x);
+			i = (i & ~(0xffff)) + 0x10000;
+		}
+}
+
 int mach64_init(fbinfo_t *fb)
 {
 	struct pci_dev *pdev;
 	struct pcidev_cookie *cookie;
+	struct linux_pbm_info *pbm;
 	unsigned long addr;
+	unsigned int tmp;
 
 	memset(&mach64, 0, sizeof(mach64));
 	for(pdev = pci_devices; pdev; pdev = pdev->next) {
@@ -148,48 +199,85 @@ int mach64_init(fbinfo_t *fb)
 		prom_halt();
 	}
 
+	pcibios_read_config_dword(pdev->bus->number, pdev->devfn,
+				  PCI_BASE_ADDRESS_0, &mach64_pci_membase);
+	mach64_pci_membase &= PCI_BASE_ADDRESS_MEM_MASK;
+
+	pcibios_read_config_dword(pdev->bus->number, pdev->devfn,
+				  PCI_BASE_ADDRESS_1, &mach64_pci_iobase);
+	mach64_pci_iobase &= PCI_BASE_ADDRESS_IO_MASK;
+
 	printk("mach64_init: IOBASE[%016lx] MEMBASE[%016lx]\n",
 		pcivga_iobase, pcivga_membase);
 
-	cookie = (struct pcidev_cookie *)pdev->sysdata;
+	cookie = pdev->sysdata;
+	pbm = cookie->pbm;
+
 	fb->prom_node = cookie->prom_node;
-	fb->proc_entry.node = cookie->pbm->prom_node;
+	fb->proc_entry.node = pbm->prom_node;
 
 	fb->type.fb_type = FBTYPE_PCI_MACH64;
 	fb->type.fb_cmsize = 256;
 	fb->info.private = (void *)&mach64;
-	fb->base = pcivga_membase + MACH64_FBOFF;
-
-	switch(pcivga_readl(MACH64_REGOFF + MEM_CNTL) & MEM_SIZE_ALIAS) {
-	case MEM_SIZE_512K:
-		mach64.total_vram = 0x80000;
-		break;
-	case MEM_SIZE_1M:
-		mach64.total_vram = 0x100000;
-		break;
-	case MEM_SIZE_2M:
-		mach64.total_vram = 0x200000;
-		break;
-	case MEM_SIZE_4M:
-		mach64.total_vram = 0x400000;
-		break;
-	case MEM_SIZE_6M:
-		mach64.total_vram = 0x600000;
-		break;
-	case MEM_SIZE_8M:
-		mach64.total_vram = 0x800000;
-		break;
-	default:
-		mach64.total_vram = 0x80000;
-		break;
-	}
+	fb->base = pcivga_membase + MACH64_BE_FBOFF;
 
 	if ((pcivga_readl(MACH64_REGOFF + CONFIG_CHIP_ID)
 					& CFG_CHIP_TYPE) == MACH64_VT_ID)
 		mach64.flags |= MACH64_MASK_VT;
 
+	/*
+	 * Fix the PROM's idea of MEM_CNTL settings...
+	 */
+	tmp = pcivga_readl(MACH64_REGOFF + MEM_CNTL);
+	switch (tmp & 0xf) {
+		case 3:
+			tmp = (tmp & ~(0xf)) | 2;
+			break;
+		case 7:
+			tmp = (tmp & ~(0xf)) | 3;
+			break;
+		case 9:
+			tmp = (tmp & ~(0xf)) | 4;
+			break;
+		case 11:
+			tmp = (tmp & ~(0xf)) | 5;
+			break;
+		default:
+			break;
+	}
+	tmp &= ~(0x00f00000);
+	pcivga_writel(tmp, MACH64_REGOFF + MEM_CNTL);
+
+	switch(tmp & MEM_SIZE_ALIAS) {
+		case MEM_SIZE_512K:
+			mach64.total_vram = 0x80000;
+			break;
+		case MEM_SIZE_1M:
+			mach64.total_vram = 0x100000;
+			break;
+		case MEM_SIZE_2M:
+			mach64.total_vram = 0x200000;
+			break;
+		case MEM_SIZE_4M:
+			mach64.total_vram = 0x400000;
+			break;
+		case MEM_SIZE_6M:
+			mach64.total_vram = 0x600000;
+			break;
+		case MEM_SIZE_8M:
+			mach64.total_vram = 0x800000;
+			break;
+		default:
+			mach64.total_vram = 0x80000;
+			break;
+	}
+
 	printk("mach64_init: total_vram[%08x] is_vt_chip[%d]\n",
 		mach64.total_vram, mach64.flags & MACH64_MASK_VT ? 1 : 0);
+
+#if 0
+	mach64_test(fb);
+#endif
 
 	fb->mmap = mach64_mmap;
 	fb->loadcmap = mach64_loadcmap;

@@ -19,6 +19,7 @@
 
 #include <net/dst.h>
 #include <net/flow.h>
+#include <linux/rtnetlink.h>
 
 struct rt6_info;
 
@@ -66,8 +67,8 @@ struct rt6_info {
 	
 	int				rt6i_keylen;
 
-	unsigned long			rt6i_flags;
-	unsigned long			rt6i_metric;
+	u32				rt6i_flags;
+	u32				rt6i_metric;
 	unsigned long			rt6i_expires;
 
 	union {
@@ -137,17 +138,7 @@ extern int			fib6_add(struct fib6_node *root,
 
 extern int			fib6_del(struct rt6_info *rt);
 
-/*
- *	auxiliary functions
- */
-extern __inline__ void rt6_release(struct rt6_info *rt)
-{
-	struct dst_entry *dst = (struct dst_entry *) rt;
-	if (atomic_dec_and_test(&dst->refcnt))
-		dst_destroy(dst);
-}
-
-extern void			rt6_ins(struct rt6_info *rt);
+extern void			inet6_rt_notify(int event, struct rt6_info *rt);
 
 #endif
 #endif

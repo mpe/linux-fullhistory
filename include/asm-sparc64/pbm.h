@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.7 1997/08/25 06:01:14 davem Exp $
+/* $Id: pbm.h,v 1.8 1998/01/10 18:26:10 ecd Exp $
  * pbm.h: U2P PCI bus module pseudo driver software state.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -53,6 +53,7 @@ struct linux_psycho {
 	unsigned long			*pci_IO_space;
 	unsigned long			*pci_mem_space;
 	u32				upa_portid;
+	int				index;
 	struct linux_pbm_info		pbm_A;
 	struct linux_pbm_info		pbm_B;
 };
@@ -67,6 +68,16 @@ struct pcidev_cookie {
 };
 
 extern struct linux_psycho *psycho_root;
+extern struct linux_psycho **psycho_index_map;
+extern int linux_num_psycho;
+
+static __inline__ struct linux_psycho *
+psycho_by_index(int index)
+{
+	if (index >= linux_num_psycho)
+		return NULL;
+	return psycho_index_map[index];
+}
 
 /* Special PCI IRQ encoding, this just makes life easier for the generic
  * irq registry layer, there is already enough crap in there due to sbus,
@@ -75,8 +86,8 @@ extern struct linux_psycho *psycho_root;
 #define PCI_IRQ_IDENT		0x80000000	/* This tells irq.c what we are        */
 #define PCI_IRQ_IMAP_OFF	0x7ff00000	/* Offset from first PSYCHO imap       */
 #define PCI_IRQ_IMAP_OFF_SHFT	20
-#define PCI_IRQ_BUSNO		0x000f8000	/* PSYCHO instance, currently unused   */
-#define PCI_IRQ_BUSNO_SHFT	15
+#define PCI_IRQ_BUSNO		0x000fc000	/* PSYCHO instance, currently unused   */
+#define PCI_IRQ_BUSNO_SHFT	14
 #define PCI_IRQ_IGN		0x000007c0	/* PSYCHO "Int Group Number"           */
 #define PCI_IRQ_INO		0x0000003f	/* PSYCHO INO                          */
 

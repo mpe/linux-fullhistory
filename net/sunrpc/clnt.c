@@ -22,7 +22,6 @@
  */
 
 #include <linux/config.h>
-#include <linux/module.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -72,20 +71,19 @@ rpc_create_client(struct rpc_xprt *xprt, char *servname,
 		  struct rpc_program *program, u32 vers, int flavor)
 {
 	struct rpc_version	*version;
-	struct rpc_clnt		*clnt;
+	struct rpc_clnt		*clnt = NULL;
 
 	dprintk("RPC: creating %s client for %s (xprt %p)\n",
-			program->name, servname, xprt);
+		program->name, servname, xprt);
 
 	if (!xprt)
-		return NULL;
-	if (vers>= program->nrvers || !(version = program->version[vers]))
-		return NULL;
+		goto out;
+	if (vers >= program->nrvers || !(version = program->version[vers]))
+		goto out;
 
-	if (!(clnt = (struct rpc_clnt *) rpc_allocate(0, sizeof(*clnt)))) {
-		printk("RPC: out of memory in rpc_create_client\n");
-		return NULL;
-	}
+	clnt = (struct rpc_clnt *) rpc_allocate(0, sizeof(*clnt));
+	if (!clnt)
+		goto out_no_clnt;
 	memset(clnt, 0, sizeof(*clnt));
 
 	clnt->cl_xprt     = xprt;
@@ -103,13 +101,20 @@ rpc_create_client(struct rpc_xprt *xprt, char *servname,
 	if (!clnt->cl_port)
 		clnt->cl_autobind = 1;
 
-	if (!rpcauth_create(flavor, clnt)) {
-		printk("RPC: Couldn't create auth handle (flavor %d)\n",
-					flavor);
-		rpc_free(clnt);
-		return NULL;
-	}
+	if (!rpcauth_create(flavor, clnt))
+		goto out_no_auth;
+out:
 	return clnt;
+
+out_no_clnt:
+	printk("RPC: out of memory in rpc_create_client\n");
+	goto out;
+out_no_auth:
+	printk("RPC: Couldn't create auth handle (flavor %d)\n",
+		flavor);
+	rpc_free(clnt);
+	clnt = NULL;
+	goto out;
 }
 
 /*
@@ -779,24 +784,3 @@ garbage:
 	rpc_exit(task, -EIO);
 	return NULL;
 }
-
-#ifdef MODULE
-int
-init_module(void)
-{
-#ifdef RPC_DEBUG
-	rpc_register_sysctl();
-#endif
-	rpc_proc_init();
-	return 0;
-}
-
-void
-cleanup_module(void)
-{
-#ifdef RPC_DEBUG
-	rpc_unregister_sysctl();
-#endif
-	rpc_proc_exit();
-}
-#endif

@@ -36,6 +36,11 @@
 #define RT_CACHE_TIMEOUT		(HZ*300)
 
 /*
+ * Periodic timer frequency
+ */
+#define RT_GC_INTERVAL			(HZ*60)
+
+/*
  * Cache invalidations can be delayed by:
  */
 #define RT_FLUSH_DELAY (5*HZ)
@@ -104,7 +109,6 @@ struct rtable
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,
 				       u32 src, u8 tos, struct device *dev);
-extern void		ip_rt_check_expire(void);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 extern void		rt_cache_flush(int how);
 extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u8 tos, int oif);
@@ -144,26 +148,6 @@ extern __inline__ int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32
 	return ip_route_output(rp, dst, src, tos, oif);
 }
 
-extern __inline__ void ip_ll_header(struct sk_buff *skb)
-{
-	struct rtable *rt = (struct rtable*)skb->dst;
-	struct device *dev = rt->u.dst.dev;
-	struct hh_cache *hh = rt->u.dst.hh;
-	int hh_len = dev->hard_header_len;
-
-	skb->dev = dev;
-	skb->arp = 1;
-	skb->protocol = htons(ETH_P_IP);
-
-	if (hh) {
-		memcpy(skb_push(skb, hh_len), hh->hh_data, hh_len);
-		skb->arp = hh->hh_uptodate;
-	} else if (dev->hard_header &&
-		   dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, 0)<0)
-		skb->arp = 0;
-		
-	skb->mac.raw = skb->data;
-}
 #endif
 
 

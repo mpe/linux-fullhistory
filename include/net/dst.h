@@ -33,9 +33,8 @@ struct dst_entry
 	atomic_t		refcnt;		/* tree/hash references	*/
 	atomic_t		use;		/* client references	*/
 	struct device	        *dev;
-	char			obsolete;
-	char			priority;
-	char			__pad1, __pad2;
+	int			obsolete;
+	__u32			priority;
 	unsigned long		lastuse;
 	unsigned		window;
 	unsigned		pmtu;
@@ -60,10 +59,12 @@ struct dst_entry
 struct dst_ops
 {
 	unsigned short		family;
+	unsigned short		protocol;
 	struct dst_entry *	(*check)(struct dst_entry *, __u32 cookie);
 	struct dst_entry *	(*reroute)(struct dst_entry *,
 					   struct sk_buff *);
 	void			(*destroy)(struct dst_entry *);
+	struct dst_entry *	(*negative_advice)(struct dst_entry *);
 };
 
 #ifdef __KERNEL__
@@ -71,7 +72,7 @@ struct dst_ops
 extern struct dst_entry * dst_garbage_list;
 extern atomic_t	dst_total;
 
-static __inline__
+extern __inline__
 struct dst_entry * dst_clone(struct dst_entry * dst)
 {
 	if (dst)
@@ -79,14 +80,14 @@ struct dst_entry * dst_clone(struct dst_entry * dst)
 	return dst;
 }
 
-static __inline__
+extern __inline__
 void dst_release(struct dst_entry * dst)
 {
 	if (dst)
 		atomic_dec(&dst->use);
 }
 
-static __inline__
+extern __inline__
 struct dst_entry * dst_check(struct dst_entry ** dst_p, u32 cookie)
 {
 	struct dst_entry * dst = *dst_p;
@@ -95,7 +96,7 @@ struct dst_entry * dst_check(struct dst_entry ** dst_p, u32 cookie)
 	return (*dst_p = dst);
 }
 
-static __inline__
+extern __inline__
 struct dst_entry * dst_reroute(struct dst_entry ** dst_p, struct sk_buff *skb)
 {
 	struct dst_entry * dst = *dst_p;
@@ -104,21 +105,12 @@ struct dst_entry * dst_reroute(struct dst_entry ** dst_p, struct sk_buff *skb)
 	return (*dst_p = dst);
 }
 
-static __inline__
-void dst_destroy(struct dst_entry * dst)
-{
-	if (dst->neighbour)
-		neigh_release(dst->neighbour);
-	if (dst->ops->destroy)
-		dst->ops->destroy(dst);
-	kfree(dst);
-	atomic_dec(&dst_total);
-}
 
 extern void * dst_alloc(int size, struct dst_ops * ops);
 extern void __dst_free(struct dst_entry * dst);
+extern void dst_destroy(struct dst_entry * dst);
 
-static __inline__
+extern __inline__
 void dst_free(struct dst_entry * dst)
 {
 	if (!atomic_read(&dst->use)) {
@@ -126,6 +118,19 @@ void dst_free(struct dst_entry * dst)
 		return;
 	}
 	__dst_free(dst);
+}
+
+extern __inline__ void dst_confirm(struct dst_entry *dst)
+{
+	if (dst)
+		neigh_confirm(dst->neighbour);
+}
+
+extern __inline__ void dst_negative_advice(struct dst_entry **dst_p)
+{
+	struct dst_entry * dst = *dst_p;
+	if (dst && dst->ops->negative_advice)
+		*dst_p = dst->ops->negative_advice(dst);
 }
 #endif
 

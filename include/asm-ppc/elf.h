@@ -42,4 +42,41 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 	       sizeof(struct pt_regs) < sizeof(elf_gregset_t)? \
 	       sizeof(struct pt_regs): sizeof(elf_gregset_t));
 
+
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  This could be done in userspace,
+   but it's not easy, and we've already done it here.  */
+
+#define ELF_HWCAP	(0)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.
+
+   For the moment, we have only optimizations for the Intel generations,
+   but that could change... */
+
+#define ELF_PLATFORM	(NULL)
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ibcs2) current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#endif
+
+
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  */
+
+#define ELF_HWCAP	(0)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.  */
+
+#define ELF_PLATFORM	(NULL)
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ibcs2) \
+	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#endif
+
 #endif

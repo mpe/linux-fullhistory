@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.83 1997/08/28 11:10:39 jj Exp $
+/* $Id: head.S,v 1.84 1997/11/19 15:12:01 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -843,7 +843,7 @@ got_prop:
 		cmp	%l1, 'm'		! Test for sun4d, sun4e ?
 		be	sun4m_init
 		 cmp	%l1, 'd'		! Let us see how the beast will die
-		be	sun4m_init
+		be	sun4d_init
 		 nop
 
 		/* Jump into mmu context zero. */
@@ -852,6 +852,17 @@ got_prop:
 
 		b	sun4c_continue_boot
 		 nop
+
+sun4d_init:
+	/* Need to patch call to handler_irq */
+	set	C_LABEL(patch_handler_irq), %g4
+	set	C_LABEL(sun4d_handler_irq), %g5
+	sethi	%hi(0x40000000), %g3		! call
+	sub	%g5, %g4, %g5
+	srl	%g5, 2, %g5
+	or	%g5, %g3, %g5
+	st	%g5, [%g4]
+	/* Fall through to sun4m_init */
 
 sun4m_init:
 	/* XXX Fucking Cypress... */

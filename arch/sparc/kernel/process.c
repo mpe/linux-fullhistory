@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.100 1997/08/10 04:49:23 davem Exp $
+/*  $Id: process.c,v 1.102 1997/12/01 03:36:31 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -120,7 +120,7 @@ int cpu_idle(void *unused)
 		}
 		/* endless idle loop with no priority at all */
 		current->counter = -100;
-		if(!smp_commenced || resched_needed())
+		if(!smp_commenced || need_resched)
 			schedule();
 	}
 }
@@ -197,7 +197,9 @@ void show_regwindow(struct reg_window *rw)
 	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
 }
 
+#ifdef __SMP__
 static spinlock_t sparc_backtrace_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 void show_backtrace(void)
 {

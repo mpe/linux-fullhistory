@@ -31,7 +31,7 @@
    BIOS ROMs. So we must put the windows high enough to avoid these areas.
 
    We put window 1 at BUS 64Mb for 64Mb, mapping physical 0 to 64Mb-1,
-   and window 2 at BUS 512Mb for 512Mb, mapping physical 0 to 512Mb-1.
+   and window 2 at BUS 1Gb for 1Gb, mapping physical 0 to 1Gb-1.
    Yes, this does map 0 to 64Mb-1 twice, but only window 1 will actually
    be used for that range (via virt_to_bus()).
 
@@ -53,12 +53,14 @@
    DMAable memory; they count on being able to DMA to any memory they
    get from kmalloc()/get_free_pages(). They will also use window 1 for
    any physical memory accesses below 64Mb; the rest will be handled by
-   window 2, maxing out at 512Mb of memory. I trust this is enough... :-)
+   window 2, maxing out at 1Gb of memory. I trust this is enough... :-)
 
-   Finally, the reason we make window 2 start at 512Mb for 512Mb, is so that
-   we can allocate PCI bus devices' memory starting at 1Gb and up, to ensure
-   that no conflicts occur and bookkeeping is simplified (ie we don't
-   try to fill the gap between the two windows, we just go above the top).
+   We hope that the area before the first window is large enough so that
+   there will be no overlap at the top end (64Mb). We *must* locate the
+   PCI cards' memory just below window 1, so that there's still the
+   possibility of being able to access it via SPARSE space. This is
+   important for cards such as the Matrox Millennium, whose Xserver
+   wants to access memory-mapped registers in byte and short lengths.
 
    Note that the XL is treated differently from the AVANTI, even though
    for most other things they are identical. It didn't seem reasonable to
@@ -69,8 +71,8 @@
 #define APECS_XL_DMA_WIN1_BASE		(64*1024*1024)
 #define APECS_XL_DMA_WIN1_SIZE		(64*1024*1024)
 #define APECS_XL_DMA_WIN1_SIZE_PARANOID	(48*1024*1024)
-#define APECS_XL_DMA_WIN2_BASE		(512*1024*1024)
-#define APECS_XL_DMA_WIN2_SIZE		(512*1024*1024)
+#define APECS_XL_DMA_WIN2_BASE		(1024*1024*1024)
+#define APECS_XL_DMA_WIN2_SIZE		(1024*1024*1024)
 
 #else /* CONFIG_ALPHA_XL */
 

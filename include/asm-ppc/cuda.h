@@ -13,20 +13,6 @@
 #define POWER_PACKET	4
 #define MACIIC_PACKET	5
 
-/* ADB commands (2nd byte) */
-#define ADB_BUSRESET		0
-#define ADB_FLUSH(id)		(1 + ((id) << 4))
-#define ADB_WRITEREG(id, reg)	(8 + (reg) + ((id) << 4))
-#define ADB_READREG(id, reg)	(0xc + (reg) + ((id) << 4))
-
-/* ADB default device IDs (upper 4 bits of 2nd byte) */
-#define ADB_DONGLE	1	/* "software execution control" devices */
-#define ADB_KEYBOARD	2
-#define ADB_MOUSE	3
-#define ADB_TABLET	4
-#define ADB_MODEM	5
-#define ADB_MISC	7	/* maybe a monitor */
-
 /* CUDA commands (2nd byte) */
 #define CUDA_WARM_START		0
 #define CUDA_AUTOPOLL		1
@@ -50,25 +36,10 @@
 
 #ifdef __KERNEL__
 
-struct cuda_request {
-    unsigned char data[16];
-    int nbytes;
-    unsigned char reply[16];
-    int reply_len;
-    unsigned char reply_expected;
-    unsigned char sent;
-    unsigned char got_reply;
-    void (*done)(struct cuda_request *);
-    void *arg;
-    struct cuda_request *next;
-};
-
 void via_cuda_init(void);
-int cuda_request(struct cuda_request *req,
-		 void (*done)(struct cuda_request *), int nbytes, ...);
-int cuda_send_request(struct cuda_request *req);
+int cuda_request(struct adb_request *req,
+		 void (*done)(struct adb_request *), int nbytes, ...);
+int cuda_send_request(struct adb_request *req);
 void cuda_poll(void);
-int adb_register(int default_id,
-		 void (*handler)(unsigned char *, int, struct pt_regs *));
 
 #endif	/* __KERNEL */

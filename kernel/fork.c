@@ -435,6 +435,7 @@ static inline int copy_sighand(unsigned long clone_flags, struct task_struct * t
  */
 int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 {
+        int i;
 	int nr;
 	int error = -ENOMEM;
 	struct task_struct *p;
@@ -482,6 +483,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 #ifdef __SMP__
 	p->has_cpu = 0;
 	p->processor = NO_PROC_ID;
+	/* ?? should we just memset this ?? */
+	for(i = 0; i < smp_num_cpus; i++)
+		p->per_cpu_utime[i] = p->per_cpu_stime[i] = 0;
 #endif
 	p->lock_depth = 0;
 	p->start_time = jiffies;

@@ -10,6 +10,22 @@
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
 #define __save_and_cli(flags)	({__save_flags(flags);__cli();})
 
+extern __inline__ void dcbf(void *line)
+{
+	asm("dcbf %0,%1\n\t"
+	    "sync \n\t"
+	    "isync \n\t"
+	    :: "r" (line), "r" (0));
+}
+
+extern __inline__ void dcbi(void *line)
+{
+	asm("dcbi %0,%1\n\t"
+	    "sync \n\t"
+	    "isync \n\t"
+	    :: "r" (line), "r" (0));
+}
+     
 extern __inline__ void __restore_flags(unsigned long flags)
 {
         extern unsigned lost_interrupts;
@@ -78,7 +94,6 @@ extern void _switch(struct thread_struct *prev, struct thread_struct *next,
 		    unsigned long context);
 
 struct pt_regs;
-extern int do_signal(unsigned long oldmask, struct pt_regs *regs);
 extern void dump_regs(struct pt_regs *);
 
 #ifndef __SMP__

@@ -315,7 +315,7 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 		return -EINVAL;
 
 	/* Only superuser is allowed to send multicasts */
-	if (nladdr->nl_groups && !suser())
+	if (!suser() && nladdr->nl_groups)
 		return -EPERM;
 
 	sk->protinfo.af_netlink.dst_pid = nladdr->nl_pid;

@@ -415,14 +415,8 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 			if (copy != 0)
 			{
 				skb1 = skb_clone(skb, GFP_ATOMIC);
-				if (skb1 != NULL)
-				{
-					skb1->arp = 1;
-				}
-				else
-				{
+				if (skb1 == NULL)
 					return -ENOMEM;
-				}
 			}
 			else
 			{
@@ -515,8 +509,6 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 	if (copy)
 	{
 		skb1 = skb_clone(skb, GFP_ATOMIC);
-		if (skb1)
-			skb1->arp=1;
 	}
 	else
 	{
@@ -533,8 +525,6 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 	if (sock1 && sock2)
 	{
 		skb2 = skb_clone(skb1, GFP_ATOMIC);
-		if (skb2 != NULL)
-			skb2->arp = 1;
 	}
 	else
 		skb2 = skb1;
@@ -561,7 +551,6 @@ static struct sk_buff *ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buf
 
 	/* Hopefully, most cases */
 	if (in_offset >= out_offset) {
-		skb->arp = 1;
 		return skb;
 	}
 
@@ -572,11 +561,10 @@ static struct sk_buff *ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buf
 		skb_reserve(skb2,out_offset);
 		skb2->nh.raw=
 		skb2->h.raw=skb_put(skb2,skb->len);
-		skb2->arp=1;
 		memcpy(skb2->h.raw, skb->h.raw, skb->len);
 	}
 	kfree_skb(skb, FREE_WRITE);
-	return skb2;
+	return NULL;
 }
 
 static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
@@ -1360,7 +1348,6 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 		return err;
 
 	skb_reserve(skb,ipx_offset);
-	skb->arp=1;
 	skb->sk=sk;
 
 	/* Fill in IPX header */

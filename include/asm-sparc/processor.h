@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.59 1997/05/01 01:42:03 davem Exp $
+/* $Id: processor.h,v 1.61 1997/10/22 09:25:42 jj Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -35,10 +35,19 @@
  */
 #define TASK_SIZE	(page_offset)
 
+#define COPY_TASK_STRUCT(dst, src) 	\
+do {					\
+	*dst = *src;			\
+} while (0)
+
 struct fpq {
 	unsigned long *insn_addr;
 	unsigned long insn;
 };
+
+typedef struct {
+	int seg;
+} mm_segment_t;
 
 /* The Sparc processor specific thread struct. */
 struct thread_struct {
@@ -74,7 +83,7 @@ struct thread_struct {
 	struct fpq	fpqueue[16];
 	struct sigstack sstk_info;
 	unsigned long flags;
-	int current_ds;
+	mm_segment_t current_ds;
 	struct exec core_exec;     /* just what it says. */
 	int new_signal;
 };
@@ -103,7 +112,7 @@ struct thread_struct {
 /* sstk_info */ \
 { 0, 0, }, \
 /* flags,              current_ds, */ \
-   SPARC_FLAG_KTHREAD, USER_DS, \
+   SPARC_FLAG_KTHREAD, KERNEL_DS, \
 /* core_exec */ \
 { 0, }, \
 /* new_signal */ \

@@ -44,8 +44,6 @@ static int cs4231_recintr(struct sparcaudio_driver *drv);
 static void cs4231_output_muted(struct sparcaudio_driver *drv, unsigned int value);
 static void cs4231_mute(struct sparcaudio_driver *drv);
 static void cs4231_pollinput(struct sparcaudio_driver *drv);
-static int cs4231_attach(struct sparcaudio_driver *drv, int node,
-                          struct linux_sbus *sbus);
 
 #define CHIP_BUG udelay(100); cs4231_ready(drv); udelay(1000);
 
@@ -623,56 +621,16 @@ static struct sparcaudio_operations cs4231_ops = {
 	cs4231_audio_getdev,
 };
 
-/* Probe for the cs4231 chip and then attach the driver. */
-#ifdef MODULE
-int init_module(void)
-#else
-__initfunc(int cs4231_init(void))
-#endif
-{
-  struct linux_sbus *bus;
-  struct linux_sbus_device *sdev;
-  int cs4231_node;
-  
-  /* Find the PROM CS4231 node. */
-  /* There's an easier way, and I should FIXME */
-  cs4231_node = prom_getchild(prom_root_node);
-  cs4231_node = prom_searchsiblings(cs4231_node,"iommu");
-  cs4231_node = prom_getchild(cs4231_node);
-  cs4231_node = prom_searchsiblings(cs4231_node,"sbus");
-  cs4231_node = prom_getchild(cs4231_node);
-  cs4231_node = prom_searchsiblings(cs4231_node,"SUNW,CS4231");
-  
-  if (cs4231_node && cs4231_attach(&drivers[0], cs4231_node, NULL) == 0)
-    num_drivers = 1;
-  else
-    num_drivers = 0;
-  
-  /* Probe each SBUS for cs4231 chips. */
-  for_all_sbusdev(sdev,bus) {
-    if (!strcmp(sdev->prom_name, "SUNW,CS4231")) {
-      /* Don't go over the max number of drivers. */
-      if (num_drivers >= MAX_DRIVERS)
-	continue;
-      
-      if (cs4231_attach(&drivers[num_drivers],
-			sdev->prom_node, sdev->my_bus) == 0)
-	num_drivers++;
-    }
-  }
-  
-  /* Only return success if we found some cs4231 chips. */
-  return (num_drivers > 0) ? 0 : -EIO;
-}
-
 /* Attach to an cs4231 chip given its PROM node. */
-static int cs4231_attach(struct sparcaudio_driver *drv, int node,
-                          struct linux_sbus *sbus)
+static inline int
+cs4231_attach(struct sparcaudio_driver *drv, struct linux_sbus_device *sdev)
 {
-  struct linux_prom_registers regs;
-  struct linux_prom_irqs irq;
   struct cs4231_chip *cs4231_chip;
   int err;
+  struct linux_sbus *sbus = sdev->my_bus;
+#ifdef __sparc_v9__
+  struct devid_cookie dcookie;
+#endif
 
   /* Allocate our private information structure. */
   drv->private = kmalloc(sizeof(struct cs4231_chip), GFP_KERNEL);
@@ -690,12 +648,11 @@ static int cs4231_attach(struct sparcaudio_driver *drv, int node,
 #endif
 
   /* Map the registers into memory. */
-  prom_getproperty(node, "reg", (char *)&regs, sizeof(regs));
-  if (sbus)
-    prom_apply_sbus_ranges(sbus, &regs, 1);
-  cs4231_chip->regs_size = regs.reg_size;
-  cs4231_chip->pioregs = sparc_alloc_io(regs.phys_addr, 0, regs.reg_size,
-				      "cs4231", regs.which_io, 0);
+  prom_apply_sbus_ranges(sbus, sdev->reg_addrs, 1, sdev);
+  cs4231_chip->regs_size = sdev->reg_addrs[0].reg_size;
+  cs4231_chip->pioregs = sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0, 
+  					sdev->reg_addrs[0].reg_size,
+				      "cs4231", sdev->reg_addrs[0].which_io, 0);
   if (!cs4231_chip->pioregs) {
     printk(KERN_ERR "cs4231: could not allocate registers\n");
     kfree(drv->private);
@@ -706,9 +663,18 @@ static int cs4231_attach(struct sparcaudio_driver *drv, int node,
   cs4231_reset(drv);
 
   /* Attach the interrupt handler to the audio interrupt. */
-  prom_getproperty(node, "intr", (char *)&irq, sizeof(irq));
-  cs4231_chip->irq = irq.pri;
-  request_irq(cs4231_chip->irq, cs4231_interrupt, SA_INTERRUPT, "cs4231", NULL);
+  cs4231_chip->irq = sdev->irqs[0].pri;
+
+#ifndef __sparc_v9__
+  request_irq(cs4231_chip->irq, cs4231_interrupt, SA_SHIRQ, "cs4231", drv);
+#else
+  dcookie.real_dev_id = s;
+  dcookie.imap = dcookie.iclr = 0;
+  dcookie.pil = -1;
+  dcookie.bus_cookie = sdev->my_bus;
+  request_irq (cs4231_chip->irq, cs4231_interrupt, (SA_SHIRQ | SA_SBUS | SA_DCOOKIE), "cs4231", drv);
+  cs4231_chip->irq = dcookie.ret_ino;
+#endif
   enable_irq(cs4231_chip->irq);
 
   /* Register ourselves with the midlevel audio driver. */
@@ -728,6 +694,32 @@ static int cs4231_attach(struct sparcaudio_driver *drv, int node,
   
   /* Success! */
   return 0;
+}
+
+/* Probe for the cs4231 chip and then attach the driver. */
+#ifdef MODULE
+int init_module(void)
+#else
+__initfunc(int cs4231_init(void))
+#endif
+{
+  struct linux_sbus *bus;
+  struct linux_sbus_device *sdev;
+  
+  /* Probe each SBUS for cs4231 chips. */
+  for_all_sbusdev(sdev,bus) {
+    if (!strcmp(sdev->prom_name, "SUNW,CS4231")) {
+      /* Don't go over the max number of drivers. */
+      if (num_drivers >= MAX_DRIVERS)
+	continue;
+      
+      if (cs4231_attach(&drivers[num_drivers], sdev) == 0)
+	num_drivers++;
+    }
+  }
+  
+  /* Only return success if we found some cs4231 chips. */
+  return (num_drivers > 0) ? 0 : -EIO;
 }
 
 #ifdef MODULE

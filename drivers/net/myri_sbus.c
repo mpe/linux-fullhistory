@@ -714,7 +714,6 @@ static int myri_rebuild_header(struct sk_buff *skb)
 	unsigned char *pad = (unsigned char *)skb->data;
 	struct ethhdr *eth = (struct ethhdr *)(pad + MYRI_PAD_LEN);
 	struct device *dev = skb->dev;
- 	struct neighbour *neigh = NULL;
 
 #ifdef DEBUG_HEADER
 	DHDR(("myri_rebuild_header: pad[%02x,%02x] ", pad[0], pad[1]));
@@ -725,16 +724,6 @@ static int myri_rebuild_header(struct sk_buff *skb)
 	pad[0] = MYRI_PAD_LEN;
 	pad[1] = 0xab;
 
-	/*
-	 *	Only ARP/IP and NDISC/IPv6 are currently supported
-	 */
-	
- 	if (skb->dst)
- 		neigh = skb->dst->neighbour;
- 
- 	if (neigh)
- 		return neigh->ops->resolve(eth->h_dest, skb);
- 
 	switch (eth->h_proto)
 	{
 #ifdef CONFIG_INET
@@ -755,59 +744,31 @@ static int myri_rebuild_header(struct sk_buff *skb)
 	return 0;	
 }
 
-int myri_header_cache(struct dst_entry *dst, struct neighbour *neigh,
-		       struct hh_cache *hh)
+int myri_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
 	unsigned short type = hh->hh_type;
 	unsigned char *pad = (unsigned char *)hh->hh_data;
 	struct ethhdr *eth = (struct ethhdr *)(pad + MYRI_PAD_LEN);
-	struct device *dev = dst->dev;
+	struct device *dev = neigh->dev;
 
-	if (type == ETH_P_802_3)
+	if (type == __constant_htons(ETH_P_802_3))
 		return -1;
 
 	/* Refill MyriNet padding identifiers, this is just being anal. */
 	pad[0] = MYRI_PAD_LEN;
 	pad[1] = 0xab;
 
-	eth->h_proto = htons(type);
-
+	eth->h_proto = type;
 	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
-
-	if (dev->flags & IFF_LOOPBACK) {
-		memset(eth->h_dest, 0, dev->addr_len);
-		hh->hh_uptodate = 1;
-		return 0;
-	}
-
-	if (type != ETH_P_IP) {
-		printk(KERN_DEBUG "%s: unable to resolve type %X addresses.\n",
-			dev->name, (int)eth->h_proto);
-		hh->hh_uptodate = 0;
-		return 0;
-	}
-
-#ifdef CONFIG_INET
-	hh->hh_uptodate = arp_find_1(eth->h_dest, dst, neigh);
-#else
-	hh->hh_uptodate = 0;
-#endif
+	memcpy(eth->h_dest, neigh->ha, dev->addr_len);
 	return 0;
 }
 
+
 /* Called by Address Resolution module to notify changes in address. */
-void myri_header_cache_update(struct hh_cache *hh, struct device *dev,
-			      unsigned char * haddr)
+void myri_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned char * haddr)
 {
-	if (hh->hh_type != ETH_P_IP) {
-		printk(KERN_DEBUG "eth_header_cache_update: %04x cache is not "
-		       "implemented\n", hh->hh_type);
-		return;
-	}
-	hh->hh_data[0] = MYRI_PAD_LEN;
-	hh->hh_data[1] = 0xab;
-	memcpy(hh->hh_data+2, haddr, ETH_ALEN);
-	hh->hh_uptodate = 1;
+	memcpy(((u8*)hh->hh_data) + 2, haddr, dev->addr_len);
 }
 
 static int myri_change_mtu(struct device *dev, int new_mtu)

@@ -11,13 +11,14 @@ O_TARGET := solaris.o
 O_OBJS   := entry64.o fs.o misc.o signal.o systbl.o ioctl.o ipc.o socksys.o
 ifeq ($(CONFIG_SOLARIS_EMUL),m)
 M_OBJS   := $(O_TARGET)
+CPPFLAGS = $(MODFLAGS)
 endif
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
+	$(CPP) -D__ASSEMBLY__ $(CPPFLAGS) -ansi $< -o $*.s
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
+	$(CC) -D__ASSEMBLY__ $(CPPFLAGS) -ansi -c $< -o $*.o
 
 ifneq ($(CONFIG_SOLARIS_EMUL),y)
 do_it_all:

@@ -72,6 +72,7 @@ enum pid_directory_inos {
 #if CONFIG_AP1000
 	PROC_PID_RINGBUF,
 #endif
+	PROC_PID_CPU,
 };
 
 enum pid_subdirectory_inos {

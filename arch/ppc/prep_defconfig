@@ -7,9 +7,11 @@
 #
 CONFIG_PPC=y
 CONFIG_NATIVE=y
+CONFIG_MACH_SPECIFIC=y
 # CONFIG_PMAC is not set
 CONFIG_PREP=y
-CONFIG_MCOMMON=y
+# CONFIG_CHRP is not set
+CONFIG_COMMON=y
 
 #
 # General setup
@@ -19,14 +21,20 @@ CONFIG_MODULES=y
 CONFIG_MODVERSIONS=y
 CONFIG_KERNELD=y
 CONFIG_PCI=y
-CONFIG_PCI_OPTIMIZE=y
+# CONFIG_PCI_OPTIMIZE is not set
 CONFIG_NET=y
-CONFIG_SYSCTL=y
+# CONFIG_SYSCTL is not set
 CONFIG_SYSVIPC=y
+# CONFIG_BSD_PROCESS_ACCT is not set
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
 # CONFIG_BINFMT_JAVA is not set
+# CONFIG_PMAC_CONSOLE is not set
+# CONFIG_MAC_KEYBOARD is not set
+# CONFIG_MAC_FLOPPY is not set
+# CONFIG_PROC_DEVICETREE is not set
+# CONFIG_XMON is not set
 CONFIG_VGA_CONSOLE=y
 
 #
@@ -49,13 +57,52 @@ CONFIG_BLK_DEV_IDECD=y
 # CONFIG_BLK_DEV_RZ1000 is not set
 # CONFIG_BLK_DEV_TRITON is not set
 # CONFIG_IDE_CHIPSETS is not set
-CONFIG_BLK_DEV_LOOP=y
+# CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_MD is not set
 CONFIG_BLK_DEV_RAM=y
 CONFIG_BLK_DEV_INITRD=y
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_BLK_DEV_EZ is not set
 # CONFIG_BLK_DEV_HD is not set
+
+#
+# NEW devices (io_request, all ALPHA and dangerous)
+#
+# CONFIG_IO_REQUEST is not set
+
+#
+# Networking options
+#
+# CONFIG_PACKET is not set
+# CONFIG_NETLINK is not set
+# CONFIG_FIREWALL is not set
+# CONFIG_NET_ALIAS is not set
+CONFIG_UNIX=y
+CONFIG_INET=y
+# CONFIG_IP_MULTICAST is not set
+# CONFIG_IP_ADVANCED_ROUTER is not set
+# CONFIG_IP_PNP is not set
+# CONFIG_IP_ACCT is not set
+# CONFIG_IP_MASQUERADE is not set
+# CONFIG_IP_ROUTER is not set
+# CONFIG_NET_IPIP is not set
+# CONFIG_NET_IPGRE is not set
+# CONFIG_IP_ALIAS is not set
+# CONFIG_SYN_COOKIES is not set
+CONFIG_INET_RARP=y
+# CONFIG_IP_NOSR is not set
+CONFIG_SKB_LARGE=y
+# CONFIG_IPV6 is not set
+# CONFIG_IPX is not set
+# CONFIG_ATALK is not set
+# CONFIG_AX25 is not set
+# CONFIG_X25 is not set
+# CONFIG_LAPB is not set
+# CONFIG_BRIDGE is not set
+# CONFIG_LLC is not set
+# CONFIG_WAN_ROUTER is not set
+# CONFIG_CPU_IS_SLOW is not set
+# CONFIG_NET_SCHED is not set
 
 #
 # SCSI support
@@ -67,7 +114,7 @@ CONFIG_BLK_DEV_SR=y
 CONFIG_BLK_DEV_SR_VENDOR=y
 # CONFIG_CHR_DEV_SG is not set
 # CONFIG_SCSI_MULTI_LUN is not set
-CONFIG_SCSI_CONSTANTS=y
+# CONFIG_SCSI_CONSTANTS is not set
 
 #
 # SCSI low-level drivers
@@ -111,46 +158,13 @@ CONFIG_SCSI_NCR53C8XX_SYNC=5
 #
 # Network device support
 #
-
-#
-# Networking options
-#
-# CONFIG_NETLINK is not set
-# CONFIG_FIREWALL is not set
-# CONFIG_NET_ALIAS is not set
-CONFIG_INET=y
-# CONFIG_IP_MULTICAST is not set
-# CONFIG_IP_ACCT is not set
-# CONFIG_IP_ROUTER is not set
-# CONFIG_NET_IPIP is not set
-# CONFIG_SYN_COOKIES is not set
-# CONFIG_XTP is not set
-# CONFIG_INET_PCTCP is not set
-# CONFIG_INET_RARP is not set
-CONFIG_PATH_MTU_DISCOVERY=y
-# CONFIG_IP_NOSR is not set
-CONFIG_SKB_LARGE=y
-# CONFIG_IPV6 is not set
-# CONFIG_IPX is not set
-# CONFIG_ATALK is not set
-# CONFIG_AX25 is not set
-# CONFIG_X25 is not set
-# CONFIG_LAPB is not set
-# CONFIG_BRIDGE is not set
-# CONFIG_LLC is not set
-# CONFIG_WAN_ROUTER is not set
 CONFIG_NETDEVICES=y
 # CONFIG_ARCNET is not set
 # CONFIG_DUMMY is not set
 # CONFIG_EQUALIZER is not set
+# CONFIG_ETHERTAP is not set
 CONFIG_NET_ETHERNET=y
-CONFIG_NET_VENDOR_3COM=y
-# CONFIG_EL1 is not set
-# CONFIG_EL2 is not set
-# CONFIG_ELPLUS is not set
-# CONFIG_EL16 is not set
-CONFIG_EL3=y
-# CONFIG_VORTEX is not set
+# CONFIG_NET_VENDOR_3COM is not set
 CONFIG_LANCE=y
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
@@ -171,7 +185,7 @@ CONFIG_DE4X5=y
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
 # CONFIG_PLIP is not set
-CONFIG_PPP=y
+CONFIG_PPP=m
 # CONFIG_NET_RADIO is not set
 # CONFIG_SLIP is not set
 # CONFIG_TR is not set
@@ -193,25 +207,30 @@ CONFIG_PPP=y
 # CONFIG_QUOTA is not set
 # CONFIG_MINIX_FS is not set
 CONFIG_EXT2_FS=y
-CONFIG_FAT_FS=y
-CONFIG_MSDOS_FS=y
-# CONFIG_VFAT_FS is not set
+CONFIG_ISO9660_FS=y
+# CONFIG_JOLIET is not set
+# CONFIG_FAT_FS is not set
+# CONFIG_MSDOS_FS is not set
 # CONFIG_UMSDOS_FS is not set
+# CONFIG_VFAT_FS is not set
 CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
-# CONFIG_ROOT_NFS is not set
-CONFIG_NFSD=y
+# CONFIG_NFSD is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
-CONFIG_ISO9660_FS=y
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_ROMFS_FS is not set
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_UFS_FS is not set
-CONFIG_MAC_PARTITION=y
+# CONFIG_MAC_PARTITION is not set
+
+#
+# Native Language Support
+#
+# CONFIG_NLS is not set
 
 #
 # Character devices
@@ -241,6 +260,8 @@ CONFIG_PSMOUSE=y
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
+# CONFIG_VIDEO_DEV is not set
+# CONFIG_VIDEO_BT848 is not set
 # CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set
 

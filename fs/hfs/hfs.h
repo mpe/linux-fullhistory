@@ -11,6 +11,7 @@
 #define _HFS_H
 
 #include <linux/hfs_sysdep.h>
+#include <linux/hfs_fs.h>
 
 #define HFS_NEW(X)	((X) = hfs_malloc(sizeof(*(X))))
 #define HFS_DELETE(X)	{ hfs_free((X), sizeof(*(X))); (X) = NULL; }
@@ -255,6 +256,7 @@ struct hfs_mdb {
 	int			rename_lock;
 	hfs_wait_queue		bitmap_wait;
 	int			bitmap_lock;
+        struct list_head        entry_dirty;
 };
 
 /*
@@ -339,10 +341,9 @@ struct hfs_file {
  */
 struct hfs_cat_entry {
 	hfs_wait_queue		wait;
-	struct hfs_cat_entry	*next;
-	struct hfs_cat_entry	*prev;
-	struct hfs_cat_entry	*hash_next;
-	struct hfs_cat_entry	*hash_prev;
+        struct list_head        hash;
+        struct list_head        list;
+        struct list_head        dirty;
 	struct hfs_mdb		*mdb;
 	hfs_sysentry		sys_entry;
 	struct hfs_cat_key	key;
@@ -352,16 +353,20 @@ struct hfs_cat_entry {
 	hfs_u32			modify_date;	/* In network byte-order */
 	hfs_u32			backup_date;	/* In network byte-order */
 	unsigned short		count;
-	unsigned char		lock;
-	unsigned char		dirt;
-	unsigned char		key_dirt;
-	unsigned char		deleted;
+        unsigned long           state;
 	hfs_u8			type;
 	union {
 		struct hfs_dir	dir;
 		struct hfs_file file;
 	} u;
 };
+
+/* hfs entry state bits */
+#define HFS_DIRTY        1
+#define HFS_KEYDIRTY     2
+#define HFS_LOCK         4
+#define HFS_DELETED      8
+#define HFS_SUPERBLK    16
 
 /* 
  * struct hfs_bnode_ref
@@ -433,7 +438,9 @@ extern void hfs_btree_free(struct hfs_btree *);
 extern void hfs_btree_commit(struct hfs_btree *, hfs_byte_t *, hfs_lword_t);
 
 /* catalog.c */
+extern void hfs_cat_init(void);
 extern void hfs_cat_put(struct hfs_cat_entry *);
+extern void hfs_cat_mark_dirty(struct hfs_cat_entry *);
 extern struct hfs_cat_entry *hfs_cat_get(struct hfs_mdb *,
 					 const struct hfs_cat_key *);
 
@@ -485,6 +492,41 @@ extern int hfs_streq(const struct hfs_name *, const struct hfs_name *);
 extern void hfs_tolower(unsigned char *, int);
 
 /* sysdep.c */
-extern int hfs_prune_entry(struct hfs_cat_entry *);
+extern void hfs_cat_prune(struct hfs_cat_entry *);
 
+extern __inline__ struct dentry 
+*hfs_lookup_dentry(const char *name, const int len, 
+		   struct dentry *base)
+{
+  struct qstr this;
+
+  this.name = name;
+  this.len = len;
+  this.hash = full_name_hash(name, len);
+
+  return d_lookup(base, &this);
+}
+
+/* drop a dentry for one of the special subdirectories */
+extern __inline__ void hfs_drop_special(const struct hfs_name *name,
+					struct dentry *base,
+					struct dentry *dentry)
+{
+  struct dentry *dparent, *de;
+  
+  dparent = hfs_lookup_dentry(name->Name, name->Len, base);
+  if (dparent) {
+    de = hfs_lookup_dentry(dentry->d_name.name, dentry->d_name.len,
+			   dparent);
+    dput(dparent);
+
+    if (de) {
+      if (!de->d_inode)
+	d_drop(de);
+      dput(de);
+    }
+  }
+}
+
+extern struct dentry_operations hfs_dentry_operations;
 #endif

@@ -1147,23 +1147,27 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		goto out;
 	/* This will also move the address data into kernel space */
 	err = verify_iovec(&msg_sys, iov, address, VERIFY_READ);
-	if (err < 0)
+	if (err < 0) 
 		goto out;
+	
 	total_len=err;
+
+	sock = sockfd_lookup(fd, &err);
+	if (!sock) 
+		goto out; 
 
 	if (msg_sys.msg_controllen) 
 	{
-		/* XXX We just limit the buffer and assume that the 
-		 * skbuff accounting stops it from going too far.
-		 * I hope this is correct.
- 		 */
-		if (msg_sys.msg_controllen > 256) {
-			err = -EINVAL;
-			goto failed2;
-		}
 		if (msg_sys.msg_controllen > sizeof(ctl))
 		{
-			ctl_buf = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
+			/* Suggested by the Advanced Sockets API for IPv6 draft:
+			 * Limit the msg_controllen size by the SO_SNDBUF size.
+			 */
+			/* Note - when this code becomes multithreaded on
+			 * SMP machines you have a race to fix here.
+			 */
+			ctl_buf = sock_kmalloc(sock->sk, msg_sys.msg_controllen, 
+					       GFP_KERNEL);
 			if (ctl_buf == NULL) 
 			{
 				err = -ENOBUFS;
@@ -1179,21 +1183,17 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	}
 	msg_sys.msg_flags = flags;
 
-	if ((sock = sockfd_lookup(fd,&err))!=NULL)
-	{
-		if (current->files->fd[fd]->f_flags & O_NONBLOCK)
-			msg_sys.msg_flags |= MSG_DONTWAIT;
-		err = sock_sendmsg(sock, &msg_sys, total_len);
-		sockfd_put(sock);
-	}
-
+	if (current->files->fd[fd]->f_flags & O_NONBLOCK)
+		msg_sys.msg_flags |= MSG_DONTWAIT;
+	err = sock_sendmsg(sock, &msg_sys, total_len);
 failed:
-	if (ctl_buf != ctl)
-		kfree_s(ctl_buf, msg_sys.msg_controllen);
+	if (ctl_buf != ctl)    
+		sock_kfree_s(sock->sk, ctl_buf, msg_sys.msg_controllen);
 failed2:
 	if (msg_sys.msg_iov != iov)
 		kfree(msg_sys.msg_iov);
-out:
+	sockfd_put(sock);
+out:       
 	unlock_kernel();
 	return err;
 }
@@ -1295,8 +1295,8 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 /* Argument list sizes for sys_socketcall */
 #define AL(x) ((x) * sizeof(unsigned long))
 static unsigned char nargs[18]={AL(0),AL(3),AL(3),AL(3),AL(2),AL(3),
-								AL(3),AL(3),AL(4),AL(4),AL(4),AL(6),
-								AL(6),AL(2),AL(5),AL(5),AL(3),AL(3)};
+				AL(3),AL(3),AL(4),AL(4),AL(4),AL(6),
+				AL(6),AL(2),AL(5),AL(5),AL(3),AL(3)};
 #undef AL
 
 /*
@@ -1451,7 +1451,14 @@ __initfunc(void sock_init(void))
 	 */
 	 
 	sk_init();
-	
+
+#ifdef SLAB_SKB
+	/*
+	 *	Initialize skbuff SLAB cache 
+	 */
+	skb_init();
+#endif
+
 
 	/*
 	 *	Wan router layer. 

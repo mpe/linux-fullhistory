@@ -16,6 +16,7 @@
 #include <linux/nvram.h>
 #include <asm/prom.h>
 #include <asm/io.h>
+#include <asm/adb.h>
 #include <asm/cuda.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
@@ -377,13 +378,13 @@ map_control_display(struct device_node *dp)
 static void
 set_control_clock(unsigned char *params)
 {
-	struct cuda_request req;
+	struct adb_request req;
 	int i;
 
 	for (i = 0; i < 3; ++i) {
 		cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
 			     0x50, i + 1, params[i]);
-		while (!req.got_reply)
+		while (!req.complete)
 			cuda_poll();
 	}
 }

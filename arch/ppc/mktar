@@ -1,9 +1,0 @@
-#!/bin/bash
-
-V=`egrep ^VERSION Makefile | awk '{print $3}'`
-P=`egrep ^PATCHLEVEL Makefile | awk '{print $3}'`
-S=`egrep ^SUBLEVEL Makefile | awk '{print $3}'`
-date=`date +'%y%m%d'`
-cd ../
-mkdir -p dist
-tar -vzcf ppclinux-$V.$P.$S-$date.tar.gz -X linux/arch/ppc/ignore linux

@@ -1,3 +1,39 @@
+Wed Jan  7 19:33:33 1998  a sun  <asun@zoology.washington.edu>
+
+	* inode.c
+	don't hfs_cat_put in hfs_iget. that's a bad idea and results
+	in screwed up entry counts.
+
+	* catalog.c
+	modified hfs_cat_put to undirty deleted entries without trying to 
+	write them out.
+
+Tue Jan  6 14:38:24 1998  a sun  <asun@zoology.washington.edu>
+
+	* version.c
+	changed it to 0.95+asun2
+
+	* sysdep.c
+	altered catalog entry pruning to make sure that an iput
+	gets done. for some reason, shrink_dcache_parent wasn't
+	doing it.
+
+	* catalog.c
+	added a global dirty list to check for pruning.
+	
+Tue Jan  6 12:29:52 1998  a sun  <asun@zoology.washington.edu>
+
+	* catalog.c
+	re-wrote it to be similar to 2.1.x inode.c. this should
+ 	at least make catalog.c SMP safe. 
+
+	* hfs.h, linux/hfs_fs.h
+	moved dentry operations into hfs.h. these probably should
+	be moved somewhere else.
+
+	* super.c, dir_cap.c, dir_nat.c, dir_dbl.c, sysdep.c
+	added dentry ops to hash everything to lowercase.
+
 Sun Dec 28 22:48:53 1997  a sun  <asun@zoology.washington.edu>
 
 	* sysdep.c, catalog.c, hfs.h

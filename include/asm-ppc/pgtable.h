@@ -3,30 +3,38 @@
 
 #include <linux/mm.h>
 
-extern void flush_tlb_all(void);
-extern void flush_tlb_mm(struct mm_struct *mm);
-extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
-extern void flush_tlb_range(struct mm_struct *mm, unsigned long start,
+extern void local_flush_tlb_all(void);
+extern void local_flush_tlb_mm(struct mm_struct *mm);
+extern void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			    unsigned long end);
+
+#ifndef __SMP__
+#define flush_tlb_all local_flush_tlb_all
+#define flush_tlb_mm local_flush_tlb_mm
+#define flush_tlb_page local_flush_tlb_page
+#define flush_tlb_range local_flush_tlb_range
+#else /* __SMP__ */
+#define flush_tlb_all local_flush_tlb_all
+#define flush_tlb_mm local_flush_tlb_mm
+#define flush_tlb_page local_flush_tlb_page
+#define flush_tlb_range local_flush_tlb_range
+#endif /* __SMP__ */
 
 /*
  * No cache flushing is required when address mappings are
  * changed, because the caches on PowerPCs are physically
  * addressed.
+ * Also, when SMP we use the coherency (M) bit of the
+ * BATs and PTEs.  -- Cort
  */
 #define flush_cache_all()		do { } while (0)
 #define flush_cache_mm(mm)		do { } while (0)
 #define flush_cache_range(mm, a, b)	do { } while (0)
 #define flush_cache_page(vma, p)	do { } while (0)
+
 extern void flush_icache_range(unsigned long, unsigned long);
-
-/*
- * For the page specified, write modified lines in the data cache
- * out to memory, and invalidate lines in the instruction cache.
- */
 extern void flush_page_to_ram(unsigned long);
-
-extern unsigned long va_to_phys(unsigned long address);
 
 /*
  * The PowerPC MMU uses a hash table containing PTEs, together with
@@ -61,13 +69,19 @@ extern unsigned long va_to_phys(unsigned long address);
 #define PTRS_PER_PGD	1024
 
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
- * current 8MB value just means that there will be a 8MB "hole" after the
+ * current 64MB value just means that there will be a 64MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
  * any out-of-bounds memory accesses will hopefully be caught.
  * The vmalloc() routines leaves a hole of 4kB between each vmalloced
  * area for the same reason. ;)
+ *
+ * The vmalloc_offset MUST be larger than the gap between the bat2 mapping
+ * and the size of physical ram.  Since the bat2 mapping can be larger than
+ * the amount of ram we have vmalloc_offset must ensure that we don't try
+ * to allocate areas that don't exist! This value of 64M will only cause
+ * problems when we have >128M -- Cort
  */
-#define VMALLOC_OFFSET	(0x2000000) /* 32M */
+#define VMALLOC_OFFSET	(0x4000000) /* 64M */
 #define VMALLOC_START ((((long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1)))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 
@@ -150,7 +164,8 @@ extern unsigned long empty_zero_page[1024];
 
 /* to set the page-dir */
 /* tsk is a task_struct and pgdir is a pte_t */
-#define SET_PAGE_DIR(tsk,pgdir) 
+#define SET_PAGE_DIR(tsk,pgdir)  \
+	((tsk)->tss.pg_tables = (unsigned long *)(pgdir))
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
@@ -253,7 +268,7 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
 extern inline unsigned long pte_page(pte_t pte)
-{ return (pte_val(pte) & PAGE_MASK) + KERNELBASE; }
+{ return (unsigned long) __va(pte_val(pte) & PAGE_MASK); }
 
 extern inline unsigned long pmd_page(pmd_t pmd)
 { return pmd_val(pmd); }
@@ -394,12 +409,6 @@ extern pgd_t swapper_pg_dir[1024];
 extern void flush_hash_segments(unsigned low_vsid, unsigned high_vsid);
 extern void flush_hash_page(unsigned context, unsigned long va);
 
-extern inline void
-flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
-{
-	if (vmaddr < TASK_SIZE)
-		flush_hash_page(vma->vm_mm->context, vmaddr);
-}
 
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
 #define SWP_OFFSET(entry) ((entry) >> 8)

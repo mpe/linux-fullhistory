@@ -70,6 +70,8 @@ typedef struct svc_fh {
  * Shorthand for dprintk()'s
  */
 #define SVCFH_DENTRY(f)		((f)->fh_dentry)
+#define SVCFH_INO(f)		((f)->fh_handle.fh_ino)
+#define SVCFH_DEV(f)		((f)->fh_handle.fh_dev)
 
 /*
  * Function prototypes

@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.28 1997/10/30 00:43:16 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.29 1997/12/13 21:52:55 kuznet Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -176,6 +176,7 @@ struct device *ipmr_reg_vif(struct vifctl *v)
 		kfree(dev);
 		return NULL;
 	}
+	dev->iflink = 0;
 
 	if ((in_dev = inetdev_init(dev)) == NULL)
 		goto failure;
@@ -924,7 +925,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			}
 			return -EADDRNOTAVAIL;
 		default:
-			return -EINVAL;
+			return -ENOIOCTLCMD;
 	}
 }
 
@@ -1095,7 +1096,6 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
 	 * not mrouter) cannot join to more than one interface - it will
 	 * result in receiving multiple packets.
 	 */
-	ip_ll_header(skb2);
 	skb2->dst->output(skb2);
 }
 
@@ -1282,6 +1282,7 @@ int pim_rcv_v1(struct sk_buff * skb, unsigned short len)
 		kfree_skb(skb, FREE_READ);
 		return -EINVAL;
 	}
+	skb->mac.raw = skb->nh.raw;
 	skb_pull(skb, (u8*)encap - skb->data);
 	skb->nh.iph = (struct iphdr *)skb->data;
 	skb->dev = reg_dev;
@@ -1321,6 +1322,7 @@ int pim_rcv(struct sk_buff * skb, unsigned short len)
 		kfree_skb(skb, FREE_READ);
 		return -EINVAL;
 	}
+	skb->mac.raw = skb->nh.raw;
 	skb_pull(skb, (u8*)encap - skb->data);
 	skb->nh.iph = (struct iphdr *)skb->data;
 	skb->dev = reg_dev;

@@ -178,7 +178,6 @@ void x25_establish_link(struct x25_neigh *neigh)
 
 	skb->protocol = htons(ETH_P_X25);
 	skb->dev      = neigh->dev;
-	skb->arp      = 1;
 
 	dev_queue_xmit(skb);
 }
@@ -208,7 +207,6 @@ void x25_terminate_link(struct x25_neigh *neigh)
 
 	skb->protocol = htons(ETH_P_X25);
 	skb->dev      = neigh->dev;
-	skb->arp      = 1;
 
 	dev_queue_xmit(skb);
 }
@@ -235,7 +233,6 @@ void x25_send_frame(struct sk_buff *skb, struct x25_neigh *neigh)
 
 	skb->protocol = htons(ETH_P_X25);
 	skb->dev      = neigh->dev;
-	skb->arp      = 1;
 
 	dev_queue_xmit(skb);
 }

@@ -32,12 +32,12 @@ main(void)
 	DEFINE(STATE, offsetof(struct task_struct, state));
 	DEFINE(NEXT_TASK, offsetof(struct task_struct, next_task));
 	DEFINE(COUNTER, offsetof(struct task_struct, counter));
-	DEFINE(BLOCKED, offsetof(struct task_struct, blocked));
-	DEFINE(SIGNAL, offsetof(struct task_struct, signal));
+	DEFINE(SIGPENDING, offsetof(struct task_struct, sigpending));
 	DEFINE(TSS, offsetof(struct task_struct, tss));
-	DEFINE(KSP, offsetof(struct thread_struct, ksp));
-	/*DEFINE(PG_TABLES, offsetof(struct thread_struct, pg_tables));*/
 	DEFINE(MM, offsetof(struct task_struct, mm));
+	DEFINE(TASK_STRUCT_SIZE, sizeof(struct task_struct));
+	DEFINE(KSP, offsetof(struct thread_struct, ksp));
+	DEFINE(PG_TABLES, offsetof(struct thread_struct, pg_tables));
 	DEFINE(PGD, offsetof(struct mm_struct, pgd));
 	DEFINE(LAST_SYSCALL, offsetof(struct thread_struct, last_syscall));
 	DEFINE(PT_REGS, offsetof(struct thread_struct, regs));

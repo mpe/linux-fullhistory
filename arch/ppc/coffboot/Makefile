@@ -8,6 +8,7 @@ ifneq ($(shell uname -m),ppc)
 CROSS_COMPILE 	=powerpc-eabi-
 endif
 
+
 HOSTCC	= gcc
 HOSTCFLAGS = -O -I$(TOPDIR)/include
 
@@ -16,35 +17,71 @@ LD	= $(CROSS_COMPILE)ld
 CFLAGS	= -O -fno-builtin -I$(TOPDIR)/include
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O aixcoff-rs6000 -R .stab -R .stabstr -R .comment \
-	--add-section=image=zImage
+	--add-section=image=vmlinux.gz
 LD_ARGS = -e _start -T ld.script -Ttext 500000 -Tdata 510000 -Bstatic
-GZIP = gzip -9
+GZ = gzip -9
 
 OBJS = crt0.o start.o main.o misc.o string.o zlib.o
 LIBS = $(TOPDIR)/lib/lib.a
 
-vmlinux.coff: coffboot hack-coff zImage
-	$(OBJCOPY) $(OBJCOPY_ARGS) coffboot $@
-	./hack-coff $@
+ifeq ($(CONFIG_PMAC),y)
+hack-coff: hack-coff.c
+	$(HOSTCC) $(HOSTCFLAGS) -o hack-coff hack-coff.c
 
-vmlinux.coff.initrd: coffboot hack-coff zImage ramdisk.image.gz
-	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=initrd=ramdisk.image.gz \
-		coffboot $@
-	./hack-coff $@
+floppy: zImage
+#	mount -t hfs /dev/fd0 /mnt
+#	cp vmlinux.coff /mnt
+#	umount /mnt
+
+znetboot: vmlinux.coff
+	cp vmlinux.coff /tftpboot/zImage.pmac
+
+znetboot.initrd: vmlinux.coff.initrd
+	cp vmlinux.coff.initrd /tftpboot/zImage.pmac
 
 coffboot: $(OBJS) ld.script
 	$(LD) -o coffboot $(LD_ARGS) $(OBJS) $(LIBS)
 
-zImage: $(TOPDIR)/vmlinux elfextract
-	./elfextract $(TOPDIR)/vmlinux | $(GZIP) >zImage
+zImage: vmlinux.coff
 
-hack-coff: hack-coff.c
-	$(HOSTCC) $(HOSTCFLAGS) -o hack-coff hack-coff.c
+zImage.initrd: vmlinux.coff.initrd
 
-elfextract: elfextract.c
-	$(HOSTCC) $(HOSTCFLAGS) -o elfextract elfextract.c
+vmlinux.coff: coffboot hack-coff vmlinux.gz
+	$(OBJCOPY) $(OBJCOPY_ARGS) coffboot $@
+	./hack-coff $@
+	ln -sf vmlinux.coff zImage
+
+vmlinux.coff.initrd: coffboot hack-coff vmlinux.gz ramdisk.image.gz
+	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=initrd=ramdisk.image.gz \
+		coffboot $@
+	./hack-coff $@
+
+else
+znetboot: vmlinux.gz
+
+znetboot.initrd: vmlinux.gz
+
+coffboot: vmlinux.gz
+
+zImage: vmlinux.gz
+
+zImage.initrd: vmlinux.gz
+
+vmlinux.coff: vmlinux.gz
+
+vmlinux.coff.initrd: vmlinux.gz
+
+floppy: vmlinux.gz
+
+
+
+endif
+
+vmlinux.gz: $(TOPDIR)/vmlinux
+	$(OBJCOPY) -S -O binary $(TOPDIR)/vmlinux vmlinux
+	gzip -vf9 vmlinux
 
 clean:
-	rm -f elfextract hack-coff coffboot zImage vmlinux.coff
+	rm -f hack-coff coffboot zImage vmlinux.coff vmlinux.gz
 
 fastdep:

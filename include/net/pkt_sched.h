@@ -15,6 +15,7 @@ struct Qdisc_ops
 	void			(*destroy)(struct Qdisc *);
 	int			(*init)(struct Qdisc *, void *arg);
 	int			(*control)(struct Qdisc *, void *);
+	int 			(*requeue)(struct sk_buff *skb, struct Qdisc *);
 };
 
 struct Qdisc_head
@@ -34,7 +35,6 @@ struct Qdisc
 	struct Qdisc		*parent;
 	struct sk_buff_head	q;
 	struct device 		*dev;
-	struct sk_buff_head	failure_q;
 	unsigned long		dropped;
 	unsigned long		tx_last;
 	unsigned long		tx_timeo;
@@ -109,7 +109,7 @@ typedef u64 psched_time_t;
 #define PSCHED_US2JIFFIE(usecs) (((usecs)+(1000000/HZ-1))/(1000000/HZ))
 
 #define PSCHED_TLESS(tv1, tv2) (((tv1).tv_usec < (tv2).tv_usec && \
-				(tv1).tv_sec < (tv2).tv_sec) || \
+				(tv1).tv_sec <= (tv2).tv_sec) || \
 				 (tv1).tv_sec < (tv2).tv_sec)
 
 #define PSCHED_TADD2(tv, delta, tv_res) \
@@ -117,7 +117,7 @@ typedef u64 psched_time_t;
 	   int __delta = (tv).tv_usec + (delta); \
 	   (tv_res).tv_sec = (tv).tv_sec; \
 	   if (__delta > 1000000) { (tv_res).tv_sec++; __delta -= 1000000; } \
-	   (tv_res).tv_sec = __delta; \
+	   (tv_res).tv_usec = __delta; \
 })
 
 #define PSCHED_TADD(tv, delta) \

@@ -98,6 +98,7 @@ struct ip_mc_list
 	char			tm_running;
 	char			reporter;
 	char			unsolicit_count;
+	char			loaded;
 };
 
 extern __inline__ int ip_check_mc(struct device *dev, u32 mc_addr)

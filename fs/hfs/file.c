@@ -97,7 +97,12 @@ struct buffer_head *hfs_getblk(struct hfs_fork *fork, int block, int create)
 		/* If writing the block, then we have exclusive access
 		   to the file until we return, so it can't have moved.
 		*/
-		return tmp ? getblk(dev, tmp, HFS_SECTOR_SIZE) : NULL;
+	       if (tmp) {
+	               hfs_cat_mark_dirty(fork->entry);
+		       return getblk(dev, tmp, HFS_SECTOR_SIZE);
+	       }
+	       return NULL;
+
 	} else {
 		/* If reading the block, then retry since the
 		   location on disk could have changed while
@@ -235,6 +240,7 @@ static void hfs_file_truncate(struct inode * inode)
 
 	fork->lsize = inode->i_size;
 	hfs_extent_adj(fork);
+	hfs_cat_mark_dirty(HFS_I(inode)->entry);
 
 	inode->i_size = fork->lsize;
 	inode->i_blocks = fork->psize;
@@ -491,7 +497,7 @@ hfs_s32 hfs_do_write(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 			fork->lsize = pos;
 		}
 		entry->modify_date = hfs_u_to_mtime(CURRENT_TIME);
-		entry->dirt = 1;
+		hfs_cat_mark_dirty(entry);
 	}
 	return written;
 }

@@ -6,6 +6,7 @@
  * compatibility - Miguel (miguel@nuclecu.unam.mx)
  *
  * Added PCI 8042 controller support -DaveM
+ * Added Magic SysRq support -MJ
  */
 
 #include <linux/config.h>
@@ -22,6 +23,7 @@
 #include <linux/random.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/sysrq.h>
 
 #include <asm/kbio.h>
 #include <asm/vuid_event.h>
@@ -77,10 +79,10 @@ extern void scrollback(int);
 extern void scrollfront(int);
 
 struct l1a_kbd_state l1a_state = { 0, 0 };
-unsigned char kbd_read_mask = 0x01;	  /* modified by psaux.c */
-unsigned char aux_device_present = 0x00;  /* To make kernel/ksyms.c happy */
 
+#ifndef CONFIG_PCI
 struct wait_queue * keypress_wait = NULL;
+#endif
 
 void keyboard_wait_for_keypress(void)
 {
@@ -96,7 +98,6 @@ void keyboard_wait_for_keypress(void)
 /* shift state counters.. */
 static unsigned char k_down[NR_SHIFT] = {0, };
 /* keyboard key bitmap */
-#define BITS_PER_LONG (8*sizeof(unsigned long))
 static unsigned long key_down[256/BITS_PER_LONG] = { 0, };
 
 void push_kbd (int scan);
@@ -108,7 +109,9 @@ static int dead_key_next = 0;
  * the variable must be global, or a new procedure must be created to 
  * return the value. I chose the former way.
  */
+#ifndef CONFIG_PCI
 /*static*/ int shift_state = 0;
+#endif
 static int npadch = -1;			/* -1 or number assembled on pad */
 static unsigned char diacr = 0;
 static char rep = 0;			/* flag telling character repeat */
@@ -120,7 +123,7 @@ static int compose_led_on = 0;
 static int kbd_delay_ticks = HZ / 5;
 static int kbd_rate_ticks = HZ / 20;
 
-extern void compute_shiftstate(void);
+void sun_compute_shiftstate(void);
 
 typedef void (*k_hand)(unsigned char value, char up_flag);
 typedef void (k_handfn)(unsigned char value, char up_flag);
@@ -151,19 +154,34 @@ static void_fnp spec_fn_table[] = {
 };
 
 /* maximum values each key_handler can handle */
+#ifndef CONFIG_PCI
 const int max_vals[] = {
 	255, SIZE(func_table) - 1, SIZE(spec_fn_table) - 1, NR_PAD - 1,
 	NR_DEAD - 1, 255, 3, NR_SHIFT - 1,
-	255, NR_ASCII - 1, NR_LOCK - 1, 255
+	255, NR_ASCII - 1, NR_LOCK - 1, 255,
+	NR_LOCK - 1
 };
 
 const int NR_TYPES = SIZE(max_vals);
+#endif
 
 static void put_queue(int);
 static unsigned char handle_diacr(unsigned char);
 
 /* pt_regs - set by keyboard_interrupt(), used by show_ptregs() */
 static struct pt_regs * pt_regs;
+
+#ifdef CONFIG_MAGIC_SYSRQ
+unsigned char sun_sysrq_xlate[128] =
+	"\0\0\0\0\0\201\202\212\203\213\204\214\205\0\206\0"	/* 0x00 - 0x0f */
+	"\207\210\211\0\0\0\0\0\0\0\0\0\0\03312"		/* 0x10 - 0x1f */
+	"34567890-=`\177\0=/*"					/* 0x20 - 0x2f */
+	"\0\0.\0\0\011qwertyuiop"				/* 0x30 - 0x3f */
+	"[]\177\000789-\0\0\0\0\0asd"				/* 0x40 - 0x4f */
+	"fghjkl;'\\\015\0154560\0"				/* 0x50 - 0x5f */
+	"\0\0\0\0zxcvbnm,./\0\012"				/* 0x60 - 0x6f */
+	"123\0\0\0\0\0\0 \0\0\0\0\0\0";				/* 0x70 - 0x7f */
+#endif
 
 volatile unsigned char sunkbd_layout;
 volatile unsigned char sunkbd_type;
@@ -222,7 +240,7 @@ static unsigned char sunkbd_clickp;
 #define KEY_ALT         0x86
 #define KEY_L1          0x87
 
-/* Do to kbd_init() being called before rs_init(), and kbd_init() doing:
+/* Do to sun_kbd_init() being called before rs_init(), and sun_kbd_init() doing:
  *
  *	init_bh(KEYBOARD_BH, kbd_bh);
  *	mark_bh(KEYBOARD_BH);
@@ -394,7 +412,7 @@ static unsigned char norepeat_keys[128] = {
 };
 
 
-int setkeycode(unsigned int scancode, unsigned int keycode)
+int sun_setkeycode(unsigned int scancode, unsigned int keycode)
 {
 	if (scancode < SC_LIM || scancode > 255 || keycode > 127)
 	  return -EINVAL;
@@ -405,7 +423,7 @@ int setkeycode(unsigned int scancode, unsigned int keycode)
 	return 0;
 }
 
-int getkeycode(unsigned int scancode)
+int sun_getkeycode(unsigned int scancode)
 {
 	return
 	  (scancode < SC_LIM || scancode > 255) ? -EINVAL :
@@ -468,7 +486,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 	} else if(ch == SKBD_ALLUP) {
 		del_timer (&auto_repeat_timer);
 		memset(key_down, 0, sizeof(key_down));
-		compute_shiftstate();
+		sun_compute_shiftstate();
 		goto out;
 	}
 #ifdef SKBD_DEBUG
@@ -520,6 +538,14 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 		rep = test_and_set_bit(keycode, key_down);
 	}
 
+#ifdef CONFIG_MAGIC_SYSRQ			/* Handle the SysRq hack */
+	if (l1a_state.l1_down) {
+		if (!up_flag)
+			handle_sysrq(sun_sysrq_xlate[keycode], pt_regs, kbd, tty);
+		goto out;
+	}
+#endif
+
 	if(raw_mode)
 		goto out;
 
@@ -548,7 +574,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 		u_char type;
 
 		/* the XOR below used to be an OR */
-		int shift_final = shift_state ^ kbd->lockstate;
+		int shift_final = shift_state ^ kbd->lockstate ^ kbd->slockstate;
 		ushort *key_map = key_maps[shift_final];
 
 		if (key_map != NULL) {
@@ -572,7 +598,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 		} else {
 			/* maybe beep? */
 			/* we have at least to update shift_state */
-			compute_shiftstate();
+			sun_compute_shiftstate();
 		}
 	}
 out:
@@ -774,7 +800,7 @@ static void do_ignore(unsigned char value, char up_flag)
 
 static void do_null()
 {
-	compute_shiftstate();
+	sun_compute_shiftstate();
 }
 
 static void do_spec(unsigned char value, char up_flag)
@@ -981,7 +1007,7 @@ static void do_shift(unsigned char value, char up_flag)
 /* called after returning from RAW mode or when changing consoles -
    recompute k_down[] and shift_state from key_down[] */
 /* maybe called when keymap is undefined, so that shiftkey release is seen */
-void compute_shiftstate(void)
+void sun_compute_shiftstate(void)
 {
 	int i, j, k, sym, val;
 
@@ -1055,11 +1081,11 @@ static unsigned char ledstate = 0xff; /* undefined */
 static unsigned char sunkbd_ledstate = 0xff; /* undefined */
 static unsigned char ledioctl;
 
-unsigned char getledstate(void) {
+unsigned char sun_getledstate(void) {
     return ledstate;
 }
 
-void setledstate(struct kbd_struct *kbd, unsigned int led) {
+void sun_setledstate(struct kbd_struct *kbd, unsigned int led) {
     if (!(led & ~7)) {
 	ledioctl = led;
 	kbd->ledmode = LED_SHOW_IOCTL;
@@ -1181,7 +1207,7 @@ static void sunkbd_kd_mksound(unsigned int hz, unsigned int ticks)
 
 extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 
-__initfunc(int kbd_init(void))
+__initfunc(int sun_kbd_init(void))
 {
 	int i, opt_node;
 	struct kbd_struct kbd0;
@@ -1190,6 +1216,7 @@ __initfunc(int kbd_init(void))
 	kbd0.ledflagstate = kbd0.default_ledflagstate = KBD_DEFLEDS;
 	kbd0.ledmode = LED_SHOW_FLAGS;
 	kbd0.lockstate = KBD_DEFLOCK;
+	kbd0.slockstate = 0;
 	kbd0.modeflags = KBD_DEFMODE;
 	kbd0.kbdmode = VC_XLATE;
  
@@ -1245,8 +1272,8 @@ push_kbd (int scan)
 	wake_up_interruptible (&kbd_wait);
 }
 
-static long
-kbd_read (struct inode *inode, struct file *f, char *buffer, unsigned long count)
+static ssize_t
+kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 {
 	struct wait_queue wait = { current, NULL };
 	char *end, *p;
@@ -1278,12 +1305,11 @@ kbd_read (struct inode *inode, struct file *f, char *buffer, unsigned long count
 }
 
 /* Needed by X */
-static int
-kbd_fasync (struct inode *inode, struct file *filp, int on)
+static int kbd_fasync (struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper (inode, filp, on, &kb_fasync);
+	retval = fasync_helper (filp, on, &kb_fasync);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -1353,7 +1379,7 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 		if (c & LED_NLOCK) leds |= (1 << VC_NUMLOCK);
 		if (c & LED_CLOCK) leds |= (1 << VC_CAPSLOCK);
 		compose_led_on = !!(c & LED_CMPOSE);
-		setledstate(kbd_table + fg_console, leds);
+		sun_setledstate(kbd_table + fg_console, leds);
 		break;
 	case KIOCGLED:
 		put_user_ret(vcleds_to_sunkbd(getleds()), (unsigned char *) arg, -EFAULT);
@@ -1433,7 +1459,7 @@ kbd_close (struct inode *i, struct file *f)
 	kbd_redirected = 0;
 	kbd_opened = 0;
 
-	kbd_fasync (i, f, 0);
+	kbd_fasync (f, 0);
 	return 0;
 }
 

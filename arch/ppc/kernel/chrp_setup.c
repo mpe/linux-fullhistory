@@ -28,11 +28,20 @@
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/ioport.h>
+#ifdef CONFIG_ABSTRACT_CONSOLE
+#include <linux/console.h>
+#endif
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/ide.h>
+#include <asm/prom.h>
+#include <asm/gg2.h>
+
+extern void hydra_init(void);
+extern void w83c553f_init(void);
 
 /* for the mac fs */
 kdev_t boot_dev;
@@ -52,110 +61,103 @@ extern int rd_image_start;	/* starting block # of image */
 #endif
 
 
-extern char saved_command_line[256];
+int chrp_ide_irq = 0;
 
-long TotalMemory;
+void chrp_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+{
+	ide_ioreg_t port = base;
+	int i = 8;
+
+	while (i--)
+		*p++ = port++;
+	*p++ = base + 0x206;
+	if (irq != NULL)
+		*irq = chrp_ide_irq;
+}
+
+static const char *gg2_memtypes[4] = {
+    "FPM", "SDRAM", "EDO", "BEDO"
+};
+static const char *gg2_cachesizes[4] = {
+    "256 KB", "512 KB", "1 MB", "Reserved"
+};
+static const char *gg2_cachetypes[4] = {
+    "Asynchronous", "Reserved", "Flow-Through Synchronous",
+    "Pipelined Synchronous"
+};
+static const char *gg2_cachemodes[4] = {
+    "Disabled", "Write-Through", "Copy-Back", "Transparent Mode"
+};
 
 int
 chrp_get_cpuinfo(char *buffer)
 {
-	int pvr = _get_PVR();
-	int len;
-	char *model;
+	int i, len, sdramen;
+	unsigned int t;
+	struct device_node *root;
+	const char *model = "";
 
-	switch (pvr>>16)
-	{
-	case 1:
-		model = "601";
-		break;
-	case 3:
-		model = "603";
-		break;
-	case 4:
-		model = "604";
-		break;
-	case 6:
-		model = "603e";
-		break;
-	case 7:
-		model = "603ev";
-		break;
-	case 9:
-		model = "604e";
-		break;
-	default:
-		model = "unknown";
-		break;
+	root = find_path_device("/");
+	if (root)
+	    model = get_property(root, "model", NULL);
+	len = sprintf(buffer,"machine\t\t: CHRP %s\n", model);
+
+	/* VLSI VAS96011/12 `Golden Gate 2' */
+	/* Memory banks */
+	sdramen = (in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_DRAM_CTRL))
+		   >>31) & 1;
+	for (i = 0; i < (sdramen ? 4 : 6); i++) {
+	    t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_DRAM_BANK0+
+				     i*4));
+	    if (!(t & 1))
+		continue;
+	    switch ((t>>8) & 0x1f) {
+		case 0x1f:
+		    model = "4 MB";
+		    break;
+		case 0x1e:
+		    model = "8 MB";
+		    break;
+		case 0x1c:
+		    model = "16 MB";
+		    break;
+		case 0x18:
+		    model = "32 MB";
+		    break;
+		case 0x10:
+		    model = "64 MB";
+		    break;
+		case 0x00:
+		    model = "128 MB";
+		    break;
+		default:
+		    model = "Reserved";
+		    break;
+	    }
+	    len += sprintf(buffer+len, "memory bank %d\t: %s %s\n", i, model,
+			   gg2_memtypes[sdramen ? 1 : ((t>>1) & 3)]);
 	}
-
-	len = sprintf(buffer, "PowerPC %s rev %d.%d\n", model,
-		      (pvr & 0xff00) >> 8, pvr & 0xff);
-
-	len += sprintf(buffer+len, "bogomips\t: %lu.%02lu\n",
-		       (loops_per_sec+2500)/500000,
-		       ((loops_per_sec+2500)/5000) % 100);
-
-#if 0
-	/*
-	 * Ooh's and aah's info about zero'd pages in idle task
-	 */
-	{
-		extern unsigned int zerocount, zerototal, zeropage_hits,zeropage_calls;
-		len += sprintf(buffer+len,"zero pages\t: total %u (%uKb) "
-			       "current: %u (%uKb) hits: %u/%u (%lu%%)\n",
-			       zerototal, (zerototal*PAGE_SIZE)>>10,
-			       zerocount, (zerocount*PAGE_SIZE)>>10,
-			       zeropage_hits,zeropage_calls,
-			       /* : 1 below is so we don't div by zero */
-			       (zeropage_hits*100) /
-				    ((zeropage_calls)?zeropage_calls:1));
-	}
-#endif
+	/* L2 cache */
+	t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_CC_CTRL));
+	len += sprintf(buffer+len, "l2\t\t: %s %s (%s)\n",
+		       gg2_cachesizes[(t>>7) & 3], gg2_cachetypes[(t>>2) & 3],
+		       gg2_cachemodes[t & 3]);
 	return len;
 }
 
 __initfunc(void
-chrp_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
-	   unsigned long * memory_end_p))
+chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	extern char cmd_line[];
-	extern char _etext[], _edata[], _end[];
-	extern int panic_timeout;
-
-	/* Save unparsed command line copy for /proc/cmdline */
-	strcpy( saved_command_line, cmd_line );
-	*cmdline_p = cmd_line;
-
-	*memory_start_p = (unsigned long) Hash+Hash_size;
-	(unsigned long *)*memory_end_p = (unsigned long *)(TotalMemory+KERNELBASE);
 
 	/* init to some ~sane value until calibrate_delay() runs */
 	loops_per_sec = 50000000;
 	
-	/* reboot on panic */	
-	panic_timeout = 180;
-	
-	init_task.mm->start_code = PAGE_OFFSET;
-	init_task.mm->end_code = (unsigned long) _etext;
-	init_task.mm->end_data = (unsigned long) _edata;
-	init_task.mm->brk = (unsigned long) _end;	
-	
 	aux_device_present = 0xaa;
-	
-	switch ( _machine )
-	{
-	case _MACH_chrp:
-		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
-		break;
-	}
+
+	ROOT_DEV = to_kdev_t(0x0802); /* sda2 (sda1 is for the kernel) */
 	
 #ifdef CONFIG_BLK_DEV_RAM
-#if 0
-	ROOT_DEV = to_kdev_t(0x0200); /* floppy */
-	rd_prompt = 1;
-	rd_doload = 1;
-	rd_image_start = 0;
-#endif
 	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
 	if ( initrd_start )
 	{
@@ -177,4 +179,20 @@ chrp_setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	request_region(0x40,0x20,"timer");
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
+
+	/* PCI bridge config space access area -
+	 * appears to be not in devtree on longtrail. */
+	ioremap(GG2_PCI_CONFIG_BASE, 0x80000);
+
+	/*
+	 *  Temporary fixes for PCI devices.
+	 *  -- Geert
+	 */
+	hydra_init();		/* Mac I/O */
+	w83c553f_init();	/* PCI-ISA bridge and IDE */
+
+#ifdef CONFIG_ABSTRACT_CONSOLE
+	/* Frame buffer device based console */
+	conswitchp = &fb_con;
+#endif
 }

@@ -1,4 +1,4 @@
-/* $Id: kdebug.h,v 1.2 1997/04/04 00:50:21 davem Exp $
+/* $Id: kdebug.h,v 1.3 1997/12/14 23:24:47 ecd Exp $
  * kdebug.h:  Defines and definitions for debugging the Linux kernel
  *            under various kernel debuggers.
  *
@@ -73,9 +73,5 @@ extern __inline__ void sp_enter_debugger(void)
 #define KDEBUG_DUNNO_OFF    0x4
 #define KDEBUG_DUNNO2_OFF   0x8
 #define KDEBUG_TEACH_OFF    0xc
-
-/* ugh... */
-#define TRAP_TRACE(reg1, reg2) \
-     
 
 #endif /* !(_SPARC64_KDEBUG_H) */

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.57 1997/08/13 04:44:20 paulus Exp $
+/* $Id: pgtable.h,v 1.59 1997/10/12 06:20:43 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -198,7 +198,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT)
-		__flush_tlb_page(mm->context & 0x1fff, page & PAGE_MASK);
+		__flush_tlb_page(mm->context & 0x1fff, page);
 }
 
 #else /* __SMP__ */
@@ -231,7 +231,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT)
-		smp_flush_tlb_page(mm, page & PAGE_MASK);
+		smp_flush_tlb_page(mm, page);
 }
 
 #endif
@@ -499,7 +499,36 @@ extern void mmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbu
 /* These do nothing with the way I have things setup. */
 #define mmu_lockarea(vaddr, len)		(vaddr)
 #define mmu_unlockarea(vaddr, len)		do { } while(0)
-#define update_mmu_cache(vma, address, pte)	do { } while(0)
+
+extern __inline__ void update_mmu_cache(struct vm_area_struct *vma,
+					unsigned long address, pte_t pte)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long ctx = mm->context & 0x1fff;
+	unsigned long tag_access;
+
+	tag_access = address | ctx;
+
+	__asm__ __volatile__("
+	rdpr	%%pstate, %%g1
+	wrpr	%%g1, %0, %%pstate
+	brz,pt	%1, 1f
+	 mov	%2, %%g2
+	stxa	%3, [%%g2] %5
+	b,pt	%%xcc, 2f
+	 stxa	%4, [%%g0] %6
+1:
+	stxa	%3, [%%g2] %7
+	stxa	%4, [%%g0] %8
+2:
+	wrpr	%%g1, 0x0, %%pstate
+"	: /* no outputs */
+	: "i" (PSTATE_IE), "r" (vma->vm_flags & VM_EXEC),
+	  "i" (TLB_TAG_ACCESS), "r" (tag_access), "r" (pte_val(pte)),
+	  "i" (ASI_IMMU), "i" (ASI_ITLB_DATA_IN),
+	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_IN)
+	: "g1", "g2");
+}
 
 /* Make a non-present pseudo-TTE. */
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)

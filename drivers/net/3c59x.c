@@ -15,7 +15,7 @@
 */
 
 static char *version =
-"3c59x.c:v0.46B 9/25/97 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.47H 12/4/97 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -89,9 +89,10 @@ static int max_interrupt_work = 20;
 #endif
 #define virt_to_bus(addr)  ((unsigned long)addr)
 #define bus_to_virt(addr) ((void*)addr)
+#define NR_IRQS 16
 #else  /* 1.3.0 and later */
 #define RUN_AT(x) (jiffies + (x))
-#define DEV_ALLOC_SKB(len) dev_alloc_skb(len + 2)
+#define DEV_ALLOC_SKB(len) dev_alloc_skb(len)
 #endif
 
 #ifdef SA_SHIRQ
@@ -111,8 +112,19 @@ static int max_interrupt_work = 20;
 #define udelay(microsec)	do { int _i = 4*microsec; while (--_i > 0) { __SLOW_DOWN_IO; }} while (0)
 #endif
 
-#if (LINUX_VERSION_CODE < 0x20123)
+#if LINUX_VERSION_CODE < 0x20115
 #define test_and_set_bit(val, addr) set_bit(val, addr)
+#elif defined(MODULE)
+MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
+MODULE_DESCRIPTION("3Com 3c590/3c900 series Vortex/Boomerang driver");
+MODULE_PARM(debug, "i");
+MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
+MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
+MODULE_PARM(rx_copybreak, "i");
+MODULE_PARM(max_interrupt_work, "i");
+MODULE_PARM(compaq_ioaddr, "i");
+MODULE_PARM(compaq_irq, "i");
+MODULE_PARM(compaq_prod_id, "i");
 #endif
 
 /* "Knobs" for adjusting internal parameters. */
@@ -147,7 +159,8 @@ static char mii_preamble_required = 0;
 
 /* Caution!  These entries must be consistent, with the EISA ones last. */
 static const int product_ids[] = {
-	0x5900, 0x5950, 0x5951, 0x5952, 0x9000, 0x9001, 0x9050, 0x9051, 0, 0};
+	0x5900, 0x5950, 0x5951, 0x5952, 0x9000, 0x9001, 0x9050, 0x9051, 0x9055,
+	0, 0};
 static const char *product_names[] = {
 	"3c590 Vortex 10Mbps",
 	"3c595 Vortex 100baseTX",
@@ -157,11 +170,12 @@ static const char *product_names[] = {
 	"3c900 Boomerang 10Mbps/Combo",
 	"3c905 Boomerang 100baseTx",
 	"3c905 Boomerang 100baseT4",
+	"3c905B Cyclone 100baseTx",
 	"3c592 EISA 10mbps Demon/Vortex",
 	"3c597 EISA Fast Demon/Vortex",
 };
-#define DEMON10_INDEX 8
-#define DEMON100_INDEX 9
+#define DEMON10_INDEX 9
+#define DEMON100_INDEX 10
 
 /*
 				Theory of Operation
@@ -424,7 +438,7 @@ static struct media_table {
 
 static int vortex_scan(struct device *dev);
 static struct device *vortex_found_device(struct device *dev, int ioaddr,
-										  int irq, int product_index,
+										  int irq, const char *product_name,
 										  int options, int card_idx);
 static int vortex_probe1(struct device *dev);
 static int vortex_open(struct device *dev);
@@ -472,10 +486,10 @@ static int full_duplex[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 /* A list of all installed Vortex devices, for removing the driver module. */
 static struct device *root_vortex_dev = NULL;
 
-/* Variables to work-around the Compaq PCI BIOS32 problem. */
-static int compaq_ioaddr = 0, compaq_irq = 0, compaq_prod_id = 0;
-
 #ifdef MODULE
+/* Variables to work-around the Compaq PCI BIOS32 problem. */
+static int compaq_ioaddr = 0, compaq_irq = 0;
+
 static int debug = -1;
 
 int
@@ -510,6 +524,7 @@ int tc59x_probe(struct device *dev)
 static int vortex_scan(struct device *dev)
 {
 	int cards_found = 0;
+	const char *product_name;
 
 #ifndef NO_PCI					/* Allow an EISA-only driver. */
 	/* Ideally we would detect all cards in slot order.  That would
@@ -522,10 +537,10 @@ static int vortex_scan(struct device *dev)
 
 		for (;pci_index < 0xff; pci_index++) {
 			unsigned char pci_irq_line, pci_latency;
-			unsigned short pci_command, vendor, device;
+			unsigned short pci_command, new_command, vendor, device;
 			unsigned int pci_ioaddr;
-
 			int board_index = 0;
+
 			if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
 									pci_index, &pci_bus, &pci_device_fn)
 				!= PCIBIOS_SUCCESSFUL)
@@ -538,6 +553,8 @@ static int vortex_scan(struct device *dev)
 									 PCI_INTERRUPT_LINE, &pci_irq_line);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+			pcibios_read_config_word(pci_bus, pci_device_fn,
+									 PCI_COMMAND, &pci_command);
 			/* Remove I/O space marker in bit 0. */
 			pci_ioaddr &= ~3;
 
@@ -548,7 +565,13 @@ static int vortex_scan(struct device *dev)
 				if (device == product_ids[board_index])
 					break;
 			}
-			if (product_ids[board_index] == 0) {
+			if (product_ids[board_index])
+				product_name = product_names[board_index];
+			else if ((device & 0xfff0) == 0x9000)
+				product_name = "3c900";
+			else if ((device & 0xfff0) == 0x9050)
+				product_name = "3c905";
+			else {
 				printk("Unknown 3Com PCI ethernet adapter type %4.4x detected:"
 					   " not configured.\n", device);
 				continue;
@@ -556,34 +579,34 @@ static int vortex_scan(struct device *dev)
 			if (check_region(pci_ioaddr, VORTEX_TOTAL_SIZE))
 				continue;
 
+			new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
+			if (pci_command != new_command) {
+				printk(KERN_INFO "  The PCI BIOS has not enabled this"
+					   " device!  Updating PCI command %4.4x->%4.4x.\n",
+					   pci_command, new_command);
+				pcibios_write_config_word(pci_bus, pci_device_fn,
+										  PCI_COMMAND, new_command);
+			}
+
 			dev = vortex_found_device(dev, pci_ioaddr, pci_irq_line,
-									  board_index, dev && dev->mem_start
+									  product_name, dev && dev->mem_start
 									  ? dev->mem_start : options[cards_found],
 									  cards_found);
 
 			if (dev) {
-				/* Get and check the bus-master and latency values.
-				   Some PCI BIOSes fail to set the master-enable bit, and
+				/* Get and check the latency values.  On the 3c590 series
 				   the latency timer must be set to the maximum value to avoid
 				   data corruption that occurs when the timer expires during
-				   a transfer -- a bug in the Vortex chip. */
-				pcibios_read_config_word(pci_bus, pci_device_fn,
-										 PCI_COMMAND, &pci_command);
-				if ( ! (pci_command & PCI_COMMAND_MASTER)) {
-					printk("%s:  PCI Master Bit has not been set! "
-						   " Setting...\n", dev->name);
-					pci_command |= PCI_COMMAND_MASTER;
-					pcibios_write_config_word(pci_bus, pci_device_fn,
-											  PCI_COMMAND, pci_command);
-				}
+				   a transfer -- a bug in the Vortex chip only. */
+				unsigned char new_latency = (device&0xff00) == 0x5900 ? 248 : 32;
 				pcibios_read_config_byte(pci_bus, pci_device_fn,
 										 PCI_LATENCY_TIMER, &pci_latency);
-				if (pci_latency != 248) {
+				if (pci_latency < new_latency) {
 					printk("%s: Overriding PCI latency"
-						   " timer (CFLT) setting of %d, new value is 248.\n",
-						   dev->name, pci_latency);
+						   " timer (CFLT) setting of %d, new value is %d.\n",
+						   dev->name, pci_latency, new_latency);
 					pcibios_write_config_byte(pci_bus, pci_device_fn,
-											  PCI_LATENCY_TIMER, 248);
+											  PCI_LATENCY_TIMER, new_latency);
 				}
 				dev = 0;
 				cards_found++;
@@ -596,7 +619,8 @@ static int vortex_scan(struct device *dev)
 	if (EISA_bus) {
 		static int ioaddr = 0x1000;
 		for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
-			int product_id, product_index;
+			int product_id;
+			char *product_name;
 			if (check_region(ioaddr, VORTEX_TOTAL_SIZE))
 				continue;
 			/* Check the standard EISA ID register for an encoded '3Com'. */
@@ -605,13 +629,13 @@ static int vortex_scan(struct device *dev)
 			/* Check for a product that we support, 3c59{2,7} any rev. */
 			product_id = inw(ioaddr + 0xC82) & 0xF0FF;
 			if (product_id == 0x7059) 		/* 597 */
-				product_index = DEMON100_INDEX;
+				product_name = "3c597 EISA Fast Demon/Vortex";
 			else if (product_id == 0x2059)	/* 592 */
-				product_index = DEMON10_INDEX;
+				product_name = "3c592 EISA 10mbps Demon/Vortex";
 			else
 				continue;
 			vortex_found_device(dev, ioaddr, inw(ioaddr + 0xC88) >> 12,
-								product_index,  dev && dev->mem_start
+								product_name,  dev && dev->mem_start
 								? dev->mem_start : options[cards_found],
 								cards_found);
 			dev = 0;
@@ -619,24 +643,25 @@ static int vortex_scan(struct device *dev)
 		}
 	}
 
+#ifdef MODULE
 	/* Special code to work-around the Compaq PCI BIOS32 problem. */
 	if (compaq_ioaddr) {
-		vortex_found_device(dev, compaq_ioaddr, compaq_irq, compaq_prod_id,
+		vortex_found_device(dev, compaq_ioaddr, compaq_irq, "3Com Vortex",
 							dev && dev->mem_start ? dev->mem_start
 							: options[cards_found], cards_found);
 		cards_found++;
 		dev = 0;
 	}
+#endif
 
-	/* Finally check for a 3c515 on the ISA bus. */
-	/* (3c515 support omitted on this version.) */
+	/* 3c515 cards are now supported by the 3c515.c driver. */
 
 	return cards_found;
 }
 
 static struct device *
 vortex_found_device(struct device *dev, int ioaddr, int irq,
-					int product_index, int options, int card_idx)
+					const char *product_name, int options, int card_idx)
 {
 	struct vortex_private *vp;
 
@@ -654,7 +679,7 @@ vortex_found_device(struct device *dev, int ioaddr, int irq,
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->init = vortex_probe1;
-	vp->product_name = product_names[product_index];
+	vp->product_name = product_name;
 	vp->options = options;
 	if (card_idx >= 0) {
 		if (full_duplex[card_idx] >= 0)
@@ -687,7 +712,7 @@ vortex_found_device(struct device *dev, int ioaddr, int irq,
 	dev->mtu = mtu;
 
 	vp  = (struct vortex_private *)dev->priv;
-	vp->product_name = product_names[product_index];
+	vp->product_name = product_name;
 	vp->options = options;
 	if (options >= 0) {
 		vp->media_override = ((options & 7) == 2)  ?  0  :  options & 7;
@@ -717,7 +742,7 @@ static int vortex_probe1(struct device *dev)
 	/* Read the station address from the EEPROM. */
 	EL3WINDOW(0);
 	for (i = 0; i < 0x18; i++) {
-		short *phys_addr = (short *)dev->dev_addr;
+		u16 *phys_addr = (u16 *)dev->dev_addr;
 		int timer;
 		outw(EEPROM_Read + i, ioaddr + Wn0EepromCmd);
 		/* Pause for at least 162 us. for the read to take place. */
@@ -792,7 +817,7 @@ static int vortex_probe1(struct device *dev)
 	vp->info1 = eeprom[13];
 	vp->info2 = eeprom[15];
 	vp->capabilities = eeprom[16];
-	if ((vp->capabilities & 0x20) && vp->bus_master) {
+	if (vp->capabilities & 0x20) {
 	  vp->full_bus_master_tx = 1;
 	  printk("  Enabling bus-master transmits and %s receives.\n",
 			 (vp->info2 & 1) ? "early" : "whole-frame" );
@@ -1045,13 +1070,17 @@ vortex_open(struct device *dev)
 			vp->rx_ring[i].next = virt_to_bus(&vp->rx_ring[i+1]);
 			vp->rx_ring[i].status = 0;	/* Clear complete bit. */
 			vp->rx_ring[i].length = PKT_BUF_SZ | LAST_FRAG;
-			skb = dev_alloc_skb(PKT_BUF_SZ);
+			skb = DEV_ALLOC_SKB(PKT_BUF_SZ);
 			vp->rx_skbuff[i] = skb;
 			if (skb == NULL)
 				break;			/* Bad news!  */
 			skb->dev = dev;			/* Mark as being used by this device. */
+#if LINUX_VERSION_CODE >= 0x10300
 			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 			vp->rx_ring[i].addr = virt_to_bus(skb->tail);
+#else
+			vp->rx_ring[i].addr = virt_to_bus(skb->data);
+#endif
 		}
 		vp->rx_ring[i-1].next = virt_to_bus(&vp->rx_ring[0]); /* Wrap the ring. */
 		outl(virt_to_bus(&vp->rx_ring[0]), ioaddr + UpListPtr);
@@ -1332,7 +1361,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Clear the Tx status stack. */
 	{
 		short tx_status;
-		int i = 4;
+		int i = 32;
 
 		while (--i > 0	&&	(tx_status = inb(ioaddr + TxStatus)) > 0) {
 			if (tx_status & 0x3C) {		/* A Tx-disabling error occurred.  */
@@ -1431,9 +1460,10 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 	int latency;
 	int i = max_interrupt_work;
 
-	if (dev->interrupt)
-		printk("%s: Re-entering the interrupt handler.\n", dev->name);
-	dev->interrupt = 1;
+	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
+		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
+		return;
+	}
 
 	ioaddr = dev->base_addr;
 	latency = inb(ioaddr + Timer);
@@ -1560,7 +1590,16 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 					printk("%s: Host error, FIFO diagnostic register %4.4x.\n",
 						   dev->name, fifo_diag);
 				/* Adapter failure requires Tx/Rx reset and reinit. */
-				if (fifo_diag & 0x0400) {
+				if (lp->full_bus_master_tx) {
+					int j;
+					outw(TotalReset | 0xff, ioaddr + EL3_CMD);
+					for (j = 200; j >= 0 ; j--)
+					if ( ! (inw(ioaddr + EL3_STATUS) & CmdInProgress))
+						break;
+					/* Re-enable the receiver. */
+					outw(RxEnable, ioaddr + EL3_CMD);
+					outw(TxEnable, ioaddr + EL3_CMD);
+				} else if (fifo_diag & 0x0400) {
 					int j;
 					outw(TxReset, ioaddr + EL3_CMD);
 					for (j = 20; j >= 0 ; j--)
@@ -1675,6 +1714,7 @@ boomerang_rx(struct device *dev)
 	int entry = vp->cur_rx % RX_RING_SIZE;
 	int ioaddr = dev->base_addr;
 	int rx_status;
+	int rx_work_limit = vp->dirty_rx + RX_RING_SIZE - vp->cur_rx;
 
 	if (vortex_debug > 5)
 		printk("   In boomerang_rx(), status %4.4x, rx_status %4.4x.\n",
@@ -1704,11 +1744,16 @@ boomerang_rx(struct device *dev)
 			if (pkt_len < rx_copybreak
 				&& (skb = DEV_ALLOC_SKB(pkt_len + 2)) != 0) {
 				skb->dev = dev;
+#if LINUX_VERSION_CODE >= 0x10300
 				skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 				/* 'skb_put()' points to the start of sk_buff data area. */
 				memcpy(skb_put(skb, pkt_len),
 					   bus_to_virt(vp->rx_ring[entry].addr),
 					   pkt_len);
+#else
+				memcpy(skb->data, bus_to_virt(vp->rx_ring[entry].addr), pkt_len);
+				skb->len = pkt_len;
+#endif
 				rx_copy++;
 			} else{
 				void *temp;
@@ -1734,13 +1779,15 @@ boomerang_rx(struct device *dev)
 			vp->stats.rx_packets++;
 		}
 		entry = (++vp->cur_rx) % RX_RING_SIZE;
+		if (--rx_work_limit < 0)
+			break;
 	}
 	/* Refill the Rx ring buffers. */
 	for (; vp->dirty_rx < vp->cur_rx; vp->dirty_rx++) {
 		struct sk_buff *skb;
 		entry = vp->dirty_rx % RX_RING_SIZE;
 		if (vp->rx_skbuff[entry] == NULL) {
-			skb = dev_alloc_skb(PKT_BUF_SZ);
+			skb = DEV_ALLOC_SKB(PKT_BUF_SZ);
 			if (skb == NULL)
 				break;			/* Bad news!  */
 			skb->dev = dev;			/* Mark as being used by this device. */
@@ -1914,7 +1961,7 @@ static int vortex_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 static void
 set_rx_mode(struct device *dev)
 {
-	short ioaddr = dev->base_addr;
+	int ioaddr = dev->base_addr;
 	short new_mode;
 
 	if (dev->flags & IFF_PROMISC) {
@@ -1964,4 +2011,3 @@ cleanup_module(void)
  *  tab-width: 4
  * End:
  */
-

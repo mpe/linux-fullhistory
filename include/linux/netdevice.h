@@ -31,6 +31,12 @@
 
 #include <asm/atomic.h>
 
+#ifdef __KERNEL__
+#ifdef CONFIG_NET_PROFILE
+#include <net/profile.h>
+#endif
+#endif
+
 /*
  *	For future expansion when we will have different priorities. 
  */
@@ -60,6 +66,7 @@
 #endif
 
 struct neighbour;
+struct sk_buff;
 
 /*
  *	We tag multicasts with these structures.
@@ -67,10 +74,11 @@ struct neighbour;
  
 struct dev_mc_list
 {	
-	struct dev_mc_list *next;
-	char dmi_addr[MAX_ADDR_LEN];
-	unsigned short dmi_addrlen;
-	unsigned short dmi_users;
+	struct dev_mc_list	*next;
+	__u8			dmi_addr[MAX_ADDR_LEN];
+	unsigned char		dmi_addrlen;
+	int			dmi_users;
+	int			dmi_gusers;
 };
 
 struct hh_cache
@@ -78,7 +86,7 @@ struct hh_cache
 	struct hh_cache *hh_next;	/* Next entry			     */
 	atomic_t	hh_refcnt;	/* number of users                   */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
-	char		hh_uptodate;	/* hh_data is valid                  */
+	int		(*hh_output)(struct sk_buff *skb);
 	/* cached hardware header; allow for machine alignment needs.        */
 	unsigned long	hh_data[16/sizeof(unsigned long)];
 };
@@ -117,6 +125,16 @@ struct net_device_stats
 	unsigned long	tx_window_errors;
 	
 };
+
+#ifdef CONFIG_NET_FASTROUTE
+struct net_fastroute_stats
+{
+	int		hits;
+	int		succeed;
+	int		deferred;
+	int		latency_reduction;
+};
+#endif
 
 /* Media selection options. */
 enum {
@@ -260,8 +278,7 @@ struct device
 	int			(*set_config)(struct device *dev,
 					      struct ifmap *map);
 #define HAVE_HEADER_CACHE
-	int			(*hard_header_cache)(struct dst_entry *dst,
-						     struct neighbour *neigh,
+	int			(*hard_header_cache)(struct neighbour *neigh,
 						     struct hh_cache *hh);
 	void			(*header_cache_update)(struct hh_cache *hh,
 						       struct device *dev,
@@ -271,6 +288,18 @@ struct device
 
 	int			(*hard_header_parse)(struct sk_buff *skb,
 						     unsigned char *haddr);
+	int			(*neigh_setup)(struct neighbour *n);
+	int			(*accept_fastpath)(struct device *, struct dst_entry*);
+
+#ifdef CONFIG_NET_FASTROUTE
+	/* Really, this semaphore may be necessary and for not fastroute code;
+	   f.e. SMP??
+	 */
+	int			tx_semaphore;
+#define NETDEV_FASTROUTE_HMASK 0xF
+	/* Semi-private data. Keep it at the end of device struct. */
+	struct dst_entry	*fastpath[NETDEV_FASTROUTE_HMASK+1];
+#endif
 };
 
 
@@ -316,7 +345,6 @@ extern int		dev_restart(struct device *dev);
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);
 extern void		net_bh(void);
-extern void		dev_tint(struct device *dev);
 extern int		dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 extern int		dev_ioctl(unsigned int cmd, void *);
 extern int		dev_change_flags(struct device *, unsigned);
@@ -383,13 +411,26 @@ extern int		register_trdev(struct device *dev);
 extern void		unregister_trdev(struct device *dev);
 /* Functions used for multicast support */
 extern void		dev_mc_upload(struct device *dev);
-extern void 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);
-extern void		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
+extern int 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);
+extern int		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
 extern void		dev_mc_discard(struct device *dev);
 extern void		dev_set_promiscuity(struct device *dev, int inc);
 extern void		dev_set_allmulti(struct device *dev, int inc);
 /* Load a device via the kerneld */
 extern void		dev_load(const char *name);
+extern void		dev_mcast_init(void);
+extern int		netdev_register_fc(struct device *dev, void (*stimul)(struct device *dev));
+extern void		netdev_unregister_fc(int bit);
+extern int		netdev_dropping;
+extern int		netdev_max_backlog;
+extern atomic_t		netdev_rx_dropped;
+extern unsigned long	netdev_fc_xoff;
+#ifdef CONFIG_NET_FASTROUTE
+extern int		netdev_fastroute;
+extern int		netdev_fastroute_obstacles;
+extern void		dev_clear_fastroute(struct device *dev);
+extern struct net_fastroute_stats dev_fastroute_stat;
+#endif
 
 
 #endif /* __KERNEL__ */

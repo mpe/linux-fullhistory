@@ -1,9 +1,9 @@
-/*  $Id: process.c,v 1.42 1997/08/19 14:17:55 jj Exp $
+/*  $Id: process.c,v 1.50 1998/01/09 16:39:33 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
- *  Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *  Copyright (C) 1997, 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 /*
@@ -38,6 +38,8 @@
 #include <asm/pstate.h>
 #include <asm/elf.h>
 #include <asm/fpumacro.h>
+
+/* #define VERBOSE_SHOWREGS */
 
 #define PGTCACHE_HIGH_WATER		50
 #define PGTCACHE_LOW_WATER		25
@@ -98,7 +100,7 @@ asmlinkage int cpu_idle(void)
 		}
 		barrier();
 		current->counter = -100;
-		if(resched_needed())
+		if(need_resched)
 			schedule();
 		barrier();
 	}
@@ -166,7 +168,7 @@ static void show_regwindow32(struct pt_regs *regs)
 {
 	struct reg_window32 *rw;
 	struct reg_window32 r_w;
-	unsigned long old_fs;
+	mm_segment_t old_fs;
 	
 	__asm__ __volatile__ ("flushw");
 	rw = (struct reg_window32 *)((long)(unsigned)regs->u_regs[14]);
@@ -192,7 +194,7 @@ static void show_regwindow(struct pt_regs *regs)
 {
 	struct reg_window *rw;
 	struct reg_window r_w;
-	unsigned long old_fs;
+	mm_segment_t old_fs;
 
 	if ((regs->tstate & TSTATE_PRIV) || !(current->tss.flags & SPARC_FLAG_32BIT)) {
 		__asm__ __volatile__ ("flushw");
@@ -311,14 +313,47 @@ void __show_regs(struct pt_regs * regs)
 #endif
 }
 
+#ifdef VERBOSE_SHOWREGS
+static void idump_from_user (unsigned int *pc)
+{
+        int i;
+        int code;
+        
+        if((((unsigned long) pc) & 3))
+        	return;
+        
+        pc -= 3;
+        for(i = -3; i < 6; i++) {
+        	get_user(code, pc);
+                printk("%c%08x%c",i?' ':'<',code,i?' ':'>');
+                pc++;
+        }
+        printk("\n");
+}
+#endif
+                                                                		
 void show_regs(struct pt_regs *regs)
 {
+#ifdef VERBOSE_SHOWREGS
+	extern long etrap, etraptl1;
+#endif
 	__show_regs(regs);
 #ifdef __SMP__
 	{
 		extern void smp_report_regs(void);
 
 		smp_report_regs();
+	}
+#endif
+
+#ifdef VERBOSE_SHOWREGS	
+	if (regs->tpc >= &etrap && regs->tpc < &etraptl1 &&
+	    regs->u_regs[14] >= (long)current - PAGE_SIZE &&
+	    regs->u_regs[14] < (long)current + 6 * PAGE_SIZE) {
+		printk ("*********parent**********\n");
+		__show_regs((struct pt_regs *)(regs->u_regs[14] + STACK_BIAS + REGWIN_SZ));
+		idump_from_user(((struct pt_regs *)(regs->u_regs[14] + STACK_BIAS + REGWIN_SZ))->tpc);
+		printk ("*********endpar**********\n");
 	}
 #endif
 }
@@ -352,29 +387,35 @@ void show_thread(struct thread_struct *tss)
 	printk("sig_address:       0x%016lx\n", tss->sig_address);
 	printk("sig_desc:          0x%016lx\n", tss->sig_desc);
 	printk("ksp:               0x%016lx\n", tss->ksp);
-	printk("kpc:               0x%016lx\n", tss->kpc);
+	printk("kpc:               0x%08x\n", tss->kpc);
 
-	for (i = 0; i < NSWINS; i++) {
-		if (!tss->rwbuf_stkptrs[i])
-			continue;
-		printk("reg_window[%d]:\n", i);
-		printk("stack ptr:         0x%016lx\n", tss->rwbuf_stkptrs[i]);
+	if (tss->w_saved) {
+		for (i = 0; i < NSWINS; i++) {
+			if (!tss->rwbuf_stkptrs[i])
+				continue;
+			printk("reg_window[%d]:\n", i);
+			printk("stack ptr:         0x%016lx\n", tss->rwbuf_stkptrs[i]);
+		}
+		printk("w_saved:           0x%04x\n", tss->w_saved);
 	}
-	printk("w_saved:           0x%08lx\n", tss->w_saved);
 
 	printk("sstk_info.stack:   0x%016lx\n",
 	        (unsigned long)tss->sstk_info.the_stack);
 	printk("sstk_info.status:  0x%016lx\n",
 	        (unsigned long)tss->sstk_info.cur_status);
 	printk("flags:             0x%08x\n", tss->flags);
-	printk("current_ds:        0x%016lx\n", tss->current_ds);
-
-	/* XXX missing: core_exec */
+	printk("current_ds:        0x%016lx\n", tss->current_ds.seg);
 }
 
 /* Free current thread data structures etc.. */
 void exit_thread(void)
 {
+	if (current->tss.utraps) {
+		if (current->tss.utraps[0] < 2)
+			kfree (current->tss.utraps);
+		else
+			current->tss.utraps[0]--;
+	}
 }
 
 void flush_thread(void)
@@ -540,9 +581,9 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	memcpy(child_trap_frame, (((struct reg_window *)regs)-1), tframe_size);
 	p->tss.ksp = ((unsigned long) child_trap_frame) - STACK_BIAS;
 #ifdef __SMP__
-	p->tss.kpc = ((unsigned long) ret_from_smpfork) - 0x8;
+	p->tss.kpc = ((unsigned int) ((unsigned long) ret_from_smpfork)) - 0x8;
 #else
-	p->tss.kpc = ((unsigned long) ret_from_syscall) - 0x8;
+	p->tss.kpc = ((unsigned int) ((unsigned long) ret_from_syscall)) - 0x8;
 #endif
 	p->tss.kregs = (struct pt_regs *)(child_trap_frame+sizeof(struct reg_window));
 	p->tss.cwp = (regs->tstate + 1) & TSTATE_CWP;
@@ -569,6 +610,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 				return -EFAULT;
 			p->tss.kregs->u_regs[UREG_FP] = csp;
 		}
+		if (p->tss.utraps)
+			p->tss.utraps[0]++;
 	}
 
 	/* Set the return value for the child. */
@@ -595,7 +638,6 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs.y = regs->y;
 	/* fuck me plenty */
 	memcpy(&dump->regs.regs[0], &regs->u_regs[1], (sizeof(unsigned long) * 15));
-	dump->uexec = current->tss.core_exec;
 	dump->u_tsize = (((unsigned long) current->mm->end_code) -
 		((unsigned long) current->mm->start_code)) & ~(PAGE_SIZE - 1);
 	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1)));

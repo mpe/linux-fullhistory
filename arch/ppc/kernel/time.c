@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.10 1997/08/27 22:06:56 cort Exp $
+ * $Id: time.c,v 1.17 1997/12/28 22:47:21 paulus Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -40,22 +40,6 @@ unsigned long last_rtc_update = 0;
 unsigned decrementer_count;	/* count value for 1e6/HZ microseconds */
 unsigned count_period_num;	/* 1 decrementer count equals */
 unsigned count_period_den;	/* count_period_num / count_period_den us */
-
-/* Accessor functions for the decrementer register. */
-inline unsigned long
-get_dec(void)
-{
-	int ret;
-
-	asm volatile("mfspr %0,22" : "=r" (ret) :);
-	return ret;
-}
-
-inline void
-set_dec(int val)
-{
-	asm volatile("mtspr 22,%0" : : "r" (val));
-}
 
 /*
  * timer_interrupt - gets called when the decrementer overflows,
@@ -125,22 +109,6 @@ void do_settimeofday(struct timeval *tv)
 void
 time_init(void)
 {
-	/* pmac hasn't yet called via_cuda_init() */
-	if ( _machine != _MACH_Pmac )
-	{
-
-		if ( _machine == _MACH_chrp )
-			xtime.tv_sec = chrp_get_rtc_time();
-		else /* assume prep */
-			xtime.tv_sec = prep_get_rtc_time();
-		xtime.tv_usec = 0;
-		/*
-		 * mark the rtc/on-chip timer as in sync
-		 * so we don't update right away
-		 */
-		last_rtc_update = xtime.tv_sec;
-	}
-
 	if ((_get_PVR() >> 16) == 1) {
 		/* 601 processor: dec counts down by 128 every 128ns */
 		decrementer_count = DECREMENTER_COUNT_601;
@@ -148,22 +116,35 @@ time_init(void)
 		count_period_den = COUNT_PERIOD_DEN_601;
 	}
 
-	switch (_machine)
-	{
+	switch (_machine) {
 	case _MACH_Pmac:
-		pmac_calibrate_decr();
+		/* can't call pmac_get_rtc_time() yet,
+		   because via-cuda isn't initialized yet. */
+		if ((_get_PVR() >> 16) != 1)
+			pmac_calibrate_decr();
 		set_rtc_time = pmac_set_rtc_time;
 		break;
-	case _MACH_IBM:
-	case _MACH_Motorola:
+	case _MACH_chrp:
+		chrp_time_init();
+		xtime.tv_sec = chrp_get_rtc_time();
+		if ((_get_PVR() >> 16) != 1)
+			chrp_calibrate_decr();
+		set_rtc_time = chrp_set_rtc_time;
+		break;
+	case _MACH_prep:
+		xtime.tv_sec = prep_get_rtc_time();
 		prep_calibrate_decr();
 		set_rtc_time = prep_set_rtc_time;
 		break;
-	case _MACH_chrp:
-		chrp_calibrate_decr();
-		set_rtc_time = chrp_set_rtc_time;
-		break;
 	}
+	xtime.tv_usec = 0;
+
+	/*
+	 * mark the rtc/on-chip timer as in sync
+	 * so we don't update right away
+	 */
+	last_rtc_update = xtime.tv_sec;
+
 	set_dec(decrementer_count);
 }
 
@@ -180,7 +161,7 @@ void prep_calibrate_decr(void)
 	unsigned long flags;
 	
 	save_flags(flags);
-	
+
 #define TIMER0_COUNT 0x40
 #define TIMER_CONTROL 0x43
 	/* set timer to periodic mode */
@@ -199,7 +180,7 @@ void prep_calibrate_decr(void)
 
 void prep_calibrate_decr_handler(int irq, void *dev, struct pt_regs * regs)
 {
-	int freq, divisor;
+	unsigned long freq, divisor;
 	static unsigned long t1 = 0, t2 = 0;
 
 	if ( !t1 )
@@ -209,28 +190,20 @@ void prep_calibrate_decr_handler(int irq, void *dev, struct pt_regs * regs)
 		t2 = get_dec();
 		t2 = t1-t2;  /* decr's in 1/HZ */
 		t2 = t2*HZ;  /* # decrs in 1s - thus in Hz */
+if ( (t2>>20) > 100 )
+{
+  printk("Decrementer frequency too high: %luMHz.  Using 15MHz.\n",t2>>20);
+  t2 = 998700000/60;
+}
 		freq = t2 * 60;	/* try to make freq/1e6 an integer */
 		divisor = 60;
-		printk("time_init: decrementer frequency = %d/%d (%luMHz)\n",
+		printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
 		       freq, divisor,t2>>20);
 		decrementer_count = freq / HZ / divisor;
 		count_period_num = divisor;
 		count_period_den = freq / 1000000;
 		*done_ptr = 1;
 	}
-}
-
-void chrp_calibrate_decr(void)
-{
-	int freq, fp, divisor;
-
-	fp = 16666000;		/* hardcoded for now */
-	freq = fp*60;	/* try to make freq/1e6 an integer */
-        divisor = 60;
-        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
-        decrementer_count = freq / HZ / divisor;
-        count_period_num = divisor;
-        count_period_den = freq / 1000000;
 }
 
 
@@ -249,9 +222,9 @@ void chrp_calibrate_decr(void)
  * machines were long is 32-bit! (However, as time_t is signed, we
  * will already get problems at other places on 2038-01-19 03:14:08)
  */
-inline unsigned long mktime(unsigned int year, unsigned int mon,
-				   unsigned int day, unsigned int hour,
-				   unsigned int min, unsigned int sec)
+unsigned long mktime(unsigned int year, unsigned int mon,
+		     unsigned int day, unsigned int hour,
+		     unsigned int min, unsigned int sec)
 {
 	
 	if (0 >= (int) (mon -= 2)) {	/* 1..12 -> 11,12,1..10 */
@@ -266,3 +239,45 @@ inline unsigned long mktime(unsigned int year, unsigned int mon,
 		)*60 + sec; /* finally seconds */
 }
 
+#define TICK_SIZE tick
+#define FEBRUARY	2
+#define	STARTOFTIME	1970
+#define SECDAY		86400L
+#define SECYR		(SECDAY * 365)
+#define	leapyear(year)		((year) % 4 == 0)
+#define	days_in_year(a) 	(leapyear(a) ? 366 : 365)
+#define	days_in_month(a) 	(month_days[(a) - 1])
+
+static int month_days[12] = {
+	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+};
+
+void to_tm(int tim, struct rtc_time * tm)
+{
+	register int    i;
+	register long   hms, day;
+
+	day = tim / SECDAY;
+	hms = tim % SECDAY;
+
+	/* Hours, minutes, seconds are easy */
+	tm->tm_hour = hms / 3600;
+	tm->tm_min = (hms % 3600) / 60;
+	tm->tm_sec = (hms % 3600) % 60;
+
+	/* Number of years in days */
+	for (i = STARTOFTIME; day >= days_in_year(i); i++)
+		day -= days_in_year(i);
+	tm->tm_year = i;
+
+	/* Number of months in days left */
+	if (leapyear(tm->tm_year))
+		days_in_month(FEBRUARY) = 29;
+	for (i = 1; day >= days_in_month(i); i++)
+		day -= days_in_month(i);
+	days_in_month(FEBRUARY) = 28;
+	tm->tm_mon = i;
+
+	/* Days are what is left over (+1) from all that. */
+	tm->tm_mday = day + 1;
+}

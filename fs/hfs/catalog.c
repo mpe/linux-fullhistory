@@ -33,7 +33,7 @@
 #define CCACHE_MAX 1024
 
 /* Number of entries to fit in a single page on an i386 */
-#define CCACHE_INC ((4080-sizeof(void *))/sizeof(struct hfs_cat_entry))
+#define CCACHE_INC ((PAGE_SIZE - sizeof(void *))/sizeof(struct hfs_cat_entry))
 
 /*================ File-local data types ================*/
 
@@ -94,7 +94,6 @@ struct hfs_cat_rec {
 	} u;
 };
 
-typedef struct hfs_cat_entry *hfs_cat_entry_ptr;
 
 struct allocation_unit {
 	struct allocation_unit *next;
@@ -103,11 +102,17 @@ struct allocation_unit {
 
 /*================ File-local variables ================*/
  
-static hfs_cat_entry_ptr hash_table[CCACHE_NR] = {NULL, };
+static LIST_HEAD(entry_in_use);
+static LIST_HEAD(entry_dirty); /* all the dirty entries */
+static LIST_HEAD(entry_unused);
+static struct list_head hash_table[CCACHE_NR];
 
-static struct hfs_cat_entry *first_entry = NULL;
-static hfs_wait_queue entry_wait;
-static int nr_entries = 0, nr_free_entries = 0;
+spinlock_t entry_lock = SPIN_LOCK_UNLOCKED;
+
+static struct {
+        int nr_entries;
+        int nr_free_entries;
+} entries_stat;
 
 static struct allocation_unit *allocation = NULL;
 
@@ -147,140 +152,22 @@ static inline unsigned int hashfn(const struct hfs_mdb *mdb,
  * hash an (struct mdb *) and a (struct hfs_cat_key *)
  * to a pointer to a slot in the hash table.
  */
-static inline struct hfs_cat_entry **hash(struct hfs_mdb *mdb,
-				          const struct hfs_cat_key *key)
+static inline struct list_head *hash(struct hfs_mdb *mdb,
+				     const struct hfs_cat_key *key)
 {
 	return hash_table + hashfn(mdb, key);
 }
 
-/*
- * insert_free()
- *
- * Add an entry to the front of the free list.
- */
-static inline void insert_free(struct hfs_cat_entry *entry)
+static inline void insert_hash(struct hfs_cat_entry *entry)
 {
-	struct hfs_cat_entry * prev, * next = first_entry;
-
-	first_entry = entry;
-	prev = next->prev;
-	entry->next = next;
-	entry->prev = prev;
-	prev->next = entry;
-	next->prev = entry;
+	struct list_head *head = hash(entry->mdb, &entry->key);
+	list_add(&entry->hash, head);
 }
 
-/*
- * remove_free()
- *
- * Remove an entry from the free list.
- */
-static inline void remove_free(struct hfs_cat_entry *entry)
+static inline void remove_hash(struct hfs_cat_entry *entry)
 {
-	if (first_entry == entry) {
-		first_entry = first_entry->next;
-	}
-	if (entry->next) {
-		entry->next->prev = entry->prev;
-	}
-	if (entry->prev) {
-		entry->prev->next = entry->next;
-	}
-	entry->next = entry->prev = NULL;
-}
-
-/*
- * insert_hash()
- *
- * Add an entry to the front of the appropriate hash list
- */
-static void insert_hash(struct hfs_cat_entry *entry)
-{
-	struct hfs_cat_entry **h;
-	h = hash(entry->mdb, &entry->key);
-
-	entry->hash_next = *h;
-	entry->hash_prev = NULL;
-	if (entry->hash_next) {
-		entry->hash_next->hash_prev = entry;
-	}
-	*h = entry;
-}
-
-/*
- * remove_hash
- *
- * Remove an entry from its hash list (if any).
- */
-static void remove_hash(struct hfs_cat_entry *entry)
-{
-	struct hfs_cat_entry **h;
-
-	if (entry->mdb) {
-		h = hash(entry->mdb, &entry->key);
-
-		if (*h == entry) {
-			*h = entry->hash_next;
-		}
-		if (entry->hash_next) {
-			entry->hash_next->hash_prev = entry->hash_prev;
-		}
-		if (entry->hash_prev) {
-			entry->hash_prev->hash_next = entry->hash_next;
-		}
-		entry->hash_prev = entry->hash_next = NULL;
-	}
-}
-
-/*
- * put_last_free()
- *
- * Move an entry to the end of the free list.
- */
-static inline void put_last_free(struct hfs_cat_entry *entry)
-{
-	remove_free(entry);
-	entry->prev = first_entry->prev;
-	entry->prev->next = entry;
-	entry->next = first_entry;
-	entry->next->prev = entry;
-}
-
-/*
- * grow_entries()
- *
- * Try to allocate more entries, adding them to the free list.
- */
-static int grow_entries(void)
-{
-	struct allocation_unit *tmp;
-	struct hfs_cat_entry * entry;
-	int i;
-
-	if (!HFS_NEW(tmp)) {
-		return -ENOMEM;
-	}
-
-	memset(tmp, 0, sizeof(*tmp));
-
-	tmp->next = allocation;
-	allocation = tmp;
-	entry = tmp->entries;
-
-	i = CCACHE_INC;
-
-	nr_entries += i;
-	nr_free_entries += i;
-
-	if (!first_entry) {
-		entry->next = entry->prev = first_entry = entry++;
-		--i;
-	}
-
-	for ( i = CCACHE_INC - 1; i ; --i ) {
-		insert_free(entry++);
-	}
-	return 0;
+	list_del(&entry->hash);
+	INIT_LIST_HEAD(&entry->hash);
 }
 
 /*
@@ -290,7 +177,7 @@ static int grow_entries(void)
  */
 static inline void wait_on_entry(struct hfs_cat_entry * entry)
 {
-	while (entry->lock) {
+	while ((entry->state & HFS_LOCK)) {
 		hfs_sleep_on(&entry->wait);
 	}
 }
@@ -303,7 +190,9 @@ static inline void wait_on_entry(struct hfs_cat_entry * entry)
 static void lock_entry(struct hfs_cat_entry * entry)
 {
 	wait_on_entry(entry);
-	entry->lock = 1;
+	spin_lock(&entry_lock);
+	entry->state |= HFS_LOCK;
+	spin_unlock(&entry_lock);
 }
 
 /*
@@ -313,7 +202,9 @@ static void lock_entry(struct hfs_cat_entry * entry)
  */
 static void unlock_entry(struct hfs_cat_entry * entry)
 {
-	entry->lock = 0;
+	spin_lock(&entry_lock);
+	entry->state &= ~HFS_LOCK;
+	spin_unlock(&entry_lock);
 	hfs_wake_up(&entry->wait);
 }
 
@@ -325,15 +216,171 @@ static void unlock_entry(struct hfs_cat_entry * entry)
 static void clear_entry(struct hfs_cat_entry * entry)
 {
 	wait_on_entry(entry);
-	remove_hash(entry);
-	remove_free(entry);
-	if (entry->count) {
-		nr_free_entries++;
-	}
 	/* zero all but the wait queue */
-	memset(&entry->next, 0,
-	       sizeof(*entry) - offsetof(struct hfs_cat_entry, next));
-	insert_free(entry);
+	memset(&entry->wait, 0,
+	       sizeof(*entry) - offsetof(struct hfs_cat_entry, wait));
+	INIT_LIST_HEAD(&entry->hash);
+	INIT_LIST_HEAD(&entry->list);
+	INIT_LIST_HEAD(&entry->dirty);
+}
+
+/* put entry on mdb dirty list. this only does it if it's on the hash
+ * list. we also add it to the global dirty list as well. */
+void hfs_cat_mark_dirty(struct hfs_cat_entry *entry)
+{
+        struct hfs_mdb *mdb = entry->mdb;
+
+	spin_lock(&entry_lock);
+	if (!(entry->state & HFS_DIRTY)) {
+	        entry->state |= HFS_DIRTY;
+
+		/* Only add valid (ie hashed) entries to the
+		 * dirty list */
+		if (!list_empty(&entry->hash)) {
+		        list_del(&entry->list);
+			list_add(&entry->list, &mdb->entry_dirty);
+			INIT_LIST_HEAD(&entry->dirty);
+			list_add(&entry->dirty, &entry_dirty);
+		}
+	}
+	spin_unlock(&entry_lock);
+}
+
+/* prune all entries */
+static void dispose_list(struct list_head *head)
+{
+        struct list_head *next;
+	int count = 0;
+
+	next = head->next;
+	for (;;) {
+		struct list_head * tmp = next;
+
+		next = next->next;
+		if (tmp == head)
+			break;
+		hfs_cat_prune(list_entry(tmp, struct hfs_cat_entry, list));
+		count++;
+	}
+}
+
+/*
+ * try_to_free_entries works by getting the underlying 
+ * cache system to release entries. it gets called with the entry lock
+ * held. 
+ *
+ * count can be up to 2 due to both a resource and data fork being
+ * listed. we can unuse dirty entries as well.
+ */
+#define CAN_UNUSE(tmp) (((tmp)->count < 3) && ((tmp)->state <= HFS_DIRTY))
+static int try_to_free_entries(const int goal) 
+{
+        struct list_head *tmp, *head = &entry_in_use;
+	LIST_HEAD(freeable);
+	int found = 0, depth = goal << 1;
+
+	/* try freeing from entry_in_use */
+	while ((tmp = head->prev) != head && depth--) {
+	        struct hfs_cat_entry *entry = 
+		  list_entry(tmp, struct hfs_cat_entry, list);
+		list_del(tmp);
+		if (CAN_UNUSE(entry)) {
+		        list_del(&entry->hash);
+			INIT_LIST_HEAD(&entry->hash);
+			list_add(tmp, &freeable);
+			if (++found < goal)
+			       continue;
+			break;
+		}
+		list_add(tmp, head);
+	}
+
+	if (found < goal) { /* try freeing from global dirty list */
+	        head = &entry_dirty;
+		depth = goal << 1;
+		while ((tmp = head->prev) != head && depth--) {
+		        struct hfs_cat_entry *entry = 
+			  list_entry(tmp, struct hfs_cat_entry, dirty);
+			list_del(tmp);
+			if (CAN_UNUSE(entry)) {
+			        list_del(&entry->hash);
+				INIT_LIST_HEAD(&entry->hash);
+				list_del(&entry->list);
+				INIT_LIST_HEAD(&entry->list);
+				list_add(&entry->list, &freeable);
+				if (++found < goal)
+				  continue;
+				break;
+			}
+			list_add(tmp, head);
+		}
+	}
+		
+	if (found) {
+	        spin_unlock(&entry_lock);
+		dispose_list(&freeable);
+		spin_lock(&entry_lock);
+	}
+
+	return found;
+}
+  
+/* init_once */
+static inline void init_once(struct hfs_cat_entry *entry)
+{
+	init_waitqueue(&entry->wait);
+	INIT_LIST_HEAD(&entry->hash);
+	INIT_LIST_HEAD(&entry->list);
+	INIT_LIST_HEAD(&entry->dirty);
+}
+
+/*
+ * grow_entries()
+ *
+ * Try to allocate more entries, adding them to the free list. this returns
+ * with the spinlock held if successful 
+ */
+static struct hfs_cat_entry *grow_entries(struct hfs_mdb *mdb)
+{
+	struct allocation_unit *tmp;
+	struct hfs_cat_entry * entry;
+	int i;
+
+	spin_unlock(&entry_lock);
+	if ((entries_stat.nr_entries < CCACHE_MAX) &&
+	    HFS_NEW(tmp)) {
+	        spin_lock(&entry_lock);
+		memset(tmp, 0, sizeof(*tmp));
+		tmp->next = allocation;
+		allocation = tmp;
+		entry = tmp->entries;
+		for (i = 1; i < CCACHE_INC; i++) {
+		        entry++;
+			init_once(entry);
+		        list_add(&entry->list, &entry_unused);
+		}
+		init_once(tmp->entries);
+
+		entries_stat.nr_entries += CCACHE_INC;
+		entries_stat.nr_free_entries += CCACHE_INC - 1;
+		return tmp->entries;
+	}
+
+	/* allocation failed. do some pruning and try again */
+	spin_lock(&entry_lock);
+	try_to_free_entries(entries_stat.nr_entries >> 2);
+	{
+		struct list_head *tmp = entry_unused.next;
+		if (tmp != &entry_unused) {
+			entries_stat.nr_free_entries--;
+			list_del(tmp);
+			entry = list_entry(tmp, struct hfs_cat_entry, list);
+			return entry;
+		}
+	}
+	spin_unlock(&entry_lock);
+
+	return NULL;
 }
 
 /*
@@ -497,18 +544,13 @@ static void write_entry(struct hfs_cat_entry * entry)
 	struct hfs_brec brec;
 	int error;
 
-	wait_on_entry(entry);
-	if (!entry->dirt) {
-		return;
-	}
-	if (!entry->deleted) {
-		entry->lock = 1;	
+	if (!(entry->state & HFS_DELETED)) {
 		error = hfs_bfind(&brec, entry->mdb->cat_tree,
 				  HFS_BKEY(&entry->key), HFS_BFIND_WRITE);
 		if (!error) {
-			if (entry->key_dirt) {
+			if ((entry->state & HFS_KEYDIRTY)) {
 				/* key may have changed case due to a rename */
-				entry->key_dirt = 0;
+				entry->state &= ~HFS_KEYDIRTY;
 				if (brec.key->KeyLen != entry->key.KeyLen) {
 					hfs_warn("hfs_write_entry: key length "
 						 "changed!\n");
@@ -531,90 +573,111 @@ static void write_entry(struct hfs_cat_entry * entry)
 			hfs_warn("hfs_write_entry: unable to write "
 				 "entry %08x\n", entry->cnid);
 		}
-		unlock_entry(entry);
 	}
-	entry->dirt = 0;
-}
-
-/*
- */
-#define CAN_UNUSE(tmp) ((tmp)->count < 3 && !((tmp)->lock || (tmp)->dirt))
-static inline int try_to_free_entries(const int goal)
-{
-	hfs_prune_entry(first_entry);
-	return 1;
 }
 
 
-/*
- * get_empty_entry()
- *
- * Allocate an unused entry.
- */
-static inline struct hfs_cat_entry *get_empty_entry(void)
+static struct hfs_cat_entry *find_entry(struct hfs_mdb *mdb,
+					const struct hfs_cat_key *key)
 {
-	struct hfs_cat_entry * entry, * best;
-	int i, try = 0;
+	struct list_head *tmp, *head = hash(mdb, key);
+	struct hfs_cat_entry * entry;
 
-	if ((nr_entries < CCACHE_MAX) &&
-	    (nr_free_entries <= (nr_entries >> 1))) {
-		grow_entries();
-	}
-repeat:
-	entry = first_entry;
-	best = NULL;
-	for (i = nr_entries/2; i > 0; i--,entry = entry->next) {
-		if (!entry->count) {
-			if (!best) {
-				best = entry;
-			}
-			if (!entry->dirt && !entry->lock) {
-				best = entry;
-				break;
-			}
-
-		}
-	}
-	if (!best || best->dirt || best->lock) {
-		if (nr_entries < CCACHE_MAX) {
-			if (grow_entries() == 0) {
-				goto repeat;
-			}
-		}
-	}
-	entry = best;
-	if (!entry) {
-	        if (try++ < 4 && try_to_free_entries(NUM_FREE_ENTRIES)) {
-		        goto repeat;
-		}
-
-		hfs_warn("hfs_cat_get: No free entries\n");
-		hfs_sleep_on(&entry_wait);
-		goto repeat;
-	}
-	if (entry->lock) {
-		wait_on_entry(entry);
-		goto repeat;
-	}
-	if (entry->dirt) {
-		write_entry(entry);
-		goto repeat;
-	}
-	if (entry->count) {
-		goto repeat;
+	tmp = head;
+	for (;;) {
+		tmp = tmp->next;
+		entry = NULL;
+		if (tmp == head)
+			break;
+		entry = list_entry(tmp, struct hfs_cat_entry, hash);
+		if (entry->mdb != mdb)
+			continue;
+		if (hfs_cat_compare(&entry->key, key))
+			continue;
+		entry->count++;
+		break;
 	}
 
-	clear_entry(entry);
-	entry->count = 1;
-	entry->dirt = 0;
-	entry->deleted = 1;	/* so it gets cleared if discarded */
-
-	nr_free_entries--;
-	if (nr_free_entries < 0) {
-		hfs_warn ("hfs_get_empty_entry: bad free entry count.\n");
-		nr_free_entries = 0;
-	}
 	return entry;
+}
+
+
+/* be careful. this gets called with the spinlock held. */
+static struct hfs_cat_entry *get_new_entry(struct hfs_mdb *mdb,
+					   const struct hfs_cat_key *key,
+					   const int read)
+{
+	struct hfs_cat_entry *entry;
+	struct list_head *head = hash(mdb, key);
+	struct list_head *tmp = entry_unused.next;
+
+	if (tmp != &entry_unused) {
+		list_del(tmp);
+		entries_stat.nr_free_entries--;
+		entry = list_entry(tmp, struct hfs_cat_entry, list);
+add_new_entry:
+		list_add(&entry->list, &entry_in_use);
+		list_add(&entry->hash, head);
+		entry->mdb = mdb;
+		entry->count = 1;
+		memcpy(&entry->key, key, sizeof(*key));
+		entry->state = HFS_LOCK;
+		spin_unlock(&entry_lock);
+
+		if (read) {
+		   struct hfs_brec brec;
+
+		   if (hfs_bfind(&brec, mdb->cat_tree,
+				 HFS_BKEY(key), HFS_BFIND_READ_EQ)) {
+		        /* uh oh. we failed to read the record */
+		        entry->state |= HFS_DELETED;
+		        goto read_fail;
+		   }
+
+		   read_entry(entry, &brec);
+		   
+		   /* error */
+		   if (!entry->cnid) {
+		        goto read_fail;
+		   }
+
+		   /* we don't have to acquire a spinlock here or
+		    * below for the unlocking bits as we're the first
+		    * user of this entry. */
+		   entry->state &= ~HFS_LOCK;
+		   hfs_wake_up(&entry->wait);
+		}
+
+		return entry;
+	}
+
+	/*
+	 * Uhhuh.. We need to expand. Note that "grow_entries()" will
+	 * release the spinlock, but will return with the lock held
+	 * again if the allocation succeeded.
+	 */
+	entry = grow_entries(mdb);
+	if (entry) {
+		/* We released the lock, so.. */
+		struct hfs_cat_entry * old = find_entry(mdb, key);
+		if (!old)
+			goto add_new_entry;
+		list_add(&entry->list, &entry_unused);
+		entries_stat.nr_free_entries++;
+		spin_unlock(&entry_lock);
+		wait_on_entry(old);
+		return old;
+	}
+
+	return entry;
+
+
+read_fail:
+	remove_hash(entry);
+	entry->state &= ~HFS_LOCK;
+	hfs_wake_up(&entry->wait);
+	hfs_cat_put(entry);
+	return NULL;
 }
 
 /*
@@ -625,81 +688,28 @@ repeat:
  * and a locked, but uninitialized, entry is returned.
  */
 static struct hfs_cat_entry *get_entry(struct hfs_mdb *mdb,
-				       const struct hfs_cat_key *key, int read)
+				       const struct hfs_cat_key *key,
+				       const int read)
 {
-	struct hfs_cat_entry **h;
 	struct hfs_cat_entry * entry;
-	struct hfs_cat_entry * empty = NULL;
-	struct hfs_brec brec;
 
-	h = hash(mdb, key);
-repeat:
-	for (entry = *h; entry ; entry = entry->hash_next) {
-		if (entry->mdb == mdb && !hfs_cat_compare(&entry->key, key)) {
-			goto found_it;
-		}
-	}
-	if (!empty) {
-		empty = get_empty_entry();
-		if (empty && read &&
-		    hfs_bfind(&brec, mdb->cat_tree,
-			      HFS_BKEY(key), HFS_BFIND_READ_EQ)) {
-			/* If we get here then:
-				1) We got an empty entry.
-				2) We want to read the record.
-				3) We failed to find the record. */
-			hfs_cat_put(empty);
-			empty = NULL;
-		}
-		if (empty) {
-			goto repeat;
-		}
-		return NULL;
-	}
-	entry = empty;
-	entry->deleted = 0;
-	entry->mdb = mdb;
-	memcpy(&entry->key, key, sizeof(*key));
-	put_last_free(entry);
-	insert_hash(entry);
+	spin_lock(&entry_lock);
+	if (!entries_stat.nr_free_entries &&
+	    (entries_stat.nr_entries >= CCACHE_MAX))
+		goto restock;
 
-	entry->lock = 1;
-	if (!read) {
-		/* Return a locked but incomplete entry.  Note that the
-		   caller can tell it is incomplete since entry->cnid = 0. */
-		return entry;
+search:
+	entry = find_entry(mdb, key);
+	if (!entry) {
+	        return get_new_entry(mdb, key, read);
 	}
-	read_entry(entry, &brec);
-	unlock_entry(entry);
-
-	goto return_it;
-
-found_it:
-	if (!entry->count) {
-		nr_free_entries--;
-	}
-	entry->count++;
-	if (empty) {
-		if (read) {
-			hfs_brec_relse(&brec, NULL);
-		}
-		hfs_cat_put(empty);
-	}
+	spin_unlock(&entry_lock);
 	wait_on_entry(entry);
-	if (entry->deleted) {
-		/* The entry was deleted while we slept */
-		hfs_cat_put(entry);
-		hfs_relinquish();
-		goto repeat;
-	}
-
-return_it:
-	if (!entry->cnid) {
-		/* There was an error reading the entry */
-		hfs_cat_put(entry);
-		entry = NULL;
-	}
 	return entry;
+
+restock:
+	try_to_free_entries(8);
+	goto search;
 }
 
 /* 
@@ -738,7 +748,7 @@ static void update_dir(struct hfs_mdb *mdb, struct hfs_cat_entry *dir,
 	
 	/* update times and dirt */
 	dir->modify_date = hfs_time();
-	dir->dirt = 1;
+	hfs_cat_mark_dirty(dir);
 }
 
 /*
@@ -813,6 +823,7 @@ static int create_entry(struct hfs_cat_entry *parent, struct hfs_cat_key *key,
 		error = -EIO;
 		goto done;
 	}
+
 	if (entry->cnid) {
 		/* The (unlocked) entry exists in the cache */
 		error = -EEXIST;
@@ -869,8 +880,7 @@ static int create_entry(struct hfs_cat_entry *parent, struct hfs_cat_key *key,
 	goto done;
 
 bail1:
-	entry->deleted = 1;
-	remove_hash(entry);
+	entry->state |= HFS_DELETED;
 	unlock_entry(entry);
 bail2:
 	hfs_cat_put(entry);
@@ -893,64 +903,66 @@ done:
  */
 void hfs_cat_put(struct hfs_cat_entry * entry)
 {
-	if (!entry) {
-		return;
-	}
-	wait_on_entry(entry);
-	if (!entry->count) {
-		hfs_warn("hfs_cat_put: trying to free free entry\n");
-		return;
-	}
-repeat:
-	if (entry->count > 1) {
-		entry->count--;
-		return;
-	}
+	if (entry) {
+	        wait_on_entry(entry);
 
-	if (!entry->cnid) {
-		clear_entry(entry);
-		return;
-	}
-
-	if (entry->type == HFS_CDR_FIL) {
-		if (entry->deleted) {
-			/* free all extents */
-			entry->u.file.data_fork.lsize = 0;
-			hfs_extent_adj(&entry->u.file.data_fork);
-			entry->u.file.rsrc_fork.lsize = 0;
-			hfs_extent_adj(&entry->u.file.rsrc_fork);
-		} else {
-			/* clear out any cached extents */
-			if (entry->u.file.data_fork.first.next) {
-				hfs_extent_free(&entry->u.file.data_fork);
-				wait_on_entry(entry);
-				goto repeat;
-			}
-			if (entry->u.file.rsrc_fork.first.next) {
-				hfs_extent_free(&entry->u.file.rsrc_fork);
-				wait_on_entry(entry);
-				goto repeat;
-			}
+		if (!entry->count) {/* just in case */
+		  hfs_warn("hfs_cat_put: trying to free free entry: %p\n",
+			   entry);
+		  return;
 		}
+
+		spin_lock(&entry_lock);
+		if (!--entry->count) {
+repeat:		  
+		        if ((entry->state & HFS_DELETED)) {
+				if (entry->type == HFS_CDR_FIL) {
+				  /* free all extents */
+				  entry->u.file.data_fork.lsize = 0;
+				  hfs_extent_adj(&entry->u.file.data_fork);
+				  entry->u.file.rsrc_fork.lsize = 0;
+				  hfs_extent_adj(&entry->u.file.rsrc_fork);
+				}
+				entry->state = 0;
+			} else if (entry->type == HFS_CDR_FIL) {
+		                /* clear out any cached extents */
+			        if (entry->u.file.data_fork.first.next) {
+				  hfs_extent_free(&entry->u.file.data_fork);
+				  spin_unlock(&entry_lock);
+				  wait_on_entry(entry);
+				  spin_lock(&entry_lock);
+				  goto repeat;
+				}
+				if (entry->u.file.rsrc_fork.first.next) {
+				  hfs_extent_free(&entry->u.file.rsrc_fork);
+				  spin_unlock(&entry_lock);
+				  wait_on_entry(entry);
+				  spin_lock(&entry_lock);
+				  goto repeat;
+				}
+			}
+
+			/* if we put a dirty entry, write it out. */
+			if ((entry->state & HFS_DIRTY)) {
+				list_del(&entry->dirty);
+				INIT_LIST_HEAD(&entry->dirty);
+				spin_unlock(&entry_lock);
+				write_entry(entry);
+				spin_lock(&entry_lock);
+				entry->state &= ~HFS_DIRTY;
+				goto repeat;
+			}
+
+			list_del(&entry->hash);
+			list_del(&entry->list);
+			spin_unlock(&entry_lock);
+			clear_entry(entry);
+			spin_lock(&entry_lock);
+			list_add(&entry->list, &entry_unused);
+			entries_stat.nr_free_entries++;
+		}
+		spin_unlock(&entry_lock);
 	}
-
-	if (entry->deleted) {
-		clear_entry(entry);
-		return;
-	}
-
-	if (entry->dirt) {
-		write_entry(entry);
-		goto repeat;
-	}
-
-	entry->count--;
-	nr_free_entries++;
-
-	/* get_empty_entry() could be blocked waiting for more entries */
-	hfs_wake_up(&entry_wait);
-
-	return;
 }
 
 /* 
@@ -965,6 +977,40 @@ struct hfs_cat_entry *hfs_cat_get(struct hfs_mdb *mdb,
 	return get_entry(mdb, key, 1);
 }
 
+/* invalidate all entries for a device */
+static void invalidate_list(struct list_head *head, struct hfs_mdb *mdb,
+			    struct list_head *dispose)
+{
+        struct list_head *next;
+
+	next = head->next;
+	for (;;) {
+	        struct list_head *tmp = next;
+		struct hfs_cat_entry * entry;
+		
+		next = next->next;
+		if (tmp == head)
+		        break;
+		entry = list_entry(tmp, struct hfs_cat_entry, list);
+		if (entry->mdb != mdb) {
+			continue;
+		}
+		if (!entry->count) {
+		        list_del(&entry->hash);
+			INIT_LIST_HEAD(&entry->hash);
+			list_del(&entry->dirty);
+			INIT_LIST_HEAD(&entry->dirty);
+			list_del(&entry->list);
+			list_add(&entry->list, dispose);
+			continue;
+		}
+		hfs_warn("hfs_fs: entry %p(%u:%lu) busy on removed device %s.\n",
+			 entry, entry->count, entry->state,
+			 hfs_mdb_name(entry->mdb->sys_mdb));
+	}
+
+}
+
 /* 
  * hfs_cat_invalidate()
  *
@@ -973,23 +1019,14 @@ struct hfs_cat_entry *hfs_cat_get(struct hfs_mdb *mdb,
  */
 void hfs_cat_invalidate(struct hfs_mdb *mdb)
 {
-	struct hfs_cat_entry * entry, * next;
-	int i;
+	LIST_HEAD(throw_away);
 
-	next = first_entry;
-	for (i = nr_entries ; i > 0 ; i--) {
-		entry = next;
-		next = entry->next;	/* clear_entry() changes the queues.. */
-		if (entry->mdb != mdb) {
-			continue;
-		}
-		if (entry->count || entry->dirt || entry->lock) {
-			hfs_warn("hfs_fs: entry busy on removed device %s.\n",
-			         hfs_mdb_name(entry->mdb->sys_mdb));
-			continue;
-		}
-		clear_entry(entry);
-	}
+	spin_lock(&entry_lock);
+	invalidate_list(&entry_in_use, mdb, &throw_away);
+	invalidate_list(&mdb->entry_dirty, mdb, &throw_away);
+	spin_unlock(&entry_lock);
+
+	dispose_list(&throw_away); 
 }
 
 /*
@@ -999,22 +1036,40 @@ void hfs_cat_invalidate(struct hfs_mdb *mdb)
  */
 void hfs_cat_commit(struct hfs_mdb *mdb)
 {
-	int i;
+        struct list_head *tmp, *head = &mdb->entry_dirty;
 	struct hfs_cat_entry * entry;
 
-	entry = first_entry;
-	for(i = 0; i < nr_entries*2; i++, entry = entry->next) {
-		if (mdb && entry->mdb != mdb) {
-			continue;
-		}
-		if (!entry->cnid || entry->deleted) {
-			continue;
-		}
-		wait_on_entry(entry);
-		if (entry->dirt) {
-			write_entry(entry);
+	spin_lock(&entry_lock);
+	while ((tmp = head->prev) != head) {
+	        entry = list_entry(tmp, struct hfs_cat_entry, list);
+		  
+		if ((entry->state & HFS_LOCK)) {
+		        spin_unlock(&entry_lock);
+			wait_on_entry(entry);
+			spin_lock(&entry_lock);
+		} else {
+		       struct list_head *insert = &entry_in_use;
+
+		       if (!entry->count)
+			        insert = entry_in_use.prev;
+		       /* remove from global dirty list */
+		       list_del(&entry->dirty); 
+		       INIT_LIST_HEAD(&entry->dirty);
+
+		       /* add to in_use list */
+		       list_del(&entry->list);
+		       list_add(&entry->list, insert);
+
+		       /* reset DIRTY, set LOCK */
+		       entry->state ^= HFS_DIRTY | HFS_LOCK;
+		       spin_unlock(&entry_lock);
+		       write_entry(entry);
+		       spin_lock(&entry_lock);
+		       entry->state &= ~HFS_LOCK;
+		       hfs_wake_up(&entry->wait);
 		}
 	}
+	spin_unlock(&entry_lock);
 }
 
 /*
@@ -1191,7 +1246,7 @@ struct hfs_cat_entry *hfs_cat_parent(struct hfs_cat_entry *entry)
 	int error;
 
 	lock_entry(entry);
-	if (!entry->deleted) {
+	if (!(entry->state & HFS_DELETED)) {
 		hfs_cat_build_key(hfs_get_nl(entry->key.ParID), NULL, &key);
 		error = hfs_bfind(&brec, mdb->cat_tree,
 				  HFS_BKEY(&key), HFS_BFIND_READ_EQ);
@@ -1303,8 +1358,8 @@ int hfs_cat_delete(struct hfs_cat_entry *parent, struct hfs_cat_entry *entry,
 
 	/* try to delete the file or directory */
 	if (!error) {
-		lock_entry(entry);
-		if (entry->deleted) {
+	        lock_entry(entry);
+		if ((entry->state & HFS_DELETED)) {
 			/* somebody beat us to it */
 			error = -ENOENT;
 		} else {
@@ -1316,7 +1371,7 @@ int hfs_cat_delete(struct hfs_cat_entry *parent, struct hfs_cat_entry *entry,
 
 	if (!error) {
 		/* Mark the entry deleted and remove it from the cache */
-		entry->deleted = 1;
+		entry->state |= HFS_DELETED;
 		remove_hash(entry);
 
 		/* try to delete the thread entry if it exists */
@@ -1446,8 +1501,7 @@ restart:
 				    &new_record, is_dir ? 2 + sizeof(DIR_REC) :
 							  2 + sizeof(FIL_REC));
 		if (error == -EEXIST) {
-			dest->deleted = 1;
-			remove_hash(dest);
+			dest->state |= HFS_DELETED;
 			unlock_entry(dest);
 			hfs_cat_put(dest);
 			goto restart;
@@ -1461,8 +1515,8 @@ restart:
 have_distinct:
 		/* The destination exists and is not same as source */
 		lock_entry(dest);
-		if (dest->deleted) {
-			unlock_entry(dest);
+		if ((dest->state & HFS_DELETED)) {
+		        unlock_entry(dest);
 			hfs_cat_put(dest);
 			goto restart;
 		}
@@ -1480,14 +1534,13 @@ have_distinct:
 		}
 	} else {
 		/* The destination exists but is same as source */
-	  /*--entry->count;*/
-		hfs_cat_put(dest);
+	        --entry->count;
 		dest = NULL;
 	}
 
 	/* lock the entry */
 	lock_entry(entry);
-	if (entry->deleted) {
+	if ((entry->state & HFS_DELETED)) {
 		error = -ENOENT;
 		goto bail1;
 	}
@@ -1519,7 +1572,7 @@ have_distinct:
 			} else {
 				/* We were lied to! */
 				entry->u.file.flags &= ~HFS_FIL_THD;
-				entry->dirt = 1;
+				hfs_cat_mark_dirty(entry);
 			}
 		}
 		if (!error) {
@@ -1537,7 +1590,7 @@ have_distinct:
 			/* Something went seriously wrong.
 			   The dir/file has been deleted. */
 			/* XXX try some recovery? */
-			entry->deleted = 1;
+			entry->state |= HFS_DELETED;
 			remove_hash(entry);
 			goto bail1;
 		}
@@ -1554,20 +1607,20 @@ have_distinct:
 
 	/* update directories */
 	new_dir->modify_date = hfs_time();
-	new_dir->dirt = 1;
+	hfs_cat_mark_dirty(new_dir);
 
 	/* update key */
 	remove_hash(entry);
 	memcpy(&entry->key, new_key, sizeof(*new_key));
-	entry->key_dirt = 1; /* Since case might differ */
-	entry->dirt = 1;
+	/* KEYDIRTY as case might differ */
+	entry->state |= HFS_KEYDIRTY;
 	insert_hash(entry);
+	hfs_cat_mark_dirty(entry);
 	unlock_entry(entry);
 
 	/* delete any pre-existing or place-holder entry */
 	if (dest) {
-		dest->deleted = 1;
-		remove_hash(dest);
+		dest->state |= HFS_DELETED;
 		unlock_entry(dest);
 		if (removed && dest->cnid) {
 			*removed = dest;
@@ -1586,8 +1639,7 @@ bail2:
 			(void)hfs_bdelete(mdb->cat_tree, HFS_BKEY(new_key));
 			update_dir(mdb, new_dir, is_dir, -1);
 bail3:
-			dest->deleted = 1;
-			remove_hash(dest);
+			dest->state |= HFS_DELETED;
 		}
 		unlock_entry(dest);
 		hfs_cat_put(dest);
@@ -1602,3 +1654,21 @@ done:
 
 	return error;
 }
+
+/*
+ * Initialize the hash tables
+ */
+void hfs_cat_init(void)
+{
+	int i;
+	struct list_head *head = hash_table;
+
+        i = CCACHE_NR;
+        do {
+                INIT_LIST_HEAD(head);
+                head++;
+                i--;
+        } while (i);
+}
+
+

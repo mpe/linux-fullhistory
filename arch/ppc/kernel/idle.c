@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.4 1997/08/23 22:46:01 cort Exp $
+ * $Id: idle.c,v 1.13 1998/01/06 06:44:55 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -31,16 +31,15 @@
 #include <asm/io.h>
 #include <asm/smp_lock.h>
 #include <asm/processor.h>
+#include <asm/mmu.h>
 
 int zero_paged(void *unused);
-int power_saved(void *unused);
+void inline power_save(void);
+void inline htab_reclaim(void);
 
-asmlinkage int sys_idle(void)
+int idled(void *unused)
 {
 	int ret = -EPERM;
-
-	if (current->pid != 0)
-		goto out;
 
 	/*
 	 * want one per cpu since it would be nice to have all
@@ -48,22 +47,109 @@ asmlinkage int sys_idle(void)
 	 * zero-ing pages since this daemon is lock-free
 	 * -- Cort
 	 */
-	kernel_thread(zero_paged, NULL, 0);
-	/* no powersaving modes on 601 */
-	/*if(  (_get_PVR()>>16) != 1 )
-		kernel_thread(power_saved, NULL, 0);*/
+	/* kernel_thread(zero_paged, NULL, 0); */
 
-	/* endless loop with no priority at all */
-	current->priority = -100;
-	current->counter = -100;
+#ifdef __SMP__	
+printk("SMP %d: in idle.  current = %s/%d\n",
+       current->processor,current->comm,current->pid);
+#endif /* __SMP__ */
 	for (;;)
 	{
+		/* endless loop with no priority at all */
+		current->priority = -100;
+		current->counter = -100;
+
+		/* endless idle loop with no priority at all */
+		/* htab_reclaim(); */
 		schedule();
+#ifndef __SMP__
+		/* can't do this on smp since second processor
+		   will never wake up -- Cort */
+		/* power_save(); */
+#endif /* __SMP__  */
 	}
 	ret = 0;
-out:
 	return ret;
 }
+
+
+/*
+ * Mark 'zombie' pte's in the hash table as invalid.
+ * This improves performance for the hash table reload code
+ * a bit since we don't consider unused pages as valid.
+ * I haven't done any rigorous performance analysis yet
+ * so it's still experimental and turned off here.
+ *  -- Cort
+ */
+void inline htab_reclaim(void)
+{
+	PTE *ptr, *start;
+	struct task_struct *p;
+	unsigned long valid = 0;
+	extern PTE *Hash, *Hash_end;
+	extern unsigned long Hash_size;
+
+	/* if we don't have a htab */
+	if ( Hash_size == 0 )
+		return;
+	/*lock_dcache();*/
+	
+	/* find a random place in the htab to start each time */
+	start = &Hash[jiffies%(Hash_size/sizeof(ptr))];
+	for ( ptr = start; ptr < Hash_end ; ptr++)
+	{
+		if ( ptr == start )
+			return;
+		if ( ptr == Hash_end )
+			ptr = Hash;
+		valid = 0;
+		if (!ptr->v)
+			continue;
+		for_each_task(p)
+		{
+			if ( need_resched )
+			{
+				/*unlock_dcache();*/
+				return;
+			}
+			/* if this vsid/context is in use */
+			if ( (ptr->vsid >> 4) == p->mm->context )
+			{
+				valid = 1;
+				break;
+			}
+		}
+		if ( valid )
+			continue;
+		/* this pte isn't used */
+		ptr->v = 0;
+	}
+	/*unlock_dcache();*/
+}
+
+/*
+ * Syscall entry into the idle task. -- Cort
+ */
+asmlinkage int sys_idle(void)
+{
+	if(current->pid != 0)
+		return -EPERM;
+
+	idled(NULL);
+	return 0; /* should never execute this but it makes gcc happy -- Cort */
+}
+
+#ifdef __SMP__
+/*
+ * SMP entry into the idle task - calls the same thing as the
+ * non-smp versions. -- Cort
+ */
+int cpu_idle(void *unused)
+{
+	idled(unused);
+	return 0; 
+}
+#endif /* __SMP__ */
 
 /*
  * vars for idle task zero'ing out pages
@@ -105,7 +191,7 @@ unsigned long get_prezerod_page(void)
 		atomic_inc((atomic_t *)&zeropage_hits);
 		atomic_dec((atomic_t *)&zerocount);
 		wake_up(&page_zerod_wait);
-		resched_force();
+		need_resched = 1;
 		
 		/* zero out the pointer to next in the page */
 		*(unsigned long *)page = 0;
@@ -120,7 +206,6 @@ unsigned long get_prezerod_page(void)
  * Zero's out pages until we need to resched or
  * we've reached the limit of zero'd pages.
  */
-
 int zero_paged(void *unused)
 {
 	extern pte_t *get_pte( struct mm_struct *mm, unsigned long address );
@@ -129,14 +214,18 @@ int zero_paged(void *unused)
 	pte_t *pte;
 
 	sprintf(current->comm, "zero_paged (idle)");
-	current->blocked = ~0UL;
+	/* current->blocked = ~0UL; */
 	
+#ifdef __SMP__
+	printk("Started zero_paged (cpu %d)\n", hard_smp_processor_id());
+#else
 	printk("Started zero_paged\n");
+#endif /* __SMP__ */
 	
 	__sti();
 	while ( 1 )
 	{
-		/* don't want to be pre-empted by swapper or power_saved */
+		/* don't want to be pre-empted by swapper or power_save */
 		current->priority = -98;
 		current->counter = -98;
 		/* we don't want to run until we have something to do */
@@ -149,12 +238,9 @@ int zero_paged(void *unused)
 		 */
 		pageptr = __get_free_pages(GFP_ATOMIC, 0, 0 );
 		if ( !pageptr )
-		{
-			printk("!pageptr in zero_paged\n");
 			goto retry;
-		}
 		
-		if ( resched_needed() )
+		if ( need_resched )
 			schedule();
 		
 		/*
@@ -180,7 +266,7 @@ int zero_paged(void *unused)
 		 */
 		for ( bytecount = 0; bytecount < PAGE_SIZE ; bytecount += 4 )
 		{
-			if ( resched_needed() )
+			if ( need_resched )
 				schedule();
 			*(unsigned long *)(bytecount + pageptr) = 0;
 		}
@@ -228,52 +314,30 @@ retry:
 	}
 }
 
-int power_saved(void *unused)
+void inline power_save(void)
 {
 	unsigned long msr, hid0;
-	sprintf(current->comm, "power_saved (idle)");
-	current->blocked = ~0UL;
-	
-	printk("Power saving daemon started\n");
+
+	/* no powersaving modes on the 601 */
+	if(  (_get_PVR()>>16) == 1 )
+		return;
 	
 	__sti();
-	while (1)
-	{
-		/* don't want to be pre-empted by swapper */
-		current->priority = -99;
-		current->counter = -99;
-		/* go ahead and wakeup page_zerod() */
-		wake_up(&page_zerod_wait);
-		schedule();
-		asm volatile(
-			/* clear powersaving modes and set nap mode */
-			"mfspr %3,1008 \n\t"
-			"andc  %3,%3,%4 \n\t"
-			"or    %3,%3,%5 \n\t"
-			"mtspr 1008,%3 \n\t"
-			/* enter the mode */
-			"mfmsr %0 \n\t"
-			"oris  %0,%0,%2 \n\t"
-			"sync \n\t"
-			"mtmsr %0 \n\t"
-			"isync \n\t"
-			: "=&r" (msr)
-			: "0" (msr), "i" (MSR_POW>>16),
-			"r" (hid0),
-			"r" (HID0_DOZE|HID0_NAP|HID0_SLEEP),
-			"r" (HID0_NAP));
-		/*
-		 * The ibm carolina spec says that the eagle memory
-		 * controller will detect the need for a snoop
-		 * and wake up the processor so we don't need to
-		 * check for cache operations that need to be
-		 * snooped.  The ppc book says the run signal
-		 * must be asserted while napping for this though.
-		 *
-		 * Paul, what do you know about the pmac here?
-		 * -- Cort
-		 */
-		schedule();
-	}
+	asm volatile(
+		/* clear powersaving modes and set nap mode */
+		"mfspr %3,1008 \n\t"
+		"andc  %3,%3,%4 \n\t"
+		"or    %3,%3,%5 \n\t"
+		"mtspr 1008,%3 \n\t"
+		/* enter the mode */
+		"mfmsr %0 \n\t"
+		"oris  %0,%0,%2 \n\t"
+		"sync \n\t"
+		"mtmsr %0 \n\t"
+		"isync \n\t"
+		: "=&r" (msr)
+		: "0" (msr), "i" (MSR_POW>>16),
+		"r" (hid0),
+		"r" (HID0_DOZE|HID0_NAP|HID0_SLEEP),
+		"r" (HID0_NAP));
 }
-

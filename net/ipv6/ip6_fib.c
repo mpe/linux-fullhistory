@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.9 1997/09/20 20:48:27 davem Exp $
+ *	$Id: ip6_fib.c,v 1.10 1997/12/13 21:53:10 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -181,6 +181,16 @@ static __inline__ void node_free(struct fib6_node * fn)
 	rt6_stats.fib_nodes--;
 	kfree(fn);
 }
+
+extern __inline__ void rt6_release(struct rt6_info *rt)
+{
+	struct dst_entry *dst = (struct dst_entry *) rt;
+	if (atomic_dec_and_test(&dst->refcnt)) {
+		rt->rt6i_node = NULL;
+		dst_free(dst);
+	}
+}
+
 
 /*
  *	Routing Table
@@ -409,8 +419,12 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt)
 			if ((iter->rt6i_dev == rt->rt6i_dev) &&
 			    (iter->rt6i_flowr == rt->rt6i_flowr) &&
 			    (ipv6_addr_cmp(&iter->rt6i_gateway,
-					   &rt->rt6i_gateway) == 0))
+					   &rt->rt6i_gateway) == 0)) {
+				if (rt->rt6i_expires == 0 ||
+				    rt->rt6i_expires - iter->rt6i_expires > 0)
+					rt->rt6i_expires = iter->rt6i_expires;
 				return -EEXIST;
+			}
 		}
 
 		if (iter->rt6i_metric > rt->rt6i_metric)
@@ -426,6 +440,9 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt)
 	*ins = rt;
 	rt->u.next = iter;
 	atomic_inc(&rt->rt6i_ref);
+#ifdef CONFIG_RTNETLINK
+	inet6_rt_notify(RTM_NEWROUTE, rt);
+#endif
 	rt6_stats.fib_rt_entries++;
 
 	if ((fn->fn_flags & RTN_RTINFO) == 0) {
@@ -513,6 +530,8 @@ int fib6_add(struct fib6_node *root, struct rt6_info *rt)
 	if (err == 0)
 		fib6_start_gc(rt);
 out:
+	if (err)
+		dst_free(&rt->u.dst);
 	return err;
 }
 
@@ -782,7 +801,11 @@ static struct fib6_node * fib6_del_1(struct rt6_info *rt)
 				 */
 
 				*back = lf->u.next;
+#ifdef CONFIG_RTNETLINK
+				inet6_rt_notify(RTM_DELROUTE, lf);
+#endif			
 				rt6_release(lf);
+				rt6_stats.fib_rt_entries--;
 				return fn;
 			}
 			back = &lf->u.next;
@@ -810,7 +833,10 @@ int fib6_del(struct rt6_info *rt)
 /*
  *	Tree transversal function
  *
+ *	Wau... It is NOT REENTERABLE!!!!!!! It is cathastrophe. --ANK
  */
+
+int fib6_walk_count;
 
 void fib6_walk_tree(struct fib6_node *root, f_pnode func, void *arg,
 		    int filter)
@@ -818,6 +844,8 @@ void fib6_walk_tree(struct fib6_node *root, f_pnode func, void *arg,
 	struct fib6_node *fn;
 
 	fn = root;
+
+	fib6_walk_count++;
 	
 	do {
 		if (!(fn->fn_flags & RTN_TAG)) {
@@ -858,6 +886,8 @@ void fib6_walk_tree(struct fib6_node *root, f_pnode func, void *arg,
 		} while (!(fn->fn_flags & RTN_TAG));
 
 	} while (!(fn->fn_flags & RTN_ROOT) || (fn->fn_flags & RTN_TAG));
+
+	fib6_walk_count--;
 }
 
 /*
@@ -884,6 +914,10 @@ static int fib6_gc_node(struct fib6_node *fn, int timeout)
 				*back = rt;
 
 				old->rt6i_node = NULL;
+#ifdef CONFIG_RTNETLINK
+				inet6_rt_notify(RTM_DELROUTE, old);
+#endif
+				old->u.dst.obsolete = 1;
 				rt6_release(old);
 				rt6_stats.fib_rt_entries--;
 				continue;
@@ -893,7 +927,28 @@ static int fib6_gc_node(struct fib6_node *fn, int timeout)
 
 		/*
 		 *	check addrconf expiration here.
+		 *
+		 *	BUGGGG Crossing fingers and ...
+		 *	Seems, radix tree walking is absolutely broken,
+		 *	but we will try in any case --ANK
 		 */
+		if (rt->rt6i_expires && now - rt->rt6i_expires < 0) {
+			struct rt6_info *old;
+
+			old = rt;
+			rt = rt->u.next;
+
+			*back = rt;
+
+			old->rt6i_node = NULL;
+#ifdef CONFIG_RTNETLINK
+			inet6_rt_notify(RTM_DELROUTE, old);
+#endif
+			old->u.dst.obsolete = 1;
+			rt6_release(old);
+			rt6_stats.fib_rt_entries--;
+			continue;
+		}
 		back = &rt->u.next;
 		rt = rt->u.next;
 	}
@@ -994,7 +1049,10 @@ static void fib6_run_gc(unsigned long dummy)
 		0
 	};
 
-	fib6_walk_tree(&ip6_routing_table, fib6_garbage_collect, &arg, 0);
+	if (fib6_walk_count == 0)
+		fib6_walk_tree(&ip6_routing_table, fib6_garbage_collect, &arg, 0);
+	else
+		arg.more = 1;
 
 	if (arg.more) {
 		ip6_fib_timer.expires = jiffies + ipv6_config.rt_gc_period;

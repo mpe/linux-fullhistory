@@ -19,7 +19,9 @@
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
+#include <asm/adb.h>
 #include <asm/cuda.h>
+#define INCLUDE_LINUX_LOGO_DATA
 #include <asm/linux_logo.h>
 #include <linux/selection.h>
 #include <linux/console_struct.h>
@@ -28,6 +30,7 @@
 #include "control.h"
 #include "platinum.h"
 #include "valkyrie.h"
+#include "chips.h"
 #ifdef CONFIG_ATY_VIDEO
 #include "aty.h"
 #endif
@@ -135,6 +138,8 @@ struct vmode_attr vmode_attrs[VMODE_MAX] = {
 static void invert_cursor(int);
 static int map_unknown(struct device_node *);
 static void unknown_init(void);
+static void unknown_set_palette(unsigned char red[], unsigned char green[],
+				unsigned char blue[], int index, int ncolors);
 
 struct display_interface {
 	char *name;
@@ -145,12 +150,22 @@ struct display_interface {
 			    unsigned char blue[], int index, int ncolors);
 	void (*set_blanking)(int blank_mode);
 } displays[] = {
+#ifdef CONFIG_CONTROL_VIDEO
 	{ "control", map_control_display, control_init,
 	  control_setmode, control_set_palette, control_set_blanking },
+#endif
+#ifdef CONFIG_PLATINUM_VIDEO
 	{ "platinum", map_platinum, platinum_init,
 	  platinum_setmode, platinum_set_palette, platinum_set_blanking },
+#endif
+#ifdef CONFIG_VALKYRIE_VIDEO
 	{ "valkyrie", map_valkyrie_display, valkyrie_init,
 	  valkyrie_setmode, valkyrie_set_palette, valkyrie_set_blanking },
+#endif
+#ifdef CONFIG_CHIPS_VIDEO
+	{ "chips65550", map_chips_display, chips_init,
+	  chips_setmode, chips_set_palette, chips_set_blanking },
+#endif
 #ifdef CONFIG_ATY_VIDEO
 	{ "ATY,mach64", map_aty_display, aty_init,
 	  aty_setmode, aty_set_palette, aty_set_blanking },
@@ -160,12 +175,16 @@ struct display_interface {
 	  aty_setmode, aty_set_palette, aty_set_blanking },
 	{ "ATY,mach64ii", map_aty_display, aty_init,
 	  aty_setmode, aty_set_palette, aty_set_blanking },
-#if 0	/* not right for 3D mach64 yet */
 	{ "ATY,264GT-B", map_aty_display, aty_init,
 	  aty_setmode, aty_set_palette, aty_set_blanking },
 	{ "ATY,mach64_3D_pcc", map_aty_display, aty_init,
-	  aty_setmode, aty_set_palette },
-#endif
+	  aty_setmode, aty_set_palette, aty_set_blanking },
+ 	{ "ATY,XCLAIM3D", map_aty_display, aty_init,
+	  aty_setmode, aty_set_palette, aty_set_blanking },
+ 	{ "ATY,XCLAIMVR", map_aty_display, aty_init,
+	  aty_setmode, aty_set_palette, aty_set_blanking },
+ 	{ "ATY,RAGEII_M", map_aty_display, aty_init, // untested!!
+	  aty_setmode, aty_set_palette, aty_set_blanking },
 #endif
 #ifdef CONFIG_IMSTT_VIDEO
 	{ "IMS,tt128mb", map_imstt_display, imstt_init, 
@@ -175,7 +194,7 @@ struct display_interface {
 };
 
 struct display_interface unknown_display = {
-	"unknown", NULL, unknown_init, NULL, NULL
+	"unknown", NULL, unknown_init, NULL, unknown_set_palette, NULL
 };
 
 static struct display_interface *current_display;
@@ -190,8 +209,6 @@ int line_pitch;			/* # bytes in 1 scan line */
 int row_pitch;			/* # bytes in 1 row of characters */
 unsigned char *fb_start;	/* addr of top left pixel of top left char */
 struct vc_mode display_info;
-
-extern int screen_initialized;	/* in arch/ppc/pmac/prom.c */
 
 #define cmapsz	(16*256)
 extern unsigned char vga_font[cmapsz];
@@ -500,8 +517,6 @@ pmac_find_display()
 	struct vmode_attr *ap;
 
 	current_display = NULL;
-	if (serial_console) 
-		return;
 	for (disp = displays; disp->name != NULL; ++disp) {
 		dp = find_devices(disp->name);
 		if (dp == 0)
@@ -518,21 +533,23 @@ pmac_find_display()
 		 * we may be able to use it in a limited fashion.
 		 * If there is, it has already been opened in prom_init().
 		 */
-		if (prom_display_path[0] != 0) {
-			dp = find_path_device(prom_display_path);
-			if (dp != 0 && map_unknown(dp))
+		int i;
+		for (i = 0; i < prom_num_displays; ++i) {
+			dp = find_path_device(prom_display_paths[i]);
+			if (dp != 0 && map_unknown(dp)) {
 				current_display = &unknown_display;
-			else
+				break;
+			} else {
 				printk(KERN_INFO "Can't use %s for display\n",
-				       prom_display_path);
+				       prom_display_paths[i]);
+			}
 		}
 	}
 
 	if (current_display == NULL
 	    || video_mode <= 0 || video_mode > VMODE_MAX) {
-		printk(KERN_INFO "No usable display device found"
-		       "- using serial console\n");
-		serial_console = 1;	/* no screen - fall back to serial */
+		printk(KERN_INFO "No usable display device found\n");
+		current_display = NULL;
 		return;
 	}
 	ap = &vmode_attrs[video_mode - 1];
@@ -590,15 +607,6 @@ console_powermode(int mode)
 }
 
 void
-pmac_cons_setup(char *str, int *ints)
-{
-	if (strcmp(str, "ttya") == 0 || strcmp(str, "modem") == 0)
-		serial_console = 1;
-	else if (strcmp(str, "ttyb") == 0 || strcmp(str, "printer") == 0)
-		serial_console = 2;
-}
-
-void
 pmac_vmode_setup(char *str, int *ints)
 {
 	if (ints[0] >= 1)
@@ -611,9 +619,8 @@ unsigned long
 con_type_init(unsigned long mem_start, const char **type_p)
 {
 	if (current_display == NULL)
-		panic("no display available");
+		return mem_start;
 	current_display->init_interface();
-	screen_initialized = 1;		/* inhibits prom_print */
 	can_do_color = 1;
 	video_type = VIDEO_TYPE_PMAC;
 	*type_p = display_info.name;
@@ -622,6 +629,12 @@ con_type_init(unsigned long mem_start, const char **type_p)
 	video_mem_term = mem_start;
 	memset((char *) video_mem_base, 0, video_screen_size);
 	return mem_start;
+}
+
+int
+con_is_present(void)
+{
+	return current_display != NULL;
 }
 
 static __inline__ void
@@ -725,7 +738,14 @@ con_type_init_finish(void)
 	xy[1] = (LINUX_LOGO_HEIGHT + 16) / 16;
 	putconsxy(0, xy);
 
-	p = "PowerMac/Linux " UTS_RELEASE;
+	switch (_machine) {
+	    case _MACH_Pmac:
+		p = "PowerMac/Linux " UTS_RELEASE;
+		break;
+	    default:
+		p = "Linux/PPC " UTS_RELEASE;
+		break;
+	}
 	addr = (unsigned short *) video_mem_base + 2 * video_num_columns
 		+ LINUX_LOGO_WIDTH / 8 + 8;
 	for (; *p; ++p) {
@@ -868,6 +888,8 @@ static int unknown_modes[] = {
 };
 
 static unsigned char *frame_buffer;
+static unsigned char *unknown_cmap_adr;
+static volatile unsigned char *unknown_cmap_data;
 
 static int map_unknown(struct device_node *dp)
 {
@@ -914,9 +936,6 @@ static int map_unknown(struct device_node *dp)
 			return 0;
 		}
 		address = dp->addrs[i].address;
-		/* temporary kludge for valkyrie */
-		if (strcmp(dp->name, "valkyrie") == 0)
-			address += 0x1000;
 	}
 	printk(KERN_INFO "%s: using address %x\n", dp->full_name, address);
 	frame_buffer = ioremap(address, len);
@@ -945,7 +964,15 @@ static int map_unknown(struct device_node *dp)
 	display_info.fb_address = (unsigned long) frame_buffer;
 	display_info.cmap_adr_address = 0;
 	display_info.cmap_data_address = 0;
-	display_info.disp_reg_address = 0;
+	unknown_cmap_adr = 0;
+	/* XXX kludge for ati */
+	if (strncmp(dp->name, "ATY,", 4) == 0) {
+		display_info.disp_reg_address = address + 0x7ffc00;
+		display_info.cmap_adr_address = address + 0x7ffcc0;
+		display_info.cmap_data_address = address + 0x7ffcc1;
+		unknown_cmap_adr = ioremap(address + 0x7ff000, 0x1000) + 0xcc0;
+		unknown_cmap_data = unknown_cmap_adr + 1;
+	}
 
 	return 1;
 }
@@ -963,6 +990,25 @@ unknown_init()
 	p = (unsigned *) frame_buffer;
 	for (i = n_scanlines * line_pitch / sizeof(unsigned); i != 0; --i)
 		*p++ = 0;
+}
+
+static void
+unknown_set_palette(unsigned char red[], unsigned char green[],
+		    unsigned char blue[], int index, int ncolors)
+{
+	volatile unsigned char *a, *d;
+	int i;
+
+	if (unknown_cmap_adr == 0)
+		return;
+	a = unknown_cmap_adr;
+	d = unknown_cmap_data;
+	for (i = 0; i < ncolors; ++i) {
+		*a = index + i;	eieio();
+		*d = red[i];	eieio();
+		*d = green[i];	eieio();
+		*d = blue[i];	eieio();
+	}
 }
 
 

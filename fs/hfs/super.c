@@ -149,6 +149,8 @@ static void hfs_put_super(struct super_block *sb)
  * This is the statfs() entry in the super_operations structure for
  * HFS filesystems.  The purpose is to return various data about the
  * filesystem.
+ *
+ * XXX: changed f_files/f_ffree to reflect the fs_ablock/free_ablocks.
  */
 static int hfs_statfs(struct super_block *sb, struct statfs *buf, int len)
 {
@@ -160,8 +162,8 @@ static int hfs_statfs(struct super_block *sb, struct statfs *buf, int len)
 	tmp.f_blocks = mdb->alloc_blksz * mdb->fs_ablocks;
 	tmp.f_bfree = mdb->alloc_blksz * mdb->free_ablocks;
 	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = -1; /* According to the statfs manual page, -1 is the  */
-	tmp.f_ffree = -1; /* correct value when the meaning is undefined.    */
+	tmp.f_files = mdb->fs_ablocks;   /* According to the statfs manual page, -1 is the  */
+	tmp.f_ffree = mdb->free_ablocks; /* correct value when the meaning is undefined. */ 
 	tmp.f_namelen = HFS_NAMELEN;
 
 	return copy_to_user(buf, &tmp, len) ? -EFAULT : 0;
@@ -436,6 +438,7 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 		goto bail2;
 	}
 	HFS_SB(s)->s_mdb = mdb;
+	INIT_LIST_HEAD(&mdb->entry_dirty);
 
 	if (HFS_ITYPE(mdb->next_id) != 0) {
 		hfs_warn("hfs_fs: too many files.\n");
@@ -462,6 +465,11 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 	if (!s->s_root) 
 		goto bail_no_root;
 
+	/* HFS_SUPERBLK prevents the root inode from being flushed 
+	 * inadvertantly. */
+	HFS_I(root_inode)->entry->state = HFS_SUPERBLK;
+	s->s_root->d_op = &hfs_dentry_operations;
+
 	/* everything's okay */
 	unlock_super(s);
 	return s;
@@ -482,6 +490,7 @@ bail3:
 
 __initfunc(int init_hfs_fs(void))
 {
+        hfs_cat_init();
 	return register_filesystem(&hfs_fs);
 }
 

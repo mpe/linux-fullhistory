@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.12 1997/08/19 03:11:52 davem Exp $ */
+/* $Id: io.h,v 1.14 1997/11/01 10:23:58 ecd Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -91,21 +91,56 @@ extern void insw(unsigned long addr, void *dst, unsigned long count);
 extern void insl(unsigned long addr, void *dst, unsigned long count);
 
 /* Memory functions, same as I/O accesses on Ultra. */
-#define readb(addr)		inb(addr)
-#define readw(addr)		inw(addr)
-#define readl(addr)		inl(addr)
-#define writeb(b, addr)		outb((b), (addr))
-#define writew(w, addr)		outw((w), (addr))
-#define writel(l, addr)		outl((l), (addr))
+#define readb(addr)		inb((unsigned long)addr)
+#define readw(addr)		inw((unsigned long)addr)
+#define readl(addr)		inl((unsigned long)addr)
+#define writeb(b, addr)		outb((b), (unsigned long)(addr))
+#define writew(w, addr)		outw((w), (unsigned long)(addr))
+#define writel(l, addr)		outl((l), (unsigned long)(addr))
 
 /* Memcpy to/from I/O space is just a regular memory operation on Ultra as well. */
+
+/*
+ * FIXME: Write faster routines using ASL_*L for this.
+ */
+static inline void *
+memset_io(void *dst, int c, __kernel_size_t n)
+{
+	char *d = dst;
+
+	while (n--)
+		*d++ = c;
+
+	return dst;
+}
+
+static inline void *
+memcpy_fromio(void *dst, const void *src, __kernel_size_t n)
+{
+	const char *s = src;
+	char *d = dst;
+
+	while (n--)
+		*d++ = *s++;
+
+	return dst;
+}
+
+static inline void *
+memcpy_toio(void *dst, const void *src, __kernel_size_t n)
+{
+	const char *s = src;
+	char *d = dst;
+
+	while (n--)
+		*d++ = *s++;
+
+	return dst;
+}
 
 #if 0 /* XXX Not exactly, we need to use ASI_*L from/to the I/O end,
        * XXX so these are disabled until we code that stuff.
        */
-#define memset_io(a,b,c)		memset(((char *)(a)),(b),(c))
-#define memcpy_fromio(a,b,c)		memcpy((a),((char *)(b)),(c))
-#define memcpy_toio(a,b,c)		memcpy(((char *)(a)),(b),(c))
 #define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),((char *)(b)),(c),(d))
 #endif
 

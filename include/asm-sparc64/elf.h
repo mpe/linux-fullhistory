@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.8 1997/08/21 18:09:07 richard Exp $ */
+/* $Id: elf.h,v 1.13 1997/10/03 18:44:14 davem Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -45,7 +45,31 @@ typedef unsigned long elf_fpregset_t;
    that it will "exec", and that there is sufficient room for the brk.  */
 
 #ifndef ELF_ET_DYN_BASE
-#define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
+#define ELF_ET_DYN_BASE         0x50000000000
+#endif
+
+
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  */
+
+/* On Ultra, we support all of the v8 capabilities. */
+#define ELF_HWCAP	(HWCAP_SPARC_FLUSH | HWCAP_SPARC_STBAR | \
+			 HWCAP_SPARC_SWAP | HWCAP_SPARC_MULDIV)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.  */
+
+#define ELF_PLATFORM	(NULL)
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ibcs2)					\
+do {								\
+	if (ibcs2)						\
+		current->personality = PER_SVR4;		\
+	else if (current->personality != PER_LINUX32)		\
+		current->personality = PER_LINUX;		\
+} while (0)
 #endif
 
 #endif /* !(__ASM_SPARC64_ELF_H) */

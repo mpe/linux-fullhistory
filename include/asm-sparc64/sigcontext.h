@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.9 1997/08/19 14:18:38 jj Exp $ */
+/* $Id: sigcontext.h,v 1.10 1997/12/11 15:16:11 jj Exp $ */
 #ifndef __SPARC64_SIGCONTEXT_H
 #define __SPARC64_SIGCONTEXT_H
 
@@ -67,7 +67,7 @@ typedef struct {
 
 typedef struct {
 	struct     pt_regs si_regs;
-	int si_mask;
+	long	   si_mask;
 } __siginfo_t;
 
 typedef struct {

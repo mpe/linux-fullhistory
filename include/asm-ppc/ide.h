@@ -13,22 +13,32 @@
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
+#include <linux/ioport.h>
+#include <asm/io.h>		/* so we can redefine insw/outsw */
 
 #ifndef MAX_HWIFS
 #define MAX_HWIFS	4
 #endif
 
+#undef	SUPPORT_SLOW_DATA_PORTS
+#define	SUPPORT_SLOW_DATA_PORTS	0
+#undef	SUPPORT_VLB_SYNC
+#define SUPPORT_VLB_SYNC	0
+
+
 #define ide_sti()	sti()
 
-typedef unsigned short ide_ioreg_t;
+typedef unsigned long ide_ioreg_t;
 void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
 void prep_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
 void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void ide_insw(ide_ioreg_t port, void *buf, int ns);
+void ide_outsw(ide_ioreg_t port, void *buf, int ns);
 
-#if defined(CONFIG_PREP) || defined(CONFIG_CHRP)
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
+	if ( _machine == _MACH_Pmac )
+		return 0;
 	switch (base) {
 		case 0x1f0: return 13;
 		case 0x170: return 13;
@@ -41,6 +51,8 @@ static __inline__ int ide_default_irq(ide_ioreg_t base)
 
 static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
+	if ( _machine == _MACH_Pmac )
+		return index;
 	switch (index) {
 		case 0:	return 0x1f0;
 		case 1:	return 0x170;
@@ -51,53 +63,52 @@ static __inline__ ide_ioreg_t ide_default_io_base(int index)
 	}
 }
 
-typedef union {
-	unsigned all			: 8;	/* all of the bits together */
-	struct {
-		unsigned head		: 4;	/* always zeros here */
-		unsigned unit		: 1;	/* drive select number, 0 or 1 */
-		unsigned bit5		: 1;	/* always 1 */
-		unsigned lba		: 1;	/* using LBA instead of CHS */
-		unsigned bit7		: 1;	/* always 1 */
-	} b;
-} select_t;
-
 static __inline__ int ide_check_region (ide_ioreg_t from, unsigned int extent)
 {
+	if ( _machine == _MACH_Pmac )
+		return 0;
 	return check_region(from, extent);
 }
 
 static __inline__ void ide_request_region (ide_ioreg_t from, unsigned int extent, const char *name)
 {
+	if ( _machine == _MACH_Pmac )
+		return;
 	request_region(from, extent, name);
 }
 
 static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent)
 {
+	if ( _machine == _MACH_Pmac )
+		return;
 	release_region(from, extent);
 }
 
-#define ide_fix_driveid(id)		do {} while (0)
+#define ide_fix_driveid(id)	do {			\
+	int nh;						\
+	unsigned short *p = (unsigned short *) id;	\
+	if ( _machine == _MACH_Pmac )			\
+		for (nh = SECTOR_WORDS * 2; nh != 0; --nh, ++p)	\
+			*p = (*p << 8) + (*p >> 8);	\
+} while (0)
 
-#endif /* CONFIG_CHRP || CONFIG_PREP */
 
-
-#ifdef CONFIG_PMAC
-
-#include <asm/io.h>		/* so we can redefine insw/outsw */
-
-typedef unsigned long ide_ioreg_t;
-
-static __inline__ int ide_default_irq(ide_ioreg_t base)
-{
-	return 0;
-}
-
-extern __inline__ ide_ioreg_t ide_default_io_base(int index)
-{
-	return index;
-}
-
+#undef insw
+#define insw(port, buf, ns) 	do {			\
+	if ( _machine != _MACH_Pmac )			\
+		/* this must be the same as insw in io.h!! */	\
+		_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
+	else						\
+		ide_insw((port), (buf), (ns));		\
+} while (0)
+#undef outsw
+#define outsw(port, buf, ns) 	do {			\
+	if ( _machine != _MACH_Pmac )			\
+		/* this must be the same as outsw in io.h!! */	\
+		_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
+	else						\
+		ide_outsw((port), (buf), (ns));		\
+} while (0)
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */
@@ -109,41 +120,6 @@ typedef union {
 		unsigned head		: 4;	/* always zeros here */
 	} b;
 } select_t;
-
-#undef	SUPPORT_SLOW_DATA_PORTS
-#define	SUPPORT_SLOW_DATA_PORTS	0
-#undef	SUPPORT_VLB_SYNC
-#define SUPPORT_VLB_SYNC	0
-
-static __inline__ int ide_check_region (ide_ioreg_t from, unsigned int extent)
-{
-	return 0;
-}
-
-static __inline__ void ide_request_region (ide_ioreg_t from, unsigned int extent, const char *name)
-{
-}
-
-static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent)
-{
-}
-
-#undef insw
-#undef outsw
-#define insw(port, buf, ns)	ide_insw((port), (buf), (ns))
-#define outsw(port, buf, ns)	ide_outsw((port), (buf), (ns))
-
-void ide_insw(ide_ioreg_t port, void *buf, int ns);
-void ide_outsw(ide_ioreg_t port, void *buf, int ns);
-
-#define ide_fix_driveid(id)	do {			\
-	int nh;						\
-	unsigned short *p = (unsigned short *) id;	\
-	for (nh = SECTOR_WORDS * 2; nh != 0; --nh, ++p)	\
-		*p = (*p << 8) + (*p >> 8);		\
-} while (0)
-
-#endif
 
 static __inline__ int ide_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 			unsigned long flags, const char *device, void *dev_id)

@@ -303,7 +303,6 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	n->ack_seq=skb->ack_seq;
 	memcpy(n->cb, skb->cb, sizeof(skb->cb));
 	n->used=skb->used;
-	n->arp=skb->arp;
 	n->tries=0;
 	atomic_set(&n->users, 1);
 	n->pkt_type=skb->pkt_type;
@@ -354,7 +353,6 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
  	n->end_seq=skb->end_seq;
 	n->ack_seq=skb->ack_seq;
 	n->used=skb->used;
-	n->arp=skb->arp;
 	n->tries=0;
 	atomic_set(&n->users, 1);
 	n->pkt_type=skb->pkt_type;
@@ -363,14 +361,4 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->security=skb->security;
 
 	return n;
-}
-  
-struct sk_buff *dev_alloc_skb(unsigned int length)
-{
-	struct sk_buff *skb;
-
-	skb = alloc_skb(length+16, GFP_ATOMIC);
-	if (skb)
-		skb_reserve(skb,16);
-	return skb;
 }

@@ -29,4 +29,3 @@ extern __inline__ void udelay(unsigned long usecs)
 }
 
 #endif /* defined(_PPC_DELAY_H) */
-

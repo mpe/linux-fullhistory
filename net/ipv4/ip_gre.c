@@ -622,13 +622,13 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		else if (skb->protocol == __constant_htons(ETH_P_IPV6)) {
 			struct in6_addr *addr6;
 			int addr_type;
-			struct nd_neigh *neigh = (struct nd_neigh *) skb->dst->neighbour;
+			struct neighbour *neigh = skb->dst->neighbour;
 
 			if (neigh == NULL)
 				goto tx_error;
 
-			addr6 = &neigh->ndn_addr;
-			addr_type = ipv6_addr_type(addr6);
+			addr6 = (struct in6_addr*)&neigh->primary_key;
+			addr_type = neigh->type;
 
 			if (addr_type == IPV6_ADDR_ANY) {
 				addr6 = &skb->nh.ipv6h->daddr;
@@ -962,28 +962,6 @@ static int ipgre_header(struct sk_buff *skb, struct device *dev, unsigned short 
 	return -t->hlen;
 }
 
-static int ipgre_rebuild_header(struct sk_buff *skb)
-{
-	struct device *dev = skb->dev;
-	struct iphdr *iph = (struct iphdr *)skb->data;
-	u16 *p = (u16*)(iph + 1);
- 	struct neighbour *neigh = NULL;
-
- 	if (skb->dst)
- 		neigh = skb->dst->neighbour;
-
- 	if (neigh)
- 		return neigh->ops->resolve((void*)&iph->daddr, skb);
-
-	if (p[1] == __constant_htons(ETH_P_IP))
- 		return arp_find((void*)&iph->daddr, skb);
-
-	if (net_ratelimit())
-		printk(KERN_DEBUG "%s: unable to resolve type %X addresses.\n", 
-		       dev->name, (int)p[1]);
-	return 0;
-}
-
 static int ipgre_open(struct device *dev)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
@@ -1076,7 +1054,6 @@ static int ipgre_tunnel_init(struct device *dev)
 				return -EINVAL;
 			dev->flags = IFF_BROADCAST;
 			dev->hard_header = ipgre_header;
-			dev->rebuild_header = ipgre_rebuild_header;
 			dev->open = ipgre_open;
 			dev->stop = ipgre_close;
 		}

@@ -18,6 +18,7 @@ void *stderr;
 void exit(void);
 void *finddevice(const char *name);
 int getprop(void *phandle, const char *name, void *buf, int buflen);
+void printk(char *fmt, ...);
 
 void
 start(int a1, int a2, void *promptr)

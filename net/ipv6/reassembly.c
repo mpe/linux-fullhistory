@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.7 1997/03/18 18:24:47 davem Exp $
+ *	$Id: reassembly.c,v 1.8 1997/12/29 19:52:50 kuznet Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -273,7 +273,9 @@ static int reasm_frag_1(struct frag_queue *fq, struct sk_buff **skb_in)
 	payload_len = (unfrag_len + tail->offset + 
 		       (tail->skb->tail - (__u8 *) (tail->fhdr + 1)));
 
+#if 0
 	printk(KERN_DEBUG "reasm: payload len = %d\n", payload_len);
+#endif
 
 	if ((skb = dev_alloc_skb(sizeof(struct ipv6hdr) + payload_len))==NULL) {
 		printk(KERN_DEBUG "reasm_frag: no memory for reassembly\n");

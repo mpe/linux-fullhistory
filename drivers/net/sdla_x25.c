@@ -10,6 +10,19 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Nov 27, 1997	Jaspreet Singh	 o Added protection against enabling of irqs
+*				   when they are disabled.
+* Nov 17, 1997  Farhan Thawar    o Added IPX support
+*				 o Changed if_send() to now buffer packets when
+*				   the board is busy
+*				 o Removed queueing of packets via the polling
+*				   routing
+*				 o Changed if_send() critical flags to properly
+*				   handle race conditions
+* Nov 06, 1997  Farhan Thawar    o Added support for SVC timeouts
+*				 o Changed PVC encapsulation to ETH_P_IP
+* Jul 21, 1997  Jaspreet Singh	 o Fixed freeing up of buffers using kfree()
+*				   when packets are received.
 * Mar 11, 1997  Farhan Thawar   Version 3.1.1
 *                                o added support for V35
 *                                o changed if_send() to return 0 if
@@ -49,11 +62,14 @@
 #define	MAX_CMD_RETRY	10		/* max number of firmware retries */
 
 #define	X25_CHAN_MTU	4096		/* unfragmented logical channel MTU */
-#define	X25_HRDHDR_SZ	6		/* max encapsulation header size */
+#define	X25_HRDHDR_SZ	7		/* max encapsulation header size */
 #define	X25_CONCT_TMOUT	(90*HZ)		/* link connection timeout */
 #define	X25_RECON_TMOUT	(10*HZ)		/* link connection timeout */
 #define	CONNECT_TIMEOUT	(90*HZ)		/* link connection timeout */
 #define	HOLD_DOWN_TIME	(30*HZ)		/* link hold down time */
+
+/* For IPXWAN */
+#define CVHexToAscii(b) (((unsigned char)(b) > (unsigned char)9) ? ((unsigned char)'A' + ((unsigned char)(b) - (unsigned char)10)) : ((unsigned char)'0' + (unsigned char)(b)))
 
 /****** Data Structures *****************************************************/
 
@@ -72,7 +88,10 @@ typedef struct x25_channel
 	char drop_sequence;		/* mark sequence for dropping */
 	unsigned long state_tick;	/* time of the last state change */
 	unsigned idle_timeout;		/* sec, before disconnecting */
+	unsigned long i_timeout_sofar;  /* # of sec's we've been idle */
 	unsigned hold_timeout;		/* sec, before re-connecting */
+	unsigned long tick_counter;	/* counter for transmit time out */
+	char devtint;			/* Weather we should dev_tint() */
 	struct sk_buff* rx_skb;		/* receive socket buffer */
 	struct sk_buff* tx_skb;		/* transmit socket buffer */
 	sdla_t* card;			/* -> owner */
@@ -167,6 +186,13 @@ static unsigned int dec_to_uint (unsigned char* str, int len);
 static unsigned int hex_to_uint (unsigned char* str, int len);
 static void parse_call_info (unsigned char* str, x25_call_info_t* info);
 
+/* IPX functions */
+static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_number, unsigned char incoming);
+static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char enable_IPX, unsigned long network_number, unsigned short proto);
+
+extern void disable_irq(unsigned int);
+extern void enable_irq(unsigned int);
+
 /****** Global Data **********************************************************
  * Note: All data must be explicitly initialized!!!
  */
@@ -232,7 +258,7 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 	u.cfg.hdlcWindow	= 7;
 	u.cfg.pktWindow		= 2;
 	u.cfg.station		= 1;		/* DTE */
-	u.cfg.options		= 0x0010;	/* disable D-bit pragmatics */
+	u.cfg.options		= 0x00B0;	/* disable D-bit pragmatics */
 	u.cfg.ccittCompat	= 1988;
 	u.cfg.t10t20		= 30;
 	u.cfg.t11t21		= 30;
@@ -243,6 +269,7 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 	u.cfg.r10r20		= 5;
 	u.cfg.r12r22		= 5;
 	u.cfg.r13r23		= 5;
+	u.cfg.responseOpt	= 1;		/* RR's after every packet */
 
 	if (conf->clocking != WANOPT_EXTERNAL)
 		u.cfg.baudRate = bps_to_speed_code(conf->bps)
@@ -267,7 +294,7 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 	else if (conf->mtu >= 128)
 		card->wandev.mtu = 128
 	;
-	else conf->mtu = 64;
+	else card->wandev.mtu = 64;
 	u.cfg.defPktSize = u.cfg.pktMTU = card->wandev.mtu;
 
 	if (conf->u.x25.hi_pvc)
@@ -322,6 +349,15 @@ __initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 	card->wandev.new_if	= &new_if;
 	card->wandev.del_if	= &del_if;
 	card->wandev.state	= WAN_DISCONNECTED;
+	card->wandev.enable_tx_int = 0;
+	card->irq_dis_if_send_count = 0;
+        card->irq_dis_poll_count = 0;
+	card->wandev.enable_IPX = conf->enable_IPX;
+	
+	if (conf->network_number)
+		card->wandev.network_number = conf->network_number;
+	else
+		card->wandev.network_number = 0xDEADBEEF;
 	return 0;
 }
 
@@ -386,13 +422,18 @@ static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
 	memset(chan, 0, sizeof(x25_channel_t));
 	strcpy(chan->name, conf->name);
 	chan->card = card;
+	chan->protocol = ETH_P_IP;
+	chan->tx_skb = chan->rx_skb = NULL;
 
 	/* verify media address */
 	if (conf->addr[0] == '@')		/* SVC */
 	{
 		chan->svc = 1;
-		chan->protocol = ETH_P_IP;
 		strncpy(chan->addr, &conf->addr[1], WAN_ADDRESS_SZ);
+
+		/* Set channel timeouts (default if not specified) */
+		chan->idle_timeout = (conf->idle_timeout) ? conf->idle_timeout : 					90;
+		chan->hold_timeout = (conf->hold_timeout) ? conf->hold_timeout :					10;
 	}
 	else if (is_digit(conf->addr[0]))	/* PVC */
 	{
@@ -435,6 +476,7 @@ static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
 /*============================================================================
  * Delete logical channel.
  */
+
 static int del_if (wan_device_t* wandev, struct device* dev)
 {
 	if (dev->priv)
@@ -450,6 +492,7 @@ static int del_if (wan_device_t* wandev, struct device* dev)
 /*============================================================================
  * Execute adapter interface command.
  */
+
 static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data)
 {
 	TX25Mbox* mbox = card->mbox;
@@ -524,6 +567,9 @@ static int if_init (struct device* dev)
 	dev->base_addr	= wandev->ioport;
 	dev->mem_start	= wandev->maddr;
 	dev->mem_end	= wandev->maddr + wandev->msize - 1;
+
+        /* Set transmit buffer queue length */
+        dev->tx_queue_len = 10;
 
 	/* Initialize socket buffers */
 	for (i = 0; i < DEV_NUMBUFFS; ++i)
@@ -659,33 +705,86 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
-	int queued = 0;
+	struct device *dev2;
+	TX25Status* status = card->flags;
+	unsigned long host_cpu_flags;
 
-	if (test_and_set_bit(0, (void*)&card->wandev.critical))
+	if (skb == NULL)
 	{
+		/* If we get here, some higher layer thinks we've missed a
+		 * tx-done interrupt.
+		 */
 #ifdef _DEBUG_
-		printk(KERN_INFO "%s: if_send() hit critical section!\n",
-			card->devname)
-		;
-#endif
-		dev_kfree_skb(skb, FREE_WRITE);
-		return 0;
-	}
-
-	if (test_and_set_bit(0, (void*)&dev->tbusy))
-	{
-#ifdef _DEBUG_
-		printk(KERN_INFO "%s: Tx collision on interface %s!\n",
+		printk(KERN_INFO "%s: interface %s got kicked!\n",
 			card->devname, dev->name)
 		;
 #endif
-		++chan->ifstats.collisions;
-		++card->wandev.stats.collisions;
-	        dev_kfree_skb(skb, FREE_WRITE);
-	        card->wandev.critical = 0;
-	        return 0;
+		dev_tint(dev);
+		return 0;
 	}
-	else if (chan->protocol && (chan->protocol != skb->protocol))
+
+	if (dev->tbusy)
+	{
+		++chan->ifstats.rx_dropped;	
+		if ((jiffies - chan->tick_counter) < (5*HZ))
+		{
+			return dev->tbusy;
+		}
+		printk(KERN_INFO "%s: Transmit time out %s!\n",
+			card->devname, dev->name)
+		;
+		for( dev2 = card->wandev.dev; dev2; dev2 = dev2->slave)
+		{
+	        	dev2->tbusy = 0;
+		}
+	}
+	chan->tick_counter = jiffies;
+
+	disable_irq(card->hw.irq);
+	++card->irq_dis_if_send_count;
+
+	if (set_bit(0, (void*)&card->wandev.critical)) 
+	{
+		printk(KERN_INFO "Hit critical in if_send()!\n");
+		if (card->wandev.critical == CRITICAL_IN_ISR) 
+		{
+			card->wandev.enable_tx_int = 1;
+			dev->tbusy = 1;
+			
+			save_flags(host_cpu_flags);
+                        cli();
+                        if ((!(--card->irq_dis_if_send_count)) &&
+                                        (!card->irq_dis_poll_count))
+                                enable_irq(card->hw.irq);
+                        restore_flags(host_cpu_flags);
+			
+			return dev->tbusy;
+		}
+		dev_kfree_skb(skb, FREE_WRITE);
+		
+		save_flags(host_cpu_flags);
+                cli();
+                if ((!(--card->irq_dis_if_send_count)) &&
+                                         (!card->irq_dis_poll_count))
+                        enable_irq(card->hw.irq);
+                restore_flags(host_cpu_flags);
+
+		return dev->tbusy;
+	}
+
+	/* Below is only until we have per-channel IPX going.... */
+	if(!(chan->svc))
+	{
+		chan->protocol = skb->protocol;
+	}
+
+	if (card->wandev.state != WAN_CONNECTED)
+	{
+		++chan->ifstats.tx_dropped
+	;
+	}
+	/* Below is only until we have per-channel IPX going.... */
+	else if ( (chan->svc) && (chan->protocol && (chan->protocol != skb->protocol)))
 	{
 		printk(KERN_INFO
 			"%s: unsupported Ethertype 0x%04X on interface %s!\n",
@@ -693,41 +792,57 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 		;
 		++chan->ifstats.tx_errors;
 	}
-	else if (card->wandev.state != WAN_CONNECTED)
-		++chan->ifstats.tx_dropped
-	;
 	else switch (chan->state)
 	{
-	case WAN_CONNECTED:
-		dev->trans_start = jiffies;
-		queued = chan_send(dev, skb);
-		if (queued) chan->tx_skb = skb;
-		break;
-
 	case WAN_DISCONNECTED:
 		/* Try to establish connection. If succeded, then start
 		 * transmission, else drop a packet.
 		 */
-		if (chan_connect(dev) == 0)
+		if (chan_connect(dev) != 0)
 		{
-			dev->trans_start = jiffies;
-			queued = chan_send(dev, skb);
-			if (queued) chan->tx_skb = skb;
+			++chan->ifstats.tx_dropped;
+			++card->wandev.stats.tx_dropped;
 			break;
 		}
-		/* else fall through */
+		/* fall through */
+
+	case WAN_CONNECTED:
+		if( skb->protocol == ETH_P_IPX ) {
+			if(card->wandev.enable_IPX) {
+				switch_net_numbers( skb->data, 
+					card->wandev.network_number, 0);
+			} else {
+				++card->wandev.stats.tx_dropped;
+				++chan->ifstats.tx_dropped;
+				goto tx_done;
+			}
+		}
+		dev->trans_start = jiffies;
+		if(chan_send(dev, skb))
+		{
+			dev->tbusy = 1;
+			status->imask |= 0x2;
+		}
+		break;
 
 	default:
-		++chan->ifstats.tx_dropped;
+		++chan->ifstats.tx_dropped;	
+		++card->wandev.stats.tx_dropped;
 	}
 
-	if (!queued)
+tx_done:
+	if (!dev->tbusy)
 	{
 		dev_kfree_skb(skb, FREE_WRITE);
-		dev->tbusy = 0;
 	}
 	card->wandev.critical = 0;
-	return 0;
+	save_flags(host_cpu_flags);
+        cli();
+        if ((!(--card->irq_dis_if_send_count)) && (!card->irq_dis_poll_count))
+                enable_irq(card->hw.irq);
+        restore_flags(host_cpu_flags);
+
+	return dev->tbusy;
 }
 
 /*============================================================================
@@ -749,6 +864,24 @@ static struct enet_statistics* if_stats (struct device* dev)
 static void wpx_isr (sdla_t* card)
 {
 	TX25Status* status = card->flags;
+	struct device *dev;
+	unsigned long host_cpu_flags;
+
+	card->in_isr = 1;
+	card->buff_int_mode_unbusy = 0;
+
+	if (test_and_set_bit(0, (void*)&card->wandev.critical)) {
+
+ 		printk(KERN_INFO "wpx_isr: %s, wandev.critical set to 0x%02X, int type = 0x%02X\n", card->devname, card->wandev.critical, status->iflags);
+		card->in_isr = 0;
+		return;
+	}
+
+	/* For all interrupts set the critical flag to CRITICAL_RX_INTR.
+         * If the if_send routine is called with this flag set it will set
+         * the enable transmit flag to 1. (for a delayed interrupt)
+         */
+	card->wandev.critical = CRITICAL_IN_ISR;
 
 	switch (status->iflags)
 	{
@@ -758,6 +891,8 @@ static void wpx_isr (sdla_t* card)
 
 	case 0x02:		/* transmit interrupt */
 		tx_intr(card);
+		card->buff_int_mode_unbusy = 1;
+		status->imask &= ~0x2;
 		break;
 
 	case 0x04:		/* modem status interrupt */
@@ -768,10 +903,33 @@ static void wpx_isr (sdla_t* card)
 		event_intr(card);
 		break;
 
-	default:		/* unwanter interrupt */
+	default:		/* unwanted interrupt */
 		spur_intr(card);
 	}
+
+	card->wandev.critical = CRITICAL_INTR_HANDLED;
+	if( card->wandev.enable_tx_int)
+	{
+		card->wandev.enable_tx_int = 0;
+		status->imask |= 0x2;
+	}
+	save_flags(host_cpu_flags);
+	cli();
+	card->in_isr = 0;
 	status->iflags = 0;	/* clear interrupt condition */
+	card->wandev.critical = 0;
+	restore_flags(host_cpu_flags);
+
+	if(card->buff_int_mode_unbusy)
+	{
+		for(dev = card->wandev.dev; dev; dev = dev->slave)
+		{
+			if(((x25_channel_t*)dev->priv)->devtint)
+			{
+				dev_tint(dev);
+			}	
+		}
+	}
 }
 
 /*============================================================================
@@ -812,6 +970,7 @@ static void rx_intr (sdla_t* card)
 	}
 
 	chan = dev->priv;
+	chan->i_timeout_sofar = jiffies;
 	if (chan->drop_sequence)
 	{
 		if (!(qdm & 0x01)) chan->drop_sequence = 0;
@@ -870,8 +1029,29 @@ static void rx_intr (sdla_t* card)
 	}
 	else
 	{
-		netif_rx(skb);
-		++chan->ifstats.rx_packets;
+		if( handle_IPXWAN(skb->data, card->devname, card->wandev.enable_IPX, card->wandev.network_number, skb->protocol))
+		{
+			if( card->wandev.enable_IPX )
+			{
+				if(chan_send(dev, skb))
+				{
+					chan->tx_skb = skb;
+				}
+				else
+				{
+					dev_kfree_skb(skb, FREE_WRITE);
+				}
+			}
+			else
+			{
+				/* increment IPX packet dropped statistic */
+			}
+		}
+		else
+		{
+			netif_rx(skb);
+			++chan->ifstats.rx_packets;
+		}
 	}
 }
 
@@ -882,6 +1062,16 @@ static void rx_intr (sdla_t* card)
  */
 static void tx_intr (sdla_t* card)
 {
+	struct device *dev;
+
+	
+	/* unbusy all devices and then dev_tint(); */
+	for(dev = card->wandev.dev; dev; dev = dev->slave)
+	{
+		((x25_channel_t*)dev->priv)->devtint = dev->tbusy; 
+		dev->tbusy = 0;
+	}
+
 }
 
 /*============================================================================
@@ -922,6 +1112,25 @@ static void spur_intr (sdla_t* card)
  */
 static void wpx_poll (sdla_t* card)
 {
+	unsigned long host_cpu_flags;
+
+	disable_irq(card->hw.irq);
+	++card->irq_dis_poll_count;
+
+	if (set_bit(0, (void*)&card->wandev.critical)) {
+
+ 		printk(KERN_INFO "%s: critical in polling!\n",card->devname);
+	 	
+		save_flags(host_cpu_flags);
+                cli();
+		if ((!card->irq_dis_if_send_count) &&
+                                (!(--card->irq_dis_poll_count)))
+                        enable_irq(card->hw.irq);
+                restore_flags(host_cpu_flags);
+		
+		return;
+	}
+
 	switch(card->wandev.state)
 	{
 	case WAN_CONNECTED:
@@ -935,6 +1144,15 @@ static void wpx_poll (sdla_t* card)
 	case WAN_DISCONNECTED:
 		poll_disconnected(card);
 	}
+
+	card->wandev.critical = 0;
+
+	save_flags(host_cpu_flags);
+        cli();
+        if ((!card->irq_dis_if_send_count) && (!(--card->irq_dis_poll_count)))
+                enable_irq(card->hw.irq);
+        restore_flags(host_cpu_flags);
+
 }
 
 /*============================================================================
@@ -948,7 +1166,8 @@ static void poll_connecting (sdla_t* card)
 	if (status->gflags & X25_HDLC_ABM)
 	{
 		wanpipe_set_state(card, WAN_CONNECTED);
-		x25_set_intr_mode(card, 0x81);	/* enable Rx interrupts */
+		x25_set_intr_mode(card, 0x83);	/* enable Rx interrupts */
+		status->imask &= ~0x2;		/* mask Tx interupts */
 	}
 	else if ((jiffies - card->state_tick) > CONNECT_TIMEOUT)
 	    disconnect(card)
@@ -998,14 +1217,16 @@ static void poll_active (sdla_t* card)
 
 		/* If SVC has been idle long enough, close virtual circuit */
 
-/*
-		unsigned long flags;
-
-		save_flags(flags);
-		cli();
-
-		restore_flags(flags);
-*/
+		if(( chan->svc )&&( chan->state == WAN_CONNECTED ))
+		{
+			if( (jiffies - chan->i_timeout_sofar) / HZ > chan->idle_timeout )
+			{
+				//Close svc
+				printk(KERN_INFO "%s: Closing down Idle link %s on LCN %d\n",card->devname,chan->name,chan->lcn); 
+				chan->i_timeout_sofar = jiffies;
+				chan_disc(dev);
+			}
+		}
 	}
 }
 
@@ -1644,7 +1865,10 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 		accept = 1;
 		break;
 
-	case NLPID_SNAP:
+	case NLPID_SNAP: /* IPX datagrams */
+		chan->protocol = ETH_P_IPX;
+		accept = 1;
+		break;
 	default:
 		printk(KERN_INFO
 			"%s: unsupported NLPID 0x%02X in incomming call "
@@ -1853,8 +2077,8 @@ static int chan_disc (struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 
-	set_chan_state(dev, WAN_DISCONNECTED);
 	if (chan->svc) x25_clear_call(chan->card, chan->lcn, 0, 0);
+	set_chan_state(dev, WAN_DISCONNECTED);
 	return 0;
 }
 
@@ -1878,6 +2102,7 @@ static void set_chan_state (struct device* dev, int state)
 			card->devname, dev->name)
 			;
 			*(unsigned short*)dev->dev_addr = htons(chan->lcn);
+			chan->i_timeout_sofar = jiffies;
 			break;
 
 		case WAN_CONNECTING:
@@ -1941,6 +2166,7 @@ static int chan_send (struct device* dev, struct sk_buff* skb)
 	switch(x25_send(card, chan->lcn, qdm, len, skb->data))
 	{
 	case 0x00:	/* success */
+		chan->i_timeout_sofar = jiffies;
 		if (qdm)
 		{
 			skb_pull(skb, len);
@@ -1954,6 +2180,7 @@ static int chan_send (struct device* dev, struct sk_buff* skb)
 
 	default:	/* failure */
 		++chan->ifstats.tx_errors;
+/*		return 1; */
 	}
 	return 0;
 }
@@ -2080,5 +2307,172 @@ static unsigned int hex_to_uint (unsigned char* str, int len)
 	}
 	return val;
 }
+
+
+static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char enable_IPX, unsigned long network_number, unsigned short proto)
+{
+	int i;
+
+	if( proto == htons(ETH_P_IPX) ) {
+		/* It's an IPX packet */
+		if(!enable_IPX) {
+			/* Return 1 so we don't pass it up the stack. */
+			return 1;
+		}
+	} else {
+		/* It's not IPX so pass it up the stack. */
+		return 0;
+	}
+
+	if( sendpacket[16] == 0x90 &&
+	    sendpacket[17] == 0x04)
+	{
+		/* It's IPXWAN */
+
+		if( sendpacket[2] == 0x02 &&
+		    sendpacket[34] == 0x00)
+		{
+			/* It's a timer request packet */
+			printk(KERN_INFO "%s: Received IPXWAN Timer Request packet\n",devname);
+
+			/* Go through the routing options and answer no to every */
+			/* option except Unnumbered RIP/SAP */
+			for(i = 41; sendpacket[i] == 0x00; i += 5)
+			{
+				/* 0x02 is the option for Unnumbered RIP/SAP */
+				if( sendpacket[i + 4] != 0x02)
+				{
+					sendpacket[i + 1] = 0;
+				}
+			}
+
+			/* Skip over the extended Node ID option */
+			if( sendpacket[i] == 0x04 )
+			{
+				i += 8;
+			}
+
+			/* We also want to turn off all header compression opt. */
+			for(; sendpacket[i] == 0x80 ;)
+			{
+				sendpacket[i + 1] = 0;
+				i += (sendpacket[i + 2] << 8) + (sendpacket[i + 3]) + 4;
+			}
+
+			/* Set the packet type to timer response */
+			sendpacket[34] = 0x01;
+
+			printk(KERN_INFO "%s: Sending IPXWAN Timer Response\n",devname);
+		}
+		else if( sendpacket[34] == 0x02 )
+		{
+			/* This is an information request packet */
+			printk(KERN_INFO "%s: Received IPXWAN Information Request packet\n",devname);
+
+			/* Set the packet type to information response */
+			sendpacket[34] = 0x03;
+
+			/* Set the router name */
+			sendpacket[51] = 'X';
+			sendpacket[52] = 'T';
+			sendpacket[53] = 'P';
+			sendpacket[54] = 'I';
+			sendpacket[55] = 'P';
+			sendpacket[56] = 'E';
+			sendpacket[57] = '-';
+			sendpacket[58] = CVHexToAscii(network_number >> 28);
+			sendpacket[59] = CVHexToAscii((network_number & 0x0F000000)>> 24);
+			sendpacket[60] = CVHexToAscii((network_number & 0x00F00000)>> 20);
+			sendpacket[61] = CVHexToAscii((network_number & 0x000F0000)>> 16);
+			sendpacket[62] = CVHexToAscii((network_number & 0x0000F000)>> 12);
+			sendpacket[63] = CVHexToAscii((network_number & 0x00000F00)>> 8);
+			sendpacket[64] = CVHexToAscii((network_number & 0x000000F0)>> 4);
+			sendpacket[65] = CVHexToAscii(network_number & 0x0000000F);
+			for(i = 66; i < 99; i+= 1)
+			{
+				sendpacket[i] = 0;
+			}
+
+			/* printk(KERN_INFO "%s: Sending IPXWAN Information Response packet\n",devname); */
+		}
+		else
+		{
+			printk(KERN_WARNING "%s: Unknown IPXWAN packet!\n",devname);
+			return 0;
+		}
+
+		/* Set the WNodeID to our network address */
+		sendpacket[35] = (unsigned char)(network_number >> 24);
+		sendpacket[36] = (unsigned char)((network_number & 0x00FF0000) >> 16);
+		sendpacket[37] = (unsigned char)((network_number & 0x0000FF00) >> 8);
+		sendpacket[38] = (unsigned char)(network_number & 0x000000FF);
+
+		return 1;
+	} else {
+		/* If we get here its an IPX-data packet, so it'll get passed up the stack. */
+
+		/* switch the network numbers */
+		switch_net_numbers(sendpacket, network_number, 1);	
+		return 0;
+	}
+}
+
+/*
+   If incoming is 0 (outgoing)- if the net numbers is ours make it 0
+   if incoming is 1 - if the net number is 0 make it ours 
+
+*/
+static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_number, unsigned char incoming)
+{
+	unsigned long pnetwork_number;
+
+	pnetwork_number = (unsigned long)((sendpacket[6] << 24) + 
+			  (sendpacket[7] << 16) + (sendpacket[8] << 8) + 
+			  sendpacket[9]);
+
+	if (!incoming) {
+		/* If the destination network number is ours, make it 0 */
+		if( pnetwork_number == network_number) {
+			sendpacket[6] = sendpacket[7] = sendpacket[8] = 
+					 sendpacket[9] = 0x00;
+		}
+	} else {
+		/* If the incoming network is 0, make it ours */
+		if( pnetwork_number == 0) {
+			sendpacket[6] = (unsigned char)(network_number >> 24);
+			sendpacket[7] = (unsigned char)((network_number & 
+					 0x00FF0000) >> 16);
+			sendpacket[8] = (unsigned char)((network_number & 
+					 0x0000FF00) >> 8);
+			sendpacket[9] = (unsigned char)(network_number & 
+					 0x000000FF);
+		}
+	}
+
+
+	pnetwork_number = (unsigned long)((sendpacket[18] << 24) + 
+			  (sendpacket[19] << 16) + (sendpacket[20] << 8) + 
+			  sendpacket[21]);
+
+	if( !incoming ) {
+		/* If the source network is ours, make it 0 */
+		if( pnetwork_number == network_number) {
+			sendpacket[18] = sendpacket[19] = sendpacket[20] = 
+					 sendpacket[21] = 0x00;
+		}
+	} else {
+		/* If the source network is 0, make it ours */
+		if( pnetwork_number == 0 ) {
+			sendpacket[18] = (unsigned char)(network_number >> 24);
+			sendpacket[19] = (unsigned char)((network_number & 
+					 0x00FF0000) >> 16);
+			sendpacket[20] = (unsigned char)((network_number & 
+					 0x0000FF00) >> 8);
+			sendpacket[21] = (unsigned char)(network_number & 
+					 0x000000FF);
+		}
+	}
+} /* switch_net_numbers */
+
 
 /****** End *****************************************************************/

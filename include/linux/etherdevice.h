@@ -35,8 +35,7 @@ extern int		eth_rebuild_header(struct sk_buff *skb);
 extern unsigned short	eth_type_trans(struct sk_buff *skb, struct device *dev);
 extern void		eth_header_cache_update(struct hh_cache *hh, struct device *dev,
 						unsigned char * haddr);
-extern int		eth_header_cache(struct dst_entry *dst,
-					 struct neighbour *neigh,
+extern int		eth_header_cache(struct neighbour *neigh,
 					 struct hh_cache *hh);
 extern int		eth_header_parse(struct sk_buff *skb,
 					 unsigned char *haddr);

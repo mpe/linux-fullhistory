@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.24 1997/10/24 17:15:58 kuznet Exp $
+ * Version:	$Id: ip_input.c,v 1.25 1997/12/13 21:52:53 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -422,7 +422,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 	if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4
+#ifndef CONFIG_IP_ROUTER
 	    || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0
+#endif
 		|| skb->len < ntohs(iph->tot_len))
 		goto inhdr_error;
 

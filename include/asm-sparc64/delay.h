@@ -1,4 +1,4 @@
-/* $Id: delay.h,v 1.6 1997/07/29 21:11:22 davem Exp $
+/* $Id: delay.h,v 1.7 1997/11/07 18:24:31 mj Exp $
  * delay.h: Linux delay routines on the V9.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu).
@@ -46,10 +46,4 @@ extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 
 #define udelay(usecs) __udelay((usecs),__udelay_val)
 
-extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
-{
-	return (a*b)/c;
-}
-
 #endif /* defined(__SPARC64_DELAY_H) */
-

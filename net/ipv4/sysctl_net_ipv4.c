@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.22 1997/11/28 15:32:42 alan Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.23 1997/12/13 21:52:57 kuznet Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -27,16 +27,6 @@
 static int boolean_min = 0;
 static int boolean_max = 1;
 #endif
-
-/* From arp.c */
-extern int sysctl_arp_res_time;
-extern int sysctl_arp_dead_res_time;
-extern int sysctl_arp_max_tries;
-extern int sysctl_arp_timeout;
-extern int sysctl_arp_check_interval;
-extern int sysctl_arp_confirm_interval;
-extern int sysctl_arp_confirm_timeout;
-extern int sysctl_arp_max_pings;
 
 /* From icmp.c */
 extern int sysctl_icmp_echo_ignore_all;
@@ -120,24 +110,6 @@ int ipv4_sysctl_rtcache_flush(ctl_table *ctl, int write, struct file * filp,
 }
 
 ctl_table ipv4_table[] = {
-        {NET_IPV4_ARP_RES_TIME, "arp_res_time",
-	 &sysctl_arp_res_time, sizeof(int), 0644, NULL, &proc_dointvec},
-        {NET_IPV4_ARP_DEAD_RES_TIME, "arp_dead_res_time",
-         &sysctl_arp_dead_res_time, sizeof(int), 0644, NULL, &proc_dointvec},
-        {NET_IPV4_ARP_MAX_TRIES, "arp_max_tries",
-         &sysctl_arp_max_tries, sizeof(int), 0644, NULL, &proc_dointvec},
-        {NET_IPV4_ARP_MAX_PINGS, "arp_max_pings",
-         &sysctl_arp_max_pings, sizeof(int), 0644, NULL, &proc_dointvec},
-        {NET_IPV4_ARP_TIMEOUT, "arp_timeout",
-         &sysctl_arp_timeout, sizeof(int), 0644, NULL, &proc_dointvec},
-        {NET_IPV4_ARP_CHECK_INTERVAL, "arp_check_interval",
-         &sysctl_arp_check_interval, sizeof(int), 0644, NULL, &proc_dointvec},
-        {NET_IPV4_ARP_CONFIRM_INTERVAL, "arp_confirm_interval",
-         &sysctl_arp_confirm_interval, sizeof(int), 0644, NULL,
-         &proc_dointvec},
-        {NET_IPV4_ARP_CONFIRM_TIMEOUT, "arp_confirm_timeout",
-         &sysctl_arp_confirm_timeout, sizeof(int), 0644, NULL,
-         &proc_dointvec},
         {NET_IPV4_TCP_HOE_RETRANSMITS, "tcp_hoe_retransmits",
          &sysctl_tcp_hoe_retransmits, sizeof(int), 0644, NULL,
          &proc_dointvec},

@@ -13,10 +13,11 @@
  */
 
 #include <linux/sys.h>
+#include <asm/processor.h>
 #include <asm/errno.h>
 #include "../kernel/ppc_asm.tmpl"
 
-_TEXT()
+	.text
 
 /*
  * ip_fast_csum(buf, len) -- Optimized for IP header
@@ -140,7 +141,8 @@ _GLOBAL(csum_partial_copy_generic)
 5:	addze	r3,r0		/* add in final carry */
 	blr
 
-.section .fixup,"ax"
+/* These shouldn't go in the fixup section, since that would
+   cause the ex_table addresses to get out of order. */
 
 src_error_1:
 	li	r6,0

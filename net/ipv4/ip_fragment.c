@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.29 1997/11/22 12:31:05 freitag Exp $
+ * Version:	$Id: ip_fragment.c,v 1.30 1997/12/29 19:52:32 kuznet Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -32,7 +32,6 @@
 #include <linux/inet.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
-#include <net/checksum.h>
 
 /* Fragment cache limits. We will commit 256K at one time. Should we
  * cross that limit we will prune down to 192K. This should cope with

@@ -9,8 +9,6 @@
  * 2 of the License, or (at your option) any later version.
  */
 
-extern int serial_console;	/* set to use serial port as console */
-
 /*
  * Video mode values.
  * These are supposed to be the same as the values that

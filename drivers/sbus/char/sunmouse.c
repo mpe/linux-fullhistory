@@ -329,12 +329,11 @@ sun_mouse_open(struct inode * inode, struct file * file)
 	return 0;
 }
 
-static int
-sun_mouse_fasync (struct inode *inode, struct file *filp, int on)
+static int sun_mouse_fasync (struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper (inode, filp, on, &sunmouse.fasync);
+	retval = fasync_helper (filp, on, &sunmouse.fasync);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -343,23 +342,23 @@ sun_mouse_fasync (struct inode *inode, struct file *filp, int on)
 static int
 sun_mouse_close(struct inode *inode, struct file *file)
 {
-	sun_mouse_fasync (inode, file, 0);
+	sun_mouse_fasync (file, 0);
 	if (--sunmouse.active)
 		return 0;
 	sunmouse.ready = 0;
 	return 0;
 }
 
-static long
-sun_mouse_write(struct inode *inode, struct file *file, const char *buffer,
-		unsigned long count)
+static ssize_t
+sun_mouse_write(struct file *file, const char *buffer,
+		size_t count, loff_t *ppos)
 {
 	return -EINVAL;  /* foo on you */
 }
 
-static long
-sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
-	       unsigned long count)
+static ssize_t
+sun_mouse_read(struct file *file, char *buffer,
+	       size_t count, loff_t *ppos)
 {
 	struct wait_queue wait = { current, NULL };
 
@@ -399,7 +398,7 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 			}
 		}
 		sunmouse.ready = !queue_empty ();
-		inode->i_atime = CURRENT_TIME;
+		file->f_dentry->d_inode->i_atime = CURRENT_TIME;
 		return p-buffer;
 	} else {
 		int c;
@@ -410,7 +409,7 @@ sun_mouse_read(struct inode *inode, struct file *file, char *buffer,
 			sunmouse.tail = (sunmouse.tail + 1) % STREAM_SIZE;
 		}
 		sunmouse.ready = !queue_empty();
-		inode->i_atime = CURRENT_TIME;
+		file->f_dentry->d_inode->i_atime = CURRENT_TIME;
 		return count-c;
 	}
 	/* Only called if nothing was sent */
@@ -484,8 +483,11 @@ static struct miscdevice sun_mouse_mouse = {
 
 __initfunc(int sun_mouse_init(void))
 {
+	if (!sunmouse.present)
+		return -ENODEV;
+
 	printk("Sun Mouse-Systems mouse driver version 1.00\n");
-	sunmouse.present = 1;
+
 	sunmouse.ready = sunmouse.active = 0;
 	misc_register (&sun_mouse_mouse);
 	sunmouse.delta_x = sunmouse.delta_y = 0;
@@ -498,5 +500,5 @@ __initfunc(int sun_mouse_init(void))
 void
 sun_mouse_zsinit(void)
 {
-	sunmouse.ready = 1;
+	sunmouse.present = 1;
 }

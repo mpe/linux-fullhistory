@@ -56,7 +56,8 @@ static int
 nfsd_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 					  struct nfsd_attrstat *resp)
 {
-	dprintk("nfsd: GETATTR  %p\n", SVCFH_DENTRY(&argp->fh));
+	dprintk("nfsd: GETATTR  %d/%ld\n",
+		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh));
 
 	fh_copy(&resp->fh, &argp->fh);
 	RETURN(fh_verify(rqstp, &resp->fh, 0, MAY_NOP));
@@ -70,7 +71,9 @@ static int
 nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
 					  struct nfsd_attrstat  *resp)
 {
-	dprintk("nfsd: SETATTR  %p\n", SVCFH_DENTRY(&argp->fh));
+	dprintk("nfsd: SETATTR  %d/%ld, valid=%x, size=%ld\n",
+		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
+		argp->attrs.ia_valid, (long) argp->attrs.ia_size);
 
 	fh_copy(&resp->fh, &argp->fh);
 	RETURN(nfsd_setattr(rqstp, &resp->fh, &argp->attrs));
@@ -88,7 +91,8 @@ nfsd_proc_lookup(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: LOOKUP   %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
+	dprintk("nfsd: LOOKUP   %d/%ld %s\n",
+		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh), argp->name);
 
 	nfserr = nfsd_lookup(rqstp, &argp->fh, argp->name, argp->len,
 				 &resp->fh);
@@ -131,8 +135,8 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 	u32 *	buffer;
 	int	nfserr, avail;
 
-	dprintk("nfsd: READ %p %d bytes at %d\n",
-		SVCFH_DENTRY(&argp->fh),
+	dprintk("nfsd: READ    %d/%ld %d bytes at %d\n",
+		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->count, argp->offset);
 
 	/* Obtain buffer pointer for payload. 19 is 1 word for
@@ -168,8 +172,8 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: WRITE    %p %d bytes at %d\n",
-		SVCFH_DENTRY(&argp->fh),
+	dprintk("nfsd: WRITE    %d/%ld %d bytes at %d\n",
+		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->len, argp->offset);
 
 	nfserr = nfsd_write(rqstp, fh_copy(&resp->fh, &argp->fh),
@@ -192,24 +196,21 @@ static int
 nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 					 struct nfsd_diropres   *resp)
 {
-	struct inode	*dirp, *inode = NULL;
-	struct iattr	*attr;
-	svc_fh		*dirfhp, *newfhp;
+	svc_fh		*dirfhp = &argp->fh;
+	svc_fh		*newfhp = &resp->fh;
+	struct iattr	*attr = &argp->attrs;
+	struct inode	*inode = NULL;
 	int		nfserr, type, mode;
 	int		rdonly = 0, exists;
 	dev_t		rdev = NODEV;
 
-	dprintk("nfsd: CREATE   %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
-
-	dirfhp = &argp->fh;
-	newfhp = &resp->fh;
-	attr = &argp->attrs;
+	dprintk("nfsd: CREATE   %d/%ld %s\n",
+		SVCFH_DEV(dirfhp), SVCFH_INO(dirfhp), argp->name);
 
 	/* Get the directory inode */
 	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
 	if (nfserr)
 		goto done; /* must fh_put dirfhp even on error */
-	dirp = dirfhp->fh_dentry->d_inode;
 
 	/* Check for MAY_WRITE separately. */
 	nfserr = nfsd_permission(dirfhp->fh_export, dirfhp->fh_dentry,
@@ -247,10 +248,9 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	}
 
 	/* This is for "echo > /dev/null" a la SunOS. Argh. */
-	if (rdonly && (!exists || type == S_IFREG)) {
-		nfserr = nfserr_rofs;
+	nfserr = nfserr_rofs;
+	if (rdonly && (!exists || type == S_IFREG))
 		goto done;
-	}
 
 	attr->ia_valid |= ATTR_MODE;
 	attr->ia_mode = type | mode;
@@ -292,11 +292,19 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		nfserr = nfsd_create(rqstp, dirfhp, argp->name, argp->len,
 					attr, type, rdev, newfhp);
 	} else if (type == S_IFREG) {
+		dprintk("nfsd:   existing %s, valid=%x, size=%ld\n",
+			argp->name, attr->ia_valid, (long) attr->ia_size);
 		/* File already exists. We ignore all attributes except
 		 * size, so that creat() behaves exactly like
 		 * open(..., O_CREAT|O_TRUNC|O_WRONLY).
 		 */
+#if 0
+		/* N.B. What is this doing? ignores size?? */
 		if ((attr->ia_valid &= ~(ATTR_SIZE)) != 0)
+			nfserr = nfsd_setattr(rqstp, newfhp, attr);
+#endif
+		attr->ia_valid &= ATTR_SIZE;
+		if (attr->ia_valid)
 			nfserr = nfsd_setattr(rqstp, newfhp, attr);
 	}
 

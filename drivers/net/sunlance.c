@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.68 1997/08/15 06:44:36 davem Exp $
+/* $Id: sunlance.c,v 1.69 1998/01/09 16:42:52 jj Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -53,12 +53,15 @@
  *
  * 1.10:
  *	 1/26/97: Modularize driver. (ecd@skynet.be)
+ *
+ * 1.11:
+ *	12/27/97: Added sun4d support. (jj@sunsite.mff.cuni.cz)
  */
 
 #undef DEBUG_DRIVER
 
 static char *version =
-	"sunlance.c:v1.10 26/Jan/97 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
+	"sunlance.c:v1.11 27/Dec/97 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
 
 static char *lancestr = "LANCE";
 static char *lancedma = "LANCE DMA";
@@ -679,14 +682,25 @@ static int lance_open (struct device *dev)
 			printk ("Lance: Can't get irq %d\n", dev->irq);
 			return -EAGAIN;
 		}
+	}
+#else
+	if (sparc_cpu_model == sun4d) {
+		struct devid_cookie dcookie;
 
-	} else
-#endif
-	if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
+		dcookie.real_dev_id = dev;
+		dcookie.bus_cookie = (void *)dev->base_addr;
+		if(request_irq(dev->irq, &lance_interrupt,
+			       (SA_SHIRQ | SA_DCOOKIE),
+			       lancestr, &dcookie)) {
+			printk ("Lance: Can't get irq %d\n", dev->irq);
+			return -EAGAIN;
+		}
+	} else if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
 			 lancestr, (void *) dev)) {
 		printk ("Lance: Can't get irq %d\n", dev->irq);
 		return -EAGAIN;
 	}
+#endif	
 
 	/* Stop the Lance */
 	ll->rap = LE_CSR0;

@@ -1,4 +1,4 @@
-/* $Id: socksys.c,v 1.1 1997/09/03 12:29:27 jj Exp $
+/* $Id: socksys.c,v 1.2 1997/09/08 11:29:38 jj Exp $
  * socksys.c: /dev/inet/ stuff for Solaris emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -14,6 +14,7 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/file.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
@@ -44,6 +45,7 @@ static struct file_operations socksys_file_ops = {
 static int socksys_open(struct inode * inode, struct file * filp)
 {
 	int family, type, protocol, fd;
+	struct dentry *dentry;
 	int (*sys_socket)(int,int,int) =
 		(int (*)(int,int,int))SUNOS(97);
 	
@@ -68,6 +70,17 @@ static int socksys_open(struct inode * inode, struct file * filp)
 	}
 	fd = sys_socket(family, type, protocol);
 	if (fd < 0) return fd;
+	dentry = filp->f_dentry;
+	filp->f_dentry = current->files->fd[fd]->f_dentry;
+	filp->f_dentry->d_inode->i_rdev = inode->i_rdev;
+	filp->f_dentry->d_inode->i_flock = inode->i_flock;
+	filp->f_dentry->d_inode->u.socket_i.file = filp;
+	filp->f_op = &socksys_file_ops;
+	dput(dentry);
+	FD_CLR(fd, &current->files->close_on_exec);
+	FD_CLR(fd, &current->files->open_fds);
+	put_filp(current->files->fd[fd]);
+	current->files->fd[fd] = NULL;
 	return 0;
 }
 

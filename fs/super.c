@@ -1064,7 +1064,11 @@ __initfunc(static void do_mount_root(void))
 		ROOT_DEV = 0;
 		if ((fs_type = get_fs_type("nfs"))) {
 			if ((vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/"))) {
-				sb = vfsmnt->mnt_sb;
+
+				sb = &super_blocks[0];
+				while (sb->s_dev) sb++;
+				vfsmnt->mnt_sb = sb;
+
 				sb->s_dev = get_unnamed_dev();
 				sb->s_flags = root_mountflags & ~MS_RDONLY;
 				if (nfs_root_mount(sb) >= 0) {

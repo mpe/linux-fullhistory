@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.4 1997/09/03 17:04:21 ecd Exp $
+/* $Id: sab82532.c,v 1.13 1997/12/30 09:37:49 ecd Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -16,6 +16,7 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
+#include <linux/console.h>
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
@@ -40,6 +41,9 @@ static int sab82532_refcount;
 /* number of characters left in xmit buffer before we ask for more */
 #define WAKEUP_CHARS 256
 
+#define SERIAL_PARANOIA_CHECK
+#define SERIAL_DO_RESTART
+
 /* Set of debugging defines */
 #undef SERIAL_DEBUG_OPEN
 #undef SERIAL_DEBUG_INTR
@@ -59,9 +63,22 @@ static struct tty_struct *sab82532_table[NR_PORTS];
 static struct termios *sab82532_termios[NR_PORTS];
 static struct termios *sab82532_termios_locked[NR_PORTS];
 
+#ifdef CONFIG_SERIAL_CONSOLE
+extern int serial_console;
+static struct console sab82532_console;
+static int sab82532_console_init(void);
+#endif
+
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
+
+static char *sab82532_version[16] = {
+	"V1.0", "V2.0", "V3.2", "V(0x03)",
+	"V(0x04)", "V(0x05)", "V(0x06)", "V(0x07)",
+	"V(0x08)", "V(0x09)", "V(0x0a)", "V(0x0b)",
+	"V(0x0c)", "V(0x0d)", "V(0x0e)", "V(0x0f)"
+};
 
 /*
  * tmp_buf is used as a temporary buffer by sab82532_write.  We need to
@@ -178,8 +195,10 @@ static void sab82532_start(struct tty_struct *tty)
 	restore_flags(flags);
 }
 
-static void batten_down_hatches(void)
+static void batten_down_hatches(struct sab82532 *info)
 {
+	unsigned char saved_rfc;
+
 	/* If we are doing kadb, we call the debugger
 	 * else we just drop into the boot monitor.
 	 * Note that we must flush the user windows
@@ -187,6 +206,16 @@ static void batten_down_hatches(void)
 	 */
 	printk("\n");
 	flush_user_windows();
+
+	/*
+	 * Set FIFO to single character mode.
+	 */
+	saved_rfc = info->regs->r.rfc;
+	info->regs->rw.rfc &= ~(SAB82532_RFC_RFDF);
+	if (info->regs->r.star & SAB82532_STAR_CEC)
+		udelay(1);
+	info->regs->w.cmdr = SAB82532_CMDR_RRES;
+
 #ifndef __sparc_v9__
 	if ((((unsigned long)linux_dbvec) >= DEBUG_FIRSTVADDR) &&
 	    (((unsigned long)linux_dbvec) <= DEBUG_LASTVADDR))
@@ -194,6 +223,14 @@ static void batten_down_hatches(void)
 	else
 #endif
 		prom_cmdline();
+
+	/*
+	 * Reset FIFO to character + status mode.
+	 */
+	info->regs->w.rfc = saved_rfc;
+	if (info->regs->r.star & SAB82532_STAR_CEC)
+		udelay(1);
+	info->regs->w.cmdr = SAB82532_CMDR_RRES;
 }
 
 /*
@@ -242,14 +279,9 @@ static inline void receive_chars(struct sab82532 *info,
 		count = info->recv_fifo_size;
 		free_fifo++;
 	}
+
 	if (stat->sreg.isr0 & SAB82532_ISR0_TCD) {
 		count = info->regs->r.rbcl & (info->recv_fifo_size - 1);
-		free_fifo++;
-	}
-	if (stat->sreg.isr0 & SAB82532_ISR0_RFO) {
-#if 1
-		printk("sab82532: receive_chars: RFO");
-#endif
 		free_fifo++;
 	}
 
@@ -260,8 +292,15 @@ static inline void receive_chars(struct sab82532 *info,
 		info->regs->w.cmdr = SAB82532_CMDR_RFRD;
 	}
 
+	if (stat->sreg.isr0 & SAB82532_ISR0_RFO) {
+#if 1
+		printk("sab82532: receive_chars: RFO");
+#endif
+		free_fifo++;
+	}
+
 	/* Read the FIFO. */
-	for (i = 0; i < (count << 1); i++)
+	for (i = 0; i < count; i++)
 		buf[i] = info->regs->r.rfifo[i];
 
 	/* Issue Receive Message Complete command. */
@@ -270,6 +309,11 @@ static inline void receive_chars(struct sab82532 *info,
 			udelay(1);
 		info->regs->w.cmdr = SAB82532_CMDR_RMC;
 	}
+
+	if (info->is_console)
+		wake_up(&keypress_wait);
+	if (!tty)
+		return;
 
 	for (i = 0; i < count; ) {
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
@@ -311,6 +355,12 @@ static inline void transmit_chars(struct sab82532 *info,
 				  union sab82532_irq_status *stat)
 {
 	int i;
+
+	if (!info->tty) {
+		info->interrupt_mask1 |= SAB82532_IMR1_XPR;
+		info->regs->w.imr1 = info->interrupt_mask1;
+		return;
+	}
 
 	if ((info->xmit_cnt <= 0) || info->tty->stopped ||
 	    info->tty->hw_stopped) {
@@ -356,7 +406,7 @@ static inline void check_status(struct sab82532 *info,
 
 	if (stat->sreg.isr1 & SAB82532_ISR1_BRK) {
 		if (info->is_console) {
-			batten_down_hatches();
+			batten_down_hatches(info);
 			return;
 		}
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
@@ -369,6 +419,9 @@ static inline void check_status(struct sab82532 *info,
 		info->icount.brk++;
 	}
 
+	if (!tty)
+		return;
+
 	if (stat->sreg.isr0 & SAB82532_ISR0_RFO) {
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
 			info->icount.buf_overrun++;
@@ -379,9 +432,6 @@ static inline void check_status(struct sab82532 *info,
 		*tty->flip.char_buf_ptr++ = 0;
 		info->icount.overrun++;
 	}
-
-	if (info->is_console)
-		return;
 
 check_modem:
 	if (stat->sreg.isr0 & SAB82532_ISR0_CDSC) {
@@ -581,38 +631,18 @@ static void do_serial_hangup(void *private_)
 	tty_hangup(tty);
 }
 
-
-static int startup(struct sab82532 *info)
+static void
+sab82532_init_line(struct sab82532 *info)
 {
-	unsigned long flags;
-	unsigned long page;
 	unsigned char stat;
 
-	page = get_free_page(GFP_KERNEL);
-	if (!page)
-		return -ENOMEM;
-
-	save_flags(flags); cli();
-
-	if (info->flags & ASYNC_INITIALIZED) {
-		free_page(page);
-		goto errout;
-	}
-
-	if (!info->regs) {
-		if (info->tty)
-			set_bit(TTY_IO_ERROR, &info->tty->flags);
-		free_page(page);
-		goto errout;
-	}
-	if (info->xmit_buf)
-		free_page(page);
-	else
-		info->xmit_buf = (unsigned char *)page;
-
-#ifdef SERIAL_DEBUG_OPEN
-	printk("starting up serial port %d...", info->line);
-#endif
+	/*
+	 * Wait for any commands or immediate characters
+	 */
+	if (info->regs->r.star & SAB82532_STAR_CEC)
+		udelay(1);
+	while (info->regs->r.star & SAB82532_STAR_TEC)
+		udelay(1);
 
 	/*
 	 * Clear the FIFO buffers.
@@ -662,7 +692,46 @@ static int startup(struct sab82532 *info)
 			break;
 	}
 	info->regs->rw.ccr0 |= SAB82532_CCR0_PU;	/* power-up */
-	
+}
+
+static int startup(struct sab82532 *info)
+{
+	unsigned long flags;
+	unsigned long page;
+	int retval = 0;
+
+	page = get_free_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	save_flags(flags); cli();
+
+	if (info->flags & ASYNC_INITIALIZED) {
+		free_page(page);
+		goto errout;
+	}
+
+	if (!info->regs) {
+		if (info->tty)
+			set_bit(TTY_IO_ERROR, &info->tty->flags);
+		free_page(page);
+		retval = -ENODEV;
+		goto errout;
+	}
+	if (info->xmit_buf)
+		free_page(page);
+	else
+		info->xmit_buf = (unsigned char *)page;
+
+#ifdef SERIAL_DEBUG_OPEN
+	printk("starting up serial port %d...", info->line);
+#endif
+
+	/*
+	 * Initialize the Hardware
+	 */
+	sab82532_init_line(info);
+
 	/*
 	 * Finally, enable interrupts
 	 */
@@ -689,7 +758,7 @@ static int startup(struct sab82532 *info)
 	
 errout:
 	restore_flags(flags);
-	return -ENODEV;
+	return retval;
 }
 
 /*
@@ -718,6 +787,22 @@ static void shutdown(struct sab82532 *info)
 	if (info->xmit_buf) {
 		free_page((unsigned long)info->xmit_buf);
 		info->xmit_buf = 0;
+	}
+
+	if (info->is_console) {
+		info->interrupt_mask0 = SAB82532_IMR0_PERR | SAB82532_IMR0_FERR |
+					SAB82532_IMR0_PLLA | SAB82532_IMR0_CDSC;
+		info->regs->w.imr0 = info->interrupt_mask0;
+		info->interrupt_mask1 = SAB82532_IMR1_BRKT | SAB82532_IMR1_ALLS |
+					SAB82532_IMR1_XOFF | SAB82532_IMR1_TIN |
+					SAB82532_IMR1_CSC | SAB82532_IMR1_XON |
+					SAB82532_IMR1_XPR;
+		info->regs->w.imr1 = info->interrupt_mask1;
+		if (info->tty)
+			set_bit(TTY_IO_ERROR, &info->tty->flags);
+		info->flags &= ~ASYNC_INITIALIZED;
+		restore_flags(flags);
+		return;
 	}
 
 	/* Disable Interrupts */
@@ -758,7 +843,7 @@ static void change_speed(struct sab82532 *info)
 	unsigned int	ebrg;
 	tcflag_t	cflag;
 	unsigned char	dafo;
-	int		i;
+	int		i, bits;
 
 	if (!info->tty || !info->tty->termios)
 		return;
@@ -766,19 +851,23 @@ static void change_speed(struct sab82532 *info)
 
 	/* Byte size and parity */
 	switch (cflag & CSIZE) {
-	      case CS5: dafo = SAB82532_DAFO_CHL5; break;
-	      case CS6: dafo = SAB82532_DAFO_CHL6; break;
-	      case CS7: dafo = SAB82532_DAFO_CHL7; break;
-	      case CS8: dafo = SAB82532_DAFO_CHL8; break;
+	      case CS5: dafo = SAB82532_DAFO_CHL5; bits = 7; break;
+	      case CS6: dafo = SAB82532_DAFO_CHL6; bits = 8; break;
+	      case CS7: dafo = SAB82532_DAFO_CHL7; bits = 9; break;
+	      case CS8: dafo = SAB82532_DAFO_CHL8; bits = 10; break;
 	      /* Never happens, but GCC is too dumb to figure it out */
-	      default:  dafo = SAB82532_DAFO_CHL5; break;
+	      default:  dafo = SAB82532_DAFO_CHL5; bits = 7; break;
 	}
 
-	if (cflag & CSTOPB)
+	if (cflag & CSTOPB) {
 		dafo |= SAB82532_DAFO_STOP;
+		bits++;
+	}
 
-	if (cflag & PARENB)
+	if (cflag & PARENB) {
 		dafo |= SAB82532_DAFO_PARE;
+		bits++;
+	}
 
 	if (cflag & PARODD) {
 #ifdef CMSPAR
@@ -807,6 +896,12 @@ static void change_speed(struct sab82532 *info)
 	}
 	ebrg = ebrg_table[i].n;
 	ebrg |= (ebrg_table[i].m << 6);
+
+	if (ebrg_table[i].baud)
+		info->timeout = (info->xmit_fifo_size * HZ * bits) / ebrg_table[i].baud;
+	else
+		info->timeout = 0;
+	info->timeout += HZ / 50;		/* Add .02 seconds of slop */
 
 	/* CTS flow control flags */
 	if (cflag & CRTSCTS)
@@ -842,6 +937,10 @@ static void change_speed(struct sab82532 *info)
 					    SAB82532_ISR0_TIME;
 
 	save_flags(flags); cli();
+	if (info->regs->r.star & SAB82532_STAR_CEC)
+		udelay(1);
+	while (info->regs->r.star & SAB82532_STAR_TEC)
+		udelay(1);
 	info->regs->w.dafo = dafo;
 	info->regs->w.bgr = ebrg & 0xff;
 	info->regs->rw.ccr2 &= ~(0xc0);
@@ -980,7 +1079,7 @@ static int sab82532_chars_in_buffer(struct tty_struct *tty)
 static void sab82532_flush_buffer(struct tty_struct *tty)
 {
 	struct sab82532 *info = (struct sab82532 *)tty->driver_data;
-				
+
 	if (serial_paranoia_check(info, tty->device, "sab82532_flush_buffer"))
 		return;
 	cli();
@@ -1003,7 +1102,7 @@ static void sab82532_send_xchar(struct tty_struct *tty, char ch)
 	if (serial_paranoia_check(info, tty->device, "sab82532_send_xchar"))
 		return;
 
-	if (info->regs->r.star & SAB82532_STAR_TEC)
+	while (info->regs->r.star & SAB82532_STAR_TEC)
 		udelay(1);
 	info->regs->w.tic = ch;
 }
@@ -1114,7 +1213,7 @@ static int get_lsr_info(struct sab82532 * info, unsigned int *value)
 {
 	unsigned int result;
 
-	result = info->all_sent ? TIOCSER_TEMT : 0;
+	result = (!info->xmit_buf && info->all_sent) ? TIOCSER_TEMT : 0;
 	return put_user(result, value);
 }
 
@@ -1496,7 +1595,9 @@ static void sab82532_close(struct tty_struct *tty, struct file * filp)
 	 */
 	info->interrupt_mask0 |= SAB82532_IMR0_TCD;
 	info->regs->w.imr0 = info->interrupt_mask0;
+#if 0
 	info->regs->rw.mode &= ~(SAB82532_MODE_RAC);
+#endif
 	if (info->flags & ASYNC_INITIALIZED) {
 		/*
 		 * Before we drop DTR, make sure the UART transmitter
@@ -1554,16 +1655,23 @@ static void sab82532_wait_until_sent(struct tty_struct *tty, int timeout)
 		char_time = 1;
 	if (timeout)
 	  char_time = MIN(char_time, timeout);
-#ifdef SERIAL_DEBUG_RS_WAIT_UNTIL_SENT
+#ifdef SERIAL_DEBUG_WAIT_UNTIL_SENT
 	printk("In sab82532_wait_until_sent(%d) check=%lu...", timeout, char_time);
 	printk("jiff=%lu...", jiffies);
 #endif
-
-	/* XXX: Implement this... */
-
+	while (info->xmit_cnt || !info->all_sent) {
+		current->state = TASK_INTERRUPTIBLE;
+		current->counter = 0;
+		current->timeout = jiffies + char_time;
+		schedule();
+		if (signal_pending(current))
+			break;
+		if (timeout && (orig_jiffies + timeout) < jiffies)
+			break;
+	}
 	current->state = TASK_RUNNING;
-#ifdef SERIAL_DEBUG_RS_WAIT_UNTIL_SENT
-	printk("lsr = %d (jiff=%lu)...done\n", lsr, jiffies);
+#ifdef SERIAL_DEBUG_WAIT_UNTIL_SENT
+	printk("xmit_cnt = %d, alls = %d (jiff=%lu)...done\n", info->xmit_cnt, info->all_sent, jiffies);
 #endif
 }
 
@@ -1573,8 +1681,11 @@ static void sab82532_wait_until_sent(struct tty_struct *tty, int timeout)
 static void sab82532_hangup(struct tty_struct *tty)
 {
 	struct sab82532 * info = (struct sab82532 *)tty->driver_data;
-	
+
 	if (serial_paranoia_check(info, tty->device, "sab82532_hangup"))
+		return;
+
+	if (info->is_console)
 		return;
 
 	sab82532_flush_buffer(tty);
@@ -1754,7 +1865,6 @@ static int sab82532_open(struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	}
 
-	info->count++;
 	if (serial_paranoia_check(info, tty->device, "sab82532_open"))
 		return -ENODEV;
 
@@ -1762,6 +1872,8 @@ static int sab82532_open(struct tty_struct *tty, struct file * filp)
 	printk("sab82532_open %s%d, count = %d\n", tty->driver.name, info->line,
 	       info->count);
 #endif
+
+	info->count++;
 	tty->driver_data = info;
 	info->tty = tty;
 
@@ -1774,7 +1886,22 @@ static int sab82532_open(struct tty_struct *tty, struct file * filp)
 		else
 			tmp_buf = (unsigned char *) page;
 	}
-	
+
+	/*
+	 * If the port is in the middle of closing, bail out now.
+	 */
+	if (tty_hung_up_p(filp) ||
+	    (info->flags & ASYNC_CLOSING)) {
+		if (info->flags & ASYNC_CLOSING)
+			interruptible_sleep_on(&info->close_wait);
+#ifdef SERIAL_DO_RESTART
+		return ((info->flags & ASYNC_HUP_NOTIFY) ?
+			-EAGAIN : -ERESTARTSYS);
+#else
+		return -EAGAIN;
+#endif
+	}
+
 	/*
 	 * Start up serial port
 	 */
@@ -1800,6 +1927,14 @@ static int sab82532_open(struct tty_struct *tty, struct file * filp)
 			*tty->termios = info->callout_termios;
 		change_speed(info);
 	}
+
+#ifdef CONFIG_SERIAL_CONSOLE
+	if (sab82532_console.cflag && sab82532_console.index == line) {
+		tty->termios->c_cflag = sab82532_console.cflag;
+		sab82532_console.cflag = 0;
+		change_speed(info);
+	}
+#endif
 
 	info->session = current->session;
 	info->pgrp = current->pgrp;
@@ -1856,7 +1991,7 @@ int sab82532_read_proc(char *page, char **start, off_t off, int count,
 	int i, len = 0;
 	off_t	begin = 0;
 
-	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.4 $");
+	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.13 $");
 	for (i = 0; i < NR_PORTS && len < 4000; i++) {
 		len += line_info(page + len, sab82532_table[i]);
 		if (len+begin > off+count)
@@ -1881,7 +2016,7 @@ done:
  * sab82532_init() is called at boot-time to initialize the serial driver.
  * ---------------------------------------------------------------------
  */
-__initfunc(static int get_sab82532(void))
+__initfunc(static int get_sab82532(unsigned long *memory_start))
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
@@ -1895,23 +2030,29 @@ __initfunc(static int get_sab82532(void))
 	if (!edev)
 		return -ENODEV;
 
-	printk("%s: SAB82532 at 0x%lx IRQ %x\n", __FUNCTION__,
-	       edev->base_address[0], edev->irqs[0]);
-
 	regs = edev->base_address[0];
 	offset = sizeof(union sab82532_async_regs);
 
 	for (i = 0; i < 2; i++) {
-		sab = (struct sab82532 *)kmalloc(sizeof(struct sab82532),
-						 GFP_KERNEL);
-		if (!sab) {
-			printk("sab82532: can't alloc sab struct\n");
-			break;
+		if (memory_start) {
+			*memory_start = (*memory_start + 7) & ~(7);
+			sab = (struct sab82532 *)*memory_start;
+			*memory_start += sizeof(struct sab82532);
+		} else {
+			sab = (struct sab82532 *)kmalloc(sizeof(struct sab82532),
+							 GFP_KERNEL);
+			if (!sab) {
+				printk("sab82532: can't alloc sab struct\n");
+				break;
+			}
 		}
 		memset(sab, 0, sizeof(struct sab82532));
 
 		sab->regs = (union sab82532_async_regs *)(regs + offset);
 		sab->irq = edev->irqs[0];
+		sab->line = 1 - i;
+		sab->xmit_fifo_size = 32;
+		sab->recv_fifo_size = 32;
 
 		if (check_region((unsigned long)sab->regs,
 				 sizeof(union sab82532_async_regs))) {
@@ -1932,20 +2073,8 @@ __initfunc(static int get_sab82532(void))
 	return 0;
 }
 
-/* Hooks for running a serial console. con_init() calls this if the
- * console is run over one of the ttya/ttyb serial ports.
- * 'chip' should be zero, as for now we only have one chip on board.
- * 'line' is decoded as 0=ttya, 1=ttyb.
- */
-void
-sab82532_cons_hook(int chip, int out, int line)
-{
-	prom_printf("sab82532: serial console is not implemented, yet\n");
-	prom_halt();
-}
-
-void
-sab82532_kgdb_hook(int line)
+__initfunc(static void
+sab82532_kgdb_hook(int line))
 {
 	prom_printf("sab82532: kgdb support is not implemented, yet\n");
 	prom_halt();
@@ -1953,7 +2082,7 @@ sab82532_kgdb_hook(int line)
 
 __initfunc(static inline void show_serial_version(void))
 {
-	char *revision = "$Revision: 1.4 $";
+	char *revision = "$Revision: 1.13 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -1971,7 +2100,7 @@ __initfunc(int sab82532_init(void))
 	int i;
 
 	if (!sab82532_chain)
-		get_sab82532();
+		get_sab82532(0);
 	if (!sab82532_chain)
 		return -ENODEV;
 
@@ -2035,9 +2164,6 @@ __initfunc(int sab82532_init(void))
 
 	for (info = sab82532_chain, i = 0; info; info = info->next, i++) {
 		info->magic = SERIAL_MAGIC;
-		info->line = i;
-		info->tty = 0;
-		info->count = 0;
 
 		info->type = info->regs->r.vstr & 0x0f;
 		info->regs->w.pcr = ~((1 << 1) | (1 << 2) | (1 << 4));
@@ -2053,14 +2179,11 @@ __initfunc(int sab82532_init(void))
 		info->regs->rw.mode |= SAB82532_MODE_FRTS;
 		info->regs->rw.mode |= SAB82532_MODE_RTS;
 
-		info->xmit_fifo_size = 32;
-		info->recv_fifo_size = 32;
 		info->custom_divisor = 16;
 		info->close_delay = 5*HZ/10;
 		info->closing_wait = 30*HZ;
 		info->x_char = 0;
 		info->event = 0;	
-		info->count = 0;
 		info->blocked_open = 0;
 		info->tqueue.routine = do_softint;
 		info->tqueue.data = info;
@@ -2086,9 +2209,9 @@ __initfunc(int sab82532_init(void))
 			}
 		}
 	
-		printk(KERN_INFO "ttyS%02d at 0x%lx (irq = %x) is a %s\n",
+		printk(KERN_INFO "ttyS%02d at 0x%lx (irq = %x) is a SAB82532 %s\n",
 		       info->line, (unsigned long)info->regs, info->irq,
-		       "SAB82532");
+		       sab82532_version[info->type]);
 	}
 	return 0;
 }
@@ -2125,8 +2248,10 @@ __initfunc(int sab82532_probe(unsigned long *memory_start))
 	return -ENODEV;
 
 found:
+#ifdef CONFIG_SERIAL_CONSOLE
+	sunserial_setinitfunc(memory_start, sab82532_console_init);
+#endif
 	sunserial_setinitfunc(memory_start, sab82532_init);
-	rs_ops.rs_cons_hook = sab82532_cons_hook;
 	rs_ops.rs_kgdb_hook = sab82532_kgdb_hook;
 	return 0;
 }
@@ -2134,7 +2259,7 @@ found:
 #ifdef MODULE
 int init_module(void)
 {
-	if (get_sab82532())
+	if (get_sab82532(0))
 		return -ENODEV;
 
 	return sab82532_init();
@@ -2171,3 +2296,200 @@ void cleanup_module(void)
 	}
 }
 #endif /* MODULE */
+
+#ifdef CONFIG_SERIAL_CONSOLE
+
+static void
+sab82532_console_putchar(struct sab82532 *info, char c)
+{
+	while (info->regs->r.star & SAB82532_STAR_TEC)
+		udelay(1);
+	info->regs->w.tic = c;
+}
+
+static void
+sab82532_console_write(struct console *con, const char *s, unsigned n)
+{
+	struct sab82532 *info;
+	int i;
+
+	info = sab82532_chain + con->index;
+
+	for (i = 0; i < n; i++) {
+		if (*s == '\n')
+			sab82532_console_putchar(info, '\r');
+		sab82532_console_putchar(info, *s++);
+	}
+	while (info->regs->r.star & SAB82532_STAR_TEC)
+		udelay(1);
+}
+
+static int
+sab82532_console_wait_key(struct console *con)
+{
+	sleep_on(&keypress_wait);
+	return 0;
+}
+
+static kdev_t
+sab82532_console_device(struct console *con)
+{
+	return MKDEV(TTY_MAJOR, 64 + con->index);
+}
+
+static int
+sab82532_console_setup(struct console *con, char *options)
+{
+	struct sab82532 *info;
+	unsigned int	ebrg;
+	tcflag_t	cflag;
+	unsigned char	dafo;
+	int		i, bits;
+	unsigned long	flags;
+
+	info = sab82532_chain + con->index;
+	info->is_console = 1;
+
+	/*
+	 * Initialize the hardware
+	 */
+	sab82532_init_line(info);
+
+	/*
+	 * Finally, enable interrupts
+	 */
+	info->interrupt_mask0 = SAB82532_IMR0_PERR | SAB82532_IMR0_FERR |
+				SAB82532_IMR0_PLLA | SAB82532_IMR0_CDSC;
+	info->regs->w.imr0 = info->interrupt_mask0;
+	info->interrupt_mask1 = SAB82532_IMR1_BRKT | SAB82532_IMR1_ALLS |
+				SAB82532_IMR1_XOFF | SAB82532_IMR1_TIN |
+				SAB82532_IMR1_CSC | SAB82532_IMR1_XON |
+				SAB82532_IMR1_XPR;
+	info->regs->w.imr1 = info->interrupt_mask1;
+
+	printk("Console: ttyS%d (SAB82532)\n", info->line);
+
+	sunserial_console_termios(con);
+	cflag = con->cflag;
+
+	/* Byte size and parity */
+	switch (cflag & CSIZE) {
+	      case CS5: dafo = SAB82532_DAFO_CHL5; bits = 7; break;
+	      case CS6: dafo = SAB82532_DAFO_CHL6; bits = 8; break;
+	      case CS7: dafo = SAB82532_DAFO_CHL7; bits = 9; break;
+	      case CS8: dafo = SAB82532_DAFO_CHL8; bits = 10; break;
+	      /* Never happens, but GCC is too dumb to figure it out */
+	      default:  dafo = SAB82532_DAFO_CHL5; bits = 7; break;
+	}
+
+	if (cflag & CSTOPB) {
+		dafo |= SAB82532_DAFO_STOP;
+		bits++;
+	}
+
+	if (cflag & PARENB) {
+		dafo |= SAB82532_DAFO_PARE;
+		bits++;
+	}
+
+	if (cflag & PARODD) {
+#ifdef CMSPAR
+		if (cflag & CMSPAR)
+			dafo |= SAB82532_DAFO_PAR_MARK;
+		else
+#endif
+			dafo |= SAB82532_DAFO_PAR_ODD;
+	} else {
+#ifdef CMSPAR
+		if (cflag & CMSPAR)
+			dafo |= SAB82532_DAFO_PAR_SPACE;
+		else
+#endif
+			dafo |= SAB82532_DAFO_PAR_EVEN;
+	}
+
+	/* Determine EBRG values based on baud rate */
+	i = cflag & CBAUD;
+	if (i & CBAUDEX) {
+		i &= ~(CBAUDEX);
+		if ((i < 1) || ((i + 15) >= NR_EBRG_VALUES))
+			info->tty->termios->c_cflag &= ~CBAUDEX;
+		else
+			i += 15;
+	}
+	ebrg = ebrg_table[i].n;
+	ebrg |= (ebrg_table[i].m << 6);
+
+	if (ebrg_table[i].baud)
+		info->timeout = (info->xmit_fifo_size * HZ * bits) / ebrg_table[i].baud;
+	else
+		info->timeout = 0;
+	info->timeout += HZ / 50;		/* Add .02 seconds of slop */
+
+	/* CTS flow control flags */
+	if (cflag & CRTSCTS)
+		info->flags |= ASYNC_CTS_FLOW;
+	else
+		info->flags &= ~(ASYNC_CTS_FLOW);
+
+	if (cflag & CLOCAL)
+		info->flags &= ~(ASYNC_CHECK_CD);
+	else
+		info->flags |= ASYNC_CHECK_CD;
+
+	save_flags(flags); cli();
+	if (info->regs->r.star & SAB82532_STAR_CEC)
+		udelay(1);
+	while (info->regs->r.star & SAB82532_STAR_TEC)
+		udelay(1);
+	info->regs->w.dafo = dafo;
+	info->regs->w.bgr = ebrg & 0xff;
+	info->regs->rw.ccr2 &= ~(0xc0);
+	info->regs->rw.ccr2 |= (ebrg >> 2) & 0xc0;
+	if (info->flags & ASYNC_CTS_FLOW) {
+		info->regs->rw.mode &= ~(SAB82532_MODE_RTS);
+		info->regs->rw.mode |= SAB82532_MODE_FRTS;
+		info->regs->rw.mode &= ~(SAB82532_MODE_FCTS);
+	} else {
+		info->regs->rw.mode |= SAB82532_MODE_RTS;
+		info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
+		info->regs->rw.mode |= SAB82532_MODE_FCTS;
+	}
+	info->regs->rw.mode |= SAB82532_MODE_RAC;
+	restore_flags(flags);
+
+	return 0;
+}
+
+static struct console sab82532_console = {
+	"ttyS",
+	sab82532_console_write,
+	NULL,
+	sab82532_console_device,
+	sab82532_console_wait_key,
+	NULL,
+	sab82532_console_setup,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
+};
+
+__initfunc(int sab82532_console_init(void))
+{
+	extern int con_is_present(void);
+
+	if (con_is_present())
+		return 0;
+
+	if (!sab82532_chain) {
+		prom_printf("sab82532_console_setup: can't get SAB82532 chain");
+		prom_halt();
+	}
+
+	sab82532_console.index = serial_console - 1;
+	register_console(&sab82532_console);
+	return 0;
+}
+
+#endif /* CONFIG_SERIAL_CONSOLE */

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.5 1997/09/03 12:29:05 jj Exp $
+/* $Id: sys_sparc.c,v 1.9 1997/12/11 15:15:44 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -16,11 +16,14 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/utsname.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/malloc.h>
 
 #include <asm/uaccess.h>
 #include <asm/ipc.h>
+#include <asm/utrap.h>
 
 /* XXX Make this per-binary type, this way we can detect the type of
  * XXX a binary.  Every Sparc executable calls this very early on.
@@ -219,39 +222,16 @@ sparc_breakpoint (struct pt_regs *regs)
 
 extern void check_pending(int signum);
 
-asmlinkage int
-sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
+asmlinkage int sys_getdomainname(char *name, int len)
 {
-	struct sigaction new_sa, *p;
+        int nlen = strlen(system_utsname.domainname);
 
-	if(signum < 0) {
-		current->tss.new_signal = 1;
-		signum = -signum;
-	}
-	if (signum<1 || signum>32)
-		return -EINVAL;
-	p = signum - 1 + current->sig->action;
-	if (action) {
-		if (signum==SIGKILL || signum==SIGSTOP)
-			return -EINVAL;
-		if(copy_from_user(&new_sa, action, sizeof(struct sigaction)))
-			return -EFAULT;
-		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			int err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
-			if (err)
-				return err;
-		}
-	}
-	if (oldaction) {
-		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
-			return -EFAULT;
-	}
-	if (action) {
-		spin_lock_irq(&current->sig->siglock);
-		*p = new_sa;
-		check_pending(signum);
-		spin_unlock_irq(&current->sig->siglock);
-	}
+        if (nlen < len)
+                len = nlen;
+	if(len > __NEW_UTS_LEN)
+		return -EFAULT;
+	if(copy_to_user(name, system_utsname.domainname, len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -271,4 +251,117 @@ asmlinkage int solaris_syscall(struct pt_regs *regs)
 	send_sig(SIGSEGV, current, 1);
 	unlock_kernel();
 	return 0;
+}
+
+asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p, utrap_handler_t new_d,
+				 utrap_handler_t *old_p, utrap_handler_t *old_d)
+{
+	if (type < UT_INSTRUCTION_EXCEPTION || type > UT_TRAP_INSTRUCTION_31)
+		return -EINVAL;
+	if (new_p == (utrap_handler_t)(long)UTH_NOCHANGE) {
+		if (old_p) {
+			if (!current->tss.utraps)
+				put_user_ret(NULL, old_p, -EFAULT);
+			else
+				put_user_ret((utrap_handler_t)(current->tss.utraps[type]), old_p, -EFAULT);
+		}
+		if (old_d)
+			put_user_ret(NULL, old_d, -EFAULT);
+		return 0;
+	}
+	lock_kernel();
+	if (!current->tss.utraps) {
+		current->tss.utraps = kmalloc((UT_TRAP_INSTRUCTION_31+1)*sizeof(long), GFP_KERNEL);
+		if (!current->tss.utraps) return -ENOMEM;
+		current->tss.utraps[0] = 1;
+		memset(current->tss.utraps+1, 0, UT_TRAP_INSTRUCTION_31*sizeof(long));
+	} else {
+		if ((utrap_handler_t)current->tss.utraps[type] != new_p && current->tss.utraps[0] > 1) {
+			long *p = current->tss.utraps;
+			
+			current->tss.utraps = kmalloc((UT_TRAP_INSTRUCTION_31+1)*sizeof(long), GFP_KERNEL);
+			if (!current->tss.utraps) {
+				current->tss.utraps = p;
+				return -ENOMEM;
+			}
+			p[0]--;
+			current->tss.utraps[0] = 1;
+			memcpy(current->tss.utraps+1, p+1, UT_TRAP_INSTRUCTION_31*sizeof(long));
+		}
+	}
+	if (old_p)
+		put_user_ret((utrap_handler_t)(current->tss.utraps[type]), old_p, -EFAULT);
+	if (old_d)
+		put_user_ret(NULL, old_d, -EFAULT);
+	current->tss.utraps[type] = (long)new_p;
+	unlock_kernel();
+	return 0;
+}
+
+long sparc_memory_ordering(unsigned long model, struct pt_regs *regs)
+{
+	if (model >= 3)
+		return -EINVAL;
+	regs->tstate = (regs->tstate & ~TSTATE_MM) | (model << 14);
+	return 0;
+}
+
+asmlinkage int
+sys_sigaction(int sig, const struct old_sigaction *act,
+	      struct old_sigaction *oact)
+{
+	struct k_sigaction new_ka, old_ka;
+	int ret;
+
+	if (act) {
+		old_sigset_t mask;
+		if (verify_area(VERIFY_READ, act, sizeof(*act)) ||
+		    __get_user(new_ka.sa.sa_handler, &act->sa_handler) ||
+		    __get_user(new_ka.sa.sa_restorer, &act->sa_restorer))
+			return -EFAULT;
+		__get_user(new_ka.sa.sa_flags, &act->sa_flags);
+		__get_user(mask, &act->sa_mask);
+		siginitset(&new_ka.sa.sa_mask, mask);
+		new_ka.ka_restorer = NULL;
+	}
+
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
+		if (verify_area(VERIFY_WRITE, oact, sizeof(*oact)) ||
+		    __put_user(old_ka.sa.sa_handler, &oact->sa_handler) ||
+		    __put_user(old_ka.sa.sa_restorer, &oact->sa_restorer))
+			return -EFAULT;
+		__put_user(old_ka.sa.sa_flags, &oact->sa_flags);
+		__put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask);
+	}
+
+	return ret;
+}
+
+asmlinkage int
+sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
+		 void *restorer, size_t sigsetsize)
+{
+	struct k_sigaction new_ka, old_ka;
+	int ret;
+
+	/* XXX: Don't preclude handling different sized sigset_t's.  */
+	if (sigsetsize != sizeof(sigset_t))
+		return -EINVAL;
+
+	if (act) {
+		new_ka.ka_restorer = restorer;
+		if (copy_from_user(&new_ka.sa, act, sizeof(*act)))
+			return -EFAULT;
+	}
+
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
+		if (copy_to_user(oact, &old_ka.sa, sizeof(*oact)))
+			return -EFAULT;
+	}
+
+	return ret;
 }

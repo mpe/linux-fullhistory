@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ -c $< -o $*.o
+	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $< -o $*.o
 
 O_TARGET := kernel.o
 O_OBJS := misc.o traps.o process.o signal.o syscalls.o \
@@ -18,6 +18,10 @@ O_OBJS := misc.o traps.o process.o signal.o syscalls.o \
 	  pci.o prep_pci.o pmac_pci.o chrp_pci.o \
 	  residual.o prom.o
 OX_OBJS := ppc_ksyms.o
+
+ifdef SMP
+O_OBJS += smp.o
+endif
 
 all: head.o kernel.o
 
@@ -33,8 +37,11 @@ ppc_defs.h: mk_defs.c ppc_defs.head \
 	grep '^#define' mk_defs.s >>ppc_defs.h
 	rm mk_defs.s
 
+find_name : find_name.c
+	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -o find_name find_name.c
+
 checks: checks.c
-	$(HOSTCC) -fno-builtin -I$(TOPDIR)/include -D__KERNEL__ -o checks checks.c
+	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -fno-builtin -I$(TOPDIR)/include -D__KERNEL__ -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

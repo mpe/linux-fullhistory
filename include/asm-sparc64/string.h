@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.7 1997/07/13 18:23:44 davem Exp $
+/* $Id: string.h,v 1.8 1997/11/19 07:57:50 jj Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
@@ -23,7 +23,7 @@ extern __kernel_size_t __memcpy_16plus(void *,const void *,__kernel_size_t,long,
 extern __kernel_size_t __memcpy_384plus(void *,const void *,__kernel_size_t,long,long);
 extern __kernel_size_t __memset(void *,int,__kernel_size_t);
 
-#ifndef EXPORT_SYMTAB
+#ifndef EXPORT_SYMTAB_STROPS
 
 /* First the mem*() things. */
 #define __HAVE_ARCH_BCOPY
@@ -192,7 +192,7 @@ extern inline int __constant_strncmp(const char *src, const char *dest, __kernel
  __constant_strncmp(__arg0, __arg1, __arg2) : \
  __strncmp(__arg0, __arg1, __arg2))
 
-#endif /* !EXPORT_SYMTAB */
+#endif /* !EXPORT_SYMTAB_STROPS */
 
 #endif /* __KERNEL__ */
 

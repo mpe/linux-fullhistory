@@ -103,8 +103,9 @@ void hfs_put_inode(struct inode * inode)
  *     to permissions must be applied to all other in-core inodes which 
  *     correspond to the same HFS file.
  */
-int hfs_notify_change(struct inode * inode, struct iattr * attr)
+int hfs_notify_change(struct dentry *dentry, struct iattr * attr)
 {
+	struct inode *inode = dentry->d_inode;
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 	struct dentry **de = entry->sys_entry;
 	struct hfs_sb_info *hsb = HFS_SB(inode->i_sb);
@@ -151,7 +152,7 @@ int hfs_notify_change(struct inode * inode, struct iattr * attr)
 
 	/* We must change all in-core inodes corresponding to this file. */
 	for (i = 0; i < 4; ++i) {
-	  if (de[i] && (de[i]->d_inode != inode)) {
+	  if (de[i] && (de[i] != dentry)) {
 			inode_setattr(de[i]->d_inode, attr);
 	  }
 	}
@@ -159,7 +160,7 @@ int hfs_notify_change(struct inode * inode, struct iattr * attr)
 	/* Change the catalog entry if needed */
 	if (attr->ia_valid & ATTR_MTIME) {
 		entry->modify_date = hfs_u_to_mtime(inode->i_mtime);
-		entry->dirt = 1;
+		hfs_cat_mark_dirty(entry);
 	}
 	if (attr->ia_valid & ATTR_MODE) {
 		hfs_u8 new_flags;
@@ -172,7 +173,7 @@ int hfs_notify_change(struct inode * inode, struct iattr * attr)
 
 		if (new_flags != entry->u.file.flags) {
 			entry->u.file.flags = new_flags;
-			entry->dirt = 1;
+			hfs_cat_mark_dirty(entry);
 		}
 	}
 	/* size changes handled in hfs_extent_adj() */
@@ -211,6 +212,8 @@ int hfs_notify_change(struct inode * inode, struct iattr * attr)
  * XXX: Both this function and NFS's corresponding nfs_fhget() would
  * benefit from a way to pass an additional (void *) through iget() to
  * the VFS read_inode() function.
+ *
+ * hfs_iget no longer touches hfs_cat_entries.
  */
 struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 		       struct dentry *dentry)
@@ -239,20 +242,21 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 	if (*sys_entry && (inode = (*sys_entry)->d_inode)) {
 		/* There is an existing inode for this file/dir.  Use it. */
 		++inode->i_count;
-		hfs_cat_put(entry);
-	} else if (!(inode = iget(sb, ntohl(entry->cnid) | type)) ||
-		   (inode->i_dev != sb->s_dev)) {
-		/* Something went wrong */
-		hfs_cat_put(entry);
+		return inode;
+	}
+
+	if (!(inode = iget(sb, ntohl(entry->cnid) | type)))
+	        return NULL;
+
+	if (inode->i_dev != sb->s_dev) {
+	        iput(inode);
+		inode = NULL;
 	} else if (inode->i_mode) {
 		/* The inode has been initialized by another process.
 		   Note that if hfs_put_inode() is sleeping in hfs_cat_put()
 		   then we still need to attach it to the entry. */
-		if (*sys_entry) {
-			hfs_cat_put(entry);
-		} else {
+		if (!(*sys_entry))
 			*sys_entry = dentry; /* cache dentry */
-		}
 	} else {
 		/* Initialize the inode */
 		struct hfs_sb_info *hsb = HFS_SB(sb);

@@ -44,6 +44,5 @@ struct in6_rtmsg {
 #define RTMSG_DELDEVICE		0x12
 #define RTMSG_NEWROUTE		0x21
 #define RTMSG_DELROUTE		0x22
-#define RTMSG_AR_FAILED		0x51	/* Address Resolution failed	*/
 
 #endif

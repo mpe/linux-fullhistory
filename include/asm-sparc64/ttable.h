@@ -1,8 +1,10 @@
-/* $Id: ttable.h,v 1.3 1997/08/29 15:52:35 jj Exp $ */
+/* $Id: ttable.h,v 1.5 1997/10/14 16:21:34 jj Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
 #include <linux/config.h>
+#include <asm/asm_offsets.h>
+#include <asm/utrap.h>
 
 #define BOOT_KERNEL b sparc64_boot; nop; nop; nop; nop; nop; nop; nop;
 
@@ -97,9 +99,19 @@
 	ba,pt	%xcc, tl0_solaris + 0xc;		\
 	 mov	num, %g1;				\
 	nop;nop;nop;
+	
+#define TRAP_UTRAP(handler,lvl)						\
+	ldx	[%g6 + AOFF_task_tss + AOFF_thread_utraps], %g1;	\
+	sethi	%hi(109f), %g7;						\
+	brz,pn	%g1, utrap;						\
+	 or	%g7, %lo(109f), %g7;					\
+	ba,pt	%xcc, utrap;						\
+109:	 ldx	[%g1 + handler*8], %g1;					\
+	ba,pt	%xcc, utrap_ill;					\
+	 mov	lvl, %o1;
 
-#define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sunos_sys_table)
-#define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table32)
+#define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall32, sunos_sys_table)
+#define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall32, sys_call_table32)
 #define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
 #define GETCC_TRAP TRAP(getcc)
 #define SETCC_TRAP TRAP(setcc)

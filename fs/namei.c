@@ -358,7 +358,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 
 	/* At this point we know we have a real path component. */
 	for(;;) {
-		int len, err;
+		int err;
 		unsigned long hash;
 		struct qstr this;
 		struct inode *inode;
@@ -379,16 +379,14 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 			break;
 
 		this.name = name;
-		len = 0;
 		c = *name;
 
 		hash = init_name_hash();
 		do {
-			len++; name++;
 			hash = partial_name_hash(c, hash);
-			c = *name;
+			c = *++name;
 		} while (c && (c != '/'));
-		this.len = len;
+		this.len = name - (const char *) this.name;
 		this.hash = end_name_hash(hash);
 
 		/* remove trailing slashes? */

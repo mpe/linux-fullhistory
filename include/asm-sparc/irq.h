@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.20 1997/05/28 05:25:07 davem Exp $
+/* $Id: irq.h,v 1.21 1997/11/19 15:12:20 jj Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,6 +10,17 @@
 #include <linux/linkage.h>
 
 #include <asm/system.h>     /* For NCPUS */
+
+/* This is used for sun4d */
+struct devid_cookie {
+        /* Caller specifies these. */
+        void            *real_dev_id;           /* What dev_id would usually contain. */
+        void            *bus_cookie;            /* linux_sbus_device *, etc. */
+        /* Return values. */
+        unsigned int    ret_ino;
+};
+
+#define SA_DCOOKIE      0x10000
 
 #define NR_IRQS    15
 

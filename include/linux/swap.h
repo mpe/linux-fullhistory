@@ -38,6 +38,7 @@ extern atomic_t nr_async_pages;
 extern int min_free_pages;
 extern int free_pages_low;
 extern int free_pages_high;
+extern struct inode swapper_inode;
 
 /* Incomplete types for prototype declarations: */
 struct task_struct;
@@ -100,39 +101,29 @@ extern unsigned long swap_cache_find_success;
 extern inline unsigned long in_swap_cache(struct page *page)
 {
 	if (PageSwapCache(page))
-		return page->pg_swap_entry;
+		return page->offset;
 	return 0;
 }
 
-extern inline long find_in_swap_cache(struct page *page)
+/*
+ * Work out if there are any other processes sharing this page, ignoring
+ * any page reference coming from the page or swap cache.  
+ */
+static inline int is_page_shared(struct page *page)
 {
-#ifdef SWAP_CACHE_INFO
-	swap_cache_find_total++;
-#endif
-	if (PageTestandClearSwapCache(page))  {
-#ifdef SWAP_CACHE_INFO
-		swap_cache_find_success++;
-#endif	
-		return page->pg_swap_entry;
-	}
-	return 0;
+	int count = atomic_read(&page->count);
+	if (page->inode)
+		count--;
+	return (count > 1);
 }
 
-extern inline int delete_from_swap_cache(struct page *page)
-{
-#ifdef SWAP_CACHE_INFO
-	swap_cache_del_total++;
-#endif	
-	if (PageTestandClearSwapCache(page))  {
-#ifdef SWAP_CACHE_INFO
-		swap_cache_del_success++;
-#endif
-		swap_free(page->pg_swap_entry);
-		return 1;
-	}
-	return 0;
-}
-
+/*
+ * Make these inline later once they are working properly.
+ */
+extern long find_in_swap_cache(struct page *page);
+extern int delete_from_swap_cache(struct page *page);
+extern void remove_from_swap_cache(struct page *page);
+extern void free_page_and_swap_cache(unsigned long addr);
 
 #endif /* __KERNEL__*/
 

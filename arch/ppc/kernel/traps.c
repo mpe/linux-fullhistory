@@ -61,10 +61,10 @@ _exception(int signr, struct pt_regs *regs)
 	if (!user_mode(regs))
 	{
 		show_regs(regs);
-		print_backtrace((unsigned long *)regs->gpr[1]);
 #ifdef CONFIG_XMON
 		xmon(regs);
 #endif
+		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("Exception in kernel pc %lx signal %d",regs->nip,signr);
 	}
 	force_sig(signr, current);
@@ -103,10 +103,10 @@ MachineCheckException(struct pt_regs *regs)
 			printk("Unknown values in msr\n");
 		}
 		show_regs(regs);
-		print_backtrace((unsigned long *)regs->gpr[1]);
 #ifdef CONFIG_XMON
 		xmon(regs);
 #endif
+		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("machine check");
 	}
 	_exception(SIGSEGV, regs);	
@@ -186,15 +186,16 @@ AlignmentException(struct pt_regs *regs)
 }
 
 void
-PromException(struct pt_regs *regs, int trap)
+StackOverflow(struct pt_regs *regs)
 {
-	regs->trap = trap;
+	printk(KERN_CRIT "Kernel stack overflow in process %p, r1=%lx\n",
+	       current, regs->gpr[1]);
 #ifdef CONFIG_XMON
 	xmon(regs);
 #endif
-	printk("Exception %lx in prom at PC: %lx, SR: %lx\n",
-	       regs->trap, regs->nip, regs->msr);
-	/* probably should turn up the toes here */
+	show_regs(regs);
+	print_backtrace((unsigned long *)regs->gpr[1]);
+	panic("kernel stack overflow");
 }
 
 void

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.31 1997/08/11 14:35:33 davem Exp $
+/* $Id: traps.c,v 1.44 1998/01/09 16:39:35 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -26,9 +26,13 @@
 #include <asm/uaccess.h>
 #include <asm/fpumacro.h>
 #include <asm/lsu.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 /* #define SYSCALL_TRACING */
 /* #define VERBOSE_SYSCALL_TRACING */
+/* #define DEBUG_FPU */
 
 #ifdef SYSCALL_TRACING
 #ifdef VERBOSE_SYSCALL_TRACING
@@ -125,8 +129,9 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 	int i;
 #endif
 
-	if(strcmp(current->comm, "bash.sunos"))
-		return;
+#if 0
+	if (!current->pid) return;
+#endif	
 	printk("SYS[%s:%d]: PC(%016lx) <%3d> ",
 	       current->comm, current->pid, regs->tpc, (int)g1);
 #ifdef VERBOSE_SYSCALL_TRACING
@@ -141,12 +146,20 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 		for(i = 0; i < sdp->num_args; i++) {
 			if(i)
 				printk(",");
-			if(!sdp->arg_is_string[i])
-				printk("%08x", (unsigned int)regs->u_regs[UREG_I0 + i]);
-			else {
-				strncpy_from_user(scall_strbuf,
-						  (char *)regs->u_regs[UREG_I0 + i],
-						  512);
+			if(!sdp->arg_is_string[i]) {
+				if (current->tss.flags & SPARC_FLAG_32BIT)
+					printk("%08x", (unsigned int)regs->u_regs[UREG_I0 + i]);
+				else
+					printk("%016lx", regs->u_regs[UREG_I0 + i]);
+			} else {
+				if (current->tss.flags & SPARC_FLAG_32BIT)
+					strncpy_from_user(scall_strbuf,
+							  (char *)(regs->u_regs[UREG_I0 + i] & 0xffffffff),
+							  512);
+				else
+					strncpy_from_user(scall_strbuf,
+							  (char *)regs->u_regs[UREG_I0 + i],
+							  512);
 				printk("%s", scall_strbuf);
 			}
 		}
@@ -157,7 +170,9 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 
 unsigned long syscall_trace_exit(unsigned long retval, struct pt_regs *regs)
 {
-	if(!strcmp(current->comm, "bash.sunos"))
+#if 0
+	if (current->pid)
+#endif
 		printk("ret[%016lx]\n", retval);
 	return retval;
 }
@@ -192,6 +207,24 @@ void bad_trap_tl1 (struct pt_regs *regs, long lvl)
 
 void data_access_exception (struct pt_regs *regs)
 {
+	if (regs->tstate & TSTATE_PRIV) {
+		/* Test if this comes from uaccess places. */
+		unsigned long fixup, g2;
+
+		g2 = regs->u_regs[UREG_G2];
+		if ((fixup = search_exception_table (regs->tpc, &g2))) {
+			/* Ouch, somebody is trying ugly VM hole tricks on us... */
+#ifdef DEBUG_EXCEPTIONS
+			printk("Exception: PC<%016lx> faddr<UNKNOWN>\n", regs->tpc);
+			printk("EX_TABLE: insn<%016lx> fixup<%016lx> "
+			       "g2<%016lx>\n", regs->tpc, fixup, g2);
+#endif
+			regs->tpc = fixup;
+			regs->tnpc = regs->tpc + 4;
+			regs->u_regs[UREG_G2] = g2;
+			return;
+		}
+	}
 	send_sig(SIGSEGV, current, 1);
 }
 
@@ -271,11 +304,46 @@ void do_fpe_common(struct pt_regs *regs)
 
 void do_fpieee(struct pt_regs *regs)
 {
+#ifdef DEBUG_FPU	
+	struct fpustate *f = FPUSTATE;
+
+	printk("fpieee %016lx\n", f->fsr);
+#endif
 	do_fpe_common(regs);
 }
 
+#ifdef CONFIG_MATHEMU_MODULE
+volatile int (*handle_mathemu)(struct pt_regs *, struct fpustate *) = NULL;
+#else
+extern int do_mathemu(struct pt_regs *, struct fpustate *);
+#endif
+
 void do_fpother(struct pt_regs *regs)
 {
+	struct fpustate *f = FPUSTATE;
+	int ret = 0;
+
+	switch ((f->fsr & 0x1c000)) {
+	case (2 << 14): /* unfinished_FPop */
+	case (3 << 14): /* unimplemented_FPop */
+#ifdef CONFIG_MATHEMU_MODULE
+#ifdef CONFIG_KERNELD
+		if (!handle_mathemu)
+			request_module("math-emu");
+#endif
+		if (handle_mathemu)
+			ret = handle_mathemu(regs, f);
+#else
+#ifdef CONFIG_MATHEMU
+		ret = do_mathemu(regs, f);
+#endif
+#endif
+		break;
+	}
+	if (ret) return;
+#ifdef DEBUG_FPU	
+	printk("fpother %016lx\n", f->fsr);
+#endif
 	do_fpe_common(regs);
 }
 
@@ -298,7 +366,7 @@ void instruction_dump (unsigned int *pc)
 	int i;
 	
 	if((((unsigned long) pc) & 3))
-                return;
+		return;
 
 	for(i = -3; i < 6; i++)
 		printk("%c%08x%c",i?' ':'<',pc[i],i?' ':'>');
@@ -332,33 +400,51 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 				(rw->ins[6] + STACK_BIAS);
 		}
 	}
-	printk("Instruction DUMP:");
-	instruction_dump ((unsigned int *) regs->tpc);
+	if(regs->tstate & TSTATE_PRIV) {
+		printk("Instruction DUMP:");
+		instruction_dump ((unsigned int *) regs->tpc);
+	}
 	lock_kernel(); /* Or else! */
 	if(regs->tstate & TSTATE_PRIV)
 		do_exit(SIGKILL);
 	do_exit(SIGSEGV);
 }
 
+extern int handle_popc(u32 insn, struct pt_regs *regs);
+extern int handle_ldq_stq(u32 insn, struct pt_regs *regs);
+
 void do_illegal_instruction(struct pt_regs *regs)
 {
 	unsigned long pc = regs->tpc;
 	unsigned long tstate = regs->tstate;
+	u32 insn;
 
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("Kernel illegal instruction", regs);
+	if(current->tss.flags & SPARC_FLAG_32BIT)
+		pc = (u32)pc;
+	if (get_user(insn, (u32 *)pc) != -EFAULT) {
+		if ((insn & 0xc1ffc000) == 0x81700000) /* POPC */ {
+			if (handle_popc(insn, regs))
+				return;
+		} else if ((insn & 0xc1580000) == 0xc1100000) /* LDQ/STQ */ {
+			if (handle_ldq_stq(insn, regs))
+				return;
+		}
+	}
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
 }
 
-void mem_address_unaligned(struct pt_regs *regs)
+void mem_address_unaligned(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr)
 {
 	if(regs->tstate & TSTATE_PRIV) {
 		extern void kernel_unaligned_trap(struct pt_regs *regs,
-						  unsigned int insn);
+						  unsigned int insn, 
+						  unsigned long sfar, unsigned long sfsr);
 
-		return kernel_unaligned_trap(regs, *((unsigned int *)regs->tpc));
+		return kernel_unaligned_trap(regs, *((unsigned int *)regs->tpc), sfar, sfsr);
 	} else {
 		current->tss.sig_address = regs->tpc;
 		current->tss.sig_desc = SUBSIG_PRIVINST;
@@ -388,22 +474,6 @@ void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long n
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGILL, current, 1);
-}
-
-/* XXX User may want to be allowed to do this. XXX */
-
-void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-			    unsigned long tstate)
-{
-	if(regs->tstate & TSTATE_PRIV) {
-		printk("KERNEL MNA at pc %016lx npc %016lx called by %016lx\n", pc, npc,
-		       regs->u_regs[UREG_RETPC]);
-		die_if_kernel("BOGUS", regs);
-		/* die_if_kernel("Kernel MNA access", regs); */
-	}
-	current->tss.sig_address = pc;
-	current->tss.sig_desc = SUBSIG_PRIVINST;
-	send_sig(SIGBUS, current, 1);
 }
 
 void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
@@ -463,19 +533,9 @@ void do_irq_tl1(struct pt_regs *regs)
 	die_if_kernel("TL1: IRQ Exception", regs);
 }
 
-void do_lddfmna(struct pt_regs *regs)
-{
-	die_if_kernel("TL0: LDDF Exception", regs);
-}
-
 void do_lddfmna_tl1(struct pt_regs *regs)
 {
 	die_if_kernel("TL1: LDDF Exception", regs);
-}
-
-void do_stdfmna(struct pt_regs *regs)
-{
-	die_if_kernel("TL0: STDF Exception", regs);
 }
 
 void do_stdfmna_tl1(struct pt_regs *regs)

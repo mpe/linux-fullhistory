@@ -45,8 +45,10 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
-	struct page *page;
-	
+	struct page *page = mem_map + MAP_NR(buf);
+
+	if (page->inode && page->inode != &swapper_inode)
+		panic ("Tried to swap a non-swapper page");
 	type = SWP_TYPE(entry);
 	if (type >= nr_swapfiles) {
 		printk("Internal error: bad swap-device\n");
@@ -66,26 +68,43 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		printk("Trying to swap to unused swap-device\n");
 		return;
 	}
+	/*
+	 * For now, this is not legal!
+	 */
+	if (PageSwapCache(page))
+		panic ("Trying to swap a swap-cache page!");
+
 	/* Make sure we are the only process doing I/O with this swap page. */
 	while (test_and_set_bit(offset,p->swap_lockmap)) {
 		run_task_queue(&tq_disk);
 		sleep_on(&lock_queue);
 	}
+
 	if (rw == READ)
 		kstat.pswpin++;
 	else
 		kstat.pswpout++;
-	page = mem_map + MAP_NR(buf);
 	atomic_inc(&page->count);
 	wait_on_page(page);
+	/* 
+	 * Make sure that we have a swap cache association for this
+	 * page.  We need this to find which swap page to unlock once
+	 * the swap IO has completed to the physical page.  If the page
+	 * is not already in the cache, just overload the offset entry
+	 * as if it were: we are not allowed to manipulate the inode
+	 * hashing for locked pages.
+	 */
+	if (PageSwapCache(page)) {
+		if (page->offset != entry)
+			panic ("swap entry mismatch");
+	} else 
+		page->offset = entry;
+
 	if (p->swap_device) {
 		if (!wait) {
 			set_bit(PG_free_after, &page->flags);
 			set_bit(PG_decr_after, &page->flags);
 			set_bit(PG_swap_unlock_after, &page->flags);
-			/* swap-cache  shouldn't be set, but play safe */
-			PageClearSwapCache(page);
-			page->pg_swap_entry = entry;
 			atomic_inc(&nr_async_pages);
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);
@@ -132,16 +151,19 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 			for (i=0, j=0; j< PAGE_SIZE ; i++, j +=swapf->i_sb->s_blocksize)
 				if (!(zones[i] = bmap(swapf,block++))) {
 					printk("rw_swap_page: bad swap file\n");
+					return;
 				}
 		}
 		ll_rw_swap_file(rw,swapf->i_dev, zones, i,buf);
 	} else
 		printk("rw_swap_page: no swap file or device\n");
+
 	atomic_dec(&page->count);
 	if (offset && !test_and_clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
+
 
 /* This is run when asynchronous page I/O has completed. */
 void swap_after_unlock_page (unsigned long entry)

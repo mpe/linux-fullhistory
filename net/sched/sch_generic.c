@@ -34,6 +34,9 @@ struct Qdisc_head qdisc_head = { &qdisc_head };
 
 static struct Qdisc_ops *qdisc_base = NULL;
 
+static int default_requeue(struct sk_buff *skb, struct Qdisc* qdisc);
+
+
 /* NOTES.
 
    Every discipline has two major routines: enqueue and dequeue.
@@ -75,6 +78,8 @@ int unregister_qdisc(struct Qdisc_ops *qops)
 			break;
 	if (!q)
 		return -ENOENT;
+	if (q->requeue == NULL)
+		q->requeue = default_requeue;
 	*qp = q->next;
 	return 0;
 }
@@ -118,6 +123,7 @@ struct Qdisc noqueue_qdisc =
 };
 
 
+
 /* 3-band FIFO queue: old style, but should be a bit faster (several CPU insns) */
 
 static int
@@ -129,7 +135,7 @@ pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc* qdisc)
 	list = ((struct sk_buff_head*)qdisc->data) + prio2band[skb->priority&7];
 
 	if (list->qlen <= skb->dev->tx_queue_len) {
-		skb_queue_tail(list, skb);
+		__skb_queue_tail(list, skb);
 		return 1;
 	}
 	qdisc->dropped++;
@@ -145,11 +151,23 @@ pfifo_fast_dequeue(struct Qdisc* qdisc)
 	struct sk_buff *skb;
 
 	for (prio = 0; prio < 3; prio++, list++) {
-		skb = skb_dequeue(list);
+		skb = __skb_dequeue(list);
 		if (skb)
 			return skb;
 	}
 	return NULL;
+}
+
+static int
+pfifo_fast_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
+{
+	const static u8 prio2band[8] = { 1, 2, 2, 2, 1, 2, 0, 0 };
+	struct sk_buff_head *list;
+
+	list = ((struct sk_buff_head*)qdisc->data) + prio2band[skb->priority&7];
+
+	__skb_queue_head(list, skb);
+	return 1;
 }
 
 static void
@@ -185,8 +203,19 @@ static struct Qdisc_ops pfifo_fast_ops =
 	pfifo_fast_dequeue,
 	pfifo_fast_reset,
 	NULL,
-	pfifo_fast_init
+	pfifo_fast_init,
+	NULL,
+	pfifo_fast_requeue
 };
+
+static int
+default_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
+{
+	if (net_ratelimit())
+		printk(KERN_DEBUG "%s deferred output. It is buggy.\n", skb->dev->name);
+	kfree_skb(skb, FREE_WRITE);
+	return 0;
+}
 
 static struct Qdisc *
 qdisc_alloc(struct device *dev, struct Qdisc_ops *ops, void *arg)
@@ -200,7 +229,6 @@ qdisc_alloc(struct device *dev, struct Qdisc_ops *ops, void *arg)
 	memset(sch, 0, size);
 
 	skb_queue_head_init(&sch->q);
-	skb_queue_head_init(&sch->failure_q);
 	sch->ops = ops;
 	sch->enqueue = ops->enqueue;
 	sch->dequeue = ops->dequeue;
@@ -218,7 +246,6 @@ void qdisc_reset(struct Qdisc *qdisc)
 		start_bh_atomic();
 		if (ops->reset)
 			ops->reset(qdisc);
-		skb_queue_purge(&qdisc->failure_q);
 		end_bh_atomic();
 	}
 }
@@ -232,7 +259,6 @@ void qdisc_destroy(struct Qdisc *qdisc)
 			ops->reset(qdisc);
 		if (ops->destroy)
 			ops->destroy(qdisc);
-		skb_queue_purge(&qdisc->failure_q);
 		ops->refcnt--;
 		end_bh_atomic();
 		kfree(qdisc);
@@ -373,23 +399,22 @@ int qdisc_restart(struct device *dev)
 	struct Qdisc *q = dev->qdisc;
 	struct sk_buff *skb;
 
-	skb = skb_dequeue(&q->failure_q);
-	if (!skb) {
-		skb = q->dequeue(q);
-		if (netdev_nit && skb)
-			dev_queue_xmit_nit(skb,dev);
-	}
-	if (skb) {
+	if ((skb = q->dequeue(q)) != NULL) {
+		if (netdev_nit)
+			dev_queue_xmit_nit(skb, dev);
+
 		if (dev->hard_start_xmit(skb, dev) == 0) {
 			q->tx_last = jiffies;
 			return -1;
 		}
-#if 0
-		if (net_ratelimit())
-			printk(KERN_DEBUG "netdevice %s defers output.\n", dev->name);
-#endif
-		skb_queue_head(&q->failure_q, skb);
-		return -1;
+
+		if (q->ops) {
+			q->ops->requeue(skb, q);
+			return -1;
+		}
+
+		printk(KERN_DEBUG "%s: it is impossible!!!\n", dev->name);
+		kfree_skb(skb, FREE_WRITE);
 	}
 	return q->q.qlen;
 }
@@ -510,9 +535,6 @@ __initfunc(int pktsched_init(void))
           extern struct Qdisc_ops name##_ops; \
           register_qdisc(&##name##_ops); \
 	}
-
-	skb_queue_head_init(&noop_qdisc.failure_q);
-	skb_queue_head_init(&noqueue_qdisc.failure_q);
 
 	register_qdisc(&pfifo_fast_ops);
 #ifdef CONFIG_NET_SCH_CBQ

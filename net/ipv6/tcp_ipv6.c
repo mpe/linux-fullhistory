@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.43 1997/10/30 23:52:34 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.44 1997/12/13 21:53:18 kuznet Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -577,9 +577,10 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 	if (type == ICMPV6_PKT_TOOBIG && sk->state != TCP_LISTEN) {
 		/* icmp should have updated the destination cache entry */
 
-		dst_check(&np->dst, np->dst_cookie);
+		if (sk->dst_cache)
+			dst_check(&sk->dst_cache, np->dst_cookie);
 
-		if (np->dst == NULL) {
+		if (sk->dst_cache == NULL) {
 			struct flowi fl;
 			struct dst_entry *dst;
 			
@@ -595,10 +596,10 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 			ip6_dst_store(sk, dst);
 		}
 
-		if (np->dst->error)
-			sk->err_soft = np->dst->error;
+		if (sk->dst_cache->error)
+			sk->err_soft = sk->dst_cache->error;
 		else
-			sk->mtu = np->dst->pmtu;
+			sk->mtu = sk->dst_cache->pmtu;
 
 		if (sk->sock_readers) { /* remove later */
 			printk(KERN_DEBUG "tcp_v6_err: pmtu disc: socket locked.\n");
@@ -1062,8 +1063,8 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 
 	buff->csum = csum_partial((char *)t1, sizeof(*t1), 0);
 
-	fl.nl_u.ip6_u.daddr = &skb->nh.ipv6h->daddr;
-	fl.nl_u.ip6_u.saddr = &skb->nh.ipv6h->saddr;
+	fl.nl_u.ip6_u.daddr = &skb->nh.ipv6h->saddr;
+	fl.nl_u.ip6_u.saddr = &skb->nh.ipv6h->daddr;
 
 	t1->check = csum_ipv6_magic(fl.nl_u.ip6_u.saddr,
 				    fl.nl_u.ip6_u.daddr, 
@@ -1072,8 +1073,8 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 
 	fl.proto = IPPROTO_TCP;
 	fl.dev = skb->dev;
-	fl.uli_u.ports.dport = th->dest;
-	fl.uli_u.ports.sport = th->source;
+	fl.uli_u.ports.dport = t1->dest;
+	fl.uli_u.ports.sport = t1->source;
 
 	ip6_xmit(NULL, buff, &fl, NULL);
 	tcp_statistics.TcpOutSegs++;
@@ -1197,22 +1198,6 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 		return(0);
 	}
 
-	/*
-	 *	Signal NDISC that the connection is making
-	 *	"forward progress"
-	 *	This is in the fast path and should be _really_ speed up! -Ak
-	 */
-	if (sk->state != TCP_LISTEN) {
-		struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-
-		if (after(skb->seq, tp->rcv_nxt) ||
-		    after(skb->ack_seq, tp->snd_una)) {
-			if (np->dst)
-				ndisc_validate(np->dst->neighbour);
-		}
-	}
-
 	skb_set_owner_r(skb, sk);
 
 	if (sk->state == TCP_ESTABLISHED) {
@@ -1270,10 +1255,10 @@ static int tcp_v6_rebuild_header(struct sock *sk, struct sk_buff *skb)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 
-	if (np->dst)
-		dst_check(&np->dst, np->dst_cookie);
+	if (sk->dst_cache)
+		dst_check(&sk->dst_cache, np->dst_cookie);
 
-	if (np->dst == NULL) {
+	if (sk->dst_cache == NULL) {
 		struct flowi fl;
 		struct dst_entry *dst;
 
@@ -1288,7 +1273,7 @@ static int tcp_v6_rebuild_header(struct sock *sk, struct sk_buff *skb)
 		ip6_dst_store(sk, dst);
 	}
 
-	if (np->dst->error) {
+	if (sk->dst_cache->error) {
 		/*
 		 *	lost route to destination
 		 */
@@ -1457,7 +1442,6 @@ static int tcp_v6_init_sock(struct sock *sk)
 
 static int tcp_v6_destroy_sock(struct sock *sk)
 {
-	struct ipv6_pinfo * np = &sk->net_pinfo.af_inet6;
 	struct sk_buff *skb;
 
 	tcp_clear_xmit_timers(sk);
@@ -1483,8 +1467,8 @@ static int tcp_v6_destroy_sock(struct sock *sk)
 	 *	Release destination entry
 	 */
 
-	if (np->dst)
-		dst_release(np->dst);
+	dst_release(sk->dst_cache);
+	sk->dst_cache = NULL;
 
 	return 0;
 }

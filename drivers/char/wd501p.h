@@ -20,9 +20,6 @@
  */
 
 #include <linux/config.h>
- 
-#define WATCHDOG_MINOR		130	/* Watchdog timer     */
-#define TEMP_MINOR		131	/* Temperature Sensor */
 
 #define WDT_COUNT0		(io+0)
 #define WDT_COUNT1		(io+1)

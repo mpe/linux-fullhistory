@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.18 1997/08/08 08:34:23 jj Exp $
+/* $Id: ultra.S,v 1.20 1997/10/03 20:42:46 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -46,26 +46,29 @@ __flush_tlb_range:	/* %o0 == (mm->context & 0x1fff), %o1 == start, %o2 == end */
 	cmp		%o4, 96
 	bgu,pn		%icc, 9b
 	 mov		SECONDARY_CONTEXT, %g7
-	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_IE, %pstate
 	ldxa		[%g7] ASI_DMMU, %g2
-	cmp		%g2, %o0
 
+	nop
+	nop
+	cmp		%g2, %o0
 	be,pt		%icc, 1f
 	 sub		%o3, %g5, %o3
+	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
 	stxa		%o0, [%g7] ASI_DMMU
+
 1:	stxa		%g0, [%o1 + %o3] ASI_DMMU_DEMAP
 	stxa		%g0, [%o1 + %o3] ASI_IMMU_DEMAP
 	brnz,pt		%o3, 1b
 	 sub		%o3, %g5, %o3
 	flush		%g6
-
-	be,a,pt		%icc, 1f
+	be,pt		%icc, 1f
 	 nop
 	stxa		%g2, [%g7] ASI_DMMU
-1:	flush		%g6
+
+	flush		%g6
 	wrpr		%g1, 0, %pstate
-	retl
+1:	retl
 	 nop
 
 	.align		32
@@ -73,7 +76,7 @@ __flush_tlb_page:	/* %o0 == (mm->context & 0x1fff), %o1 == page & PAGE_MASK */
 	mov		SECONDARY_CONTEXT, %g7
 	ldxa		[%g7] ASI_DMMU, %g2
 	cmp		%g2, %o0
-	be,pt		%icc, 1f
+	bne,pt		%icc, 1f
 	 or		%o1, 0x10, %g3
 	stxa		%g0, [%g3] ASI_DMMU_DEMAP
 	stxa		%g0, [%g3] ASI_IMMU_DEMAP

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.22 1997/08/07 02:54:04 davem Exp $
+/* $Id: bitops.h,v 1.23 1997/12/18 02:44:12 ecd Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #ifndef _SPARC64_BITOPS_H
 #define _SPARC64_BITOPS_H
 
+#include <asm/byteorder.h>
 #include <asm/asi.h>         /* For the little endian spaces. */
 
 /* These can all be exported to userland, because the atomic
@@ -286,15 +287,6 @@ extern __inline__ int test_le_bit(int nr, __const__ void * addr)
 
 #define find_first_zero_le_bit(addr, size) \
         find_next_zero_le_bit((addr), (size), 0)
-
-extern __inline__ unsigned long __swab64p(unsigned long *addr)
-{
-	unsigned long ret;
-	__asm__ __volatile__ ("ldxa [%1] %2, %0"
-			      : "=r" (ret)
-			      : "r" (addr), "i" (ASI_PL));
-	return ret;
-}
 
 extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long size, unsigned long offset)
 {

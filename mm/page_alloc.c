@@ -133,9 +133,12 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 void __free_page(struct page *page)
 {
 	if (!PageReserved(page) && atomic_dec_and_test(&page->count)) {
-		delete_from_swap_cache(page);
+		if (PageSwapCache(page))
+			panic ("Freeing swap cache page");
 		free_pages_ok(page->map_nr, 0);
 	}
+	if (PageSwapCache(page) && atomic_read(&page->count) == 1)
+		panic ("Releasing swap cache page");
 }
 
 void free_pages(unsigned long addr, unsigned long order)
@@ -147,10 +150,14 @@ void free_pages(unsigned long addr, unsigned long order)
 		if (PageReserved(map))
 			return;
 		if (atomic_dec_and_test(&map->count)) {
-			delete_from_swap_cache(map);
+			if (PageSwapCache(map))
+				panic ("Freeing swap cache pages");
 			free_pages_ok(map_nr, order);
 			return;
 		}
+		if (PageSwapCache(map) && atomic_read(&map->count) == 1)
+			panic ("Releasing swap cache pages at %p",
+			       __builtin_return_address(0));
 	}
 }
 

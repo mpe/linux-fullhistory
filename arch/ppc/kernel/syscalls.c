@@ -32,6 +32,8 @@
 #include <linux/mman.h>
 #include <linux/sys.h>
 #include <linux/ipc.h>
+#include <linux/utsname.h>
+
 #include <asm/uaccess.h>
 #include <asm/ipc.h>
 
@@ -149,7 +151,7 @@ sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 			break;
 			}
 		case 1:	/* iBCS2 emulator entry point */
-			if (get_fs() != get_ds())
+			if (!segment_eq(get_fs(), get_ds()))
 				break;
 			ret = sys_shmat (first, (char *) ptr, second,
 					 (ulong *) third);
@@ -206,7 +208,8 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			goto out;
 	}
-	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	
+	/*flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);*/
 	ret = do_mmap(file, addr, len, prot, flags, offset);
 out:
 	unlock_kernel();
@@ -236,4 +239,42 @@ ppc_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 			return -EFAULT;
 	}
 	return sys_select(n, inp, outp, exp, tvp);
+}
+
+asmlinkage int sys_pause(void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
+}
+
+asmlinkage int sys_uname(struct old_utsname * name)
+{
+	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
+		return 0;
+	return -EFAULT;
+}
+
+asmlinkage int sys_olduname(struct oldold_utsname * name)
+{
+	int error;
+
+	if (!name)
+		return -EFAULT;
+	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
+		return -EFAULT;
+  
+	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
+	error -= __put_user(0,name->sysname+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
+	error -= __put_user(0,name->nodename+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
+	error -= __put_user(0,name->release+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
+	error -= __put_user(0,name->version+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
+	error = __put_user(0,name->machine+__OLD_UTS_LEN);
+	error = error ? -EFAULT : 0;
+
+	return error;
 }

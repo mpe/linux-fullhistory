@@ -26,13 +26,7 @@
 #include <linux/in6.h>
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
-#include <asm/checksum.h>
-
-extern inline int min(int x, int y)
-{
-	return x>y?y:x;
-}
-
+#include <net/checksum.h>
 
 /*
  *	Verify iovec
@@ -211,8 +205,8 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 
 			/* Normal case (single iov component) is fastly detected */
 			if (len <= copy) {
-				*csump = csum_partial_copy_from_user(base, kdata, 
-								     len, *csump, &err);
+				*csump = csum_and_copy_from_user(base, kdata, 
+								 len, *csump, &err);
 				return err;
 			}
 
@@ -222,8 +216,8 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 				err |= copy_from_user(kdata+copy, base+copy, partial_cnt);
 			}
 
-			*csump = csum_partial_copy_from_user(base, kdata, 
-							     copy, *csump, &err);
+			*csump = csum_and_copy_from_user(base, kdata, 
+							 copy, *csump, &err);
 
 			len   -= copy + partial_cnt;
 			kdata += copy + partial_cnt;
@@ -241,14 +235,6 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 		u8 *base = iov->iov_base;
 		unsigned int copy = min(len, iov->iov_len);
 
-		/* FIXME: more sanity checking is needed here, because
-                 * the iovs are copied from the user.
-		 */
-		if (base == NULL) {
-			printk(KERN_DEBUG "%s: iov too short\n",current->comm);
-			return -EINVAL;
-		}
-		
 		/* There is a remnant from previous iov. */
 		if (partial_cnt)
 		{
@@ -289,7 +275,7 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 		if (copy == 0)
 			break;
 
-		csum = csum_partial_copy_from_user(base, kdata, copy, csum, &err);
+		csum = csum_and_copy_from_user(base, kdata, copy, csum, &err);
 		len   -= copy + partial_cnt;
 		kdata += copy + partial_cnt;
 		iov++;

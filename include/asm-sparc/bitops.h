@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.47 1997/05/14 20:47:56 davem Exp $
+/* $Id: bitops.h,v 1.48 1997/12/18 02:44:06 ecd Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,6 +9,7 @@
 #define _SPARC_BITOPS_H
 
 #include <linux/kernel.h>
+#include <asm/byteorder.h>
 
 #ifndef __KERNEL__
 
@@ -335,12 +336,6 @@ extern __inline__ int test_le_bit(int nr, __const__ void * addr)
 
 #define find_first_zero_le_bit(addr, size) \
         find_next_zero_le_bit((addr), (size), 0)
-
-extern __inline__ unsigned long __swab32(unsigned long value)
-{
-	return((value>>24) | ((value>>8)&0xff00) |
-	       ((value<<8)&0xff0000) | (value<<24));
-}     
 
 extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long size, unsigned long offset)
 {

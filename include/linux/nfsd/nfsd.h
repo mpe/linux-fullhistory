@@ -111,6 +111,9 @@ int		nfsd_statfs(struct svc_rqst *, struct svc_fh *,
 int		nfsd_notify_change(struct inode *, struct iattr *);
 int		nfsd_permission(struct svc_export *, struct dentry *, int);
 
+/* nfsd/nfsctl.c */
+void		nfsd_modcount(struct inode *, int);
+
 /*
  * lockd binding
  */

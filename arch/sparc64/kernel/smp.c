@@ -3,6 +3,7 @@
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/tasks.h>
@@ -23,6 +24,7 @@
 #include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+#include <asm/uaccess.h>
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
@@ -346,7 +348,7 @@ static void smp_cross_call_avoidance(struct mm_struct *mm)
 	spin_lock(&scheduler_lock);
 	get_new_mmu_context(mm, &tlb_context_cache);
 	mm->cpu_vm_mask = (1UL << smp_processor_id());
-	if(current->tss.current_ds) {
+	if(segment_eq(current->tss.current_ds,USER_DS)) {
 		u32 ctx = mm->context & 0x1fff;
 
 		current->tss.ctx = ctx;
@@ -473,6 +475,7 @@ void smp_penguin_jailcell(void)
 
 static inline void sparc64_do_profile(unsigned long pc)
 {
+#ifdef CONFIG_PROFILE
 	if(prof_buffer && current->pid) {
 		extern int _stext;
 
@@ -483,6 +486,7 @@ static inline void sparc64_do_profile(unsigned long pc)
 			pc = prof_len - 1;
 		atomic_inc((atomic_t *)&prof_buffer[pc]);
 	}
+#endif
 }
 
 static unsigned long real_tick_offset, current_tick_offset;
@@ -510,7 +514,7 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 				update_one_process(current, 1, user, !user);
 				if(--current->counter < 0) {
 					current->counter = 0;
-					resched_force();
+					need_resched = 1;
 				}
 
 				if(user) {

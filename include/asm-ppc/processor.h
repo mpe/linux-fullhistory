@@ -1,6 +1,8 @@
 #ifndef __ASM_PPC_PROCESSOR_H
 #define __ASM_PPC_PROCESSOR_H
 
+#include <linux/config.h>
+
 #include <asm/ptrace.h>
 #include <asm/residual.h>
 
@@ -47,33 +49,128 @@
 #define HID0_DCI	(1<<10)		/* Data Cache Invalidate */
 #define HID0_SIED	(1<<7)		/* Serial Instruction Execution [Disable] */
 #define HID0_BHTE	(1<<2)		/* Branch History Table Enable */
+#define HID0_BTCD	(1<<1)		/* Branch target cache disable */
 
 /* fpscr settings */
 #define FPSCR_FX        (1<<31)
 #define FPSCR_FEX       (1<<30)
 
-#define _MACH_Motorola 1 /* motorola prep */
-#define _MACH_IBM      2 /* ibm prep */
-#define _MACH_Pmac     4 /* pmac or pmac clone (non-chrp) */
-#define _MACH_chrp     8 /* chrp machine */
+#define _MACH_prep     1
+#define _MACH_Pmac     2 /* pmac or pmac clone (non-chrp) */
+#define _MACH_chrp     4 /* chrp machine */
+
+/* see residual.h for these */
+#define _PREP_Motorola 0x01  /* motorola prep */
+#define _PREP_Firm     0x02  /* firmworks prep */
+#define _PREP_IBM      0x00  /* ibm prep */
+#define _PREP_Bull     0x03  /* bull prep */
+
+#define _GLOBAL(n)\
+	.globl n;\
+n:
+
+#define	TBRU	269	/* Time base Upper/Lower (Reading) */
+#define	TBRL	268
+#define TBWU	284	/* Time base Upper/Lower (Writing) */
+#define TBWL	285
+#define	XER	1
+#define LR	8
+#define CTR	9
+#define HID0	1008	/* Hardware Implementation */
+#define PVR	287	/* Processor Version */
+#define IBAT0U	528	/* Instruction BAT #0 Upper/Lower */
+#define IBAT0L	529
+#define IBAT1U	530	/* Instruction BAT #1 Upper/Lower */
+#define IBAT1L	531
+#define IBAT2U	532	/* Instruction BAT #2 Upper/Lower */
+#define IBAT2L	533
+#define IBAT3U	534	/* Instruction BAT #3 Upper/Lower */
+#define IBAT3L	535
+#define DBAT0U	536	/* Data BAT #0 Upper/Lower */
+#define DBAT0L	537
+#define DBAT1U	538	/* Data BAT #1 Upper/Lower */
+#define DBAT1L	539
+#define DBAT2U	540	/* Data BAT #2 Upper/Lower */
+#define DBAT2L	541
+#define DBAT3U	542	/* Data BAT #3 Upper/Lower */
+#define DBAT3L	543
+#define DMISS	976	/* TLB Lookup/Refresh registers */
+#define DCMP	977
+#define HASH1	978
+#define HASH2	979
+#define IMISS	980
+#define ICMP	981
+#define RPA	982
+#define SDR1	25	/* MMU hash base register */
+#define DAR	19	/* Data Address Register */
+#define SPR0	272	/* Supervisor Private Registers */
+#define SPRG0   272
+#define SPR1	273
+#define SPRG1   273
+#define SPR2	274
+#define SPRG2   274
+#define SPR3	275
+#define SPRG3   275
+#define DSISR	18
+#define SRR0	26	/* Saved Registers (exception) */
+#define SRR1	27
+#define IABR	1010	/* Instruction Address Breakpoint */
+#define DEC	22	/* Decrementer */
+#define EAR	282	/* External Address Register */
+
+/* Segment Registers */
+#define SR0	0
+#define SR1	1
+#define SR2	2
+#define SR3	3
+#define SR4	4
+#define SR5	5
+#define SR6	6
+#define SR7	7
+#define SR8	8
+#define SR9	9
+#define SR10	10
+#define SR11	11
+#define SR12	12
+#define SR13	13
+#define SR14	14
+#define SR15	15
 
 #ifndef __ASSEMBLY__
+/*
+ * If we've configured for a specific machine set things
+ * up so the compiler can optimize away the other parts.
+ * -- Cort
+ */
+#ifdef CONFIG_MACH_SPECIFIC
+#ifdef CONFIG_PREP
+#define _machine (_MACH_prep)
+#define is_prep (1)
+#endif /* CONFIG_PREP */
+
+#ifdef CONFIG_CHRP
+#define _machine (_MACH_chrp)
+#define is_prep (0)
+#endif /* CONFIG_CHRP */
+
+#ifdef CONFIG_PMAC
+#define _machine (_MACH_Pmac)
+#define is_prep (0)
+#endif /* CONFIG_PMAC */
+
+#else /* CONFIG_MACH_SPECIFIC */
+
 extern int _machine;
 
 /* if we're a prep machine */
-#define is_prep (_machine & (_MACH_Motorola|_MACH_IBM))
-/*
- * if we have openfirmware - pmac/chrp have it implicitly
- * but we have to check residual data to know on prep
- */
-extern __inline__ int have_of(void)
-{
-	if ( (_machine & (_MACH_Pmac|_MACH_chrp)) /*||
-	     ( is_prep && (res.VitalProductData.FirmwareSupplier & OpenFirmware))*/)
-		return 1; 
-	else 
-		return 0;
-}
+#define is_prep (_machine == _MACH_prep)
+
+#endif /* CONFIG_MACH_SPECIFIC */
+
+/* if we have openfirmware */
+extern unsigned long have_of;
+/* what kind of prep workstation we are */
+extern int _prep_type;
 
 struct task_struct;
 void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp);
@@ -100,11 +197,21 @@ void release_thread(struct task_struct *);
  */
 #define TASK_UNMAPPED_BASE     (TASK_SIZE / 8 * 3)
 
+#define COPY_TASK_STRUCT(dst, src) 	\
+do {					\
+	*dst = *src;			\
+} while (0)
+
+typedef struct {
+	unsigned long seg;
+} mm_segment_t;
+
 struct thread_struct {
 	unsigned long	ksp;		/* Kernel stack pointer */
+	unsigned long	*pg_tables;	/* Base of page-table tree */
 	unsigned long	wchan;		/* Event task is sleeping on */
 	struct pt_regs	*regs;		/* Pointer to saved register state */
-	unsigned long   fs;		/* for get_fs() validation */
+	mm_segment_t	fs;		/* for get_fs() validation */
 	signed long     last_syscall;
 	double		fpr[32];	/* Complete floating point set */
 	unsigned long	fpscr_pad;	/* fpr ... fpscr must be contiguous */
@@ -115,6 +222,7 @@ struct thread_struct {
 
 #define INIT_TSS  { \
 	INIT_SP, /* ksp */ \
+	(unsigned long *) swapper_pg_dir, /* pg_tables */ \
 	0, /* wchan */ \
 	(struct pt_regs *)INIT_SP - 1, /* regs */ \
 	KERNEL_DS, /*fs*/ \

@@ -523,21 +523,21 @@ static void bt848_set_size(struct bttv *btv)
  
 static struct tunertype tuners[] = {
 	{"Temic PAL", TEMIC, PAL,
-		16*140.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2},
+		16*140.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2, 623},
 	{"Philips PAL_I", Philips, PAL_I,
-		16*140.25,16*463.25,0x00,0x00,0x00,0x00,0x00},
+		16*140.25,16*463.25,0x00,0x00,0x00,0x00,0x00, 623},
 	{"Philips NTSC", Philips, NTSC,
-		16*157.25,16*451.25,0xA0,0x90,0x30,0x8e,0xc0},
+		16*157.25,16*451.25,0xA0,0x90,0x30,0x8e,0xc0, 732},
 	{"Philips SECAM", Philips, SECAM,
-		16*168.25,16*447.25,0xA3,0x93,0x33,0x8e,0xc0},
+		16*168.25,16*447.25,0xA3,0x93,0x33,0x8e,0xc0, 623},
 	{"NoTuner", NoTuner, NOTUNER,
-		0        ,0        ,0x00,0x00,0x00,0x00,0x00},
+		0        ,0        ,0x00,0x00,0x00,0x00,0x00, 0},
 	{"Philips PAL", Philips, PAL,
-		16*168.25,16*447.25,0xA0,0x90,0x30,0x8e,0xc0},
+		16*168.25,16*447.25,0xA0,0x90,0x30,0x8e,0xc0, 623},
 	{"Temic NTSC", TEMIC, NTSC,
-		16*157.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2},
+		16*157.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2, 732},
 	{"TEMIC PAL_I", TEMIC, PAL_I,
-		0        ,0        ,0x00,0x00,0x00,0x00,0xc2},
+		0        ,0        ,0x00,0x00,0x00,0x00,0xc2, 623},
 }; 
 
 /*
@@ -553,6 +553,7 @@ static void set_freq(struct bttv *btv, ushort freq)
 
 	audio(btv, AUDIO_MUTE);
 	udelay(AUDIO_MUTE_DELAY);
+	
 	if (freq < tun->thresh1) 
 		config = tun->VHF_L;
 	else if (freq < tun->thresh2) 
@@ -560,9 +561,17 @@ static void set_freq(struct bttv *btv, ushort freq)
 	else
 		config = tun->UHF;
 
-	div=freq+623; /* div=((freq+16*38.9));*/
-  
+	if(freq < tun->thresh1)
+		config = tun->VHF_L;
+	else if(freq < tun->thresh2)
+		config = tun->VHF_H;
+	else
+		config=tun->UHF;
+		
+	div=freq+tun->IFPCoff;
+	  
 	div&=0x7fff;
+	
 	if (I2CWrite(btv, btv->tuneradr, (div>>8)&0x7f, div&0xff, 1)<0)
 		return;
 	I2CWrite(btv, btv->tuneradr, tun->config, config, 1);

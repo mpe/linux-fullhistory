@@ -7,16 +7,18 @@
 #include <linux/nvram.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
-#include <asm/cuda.h>
 #include <asm/system.h>
 #include <asm/prom.h>
 
 /*
- * Read and write the non-volatile RAM on PowerMacs.
+ * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
  */
 static int nvram_naddrs;
 static volatile unsigned char *nvram_addr;
 static volatile unsigned char *nvram_data;
+static int nvram_mult;
+
+#define NVRAM_SIZE	0x2000	/* 8kB of non-volatile RAM */
 
 void pmac_nvram_init(void)
 {
@@ -29,8 +31,13 @@ void pmac_nvram_init(void)
 		return;
 	}
 	nvram_naddrs = dp->n_addrs;
-	if (nvram_naddrs == 1) {
+	if (_machine == _MACH_chrp && nvram_naddrs == 1) {
+		/* XXX for now */
+		nvram_data = ioremap(0xf70e0000, NVRAM_SIZE);
+		nvram_mult = 1;
+	} else if (nvram_naddrs == 1) {
 		nvram_data = ioremap(dp->addrs[0].address, dp->addrs[0].size);
+		nvram_mult = (dp->addrs[0].size + NVRAM_SIZE - 1) / NVRAM_SIZE;
 	} else if (nvram_naddrs == 2) {
 		nvram_addr = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_data = ioremap(dp->addrs[1].address, dp->addrs[1].size);
@@ -44,7 +51,7 @@ unsigned char nvram_read_byte(int addr)
 {
 	switch (nvram_naddrs) {
 	case 1:
-		return nvram_data[(addr & 0x1fff) << 4];
+		return nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult];
 	case 2:
 		*nvram_addr = addr >> 5;
 		eieio();
@@ -57,7 +64,7 @@ void nvram_write_byte(unsigned char val, int addr)
 {
 	switch (nvram_naddrs) {
 	case 1:
-		nvram_data[(addr & 0x1fff) << 4] = val;
+		nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult] = val;
 		break;
 	case 2:
 		*nvram_addr = addr >> 5;

@@ -76,7 +76,7 @@
  *              Steve Whitehouse:       Added various other default routines
  *                                      common to several socket families.
  *              Chris Evans     :       Call suser() check last on F_SETOWN
- *		Jay Schulist	:	Added SO_ATTACH_FILTER and SO_DETACH_FILTER.
+ *		Andi Kleen	:	Add sock_kmalloc()/sock_kfree_s()
  *
  * To Fix:
  *
@@ -123,10 +123,6 @@
 #include <net/icmp.h>
 #include <linux/ipsec.h>
 
-#ifdef CONFIG_FILTER
-#include <linux/filter.h>
-#endif
-
 #define min(a,b)	((a)<(b)?(a):(b))
 
 /* Run time adjustable parameters. */
@@ -152,10 +148,6 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	struct linger ling;
 	struct ifreq req;
 	int ret = 0;
-
-#ifdef CONFIG_FILTER
-	struct sock_fprog fprog;
-#endif
 	
 	/*
 	 *	Options without arguments
@@ -287,6 +279,48 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 			
 			
+#ifdef CONFIG_NET_SECURITY			
+		/*
+		 *	FIXME: make these error things that are not
+		 *	available!
+		 */
+		 
+		case SO_SECURITY_AUTHENTICATION:
+			if(val<=IPSEC_LEVEL_DEFAULT)
+			{
+				sk->authentication=val;
+				return 0;
+			}
+			if(net_families[sock->ops->family]->authentication)
+				sk->authentication=val;
+			else
+				return -EINVAL;
+			break;
+			
+		case SO_SECURITY_ENCRYPTION_TRANSPORT:
+			if(val<=IPSEC_LEVEL_DEFAULT)
+			{
+				sk->encryption=val;
+				return 0;
+			}
+			if(net_families[sock->ops->family]->encryption)
+				sk->encryption = val;
+			else
+				return -EINVAL;
+			break;
+			
+		case SO_SECURITY_ENCRYPTION_NETWORK:
+			if(val<=IPSEC_LEVEL_DEFAULT)
+			{
+				sk->encrypt_net=val;
+				return 0;
+			}
+			if(net_families[sock->ops->family]->encrypt_net)
+				sk->encrypt_net = val;
+			else
+				return -EINVAL;
+			break;
+#endif
 		case SO_BINDTODEVICE:
 			/* Bind this socket to a particular device like "eth0",
 			 * as specified in an ifreq structure. If the device
@@ -326,33 +360,6 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			}
 			return 0;
 
-#ifdef CONFIG_FILTER
-		case SO_ATTACH_FILTER:
-			if(optlen < sizeof(struct sock_fprog))
-				return -EINVAL;
-
-			if(copy_from_user(&fprog, optval, sizeof(fprog)))
-			{
-				ret = -EFAULT;
-				break;
-			}
-
-			ret = sk_attach_filter(&fprog, sk);
-			break;
-
-		case SO_DETACH_FILTER:
-                        if(sk->filter)
-			{
-				fprog.filter = sk->filter_data;
-				kfree_s(fprog.filter, (sizeof(fprog.filter) * sk->filter));
-				sk->filter_data = NULL;
-				sk->filter = 0;
-				return 0;
-			}
-			else
-				return -EINVAL;
-			break;
-#endif
 
 		/* We implement the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */
@@ -583,6 +590,40 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 	return NULL;
 }
 
+void *sock_kmalloc(struct sock *sk, int size, int priority)
+{
+	void *mem = NULL;
+	/* Always use wmem.. */
+	if (atomic_read(&sk->wmem_alloc)+size < sk->sndbuf) {
+		/* First do the add, to avoid the race if kmalloc
+ 		 * might sleep.
+		 */
+		atomic_add(size, &sk->wmem_alloc);
+		mem = kmalloc(size, priority);
+		if (mem) {
+			/* Recheck because kmalloc might sleep */
+			if (atomic_read(&sk->wmem_alloc)+size < sk->sndbuf)
+				return mem; 
+			kfree_s(mem, size);
+		} 
+		atomic_sub(size, &sk->wmem_alloc);
+	}
+	return mem;
+}
+
+void sock_kfree_s(struct sock *sk, void *mem, int size)
+{
+#if 1 /* Debug */
+	if (atomic_read(&sk->wmem_alloc) < size) {
+		printk(KERN_DEBUG "sock_kfree_s: mem not accounted.\n");
+		return;
+	}
+#endif
+	kfree_s(mem, size); 
+	atomic_sub(size, &sk->wmem_alloc);
+	sk->write_space(sk);
+}
+
 
 /* FIXME: this is insane. We are trying suppose to be controlling how
  * how much space we have for data bytes, not packet headers.
@@ -621,7 +662,7 @@ unsigned long sock_wspace(struct sock *sk)
 	if (sk != NULL) {
 		if (sk->shutdown & SEND_SHUTDOWN)
 			return(0);
-		if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf)
+		if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf) 
 			return(0);
 		return sk->sndbuf - atomic_read(&sk->wmem_alloc);
 	}
@@ -1003,8 +1044,8 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	init_timer(&sk->timer);
 	
 	sk->allocation	=	GFP_KERNEL;
-	sk->rcvbuf	=	sysctl_rmem_default*2;
-	sk->sndbuf	=	sysctl_wmem_default*2;
+	sk->rcvbuf	=	sysctl_rmem_default;
+	sk->sndbuf	=	sysctl_wmem_default;
 	sk->state 	= 	TCP_CLOSE;
 	sk->zapped	=	1;
 	sk->socket	=	sock;

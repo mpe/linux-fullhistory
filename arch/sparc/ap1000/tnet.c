@@ -613,7 +613,7 @@ void tnet_send_ip(int cid,struct sk_buff *skb)
 
 static void reschedule(void)
 {
-	resched_force();
+	need_resched = 1;
 	mark_bh(TQUEUE_BH);
 }
 

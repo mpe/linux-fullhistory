@@ -1,10 +1,12 @@
-/* $Id: sparc_ksyms.c,v 1.60 1997/06/17 13:25:13 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.61 1997/11/19 07:57:44 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  */
 
+/* Tell string.h we don't want memcpy etc. as cpp defines */
+#define EXPORT_SYMTAB_STROPS
 #define PROMLIB_INTERNAL
 
 #include <linux/config.h>

@@ -46,8 +46,13 @@ relocate:
 	mr	r8,r3
 	lis	r4,start@h
 	ori	r4,r4,start@l
+#if 0	
 	lis	r5,edata@h
 	ori	r5,r5,edata@l
+#else
+	lis	r5,end@h
+	ori	r5,r5,end@l
+#endif		
 	addi	r5,r5,3			/* Round up - just in case */
 	sub	r5,r5,r4		/* Compute # longwords to move */
 	srwi	r5,r5,2

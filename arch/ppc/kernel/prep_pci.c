@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.7 1997/08/23 22:46:02 cort Exp $
+ * $Id: prep_pci.c,v 1.12 1997/10/29 03:35:08 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -30,6 +30,83 @@ unsigned char *Motherboard_map_name;
 unsigned char *Motherboard_routes;
 
 /* Tables for known hardware */   
+
+/* Motorola PowerStackII - Utah */
+static char Utah_pci_IRQ_map[23] =
+{
+        0,   /* Slot 0  - unused */
+        0,   /* Slot 1  - unused */
+        4,   /* Slot 2  - SCSI - NCR825A  */
+        0,   /* Slot 3  - unused */
+        1,   /* Slot 4  - Ethernet - DEC2114x */
+        0,   /* Slot 5  - unused */
+        2,   /* Slot 6  - PCI Card slot #1 */
+        3,   /* Slot 7  - PCI Card slot #2 */
+        4,   /* Slot 8  - PCI Card slot #3 */
+        4,   /* Slot 9  - PCI Bridge */
+             /* added here in case we ever support PCI bridges */
+             /* Secondary PCI bus cards are at slot-9,6 & slot-9,7 */
+        0,   /* Slot 10 - unused */
+        0,   /* Slot 11 - unused */
+        4,   /* Slot 12 - SCSI - NCR825A */
+        0,   /* Slot 13 - unused */
+        2,   /* Slot 14 - enet */
+        0,   /* Slot 15 - unused */
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+};
+
+static char Utah_pci_IRQ_routes[] =
+{
+        0,   /* Line 0 - Unused */
+        9,   /* Line 1 */
+        11,  /* Line 2 */
+        14,  /* Line 3 */
+        15,  /* Line 4 */
+};
+
+/* Motorola PowerStackII - Omaha */
+/* no integrated SCSI or ethernet */
+static char Omaha_pci_IRQ_map[23] =
+{
+        0,   /* Slot 0  - unused */
+        0,   /* Slot 1  - unused */
+        3,   /* Slot 2  - Winbond EIDE */
+        0,   /* Slot 3  - unused */
+        0,   /* Slot 4  - unused */
+        0,   /* Slot 5  - unused */
+        1,   /* Slot 6  - PCI slot 1 */
+        2,   /* Slot 7  - PCI slot 2  */
+        3,   /* Slot 8  - PCI slot 3 */
+        4,   /* Slot 9  - PCI slot 4 */ /* needs indirect access */
+        0,   /* Slot 10 - unused */
+        0,   /* Slot 11 - unused */
+        0,   /* Slot 12 - unused */
+        0,   /* Slot 13 - unused */
+        0,   /* Slot 14 - unused */
+        0,   /* Slot 15 - unused */
+        1,   /* Slot 16  - PCI slot 1 */
+        2,   /* Slot 17  - PCI slot 2  */
+        3,   /* Slot 18  - PCI slot 3 */
+        4,   /* Slot 19  - PCI slot 4 */ /* needs indirect access */
+        0,
+        0,
+        0,
+};
+
+static char Omaha_pci_IRQ_routes[] =
+{
+        0,   /* Line 0 - Unused */
+        9,   /* Line 1 */
+        11,  /* Line 2 */
+        14,  /* Line 3 */
+        15   /* Line 4 */
+};
 
 /* Motorola PowerStack */
 static char Blackhawk_pci_IRQ_map[16] =
@@ -323,59 +400,13 @@ prep_pcibios_write_config_byte (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int prep_pcibios_find_device (unsigned short vendor, unsigned short device_id,
-			   unsigned short index, unsigned char *bus,
-			   unsigned char *devfn)
-{
-    unsigned int curr = 0;
-    struct pci_dev *dev;
-/*printk("pcibios_find_device(): vendor %04x devid %04x index %d\n",    
-       vendor,device_id,index);*/
-    for (dev = pci_devices; dev; dev = dev->next) {
-/*printk("   dev->vendor %04x dev->device %04x\n",
-       dev->vendor,dev->device);*/
-	if (dev->vendor == vendor && dev->device == device_id) {
-	    if (curr == index) {
-		*devfn = dev->devfn;
-		*bus = dev->bus->number;
-		return PCIBIOS_SUCCESSFUL;
-	    }
-	    ++curr;
-	}
-    }
-    return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-/*
- * Given the class, find the n'th instance of that device
- * in the system.
- */
-int prep_pcibios_find_class (unsigned int class_code, unsigned short index,
-			  unsigned char *bus, unsigned char *devfn)
-{
-    unsigned int curr = 0;
-    struct pci_dev *dev;
-
-    for (dev = pci_devices; dev; dev = dev->next) {
-	if (dev->class == class_code) {
-	    if (curr == index) {
-		*devfn = dev->devfn;
-		*bus = dev->bus->number;
-		return PCIBIOS_SUCCESSFUL;
-	    }
-	    ++curr;
-	}
-    }
-    return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
 __initfunc(unsigned long route_pci_interrupts(void))
 {
 	unsigned char *ibc_pirq = (unsigned char *)0x80800860;
 	unsigned char *ibc_pcicon = (unsigned char *)0x80800840;
 	int i;
 	
-	if ( _machine == _MACH_Motorola)
+	if ( _prep_type == _PREP_Motorola)
 	{ 
 		switch (inb(0x800) & 0xF0)
 		{
@@ -385,18 +416,28 @@ __initfunc(unsigned long route_pci_interrupts(void))
 			Motherboard_routes = Genesis_pci_IRQ_routes;
 			break;
 		case 0x20: /* Series E */
-			Motherboard_map_name = "Series E";
+			Motherboard_map_name = "Powerstack (Series E)";
 			Motherboard_map = Comet_pci_IRQ_map;
 			Motherboard_routes = Comet_pci_IRQ_routes;
 			break;
+		case 0x50: /* PowerStackII Pro3000 */
+			Motherboard_map_name = "Omaha (PowerStack II Pro3000)";
+			Motherboard_map = Omaha_pci_IRQ_map;
+			Motherboard_routes = Omaha_pci_IRQ_routes;
+		case 0x60: /* PowerStackII Pro4000 */
+			Motherboard_map_name = "Utah (Powerstack II Pro4000)";
+			Motherboard_map = Utah_pci_IRQ_map;
+			Motherboard_routes = Utah_pci_IRQ_routes;
+			break;
 		case 0x40: /* PowerStack */
 		default: /* Can't hurt, can it? */
+		  
 			Motherboard_map_name = "Blackhawk (Powerstack)";
 			Motherboard_map = Blackhawk_pci_IRQ_map;
 			Motherboard_routes = Blackhawk_pci_IRQ_routes;
 			break;
 		}
-	} else if ( _machine == _MACH_IBM )
+	} else if ( _prep_type == _PREP_IBM )
 	{
 		unsigned char pl_id;
 		

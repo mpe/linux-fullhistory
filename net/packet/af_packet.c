@@ -211,6 +211,11 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct device *dev,  struct pack
 	 *	so that this procedure is noop.
 	 */
 
+	if (skb->pkt_type == PACKET_LOOPBACK) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+
 	skb_push(skb, skb->data-skb->mac.raw);
 
 	/*
@@ -318,16 +323,14 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 	 * notable one here. This should really be fixed at the driver level.
 	 */
 	skb_reserve(skb,(dev->hard_header_len+15)&~15);
-	skb->mac.raw = skb->nh.raw = skb->data;
+	skb->nh.raw = skb->data;
 
 	/* Try to align data part correctly */
 	if (dev->hard_header) {
 		skb->data -= dev->hard_header_len;
 		skb->tail -= dev->hard_header_len;
-		skb->mac.raw = skb->data;
 	}
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
-	skb->arp = 1;	/* No ARP needs doing on this (complete) frame */
 	skb->protocol = proto;
 	skb->dev = dev;
 	skb->priority = sk->priority;
@@ -372,9 +375,10 @@ static int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_ty
 
 	sk = (struct sock *) pt->data;
 
-	/*
-	 *	The SOCK_PACKET socket receives _all_ frames.
-	 */
+	if (skb->pkt_type == PACKET_LOOPBACK) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
 
 	skb->dev = dev;
 
@@ -469,7 +473,7 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 
 	skb_reserve(skb, (dev->hard_header_len+15)&~15);
-	skb->mac.raw = skb->nh.raw = skb->data;
+	skb->nh.raw = skb->data;
 
 	if (dev->hard_header) {
 		if (dev->hard_header(skb, dev, ntohs(proto),
@@ -480,7 +484,6 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			dev_unlock_list();
 			return -EINVAL;
 		}
-		skb->mac.raw = skb->data;
 		if (sock->type != SOCK_DGRAM) {
 			skb->tail = skb->data;
 			skb->len = 0;
@@ -488,7 +491,6 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
-	skb->arp = 1;	/* No ARP needs doing on this (complete) frame */
 	skb->protocol = proto;
 	skb->dev = dev;
 	skb->priority = sk->priority;

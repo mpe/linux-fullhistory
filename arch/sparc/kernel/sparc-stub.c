@@ -1,4 +1,4 @@
-/* $Id: sparc-stub.c,v 1.20 1997/01/06 06:52:31 davem Exp $
+/* $Id: sparc-stub.c,v 1.22 1998/01/07 06:33:48 baccala Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
@@ -323,7 +323,23 @@ mem2hex(char *mem, char *buf, int count)
 	unsigned char ch;
 
 	while (count-- > 0) {
-		ch = *mem++;
+		/* This assembler code is basically:  ch = *mem++;
+		 * except that we use the SPARC/Linux exception table
+		 * mechanism (see how "fixup" works in kernel_mna_trap_fault)
+		 * to arrange for a "return 0" upon a memory fault
+		 */
+		__asm__(
+			"1:	ldub [%0], %1
+				inc %0
+				.section .fixup,#alloc,#execinstr
+				.align 4
+			 2:	retl
+				 mov 0, %%o0
+				.section __ex_table, #alloc
+				.align 4
+				.word 1b, 2b
+				.text"
+					: "=r" (mem), "=r" (ch) : "0" (mem));
 		*buf++ = hexchars[ch >> 4];
 		*buf++ = hexchars[ch & 0xf];
 	}
@@ -345,7 +361,19 @@ hex2mem(char *buf, char *mem, int count)
 
 		ch = hex(*buf++) << 4;
 		ch |= hex(*buf++);
-		*mem++ = ch;
+		/* Assembler code is   *mem++ = ch;   with return 0 on fault */
+		__asm__(
+			"1:	stb %1, [%0]
+				inc %0
+				.section .fixup,#alloc,#execinstr
+				.align 4
+			 2:	retl
+				 mov 0, %%o0
+				.section __ex_table, #alloc
+				.align 4
+				.word 1b, 2b
+				.text"
+					: "=r" (mem) : "r" (ch) , "0" (mem));
 	}
 	return mem;
 }
@@ -387,13 +415,18 @@ set_debug_traps(void)
 
 	/* In case GDB is started before us, ack any packets (presumably
 	 * "$?#xx") sitting there.
+	 *
+	 * I've found this code causes more problems than it solves,
+	 * so that's why it's commented out.  GDB seems to work fine
+	 * now starting either before or after the kernel   -bwb
 	 */
-
+#if 0
 	while((c = getDebugChar()) != '$');
 	while((c = getDebugChar()) != '#');
 	c = getDebugChar(); /* eat first csum byte */
 	c = getDebugChar(); /* eat second csum byte */
 	putDebugChar('+'); /* ack it */
+#endif
 
 	initialized = 1; /* connect! */
 	restore_flags(flags);

@@ -84,7 +84,6 @@ CONFIG_PACKET=y
 # CONFIG_NETLINK is not set
 # CONFIG_FIREWALL is not set
 # CONFIG_NET_ALIAS is not set
-# CONFIG_FILTER is not set
 CONFIG_UNIX=y
 CONFIG_INET=y
 # CONFIG_IP_MULTICAST is not set
@@ -267,7 +266,6 @@ CONFIG_82C710_MOUSE=y
 # CONFIG_RTC is not set
 # CONFIG_VIDEO_DEV is not set
 # CONFIG_VIDEO_BT848 is not set
-# CONFIG_VIDEO_BWQCAM is not set
 # CONFIG_VIDEO_PMS is not set
 # CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set

@@ -1397,7 +1397,6 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 */
 		if(skb)
 		{
-			skb->arp = 1;	/* Resolved */
 			if(aarp_send_ddp(rt->dev, skb, &ta, NULL) == -1)
 				kfree_skb(skb, FREE_READ);
 		}
@@ -1621,7 +1620,6 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		return (err);
 
 	skb->sk  = sk;
-	skb->arp = 1;
 	skb_reserve(skb, ddp_dl->header_length);
 	skb_reserve(skb, dev->hard_header_len);
 

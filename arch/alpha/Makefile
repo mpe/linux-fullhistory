@@ -44,3 +44,6 @@ archclean:
 
 archdep:
 	@$(MAKEBOOT) dep
+
+bootpfile:
+	@$(MAKEBOOT) bootpfile

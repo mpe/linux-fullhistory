@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.34 1997/12/04 03:42:22 freitag Exp $
+ * Version:	$Id: route.c,v 1.36 1997/12/17 20:14:18 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -88,24 +88,28 @@
 #define RTprint(a...)	printk(KERN_DEBUG a)
 
 static struct timer_list rt_flush_timer =
-	{ NULL, NULL, RT_FLUSH_DELAY, 0L, NULL };
+	{ NULL, NULL, 0, 0L, NULL };
+static struct timer_list rt_periodic_timer =
+	{ NULL, NULL, 0, 0L, NULL };
 
 /*
  *	Interface to generic destination cache.
  */
 
-static void ipv4_dst_destroy(struct dst_entry * dst);
 static struct dst_entry * ipv4_dst_check(struct dst_entry * dst, u32);
 static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst,
 					   struct sk_buff *);
+static struct dst_entry * ipv4_negative_advice(struct dst_entry *);
 
 
 struct dst_ops ipv4_dst_ops =
 {
 	AF_INET,
+	__constant_htons(ETH_P_IP),
 	ipv4_dst_check,
 	ipv4_dst_reroute,
-	ipv4_dst_destroy
+	NULL,
+	ipv4_negative_advice
 };
 
 __u8 ip_tos2prio[16] = {
@@ -188,7 +192,7 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				r->u.dst.window,
 				(int)r->u.dst.rtt, r->key.tos,
 				r->u.dst.hh ? atomic_read(&r->u.dst.hh->hh_refcnt) : -1,
-				r->u.dst.hh ? r->u.dst.hh->hh_uptodate : 0,
+				r->u.dst.hh ? (r->u.dst.hh->hh_output == ip_acct_output) : 0,
 				r->rt_spec_dst,
 				i);
 			sprintf(buffer+len,"%-127s\n",temp);
@@ -215,7 +219,7 @@ static void __inline__ rt_free(struct rtable *rt)
 }
 
 
-void ip_rt_check_expire()
+static void rt_check_expire(unsigned long dummy)
 {
 	int i;
 	static int rover;
@@ -262,6 +266,8 @@ void ip_rt_check_expire()
 			rthp = &rth->u.rt_next;
 		}
 	}
+	rt_periodic_timer.expires = now + RT_GC_INTERVAL;
+	add_timer(&rt_periodic_timer);
 }
 
 static void rt_run_flush(unsigned long dummy)
@@ -365,54 +371,6 @@ static void rt_garbage_collect(void)
 	end_bh_atomic();
 }
 
-static int rt_ll_bind(struct rtable *rt)
-{
-	struct neighbour *neigh;
-	struct hh_cache	*hh = NULL;
-
-	if (rt->u.dst.dev && rt->u.dst.dev->hard_header_cache) {
-		neigh = rt->u.dst.neighbour;
-		if (!neigh)
-			neigh = arp_find_neighbour(&rt->u.dst, 1);
-
-		if (neigh) {
-			rt->u.dst.neighbour = neigh;
-			for (hh=neigh->hh; hh; hh = hh->hh_next)
-				if (hh->hh_type == ETH_P_IP)
-					break;
-		}
-
-		if (!hh && (hh = kmalloc(sizeof(*hh), GFP_ATOMIC)) != NULL) {
-#if RT_CACHE_DEBUG >= 2
-			extern atomic_t hh_count;
-			atomic_inc(&hh_count);
-#endif
-			memset(hh, 0, sizeof(struct hh_cache));
-			hh->hh_type = ETH_P_IP;
-			atomic_set(&hh->hh_refcnt, 0);
-			hh->hh_next = NULL;
-			if (rt->u.dst.dev->hard_header_cache(&rt->u.dst, neigh, hh)) {
-				kfree(hh);
-#if RT_CACHE_DEBUG >= 2
-				atomic_dec(&hh_count);
-#endif
-				hh = NULL;
-			} else if (neigh) {
-				atomic_inc(&hh->hh_refcnt);
-				hh->hh_next = neigh->hh;
-				neigh->hh = hh;
-			}
-		}
-		if (hh)	{
-			atomic_inc(&hh->hh_refcnt);
-			rt->u.dst.hh = hh;
-			return hh->hh_uptodate;
-		}
-	}
-	return 0;
-}
-
-
 static struct rtable *rt_intern_hash(unsigned hash, struct rtable * rt, u16 protocol)
 {
 	struct rtable	*rth, **rthp;
@@ -444,6 +402,12 @@ static struct rtable *rt_intern_hash(unsigned hash, struct rtable * rt, u16 prot
 		rthp = &rth->u.rt_next;
 	}
 
+	/* Try to bind route ro arp only if it is output
+	   route or unicast forwarding path.
+	 */
+	if (rt->rt_type == RTN_UNICAST || rt->key.iif == 0)
+		arp_bind_neighbour(&rt->u.dst);
+
 	if (atomic_read(&rt_cache_size) >= RT_CACHE_MAX_SIZE)
 		rt_garbage_collect();
 
@@ -459,9 +423,6 @@ static struct rtable *rt_intern_hash(unsigned hash, struct rtable * rt, u16 prot
 #endif
 	rt_hash_table[hash] = rt;
 	atomic_inc(&rt_cache_size);
-
-	if (protocol == ETH_P_IP)
-		rt_ll_bind(rt);
 
 	end_bh_atomic();
 	return rt;
@@ -534,7 +495,11 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 				/* Gateway is different ... */
 				rt->rt_gateway = new_gw;
 
-				if (!rt_ll_bind(rt)) {
+				/* Redirect received -> path was valid */
+				dst_confirm(&rth->u.dst);
+
+				if (!arp_bind_neighbour(&rt->u.dst) ||
+				    !(rt->u.dst.neighbour->nud_state&NUD_VALID)) {
 					ip_rt_put(rt);
 					rt_free(rt);
 					break;
@@ -560,25 +525,21 @@ reject_redirect:
 #endif
 }
 
-
-void ip_rt_advice(struct rtable **rp, int advice)
+static struct dst_entry *ipv4_negative_advice(struct dst_entry *dst)
 {
-	struct rtable *rt;
+	struct rtable *rt = (struct rtable*)dst;
 
-	if (advice)
-		return;
-
-	start_bh_atomic();
-	if ((rt = *rp) != NULL && (rt->rt_flags&RTCF_REDIRECTED)) {
+	if (rt != NULL) {
+		if (dst->obsolete || rt->rt_flags&RTCF_REDIRECTED) {
 #if RT_CACHE_DEBUG >= 1
-		printk(KERN_DEBUG "ip_rt_advice: redirect to %08x/%02x dropped\n", rt->rt_dst, rt->key.tos);
+			printk(KERN_DEBUG "ip_rt_advice: redirect to %08x/%02x dropped\n", rt->rt_dst, rt->key.tos);
 #endif
-		*rp = NULL;
-		ip_rt_put(rt);
-		rt_cache_flush(0);
+			ip_rt_put(rt);
+			rt_cache_flush(0);
+			return NULL;
+		}
 	}
-	end_bh_atomic();
-	return;
+	return dst;
 }
 
 /*
@@ -712,6 +673,9 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 					mtu = guess_mtu(old_mtu);
 				}
 				if (mtu < rth->u.dst.pmtu) {
+					/* New mtu received -> path was valid */
+					dst_confirm(&rth->u.dst);
+
 					rth->u.dst.pmtu = mtu;
 					est_mtu = mtu;
 				}
@@ -721,23 +685,9 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 	return est_mtu;
 }
 
-
-static void ipv4_dst_destroy(struct dst_entry * dst)
-{
-	struct rtable * rt = (struct rtable*)dst;
-	struct hh_cache * hh = rt->u.dst.hh;
-	rt->u.dst.hh = NULL;
-	if (hh && atomic_dec_and_test(&hh->hh_refcnt)) {
-#if RT_CACHE_DEBUG >= 2
-		extern atomic_t hh_count;
-		atomic_dec(&hh_count);
-#endif
-		kfree(hh);
-	}
-}
-
 static struct dst_entry * ipv4_dst_check(struct dst_entry * dst, u32 cookie)
 {
+	dst_release(dst);
 	return NULL;
 }
 
@@ -965,9 +915,9 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 
 	if (skb->protocol != __constant_htons(ETH_P_IP)) {
 		/* Not IP (i.e. ARP). Do not make route for invalid
-		 * destination or if it is redirected.
+		 * destination AND it is not translated destination.
 		 */
-		if (out_dev == in_dev && flags&RTCF_DOREDIRECT)
+		if (out_dev == in_dev && !(flags&RTCF_DNAT))
 			return -EINVAL;
 	}
 
@@ -1007,6 +957,17 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 
 	rth->rt_flags = flags;
 	rth->rt_type = res.type;
+
+#ifdef CONFIG_NET_FASTROUTE
+	if (netdev_fastroute && !(flags&(RTCF_NAT|RTCF_MASQ|RTCF_DOREDIRECT))) {
+		struct device *odev = rth->u.dst.dev;
+		if (odev != dev &&
+		    dev->accept_fastpath &&
+		    odev->mtu >= dev->mtu &&
+		    dev->accept_fastpath(dev, &rth->u.dst) == 0)
+			rth->rt_flags |= RTCF_FAST;
+	}
+#endif
 
 	skb->dst = (struct dst_entry*)rt_intern_hash(hash, rth, ntohs(skb->protocol));
 	return 0;
@@ -1418,6 +1379,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 	u32 src = 0;
 	int err;
 	struct sk_buff *skb;
+	struct rta_cacheinfo ci;
 	u8  *o;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
@@ -1487,6 +1449,12 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 	RTA_PUT(skb, RTA_WINDOW, sizeof(unsigned), &rt->u.dst.window);
 	RTA_PUT(skb, RTA_RTT, sizeof(unsigned), &rt->u.dst.rtt);
 	RTA_PUT(skb, RTA_PREFSRC, 4, &rt->rt_spec_dst);
+	ci.rta_lastuse = jiffies - rt->u.dst.lastuse;
+	ci.rta_used = atomic_read(&rt->u.dst.refcnt);
+	ci.rta_clntref = atomic_read(&rt->u.dst.use);
+	ci.rta_expires = 0;
+	ci.rta_error = rt->u.dst.error;
+	RTA_PUT(skb, RTA_CACHEINFO, sizeof(ci), &ci);
 	rtm->rtm_optlen = skb->tail - o;
 	if (rta->rta_iif) {
 #ifdef CONFIG_IP_MROUTE
@@ -1525,6 +1493,12 @@ __initfunc(void ip_rt_init(void))
 {
 	devinet_init();
 	ip_fib_init();
+	rt_periodic_timer.function = rt_check_expire;
+	/* All the timers, started at system startup tend
+	   to synchronize. Perturb it a bit.
+	 */
+	rt_periodic_timer.expires = jiffies + net_random()%RT_GC_INTERVAL + RT_GC_INTERVAL;
+	add_timer(&rt_periodic_timer);
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {

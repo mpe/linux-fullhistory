@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.10 1997/04/03 08:47:55 davem Exp $
+/* $Id: rtc.c,v 1.11 1997/09/20 20:47:26 davem Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -70,8 +70,7 @@ void set_rtc_time(struct rtc_time *t)
 	restore_flags(flags);
 }
 
-static long long rtc_lseek(struct inode *inode, struct file *file,
-	long long offset, int origin)
+static long long rtc_lseek(struct file *file, long long offset, int origin)
 {
 	return -ESPIPE;
 }

@@ -558,7 +558,7 @@ void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
 /* Reschedule call back. */
 void smp_reschedule_irq(void)
 {
-	resched_force();
+	need_resched = 1;
 }
 
 /* Running cross calls. */
@@ -583,6 +583,8 @@ void smp_stop_cpu_irq(void)
 /* Protects counters touched during level14 ticker */
 spinlock_t ticker_lock = SPIN_LOCK_UNLOCKED;
 
+#ifdef CONFIG_PROFILE
+
 /* 32-bit Sparc specific profiling function. */
 static inline void sparc_do_profile(unsigned long pc)
 {
@@ -601,6 +603,8 @@ static inline void sparc_do_profile(unsigned long pc)
 	}
 }
 
+#endif
+
 volatile unsigned long smp_local_timer_ticks[1+NR_CPUS]={0,};
 
 unsigned int prof_multiplier[NR_CPUS];
@@ -614,8 +618,10 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 	int cpu = smp_processor_id();
 
 	clear_profile_irq(mid_xlate[cpu]);
+#ifdef CONFIG_PROFILE
 	if(!user_mode(regs))
 		sparc_do_profile(regs->pc);
+#endif
 	if(!--prof_counter[cpu]) {
 		int user = user_mode(regs);
 		if(current->pid) {
@@ -623,7 +629,7 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 
 			if(--current->counter < 0) {
 				current->counter = 0;
-				resched_force();
+				need_resched = 1;
 			}
 
 			spin_lock(&ticker_lock);

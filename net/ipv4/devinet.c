@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.14 1997/10/10 22:40:44 davem Exp $
+ *	Version: $Id: devinet.c,v 1.15 1997/12/13 21:52:47 kuznet Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -46,6 +46,9 @@
 #include <linux/notifier.h>
 #include <linux/inetdevice.h>
 #include <linux/igmp.h>
+#ifdef CONFIG_SYSCTL
+#include <linux/sysctl.h>
+#endif
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
@@ -96,8 +99,16 @@ struct in_device *inetdev_init(struct device *dev)
 	inet_dev_count++;
 	memset(in_dev, 0, sizeof(*in_dev));
 	in_dev->dev = dev;
+	if ((in_dev->arp_parms = neigh_parms_alloc(&arp_tbl)) == NULL)
+		in_dev->arp_parms = &arp_tbl.parms;
+#ifdef CONFIG_SYSCTL
+	else
+		in_dev->arp_parms->sysctl_table =
+			neigh_sysctl_register(dev, in_dev->arp_parms, NET_IPV4, NET_IPV4_NEIGH, "ipv4");
+#endif
 	dev->ip_ptr = in_dev;
-	ip_mc_init_dev(in_dev);
+	if (dev->flags&IFF_UP)
+		ip_mc_up(in_dev);
 	return in_dev;
 }
 
@@ -113,6 +124,7 @@ static void inetdev_destroy(struct in_device *in_dev)
 	}
 
 	in_dev->dev->ip_ptr = NULL;
+	neigh_parms_release(&arp_tbl, in_dev->arp_parms);
 	kfree(in_dev);
 }
 
@@ -201,8 +213,10 @@ inet_insert_ifa(struct in_device *in_dev, struct in_ifaddr *ifa)
 		}
 	}
 
-	if (!(ifa->ifa_flags&IFA_F_SECONDARY))
+	if (!(ifa->ifa_flags&IFA_F_SECONDARY)) {
+		net_srandom(ifa->ifa_local);
 		ifap = last_primary;
+	}
 
 	cli();
 	ifa->ifa_next = *ifap;
@@ -704,7 +718,7 @@ static int inet_fill_ifaddr(struct sk_buff *skb, struct in_ifaddr *ifa,
 	ifm = NLMSG_DATA(nlh);
 	ifm->ifa_family = AF_INET;
 	ifm->ifa_prefixlen = ifa->ifa_prefixlen;
-	ifm->ifa_flags = ifa->ifa_flags;
+	ifm->ifa_flags = ifa->ifa_flags|IFA_F_PERMANENT;
 	ifm->ifa_scope = ifa->ifa_scope;
 	ifm->ifa_index = ifa->ifa_dev->dev->ifindex;
 	if (ifa->ifa_prefixlen)
@@ -796,9 +810,9 @@ static struct rtnetlink_link inet_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 	{ inet_rtm_getroute,	inet_dump_fib,		},
 	{ NULL,			NULL,			},
 
-	{ NULL,			NULL,			},
-	{ NULL,			NULL,			},
-	{ NULL,			NULL,			},
+	{ neigh_add,		NULL,			},
+	{ neigh_delete,		NULL,			},
+	{ NULL,			neigh_dump_info,	},
 	{ NULL,			NULL,			},
 
 #ifdef CONFIG_IP_MULTIPLE_TABLES
