@@ -17,7 +17,7 @@
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
 static char *version =
-    "ne.c:v0.99-14g 12/21/93 Donald Becker (becker@super.org)\n";
+    "ne.c:v0.99-14a 12/3/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -25,9 +25,6 @@ static char *version =
 #include <linux/errno.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#ifndef port_read
-#include "iow.h"
-#endif
 
 #include "dev.h"
 #include "8390.h"
@@ -306,11 +303,11 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
     outb_p(ring_offset >> 8, nic_base + EN0_RSARHI);
     outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
     if (ei_status.word16) {
-      port_read(NE_BASE + NE_DATAPORT,buf,count>>1);
+      insw(NE_BASE + NE_DATAPORT,buf,count>>1);
       if (count & 0x01)
 	buf[count-1] = inb(NE_BASE + NE_DATAPORT), xfer_count++;
     } else {
-	port_read_b(NE_BASE + NE_DATAPORT, buf, count);
+	insb(NE_BASE + NE_DATAPORT, buf, count);
     }
 
     /* This was for the ALPHA version only, but enough people have
@@ -385,9 +382,9 @@ ne_block_output(struct device *dev, int count,
 
     outb_p(E8390_RWRITE+E8390_START, nic_base + NE_CMD);
     if (ei_status.word16) {
-	port_write(NE_BASE + NE_DATAPORT, buf, count>>1);
+	outsw(NE_BASE + NE_DATAPORT, buf, count>>1);
     } else {
-	port_write_b(NE_BASE + NE_DATAPORT, buf, count);
+	outsb(NE_BASE + NE_DATAPORT, buf, count);
     }
 
     /* This was for the ALPHA version only, but enough people have

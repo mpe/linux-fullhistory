@@ -33,16 +33,6 @@ static char *version = "3c509.c:pl13t 11/24/93 becker@super.org\n";
 #include "skbuff.h"
 #include "arp.h"
 
-#ifndef port_read
-#include "iow.h"
-#endif
-
-/* These should be in <asm/io.h>. */
-#define port_read_l(port,buf,nr) \
-__asm__("cld;rep;insl": :"d" (port),"D" (buf),"c" (nr):"cx","di")
-#define port_write_l(port,buf,nr) \
-__asm__("cld;rep;outsl": :"d" (port),"S" (buf),"c" (nr):"cx","si")
-
 #ifndef HAVE_ALLOC_SKB
 #define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
 #endif
@@ -415,7 +405,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		outw(skb->len, ioaddr + TX_FIFO);
 		outw(0x00, ioaddr + TX_FIFO);
 		/* ... and the packet rounded to a doubleword. */
-		port_write_l(ioaddr + TX_FIFO, (void *)(skb+1), (skb->len + 3) >> 2);
+		outsl(ioaddr + TX_FIFO, (void *)(skb+1), (skb->len + 3) >> 2);
 	
 		dev->trans_start = jiffies;
 		if (inw(ioaddr + TX_FREE) > 1536) {
@@ -588,7 +578,7 @@ el3_rx(struct device *dev)
 				skb->dev = dev;
 
 				/* 'skb+1' points to the start of sk_buff data area. */
-				port_read_l(ioaddr+RX_FIFO, (void *)(skb+1),
+				insl(ioaddr+RX_FIFO, (void *)(skb+1),
 							(pkt_len + 3) >> 2);
 
 #ifdef HAVE_NETIF_RX

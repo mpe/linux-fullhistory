@@ -429,7 +429,7 @@ fake_volatile:
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
 		p->flags &= ~(PF_PTRACED|PF_TRACESYS);
-		if (task[1])
+		if (task[1] && task[1] != current)
 			p->p_pptr = task[1];
 		else
 			p->p_pptr = task[0];

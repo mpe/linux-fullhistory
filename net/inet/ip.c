@@ -428,21 +428,22 @@ ip_fast_csum(unsigned char * buff, int wlen)
 {
     unsigned long sum = 0;
 
-    if (wlen)
+    if (wlen) {
+    	unsigned long bogus;
 	 __asm__("clc\n"
 		"1:\t"
 		"lodsl\n\t"
-		"adcl %%eax, %0\n\t"
+		"adcl %3, %0\n\t"
 		"decl %2\n\t"
 		"jne 1b\n\t"
 		"adcl $0, %0\n\t"
-		"movl %0, %%eax\n\t"
-		"shrl $16, %%eax\n\t"
-		"addw %%ax, %w0\n\t"
+		"movl %0, %3\n\t"
+		"shrl $16, %3\n\t"
+		"addw %w3, %w0\n\t"
 		"adcw $0, %w0"
-	    : "=r" (sum), "=S" (buff), "=r" (wlen)
-	    : "0"  (sum),  "1" (buff),  "2" (wlen)
-	    : "ax" );
+	    : "=r" (sum), "=S" (buff), "=r" (wlen), "=a" (bogus)
+	    : "0"  (sum),  "1" (buff),  "2" (wlen));
+    }
     return (~sum) & 0xffff;
 }
 
@@ -1266,7 +1267,6 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   }
   
   /* Point into the IP datagram, just past the header. */
-  skb->h.raw += iph->ihl*4;
   hash = iph->protocol & (MAX_INET_PROTOS -1);
   for (ipprot = (struct inet_protocol *)inet_protos[hash];
        ipprot != NULL;
@@ -1305,7 +1305,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	* check the protocol handler's return values here...
 	*/
 	ipprot->handler(skb2, dev, opts_p ? &opt : 0, iph->daddr,
-			(ntohs(iph->tot_len) - (iph->ihl * 4)),
+			ntohs(iph->tot_len),
 			iph->saddr, 0, ipprot);
 
   }

@@ -2934,6 +2934,9 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	DPRINTF((DBG_TCP, "tcp.c: tcp_rcv dev = NULL\n"));
 	return(0);
   }
+  /* Skip IP-Header */
+  len -= skb->h.iph->ihl << 2;
+  skb->h.raw += skb->h.iph->ihl << 2;
   th = skb->h.th;
 
   /* Find the socket. */

@@ -550,6 +550,9 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   struct sock *sk;
   struct udphdr *uh;
 
+  /* Skip IP-Header */
+  len -= skb->h.iph->ihl << 2;
+  skb->h.raw += skb->h.iph->ihl << 2;
   uh = (struct udphdr *) skb->h.uh;
   sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
   if (sk == NULL) 

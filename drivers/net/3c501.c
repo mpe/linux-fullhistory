@@ -38,7 +38,6 @@ static char *version =
 #include <errno.h>
 
 #include "dev.h"
-#include "iow.h"
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"
@@ -321,7 +320,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	inb(TX_STATUS);
 	outb(0x00, RX_BUF_CLR);	/* Set rx packet area to 0. */
 	outw(gp_start, GP_LOW);
-	port_write_b(DATAPORT,buf,skb->len);
+	outsb(DATAPORT,buf,skb->len);
 	outw(gp_start, GP_LOW);
 	outb(AX_XMIT, AX_CMD);		/* Trigger xmit.  */
 	dev->trans_start = jiffies;
@@ -464,7 +463,7 @@ el_receive(struct device *dev)
 	skb->len = pkt_len;
 	skb->dev = dev;
 
-	port_read_b(DATAPORT, (void *)(skb+1), pkt_len);
+	insb(DATAPORT, (void *)(skb+1), pkt_len);
 
 #ifdef HAVE_NETIF_RX
 	    netif_rx(skb);

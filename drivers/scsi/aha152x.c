@@ -333,17 +333,6 @@ All Rights Reserved\r\n\0 \r\n \r\n", 0x1029, 102
 #define SIGNATURE_COUNT (sizeof( signatures ) / sizeof( struct signature ))
 
 
-/* These defines are copied from kernel/blk_drv/hd.c */
-
-#define insw( buf, count, port ) \
-  __asm__ volatile \
-  ("cld;rep;insw": :"d" (port),"D" (buf),"c" (count):"cx","di" )
-
-#define outsw( buf, count, port ) \
-  __asm__ volatile \
-  ("cld;rep;outsw": :"d" (port),"S" (buf),"c" (count):"cx","si")
-
-
 static void do_pause( unsigned amount ) /* Pause for amount*10 milliseconds */
 {
    unsigned long the_time = jiffies + amount; /* 0.01 seconds per jiffy */
@@ -1469,9 +1458,9 @@ void aha152x_intr( int irqno )
           disp_ports();
 #endif
   
-          outsw( &current_SC->cmnd,
-                 COMMAND_SIZE(current_SC->cmnd[0])>>1,
-                 DATAPORT );
+          outsw( DATAPORT,
+                 &current_SC->cmnd,
+                 COMMAND_SIZE(current_SC->cmnd[0])>>1 );
 
 #if defined(DEBUG_CMD)
           printk("FCNT=%d, STCNT=%d, ", GETPORT(FIFOSTAT), GETSTCNT() );
@@ -1763,7 +1752,7 @@ void aha152x_intr( int irqno )
                   {
                     CLRBITS(DMACNTRL0, _8BIT );
                     data_count >>= 1; /* Number of words */
-                    insw( current_SC->SCp.ptr, data_count, DATAPORT );
+                    insw( DATAPORT, current_SC->SCp.ptr, data_count );
 #if defined(DEBUG_DATAI)
 /* show what comes with the last transfer */
                     if(done)
@@ -1892,7 +1881,7 @@ void aha152x_intr( int irqno )
               {
                 CLRBITS(DMACNTRL0, _8BIT );
                 data_count >>= 1; /* Number of words */
-                outsw( current_SC->SCp.ptr, data_count, DATAPORT );
+                outsw( DATAPORT, current_SC->SCp.ptr, data_count );
                 current_SC->SCp.ptr           += 2 * data_count;
                 current_SC->SCp.this_residual -= 2 * data_count;
               }

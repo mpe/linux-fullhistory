@@ -220,7 +220,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg,int local)
   case SOUND_PCM_WRITE_CHANNELS:
     if (local)
       return dsp_set_stereo(arg-1)+1;
-    return IOCTL_OUT (arg, dsp_set_stereo(IOCTL_IN (arg)-1))+1;
+    return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg) - 1) + 1);
     
   case SOUND_PCM_READ_CHANNELS:
     if (local)

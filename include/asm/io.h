@@ -52,6 +52,16 @@ __IN1(s##c) __IN2(s,s1,"") : "=a" (_v) : "i" (port) ,##i ); return _v; } \
 __IN1(s##_p) __IN2(s,s1,"w") : "=a" (_v) : "d" (port) ,##i ); SLOW_DOWN_IO; return _v; } \
 __IN1(s##c_p) __IN2(s,s1,"") : "=a" (_v) : "i" (port) ,##i ); SLOW_DOWN_IO; return _v; }
 
+#define __INS(s) \
+extern inline void ins##s(unsigned short port, void * addr, unsigned long count) \
+{ __asm__ __volatile__ ("cld ; rep ; ins" #s \
+: "=D" (addr), "=c" (count) : "d" (port),"0" (addr),"1" (count)); }
+
+#define __OUTS(s) \
+extern inline void outs##s(unsigned short port, void * addr, unsigned long count) \
+{ __asm__ __volatile__ ("cld ; rep ; outs" #s \
+: "=S" (addr), "=c" (count) : "d" (port),"0" (addr),"1" (count)); }
+
 __IN(b,"b","0" (0))
 __IN(w,"w","0" (0))
 __IN(l,"")
@@ -59,6 +69,14 @@ __IN(l,"")
 __OUT(b,"b",char)
 __OUT(w,"w",short)
 __OUT(l,,int)
+
+__INS(b)
+__INS(w)
+__INS(l)
+
+__OUTS(b)
+__OUTS(w)
+__OUTS(l)
 
 /*
  * Note that due to the way __builtin_constant_p() works, you

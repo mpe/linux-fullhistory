@@ -68,7 +68,7 @@
 /* borrowed from hd.c */
 
 #define READ_DATA(port, buf, nr) \
-__asm__("cld;rep;insb": :"d" (port),"D" (buf),"c" (nr):"cx","di")
+insb(port, buf, nr)
 
 #define SET_TIMER(func, jifs) \
 	((timer_table[MCD_TIMER].expires = jiffies + jifs), \

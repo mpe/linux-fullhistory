@@ -22,6 +22,8 @@
 #define MINIX_SUPER_MAGIC	0x137F		/* original minix fs */
 #define MINIX_SUPER_MAGIC2	0x138F		/* minix fs, 30 char names */
 #define NEW_MINIX_SUPER_MAGIC	0x2468		/* minix V2 - not implemented */
+#define MINIX_VALID_FS		0x0001		/* Clean fs. */
+#define MINIX_ERROR_FS		0x0002		/* fs has errors. */
 
 #define MINIX_INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct minix_inode)))
 
@@ -65,6 +67,7 @@ struct minix_super_block {
 	unsigned short s_log_zone_size;
 	unsigned long s_max_size;
 	unsigned short s_magic;
+	unsigned short s_state;
 };
 
 struct minix_dir_entry {
@@ -100,6 +103,8 @@ extern struct buffer_head * minix_bread(struct inode *, int, int);
 extern void minix_truncate(struct inode *);
 extern void minix_put_super(struct super_block *);
 extern struct super_block *minix_read_super(struct super_block *,void *,int);
+extern void minix_write_super(struct super_block *);
+extern int minix_remount (struct super_block * sb, int * flags, char * data);
 extern void minix_read_inode(struct inode *);
 extern void minix_write_inode(struct inode *);
 extern void minix_put_inode(struct inode *);

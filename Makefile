@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 14
-ALPHA = j
+ALPHA = k
 
 all:	Version zImage
 
@@ -189,8 +189,7 @@ zdisk: zImage
 zlilo: $(CONFIGURE) zImage
 	if [ -f /vmlinuz ]; then mv /vmlinuz /vmlinuz.old; fi
 	cat zImage > /vmlinuz
-	/etc/lilo/install
-
+	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
 tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
 	$(LD) $(LDFLAGS) -T 100000 boot/head.o init/main.o tools/version.o \
@@ -221,6 +220,7 @@ net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
 clean:
+	rm -f kernel/ksyms.lst
 	rm -f core `find . -name '*.[oas]' -print`
 	rm -f core `find . -name 'core' -print`
 	rm -f zImage zSystem.map tools/zSystem tools/system

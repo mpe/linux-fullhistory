@@ -25,6 +25,7 @@
 #include <linux/serial.h>
 #include <linux/interrupt.h>
 #include <linux/config.h>
+#include <linux/major.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
@@ -1580,7 +1581,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	 * If this is a callout device, then just make sure the normal
 	 * device isn't being used.
 	 */
-	if (MAJOR(filp->f_rdev) == 5) {
+	if (MAJOR(filp->f_rdev) == TTYAUX_MAJOR) {
 		if (info->flags & ASYNC_NORMAL_ACTIVE)
 			return -EBUSY;
 		if ((info->flags & ASYNC_CALLOUT_ACTIVE) &&
@@ -1694,7 +1695,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	tty->start = rs_start;
 	tty->hangup = rs_hangup;
 	if ((info->count == 1) && (info->flags & ASYNC_SPLIT_TERMIOS)) {
-		if (MAJOR(filp->f_rdev) == 4) 
+		if (MAJOR(filp->f_rdev) == TTY_MAJOR)
 			*tty->termios = info->normal_termios;
 		else 
 			*tty->termios = info->callout_termios;

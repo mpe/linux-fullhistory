@@ -14,7 +14,7 @@
     C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "lance.c:v0.13s 11/15/93 becker@super.org\n";
+static char *version = "lance.c:v0.14g 12/21/93 becker@super.org\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -30,7 +30,6 @@ static char *version = "lance.c:v0.13s 11/15/93 becker@super.org\n";
 #include <asm/dma.h>
 
 #include "dev.h"
-#include "iow.h"
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"
@@ -145,7 +144,7 @@ tx_full and tbusy flags.
    Reasonable default values are 4 Tx buffers, and 16 Rx buffers.
    That translates to 2 (4 == 2^^2) and 4 (16 == 2^^4). */
 #ifndef LANCE_LOG_TX_BUFFERS
-#define LANCE_LOG_TX_BUFFERS 2
+#define LANCE_LOG_TX_BUFFERS 4
 #define LANCE_LOG_RX_BUFFERS 4
 #endif
 
@@ -224,7 +223,6 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 {
     int *port, ports[] = {0x300, 0x320, 0x340, 0x360, 0};
 
-    printk("lance_init(%#x, %#x).\n", mem_start, mem_end);
     for (port = &ports[0]; *port; port++) {
 	int ioaddr = *port;
 
@@ -336,7 +334,8 @@ static unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
 
 	    dev->irq = autoirq_report(1);
 	    if (dev->irq)
-		printk(", probed IRQ %d, fixed at DMA %d.\n", dev->irq, dev->dma);
+		printk(", probed IRQ %d, fixed at DMA %d.\n",
+		       dev->irq, dev->dma);
 	    else {
 		printk(", failed to detect IRQ line.\n");
 		return mem_start;
@@ -617,13 +616,6 @@ lance_interrupt(int reg_ptr)
     if (csr0 & 0x0200) {	/* Tx-done interrupt */
 	int dirty_tx = lp->dirty_tx;
 
-	if (dirty_tx == lp->cur_tx - TX_RING_SIZE
-	    && dev->tbusy) {
-	    /* The ring is full, clear tbusy. */
-	    dev->tbusy = 0;
-	    mark_bh(INET_BH);
-	}
-
 	while (dirty_tx < lp->cur_tx) {
 	    int entry = dirty_tx & TX_RING_MOD_MASK;
 	    int status = lp->tx_ring[entry].base;
@@ -650,7 +642,7 @@ lance_interrupt(int reg_ptr)
 
 	    /* We don't free the skb if it's a data-only copy in the bounce
 	       buffer.  The address checks here are sorted -- the first test
-	       should always works.  */
+	       should always work.  */
 	    if (databuff >= (void*)(&lp->tx_bounce_buffs[TX_RING_SIZE])
 		|| databuff < (void*)(lp->tx_bounce_buffs)) {
 		struct sk_buff *skb = ((struct sk_buff *)databuff) - 1;
@@ -660,15 +652,21 @@ lance_interrupt(int reg_ptr)
 	    dirty_tx++;
 	}
 
-	lp->dirty_tx = dirty_tx;
-
 #ifndef final_version
 	if (lp->cur_tx - dirty_tx >= TX_RING_SIZE) {
 	    printk("out-of-sync dirty pointer, %d vs. %d.\n",
 		   dirty_tx, lp->cur_tx);
-	    lp->dirty_tx += TX_RING_SIZE;
+	    dirty_tx += TX_RING_SIZE;
 	}
 #endif
+
+	if (dev->tbusy  &&  dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
+	    /* The ring is no longer full, clear tbusy. */
+	    dev->tbusy = 0;
+	    mark_bh(INET_BH);
+	}
+
+	lp->dirty_tx = dirty_tx;
     }
 
     if (csr0 & 0x8000) {

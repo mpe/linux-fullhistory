@@ -44,7 +44,7 @@
 
 
 static struct rtable *rt_base = NULL;
-
+static struct rtable *rt_loopback = NULL;
 
 /* Dump the contents of a routing table entry. */
 static void
@@ -80,6 +80,8 @@ static void rt_del(unsigned long dst)
 			continue;
 		}
 		*rp = r->rt_next;
+		if (rt_loopback == r)
+			rt_loopback = NULL;
 		kfree_s(r, sizeof(struct rtable));
 	} 
 	restore_flags(flags);
@@ -105,6 +107,8 @@ void rt_flush(struct device *dev)
 			continue;
 		}
 		*rp = r->rt_next;
+		if (rt_loopback == r)
+			rt_loopback = NULL;
 		kfree_s(r, sizeof(struct rtable));
 	} 
 	restore_flags(flags);
@@ -216,6 +220,8 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 			continue;
 		}
 		*rp = r->rt_next;
+		if (rt_loopback == r)
+			rt_loopback = NULL;
 		kfree_s(r, sizeof(struct rtable));
 	}
 	/* add the new route */
@@ -227,6 +233,8 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 	}
 	rt->rt_next = r;
 	*rp = rt;
+	if (rt->rt_dev->flags & IFF_LOOPBACK)
+		rt_loopback = rt;
 	restore_flags(cpuflags);
 	return;
 }
@@ -306,41 +314,28 @@ rt_get_info(char *buffer)
   return(pos - buffer);
 }
 
-
 /*
- * rewrote this too.. Maybe somebody can understand it now. Linus
+ * This is hackish, but results in better code. Use "-S" to see why.
  */
+#define early_out ({ goto no_route; 1; })
+
 struct rtable * rt_route(unsigned long daddr, struct options *opt)
 {
 	struct rtable *rt;
-	int type;
 
-  /*
-   * This is a hack, I think. -FvK
-   */
-	if ((type=chk_addr(daddr)) == IS_MYADDR) daddr = my_addr();
-
-  /*
-   * Loop over the IP routing table to find a route suitable
-   * for this packet.  Note that we really should have a look
-   * at the IP options to see if we have been given a hint as
-   * to what kind of path we should use... -FvK
-   */
-  /*
-   * This depends on 'rt_mask' and the ordering set up in 'rt_add()' - Linus
-   */
-	for (rt = rt_base; rt != NULL; rt = rt->rt_next) {
-		if (!((rt->rt_dst ^ daddr) & rt->rt_mask)) {
-			rt->rt_use++;
-			return rt;
-		}
+	for (rt = rt_base; rt != NULL || early_out ; rt = rt->rt_next) {
+		if (!((rt->rt_dst ^ daddr) & rt->rt_mask))
+			break;
 		/* broadcast addresses can be special cases.. */
 		if ((rt->rt_dev->flags & IFF_BROADCAST) &&
-		     rt->rt_dev->pa_brdaddr == daddr) {
-			rt->rt_use++;
-			return(rt);
-		}
+		     rt->rt_dev->pa_brdaddr == daddr)
+			break;
 	}
+	if (daddr == rt->rt_dev->pa_addr)
+		rt = rt_loopback;
+	rt->rt_use++;
+	return rt;
+no_route:
 	return NULL;
 }
 

@@ -25,16 +25,43 @@ void minix_put_inode(struct inode *inode)
 	minix_free_inode(inode);
 }
 
+static void minix_commit_super (struct super_block * sb,
+			       struct minix_super_block * ms)
+{
+	sb->u.minix_sb.s_sbh->b_dirt = 1;
+	sb->s_dirt = 0;
+}
+
+void minix_write_super (struct super_block * sb)
+{
+	struct minix_super_block * ms;
+
+	if (!(sb->s_flags & MS_RDONLY)) {
+		ms = sb->u.minix_sb.s_ms;
+
+		if (ms->s_state & MINIX_VALID_FS)
+			ms->s_state &= ~MINIX_VALID_FS;
+		minix_commit_super (sb, ms);
+	}
+	sb->s_dirt = 0;
+}
+
+
 void minix_put_super(struct super_block *sb)
 {
 	int i;
 
 	lock_super(sb);
+	if (!(sb->s_flags & MS_RDONLY)) {
+		sb->u.minix_sb.s_ms->s_state = sb->u.minix_sb.s_mount_state;
+		sb->u.minix_sb.s_sbh->b_dirt = 1;
+	}
 	sb->s_dev = 0;
 	for(i = 0 ; i < MINIX_I_MAP_SLOTS ; i++)
 		brelse(sb->u.minix_sb.s_imap[i]);
 	for(i = 0 ; i < MINIX_Z_MAP_SLOTS ; i++)
 		brelse(sb->u.minix_sb.s_zmap[i]);
+	brelse (sb->u.minix_sb.s_sbh);
 	unlock_super(sb);
 	return;
 }
@@ -45,10 +72,45 @@ static struct super_operations minix_sops = {
 	minix_write_inode,
 	minix_put_inode,
 	minix_put_super,
-	NULL,
+	minix_write_super,
 	minix_statfs,
-	NULL
+	minix_remount
 };
+
+int minix_remount (struct super_block * sb, int * flags, char * data)
+{
+	struct minix_super_block * ms;
+
+	ms = sb->u.minix_sb.s_ms;
+	if ((*flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY))
+		return 0;
+	if (*flags & MS_RDONLY) {
+		if (ms->s_state & MINIX_VALID_FS ||
+		    !(sb->u.minix_sb.s_mount_state & MINIX_VALID_FS))
+			return 0;
+		/* Mounting a rw partition read-only. */
+		ms->s_state = sb->u.minix_sb.s_mount_state;
+		sb->u.minix_sb.s_sbh->b_dirt = 1;
+		sb->s_dirt = 1;
+		minix_commit_super (sb, ms);
+	}
+	else {
+	  	/* Mount a partition which is read-only, read-write. */
+		sb->u.minix_sb.s_mount_state = ms->s_state;
+		ms->s_state &= ~MINIX_VALID_FS;
+		sb->u.minix_sb.s_sbh->b_dirt = 1;
+		sb->s_dirt = 1;
+
+		if (!(sb->u.minix_sb.s_mount_state & MINIX_VALID_FS))
+			printk ("MINIX-fs warning: remounting unchecked fs, "
+				"running fsck is recommended.\n");
+		else if ((sb->u.minix_sb.s_mount_state & MINIX_ERROR_FS))
+			printk ("MINIX-fs warning: remounting fs with errors, "
+				"running fsck is recommended.\n");
+	}
+	return 0;
+}
+
 
 struct super_block *minix_read_super(struct super_block *s,void *data, 
 				     int silent)
@@ -67,6 +129,9 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 	ms = (struct minix_super_block *) bh->b_data;
+	s->u.minix_sb.s_ms = ms;
+	s->u.minix_sb.s_sbh = bh;
+	s->u.minix_sb.s_mount_state = ms->s_state;
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
 	s->u.minix_sb.s_ninodes = ms->s_ninodes;
@@ -77,7 +142,6 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	s->u.minix_sb.s_log_zone_size = ms->s_log_zone_size;
 	s->u.minix_sb.s_max_size = ms->s_max_size;
 	s->s_magic = ms->s_magic;
-	brelse(bh);
 	if (s->s_magic == MINIX_SUPER_MAGIC) {
 		s->u.minix_sb.s_dirsize = 16;
 		s->u.minix_sb.s_namelen = 14;
@@ -87,9 +151,9 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	} else {
 		s->s_dev = 0;
 		unlock_super(s);
+		brelse(bh);
 		if (!silent)
-			printk("VFS: Can't find a minix filesystem on dev 0x%04x.\n",
-				   dev);
+			printk("VFS: Can't find a minix filesystem on dev 0x%04x.\n", dev);
 		return NULL;
 	}
 	for (i=0;i < MINIX_I_MAP_SLOTS;i++)
@@ -114,21 +178,34 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 			brelse(s->u.minix_sb.s_zmap[i]);
 		s->s_dev=0;
 		unlock_super(s);
+		brelse(bh);
 		printk("MINIX-fs: bad superblock or unable to read bitmaps\n");
 		return NULL;
 	}
 	set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
 	set_bit(0,s->u.minix_sb.s_zmap[0]->b_data);
+	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
 	s->s_op = &minix_sops;
 	s->s_mounted = iget(s,MINIX_ROOT_INO);
-	unlock_super(s);
 	if (!s->s_mounted) {
 		s->s_dev = 0;
+		brelse(bh);
 		printk("MINIX-fs: get root inode failed\n");
 		return NULL;
 	}
+	if (!(s->s_flags & MS_RDONLY)) {
+		ms->s_state &= ~MINIX_VALID_FS;
+		bh->b_dirt = 1;
+		s->s_dirt = 1;
+	}
+	if (!(s->u.minix_sb.s_mount_state & MINIX_VALID_FS))
+		printk ("MINIX-fs: mounting unchecked file system, "
+			"running fsck is recommended.\n");
+ 	else if (s->u.minix_sb.s_mount_state & MINIX_ERROR_FS)
+		printk ("MINIX-fs: mounting file system with errors, "
+			"running fsck is recommended.\n");
 	return s;
 }
 

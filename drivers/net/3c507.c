@@ -50,7 +50,6 @@ static char *version =
 #include <memory.h>
 
 #include "dev.h"
-#include "iow.h"
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"

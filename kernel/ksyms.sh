@@ -10,7 +10,7 @@
 #
 #
 
-trap "rm -f ksyms.tmp ksyms.lst" 0 1 2 
+trap "rm -f ksyms.tmp ksyms.lst" 1 2 
 
 sed -e '/^#/d' -e '/^[	 ]*$/d' ksyms.lst | sort > ksyms.tmp
 
@@ -27,7 +27,7 @@ awk 'BEGIN {stringloc = 0}
 echo '
 strings:'
 awk '{print "	.ascii \"" $1 "\\0\""}' ksyms.tmp
-
+rm -f ksyms.tmp
 
 
 #

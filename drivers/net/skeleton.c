@@ -57,7 +57,6 @@ static char *version =
 #include <errno.h>
 
 #include "dev.h"
-#include "iow.h"
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"
@@ -425,7 +424,7 @@ net_rx(struct device *dev)
 			memcpy((unsigned char *) (skb + 1), (void*)dev->rmem_start,
 				   pkt_len);
 			/* or */
-			port_read(ioaddr, (void *)(skb+1), (pkt_len + 1) >> 1);
+			insw(ioaddr, (void *)(skb+1), (pkt_len + 1) >> 1);
 
 #ifdef HAVE_NETIF_RX
 			netif_rx(skb);

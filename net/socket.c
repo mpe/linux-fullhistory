@@ -231,6 +231,7 @@ static void
 sock_release(struct socket *sock)
 {
   int oldstate;
+  struct inode *inode;
   struct socket *peersock, *nextsock;
 
   DPRINTF((net_debug, "NET: sock_release: socket 0x%x, inode 0x%x\n",
@@ -251,11 +252,12 @@ sock_release(struct socket *sock)
   peersock = (oldstate == SS_CONNECTED) ? sock->conn : NULL;
   if (sock->ops) sock->ops->release(sock, peersock);
   if (peersock) sock_release_peer(peersock);
+  inode = SOCK_INODE(sock);
   sock->state = SS_FREE;		/* this really releases us */
   wake_up(&socket_wait_free);
 
   /* We need to do this. If sock alloc was called we already have an inode. */
-  iput(SOCK_INODE(sock));
+  iput(inode);
 }
 
 

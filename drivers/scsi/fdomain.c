@@ -325,36 +325,6 @@ struct signature {
 #define SIGNATURE_COUNT (sizeof( signatures ) / sizeof( struct signature ))
 
 
-/* These functions are based on include/asm/io.h */
-
-inline static unsigned short inw( unsigned short port )
-{
-   unsigned short _v;
-   
-   __asm__ volatile ( "inw %1,%0"
-		      :"=a" (_v):"d" ((unsigned short) port) );
-   return _v;
-}
-
-inline static void outw( unsigned short value, unsigned short port )
-{
-   __asm__ volatile ( "outw %0,%1"
-		      : :"a" ((unsigned short) value),
-		      "d" ((unsigned short) port) );
-}
-
-
-/* These defines are copied from kernel/blk_drv/hd.c */
-
-#define insw( buf, count, port ) \
-   __asm__ volatile \
-      ("cld;rep;insw": :"d" (port),"D" (buf),"c" (count):"cx","di" )
-
-#define outsw( buf, count, port ) \
-    __asm__ volatile \
-       ("cld;rep;outsw": :"d" (port),"S" (buf),"c" (count):"cx","si")
-
-
 static void print_banner( void )
 {
    printk( "%s", fdomain_16x0_info() );
@@ -1113,7 +1083,7 @@ void fdomain_16x0_intr( int unused )
 	       --current_SC->SCp.this_residual;
 	    } else {
 	       data_count >>= 1;
-	       outsw( current_SC->SCp.ptr, data_count, Write_FIFO_port );
+	       outsw( Write_FIFO_port, current_SC->SCp.ptr, data_count );
 	       current_SC->SCp.ptr += 2 * data_count;
 	       current_SC->SCp.this_residual -= 2 * data_count;
 	    }
@@ -1146,7 +1116,7 @@ void fdomain_16x0_intr( int unused )
 	       --current_SC->SCp.this_residual;
 	    } else {
 	       data_count >>= 1; /* Number of words */
-	       insw( current_SC->SCp.ptr, data_count, Read_FIFO_port );
+	       insw( Read_FIFO_port, current_SC->SCp.ptr, data_count );
 	       current_SC->SCp.ptr += 2 * data_count;
 	       current_SC->SCp.this_residual -= 2 * data_count;
 	    }

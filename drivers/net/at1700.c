@@ -38,7 +38,6 @@ static char *version =
 #include <memory.h>
 
 #include "dev.h"
-#include "iow.h"
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"
@@ -426,7 +425,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		outb(0x00, ioaddr + TX_INTR);
 		
 		outw(length, ioaddr + DATAPORT);
-		port_write(ioaddr + DATAPORT, buf, (length + 1) >> 1);
+		outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
 
 		lp->tx_queue++;
 		lp->tx_queue_len += length + 2;
@@ -553,7 +552,7 @@ net_rx(struct device *dev)
 			skb->dev = dev;
 
 			/* 'skb+1' points to the start of sk_buff data area. */
-			port_read(ioaddr + DATAPORT, (void *)(skb+1), (pkt_len + 1) >> 1);
+			insw(ioaddr + DATAPORT, (void *)(skb+1), (pkt_len + 1) >> 1);
 
 			if (net_debug > 5) {
 				int i;

@@ -55,6 +55,8 @@
 
 #include "vt_kern.h"
 
+#define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
+
 #define MAX_TTYS 256
 
 struct tty_struct *tty_table[MAX_TTYS];
@@ -239,13 +241,13 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 
 	if (!tty)
 		return;
-	dev = 0x0400 + tty->line;
+	dev = MKDEV(TTY_MAJOR,tty->line);
 	for (filp = first_file, i=0; i<nr_files; i++, filp = filp->f_next) {
-	if (!filp->f_count)
+		if (!filp->f_count)
 			continue;
 		if (filp->f_rdev != dev)
 			continue;
-		if (filp->f_inode && filp->f_inode->i_rdev == 0x0400)
+		if (filp->f_inode && filp->f_inode->i_rdev == CONSOLE_DEV)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
@@ -1031,7 +1033,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	tty = TTY_TABLE(dev);
 	if (!tty || (tty->flags & (1 << TTY_IO_ERROR)))
 		return -EIO;
-	if ((inode->i_rdev != 0x0400) && /* don't stop on /dev/console */
+	if ((inode->i_rdev != CONSOLE_DEV) && /* don't stop on /dev/console */
 	    (tty->pgrp > 0) &&
 	    (current->tty == dev) &&
 	    (tty->pgrp != current->pgrp))
@@ -1056,7 +1058,7 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 	struct tty_struct * tty;
 
 	dev = file->f_rdev;
-	is_console = (inode->i_rdev == 0x0400);
+	is_console = (inode->i_rdev == CONSOLE_DEV);
 	if (MAJOR(dev) != TTY_MAJOR) {
 		printk("tty_write: pseudo-major != TTY_MAJOR\n");
 		return -EINVAL;
@@ -1396,7 +1398,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 		tty->session = current->session;
 		tty->pgrp = current->pgrp;
 	}
-	filp->f_rdev = 0x0400 | minor; /* Set it to something normal */
+	filp->f_rdev = MKDEV(TTY_MAJOR,minor); /* Set it to something normal */
 	return 0;
 }
 

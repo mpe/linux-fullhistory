@@ -85,12 +85,6 @@ static struct hd_struct hd[MAX_HD<<6]={{0,0},};
 static int hd_sizes[MAX_HD<<6] = {0, };
 static int hd_blocksizes[MAX_HD<<6] = {0, };
 
-#define port_read(port,buf,nr) \
-__asm__("cld;rep;insw": :"d" (port),"D" (buf),"c" (nr):"cx","di")
-
-#define port_write(port,buf,nr) \
-__asm__("cld;rep;outsw": :"d" (port),"S" (buf),"c" (nr):"cx","si")
-
 #if (HD_DELAY > 0)
 unsigned long read_timer(void)
 {
@@ -339,7 +333,7 @@ static void read_intr(void)
 	do_hd_request();
 	return;
 ok_to_read:
-	port_read(HD_DATA,CURRENT->buffer,256);
+	insw(HD_DATA,CURRENT->buffer,256);
 	CURRENT->errors = 0;
 	CURRENT->buffer += 512;
 	CURRENT->sector++;
@@ -398,7 +392,7 @@ ok_to_write:
 		end_request(1);
 	if (i > 0) {
 		SET_INTR(&write_intr);
-		port_write(HD_DATA,CURRENT->buffer,256);
+		outsw(HD_DATA,CURRENT->buffer,256);
 		sti();
 	} else {
 #if (HD_DELAY > 0)
@@ -508,7 +502,7 @@ repeat:
 			bad_rw_intr();
 			goto repeat;
 		}
-		port_write(HD_DATA,CURRENT->buffer,256);
+		outsw(HD_DATA,CURRENT->buffer,256);
 		sti();
 		return;
 	}

@@ -49,6 +49,7 @@ extern unsigned long file_table_init(unsigned long start, unsigned long end);
 
 #define MAJOR(a) (int)((unsigned short)(a) >> 8)
 #define MINOR(a) (int)((unsigned short)(a) & 0xFF)
+#define MKDEV(a,b) ((int)((((a) & 0xff) << 8) | ((b) & 0xff)))
 
 #ifndef NULL
 #define NULL ((void *) 0)

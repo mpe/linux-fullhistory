@@ -748,8 +748,10 @@ static void show_task(int nr,struct task_struct * p)
 		printk(stat_nam[p->state]);
 	else
 		printk(" ");
-	/* this prints bogus values for the current process */
-	printk(" %08lX ", ((unsigned long *)p->tss.esp)[2]);
+	if (p == current)
+		printk(" current  ");
+	else
+		printk(" %08lX ", ((unsigned long *)p->tss.esp)[3]);
 	printk("%5lu %5d %6d ",
 		p->tss.esp - p->kernel_stack_page, p->pid, p->p_pptr->pid);
 	if (p->p_cptr)

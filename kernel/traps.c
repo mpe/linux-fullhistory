@@ -22,6 +22,12 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
+static inline void console_verbose(void)
+{
+	extern int console_loglevel;
+	console_loglevel = 15;
+}
+
 #define DO_ERROR(trapnr, signr, str, name, tsk) \
 asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
@@ -78,6 +84,7 @@ asmlinkage void alignment_check(void);
 	if ((regs->eflags & VM_MASK) || (3 & regs->cs) == 3)
 		return;
 
+	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
 	printk("EIP:    %04x:%08lx\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",

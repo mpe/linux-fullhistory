@@ -16,7 +16,6 @@
  *		Fred Baumgarten, <dc6iq@insu1.etec.uni-kalrsruhe.de>
  *
  * Fixes:
- *		Andriews Brouwer	:	Comment errors
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

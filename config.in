@@ -82,7 +82,7 @@ bool 'AT1700 support' CONFIG_AT1700 n
 #bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 #bool 'Cabletron E21xx support (not recommended)' CONFIG_E21 n
 bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
-#bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
+bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
 fi
 *
 bool 'Sony CDU31A CDROM driver support' CONFIG_CDU31A n
