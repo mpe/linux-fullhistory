@@ -35,7 +35,8 @@ struct inode_operations nfs_symlink_inode_operations = {
 	nfs_readlink,		/* readlink */
 	nfs_follow_link,	/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static int nfs_follow_link(struct inode *dir, struct inode *inode,

@@ -63,5 +63,6 @@ struct inode_operations isofs_blkdev_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	isofs_bmap,		/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };

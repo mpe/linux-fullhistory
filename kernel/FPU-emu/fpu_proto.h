@@ -36,6 +36,7 @@ extern void fp_nop(void);
 extern void fld_i_(void);
 extern void fxch_i(void);
 extern void ffree_(void);
+extern void ffreep(void);
 extern void fst_i_(void);
 extern void fstp_i(void);
 /* fpu_entry.c */

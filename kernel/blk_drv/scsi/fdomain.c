@@ -1,8 +1,8 @@
 /* fdomain.c -- Future Domain TMC-1660/TMC-1680 driver
  * Created: Sun May  3 18:53:19 1992 by faith
- * Revised: Wed Dec  9 21:34:53 1992 by root
+ * Revised: Sun Jan 10 01:23:29 1993 by root
  * Author: Rickard E. Faith, faith@cs.unc.edu
- * Copyright 1992 Rickard E. Faith
+ * Copyright 1992, 1993 Rickard E. Faith
  *
  * $Log$
 
@@ -16,29 +16,88 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
 
- * WARNING: THIS IS A BETA VERSION!
- *          USE AT YOUR OWN RISK!
- *          BACKUP YOUR SYSTEM BEFORE USING!
+ **************************************************************************
 
- * I would like to thank Maxtor, whose *free* 206 page manual on the LXT
- * drives was very helpful: "LXT SCSI Products: Specifications and OEM
- * Technical Manual (Revision B/September 1991)"
 
- * I wish that I could thank Future Domain for the necessary documentation,
- * but I can't.  I used the $25 "TMC-1800 SCSI Chip Specification" document
- * (FDC-1800T), which documents the *chip* and not the board.  Without it,
- * I would have been totally lost, but it would have been nice to have some
- * example source.  (The DOS BIOS source cost $250 and the UN*X driver
- * source was $750 [both required a non-disclosure agreement].  Ever wonder
- * why there are no freely available Future Domain drivers?)
+ DESCRIPTION:
 
- * Thanks to: Todd Carrico (todd@wutc.wustl.edu), Dan Poirier
- * (poirier@cs.unc.edu ), Ken Corey (kenc@sol.acs.unt.edu), C. de Bruin
- * (bruin@dutiba.tudelft.nl) and Sakari Aaltonen (sakaria@vipunen.hit.fi)
- * for alpha testing.  Also thanks to Drew Eckhardt (drew@cs.colorado.edu)
- * and Eric Youngdale (eric@tantalus.nrl.navy.mil) for answering questions,
- * and to Doug Hoffman (hoffman@cs.unc.edu) for lending me SCSI devices to
- * make the driver more robust. */
+ This is the Linux low-level SCSI driver for Future Domain TMC-1660/1680
+ and TMC-1670 SCSI host adapters.
+
+
+ REFERENCES USED:
+
+ "TMC-1800 SCSI Chip Specification (FDC-1800T)", Future Domain Corporation,
+ 1990.
+
+ "LXT SCSI Products: Specifications and OEM Technical Manual (Revision
+ B/September 1991)", Maxtor Corporation, 1991.
+
+ "7213S product Manual (Revision P3)", Maxtor Corporation, 1992.
+
+ Private communications, Drew Eckhardt (drew@cs.colorado.edu) and Eric
+ Youngdale (eric@tantalus.nrl.navy.mil), 1992.
+
+
+ NOTES ON REFERENCES:
+
+ The Maxtor manuals were free.  Maxtor telephone technical support is
+ great!
+
+ The Future Domain manual is $25.  It documents the chip, not the TMC-16x0
+ boards, so some information I had to guess at.  Future Domain sells DOS
+ BIOS source for $250 and the UN*X driver source was $750, but these
+ require a non-disclosure agreement, so even if I could afford them, they
+ would *not* have been useful for writing this publically distributable
+ driver.  Future Domain technical support has provided some information on
+ the phone, and this has been somewhat helpful.
+
+
+ ALPHA TESTERS:
+
+ Todd Carrico (todd@wutc.wustl.edu), Dan Poirier (poirier@cs.unc.edu ), Ken
+ Corey (kenc@sol.acs.unt.edu), C. de Bruin (bruin@dutiba.tudelft.nl),
+ Sakari Aaltonen (sakaria@vipunen.hit.fi), John Rice
+ (rice@xanth.cs.odu.edu), and Brad Yearwood (brad@optilink.com).
+
+
+ NOTES ON USER DEFINABLE OPTIONS:
+
+ DEBUG: This turns on the printing of various debug informaiton.
+
+ ENABLE_PARITY: This turns on SCSI parity checking.  With the current
+ driver, all attached devices must support SCSI parity.  If none of your
+ devices support parity, then you can probably get the driver to work by
+ turning this option off.  I have no way of testing this, however.
+
+ QUEUE: Enable "command queueing."  This is supported by the higher level
+ SCSI code, and allows the kernel to continue to schedule tasks while the
+ SCSI request is pending.  If this option is turned off, then everything
+ will "freeze" during SCSI requests, and system performance will become
+ unbearable.  Later, this will allow multiple outstanding SCSI requests.  I
+ have received reports that if this option is turned off, the driver will
+ no longer function correctly.  I have not had time to track down this bug,
+ since I hope to make the driver work for everyone with QUEUE on.
+
+ FIFO_COUNT: The host adapter has an 8K cache.  When this many 512 byte
+ blocks are filled by the SCSI device, an interrupt will be raised.
+ Therefore, this could be as low as 0, or as high as 16.  Note, however,
+ that values which are too high or too low seem to prevent any interrupts
+ from occuring, and thereby lock up the machine.  I have found that 2 is a
+ good number, but throughput may be increased by changing this value to
+ values which are close to 2.  Please let me know if you try any different
+ values.
+
+ DO_DETECT: This activates some old scan code which was needed before the
+ high level drivers got fixed.  If you are having toruble with the driver,
+ turning this on should not hurt, and might help.  Please let me know if
+ this is the case, since this code will be removed from future drivers.
+
+ RESELECTION: DO *NOT* USE THIS OPTION!  This turns on SCSI device
+ disconnect and reselection, which does not work at this time.  When I get
+ this working, it will support multiple outstanding SCSI commands.
+
+ **************************************************************************/
 
 #include <linux/sched.h>
 #include <asm/io.h>
@@ -49,14 +108,14 @@
 #include <asm/system.h>
 #include <linux/errno.h>
 
-#define VERSION          "3.2"	/* Change with each revision */
+#define VERSION          "3.3"	/* Change with each revision */
 
 /* START OF USER DEFINABLE OPTIONS */
 
 #define DEBUG            1	/* Enable debugging output */
 #define ENABLE_PARITY    1	/* Enable SCSI Parity */
 #define QUEUE            1	/* Enable command queueing */
-#define FIFO_COUNT       2      /* Number of 512 byte blocks before INTR */
+#define FIFO_COUNT       2	/* Number of 512 byte blocks before INTR */
 #define DO_DETECT        0	/* Do device detection here (see scsi.c) */
 #define RESELECTION      0	/* Support RESELECTION PHASE (NOT stable) */
 
@@ -66,8 +125,8 @@
 #define EVERY_ACCESS     0	/* Write a line on every scsi access */
 #define ERRORS_ONLY      1	/* Only write a line if there is an error */
 #define DEBUG_DETECT     0	/* Debug fdomain_16x0_detect() */
-#define DEBUG_MESSAGES   0      /* Debug MESSAGE IN PHASE */
-#define DEBUG_ABORT      1    /* Debug abort() routine */
+#define DEBUG_MESSAGES   0	/* Debug MESSAGE IN PHASE */
+#define DEBUG_ABORT      1	/* Debug abort() routine */
 #else
 #define EVERY_ACCESS     0	/* LEAVE THESE ALONE--CHANGE THE ONES ABOVE */
 #define ERRORS_ONLY      0
@@ -154,19 +213,16 @@ static unsigned short ints[] = { 3, 5, 10, 11, 12, 14, 15, 0 };
 
   READ EVERY WORD, ESPECIALLY THE WORD *NOT*
 
-  This driver works *ONLY* for Future Domain cards using the
-  TMC-1800 chip.  This includes models TMC-1660 and TMC-1680
-  *ONLY*.
+  This driver works *ONLY* for Future Domain cards using the TMC-1800 chip.
+  This includes models TMC-1660, 1670, and 1680 *ONLY*.
 
   The following BIOS signatures have been tried with this driver.  These
   signatures are for boards which do *NOT* work with this driver (but the
   first one should work with the Seagate driver):
 
-  FUTURE DOMAIN COPR. (C) 1986-1989 V6.0A7/28/90
-
-  FUTURE DOMAIN CORP. (C) 1986-1990 V6.0209/18/90
-
-  FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90
+      FUTURE DOMAIN COPR. (C) 1986-1989 V6.0A7/28/90
+      FUTURE DOMAIN CORP. (C) 1986-1990 V6.0209/18/90
+      FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90
 
   */
 
@@ -175,8 +231,10 @@ struct signature {
    int  sig_offset;
    int  sig_length;
 } signatures[] = {
-   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.0 7/28/89", 5, 50 },
-   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800", 5, 37 },
+   /*          1         2         3         4         5         6 */
+   /* 123456789012345678901234567890123456789012345678901234567890 */
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 5, 50 },
+   { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92", 5, 44 },
    /* READ NOTICE ABOVE *BEFORE* YOU WASTE YOUR TIME ADDING A SIGANTURE */
 };
 
@@ -510,7 +568,7 @@ int fdomain_16x0_detect( int hostnum )
 const char *fdomain_16x0_info(void)
 {
    static char buffer[] =
-	 "Future Domain TMC-1660/TMC-1680 SCSI driver version "
+	 "Future Domain TMC-16x0 SCSI driver version "
 	       VERSION
 		     "\n";
    return buffer;

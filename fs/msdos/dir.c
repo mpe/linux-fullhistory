@@ -48,7 +48,8 @@ struct inode_operations msdos_dir_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	msdos_bmap,		/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static int msdos_readdir(struct inode *inode,struct file *filp,

@@ -12,7 +12,9 @@
  * filesystem and type 'ls xyzzy' to turn on debugging.
  */
 
+#if 0
 #define NFS_PROC_DEBUG
+#endif
 
 #include <linux/param.h>
 #include <linux/sched.h>
@@ -24,11 +26,12 @@
 
 #include <netinet/in.h>
 
-#ifdef NFS_PROC_DEBUG
 static int proc_debug = 0;
+
+#ifdef NFS_PROC_DEBUG
 #define PRINTK if (proc_debug) printk
 #else
-#define PRINTK (void)
+#define PRINTK if (0) printk
 #endif
 
 static int *nfs_rpc_header(int *p, int procedure);
@@ -595,22 +598,23 @@ static int *nfs_rpc_verify(int *p)
 	int n;
 
 	p++;
-	if (ntohl(*p++) != RPC_REPLY) {
-		printk("not an RPC reply\n");
+	if ((n = ntohl(*p++)) != RPC_REPLY) {
+		printk("nfs_rpc_verify: not an RPC reply: %d\n", n);
 		return 0;
 	}
-	if (ntohl(*p++) != RPC_MSG_ACCEPTED) {
-		printk("RPC call rejected\n");
+	if ((n = ntohl(*p++)) != RPC_MSG_ACCEPTED) {
+		printk("nfs_rpc_verify: RPC call rejected: %d\n", n);
 		return 0;
 	}
 	if ((n = ntohl(*p++)) != RPC_AUTH_NULL && n != RPC_AUTH_UNIX) {
-		printk("reply with unknown RPC authentication type\n");
+		printk("nfs_rpc_verify: bad RPC authentication type: %d\n",
+			n);
 		return 0;
 	}
 	n = ntohl(*p++);
 	p += (n + 3) >> 2;
-	if (ntohl(*p++) != RPC_SUCCESS) {
-		printk("RPC call failed\n");
+	if ((n = ntohl(*p++)) != RPC_SUCCESS) {
+		printk("nfs_rpc_verify: RPC call failed: %d\n", n);
 		return 0;
 	}
 	return p;
@@ -629,39 +633,38 @@ static struct {
 	enum nfs_stat stat;
 	int errno;
 } nfs_errtbl[] = {
-	{ NFS_OK,		0 },
-	{ NFSERR_PERM,		EPERM },
-	{ NFSERR_NOENT,		ENOENT },
-	{ NFSERR_IO,		EIO },
-	{ NFSERR_NXIO,		ENXIO },
-	{ NFSERR_ACCES,		EACCES },
-	{ NFSERR_EXIST,		EEXIST },
-	{ NFSERR_NODEV,		ENODEV },
-	{ NFSERR_NOTDIR,	ENOTDIR },
-	{ NFSERR_ISDIR,		EISDIR },
-	{ NFSERR_FBIG,		EFBIG },
-	{ NFSERR_NOSPC,		ENOSPC },
-	{ NFSERR_ROFS,		EROFS },
-	{ NFSERR_NAMETOOLONG,	ENAMETOOLONG },
-	{ NFSERR_NOTEMPTY,	ENOTEMPTY },
-	{ NFSERR_DQUOT,		EDQUOT },
-	{ NFSERR_STALE,		ESTALE },
-	{ NFSERR_WFLUSH,	EIO },
-	{ -1,			EIO }
+	{ NFS_OK,		0		},
+	{ NFSERR_PERM,		EPERM		},
+	{ NFSERR_NOENT,		ENOENT		},
+	{ NFSERR_IO,		EIO		},
+	{ NFSERR_NXIO,		ENXIO		},
+	{ NFSERR_ACCES,		EACCES		},
+	{ NFSERR_EXIST,		EEXIST		},
+	{ NFSERR_NODEV,		ENODEV		},
+	{ NFSERR_NOTDIR,	ENOTDIR		},
+	{ NFSERR_ISDIR,		EISDIR		},
+	{ NFSERR_FBIG,		EFBIG		},
+	{ NFSERR_NOSPC,		ENOSPC		},
+	{ NFSERR_ROFS,		EROFS		},
+	{ NFSERR_NAMETOOLONG,	ENAMETOOLONG	},
+	{ NFSERR_NOTEMPTY,	ENOTEMPTY	},
+	{ NFSERR_DQUOT,		EDQUOT		},
+	{ NFSERR_STALE,		ESTALE		},
+#ifdef EWFLUSH
+	{ NFSERR_WFLUSH,	EWFLUSH		},
+#endif
+	{ -1,			EIO		}
 };
 
 static int nfs_stat_to_errno(int stat)
 {
-	int errno;
 	int i;
 
-	errno = EIO;
 	for (i = 0; nfs_errtbl[i].stat != -1; i++) {
-		if (nfs_errtbl[i].stat == stat) {
-			errno = nfs_errtbl[i].errno;
-			break;
-		}
+		if (nfs_errtbl[i].stat == stat)
+			return nfs_errtbl[i].errno;
 	}
-	return errno;
+	printk("nfs_stat_to_errno: bad nfs status return value: %d\n", stat);
+	return nfs_errtbl[i].errno;
 }
 

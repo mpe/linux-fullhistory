@@ -107,6 +107,8 @@ extern int last_reset[];
 static struct blist blacklist[] = 
 {{"TANDBERG","TDC 3600","U07"},  /* Locks up if polled for lun != 0 */
    {"SEAGATE","ST296","921"},   /* Responds to all lun */
+   {"SONY","CD-ROM CDU-541","4.3d"},
+   {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(char * response_data){
@@ -427,8 +429,10 @@ Scsi_Cmnd * request_queueable (struct request * req, int index)
   if (req) {
     memcpy(&SCpnt->request, req, sizeof(struct request));
     req->dev = -1;
-  } else
+  } else {
     SCpnt->request.dev = 0xffff; /* Busy, but no request */
+    SCpnt->request.waiting = NULL;  /* And no one is waiting for the device either */
+  };
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
   return SCpnt;
@@ -491,6 +495,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
 	  *reqp = req->next;
 	} else {
 	  SCpnt->request.dev = 0xffff; /* Busy */
+	  SCpnt->request.waiting = NULL;  /* And no one is waiting for this to complete */
 	};
 	sti();
 	break;

@@ -75,9 +75,9 @@ struct proto_ops {
 extern int sock_awaitconn(struct socket *mysock, struct socket *servsock);
 
 #ifdef SOCK_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK (void)
+#define PRINTK(x) /**/
 #endif
 
 #endif /* _KERN_SOCK_H */

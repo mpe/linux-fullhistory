@@ -59,10 +59,11 @@
 #include "arp.h"
 
 #undef ARP_DEBUG
+
 #ifdef  ARP_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 static struct arp_table *arp_table[ARP_TABLE_SIZE] ={NULL, };
@@ -147,33 +148,33 @@ print_arp(struct arp *arp)
   int i;
   unsigned long *lptr;
   unsigned char *ptr;
-  PRINTK ("arp: \n");
+  PRINTK (("arp: \n"));
   if (arp == NULL)
     {
-      PRINTK ("(null)\n");
+      PRINTK (("(null)\n"));
       return;
     }
-  PRINTK ("   hrd = %d\n",net16(arp->hrd));
-  PRINTK ("   pro = %d\n",net16(arp->pro));
-  PRINTK ("   hlen = %d plen = %d\n",arp->hlen, arp->plen);
-  PRINTK ("   op = %d\n", net16(arp->op));
+  PRINTK (("   hrd = %d\n",net16(arp->hrd)));
+  PRINTK (("   pro = %d\n",net16(arp->pro)));
+  PRINTK (("   hlen = %d plen = %d\n",arp->hlen, arp->plen));
+  PRINTK (("   op = %d\n", net16(arp->op)));
   ptr = (unsigned char *)(arp+1);
-  PRINTK ("   sender haddr = ");
+  PRINTK (("   sender haddr = "));
   for (i = 0; i < arp->hlen; i++)
     {
-      PRINTK ("0x%02X ",*ptr++);
+      PRINTK (("0x%02X ",*ptr++));
     }
   lptr = (void *)ptr;
-  PRINTK (" send paddr = %X\n",*lptr);
+  PRINTK ((" send paddr = %X\n",*lptr));
   lptr ++;
   ptr = (void *)lptr;
-  PRINTK ("   destination haddr = ");
+  PRINTK (("   destination haddr = "));
   for (i = 0; i < arp->hlen; i++)
     {
-      PRINTK ("0x%02X ",*ptr++);
+      PRINTK (("0x%02X ",*ptr++));
     }
   lptr = (void *)ptr;
-  PRINTK (" destination paddr = %X\n",*lptr);
+  PRINTK ((" destination paddr = %X\n",*lptr));
 }
 
 static  unsigned char *
@@ -269,7 +270,7 @@ arp_response (struct arp *arp1, struct device *dev)
   skb->arp = 1; /* so the code will know it's not waiting on an arp. */
   skb->sk = NULL;
   skb->next = NULL;
-  PRINTK (">>");
+  PRINTK ((">>"));
   print_arp(arp2);
   /* send it. */
   dev->queue_xmit (skb, dev, 0);
@@ -283,7 +284,7 @@ arp_lookup (unsigned long paddr)
 {
   unsigned long hash;
   struct arp_table *apt;
-  PRINTK ("arp_lookup(paddr=%X)\n", paddr);
+  PRINTK (("arp_lookup(paddr=%X)\n", paddr));
   /* we don't want to arp ourselves. */
   if (my_ip_addr(paddr)) return (NULL);
   hash = net32(paddr) & (ARP_TABLE_SIZE - 1);
@@ -306,7 +307,7 @@ arp_destroy(unsigned long paddr)
   unsigned long hash;
   struct arp_table *apt;
   struct arp_table *lapt;
-  PRINTK ("arp_destroy (paddr=%X)\n",paddr);
+  PRINTK (("arp_destroy (paddr=%X)\n",paddr));
   /* we don't want to destroy are own arp */
   if (my_ip_addr(paddr)) return;
   hash = net32(paddr) & (ARP_TABLE_SIZE - 1);
@@ -369,7 +370,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
    struct arp_table *tbl;
    int ret;
 
-   PRINTK ("<<\n");
+   PRINTK (("<<\n"));
    arp = skb->h.arp;
    print_arp(arp);
 
@@ -427,7 +428,7 @@ arp_snd (unsigned long paddr, struct device *dev, unsigned long saddr)
   struct arp *arp;
   struct arp_table *apt;
   int tmp;
-  PRINTK ("arp_snd (paddr=%X, dev=%X, saddr=%X)\n",paddr, dev, saddr);
+  PRINTK (("arp_snd (paddr=%X, dev=%X, saddr=%X)\n",paddr, dev, saddr));
 
   /* first we build a dummy arp table entry. */
   apt = create_arp (paddr, NULL, 0);
@@ -465,7 +466,7 @@ arp_snd (unsigned long paddr, struct device *dev, unsigned long saddr)
   *arp_targetp(arp) = paddr;
   memcpy (arp_sourceh(arp), dev->dev_addr, dev->addr_len);
   memcpy (arp_targeth(arp), dev->broadcast, dev->addr_len);
-  PRINTK(">>\n");
+  PRINTK((">>\n"));
   print_arp(arp);
   dev->queue_xmit (skb, dev, 0);
 }
@@ -475,8 +476,8 @@ arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	   unsigned long saddr)
 {
   struct arp_table *apt;
-  PRINTK ("arp_find(haddr=%X, paddr=%X, dev=%X, saddr=%X)\n",
-	  haddr, paddr, dev, saddr);
+  PRINTK (("arp_find(haddr=%X, paddr=%X, dev=%X, saddr=%X)\n",
+	  haddr, paddr, dev, saddr));
   if (my_ip_addr (paddr))
     {
       memcpy (haddr, dev->dev_addr, dev->addr_len);

@@ -12,7 +12,13 @@
 #ifndef UTS_NODENAME
 #define UTS_NODENAME "(none)"	/* set by sethostname() */
 #endif
+
+#ifdef CONFIG_M486
+#define UTS_MACHINE "i486"	/* hardware type */
+#else
 #define UTS_MACHINE "i386"	/* hardware type */
+#endif
+
 /*
  * The definitions for UTS_RELEASE and UTS_VERSION are now defined
  * in linux/version.h, and should only be used by linux/version.c

@@ -34,7 +34,8 @@ struct inode_operations proc_link_inode_operations = {
 	proc_readlink,		/* readlink */
 	proc_follow_link,	/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static int proc_follow_link(struct inode * dir, struct inode * inode,
@@ -92,12 +93,22 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 {
 	int i;
+	unsigned int dev,ino;
+	char buf[64];
 
+	i = proc_follow_link(NULL, inode, 0, 0, &inode);
+	if (i)
+		return i;
+	if (!inode)
+		return -EIO;
+	dev = inode->i_dev;
+	ino = inode->i_ino;
 	iput(inode);
-	if (buflen > 3)
-		buflen = 3;
+	i = sprintf(buf,"[%04x]:%u", dev, ino);
+	if (buflen > i)
+		buflen = i;
 	i = 0;
-	while (i++ < buflen)
-		put_fs_byte('-',buffer++);
+	while (i < buflen)
+		put_fs_byte(buf[i++],buffer++);
 	return i;
 }

@@ -129,7 +129,8 @@ repeat:
 	}
 	bh->b_dirt = 1;
 	j += i*8192 + sb->u.minix_sb.s_firstdatazone-1;
-	if (j >= sb->u.minix_sb.s_nzones)
+	if (j < sb->u.minix_sb.s_firstdatazone ||
+	    j >= sb->u.minix_sb.s_nzones)
 		return 0;
 	if (!(bh = getblk(sb->s_dev,j,BLOCK_SIZE))) {
 		printk("new_block: cannot get block");
@@ -174,7 +175,7 @@ void minix_free_inode(struct inode * inode)
 		printk("free_inode: inode on nonexistent device\n");
 		return;
 	}
-	if (inode->i_ino < 1 || inode->i_ino > inode->i_sb->u.minix_sb.s_ninodes) {
+	if (inode->i_ino < 1 || inode->i_ino >= inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("free_inode: inode 0 or nonexistent inode\n");
 		return;
 	}
@@ -205,7 +206,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 		if ((bh = inode->i_sb->u.minix_sb.s_imap[i]) != NULL)
 			if ((j=find_first_zero(bh->b_data))<8192)
 				break;
-	if (!bh || j >= 8192 || j+i*8192 > inode->i_sb->u.minix_sb.s_ninodes) {
+	if (!bh || j >= 8192) {
 		iput(inode);
 		return NULL;
 	}
@@ -215,13 +216,18 @@ struct inode * minix_new_inode(const struct inode * dir)
 		return NULL;
 	}
 	bh->b_dirt = 1;
+	j += i*8192;
+	if (!j || j >= inode->i_sb->u.minix_sb.s_ninodes) {
+		iput(inode);
+		return NULL;
+	}
 	inode->i_count = 1;
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->euid;
 	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->egid;
 	inode->i_dirt = 1;
-	inode->i_ino = j + i*8192;
+	inode->i_ino = j;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = NULL;
 	inode->i_blocks = inode->i_blksize = 0;

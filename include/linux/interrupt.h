@@ -7,7 +7,8 @@ struct bh_struct {
 	void *data;
 };
 
-extern int bh_active;
+extern unsigned long bh_active;
+extern unsigned long bh_mask;
 extern struct bh_struct bh_base[32];
 
 /* Who gets which entry in bh_base.  Things which will occur most often
@@ -19,8 +20,6 @@ enum {
 	INET_BH,
 	KEYBOARD_BH
 };
-
-void do_bottom_half();
 
 extern inline void mark_bh(int nr)
 {

@@ -178,20 +178,20 @@ sock_alloc(int wait)
 				}
 				SOCK_INODE(sock)->i_mode = S_IFSOCK;
 				sock->wait = &SOCK_INODE(sock)->i_wait;
-				PRINTK("sock_alloc: socket 0x%x, inode 0x%x\n",
-				       sock, SOCK_INODE(sock));
+				PRINTK(("sock_alloc: socket 0x%x, inode 0x%x\n",
+				       sock, SOCK_INODE(sock)));
 				return sock;
 			}
 		sti();
 		if (!wait)
 			return NULL;
-		PRINTK("sock_alloc: no free sockets, sleeping...\n");
+		PRINTK(("sock_alloc: no free sockets, sleeping...\n"));
 		interruptible_sleep_on(&socket_wait_free);
 		if (current->signal & ~current->blocked) {
-			PRINTK("sock_alloc: sleep was interrupted\n");
+			PRINTK(("sock_alloc: sleep was interrupted\n"));
 			return NULL;
 		}
-		PRINTK("sock_alloc: wakeup... trying again...\n");
+		PRINTK(("sock_alloc: wakeup... trying again...\n"));
 	}
 }
 
@@ -208,8 +208,8 @@ sock_release(struct socket *sock)
 	int oldstate;
 	struct socket *peersock, *nextsock;
 
-	PRINTK("sock_release: socket 0x%x, inode 0x%x\n", sock,
-	       SOCK_INODE(sock));
+	PRINTK(("sock_release: socket 0x%x, inode 0x%x\n", sock,
+	       SOCK_INODE(sock)));
 	if ((oldstate = sock->state) != SS_UNCONNECTED)
 		sock->state = SS_DISCONNECTING;
 	/*
@@ -237,8 +237,8 @@ sock_release(struct socket *sock)
 static int
 sock_lseek(struct inode *inode, struct file *file, off_t offset, int whence)
 {
-	PRINTK("sock_lseek: huh?\n");
-	return -EBADF;
+	PRINTK(("sock_lseek: huh?\n"));
+	return -ESPIPE;
 }
 
 static int
@@ -246,7 +246,7 @@ sock_read(struct inode *inode, struct file *file, char *ubuf, int size)
 {
 	struct socket *sock;
 
-	PRINTK("sock_read: buf=0x%x, size=%d\n", ubuf, size);
+	PRINTK(("sock_read: buf=0x%x, size=%d\n", ubuf, size));
 	if (!(sock = socki_lookup(inode))) {
 		printk("sock_read: can't find socket for inode!\n");
 		return -EBADF;
@@ -261,7 +261,7 @@ sock_write(struct inode *inode, struct file *file, char *ubuf, int size)
 {
 	struct socket *sock;
 
-	PRINTK("sock_write: buf=0x%x, size=%d\n", ubuf, size);
+	PRINTK(("sock_write: buf=0x%x, size=%d\n", ubuf, size));
 	if (!(sock = socki_lookup(inode))) {
 		printk("sock_write: can't find socket for inode!\n");
 		return -EBADF;
@@ -275,7 +275,7 @@ static int
 sock_readdir(struct inode *inode, struct file *file, struct dirent *dirent,
 	     int count)
 {
-	PRINTK("sock_readdir: huh?\n");
+	PRINTK(("sock_readdir: huh?\n"));
 	return -EBADF;
 }
 
@@ -285,7 +285,7 @@ sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 {
 	struct socket *sock;
 
-	PRINTK("sock_ioctl: inode=0x%x cmd=0x%x arg=%d\n", inode, cmd, arg);
+	PRINTK(("sock_ioctl: inode=0x%x cmd=0x%x arg=%d\n", inode, cmd, arg));
 	if (!(sock = socki_lookup(inode))) {
 		printk("sock_ioctl: can't find socket for inode!\n");
 		return -EBADF;
@@ -298,9 +298,9 @@ sock_select(struct inode *inode, struct file *file, int sel_type, select_table *
 {
 	struct socket *sock;
 
-	PRINTK("sock_select: inode = 0x%x, kind = %s\n", inode,
+	PRINTK(("sock_select: inode = 0x%x, kind = %s\n", inode,
 	       (sel_type == SEL_IN) ? "in" :
-	       (sel_type == SEL_OUT) ? "out" : "ex");
+	       (sel_type == SEL_OUT) ? "out" : "ex"));
 	if (!(sock = socki_lookup(inode))) {
 		printk("sock_select: can't find socket for inode!\n");
 		return 0;
@@ -318,7 +318,7 @@ sock_close(struct inode *inode, struct file *file)
 {
 	struct socket *sock;
 
-	PRINTK("sock_close: inode=0x%x (cnt=%d)\n", inode, inode->i_count);
+	PRINTK(("sock_close: inode=0x%x (cnt=%d)\n", inode, inode->i_count));
 	/*
 	 * it's possible the inode is NULL if we're closing an unfinished
 	 * socket.
@@ -337,10 +337,10 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
 {
 	struct socket *last;
 
-	PRINTK("sock_awaitconn: trying to connect socket 0x%x to 0x%x\n",
-	       mysock, servsock);
+	PRINTK(("sock_awaitconn: trying to connect socket 0x%x to 0x%x\n",
+	       mysock, servsock));
 	if (!(servsock->flags & SO_ACCEPTCON)) {
-		PRINTK("sock_awaitconn: server not accepting connections\n");
+		PRINTK(("sock_awaitconn: server not accepting connections\n"));
 		return -EINVAL;
 	}
 
@@ -403,8 +403,8 @@ sock_socket(int family, int type, int protocol)
 	struct socket *sock;
 	struct proto_ops *ops;
 
-	PRINTK("sys_socket: family = %d (%s), type = %d, protocol = %d\n",
-	       family, family_name(family), type, protocol);
+	PRINTK(("sys_socket: family = %d (%s), type = %d, protocol = %d\n",
+	       family, family_name(family), type, protocol));
 
 	/*
 	 * locate the correct protocol family
@@ -413,7 +413,7 @@ sock_socket(int family, int type, int protocol)
 		if (proto_table[i].family == family)
 			break;
 	if (i == NPROTO) {
-		PRINTK("sys_socket: family not found\n");
+		PRINTK(("sys_socket: family not found\n"));
 		return -EINVAL;
 	}
 	ops = proto_table[i].ops;
@@ -460,8 +460,8 @@ sock_socketpair(int family, int type, int protocol, int usockvec[2])
 	int fd1, fd2, i;
 	struct socket *sock1, *sock2;
 
-	PRINTK("sys_socketpair: family = %d, type = %d, protocol = %d\n",
-	       family, type, protocol);
+	PRINTK(("sys_socketpair: family = %d, type = %d, protocol = %d\n",
+	       family, type, protocol));
 
 	/*
 	 * obtain the first socket and check if the underlying protocol
@@ -510,11 +510,11 @@ sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
 	struct socket *sock;
 	int i;
 
-	PRINTK("sys_bind: fd = %d\n", fd);
+	PRINTK(("sys_bind: fd = %d\n", fd));
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return -EBADF;
 	if ((i = sock->ops->bind(sock, umyaddr, addrlen)) < 0) {
-		PRINTK("sys_bind: bind failed\n");
+		PRINTK(("sys_bind: bind failed\n"));
 		return i;
 	}
 	return 0;
@@ -530,15 +530,15 @@ sock_listen(int fd, int backlog)
 {
 	struct socket *sock;
 
-	PRINTK("sys_listen: fd = %d\n", fd);
+	PRINTK(("sys_listen: fd = %d\n", fd));
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return -EBADF;
 	if (sock->state != SS_UNCONNECTED) {
-		PRINTK("sys_listen: socket isn't unconnected\n");
+		PRINTK(("sys_listen: socket isn't unconnected\n"));
 		return -EINVAL;
 	}
 	if (sock->flags & SO_ACCEPTCON) {
-		PRINTK("sys_listen: socket already accepting connections!\n");
+		PRINTK(("sys_listen: socket already accepting connections!\n"));
 		return -EINVAL;
 	}
 	if (sock->ops && sock->ops->listen)
@@ -558,15 +558,15 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 	struct socket *sock, *newsock;
 	int i;
 
-	PRINTK("sys_accept: fd = %d\n", fd);
+	PRINTK(("sys_accept: fd = %d\n", fd));
 	if (!(sock = sockfd_lookup(fd, &file)))
 		return -EBADF;
 	if (sock->state != SS_UNCONNECTED) {
-		PRINTK("sys_accept: socket isn't unconnected\n");
+		PRINTK(("sys_accept: socket isn't unconnected\n"));
 		return -EINVAL;
 	}
 	if (!(sock->flags & SO_ACCEPTCON)) {
-		PRINTK("sys_accept: socket not accepting connections!\n");
+		PRINTK(("sys_accept: socket not accepting connections!\n"));
 		return -EINVAL;
 	}
 
@@ -594,8 +594,8 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 		return -EINVAL;
 	}
 
-	PRINTK("sys_accept: connected socket 0x%x via 0x%x\n",
-	       sock, newsock);
+	PRINTK(("sys_accept: connected socket 0x%x via 0x%x\n",
+	       sock, newsock));
 
 	if (upeer_sockaddr)
 		newsock->ops->getname(newsock, upeer_sockaddr,
@@ -614,7 +614,7 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 	struct file *file;
 	int i;
 
-	PRINTK("sys_connect: fd = %d\n", fd);
+	PRINTK(("sys_connect: fd = %d\n", fd));
 	if (!(sock = sockfd_lookup(fd, &file)))
 		return -EBADF;
 	switch (sock->state) {
@@ -629,12 +629,12 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 			/* we will check this. */
 			return (sock->ops->connect(sock, uservaddr, addrlen, file->f_flags));
 		default:
-			PRINTK("sys_connect: socket not unconnected\n");
+			PRINTK(("sys_connect: socket not unconnected\n"));
 			return -EINVAL;
 	}
 	i = sock->ops->connect(sock, uservaddr, addrlen, file->f_flags);
 	if (i < 0) {
-		PRINTK("sys_connect: connect failed\n");
+		PRINTK(("sys_connect: connect failed\n"));
 		return i;
 	}
 	return 0;
@@ -645,7 +645,7 @@ sock_getsockname(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
 	struct socket *sock;
 
-	PRINTK("sys_getsockname: fd = %d\n", fd);
+	PRINTK(("sys_getsockname: fd = %d\n", fd));
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return -EBADF;
 	return sock->ops->getname(sock, usockaddr, usockaddr_len, 0);
@@ -656,7 +656,7 @@ sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 {
 	struct socket *sock;
 
-	PRINTK("sys_getpeername: fd = %d\n", fd);
+	PRINTK(("sys_getpeername: fd = %d\n", fd));
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return -EBADF;
 	return sock->ops->getname(sock, usockaddr, usockaddr_len, 1);
@@ -671,8 +671,8 @@ sys_send( int fd, void * buff, int len, unsigned flags)
 	struct socket *sock;
 	struct file *file;
 
-	PRINTK("sys_send (fd = %d, buff = %X, len = %d, flags = %X)\n",
-	       fd, buff, len, flags);
+	PRINTK(("sys_send (fd = %d, buff = %X, len = %d, flags = %X)\n",
+	       fd, buff, len, flags));
 
 	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
 	  return (-EBADF);
@@ -692,8 +692,8 @@ sys_sendto( int fd, void * buff, int len, unsigned flags,
 	struct socket *sock;
 	struct file *file;
 
-	PRINTK("sys_sendto (fd = %d, buff = %X, len = %d, flags = %X,"
-	       " addr=%X, alen = %d\n", fd, buff, len, flags, addr, addr_len);
+	PRINTK(("sys_sendto (fd = %d, buff = %X, len = %d, flags = %X,"
+	       " addr=%X, alen = %d\n", fd, buff, len, flags, addr, addr_len));
 
 	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
 	  return (-EBADF);
@@ -714,8 +714,8 @@ sys_recv( int fd, void * buff, int len, unsigned flags)
 	struct socket *sock;
 	struct file *file;
 
-	PRINTK("sys_recv (fd = %d, buff = %X, len = %d, flags = %X)\n",
-	       fd, buff, len, flags);
+	PRINTK(("sys_recv (fd = %d, buff = %X, len = %d, flags = %X)\n",
+	       fd, buff, len, flags));
 
 	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
 	  return (-EBADF);
@@ -735,8 +735,8 @@ sys_recvfrom( int fd, void * buff, int len, unsigned flags,
 	struct socket *sock;
 	struct file *file;
 
-	PRINTK("sys_recvfrom (fd = %d, buff = %X, len = %d, flags = %X,"
-	       " addr=%X, alen=%X\n", fd, buff, len, flags, addr, addr_len);
+	PRINTK(("sys_recvfrom (fd = %d, buff = %X, len = %d, flags = %X,"
+	       " addr=%X, alen=%X\n", fd, buff, len, flags, addr, addr_len));
 
 	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
 	  return (-EBADF);
@@ -757,9 +757,9 @@ sys_setsockopt (int fd, int level, int optname, char *optval, int optlen)
 	struct socket *sock;
 	struct file *file;
 	
-	PRINTK ("sys_setsockopt(fd=%d, level=%d, optname=%d,\n",fd, level,
-		optname);
-	PRINTK ("               optval = %X, optlen = %d)\n", optval, optlen);
+	PRINTK (("sys_setsockopt(fd=%d, level=%d, optname=%d,\n",fd, level,
+		optname));
+	PRINTK (("               optval = %X, optlen = %d)\n", optval, optlen));
 
 	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
 	  return (-EBADF);
@@ -776,9 +776,9 @@ sys_getsockopt (int fd, int level, int optname, char *optval, int *optlen)
 {
 	struct socket *sock;
 	struct file *file;
-	PRINTK ("sys_getsockopt(fd=%d, level=%d, optname=%d,\n",fd, level,
-		optname);
-	PRINTK ("               optval = %X, optlen = %X)\n", optval, optlen);
+	PRINTK (("sys_getsockopt(fd=%d, level=%d, optname=%d,\n",fd, level,
+		optname));
+	PRINTK (("               optval = %X, optlen = %X)\n", optval, optlen));
 
 	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
 	  return (-EBADF);
@@ -786,8 +786,9 @@ sys_getsockopt (int fd, int level, int optname, char *optval, int *optlen)
 	if (!(sock = sockfd_lookup(fd, NULL)))
 	    return (-ENOTSOCK);
 	    
-	return (0);
-	return (sock->ops->getsockopt (sock, level, optname, optval, optlen));
+	if (!sock->ops || !sock->ops->getsockopt)
+		return 0;
+	return sock->ops->getsockopt(sock, level, optname, optval, optlen);
 
 }
 
@@ -798,7 +799,7 @@ sys_shutdown( int fd, int how)
 	struct socket *sock;
 	struct file *file;
 
-	PRINTK("sys_shutdown (fd = %d, how = %d)\n",fd, how);
+	PRINTK(("sys_shutdown (fd = %d, how = %d)\n",fd, how));
 
 	file = current->filp[fd];
 	if (fd < 0 || fd >= NR_OPEN || file == NULL)

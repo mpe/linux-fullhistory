@@ -133,13 +133,8 @@ void nfs_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(res.blocks, &buf->f_blocks);
 	put_fs_long(res.bfree, &buf->f_bfree);
 	put_fs_long(res.bavail, &buf->f_bavail);
-#if 0
-	put_fs_long(-1, &buf->f_files);
-	put_fs_long(-1, &buf->f_ffree);
-#else
 	put_fs_long(0, &buf->f_files);
 	put_fs_long(0, &buf->f_ffree);
-#endif
 }
 
 /*

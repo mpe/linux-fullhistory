@@ -74,9 +74,9 @@
 
 #undef RAW_DEBUG
 #ifdef RAW_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 extern struct proto raw_prot;
@@ -95,7 +95,7 @@ raw_err (int err, unsigned char *header, unsigned long daddr,
 {
    volatile struct sock *sk;
    
-   PRINTK ("raw_err (err=%d, header=%X, daddr=%X, saddr=%X, ip_protocl=%X)\n");
+   PRINTK (("raw_err (err=%d, header=%X, daddr=%X, saddr=%X, ip_protocl=%X)\n"));
 
    if (protocol == NULL) return;
 
@@ -132,9 +132,9 @@ raw_rcv (struct sk_buff *skb, struct device *dev, struct options *opt,
 
   volatile struct sock *sk;
 
-   PRINTK ("raw_rcv (skb=%X, dev=%X, opt=%X, daddr=%X,\n"
+   PRINTK (("raw_rcv (skb=%X, dev=%X, opt=%X, daddr=%X,\n"
 	   "         len=%d, saddr=%X, redo=%d, protocol=%X)\n",
-	   skb, dev, opt, daddr, len, saddr, redo, protocol);
+	   skb, dev, opt, daddr, len, saddr, redo, protocol));
 
    if (skb == NULL) return (0);
    if (protocol == NULL)
@@ -162,7 +162,7 @@ raw_rcv (struct sk_buff *skb, struct device *dev, struct options *opt,
 	cli();
 	if (sk->inuse)
 	  {
-	     PRINTK ("raw_rcv adding to backlog. \n");
+	     PRINTK (("raw_rcv adding to backlog. \n"));
 	     if (sk->back_log == NULL)
 	       {
 		  sk->back_log = skb;
@@ -223,9 +223,9 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
    struct sockaddr_in sin;
    int tmp;
 
-   PRINTK ("raw_sendto (sk=%X, from=%X, len=%d, noblock=%d, flags=%X,\n"
+   PRINTK (("raw_sendto (sk=%X, from=%X, len=%d, noblock=%d, flags=%X,\n"
 	   "            usin=%X, addr_len = %d)\n", sk, from, len, noblock,
-	   flags, usin, addr_len);
+	   flags, usin, addr_len));
 
    /* check the flags. */
    if (flags) return (-EINVAL);
@@ -263,7 +263,7 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
        if (skb == NULL)
 	 {
 	   int tmp;
-	   PRINTK ("raw_sendto: write buffer full?\n");
+	   PRINTK (("raw_sendto: write buffer full?\n"));
 	   print_sk (sk);
 	   if (noblock) return (-EAGAIN);
 	   tmp = sk->wmem_alloc;
@@ -295,7 +295,7 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
 				 sk->protocol, sk->opt, skb->mem_len);
    if (tmp < 0)
      {
-       PRINTK ("raw_sendto: error building ip header.\n");
+       PRINTK (("raw_sendto: error building ip header.\n"));
 	sk->prot->wfree (sk, skb->mem_addr, skb->mem_len);
 	release_sock (sk);
 	return (tmp);
@@ -321,10 +321,10 @@ raw_close (volatile struct sock *sk, int timeout)
 {
    sk->inuse = 1;
    sk->state = TCP_CLOSE;
-   PRINTK ("raw_close: deleting ip_protocol %d\n",
-	   ((struct ip_protocol *)sk->pair)->protocol);
+   PRINTK (("raw_close: deleting ip_protocol %d\n",
+	   ((struct ip_protocol *)sk->pair)->protocol));
    if (delete_ip_protocol ((struct ip_protocol *)sk->pair) < 0)
-     PRINTK ("raw_close: delete_ip_protocol failed. \n");
+     PRINTK (("raw_close: delete_ip_protocol failed. \n"));
    kfree_s ((void *)sk->pair, sizeof (struct ip_protocol));
    sk->pair = NULL;
    release_sock (sk);
@@ -346,7 +346,7 @@ raw_init (volatile struct sock *sk)
    /* we need to remember this somewhere. */
    sk->pair = (volatile struct sock *)p;
 
-   PRINTK ("raw init added protocol %d\n", sk->protocol);
+   PRINTK (("raw init added protocol %d\n", sk->protocol));
 
    return (0);
 }
@@ -362,9 +362,9 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 	int copied=0;
 	struct sk_buff *skb;
 
-	PRINTK ("raw_recvfrom (sk=%X, to=%X, len=%d, noblock=%d, flags=%X,\n"
+	PRINTK (("raw_recvfrom (sk=%X, to=%X, len=%d, noblock=%d, flags=%X,\n"
 		"              sin=%X, addr_len=%X)\n", sk, to, len, noblock,
-		flags, sin, addr_len);
+		flags, sin, addr_len));
 
 	if (len == 0) return (0);
 	if (len < 0) return (-EINVAL);

@@ -35,9 +35,11 @@
 #define CR0_NE 32
 
 static unsigned long intr_count=0;
+static unsigned char cache_21 = 0xff;
+static unsigned char cache_A1 = 0xff;
 
-/* I'll use an array for speed. and bitmap for speed. */
-int bh_active=0;
+unsigned long bh_active = 0;
+unsigned long bh_mask = 0xFFFFFFFF;
 struct bh_struct bh_base[32]; 
 
 /*
@@ -47,13 +49,10 @@ struct bh_struct bh_base[32];
  * called only when bh_active is non-zero and when there aren't any
  * nested irq's active.
  */
-void do_bottom_half(void)
+void do_bottom_half(int nr)
 {
 	struct bh_struct *bh;
-	int nr;
 
-	__asm__ __volatile__("bsfl %1,%0":"=r" (nr):"m" (bh_active));
-	__asm__ __volatile__("btcl %1,%0":"=m" (bh_active):"r" (nr));
 	bh = bh_base+nr;
 	if (bh->routine != NULL)
 		bh->routine(bh->data);
@@ -186,11 +185,14 @@ int irqaction(unsigned int irq, struct sigaction * new)
 		set_intr_gate(0x20+irq,fast_interrupt[irq]);
 	else
 		set_intr_gate(0x20+irq,interrupt[irq]);
-	if (irq < 8)
-		outb(inb_p(0x21) & ~(1<<irq),0x21);
-	else {
-		outb(inb_p(0x21) & ~(1<<2),0x21);
-		outb(inb_p(0xA1) & ~(1<<(irq-8)),0xA1);
+	if (irq < 8) {
+		cache_21 &= ~(1<<irq);
+		outb(cache_21,0x21);
+	} else {
+		cache_21 &= ~(1<<2);
+		cache_A1 &= ~(1<<(irq-8));
+		outb(cache_21,0x21);
+		outb(cache_A1,0xA1);
 	}
 	restore_flags(flags);
 	return 0;
@@ -222,10 +224,13 @@ void free_irq(unsigned int irq)
 	}
 	save_flags(flags);
 	cli();
-	if (irq < 8)
-		outb(inb_p(0x21) | (1<<irq),0x21);
-	else
-		outb(inb_p(0xA1) | (1<<(irq-8)),0xA1);
+	if (irq < 8) {
+		cache_21 |= 1 << irq;
+		outb(cache_21,0x21);
+	} else {
+		cache_A1 |= 1 << (irq-8);
+		outb(cache_A1,0xA1);
+	}
 	set_intr_gate(0x20+irq,bad_interrupt[irq]);
 	sa->sa_handler = NULL;
 	sa->sa_flags = 0;

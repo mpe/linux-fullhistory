@@ -56,29 +56,29 @@
 
 #undef ETH_DEBUG
 #ifdef ETH_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 void
 print_eth (struct enet_header *eth)
 {
   int i;
-  PRINTK ("ether source addr: ");
+  PRINTK (("ether source addr: "));
   for (i =0 ; i < ETHER_ADDR_LEN; i++)
     {
-      PRINTK ("0x%2X ",eth->saddr[i]);
+      PRINTK (("0x%2X ",eth->saddr[i]));
     }
-  PRINTK ("\n");
+  PRINTK (("\n"));
 
-  PRINTK ("ether dest addr: ");
+  PRINTK (("ether dest addr: "));
   for (i =0 ; i < ETHER_ADDR_LEN; i++)
     {
-      PRINTK ("0x%2X ",eth->daddr[i]);
+      PRINTK (("0x%2X ",eth->daddr[i]));
     }
-  PRINTK ("\n");
-  PRINTK ("ethertype = %X\n",net16(eth->type));
+  PRINTK (("\n"));
+  PRINTK (("ethertype = %X\n",net16(eth->type)));
 }
 
 int

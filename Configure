@@ -2,7 +2,7 @@
 #
 # This script is used to configure the linux kernel.
 # It's a fast hack - feel free to do something better.
-CONFIG=.config
+CONFIG=.config~
 CONFIG_H=include/linux/autoconf.h
 echo "#" > $CONFIG
 echo "# Automatically generated make config: don't edit" >> $CONFIG

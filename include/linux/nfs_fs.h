@@ -40,6 +40,14 @@
 
 #define NFS_MAX_RPC_TIMEOUT		600
 
+/*
+ * Size of the lookup cache in units of number of entries cached.
+ * It is better not to make this too large although the optimimum
+ * depends on a usage and environment.
+ */
+
+#define NFS_LOOKUP_CACHE_SIZE		64
+
 #define NFS_SUPER_MAGIC			0x6969
 
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)

@@ -54,7 +54,6 @@
 #define NPAR 16
 
 extern void vt_init(void);
-extern void set_leds(void);
 
 unsigned long	video_num_columns;		/* Number of text columns	*/
 unsigned long	video_num_lines;		/* Number of test lines		*/

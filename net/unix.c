@@ -227,14 +227,14 @@ static inline void
 unix_data_ref(struct unix_proto_data *upd)
 {
 	++upd->refcnt;
-	PRINTK("unix_data_ref: refing data 0x%x (%d)\n", upd, upd->refcnt);
+	PRINTK(("unix_data_ref: refing data 0x%x (%d)\n", upd, upd->refcnt));
 }
 
 static void
 unix_data_deref(struct unix_proto_data *upd)
 {
 	if (upd->refcnt == 1) {
-		PRINTK("unix_data_deref: releasing data 0x%x\n", upd);
+		PRINTK(("unix_data_deref: releasing data 0x%x\n", upd));
 		if (upd->buf) {
 			free_page((unsigned long)upd->buf);
 			upd->buf = NULL;
@@ -253,9 +253,9 @@ unix_proto_create(struct socket *sock, int protocol)
 {
 	struct unix_proto_data *upd;
 
-	PRINTK("unix_proto_create: socket 0x%x, proto %d\n", sock, protocol);
+	PRINTK(("unix_proto_create: socket 0x%x, proto %d\n", sock, protocol));
 	if (protocol != 0) {
-		PRINTK("unix_proto_create: protocol != 0\n");
+		PRINTK(("unix_proto_create: protocol != 0\n"));
 		return -EINVAL;
 	}
 	if (!(upd = unix_data_alloc())) {
@@ -270,7 +270,7 @@ unix_proto_create(struct socket *sock, int protocol)
 	upd->protocol = protocol;
 	upd->socket = sock;
 	UN_DATA(sock) = upd;
-	PRINTK("unix_proto_create: allocated data 0x%x\n", upd);
+	PRINTK(("unix_proto_create: allocated data 0x%x\n", upd));
 	return 0;
 }
 
@@ -287,8 +287,8 @@ unix_proto_release(struct socket *sock, struct socket *peer)
 {
 	struct unix_proto_data *upd = UN_DATA(sock);
 
-	PRINTK("unix_proto_release: socket 0x%x, unix_data 0x%x\n",
-	       sock, upd);
+	PRINTK(("unix_proto_release: socket 0x%x, unix_data 0x%x\n",
+	       sock, upd));
 	if (!upd)
 		return 0;
 	if (upd->socket != sock) {
@@ -296,8 +296,8 @@ unix_proto_release(struct socket *sock, struct socket *peer)
 		return -EINVAL;
 	}
 	if (upd->inode) {
-		PRINTK("unix_proto_release: releasing inode 0x%x\n",
-		       upd->inode);
+		PRINTK(("unix_proto_release: releasing inode 0x%x\n",
+		       upd->inode));
 		iput(upd->inode);
 		upd->inode = NULL;
 	}
@@ -327,11 +327,11 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	int i;
 	unsigned long old_fs;
 
-	PRINTK("unix_proto_bind: socket 0x%x, len=%d\n", sock,
-	       sockaddr_len);
+	PRINTK(("unix_proto_bind: socket 0x%x, len=%d\n", sock,
+	       sockaddr_len));
 	if (sockaddr_len <= UN_PATH_OFFSET ||
 	    sockaddr_len > sizeof(struct sockaddr_un)) {
-		PRINTK("unix_proto_bind: bad length %d\n", sockaddr_len);
+		PRINTK(("unix_proto_bind: bad length %d\n", sockaddr_len));
 		return -EINVAL;
 	}
 	if (upd->sockaddr_len || upd->inode) {
@@ -341,8 +341,8 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	verify_area(umyaddr, sockaddr_len);
 	memcpy_fromfs(&upd->sockaddr_un, umyaddr, sockaddr_len);
 	if (upd->sockaddr_un.sun_family != AF_UNIX) {
-		PRINTK("unix_proto_bind: family is %d, not AF_UNIX (%d)\n",
-		       upd->sockaddr_un.sun_family, AF_UNIX);
+		PRINTK(("unix_proto_bind: family is %d, not AF_UNIX (%d)\n",
+		       upd->sockaddr_un.sun_family, AF_UNIX));
 		return -EINVAL;
 	}
 
@@ -360,11 +360,11 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	}
 
 	upd->sockaddr_len = sockaddr_len;	/* now its legal */
-	PRINTK("unix_proto_bind: bound socket address: ");
+	PRINTK(("unix_proto_bind: bound socket address: "));
 #ifdef SOCK_DEBUG
 	sockaddr_un_printk(&upd->sockaddr_un, upd->sockaddr_len);
 #endif
-	PRINTK("to inode 0x%x\n", upd->inode);
+	PRINTK(("to inode 0x%x\n", upd->inode));
 	return 0;
 }
 
@@ -383,12 +383,12 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	unsigned long old_fs;
 	struct inode *inode;
 
-	PRINTK("unix_proto_connect: socket 0x%x, servlen=%d\n", sock,
-	       sockaddr_len);
+	PRINTK(("unix_proto_connect: socket 0x%x, servlen=%d\n", sock,
+	       sockaddr_len));
 
 	if (sockaddr_len <= UN_PATH_OFFSET ||
 	    sockaddr_len > sizeof(struct sockaddr_un)) {
-		PRINTK("unix_proto_connect: bad length %d\n", sockaddr_len);
+		PRINTK(("unix_proto_connect: bad length %d\n", sockaddr_len));
 		return -EINVAL;
 	}
 
@@ -401,8 +401,8 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	verify_area(uservaddr, sockaddr_len);
 	memcpy_fromfs(&sockun, uservaddr, sockaddr_len);
 	if (sockun.sun_family != AF_UNIX) {
-		PRINTK("unix_proto_connect: family is %d, not AF_UNIX (%d)\n",
-		       sockun.sun_family, AF_UNIX);
+		PRINTK(("unix_proto_connect: family is %d, not AF_UNIX (%d)\n",
+		       sockun.sun_family, AF_UNIX));
 		return -EINVAL;
 	}
 
@@ -419,18 +419,18 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	i = open_namei(fname, 0, S_IFSOCK, &inode, NULL);
 	set_fs(old_fs);
 	if (i < 0) {
-		PRINTK("unix_proto_connect: can't open socket %s\n", fname);
+		PRINTK(("unix_proto_connect: can't open socket %s\n", fname));
 		return i;
 	}
 	serv_upd = unix_data_lookup(&sockun, sockaddr_len, inode);
 	iput(inode);
 	if (!serv_upd) {
-		PRINTK("unix_proto_connect: can't locate peer %s at inode 0x%x\n",
-			fname, inode);
+		PRINTK(("unix_proto_connect: can't locate peer %s at inode 0x%x\n",
+			fname, inode));
 		return -EINVAL;
 	}
 	if ((i = sock_awaitconn(sock, serv_upd->socket)) < 0) {
-		PRINTK("unix_proto_connect: can't await connection\n");
+		PRINTK(("unix_proto_connect: can't await connection\n"));
 		return i;
 	}
 	unix_data_ref(UN_DATA(sock->conn));
@@ -464,8 +464,8 @@ unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
 {
    struct socket *clientsock;
 
-	PRINTK("unix_proto_accept: socket 0x%x accepted via socket 0x%x\n",
-	       sock, newsock);
+	PRINTK(("unix_proto_accept: socket 0x%x accepted via socket 0x%x\n",
+	       sock, newsock));
 
 	/*
 	 * if there aren't any sockets awaiting connection, then wait for
@@ -476,7 +476,7 @@ unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
 			return -EAGAIN;
 		interruptible_sleep_on(sock->wait);
 		if (current->signal & ~current->blocked) {
-			PRINTK("sys_accept: sleep was interrupted\n");
+			PRINTK(("sys_accept: sleep was interrupted\n"));
 			return -ERESTARTSYS;
 		}
 	}
@@ -511,11 +511,11 @@ unix_proto_getname(struct socket *sock, struct sockaddr *usockaddr,
 	struct unix_proto_data *upd;
 	int len;
 
-	PRINTK("unix_proto_getname: socket 0x%x for %s\n", sock,
-	       peer ? "peer" : "self");
+	PRINTK(("unix_proto_getname: socket 0x%x for %s\n", sock,
+	       peer ? "peer" : "self"));
 	if (peer) {
 		if (sock->state != SS_CONNECTED) {
-			PRINTK("unix_proto_getname: socket not connected\n");
+			PRINTK(("unix_proto_getname: socket not connected\n"));
 			return -EINVAL;
 		}
 		upd = UN_DATA(sock->conn);
@@ -549,19 +549,19 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 	upd = UN_DATA(sock);
 	while (!(avail = UN_BUF_AVAIL(upd))) {
 		if (sock->state != SS_CONNECTED) {
-			PRINTK("unix_proto_read: socket not connected\n");
+			PRINTK(("unix_proto_read: socket not connected\n"));
 			return (sock->state == SS_DISCONNECTING) ? 0 : -EINVAL;
 		}
-		PRINTK("unix_proto_read: no data available...\n");
+		PRINTK(("unix_proto_read: no data available...\n"));
 		if (nonblock)
 			return -EAGAIN;
 		interruptible_sleep_on(sock->wait);
 		if (current->signal & ~current->blocked) {
-			PRINTK("unix_proto_read: interrupted\n");
+			PRINTK(("unix_proto_read: interrupted\n"));
 			return -ERESTARTSYS;
 		}
 		if (sock->state == SS_DISCONNECTING) {
-			PRINTK("unix_proto_read: disconnected\n");
+			PRINTK(("unix_proto_read: disconnected\n"));
 			return 0;
 		}
 	}
@@ -574,7 +574,7 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 		int part, cando;
 
 		if (avail <= 0) {
-			PRINTK("unix_proto_read: AVAIL IS NEGATIVE!!!\n");
+			PRINTK(("unix_proto_read: AVAIL IS NEGATIVE!!!\n"));
 			send_sig(SIGKILL,current,1);
 			return -EINTR;
 		}
@@ -583,8 +583,8 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 			cando = avail;
 		if (cando > (part = BUF_SIZE - upd->bp_tail))
 			cando = part;
-		PRINTK("unix_proto_read: avail=%d, todo=%d, cando=%d\n",
-		       avail, todo, cando);
+		PRINTK(("unix_proto_read: avail=%d, todo=%d, cando=%d\n",
+		       avail, todo, cando));
 		verify_area(ubuf, cando);
 		memcpy_tofs(ubuf, upd->buf + upd->bp_tail, cando);
 		upd->bp_tail = (upd->bp_tail + cando) & (BUF_SIZE-1);
@@ -611,7 +611,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	if ((todo = size) <= 0)
 		return 0;
 	if (sock->state != SS_CONNECTED) {
-		PRINTK("unix_proto_write: socket not connected\n");
+		PRINTK(("unix_proto_write: socket not connected\n"));
 		if (sock->state == SS_DISCONNECTING) {
 			send_sig(SIGPIPE,current,1);
 			return -EINTR;
@@ -621,16 +621,16 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 	pupd = UN_DATA(sock)->peerupd;	/* safer than sock->conn */
 
 	while (!(space = UN_BUF_SPACE(pupd))) {
-		PRINTK("unix_proto_write: no space left...\n");
+		PRINTK(("unix_proto_write: no space left...\n"));
 		if (nonblock)
 			return -EAGAIN;
 		interruptible_sleep_on(sock->wait);
 		if (current->signal & ~current->blocked) {
-			PRINTK("unix_proto_write: interrupted\n");
+			PRINTK(("unix_proto_write: interrupted\n"));
 			return -ERESTARTSYS;
 		}
 		if (sock->state == SS_DISCONNECTING) {
-			PRINTK("unix_proto_write: disconnected (SIGPIPE)\n");
+			PRINTK(("unix_proto_write: disconnected (SIGPIPE)\n"));
 			send_sig(SIGPIPE,current,1);
 			return -EINTR;
 		}
@@ -644,7 +644,7 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 		int part, cando;
 
 		if (space <= 0) {
-			PRINTK("unix_proto_write: SPACE IS NEGATIVE!!!\n");
+			PRINTK(("unix_proto_write: SPACE IS NEGATIVE!!!\n"));
 			send_sig(SIGKILL,current,1);
 			return -EINTR;
 		}
@@ -661,8 +661,8 @@ unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
 			cando = space;
 		if (cando > (part = BUF_SIZE - pupd->bp_head))
 			cando = part;
-		PRINTK("unix_proto_write: space=%d, todo=%d, cando=%d\n",
-		       space, todo, cando);
+		PRINTK(("unix_proto_write: space=%d, todo=%d, cando=%d\n",
+		       space, todo, cando));
 		verify_area(ubuf, cando);
 		memcpy_fromfs(pupd->buf + pupd->bp_head, ubuf, cando);
 		pupd->bp_head = (pupd->bp_head + cando) & (BUF_SIZE-1);
@@ -685,26 +685,26 @@ unix_proto_select(struct socket *sock, int sel_type, select_table * wait)
 	 */
 	if (sock->flags & SO_ACCEPTCON) {
 		if (sel_type == SEL_IN) {
-			PRINTK("sock_select: %sconnections pending\n",
-			       sock->iconn ? "" : "no ");
+			PRINTK(("sock_select: %sconnections pending\n",
+			       sock->iconn ? "" : "no "));
 			if (sock->iconn)
 				return 1;
 			select_wait(sock->wait, wait);
 			return sock->iconn ? 1 : 0;
 		}
-		PRINTK("sock_select: nothing else for server socket\n");
+		PRINTK(("sock_select: nothing else for server socket\n"));
 		select_wait(sock->wait, wait);
 		return 0;
 	}
 
 	if (sel_type == SEL_IN) {
 		upd = UN_DATA(sock);
-		PRINTK("unix_proto_select: there is%s data available\n",
-		       UN_BUF_AVAIL(upd) ? "" : " no");
+		PRINTK(("unix_proto_select: there is%s data available\n",
+		       UN_BUF_AVAIL(upd) ? "" : " no"));
 		if (UN_BUF_AVAIL(upd))	/* even if disconnected */
 			return 1;
 		else if (sock->state != SS_CONNECTED) {
-			PRINTK("unix_proto_select: socket not connected (read EOF)\n");
+			PRINTK(("unix_proto_select: socket not connected (read EOF)\n"));
 			return 1;
 		}
 		select_wait(sock->wait,wait);
@@ -712,19 +712,19 @@ unix_proto_select(struct socket *sock, int sel_type, select_table * wait)
 	}
 	if (sel_type == SEL_OUT) {
 		if (sock->state != SS_CONNECTED) {
-			PRINTK("unix_proto_select: socket not connected (write EOF)\n");
+			PRINTK(("unix_proto_select: socket not connected (write EOF)\n"));
 			return 1;
 		}
 		peerupd = UN_DATA(sock->conn);
-		PRINTK("unix_proto_select: there is%s space available\n",
-		       UN_BUF_SPACE(peerupd) ? "" : " no");
+		PRINTK(("unix_proto_select: there is%s space available\n",
+		       UN_BUF_SPACE(peerupd) ? "" : " no"));
 		if (UN_BUF_SPACE(peerupd) > 0)
 			return 1;
 		select_wait(sock->wait,wait);
 		return 0;
 	}
 	/* SEL_EX */
-	PRINTK("unix_proto_select: there are no exceptions here?!\n");
+	PRINTK(("unix_proto_select: there are no exceptions here?!\n"));
 	return 0;
 }
 
@@ -770,7 +770,7 @@ unix_proto_init(void)
 {
 	struct unix_proto_data *upd;
 
-	PRINTK("unix_proto_init: initializing...\n");
+	PRINTK(("unix_proto_init: initializing...\n"));
 	for (upd = unix_datas; upd <= last_unix_data; ++upd)
 		upd->refcnt = 0;
 	return 0;

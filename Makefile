@@ -1,10 +1,20 @@
 #
-# Make "config" the default target if there is no configuration file
+# Make "config" the default target if there is no configuration file or
+# "depend" the target if there is no top-level dependency information.
 #
 ifeq (.config,$(wildcard .config))
 include .config
+ifeq (.depend,$(wildcard .depend))
+include .depend
+else
+CONFIGURATION = depend
+endif
 else
 CONFIGURATION = config
+endif
+
+ifdef CONFIGURATION
+CONFIGURE = dummy
 endif
 
 #
@@ -20,10 +30,7 @@ ROOT_DEV = /dev/hdb1
 #
 # The value of KBDFLAGS should be or'ed together from the following
 # bits, depending on which features you want enabled.
-# 0x80 - Off: the Alt key will set bit 7 if pressed together with
-#             another key.
-#        On:  the Alt key will NOT set the high bit; an escape
-#             character is prepended instead.
+#
 # The least significant bits control if the following keys are "dead".
 # The key is dead by default if the bit is on.
 # 0x01 - backquote (`)
@@ -118,37 +125,30 @@ KERNELHDRS	=/usr/src/linux/include
 
 all:	Version Image
 
-lilo: Image
+Version: dummy
+	rm tools/version.h
+
+lilo: $(CONFIGURE) Image
 	if [ -f /vmlinux ]; then mv /vmlinux /vmlinux.old; fi
 	cat Image > /vmlinux
 	/etc/lilo/install
 
 config:
-ifdef CONFIGURATION
-	@echo
-	@echo "You have no .config: running Configure"
-	@echo
-endif
 	sh Configure < config.in
-ifdef CONFIGURATION
-	@echo
-	@echo "Configure successful. Try re-making (ignore the error that follows)"
-	@echo
-	exit 1
-endif
+	mv .config~ .config
 
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
-Version: dummy
+tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl2-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl3-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 
-Image: $(CONFIGURATION) boot/bootsect boot/setup tools/system tools/build
+Image: $(CONFIGURE) boot/bootsect boot/setup tools/system tools/build
 	cp tools/system system.tmp
 	$(STRIP) system.tmp
 	tools/build boot/bootsect boot/setup system.tmp $(ROOT_DEV) > Image
@@ -158,18 +158,18 @@ Image: $(CONFIGURATION) boot/bootsect boot/setup tools/system tools/build
 disk: Image
 	dd bs=8192 if=Image of=/dev/fd0
 
-tools/build: tools/build.c
+tools/build: $(CONFIGURE) tools/build.c
 	$(HOSTCC) $(CFLAGS) \
 	-o tools/build tools/build.c
 
-boot/head.o: boot/head.s
+boot/head.o: $(CONFIGURE) boot/head.s
 
-boot/head.s: boot/head.S
+boot/head.s: $(CONFIGURE) boot/head.S
 	$(CPP) -traditional boot/head.S -o boot/head.s
 
 tools/version.o: tools/version.c tools/version.h
 
-init/main.o: init/main.c
+init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
@@ -185,10 +185,10 @@ boot/setup: boot/setup.s
 	$(AS86) -o boot/setup.o boot/setup.s
 	$(LD86) -s -o boot/setup boot/setup.o
 
-boot/setup.s:	boot/setup.S include/linux/config.h Makefile
+boot/setup.s: $(CONFIGURE) boot/setup.S include/linux/config.h Makefile
 	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) boot/setup.S -o boot/setup.s
 
-boot/bootsect.s: boot/bootsect.S include/linux/config.h Makefile
+boot/bootsect.s: $(CONFIGURE) boot/bootsect.S include/linux/config.h Makefile
 	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) boot/bootsect.S -o boot/bootsect.s
 
 boot/bootsect:	boot/bootsect.s
@@ -215,15 +215,26 @@ backup: clean
 	sync
 
 depend dep:
-	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .depend
+	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .depend~
+	for i in tools/*.c;do echo -n "tools/";$(CPP) -M $$i;done >> .depend~
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
+	mv .depend~ .depend
 
-dummy: $(CONFIGURATION)
+ifdef CONFIGURATION
+..$(CONFIGURATION):
+	@echo
+	@echo "You have no" .$(CONFIGURATION) ": running 'make" $(CONFIGURATION)"'"
+	@echo
+	$(MAKE) $(CONFIGURATION)
+	@echo
+	@echo "Successful. Try re-making (ignore the error that follows)"
+	@echo
+	exit 1
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
+dummy: ..$(CONFIGURATION)
+
+else
+
+dummy:
+
 endif
-

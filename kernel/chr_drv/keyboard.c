@@ -16,6 +16,15 @@
 #include <linux/ptrace.h>
 #include <linux/keyboard.h>
 #include <linux/interrupt.h>
+#include <linux/config.h>
+
+#ifndef KBD_DEFFLAGS
+#ifdef CONFIG_KBD_META
+#define KBD_DEFFLAGS ((1 << VC_NUMLOCK) | (1 << VC_REPEAT) | (1 << VC_META))
+#else
+#define KBD_DEFFLAGS ((1 << VC_NUMLOCK) | (1 << VC_REPEAT))
+#endif
+#endif
 
 /*
  * The default IO slowdown is doing 'inb()'s from 0x61, which should be
@@ -36,6 +45,7 @@ unsigned long kbd_flags = 0;
 unsigned long kbd_dead_keys = 0;
 unsigned long kbd_prev_dead_keys = 0;
 
+static int want_console = -1;
 struct kbd_struct kbd_table[NR_CONSOLES];
 static struct kbd_struct * kbd = kbd_table;
 static struct tty_struct * tty = NULL;
@@ -50,7 +60,6 @@ static int npadch = 0;
 fptr key_table[];
 
 static void put_queue(int);
-void set_leds(void);
 static void applkey(int);
 static void cur(int);
 static unsigned int handle_diacr(unsigned int);
@@ -136,8 +145,8 @@ static void keyboard_interrupt(int int_pt_regs)
 		key_table[scancode](scancode);
 	rep = scancode;
 end_kbd_intr:
-	do_keyboard_interrupt();
 	send_cmd(0xAE);
+	mark_bh(KEYBOARD_BH);
 }
 
 static void put_queue(int ch)
@@ -239,7 +248,6 @@ static void caps(int sc)
 		return;		/* key already pressed: defeat repeat */
 	set_kbd_flag(KG_CAPSLOCK);
 	chg_vc_kbd_flag(kbd,VC_CAPSLOCK);
-	set_leds();
 }
 
 static void uncaps(int sc)
@@ -272,20 +280,16 @@ static void scroll(int sc)
 		show_ptregs();
 	else if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
 		show_state();
-	else {
+	else
 		chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
-		set_leds();
-	}
 }
 
 static void num(int sc)
 {
 	if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey(0x50);
-	else {
+	else
 		chg_vc_kbd_flag(kbd,VC_NUMLOCK);
-		set_leds();
-	}
 }
 
 static void applkey(int key)
@@ -1249,7 +1253,7 @@ static void func(int sc)
 			return;
 	}
 	if (kbd_flag(KG_ALT))
-		change_console(sc);
+		want_console = sc;
 	else
 		if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))	/* DEC F11 - F20 */
 			puts_queue(func_table[1][sc]);
@@ -1334,21 +1338,34 @@ repeat:
 	return 0;
 }
 
+/*
+ * This routine is the bottom half of the keyboard interrupt
+ * routine, and runs with all interrupts enabled. It does
+ * console changing, led setting and copy_to_cooked, which can
+ * take a reasonably long time.
+ *
+ * Aside from timing (which isn't really that important for
+ * keyboard interrupts as they happen often), using the software
+ * interrupt routines for this thing allows us to easily mask
+ * this when we don't want any of the above to happen. Not yet
+ * used, but this allows for easy and efficient race-condition
+ * prevention later on.
+ */
 static void kbd_bh(void * unused)
 {
 	static unsigned char old_leds = -1;
 	unsigned char leds = kbd_table[fg_console].flags & LED_MASK;
 
-	if (leds == old_leds)
-		return;
-	old_leds = leds;
-	if (!send_data(0xed) || !send_data(leds))
-		send_data(0xf4);	/* re-enable kbd if any errors */
-}
-
-void set_leds(void)
-{
-	mark_bh(KEYBOARD_BH);
+	if (leds != old_leds) {
+		old_leds = leds;
+		if (!send_data(0xed) || !send_data(leds))
+			send_data(0xf4);	/* re-enable kbd if any errors */
+	}
+	if (want_console >= 0) {
+		change_console(want_console);
+		want_console = -1;
+	}
+	do_keyboard_interrupt();
 }
 
 long no_idt[2] = {0, 0};
@@ -1363,7 +1380,7 @@ void hard_reset_now(void)
 	int i, j;
 	extern unsigned long pg0[1024];
 
-	cli();
+	sti();
 /* rebooting needs to touch the page at absolute addr 0 */
 	pg0[0] = 7;
 	*((unsigned short *)0x472) = 0x1234;

@@ -58,7 +58,8 @@ struct inode_operations minix_file_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	minix_bmap,		/* bmap */
-	minix_truncate		/* truncate */
+	minix_truncate,		/* truncate */
+	NULL			/* permission */
 };
 
 static int minix_file_read(struct inode * inode, struct file * filp, char * buf, int count)

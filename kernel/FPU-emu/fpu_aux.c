@@ -128,6 +128,14 @@ void ffree_()
 }
 
 
+void ffreep()
+{
+  /* ffree st(i) + pop - unofficial code */
+  st(FPU_rm).tag = TW_Empty;
+  pop();
+}
+
+
 void fst_i_()
 {
   /* fst st(i) */

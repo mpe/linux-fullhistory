@@ -45,7 +45,8 @@ struct inode_operations proc_base_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static struct proc_dir_entry base_dir[] = {

@@ -39,6 +39,8 @@ int permission(struct inode * inode,int mask)
 /* special case: not even root can read/write a deleted file */
 	if (inode->i_dev && !inode->i_nlink)
 		return 0;
+	else if (inode->i_op && inode->i_op->permission)
+		return inode->i_op->permission(inode, mask);
 	else if (current->euid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))

@@ -256,6 +256,7 @@ struct inode_operations {
 	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
+	int (*permission) (struct inode *, int);
 };
 
 struct super_operations {

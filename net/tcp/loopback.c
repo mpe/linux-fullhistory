@@ -68,9 +68,9 @@
 #endif
 
 #ifdef LOOPBACK_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 static int
@@ -83,7 +83,7 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   static unsigned char buff[2048];
   unsigned char *tmp;
 
-  PRINTK ("loopback_xmit (dev = %X)\n", dev);
+  PRINTK (("loopback_xmit (dev = %X)\n", dev));
   cli();
   if (inuse)
     {
@@ -107,7 +107,7 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
 	    if (done != -1 && (i = dev_tint (buff,dev)) != 0)
 	      {
 		 /* print out the buffer. */
-		 PRINTK ("loopback xmit: \n");
+		 PRINTK (("loopback xmit: \n"));
 		 eth = (struct enet_header *)buff;
 		 print_eth (eth);
 		 tmp = buff;

@@ -309,11 +309,21 @@ void minix_read_inode(struct inode * inode)
 	int block, ino;
 
 	ino = inode->i_ino;
+	inode->i_op = NULL;
+	inode->i_mode = 0;
+	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
+		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
+			inode->i_dev, ino);
+		return;
+	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks +
 		    inode->i_sb->u.minix_sb.s_zmap_blocks +
 		    (ino-1)/MINIX_INODES_PER_BLOCK;
-	if (!(bh=bread(inode->i_dev,block, BLOCK_SIZE)))
-		panic("unable to read i-node block");
+	if (!(bh=bread(inode->i_dev,block, BLOCK_SIZE))) {
+		printk("Major problem: unable to read inode from dev 0x%04x\n",
+			inode->i_dev);
+		return;
+	}
 	raw_inode = ((struct minix_inode *) bh->b_data) +
 		    (ino-1)%MINIX_INODES_PER_BLOCK;
 	inode->i_mode = raw_inode->i_mode;
@@ -328,7 +338,6 @@ void minix_read_inode(struct inode * inode)
 	else for (block = 0; block < 9; block++)
 		inode->u.minix_i.i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
-	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &minix_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))
@@ -353,14 +362,21 @@ void minix_write_inode(struct inode * inode)
 {
 	struct buffer_head * bh;
 	struct minix_inode * raw_inode;
-	int block;
+	int ino, block;
 
+	ino = inode->i_ino;
+	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
+		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
+			inode->i_dev, ino);
+		inode->i_dirt = 0;
+		return;
+	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks + inode->i_sb->u.minix_sb.s_zmap_blocks +
-		(inode->i_ino-1)/MINIX_INODES_PER_BLOCK;
+		(ino-1)/MINIX_INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE)))
 		panic("unable to read i-node block");
 	raw_inode = ((struct minix_inode *)bh->b_data) +
-		(inode->i_ino-1)%MINIX_INODES_PER_BLOCK;
+		(ino-1)%MINIX_INODES_PER_BLOCK;
 	raw_inode->i_mode = inode->i_mode;
 	raw_inode->i_uid = inode->i_uid;
 	raw_inode->i_gid = inode->i_gid;

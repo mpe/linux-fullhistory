@@ -64,7 +64,8 @@ struct inode_operations ext_file_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	ext_bmap,		/* bmap */
-	ext_truncate		/* truncate */
+	ext_truncate,		/* truncate */
+	NULL			/* permission */
 };
 
 static int ext_file_read(struct inode * inode, struct file * filp, char * buf, int count)

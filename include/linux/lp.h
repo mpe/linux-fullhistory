@@ -1,13 +1,6 @@
 #ifndef _LINUX_LP_H
 #define _LINUX_LP_H
 
-#include <linux/errno.h>
-#include <linux/kernel.h>
-#include <linux/sched.h>
-
-#include <asm/io.h>
-#include <asm/segment.h>
-
 /*
  * usr/include/linux/lp.h c.1991-1992 James Wiegand
  * many modifications copyright (C) 1992 Michael K. Johnson
@@ -71,7 +64,7 @@
 
 #define LP_B(minor)	lp_table[(minor)].base		/* IO address */
 #define LP_F(minor)	lp_table[(minor)].flags		/* flags for busy, etc. */
-#define LP_S(minor)	inb(LP_B((minor)) + 1)		/* status port */
+#define LP_S(minor)	inb_p(LP_B((minor)) + 1)	/* status port */
 #define LP_C(minor)	(lp_table[(minor)].base + 2)	/* control port */
 #define LP_CHAR(minor)	lp_table[(minor)].chars		/* busy timeout */
 #define LP_TIME(minor)	lp_table[(minor)].time		/* wait time */

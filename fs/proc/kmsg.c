@@ -14,6 +14,9 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
+extern unsigned long log_size;
+extern struct wait_queue * log_wait;
+
 extern int sys_syslog(int type, char * bug, int count);
 
 static int kmsg_open(struct inode * inode, struct file * file)
@@ -31,12 +34,23 @@ static int kmsg_read(struct inode * inode, struct file * file,char * buf, int co
 	return sys_syslog(2,buf,count);
 }
 
+static int kmsg_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+{
+	if (sel_type != SEL_IN)
+		return 0;
+	if (log_size)
+		return 1;
+	select_wait(&log_wait, wait);
+	return 0;
+}
+
+
 static struct file_operations proc_kmsg_operations = {
 	NULL,		/* kmsg_lseek */
 	kmsg_read,
 	NULL,		/* kmsg_write */
 	NULL,		/* kmsg_readdir */
-	NULL,		/* kmsg_select */
+	kmsg_select,	/* kmsg_select */
 	NULL,		/* kmsg_ioctl */
 	NULL,		/* mmap */
 	kmsg_open,
@@ -57,5 +71,6 @@ struct inode_operations proc_kmsg_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };

@@ -54,7 +54,9 @@ int fg_console = 0;
 struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
 
-static int initialize_tty_struct(struct tty_struct *tty, int line);
+static void initialize_tty_struct(int line, struct tty_struct *tty);
+static void initialize_termios(int line, struct termios *tp);
+
 static int tty_read(struct inode *, struct file *, char *, int);
 static int tty_write(struct inode *, struct file *, char *, int);
 static int tty_select(struct inode *, struct file *, int, select_table *);
@@ -128,7 +130,7 @@ static int hung_up_tty_select(struct inode * inode, struct file * filp, int sel_
 
 static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
 {
-	return -EBADF;
+	return -ESPIPE;
 }
 
 static struct file_operations tty_fops = {
@@ -184,6 +186,27 @@ static inline int hung_up(struct file * filp)
 {
 	return filp->f_op == &hung_up_tty_fops;
 }
+
+/*
+ * Sometimes we want to wait until a particular VT has been activated. We
+ * do it in a very simple manner. Everybody waits on a single queue and
+ * get woken up at once. Those that are satisfied go on with their business,
+ * while those not ready go back to sleep. Seems overkill to add a wait
+ * to each vt just for this - usually this does nothing!
+ */
+static struct wait_queue *vt_activate_queue = NULL;
+
+/*
+ * Sleeps until a vt is activated, or the task is interrupted. Returns
+ * 0 if activation, -1 if interrupted.
+ */
+int vt_waitactive(void)
+{
+	interruptible_sleep_on(&vt_activate_queue);
+	return (current->signal & ~current->blocked) ? -1 : 0;
+}
+
+#define vt_wake_waitactive() wake_up(&vt_activate_queue)
 
 extern int kill_proc(int pid, int sig, int priv);
 
@@ -257,6 +280,10 @@ void complete_change_console(unsigned int new_console)
 		}
 	}
 
+	/*
+	 * Wake anyone waiting for their VT to activate
+	 */
+	vt_wake_waitactive();
 	return;
 }
 
@@ -732,7 +759,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	}
 	dev = MINOR(dev);
 	tty = TTY_TABLE(dev);
-	if (!tty)
+	if (!tty || (tty->flags & (1 << TTY_IO_ERROR)))
 		return -EIO;
 	if (MINOR(inode->i_rdev) && (tty->pgrp > 0) &&
 	    (current->tty == dev) &&
@@ -765,7 +792,7 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 		tty = redirect;
 	else
 		tty = TTY_TABLE(dev);
-	if (!tty || !tty->write)
+	if (!tty || !tty->write || (tty->flags & (1 << TTY_IO_ERROR)))
 		return -EIO;
 	if (!is_console && L_TOSTOP(tty) && (tty->pgrp > 0) &&
 	    (current->tty == dev) && (tty->pgrp != current->pgrp)) {
@@ -783,6 +810,169 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 }
 
 /*
+ * This is so ripe with races that you should *really* not touch this
+ * unless you know exactly what you are doing. All the changes have to be
+ * made atomically, or there may be incorrect pointers all over the place.
+ */
+static int init_dev(int dev)
+{
+	struct tty_struct *tty, *o_tty;
+	struct termios *tp, *o_tp;
+	int retval;
+	int o_dev;
+
+	o_dev = PTY_OTHER(dev);
+	tty = o_tty = NULL;
+	tp = o_tp = NULL;
+repeat:
+	retval = -EAGAIN;
+	if (IS_A_PTY_MASTER(dev) && tty_table[dev] && tty_table[dev]->count)
+		goto end_init;
+	retval = -ENOMEM;
+	if (!tty_table[dev] && !tty) {
+		tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
+		if (!tty)
+			goto end_init;
+		initialize_tty_struct(dev, tty);
+		goto repeat;
+	}
+	if (!tty_termios[dev] && !tp) {
+		tp = (struct termios *) kmalloc(sizeof(struct termios), GFP_KERNEL);
+		if (!tp)
+			goto end_init;
+		initialize_termios(dev, tp);
+		goto repeat;
+	}
+	if (IS_A_PTY(dev)) {
+		if (!tty_table[o_dev] && !o_tty) {
+			o_tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
+			if (!o_tty)
+				goto end_init;
+			initialize_tty_struct(o_dev, o_tty);
+			goto repeat;
+		}
+		if (!tty_termios[o_dev] && !o_tp) {
+			o_tp = (struct termios *) kmalloc(sizeof(struct termios), GFP_KERNEL);
+			if (!o_tp)
+				goto end_init;
+			initialize_termios(o_dev, o_tp);
+			goto repeat;
+		}
+	}
+	/* Now we have allocated all the structures: update all the pointers.. */
+	if (!tty_termios[dev]) {
+		tty_termios[dev] = tp;
+		tp = NULL;
+	}
+	if (!tty_table[dev]) {
+		tty->termios = tty_termios[dev];
+		tty_table[dev] = tty;
+		tty = NULL;
+	}
+	if (IS_A_PTY(dev)) {
+		if (!tty_termios[o_dev]) {
+			tty_termios[o_dev] = o_tp;
+			o_tp = NULL;
+		}
+		if (!tty_table[o_dev]) {
+			o_tty->termios = tty_termios[o_dev];
+			tty_table[o_dev] = o_tty;
+			o_tty = NULL;
+		}
+		tty_table[dev]->link = tty_table[o_dev];
+		tty_table[o_dev]->link = tty_table[dev];
+	}
+	tty_table[dev]->count++;
+	if (IS_A_PTY_MASTER(dev))
+		tty_table[o_dev]->count++;
+	retval = 0;
+end_init:
+	if (tty)
+		free_page((unsigned long) tty);
+	if (o_tty)
+		free_page((unsigned long) tty);
+	if (tp)
+		kfree_s(tp, sizeof(struct termios));
+	if (o_tp)
+		kfree_s(o_tp, sizeof(struct termios));
+	return retval;
+}
+
+/*
+ * Even releasing the tty structures is a tricky business.. We have
+ * to be very careful that the structures are all released at the
+ * same time, as interrupts might otherwise get the wrong pointers.
+ */
+static void release_dev(int dev, struct file * filp)
+{
+	struct tty_struct *tty, *o_tty;
+	struct termios *tp, *o_tp;
+
+	tty = tty_table[dev];
+	tp = tty_termios[dev];
+	o_tty = NULL;
+	o_tp = NULL;
+	if (!tty) {
+		printk("release_dev: tty_table[%d] was NULL\n", dev);
+		return;
+	}
+	if (!tp) {
+		printk("release_dev: tty_termios[%d] was NULL\n", dev);
+		return;
+	}
+	if (IS_A_PTY(dev)) {
+		o_tty = tty_table[PTY_OTHER(dev)];
+		o_tp = tty_termios[PTY_OTHER(dev)];
+		if (!o_tty) {
+			printk("release_dev: pty pair(%d) was NULL\n", dev);
+			return;
+		}
+		if (!o_tp) {
+			printk("release_dev: pty pair(%d) termios was NULL\n", dev);
+			return;
+		}
+		if (tty->link != o_tty || o_tty->link != tty) {
+			printk("release_dev: bad pty pointers\n");
+			return;
+		}
+	}
+	if (tty->count < 2 && tty->close)
+		tty->close(tty, filp);
+	if (IS_A_PTY_MASTER(dev)) {
+		if (--tty->link->count < 0) {
+			printk("release_dev: bad tty slave count (dev = %d): %d\n",
+			       dev, tty->count);
+			tty->link->count = 0;
+		}
+	}
+	if (--tty->count < 0) {
+		printk("release_dev: bad tty_table[%d]->count: %d\n",
+		       dev, tty->count);
+		tty->count = 0;
+	}
+	if (tty->count)
+		return;
+	if (o_tty) {
+		if (o_tty->count)
+			return;
+		else {
+			tty_table[PTY_OTHER(dev)] = NULL;
+			tty_termios[PTY_OTHER(dev)] = NULL;
+		}
+	}
+	tty_table[dev] = NULL;
+	if (IS_A_PTY(dev)) {
+		tty_termios[dev] = NULL;
+		kfree_s(tp, sizeof(struct termios));
+	}
+	free_page((unsigned long) tty);
+	if (o_tty)
+		free_page((unsigned long) o_tty);
+	if (o_tp)
+		kfree_s(o_tp, sizeof(struct termios));
+}
+
+/*
  * tty_open and tty_release keep up the tty count that contains the
  * number of opens done on a tty. We cannot use the inode-count, as
  * different inodes might point to the same tty.
@@ -795,7 +985,7 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
  */
 static int tty_open(struct inode * inode, struct file * filp)
 {
-	struct tty_struct *tty, *o_tty;
+	struct tty_struct *tty;
 	int dev, retval;
 
 	dev = inode->i_rdev;
@@ -808,76 +998,24 @@ static int tty_open(struct inode * inode, struct file * filp)
 	if (!dev)
 		dev = fg_console + 1;
 	filp->f_rdev = 0x0400 | dev;
-/*
- * There be race-conditions here... Lots of them. Careful now.
- */
-	tty = o_tty = NULL;
+	retval = init_dev(dev);
+	if (retval)
+		return retval;
 	tty = tty_table[dev];
-	if (!tty) {
-		tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
-		if (tty_table[dev]) {
-			/*
-			 * Stop our allocation of tty if race
-			 * condition detected.
-			 */
-			if (tty)
-				free_page((unsigned long) tty);
-			tty = tty_table[dev];
-		} else {
-			if (!tty)
-				return -ENOMEM;
-			retval = initialize_tty_struct(tty, dev);
-			if (retval) {
-				free_page((unsigned long) tty);
-				return retval;
-			}
-			tty_table[dev] = tty;
-		}
-	}
-	tty->count++;			/* bump count to preserve tty */
-	if (IS_A_PTY(dev)) {
-		o_tty = tty_table[PTY_OTHER(dev)];
-		if (!o_tty) {
-			o_tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
-			if (tty_table[PTY_OTHER(dev)]) {
-				/*
-				 * Stop our allocation of o_tty if race
-				 * condition detected.
-				 */
-				free_page((unsigned long) o_tty);
-				o_tty = tty_table[PTY_OTHER(dev)];
-			} else {
-				if (!o_tty) {
-					tty->count--;
-					return -ENOMEM;
-				}
-				retval = initialize_tty_struct(o_tty, PTY_OTHER(dev));
-				if (retval) {
-					tty->count--;
-					free_page((unsigned long) o_tty);
-					return retval;
-				}
-				tty_table[PTY_OTHER(dev)] = o_tty;
-			}
-		}
-		tty->link = o_tty;				
-		o_tty->link = tty;
-	}
-	if (IS_A_PTY_MASTER(dev)) {
-		if (tty->count > 1) {
-			tty->count--;
-			return -EAGAIN;
-		}
-		if (tty->link)
-			tty->link->count++;
-	} 
-	retval = 0;
-
 	/* clean up the packet stuff. */
 	tty->status_changed = 0;
 	tty->ctrl_status = 0;
 	tty->packet = 0;
 
+	if (tty->open) {
+		retval = tty->open(tty, filp);
+	} else {
+		retval = -ENODEV;
+	}
+	if (retval) {
+		release_dev(dev, filp);
+		return retval;
+	}
 	if (!(filp->f_flags & O_NOCTTY) &&
 	    current->leader &&
 	    current->tty<0 &&
@@ -886,16 +1024,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 		tty->session = current->session;
 		tty->pgrp = current->pgrp;
 	}
-	if (tty->open)
-		retval = tty->open(tty, filp);
-	else
-		retval = -ENODEV;
-	if (retval) {
-		tty->count--;
-		if (IS_A_PTY_MASTER(dev) && tty->link)
-			tty->link->count--;
-	}
-	return retval;
+	return 0;
 }
 
 /*
@@ -906,9 +1035,6 @@ static int tty_open(struct inode * inode, struct file * filp)
 static void tty_release(struct inode * inode, struct file * filp)
 {
 	int dev;
-	struct tty_struct * tty;
-	unsigned long free_tty_struct;
-	struct termios *free_termios;
 
 	dev = filp->f_rdev;
 	if (MAJOR(dev) != 4) {
@@ -916,67 +1042,11 @@ static void tty_release(struct inode * inode, struct file * filp)
 		return;
 	}
 	dev = MINOR(filp->f_rdev);
-	if (!dev)
-		dev = fg_console+1;
-	tty = tty_table[dev];
-	if (!tty) {
-		printk("tty_release: tty_table[%d] was NULL\n", dev);
+	if (!dev) {
+		printk("tty_release: bad f_rdev\n");
 		return;
 	}
-	if (IS_A_PTY_MASTER(dev) && tty->link)  {
-		if (--tty->link->count < 0) {
-			printk("tty_release: bad tty slave count (dev = %d): %d\n",
-			       dev, tty->count);	
-			tty->link->count = 0;
-		}
-	}
-	if (--tty->count < 0) {
-		printk("tty_release: bad tty_table[%d]->count: %d\n",
-		       dev, tty->count);
-		tty->count = 0;
-	}
-	if (tty->count)
-		return;
-	if (tty->close)
-		tty->close(tty, filp);
-	if (tty == redirect)
-		redirect = NULL;
-	if (tty->link && !tty->link->count && (tty->link == redirect))
-		redirect = NULL;
-	if (tty->link) {
-		if (tty->link->count)
-			return;
-		/*
-		 * Free the tty structure, being careful to avoid race conditions
-		 */
-		free_tty_struct = (unsigned long) tty_table[PTY_OTHER(dev)];
-		tty_table[PTY_OTHER(dev)] = 0;
-		free_page(free_tty_struct);
-		/*
-		 * If this is a PTY, free the termios structure, being
-		 * careful to avoid race conditions
-		 */
-		if (IS_A_PTY(dev)) {
-			free_termios = tty_termios[PTY_OTHER(dev)];
-			tty_termios[PTY_OTHER(dev)] = 0;
-			kfree_s(free_termios, sizeof(struct termios));
-		}
-	}
-	/*
-	 * Free the tty structure, being careful to avoid race conditions
-	 */
-	free_tty_struct = (unsigned long) tty_table[dev];
-	tty_table[dev] = 0;	
-	free_page(free_tty_struct);
-	/*
-	 * If this is a PTY, free the termios structure, being careful
-	 * to avoid race conditions
-	 */
-	if (IS_A_PTY(dev)) {
-		free_termios = tty_termios[dev];
-		tty_termios[dev] = 0;
-		kfree_s(free_termios, sizeof(struct termios));
-	}
+	release_dev(dev, filp);
 }
 
 static int tty_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
@@ -1070,44 +1140,13 @@ void do_SAK( struct tty_struct *tty)
  * This subroutine initializes a tty structure.  We have to set up
  * things correctly for each different type of tty.
  */
-static int initialize_tty_struct(struct tty_struct *tty, int line)
+static void initialize_tty_struct(int line, struct tty_struct *tty)
 {
-	struct termios *tp = tty_termios[line];
-
 	memset(tty, 0, sizeof(struct tty_struct));
 	tty->line = line;
 	tty->pgrp = -1;
 	tty->winsize.ws_row = 24;
 	tty->winsize.ws_col = 80;
-	if (!tty_termios[line]) {
-		tp = kmalloc(sizeof(struct termios), GFP_KERNEL);
-		if (!tty_termios[line]) {
-			if (!tp)
-				return -ENOMEM;
-			memset(tp, 0, sizeof(struct termios));
-			memcpy(tp->c_cc, INIT_C_CC, NCCS);
-			if (IS_A_CONSOLE(line)) {
-				tp->c_iflag = ICRNL | IXON;
-				tp->c_oflag = OPOST | ONLCR;
-				tp->c_cflag = B38400 | CS8 | CREAD;
-				tp->c_lflag = ISIG | ICANON | ECHO |
-					ECHOCTL | ECHOKE;
-			} else if (IS_A_SERIAL(line)) {
-				tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
-			} else if (IS_A_PTY_MASTER(line)) {
-				tp->c_cflag = B9600 | CS8 | CREAD;
-			} else if (IS_A_PTY_SLAVE(line)) {
-				tp->c_iflag = ICRNL | IXON;
-				tp->c_oflag = OPOST | ONLCR;
-				tp->c_cflag = B38400 | CS8 | CREAD;
-				tp->c_lflag = ISIG | ICANON | ECHO |
-					ECHOCTL | ECHOKE;
-			}
-			tty_termios[line] = tp;
-		}
-	}
-	tty->termios = tty_termios[line];
-	
 	if (IS_A_CONSOLE(line)) {
 		tty->open = con_open;
 		tty->winsize.ws_row = video_num_lines;
@@ -1117,9 +1156,31 @@ static int initialize_tty_struct(struct tty_struct *tty, int line)
 	} else if IS_A_PTY(line) {
 		tty->open = pty_open;
 	}
-	return 0;
 }
 
+static void initialize_termios(int line, struct termios * tp)
+{
+	memset(tp, 0, sizeof(struct termios));
+	memcpy(tp->c_cc, INIT_C_CC, NCCS);
+	if (IS_A_CONSOLE(line)) {
+		tp->c_iflag = ICRNL | IXON;
+		tp->c_oflag = OPOST | ONLCR;
+		tp->c_cflag = B38400 | CS8 | CREAD;
+		tp->c_lflag = ISIG | ICANON | ECHO |
+			ECHOCTL | ECHOKE;
+	} else if (IS_A_SERIAL(line)) {
+		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
+	} else if (IS_A_PTY_MASTER(line)) {
+		tp->c_cflag = B9600 | CS8 | CREAD;
+	} else if (IS_A_PTY_SLAVE(line)) {
+		tp->c_iflag = ICRNL | IXON;
+		tp->c_oflag = OPOST | ONLCR;
+		tp->c_cflag = B38400 | CS8 | CREAD;
+		tp->c_lflag = ISIG | ICANON | ECHO |
+			ECHOCTL | ECHOKE;
+	}
+}
+	
 long tty_init(long kmem_start)
 {
 	int i;

@@ -34,7 +34,8 @@ struct inode_operations minix_symlink_inode_operations = {
 	minix_readlink,		/* readlink */
 	minix_follow_link,	/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static int minix_follow_link(struct inode * dir, struct inode * inode,

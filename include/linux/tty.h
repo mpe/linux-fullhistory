@@ -76,7 +76,8 @@ struct serial_struct {
 	int	flags;
 	int	xmit_fifo_size;
 	int	custom_divisor;
-	int	reserved[8];
+	int	baud_base;
+	int	reserved[7];
 };
 
 /*
@@ -92,7 +93,6 @@ struct serial_struct {
 /*
  * Definitions for async_struct (and serial_struct) flags field
  */
-#define ASYNC_NOSCRATCH	0x0001	/* 16XXX UART with no scratch register */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
 
@@ -101,7 +101,10 @@ struct serial_struct {
 #define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
 #define ASYNC_SPD_CUST	0x0030  /* Use user-specified divisor */
 
-#define ASYNC_FLAGS	0x0037	/* Possible legal async flags */
+#define ASYNC_FLAGS	0x0036	/* Possible legal async flags */
+
+/* Internal flags used only by kernel/chr_drv/serial.c */
+#define ASYNC_NO_IRQ	0x80000000 /* No IRQ was initialized */
 
 #define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
 #define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
@@ -244,6 +247,7 @@ struct tty_struct {
 #define TTY_CR_PENDING 2
 #define TTY_SQ_THROTTLED 3
 #define TTY_RQ_THROTTLED 4
+#define TTY_IO_ERROR 5
 
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
 #define TTY_READ_FLUSH(tty) tty_read_flush((tty))

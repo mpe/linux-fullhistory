@@ -1,6 +1,9 @@
 #ifndef __LINUX_KEYBOARD_H
 #define __LINUX_KEYBOARD_H
 
+#include <linux/interrupt.h>
+#define set_leds() mark_bh(KEYBOARD_BH)
+
 /*
  * Global flags: things that don't change between virtual consoles.
  * This includes things like "key-down" flags - if the shift key is
@@ -64,10 +67,6 @@ extern struct kbd_struct kbd_table[];
 #define VC_META		9	/* 0 - meta, 1 - meta=prefix with ESC */
 
 #define LED_MASK	7
-
-#ifndef KBD_DEFFLAGS
-#define KBD_DEFFLAGS ((1 << VC_NUMLOCK) | (1 << VC_REPEAT))
-#endif
 
 extern unsigned long kbd_init(unsigned long);
 

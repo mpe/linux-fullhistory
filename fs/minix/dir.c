@@ -49,7 +49,8 @@ struct inode_operations minix_dir_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
-	minix_truncate		/* truncate */
+	minix_truncate,		/* truncate */
+	NULL			/* permission */
 };
 
 static int minix_readdir(struct inode * inode, struct file * filp,

@@ -63,9 +63,9 @@
 
 
 #ifdef TIMER_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 static struct timer *timer_base=NULL;
@@ -75,7 +75,7 @@ void
 delete_timer (struct timer *t)
 {
    struct timer *tm;
-   PRINTK ("delete_timer (t=%X)\n",t);
+   PRINTK (("delete_timer (t=%X)\n",t));
    if (timer_base == NULL || t == NULL) return;
    cli();
    if (t == timer_base) 
@@ -113,7 +113,7 @@ reset_timer (struct timer *t)
 
    delete_timer (t);
    t->when = timer_seq + t->len;
-   PRINTK ("reset_timer (t=%X) when = %d jiffies = %d\n",t, t->when, jiffies);
+   PRINTK (("reset_timer (t=%X) when = %d jiffies = %d\n",t, t->when, jiffies));
    if (t == NULL)
      {
 	printk ("*** reset timer NULL timer\n");
@@ -173,7 +173,7 @@ net_timer (void)
 	sti();
 	why = sk->timeout;
 
-	PRINTK ("net_timer: found sk=%X why = %d\n",sk, why);
+	PRINTK (("net_timer: found sk=%X why = %d\n",sk, why));
 
 	if (sk->keepopen)
 	  {
@@ -212,7 +212,7 @@ net_timer (void)
 				  the memory assosiated with the
 				  socket to be freed.  We need to
 				  print an error message. */
-	     PRINTK ("possible memory leak.  sk = %X\n", sk);
+	     PRINTK (("possible memory leak.  sk = %X\n", sk));
 	     print_sk (sk);
 	     reset_timer ((struct timer *)&sk->time_wait);
 	     sk->inuse = 0;
@@ -244,19 +244,19 @@ net_timer (void)
 		     release_sock (sk);
 		     break;
 		   }
-		 PRINTK ("retransmitting.\n");
+		 PRINTK (("retransmitting.\n"));
 		 sk->prot->retransmit (sk, 0);
 
 		  if (sk->retransmits > TCP_RETR1)
 		    {
-		      PRINTK ("timer.c TIME_WRITE time-out 1\n");
+		      PRINTK (("timer.c TIME_WRITE time-out 1\n"));
 		      arp_destroy (sk->daddr);
 		      ip_route_check (sk->daddr);
 		    }
 
 		  if (sk->retransmits > TCP_RETR2)
 		    {
-		      PRINTK ("timer.c TIME_WRITE time-out 2\n");
+		      PRINTK (("timer.c TIME_WRITE time-out 2\n"));
 		       sk->err = ETIMEDOUT;
 		       if (sk->state == TCP_FIN_WAIT1 ||
 			   sk->state == TCP_FIN_WAIT2 ||
@@ -295,7 +295,7 @@ net_timer (void)
 
 	     if (sk->retransmits > TCP_RETR1)
 	       {
-		 PRINTK ("timer.c TIME_KEEPOPEN time-out 1\n");
+		 PRINTK (("timer.c TIME_KEEPOPEN time-out 1\n"));
 		 arp_destroy (sk->daddr);
 		 ip_route_check (sk->daddr);
 		 release_sock (sk);
@@ -303,7 +303,7 @@ net_timer (void)
 	       }
 	     if (sk->retransmits > TCP_RETR2)
 	       {
-		 PRINTK ("timer.c TIME_KEEPOPEN time-out 2\n");
+		 PRINTK (("timer.c TIME_KEEPOPEN time-out 2\n"));
 		  arp_destroy (sk->daddr);
 		  sk->err = ETIMEDOUT;
 		  if (sk->state == TCP_FIN_WAIT1 ||

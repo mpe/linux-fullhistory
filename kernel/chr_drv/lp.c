@@ -1,8 +1,13 @@
 /* Copyright (C) 1992 by Jim Weigand, Linus Torvalds, and Michael K. Johnson
 */
 
+#include <linux/errno.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/lp.h>
-/* sched.h is included from lp.h */
+
+#include <asm/io.h>
+#include <asm/segment.h>
 
 /* 
  * All my debugging code assumes that you debug with only one printer at
@@ -16,10 +21,10 @@ static int lp_reset(int minor)
 	int testvalue;
 
 	/* reset value */
-	outb(0, LP_C(minor));
+	outb_p(0, LP_C(minor));
 	for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
 		;
-	outb(LP_PSELECP | LP_PINITP, LP_C(minor));
+	outb_p(LP_PSELECP | LP_PINITP, LP_C(minor));
 	return LP_S(minor);
 }
 
@@ -32,7 +37,7 @@ static int lp_char(char lpchar, int minor)
 	int retval = 0, wait = 0;
 	unsigned long count  = 0; 
 
-	outb(lpchar, LP_B(minor));
+	outb_p(lpchar, LP_B(minor));
 	do {
 		retval = LP_S(minor);
 		count ++;
@@ -54,10 +59,10 @@ static int lp_char(char lpchar, int minor)
 	   low, according spec.  Some printers need it, others don't. */
 	while(wait != LP_WAIT(minor)) wait++;
         /* control port takes strobe high */
-	outb(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
+	outb_p(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
 	while(wait) wait--;
         /* take strobe low */
-	outb(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
+	outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
        /* get something meaningful for return value */
 	return LP_S(minor);
 }
@@ -152,7 +157,7 @@ static int lp_write(struct inode * inode, struct file * file, char * buf, int co
 static int lp_lseek(struct inode * inode, struct file * file,
 		    off_t offset, int origin)
 {
-	return -EINVAL;
+	return -ESPIPE;
 }
 
 static int lp_open(struct inode * inode, struct file * file)
@@ -232,10 +237,10 @@ long lp_init(long kmem_start)
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {
 		/* write to port & read back to check */
-		outb( LP_DUMMY, LP_B(offset));
+		outb_p( LP_DUMMY, LP_B(offset));
 		for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
 			;
-		testvalue = inb(LP_B(offset));
+		testvalue = inb_p(LP_B(offset));
 		if (testvalue != 255) {
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);

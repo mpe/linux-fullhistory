@@ -68,10 +68,11 @@
 unsigned long ip_addr[MAX_IP_ADDRES]={0,0,0};
 
 #undef IP_DEBUG
+
 #ifdef IP_DEBUG
-#define PRINTK printk
+#define PRINTK(X) printk X
 #else
-#define PRINTK dummy_routine
+#define PRINTK(X) /**/
 #endif
 
 static struct rtable *rt_base=NULL; /* used to base all the routing data. */
@@ -84,11 +85,11 @@ get_protocol(unsigned char prot)
 {
    unsigned char hash;
    struct ip_protocol *p;
-   PRINTK ("get_protocol (%d)\n ", prot);
+   PRINTK (("get_protocol (%d)\n ", prot));
    hash = prot & (MAX_IP_PROTOS -1);
    for (p = ip_protos[hash] ; p != NULL; p=p->next)
      {
-	PRINTK ("trying protocol %d\n", p->protocol);
+	PRINTK (("trying protocol %d\n", p->protocol));
 	if (p->protocol == prot)
 	     return (p);
      }
@@ -207,20 +208,20 @@ loose_route(struct ip_header *iph, struct options *opt)
 void
 print_rt(struct rtable *rt)
 {
-  PRINTK ("net = %08X router = %08X\n",rt->net, rt->router);
-  PRINTK ("dev = %X, next = %X\n",rt->dev, rt->next);
+  PRINTK (("net = %08X router = %08X\n",rt->net, rt->router));
+  PRINTK (("dev = %X, next = %X\n",rt->dev, rt->next));
 }
 
 void
 print_ipprot (struct ip_protocol *ipprot)
 {
-   PRINTK ("handler = %X, protocol = %d, copy=%d \n",
-	   ipprot->handler, ipprot->protocol, ipprot->copy);
+   PRINTK (("handler = %X, protocol = %d, copy=%d \n",
+	    ipprot->handler, ipprot->protocol, ipprot->copy));
 }
 
 /* This assumes that address are all in net order. */
 static  struct device *
-ip_route(struct options *opt, unsigned long daddr , unsigned long *raddr)
+ip_route(struct options *opt, unsigned long daddr, unsigned long *raddr)
 {
   struct rtable *rt;
   /* look through the routing table for some
@@ -230,6 +231,7 @@ ip_route(struct options *opt, unsigned long daddr , unsigned long *raddr)
       /* see if we found one. */
       if (ip_addr_match (rt->net, daddr))
 	{
+	  PRINTK (("IP: %X via %s (%X)\n", daddr, rt->dev->name, rt->router));
 	  *raddr = rt->router;
 	  return (rt->dev);
 	}
@@ -243,7 +245,7 @@ add_route (struct rtable *rt)
   int mask;
   struct rtable *r;
   struct rtable *r1;
-  PRINTK ("add_route (rt=%X):\n",rt);
+  PRINTK (("add_route (rt=%X):\n",rt));
   print_rt(rt);
 
   if (rt_base == NULL)
@@ -264,7 +266,7 @@ add_route (struct rtable *rt)
 	  break;
 	}
     }
-  PRINTK ("mask = %X\n",mask);
+  PRINTK (("mask = %X\n",mask));
   r1=rt_base;
   for (r=rt_base; r != NULL; r=r->next)
     {
@@ -287,7 +289,7 @@ add_route (struct rtable *rt)
 
       if (!(r->net & mask))
 	{
-	   PRINTK("adding before r=%X\n",r);
+	   PRINTK (("adding before r=%X\n",r));
 	   print_rt(r);
 	   if (r == rt_base)
 	     {
@@ -301,7 +303,7 @@ add_route (struct rtable *rt)
 	}
       r1 = r;
     }
-  PRINTK ("adding after r1=%X\n",r1);
+  PRINTK (("adding after r1=%X\n",r1));
   print_rt(r1);
   /* goes at the end. */
   rt->next = NULL;
@@ -328,10 +330,10 @@ ip_set_dev (struct ip_config *u_ipc)
   /* see if we need to add a broadcast address. */
   if (ipc.net != -1)
     {
+       PRINTK (("new broadcast for %s: %08X\n", dev->name, ipc.net));
        arp_add_broad (ipc.net, dev);
        rt = kmalloc (sizeof (*rt), GFP_KERNEL);
        if (rt == NULL) return (-ENOMEM);
-
        rt->net = ipc.net;
        rt->dev = dev;
        rt->router = 0;
@@ -341,6 +343,7 @@ ip_set_dev (struct ip_config *u_ipc)
 
   if (ipc.router != -1)
     {
+       PRINTK (("new router for %s: %08X\n", dev->name, ipc.router));
        rt = kmalloc (sizeof (*rt),GFP_KERNEL);
        if (rt == NULL) return (-ENOMEM);
        rt->net = 0;
@@ -351,18 +354,21 @@ ip_set_dev (struct ip_config *u_ipc)
 
   if (dev->loopback)
     {
+       PRINTK (("new loopback addr: %08X\n", ipc.paddr));
        rt = kmalloc (sizeof (*rt), GFP_KERNEL);
        if (rt == NULL) return (-ENOMEM);
        rt->net = ipc.paddr;
        rt->dev = dev;
        rt->router = 0;
        add_route (rt);
-
     }
 
 
   if (!my_ip_addr (ipc.paddr))
-    ip_addr[ip_ads++] = ipc.paddr;
+    {
+       PRINTK (("new identity: %08X\n", ipc.paddr));
+       ip_addr[ip_ads++] = ipc.paddr;
+    }
 
   dev->up = ipc.up;
   if (dev->up)
@@ -375,8 +381,8 @@ ip_set_dev (struct ip_config *u_ipc)
        if (dev->stop)
 	 dev->stop(dev);
     }
-  return (0);
 
+  return (0);
 }
 
 /* this routine will check to see if we have lost a gateway. */
@@ -415,9 +421,9 @@ ip_build_header (struct sk_buff *skb, unsigned long saddr,
   unsigned long raddr; /* for the router. */
   int tmp;
   if (saddr == 0) saddr = MY_IP_ADDR;
-  PRINTK ("ip_build_header (skb=%X, saddr=%X, daddr=%X, *dev=%X,\n"
-	  "                 type=%d, opt=%X, len = %d)\n",
-	  skb, saddr, daddr, *dev, type, opt, len);
+  PRINTK (("ip_build_header (skb=%X, saddr=%X, daddr=%X, *dev=%X,\n"
+	   "                 type=%d, opt=%X, len = %d)\n",
+	   skb, saddr, daddr, *dev, type, opt, len));
   buff = (unsigned char *)(skb + 1);
   /* see if we need to look up the device. */
   if (*dev == NULL)
@@ -712,12 +718,12 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   iph=skb->h.iph;
 
-  PRINTK("<<\n");
+  PRINTK (("<<\n"));
   print_iph(iph);
 
   if (ip_csum (iph) || do_options (iph,&opt) || iph->version != 4)
     {
-       PRINTK ("ip packet thrown out. \n");
+       PRINTK (("ip packet thrown out. \n"));
        skb->sk = NULL;
        kfree_skb(skb, 0);
        return (0);
@@ -726,7 +732,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   /* for now we will only deal with packets meant for us. */
   if (!my_ip_addr(iph->daddr))
     {
-       PRINTK ("packet meant for someone else.\n");
+       PRINTK (("packet meant for someone else.\n"));
        skb->sk = NULL;
        kfree_skb(skb, 0);
        return (0);
@@ -748,7 +754,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     {
        struct sk_buff *skb2;
        if (ipprot->protocol != iph->protocol) continue;
-       PRINTK ("Using protocol = %X:\n", ipprot);
+       PRINTK (("Using protocol = %X:\n", ipprot));
        print_ipprot (ipprot);
        /* pass it off to everyone who wants it. */
        /* we should check the return values here. */
@@ -811,7 +817,7 @@ ip_queue_xmit (volatile struct sock *sk, struct device *dev,
   skb->free = free;
   skb->dev = dev;
   skb->when = jiffies;
-  PRINTK(">>\n");
+  PRINTK ((">>\n"));
   ptr = (unsigned char *)(skb + 1);
   ptr += dev->hard_header_len;
   iph = (struct ip_header *)ptr;
@@ -922,13 +928,13 @@ ip_retransmit (volatile struct sock *sk, int all)
 void
 print_iph (struct ip_header *ip)
 {
-  PRINTK ("ip header:\n");
-  PRINTK ("  ihl = %d, version = %d, tos = %d, tot_len = %d\n",
-	  ip->ihl, ip->version, ip->tos, net16(ip->tot_len));
-  PRINTK ("  id = %x, ttl = %d, prot = %d, check=%x\n",
-	  ip->id, ip->ttl, ip->protocol, ip->check);
-  PRINTK (" frag_off=%d\n", ip->frag_off);
-  PRINTK ("  saddr = %X, daddr = %X\n",ip->saddr, ip->daddr);
+  PRINTK (("ip header:\n"));
+  PRINTK (("  ihl = %d, version = %d, tos = %d, tot_len = %d\n",
+	   ip->ihl, ip->version, ip->tos, net16(ip->tot_len)));
+  PRINTK (("  id = %x, ttl = %d, prot = %d, check=%x\n",
+	   ip->id, ip->ttl, ip->protocol, ip->check));
+  PRINTK ((" frag_off=%d\n", ip->frag_off));
+  PRINTK (("  saddr = %X, daddr = %X\n",ip->saddr, ip->daddr));
 }
 
 #if 0

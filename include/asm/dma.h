@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.5 1992/11/18 02:37:20 root Exp root $
+/* $Id: dma.h,v 1.7 1992/12/14 00:29:34 root Exp root $
  * linux/include/asm/dma.h: Defines for using and allocating dma channels.
  * Written by Hennus Bergman, 1992.
  * High DMA channel support & info by Hannu Savolainen
@@ -9,7 +9,6 @@
 #define _ASM_DMA_H
 
 #include <asm/io.h>		/* need byte IO */
-#include <linux/kernel.h>	/* need panic() [FIXME] */
 
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
@@ -143,9 +142,9 @@ static __inline__ void disable_dma(unsigned int dmanr)
 /* Clear the 'DMA Pointer Flip Flop'.
  * Write 0 for LSB/MSB, 1 for MSB/LSB access.
  * Use this once to initialize the FF to a know state.
- * After that, keep track of it. :-) In order to do that,
- * dma_set_addr() and dma_set_count() should only be used wile
- * interrupts are disbled.
+ * After that, keep track of it. :-)
+ * --- In order to do that, the DMA routines below should ---
+ * --- only be used while interrupts are disbled! ---
  */
 static __inline__ void clear_dma_ff(unsigned int dmanr)
 {
@@ -219,7 +218,7 @@ static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int a)
  * NOTE: from a manual: "the number of transfers is one more
  * than the initial word count"! This is taken into account.
  * Assumes dma flip-flop is clear.
- * NOTE 2: "count" must represent _words_ for channels 5-7.
+ * NOTE 2: "count" represents _bytes_ and must be even for channels 5-7.
  */
 static __inline__ void set_dma_count(unsigned int dmanr, unsigned int count)
 {
@@ -227,32 +226,33 @@ static __inline__ void set_dma_count(unsigned int dmanr, unsigned int count)
 	if (dmanr <= 3)  {
 	    outb( count & 0xff, ((dmanr&3)<<1) + 1 + IO_DMA1_BASE );
 	    outb( (count>>8) & 0xff, ((dmanr&3)<<1) + 1 + IO_DMA1_BASE );
-        }  else  {
-	    outb( count & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
-	    outb( (count>>8) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
+        } else {
+	    outb( (count>>1) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
+	    outb( (count>>9) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
         }
 }
 
 
 /* Get DMA residue count. After a DMA transfer, this
  * should return zero. Reading this while a DMA transfer is
- * should return zero. Reading this while a DMA transfer is
  * still in progress will return unpredictable results.
  * If called before the channel has been used, it may return 1.
- * Otherwise, it returns the number of bytes (or words) left to
- * transfer, minus 1, modulo 64k.
+ * Otherwise, it returns the number of _bytes_ left to transfer.
+ *
  * Assumes DMA flip-flop is clear.
  */
-static __inline__ short int get_dma_residue(unsigned int dmanr)
+static __inline__ int get_dma_residue(unsigned int dmanr)
 {
-	if (dmanr <= 3)  {
-	    return 1 + inb( ((dmanr&3)<<1) + 1 + IO_DMA1_BASE ) +
-	              (inb( ((dmanr&3)<<1) + 1 + IO_DMA1_BASE ) << 8);
-	}  else  {
-	    return 1 + inb( ((dmanr&3)<<2) + 2 + IO_DMA2_BASE ) +
-	              (inb( ((dmanr&3)<<2) + 2 + IO_DMA2_BASE ) << 8);
-	}
+	unsigned int io_port = (dmanr<=3)? ((dmanr&3)<<1) + 1 + IO_DMA1_BASE
+					 : ((dmanr&3)<<2) + 2 + IO_DMA2_BASE;
+
+	/* using short to get 16-bit wrap around */
+	short count = 1 + inb(io_port) + 
+			( inb(io_port) << 8 );
+
+	return (dmanr<=3)? count : (count<<1);
 }
+
 
 /* These are in kernel/dma.c: */
 extern int request_dma(unsigned int dmanr);	/* reserve a DMA channel */

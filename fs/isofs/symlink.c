@@ -37,7 +37,8 @@ struct inode_operations isofs_symlink_inode_operations = {
 	isofs_readlink,		/* readlink */
 	isofs_follow_link,	/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static int isofs_follow_link(struct inode * dir, struct inode * inode,

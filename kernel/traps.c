@@ -169,7 +169,7 @@ void do_stack_segment(long esp,long error_code)
 void do_coprocessor_error(long esp, long error_code)
 {
 	send_sig(SIGFPE, last_task_used_math, 1);
-	__asm__("fnclex");
+	__asm__("fninit");
 }
 
 void do_reserved(long esp, long error_code)

@@ -24,7 +24,7 @@
 #define IOCCMD_MASK	0x0000ffff	/* command code */
 #define IOCCMD_SHIFT	0
 
-#define _IO(c,d)	(IOC_VOID | (d)<<16) | c) /* param encoded */
+#define _IO(c,d)	(IOC_VOID | ((d)<<16) | c) /* param encoded */
 /* use _IOXX(magic, subcode, arg_t) where arg_t is the type of the
  * (last) argument field in the ioctl call, if present.
  */
@@ -33,7 +33,7 @@
 #define _IOR(c,d,t)	(IOC_OUT | ((sizeof(t)<<16) & IOCSIZE_MASK) | \
 				   (c<<8) | d)
 /* WR rather than RW to avoid conflict with stdio.h */
-#define _IOWR(c,d,t)	(IOC_INOUT | (sizeof(t)<<16) & IOCSIZE_MASK) | \
+#define _IOWR(c,d,t)	(IOC_INOUT | ((sizeof(t)<<16) & IOCSIZE_MASK) | \
 				     (c<<8) | d)
 
 #endif /* _LINUX_IOCTL_H */

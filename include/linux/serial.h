@@ -8,24 +8,6 @@
  */
 
 /*
- * This our internal structure for keeping track of interrupt service
- * routines. 
- */
-typedef struct struct_ISR *async_ISR;
-struct struct_ISR {
-	int		irq;		/* The IRQ assigned for this device */
-	int		port;		/* The base port for this device */
-					/* (use is ISR specific) */
-	void		(*ISR_proc)(async_ISR, int);
-	int		line;		/* The serial line (or base */
-					/* serial line)  */
-	int		refcnt;		/* How many devices are depending on */
-					/* this interrupt (multiport boards) */
-	async_ISR	next_ISR; /* For the linked list */
-	async_ISR	prev_ISR;
-};
-
-/*
  * This is our internal structure for each serial port's state.
  * 
  * Many fields are paralleled by the structure used by the serial_struct
@@ -37,7 +19,7 @@ struct struct_ISR {
 struct async_struct {
 	int			baud_base;
 	int			port;
-	async_ISR		ISR;
+	int			irq;
 	int			flags;
 	int			type;
 	struct tty_struct 	*tty;
@@ -48,6 +30,9 @@ struct async_struct {
 	int			x_char;	/* xon/xoff characater */
 	int			event;
 	int			line;
+	struct async_struct	*next_port; /* For the linked list */
+	struct async_struct	*prev_port;
+	
 };
 
 /*
@@ -92,7 +77,7 @@ struct async_struct {
 #define UART_FCR_TRIGGER_14	0xC0 /* Mask for trigger set at 14 */
 
 #define UART_FCR_CLEAR_CMD	(UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT)
-#define UART_FCR_SETUP_CMD	(UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_14)
+#define UART_FCR_SETUP_CMD	(UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_8)
 	
 /*
  * These are the definitions for the Line Control Register

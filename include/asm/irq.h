@@ -60,10 +60,8 @@
 	"iret"
 
 #define ACK_FIRST(mask) \
-	"inb $0x21,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\torb $" #mask ",%al\n\t" \
+	"orb $" #mask ",_cache_21\n\t" \
+	"movb _cache_21,%al\n\t" \
 	"outb %al,$0x21\n\t" \
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
@@ -71,10 +69,8 @@
 	"outb %al,$0x20\n\t"
 
 #define ACK_SECOND(mask) \
-	"inb $0xA1,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\torb $" #mask ",%al\n\t" \
+	"orb $" #mask ",_cache_A1\n\t" \
+	"movb _cache_A1,%al\n\t" \
 	"outb %al,$0xA1\n\t" \
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
@@ -85,17 +81,13 @@
 	"1:\toutb %al,$0x20\n\t"
 
 #define UNBLK_FIRST(mask) \
-	"inb $0x21,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\tandb $~(" #mask "),%al\n\t" \
+	"andb $~(" #mask "),_cache_21\n\t" \
+	"movb _cache_21,%al\n\t" \
 	"outb %al,$0x21\n\t"
 
 #define UNBLK_SECOND(mask) \
-	"inb $0xA1,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\tandb $~(" #mask "),%al\n\t" \
+	"andb $~(" #mask "),_cache_A1\n\t" \
+	"movb _cache_A1,%al\n\t" \
 	"outb %al,$0xA1\n\t"
 
 #define IRQ_NAME2(nr) nr##_interrupt()
@@ -108,7 +100,7 @@ void IRQ_NAME(nr); \
 void FAST_IRQ_NAME(nr); \
 void BAD_IRQ_NAME(nr); \
 __asm__( \
-"\n.align 2\n" \
+"\n.align 4\n" \
 "_IRQ" #nr "_interrupt:\n\t" \
 	"pushl $-"#nr"-2\n\t" \
 	SAVE_ALL \
@@ -124,25 +116,48 @@ __asm__( \
 	UNBLK_##chip(mask) \
 	"decl _intr_count\n\t" \
 	"jne ret_from_sys_call\n\t" \
-	"cmpl $0,_bh_active\n\t" \
+	"movl _bh_mask,%eax\n\t" \
+	"andl _bh_active,%eax\n\t" \
 	"je ret_from_sys_call\n\t" \
 	"incl _intr_count\n\t" \
 	"sti\n\t" \
+	"bsfl %eax,%eax\n\t" \
+	"btrl %eax,_bh_active\n\t" \
+	"pushl %eax\n\t" \
 	"call _do_bottom_half\n\t" \
+	"addl $4,%esp\n\t" \
 	"cli\n\t" \
 	"decl _intr_count\n\t" \
 	"jmp ret_from_sys_call\n" \
-"\n.align 2\n" \
+"\n.align 4\n" \
 "_fast_IRQ" #nr "_interrupt:\n\t" \
 	SAVE_MOST \
 	ACK_##chip(mask) \
+	"incl _intr_count\n\t" \
 	"pushl $" #nr "\n\t" \
 	"call _do_fast_IRQ\n\t" \
 	"addl $4,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
+	"decl _intr_count\n\t" \
+	"jne 1f\n\t" \
+	"movl _bh_mask,%eax\n\t" \
+	"andl _bh_active,%eax\n\t" \
+	"jne 2f\n" \
+	"1:\t" \
 	RESTORE_MOST \
-"\n\n.align 2\n" \
+	"\n.align 4\n" \
+	"2:\tincl _intr_count\n\t" \
+	"sti\n\t" \
+	"bsfl %eax,%eax\n\t" \
+	"btrl %eax,_bh_active\n\t" \
+	"pushl %eax\n\t" \
+	"call _do_bottom_half\n\t" \
+	"addl $4,%esp\n\t" \
+	"cli\n\t" \
+	"decl _intr_count\n\t" \
+	RESTORE_MOST \
+"\n\n.align 4\n" \
 "_bad_IRQ" #nr "_interrupt:\n\t" \
 	"pushl %eax\n\t" \
 	ACK_##chip(mask) \

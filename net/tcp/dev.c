@@ -78,9 +78,9 @@
 
 #undef DEV_DEBUG
 #ifdef DEV_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 
@@ -157,7 +157,7 @@ void
 dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
 {
   struct sk_buff *skb2;
-  PRINTK ("dev_queue_xmit (skb=%X, dev=%X, pri = %d)\n", skb, dev, pri);
+  PRINTK (("dev_queue_xmit (skb=%X, dev=%X, pri = %d)\n", skb, dev, pri));
 
   if (dev == NULL)
     {
@@ -185,7 +185,7 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
     }
 
   /* put skb into a bidirectional circular linked list. */
-  PRINTK ("dev_queue_xmit dev->buffs[%d]=%X\n",pri, dev->buffs[pri]);
+  PRINTK (("dev_queue_xmit dev->buffs[%d]=%X\n",pri, dev->buffs[pri]));
   /* interrupts should already be cleared by hard_start_xmit. */
   cli();
   if (dev->buffs[pri] == NULL)
@@ -365,7 +365,7 @@ inet_bh(void *tmp)
 
        if (!flag)
 	 {
-	   PRINTK ("discarding packet type = %X\n", type);
+	   PRINTK (("discarding packet type = %X\n", type));
 	   kfree_skb (skb, FREE_READ);
 	 }
      }
@@ -452,7 +452,7 @@ dev_tint(unsigned char *buff,  struct device *dev)
 	       if (buff != NULL)
 		 memcpy (buff, skb + 1, tmp);
 
-	       PRINTK (">>\n");
+	       PRINTK ((">>\n"));
 	       print_eth ((struct enet_header *)(skb+1));
 	    }
 	  else
@@ -474,7 +474,6 @@ dev_tint(unsigned char *buff,  struct device *dev)
 	    return (tmp);
 	}
     }
-  PRINTK ("dev_tint returning 0 \n");
+  PRINTK (("dev_tint returning 0 \n"));
   return (0);
 }
-

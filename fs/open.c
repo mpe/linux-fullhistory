@@ -245,6 +245,7 @@ int sys_fchmod(unsigned int fd, mode_t mode)
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
 	if (!suser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
+	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
 	return notify_change(inode);
 }
@@ -268,6 +269,7 @@ int sys_chmod(const char * filename, mode_t mode)
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
 	if (!suser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
+	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
 	error = notify_change(inode);
 	iput(inode);
@@ -294,6 +296,7 @@ int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	    suser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
+		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
 		return notify_change(inode);
 	}
@@ -321,6 +324,7 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
 	    suser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
+		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
 		error = notify_change(inode);
 		iput(inode);
@@ -490,11 +494,13 @@ int sys_vhangup(void)
 
 	if (!suser())
 		return -EPERM;
-	/* send the SIGHUP signal. */
-	kill_pg(current->pgrp, SIGHUP, 0);
 	/* See if there is a controlling tty. */
 	if (current->tty < 0)
 		return 0;
+	/* send the SIGHUP signal. */
+	tty = TTY_TABLE(current->tty);
+	if (tty && tty->pgrp > 0)
+		kill_pg(tty->pgrp, SIGHUP, 0);
 
 	for (process = task + 0; process < task + NR_TASKS; process++) {
 		for (j = 0; j < NR_OPEN; j++) {

@@ -149,9 +149,6 @@ _system_call:
 	call _schedule
 	.align 4,0x90
 ret_from_sys_call:
-/*
- * XXX - interrupts are masked here about 3 times in 1000.  Fishy.
- */
 	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $VM_MASK,%eax		# different then
 	jne 4f
@@ -159,7 +156,8 @@ ret_from_sys_call:
 	jne 2f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 2f
-4:	orl $IF_MASK,%eax		# these just try to make sure
+4:	sti				# slow interrupts get here with interrupts disabled
+	orl $IF_MASK,%eax		# these just try to make sure
 	andl $~NT_MASK,%eax		# the program doesn't do anything
 	movl %eax,EFLAGS(%esp)		# stupid
 1:	cmpl $0,_need_resched

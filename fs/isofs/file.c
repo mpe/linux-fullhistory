@@ -60,7 +60,8 @@ struct inode_operations isofs_file_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	isofs_bmap,		/* bmap */
-	NULL	       		/* truncate */
+	NULL,	       		/* truncate */
+	NULL			/* permission */
 };
 
 /* This is a heuristic to determine if a file is text of binary.  If it

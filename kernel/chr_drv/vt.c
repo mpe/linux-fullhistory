@@ -20,24 +20,24 @@
 #include "vt_kern.h"
 
 /*
- * Console (vt and kd) routines, as defined by USL SVR4 manual
+ * Console (vt and kd) routines, as defined by USL SVR4 manual, and by
+ * experimentation and study of X386 SYSV handling.
  *
  * One point of difference: SYSV vt's are /dev/vtX, which X >= 0, and
  * /dev/console is a separate ttyp. Under Linux, /dev/tty0 is /dev/console,
  * and the vc start at /dev/ttyX, X >= 1. We maintain that here, so we will
  * always treat our set of vt as numbered 1..NR_CONSOLES (corresponding to
- * ttys 0..NR_CONSOLES-1).
- *
- * Mostly done for X386, but with some slight differences and omissions.
- * Should be useable by other SYSV programs in the future.
+ * ttys 0..NR_CONSOLES-1). Explicitly naming VT 0 is illegal, but using
+ * /dev/tty0 (fg_console) as a target is legal, since an implicit aliasing
+ * to the current console is done by the main ioctl code.
  */
 
 struct vt_cons vt_cons[NR_CONSOLES];
 
 extern int sys_ioperm(unsigned long from, unsigned long num, int on);
-extern void set_leds(void);
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
+extern int vt_waitactive(void);
 
 /*
  * these are the valid i/o ports we're allowed to change. they map all the
@@ -283,6 +283,25 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	}
 
 	/*
+	 * Returns global vt state. Note that VT 0 is always open, since
+	 * it's an alias for the current VT, and people can't use it here.
+	 */
+	case VT_GETSTATE:
+	{
+		struct vt_stat *vtstat = (struct vt_stat *)arg;
+		unsigned short state, mask;
+
+		verify_area((void *)vtstat, sizeof(struct vt_stat));
+		put_fs_word(fg_console + 1, &vtstat->v_active);
+		state = 1;	/* /dev/tty0 is always open */
+		for (i = 1, mask = 2; i <= NR_CONSOLES; ++i, mask <<= 1)
+			if (tty_table[i] && tty_table[i]->count > 0)
+				state |= mask;
+		put_fs_word(state, &vtstat->v_state);
+		return 0;
+	}
+
+	/*
 	 * Returns the first available (non-opened) console.
 	 */
 	case VT_OPENQRY:
@@ -305,37 +324,68 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	/*
+	 * wait until the specified VT has been activated
+	 */
+	case VT_WAITACTIVE:
+		if (arg == 0 || arg > NR_CONSOLES)
+			return -ENXIO;
+		while (fg_console != arg - 1)
+		{
+			if (vt_waitactive() < 0)
+				return -EINTR;
+		}
+		return 0;
+
+	/*
 	 * If a vt is under process control, the kernel will not switch to it
 	 * immediately, but postpone the operation until the process calls this
 	 * ioctl, allowing the switch to complete.
 	 *
-	 * XXX Under X, the switching code calls VT_RELDISP with an arg of 2
-	 * when it has switched back to it's vt. That's not kosher according
-	 * to my documentation, which says this is only called when releasing
-	 * the vt under your control.
+	 * According to the X sources this is the behavior:
+	 *	0:	pending switch-from not OK
+	 *	1:	pending switch-from OK
+	 *	2:	completed switch-to OK
 	 */
 	case VT_RELDISP:
-		if (vt_cons[console].vt_mode.mode != VT_PROCESS ||
-		    vt_cons[console].vt_newvt < 0)
+		if (vt_cons[console].vt_mode.mode != VT_PROCESS)
 			return -EINVAL;
 
-		if (arg != 0)
+		/*
+		 * Switching-from response
+		 */
+		if (vt_cons[console].vt_newvt >= 0)
 		{
-			/*
-			 * If arg is nonzero, the current vt has been released,
-			 * so we can go ahead and complete the switch.
-			 */
-			int newvt = vt_cons[console].vt_newvt;
-			vt_cons[console].vt_newvt = -1;
-			complete_change_console(newvt);
+			if (arg == 0)
+				/*
+				 * Switch disallowed, so forget we were trying
+				 * to do it.
+				 */
+				vt_cons[console].vt_newvt = -1;
+
+			else
+			{
+				/*
+				 * The current vt has been released, so
+				 * complete the switch.
+				 */
+				int newvt = vt_cons[console].vt_newvt;
+				vt_cons[console].vt_newvt = -1;
+				complete_change_console(newvt);
+			}
 		}
+
+		/*
+		 * Switched-to response
+		 */
 		else
 		{
 			/*
-			 * Mark that we've performed our part and return.
+			 * If it's just an ACK, ignore it
 			 */
-			vt_cons[console].vt_newvt = -1;
+			if (arg != VT_ACKACQ)
+				return -EINVAL;
 		}
+
 		return 0;
 
 	default:

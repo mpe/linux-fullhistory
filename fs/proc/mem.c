@@ -12,6 +12,14 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
+/*
+ * mem_write isn't really a good idea right now. It needs
+ * to check a lot more: if the process we try to write to 
+ * dies in the middle right now, mem_write will overwrite
+ * kernel memory.. This disables it altogether.
+ */
+#define mem_write NULL
+
 static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
 	unsigned long addr, pid, cr3;
@@ -58,6 +66,8 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	file->f_pos = addr;
 	return tmp-buf;
 }
+
+#ifndef mem_write
 
 static int mem_write(struct inode * inode, struct file * file,char * buf, int count)
 {
@@ -114,6 +124,8 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	return 0;
 }
 
+#endif
+
 static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
 {
 	switch (orig) {
@@ -154,5 +166,6 @@ struct inode_operations proc_mem_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };

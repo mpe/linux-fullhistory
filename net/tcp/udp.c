@@ -75,9 +75,9 @@
 #endif
 
 #ifdef UDP_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 #define min(a,b) ((a)<(b)?(a):(b))
@@ -89,11 +89,11 @@ print_uh(struct udp_header *uh)
 {
   if (uh == NULL)
     {
-      PRINTK ("(NULL)\n");
+      PRINTK (("(NULL)\n"));
       return;
     }
-	PRINTK("source = %d, dest = %d\n", net16(uh->source), net16(uh->dest));
-	PRINTK("len = %d, check = %d\n", net16(uh->len), net16(uh->check));
+	PRINTK(("source = %d, dest = %d\n", net16(uh->source), net16(uh->dest)));
+	PRINTK(("len = %d, check = %d\n", net16(uh->len), net16(uh->check)));
 }
 
 
@@ -138,7 +138,7 @@ udp_err (int err, unsigned char *header, unsigned long daddr,
    struct udp_header *th;
    volatile struct sock *sk;
    
-   PRINTK ("udp_err (err=%d, header=%X, daddr=%X, saddr=%X, ip_protocl=%X)\n");
+   PRINTK (("udp_err (err=%d, header=%X, daddr=%X, saddr=%X, ip_protocl=%X)\n"));
 
    th = (struct udp_header *)header;
    sk = get_sock (&udp_prot, net16(th->dest), saddr, th->source, daddr);
@@ -167,8 +167,8 @@ udp_check (struct udp_header *uh, int len,
 	   unsigned long saddr, unsigned long daddr)
 {
    unsigned long sum;
-   PRINTK ("udp_check (uh=%X, len = %d, saddr = %X, daddr = %X)\n",
-	   uh, len, saddr, daddr);
+   PRINTK (("udp_check (uh=%X, len = %d, saddr = %X, daddr = %X)\n",
+	   uh, len, saddr, daddr));
 
    print_uh (uh);
 
@@ -250,7 +250,7 @@ udp_loopback (volatile struct sock *sk, unsigned short port,
 	volatile struct sock *pair;
 	sk->inuse = 1;
 
-	PRINTK ("udp_loopback \n");
+	PRINTK (("udp_loopback \n"));
 
 	pair = get_sock (sk->prot, net16(port), saddr,
 			 sk->dummy_th.source, daddr);
@@ -320,7 +320,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	if (len < 0) return (-EINVAL);
 	if (len == 0) return (0);
 
-	PRINTK ("sendto len = %d\n", len);
+	PRINTK (("sendto len = %d\n", len));
 
 	/* get and verify the address. */
 	if (usin)
@@ -419,8 +419,8 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 		     let the ip protocol fragment the packet. */
 		  amt = min (len + tmp + sizeof (*uh), dev->mtu);
 
-		  PRINTK ("amt = %d, dev = %X, dev->mtu = %d\n",
-			  amt, dev, dev->mtu);
+		  PRINTK (("amt = %d, dev = %X, dev->mtu = %d\n",
+			  amt, dev, dev->mtu));
 
 		  skb->len = amt;
 		  amt -= tmp; 
@@ -663,7 +663,7 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  {
 	     if (uh->check && udp_check (uh, len, saddr, daddr))
 	       {
-		  PRINTK ("bad udp checksum\n");
+		  PRINTK (("bad udp checksum\n"));
 		  skb->sk = NULL;
 		  kfree_skb (skb, 0);
 		  return (0);
@@ -713,7 +713,7 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	sk->rmem_alloc += skb->mem_len;
 
 	/* At this point we should print the thing out. */
-	PRINTK ("<< \n");
+	PRINTK (("<< \n"));
 	print_sk (sk);
 
 	/* now add it to the data chain and wake things up. */

@@ -24,7 +24,7 @@ extern inline int tas(char * m)
 {
 	char res;
 
-	__asm__("xchg %0,%1":"=q" (res),"=m" (*m):"0" (0x1));
+	__asm__("xchgb %0,%1":"=q" (res),"=m" (*m):"0" (0x1));
 	return res;
 }
 

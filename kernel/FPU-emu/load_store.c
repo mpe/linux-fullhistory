@@ -38,9 +38,9 @@ static unsigned char type_table[32] = {
   _null_, _null_, _null_, _null_,
   _REG0_, _REG0_, _REG0_, _REG0_,
   _REG0_, _REG0_, _REG0_, _REG0_,
-  _null_, _null_, _NONE_, _PUSH_,
+  _NONE_, _null_, _NONE_, _PUSH_,
   _NONE_, _PUSH_, _null_, _PUSH_,
-  _null_, _null_, _NONE_, _REG0_,
+  _NONE_, _null_, _NONE_, _REG0_,
   _NONE_, _REG0_, _NONE_, _REG0_
   };
 

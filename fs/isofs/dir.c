@@ -49,7 +49,8 @@ struct inode_operations isofs_dir_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	isofs_bmap,		/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 /* This is used to speed up lookup.  Without this we would need to

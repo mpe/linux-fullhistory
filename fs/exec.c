@@ -140,10 +140,10 @@ int core_dump(long signr, struct pt_regs * regs)
 		dump.u_fpvalid = 0;
 	}
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+/* struct user */
 	DUMP_WRITE(&dump,sizeof(dump));
-	DUMP_SEEK(sizeof(dump));
- /* Dump the task struct.  Not be used by gdb, but could be useful */
-	DUMP_WRITE(current,sizeof(*current));
+/* name of the executable */
+	DUMP_WRITE(current->comm,16);
 /* Now dump all of the user data.  Include malloced stuff as well */
 	DUMP_SEEK(PAGE_SIZE);
 /* now we start writing out the user space info */
@@ -160,6 +160,9 @@ int core_dump(long signr, struct pt_regs * regs)
 		dump_size = dump.u_ssize << 12;
 		DUMP_WRITE(dump_start,dump_size);
 	};
+/* Finally dump the task struct.  Not be used by gdb, but could be useful */
+	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);

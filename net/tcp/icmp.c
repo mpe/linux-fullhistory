@@ -74,10 +74,11 @@
 #endif
 
 #undef ICMP_DEBUG
+
 #ifdef ICMP_DEBUG
-#define PRINTK printk
+#define PRINTK(x) printk x
 #else
-#define PRINTK dummy_routine
+#define PRINTK(x) /**/
 #endif
 
 #define min(a,b) ((a)<(b)?(a):(b))
@@ -103,9 +104,9 @@ struct icmp_err icmp_err_convert[]=
 void
 print_icmph (struct icmp_header *icmph)
 {
-   PRINTK ("  type = %d, code = %d, checksum = %X\n", icmph->type,
-	   icmph->code, icmph->checksum);
-   PRINTK (" gateway = %X\n", icmph->un.gateway);
+   PRINTK (("  type = %d, code = %d, checksum = %X\n", icmph->type,
+	   icmph->code, icmph->checksum));
+   PRINTK ((" gateway = %X\n", icmph->un.gateway));
 }
 
 /* sends an icmp message in response to a packet. */
@@ -118,8 +119,8 @@ icmp_reply (struct sk_buff *skb_in,  int type, int code, struct device *dev)
    struct icmp_header *icmph;
    int len;
 
-   PRINTK ("icmp_reply (skb_in = %X, type = %d, code = %d, dev=%X)\n",
-	   skb_in, type, code, dev);
+   PRINTK (("icmp_reply (skb_in = %X, type = %d, code = %d, dev=%X)\n",
+	   skb_in, type, code, dev));
 
    /* get some memory for the reply. */
    len = sizeof (*skb) + 8 /* amount of header to return. */ +
@@ -196,7 +197,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	if( ip_compute_csum( (unsigned char *)icmph, len ) )
 	  {
 	     /* Failed checksum! */
-	     PRINTK("ICMP ECHO failed checksum!\n");
+	     PRINTK(("ICMP ECHO failed checksum!\n"));
 	     skb1->sk = NULL;
 	     kfree_skb (skb1, FREE_READ);
 	     return (0);
@@ -287,7 +288,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	if (offset < 0)
 	  {
 	     /* Problems building header */
-	     PRINTK("Could not build IP Header for ICMP ECHO Response\n");
+	     PRINTK(("Could not build IP Header for ICMP ECHO Response\n"));
 	     kfree_s (skb->mem_addr, skb->mem_len);
 	     skb1->sk = NULL;
 	     kfree_skb (skb1, FREE_READ);
@@ -317,7 +318,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	return( 0 );
 
 	default:
-	PRINTK("Unsupported ICMP type = x%x\n", icmph->type );
+	PRINTK(("Unsupported ICMP type = x%x\n", icmph->type ));
 	skb1->sk = NULL;
 	kfree_skb (skb1, FREE_READ);
 	return( 0 ); /* just toss the packet */

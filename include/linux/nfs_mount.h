@@ -13,7 +13,7 @@
  * WARNING!  Do not delete or change the order of these fields.  If
  * a new field is required then add it to the end.  The version field
  * tracks which fields are present.  This will ensure some measure of
- * mount-to-kernel version compatibilty.  Most of these are used yet
+ * mount-to-kernel version compatibilty.  Some of these aren't used yet
  * but here they are anyway.
  */
 

@@ -51,7 +51,8 @@ struct inode_operations msdos_file_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	msdos_bmap,		/* bmap */
-	msdos_truncate		/* truncate */
+	msdos_truncate,		/* truncate */
+	NULL			/* permission */
 };
 
 /* No bmap for MS-DOS FS' that don't align data at kByte boundaries. */
@@ -70,7 +71,8 @@ struct inode_operations msdos_file_inode_operations_no_bmap = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
-	msdos_truncate		/* truncate */
+	msdos_truncate,		/* truncate */
+	NULL			/* permission */
 };
 
 

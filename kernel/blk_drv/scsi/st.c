@@ -30,7 +30,7 @@
 
   Kai Makisara, Nov 9, 1992  email makisara@vtinsx.ins.vtt.fi or
                                     Kai.Makisara@vtt.fi
-  Last changes Dec 19, 1992.
+  Last changes Jan 3, 1993.
 */
 
 #include <linux/fs.h>
@@ -856,8 +856,6 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
 
    dev = dev & 127;
 
-   SCpnt = allocate_device(NULL, scsi_tapes[dev].device->index, 1);
-
    memset(cmd, 0, 10);
    switch (cmd_in) {
      case MTFSF:
@@ -905,7 +903,6 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
        cmd[2] = (ltmp >> 16);
        cmd[3] = (ltmp >> 8);
        cmd[4] = ltmp;
-       SCpnt->result = -1;
 #ifdef DEBUG
        if (cmd[2] & 0x80)
 	 ltmp = 0xff000000;
@@ -1042,10 +1039,10 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
        break;
      default:
        printk("st%d: Unknown st_ioctl command %x.\n", dev, cmd_in);
-       SCpnt->request.dev = -1;  /* Mark as not busy */
        return (-ENOSYS);
      }
 
+   SCpnt = allocate_device(NULL, scsi_tapes[dev].device->index, 1);
    SCpnt->sense_buffer[0] = 0;
    SCpnt->request.dev = dev;
    scsi_do_cmd(SCpnt,

@@ -153,9 +153,17 @@ static struct sigaction seagate_sigaction = {
 	
 	base_address = NULL;
 #ifdef OVERRIDE
-	base_address = (void *) OVERRIDE;	
+	base_address = (void *) OVERRIDE;
+
+/* CONTROLLER is used to override controller (SEAGATE or FD). PM: 07/01/93 */
+#ifdef CONTROLLER
+	controller_type = CONTROLLER;
+#else
+#error Please use -DCONTROLLER=SEAGATE or -DCONTROLLER=FD to override controller type
+#endif
 #ifdef DEBUG
-	printk("Base address overridden to %x\n", base_address);
+	printk("Base address overridden to %x, controller type is %s\n",
+		base_address,controller_type == SEAGATE ? "SEAGATE" : "FD");
 #endif
 #else	
 /*
@@ -274,8 +282,10 @@ static void seagate_reconnect_intr (int unused)
 				printk("scsi%d : done_fn(%d,%08x)", hostno, 
 				hostno, temp);
 #endif
+				if(!SCint) panic("SCint == NULL in seagate");
 				SCint->result = temp;
 				done_fn (SCint);
+				SCint = NULL;
 				}
 			else
 				printk("done_fn() not defined.\n");
@@ -311,6 +321,7 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 		{
 		  SCpnt->result = result;
 		done_fn (SCpnt); 
+		SCint = NULL;
 		return 1; 
 		}
 	}

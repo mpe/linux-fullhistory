@@ -37,11 +37,21 @@
 
 #define __BAD__ Un_impl   /* Not implemented */
 
+#define _d9_d8_ fstp_i    /* unofficial code (19) */
+#define _dc_d0_ fcom_st   /* unofficial code (14) */
+#define _dc_d8_ fcompst   /* unofficial code (1c) */
+#define _dd_c8_ fxch_i    /* unofficial code (0d) */
+#define _de_d0_ fcompst   /* unofficial code (16) */
+#define _df_c0_ ffreep    /* unofficial code (07) ffree + pop */
+#define _df_c8_ fxch_i    /* unofficial code (0f) */
+#define _df_d0_ fstp_i    /* unofficial code (17) */
+#define _df_d8_ fstp_i    /* unofficial code (1f) */
+
 static FUNC st_instr_table[64] = {
-  fadd__,   fld_i_,  __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  __BAD__,
-  fmul__,   fxch_i,  __BAD__, __BAD__, fmul_i,  __BAD__, fmulp_,  __BAD__,
-  fcom_st,  fp_nop,  __BAD__, __BAD__, __BAD__, fst_i_,  __BAD__, __BAD__,
-  fcompst,  __BAD__, __BAD__, __BAD__, __BAD__, fstp_i,  fcompp,  __BAD__,
+  fadd__,   fld_i_,  __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  _df_c0_,
+  fmul__,   fxch_i,  __BAD__, __BAD__, fmul_i,  _dd_c8_, fmulp_,  _df_c8_,
+  fcom_st,  fp_nop,  __BAD__, __BAD__, _dc_d0_, fst_i_,  _de_d0_, _df_d0_,
+  fcompst,  _d9_d8_, __BAD__, __BAD__, _dc_d8_, fstp_i,  fcompp,  _df_d8_,
   fsub__,   fp_etc,  __BAD__, finit_,  fsubri,  fucom_,  fsubrp,  fstsw_,
   fsubr_,   fconst,  fucompp, __BAD__, fsub_i,  fucomp,  fsubp_,  __BAD__,
   fdiv__,   trig_a,  __BAD__, __BAD__, fdivri,  __BAD__, fdivrp,  __BAD__,
@@ -56,10 +66,10 @@ static FUNC st_instr_table[64] = {
 #define _null_ 4   /* Function illegal or not implemented */
 
 static unsigned char type_table[64] = {
-  _REGI_, _NONE_, _null_, _null_, _REGI_, _REGi_, _REGI_, _null_,
-  _REGI_, _REGI_, _null_, _null_, _REGI_, _null_, _REGI_, _null_,
-  _REGI_, _NONE_, _null_, _null_, _null_, _REG0_, _null_, _null_,
-  _REGI_, _null_, _null_, _null_, _null_, _REG0_, _REGI_, _null_,
+  _REGI_, _NONE_, _null_, _null_, _REGI_, _REGi_, _REGI_, _REGi_,
+  _REGI_, _REGI_, _null_, _null_, _REGI_, _REGI_, _REGI_, _REGI_,
+  _REGI_, _NONE_, _null_, _null_, _REGI_, _REG0_, _REGI_, _REG0_,
+  _REGI_, _REG0_, _null_, _null_, _REGI_, _REG0_, _REGI_, _REG0_,
   _REGI_, _NONE_, _null_, _NONE_, _REGI_, _REGI_, _REGI_, _NONE_,
   _REGI_, _NONE_, _REGI_, _null_, _REGI_, _REGI_, _REGI_, _null_,
   _REGI_, _NONE_, _null_, _null_, _REGI_, _null_, _REGI_, _null_,

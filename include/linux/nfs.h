@@ -1,8 +1,6 @@
 #ifndef _LINUX_NFS_H
 #define _LINUX_NFS_H
 
-#define RPC_VERSION 2
-
 #define NFS_PORT 2049
 #define NFS_MAXDATA 8192
 #define NFS_MAXPATHLEN 1024
@@ -20,6 +18,10 @@
 #define NFSMODE_SOCK 0140000
 #define NFSMODE_FIFO 0010000
 
+#ifdef KERNEL	/* user programs should get these from the rpc header files */
+
+#define RPC_VERSION 2
+
 enum rpc_auth_flavor {
 	RPC_AUTH_NULL = 0,
 	RPC_AUTH_UNIX = 1,
@@ -33,7 +35,7 @@ enum rpc_msg_type {
 
 enum rpc_reply_stat {
 	RPC_MSG_ACCEPTED = 0,
-	RPC_MSG_DENIED,
+	RPC_MSG_DENIED = 1,
 };
 
 enum rpc_accept_stat {
@@ -56,6 +58,8 @@ enum rpc_auth_stat {
 	RPC_AUTH_REJECTEDVERF = 4,
 	RPC_AUTH_TOOWEAK = 5,
 };
+
+#endif /* KERNEL */
 	
 enum nfs_stat {
 	NFS_OK = 0,

@@ -20,8 +20,8 @@ extern void console_print(const char *);
 
 static unsigned long log_page = 0;
 static unsigned long log_start = 0;
-static unsigned long log_size = 0;
-static struct wait_queue * log_wait = NULL;
+unsigned long log_size = 0;
+struct wait_queue * log_wait = NULL;
 
 int sys_syslog(int type, char * buf, int len)
 {

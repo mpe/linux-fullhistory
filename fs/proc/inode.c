@@ -123,7 +123,7 @@ void proc_read_inode(struct inode * inode)
 		case 5:
 		case 6:
 			inode->i_op = &proc_link_inode_operations;
-			inode->i_size = 3;
+			inode->i_size = 64;
 			inode->i_mode = S_IFLNK | 0700;
 			return;
 		case 7:
@@ -146,7 +146,7 @@ void proc_read_inode(struct inode * inode)
 			if (ino >= NR_OPEN || !p->filp[ino])
 				return;
 			inode->i_op = &proc_link_inode_operations;
-			inode->i_size = 3;
+			inode->i_size = 64;
 			inode->i_mode = S_IFLNK | 0700;
 			return;
 		case 2:
@@ -154,7 +154,7 @@ void proc_read_inode(struct inode * inode)
 			if (ino >= p->numlibraries)
 				return;
 			inode->i_op = &proc_link_inode_operations;
-			inode->i_size = 3;
+			inode->i_size = 64;
 			inode->i_mode = S_IFLNK | 0700;
 			return;
 	}

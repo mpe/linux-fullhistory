@@ -40,7 +40,8 @@ struct inode_operations ext_symlink_inode_operations = {
 	ext_readlink,		/* readlink */
 	ext_follow_link,	/* follow_link */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL			/* permission */
 };
 
 static int ext_follow_link(struct inode * dir, struct inode * inode,
