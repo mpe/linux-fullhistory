@@ -57,7 +57,7 @@ struct sysv_sb_info {
 	unsigned long  *s_sb_flc_blocks; /* pointer to s_sbd->s_free */
 	unsigned long  *s_sb_total_free_blocks;/* pointer to s_sbd->s_tfree */
 	unsigned long  *s_sb_time;	/* pointer to s_sbd->s_time */
-	unsigned long  *s_sb_state;	/* pointer to s_sbd->s_state */
+	unsigned long  *s_sb_state;	/* pointer to s_sbd->s_state, only FSTYPE_SYSV */
 	/* We keep those superblock entities that don't change here;
 	   this saves us an indirection and perhaps a conversion. */
 	unsigned long  s_firstinodezone; /* index of first inode zone */

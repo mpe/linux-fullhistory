@@ -82,11 +82,23 @@ asmlinkage void coprocessor_error(void);
 asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
 
+int kstack_depth_to_print = 24;
+
+/*
+ * These constants are for searching for possible module text
+ * segments.  VMALLOC_OFFSET comes from mm/vmalloc.c; MODULE_RANGE is
+ * a guess of how much space is likely to be vmalloced.
+ */
+#define VMALLOC_OFFSET (8*1024*1024)
+#define MODULE_RANGE (8*1024*1024)
+
 /*static*/ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
 	int i;
 	unsigned long esp;
 	unsigned short ss;
+	unsigned long *stack, addr, module_start, module_end;
+	extern char start_kernel, etext;
 
 	esp = (unsigned long) &regs->esp;
 	ss = KERNEL_DS;
@@ -110,8 +122,38 @@ asmlinkage void alignment_check(void);
 		printk("Corrupted stack page\n");
 	printk("Process %s (pid: %d, process nr: %d, stackpage=%08lx)\nStack: ",
 		current->comm, current->pid, 0xffff & i, current->kernel_stack_page);
-	for(i=0;i<5;i++)
-		printk("%08lx ", get_seg_long(ss,(i+(unsigned long *)esp)));
+	stack = (unsigned long *) esp;
+	for(i=0; i < kstack_depth_to_print; i++) {
+		if (((long) stack & 4095) == 0)
+			break;
+		if (i && ((i % 8) == 0))
+			printk("\n       ");
+		printk("%08lx ", get_seg_long(ss,stack++));
+	}
+	printk("\nCall Trace: ");
+	stack = (unsigned long *) esp;
+	i = 1;
+	module_start = ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
+	module_end = module_start + MODULE_RANGE;
+	while (((long) stack & 4095) != 0) {
+		addr = get_seg_long(ss, stack++);
+		/*
+		 * If the address is either in the text segment of the
+		 * kernel, or in the region which contains vmalloc'ed
+		 * memory, it *may* be the address of a calling
+		 * routine; if so, print it so that someone tracing
+		 * down the cause of the crash will be able to figure
+		 * out the call path that was taken.
+		 */
+		if (((addr >= (unsigned long) &start_kernel) &&
+		     (addr <= (unsigned long) &etext)) ||
+		    ((addr >= module_start) && (addr <= module_end))) {
+			if (i && ((i % 8) == 0))
+				printk("\n       ");
+			printk("%08lx ", addr);
+			i++;
+		}
+	}
 	printk("\nCode: ");
 	for(i=0;i<20;i++)
 		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));

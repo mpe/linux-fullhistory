@@ -154,20 +154,27 @@ void put_sock(unsigned short num, struct sock *sk)
 	struct sock *sk1;
 	struct sock *sk2;
 	int mask;
+	unsigned long flags;
 
 	sk->num = num;
 	sk->next = NULL;
 	num = num &(SOCK_ARRAY_SIZE -1);
 
 	/* We can't have an interrupt re-enter here. */
+	save_flags(flags);
 	cli();
+
+	sk->prot->inuse += 1;
+	if (sk->prot->highestinuse < sk->prot->inuse)
+		sk->prot->highestinuse = sk->prot->inuse;
+
 	if (sk->prot->sock_array[num] == NULL) 
 	{
 		sk->prot->sock_array[num] = sk;
-		sti();
+		restore_flags(flags);
 		return;
 	}
-	sti();
+	restore_flags(flags);
 	for(mask = 0xff000000; mask != 0xffffffff; mask = (mask >> 8) | mask) 
 	{
 		if ((mask & sk->saddr) &&
@@ -211,6 +218,7 @@ void put_sock(unsigned short num, struct sock *sk)
 static void remove_sock(struct sock *sk1)
 {
 	struct sock *sk2;
+	unsigned long flags;
 
 	if (!sk1->prot) 
 	{
@@ -219,12 +227,14 @@ static void remove_sock(struct sock *sk1)
 	}
 
 	/* We can't have this changing out from under us. */
+	save_flags(flags);
 	cli();
 	sk2 = sk1->prot->sock_array[sk1->num &(SOCK_ARRAY_SIZE -1)];
 	if (sk2 == sk1) 
 	{
+		sk1->prot->inuse -= 1;
 		sk1->prot->sock_array[sk1->num &(SOCK_ARRAY_SIZE -1)] = sk1->next;
-		sti();
+		restore_flags(flags);
 		return;
 	}
 
@@ -235,11 +245,12 @@ static void remove_sock(struct sock *sk1)
 
 	if (sk2) 
 	{
+		sk1->prot->inuse -= 1;
 		sk2->next = sk1->next;
-		sti();
+		restore_flags(flags);
 		return;
 	}
-	sti();
+	restore_flags(flags);
 }
 
 /*
@@ -1502,6 +1513,12 @@ void inet_proto_init(struct net_proto *pro)
 		udp_prot.sock_array[i] = NULL;
 		raw_prot.sock_array[i] = NULL;
   	}
+	tcp_prot.inuse = 0;
+	tcp_prot.highestinuse = 0;
+	udp_prot.inuse = 0;
+	udp_prot.highestinuse = 0;
+	raw_prot.inuse = 0;
+	raw_prot.highestinuse = 0;
 
 	printk("IP Protocols: ");
 	for(p = inet_protocol_base; p != NULL;) 

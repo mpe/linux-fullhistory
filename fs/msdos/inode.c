@@ -19,8 +19,11 @@
 #include "msbuffer.h"
 
 #ifdef MODULE
-	#include <linux/module.h>
-	#include <linux/version.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
 #endif
 
 #include <asm/segment.h>
@@ -62,9 +65,7 @@ void msdos_put_super(struct super_block *sb)
 	lock_super(sb);
 	sb->s_dev = 0;
 	unlock_super(sb);
-	#ifdef MODULE
-		MOD_DEC_USE_COUNT;
-	#endif
+	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -177,6 +178,8 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 	gid_t gid;
 	int umask;
 	int blksize = 512;
+
+	MOD_INC_USE_COUNT;
 	if (hardsect_size[MAJOR(sb->s_dev)] != NULL){
 		blksize = hardsect_size[MAJOR(sb->s_dev)][MINOR(sb->s_dev)];
 		if (blksize != 512){
@@ -187,6 +190,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 	    &debug,&fat,&quiet,&blksize)
 		|| (blksize != 512 && blksize != 1024)) {
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	cache_init();
@@ -200,6 +204,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 		brelse (bh);
 		sb->s_dev = 0;
 		printk("MSDOS bread failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	b = (struct msdos_boot_sector *) bh->b_data;
@@ -279,6 +284,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 			printk("VFS: Can't find a valid MSDOS filesystem on dev 0x%04x.\n",
 				   sb->s_dev);
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	sb->s_magic = MSDOS_SUPER_MAGIC;
@@ -297,11 +303,9 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 	if (!(sb->s_mounted = iget(sb,MSDOS_ROOT_INO))) {
 		sb->s_dev = 0;
 		printk("get root inode failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	#ifdef MODULE
-		MOD_INC_USE_COUNT;
-	#endif
 	return sb;
 }
 
@@ -514,12 +518,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("msdos: device busy, remove delayed\n");
-	else
-	{
-		unregister_filesystem(&msdos_fs_type);
-	}
+	unregister_filesystem(&msdos_fs_type);
 }
 
 #endif

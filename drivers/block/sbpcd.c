@@ -4004,7 +4004,7 @@ void sbpcd_setup(char *s, int *p)
 static int config_spea(void)
 {
   int n_ports=0x10; /* 2:0x00, 8:0x10, 16:0x20, 32:0x30 */
-/* What is n_ports? Number of adresses or base address offset? */
+/* What is n_ports? Number of addresses or base address offset? */
   int irq_number=0; /* 2:0x01, 7:0x03, 12:0x05, 15:0x07, OFF:0x00 */
   int dma_channel=0; /* 0:0x08, 1:0x18, 3:0x38, 5:0x58, 6:0x68, 7:0x78, OFF: 0x00 */
   int dack_polarity=0; /* L:0x00, H:0x80 */

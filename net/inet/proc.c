@@ -145,6 +145,34 @@ int raw_get_info(char *buffer, char **start, off_t offset, int length)
 }
 
 
+/*
+ *	Report socket allocation statistics [mea@utu.fi]
+ */
+int afinet_get_info(char *buffer, char **start, off_t offset, int length)
+{
+	/* From  net/socket.c  */
+	extern int socket_get_info(char *, char **, off_t, int);
+	extern struct proto packet_prot;
+
+	int len  = socket_get_info(buffer,start,offset,length);
+
+	len += sprintf(buffer+len,"SOCK_ARRAY_SIZE=%d\n",SOCK_ARRAY_SIZE);
+	len += sprintf(buffer+len,"TCP: inuse %d highest %d\n",
+		       tcp_prot.inuse, tcp_prot.highestinuse);
+	len += sprintf(buffer+len,"UDP: inuse %d highest %d\n",
+		       udp_prot.inuse, udp_prot.highestinuse);
+	len += sprintf(buffer+len,"RAW: inuse %d highest %d\n",
+		       raw_prot.inuse, raw_prot.highestinuse);
+	len += sprintf(buffer+len,"PAC: inuse %d highest %d\n",
+		       packet_prot.inuse, packet_prot.highestinuse);
+	*start = buffer + offset;
+	len -= offset;
+	if (len > length)
+		len = length;
+	return len;
+}
+
+
 /* 
  *	Called from the PROCfs module. This outputs /proc/net/snmp.
  */

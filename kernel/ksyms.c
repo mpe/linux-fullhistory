@@ -188,6 +188,11 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(request_dma),
 	X(free_dma),
 
+	/* IO port handling */
+	X(check_region),
+	X(request_region),
+	X(release_region),
+
 	/* process management */
 	X(wake_up),
 	X(wake_up_interruptible),
@@ -246,9 +251,6 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(alloc_skb),
 	X(kfree_skb),
 	X(dev_kfree_skb),
-	X(snarf_region),
-	X(request_region),
-	X(release_region),
 	X(netif_rx),
 	X(dev_rint),
 	X(dev_tint),

@@ -79,9 +79,11 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	struct file *filp;
 	dev_t dev = sb->s_dev;
 
+	MOD_INC_USE_COUNT;
 	if (!data) {
 		printk("nfs_read_super: missing data argument\n");
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	fd = data->fd;
@@ -92,11 +94,13 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd])) {
 		printk("nfs_read_super: invalid file descriptor\n");
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (!S_ISSOCK(filp->f_inode->i_mode)) {
 		printk("nfs_read_super: not a socket\n");
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	filp->f_count++;
@@ -133,9 +137,9 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 	if (!(sb->s_mounted = nfs_fhget(sb, &data->root, NULL))) {
 		sb->s_dev = 0;
 		printk("nfs_read_super: get root inode failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	MOD_INC_USE_COUNT;
 	return sb;
 }
 
@@ -264,23 +268,12 @@ static struct file_system_type nfs_fs_type = {
 
 int init_module(void)
 {
-	int i;
-
 	register_filesystem(&nfs_fs_type);
-
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	int i;
-
-	if (MOD_IN_USE) 
-	{
-		printk("NFS cannot be removed, currently in use\n");
-		return;
-	}
-
 	unregister_filesystem(&nfs_fs_type);
 }
 

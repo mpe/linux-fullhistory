@@ -8,6 +8,8 @@
  * I hate traps on the sparc, grrr...
  */
 
+#include <linux/sched.h>  /* for jiffies */
+#include <linux/kernel.h>
 
 void do_hw_interrupt(unsigned long type, unsigned long vector)
 {
@@ -23,7 +25,7 @@ void do_hw_interrupt(unsigned long type, unsigned long vector)
   return;
 }
 
-extern unsigned int *trapbase;
+extern unsigned long *trapbase;
 
 void trap_init(void)
 {

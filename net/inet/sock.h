@@ -91,6 +91,7 @@ struct sock {
   unsigned long		        lingertime;
   int				proc;
   struct sock			*next;
+  struct sock			*prev; /* Doubdly linked chain.. */
   struct sock			*pair;
   struct sk_buff		* volatile send_head;
   struct sk_buff		* volatile send_tail;
@@ -245,6 +246,7 @@ struct proto {
   unsigned long		retransmits;
   struct sock *		sock_array[SOCK_ARRAY_SIZE];
   char			name[80];
+  int			inuse, highestinuse;
 };
 
 #define TIME_WRITE	1

@@ -9,7 +9,7 @@ bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal harddisk support' CONFIG_BLK_DEV_HD n
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
-bool 'System V IPC' CONFIG_SYSVIPC y
+bool 'System V IPC' CONFIG_SYSVIPC n
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 
 if [ "$CONFIG_NET" = "y" ]; then

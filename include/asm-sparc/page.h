@@ -19,7 +19,7 @@
 
 #define PAGE_SHIFT   12             /* This is the virtual page... */
 #define PGDIR_SHIFT  18             /* This is the virtual segment */
-#define PAGE_SIZE    (1UL << PAGE_SHIFT)
+#define PAGE_SIZE    4096
 #define PGDIR_SIZE   (1UL << PGDIR_SHIFT)
 
 #ifdef __KERNEL__
@@ -65,6 +65,7 @@
  * with the following macro
  */
 
+#ifndef __ASSEMBLY__ /* for head.S */
 extern __inline__ unsigned long get_segmap(unsigned long addr)
 {
   register unsigned long entry;
@@ -122,6 +123,8 @@ extern __inline__ int get_context(void)
 
   return ctx;
 }
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* __KERNEL__ */
 

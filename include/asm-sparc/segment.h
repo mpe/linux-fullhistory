@@ -8,6 +8,7 @@
 #define USER_DS     0x1
 
 #include <linux/string.h>
+#include <asm/vac-ops.h>
 
 static inline unsigned char get_user_byte(const char * addr)
 {

@@ -24,6 +24,9 @@
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
 #endif
 
 #ifdef LEAK_CHECK
@@ -41,9 +44,7 @@ void isofs_put_super(struct super_block *sb)
 #endif
 	sb->s_dev = 0;
 	unlock_super(sb);
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 	return;
 }
 
@@ -166,8 +167,11 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	struct iso9660_options opt;
 
+	MOD_INC_USE_COUNT;
+
 	if (!parse_options((char *) data,&opt)) {
 		s->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
@@ -219,6 +223,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 			printk("isofs_read_super: bread failed, dev 0x%x iso_blknum %d\n",
 			       dev, iso_blknum);
 			unlock_super(s);
+			MOD_DEC_USE_COUNT;
 			return NULL;
 		}
 
@@ -256,6 +261,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 			printk("Unable to identify CD-ROM format.\n");
 		s->s_dev = 0;
 		unlock_super(s);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	};
 	
@@ -340,19 +346,18 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	if (!(s->s_mounted)) {
 		s->s_dev=0;
 		printk("get root inode failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
 	if(!check_disk_change(s->s_dev)) {
-#ifdef MODULE
-	  MOD_INC_USE_COUNT;
-#endif
 	  return s;
 	}
  out: /* Kick out for various error conditions */
 	brelse(bh);
 	s->s_dev = 0;
 	unlock_super(s);
+	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -766,12 +771,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("ne: device busy, remove delayed\n");
-	else
-	{
-		unregister_filesystem(&iso9660_fs_type);
-	}
+	unregister_filesystem(&iso9660_fs_type);
 }
 
 #endif

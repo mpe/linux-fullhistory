@@ -107,14 +107,14 @@ int permission(struct inode * inode,int mask)
 	if (inode->i_op && inode->i_op->permission)
 		return inode->i_op->permission(inode, mask);
 	else if ((mask & S_IWOTH) && IS_IMMUTABLE(inode))
-		return 0; /* Nobody gets write access to an immutable file */
+		return -EACCES; /* Nobody gets write access to an immutable file */
 	else if (current->fsuid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))
 		mode >>= 3;
 	if (((mode & mask & 0007) == mask) || fsuser())
-		return 1;
-	return 0;
+		return 0;
+	return -EACCES;
 }
 
 /*
@@ -182,9 +182,9 @@ int lookup(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOTDIR;
 	}
- 	if (!perm) {
+ 	if (perm != 0) {
 		iput(dir);
-		return -EACCES;
+		return perm;
 	}
 	if (!len) {
 		*result = dir;
@@ -352,9 +352,9 @@ int open_namei(const char * pathname, int flag, int mode,
 			return -EISDIR;
 		}
 		/* thanks to Paul Pluzhnikov for noticing this was missing.. */
-		if (!permission(dir,ACC_MODE(flag))) {
+		if ((error = permission(dir,ACC_MODE(flag))) != 0) {
 			iput(dir);
-			return -EACCES;
+			return error;
 		}
 		*res_inode=dir;
 		return 0;
@@ -368,8 +368,8 @@ int open_namei(const char * pathname, int flag, int mode,
 				iput(inode);
 				error = -EEXIST;
 			}
-		} else if (!permission(dir,MAY_WRITE | MAY_EXEC))
-			error = -EACCES;
+		} else if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0)
+			;	/* error is already set! */
 		else if (!dir->i_op || !dir->i_op->create)
 			error = -EACCES;
 		else if (IS_RDONLY(dir))
@@ -395,9 +395,9 @@ int open_namei(const char * pathname, int flag, int mode,
 		iput(inode);
 		return -EISDIR;
 	}
-	if (!permission(inode,ACC_MODE(flag))) {
+	if ((error = permission(inode,ACC_MODE(flag))) != 0) {
 		iput(inode);
-		return -EACCES;
+		return error;
 	}
 	if (S_ISBLK(inode->i_mode) || S_ISCHR(inode->i_mode)) {
 		if (IS_NODEV(inode)) {
@@ -460,9 +460,9 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(dir);
-		return -EACCES;
+		return error;
 	}
 	if (!dir->i_op || !dir->i_op->mknod) {
 		iput(dir);
@@ -517,9 +517,9 @@ static int do_mkdir(const char * pathname, int mode)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(dir);
-		return -EACCES;
+		return error;
 	}
 	if (!dir->i_op || !dir->i_op->mkdir) {
 		iput(dir);
@@ -563,9 +563,9 @@ static int do_rmdir(const char * name)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(dir);
-		return -EACCES;
+		return error;
 	}
 	/*
 	 * A subdirectory cannot be removed from an append-only directory
@@ -611,9 +611,9 @@ static int do_unlink(const char * name)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(dir);
-		return -EACCES;
+		return error;
 	}
 	/*
 	 * A file cannot be removed from an append-only directory
@@ -659,9 +659,9 @@ static int do_symlink(const char * oldname, const char * newname)
 		iput(dir);
 		return -EROFS;
 	}
-	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(dir);
-		return -EACCES;
+		return error;
 	}
 	if (!dir->i_op || !dir->i_op->symlink) {
 		iput(dir);
@@ -718,10 +718,10 @@ static int do_link(struct inode * oldinode, const char * newname)
 		iput(oldinode);
 		return -EXDEV;
 	}
-	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(dir);
 		iput(oldinode);
-		return -EACCES;
+		return error;
 	}
 	/*
 	 * A link to an append-only or immutable file cannot be created
@@ -772,9 +772,9 @@ static int do_rename(const char * oldname, const char * newname)
 	error = dir_namei(oldname,&old_len,&old_base,NULL,&old_dir);
 	if (error)
 		return error;
-	if (!permission(old_dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(old_dir,MAY_WRITE | MAY_EXEC)) != 0) {
 		iput(old_dir);
-		return -EACCES;
+		return error;
 	}
 	if (!old_len || (old_base[0] == '.' &&
 	    (old_len == 1 || (old_base[1] == '.' &&
@@ -787,10 +787,10 @@ static int do_rename(const char * oldname, const char * newname)
 		iput(old_dir);
 		return error;
 	}
-	if (!permission(new_dir,MAY_WRITE | MAY_EXEC)) {
+	if ((error = permission(new_dir,MAY_WRITE | MAY_EXEC)) != 0){
 		iput(old_dir);
 		iput(new_dir);
-		return -EACCES;
+		return error;
 	}
 	if (!new_len || (new_base[0] == '.' &&
 	    (new_len == 1 || (new_base[1] == '.' &&

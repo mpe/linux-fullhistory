@@ -136,7 +136,7 @@ struct sysv4_super_block {
 	char	       s_fname[6];	/* file system volume name */
 	char	       s_fpack[6];	/* file system pack name */
 	long	       s_fill[12];
-	long	       s_state;		/* file system state */
+	long	       s_state;		/* file system state: 0x7c269d38-s_time means clean */
 	long	       s_magic;		/* version of file system */
 	long	       s_type;		/* type of file system: 1 for 512 byte blocks
 								2 for 1024 byte blocks */
@@ -170,7 +170,7 @@ struct sysv2_super_block {
 	char	       s_fname[6];	/* file system volume name */
 	char	       s_fpack[6];	/* file system pack name */
 	long	       s_fill[14];
-	long	       s_state;		/* file system state */
+	long	       s_state;		/* file system state: 0xcb096f43 means clean */
 	long	       s_magic;		/* version of file system */
 	long	       s_type;		/* type of file system: 1 for 512 byte blocks
 								2 for 1024 byte blocks */

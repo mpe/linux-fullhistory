@@ -30,8 +30,6 @@ void ret_from_sys_call(void) { __asm__("nop"); }
  */
 asmlinkage int sys_idle(void)
 {
-	int i;
-
 	if (current->pid != 0)
 		return -EPERM;
 
@@ -54,7 +52,6 @@ void start_thread(struct pt_regs * regs, unsigned long sp, unsigned long fp)
 {
 	regs->sp = sp;
 	regs->fp = fp;
-	regs->psr = psr;
 }
 
 /*
@@ -75,9 +72,8 @@ unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct 
 	struct pt_regs * childregs;
 
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
-	p->tss.sp = (unsigned long) childregs;
+	p->tss.usp = (unsigned long) childregs;
 	*childregs = *regs;
-	p->tss.back_link = 0;
 	p->tss.psr = regs->psr; /* for condition codes */
 	return clone_flags;
 }
@@ -98,8 +94,8 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	int error;
 	char * filename;
 
-	error = do_execve(filename, (char **) regs.reg_window[0], 
-			  (char **) regs.reg_window[1], &regs);
+	error = do_execve(filename, (char **) regs.u_regs[0], 
+			  (char **) regs.u_regs[1], &regs);
 	putname(filename);
 	return error;
 }

@@ -59,6 +59,9 @@ static struct proc_dir_entry root_dir[] = {
 	{ PROC_MEMINFO,		7, "meminfo" },
 	{ PROC_KMSG,		4, "kmsg" },
 	{ PROC_VERSION,		7, "version" },
+#ifdef CONFIG_PCI
+	{ PROC_PCI,             3, "pci"  },
+#endif
 	{ PROC_CPUINFO,		7, "cpuinfo" },
 	{ PROC_SELF,		4, "self" },	/* will change inode # */
 	{ PROC_NET,		3, "net" },
@@ -74,7 +77,9 @@ static struct proc_dir_entry root_dir[] = {
    	{ PROC_KSYMS,		5, "ksyms" },
    	{ PROC_DMA,		3, "dma" },
 	{ PROC_IOPORTS,		7, "ioports"},
-	{ PROC_PROFILE,     7, "profile"},
+#ifdef CONFIG_PROFILE
+	{ PROC_PROFILE,		7, "profile"},
+#endif
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

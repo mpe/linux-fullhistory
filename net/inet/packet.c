@@ -404,5 +404,6 @@ struct proto packet_prot =
 	128,
 	0,
 	{NULL,},
-	"PACKET"
+	"PACKET",
+	0, 0
 };

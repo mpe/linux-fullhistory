@@ -293,15 +293,15 @@ static struct vc {
 #define vcmode		(vt_cons[currcons]->vc_mode)
 #define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))
 
-static void * memsetw(void * s, unsigned short c, unsigned int count)
+static void memsetw(void * s, unsigned short c, unsigned int count)
 {
-__asm__("cld\n\t"
-	"rep\n\t"
-	"stosw"
-	: /* no output */
-	:"a" (c),"D" (s),"c" (count/2)
-	:"cx","di");
-return s;
+	unsigned short * addr = (unsigned short *) s;
+
+	count /= 2;
+	while (count) {
+		count--;
+		*(addr++) = c;
+	}
 }
 
 int vc_cons_allocated(unsigned int i)
@@ -681,67 +681,72 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 		pos += video_size_row;
 		scr_end += video_size_row;
 		if (scr_end > video_mem_end) {
-			__asm__("cld\n\t"
-				"rep\n\t"
-				"movsl\n\t"
-				"movl _video_num_columns,%1\n\t"
-				"rep\n\t"
-				"stosw"
-				: /* no output */
-				:"a" (video_erase_char),
-				"c" ((video_num_lines-1)*video_num_columns>>1),
-				"D" (video_mem_start),
-				"S" (origin)
-				:"cx","di","si");
+			unsigned short * d = (unsigned short *) video_mem_start;
+			unsigned short * s = (unsigned short *) origin;
+			unsigned int count;
+
+			count = (video_num_lines-1)*video_num_columns;
+			while (count) {
+				count--;
+				*(d++) = *(s++);
+			}
+			count = video_num_columns;
+			while (count) {
+				count--;
+				*(d++) = video_erase_char;
+			}
 			scr_end -= origin-video_mem_start;
 			pos -= origin-video_mem_start;
 			origin = video_mem_start;
 			has_scrolled = 1;
 		} else {
-			__asm__("cld\n\t"
-				"rep\n\t"
-				"stosw"
-				: /* no output */
-				:"a" (video_erase_char),
-				"c" (video_num_columns),
-				"D" (scr_end-video_size_row)
-				:"cx","di");
+			unsigned short * d;
+			unsigned int count;
+
+			d = (unsigned short *) (scr_end - video_size_row);
+			count = video_num_columns;
+			while (count) {
+				count--;
+				*(d++) = video_erase_char;
+			}
 		}
 		set_origin(currcons);
 	} else {
-		__asm__("cld\n\t"
-			"rep\n\t"
-			"movsl\n\t"
-			"movl _video_num_columns,%%ecx\n\t"
-			"rep\n\t"
-			"stosw"
-			: /* no output */
-			:"a" (video_erase_char),
-			"c" ((b-t-1)*video_num_columns>>1),
-			"D" (origin+video_size_row*t),
-			"S" (origin+video_size_row*(t+1))
-			:"cx","di","si");
+		unsigned short * d = (unsigned short *) (origin+video_size_row*t);
+		unsigned short * s = (unsigned short *) (origin+video_size_row*(t+1));
+		unsigned int count = (b-t-1) * video_num_columns;
+
+		while (count) {
+			count--;
+			*(d++) = *(s++);
+		}
+		count = video_num_columns;
+		while (count) {
+			count--;
+			*(d++) = video_erase_char;
+		}
 	}
 }
 
 static void scrdown(int currcons, unsigned int t, unsigned int b)
 {
+	unsigned short *d, *s;
+	unsigned int count;
+
 	if (b > video_num_lines || t >= b)
 		return;
-	__asm__("std\n\t"
-		"rep\n\t"
-		"movsl\n\t"
-		"addl $2,%%edi\n\t"	/* %edi has been decremented by 4 */
-		"movl _video_num_columns,%%ecx\n\t"
-		"rep\n\t"
-		"stosw\n\t"
-		"cld"
-		: /* no output */
-		:"a" (video_erase_char),
-		"c" ((b-t-1)*video_num_columns>>1),
-		"D" (origin+video_size_row*b-4),
-		"S" (origin+video_size_row*(b-1)-4)
-		:"ax","cx","di","si");
+	d = (unsigned short *) origin+video_size_row*b;
+	s = (unsigned short *) origin+video_size_row*(b-1);
+	count = (b-t-1)*video_num_columns;
+	while (count) {
+		count--;
+		*(--d) = *(--s);
+	}
+	count = video_num_columns;
+	while (count) {
+		count--;
+		*(--d) = video_erase_char;
+	}
 	has_scrolled = 1;
 }
 
@@ -796,83 +801,74 @@ static inline void del(int currcons)
 static void csi_J(int currcons, int vpar)
 {
 	unsigned long count;
-	unsigned long start;
+	unsigned short * start;
 
 	switch (vpar) {
 		case 0:	/* erase from cursor to end of display */
 			count = (scr_end-pos)>>1;
-			start = pos;
+			start = (unsigned short *) pos;
 			break;
 		case 1:	/* erase from start to cursor */
 			count = ((pos-origin)>>1)+1;
-			start = origin;
+			start = (unsigned short *) origin;
 			break;
 		case 2: /* erase whole display */
 			count = video_num_columns * video_num_lines;
-			start = origin;
+			start = (unsigned short *) origin;
 			break;
 		default:
 			return;
 	}
-	__asm__("cld\n\t"
-		"rep\n\t"
-		"stosw\n\t"
-		: /* no output */
-		:"c" (count),
-		"D" (start),"a" (video_erase_char)
-		:"cx","di");
+	while (count) {
+		count--;
+		*(start++) = video_erase_char;
+	}
 	need_wrap = 0;
 }
 
 static void csi_K(int currcons, int vpar)
 {
-	long count;
-	long start;
+	unsigned long count;
+	unsigned short * start;
 
 	switch (vpar) {
 		case 0:	/* erase from cursor to end of line */
 			count = video_num_columns-x;
-			start = pos;
+			start = (unsigned short *) pos;
 			break;
 		case 1:	/* erase from start of line to cursor */
-			start = pos - (x<<1);
+			start = (unsigned short *) (pos - (x<<1));
 			count = x+1;
 			break;
 		case 2: /* erase whole line */
-			start = pos - (x<<1);
+			start = (unsigned short *) (pos - (x<<1));
 			count = video_num_columns;
 			break;
 		default:
 			return;
 	}
-	__asm__("cld\n\t"
-		"rep\n\t"
-		"stosw\n\t"
-		: /* no output */
-		:"c" (count),
-		"D" (start),"a" (video_erase_char)
-		:"cx","di");
+	while (count) {
+		count--;
+		*(start++) = video_erase_char;
+	}
 	need_wrap = 0;
 }
 
 static void csi_X(int currcons, int vpar) /* erase the following vpar positions */
 {					  /* not vt100? */
-	long count;
-	long start;
+	unsigned long count;
+	unsigned short * start;
 
 	if (!vpar)
 		vpar++;
 
-	start=pos;
-	count=(vpar > video_num_columns-x) ? (video_num_columns-x) : vpar;
+	start = (unsigned short *) pos;
+	count = (vpar > video_num_columns-x) ? (video_num_columns-x) : vpar;
 
-	__asm__("cld\n\t"
-		"rep\n\t"
-		"stosw\n\t"
-		: /* no output */
-		:"c" (count),
-		"D" (start),"a" (video_erase_char)
-		:"cx","di");
+	while (count) {
+		count--;
+		*(start++) = video_erase_char;
+	}
 	need_wrap = 0;
 }
 

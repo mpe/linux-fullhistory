@@ -48,7 +48,7 @@ struct thread_struct {
 	unsigned long npc;          /* next program counter */
 
 /* 8 local registers + 8 in registers * 24 register windows.
- * Most sparc's I know of only have 8 windows implemented,
+ * Most sparcs I know of only have 8 windows implemented,
  * we determine how many at boot time and store that value
  * in nwindows.
  */
@@ -58,8 +58,7 @@ struct thread_struct {
 };
 
 #define INIT_TSS  { \
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
-        0, 0, 0, 0, 0, 0, 0, 0, \
+	0, 0, 0, 0, 0, 0, \
         { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
@@ -84,7 +83,9 @@ struct thread_struct {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
-	0, 0, 0, 0, \
+	0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        { 0, 0, 0, 0, 0, 0, 0, 0, }, \
+        0, \
         { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \

@@ -13,13 +13,15 @@
 #include <linux/errno.h>
 #include <asm/segment.h>
 #include <linux/string.h>
-#include <linux/ctype.h>
 #include <linux/stat.h>
 #include <linux/umsdos_fs.h>
 
 #ifdef MODULE
-	#include <linux/module.h>
-	#include <linux/version.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
 #endif
 
 struct inode *pseudo_root=NULL;		/* Useful to simulate the pseudo DOS */
@@ -55,9 +57,7 @@ void UMSDOS_put_inode(struct inode *inode)
 void UMSDOS_put_super(struct super_block *sb)
 {
 	msdos_put_super(sb);
-	#ifdef MODULE
-		MOD_DEC_USE_COUNT;
-	#endif
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -404,7 +404,9 @@ struct super_block *UMSDOS_read_super(
 		which do not have an EMD file. They behave like normal
 		msdos directory, with all limitation of msdos.
 	*/
-	struct super_block *sb = msdos_read_super(s,data,silent);
+	struct super_block *sb;
+	MOD_INC_USE_COUNT;
+	sb = msdos_read_super(s,data,silent);
 	printk ("UMSDOS Beta 0.6 (compatibility level %d.%d, fast msdos)\n"
 		,UMSDOS_VERSION,UMSDOS_RELEASE);
 	if (sb != NULL){
@@ -473,9 +475,8 @@ struct super_block *UMSDOS_read_super(
 			}
 			iput (pseudo);
 		}
-		#ifdef MODULE
-			MOD_INC_USE_COUNT;
-		#endif
+	} else {
+		MOD_DEC_USE_COUNT;
 	}
 	return sb;
 }
@@ -497,12 +498,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("Umsdos: file system in use, remove delayed\n");
-	else
-	{
-		unregister_filesystem(&umsdos_fs_type);
-	}
+	unregister_filesystem(&umsdos_fs_type);
 }
 
 #endif

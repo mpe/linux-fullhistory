@@ -9,6 +9,7 @@
  */
 
 #include <asm/head.h>
+#include <asm/asi.h>
 
 /* Here are macros for routines we do often, this allows me to inline this
  * without making the code look real ugly. Well, the macro looks ugly too but
@@ -223,9 +224,9 @@ my_trap_handler:
 		TRAP_WIN_CLEAN
 
 		nop
-		or %%g0, %l3, %o0
+		or %g0, %l3, %o0
 		call _do_hw_interrupt
-		or %%g0, %%g0, %o1
+		or %g0, %g0, %o1
 		wr %l0, 0x20, %psr  ! re-enable traps and reset the condition codes
 		nop
 		nop
@@ -260,7 +261,7 @@ fill_from_user:
 	ld	[%l6 + THREAD_WIM], %l5
 	and	%l0, 0x1f, %l3
 
-/* I don't know whats worse, the extra comparison here, or an extra load
+/* I don't know what's worse, the extra comparison here, or an extra load
  * from a lookup table, we'll see.
  */
 	cmp	%l5, %l3
@@ -289,7 +290,7 @@ fill_from_user:
  * was attempted and a trap occurred. Therefore the restore attempt had no
  * effect on window movement and the trap saved, which means it went in the
  * other direction. :-( We are in a trap window which is two restores away
- * from the window we want to un-invalidate sorta speak and three away from
+ * from the window we want to un-invalidate so to speak and three away from
  * the one which will become invalid after this routine. There are probably
  * bugs already this routine. Bugs suck.
  */
@@ -314,14 +315,14 @@ spill_window_entry:
 	ld	[%l1 + %lo(_current)], %l1
 	st	%l0, [%l1 + THREAD_WIM]
 	save	%g0, %g0, %g0		! back to invalid register
-	ldd	%l0, [%sp]		! load the window from stack
-	ldd	%l2, [%sp + 8]
-	ldd	%l4, [%sp + 16]
-	ldd	%l6, [%sp + 24]
-	ldd	%i0, [%sp + 32]
-	ldd	%i2, [%sp + 40]
-	ldd	%i4, [%sp + 48]
-	ldd	%i6, [%sp + 56]
+	ldd	[%sp], %l0		! load the window from stack
+	ldd	[%sp + 8], %l2
+	ldd	[%sp + 16], %l4
+	ldd	[%sp + 24], %l6
+	ldd	[%sp + 32], %i0
+	ldd	[%sp + 40], %i2
+	ldd	[%sp + 48], %i4
+	ldd	[%sp + 56], %i6
 	save	%g0, %g0, %g0		! to window where trap happened
 	save	%g0, %g0, %g0		! back to trap window, so rett works
 	wr	%l0, 0x0, %psr		! load condition codes

@@ -535,7 +535,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 	flush_thread();
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
-	    !permission(bprm->inode,MAY_READ))
+	    permission(bprm->inode,MAY_READ))
 		current->dumpable = 0;
 	current->signal = 0;
 	for (i=0 ; i<32 ; i++) {
@@ -605,8 +605,9 @@ restart_interp:
 		bprm.e_uid = (i & S_ISUID) ? bprm.inode->i_uid : current->euid;
 		bprm.e_gid = (i & S_ISGID) ? bprm.inode->i_gid : current->egid;
 	}
-	if (!permission(bprm.inode, MAY_EXEC) ||
-	    (!(bprm.inode->i_mode & 0111) && fsuser())) {
+	if ((retval = permission(bprm.inode, MAY_EXEC)) != 0)
+		goto exec_error2;
+	if (!(bprm.inode->i_mode & 0111) && fsuser()) {
 		retval = -EACCES;
 		goto exec_error2;
 	}

@@ -82,13 +82,16 @@
  *  Version 3.4 BETA	removed "444" debug message
  *  (sent to Linus)
  *  Version 3.5		correct the bios_cyl field if it's too small
- *  (linux 1.1.76!)	 (to help fdisk with brain-dead BIOSs)
+ *  (linux 1.1.76)	 (to help fdisk with brain-dead BIOSs)
  *  Version 3.6		cosmetic corrections to comments and stuff
- *			reorganise probing code to make it understandable
+ *  (linux 1.1.77)	reorganise probing code to make it understandable
  *			added halfway retry to probing for drive identification
  *			added "hdx=noprobe" command line option
  *			allow setting multmode even when identification fails
- *
+ *  Version 3.7		move set_geometry=1 from do_identify() to ide_init()
+ *			increase DRQ_WAIT to eliminate nuisance messages
+ *			wait for DRQ_STAT instead of DATA_READY during probing
+ *			  (courtesy of Gary Thomas gary@efland.UU.NET)
  *  To do:
  *	- special 32-bit controller-type detection & support
  *	- figure out why two WD drives on one i/f sometimes don't identify
@@ -234,7 +237,7 @@ typedef unsigned char		byte;	/* used everywhere */
 /*
  * Timeouts for various operations:
  */
-#define WAIT_DRQ	3	/* 30msec - spec allows up to 20ms */
+#define WAIT_DRQ	5	/* 50msec - spec allows up to 20ms */
 #define WAIT_READY	3	/* 30msec - should be instantaneous */
 #define WAIT_PIDENTIFY	100	/* 1sec   - should be less than 3ms (?) */
 #define WAIT_WORSTCASE	3000	/* 30sec  - worst case when spinning up */
@@ -1624,10 +1627,6 @@ static void do_identify (ide_dev_t *dev)
 #endif	/* CONFIG_BLK_DEV_IDECD */
 		return;
 	}
-	/*
-	 * for Quantum drives, and also for drives not known to the BIOS:
-	 */
-	dev->special.b.set_geometry = 1;
 
 	/*
 	 * Gather up the geometry info.
@@ -1738,7 +1737,7 @@ static int try_to_identify (ide_dev_t *dev, byte cmd)
 	for (timer = jiffies + (timeout / 2); timer > jiffies;) {
 		if ((IN_BYTE(HD_ALTSTATUS,DEV_HWIF) & BUSY_STAT) == 0) {
 			delay_10ms();		/* wait for IRQ & DATA_READY */
-			if (OK_STAT(GET_STAT(DEV_HWIF),DATA_READY,BAD_RW_STAT)){
+			if (OK_STAT(GET_STAT(DEV_HWIF),DRQ_STAT,BAD_RW_STAT)){
 				cli();			/* some sys need this */
 				do_identify(dev);	/* drive returned ID */
 				rc = 0;
@@ -1770,7 +1769,7 @@ done_try:
 /*
  * This routine has the difficult job of finding a drive if it exists,
  * without getting hung up if it doesn't exist, and without leaving any IRQs
- * dangling to haunt us later.  The last point actually occured in v2.3, and
+ * dangling to haunt us later.  The last point actually occurred in v2.3, and
  * is the reason for the slightly complex exit sequence.  If a drive is "known"
  * to exist (from CMOS or kernel parameters), but does not respond right away,
  * the probe will "hang in there" for the maximum wait time (about 30 seconds).
@@ -2041,6 +2040,7 @@ static void init_ide_data (byte hwif)
 		dev->wqueue			= NULL;
 		dev->special.all		= 0;
 		dev->special.b.recalibrate	= 1;
+		dev->special.b.set_geometry	= 1;
 		dev->keep_settings		= 0;
 		ide_hd[hwif][drive<<PARTN_BITS].start_sect = 0;
 		dev->name = ide_devname[hwif][drive];

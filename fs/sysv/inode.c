@@ -1000,11 +1000,6 @@ void cleanup_module(void)
 {
 	int i;
 
-	if (MOD_IN_USE) {
-		printk("SysV FS cannot be removed, currently in use\n");
-		return;
-	}
-
 	for (i = 0; i < 3; i++)
 		unregister_filesystem(&sysv_fs_type[i]);
 }

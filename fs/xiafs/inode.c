@@ -535,10 +535,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE) {
-		printk("XIA-FS cannot be removed, currently in use\n");
-		return;
-	}
 	unregister_filesystem(&xiafs_fs_type);
 }
 

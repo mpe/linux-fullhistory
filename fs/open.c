@@ -74,9 +74,13 @@ asmlinkage int sys_truncate(const char * path, unsigned int length)
 	error = namei(path,&inode);
 	if (error)
 		return error;
-	if (S_ISDIR(inode->i_mode) || !permission(inode,MAY_WRITE)) {
+	if (S_ISDIR(inode->i_mode)) {
 		iput(inode);
 		return -EACCES;
+	}
+	if ((error = permission(inode,MAY_WRITE)) != 0) {
+		iput(inode);
+		return error;
 	}
 	if (IS_RDONLY(inode)) {
 		iput(inode);
@@ -157,9 +161,9 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		newattrs.ia_ctime = CURRENT_TIME;
 		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
-		if (!permission(inode,MAY_WRITE)) {
+		if ((error = permission(inode,MAY_WRITE)) != 0) {
 			iput(inode);
-			return -EACCES;
+			return error;
 		}
 		actime = modtime = newattrs.ia_ctime = CURRENT_TIME;
 	}
@@ -190,8 +194,7 @@ asmlinkage int sys_access(const char * filename, int mode)
 	current->fsgid = current->gid;
 	res = namei(filename,&inode);
 	if (!res) {
-		if (!permission(inode, mode))
-			res = -EACCES;
+		res = permission(inode, mode);
 		iput(inode);
 	}
 	current->fsuid = old_fsuid;
@@ -211,9 +214,9 @@ asmlinkage int sys_chdir(const char * filename)
 		iput(inode);
 		return -ENOTDIR;
 	}
-	if (!permission(inode,MAY_EXEC)) {
+	if ((error = permission(inode,MAY_EXEC)) != 0) {
 		iput(inode);
-		return -EACCES;
+		return error;
 	}
 	iput(current->fs->pwd);
 	current->fs->pwd = inode;
@@ -224,6 +227,7 @@ asmlinkage int sys_fchdir(unsigned int fd)
 {
 	struct inode * inode;
 	struct file * file;
+	int error;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -231,8 +235,8 @@ asmlinkage int sys_fchdir(unsigned int fd)
 		return -ENOENT;
 	if (!S_ISDIR(inode->i_mode))
 		return -ENOTDIR;
-	if (!permission(inode,MAY_EXEC))
-		return -EACCES;
+	if ((error = permission(inode,MAY_EXEC)) != 0)
+		return error;
 	iput(current->fs->pwd);
 	current->fs->pwd = inode;
 	inode->i_count++;

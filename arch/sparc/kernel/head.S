@@ -44,6 +44,8 @@
 #include <asm/version.h>
 #include <asm/asi.h>
 #include <asm/contregs.h>
+#include <asm/psr.h>
+#include <asm/page.h>
 
 	.data
 
@@ -52,7 +54,7 @@
         .globl  _intstack
         .globl  _eintstack
 _intstack:
-        .skip   4 * PAGESIZE                ! 16k = 128 128-byte stack frames
+        .skip   4 * PAGE_SIZE                ! 16k = 128 128-byte stack frames
 _eintstack:
 
 
@@ -77,7 +79,7 @@ _cputypval:
  */
 
 /* Uh, actually Linus it is I who cannot spell. Too much murky
- * Sparc assembly will does this to ya.
+ * Sparc assembly will do this to ya.
  */
 _cputypvar:
 	.asciz "compatability"
@@ -181,8 +183,8 @@ newline:
 	.text
 
         .globl  _msgbuf
-msgbufsize = PAGESIZE                       ! 1 page for msg buffer
-_msgbuf =  PAGESIZE
+msgbufsize = PAGE_SIZE                       ! 1 page for msg buffer
+_msgbuf =  PAGE_SIZE
 
 
 IE_reg_addr = _msgbuf + msgbufsize      ! this page not used; points to IEreg
@@ -191,7 +193,7 @@ IE_reg_addr = _msgbuf + msgbufsize      ! this page not used; points to IEreg
 /* Ok, things start to get interesting. We get linked such that 'start'
    is the entry symbol. However, it is real low in kernel address space
    and as such a nifty place to place the trap table. We achieve this goal
-   by just jumping to 'dostart' for the first trap's entry as the sparc
+   by just jumping to 'gokernel' for the first trap's entry as the sparc
    never receives the zero trap as it is real special (hw reset).
 
    Each trap entry point is the size of 4 sparc instructions (or 4 bytes
@@ -494,7 +496,7 @@ _msgbufmapped:
    a v0 or v2 prom.
 */
 
-gokernel:	mov	%o0, %g7
+gokernel:	or	%g0, %o0, %g7
 		st	%o0, [_prom_vector_p]   ! we will need it later
 		rd	%psr, %l2
 		rd	%wim, %l3
@@ -502,7 +504,7 @@ gokernel:	mov	%o0, %g7
 		or	%g0, %o2, %l5		! could be prom magic value...
 	
 #if 0 /* You think I'm nutz? */
-		cmp	%l5, 0x0		! check for magic SMP pointer
+		subcc	%l5, 0x0, %g0		! check for magic SMP pointer
 		bne	nosmp	
 		nop
 		call    %o2			! call smp prom setup 
@@ -519,15 +521,15 @@ nosmp:		sethi	%hi(_boot_psr), %l1
 		st	%l3, [%l1 + %lo(_boot_wim)]
 		sethi	%hi(_boot_tbr), %l1
 		st	%l4, [%l1 + %lo(_boot_tbr)]
-		sethi	%hi(_boot_o_two), %l1
+		sethi	%hi(_boot_smp_ptr), %l1
 		st	%l5, [%l1 + %lo(_boot_smp_ptr)]
 
-		mov	%o0, %g7
+		or	%g0, %o0, %g7
 		sethi	%hi(_prom_vector_p), %g5
 		st	%o0, [%g5 + %lo(_prom_vector_p)]   ! we will need it later
 
 		ld	[%g7 + 0x4], %o3
-		cmp	%o3, 2			! a v2 prom?
+		subcc	%o3, 0x2, %g0			! a v2 prom?
 		be	found_v2
 		nop
 
@@ -538,17 +540,19 @@ nosmp:		sethi	%hi(_boot_psr), %l1
 */
 
 		sethi	%hi(LOAD_ADDR), %g6
-		cmp	%o0, %g6		! an old sun4?
-		beq	no_sun4_here
+		subcc	%o0, %g6, %g0		! an old sun4?
+		be	no_sun4_here
 		nop
 
-		st	%g0, [_prom_iface_vers]
+		sethi	%hi(_prom_iface_vers), %g1
+		st	%g0, [%g1 + %lo(_prom_iface_vers)]
 		b	not_v2
 		nop
 
 found_v2:
-		or	%%g0, 0x2, %o5
-		st	%o5, [_prom_iface_vers]
+		or	%g0, 0x2, %o5
+		sethi	%hi(_prom_iface_vers), %g1
+		st	%o5, [%g1 + %lo(_prom_iface_vers)]
 
 not_v2:
 
@@ -573,29 +577,32 @@ not_v2:
 		call 	%l0
 		or	%g0, %g0, %o0		! next_node(0) = first_node
 
-		set	_cputypvar, %o1		! first node has cpu-arch
-		set	_cputypval, %o2		! information, the string
+		sethi	%hi(_cputypvar), %o1	! first node has cpu-arch
+		or	%o1, %lo(_cputypvar), %o1
+		sethi	%hi(_cputypval), %o2	! information, the string
+		or	%o2, %lo(_cputypval), %o2
 		ld	[%l1], %l0		! 'compatibility' tells
-		ld	[%l0 + 0x0c], %l0	! that we want 'sun4x' where
+		ld	[%l0 + 0xc], %l0	! that we want 'sun4x' where
 		call	%l0			! x is one of '', 'c', 'm',
 		nop				! 'd' or 'e'. %o2 holds pointer
 						! to a buf where above string
 						! will get stored by the prom.
 
-		set	_cputypval, %o2		! better safe than sorry
-		ldub	[%o2 + 4], %o0
-		cmp	%o0, 'c'		! we already know we are not
-		beq	is_sun4c		! on a plain sun4 because of
+		sethi	%hi(_cputypval), %o2	! better safe than sorry
+		or	%o2, %lo(_cputypval), %o2
+		ldub	[%o2 + 0x4], %o0
+		subcc	%o0, 'c', %g0		! we already know we are not
+		be	is_sun4c		! on a plain sun4 because of
 		nop				! the check for 0x4000 in %o0
-		cmp	%o0, 'm'		! at start:
-		beq	is_sun4m
+		subcc	%o0, 'm', %g0		! at start:
+		be	is_sun4m
 		nop
 		b	no_sun4d_here		! god bless the person who
 		nop				! tried to run this on sun4d
 
 is_sun4m:
 is_sun4c:					! OK, this is a sun4c, yippie
-		mov 	%g7, %g6		! load up the promvec offsets
+		or 	%g0, %g7, %g6		! load up the promvec offsets
 		sethi	%hi(prom_magic), %g5   	! magic mushroom :>
 		st	%g6, [%g5 + %lo(prom_magic)]
 		add	%g7, 0x4, %g6
@@ -639,29 +646,39 @@ is_sun4c:					! OK, this is a sun4c, yippie
  * as the prom expects.
  */
 
-		set	boot_msg, %o0	
-		ld	[prom_printf], %o1
+		sethi	%hi(boot_msg), %o0	
+		or	%o0, %lo(boot_msg), %o0
+		sethi	%hi(prom_printf), %o1
+		ld	[%o1 + %lo(prom_printf)], %o1
 		ld	[%o1], %o1
 		call	%o1  			! print boot message #1
 		nop
 
-_newline:	set	newline, %o0
-		ld	[prom_printf], %o1
+_newline:	sethi	%hi(newline), %o0
+		or	%o0, %lo(newline), %o0
+		sethi	%hi(prom_printf), %o1
+		ld	[%o1 + %lo(prom_printf)], %o1
 		ld	[%o1], %o1
 		call	%o1
 		nop
 
-		set	pstring1, %o0
-		ld	[prom_printf], %o2
+		sethi	%hi(pstring1), %o0
+		or	%o0, %lo(pstring1), %o0
+		sethi	%hi(prom_printf), %o2
+		ld	[%o2 + %lo(prom_printf)], %o2
 		ld	[%o2], %o2
-		ld	[prom_magic], %o1
+		sethi	%hi(prom_magic), %o1
+		ld	[%o1 + %lo(prom_magic)], %o1
 		ld	[%o1], %o1
 		call	%o2
 
-		set	pstring2, %o0
-		ld	[prom_printf], %o2
+		sethi	%hi(pstring2), %o0
+		or	%o0, %lo(pstring2), %o0
+		sethi	%hi(prom_printf), %o2
+		ld	[%o2 + %lo(prom_printf)], %o2
 		ld	[%o2], %o2
-		ld	[_prom_iface_vers], %o1
+		sethi	%hi(_prom_iface_vers), %o1
+		ld	[%o1 + %lo(_prom_iface_vers)], %o1
 		ld	[%o1], %o1
 		call 	%o2
 
@@ -675,9 +692,9 @@ no_sun4_here:
 		nop
 
 rest_of_boot:
-		mov	PAGESHIFT_SUN4C, %g5
+		or	%g0, PAGE_SHIFT, %g5
 
-		set	AC_CONTEXT, %g1		! kernel context, safe now
+		sethi	%hi(AC_CONTEXT), %g1	! kernel context, safe now
 						! the only valid context
 						! until we call paging_init()
 		stba	%g0, [%g1] ASI_CONTROL
@@ -690,7 +707,7 @@ rest_of_boot:
 
 /* Uh, oh, interrupt time. This crap is real confusing. What I want to do is
  * clear all interrupts, map the interrupt enable register which in effect
- * enables non-maskable interrupts (or NMI's). Actuall we take no interrupts
+ * enables non-maskable interrupts (or NMI's). Actually we take no interrupts
  * until we frob with the %tbr (trap base register) which the prom has set 
  * to all its routines which allows some sanity during bootup.
  */
@@ -711,7 +728,8 @@ rest_of_boot:
  * show-time!
  */
 
-		set	1f, %g1
+		sethi	%hi(1f), %g1
+		or	%g1, %lo(1f), %g1
 		jmp	%g1
 		nop
 
@@ -734,26 +752,31 @@ rest_of_boot:
 
 		rd	%psr, %g3
 		andn	%g3, PSR_ET, %g3
-		wr	%g3, 0, %psr		! make sure traps are off
+		wr	%g3, 0x0, %psr		! make sure traps are off
 						! before we play around
-		WRITE_PAUSE			! no guarentees until 3 insns
+		WRITE_PAUSE			! no guarantees until 3 insns
 
 
-		wr	%g0, 0, %wim		! magical invalid window reg
+		wr	%g0, 0x0, %wim		! magical invalid window reg
 		WRITE_PAUSE			! see above
 
 	
 /* I keep the timer interrupt on so that BogoMIPS works and the prom
  * keeps updating it's "jiffies" counter. 100HZ clock on sparcstations.
  */	
-		wr	%g0, (PSR_S | PSR_PS | PSR_PIL), %psr
+
+/* If gas wasn't so dumb, I could use or'd macros in this next
+ * write. ;-( like this (PSR_PS | PSR_S | PSR_PIL)...
+ */
+
+		wr	%g0, (0xfc0), %psr
 		WRITE_PAUSE
 
-		wr	%g0, 2, %wim		! window 1 invalid
+		wr	%g0, 0x2, %wim		! window 1 invalid
 		WRITE_PAUSE
-		mov	1, %g1
-		sethi	%hi(_task + PCB_WIM), %g2
-		st	%g1, [%g2 + %lo(_task + PCB_WIM)]
+		or	%g0, 0x1, %g1
+		sethi	%hi(_current + THREAD_WIM), %g2
+		st	%g1, [%g2 + %lo(_current + THREAD_WIM)]
 
 /* I want a kernel stack NOW! */
 
@@ -765,7 +788,7 @@ rest_of_boot:
 
 
 /*
- * Maybe the prom zero's out our BSS section, maybe it doesn't. I certainly 
+ * Maybe the prom zeroes out our BSS section, maybe it doesn't. I certainly 
  * don't know, do you?
  */
 
@@ -788,12 +811,12 @@ rest_of_boot:
 		sub	%g3, %g4, %g2
 		sethi	%hi(_kernel_data_len), %g3
 		st	%g2, [%g3 + %lo(_kernel_data_len)]
-		clr	%g1
+		or	%g0, %g0, %g1
 
 1:	
 		st	%g0, [%o0]
 		add	%o0, 0x4, %o0
-		cmp	%o0, %o1
+		subcc	%o0, %o1, %g0
 		bl	1b
 		nop
 
@@ -812,7 +835,7 @@ rest_of_boot:
 		or	%g0, 0x0, %g3
 
 1:		srl	%g1, 0x1, %g1			! shift until highest
-		cmp	%g1, 0x0			! bit set
+		subcc	%g1, 0x0, %g0			! bit set
 		bne	1b
 		add	%g3, 0x1, %g3
 		sethi	%hi(_nwindows), %g4
@@ -906,7 +929,7 @@ prom_printf:		.skip 4			! minimal printf()
  * sequence, all sorts of bad things can happen
  */
 
-prom_abort:		.skip 4		! "L1-A" magic cookie
+prom_abort:		.skip 4		! L1-A magic cookie
 					! must be mapped in ALL contexts
 
 /* prom_sync is a place where the kernel should place a pointer to a kernel
@@ -916,7 +939,7 @@ prom_abort:		.skip 4		! "L1-A" magic cookie
  * executed. Nice feature eh?
  */
 
-prom_sync:		.skip 4			! hook in prom for "sync" func
+prom_sync:		.skip 4			! hook in prom for sync func
 
 	.align 4
 
@@ -930,14 +953,15 @@ _nwindows:	.skip 4
 _nwindowsm1:	.skip 4
 
 	.align 4
-/* Boot time priviledged register values, plus magic %o2 value */
+/* Boot time privileged register values, plus magic %o2 value */
 
 	.globl _boot_wim
 	.globl _boot_psr
 	.globl _boot_tbr
-	.globl _boot_o_two
+	.globl _boot_smp_ptr
 _boot_wim:		.skip 4
 _boot_psr:		.skip 4
 _boot_tbr:		.skip 4
 _boot_smp_ptr:		.skip 4
+
 

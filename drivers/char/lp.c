@@ -37,6 +37,9 @@ struct lp_struct lp_table[] = {
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
 #endif
 
 /* Test if printer is ready (and optionally has no error conditions) */
@@ -47,6 +50,15 @@ struct lp_struct lp_table[] = {
 #define _LP_CAREFUL_READY(status) \
    (status & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
       (LP_PBUSY|LP_PSELECD|LP_PERRORP) 
+
+/* Allow old versions of tunelp to continue to work */
+#define OLD_LPCHAR   0x0001
+#define OLD_LPTIME   0x0002
+#define OLD_LPABORT  0x0004
+#define OLD_LPSETIRQ 0x0005
+#define OLD_LPGETIRQ 0x0006
+#define OLD_LPWAIT   0x0008
+#define OLD_IOCTL_MAX 8
 
 /* 
  * All my debugging code assumes that you debug with only one printer at
@@ -320,6 +332,8 @@ static int lp_open(struct inode * inode, struct file * file)
 	if (LP_F(minor) & LP_BUSY)
 		return -EBUSY;
 
+	MOD_INC_USE_COUNT;
+
 	/* If ABORTOPEN is set and the printer is offline or out of paper,
 	   we may still want to open it to perform ioctl()s.  Therefore we
 	   have commandeered O_NONBLOCK, even though it is being used in
@@ -329,34 +343,37 @@ static int lp_open(struct inode * inode, struct file * file)
 		int status = LP_S(minor);
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
+			MOD_DEC_USE_COUNT;
 			return -ENOSPC;
 		} else if (!(status & LP_PSELECD)) {
 			printk(KERN_INFO "lp%d off-line\n", minor);
+			MOD_DEC_USE_COUNT;
 			return -EIO;
 		} else if (!(status & LP_PERRORP)) {
 			printk(KERN_ERR "lp%d printer error\n", minor);
+			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
 	}
 
 	if ((irq = LP_IRQ(minor))) {
 		lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
-		if (!lp_table[minor].lp_buffer)
+		if (!lp_table[minor].lp_buffer) {
+			MOD_DEC_USE_COUNT;
 			return -ENOMEM;
+		}
 
 		ret = request_irq(irq, lp_interrupt, SA_INTERRUPT, "printer");
 		if (ret) {
 			kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 			lp_table[minor].lp_buffer = NULL;
 			printk("lp%d unable to use interrupt %d, error %d\n", minor, irq, ret);
+			MOD_DEC_USE_COUNT;
 			return ret;
 		}
 	}
 
 	LP_F(minor) |= LP_BUSY;
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif	
 	return 0;
 }
 
@@ -372,9 +389,7 @@ static void lp_release(struct inode * inode, struct file * file)
 	}
 
 	LP_F(minor) &= ~LP_BUSY;
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif		
 }
 
 
@@ -391,13 +406,19 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		return -ENODEV;
 	if ((LP_F(minor) & LP_EXIST) == 0)
 		return -ENODEV;
+	if (cmd <= OLD_IOCTL_MAX)
+		printk(KERN_NOTICE "lp%d: warning: obsolete ioctl %#x (perhaps you need a new tunelp)\n",
+		    minor, cmd);
 	switch ( cmd ) {
+		case OLD_LPTIME:
 		case LPTIME:
 			LP_TIME(minor) = arg;
 			break;
+		case OLD_LPCHAR:
 		case LPCHAR:
 			LP_CHAR(minor) = arg;
 			break;
+		case OLD_LPABORT:
 		case LPABORT:
 			if (arg)
 				LP_F(minor) |= LP_ABORT;
@@ -416,9 +437,11 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_CAREFUL;
 			break;
+		case OLD_LPWAIT:
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;
+		case OLD_LPSETIRQ:
 		case LPSETIRQ: {
 			int oldirq;
 			int newirq = arg;
@@ -462,11 +485,28 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			lp_reset(minor);
 			break;
 		}
-		case LPGETIRQ:
+		case OLD_LPGETIRQ:
 			retval = LP_IRQ(minor);
 			break;
+		case LPGETIRQ:
+			retval = verify_area(VERIFY_WRITE, (void *) arg,
+			    sizeof(int));
+		    	if (retval)
+		    		return retval;
+			memcpy_tofs((int *) arg, &LP_IRQ(minor), sizeof(int));
+			break;
 		case LPGETSTATUS:
-			retval = LP_S(minor);	/* in range 0..255 */
+			retval = verify_area(VERIFY_WRITE, (void *) arg,
+			    sizeof(int));
+		    	if (retval)
+		    		return retval;
+			else {
+				int status = LP_S(minor);
+				memcpy_tofs((int *) arg, &status, sizeof(int));
+			}
+			break;
+		case LPRESET:
+			lp_reset(minor);
 			break;
 		default:
 			retval = -EINVAL;

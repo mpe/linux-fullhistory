@@ -20,6 +20,8 @@ msdos.o: $(OBJS)
 	$(LD) -r -o msdos.o $(OBJS)
 
 modules: msdos.o
+	ln -sf ../fs/msdos/msdos.o $(TOPDIR)/modules
+
 dep:
 	$(CPP) -M *.c > .depend
 

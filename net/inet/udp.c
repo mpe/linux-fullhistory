@@ -599,7 +599,12 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	if (uh->check && udp_check(uh, len, saddr, daddr)) 
 	{
-		printk("UDP: bad checksum.\n");
+		/* <mea@utu.fi> wants to know, who sent it, to
+		   go and stomp on the garbage sender... */
+		printk("UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
+		       ntohl(saddr),ntohs(uh->source),
+		       ntohl(daddr),ntohs(uh->dest),
+		       ulen);
 		udp_statistics.UdpInErrors++;
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
@@ -724,6 +729,7 @@ struct proto udp_prot = {
 	128,
 	0,
 	{NULL,},
-	"UDP"
+	"UDP",
+	0, 0
 };
 

@@ -2,7 +2,7 @@
 # Makefile for kernel/blk_drv/scsi
 #
 # Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DONT put your own dependencies here
+# removes any old dependencies. DON'T put your own dependencies here
 # unless its something special (ie not a .c file).
 #
 

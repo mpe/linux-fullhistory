@@ -314,5 +314,6 @@ struct proto raw_prot = {
 	128,
 	0,
 	{NULL,},
-	"RAW"
+	"RAW",
+	0, 0
 };

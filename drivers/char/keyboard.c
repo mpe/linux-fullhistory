@@ -74,8 +74,11 @@ extern void scrollback(int);
 extern void scrollfront(int);
 extern int vc_cons_allocated(unsigned int);
 
-#define fake_keyboard_interrupt() \
-__asm__ __volatile__("int $0x21")
+#ifdef __i386__
+#define fake_keyboard_interrupt() __asm__ __volatile__("int $0x21")
+#else
+#define fake_keyboard_interrupt() do ; while (0)
+#endif
 
 unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
 
@@ -611,6 +614,7 @@ static void caps_on(void)
 
 static void show_ptregs(void)
 {
+#ifdef __i386__
 	if (!pt_regs)
 		return;
 	printk("\n");
@@ -625,6 +629,7 @@ static void show_ptregs(void)
 	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
 		0xffff & pt_regs->ds,0xffff & pt_regs->es,
 		0xffff & pt_regs->fs,0xffff & pt_regs->gs);
+#endif
 }
 
 static void hold(void)
@@ -1176,7 +1181,9 @@ void hard_reset_now(void)
 				/* nothing */;
 			outb(0xfe,0x64);	 /* pulse reset low */
 		}
+#ifdef __i386__
 		__asm__("\tlidt _no_idt");
+#endif
 	}
 }
 

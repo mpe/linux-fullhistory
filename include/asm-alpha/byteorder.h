@@ -20,7 +20,7 @@ extern unsigned short int	__constant_ntohs(unsigned short int);
  * The constant and non-constant versions here are the same.
  * Maybe I'll come up with an alpha-optimized routine for the
  * non-constant ones (the constant ones don't need it: gcc
- * will optimze it to the correct constant)
+ * will optimize it to the correct constant)
  */
 
 extern __inline__ unsigned long int

@@ -54,7 +54,7 @@
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size)              0
-#define request_region(ioaddr, size,name);             do ; while (0)
+#define request_region(ioaddr, size,name)       do ; while (0)
 #endif
 
 #ifndef NET_DEBUG

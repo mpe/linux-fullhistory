@@ -555,7 +555,7 @@ static void retransmit_timer(unsigned long data)
 	if (sk->inuse || in_bh) 
 	{
 		sk->retransmit_timer.expires = 10;
-		add_timer(&sk->timer);
+		add_timer(&sk->retransmit_timer);
 		sti();
 		return;
 	}
@@ -4821,5 +4821,6 @@ struct proto tcp_prot = {
 	128,
 	0,
 	{NULL,},
-	"TCP"
+	"TCP",
+	0, 0
 };

@@ -166,7 +166,7 @@ extern __inline__ char *strncat(char *dest, const char *src, size_t len)
   return retval;
 }
 
-extern __inline__ char *strchr(const char *src, char c)
+extern __inline__ char *strchr(const char *src, int c)
 {
   register char temp;
   register char *trick;
@@ -271,7 +271,7 @@ extern __inline__ char *strtok(char *s, const char *ct)
 }
 	
 
-extern __inline__ void *memset(void *src, char c, size_t count)
+extern __inline__ void *memset(void *src, int c, size_t count)
 {
   register void *retval;
 

@@ -1,7 +1,7 @@
 #
 # sparc/Makefile
 #
-# Makefile for the architecture dependant flags and dependancies on the
+# Makefile for the architecture dependent flags and dependencies on the
 # Sparc.
 #
 # Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -19,8 +19,8 @@ CFLAGS := $(CFLAGS) -pipe
 
 HEAD := arch/sparc/kernel/head.o
 
-SUBDIRS := $(SUBDIRS) arch/sparc/kernel
-ARCHIVES := arch/sparc/kernel/kernel.o $(ARCHIVES)
+SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib
+ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/lib/lib.a $(ARCHIVES)
 
 archclean:
 

@@ -284,7 +284,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *     
  *   - TOSHIBA: setting density is done here now, mounting PhotoCD's should
  *              work now without running the program "set_density"
- *              People reported, that it is nessesary to eject and reinsert
+ *              People reported that it is necessary to eject and reinsert
  *              the CD after the set-density call to get this working for
  *              old drives.
  *              And some very new drives don't need this call any more...
@@ -302,10 +302,10 @@ static void sr_photocd(struct inode *inode)
   int             rc;
 
   if (!suser()) {
-    /* I'm not the superuser, so SCSI_IOCTL_SEND_COMMAND is'nt allowed for me.
-     * That's why mpcd_sector will be initialized with zero, becauce I'm not
-     * able to get the right value. Nessesary only if access_count is 1, else
-     * no disk change happend since the last call of this function and we can
+    /* I'm not the superuser, so SCSI_IOCTL_SEND_COMMAND isn't allowed for me.
+     * That's why mpcd_sector will be initialized with zero, because I'm not
+     * able to get the right value. Necessary only if access_count is 1, else
+     * no disk change happened since the last call of this function and we can
      * keep the old value.
      */
     if (1 == scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
@@ -328,7 +328,7 @@ static void sr_photocd(struct inode *inode)
     rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 			   SCSI_IOCTL_SEND_COMMAND, buf);
     if (rc != 0) {
-      printk("sr_photocd: ioctl error: %i\n",rc);
+      printk("sr_photocd: ioctl error (NEC): 0x%x\n",rc);
       sector = 0;
     } else {
       min   = (unsigned long)buf[8+15]/16*10 + (unsigned long)buf[8+15]%16;
@@ -361,7 +361,7 @@ static void sr_photocd(struct inode *inode)
     rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 			   SCSI_IOCTL_SEND_COMMAND, buf);
     if (rc != 0) {
-      printk("sr_photocd: ioctl error: %i\n",rc);
+      printk("sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
     }
 
     /* ... and then I ask, if there is a multisession-Disk */
@@ -370,8 +370,10 @@ static void sr_photocd(struct inode *inode)
     *((unsigned long*)buf+1) = 4;
     buf[8+0] = 0xc7;
     buf[8+1] = 3;
+    rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+			   SCSI_IOCTL_SEND_COMMAND, buf);
     if (rc != 0) {
-      printk("sr_photocd: ioctl error: %i\n",rc);
+      printk("sr_photocd: ioctl error (TOSHIBA #2): 0x%x\n",rc);
       sector = 0;
     } else {
       min   = (unsigned long)buf[8+1]/16*10 + (unsigned long)buf[8+1]%16;
@@ -574,7 +576,7 @@ are any multiple of 512 bytes long.  */
 
 #if 1
 	/* Here we redirect the volume descriptor block of the CD-ROM.
-	 * Nessesary for multisession CD's, until the isofs-rotines
+	 * Necessary for multisession CD's, until the isofs-routines
 	 * handle this via the CDROMMULTISESSION_SYS call
 	 */
 	if (block >= 64 && block < 68) {

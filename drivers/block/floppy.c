@@ -2998,7 +2998,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	}
 
 	/* Allow ioctls if we have write-permissions even if read-only open */
-	if ((filp->f_mode & 2) || permission(inode,2))
+	if ((filp->f_mode & 2) || (permission(inode,2) == 0))
 		filp->f_mode |= IOCTL_MODE_BIT;
 	if (filp->f_mode & 2)
 		filp->f_mode |= OPEN_WRITE_BIT;

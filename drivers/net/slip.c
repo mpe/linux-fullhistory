@@ -46,12 +46,6 @@
 #define SL_CHECK_TRANSMIT
 #include <linux/config.h>
 
-#ifdef SL_COMPRESSED
-/* I think following lines must be in the <linux/config.h>
- *         14 Oct 1994 Dmitry Gorodchanin
- */
-#define CONFIG_SLIP_COMPRESSED
-#endif
 /* Undef this, if you don't need 6bit encapsulation code in the driver */
 #define CONFIG_SLIP_MODE_SLIP6
 

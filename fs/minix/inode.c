@@ -130,12 +130,14 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 
 	if (32 != sizeof (struct minix_inode))
 		panic("bad i-node size");
+	MOD_INC_USE_COUNT;
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev,1,BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);
 		printk("MINIX-fs: unable to read superblock\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	ms = (struct minix_super_block *) bh->b_data;
@@ -164,6 +166,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		brelse(bh);
 		if (!silent)
 			printk("VFS: Can't find a minix filesystem on dev 0x%04x.\n", dev);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	for (i=0;i < MINIX_I_MAP_SLOTS;i++)
@@ -190,6 +193,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		unlock_super(s);
 		brelse(bh);
 		printk("MINIX-fs: bad superblock or unable to read bitmaps\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
@@ -203,6 +207,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		s->s_dev = 0;
 		brelse(bh);
 		printk("MINIX-fs: get root inode failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (!(s->s_flags & MS_RDONLY)) {
@@ -216,7 +221,6 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
  	else if (s->u.minix_sb.s_mount_state & MINIX_ERROR_FS)
 		printk ("MINIX-fs: mounting file system with errors, "
 			"running fsck is recommended.\n");
-	MOD_INC_USE_COUNT;
 	return s;
 }
 
@@ -538,12 +542,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("ne: device busy, remove delayed\n");
-	else
-	{
-		unregister_filesystem(&minix_fs_type);
-	}
+	unregister_filesystem(&minix_fs_type);
 }
 
 #endif

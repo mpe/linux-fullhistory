@@ -95,7 +95,6 @@ endif
 dep:
 	$(CPP) -M $(SRCS) > .depend
 
-modules:
 dummy:
 
 #

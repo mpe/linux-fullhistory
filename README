@@ -179,12 +179,11 @@ IF SOMETHING GOES WRONG:
    see which kernel function contains the offending address.
 
    To find out the kernel function name, you'll need to find the system
-   binary associated with the kernel that exhibited the symptom.  In the
-   case of compressed kernels, this will be 'linux/tools/zSystem', while
-   uncompressed kernels use the file 'tools/system'.  To extract the
-   namelist and match it against the EIP from the kernel crash, do:
+   binary associated with the kernel that exhibited the symptom.  This is
+   the file 'linux/vmlinux'.  To extract the namelist and match it against
+   the EIP from the kernel crash, do:
 
-		nm tools/zSystem | sort | less
+		nm vmlinux | sort | less
 
    This will give you a list of kernel addresses sorted in ascending
    order, from which it is simple to find the function that contains the
@@ -208,10 +207,10 @@ IF SOMETHING GOES WRONG:
    kernel with -g; edit arch/i386/Makefile appropriately, then do a "make
    clean". You'll also need to enable CONFIG_PROC_FS (via "make config").
 
-   After you've rebooted with the new kernel, do "gdb tools/zSystem
-   /proc/kcore". You can now use all the usual gdb commands. The command to
-   look up the point where your system crashed is "l *0xXXXXXXXX". (Replace
-   the XXXes with the EIP value.)
+   After you've rebooted with the new kernel, do "gdb vmlinux /proc/kcore".
+   You can now use all the usual gdb commands. The command to look up the
+   point where your system crashed is "l *0xXXXXXXXX". (Replace the XXXes
+   with the EIP value.)
 
    gdb'ing a non-running kernel currently fails because gdb (wrongly)
    disregards the starting offset for which the kernel is compiled.

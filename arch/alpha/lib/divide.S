@@ -19,27 +19,39 @@
  * These are not normal C functions: instead of the normal
  * calling sequence, these expect their arguments in registers
  * $24 and $25, and return the result in $27. Register $28 may
- * be clobbered (assembly temprary), anything else must be saved. 
+ * be clobbered (assembly temporary), anything else must be saved. 
  *
- * In short: painful. I'm not going to try to be clever about it:
- * let somebody else optimize it if they will.
+ * In short: painful.
+ *
+ * This is a rather simple bit-at-a-time algorithm: it's very good
+ * at dividing random 64-bit numbers, but the more usual case where
+ * the divisor is small is handled better by the DEC algorithm
+ * using lookup tables. This uses much less memory, though, and is
+ * nicer on the cache.. Besides, I don't know the copyright status
+ * of the DEC code.
  */
 
 /*
  * My temporaries:
  *	$0 - current bit
  *	$1 - shifted divisor
- *	$2 - rest
- *	$3 - compare status
+ *	$2 - modulus/quotient
  *
  *	$23 - return address
  *	$24 - dividend
  *	$25 - divisor
+ *
+ *	$27 - quotient/modulus
+ *	$28 - compare status
  */
 
 /*
  * Select function type and registers
  */
+#define mask	$0
+#define divisor	$1
+#define compare $28
+
 #ifdef DIV
 #define func(x) __div##x
 #define modulus $2
@@ -61,38 +73,44 @@
 #define LONGIFY(x)
 #endif
 
+.set noat
 .globl	function
 .ent	function
 function:
-	lda	$30,-32($30)
+	subq	$30,32,$30
 	stq	$0, 0($30)
 	stq	$1, 8($30)
 	stq	$2,16($30)
-	stq	$3,24($30)
-	bis	$25,$25,$1
+
+	bis	$25,$25,divisor
 	bis	$24,$24,modulus
 	bis	$31,$31,quotient
-	LONGIFY($1)
+	LONGIFY(divisor)
 	LONGIFY(modulus)
-	beq	$1, 9f			/* div by zero */
-	bis	$31,1,$0
-	blt	$1, 2f			/* high bit set */
-1:	cmpult	modulus,$1,$3
-	bne	$3,3f
-	addq	$1,$1,$1
-	addq	$0,$0,$0
-	bge	$1,1b
-2:	cmpult	modulus,$1,$3
-	bne	$3,3f
-	subq	modulus,$1,modulus
-	addq	$0,quotient,quotient
-3:	srl	$0,1,$0
-	srl	$1,1,$1
-	bne	$0,2b
+	beq	divisor, 9f			/* div by zero */
+	bis	$31,1,mask
+
+	/* shift divisor left */
+1:	cmpult	divisor,modulus,compare
+	blt	divisor, 3f
+	addq	divisor,divisor,divisor
+	addq	mask,mask,mask
+	bne	compare,1b
+
+	/* ok, start to go right again.. */
+2:	srl	divisor,1,divisor
+	beq	mask,9f
+	srl	mask,1,mask
+3:	cmpule	divisor,modulus,compare
+	beq	compare,2b
+	addq	quotient,mask,quotient
+	beq	mask,9f
+	subq	modulus,divisor,modulus
+	br	2b
+
 9:	ldq	$0, 0($30)
 	ldq	$1, 8($30)
 	ldq	$2, 16($30)
-	ldq	$3, 32($30)
-	lda	$30,32($30)
+	addq	$30,32,$30
 	ret	$31,($23),1
 	.end	function

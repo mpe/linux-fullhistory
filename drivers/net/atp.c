@@ -113,7 +113,7 @@ extern struct device *irq2dev_map[16];
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size)		0
-#define request_region(ioaddr, size,name);		do ; while (0)
+#define request_region(ioaddr, size,name)	do ; while (0)
 #endif
 
 /* use 0 for production, 1 for verification, >2 for debug */

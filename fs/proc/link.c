@@ -103,16 +103,16 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	unsigned int pid, ino;
 	struct task_struct * p;
 	struct inode * new_inode;
-	int i;
+	int i, error;
 
 	*res_inode = NULL;
 	if (dir)
 		iput(dir);
 	if (!inode)
 		return -ENOENT;
-	if (!permission(inode, MAY_EXEC)) {
+	if ((error = permission(inode, MAY_EXEC)) != 0){
 		iput(inode);
-		return -EACCES;
+		return error;
 	}
 	ino = inode->i_ino;
 	pid = ino >> 16;

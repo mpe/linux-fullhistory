@@ -19,6 +19,11 @@
  * sa_restorer is the unused
  */
 
+#include <asm/ptrace.h>
+#include <asm/system.h>
+#include <linux/linkage.h>
+#include <linux/kernel_stat.h>
+#include <linux/signal.h>
 
 void disable_irq(unsigned int irq_nr)
 {
@@ -87,7 +92,7 @@ static int irqaction(unsigned int irq, struct sigaction * new_sa)
 int request_irq(unsigned int irq, void (*handler)(int),
 	unsigned long flags, const char * devname)
 {
-	return irqaction(irq,&sa);
+	return irqaction(irq, (struct sigaction *) 0);
 }
 
 void free_irq(unsigned int irq)

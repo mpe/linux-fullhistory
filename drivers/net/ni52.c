@@ -181,7 +181,7 @@ extern void *irq2dev_map[16];
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size) 		0
-#define	request_region(ioaddr, size,name);		do ; while (0)
+#define	request_region(ioaddr, size,name)	do ; while (0)
 #endif
 
 #define NI52_TOTAL_SIZE 16

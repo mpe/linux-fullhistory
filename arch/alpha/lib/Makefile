@@ -28,7 +28,6 @@ __remlu.o: divide.S
 	$(CC) -DREM -DINTSIZE -c -o __remlu.o divide.S
 
 dep:
-	$(CPP) -M *.c > .depend
 
 #
 # include a dependency file if one exists

@@ -87,8 +87,10 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 {
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
+#ifdef __i386__
 	if (x86 > 3 && vma->vm_offset >= high_memory)
 		vma->vm_page_prot |= PAGE_PCD;
+#endif
 	if (remap_page_range(vma->vm_start, vma->vm_offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	vma->vm_inode = inode;

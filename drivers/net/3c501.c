@@ -51,7 +51,7 @@
     like (eg touching a register at the wrong time).
     
     	The driver is less efficient than it could be. It switches through
-    recieve mode even if more transmits are queued. If this worries you buy
+    receive mode even if more transmits are queued. If this worries you buy
     a real ethernet card.
     
     	The combination of slow receive restart and no real multicast
@@ -564,7 +564,7 @@ el_receive(struct device *dev)
 	skb->dev = dev;
 
 	/*
-	 *	The read incrememts through the bytes. The interrupt
+	 *	The read increments through the bytes. The interrupt
 	 *	handler will fix the pointer when it returns to 
 	 *	receive mode.
 	 */

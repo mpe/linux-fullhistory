@@ -32,6 +32,7 @@
  *			Small correction to promisc mode error fix <Alan Cox>
  *			Asynchronous I/O support.
  *			Changed to use notifiers and the newer packet_type stuff.
+ *			Assorted major fixes <Alejandro Liu>
  */
   
 #include <linux/config.h>
@@ -432,7 +433,6 @@ static int ipxrtr_ioctl(unsigned int cmd, void *arg)
 	}
 }
 
-/* Called from proc fs */
 int ipx_rt_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	ipx_route *rt;
@@ -440,12 +440,13 @@ int ipx_rt_get_info(char *buffer, char **start, off_t offset, int length)
 	off_t pos=0;
 	off_t begin=0;
 
-	len += sprintf (buffer,"Net      Router                Flags Dev\n");
+	len += sprintf (buffer,"Net      Router                Flags Dev   Frame\n");
 	for (rt = ipx_router_list; rt != NULL; rt = rt->next)
 	{
-		len += sprintf (buffer+len,"%08lX %08lX:%02X%02X%02X%02X%02X%02X %02X    %s\n", ntohl(rt->net),
+		len += sprintf (buffer+len,"%08lX %08lX:%02X%02X%02X%02X%02X%02X %02X    %s  %d\n", ntohl(rt->net),
 			ntohl(rt->router_net), rt->router_node[0], rt->router_node[1], rt->router_node[2],
-			rt->router_node[3], rt->router_node[4], rt->router_node[5], rt->flags, rt->dev->name);
+			rt->router_node[3], rt->router_node[4], rt->router_node[5], rt->flags, rt->dev->name,
+			ntohs(rt->dlink_type));
 		pos=begin+len;
 		if(pos<offset)
 		{
@@ -806,6 +807,50 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 	return(0);
 }
 
+#if 0
+/*
+ * User to dump IPX packets (debugging)
+ */
+void dump_data(char *str,unsigned char *d) {
+  static char h2c[] = "0123456789ABCDEF";
+  int l,i;
+  char *p, b[64];
+  for (l=0;l<16;l++) {
+    p = b;
+    for (i=0; i < 8 ; i++) {
+      *(p++) = h2c[d[i] & 0x0f];
+      *(p++) = h2c[(d[i] >> 4) & 0x0f];
+      *(p++) = ' ';
+    }
+    *(p++) = '-';
+    *(p++) = ' ';
+    for (i=0; i < 8 ; i++)  *(p++) = ' '<= d[i] && d[i]<'\177' ? d[i] : '.';
+    *p = '\000';
+    d += i;
+    printk("%s-%04X: %s\n",str,l*8,b);
+  }
+}
+
+void dump_addr(char *str,ipx_address *p) {
+  printk("%s: %08X:%02X%02X%02X%02X%02X%02X:%04X\n",
+   str,ntohl(p->net),p->node[0],p->node[1],p->node[2],
+   p->node[3],p->node[4],p->node[5],ntohs(p->sock));
+}
+
+void dump_hdr(char *str,ipx_packet *p) {
+  printk("%s: CHKSUM=%04X SIZE=%d (%04X) HOPS=%d (%02X) TYPE=%02X\n",
+   str,p->ipx_checksum,ntohs(p->ipx_pktsize),ntohs(p->ipx_pktsize),
+   p->ipx_tctrl,p->ipx_tctrl,p->ipx_type);
+  dump_addr("  IPX-DST",&p->ipx_dest);
+  dump_addr("  IPX-SRC",&p->ipx_source);
+}
+
+void dump_pkt(char *str,ipx_packet *p) {
+  dump_hdr(str,p);
+  dump_data(str,(unsigned char *)p);
+}
+#endif
+
 int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	/* NULL here for pt means the packet was looped back */
@@ -885,6 +930,18 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			return(0);
 		}
 
+		/*
+		 *	Ok, before we forward, make sure this is not a local packet on the 
+		 *	other network 
+		 */
+		if (rt->router_net == 0) 
+		{
+			memset(IPXaddr,'\0',6);
+			memcpy(IPXaddr+(6-rt->dev->addr_len),rt->dev->dev_addr,rt->dev->addr_len);
+			if (memcmp(IPXaddr,ipx->ipx_dest.node,6) == 0) 
+				goto DELIVER;
+		}
+	
 		/* Check for differences in outgoing and incoming packet size */
 		incoming_size = skb->len - ntohs(ipx->ipx_pktsize);
 		outgoing_size = rt->datalink->header_length + rt->dev->hard_header_len;
@@ -900,15 +957,20 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				return 0;
 			}
 			free_it=1;
-			skb2->free=1;
 			skb2->len=ntohs(ipx->ipx_pktsize) + outgoing_size;
 			skb2->mem_addr = skb2;
-			skb2->arp = 1;
 			skb2->sk = NULL;
+			skb2->free = 1;
+			skb2->arp = 1;
+			skb2->len = ntohs(ipx->ipx_pktsize) + outgoing_size;
 
-			/* Need to copy with appropriate offsets */
-			memcpy((char *)(skb2+1)+outgoing_size,
-				(char *)(skb+1)+incoming_size,
+			/*
+        		 *	NOTE: src arg for memcpy used to be (skb+1)+insize
+			 *	however, that doesn't work... (dunno why)
+			 *	it should though...
+ 			 */
+ 			
+ 			memcpy((char *)(skb2+1)+outgoing_size,ipx,
 				ntohs(ipx->ipx_pktsize));
 		}
 		else
@@ -931,7 +993,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		return(0);
 	}
 	/************ End of router: Now sanity check stuff for us ***************/
-	
+DELIVER:	
 	/* Ok its for us ! */
 	if (ln->net == 0L) {
 /*		printk("IPX: Registering local net %lx\n", ipx->ipx_dest.net);*/
@@ -1319,6 +1381,7 @@ static struct proto_ops ipx_proto_ops = {
 /* Called by ddi.c on kernel start up */
 
 static struct packet_type ipx_8023_packet_type = 
+
 {
 	0,	/* MUTTER ntohs(ETH_P_8023),*/
 	0,		/* copy */

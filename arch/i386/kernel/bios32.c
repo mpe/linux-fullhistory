@@ -36,9 +36,14 @@
  * CHANGELOG :
  * Jun 17, 1994 : Modified to accommodate the broken pre-PCI BIOS SPECIFICATION
  *	Revision 2.0 present on <thys@dennis.ee.up.ac.za>'s ASUS mainboard.
+ *
+ * Jan 10, 1995 : Modified to store the information about configured pci
+ *      devices into a list, which can be accessed via /proc/pci by
+ *      Curtis Varner, cvarner@cs.ucr.edu
  */
 
 #include <linux/config.h>
+#include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
@@ -56,6 +61,10 @@
 #define PCIBIOS_WRITE_CONFIG_BYTE	0xb10b
 #define PCIBIOS_WRITE_CONFIG_WORD	0xb10c
 #define PCIBIOS_WRITE_CONFIG_DWORD	0xb10d
+
+#ifdef CONFIG_PCI
+extern void add_pci_resource(unsigned char, unsigned char);
+#endif
 
 /* BIOS32 signature: "_32_" */
 #define BIOS32_SIGNATURE	(('_' << 0) + ('3' << 8) + ('2' << 16) + ('_' << 24))
@@ -75,6 +84,15 @@
  *	Norwood, MA
  * and the PCI BIOS specification.
  */
+
+#ifdef CONFIG_PCI
+typedef struct pci_resource_t
+{
+   unsigned char bus;
+   unsigned char dev_fn;
+   struct pci_resource_t *next;
+} pci_resource_t;
+#endif
 
 union bios32 {
 	struct {
@@ -105,6 +123,12 @@ static struct {
 /*
  * Returns the entry point for the given service, NULL on error
  */
+
+#define PCI_LIST_SIZE 32
+
+static pci_resource_t pci_list = { 0, 0, NULL };
+static int pci_index = 0;
+static pci_resource_t pci_table[PCI_LIST_SIZE];
 
 static unsigned long bios32_service(unsigned long service)
 {
@@ -424,7 +448,7 @@ int multi_function(unsigned char bus,unsigned char dev_fn)
 
 /* Returns Interrupt register */
 
-int interrupt_decod(unsigned char bus,unsigned char dev_fn)
+int interrupt_decode(unsigned char bus,unsigned char dev_fn)
 {
 	unsigned char interrupt;
 		pcibios_read_config_byte(
@@ -467,12 +491,10 @@ int class_decode(unsigned char bus,unsigned char dev_fn)
 		pcibios_read_config_dword(
 			bus, dev_fn, (unsigned char) PCI_CLASS_REVISION, &class);
 		class=class >> 16;
-		for (i=0;i<PCI_CLASS_NUM;i++) 
+		for (i=0;i<PCI_CLASS_NUM;i++)
 			if (class==pci_class[i].class_id) break;
 		return i;
 }
-
-
 
 
 int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor)
@@ -480,18 +502,15 @@ int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor)
 	struct pci_device_type 	pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
 	int 			i;
 	unsigned short   	device;
-		pcibios_read_config_word(
-			bus, dev_fn, (unsigned char) PCI_DEVICE_ID, &device);
-		for (i=0;i<PCI_DEVICE_NUM;i++) 
-			if ((device==pci_device[i].device_id) 
-			 && (vendor==pci_device[i].vendor_id)) return i;
-		printk("Device id=%x ",device);
-		return i;
+
+	pcibios_read_config_word(
+		bus, dev_fn, (unsigned char) PCI_DEVICE_ID, &device);
+	for (i=0;i<PCI_DEVICE_NUM;i++)
+		if ((device==pci_device[i].device_id)
+		 && (vendor==pci_device[i].vendor_id)) return i;
+	printk("Device id=%x ",device);
+	return i;
 }
-
-
-
-
 
 
 int vendor_decode(unsigned char bus,unsigned char dev_fn)
@@ -502,38 +521,14 @@ int vendor_decode(unsigned char bus,unsigned char dev_fn)
 
 		pcibios_read_config_word(
 			bus, dev_fn, (unsigned char) PCI_VENDOR_ID, &vendor);
-		for (i=0;i<PCI_VENDOR_NUM;i++) 
+		for (i=0;i<PCI_VENDOR_NUM;i++)
 			if (vendor==pci_vendor[i].vendor_id) return i;
 		printk("Vendor id=%x ",vendor);
 		return i;
 }
 
 
-
-
-/* Call all the information procedures */
-
-void info(unsigned char bus,unsigned char dev_fn)
-{
-	struct	pci_class_type		pci_class[PCI_CLASS_NUM+1] = PCI_CLASS_TYPE;
-	struct	pci_vendor_type		pci_vendor[PCI_VENDOR_NUM+1] = PCI_VENDOR_TYPE;
-	struct	pci_device_type		pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
-	int				pr;
-		pr=vendor_decode(bus,dev_fn);
-		printk("       %s : %s %s (rev %d). "
-			,pci_class[class_decode(bus,dev_fn)].class_name
-			,pci_vendor[pr].vendor_name
-			,pci_device[device_decode(bus,dev_fn,pci_vendor[pr].vendor_id)].device_name
-			,revision_decode(bus,dev_fn));
-			
-		if (bist_probe(bus,dev_fn))
-			printk("BIST capable. ");
-		if ((pr=interrupt_decod(bus,dev_fn))!=0)
-			printk("8259's interrupt %d.",pr);
-		printk("\n");
-}
-
-/* In futur version in case we detect a PCI to PCi bridge, we will go 
+/* In future version in case we detect a PCI to PCi bridge, we will go
 for a recursive device search*/
 
 void probe_devices(unsigned char bus)
@@ -542,7 +537,7 @@ void probe_devices(unsigned char bus)
 	unsigned char	dev_fn;
 
 /* For a mysterious reason, my PC crash if I try to probe device 31 function 7  */
-/* (i.e. dev_fn=0xff) It can be a bug in my BIOS, or I havn't understood all about */
+/* (i.e. dev_fn=0xff) It can be a bug in my BIOS, or I haven't understood all about */
 /* PCI */
 
 
@@ -554,31 +549,109 @@ void probe_devices(unsigned char bus)
 /* Second, we get rid of non multi-function device that seems to be lazy  */
 /* and not fully decode the function number */
 
-			if ((res!=0xffffffff) && 
+			if ((res!=0xffffffff) &&
 				(((dev_fn & 7) == 0) || multi_function(bus,dev_fn))) {
-				printk("Bus %d Device %d Function %d.\n",
-						(int) bus,
-						(int) ((dev_fn & 0xf8) >> 3),
-						(int) (dev_fn & 7));
-				info(bus,dev_fn);
+				add_pci_resource( bus, dev_fn);
 			}
 		}
 }
 
 
-
-
-
-
-
 void probe_pci(void)
 {
-	if (pcibios_present()==0) printk("ProbePci PCI bios not detected.\n");
-	 else {
-		printk( "Probing PCI hardware.\n");
-		probe_devices(0);
+	if (pcibios_present()==0) {
+		printk("ProbePci PCI bios not detected.\n");
+		return;
 	}
+	printk( "Probing PCI hardware.\n");
+	probe_devices(0);
 }
+
+
+/*
+ * Function to add a resource to the pci list...
+ */
+void add_pci_resource(unsigned char bus, unsigned char dev_fn)
+{
+	pci_resource_t* new_pci;
+	pci_resource_t* temp;
+
+	/*
+	 * Request and verify allocation of kernel RAM
+	 */
+	if(pci_index > 31)
+	{
+		printk("PCI resource list full.\n");
+		return;
+	}
+
+
+	new_pci = &pci_table[pci_index];
+	pci_index++;
+
+	/*
+	 * Enter the new node into the list....
+	 *
+	 */
+	if(pci_list.next != NULL)
+	{
+		for(temp = pci_list.next; (temp->next); temp = temp->next)
+			/* nothing */;
+
+		temp->next = new_pci;
+	}
+	else
+		pci_list.next = new_pci;
+
+	/*
+	 * Set the information for the node
+	 */
+	new_pci->next = NULL;
+	new_pci->bus = bus;
+	new_pci->dev_fn = dev_fn;
+
+	return;
+}
+
+
+int get_pci_list(char* buf)
+{
+	int pr, length;
+	pci_resource_t* temp = pci_list.next;
+	struct	pci_class_type	pci_class[PCI_CLASS_NUM+1] = PCI_CLASS_TYPE;
+	struct	pci_vendor_type	pci_vendor[PCI_VENDOR_NUM+1] = PCI_VENDOR_TYPE;
+	struct	pci_device_type	pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
+
+	for (length = 0 ; (temp) && (length<4000); temp = temp->next)
+	{
+		pr=vendor_decode(temp->bus,temp->dev_fn);
+
+		length += sprintf(buf+length, "Bus %2d Device %3d Function %2d.\n",
+			(int)temp->bus,
+			(int)((temp->dev_fn & 0xf8) >> 3),
+			(int) (temp->dev_fn & 7));
+
+		length += sprintf(buf+length, "    %s : %s %s (rev %d). ",
+			pci_class[class_decode(temp->bus, temp->dev_fn)].class_name,
+			pci_vendor[pr].vendor_name,
+			pci_device[device_decode(temp->bus, temp->dev_fn, pci_vendor[pr].vendor_id)].device_name,
+			revision_decode(temp->bus, temp->dev_fn));
+
+		if (bist_probe(temp->bus, temp->dev_fn))
+			length += sprintf(buf+length, "BIST capable. ");
+
+		if ((pr = interrupt_decode(temp->bus, temp->dev_fn)) != 0)
+			length += sprintf(buf+length, "8259's interrupt %d.", pr);
+
+		length += sprintf(buf+length, "\n");
+	}
+
+	if (temp)
+		length += sprintf(buf+length, "4K limit reached!\n");
+
+	return length;
+}
+
 
 #endif
 
@@ -638,3 +711,6 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 #endif
 	return memory_start;
 }
+
+
+

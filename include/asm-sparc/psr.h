@@ -10,6 +10,7 @@
 #ifndef __LINUX_SPARC_PSR_H
 #define __LINUX_SPARC_PSR_H
 
+#define __LINUX_SPARC_V8  /* duh */
 
 #ifdef __LINUX_SPARC_V8
 

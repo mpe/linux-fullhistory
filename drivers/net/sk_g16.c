@@ -329,7 +329,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #ifndef HAVE_PORTRESERVE
 
 #define check_region(ioaddr, size)              0
-#define request_region(ioaddr, size,name);             do ; while (0)
+#define request_region(ioaddr, size,name)       do ; while (0)
 
 #endif
 

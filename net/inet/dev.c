@@ -281,7 +281,7 @@ int register_netdevice_notifier(struct notifier_block *nb)
 	return notifier_chain_register(&netdev_chain, nb);
 }
 
-int unregister_netdevice_notifer(struct notifier_block *nb)
+int unregister_netdevice_notifier(struct notifier_block *nb)
 {
 	return notifier_chain_unregister(&netdev_chain,nb);
 }
@@ -611,7 +611,7 @@ void net_bh(void *tmp)
 {
 	struct sk_buff *skb;
 	struct packet_type *ptype;
-	struct packet_type *pt_prev=NULL;
+	struct packet_type *pt_prev;
 	unsigned short type;
 
 	/*
@@ -684,7 +684,7 @@ void net_bh(void *tmp)
 		 *	here is minimal but no doubt adds up at the 4,000+ pkts/second
 		 *	rate we can hit flat out]
 		 */
-		 
+		pt_prev = NULL;
 		for (ptype = ptype_base; ptype != NULL; ptype = ptype->next) 
 		{
 			if ((ptype->type == type || ptype->type == htons(ETH_P_ALL)) && (!ptype->dev || ptype->dev==skb->dev))

@@ -421,14 +421,9 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			}
 
 		case CDROMMULTISESSION_SYS: /* tell start-of-last-session to kernel */
-			{
-			  long *p_lba;
-			  
-			  if(!suser()) return -EACCES;
-			  p_lba =(long*)arg;
-			  *p_lba=scsi_CDs[target].mpcd_sector;
-			  return (0);
-			}
+			if(!suser()) return -EACCES;
+			*((unsigned int *)arg)=scsi_CDs[target].mpcd_sector;
+			return (0);
 			
 		case BLKRASET:
 			if(!suser())  return -EACCES;
