@@ -26,9 +26,7 @@
 static inline int
 gnet_stats_copy(struct gnet_dump *d, int type, void *buf, int size)
 {
-	if (type)
-		RTA_PUT(d->skb, type, size, buf);
-
+	RTA_PUT(d->skb, type, size, buf);
 	return 0;
 
 rtattr_failure:
@@ -58,6 +56,8 @@ int
 gnet_stats_start_copy_compat(struct sk_buff *skb, int type, int tc_stats_type,
 	int xstats_type, spinlock_t *lock, struct gnet_dump *d)
 {
+	memset(d, 0, sizeof(*d));
+	
 	spin_lock_bh(lock);
 	d->lock = lock;
 	if (type)
@@ -65,12 +65,11 @@ gnet_stats_start_copy_compat(struct sk_buff *skb, int type, int tc_stats_type,
 	d->skb = skb;
 	d->compat_tc_stats = tc_stats_type;
 	d->compat_xstats = xstats_type;
-	d->xstats = NULL;
 
-	if (d->compat_tc_stats)
-		memset(&d->tc_stats, 0, sizeof(d->tc_stats));
+	if (d->tail)
+		return gnet_stats_copy(d, type, NULL, 0);
 
-	return gnet_stats_copy(d, type, NULL, 0);
+	return 0;
 }
 
 /**
@@ -111,8 +110,11 @@ gnet_stats_copy_basic(struct gnet_dump *d, struct gnet_stats_basic *b)
 		d->tc_stats.bytes = b->bytes;
 		d->tc_stats.packets = b->packets;
 	}
-	
-	return gnet_stats_copy(d, TCA_STATS_BASIC, b, sizeof(*b));
+
+	if (d->tail)
+		return gnet_stats_copy(d, TCA_STATS_BASIC, b, sizeof(*b));
+
+	return 0;
 }
 
 /**
@@ -134,7 +136,10 @@ gnet_stats_copy_rate_est(struct gnet_dump *d, struct gnet_stats_rate_est *r)
 		d->tc_stats.pps = r->pps;
 	}
 
-	return gnet_stats_copy(d, TCA_STATS_RATE_EST, r, sizeof(*r));
+	if (d->tail)
+		return gnet_stats_copy(d, TCA_STATS_RATE_EST, r, sizeof(*r));
+
+	return 0;
 }
 
 /**
@@ -157,8 +162,11 @@ gnet_stats_copy_queue(struct gnet_dump *d, struct gnet_stats_queue *q)
 		d->tc_stats.backlog = q->backlog;
 		d->tc_stats.overlimits = q->overlimits;
 	}
-		
-	return gnet_stats_copy(d, TCA_STATS_QUEUE, q, sizeof(*q));
+
+	if (d->tail)
+		return gnet_stats_copy(d, TCA_STATS_QUEUE, q, sizeof(*q));
+
+	return 0;
 }
 
 /**
@@ -177,9 +185,15 @@ gnet_stats_copy_queue(struct gnet_dump *d, struct gnet_stats_queue *q)
 int
 gnet_stats_copy_app(struct gnet_dump *d, void *st, int len)
 {
-	if (d->compat_xstats)
-		d->xstats = (struct rtattr *) d->skb->tail;
-	return gnet_stats_copy(d, TCA_STATS_APP, st, len);
+	if (d->compat_xstats) {
+		d->xstats = st;
+		d->xstats_len = len;
+	}
+
+	if (d->tail)
+		return gnet_stats_copy(d, TCA_STATS_APP, st, len);
+
+	return 0;
 }
 
 /**
@@ -206,8 +220,8 @@ gnet_stats_finish_copy(struct gnet_dump *d)
 			return -1;
 
 	if (d->compat_xstats && d->xstats) {
-		if (gnet_stats_copy(d, d->compat_xstats, RTA_DATA(d->xstats),
-			RTA_PAYLOAD(d->xstats)) < 0)
+		if (gnet_stats_copy(d, d->compat_xstats, d->xstats,
+			d->xstats_len) < 0)
 			return -1;
 	}
 
