@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.17 1999/09/21 19:00:35 armin Exp $
+/* $Id: isdn_tty.h,v 1.18 2000/01/20 19:55:33 keil Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.18  2000/01/20 19:55:33  keil
+ * Add FAX Class 1 support
+ *
  * Revision 1.17  1999/09/21 19:00:35  armin
  * Extended FCON message with added CPN
  * can now be activated with Bit 1 of Reg 23.
@@ -160,6 +163,13 @@
 #define BIT_CPN       1
 #define BIT_CPNFCON   2
 
+#define TTY_IS_FCLASS1(info) \
+	((info->emu.mdmreg[REG_L2PROT] == ISDN_PROTO_L2_FAX) && \
+	 (info->emu.mdmreg[REG_L3PROT] == ISDN_PROTO_L3_FCLASS1))
+#define TTY_IS_FCLASS2(info) \
+	((info->emu.mdmreg[REG_L2PROT] == ISDN_PROTO_L2_FAX) && \
+	 (info->emu.mdmreg[REG_L3PROT] == ISDN_PROTO_L3_FCLASS2))
+
 extern void isdn_tty_modem_escape(void);
 extern void isdn_tty_modem_ring(void);
 extern void isdn_tty_carrier_timeout(void);
@@ -175,6 +185,6 @@ extern void isdn_tty_at_cout(char *, modem_info *);
 extern void isdn_tty_modem_hup(modem_info *, int);
 #ifdef CONFIG_ISDN_TTY_FAX
 extern int isdn_tty_cmd_PLUSF_FAX(char **, modem_info *);
-extern int isdn_tty_fax_command(modem_info *);
+extern int isdn_tty_fax_command(modem_info *, isdn_ctrl *);
 extern void isdn_tty_fax_bitorder(modem_info *, struct sk_buff *);
 #endif

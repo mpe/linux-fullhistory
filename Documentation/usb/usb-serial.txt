@@ -67,20 +67,6 @@ Current status:
   http://usbvisor.sourceforge.net/
 
 
-Belkin single port serial converter
-Peracom single port serial converter
-
-Current status:
-  The driver can handle enumerating the device, and sending and receiving
-  data from the converter. However, since I do not have a spec for the
-  Belkin, Peracom, and eTek devices, and the raw dumps from the Win98
-  driver are confusing, and eTek refuses to provide documentation on their
-  protocol, no control signals are currently handled, and the data will
-  most likely come through on a baud rate that you are not expecting. So
-  if you have these devices, do not expect the correct data to show up at 
-  either end. 
-  
-
 Generic Serial driver
 
   If your device is not one of the above listed devices, compatible with

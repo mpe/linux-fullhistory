@@ -1,10 +1,10 @@
-/* $Id: eicon.h,v 1.17 1999/10/26 21:15:33 armin Exp $
+/* $Id: eicon.h,v 1.19 2000/01/23 21:21:23 armin Exp $
  *
- * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
+ * ISDN low-level module for Eicon active ISDN-Cards.
  *
  * Copyright 1998    by Fritz Elfert (fritz@isdn4linux.de)
- * Copyright 1998,99 by Armin Schindler (mac@melware.de) 
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1998-2000  by Armin Schindler (mac@melware.de) 
+ * Copyright 1999,2000  Cytronics & Melware (info@melware.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon.h,v $
+ * Revision 1.19  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
+ * Revision 1.18  1999/11/25 11:43:27  armin
+ * Fixed statectrl and connect message.
+ * X.75 fix and HDLC/transparent with autoconnect.
+ * Minor cleanup.
+ *
  * Revision 1.17  1999/10/26 21:15:33  armin
  * using define for checking phone number len to avoid buffer overflow.
  *
@@ -258,7 +267,7 @@ typedef struct {
 
 /* Macro for delay via schedule() */
 #define SLEEP(j) {                     \
-  set_current_state(TASK_INTERRUPTIBLE); \
+  set_current_state(TASK_UNINTERRUPTIBLE); \
   schedule_timeout(j);                 \
 }
 
@@ -276,6 +285,8 @@ typedef struct {
 #define XLOG_ERR_CARD_STATE     (17)
 #define XLOG_ERR_UNKNOWN        (18)
 #define XLOG_OK                  (0)
+
+#define TRACE_OK                 (1)
 
 typedef struct {
   __u8 Id	__attribute__ ((packed));
@@ -494,12 +505,13 @@ typedef struct {
 typedef struct {
 	int	       No;		 /* Channel Number	        */
 	unsigned short fsm_state;        /* Current D-Channel state     */
+	unsigned short statectrl;	 /* State controling bits	*/
 	unsigned short eazmask;          /* EAZ-Mask for this Channel   */
 	int		queued;          /* User-Data Bytes in TX queue */
 	int		waitq;           /* User-Data Bytes in wait queue */
 	int		waitpq;          /* User-Data Bytes in packet queue */
-	unsigned short plci;
-	unsigned short ncci;
+	struct sk_buff *tskb1;           /* temp skb 1			*/
+	struct sk_buff *tskb2;           /* temp skb 2			*/
 	unsigned char  l2prot;           /* Layer 2 protocol            */
 	unsigned char  l3prot;           /* Layer 3 protocol            */
 #ifdef CONFIG_ISDN_TTY_FAX
@@ -600,21 +612,16 @@ typedef struct eicon_card {
         struct eicon_card *next;	 /* Pointer to next device struct    */
         int myid;                        /* Driver-Nr. assigned by linklevel */
         unsigned long flags;             /* Statusflags                      */
-        unsigned long ilock;             /* Semaphores for IRQ-Routines      */
 	struct sk_buff_head rcvq;        /* Receive-Message queue            */
 	struct sk_buff_head sndq;        /* Send-Message queue               */
 	struct sk_buff_head rackq;       /* Req-Ack-Message queue            */
 	struct sk_buff_head sackq;       /* Data-Ack-Message queue           */
 	struct sk_buff_head statq;       /* Status-Message queue             */
 	int statq_entries;
-	u_char *ack_msg;                 /* Ptr to User Data in User skb     */
-	__u16 need_b3ack;                /* Flag: Need ACK for current skb   */
-	struct sk_buff *sbuf;            /* skb which is currently sent      */
 	struct tq_struct snd_tq;         /* Task struct for xmit bh          */
 	struct tq_struct rcv_tq;         /* Task struct for rcv bh           */
 	struct tq_struct ack_tq;         /* Task struct for ack bh           */
 	msn_entry *msn_list;
-	unsigned short msgnum;           /* Message number for sending       */
 	eicon_chan*	IdTable[256];	 /* Table to find entity   */
 	__u16  ref_in;
 	__u16  ref_out;
@@ -696,6 +703,7 @@ extern int eicon_info(char *, int , void *);
 
 extern ulong DebugVar;
 extern void eicon_log(eicon_card * card, int level, const char *fmt, ...);
+extern void eicon_putstatus(eicon_card * card, char * buf);
 
 #endif  /* __KERNEL__ */
 

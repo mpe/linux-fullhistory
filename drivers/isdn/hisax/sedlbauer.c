@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.18 1999/11/13 21:25:03 keil Exp $
+/* $Id: sedlbauer.c,v 1.20 2000/01/20 19:47:45 keil Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,6 +17,13 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.20  2000/01/20 19:47:45  keil
+ * Add Fax Class 1 support
+ *
+ * Revision 1.19  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.18  1999/11/13 21:25:03  keil
  * Support for Speedfax+ PCI
  *
@@ -110,7 +117,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.18 $";
+const char *Sedlbauer_revision = "$Revision: 1.20 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -490,10 +497,10 @@ reset_sedlbauer(struct IsdnCardState *cs)
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_POTA2, 0x20);
 			save_flags(flags);
 			sti();
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_POTA2, 0x0);
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_CONF, 0x0);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_ACFG, 0xff);
@@ -506,20 +513,20 @@ reset_sedlbauer(struct IsdnCardState *cs)
 			byteout(cs->hw.sedl.cfg_reg +3, cs->hw.sedl.reset_on);
 			save_flags(flags);
 			sti();
-			current->state = TASK_INTERRUPTIBLE;
+			current->state = TASK_UNINTERRUPTIBLE;
 			schedule_timeout((20*HZ)/1000);
 			byteout(cs->hw.sedl.cfg_reg +3, cs->hw.sedl.reset_off);
-			current->state = TASK_INTERRUPTIBLE;
+			current->state = TASK_UNINTERRUPTIBLE;
 			schedule_timeout((20*HZ)/1000);
 			restore_flags(flags);
 		} else {		
 			byteout(cs->hw.sedl.reset_on, SEDL_RESET);	/* Reset On */
 			save_flags(flags);
 			sti();
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			byteout(cs->hw.sedl.reset_off, 0);	/* Reset Off */
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			restore_flags(flags);
 		}
@@ -659,15 +666,13 @@ setup_sedlbauer(struct IsdnCard *card))
 			(sub_id == PCI_SUB_ID_SPEEDFAXP)) {
 			cs->hw.sedl.chip = SEDL_CHIP_ISAC_ISAR;
 			cs->subtyp = SEDL_SPEEDFAX_PCI;
-			cs->hw.sedl.reset_on = cs->hw.sedl.cfg_reg +
-						SEDL_ISAR_PCI_ISAR_RESET_ON;
-			cs->hw.sedl.reset_off = cs->hw.sedl.cfg_reg +
-						SEDL_ISAR_PCI_ISAR_RESET_OFF;
 		} else {
 			cs->hw.sedl.chip = SEDL_CHIP_IPAC;
 			cs->subtyp = SEDL_SPEED_PCI;
 		}
 		bytecnt = 256;
+		cs->hw.sedl.reset_on = SEDL_ISAR_PCI_ISAR_RESET_ON;
+		cs->hw.sedl.reset_off = SEDL_ISAR_PCI_ISAR_RESET_OFF;
 		byteout(cs->hw.sedl.cfg_reg, 0xff);
 		byteout(cs->hw.sedl.cfg_reg, 0x00);
 		byteout(cs->hw.sedl.cfg_reg+ 2, 0xdd);
@@ -675,7 +680,7 @@ setup_sedlbauer(struct IsdnCard *card))
 		byteout(cs->hw.sedl.cfg_reg +3, cs->hw.sedl.reset_on);
 		save_flags(flags);
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout((10*HZ)/1000);
 		byteout(cs->hw.sedl.cfg_reg +3, cs->hw.sedl.reset_off);
 		restore_flags(flags);

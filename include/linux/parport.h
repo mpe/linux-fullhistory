@@ -345,11 +345,11 @@ extern int parport_register_driver (struct parport_driver *);
 extern void parport_unregister_driver (struct parport_driver *);
 
 /* parport_register_device declares that a device is connected to a
-   port, and tells the kernel all it needs to know.  pf is the
-   preemption function (may be NULL for no callback) kf is the wake-up
-   function (may be NULL for no callback) irq_func is the interrupt
-   handler (may be NULL for no interrupts) handle is a user pointer
-   that gets handed to callback functions.  */
+   port, and tells the kernel all it needs to know.
+   - pf is the preemption function (may be NULL for no callback)
+   - kf is the wake-up function (may be NULL for no callback)
+   - irq_func is the interrupt handler (may be NULL for no interrupts)
+   - handle is a user pointer that gets handed to callback functions.  */
 struct pardevice *parport_register_device(struct parport *port, 
 			  const char *name,
 			  int (*pf)(void *), void (*kf)(void *),

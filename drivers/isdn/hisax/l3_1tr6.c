@@ -1,4 +1,4 @@
-/* $Id: l3_1tr6.c,v 2.9 1999/07/01 08:11:55 keil Exp $
+/* $Id: l3_1tr6.c,v 2.10 2000/01/20 19:42:01 keil Exp $
 
  *  German 1TR6 D-channel protocol
  *
@@ -10,6 +10,9 @@
  *
  *
  * $Log: l3_1tr6.c,v $
+ * Revision 2.10  2000/01/20 19:42:01  keil
+ * Fixed uninitialiesed location
+ *
  * Revision 2.9  1999/07/01 08:11:55  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -59,7 +62,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *l3_1tr6_revision = "$Revision: 2.9 $";
+const char *l3_1tr6_revision = "$Revision: 2.10 $";
 
 #define MsgHead(ptr, cref, mty, dis) \
 	*ptr++ = dis; \
@@ -699,6 +702,7 @@ l3_1tr6_dl_release(struct l3_process *pc, u_char pr, void *arg)
 {
         newl3state(pc, 0);
         pc->para.cause = 0x1b;          /* Destination out of order */
+        pc->para.loc = 0;
         pc->st->l3.l3l4(pc->st, CC_RELEASE | INDICATION, pc);
         release_l3_process(pc);
 }

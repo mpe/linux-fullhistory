@@ -1,8 +1,11 @@
-/* $Id: l3dss1.h,v 1.7 1999/07/01 08:12:02 keil Exp $
+/* $Id: l3dss1.h,v 1.8 2000/01/20 19:46:15 keil Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
  * $Log: l3dss1.h,v $
+ * Revision 1.8  2000/01/20 19:46:15  keil
+ * Changes from certification
+ *
  * Revision 1.7  1999/07/01 08:12:02  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -35,6 +38,8 @@
 #define T304	30000
 #define T305	30000
 #define T308	4000
+/* for layer 1 certification T309 < layer1 T3 (e.g. 4000) */
+/* This makes some tests easier and quicker */
 #define T309	40000
 #define T310	30000
 #define T313	4000

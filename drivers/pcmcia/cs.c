@@ -2,7 +2,7 @@
 
     PCMCIA Card Services -- core services
 
-    cs.c 1.247 2000/01/15 04:30:35
+    cs.c 1.249 2000/02/10 23:26:11
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -69,7 +69,7 @@ static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data);
 int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"cs.c 1.247 2000/01/15 04:30:35 (David Hinds)";
+"cs.c 1.249 2000/02/10 23:26:11 (David Hinds)";
 #endif
 
 #ifdef CONFIG_PCI
@@ -341,6 +341,7 @@ int register_ss_entry(int nsock, struct pccard_operations * ss_entry)
 	s->sock = ns;
 	s->setup.data = sockets;
 	s->setup.function = &setup_socket;
+	s->setup_timeout = 0;
 	s->shutdown.data = sockets;
 	s->shutdown.function = &shutdown_socket;
 	/* base address = 0, map = 0 */
@@ -486,7 +487,17 @@ static void setup_socket(u_long i)
     socket_info_t *s = socket_table[i];
 
     get_socket_status(s, &val);
-    if (val & SS_DETECT) {
+    if (val & SS_PENDING) {
+	/* Does the socket need more time? */
+	DEBUG(2, "cs: setup_socket(%ld): status pending\n", i);
+	if (++s->setup_timeout > 100) {
+	    printk(KERN_NOTICE "cs: socket %ld voltage interrogation"
+		   " timed out\n", i);
+	} else {
+	    s->setup.expires = jiffies + HZ/10;
+	    add_timer(&s->setup);
+	}
+    } else if (val & SS_DETECT) {
 	DEBUG(1, "cs: setup_socket(%ld): applying power\n", i);
 	s->state |= SOCKET_PRESENT;
 	s->socket.flags = 0;
@@ -532,7 +543,7 @@ static void reset_socket(u_long i)
     udelay((long)reset_time);
     s->socket.flags &= ~SS_RESET;
     set_socket(s, &s->socket);
-    s->unreset_timeout = 0;
+    s->setup_timeout = 0;
     s->setup.expires = jiffies + unreset_delay;
     s->setup.function = &unreset_socket;
     add_timer(&s->setup);
@@ -571,12 +582,11 @@ static void unreset_socket(u_long i)
 	}
     } else {
 	DEBUG(2, "cs: socket %ld not ready yet\n", i);
-	if (s->unreset_timeout > unreset_limit) {
+	if (++s->setup_timeout > unreset_limit) {
 	    printk(KERN_NOTICE "cs: socket %ld timed out during"
 		   " reset\n", i);
 	    s->state &= ~EVENT_MASK;
 	} else {
-	    s->unreset_timeout++;
 	    s->setup.expires = jiffies + unreset_check;
 	    add_timer(&s->setup);
 	}

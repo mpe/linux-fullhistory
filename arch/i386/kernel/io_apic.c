@@ -1368,7 +1368,6 @@ void IO_APIC_init_uniprocessor (void)
 {
 	if (!smp_found_config)
 		return;
-	phys_cpu_present_map = 0xff;
 	setup_local_APIC();
 	setup_IO_APIC();
 	setup_APIC_clocks();

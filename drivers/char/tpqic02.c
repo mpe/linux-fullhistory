@@ -2774,23 +2774,6 @@ static struct file_operations qic02_tape_fops = {
 };
 
 
-/* Why is this not is one place? */
-/* Pure 2^n version of get_order */
-static inline int __get_order(unsigned long size)
-{
-    int order;
-
-    size = (size-1) >> (PAGE_SHIFT-1);
-    order = -1;
-    do
-    {
-	size >>= 1;
-	order++;
-    } while (size);
-    return order;
-}
-
-
 static void qic02_release_resources(void)
 {
     free_irq(QIC02_TAPE_IRQ, NULL);
@@ -2798,7 +2781,7 @@ static void qic02_release_resources(void)
     release_region(QIC02_TAPE_PORT, QIC02_TAPE_PORT_RANGE);
     if (buffaddr)
     {
-	free_pages(buffaddr, __get_order(TPQBUF_SIZE));
+	free_pages(buffaddr, get_order(TPQBUF_SIZE));
     }
     buffaddr = 0; /* Better to cause a panic than overwite someone else */
     status_zombie = YES;
@@ -2850,7 +2833,7 @@ static int qic02_get_resources(void)
     /* Setup the page-address for the dma transfer. */
 
     /*** TODO: does _get_dma_pages() really return the physical address?? ****/
-    buffaddr = __get_dma_pages(GFP_KERNEL,__get_order(TPQBUF_SIZE));
+    buffaddr = __get_dma_pages(GFP_KERNEL,get_order(TPQBUF_SIZE));
     
     if (!buffaddr)
     {

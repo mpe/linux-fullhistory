@@ -270,10 +270,6 @@
 
  **************************************************************************/
 
-#ifdef PCMCIA
-#define MODULE
-#endif
-
 #include <linux/module.h>
 
 #ifdef PCMCIA

@@ -39,20 +39,6 @@ calc_npages(long bytes)
 {
 	return (bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
 }
-
-static inline long
-calc_order(long size)
-{
-	int order;
-
-	size = (size-1) >> (PAGE_SHIFT-1);
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-	return order;
-}
 
 struct pci_iommu_arena *
 iommu_arena_new(dma_addr_t base, unsigned long window_size,
@@ -248,7 +234,7 @@ void *
 pci_alloc_consistent(struct pci_dev *pdev, long size, dma_addr_t *dma_addrp)
 {
 	void *cpu_addr;
-	long order = calc_order(size);
+	long order = get_order(size);
 
 	cpu_addr = (void *)__get_free_pages(GFP_ATOMIC, order);
 	if (! cpu_addr) {
@@ -285,7 +271,7 @@ pci_free_consistent(struct pci_dev *pdev, long size, void *cpu_addr,
 		    dma_addr_t dma_addr)
 {
 	pci_unmap_single(pdev, dma_addr, size);
-	free_pages((unsigned long)cpu_addr, calc_order(size));
+	free_pages((unsigned long)cpu_addr, get_order(size));
 
 	DBGA2("pci_free_consistent: [%x,%lx] from %p\n",
 	      dma_addr, size, __builtin_return_address(0));

@@ -35,17 +35,13 @@ MODULE_PARM_DESC(product, "User specified USB idProduct");
 
 
 /* USB Serial devices vendor ids and device ids that this driver supports */
-#define BELKIN_VENDOR_ID		0x056c
-#define BELKIN_SERIAL_CONVERTER_ID	0x8007
-#define PERACOM_VENDOR_ID		0x0565
-#define PERACOM_SERIAL_CONVERTER_ID	0x0001
 #define CONNECT_TECH_VENDOR_ID		0x0710
 #define CONNECT_TECH_FAKE_WHITE_HEAT_ID	0x0001
 #define CONNECT_TECH_WHITE_HEAT_ID	0x8001
 #define HANDSPRING_VENDOR_ID		0x082d
 #define HANDSPRING_VISOR_ID		0x0100
 #define FTDI_VENDOR_ID			0x0403
-#define FTDI_SERIAL_CONVERTER_ID	0x8372
+#define FTDI_SIO_SERIAL_CONVERTER_ID	0x8372
 #define KEYSPAN_VENDOR_ID		0x06cd
 #define KEYSPAN_PDA_FAKE_ID		0x0103
 #define KEYSPAN_PDA_ID			0x0103
@@ -125,6 +121,8 @@ struct usb_serial_device_type {
 	int  (*chars_in_buffer)(struct tty_struct *tty);
 	void (*throttle)(struct tty_struct * tty);
 	void (*unthrottle)(struct tty_struct * tty);
+	void (*read_bulk_callback)(struct urb *urb);
+	void (*write_bulk_callback)(struct urb *urb);
 };
 
 
@@ -135,6 +133,9 @@ static void generic_serial_close	(struct tty_struct *tty, struct file *filp);
 static int  generic_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
 static int  generic_write_room		(struct tty_struct *tty);
 static int  generic_chars_in_buffer	(struct tty_struct *tty);
+static void generic_read_bulk_callback	(struct urb *urb);
+static void generic_write_bulk_callback	(struct urb *urb);
+
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
 /* All of the device info needed for the Generic Serial Converter */
@@ -154,59 +155,8 @@ static struct usb_serial_device_type generic_device = {
 	write:			generic_serial_write,
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
-};
-#endif
-
-#if defined(CONFIG_USB_SERIAL_BELKIN) || defined(CONFIG_USB_SERIAL_PERACOM)
-/* function prototypes for the eTek type converters (this includes Belkin and Peracom) */
-static int  etek_serial_open		(struct tty_struct *tty, struct file *filp);
-static void etek_serial_close		(struct tty_struct *tty, struct file *filp);
-#endif
-
-#ifdef CONFIG_USB_SERIAL_BELKIN
-/* All of the device info needed for the Belkin Serial Converter */
-static __u16	belkin_vendor_id	= BELKIN_VENDOR_ID;
-static __u16	belkin_product_id	= BELKIN_SERIAL_CONVERTER_ID;
-static struct usb_serial_device_type belkin_device = {
-	name:			"Belkin",
-	idVendor:		&belkin_vendor_id,	/* the Belkin vendor id */
-	idProduct:		&belkin_product_id,	/* the Belkin serial converter product id */
-	needs_interrupt_in:	MUST_HAVE,		/* this device must have an interrupt in endpoint */
-	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
-	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
-	num_interrupt_in:	1,
-	num_bulk_in:		1,
-	num_bulk_out:		1,
-	num_ports:		1,
-	open:			etek_serial_open,
-	close:			etek_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-};
-#endif
-
-
-#ifdef CONFIG_USB_SERIAL_PERACOM
-/* All of the device info needed for the Peracom Serial Converter */
-static __u16	peracom_vendor_id	= PERACOM_VENDOR_ID;
-static __u16	peracom_product_id	= PERACOM_SERIAL_CONVERTER_ID;
-static struct usb_serial_device_type peracom_device = {
-	name:			"Peracom",
-	idVendor:		&peracom_vendor_id,	/* the Peracom vendor id */
-	idProduct:		&peracom_product_id,	/* the Peracom serial converter product id */
-	needs_interrupt_in:	MUST_HAVE,		/* this device must have an interrupt in endpoint */
-	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
-	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
-	num_ports:		1,
-	num_interrupt_in:	1,
-	num_bulk_in:		1,
-	num_bulk_out:		1,
-	open:			etek_serial_open,
-	close:			etek_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
+	read_bulk_callback:	generic_read_bulk_callback,
+	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
@@ -338,23 +288,25 @@ static struct usb_serial_device_type handspring_device = {
 	chars_in_buffer:	generic_chars_in_buffer,
 	throttle:		visor_throttle,
 	unthrottle:		visor_unthrottle,
-	startup:		visor_startup
+	startup:		visor_startup,
+	read_bulk_callback:	generic_read_bulk_callback,
+	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
 
-#ifdef CONFIG_USB_SERIAL_FTDI
+#ifdef CONFIG_USB_SERIAL_FTDI_SIO
 /* function prototypes for a FTDI serial converter */
-static int  ftdi_serial_open	(struct tty_struct *tty, struct file *filp);
-static void ftdi_serial_close	(struct tty_struct *tty, struct file *filp);
+static int  ftdi_sio_serial_open	(struct tty_struct *tty, struct file *filp);
+static void ftdi_sio_serial_close	(struct tty_struct *tty, struct file *filp);
 
 /* All of the device info needed for the Handspring Visor */
-static __u16	ftdi_vendor_id	= FTDI_VENDOR_ID;
-static __u16	ftdi_product_id	= FTDI_SERIAL_CONVERTER_ID;
-static struct usb_serial_device_type ftdi_device = {
-	name:			"FTDI",
+static __u16	ftdi_vendor_id		= FTDI_VENDOR_ID;
+static __u16	ftdi_sio_product_id	= FTDI_SIO_SERIAL_CONVERTER_ID;
+static struct usb_serial_device_type ftdi_sio_device = {
+	name:			"FTDI SIO",
 	idVendor:		&ftdi_vendor_id,	/* the FTDI vendor ID */
-	idProduct:		&ftdi_product_id,	/* the FTDI product id */
+	idProduct:		&ftdi_sio_product_id,	/* the FTDI SIO product id */
 	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
 	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
 	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
@@ -362,11 +314,13 @@ static struct usb_serial_device_type ftdi_device = {
 	num_bulk_in:		1,
 	num_bulk_out:		1,
 	num_ports:		1,
-	open:			ftdi_serial_open,
-	close:			ftdi_serial_close,
+	open:			ftdi_sio_serial_open,
+	close:			ftdi_sio_serial_close,
 	write:			generic_serial_write,
 	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer
+	chars_in_buffer:	generic_chars_in_buffer,
+	read_bulk_callback:	generic_read_bulk_callback,
+	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
@@ -408,7 +362,9 @@ static struct usb_serial_device_type keyspan_pda_device = {
 	close:			keyspan_pda_serial_close,
 	write:			generic_serial_write,
 	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer
+	chars_in_buffer:	generic_chars_in_buffer,
+	read_bulk_callback:	generic_read_bulk_callback,
+	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
@@ -423,17 +379,11 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 	&whiteheat_fake_device,
 	&whiteheat_device,
 #endif
-#ifdef CONFIG_USB_SERIAL_BELKIN
-	&belkin_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_PERACOM
-	&peracom_device,
-#endif
 #ifdef CONFIG_USB_SERIAL_VISOR
 	&handspring_device,
 #endif
-#ifdef CONFIG_USB_SERIAL_FTDI
-	&ftdi_device,
+#ifdef CONFIG_USB_SERIAL_FTDI_SIO
+	&ftdi_sio_device,
 #endif
 #ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
 	&keyspan_pda_fake_device,

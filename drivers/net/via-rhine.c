@@ -865,7 +865,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 				np->stats.tx_packets++;
 			}
 			/* Free the original skb. */
-			kfree_skb(np->tx_skbuff[entry]);
+			dev_kfree_skb_irq(np->tx_skbuff[entry]);
 			np->tx_skbuff[entry] = 0;
 		}
 		if (np->tx_full &&
@@ -1147,13 +1147,13 @@ static int netdev_close(struct net_device *dev)
 		np->rx_ring[i].rx_length = 0;
 		np->rx_ring[i].addr = 0xBADF00D0; /* An invalid address. */
 		if (np->rx_skbuff[i]) {
-			kfree_skb(np->rx_skbuff[i]);
+			dev_kfree_skb(np->rx_skbuff[i]);
 		}
 		np->rx_skbuff[i] = 0;
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (np->tx_skbuff[i])
-			kfree_skb(np->tx_skbuff[i]);
+			dev_kfree_skb(np->tx_skbuff[i]);
 		np->tx_skbuff[i] = 0;
 	}
 

@@ -1,9 +1,14 @@
 /*
- * $Id: avmcard.h,v 1.6 1999/11/05 16:38:01 calle Exp $
+ * $Id: avmcard.h,v 1.7 2000/01/25 14:33:38 calle Exp $
  *
  * Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avmcard.h,v $
+ * Revision 1.7  2000/01/25 14:33:38  calle
+ * - Added Support AVM B1 PCI V4.0 (tested with prototype)
+ *   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
+ *   - support for revision register
+ *
  * Revision 1.6  1999/11/05 16:38:01  calle
  * Cleanups before kernel 2.4:
  * - Changed all messages to use card->name or driver->name instead of
@@ -92,6 +97,8 @@ typedef struct avmcard {
 	unsigned irq;
 	unsigned long membase;
 	enum avmcardtype cardtype;
+	unsigned char revision;
+	unsigned char class;
 	int cardnr; /* for t1isa */
 
 	char msgbuf[128];	/* capimsg msg part */
@@ -228,8 +235,9 @@ extern int b1_irq_table[16];
 #define B1_WRITE		0x01
 #define B1_INSTAT		0x02
 #define B1_OUTSTAT		0x03
-#define B1_RESET		0x10
 #define B1_ANALYSE		0x04
+#define B1_REVISION		0x05
+#define B1_RESET		0x10
 
 
 #define B1_STAT0(cardtype)  ((cardtype) == avm_m1 ? 0x81200000l : 0x80A00000l)
@@ -561,10 +569,13 @@ static inline void b1_setinterrupt(unsigned int base, unsigned irq,
 	 }
 }
 
+/* b1.c */
 int b1_detect(unsigned int base, enum avmcardtype cardtype);
+void b1_getrevision(avmcard *card);
 int b1_load_t4file(avmcard *card, capiloaddatapart * t4file);
 int b1_load_config(avmcard *card, capiloaddatapart * config);
 int b1_loaded(avmcard *card);
+
 int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data);
 void b1_reset_ctr(struct capi_ctr *ctrl);
 void b1_register_appl(struct capi_ctr *ctrl, __u16 appl,
@@ -577,5 +588,21 @@ void b1_handle_interrupt(avmcard * card);
 int b1ctl_read_proc(char *page, char **start, off_t off,
         		int count, int *eof, struct capi_ctr *ctrl);
 
+/* b1dma.c */
+int b1pciv4_detect(avmcard *card);
+int t1pci_detect(avmcard *card);
+void b1dma_reset(avmcard *card);
+void b1dma_interrupt(int interrupt, void *devptr, struct pt_regs *regs);
+
+int b1dma_load_firmware(struct capi_ctr *ctrl, capiloaddata *data);
+void b1dma_reset_ctr(struct capi_ctr *ctrl);
+void b1dma_remove_ctr(struct capi_ctr *ctrl);
+void b1dma_register_appl(struct capi_ctr *ctrl,
+				__u16 appl,
+				capi_register_params *rp);
+void b1dma_release_appl(struct capi_ctr *ctrl, __u16 appl);
+void b1dma_send_message(struct capi_ctr *ctrl, struct sk_buff *skb);
+int b1dmactl_read_proc(char *page, char **start, off_t off,
+        		int count, int *eof, struct capi_ctr *ctrl);
 
 #endif /* _AVMCARD_H_ */

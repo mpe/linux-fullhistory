@@ -34,12 +34,39 @@ asmlinkage unsigned long sys_getpagesize(void)
 	return PAGE_SIZE; /* Possibly older binaries want 8192 on sun4's? */
 }
 
+unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
+{
+	struct vm_area_struct * vmm;
+
+	/* See asm-sparc/uaccess.h */
+	if (len > TASK_SIZE - PAGE_SIZE)
+		return 0;
+	if (ARCH_SUN4C_SUN4 && len > 0x20000000)
+		return 0;
+	if (!addr)
+		addr = TASK_UNMAPPED_BASE;
+	addr = PAGE_ALIGN(addr);
+
+	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
+		if (ARCH_SUN4C_SUN4 && addr < 0xe0000000 && 0x20000000 - len < addr) {
+			addr = PAGE_OFFSET;
+			vmm = find_vma(current->mm, PAGE_OFFSET);
+		}
+		if (TASK_SIZE - PAGE_SIZE - len < addr)
+			return 0;
+		if (!vmm || addr + len <= vmm->vm_start)
+			return addr;
+		addr = vmm->vm_end;
+	}
+}
+
 extern asmlinkage unsigned long sys_brk(unsigned long brk);
 
 asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
 	if(ARCH_SUN4C_SUN4) {
-		if(brk >= 0x20000000 && brk < 0xe0000000)
+		if ((brk & 0xe0000000) != (current->mm->brk & 0xe0000000))
 			return current->mm->brk;
 	}
 	return sys_brk(brk);
@@ -190,24 +217,16 @@ static unsigned long do_mmap2(unsigned long addr, unsigned long len,
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	retval = -ENOMEM;
+	retval = -EINVAL;
 	len = PAGE_ALIGN(len);
-	if(!(flags & MAP_FIXED) &&
-	   (!addr || (ARCH_SUN4C_SUN4 &&
-		      (addr >= 0x20000000 && addr < 0xe0000000)))) {
-		addr = get_unmapped_area(0, len);
-		if(!addr)
-			goto out_putf;
-		if (ARCH_SUN4C_SUN4 &&
-		    (addr >= 0x20000000 && addr < 0xe0000000)) {
-			retval = -EINVAL;
-			goto out_putf;
-		}
-	}
+	if (ARCH_SUN4C_SUN4 &&
+	    (len > 0x20000000 ||
+	     ((flags & MAP_FIXED) &&
+	      addr < 0xe0000000 && addr + len > 0x20000000)))
+		goto out_putf;
 
 	/* See asm-sparc/uaccess.h */
-	retval = -EINVAL;
-	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
+	if (len > TASK_SIZE - PAGE_SIZE || addr + len > TASK_SIZE - PAGE_SIZE)
 		goto out_putf;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
@@ -236,6 +255,50 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	unsigned long off)
 {
 	return do_mmap2(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
+}
+
+extern unsigned long do_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr);
+                
+asmlinkage unsigned long sparc_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr)
+{
+	unsigned long ret = -EINVAL;
+	if (ARCH_SUN4C_SUN4) {
+		if (old_len > 0x20000000 || new_len > 0x20000000)
+			goto out;
+		if (addr < 0xe0000000 && addr + old_len > 0x20000000)
+			goto out;
+	}
+	if (old_len > TASK_SIZE - PAGE_SIZE ||
+	    new_len > TASK_SIZE - PAGE_SIZE)
+		goto out;
+	down(&current->mm->mmap_sem);
+	if (flags & MREMAP_FIXED) {
+		if (ARCH_SUN4C_SUN4 &&
+		    new_addr < 0xe0000000 &&
+		    new_addr + new_len > 0x20000000)
+			goto out_sem;
+		if (new_addr + new_len > TASK_SIZE - PAGE_SIZE)
+			goto out_sem;
+	} else if ((ARCH_SUN4C_SUN4 && addr < 0xe0000000 &&
+		    addr + new_len > 0x20000000) ||
+		   addr + new_len > TASK_SIZE - PAGE_SIZE) {
+		ret = -ENOMEM;
+		if (!(flags & MREMAP_MAYMOVE))
+			goto out_sem;
+		new_addr = get_unmapped_area (addr, new_len);
+		if (!new_addr)
+			goto out_sem;
+		flags |= MREMAP_FIXED;
+	}
+	ret = do_mremap(addr, old_len, new_len, flags, new_addr);
+out_sem:
+	up(&current->mm->mmap_sem);
+out:
+	return ret;       
 }
 
 /* we come to here via sys_nis_syscall so it can setup the regs argument */

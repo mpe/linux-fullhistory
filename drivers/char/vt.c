@@ -22,6 +22,7 @@
 #include <linux/malloc.h>
 #include <linux/major.h>
 #include <linux/fs.h>
+#include <linux/console.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -804,12 +805,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				 * When we actually do the console switch,
 				 * make sure we are atomic with respect to
 				 * other console switches..
-				 *
-				 * Damn! Was it difficult to make this clean?
 				 */
-				disable_bh(CONSOLE_BH);
+				spin_lock_irq(&console_lock);
 				complete_change_console(newvt);
-				enable_bh(CONSOLE_BH);
+				spin_unlock_irq(&console_lock);
 			}
 		}
 

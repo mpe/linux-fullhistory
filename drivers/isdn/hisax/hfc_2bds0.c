@@ -1,11 +1,14 @@
-/* $Id: hfc_2bds0.c,v 1.10 1999/10/14 20:25:28 keil Exp $
+/* $Id: hfc_2bds0.c,v 1.11 1999/12/23 15:09:32 keil Exp $
  *
  *  specific routines for CCD's HFC 2BDS0
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: hfc_2bds0.c,v $
+ * Revision 1.11  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 1.10  1999/10/14 20:25:28  keil
  * add a statistic for error monitoring
  *

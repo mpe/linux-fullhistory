@@ -39,20 +39,6 @@
 /*  DMA'able memory allocation stuff.
  */
 
-/* Pure 2^n version of get_order */
-static inline int __get_order(size_t size)
-{
-	unsigned long order;
-
-	size = (size-1) >> (PAGE_SHIFT-1);
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-	return order;
-}
-
 static inline void *dmaalloc(size_t size)
 {
 	unsigned long addr;
@@ -60,7 +46,7 @@ static inline void *dmaalloc(size_t size)
 	if (size == 0) {
 		return NULL;
 	}
-	addr = __get_dma_pages(GFP_KERNEL, __get_order(size));
+	addr = __get_dma_pages(GFP_KERNEL, get_order(size));
 	if (addr) {
 		int i;
 
@@ -80,7 +66,7 @@ static inline void dmafree(void *addr, size_t size)
 		     i < MAP_NR((unsigned long)addr+size); i++) {
 			mem_map_unreserve (i);
 		}
-		free_pages((unsigned long) addr, __get_order(size));
+		free_pages((unsigned long) addr, get_order(size));
 	}
 }
 

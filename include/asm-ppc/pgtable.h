@@ -69,6 +69,8 @@ extern inline void flush_tlb_pgtables(struct mm_struct *mm,
 extern void flush_icache_range(unsigned long, unsigned long);
 extern void __flush_page_to_ram(unsigned long page_va);
 #define flush_page_to_ram(page)	__flush_page_to_ram(page_address(page))
+extern void __flush_icache_page(unsigned long page_va);
+#define flush_icache_page(vma, page) __flush_icache_page(page_address(page))
 
 extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);

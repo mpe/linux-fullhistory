@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.118 1999/12/21 21:24:35 davem Exp $
+/* $Id: pgtable.h,v 1.119 2000/02/14 02:53:44 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -280,16 +280,18 @@ extern pgd_t swapper_pg_dir[1];
  *    table.
  * 4) Splat.
  */
-extern void flush_icache_page(unsigned long phys_page);
+extern void __flush_icache_page(unsigned long phys_page);
 #define update_mmu_cache(__vma, __address, _pte) \
 do { \
 	unsigned short __flags = ((__vma)->vm_flags); \
 	if ((__flags & VM_EXEC) != 0 && \
 	    ((pte_val(_pte) & (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED)) == \
 	     (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED))) { \
-		flush_icache_page(pte_pagenr(_pte) << PAGE_SHIFT); \
+		__flush_icache_page(pte_pagenr(_pte) << PAGE_SHIFT); \
 	} \
 } while(0)
+
+#define flush_icache_page(vma, pg)	do { } while(0)
 
 /* Make a non-present pseudo-TTE. */
 extern inline pte_t mk_pte_io(unsigned long page, pgprot_t prot, int space)
@@ -350,5 +352,8 @@ extern int io_remap_page_range(unsigned long from, unsigned long offset,
 			       unsigned long size, pgprot_t prot, int space);
 
 #endif /* !(__ASSEMBLY__) */
+
+/* We provide our own get_unmapped_area to cope with VA holes for userland */
+#define HAVE_ARCH_UNMAPPED_AREA
 
 #endif /* !(_SPARC64_PGTABLE_H) */

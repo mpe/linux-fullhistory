@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.20 1999/10/11 22:16:27 keil Exp $
+/* $Id: l3dss1.c,v 2.22 2000/01/20 19:44:20 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,16 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.22  2000/01/20 19:44:20  keil
+ * Fixed uninitialiesed location
+ * Fixed redirecting number IE in Setup
+ * Changes from certification
+ * option for disabling use of KEYPAD protocol
+ *
+ * Revision 2.21  1999/12/19 20:25:17  keil
+ * fixed LLC for outgoing analog calls
+ * IE Signal is valid on older local switches
+ *
  * Revision 2.20  1999/10/11 22:16:27  keil
  * Suspend/Resume is possible without explicit ID too
  *
@@ -91,9 +101,10 @@
 #include "isdnl3.h"
 #include "l3dss1.h"
 #include <linux/ctype.h>
+#include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.20 $";
+const char *dss1_revision = "$Revision: 2.22 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -668,34 +679,36 @@ l3dss1_msg_without_setup(struct l3_process *pc, u_char pr, void *arg)
 }
 
 static int ie_ALERTING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_HLC, IE_USER_USER, -1};
+		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_HLC,
+		IE_USER_USER, -1};
 static int ie_CALL_PROCEEDING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_HLC, -1};
 static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1, 
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_CONNECT_PN,
-		IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
-static int ie_CONNECT_ACKNOWLEDGE[] = {IE_CHANNEL_ID, IE_DISPLAY, -1};
+		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_SIGNAL,
+		IE_CONNECT_PN, IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
+static int ie_CONNECT_ACKNOWLEDGE[] = {IE_CHANNEL_ID, IE_DISPLAY, IE_SIGNAL, -1};
 static int ie_DISCONNECT[] = {IE_CAUSE | IE_MANDATORY, IE_FACILITY,
-		IE_PROGRESS, IE_DISPLAY, IE_USER_USER, -1};
-static int ie_INFORMATION[] = {IE_COMPLETE, IE_DISPLAY, IE_KEYPAD,
+		IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
+static int ie_INFORMATION[] = {IE_COMPLETE, IE_DISPLAY, IE_KEYPAD, IE_SIGNAL,
 		IE_CALLED_PN, -1};
 static int ie_NOTIFY[] = {IE_BEARER, IE_NOTIFY | IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_PROGRESS[] = {IE_BEARER, IE_CAUSE, IE_FACILITY, IE_PROGRESS |
 		IE_MANDATORY, IE_DISPLAY, IE_HLC, IE_USER_USER, -1};
-static int ie_RELEASE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY, IE_DISPLAY, IE_USER_USER, -1};
+static int ie_RELEASE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY, IE_DISPLAY,
+		IE_SIGNAL, IE_USER_USER, -1};
 /* a RELEASE_COMPLETE with errors don't require special actions 
-static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_DISPLAY, IE_USER_USER, -1};
+static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
 */
 static int ie_RESUME_ACKNOWLEDGE[] = {IE_CHANNEL_ID| IE_MANDATORY, IE_FACILITY,
 		IE_DISPLAY, -1};
 static int ie_RESUME_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_SETUP[] = {IE_COMPLETE, IE_BEARER  | IE_MANDATORY,
 		IE_CHANNEL_ID| IE_MANDATORY, IE_FACILITY, IE_PROGRESS,
-		IE_NET_FAC, IE_DISPLAY, IE_KEYPAD, IE_CALLING_PN,
-		IE_CALLING_SUB, IE_CALLED_PN, IE_CALLED_SUB, IE_LLC, IE_HLC,
-		IE_USER_USER, -1};
+		IE_NET_FAC, IE_DISPLAY, IE_KEYPAD, IE_SIGNAL, IE_CALLING_PN,
+		IE_CALLING_SUB, IE_CALLED_PN, IE_CALLED_SUB, IE_REDIR_NR,
+		IE_LLC, IE_HLC, IE_USER_USER, -1};
 static int ie_SETUP_ACKNOWLEDGE[] = {IE_CHANNEL_ID | IE_MANDATORY, IE_FACILITY,
-		IE_PROGRESS, IE_DISPLAY, -1};
+		IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, -1};
 static int ie_STATUS[] = {IE_CAUSE | IE_MANDATORY, IE_CALL_STATE |
 		IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_STATUS_ENQUIRY[] = {IE_DISPLAY, -1};
@@ -1272,6 +1285,7 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	u_char tmp[128];
 	u_char *p = tmp;
 	u_char channel = 0;
+
         u_char send_keypad;
 	u_char screen = 0x80;
 	u_char *teln;
@@ -1283,14 +1297,18 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	MsgHead(p, pc->callref, MT_SETUP);
 
 	teln = pc->para.setup.phone;
+#ifndef CONFIG_HISAX_NO_KEYPAD
         send_keypad = (strchr(teln,'*') || strchr(teln,'#')) ? 1 : 0; 
+#else
+	send_keypad = 0;
+#endif
+#ifndef CONFIG_HISAX_NO_SENDCOMPLETE
+	if (!send_keypad)
+		*p++ = 0xa1;		/* complete indicator */
+#endif
 	/*
 	 * Set Bearer Capability, Map info from 1TR6-convention to EDSS1
 	 */
-#if HISAX_EURO_SENDCOMPLETE
-	if (!send_keypad)
-	  *p++ = 0xa1;		/* complete indicator */
-#endif
         if (!send_keypad)
 	  switch (pc->para.setup.si1) {
 		case 1:	/* Telephony                               */
@@ -1452,12 +1470,25 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 		*p++ = 0x90;
 		*p++ = 0x21;
 		p = EncodeASyncParams(p, pc->para.setup.si2 - 192);
-#if HISAX_SEND_STD_LLC_IE
+#ifndef CONFIG_HISAX_NO_LLC
 	} else {
-		*p++ = 0x7c;
-		*p++ = 0x02;
-		*p++ = 0x88;
-		*p++ = 0x90;
+	  switch (pc->para.setup.si1) {
+		case 1:	/* Telephony                               */
+			*p++ = 0x7c;	/* BC-IE-code                              */
+			*p++ = 0x3;	/* Length                                  */
+			*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                     */
+			*p++ = 0xa3;	/* A-Law Audio                             */
+			break;
+		case 5:	/* Datatransmission 64k, BTX               */
+		case 7:	/* Datatransmission 64k                    */
+		default:
+			*p++ = 0x7c;	/* BC-IE-code                              */
+			*p++ = 0x2;	/* Length                                  */
+			*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inform. */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
+			break;
+	  }
 #endif
 	}
 #endif
@@ -2738,6 +2769,7 @@ static void
 l3dss1_dl_reset(struct l3_process *pc, u_char pr, void *arg)
 {
         pc->para.cause = 0x29;          /* Temporary failure */
+        pc->para.loc = 0;
         l3dss1_disconnect_req(pc, pr, NULL);
         pc->st->l3.l3l4(pc->st, CC_SETUP_ERR, pc);
 }
@@ -2747,6 +2779,7 @@ l3dss1_dl_release(struct l3_process *pc, u_char pr, void *arg)
 {
         newl3state(pc, 0);
         pc->para.cause = 0x1b;          /* Destination out of order */
+        pc->para.loc = 0;
         pc->st->l3.l3l4(pc->st, CC_RELEASE | INDICATION, pc);
         release_l3_process(pc);
 }

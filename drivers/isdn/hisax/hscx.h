@@ -1,11 +1,14 @@
-/* $Id: hscx.h,v 1.4 1998/04/15 16:45:34 keil Exp $
+/* $Id: hscx.h,v 1.5 1999/12/23 15:09:32 keil Exp $
 
  * hscx.h   HSCX specific defines
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: hscx.h,v $
+ * Revision 1.5  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 1.4  1998/04/15 16:45:34  keil
  * new init code
  *

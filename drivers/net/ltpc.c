@@ -246,23 +246,9 @@ static int sendup_buffer (struct net_device *dev);
 
 /* Dma Memory related stuff, cribbed directly from 3c505.c */
 
-/* Pure 2^n version of get_order */
-static inline int __get_order(unsigned long size)
-{
-        int order;
-
-        size = (size - 1) >> (PAGE_SHIFT - 1);
-        order = -1;
-        do {
-                size >>= 1;
-                order++;
-        } while (size);
-        return order;
-}
-
 static unsigned long dma_mem_alloc(int size)
 {
-        int order = __get_order(size);
+        int order = get_order(size);
 
         return __get_dma_pages(GFP_KERNEL, order);
 }
@@ -1364,7 +1350,7 @@ void cleanup_module(void)
 
 	if(debug&DEBUG_VERBOSE) printk("free_pages\n");
 
-	free_pages( (unsigned long) ltdmabuf, __get_order(1000));
+	free_pages( (unsigned long) ltdmabuf, get_order(1000));
 	ltdmabuf=NULL;
 	ltdmacbuf=NULL;
 

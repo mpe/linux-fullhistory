@@ -13,6 +13,16 @@ MIX_OBJS :=
 MOD_LIST_NAME := SCSI_MODULES
 SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
+ALL_SUB_DIRS := pcmcia
+ifeq ($(CONFIG_PCMCIA),y)
+  SUB_DIRS += pcmcia
+  MOD_IN_SUB_DIRS += pcmcia
+else
+  ifeq ($(CONFIG_PCMCIA),m)
+    MOD_IN_SUB_DIRS += pcmcia
+  endif
+endif
+
 CFLAGS_aha152x.o =   -DAHA152X_STAT -DAUTOCONF
 CFLAGS_gdth.o    = # -DDEBUG_GDTH=2 -D__SERIAL__ -D__COM2__ -DGDTH_STATISTICS
 CFLAGS_seagate.o =   -DARBITRATE -DPARITY -DSEAGATE_USE_ASM

@@ -41,7 +41,6 @@ obj-$(CONFIG_AIRONET4500_CS)	+= aironet4500_cs.o
 # Cardbus client drivers
 obj-$(CONFIG_PCMCIA_3C575)	+= 3c575_cb.o
 obj-$(CONFIG_PCMCIA_TULIP)	+= tulip_cb.o
-obj-$(CONFIG_PCMCIA_EPIC100)	+= epic100_cb.o
 
 O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
 OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
@@ -49,6 +48,3 @@ M_OBJS		:= $(filter-out $(export-objs), $(obj-m))
 MX_OBJS		:= $(filter     $(export-objs), $(obj-m))
 
 include $(TOPDIR)/Rules.make
-
-epic100_cb.o: ../epic100.c
-	$(CC) $(CFLAGS) -DMODULE -DCARDBUS -c -o $@ ../epic100.c

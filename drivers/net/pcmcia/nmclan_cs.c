@@ -1153,6 +1153,11 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     return;
   }
 
+  if (!test_bit(LINK_STATE_START, &dev->state)) {
+    DEBUG(2, "%s: interrupt from dead card\n", dev->name);
+    goto exception;
+  }
+
   do {
     /* WARNING: MACE_IR is a READ/CLEAR port! */
     status = inb(ioaddr + AM2150_MACE_BASE + MACE_IR);

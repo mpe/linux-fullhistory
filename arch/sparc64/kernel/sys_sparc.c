@@ -39,17 +39,49 @@ asmlinkage unsigned long sys_getpagesize(void)
 	return PAGE_SIZE;
 }
 
+unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
+{
+	struct vm_area_struct * vmm;
+	unsigned long task_size = TASK_SIZE;
+
+	if (current->thread.flags & SPARC_FLAG_32BIT)
+		task_size = 0xf0000000UL;
+	if (len > task_size || len > -PAGE_OFFSET)
+		return 0;
+	if (!addr)
+		addr = TASK_UNMAPPED_BASE;
+	addr = PAGE_ALIGN(addr);
+
+	task_size -= len;
+
+	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
+		if (addr < PAGE_OFFSET && -PAGE_OFFSET - len < addr) {
+			addr = PAGE_OFFSET;
+			vmm = find_vma(current->mm, PAGE_OFFSET);
+		}
+		if (task_size < addr)
+			return 0;
+		if (!vmm || addr + len <= vmm->vm_start)
+			return addr;
+		addr = vmm->vm_end;
+	}
+}
+
 extern asmlinkage unsigned long sys_brk(unsigned long brk);
 
 asmlinkage unsigned long sparc_brk(unsigned long brk)
 {
-	if((brk >= 0x80000000000UL && brk < PAGE_OFFSET) ||
-	   (brk - current->mm->brk > 0x80000000000UL &&
-	    brk - current->mm->brk < PAGE_OFFSET)) /* VM hole */
+	/* People could try to be nasty and use ta 0x6d in 32bit programs */
+	if ((current->thread.flags & SPARC_FLAG_32BIT) &&
+	    brk >= 0xf0000000UL)
+		return current->mm->brk;
+
+	if ((current->mm->brk & PAGE_OFFSET) != (brk & PAGE_OFFSET))
 		return current->mm->brk;
 	return sys_brk(brk);
 }
-
+                                                                
 /*
  * sys_pipe() is the normal C calling standard for creating
  * a pipe. It's not the way unix traditionally does this, though.
@@ -164,30 +196,21 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 			goto out;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	retval = -ENOMEM;
 	len = PAGE_ALIGN(len);
+	retval = -EINVAL;
+
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	if(!(flags & MAP_FIXED) && !addr) {
-		addr = get_unmapped_area(addr, len);
-		if(!addr)
-			goto out_putf;
-	}
 
-	retval = -EINVAL;
 	if (current->thread.flags & SPARC_FLAG_32BIT) {
-		if (len > 0xf0000000UL || addr > 0xf0000000UL - len)
+		if (len > 0xf0000000UL ||
+		    ((flags & MAP_FIXED) && addr > 0xf0000000UL - len))
 			goto out_putf;
 	} else {
-		if (len >= 0x80000000000UL || 
-		    (addr < 0x80000000000UL &&
-		     addr > 0x80000000000UL-len))
+		if (len > -PAGE_OFFSET ||
+		    ((flags & MAP_FIXED) &&
+		     addr < PAGE_OFFSET && addr + len > -PAGE_OFFSET))
 			goto out_putf;
-		if (addr >= 0x80000000000UL && addr < PAGE_OFFSET) {
-			/* VM hole */
-			retval = current->mm->brk;
-			goto out_putf;
-		}
 	}
 
 	retval = do_mmap(file, addr, len, prot, flags, off);
@@ -199,6 +222,55 @@ out_putf:
 		fput(file);
 out:
 	return retval;
+}
+
+asmlinkage long sys64_munmap(unsigned long addr, size_t len)
+{
+	long ret;
+
+	if (len > -PAGE_OFFSET ||
+	    (addr < PAGE_OFFSET && addr + len > -PAGE_OFFSET))
+		return -EINVAL;
+	down(&current->mm->mmap_sem);
+	ret = do_munmap(addr, len);
+	up(&current->mm->mmap_sem);
+	return ret;
+}
+
+extern unsigned long do_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr);
+                
+asmlinkage unsigned long sys64_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr)
+{
+	unsigned long ret = -EINVAL;
+	if (current->thread.flags & SPARC_FLAG_32BIT)
+		goto out;
+	if (old_len > -PAGE_OFFSET || new_len > -PAGE_OFFSET)
+		goto out;
+	if (addr < PAGE_OFFSET && addr + old_len > -PAGE_OFFSET)
+		goto out;
+	down(&current->mm->mmap_sem);
+	if (flags & MREMAP_FIXED) {
+		if (new_addr < PAGE_OFFSET &&
+		    new_addr + new_len > -PAGE_OFFSET)
+			goto out_sem;
+	} else if (addr < PAGE_OFFSET && addr + new_len > -PAGE_OFFSET) {
+		ret = -ENOMEM;
+		if (!(flags & MREMAP_MAYMOVE))
+			goto out_sem;
+		new_addr = get_unmapped_area (addr, new_len);
+		if (!new_addr)
+			goto out_sem;
+		flags |= MREMAP_FIXED;
+	}
+	ret = do_mremap(addr, old_len, new_len, flags, new_addr);
+out_sem:
+	up(&current->mm->mmap_sem);
+out:
+	return ret;       
 }
 
 /* we come to here via sys_nis_syscall so it can setup the regs argument */

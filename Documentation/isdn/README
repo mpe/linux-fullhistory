@@ -80,8 +80,7 @@ README for the ISDN-subsystem
    The functionality is almost the same as that of a serial device
    (the line-discs are handled by the kernel), which lets you run
    SLIP, CSLIP and asynchronous PPP through the devices. We have tested
-   Seyon, minicom, CSLIP (uri-dip) PPP and mgetty (compiled with NO_FAX),
-   XCept.
+   Seyon, minicom, CSLIP (uri-dip) PPP, mgetty, XCept and Hylafax. 
 
    The modem-emulation supports the following:
            1.3.1 Commands:
@@ -124,6 +123,10 @@ README for the ISDN-subsystem
                AT&D3    Same as AT&D2 but also resets all registers.
                AT&Ex    Set the EAZ/MSN for this channel to x.
                AT&F     Reset all registers and profile to "factory-defaults"
+               AT&Lx    Set list of phone numbers to listen on.  x is a
+                        list of wildcard patterns separated by semicolon.
+                        If this is set, it has precedence over the MSN set
+                        by AT&E.
                AT&Rx    Select V.110 bitrate adaption.
                         This command enables V.110 protocol with 9600 baud
                         (x=9600), 19200 baud (x=19200) or 38400 baud
@@ -238,7 +241,8 @@ README for the ISDN-subsystem
              15   0         Layer-3 protocol:
                                       0 = transparent
                                       1 = transparent with audio features (e.g. DSP)
-                                      2 = Fax G3 (S14 has to be set to 11)
+                                      2 = Fax G3 Class 2 commands (S14 has to be set to 11)
+                                      2 = Fax G3 Class 1 commands (S14 has to be set to 11)
              16   250       Send-Packet-size/16
              17   8         Window-size (not yet implemented)
              18   4         Bit coded register, Service-Octet-1 to accept,
@@ -309,8 +313,6 @@ README for the ISDN-subsystem
   If an incoming call matches one network interface, it gets connected to it.
   If another incoming call for the same EAZ arrives, which does not match
   a network interface, the first tty gets a "RING" and so on.
-  As soon as voice gets supported (with the availability of the Diehl-driver),
-  the service-identifier will be evaluated in addition.
 
 2 System prerequisites:
 

@@ -1,5 +1,5 @@
 /*
- * ciscode.h 1.39 1999/10/25 20:23:17
+ * ciscode.h 1.40 2000/02/01 19:06:40
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -90,6 +90,8 @@
 #define PRODID_OSITECH_JACK_288		0x0002
 #define PRODID_OSITECH_JACK_336		0x0007
 #define PRODID_OSITECH_SEVEN		0x0008
+
+#define MANFID_PIONEER			0x000b
 
 #define MANFID_PSION			0x016c
 

@@ -1,9 +1,10 @@
-$Id: README.eicon,v 1.5 1999/10/11 18:13:25 armin Exp $
+$Id: README.eicon,v 1.6 2000/01/27 09:54:44 armin Exp $
 
-(c) 1999 Cytronics & Melware (info@melware.de)
+(c) 1999,2000 Armin Schindler (mac@melware.de)
+(c) 1999,2000 Cytronics & Melware (info@melware.de)
 
 This document describes the eicon driver for the
-Eicon.Diehl active ISDN cards.
+Eicon active ISDN cards.
 
 It is meant to be used with isdn4linux, an ISDN link-level module for Linux.
 
@@ -50,7 +51,8 @@ ISDN D-Channel Protocols
 
 - ETSI (Euro-DSS1) 
 - 1TR6 (German ISDN) *not testet*
-
+- other protocols exist for the range of DIVA Server cards,
+  but they are not fully testet yet.
 
 
 You can load the module simply by using the insmod or modprobe function :
@@ -58,7 +60,7 @@ You can load the module simply by using the insmod or modprobe function :
   insmod eicon [id=driverid] [membase=<membase>] [irq=<irq>]
 
 
-The module will automatically probe the PCI-cards. If the id-options
+The module will automatically probe the PCI-cards. If the id-option
 is omitted, the driver will assume 'eicon0' for the first pci card and
 increases the digit with each further card. With a given driver-id
 the module appends a number starting with '0'.
@@ -84,6 +86,14 @@ Example for loading and starting a PRI card with E-DSS1 Protocol.
 
 Details about using the eiconctrl utility are in 'man eiconctrl'
 or will be printed by starting eiconctrl without any parameters.
+
+ISDNLOG:
+With eicon driver version 1.77 or newer and the eiconctrl utility
+of version 1.1 or better, you can use the isdnlog user program
+with your DIVA Server BRI card.
+Just use "eiconctrl isdnlog on" and the driver will generate
+the necessary D-Channel traces for isdnlog.
+
 
 Thanks to 
 	Deutsche Mailbox Saar-Lor-Lux GmbH

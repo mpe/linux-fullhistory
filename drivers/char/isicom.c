@@ -2051,7 +2051,8 @@ void cleanup_module(void)
 	re_schedule = 0;
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(HZ);
-	disable_bh(ISICOM_BH);
+
+	remove_bh(ISICOM_BH);
 	
 #ifdef ISICOM_DEBUG	
 	printk("ISICOM: isicom_tx tx_count = %ld.\n", tx_count);

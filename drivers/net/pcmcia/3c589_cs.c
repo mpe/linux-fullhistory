@@ -4,7 +4,7 @@
     
     Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    3c589_cs.c 1.143 1999/12/30 21:28:10
+    3c589_cs.c 1.145 2000/02/11 03:11:51
 
     The network driver code is based on Donald Becker's 3c589 code:
     
@@ -117,7 +117,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"3c589_cs.c 1.143 1999/12/30 21:28:10 (David Hinds)";
+"3c589_cs.c 1.145 2000/02/11 03:11:51 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -513,6 +513,7 @@ static int tc589_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_stop_queue (dev);
+	    clear_bit(LINK_STATE_START, &dev->state);
 	    link->release.expires = jiffies + HZ/20;
 	    add_timer(&link->release);
 	}
@@ -528,6 +529,7 @@ static int tc589_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
 		netif_stop_queue (dev);
+		clear_bit(LINK_STATE_START, &dev->state);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -540,6 +542,7 @@ static int tc589_event(event_t event, int priority,
 	    CardServices(RequestConfiguration, link->handle, &link->conf);
 	    if (link->open) {
 		tc589_reset(dev);
+		set_bit(LINK_STATE_START, &dev->state);
 		netif_start_queue (dev);
 	    }
 	}
@@ -748,22 +751,22 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	  inw(ioaddr + EL3_STATUS));
 
     netif_stop_queue (dev);
-    if (1) {
+    {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	lp->stats.tx_bytes += skb->len;
-	/* Put out the doubleword header... */
-	outw(skb->len, ioaddr + TX_FIFO);
-	outw(0x00, ioaddr + TX_FIFO);
-	/* ... and the packet rounded to a doubleword. */
-	outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
-	
-	dev->trans_start = jiffies;
-	if (inw(ioaddr + TX_FREE) > 1536) {
-	    netif_start_queue (dev);
-	} else
-	    /* Interrupt us when the FIFO has room for max-sized packet. */
-	    outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
     }
+    /* Put out the doubleword header... */
+    outw(skb->len, ioaddr + TX_FIFO);
+    outw(0x00, ioaddr + TX_FIFO);
+    /* ... and the packet rounded to a doubleword. */
+    outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
+
+    dev->trans_start = jiffies;
+    if (inw(ioaddr + TX_FREE) > 1536) {
+	netif_start_queue (dev);
+    } else
+	/* Interrupt us when the FIFO has room for max-sized packet. */
+	outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
 
     dev_kfree_skb(skb);
     pop_tx_status(dev);
@@ -779,29 +782,20 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     ioaddr_t ioaddr, status;
     int i = 0;
     
-    if (lp == NULL)
+    if (!test_bit(LINK_STATE_START, &dev->state))
 	return;
     ioaddr = dev->base_addr;
 
-#ifdef PCMCIA_DEBUG
-    if (dev->interrupt) {
-	printk(KERN_NOTICE "%s: re-entering the interrupt handler.\n",
-	       dev->name);
-	return;
-    }
-    dev->interrupt = 1;
     DEBUG(3, "%s: interrupt, status %4.4x.\n",
 	  dev->name, inw(ioaddr + EL3_STATUS));
-#endif
     
     while ((status = inw(ioaddr + EL3_STATUS)) &
 	(IntLatch | RxComplete | StatsFull)) {
-#if 0
-	if ((dev->start == 0) || ((status & 0xe000) != 0x2000)) {
+	if (!test_bit(LINK_STATE_START, &dev->state) ||
+	    ((status & 0xe000) != 0x2000)) {
 	    DEBUG(1, "%s: interrupt from dead card\n", dev->name);
 	    break;
 	}
-#endif
 	
 	if (status & RxComplete)
 	    el3_rx(dev);
@@ -860,11 +854,8 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     }
 
     lp->last_irq = jiffies;
-#ifdef PCMCIA_DEBUG
     DEBUG(3, "%s: exiting interrupt, status %4.4x.\n",
 	  dev->name, inw(ioaddr + EL3_STATUS));
-    dev->interrupt = 0;
-#endif
     return;
 }
 
@@ -876,9 +867,8 @@ static void media_check(u_long arg)
     u_short media, errs;
     u_long flags;
 
-#if 0
-    if (dev->start == 0) goto reschedule;
-#endif
+    if (!test_bit(LINK_STATE_START, &dev->state))
+	goto reschedule;
 
     EL3WINDOW(1);
     /* Check for pending interrupt with expired latency timer: with

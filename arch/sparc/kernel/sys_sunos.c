@@ -71,8 +71,10 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	lock_kernel();
 	current->personality |= PER_BSD;
 	if(flags & MAP_NORESERVE) {
-		printk("%s: unimplemented SunOS MAP_NORESERVE mmap() flag\n",
-		       current->comm);
+		static int cnt;
+		if (cnt++ < 10)
+			printk("%s: unimplemented SunOS MAP_NORESERVE mmap() flag\n",
+			       current->comm);
 		flags &= ~MAP_NORESERVE;
 	}
 	retval = -EBADF;
@@ -84,19 +86,7 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 			goto out;
 	}
 
-	retval = -ENOMEM;
-	if(!(flags & MAP_FIXED) &&
-	   (!addr || (ARCH_SUN4C_SUN4 &&
-		      (addr >= 0x20000000 && addr < 0xe0000000)))) {
-		addr = get_unmapped_area(0, len);
-		if(!addr)
-			goto out_putf;
-		if (ARCH_SUN4C_SUN4 &&
-		    (addr >= 0x20000000 && addr < 0xe0000000)) {
-			retval = -EINVAL;
-			goto out_putf;
-		}
-	}
+	retval = -EINVAL;
 	/* If this is ld.so or a shared library doing an mmap
 	 * of /dev/zero, transform it into an anonymous mapping.
 	 * SunOS is so stupid some times... hmph!
@@ -105,18 +95,27 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 		if(MAJOR(file->f_dentry->d_inode->i_rdev) == MEM_MAJOR &&
 		   MINOR(file->f_dentry->d_inode->i_rdev) == 5) {
 			flags |= MAP_ANONYMOUS;
+			fput(file);
 			file = 0;
 		}
 	}
-	if(!(flags & MAP_FIXED))
-		addr = 0;
 	ret_type = flags & _MAP_NEW;
 	flags &= ~_MAP_NEW;
 
-	/* See asm-sparc/uaccess.h */
-	retval = -EINVAL;
-	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
-		goto out_putf;
+	if(!(flags & MAP_FIXED))
+		addr = 0;
+	else {
+		if (ARCH_SUN4C_SUN4 &&
+		    (len > 0x20000000 ||
+		     ((flags & MAP_FIXED) &&
+		      addr < 0xe0000000 && addr + len > 0x20000000)))
+			goto out_putf;
+
+		/* See asm-sparc/uaccess.h */
+		if (len > TASK_SIZE - PAGE_SIZE ||
+		    addr + len > TASK_SIZE - PAGE_SIZE)
+			goto out_putf;
+	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file, addr, len, prot, flags, off);

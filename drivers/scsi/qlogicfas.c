@@ -21,7 +21,7 @@
    Version 0.46 1/30/97 - kernel 1.2.0+
 
    Functions as standalone, loadable, and PCMCIA driver, the latter from
-   Dave Hind's PCMCIA package.
+   Dave Hinds' PCMCIA package.
 
    Redistributable under terms of the GNU Public License
 
@@ -107,7 +107,6 @@
 #ifdef PCMCIA
 #undef QL_INT_ACTIVE_HIGH
 #define QL_INT_ACTIVE_HIGH 0
-#define MODULE
 #endif 
 
 #include <linux/module.h>

@@ -1,4 +1,4 @@
-/* $Id: rwsem.S,v 1.2 2000/01/05 01:00:38 davem Exp $
+/* $Id: rwsem.S,v 1.4 2000/02/13 07:59:39 anton Exp $
  * Assembly part of rw semaphores.
  *
  * Copyright (C) 1999 Jakub Jelinek (jakub@redhat.com)
@@ -26,16 +26,19 @@ ___down_read:
 	tst		%g7
 	bne		1b
 	 ld		[%g1], %g7
-	subcc		%g7, 1, %g7
+	sub		%g7, 1, %g7
 	st		%g7, [%g1]
 	stb		%g0, [%g1 + 4]
 #else
 	ld		[%g1], %g7
-	subcc		%g7, 1, %g7
+	sub		%g7, 1, %g7
 	st		%g7, [%g1]
 #endif
 	wr		%g3, 0, %psr
+	add		%g7, 1, %g7
 	nop
+	nop
+	subcc		%g7, 1, %g7
 	bneg		3f
 	 nop
 2:	jmpl		%o7, %g0
@@ -74,16 +77,19 @@ ___down_write:
 	tst		%g7
 	bne		1b
 	 ld		[%g1], %g7
-	subcc		%g7, %g2, %g7
+	sub		%g7, %g2, %g7
 	st		%g7, [%g1]
 	stb		%g0, [%g1 + 4]
 #else
 	ld		[%g1], %g7
-	subcc		%g7, %g2, %g7
+	sub		%g7, %g2, %g7
 	st		%g7, [%g1]
 #endif
 	wr		%g3, 0, %psr
+	add		%g7, %g2, %g7
 	nop
+	nop
+	subcc		%g7, %g2, %g7
 	bne		3f
 	 nop
 2:	jmpl		%o7, %g0
@@ -122,16 +128,19 @@ ___up_read:
 	tst		%g7
 	bne		1b
 	 ld		[%g1], %g7
-	addcc		%g7, 1, %g7
+	add		%g7, 1, %g7
 	st		%g7, [%g1]
 	stb		%g0, [%g1 + 4]
 #else
 	ld		[%g1], %g7
-	addcc		%g7, 1, %g7
+	add		%g7, 1, %g7
 	st		%g7, [%g1]
 #endif
 	wr		%g3, 0, %psr
 	nop
+	nop
+	nop
+	cmp		%g7, 0
 	be		3f
 	 nop
 2:	jmpl		%o7, %g0
@@ -164,16 +173,19 @@ ___up_write:
 	tst		%g7
 	bne		1b
 	 ld		[%g1], %g7
-	addcc		%g7, %g2, %g7
+	add		%g7, %g2, %g7
 	st		%g7, [%g1]
 	stb		%g0, [%g1 + 4]
 #else
 	ld		[%g1], %g7
-	addcc		%g7, %g2, %g7
+	add		%g7, %g2, %g7
 	st		%g7, [%g1]
 #endif
 	wr		%g3, 0, %psr
+	sub		%g7, %g2, %g7
 	nop
+	nop
+	addcc		%g7, %g2, %g7
 	bcs		3f
 	 nop
 2:	jmpl		%o7, %g0

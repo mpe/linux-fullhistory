@@ -38,3 +38,6 @@ README.sc
 	- info on driver for Spellcaster cards.
 README.x25
     _ info for running X.25 over ISDN.
+README.hysdn
+        - info on driver for Hypercope active HYSDN cards
+ 

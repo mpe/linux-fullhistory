@@ -132,7 +132,7 @@ pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 		/* We need to avoid collisions with `mirrored' VGA ports
 		   and other strange ISA hardware, so we always want the
 		   addresses kilobyte aligned.  */
-		if (size >= 0x100) {
+		if (size > 0x100) {
 			printk(KERN_ERR "PCI: I/O Region %s/%d too large"
 			       " (%ld bytes)\n", dev->slot_name,
 			       dev->resource - res, size);

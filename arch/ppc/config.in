@@ -97,7 +97,7 @@ fi
 if [ "$CONFIG_6xx" = "y" -a "$CONFIG_APUS" != "y" ]; then
     define_bool CONFIG_PCI y
 fi
-if [ "$CONFIG_PREP" = "y" -o "$CONFIG_PMAC" = "y" -o "$CONFIG_CHRP" = "y" -o "$CONFIG_ALL_PPC" = "y"]; then
+if [ "$CONFIG_PREP" = "y" -o "$CONFIG_PMAC" = "y" -o "$CONFIG_CHRP" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
     define_bool CONFIG_PCI y
 fi
 

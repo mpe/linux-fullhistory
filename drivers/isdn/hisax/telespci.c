@@ -1,12 +1,15 @@
-/* $Id: telespci.c,v 2.10 1999/11/15 14:20:05 keil Exp $
+/* $Id: telespci.c,v 2.11 1999/12/23 15:09:32 keil Exp $
 
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
  * Author       Ton van Rosmalen 
- *              Karsten Keil (keil@temic-ech.spacenet.de)
+ *              Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: telespci.c,v $
+ * Revision 2.11  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 2.10  1999/11/15 14:20:05  keil
  * 64Bit compatibility
  *
@@ -47,7 +50,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *telespci_revision = "$Revision: 2.10 $";
+const char *telespci_revision = "$Revision: 2.11 $";
 
 #define ZORAN_PO_RQ_PEN	0x02000000
 #define ZORAN_PO_WR	0x00800000

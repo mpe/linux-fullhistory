@@ -1,11 +1,15 @@
 /*
- * $Id: kernelcapi.h,v 1.4 1999/09/10 17:24:19 calle Exp $
+ * $Id: kernelcapi.h,v 1.5 2000/01/28 16:45:40 calle Exp $
  * 
  * Kernel CAPI 2.0 Interface for Linux
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kernelcapi.h,v $
+ * Revision 1.5  2000/01/28 16:45:40  calle
+ * new manufacturer command KCAPI_CMD_ADDCARD (generic addcard),
+ * will search named driver and call the add_card function if one exist.
+ *
  * Revision 1.4  1999/09/10 17:24:19  calle
  * Changes for proposed standard for CAPI2.0:
  * - AK148 "Linux Exention"
@@ -57,8 +61,17 @@ typedef struct kcapi_flagdef {
 	int flag;
 } kcapi_flagdef;
 
+typedef struct kcapi_carddef {
+	char		driver[32];
+	unsigned int	port;
+	unsigned	irq;
+	unsigned int	membase;
+	int		cardnr;
+} kcapi_carddef;
+
 /* new ioctls >= 10 */
 #define KCAPI_CMD_TRACE		10
+#define KCAPI_CMD_ADDCARD	11	/* add card to named driver */
 
 /* 
  * flag > 2 => trace also data

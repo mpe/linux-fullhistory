@@ -12,20 +12,6 @@
 #include <asm/io.h>
 #include <asm/pgalloc.h>
 
-/* Pure 2^n version of get_order */
-extern __inline__ int __get_order(unsigned long size)
-{
-	int order;
-
-	size = (size-1) >> (PAGE_SHIFT-1);
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-	return order;
-}
-
 /*
  * This allocates one page of cache-coherent memory space and returns
  * both the virtual and a "dma" address to that space.  It is not clear
@@ -43,7 +29,7 @@ void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 	if (in_interrupt())
 		BUG();
 
-	order = __get_order(size);
+	order = get_order(size);
 
 	page = __get_free_pages(gfp, order);
 	if (!page)

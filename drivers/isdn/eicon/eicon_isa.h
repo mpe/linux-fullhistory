@@ -1,10 +1,10 @@
-/* $Id: eicon_isa.h,v 1.6 1999/11/15 19:37:04 keil Exp $
+/* $Id: eicon_isa.h,v 1.8 2000/01/23 21:21:23 armin Exp $
  *
- * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
+ * ISDN low-level module for Eicon active ISDN-Cards.
  *
- * Copyright 1998    by Fritz Elfert (fritz@isdn4linux.de)
- * Copyright 1998,99 by Armin Schindler (mac@melware.de)
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1998      by Fritz Elfert (fritz@isdn4linux.de)
+ * Copyright 1998-2000 by Armin Schindler (mac@melware.de)
+ * Copyright 1999,2000 Cytronics & Melware (info@melware.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.h,v $
+ * Revision 1.8  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
+ * Revision 1.7  1999/11/18 21:14:30  armin
+ * New ISA memory mapped IO
+ *
  * Revision 1.6  1999/11/15 19:37:04  keil
  * need config.h
  *
@@ -116,6 +123,7 @@ typedef union {
 typedef struct {
 	int               ramsize;
 	int               irq;	    /* IRQ                        */
+	unsigned long	  physmem;  /* physical memory address	  */
 #ifdef CONFIG_MCA
 	int		  io;	    /* IO-port for MCA brand      */
 #endif /* CONFIG_MCA */

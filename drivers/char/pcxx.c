@@ -1198,7 +1198,6 @@ int __init pcxe_init(void)
 	memset(pcxe_termios_locked,0,sizeof(struct termios *)*nbdevs);
 
 	init_bh(DIGI_BH,do_pcxe_bh);
-	enable_bh(DIGI_BH);
 
 	timer_table[DIGI_TIMER].fn = pcxxpoll;
 	timer_table[DIGI_TIMER].expires = 0;

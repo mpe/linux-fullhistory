@@ -1,11 +1,19 @@
 /*
- * $Id: t1isa.c,v 1.8 1999/11/05 16:38:01 calle Exp $
+ * $Id: t1isa.c,v 1.10 2000/02/02 18:36:04 calle Exp $
  * 
  * Module for AVM T1 HEMA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1isa.c,v $
+ * Revision 1.10  2000/02/02 18:36:04  calle
+ * - Modules are now locked while init_module is running
+ * - fixed problem with memory mapping if address is not aligned
+ *
+ * Revision 1.9  2000/01/25 14:37:39  calle
+ * new message after successfull detection including card revision and
+ * used resources.
+ *
  * Revision 1.8  1999/11/05 16:38:01  calle
  * Cleanups before kernel 2.4:
  * - Changed all messages to use card->name or driver->name instead of
@@ -73,7 +81,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.8 $";
+static char *revision = "$Revision: 1.10 $";
 
 /* ------------------------------------------------------------- */
 
@@ -413,10 +421,13 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 	avmcard *card;
 	int retval;
 
+	MOD_INC_USE_COUNT;
+
 	card = (avmcard *) kmalloc(sizeof(avmcard), GFP_ATOMIC);
 
 	if (!card) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(card, 0, sizeof(avmcard));
@@ -424,6 +435,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 	if (!cinfo) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(cinfo, 0, sizeof(avmctrl_info));
@@ -440,6 +452,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 				driver->name, card->port);
 	        kfree(card->ctrlinfo);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EINVAL;
         }
 
@@ -449,6 +462,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 		       driver->name, card->port, card->port + AVMB1_PORTLEN);
 	        kfree(card->ctrlinfo);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 	if (hema_irq_table[card->irq & 0xf] == 0) {
@@ -456,6 +470,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 				driver->name, card->irq);
 	        kfree(card->ctrlinfo);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EINVAL;
 	}
 	for (ctrl = driver->controller; ctrl; ctrl = ctrl->next) {
@@ -465,6 +480,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 					driver->name, card->cardnr, cardp->port);
 	                kfree(card->ctrlinfo);
 			kfree(card);
+	        	MOD_DEC_USE_COUNT;
 			return -EBUSY;
 		}
 	}
@@ -473,6 +489,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 					driver->name, card->port, retval);
 	        kfree(card->ctrlinfo);
 		kfree(card);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 	t1_disable_irq(card->port);
@@ -487,6 +504,7 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 		release_region(card->port, AVMB1_PORTLEN);
 	        kfree(card->ctrlinfo);
 		kfree(card);
+		MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
@@ -498,10 +516,14 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 		release_region(card->port, AVMB1_PORTLEN);
 	        kfree(card->ctrlinfo);
 		kfree(card);
+		MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
-	MOD_INC_USE_COUNT;
+	printk(KERN_INFO
+		"%s: AVM T1 ISA at i/o %#x, irq %d, card %d\n",
+		driver->name, card->port, card->irq, card->cardnr);
+
 	return 0;
 }
 

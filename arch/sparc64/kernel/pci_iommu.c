@@ -123,11 +123,8 @@ void *pci_alloc_consistent(struct pci_dev *pdev, size_t size, dma_addr_t *dma_ad
 	int npages;
 
 	size = PAGE_ALIGN(size);
-	for (order = 0; order < 10; order++) {
-		if ((PAGE_SIZE << order) >= size)
-			break;
-	}
-	if (order == 10)
+	order = get_order(size);
+	if (order >= 10)
 		return NULL;
 
 	/* We still don't support devices which don't recognize at least 30 bits
@@ -210,10 +207,7 @@ void pci_free_consistent(struct pci_dev *pdev, size_t size, void *cpu, dma_addr_
 
 	spin_unlock_irqrestore(&iommu->lock, flags);
 
-	for (order = 0; order < 10; order++) {
-		if ((PAGE_SIZE << order) >= size)
-			break;
-	}
+	order = get_order(size);
 	if (order < 10)
 		free_pages((unsigned long)cpu, order);
 }

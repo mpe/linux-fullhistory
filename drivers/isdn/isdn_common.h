@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.17 1999/10/27 21:21:17 detabc Exp $
+/* $Id: isdn_common.h,v 1.18 2000/01/23 18:45:37 keil Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.18  2000/01/23 18:45:37  keil
+ * Change EAZ mapping to forbit the use of cards (insert a "-" for the MSN)
+ *
  * Revision 1.17  1999/10/27 21:21:17  detabc
  * Added support for building logically-bind-group's per interface.
  * usefull for outgoing call's with more then one isdn-card.
@@ -128,7 +131,7 @@ extern void isdn_timer_ctrl(int tf, int onoff);
 extern void isdn_unexclusive_channel(int di, int ch);
 extern int isdn_getnum(char **);
 extern int isdn_readbchan(int, int, u_char *, u_char *, int, wait_queue_head_t *);
-extern int isdn_get_free_channel(int, int, int, int, int);
+extern int isdn_get_free_channel(int, int, int, int, int, char *);
 extern int isdn_writebuf_skb_stub(int, int, int, struct sk_buff *);
 extern int register_isdn(isdn_if * i);
 extern int isdn_wildmat(char *, char *);

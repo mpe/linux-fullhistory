@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.60 1999/11/04 20:29:55 he Exp $
+/* $Id: isdn_ppp.c,v 1.62 2000/02/12 19:26:55 kai Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,31 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.62  2000/02/12 19:26:55  kai
+ * adopted to latest 2.3 softnet changes.
+ *
+ * tested with PPP and MPPP, it works here.
+ * can somebody check raw-ip?
+ *
+ * also changed std2kern, stddiff for bash-1 compatibility,
+ * hope this doesn't break anything.
+ *
+ * Revision 1.61  1999/11/20 22:14:14  detabc
+ * added channel dial-skip in case of external use
+ * (isdn phone or another isdn device) on the same NTBA.
+ * usefull with two or more card's connected the different NTBA's.
+ * global switchable in kernel-config and also per netinterface.
+ *
+ * add auto disable of netinterface's in case of:
+ * 	to many connection's in short time.
+ * 	config mistakes (wrong encapsulation, B2-protokoll or so on) on local
+ * 	or remote side.
+ * 	wrong password's or something else to a ISP (syncppp).
+ *
+ * possible encapsulations for this future are:
+ * ISDN_NET_ENCAP_SYNCPPP, ISDN_NET_ENCAP_UIHDLC, ISDN_NET_ENCAP_RAWIP,
+ * and ISDN_NET_ENCAP_CISCOHDLCK.
+ *
  * Revision 1.60  1999/11/04 20:29:55  he
  * applied Andre Beck's reset_free fix
  *
@@ -306,7 +331,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.60 $";
+char *isdn_ppp_revision = "$Revision: 1.62 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 
@@ -699,7 +724,7 @@ isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 		case PPPIOCGIFNAME:
 			if(!lp)
 				return -EINVAL;
-			if ((r = set_arg((void *) arg, lp->name,strlen(lp->name))))
+			if ((r = set_arg((void *) arg, lp->name, strlen(lp->name))))
 				return r;
 			break;
 		case PPPIOCGMPFLAGS:	/* get configuration flags */
@@ -721,8 +746,8 @@ isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			if (val & SC_ENABLE_IP && !(is->pppcfg & SC_ENABLE_IP) && (is->state & IPPP_CONNECT)) {
 				if (lp) {
-					lp->netdev->dev.tbusy = 0;
-					mark_bh(NET_BH);	/* OK .. we are ready to send buffers */
+					/* OK .. we are ready to send buffers */
+					netif_wake_queue(&lp->netdev->dev);
 				}
 			}
 			is->pppcfg = val;

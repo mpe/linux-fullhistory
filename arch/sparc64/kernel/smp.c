@@ -753,9 +753,7 @@ static void __init smp_tune_scheduling (void)
 					 "ecache-size", (512 * 1024));
 	if (ecache_size > (4 * 1024 * 1024))
 		ecache_size = (4 * 1024 * 1024);
-	for (order = 0UL; (PAGE_SIZE << order) < ecache_size; order++)
-		;
-	flush_base = __get_free_pages(GFP_KERNEL, order);
+	flush_base = __get_free_pages(GFP_KERNEL, order = get_order(ecache_size));
 
 	if (flush_base != 0UL) {
 		__save_and_cli(flags);

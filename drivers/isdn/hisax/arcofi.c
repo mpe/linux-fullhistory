@@ -1,12 +1,19 @@
-/* $Id: arcofi.c,v 1.8 1999/08/25 16:50:51 keil Exp $
+/* $Id: arcofi.c,v 1.10 1999/12/23 15:09:32 keil Exp $
 
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
- * Author     Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author     Karsten Keil (keil@isdn4linux.de)
  *
  *
  *
  * $Log: arcofi.c,v $
+ * Revision 1.10  1999/12/23 15:09:32  keil
+ * change email
+ *
+ * Revision 1.9  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.8  1999/08/25 16:50:51  keil
  * Fix bugs which cause 2.3.14 hangs (waitqueue init)
  *
@@ -83,7 +90,7 @@ arcofi_fsm(struct IsdnCardState *cs, int event, void *data) {
 	if (event == ARCOFI_TIMEOUT) {
 		cs->dc.isac.arcofi_state = ARCOFI_NOP;
 		test_and_set_bit(FLG_ARCOFI_ERROR, &cs->HW_Flags);
-		wake_up_interruptible(&cs->dc.isac.arcofi_wait);
+		wake_up(&cs->dc.isac.arcofi_wait);
  		return(1);
 	}
 	switch (cs->dc.isac.arcofi_state) {
@@ -109,7 +116,7 @@ arcofi_fsm(struct IsdnCardState *cs, int event, void *data) {
 							del_timer(&cs->dc.isac.arcofitimer);
 						}
 						cs->dc.isac.arcofi_state = ARCOFI_NOP;
-						wake_up_interruptible(&cs->dc.isac.arcofi_wait);
+						wake_up(&cs->dc.isac.arcofi_wait);
 					}
 				}
 			}
@@ -126,7 +133,7 @@ arcofi_fsm(struct IsdnCardState *cs, int event, void *data) {
 						del_timer(&cs->dc.isac.arcofitimer);
 					}
 					cs->dc.isac.arcofi_state = ARCOFI_NOP;
-					wake_up_interruptible(&cs->dc.isac.arcofi_wait);
+					wake_up(&cs->dc.isac.arcofi_wait);
 				}
 			}
 			break;

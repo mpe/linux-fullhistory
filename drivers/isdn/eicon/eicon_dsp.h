@@ -1,10 +1,10 @@
-/* $Id: eicon_dsp.h,v 1.4 1999/07/25 15:12:02 armin Exp $
+/* $Id: eicon_dsp.h,v 1.5 2000/01/23 21:21:23 armin Exp $
  *
- * ISDN lowlevel-module for Eicon.Diehl active cards.
+ * ISDN lowlevel-module for Eicon active cards.
  *        DSP definitions
  *
- * Copyright 1999    by Armin Schindler (mac@melware.de)
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1999,2000  by Armin Schindler (mac@melware.de)
+ * Copyright 1999,2000  Cytronics & Melware (info@melware.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: eicon_dsp.h,v $
+ * Revision 1.5  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
  * Revision 1.4  1999/07/25 15:12:02  armin
  * fix of some debug logs.
  * enabled ISA-cards option.

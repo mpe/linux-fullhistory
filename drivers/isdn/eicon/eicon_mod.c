@@ -1,12 +1,12 @@
-/* $Id: eicon_mod.c,v 1.19 1999/11/12 13:21:44 armin Exp $
+/* $Id: eicon_mod.c,v 1.24 2000/01/23 21:21:23 armin Exp $
  *
- * ISDN lowlevel-module for Eicon.Diehl active cards.
+ * ISDN lowlevel-module for Eicon active cards.
  * 
- * Copyright 1997    by Fritz Elfert (fritz@isdn4linux.de)
- * Copyright 1998,99 by Armin Schindler (mac@melware.de) 
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1997      by Fritz Elfert (fritz@isdn4linux.de)
+ * Copyright 1998-2000 by Armin Schindler (mac@melware.de) 
+ * Copyright 1999,2000 Cytronics & Melware (info@melware.de)
  * 
- * Thanks to    Eicon Technology Diehl GmbH & Co. oHG for
+ * Thanks to    Eicon Technology GmbH & Co. oHG for
  *              documents, informations and hardware.
  *
  *              Deutsche Telekom AG for S2M support.
@@ -31,6 +31,23 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.24  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
+ * Revision 1.23  2000/01/20 19:55:34  keil
+ * Add FAX Class 1 support
+ *
+ * Revision 1.22  1999/11/27 12:56:19  armin
+ * Forgot some iomem changes for last ioremap compat.
+ *
+ * Revision 1.21  1999/11/25 11:35:10  armin
+ * Microchannel fix from Erik Weber (exrz73@ibm.net).
+ * Minor cleanup.
+ *
+ * Revision 1.20  1999/11/18 21:14:30  armin
+ * New ISA memory mapped IO
+ *
  * Revision 1.19  1999/11/12 13:21:44  armin
  * Bugfix of undefined reference with CONFIG_MCA
  *
@@ -46,7 +63,7 @@
  * Improved debug and log via readstat()
  *
  * Revision 1.15  1999/09/08 20:17:31  armin
- * Added microchannel patch from Erik Weber.
+ * Added microchannel patch from Erik Weber (exrz73@ibm.net).
  *
  * Revision 1.14  1999/09/06 07:29:35  fritz
  * Changed my mail-address.
@@ -123,7 +140,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.19 $";
+static char *eicon_revision = "$Revision: 1.24 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -144,7 +161,7 @@ static int   irq          = -1;
 #endif
 static char *id           = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
-MODULE_DESCRIPTION(             "Driver for Eicon.Diehl active ISDN cards");
+MODULE_DESCRIPTION(             "Driver for Eicon active ISDN cards");
 MODULE_AUTHOR(                  "Armin Schindler");
 MODULE_SUPPORTED_DEVICE(        "ISDN subsystem");
 MODULE_PARM_DESC(id,   		"ID-String of first card");
@@ -659,7 +676,7 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 				break;
 			chan->l3prot = (c->arg >> 8);
 #ifdef CONFIG_ISDN_TTY_FAX
-			if (chan->l3prot == ISDN_PROTO_L3_FAX)
+			if (chan->l3prot == ISDN_PROTO_L3_FCLASS2)
 				chan->fax = c->parm.fax;
 #endif
 			return 0;
@@ -839,8 +856,7 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 }
 
 /* jiftime() copied from HiSax */
-inline int
-jiftime(char *s, long mark)
+static inline int jiftime(char *s, long mark)
 {
         s += 8;
 
@@ -1000,19 +1016,28 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
                         case EICON_CTYPE_S:
                         case EICON_CTYPE_SX:
                         case EICON_CTYPE_SCOM:
-                                if (membase == -1)
-                                        membase = EICON_ISA_MEMBASE;
-                                if (irq == -1)
-                                        irq = EICON_ISA_IRQ;
-                                card->bus = EICON_BUS_MCA;
-                                card->hwif.isa.card = (void *)card;
-                                card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
-                                card->hwif.isa.master = 1;
+				if (MCA_bus) {
+	                                if (membase == -1)
+        	                                membase = EICON_ISA_MEMBASE;
+                	                if (irq == -1)
+                        	                irq = EICON_ISA_IRQ;
+	                                card->bus = EICON_BUS_MCA;
+        	                        card->hwif.isa.card = (void *)card;
+                	                card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
+					card->hwif.isa.physmem = (unsigned long)membase;
+                        	        card->hwif.isa.master = 1;
 
-                                card->hwif.isa.irq = irq;
-                                card->hwif.isa.type = Type;
-                                card->nchannels = 2;
-                                card->interface.channels = 1;
+	                                card->hwif.isa.irq = irq;
+        	                        card->hwif.isa.type = Type;
+                	                card->nchannels = 2;
+                        	        card->interface.channels = 1;
+				} else {
+					printk(KERN_WARNING
+						"eicon (%s): no MCA bus detected.\n",
+						card->interface.id);
+					kfree(card);
+					return;
+				}
                                 break;
 #endif /* CONFIG_MCA */
 			case EICON_CTYPE_QUADRO:
@@ -1023,6 +1048,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
                                 card->bus = EICON_BUS_ISA;
 				card->hwif.isa.card = (void *)card;
 				card->hwif.isa.shmem = (eicon_isa_shmem *)(membase + (i+1) * EICON_ISA_QOFFSET);
+				card->hwif.isa.physmem = (unsigned long)(membase + (i+1) * EICON_ISA_QOFFSET);
 				card->hwif.isa.master = 0;
 				strcpy(card->interface.id, id);
 				if (id[strlen(id) - 1] == 'a') {
@@ -1067,7 +1093,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_MODEM |
 					ISDN_FEATURE_L2_FAX | 
 					ISDN_FEATURE_L3_TRANSDSP |
-					ISDN_FEATURE_L3_FAX;
+					ISDN_FEATURE_L3_FCLASS2;
                                 card->hwif.pci.card = (void *)card;
 				card->hwif.pci.PCIreg = pcic->PCIreg;
 				card->hwif.pci.PCIcfg = pcic->PCIcfg;
@@ -1091,7 +1117,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_MODEM |
 					ISDN_FEATURE_L2_FAX |
 					ISDN_FEATURE_L3_TRANSDSP |
-					ISDN_FEATURE_L3_FAX;
+					ISDN_FEATURE_L3_FCLASS2;
                                 card->hwif.pci.card = (void *)card;
                                 card->hwif.pci.shmem = (eicon_pci_shmem *)pcic->shmem;
 				card->hwif.pci.PCIreg = pcic->PCIreg;
@@ -1116,6 +1142,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 				card->bus = EICON_BUS_ISA;
 				card->hwif.isa.card = (void *)card;
 				card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
+				card->hwif.isa.physmem = (unsigned long)membase;
 				card->hwif.isa.master = 1;
 				card->hwif.isa.irq = irq;
 				card->hwif.isa.type = Type;
@@ -1130,6 +1157,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
                                 card->bus = EICON_BUS_ISA;
 				card->hwif.isa.card = (void *)card;
 				card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
+				card->hwif.isa.physmem = (unsigned long)membase;
 				card->hwif.isa.master = 1;
 				card->hwif.isa.irq = irq;
 				card->hwif.isa.type = Type;
@@ -1151,14 +1179,15 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 		}
 		for (j=0; j< (card->nchannels + 1); j++) {
 			memset((char *)&card->bch[j], 0, sizeof(eicon_chan));
-			card->bch[j].plci = 0x8000;
-			card->bch[j].ncci = 0x8000;
+			card->bch[j].statectrl = 0;
 			card->bch[j].l2prot = ISDN_PROTO_L2_X75I;
 			card->bch[j].l3prot = ISDN_PROTO_L3_TRANS;
 			card->bch[j].e.D3Id = 0;
 			card->bch[j].e.B2Id = 0;
 			card->bch[j].e.Req = 0;
 			card->bch[j].No = j;
+			card->bch[j].tskb1 = NULL;
+			card->bch[j].tskb2 = NULL;
 			skb_queue_head_init(&card->bch[j].e.X);
 			skb_queue_head_init(&card->bch[j].e.R);
 		}

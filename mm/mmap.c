@@ -347,6 +347,7 @@ free_vma:
  * For mmap() without MAP_FIXED and shmat() with addr=0.
  * Return value 0 means ENOMEM.
  */
+#ifndef HAVE_ARCH_UNMAPPED_AREA
 unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 {
 	struct vm_area_struct * vmm;
@@ -366,6 +367,7 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 		addr = vmm->vm_end;
 	}
 }
+#endif
 
 #define vm_avl_empty	(struct vm_area_struct *) NULL
 
@@ -580,7 +582,7 @@ static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
 	unsigned long start, unsigned long end)
 {
 	unsigned long first = start & PGDIR_MASK;
-	unsigned long last = (end + PGDIR_SIZE - 1) & PGDIR_MASK;
+	unsigned long last = end + PGDIR_SIZE - 1;
 	unsigned long start_index, end_index;
 
 	if (!prev) {
@@ -615,8 +617,10 @@ no_mmaps:
 	 */
 	start_index = pgd_index(first);
 	end_index = pgd_index(last);
-	if (end_index > start_index)
+	if (end_index > start_index) {
 		clear_page_tables(mm, start_index, end_index - start_index);
+		flush_tlb_pgtables(mm, first & PGDIR_MASK, last & PGDIR_MASK);
+	}
 }
 
 /* Munmap is split into 2 main parts -- this part which finds

@@ -39,6 +39,14 @@
 #include "usb.h"
 #include "usb_storage.h"
 
+/*
+ * This is the size of the structure Scsi_Host_Template.  We create
+ * an instance of this structure in this file and this is a check
+ * to see if this structure may have changed within the SCSI module.
+ * This is by no means foolproof, but it does help us some.
+ */
+#define SCSI_HOST_TEMPLATE_SIZE			(104)
+
 /* direction table -- this indicates the direction of the data
  * transfer for each command code -- a 1 indicates input
  */
@@ -1327,6 +1335,7 @@ static Scsi_Host_Template my_host_template = {
 	NULL,			    /* reset */
 	NULL,			    /* slave_attach */
 	NULL,			    /* bios_param */
+	NULL,			    /* select_queue_depths */
 	1,			    /* can_queue */
 	-1,			    /* this_id */
 	SG_ALL,		    /* sg_tablesize */
@@ -1811,9 +1820,17 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
  * Initialization and registration
  ***********************************************************************/
 
-int usb_stor_init(void)
+static int __init usb_stor_init(void)
 {
 	//  MOD_INC_USE_COUNT;
+
+	if (sizeof(my_host_template) != SCSI_HOST_TEMPLATE_SIZE) {
+		printk(KERN_ERR "usb-storage: SCSI_HOST_TEMPLATE_SIZE does not match\n") ;
+		printk(KERN_ERR "usb-storage: expected %d bytes, got %d bytes\n", 
+		       SCSI_HOST_TEMPLATE_SIZE, sizeof(my_host_template)) ;
+
+		return -1 ;
+	}
 
 	/* register the driver, return -1 if error */
 	if (usb_register(&storage_driver) < 0)
@@ -1823,15 +1840,10 @@ int usb_stor_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-int init_module(void)
+static void __exit usb_stor_exit(void)
 {
-	/* MDD: Perhaps we should register the host here */
-	return usb_stor_init();
+	usb_deregister(&storage_driver) ;
 }
 
-void cleanup_module(void)
-{
-	usb_deregister(&storage_driver);
-}
-#endif
+module_init(usb_stor_init) ;
+module_exit(usb_stor_exit) ;

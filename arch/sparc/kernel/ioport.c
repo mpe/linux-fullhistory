@@ -44,7 +44,6 @@
 #include <asm/pgtable.h>
 
 struct resource *_sparc_find_resource(struct resource *r, unsigned long);
-int _sparc_len2order(unsigned long len);
 
 static void *_sparc_ioremap(struct resource *res, u32 bus, u32 pa, int sz);
 static void *_sparc_alloc_io(unsigned int busno, unsigned long phys,
@@ -280,7 +279,7 @@ void *sbus_alloc_consistent(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 		return NULL;
 	}
 
-	order = _sparc_len2order(len_total);
+	order = get_order(len_total);
 	va = __get_free_pages(GFP_KERNEL, order);
 	if (va == 0) {
 		/*
@@ -341,7 +340,7 @@ void sbus_free_consistent(struct sbus_dev *sdev, long n, void *p, u32 ba)
 	pgp = (unsigned long) phys_to_virt(mmu_translate_dvma(ba));
 	mmu_unmap_dma_area(ba, n);
 
-	free_pages(pgp, _sparc_len2order(n));
+	free_pages(pgp, get_order(n));
 }
 
 /*
@@ -482,7 +481,7 @@ void *pci_alloc_consistent(struct pci_dev *pdev, size_t len, dma_addr_t *pba)
 		return NULL;
 	}
 
-	order = _sparc_len2order(len_total);
+	order = get_order(len_total);
 	va = __get_free_pages(GFP_KERNEL, order);
 	if (va == 0) {
 		printk("pci_alloc_consistent: no %ld pages\n", len_total>>PAGE_SHIFT);
@@ -569,7 +568,7 @@ void pci_free_consistent(struct pci_dev *pdev, size_t n, void *p, dma_addr_t ba)
 	release_resource(res);
 	kfree(res);
 
-	free_pages(pgp, _sparc_len2order(n));
+	free_pages(pgp, get_order(n));
 }
 
 /* Map a single buffer of the indicated size for DMA in streaming mode.
@@ -737,19 +736,6 @@ _sparc_find_resource(struct resource *root, unsigned long hit)
 			return tmp;
 	}
 	return NULL;
-}
-
-int
-_sparc_len2order(unsigned long len)
-{
-	int order;
-
-	for (order = 0; order < 7; order++)	/* 2^6 pages == 256K */
-		if ((1 << (order + PAGE_SHIFT)) >= len)
-			return order;
-	printk("len2order: from %p: len %lu(0x%lx) yields order >=7.\n",
-	    __builtin_return_address(0), len, len);
-	return 1;
 }
 
 /*

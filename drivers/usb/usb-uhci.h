@@ -2,7 +2,7 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: usb-uhci.h,v 1.39 2000/02/05 20:25:27 acher Exp $
+   $Id: usb-uhci.h,v 1.41 2000/02/13 21:37:38 acher Exp $
  */
 #define MODNAME "usb-uhci"
 #define VERSTR "version v1.184 time " __TIME__ " " __DATE__
@@ -155,6 +155,8 @@ typedef struct {
 typedef struct {
 	struct list_head desc_list;	// list pointer to all corresponding TDs/QHs associated with this request
 	int short_control_packet;
+	unsigned long started;
+	int use_loop;
 } urb_priv_t, *purb_priv_t;
 
 struct virt_root_hub {
@@ -197,6 +199,7 @@ typedef struct uhci {
 	spinlock_t qh_lock;
 	spinlock_t td_lock;
 	struct virt_root_hub rh;	//private data of the virtual root hub
+	int loop_usage;            // URBs using bandwidth reclamation
 } uhci_t, *puhci_t;
 
 

@@ -453,7 +453,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 				lo->lo_backing_file = NULL;
 			}
 		}
-		aops = lo->lo_dentry->d_inode->i_mapping->a_ops;
+		aops = inode->i_mapping->a_ops;
 		/*
 		 * If we can't read - sorry. If we only can't write - well,
 		 * it's going to be read-only.

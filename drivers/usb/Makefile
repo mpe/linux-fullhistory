@@ -69,6 +69,7 @@ obj-$(CONFIG_USB_DC2XX)		+= dc2xx.o
 obj-$(CONFIG_USB_STORAGE)	+= usb-storage.o
 obj-$(CONFIG_USB_USS720)	+= uss720.o
 obj-$(CONFIG_USB_DABUSB)	+= dabusb.o
+obj-$(CONFIG_USB_PLUSB)		+= plusb.o
 obj-$(CONFIG_USB_OV511)		+= ov511.o
 
 # Extract lists of the multi-part drivers.

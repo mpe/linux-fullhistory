@@ -1,4 +1,4 @@
-/* $Id: teleint.c,v 1.11 1999/09/04 06:20:06 keil Exp $
+/* $Id: teleint.c,v 1.12 1999/12/19 13:09:42 keil Exp $
 
  * teleint.c     low level stuff for TeleInt isdn cards
  *
@@ -6,6 +6,10 @@
  *
  *
  * $Log: teleint.c,v $
+ * Revision 1.12  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.11  1999/09/04 06:20:06  keil
  * Changes from kernel set_current_state()
  *
@@ -51,7 +55,7 @@
 
 extern const char *CardType[];
 
-const char *TeleInt_revision = "$Revision: 1.11 $";
+const char *TeleInt_revision = "$Revision: 1.12 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -260,11 +264,11 @@ reset_TeleInt(struct IsdnCardState *cs)
 	byteout(cs->hw.hfc.addr | 1, cs->hw.hfc.cirm);	/* Reset On */
 	save_flags(flags);
 	sti();
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);
 	cs->hw.hfc.cirm &= ~HFC_RESET;
 	byteout(cs->hw.hfc.addr | 1, cs->hw.hfc.cirm);	/* Reset Off */
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }

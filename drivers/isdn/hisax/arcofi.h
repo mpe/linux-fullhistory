@@ -1,12 +1,15 @@
-/* $Id: arcofi.h,v 1.4 1999/07/01 08:11:18 keil Exp $
+/* $Id: arcofi.h,v 1.5 1999/12/23 15:09:32 keil Exp $
 
  * arcofi.h   Ansteuerung ARCOFI 2165
  *
- * Author     Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author     Karsten Keil (keil@isdn4linux.de)
  *
  *
  *
  * $Log: arcofi.h,v $
+ * Revision 1.5  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 1.4  1999/07/01 08:11:18  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *

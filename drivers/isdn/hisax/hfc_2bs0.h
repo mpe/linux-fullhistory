@@ -1,11 +1,14 @@
-/* $Id: hfc_2bs0.h,v 1.1 1997/09/11 17:31:34 keil Exp $
+/* $Id: hfc_2bs0.h,v 1.2 1999/12/23 15:09:32 keil Exp $
 
  *  specific defines for CCD's HFC 2BS0
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: hfc_2bs0.h,v $
+ * Revision 1.2  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 1.1  1997/09/11 17:31:34  keil
  * Common part for HFC 2BS0 based cards
  *

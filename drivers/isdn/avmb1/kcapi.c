@@ -1,11 +1,18 @@
 /*
- * $Id: kcapi.c,v 1.10 1999/10/26 15:30:32 calle Exp $
+ * $Id: kcapi.c,v 1.12 2000/01/28 16:45:39 calle Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.12  2000/01/28 16:45:39  calle
+ * new manufacturer command KCAPI_CMD_ADDCARD (generic addcard),
+ * will search named driver and call the add_card function if one exist.
+ *
+ * Revision 1.11  1999/11/23 13:29:29  calle
+ * Bugfix: incoming capi message were never traced.
+ *
  * Revision 1.10  1999/10/26 15:30:32  calle
  * Generate error message if user want to add card, but driver module is
  * not loaded.
@@ -79,7 +86,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.10 $";
+static char *revision = "$Revision: 1.12 $";
 
 /* ------------------------------------------------------------- */
 
@@ -154,10 +161,6 @@ static int ncards = 0;
 static struct sk_buff_head recv_queue;
 static struct capi_interface_user *capi_users = 0;
 static struct capi_driver *drivers;
-#ifdef CONFIG_AVMB1_COMPAT
-static struct capi_driver *b1isa_driver;
-static struct capi_driver *t1isa_driver;
-#endif
 static long notify_up_set = 0;
 static long notify_down_set = 0;
 
@@ -703,9 +706,9 @@ static void controllercb_handle_capimsg(struct capi_ctr * card,
 	if (cmd == CAPI_DATA_B3 && subcmd == CAPI_IND) {
 		card->nrecvdatapkt++;
 	        if (card->traceflag > 2) showctl |= 2;
-	        if (card->traceflag) showctl |= 2;
 	} else {
 		card->nrecvctlpkt++;
+	        if (card->traceflag) showctl |= 2;
 	}
 	showctl |= (card->traceflag & 1);
 	if (showctl & 2) {
@@ -877,8 +880,14 @@ drivercb_attach_ctr(struct capi_driver *driver, char *name, void *driverdata)
 	*pp = card;
 	driver->ncontroller++;
 	sprintf(card->procfn, "capi/controllers/%d", card->cnr);
-	card->procent = create_proc_read_entry(card->procfn, 0, 0,
-					driver->ctr_read_proc, card);
+	card->procent = create_proc_entry(card->procfn, 0, 0);
+	if (card->procent) {
+	   card->procent->read_proc = 
+		(int (*)(char *,char **,off_t,int,int *,void *))
+			driver->ctr_read_proc;
+	   card->procent->data = card;
+	}
+
 	ncards++;
 	printk(KERN_NOTICE "kcapi: Controller %d: %s attached\n",
 			card->cnr, card->name);
@@ -947,18 +956,18 @@ struct capi_driver_interface *attach_capi_driver(struct capi_driver *driver)
 	driver->next = 0;
 	*pp = driver;
 	printk(KERN_NOTICE "kcapi: driver %s attached\n", driver->name);
-#ifdef CONFIG_AVMB1_COMPAT
-        if (strcmp(driver->name, "b1isa") == 0 && driver->add_card)
-		b1isa_driver = driver;
-        if (strcmp(driver->name, "t1isa") == 0 && driver->add_card)
-		t1isa_driver = driver;
-#endif
 	sprintf(driver->procfn, "capi/drivers/%s", driver->name);
-	driver->procent = create_proc_read_entry(driver->procfn, 0, 0,
-						driver->driver_read_proc
-						? driver->driver_read_proc
-						: driver_read_proc,
-					        driver);
+	driver->procent = create_proc_entry(driver->procfn, 0, 0);
+	if (driver->procent) {
+	   if (driver->driver_read_proc) {
+		   driver->procent->read_proc = 
+	       		(int (*)(char *,char **,off_t,int,int *,void *))
+					driver->driver_read_proc;
+	   } else {
+		   driver->procent->read_proc = driver_read_proc;
+	   }
+	   driver->procent->data = driver;
+	}
 	return &di;
 }
 
@@ -968,10 +977,6 @@ void detach_capi_driver(struct capi_driver *driver)
 	for (pp = &drivers; *pp && *pp != driver; pp = &(*pp)->next) ;
 	if (*pp) {
 		*pp = (*pp)->next;
-#ifdef CONFIG_AVMB1_COMPAT
-		if (driver == b1isa_driver) b1isa_driver = 0;
-		if (driver == t1isa_driver) t1isa_driver = 0;
-#endif
 		printk(KERN_NOTICE "kcapi: driver %s detached\n", driver->name);
 	} else {
 		printk(KERN_ERR "kcapi: driver %s double detach ?\n", driver->name);
@@ -1186,6 +1191,15 @@ static __u16 capi_get_profile(__u32 contr, struct capi_profile *profp)
 	return CAPI_NOERROR;
 }
 
+static struct capi_driver *find_driver(char *name)
+{
+	struct capi_driver *dp;
+	for (dp = drivers; dp; dp = dp->next)
+		if (strcmp(dp->name, name) == 0)
+			return dp;
+	return 0;
+}
+
 #ifdef CONFIG_AVMB1_COMPAT
 static int old_capi_manufacturer(unsigned int cmd, void *data)
 {
@@ -1217,9 +1231,15 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 		cparams.cardnr = cdef.cardnr;
 
                 switch (cdef.cardtype) {
-			case AVM_CARDTYPE_B1: driver = b1isa_driver; break;
-			case AVM_CARDTYPE_T1: driver = t1isa_driver; break;
-			default: driver = 0;
+			case AVM_CARDTYPE_B1:
+				driver = find_driver("b1isa");
+				break;
+			case AVM_CARDTYPE_T1:
+				driver = find_driver("t1isa");
+				break;
+			default:
+				driver = 0;
+				break;
 		}
 		if (!driver) {
 			printk(KERN_ERR "kcapi: driver not loaded.\n");
@@ -1331,9 +1351,7 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 			return -ESRCH;
 
 		gdef.cardstate = card->cardstate;
-		if (card->driver == b1isa_driver)
-			gdef.cardtype = AVM_CARDTYPE_B1;
-		else if (card->driver == t1isa_driver)
+		if (card->driver == find_driver("t1isa"))
 			gdef.cardtype = AVM_CARDTYPE_T1;
 		else gdef.cardtype = AVM_CARDTYPE_B1;
 
@@ -1377,7 +1395,6 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 static int capi_manufacturer(unsigned int cmd, void *data)
 {
         struct capi_ctr *card;
-	kcapi_flagdef fdef;
 	int retval;
 
 	switch (cmd) {
@@ -1392,6 +1409,9 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 		return old_capi_manufacturer(cmd, data);
 #endif
 	case KCAPI_CMD_TRACE:
+	{
+		kcapi_flagdef fdef;
+
 		if ((retval = copy_from_user((void *) &fdef, data,
 					 sizeof(kcapi_flagdef))))
 			return retval;
@@ -1405,6 +1425,44 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 		printk(KERN_INFO "kcapi: contr %d set trace=%d\n",
 			card->cnr, card->traceflag);
 		return 0;
+	}
+
+	case KCAPI_CMD_ADDCARD:
+	{
+		struct capi_driver *driver;
+		capicardparams cparams;
+		kcapi_carddef cdef;
+
+		if ((retval = copy_from_user((void *) &cdef, data,
+							sizeof(cdef))))
+			return retval;
+
+		cparams.port = cdef.port;
+		cparams.irq = cdef.irq;
+		cparams.membase = cdef.membase;
+		cparams.cardnr = cdef.cardnr;
+		cparams.cardtype = 0;
+		cdef.driver[sizeof(cdef.driver)-1] = 0;
+
+		if ((driver = find_driver(cdef.driver)) == 0) {
+			printk(KERN_ERR "kcapi: driver \"%s\" not loaded.\n",
+					cdef.driver);
+			return -ESRCH;
+		}
+
+		if (!driver->add_card) {
+			printk(KERN_ERR "kcapi: driver \"%s\" has no add card function.\n", cdef.driver);
+			return -EIO;
+		}
+
+		return driver->add_card(driver, &cparams);
+	}
+
+	default:
+		printk(KERN_ERR "kcapi: manufacturer command %d unknown.\n",
+					cmd);
+		break;
+
 	}
 	return -EINVAL;
 }

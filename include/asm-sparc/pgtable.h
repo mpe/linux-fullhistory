@@ -448,4 +448,7 @@ extern int io_remap_page_range(unsigned long from, unsigned long to,
 
 #endif /* !(__ASSEMBLY__) */
 
+/* We provide our own get_unmapped_area to cope with VA holes for userland */
+#define HAVE_ARCH_UNMAPPED_AREA
+
 #endif /* !(_SPARC_PGTABLE_H) */

@@ -165,19 +165,14 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
  *
  * MREMAP_FIXED option added 5-Dec-1999 by Benjamin LaHaise
  * This option implies MREMAP_MAYMOVE.
- *
- * "__new_addr" toying in order to not change the saved stack layout
- * for old x86 binaries that don't want %edi to change..
  */
-asmlinkage unsigned long sys_mremap(unsigned long addr,
+unsigned long do_mremap(unsigned long addr,
 	unsigned long old_len, unsigned long new_len,
-	unsigned long flags, unsigned long __new_addr)
+	unsigned long flags, unsigned long new_addr)
 {
-	unsigned long new_addr = __new_addr;
 	struct vm_area_struct *vma;
 	unsigned long ret = -EINVAL;
 
-	down(&current->mm->mmap_sem);
 	if (flags & ~(MREMAP_FIXED | MREMAP_MAYMOVE))
 		goto out;
 
@@ -287,6 +282,17 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 		ret = move_vma(vma, addr, old_len, new_len, new_addr);
 	}
 out:
+	return ret;
+}
+
+asmlinkage unsigned long sys_mremap(unsigned long addr,
+	unsigned long old_len, unsigned long new_len,
+	unsigned long flags, unsigned long new_addr)
+{
+	unsigned long ret;
+
+	down(&current->mm->mmap_sem);
+	ret = do_mremap(addr, old_len, new_len, flags, new_addr);
 	up(&current->mm->mmap_sem);
 	return ret;
 }

@@ -1,10 +1,21 @@
-/* $Id: config.c,v 2.40 1999/10/30 13:09:45 keil Exp $
+/* $Id: config.c,v 2.43 2000/01/20 19:49:36 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.43  2000/01/20 19:49:36  keil
+ * Support teles 13.3c vendor version 2.1
+ *
+ * Revision 2.42  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
+ * Revision 2.41  1999/11/18 00:00:43  werner
+ *
+ * Added support for HFC-S+ and HFC-SP cards
+ *
  * Revision 2.40  1999/10/30 13:09:45  keil
  * Version 3.3c
  *
@@ -202,6 +213,7 @@
  *   34	Gazel ISDN cards
  *   35 HFC 2BDS0 PCI           none
  *   36 Winbond 6692 PCI        none
+ *   37 HFC 2BDS0 S+/SP         p0=irq p1=iobase
  *
  * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
  *
@@ -217,6 +229,7 @@ const char *CardType[] =
  "AMD 7930", "NICCY", "S0Box", "AVM A1 (PCMCIA)", "AVM Fritz PnP/PCI",
  "Sedlbauer Speed Fax +", "Siemens I-Surf", "Acer P10", "HST Saphir",
  "Telekom A4T", "Scitel Quadro", "Gazel", "HFC 2BDS0 PCI", "Winbond 6692",
+ "HFC 2BDS0 SX",
 };
 
 void HiSax_closecard(int cardnr);
@@ -350,6 +363,13 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_HFC_PCI
 #define DEFAULT_CFG {0,0,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_HFC_SX
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_HFC_SX
+#define DEFAULT_CFG {5,0x2E0,0,0}
 #endif
 
 
@@ -529,9 +549,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.3c (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.3d (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.3c (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.3d (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
@@ -685,6 +705,10 @@ extern int setup_hfcs(struct IsdnCard *card);
 
 #if CARD_HFC_PCI
 extern int setup_hfcpci(struct IsdnCard *card);
+#endif
+
+#if CARD_HFC_SX
+extern int setup_hfcsx(struct IsdnCard *card);
 #endif
 
 #if CARD_AMD7930
@@ -994,7 +1018,7 @@ HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
 	while (cnt) {
 		cs->cardmsg(cs, CARD_INIT, NULL);
 		sti();
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		/* Timeout 10ms */
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);
@@ -1206,6 +1230,11 @@ checkcard(int cardnr, char *id, int *busy_flag))
 #if CARD_HFC_PCI
 		        case ISDN_CTYPE_HFC_PCI: 
 				ret = setup_hfcpci(card);
+				break;
+#endif
+#if CARD_HFC_SX
+		        case ISDN_CTYPE_HFC_SX: 
+				ret = setup_hfcsx(card);
 				break;
 #endif
 #if CARD_NICCY
@@ -1515,6 +1544,7 @@ HiSax_init(void))
 			case ISDN_CTYPE_FRITZPCI:
 			case ISDN_CTYPE_HSTSAPHIR:
 			case ISDN_CTYPE_GAZEL:
+		        case ISDN_CTYPE_HFC_SX:
 				cards[i].para[0] = irq[i];
 				cards[i].para[1] = io[i];
 				break;

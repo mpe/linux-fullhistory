@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.21 1999/11/19 09:56:57 davem Exp $
+/* $Id: cgsixfb.c,v 1.22 2000/02/14 08:44:26 jj Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -491,7 +491,7 @@ static void cg6_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int inde
 	int i;
                 
 	spin_lock_irqsave(&fb->lock, flags);
-	bt->addr = index << 24;
+	sbus_writel(index << 24, &bt->addr);
 	for (i = index; count--; i++){
 		sbus_writel(fb->color_map CM(i,0) << 24,
 			    &bt->color_map);

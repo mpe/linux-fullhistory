@@ -90,11 +90,6 @@
 /* Debug register calls, too? */
 #undef MATROXFB_DEBUG_REG
 
-/* Log reentrancy attempts - you must have printstate() patch applied */
-#undef MATROXFB_DEBUG_REENTER
-/* you must define DEBUG_REENTER to get debugged CONSOLEBH... */
-#undef MATROXFB_DEBUG_CONSOLEBH
-
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -1082,46 +1077,6 @@ static int default_cmode = CMODE_NVRAM;
 #define isMilleniumII(x) (0)
 #endif
 
-#ifdef MATROXFB_DEBUG_REENTER
-static atomic_t guard_counter = ATOMIC_INIT(1);
-static atomic_t guard_printing = ATOMIC_INIT(1);
-static void guard_start(void) {
-	if (atomic_dec_and_test(&guard_counter)) {	/* first level */
-		if (!(bh_mask & (1 << CONSOLE_BH)))	/* and CONSOLE_BH disabled */
-			return;				/* is OK */
-		/* otherwise it is first level with CONSOLE_BH enabled -
-		   - if we are __sti or SMP, reentering from console_bh possible */
-		atomic_dec(&guard_printing);	/* disable reentrancy warning */
-		printk(KERN_DEBUG "matroxfb entered without CONSOLE_BH disabled\n");
-#ifdef printstate
-		printstate();
-#endif
-		atomic_inc(&guard_printing);
-		return;
-	}
-	/* real reentering... You should be already warned by code above */
-	if (atomic_dec_and_test(&guard_printing)) {
-#ifdef printstate
-		printstate();
-#endif
-	}
-	atomic_inc(&guard_printing);
-}
-
-static inline void guard_end(void) {
-	atomic_inc(&guard_counter);
-}
-
-#define CRITBEGIN guard_start();
-#define CRITEND   guard_end();
-
-#else
-
-#define CRITBEGIN
-#define CRITEND
-
-#endif
-
 #define mga_ydstlen(y,l) mga_outl(M_YDSTLEN | M_EXEC, ((y) << 16) | (l))
 
 static void matrox_cfbX_init(WPMINFO struct display* p) {
@@ -1184,8 +1139,6 @@ static void matrox_cfbX_bmove(struct display* p, int sy, int sx, int dy, int dx,
 
 	DBG("matrox_cfbX_bmove")
 
-	CRITBEGIN
-
 	sx *= fontwidth(p);
 	dx *= fontwidth(p);
 	width *= fontwidth(p);
@@ -1216,8 +1169,6 @@ static void matrox_cfbX_bmove(struct display* p, int sy, int sx, int dy, int dx,
 	mga_outl(M_FXBNDRY, ((dx+width)<<16) | dx);
 	mga_ydstlen(dy, height);
 	WaitTillIdle();
-
-	CRITEND
 }
 
 #ifdef FBCON_HAS_CFB4
@@ -1228,8 +1179,6 @@ static void matrox_cfb4_bmove(struct display* p, int sy, int sx, int dy, int dx,
 	   also odd, that means that we cannot use acceleration */
 	
 	DBG("matrox_cfb4_bmove")
-
-	CRITBEGIN
 
 	if ((sx | dx | width) & fontwidth(p) & 1) {
 		fbcon_cfb4_bmove(p, sy, sx, dy, dx, height, width);
@@ -1270,8 +1219,6 @@ static void matrox_cfb4_bmove(struct display* p, int sy, int sx, int dy, int dx,
 	mga_outl(M_YDST, dy*pixx >> 5);
 	mga_outl(M_LEN | M_EXEC, height);
 	WaitTillIdle();
-
-	CRITEND
 }
 #endif
 
@@ -1280,16 +1227,12 @@ static void matroxfb_accel_clear(CPMINFO u_int32_t color, int sy, int sx, int he
 	
 	DBG("matroxfb_accel_clear")
 
-	CRITBEGIN
-
 	mga_fifo(5);
 	mga_outl(M_DWGCTL, ACCESS_FBINFO(accel.m_dwg_rect) | M_DWG_REPLACE);
 	mga_outl(M_FCOL, color);
 	mga_outl(M_FXBNDRY, ((sx + width) << 16) | sx);
 	mga_ydstlen(sy, height);
 	WaitTillIdle();
-
-	CRITEND
 }
 
 static void matrox_cfbX_clear(u_int32_t color, struct display* p, int sy, int sx, int height, int width) {
@@ -1307,8 +1250,6 @@ static void matrox_cfb4_clear(struct vc_data* conp, struct display* p, int sy, i
 	MINFO_FROM_DISP(p);
 
 	DBG("matrox_cfb4_clear")
-
-	CRITBEGIN
 
 	whattodo = 0; 
 	bgx = attr_bgcol_ec(p, conp);
@@ -1361,8 +1302,6 @@ static void matrox_cfb4_clear(struct vc_data* conp, struct display* p, int sy, i
 			}
 		}
 	}
-
-	CRITEND
 }
 #endif
 
@@ -1410,8 +1349,6 @@ static void matrox_cfbX_fastputc(u_int32_t fgx, u_int32_t bgx, struct display* p
 	yy *= fontheight(p);
 	xx *= fontwidth(p);
 
-	CRITBEGIN
-
 	mga_fifo(8);
 	mga_outl(M_DWGCTL, M_DWG_BITBLT | M_DWG_SGNZERO | M_DWG_SHIFTZERO | M_DWG_BMONOWF | M_DWG_LINEAR | M_DWG_REPLACE);
 	
@@ -1423,8 +1360,6 @@ static void matrox_cfbX_fastputc(u_int32_t fgx, u_int32_t bgx, struct display* p
 	mga_outl(M_AR0, (ar3 + charcell - 1) & 0x0003FFFF);
 	mga_ydstlen(yy, fontheight(p));
 	WaitTillIdle();
-
-	CRITEND
 }
 	
 static void matrox_cfbX_putc(u_int32_t fgx, u_int32_t bgx, struct display* p, int c, int yy, int xx) {
@@ -1436,8 +1371,6 @@ static void matrox_cfbX_putc(u_int32_t fgx, u_int32_t bgx, struct display* p, in
 	
 	yy *= fontheight(p);
 	xx *= fontwidth(p);
-
-	CRITBEGIN
 
 #ifdef __BIG_ENDIAN
 	WaitTillIdle();
@@ -1504,7 +1437,6 @@ static void matrox_cfbX_putc(u_int32_t fgx, u_int32_t bgx, struct display* p, in
 #ifdef __BIG_ENDIAN
 	mga_outl(M_OPMODE, ACCESS_FBINFO(accel.m_opmode));
 #endif
-	CRITEND
 }
 
 #ifdef FBCON_HAS_CFB8
@@ -1560,8 +1492,6 @@ static void matrox_cfbX_fastputcs(u_int32_t fgx, u_int32_t bgx, struct display* 
 	xx *= fontwidth(p);
 	charcell = fontwidth(p) * fontheight(p);
 
-	CRITBEGIN
-
 	mga_fifo(3);
 	mga_outl(M_DWGCTL, M_DWG_BITBLT | M_DWG_SGNZERO | M_DWG_SHIFTZERO | M_DWG_BMONOWF | M_DWG_LINEAR | M_DWG_REPLACE);
 	mga_outl(M_FCOL, fgx);
@@ -1577,8 +1507,6 @@ static void matrox_cfbX_fastputcs(u_int32_t fgx, u_int32_t bgx, struct display* 
 		xx += fontwidth(p);
 	}
 	WaitTillIdle();
-
-	CRITEND
 }
 
 static void matrox_cfbX_putcs(u_int32_t fgx, u_int32_t bgx, struct display* p, const unsigned short* s, int count, int yy, int xx) {
@@ -1612,8 +1540,6 @@ static void matrox_cfbX_putcs(u_int32_t fgx, u_int32_t bgx, struct display* p, c
 		ar0 = fontwidth(p) - 1;
 		easy = 0;
 	}
-
-	CRITBEGIN
 
 #ifdef __BIG_ENDIAN
 	WaitTillIdle();
@@ -1676,7 +1602,6 @@ static void matrox_cfbX_putcs(u_int32_t fgx, u_int32_t bgx, struct display* p, c
 #ifdef __BIG_ENDIAN
 	mga_outl(M_OPMODE, ACCESS_FBINFO(accel.m_opmode));
 #endif
-	CRITEND
 }
 
 #ifdef FBCON_HAS_CFB8
@@ -1739,8 +1664,6 @@ static void matrox_cfb4_revc(struct display* p, int xx, int yy) {
 	xx |= (xx + fontwidth(p)) << 16;
 	xx >>= 1;
 
-	CRITBEGIN
-	
 	mga_fifo(5);
 	mga_outl(M_DWGCTL, ACCESS_FBINFO(accel.m_dwg_rect) | M_DWG_XOR);
 	mga_outl(M_FCOL, 0xFFFFFFFF);
@@ -1748,8 +1671,6 @@ static void matrox_cfb4_revc(struct display* p, int xx, int yy) {
 	mga_outl(M_YDST, yy * p->var.xres_virtual >> 6);
 	mga_outl(M_LEN | M_EXEC, fontheight(p));
 	WaitTillIdle();
-
-	CRITEND
 } 
 #endif
 
@@ -1762,16 +1683,12 @@ static void matrox_cfb8_revc(struct display* p, int xx, int yy) {
 	yy *= fontheight(p);
 	xx *= fontwidth(p);
 
-	CRITBEGIN
-	
 	mga_fifo(4);
 	mga_outl(M_DWGCTL, ACCESS_FBINFO(accel.m_dwg_rect) | M_DWG_XOR);
 	mga_outl(M_FCOL, 0x0F0F0F0F);
 	mga_outl(M_FXBNDRY, ((xx + fontwidth(p)) << 16) | xx);
 	mga_ydstlen(yy, fontheight(p));
 	WaitTillIdle();
-
-	CRITEND
 }
 #endif
 
@@ -1783,16 +1700,12 @@ static void matrox_cfbX_revc(struct display* p, int xx, int yy) {
 	yy *= fontheight(p);
 	xx *= fontwidth(p);
 
-	CRITBEGIN
-	
 	mga_fifo(4);
 	mga_outl(M_DWGCTL, ACCESS_FBINFO(accel.m_dwg_rect) | M_DWG_XOR);
 	mga_outl(M_FCOL, 0xFFFFFFFF);
 	mga_outl(M_FXBNDRY, ((xx + fontwidth(p)) << 16) | xx);
 	mga_ydstlen(yy, fontheight(p));
 	WaitTillIdle();
-
-	CRITEND
 }
 
 static void matrox_cfbX_clear_margins(struct vc_data* conp, struct display* p, int bottom_only) {
@@ -2034,8 +1947,6 @@ static void matroxfb_DAC1064_createcursor(WPMINFO struct display* p) {
 	cursorbase = ACCESS_FBINFO(video.vbase);
 	h = ACCESS_FBINFO(features.DAC1064.cursorimage);
 
-	CRITBEGIN
-
 #ifdef __BIG_ENDIAN
 	WaitTillIdle();
 	mga_outl(M_OPMODE, M_OPMODE_32BPP);
@@ -2066,8 +1977,6 @@ static void matroxfb_DAC1064_createcursor(WPMINFO struct display* p) {
 #ifdef __BIG_ENDIAN
 	mga_outl(M_OPMODE, ACCESS_FBINFO(accel.m_opmode));
 #endif
-
-	CRITEND
 }
 	
 static void matroxfb_DAC1064_cursor(struct display* p, int mode, int x, int y) {
@@ -2137,8 +2046,6 @@ static int matroxfb_fastfont_tryset(WPMINFO struct display* p) {
 	fsize = (p->userfont?FNTCHARCNT(p->fontdata):256) * fontheight(p);
 	if (((fsize * width + 31) / 32) * 4 > ACCESS_FBINFO(fastfont.size))
 		return 0;
-
-	CRITBEGIN
 
 	mga_outl(M_OPMODE, M_OPMODE_8BPP);
 	if (width <= 8) {
@@ -2231,8 +2138,6 @@ static int matroxfb_fastfont_tryset(WPMINFO struct display* p) {
 	}
 	mga_outl(M_OPMODE, ACCESS_FBINFO(accel.m_opmode));
 
-	CRITEND
-
 	return 1;
 }
 
@@ -2249,8 +2154,6 @@ static void matrox_text_bmove(struct display* p, int sy, int sx, int dy, int dx,
 	unsigned int dstoff;
 	unsigned int step;
 	MINFO_FROM_DISP(p);
-
-	CRITBEGIN
 
 	step = ACCESS_FBINFO(devflags.textstep);
 	srcoff = (sy * p->next_line) + (sx * step);
@@ -2279,7 +2182,6 @@ static void matrox_text_bmove(struct display* p, int sy, int sx, int dy, int dx,
 			height--;
 		}
 	}
-	CRITEND
 }
 
 static void matrox_text_clear(struct vc_data* conp, struct display* p, int sy, int sx,
@@ -2293,8 +2195,6 @@ static void matrox_text_clear(struct vc_data* conp, struct display* p, int sy, i
 	offs = sy * p->next_line + sx * step;
 	val = ntohs((attr_bgcol(p, conp->vc_video_erase_char) << 4) | attr_fgcol(p, conp->vc_video_erase_char) | (' ' << 8));
 
-	CRITBEGIN
-	
 	while (height > 0) {
 		int i;
 		for (i = width; i > 0; offs += step, i--)
@@ -2302,7 +2202,6 @@ static void matrox_text_clear(struct vc_data* conp, struct display* p, int sy, i
 		offs += p->next_line - width * step;
 		height--;
 	}
-	CRITEND
 }
 
 static void matrox_text_putc(struct vc_data* conp, struct display* p, int c, int yy, int xx) {
@@ -2316,11 +2215,7 @@ static void matrox_text_putc(struct vc_data* conp, struct display* p, int c, int
 	chr = attr_fgcol(p,c) | (attr_bgcol(p,c) << 4) | ((c & p->charmask) << 8);
 	if (chr & 0x10000) chr |= 0x08;
 
-	CRITBEGIN
-	
 	mga_writew(ACCESS_FBINFO(video.vbase), offs, ntohs(chr));
-
-	CRITEND
 }
 
 static void matrox_text_putcs(struct vc_data* conp, struct display* p, const unsigned short* s,
@@ -2334,16 +2229,12 @@ static void matrox_text_putcs(struct vc_data* conp, struct display* p, const uns
 	offs = yy * p->next_line + xx * step;
 	attr = attr_fgcol(p, scr_readw(s)) | (attr_bgcol(p, scr_readw(s)) << 4);
 
-	CRITBEGIN
-	
 	while (count-- > 0) {
 		unsigned int chr = ((scr_readw(s++)) & p->charmask) << 8;
 		if (chr & 0x10000) chr ^= 0x10008;
 		mga_writew(ACCESS_FBINFO(video.vbase), offs, ntohs(attr|chr));
 		offs += step;
 	}
-
-	CRITEND
 }
 
 static void matrox_text_revc(struct display* p, int xx, int yy) {
@@ -2354,11 +2245,7 @@ static void matrox_text_revc(struct display* p, int xx, int yy) {
 	step = ACCESS_FBINFO(devflags.textstep);
 	offs = yy * p->next_line + xx * step + 1;
 	
-	CRITBEGIN
-	
 	mga_writeb(ACCESS_FBINFO(video.vbase), offs, mga_readb(ACCESS_FBINFO(video.vbase), offs) ^ 0x77);
-
-	CRITEND
 }
 
 static int matrox_text_loadfont(WPMINFO struct display* p) {
@@ -2377,8 +2264,6 @@ static int matrox_text_loadfont(WPMINFO struct display* p) {
 	i = 2;
 	font = (u_int8_t*)p->fontdata;
 
-	CRITBEGIN
-
 	mga_setr(M_SEQ_INDEX, 0x02, 0x04);
 	while (fsize--) {
 		int l;
@@ -2392,8 +2277,6 @@ static int matrox_text_loadfont(WPMINFO struct display* p) {
 	}
 	mga_setr(M_SEQ_INDEX, 0x02, 0x03);
 
-	CRITEND
-
 	return 1;
 }
 
@@ -2404,12 +2287,8 @@ static void matrox_text_createcursor(WPMINFO struct display* p) {
 
 	matroxfb_createcursorshape(PMINFO p, 0);
 
-	CRITBEGIN
-	
 	mga_setr(M_CRTC_INDEX, 0x0A, ACCESS_FBINFO(cursor.u));
 	mga_setr(M_CRTC_INDEX, 0x0B, ACCESS_FBINFO(cursor.d) - 1);
-
-	CRITEND
 }
 
 static void matrox_text_cursor(struct display* p, int mode, int x, int y) {
@@ -2422,11 +2301,7 @@ static void matrox_text_cursor(struct display* p, int mode, int x, int y) {
 	if (mode == CM_ERASE) {
 		if (ACCESS_FBINFO(cursor.state) != CM_ERASE) {
 
-			CRITBEGIN
-			
 			mga_setr(M_CRTC_INDEX, 0x0A, 0x20);
-
-			CRITEND
 
 			ACCESS_FBINFO(cursor.state) = CM_ERASE;
 		}
@@ -2440,14 +2315,10 @@ static void matrox_text_cursor(struct display* p, int mode, int x, int y) {
 	ACCESS_FBINFO(cursor.y) = y;
 	pos = p->next_line / ACCESS_FBINFO(devflags.textstep) * y + x;
 
-	CRITBEGIN
-	
 	mga_setr(M_CRTC_INDEX, 0x0F, pos);
 	mga_setr(M_CRTC_INDEX, 0x0E, pos >> 8);
 
 	mga_setr(M_CRTC_INDEX, 0x0A, ACCESS_FBINFO(cursor.u));
-
-	CRITEND
 
 	ACCESS_FBINFO(cursor.state) = CM_DRAW;
 }
@@ -2717,8 +2588,6 @@ static void matrox_pan_var(WPMINFO struct fb_var_screeninfo *var) {
 	p3 = ACCESS_FBINFO(currenthw)->CRTCEXT[8] = pos >> 21;
 #endif	
 
-	CRITBEGIN
-
 	mga_setr(M_CRTC_INDEX, 0x0D, p0);
 	mga_setr(M_CRTC_INDEX, 0x0C, p1);
 #ifdef CONFIG_FB_MATROX_32MB
@@ -2726,8 +2595,6 @@ static void matrox_pan_var(WPMINFO struct fb_var_screeninfo *var) {
 		mga_setr(M_EXTVGA_INDEX, 0x08, p3);
 #endif
 	mga_setr(M_EXTVGA_INDEX, 0x00, p2);
-
-	CRITEND
 }
 
 	/*
@@ -3480,8 +3347,6 @@ static void DAC1064_restore_1(CPMINFO const struct matrox_hw_state* hw, const st
 	
 	DBG("DAC1064_restore_1")
 
-	CRITBEGIN
-	
 	outDAC1064(PMINFO DAC1064_XSYSPLLM, hw->DACclk[3]);
 	outDAC1064(PMINFO DAC1064_XSYSPLLN, hw->DACclk[4]);
 	outDAC1064(PMINFO DAC1064_XSYSPLLP, hw->DACclk[5]);
@@ -3491,8 +3356,6 @@ static void DAC1064_restore_1(CPMINFO const struct matrox_hw_state* hw, const st
 		for (i = 0; i < sizeof(MGA1064_DAC_regs); i++)
 			outDAC1064(PMINFO MGA1064_DAC_regs[i], hw->DACreg[i]);
 	}
-
-	CRITEND
 }
 
 static void DAC1064_restore_2(WPMINFO const struct matrox_hw_state* hw, const struct matrox_hw_state* oldhw, struct display* p) {
@@ -3501,17 +3364,13 @@ static void DAC1064_restore_2(WPMINFO const struct matrox_hw_state* hw, const st
 	
 	DBG("DAC1064_restore_2")
 
-	CRITBEGIN
-	
 	for (i = 0; i < 3; i++)
 		outDAC1064(PMINFO M1064_XPIXPLLCM + i, hw->DACclk[i]);
 	for (tmout = 500000; tmout; tmout--) {
 		if (inDAC1064(PMINFO M1064_XPIXPLLSTAT) & 0x40)
 			break;
 		udelay(10);
-	};
-
-	CRITEND
+	}
 
 	if (!tmout)
 		printk(KERN_ERR "matroxfb: Pixel PLL not locked after 5 secs\n");
@@ -4306,8 +4165,6 @@ static void vgaHWrestore(CPMINFO struct matrox_hw_state* hw, struct matrox_hw_st
 		dprintk("%02X:", hw->ATTR[i]);
 	dprintk("\n");
 
-	CRITBEGIN
-
 	mga_inb(M_ATTR_RESET);
 	mga_outb(M_ATTR_INDEX, 0);
 	mga_outb(M_MISC_REG, hw->MiscOutReg);
@@ -4329,8 +4186,6 @@ static void vgaHWrestore(CPMINFO struct matrox_hw_state* hw, struct matrox_hw_st
 		mga_outb(M_DAC_VAL, hw->DACpal[i]);
 	mga_inb(M_ATTR_RESET);
 	mga_outb(M_ATTR_INDEX, 0x20);
-
-	CRITEND
 }
 
 static int matrox_setcolreg(unsigned regno, unsigned red, unsigned green,
@@ -4434,13 +4289,9 @@ static void MGA1064_restore(WPMINFO struct matrox_hw_state* hw, struct matrox_hw
 
 	DBG("MGA1064_restore")
 
-	CRITBEGIN
-	
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
 	mga_outb(M_IEN, 0x00);
 	mga_outb(M_CACHEFLUSH, 0x00);
-
-	CRITEND
 
 	DAC1064_restore_1(PMINFO hw, oldhw);
 	vgaHWrestore(PMINFO hw, oldhw);
@@ -4456,10 +4307,7 @@ static void MGAG100_restore(WPMINFO struct matrox_hw_state* hw, struct matrox_hw
 
 	DBG("MGAG100_restore")
 
-	CRITBEGIN
-
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
-	CRITEND
 
 	DAC1064_restore_1(PMINFO hw, oldhw);
 	vgaHWrestore(PMINFO hw, oldhw);
@@ -4484,15 +4332,9 @@ static void Ti3026_restore(WPMINFO struct matrox_hw_state* hw, struct matrox_hw_
 		dprintk("%02X:", hw->CRTCEXT[i]);
 	dprintk("\n");
 
-	CRITBEGIN
-
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
 
-	CRITEND
-
 	vgaHWrestore(PMINFO hw, oldhw);
-
-	CRITBEGIN
 
 	for (i = 0; i < 6; i++)
 		mga_setr(M_EXTVGA_INDEX, i, hw->CRTCEXT[i]);
@@ -4511,13 +4353,11 @@ static void Ti3026_restore(WPMINFO struct matrox_hw_state* hw, struct matrox_hw_
 		oldhw->DACclk[2] = inTi3026(PMINFO TVP3026_XPIXPLLDATA);
 		oldhw->DACclk[5] = inTi3026(PMINFO TVP3026_XLOOPPLLDATA);
 	}
-	CRITEND
 	if (!oldhw || memcmp(hw->DACclk, oldhw->DACclk, 6)) {
 		/* agrhh... setting up PLL is very slow on Millenium... */
 		/* Mystique PLL is locked in few ms, but Millenium PLL lock takes about 0.15 s... */
 		/* Maybe even we should call schedule() ? */
 
-		CRITBEGIN
 		outTi3026(PMINFO TVP3026_XCLKCTRL, hw->DACreg[POS3026_XCLKCTRL]);
 		outTi3026(PMINFO TVP3026_XPLLADDR, 0x2A);
 		outTi3026(PMINFO TVP3026_XLOOPPLLDATA, 0);
@@ -4536,30 +4376,24 @@ static void Ti3026_restore(WPMINFO struct matrox_hw_state* hw, struct matrox_hw_
 				udelay(10);
 			}
 
-			CRITEND
-
 			if (!tmout)
 				printk(KERN_ERR "matroxfb: Pixel PLL not locked after 5 secs\n");
 			else
 				dprintk(KERN_INFO "PixelPLL: %d\n", 500000-tmout);
-			CRITBEGIN
 		}
 		outTi3026(PMINFO TVP3026_XMEMPLLCTRL, hw->DACreg[POS3026_XMEMPLLCTRL]);
 		outTi3026(PMINFO TVP3026_XPLLADDR, 0x00);
 		for (i = 3; i < 6; i++)
 			outTi3026(PMINFO TVP3026_XLOOPPLLDATA, hw->DACclk[i]);
-		CRITEND
 		if ((hw->MiscOutReg & 0x08) && ((hw->DACclk[5] & 0x80) == 0x80)) {
 			int tmout;
 
-			CRITBEGIN
 			outTi3026(PMINFO TVP3026_XPLLADDR, 0x3F);
 			for (tmout = 500000; tmout; --tmout) {
 				if (inTi3026(PMINFO TVP3026_XLOOPPLLDATA) & 0x40) 
 					break;
 				udelay(10);
 			}
-			CRITEND
 			if (!tmout)
 				printk(KERN_ERR "matroxfb: Loop PLL not locked after 5 secs\n");
 			else
@@ -4954,14 +4788,10 @@ static void matroxfb_blank(int blank, struct fb_info *info)
 		default: seq = 0x00; crtc = 0x00; break;
 	}
 
-	CRITBEGIN
-	
 	mga_outb(M_SEQ_INDEX, 1);
 	mga_outb(M_SEQ_DATA, (mga_inb(M_SEQ_DATA) & ~0x20) | seq);
 	mga_outb(M_EXTVGA_INDEX, 1);
 	mga_outb(M_EXTVGA_DATA, (mga_inb(M_EXTVGA_DATA) & ~0x30) | crtc);
-
-	CRITEND
 
 #undef minfo
 }

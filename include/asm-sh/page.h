@@ -76,6 +76,21 @@ extern int console_loglevel;
 #define PAGE_BUG(page) do { \
 	BUG(); \
 } while (0)
+
+/* Pure 2^n version of get_order */
+extern __inline__ int get_order(unsigned long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
+}
+
 #endif
 
 #endif /* __KERNEL__ */

@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.7 1999/09/15 08:16:03 calle Exp $
+# $Id: Makefile,v 1.8 2000/01/25 14:33:38 calle Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,6 +11,11 @@
 # parent makes..
 #
 # $Log: Makefile,v $
+# Revision 1.8  2000/01/25 14:33:38  calle
+# - Added Support AVM B1 PCI V4.0 (tested with prototype)
+#   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
+#   - support for revision register
+#
 # Revision 1.7  1999/09/15 08:16:03  calle
 # Implementation of 64Bit extention complete.
 #
@@ -99,7 +104,7 @@ ifeq ($(CONFIG_ISDN_DRV_AVMB1),y)
   ifdef CONFIG_ISDN_DRV_AVMB1_C4
   O_OBJS   += c4.o
   endif
-  OX_OBJS  += capiutil.o capidrv.o b1.o
+  OX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
 else
   ifeq ($(CONFIG_ISDN_DRV_AVMB1),m)
   O_TARGET += kernelcapi.o
@@ -123,7 +128,7 @@ else
   ifdef CONFIG_ISDN_DRV_AVMB1_C4
   M_OBJS   += c4.o
   endif
-  MX_OBJS  += capiutil.o capidrv.o b1.o
+  MX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
   endif
 endif
 

@@ -2,7 +2,7 @@
 
     Device driver for Databook TCIC-2 PCMCIA controller
 
-    tcic.c 1.108 1999/12/09 20:17:29
+    tcic.c 1.111 2000/02/15 04:13:12
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -60,7 +60,7 @@
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"tcic.c 1.108 1999/12/09 20:17:29 (David Hinds)";
+"tcic.c 1.111 2000/02/15 04:13:12 (David Hinds)";
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 #else
 #define DEBUG(n, args...)
@@ -243,11 +243,11 @@ static u_int __init try_irq(int irq)
     u_short cfg;
 
     irq_hits = 0;
-    if (request_irq(irq, irq_count, 0, "irq scan", NULL) != 0)
+    if (request_irq(irq, irq_count, 0, "irq scan", irq_count) != 0)
 	return -1;
     mdelay(10);
     if (irq_hits) {
-	free_irq(irq, NULL);
+	free_irq(irq, irq_count);
 	return -1;
     }
 
@@ -258,7 +258,7 @@ static u_int __init try_irq(int irq)
     tcic_setb(TCIC_ICSR, TCIC_ICSR_ERR | TCIC_ICSR_JAM);
 
     udelay(1000);
-    free_irq(irq, NULL);
+    free_irq(irq, irq_count);
 
     /* Turn off interrupts */
     tcic_setb(TCIC_IENA, TCIC_IENA_CFG_OFF);
@@ -299,9 +299,9 @@ static u_int __init irq_scan(u_int mask0)
 	/* Fallback: just find interrupts that aren't in use */
 	for (i = 0; i < 16; i++)
 	    if ((mask0 & (1 << i)) &&
-		(request_irq(i, irq_count, 0, "x", NULL) == 0)) {
+		(request_irq(i, irq_count, 0, "x", irq_count) == 0)) {
 		mask1 |= (1 << i);
-		free_irq(i, NULL);
+		free_irq(i, irq_count);
 	    }
 	printk("default");
     }
@@ -475,7 +475,8 @@ static int __init init_tcic(void)
 	u_int cs_mask = mask & ((cs_irq) ? (1<<cs_irq) : ~(1<<12));
 	for (i = 15; i > 0; i--)
 	    if ((cs_mask & (1 << i)) &&
-		(request_irq(i, tcic_interrupt, 0, "tcic", NULL) == 0))
+		(request_irq(i, tcic_interrupt, 0, "tcic",
+			     tcic_interrupt) == 0))
 		break;
 	cs_irq = i;
 	if (cs_irq == 0) poll_interval = HZ;
@@ -501,7 +502,7 @@ static int __init init_tcic(void)
 	printk(KERN_NOTICE "tcic: register_ss_entry() failed\n");
 	release_region(tcic_base, 16);
 	if (cs_irq != 0)
-	    free_irq(cs_irq, NULL);
+	    free_irq(cs_irq, tcic_interrupt);
 	return -ENODEV;
     }
 
@@ -519,7 +520,7 @@ static void __exit exit_tcic(void)
     cli();
     if (cs_irq != 0) {
 	tcic_aux_setw(TCIC_AUX_SYSCFG, TCIC_SYSCFG_AUTOBUSY|0x0a00);
-	free_irq(cs_irq, NULL);
+	free_irq(cs_irq, tcic_interrupt);
     }
     if (tcic_timer_pending)
 	del_timer(&poll_timer);

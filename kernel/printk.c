@@ -318,14 +318,14 @@ void console_print(const char *s)
 	unsigned long flags;
 	int len = strlen(s);
 
-	spin_lock_irqsave(&console_lock,flags);
+	spin_lock_irqsave(&console_lock, flags);
 	c = console_drivers;
 	while(c) {
 		if ((c->flags & CON_ENABLED) && c->write)
 			c->write(c, s, len);
 		c = c->next;
 	}
-	spin_unlock_irqrestore(&console_lock,flags);
+	spin_unlock_irqrestore(&console_lock, flags);
 }
 
 void unblank_console(void)
@@ -333,14 +333,14 @@ void unblank_console(void)
 	struct console *c;
 	unsigned long flags;
 	
-	spin_lock_irqsave(&console_lock,flags);
+	spin_lock_irqsave(&console_lock, flags);
 	c = console_drivers;
 	while(c) {
 		if ((c->flags & CON_ENABLED) && c->unblank)
 			c->unblank();
 		c = c->next;
 	}
-	spin_unlock_irqrestore(&console_lock,flags);
+	spin_unlock_irqrestore(&console_lock, flags);
 }
 
 /*
@@ -402,7 +402,7 @@ void register_console(struct console * console)
 	 *	Put this console in the list - keep the
 	 *	preferred driver at the head of the list.
 	 */
-	spin_lock_irqsave(&console_lock,flags);
+	spin_lock_irqsave(&console_lock, flags);
 	if ((console->flags & CON_CONSDEV) || console_drivers == NULL) {
 		console->next = console_drivers;
 		console_drivers = console;
@@ -445,7 +445,7 @@ void register_console(struct console * console)
 		j = 0;
 	}
 done:
-	spin_unlock_irqrestore(&console_lock,flags);
+	spin_unlock_irqrestore(&console_lock, flags);
 }
 
 
@@ -455,7 +455,7 @@ int unregister_console(struct console * console)
 	unsigned long flags;
 	int res = 1;
 
-	spin_lock_irqsave(&console_lock,flags);
+	spin_lock_irqsave(&console_lock, flags);
 	if (console_drivers == console) {
 		console_drivers=console->next;
 		res = 0;
@@ -471,7 +471,7 @@ int unregister_console(struct console * console)
 		}
 	}
 	
-	spin_unlock_irqrestore(&console_lock,flags);
+	spin_unlock_irqrestore(&console_lock, flags);
 	return res;
 }
 	

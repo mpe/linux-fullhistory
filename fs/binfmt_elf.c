@@ -269,14 +269,8 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
 	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
 	    vaddr = eppnt->p_vaddr;
-	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set) {
+	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
 	    	elf_type |= MAP_FIXED;
-#ifdef __sparc__
-	    } else {
-		load_addr = get_unmapped_area(0, eppnt->p_filesz +
-					ELF_PAGEOFFSET(vaddr));
-#endif
-	    }
 
 	    map_addr = do_mmap(file,
 			    load_addr + ELF_PAGESTART(vaddr),

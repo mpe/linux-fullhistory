@@ -65,6 +65,20 @@ extern void __bug(const char *file, int line, void *data);
 #define BUG()		__bug(__FILE__, __LINE__, NULL)
 #define PAGE_BUG(page)	__bug(__FILE__, __LINE__, page)
 
+/* Pure 2^n version of get_order */
+extern __inline__ int get_order(unsigned long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
+}
+
 #endif /* !__ASSEMBLY__ */
 
 #include <asm/arch/memory.h>

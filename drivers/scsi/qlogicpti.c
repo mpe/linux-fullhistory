@@ -1074,7 +1074,7 @@ static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 			}
 			sg_count -= n;
 		}
-	} else {
+	} else if (Cmnd->request_bufflen) {
 		Cmnd->SCp.ptr = (char *)(unsigned long)
 			sbus_map_single(qpti->sdev,
 					Cmnd->request_buffer,
@@ -1083,6 +1083,10 @@ static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 		cmd->dataseg[0].d_base = (u32) ((unsigned long)Cmnd->SCp.ptr);
 		cmd->dataseg[0].d_count = Cmnd->request_bufflen;
 		cmd->segment_cnt = 1;
+	} else {
+		cmd->dataseg[0].d_base = 0;
+		cmd->dataseg[0].d_count = 0;
+		cmd->segment_cnt = 1; /* Shouldn't this be 0? */
 	}
 
 	/* Committed, record Scsi_Cmd so we can find it later. */

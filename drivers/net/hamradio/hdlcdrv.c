@@ -381,11 +381,11 @@ void hdlcdrv_transmitter(struct net_device *dev, struct hdlcdrv_state *s)
 			if (pkt_len >= HDLCDRV_MAXFLEN || pkt_len < 2) {
 				s->hdlctx.tx_state = 0;
 				s->hdlctx.numflags = 1;
-				dev_kfree_skb(skb);
+				dev_kfree_skb_irq(skb);
 				break;
 			}
 			memcpy(s->hdlctx.buffer, skb->data+1, pkt_len);
-			dev_kfree_skb(skb);
+			dev_kfree_skb_irq(skb);
 			s->hdlctx.bp = s->hdlctx.buffer;
 			append_crc_ccitt(s->hdlctx.buffer, pkt_len);
 			s->hdlctx.len = pkt_len+2; /* the appended CRC */

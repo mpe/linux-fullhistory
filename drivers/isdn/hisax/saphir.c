@@ -1,4 +1,4 @@
-/* $Id: saphir.c,v 1.4 1999/09/04 06:20:06 keil Exp $
+/* $Id: saphir.c,v 1.5 1999/12/19 13:09:42 keil Exp $
 
  * saphir.c low level stuff for HST Saphir 1
  *
@@ -8,6 +8,10 @@
  *
  *
  * $Log: saphir.c,v $
+ * Revision 1.5  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.4  1999/09/04 06:20:06  keil
  * Changes from kernel set_current_state()
  *
@@ -29,7 +33,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-static char *saphir_rev = "$Revision: 1.4 $";
+static char *saphir_rev = "$Revision: 1.5 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -237,10 +241,10 @@ saphir_reset(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	byteout(cs->hw.saphir.cfg_reg + RESET_REG, 1);
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);	/* Timeout 30ms */
 	byteout(cs->hw.saphir.cfg_reg + RESET_REG, 0);
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);	/* Timeout 30ms */
 	restore_flags(flags);
 	byteout(cs->hw.saphir.cfg_reg + IRQ_REG, irq_val);

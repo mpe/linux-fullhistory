@@ -2611,7 +2611,7 @@ static struct initvol {
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
 
-static int es1371_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
+static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
 	struct es1371_state *s;
 	mm_segment_t fs;
@@ -2764,7 +2764,7 @@ static int es1371_probe(struct pci_dev *pcidev, const struct pci_device_id *pcii
 	return -1;
 }
 
-static void es1371_remove(struct pci_dev *dev)
+static void __devinit es1371_remove(struct pci_dev *dev)
 {
 	struct es1371_state *s = (struct es1371_state *)dev->driver_data;
 
@@ -2788,7 +2788,7 @@ static void es1371_remove(struct pci_dev *dev)
 	dev->driver_data = NULL;
 }
 
-static const struct pci_device_id id_table[] = {
+static const struct pci_device_id id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
 	{ PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_CT5880, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
 	{ PCI_VENDOR_ID_ECTIVA, PCI_DEVICE_ID_ECTIVA_EV1938, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },

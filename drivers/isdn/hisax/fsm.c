@@ -1,12 +1,15 @@
-/* $Id: fsm.c,v 1.10 1998/11/15 23:54:39 keil Exp $
+/* $Id: fsm.c,v 1.11 1999/12/23 15:09:32 keil Exp $
 
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
  * $Log: fsm.c,v $
+ * Revision 1.11  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 1.10  1998/11/15 23:54:39  keil
  * changes from 2.0
  *

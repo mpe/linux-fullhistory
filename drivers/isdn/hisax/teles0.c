@@ -1,15 +1,18 @@
-/* $Id: teles0.c,v 2.10 1999/11/14 23:37:03 keil Exp $
+/* $Id: teles0.c,v 2.11 1999/12/23 15:09:32 keil Exp $
 
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *              Beat Doebeli
  *
  * $Log: teles0.c,v $
+ * Revision 2.11  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 2.10  1999/11/14 23:37:03  keil
  * new ISA memory mapped IO
  *
@@ -61,7 +64,7 @@
 
 extern const char *CardType[];
 
-const char *teles0_revision = "$Revision: 2.10 $";
+const char *teles0_revision = "$Revision: 2.11 $";
 
 #define TELES_IOMEM_SIZE	0x400
 #define byteout(addr,val) outb(val,addr)

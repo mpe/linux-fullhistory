@@ -1,11 +1,14 @@
-/* $Id: isac.h,v 1.5 1998/05/25 12:58:03 keil Exp $
+/* $Id: isac.h,v 1.6 1999/12/23 15:09:32 keil Exp $
 
  * isac.h   ISAC specific defines
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: isac.h,v $
+ * Revision 1.6  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 1.5  1998/05/25 12:58:03  keil
  * HiSax golden code from certification, Don't use !!!
  * No leased lines, no X75, but many changes.

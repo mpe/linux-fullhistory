@@ -479,8 +479,8 @@ static inline void __add_to_page_cache(struct page * page,
 	struct page *alias;
 	unsigned long flags;
 
-	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_referenced));
-	page->flags = flags | (1 << PG_locked);
+	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error));
+	page->flags = flags | (1 << PG_locked) | (1 << PG_referenced);
 	get_page(page);
 	page->index = offset;
 	add_page_to_inode_queue(mapping, page);

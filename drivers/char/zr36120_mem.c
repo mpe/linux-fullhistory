@@ -35,17 +35,6 @@
 /* Memory management functions */
 /*******************************/
 
-inline int __get_order(unsigned long size)
-{
-        int order = 0;
-	size = (size+PAGE_SIZE-1)/PAGE_SIZE;
-	while (size) {
-		size /= 2;
-		order++;
-	}
-	return order;
-}
-			
 void* bmalloc(unsigned long size)
 {
 	void* mem;
@@ -56,7 +45,7 @@ void* bmalloc(unsigned long size)
 	 * The following function got a lot of memory at boottime,
 	 * so we know its always there...
 	 */
-	mem = (void*)__get_free_pages(GFP_USER|GFP_DMA,__get_order(size));
+	mem = (void*)__get_free_pages(GFP_USER|GFP_DMA,get_order(size));
 #endif
 	if (mem) {
 		unsigned long adr = (unsigned long)mem;
@@ -82,7 +71,7 @@ void bfree(void* mem, unsigned long size)
 #ifdef CONFIG_BIGPHYS_AREA
 		bigphysarea_free_pages(mem);
 #else
-		free_pages((unsigned long)mem,__get_order(size));
+		free_pages((unsigned long)mem,get_order(size));
 #endif
 	}
 }

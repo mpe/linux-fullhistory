@@ -129,6 +129,20 @@ BTFIXUPDEF_SETHI(sparc_unmapped_base)
 
 #define TASK_UNMAPPED_BASE	BTFIXUP_SETHI(sparc_unmapped_base)
 
+/* Pure 2^n version of get_order */
+extern __inline__ int get_order(unsigned long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
+}
+
 #else /* !(__ASSEMBLY__) */
 
 #define __pgprot(x)	(x)

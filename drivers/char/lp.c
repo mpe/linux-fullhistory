@@ -661,6 +661,8 @@ static struct file_operations lp_fops = {
  * non-zero to get the latter behaviour. */
 #define CONSOLE_LP_STRICT 1
 
+/* The console_lock must be held when we get here. */
+
 static void lp_console_write (struct console *co, const char *s,
 			      unsigned count)
 {

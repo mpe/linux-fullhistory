@@ -1,10 +1,13 @@
-/* $Id: isar.h,v 1.6 1999/10/14 20:25:29 keil Exp $
+/* $Id: isar.h,v 1.7 2000/01/20 19:47:45 keil Exp $
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
  * Author Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: isar.h,v $
+ * Revision 1.7  2000/01/20 19:47:45  keil
+ * Add Fax Class 1 support
+ *
  * Revision 1.6  1999/10/14 20:25:29  keil
  * add a statistic for error monitoring
  *
@@ -145,6 +148,28 @@
 #define PSEV_REM_REN	0xcd
 #define PSEV_GSTN_CLR	0xd4
 
+#define PSEV_RSP_READY	0xbc
+#define PSEV_LINE_TX_H	0xb3
+#define PSEV_LINE_TX_B	0xb2
+#define PSEV_LINE_RX_H	0xb1
+#define PSEV_LINE_RX_B	0xb0
+#define PSEV_RSP_CONN	0xb5
+#define PSEV_RSP_DISC	0xb7
+#define PSEV_RSP_FCERR	0xb9
+#define PSEV_RSP_SILDET	0xbe
+#define PSEV_RSP_SILOFF	0xab
+#define PSEV_FLAGS_DET	0xba
+
+#define PCTRL_CMD_FTH	0xa7
+#define PCTRL_CMD_FRH	0xa5
+#define PCTRL_CMD_FTM	0xa8
+#define PCTRL_CMD_FRM	0xa6
+#define PCTRL_CMD_SILON	0xac
+#define PCTRL_CMD_CONT	0xa2
+#define PCTRL_CMD_ESC	0xa4
+#define PCTRL_CMD_SILOFF 0xab
+#define PCTRL_CMD_HALT	0xa9
+
 #define PCTRL_LOC_RET	0xcf
 #define PCTRL_LOC_REN	0xce
 
@@ -192,6 +217,15 @@
 #define BSTAT_RDM3	0x8
 #define BSTEV_TBO	0x1f
 #define BSTEV_RBO	0x2f
+
+/* FAX State Machine */
+#define STFAX_NULL	0
+#define STFAX_READY	1
+#define STFAX_LINE	2
+#define STFAX_CONT	3
+#define STFAX_ACTIV	4
+#define STFAX_ESCAPE	5
+#define STFAX_SILDET	6
 
 extern int ISARVersion(struct IsdnCardState *cs, char *s);
 extern void isar_int_main(struct IsdnCardState *cs);

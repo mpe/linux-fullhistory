@@ -64,6 +64,7 @@ Scitel Quadro
 Gazel ISDN cards
 HFC-PCI based cards
 Winbond W6692 based cards
+HFC-S+, HFC-SP/PCMCIA cards
 
 Note: PCF, PCF-Pro: up to now, only the ISDN part is supported
       PCC-8: not tested yet
@@ -72,6 +73,7 @@ Note: PCF, PCF-Pro: up to now, only the ISDN part is supported
       Teles PCI is EXPERIMENTAL
       Teles S0Box is EXPERIMENTAL
       Eicon.Diehl Diva U interface not tested
+      HFC-S+, HFC-SP/PCMCIA are experimental
 
 If you know other passive cards with the Siemens chipset, please let me know.
 To use the PNP cards you need the isapnptools.
@@ -184,6 +186,7 @@ Card types:
    34	Gazel ISDN cards (PCI)   none
    35	HFC 2BDS0 PCI            none
    36	W6692 based PCI cards    none
+   37   HFC 2BDS0 S+, SP/PCMCIA  irq,io (pcmcia must be set with cardmgr)
 
 
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
@@ -288,6 +291,7 @@ type
    34	Gazel ISDN cards (PCI)  no parameter
    35	HFC 2BDS0 PCI           no parameter
    36	W6692 based PCI cards   none
+   37   HFC 2BDS0 S+,SP/PCMCIA  pa=irq, pb=io
 
 Running the driver
 ------------------

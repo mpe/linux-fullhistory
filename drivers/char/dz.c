@@ -1427,6 +1427,7 @@ static void dz_console_put_char (unsigned char ch)
  * dz_console_print ()
  *
  * dz_console_print is registered for printk.
+ * The console_lock must be held when we get here.
  * ------------------------------------------------------------------- 
  */
 static void dz_console_print (struct console *cons, 

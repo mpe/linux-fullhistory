@@ -200,13 +200,9 @@
 
  **************************************************************************/
 
-#if defined(PCMCIA)
-#define MODULE
-#endif
-
 #include <linux/module.h>
 
-#if defined(PCMCIA)
+#ifdef PCMCIA
 #undef MODULE
 #endif
 
@@ -877,9 +873,9 @@ static int tc1550_porttest(int io_port)
 
 static int checksetup(struct aha152x_setup *setup)
 {
-	int i;
 
 #if !defined(PCMCIA)
+	int i;
 	for (i = 0; i < PORT_COUNT && (setup->io_port != ports[i]); i++)
 		;
 

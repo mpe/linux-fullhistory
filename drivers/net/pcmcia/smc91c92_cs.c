@@ -1113,6 +1113,7 @@ static int smc91c92_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_stop_queue (dev);
+	    clear_bit(LINK_STATE_START, &dev->state);
 	    link->release.expires = jiffies + HZ/20;
 	    link->state |= DEV_RELEASE_PENDING;
 	    add_timer(&link->release);
@@ -1129,6 +1130,7 @@ static int smc91c92_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
 		netif_stop_queue (dev);
+		clear_bit(LINK_STATE_START, &dev->state);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -1152,6 +1154,7 @@ static int smc91c92_event(event_t event, int priority,
 	    }
 	    if (link->open) {
 		smc_reset(dev);
+		set_bit(LINK_STATE_START, &dev->state);
 		netif_start_queue (dev);
 	    }
 	}
@@ -1503,16 +1506,14 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     u_short saved_bank, saved_pointer, mask, status;
     char bogus_cnt = INTR_WORK;		/* Work we are willing to do. */
 
-    if (smc == NULL)
+    if ((smc == NULL) || !test_bit(LINK_STATE_START, &dev->state))
 	return;
     ioaddr = dev->base_addr;
     
     spin_lock (&smc->lock);
 
-#ifdef PCMCIA_DEBUG
     DEBUG(3, "%s: SMC91c92 interrupt %d at %#x.\n", dev->name,
 	  irq, ioaddr);
-#endif
     
     smc->watchdog = 0;
     saved_bank = inw(ioaddr + BANK_SELECT);
@@ -1523,7 +1524,6 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (dev->start)
 	    DEBUG(1, "%s: SMC91c92 interrupt %d for non-existent"
 		  "/ejected device.\n", dev->name, irq);
-	dev->interrupt = 0;
 #endif
 	goto irq_done;
     }
@@ -1588,9 +1588,7 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
     spin_unlock (&smc->lock);
 
-#ifdef PCMCIA_DEBUG
     DEBUG(3, "%s: Exiting interrupt IRQ%d.\n", dev->name, irq);
-#endif
 
 irq_done:
     
@@ -1912,9 +1910,8 @@ static void media_check(u_long arg)
     ioaddr_t ioaddr = dev->base_addr;
     u_short i, media, saved_bank;
 
-#if 0
-    if (dev->start == 0) goto reschedule;
-#endif
+    if (!test_bit(LINK_STATE_START, &dev->state))
+	goto reschedule;
 
     saved_bank = inw(ioaddr + BANK_SELECT);
     SMC_SELECT_BANK(2);

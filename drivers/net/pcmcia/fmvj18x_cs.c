@@ -594,6 +594,7 @@ static int fmvj18x_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_stop_queue (dev);
+	    clear_bit(LINK_STATE_START, &dev->state);
 	    link->release.expires = jiffies + HZ/20;
 	    add_timer(&link->release);
 	}
@@ -609,6 +610,7 @@ static int fmvj18x_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
 	    	netif_stop_queue (dev);
+		clear_bit(LINK_STATE_START, &dev->state);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -621,6 +623,7 @@ static int fmvj18x_event(event_t event, int priority,
 	    CardServices(RequestConfiguration, link->handle, &link->conf);
 	    if (link->open) {
 		fjn_reset(dev);
+		set_bit(LINK_STATE_START, &dev->state);
 		netif_start_queue (dev);
 	    }
 	}

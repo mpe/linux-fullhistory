@@ -32,6 +32,8 @@
 #include <linux/vt_kern.h>
 #include <linux/console_struct.h>
 #include <linux/selection.h>
+#include <linux/kbd_kern.h>
+#include <linux/console.h>
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 
@@ -80,7 +82,14 @@ static loff_t vcs_lseek(struct file *file, loff_t offset, int orig)
 	return file->f_pos;
 }
 
-#define RETURN(x) { enable_bh(CONSOLE_BH); return x; }
+/* We share this temporary buffer with the console write code
+ * so that we can easily avoid touching user space while holding the
+ * console spinlock.
+ */
+extern char con_buf[PAGE_SIZE];
+#define CON_BUF_SIZE	PAGE_SIZE
+extern struct semaphore con_buf_sem;
+
 static ssize_t
 vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
@@ -88,13 +97,20 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	unsigned int currcons = MINOR(inode->i_rdev);
 	long p = *ppos;
 	long viewed, attr, size, read;
-	char *buf0;
+	char *con_buf0;
 	int col, maxcol;
 	unsigned short *org = NULL;
+	ssize_t ret, orig_count;
+
+	down(&con_buf_sem);
+
+	/* Select the proper current console and verify
+	 * sanity of the situation under the console lock.
+	 */
+	spin_lock_irq(&console_lock);
 
 	attr = (currcons & 128);
 	currcons = (currcons & 127);
-	disable_bh(CONSOLE_BH);
 	if (currcons == 0) {
 		currcons = fg_console;
 		viewed = 1;
@@ -102,23 +118,33 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		currcons--;
 		viewed = 0;
 	}
+	ret = -ENXIO;
 	if (!vc_cons_allocated(currcons))
-		RETURN( -ENXIO );
+		goto unlock_out;
 
 	size = vcs_size(inode);
+	ret = -EINVAL;
 	if (p < 0 || p > size)
-		RETURN( -EINVAL );
+		goto unlock_out;
 	if (count > size - p)
 		count = size - p;
+	if (count > CON_BUF_SIZE)
+		count = CON_BUF_SIZE;
 
-	buf0 = buf;
+	/* Perform the whole read into the local con_buf.
+	 * Then we can drop the console spinlock and safely
+	 * attempt to move it to userspace.
+	 */
+
+	con_buf0 = con_buf;
+	orig_count = count;
 	maxcol = video_num_columns;
 	if (!attr) {
 		org = screen_pos(currcons, p, viewed);
 		col = p % maxcol;
 		p += maxcol - col;
 		while (count-- > 0) {
-			put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++);
+			*con_buf0++ = (vcs_scr_readw(currcons, org++) & 0xff);
 			if (++col == maxcol) {
 				org = screen_pos(currcons, p, viewed);
 				col = 0;
@@ -127,24 +153,38 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		}
 	} else {
 		if (p < HEADER_SIZE) {
-			char header[HEADER_SIZE];
-			header[0] = (char) video_num_lines;
-			header[1] = (char) video_num_columns;
-			getconsxy(currcons, header+2);
-			while (p < HEADER_SIZE && count > 0)
-			    { count--; put_user(header[p++], buf++); }
+			size_t tmp_count;
+
+			con_buf0[0] = (char) video_num_lines;
+			con_buf0[1] = (char) video_num_columns;
+			getconsxy(currcons, con_buf0 + 2);
+
+			tmp_count = HEADER_SIZE - p;
+			if (tmp_count > count)
+				tmp_count = count;
+
+			/* Advance state pointers and move on. */
+			count -= tmp_count;
+			buf += tmp_count;
+			p += tmp_count;
+			con_buf0 += tmp_count;
 		}
 		p -= HEADER_SIZE;
 		col = (p/2) % maxcol;
 		if (count > 0) {
+			char tmp_byte;
+
 			org = screen_pos(currcons, p/2, viewed);
 			if ((p & 1) && count > 0) {
-				count--;   
 #ifdef __BIG_ENDIAN
-				put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++);
+				tmp_byte = vcs_scr_readw(currcons, org++) & 0xff;
 #else
-				put_user(vcs_scr_readw(currcons, org++) >> 8, buf++);
+				tmp_byte = vcs_scr_readw(currcons, org++) >> 8;
 #endif
+
+				*con_buf0++ = tmp_byte;
+
+				count--;   
 				p++;
 				if (++col == maxcol) {
 					org = screen_pos(currcons, p/2, viewed);
@@ -154,26 +194,59 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			p /= 2;
 			p += maxcol - col;
 		}
-		while (count > 1) {
-			put_user(vcs_scr_readw(currcons, org++), (unsigned short *) buf);
-			buf += 2;
-			count -= 2;
-			if (++col == maxcol) {
-				org = screen_pos(currcons, p, viewed);
-				col = 0;
-				p += maxcol;
+
+		if (count > 1) {
+			size_t tmp_count = count;
+			unsigned short *tmp_buf = (unsigned short *)con_buf0;
+
+			while (tmp_count > 1) {
+				*tmp_buf++ = vcs_scr_readw(currcons, org++);
+				tmp_count -= 2;
+				if (++col == maxcol) {
+					org = screen_pos(currcons, p, viewed);
+					col = 0;
+					p += maxcol;
+				}
 			}
+
+			/* Advance pointers, and move on. */
+			count -= (char *)tmp_buf - con_buf0;
+			con_buf0 += (char *)tmp_buf - con_buf0;
 		}
-		if (count > 0)
+		if (count > 0) {
+			char tmp_byte;
+
 #ifdef __BIG_ENDIAN
-			put_user(vcs_scr_readw(currcons, org) >> 8, buf++);
+			tmp_byte = vcs_scr_readw(currcons, org) >> 8;
 #else
-			put_user(vcs_scr_readw(currcons, org) & 0xff, buf++);
+			tmp_byte = vcs_scr_readw(currcons, org) & 0xff;
 #endif
+
+			*con_buf0++ = tmp_byte;
+		}
 	}
-	read = buf - buf0;
-	*ppos += read;
-	RETURN( read );
+
+	/* Finally, temporarily drop the console lock and push
+	 * all the data to userspace from our temporary buffer.
+	 */
+
+	spin_unlock_irq(&console_lock);
+	ret = copy_to_user(buf, con_buf0, orig_count);
+	spin_lock_irq(&console_lock);
+
+	if (ret) {
+		ret = -EFAULT;
+	} else {
+		read = orig_count;
+		*ppos += read;
+		ret = read;
+	}
+
+unlock_out:
+	spin_unlock_irq(&console_lock);
+
+	up(&con_buf_sem);
+	return ret;
 }
 
 static ssize_t
@@ -183,13 +256,21 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	unsigned int currcons = MINOR(inode->i_rdev);
 	long p = *ppos;
 	long viewed, attr, size, written;
-	const char *buf0;
+	char *con_buf0;
 	int col, maxcol;
 	u16 *org0 = NULL, *org = NULL;
+	size_t ret, orig_count;
+
+	down(&con_buf_sem);
+
+	/* Select the proper current console and verify
+	 * sanity of the situation under the console lock.
+	 */
+	spin_lock_irq(&console_lock);
 
 	attr = (currcons & 128);
 	currcons = (currcons & 127);
-	disable_bh(CONSOLE_BH);
+
 	if (currcons == 0) {
 		currcons = fg_console;
 		viewed = 1;
@@ -197,26 +278,59 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		currcons--;
 		viewed = 0;
 	}
+	ret = -ENXIO;
 	if (!vc_cons_allocated(currcons))
-		RETURN( -ENXIO );
+		goto unlock_out;
 
 	size = vcs_size(inode);
+	ret = -EINVAL;
 	if (p < 0 || p > size)
-		RETURN( -EINVAL );
+		goto unlock_out;
+	if (count > size - p)
+		count = size - p;
+	if (count > CON_BUF_SIZE)
+		count = CON_BUF_SIZE;
+
+	/* Temporarily drop the console lock so that we can read
+	 * in the write data from userspace safely.
+	 */
+	spin_unlock_irq(&console_lock);
+	ret = copy_from_user(con_buf, buf, count);
+	spin_lock_irq(&console_lock);
+
+	if (ret) {
+		ret = -EFAULT;
+		goto unlock_out;
+	}
+
+	/* The vcs_size might have changed while we slept to grab
+	 * the user buffer, so recheck.
+	 */
+	size = vcs_size(inode);
+	ret = -EINVAL;
+	if (p > size)
+		goto unlock_out;
 	if (count > size - p)
 		count = size - p;
 
-	buf0 = buf;
+	/* OK, now actually push the write to the console
+	 * under the lock using the local kernel buffer.
+	 */
+
+	con_buf0 = con_buf;
+	orig_count = count;
 	maxcol = video_num_columns;
 	if (!attr) {
 		org0 = org = screen_pos(currcons, p, viewed);
 		col = p % maxcol;
 		p += maxcol - col;
+
 		while (count > 0) {
-			unsigned char c;
+			unsigned char c = *con_buf0++;
+
 			count--;
-			get_user(c, (const unsigned char*)buf++);
-			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
+			vcs_scr_writew(currcons,
+				       (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
 			org++;
 			if (++col == maxcol) {
 				org = screen_pos(currcons, p, viewed);
@@ -227,20 +341,24 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	} else {
 		if (p < HEADER_SIZE) {
 			char header[HEADER_SIZE];
-			getconsxy(currcons, header+2);
-			while (p < HEADER_SIZE && count > 0)
-				{ count--; get_user(header[p++], buf++); }
+
+			getconsxy(currcons, header + 2);
+			while (p < HEADER_SIZE && count > 0) {
+				count--;
+				header[p++] = *con_buf0++;
+			}
 			if (!viewed)
-				putconsxy(currcons, header+2);
+				putconsxy(currcons, header + 2);
 		}
 		p -= HEADER_SIZE;
 		col = (p/2) % maxcol;
 		if (count > 0) {
 			org0 = org = screen_pos(currcons, p/2, viewed);
 			if ((p & 1) && count > 0) {
-			    char c;
+				char c;
+
 				count--;
-				get_user(c,buf++);
+				c = *con_buf0++;
 #ifdef __BIG_ENDIAN
 				vcs_scr_writew(currcons, c |
 				     (vcs_scr_readw(currcons, org) & 0xff00), org);
@@ -260,9 +378,10 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		}
 		while (count > 1) {
 			unsigned short w;
-			get_user(w, (const unsigned short *) buf);
+
+			w = *((const unsigned short *)con_buf0);
 			vcs_scr_writew(currcons, w, org++);
-			buf += 2;
+			con_buf0 += 2;
 			count -= 2;
 			if (++col == maxcol) {
 				org = screen_pos(currcons, p, viewed);
@@ -272,7 +391,8 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		}
 		if (count > 0) {
 			unsigned char c;
-			get_user(c, (const unsigned char*)buf++);
+
+			c = *con_buf0++;
 #ifdef __BIG_ENDIAN
 			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff) | (c << 8), org);
 #else
@@ -282,9 +402,16 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	}
 	if (org0)
 		update_region(currcons, (unsigned long)(org0), org-org0);
-	written = buf - buf0;
+	written = orig_count;
 	*ppos += written;
-	RETURN( written );
+	ret = written;
+
+unlock_out:
+	spin_unlock_irq(&console_lock);
+
+	up(&con_buf_sem);
+
+	return ret;
 }
 
 static int

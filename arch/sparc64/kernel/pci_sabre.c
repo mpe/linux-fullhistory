@@ -1133,10 +1133,7 @@ static void __init sabre_iommu_init(struct pci_controller_info *p,
 	control &= ~(SABRE_IOMMUCTRL_DENAB);
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
 
-	for(order = 0;; order++)
-		if((PAGE_SIZE << order) >= ((tsbsize * 1024) * 8))
-			break;
-	tsbbase = __get_free_pages(GFP_KERNEL, order);
+	tsbbase = __get_free_pages(GFP_KERNEL, order = get_order(tsbsize * 1024 * 8));
 	if (!tsbbase) {
 		prom_printf("SABRE_IOMMU: Error, gfp(tsb) failed.\n");
 		prom_halt();

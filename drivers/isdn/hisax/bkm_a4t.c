@@ -1,4 +1,4 @@
-/* $Id: bkm_a4t.c,v 1.8 1999/09/04 06:20:05 keil Exp $
+/* $Id: bkm_a4t.c,v 1.9 1999/12/19 13:09:41 keil Exp $
  * bkm_a4t.c    low level stuff for T-Berkom A4T
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,10 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a4t.c,v $
+ * Revision 1.9  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.8  1999/09/04 06:20:05  keil
  * Changes from kernel set_current_state()
  *
@@ -48,7 +52,7 @@
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.8 $";
+const char *bkm_a4t_revision = "$Revision: 1.9 $";
 
 
 static inline u_char
@@ -231,11 +235,11 @@ reset_bkm(struct IsdnCardState *cs)
 		sti();
 		/* Issue the I20 soft reset     */
 		pI20_Regs->i20SysControl = 0xFF;	/* all in */
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 		/* Remove the soft reset */
 		pI20_Regs->i20SysControl = sysRESET | 0xFF;
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 		/* Set our configuration */
 		pI20_Regs->i20SysControl = sysRESET | sysCFG;
@@ -246,14 +250,14 @@ reset_bkm(struct IsdnCardState *cs)
 		    g_A4T_ISAC_RES |
 		    g_A4T_JADE_BOOTR |
 		    g_A4T_ISAR_BOOTR;
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 
 		/* Remove RESET state from ISDN */
 		pI20_Regs->i20GuestControl &= ~(g_A4T_ISAC_RES |
 						g_A4T_JADE_RES |
 						g_A4T_ISAR_RES);
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 		restore_flags(flags);
 	}

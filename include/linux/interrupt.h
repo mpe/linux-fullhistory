@@ -23,7 +23,6 @@ struct irqaction {
    
 enum {
 	TIMER_BH = 0,
-	CONSOLE_BH,
 	TQUEUE_BH,
 	DIGI_BH,
 	SERIAL_BH,
@@ -47,8 +46,8 @@ enum {
 
 /* PLEASE, avoid to allocate new softirqs, if you need not _really_ high
    frequency threaded job scheduling. For almost all the purposes
-   tasklets are more than enough. F.e. KEYBOARD_BH, CONSOLE_BH, all serial
-   device BHs et al. are converted to tasklets, not to softirqs.
+   tasklets are more than enough. F.e. all serial device BHs et
+   al. should be converted to tasklets, not to softirqs.
  */
 
 enum
@@ -242,24 +241,6 @@ extern __inline__ void mark_bh(int nr)
 {
 	tasklet_hi_schedule(bh_task_vec+nr);
 }
-
-extern __inline__ void disable_bh_nosync(int nr)
-{
-	tasklet_disable_nosync(bh_task_vec+nr);
-}
-
-extern __inline__ void disable_bh(int nr)
-{
-	tasklet_disable_nosync(bh_task_vec+nr);
-	if (!in_interrupt())
-		tasklet_unlock_wait(bh_task_vec+nr);
-}
-
-extern __inline__ void enable_bh(int nr)
-{
-	tasklet_enable(bh_task_vec+nr);
-}
-
 
 extern void init_bh(int nr, void (*routine)(void));
 extern void remove_bh(int nr);

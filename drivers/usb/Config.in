@@ -9,6 +9,9 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
+   if [ "$CONFIG_USB_UHCI" != "n" ]; then
+      bool '    USB-UHCI High Bandwidth (EXPERIMENTAL)' CONFIG_USB_UHCI_HIGH_BANDWIDTH
+   fi
    dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
    if [ "$CONFIG_USB_UHCI_ALT" != "n" ]; then
       bool '    UHCI unlink optimizations (EXPERIMENTAL)' CONFIG_USB_UHCI_ALT_UNLINK_OPTIMIZE
@@ -28,10 +31,8 @@ comment 'USB Devices'
       bool '    USB Generic Serial Driver' CONFIG_USB_SERIAL_GENERIC
       bool '    USB Handspring Visor Driver' CONFIG_USB_SERIAL_VISOR
       bool '    USB ConnectTech WhiteHEAT Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_WHITEHEAT
-      bool '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI
+      bool '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI_SIO
       bool '    USB Keyspan PDA Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_KEYSPAN_PDA
-      bool '    USB Belkin Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_BELKIN
-      bool '    USB Peracom Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_PERACOM
    fi
    dep_tristate '  USB CPiA Camera support' CONFIG_USB_CPIA $CONFIG_USB
    dep_tristate '  USB IBM (Xirlink) C-it Camera support' CONFIG_USB_IBMCAM $CONFIG_USB
@@ -43,7 +44,8 @@ comment 'USB Devices'
    fi
    dep_tristate '  USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
    dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB 
-
+   dep_tristate '  PLUSB Prolific USB-Network driver' CONFIG_USB_PLUSB $CONFIG_USB 
+   
 comment 'USB HID'
    dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB
    if [ "$CONFIG_USB_HID" != "y" ]; then

@@ -11,6 +11,7 @@
 #include <linux/spinlock.h>
 #include <linux/console.h>
 #include <linux/irq.h>
+#include <linux/pci.h>
 
 #include <asm/page.h>
 #include <asm/semaphore.h>
@@ -170,6 +171,11 @@ EXPORT_SYMBOL(chrp_ide_ports_known);
 EXPORT_SYMBOL(chrp_ide_regbase);
 EXPORT_SYMBOL(chrp_ide_probe);
 #endif
+
+#ifdef CONFIG_PCI
+EXPORT_SYMBOL(pci_alloc_consistent);
+EXPORT_SYMBOL(pci_free_consistent);
+#endif /* CONFIG_PCI */
 
 EXPORT_SYMBOL(start_thread);
 EXPORT_SYMBOL(kernel_thread);

@@ -30,7 +30,7 @@ some validation checks that are made during the make process. The HiSax main
 files are protected by md5 checksums and the md5sum file is pgp signed by
 myself:
 
-KeyID 1024/FF992F6D 1997/01/16 Karsten Keil <keil@temic-ech.spacenet.de>
+KeyID 1024/FF992F6D 1997/01/16 Karsten Keil <kkeil@suse.de>
 Key fingerprint = 92 6B F7 58 EE 86 28 C8  C4 1A E6 DC 39 89 F2 AA
 
 Only if the checksums are OK, and the signature of the file
@@ -70,9 +70,9 @@ keil@isdn4linux.de
 Version: 2.6.3i
 Charset: noconv
 
-iQCVAwUBN6xoKTpxHvX/mS9tAQF4DAP/efRWym6jvNOND1O9eaEFdP5fd2xKB3XD
-Ifh6Iv0DvARcIuxXtEjT+z3FjjQk35eo/wX4C4tpRhYQYdgCxl+iv+5DzhVDpB95
-3QS9E5m0E1eIK3t8XiQTRgb+1JPCMYUThCrakYsX25o3ndGKyDipsCTfkyR38XwC
-bUyTfcOYKAk=
-=VKyL
+iQCVAwUBOFAwqTpxHvX/mS9tAQFI2QP9GLDK2iy/KBhwReE3F7LeO+tVhffTVZ3a
+20q5/z/WcIg/pnH0uTkl2UgDXBFXYl45zJyDGNpAposIFmT+Edd14o7Vj1w/BBdn
+Y+5rBmJf+gyBu61da5d6bv0lpymwRa/um+ri+ilYnZ/XPfg5JKhdjGSBCJuJAElM
+d2jFbTrsMYw=
+=LNf9
 -----END PGP SIGNATURE-----

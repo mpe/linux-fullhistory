@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.23 1999/11/07 17:01:55 keil Exp $
+/* $Id: hfc_pci.c,v 1.26 2000/02/09 20:22:55 werner Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -23,6 +23,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_pci.c,v $
+ * Revision 1.26  2000/02/09 20:22:55  werner
+ *
+ * Updated PCI-ID table
+ *
+ * Revision 1.25  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
+ * Revision 1.24  1999/11/17 23:59:55  werner
+ *
+ * removed unneeded data
+ *
  * Revision 1.23  1999/11/07 17:01:55  keil
  * fix for 2.3 pci structs
  *
@@ -114,7 +126,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.23 $";
+static const char *hfcpci_revision = "$Revision: 1.26 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -143,26 +155,12 @@ static const PCI_ENTRY id_list[] =
 	{0x1051, 0x0100, "Motorola MC145575", "MC145575"},
 	{0x1397, 0xB100, "Seyeon", "B100"},
 	{0x15B0, 0x2BD0, "Zoltrix", "2BD0"},
+	{0x114f, 0x71,   "Digi intl.","Digicom"}, 
 	{0, 0, NULL, NULL},
 };
 
 
 #if CONFIG_PCI
-/*****************************/
-/* release D- and B-channels */
-/*****************************/
-void
-releasehfcpci(struct IsdnCardState *cs)
-{
-	if (cs->bcs[0].hw.hfc.send) {
-		kfree(cs->bcs[0].hw.hfc.send);
-		cs->bcs[0].hw.hfc.send = NULL;
-	}
-	if (cs->bcs[1].hw.hfc.send) {
-		kfree(cs->bcs[1].hw.hfc.send);
-		cs->bcs[1].hw.hfc.send = NULL;
-	}
-}
 
 /******************************************/
 /* free hardware resources used by driver */
@@ -179,13 +177,12 @@ release_io_hfcpci(struct IsdnCardState *cs)
 	restore_flags(flags);
 	Write_hfc(cs, HFCPCI_CIRM, HFCPCI_RESET);	/* Reset On */
 	sti();
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
 	Write_hfc(cs, HFCPCI_CIRM, 0);	/* Reset Off */
 #if CONFIG_PCI
 	pcibios_write_config_word(cs->hw.hfcpci.pci_bus, cs->hw.hfcpci.pci_device_fn, PCI_COMMAND, 0);	/* disable memory mapped ports + busmaster */
 #endif				/* CONFIG_PCI */
-	releasehfcpci(cs);
 	del_timer(&cs->hw.hfcpci.timer);
 	kfree(cs->hw.hfcpci.share_start);
 	cs->hw.hfcpci.share_start = NULL;
@@ -211,10 +208,10 @@ reset_hfcpci(struct IsdnCardState *cs)
 	pcibios_write_config_word(cs->hw.hfcpci.pci_bus, cs->hw.hfcpci.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
 	Write_hfc(cs, HFCPCI_CIRM, HFCPCI_RESET);	/* Reset On */
 	sti();
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
 	Write_hfc(cs, HFCPCI_CIRM, 0);	/* Reset Off */
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((20 * HZ) / 1000);	/* Timeout 20ms */
 	if (Read_hfc(cs, HFCPCI_STATUS) & 2)
 		printk(KERN_WARNING "HFC-PCI init bit busy\n");
@@ -1647,24 +1644,6 @@ hfcpci_bh(struct IsdnCardState *cs)
 }
 
 
-/*************************************/
-/* Alloc memory send data for queues */
-/*************************************/
-__initfunc(unsigned int
-	   *init_send_hfcpci(int cnt))
-{
-	int i, *send;
-
-	if (!(send = kmalloc(cnt * sizeof(unsigned int), GFP_ATOMIC))) {
-		printk(KERN_WARNING
-		       "HiSax: No memory for hfcpci.send\n");
-		return (NULL);
-	}
-	for (i = 0; i < cnt; i++)
-		send[i] = 0x1fff;
-	return (send);
-}
-
 /********************************/
 /* called for card init message */
 /********************************/
@@ -1676,10 +1655,6 @@ __initfunc(void
 	cs->dbusytimer.data = (long) cs;
 	init_timer(&cs->dbusytimer);
 	cs->tqueue.routine = (void *) (void *) hfcpci_bh;
-	if (!cs->bcs[0].hw.hfc.send)
-		cs->bcs[0].hw.hfc.send = init_send_hfcpci(32);
-	if (!cs->bcs[1].hw.hfc.send)
-		cs->bcs[1].hw.hfc.send = init_send_hfcpci(32);
 	cs->BC_Send_Data = &hfcpci_send_data;
 	cs->bcs[0].BC_SetStack = setstack_2b;
 	cs->bcs[1].BC_SetStack = setstack_2b;
@@ -1712,7 +1687,7 @@ hfcpci_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			inithfcpci(cs);
 			save_flags(flags);
 			sti();
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((80 * HZ) / 1000);	/* Timeout 80ms */
 			/* now switch timer interrupt off */
 			cs->hw.hfcpci.int_m1 &= ~HFCPCI_INTS_TIMER;
@@ -1746,8 +1721,6 @@ __initfunc(int
 	printk(KERN_INFO "HiSax: HFC-PCI driver Rev. %s\n", HiSax_getrev(tmp));
 #if CONFIG_PCI
 	cs->hw.hfcpci.int_s1 = 0;
-	cs->bcs[0].hw.hfc.send = NULL;
-	cs->bcs[1].hw.hfc.send = NULL;
 	cs->dc.hfcpci.ph_state = 0;
 	cs->hw.hfcpci.fifo = 255;
 	if (cs->typ == ISDN_CTYPE_HFC_PCI) {

@@ -253,6 +253,7 @@ static short *beep_buf;
 static volatile struct dbdma_cmd *beep_dbdma_cmd;
 static void (*orig_mksound)(unsigned int, unsigned int);
 static int is_pbook_3400;
+static unsigned char *latch_base;
 static int is_pbook_G3;
 static unsigned char *macio_base;
 
@@ -3695,7 +3696,7 @@ static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		} else if (is_pbook_3400) {
 			feature_set(awacs_node, FEATURE_IOBUS_enable);
 			udelay(10);
-			in_8((unsigned char *)0xf301a190);
+			in_8(latch_base + 0x190);
 		}
  		/* Resume pending sounds. */
  		PMacPlay();
@@ -5698,7 +5699,9 @@ void __init dmasound_init(void)
 			 * sound input.  The 0x100 enables the SCSI bus
 			 * terminator power.
 			 */
-			in_8((unsigned char *)0xf301a190);
+			latch_base = (unsigned char *) ioremap
+				(0xf301a000, 0x1000);
+			in_8(latch_base + 0x190);
 		} else if (machine_is_compatible("PowerBook1,1")
 			   || machine_is_compatible("AAPL,PowerBook1998")) {
 			struct device_node* mio;

@@ -109,6 +109,20 @@ typedef unsigned long pgprot_t;
 #define BUG()		__asm__ __volatile__("call_pal 129 # bugchk")
 #define PAGE_BUG(page)	BUG()
 
+/* Pure 2^n version of get_order */
+extern __inline__ int get_order(unsigned long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
+}
+
 #endif /* !ASSEMBLY */
 
 /* to align the pointer to the (next) page boundary */

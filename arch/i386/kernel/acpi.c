@@ -643,6 +643,7 @@ const static struct
 	{NULL,},
 	{acpi_init_piix4},
 	{acpi_init_via},
+	{acpi_init_via},
 };
 	
 const static struct pci_device_id acpi_pci_tbl[] =

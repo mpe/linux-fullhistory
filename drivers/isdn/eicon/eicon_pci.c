@@ -1,12 +1,12 @@
-/* $Id: eicon_pci.c,v 1.10 1999/08/22 20:26:49 calle Exp $
+/* $Id: eicon_pci.c,v 1.11 2000/01/23 21:21:23 armin Exp $
  *
- * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
+ * ISDN low-level module for Eicon active ISDN-Cards.
  * Hardware-specific code for PCI cards.
  *
- * Copyright 1998,99 by Armin Schindler (mac@melware.de)
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1998-2000 by Armin Schindler (mac@melware.de)
+ * Copyright 1999,2000 Cytronics & Melware (info@melware.de)
  *
- * Thanks to	Eicon Technology Diehl GmbH & Co. oHG for 
+ * Thanks to	Eicon Technology GmbH & Co. oHG for 
  *		documents, informations and hardware. 
  *
  *		Deutsche Telekom AG for S2M support.
@@ -26,6 +26,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_pci.c,v $
+ * Revision 1.11  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
  * Revision 1.10  1999/08/22 20:26:49  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -77,7 +81,7 @@
 #include "eicon_pci.h"
 
 
-char *eicon_pci_revision = "$Revision: 1.10 $";
+char *eicon_pci_revision = "$Revision: 1.11 $";
 
 #if CONFIG_PCI	         /* intire stuff is only for PCI */
 

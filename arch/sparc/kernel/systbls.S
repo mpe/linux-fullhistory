@@ -69,7 +69,7 @@ sys_call_table:
 /*235*/	.long sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
 /*240*/	.long sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 /*245*/	.long sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
-/*250*/	.long sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
+/*250*/	.long sparc_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
 /*255*/	.long sys_nis_syscall, sys_nis_syscall
 
 #ifdef CONFIG_SUNOS_EMUL

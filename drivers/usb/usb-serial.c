@@ -14,6 +14,24 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (02/14/2000) gkh
+ *	Removed the Belkin and Peracom functionality from the driver due to
+ *	the lack of support from the vendor, and me not wanting people to 
+ *	accidenatly buy the device, expecting it to work with Linux.
+ *	Added read_bulk_callback and write_bulk_callback to the type structure
+ *	for the needs of the FTDI and WhiteHEAT driver.
+ *	Changed all reverences to FTDI to FTDI_SIO at the request of Bill
+ *	Ryder.
+ *	Changed the output urb size back to the max endpoint size to make
+ *	the ftdi_sio driver have it easier, and due to the fact that it didn't
+ *	really increase the speed any.
+ *
+ * (02/11/2000) gkh
+ *	Added VISOR_FUNCTION_CONSOLE to the visor startup function. This was a
+ *	patch from Miles Lott (milos@insync.net).
+ *	Fixed bug with not restoring the minor range that a device grabs, if
+ *	the startup function fails (thanks Miles for finding this).
+ *
  * (02/05/2000) gkh
  *	Added initial framework for the Keyspan PDA serial converter so that
  *	Brian Warner has a place to put his code.
@@ -228,6 +246,23 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 }
 
 
+static void return_serial (struct usb_serial *serial)
+{
+	int i;
+
+	dbg("return_serial");
+
+	if (serial == NULL)
+		return;
+
+	for (i = 0; i < serial->num_ports; ++i) {
+		serial_table[serial->minor + i] = NULL;
+	}
+
+	return;
+}
+
+
 #ifdef USES_EZUSB_FUNCTIONS
 /* EZ-USB Control and Status Register.  Bit 0 controls 8051 reset */
 #define CPUCS_REG    0x7F92
@@ -262,67 +297,6 @@ static int ezusb_set_reset (struct usb_serial *serial, unsigned char reset_bit)
 }
 
 #endif	/* USES_EZUSB_FUNCTIONS */
-
-
-static void serial_read_bulk (struct urb *urb)
-{
-	struct usb_serial *serial = (struct usb_serial *)urb->context;
-       	struct tty_struct *tty = serial->tty; 
-       	unsigned char *data = urb->transfer_buffer;
-	int i;
-
-	dbg("serial_read_irq");
-
-	if (urb->status) {
-		dbg("nonzero read bulk status received: %d", urb->status);
-		return;
-	}
-
-#ifdef DEBUG
-	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
-		for (i = 0; i < urb->actual_length; ++i) {
-			printk ("0x%.2x ", data[i]);
-		}
-		printk ("\n");
-	}
-#endif
-	
-	if (urb->actual_length) {
-		for (i = 0; i < urb->actual_length ; ++i) {
-			 tty_insert_flip_char(tty, data[i], 0);
-	  	}
-	  	tty_flip_buffer_push(tty);
-	}
-
-	/* Continue trying to always read  */
-	if (usb_submit_urb(urb))
-		dbg("failed resubmitting read urb");
-
-	return;
-}
-
-
-static void serial_write_bulk (struct urb *urb)
-{
-	struct usb_serial *serial = (struct usb_serial *) urb->context; 
-       	struct tty_struct *tty = serial->tty; 
-
-	dbg("serial_write_irq");
-
-	if (urb->status) {
-		dbg("nonzero write bulk status received: %d", urb->status);
-		return;
-	}
-
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
-		(tty->ldisc.write_wakeup)(tty);
-
-	wake_up_interruptible(&tty->write_wait);
-	
-	return;
-}
-
 
 
 /*****************************************************************************
@@ -545,53 +519,6 @@ static void serial_unthrottle (struct tty_struct * tty)
 
 	return;
 }
-
-
-#if defined(CONFIG_USB_SERIAL_BELKIN) || defined(CONFIG_USB_SERIAL_PERACOM)
-/*****************************************************************************
- * eTek specific driver functions
- *****************************************************************************/
-static int etek_serial_open (struct tty_struct *tty, struct file *filp)
-{
-	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
-	int port = MINOR(tty->device) - serial->minor;
-
-	dbg("etek_serial_open port %d", port);
-
-	if (serial->active[port]) {
-		dbg ("device already open");
-		return -EINVAL;
-	}
-	serial->active[port] = 1;
- 
-	/*Start reading from the device*/
-	if (usb_submit_urb(&serial->read_urb[port]))
-		dbg("usb_submit_urb(read bulk) failed");
-
-	/* Need to do device specific setup here (control lines, baud rate, etc.) */
-	/* FIXME!!! */
-
-	return (0);
-}
-
-
-static void etek_serial_close(struct tty_struct *tty, struct file * filp)
-{
-	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
-	int port = MINOR(tty->device) - serial->minor;
-
-	dbg("etek_serial_close port %d", port);
-	
-	/* Need to change the control lines here */
-	/* FIXME */
-	
-	/* shutdown our bulk reads and writes */
-	usb_unlink_urb (&serial->write_urb[port]);
-	usb_unlink_urb (&serial->read_urb[port]);
-	serial->active[port] = 0;
-}
-#endif	/* defined(CONFIG_USB_SERIAL_BELKIN) || defined(CONFIG_USB_SERIAL_PERACOM) */
-
 
 
 #ifdef CONFIG_USB_SERIAL_WHITEHEAT
@@ -851,6 +778,9 @@ static int  visor_startup (struct usb_serial *serial)
 				case VISOR_FUNCTION_HOTSYNC:
 					string = "HotSync";
 					break;
+				case VISOR_FUNCTION_CONSOLE:
+					string = "Console";
+					break;
 				case VISOR_FUNCTION_REMOTE_FILE_SYS:
 					string = "Remote File System";
 					break;
@@ -879,11 +809,11 @@ static int  visor_startup (struct usb_serial *serial)
 #endif	/* CONFIG_USB_SERIAL_VISOR*/
 
 
-#ifdef CONFIG_USB_SERIAL_FTDI
+#ifdef CONFIG_USB_SERIAL_FTDI_SIO
 /******************************************************************************
- * FTDI Serial Converter specific driver functions
+ * FTDI SIO Serial Converter specific driver functions
  ******************************************************************************/
-static int  ftdi_serial_open (struct tty_struct *tty, struct file *filp)
+static int  ftdi_sio_serial_open (struct tty_struct *tty, struct file *filp)
 {
 	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
 	int port = MINOR(tty->device) - serial->minor;
@@ -907,7 +837,7 @@ static int  ftdi_serial_open (struct tty_struct *tty, struct file *filp)
 }
 
 
-static void ftdi_serial_close (struct tty_struct *tty, struct file *filp)
+static void ftdi_sio_serial_close (struct tty_struct *tty, struct file *filp)
 {
 	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
 	int port = MINOR(tty->device) - serial->minor;
@@ -924,7 +854,7 @@ static void ftdi_serial_close (struct tty_struct *tty, struct file *filp)
 }
 
 
-#endif
+#endif	/* CONFIG_USB_SERIAL_FTDI_SIO */
 
 
 #ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
@@ -1111,6 +1041,67 @@ static int generic_chars_in_buffer (struct tty_struct *tty)
 }
 
 
+static void generic_read_bulk_callback (struct urb *urb)
+{
+	struct usb_serial *serial = (struct usb_serial *)urb->context;
+       	struct tty_struct *tty = serial->tty; 
+       	unsigned char *data = urb->transfer_buffer;
+	int i;
+
+	dbg("generic_read_bulk_callback");
+
+	if (urb->status) {
+		dbg("nonzero read bulk status received: %d", urb->status);
+		return;
+	}
+
+#ifdef DEBUG
+	if (urb->actual_length) {
+		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
+		for (i = 0; i < urb->actual_length; ++i) {
+			printk ("0x%.2x ", data[i]);
+		}
+		printk ("\n");
+	}
+#endif
+	
+	if (urb->actual_length) {
+		for (i = 0; i < urb->actual_length ; ++i) {
+			 tty_insert_flip_char(tty, data[i], 0);
+	  	}
+	  	tty_flip_buffer_push(tty);
+	}
+
+	/* Continue trying to always read  */
+	if (usb_submit_urb(urb))
+		dbg("failed resubmitting read urb");
+
+	return;
+}
+
+
+static void generic_write_bulk_callback (struct urb *urb)
+{
+	struct usb_serial *serial = (struct usb_serial *) urb->context; 
+       	struct tty_struct *tty = serial->tty; 
+
+	dbg("generic_write_bulk_callback");
+
+	if (urb->status) {
+		dbg("nonzero write bulk status received: %d", urb->status);
+		return;
+	}
+
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
+		(tty->ldisc.write_wakeup)(tty);
+
+	wake_up_interruptible(&tty->write_wait);
+	
+	return;
+}
+
+
+
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_serial *serial = NULL;
@@ -1211,8 +1202,10 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 
 				/* if this device type has a startup function, call it */
 				if (type->startup) {
-					if (type->startup (serial))
+					if (type->startup (serial)) {
+						return_serial (serial);
 						return NULL;
+					}
 				}
 
 				/* set up the endpoint information */
@@ -1223,19 +1216,29 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 						err("Couldn't allocate bulk_in_buffer");
 						goto probe_error;
 					}
-					FILL_BULK_URB(&serial->read_urb[i], dev, usb_rcvbulkpipe (dev, bulk_in_endpoint[i]->bEndpointAddress),
-							serial->bulk_in_buffer[i], buffer_size, serial_read_bulk, serial);
+					if (serial->type->read_bulk_callback) {
+						FILL_BULK_URB(&serial->read_urb[i], dev, usb_rcvbulkpipe (dev, bulk_in_endpoint[i]->bEndpointAddress),
+								serial->bulk_in_buffer[i], buffer_size, serial->type->read_bulk_callback, serial);
+					} else {
+						FILL_BULK_URB(&serial->read_urb[i], dev, usb_rcvbulkpipe (dev, bulk_in_endpoint[i]->bEndpointAddress),
+								serial->bulk_in_buffer[i], buffer_size, generic_read_bulk_callback, serial);
+					}
 				}
 
 				for (i = 0; i < num_bulk_out; ++i) {
-					serial->bulk_out_size[i] = bulk_out_endpoint[i]->wMaxPacketSize * 2;
+					serial->bulk_out_size[i] = bulk_out_endpoint[i]->wMaxPacketSize;
 					serial->bulk_out_buffer[i] = kmalloc (serial->bulk_out_size[i], GFP_KERNEL);
 					if (!serial->bulk_out_buffer[i]) {
 						err("Couldn't allocate bulk_out_buffer");
 						goto probe_error;
 					}
-					FILL_BULK_URB(&serial->write_urb[i], dev, usb_sndbulkpipe (dev, bulk_out_endpoint[i]->bEndpointAddress),
-							serial->bulk_out_buffer[i], serial->bulk_out_size[i], serial_write_bulk, serial);
+					if (serial->type->write_bulk_callback) {
+						FILL_BULK_URB(&serial->write_urb[i], dev, usb_sndbulkpipe (dev, bulk_out_endpoint[i]->bEndpointAddress),
+								serial->bulk_out_buffer[i], serial->bulk_out_size[i], serial->type->write_bulk_callback, serial);
+					} else {
+						FILL_BULK_URB(&serial->write_urb[i], dev, usb_sndbulkpipe (dev, bulk_out_endpoint[i]->bEndpointAddress),
+								serial->bulk_out_buffer[i], serial->bulk_out_size[i], generic_write_bulk_callback, serial);
+					}
 				}
 
 #if 0 /* use this code when WhiteHEAT is up and running */
@@ -1295,7 +1298,6 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 			usb_unlink_urb (&serial->write_urb[i]);
 			usb_unlink_urb (&serial->read_urb[i]);
 			serial->active[i] = 0;
-			serial_table[serial->minor + i] = NULL;
 		}
 
 		/* free up any memory that we allocated */
@@ -1313,6 +1315,10 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 			info("%s converter now disconnected from ttyUSB%d", serial->type->name, serial->minor + i);
 		}
 
+		/* return the minor range that this device had */
+		return_serial (serial);
+
+		/* free up any memory that we allocated */
 		kfree (serial);
 
 	} else {

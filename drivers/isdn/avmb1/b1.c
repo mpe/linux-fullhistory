@@ -1,11 +1,16 @@
 /*
- * $Id: b1.c,v 1.12 1999/11/05 16:38:01 calle Exp $
+ * $Id: b1.c,v 1.13 2000/01/25 14:33:38 calle Exp $
  * 
  * Common module for AVM B1 cards.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1.c,v $
+ * Revision 1.13  2000/01/25 14:33:38  calle
+ * - Added Support AVM B1 PCI V4.0 (tested with prototype)
+ *   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
+ *   - support for revision register
+ *
  * Revision 1.12  1999/11/05 16:38:01  calle
  * Cleanups before kernel 2.4:
  * - Changed all messages to use card->name or driver->name instead of
@@ -86,7 +91,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.12 $";
+static char *revision = "$Revision: 1.13 $";
 
 /* ------------------------------------------------------------- */
 
@@ -156,6 +161,12 @@ int b1_detect(unsigned int base, enum avmcardtype cardtype)
 	   return 5;
 
 	return 0;
+}
+
+void b1_getrevision(avmcard *card)
+{
+    card->class = inb(card->port + B1_ANALYSE);
+    card->revision = inb(card->port + B1_REVISION);
 }
 
 int b1_load_t4file(avmcard *card, capiloaddatapart * t4file)
@@ -688,6 +699,7 @@ int b1ctl_read_proc(char *page, char **start, off_t off,
 EXPORT_SYMBOL(b1_irq_table);
 
 EXPORT_SYMBOL(b1_detect);
+EXPORT_SYMBOL(b1_getrevision);
 EXPORT_SYMBOL(b1_load_t4file);
 EXPORT_SYMBOL(b1_load_config);
 EXPORT_SYMBOL(b1_loaded);

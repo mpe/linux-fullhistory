@@ -1020,6 +1020,7 @@ static int netwave_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_stop_queue (dev);
+	    clear_bit(LINK_STATE_START, &dev->state);
 	    link->release.expires = jiffies + 5;
 	    add_timer(&link->release);
 	}
@@ -1035,6 +1036,7 @@ static int netwave_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
 		netif_stop_queue (dev);
+		clear_bit(LINK_STATE_START, &dev->state);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -1047,6 +1049,7 @@ static int netwave_event(event_t event, int priority,
 	    CardServices(RequestConfiguration, link->handle, &link->conf);
 	    if (link->open) {
 		netwave_reset(dev);
+		set_bit(LINK_STATE_START, &dev->state);
 		netif_start_queue (dev);
 	    }
 	}
@@ -1296,7 +1299,7 @@ static void netwave_interrupt(int irq, void* dev_id, struct pt_regs *regs) {
     dev_link_t *link = &priv->link;
     int i;
     
-    if (dev == NULL)
+    if ((dev == NULL) || !test_bit(LINK_STATE_START, &dev->state))
 	return;
     
     spin_lock (&priv->lock);

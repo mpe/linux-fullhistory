@@ -37,6 +37,7 @@ int usb_dc2xx_init(void);
 int usb_scanner_init(void);
 int usb_stor_init(void);
 int dabusb_init(void);
+int plusb_init(void);
 int usb_mouse_init(void);
 int usb_kbd_init(void);
 int graphire_init(void);
@@ -98,6 +99,9 @@ int usb_init(void)
 #endif
 #ifdef CONFIG_USB_DABUSB
 	dabusb_init();
+#endif
+#ifdef CONFIG_USB_PLUSB
+	plusb_init();
 #endif
 #ifdef CONFIG_USB_MOUSE
 	usb_mouse_init();

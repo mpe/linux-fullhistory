@@ -2430,7 +2430,7 @@ static struct initvol {
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
 
-static int sv_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
+static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
 	static const char __initlocaldata sv_ddma_name[] = "S3 Inc. SonicVibes DDMA Controller";
        	struct sv_state *s;
@@ -2598,7 +2598,7 @@ static int sv_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 	return -1;
 }
 
-static void sv_remove(struct pci_dev *dev)
+static void __devinit sv_remove(struct pci_dev *dev)
 {
        struct sv_state *s = (struct sv_state *)dev->driver_data;
 
@@ -2625,7 +2625,7 @@ static void sv_remove(struct pci_dev *dev)
        dev->driver_data = NULL;
 }
 
-static const struct pci_device_id id_table[] = {
+static const struct pci_device_id id_table[] __devinitdata = {
        { PCI_VENDOR_ID_S3, PCI_DEVICE_ID_S3_SONICVIBES, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
        { 0, 0, 0, 0, 0, 0 }
 };

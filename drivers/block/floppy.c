@@ -196,7 +196,6 @@ static int use_virtual_dma=0;
 static unsigned short virtual_dma_port=0x3f0;
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int set_dor(int fdc, char mask, char data);
-static inline int __get_order(unsigned long size);
 #define K_64	0x10000		/* 64KB */
 #include <asm/floppy.h>
 
@@ -213,26 +212,12 @@ static inline int __get_order(unsigned long size);
 
 /* Dma Memory related stuff */
 
-/* Pure 2^n version of get_order */
-static inline int __get_order(unsigned long size)
-{
-	int order;
-
-	size = (size-1) >> (PAGE_SHIFT-1);
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-	return order;
-}
-
 #ifndef fd_dma_mem_free
-#define fd_dma_mem_free(addr, size) free_pages(addr, __get_order(size))
+#define fd_dma_mem_free(addr, size) free_pages(addr, get_order(size))
 #endif
 
 #ifndef fd_dma_mem_alloc
-#define fd_dma_mem_alloc(size) __get_dma_pages(GFP_KERNEL,__get_order(size))
+#define fd_dma_mem_alloc(size) __get_dma_pages(GFP_KERNEL,get_order(size))
 #endif
 
 static inline void fallback_on_nodma_alloc(char **addr, size_t l)

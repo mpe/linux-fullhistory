@@ -723,7 +723,7 @@ xirc2ps_attach(void)
     dev->stop = &do_stop;
     dev->tx_timeout = xirc_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
-    netif_start_queue (dev);
+    netif_start_queue(dev);
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -1239,7 +1239,7 @@ xirc2ps_config(dev_link_t * link)
     /* we can now register the device with the net subsystem */
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    netif_start_queue (dev);
+    netif_start_queue(dev);
     if ((err=register_netdev(dev))) {
 	printk(KNOT_XIRC "register_netdev() failed\n");
 	goto config_error;
@@ -1340,7 +1340,8 @@ xirc2ps_event(event_t event, int priority,
       case CS_EVENT_CARD_REMOVAL:
 	  link->state &= ~DEV_PRESENT;
 	  if (link->state & DEV_CONFIG) {
-	      netif_stop_queue (dev);
+	      netif_stop_queue(dev);
+	      clear_bit(LINK_STATE_START, &dev->state);
 	      link->release.expires = jiffies + HZ / 20;
 	      add_timer(&link->release);
 	  }
@@ -1355,7 +1356,8 @@ xirc2ps_event(event_t event, int priority,
       case CS_EVENT_RESET_PHYSICAL:
 	  if (link->state & DEV_CONFIG) {
 	      if (link->open) {
-		  netif_stop_queue (dev);
+		  netif_stop_queue(dev);
+		  clear_bit(LINK_STATE_START, &dev->state);
 		  lp->suspended=1;
 		  do_powerdown(dev);
 	      }
@@ -1371,7 +1373,8 @@ xirc2ps_event(event_t event, int priority,
 	     if (link->open) {
 		 do_reset(dev,1);
 		 lp->suspended=0;
-		 netif_start_queue (dev);
+		 set_bit(LINK_STATE_START, &dev->state);
+		 netif_start_queue(dev);
 	     }
 	  }
 	  break;
@@ -1400,6 +1403,8 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				  */
 
     spin_lock (&lp->lock);
+    if (!test_bit(LINK_STATE_START, &dev->state))
+	return;
 
     ioaddr = dev->base_addr;
     if (lp->mohawk) { /* must disable the interrupt */
@@ -1555,7 +1560,7 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    DEBUG(0, "PTR not changed?\n");
 	} else
 	    lp->stats.tx_packets += lp->last_ptr_value - n;
-	netif_wake_queue (dev);
+	netif_wake_queue(dev);
     }
     if (tx_status & 0x0002) {	/* Execessive collissions */
 	DEBUG(0, "tx restarted due to execssive collissions\n");
@@ -1613,7 +1618,7 @@ static void xirc_tx_timeout (struct net_device *dev)
 	if (lp->suspended) {
 	    dev->trans_start = jiffies;
 	    lp->stats.tx_dropped++;
-	    netif_start_queue (dev);
+	    netif_start_queue(dev);
 	    return;
 	}
 
@@ -1622,7 +1627,7 @@ static void xirc_tx_timeout (struct net_device *dev)
 	/* reset the card */
 	do_reset(dev,1);
 	dev->trans_start = jiffies;
-	netif_start_queue (dev);
+	netif_start_queue(dev);
 }
 
 
@@ -1638,7 +1643,7 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
     DEBUG(1, "do_start_xmit(skb=%p, dev=%p) len=%u\n",
 	  skb, dev, pktlen);
 
-    netif_stop_queue (dev);
+    netif_stop_queue(dev);
 
     /* adjust the packet length to min. required
      * and hope that the buffer is large enough
@@ -1673,7 +1678,7 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
     dev_kfree_skb (skb);
     dev->trans_start = jiffies;
-    netif_start_queue (dev);
+    netif_start_queue(dev);
     lp->stats.tx_bytes += pktlen;
     return 0;
 }
@@ -1818,7 +1823,7 @@ do_open(struct net_device *dev)
     link->open++;
     MOD_INC_USE_COUNT;
 
-    netif_start_queue (dev);
+    netif_start_queue(dev);
     lp->suspended = 0;
     do_reset(dev,1);
 
@@ -2136,7 +2141,7 @@ do_stop(struct net_device *dev)
     if (!link)
 	return -ENODEV;
 
-    netif_stop_queue (dev);
+    netif_stop_queue(dev);
 
     SelectPage(0);
     PutByte(XIRCREG_CR, 0);  /* disable interrupts */

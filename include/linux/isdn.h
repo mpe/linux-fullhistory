@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.81 1999/10/27 21:21:18 detabc Exp $
+/* $Id: isdn.h,v 1.90 2000/02/06 21:50:00 detabc Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,52 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.90  2000/02/06 21:50:00  detabc
+ * add rewriting of socket's and frame's saddr for udp-ipv4 dynip-connections.
+ * Include checksum-recompute of ip- and udp-header's.
+ *
+ * Revision 1.89  2000/02/05 22:11:33  detabc
+ * Add rewriting of socket's and frame's saddr adressfield for
+ * dynip-connections.  Only for tcp/ipv4 and switchable per interface.
+ * Include checksum-recompute of ip- and tcp-header's.
+ *
+ * Revision 1.88  2000/01/20 19:59:43  keil
+ * Add FAX Class 1 support
+ *
+ * Revision 1.87  2000/01/09 20:43:15  detabc
+ * exand logical bind-group's for both call's (in and out).
+ * add first part of kernel-config-help for abc-extension.
+ *
+ * Revision 1.86  1999/12/05 16:06:09  detabc
+ * add resethandling for rawip-compression.
+ * at now all B2-Protocols are usable with rawip-compression
+ *
+ * Revision 1.85  1999/11/30 11:29:06  detabc
+ * add a on the fly frame-counter and limit
+ *
+ * Revision 1.84  1999/11/28 14:49:08  detabc
+ * In case of rawip-compress adjust dev[x]->ibytes/obytes to reflect the
+ * uncompressed size.
+ *
+ * Revision 1.83  1999/11/26 15:54:59  detabc
+ * added compression (isdn_bsdcompress) for rawip interfaces with x75i B2-protocol.
+ *
+ * Revision 1.82  1999/11/20 22:14:14  detabc
+ * added channel dial-skip in case of external use
+ * (isdn phone or another isdn device) on the same NTBA.
+ * usefull with two or more card's connected the different NTBA's.
+ * global switchable in kernel-config and also per netinterface.
+ *
+ * add auto disable of netinterface's in case of:
+ * 	to many connection's in short time.
+ * 	config mistakes (wrong encapsulation, B2-protokoll or so on) on local
+ * 	or remote side.
+ * 	wrong password's or something else to a ISP (syncppp).
+ *
+ * possible encapsulations for this future are:
+ * ISDN_NET_ENCAP_SYNCPPP, ISDN_NET_ENCAP_UIHDLC, ISDN_NET_ENCAP_RAWIP,
+ * and ISDN_NET_ENCAP_CISCOHDLCK.
+ *
  * Revision 1.81  1999/10/27 21:21:18  detabc
  * Added support for building logically-bind-group's per interface.
  * usefull for outgoing call's with more then one isdn-card.
@@ -333,6 +379,12 @@
 #undef CONFIG_ISDN_WITH_ABC_IPV4_DYNADDR
 #undef CONFIG_ISDN_WITH_ABC_RCV_NO_HUPTIMER
 #undef CONFIG_ISDN_WITH_ABC_ICALL_BIND
+#undef CONFIG_ISDN_WITH_ABC_CH_EXTINUSE
+#undef CONFIG_ISDN_WITH_ABC_CONN_ERROR
+#undef CONFIG_ISDN_WITH_ABC_RAWIPCOMPRESS
+#undef CONFIG_ISDN_WITH_ABC_FRAME_LIMIT
+#undef CONFIG_ISDN_WITH_ABC_IPV4_RW_SOCKADDR 
+#undef CONFIG_ISDN_WITH_ABC_IPV4_RWUDP_SOCKADDR 
 
 
 /* New ioctl-codes */
@@ -359,6 +411,7 @@
 #define IIOCGETCPS  _IO('I',21)
 #define IIOCGETDVR  _IO('I',22)
 #define IIOCNETLCR  _IO('I',23) /* dwabc ioctl for LCR from isdnlog */
+#define IIOCNETDWRSET  _IO('I',24) /* dwabc ioctl to reset abc-values to default on a net-interface */
 
 #define IIOCNETALN  _IO('I',32)
 #define IIOCNETDLN  _IO('I',33)
@@ -922,6 +975,7 @@ typedef struct isdn_devt {
 	isdn_v110_stream  *v110[ISDN_MAX_CHANNELS];  /* V.110 private data         */
 	struct semaphore  sem;                       /* serialize list access*/
 	isdn_module       *modules;
+	unsigned long     global_features;
 } isdn_dev;
 
 extern isdn_dev *dev;

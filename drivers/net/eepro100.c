@@ -274,34 +274,45 @@ enum pci_flags_bit {
 #define outl writel
 #endif
 
+
 /* How to wait for the command unit to accept a command.
    Typically this takes 0 ticks. */
-static inline void wait_for_cmd_done(long cmd_ioaddr)
+static inline void wait_for_cmd_done (long cmd_ioaddr)
 {
 	int wait = 100;
-	do   ;
-	while(inb(cmd_ioaddr) && --wait >= 0);
+	do;
+	while (inb (cmd_ioaddr) && --wait >= 0);
 }
+
 
 /* Offsets to the various registers.
    All accesses need not be longword aligned. */
 enum speedo_offsets {
 	SCBStatus = 0, SCBCmd = 2,	/* Rx/Command Unit command and status. */
-	SCBPointer = 4,				/* General purpose pointer. */
-	SCBPort = 8,				/* Misc. commands and operands.  */
-	SCBflash = 12, SCBeeprom = 14, /* EEPROM and flash memory control. */
-	SCBCtrlMDI = 16,			/* MDI interface control. */
-	SCBEarlyRx = 20,			/* Early receive byte count. */
+	SCBPointer = 4,			/* General purpose pointer. */
+	SCBPort = 8,			/* Misc. commands and operands.  */
+	SCBflash = 12, SCBeeprom = 14, 	/* EEPROM and flash memory control. */
+	SCBCtrlMDI = 16,		/* MDI interface control. */
+	SCBEarlyRx = 20,		/* Early receive byte count. */
 };
+
+
 /* Commands that can be put in a command list entry. */
 enum commands {
-	CmdNOp = 0, CmdIASetup = 0x10000, CmdConfigure = 0x20000,
-	CmdMulticastList = 0x30000, CmdTx = 0x40000, CmdTDR = 0x50000,
-	CmdDump = 0x60000, CmdDiagnose = 0x70000,
+	CmdNOp = 0,
+	CmdIASetup = 0x10000,
+	CmdConfigure = 0x20000,
+	CmdMulticastList = 0x30000,
+	CmdTx = 0x40000,
+	CmdTDR = 0x50000,
+	CmdDump = 0x60000,
+	CmdDiagnose = 0x70000,
 	CmdSuspend = 0x40000000,	/* Suspend after completion. */
 	CmdIntr = 0x20000000,		/* Interrupt after completion. */
 	CmdTxFlex = 0x00080000,		/* Use "Flexible mode" for CmdTx command. */
 };
+
+
 /* Do atomically if possible. */
 #if defined(__i386__) || defined(__alpha__) || defined(__ia64__)
 #define clear_suspend(cmd)	clear_bit(30, &(cmd)->cmd_status)
@@ -1145,8 +1156,8 @@ static void speedo_tx_timeout(struct net_device *dev)
 	sp->stats.tx_errors++;
 	dev->trans_start = jiffies;
 	netif_start_queue (dev);
-	return;
 }
+
 
 static int
 speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -1764,6 +1775,8 @@ static void eepro100_suspend (struct pci_dev *pdev)
 
 	netif_stop_queue (dev);
 	outl(PortPartialReset, ioaddr + SCBPort);
+	
+	/* XXX call pci_set_power_state ()? */
 }
 
 

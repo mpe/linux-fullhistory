@@ -184,23 +184,9 @@ static const int addr_list[] __initdata = {0x300, 0x280, 0x310, 0};
 
 /* Dma Memory related stuff */
 
-/* Pure 2^n version of get_order */
-static inline int __get_order(unsigned long size)
-{
-	int order;
-
-	size = (size - 1) >> (PAGE_SHIFT - 1);
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-	return order;
-}
-
 static unsigned long dma_mem_alloc(int size)
 {
-	int order = __get_order(size);
+	int order = get_order(size);
 
 	return __get_dma_pages(GFP_KERNEL, order);
 }
@@ -1191,7 +1177,7 @@ static int elp_close(struct net_device *dev)
 	free_irq(dev->irq, dev);
 
 	free_dma(dev->dma);
-	free_pages((unsigned long) adapter->dma_buffer, __get_order(DMA_BUFFER_SIZE));
+	free_pages((unsigned long) adapter->dma_buffer, get_order(DMA_BUFFER_SIZE));
 
 	MOD_DEC_USE_COUNT;
 

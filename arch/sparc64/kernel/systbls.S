@@ -69,7 +69,7 @@ sys_call_table32:
 	.word sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
-/*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
+/*250*/	.word sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
 	.word sys_aplib
 
 	/* Now the 64-bit native Linux syscall table. */
@@ -92,7 +92,7 @@ sys_call_table:
 	.word sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
 /*60*/	.word sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
 	.word sys_msync, sys_vfork, sys_pread, sys_pwrite, sys_nis_syscall
-/*70*/	.word sys_nis_syscall, sys_mmap, sys_nis_syscall, sys_munmap, sys_mprotect
+/*70*/	.word sys_nis_syscall, sys_mmap, sys_nis_syscall, sys64_munmap, sys_mprotect
 	.word sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys_getgroups
 /*80*/	.word sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_nis_syscall
 	.word sys_swapon, sys_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
@@ -128,7 +128,7 @@ sys_call_table:
 	.word sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
-/*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
+/*250*/	.word sys64_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
 	.word sys_aplib
 
 #if defined(CONFIG_SUNOS_EMUL) || defined(CONFIG_SOLARIS_EMUL) || \

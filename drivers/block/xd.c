@@ -87,21 +87,8 @@ XD_INFO xd_info[XD_MAXDRIVES];
    should be able to detect your drive's geometry from this info. (eg: xd=0,5,0x320,3 is the "standard"). */
 
 #include <asm/page.h>
-/* coppied from floppy.c */
-static inline int __get_order(unsigned long size)
-{
-	int order;
-
-	size = (size-1) >> (PAGE_SHIFT-1);
-	order = -1;
-	do {
-		size >>= 1;
-		order++;
-	} while (size);
-	return order;
-}
-#define xd_dma_mem_alloc(size) __get_dma_pages(GFP_KERNEL,__get_order(size))
-#define xd_dma_mem_free(addr, size) free_pages(addr, __get_order(size))
+#define xd_dma_mem_alloc(size) __get_dma_pages(GFP_KERNEL,get_order(size))
+#define xd_dma_mem_free(addr, size) free_pages(addr, get_order(size))
 static char *xd_dma_buffer = 0;
 
 static XD_SIGNATURE xd_sigs[] __initdata = {

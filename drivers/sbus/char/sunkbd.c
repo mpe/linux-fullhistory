@@ -507,7 +507,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 	}
 	
 	do_poke_blanked_console = 1;
-	mark_bh(CONSOLE_BH);
+	tasklet_schedule(&console_tasklet);
 	add_keyboard_randomness(keycode);
 
 	tty = ttytab? ttytab[fg_console]: NULL;
@@ -616,7 +616,7 @@ static void put_queue(int ch)
 	wake_up(&keypress_wait);
 	if (tty) {
 		tty_insert_flip_char(tty, ch, 0);
-		tty_schedule_flip(tty);
+		con_schedule_flip(tty);
 	}
 }
 
@@ -630,7 +630,7 @@ static void puts_queue(char *cp)
 		tty_insert_flip_char(tty, *cp, 0);
 		cp++;
 	}
-	tty_schedule_flip(tty);
+	con_schedule_flip(tty);
 }
 
 static void applkey(int key, char mode)
@@ -742,7 +742,7 @@ static void send_intr(void)
 	if (!tty)
 		return;
 	tty_insert_flip_char(tty, 0, TTY_BREAK);
-	tty_schedule_flip(tty);
+	con_schedule_flip(tty);
 }
 
 static void scroll_forw(void)

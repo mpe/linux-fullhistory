@@ -255,11 +255,8 @@ void *sbus_alloc_consistent(struct sbus_dev *sdev, size_t size, dma_addr_t *dvma
 		return NULL;
 
 	size = PAGE_ALIGN(size);
-	for (order = 0; order < 10; order++) {
-		if ((PAGE_SIZE << order) >= size)
-			break;
-	}
-	if (order == 10)
+	order = get_order(size);
+	if (order >= 10)
 		return NULL;
 	first_page = __get_free_pages(GFP_KERNEL, order);
 	if (first_page == 0UL)
@@ -306,10 +303,7 @@ void sbus_free_consistent(struct sbus_dev *sdev, size_t size, void *cpu, dma_add
 	free_consistent_cluster(iommu, dvma, npages);
 	spin_unlock_irq(&iommu->lock);
 
-	for (order = 0; order < 10; order++) {
-		if ((PAGE_SIZE << order) >= size)
-			break;
-	}
+	order = get_order(size);
 	if (order < 10)
 		free_pages((unsigned long)cpu, order);
 }

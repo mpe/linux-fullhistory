@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.36 1999/12/15 15:45:18 davem Exp $
+/* $Id: ultra.S,v 1.37 2000/02/14 02:52:04 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -132,8 +132,8 @@ __flush_tlb_range_pbp_slow:
 	 wrpr		%g1, 0x0, %pstate
 
 	.align		32
-	.globl		flush_icache_page
-flush_icache_page:	/* %o0 = phys_page */
+	.globl		__flush_icache_page
+__flush_icache_page:	/* %o0 = phys_page */
 	sethi		%hi(1 << 13), %o2	! IC_set bit
 	mov		1, %g1
 	srlx		%o0, 5, %o0

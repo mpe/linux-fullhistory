@@ -61,7 +61,21 @@ X.25 on top of isdn might be useful with two different scenarios:
 
 - You might want to access a public X.25 data network from your Linux box.
   You can use i4l if you were physically connected to the X.25 switch
-  by an ISDN line (leased line as well as dial up connection should work)
+  by an ISDN B-channel (leased line as well as dial up connection should
+  work).
+
+  This corresponds to ITU-T recommendation X.31 Case A (circuit-mode
+  access to PSPDN [packet switched public data network]).
+
+  NOTE: X.31 also covers a Case B (access to PSPDN via virtual
+  circuit / packet mode service). The latter mode (which in theory
+  also allows using the D-channel) is not supported by isdn4linux.
+  It should however be possible to establish such packet mode connections
+  with certain active isdn cards provided that the firmware supports X.31
+  and the driver exports this functionality to the user. Currently, 
+  the AVM B1 driver is the only driver which does so. (It should be
+  possible to access D-channel X.31 with active AVM cards using the
+  CAPI interface of the AVM-B1 driver).
 
 - Or you might want to operate certain ISDN teleservices on your linux
   box. A lot of those teleservices run on top of the ISO-8208

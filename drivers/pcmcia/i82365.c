@@ -82,9 +82,9 @@ static const char *version =
 static void irq_count(int, void *, struct pt_regs *);
 static inline int _check_irq(int irq, int flags)
 {
-    if (request_irq(irq, irq_count, flags, "x", NULL) != 0)
+    if (request_irq(irq, irq_count, flags, "x", irq_count) != 0)
 	return -1;
-    free_irq(irq, NULL);
+    free_irq(irq, irq_count);
     return 0;
 }
 
@@ -570,28 +570,26 @@ static void irq_count(int irq, void *dev, struct pt_regs *regs)
     DEBUG(2, "-> hit on irq %d\n", irq);
 }
 
-static u_int __init test_irq(u_short sock, int irq, int pci)
+static u_int __init test_irq(u_short sock, int irq)
 {
-    u_char csc = (pci) ? 0 : irq;
-    DEBUG(2, "  testing %s irq %d\n", pci ? "PCI" : "ISA", irq);
-    
-    if (request_irq(irq, irq_count, (pci?SA_SHIRQ:0), "scan", NULL) != 0)
+    DEBUG(2, "  testing ISA irq %d\n", irq);
+    if (request_irq(irq, irq_count, 0, "scan", irq_count) != 0)
 	return 1;
     irq_hits = 0; irq_sock = sock;
     __set_current_state(TASK_UNINTERRUPTIBLE);
     schedule_timeout(HZ/100);
     if (irq_hits) {
-	free_irq(irq, NULL);
+	free_irq(irq, irq_count);
 	DEBUG(2, "    spurious hit!\n");
 	return 1;
     }
 
     /* Generate one interrupt */
-    i365_set(sock, I365_CSCINT, I365_CSC_DETECT | (csc << 4));
+    i365_set(sock, I365_CSCINT, I365_CSC_DETECT | (irq << 4));
     i365_bset(sock, I365_GENCTL, I365_CTL_SW_IRQ);
     udelay(1000);
 
-    free_irq(irq, NULL);
+    free_irq(irq, irq_count);
 
     /* mask all interrupts */
     i365_set(sock, I365_CSCINT, 0);
@@ -617,10 +615,10 @@ static u_int __init isa_scan(u_short sock, u_int mask0)
 	set_bridge_state(sock);
 	i365_set(sock, I365_CSCINT, 0);
 	for (i = 0; i < 16; i++)
-	    if ((mask0 & (1 << i)) && (test_irq(sock, i, 0) == 0))
+	    if ((mask0 & (1 << i)) && (test_irq(sock, i) == 0))
 		mask1 |= (1 << i);
 	for (i = 0; i < 16; i++)
-	    if ((mask1 & (1 << i)) && (test_irq(sock, i, 0) != 0))
+	    if ((mask1 & (1 << i)) && (test_irq(sock, i) != 0))
 		mask1 ^= (1 << i);
     }
     
@@ -1543,7 +1541,7 @@ static int __init init_i82365(void)
     /* Set up interrupt handler(s) */
 #ifdef CONFIG_ISA
     if (grab_irq != 0)
-	request_irq(cs_irq, pcic_interrupt, 0, "i82365", NULL);
+	request_irq(cs_irq, pcic_interrupt, 0, "i82365", pcic_interrupt);
 #endif
     
     if (register_ss_entry(sockets, &pcic_operations) != 0)
@@ -1573,7 +1571,7 @@ static void __exit exit_i82365(void)
 	del_timer(&poll_timer);
 #ifdef CONFIG_ISA
     if (grab_irq != 0)
-	free_irq(cs_irq, NULL);
+	free_irq(cs_irq, pcic_interrupt);
 #endif
     for (i = 0; i < sockets; i++) {
 	/* Turn off all interrupt sources! */

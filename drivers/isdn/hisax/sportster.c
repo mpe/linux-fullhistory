@@ -1,12 +1,19 @@
-/* $Id: sportster.c,v 1.10 1999/09/04 06:20:06 keil Exp $
+/* $Id: sportster.c,v 1.12 1999/12/23 15:09:32 keil Exp $
 
  * sportster.c     low level stuff for USR Sportster internal TA
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
  * $Log: sportster.c,v $
+ * Revision 1.12  1999/12/23 15:09:32  keil
+ * change email
+ *
+ * Revision 1.11  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.10  1999/09/04 06:20:06  keil
  * Changes from kernel set_current_state()
  *
@@ -46,7 +53,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.10 $";
+const char *sportster_revision = "$Revision: 1.12 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -180,11 +187,11 @@ reset_sportster(struct IsdnCardState *cs)
 	byteout(cs->hw.spt.cfg_reg + SPORTSTER_RES_IRQ, cs->hw.spt.res_irq);
 	save_flags(flags);
 	sti();
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	cs->hw.spt.res_irq &= ~SPORTSTER_RESET; /* Reset Off */
 	byteout(cs->hw.spt.cfg_reg + SPORTSTER_RES_IRQ, cs->hw.spt.res_irq);
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }

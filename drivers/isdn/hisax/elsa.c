@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.19 1999/09/04 06:20:06 keil Exp $
+/* $Id: elsa.c,v 2.20 1999/12/19 13:09:42 keil Exp $
 
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -14,6 +14,10 @@
  *              for ELSA PCMCIA support
  *
  * $Log: elsa.c,v $
+ * Revision 2.20  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 2.19  1999/09/04 06:20:06  keil
  * Changes from kernel set_current_state()
  *
@@ -99,7 +103,7 @@
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.19 $";
+const char *Elsa_revision = "$Revision: 2.20 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
  "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI", 
@@ -578,10 +582,10 @@ reset_elsa(struct IsdnCardState *cs)
 		save_flags(flags);
 		sti();
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x20);
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x00);
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_MASK, 0xc0);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		restore_flags(flags);
@@ -785,7 +789,7 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				cs->hw.elsa.status |= ELSA_TIMER_AKTIV;
 				byteout(cs->hw.elsa.ctrl, cs->hw.elsa.ctrl_reg);
 				byteout(cs->hw.elsa.timer, 0);
-				set_current_state(TASK_INTERRUPTIBLE);
+				set_current_state(TASK_UNINTERRUPTIBLE);
 				schedule_timeout((110*HZ)/1000);
 				restore_flags(flags);
 				cs->hw.elsa.ctrl_reg &= ~ELSA_ENA_TIMER_INT;

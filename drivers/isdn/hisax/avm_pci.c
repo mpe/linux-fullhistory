@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.12 1999/09/04 06:20:05 keil Exp $
+/* $Id: avm_pci.c,v 1.14 1999/12/19 13:09:41 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,13 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.14  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
+ * Revision 1.13  1999/12/03 12:10:14  keil
+ * Bugfix: Wrong channel use on hangup of channel 2
+ *
  * Revision 1.12  1999/09/04 06:20:05  keil
  * Changes from kernel set_current_state()
  *
@@ -56,7 +63,7 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.12 $";
+static const char *avm_pci_rev = "$Revision: 1.14 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -269,18 +276,26 @@ modehdlc(struct BCState *bcs, int mode, int bc)
 	int hdlc = bcs->channel;
 
 	if (cs->debug & L1_DEB_HSCX)
-		debugl1(cs, "hdlc %c mode %d ichan %d",
-			'A' + hdlc, mode, bc);
-	bcs->mode = mode;
-	bcs->channel = bc;
+		debugl1(cs, "hdlc %c mode %d --> %d ichan %d --> %d",
+			'A' + hdlc, bcs->mode, mode, hdlc, bc);
 	bcs->hw.hdlc.ctrl.ctrl = 0;
 	switch (mode) {
+		case (-1): /* used for init */
+			bcs->mode = 1;
+			bcs->channel = bc;
+			bc = 0;
 		case (L1_MODE_NULL):
+			if (bcs->mode == L1_MODE_NULL)
+				return;
 			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bcs, 5);
+			bcs->mode = L1_MODE_NULL;
+			bcs->channel = bc;
 			break;
 		case (L1_MODE_TRANS):
+			bcs->mode = mode;
+			bcs->channel = bc;
 			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bcs, 5);
@@ -290,6 +305,8 @@ modehdlc(struct BCState *bcs, int mode, int bc)
 			hdlc_sched_event(bcs, B_XMTBUFREADY);
 			break;
 		case (L1_MODE_HDLC):
+			bcs->mode = mode;
+			bcs->channel = bc;
 			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_ITF_FLG;
 			write_ctrl(bcs, 5);
@@ -695,8 +712,8 @@ inithdlc(struct IsdnCardState *cs))
 	cs->bcs[1].BC_SetStack = setstack_hdlc;
 	cs->bcs[0].BC_Close = close_hdlcstate;
 	cs->bcs[1].BC_Close = close_hdlcstate;
-	modehdlc(cs->bcs, 0, 0);
-	modehdlc(cs->bcs + 1, 0, 0);
+	modehdlc(cs->bcs, -1, 0);
+	modehdlc(cs->bcs + 1, -1, 1);
 }
 
 static void
@@ -734,11 +751,11 @@ reset_avmpcipnp(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	outb(AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER, cs->hw.avm.cfg_reg + 2);
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | AVM_STATUS0_ENA_IRQ, cs->hw.avm.cfg_reg + 2);
 	outb(AVM_STATUS1_ENA_IOM | cs->irq, cs->hw.avm.cfg_reg + 3);
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(cs->hw.avm.cfg_reg + 3));
 }

@@ -2190,10 +2190,9 @@ static int solo1_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
 
-static int solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
+static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
 	struct solo1_state *s;
-	struct pm_dev *pmdev;
 
 	if (!RSRCISIOREGION(pcidev, 0) ||
 	    !RSRCISIOREGION(pcidev, 1) ||
@@ -2293,7 +2292,7 @@ static int solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid
 	return -1;
 }
 
-static void solo1_remove(struct pci_dev *dev)
+static void __devinit solo1_remove(struct pci_dev *dev)
 {
 	struct solo1_state *s = (struct solo1_state *)dev->driver_data;
 	
@@ -2319,7 +2318,7 @@ static void solo1_remove(struct pci_dev *dev)
 	dev->driver_data = NULL;
 }
 
-static const struct pci_device_id id_table[] = {
+static const struct pci_device_id id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, PCI_ANY_ID, PCI_ANY_ID, 0, 0 },
 	{ 0, 0, 0, 0, 0, 0 }
 };

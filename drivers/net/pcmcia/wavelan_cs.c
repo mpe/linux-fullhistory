@@ -4663,6 +4663,7 @@ wavelan_event(event_t		event,		/* The event received */
 	  {
 	    /* Accept no more transmissions */
       	    netif_stop_queue (dev);
+	    clear_bit(LINK_STATE_START, &dev->state);
 
 	    /* Release the card */
 	    wv_pcmcia_release((u_long) link);
@@ -4701,6 +4702,7 @@ wavelan_event(event_t		event,		/* The event received */
       	    if(link->open)
 	      {
 	      	netif_stop_queue (dev);
+		clear_bit(LINK_STATE_START, &dev->state);
 	      }
       	    CardServices(ReleaseConfiguration, link->handle);
 	  }
@@ -4716,6 +4718,7 @@ wavelan_event(event_t		event,		/* The event received */
       	    if(link->open)	/* If RESET -> True, If RESUME -> False ??? */
 	      {
 		wv_hw_reset(dev);
+		set_bit(LINK_STATE_START, &dev->state);
 		netif_start_queue (dev);
 	      }
 	  }

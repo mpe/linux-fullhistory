@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.8 1999/09/04 06:20:05 keil Exp $
+/* $Id: bkm_a8.c,v 1.9 1999/12/19 13:09:41 keil Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,10 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a8.c,v $
+ * Revision 1.9  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.8  1999/09/04 06:20:05  keil
  * Changes from kernel set_current_state()
  *
@@ -49,7 +53,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.8 $";
+const char sct_quadro_revision[] = "$Revision: 1.9 $";
 
 /* To survive the startup phase */
 typedef struct {
@@ -298,13 +302,13 @@ reset_bkm(struct IsdnCardState *cs)
 
 			save_flags(flags);
 			sti();
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10 * HZ) / 1000);
 
 			/* Remove the soft reset */
 			wordout(cs->hw.ax.plx_adr + 0x50, (wordin(cs->hw.ax.plx_adr + 0x50) | 4));
 
-			set_current_state(TASK_INTERRUPTIBLE);
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10 * HZ) / 1000);
 			restore_flags(flags);
 		}

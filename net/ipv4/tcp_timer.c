@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.73 2000/02/09 11:16:42 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.74 2000/02/14 20:56:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -659,6 +659,7 @@ static void tcp_synack_timer(struct sock *sk)
 				if (req->retrans == 0)
 					lopt->qlen_young--;
 				tcp_openreq_free(req);
+				continue;
 			}
 			reqp = &req->dl_next;
 		}

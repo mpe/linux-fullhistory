@@ -1,10 +1,14 @@
-/* $Id: isurf.c,v 1.7 1999/11/14 23:37:03 keil Exp $
+/* $Id: isurf.c,v 1.8 1999/12/19 13:09:42 keil Exp $
 
  * isurf.c  low level stuff for Siemens I-Surf/I-Talk cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * $Log: isurf.c,v $
+ * Revision 1.8  1999/12/19 13:09:42  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.7  1999/11/14 23:37:03  keil
  * new ISA memory mapped IO
  *
@@ -40,7 +44,7 @@
 
 extern const char *CardType[];
 
-static const char *ISurf_revision = "$Revision: 1.7 $";
+static const char *ISurf_revision = "$Revision: 1.8 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -162,10 +166,10 @@ reset_isurf(struct IsdnCardState *cs, u_char chips)
 	byteout(cs->hw.isurf.reset, chips); /* Reset On */
 	save_flags(flags);
 	sti();
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	byteout(cs->hw.isurf.reset, ISURF_ISAR_EA); /* Reset Off */
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }

@@ -83,27 +83,25 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
 		}
 	}
 
-	down(&current->mm->mmap_sem);
-	retval = -ENOMEM;
-	if(!(flags & MAP_FIXED) && !addr) {
-		unsigned long attempt = get_unmapped_area(addr, len);
-		if(!attempt || (attempt >= 0xf0000000UL))
-			goto out_putf;
-		addr = (u32) attempt;
-	}
+	retval = -EINVAL;
+	len = PAGE_ALIGN(len);
 	if(!(flags & MAP_FIXED))
 		addr = 0;
+	else if (len > 0xf0000000UL || addr > 0xf0000000UL - len)
+		goto out_putf;
 	ret_type = flags & _MAP_NEW;
 	flags &= ~_MAP_NEW;
 
+	down(&current->mm->mmap_sem);
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file,
 			 (unsigned long) addr, (unsigned long) len,
 			 (unsigned long) prot, (unsigned long) flags, off);
+	up(&current->mm->mmap_sem);
 	if(!ret_type)
 		retval = ((retval < 0xf0000000) ? 0 : retval);
+	                        
 out_putf:
-	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:

@@ -1,4 +1,4 @@
-/* $Id: asuscom.c,v 1.8 1999/09/04 06:20:05 keil Exp $
+/* $Id: asuscom.c,v 1.9 1999/12/19 13:09:41 keil Exp $
 
  * asuscom.c     low level stuff for ASUSCOM NETWORK INC. ISDNLink cards
  *
@@ -8,6 +8,10 @@
  *
  *
  * $Log: asuscom.c,v $
+ * Revision 1.9  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 1.8  1999/09/04 06:20:05  keil
  * Changes from kernel set_current_state()
  *
@@ -42,7 +46,7 @@
 
 extern const char *CardType[];
 
-const char *Asuscom_revision = "$Revision: 1.8 $";
+const char *Asuscom_revision = "$Revision: 1.9 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -291,13 +295,13 @@ reset_asuscom(struct IsdnCardState *cs)
 		byteout(cs->hw.asus.adr, ASUS_RESET);	/* Reset On */
 	save_flags(flags);
 	sti();
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	if (cs->subtyp == ASUS_IPAC)
 		writereg(cs->hw.asus.adr, cs->hw.asus.isac, IPAC_POTA2, 0x0);
 	else
 		byteout(cs->hw.asus.adr, 0);	/* Reset Off */
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	if (cs->subtyp == ASUS_IPAC) {
 		writereg(cs->hw.asus.adr, cs->hw.asus.isac, IPAC_CONF, 0x0);

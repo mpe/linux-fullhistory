@@ -4664,6 +4664,8 @@ static inline void wait_for_xmitr(struct async_struct *info)
 /*
  *	Print a string to the serial port trying not to disturb
  *	any possible real use of the port...
+ *
+ *	The console_lock must be held when we get here.
  */
 static void serial_console_write(struct console *co, const char *s,
 				unsigned count)

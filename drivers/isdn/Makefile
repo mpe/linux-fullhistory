@@ -1,6 +1,6 @@
 SUB_DIRS     :=
 MOD_SUB_DIRS :=
-ALL_SUB_DIRS := icn pcbit hisax avmb1 act2000 eicon divert
+ALL_SUB_DIRS := icn pcbit hisax avmb1 act2000 eicon divert hysdn
 
 L_OBJS :=
 LX_OBJS :=
@@ -135,6 +135,10 @@ else
   ifeq ($(CONFIG_ISDN_DRV_EICON),m)
     MOD_SUB_DIRS += eicon
   endif
+endif
+
+ifeq ($(CONFIG_HYSDN),y)
+  MOD_SUB_DIRS += hysdn
 endif
 
 include $(TOPDIR)/Rules.make

@@ -12,9 +12,10 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.185 2000/02/05 21:29:19 acher Exp $
+ * $Id: usb-uhci.c,v 1.197 2000/02/15 17:44:22 acher Exp $
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
@@ -54,7 +55,6 @@
 #define dbg(format, arg...) do {} while (0)
 
 #include <linux/pm.h>
-static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data);
 
 #ifdef DEBUG_SYMBOLS
 	#define _static
@@ -70,9 +70,18 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data);
 	static kmem_cache_t *urb_priv_kmem;
 #endif
 
-#define USE_CTRL_DEPTH_FIRST 1  // 0: Breadth first, 1: Depth first (standard)
+#define USE_CTRL_DEPTH_FIRST 0  // 0: Breadth first, 1: Depth first
+#define USE_BULK_DEPTH_FIRST 0  // 0: Breadth first, 1: Depth first
 
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
+#define USE_RECLAMATION_LOOP
+#else
 //#define USE_RECLAMATION_LOOP
+#endif
+
+// stop bandwidth reclamation after (roughly) 50ms (depends also on
+// hub polling interval)
+#define IDLE_TIMEOUT  (HZ/20)
 
 _static int rh_submit_urb (urb_t *urb);
 _static int rh_unlink_urb (urb_t *urb);
@@ -101,22 +110,81 @@ void clean_descs(uhci_t *s, int force)
 	}
 }
 /*-------------------------------------------------------------------*/
-_static void queue_urb (uhci_t *s, struct list_head *p)
+#ifdef USE_RECLAMATION_LOOP
+_static void enable_desc_loop(uhci_t *s, urb_t *urb)
+{
+	int flags;
+	
+	dbg("enable_desc_loop: enter");
+	
+	spin_lock_irqsave (&s->qh_lock, flags);
+	s->chain_end->hw.qh.head=virt_to_bus(s->control_chain)|UHCI_PTR_QH;
+	s->loop_usage++;
+	((urb_priv_t*)urb->hcpriv)->use_loop=1;
+	spin_unlock_irqrestore (&s->qh_lock, flags);
+	
+	dbg("enable_desc_loop: finished");
+}
+/*-------------------------------------------------------------------*/
+_static void disable_desc_loop(uhci_t *s, urb_t *urb)
+{
+	int flags;
+	
+	dbg("disable_desc_loop: enter\n");
+	
+	spin_lock_irqsave (&s->qh_lock, flags);
+
+	if (((urb_priv_t*)urb->hcpriv)->use_loop) {
+		s->loop_usage--;
+
+		if (!s->loop_usage)
+			s->chain_end->hw.qh.head=UHCI_PTR_TERM;
+
+		((urb_priv_t*)urb->hcpriv)->use_loop=0;
+	}
+	spin_unlock_irqrestore (&s->qh_lock, flags);
+	
+	dbg("disable_desc_loop: finished");
+
+}
+#endif
+/*-------------------------------------------------------------------*/
+_static void queue_urb (uhci_t *s, urb_t *urb)
 {
 	unsigned long flags=0;
+	struct list_head *p=&urb->urb_list;
+	
 
 	spin_lock_irqsave (&s->urb_list_lock, flags);
 
+#ifdef USE_RECLAMATION_LOOP
+	{
+		int type;
+		type=usb_pipetype (urb->pipe);
+
+		if ((type == PIPE_BULK) || (type == PIPE_CONTROL))
+			enable_desc_loop(s, urb);
+	}
+#endif
+	((urb_priv_t*)urb->hcpriv)->started=jiffies;
 	list_add_tail (p, &s->urb_list);
 	
 	spin_unlock_irqrestore (&s->urb_list_lock, flags);
 }
 
 /*-------------------------------------------------------------------*/
-_static void dequeue_urb (uhci_t *s, struct list_head *p)
+_static void dequeue_urb (uhci_t *s, urb_t *urb)
 {
-	list_del (p);
+#ifdef USE_RECLAMATION_LOOP
+	int type;
 
+	type=usb_pipetype (urb->pipe);
+
+	if ((type == PIPE_BULK) || (type == PIPE_CONTROL))
+		disable_desc_loop(s, urb);
+#endif
+
+	list_del (&urb->urb_list);
 }
 /*-------------------------------------------------------------------*/
 _static int alloc_td (uhci_desc_t ** new, int flags)
@@ -219,6 +287,7 @@ _static int unlink_td (uhci_t *s, uhci_desc_t *element, int phys_unlink)
 	
 	return 0;
 }
+
 /*-------------------------------------------------------------------*/
 _static int delete_desc (uhci_desc_t *element)
 {
@@ -451,11 +520,6 @@ _static int init_skel (uhci_t *s)
 	insert_qh (s, s->bulk_chain, qh, 0);
 	s->control_chain = qh;
 
-#ifdef USE_RECLAMATION_LOOP
-	s->chain_end->hw.qh.head=virt_to_bus(s->control_chain)|UHCI_PTR_QH;
-	info("Using loop for bandwidth reclamation.");
-#endif
-
 	for (n = 0; n < 8; n++)
 		s->int_chain[n] = 0;
 
@@ -625,7 +689,7 @@ _static int uhci_submit_control_urb (urb_t *urb)
 	list_add (&qh->desc_list, &urb_priv->desc_list);
 
 	urb->status = -EINPROGRESS;
-	queue_urb (s, &urb->urb_list);	// queue before inserting in desc chain
+	queue_urb (s, urb);	// queue before inserting in desc chain
 
 	qh->hw.qh.element&=~UHCI_PTR_TERM;
 
@@ -635,8 +699,8 @@ _static int uhci_submit_control_urb (urb_t *urb)
 		insert_qh (s, s->control_chain, qh, 1);	// insert after control chain
 	else
 		insert_qh (s, s->bulk_chain, qh, 0);	// insert before bulk chain
-	
 	//uhci_show_queue(qh);
+
 	dbg("uhci_submit_control end");
 	return 0;
 }
@@ -651,11 +715,12 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 	unsigned int pipe = urb->pipe;
 	int maxsze = usb_maxpacket (urb->dev, pipe, usb_pipeout (pipe));
 	int info, len;
+	int depth_first=USE_BULK_DEPTH_FIRST;  // UHCI descriptor chasing method
 
-	/* shouldn't the clear_halt be done in the USB core or in the client driver? - Thomas */
-	if (usb_endpoint_halted (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe)) &&
-	    usb_clear_halt (urb->dev, usb_pipeendpoint (pipe) | (pipe & USB_DIR_IN)))
+
+	if (usb_endpoint_halted (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe)))
 		return -EPIPE;
+
 	if (urb->transfer_buffer_length < 0) {
 		err("Negative transfer length in submit_bulk");
 		return -EINVAL;
@@ -685,7 +750,7 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 	do {					// TBD: Really allow zero-length packets?
 		int pktsze = len;
 
-		alloc_td (&td, UHCI_PTR_DEPTH);
+		alloc_td (&td, UHCI_PTR_DEPTH * depth_first);
 
 		if (!td) {
 			delete_qh (s, qh);
@@ -708,7 +773,7 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 			td->hw.td.status |= TD_CTRL_IOC;	// last one generates INT
 		//dbg("insert td %p, len %i",td,pktsze);
 
-		insert_td (s, qh, td, UHCI_PTR_DEPTH);
+		insert_td (s, qh, td, UHCI_PTR_DEPTH * depth_first);
 		
 		/* Alternate Data0/1 (start with Data0) */
 		usb_dotoggle (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe));
@@ -717,7 +782,7 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 	list_add (&qh->desc_list, &urb_priv->desc_list);
 
 	urb->status = -EINPROGRESS;
-	queue_urb (s, &urb->urb_list);
+	queue_urb (s, urb);
 	
 	qh->hw.qh.element&=~UHCI_PTR_TERM;
 
@@ -727,6 +792,7 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 	dbg("uhci_submit_bulk_urb: exit");
 	return 0;
 }
+
 /*-------------------------------------------------------------------*/
 // unlinks an urb by dequeuing its qh, waits some frames and forgets it
 // Problem: unlinking in interrupt requires waiting for one frame (udelay)
@@ -758,7 +824,7 @@ _static int uhci_unlink_urb (urb_t *urb)
 
 	if (urb->status == -EINPROGRESS) {
 		// URB probably still in work
-		dequeue_urb (s, &urb->urb_list);
+		dequeue_urb (s, urb);
 		s->unlink_urb_done=1;
 		spin_unlock_irqrestore (&s->urb_list_lock, flags);		
 		
@@ -773,7 +839,7 @@ _static int uhci_unlink_urb (urb_t *urb)
 				unlink_td (s, td, 1);
 			}
 			// wait at least 1 Frame
-			uhci_wait_ms(1);
+			uhci_wait_ms(1);	
 			while ((p = urb_priv->desc_list.next) != &urb_priv->desc_list) {
 				td = list_entry (p, uhci_desc_t, desc_list);
 				list_del (p);
@@ -991,7 +1057,7 @@ _static int uhci_submit_int_urb (urb_t *urb)
 	list_add_tail (&td->desc_list, &urb_priv->desc_list);
 
 	urb->status = -EINPROGRESS;
-	queue_urb (s, &urb->urb_list);
+	queue_urb (s, urb);
 
 	insert_td_horizontal (s, s->int_chain[nint], td);	// store in INT-TDs
 
@@ -1083,7 +1149,7 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 	
 		if (n == last) {
 			urb->status = -EINPROGRESS;
-			queue_urb (s, &urb->urb_list);
+			queue_urb (s, urb);
 		}
 		insert_td_horizontal (s, s->iso_td[(urb->start_frame + n) & 1023], td);	// store in iso-tds
 		//uhci_show_td(td);
@@ -1194,14 +1260,44 @@ _static int uhci_submit_urb (urb_t *urb)
 #endif
 		return ret;
 	}
-/*
-	urb->status = -EINPROGRESS;
-	queue_urb (s, &urb->urb_list);
 
-	dbg("submit_urb: exit");
-*/
 	return 0;
 }
+#ifdef USE_RECLAMATION_LOOP
+// Removes bandwidth reclamation if URB idles too long
+void check_idling_urbs(uhci_t *s)
+{
+	struct list_head *p,*p2;
+	urb_t *urb;
+	int type;	
+
+	//dbg("check_idling_urbs: enter i:%d",in_interrupt());
+	
+	spin_lock (&s->urb_list_lock);
+	p = s->urb_list.prev;	
+
+	while (p != &s->urb_list) {
+		p2 = p;
+		p = p->prev;
+		urb=list_entry (p2, urb_t, urb_list);
+		type=usb_pipetype (urb->pipe);
+
+#if 0
+		err("URB timers: %li now: %li %i\n",
+			((urb_priv_t*)urb->hcpriv)->started +IDLE_TIMEOUT, jiffies,
+			type);
+#endif			 
+		if (((type == PIPE_BULK) || (type == PIPE_CONTROL)) &&  
+		    (((urb_priv_t*)urb->hcpriv)->use_loop) &&
+		    ((((urb_priv_t*)urb->hcpriv)->started +IDLE_TIMEOUT) < jiffies))
+			disable_desc_loop(s,urb);
+
+	}
+	spin_unlock (&s->urb_list_lock);
+	
+	//dbg("check_idling_urbs: finished");
+}
+#endif
 /*-------------------------------------------------------------------
  Virtual Root Hub
  -------------------------------------------------------------------*/
@@ -1313,9 +1409,12 @@ _static int rh_init_int_timer (urb_t *urb);
 _static void rh_int_timer_do (unsigned long ptr)
 {
 	int len;
-
 	urb_t *urb = (urb_t*) ptr;
 	uhci_t *uhci = urb->dev->bus->hcpriv;
+
+#ifdef USE_RECLAMATION_LOOP
+	check_idling_urbs(uhci);
+#endif
 
 	if (uhci->rh.send) {
 		len = rh_send_irq (urb);
@@ -1558,9 +1657,11 @@ _static int rh_unlink_urb (urb_t *urb)
 {
 	uhci_t *uhci = urb->dev->bus->hcpriv;
 
-	dbg("Root-Hub unlink IRQ");
-	uhci->rh.send = 0;
-	del_timer (&uhci->rh.rh_int_timer);
+	if (uhci->rh.urb==urb) {
+		dbg("Root-Hub unlink IRQ");
+		uhci->rh.send = 0;
+		del_timer (&uhci->rh.rh_int_timer);
+	}
 	return 0;
 }
 /*-------------------------------------------------------------------*/
@@ -1741,7 +1842,7 @@ _static int process_transfer (uhci_t *s, urb_t *urb)
 		// got less data than requested
 		if ( (actual_length < maxlength)) {
 			if (urb->transfer_flags & USB_DISABLE_SPD) {
-				ret = -EREMOTEIO;	// treat as real error
+				status = -EREMOTEIO;	// treat as real error
 				dbg("process_transfer: SPD!!");
 				break;	// exit after this TD because SP was detected
 			}
@@ -1776,6 +1877,10 @@ _static int process_transfer (uhci_t *s, urb_t *urb)
 	list_add_tail (&qh->horizontal, &s->free_desc); // mark for later deletion
 
 	urb->status = status;
+
+#ifdef USE_RECLAMATION_LOOP	
+	disable_desc_loop(s,urb);
+#endif	
 
 	dbg("process_transfer: urb %p, wanted len %d, len %d status %x err %d",
 		urb,urb->transfer_buffer_length,urb->actual_length, urb->status, urb->error_count);
@@ -1971,7 +2076,7 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 		int proceed = 0;
 
 		dbg("dequeued urb: %p", urb);
-		dequeue_urb (s, p);
+		dequeue_urb (s, urb);
 
 #ifdef DEBUG_SLAB
 		kmem_cache_free(urb_priv_kmem, urb->hcpriv);
@@ -2181,6 +2286,23 @@ _static int __init uhci_start_usb (uhci_t *s)
 	return 0;
 }
 
+_static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
+{
+	uhci_t *s = (uhci_t*) dev->data;
+	dbg("handle_apm_event(%d)", rqst);
+	if (s) {
+		switch (rqst) {
+		case PM_SUSPEND:
+			reset_hc (s);
+			break;
+		case PM_RESUME:
+			start_hc (s);
+			break;
+		}
+	}
+	return 0;
+}
+
 _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_addr, unsigned int io_size)
 {
 	uhci_t *s;
@@ -2236,7 +2358,7 @@ _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_add
 	}
 
 	s->rh.numports = s->maxports;
-
+	s->loop_usage=0;
 	if (init_skel (s)) {
 		usb_free_bus (bus);
 		kfree(s);
@@ -2306,23 +2428,6 @@ _static int __init start_uhci (struct pci_dev *dev)
 	return -1;
 }
 
-_static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
-{
-	uhci_t *s = (uhci_t*) dev->data;
-	dbg("handle_apm_event(%d)", rqst);
-	if (s) {
-		switch (rqst) {
-		case PM_SUSPEND:
-			reset_hc (s);
-			break;
-		case PM_RESUME:
-			start_hc (s);
-			break;
-		}
-	}
-	return 0;
-}
-
 int __init uhci_init (void)
 {
 	int retval = -ENODEV;
@@ -2385,11 +2490,9 @@ void __exit uhci_cleanup (void)
 		uhci_cleanup_dev(s);
 	}
 #ifdef DEBUG_SLAB
-	
-	
 	if(kmem_cache_destroy(uhci_desc_kmem))
 		err("uhci_desc_kmem remained");
-		
+
 	if(kmem_cache_destroy(urb_priv_kmem))
 		err("urb_priv_kmem remained");
 #endif
