@@ -224,6 +224,11 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   {
     size += sprintf(BLS, "    BIOS Memory Address: 0x%08x\n", p->bios_address);
   }
+  if( p->chip & AHC_PCI )
+  {
+    size += sprintf(BLS, "    PCI Bus 0x%02x Device 0x%02x\n", p->pci_bus,
+              p->pci_device_fn);
+  }
   size += sprintf(BLS, " Adapter SEEPROM Config: %s\n",
           (p->flags & AHC_SEEPROM_FOUND) ? "SEEPROM found and used." :
          ((p->flags & AHC_USEDEFAULTS) ? "SEEPROM not found, using defaults." :
@@ -373,11 +378,9 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   }
   else
   {
-    *start = &aic7xxx_buffer[offset];   /* Start of wanted data */
-    if (size - offset < length)
-    {
-      length = size - offset;
-    }
+    *start = buffer;
+    length = MIN(length, size - offset);
+    memcpy(buffer, &aic7xxx_buffer[offset], length);
   }
 
   return (length);

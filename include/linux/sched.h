@@ -845,7 +845,7 @@ static inline int task_lock(struct task_struct *p)
 	down(&p->exit_sem);
 	if (p->p_pptr)
 		return 1;
-	/* He's dead, Jim. You take his wallet, I'll take tricoder... */
+	/* He's dead, Jim. You take his wallet, I'll take the tricorder... */
 	up(&p->exit_sem);
 	return 0;
 }

@@ -1253,20 +1253,10 @@ static ide_startstop_t cdrom_pc_intr (ide_drive_t *drive)
 
 	/* Figure out how much data to transfer. */
 	thislen = pc->buflen;
-	if (thislen < 0) thislen = -thislen;
 	if (thislen > len) thislen = len;
 
 	/* The drive wants to be written to. */
 	if ((ireason & 3) == 0) {
-		/* Check that we want to write. */
-		if (pc->buflen > 0) {
-			printk ("%s: cdrom_pc_intr: Drive wants "
-				"to transfer data the wrong way!\n",
-				drive->name);
-			pc->stat = 1;
-			thislen = 0;
-		}
-
 		/* Transfer the data. */
 		atapi_output_bytes (drive, pc->buffer, thislen);
 
@@ -1285,14 +1275,6 @@ static ide_startstop_t cdrom_pc_intr (ide_drive_t *drive)
 
 	/* Same drill for reading. */
 	else if ((ireason & 3) == 2) {
-		/* Check that we want to read. */
-		if (pc->buflen < 0) {
-			printk ("%s: cdrom_pc_intr: Drive wants to "
-				"transfer data the wrong way!\n",
-				drive->name);
-			pc->stat = 1;
-			thislen = 0;
-		}
 
 		/* Transfer the data. */
 		atapi_input_bytes (drive, pc->buffer, thislen);

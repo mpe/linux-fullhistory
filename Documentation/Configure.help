@@ -6499,10 +6499,16 @@ CONFIG_RTL8139
 
 SiS 900 PCI Fast Ethernet Adapter support
 CONFIG_SIS900
-  This is a driver for the Silicon Integrated System Corporation 900
-  Fast Ethernet PCI network card. If you have one of those, say Y and
-  read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  This is a driver for the Fast Ethernet PCI network cards based on
+  the SiS 900 and SiS 7016 chips. The SiS 900 core is also embedded in
+  SiS 630 and SiS 540 chipsets. If you have one of those, say Y and
+  read the Ethernet-HOWTO, available via FTP (user: anonymous) in   
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. Please read 
+  Documentation/networking/sis900.txt and comments at the beginning
+  of drivers/net/sis900.c for more information.
+
+  This driver also supports AMD 79C901 HomePNA such that you can use
+  your phone line as network cable.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -11128,10 +11134,10 @@ CONFIG_ISDN_AUDIO
   is the only voice-supporting driver. See
   Documentation/isdn/README.audio for more information.
 
-X.25 PLP on top of ISDN (EXPERIMENTAL)
+X.25 PLP on top of ISDN
 CONFIG_ISDN_X25
-  This experimental feature provides the X.25 protocol over ISDN
-  connections. See Documentation/isdn/README.x25 for more information
+  This feature provides the X.25 protocol over ISDN connections.
+  See Documentation/isdn/README.x25 for more information
   if you are thinking about using this.
 
 ISDN diversion services support
@@ -11193,6 +11199,28 @@ CONFIG_ISDN_DRV_HISAX
   called hisax.o. See Documentation/isdn/README.HiSax for more
   information on using this driver.
 
+HiSax Support for EURO/DSS1
+CONFIG_HISAX_EURO
+  Enable this if you have a EURO ISDN line.
+
+Support for german chargeinfo
+CONFIG_DE_AOC
+  If you have german AOC, you can enable this to get the charginfo.
+
+Disable sending complete
+CONFIG_HISAX_NO_SENDCOMPLETE
+  If you have trouble with some ugly exchanges or you live in
+  Australia select this option.
+
+Disable sending low layer compatibility
+CONFIG_HISAX_NO_LLC
+  If you have trouble with some ugly exchanges try to select this
+  option.
+
+HiSax Support for german 1TR6
+CONFIG_HISAX_1TR6
+  Enable this if you have a old german 1TR6 line.
+
 HiSax Support for Teles 16.0/8.0
 CONFIG_HISAX_16_0
   This enables HiSax support for the Teles ISDN-cards S0-16.0, S0-8
@@ -11211,13 +11239,15 @@ CONFIG_HISAX_16_3
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Teles 16.3c
-CONFIG_HISAX_TELES3C
-  This enables HiSax support for the Teles ISDN-cards 16.3c.
-  
-  See Documentation/isdn/README.HiSax on how to configure it using the
-  different cards, a different D-channel protocol, or non-standard
-  IRQ/port settings.
+HiSax Support for Teles PCI
+CONFIG_HISAX_TELESPCI
+  This enables HiSax support for the Teles PCI.
+  See Documentation/isdn/README.HiSax on how to configure it.
+
+HiSax Support for Teles S0Box
+CONFIG_HISAX_S0BOX
+  This enables HiSax support for the Teles/Creatix parallel port
+  S0BOX.  See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for AVM A1 (Fritz)
 CONFIG_HISAX_AVM_A1
@@ -11227,7 +11257,17 @@ CONFIG_HISAX_AVM_A1
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Elsa ISA cards
+HiSax Support for AVM PnP/PCI (Fritz!PNP/PCI)
+CONFIG_HISAX_FRITZPCI
+  This enables HiSax support for the AVM "Fritz!PnP" and "Fritz!PCI".
+  See Documentation/isdn/README.HiSax on how to configure it.
+
+HiSax Support for AVM A1 PCMCIA (Fritz)
+CONFIG_HISAX_AVM_A1_PCMCIA
+  This enables HiSax support for the AVM A1 "Fritz!PCMCIA").
+  See Documentation/isdn/README.HiSax on how to configure it.
+
+HiSax Support for Elsa cards
 CONFIG_HISAX_ELSA
   This enables HiSax support for the Elsa Mircolink ISA cards, for the
   Elsa Quickstep series cards and Elsa PCMCIA.
@@ -11270,7 +11310,16 @@ CONFIG_HISAX_TELEINT
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Sedlbauer speed card/win-star
+HiSax Support for HFC-S based cards
+CONFIG_HISAX_HFCS
+  This enables HiSax support for the HFC-S 2BDS0 based cards, like
+  teles 16.3c.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using the
+  different cards, a different D-channel protocol, or non-standard
+  IRQ/port settings.
+
+HiSax Support for Sedlbauer cards
 CONFIG_HISAX_SEDLBAUER
   This enables HiSax support for the Sedlbauer passive ISDN cards.
 
@@ -11307,50 +11356,58 @@ CONFIG_HISAX_NICCY
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
+HiSax Support for Siemens I-Surf card
+CONFIG_HISAX_ISURF
+  This enables HiSax support for the Siemens I-Talk/I-Surf card with
+  ISAR chip.
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for HST Saphir card
+CONFIG_HISAX_HSTSAPHIR
+  This enables HiSax support for the HST Saphir card.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for Telekom A4T card
+CONFIG_HISAX_BKM_A4T
+  This enables HiSax support for the Telekom A4T card.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for Scitel Quadro card
+CONFIG_HISAX_SCT_QUADRO
+  This enables HiSax support for the Scitel Quadro card.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for Gazel cards
+CONFIG_HISAX_GAZEL
+  This enables HiSax support for the Gazel cards.
+
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for HFC PCI-Bus cards
+CONFIG_HISAX_HFC_PCI
+  This enables HiSax support for the HFC-S PCI 2BDS0 based cards.
+  
+  For more informations see under Documentation/isdn/README.hfc-pci.
+
+HiSax Support for Winbond W6692 based cards
+CONFIG_HISAX_W6692
+  This enables HiSax support for Winbond W6692 based PCI ISDN cards.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
 HiSax Support for Am7930 (EXPERIMENTAL)
 CONFIG_HISAX_AMD7930
   This enables HiSax support for the AMD7930 chips on some SPARCs.
   This code is not finished yet.
-
-HiSax Support for EURO/DSS1
-CONFIG_HISAX_EURO
-  Say Y or N according to the D-channel protocol which your local
-  telephone service company provides.
-
-  NOTE: If you say Y here and you have only one ISDN card installed,
-  you cannot say Y to "HiSax Support for German 1TR6", below. And vice
-  versa.
-
-Support for German tariff info
-CONFIG_DE_AOC
-  If you want that the HiSax hardware driver sends messages to the
-  upper level of the isdn code on each AOCD (Advice Of Charge, During
-  the call -- transmission of the fee information during a call) and
-  on each AOCE (Advice Of Charge, at the End of the call --
-  transmission of fee information at the end of the call), say Y here.
-  This works only in Germany.
-
-Support for Australian Microlink service (not for std. EURO)
-CONFIG_HISAX_ML
-  If you are in Australia and connected to the Microlink telephone
-  network, enable this, because there are little differences in
-  protocol.
-  
-  Please don't enable this in other countries.
-
-HiSax Support for US/NI-1 (not released yet)
-CONFIG_HISAX_NI1
-  Say Y or N according to the D-channel protocol which your local
-  telephone service company provides.
-
-HiSax Support for German 1TR6
-CONFIG_HISAX_1TR6
-  Say Y or N according to the D-channel protocol which your local
-  telephone service company provides.
-
-  NOTE: If you say Y here and you have only one ISDN card installed,
-  you cannot say Y to "HiSax Support for EURO/DSS1", above. And vice
-  versa.
 
 PCBIT-D support
 CONFIG_ISDN_DRV_PCBIT
@@ -11399,26 +11456,51 @@ CONFIG_ISDN_TTY_FAX
   an ISDN-fax-machine. This must be supported by the lowlevel driver
   also. See Documentation/isdn/README.fax for more information.
 
-AVM-B1 with CAPI2.0 support
+AVM CAPI2.0 support
 CONFIG_ISDN_DRV_AVMB1
-  This enables support for the AVM B1 ISDN networking cards. In
+  This enables support for the AVM B1/T1 ISDN networking cards.In
   addition, a CAPI (Common ISDN Application Programming Interface, a
   standard making it easy for programs to access ISDN hardware, see
-  http://www.capi.org/ ) interface for this card is provided. In order
-  to use this card, additional firmware is necessary, which has to be
-  downloaded into the card using a utility which is distributed
-  separately. Please read the file Documentation/isdn/README.avmb1.
-
+  http://www.capi.org/; to browse the WWW, you need to have access to
+  a machine on the Internet that has a program like lynx or netscape)
+  interface for this card is provided. In order to use this card,
+  additional firmware is necessary, which has to be downloaded into
+  the card using a utility which is distributed separately. Please
+  read the file Documentation/isdn/README.avmb1. 
+  
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called avmb1.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+AVM B1 ISA support
+CONFIG_ISDN_DRV_AVMB1_B1ISA
+  Enable support for the ISA version of the AVM B1 card.
+
+AVM B1 PCI support
+CONFIG_ISDN_DRV_AVMB1_B1PCI
+  Enable support for the PCI version of the AVM B1 card.
+
+AVM T1/T1-B ISA support
+CONFIG_ISDN_DRV_AVMB1_T1ISA
+  Enable support for the AVM T1 T1B card.
+  Note: This is a PRI card and handle 30 B-channels.
+
+AVM B1/M1/M2 PCMCIA support
+CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+  Enable support for the PCMCIA version of the AVM B1 card.
+
+AVM T1/T1-B PCI support
+CONFIG_ISDN_DRV_AVMB1_T1PCI
+  Enable support for the AVM T1 T1B card.
+  Note: This is a PRI card and handle 30 B-channels.
 
 Verbose reason code reporting (kernel size +=7K)
 CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
   If you say Y here, the AVM B1 driver will give verbose reasons for
   disconnecting. This will increase the size of the kernel by 7 KB. If
   unsure, say Y.
+
 
 IBM Active 2000 support (EXPERIMENTAL)
 CONFIG_ISDN_DRV_ACT2000

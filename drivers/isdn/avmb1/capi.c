@@ -1,11 +1,14 @@
 /*
- * $Id: capi.c,v 1.21 1999/09/10 17:24:18 calle Exp $
+ * $Id: capi.c,v 1.22 1999/11/13 21:27:16 keil Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.22  1999/11/13 21:27:16  keil
+ * remove KERNELVERSION
+ *
  * Revision 1.21  1999/09/10 17:24:18  calle
  * Changes for proposed standard for CAPI2.0:
  * - AK148 "Linux Exention"
@@ -282,20 +285,13 @@ static unsigned int
 capi_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask = 0;
-#if (LINUX_VERSION_CODE >= 0x02012d)
 	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
-#else
-	unsigned int minor = MINOR(file->f_inode->i_rdev);
-#endif
 	struct capidev *cdev;
 
 	if (!minor || minor > CAPI_MAXMINOR || !capidevs[minor].is_registered)
 		return POLLERR;
 
 	cdev = &capidevs[minor];
-#if (LINUX_VERSION_CODE < 0x020159) /* 2.1.89 */
-#define poll_wait(f,wq,w) poll_wait((wq),(w))
-#endif
 	poll_wait(file, &(cdev->recv_wait), wait);
 	mask = POLLOUT | POLLWRNORM;
 	if (!skb_queue_empty(&cdev->recv_queue))
@@ -523,9 +519,7 @@ static struct file_operations capi_fops =
 	capi_ioctl,
 	NULL,			/* capi_mmap */
 	capi_open,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,118)
         NULL,                   /* capi_flush */
-#endif
 	capi_release,
 	NULL,			/* capi_fsync */
 	NULL,			/* capi_fasync */

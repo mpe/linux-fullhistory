@@ -189,21 +189,26 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct net_device *dev)
 
 	skb_pull(skb,sizeof(struct trh_hdr)-TR_MAXRIFLEN+riflen);
 
-	tr_add_rif_info(trh, dev);
-
-	if(*trh->daddr & 1) 
+	if(*trh->daddr & 0x80) 
 	{
 		if(!memcmp(trh->daddr,dev->broadcast,TR_ALEN)) 	
 			skb->pkt_type=PACKET_BROADCAST;
 		else
 			skb->pkt_type=PACKET_MULTICAST;
 	}
-
+	else if ( (trh->daddr[0] & 0x01) && (trh->daddr[1] & 0x00) && (trh->daddr[2] & 0x5E))
+	{
+		skb->pkt_type=PACKET_MULTICAST;
+	}
 	else if(dev->flags & IFF_PROMISC) 
 	{
 		if(memcmp(trh->daddr, dev->dev_addr, TR_ALEN))
 			skb->pkt_type=PACKET_OTHERHOST;
 	}
+
+	if ((skb->pkt_type != PACKET_BROADCAST) &&
+	    (skb->pkt_type != PACKET_MULTICAST))
+		tr_add_rif_info(trh,dev) ; 
 
 	/*
 	 * Strip the SNAP header from ARP packets since we don't 
@@ -231,13 +236,15 @@ static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct net_d
 	unsigned int hash;
 	rif_cache entry;
 	unsigned char *olddata;
+	unsigned char mcast_func_addr[] = {0xC0,0x00,0x00,0x04,0x00,0x00};
 	
 	spin_lock_bh(&rif_lock);
 
 	/*
 	 *	Broadcasts are single route as stated in RFC 1042 
 	 */
-	if(!memcmp(&(trh->daddr[0]),&(dev->broadcast[0]),TR_ALEN)) 
+	if( (!memcmp(&(trh->daddr[0]),&(dev->broadcast[0]),TR_ALEN)) ||
+	    (!memcmp(&(trh->daddr[0]),&(mcast_func_addr[0]), TR_ALEN))  )
 	{
 		trh->rcf=htons((((sizeof(trh->rcf)) << 8) & TR_RCF_LEN_MASK)  
 			       | TR_RCF_FRAME2K | TR_RCF_LIMITED_BROADCAST);

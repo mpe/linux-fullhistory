@@ -4,6 +4,7 @@
  * (C) 1997 Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>

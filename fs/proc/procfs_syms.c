@@ -14,15 +14,8 @@ EXPORT_SYMBOL(create_proc_entry);
 EXPORT_SYMBOL(remove_proc_entry);
 EXPORT_SYMBOL(proc_root);
 EXPORT_SYMBOL(proc_root_fs);
-EXPORT_SYMBOL(proc_get_inode);
-EXPORT_SYMBOL(proc_dir_inode_operations);
 EXPORT_SYMBOL(proc_net);
 EXPORT_SYMBOL(proc_bus);
-
-#if defined(CONFIG_SUN_OPENPROMFS_MODULE)
-EXPORT_SYMBOL(proc_openprom_register);
-EXPORT_SYMBOL(proc_openprom_deregister);
-#endif
 
 static struct file_system_type proc_fs_type = {
 	"proc", 

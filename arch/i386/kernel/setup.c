@@ -449,6 +449,9 @@ void __init setup_memory_region(void)
 			case E820_ACPI:
 					printk("(ACPI data)\n");
 					break;
+			case E820_NVS:
+					printk("(ACPI NVS)\n");
+					break;
 			default:	printk("type %lu\n", e820.map[i].type);
 					break;
 			}

@@ -39,7 +39,7 @@
 
 static inline struct vm_struct *get_io_area(unsigned long size)
 {
-	return get_vm_area(size);
+	return get_vm_area(size, VM_IOREMAP);
 }
 
 

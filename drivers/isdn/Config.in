@@ -13,8 +13,8 @@ if [ "$CONFIG_ISDN_AUDIO" != "n" ]; then
    bool '    Support AT-Fax Class 2 commands' CONFIG_ISDN_TTY_FAX
 fi
 bool '  Support isdn diversion services' CONFIG_ISDN_DIVERSION
-if [ "$CONFIG_X25" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  X.25 PLP on top of ISDN (EXPERIMENTAL)' CONFIG_ISDN_X25
+if [ "$CONFIG_X25" != "n" ]; then
+   bool '  X.25 PLP on top of ISDN' CONFIG_ISDN_X25
 fi
 dep_tristate '  ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
 dep_tristate '  isdnloop support' CONFIG_ISDN_DRV_LOOP $CONFIG_ISDN
@@ -52,15 +52,15 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
    bool '    HiSax Support for Scitel Quadro card' CONFIG_HISAX_SCT_QUADRO
    bool '    HiSax Support for Gazel cards' CONFIG_HISAX_GAZEL
    bool '    HiSax Support for HFC PCI-Bus cards' CONFIG_HISAX_HFC_PCI
-   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool '    HiSax Support for Winbond W6692 based cards (EXPERIMENTAL)' CONFIG_HISAX_W6692
+   bool '    HiSax Support for Winbond W6692 based cards' CONFIG_HISAX_W6692
+   if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
 #      bool '    HiSax Support for TESTEMULATOR (EXPERIMENTAL)' CONFIG_HISAX_TESTEMU
       if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
 	 bool '    HiSax Support for Am7930' CONFIG_HISAX_AMD7930
       fi
    fi
 fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
    dep_tristate '  Spellcaster support (EXPERIMENTAL)' CONFIG_ISDN_DRV_SC $CONFIG_ISDN
    dep_tristate '  IBM Active 2000 support (EXPERIMENTAL)' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
 fi

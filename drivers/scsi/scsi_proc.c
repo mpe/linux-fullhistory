@@ -118,6 +118,7 @@ static ssize_t proc_scsi_write(struct file * file, const char * buf,
 void build_proc_dir_entries(Scsi_Host_Template * tpnt)
 {
 	struct Scsi_Host *hpnt;
+	char name[10];	/* see scsi_unregister_host() */
 
 	tpnt->proc_dir = create_proc_entry(tpnt->proc_name, S_IFDIR, proc_scsi);
 	tpnt->proc_dir->owner = tpnt->module;
@@ -126,7 +127,8 @@ void build_proc_dir_entries(Scsi_Host_Template * tpnt)
 	while (hpnt) {
 		if (tpnt == hpnt->hostt) {
 			struct proc_dir_entry *p;
-			p = create_proc_read_entry(hpnt->proc_name,
+			sprintf(name,"%d",hpnt->host_no);
+			p = create_proc_read_entry(name,
 					S_IFREG | S_IRUGO | S_IWUSR,
 					tpnt->proc_dir,
 					proc_scsi_read,

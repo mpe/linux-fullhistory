@@ -15,6 +15,7 @@
 #include <linux/inetdevice.h>
 #include <linux/fddidevice.h>
 #include <linux/trdevice.h>
+#include <linux/fcdevice.h>
 #include <linux/ioport.h>
 #include <net/neighbour.h>
 #include <net/snmp.h>
@@ -444,7 +445,12 @@ EXPORT_SYMBOL(tr_type_trans);
 EXPORT_SYMBOL(register_trdev);
 EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
-EXPORT_SYMBOL(tr_freedev);
+#endif
+
+#ifdef CONFIG_NET_FC
+EXPORT_SYMBOL(register_fcdev);
+EXPORT_SYMBOL(unregister_fcdev);
+EXPORT_SYMBOL(init_fcdev);
 #endif
 
 /* Device callback registration */

@@ -34,6 +34,7 @@
  *                 50: ff ff ff ff 00 06 00 00 00 00 00 00 00 00 00 00
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>

@@ -52,10 +52,6 @@ void de_put(struct proc_dir_entry *de)
 
 static void proc_put_inode(struct inode *inode)
 {
-#ifdef CONFIG_SUN_OPENPROMFS_MODULE
-	if (PROC_INODE_OPENPROM(inode) && proc_openprom_use)
-		(*proc_openprom_use)(inode, 0);
-#endif	
 	/*
 	 * Kill off unused inodes ... VFS will unhash and
 	 * delete the inode if we set i_nlink to zero.
@@ -75,9 +71,6 @@ static void proc_delete_inode(struct inode *inode)
 		proc_pid_delete_inode(inode);
 		return;
 	}
-	if (PROC_INODE_OPENPROM(inode))
-		return;
-
 	if (de) {
 		if (de->owner)
 			__MOD_DEC_USE_COUNT(de->owner);
@@ -159,11 +152,6 @@ printk("proc_iget: using deleted entry %s, count=%d\n", de->name, de->count);
 	if (!inode)
 		goto out_fail;
 	
-#ifdef CONFIG_SUN_OPENPROMFS_MODULE
-	if (PROC_INODE_OPENPROM(inode) && proc_openprom_use)
-		(*proc_openprom_use)(inode, 1);
-#endif	
-
 	inode->u.generic_ip = (void *) de;
 	if (de) {
 		if (de->mode) {

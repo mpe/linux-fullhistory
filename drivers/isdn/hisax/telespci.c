@@ -1,4 +1,4 @@
-/* $Id: telespci.c,v 2.9 1999/08/11 21:01:34 keil Exp $
+/* $Id: telespci.c,v 2.10 1999/11/15 14:20:05 keil Exp $
 
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
@@ -7,6 +7,9 @@
  *
  *
  * $Log: telespci.c,v $
+ * Revision 2.10  1999/11/15 14:20:05  keil
+ * 64Bit compatibility
+ *
  * Revision 2.9  1999/08/11 21:01:34  keil
  * new PCI codefix
  *
@@ -44,7 +47,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *telespci_revision = "$Revision: 2.9 $";
+const char *telespci_revision = "$Revision: 2.10 $";
 
 #define ZORAN_PO_RQ_PEN	0x02000000
 #define ZORAN_PO_WR	0x00800000
@@ -66,7 +69,7 @@ const char *telespci_revision = "$Revision: 2.9 $";
 				} while (portdata & ZORAN_PO_RQ_PEN)
 
 static inline u_char
-readisac(unsigned int adr, u_char off)
+readisac(unsigned long adr, u_char off)
 {
 	register unsigned int portdata;
 
@@ -83,7 +86,7 @@ readisac(unsigned int adr, u_char off)
 }
 
 static inline void
-writeisac(unsigned int adr, u_char off, u_char data)
+writeisac(unsigned long adr, u_char off, u_char data)
 {
 	register unsigned int portdata;
 
@@ -99,7 +102,7 @@ writeisac(unsigned int adr, u_char off, u_char data)
 }
 
 static inline u_char
-readhscx(unsigned int adr, int hscx, u_char off)
+readhscx(unsigned long adr, int hscx, u_char off)
 {
 	register unsigned int portdata;
 
@@ -115,7 +118,7 @@ readhscx(unsigned int adr, int hscx, u_char off)
 }
 
 static inline void
-writehscx(unsigned int adr, int hscx, u_char off, u_char data)
+writehscx(unsigned long adr, int hscx, u_char off, u_char data)
 {
 	register unsigned int portdata;
 
@@ -130,7 +133,7 @@ writehscx(unsigned int adr, int hscx, u_char off, u_char data)
 }
 
 static inline void
-read_fifo_isac(unsigned int adr, u_char * data, int size)
+read_fifo_isac(unsigned long adr, u_char * data, int size)
 {
 	register unsigned int portdata;
 	register int i;
@@ -148,7 +151,7 @@ read_fifo_isac(unsigned int adr, u_char * data, int size)
 }
 
 static void
-write_fifo_isac(unsigned int adr, u_char * data, int size)
+write_fifo_isac(unsigned long adr, u_char * data, int size)
 {
 	register unsigned int portdata;
 	register int i;
@@ -165,7 +168,7 @@ write_fifo_isac(unsigned int adr, u_char * data, int size)
 }
 
 static inline void
-read_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
+read_fifo_hscx(unsigned long adr, int hscx, u_char * data, int size)
 {
 	register unsigned int portdata;
 	register int i;
@@ -183,7 +186,7 @@ read_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
 }
 
 static inline void
-write_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
+write_fifo_hscx(unsigned long adr, int hscx, u_char * data, int size)
 {
 	unsigned int portdata;
 	register int i;
@@ -324,7 +327,7 @@ setup_telespci(struct IsdnCard *card))
 			printk(KERN_WARNING "Teles: No IRQ for PCI card found\n");
 			return(0);
 		}
-		cs->hw.teles0.membase = (u_int) ioremap(dev_tel->resource[ 0].start,
+		cs->hw.teles0.membase = (u_long) ioremap(dev_tel->resource[ 0].start,
 			PAGE_SIZE);
 		printk(KERN_INFO "Found: Zoran, base-address: 0x%lx, irq: 0x%x\n",
 			dev_tel->resource[ 0].start, dev_tel->irq);
@@ -348,7 +351,7 @@ setup_telespci(struct IsdnCard *card))
 	/* writel(0x00800000, cs->hw.teles0.membase + 0x200); */
 
 	printk(KERN_INFO
-	       "HiSax: %s config irq:%d mem:%x\n",
+	       "HiSax: %s config irq:%d mem:%lx\n",
 	       CardType[cs->typ], cs->irq,
 	       cs->hw.teles0.membase);
 

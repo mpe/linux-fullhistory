@@ -1,4 +1,4 @@
-/* $Id: teles0.c,v 2.9 1999/07/12 21:05:31 keil Exp $
+/* $Id: teles0.c,v 2.10 1999/11/14 23:37:03 keil Exp $
 
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -10,6 +10,9 @@
  *              Beat Doebeli
  *
  * $Log: teles0.c,v $
+ * Revision 2.10  1999/11/14 23:37:03  keil
+ * new ISA memory mapped IO
+ *
  * Revision 2.9  1999/07/12 21:05:31  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -58,71 +61,72 @@
 
 extern const char *CardType[];
 
-const char *teles0_revision = "$Revision: 2.9 $";
+const char *teles0_revision = "$Revision: 2.10 $";
 
+#define TELES_IOMEM_SIZE	0x400
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
 static inline u_char
-readisac(unsigned int adr, u_char off)
+readisac(unsigned long adr, u_char off)
 {
 	return readb(adr + ((off & 1) ? 0x2ff : 0x100) + off);
 }
 
 static inline void
-writeisac(unsigned int adr, u_char off, u_char data)
+writeisac(unsigned long adr, u_char off, u_char data)
 {
 	writeb(data, adr + ((off & 1) ? 0x2ff : 0x100) + off); mb();
 }
 
 
 static inline u_char
-readhscx(unsigned int adr, int hscx, u_char off)
+readhscx(unsigned long adr, int hscx, u_char off)
 {
 	return readb(adr + (hscx ? 0x1c0 : 0x180) +
 		     ((off & 1) ? 0x1ff : 0) + off);
 }
 
 static inline void
-writehscx(unsigned int adr, int hscx, u_char off, u_char data)
+writehscx(unsigned long adr, int hscx, u_char off, u_char data)
 {
 	writeb(data, adr + (hscx ? 0x1c0 : 0x180) +
 	       ((off & 1) ? 0x1ff : 0) + off); mb();
 }
 
 static inline void
-read_fifo_isac(unsigned int adr, u_char * data, int size)
+read_fifo_isac(unsigned long adr, u_char * data, int size)
 {
 	register int i;
-	register u_char *ad = (u_char *) ((long)adr + 0x100);
+	register u_char *ad = (u_char *)adr + 0x100;
 	for (i = 0; i < size; i++)
 		data[i] = readb(ad);
 }
 
 static inline void
-write_fifo_isac(unsigned int adr, u_char * data, int size)
+write_fifo_isac(unsigned long adr, u_char * data, int size)
 {
 	register int i;
-	register u_char *ad = (u_char *) ((long)adr + 0x100);
+	register u_char *ad = (u_char *)adr + 0x100;
 	for (i = 0; i < size; i++) {
 		writeb(data[i], ad); mb();
 	}
 }
 
 static inline void
-read_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
+read_fifo_hscx(unsigned long adr, int hscx, u_char * data, int size)
 {
 	register int i;
-	register u_char *ad = (u_char *) ((long)adr + (hscx ? 0x1c0 : 0x180));
+	register u_char *ad = (u_char *) (adr + (hscx ? 0x1c0 : 0x180));
 	for (i = 0; i < size; i++)
 		data[i] = readb(ad);
 }
 
 static inline void
-write_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
+write_fifo_hscx(unsigned long adr, int hscx, u_char * data, int size)
 {
 	int i;
-	register u_char *ad = (u_char *) ((long)adr + (hscx ? 0x1c0 : 0x180));
+	register u_char *ad = (u_char *) (adr + (hscx ? 0x1c0 : 0x180));
 	for (i = 0; i < size; i++) {
 		writeb(data[i], ad); mb();
 	}
@@ -222,6 +226,8 @@ release_io_teles0(struct IsdnCardState *cs)
 {
 	if (cs->hw.teles0.cfg_reg)
 		release_region(cs->hw.teles0.cfg_reg, 8);
+	iounmap((unsigned char *)cs->hw.teles0.membase);
+	release_mem_region(cs->hw.teles0.phymem, TELES_IOMEM_SIZE);
 }
 
 static int
@@ -262,7 +268,7 @@ reset_teles0(struct IsdnCardState *cs)
 			default:
 				return(1);
 		}
-		cfval |= ((cs->hw.teles0.membase >> 9) & 0xF0);
+		cfval |= ((cs->hw.teles0.phymem >> 9) & 0xF0);
 		byteout(cs->hw.teles0.cfg_reg + 4, cfval);
 		HZDELAY(HZ / 10 + 1);
 		byteout(cs->hw.teles0.cfg_reg + 4, cfval | 1);
@@ -318,10 +324,9 @@ setup_teles0(struct IsdnCard *card))
 		   "Teles0: membase configured DOSish, assuming 0x%lx\n",
 		       (unsigned long) card->para[1]);
 	}
-	cs->hw.teles0.membase = card->para[1];
 	cs->irq = card->para[0];
 	if (cs->hw.teles0.cfg_reg) {
-		if (check_region((cs->hw.teles0.cfg_reg), 8)) {
+		if (check_region(cs->hw.teles0.cfg_reg, 8)) {
 			printk(KERN_WARNING
 			  "HiSax: %s config port %x-%x already in use\n",
 			       CardType[card->typ],
@@ -358,8 +363,24 @@ setup_teles0(struct IsdnCard *card))
 	}
 	/* 16.0 and 8.0 designed for IOM1 */
 	test_and_set_bit(HW_IOM1, &cs->HW_Flags);
+	cs->hw.teles0.phymem = card->para[1];
+	if (check_mem_region(cs->hw.teles0.phymem, TELES_IOMEM_SIZE)) {
+		printk(KERN_WARNING
+			"HiSax: %s memory region %lx-%lx already in use\n",
+			CardType[card->typ],
+			cs->hw.teles0.phymem,
+			cs->hw.teles0.phymem + TELES_IOMEM_SIZE);
+		if (cs->hw.teles0.cfg_reg)
+			release_region(cs->hw.teles0.cfg_reg, 8);
+		return (0);
+	} else {
+		request_mem_region(cs->hw.teles0.phymem, TELES_IOMEM_SIZE,
+			"teles iomem");
+	}
+	cs->hw.teles0.membase =
+		(unsigned long) ioremap(cs->hw.teles0.phymem, TELES_IOMEM_SIZE);
 	printk(KERN_INFO
-	       "HiSax: %s config irq:%d mem:0x%X cfg:0x%X\n",
+	       "HiSax: %s config irq:%d mem:0x%lX cfg:0x%X\n",
 	       CardType[cs->typ], cs->irq,
 	       cs->hw.teles0.membase, cs->hw.teles0.cfg_reg);
 	if (reset_teles0(cs)) {

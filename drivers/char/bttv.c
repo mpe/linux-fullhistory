@@ -551,7 +551,9 @@ static struct tvcard tvcards[] =
          /* Lucky Star Image World ConferenceTV */
         {3, 1, 0, 2, 16777215, { 2, 3, 1, 1}, { 131072, 1, 1638400, 3, 4}},
          /* Phoebe Tv Master + FM */
-        { 3, 1, 0, 2, 0xc00, { 2, 3, 1, 1},{0, 1, 0x800, 0x400, 0xc00, 0}}
+        { 3, 1, 0, 2, 0xc00, { 2, 3, 1, 1},{0, 1, 0x800, 0x400, 0xc00, 0}},
+	/* Modular Technology MM205 PCTV, bt878 */
+	{ 2, 1, 0, -1, 7, { 2, 3 }, { 0, 0, 0, 0, 0 }},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -2729,37 +2731,41 @@ static void idcard(int i)
 	}
 
         /* board specific initialisations */
-        if (btv->type == BTTV_MIRO || btv->type == BTTV_MIROPRO) {
-                /* auto detect tuner for MIRO cards */
-                btv->tuner_type=((btread(BT848_GPIO_DATA)>>10)-1)&7;
-        }
-        if (btv->type == BTTV_HAUPPAUGE || btv->type == BTTV_HAUPPAUGE878) {
-                hauppauge_msp_reset(btv);
-                hauppauge_eeprom(&(btv->i2c));
-                if (btv->type == BTTV_HAUPPAUGE878) {
-			/* all bt878 hauppauge boards use this ... */
+        
+        switch(btv->type)
+        {
+        	case BTTV_MIRO:
+        	case BTTV_MIROPRO:
+	                /* auto detect tuner for MIRO cards */
+        	        btv->tuner_type=((btread(BT848_GPIO_DATA)>>10)-1)&7;
+        	        break;
+        	
+        	case BTTV_HAUPPAUGE:
+        	case BTTV_HAUPPAUGE878:
+	                hauppauge_msp_reset(btv);
+        	        hauppauge_eeprom(&(btv->i2c));
+                	if (btv->type == BTTV_HAUPPAUGE878) {
+				/* all bt878 hauppauge boards use this ... */
+				btv->pll.pll_ifreq=28636363;
+				btv->pll.pll_crystal=BT848_IFORM_XT0;
+			}
+        		break;
+   
+   		case BTTV_CONFERENCETV:
+			btv->tuner_type = 1;
+		   	btv->pll.pll_ifreq=28636363;
+		   	btv->pll.pll_crystal=BT848_IFORM_XT0;
+		   	break;
+
+		case BTTV_PIXVIEWPLAYTV:
+		case BTTV_AVERMEDIA98:
+		case BTTV_MODTEC_205:
 			btv->pll.pll_ifreq=28636363;
 			btv->pll.pll_crystal=BT848_IFORM_XT0;
-		}
-        }
-   
-        if (btv->type == BTTV_CONFERENCETV) {
-		btv->tuner_type = 1;
-	   	btv->pll.pll_ifreq=28636363;
-	   	btv->pll.pll_crystal=BT848_IFORM_XT0;
+			break;
+
 	}
-
-        if (btv->type == BTTV_PIXVIEWPLAYTV) {
-		btv->pll.pll_ifreq=28636363;
-		btv->pll.pll_crystal=BT848_IFORM_XT0;
-        }
-
-        if(btv->type==BTTV_AVERMEDIA98)
-        {
-        	btv->pll.pll_ifreq=28636363;
-        	btv->pll.pll_crystal=BT848_IFORM_XT0;
-        }
-          
+	
 	if (btv->have_tuner && btv->tuner_type != -1) 
  		i2c_control_device(&(btv->i2c), 
                                    I2C_DRIVERID_TUNER,
@@ -2864,6 +2870,9 @@ static void idcard(int i)
                 case BTTV_PHOEBE_TVMAS:
                         strcpy(btv->video_dev.name,"(Phoebe TV Master)");
                         break;
+		case BTTV_MODTEC_205:
+			strcpy(btv->video_dev.name,"(Modtec MM205)");
+			break;
 	}
 	printk("%s\n",btv->video_dev.name);
 	audio(btv, AUDIO_INTERN);

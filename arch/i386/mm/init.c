@@ -518,6 +518,11 @@ static inline int page_is_ram (unsigned long pagenr)
 
 		if (e820.map[i].type != E820_RAM)	/* not usable memory */
 			continue;
+		/*
+		 *	!!!FIXME!!! Some BIOSen report areas as RAM that
+		 *	are not. Notably the 640->1Mb area. We need a sanity
+		 *	check here.
+		 */
 		addr = (e820.map[i].addr+PAGE_SIZE-1) >> PAGE_SHIFT;
 		size = e820.map[i].size >> PAGE_SHIFT;
 		if  ((pagenr >= addr) && (pagenr < addr+size))

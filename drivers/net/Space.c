@@ -160,6 +160,9 @@ static int __init probe_list(struct net_device *dev, struct devprobe *plist)
  * EISA only driver probes, and also the legacy PCI probes
  */
 struct devprobe eisa_probes[] __initdata = {
+#ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
+	{de4x5_probe, 0},
+#endif
 #ifdef CONFIG_TLAN
 	{tlan_probe, 0},
 #endif

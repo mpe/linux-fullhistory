@@ -114,15 +114,6 @@ struct us_data {
 #define US_ACT_BUS_RESET	4
 #define US_ACT_HOST_RESET	5
 
-static struct proc_dir_entry proc_usb_scsi =
-{
-    PROC_SCSI_USB_SCSI,		/* It's currently b0rken */
-    0,
-    NULL,
-    S_IFDIR | S_IRUGO | S_IXUGO,
-    2
-};
-
 static struct us_data *us_list;
 
 static struct usb_scsi_filter *filters;
@@ -615,26 +606,19 @@ static int us_detect(struct SHT *sht)
     char name[32];
 
     sprintf(name, "usbscsi%d", us->host_number);
-    proc_usb_scsi.namelen = strlen(name);
-    proc_usb_scsi.name = kmalloc(proc_usb_scsi.namelen+1, GFP_KERNEL);
-    if (!proc_usb_scsi.name)
+    sht->name = sht->proc_name = kmalloc(strlen(name)+1, GFP_KERNEL);
+    if (!sht->proc_name)
 	return 0;
-    strcpy((char *)proc_usb_scsi.name, name);
-    sht->proc_dir = kmalloc(sizeof(*sht->proc_dir), GFP_KERNEL);
-    if (!sht->proc_dir) {
-	kfree(proc_usb_scsi.name);
-	return 0;
-    }
-    *sht->proc_dir = proc_usb_scsi;
-    sht->name = proc_usb_scsi.name;
+    strcpy(sht->proc_name, name);
+    sht->proc_dir = NULL;
     us->host = scsi_register(sht, sizeof(us));
     if (us->host) {
 	us->host->hostdata[0] = (unsigned long)us;
 	us->host_no = us->host->host_no;
 	return 1;
     }
-    kfree(proc_usb_scsi.name);
-    kfree(sht->proc_dir);
+    kfree(sht->proc_name);
+    sht->proc_name = sht->name = NULL;
     return 0;
 }
 

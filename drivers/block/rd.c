@@ -339,6 +339,24 @@ static struct file_operations fd_fops = {
 	block_fsync	/* fsync */ 
 };
 
+#ifdef MODULE
+#define rd_init init_module
+
+/* Before freeing the module, invalidate all of the protected buffers! */
+void cleanup_module(void)
+{
+	int i;
+
+	for (i = 0 ; i < NUM_RAMDISKS; i++)
+		invalidate_buffers(MKDEV(MAJOR_NR, i));
+
+	unregister_blkdev( MAJOR_NR, "ramdisk" );
+	blk_dev[MAJOR_NR].request_fn = 0;
+}
+
+#endif  /* MODULE */
+
+
 /* This is the registration and initialization section of the RAM disk driver */
 int __init rd_init(void)
 {
@@ -380,34 +398,10 @@ int __init rd_init(void)
 
 /* loadable module support */
 
-#ifdef MODULE
-
 MODULE_PARM     (rd_size, "1i");
 MODULE_PARM_DESC(rd_size, "Size of each RAM disk in kbytes.");
 MODULE_PARM     (rd_blocksize, "i");
 MODULE_PARM_DESC(rd_blocksize, "Blocksize of each RAM disk in bytes.");
-
-int init_module(void)
-{
-	int error = rd_init();
-	if (!error)
-		printk(KERN_INFO "RAMDISK: Loaded as module.\n");
-	return error;
-}
-
-/* Before freeing the module, invalidate all of the protected buffers! */
-void cleanup_module(void)
-{
-	int i;
-
-	for (i = 0 ; i < NUM_RAMDISKS; i++)
-		invalidate_buffers(MKDEV(MAJOR_NR, i));
-
-	unregister_blkdev( MAJOR_NR, "ramdisk" );
-	blk_dev[MAJOR_NR].request_fn = 0;
-}
-
-#endif  /* MODULE */
 
 /* End of non-loading portions of the RAM disk driver */
 

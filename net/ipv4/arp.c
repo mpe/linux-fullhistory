@@ -205,9 +205,12 @@ int arp_mc_map(u32 addr, u8 *haddr, struct net_device *dev, int dir)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
-	case ARPHRD_IEEE802:
 	case ARPHRD_FDDI:
-		ip_eth_mc_map(addr, haddr);
+	case ARPHRD_IEEE802:
+		ip_eth_mc_map(addr, haddr) ; 
+		return 0 ; 
+	case ARPHRD_IEEE802_TR:
+		ip_tr_mc_map(addr, haddr) ; 
 		return 0;
 	default:
 		if (dir) {
@@ -522,6 +525,12 @@ void arp_send(int type, int ptype, u32 dest_ip,
 		arp->ar_pro = __constant_htons(ETH_P_IP);
 		break;
 #endif
+#ifdef CONFIG_TR
+	case ARPHRD_IEEE802_TR:
+		arp->ar_hrd = __constant_htons(ARPHRD_IEEE802);
+		arp->ar_pro = __constant_htons(ETH_P_IP);
+		break;
+#endif
 	}
 
 	arp->ar_hln = dev->addr_len;
@@ -595,6 +604,19 @@ int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 	case ARPHRD_ETHER:
 		/*
 		 * ETHERNET devices will accept ARP hardware types of either
+		 * 1 (Ethernet) or 6 (IEEE 802.2).
+		 */
+		if (arp->ar_hrd != __constant_htons(ARPHRD_ETHER) &&
+		    arp->ar_hrd != __constant_htons(ARPHRD_IEEE802))
+			goto out;
+		if (arp->ar_pro != __constant_htons(ETH_P_IP))
+			goto out;
+		break;
+#endif
+#ifdef CONFIG_TR
+	case ARPHRD_IEEE802_TR:
+		/*
+		 * Token ring devices will accept ARP hardware types of either
 		 * 1 (Ethernet) or 6 (IEEE 802.2).
 		 */
 		if (arp->ar_hrd != __constant_htons(ARPHRD_ETHER) &&

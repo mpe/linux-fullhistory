@@ -423,7 +423,6 @@ extern void		ether_setup(struct net_device *dev);
 extern void		fddi_setup(struct net_device *dev);
 extern void		tr_setup(struct net_device *dev);
 extern void		fc_setup(struct net_device *dev);
-extern void		tr_freedev(struct net_device *dev);
 extern void		fc_freedev(struct net_device *dev);
 extern int		ether_config(struct net_device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */

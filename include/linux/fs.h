@@ -543,14 +543,12 @@ struct super_block {
 	unsigned long		s_blocksize;
 	unsigned char		s_blocksize_bits;
 	unsigned char		s_lock;
-	unsigned char		s_rd_only;
 	unsigned char		s_dirt;
 	struct file_system_type	*s_type;
 	struct super_operations	*s_op;
 	struct dquot_operations	*dq_op;
 	unsigned long		s_flags;
 	unsigned long		s_magic;
-	unsigned long		s_time;
 	struct dentry		*s_root;
 	wait_queue_head_t	s_wait;
 

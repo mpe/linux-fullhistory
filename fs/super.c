@@ -567,7 +567,6 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 	if (!type->read_super(s, data, silent))
 		goto out_fail;
 	s->s_dev = dev; /* N.B. why do this again?? */
-	s->s_rd_only = 0;
 	s->s_type = type;
 out:
 	return s;

@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.18 1999/10/11 18:13:25 armin Exp $
+/* $Id: eicon_mod.c,v 1.19 1999/11/12 13:21:44 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
@@ -31,6 +31,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.19  1999/11/12 13:21:44  armin
+ * Bugfix of undefined reference with CONFIG_MCA
+ *
  * Revision 1.18  1999/10/11 18:13:25  armin
  * Added fax capabilities for Eicon Diva Server cards.
  *
@@ -120,7 +123,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.18 $";
+static char *eicon_revision = "$Revision: 1.19 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -1382,7 +1385,7 @@ eicon_init(void)
                 printk(KERN_INFO
                         "eicon: No MCA bus, ISDN-interfaces  not probed.\n");
         } else {
-		eicon_log(card, 8,
+		eicon_log(NULL, 8,
 			"eicon_mca_find_card, irq=%d.\n", 
 				irq);
                	if (!eicon_mca_find_card(0, membase, irq, id))
@@ -1511,7 +1514,7 @@ int eicon_mca_find_card(int type,          /* type-idx of eicon-card          */
 {
 	int j, curr_slot = 0;
 
-       	eicon_log(card, 8,
+       	eicon_log(NULL, 8,
 		"eicon_mca_find_card type: %d, membase: %#x, irq %d \n",
 		type, membase, irq);
 	/* find a no-driver-assigned eicon card                               */
@@ -1578,7 +1581,7 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 	int irq_array1[]={3,4,0,0,2,10,11,12};
 
         adf_pos0 = mca_read_stored_pos(slot,2);
-	eicon_log(card, 8,
+	eicon_log(NULL, 8,
 		"eicon_mca_probe irq=%d, membase=%d\n", 
 		irq,
 		membase);
@@ -1636,7 +1639,7 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 		default:
 			return  ENODEV;
 	};
-	/* Uebereinstimmung vorgegebener membase & irq */
+	/* matching membase & irq */
 	if ( 1 == eicon_addcard(type, membase, irq, id)) { 
 		mca_set_adapter_name(slot, eicon_mca_adapters[a_idx].name);
   		mca_set_adapter_procfn(slot, (MCA_ProcFn) eicon_info, cards);
@@ -1649,9 +1652,9 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 		/* reset card */
 		outb_p(0,cards_io+1);
 
-		eicon_log(card, 8, "eicon_addcard: successful for slot # %d.\n", 
+		eicon_log(NULL, 8, "eicon_addcard: successful for slot # %d.\n", 
 			cards->mca_slot+1);
-		return  0 ; /* eicon_addcard hat eine Karte zugefuegt */
+		return  0 ; /* eicon_addcard added a card */
 	} else {
 		return ENODEV;
 	};

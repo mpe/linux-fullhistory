@@ -51,8 +51,11 @@ bootsect.o: bootsect.s
 bootsect.s: bootsect.S Makefile $(BOOT_INCL)
 	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
-bbootsect: bbootsect.o bsetup.o
-	$(LD) -Ttext 0x0 -R bsetup.o -s -oformat binary $< -o $@
+bbootsect: bbootsect.o bbootsect_kludge.o
+	$(LD) -Ttext 0x0 -R bbootsect_kludge.o -s -oformat binary $< -o $@
+
+bbootsect_kludge.o:	bbootsect.o bsetup.o
+	$(LD) -r $^ -o $@
 
 bbootsect.o: bbootsect.s
 	$(AS) -o $@ $<
@@ -84,4 +87,5 @@ clean:
 	rm -f tools/build
 	rm -f setup bootsect zImage compressed/vmlinux.out
 	rm -f bsetup bbootsect bzImage compressed/bvmlinux.out
+	rm -f bbootsect_kludge.o
 	@$(MAKE) -C compressed clean

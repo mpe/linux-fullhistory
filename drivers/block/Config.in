@@ -54,7 +54,7 @@ else
 	    bool '    Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
 	    bool '    AEC6210 chipset support' CONFIG_BLK_DEV_AEC6210
 	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_AEC6210" = "y" ]; then
-		 bool '      AEC6210 Tuning support' CONFIG_BLK_DEV_AEC6210_TUNING
+		  bool '      AEC6210 Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_AEC6210_TUNING
 	       fi
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       if [ "$CONFIG_X86" = "y" ]; then
@@ -90,7 +90,7 @@ else
 	       if [ "$CONFIG_BLK_DEV_PDC202XX" = "y" ]; then
 		  bool '      Special UDMA Feature' CONFIG_PDC202XX_FORCE_BURST_BIT
 		  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-		    bool '      Special Mode Feature (EXPERIMENTAL)' CONFIG_PDC202XX_FORCE_MASTER_MODE
+		     bool '      Special Mode Feature (EXPERIMENTAL)' CONFIG_PDC202XX_FORCE_MASTER_MODE
 		  fi
 	       fi
   	       if [ "$CONFIG_X86" = "y" ]; then

@@ -243,6 +243,7 @@ static struct dev_info device_list[] =
 	{"TEAC", "CD-ROM", "1.06", BLIST_NOLUN},		/* causes failed REQUEST SENSE on lun 1
 								 * for seagate controller, which causes
 								 * SCSI code to reset bus.*/
+	{"TEAC", "MT-2ST/45S2-27", "RV M", BLIST_NOLUN},	/* Responds to all lun */
 	{"TEXEL", "CD-ROM", "1.06", BLIST_NOLUN},		/* causes failed REQUEST SENSE on lun 1
 								 * for seagate controller, which causes
 								 * SCSI code to reset bus.*/
@@ -254,7 +255,9 @@ static struct dev_info device_list[] =
 	{"HP", "C1750A", "3226", BLIST_NOLUN},			/* scanjet iic */
 	{"HP", "C1790A", "", BLIST_NOLUN},			/* scanjet iip */
 	{"HP", "C2500A", "", BLIST_NOLUN},			/* scanjet iicx */
-	{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},		/* extra reset */
+	{"YAMAHA", "CDR100", "1.00", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
+	{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},		/* Locks up if polled for lun != 0  
+								 * extra reset */
 	{"RELISYS", "Scorpio", "*", BLIST_NOLUN},		/* responds to all LUN */
 
 /*
@@ -278,8 +281,6 @@ static struct dev_info device_list[] =
 	{"nCipher", "Fastness Crypto", "*", BLIST_FORCELUN},
 	{"NEC", "PD-1 ODX654P", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
 	{"MATSHITA", "PD", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
-	{"YAMAHA", "CDR100", "1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
-	{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 	{"iomega", "jaz 1GB", "J.86", BLIST_NOTQ | BLIST_NOLUN},
 
 	/*
@@ -1201,9 +1202,14 @@ Scsi_Cmnd *scsi_allocate_device(struct request ** reqp, Scsi_Device * device,
 		}
 		if (!SCpnt || SCpnt->request.rq_status != RQ_INACTIVE) {	/* Might have changed */
 			if (wait && SCwait && SCwait->request.rq_status != RQ_INACTIVE) {
-				spin_unlock(&io_request_lock);	/* FIXME!!!! */
-				sleep_on(&device->device_wait);
-				spin_lock_irq(&io_request_lock);	/* FIXME!!!! */
+				DECLARE_WAITQUEUE(wait,current);
+				add_wait_queue(&device->device_wait,&wait);
+				current->state=TASK_UNINTERRUPTIBLE;
+				spin_unlock(&io_request_lock);
+				schedule();
+				current->state=TASK_RUNNING;
+				remove_wait_queue(&device->device_wait,&wait);
+				spin_lock_irq(&io_request_lock);
 			} else {
 				if (!wait)
 					return NULL;
@@ -2746,6 +2752,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	struct Scsi_Host *shpnt;
 	Scsi_Host_Template *SHT;
 	Scsi_Host_Template *SHTp;
+	char name[10];	/* host_no>=10^9? I don't think so. */
 
 	/*
 	 * First verify that this host adapter is completely free with no pending
@@ -2887,7 +2894,8 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 			continue;
 		pcount = next_scsi_host;
 		/* Remove the /proc/scsi directory entry */
-		remove_proc_entry(shpnt->proc_name, tpnt->proc_dir);
+		sprintf(name,"%d",shpnt->host_no);
+		remove_proc_entry(name, tpnt->proc_dir);
 		if (tpnt->release)
 			(*tpnt->release) (shpnt);
 		else {

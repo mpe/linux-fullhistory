@@ -214,7 +214,7 @@ int __init t128_detect(Scsi_Host_Template * tpnt){
 #endif
 		for (sig = 0; sig < NO_SIGNATURES; ++sig) 
 		    if (!bases[current_base].noauto && 
-			check_signature(bases[current_base].address +
+			isa_check_signature(bases[current_base].address +
 					signatures[sig].offset,
 					signatures[sig].string,
 					strlen(signatures[sig].string))) {

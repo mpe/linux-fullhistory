@@ -42,18 +42,20 @@ int scsicam_bios_param(Disk * disk,	/* SCSI disk */
 		       kdev_t dev,	/* Device major, minor */
 		  int *ip /* Heads, sectors, cylinders in that order */ )
 {
-
 	struct buffer_head *bh;
 	int ret_code;
 	int size = disk->capacity;
 	unsigned long temp_cyl;
 
+	int ma = MAJOR(dev);
+	int mi = (MINOR(dev) & ~0xf);
+
 	int block = 1024; 
 
-	if(blksize_size[MAJOR(dev)])
-		block = blksize_size[MAJOR(dev)][MINOR(dev)];
+	if(blksize_size[ma])
+		block = blksize_size[ma][mi];
 		
-	if (!(bh = bread(MKDEV(MAJOR(dev), MINOR(dev) & ~0xf), 0, block)))
+	if (!(bh = bread(MKDEV(ma,mi), 0, block)))
 		return -1;
 
 	/* try to infer mapping from partition table */

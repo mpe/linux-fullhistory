@@ -55,6 +55,8 @@ static inline int serial_register_onedev (unsigned long port, int irq)
 {
     struct serial_struct req;
 
+    memset(&req, 0, sizeof(serial_struct));
+
     req.baud_base = MY_BAUD_BASE;
     req.irq = irq;
     req.port = port;

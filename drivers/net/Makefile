@@ -19,8 +19,8 @@ MOD_SUB_DIRS :=
 MOD_IN_SUB_DIRS :=
 ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan
 
-L_TARGET := net.a
-L_OBJS   := auto_irq.o
+O_TARGET := net.o
+O_OBJS   :=
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
@@ -263,8 +263,9 @@ OX_OBJS         := $(filter     $(export-objs), $(obj-y))
 M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
 
-L_OBJS += $(O_OBJS)
-L_OBJS += $(OX_OBJS)
+O_OBJS += $(O_OBJS)
+O_OBJS += $(OX_OBJS)
+O_OBJS += auto_irq.o
 
 include $(TOPDIR)/Rules.make
 

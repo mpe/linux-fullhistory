@@ -446,7 +446,8 @@ clear_target_state:
 data_phase_reinit:
 	if ((p->features & AHC_CMD_CHAN) != 0) {
 		if ((p->features & AHC_ULTRA2) != 0) {
-			bmov	HCNT, SCB_RESID_DCNT, 3;
+			bmov	HADDR, SHADDR, 4;
+			bmov    HCNT, SCB_RESID_DCNT, 3;
 		}
 		bmov    STCNT, SCB_RESID_DCNT, 3;
 	} else {
@@ -658,11 +659,25 @@ ultra2_dmafinish:
 		test	DFCNTRL, DIRECTION jnz ultra2_dmahalt;
 		and	DFCNTRL, ~SCSIEN;
 		test	DFCNTRL, SCSIEN jnz .;
+ultra2_dmafifoflush:
 		or	DFCNTRL, FIFOFLUSH;
 		test	DFSTATUS, FIFOEMP jz . - 1;
+		/*
+		 * hardware bug alert!  This needless set of jumps is to
+		 * protect against a FIFOEMP status bit glitch in the
+		 * silicon.
+		 */
+		test	DFSTATUS, FIFOEMP jz ultra2_dmafifoflush;
+		test	DFSTATUS, FIFOEMP jz ultra2_dmafifoflush;
+		test	DFSTATUS, FIFOEMP jz ultra2_dmafifoflush;
+		test	DFSTATUS, FIFOEMP jz ultra2_dmafifoflush;
+		test	DFSTATUS, FIFOEMP jz ultra2_dmafifoflush;
+		test	DFSTATUS, MREQPEND	jnz .;
 ultra2_dmahalt:
-		and     DFCNTRL, ~(SCSIEN|HDMAEN);
+		and     DFCNTRL, ~HDMAEN;
 		test	DFCNTRL, HDMAEN jnz .;
+		and     DFCNTRL, ~SCSIEN;
+		test	DFCNTRL, SCSIEN jnz .;
 		bmov	SCB_RESID_DCNT, STCNT, 3;
 		mov	SCB_RESID_SGCNT, SG_COUNT;
 		or	SXFRCTL0, CLRSTCNT|CLRCHN;
@@ -701,8 +716,10 @@ p_command_dma_loop:
 		test	SSTAT0, DMADONE jnz p_command_ultra2_dma_done;
 		test	SSTAT1,PHASEMIS	jz p_command_dma_loop;	/* ie. underrun */
 p_command_ultra2_dma_done:
-		and     DFCNTRL, ~(SCSIEN|HDMAEN);
+		and     DFCNTRL, ~HDMAEN;
 		test	DFCNTRL, HDMAEN jnz .;
+		and	DFCNTRL, ~SCSIEN;
+		test	DFCNTRL, SCSIEN jnz .;
 		or	SXFRCTL0, CLRSTCNT|CLRCHN;
 	}
 	jmp	ITloop;

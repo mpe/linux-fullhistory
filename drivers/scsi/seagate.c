@@ -447,7 +447,7 @@ int __init seagate_st0x_detect (Scsi_Host_Template * tpnt)
     for (i = 0; i < (sizeof (seagate_bases) / sizeof (unsigned int)); ++i)
 
       for (j = 0; !base_address && j < NUM_SIGNATURES; ++j)
-        if (check_signature (seagate_bases[i] + signatures[j].offset,
+        if (isa_check_signature (seagate_bases[i] + signatures[j].offset,
                              signatures[j].signature, signatures[j].length))
         {
           base_address = seagate_bases[i];

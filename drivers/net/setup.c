@@ -13,6 +13,7 @@ extern int ppp_init(void);
 extern int slip_init_ctrl_dev(void);
 extern int strip_init_ctrl_dev(void);
 extern int x25_asy_init_ctrl_dev(void);
+extern int slhc_install(void);
   
 extern int bpq_init(void);
 extern int dmascc_init(void);
@@ -180,9 +181,6 @@ struct net_probe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_DEC_ELCP 
 	{tulip_probe, 0},
-#endif
-#ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
-	{de4x5_probe, 0},
 #endif
 #ifdef CONFIG_EPIC100
 	{epic100_probe, 0},
@@ -367,5 +365,3 @@ void __init net_device_init(void)
 	special_device_init();
 	/* That kicks off the legacy init functions */
 }
-
-	 

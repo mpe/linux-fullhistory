@@ -1,4 +1,4 @@
-3 November 1999
+13 November 1999
 david-b@pacbell.net
 
 This is an overview of how to use the "dc2xx" USB driver with certain
@@ -15,13 +15,14 @@ You'll most likely want to hook it up to recent versions of "gPhoto"
 (www.gphoto.org), since version 0.4 and later know how to use it to talk
 to Kodak DC-240 and DC-280 cameras over USB.
 
-The DC-260 is currently recognized.  However, like other cameras using the
-"Digita OS" (from www.flashpoint.com) there is no application software
-(such as gPhoto) support for this camera.  Until it's available, those
-cameras aren't much use with Linux; when it's available, this driver
-should be able to handle the cameras' communication requirements.  Today,
-that's six more cameras.  From Kodak:  DC-220, DC-260, DC-265, DC-290.
-Minolta has the Dimage EX-1500; HP, the PhotoSmart C500.
+In addition the DC-260, DC-265, and DC-290 are currently recognized.
+However, like other cameras using the "Digita OS" (from www.flashpoint.com)
+there is no gPhoto support for this camera.  At this writing the best
+known support for these cameras is a Python script that supports image
+downloading from those cameras.  (See archives of the linux-usb mailing
+list.)  The DC-220 should also work with this driver, given information
+about the USB product IDs.  When it becomes available, the HP PhotoSmart
+C500 should also work ... it's another Digita OS camera with USB support.)
 
 It's likely that other digital still cameras can also use this USB driver,
 even if they're not from Kodak and don't use Digita.  The reason is that
@@ -34,7 +35,11 @@ USB HARDWARE
 
 This has been shown to work on x86 OHCI and UHCI (Intel) chipsets.  OHCI has
 been trouble free; not so with UHCI, which was first seen to be happy with
-2.3.24 kernels.
+2.3.24 kernels, and has not been as fast as OHCI.
+
+Note that in some cases changes in BIOS settings may be needed before
+your USB works.  At least one user has reported a need for SMP-related 
+settings as well.
 
 As yet, no reports have come from Linux users on non-Intel hardware.
 (You could color coordinate your iMac with a DC-240i ... :-)
@@ -88,7 +93,7 @@ by the driver?
 	USB new device connect, assigned device number 1
 	Manufacturer: Eastman Kodak Company
 	Product: KODAK DC240 Zoom Digital Camera
-	USB Camera (Kodak DC-240) is connected
+	USB Camera is connected
 	usbcore: dc2xx driver claimed interface c3a68600
 	ohci-control thread sleeping
 

@@ -228,6 +228,25 @@ out:
 	return retval;
 }
 
+static inline int isa_check_signature(unsigned long io_addr,
+	const unsigned char *signature, int length)
+{
+	int retval = 0;
+	do {
+		if (isa_readb(io_addr) != *signature)
+			goto out;
+		io_addr++;
+		signature++;
+		length--;
+	} while (length);
+	retval = 1;
+out:
+	return retval;
+}
+
+
+
+
 /* Nothing to do */
 
 #define dma_cache_inv(_start,_size)		do { } while (0)

@@ -1,0 +1,460 @@
+  SiS 900/7016 Fast Ethernet Device Driver
+  by Ollie Lho (ollie@sis.com.tw)
+  November 4, 1999. Document Revision: 0.1
+
+  This document gives some information on installation and usage of SiS
+  900/7016 device driver under Linux.
+  ______________________________________________________________________
+
+  Table of Contents
+
+
+  1. Introduction
+
+  2. License
+
+  3. Changes
+
+  4. Tested Environment
+
+  5. Files in This Rackage
+
+  6. Installation
+
+     6.1 Kernel version later than 2.2.11 and 2.3.15
+        6.1.1 Building the driver as loadable module
+        6.1.2 Building the driver into kernel
+     6.2 Earlier Kernel Version in 2.2.x and 2.3.x Series
+
+  7. Known Problems and Bugs
+
+  8. Revision History
+
+  9. Acknowledgements
+
+
+
+  ______________________________________________________________________
+
+  1.  Introduction
+
+  This document describes the revision 1.06 of SiS 900/7016 Fast
+  Ethernet device driver under Linux. The driver is developed by Silicon
+  Integrated System Corp. and distributed freely under the GNU General
+  Public License (GPL). The driver can be compiled as a loadable module
+  and used under Linux kernel version 2.2.x. With minimal changes, the
+  driver can also be used under 2.3.x kernel, please see section
+  ``Installation''. If you are intended to use the driver for earlier
+  kernels, you are on your own.
+
+  The driver is tested with usual TCP/IP applications including FTP,
+  Telnet, Netscape etc. and is used constantly by the developers.
+
+  Please send all comments/fixes/questions to Ollie Lho.
+
+
+  2.  License
+
+
+
+
+
+
+
+
+
+
+          Copyright (C) 1999 Silicon Integrated System Corp.
+
+          This program is free software; you can redistribute it and/or modify
+          it under the terms of the GNU General Public License as published by
+          the Free Software Foundation; either version 2 of the License, or
+          (at your option) any later version.
+
+          This program is distributed in the hope that it will be useful,
+          but WITHOUT ANY WARRANTY; without even the implied warranty of
+          MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+          GNU General Public License for more details.
+
+          You should have received a copy of the GNU General Public License
+          along with this program; if not, write to the Free Software
+          Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+
+
+
+
+  3.  Changes
+
+  Changes made in Revision 1.06
+
+  1. Separation of sis900.c and sis900.h in order to move most constant
+     definition to sis900.h (many of those constants were corrected)
+
+  2. Clean up PCI detection, the pci-scan from Donald Becker were not
+     used, just simple pci_find_*.
+
+  3. MII detection is modified to support multiple mii transceiver.
+
+  4. Bugs in read_eeprom, mdio_* were removed.
+
+  5. Lot of sis900 irrelevant comments were removed/changed and more
+     comments were added to reflect the real situation.
+
+  6. Clean up of physical/virtual address space mess in buffer
+     descriptors.
+
+  7. Better transmit/receive error handling.
+
+  8. The driver now uses zero-copy single buffer management scheme to
+     improve performance.
+
+  9. Names of variables were changed to be more consistent.
+
+ 10. Clean up of auo-negotiation and timer code.
+
+ 11. Automatic detection and change of PHY on the fly.
+
+
+  4.  Tested Environment
+
+  This driver is developed on the following hardware
+
+  o  Intel Celeron 336 with SiS 620 (rev 02) chipset
+
+  o  SiS 900 (rev 01) and SiS 7016/7014 Fast Ethernet Card
+
+     and tested with these software environments
+
+  o  Red Hat Linux version 6.0
+
+  o  Linux kernel version 2.2.13
+
+  o  Netscape version 4.6
+
+  o  NcFTP 3.0.0 beta 18
+
+  o  Samba version 2.0.3
+
+
+  5.  Files in This Rackage
+
+  In the package you can find these files:
+
+
+     sis900-2.2.x.c
+        Driver source for kernel 2.2.x
+
+     sis900-2.3.x.c
+        Driver source for kernel 2.3.x
+
+     sis900.h
+        Header file for both 2.2.x and 2.3.x kernel
+
+     sis900.sgml
+        Linux-Doc SGML source of the document
+
+
+  6.  Installation
+
+  Before trying to install the driver, be sure to get the latest
+  revision from SiS' Home Page.  If you have no prior experience in
+  networking under Linux, please read Ethernet HOWTO and Networking
+  HOWTO available from Linux Documentation Project (LDP).
+
+  The installation procedure are different according to your kernel
+  versions.
+
+
+  6.1.  Kernel version later than 2.2.11 and 2.3.15
+
+  The driver is bundled in release later than 2.2.11 and 2.3.15 so this
+  is the most easy case.  Be sure you have the appropriate packages for
+  compiling kernel source.  Those packages are listed in
+  Document/Changes in kernel source distribution. There are two
+  alternative ways to install the driver
+
+
+  6.1.1.  Building the driver as loadable module
+
+  To build the driver as a loadable kernel module you have to
+  reconfigure the kernel to activate network support by
+
+
+
+       make config
+
+
+
+
+  Choose "Network Device Support" to "Y" and "Ethernet Support" to "Y".
+  Then you have to choose "SiS 900 Fast Ethernet Adapter Support" to
+  "M".
+
+  After reconfiguring the kernel, you can make the driver module by
+
+
+       make modules
+
+
+
+
+  The driver should be compiled with no errors. After compiling the
+  driver, the driver can be installed to proper place by
+
+
+
+       make modules_install
+
+
+
+
+  Load the driver into kernel by
+
+
+
+       insmod sis900
+
+
+
+
+  When loading the driver into memory, some information message can be
+  view by
+
+
+
+       dmesg
+
+
+
+
+  or
+
+
+       cat /var/log/message
+
+
+
+
+  If the driver is loaded properly you will have messages similar to
+  this:
+
+
+
+       sis900.c: v1.06  11/04/99
+       eth0: SiS 900 PCI Fast Ethernet at 0xd000, IRQ 10, 00:00:e8:83:7f:a4.
+       eth0: SiS 900 Internal MII PHY transceiver found at address 1.
+
+
+
+
+  showing the version of the driver and the results of probing routine.
+
+  Once the driver is loaded, network can be brought up by
+
+
+
+       /sbin/ifconfig eth0 IPADDR broadcast BROADCAST netmask NETMASK
+
+
+
+
+
+  where IPADDR, BROADCAST, NETMASK are your IP address, broadcast
+  address and netmask respectively. For more information on how to
+  configure network interface, please refer to Networking HOWTO.
+
+  The link status is also shown by kernel messages. For example, after
+  the network interface is activated, you may have the message:
+
+
+
+       eth0: Using SiS 900 Internal MII PHY as default
+       eth0: Media Link On 100mbps full-duplex
+
+
+
+
+  If you try to unplug the twist pair (TP) cable you will get
+
+
+
+       eth0: Media Link Off
+
+
+
+
+  indicating that the link is failed.
+
+
+  6.1.2.  Building the driver into kernel
+
+  If you want to make the driver into kernel, choose "Y" rather than "M"
+  on "SiS 900 Fast Ethernet Adapter Support" when configuring the
+  kernel.  Build the kernel image in the usual way
+
+
+
+       make dep
+
+       make clean
+
+       make bzlilo
+
+
+
+
+  Next time the system reboot, you have the driver in memory.
+
+
+  6.2.  Earlier Kernel Version in 2.2.x and 2.3.x Series
+
+  Installing the driver for earlier kernels in 2.2.x and 2.3.x series
+  requires a little bit more work. First you have to copy sis900-2.x.x.c
+  to /usr/src/linux/drivers/net/ and you have to modify some files
+  manually (sorry !! no patch available !!)
+
+  in Space.c, add
+
+
+       extern int sis900_probe(struct device *dev);
+
+       ...
+
+       #ifdef CONFIG_SIS900
+               {sis900_probe,0},
+       #endif
+
+
+  in Config.in add
+
+
+       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+               ... //other adapter drivers
+               tristate 'SiS 900 PCI Fast Ethernet Adapter Support' CONFIG_SIS900
+               ... //other adapter drivers
+       fi
+
+
+
+
+  in Makefile add
+
+
+       ifeq ($(CONFIG_SIS900),y)
+               L_OBJS += sis900.o
+       else
+               ifeq ($(CONFIG_SIS900),m)
+                       M_OBJS += sis900.o
+               endif
+       endif
+
+
+
+
+  After modifying these files, the driver can be build as described in
+  the previous section.
+
+
+  7.  Known Problems and Bugs
+
+  There are some known problems and bugs. If you find any other bugs
+  please mail to ollie@sis.com.tw
+
+  1. AM79C901 HomePNA PHY is not thoroughly tested, there may be some
+     bugs in the "on the fly" change of transceiver.
+
+  2. A bug is hidden somewhere in the receive buffer management code,
+     the bug causes NULL pointer reference in the kernel. This fault is
+     caught before bad things happen and reported with the message:
+
+
+       eth0: NULL pointer encountered in Rx ring, skipping
+
+
+
+
+  which can be viewed with dmesg or cat /var/log/message.
+
+
+  8.  Revision History
+
+
+  o  November 4, 1999, Revision 1.06, Second release, lots of clean up
+     and optimization.
+
+  o  August 8, 1999, Revision 1.05, Initial Public Release
+
+
+  9.  Acknowledgements
+
+  This driver was originally derived form Donald Becker's pci-skeleton
+  and rtl8139 drivers. Donald also provided various suggestion regarded
+  with improvements made in revision 1.06.
+
+  The 1.05 revision was created by Jim Huang, AMD 79c901 support was
+  added by Chin-Shan Li.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

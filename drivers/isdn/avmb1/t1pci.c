@@ -1,11 +1,14 @@
 /*
- * $Id: t1pci.c,v 1.2 1999/11/05 16:38:02 calle Exp $
+ * $Id: t1pci.c,v 1.3 1999/11/13 21:27:16 keil Exp $
  * 
  * Module for AVM T1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1pci.c,v $
+ * Revision 1.3  1999/11/13 21:27:16  keil
+ * remove KERNELVERSION
+ *
  * Revision 1.2  1999/11/05 16:38:02  calle
  * Cleanups before kernel 2.4:
  * - Changed all messages to use card->name or driver->name instead of
@@ -30,13 +33,12 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
-#include "compat.h"
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.2 $";
+static char *revision = "$Revision: 1.3 $";
 
 #undef CONFIG_T1PCI_DEBUG
 #undef CONFIG_T1PCI_POLLDEBUG

@@ -50,8 +50,7 @@ static u16 options = 0xffff;
 static u16 aliases = 0xffff;
 static int aliases_nodes = 0;
 static char *alias_names [ALIASES_NNODES];
-static struct inode_operations *proc_openprom_iops = 0;
-static struct openpromfs_dev **devices;
+extern struct openpromfs_dev *openprom_devices;
 
 #define NODE(ino) nodes[ino - PROC_OPENPROM_FIRST]
 #define NODE2INO(node) (node + PROC_OPENPROM_FIRST)
@@ -661,6 +660,8 @@ static struct inode_operations openprom_alias_inode_operations = {
 	NULL			/* revalidate */
 };
 
+extern struct inode_operations openprom_inode_operations;
+
 static int lookup_children(u16 n, const char * name, int len)
 {
 	int ret;
@@ -772,7 +773,7 @@ static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentr
 		}
 	}
 	if (!ino) {
-		for (d = *devices; d; d = d->next)
+		for (d = openprom_devices; d; d = d->next)
 			if ((d->node == n) && (strlen (d->name) == len)
 			    && !strncmp (d->name, name, len)) {
 				ino = d->inode;
@@ -787,7 +788,7 @@ static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentr
 		else
 			return ERR_PTR(-ENOENT);
 	}
-	inode = proc_get_inode (dir->i_sb, ino, 0);
+	inode = iget (dir->i_sb, ino, 0);
 	if (!inode)
 		return ERR_PTR(-EINVAL);
 	switch (type) {
@@ -797,7 +798,7 @@ static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentr
 			inode->i_mode |= S_IWUSR;
 			inode->i_op = &openprom_alias_inode_operations;
 		} else
-			inode->i_op = proc_openprom_iops;
+			inode->i_op = &openprom_inode_operations;
 		inode->i_nlink = 2;
 		break;
 	case OPFSL_NODENUM:
@@ -825,11 +826,7 @@ static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentr
 			(((u16)(ino - NODEP2INO(NODE(dir->i_ino).first_prop) - 1)) << 16));
 		break;
 	case OPFSL_DEVICE:
-		inode->i_mode = d->mode;
-		inode->i_op = &chrdev_inode_operations;
-		inode->i_nlink = 1;
-		inode->i_rdev = d->rdev;
-		break;
+		init_special_inode(d->mode, kdev_to_nr(d->rdev));
 	}		
 
 	inode->i_gid = 0;
@@ -914,7 +911,7 @@ static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filld
 				}
 			}
 		}
-		for (d = *devices; d; d = d->next) {
+		for (d = openprom_devices; d; d = d->next) {
 			if (d->node == n) {
 				if (i) i--;
 				else {
@@ -1090,25 +1087,6 @@ void openpromfs_use (struct inode *inode, int inc)
 {
 	static int root_fresh = 1;
 	static int dec_first = 1;
-#ifdef OPENPROM_DEBUGGING
-	static int usec = 0;
-
-	if (inc) {
-		if (inode->i_count == 1)
-			usec++;
-		else if (root_fresh && inode->i_ino == PROC_OPENPROM_FIRST) {
-			root_fresh = 0;
-			usec++;
-		}
-	} else {
-		if (inode->i_ino == PROC_OPENPROM_FIRST)
-			root_fresh = 0;
-		if (!dec_first)
-			usec--;
-	}
-	printk ("openpromfs_use: %d %d %d %d\n",
-		inode->i_ino, inc, usec, inode->i_count);
-#else
 	if (inc) {
 		if (inode->i_count == 1)
 			MOD_INC_USE_COUNT;
@@ -1122,7 +1100,6 @@ void openpromfs_use (struct inode *inode, int inc)
 		if (!dec_first)
 			MOD_DEC_USE_COUNT;
 	}
-#endif	
 	dec_first = 0;
 }
 
@@ -1130,39 +1107,131 @@ void openpromfs_use (struct inode *inode, int inc)
 #define openpromfs_use 0
 #endif
 
-#ifndef MODULE
-#define RET(x)
-void __init openpromfs_init (void)
-#else
+static struct file_operations openprom_operations = {
+	NULL,			/* lseek - default */
+	NULL,			/* read - bad */
+	NULL,			/* write - bad */
+	openpromfs_readdir,	/* readdir */
+};
 
-EXPORT_NO_SYMBOLS;
+static struct inode_operations openprom_inode_operations = {
+	&openprom_operations,/* default net directory file-ops */
+	NULL,			/* create */
+	openpromfs_lookup,	/* lookup */
+};
 
-#define RET(x) -x
-int init_module (void)
-#endif
+static void openprom_read_inode(struct inode * inode)
+{
+	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	if (inode->i_ino == PROC_OPENPROM) {
+		inode->i_op = &openprom_inode_operations;
+	}
+}
+
+static void openprom_put_super(struct super_block *sb)
+{
+	MOD_DEC_USE_COUNT;
+}
+
+static int openprom_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+{
+	struct statfs tmp;
+
+	tmp.f_type = PROC_SUPER_MAGIC;		/* FIXME */
+	tmp.f_bsize = PAGE_SIZE/sizeof(long);	/* ??? */
+	tmp.f_blocks = 0;
+	tmp.f_bfree = 0;
+	tmp.f_bavail = 0;
+	tmp.f_files = 0;
+	tmp.f_ffree = 0;
+	tmp.f_namelen = NAME_MAX;
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
+}
+
+static struct super_operations openprom_sops = { 
+	openprom_read_inode,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	openprom_put_super,
+	NULL,
+	openprom_statfs,
+	NULL
+};
+
+struct super_block *openprom_read_super(struct super_block *s,void *data, 
+				    int silent)
+{
+	struct inode * root_inode;
+
+	MOD_INC_USE_COUNT;
+	lock_super(s);
+	s->s_blocksize = 1024;
+	s->s_blocksize_bits = 10;
+	s->s_magic = PROC_SUPER_MAGIC;	/* FIXME */
+	s->s_op = &openprom_sops;
+	root_inode = iget(s, PROC_OPENPROM);
+	if (!root_inode)
+		goto out_no_root;
+	s->s_root = d_alloc_root(root_inode);
+	if (!s->s_root)
+		goto out_no_root;
+	unlock_super(s);
+	return s;
+
+out_no_root:
+	printk("proc_read_super: get root inode failed\n");
+	iput(root_inode);
+	s->s_dev = 0;
+	unlock_super(s);
+	return NULL;
+}
+
+static struct file_system_type openprom_fs_type = {
+	"openprom", 
+	0,
+	openprom_read_super, 
+	NULL
+};
+
+static int init_openprom_fs(void)
 {
 	nodes = (openpromfs_node *)__get_free_pages(GFP_KERNEL, 0);
 	if (!nodes) {
 		printk (KERN_WARNING "/proc/openprom: can't get free page\n");
-		return RET(EIO);
+		return -EIO;
 	}
 	if (get_nodes (0xffff, prom_root_node) == 0xffff) {
 		printk (KERN_WARNING "/proc/openprom: couldn't setup tree\n");
-		return RET(EIO);
+		return -EIO;
 	}
 	nodes[last_node].first_prop = first_prop;
-	proc_openprom_iops = proc_openprom_register (openpromfs_readdir,
-				                     openpromfs_lookup,
-						     openpromfs_use,
-						     &devices);
-	return RET(0);
+	return register_filesystem(&openprom_fs_type);
 }
+
+#ifdef MODULE
+
+EXPORT_NO_SYMBOLS;
+
+int init_module (void)
+{
+	return init_openprom_fs();
+}
+
+#else
+
+void __init openpromfs_init (void)
+{
+	init_openprom_fs();
+}
+#endif
 
 #ifdef MODULE
 void cleanup_module (void)
 {
 	int i;
-	proc_openprom_deregister ();
+	unregister_filesystem(&openprom_fs_type);
 	free_pages ((unsigned long)nodes, alloced);
 	for (i = 0; i < aliases_nodes; i++)
 		if (alias_names [i])

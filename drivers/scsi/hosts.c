@@ -703,8 +703,6 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->loaded_as_module = scsi_loadable_module_flag;
     retval->host_no = max_scsi_hosts++; /* never reuse host_no (DB) */
     next_scsi_host++;
-    /* FIXME: what with overflows? Old code suffered from the same, BTW */
-    sprintf(retval->proc_name, "%d", retval->host_no);
     retval->host_queue = NULL;
     init_waitqueue_head(&retval->host_wait);
     retval->resetting = 0;

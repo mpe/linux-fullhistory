@@ -800,6 +800,12 @@ P:	Ingo Molnar
 M:	mingo@redhat.com
 S:	Maintained
 
+SIS 900/7016 FAST ETHERNET DRIVER
+P:	Ollie Lho
+M:	ollie@sis.com.tw
+L:	linux-net@vger.rutgers.edu
+S:	Supported
+
 SMB FILESYSTEM
 P:	Andrew Tridgell
 M:	tridge@samba.org

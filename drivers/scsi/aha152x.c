@@ -952,7 +952,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 		ok = 0;
 		for (i = 0; i < ADDRESS_COUNT && !ok; i++)
 			for (j = 0; (j < SIGNATURE_COUNT) && !ok; j++)
-				ok = check_signature(addresses[i] + signatures[j].sig_offset,
+				ok = isa_check_signature(addresses[i] + signatures[j].sig_offset,
 						     signatures[j].signature, signatures[j].sig_length);
 
 		if (!ok && setup_count == 0)

@@ -27,7 +27,7 @@
 #define STAT_FILE_NAME "mpc"     /* Our statistic file's name */
 
 extern struct mpoa_client *mpcs;
-extern struct proc_dir_entry atm_proc_root;  /* from proc.c. */
+extern struct proc_dir_entry *atm_proc_root;  /* from proc.c. */
 
 static ssize_t proc_mpc_read(struct file *file, char *buff,
 			     size_t count, loff_t *pos);
@@ -44,13 +44,6 @@ static struct file_operations mpc_file_operations = {
         NULL,                   /* lseek */
         proc_mpc_read,          /* read */
         proc_mpc_write,         /* write */
-        NULL,                   /* readdir */
-        NULL,                   /* poll - default */
-        NULL,                   /* ioctl - default */
-        NULL,                   /* mmap */
-        NULL,                   /* no special open code */
-        NULL,                   /* no special release code */
-        NULL                    /* no fsync */
 };
 
 /*
@@ -58,40 +51,7 @@ static struct file_operations mpc_file_operations = {
  */
 static struct inode_operations mpc_inode_operations = {
         &mpc_file_operations,
-        NULL,                   /* create */
-        NULL,                   /* lookup */
-        NULL,                   /* link */
-        NULL,                   /* unlink */
-        NULL,                   /* symlink */
-        NULL,                   /* mkdir */
-        NULL,                   /* rmdir */
-        NULL,                   /* mknod */
-        NULL,                   /* rename */
-        NULL,                   /* readlink */
-        NULL,                   /* follow_link */
-        NULL,                   /* readpage */
-        NULL,                   /* writepage */
-        NULL,                   /* bmap */
-        NULL,                   /* truncate */
-        NULL                    /* permission */
 };
-
-/*
- *  Our statistics file
- */
-static struct proc_dir_entry mpc_stats = {
-        0,                            /* low_ino           */
-	sizeof(STAT_FILE_NAME)-1,     /* name length       */
-	STAT_FILE_NAME,               /* name              */
-	S_IFREG | S_IRUGO,            /* mode              */
-	1,                            /* 1=file            */
-        0,                            /* UID               */
-        0,                            /* GID               */
-        0,                            /* size              */
-        &mpc_inode_operations,        /* inode operations  */
-        NULL                          /* get_info func-ptr */
-
-};  
 
 static int print_header(char *buff,struct mpoa_client *mpc){
         if(mpc != NULL){
@@ -364,12 +324,14 @@ static int parse_qos(const char *buff, int len)
  */
 int mpc_proc_init(void)
 {
-        int retval = 0;
+	struct proc_dir_entry *p;
 
-        if ( (retval = proc_register(&atm_proc_root,&mpc_stats)) != 0 ) {
+        p = create_proc_entry(STAT_FILE_NAME, 0, atm_proc_root);
+	if (!p) {
                 printk(KERN_ERR "Unable to initialize /proc/atm/%s\n", STAT_FILE_NAME);
-                return retval;
+                return -ENOMEM;
         }
+	p->ops = &mpc_inode_operations;
 	return 0;
 }
 
@@ -378,7 +340,7 @@ int mpc_proc_init(void)
  */
 void mpc_proc_clean(void)
 {
-        proc_unregister(&atm_proc_root,mpc_stats.low_ino);
+	remove_proc_entry(STAT_FILE_NAME,atm_proc_root);
 }
 
 

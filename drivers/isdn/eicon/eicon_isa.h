@@ -1,4 +1,4 @@
-/* $Id: eicon_isa.h,v 1.5 1999/09/08 20:17:31 armin Exp $
+/* $Id: eicon_isa.h,v 1.6 1999/11/15 19:37:04 keil Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.h,v $
+ * Revision 1.6  1999/11/15 19:37:04  keil
+ * need config.h
+ *
  * Revision 1.5  1999/09/08 20:17:31  armin
  * Added microchannel patch from Erik Weber.
  *

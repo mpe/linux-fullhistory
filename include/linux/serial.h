@@ -20,7 +20,8 @@ struct serial_struct {
 	int	custom_divisor;
 	int	baud_base;
 	unsigned short	close_delay;
-	char	reserved_char[2];
+	char	io_type;
+	char	reserved_char[1];
 	int	hub6;
 	unsigned short	closing_wait; /* time to wait before closing */
 	unsigned short	closing_wait2; /* no longer used... */
@@ -35,20 +36,6 @@ struct serial_struct {
  */
 #define ASYNC_CLOSING_WAIT_INF	0
 #define ASYNC_CLOSING_WAIT_NONE	65535
-
-/*
- * The size of the serial xmit buffer is 1 page, or 4096 bytes
- */
-#define SERIAL_XMIT_SIZE 4096
-
-/*
- * Counters of the input lines (CTS, DSR, RI, CD) interrupts
- */
-struct async_icount {
-	__u32	cts, dsr, rng, dcd, tx, rx;
-	__u32	frame, parity, overrun, brk;
-	__u32	buf_overrun;
-};
 
 /*
  * These are the supported serial types.
@@ -67,6 +54,11 @@ struct async_icount {
 #define PORT_16654	11
 #define PORT_16850	12
 #define PORT_MAX	12
+
+#define SERIAL_IO_PORT	0
+#define SERIAL_IO_HUB6	1
+#define SERIAL_IO_MEM	2
+#define SERIAL_IO_GSC	3
 
 struct serial_uart_config {
 	char	*name;

@@ -238,8 +238,8 @@ p2k_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 static inline void __init
 noname_init_pci(void)
 {
-	sio_pci_route();
 	common_init_pci();
+	sio_pci_route();
 	sio_fixup_irq_levels(sio_collect_irq_levels());
 	ns87312_enable_ide(0x26e);
 }
@@ -250,8 +250,8 @@ alphabook1_init_pci(void)
 	struct pci_dev *dev;
 	unsigned char orig, config;
 
-	sio_pci_route();
 	common_init_pci();
+	sio_pci_route();
 
 	/*
 	 * On the AlphaBook1, the PCMCIA chip (Cirrus 6729)

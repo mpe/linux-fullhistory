@@ -18,9 +18,11 @@ M_OBJS   :=
 
 ifeq ($(CONFIG_SUN_OPENPROMFS),y)
 O_OBJS += openpromfs.o
+OX_OBJS  := openprom-dev.o
 else
   ifeq ($(CONFIG_SUN_OPENPROMFS),m)
   M_OBJS += openpromfs.o
+  OX_OBJS  := openprom-dev.o
   endif
 endif
 

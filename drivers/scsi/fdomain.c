@@ -699,7 +699,7 @@ static int fdomain_isa_detect( int *irq, int *iobase )
       printk( " %lx(%lx),", addresses[i], bios_base );
 #endif
       for (j = 0; !bios_base && j < SIGNATURE_COUNT; j++) {
-	 if (check_signature(addresses[i] + signatures[j].sig_offset,
+	 if (isa_check_signature(addresses[i] + signatures[j].sig_offset,
 			     signatures[j].signature,
 			     signatures[j].sig_length )) {
 	    bios_major = signatures[j].major_bios_version;

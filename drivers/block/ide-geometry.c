@@ -66,7 +66,6 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
 			drive->head  = drive->bios_head = *(BIOS+2);
 			drive->sect  = drive->bios_sect = *(BIOS+14);
 			drive->ctl   = *(BIOS+8);
-			drive->present = 1;
 		}
 		BIOS += 16;
 	}

@@ -1,8 +1,11 @@
-/* $Id: hisax.h,v 2.37 1999/10/14 20:25:28 keil Exp $
+/* $Id: hisax.h,v 2.38 1999/11/14 23:37:03 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.38  1999/11/14 23:37:03  keil
+ * new ISA memory mapped IO
+ *
  * Revision 2.37  1999/10/14 20:25:28  keil
  * add a statistic for error monitoring
  *
@@ -663,7 +666,8 @@ struct teles3_hw {
 
 struct teles0_hw {
 	unsigned int cfg_reg;
-	unsigned int membase;
+	unsigned long membase;
+	unsigned long phymem;
 };
 
 struct avm_hw {
@@ -803,8 +807,9 @@ struct hfcD_hw {
 
 struct isurf_hw {
 	unsigned int reset;
-	unsigned int isac;
-	unsigned int isar;
+	unsigned long phymem;
+	unsigned long isac;
+	unsigned long isar;
 	struct isar_reg isar_r;
 };
 

@@ -422,7 +422,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	
 	if (mem_init_done) {
 		struct vm_struct *area;
-		area = get_vm_area(size);
+		area = get_vm_area(size, VM_IOREMAP);
 		if (area == 0)
 			return NULL;
 		v = VMALLOC_VMADDR(area->addr);

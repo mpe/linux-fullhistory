@@ -31,9 +31,9 @@
  *	- David Hein at Texas Instruments 
  *
  *  Maintainer(s):
- *    JS        Jay Schulist            jschlst@samba.anu.edu.au
+ *    JS	Jay Schulist		jschlst@samba.anu.edu.au
  *    CG	Christoph Goos		cgoos@syskonnect.de
- *    AF        Adam Fritzler           mid@auk.cx
+ *    AF	Adam Fritzler		mid@auk.cx
  *
  *  Modification History:
  *	29-Aug-97	CG	Created
@@ -42,10 +42,10 @@
  *	27-May-98	JS	Formated to Linux Kernel Format
  *	31-May-98	JS	Hacked in PCI support
  *	16-Jun-98	JS	Modulized for multiple cards with one driver
- *         Sep-99       AF      Renamed to tms380tr (supports more than SK's)
- *      23-Sep-99       AF      Added Compaq and Thomas-Conrad PCI support
- *                              Fixed a bug causing double copies on PCI
- *                              Fixed for new multicast stuff (2.2/2.3)
+ *         Sep-99	AF      Renamed to tms380tr (supports more than SK's)
+ *      23-Sep-99	AF      Added Compaq and Thomas-Conrad PCI support
+ *				Fixed a bug causing double copies on PCI
+ *				Fixed for new multicast stuff (2.2/2.3)
  *	25-Sep-99	AF	Uped TPL_NUM from 3 to 9
  *				Removed extraneous 'No free TPL'
  *
@@ -226,18 +226,22 @@ int __init tms380tr_probe(struct net_device *dev)
 	else if(base_addr != 0)  /* Don't probe at all. */
 		return (-ENXIO);
 
+	/* 
+	 * Let's check for pci adapters first 
+	 */
+	if (tms380tr_probe1(dev,0) == 0)  /* Success */
+		return 0 ;
+
+	/*
+	 * No pci cards found, let's check for isa
+	 */
+
 	for(i = 0; tms380tr_portlist[i]; i++)
 	{
 		int ioaddr = tms380tr_portlist[i];
-		if(check_region(ioaddr, TMS380TR_IO_EXTENT))
+		if(check_region(ioaddr, TMS380TR_IO_EXTENT)) /* Region already used */
 			continue;
-		if(tms380tr_probe1(dev, ioaddr))
-		{
-#ifndef MODULE
-                        tr_freedev(dev);
-#endif
-                }
-		else
+		if(!tms380tr_probe1(dev, ioaddr))
 			return (0);
 	}
 
@@ -248,7 +252,6 @@ struct cardinfo_table * __init tms380tr_pci_getcardinfo(unsigned short vendor,
 							unsigned short device)
 {
 	int cur;
-	
 	for (cur = 1; cardinfo[cur].name != NULL; cur++) {
 		if (cardinfo[cur].type == 2) /* PCI */
 		{
@@ -266,65 +269,39 @@ struct cardinfo_table * __init tms380tr_pci_getcardinfo(unsigned short vendor,
 static int __init tms380tr_pci_chk_card(struct net_device *dev, 
 					struct cardinfo_table **outcard)
 {
-	static int pci_index = 0;
-	unsigned char pci_bus, pci_device_fn;
+	struct pci_dev *pci_device = NULL ; 
 	struct cardinfo_table *card;
 	int i;
 
 	if(!pci_present())
 		return (-1);	/* No PCI present. */
+ 
+	while ( (pci_device=pci_find_class(PCI_CLASS_NETWORK_TOKEN_RING<<8, pci_device))) { 
 
-	for(; pci_index < 0xff; pci_index++)
-	{
 		unsigned int pci_irq_line;
-		struct pci_dev *pdev;
-		unsigned short pci_command, new_command, vendor, device;
 		unsigned int pci_ioaddr;
 
-		if(pcibios_find_class(PCI_CLASS_NETWORK_TOKEN_RING << 8,
-			pci_index, &pci_bus, &pci_device_fn)
-			!= PCIBIOS_SUCCESSFUL)
-		{
-			break;
-		}
-
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-						PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-						PCI_DEVICE_ID, &device);
-
-		pdev		= pci_find_slot(pci_bus, pci_device_fn);
-		pci_irq_line 	= pdev->irq;
-		pci_ioaddr 	= pdev->resource[0].start;
-
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-						PCI_COMMAND, &pci_command);
-
 		/* Remove I/O space marker in bit 0. */
-		pci_ioaddr &= ~3;
+		pci_irq_line = pci_device->irq ; 
+		pci_ioaddr = pci_device->resource[0].start ; 
+/*		pci_ioaddr &= ~3; */
 
-		if (!(card = tms380tr_pci_getcardinfo(vendor, device)))
-			return -ENODEV;
-		
+		/* Don't return from here, just continue on the card discovery loop - MLP */
+		if (!(card = tms380tr_pci_getcardinfo(pci_device->vendor, pci_device->device)))  
+			continue ; 
+
 		if(check_region(pci_ioaddr, TMS380TR_IO_EXTENT))
 			continue;
+
 		request_region(pci_ioaddr, TMS380TR_IO_EXTENT, card->name);
-		if(request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
-				card->name, dev))
+		if(request_irq(pci_device->irq, tms380tr_interrupt, SA_SHIRQ,
+				card->name, dev)) { 
+			release_region(pci_ioaddr, TMS380TR_IO_EXTENT) ; 
 			return (-ENODEV); /* continue; ?? */
-
-		new_command = (pci_command|PCI_COMMAND_MASTER|PCI_COMMAND_IO);
-
-		if(pci_command != new_command)
-		{
-			printk("The PCI BIOS has not enabled this"
-				"device! Updating PCI command %4.4x->%4.4x.\n",
-			  	pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-				PCI_COMMAND, new_command);
 		}
+		/* At this point we have found a valid tms380tr PCI TR card. */
 
-		/* At this point we have found a valid PCI TR card. */
+		pci_ioaddr &= ~3 ; 
 		dev->base_addr	= pci_ioaddr;
 		dev->irq 	= pci_irq_line;
 		dev->dma	= 0;
@@ -342,10 +319,10 @@ static int __init tms380tr_pci_chk_card(struct net_device *dev,
 		if (outcard)
 			*outcard = card;
 
-		return (0);
+		return 0 ; 
 	}
 
-	return (-1);
+ 	return (-1); 
 }
 
 /*
@@ -362,91 +339,95 @@ static int __init tms380tr_isa_chk_card(struct net_device *dev, int ioaddr,
 	if(err < 0)
 		return (-ENODEV);
 
-        if(virt_to_bus((void*)((unsigned long)dev->priv+sizeof(struct net_local)))
+	if(virt_to_bus((void*)((unsigned long)dev->priv+sizeof(struct net_local)))
 		> ISA_MAX_ADDRESS)
-        {
-                printk("%s: Memory not accessible for DMA\n", dev->name);
-                kfree(dev->priv);
-                return (-EAGAIN);
-        }
+	{
+		printk("%s: Memory not accessible for DMA\n", dev->name);
+		kfree(dev->priv);
+		return (-EAGAIN);
+	}
 
 	/* FIXME */
 	card = &cardinfo[1];
 
-        /* Grab the region so that no one else tries to probe our ioports. */
-        request_region(ioaddr, TMS380TR_IO_EXTENT, card->name);
-        dev->base_addr = ioaddr;
+	/* Grab the region so that no one else tries to probe our ioports. */
+	request_region(ioaddr, TMS380TR_IO_EXTENT, card->name);
+	dev->base_addr = ioaddr;
 
-        /* Autoselect IRQ and DMA if dev->irq == 0 */
-        if(dev->irq == 0)
-        {
-                for(i = 0; tms380tr_irqlist[i] != 0; i++)
-                {
-                        dev->irq = tms380tr_irqlist[i];
-                        err = request_irq(dev->irq, &tms380tr_interrupt, 0, card->name, dev);
-                        if(!err)
+	/* Autoselect IRQ and DMA if dev->irq == 0 */
+	if(dev->irq == 0)
+	{
+		for(i = 0; tms380tr_irqlist[i] != 0; i++)
+		{
+			dev->irq = tms380tr_irqlist[i];
+			err = request_irq(dev->irq, &tms380tr_interrupt, 0, card->name, dev);
+			if(!err)
 				break;
-                }
+		}
 
-                if(tms380tr_irqlist[i] == 0)
-                {
-                        printk("%s: AutoSelect no IRQ available\n", dev->name);
-                        return (-EAGAIN);
-                }
-        }
-        else
-        {
-                err = request_irq(dev->irq, &tms380tr_interrupt, 0, card->name, dev);
+		if(tms380tr_irqlist[i] == 0)
+		{
+			printk("%s: AutoSelect no IRQ available\n", dev->name);
+			return (-EAGAIN);
+		}
+	}
+	else
+	{
+		err = request_irq(dev->irq, &tms380tr_interrupt, 0, card->name, dev);
 		if(err)
-                {
-                        printk("%s: Selected IRQ not available\n", dev->name);
-                        return (-EAGAIN);
-                }
-        }
+		{
+			printk("%s: Selected IRQ not available\n", dev->name);
+			return (-EAGAIN);
+		}
+	}
 
-        /* Always allocate the DMA channel after IRQ and clean up on failure */
-        if(dev->dma == 0)
-        {
-                for(i = 0; tms380tr_dmalist[i] != 0; i++)
-                {
+	/* Always allocate the DMA channel after IRQ and clean up on failure */
+	if(dev->dma == 0)
+	{
+		for(i = 0; tms380tr_dmalist[i] != 0; i++)
+		{
 			dev->dma = tms380tr_dmalist[i];
-                        err = request_dma(dev->dma, card->name);
-                        if(!err)
-                                break;
-                }
+			err = request_dma(dev->dma, card->name);
+			if(!err)
+				break;
+		}
 
-                if(dev->dma == 0)
-                {
-                        printk("%s: AutoSelect no DMA available\n", dev->name);
-                        free_irq(dev->irq, NULL);
-                        return (-EAGAIN);
-                }
-        }
-        else
-        {
-                err = request_dma(dev->dma, card->name);
-                if(err)
-                {
-                        printk("%s: Selected DMA not available\n", dev->name);
-                        free_irq(dev->irq, NULL);
-                        return (-EAGAIN);
-                }
-        }
+		if(dev->dma == 0)
+		{
+			printk("%s: AutoSelect no DMA available\n", dev->name);
+			free_irq(dev->irq, NULL);
+			return (-EAGAIN);
+		}
+	}
+	else
+	{
+		err = request_dma(dev->dma, card->name);
+		if(err)
+		{
+			printk("%s: Selected DMA not available\n", dev->name);
+			free_irq(dev->irq, NULL);
+			return (-EAGAIN);
+		}
+	}
 
 	flags=claim_dma_lock();
 	disable_dma(dev->dma);
-        set_dma_mode(dev->dma, DMA_MODE_CASCADE);
-        enable_dma(dev->dma);
-        release_dma_lock(flags);
+	set_dma_mode(dev->dma, DMA_MODE_CASCADE);
+	enable_dma(dev->dma);
+	release_dma_lock(flags);
 
 	printk("%s: %s found at %#4x, using IRQ %d and DMA %d.\n",
-                dev->name, card->name, ioaddr, dev->irq, dev->dma);
+		dev->name, card->name, ioaddr, dev->irq, dev->dma);
 
 	if (outcard)
 		*outcard = card;
 
 	return (0);
 }
+
+/*
+ * Passing an ioaddr of 0 tells us to do a pci card search
+ */
 
 static int __init tms380tr_probe1(struct net_device *dev, int ioaddr)
 {
@@ -463,14 +444,13 @@ static int __init tms380tr_probe1(struct net_device *dev, int ioaddr)
 	if(dev == NULL)
 		return (-ENOMEM);
 #endif
-
-	err = tms380tr_pci_chk_card(dev, &card);
-	if(err < 0)
-	{
+	if (ioaddr == 0) {
+		err = tms380tr_pci_chk_card(dev, &card);
+	} else {
 		err = tms380tr_isa_chk_card(dev, ioaddr, &card);
-		if(err < 0)
-			return (-ENODEV);
 	}
+	if(err < 0)
+		return (-ENODEV);
 
 	/* Setup this devices private information structure */
 	tp = (struct net_local *)kmalloc(sizeof(struct net_local), GFP_KERNEL | GFP_DMA);
@@ -481,14 +461,14 @@ static int __init tms380tr_probe1(struct net_device *dev, int ioaddr)
 	tp->CardType = card;
 	
 	dev->priv		= tp;
-	dev->init               = tms380tr_init_card;
-        dev->open               = tms380tr_open;
-        dev->stop               = tms380tr_close;
-        dev->hard_start_xmit    = tms380tr_send_packet;
-        dev->get_stats          = tms380tr_get_stats;
-        dev->set_multicast_list = &tms380tr_set_multicast_list;
-
-        return (0);
+	dev->init		= tms380tr_init_card;
+	dev->open		= tms380tr_open;
+	dev->stop		= tms380tr_close;
+	dev->do_ioctl		= NULL ; 
+	dev->hard_start_xmit    = tms380tr_send_packet;
+	dev->get_stats		= tms380tr_get_stats;
+	dev->set_multicast_list = &tms380tr_set_multicast_list;
+	return (0);
 }
 
 /* Dummy function */
@@ -568,6 +548,7 @@ static int tms380tr_open(struct net_device *dev)
 
 	printk(KERN_INFO "%s: Adapter RAM size: %dK\n", 
 	       dev->name, tms380tr_read_ptr(dev));
+
 	tms380tr_enable_interrupts(dev);
 	tms380tr_open_adapter(dev);
 
@@ -664,15 +645,12 @@ static int tms380tr_chipset_init(struct net_device *dev)
 		if((Tmp & ~CYCLE_TIME) != (PosReg & ~CYCLE_TIME))
 			printk(KERN_INFO "%s: POSREG error\n", dev->name);
 	}
-
 	err = tms380tr_reset_adapter(dev);
 	if(err < 0)
 		return (-1);
-
 	err = tms380tr_bringup_diags(dev);
 	if(err < 0)
 		return (-1);
-
 	err = tms380tr_init_adapter(dev);
 	if(err < 0)
 		return (-1);
@@ -1461,7 +1439,6 @@ static void tms380tr_cmd_status_irq(struct net_device *dev)
 static int tms380tr_close(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
-
 	dev->tbusy = 1;
 	dev->start = 0;
 
@@ -1522,52 +1499,51 @@ static struct enet_statistics *tms380tr_get_stats(struct net_device *dev)
 static void tms380tr_set_multicast_list(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
-        unsigned int OpenOptions;
+	unsigned int OpenOptions;
 	
-        OpenOptions = tp->ocpl.OPENOptions &
-                ~(PASS_ADAPTER_MAC_FRAMES
+	OpenOptions = tp->ocpl.OPENOptions &
+		~(PASS_ADAPTER_MAC_FRAMES
 		  | PASS_ATTENTION_FRAMES
 		  | PASS_BEACON_MAC_FRAMES
 		  | COPY_ALL_MAC_FRAMES
 		  | COPY_ALL_NON_MAC_FRAMES);
 	
-        tp->ocpl.FunctAddr = 0;
+	tp->ocpl.FunctAddr = 0;
 	
-        if(dev->flags & IFF_PROMISC)
-                /* Enable promiscuous mode */
-                OpenOptions |= COPY_ALL_NON_MAC_FRAMES |
+	if(dev->flags & IFF_PROMISC)
+		/* Enable promiscuous mode */
+		OpenOptions |= COPY_ALL_NON_MAC_FRAMES |
 			COPY_ALL_MAC_FRAMES;
-        else
-        {
-                if(dev->flags & IFF_ALLMULTI)
-                {
-                        /* Disable promiscuous mode, use normal mode. */
-                        tp->ocpl.FunctAddr = 0xFFFFFFFF;
-			
-                }
-                else
-                {
-                        int i;
-                        struct dev_mc_list *mclist = dev->mc_list;
-                        for (i=0; i< dev->mc_count; i++)
-                        {
-                                ((char *)(&tp->ocpl.FunctAddr))[0] |=
+	else
+	{
+		if(dev->flags & IFF_ALLMULTI)
+		{
+			/* Disable promiscuous mode, use normal mode. */
+			tp->ocpl.FunctAddr = 0xFFFFFFFF;
+		}
+		else
+		{
+			int i;
+			struct dev_mc_list *mclist = dev->mc_list;
+			for (i=0; i< dev->mc_count; i++)
+			{
+				((char *)(&tp->ocpl.FunctAddr))[0] |=
 					mclist->dmi_addr[2];
-                                ((char *)(&tp->ocpl.FunctAddr))[1] |=
+				((char *)(&tp->ocpl.FunctAddr))[1] |=
 					mclist->dmi_addr[3];
-                                ((char *)(&tp->ocpl.FunctAddr))[2] |=
+				((char *)(&tp->ocpl.FunctAddr))[2] |=
 					mclist->dmi_addr[4];
-                                ((char *)(&tp->ocpl.FunctAddr))[3] |=
+				((char *)(&tp->ocpl.FunctAddr))[3] |=
 					mclist->dmi_addr[5];
-                                mclist = mclist->next;
-                        }
-                }
-                tms380tr_exec_cmd(dev, OC_SET_FUNCT_ADDR);
-        }
+				mclist = mclist->next;
+			}
+		}
+		tms380tr_exec_cmd(dev, OC_SET_FUNCT_ADDR);
+	}
 	
-        tp->ocpl.OPENOptions = OpenOptions;
-        tms380tr_exec_cmd(dev, OC_MODIFY_OPEN_PARMS);
-        return;
+	tp->ocpl.OPENOptions = OpenOptions;
+	tms380tr_exec_cmd(dev, OC_MODIFY_OPEN_PARMS);
+	return;
 }
 
 /*
@@ -2259,8 +2235,7 @@ static int tms380tr_read_ptr(struct net_device *dev)
 			ADAPTER_INT_PTRS, 16);
 	tms380tr_read_ram(dev, (unsigned char *)&adapterram,
 			(unsigned short)SWAPB(tp->intptrs.AdapterRAMPtr), 2);
-
-	return SWAPB(adapterram);
+	return SWAPB(adapterram); 
 }
 
 /*
@@ -2428,7 +2403,7 @@ static void tms380tr_tx_status_irq(struct net_device *dev)
 			}
 		}
 
-                tp->MacStat.tx_packets++;
+		tp->MacStat.tx_packets++;
 		dev_kfree_skb(tpl->Skb);
 		tpl->BusyFlag = 0;	/* "free" TPL */
 	}
@@ -2669,16 +2644,16 @@ static unsigned char tms380tr_chk_frame(struct net_device *dev, unsigned char *A
  */
 static void tms380tr_dump(unsigned char *Data, int length)
 {
-        int i, j;
+	int i, j;
 
-        for (i = 0, j = 0; i < length / 8; i++, j += 8)
-        {
+	for (i = 0, j = 0; i < length / 8; i++, j += 8)
+	{
 		printk(KERN_DEBUG "%02x %02x %02x %02x %02x %02x %02x %02x\n",
 			Data[j+0],Data[j+1],Data[j+2],Data[j+3],
-                        Data[j+4],Data[j+5],Data[j+6],Data[j+7]);
-        }
+			Data[j+4],Data[j+5],Data[j+6],Data[j+7]);
+	}
 
-        return;
+	return;
 }
 #endif
 
@@ -2699,40 +2674,41 @@ int init_module(void)
 
 	for(i = 0; i < TMS380TR_MAX_ADAPTERS; i++)
 	{
-                irq[i] = 0;
-                mem[i] = 0;
-                dev_tms380tr[i] = NULL;
-                dev_tms380tr[i] = init_trdev(dev_tms380tr[i], 0);
-                if(dev_tms380tr[i] == NULL)
-                        return (-ENOMEM);
+		irq[i] = 0;
+		mem[i] = 0;
+		dev_tms380tr[i] = NULL;
+		dev_tms380tr[i] = init_trdev(dev_tms380tr[i], 0);
+		if(dev_tms380tr[i] == NULL)
+			return (-ENOMEM);
 
 		dev_tms380tr[i]->base_addr = io[i];
-                dev_tms380tr[i]->irq       = irq[i];
-                dev_tms380tr[i]->mem_start = mem[i];
-                dev_tms380tr[i]->init      = &tms380tr_probe;
+		dev_tms380tr[i]->irq       = irq[i];
+		dev_tms380tr[i]->mem_start = mem[i];
+		dev_tms380tr[i]->init      = &tms380tr_probe;
 
-                if(register_trdev(dev_tms380tr[i]) != 0)
+		if(register_trdev(dev_tms380tr[i]) != 0)
 		{
-                        kfree_s(dev_tms380tr[i], sizeof(struct net_device));
-                        dev_tms380tr[i] = NULL;
-                        if(i == 0)
+			kfree_s(dev_tms380tr[i], sizeof(struct net_device));
+			dev_tms380tr[i] = NULL;
+			if(i == 0)
 			{
-                                printk("tms380tr: register_trdev() returned non-zero.\n");
-                                return (-EIO);
-                        }
+				printk("tms380tr: register_trdev() returned non-zero.\n");
+				return (-EIO);
+			}
 			else
-                                return (0);
-                }
-        }
+				return (0);
+		} 
 
-        return (0);
+	}
+
+	return (0);
 }
 
 void cleanup_module(void)
 {
 	int i;
 
-        for(i = 0; i < TMS380TR_MAX_ADAPTERS; i++)
+	for(i = 0; i < TMS380TR_MAX_ADAPTERS; i++)
 	{
 		if(dev_tms380tr[i])
 		{
@@ -2746,7 +2722,7 @@ void cleanup_module(void)
 				kfree_s(dev_tms380tr[i]->priv, sizeof(struct net_local));
 			kfree_s(dev_tms380tr[i], sizeof(struct net_device));
 			dev_tms380tr[i] = NULL;
-                }
+		}
 	}
 }
 #endif /* MODULE */

@@ -22,8 +22,6 @@ void free_atm_vcc_sk(struct sock *sk);
 
 #include <linux/proc_fs.h>
 
-extern struct proc_dir_entry atm_proc_root; /* @@@ move elsewhere */
-
 int atm_proc_dev_register(struct atm_dev *dev);
 void atm_proc_dev_deregister(struct atm_dev *dev);
 

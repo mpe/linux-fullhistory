@@ -46,6 +46,7 @@ struct pcbit_dev {
 	/* board */
 
 	volatile unsigned char* sh_mem;		/* RDP address	*/
+	unsigned long ph_mem;
 	unsigned int irq;
 	unsigned int id;
 	unsigned int interrupt;			/* set during interrupt 
@@ -166,10 +167,3 @@ struct pcbit_ioctl {
 #define L2_ERROR    6
 
 #endif
-
-
-
-
-
-
-

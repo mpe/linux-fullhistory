@@ -19,11 +19,18 @@
  * For definitions of the flags field, see tty.h
  */
 
-#include <linux/config.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>
 
+/*
+ * Counters of the input lines (CTS, DSR, RI, CD) interrupts
+ */
+struct async_icount {
+	__u32	cts, dsr, rng, dcd, tx, rx;
+	__u32	frame, parity, overrun, brk;
+	__u32	buf_overrun;
+};
 
 struct serial_state {
 	int	magic;
@@ -45,6 +52,7 @@ struct serial_state {
 	struct async_icount	icount;	
 	struct termios		normal_termios;
 	struct termios		callout_termios;
+	int	io_type;
 	struct async_struct *info;
 };
 
@@ -80,6 +88,7 @@ struct async_struct {
 	int			xmit_cnt;
 	u8			*iomem_base;
 	u16			iomem_reg_shift;
+	int			io_type;
 	struct tq_struct	tqueue;
 #ifdef DECLARE_WAITQUEUE
 	wait_queue_head_t	open_wait;
@@ -99,6 +108,10 @@ struct async_struct {
 #define SERIAL_MAGIC 0x5301
 #define SSTATE_MAGIC 0x5302
 
+/*
+ * The size of the serial xmit buffer is 1 page, or 4096 bytes
+ */
+#define SERIAL_XMIT_SIZE 4096
 
 /*
  * Events are used to schedule things to happen at timer-interrupt
@@ -132,7 +145,6 @@ struct rs_multiport_struct {
 #define ALPHA_KLUDGE_MCR 0
 #endif
 
-#ifdef CONFIG_PCI
 /*
  * Structures and definitions for PCI support
  */
@@ -147,8 +159,9 @@ struct pci_board {
 	int base_baud;
 	int uart_offset;
 	int reg_shift;
-	void (*init_fn)(struct pci_dev *dev, struct pci_board *board,
+	int (*init_fn)(struct pci_dev *dev, struct pci_board *board,
 			int enable);
+	int first_uart_offset;
 };
 
 struct pci_board_inst {
@@ -158,7 +171,6 @@ struct pci_board_inst {
 
 #ifndef PCI_ANY_ID
 #define PCI_ANY_ID (~0)
-#endif
 #endif
 
 #define SPCI_FL_BASE_MASK	0x0007

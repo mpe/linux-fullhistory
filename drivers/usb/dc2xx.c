@@ -41,6 +41,9 @@
  * 12 Oct, 1999 -- handle DC-280 interface class (0xff not 0x0);
  *	added timeouts to bulk_msg calls.  Minor updates, docs.
  * 03 Nov, 1999 -- update for 2.3.25 kernel API changes.
+ *
+ * Thanks to:  the folk who've provided USB product IDs, sent in
+ * patches, and shared their sucesses!
  */
 
 #include <linux/kernel.h>
@@ -74,33 +77,30 @@
 
 
 /* table of cameras that work through this driver */
-static struct camera {
+static const struct camera {
 	short		idVendor;
 	short		idProduct;
-
-	/* should get this name from the USB subsystem */
-	const char	*nameProduct;
+	/* plus hooks for camera-specific info if needed */
 } cameras [] = {
-    { 0x040a, 0x0120, "Kodak DC-240" },
-    { 0x040a, 0x0130, "Kodak DC-280" },
+    { 0x040a, 0x0120 },		// Kodak DC-240
+    { 0x040a, 0x0130 },		// Kodak DC-280
 
 	/* Kodak has several other USB-enabled devices, which (along with
 	 * models from other vendors) all use the Flashpoint "Digita
-	 * OS" and its wire protocol.  This driver should work with such
-	 * devices, which need different application level protocol code
-	 * from the DC-240/280 models.  Note that Digita isn't just for
-	 * cameras -- Epson has a non-USB Digita photo printer.
+	 * OS" and its wire protocol.  These use a different application
+	 * level protocol from the DC-240/280 models.  Note that Digita
+	 * isn't just for cameras -- Epson has a non-USB Digita printer.
 	 */
-/*  { 0x040a, 0x0100, "Kodak DC-220" }, */
-    { 0x040a, 0x0110, "Kodak DC-260" },
-/*  { 0x040a, 0x0115, "Kodak DC-265" }, */
-/*  { 0x040a, 0x0140, "Kodak DC-290" }, */
+//  { 0x040a, 0x0100 },		// Kodak DC-220
+    { 0x040a, 0x0110 },		// Kodak DC-260
+    { 0x040a, 0x0111 },		// Kodak DC-265
+    { 0x040a, 0x0112 },		// Kodak DC-290
 
-/*  { 0xffff, 0xffff, "Minolta Dimage EX 1500" }, */
-/*  { 0x03f0, 0xffff, "HP PhotoSmart C500" }, */
+//  { 0x03f0, 0xffff },		// HP PhotoSmart C500
 
 	/* Other USB cameras may well work here too, so long as they
-	 * just stick to half duplex packet exchanges.
+	 * just stick to half duplex packet exchanges and bulk messages.
+	 * Some non-camera devices have also been shown to work.
 	 */
 };
 
@@ -110,7 +110,7 @@ struct camera_state {
 	struct usb_device	*dev;		/* USB device handle */
 	char			inEP;		/* read endpoint */
 	char			outEP;		/* write endpoint */
-	struct camera		*info;		/* DC-240, etc */
+	const struct camera	*info;		/* DC-240, etc */
 
 	/* valid iff isOpen */
 	int			isOpen;		/* device opened? */
@@ -159,9 +159,10 @@ static ssize_t camera_read (struct file *file,
 			return -ENODEV;
 		}
 
-		result = camera->dev->bus->op->bulk_msg (camera->dev,
+		result = usb_bulk_msg (camera->dev,
 			  usb_rcvbulkpipe (camera->dev, camera->inEP),
 			  camera->buf, len, &count, HZ*10);
+
 #ifdef	CAMERA_DEBUG
 		printk ("camera.r (%d) - 0x%x %ld\n", len, result, count);
 #endif
@@ -205,7 +206,6 @@ static ssize_t camera_write (struct file *file,
 
 		/* it's not clear that retrying can do any good ... or that
 		 * fragmenting application packets into N writes is correct.
-		 * consider those mechanisms mostly untested legacy code
 		 */
 		thistime = copy_size = len;
 		if (copy_from_user (obuf, buf, copy_size)) {
@@ -227,7 +227,7 @@ static ssize_t camera_write (struct file *file,
 				goto done;
 			}
 
-			result = camera->dev->bus->op->bulk_msg (camera->dev,
+			result = usb_bulk_msg (camera->dev,
 				 usb_sndbulkpipe (camera->dev, camera->outEP),
 				 obuf, thistime, &count, HZ*10);
 #ifdef	CAMERA_DEBUG
@@ -311,7 +311,7 @@ static int camera_release (struct inode *inode, struct file *file)
 	 * to applications ... what USB exposes should suffice.
 	 * apps should be able to see the camera type.
 	 */
-static struct file_operations usb_camera_fops = {
+static /* const */ struct file_operations usb_camera_fops = {
 	NULL,		/* llseek */
 	camera_read,
 	camera_write,
@@ -333,6 +333,7 @@ static struct miscdevice usb_camera = {
 	USB_CAMERA_MINOR,
 	"USB camera (Kodak DC-2xx)",
 	&usb_camera_fops
+	// next, prev
 };
 
 
@@ -340,9 +341,10 @@ static struct miscdevice usb_camera = {
 static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	int				i;
-	struct camera			*camera_info = NULL;
+	const struct camera		*camera_info = NULL;
 	struct usb_interface_descriptor	*interface;
 	struct usb_endpoint_descriptor	*endpoint;
+	int				direction, ep;
 
 	struct camera_state		*camera = &static_camera_state;
 
@@ -365,13 +367,10 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 	}
 
-	/* the interface class bit is odd -- the dc240 and dc260 return
-	 * a zero there, and at least some dc280s report 0xff
-	 */
-	// interface = &dev->config[0].interface[0].altsetting[0];
+	/* models differ in how they report themselves */
 	interface = &dev->actconfig->interface[ifnum].altsetting[0];
-	if ((interface->bInterfaceClass != 0
-				&& interface->bInterfaceClass != 0xff)
+	if ((interface->bInterfaceClass != USB_CLASS_PER_INTERFACE
+		&& interface->bInterfaceClass != USB_CLASS_VENDOR_SPEC)
 			|| interface->bInterfaceSubClass != 0
 			|| interface->bInterfaceProtocol != 0
 			|| interface->bNumEndpoints != 2
@@ -383,31 +382,33 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	/* can only show one camera at a time through /dev ... */
 	if (!camera->dev) {
 		camera->dev = dev;
-		printk(KERN_INFO "USB Camera (%s) is connected\n",
-				camera_info->nameProduct);
+		printk(KERN_INFO "USB Camera is connected\n");
 	} else {
-		printk(KERN_INFO "Ignoring additional USB Camera (%s)\n",
-				camera_info->nameProduct);
+		printk(KERN_INFO "Ignoring additional USB Camera\n");
 		return NULL;
 	}
-
-// XXX there are now masks for these constants ... see printer.c
 
 	/* get input and output endpoints (either order) */
 	endpoint = interface->endpoint;
 	camera->outEP = camera->inEP =  -1;
-	if ((endpoint [0].bEndpointAddress & 0x80) == 0x80)
-		camera->inEP = endpoint [0].bEndpointAddress & 0x7f;
-	else
-		camera->outEP = endpoint [0].bEndpointAddress;
 
-	if ((endpoint [1].bEndpointAddress & 0x80) == 0x80)
-		camera->inEP = endpoint [1].bEndpointAddress & 0x7f;
+	ep = endpoint [0].bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
+	direction = endpoint [0].bEndpointAddress & USB_ENDPOINT_DIR_MASK;
+	if (direction == USB_DIR_IN)
+		camera->inEP = ep;
 	else
-		camera->outEP = endpoint [1].bEndpointAddress;
+		camera->outEP = ep;
+
+	ep = endpoint [1].bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
+	direction = endpoint [1].bEndpointAddress & USB_ENDPOINT_DIR_MASK;
+	if (direction == USB_DIR_IN)
+		camera->inEP = ep;
+	else
+		camera->outEP = ep;
+
 	if (camera->outEP == -1 || camera->inEP == -1
-			|| endpoint [0].bmAttributes != 0x02
-			|| endpoint [1].bmAttributes != 0x02
+			|| endpoint [0].bmAttributes != USB_ENDPOINT_XFER_BULK
+			|| endpoint [1].bmAttributes != USB_ENDPOINT_XFER_BULK
 			) {
 		printk (KERN_INFO "Bogus camera endpoints\n");
 		camera->dev = NULL;
@@ -428,7 +429,6 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 static void camera_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct camera_state	*camera = (struct camera_state *) ptr;
-	struct camera		*info = camera->info;
 
 	if (camera->dev != dev)
 		return;
@@ -443,10 +443,10 @@ static void camera_disconnect(struct usb_device *dev, void *ptr)
 	camera->info = NULL;
 	camera->dev = NULL;
 
-	printk (KERN_INFO "USB Camera (%s) disconnected\n", info->nameProduct);
+	printk (KERN_INFO "USB Camera disconnected\n");
 }
 
-static struct usb_driver camera_driver = {
+static /* const */ struct usb_driver camera_driver = {
 	"dc2xx",
 	camera_probe,
 	camera_disconnect,

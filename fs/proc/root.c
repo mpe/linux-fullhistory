@@ -15,12 +15,6 @@
 #include <linux/config.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
-#ifdef CONFIG_KMOD
-#include <linux/kmod.h>
-#endif
-#ifdef CONFIG_ZORRO
-#include <linux/zorro.h>
-#endif
 
 static int proc_root_readdir(struct file *, void *, filldir_t);
 static struct dentry *proc_root_lookup(struct inode *,struct dentry *);
@@ -102,119 +96,6 @@ struct proc_dir_entry *proc_mca;
 #ifdef CONFIG_SYSCTL
 struct proc_dir_entry *proc_sys_root;
 #endif
-
-#if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
-
-static int (*proc_openprom_defreaddir_ptr)(struct file *, void *, filldir_t);
-static struct dentry * (*proc_openprom_deflookup_ptr)(struct inode *, struct dentry *);
-void (*proc_openprom_use)(struct inode *, int) = 0;
-static struct openpromfs_dev *proc_openprom_devices = NULL;
-static ino_t proc_openpromdev_ino = PROC_OPENPROMD_FIRST;
-
-struct inode_operations *
-proc_openprom_register(int (*readdir)(struct file *, void *, filldir_t),
-		       struct dentry * (*lookup)(struct inode *, struct dentry *),
-		       void (*use)(struct inode *, int),
-		       struct openpromfs_dev ***devices)
-{
-	proc_openprom_defreaddir_ptr = (proc_openprom_inode_operations.default_file_ops)->readdir;
-	proc_openprom_deflookup_ptr = proc_openprom_inode_operations.lookup;
-	(proc_openprom_inode_operations.default_file_ops)->readdir = readdir;
-	proc_openprom_inode_operations.lookup = lookup;
-	proc_openprom_use = use;
-	*devices = &proc_openprom_devices;
-	return &proc_openprom_inode_operations;
-}
-
-int proc_openprom_regdev(struct openpromfs_dev *d)
-{
-	if (proc_openpromdev_ino == PROC_OPENPROMD_FIRST + PROC_NOPENPROMD)
-		return -1;
-	d->next = proc_openprom_devices;
-	d->inode = proc_openpromdev_ino++;
-	proc_openprom_devices = d;
-	return 0;
-}
-
-int proc_openprom_unregdev(struct openpromfs_dev *d)
-{
-	if (d == proc_openprom_devices) {
-		proc_openprom_devices = d->next;
-	} else if (!proc_openprom_devices)
-		return -1;
-	else {
-		struct openpromfs_dev *p;
-		
-		for (p = proc_openprom_devices; p->next != d && p->next; p = p->next);
-		if (!p->next) return -1;
-		p->next = d->next;
-	}
-	return 0;
-}
-
-#ifdef CONFIG_SUN_OPENPROMFS_MODULE
-void
-proc_openprom_deregister(void)
-{
-	(proc_openprom_inode_operations.default_file_ops)->readdir = proc_openprom_defreaddir_ptr;
-	proc_openprom_inode_operations.lookup = proc_openprom_deflookup_ptr;
-	proc_openprom_use = 0;
-}		      
-#endif
-
-#if defined(CONFIG_SUN_OPENPROMFS_MODULE) && defined(CONFIG_KMOD)
-static int 
-proc_openprom_defreaddir(struct file * filp, void * dirent, filldir_t filldir)
-{
-	request_module("openpromfs");
-	if ((proc_openprom_inode_operations.default_file_ops)->readdir !=
-	    proc_openprom_defreaddir)
-		return (proc_openprom_inode_operations.default_file_ops)->readdir 
-				(filp, dirent, filldir);
-	return -EINVAL;
-}
-#define OPENPROM_DEFREADDIR proc_openprom_defreaddir
-
-static struct dentry *
-proc_openprom_deflookup(struct inode * dir, struct dentry *dentry)
-{
-	request_module("openpromfs");
-	if (proc_openprom_inode_operations.lookup !=
-	    proc_openprom_deflookup)
-		return proc_openprom_inode_operations.lookup 
-				(dir, dentry);
-	return ERR_PTR(-ENOENT);
-}
-#define OPENPROM_DEFLOOKUP proc_openprom_deflookup
-#else
-#define OPENPROM_DEFREADDIR NULL
-#define OPENPROM_DEFLOOKUP NULL
-#endif
-
-static struct file_operations proc_openprom_operations = {
-	NULL,			/* lseek - default */
-	NULL,			/* read - bad */
-	NULL,			/* write - bad */
-	OPENPROM_DEFREADDIR,	/* readdir */
-};
-
-struct inode_operations proc_openprom_inode_operations = {
-	&proc_openprom_operations,/* default net directory file-ops */
-	NULL,			/* create */
-	OPENPROM_DEFLOOKUP,	/* lookup */
-};
-
-struct proc_dir_entry proc_openprom = {
-	PROC_OPENPROM, 8, "openprom",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_openprom_inode_operations,
-	NULL, NULL,
-	NULL,
-	&proc_root, NULL
-};
-
-extern void openpromfs_init (void);
-#endif /* CONFIG_SUN_OPENPROMFS */
 
 static int make_inode_number(void)
 {
@@ -435,7 +316,7 @@ static struct proc_dir_entry proc_root_self = {
 #ifdef __powerpc__
 static struct proc_dir_entry proc_root_ppc_htab = {
 	0, 8, "ppc_htab",
-	S_IFREG | S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, 1, 0, 0,
+	S_IFREG | S_IRUGO|S_IWUSR, 1, 0, 0,
 	0, &proc_ppc_htab_inode_operations,
 };
 #endif
@@ -460,7 +341,8 @@ void __init proc_root_init(void)
 #ifdef CONFIG_SUN_OPENPROMFS
 	openpromfs_init ();
 #endif
-	proc_register(&proc_root, &proc_openprom);
+	/* just give it a mountpoint */
+	create_proc_entry("openprom", S_IFDIR, 0);
 #endif
 	proc_tty_init();
 #ifdef __powerpc__

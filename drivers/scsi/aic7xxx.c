@@ -263,7 +263,7 @@
  */
 #define VIRT_TO_BUS(a) (unsigned int)virt_to_bus((void *)(a))
 
-#define AIC7XXX_C_VERSION  "5.1.20"
+#define AIC7XXX_C_VERSION  "5.1.21"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -1355,6 +1355,18 @@ static int aic7xxx_no_probe = 0;
  */
 static int aic7xxx_scbram = 0;
 /*
+ * So that we can set how long each device is given as a selection timeout.
+ * The table of values goes like this:
+ * 	0 - 256ms
+ * 	1 - 128ms
+ * 	2 - 64ms
+ * 	3 - 32ms
+ * We default to 64ms because it's fast.  Some old SCSI-I devices need a
+ * longer time.  The final value has to be left shifted by 3, hence 0x10
+ * is the final value.
+ */
+static int aic7xxx_seltime = 0x10;
+/*
  * So that insmod can find the variable and make it point to something
  */
 #ifdef MODULE
@@ -1515,6 +1527,7 @@ aic7xxx_setup(char *s, int *dummy)
     { "dump_card", &aic7xxx_dump_card },
     { "dump_sequencer", &aic7xxx_dump_sequencer },
     { "scbram", &aic7xxx_scbram },
+    { "seltime", &aic7xxx_seltime },
     { "tag_info",    NULL }
   };
 
@@ -1608,6 +1621,10 @@ aic7xxx_setup(char *s, int *dummy)
         else if (p[n] == ':')
         {
           *(options[i].flag) = simple_strtoul(p + n + 1, NULL, 0);
+          if(!strncmp(p, "seltime", n))
+          {
+            *(options[i].flag) = (*(options[i].flag) % 4) << 3;
+          }
         }
         else if (!strncmp(p, "verbose", n))
         {
@@ -1616,6 +1633,10 @@ aic7xxx_setup(char *s, int *dummy)
         else
         {
           *(options[i].flag) = ~(*(options[i].flag));
+          if(!strncmp(p, "seltime", n))
+          {
+            *(options[i].flag) = (*(options[i].flag) % 4) << 3;
+          }
         }
       }
     }
@@ -1850,10 +1871,13 @@ aic7xxx_download_instr(struct aic7xxx_host *p, int instrptr,
         }
       }
       aic_outb(p, (instr.integer & 0xff), SEQRAM);
+      udelay(50);
       aic_outb(p, ((instr.integer >> 8) & 0xff), SEQRAM);
+      udelay(50);
       aic_outb(p, ((instr.integer >> 16) & 0xff), SEQRAM);
+      udelay(50);
       aic_outb(p, ((instr.integer >> 24) & 0xff), SEQRAM);
-      udelay(15);
+      udelay(50);
       break;
 
     default:
@@ -8117,7 +8141,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     aic_outb(p, p->scsi_id_b, SCSIID);
     scsi_conf = aic_inb(p, SCSICONF + 1);
     aic_outb(p, DFON | SPIOEN, SXFRCTL0);
-    aic_outb(p, (scsi_conf & ENSPCHK) | STIMESEL | term | 
+    aic_outb(p, (scsi_conf & ENSPCHK) | aic7xxx_seltime | term | 
          ENSTIMER | ACTNEGEN, SXFRCTL1);
     aic_outb(p, 0, SIMODE0);
     aic_outb(p, ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1);
@@ -8141,7 +8165,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     term = ((p->flags & (AHC_TERM_ENB_A|AHC_TERM_ENB_LVD)) ? STPWEN : 0);
   scsi_conf = aic_inb(p, SCSICONF);
   aic_outb(p, DFON | SPIOEN, SXFRCTL0);
-  aic_outb(p, (scsi_conf & ENSPCHK) | STIMESEL | term | 
+  aic_outb(p, (scsi_conf & ENSPCHK) | aic7xxx_seltime | term | 
        ENSTIMER | ACTNEGEN, SXFRCTL1);
   aic_outb(p, 0, SIMODE0);
   aic_outb(p, ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1);

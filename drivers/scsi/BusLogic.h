@@ -35,7 +35,6 @@
 */
 
 typedef kdev_t KernelDevice_T;
-typedef struct proc_dir_entry PROC_DirectoryEntry_T;
 typedef unsigned long ProcessorFlags_T;
 typedef struct pt_regs Registers_T;
 typedef struct partition PartitionTable_T;

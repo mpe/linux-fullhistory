@@ -98,7 +98,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       # tristate '  Packet Engines Hamachi GNIC-II support (EXPERIMENTAL)' CONFIG_HAMACHI
       tristate '  Packet Engines Yellowfin Gigabit-NIC support (EXPERIMENTAL)' CONFIG_YELLOWFIN
       tristate '  RealTek 8129/8139 (not 8019/8029!) support (EXPERIMENTAL)' CONFIG_RTL8139
-      tristate '  SiS 900 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_SIS900
       tristate '  DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
    fi
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -156,6 +155,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       # tristate '    Sundance Alta support' CONFIG_ALTA
       tristate '    TI ThunderLAN support' CONFIG_TLAN
       tristate '    VIA Rhine support' CONFIG_VIA_RHINE
+      tristate '    SiS 900/7016 PCI Fast Ethernet Adapter support' CONFIG_SIS900
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 tristate '    Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
 	 tristate '    SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100

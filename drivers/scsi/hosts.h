@@ -327,7 +327,6 @@ struct Scsi_Host
 /* public: */
     unsigned short extra_bytes;
     unsigned short host_no;  /* Used for IOCTL_GET_IDLUN, /proc/scsi et al. */
-    char proc_name[4];
     int resetting; /* if set, it means that last_reset is a valid value */
     unsigned long last_reset;
 

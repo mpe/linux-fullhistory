@@ -96,6 +96,12 @@ static struct tunertype tuners[] = {
 		16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
 	{"Alps TSBE1",TEMIC,PAL,
 		16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
+	{"Alps TSBB5", Alps, PAL_I, /* tested (UK UHF) with Modtec MM205 */
+	 	16*133.25,16*351.25,0x01,0x02,0x08,0x8e,0xc0,632},
+	{"Alps TSBE5", Alps, PAL,/* untested - data sheet guess. Only IF differs. */
+	 	16*133.25,16*351.25,0x01,0x02,0x08,0x8e,0xc0,622},
+	{"Alps TSBC5", Alps, PAL,/* untested - data sheet guess. Only IF differs. */
+	 	16*133.25,16*351.25,0x01,0x02,0x08,0x8e,0xc0,608},
 };
 
 /* ---------------------------------------------------------------------- */
