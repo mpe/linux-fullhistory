@@ -66,17 +66,20 @@ extern unsigned int irda_debug;
 /* use 0 for production, 1 for verification, >2 for debug */
 #define IRDA_DEBUG_LEVEL 0
 
-#define IRDA_DEBUG(n, args...) ( (irda_debug >= (n)) ? \
-				 (printk(KERN_DEBUG args)) : \
-				 0 )
+#define IRDA_DEBUG(n, args...) \
+do {	if (irda_debug >= (n)) \
+		printk(KERN_DEBUG args); \
+} while (0)
 #define IRDA_ASSERT(expr, func) \
 do { if(!(expr)) { \
 	printk( "Assertion failed! %s:%s:%d %s\n", \
 		__FILE__,__FUNCTION__,__LINE__,(#expr) ); \
 	func } } while (0)
+#define IRDA_ASSERT_LABEL(label)	label
 #else
-#define IRDA_DEBUG(n, args...) 0
-#define IRDA_ASSERT(expr, func) 0
+#define IRDA_DEBUG(n, args...) do { } while (0)
+#define IRDA_ASSERT(expr, func) do { (void)(expr); } while (0)
+#define IRDA_ASSERT_LABEL(label)
 #endif /* CONFIG_IRDA_DEBUG */
 
 #define IRDA_WARNING(args...) printk(KERN_WARNING args)

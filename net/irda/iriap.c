@@ -1057,7 +1057,7 @@ static int irias_seq_show(struct seq_file *seq, void *v)
 			seq_putc(seq, '\n');
 
 		}
-	outloop:
+	IRDA_ASSERT_LABEL(outloop:)
 		spin_unlock(&obj->attribs->hb_spinlock);
 	}
 

@@ -1738,7 +1738,7 @@ static int irlmp_slsap_inuse(__u8 slsap_sel)
 	 * Jean II */
 errlsap:
 	spin_unlock(&lap->lsaps->hb_spinlock);
-errlap:
+IRDA_ASSERT_LABEL(errlap:)
 	spin_unlock_irqrestore(&irlmp->links->hb_spinlock, flags);
 	return TRUE;
 
@@ -1989,7 +1989,7 @@ static int irlmp_seq_show(struct seq_file *seq, void *v)
 			seq_putc(seq, '\n');
 
 		}
-	outloop:
+	IRDA_ASSERT_LABEL(outloop:)
 		spin_unlock(&lap->lsaps->hb_spinlock);
 		seq_putc(seq, '\n');
 	} else
