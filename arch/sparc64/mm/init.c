@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.24 1997/04/17 21:49:41 jj Exp $
+/*  $Id: init.c,v 1.25 1997/04/28 14:57:11 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -694,6 +694,11 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		min_free_pages = 16;
 	free_pages_low = min_free_pages + (min_free_pages >> 1);
 	free_pages_high = min_free_pages + min_free_pages;
+
+#if 0
+	printk("Testing fault handling...\n");
+	*(char *)0x00000deadbef0000UL = 0;
+#endif
 }
 
 void free_initmem (void)

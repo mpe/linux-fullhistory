@@ -107,6 +107,7 @@
 #include <net/netlink.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
+#include <linux/init.h>
 
 #ifdef CONFIG_IP_MASQUERADE
 #include <net/ip_masq.h>
@@ -1298,7 +1299,7 @@ static struct proc_dir_entry proc_net_ipfwfwd = {
 #endif
 
 
-void ip_fw_init(void)
+__initfunc(void ip_fw_init(void))
 {
 #ifdef CONFIG_PROC_FS
 #ifdef CONFIG_IP_ACCT

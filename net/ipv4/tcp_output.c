@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.42 1997/04/22 01:06:33 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.43 1997/04/27 19:24:43 schenk Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -404,14 +404,115 @@ void tcp_write_xmit(struct sock *sk)
 
 
 
-/*
- *      This function returns the amount that we can raise the
- *      usable window based on the following constraints
+/* This function returns the amount that we can raise the
+ * usable window based on the following constraints
  *  
- *	1. The window can never be shrunk once it is offered (RFC 793)
- *	2. We limit memory per socket
+ * 1. The window can never be shrunk once it is offered (RFC 793)
+ * 2. We limit memory per socket
+ *
+ * RFC 1122:
+ * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+ *  RECV.NEXT + RCV.WIN fixed until:
+ *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+ *
+ * i.e. don't raise the right edge of the window until you can raise
+ * it at least MSS bytes.
+ *
+ * Unfortunately, the recomended algorithm breaks header prediction,
+ * since header prediction assumes th->window stays fixed.
+ *
+ * Strictly speaking, keeping th->window fixed violates the receiver
+ * side SWS prevention criteria. The problem is that under this rule
+ * a stream of single byte packets will cause the right side of the
+ * window to always advance by a single byte.
+ * 
+ * Of course, if the sender implements sender side SWS prevention
+ * then this will not be a problem.
+ * 
+ * BSD seems to make the following compromise:
+ * 
+ *	If the free space is less than the 1/4 of the maximum
+ *	space available and the free space is less than 1/2 mss,
+ *	then set the window to 0.
+ *	Otherwise, just prevent the window from shrinking
+ *	and from being larger than the largest representable value.
+ *
+ * This prevents incremental opening of the window in the regime
+ * where TCP is limited by the speed of the reader side taking
+ * data out of the TCP receive queue. It does nothing about
+ * those cases where the window is constrained on the sender side
+ * because the pipeline is full.
+ *
+ * BSD also seems to "accidentally" limit itself to windows that are a
+ * multiple of MSS, at least until the free space gets quite small.
+ * This would appear to be a side effect of the mbuf implementation.
+ * Combining these two algorithms results in the observed behavior
+ * of having a fixed window size at almost all times.
+ *
+ * Below we obtain similar behavior by forcing the offered window to
+ * a multiple of the mss when it is feasible to do so.
+ *
+ * FIXME: In our current implementation the value returned by sock_rpsace(sk)
+ * is the total space we have allocated to the socket to store skbuf's.
+ * The current design assumes that up to half of that space will be
+ * taken by headers, and the remaining space will be available for TCP data.
+ * This should be accounted for correctly instead.
  */
+unsigned short tcp_select_window(struct sock *sk)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	int mss = sk->mss;
+	long free_space = sock_rspace(sk)/2;
+	long window, cur_win;
 
+	if (tp->window_clamp) {
+		free_space = min(tp->window_clamp, free_space);
+		mss = min(tp->window_clamp, mss);
+	} else
+		printk(KERN_DEBUG "Clamp failure. Water leaking.\n");
+
+	if (mss < 1) {
+		mss = 1;
+		printk(KERN_DEBUG "tcp_select_window: mss fell to 0.\n");
+	}
+	
+	/* compute the actual window i.e.
+	 * old_window - received_bytes_on_that_win
+	 */
+	cur_win = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
+	window  = tp->rcv_wnd;
+
+	if (cur_win < 0) {
+		cur_win = 0;
+		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
+		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
+	}
+
+	if (free_space < sk->rcvbuf/4 && free_space < mss/2)
+		window = 0;
+
+	/* Get the largest window that is a nice multiple of mss.
+	 * Window clamp already applied above.
+	 * If our current window offering is within 1 mss of the
+	 * free space we just keep it. This prevents the divide
+	 * and multiply from happening most of the time.
+	 * We also don't do any window rounding when the free space
+	 * is too small.
+	 */
+	if (window < free_space - mss && free_space > mss)
+		window = (free_space/mss)*mss;
+
+	/* Never shrink the offered window */
+	if (window < cur_win)
+		window = cur_win;
+
+	tp->rcv_wnd = window;
+	tp->rcv_wup = tp->rcv_nxt;
+	return window >> tp->rcv_wscale;	/* RFC1323 scaling applied */
+}
+
+#if 0
+/* Old algorithm for window selection */
 unsigned short tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
@@ -427,37 +528,31 @@ unsigned short tcp_select_window(struct sock *sk)
 	/* compute the actual window i.e.
 	 * old_window - received_bytes_on_that_win
 	 */
-	cur_win = tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
+	cur_win = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
 	window  = tp->rcv_wnd;
-	
+
 	if (cur_win < 0) {
 		cur_win = 0;
 		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
 		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
 	}
 
-	/*
-	 * RFC 1122:
+	/* RFC 1122:
 	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
 	 *  RECV.NEXT + RCV.WIN fixed until:
 	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
 	 *
-	 * i.e. don't raise the right edge of the window until you can't raise
-	 * it MSS bytes
+	 * i.e. don't raise the right edge of the window until you can raise
+	 * it at least MSS bytes.
 	 */
 
-	/* It would be a good idea if it didn't break header prediction.
-	 * and BSD made the header predition standard...
-	 * It expects the same value in the header i.e. th->window to be
-	 * constant
-	 */
 	usable = free_space - cur_win;
 	if (usable < 0)
 		usable = 0;
 
 	if (window < usable) {
 		/*	Window is not blocking the sender
-		 *	and we have enought free space for it
+		 *	and we have enough free space for it
 		 */
 		if (cur_win > (sk->mss << 1))
 			goto out;
@@ -469,7 +564,7 @@ unsigned short tcp_select_window(struct sock *sk)
 		 */
 		window = max(usable, cur_win);
 	} else {
-		if ((usable - window) >= mss)
+		while ((usable - window) >= mss)
 			window += mss;
 	}
 out:
@@ -477,6 +572,7 @@ out:
 	tp->rcv_wup = tp->rcv_nxt;
 	return window;
 }
+#endif
 
 static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 {
@@ -703,6 +799,11 @@ void tcp_send_fin(struct sock *sk)
 	}
 }
 
+/* WARNING: This routine must only be called when we have already sent
+ * a SYN packet that crossed the incoming SYN that caused this routine
+ * to get called. If this assumption fails then the initial rcv_wnd
+ * and rcv_wscale values will not be correct.
+ */
 int tcp_send_synack(struct sock *sk)
 {
 	struct tcp_opt * tp = &(sk->tp_pinfo.af_tcp);
@@ -735,13 +836,16 @@ int tcp_send_synack(struct sock *sk)
 	skb->end_seq = skb->seq + 1 /* th->syn */ ;
 	th->seq = ntohl(skb->seq);
 
-	th->window = ntohs(tp->rcv_wnd);
+	/* This is a resend of a previous SYN, now with an ACK.
+	 * we must reuse the previously offered window.
+	 */
+	th->window = htons(tp->rcv_wnd);
 
 	tp->last_ack_sent = th->ack_seq = htonl(tp->rcv_nxt);
 
 	tmp = tcp_syn_build_options(skb, sk->mss,
 		tp->sack_ok, tp->tstamp_ok,
-		tp->snd_wscale?tp->rcv_wscale:0);
+		tp->wscale_ok,tp->rcv_wscale);
 	skb->csum = 0;
 	th->doff = (sizeof(*th) + tmp)>>2;
 

@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.11 1997/03/18 17:58:10 jj Exp $
+/* $Id: console.c,v 1.12 1997/05/01 01:41:30 davem Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -42,7 +42,7 @@ prom_nbgetchar(void)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 	return i; /* Ugh, we could spin forever on unsupported proms ;( */
@@ -83,7 +83,7 @@ prom_nbputchar(char c)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 	return i; /* Ugh, we could spin forever on unsupported proms ;( */
@@ -130,7 +130,7 @@ prom_query_input_device()
 		save_flags(flags); cli();
 		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdin);
 		__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-				     "r" (&current_set[smp_processor_id()]) :
+				     "r" (&current_set[hard_smp_processor_id()]) :
 				     "memory");
 		restore_flags(flags);
 		if(prom_node_has_property(st_p, "keyboard"))
@@ -177,7 +177,7 @@ prom_query_output_device()
 		save_flags(flags); cli();
 		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdout);
 		__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-				     "r" (&current_set[smp_processor_id()]) :
+				     "r" (&current_set[hard_smp_processor_id()]) :
 				     "memory");
 		restore_flags(flags);
 		propl = prom_getproperty(st_p, "device_type", propb, sizeof(propb));

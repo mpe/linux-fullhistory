@@ -48,6 +48,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/isp16.h>
+#include <linux/init.h>
 #include <asm/io.h>
 
 static short isp16_detect(void);
@@ -76,8 +77,8 @@ void cleanup_module(void);
 #define ISP16_OUT(p,b) (outb(isp16_ctrl,ISP16_CTRL_PORT), outb(b,p))
 
 
-void
-isp16_setup(char *str, int *ints)
+__initfunc(void
+isp16_setup(char *str, int *ints))
 {
   if ( ints[0] > 0 )
     isp16_cdrom_base = ints[1];
@@ -93,8 +94,8 @@ isp16_setup(char *str, int *ints)
  *  ISP16 initialisation.
  *
  */
-int
-isp16_init(void)
+__initfunc(int
+isp16_init(void))
 {
   u_char expected_drive;
 
@@ -143,8 +144,8 @@ isp16_init(void)
   return(0);
 }
 
-static short
-isp16_detect(void)
+__initfunc(static short
+isp16_detect(void))
 {
 
   if ( isp16_c929__detect() >= 0 )
@@ -153,8 +154,8 @@ isp16_detect(void)
     return(isp16_c928__detect());
 }
 
-static short
-isp16_c928__detect(void)
+__initfunc(static short
+isp16_c928__detect(void))
 {
   u_char ctrl;
   u_char enable_cdrom;
@@ -202,8 +203,8 @@ isp16_c928__detect(void)
   return(i);
 }
 
-static short
-isp16_c929__detect(void)
+__initfunc(static short
+isp16_c929__detect(void))
 {
   u_char ctrl;
   u_char tmp;
@@ -229,8 +230,8 @@ isp16_c929__detect(void)
   return(2);
 }
 
-static short
-isp16_cdi_config(int base, u_char drive_type, int irq, int dma)
+__initfunc(static short
+isp16_cdi_config(int base, u_char drive_type, int irq, int dma))
 {
   u_char base_code;
   u_char irq_code;

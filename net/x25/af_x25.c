@@ -45,6 +45,7 @@
 #include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/if_arp.h>
+#include <linux/init.h>
 #include <net/x25.h>
 
 int sysctl_x25_restart_request_timeout = X25_DEFAULT_T20;
@@ -1283,7 +1284,7 @@ static struct proc_dir_entry proc_net_x25_routes = {
 };
 #endif	
 
-void x25_proto_init(struct net_proto *pro)
+__initfunc(void x25_proto_init(struct net_proto *pro))
 {
 	sock_register(&x25_family_ops);
 

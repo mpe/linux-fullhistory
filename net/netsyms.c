@@ -200,6 +200,10 @@ EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(__release_sock);
 EXPORT_SYMBOL(net_timer);
 /* UDP/TCP exported functions for TCPv6 */
+EXPORT_SYMBOL(sysctl_tcp_sack);
+EXPORT_SYMBOL(sysctl_tcp_timestamps);
+EXPORT_SYMBOL(sysctl_tcp_window_scaling);
+EXPORT_SYMBOL(sock_rspace);
 EXPORT_SYMBOL(udp_ioctl);
 EXPORT_SYMBOL(udp_connect);
 EXPORT_SYMBOL(udp_sendmsg);

@@ -3,7 +3,6 @@
  *
  *  (c) 1996 Hans-Joachim Widmaier
  *
- *
  *  bitmap.c contains the code that handles all bitmap related stuff -
  *  block allocation, deallocation, calculation of free space.
  */
@@ -54,7 +53,7 @@ affs_count_free_blocks(struct super_block *s)
 }
 
 void
-affs_free_block(struct super_block *sb, int block)
+affs_free_block(struct super_block *sb, s32 block)
 {
 	int			 bmap;
 	int			 bit;
@@ -70,7 +69,7 @@ affs_free_block(struct super_block *sb, int block)
 	zone_no = (bmap << (sb->s_blocksize_bits - 7)) + bit / 1024;
 	bm      = &sb->u.affs_sb.s_bitmap[bmap];
 	if (bmap >= sb->u.affs_sb.s_bm_count) {
-		printk("AFFS: free_block(): block %d outside partition.\n",block);
+		affs_error(sb,"affs_free_block","Block %d outside partition",block);
 		return;
 	}
 	blk = 0;
@@ -83,15 +82,16 @@ affs_free_block(struct super_block *sb, int block)
 		if (!bm->bm_bh) {
 			bm->bm_count--;
 			unlock_super(sb);
-			printk("AFFS: free_block(): Cannot read bitmap block %d\n",bm->bm_key);
+			affs_error(sb,"affs_free_block","Cannot read bitmap block %d",bm->bm_key);
 			return;
 		}
 	}
 	if (set_bit(bit ^ BO_EXBITS,bm->bm_bh->b_data + 4))
-		printk("AFFS: free_block(): block %d is already free.\n",block);
+		affs_warning(sb,"affs_free_block","Trying to free block %d which is already free",
+				block);
 	else {
 		sb->u.affs_sb.s_alloc[zone_no].az_free++;
-		((__u32 *)bm->bm_bh->b_data)[0] = ntohl(htonl(((__u32 *)bm->bm_bh->b_data)[0]) - blk);
+		((u32 *)bm->bm_bh->b_data)[0] = ntohl(htonl(((u32 *)bm->bm_bh->b_data)[0]) - blk);
 		mark_buffer_dirty(bm->bm_bh,1);
 		sb->s_dirt = 1;
 	}
@@ -102,15 +102,15 @@ affs_free_block(struct super_block *sb, int block)
 	unlock_super(sb);
 }
 
-static int
+static s32
 affs_balloc(struct inode *inode, int zone_no)
 {
-	__u32			 w;
-	__u32			*bm;
+	u32			 w;
+	u32			*bm;
 	int			 fb;
 	int			 i;
 	int			 fwb;
-	int			 block;
+	s32			 block;
 	struct affs_zone	*zone;
 	struct affs_alloc_zone	*az;
 	struct super_block	*sb;
@@ -124,7 +124,7 @@ affs_balloc(struct inode *inode, int zone_no)
 	pr_debug("AFFS: balloc(inode=%lu,zone=%d)\n",inode->i_ino,zone_no);
 
 	az = &sb->u.affs_sb.s_alloc[zone->z_az_no];
-	bm = (__u32 *)zone->z_bm->bm_bh->b_data;
+	bm = (u32 *)zone->z_bm->bm_bh->b_data;
 repeat:
 	for (i = zone->z_start; i < zone->z_end; i++) {
 		if (bm[i])
@@ -140,7 +140,7 @@ found:
 	fb  = find_first_zero_bit(&w,32);
 	if (fb > 31 || !clear_bit(fb ^ BO_EXBITS,&bm[i])) {
 		unlock_super(sb);
-		printk("AFFS: balloc(): empty block disappeared somehow\n");
+		affs_warning(sb,"balloc","Empty block disappeared somehow");
 		goto repeat;
 	}
 	block = fwb + fb;
@@ -154,7 +154,7 @@ found:
 			if (fb > 31)
 				break;
 			if (!clear_bit(fb ^ BO_EXBITS,&bm[i])) {
-				printk("AFFS: balloc(): empty block disappeared\n");
+				affs_warning(sb,"balloc","Empty block disappeared somehow");
 				break;
 			}
 			inode->u.affs_i.i_data[inode->u.affs_i.i_pa_last++] = fwb + fb;
@@ -204,7 +204,7 @@ affs_find_new_zone(struct super_block *sb, int zone_no)
 		if (az->az_count)
 			az->az_count--;
 		else
-			printk("AFFS: find_new_zone(): az_count=0, but bm used\n");
+			affs_error(sb,"find_new_zone","az_count=0, but bm used");
 
 	}
 	while (1) {
@@ -247,7 +247,7 @@ affs_find_new_zone(struct super_block *sb, int zone_no)
 		bm->bm_count--;
 		az->az_count--;
 		unlock_super(sb);
-		printk("AFFS: find_new_zone(): Cannot read bitmap\n");
+		affs_error(sb,"find_new_zone","Cannot read bitmap");
 		return 0;
 	}
 	zone->z_bm    = bm;
@@ -261,16 +261,16 @@ affs_find_new_zone(struct super_block *sb, int zone_no)
 	return az->az_free;
 }
 
-int
+s32
 affs_new_header(struct inode *inode)
 {
-	int			 block;
+	s32			 block;
 	struct buffer_head	*bh;
 
 	pr_debug("AFFS: new_header(ino=%lu)\n",inode->i_ino);
 
 	if (!(block = affs_balloc(inode,0))) {
-		while(affs_find_new_zone(inode->i_sb,0)) {
+		while (affs_find_new_zone(inode->i_sb,0)) {
 			if ((block = affs_balloc(inode,0)))
 				goto init_block;
 			schedule();
@@ -279,7 +279,7 @@ affs_new_header(struct inode *inode)
 	}
 init_block:
 	if (!(bh = getblk(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
-		printk("AFFS: balloc(): cannot read block %d\n",block);
+		affs_error(inode->i_sb,"new_header","Cannot read block %d",block);
 		return 0;
 	}
 	memset(bh->b_data,0,AFFS_I2BSIZE(inode));
@@ -290,7 +290,7 @@ init_block:
 	return block;
 }
 
-int
+s32
 affs_new_data(struct inode *inode)
 {
 	int			 empty, old;
@@ -299,7 +299,7 @@ affs_new_data(struct inode *inode)
 	struct super_block	*sb;
 	struct buffer_head	*bh;
 	int			 i = 0;
-	int			 block;
+	s32			 block;
 
 	pr_debug("AFFS: new_data(ino=%lu)\n",inode->i_ino);
 
@@ -345,7 +345,7 @@ affs_new_data(struct inode *inode)
 found:
 	zone = &sb->u.affs_sb.s_zones[i];
 	if (!(block = affs_balloc(inode,i))) {		/* No data zones left */
-		while(affs_find_new_zone(sb,i)) {
+		while (affs_find_new_zone(sb,i)) {
 			if ((block = affs_balloc(inode,i)))
 				goto init_block;
 			schedule();
@@ -357,7 +357,7 @@ found:
 
 init_block:
 	if (!(bh = getblk(inode->i_dev,block,sb->s_blocksize))) {
-		printk("AFFS: balloc(): cannot read block %u\n",block);
+		affs_error(inode->i_sb,"new_data","Cannot read block %d",block);
 		return 0;
 	}
 	memset(bh->b_data,0,sb->s_blocksize);

@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/dma.h>
@@ -201,7 +202,7 @@ static inline void free_kmalloc_pages(struct page_descriptor * page,
 	free_pages((unsigned long) page, order);
 }
 
-long kmalloc_init(long start_mem, long end_mem)
+__initfunc(long kmalloc_init(long start_mem, long end_mem))
 {
 	int order;
 

@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/init.h>
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
@@ -116,9 +117,8 @@ pte_t *kernel_page_table (unsigned long *memavailp)
 	return ptablep;
 }
 
-static unsigned long map_chunk (unsigned long addr,
-				unsigned long size,
-				unsigned long *memavailp)
+__initfunc(static unsigned long
+map_chunk (unsigned long addr, unsigned long size, unsigned long *memavailp))
 {
 #define ONEMEG	(1024*1024)
 #define L3TREESIZE (256*1024)
@@ -283,6 +283,11 @@ static unsigned long map_chunk (unsigned long addr,
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
+/* References to section boundaries */
+
+extern char _text, _etext, _edata, __bss_start, _end;
+extern char __init_begin, __init_end;
+
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
 /*
@@ -291,7 +296,7 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
  * The parameters are pointers to where to stick the starting and ending
  * addresses  of available kernel virtual memory.
  */
-unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int chunk;
 	unsigned long mem_avail = 0;
@@ -395,12 +400,12 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	return PAGE_ALIGN(free_area_init (start_mem, end_mem));
 }
 
-void mem_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int codepages = 0;
 	int datapages = 0;
+	int initpages = 0;
 	unsigned long tmp;
-	extern int _etext;
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
@@ -448,8 +453,15 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		if (VTOP (tmp) >= mach_max_dma_address)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
-			if (tmp < (unsigned long)&_etext)
-				codepages++;
+			if (tmp >= (unsigned long)&_text
+			    && tmp < (unsigned long)&_edata) {
+				if (tmp < (unsigned long) &_etext)
+					codepages++;
+				else
+					datapages++;
+			} else if (tmp >= (unsigned long) &__init_begin
+				   && tmp < (unsigned long) &__init_end)
+				initpages++;
 			else
 				datapages++;
 			continue;
@@ -461,16 +473,26 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 			free_page(tmp);
 	}
-	printk("Memory: %luk/%luk available (%dk kernel code, %dk data)\n",
+	printk("Memory: %luk/%luk available (%dk kernel code, %dk data, %dk init)\n",
 	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
 	       max_mapnr << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
-	       datapages << (PAGE_SHIFT-10));
+	       datapages << (PAGE_SHIFT-10),
+	       initpages << (PAGE_SHIFT-10));
 }
 
 void free_initmem(void)
 {
-	/* To be written */
+	unsigned long addr;
+
+	addr = (unsigned long)&__init_begin;
+	for (; addr < (unsigned long)&__init_end; addr += PAGE_SIZE) {
+		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		free_page(addr);
+	}
+	printk ("Freeing unused kernel memory: %dk freed\n",
+		(&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

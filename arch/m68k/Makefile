@@ -24,17 +24,7 @@ ifneq ($(COMPILE_ARCH),$(ARCH))
 	CROSS_COMPILE = m68k-linux-
 endif
 
-#
-# Set these to indicate how to link it..
-#
-# -zmagic:   
-#
-# LINKFLAGS    = -Ttext 0x100000
-#
-# -qmagic (we need to remove the 32 byte header for bootup purposes)
-#
-
-LINKFLAGS = -Ttext 0x1000
+LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux.lds
 
 CFLAGS := $(CFLAGS) -pipe -fno-strength-reduce
 

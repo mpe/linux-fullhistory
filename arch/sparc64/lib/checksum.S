@@ -555,7 +555,7 @@ __csum_partial_copy_end:
 	add	%i1, %i2, %i1
 2:
 	mov	%i1, %o0
-        wr	%%g0, ASI_S, %%asi
+        wr	%g0, ASI_S, %asi
         call	__bzero_noasi
 	 mov	%i3, %o1
 1:

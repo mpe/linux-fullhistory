@@ -21,6 +21,7 @@
 
 #include <linux/md.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include "linear.h"
 
@@ -180,7 +181,7 @@ static struct md_personality linear_personality=
 
 #ifndef MODULE
 
-void linear_init (void)
+__initfunc(void linear_init (void))
 {
   register_md_personality (LINEAR, &linear_personality);
 }

@@ -126,6 +126,7 @@
 #include <linux/stat.h>
 #include <linux/firewall.h>
 #include <linux/sysctl.h>
+#include <linux/init.h>
 #include <net/ip.h>
 #include <net/arp.h>
 
@@ -1795,7 +1796,7 @@ static struct proc_dir_entry proc_ax25_calls = {
 };
 #endif
 
-void ax25_proto_init(struct net_proto *pro)
+__initfunc(void ax25_proto_init(struct net_proto *pro))
 {
 	sock_register(&ax25_family_ops);
 	ax25_packet_type.type = htons(ETH_P_AX25);

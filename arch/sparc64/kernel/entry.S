@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.14 1997/04/14 06:56:54 davem Exp $
+/* $Id: entry.S,v 1.15 1997/04/28 14:57:08 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -34,21 +34,37 @@ sparc64_dtlb_fault:
 	call	sparc64_dtlb_fault_handler
 	 nop
 
+	/* Note, DMMU SFAR not updated for fast tlb data access miss
+	 * traps, so we must use tag access to find the right page.
+	 */
 sparc64_dtlb_refbit_catch:
+	wr	%g0, ASI_DMMU, %asi
 	rdpr	%pstate, %g1
 	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
+	ldxa	[%g0 + TLB_TAG_ACCESS] %asi, %g5
+	srlx	%g5, PAGE_SHIFT, %g5
+	ldxa	[%g0 + TLB_SFSR] %asi, %g4
+	sllx	%g5, PAGE_SHIFT, %g5
 	ba,pt	%xcc, etrap
 	 rd	%pc, %g7
-	call	sparc64_dtlb_refbit_handler
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+
+	clr	%o1					! text_fault == 0
+	mov	%l5, %o3				! address == sfar
+	and	%l4, 0x4, %o2				! write == sfsr.W
+	call	do_sparc64_fault
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0	! pt_regs ptr
 
 sparc64_itlb_refbit_catch:
 	rdpr	%pstate, %g1
 	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
 	ba,pt	%xcc, etrap
 	 rd	%pc, %g7
-	call	sparc64_dtlb_refbit_handler
-	 nop
+
+	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC], %o3
+	mov	1, %o1					! text_fault == 1
+	clr	%o2					! write == 0
+	call	do_sparc64_fault
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0	! pt_regs ptr
 
 	/* Note check out head.h, this code isn't even used for UP,
 	 * for SMP things will be different.  In particular the data

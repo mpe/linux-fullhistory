@@ -76,6 +76,7 @@
 #include <linux/interrupt.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -1063,7 +1064,7 @@ extern void tcp_init(void);
  *	Called by socket.c on kernel startup.  
  */
  
-void inet_proto_init(struct net_proto *pro)
+__initfunc(void inet_proto_init(struct net_proto *pro))
 {
 	struct sk_buff *dummy_skb;
 	struct inet_protocol *p;

@@ -43,6 +43,17 @@ extern struct sock *tcp_established_hash[TCP_HTABLE_SIZE];
 extern struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
 extern struct sock *tcp_bound_hash[TCP_BHTABLE_SIZE];
 
+/* tcp_ipv4.c: These sysctl variables need to be shared between v4 and v6
+ * because the v6 tcp code to intialize a connection needs to interoperate
+ * with the v4 code using the same variables.
+ * FIXME: It would be better to rewrite the connection code to be
+ * address family independent and just leave one copy in the ipv4 section.
+ * This would also clean up some code duplication. -- erics
+ */
+extern int sysctl_tcp_sack;
+extern int sysctl_tcp_timestamps;
+extern int sysctl_tcp_window_scaling;
+
 /* These are AF independant. */
 static __inline__ int tcp_bhashfn(__u16 lport)
 {
@@ -224,8 +235,12 @@ struct open_request {
 	__u16			rmt_port;
 	__u16			mss;
 	__u8			snd_wscale;
+	__u8			rcv_wscale;
 	char			sack_ok;
 	char			tstamp_ok;
+	char			wscale_ok;
+	__u32			window_clamp;	/* window clamp at creation time */
+	__u32			rcv_wnd;	/* rcv_wnd offered first time */
 	__u32			ts_recent;
 	unsigned long		expires;
 	int			retrans;
@@ -452,6 +467,10 @@ struct tcp_sl_timer {
 
 extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
  
+/*
+ * FIXME: this method of choosing when to send a window update
+ * does not seem correct to me. -- erics
+ */
 static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
@@ -553,9 +572,9 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
  * It would be especially magical to compute the checksum for this
  * stuff on the fly here.
  */
-extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int sack, int ts, int wscale)
+extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int sack, int ts, int offer_wscale, int wscale)
 {
-	int count = 4 + (wscale ? 4 : 0) +  ((ts || sack) ? 4 : 0) +  (ts ? 8 : 0);
+	int count = 4 + (offer_wscale ? 4 : 0) +  ((ts || sack) ? 4 : 0) +  (ts ? 8 : 0);
 	unsigned char *optr = skb_put(skb,count);
 	__u32 *ptr = (__u32 *)optr;
 
@@ -579,10 +598,51 @@ extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int sa
 		*ptr++ = htonl((TCPOPT_SACK_PERM << 24) | (TCPOLEN_SACK_PERM << 16)
 				| (TCPOPT_NOP << 8) | TCPOPT_NOP);
 	}
-	if (wscale)
-		*ptr++ = htonl((TCPOPT_WINDOW << 24) | (TCPOLEN_WINDOW << 16) | wscale);
+	if (offer_wscale)
+		*ptr++ = htonl((TCPOPT_WINDOW << 24) | (TCPOLEN_WINDOW << 16) | (wscale << 8));
 	skb->csum = csum_partial(optr, count, 0);
 	return count;
+}
+
+/* Determine a window scaling and initial window to offer.
+ * Based on the assumption that the given amount of space
+ * will be offered. Store the results in the tp structure.
+ * NOTE: for smooth operation initial space offering should
+ * be a multiple of mss if possible. We assume here that mss >= 1.
+ * This MUST be enforced by all callers.
+ */
+extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
+	__u32 *rcv_wnd,
+	__u32 *window_clamp,
+	int wscale_ok,
+	__u8 *rcv_wscale)
+{
+	/* If no clamp set the clamp to the max possible scaled window */
+	if (*window_clamp == 0)
+		(*window_clamp) = (65535<<14);
+	space = min(*window_clamp,space);
+
+	/* Quantize space offering to a multiple of mss if possible. */
+	if (space > mss)
+		space = (space/mss)*mss;
+
+	/* NOTE: offering an initial window larger than 32767
+	 * will break some buggy TCP stacks. We try to be nice.
+	 * If we are not window scaling, then this truncates
+	 * our initial window offering to 32k. There should also
+	 * be a sysctl option to stop being nice.
+	 */
+	(*rcv_wnd) = min(space,32767);
+	(*rcv_wscale) = 0;
+	if (wscale_ok) {
+		/* See RFC1323 for an explanation of the limit to 14 */
+		while (space > 65535 && (*rcv_wscale) < 14) {
+			space >>= 1;
+			(*rcv_wscale)++;
+		}
+	}
+	/* Set the clamp no higher than max representable value */
+	(*window_clamp) = min(65535<<(*rcv_wscale),*window_clamp);
 }
 
 extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req)

@@ -39,10 +39,6 @@ r_base = .
 	mov	%cs, %ax	# Code and data in the same place
 	mov	%ax, %ds
 
-	mov	%ax, %cx	# Pass stack info to the 32bit boot
-	shl	$4, %cx		# Segment -> Offset
-	add	$1024, %cx	# Don't overwrite end of page (filled in by kernel_thread)
-
 	mov	$1, %bx		# Flag an SMP trampoline
 	cli			# We should be safe anyway
 

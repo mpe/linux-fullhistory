@@ -59,6 +59,7 @@ struct fb_bitfield {
 #define FB_ACCEL_ATARIBLITT	1	/* Atari Blitter		*/
 #define FB_ACCEL_AMIGABLITT	2	/* Amiga Blitter                */
 #define FB_ACCEL_CYBERVISION	3	/* Cybervision64 (S3 Trio64)    */
+#define FB_ACCEL_RETINAZ3	4	/* RetinaZ3 (NCR77C32BLT)       */
 
 #define FB_SYNC_HOR_HIGH_ACT	1	/* horizontal sync high active	*/
 #define FB_SYNC_VERT_HIGH_ACT	2	/* vertical sync high active	*/
@@ -205,6 +206,7 @@ struct fb_info {
    int (*switch_con)(int);          /* tell fb to switch consoles */
    int (*updatevar)(int);           /* tell fb to update the vars */
    void (*blank)(int);              /* tell fb to (un)blank the screen */
+   int (*setcmap)(struct fb_cmap *, int); /* tell fb to set the colormap */
 };
 
 #endif /* __KERNEL__ */

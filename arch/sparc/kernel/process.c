@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.93 1997/04/11 08:55:40 davem Exp $
+/*  $Id: process.c,v 1.96 1997/05/01 08:53:33 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -38,22 +38,6 @@
 #include <asm/psr.h>
 #include <asm/system.h>
 #include <asm/elf.h>
-
-/*
- * Initial task structure. Make this a per-architecture thing,
- * because different architectures tend to have different
- * alignment requirements and potentially different initial
- * setup.
- */
-static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
-unsigned long init_user_stack[1024] = { STACK_MAGIC, };
-static struct vm_area_struct init_mmap = INIT_MMAP;
-static struct fs_struct init_fs = INIT_FS;
-static struct files_struct init_files = INIT_FILES;
-static struct signal_struct init_signals = INIT_SIGNALS;
-
-struct mm_struct init_mm = INIT_MM;
-struct task_struct init_task = INIT_TASK;
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
 
@@ -457,12 +441,12 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	if(regs->psr & PSR_PS)
 		stack_offset -= REGWIN_SZ;
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + stack_offset));
+	childregs = ((struct pt_regs *) (((unsigned long)p) + stack_offset));
 	copy_regs(childregs, regs);
 	new_stack = (((struct reg_window *) childregs) - 1);
 	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
 
-	p->tss.ksp = p->saved_kernel_stack = (unsigned long) new_stack;
+	p->tss.ksp = (unsigned long) new_stack;
 #ifdef __SMP__
 	p->tss.kpc = (((unsigned long) ret_from_smpfork) - 0x8);
 	p->tss.kpsr = current->tss.fork_kpsr | PSR_PIL;
@@ -483,7 +467,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;
 
-		if (sp != current->tss.kregs->u_regs[UREG_FP]) {
+		if (sp != regs->u_regs[UREG_FP]) {
 			struct sparc_stackf *childstack;
 			struct sparc_stackf *parentstack;
 
@@ -491,9 +475,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 			 * This is a clone() call with supplied user stack.
 			 * Set some valid stack frames to give to the child.
 			 */
-			childstack = (struct sparc_stackf *)sp;
-			parentstack = (struct sparc_stackf *)
-					current->tss.kregs->u_regs[UREG_FP];
+			childstack = (struct sparc_stackf *) sp;
+			parentstack = (struct sparc_stackf *) regs->u_regs[UREG_FP];
 
 #if 0
 			printk("clone: parent stack:\n");

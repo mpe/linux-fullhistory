@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.11 1997/04/16 05:58:05 davem Exp $
+ *	$Id: route.c,v 1.12 1997/04/29 09:38:50 mj Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -22,6 +22,7 @@
 #include <linux/route.h>
 #include <linux/netdevice.h>
 #include <linux/in6.h>
+#include <linux/init.h>
 
 #ifdef 	CONFIG_PROC_FS
 #include <linux/proc_fs.h>
@@ -1573,7 +1574,7 @@ static struct proc_dir_entry proc_rt6_tree = {
 };
 #endif	/* CONFIG_PROC_FS */
 
-void ip6_route_init(void)
+__initfunc(void ip6_route_init(void))
 {
 #ifdef 	CONFIG_PROC_FS
 	proc_net_register(&proc_rt6_info);

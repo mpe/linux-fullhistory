@@ -132,6 +132,7 @@ static void release(struct task_struct * p)
 			barrier();
 		spin_unlock_wait(&scheduler_lock);
 #endif
+		charge_uid(p, -1);
 		nr_tasks--;
 		add_free_taskslot(p->tarray_ptr);
 		unhash_pid(p);

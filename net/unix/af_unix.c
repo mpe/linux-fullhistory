@@ -81,6 +81,7 @@
 #include <net/af_unix.h>
 #include <linux/proc_fs.h>
 #include <net/scm.h>
+#include <linux/init.h>
 
 #include <asm/checksum.h>
 
@@ -1459,7 +1460,7 @@ struct net_proto_family unix_family_ops = {
 	unix_create
 };
 
-void unix_proto_init(struct net_proto *pro)
+__initfunc(void unix_proto_init(struct net_proto *pro))
 {
 	struct sk_buff *dummy_skb;
 	struct proc_dir_entry *ent;

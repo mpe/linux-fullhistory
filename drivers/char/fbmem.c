@@ -16,6 +16,7 @@
 #include <linux/malloc.h>
 #include <linux/mman.h>
 #include <linux/tty.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -300,8 +301,8 @@ unregister_framebuffer(int node)
 	return 0;
 }
 
-void
-fbmem_init(void)
+__initfunc(void
+fbmem_init(void))
 {
 	if (register_chrdev(FB_MAJOR,"fb",&fb_fops))
 		printk("unable to get major %d for fb devs\n", FB_MAJOR);

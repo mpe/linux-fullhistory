@@ -5,8 +5,10 @@
  *
  *  (C) 1993  Ray Burr - Amiga FFS filesystem.
  *
+ *  Please send bug reports to: hjw@zvw.de
  */
 
+#include <stdarg.h>
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/affs_fs.h>
@@ -16,6 +18,8 @@
 #include <linux/amigaffs.h>
 
 extern struct timezone sys_tz;
+
+static char ErrorBuffer[256];
 
 /*
  * Functions for accessing Amiga-FFS structures.
@@ -28,7 +32,7 @@ extern struct timezone sys_tz;
    0 is returned.  Otherwise, the key number in the next used hash slot
    is returned. */
 
-int
+static int
 affs_find_next_hash_entry(int hsize, void *dir_data, int *hash_pos)
 {
 	struct dir_front *dir_front = dir_data;
@@ -54,24 +58,23 @@ affs_get_file_name(int bsize, void *fh_data, char **name)
 	file_end = GET_END_PTR(struct file_end, fh_data, bsize);
 	if (file_end->file_name[0] == 0
 	    || file_end->file_name[0] > 30) {
-		printk ("affs_get_file_name: OOPS! bad filename\n");
-		printk ("  file_end->file_name[0] = %d\n",
+		printk(KERN_WARNING "AFFS: bad filename (length=%d chars)\n",
 			file_end->file_name[0]);
 		*name = "***BAD_FILE***";
 		return 14;
         }
-	*name = (char *) &file_end->file_name[1];
+	*name = (char *)&file_end->file_name[1];
         return file_end->file_name[0];
 }
 
 /* Find the predecessor in the hash chain */
 
 int
-affs_fix_hash_pred(struct inode *startino, int startoffset, int key, int newkey)
+affs_fix_hash_pred(struct inode *startino, int startoffset, s32 key, s32 newkey)
 {
 	struct buffer_head	*bh = NULL;
-	int			 nextkey;
-	int			 ptype, stype;
+	s32			 nextkey;
+	s32			 ptype, stype;
 	int			 retval;
 
 	nextkey = startino->i_ino;
@@ -87,14 +90,14 @@ affs_fix_hash_pred(struct inode *startino, int startoffset, int key, int newkey)
 		    || ptype != T_SHORT || (stype != ST_FILE && stype != ST_USERDIR &&
 					    stype != ST_LINKFILE && stype != ST_LINKDIR &&
 					    stype != ST_ROOT && stype != ST_SOFTLINK)) {
-			printk("AFFS: bad block found in link chain (ptype=%d, stype=%d)\n",
-			       ptype,stype);
+			affs_error(startino->i_sb,"affs_fix_hash_pred",
+				"Bad block in link chain (ptype=%d, stype=%d)",ptype,stype);
 			affs_brelse(bh);
 			break;
 		}
-		nextkey = htonl(((__u32 *)bh->b_data)[startoffset]);
+		nextkey = htonl(((s32 *)bh->b_data)[startoffset]);
 		if (nextkey == key) {
-			((__u32 *)bh->b_data)[startoffset] = newkey;
+			((s32 *)bh->b_data)[startoffset] = newkey;
 			affs_fix_checksum(AFFS_I2BSIZE(startino),bh->b_data,5);
 			mark_buffer_dirty(bh,1);
 			affs_brelse(bh);
@@ -112,13 +115,13 @@ affs_fix_hash_pred(struct inode *startino, int startoffset, int key, int newkey)
 /* Remove inode from link chain */
 
 int
-affs_fix_link_pred(struct inode *startino, int key, int newkey)
+affs_fix_link_pred(struct inode *startino, s32 key, s32 newkey)
 {
 	struct buffer_head	*bh = NULL;
-	int			 nextkey;
+	s32			 nextkey;
 	int			 offset;
-	int			 etype = 0;
-	int			 ptype, stype;
+	s32			 etype = 0;
+	s32			 ptype, stype;
 	int			 retval;
 
 	offset  = AFFS_I2BSIZE(startino) / 4 - 10;
@@ -150,7 +153,7 @@ affs_fix_link_pred(struct inode *startino, int key, int newkey)
 			retval = -EPERM;
 			break;
 		}
-		nextkey = htonl(((__u32 *)bh->b_data)[offset]);
+		nextkey = htonl(((s32 *)bh->b_data)[offset]);
 		if (nextkey == key) {
 			FILE_END(bh->b_data,startino)->link_chain = newkey;
 			affs_fix_checksum(AFFS_I2BSIZE(startino),bh->b_data,5);
@@ -172,17 +175,17 @@ affs_fix_link_pred(struct inode *startino, int key, int newkey)
    (which lets us calculate the block size).
    Returns non-zero if the block is not consistent. */
 
-__u32
-affs_checksum_block(int bsize, void *data, int *ptype, int *stype)
+u32
+affs_checksum_block(int bsize, void *data, s32 *ptype, s32 *stype)
 {
-	__u32	 sum;
-	__u32	*p;
+	u32	 sum;
+	u32	*p;
 
 	bsize /= 4;
 	if (ptype)
-		*ptype = htonl(((__s32 *)data)[0]);
+		*ptype = htonl(((s32 *)data)[0]);
 	if (stype)
-		*stype = htonl(((__s32 *)data)[bsize - 1]);
+		*stype = htonl(((s32 *)data)[bsize - 1]);
 
 	sum    = 0;
 	p      = data;
@@ -194,20 +197,20 @@ affs_checksum_block(int bsize, void *data, int *ptype, int *stype)
 void
 affs_fix_checksum(int bsize, void *data, int cspos)
 {
-	__u32	 ocs;
-	__u32	 cs;
+	u32	 ocs;
+	u32	 cs;
 
 	cs   = affs_checksum_block(bsize,data,NULL,NULL);
-	ocs  = htonl (((__u32 *)data)[cspos]);
+	ocs  = htonl (((u32 *)data)[cspos]);
 	ocs -= cs;
-	((__u32 *)data)[cspos] = htonl(ocs);
+	((u32 *)data)[cspos] = htonl(ocs);
 }
 
 void
-secs_to_datestamp(int secs, struct DateStamp *ds)
+secs_to_datestamp(time_t secs, struct DateStamp *ds)
 {
-	__u32	 days;
-	__u32	 minute;
+	u32	 days;
+	u32	 minute;
 
 	secs -= sys_tz.tz_minuteswest * 60 +((8 * 365 + 2) * 24 * 60 * 60);
 	if (secs < 0)
@@ -223,7 +226,7 @@ secs_to_datestamp(int secs, struct DateStamp *ds)
 }
 
 int
-prot_to_mode(__u32 prot)
+prot_to_mode(u32 prot)
 {
 	int	 mode = 0;
 
@@ -249,10 +252,10 @@ prot_to_mode(__u32 prot)
 	return mode;
 }
 
-unsigned int
+u32
 mode_to_prot(int mode)
 {
-	unsigned int	 prot = 0;
+	u32	 prot = 0;
 
 	if (mode & S_IXUSR)
 		prot |= FIBF_SCRIPT;
@@ -270,4 +273,33 @@ mode_to_prot(int mode)
 		prot |= FIBF_OTR_WRITE;
 	
 	return prot;
+}
+
+void
+affs_error(struct super_block *sb, const char *function, const char *fmt, ...)
+{
+	va_list	 args;
+
+	va_start(args,fmt);
+	vsprintf(ErrorBuffer,fmt,args);
+	va_end(args);
+
+	printk(KERN_CRIT "AFFS error (device %s): %s(): %s\n",kdevname(sb->s_dev),
+		function,ErrorBuffer);
+	if (!(sb->s_flags & MS_RDONLY))
+		printk(KERN_WARNING "AFFS: Remounting filesystem read-only\n");
+	sb->s_flags |= MS_RDONLY;
+}
+
+void
+affs_warning(struct super_block *sb, const char *function, const char *fmt, ...)
+{
+	va_list	 args;
+
+	va_start(args,fmt);
+	vsprintf(ErrorBuffer,fmt,args);
+	va_end(args);
+
+	printk(KERN_WARNING "AFFS error (device %s): %s(): %s\n",kdevname(sb->s_dev),
+		function,ErrorBuffer);
 }

@@ -16,6 +16,7 @@
 #include <linux/swap.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -44,7 +45,7 @@ static ulong swap_attempts = 0;
 static ulong swap_successes = 0;
 static ulong used_segs = 0;
 
-void shm_init (void)
+__initfunc(void shm_init (void))
 {
 	int id;
 
@@ -803,9 +804,10 @@ int shm_swap (int prio, int dma)
 		if (shmd->vm_mm->rss > 0)
 			shmd->vm_mm->rss--;
 		flush_tlb_page(shmd, tmp);
-	    /* continue looping through circular list */
+	    /* continue looping through the linked list */
 	    } while (0);
-	    if ((shmd = shmd->vm_next_share) == shp->attaches)
+	    shmd = shmd->vm_next_share;
+	    if (!shmd)
 		break;
 	}
 

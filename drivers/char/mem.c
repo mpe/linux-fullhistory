@@ -139,7 +139,8 @@ static long read_kmem(struct inode *inode, struct file *file,
 		else
 			tmp = count;
 		read = tmp;
-#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+#if defined(__sparc__) || defined(__mc68000__)
+		/* we don't have page 0 mapped on sparc and m68k.. */
 		while (p < PAGE_SIZE && tmp > 0) {
 			put_user(0,buf);
 			buf++;
@@ -172,7 +173,8 @@ static long write_kmem(struct inode * inode, struct file * file,
 	if (count > (unsigned long) high_memory - p)
 		count = (unsigned long) high_memory - p;
 	written = 0;
-#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+#if defined(__sparc__) || defined(__mc68000__)
+	/* we don't have page 0 mapped on sparc and m68k.. */
 	while (p < PAGE_SIZE && count > 0) {
 		/* Hmm. Do something? */
 		buf++;

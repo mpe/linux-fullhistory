@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/major.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/atarikb.h>
 #include <asm/atari_joystick.h>
@@ -128,7 +129,7 @@ struct file_operations atari_joystick_fops = {
 	release_joystick
 };
 
-int atari_joystick_init(void)
+__initfunc(int atari_joystick_init(void))
 {
     joystick[0].active = joystick[1].active = 0;
     joystick[0].ready = joystick[1].ready = 0;

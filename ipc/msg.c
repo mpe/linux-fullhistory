@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -39,7 +40,7 @@ static int kerneld_msqid = -1;
 static int kerneld_arr[MAX_KERNELDS];
 static int n_kernelds = 0;
 
-void msg_init (void)
+__initfunc(void msg_init (void))
 {
 	int id;
 	

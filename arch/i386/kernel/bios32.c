@@ -52,6 +52,9 @@
  * Feb 3, 1997  : Set internal functions to static, save/restore flags
  *	avoid dead locks reading broken PCI BIOS, werner@suse.de 
  *
+ * Apr 26, 1997 : Fixed case when there is BIOS32, but not PCI BIOS
+ *	(mj@atrey.karlin.mff.cuni.cz)
+ *
  */
 
 #include <linux/config.h>
@@ -173,10 +176,10 @@ static unsigned long bios32_service(unsigned long service)
 		case 0:
 			return address + entry;
 		case 0x80:	/* Not present */
-			printk("bios32_service(%ld) : not present\n", service);
+			printk("bios32_service(0x%lx) : not present\n", service);
 			return 0;
 		default: /* Shouldn't happen */
-			printk("bios32_service(%ld) : returned 0x%x, mail drew@colorado.edu\n",
+			printk("bios32_service(0x%lx) : returned 0x%x, mail drew@colorado.edu\n",
 				service, return_code);
 			return 0;
 	}
@@ -189,7 +192,7 @@ static struct {
 } pci_indirect = { 0, KERNEL_CS };
 
 
-__initfunc(static unsigned long check_pcibios(unsigned long memory_start, unsigned long memory_end))
+__initfunc(static int check_pcibios(void))
 {
 	unsigned long signature;
 	unsigned char present_status;
@@ -212,7 +215,7 @@ __initfunc(static unsigned long check_pcibios(unsigned long memory_start, unsign
 			: "1" (PCIBIOS_PCI_BIOS_PRESENT),
 			  "D" (&pci_indirect)
 			: "bx", "cx");
-	restore_flags(flags);
+		restore_flags(flags);
 
 		present_status = (pack >> 16) & 0xff;
 		major_revision = (pack >> 8) & 0xff;
@@ -232,9 +235,10 @@ __initfunc(static unsigned long check_pcibios(unsigned long memory_start, unsign
 		if (pcibios_entry) {
 			printk ("pcibios_init : PCI BIOS revision %x.%02x entry at 0x%lx\n",
 				major_revision, minor_revision, pcibios_entry);
+			return 1;
 		}
 	}
-	return memory_start;
+	return 0;
 }
 
 
@@ -912,13 +916,11 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 				bios32_entry = check->fields.entry;
 				printk ("pcibios_init : BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
 				bios32_indirect.address = bios32_entry + PAGE_OFFSET;
- 				access_pci = &pci_bios_access;
 			}
 		}
 	}
-	if (bios32_entry) {
-		memory_start = check_pcibios (memory_start, memory_end);
-	}
+	if (bios32_entry && check_pcibios())
+ 		access_pci = &pci_bios_access;
 #endif
 	return memory_start;
 }

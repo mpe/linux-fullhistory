@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: sit.c,v 1.13 1997/03/18 18:24:50 davem Exp $
+ *	$Id: sit.c,v 1.14 1997/04/29 09:38:52 mj Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -23,6 +23,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/icmp.h>
+#include <linux/init.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
@@ -243,7 +244,7 @@ static int sit_close(struct device *dev)
 	return 0;
 }
 
-int sit_init(void)
+__initfunc(int sit_init(void))
 {
 	int i;
 

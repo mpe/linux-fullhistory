@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.16 1997/04/11 22:22:57 davem Exp $
+ *	$Id: udp.c,v 1.17 1997/04/29 09:38:55 mj Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -26,6 +26,7 @@
 #include <linux/if_arp.h>
 #include <linux/ipv6.h>
 #include <linux/icmpv6.h>
+#include <linux/init.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
@@ -770,7 +771,7 @@ struct proto udpv6_prot = {
 	0				/* highestinuse */
 };
 
-void udpv6_init(void)
+__initfunc(void udpv6_init(void))
 {
 	inet6_add_protocol(&udpv6_protocol);
 }

@@ -68,6 +68,7 @@ extern void init_modules(void);
 extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern void sock_init(void);
+extern void uidcache_init(void);
 extern unsigned long pci_init(unsigned long, unsigned long);
 extern long mca_init(long, long);
 extern long sbus_init(long, long);
@@ -644,6 +645,7 @@ __initfunc(static void parse_root_dev(char * line))
 		{ "gscd",    0x1000 },
 		{ "sbpcd",   0x1900 },
 		{ "sonycd",  0x1800 },
+		{ "eda",     0x2400 },
 		{ "eza",     0x2800 },
 		{ "bpcd",    0x2900 },
 #if CONFIG_APBLOCK
@@ -881,6 +883,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	proc_root_init();
 #endif
 	kmem_cache_sizes_init();
+	uidcache_init();
 	vma_init();
 	buffer_init();
 	inode_init();

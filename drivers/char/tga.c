@@ -26,6 +26,7 @@
 #include <linux/ioport.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -140,35 +141,35 @@ unsigned long tga_fb_base;
 unsigned long tga_regs_base;
 unsigned int tga_bpp, tga_fb_width, tga_fb_height, tga_fb_stride;
 
-static unsigned int fb_offset_presets[4] = {
+static unsigned int fb_offset_presets[4] __initdata = {
 	TGA_8PLANE_FB_OFFSET,
 	TGA_24PLANE_FB_OFFSET,
 	0xffffffff,
 	TGA_24PLUSZ_FB_OFFSET
 };
 
-static unsigned int deep_presets[4] = {
+static unsigned int deep_presets[4] __initdata = {
   0x00014000,
   0x0001440d,
   0xffffffff,
   0x0001441d
 };
 
-static unsigned int rasterop_presets[4] = {
+static unsigned int rasterop_presets[4] __initdata = {
   0x00000003,
   0x00000303,
   0xffffffff,
   0x00000303
 };
 
-static unsigned int mode_presets[4] = {
+static unsigned int mode_presets[4] __initdata = {
   0x00002000,
   0x00002300,
   0xffffffff,
   0x00002300
 };
 
-static unsigned int base_addr_presets[4] = {
+static unsigned int base_addr_presets[4] __initdata = {
   0x00000000,
   0x00000001,
   0xffffffff,
@@ -304,8 +305,8 @@ set_cursor(int currcons)
   restore_flags(flags);
 }
 
-unsigned long
-con_type_init(unsigned long kmem_start, const char **display_desc)
+__initfunc(unsigned long
+con_type_init(unsigned long kmem_start, const char **display_desc))
 {
         can_do_color = 1;
 
@@ -323,8 +324,8 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 	return kmem_start;
 }
 
-void
-con_type_init_finish(void)
+__initfunc(void
+con_type_init_finish(void))
 {
 }
 
@@ -447,8 +448,8 @@ void set_vesa_blanking(const unsigned long arg)
  * when TGA console is configured, at the end of the probing code,
  * we call here to look for a TGA device, and proceed...
  */
-void
-tga_console_init(void)
+__initfunc(void
+tga_console_init(void))
 {
 	unsigned char pci_bus, pci_devfn;
 	int status;
@@ -490,9 +491,9 @@ tga_console_init(void)
 #endif
 }
 
-unsigned char PLLbits[7] = { 0x80, 0x04, 0x00, 0x24, 0x44, 0x80, 0xb8 };
+unsigned char PLLbits[7] __initdata = { 0x80, 0x04, 0x00, 0x24, 0x44, 0x80, 0xb8 };
 
-const unsigned long bt485_cursor_source[64] = {
+const unsigned long bt485_cursor_source[64] __initdata = {
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
@@ -502,7 +503,7 @@ const unsigned long bt485_cursor_source[64] = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
-const unsigned int bt463_cursor_source[256] = {
+const unsigned int bt463_cursor_source[256] = __initdata {
   0xffff0000, 0x00000000, 0x00000000, 0x00000000,
   0xffff0000, 0x00000000, 0x00000000, 0x00000000,
   0xffff0000, 0x00000000, 0x00000000, 0x00000000,
@@ -533,8 +534,8 @@ const unsigned int bt463_cursor_source[256] = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
-void
-tga_init_video()
+__initfunc(void
+tga_init_video(void))
 {
 	int i, j, temp;
 	unsigned char *cbp;
@@ -750,8 +751,8 @@ tga_init_video()
 	tga_fb_stride = tga_fb_width / sizeof(int);
 }
 
-void
-tga_clear_screen()
+__initfunc(void
+tga_clear_screen(void))
 {
     register int i, j;
     register unsigned int *dst;

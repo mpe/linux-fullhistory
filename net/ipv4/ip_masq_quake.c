@@ -28,6 +28,7 @@
 #include <linux/skbuff.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/init.h>
 #include <net/protocol.h>
 #include <net/udp.h>
 #include <net/ip_masq.h>
@@ -279,7 +280,7 @@ struct ip_masq_app ip_masq_quakenew = {
  * 	ip_masq_quake initialization
  */
 
-int ip_masq_quake_init(void)
+__initfunc(int ip_masq_quake_init(void))
 {
         return (register_ip_masq_app(&ip_masq_quake, IPPROTO_UDP, 26000) +
 		register_ip_masq_app(&ip_masq_quakenew, IPPROTO_UDP, 27000));

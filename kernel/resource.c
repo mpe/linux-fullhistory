@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 
 #define IOTABLE_SIZE 128
 
@@ -181,7 +182,7 @@ unsigned long occupy_region(unsigned long base, unsigned long end,
 #endif
 
 /* Called from init/main.c to reserve IO ports. */
-void reserve_setup(char *str, int *ints)
+__initfunc(void reserve_setup(char *str, int *ints))
 {
 	int i;
 

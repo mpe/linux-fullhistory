@@ -64,7 +64,7 @@ struct inode_operations affs_dir_inode_operations = {
 };
 
 static long
-affs_dir_read(struct inode * inode, struct file * filp, char * buf, unsigned long count)
+affs_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count)
 {
 	return -EISDIR;
 }
@@ -73,19 +73,18 @@ static int
 affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t filldir)
 {
 	int			 j, namelen;
-	int			 i;
+	s32			 i;
 	int			 hash_pos;
 	int			 chain_pos;
 	unsigned long		 ino;
 	unsigned long		 old;
-	int stored;
-	char *name;
-	struct buffer_head *dir_bh;
-	struct buffer_head *fh_bh;
-	struct inode	   *dir;
+	int			 stored;
+	char			 *name;
+	struct buffer_head	 *dir_bh;
+	struct buffer_head	 *fh_bh;
+	struct inode		 *dir;
 
 	pr_debug("AFFS: readdir(ino=%ld,f_pos=%lu)\n",inode->i_ino,filp->f_pos);
-	
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
@@ -122,7 +121,7 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 	chain_pos = (filp->f_pos - 2) & 0xffff;
 	hash_pos  = (filp->f_pos - 2) >> 16;
 	if (chain_pos == 0xffff) {
-		printk("AFFS: more than 65535 entries in chain\n");
+		affs_warning(inode->i_sb,"readdir","More than 65535 entries in chain");
 		chain_pos = 0;
 		hash_pos++;
 		filp->f_pos = ((hash_pos << 16) | chain_pos) + 2;
@@ -143,15 +142,15 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 		 * we can jump directly to where we left off.
 		 */
 		if (filp->private_data && filp->f_version == dir->i_version) {
-			i = (int)filp->private_data;
+			i = (s32)filp->private_data;
 			j = 0;
 			pr_debug("AFFS: readdir() left off=%d\n",i);
 		}
 		filp->f_version = dir->i_version;
-		pr_debug("AFFS: hash_pos=%lu chain_pos=%lu\n", hash_pos, chain_pos);
+		pr_debug("AFFS: hash_pos=%d chain_pos=%d\n",hash_pos,chain_pos);
 		while (i) {
 			if (!(fh_bh = affs_bread(inode->i_dev,i,AFFS_I2BSIZE(inode)))) {
-				printk("AFFS: readdir: Can't get block %d\n",i);
+				affs_error(inode->i_sb,"readdir","Cannot read block %d",i);
 				goto readdir_done;
 			}
 			ino = i;
@@ -164,7 +163,7 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 		}
 		if (fh_bh) {
 			namelen = affs_get_file_name(AFFS_I2BSIZE(inode),fh_bh->b_data,&name);
-			pr_debug("AFFS: readdir(): filldir(..,\"%.*s\",ino=%lu), i=%lu\n",
+			pr_debug("AFFS: readdir(): filldir(..,\"%.*s\",ino=%lu), i=%d\n",
 				 namelen,name,ino,i);
 			filp->private_data = (void *)ino;
 			if (filldir(dirent,name,namelen,filp->f_pos,ino) < 0)

@@ -22,6 +22,8 @@
  *  for more details.
  *
  *  History:
+ *	27 Mar 1997 FPU-less machines couldn't boot kernels that use bootinfo
+ *		    interface version 1.0 (Geert)
  *	03 Feb 1997 Implemented kernel decompression (Geert, based on Roman's
  *		    code for ataboot)
  *	30 Dec 1996 Reverted the CPU detection to the old scheme
@@ -791,6 +793,7 @@ static u_long get_chipset(void)
 static void get_processor(u_long *cpu, u_long *fpu, u_long *mmu)
 {
     *cpu = *fpu = 0;
+
     if (SysBase->AttnFlags & AFF_68060)
 	*cpu = CPU_68060;
     else if (SysBase->AttnFlags & AFF_68040)
@@ -799,15 +802,15 @@ static void get_processor(u_long *cpu, u_long *fpu, u_long *mmu)
 	*cpu = CPU_68030;
     else if (SysBase->AttnFlags & AFF_68020)
 	*cpu = CPU_68020;
+
     if (*cpu == CPU_68040 || *cpu == CPU_68060) {
 	if (SysBase->AttnFlags & AFF_FPU40)
 	    *fpu = *cpu;
-    } else {
-	if (SysBase->AttnFlags & AFF_68882)
-	    *fpu = FPU_68882;
-	else if (SysBase->AttnFlags & AFF_68881)
-	    *fpu = FPU_68881;
-    }
+    } else if (SysBase->AttnFlags & AFF_68882)
+	*fpu = FPU_68882;
+    else if (SysBase->AttnFlags & AFF_68881)
+	*fpu = FPU_68881;
+
     *mmu = *cpu;
 }
 
@@ -1047,7 +1050,7 @@ static int create_compat_bootinfo(void)
 	compat_bootinfo.cputype |= COMPAT_FPU_68040;
     else if (bi.fputype & FPU_68060)
 	compat_bootinfo.cputype |= COMPAT_FPU_68060;
-    else {
+    else if (bi.fputype) {
 	Printf("FPU type 0x%08lx not supported by kernel\n", bi.fputype);
 	return(0);
     }

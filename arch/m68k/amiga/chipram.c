@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <asm/amigahw.h>
 
 struct chip_desc {
@@ -21,19 +22,18 @@ struct chip_desc {
 #define DP(ptr) ((struct chip_desc *)(ptr))
 
 u_long amiga_chip_size;
-static unsigned long chipavail; /*MILAN*/
+static unsigned long chipavail;
 
-/*MILAN*/
 unsigned long amiga_chip_avail( void )
 {
 #ifdef DEBUG
-   printk("chip_avail : %ld bytes\n",chipavail);
+	printk("chip_avail : %ld bytes\n",chipavail);
 #endif
-   return chipavail;
+	return chipavail;
 }
 
 
-void amiga_chip_init (void)
+__initfunc(void amiga_chip_init (void))
 {
   struct chip_desc *dp;
 

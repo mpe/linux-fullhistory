@@ -47,7 +47,7 @@ as the serial console. Replace as needed.
    Sysvinit remembers its stty settings in a file in /etc, called
    `/etc/ioctl.save'. REMOVE THIS FILE before using the serial
    console for the first time, because otherwise init will probably
-   set the baudrate to 38400 (bausdrate of the virtual console).
+   set the baudrate to 38400 (baudrate of the virtual console).
 
 5. /dev/console and X
    Programs that want to do something with the virtual console usually

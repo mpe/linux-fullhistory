@@ -126,7 +126,8 @@
 .ent	entInt
 entInt:
 	SAVE_ALL
-	ldq	$8,current_set
+	lda	$8,0x3fff
+	bic	$30,$8,$8
 	jsr	$26,do_entInt
 	br	$31,ret_from_sys_call
 .end entInt
@@ -147,7 +148,8 @@ entMM:
 	stq	$15,48($30)
 	addq	$30,56,$19
 /* handle the fault */
-	ldq	$8,current_set
+	lda	$8,0x3fff
+	bic	$30,$8,$8
 	jsr	$26,do_page_fault
 /* reload the registers after the exception code played.  */
 	ldq	$9,0($30)
@@ -167,7 +169,8 @@ entMM:
 .ent	entArith
 entArith:
 	SAVE_ALL
-	ldq	$8,current_set
+	lda	$8,0x3fff
+	bic	$30,$8,$8
 	/* How much of a win is this clockwise?  We are, after all, messing
 	   up the call/return prefetch stack.  -- rth */
 	lda	$27,do_entArith
@@ -180,7 +183,8 @@ entArith:
 .ent	entIF
 entIF:
 	SAVE_ALL
-	ldq	$8,current_set
+	lda	$8,0x3fff
+	bic	$30,$8,$8
 	lda	$27,do_entIF
 	lda	$26,ret_from_sys_call
 	jsr	$31,($27),do_entIF
@@ -221,12 +225,13 @@ kernel_clone:
 .globl	__kernel_thread
 .ent	__kernel_thread
 __kernel_thread:
+	ldgp $29,0($27)		/* we can be called from a module */
 	.frame $30, 4*8, $26
 	subq $30,4*8,$30
 	stq $10,16($30)
 	stq $9,8($30)
 	stq $26,0($30)
-	.prologue 0
+	.prologue 1
 	bis $17,$17,$9		/* save fn */
 	bis $18,$18,$10		/* save arg */
 	bsr $26,kernel_clone
@@ -238,10 +243,9 @@ __kernel_thread:
 	ret $31,($26),1
 /* this is in child: look out as we don't have any stack here.. */
 1:	bis $9,$9,$27		/* get fn */
-	br $29,2f
-2:	ldgp $29,0($29)
+	lda $8,0x3fff
 	bis $10,$10,$16		/* get arg */
-	ldq $8,current_set
+	bic $30,$8,$8		/* get current */
 	jsr $26,($27)
 	bis $0,$0,$16
 	jsr $26,sys_exit
@@ -382,7 +386,8 @@ entUna:
 	stq $29,232($30)
 	stq $30,240($30)
 	stq $31,248($30)
-	ldq $8,current_set
+	lda $8,0x3fff
+	bic $30,$8,$8
 	jsr $26,do_entUna
 	ldq $0,0($30)
 	ldq $1,8($30)
@@ -432,7 +437,8 @@ entUnaUser:
 	stq $14,40($30)
 	stq $15,48($30)
 	bis $31,$30,$19
-	ldq $8,current_set
+	lda $8,0x3fff
+	bic $30,$8,$8
 	jsr $26,do_entUnaUser
 	ldq $9,0($30)
 	ldq $10,8($30)
@@ -497,7 +503,8 @@ alpha_switch_to:
 .ent	entSys
 entSys:
 	SAVE_ALL
-	ldq	$8,current_set
+	lda	$8,0x3fff
+	bic	$30,$8,$8
 	lda	$4,NR_SYSCALLS($31)
 	stq	$16,SP_OFF+24($30)
 	lda	$5,sys_call_table
@@ -532,7 +539,7 @@ ret_from_handle_bh:
 ret_from_reschedule:
 	lda	$0,need_resched
 	ldl	$2,0($0)
-	lda	$4,init_task
+	lda	$4,init_task_union
 	bne	$2,reschedule
 	xor	$4,$8,$4
 	beq	$4,restore_all

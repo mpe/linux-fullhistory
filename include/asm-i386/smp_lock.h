@@ -31,14 +31,11 @@ do { \
 #define reacquire_kernel_lock(task, cpu, depth) \
 do { if (depth) __asm__ __volatile__( \
 	"cli\n\t" \
-	"movl $0f,%%eax\n\t" \
-	"jmp __lock_kernel\n" \
-	"0:\t" \
+	"call __lock_kernel\n\t" \
 	"movl %2,%0\n\t" \
 	"sti" \
 	: "=m" (task->lock_depth) \
-	: "d" (cpu), "c" (depth) \
-	: "ax"); \
+	: "d" (cpu), "c" (depth)); \
 } while (0)
 	
 
@@ -62,14 +59,12 @@ l2:		printk("Ugh at %p\n", &&l2);
 	cli
 	cmpl	$0, %0
 	jne	0f
-	movl	$0f, %%eax
-	jmp	__lock_kernel
-0:
-	incl	%0
+	call	__lock_kernel
+0:	incl	%0
 	popfl
 "	:
-	: "m" (current_set[cpu]->lock_depth), "d" (cpu)
-	: "ax", "memory");
+	: "m" (current->lock_depth), "d" (cpu)
+	: "memory");
 }
 
 extern __inline__ void unlock_kernel(void)

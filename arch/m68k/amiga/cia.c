@@ -15,6 +15,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
+#include <linux/init.h>
 
 #include <asm/irq.h>
 #include <asm/amigahw.h>
@@ -152,7 +153,7 @@ static void cia_handler(int irq, void *dev_id, struct pt_regs *fp)
 	amiga_do_irq_list(base->server_irq, fp, &base->server);
 }
 
-void cia_init_IRQ(struct ciabase *base)
+__initfunc(void cia_init_IRQ(struct ciabase *base))
 {
 	int i;
 

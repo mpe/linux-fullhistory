@@ -501,7 +501,8 @@ static unsigned long get_wchan(struct task_struct *p)
    */
 # define PT_REG(reg)		(PAGE_SIZE - sizeof(struct pt_regs)	\
 				 + (long)&((struct pt_regs *)0)->reg)
-# define KSTK_EIP(tsk)	(*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
+# define KSTK_EIP(tsk) \
+    (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
 #elif defined(__mc68000__)
 #define	KSTK_EIP(tsk)	\

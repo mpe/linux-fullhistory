@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.16 1997/03/18 18:24:26 davem Exp $
+ *	$Id: af_inet6.c,v 1.17 1997/04/29 09:38:39 mj Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -34,6 +34,7 @@
 #include <linux/interrupt.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>
@@ -459,7 +460,7 @@ static struct proc_dir_entry proc_net_sockstat6 = {
 #ifdef MODULE
 int init_module(void)
 #else
-void inet6_proto_init(struct net_proto *pro)
+__initfunc(void inet6_proto_init(struct net_proto *pro))
 #endif
 {
 	struct sk_buff *dummy_skb;

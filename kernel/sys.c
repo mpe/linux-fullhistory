@@ -523,16 +523,15 @@ asmlinkage int sys_old_syscall(void)
  */
 asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 {
-	int old_ruid;
-	int old_euid;
+	int old_ruid, old_euid, new_ruid;
 
-	old_ruid = current->uid;
+	new_ruid = old_ruid = current->uid;
 	old_euid = current->euid;
 	if (ruid != (uid_t) -1) {
 		if ((old_ruid == ruid) || 
 		    (current->euid==ruid) ||
 		    suser())
-			current->uid = ruid;
+			new_ruid = ruid;
 		else
 			return -EPERM;
 	}
@@ -542,10 +541,8 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		    (current->suid == euid) ||
 		    suser())
 			current->fsuid = current->euid = euid;
-		else {
-			current->uid = old_ruid;
+		else
 			return -EPERM;
-		}
 	}
 	if (ruid != (uid_t) -1 ||
 	    (euid != (uid_t) -1 && euid != old_ruid))
@@ -553,6 +550,18 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	current->fsuid = current->euid;
 	if (current->euid != old_euid)
 		current->dumpable = 0;
+
+	if(new_ruid != old_ruid) {
+		/* What if a process setreuid()'s and this brings the
+		 * new uid over his NPROC rlimit?  We can check this now
+		 * cheaply with the new uid cache, so if it matters
+		 * we should be checking for it.  -DaveM
+		 */
+		charge_uid(current, -1);
+		current->uid = new_ruid;
+		if(new_ruid)
+			charge_uid(current, 1);
+	}
 	return 0;
 }
 
@@ -570,9 +579,11 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 asmlinkage int sys_setuid(uid_t uid)
 {
 	int old_euid = current->euid;
+	int old_ruid, new_ruid;
 
+	old_ruid = new_ruid = current->uid;
 	if (suser())
-		current->uid = current->euid = current->suid = current->fsuid = uid;
+		new_ruid = current->euid = current->suid = current->fsuid = uid;
 	else if ((uid == current->uid) || (uid == current->suid))
 		current->fsuid = current->euid = uid;
 	else
@@ -580,6 +591,14 @@ asmlinkage int sys_setuid(uid_t uid)
 
 	if (current->euid != old_euid)
 		current->dumpable = 0;
+
+	if(new_ruid != old_ruid) {
+		/* See comment above about NPROC rlimit issues... */
+		charge_uid(current, -1);
+		current->uid = new_ruid;
+		if(new_ruid)
+			charge_uid(current, 1);
+	}
 	return 0;
 }
 
@@ -605,8 +624,13 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	if ((suid != (uid_t) -1) && (suid != current->uid) &&
 	    (suid != current->euid) && (suid != current->suid))
 		return -EPERM;
-	if (ruid != (uid_t) -1)
+	if (ruid != (uid_t) -1) {
+		/* See above commentary about NPROC rlimit issues here. */
+		charge_uid(current, -1);
 		current->uid = ruid;
+		if(ruid)
+			charge_uid(current, 1);
+	}
 	if (euid != (uid_t) -1)
 		current->euid = euid;
 	if (suid != (uid_t) -1)

@@ -91,7 +91,8 @@ enum lp_type  {
 LP_UNKNOWN = 0,
 LP_AMIGA = 1,
 LP_ATARI = 2,
-LP_MFC = 3
+LP_MFC = 3,
+LP_IOEXT = 4
 };
 
 /*
@@ -105,10 +106,10 @@ struct lp_struct {
 	int (*lp_is_busy)(int);
 	int (*lp_has_pout)(int);
 	int (*lp_is_online)(int);
-	int (*lp_my_interrupt)(int);
+	int (*lp_dummy)(int);
 	int (*lp_ioctl)(int, unsigned int, unsigned long);
-	void (*lp_open)(void);		/* for module use counter */
-	void (*lp_release)(void);	/* for module use counter */
+	int (*lp_open)(int);		/* for module use counter */
+	void (*lp_release)(int);	/* for module use counter */
 	int flags;		/*for BUSY... */
 	unsigned int chars;	/*busy timeout */
 	unsigned int time;	/*wait time */
@@ -124,7 +125,7 @@ struct lp_struct {
 extern struct lp_struct *lp_table[MAX_LP];
 extern unsigned int lp_irq;
 
-void lp_interrupt(int, void *, struct pt_regs *);
+void lp_interrupt(int dev);
 int lp_init(void);
 int register_parallel(struct lp_struct *, int);
 void unregister_parallel(int);

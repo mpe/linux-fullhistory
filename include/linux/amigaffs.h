@@ -56,131 +56,131 @@
 
 struct root_front
 {
-  __s32 primary_type;
-  __s32 spare1[2];
-  __s32 hash_size;
-  __s32 spare2;
-  __u32 checksum;
-  __s32 hashtable[0];
+  s32 primary_type;
+  s32 spare1[2];
+  s32 hash_size;
+  s32 spare2;
+  u32 checksum;
+  s32 hashtable[0];
 };
 
 struct root_end
 {
-  __s32 bm_flag;
-  __s32 bm_keys[25];
-  __s32 bm_extend;
+  s32 bm_flag;
+  s32 bm_keys[25];
+  s32 bm_extend;
   struct DateStamp dir_altered;
-  __u8 disk_name[40];
+  u8 disk_name[40];
   struct DateStamp disk_altered;
   struct DateStamp disk_made;
-  __s32 spare1[3];
-  __s32 secondary_type;
+  s32 spare1[3];
+  s32 secondary_type;
 };
 
 struct dir_front
 {
-  __s32 primary_type;
-  __s32 own_key;
-  __s32 spare1[3];
-  __u32 checksum;
-  __s32 hashtable[0];
+  s32 primary_type;
+  s32 own_key;
+  s32 spare1[3];
+  u32 checksum;
+  s32 hashtable[0];
 };
 
 struct dir_end
 {
-  __s32 spare1;
-  __s16 owner_uid;
-  __s16 owner_gid;
-  __u32 protect;
-  __s32 spare2;
-  __u8 comment[92];
+  s32 spare1;
+  s16 owner_uid;
+  s16 owner_gid;
+  u32 protect;
+  s32 spare2;
+  u8 comment[92];
   struct DateStamp created;
-  __u8 dir_name[32];
-  __s32 spare3[2];
-  __s32 link_chain;
-  __s32 spare4[5];
-  __s32 hash_chain;
-  __s32 parent;
-  __s32 spare5;
-  __s32 secondary_type;
+  u8 dir_name[32];
+  s32 spare3[2];
+  s32 link_chain;
+  s32 spare4[5];
+  s32 hash_chain;
+  s32 parent;
+  s32 spare5;
+  s32 secondary_type;
 };
 
 struct file_front
 {
-  __s32 primary_type;
-  __s32 own_key;
-  __s32 block_count;
-  __s32 unknown1;
-  __s32 first_data;
-  __u32 checksum;
-  __s32 blocks[0];
+  s32 primary_type;
+  s32 own_key;
+  s32 block_count;
+  s32 unknown1;
+  s32 first_data;
+  u32 checksum;
+  s32 blocks[0];
 };
 
 struct file_end
 {
-  __s32 spare1;
-  __s16 owner_uid;
-  __s16 owner_gid;
-  __u32 protect;
-  __s32 byte_size;
-  __u8 comment[92];
+  s32 spare1;
+  s16 owner_uid;
+  s16 owner_gid;
+  u32 protect;
+  s32 byte_size;
+  u8 comment[92];
   struct DateStamp created;
-  __u8 file_name[32];
-  __s32 spare2;
-  __s32 original;	/* not really in file_end */
-  __s32 link_chain;
-  __s32 spare3[5];
-  __s32 hash_chain;
-  __s32 parent;
-  __s32 extension;
-  __s32 secondary_type;
+  u8 file_name[32];
+  s32 spare2;
+  s32 original;	/* not really in file_end */
+  s32 link_chain;
+  s32 spare3[5];
+  s32 hash_chain;
+  s32 parent;
+  s32 extension;
+  s32 secondary_type;
 };
 
 struct hlink_front
 {
-  __s32 primary_type;
-  __s32 own_key;
-  __s32 spare1[3];
-  __u32 checksum;
+  s32 primary_type;
+  s32 own_key;
+  s32 spare1[3];
+  u32 checksum;
 };
 
 struct hlink_end
 {
-  __s32 spare1;
-  __s16 owner_uid;
-  __s16 owner_gid;
-  __u32 protect;
-  __u8 comment[92];
+  s32 spare1;
+  s16 owner_uid;
+  s16 owner_gid;
+  u32 protect;
+  u8 comment[92];
   struct DateStamp created;
-  __u8 link_name[32];
-  __s32 spare2;
-  __s32 original;
-  __s32 link_chain;
-  __s32 spare3[5];
-  __s32 hash_chain;
-  __s32 parent;
-  __s32 spare4;
-  __s32 secondary_type;
+  u8 link_name[32];
+  s32 spare2;
+  s32 original;
+  s32 link_chain;
+  s32 spare3[5];
+  s32 hash_chain;
+  s32 parent;
+  s32 spare4;
+  s32 secondary_type;
 };
 
 struct slink_front
 {
-  __s32 primary_type;
-  __s32 own_key;
-  __s32 spare1[3];
-  __s32 checksum;
-  __u8	symname[288];	/* depends on block size */
+  s32 primary_type;
+  s32 own_key;
+  s32 spare1[3];
+  s32 checksum;
+  u8	symname[288];	/* depends on block size */
 };
 
 struct data_front
 {
-  __s32 primary_type;
-  __s32 header_key;
-  __s32 sequence_number;
-  __s32 data_size;
-  __s32 next_data;
-  __s32 checksum;
-  __u8 data[488];	/* depends on block size */
+  s32 primary_type;
+  s32 header_key;
+  s32 sequence_number;
+  s32 data_size;
+  s32 next_data;
+  s32 checksum;
+  u8 data[488];	/* depends on block size */
 };
 
 /* Permission bits */

@@ -149,6 +149,7 @@ atari_stram_free (void *ptr)
 #else
 
 #include <linux/mm.h>
+#include <linux/init.h>
 
 /* ++roman:
  * 
@@ -190,7 +191,7 @@ static unsigned long stram_end;
     /* Overall end of ST-Ram */
 
 
-void atari_stram_init( void )
+__initfunc(void atari_stram_init( void ))
 
 {	int		i;
 

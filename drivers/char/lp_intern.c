@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/init.h>
 #include <asm/irq.h>
 #include <asm/setup.h>
 #ifdef CONFIG_AMIGA
@@ -33,7 +34,6 @@
 #endif
 #include <linux/lp_intern.h>
 
-static int my_inter = 0;
 static int minor = -1;
 
 static void lp_int_out(int, int);
@@ -126,24 +126,18 @@ lp_int_online (int dev)
     }
 }
 
-static int lp_int_my_interrupt(int dev)
-{
-  return my_inter;
-}
-
 static void lp_int_interrupt(int irq, void *data, struct pt_regs *fp)
 {
-  my_inter = 1;
-  lp_interrupt(irq, data, fp);
-  my_inter = 0;
+  lp_interrupt(minor);
 }
 
-static void lp_int_open(void)
+static int lp_int_open(int dev)
 {
   MOD_INC_USE_COUNT;
+  return 0;
 }
 
-static void lp_int_release(void)
+static void lp_int_release(int dev)
 {
   MOD_DEC_USE_COUNT;
 }
@@ -155,7 +149,7 @@ static struct lp_struct tab = {
 	lp_int_busy,
 	lp_int_pout,
 	lp_int_online,
-	lp_int_my_interrupt,
+	0,
 	NULL,				/* ioctl */
 	lp_int_open,
 	lp_int_release,
@@ -167,7 +161,7 @@ static struct lp_struct tab = {
 	NULL,
 };
 
-int lp_internal_init(void)
+__initfunc(int lp_internal_init(void))
 {
 #ifdef CONFIG_AMIGA
   if (MACH_IS_AMIGA && AMIGAHW_PRESENT(AMI_PARALLEL))

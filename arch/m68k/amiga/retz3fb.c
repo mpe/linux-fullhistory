@@ -30,10 +30,11 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/fb.h>
+#include <linux/zorro.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>
-#include <linux/zorro.h>
 #include <asm/pgtable.h>
 
 #include "retz3fb.h"
@@ -1650,7 +1651,7 @@ void retz3_video_setup(char *options, int *ints)
  *    Initialization
  */
 
-struct fb_info *retz3_fb_init(long *mem_start)
+__initfunc(struct fb_info *retz3_fb_init(long *mem_start))
 {
 	int err;
 	struct retz3_fb_par par;

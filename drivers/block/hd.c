@@ -39,6 +39,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/mc146818rtc.h> /* CMOS defines */
+#include <linux/init.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -110,7 +111,7 @@ unsigned long read_timer(void)
 }
 #endif
 
-void hd_setup(char *str, int *ints)
+__initfunc(void hd_setup(char *str, int *ints))
 {
 	int hdind = 0;
 
@@ -792,7 +793,7 @@ static struct file_operations hd_fops = {
 	block_fsync		/* fsync */
 };
 
-int hd_init(void)
+__initfunc(int hd_init(void))
 {
 	if (register_blkdev(MAJOR_NR,"hd",&hd_fops)) {
 		printk("hd: unable to get major %d for harddisk\n",MAJOR_NR);

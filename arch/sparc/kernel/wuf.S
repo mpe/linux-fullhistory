@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.31 1997/03/04 16:26:37 jj Exp $
+/* $Id: wuf.S,v 1.34 1997/05/01 08:53:36 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -145,14 +145,17 @@ fwin_user_stack_is_bolixed:
 	 * to the trap window and call c-code to deal with this.
 	 */
 	LOAD_CURRENT(l4, l5)
-	ld	[%l4 + AOFF_task_saved_kernel_stack], %l5
+
+	mov	1, %l5
+	sll	%l5, (PAGE_SHIFT + 1), %l5
+	sub	%l5, (TRACEREG_SZ + REGWIN_SZ), %l5
+	add	%l4, %l5, %l5
 
 	/* Store globals into pt_regs frame. */
 	STORE_PT_GLOBALS(l5)
 	STORE_PT_YREG(l5, g3)
 
-	/* Save kernel %sp in global while we change windows. */
-	mov	%l5, %g2
+	/* Save current in a global while we change windows. */
 	mov	%l4, %curptr
 
 	save	%g0, %g0, %g0
@@ -166,7 +169,10 @@ fwin_user_stack_is_bolixed:
 
 	/* LOCATION: Window 'T' */
 
-	mov	%g2, %sp		/* Jump onto kernel %sp being held */
+	mov	1, %sp
+	sll	%sp, (PAGE_SHIFT + 1), %sp
+	sub	%sp, (TRACEREG_SZ + REGWIN_SZ), %sp
+	add	%curptr, %sp, %sp
 
 	/* Build rest of pt_regs. */
 	STORE_PT_INS(sp)

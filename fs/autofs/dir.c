@@ -10,7 +10,7 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/auto_fs.h>
+#include "autofs_i.h"
 
 static int autofs_dir_readdir(struct inode *inode, struct file *filp,
 			       void *dirent, filldir_t filldir)

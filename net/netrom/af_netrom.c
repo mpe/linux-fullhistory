@@ -64,6 +64,7 @@
 #include <net/ip.h>
 #include <net/arp.h>
 #include <linux/if_arp.h>
+#include <linux/init.h>
 
 int sysctl_netrom_default_path_quality            = NR_DEFAULT_QUAL;
 int sysctl_netrom_obsolescence_count_initialiser  = NR_DEFAULT_OBS;
@@ -1361,7 +1362,7 @@ static struct device dev_nr[] = {
 	{"nr3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init}
 };
 
-void nr_proto_init(struct net_proto *pro)
+__initfunc(void nr_proto_init(struct net_proto *pro))
 {
 	int i;
 

@@ -30,6 +30,7 @@
 #include <linux/skbuff.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/init.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
 #include <net/udp.h>
@@ -482,7 +483,7 @@ static struct proc_dir_entry proc_net_ip_masq_app = {
  *	Initialization routine
  */
 
-int ip_masq_app_init(void)
+__initfunc(int ip_masq_app_init(void))
 {
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_ip_masq_app);

@@ -6,22 +6,22 @@
 #ifndef _SPARC_ASMMACRO_H
 #define _SPARC_ASMMACRO_H
 
-/* #define SMP_DEBUG */
-
 #define GET_PROCESSOR_ID(reg) \
 	rd	%tbr, %reg; \
 	srl	%reg, 12, %reg; \
 	and	%reg, 3, %reg;
 
 #define GET_PROCESSOR_MID(reg, tmp) \
-	GET_PROCESSOR_ID(reg) \
-	set	C_LABEL(mid_xlate), %tmp; \
+	rd	%tbr, %reg; \
+	sethi	C_LABEL(mid_xlate), %tmp; \
+	srl	%reg, 12, %reg; \
+	or	%tmp, %lo(C_LABEL(mid_xlate)), %tmp; \
+	and	%reg, 3, %reg; \
 	ldub	[%tmp + %reg], %reg;
 
 #define GET_PROCESSOR_OFFSET(reg) \
-	rd	%tbr, %reg; \
-	srl	%reg, 10, %reg; \
-	and	%reg, 0xc, %reg;
+	GET_PROCESSOR_ID(reg) \
+	sll	%reg, 2, %reg;
 
 #define PROCESSOR_OFFSET_TO_ID(reg) \
 	srl	%reg, 2, %reg;

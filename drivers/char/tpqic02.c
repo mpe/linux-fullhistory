@@ -89,6 +89,7 @@
 #include <linux/tpqic02.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
  
 #include <asm/dma.h>
 #include <asm/system.h>
@@ -2866,10 +2867,7 @@ static int qic02_get_resources(void)
     return 0;
 } /* qic02_get_resources */
 
-#ifdef MODULE
-static
-#endif
-int qic02_tape_init(void)
+__initfunc(static int qic02_tape_init(void))
 {
     if (TPSTATSIZE != 6)
     {

@@ -800,6 +800,18 @@ hostadapters.
   No argument. Used to separate blocks of keywords when there's more
 than one host adapter in the system.
 
+5.3.7) nodma
+------------
+
+Syntax: nodma:x
+
+  If x is 1 (or if the option is just written as "nodma"), the WD33c93
+controller will not use DMA (= direct memory access) to access the
+Amiga's memory.  This is useful for some systems (like A3000's and
+A4000's with the A3640 accelerator, revision 3.0) that have problems
+using DMA to chip memory.  The default is 0, i.e. to use DMA if
+possible.
+
 
 5.4) gvp11=
 -----------

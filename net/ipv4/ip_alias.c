@@ -26,6 +26,7 @@
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/route.h>
+#include <linux/init.h>
 #include <net/route.h>
 
 #ifdef ALIAS_USER_LAND_DEBUG
@@ -137,7 +138,7 @@ struct net_alias_type ip_alias_type =
  * ip_alias module initialization
  */
 
-int ip_alias_init(void)
+__initfunc(int ip_alias_init(void))
 {
 	return register_net_alias_type(&ip_alias_type, AF_INET);
 }

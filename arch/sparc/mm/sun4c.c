@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.143 1997/04/11 00:42:14 davem Exp $
+/* $Id: sun4c.c,v 1.147 1997/05/01 08:53:42 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1093,8 +1093,7 @@ static void sun4c_quick_kernel_fault(unsigned long address)
         panic("sun4c kernel fault handler bolixed...");
 }
 
-/*
- * 4 page buckets for task struct and kernel stack allocation.
+/* 2 page buckets for task struct and kernel stack allocation.
  *
  * TASK_STACK_BEGIN
  * bucket[0]
@@ -1105,24 +1104,17 @@ static void sun4c_quick_kernel_fault(unsigned long address)
  *
  * Each slot looks like:
  *
- *  page 1   --  task struct
- *  page 2   --  unmapped, for stack redzone (maybe use for pgd)
- *  page 3/4 --  kernel stack
+ *  page 1 --  task struct + beginning of kernel stack
+ *  page 2 --  rest of kernel stack
  */
 
-struct task_bucket {
-	struct task_struct task;
-	char _unused1[PAGE_SIZE - sizeof(struct task_struct)];
-	char kstack[(PAGE_SIZE*3)];
-};
-
-struct task_bucket *sun4c_bucket[NR_TASKS];
+union task_union *sun4c_bucket[NR_TASKS];
 
 static int sun4c_lowbucket_avail;
 
-#define BUCKET_EMPTY     ((struct task_bucket *) 0)
-#define BUCKET_SIZE      (PAGE_SIZE << 2)
-#define BUCKET_SHIFT     14        /* log2(sizeof(struct task_bucket)) */
+#define BUCKET_EMPTY     ((union task_union *) 0)
+#define BUCKET_SHIFT     (PAGE_SHIFT + 1)        /* log2(sizeof(struct task_bucket)) */
+#define BUCKET_SIZE      (1 << BUCKET_SHIFT)
 #define BUCKET_NUM(addr) ((((addr) - SUN4C_LOCK_VADDR) >> BUCKET_SHIFT))
 #define BUCKET_ADDR(num) (((num) << BUCKET_SHIFT) + SUN4C_LOCK_VADDR)
 #define BUCKET_PTE(page)       \
@@ -1177,10 +1169,10 @@ static inline void garbage_collect(int entry)
 {
 	int start, end;
 
-	/* 16 buckets per segment... */
-	entry &= ~15;
+	/* 32 buckets per segment... */
+	entry &= ~31;
 	start = entry;
-	for(end = (start + 16); start < end; start++)
+	for(end = (start + 32); start < end; start++)
 		if(sun4c_bucket[start] != BUCKET_EMPTY)
 			return;
 
@@ -1190,121 +1182,70 @@ static inline void garbage_collect(int entry)
 
 static struct task_struct *sun4c_alloc_task_struct(void)
 {
-	unsigned long addr, page;
+	unsigned long addr, pages;
 	int entry;
 
-	page = get_free_page(GFP_KERNEL);
-	if(!page)
+	pages = __get_free_pages(GFP_KERNEL, 1, 0);
+	if(!pages)
 		return (struct task_struct *) 0;
 
 	for(entry = sun4c_lowbucket_avail; entry < NR_TASKS; entry++)
 		if(sun4c_bucket[entry] == BUCKET_EMPTY)
 			break;
 	if(entry == NR_TASKS) {
-		free_page(page);
+		free_pages(pages, 1);
 		return (struct task_struct *) 0;
 	}
 	if(entry >= sun4c_lowbucket_avail)
 		sun4c_lowbucket_avail = entry + 1;
 
 	addr = BUCKET_ADDR(entry);
-	sun4c_bucket[entry] = (struct task_bucket *) addr;
+	sun4c_bucket[entry] = (union task_union *) addr;
 	if(sun4c_get_segmap(addr) == invalid_segment)
 		get_locked_segment(addr);
-	sun4c_put_pte(addr, BUCKET_PTE(page));
+	sun4c_put_pte(addr, BUCKET_PTE(pages));
+	sun4c_put_pte(addr + PAGE_SIZE, BUCKET_PTE(pages + PAGE_SIZE));
 
 	return (struct task_struct *) addr;
-}
-
-static unsigned long sun4c_alloc_kernel_stack(struct task_struct *tsk)
-{
-	unsigned long saddr = (unsigned long) tsk;
-	unsigned long page[2];
-
-	if(!saddr)
-		return 0;
-	page[0] = __get_free_page(GFP_KERNEL);
-	if(!page[0])
-		return 0;
-	page[1] = __get_free_page(GFP_KERNEL);
-	if(!page[1]) {
-		free_page(page[0]);
-		return 0;
-	}
-
-	saddr += PAGE_SIZE << 1;
-	sun4c_put_pte(saddr, BUCKET_PTE(page[0]));
-	sun4c_put_pte(saddr + PAGE_SIZE, BUCKET_PTE(page[1]));
-	return saddr;
-}
-
-static void sun4c_free_kernel_stack_hw(unsigned long stack)
-{
-	unsigned long page[2];
-
-	page[0] = BUCKET_PTE_PAGE(sun4c_get_pte(stack));
-	page[1] = BUCKET_PTE_PAGE(sun4c_get_pte(stack+PAGE_SIZE));
-
-	/* We are deleting a mapping, so the flushes here are mandatory. */
-	sun4c_flush_page_hw(stack);
-	sun4c_flush_page_hw(stack + PAGE_SIZE);
-
-	sun4c_put_pte(stack, 0);
-	sun4c_put_pte(stack + PAGE_SIZE, 0);
-	free_page(page[0]);
-	free_page(page[1]);
 }
 
 static void sun4c_free_task_struct_hw(struct task_struct *tsk)
 {
 	unsigned long tsaddr = (unsigned long) tsk;
-	unsigned long page = BUCKET_PTE_PAGE(sun4c_get_pte(tsaddr));
+	unsigned long pages = BUCKET_PTE_PAGE(sun4c_get_pte(tsaddr));
 	int entry = BUCKET_NUM(tsaddr);
 
 	/* We are deleting a mapping, so the flush here is mandatory. */
 	sun4c_flush_page_hw(tsaddr);
+	sun4c_flush_page_hw(tsaddr + PAGE_SIZE);
 
 	sun4c_put_pte(tsaddr, 0);
+	sun4c_put_pte(tsaddr + PAGE_SIZE, 0);
 	sun4c_bucket[entry] = BUCKET_EMPTY;
 	if(entry < sun4c_lowbucket_avail)
 		sun4c_lowbucket_avail = entry;
 
-	free_page(page);
+	free_pages(pages, 1);
 	garbage_collect(entry);
-}
-
-static void sun4c_free_kernel_stack_sw(unsigned long stack)
-{
-	unsigned long page[2];
-
-	page[0] = BUCKET_PTE_PAGE(sun4c_get_pte(stack));
-	page[1] = BUCKET_PTE_PAGE(sun4c_get_pte(stack+PAGE_SIZE));
-
-	/* We are deleting a mapping, so the flushes here are mandatory. */
-	sun4c_flush_page_sw(stack);
-	sun4c_flush_page_sw(stack + PAGE_SIZE);
-
-	sun4c_put_pte(stack, 0);
-	sun4c_put_pte(stack + PAGE_SIZE, 0);
-	free_page(page[0]);
-	free_page(page[1]);
 }
 
 static void sun4c_free_task_struct_sw(struct task_struct *tsk)
 {
 	unsigned long tsaddr = (unsigned long) tsk;
-	unsigned long page = BUCKET_PTE_PAGE(sun4c_get_pte(tsaddr));
+	unsigned long pages = BUCKET_PTE_PAGE(sun4c_get_pte(tsaddr));
 	int entry = BUCKET_NUM(tsaddr);
 
 	/* We are deleting a mapping, so the flush here is mandatory. */
 	sun4c_flush_page_sw(tsaddr);
+	sun4c_flush_page_sw(tsaddr + PAGE_SIZE);
 
 	sun4c_put_pte(tsaddr, 0);
+	sun4c_put_pte(tsaddr + PAGE_SIZE, 0);
 	sun4c_bucket[entry] = BUCKET_EMPTY;
 	if(entry < sun4c_lowbucket_avail)
 		sun4c_lowbucket_avail = entry;
 
-	free_page(page);
+	free_pages(pages, 1);
 	garbage_collect(entry);
 }
 
@@ -1312,8 +1253,8 @@ __initfunc(static void sun4c_init_buckets(void))
 {
 	int entry;
 
-	if(sizeof(struct task_bucket) != (PAGE_SIZE << 2)) {
-		prom_printf("task bucket not 4 pages!\n");
+	if(sizeof(union task_union) != (PAGE_SIZE << 1)) {
+		prom_printf("task union not 2 pages!\n");
 		prom_halt();
 	}
 	for(entry = 0; entry < NR_TASKS; entry++)
@@ -2645,7 +2586,6 @@ __initfunc(void ld_mmu_sun4c(void))
 		flush_tlb_mm = sun4c_flush_tlb_mm_hw;
 		flush_tlb_range = sun4c_flush_tlb_range_hw;
 		flush_tlb_page = sun4c_flush_tlb_page_hw;
-		free_kernel_stack = sun4c_free_kernel_stack_hw;
 		free_task_struct = sun4c_free_task_struct_hw;
 		switch_to_context = sun4c_switch_to_context_hw;
 		destroy_context = sun4c_destroy_context_hw;
@@ -2658,7 +2598,6 @@ __initfunc(void ld_mmu_sun4c(void))
 		flush_tlb_mm = sun4c_flush_tlb_mm_sw;
 		flush_tlb_range = sun4c_flush_tlb_range_sw;
 		flush_tlb_page = sun4c_flush_tlb_page_sw;
-		free_kernel_stack = sun4c_free_kernel_stack_sw;
 		free_task_struct = sun4c_free_task_struct_sw;
 		switch_to_context = sun4c_switch_to_context_sw;
 		destroy_context = sun4c_destroy_context_sw;
@@ -2736,7 +2675,6 @@ __initfunc(void ld_mmu_sun4c(void))
         mmu_p2v = sun4c_p2v;
 	
 	/* Task struct and kernel stack allocating/freeing. */
-	alloc_kernel_stack = sun4c_alloc_kernel_stack;
 	alloc_task_struct = sun4c_alloc_task_struct;
 
 	quick_kernel_fault = sun4c_quick_kernel_fault;

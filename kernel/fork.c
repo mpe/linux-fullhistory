@@ -42,31 +42,105 @@ spinlock_t pidhash_lock = SPIN_LOCK_UNLOCKED;
 struct task_struct **tarray_freelist = NULL;
 spinlock_t taskslot_lock = SPIN_LOCK_UNLOCKED;
 
+/* UID task count cache, to prevent walking entire process list every
+ * single fork() operation.
+ */
+#define UIDHASH_SZ	(PIDHASH_SZ >> 2)
+
+static struct uid_taskcount {
+	struct uid_taskcount *next, **pprev;
+	unsigned short uid;
+	int task_count;
+} *uidhash[UIDHASH_SZ];
+static spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
+
+kmem_cache_t *uid_cachep;
+
+#define uidhashfn(uid)	(((uid >> 8) ^ uid) & (UIDHASH_SZ - 1))
+
+static inline void uid_hash_insert(struct uid_taskcount *up, unsigned int hashent)
+{
+	spin_lock(&uidhash_lock);
+	if((up->next = uidhash[hashent]) != NULL)
+		uidhash[hashent]->pprev = &up->next;
+	up->pprev = &uidhash[hashent];
+	uidhash[hashent] = up;
+	spin_unlock(&uidhash_lock);
+}
+
+static inline void uid_hash_remove(struct uid_taskcount *up)
+{
+	spin_lock(&uidhash_lock);
+	if(up->next)
+		up->next->pprev = up->pprev;
+	*up->pprev = up->next;
+	spin_unlock(&uidhash_lock);
+}
+
+static inline struct uid_taskcount *uid_find(unsigned short uid, unsigned int hashent)
+{
+	struct uid_taskcount *up;
+
+	spin_lock(&uidhash_lock);
+	for(up = uidhash[hashent]; (up && up->uid != uid); up = up->next)
+		;
+	spin_unlock(&uidhash_lock);
+	return up;
+}
+
+int charge_uid(struct task_struct *p, int count)
+{
+	unsigned int hashent = uidhashfn(p->uid);
+	struct uid_taskcount *up = uid_find(p->uid, hashent);
+
+	if(up) {
+		int limit = p->rlim[RLIMIT_NPROC].rlim_cur;
+		int newcnt = up->task_count + count;
+
+		if(newcnt > limit)
+			return -EAGAIN;
+		else if(newcnt == 0) {
+			uid_hash_remove(up);
+			kmem_cache_free(uid_cachep, up);
+			return 0;
+		}
+	} else {
+		up = kmem_cache_alloc(uid_cachep, SLAB_KERNEL);
+		if(!up)
+			return -EAGAIN;
+		up->uid = p->uid;
+		up->task_count = 0;
+		uid_hash_insert(up, hashent);
+	}
+	up->task_count += count;
+	return 0;
+}
+
+void uidcache_init(void)
+{
+	int i;
+
+	uid_cachep = kmem_cache_create("uid_cache", sizeof(struct uid_taskcount),
+				       sizeof(unsigned long) * 2,
+				       SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(!uid_cachep)
+		panic("Cannot create uid taskcount SLAB cache\n");
+
+	for(i = 0; i < UIDHASH_SZ; i++)
+		uidhash[i] = 0;
+}
+
 static inline int find_empty_process(void)
 {
 	struct task_struct **tslot;
 
-	if (nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT) {
-		if (current->uid)
+	if(current->uid) {
+		int error;
+
+		if(nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT)
 			return -EAGAIN;
-	}
-	if (current->uid) {
-		long max_tasks = current->rlim[RLIMIT_NPROC].rlim_cur;
-
-		max_tasks--;	/* count the new process.. */
-		if (max_tasks < nr_tasks) {
-			struct task_struct *p;
-
-			read_lock(&tasklist_lock);
-			for_each_task (p) {
-				if (p->uid == current->uid)
-					if (--max_tasks < 0) {
-						read_unlock(&tasklist_lock);
-						return -EAGAIN;
-					}
-			}
-			read_unlock(&tasklist_lock);
-		}
+		if((error = charge_uid(current, 1)) < 0)
+			return error;
 	}
 	tslot = get_free_taskslot();
 	if(tslot)
@@ -74,24 +148,48 @@ static inline int find_empty_process(void)
 	return -EAGAIN;
 }
 
+/* Protects next_safe and last_pid. */
+static spinlock_t lastpid_lock = SPIN_LOCK_UNLOCKED;
+
 static int get_pid(unsigned long flags)
 {
+	static int next_safe = PID_MAX;
 	struct task_struct *p;
 
 	if (flags & CLONE_PID)
 		return current->pid;
 
-	read_lock(&tasklist_lock);
-repeat:
-	if ((++last_pid) & 0xffff8000)
-		last_pid=1;
-	for_each_task (p) {
-		if (p->pid == last_pid ||
-		    p->pgrp == last_pid ||
-		    p->session == last_pid)
-			goto repeat;
+	spin_lock(&lastpid_lock);
+	if((++last_pid) & 0xffff8000) {
+		last_pid = 300;		/* Skip daemons etc. */
+		goto inside;
 	}
-	read_unlock(&tasklist_lock);
+	if(last_pid >= next_safe) {
+inside:
+		next_safe = PID_MAX;
+		read_lock(&tasklist_lock);
+	repeat:
+		for_each_task(p) {
+			if(p->pid == last_pid	||
+			   p->pgrp == last_pid	||
+			   p->session == last_pid) {
+				if(++last_pid >= next_safe) {
+					if(last_pid & 0xffff8000)
+						last_pid = 300;
+					next_safe = PID_MAX;
+					goto repeat;
+				}
+			}
+			if(p->pid > last_pid && next_safe > p->pid)
+				next_safe = p->pid;
+			if(p->pgrp > last_pid && next_safe > p->pgrp)
+				next_safe = p->pgrp;
+			if(p->session > last_pid && next_safe > p->session)
+				next_safe = p->session;
+		}
+		read_unlock(&tasklist_lock);
+	}
+	spin_unlock(&lastpid_lock);
 
 	return last_pid;
 }
@@ -350,6 +448,7 @@ bad_fork_cleanup_fs:
 bad_fork_cleanup_files:
 	exit_files(p);
 bad_fork_cleanup:
+	charge_uid(current, -1);
 	if (p->exec_domain && p->exec_domain->module)
 		__MOD_DEC_USE_COUNT(p->exec_domain->module);
 	if (p->binfmt && p->binfmt->module)

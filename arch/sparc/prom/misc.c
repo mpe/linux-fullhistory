@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.13 1997/04/10 05:12:59 davem Exp $
+/* $Id: misc.c,v 1.14 1997/05/01 01:41:32 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -22,7 +22,7 @@ prom_reboot(char *bcommand)
 	(*(romvec->pv_reboot))(bcommand);
 	/* Never get here. */
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 }
@@ -40,7 +40,7 @@ prom_feval(char *fstring)
 	else
 		(*(romvec->pv_fortheval.v2_eval))(fstring);
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 }
@@ -72,7 +72,7 @@ prom_cmdline(void)
 	save_flags(flags); cli();
 	(*(romvec->pv_abort))();
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 	install_linux_ticker();
@@ -97,7 +97,7 @@ again:
 	(*(romvec->pv_halt))();
 	/* Never get here. */
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 	goto again; /* PROM is out to get me -DaveM */

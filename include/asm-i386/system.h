@@ -73,7 +73,6 @@ __asm__("str %%ax\n\t" \
 		__asm__ __volatile__("fwait"); \
 		prev->flags&=~PF_USEDFPU;	 \
 	} \
-	current_set[this_cpu] = next; \
 __asm__("ljmp %0\n\t" \
 	: /* no output */ \
 	:"m" (*(((char *)&next->tss.tr)-4)), \
@@ -91,8 +90,7 @@ __asm__("ljmp %0\n\t" \
 
 #else
 #define switch_to(prev,next) do { \
-__asm__("movl %2,"SYMBOL_NAME_STR(current_set)"\n\t" \
-	"ljmp %0\n\t" \
+__asm__("ljmp %0\n\t" \
 	"cmpl %1,"SYMBOL_NAME_STR(last_task_used_math)"\n\t" \
 	"jne 1f\n\t" \
 	"clts\n" \

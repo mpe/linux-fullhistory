@@ -23,6 +23,7 @@
 #include <net/datalink.h>
 #include <linux/mm.h>
 #include <linux/in.h>
+#include <linux/init.h>
 #include <net/p8022.h>
 
 static struct datalink_proto *p8022_list = NULL;
@@ -90,7 +91,7 @@ static struct packet_type p8022_packet_type =
 EXPORT_SYMBOL(register_8022_client);
 EXPORT_SYMBOL(unregister_8022_client);
 
-void p8022_proto_init(struct net_proto *pro)
+__initfunc(void p8022_proto_init(struct net_proto *pro))
 {
 	p8022_packet_type.type=htons(ETH_P_802_2);
 	dev_add_pack(&p8022_packet_type);

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.8 1997/04/12 04:32:48 davem Exp $
+ *	$Id: mcast.c,v 1.9 1997/04/29 09:38:46 mj Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -27,6 +27,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/route.h>
+#include <linux/init.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
@@ -495,7 +496,7 @@ void igmp6_timer_handler(unsigned long data)
 	ma->mca_flags &= ~MAF_TIMER_RUNNING;
 }
 
-void igmp6_init(struct net_proto_family *ops)
+__initfunc(void igmp6_init(struct net_proto_family *ops))
 {
 	struct sock *sk;
 	int err;

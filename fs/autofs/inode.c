@@ -15,7 +15,7 @@
 #include <linux/file.h>
 #include <linux/locks.h>
 #include <asm/bitops.h>
-#include <linux/auto_fs.h>
+#include "autofs_i.h"
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -28,17 +28,19 @@ static void autofs_put_inode(struct inode *inode)
 
 static void autofs_put_super(struct super_block *sb)
 {
-	struct autofs_sb_info *sbi;
+	struct autofs_sb_info *sbi =
+		(struct autofs_sb_info *) sb->u.generic_sbp;
 	unsigned int n;
 
+	if ( !sbi->catatonic )
+		autofs_catatonic_mode(sbi); /* Free wait queues, close pipe */
+
         lock_super(sb);
-	sbi = (struct autofs_sb_info *) sb->u.generic_sbp;
 	autofs_hash_nuke(&sbi->dirhash);
 	for ( n = 0 ; n < AUTOFS_MAX_SYMLINKS ; n++ ) {
 		if ( test_bit(n, sbi->symlink_bitmap) )
 			kfree(sbi->symlink[n].data);
 	}
-	fput(sbi->pipe, sbi->pipe->f_inode);
 
         sb->s_dev = 0;
 	kfree(sb->u.generic_sbp);
@@ -149,6 +151,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 
 	s->u.generic_sbp = sbi;
 	sbi->catatonic = 0;
+	sbi->exp_timeout = 0;
 	sbi->oz_pgrp = current->pgrp;
 	autofs_initialize_hash(&sbi->dirhash);
 	sbi->queues = NULL;

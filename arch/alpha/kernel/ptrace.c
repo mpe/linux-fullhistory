@@ -67,7 +67,7 @@
  *  |				     |			      |
  *  |				     |			      v
  *  +================================+ <-------------------------
- *					task->kernel_stack_page
+ *					task + PAGE_SIZE
  */
 #define PT_REG(reg)	(PAGE_SIZE - sizeof(struct pt_regs)	\
 			 + (long)&((struct pt_regs *)0)->reg)
@@ -120,7 +120,7 @@ static inline long get_reg(struct task_struct * task, long regno)
 		zero = 0;
 		addr = &zero;
 	} else {
-		addr = (long *) (task->kernel_stack_page + regoff[regno]);
+		addr = (long *) (regoff[regno] + PAGE_SIZE + (long)task);
 	}
 	return *addr;
 }
@@ -137,7 +137,7 @@ static inline int put_reg(struct task_struct *task, long regno, long data)
 	} else if (regno == 31) {
 		addr = &zero;
 	} else {
-		addr = (long *) (task->kernel_stack_page + regoff[regno]);
+		addr = (long *) (regoff[regno] + PAGE_SIZE + (long)task);
 	}
 	*addr = data;
 	return 0;

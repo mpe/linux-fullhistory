@@ -307,6 +307,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -2144,7 +2145,7 @@ void ide_fixstring (byte *s, const int bytecount, const int byteswap)
  * stridx() returns the offset of c within s,
  * or -1 if c is '\0' or not found within s.
  */
-static int stridx (const char *s, char c)
+__initfunc(static int stridx (const char *s, char c))
 {
 	char *i = strchr(s, c);
 	return (i && c) ? i - s : -1;
@@ -2162,7 +2163,7 @@ static int stridx (const char *s, char c)
  *     and base16 is allowed when prefixed with "0x".
  * 4. otherwise, zero is returned.
  */
-static int match_parm (char *s, const char *keywords[], int vals[], int max_vals)
+__initfunc(static int match_parm (char *s, const char *keywords[], int vals[], int max_vals))
 {
 	static const char *decimal = "0123456789";
 	static const char *hex = "0123456789abcdef";
@@ -2261,7 +2262,7 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
  * "ide0=ali14xx"	: probe/support ali14xx chipsets (ALI M1439, M1443, M1445)
  * "ide0=umc8672"	: probe/support umc8672 chipsets
  */
-void ide_setup (char *s)
+__initfunc(void ide_setup (char *s))
 {
 	int i, vals[3];
 	ide_hwif_t *hwif;
@@ -2558,7 +2559,7 @@ typedef void (ide_pci_init_proc_t)(byte, byte);
  * ide_probe_pci() scans PCI for a specific vendor/device function,
  * and invokes the supplied init routine for each instance detected.
  */
-static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init, int func_adj)
+__initfunc(static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init, int func_adj))
 {
 	unsigned long flags;
 	unsigned index;
@@ -2581,7 +2582,7 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
  * This routine should ideally be using pcibios_find_class() to find all
  * PCI IDE interfaces, but that function causes some systems to "go weird".
  */
-static void probe_for_hwifs (void)
+__initfunc(static void probe_for_hwifs (void))
 {
 #ifdef CONFIG_PCI
 	/*
@@ -2620,7 +2621,7 @@ static void probe_for_hwifs (void)
 #endif
 }
 
-void ide_init_builtin_drivers (void)
+__initfunc(void ide_init_builtin_drivers (void))
 {
 	/*
 	 * Probe for special "known" interface chipsets
@@ -2889,7 +2890,7 @@ EXPORT_SYMBOL(ide_unregister);
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
-int ide_init (void)
+__initfunc(int ide_init (void))
 {
 	init_ide_data ();
 
@@ -2904,7 +2905,7 @@ int ide_init (void)
 char *options = NULL;
 MODULE_PARM(options,"s");
 
-static void parse_options (char *line)
+__initfunc(static void parse_options (char *line))
 {
 	char *next = line;
 

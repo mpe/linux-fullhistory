@@ -11,6 +11,7 @@
 #include <linux/msg.h>
 #include <linux/shm.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -18,7 +19,7 @@
 
 extern void sem_init (void), msg_init (void), shm_init (void);
 
-void ipc_init (void)
+__initfunc(void ipc_init (void))
 {
 	sem_init();
 	msg_init();

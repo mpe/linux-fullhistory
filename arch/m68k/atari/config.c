@@ -32,6 +32,7 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -106,7 +107,7 @@ extern void (*kd_mksound)(unsigned int, unsigned int);
  * a temporary VBR and a vector table for the duration of the test.
  */
 
-static int hwreg_present( volatile void *regp )
+__initfunc(static int hwreg_present( volatile void *regp ))
 {
     int	ret = 0;
     long	save_sp, save_vbr;
@@ -132,9 +133,8 @@ static int hwreg_present( volatile void *regp )
 }
   
 #if 0
-static int hwreg_present_bywrite( volatile void *regp,
-				 unsigned char val )
-
+__initfunc(static int
+hwreg_present_bywrite(volatile void *regp, unsigned char val))
 {
     int		ret;
     long	save_sp, save_vbr;
@@ -166,7 +166,7 @@ static int hwreg_present_bywrite( volatile void *regp,
 /* Basically the same, but writes a value into a word register, protected
  * by a bus error handler */
 
-static int hwreg_write( volatile void *regp, unsigned short val )
+__initfunc(static int hwreg_write( volatile void *regp, unsigned short val ))
 {
 	int		ret;
 	long	save_sp, save_vbr;
@@ -201,7 +201,7 @@ static int hwreg_write( volatile void *regp, unsigned short val )
  * should be readable without trouble (from channel A!).
  */
 
-static int scc_test( volatile char *ctla )
+__initfunc(static int scc_test( volatile char *ctla ))
 {
 	if (!hwreg_present( ctla ))
 		return( 0 );
@@ -228,7 +228,7 @@ static int scc_test( volatile char *ctla )
      *  Parse an Atari-specific record in the bootinfo
      */
 
-int atari_parse_bootinfo(const struct bi_record *record)
+__initfunc(int atari_parse_bootinfo(const struct bi_record *record))
 {
     int unknown = 0;
     const u_long *data = record->data;
@@ -247,7 +247,7 @@ int atari_parse_bootinfo(const struct bi_record *record)
      *  Setup the Atari configuration info
      */
 
-void config_atari(void)
+__initfunc(void config_atari(void))
 {
     memset(&atari_hw_present, 0, sizeof(atari_hw_present));
 
@@ -493,7 +493,8 @@ void config_atari(void)
     }
 }
 
-static void atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
+__initfunc(static void
+atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *)))
 {
     /* set Timer C data Register */
     mfp.tim_dt_c = INT_TICKS;
@@ -976,7 +977,7 @@ static void atari_par_console_write (const char *str, unsigned int count)
 }
 
 
-static void atari_debug_init(void)
+__initfunc(static void atari_debug_init(void))
 {
 #ifdef CONFIG_KGDB
 	/* if the m68k_debug_device is used by the GDB stub, do nothing here */

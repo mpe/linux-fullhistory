@@ -94,6 +94,7 @@
 #include <asm/io.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -301,7 +302,7 @@ static inline short int SHADOW(short int addr)
  * checks for presence of EtherExpress card
  */
 
-int express_probe(struct device *dev)
+__initfunc(int express_probe(struct device *dev))
 {
 	unsigned short *port;
 	static unsigned short ports[] = { 0x300,0x310,0x270,0x320,0x340,0 };
@@ -913,7 +914,7 @@ static void eexp_hw_tx_pio(struct device *dev, unsigned short *buf,
  * than one card in a machine.
  */
 
-static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
+__initfunc(static int eexp_hw_probe(struct device *dev, unsigned short ioaddr))
 {
 	unsigned short hw_addr[3];
 	unsigned char buswidth;
@@ -1034,8 +1035,8 @@ static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
  * Read a word from the EtherExpress on-board serial EEPROM.
  * The EEPROM contains 64 words of 16 bits.
  */
-static unsigned short eexp_hw_readeeprom(unsigned short ioaddr,
-					 unsigned char location)
+__initfunc(static unsigned short eexp_hw_readeeprom(unsigned short ioaddr,
+						    unsigned char location))
 {
 	unsigned short cmd = 0x180|(location&0x7f);
 	unsigned short rval = 0,wval = EC_CS|i586_RST;

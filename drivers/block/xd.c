@@ -30,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -126,7 +127,7 @@ static u_char xd_override = 0, xd_type = 0;
 static u_short xd_iobase = 0;
 
 /* xd_init: register the block device number and set up pointer tables */
-int xd_init (void)
+__initfunc(int xd_init (void))
 {
 	if (register_blkdev(MAJOR_NR,"xd",&xd_fops)) {
 		printk("xd_init: unable to get major number %d\n",MAJOR_NR);
@@ -141,7 +142,7 @@ int xd_init (void)
 }
 
 /* xd_detect: scan the possible BIOS ROM locations for the signature strings */
-static u_char xd_detect (u_char *controller, unsigned int *address)
+__initfunc(static u_char xd_detect (u_char *controller, unsigned int *address))
 {
 	u_char i,j,found = 0;
 
@@ -164,7 +165,7 @@ static u_char xd_detect (u_char *controller, unsigned int *address)
 
 /* xd_geninit: grab the IRQ and DMA channel, initialise the drives */
 /* and set up the "raw" device entries in the table */
-static void xd_geninit (struct gendisk *ignored)
+__initfunc(static void xd_geninit (struct gendisk *ignored))
 {
 	u_char i,controller;
 	unsigned int address;
@@ -527,7 +528,7 @@ static u_int xd_command (u_char *command,u_char mode,u_char *indata,u_char *outd
 	return (csb & CSB_ERROR);
 }
 
-static u_char xd_initdrives (void (*init_drive)(u_char drive))
+__initfunc(static u_char xd_initdrives (void (*init_drive)(u_char drive)))
 {
 	u_char cmdblk[6],i,count = 0;
 
@@ -541,7 +542,7 @@ static u_char xd_initdrives (void (*init_drive)(u_char drive))
 	return (count);
 }
 
-static void xd_dtc_init_controller (unsigned int address)
+__initfunc(static void xd_dtc_init_controller (unsigned int address))
 {
 	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
@@ -556,7 +557,7 @@ static void xd_dtc_init_controller (unsigned int address)
 	outb(0,XD_RESET);		/* reset the controller */
 }
 
-static void xd_dtc_init_drive (u_char drive)
+__initfunc(static void xd_dtc_init_drive (u_char drive))
 {
 	u_char cmdblk[6],buf[64];
 
@@ -581,7 +582,7 @@ static void xd_dtc_init_drive (u_char drive)
 		printk("xd_dtc_init_drive: error reading geometry for drive %d\n",drive);
 }
 
-static void xd_wd_init_controller (unsigned int address)
+__initfunc(static void xd_wd_init_controller (unsigned int address))
 {
 	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
@@ -600,7 +601,7 @@ static void xd_wd_init_controller (unsigned int address)
 	/* outb(0,XD_RESET); */		/* reset the controller */
 }
 
-static void xd_wd_init_drive (u_char drive)
+__initfunc(static void xd_wd_init_drive (u_char drive))
 {
 	u_char cmdblk[6],buf[0x200];
 
@@ -622,7 +623,7 @@ static void xd_wd_init_drive (u_char drive)
 		printk("xd_wd_init_drive: error reading geometry for drive %d\n",drive);	
 }
 
-static void xd_seagate_init_controller (unsigned int address)
+__initfunc(static void xd_seagate_init_controller (unsigned int address))
 {
 	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
@@ -639,7 +640,7 @@ static void xd_seagate_init_controller (unsigned int address)
 	outb(0,XD_RESET);		/* reset the controller */
 }
 
-static void xd_seagate_init_drive (u_char drive)
+__initfunc(static void xd_seagate_init_drive (u_char drive))
 {
 	u_char cmdblk[6],buf[0x200];
 
@@ -655,7 +656,7 @@ static void xd_seagate_init_drive (u_char drive)
 }
 
 /* Omti support courtesy Dirk Melchers */
-static void xd_omti_init_controller (unsigned int address)
+__initfunc(static void xd_omti_init_controller (unsigned int address))
 {
 	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
@@ -673,7 +674,7 @@ static void xd_omti_init_controller (unsigned int address)
 	outb(0,XD_RESET);		/* reset the controller */
 }
 
-static void xd_omti_init_drive (u_char drive)
+__initfunc(static void xd_omti_init_drive (u_char drive))
 {
 	/* gets infos from drive */
 	xd_override_init_drive(drive);
@@ -684,7 +685,7 @@ static void xd_omti_init_drive (u_char drive)
 
 /* xd_override_init_drive: this finds disk geometry in a "binary search" style, narrowing in on the "correct" number of heads
    etc. by trying values until it gets the highest successful value. Idea courtesy Salvador Abreu (spa@fct.unl.pt). */
-static void xd_override_init_drive (u_char drive)
+__initfunc(static void xd_override_init_drive (u_char drive))
 {
 	u_short min[] = { 0,0,0 },max[] = { 16,1024,64 },test[] = { 0,0,0 };
 	u_char cmdblk[6],i;
@@ -707,7 +708,7 @@ static void xd_override_init_drive (u_char drive)
 }
 
 /* xd_setup: initialise from command line parameters */
-void xd_setup (char *command,int *integers)
+__initfunc(void xd_setup (char *command,int *integers))
 {
 	xd_override = 1;
 
@@ -720,7 +721,7 @@ void xd_setup (char *command,int *integers)
 }
 
 /* xd_setparam: set the drive characteristics */
-static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc)
+__initfunc(static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc))
 {
 	u_char cmdblk[14];
 

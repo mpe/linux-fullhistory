@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>
@@ -68,7 +69,7 @@ static void ami_badint(int irq, void *dev_id, struct pt_regs *fp)
  * the amiga IRQ handling routines.
  */
 
-void amiga_init_IRQ(void)
+__initfunc(void amiga_init_IRQ(void))
 {
 	int i;
 

@@ -73,6 +73,7 @@ extern void watchdog_init(void);
 extern void wdt_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_init(void);
+extern int dsp56k_init(void);
 
 #ifdef CONFIG_PROC_FS
 static int misc_read_proc(char *buf, char **start, off_t offset,
@@ -234,6 +235,9 @@ __initfunc(int misc_init(void))
 #endif
 #ifdef CONFIG_RTC
 	rtc_init();
+#endif
+#ifdef CONFIG_ATARI_DSP56K
+	dsp56k_init();
 #endif
 #endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {

@@ -24,6 +24,7 @@
 #include <linux/swapctl.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
@@ -210,7 +211,7 @@ static ctl_table dev_table[] = {
 };  
 
 
-void sysctl_init(void)
+__initfunc(void sysctl_init(void))
 {
 #ifdef CONFIG_PROC_FS
 	register_proc_table(root_table, &proc_sys_root);

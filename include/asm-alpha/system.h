@@ -56,7 +56,7 @@ extern void wrmces (unsigned long);
 #define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
 
 #define switch_to(prev,next) do { \
-	current_set[0] = current = next; \
+	current = next; \
 	alpha_switch_to((unsigned long) &current->tss - 0xfffffc0000000000); \
 } while (0)
 
@@ -129,9 +129,9 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 	"	bis %3,%3,%1\n"
 	"	stl_c %1,%2\n"
 	"	beq %1,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
 	: "r" (val), "m" (*m));
 
@@ -147,9 +147,9 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 	"	bis %3,%3,%1\n"
 	"	stq_c %1,%2\n"
 	"	beq %1,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
 	: "r" (val), "m" (*m));
 

@@ -1821,7 +1821,7 @@ static void rc_release_drivers(void)
  * addresses in this case.
  *
  */ 
-void riscom8_setup(char *str, int * ints)
+__initfunc(void riscom8_setup(char *str, int * ints))
 {
 	int i;
 

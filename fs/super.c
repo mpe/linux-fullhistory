@@ -33,6 +33,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/fd.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -937,7 +938,11 @@ out:
 	return retval;
 }
 
+#ifdef CONFIG_BLK_DEV_INITRD
 static void do_mount_root(void)
+#else
+__initfunc(static void do_mount_root(void))
+#endif
 {
 	struct file_system_type * fs_type;
 	struct super_block * sb;
@@ -1046,7 +1051,7 @@ static void do_mount_root(void)
 }
 
 
-void mount_root(void)
+__initfunc(void mount_root(void))
 {
 	memset(super_blocks, 0, sizeof(super_blocks));
 	do_mount_root();

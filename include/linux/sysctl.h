@@ -104,6 +104,13 @@ enum
 
 
 /* /proc/sys/net/core */
+enum
+{
+	NET_CORE_WMEM_MAX=1,
+	NET_CORE_RMEM_MAX,
+	NET_CORE_WMEM_DEFAULT,
+	NET_CORE_RMEM_DEFAULT,
+};
 
 /* /proc/sys/net/ethernet */
 

@@ -49,7 +49,7 @@ encountered a bug!
 - Net-tools              1.32-alpha
 - Loadlin                1.6a
 - Sh-utils               1.16
-- Autofs                 0.2.2
+- Autofs                 0.3.0
 - NFS                    0.4.21
 
 Upgrade notes
@@ -301,8 +301,8 @@ ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6g.tar.gz
 Autofs
 ======
 
-The 0.2.2 release:
-ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.2.2.tar.gz
+The 0.3.0 release:
+ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-0.3.0.tar.gz
 
 NFS
 ===

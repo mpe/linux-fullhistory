@@ -1047,7 +1047,7 @@ static int sd_init_onedisk(int i)
     spintime = 0;
 
     /* Spin up drives, as required.  Only do this at boot time */
-    if (!MODULE_FLAG){
+    /* Spinup needs to be done for module loads too. */
 	do{
 	    retries = 0;
 	    while(retries < 3)
@@ -1120,7 +1120,6 @@ static int sd_init_onedisk(int i)
 	    else
 		printk( "ready\n" );
 	}
-    }  /* !MODULE_FLAG */
 
     retries = 3;
     do {

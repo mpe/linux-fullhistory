@@ -151,7 +151,7 @@ do {						\
 	"b,a	1b\n\t"				\
 	".previous\n"				\
 	: "=r" (flags)				\
-	: "i" (PSR_PIL), "r" (lock)		\
+	: "i" (PSR_PIL), "r" (lp)		\
 	: "g2", "memory", "cc");		\
 } while(0)
 
@@ -198,7 +198,7 @@ typedef struct { volatile unsigned int lock; } rwlock_t;
  *
  * Unfortunately this scheme limits us to ~65,000 cpus.
  */
-extern __inline__ void read_lock(rwlock_t *rw)
+extern __inline__ void _read_lock(rwlock_t *rw)
 {
 	register rwlock_t *lp asm("g1");
 	lp = rw;
@@ -211,7 +211,14 @@ extern __inline__ void read_lock(rwlock_t *rw)
 	: "g2", "g4", "g7", "memory", "cc");
 }
 
-extern __inline__ void read_unlock(rwlock_t *rw)
+#define read_lock(lock) \
+do {	unsigned long flags; \
+	__save_and_cli(flags); \
+	_read_lock(lock); \
+	__restore_flags(flags); \
+} while(0)
+
+extern __inline__ void _read_unlock(rwlock_t *rw)
 {
 	register rwlock_t *lp asm("g1");
 	lp = rw;
@@ -223,6 +230,13 @@ extern __inline__ void read_unlock(rwlock_t *rw)
 	: "r" (lp)
 	: "g2", "g4", "g7", "memory", "cc");
 }
+
+#define read_unlock(lock) \
+do {	unsigned long flags; \
+	__save_and_cli(flags); \
+	_read_unlock(lock); \
+	__restore_flags(flags); \
+} while(0)
 
 extern __inline__ void write_lock(rwlock_t *rw)
 {
@@ -238,15 +252,15 @@ extern __inline__ void write_lock(rwlock_t *rw)
 }
 
 #define write_unlock(rw)	do { (rw)->lock = 0; } while(0)
-#define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
-#define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
+#define read_lock_irq(lock)	do { __cli(); _read_lock(lock); } while (0)
+#define read_unlock_irq(lock)	do { _read_unlock(lock); __sti(); } while (0)
 #define write_lock_irq(lock)	do { __cli(); write_lock(lock); } while (0)
 #define write_unlock_irq(lock)	do { write_unlock(lock); __sti(); } while (0)
 
 #define read_lock_irqsave(lock, flags)	\
-	do { __save_and_cli(flags); read_lock(lock); } while (0)
+	do { __save_and_cli(flags); _read_lock(lock); } while (0)
 #define read_unlock_irqrestore(lock, flags) \
-	do { read_unlock(lock); __restore_flags(flags); } while (0)
+	do { _read_unlock(lock); __restore_flags(flags); } while (0)
 #define write_lock_irqsave(lock, flags)	\
 	do { __save_and_cli(flags); write_lock(lock); } while (0)
 #define write_unlock_irqrestore(lock, flags) \

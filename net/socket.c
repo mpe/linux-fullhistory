@@ -71,6 +71,7 @@
 #include <linux/proc_fs.h>
 #include <linux/firewall.h>
 #include <linux/wanrouter.h>
+#include <linux/init.h>
 
 #if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
 #include <linux/kerneld.h>
@@ -1399,7 +1400,7 @@ int sock_unregister(int family)
 	return 0;
 }
 
-void proto_init(void)
+__initfunc(void proto_init(void))
 {
 	extern struct net_proto protocols[];	/* Network protocols */
 	struct net_proto *pro;
@@ -1416,7 +1417,7 @@ void proto_init(void)
 
 extern void sk_init(void);
 
-void sock_init(void)
+__initfunc(void sock_init(void))
 {
 	int i;
 

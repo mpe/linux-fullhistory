@@ -190,6 +190,7 @@
 #include <linux/ioport.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -220,7 +221,7 @@ static struct
    unsigned short base;         /* I/O Base Address */
    short          int_num;      /* Interrupt Number (-1 means scan for it,
                                    0 means don't use) */
-} cdu31a_addresses[] =
+} cdu31a_addresses[] __initdata =
 {
 #if 0	/* No autoconfig any more. See Note at beginning
 	   of this file. */
@@ -2963,12 +2964,12 @@ static struct file_operations scd_fops = {
 
 
 /* The different types of disc loading mechanisms supported */
-static const char *load_mech[] = { "caddy", "tray", "pop-up", "unknown" };
+static const char *load_mech[] __initdata = { "caddy", "tray", "pop-up", "unknown" };
 
-static void
+__initfunc(static void
 get_drive_configuration(unsigned short base_io,
                         unsigned char res_reg[],
-                        unsigned int *res_size)
+                        unsigned int *res_size))
 {
    int retry_count;
 
@@ -3032,9 +3033,9 @@ get_drive_configuration(unsigned short base_io,
 /*
  * Set up base I/O and interrupts, called from main.c.
  */
-void
+__initfunc(void
 cdu31a_setup(char *strings,
-	     int  *ints)
+	     int  *ints))
 {
    if (ints[0] > 0)
    {
@@ -3063,8 +3064,8 @@ static int cdu31a_block_size;
 /*
  * Initialize the driver.
  */
-int
-cdu31a_init(void)
+__initfunc(int
+cdu31a_init(void))
 {
    struct s_sony_drive_config drive_config;
    unsigned int res_size;

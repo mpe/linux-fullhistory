@@ -36,8 +36,6 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
-#include <asm/uaccess.h>
-#include <asm/system.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -52,16 +50,17 @@
 #include <linux/skbuff.h>
 #include <linux/errno.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include <net/dst.h>
 #include <net/arp.h>
 #include <net/sock.h>
 #include <net/ipv6.h>
-
-
+#include <asm/uaccess.h>
+#include <asm/system.h>
 #include <asm/checksum.h>
 
 
-void eth_setup(char *str, int *ints)
+__initfunc(void eth_setup(char *str, int *ints))
 {
 	struct device *d = dev_base;
 

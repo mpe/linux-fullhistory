@@ -12,7 +12,7 @@
 
 #include <linux/string.h>
 #include <linux/sched.h>
-#include <linux/auto_fs.h>
+#include "autofs_i.h"
 
 static int autofs_follow_link(struct inode *dir, struct inode *inode,
 			      int flag, int mode, struct inode **res_inode)

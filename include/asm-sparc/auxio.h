@@ -1,4 +1,4 @@
-/* $Id: auxio.h,v 1.16 1997/01/31 23:26:05 tdyas Exp $
+/* $Id: auxio.h,v 1.17 1997/05/01 01:42:02 davem Exp $
  * auxio.h:  Definitions and code for the Auxiliary I/O register.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -43,30 +43,27 @@ extern unsigned char *auxio_register;
 #define FLPY_TCNTOFF  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_TCNT))
 
 #ifndef __ASSEMBLY__
-extern __inline__ void set_auxio(unsigned char bits_on, unsigned char bits_off)
-{
-	unsigned char regval;
-	unsigned long flags;
-
-	save_flags(flags); cli();
-
-	switch(sparc_cpu_model) {
-	case sun4c:
-		regval = *AUXREG;
-		*AUXREG = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN;
-		break;
-	case sun4m:
-		if(!AUXREG)
-			break;     /* VME chassic sun4m, no auxio. */
-		regval = *AUXREG;
-		*AUXREG = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN4M;
-		break;
-	default:
-		panic("Can't set AUXIO register on this machine.");
-	};
-
-	restore_flags(flags);
-}
+#define set_auxio(bits_on, bits_off) \
+do { \
+	unsigned char regval; \
+	unsigned long flags; \
+	save_flags(flags); cli(); \
+	switch(sparc_cpu_model) { \
+	case sun4c: \
+		regval = *AUXREG; \
+		*AUXREG = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN; \
+		break; \
+	case sun4m: \
+		if(!AUXREG) \
+			break;     /* VME chassic sun4m, no auxio. */ \
+		regval = *AUXREG; \
+		*AUXREG = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN4M; \
+		break; \
+	default: \
+		panic("Can't set AUXIO register on this machine."); \
+	}; \
+	restore_flags(flags); \
+} while(0)
 #endif /* !(__ASSEMBLY__) */
 
 

@@ -12,9 +12,8 @@
 
 #include <linux/errno.h>
 #include <linux/stat.h>
-#include <linux/malloc.h>
-#include <linux/ioctl.h>
-#include <linux/auto_fs.h>
+#include <linux/param.h>
+#include "autofs_i.h"
 
 static int autofs_root_readdir(struct inode *,struct file *,void *,filldir_t);
 static int autofs_root_lookup(struct inode *,const char *,int,struct inode **);
@@ -171,7 +170,8 @@ static int autofs_root_lookup(struct inode *dir, const char *name, int len,
 			}
 		}
 	} while(!res);
-		
+	autofs_update_usage(&sbi->dirhash,ent);
+	
 	*result = res;
 	iput(dir);
 	return 0;
@@ -229,7 +229,6 @@ static int autofs_root_symlink(struct inode *dir, const char *name, int len, con
 	ent->ino = AUTOFS_FIRST_SYMLINK + n;
 	ent->hash = hash;
 	memcpy(ent->name,name,ent->len = len);
-	ent->expiry = END_OF_TIME;
 
 	autofs_hash_insert(dh,ent);
 
@@ -322,10 +321,55 @@ static int autofs_root_mkdir(struct inode *dir, const char *name, int len, int m
 	ent->hash = hash;
 	memcpy(ent->name, name, ent->len = len);
 	ent->ino = sbi->next_dir_ino++;
-	ent->expiry = END_OF_TIME;
 	autofs_hash_insert(dh,ent);
 	dir->i_nlink++;
 	iput(dir);
+
+	return 0;
+}
+
+/* Get/set timeout ioctl() operation */
+static inline int autofs_get_set_timeout(struct autofs_sb_info *sbi,
+					 unsigned long *p)
+{
+	int rv;
+	unsigned long ntimeout;
+
+	if ( (rv = get_user(ntimeout, p)) ||
+	     (rv = put_user(sbi->exp_timeout/HZ, p)) )
+		return rv;
+
+	if ( ntimeout > ULONG_MAX/HZ )
+		sbi->exp_timeout = 0;
+	else
+		sbi->exp_timeout = ntimeout * HZ;
+
+	return 0;
+}
+
+/* Perform an expiry operation */
+static inline int autofs_expire_run(struct autofs_sb_info *sbi,
+				    struct autofs_packet_expire *pkt_p)
+{
+	struct autofs_dir_ent *ent;
+	struct autofs_packet_expire pkt;
+	struct autofs_dirhash *dh = &(sbi->dirhash);
+	
+	pkt.hdr.proto_version = AUTOFS_PROTO_VERSION;
+	pkt.hdr.type = autofs_ptype_expire;
+
+	if ( !sbi->exp_timeout ||
+	     !(ent = autofs_expire(dh,sbi->exp_timeout)) )
+		return -EAGAIN;
+
+	pkt.len = ent->len;
+	memcpy(pkt.name, ent->name, pkt.len);
+	pkt.name[pkt.len] = '\0';
+
+	if ( copy_to_user(pkt_p, &pkt, sizeof(struct autofs_packet_expire)) )
+		return -EFAULT;
+	
+	autofs_update_usage(dh,ent);
 
 	return 0;
 }
@@ -337,26 +381,33 @@ static int autofs_root_mkdir(struct inode *dir, const char *name, int len, int m
 static int autofs_root_ioctl(struct inode *inode, struct file *filp,
 			     unsigned int cmd, unsigned long arg)
 {
-	struct autofs_sb_info *sbi = (struct autofs_sb_info *)inode->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi =
+		(struct autofs_sb_info *)inode->i_sb->u.generic_sbp;
 
-	DPRINTK(("autofs_ioctl: cmd = %04x, arg = 0x%08lx, sbi = %p, pgrp = %u\n",cmd,arg,sbi,current->pgrp));
+	DPRINTK(("autofs_ioctl: cmd = 0x%08x, arg = 0x%08lx, sbi = %p, pgrp = %u\n",cmd,arg,sbi,current->pgrp));
 
+	if ( _IOC_TYPE(cmd) != _IOC_TYPE(AUTOFS_IOC_FIRST) ||
+	     _IOC_NR(cmd) - _IOC_NR(AUTOFS_IOC_FIRST) >= AUTOFS_IOC_COUNT )
+		return -ENOTTY;
+	
+	if ( !autofs_oz_mode(sbi) && !fsuser() )
+		return -EPERM;
+	
 	switch(cmd) {
 	case AUTOFS_IOC_READY:	/* Wait queue: go ahead and retry */
-		if ( !autofs_oz_mode(sbi) && !fsuser() )
-			return -EPERM;
 		return autofs_wait_release(sbi,arg,0);
 	case AUTOFS_IOC_FAIL:	/* Wait queue: fail with ENOENT */
-		/* Optional: add to failure cache */
-		if ( !autofs_oz_mode(sbi) && !fsuser() )
-			return -EPERM;
 		return autofs_wait_release(sbi,arg,-ENOENT);
 	case AUTOFS_IOC_CATATONIC: /* Enter catatonic mode (daemon shutdown) */
-		if ( !autofs_oz_mode(sbi) && !fsuser() )
-			return -EPERM;
 		autofs_catatonic_mode(sbi);
 		return 0;
+	case AUTOFS_IOC_PROTOVER: /* Get protocol version */
+		return put_user(AUTOFS_PROTO_VERSION, (int *)arg);
+	case AUTOFS_IOC_SETTIMEOUT:
+		return autofs_get_set_timeout(sbi,(unsigned long *)arg);
+	case AUTOFS_IOC_EXPIRE:
+		return autofs_expire_run(sbi,(struct autofs_packet_expire *)arg);
 	default:
-		return -ENOTTY;	/* Should this be ENOSYS? */
+		return -ENOSYS;
 	}
 }

@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.11 1997/04/20 09:44:33 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.12 1997/04/29 09:38:45 mj Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -31,12 +31,11 @@
 #include <linux/in6.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
-
+#include <linux/init.h>
 #include <linux/sysctl.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
-
 #include <net/ipv6.h>
 #include <net/ndisc.h>
 #include <net/protocol.h>
@@ -239,7 +238,7 @@ extern void ipv6_sysctl_register(void);
 extern void ipv6_sysctl_unregister(void);
 #endif
 
-void ipv6_init(void)
+__initfunc(void ipv6_init(void))
 {
 	dev_add_pack(&ipv6_packet_type);
 

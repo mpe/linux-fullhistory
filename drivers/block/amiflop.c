@@ -62,6 +62,7 @@
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -1712,7 +1713,7 @@ static void fd_probe(int dev)
 
 }
 
-static void probe_drives(void)
+__initfunc(static void probe_drives(void))
 {
 	int drive,found;
 
@@ -1860,7 +1861,7 @@ static void fd_block_done(int irq, void *dummy, struct pt_regs *fp)
 
 }
 
-int amiga_floppy_init(void)
+__initfunc(int amiga_floppy_init(void))
 {
   int i;
 

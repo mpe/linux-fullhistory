@@ -42,7 +42,9 @@
 
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
+asmlinkage int sys_wait4(pid_t pid, unsigned long *stat_addr,
+			 int options, unsigned long *ru);
+
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs);
 
 const int frame_extra_sizes[16] = {
@@ -466,7 +468,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs)
 			if (signr != SIGCHLD)
 				continue;
 			/* check for SIGCHLD: it's special */
-			while (sys_waitpid(-1,NULL,WNOHANG) > 0)
+			while (sys_wait4(-1,NULL,WNOHANG, NULL) > 0)
 				/* nothing */;
 			continue;
 		}

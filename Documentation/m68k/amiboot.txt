@@ -1,6 +1,9 @@
 
-		Linux/m68k Amiga Bootstrap version 5.1
+		Linux/m68k Amiga Bootstrap version 5.5
 		--------------------------------------
+
+Maintained by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
+Last revised: March 27, 1997
 
 
 0. Introduction
@@ -10,7 +13,7 @@ Amiboot is used to boot Linux/m68k on Amiga from the CLI/Shell.
 
 Before you try to boot Linux/m68k for the first time, please read the FAQ
 
-    http://www-agrw.informatik.uni-kl.de/~jmayer/linux68k/linux68k-faq
+    http://www.clark.net/pub/lawrencc/linux/faq/faq.html
 
 and the Installation Guide
 
@@ -19,7 +22,7 @@ and the Installation Guide
 first. Although the Installation Guide is getting a bit outdated, it's still a
 good starting point.
 
-Amiboot 5.1 is meant for Linux/m68k 2.0.x, 2.1.x or higher (kernel bootinfo
+Amiboot 5.5 is meant for Linux/m68k 2.0.x, 2.1.x or higher (kernel bootinfo
 interface versions 1.x and 2.x). Please use an older version for older kernels.
 
 
@@ -30,23 +33,27 @@ The Amiboot invocation syntax looks like
 
     amiboot [options] [kernel command line]
 
-Valid options are:
+Basic options:
 
     --help           Display the usage information
 
     --kernel file    Use kernel image `file' (default is `vmlinux')
 
-    --ramdisk file   Use ramdisk image `file'.
+    --ramdisk file   Use ramdisk image `file'
+
+Advanced options:
 
     --debug          Enable debug mode
 
-    --baud           Set the serial port speed (default is 9600)
+    --baud speed     Set the serial port speed (default is 9600 bps)
 
     --memfile file   Use memory file `file'
 
     --keep-video     Don't reset the video mode
 
-    --model id       Set the Amiga model to `id'.
+    --model id       Set the Amiga model to `id'
+
+    --processor cfm  Set the processor type to `cfm'
 
 The kernel command line contains the options you want to pass to the kernel and
 to init, the process that's started first by Linux. Please read
@@ -57,6 +64,10 @@ Linux/m68k kernel image, and --ramdisk if you want to boot from a ramdisk file,
 i.e. a file containing a complete file system, instead of from a hard disk
 partition.
 
+Note that both the kernel image and the ramdisk image can be compressed with
+gzip. Amiboot knows how to deal with gzipped kernel images, and the kernel
+recognizes gzipped ramdisk images.
+
 Example:
 
     amiboot -k vmlinux-2.1.13 root=/dev/hda3 video=font:PEARL8x8
@@ -65,8 +76,8 @@ Amiboot will boot the kernel image `vmlinux-2.1.13' and will pass
 `root=/dev/hda3 video=font:PEARL8x8' to the kernel.
 
 
-The other options are more specialized. Don't use them unless you really have
-to and you know what you're doing.
+The other options are more advanced. Don't use them unless you really have to
+and you know what you're doing.
 
 The --baud option allows you to specify the serial port speed for initial boot
 information and initial kernel messages. Note: this option does not work with
@@ -79,8 +90,9 @@ The --keep-video option is necessary if you want to retain the current graphics
 mode (on a graphics board) under Linux. Currently this is only useful if you
 have a CyberVision 64 graphics board.
 
-Finally, --model allows you to specify your Amiga model, and --debug is for
-debugging purposes.
+Finally, --model and --processor allow you to specify your Amiga model and
+processor type if they are detected incorrectly, and --debug dumps some
+information which simplifies debugging.
 
 
 2. The memory file
@@ -98,7 +110,7 @@ format for the file is:
     ...
 
 For example, if you don't want Linux to use your 2nd meg of chipram, you would
-create a file that looks contains only:
+create a file that contains only:
 
     1048576
 
@@ -149,7 +161,33 @@ Please send me the output of amiboot used with the --debug option if your Amiga
 model is detected incorrectly.
 
 
-4. Abbreviations
+4. Processor types
+------------------
+
+If your processor is detected incorrectly, you can override this using the
+`--processor cfm' option. `cfm' must be a three-digit number with
+
+  - `c' the CPU (Central Processing Unit) type,
+  - 'f' the FPU (Floating Point Unit) type,
+  - 'm' the MMU (Memory Management Unit) type,
+
+from the table below:
+
+     value |  CPU  |  FPU  |  MMU
+    -------+-------+-------+-------
+       0   |   -   |   -   |   -
+       1   | 68020 | 68881 | 68851
+       2   | 68030 | 68882 | 68030
+       3   | 68040 | 68040 | 68040
+       4   | 68060 | 68060 | 68060
+
+e.g. `444' if you have a 68060 and `303' if you have a 68LC040.
+
+Note that normally you don't have to use this option. It's only needed for some
+combinations of an old Kickstart ROM and a new processor (e.g. a 68060).
+
+
+5. Abbreviations
 ----------------
 
 All options also have a shorthand:
@@ -162,9 +200,10 @@ All options also have a shorthand:
     --memfile	    -m
     --keep-video    -v
     --model	    -t
+    --processor	    -p
 
 
-5. Miscellaneous
+6. Miscellaneous
 ----------------
 
 Some expansion boards keep on generating interrupts once they were initialized
@@ -186,7 +225,7 @@ routine for them yet:
 If you write a routine to disable an expansion board, please let me know.
 
 
-6. Troubleshooting
+7. Troubleshooting
 ------------------
 
   - Amiboot says
@@ -222,11 +261,13 @@ If you write a routine to disable an expansion board, please let me know.
 
       o If that doesn't work, remove any expansion devices and retry.
 
+      o Check the detected Amiga model and processor type.
+
       o Look at the characters that are dumped to the serial port during
 	booting.
 
 
-7. Amiga-Lilo
+8. Amiga-Lilo
 -------------
 
 Once you have a stable Linux/m68k installation, you may want to try Amiga-Lilo.
@@ -234,7 +275,7 @@ Amiga-Lilo allows you to boot Linux/m68k without the overhead of booting
 AmigaOS first, and it provides you with a boot menu.
 
 
-8. Credits
+9. Credits
 ----------
 
 This readme was written by Geert Uytterhoeven. A lot of information was taken

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.27 1997/04/22 02:53:20 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.31 1997/04/29 21:51:23 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -27,6 +27,7 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/netdevice.h>
+#include <linux/init.h>
 
 #include <linux/ipv6.h>
 #include <linux/icmpv6.h>
@@ -432,13 +433,24 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	tp->snd_nxt = sk->write_seq;
 	buff->end_seq = sk->write_seq;
 	th->ack = 0;
-	th->window = 2;
 	th->syn = 1;
 
-	tp->window_clamp = 0;
 
 	sk->mtu = dst->pmtu;
 	sk->mss = sk->mtu - sizeof(struct ipv6hdr) - sizeof(struct tcphdr);
+
+        if (sk->mss < 1) {
+                printk(KERN_DEBUG "intial ipv6 sk->mss below 1\n");
+                sk->mss = 1;    /* Sanity limit */
+        }
+
+	tp->window_clamp = 0;	/* FIXME: shouldn't ipv6 dst cache have this? */
+	tcp_select_initial_window(sock_rspace(sk)/2,sk->mss,
+		&tp->rcv_wnd,
+		&tp->window_clamp,
+		sysctl_tcp_window_scaling,
+		&tp->rcv_wscale);
+	th->window = htons(tp->rcv_wnd);
 
 	/*
 	 *	Put in the TCP options to say MTU.
@@ -446,7 +458,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
         tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_sack,
                 sysctl_tcp_timestamps,
-                sysctl_tcp_window_scaling?tp->rcv_wscale:0);
+                sysctl_tcp_window_scaling,tp->rcv_wscale);
         th->doff = sizeof(*th)/4 + (tmp>>2);
 	buff->csum = 0;
 	tcp_v6_send_check(sk, th, sizeof(struct tcphdr) + tmp, buff);
@@ -586,9 +598,11 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 }
 
 
+/* FIXME: this is substantially similar to the ipv4 code.
+ * Can some kind of merge be done? -- erics
+ */
 static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	struct sk_buff * skb;
 	struct tcphdr *th;
 	struct dst_entry *dst;
@@ -630,11 +644,32 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	th->seq = ntohl(skb->seq);
 	th->ack_seq = htonl(req->rcv_isn + 1);
 	th->doff = sizeof(*th)/4 + 1;
-	
-	th->window = ntohs(tp->rcv_wnd);
 
-	tmp = tcp_syn_build_options(skb, sk->mss, req->sack_ok, req->tstamp_ok,
-		(req->snd_wscale)?tp->rcv_wscale:0);
+	/* Don't offer more than they did.
+	 * This way we don't have to memorize who said what.
+	 * FIXME: the selection of initial mss here doesn't quite
+	 * match what happens under IPV4. Figure out the right thing to do.
+	 */
+        req->mss = min(sk->mss, req->mss);
+
+        if (req->mss < 1) {
+                printk(KERN_DEBUG "initial req->mss below 1\n");
+                req->mss = 1;
+        }
+
+	if (req->rcv_wnd == 0) {
+		/* Set this up on the first call only */
+		req->window_clamp = 0; /* FIXME: should be in dst cache */
+		tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
+			&req->rcv_wnd,
+			&req->window_clamp,
+			req->wscale_ok,
+			&req->rcv_wscale);
+	}
+	th->window = htons(req->rcv_wnd);
+
+	tmp = tcp_syn_build_options(skb, req->mss, req->sack_ok, req->tstamp_ok,
+		req->snd_wscale,req->rcv_wscale);
 	th->doff = sizeof(*th)/4 + (tmp>>2);
 	th->check = tcp_v6_check(th, sizeof(*th) + tmp,
 				 &req->af.v6_req.loc_addr, &req->af.v6_req.rmt_addr,
@@ -656,10 +691,13 @@ static struct or_calltable or_ipv6 = {
 	tcp_v6_or_free
 };
 
+/* FIXME: this is substantially similar to the ipv4 code.
+ * Can some kind of merge be done? -- erics
+ */
 static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 			       __u32 isn)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct tcp_opt tp;
 	struct open_request *req;
 	__u16 req_mss;
 	
@@ -691,14 +729,20 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	sk->ack_backlog++;
 
+	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
+
 	req->rcv_isn = skb->seq;
 	req->snt_isn = isn;
-
-	tcp_parse_options(skb->h.th,tp);
-	req_mss = tp->in_mss;
-	if (!req_mss)
-		req_mss = 536;
-	req->mss = req_mss;
+	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+	tp.in_mss = 536;
+	tcp_parse_options(skb->h.th,&tp);
+	if (tp.saw_tstamp)
+                req->ts_recent = tp.rcv_tsval;
+        req->mss = tp.in_mss;
+        req->tstamp_ok = tp.tstamp_ok;
+        req->sack_ok = tp.sack_ok;
+        req->snd_wscale = tp.snd_wscale;
+        req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = skb->h.th->source;
 	ipv6_addr_copy(&req->af.v6_req.rmt_addr, &skb->nh.ipv6h->saddr);
 	ipv6_addr_copy(&req->af.v6_req.loc_addr, &skb->nh.ipv6h->daddr);
@@ -876,6 +920,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
         newtp->sack_ok = req->sack_ok;
         newtp->tstamp_ok = req->tstamp_ok;
         newtp->snd_wscale = req->snd_wscale;
+	newtp->wscale_ok = req->wscale_ok;
         newtp->ts_recent = req->ts_recent;
         if (newtp->tstamp_ok) {
                 newtp->tcp_header_len = sizeof(struct tcphdr) + 12; /* FIXME: define the contant. */
@@ -1305,8 +1350,11 @@ static int tcp_v6_init_sock(struct sock *sk)
 
 	tp->ato = 0;
 	tp->iat = (HZ/5) << 3;
-
-	tp->rcv_wnd = 8192;
+	
+	/* FIXME: right thing? */
+	tp->rcv_wnd = 0;
+	tp->in_mss = 536;
+	/* tp->rcv_wnd = 8192; */
 
 	/* start with only sending one packet at a time. */
 	tp->snd_cwnd = 1;
@@ -1320,7 +1368,7 @@ static int tcp_v6_init_sock(struct sock *sk)
 	sk->max_ack_backlog = SOMAXCONN;
 
 	sk->mtu = 576;
-	sk->mss = 516;
+	sk->mss = 536;
 
 	sk->dummy_th.doff = sizeof(sk->dummy_th)/4;
 
@@ -1416,7 +1464,7 @@ static struct inet6_protocol tcpv6_protocol =
 	"TCPv6"			/* name			*/
 };
 
-void tcpv6_init(void)
+__initfunc(void tcpv6_init(void))
 {
 	/* register inet6 protocol */
 	inet6_add_protocol(&tcpv6_protocol);

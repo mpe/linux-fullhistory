@@ -18,6 +18,7 @@
 #include <linux/genhd.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/init.h>
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -55,13 +56,13 @@ static struct mem_info m68k_ramdisk = { 0, 0 };
 static char m68k_command_line[CL_SIZE];
 char saved_command_line[CL_SIZE];
 
-void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *));
+void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initdata;
 /* machine dependent keyboard functions */
-int (*mach_keyb_init) (void);
+int (*mach_keyb_init) (void) __initdata;
 int (*mach_kbdrate) (struct kbd_repeat *) = NULL;
 void (*mach_kbd_leds) (unsigned int) = NULL;
 /* machine dependent irq functions */
-void (*mach_init_IRQ) (void);
+void (*mach_init_IRQ) (void) __initdata;
 void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) = NULL;
 void (*mach_get_model) (char *model) = NULL;
 int (*mach_get_hardware_list) (char *buffer) = NULL;
@@ -73,12 +74,12 @@ void (*mach_gettod) (int*, int*, int*, int*, int*, int*);
 int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
 int (*mach_set_clock_mmss) (unsigned long) = NULL;
 void (*mach_reset)( void );
-struct fb_info *(*mach_fb_init)(long *);
+struct fb_info *(*mach_fb_init)(long *) __initdata;
 long mach_max_dma_address = 0x00ffffff; /* default set to the lower 16MB */
-void (*mach_video_setup) (char *, int *);
+void (*mach_video_setup) (char *, int *) __initdata;
 #ifdef CONFIG_BLK_DEV_FD
-int (*mach_floppy_init) (void) = NULL;
-void (*mach_floppy_setup) (char *, int *) = NULL;
+int (*mach_floppy_init) (void) __initdata = NULL;
+void (*mach_floppy_setup) (char *, int *) __initdata = NULL;
 void (*mach_floppy_eject) (void) = NULL;
 #endif
 
@@ -94,7 +95,7 @@ extern void config_apollo(void);
 #define MASK_256K 0xfffc0000
 
 
-static void m68k_parse_bootinfo(const struct bi_record *record)
+__initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 {
     while (record->tag != BI_LAST) {
 	int unknown = 0;
@@ -141,8 +142,8 @@ static void m68k_parse_bootinfo(const struct bi_record *record)
     }
 }
 
-void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
-		unsigned long * memory_end_p)
+ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
+		unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
 	extern int _etext, _edata, _end;
@@ -337,7 +338,7 @@ int get_hardware_list(char *buffer)
 }
 
 #ifdef CONFIG_BLK_DEV_FD
-int floppy_init(void)
+__initfunc(int floppy_init(void))
 {
 	if (mach_floppy_init)
 		return mach_floppy_init();
@@ -345,7 +346,7 @@ int floppy_init(void)
 		return 0;
 }
 
-void floppy_setup(char *str, int *ints)
+__initfunc(void floppy_setup(char *str, int *ints))
 {
 	if (mach_floppy_setup)
 		mach_floppy_setup (str, ints);
@@ -358,7 +359,7 @@ void floppy_eject(void)
 }
 #endif
 
-unsigned long arch_kbd_init(void)
+__initfunc(unsigned long arch_kbd_init(void))
 {
 	return mach_keyb_init();
 }
@@ -372,7 +373,7 @@ void arch_gettod(int *year, int *mon, int *day, int *hour,
 		*year = *mon = *day = *hour = *min = *sec = 0;
 }
 
-void video_setup (char *options, int *ints)
+__initfunc(void video_setup (char *options, int *ints))
 {
 	if (mach_video_setup)
 		mach_video_setup (options, ints);

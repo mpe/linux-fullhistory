@@ -17,9 +17,9 @@ static inline void clear_active_bhs(unsigned long x)
 	"	and %0,%2,%0\n"
 	"	stq_c %0,%1\n"
 	"	beq %0,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (bh_active)
 	:"Ir" (x), "m" (bh_active));
 }

@@ -31,9 +31,9 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	"2:\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 
@@ -54,9 +54,9 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 	"	stl_c %0,%1\n\t"
 	"	beq %0,3f\n"
 	"2:\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 
@@ -75,9 +75,9 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 	"	xor %0,%3,%0\n\t"
 	"	stl_c %0,%1\n\t"
 	"	beq %0,3f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 

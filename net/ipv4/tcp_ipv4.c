@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.39 1997/04/22 02:53:14 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.42 1997/04/29 16:09:46 schenk Exp $
  *
  *		IPv4 specific functions
  *
@@ -465,7 +465,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	struct sk_buff *buff;
 	struct sk_buff *skb1;
 	int tmp;
-	struct tcphdr *t1;
+	struct tcphdr *th;
 	struct rtable *rt;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sockaddr_in *usin = (struct sockaddr_in *) uaddr;
@@ -546,20 +546,17 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return(-ENETUNREACH);
 	}
 
-	t1 = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
-	buff->h.th = t1;
+	th = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
+	buff->h.th = th;
 
-	memcpy(t1,(void *)&(sk->dummy_th), sizeof(*t1));
+	memcpy(th,(void *)&(sk->dummy_th), sizeof(*th));
 	buff->seq = sk->write_seq++;
-	t1->seq = htonl(buff->seq);
+	th->seq = htonl(buff->seq);
 	tp->snd_nxt = sk->write_seq;
 	buff->end_seq = sk->write_seq;
-	t1->ack = 0;
-	t1->window = htons(512);
-	t1->syn = 1;
+	th->ack = 0;
+	th->syn = 1;
 
-	/* Use 512 or whatever user asked for. */
-	tp->window_clamp = rt->u.dst.window;
 
 	sk->mtu = rt->u.dst.pmtu;
 	if ((sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
@@ -577,13 +574,26 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sk->mss = (sk->mtu - sizeof(struct iphdr) -
 			   sizeof(struct tcphdr));
 
+	if (sk->mss < 1) {
+		printk(KERN_DEBUG "intial sk->mss below 1\n");
+		sk->mss = 1;	/* Sanity limit */
+	}
+
+	tp->window_clamp = rt->u.dst.window;
+	tcp_select_initial_window(sock_rspace(sk)/2,sk->mss,
+		&tp->rcv_wnd,
+		&tp->window_clamp,
+		sysctl_tcp_window_scaling,
+		&tp->rcv_wscale);
+	th->window = htons(tp->rcv_wnd);
+
 	tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_sack,
 		sysctl_tcp_timestamps,
-		sysctl_tcp_window_scaling?tp->rcv_wscale:0);
+		sysctl_tcp_window_scaling,tp->rcv_wscale);
 	buff->csum = 0;
-	t1->doff = (sizeof(*t1)+ tmp)>>2;
+	th->doff = (sizeof(*th)+ tmp)>>2;
 
-	tcp_v4_send_check(sk, t1, sizeof(struct tcphdr) + tmp, buff);
+	tcp_v4_send_check(sk, th, sizeof(struct tcphdr) + tmp, buff);
 
 	tcp_set_state(sk,TCP_SYN_SENT);
 
@@ -803,7 +813,6 @@ int tcp_chkaddr(struct sk_buff *skb)
 
 static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	struct sk_buff * skb;
 	struct tcphdr *th;
 	int tmp;
@@ -829,6 +838,11 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	 */
 	req->mss = min(mss, req->mss);
 
+	if (req->mss < 1) {
+		printk(KERN_DEBUG "initial req->mss below 1\n");
+		req->mss = 1;
+	}
+
 	/* Yuck, make this header setup more efficient... -DaveM */
 	memset(th, 0, sizeof(struct tcphdr));
 	th->syn = 1;
@@ -839,7 +853,16 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	skb->end_seq = skb->seq + 1;
 	th->seq = ntohl(skb->seq);
 	th->ack_seq = htonl(req->rcv_isn + 1);
-	th->window = ntohs(tp->rcv_wnd);
+	if (req->rcv_wnd == 0) {
+		/* Set this up on the first call only */
+		req->window_clamp = skb->dst->window;
+		tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
+			&req->rcv_wnd,
+			&req->window_clamp,
+			req->wscale_ok,
+			&req->rcv_wscale);
+	}
+	th->window = htons(req->rcv_wnd);
 
 	/* XXX Partial csum of 4 byte quantity is itself! -DaveM
 	 * Yes, but it's a bit harder to special case now. It's
@@ -850,7 +873,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	 */
 
 	tmp = tcp_syn_build_options(skb, req->mss, req->sack_ok, req->tstamp_ok,
-		(req->snd_wscale)?tp->rcv_wscale:0);
+		req->wscale_ok,req->rcv_wscale);
 	skb->csum = 0;
 	th->doff = (sizeof(*th) + tmp)>>2;
 	th->check = tcp_v4_check(th, sizeof(*th) + tmp,
@@ -881,7 +904,7 @@ static int tcp_v4_syn_filter(struct sock *sk, struct sk_buff *skb, __u32 saddr)
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 isn)
 {
 	struct ip_options *opt = (struct ip_options *) ptr;
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct tcp_opt tp;
 	struct open_request *req;
 	struct tcphdr *th = skb->h.th;
 	__u32 saddr = skb->nh.iph->saddr;
@@ -913,19 +936,20 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 
 	sk->ack_backlog++;
 
+	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
+
 	req->rcv_isn = skb->seq;
 	req->snt_isn = isn;
-	tp->tstamp_ok = tp->sack_ok = tp->snd_wscale = 0;
-	tcp_parse_options(th,tp);
-	if (tp->saw_tstamp) {
-		tp->ts_recent = tp->rcv_tsval;
-		tp->ts_recent_stamp = jiffies;
-	}
-	req->mss = tp->in_mss;
-	req->tstamp_ok = tp->tstamp_ok;
-	req->sack_ok = tp->sack_ok;
-	req->snd_wscale = tp->snd_wscale;
-	req->ts_recent = tp->ts_recent;
+	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+	tp.in_mss = 536;
+	tcp_parse_options(th,&tp);
+	if (tp.saw_tstamp)
+		req->ts_recent = tp.rcv_tsval;
+	req->mss = tp.in_mss;
+	req->tstamp_ok = tp.tstamp_ok;
+	req->sack_ok = tp.sack_ok;
+	req->snd_wscale = tp.snd_wscale;
+	req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = th->source;
 	req->af.v4_req.loc_addr = daddr;
 	req->af.v4_req.rmt_addr = saddr;
@@ -1004,8 +1028,6 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	atomic_set(&newsk->rmem_alloc, 0);
 	newsk->localroute = sk->localroute;
 
-	newsk->max_unacked = MAX_WINDOW - TCP_WINDOW_DIFF;
-
 	newsk->err = 0;
 	newsk->shutdown = 0;
 	newsk->ack_backlog = 0;
@@ -1060,7 +1082,6 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	newsk->dst_cache = &rt->u.dst;
 
-	newtp->window_clamp = rt->u.dst.window;
 	snd_mss = rt->u.dst.pmtu;
 
 	/* FIXME: is mtu really the same as snd_mss? */
@@ -1072,10 +1093,19 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	newtp->sack_ok = req->sack_ok;
 	newtp->tstamp_ok = req->tstamp_ok;
-	newtp->snd_wscale = req->snd_wscale;
-	newtp->ts_recent = req->ts_recent;
-	newtp->ts_recent_stamp = jiffies;
+	newtp->window_clamp = req->window_clamp;
+	newtp->rcv_wnd = req->rcv_wnd;
+	newtp->wscale_ok = req->wscale_ok;
+	if (newtp->wscale_ok) {
+		newtp->snd_wscale = req->snd_wscale;
+		newtp->rcv_wscale = req->rcv_wscale;
+	} else {
+		newtp->snd_wscale = newtp->rcv_wscale = 0;
+		newtp->window_clamp = min(newtp->window_clamp,65535);
+	}
 	if (newtp->tstamp_ok) {
+		newtp->ts_recent = req->ts_recent;
+		newtp->ts_recent_stamp = jiffies;
 		newtp->tcp_header_len = sizeof(struct tcphdr) + 12;	/* FIXME: define constant! */
 		newsk->dummy_th.doff += 3;
 	} else {
@@ -1219,9 +1249,8 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,saddr,daddr,skb->csum)) {
 			struct iphdr * iph = skb->nh.iph;
-			printk(KERN_DEBUG "TCPv4 bad checksum from %08x:%04x to %08x:%04x, ack = %u, seq = %u, len=%d/%d/%d\n",
+			printk(KERN_DEBUG "TCPv4 bad checksum from %08x:%04x to %08x:%04x, len=%d/%d/%d\n",
 			       saddr, ntohs(th->source), daddr,
-			       ntohl(th->ack_seq), ntohl(th->seq),
 			       ntohs(th->dest), len, skb->len, ntohs(iph->tot_len));
 					goto discard_it;
 		}
@@ -1346,10 +1375,12 @@ static int tcp_v4_init_sock(struct sock *sk)
 	tp->ato = 0;
 	tp->iat = (HZ/5) << 3;
 
-	tp->rcv_wnd = 8192;
+	/* FIXME: tie this to sk->rcvbuf? (May be unnecessary) */
+	/* tp->rcv_wnd = 8192; */
 	tp->tstamp_ok = 0;
 	tp->sack_ok = 0;
-	tp->in_mss = 0;
+	tp->wscale_ok = 0;
+	tp->in_mss = 536;
 	tp->snd_wscale = 0;
 	tp->sacks = 0;
 	tp->saw_tstamp = 0;

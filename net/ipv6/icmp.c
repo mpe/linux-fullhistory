@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.8 1997/03/18 18:24:30 davem Exp $
+ *	$Id: icmp.c,v 1.9 1997/04/29 09:38:42 mj Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -34,6 +34,7 @@
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>
@@ -486,7 +487,7 @@ discard_it:
 	return 0;
 }
 
-void icmpv6_init(struct net_proto_family *ops)
+__initfunc(void icmpv6_init(struct net_proto_family *ops))
 {
 	struct sock *sk;
 	int err;

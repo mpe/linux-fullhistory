@@ -29,6 +29,7 @@
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>
@@ -79,7 +80,7 @@ void (*mach_free_irq) (unsigned int, void *) = dummy_free_irq;
  * the IRQ handling routines.
  */
 
-void init_IRQ(void)
+__initfunc(void init_IRQ(void))
 {
 	int i;
 

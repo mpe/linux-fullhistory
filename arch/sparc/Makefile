@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.27 1997/04/07 06:54:08 davem Exp $
+# $Id: Makefile,v 1.28 1997/05/01 01:41:21 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -21,7 +21,7 @@ CFLAGS := $(CFLAGS) -pipe -fcall-used-g5 -fcall-used-g7
 #LINKFLAGS = -N -Ttext 0xf0004000
 LINKFLAGS = -T arch/sparc/vmlinux.lds
 
-HEAD := arch/sparc/kernel/head.o
+HEAD := arch/sparc/kernel/head.o arch/sparc/kernel/init_task.o
 
 SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/mm \
 	arch/sparc/prom

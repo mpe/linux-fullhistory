@@ -28,6 +28,7 @@
 #include <linux/major.h>
 #include <linux/malloc.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 
 #if defined(MODULE)
 #include <linux/module.h>
@@ -282,8 +283,8 @@ static struct file_operations z2_fops =
         block_fsync             /* fsync */
 };
 
-int
-z2_init( void )
+__initfunc(int
+z2_init( void ))
 {
 
     if ( !MACH_IS_AMIGA )

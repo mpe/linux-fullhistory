@@ -1,4 +1,4 @@
-/* $Id: mp.c,v 1.7 1997/03/18 17:58:23 jj Exp $
+/* $Id: mp.c,v 1.8 1997/05/01 01:41:32 davem Exp $
  * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
@@ -36,7 +36,7 @@ prom_startcpu(int cpunode, struct linux_prom_registers *ctable_reg, int ctx, cha
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 
@@ -65,7 +65,7 @@ prom_stopcpu(int cpunode)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 
@@ -94,7 +94,7 @@ prom_idlecpu(int cpunode)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 
@@ -123,7 +123,7 @@ prom_restartcpu(int cpunode)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 

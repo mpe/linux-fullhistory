@@ -31,7 +31,7 @@
      *  Amiboot Version
      */
 
-#define AMIBOOT_VERSION		"5.4"
+#define AMIBOOT_VERSION		"5.5"
 
 
     /*

@@ -39,6 +39,7 @@
 #include <linux/kernel.h>
 #include <linux/ptrace.h>
 #include <linux/kernel_stat.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/traps.h>
@@ -331,7 +332,7 @@ extern void atari_microwire_cmd( int cmd );
  * the atari IRQ handling routines.
  */
 
-void atari_init_IRQ(void)
+__initfunc(void atari_init_IRQ(void))
 {
 	int i;
 

@@ -20,6 +20,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/console.h>
+#include <linux/init.h>
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -148,7 +149,7 @@ int amiga_parse_bootinfo(const struct bi_record *record)
      *  Setup the Amiga configuration info
      */
 
-void config_amiga(void)
+__initfunc(void config_amiga(void))
 {
   /* Fill in some default values, if necessary */
   if (amiga_eclock == 0)
@@ -376,8 +377,8 @@ void config_amiga(void)
 
 static unsigned short jiffy_ticks;
 
-static void amiga_sched_init(void (*timer_routine)(int, void *,
-			     struct pt_regs *))
+__initfunc(static void amiga_sched_init(void (*timer_routine)(int, void *,
+					struct pt_regs *)))
 {
 	jiffy_ticks = (amiga_eclock+HZ/2)/HZ;
 
@@ -796,7 +797,7 @@ void amiga_serial_gets(char *s, int len)
 }
 #endif
 
-static void amiga_debug_init(void)
+__initfunc(static void amiga_debug_init(void))
 {
     if (!strcmp( m68k_debug_device, "ser" )) {
         /* no initialization required (?) */

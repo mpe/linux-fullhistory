@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Mike Shaver		<shaver@ingenia.com>
  *
- *	$Id: ndisc.c,v 1.14 1997/04/12 04:32:51 davem Exp $
+ *	$Id: ndisc.c,v 1.15 1997/04/29 09:38:48 mj Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -43,6 +43,7 @@
 #include <linux/net.h>
 #include <linux/in6.h>
 #include <linux/route.h>
+#include <linux/init.h>
 
 #include <linux/if_arp.h>
 #include <linux/ipv6.h>
@@ -1647,7 +1648,7 @@ struct proc_dir_entry ndisc_proc_entry =
 };
 #endif	/* CONFIG_PROC_FS */
 
-void ndisc_init(struct net_proto_family *ops)
+__initfunc(void ndisc_init(struct net_proto_family *ops))
 {
 	struct sock *sk;
         int err;

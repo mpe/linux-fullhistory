@@ -70,6 +70,7 @@
 #define RISCOM8_NORMAL_MAJOR 48
 #define RISCOM8_CALLOUT_MAJOR 49
 #define MKISS_MAJOR	55
+#define DSP56K_MAJOR    55   /* DSP56001 processor device */
 
 /*
  * Tests for SCSI devices.

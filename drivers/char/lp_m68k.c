@@ -41,6 +41,7 @@
 #include <linux/major.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/irq.h>
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
@@ -465,7 +466,7 @@ EXPORT_SYMBOL(lp_init);
 EXPORT_SYMBOL(register_parallel);
 EXPORT_SYMBOL(unregister_parallel);
 
-int lp_init(void)
+__initfunc(int lp_init(void))
 {
 	extern char m68k_debug_device[];
 
@@ -498,7 +499,7 @@ int lp_init(void)
 /*
  * Currently we do not accept any lp-parameters, but that may change.
  */
-void	lp_setup(char *str, int *ints)
+__initfunc(void lp_setup(char *str, int *ints))
 {	
 }
 

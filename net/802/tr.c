@@ -31,6 +31,7 @@
 #include <linux/timer.h>
 #include <linux/net.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 #include <net/arp.h>
 
 static void tr_source_route(struct trh_hdr *trh, struct device *dev);
@@ -460,7 +461,7 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
  *	too much for this.
  */
  
-void rif_init(struct net_proto *unused) 
+__initfunc(void rif_init(struct net_proto *unused))
 {
 
 	rif_timer.expires  = RIF_TIMEOUT;

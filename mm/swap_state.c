@@ -16,6 +16,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/swapctl.h>
+#include <linux/init.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -69,8 +70,8 @@ int add_to_swap_cache(unsigned long index, unsigned long entry)
 	return 0;
 }
 
-unsigned long init_swap_cache(unsigned long mem_start,
-	unsigned long mem_end)
+__initfunc(unsigned long init_swap_cache(unsigned long mem_start,
+					 unsigned long mem_end))
 {
 	unsigned long swap_cache_size;
 

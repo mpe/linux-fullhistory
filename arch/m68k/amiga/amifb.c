@@ -50,12 +50,14 @@
 #include <linux/delay.h>
 #include <linux/config.h>
 #include <linux/interrupt.h>
+#include <linux/fb.h>
+#include <linux/init.h>
+
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
-#include <linux/fb.h>
 
 #define DEBUG
 
@@ -1802,7 +1804,7 @@ static int amiga_fb_set_cursorstate(struct fb_cursorstate *state, int con)
 	 * Initialisation
 	 */
 
-struct fb_info *amiga_fb_init(long *mem_start)
+__initfunc(struct fb_info *amiga_fb_init(long *mem_start))
 {
 	int err, tag, i;
 	u_long chipptr;

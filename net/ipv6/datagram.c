@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.10 1997/04/14 05:39:42 davem Exp $
+ *	$Id: datagram.c,v 1.11 1997/05/03 00:58:25 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -15,6 +15,9 @@
 
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/interrupt.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/in6.h>

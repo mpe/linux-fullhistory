@@ -53,6 +53,7 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -146,8 +147,8 @@ set_cursor(int currcons)
 		hide_cursor();
 }
 
-unsigned long
-con_type_init(unsigned long kmem_start, const char **display_desc)
+__initfunc(unsigned long
+con_type_init(unsigned long kmem_start, const char **display_desc))
 {
 	if (ORIG_VIDEO_MODE == 7)	/* Is this a monochrome display? */
 	{
@@ -239,8 +240,8 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 	return kmem_start;
 }
 
-void
-con_type_init_finish(void)
+__initfunc(void
+con_type_init_finish(void))
 {
 }
 

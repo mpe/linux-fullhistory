@@ -35,6 +35,7 @@
 #include <linux/kerneld.h>
 #endif
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #define MAJOR_NR MD_MAJOR
 #define MD_DRIVER
@@ -546,7 +547,7 @@ void raid0_init (void);
 void raid1_init (void);
 void raid5_init (void);
 
-int md_init (void)
+__initfunc(int md_init (void))
 {
   printk ("md driver %s MAX_MD_DEV=%d, MAX_REAL=%d\n", MD_VERSION, MAX_MD_DEV, MAX_REAL);
 

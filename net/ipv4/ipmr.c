@@ -47,6 +47,7 @@
 #include <linux/netdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/mroute.h>
+#include <linux/init.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <linux/skbuff.h>
@@ -1065,7 +1066,7 @@ static struct proc_dir_entry proc_net_ipmr_mfc = {
  *	Setup for IP multicast routing
  */
  
-void ip_mr_init(void)
+__initfunc(void ip_mr_init(void))
 {
 	printk(KERN_INFO "Linux IP multicast router 0.06.\n");
 	register_netdevice_notifier(&ip_mr_notifier);

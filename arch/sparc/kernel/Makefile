@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.39 1997/04/01 02:21:44 davem Exp $
+# $Id: Makefile,v 1.40 1997/05/01 01:40:36 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -28,7 +28,7 @@ else
 CHECKASM_CC	=	$(CC)
 endif
 
-all: kernel.o head.o
+all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
 IRQ_OBJS := irq.o sun4m_irq.o sun4c_irq.o

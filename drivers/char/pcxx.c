@@ -895,7 +895,7 @@ static void pcxe_flush_chars(struct tty_struct *tty)
  * Driver setup function when linked into the kernel to optionally parse multible
  * "digi="-lines and initialize the driver at boot time. No probing.
  */
-void pcxx_setup(char *str, int *ints)
+__initfunc(void pcxx_setup(char *str, int *ints))
 {
 
 	struct board_info board;

@@ -301,7 +301,6 @@ EXPORT_SYMBOL(wake_up_interruptible);
 EXPORT_SYMBOL(sleep_on);
 EXPORT_SYMBOL(interruptible_sleep_on);
 EXPORT_SYMBOL(schedule);
-EXPORT_SYMBOL(current_set);
 EXPORT_SYMBOL(jiffies);
 EXPORT_SYMBOL(xtime);
 EXPORT_SYMBOL(do_gettimeofday);

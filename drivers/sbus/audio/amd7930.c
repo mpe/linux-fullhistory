@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/system.h>

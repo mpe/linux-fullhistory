@@ -55,6 +55,7 @@
 #include <linux/ioport.h>
 #include <linux/major.h>
 #include <linux/string.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -191,7 +192,7 @@ static int check_gscd_med_chg (kdev_t full_dev)
 }
 
 
-void gscd_setup (char *str, int *ints)
+__initfunc(void gscd_setup (char *str, int *ints))
 {
   if (ints[0] > 0) 
   {
@@ -848,7 +849,7 @@ int  i;
      return;
 }
 
-int find_drives (void)
+__initfunc(int find_drives (void))
 {
 int *pdrv;
 int drvnum;
@@ -899,7 +900,7 @@ int i;
     return drvnum;
 }    
 
-void init_cd_drive ( int num )
+__initfunc(void init_cd_drive ( int num ))
 {
 char resp [50];
 int  i;
@@ -991,7 +992,7 @@ void cleanup_module (void)
 
 
 /* Test for presence of drive and initialize it.  Called only at boot time. */
-int gscd_init (void)
+__initfunc(int gscd_init (void))
 {
    return my_gscd_init ();
 }
@@ -999,7 +1000,7 @@ int gscd_init (void)
 
 /* This is the common initialisation for the GoldStar drive. */
 /* It is called at boot time AND for module init.           */
-int my_gscd_init (void)
+__initfunc(int my_gscd_init (void))
 {
 int i;
 int result;

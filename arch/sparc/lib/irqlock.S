@@ -1,4 +1,4 @@
-/* $Id: irqlock.S,v 1.2 1997/04/19 04:33:37 davem Exp $
+/* $Id: irqlock.S,v 1.4 1997/05/01 02:26:54 davem Exp $
  * irqlock.S: High performance IRQ global locking and interrupt entry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)

@@ -23,6 +23,7 @@
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/major.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -537,8 +538,8 @@ static struct file_operations lo_fops = {
 #define loop_init init_module
 #endif
 
-int
-loop_init( void ) {
+__initfunc(int
+loop_init( void )) {
 	int	i;
 
 	if (register_blkdev(MAJOR_NR, "loop", &lo_fops)) {

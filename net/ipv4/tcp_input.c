@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.50 1997/04/22 02:53:12 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.51 1997/04/27 19:24:40 schenk Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -321,8 +321,10 @@ void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp)
 	  					break;
 					case TCPOPT_WINDOW:
 	  					if(opsize==TCPOLEN_WINDOW && th->syn)
-							if (sysctl_tcp_window_scaling)
+							if (sysctl_tcp_window_scaling) {
+								tp->wscale_ok = 1;
 								tp->snd_wscale = *(__u8 *)ptr;
+							}
 						break;
 					case TCPOPT_SACK_PERM:
 	  					if(opsize==TCPOLEN_SACK_PERM && th->syn)
@@ -816,7 +818,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	 */
 	if (before(tp->snd_wl1, ack_seq) ||
 	    (tp->snd_wl1 == ack_seq && !after(tp->snd_wl2, ack))) {
-		unsigned long nwin = ntohs(th->window);
+		unsigned long nwin = ntohs(th->window) << tp->snd_wscale;
 
 		if ((tp->snd_wl2 != ack) || (nwin > tp->snd_wnd)) {
 			flag |= FLAG_WIN_UPDATE;
@@ -1464,17 +1466,21 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			if(tp->af_specific->conn_request(sk, skb, opt, isn) < 0)
 				return 1;
 
-			/*  Now we have several options: In theory there is 
-			 *  nothing else in the frame. KA9Q has an option to 
-			 *  send data with the syn, BSD accepts data with the
-			 *  syn up to the [to be] advertised window and 
-			 *  Solaris 2.1 gives you a protocol error. For now 
-			 *  we just ignore it, that fits the spec precisely 
-			 *  and avoids incompatibilities. It would be nice in
-			 *  future to drop through and process the data.
+			/* Now we have several options: In theory there is 
+			 * nothing else in the frame. KA9Q has an option to 
+			 * send data with the syn, BSD accepts data with the
+			 * syn up to the [to be] advertised window and 
+			 * Solaris 2.1 gives you a protocol error. For now 
+			 * we just ignore it, that fits the spec precisely 
+			 * and avoids incompatibilities. It would be nice in
+			 * future to drop through and process the data.
 			 *
-			 *  Now that TTCP is starting to be used we ought to 
-			 *  queue this data.
+			 * Now that TTCP is starting to be used we ought to 
+			 * queue this data.
+			 * But, this leaves one open to an easy denial of
+		 	 * service attack, and SYN cookies can't defend
+			 * against this problem. So, we drop the data
+			 * in the interest of security over speed.
 			 */
 			return 0;
 		}
@@ -1514,10 +1520,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			 * move to established.
 			 */
 			tp->rcv_nxt = skb->seq+1;
-			tp->rcv_wnd = 0;
 			tp->rcv_wup = skb->seq+1;
 
-			tp->snd_wnd = htons(th->window);
+			tp->snd_wnd = htons(th->window) << tp->snd_wscale;
 			tp->snd_wl1 = skb->seq;
 			tp->snd_wl2 = skb->ack_seq;
 
@@ -1526,6 +1531,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			tcp_set_state(sk, TCP_ESTABLISHED);
 			tcp_parse_options(th,tp);
 			/* FIXME: need to make room for SACK still */
+        		if (tp->wscale_ok == 0) {
+                		tp->snd_wscale = tp->rcv_wscale = 0;
+                		tp->window_clamp = min(tp->window_clamp,65535);
+        		}
 			if (tp->tstamp_ok) {
 				tp->tcp_header_len = sizeof(struct tcphdr) + 12;	/* FIXME: Define constant! */
 				sk->dummy_th.doff += 3;		/* reserve space of options */
@@ -1695,7 +1704,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 					sk->state_change(sk);		
 
 				tp->snd_una = skb->ack_seq;
-				tp->snd_wnd = htons(th->window);
+				tp->snd_wnd = htons(th->window) << tp->snd_wscale;
 				tp->snd_wl1 = skb->seq;
 				tp->snd_wl2 = skb->ack_seq;
 

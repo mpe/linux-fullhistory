@@ -3,6 +3,7 @@
 #include <linux/blk.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/page.h>
@@ -190,7 +191,7 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
 
 static int num_a2091 = 0;
 
-int a2091_detect(Scsi_Host_Template *tpnt)
+__initfunc(int a2091_detect(Scsi_Host_Template *tpnt))
 {
     static unsigned char called = 0;
     struct Scsi_Host *instance;
@@ -243,13 +244,11 @@ Scsi_Host_Template driver_template = A2091_SCSI;
 int a2091_release(struct Scsi_Host *instance)
 {
 #ifdef MODULE
-DMA(instance)->CNTR = 0;
-zorro_unconfig_board(instance->unique_id, 0);
-if (--num_a2091 == 0)
-  free_irq(IRQ_AMIGA_PORTS, a2091_intr);
-wd33c93_release();
+	DMA(instance)->CNTR = 0;
+	zorro_unconfig_board(instance->unique_id, 0);
+	if (--num_a2091 == 0)
+		free_irq(IRQ_AMIGA_PORTS, a2091_intr);
+	wd33c93_release();
 #endif
-return 1;
+	return 1;
 }
-
-

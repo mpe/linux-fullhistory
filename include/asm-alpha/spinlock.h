@@ -3,8 +3,9 @@
 
 #ifndef __SMP__
 
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { }
+/* gcc 2.7.2 can crash initializing an empty structure.  */
+typedef struct { int dummy; } spinlock_t;
+#define SPIN_LOCK_UNLOCKED { 0 }
 
 #define spin_lock_init(lock)			do { } while(0)
 #define spin_lock(lock)				do { } while(0)
@@ -27,8 +28,8 @@ typedef struct { } spinlock_t;
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  */
-typedef struct { } rwlock_t;
-#define RW_LOCK_UNLOCKED { }
+typedef struct { int dummy; } rwlock_t;
+#define RW_LOCK_UNLOCKED { 0 }
 
 #define read_lock(lock)		do { } while(0)
 #define read_unlock(lock)	do { } while(0)
@@ -89,13 +90,13 @@ l1:
 	"	stq_c	%0,%1\n"
 	"	beq	%0,3f\n"
 	"4:	mb\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	ldq	%0,%1\n"
 	"	subq	%2,1,%2\n"
 	"3:	blt	%2,4b\n"
 	"	blbs	%0,2b\n"
 	"	br	1b\n"
-	".text"
+	".previous"
 	: "=r" (tmp),
 	  "=m" (__dummy_lock(lock)),
 	  "=r" (stuck)

@@ -14,13 +14,17 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/head.h>
 #include <asm/asi.h>
+
+#define PRE_RETL sethi %uhi(KERNBASE), %g4; sllx %g4, 32, %g4;
 
 #define EX(x,y,a,b,z) 				\
 98: 	x,y;					\
 	.section .fixup,z##alloc,z##execinstr;	\
 	.align	4;				\
-99:	retl;					\
+99:	PRE_RETL				\
+	retl;					\
 	 a, b, %o0;				\
 	.section __ex_table,z##alloc;		\
 	.align	4;				\
@@ -33,6 +37,7 @@
 	.section .fixup,z##alloc,z##execinstr;	\
 	.align	4;				\
 99:	c, d, e;				\
+	PRE_RETL				\
 	retl;					\
 	 a, b, %o0;				\
 	.section __ex_table,z##alloc;		\
@@ -234,6 +239,7 @@ copy_user_last7:
 	ldub	[%o1], %g2
 	EX(stba	%g2, [%o0] %asi, add %g0, 1,#)
 1:
+	PRE_RETL
 	retl
  	 clr	%o0
 
@@ -332,6 +338,7 @@ short_table_end:
 	ldub	[%o1], %g2
 	EX(stba	%g2, [%o0] %asi, add %g0, 1,#)
 1:
+	PRE_RETL
 	retl
  	 clr	%o0
 
@@ -355,6 +362,7 @@ short_aligned_end:
 	.section .fixup,#alloc,#execinstr
 	.align	4
 97:
+	PRE_RETL
 	retl
 	 mov	%o2, %o0
 /* exception routine sets %g2 to (broken_insn - first_insn)>>2 */
@@ -388,6 +396,7 @@ short_aligned_end:
 1:
 	and	%g1, 0x7f, %o0
 	add	%o0, %g7, %o0
+	PRE_RETL
 	retl
 	 sub	%o0, %g2, %o0
 51:
@@ -413,6 +422,7 @@ short_aligned_end:
 3:
 	sll	%g2, 2, %g2
 2:
+	PRE_RETL
 	retl
 	 add	%g1, %g2, %o0
 52:
@@ -431,6 +441,7 @@ short_aligned_end:
 	add	%g2, %g4, %g2
 	and	%o2, 0xf, %o0
 	add	%o0, %o3, %o0
+	PRE_RETL
 	retl
 	 sub	%o0, %g2, %o0
 54:
@@ -441,6 +452,7 @@ short_aligned_end:
 	and	%o2, 0xf, %o2
 	sub	%o3, %o1, %o3
 	sub	%o2, %o4, %o2
+	PRE_RETL
 	retl
 	 add	%o2, %o3, %o0
 55:
@@ -452,5 +464,6 @@ short_aligned_end:
 	and	%g2, 1, %g2
 	sll	%o1, 1, %o1
 	add	%o2, %g2, %o0
+	PRE_RETL
 	retl
 	 add	%o0, %o1, %o0

@@ -11,9 +11,10 @@
  * ------------------------------------------------------------------------- */
 
 #include <linux/malloc.h>
-#include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/auto_fs.h>
+#include <linux/signal.h>
+#include <linux/file.h>
+#include "autofs_i.h"
 
 /* We make this a static variable rather than a part of the superblock; it
    is better if we don't reassign numbers easily even across filesystems */
@@ -36,6 +37,7 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 		wake_up(&wq->queue);
 		wq = nwq;
 	}
+	fput(sbi->pipe, sbi->pipe->f_inode);	/* Close the pipe */
 }
 
 static int autofs_write(struct file *file, const void *addr, int bytes)

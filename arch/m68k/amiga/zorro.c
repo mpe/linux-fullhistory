@@ -13,10 +13,11 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/init.h>
+#include <linux/zorro.h>
 #include <asm/setup.h>
 #include <asm/bitops.h>
 #include <asm/amigahw.h>
-#include <linux/zorro.h>
 
 
 #ifdef CONFIG_ZORRO
@@ -415,10 +416,6 @@ BEGIN_PROD(MASOBOSHI)
    PROD("MVD 819", MVD_819)
 END
 
-BEGIN_PROD(DELACOMP)
-   PROD("RAM Expansion 2000", DELACOMP_RAM_2000)
-END
-
 BEGIN_PROD(VILLAGE_TRONIC)
    PROD("Domino Graphics Board (RAM)", DOMINO_RAM)
    PROD("Domino Graphics Board (REG)", DOMINO_REG)
@@ -656,7 +653,6 @@ BEGIN_MANUF
    MANUF("Helfrich", HELFRICH1)
    MANUF("Software Result Enterprises", SW_RESULT_ENTS)
    MANUF("Masoboshi", MASOBOSHI)
-   MANUF("DelaComp", DELACOMP)
    MANUF("Village Tronic", VILLAGE_TRONIC)
    MANUF("Utilities Unlimited", UTILITIES_ULTD)
    MANUF("Amitrix", AMITRIX)
@@ -992,7 +988,7 @@ static void mark_region(u_long addr, u_long size, int flag)
     *    Initialization
     */
 
-void zorro_init(void)
+__initfunc(void zorro_init(void))
 {
    int i;
    struct ConfigDev *cd;

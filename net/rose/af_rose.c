@@ -52,6 +52,7 @@
 #include <net/ip.h>
 #include <net/arp.h>
 #include <linux/if_arp.h>
+#include <linux/init.h>
 
 int sysctl_rose_restart_request_timeout = ROSE_DEFAULT_T0;
 int sysctl_rose_call_request_timeout    = ROSE_DEFAULT_T1;
@@ -1381,7 +1382,7 @@ static struct device dev_rose[] = {
 	{"rose5", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, rose_init}
 };
 
-void rose_proto_init(struct net_proto *pro)
+__initfunc(void rose_proto_init(struct net_proto *pro))
 {
 	int i;
 

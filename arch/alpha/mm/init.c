@@ -133,7 +133,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	init_task.tss.ptbr = newptbr;
 	init_task.tss.pal_flags = 1;	/* set FEN, clear everything else */
 	init_task.tss.flags = 0;
-	init_task.kernel_stack_page = INIT_STACK;
 	load_PCB(&init_task.tss);
 
 	flush_tlb_all();
@@ -182,7 +181,7 @@ void free_initmem (void)
                 atomic_set(&mem_map[MAP_NR(addr)].count, 1);
                 free_page(addr);
         }
-        printk ("Freeing unused kernel memory: %dk freed\n",
+        printk ("Freeing unused kernel memory: %ldk freed\n",
 		(&__init_end - &__init_begin) >> 10);
 }
 

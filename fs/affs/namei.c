@@ -20,6 +20,8 @@
 
 #include <linux/errno.h>
 
+static int affs_fixup(struct buffer_head *bh, struct inode *inode);
+
 /* Simple toupper() for DOS\1 */
 
 static inline unsigned int
@@ -100,7 +102,7 @@ affs_find_entry(struct inode *dir, const char *name, int namelen,
 {
 	struct buffer_head *bh;
 	int	 intl;
-	int	 key;
+	s32	 key;
 
 	pr_debug("AFFS: find_entry(%.*s)=\n",namelen,name);
 
@@ -222,9 +224,7 @@ affs_create(struct inode *dir, const char *name, int len, int mode, struct inode
 	
 	pr_debug("AFFS: create(%lu,\"%.*s\",0%o)\n",dir->i_ino,len,name,mode);
 
-
 	*result = NULL;
-
 	if (!dir || !dir->i_sb) {
 		iput(dir);
 		return -EINVAL;
@@ -472,7 +472,7 @@ affs_link(struct inode *oldinode, struct inode *dir, const char *name, int len)
 		iput(oldinode);
 		oldinode = iget(dir->i_sb,i);
 		if (!oldinode) {
-			printk("AFFS: link(): original does not exist.\n");
+			affs_error(oldinode->i_sb,"link","Cannot get original from link");
 			iput(dir);
 			return -ENOENT;
 		}
@@ -507,7 +507,7 @@ affs_link(struct inode *oldinode, struct inode *dir, const char *name, int len)
 }
 
 static int
-subdir(struct inode * new_inode, struct inode * old_inode)
+subdir(struct inode *new_inode, struct inode *old_inode)
 {
     int ino;
     int result;
@@ -650,11 +650,11 @@ end_rename:
 	return retval;
 }
 
-int
+static int
 affs_fixup(struct buffer_head *bh, struct inode *inode)
 {
-	int			 key, link_key;
-	int			 type;
+	s32			 key, link_key;
+	s32			 type;
 	struct buffer_head	*nbh;
 	struct inode		*ofinode;
 
@@ -663,7 +663,8 @@ affs_fixup(struct buffer_head *bh, struct inode *inode)
 		key = htonl(LINK_END(bh->b_data,inode)->original);
 		LINK_END(bh->b_data,inode)->original = 0;
 		if (!key) {
-			printk("AFFS: fixup(): hard link without original: ino=%lu\n",inode->i_ino);
+			affs_error(inode->i_sb,"fixup","Hard link without original: ino=%lu",
+				   inode->i_ino);
 			return -ENOENT;
 		}
 		if (!(ofinode = iget(inode->i_sb,key)))
@@ -676,17 +677,18 @@ affs_fixup(struct buffer_head *bh, struct inode *inode)
 		if ((key = htonl(FILE_END(bh->b_data,inode)->link_chain))) {
 			/* Get first link, turn it to a file */
 			if (!(ofinode = iget(inode->i_sb,key))) {
-				printk("AFFS: fixup(): cannot read inode %u\n",key);
+				affs_error(inode->i_sb,"fixup","Cannot read block %d",key);
 				return -ENOENT;
 			}
 			if (!ofinode->u.affs_i.i_hlink) {
-				printk("AFFS: fixup(): first link to %lu (%u) is not a link?\n",
-					inode->i_ino,key);
+				affs_error(inode->i_sb,"fixup",
+					   "First link to %lu (%d) is not a link",
+					   inode->i_ino,key);
 				iput(ofinode);
 				return -ENOENT;
 			}
 			if (!(nbh = affs_bread(inode->i_dev,key,AFFS_I2BSIZE(inode)))) {
-				printk("AFFS: fixup(): cannot read block %u\n",key);
+				affs_error(inode->i_sb,"fixup","Cannot read block %d",key);
 				iput(ofinode);
 				return -ENOENT;
 			}
@@ -719,13 +721,14 @@ affs_fixup(struct buffer_head *bh, struct inode *inode)
 					break;
 				if ((ofinode = iget(inode->i_sb,key))) {
 					if (!ofinode->u.affs_i.i_hlink)
-						printk("AFFS: fixup() inode %u in link chain is "
-						       "not a link\n",key);
+						affs_error(inode->i_sb,"fixup",
+							   "Inode %d in link chain is not a link",
+							   key);
 					ofinode->u.affs_i.i_original = link_key;
 					ofinode->i_dirt              = 1;
 					FILE_END(nbh->b_data,inode)->original = htonl(link_key);
 				} else
-					printk("AFFS: fixup(): cannot get inode %u\n",key);
+					affs_error(inode->i_sb,"fixup","Cannot read block %d",key);
 			}
 			/* Turn old inode to a link */
 			inode->u.affs_i.i_hlink = 1;
@@ -735,7 +738,7 @@ affs_fixup(struct buffer_head *bh, struct inode *inode)
 	} else if (type == ST_SOFTLINK) {
 		return 0;
 	} else {
-		printk("AFFS: fixup(): secondary type=%d\n",type);
+		affs_error(inode->i_sb,"fixup","Bad secondary type (%d)",type);
 		return -EBADF;
 	}
 }

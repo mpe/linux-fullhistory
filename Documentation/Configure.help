@@ -4928,9 +4928,13 @@ CONFIG_RMW_INSNS
 Amiga AutoConfig Identification
 CONFIG_ZORRO
   This enables support for automatic identification of Amiga expansion
-  cards that obey the AutoConfig(tm) specification.  You should say Y
-  to this question unless you have no expansion cards and no intention
-  of getting any.
+  cards that obey the AutoConfig(tm) specification.
+  Say Y if you want your expansion cards to be identified on bootup;
+  it will enlarge your kernel by about 10KB. The identification
+  information is also available through /proc/zorro (say Y to
+  "/proc filesystem support"!).
+  Note that even if you say N here, you can still use your expansion
+  cards. If in doubt, say Y.
 
 Amiga OCS chipset support
 CONFIG_AMIFB_OCS
@@ -4958,6 +4962,8 @@ CONFIG_FB_CYBER
   Please note that its use is not all that intuitive (i.e. if you have
   any questions, be sure to ask!).  Say N unless you have a Cybervision
   64 or plan to get one before you next recompile the kernel.
+  Please note that this driver DOES NOT support the Cybervision 64 3D
+  card at present, as they use incompatible video chips.
 
 Amiga GSP (TMS340x0) support
 CONFIG_AMIGA_GSP
@@ -5196,6 +5202,16 @@ CONFIG_ATARI_MIDI
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Atari DSP56k Digital Signal Processor support
+CONFIG_ATARI_DSP56K
+  If you want to be able to use the DSP56001 in Falcons, say Y.
+  This driver is still experimental, and if you don't know what it is,
+  or if you don't have this processor, just say N.
+  This driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
 Amiga builtin serial support

@@ -27,6 +27,8 @@
  *					(in case if packet not accepted by
  *					output firewall rules)
  *		Alexey Kuznetsov:	use new route cache
+ *		Andi Kleen:		Fix broken PMTU recovery and remove
+ *					some redundant tests.
  */
 
 #include <asm/uaccess.h>
@@ -47,6 +49,7 @@
 #include <linux/etherdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include <net/snmp.h>
 #include <net/ip.h>
@@ -126,9 +129,8 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 	iph->ihl      = 5;
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
-	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-	    (sk->ip_pmtudisc == IP_PMTUDISC_WANT && 
-	     rt->rt_flags&RTF_NOPMTUDISC))
+	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT && 
+		!(rt->rt_flags & RTF_NOPMTUDISC))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -207,9 +209,8 @@ int ip_build_header(struct sk_buff *skb, struct sock *sk)
 	iph->ihl      = 5;
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
-	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-	    (sk->ip_pmtudisc == IP_PMTUDISC_WANT && 
-	     rt->rt_flags&RTF_NOPMTUDISC))
+	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
+		!(rt->rt_flags & RTF_NOPMTUDISC))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -480,8 +481,7 @@ int ip_build_xmit(struct sock *sk,
 #endif	
 
 	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-	    (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-	     rt->rt_flags&RTF_NOPMTUDISC))
+	     rt->rt_flags&RTF_NOPMTUDISC)
 		df = 0;
 
 	 
@@ -1036,7 +1036,7 @@ static struct proc_dir_entry proc_net_igmp = {
  *	IP registers the packet type and then calls the subprotocol initialisers
  */
 
-void ip_init(void)
+__initfunc(void ip_init(void))
 {
 	dev_add_pack(&ip_packet_type);
 

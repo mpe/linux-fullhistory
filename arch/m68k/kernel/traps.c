@@ -27,6 +27,7 @@
 #include <linux/user.h>
 #include <linux/string.h>
 #include <linux/linkage.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/fpu.h>
@@ -63,7 +64,7 @@ asm(".text\n"
     __ALIGN_STR "\n"
     SYMBOL_NAME_STR(nmihandler) ": rte");
 
-void trap_init (void)
+__initfunc(void trap_init (void))
 {
 	int i;
 

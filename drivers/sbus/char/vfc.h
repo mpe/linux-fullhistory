@@ -157,10 +157,16 @@ void vfc_unlock_device(struct vfc_dev *);
 
 #define VFC_STATUS_CAPTURE    0x08000000
 
-#ifdef VFC_DEBUG
-#define VFC_DEBUG_PRINTK(a) printk a
+#ifdef VFC_IOCTL_DEBUG
+#define VFC_IOCTL_DEBUG_PRINTK(a) printk a
 #else
-#define VFC_DEBUG_PRINTK(a)
+#define VFC_IOCTL_DEBUG_PRINTK(a)
+#endif
+
+#ifdef VFC_I2C_DEBUG
+#define VFC_I2C_DEBUG_PRINTK(a) printk a
+#else
+#define VFC_I2C_DEBUG_PRINTK(a)
 #endif
 
 #endif /* _LINUX_VFC_H_ */

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.136 1997/04/20 14:11:51 ecd Exp $
+/* $Id: srmmu.c,v 1.140 1997/05/01 08:53:39 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -659,27 +659,6 @@ static void srmmu_set_pte_cacheable(pte_t *ptep, pte_t pteval)
 	srmmu_set_entry(ptep, pte_val(pteval));
 }
 
-static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
-{
-	unsigned long page = ((unsigned long)ptep) & PAGE_MASK;
-
-	srmmu_set_entry(ptep, pte_val(pteval));
-	__asm__ __volatile__("
-	lda	[%0] %2, %%g4
-	orcc	%%g4, 0x0, %%g0
-	be	2f
-	 sethi	%%hi(%7), %%g5
-1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
-	bne	1b
-	 sta	%%g0, [%1 + %%g5] %3
-	lda	[%4] %5, %%g0
-2:"	: /* no outputs */
-	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
-	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
-	  "r" (vac_line_size), "i" (PAGE_SIZE)
-	: "g4", "g5", "cc");
-}
-
 static void srmmu_set_pte_nocache_cypress(pte_t *ptep, pte_t pteval)
 {
 	register unsigned long a, b, c, d, e, f, g;
@@ -860,30 +839,12 @@ static void srmmu_unlockarea(char *vaddr, unsigned long len)
  */
 struct task_struct *srmmu_alloc_task_struct(void)
 {
-	return (struct task_struct *) kmalloc(sizeof(struct task_struct), GFP_KERNEL);
-}
-
-unsigned long srmmu_alloc_kernel_stack(struct task_struct *tsk)
-{
-	unsigned long kstk = __get_free_pages(GFP_KERNEL, 1, 0);
-
-	if(!kstk)
-		kstk = (unsigned long) vmalloc(PAGE_SIZE << 1);
-
-	return kstk;
+	return (struct task_struct *) __get_free_pages(GFP_KERNEL, 1, 0);
 }
 
 static void srmmu_free_task_struct(struct task_struct *tsk)
 {
-	kfree(tsk);
-}
-
-static void srmmu_free_kernel_stack(unsigned long stack)
-{
-	if(stack < VMALLOC_START)
-		free_pages(stack, 1);
-	else
-		vfree((char *)stack);
+	free_pages((unsigned long)tsk, 1);
 }
 
 /* Tsunami flushes.  It's page level tlb invalidation is not very
@@ -1365,17 +1326,28 @@ extern void hypersparc_flush_tlb_mm(struct mm_struct *mm);
 extern void hypersparc_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
 extern void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
 
+static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
+{
+	unsigned long page = ((unsigned long)ptep) & PAGE_MASK;
+
+	srmmu_set_entry(ptep, pte_val(pteval));
+	hypersparc_flush_page_to_ram(page);
+}
+
 static void hypersparc_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
 {
+	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) pgdp) >> 4))));
+	hypersparc_flush_page_to_ram((unsigned long)ctxp);
 	hyper_flush_whole_icache();
-	set_pte((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) pgdp) >> 4))));
 }
 
 static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
 	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
 
-	hypersparc_flush_page_to_ram(page);
+	if(pgdp != swapper_pg_dir)
+		hypersparc_flush_page_to_ram(page);
+
 	if(tsk->mm->context != NO_CONTEXT) {
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
@@ -1429,26 +1401,29 @@ static void cypress_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 
 static void hypersparc_switch_to_context(struct task_struct *tsk)
 {
-	hyper_flush_whole_icache();
 	if(tsk->mm->context == NO_CONTEXT) {
+		ctxd_t *ctxp;
+
 		alloc_context(tsk->mm);
-		flush_cache_mm(tsk->mm);
-		ctxd_set(&srmmu_context_table[tsk->mm->context], tsk->mm->pgd);
-		flush_tlb_mm(tsk->mm);
+		ctxp = &srmmu_context_table[tsk->mm->context];
+		srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) tsk->mm->pgd) >> 4))));
+		hypersparc_flush_page_to_ram((unsigned long)ctxp);
 	}
+	hyper_flush_whole_icache();
 	srmmu_set_context(tsk->mm->context);
 }
 
 static void hypersparc_init_new_context(struct mm_struct *mm)
 {
-	hyper_flush_whole_icache();
+	ctxd_t *ctxp;
 
 	alloc_context(mm);
 
-	flush_cache_mm(mm);
-	ctxd_set(&srmmu_context_table[mm->context], mm->pgd);
-	flush_tlb_mm(mm);
+	ctxp = &srmmu_context_table[mm->context];
+	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) mm->pgd) >> 4))));
+	hypersparc_flush_page_to_ram((unsigned long)ctxp);
 
+	hyper_flush_whole_icache();
 	if(mm == current->mm)
 		srmmu_set_context(mm->context);
 }
@@ -2355,13 +2330,19 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 static void hypersparc_destroy_context(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT && mm->count == 1) {
+		ctxd_t *ctxp;
+
 		/* HyperSparc is copy-back, any data for this
 		 * process in a modified cache line is stale
 		 * and must be written back to main memory now
 		 * else we eat shit later big time.
 		 */
 		flush_cache_mm(mm);
-		ctxd_set(&srmmu_context_table[mm->context], swapper_pg_dir);
+
+		ctxp = &srmmu_context_table[mm->context];
+		srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) swapper_pg_dir) >> 4))));
+		hypersparc_flush_page_to_ram((unsigned long)ctxp);
+
 		flush_tlb_mm(mm);
 		free_context(mm->context);
 		mm->context = NO_CONTEXT;
@@ -3014,9 +2995,7 @@ __initfunc(void ld_mmu_srmmu(void))
         mmu_p2v = srmmu_p2v;
 
 	/* Task struct and kernel stack allocating/freeing. */
-	alloc_kernel_stack = srmmu_alloc_kernel_stack;
 	alloc_task_struct = srmmu_alloc_task_struct;
-	free_kernel_stack = srmmu_free_kernel_stack;
 	free_task_struct = srmmu_free_task_struct;
 
 	quick_kernel_fault = srmmu_quick_kernel_fault;

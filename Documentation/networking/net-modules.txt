@@ -109,6 +109,10 @@ Card/Module List - Configurable Parameters and Default Values
 8390.c:
 	(No public options, several other modules need this one)
 
+a2065.c:
+	Since this is a Zorro board, it supports full autoprobing, even for
+	multiple boards. (m68k/Amiga)
+
 ac3200.c:
 	io = 0		(Checks 0x1000 to 0x8fff in 0x1000 intervals)
 	irq = 0		(Read from config register)
@@ -133,10 +137,23 @@ arcnet.c:
 		       0x310, 0x320, 0x330, 0x340, 0x350, 0x360, 0x370,
 		0x380, 0x390, 0x3A0,			  0x3E0, 0x3F0  )
 
+ariadne.c:
+	Since this is a Zorro board, it supports full autoprobing, even for
+	multiple boards. (m68k/Amiga)
+
 at1700.c:
 	io = 0x260
 	irq = 0
 	(Probes ports: 0x260, 0x280, 0x2A0, 0x240, 0x340, 0x320, 0x380, 0x300)
+
+atari_bionet.c:
+	Supports full autoprobing. (m68k/Atari)
+
+atari_pamsnet.c:
+	Supports full autoprobing. (m68k/Atari)
+
+atarilance.c:
+	Supports full autoprobing. (m68k/Atari)
 
 atp.c: *Not modularized*
 	(Probes ports: 0x378, 0x278, 0x3BC;
@@ -211,6 +228,10 @@ hp100.c:
 	(Does EISA-probing, if on EISA-slot;
 	 On ISA-bus probes all ports from 0x100 thru to 0x3E0
 	 in increments of 0x020)
+
+hydra.c:
+	Since this is a Zorro board, it supports full autoprobing, even for
+	multiple boards. (m68k/Amiga)
 
 ibmtr.c:
 	io = 0xa20, 0xa24 (autoprobed by default)

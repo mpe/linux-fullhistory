@@ -37,6 +37,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 
 /*
  * Initial task structure. Make this a per-architecture thing,
@@ -44,15 +45,16 @@
  * alignment requirements and potentially different initial
  * setup.
  */
-static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
+
 unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
-
 struct mm_struct init_mm = INIT_MM;
-struct task_struct init_task = INIT_TASK;
+
+union task_union init_task_union __attribute__((section("init_task")))
+	 = { task: INIT_TASK };
 
 /*
  * No need to acquire the kernel lock, we're entirely local..
@@ -202,7 +204,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	stack_offset = PAGE_SIZE - sizeof(struct pt_regs);
 	if (!(regs->ps & 8))
 		stack_offset = (PAGE_SIZE-1) & (unsigned long) regs;
-	childregs = (struct pt_regs *) (p->kernel_stack_page + stack_offset);
+	childregs = (struct pt_regs *) (stack_offset + PAGE_SIZE + (unsigned long)p);
 		
 	*childregs = *regs;
 	childregs->r0 = 0;

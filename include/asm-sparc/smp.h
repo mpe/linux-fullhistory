@@ -85,7 +85,7 @@ extern __volatile__ int cpu_number_map[NR_CPUS];
 extern __volatile__ int cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];
 
-extern __inline__ int smp_processor_id(void)
+extern __inline__ int hard_smp_processor_id(void)
 {
 	int cpuid;
 
@@ -95,6 +95,8 @@ extern __inline__ int smp_processor_id(void)
 			     "=&r" (cpuid));
 	return cpuid;
 }
+
+#define smp_processor_id() hard_smp_processor_id()
 
 #endif /* !(__ASSEMBLY__) */
 

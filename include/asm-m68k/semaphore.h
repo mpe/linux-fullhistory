@@ -1,6 +1,7 @@
 #ifndef _M68K_SEMAPHORE_H
 #define _M68K_SEMAPHORE_H
 
+#include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/system.h>
 #include <asm/atomic.h>
@@ -38,6 +39,7 @@ static inline void wake_one_more(struct semaphore * sem)
 
 static inline int waking_non_zero(struct semaphore *sem)
 {
+#ifndef CONFIG_RMW_INSNS
 	unsigned long flags;
 	int ret = 0;
 
@@ -48,6 +50,21 @@ static inline int waking_non_zero(struct semaphore *sem)
 		ret = 1;
 	}
 	restore_flags(flags);
+#else
+	int ret, tmp;
+
+	__asm__ __volatile__
+	  ("1:	movel	%2,%0\n"
+	   "	jeq	3f\n"
+	   "2:	movel	%0,%1\n"
+	   "	subql	#1,%1\n"
+	   "	casl	%0,%1,%2\n"
+	   "	jeq	3f\n"
+	   "	tstl	%0\n"
+	   "	jne	2b\n"
+	   "3:"
+	   : "=d" (ret), "=d" (tmp), "=m" (sem->waking));
+#endif
 	return ret;
 }
 

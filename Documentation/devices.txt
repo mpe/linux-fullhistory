@@ -1,7 +1,7 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: April 7, 1997
+		      Last revised: May 1, 1997
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -18,11 +18,14 @@ tsx-11.mit.edu in the directory /pub/linux/docs/linux-standards/fsstnd.
 
 To have a major number allocated, or a minor number in situations
 where that applies (e.g. busmice), please contact me with the
-appropriate device information.  Also, if you have additional
-information regarding any of the devices listed below, or if I have
-made a mistake, I would greatly appreciate a note.  When sending me
-mail, *please* include the word "device" in the subject so your mail
-won't accidentally get buried!
+appropriate device information.  I *very* much appreciate if you send
+me a device description in the same format as the ones already in this
+file.  Also, if you have additional information regarding any of the
+devices listed below, or if I have made a mistake, I would greatly
+appreciate a note.
+
+NOTE: When sending me mail, *please* include the word "device" in the
+subject so your mail won't accidentally get buried!
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -979,7 +982,22 @@ reply.
 		 33 = /dev/bttv-vbi1	VBI data of second Bt848 card
 		      ...
 
- 82-119		UNALLOCATED
+ 82 char	WiNRADiO communications receiver card
+		  0 = /dev/winradio0	First WiNRADiO card
+		  1 = /dev/winradio1	Second WiNRADiO card
+		      ...
+
+		The driver and documentation may be obtained from
+                http://www.proximity.com.au/~brian/winradio/
+
+ 83 char	Teletext/videotext interfaces
+                  0 = /dev/vtx          Teletext decoder
+                 16 = /dev/vttuner      TV tuner on teletext interface
+
+                Devices for the driver contained in the VideoteXt package.
+                More information on http://home.pages.de/~videotext/
+
+ 84-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

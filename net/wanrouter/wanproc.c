@@ -23,6 +23,7 @@
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
 #include <linux/mm.h>		/* verify_area(), etc. */
 #include <linux/string.h>	/* inline mem*, str* functions */
+#include <linux/init.h>		/* __initfunc et al. */
 #include <asm/segment.h>	/* kernel <-> user copy */
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/uaccess.h>	/* copy_to_user */
@@ -271,7 +272,7 @@ static struct proc_dir_entry proc_router_stat =
  *	Initialize router proc interface.
  */
 
-int wanrouter_proc_init (void)
+__initfunc(int wanrouter_proc_init (void))
 {
 	int err = proc_register(&proc_net, &proc_router);
 

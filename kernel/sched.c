@@ -32,6 +32,7 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -95,7 +96,6 @@ unsigned long volatile jiffies=0;
  *	via the SMP irq return path.
  */
  
-struct task_struct *current_set[NR_CPUS] = {&init_task, };
 struct task_struct *last_task_used_math = NULL;
 
 struct task_struct * task[NR_TASKS] = {&init_task, };
@@ -409,7 +409,7 @@ asmlinkage int sys_pause(void)
 
 #endif
 
-rwlock_t waitqueue_lock;
+rwlock_t waitqueue_lock = RW_LOCK_UNLOCKED;
 
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
@@ -1605,7 +1605,7 @@ void show_state(void)
 	read_unlock(&tasklist_lock);
 }
 
-void sched_init(void)
+__initfunc(void sched_init(void))
 {
 	/*
 	 *	We have to do a little magic to get the first
@@ -1614,17 +1614,7 @@ void sched_init(void)
 	int cpu=hard_smp_processor_id();
 	int nr = NR_TASKS;
 
-#ifndef __SMP__
-	current_set[cpu]=&init_task;
-#else
 	init_task.processor=cpu;
-	/*
-	 * This looks strange, but we don't necessarily know which CPU
-	 * we're booting on yet, so do them all..
-	 */
-	for(cpu = 0; cpu < NR_CPUS; cpu++)
-		current_set[cpu] = &init_task;
-#endif
 
 	/* Init task array free list and pidhash table. */
 	while(--nr > 0)

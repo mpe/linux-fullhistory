@@ -25,6 +25,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/console.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -261,7 +262,7 @@ void unblank_console(void)
  * print any messages that were printed by the kernel before the
  * console driver was initialized.
  */
-void register_console(struct console * console)
+__initfunc(void register_console(struct console * console))
 {
 	int	i,j,len;
 	int	p = log_start;

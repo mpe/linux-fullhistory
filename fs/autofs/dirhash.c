@@ -10,9 +10,43 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/string.h>
-#include <linux/malloc.h>
-#include <linux/auto_fs.h>
+#include "autofs_i.h"
+
+/* Functions for maintenance of expiry queue */
+
+static void autofs_init_usage(struct autofs_dirhash *dh,
+			      struct autofs_dir_ent *ent)
+{
+	ent->exp_next = &dh->expiry_head;
+	ent->exp_prev = dh->expiry_head.exp_prev;
+	dh->expiry_head.exp_prev->exp_next = ent;
+	dh->expiry_head.exp_prev = ent;
+	ent->last_usage = jiffies;
+}
+
+static void autofs_delete_usage(struct autofs_dir_ent *ent)
+{
+	ent->exp_prev->exp_next = ent->exp_next;
+	ent->exp_next->exp_prev = ent->exp_prev;
+}
+
+void autofs_update_usage(struct autofs_dirhash *dh,
+			 struct autofs_dir_ent *ent)
+{
+	autofs_delete_usage(ent);   /* Unlink from current position */
+	autofs_init_usage(dh,ent);  /* Relink at queue tail */
+}
+
+struct autofs_dir_ent *autofs_expire(struct autofs_dirhash *dh,
+				     unsigned long timeout)
+{
+	struct autofs_dir_ent *ent;
+
+	ent = dh->expiry_head.exp_next;
+
+	if ( ent == &(dh->expiry_head) ) return NULL;
+	return (jiffies - ent->last_usage >= timeout) ? ent : NULL;
+}
 
 /* Adapted from the Dragon Book, page 436 */
 /* This particular hashing algorithm requires autofs_hash_t == u32 */
@@ -28,6 +62,8 @@ autofs_hash_t autofs_hash(const char *name, int len)
 
 void autofs_initialize_hash(struct autofs_dirhash *dh) {
 	memset(&dh->h, 0, AUTOFS_HASH_SIZE*sizeof(struct autofs_dir_ent *));
+	dh->expiry_head.exp_next = dh->expiry_head.exp_prev =
+		&dh->expiry_head;
 }
 
 struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *dh, autofs_hash_t hash, const char *name, int len)
@@ -54,6 +90,8 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 	DPRINTK(("autofs_hash_insert: hash = 0x%08x, name = ", ent->hash));
 	autofs_say(ent->name,ent->len);
 
+	autofs_init_usage(dh,ent);
+
 	dhnp = &dh->h[ent->hash % AUTOFS_HASH_SIZE];
 	ent->next = *dhnp;
 	ent->back = dhnp;
@@ -63,6 +101,9 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 void autofs_hash_delete(struct autofs_dir_ent *ent)
 {
 	*(ent->back) = ent->next;
+
+	autofs_delete_usage(ent);
+
 	kfree(ent->name);
 	kfree(ent);
 }
@@ -114,6 +155,8 @@ struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *dh, off_t *
 	return ent;
 }
 
+/* Delete everything.  This is used on filesystem destruction, so we
+   make no attempt to keep the pointers valid */
 void autofs_hash_nuke(struct autofs_dirhash *dh)
 {
 	int i;

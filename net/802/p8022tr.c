@@ -15,6 +15,7 @@
 #include <net/datalink.h>
 #include <linux/mm.h>
 #include <linux/in.h>
+#include <linux/init.h>
 #include <net/p8022tr.h>
 
 #define SNAP_HEADER_LEN	8
@@ -91,7 +92,7 @@ static struct packet_type p8022tr_packet_type =
 EXPORT_SYMBOL(register_8022tr_client);
 EXPORT_SYMBOL(unregister_8022tr_client);
 
-void p8022tr_proto_init(struct net_proto *pro)
+__initfunc(void p8022tr_proto_init(struct net_proto *pro))
 {
 	p8022tr_packet_type.type=htons(ETH_P_TR_802_2);
 	dev_add_pack(&p8022tr_packet_type);

@@ -69,24 +69,16 @@ startup_32:
 	movl $1f,%eax
 	jmp *%eax		/* make sure eip is relocated */
 1:
+	/* Set up the stack pointer */
+	lss stack_start,%esp
 
 #ifdef __SMP__
 	orw  %bx,%bx
 	jz  1f				/* Initial CPU cleans BSS */
-/*
- *	Set up the stack
- */
-        movl $(KERNEL_DS),%eax         /* walken modif */
-	mov %ax,%ss
-	xorl %eax,%eax
-	movw %cx, %ax
-	movl %eax,%esp
-	addl $0xC0000000, %esp		/* shift it to the upper mapping */
 	pushl $0
 	popfl
 	jmp checkCPUtype
 1:
-	lss stack_start,%esp
 #endif __SMP__
 /*
  * Clear BSS first so that there are no surprises...
@@ -307,7 +299,7 @@ rp_sidt:
 	jne rp_sidt
 	ret
 
-stack_start:
+ENTRY(stack_start)
 	.long SYMBOL_NAME(init_task_union)+8192
 	.long KERNEL_DS
 

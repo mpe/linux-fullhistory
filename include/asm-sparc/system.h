@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.58 1997/04/18 05:44:54 davem Exp $ */
+/* $Id: system.h,v 1.60 1997/05/01 02:26:56 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -108,7 +108,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"nop\n\t"									\
 	"nop\n\t"									\
 	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
-	" nop\n\t" : : "r" (&(current_set[smp_processor_id()])), "r" (next),		\
+	" nop\n\t" : : "r" (&(current_set[hard_smp_processor_id()])), "r" (next),	\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
 	  "r" (task_pc)									\
@@ -233,12 +233,8 @@ do {	register unsigned long bits asm("g7");			\
 extern unsigned char global_irq_holder;
 
 #define save_flags(x) \
-do {	int cpuid; \
-	__asm__ __volatile__("rd %%tbr, %0; srl %0, 12, %0; and %0, 3, %0" \
-			     : "=r" (cpuid)); \
-	((x) = ((global_irq_holder == (unsigned char) cpuid) ? 1 : \
-		((getipl() & PSR_PIL) ? 2 : 0))); \
-} while(0)
+do {	((x) = ((global_irq_holder == (unsigned char) smp_processor_id()) ? 1 : \
+		((getipl() & PSR_PIL) ? 2 : 0))); } while(0)
 
 #define restore_flags(flags)						\
 do {	register unsigned long bits asm("g7");				\

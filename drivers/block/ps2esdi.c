@@ -43,6 +43,7 @@
 #include <linux/ps2esdi.h>
 #include <linux/blk.h>
 #include <linux/mca.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -176,7 +177,7 @@ static struct gendisk ps2esdi_gendisk =
 };
 
 /* initialization routine called by ll_rw_blk.c   */
-int ps2esdi_init(void)
+__initfunc(int ps2esdi_init(void))
 {
 
 	/* register the device - pass the name, major number and operations
@@ -197,7 +198,7 @@ int ps2esdi_init(void)
 }				/* ps2esdi_init */
 
 /* handles boot time command line parameters */
-void tp720_setup(char *str, int *ints)
+__initfunc(void tp720_setup(char *str, int *ints))
 {
 	/* no params, just sets the tp720esdi flag if it exists */
 
@@ -205,7 +206,7 @@ void tp720_setup(char *str, int *ints)
 	tp720esdi = 1;
 }
 
-void ed_setup(char *str, int *ints)
+__initfunc(void ed_setup(char *str, int *ints))
 {
 	int hdind = 0;
 
@@ -252,10 +253,9 @@ static int ps2esdi_getinfo(char *buf, int slot, void *d)
 }
 
 /* ps2 esdi specific initialization - called thru the gendisk chain */
-static void ps2esdi_geninit(struct gendisk *ignored)
+__initfunc(static void ps2esdi_geninit(struct gendisk *ignored))
 {
 	/*
-
 	   The first part contains the initialization code
 	   for the ESDI disk subsystem.  All we really do
 	   is search for the POS registers of the controller
@@ -386,7 +386,7 @@ static void ps2esdi_geninit(struct gendisk *ignored)
 }				/* ps2esdi_geninit */
 
 
-static void ps2esdi_get_device_cfg(void)
+__initfunc(static void ps2esdi_get_device_cfg(void))
 {
 	u_short cmd_blk[TYPE_0_CMD_BLK_LENGTH];
 

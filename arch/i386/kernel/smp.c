@@ -122,7 +122,6 @@ struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters
 static unsigned int num_processors = 1;			/* Internal processor count				*/
 static unsigned long io_apic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
-static unsigned char *kstack_base,*kstack_end;		/* Kernel stack list pointers 				*/
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
 int apic_version[NR_CPUS];				/* APIC version number					*/
 static volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
@@ -535,6 +534,7 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 
 extern unsigned char trampoline_data [];
 extern unsigned char trampoline_end  [];
+static unsigned char *trampoline_base;
 
 /*
  *	Currently trivial. Write the real->protected mode
@@ -542,33 +542,22 @@ extern unsigned char trampoline_end  [];
  *	has made sure it's suitably aligned.
  */
 
-__initfunc(static void install_trampoline(unsigned char *mp))
+__initfunc(static unsigned long setup_trampoline(void))
 {
-	memcpy(mp, trampoline_data, trampoline_end - trampoline_data);
+	memcpy(trampoline_base, trampoline_data, trampoline_end - trampoline_data);
+	return virt_to_phys(trampoline_base);
 }
 
 /*
- *	We are called very early to get the low memory for the trampoline/kernel stacks
- *	This has to be done by mm/init.c to parcel us out nice low memory. We allocate
- *	the kernel stacks at 4K, 8K, 12K... currently (0-03FF is preserved for SMM and
- *	other things).
+ *	We are called very early to get the low memory for the
+ *	SMP bootup trampoline page.
  */
-
 __initfunc(unsigned long smp_alloc_memory(unsigned long mem_base))
 {
-	int size=(num_processors-1)*PAGE_SIZE;		/* Number of stacks needed */
-
-	/*
-	 *	Our stacks have to be below the 1Mb line, and mem_base on entry
-	 *	is 4K aligned.
-	 */
-	
-	if(virt_to_phys((void *)(mem_base+size))>=0x9F000)
-		panic("smp_alloc_memory: Insufficient low memory for kernel stacks 0x%lx.\n", mem_base);
-	kstack_base=(void *)mem_base;
-	mem_base+=size;
-	kstack_end=(void *)mem_base;
-	return mem_base;
+	if (virt_to_phys((void *)mem_base) >= 0x9F000)
+		panic("smp_alloc_memory: Insufficient low memory for kernel trampoline 0x%lx.\n", mem_base);
+	trampoline_base = (void *)mem_base;
+	return mem_base + PAGE_SIZE;
 }
 
 /*
@@ -663,8 +652,6 @@ extern int cpu_idle(void * unused);
  */
 __initfunc(int start_secondary(void *unused))
 {
-	trap_init();
-	init_IRQ();
 	smp_callin();
 	cpu_idle(NULL);
 }
@@ -672,7 +659,7 @@ __initfunc(int start_secondary(void *unused))
 /*
  * Everything has been set up for the secondary
  * CPU's - they just need to reload everything
- * from the task structude
+ * from the task structure
  */
 __initfunc(void initialize_secondary(void))
 {
@@ -680,8 +667,9 @@ __initfunc(void initialize_secondary(void))
 
 	/*
 	 * We don't actually need to load the full TSS,
-	 * just the stack pointer and the eip.
+	 * basically just the stack pointer and the eip.
 	 */
+	asm volatile("lldt %%ax": :"a" (p->ldt));
 	asm volatile("ltr %%ax": :"a" (p->tr));
 	asm volatile(
 		"movl %0,%%esp\n\t"
@@ -690,14 +678,19 @@ __initfunc(void initialize_secondary(void))
 		:"r" (p->esp),"r" (p->eip));
 }
 
+extern struct {
+	void * esp;
+	unsigned short ss;
+} stack_start;
+
 __initfunc(static void do_boot_cpu(int i))
 {
 	unsigned long cfg;
 	pgd_t maincfg;
-	void *stack;
 	struct task_struct *idle;
 	unsigned long send_status, accept_status;
 	int timeout, num_starts, j;
+	unsigned long start_eip;
 
 	/*
 	 *	We need an idle process for each processor.
@@ -714,11 +707,11 @@ __initfunc(static void do_boot_cpu(int i))
 	cpu_logical_map[cpucount] = i;
 	cpu_number_map[i] = cpucount;
 
-	/* This MUST be in the low 1MB range. That's ok, we're cool */
-	stack = (void *) (4096+(char *)idle);
-	install_trampoline(stack);
+	/* start_eip had better be page-aligned! */
+	start_eip = setup_trampoline();
 
-	printk("Booting processor %d stack %p: ",i,stack);			/* So we set what's up   */
+	printk("Booting processor %d eip %lx: ", i, start_eip);	/* So we see what's up   */
+	stack_start.esp = (void *) (1024 + PAGE_SIZE + (char *)idle);
 
 	/*
 	 *	This grunge runs the startup process for
@@ -730,9 +723,9 @@ __initfunc(static void do_boot_cpu(int i))
 	CMOS_WRITE(0xa, 0xf);
 	local_flush_tlb();
 	SMP_PRINTK(("1.\n"));
-	*((volatile unsigned short *) phys_to_virt(0x469)) = ((unsigned long)stack)>>4;
+	*((volatile unsigned short *) phys_to_virt(0x469)) = start_eip >> 4;
 	SMP_PRINTK(("2.\n"));
-	*((volatile unsigned short *) phys_to_virt(0x467)) = 0;
+	*((volatile unsigned short *) phys_to_virt(0x467)) = start_eip & 0xf;
 	SMP_PRINTK(("3.\n"));
 
 	maincfg=swapper_pg_dir[0];
@@ -821,7 +814,7 @@ __initfunc(static void do_boot_cpu(int i))
 		cfg&=~0xCDFFF;								/* Clear bits 		*/
 		cfg |= (APIC_DEST_FIELD
 			| APIC_DEST_DM_STARTUP
-			| (virt_to_phys(stack) >> 12));					/* Boot on the stack 	*/
+			| (start_eip >> 12));						/* Boot on the stack 	*/
 		SMP_PRINTK(("Before start apic_write.\n"));
 		apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
 
@@ -1602,11 +1595,11 @@ __initfunc(int calibrate_APIC_clock (void))
 			 calibration_result));
 
 
-	printk("\n..... CPU clock speed is %ld.%ld MHz.\n",
+	printk("\n..... CPU clock speed is %ld.%04ld MHz.\n",
 		((long)(t2-t1)/LOOPS)/(1000000/HZ),
 		((long)(t2-t1)/LOOPS)%(1000000/HZ)  );
 
-	printk("..... APIC bus clock speed is %ld.%ld MHz.\n",
+	printk("..... APIC bus clock speed is %ld.%04ld MHz.\n",
 		calibration_result/(1000000/HZ),
 		calibration_result%(1000000/HZ)  );
 #undef LOOPS

@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.33 1997/03/04 16:26:35 jj Exp $
+/* $Id: wof.S,v 1.36 1997/05/01 08:53:35 davem Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -234,15 +234,20 @@ spwin_user_stack_is_bolixed:
 spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 		st	%twin_tmp, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
 
-	/* Jump onto kernel stack for this process... */
-	ld	[%curptr + AOFF_task_saved_kernel_stack], %sp
+	mov	1, %sp
+	sll	%sp, (PAGE_SHIFT + 1), %sp
+	sub	%sp, (TRACEREG_SZ + REGWIN_SZ), %sp
+	add	%curptr, %sp, %sp
 
 	/* Restore the saved globals and build a pt_regs frame. */
 	mov	%saved_g5, %g5
-	mov	%g6, %l4
 	mov	%saved_g6, %g6
 	STORE_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
-	mov	%l4, %g6
+
+	mov	1, %g6
+	sll	%g6, (PAGE_SHIFT + 1), %g6
+	sub	%g6, (TRACEREG_SZ + REGWIN_SZ), %g6
+	sub	%sp, %g6, %g6
 
 	/* Turn on traps and call c-code to deal with it. */
 	wr	%t_psr, PSR_ET, %psr

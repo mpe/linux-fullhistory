@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include "consolemap.h"
 
@@ -483,8 +484,8 @@ conv_uni_to_pc(long ucs)
  * initialized.  It must be possible to call kmalloc(..., GFP_KERNEL)
  * from this function, hence the call from sys_setup.
  */
-void
-console_map_init(void)
+__initfunc(void
+console_map_init(void))
 {
   con_set_default_unimap();
 }

@@ -138,6 +138,7 @@ History:
 #include <linux/ioport.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include <linux/ucdrom.h>
 
@@ -1186,7 +1187,7 @@ void cleanup(int level)
    check_region, 15 bits of one port and 6 of another make things
    likely enough to accept the region on the first hit...
  */
-int probe_base_port(int base)
+__initfunc(int probe_base_port(int base))
 {
   int b=0x300, e=0x370;		/* this is the range of start addresses */
   volatile int fool, i;
@@ -1206,7 +1207,7 @@ int probe_base_port(int base)
 
 #if !defined(MODULE) || defined(AUTO_PROBE_MODULE)
 /* Probe for irq# nr. If nr==0, probe for all possible irq's. */
-int probe_irq(int nr) {
+__initfunc(int probe_irq(int nr)) {
   int irqs, irq;
   outw(dc_normal | READ_AHEAD, r_data_control);	/* disable irq-generation */
   sti(); 
@@ -1220,7 +1221,7 @@ int probe_irq(int nr) {
 }
 #endif
 
-int cm206_init(void)
+__initfunc(int cm206_init(void))
 {
   uch e=0;
   long int size=sizeof(struct cm206_struct);
@@ -1303,7 +1304,7 @@ int cm206_init(void)
 
 static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
 
-void parse_options(void) 
+__initfunc(void parse_options(void))
 {
   int i;
   for (i=0; i<2; i++) {
@@ -1337,7 +1338,7 @@ void cleanup_module(void)
 
 /* This setup function accepts either `auto' or numbers in the range
  * 3--11 (for irq) or 0x300--0x370 (for base port) or both. */
-void cm206_setup(char *s, int *p)
+__initfunc(void cm206_setup(char *s, int *p))
 {
   int i;
   if (!strcmp(s, "auto")) auto_probe=1;

@@ -120,6 +120,7 @@
 #include <linux/genhd.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #define REALLY_SLOW_IO
 #include <asm/system.h>
@@ -1484,8 +1485,8 @@ static struct file_operations cdu_fops =
 /*
  * Initialize the driver.
  */
-int
-sony535_init(void)
+__initfunc(int
+sony535_init(void))
 {
 	struct s535_sony_drive_config drive_config;
 	Byte cmd_buff[3];
@@ -1649,8 +1650,8 @@ sony535_init(void)
  *
  * the address value has to be the existing CDROM port address.
  */
-void
-sonycd535_setup(char *strings, int *ints)
+__initfunc(void
+sonycd535_setup(char *strings, int *ints))
 {
 	/* if IRQ change and default io base desired,
 	 * then call with io base of 0

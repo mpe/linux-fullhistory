@@ -6,6 +6,8 @@
 #include <linux/mm.h>
 #include <linux/user.h>
 #include <linux/elfcore.h>
+#include <linux/in6.h>
+#include <linux/interrupt.h>
 
 #include <asm/setup.h>
 #include <asm/machdep.h>
@@ -14,6 +16,7 @@
 #include <asm/semaphore.h>
 #include <asm/checksum.h>
 #include <asm/hardirq.h>
+#include <asm/softirq.h>
 
 asmlinkage long long __ashrdi3 (long long, int);
 extern char m68k_debug_device[];
@@ -40,6 +43,7 @@ EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(__m68k_bh_counter);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);

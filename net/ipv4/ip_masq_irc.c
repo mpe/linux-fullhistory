@@ -29,6 +29,7 @@
 #include <linux/skbuff.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/init.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
 #include <net/ip_masq.h>
@@ -238,7 +239,7 @@ struct ip_masq_app ip_masq_irc = {
  * 	ip_masq_irc initialization
  */
 
-int ip_masq_irc_init(void)
+__initfunc(int ip_masq_irc_init(void))
 {
         return register_ip_masq_app(&ip_masq_irc, IPPROTO_TCP, 6667);
 }

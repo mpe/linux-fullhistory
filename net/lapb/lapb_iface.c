@@ -39,6 +39,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 #include <net/lapb.h>
 
 static lapb_cb *volatile lapb_list = NULL;
@@ -397,7 +398,7 @@ EXPORT_SYMBOL(lapb_disconnect_request);
 EXPORT_SYMBOL(lapb_data_request);
 EXPORT_SYMBOL(lapb_data_received);
 
-void lapb_proto_init(struct net_proto *pro)
+__initfunc(void lapb_proto_init(struct net_proto *pro))
 {
 	printk(KERN_INFO "LAPB for Linux. Version 0.01 for Linux NET3.038 (Linux 2.1)\n");
 }

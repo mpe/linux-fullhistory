@@ -1,4 +1,4 @@
-/* $Id: segment.c,v 1.3 1996/09/19 20:27:28 davem Exp $
+/* $Id: segment.c,v 1.4 1997/05/01 01:41:33 davem Exp $
  * segment.c:  Prom routine to map segments in other contexts before
  *             a standalone is completely mapped.  This is for sun4 and
  *             sun4c architectures only.
@@ -22,7 +22,7 @@ prom_putsegment(int ctx, unsigned long vaddr, int segment)
 	save_flags(flags); cli();
 	(*(romvec->pv_setctxt))(ctx, (char *) vaddr, segment);
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 	return;

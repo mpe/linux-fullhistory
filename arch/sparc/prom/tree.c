@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.16 1997/03/19 14:53:16 davem Exp $
+/* $Id: tree.c,v 1.17 1997/05/01 01:41:33 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -18,7 +18,7 @@
 
 /* Macro to restore "current" to the g6 register. */
 #define restore_current() __asm__ __volatile__("ld [%0], %%g6\n\t" : : \
-			  "r" (&current_set[smp_processor_id()]) : \
+			  "r" (&current_set[hard_smp_processor_id()]) : \
 			  "memory")
 
 static char promlib_buf[128];

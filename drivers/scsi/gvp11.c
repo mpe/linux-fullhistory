@@ -3,6 +3,7 @@
 #include <linux/blk.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/page.h>
@@ -198,7 +199,7 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
 
 static int num_gvp11 = 0;
 
-int gvp11_detect(Scsi_Host_Template *tpnt)
+__initfunc(int gvp11_detect(Scsi_Host_Template *tpnt))
 {
     static unsigned char called = 0;
     struct Scsi_Host *instance;

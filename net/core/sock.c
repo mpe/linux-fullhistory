@@ -118,6 +118,12 @@
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
+/* Run time adjustable parameters. */
+__u32 sysctl_wmem_max = SK_WMEM_MAX;
+__u32 sysctl_rmem_max = SK_RMEM_MAX;
+__u32 sysctl_wmem_default = SK_WMEM_MAX;
+__u32 sysctl_rmem_default = SK_RMEM_MAX;
+
 /*
  *	This is meant for all protocols to use and covers goings on
  *	at the socket level. Everything here is generic.
@@ -146,13 +152,8 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	}
 #endif	
 		
-  	if(optlen<sizeof(int)) {
-#if 1 /* DaveM Debugging */
-		printk("sock_setsockopt: optlen is %d, going on anyways.\n", optlen);
-#else
+  	if(optlen<sizeof(int))
   		return(-EINVAL);
-#endif
-	}
   	
 	err = get_user(val, (int *)optval);
 	if (err)
@@ -189,15 +190,15 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			 *	is best
 			 */
 			 
-			if(val > SK_WMEM_MAX*2)
+			/* printk(KERN_DEBUG "setting SO_SNDBUF %d\n", val); */
+			if (val > sysctl_wmem_max)
 				return -EINVAL;
-			/*
-			 *	Once this is all 32bit values we can
-			 *	drop this check.
+
+			/* FIXME: the tcp code should be made to work even
+			 * with small sndbuf values.
 			 */
-			if(val > 65535)
-				return -EINVAL;
-			sk->sndbuf = max(val,2048);
+			sk->sndbuf = max(val*2,2048);
+
 			/*
 			 *	Wake up sending tasks if we
 			 *	upped the value.
@@ -206,12 +207,13 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_RCVBUF:
-			if(val > SK_RMEM_MAX*2)
+			/* printk(KERN_DEBUG "setting SO_RCVBUF %d\n", val); */
+
+			if (val > sysctl_rmem_max)
 				return -EINVAL;
-			/* Can go soon: FIXME */
-			if(val > 65535)
-				return -EINVAL;
-			sk->rcvbuf = max(val,256);
+
+			/* FIXME: is this lower bound the right one? */
+			sk->rcvbuf = max(val*2,256);
 			break;
 
 		case SO_KEEPALIVE:
@@ -533,15 +535,29 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 }
 
 
+/* FIXME: this is insane. We are trying suppose to be controlling how
+ * how much space we have for data bytes, not packet headers.
+ * This really points out that we need a better system for doing the
+ * receive buffer. -- erics
+ * WARNING: This is currently ONLY used in tcp. If you need it else where
+ * this will probably not be what you want. Possibly these two routines
+ * should move over to the ipv4 directory.
+ */
 unsigned long sock_rspace(struct sock *sk)
 {
 	int amt;
 
-	if (sk != NULL) 
-	{
-		if (atomic_read(&sk->rmem_alloc) >= sk->rcvbuf-2*MIN_WINDOW) 
-			return(0);
-		amt = min((sk->rcvbuf-atomic_read(&sk->rmem_alloc))/2-MIN_WINDOW, MAX_WINDOW);
+	if (sk != NULL) {
+		/* This used to have some bizzare complications that
+		 * to attempt to reserve some amount of space. This doesn't
+	 	 * make sense, since the number returned here does not
+		 * actually reflect allocated space, but rather the amount
+		 * of space we committed to. We gamble that we won't
+		 * run out of memory, and returning a smaller number does
+		 * not change the gamble. If we loose the gamble tcp still
+		 * works, it may just slow down for retransmissions.
+		 */
+		amt = sk->rcvbuf - atomic_read(&sk->rmem_alloc);
 		if (amt < 0) 
 			return(0);
 		return(amt);
@@ -550,10 +566,10 @@ unsigned long sock_rspace(struct sock *sk)
 }
 
 
+/* FIXME: this is also insane. See above comment */
 unsigned long sock_wspace(struct sock *sk)
 {
-	if (sk != NULL) 
-	{
+	if (sk != NULL) {
 		if (sk->shutdown & SEND_SHUTDOWN)
 			return(0);
 		if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf)
@@ -868,8 +884,8 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	init_timer(&sk->timer);
 	
 	sk->allocation	=	GFP_KERNEL;
-	sk->rcvbuf	=	SK_RMEM_MAX;
-	sk->sndbuf	=	SK_WMEM_MAX;
+	sk->rcvbuf	=	sysctl_rmem_default*2;
+	sk->sndbuf	=	sysctl_wmem_default*2;
 	sk->priority	=	SOPRI_NORMAL;
 	sk->state 	= 	TCP_CLOSE;
 	sk->zapped	=	1;

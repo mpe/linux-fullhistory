@@ -19,6 +19,7 @@
 #include <net/psnap.h>
 #include <linux/mm.h>
 #include <linux/in.h>
+#include <linux/init.h>
 
 static struct datalink_proto *snap_list = NULL;
 static struct datalink_proto *snap_dl = NULL;		/* 802.2 DL for SNAP */
@@ -87,7 +88,7 @@ static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb,
 EXPORT_SYMBOL(register_snap_client);
 EXPORT_SYMBOL(unregister_snap_client);
 
-void snap_proto_init(struct net_proto *pro)
+__initfunc(void snap_proto_init(struct net_proto *pro))
 {
 	snap_dl=register_8022_client(0xAA, snap_rcv);
 	if(snap_dl==NULL)

@@ -21,9 +21,9 @@
 #include <linux/tty.h>
 #include <linux/delay.h>
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
+#include <linux/ioport.h>
 
 #ifdef CONFIG_RTC
-#include <linux/ioport.h>
 #include <linux/timex.h>
 #endif
 

@@ -22,6 +22,7 @@
 #include <linux/kd.h>
 #include <linux/random.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
@@ -295,7 +296,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	}
 }
 
-int amiga_keyb_init(void)
+__initfunc(int amiga_keyb_init(void))
 {
     if (!AMIGAHW_PRESENT(AMI_KEYBOARD))
         return -EIO;

@@ -69,6 +69,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/route.h>
@@ -1379,7 +1380,7 @@ void ip_rt_multicast_event(struct device *dev)
 	rt_cache_flush(0);
 }
 
-void ip_rt_init()
+__initfunc(void ip_rt_init(void))
 {
 	ip_fib_init();
 

@@ -10,7 +10,6 @@
 	 * %eax contains callers PC and %edx holds this cpu ID.
 	 */
 ENTRY(__lock_kernel)
-	pushl	%eax		! return address
 1:
 	lock
 	btsl	$0, SYMBOL_NAME(kernel_flag)
@@ -21,8 +20,10 @@ ENTRY(__lock_kernel)
 	lock
 	btrl	%dl, SYMBOL_NAME(smp_invalidate_needed)
 	jnc	0f
+	pushl	%eax
 	movl	%cr3, %eax
 	movl	%eax, %cr3
+	popl	%eax
 0:
 	btl	$0, SYMBOL_NAME(kernel_flag)
 	jc	2b

@@ -44,9 +44,6 @@ extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
 
 #define CR0_NE 32
 
-/* This contains the irq mask for both irq controllers */
-static unsigned long cached_irq_mask = 0xffff;
-
 unsigned int local_irq_count[NR_CPUS];
 #ifdef __SMP__
 atomic_t __intel_bh_counter;
@@ -58,32 +55,64 @@ int __intel_bh_counter;
 static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
 #endif
 
-static inline void ack_irq(int irq_nr)
+/*
+ * This contains the irq mask for both irq controllers
+ */
+static unsigned int cached_irq_mask = 0xffff;
+
+#define cached_21	(((char *)(&cached_irq_mask))[0])
+#define cached_A1	(((char *)(&cached_irq_mask))[1])
+
+spinlock_t irq_controller_lock;
+
+/*
+ * This is always called from an interrupt context
+ * with local interrupts disabled. Don't worry about
+ * irq-safe locks.
+ *
+ * Note that we always ack the primary irq controller,
+ * even if the interrupt came from the secondary, as
+ * the primary will still have routed it. Oh, the joys
+ * of PC hardware.
+ */
+static inline void mask_and_ack_irq(int irq_nr)
 {
+	spin_lock(&irq_controller_lock);
+	cached_irq_mask |= 1 << irq_nr;
 	if (irq_nr & 8) {
+		inb(0xA1);	/* DUMMY */
+		outb(cached_A1,0xA1);
 		outb(0x20,0xA0);
+	} else {
+		inb(0x21);	/* DUMMY */
+		outb(cached_21,0x21);
 	}
 	outb(0x20,0x20);
+	spin_unlock(&irq_controller_lock);
 }
 
 static inline void set_irq_mask(int irq_nr)
 {
 	if (irq_nr & 8) {
-		outb(cached_irq_mask>>8,0xA1);
+		outb(cached_A1,0xA1);
 	} else {
-		outb(cached_irq_mask,0x21);
+		outb(cached_21,0x21);
 	}
-}		
+}
 
+/*
+ * These have to be protected by the spinlock
+ * before being called.
+ */
 static inline void mask_irq(unsigned int irq_nr)
 {
-	set_bit(irq_nr, &cached_irq_mask);
+	cached_irq_mask |= 1 << irq_nr;
 	set_irq_mask(irq_nr);
 }
 
 static inline void unmask_irq(unsigned int irq_nr)
 {
-	clear_bit(irq_nr, &cached_irq_mask);
+	cached_irq_mask &= ~(1 << irq_nr);
 	set_irq_mask(irq_nr);
 }
 
@@ -91,20 +120,19 @@ void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&irq_controller_lock, flags);
 	mask_irq(irq_nr);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
 	synchronize_irq();
-	restore_flags(flags);
 }
 
 void enable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+
+	spin_lock_irqsave(&irq_controller_lock, flags);
 	unmask_irq(irq_nr);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
 }
 
 /*
@@ -511,11 +539,19 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 {
 	int irq = regs.orig_eax & 0xff;
 	struct irqaction * action;
-	int status, cpu = smp_processor_id();
+	int status, cpu;
 
+	/* 
+	 * mask and ack quickly, we don't want the irq controller
+	 * thinking we're snobs just because some other CPU has
+	 * disabled global interrupts (we have already done the
+	 * INT_ACK cycles, it's too late to try to pretend to the
+	 * controller that we aren't taking the interrupt).
+	 */
+	mask_and_ack_irq(irq);
+
+	cpu = smp_processor_id();
 	irq_enter(cpu, irq);
-	mask_irq(irq);
-	ack_irq(irq);
 	kstat.interrupts[irq]++;
 
 	/* Return with this interrupt masked if no action */
@@ -531,7 +567,9 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 			add_interrupt_randomness(irq);
 
 		__cli();
+		spin_lock(&irq_controller_lock);
 		unmask_irq(irq);
+		spin_unlock(&irq_controller_lock);
 	}
 
 	irq_exit(cpu, irq);
@@ -575,8 +613,9 @@ int setup_x86_irq(int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
-		set_intr_gate(0x20+irq,interrupt[irq]);
+		spin_lock(&irq_controller_lock);
 		unmask_irq(irq);
+		spin_unlock(&irq_controller_lock);
 	}
 	restore_flags(flags);
 	return 0;
@@ -678,10 +717,6 @@ int probe_irq_off (unsigned long irqs)
 __initfunc(void init_IRQ(void))
 {
 	int i;
-	static unsigned char smptrap=0;
-	if(smptrap)
-		return;
-	smptrap=1;
 
 	/* set the clock to 100 Hz */
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */

@@ -56,6 +56,7 @@ static const char *version =
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -70,7 +71,7 @@ static const char* cardname = "netcard";
 /* First, a few definitions that the brave might change. */
 
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int netcard_portlist[] =
+static unsigned int netcard_portlist[] __initdata =
    { 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
@@ -126,8 +127,8 @@ extern void 	chipset_init(struct device *dev, int startp);
 struct netdev_entry netcard_drv =
 {cardname, netcard_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
-int
-netcard_probe(struct device *dev)
+__initfunc(int
+netcard_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -154,7 +155,7 @@ netcard_probe(struct device *dev)
  * probes on the ISA bus. A good device probes avoids doing writes, and
  * verifies that the correct device exists and functions.
  */
-static int netcard_probe1(struct device *dev, int ioaddr)
+__initfunc(static int netcard_probe1(struct device *dev, int ioaddr))
 {
 	static unsigned version_printed = 0;
 	int i;

@@ -10,6 +10,7 @@
 #include <linux/skbuff.h>
 #include <linux/socket.h>
 #include <linux/netdevice.h>
+#include <linux/init.h>
 #include <net/x25.h>
 
 static int min_timer[] = {1   * X25_SLOWHZ};
@@ -46,7 +47,7 @@ static ctl_table x25_root_table[] = {
 	{0}
 };
 
-void x25_register_sysctl(void)
+__initfunc(void x25_register_sysctl(void))
 {
 	x25_table_header = register_sysctl_table(x25_root_table, 1);
 }

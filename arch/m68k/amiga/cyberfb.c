@@ -29,12 +29,13 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/zorro.h>
+#include <linux/fb.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>
-#include <linux/zorro.h>
 #include <asm/pgtable.h>
-#include <linux/fb.h>
 #include "s3blit.h"
 
 
@@ -1157,7 +1158,7 @@ void Cyber_video_setup(char *options, int *ints)
     *    Initialization
     */
 
-struct fb_info *Cyber_fb_init(long *mem_start)
+__initfunc(struct fb_info *Cyber_fb_init(long *mem_start))
 {
    int err;
    struct Cyber_fb_par par;

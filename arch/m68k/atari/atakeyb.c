@@ -22,6 +22,7 @@
 #include <linux/timer.h>
 #include <linux/kd.h>
 #include <linux/random.h>
+#include <linux/init.h>
 
 #include <asm/atariints.h>
 #include <asm/atarihw.h>
@@ -804,7 +805,7 @@ void atari_kbd_leds (unsigned int leds)
  * Martin Rogge, 20 Aug 1995
  */
  
-int atari_keyb_init(void)
+__initfunc(int atari_keyb_init(void))
 {
     /* setup key map */
     key_maps[0]  = ataplain_map;

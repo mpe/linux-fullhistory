@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.6 1997/04/14 05:38:33 davem Exp $
+/* $Id: trampoline.S,v 1.9 1997/05/01 08:53:34 davem Exp $
  * trampoline.S: SMP cpu boot-up trampoline code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #include <asm/cprefix.h>
 #include <asm/head.h>
 #include <asm/psr.h>
+#include <asm/page.h>
 #include <asm/asi.h>
 #include <asm/ptrace.h>
 #include <asm/vaddrs.h>
@@ -25,27 +26,18 @@
 C_LABEL(sparc_cpu_startup):
 cpu1_startup:
 	sethi	%hi(C_LABEL(trapbase_cpu1)), %g3
-	or	%g3, %lo(C_LABEL(trapbase_cpu1)), %g3
-	sethi	%hi(C_LABEL(cpu1_stack)), %g2
-	or	%g2, %lo(C_LABEL(cpu1_stack)), %g2
 	b	1f
-	 nop	
+	 or	%g3, %lo(C_LABEL(trapbase_cpu1)), %g3
 
 cpu2_startup:
 	sethi	%hi(C_LABEL(trapbase_cpu2)), %g3
-	or	%g3, %lo(C_LABEL(trapbase_cpu2)), %g3
-	sethi	%hi(C_LABEL(cpu2_stack)), %g2
-	or	%g2, %lo(C_LABEL(cpu2_stack)), %g2
 	b	1f
-	 nop	
+	 or	%g3, %lo(C_LABEL(trapbase_cpu2)), %g3
 
 cpu3_startup:
 	sethi	%hi(C_LABEL(trapbase_cpu3)), %g3
-	or	%g3, %lo(C_LABEL(trapbase_cpu3)), %g3
-	sethi	%hi(C_LABEL(cpu3_stack)), %g2
-	or	%g2, %lo(C_LABEL(cpu3_stack)), %g2
 	b	1f
-	 nop	
+	 or	%g3, %lo(C_LABEL(trapbase_cpu3)), %g3
 
 1:
 	/* Set up a sane %psr -- PIL<0xf> S<0x1> PS<0x1> CWP<0x0> */
@@ -62,14 +54,16 @@ cpu3_startup:
 	wr	%g3, 0x0, %tbr
 	WRITE_PAUSE
 
-	/* Give ourselves a stack. */
-	set	0x2000, %g5
-	add	%g2, %g5, %g2		! end of stack
-	sub	%g2, REGWIN_SZ, %sp
-	mov	0, %fp
+	/* Give ourselves a stack and curptr. */
+	set	C_LABEL(current_set), %g5
+	srl	%g3, 10, %g4
+	and	%g4, 0xc, %g4
+	ld	[%g5 + %g4], %g6
 
-	/* Set up curptr. */
-	set	C_LABEL(init_task), %g6
+	mov	1, %sp
+	sll	%sp, (PAGE_SHIFT + 1), %sp
+	sub	%sp, REGWIN_SZ, %sp
+	add	%g6, %sp, %sp
 
 	/* Turn on traps (PSR_ET). */
 	rd	%psr, %g1

@@ -56,6 +56,7 @@
 #include <asm/bitops.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 #include "sm.h"
 
 /* --------------------------------------------------------------------- */
@@ -662,10 +663,7 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-#ifdef MODULE
-static
-#endif /* MODULE */
-int sm_init(void)
+__initfunc(int sm_init(void))
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -800,7 +798,7 @@ void cleanup_module(void)
  * modem: afsk1200, fsk9600
  */
 
-void sm_setup(char *str, int *ints)
+__initfunc(void sm_setup(char *str, int *ints))
 {
 	int i;
 

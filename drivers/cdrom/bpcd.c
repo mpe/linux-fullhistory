@@ -113,6 +113,7 @@
 #include <linux/delay.h>
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -201,7 +202,7 @@ static struct file_operations bp_fops = {
    nybble value.  The following function initialises the table.
 */
 
-static	void init_nyb_map( void )
+__initfunc(static void init_nyb_map( void ))
 
 {	int	i, j;
 
@@ -212,7 +213,7 @@ static	void init_nyb_map( void )
 	}
 }
 
-int bpcd_init (void)	/* preliminary initialisation */
+__initfunc(int bpcd_init (void))	/* preliminary initialisation */
 
 {	init_nyb_map();
 
@@ -327,7 +328,7 @@ void	cleanup_module(void)
    syntax:	bpcd=base[,nybble[,rep]]
 */
 
-void    bpcd_setup(char *str, int *ints)
+__initfunc(void bpcd_setup(char *str, int *ints))
 
 {       if (ints[0] > 0) bp_base = ints[1];
         if (ints[0] > 1) bp_nybble = ints[2];
@@ -425,7 +426,7 @@ static void read_data( char * buf, int len )
 	if (bp_mode == 2) { t2(1); t2(0x20); }
 }
 
-static int probe( int id )
+__initfunc(static int probe( int id ))
 
 {	int l, h, t;
 	int r = -1;
@@ -588,7 +589,7 @@ static void bp_eject( void)
 	bp_atapi(ej_cmd,0,"eject");
 }
 
-static int bp_reset( void )
+__initfunc(static int bp_reset( void ))
 
 /* the ATAPI standard actually specifies the contents of all 7 registers
    after a reset, but the specification is ambiguous concerning the last
@@ -615,7 +616,7 @@ static int bp_reset( void )
 	return flg-1;	
 }
 
-static int bp_identify( char * id )
+__initfunc(static int bp_identify( char * id ))
 
 {	int k;
 	char   id_cmd[12] = {0x12,0,0,0,36,0,0,0,0,0,0,0};
@@ -627,7 +628,7 @@ static int bp_identify( char * id )
 	return 0;
 }
 
-static int bp_port_check( void ) 	/* check for 8-bit port */
+__initfunc(static int bp_port_check( void )) 	/* check for 8-bit port */
 
 {	int	r;
 
@@ -640,7 +641,7 @@ static int bp_port_check( void ) 	/* check for 8-bit port */
 	return 0;
 }
 
-static int bp_locate( void )
+__initfunc(static int bp_locate( void ))
 
 {	int	k;
 
@@ -652,7 +653,7 @@ static int bp_locate( void )
 	return -1;
 }
 
-static int bp_do_detect( int autop )
+__initfunc(static int bp_do_detect( int autop ))
 
 {	char   id[18];
 
@@ -705,7 +706,7 @@ static int bp_do_detect( int autop )
    add it here ....
 */
 
-static int bp_detect( void )
+__initfunc(static int bp_detect( void ))
 
 {	if (bp_base) return bp_do_detect(0);
 	if (!bp_do_detect(0x378)) return 0;

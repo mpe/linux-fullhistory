@@ -91,6 +91,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/firewall.h>
+#include <linux/init.h>
 
 #ifdef MODULE
 static void ipx_proto_finito(void);
@@ -2434,7 +2435,7 @@ ipx_proto_init(struct net_proto *pro)
  * sockets be closed from user space.
  */
 
-static void ipx_proto_finito(void)
+__initfunc(static void ipx_proto_finito(void))
 {	ipx_interface	*ifc;
 
 	while (ipx_interfaces) {

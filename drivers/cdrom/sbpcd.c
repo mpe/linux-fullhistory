@@ -328,6 +328,7 @@
 #include <linux/major.h> 
 #include <linux/string.h>
 #include <linux/vmalloc.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -3052,7 +3053,7 @@ static int cc_SubChanInfo(int frame, int count, u_char *buffer)
 }
 #endif FUTURE
 /*==========================================================================*/
-static void check_datarate(void)
+__initfunc(static void check_datarate(void))
 {
 	int i=0;
 	
@@ -3122,7 +3123,7 @@ static int c2_ReadError(int fam)
 }
 #endif
 /*==========================================================================*/
-static void ask_mail(void)
+__initfunc(static void ask_mail(void))
 {
 	int i;
 	
@@ -3141,7 +3142,7 @@ static void ask_mail(void)
 	msg(DBG_INF,"infobuf =%s\n", msgbuf);
 }
 /*==========================================================================*/
-static int check_version(void)
+__initfunc(static int check_version(void))
 {
 	int i, j, l;
 	int teac_possible=0;
@@ -3439,7 +3440,7 @@ static void switch_drive(int i)
 /*
  * probe for the presence of an interface card
  */
-static int check_card(int port)
+__initfunc(static int check_card(int port))
 {
 #undef N_RESPO
 #define N_RESPO 20
@@ -3543,7 +3544,7 @@ static int check_card(int port)
 /*
  * probe for the presence of drives on the selected controller
  */
-static int check_drives(void)
+__initfunc(static int check_drives(void))
 {
 	int i, j;
 	
@@ -5284,10 +5285,11 @@ static struct file_operations sbpcd_fops =
  * bytes above).
  *
  */
+__initfunc(
 #if (SBPCD_ISSUE-1)
 static
 #endif
-void sbpcd_setup(const char *s, int *p)
+void sbpcd_setup(const char *s, int *p))
 {
 	setup_done++;
 	msg(DBG_INI,"sbpcd_setup called with %04X,%s\n",p[1], s);
@@ -5338,7 +5340,7 @@ void sbpcd_setup(const char *s, int *p)
  *        port 0x330, we have to use an offset of 8; so, the real CDROM port
  *        address is 0x338.
  */
-static int config_spea(void)
+__initfunc(static int config_spea(void))
 {
 	/*
          * base address offset between configuration port and CDROM port,
@@ -5397,7 +5399,7 @@ static int config_spea(void)
 #ifdef MODULE
 int init_module(void)
 #else
-int SBPCD_INIT(void)
+__initfunc(int SBPCD_INIT(void))
 #endif MODULE
 {
 	int i=0, j=0;

@@ -13,6 +13,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
+#include <linux/init.h>
 
 #include <asm/page.h>
 
@@ -576,8 +577,8 @@ const char *pci_strdev(unsigned int vendor, unsigned int device)
 /*
  * Turn on/off PCI bridge optimization. This should allow benchmarking.
  */
-static void burst_bridge(unsigned char bus, unsigned char devfn,
-			 unsigned char pos, int turn_on)
+__initfunc(static void burst_bridge(unsigned char bus, unsigned char devfn,
+				    unsigned char pos, int turn_on))
 {
 #ifdef CONFIG_PCI_OPTIMIZE
 	struct bridge_mapping_type *bmap;
@@ -791,7 +792,7 @@ int get_pci_list(char *buf)
  * pci_malloc() returns initialized memory of size SIZE.  Can be
  * used only while pci_init() is active.
  */
-static void *pci_malloc(long size, unsigned long *mem_startp)
+__initfunc(static void *pci_malloc(long size, unsigned long *mem_startp))
 {
 	void *mem;
 
@@ -805,7 +806,7 @@ static void *pci_malloc(long size, unsigned long *mem_startp)
 }
 
 
-static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
+__initfunc(static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp))
 {
 	unsigned int devfn, l, max;
 	unsigned char cmd, tmp, hdr_type = 0;
@@ -980,12 +981,12 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 }
 
 
-unsigned long pci_init (unsigned long mem_start, unsigned long mem_end)
+__initfunc(unsigned long pci_init (unsigned long mem_start, unsigned long mem_end))
 {
 	mem_start = pcibios_init(mem_start, mem_end);
 
 	if (!pcibios_present()) {
-		printk("pci_init: no BIOS32 detected\n");
+		printk("pci_init: no PCI BIOS detected\n");
 		return mem_start;
 	}
 

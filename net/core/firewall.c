@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/firewall.h>
+#include <linux/init.h>
 #include <asm/semaphore.h>
 
 struct semaphore firewall_sem = MUTEX; 
@@ -150,7 +151,7 @@ EXPORT_SYMBOL(call_in_firewall);
 EXPORT_SYMBOL(call_out_firewall);
 EXPORT_SYMBOL(call_fw_firewall);
 
-void fwchain_init(void)
+__initfunc(void fwchain_init(void))
 {
 	int i;
 	for(i=0;i<NPROTO;i++)

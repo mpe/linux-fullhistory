@@ -631,7 +631,7 @@ MODULE_PARM(parport, "1-" __MODULE_STRING(LP_NO) "i");
 
 static int parport_ptr = 0;
 
-void lp_setup(char *str, int *ints)
+__initfunc(void lp_setup(char *str, int *ints))
 {
 	/* Ugh. */
 	if (!strncmp(str, "parport", 7)) {

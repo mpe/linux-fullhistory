@@ -166,6 +166,7 @@
 #include <linux/ioport.h>
 #include <linux/string.h>
 #include <linux/major.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -1049,7 +1050,7 @@ static int aztGetToc(int multi)
   Kernel Interface Functions
   ##########################################################################
 */
-void aztcd_setup(char *str, int *ints)
+__initfunc(void aztcd_setup(char *str, int *ints))
 {  if (ints[0] > 0)
       azt_port = ints[1];
    if (ints[0] > 1)
@@ -1567,7 +1568,7 @@ static int aztcd_release(struct inode * inode, struct file * file)
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
-int aztcd_init(void)
+__initfunc(int aztcd_init(void))
 {       long int count, max_count;
 	unsigned char result[50];
 	int st;

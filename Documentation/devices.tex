@@ -15,6 +15,7 @@
 %
 \begin{document}
 \newcommand{\file}{\tt}			% Style to use for a filename
+\newcommand{\url}{\it}		        % Style to use for an URL
 \newcommand{\hex}{\tt}			% Style to use for a hex number
 \newcommand{\ud}{(Under development)}	% Abbreviation
 \newcommand{\1}{\({}^1\)}
@@ -46,7 +47,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: April 7, 1997}
+\date{Last revised: May 1, 1997}
 \maketitle
 %
 \noindent
@@ -60,17 +61,19 @@ sources in \LaTeX\ and ASCII form.  In case of discrepancy, the
 \LaTeX\ version is authoritative.
 
 This document is included by reference into the Linux Filesystem
-Standard (FSSTND).  The FSSTND is available via FTP from
-tsx-11.mit.edu in the directory {\file
-/pub/linux/docs/linux-standards/fsstnd}.
+Standard (FSSTND).  The FSSTND is available from
+{\url ftp://tsx-11.mit.edu/pub/linux/docs/linux-standards/fsstnd/}.
 
 To have a major number allocated, or a minor number in situations
 where that applies (e.g.\ busmice), please contact me with the
-appropriate device information.  Also, if you have additional
-information regarding any of the devices listed below, or if I have
-made a mistake, I would greatly appreciate a note.  When sending me
-mail, {\em please\/} include the word ``device'' in the subject so
-your mail won't accidentally get buried!
+appropriate device information.  I *very* much appreciate if you send
+me a device description in the same format as the ones already in this
+file.  Also, if you have additional information regarding any of the
+devices listed below, or if I have made a mistake, I would greatly
+appreciate a note.
+
+NOTE: When sending me mail, {\em please\/} include the word ``device''
+in the subject so your mail won't accidentally get buried!
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -207,7 +210,9 @@ reply.
 \major{79}{}{char }{PAM Software's multimodem boards -- alternate devices}
 \major{80}{}{char }{Photometrics AT200 CCD camera}
 \major{81}{}{char }{Brooktree Bt848 frame grabbers}
-\major{82}{--119}{}{Unallocated}
+\major{82}{}{char }{WiNRADiO communications receiver card}
+\major{83}{}{char }{Teletext/videotext interfaces}
+\major{84}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -1243,7 +1248,7 @@ $<$jth@prosig.demon.co.uk$>$ for information.
 \end{devicelist}
 
 \noindent
-See {\em http://www.coda.cs.cmu.edu\/} for information about Coda.
+See {\url http://www.coda.cs.cmu.edu\/} for information about Coda.
 
 \begin{devicelist}
 \major{68}{}{char }{CAPI 2.0 interface}
@@ -1392,7 +1397,28 @@ Currently for Dolphin Interconnect Solutions' PCI-SCI bridge.
 \end{devicelist}
 
 \begin{devicelist}
-\major{82}{--119}{}{Unallocated}
+\major{82}{}{char }{WiNRADiO communications receiver card}
+	\major{0}{/dev/winradio0}{First WiNRADiO card}
+	\major{1}{/dev/winradio1}{Second WiNRADiO card}
+	\minordots
+\end{devicelist}
+
+\noindent
+The driver and documentation may be obtained from
+{\url http://www.proximity.com.au/~brian/winradio/\/}.
+
+\begin{devicelist}
+\major{83}{}{char }{Teletext/videotext interfaces}
+        \minor{0}{/dev/vtx}{Teletext decoder}
+        \minor{16}{/dev/vttuner}{TV tuner on teletext interface}
+\end{devicelist}
+
+\noindent
+Devices for the driver contained in the VideoteXt package. More information
+on {\url http://home.pages.de/~videotext/\/}.
+
+\begin{devicelist}
+\major{84}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

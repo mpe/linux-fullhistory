@@ -29,6 +29,7 @@
 #include <linux/signal.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 #include <linux/ftape.h>
 #include <asm/dma.h>
 
@@ -120,7 +121,7 @@ EXPORT_NO_SYMBOLS;
 #define ftape_init init_module
 #endif
 
-int ftape_init(void)
+__initfunc(int ftape_init(void))
 {
 	int n;
 	int order;

@@ -216,6 +216,7 @@ struct tcp_opt
  *      Options received (usually on last packet, some only on SYN packets).
  */
 	char	tstamp_ok,	/* TIMESTAMP seen on SYN packet		*/
+		wscale_ok,	/* Wscale seen on SYN packet		*/
 		sack_ok;	/* SACK_PERM seen on SYN packet		*/
 	char	saw_tstamp;	/* Saw TIMESTAMP on last packet		*/
         __u16	in_mss;		/* MSS option received from sender	*/

@@ -51,7 +51,7 @@
 static struct mouse_status mouse;
 static int mouse_irq = MOUSE_IRQ;
 
-void msmouse_setup(char *str, int *ints)
+__initfunc(void msmouse_setup(char *str, int *ints))
 {
 	if (ints[0] > 0)
 		mouse_irq=ints[1];

@@ -30,6 +30,7 @@
 #include <linux/delay.h>
 #include <linux/smp.h>
 #include <linux/reboot.h>
+#include <linux/init.h>
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
 #include <linux/apm_bios.h>
 #endif
@@ -184,7 +185,7 @@ static long no_idt[2] = {0, 0};
 static int reboot_mode = 0;
 static int reboot_thru_bios = 0;
 
-void reboot_setup(char *str, int *ints)
+__initfunc(void reboot_setup(char *str, int *ints))
 {
 	while(1) {
 		switch (*str) {

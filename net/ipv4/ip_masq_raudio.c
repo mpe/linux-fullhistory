@@ -2,7 +2,7 @@
  *		IP_MASQ_RAUDIO  - Real Audio masquerading module
  *
  *
- * Version:	@(#)$Id: ip_masq_raudio.c,v 1.5 1997/04/03 08:52:02 davem Exp $
+ * Version:	@(#)$Id: ip_masq_raudio.c,v 1.6 1997/04/29 09:38:26 mj Exp $
  *
  * Author:	Nigel Metheringham
  *		[strongly based on ftp module by Juan Jose Ciarlante & Wouter Gadeyne]
@@ -45,6 +45,7 @@
 #include <linux/skbuff.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/init.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
 #include <net/ip_masq.h>
@@ -200,7 +201,7 @@ struct ip_masq_app ip_masq_raudio = {
  * 	ip_masq_raudio initialization
  */
 
-int ip_masq_raudio_init(void)
+__initfunc(int ip_masq_raudio_init(void))
 {
         return register_ip_masq_app(&ip_masq_raudio, IPPROTO_TCP, 7070);
 }

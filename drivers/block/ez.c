@@ -101,6 +101,7 @@
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -256,7 +257,7 @@ static struct file_operations ez_fops = {
 	ez_revalidate		/* revalidate new media */
 };
 
-int ez_init (void)	/* preliminary initialisation */
+__initfunc(int ez_init (void))	/* preliminary initialisation */
 
 {	
 	if (register_blkdev(MAJOR_NR,"ez",&ez_fops)) {
@@ -271,7 +272,7 @@ int ez_init (void)	/* preliminary initialisation */
 	return 0;
 }
 
-static void ez_geninit (struct gendisk *ignored)    /* real init */
+__initfunc(static void ez_geninit (struct gendisk *ignored))    /* real init */
 
 {	int i;
 
@@ -507,7 +508,7 @@ void	cleanup_module(void)
    syntax:	ez=base[,irq[,rep[,nybble]]]
 */
 
-void    ez_setup(char *str, int *ints)
+__initfunc(void ez_setup(char *str, int *ints))
 
 {       if (ints[0] > 0) ez_base = ints[1];
         if (ints[0] > 1) ez_irq = ints[2];
@@ -748,7 +749,7 @@ static void ez_doorlock( int func )
 
 /* ez_media_check: check for and acknowledge the MC flag */
 
-static void ez_media_check( void )
+__initfunc(static void ez_media_check( void ))
 
 {	int r;
 
@@ -768,7 +769,7 @@ static void ez_media_check( void )
 	disconnect();
 }
 
-static int ez_identify( void )
+__initfunc(static int ez_identify( void ))
 
 
 {	int	k, r;
@@ -800,7 +801,7 @@ static int ez_identify( void )
 
 #define  word_val(n) 	(ez_scratch[2*n]+256*ez_scratch[2*n+1])
 
-static void ez_get_capacity( void )
+__initfunc(static void ez_get_capacity( void ))
 
 {	int	ez_cylinders;
 
@@ -821,7 +822,7 @@ static void ez_get_capacity( void )
 		ez_heads,ez_sectors);
 }
 
-static void ez_standby_off( void )
+__initfunc(static void ez_standby_off( void ))
 
 {	connect();
 	wait_for(0,NULL);
@@ -830,7 +831,7 @@ static void ez_standby_off( void )
 	disconnect();
 }
 
-static int ez_port_check( void ) 	/* check for 8-bit port */
+__initfunc(static int ez_port_check( void )) 	/* check for 8-bit port */
 
 {	int	r;
 
@@ -843,7 +844,7 @@ static int ez_port_check( void ) 	/* check for 8-bit port */
 	return 0;
 }
 
-static int ez_detect( void )
+__initfunc(static int ez_detect( void ))
 
 {	int j, k;
 	char sig[EZ_SIGLEN] = EZ_SIG;

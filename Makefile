@@ -352,6 +352,8 @@ distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
                 -o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
                 -o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
+	rm -f drivers/sound/Config.in
+	cp drivers/sound/Config.std drivers/sound/Config.in
 
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz

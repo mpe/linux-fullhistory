@@ -7,6 +7,7 @@
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
+#include <linux/init.h>
 #include <net/ax25.h>
 #include <net/rose.h>
 
@@ -58,7 +59,7 @@ static ctl_table rose_root_table[] = {
 	{0}
 };
 
-void rose_register_sysctl(void)
+__initfunc(void rose_register_sysctl(void))
 {
 	rose_table_header = register_sysctl_table(rose_root_table, 1);
 }

@@ -34,6 +34,7 @@
 #include <linux/delay.h>	/* guess what */
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/segment.h>
 #include <asm/atarihw.h>
@@ -529,7 +530,7 @@ static struct file_operations dsp56k_fops = {
 
 static int init_error = 0;
 
-void dsp56k_init(void)
+__initfunc(void dsp56k_init(void))
 {
 	if(!ATARIHW_PRESENT(DSP56K)) {
 		init_error = 1;

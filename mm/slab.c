@@ -16,6 +16,7 @@
 #include	<linux/slab.h>
 #include	<linux/mm.h>
 #include	<linux/interrupt.h>
+#include	<linux/init.h>
 #include	<asm/system.h>
 #include	<asm/cache.h>
 
@@ -269,8 +270,8 @@ static void kmem_hash_ctor(void *ptr, int size, unsigned long flags)
 static	kmem_cache_t	*clock_searchp = &cache_cache;
 
 /* Init an internal cache */
-static void
-kmem_own_cache_init(kmem_cache_t *cachep)
+__initfunc(static void
+kmem_own_cache_init(kmem_cache_t *cachep))
 {
 	unsigned long	size, i;
 
@@ -293,8 +294,8 @@ kmem_own_cache_init(kmem_cache_t *cachep)
 }
 
 /* Initialisation - setup all internal caches */
-long
-kmem_cache_init(long start, long end)
+__initfunc(long
+kmem_cache_init(long start, long end))
 {
 	/* sanity */
 #define	kmem_cache_offset(x) ((unsigned long)&((kmem_cache_t *)0)->x)
@@ -319,8 +320,8 @@ kmem_cache_init(long start, long end)
 }
 
 /* Initialisation - setup general caches */
-void
-kmem_cache_sizes_init(void)
+__initfunc(void
+kmem_cache_sizes_init(void))
 {
 	unsigned long	i;
 

@@ -61,7 +61,7 @@ static int irq=14;
  *	Setup options
  */
  
-void wdt_setup(char *str, int *ints)
+__initfunc(void wdt_setup(char *str, int *ints))
 {
 	if(ints[0]>0)
 	{

@@ -45,6 +45,7 @@
 #include <linux/if_arp.h>
 #include <linux/in.h>
 #include <linux/config.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -553,8 +554,8 @@ struct proc_dir_entry proc_net_rarp = {
 	rarp_get_info
 };
 
-void
-rarp_init(void)
+__initfunc(void
+rarp_init(void))
 {
 	proc_net_register(&proc_net_rarp);
 	rarp_ioctl_hook = rarp_ioctl;

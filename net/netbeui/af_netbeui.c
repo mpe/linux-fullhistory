@@ -31,6 +31,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/firewall.h>
+#include <linux/init.h>
 
 
 #undef NETBEUI_DEBUG
@@ -620,7 +621,7 @@ static struct proc_dir_entry proc_netbeui = {
 
 /* Called by proto.c on kernel start up */
 
-void netbeui_proto_init(struct net_proto *pro)
+__initfunc(void netbeui_proto_init(struct net_proto *pro))
 {
 	(void) sock_register(netbeui_proto_ops.family, &netbeui_proto_ops);
 	if ((nb_dl = register_8022_client(nb_8022_id, netbeui_rcv)) == NULL)

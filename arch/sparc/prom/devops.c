@@ -1,4 +1,4 @@
-/* $Id: devops.c,v 1.7 1997/03/18 17:58:19 jj Exp $
+/* $Id: devops.c,v 1.8 1997/05/01 01:41:31 davem Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -35,7 +35,7 @@ prom_devopen(char *dstr)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 
@@ -60,7 +60,7 @@ prom_devclose(int dhandle)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 	return 0;
@@ -86,7 +86,7 @@ prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[smp_processor_id()]) :
+			     "r" (&current_set[hard_smp_processor_id()]) :
 			     "memory");
 	restore_flags(flags);
 

@@ -3,6 +3,7 @@
 #include <linux/blk.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/page.h>
@@ -166,7 +167,7 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
     }
 }
 
-int a3000_detect(Scsi_Host_Template *tpnt)
+__initfunc(int a3000_detect(Scsi_Host_Template *tpnt))
 {
     static unsigned char called = 0;
 

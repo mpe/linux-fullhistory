@@ -518,7 +518,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	prev = NULL;
 	for(next = qp->fragments; next != NULL; next = next->next)
 	{
-		if (next->offset > offset)
+		if (next->offset >= offset)
 			break;	/* bingo! */
 		prev = next;
 	}

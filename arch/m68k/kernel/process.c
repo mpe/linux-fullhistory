@@ -10,6 +10,7 @@
  * This file handles the architecture-dependent parts of process handling..
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -62,8 +63,16 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->priority = -100;
 	current->counter = -100;
-	for (;;)
+	for (;;){
+		if (!need_resched)
+#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
+			/* block out HSYNC on the atari (falcon) */
+			__asm__("stop #0x2200" : : : "cc");
+#else /* portable version */
+			__asm__("stop #0x2000" : : : "cc");
+#endif /* machine compilation types */ 
 		schedule();
+	}
 	ret = 0;
 out:
 	unlock_kernel();

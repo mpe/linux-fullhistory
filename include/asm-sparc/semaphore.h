@@ -28,20 +28,18 @@ extern void __up(struct semaphore * sem);
  * XXX spinlock can allow this to be done without grabbing the IRQ
  * XXX global lock.
  */
-static inline int waking_non_zero(struct semaphore *sem)
-{
-	unsigned long flags;
-	int ret = 0;
-
-	save_flags(flags);
-	cli();
-	if (atomic_read(&sem->waking) > 0) {
-		atomic_dec(&sem->waking);
-		ret = 1;
-	}
-	restore_flags(flags);
-	return ret;
-}
+#define waking_non_zero(sem) \
+({	unsigned long flags; \
+	int ret = 0; \
+	save_flags(flags); \
+	cli(); \
+	if (atomic_read(&sem->waking) > 0) { \
+		atomic_dec(&sem->waking); \
+		ret = 1; \
+	} \
+	restore_flags(flags); \
+	ret; \
+})
 
 /* This isn't quite as clever as the x86 side, I'll be fixing this
  * soon enough.

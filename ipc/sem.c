@@ -40,6 +40,7 @@
 #include <linux/malloc.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -55,7 +56,7 @@ static int max_semid = 0;
 
 static unsigned short sem_seq = 0;
 
-void sem_init (void)
+__initfunc(void sem_init (void))
 {
 	int i;
 

@@ -42,6 +42,7 @@
 #include <linux/if_arp.h>
 #include <linux/proc_fs.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <net/ip.h>
 #include <net/protocol.h>
@@ -2020,7 +2021,7 @@ int ip_rt_event(int event, struct device *dev)
 }
 
 
-void ip_fib_init()
+__initfunc(void ip_fib_init(void))
 {
 	struct in_rtrulemsg r;
 

@@ -123,6 +123,9 @@ struct sk_buff
 #endif
 };
 
+/* These are just the default values. This is run time configurable.
+ * FIXME: Probably the config option should go away. -- erics
+ */
 #ifdef CONFIG_SKB_LARGE
 #define SK_WMEM_MAX	65535
 #define SK_RMEM_MAX	65535

@@ -384,15 +384,7 @@ __initfunc(void trap_init(void))
 {
 	int i;
 	struct desc_struct * p;
-	static int smptrap=0;
-	
-	if(smptrap)
-	{
-		__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
-		load_ldt(0);
-		return;
-	}
-	smptrap++;
+
 	if (readl(0x0FFFD9) == 'E' + ('I'<<8) + ('S'<<16) + ('A'<<24))
 		EISA_bus = 1;
 	set_call_gate(&default_ldt,lcall7);

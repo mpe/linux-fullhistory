@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -265,7 +266,7 @@ void show_free_areas(void)
  *   - mark all memory queues empty
  *   - clear the memory bitmaps
  */
-unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem))
 {
 	mem_map_t * p;
 	unsigned long mask = PAGE_MASK;
@@ -273,7 +274,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 
 	/*
 	 * select nr of pages we try to keep free for important stuff
-	 * with a minimum of 16 pages. This is totally arbitrary
+	 * with a minimum of 48 pages. This is totally arbitrary
 	 */
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
 	if (i < 48)

@@ -27,19 +27,20 @@ struct vc_data;
 /* DPC: 1994-04-13 !!! con_putcs is new entry !!! */
 
 struct consw {
-    unsigned long (*con_startup)(unsigned long, char **);
-    void   (*con_init)(struct vc_data *);
-    int    (*con_deinit)(struct vc_data *);
-    int    (*con_clear)(struct vc_data *, int, int, int, int);
-    int    (*con_putc)(struct vc_data *, int, int, int);
-    int    (*con_putcs)(struct vc_data *, const char *, int, int, int);
-    int    (*con_cursor)(struct vc_data *, int);
-    int    (*con_scroll)(struct vc_data *, int, int, int, int);
-    int    (*con_bmove)(struct vc_data *, int, int, int, int, int, int);
-    int    (*con_switch)(struct vc_data *);
-    int    (*con_blank)(int);
-    int    (*con_get_font)(struct vc_data *, int *, int *, char *);
-    int    (*con_set_font)(struct vc_data *, int, int, char *);
+	unsigned long (*con_startup)(unsigned long, const char **);
+	void   (*con_init)(struct vc_data *);
+	int    (*con_deinit)(struct vc_data *);
+	int    (*con_clear)(struct vc_data *, int, int, int, int);
+	int    (*con_putc)(struct vc_data *, int, int, int);
+	int    (*con_putcs)(struct vc_data *, const char *, int, int, int);
+	int    (*con_cursor)(struct vc_data *, int);
+	int    (*con_scroll)(struct vc_data *, int, int, int, int);
+	int    (*con_bmove)(struct vc_data *, int, int, int, int, int, int);
+	int    (*con_switch)(struct vc_data *);
+	int    (*con_blank)(int);
+	int    (*con_get_font)(struct vc_data *, int *, int *, char *);
+	int    (*con_set_font)(struct vc_data *, int, int, char *);
+	int    (*con_set_palette)(struct vc_data *, unsigned char *);
 };
 
 extern struct consw *conswitchp;

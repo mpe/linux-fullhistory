@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.81 1997/04/16 07:15:48 davem Exp $
+/* $Id: head.S,v 1.82 1997/05/01 01:40:38 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -393,12 +393,6 @@ C_LABEL(trapbase_cpu3):
 	BAD_TRAP(0xf7) BAD_TRAP(0xf8) BAD_TRAP(0xf9) BAD_TRAP(0xfa) BAD_TRAP(0xfb)
 	BAD_TRAP(0xfc) BAD_TRAP(0xfd) BAD_TRAP(0xfe) BAD_TRAP(0xff)
 
-	.globl	C_LABEL(cpu0_stack), C_LABEL(cpu1_stack), C_LABEL(cpu2_stack)
-	.globl	C_LABEL(cpu3_stack)
-C_LABEL(cpu0_stack):			.skip 0x2000
-C_LABEL(cpu1_stack):			.skip 0x2000
-C_LABEL(cpu2_stack):			.skip 0x2000
-C_LABEL(cpu3_stack):			.skip 0x2000
 #endif
 	.skip 4096
 
@@ -742,6 +736,9 @@ go_to_highmem:
 		jmpl	%g1, %g0
 		 nop
 
+	/* This is to align init_task_union properly, be careful. -DaveM */
+	.align	8192
+
 /* The code above should be at beginning and we have to take care about
  * short jumps, as branching to .text.init section from .text is usually
  * impossible */
@@ -986,12 +983,10 @@ sun4c_continue_boot:
 		/* Initialize the umask value for init_task just in case.
 		 * But first make current_set[0] point to something useful.
 		 */
-		set	C_LABEL(init_task), %g6
+		set	C_LABEL(init_task_union), %g6
 		set	C_LABEL(current_set), %g2
 		st	%g6, [%g2]
 
-		set	C_LABEL(bootup_kernel_stack), %g3
-		st	%g3, [%g6 + AOFF_task_kernel_stack_page]
 		st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_uwinmask]
 
 /* Compute NWINDOWS and stash it away. Now uses %wim trick explained

@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.16 1997/04/08 11:03:13 davem Exp $ */
+/* $Id: head.h,v 1.17 1997/04/28 14:57:13 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
@@ -113,7 +113,7 @@
 #define INDIRECT_SOLARIS_SYSCALL(tlvl) TRAP_ARG(indirect_syscall, tlvl)
 
 #define TRAP_IRQ(routine, level)			\
-	rdpr	%pil, %g4;				\
+	rdpr	%pil, %g2;				\
 	wrpr	%g0, 15, %pil;				\
 	ba,pt	%xcc, etrap_irq;			\
 	 rd	%pc, %g7;				\

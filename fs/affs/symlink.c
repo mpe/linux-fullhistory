@@ -82,7 +82,7 @@ affs_follow_link(struct inode *dir, struct inode *inode, int flag, int mode,
 	i  = 0;
 	j  = 0;
 	if (!bh) {
-		printk("AFFS: unable to read i-node block %lu\n",inode->i_ino);
+		affs_error(inode->i_sb,"follow_link","Cannot read block %lu\n",inode->i_ino);
 		kfree(buffer);
 		iput(inode);
 		iput(dir);
@@ -138,7 +138,7 @@ affs_readlink(struct inode *inode, char *buffer, int buflen)
 	i  = 0;
 	j  = 0;
 	if (!bh) {
-		printk("AFFS: unable to read i-node block %lu\n",inode->i_ino);
+		affs_error(inode->i_sb,"readlink","Cannot read block %lu\n",inode->i_ino);
 		goto symlink_end;
 	}
 	lf = (struct slink_front *)bh->b_data;

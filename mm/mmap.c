@@ -16,6 +16,7 @@
 #include <linux/swap.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -654,7 +655,7 @@ no_vma:
 	up(&mm->mmap_sem);
 }
 
-void vma_init(void)
+__initfunc(void vma_init(void))
 {
 	vm_area_cachep = kmem_cache_create("vm_area_struct",
 					   sizeof(struct vm_area_struct),

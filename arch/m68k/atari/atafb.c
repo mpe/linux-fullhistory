@@ -46,6 +46,7 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -2911,8 +2912,8 @@ atafb_setcmap(struct fb_cmap *cmap, int con)
 	return(atari_fb_set_cmap(cmap, 1, con));
 }
 
-struct fb_info *
-atari_fb_init(long *mem_start)
+__initfunc(struct fb_info *
+atari_fb_init(long *mem_start))
 {
 	int err;
 	int pad;

@@ -34,6 +34,7 @@
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/uaccess.h>	/* copy_to/from_user */
 #include <linux/wanrouter.h>	/* WAN router API definitions */
+#include <linux/init.h>		/* __initfunc et al. */
 
 /****** Defines and Macros **************************************************/
 
@@ -130,7 +131,7 @@ void cleanup_module (void)
 
 #else
 
-void wanrouter_init(void)
+__initfunc(void wanrouter_init(void))
 {
 	int err = wanrouter_proc_init();
 	if (err) printk(KERN_ERR

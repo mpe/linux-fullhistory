@@ -31,8 +31,8 @@ fairly certain that the flowcharts in the phillips docs are wrong. */
 #include <asm/system.h>
 #include <asm/sbus.h>
 
-#if 0
-#define VFC_DEBUG
+#if 0 
+#define VFC_I2C_DEBUG
 #endif
 
 #include "vfc.h"
@@ -72,6 +72,8 @@ int vfc_pcf8584_init(struct vfc_dev *dev)
 
 void vfc_i2c_delay_wakeup(struct vfc_dev *dev) 
 {
+	/* Used to profile code and eliminate too many delays */
+	VFC_I2C_DEBUG_PRINTK(("vfc%d: Delaying\n",dev->instance));
 	wake_up(&dev->poll_wait);
 }
 
@@ -95,14 +97,14 @@ void inline vfc_i2c_delay(struct vfc_dev *dev)
 
 int vfc_init_i2c_bus(struct vfc_dev *dev)
 {
-	dev->regs->i2c_s1= ENABLE_SERIAL | ACK;
+	dev->regs->i2c_s1= ENABLE_SERIAL | SELECT(S0) | ACK;
 	vfc_i2c_reset_bus(dev);
 	return 0;
 }
 
 int vfc_i2c_reset_bus(struct vfc_dev *dev) 
 {
-	VFC_DEBUG_PRINTK((KERN_DEBUG "vfc%d: Resetting the i2c bus\n",
+	VFC_I2C_DEBUG_PRINTK((KERN_DEBUG "vfc%d: Resetting the i2c bus\n",
 			  dev->instance));
 	if(!dev) return -EINVAL;
 	if(!dev->regs) return -EINVAL;
@@ -110,7 +112,7 @@ int vfc_i2c_reset_bus(struct vfc_dev *dev)
 	dev->regs->i2c_s1=SEND_I2C_STOP | ACK;
 	vfc_i2c_delay(dev);
 	dev->regs->i2c_s1=CLEAR_I2C_BUS;
-	VFC_DEBUG_PRINTK((KERN_DEBUG "vfc%d: I2C status %x\n",
+	VFC_I2C_DEBUG_PRINTK((KERN_DEBUG "vfc%d: I2C status %x\n",
 			  dev->instance, dev->regs->i2c_s1));
 	return 0;
 }
@@ -146,7 +148,7 @@ int vfc_i2c_xmit_addr(struct vfc_dev *dev, unsigned char addr, char mode)
 { 
 	int ret,raddr;
 #if 1
-	dev->regs->i2c_s1=SEND_I2C_STOP;
+	dev->regs->i2c_s1=SEND_I2C_STOP | ACK;
 	dev->regs->i2c_s1=SELECT(S0) | ENABLE_SERIAL;
 	vfc_i2c_delay(dev);
 #endif
@@ -154,12 +156,12 @@ int vfc_i2c_xmit_addr(struct vfc_dev *dev, unsigned char addr, char mode)
 	switch(mode) {
 	case VFC_I2C_READ:
 		dev->regs->i2c_reg=raddr=SHIFT((unsigned int)addr | 0x1);
-		VFC_DEBUG_PRINTK(("vfc%d: recieving from i2c addr 0x%x\n",
+		VFC_I2C_DEBUG_PRINTK(("vfc%d: recieving from i2c addr 0x%x\n",
 				  dev->instance,addr | 0x1));
 		break;
 	case VFC_I2C_WRITE:
 		dev->regs->i2c_reg=raddr=SHIFT((unsigned int)addr & ~0x1);
-		VFC_DEBUG_PRINTK(("vfc%d: sending to i2c addr 0x%x\n",
+		VFC_I2C_DEBUG_PRINTK(("vfc%d: sending to i2c addr 0x%x\n",
 				  dev->instance,addr & ~0x1));
 		break;
 	default:
@@ -215,7 +217,7 @@ int vfc_i2c_recv_byte(struct vfc_dev *dev, unsigned char *byte, int last)
 	int ret;
 	if(last) {
 		dev->regs->i2c_reg=NEGATIVE_ACK;
-		VFC_DEBUG_PRINTK((KERN_DEBUG "vfc%d: sending negative ack\n",
+		VFC_I2C_DEBUG_PRINTK(("vfc%d: sending negative ack\n",
 				  dev->instance));
 	} else {
 		dev->regs->i2c_s1=ACK;
@@ -255,6 +257,8 @@ int vfc_i2c_recvbuf(struct vfc_dev *dev, unsigned char addr,
 			printk(KERN_ERR "vfc%d: "
 			       "VFC error while recieving byte\n",
 			       dev->instance);
+			dev->regs->i2c_s1=SEND_I2C_STOP;
+			ret=-EINVAL;
 		}
 		buf++;
 	}
@@ -286,7 +290,7 @@ int vfc_i2c_sendbuf(struct vfc_dev *dev, unsigned char addr,
 		ret=vfc_i2c_xmit_byte(dev,buf);
 		switch(ret) {
 		case XMIT_LAST_BYTE:
-			VFC_DEBUG_PRINTK(("vfc%d: "
+			VFC_I2C_DEBUG_PRINTK(("vfc%d: "
 					  "Reciever ended transmission with "
 					  " %d bytes remaining\n",
 					  dev->instance,count));

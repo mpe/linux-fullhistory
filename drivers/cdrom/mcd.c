@@ -80,6 +80,7 @@
 #include <linux/ioport.h>
 #include <linux/string.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 /* #define REALLY_SLOW_IO  */
 #include <asm/system.h>
@@ -196,7 +197,7 @@ static int GetToc(void);
 static int getValue(unsigned char *result);
 
 
-void mcd_setup(char *str, int *ints)
+__initfunc(void mcd_setup(char *str, int *ints))
 {
    if (ints[0] > 0)
       mcd_port = ints[1];
@@ -1175,7 +1176,7 @@ static struct file_operations mcd_fops = {
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
-int mcd_init(void)
+__initfunc(int mcd_init(void))
 {
 	int count;
 	unsigned char result[3];

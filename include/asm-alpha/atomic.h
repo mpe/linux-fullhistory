@@ -41,9 +41,9 @@ extern __inline__ void atomic_add(int i, atomic_t * v)
 	"	addl %0,%2,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (__atomic_fool_gcc(v))
 	:"Ir" (i), "m" (__atomic_fool_gcc(v)));
 }
@@ -56,9 +56,9 @@ extern __inline__ void atomic_sub(int i, atomic_t * v)
 	"	subl %0,%2,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (__atomic_fool_gcc(v))
 	:"Ir" (i), "m" (__atomic_fool_gcc(v)));
 }
@@ -75,9 +75,9 @@ extern __inline__ long atomic_add_return(int i, atomic_t * v)
 	"	mov %0,%2\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (__atomic_fool_gcc(v)), "=&r" (result)
 	:"Ir" (i), "m" (__atomic_fool_gcc(v)));
 	return result;
@@ -92,9 +92,9 @@ extern __inline__ long atomic_sub_return(int i, atomic_t * v)
 	"	mov %0,%2\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,2f\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
-	".text"
+	".previous"
 	:"=&r" (temp), "=m" (__atomic_fool_gcc(v)), "=&r" (result)
 	:"Ir" (i), "m" (__atomic_fool_gcc(v)));
 	return result;

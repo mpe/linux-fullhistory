@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.23 1997/03/04 16:26:25 jj Exp $
+/* $Id: etrap.S,v 1.26 1997/05/01 08:53:32 davem Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -129,15 +129,23 @@ tsetup_patch2:
 trap_setup_from_user:
 	/* We can't use %curptr yet. */
 	LOAD_CURRENT(t_kstack, t_twinmask)
+
 	mov	1, %t_twinmask
-	ld	[%t_kstack + AOFF_task_saved_kernel_stack], %t_kstack
+	sll	%t_twinmask, (PAGE_SHIFT + 1), %t_twinmask
+	sub	%t_twinmask, (TRACEREG_SZ + REGWIN_SZ), %t_twinmask
+	add	%t_kstack, %t_twinmask, %t_kstack
+
+	mov	1, %t_twinmask
 	sll	%t_twinmask, %t_psr, %t_twinmask ! t_twinmask = (1 << psr)
 
 	/* Build pt_regs frame. */
 	STORE_PT_ALL(t_kstack, t_psr, t_pc, t_npc, g2)
 
 	/* Clear current->tss.w_saved */
-	LOAD_CURRENT(curptr, g1)
+	mov	1, %curptr
+	sll	%curptr, (PAGE_SHIFT + 1), %curptr
+	sub	%curptr, (TRACEREG_SZ + REGWIN_SZ), %curptr
+	sub	%t_kstack, %curptr, %curptr
 	st	%g0, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]
 
 	/* See if we are in the trap window. */

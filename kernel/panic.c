@@ -15,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/smp.h>
 #include <linux/reboot.h>
+#include <linux/init.h>
 
 asmlinkage void sys_sync(void);	/* it's really int */
 extern void unblank_console(void);
@@ -22,7 +23,7 @@ extern int C_A_D;
 
 int panic_timeout = 0;
 
-void panic_setup(char *str, int *ints)
+__initfunc(void panic_setup(char *str, int *ints))
 {
 	if (ints[0] == 1)
 		panic_timeout = ints[1];

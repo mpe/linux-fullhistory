@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/pagemap.h>
+#include <linux/init.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -67,7 +68,7 @@ swapstat_t swapstats = {0};
 /* General swap control */
 
 /* Parse the kernel command line "swap=" option at load time: */
-void swap_setup(char *str, int *ints)
+__initfunc(void swap_setup(char *str, int *ints))
 {
 	int * swap_vars[8] = {
 		&MAX_PAGE_AGE,
@@ -87,7 +88,7 @@ void swap_setup(char *str, int *ints)
 }
 
 /* Parse the kernel command line "buff=" option at load time: */
-void buff_setup(char *str, int *ints)
+__initfunc(void buff_setup(char *str, int *ints))
 {
 	int * buff_vars[6] = {
 		&MAX_BUFF_AGE,

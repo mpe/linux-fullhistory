@@ -30,12 +30,26 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
+/* AmigaOS allows file names with up to 30 characters length.
+ * Names longer than that will be silently truncated. If you
+ * want to disallow this, comment out the following #define.
+ * Creating filesystem objects with longer names will then
+ * result in an error (ENAMETOOLONG).
+ */
+/*#define NO_TRUNCATE */
+
 extern int *blk_size[];
 extern struct timezone sys_tz;
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
-void
+static int affs_notify_change(struct inode *inode, struct iattr *attr);
+static void affs_put_inode(struct inode *inode);
+static void affs_read_inode(struct inode *inode);
+static void affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
+static void affs_write_inode(struct inode *inode);
+
+static void
 affs_put_super(struct super_block *sb)
 {
 	int	 i;
@@ -110,13 +124,13 @@ static struct super_operations affs_sops = {
 	NULL			/* remount */
 };
 
-int
+unsigned long
 affs_parent_ino(struct inode *dir)
 {
 	int root_ino = (dir->i_sb->u.affs_sb.s_root_block);
 
 	if (!S_ISDIR (dir->i_mode)) {
-		printk ("affs_parent_ino: argument is not a directory\n");
+		affs_error(dir->i_sb,"parent_ino","Trying to get parent of non-directory");
 		return root_ino;
 	}
 	if (dir->i_ino == root_ino)
@@ -125,7 +139,7 @@ affs_parent_ino(struct inode *dir)
 }
 
 static int
-parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, int *root,
+parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, s32 *root,
 		int *blocksize, char **prefix, char *volume, unsigned long *mount_opts)
 {
 	char	*this_char, *value;
@@ -150,14 +164,14 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
 			*value++ = 0;
 		if (!strcmp(this_char,"protect")) {
 			if (value) {
-				printk("AFFS: option protect does not take an argument\n");
+				printk("AFFS: Option protect does not take an argument\n");
 				return 0;
 			}
 			*mount_opts |= SF_IMMUTABLE;
 		}
 		else if (!strcmp(this_char,"verbose")) {
 			if (value) {
-				printk("AFFS: option verbose does not take an argument\n");
+				printk("AFFS: Option verbose does not take an argument\n");
 				return 0;
 			}
 			*mount_opts |= SF_VERBOSE;
@@ -166,7 +180,7 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
 			if (!value)
 				*uid = current->uid;
 			else if (!*value) {
-				printk("AFFS: argument for uid option missing\n");
+				printk("AFFS: Argument for uid option missing\n");
 				return 0;
 			} else {
 				*uid = simple_strtoul(value,&value,0);
@@ -180,7 +194,7 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
 			if (!value)
 				*gid = current->gid;
 			else if (!*value) {
-				printk("AFFS: argument for gid option missing\n");
+				printk("AFFS: Argument for gid option missing\n");
 				return 0;
 			} else {
 				*gid = simple_strtoul(value,&value,0);
@@ -248,7 +262,7 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
 				return 0;
 			if (*blocksize != 512 && *blocksize != 1024 && *blocksize != 2048
 			    && *blocksize != 4096) {
-				printk ("AFFS: Invalid blocksize (512, 1024, 2048, 4096 allowed).\n");
+				printk ("AFFS: Invalid blocksize (512, 1024, 2048, 4096 allowed)\n");
 				return 0;
 			}
 		}
@@ -270,21 +284,21 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
  * hopefully have the guts to do so. Until then: sorry for the mess.
  */
 
-struct super_block *
+static struct super_block *
 affs_read_super(struct super_block *s,void *data, int silent)
 {
 	struct buffer_head	*bh = NULL;
 	struct buffer_head	*bb;
 	kdev_t			 dev = s->s_dev;
-	int			 root_block;
+	s32			 root_block;
 	int			 size;
-	__u32			 chksum;
-	__u32			*bm;
-	int			 ptype, stype;
+	u32			 chksum;
+	u32			*bm;
+	s32			 ptype, stype;
 	int			 mapidx;
 	int			 num_bm;
 	int			 i, j;
-	int			 key;
+	s32			 key;
 	int			 blocksize;
 	uid_t			 uid;
 	gid_t			 gid;
@@ -300,7 +314,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	if (!parse_options(data,&uid,&gid,&i,&reserved,&root_block,
 	    &blocksize,&s->u.affs_sb.s_prefix,s->u.affs_sb.s_volume,&mount_flags)) {
 		s->s_dev = 0;
-		printk("AFFS: error parsing options.\n");
+		printk(KERN_ERR "AFFS: Error parsing options\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
@@ -324,13 +338,13 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	if (size == 0) {
 		s->s_dev = 0;
 		unlock_super(s);
-		printk("affs_read_super: could not determine device size\n");
+		printk(KERN_ERR "AFFS: Could not determine device size\n");
 		goto out;
 	}
 	s->u.affs_sb.s_partition_size = size;
 	s->u.affs_sb.s_reserved       = reserved;
 
-	/* Try to find root block. Its location may depend on the block size. */
+	/* Try to find root block. Its location depends on the block size. */
 
 	s->u.affs_sb.s_hashsize = 0;
 	if (blocksize > 0) {
@@ -358,12 +372,12 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		 * block behind the calculated one. So we check this one, too.
 		 */
 		for (num_bm = 0; num_bm < 2; num_bm++) {
-			pr_debug("AFFS: Dev %s - trying bs=%d bytes, root at %d, "
+			pr_debug("AFFS: Dev %s - trying bs=%d bytes, root at %u, "
 				 "size=%d blocks, %d reserved\n",kdevname(dev),blocksize,
 				 s->u.affs_sb.s_root_block + num_bm,size,reserved);
 			bh = affs_bread(dev,s->u.affs_sb.s_root_block + num_bm,blocksize);
 			if (!bh) {
-				printk("AFFS: unable to read root block\n");
+				printk(KERN_ERR "AFFS: Cannot read root block\n");
 				goto out;
 			}
 			if (!affs_checksum_block(blocksize,bh->b_data,&ptype,&stype) &&
@@ -383,7 +397,8 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	if (!key) {
 		affs_brelse(bh);
 		if (!silent)
-			printk("AFFS: Can't find a valid root block on device %s\n",kdevname(dev));
+			printk(KERN_ERR "AFFS: Cannot find a valid root block on device %s\n",
+				kdevname(dev));
 		goto out;
 	}
 	root_block = s->u.affs_sb.s_root_block;
@@ -396,7 +411,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	/* Find out which kind of FS we have */
 	bb = affs_bread(dev,0,s->s_blocksize);
 	if (bb) {
-		chksum = htonl(*(__u32 *)bb->b_data);
+		chksum = htonl(*(u32 *)bb->b_data);
 
 		/* Dircache filesystems are compatible with non-dircache ones
 		 * when reading. As long as they aren't supported, writing is
@@ -404,7 +419,8 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		 */
 		if ((chksum == FS_DCFFS || chksum == MUFS_DCFFS || chksum == FS_DCOFS
 		     || chksum == MUFS_DCOFS) && !(s->s_flags & MS_RDONLY)) {
-			printk("AFFS: Dircache FS - mounting %s read only.\n",kdevname(dev));
+			printk(KERN_NOTICE "AFFS: Dircache FS - mounting %s read only\n",
+				kdevname(dev));
 			s->s_flags |= MS_RDONLY;
 		}
 		switch (chksum) {
@@ -436,22 +452,22 @@ affs_read_super(struct super_block *s,void *data, int silent)
 				s->u.affs_sb.s_flags |= SF_INTL | SF_OFS;
 				break;
 			default:
-				printk("AFFS: Unknown filesystem on device %s: %08X\n",
-				       kdevname(dev),chksum);
+				printk(KERN_ERR "AFFS: Unknown filesystem on device %s: %08X\n",
+					kdevname(dev),chksum);
 				affs_brelse(bb);
 				goto out;
 		}
 		affs_brelse(bb);
 	} else {
-		printk("AFFS: Can't get boot block.\n");
+		printk(KERN_ERR "AFFS: Cannot read boot block\n");
 		goto out;
 	}
 	if (mount_flags & SF_VERBOSE) {
 		chksum = ntohl(chksum);
-		printk("AFFS: Mounting volume \"%*s\": Type=%.3s\\%c, Blocksize=%d\n",
-		       GET_END_PTR(struct root_end,bh->b_data,blocksize)->disk_name[0],
-		       &GET_END_PTR(struct root_end,bh->b_data,blocksize)->disk_name[1],
-		       (char *)&chksum,((char *)&chksum)[3] + '0',blocksize);
+		printk(KERN_NOTICE "AFFS: Mounting volume \"%*s\": Type=%.3s\\%c, Blocksize=%d\n",
+			GET_END_PTR(struct root_end,bh->b_data,blocksize)->disk_name[0],
+			&GET_END_PTR(struct root_end,bh->b_data,blocksize)->disk_name[1],
+			(char *)&chksum,((char *)&chksum)[3] + '0',blocksize);
 	}
 
 	s->s_magic  = AFFS_SUPER_MAGIC;
@@ -459,7 +475,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 
 	/* Keep super block in cache */
 	if (!(s->u.affs_sb.s_root_bh = affs_bread(dev,root_block,s->s_blocksize))) {
-		printk("AFFS: Can't read root block a second time\n");
+		printk(KERN_ERR "AFFS: Cannot read root block\n");
 		goto out;
 	}
 
@@ -473,7 +489,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		 MAX_ZONES * sizeof(struct affs_zone);
 	pr_debug("num_bm=%d, az_no=%d, sum=%d\n",num_bm,az_no,ptype);
 	if (!(s->u.affs_sb.s_bitmap = kmalloc(ptype,GFP_KERNEL))) {
-		printk("AFFS: Not enough memory.\n");
+		printk(KERN_ERR "AFFS: Not enough memory\n");
 		goto out;
 	}
 	memset(s->u.affs_sb.s_bitmap,0,ptype);
@@ -486,7 +502,8 @@ affs_read_super(struct super_block *s,void *data, int silent)
 
 	if (ROOT_END_S(bh->b_data,s)->bm_flag == 0) {
 		if (!(s->s_flags & MS_RDONLY)) {
-			printk("AFFS: Bitmap invalid - mounting %s read only.\n",kdevname(dev));
+			printk(KERN_NOTICE "AFFS: Bitmap invalid - mounting %s read only\n",
+				kdevname(dev));
 			s->s_flags |= MS_RDONLY;
 		}
 		affs_brelse(bh);
@@ -504,17 +521,17 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	offset = s->u.affs_sb.s_reserved;
 	az_no  = 0;
 	while (bh) {
-		bm = (__u32 *)bh->b_data;
+		bm = (u32 *)bh->b_data;
 		for (i = ptype; i < stype && bm[i]; i++, mapidx++) {
 			if (mapidx >= num_bm) {
-				printk("AFFS: Not enough bitmap space!?\n");
+				printk(KERN_ERR "AFFS: Not enough bitmap space!?\n");
 				goto out;
 			}
 			bb = affs_bread(s->s_dev,htonl(bm[i]),s->s_blocksize);
 			if (bb) {
 				if (affs_checksum_block(s->s_blocksize,bb->b_data,NULL,NULL) &&
 				    !(s->s_flags & MS_RDONLY)) {
-					printk("AFFS: Bitmap (%d,key=%lu) invalid - "
+					printk(KERN_WARNING "AFFS: Bitmap (%d,key=%lu) invalid - "
 					       "mounting %s read only.\n",mapidx,htonl(bm[i]),
 						kdevname(dev));
 					s->s_flags |= MS_RDONLY;
@@ -525,7 +542,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 					key   = size & 0x1F;		/* used bits */
 					if (key) {
 						chksum = ntohl(0x7FFFFFFF >> (31 - key));
-						((__u32 *)bb->b_data)[ptype] &= chksum;
+						((u32 *)bb->b_data)[ptype] &= chksum;
 						affs_fix_checksum(s->s_blocksize,bb->b_data,0);
 						mark_buffer_dirty(bb,1);
 					}
@@ -551,7 +568,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 				}
 				affs_brelse(bb);
 			} else {
-				printk("AFFS: Can't read bitmap.\n");
+				printk(KERN_ERR "AFFS: Cannot read bitmap\n");
 				goto out;
 			}
 		}
@@ -561,14 +578,14 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		affs_brelse(bh);
 		if (key) {
 			if (!(bh = affs_bread(s->s_dev,key,s->s_blocksize))) {
-				printk("AFFS: Can't read bitmap extension.\n");
+				printk(KERN_ERR "AFFS: Cannot read bitmap extension\n");
 				goto out;
 			}
 		} else
 			bh = NULL;
 	}
 	if (mapidx != num_bm) {
-		printk("AFFS: Got only %d bitmap blocks, expected %d\n",mapidx,num_bm);
+		printk(KERN_ERR "AFFS: Got only %d bitmap blocks, expected %d\n",mapidx,num_bm);
 		goto out;
 	}
 nobitmap:
@@ -584,7 +601,7 @@ nobitmap:
 
 	if (!(s->s_mounted)) {
 		s->s_dev = 0;
-		printk("AFFS: get root inode failed\n");
+		printk(KERN_ERR "AFFS: get root inode failed\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
@@ -615,7 +632,7 @@ nobitmap:
 	return NULL;
 }
 
-void
+static void
 affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	int		 free;
@@ -635,15 +652,15 @@ affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	copy_to_user(buf,&tmp,bufsiz);
 }
 
-void
+static void
 affs_read_inode(struct inode *inode)
 {
 	struct buffer_head	*bh, *lbh;
 	struct file_front	*file_front;
 	struct file_end		*file_end;
-	int			 block;
+	s32			 block;
 	unsigned long		 prot;
-	int			 ptype, stype;
+	s32			 ptype, stype;
 	unsigned short		 id;
 
 	pr_debug("AFFS: read_inode(%lu)\n",inode->i_ino);
@@ -651,12 +668,12 @@ affs_read_inode(struct inode *inode)
 	lbh   = NULL;
 	block = inode->i_ino;
 	if (!(bh = affs_bread(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
-		printk("AFFS: unable to read i-node block %d\n",block);
+		affs_error(inode->i_sb,"read_inode","Cannot read block %d",block);
 		return;
 	}
 	if (affs_checksum_block(AFFS_I2BSIZE(inode),bh->b_data,&ptype,&stype) || ptype != T_SHORT) {
-		printk("AFFS: read_inode(): checksum or type (ptype=%d) error on inode %d\n",
-		       ptype,block);
+		affs_error(inode->i_sb,"read_inode",
+			   "Checksum or type (ptype=%d) error on inode %d",ptype,block);
 		affs_brelse(bh);
 		return;
 	}
@@ -735,7 +752,8 @@ affs_read_inode(struct inode *inode)
 			if (!(lbh = affs_bread(inode->i_dev,inode->u.affs_i.i_original,
 			                  AFFS_I2BSIZE(inode)))) {
 				affs_brelse(bh);
-				printk("AFFS: unable to read i-node block %ld\n",inode->i_ino);
+				affs_error(inode->i_sb,"read_inode","Cannot read block %lu",
+					   inode->i_ino);
 				return;
 			}
 			file_end = GET_END_PTR(struct file_end,lbh->b_data,AFFS_I2BSIZE(inode));
@@ -776,12 +794,13 @@ affs_read_inode(struct inode *inode)
 		inode->i_op = &affs_symlink_inode_operations;
 }
 
-void
+static void
 affs_write_inode(struct inode *inode)
 {
-	struct buffer_head *bh;
-	struct file_end	   *file_end;
-	short		    uid, gid;
+	struct buffer_head	*bh;
+	struct file_end		*file_end;
+	uid_t			 uid;
+	gid_t			 gid;
 
 	pr_debug("AFFS: write_inode(%lu)\n",inode->i_ino);
 
@@ -789,8 +808,7 @@ affs_write_inode(struct inode *inode)
 	if (!inode->i_nlink)
 		return;
 	if (!(bh = bread(inode->i_dev,inode->i_ino,AFFS_I2BSIZE(inode)))) {
-		printk("AFFS: Unable to read block of inode %ld on %s\n",
-		       inode->i_ino,kdevname(inode->i_dev));
+		affs_error(inode->i_sb,"write_inode","Cannot read block %lu",inode->i_ino);
 		return;
 	}
 	file_end = GET_END_PTR(struct file_end, bh->b_data,AFFS_I2BSIZE(inode));
@@ -820,7 +838,7 @@ affs_write_inode(struct inode *inode)
 	brelse(bh);
 }
 
-int
+static int
 affs_notify_change(struct inode *inode, struct iattr *attr)
 {
 	int error;
@@ -848,7 +866,7 @@ affs_notify_change(struct inode *inode, struct iattr *attr)
 	return 0;
 }
 
-void
+static void
 affs_put_inode(struct inode *inode)
 {
 	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",inode->i_ino,inode->i_nlink);
@@ -867,7 +885,7 @@ affs_new_inode(const struct inode *dir)
 {
 	struct inode		*inode;
 	struct super_block	*sb;
-	int			 block;
+	s32			 block;
 
 	if (!dir || !(inode = get_empty_inode()))
 		return NULL;
@@ -918,7 +936,10 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 	struct buffer_head	*dir_bh;
 	struct buffer_head	*inode_bh;
 	struct buffer_head	*link_bh;
-	int			 hash;
+	struct buffer_head	*ibh;
+	int			 retval;
+	int			 i;
+	s32			 next;
 
 	pr_debug("AFFS: add_entry(dir=%lu,inode=%lu,\"%*s\",type=%d\n",dir->i_ino,inode->i_ino,
 		 len,name,type);
@@ -926,34 +947,60 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 	dir_bh      = affs_bread(dir->i_dev,dir->i_ino,AFFS_I2BSIZE(dir));
 	inode_bh    = affs_bread(inode->i_dev,inode->i_ino,AFFS_I2BSIZE(inode));
 	link_bh     = NULL;
-	if (!dir_bh || !inode_bh) {
-		affs_brelse(dir_bh);
-		affs_brelse(inode_bh);
-		return -ENOSPC;
-	}
+	retval       = -EIO;
+	if (!dir_bh || !inode_bh)
+		goto addentry_done;
 	if (link) {
 		link_bh = affs_bread(link->i_dev,link->i_ino,AFFS_I2BSIZE(link));
-		if (!link_bh) {
-			affs_brelse(dir_bh);
-			affs_brelse(inode_bh);
-			return -EINVAL;
-		}
+		if (!link_bh)
+			goto addentry_done;
 	}
 	((struct dir_front *)inode_bh->b_data)->primary_type = ntohl(T_SHORT);
 	((struct dir_front *)inode_bh->b_data)->own_key      = ntohl(inode->i_ino);
 
-	if (len > 30)		/* truncate name quietly */
+	retval = -ENAMETOOLONG;
+	if (len > 30)
+#ifdef NO_TRUNCATE
+		goto addentry_done;
+#else
 		len = 30;
+#endif
+
+	/* Check if name is valid */
+	retval = -EINVAL;
+	for (i = 0; i < len; i++) {
+		if (name[i] < ' ' || name[i] == ':'
+		    || ((unsigned char)name[i] > 0x7e && (unsigned char)name[i] < 0xa0))
+			goto addentry_done;
+	}
+	retval = 0;
 	DIR_END(inode_bh->b_data,inode)->dir_name[0] = len;
 	strncpy(DIR_END(inode_bh->b_data,inode)->dir_name + 1,name,len);
 	DIR_END(inode_bh->b_data,inode)->secondary_type = ntohl(type);
 	DIR_END(inode_bh->b_data,inode)->parent         = ntohl(dir->i_ino);
-	hash = affs_hash_name(name,len,AFFS_I2FSTYPE(dir),AFFS_I2HSIZE(dir));
+
+	i    = affs_hash_name(name,len,AFFS_I2FSTYPE(dir),AFFS_I2HSIZE(dir)) + 6;
+	next = dir->i_ino;
+
+	/* Alas, we have to search the insertion point with a locked sb */
 
 	lock_super(inode->i_sb);
-	DIR_END(inode_bh->b_data,inode)->hash_chain =
-				((struct dir_front *)dir_bh->b_data)->hashtable[hash];
-	((struct dir_front *)dir_bh->b_data)->hashtable[hash] = ntohl(inode->i_ino);
+	while (1) {
+		if (!(ibh = affs_bread(dir->i_dev,next,AFFS_I2BSIZE(dir))))
+			goto addentry_done;
+		next = htonl(((s32 *)ibh->b_data)[i]);
+		if (!next || next > inode->i_ino)
+			break;
+		i = AFFS_I2BSIZE(dir) / 4 - 4;
+		affs_brelse(ibh);
+	}
+
+	DIR_END(inode_bh->b_data,inode)->hash_chain = next;
+	((s32 *)ibh->b_data)[i]                     = ntohl(inode->i_ino);
+	affs_fix_checksum(AFFS_I2BSIZE(dir),ibh->b_data,5);
+	mark_buffer_dirty(ibh,1);
+	affs_brelse(ibh);
+
 	if (link_bh) {
 		LINK_END(inode_bh->b_data,inode)->original   = ntohl(link->i_ino);
 		LINK_END(inode_bh->b_data,inode)->link_chain =
@@ -974,11 +1021,13 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 	inode->i_dirt  = 1;
 	mark_buffer_dirty(dir_bh,1);
 	mark_buffer_dirty(inode_bh,1);
+
+addentry_done:
 	affs_brelse(dir_bh);
 	affs_brelse(inode_bh);
 	affs_brelse(link_bh);
 
-	return 0;
+	return retval;
 }
 
 static struct file_system_type affs_fs_type = {
@@ -999,7 +1048,7 @@ EXPORT_NO_SYMBOLS;
 int
 init_module(void)
 {
-	return init_affs_fs();
+	return register_filesystem(&affs_fs_type);
 }
 
 void

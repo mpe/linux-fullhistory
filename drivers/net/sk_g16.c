@@ -68,6 +68,7 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #include <asm/io.h>
 #include <asm/bitops.h> 
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -532,7 +533,7 @@ void SK_print_ram(struct device *dev);
  *                         (detachable devices only).
  */
 
-int SK_init(struct device *dev)
+__initfunc(int SK_init(struct device *dev))
 {
 	int ioaddr         = 0;            /* I/O port address used for POS regs */
 	int *port, ports[] = SK_IO_PORTS;  /* SK_G16 supported ports */
@@ -616,7 +617,7 @@ int SK_init(struct device *dev)
  *     94/06/30  pwe  SK_ADDR now checked and at the correct place
 -*/
 
-int SK_probe(struct device *dev, short ioaddr)
+__initfunc(int SK_probe(struct device *dev, short ioaddr))
 {
     int i,j;                /* Counters */
     int sk_addr_flag = 0;   /* SK ADDR correct? 1 - no, 0 - yes */
@@ -1740,7 +1741,7 @@ static void set_multicast_list(struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-unsigned int SK_rom_addr(void)
+__initfunc(unsigned int SK_rom_addr(void))
 {
     int i,j;
     int rom_found = 0;

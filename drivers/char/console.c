@@ -101,6 +101,7 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
@@ -1979,7 +1980,7 @@ static void console_bh(void)
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
  */
-unsigned long con_init(unsigned long kmem_start)
+__initfunc(unsigned long con_init(unsigned long kmem_start))
 {
 	const char *display_desc = "????";
 	int currcons = 0;

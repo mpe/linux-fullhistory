@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <net/netlink.h>
 
@@ -443,7 +444,7 @@ void nlmsg_transmit(struct nlmsg_ctl *ctl)
 }
 
 
-int init_netlink(void)
+__initfunc(int init_netlink(void))
 {
 	int ct;
 

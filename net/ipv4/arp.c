@@ -90,6 +90,7 @@
 #include <linux/skbuff.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include <net/ip.h>
 #include <net/icmp.h>
@@ -1976,7 +1977,7 @@ static struct proc_dir_entry proc_net_arp = {
 };
 #endif
 
-void arp_init (void)
+__initfunc(void arp_init (void))
 {
 	dev_add_pack(&arp_packet_type);
 	/* Start with the regular checks for expired arp entries. */

@@ -323,7 +323,7 @@ typedef struct {
 static TAG_ALLOC TagAlloc[8][8]; /* 8 targets and 8 LUNs */
 
 
-static void init_tags( void )
+__initfunc(static void init_tags( void ))
 {
     int target, lun;
     TAG_ALLOC *ta;
@@ -665,7 +665,7 @@ static __inline__ void queue_main(void)
 }
 
 
-static void NCR5380_all_init (void)
+static inline void NCR5380_all_init (void)
 {
     static int done = 0;
     if (!done) {
@@ -684,7 +684,7 @@ static void NCR5380_all_init (void)
  * Inputs : instance, pointer to this instance.  Unused.
  */
 
-static void NCR5380_print_options (struct Scsi_Host *instance)
+__initfunc(static void NCR5380_print_options (struct Scsi_Host *instance))
 {
     printk(" generic options"
 #ifdef AUTOSENSE 
@@ -848,7 +848,7 @@ lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length)
  * 
  */
 
-static void NCR5380_init (struct Scsi_Host *instance, int flags)
+__initfunc(static void NCR5380_init (struct Scsi_Host *instance, int flags))
 {
     int i;
     SETUP_HOSTDATA(instance);

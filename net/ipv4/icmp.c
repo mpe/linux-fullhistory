@@ -256,6 +256,7 @@
 #include <net/sock.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <net/checksum.h>
@@ -373,7 +374,7 @@ struct socket *icmp_socket=&icmp_inode.u.socket_i;
 
 #ifndef CONFIG_NO_ICMP_LIMIT
 
-static void xrlim_init(void)
+__initfunc(static void xrlim_init(void))
 {
 	int type, entry;
 	struct icmp_xrlim *xr;
@@ -1167,7 +1168,7 @@ static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
  { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_address_reply, 0, NULL }
 };
 
-void icmp_init(struct net_proto_family *ops)
+__initfunc(void icmp_init(struct net_proto_family *ops))
 {
 	int err;
 

@@ -26,6 +26,7 @@
 #include <linux/malloc.h>
 #include <linux/unistd.h>
 #include <linux/netdevice.h>
+#include <linux/init.h>
 #include <net/p8022.h>
 
 #include <asm/byteorder.h>
@@ -202,7 +203,7 @@ EXPORT_SYMBOL(llc_xid_request);
 
 #define ALL_TYPES_8022 0
 
-void llc_init(struct net_proto *proto)
+__initfunc(void llc_init(struct net_proto *proto))
 {
 	printk(KERN_NOTICE "IEEE 802.2 LLC for Linux 2.1 (c) 1996 Tim Alpaerts\n");
 	return;

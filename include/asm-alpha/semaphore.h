@@ -47,9 +47,9 @@ static inline int waking_non_zero(struct semaphore *sem)
 	"	stl_c	%0,%2\n"
 	"	beq	%0,3f\n"
 	"2:\n"
-	".text 2\n"
+	".section .text2,\"ax\"\n"
 	"3:	br	1b\n"
-	".text"
+	".previous"
 	: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
 	: "0"(0));
 

@@ -4,15 +4,17 @@
  */
 
 #include <asm/head.h>
-#include <asm/ptrace.h>
-#include <asm/atomic.h>
 
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/tasks.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
+
+#include <asm/ptrace.h>
+#include <asm/atomic.h>
 
 #include <asm/delay.h>
 #include <asm/irq.h>
@@ -23,6 +25,9 @@
 #include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+
+#define __KERNEL_SYSCALLS__
+#include <linux/unistd.h>
 
 #define IRQ_RESCHEDULE		13
 #define IRQ_STOP_CPU		14
@@ -118,16 +123,6 @@ void smp_store_cpu_info(int id)
 	cpu_data[id].udelay_val = loops_per_sec; /* this is it on sparc. */
 }
 
-/*
- *	Architecture specific routine called by the kernel just before init is
- *	fired off. This allows the BP to have everything in order [we hope].
- *	At the end of this all the AP's will hit the system scheduling and off
- *	we go. Each AP will load the system gdt's and jump through the kernel
- *	init into idle(). At this point the scheduler will one day take over 
- * 	and give them jobs to do. smp_callin is a standard routine
- *	we use to track CPU's as they power up.
- */
-
 void smp_commence(void)
 {
 	/*
@@ -144,7 +139,7 @@ static void smp_setup_percpu_timer(void);
 
 void smp_callin(void)
 {
-	int cpuid = smp_processor_id();
+	int cpuid = hard_smp_processor_id();
 
 	local_flush_cache_all();
 	local_flush_tlb_all();
@@ -181,6 +176,25 @@ void smp_callin(void)
 	local_flush_tlb_all();
 
 	__sti();
+}
+
+extern int cpu_idle(void *unused);
+extern void init_IRQ(void);
+
+/* Only broken Intel needs this, thus it should not even be referenced
+ * globally...
+ */
+void initialize_secondary(void)
+{
+}
+
+/* Activate a secondary processor. */
+int start_secondary(void *unused)
+{
+	trap_init();
+	init_IRQ();
+	smp_callin();
+	return cpu_idle(NULL);
 }
 
 void cpu_panic(void)
@@ -220,6 +234,7 @@ void smp_boot_cpus(void)
 	cpu_number_map[boot_cpu_id] = 0;
 	cpu_logical_map[0] = boot_cpu_id;
 	klock_info.akp = boot_cpu_id;
+	current->processor = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
 	set_irq_udt(mid_xlate[boot_cpu_id]);
 	smp_setup_percpu_timer();
@@ -233,10 +248,19 @@ void smp_boot_cpus(void)
 		if(cpu_present_map & (1 << i)) {
 			extern unsigned long sparc_cpu_startup;
 			unsigned long *entry = &sparc_cpu_startup;
+			struct task_struct *p;
 			int timeout;
 
+			/* Cook up an idler for this guy. */
+			kernel_thread(start_secondary, NULL, CLONE_PID);
+
+			p = task[++cpucount];
+
+			p->processor = i;
+			current_set[i] = p;
+
 			/* See trampoline.S for details... */
-			entry += ((i-1) * 6);
+			entry += ((i-1) * 3);
 
 			/* whirrr, whirrr, whirrrrrrrrr... */
 			printk("Starting CPU %d at %p\n", i, entry);
@@ -253,10 +277,10 @@ void smp_boot_cpus(void)
 			}
 			if(cpu_callin_map[i]) {
 				/* Another "Red Snapper". */
-				cpucount++;
 				cpu_number_map[i] = i;
 				cpu_logical_map[i] = i;
 			} else {
+				cpucount--;
 				printk("Processor %d is stuck.\n", i);
 			}
 		}
@@ -376,14 +400,11 @@ static spinlock_t cross_call_lock = SPIN_LOCK_UNLOCKED;
 void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 		    unsigned long arg3, unsigned long arg4, unsigned long arg5)
 {
-	unsigned long me = smp_processor_id();
-	unsigned long flags, mask;
-	int i, timeout;
-
 	if(smp_processors_ready) {
-		__save_flags(flags);
-		__cli();
-		spin_lock(&cross_call_lock);
+		register int ncpus = smp_num_cpus;
+		unsigned long flags;
+
+		spin_lock_irqsave(&cross_call_lock, flags);
 
 		/* Init function glue. */
 		ccall_info.func = func;
@@ -393,56 +414,47 @@ void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 		ccall_info.arg4 = arg4;
 		ccall_info.arg5 = arg5;
 
-		/* Init receive/complete mapping. */
-		for(i = 0; i < smp_num_cpus; i++) {
-			ccall_info.processors_in[i] = 0;
-			ccall_info.processors_out[i] = 0;
-		}
-		ccall_info.processors_in[me] = 1;
-		ccall_info.processors_out[me] = 1;
+		/* Init receive/complete mapping, plus fire the IPI's off. */
+		{
+			register void (*send_ipi)(int,int) = set_cpu_int;
+			register unsigned long mask;
+			register int i;
 
-		/* Fire it off. */
-		mask = (cpu_present_map & ~(1 << me));
-		for(i = 0; i < 4; i++) {
-			if(mask & (1 << i))
-				set_cpu_int(mid_xlate[i], IRQ_CROSS_CALL);
-		}
-
-		/* For debugging purposes right now we can timeout
-		 * on both callin and callexit.
-		 */
-		timeout = CCALL_TIMEOUT;
-		for(i = 0; i < smp_num_cpus; i++) {
-			while(!ccall_info.processors_in[i] && timeout-- > 0)
-				barrier();
-			if(!ccall_info.processors_in[i])
-				goto procs_time_out;
+			mask = (cpu_present_map & ~(1 << smp_processor_id()));
+			for(i = 0; i < ncpus; i++) {
+				if(mask & (1 << i)) {
+					ccall_info.processors_in[i] = 0;
+					ccall_info.processors_out[i] = 0;
+					send_ipi(mid_xlate[i], IRQ_CROSS_CALL);
+				} else {
+					ccall_info.processors_in[i] = 1;
+					ccall_info.processors_out[i] = 1;
+				}
+			}
 		}
 
-		/* Run local copy. */
+		/* First, run local copy. */
 		func(arg1, arg2, arg3, arg4, arg5);
 
-		/* Spin on proc dispersion. */
-		timeout = CCALL_TIMEOUT;
-		for(i = 0; i < smp_num_cpus; i++) {
-			while(!ccall_info.processors_out[i] && timeout-- > 0)
-				barrier();
-			if(!ccall_info.processors_out[i])
-				goto procs_time_out;
+		{
+			register int i;
+
+			i = 0;
+			do {
+				while(!ccall_info.processors_in[i])
+					barrier();
+			} while(++i < ncpus);
+
+			i = 0;
+			do {
+				while(!ccall_info.processors_out[i])
+					barrier();
+			} while(++i < ncpus);
 		}
-		spin_unlock(&cross_call_lock);
-		__restore_flags(flags);
-		return; /* made it... */
 
-procs_time_out:
-		printk("smp: Wheee, penguin drops off the bus\n");
-		spin_unlock(&cross_call_lock);
-		__restore_flags(flags);
-		return; /* why me... why me... */
-	}
-
-	/* Just need to run local copy. */
-	func(arg1, arg2, arg3, arg4, arg5);
+		spin_unlock_irqrestore(&cross_call_lock, flags);
+	} else
+		func(arg1, arg2, arg3, arg4, arg5); /* Just need to run local copy. */
 }
 
 void smp_flush_cache_all(void)

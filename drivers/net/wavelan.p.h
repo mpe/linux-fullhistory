@@ -305,6 +305,7 @@
 #include	<linux/skbuff.h>
 #include	<linux/malloc.h>
 #include	<linux/timer.h>
+#include	<linux/init.h>
 
 #include <linux/wireless.h>		/* Wireless extensions */
 
