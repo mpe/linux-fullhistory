@@ -1236,22 +1236,6 @@ s32 i2c_smbus_xfer(struct i2c_adapter * adapter, u16 addr, unsigned short flags,
 }
 
 
-/* You should always define `functionality'; the 'else' is just for
-   backward compatibility. */ 
-u32 i2c_get_functionality (struct i2c_adapter *adap)
-{
-	if (adap->algo->functionality)
-		return adap->algo->functionality(adap);
-	else
-		return 0xffffffff;
-}
-
-int i2c_check_functionality (struct i2c_adapter *adap, u32 func)
-{
-	u32 adap_func = i2c_get_functionality (adap);
-	return (func & adap_func) == func;
-}
-
 EXPORT_SYMBOL(i2c_add_adapter);
 EXPORT_SYMBOL(i2c_del_adapter);
 EXPORT_SYMBOL(i2c_add_driver);
@@ -1282,9 +1266,6 @@ EXPORT_SYMBOL(i2c_smbus_read_word_data);
 EXPORT_SYMBOL(i2c_smbus_write_word_data);
 EXPORT_SYMBOL(i2c_smbus_write_block_data);
 EXPORT_SYMBOL(i2c_smbus_read_i2c_block_data);
-
-EXPORT_SYMBOL(i2c_get_functionality);
-EXPORT_SYMBOL(i2c_check_functionality);
 
 MODULE_AUTHOR("Simon G. Vogl <simon@tk.uni-linz.ac.at>");
 MODULE_DESCRIPTION("I2C-Bus main module");
