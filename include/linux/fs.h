@@ -728,6 +728,9 @@ extern void put_write_access(struct inode *inode);
 extern struct dentry * open_namei(const char * pathname, int flag, int mode);
 extern struct dentry * do_mknod(const char * filename, int mode, dev_t dev);
 extern int do_pipe(int *);
+
+/* fs/dcache.c -- generic fs support functions */
+extern int is_subdir(struct dentry *, struct dentry *);
 extern ino_t find_inode_number(struct dentry *, struct qstr *);
 
 /*

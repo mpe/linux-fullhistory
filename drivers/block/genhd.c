@@ -1094,6 +1094,9 @@ __initfunc(void device_setup(void))
 #ifdef CONFIG_PARPORT
 	extern int parport_init(void);
 #endif
+#ifdef CONFIG_MD_BOOT
+        extern void md_setup_drive(void) __init;
+#endif
 	struct gendisk *p;
 	int nr=0;
 
@@ -1123,5 +1126,8 @@ __initfunc(void device_setup(void))
 	else
 #endif
 	rd_load();
+#endif
+#ifdef CONFIG_MD_BOOT
+        md_setup_drive();
 #endif
 }

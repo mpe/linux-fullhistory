@@ -78,6 +78,13 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
+#include <linux/smp_lock.h>
+#include <asm/irq.h>
+#include <asm/bitops.h>
+#include <asm/smp.h>
+
+#include "irq.h"
+
 /*
  * Generic PCI access -- indirect calls according to detected HW.
  */
@@ -133,7 +140,39 @@ int pcibios_find_device (unsigned short vendor, unsigned short device_id,
 int pcibios_read_config_byte (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char *value)
 {
-	return access_pci->read_config_byte(bus, device_fn, where, value);
+	int res;
+
+	res = access_pci->read_config_byte(bus, device_fn, where, value);
+
+#ifdef __SMP__
+/*
+ * IOAPICs can take PCI IRQs directly, lets first check the mptable:
+ */
+	if (where == PCI_INTERRUPT_LINE) {
+		int irq;
+		char pin;
+
+		/*
+		 * get the PCI IRQ INT _physical pin_ for this device
+		 */
+		access_pci->read_config_byte(bus, device_fn,
+						PCI_INTERRUPT_PIN, &pin);
+		/*
+		 * subtle, PCI pins are numbered starting from 1 ...
+		 */
+		pin--;
+
+		irq = IO_APIC_get_PCI_irq_vector (bus,PCI_SLOT(device_fn),pin);
+		if (irq != -1)
+			*value = (unsigned char) irq;
+
+		printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
+			bus,PCI_SLOT(device_fn), pin, irq);
+
+	}
+#endif
+
+	return res;
 }
 
 int pcibios_read_config_word (unsigned char bus,

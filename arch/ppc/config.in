@@ -129,7 +129,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   endmenu
 fi
 
-source drivers/net/hamradio/Config.in
+source net/ax25/Config.in
 
 mainmenu_option next_comment
 comment 'ISDN subsystem'

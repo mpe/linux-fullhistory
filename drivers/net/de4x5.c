@@ -2216,7 +2216,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 __initfunc(static void
 srom_search(int index))
 {
-    u_char pb, dev_fn;
+    u_char pb, dev_fn, tirq;
     u_short dev_id, dev_num, vendor, status;
     u_int tmp, irq = 0, device, class = DE4X5_CLASS_CODE;
     u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
@@ -2266,8 +2266,8 @@ srom_search(int index))
 
 	/* Fetch the IRQ to be used */
 #ifndef __sparc_v9__
-	pcibios_read_config_byte(pb, PCI_DEVICE, PCI_INTERRUPT_LINE, 
-				                                 (char *)&irq);
+	pcibios_read_config_byte(pb, PCI_DEVICE, PCI_INTERRUPT_LINE, &tirq);
+	irq = tirq;
 #else
 	irq = pdev->irq;
 #endif

@@ -23,7 +23,9 @@ OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 LDFLAGS=-e stext
 LINKFLAGS =-T $(TOPDIR)/arch/i386/vmlinux.lds $(LDFLAGS)
 
-CFLAGS := $(CFLAGS) -pipe -fno-strength-reduce
+CFLAGS_PIPE := -pipe
+CFLAGS_NSR  := -fno-strength-reduce
+CFLAGS := $(CFLAGS) $(CFLAGS_PIPE) $(CFLAGS_NSR)
 
 ifdef CONFIG_M386
 CFLAGS := $(CFLAGS) -m386 -DCPU=386

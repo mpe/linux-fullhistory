@@ -2,7 +2,7 @@
  *
  * linux/fs/autofs/dirhash.c
  *
- *  Copyright 1997 Transmeta Corporation -- All Rights Reserved
+ *  Copyright 1997-1998 Transmeta Corporation -- All Rights Reserved
  *
  * This file is part of the Linux kernel and is made available under
  * the terms of the GNU General Public License, version 2, or at your
@@ -84,11 +84,15 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 	ent->next = *dhnp;
 	ent->back = dhnp;
 	*dhnp = ent;
+	if ( ent->next )
+		ent->next->back = &(ent->next);
 }
 
 void autofs_hash_delete(struct autofs_dir_ent *ent)
 {
 	*(ent->back) = ent->next;
+	if ( ent->next )
+		ent->next->back = ent->back;
 
 	autofs_delete_usage(ent);
 

@@ -199,10 +199,11 @@
    5) Magneto-Optical drives and medium-changers are also recognized, now.
       Therefore, we have a completely gapfree recognition of all SCSI-
       device-types, that are known by Linux up to kernel 2.1.31.
-   6) The flag CONFIG_SCSI_IBMMCA_DEV_RESET has been inserted. If it is set
-      within the configuration, each connected SCSI-device will get a reset
-      command during boottime. This can be necessary for some special
-      SCSI-devices.  (See also the new Config.in file.)
+   6) The flag SCSI_IBMMCA_DEV_RESET has been inserted. If it is set within
+      the configuration, each connected SCSI-device will get a reset command
+      during boottime. This can be necessary for some special SCSI-devices.
+      This flag should be included in Config.in.
+      (See also the new Config.in file.)
    Probable next improvement: bad disk handler.
    - Michael Lang
  
@@ -210,8 +211,64 @@
    1) Some debugging and speed optimization applied.
    - Michael Lang
 
+   Dec 15, 1997
+    - chrisb@truespectra.com
+    - made the front panel display thingy optional, specified from the
+    command-line via ibmmcascsi=display.  Along the lines of the /LED
+    option for the OS/2 driver.
+    - fixed small bug in the LED display that would hang some machines.
+    - reversed ordering of the drives (using the
+    IBMMCA_SCSI_ORDER_STANDARD define).  This is necessary for two main
+    reasons:
+	- users who've already installed Linux won't be screwed.  Keep
+	in mind that not everyone is a kernel hacker.
+	- be consistent with the BIOS ordering of the drives.  In the
+	BIOS, id 6 is C:, id 0 might be D:.  With this scheme, they'd be
+	backwards.  This confuses the crap out of those heathens who've
+	got a impure Linux installation (which, <wince>, I'm one of).
+    This whole problem arises because IBM is actually non-standard with
+    the id to BIOS mappings.  You'll find, in fdomain.c, a similar
+    comment about a few FD BIOS revisions.  The Linux (and apparently
+    industry) standard is that C: maps to scsi id (0,0).  Let's stick
+    with that standard.
+    - Since this is technically a branch of my own, I changed the
+    version number to 3.0e-cpb.
 
- 
+   Jan 17, 1998: (v3.0f)
+   1) Addition of some statistical info for /proc in proc_info.
+   2) Taking care of the SCSI-assignment problem, dealed by Chris at Dec 15
+      1997. In fact, IBM is right, concerning the assignment of SCSI-devices 
+      to driveletters. It is conform to the ANSI-definition of the SCSI-
+      standard to assign drive C: to SCSI-id 6, because it is the highest
+      hardware priority after the hostadapter (that has still today by
+      default everywhere id 7). Also realtime-operating systems that I use, 
+      like LynxOS and OS9, which are quite industrial systems use top-down
+      numbering of the harddisks, that is also starting at id 6. Now, one
+      sits a bit between two chairs. On one hand side, using the define
+      IBMMCA_SCSI_ORDER_STANDARD makes Linux assigning disks conform to
+      the IBM- and ANSI-SCSI-standard and keeps this driver downward
+      compatible to older releases, on the other hand side, people is quite
+      habituated in believing that C: is assigned to (0,0) and much other
+      SCSI-BIOS do so. Therefore, I moved the IBMMCA_SCSI_ORDER_STANDARD 
+      define out of the driver and put it into Config.in as subitem of 
+      'IBM SCSI support'. A help, added to Documentation/Configure.help 
+      explains the differences between saying 'y' or 'n' to the user, when 
+      IBMMCA_SCSI_ORDER_STANDARD prompts, so the ordinary user is enabled to 
+      choose the way of assignment, depending on his own situation and gusto.
+   3) Adapted SCSI_IBMMCA_DEV_RESET to the local naming convention, so it is
+      now called IBMMCA_SCSI_DEV_RESET.
+   4) Optimization of proc_info and its subroutines.
+   5) Added more in-source-comments and extended the driver description by
+      some explanation about the SCSI-device-assignment problem.
+   - Michael Lang
+   
+   Jan 18, 1998: (v3.0g)
+   1) Correcting names to be absolutely conform to the later 2.1.x releases.
+      This is necessary for 
+            IBMMCA_SCSI_DEV_RESET -> CONFIG_IBMMCA_SCSI_DEV_RESET
+            IBMMCA_SCSI_ORDER_STANDARD -> CONFIG_IBMMCA_SCSI_ORDER_STANDARD
+   - Michael Lang
+
 	TODO:
  
 	- It seems that the handling of bad disks is really bad -
@@ -252,7 +309,12 @@
 /*--------------------------------------------------------------------*/
 
 /* current version of this driver-source: */
-#define IBMMCA_SCSI_DRIVER_VERSION "3.0d"
+#define IBMMCA_SCSI_DRIVER_VERSION "3.0f"
+
+/* use standard Linux ordering, where C: maps to (0,0), unlike the IBM
+standard which seems to like C: => (6,0) */
+/* #define IBMMCA_SCSI_ORDER_STANDARD is defined/undefined in Config.in
+ * now, while configuring the kernel. */
 
 /*
    Driver Description
@@ -341,8 +403,23 @@
    If your boot-partition is not coming up, also edit the /etc/lilo.conf-file
    in a Linux session booted on old kernel and run lilo before reboot. Check
    lilo.conf anyway to get boot on other partitions with foreign OSes right
-   again.
-
+   again. 
+ 
+   The problem is, that Linux does not assign the SCSI-devices in the
+   way as described in the ANSI-SCSI-standard. Linux assigns /dev/sda to 
+   the device with at minimum id 0. But the first drive should be at id 6,
+   because for historical reasons, drive at id 6 has, by hardware, the highest
+   priority and a drive at id 0 the lowest. IBM was one of the rare producers,
+   where the BIOS assigns drives belonging to the ANSI-SCSI-standard. Most 
+   other producers' BIOS does not (I think even Adaptec-BIOS). The 
+   IBMMCA_SCSI_ORDER_STANDARD flag helps to be able to choose the preferred 
+   way of SCSI-device-assignment. Defining this flag would result in Linux 
+   determining the devices in the same order as DOS and OS/2 does on your 
+   MCA-machine. This is also standard on most industrial computers. Leaving 
+   this flag undefined will get your devices ordered in the default way of 
+   Linux. See also the remarks of Chris Beauregard from Dec 15, 1997 and
+   the followups.
+   
    (C) Regular Processing 
    Only three functions get involved: ibmmca_queuecommand(), issue_cmd(),
    and interrupt_handler().
@@ -443,7 +520,7 @@
 
 /* basic I/O-port of first adapter */
 #define IM_IO_PORT   0x3540
-/* maximum number of hosts that can be find */
+/* maximum number of hosts that can be found */
 #define IM_N_IO_PORT 8
 
 /*requests going into the upper nibble of the Attention register */
@@ -589,16 +666,19 @@ struct im_tsb
    interest, debugging or just for having fun. The left number gives the
    host-adapter number and the right shows the accessed SCSI-ID. */
 
+/* use_display is set by the ibmmcascsi=display command line arg */
+static int use_display = 0;
 #define PS2_DISK_LED_ON(ad,id) {\
-	if( machine_id == 0xf8 ) { outb((char)(id+48), MOD95_LED_PORT ); \
+	if( use_display ) { outb((char)(id+48), MOD95_LED_PORT ); \
         outb((char)(ad+48), MOD95_LED_PORT+1); } \
 	else outb(inb(PS2_SYS_CTR) | 0xc0, PS2_SYS_CTR); \
 }
 
+/* bug fixed, Dec 15, 1997, where | was replaced by & here */
 #define PS2_DISK_LED_OFF() {\
-	if( machine_id == 0xf8 ) { outb( ' ', MOD95_LED_PORT ); \
+	if( use_display ) { outb( ' ', MOD95_LED_PORT ); \
         outb(' ', MOD95_LED_PORT+1); } \
-	else outb(inb(PS2_SYS_CTR) | 0x3f, PS2_SYS_CTR); \
+	else outb(inb(PS2_SYS_CTR) & 0x3f, PS2_SYS_CTR); \
 }
 
 /*--------------------------------------------------------------------*/
@@ -609,6 +689,8 @@ struct subsys_list_struct
     unsigned short mca_id;
     char *description;
   };
+
+/* List of possible IBM-SCSI-adapters */
 struct subsys_list_struct subsys_list[] =
 {
   {0x8efc, "IBM Fast SCSI-2 Adapter"},
@@ -632,14 +714,14 @@ of the adapter itself. */
 /*local data for a logical device */
 struct logical_device
   {
-    struct im_scb scb;
+    struct im_scb scb; /* SCSI-subsystem-control-block structure */
     struct im_tsb tsb;
     struct im_sge sge[16];
     Scsi_Cmnd *cmd;  /* SCSI-command that is currently in progress */
      
     int device_type; /* type of the SCSI-device. See include/scsi/scsi.h
-		        for interpreation of the possible values */
-    int block_length;
+		        for interpretation of the possible values */
+    int block_length;/* blocksize of a particular logical SCSI-device */
   };
 
 /* statistics of the driver during operations (for proc_info) */
@@ -649,6 +731,8 @@ struct Driver_Statistics
       int ldn_access[MAX_LOG_DEV+1];         /* total accesses on a ldn */
       int ldn_read_access[MAX_LOG_DEV+1];    /* total read-access on a ldn */
       int ldn_write_access[MAX_LOG_DEV+1];   /* total write-access on a ldn */
+      int ldn_inquiry_access[MAX_LOG_DEV+1]; /* total inquiries on a ldn */
+      int ldn_modeselect_access[MAX_LOG_DEV+1]; /* total mode selects on ldn */
       int total_accesses;                    /* total accesses on all ldns */
       int total_interrupts;                  /* total interrupts (should be
 						same as total_accesses) */
@@ -663,26 +747,28 @@ struct Driver_Statistics
 /* data structure for each host adapter */
 struct ibmmca_hostdata
 {
-  /* array of logical devices */
-    struct logical_device _ld[MAX_LOG_DEV];
-  /* array to convert (pun, lun) into logical device number */
+  /* array of logical devices: */
+    struct logical_device _ld[MAX_LOG_DEV];   
+  /* array to convert (pun, lun) into logical device number: */
     unsigned char _get_ldn[8][8];
   /*array that contains the information about the physical SCSI-devices
-       attached to this host adapter */
+   attached to this host adapter: */
     unsigned char _get_scsi[8][8];
-  /* used only when checking logical devices */
+  /* used only when checking logical devices: */
     int _local_checking_phase_flag;
+  /* report received interrupt: */
     int _got_interrupt;
+  /* report termination-status of SCSI-command: */
     int _stat_result;
-  /* reset status (used only when doing reset) */
+  /* reset status (used only when doing reset): */
     int _reset_status;
-  /* code of the last SCSI command (needed for panic info) */
+  /* code of the last SCSI command (needed for panic info): */
     int _last_scsi_command;
-  /* counter that points on next reassignable ldn for dynamical remapping */
-  /* The default value is 7, that is the first reassignable number in
-     the list on startup. */
+  /* Counter that points on the next reassignable ldn for dynamical 
+   remapping. The default value is 7, that is the first reassignable 
+   number in the list at boottime: */
     int _next_ldn;
-  /* Statistics for this IBM-SCSI-host */
+  /* Statistics-structure for this IBM-SCSI-host: */
     struct Driver_Statistics _IBM_DS;
 };
 
@@ -701,21 +787,21 @@ struct ibmmca_hostdata
 #define IBM_DS (HOSTDATA(shpnt)->_IBM_DS)
 
 /* Define a arbitrary number as subsystem-marker-type. This number is, as 
-   described in the SCSI-Standard, not occupied by other device-types. */
+   described in the ANSI-SCSI-standard, not occupied by other device-types. */
 #define TYPE_IBM_SCSI_ADAPTER   0x2F
 
 /* Define 0xFF for no device type, because this type is not defined within
-   the SCSI-standard, therefore, it can be used and should not cause any
+   the ANSI-SCSI-standard, therefore, it can be used and should not cause any
    harm. */
 #define TYPE_NO_DEVICE          0xFF
 
-/* define medium-changer. If this is not defined previously, define 
-   this type here. */
+/* define medium-changer. If this is not defined previously, e.g. Linux
+   2.0.x, define this type here. */
 #ifndef TYPE_MEDIUM_CHANGER
 #define TYPE_MEDIUM_CHANGER     0x08
 #endif
 
-/* define operations for immediate_assign */
+/* define possible operations for the immediate_assign command */
 #define SET_LDN        0
 #define REMOVE_LDN     1
 
@@ -732,7 +818,7 @@ static int io_port[IM_MAX_HOSTS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 static int scsi_id[IM_MAX_HOSTS] = { 7, 7, 7, 7, 7, 7, 7, 7 };
 
 /* fill module-parameters only, when this define is present.
-   (that is kernel >=2.1.0) */
+   (that is kernel version 2.1.x) */
 #ifdef MODULE_PARM
 MODULE_PARM(io_port, "1-" __MODULE_STRING(IM_MAX_HOSTS) "i");
 MODULE_PARM(scsi_id, "1-" __MODULE_STRING(IM_MAX_HOSTS) "i"); 
@@ -1036,24 +1122,19 @@ static char *ti_p(int value)
    return("-");
 }
 
-/* type-interpreter for logical devices 
-   (A bit stupid, but it was necessary to get the '-' and the Hex-codes
-   into one type.) */
+/* interpreter for logical device numbers (ldn) */
 static char *ti_l(int value)
 {
-   switch (value)
-     {
-	case 0:  return("0"); break; case 1:  return("1"); break;
-	case 2:  return("2"); break; case 3:  return("3"); break;
-	case 4:  return("4"); break; case 5:  return("5"); break;
-	case 6:  return("6"); break; case 7:  return("7"); break;
-	case 8:  return("8"); break; case 9:  return("9"); break;
-	case 10: return("a"); break; case 11: return("b"); break;
-        case 12: return("c"); break; case 13: return("d"); break;
-	case 14: return("e"); break; case 15: return("f"); break;
-	default: return("-"); break;
-     }
-   return("-");
+   const char hex[16] = ("0123456789abcdef");
+   static char answer[2];
+
+   answer[1] = (char)(0x0);
+   if (value<=MAX_LOG_DEV)
+     answer[0] = hex[value];
+   else
+     answer[0] = '-';
+   
+   return (char *)&answer;
 }
 
 /* 
@@ -1093,7 +1174,7 @@ static void check_devices (struct Scsi_Host *shpnt)
   memset (get_ldn, TYPE_NO_DEVICE, sizeof get_ldn); /* this is essential ! */
   memset (get_scsi, TYPE_NO_DEVICE, sizeof get_scsi); /* this is essential ! */
 
-  for (lun=0; lun<=7; lun++) /* mark the adapter at its pun on all luns*/
+  for (lun=0; lun<8; lun++) /* mark the adapter at its pun on all luns*/
     {
       get_scsi[subsystem_pun][lun] = TYPE_IBM_SCSI_ADAPTER; 
       get_ldn[subsystem_pun][lun] = MAX_LOG_DEV; /* make sure, the subsystem
@@ -1111,13 +1192,13 @@ static void check_devices (struct Scsi_Host *shpnt)
       immediate_assign(shpnt,0,0,ldn,REMOVE_LDN); /* remove ldn (wherever)*/
     }
 
-  lun = 0;
+  lun = 0; /* default lun is 0 */
 
   /* STEP 2: */
   printk("\nIBM MCA SCSI: Probing SCSI-devices.");
-  for (id=0; id<=7; id++)
+  for (id=0; id<8; id++)
 #ifdef CONFIG_SCSI_MULTI_LUN
-    for (lun=0; lun<=7; lun++)
+    for (lun=0; lun<8; lun++)
 #endif
       {
 #ifdef IM_DEBUG_PROBE
@@ -1137,16 +1218,16 @@ static void check_devices (struct Scsi_Host *shpnt)
 	  }
       }
   
-  /* STEP 3: */
+  /* STEP 3: */   
   printk("\nIBM MCA SCSI: Mapping SCSI-devices.");
    
   ldn = 0;
   lun = 0;
 
 #ifdef CONFIG_SCSI_MULTI_LUN   
-  for (lun=0; lun<=7 && ldn<MAX_LOG_DEV; lun++)
+  for (lun=0; lun<8 && ldn<MAX_LOG_DEV; lun++)
 #endif
-    for (id=0; id<=7 && ldn<MAX_LOG_DEV; id++)
+    for (id=0; id<8 && ldn<MAX_LOG_DEV; id++)
       {
 #ifdef IM_DEBUG_PROBE
 	printk(".");
@@ -1163,7 +1244,7 @@ static void check_devices (struct Scsi_Host *shpnt)
 		if (device_exists (shpnt, ldn, &ld[ldn].block_length,
 				   &ld[ldn].device_type))
 		  {
-#ifdef CONFIG_SCSI_IBMMCA_DEV_RESET
+#ifdef CONFIG_IBMMCA_SCSI_DEV_RESET
 		    int ticks;
 		    printk("(resetting)");
 		    ticks = IM_RESET_DELAY*HZ;
@@ -1211,8 +1292,8 @@ static void check_devices (struct Scsi_Host *shpnt)
    /* STEP 4: */
    
    /* map remaining ldns to non-existing devices */
-   for (lun=1; lun<=7 && ldn<MAX_LOG_DEV; lun++)
-     for (id=0; id<=7 && ldn<MAX_LOG_DEV; id++)
+   for (lun=1; lun<8 && ldn<MAX_LOG_DEV; lun++)
+     for (id=0; id<8 && ldn<MAX_LOG_DEV; id++)
      {
 	if (get_scsi[id][lun] == TYPE_NO_LUN ||
 	    get_scsi[id][lun] == TYPE_NO_DEVICE)
@@ -1228,24 +1309,29 @@ static void check_devices (struct Scsi_Host *shpnt)
      }	
 	
    printk("\n");
-
+#ifdef CONFIG_IBMMCA_SCSI_ORDER_STANDARD
+   printk("IBM MCA SCSI: SCSI-access-order: IBM/ANSI.\n");
+#else
+   printk("IBM MCA SCSI: SCSI-access-order: Linux.\n");
+#endif
+   
 #ifdef IM_DEBUG_PROBE
    /* Show the physical and logical mapping during boot. */
    printk("IBM MCA SCSI: Determined SCSI-device-mapping:\n");
    printk("    Physical SCSI-Device Map               Logical SCSI-Device Map\n");
    printk("ID\\LUN  0  1  2  3  4  5  6  7       ID\\LUN  0  1  2  3  4  5  6  7\n");
-   for (id=0; id<=7; id++)
+   for (id=0; id<8; id++)
      {
-       printk("%2d     %2s %2s %2s %2s %2s %2s %2s %2s",
-	      id, ti_p(get_scsi[id][0]), ti_p(get_scsi[id][1]), 
-	      ti_p(get_scsi[id][2]), ti_p(get_scsi[id][3]), 
-	      ti_p(get_scsi[id][4]), ti_p(get_scsi[id][5]), 
-	      ti_p(get_scsi[id][6]), ti_p(get_scsi[id][7]));
-       printk("       %2d     %2s %2s %2s %2s %2s %2s %2s %2s\n",
-	      id, ti_l(get_ldn[id][0]), ti_l(get_ldn[id][1]), 
-	      ti_l(get_ldn[id][2]), ti_l(get_ldn[id][3]), 
-	      ti_l(get_ldn[id][4]), ti_l(get_ldn[id][5]),
-	      ti_l(get_ldn[id][6]), ti_l(get_ldn[id][7]));
+        printk("%2d     %2s %2s %2s %2s %2s %2s %2s %2s",
+	       id, ti_p(get_scsi[id][0]), ti_p(get_scsi[id][1]), 
+	       ti_p(get_scsi[id][2]), ti_p(get_scsi[id][3]), 
+	       ti_p(get_scsi[id][4]), ti_p(get_scsi[id][5]), 
+	       ti_p(get_scsi[id][6]), ti_p(get_scsi[id][7]));
+
+	printk("       %2d     ",id);
+	for (lun=0; lun<8; lun++)
+	  printk("%2s ",ti_l(get_ldn[id][lun]));
+	printk("\n");
      }
 #endif
 
@@ -1270,6 +1356,8 @@ static void check_devices (struct Scsi_Host *shpnt)
   memset (IBM_DS.ldn_access, 0x0, sizeof (IBM_DS.ldn_access));
   memset (IBM_DS.ldn_read_access, 0x0, sizeof (IBM_DS.ldn_read_access));
   memset (IBM_DS.ldn_write_access, 0x0, sizeof (IBM_DS.ldn_write_access));
+  memset (IBM_DS.ldn_inquiry_access, 0x0, sizeof (IBM_DS.ldn_inquiry_access));
+  memset (IBM_DS.ldn_modeselect_access, 0x0, sizeof (IBM_DS.ldn_modeselect_access));
   memset (IBM_DS.ldn_assignments, 0x0, sizeof (IBM_DS.ldn_assignments));
    
   return;
@@ -1412,10 +1500,14 @@ device_exists (struct Scsi_Host *shpnt, int ldn, int *block_length,
 void 
 ibmmca_scsi_setup (char *str, int *ints)
 {
-   int i;
-
-   for (i = 0; i < IM_MAX_HOSTS && i < ints[0]; i++)
-      io_port[i] = ints[i+1];
+   if( str && !strcmp( str, "display" ) ) {
+   	use_display = 1;
+   } else if( ints ) {
+	   int i;
+	   for (i = 0; i < IM_MAX_HOSTS && i < ints[0]; i++) {
+	      io_port[i] = ints[i+1];
+	   }
+   }
 }
 
 #endif
@@ -1597,9 +1689,16 @@ int ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
   int current_ldn;
   int id,lun;
 
+  /* use industry standard ordering of the IDs */
+#ifdef CONFIG_IBMMCA_SCSI_ORDER_STANDARD
+  int target = 6 - cmd->target;
+#else
+  int target = cmd->target;
+#endif
+
   /*if (target,lun) is NO LUN or not existing at all, return error */
-  if ((get_scsi[cmd->target][cmd->lun] == TYPE_NO_LUN)||
-      (get_scsi[cmd->target][cmd->lun] == TYPE_NO_DEVICE))
+  if ((get_scsi[target][cmd->lun] == TYPE_NO_LUN)||
+      (get_scsi[target][cmd->lun] == TYPE_NO_DEVICE))
      {
 	cmd->result = DID_NO_CONNECT << 16;
 	done (cmd);
@@ -1607,7 +1706,7 @@ int ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
      }
    
   /*if (target,lun) unassigned, do further checks... */
-  ldn = get_ldn[cmd->target][cmd->lun];
+  ldn = get_ldn[target][cmd->lun];
   if (ldn >= MAX_LOG_DEV) /* on invalid ldn do special stuff */
     {
       if (ldn > MAX_LOG_DEV) /* dynamical remapping if ldn unassigned */
@@ -1623,7 +1722,7 @@ int ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 		      printk("IBM MCA SCSI: Cannot assign SCSI-device dynamically!\n");
 		      printk("              On ldn 7-14 SCSI-commands everywhere in progress.\n");
 		      printk("              Reporting DID_NO_CONNECT for device (%d,%d).\n",
-			     cmd->target, cmd->lun);
+			     target, cmd->lun);
 		      cmd->result = DID_NO_CONNECT << 16;/* return no connect*/
 		      done (cmd);
 		      return 0;
@@ -1631,8 +1730,8 @@ int ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 	      }
 
 	    /* unmap non-processing ldn */
-	    for (id=0; id<=7; id ++)
-	      for (lun=0; lun<=7; lun++)
+	    for (id=0; id<8; id ++)
+	      for (lun=0; lun<8; lun++)
 	      {
 		 if (get_ldn[id][lun] == next_ldn)
 		   {
@@ -1645,9 +1744,9 @@ DYN_ASSIGN:
 	    /* unassign found ldn (pun,lun does not matter for remove) */
 	    immediate_assign(shpnt,0,0,next_ldn,REMOVE_LDN);
 	    /* assign found ldn to aimed pun,lun */
-	    immediate_assign(shpnt,cmd->target,cmd->lun,next_ldn,SET_LDN);
+	    immediate_assign(shpnt,target,cmd->lun,next_ldn,SET_LDN);
 	    /* map found ldn to pun,lun */
-	    get_ldn[cmd->target][cmd->lun] = next_ldn;
+	    get_ldn[target][cmd->lun] = next_ldn;
             /* change ldn to the right value, that is now next_ldn */
 	    ldn = next_ldn;
 	    /* set reduced interrupt_handler-mode for checking */
@@ -1668,19 +1767,19 @@ DYN_ASSIGN:
 	         /* panic here, because a device, found at boottime has 
 		    vanished */
 	         panic("IBM MCA SCSI: ldn=0x%x, SCSI-device on (%d,%d) vanished!\n",
-		       ldn, cmd->target, cmd->lun);
+		       ldn, target, cmd->lun);
 	    
 	    /* set back to normal interrupt_handling */
 	    local_checking_phase_flag = 0;
 	    
 	    /* Information on syslog terminal */
 	    printk("IBM MCA SCSI: ldn=0x%x dynamically reassigned to (%d,%d).\n",
-		   ldn, cmd->target, cmd->lun);
+		   ldn, target, cmd->lun);
 	    
 	    /* increase next_ldn for next dynamical assignment */ 
 	    next_ldn ++;
 	    if (next_ldn>=MAX_LOG_DEV) next_ldn = 7;
-	 }
+	 }       
       else
 	 {  /* wall against Linux accesses to the subsystem adapter */	 
             cmd->result = DID_NO_CONNECT << 16;
@@ -1729,7 +1828,7 @@ DYN_ASSIGN:
   printk("issue scsi cmd=%02x to ldn=%d\n", scsi_cmd, ldn);
 #endif
 
-  /* for specific device debugging: */
+  /* for specific device-type debugging: */
 #ifdef IM_DEBUG_CMD_SPEC_DEV
   if (ld[ldn].device_type==IM_DEBUG_CMD_DEVICE)
      printk("(SCSI-device-type=0x%x) issue scsi cmd=%02x to ldn=%d\n", 
@@ -1794,7 +1893,7 @@ DYN_ASSIGN:
 	     }
            scb->u2.blk.length = ld[ldn].block_length;
 	   if (++disk_rw_in_progress == 1)
-	      PS2_DISK_LED_ON (shpnt->host_no, cmd->target);
+	      PS2_DISK_LED_ON (shpnt->host_no, target);
 	  break;
 	    
 	  /* for other devices, enter here. Other types are not known by
@@ -1830,11 +1929,12 @@ DYN_ASSIGN:
 	   /* Read/write on this non-disk devices is also displayworthy, 
 	      so flash-up the LED/display. */
 	   if (++disk_rw_in_progress == 1)
-	      PS2_DISK_LED_ON (shpnt->host_no, cmd->target);
+	      PS2_DISK_LED_ON (shpnt->host_no, target);
 	 break;
 	 }
       break;
     case INQUIRY:
+      IBM_DS.ldn_inquiry_access[ldn]++;
       scb->command = IM_DEVICE_INQUIRY_CMD;
       scb->enable |= IM_READ_CONTROL | IM_SUPRESS_EXCEPTION_SHORT;
       break;
@@ -1856,6 +1956,7 @@ DYN_ASSIGN:
     /* Commands that need write-only-mode (system -> device): */
     case MODE_SELECT:
     case MODE_SELECT_10:
+      IBM_DS.ldn_modeselect_access[ldn]++;
       scb->command = IM_OTHER_SCSI_CMD_CMD;      
       scb->enable |= IM_SUPRESS_EXCEPTION_SHORT; /*Select needs WRITE-enabled*/
       scb->u1.scsi_cmd_length = cmd->cmd_len;
@@ -1892,10 +1993,16 @@ ibmmca_abort (Scsi_Cmnd * cmd)
   unsigned int ldn;
   void (*saved_done) (Scsi_Cmnd *);
 
+#ifdef CONFIG_IBMMCA_SCSI_ORDER_STANDARD
+  int target = 6 - cmd->target;
+#else
+  int target = cmd->target;
+#endif
+
   /*get logical device number, and disable system interrupts */
   printk ("IBM MCA SCSI: sending abort to device id=%d lun=%d.\n",
-	  cmd->target, cmd->lun);
-  ldn = get_ldn[cmd->target][cmd->lun];
+	  target, cmd->lun);
+  ldn = get_ldn[target][cmd->lun];
   cli ();
 
   /*if cmd for this ldn has already finished, no need to abort */
@@ -2027,12 +2134,32 @@ static int ldn_access_total_read_write(struct Scsi_Host *shpnt)
    return(a);
 }
 
+static int ldn_access_total_inquiry(struct Scsi_Host *shpnt)
+{
+   int a = 0;
+   int i;
+   
+   for (i=0; i<=MAX_LOG_DEV; i++)
+     a+=IBM_DS.ldn_inquiry_access[i];
+   return(a);
+}
+
+static int ldn_access_total_modeselect(struct Scsi_Host *shpnt)
+{
+   int a = 0;
+   int i;
+   
+   for (i=0; i<=MAX_LOG_DEV; i++)
+     a+=IBM_DS.ldn_modeselect_access[i];
+   return(a);
+}
+
 /* routine to display info in the proc-fs-structure (a deluxe feature) */
 int ibmmca_proc_info (char *buffer, char **start, off_t offset, int length,
 		      int hostno, int inout)
 {
    int len=0;
-   int i,id;
+   int i,id,lun;
    struct Scsi_Host *shpnt;
 
    for (i = 0; hosts[i] && hosts[i]->host_no != hostno; i++);
@@ -2047,6 +2174,11 @@ int ibmmca_proc_info (char *buffer, char **start, off_t offset, int length,
    len += sprintf(buffer+len, "\n             IBM-SCSI-Subsystem-Linux-Driver, Version %s\n\n\n",
 		  IBMMCA_SCSI_DRIVER_VERSION);
    len += sprintf(buffer+len, " SCSI Access-Statistics:\n");
+#ifdef CONFIG_IBMMCA_SCSI_ORDER_STANDARD
+   len += sprintf(buffer+len, "               ANSI-SCSI-standard order.: Yes\n");
+#else
+   len += sprintf(buffer+len, "               ANSI-SCSI-standard order.: No\n");
+#endif
 #ifdef CONFIG_SCSI_MULTI_LUN
    len += sprintf(buffer+len, "               Multiple LUN probing.....: Yes\n");
 #else
@@ -2064,8 +2196,14 @@ int ibmmca_proc_info (char *buffer, char **start, off_t offset, int length,
 		  IBM_DS.total_accesses);
    len += sprintf(buffer+len, "                 Total SCSI READ/WRITE..: %d\n",
 		  ldn_access_total_read_write(shpnt));
+   len += sprintf(buffer+len, "                 Total SCSI Inquiries...: %d\n",
+		  ldn_access_total_inquiry(shpnt));
+   len += sprintf(buffer+len, "                 Total SCSI Modeselects.: %d\n",
+		  ldn_access_total_modeselect(shpnt));
    len += sprintf(buffer+len, "                 Total SCSI other cmds..: %d\n\n",
-		  IBM_DS.total_accesses - ldn_access_total_read_write(shpnt));
+		  IBM_DS.total_accesses - ldn_access_total_read_write(shpnt)
+		  - ldn_access_total_modeselect(shpnt)
+		  - ldn_access_total_inquiry(shpnt));
    
    len += sprintf(buffer+len, " Logical-Device-Number (LDN) Access-Statistics:\n");
    len += sprintf(buffer+len, "         LDN | Accesses [%%] |   READ    |   WRITE   | ASSIGNMENTS\n");
@@ -2096,11 +2234,11 @@ int ibmmca_proc_info (char *buffer, char **start, off_t offset, int length,
 	       ti_p(get_scsi[id][2]), ti_p(get_scsi[id][3]), 
 	       ti_p(get_scsi[id][4]), ti_p(get_scsi[id][5]), 
 	       ti_p(get_scsi[id][6]), ti_p(get_scsi[id][7]));
-	len += sprintf(buffer+len, "       %2d     %2s %2s %2s %2s %2s %2s %2s %2s\n",
-	       id, ti_l(get_ldn[id][0]), ti_l(get_ldn[id][1]), 
-	       ti_l(get_ldn[id][2]), ti_l(get_ldn[id][3]), 
-	       ti_l(get_ldn[id][4]), ti_l(get_ldn[id][5]),
-	       ti_l(get_ldn[id][6]), ti_l(get_ldn[id][7]));
+	
+	len += sprintf(buffer+len, "       %2d     ",id);
+	for (lun=0; lun<8; lun++)
+	  len += sprintf(buffer+len,"%2s ",ti_l(get_ldn[id][lun]));
+	len += sprintf(buffer+len,"\n");
      }
    
    len += sprintf(buffer+len, "(A = IBM-Subsystem, D = Harddisk, T = Tapedrive, P = Processor, W = WORM,\n");
@@ -2125,3 +2263,6 @@ Scsi_Host_Template driver_template = IBMMCA;
 #endif
 
 /*--------------------------------------------------------------------*/
+
+
+

@@ -730,6 +730,16 @@ S: 36 Mudtown Road
 S: Wantage, New Jersey 07461
 S: USA
 
+N: Harald Hoyer
+E: HarryH@Royal.Net
+W: http://hot.spotline.de/
+W: http://home.pages.de/~saturn
+D: ip_masq_quake
+D: md boot support
+S: Alleenstrasse 27
+S: D-71679 Asperg
+S: Germany
+
 N: Miguel de Icaza Amozurrutia
 E: miguel@nuclecu.unam.mx
 D: Linux/SPARC team, Midnight Commander maintainer
@@ -1361,8 +1371,9 @@ S: 79098 Freiburg
 S: Germany
 
 N: Joerg Reuter
-E: jreuter@lykos.oche.de
-E: dl1bke@db0pra.ampr.org
+E: jreuter@poboxes.com
+W: http://www.rat.de/jr/
+W: http://qsl.net/dl1bke/
 D: Generic Z8530 driver, AX.25 DAMA slave implementation
 D: Several AX.25 hacks
 

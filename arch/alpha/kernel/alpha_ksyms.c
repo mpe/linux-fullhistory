@@ -40,7 +40,7 @@ extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
 
-EXPORT_SYMBOL(__alpha_bh_counter);
+EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 
 /* platform dependent support */

@@ -1,4 +1,4 @@
-#define RCS_ID "$Id: scc.c,v 1.71 1997/11/29 19:59:20 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.73 1998/01/29 17:38:51 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
 #define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
@@ -6,6 +6,9 @@
 /*
  * Please use z8530drv-utils-3.0 with this version.
  *            ------------------
+ *
+ * You can find a subset of the documentation in 
+ * linux/Documentation/networking/z8530drv.txt.
  */
 
 /*
@@ -16,7 +19,7 @@
 
    ********************************************************************
 
-	Copyright (c) 1993, 1997 Joerg Reuter DL1BKE
+	Copyright (c) 1993, 1998 Joerg Reuter DL1BKE
 
 	portions (c) 1993 Guido ten Dolle PE1NNZ
 
@@ -89,7 +92,8 @@
    970108	- Fixed the remaining problems.
    970402	- Hopefully fixed the problems with the new *_timer()
    		  routines, added calibration code.
-   971012	- made SCC_DELAY a CONFIG option, added CONFIG_SCC_TRXECHO
+   971012	- Made SCC_DELAY a CONFIG option, added CONFIG_SCC_TRXECHO
+   980129	- Small fix to avoid lock-up on initialization
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -195,7 +199,7 @@ static void scc_key_trx (struct scc_channel *scc, char tx);
 static void scc_isr(int irq, void *dev_id, struct pt_regs *regs);
 static void scc_init_timer(struct scc_channel *scc);
 
-static int scc_net_setup(struct scc_channel *scc, unsigned char *name);
+static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev);
 static int scc_net_init(struct device *dev);
 static int scc_net_open(struct device *dev);
 static int scc_net_close(struct device *dev);
@@ -1529,7 +1533,7 @@ static void z8530_init(void)
  * Allocate device structure, err, instance, and register driver
  */
 
-static int scc_net_setup(struct scc_channel *scc, unsigned char *name)
+static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev)
 {
 	unsigned char *buf;
 	struct device *dev;
@@ -1553,11 +1557,11 @@ static int scc_net_setup(struct scc_channel *scc, unsigned char *name)
 	dev->name = buf;
 	dev->init = scc_net_init;
 
-	if (register_netdev(dev) != 0)
+	if ((addev? register_netdevice(dev) : register_netdev(dev)) != 0)
 	{
 		kfree(dev);
-		return -EIO;
-	}
+                return -EIO;
+        }
 
 	return 0;
 }
@@ -1868,7 +1872,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 					request_region(SCC_Info[2*Nchips+chan].ctrl, 1, "scc ctrl");
 					request_region(SCC_Info[2*Nchips+chan].data, 1, "scc data");
 					if (Nchips+chan != 0)
-						scc_net_setup(&SCC_Info[2*Nchips+chan], device_name);
+						scc_net_setup(&SCC_Info[2*Nchips+chan], device_name, 1);
 				}
 			}
 			
@@ -2178,7 +2182,7 @@ __initfunc(int scc_init (void))
 
 	sprintf(devname,"%s0", SCC_DriverName);
 	
-	result = scc_net_setup(SCC_Info, devname);
+	result = scc_net_setup(SCC_Info, devname, 0);
 	if (result)
 	{
 		printk(KERN_ERR "z8530drv: cannot initialize module\n");
@@ -2203,7 +2207,7 @@ int init_module(void)
 	result = scc_init();
 
 	if (result == 0)
-		printk(KERN_INFO "Copyright 1993,1997 Joerg Reuter DL1BKE (jreuter@poboxes.com)\n");
+		printk(KERN_INFO "Copyright 1993,1998 Joerg Reuter DL1BKE (jreuter@poboxes.com)\n");
 		
 	return result;
 }

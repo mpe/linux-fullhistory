@@ -4,7 +4,6 @@
 #include <linux/tasks.h>
 
 extern unsigned int local_irq_count[NR_CPUS];
-#define in_interrupt()	(local_irq_count[smp_processor_id()] != 0)
 
 #ifndef __SMP__
 

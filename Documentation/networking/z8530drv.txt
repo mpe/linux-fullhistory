@@ -4,9 +4,9 @@ full package from:
 Internet:
 =========
 
-1. ftp://db0bm.automation.fh-aachen.de/incoming/z8530drv/z8530drv-utils-3.0.tar.gz
+1. ftp://ftp.ccac.rwth-aachen.de/pub/jr/z8530drv-utils-3.0-1.tar.gz
 
-2. ftp://ftp.pspt.fi/pub/ham/linux/ax25/z8530drv-utils-3.0.tar.gz
+2. ftp://ftp.pspt.fi/pub/ham/linux/ax25/z8530drv-utils-3.0-1.tar.gz
 
 3. ftp://ftp.ucsd.edu/hamradio/packet/tcpip/incoming/z8530drv-utils-3.0.tar.gz
    If you can't find it there, try .../tcpip/linux/z8530drv-utils-3.0.tar.gz
@@ -23,7 +23,7 @@ http://www.rat.de/jr
 
    ********************************************************************
 
-        (c) 1993,1997 by Joerg Reuter DL1BKE <jreuter@poboxes.com>
+        (c) 1993,1998 by Joerg Reuter DL1BKE <jreuter@poboxes.com>
 
         portions (c) 1993 Guido ten Dolle PE1NNZ
 

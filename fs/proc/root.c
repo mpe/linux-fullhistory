@@ -621,13 +621,6 @@ static struct proc_dir_entry proc_root_slab = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
-#ifdef CONFIG_OMIRR
-static struct proc_dir_entry proc_root_omirr = {
-	PROC_OMIRR, 5, "omirr",
-	S_IFREG | S_IRUSR, 1, 0, 0,
-	0, &proc_omirr_inode_operations
-};
-#endif
 #ifdef __powerpc__
 static struct proc_dir_entry proc_root_ppc_htab = {
 	PROC_PPC_HTAB, 8, "ppc_htab",

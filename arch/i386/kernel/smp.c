@@ -258,10 +258,14 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 	}
 	memcpy(str,mpc->mpc_oem,8);
 	str[8]=0;
+	memcpy(ioapic_OEM_ID,str,9);
 	printk("OEM ID: %s ",str);
+	
 	memcpy(str,mpc->mpc_productid,12);
 	str[12]=0;
+	memcpy(ioapic_Product_ID,str,13);
 	printk("Product ID: %s ",str);
+
 	printk("APIC at: 0x%lX\n",mpc->mpc_lapic);
 
 	/* set the local APIC address */
@@ -366,14 +370,6 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					printk("Skipping remaining sources.\n");
 					--mp_irq_entries;
 				}
-
-printk(" Itype:%d Iflag:%d srcbus:%d srcbusI:%d dstapic:%d dstI:%d.\n",
-		m->mpc_irqtype,
-		m->mpc_irqflag,
-		m->mpc_srcbus,
-		m->mpc_srcbusirq,
-		m->mpc_dstapic,
-		m->mpc_dstirq);
 
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
@@ -1372,10 +1368,13 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 				p->counter = 0;
 				need_resched = 1;
 			}
-			if (p->priority < DEF_PRIORITY)
+			if (p->priority < DEF_PRIORITY) {
 				kstat.cpu_nice += user;
-			else
+				kstat.per_cpu_nice[cpu] += user;
+			} else {
 				kstat.cpu_user += user;
+				kstat.per_cpu_user[cpu] += user;
+			}
 
 			kstat.cpu_system += system;
 			kstat.per_cpu_system[cpu] += system;

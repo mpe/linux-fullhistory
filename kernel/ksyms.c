@@ -143,6 +143,7 @@ EXPORT_SYMBOL(update_vm_cache);
 EXPORT_SYMBOL(vmtruncate);
 
 /* filesystem internal functions */
+EXPORT_SYMBOL(update_atime);
 EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(putname);
@@ -203,6 +204,7 @@ EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);
 EXPORT_SYMBOL(find_inode_number);
+EXPORT_SYMBOL(is_subdir);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);

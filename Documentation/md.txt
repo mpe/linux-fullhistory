@@ -1,0 +1,37 @@
+Tools that manage md devices can be found at sweet-smoke.ufr-info-p7.ibp.fr
+in public/Linux/md035.tar.gz.
+
+	Marc ZYNGIER <zyngier@ufr-info-p7.ibp.fr>
+
+--
+
+You can boot (if you selected boot support in the configuration) with your md 
+device with the following kernel command line:
+
+md=<md device no.>,<raid level>,<chunk size factor>,<fault level>,dev0,dev1,...,devn
+
+md device no. = the number of the md device ... 
+              0 means md0, 
+	      1 md1,
+	      2 md2,
+	      3 md3,
+	      4 md4
+
+raid level = -1 linear mode
+              0 striped mode
+	      other modes are currently unsupported.
+
+chunk size factor = (raid-0 and raid-1 only)
+              Set  the chunk size as PAGE_SIZE << n.
+	      
+fault level = (raid-1 only)
+              Set  the maximum fault number as n.
+	      Currently unsupported due to lack of boot support for raid1.
+			    
+dev0-devn: e.g. /dev/hda1,/dev/hdc1,/dev/sda1,/dev/sdb1
+			    
+my loadlin line looks like this:
+
+e:\loadlin\loadlin e:\zimage root=/dev/md0 md=0,0,4,0,/dev/hdb2,/dev/hdc3 ro
+			    
+        Harald Hoyer <HarryH@Royal.Net>

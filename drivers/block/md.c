@@ -8,6 +8,7 @@
    A lot of inspiration came from hd.c ...
 
    kerneld support by Boris Tobotras <boris@xtalk.msk.su>
+   boot support for linear and striped mode by Harald Hoyer <HarryH@Royal.Net>
 
    RAID-1/RAID-5 extensions by:
         Ingo Molnar, Miguel de Icaza, Gadi Oxman
@@ -58,6 +59,10 @@
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
+
+#ifdef CONFIG_MD_BOOT
+extern dev_t name_to_dev_t(char *line) __init;
+#endif
 
 static struct hd_struct md_hd_struct[MAX_MD_DEV];
 static int md_blocksizes[MAX_MD_DEV];
@@ -988,10 +993,13 @@ int md_thread(void * arg)
 		cli();
 		if (!test_bit(THREAD_WAKEUP, &thread->flags)) {
 			do {
-			         spin_lock_irq(&current->sigmask_lock);
+			         spin_lock(&current->sigmask_lock);
 				 flush_signals(current);
-				 spin_unlock_irq(&current->sigmask_lock);
+				 spin_unlock(&current->sigmask_lock);
 				 interruptible_sleep_on(&thread->wqueue);
+				 cli();
+				 if (test_bit(THREAD_WAKEUP, &thread->flags))
+				 	break;
 			} while (signal_pending(current));
 		}
 	}
@@ -1055,7 +1063,7 @@ int md_do_sync(struct md_dev *mddev)
 		 */
 		curr_bsize = blksize_size[major][minor];
 		if (curr_bsize != blocksize) {
-diff_blocksize:
+		diff_blocksize:
 			if (curr_bsize > blocksize)
 				/*
 				 * this is safe, rounds downwards.
@@ -1163,6 +1171,102 @@ void mdsyncd (void *data)
 	
 }
 
+#ifdef CONFIG_MD_BOOT
+struct {
+	int set;
+	int ints[100];
+	char str[100];
+} md_setup_args __initdata = {
+	0,{0},{0}
+};
+
+/* called from init/main.c */
+__initfunc(void md_setup(char *str,int *ints))
+{
+	int i;
+	for(i=0;i<=ints[0];i++) {
+		md_setup_args.ints[i] = ints[i];
+		strcpy(md_setup_args.str, str);
+/*      printk ("md: ints[%d]=%d.\n", i, ints[i]);*/
+	}
+	md_setup_args.set=1;
+	return;
+}
+
+__initfunc(void do_md_setup(char *str,int *ints))
+{
+	int minor, pers, factor, fault;
+	dev_t dev;
+	int i=1;
+
+	if(ints[0] < 4) {
+		printk ("md: Too few Arguments (%d).\n", ints[0]);
+		return;
+	}
+   
+	minor=ints[i++];
+   
+	if (minor >= MAX_MD_DEV) {
+		printk ("md: Minor device number too high.\n");
+		return;
+	}
+
+	pers = 0;
+	
+	switch(ints[i++]) {  /* Raidlevel  */
+	case -1:
+#ifdef CONFIG_MD_LINEAR
+		pers = LINEAR;
+		printk ("md: Setting up md%d as linear device.\n",minor);
+#else 
+	        printk ("md: Linear mode not configured." 
+			"Recompile the kernel with linear mode enabled!\n");
+#endif
+		break;
+	case 0:
+		pers = STRIPED;
+#ifdef CONFIG_MD_STRIPED
+		printk ("md: Setting up md%d as a striped device.\n",minor);
+#else 
+	        printk ("md: Striped mode not configured." 
+			"Recompile the kernel with striped mode enabled!\n");
+#endif
+		break;
+/*      not supported yet
+	case 1:
+		pers = RAID1;
+		printk ("md: Setting up md%d as a raid1 device.\n",minor);
+		break;
+	case 5:
+		pers = RAID5;
+		printk ("md: Setting up md%d as a raid5 device.\n",minor);
+		break;
+*/
+	default:	   
+		printk ("md: Unknown or not supported raid level %d.\n", ints[--i]);
+		return;
+	}
+
+	if(pers) {
+
+	  factor=ints[i++]; /* Chunksize  */
+	  fault =ints[i++]; /* Faultlevel */
+   
+	  pers=pers | factor | (fault << FAULT_SHIFT);   
+   
+	  while( str && (dev = name_to_dev_t(str))) {
+	    do_md_add (minor, dev);
+	    if(str = strchr (str, ','))
+	      str++;
+	  }
+
+	  do_md_run (minor, pers);
+	  printk ("md: Loading md%d.\n",minor);
+	}
+   
+}
+#endif
+
 void linear_init (void);
 void raid0_init (void);
 void raid1_init (void);
@@ -1216,6 +1320,13 @@ __initfunc(int md_init (void))
 #ifdef CONFIG_MD_RAID5
   raid5_init ();
 #endif
-  
   return (0);
 }
+
+#ifdef CONFIG_MD_BOOT
+__initfunc(void md_setup_drive(void))
+{
+	if(md_setup_args.set)
+		do_md_setup(md_setup_args.str, md_setup_args.ints);
+}
+#endif

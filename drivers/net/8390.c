@@ -54,6 +54,8 @@ static const char *version =
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/irq.h>
+#include <asm/delay.h>
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/in.h>
@@ -185,10 +187,12 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 
     /* Mask interrupts from the ethercard. */
     outb_p(0x00, e8390_base + EN0_IMR);
+    disable_irq(dev->irq);
     synchronize_irq();
     if (dev->interrupt) {
 	printk("%s: Tx request while isr active.\n",dev->name);
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+	enable_irq(dev->irq);
 	ei_local->stat.tx_errors++;
 	dev_kfree_skb(skb, FREE_WRITE);
 	return 0;
@@ -226,6 +230,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	ei_local->irqlock = 0;
 	dev->tbusy = 1;
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+	enable_irq(dev->irq);
 	ei_local->stat.tx_errors++;
 	return 1;
     }
@@ -272,6 +277,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     /* Turn 8390 interrupts back on. */
     ei_local->irqlock = 0;
     outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+    enable_irq(dev->irq);
 
     dev_kfree_skb (skb, FREE_WRITE);
     ei_local->stat.tx_bytes += send_length;
@@ -608,7 +614,6 @@ static void ei_receive(struct device *dev)
 static void ei_rx_overrun(struct device *dev)
 {
     int e8390_base = dev->base_addr;
-    unsigned long wait_start_time;
     unsigned char was_txing, must_resend = 0;
     struct ei_device *ei_local = (struct ei_device *) dev->priv;
     
@@ -629,9 +634,7 @@ static void ei_rx_overrun(struct device *dev)
      * it "is not a reliable indicator and subsequently should be ignored."
      * We wait at least 10ms.
      */
-    wait_start_time = jiffies;
-    while (jiffies - wait_start_time <= 1*HZ/100)
-	barrier();
+    udelay(10*1000);
 
     /*
      * Reset RBCR[01] back to zero as per magic incantation.

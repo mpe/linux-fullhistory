@@ -1,0 +1,137 @@
+
+most (all) Intel SMP boards have the so-called 'IO-APIC', which is
+an enhanced interrupt controller, able to route hardware interrupts
+to multiple CPUs, or to CPU groups.
+
+Linux supports the IO-APIC, but unfortunately there are broken boards
+out there which make it unsafe to enable the IO-APIC unconditionally.
+The Linux policy thus is to enable the IO-APIC only if it's 100% safe, ie.:
+
+	   - the board is on the 'whitelist'
+
+	or - the board does not have PCI pins connected to the IO-APIC
+
+	or - the user has overriden blacklisted settings with the
+	     pirq= boot option line.
+
+Kernel messages tell you wether the board is 'safe'. If your box
+boots with enabled IO-APIC IRQs, then you have nothing else to do. Your
+/proc/interrupts will look like this one:
+
+   ---------------------------->
+   hell:~> cat /proc/interrupts
+              CPU0       CPU1
+     0:      90782          0   XT PIC   timer
+     1:       4135       2375  IO-APIC   keyboard
+     2:          0          0   XT PIC   cascade
+     3:        851        807  IO-APIC   serial
+     9:          6         22  IO-APIC   ncr53c8xx
+    11:        307        154  IO-APIC   NE2000
+    13:          4          0   XT PIC   fpu
+    14:      56000      30610  IO-APIC   ide0
+   NMI:          0
+   IPI:          0
+   <----------------------------
+
+some interrupts will still be 'XT PIC', but this is not a problem, none
+of those IRQ sources is 'heavy'.
+
+If one of your boot messages says 'unlisted/blacklisted board, DISABLING
+IO-APIC IRQs', then you should do this to get multi-CPU IO-APIC IRQs
+running:
+
+	A) if your board is unlisted, then mail to linux-smp to get
+	   it into either the white or the blacklist
+	B) if your board is blacklisted, then figure out the apropriate
+	   pirq= option to get your system boot
+
+
+pirq= lines look like the following in /etc/lilo.conf:
+
+	append="pirq=15,11,10"
+
+the actual numbers depend on your system, on your PCI cards and on their
+PCI slot position. Usually PCI slots are 'daisy chained' before they are
+connected to the PCI chipset irq routing facility (the incoming PIRQ1-4
+lines):
+
+               ,-.        ,-.        ,-.        ,-.        ,-.
+     PIRQ4 ----| |-.    ,-| |-.    ,-| |-.    ,-| |--------| |
+               |S|  \  /  |S|  \  /  |S|  \  /  |S|        |S|
+     PIRQ3 ----|l|-. `/---|l|-. `/---|l|-. `/---|l|--------|l|
+               |o|  \/    |o|  \/    |o|  \/    |o|        |o|
+     PIRQ2 ----|t|-./`----|t|-./`----|t|-./`----|t|--------|t|
+               |1| /\     |2| /\     |3| /\     |4|        |5|
+     PIRQ1 ----| |-  `----| |-  `----| |-  `----| |--------| |
+               `-'        `-'        `-'        `-'        `-'
+
+every PCI card emits a PCI IRQ, which can be INTA,INTB,INTC,INTD:
+
+                               ,-.
+                         INTD--| |
+                               |S|
+                         INTC--|l|
+                               |o|
+                         INTB--|t|
+                               |x|
+                         INTA--| |
+                               `-'
+
+These INTA-D PCI IRQs are always 'local to the card', their real meaning
+depends on which slot they are in. If you look at the daisy chaining diagram,
+a card in slot4, issuing INTA IRQ, it will end up as a signal on PIRQ2 of
+the PCI chipset. Most cards issue INTA, this creates optimal distibution
+between the PIRQ lines. (distributing IRQ sources properly is not a
+necessity, PCI IRQs can be shared at will, but it's a good for performance
+to have non shared interrupts). Slot5 should be used for videocards, they
+dont use interrupts normally, thus they are not daisy chained either.
+
+so if you have your SCSI card (IRQ11) in Slot1, Tulip card (IRQ9) in
+Slot2, then you'll have to specify this pirq= line:
+
+	append="pirq=11,9"
+
+the following script tries to figure out such a default pirq= line from
+your PCI configuration:
+
+	echo -n pirq=; echo `scanpci | grep T_L | cut -c56-` | sed 's/ /,/g'
+
+note that this script wont work if you have skipped a few slots or if your
+board does not do default daisy-chaining. (or the IO-APIC has the PIRQ pins
+connected in some strange way). Eg. if in the above case you have your SCSI
+card (IRQ11) in Slot3, and have Slot1 empty:
+
+	append="pirq=0,9,11"
+
+[value '0' is a generic 'placeholder', reserved for empty (or non-IRQ emitting)
+slots.]
+
+generally, it's always possible to find out the correct pirq= settings, just
+permutate all IRQ numbers properly ... it will take some time though. An
+'incorrect' pirq line will cause the booting process to hang, or a device
+wont function properly (if it's inserted as eg. a module).
+
+If you have 2 PCI buses, then you can use up to 8 pirq values. Although such
+boards tend to have a good configuration and will be included in the
+whitelist.
+
+Be prepared that it might happen that you need some strange pirq line:
+
+	append="pirq=0,0,0,0,0,0,9,11"
+
+use smart try-and-err techniques to find out the correct pirq line ...
+
+
+the following pirq line can be used to force a board into the whitelist:
+
+	append="pirq=0"
+
+[if your system works with no problems after this, then it should be added
+to the official whitelist, contact us]
+
+good luck and mail to linux-smp@vger.rutgers.edu or
+linux-kernel@vger.rutger.edu if you have any problems that are not covered
+by this document.
+
+-- mingo
+

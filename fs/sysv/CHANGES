@@ -7,3 +7,10 @@ Fri Jan 23 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 		      in detected_[xenix,sysv4,sysv2,coherent]. Thanks
 		      to Andrzej Krzysztofowicz <ankry@mif.pg.gda.pl>
 		      for identifying the problem.
+
+Tue Jan 27 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
+        *    inode.c: added 2048-byte block support to SystemV FS.
+		      Merged detected_bs[512,1024,2048] into one function:
+		      void detected_bs (u_char type, struct super_block *sb).
+		      Thanks to Andrzej Krzysztofowicz <ankry@mif.pg.gda.pl>
+		      for the patch.

@@ -17,6 +17,7 @@
 #include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/socket.h>
+#include <linux/file.h>
 #include <linux/fcntl.h>
 #include <linux/net.h>
 #include <linux/interrupt.h>
@@ -44,6 +45,7 @@
 
 static __inline__ int scm_check_creds(struct ucred *creds)
 {
+	/* N.B. The test for suser should follow the credential check */
 	if (suser())
 		return 0;
 	if (creds->pid != current->pid ||
@@ -58,11 +60,10 @@ static __inline__ int scm_check_creds(struct ucred *creds)
 
 static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 {
-	int num;
+	int *fdp = (int*)CMSG_DATA(cmsg);
 	struct scm_fp_list *fpl = *fplp;
 	struct file **fpp;
-	int *fdp = (int*)CMSG_DATA(cmsg);
-	int i;
+	int i, num;
 
 	num = (cmsg->cmsg_len - CMSG_ALIGN(sizeof(struct cmsghdr)))/sizeof(int);
 
@@ -86,41 +87,33 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 		return -EINVAL;
 	
 	/*
-	 *	Verify the descriptors.
+	 *	Verify the descriptors and increment the usage count.
 	 */
 	 
 	for (i=0; i< num; i++)
 	{
-		int fd;
-		
-		fd = fdp[i];
-		if (fd < 0 || fd >= NR_OPEN)
+		int fd = fdp[i];
+		struct file *file;
+
+		if (fd < 0 || !(file = fget(fd)))
 			return -EBADF;
-		if (current->files->fd[fd]==NULL)
-			return -EBADF;
-		fpp[i] = current->files->fd[fd];
+		*fpp++ = file;
+		fpl->count++;
 	}
-	
-        /* add another reference to these files */
-	for (i=0; i< num; i++, fpp++)
-		(*fpp)->f_count++;
-	fpl->count += num;
-	
 	return num;
 }
 
 void __scm_destroy(struct scm_cookie *scm)
 {
-	int i;
 	struct scm_fp_list *fpl = scm->fp;
+	int i;
 
-	if (!fpl)
-		return;
-
-	for (i=fpl->count-1; i>=0; i--)
-		close_fp(fpl->fp[i]);
-
-	kfree(fpl);
+	if (fpl) {
+		scm->fp = NULL;
+		for (i=fpl->count-1; i>=0; i--)
+			close_fp(fpl->fp[i]);
+		kfree(fpl);
+	}
 }
 
 
@@ -223,14 +216,17 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 	cmhdr.cmsg_level = level;
 	cmhdr.cmsg_type = type;
 	cmhdr.cmsg_len = cmlen;
-	err = copy_to_user(cm, &cmhdr, sizeof cmhdr); 
-	if (!err)
-		err = copy_to_user(CMSG_DATA(cm), data, cmlen - sizeof(struct cmsghdr));
-	if (!err) {
-		cmlen = CMSG_SPACE(len);
-		msg->msg_control += cmlen;
-		msg->msg_controllen -= cmlen;
-	}
+
+	err = -EFAULT;
+	if (copy_to_user(cm, &cmhdr, sizeof cmhdr))
+		goto out; 
+	if (copy_to_user(CMSG_DATA(cm), data, cmlen - sizeof(struct cmsghdr)))
+		goto out;
+	cmlen = CMSG_SPACE(len);
+	msg->msg_control += cmlen;
+	msg->msg_controllen -= cmlen;
+	err = 0;
+out:
 	return err;
 }
 
@@ -240,21 +236,28 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 
 	int fdmax = (msg->msg_controllen - sizeof(struct cmsghdr))/sizeof(int);
 	int fdnum = scm->fp->count;
-	int *cmfptr;
-	int err = 0;
-	int i;
 	struct file **fp = scm->fp->fp;
+	int *cmfptr;
+	int err = 0, i;
 
 	if (fdnum < fdmax)
 		fdmax = fdnum;
 
 	for (i=0, cmfptr=(int*)CMSG_DATA(cm); i<fdmax; i++, cmfptr++)
 	{
-		int new_fd = get_unused_fd();
-		if (new_fd < 0)
+		int new_fd;
+		err = get_unused_fd();
+		if (err < 0)
 			break;
-		current->files->fd[new_fd] = fp[i];
+		new_fd = err;
 		err = put_user(new_fd, cmfptr);
+		if (err) {
+			put_unused_fd(new_fd);
+			break;
+		}
+		/* Bump the usage count and install the file. */
+		fp[i]->f_count++;
+		current->files->fd[new_fd] = fp[i];
 	}
 
 	if (i > 0)
@@ -272,38 +275,30 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 			msg->msg_controllen -= cmlen;
 		}
 	}
-
-	if (err)
-		i = 0;
+	if (i < fdnum)
+		msg->msg_flags |= MSG_CTRUNC;
 
 	/*
-	 *	Dump those that don't fit.
+	 * All of the files that fit in the message have had their
+	 * usage counts incremented, so we just free the list.
 	 */
-	for ( ; i < fdnum; i++)	{
-		msg->msg_flags |= MSG_CTRUNC;
-		close_fp(fp[i]);
-	}
-
-	kfree (scm->fp);
-	scm->fp = NULL;
+	__scm_destroy(scm);
 }
 
 struct scm_fp_list *scm_fp_dup(struct scm_fp_list *fpl)
 {
-	int i;
 	struct scm_fp_list *new_fpl;
+	int i;
 
 	if (!fpl)
 		return NULL;
 
-	new_fpl = kmalloc(fpl->count*sizeof(int) + sizeof(*fpl), GFP_KERNEL);
-	if (!new_fpl)
-		return NULL;
+	new_fpl = kmalloc(sizeof(*fpl), GFP_KERNEL);
+	if (new_fpl) {
+		memcpy(new_fpl, fpl, sizeof(*fpl));
 
-	memcpy(new_fpl, fpl, fpl->count*sizeof(int) + sizeof(*fpl));
-
-	for (i=fpl->count-1; i>=0; i--)
-		fpl->fp[i]->f_count++;
-
+		for (i=fpl->count-1; i>=0; i--)
+			fpl->fp[i]->f_count++;
+	}
 	return new_fpl;
 }

@@ -331,8 +331,9 @@ struct cpu_model_info {
 
 static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_INTEL,	4,
-		{ "486 DX-25/33", "486 DX-50", "486 SX", "487 DX", "486 DX/2", "486 SL", "486 SX/2",
-		  NULL, "486 DX/2-WB", "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL }},
+		{ "486 DX-25/33", "486 DX-50", "486 SX", "486 DX/2", "486 SL", "486 SX/2",
+		  NULL, "486 DX/2-WB", "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL,
+		  NULL, NULL }},
 	{ X86_VENDOR_INTEL,	5,
 	  { "Pentium 60/66 A-step", "Pentium 60/66", "Pentium 75+",
 	    "OverDrive PODP5V83", "Pentium MMX", NULL, NULL,

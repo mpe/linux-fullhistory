@@ -84,10 +84,11 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
-   dep_tristate 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA $CONFIG_SCSI
-   if [ "$CONFIG_SCSI_IBMMCA" != "n" ]; then
-      bool '  reset SCSI-devices while booting' CONFIG_SCSI_IBMMCA_DEV_RESET
-   fi
+  bool 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA
+  if [ "$CONFIG_SCSI_IBMMCA" = "y" ]; then
+     bool '  Standard SCSI-order' CONFIG_IBMMCA_SCSI_ORDER_STANDARD
+     bool '  Reset SCSI-devices at boottime' CONFIG_IBMMCA_SCSI_DEV_RESET
+  fi
 fi
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT

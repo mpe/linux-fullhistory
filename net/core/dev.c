@@ -49,6 +49,7 @@
  *	    Thomas Bogendoerfer :	Return ENODEV for dev_open, if there
  *					is no device open function.
  *		Andi Kleen	:	Fix error reporting for SIOCGIFCONF
+ *		Régis Duchesne	:	Fix the argument check in dev_ioctl()
  *
  */
 
@@ -1534,7 +1535,6 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 	return -EINVAL;
 }
 
-
 /*
  *	This function handles all "interface"-type I/O control requests. The actual
  *	'doing' part of this is dev_ifsioc above.
@@ -1566,24 +1566,18 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		return dev_ifname((struct ifreq *)arg);
 	}
 
+	/*
+	 *	Fetch the interface name from the info block. 
+	 */
+
 	if (copy_from_user(&ifr, arg, sizeof(struct ifreq)))
 		return -EFAULT;
-
 	ifr.ifr_name[IFNAMSIZ-1] = 0;
-
 #ifdef CONFIG_NET_ALIAS
 	colon = strchr(ifr.ifr_name, ':');
 	if (colon)
 		*colon = 0;
 #endif
-
-	/*
-	 *	See which interface the caller is talking about. 
-	 */
-	 
-#ifdef CONFIG_KERNELD
-	dev_load(ifr.ifr_name);
-#endif	
 
 	switch(cmd) 
 	{
@@ -1602,6 +1596,9 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFMAP:
 		case SIOCGIFINDEX:
 		case SIOCGIFTXQLEN:
+#ifdef CONFIG_KERNELD
+			dev_load(ifr.ifr_name);
+#endif	
 			ret = dev_ifsioc(&ifr, cmd);
 			if (!ret) {
 #ifdef CONFIG_NET_ALIAS
@@ -1632,6 +1629,9 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFTXQLEN:
 			if (!suser())
 				return -EPERM;
+#ifdef CONFIG_KERNELD
+			dev_load(ifr.ifr_name);
+#endif	
 			rtnl_lock();
 			ret = dev_ifsioc(&ifr, cmd);
 			rtnl_unlock();
@@ -1652,6 +1652,9 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		default:
 			if (cmd >= SIOCDEVPRIVATE &&
 			    cmd <= SIOCDEVPRIVATE + 15) {
+#ifdef CONFIG_KERNELD
+				dev_load(ifr.ifr_name);
+#endif	
 				rtnl_lock();
 				ret = dev_ifsioc(&ifr, cmd);
 				rtnl_unlock();
@@ -1664,8 +1667,15 @@ int dev_ioctl(unsigned int cmd, void *arg)
 				if (IW_IS_SET(cmd)) {
 					if (!suser())
 						return -EPERM;
+#ifdef CONFIG_KERNELD
+					dev_load(ifr.ifr_name);
+#endif	
 					rtnl_lock();
 				}
+#ifdef CONFIG_KERNELD
+				else
+					dev_load(ifr.ifr_name);
+#endif	
 				ret = dev_ifsioc(&ifr, cmd);
 				if (IW_IS_SET(cmd))
 					rtnl_unlock();

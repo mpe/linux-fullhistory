@@ -1,7 +1,7 @@
 /*
  *	linux/arch/i386/kernel/irq.c
  *
- *	Copyright (C) 1992 Linus Torvalds
+ *	Copyright (C) 1992, 1998 Linus Torvalds, Ingo Molnar
  *
  * This file contains the code used by various IRQ handling routines:
  * asking for different IRQ's should be done through these routines
@@ -41,33 +41,6 @@
 
 #include "irq.h"
 
-/*
- * I had a lockup scenario where a tight loop doing
- * spin_unlock()/spin_lock() on CPU#1 was racing with
- * spin_lock() on CPU#0. CPU#0 should have noticed spin_unlock(), but
- * apparently the spin_unlock() information did not make it
- * through to CPU#0 ... nasty, is this by design, do we haveto limit
- * 'memory update oscillation frequency' artificially like here?
- *
- * Such 'high frequency update' races can be avoided by careful design, but
- * some of our major constructs like spinlocks use similar techniques,
- * it would be nice to clarify this issue. Set this define to 0 if you
- * want to check wether your system freezes. I suspect the delay done
- * by SYNC_OTHER_CORES() is in correlation with 'snooping latency', but
- * i thought that such things are guaranteed by design, since we use
- * the 'LOCK' prefix.
- */
-#define SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND 1
-
-#if SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND
-# define SYNC_OTHER_CORES(x) udelay(x+1)
-#else
-/*
- * We have to allow irqs to arrive between __sti and __cli
- */
-# define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop")
-#endif
-
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 
@@ -96,11 +69,8 @@ static unsigned int cached_irq_mask = (1<<NR_IRQS)-1;
 
 spinlock_t irq_controller_lock;
 
-static int irq_events [NR_IRQS] = { -1, };
+static unsigned int irq_events [NR_IRQS] = { -1, };
 static int disabled_irq [NR_IRQS] = { 0, };
-#ifdef __SMP__
-static int irq_owner [NR_IRQS] = { NO_PROC_ID, };
-#endif
 
 /*
  * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)
@@ -125,10 +95,54 @@ static int irq_owner [NR_IRQS] = { NO_PROC_ID, };
    *  - explicitly use irq 16-19 depending on which PCI irq
    *    line your PCI controller uses.
    */
-  unsigned int io_apic_irqs = 0xff0000;
+  unsigned int io_apic_irqs = 0;
 #endif
 
-static inline void mask_8259A(int irq)
+struct hw_interrupt_type {
+	void (*handle)(unsigned int irq, int cpu, struct pt_regs * regs);
+	void (*enable)(unsigned int irq);
+	void (*disable)(unsigned int irq);
+};
+
+
+static void do_8259A_IRQ (unsigned int irq, int cpu, struct pt_regs * regs);
+static void enable_8259A_irq (unsigned int irq);
+static void disable_8259A_irq (unsigned int irq);
+
+static struct hw_interrupt_type i8259A_irq_type = {
+	do_8259A_IRQ,
+	enable_8259A_irq,
+	disable_8259A_irq
+};
+
+
+#ifdef __SMP__
+static void do_ioapic_IRQ (unsigned int irq, int cpu, struct pt_regs * regs);
+static void enable_ioapic_irq (unsigned int irq);
+static void disable_ioapic_irq (unsigned int irq);
+
+static struct hw_interrupt_type ioapic_irq_type = {
+	do_ioapic_IRQ,
+	enable_ioapic_irq,
+	disable_ioapic_irq
+};
+#endif
+
+struct hw_interrupt_type *irq_handles[NR_IRQS] =
+{
+	[0 ... 15] = &i8259A_irq_type			/* standard ISA IRQs */
+#ifdef __SMP__
+	, [16 ... NR_IRQS-1] = &ioapic_irq_type		/* 'high' PCI IRQs */
+#endif
+};
+
+
+/*
+ * These have to be protected by the irq controller spinlock
+ * before being called.
+ */
+
+static inline void mask_8259A(unsigned int irq)
 {
 	cached_irq_mask |= 1 << irq;
 	if (irq & 8) {
@@ -138,7 +152,7 @@ static inline void mask_8259A(int irq)
 	}
 }
 
-static inline void unmask_8259A(int irq)
+static inline void unmask_8259A(unsigned int irq)
 {
 	cached_irq_mask &= ~(1 << irq);
 	if (irq & 8) {
@@ -148,7 +162,7 @@ static inline void unmask_8259A(int irq)
 	}
 }
 
-void set_8259A_irq_mask(int irq)
+void set_8259A_irq_mask(unsigned int irq)
 {
 	/*
 	 * (it might happen that we see IRQ>15 on a UP box, with SMP
@@ -163,21 +177,7 @@ void set_8259A_irq_mask(int irq)
 	}
 }
 
-/*
- * These have to be protected by the spinlock
- * before being called.
- */
-void mask_irq(unsigned int irq)
-{
-	if (IO_APIC_IRQ(irq))
-		disable_IO_APIC_irq(irq);
-	else {
-		cached_irq_mask |= 1 << irq;
-		set_8259A_irq_mask(irq);
-	}
-}
-
-void unmask_irq(unsigned int irq)
+void unmask_generic_irq(unsigned int irq)
 {
 	if (IO_APIC_IRQ(irq))
 		enable_IO_APIC_irq(irq);
@@ -218,8 +218,8 @@ BUILD_IRQ(12) BUILD_IRQ(13) BUILD_IRQ(14) BUILD_IRQ(15)
 BUILD_IRQ(16) BUILD_IRQ(17) BUILD_IRQ(18) BUILD_IRQ(19)
 
 /*
- * [FIXME: anyone with 2 separate PCI buses and 2 IO-APICs,
- *         please speak up and request experimental patches.
+ * [FIXME: anyone with 2 separate PCI buses and 2 IO-APICs, please
+ *	   speak up if problems and request experimental patches.
  *         --mingo ]
  */
 
@@ -417,6 +417,33 @@ static inline void wait_on_bh(void)
 	} while (atomic_read(&global_bh_count) != 0);
 }
 
+/*
+ * I had a lockup scenario where a tight loop doing
+ * spin_unlock()/spin_lock() on CPU#1 was racing with
+ * spin_lock() on CPU#0. CPU#0 should have noticed spin_unlock(), but
+ * apparently the spin_unlock() information did not make it
+ * through to CPU#0 ... nasty, is this by design, do we have to limit
+ * 'memory update oscillation frequency' artificially like here?
+ *
+ * Such 'high frequency update' races can be avoided by careful design, but
+ * some of our major constructs like spinlocks use similar techniques,
+ * it would be nice to clarify this issue. Set this define to 0 if you
+ * want to check wether your system freezes. I suspect the delay done
+ * by SYNC_OTHER_CORES() is in correlation with 'snooping latency', but
+ * i thought that such things are guaranteed by design, since we use
+ * the 'LOCK' prefix.
+ */
+#define SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND 1
+
+#if SUSPECTED_CPU_OR_CHIPSET_BUG_WORKAROUND
+# define SYNC_OTHER_CORES(x) udelay(x+1)
+#else
+/*
+ * We have to allow irqs to arrive between __sti and __cli
+ */
+# define SYNC_OTHER_CORES(x) __asm__ __volatile__ ("nop")
+#endif
+
 static inline void wait_on_irq(int cpu)
 {
 	int count = MAXCOUNT;
@@ -563,7 +590,7 @@ void __global_restore_flags(unsigned long flags)
 
 #endif
 
-static int handle_IRQ_event(int irq, struct pt_regs * regs)
+static int handle_IRQ_event(unsigned int irq, struct pt_regs * regs)
 {
 	struct irqaction * action;
 	int status;
@@ -591,30 +618,105 @@ static int handle_IRQ_event(int irq, struct pt_regs * regs)
 }
 
 
-/*
- * disable/enable_irq() wait for all irq contexts to finish
- * executing. Also it's recursive.
- */
 void disable_irq(unsigned int irq)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	disabled_irq[irq]++;
-	mask_irq(irq);
+	irq_handles[irq]->disable(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 
 	synchronize_irq();
 }
 
-void enable_irq(unsigned int irq)
+/*
+ * disable/enable_irq() wait for all irq contexts to finish
+ * executing. Also it's recursive.
+ */
+static void disable_8259A_irq(unsigned int irq)
+{
+	disabled_irq[irq]++;
+	cached_irq_mask |= 1 << irq;
+	set_8259A_irq_mask(irq);
+}
+
+#ifdef __SMP__
+static void disable_ioapic_irq(unsigned int irq)
+{
+	disabled_irq[irq]++;
+	/*
+	 * We do not disable IO-APIC irqs in hardware ...
+	 */
+}
+#endif
+
+void enable_8259A_irq (unsigned int irq)
 {
 	unsigned long flags;
+	spin_lock_irqsave(&irq_controller_lock, flags);
+	if (disabled_irq[irq])
+		disabled_irq[irq]--;
+	else {
+		spin_unlock_irqrestore(&irq_controller_lock, flags);
+		return;
+	}
+	cached_irq_mask &= ~(1 << irq);
+	set_8259A_irq_mask(irq);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+}
+
+#ifdef __SMP__
+void enable_ioapic_irq (unsigned int irq)
+{
+	unsigned long flags;
+	int cpu = smp_processor_id(), should_handle_irq;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	disabled_irq[irq]--;
-	unmask_irq(irq);
-	spin_unlock_irqrestore(&irq_controller_lock, flags);
+	if (disabled_irq[irq])
+		disabled_irq[irq]--;
+	else {
+		spin_unlock_irqrestore(&irq_controller_lock, flags);
+		return;
+	}
+	/*
+	 * In the SMP+IOAPIC case it might happen that there are an unspecified
+	 * number of pending IRQ events unhandled. We protect against multiple
+	 * enable_irq()'s executing them via disable_irq[irq]++
+	 */
+	if (!disabled_irq[irq] && irq_events[irq]) {
+		struct pt_regs regs; /* FIXME: these are fake currently */
+
+		disabled_irq[irq]++;
+		spin_unlock(&irq_controller_lock);
+		release_irqlock(cpu);
+		irq_enter(cpu, irq);
+again:
+		handle_IRQ_event(irq, &regs);
+
+		spin_lock(&irq_controller_lock);
+		disabled_irq[irq]--;
+		should_handle_irq=0;
+		if (--irq_events[irq] && !disabled_irq[irq]) {
+			should_handle_irq=1;
+			disabled_irq[irq]++;
+		}
+		spin_unlock(&irq_controller_lock);
+
+		if (should_handle_irq)
+			goto again;
+
+		irq_exit(cpu, irq);
+		__restore_flags(flags);
+	} else {
+		enable_IO_APIC_irq(irq);
+		spin_unlock_irqrestore(&irq_controller_lock, flags);
+	}
+}
+#endif
+
+void enable_irq(unsigned int irq)
+{
+	irq_handles[irq]->enable(irq);
 }
 
 /*
@@ -623,11 +725,11 @@ void enable_irq(unsigned int irq)
  * first, _then_ send the EOI, and the order of EOI
  * to the two 8259s is important!
  */
-static inline void mask_and_ack_8259A(int irq_nr)
+static inline void mask_and_ack_8259A(unsigned int irq)
 {
 	spin_lock(&irq_controller_lock);
-	cached_irq_mask |= 1 << irq_nr;
-	if (irq_nr & 8) {
+	cached_irq_mask |= 1 << irq;
+	if (irq & 8) {
 		inb(0xA1);	/* DUMMY */
 		outb(cached_A1,0xA1);
 		outb(0x62,0x20);	/* Specific EOI to cascade */
@@ -640,7 +742,7 @@ static inline void mask_and_ack_8259A(int irq_nr)
 	spin_unlock(&irq_controller_lock);
 }
 
-static void do_8259A_IRQ(int irq, int cpu, struct pt_regs * regs)
+static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
 	mask_and_ack_8259A(irq);
 
@@ -656,45 +758,36 @@ static void do_8259A_IRQ(int irq, int cpu, struct pt_regs * regs)
 }
 
 #ifdef __SMP__
-/*
- * FIXME! This is completely broken.
- */
-static void do_ioapic_IRQ(int irq, int cpu, struct pt_regs * regs)
+static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
-	int should_handle_irq;
-
-	spin_lock(&irq_controller_lock);
-	should_handle_irq = 0;
-	if (!irq_events[irq]++ && !disabled_irq[irq]) {
-		should_handle_irq = 1;
-		irq_owner[irq] = cpu;
-		hardirq_enter(cpu);
-	}
+	int should_handle_irq = 0;
 
 	ack_APIC_irq();
 
+	spin_lock(&irq_controller_lock);
+
+	if (!irq_events[irq]++ && !disabled_irq[irq])
+		should_handle_irq = 1;
+
 	spin_unlock(&irq_controller_lock);
-	
+
+	irq_enter(cpu, irq);
+
 	if (should_handle_irq) {
 again:
-		if (!handle_IRQ_event(irq, regs))
-			disabled_irq[irq] = 1;
+		handle_IRQ_event(irq, regs);
 
-	}
-
-	spin_lock(&irq_controller_lock);
-	release_irqlock(cpu);
-
-	if ((--irq_events[irq]) && (!disabled_irq[irq]) && should_handle_irq) {
+		spin_lock(&irq_controller_lock);
+		should_handle_irq=0;
+		if (--irq_events[irq] && !disabled_irq[irq])
+			should_handle_irq=1;
 		spin_unlock(&irq_controller_lock);
-		goto again;
+
+		if (should_handle_irq)
+			goto again;
 	}
 
-	irq_owner[irq] = NO_PROC_ID;
-	hardirq_exit(cpu);
-	spin_unlock(&irq_controller_lock);
-
-	enable_IO_APIC_irq(irq);
+	irq_exit(cpu, irq);
 }
 #endif
 
@@ -714,8 +807,6 @@ again:
  */
 asmlinkage void do_IRQ(struct pt_regs regs)
 {	
-	void (*do_lowlevel_IRQ)(int, int, struct pt_regs *);
-
 	/* 
 	 * We ack quickly, we don't want the irq controller
 	 * thinking we're snobs just because some other CPU has
@@ -726,18 +817,11 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 	 * 0 return value means that this irq is already being
 	 * handled by some other CPU. (or is disabled)
 	 */
-	int irq = regs.orig_eax & 0xff;
+	unsigned int irq = regs.orig_eax & 0xff;
 	int cpu = smp_processor_id();
 
 	kstat.irqs[cpu][irq]++;
-
-	do_lowlevel_IRQ = do_8259A_IRQ;
-#ifdef __SMP__
-	if (IO_APIC_IRQ(irq))
-		do_lowlevel_IRQ = do_ioapic_IRQ;
-#endif
-	
-	do_lowlevel_IRQ(irq, cpu, &regs);
+	irq_handles[irq]->handle(irq, cpu, &regs);
 
 	/*
 	 * This should be conditional: we should really get
@@ -751,7 +835,7 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 	}
 }
 
-int setup_x86_irq(int irq, struct irqaction * new)
+int setup_x86_irq(unsigned int irq, struct irqaction * new)
 {
 	int shared = 0;
 	struct irqaction *old, **p;
@@ -780,16 +864,18 @@ int setup_x86_irq(int irq, struct irqaction * new)
 
 	if (!shared) {
 		spin_lock(&irq_controller_lock);
+#ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
+			irq_handles[irq] = &ioapic_irq_type;
 			/*
 			 * First disable it in the 8259A:
 			 */
 			cached_irq_mask |= 1 << irq;
 			if (irq < 16)
 				set_8259A_irq_mask(irq);
-			setup_IO_APIC_irq(irq);
 		}
-		unmask_irq(irq);
+#endif
+		unmask_generic_irq(irq);
 		spin_unlock(&irq_controller_lock);
 	}
 	restore_flags(flags);
@@ -873,10 +959,11 @@ unsigned long probe_irq_on (void)
 	 */
 	for (i = NR_IRQS-1; i > 0; i--) {
 		if (!irq_action[i]) {
-			spin_lock(&irq_controller_lock);
-			unmask_irq(i);
+			unsigned long flags;
+			spin_lock_irqsave(&irq_controller_lock, flags);
+			unmask_generic_irq(i);
 			irqs |= (1 << i);
-			spin_unlock(&irq_controller_lock);
+			spin_unlock_irqrestore(&irq_controller_lock, flags);
 		}
 	}
 
@@ -921,6 +1008,7 @@ out:
 	return irq_found;
 }
 
+#ifdef __SMP__
 void init_IO_APIC_traps(void)
 {
 	int i;
@@ -938,16 +1026,17 @@ void init_IO_APIC_traps(void)
 	for (i = 0; i < NR_IRQS ; i++)
 		if (IO_APIC_GATE_OFFSET+(i<<3) <= 0xfe)  /* HACK */ {
 			if (IO_APIC_IRQ(i)) {
+				irq_handles[i] = &ioapic_irq_type;
 				/*
 				 * First disable it in the 8259A:
 				 */
 				cached_irq_mask |= 1 << i;
 				if (i < 16)
 					set_8259A_irq_mask(i);
-				setup_IO_APIC_irq(i);
 			}
 		}
 }
+#endif
 
 __initfunc(void init_IRQ(void))
 {
@@ -961,9 +1050,6 @@ __initfunc(void init_IRQ(void))
 	printk("INIT IRQ\n");
 	for (i=0; i<NR_IRQS; i++) {
 		irq_events[i] = 0;
-#ifdef __SMP__
-		irq_owner[i] = NO_PROC_ID;
-#endif
 		disabled_irq[i] = 0;
 	}
 	/*

@@ -282,6 +282,10 @@ extern void ftape_setup(char *str, int *ints);
 extern void ipc_init(void);
 #endif
 
+#ifdef CONFIG_MD_BOOT
+extern void md_setup(char *str,int *ints) __init;
+#endif
+
 #ifdef __sparc__
 extern int serial_console;
 #endif
@@ -378,6 +382,9 @@ static struct dev_name_struct {
 #ifdef CONFIG_BLK_DEV_FD
 	{ "fd",      0x0200 },
 #endif
+#ifdef CONFIG_MD_BOOT
+	{ "md",      0x0900 },	     
+#endif     
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xda",     0x0d00 },
 	{ "xdb",     0x0d40 },
@@ -419,7 +426,7 @@ static struct dev_name_struct {
 	{ NULL, 0 }
 };
 
-__initfunc(static void root_dev_setup(char *line, int *num))
+__initfunc(dev_t name_to_dev_t(char *line))
 {
 	int base = 0;
 	if (strncmp(line,"/dev/",5) == 0) {
@@ -435,7 +442,12 @@ __initfunc(static void root_dev_setup(char *line, int *num))
 			dev++;
 		} while (dev->name);
 	}
-	ROOT_DEV = to_kdev_t(base + simple_strtoul(line,NULL,base?10:16));
+	return to_kdev_t(base + simple_strtoul(line,NULL,base?10:16));
+}
+
+__initfunc(static void root_dev_setup(char *line, int *num))
+{
+	ROOT_DEV = name_to_dev_t(line);
 }
 
 /*
@@ -713,6 +725,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_FTAPE
 	{ "ftape=", ftape_setup},
+#endif
+#ifdef CONFIG_MD_BOOT
+	{ "md=", md_setup},
 #endif
 	{ 0, 0 }
 };

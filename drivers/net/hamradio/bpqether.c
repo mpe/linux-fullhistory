@@ -51,6 +51,7 @@
  *						call.
  *						Fixed to match Linux networking
  *						changes - 2.1.15.
+ *	BPQ   004	Joerg(DL1BKE)		Fixed to not lock up on ifconfig.
  */
 
 #include <linux/config.h>
@@ -78,6 +79,7 @@
 #include <linux/firewall.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/rtnetlink.h>
 
 #include <net/ip.h>
 #include <net/arp.h>
@@ -186,7 +188,11 @@ static int bpq_check_devices(struct device *dev)
 			if (&bpq->axdev == dev)
 				result = 1;
 
-			unregister_netdev(&bpq->axdev);
+			/* We should be locked, call 
+			 * unregister_netdevice directly 
+			 */
+
+			unregister_netdevice(&bpq->axdev);
 			kfree(bpq);
 		}
 
@@ -531,7 +537,9 @@ static int bpq_new_device(struct device *dev)
 	dev->name = buf;
 	dev->init = bpq_dev_init;
 
-	if (register_netdev(dev) != 0) {
+	/* We should be locked, call register_netdevice() directly. */
+
+	if (register_netdevice(dev) != 0) {
 		kfree(bpq);
                 return -EIO;
         }

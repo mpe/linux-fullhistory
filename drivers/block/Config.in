@@ -65,6 +65,9 @@ if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
   tristate '   RAID-4/RAID-5 mode' CONFIG_MD_RAID5
 fi
+if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
+  bool '      Boot support (linear, striped)' CONFIG_MD_BOOT
+fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD

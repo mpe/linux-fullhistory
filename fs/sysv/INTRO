@@ -18,7 +18,7 @@ These filesystems are rather similar. Here is a comparison with Minix FS:
 * Size of a block or zone (data allocation unit on disk)
   - Minix FS     1024
   - Xenix FS     1024 (also 512 ??)
-  - SystemV FS   1024 (also 512)
+  - SystemV FS   1024 (also 512 and 2048)
   - Coherent FS   512
 
 * General layout: all have one boot block, one super block and
@@ -180,4 +180,3 @@ and not the disk driver's notion of "block".
 
 
 Bruno Haible  <haible@ma2s2.mathematik.uni-karlsruhe.de>
-

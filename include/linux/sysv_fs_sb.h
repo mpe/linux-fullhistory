@@ -15,8 +15,8 @@ struct sysv_sb_info {
 	unsigned int   s_block_size;	/* zone size, = 512 or = 1024 */
 	unsigned int   s_block_size_1;	/* block_size - 1 */
 	unsigned int   s_block_size_bits;	/* log2(block_size) */
-	unsigned int   s_block_size_ratio;	/* BLOCK_SIZE / block_size */
-	unsigned int   s_block_size_ratio_bits;	/* log2(block_size_ratio) */
+	unsigned int   s_block_size_inc_bits;	/* log2(block_size/BLOCK_SIZE) if >0 */
+	unsigned int   s_block_size_dec_bits;	/* log2(BLOCK_SIZE/block_size) if >0 */
 	char	       s_convert;	/* flag whether byte ordering requires conversion */
 	char	       s_kludge_symlinks; /* flag whether symlinks have a kludgey mode */
 	char	       s_truncate;	/* if 1: names > SYSV_NAMELEN chars are truncated */
@@ -66,15 +66,15 @@ struct sysv_sb_info {
 	unsigned long  s_ndatazones;	/* total number of data zones */
 	unsigned long  s_nzones;	/* same as s_sbd->s_fsize */
 };
-/* The fields s_block_size_ratio, s_ind_per_block_2_1, s_toobig_block are currently unused. */
+/* The fields s_ind_per_block_2_1, s_toobig_block are currently unused. */
 
 /* sv_ == u.sysv_sb.s_ */
 #define sv_type					u.sysv_sb.s_type
 #define sv_block_size				u.sysv_sb.s_block_size
 #define sv_block_size_1				u.sysv_sb.s_block_size_1
 #define sv_block_size_bits			u.sysv_sb.s_block_size_bits
-#define sv_block_size_ratio			u.sysv_sb.s_block_size_ratio
-#define sv_block_size_ratio_bits		u.sysv_sb.s_block_size_ratio_bits
+#define sv_block_size_inc_bits			u.sysv_sb.s_block_size_inc_bits
+#define sv_block_size_dec_bits			u.sysv_sb.s_block_size_dec_bits
 #define sv_convert				u.sysv_sb.s_convert
 #define sv_kludge_symlinks			u.sysv_sb.s_kludge_symlinks
 #define sv_truncate				u.sysv_sb.s_truncate

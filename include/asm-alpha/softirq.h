@@ -5,7 +5,7 @@
  * is entirely private to an implementation, it should not be
  * referenced at all outside of this file.
  */
-extern atomic_t __alpha_bh_counter;
+extern unsigned int local_bh_count[NR_CPUS];
 
 #define get_active_bhs()	(bh_mask & bh_active)
 
@@ -43,6 +43,36 @@ extern inline void mark_bh(int nr)
 }
 
 /*
+ * start_bh_atomic/end_bh_atomic also nest
+ * naturally by using a counter
+ */
+extern inline void start_bh_atomic(void)
+{
+	local_bh_count[smp_processor_id()]++;
+	barrier();
+}
+
+extern inline void end_bh_atomic(void)
+{
+	barrier();
+	local_bh_count[smp_processor_id()]--;
+}
+
+#ifndef __SMP__
+
+/* These are for the irq's testing the lock */
+#define softirq_trylock(cpu) \
+  (local_bh_count[cpu] ? 0 : (local_bh_count[cpu] = 1))
+#define softirq_endlock(cpu) \
+  (local_bh_count[cpu] = 0)
+
+#else
+
+#error FIXME
+
+#endif /* __SMP__ */
+
+/*
  * These use a mask count to correctly handle
  * nested disable/enable calls
  */
@@ -58,36 +88,4 @@ extern inline void enable_bh(int nr)
 		bh_mask |= 1 << nr;
 }
 
-/*
- * start_bh_atomic/end_bh_atomic also nest
- * naturally by using a counter
- */
-extern inline void start_bh_atomic(void)
-{
-#ifdef __SMP__
-	atomic_inc(&__alpha_bh_counter);
-	synchronize_irq();
-#else
-	atomic_inc(&__alpha_bh_counter);
-#endif
-}
-
-extern inline void end_bh_atomic(void)
-{
-	atomic_dec(&__alpha_bh_counter);
-}
-
-#ifndef __SMP__
-
-/* These are for the irq's testing the lock */
-#define softirq_trylock(cpu)	(atomic_read(&__alpha_bh_counter) ? \
-				0 : \
-				((atomic_set(&__alpha_bh_counter,1)),1))
-#define softirq_endlock(cpu)	(atomic_set(&__alpha_bh_counter, 0))
-
-#else
-
-#error FIXME
-
-#endif /* __SMP__ */
 #endif /* _ALPHA_SOFTIRQ_H */

@@ -109,7 +109,7 @@ void io_apic_write (unsigned int reg, unsigned int value)
 	*(io_apic_reg+4) = value;
 }
 
-void enable_IO_APIC_irq (int irq)
+void enable_IO_APIC_irq (unsigned int irq)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -121,7 +121,11 @@ void enable_IO_APIC_irq (int irq)
 	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
 }
 
-void disable_IO_APIC_irq (int irq)
+/*
+ * this function is just here to make things complete, otherwise it's
+ * unused
+ */
+void disable_IO_APIC_irq (unsigned int irq)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -133,7 +137,7 @@ void disable_IO_APIC_irq (int irq)
 	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
 }
 
-void clear_IO_APIC_irq (int irq)
+void clear_IO_APIC_irq (unsigned int irq)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -151,8 +155,9 @@ void clear_IO_APIC_irq (int irq)
  * specific CPU-side IRQs.
  */
 
-#define MAX_PIRQS 4
+#define MAX_PIRQS 8
 int pirq_entries [MAX_PIRQS];
+int pirqs_enabled;
 
 void ioapic_pirq_setup(char *str, int *ints)
 {
@@ -161,9 +166,12 @@ void ioapic_pirq_setup(char *str, int *ints)
 	for (i=0; i<MAX_PIRQS; i++)
 		pirq_entries[i]=-1;
 
-	if (!ints)
+	if (!ints) {
+		pirqs_enabled=0;
 		printk("PIRQ redirection SETUP, trusting MP-BIOS.\n");
-	else {
+
+	} else {
+		pirqs_enabled=1;
 		printk("PIRQ redirection SETUP, working around broken MP-BIOS.\n");
 		max = MAX_PIRQS;
 		if (ints[0] < MAX_PIRQS)
@@ -229,9 +237,10 @@ void setup_IO_APIC_irqs (void)
 			}
 			case MP_BUS_PCI: /* PCI pin */
 			{
-				irq = mp_irqs[idx].mpc_srcbusirq >> 2;
-				if (irq>=16)
-					printk("WARNING: MP BIOS says PIRQ%d is redirected to %d, suspicious.\n",idx-16, irq); 
+				/*
+				 * PCI IRQs are 'directly mapped'
+				 */
+				irq = i;
 				break;
 			}
 			default:
@@ -358,7 +367,7 @@ void setup_IO_APIC_irqs (void)
 		printk(" not connected.\n");
 }
 
-void setup_IO_APIC_irq_ISA_default (int irq)
+void setup_IO_APIC_irq_ISA_default (unsigned int irq)
 {
 	struct IO_APIC_route_entry entry;
 
@@ -381,8 +390,23 @@ void setup_IO_APIC_irq_ISA_default (int irq)
 	io_apic_write(0x11+2*irq, *(((int *)&entry)+1));
 }
 
-void setup_IO_APIC_irq (int irq)
+int IO_APIC_get_PCI_irq_vector (int bus, int slot, int pci_pin)
 {
+	int i;
+
+	for (i=0; i<mp_irq_entries; i++) {
+		int lbus = mp_irqs[i].mpc_srcbus;
+
+		if (IO_APIC_IRQ(i) &&
+		    (mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
+		    !mp_irqs[i].mpc_irqtype &&
+		    (bus == mp_irqs[i].mpc_srcbus) &&
+		    (slot == (mp_irqs[i].mpc_srcbusirq >> 2)) &&
+		    (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3)))
+
+			return mp_irqs[i].mpc_dstirq;
+	}
+	return -1;
 }
 
 void print_IO_APIC (void)
@@ -471,6 +495,47 @@ void init_sym_mode (void)
 	printk("...done.\n");
 }
 
+char ioapic_OEM_ID [16];
+char ioapic_Product_ID [16];
+
+struct ioapic_list_entry {
+	char * oem_id;
+	char * product_id;
+};
+
+struct ioapic_list_entry ioapic_whitelist [] = {
+
+	{ "INTEL   "	, 	"PR440FX     "	},
+	{ 0		,	0		}
+};
+
+struct ioapic_list_entry ioapic_blacklist [] = {
+
+	{ "OEM00000"	,	"PROD00000000"	},
+	{ 0		,	0		}
+};
+
+
+static int in_ioapic_list (struct ioapic_list_entry * table)
+{
+	for (;table->oem_id; table++)
+		if ((!strcmp(table->oem_id,ioapic_OEM_ID)) &&
+		    (!strcmp(table->product_id,ioapic_Product_ID)))
+			return 1;
+	return 0;
+}
+
+static int ioapic_whitelisted (void)
+{
+	return in_ioapic_list(ioapic_whitelist);
+}
+
+static int ioapic_blacklisted (void)
+{
+	return in_ioapic_list(ioapic_blacklist);
+}
+
+
 void setup_IO_APIC (void)
 {
 	int i;
@@ -490,8 +555,6 @@ void setup_IO_APIC (void)
 		nr_ioapic_registers = reg_01.entries+1;
 	}
 
-	init_IO_APIC_traps();
-
 	/*
 	 * do not trust the IO-APIC being empty at bootup
 	 */
@@ -504,6 +567,30 @@ void setup_IO_APIC (void)
 			setup_IO_APIC_irq_ISA_default (i);
 #endif
 
+	/*
+	 * the following IO-APIC's can be enabled:
+	 *
+	 * - whitelisted ones
+	 * - those which have no PCI pins connected
+	 * - those for which the user has specified a pirq= parameter
+	 */
+	if (	ioapic_whitelisted() ||
+		(nr_ioapic_registers == 16) ||
+		pirqs_enabled)
+	{
+		printk("ENABLING IO-APIC IRQs\n");
+		io_apic_irqs = ~((1<<0)|(1<<2)|(1<<13));
+	} else {
+		if (ioapic_blacklisted())
+			printk(" blacklisted board, DISABLING IO-APIC IRQs\n");
+		else
+			printk(" unlisted board, DISABLING IO-APIC IRQs\n");
+
+		printk(" see Documentation/IO-APIC.txt to enable them\n");
+		io_apic_irqs = 0;
+	}
+
+	init_IO_APIC_traps();
 	setup_IO_APIC_irqs ();
 
 	printk("nr of MP irq sources: %d.\n", mp_irq_entries);

@@ -758,6 +758,30 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 }
 
 /*
+ * Test whether new_dentry is a subdirectory of old_dentry.
+ *
+ * Trivially implemented using the dcache structure
+ */
+int is_subdir(struct dentry * new_dentry, struct dentry * old_dentry)
+{
+	int result;
+
+	result = 0;
+	for (;;) {
+		if (new_dentry != old_dentry) {
+			struct dentry * parent = new_dentry->d_parent;
+			if (parent == new_dentry)
+				break;
+			new_dentry = parent;
+			continue;
+		}
+		result = 1;
+		break;
+	}
+	return result;
+}
+
+/*
  * Check whether a dentry already exists for the given name,
  * and return the inode number if it has an inode.
  *

@@ -524,7 +524,7 @@ static inline void handle_nmi(struct pt_regs * regs)
 }
 
 unsigned int local_irq_count[NR_CPUS];
-atomic_t __alpha_bh_counter;
+unsigned int local_bh_count[NR_CPUS];
 
 #ifdef __SMP__
 #error "Me no hablo Alpha SMP"

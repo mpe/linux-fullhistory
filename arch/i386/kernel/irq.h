@@ -9,15 +9,15 @@
 
 #define IO_APIC_GATE_OFFSET 0x51
 
-void mask_irq(unsigned int irq_nr);
-void unmask_irq(unsigned int irq_nr);
-void enable_IO_APIC_irq (int irq);
-void disable_IO_APIC_irq (int irq);
-void set_8259A_irq_mask(int irq_nr);
-void setup_IO_APIC_irq (int irq);
+void mask_irq(unsigned int irq);
+void unmask_irq(unsigned int irq);
+void enable_IO_APIC_irq (unsigned int irq);
+void disable_IO_APIC_irq (unsigned int irq);
+void set_8259A_irq_mask(unsigned int irq);
 void ack_APIC_irq (void);
 void setup_IO_APIC (void);
 void init_IO_APIC_traps(void);
+int IO_APIC_get_PCI_irq_vector (int bus, int slot, int fn);
 
 #ifdef __SMP__
  extern unsigned int io_apic_irqs;
@@ -34,6 +34,8 @@ enum mp_bustype {
 	MP_BUS_PCI
 };
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];
+extern char ioapic_OEM_ID [16];
+extern char ioapic_Product_ID [16];
 
 extern spinlock_t irq_controller_lock; /*
 					* Protects both the 8259 and the
@@ -44,7 +46,7 @@ extern spinlock_t irq_controller_lock; /*
 
 #include <asm/atomic.h>
 
-static inline void irq_enter(int cpu, int irq)
+static inline void irq_enter(int cpu, unsigned int irq)
 {
 	hardirq_enter(cpu);
 	while (test_bit(0,&global_irq_lock)) {
@@ -52,7 +54,7 @@ static inline void irq_enter(int cpu, int irq)
 	}
 }
 
-static inline void irq_exit(int cpu, int irq)
+static inline void irq_exit(int cpu, unsigned int irq)
 {
 	hardirq_exit(cpu);
 	release_irqlock(cpu);

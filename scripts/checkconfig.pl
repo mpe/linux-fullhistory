@@ -1,8 +1,11 @@
 #! /usr/bin/perl
 #
 # checkconfig: find uses of CONFIG_* names without matching definitions.
+# Copyright abandoned, 1998, Michael Elizabeth Chastain <mailto:mec@shout.net>.
 
 use integer;
+
+$| = 1;
 
 foreach $file (@ARGV)
 {
@@ -24,15 +27,15 @@ foreach $file (@ARGV)
 	# Pick up definitions.
 	if ( m/^#/o )
 	{
-	    $iLinuxConfig      = $. if m/^#\s*include\s+<linux\/config\.h>/o;
-	    $configList{uc $1} = 1  if m/^#\s*include\s+<config\/(\S*)\.h>/o;
+	    $iLinuxConfig      = $. if m/^#\s*include\s*<linux\/config\.h>/o;
+	    $configList{uc $1} = 1  if m/^#\s*include\s*<config\/(\S*)\.h>/o;
 	    $configList{$1}    = 1  if m/^#\s*define\s+CONFIG_(\w*)/o;
 	    $configList{$1}    = 1  if m/^#\s*undef\s+CONFIG_(\w*)/o;
 	}
 
 	# Look for usages.
 	next unless m/CONFIG_/o;
-	WORD: while ( m/\bCONFIG_(\w*)/og )
+	WORD: while ( m/\bCONFIG_(\w+)/og )
 	{
 	    $fUseConfig = 1;
 	    last LINE if $iLinuxConfig;

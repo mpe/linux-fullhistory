@@ -34,6 +34,27 @@
 
 #include <asm/uaccess.h>
 
+#if 0
+void sysv_print_inode(struct inode * inode)
+{
+        printk("ino %lu  mode 0%6.6o  lk %d  uid %d  gid %d"
+               "  sz %lu  blks %lu  cnt %u\n",
+               inode->i_ino, inode->i_mode, inode->i_nlink, inode->i_uid,
+               inode->i_gid, inode->i_size, inode->i_blocks, inode->i_count);
+        printk("  db <0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx"
+               " 0x%lx 0x%lx>\n",
+                inode->u.sysv_i.i_data[0], inode->u.sysv_i.i_data[1],
+                inode->u.sysv_i.i_data[2], inode->u.sysv_i.i_data[3],
+                inode->u.sysv_i.i_data[4], inode->u.sysv_i.i_data[5],
+                inode->u.sysv_i.i_data[6], inode->u.sysv_i.i_data[7],
+                inode->u.sysv_i.i_data[8], inode->u.sysv_i.i_data[9]);
+        printk("  ib <0x%lx 0x%lx 0x%lx>\n",
+                inode->u.sysv_i.i_data[10],
+                inode->u.sysv_i.i_data[11],
+                inode->u.sysv_i.i_data[12]);
+}
+#endif
+
 void sysv_put_inode(struct inode *inode)
 {
 	if (inode->i_nlink)
@@ -65,58 +86,35 @@ static struct super_operations sysv_sops = {
  * the time stamp is not < 01-01-1980.
  */
 
-static void detected_bs512 (struct super_block *sb)
+static void detected_bs (u_char type, struct super_block *sb)
 {
-	sb->sv_block_size = 512;
-	sb->sv_block_size_1 = 512-1;
-	sb->sv_block_size_bits = 9;
-	sb->sv_block_size_ratio = 2;
-	sb->sv_block_size_ratio_bits = 1;
-	sb->sv_inodes_per_block = 512/64;
-	sb->sv_inodes_per_block_1 = 512/64-1;
-	sb->sv_inodes_per_block_bits = 9-6;
+	u_char n_bits = type+8;
+	int bsize = 1 << n_bits;
+	int bsize_4 = bsize >> 2;
+	
+	sb->sv_block_size = bsize;
+	sb->sv_block_size_1 = bsize-1;
+	sb->sv_block_size_bits = n_bits;
+	sb->sv_block_size_dec_bits = (bsize==512) ? 1 : 0;
+	sb->sv_block_size_inc_bits = (bsize==2048) ? 1 : 0;
+	sb->sv_inodes_per_block = bsize >> 6;
+	sb->sv_inodes_per_block_1 = (bsize >> 6)-1;
+	sb->sv_inodes_per_block_bits = n_bits-6;
 	sb->sv_toobig_block = 10 +
-	  (sb->sv_ind_per_block = 512/4) +
-	  (sb->sv_ind_per_block_2 = (512/4)*(512/4)) +
-	  (sb->sv_ind_per_block_3 = (512/4)*(512/4)*(512/4));
-	sb->sv_ind_per_block_1 = 512/4-1;
-	sb->sv_ind_per_block_2_1 = (512/4)*(512/4)-1;
+	  (sb->sv_ind_per_block = bsize_4) +
+	  (sb->sv_ind_per_block_2 = bsize_4*bsize_4) +
+	  (sb->sv_ind_per_block_3 = bsize_4*bsize_4*bsize_4);
+	sb->sv_ind_per_block_1 = bsize_4-1;
+	sb->sv_ind_per_block_2_1 = bsize_4*bsize_4-1;
 	sb->sv_ind_per_block_2_bits = 2 *
-	  (sb->sv_ind_per_block_bits = 9-2);
-	sb->sv_ind_per_block_block_size_1 = (512/4)*512-1;
-	sb->sv_ind_per_block_block_size_bits = (9-2)+9;
-	sb->sv_ind_per_block_2_block_size_1 = (512/4)*(512/4)*512-1;
-	sb->sv_ind_per_block_2_block_size_bits = (9-2)+(9-2)+9;
-	sb->sv_ind0_size = 10 * 512;
-	sb->sv_ind1_size = (10 + (512/4))* 512;
-	sb->sv_ind2_size = (10 + (512/4) + (512/4)*(512/4)) * 512;
-}
-
-static void detected_bs1024 (struct super_block *sb)
-{
-	sb->sv_block_size = 1024;
-	sb->sv_block_size_1 = 1024-1;
-	sb->sv_block_size_bits = 10;
-	sb->sv_block_size_ratio = 1;
-	sb->sv_block_size_ratio_bits = 0;
-	sb->sv_inodes_per_block = 1024/64;
-	sb->sv_inodes_per_block_1 = 1024/64-1;
-	sb->sv_inodes_per_block_bits = 10-6;
-	sb->sv_toobig_block = 10 +
-	  (sb->sv_ind_per_block = 1024/4) +
-	  (sb->sv_ind_per_block_2 = (1024/4)*(1024/4)) +
-	  (sb->sv_ind_per_block_3 = (1024/4)*(1024/4)*(1024/4));
-	sb->sv_ind_per_block_1 = 1024/4-1;
-	sb->sv_ind_per_block_2_1 = (1024/4)*(1024/4)-1;
-	sb->sv_ind_per_block_2_bits = 2 *
-	  (sb->sv_ind_per_block_bits = 10-2);
-	sb->sv_ind_per_block_block_size_1 = (1024/4)*1024-1;
-	sb->sv_ind_per_block_block_size_bits = (10-2)+10;
-	sb->sv_ind_per_block_2_block_size_1 = (1024/4)*(1024/4)*1024-1;
-	sb->sv_ind_per_block_2_block_size_bits = (10-2)+(10-2)+10;
-	sb->sv_ind0_size = 10 * 1024;
-	sb->sv_ind1_size = (10 + (1024/4))* 1024;
-	sb->sv_ind2_size = (10 + (1024/4) + (1024/4)*(1024/4)) * 1024;
+	  (sb->sv_ind_per_block_bits = n_bits-2);
+	sb->sv_ind_per_block_block_size_1 = bsize_4*bsize-1;
+	sb->sv_ind_per_block_block_size_bits = 2*n_bits-2;
+	sb->sv_ind_per_block_2_block_size_1 = bsize_4*bsize_4*bsize-1;
+	sb->sv_ind_per_block_2_block_size_bits = 3*n_bits-4;
+	sb->sv_ind0_size = 10 * bsize;
+	sb->sv_ind1_size = (10 + bsize_4)* bsize;
+	sb->sv_ind2_size = (10 + bsize_4 + bsize_4*bsize_4) * bsize;
 }
 
 static const char* detect_xenix (struct super_block *sb, struct buffer_head *bh)
@@ -126,11 +124,9 @@ static const char* detect_xenix (struct super_block *sb, struct buffer_head *bh)
 	sbd = (struct xenix_super_block *) bh->b_data;
 	if (sbd->s_magic != 0x2b5544)
 		return NULL;
-	switch (sbd->s_type) {
-		case 1: detected_bs512(sb); break;
-		case 2: detected_bs1024(sb); break;
-		default: return NULL;
-	}
+	if (sbd->s_type > 2 || sbd->s_type < 1)
+		return NULL;
+	detected_bs(sbd->s_type, sb);
 	sb->sv_type = FSTYPE_XENIX;
 	return "Xenix";
 }
@@ -139,8 +135,8 @@ static struct super_block * detected_xenix (struct super_block *sb, struct buffe
 	struct xenix_super_block * sbd1;
 	struct xenix_super_block * sbd2;
 
-	if (sb->sv_block_size == BLOCK_SIZE)
-		/* block size = 1024, so bh1 = bh2 */
+	if (sb->sv_block_size >= BLOCK_SIZE)
+		/* block size >= 1024, so bh1 = bh2 */
 		sbd1 = sbd2 = (struct xenix_super_block *) bh1->b_data;
 	else {
 		/* block size = 512, so bh1 != bh2 */
@@ -184,11 +180,9 @@ static const char* detect_sysv4 (struct super_block *sb, struct buffer_head *bh)
 		return NULL;
 	if (sbd->s_time < 315532800) /* this is likely to happen on SystemV2 FS */
 		return NULL;
-	switch (sbd->s_type) {
-		case 1: detected_bs512(sb); break;
-		case 2: detected_bs1024(sb); break;
-		default: return NULL;
-	}
+	if (sbd->s_type > 3 || sbd->s_type < 1)
+		return NULL;
+	detected_bs(sbd->s_type, sb);
 	sb->sv_type = FSTYPE_SYSV4;
 	return "SystemV";
 }
@@ -196,7 +190,7 @@ static struct super_block * detected_sysv4 (struct super_block *sb, struct buffe
 {
 	struct sysv4_super_block * sbd;
 
-	if (sb->sv_block_size == BLOCK_SIZE)
+	if (sb->sv_block_size >= BLOCK_SIZE)
 		sbd = (struct sysv4_super_block *) (bh->b_data + BLOCK_SIZE/2);
 	else {
 		sbd = (struct sysv4_super_block *) bh->b_data;
@@ -241,11 +235,9 @@ static const char* detect_sysv2 (struct super_block *sb, struct buffer_head *bh)
 		return NULL;
 	if (sbd->s_time < 315532800) /* this is likely to happen on SystemV4 FS */
 		return NULL;
-	switch (sbd->s_type) {
-		case 1: detected_bs512(sb); break;
-		case 2: detected_bs1024(sb); break;
-		default: return NULL;
-	}
+	if (sbd->s_type > 3 || sbd->s_type < 1)
+		return NULL;
+	detected_bs(sbd->s_type, sb);
 	sb->sv_type = FSTYPE_SYSV2;
 	return "SystemV Release 2";
 }
@@ -253,7 +245,7 @@ static struct super_block * detected_sysv2 (struct super_block *sb, struct buffe
 {
 	struct sysv2_super_block * sbd;
 
-	if (sb->sv_block_size == BLOCK_SIZE)
+	if (sb->sv_block_size >= BLOCK_SIZE)
 		sbd = (struct sysv2_super_block *) (bh->b_data + BLOCK_SIZE/2);
 	else {
 		sbd = (struct sysv2_super_block *) bh->b_data;
@@ -297,7 +289,7 @@ static const char* detect_coherent (struct super_block *sb, struct buffer_head *
 	if ((memcmp(sbd->s_fname,"noname",6) && memcmp(sbd->s_fname,"xxxxx ",6))
 	    || (memcmp(sbd->s_fpack,"nopack",6) && memcmp(sbd->s_fpack,"xxxxx\n",6)))
 		return NULL;
-	detected_bs512(sb);
+	detected_bs(1, sb);
 	sb->sv_type = FSTYPE_COH;
 	return "Coherent";
 }
@@ -342,7 +334,8 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	const char *found;
 	kdev_t dev = sb->s_dev;
 	struct inode *root_inode;
-
+	unsigned long blocknr;
+	
 	if (1024 != sizeof (struct xenix_super_block))
 		panic("Xenix FS: bad super-block size");
 	if ((512 != sizeof (struct sysv4_super_block))
@@ -376,22 +369,29 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	}
 	/* Try to recognize SystemV superblock */
 	/* Offset by 1 track, i.e. most probably 9, 15, or 18 kilobytes. */
+	/* 2kB blocks with offset of 9 and 15 kilobytes are not supported. */
+	/* Maybe we should also check the device geometry ? */
 	{	static int offsets[] = { 9, 15, 18, };
 		int i;
 		for (i = 0; i < sizeof(offsets)/sizeof(offsets[0]); i++)
 			if ((bh = bread(dev, offsets[i], BLOCK_SIZE)) != NULL) {
 				/* Try to recognize SystemV superblock */
 				if ((found = detect_sysv4(sb,bh)) != NULL) {
-					sb->sv_block_base = offsets[i] << sb->sv_block_size_ratio_bits;
+					if (sb->sv_block_size>BLOCK_SIZE && (offsets[i] % 2))
+						goto bad_shift;
+					sb->sv_block_base = (offsets[i] << sb->sv_block_size_dec_bits) >> sb->sv_block_size_inc_bits;
 					goto ok;
 				}
 				if ((found = detect_sysv2(sb,bh)) != NULL) {
-					sb->sv_block_base = offsets[i] << sb->sv_block_size_ratio_bits;
+					if (sb->sv_block_size>BLOCK_SIZE && (offsets[i] % 2))
+						goto bad_shift;
+					sb->sv_block_base = (offsets[i] << sb->sv_block_size_dec_bits) >> sb->sv_block_size_inc_bits;
 					goto ok;
 				}
 				brelse(bh);
 			}
 	}
+	bad_shift:
 	sb->s_dev = 0;
 	unlock_super(sb);
 	if (!silent)
@@ -402,7 +402,14 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	return NULL;
 
 	ok:
-	if (sb->sv_block_size == BLOCK_SIZE) {
+	if (sb->sv_block_size >= BLOCK_SIZE) {
+		if (sb->sv_block_size != BLOCK_SIZE) {
+			brelse(bh);
+			set_blocksize(dev, sb->sv_block_size);
+			blocknr = (bh->b_blocknr << sb->sv_block_size_dec_bits) >> sb->sv_block_size_inc_bits;
+			if ((bh = bread(dev, blocknr, sb->sv_block_size)) == NULL)
+				goto bad_superblock;
+		}
 		switch (sb->sv_type) {
 			case FSTYPE_XENIX:
 				if (!detected_xenix(sb,bh,bh))
@@ -416,19 +423,21 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 				if (!detected_sysv2(sb,bh))
 					goto bad_superblock;
 				break;
-			default:
-			bad_superblock:
-				brelse(bh);
-				sb->s_dev = 0;
-				unlock_super(sb);
-				printk("SysV FS: cannot read superblock in 1024 byte mode\n");
-				goto failed;
+			default: goto bad_superblock;
+		goto superblock_ok;
+		bad_superblock:
+			brelse(bh);
+			sb->s_dev = 0;
+			unlock_super(sb);
+			printk("SysV FS: cannot read superblock in %d byte mode\n", sb->sv_block_size);
+			goto failed;
+		superblock_ok:
 		}
 	} else {
-		/* Switch to another block size. Unfortunately, we have to
-		   release the 1 KB block bh and read it in two parts again. */
+		/* Switch to 512 block size. Unfortunately, we have to
+		   release the block bh and read it again. */
 		struct buffer_head *bh1, *bh2;
-		unsigned long blocknr = bh->b_blocknr << sb->sv_block_size_ratio_bits;
+		unsigned long blocknr = (bh->b_blocknr << sb->sv_block_size_dec_bits) >> sb->sv_block_size_inc_bits;
 
 		brelse(bh);
 		set_blocksize(dev,sb->sv_block_size);

@@ -1,0 +1,6 @@
+comment 'Misc. hamradio protocols'
+tristate 'Shortwave radio modem driver' CONFIG_HFMODEM
+if [ "$CONFIG_HFMODEM" != "n" ]; then
+  bool '   HFmodem support for Soundblaster and compatible cards' CONFIG_HFMODEM_SBC
+  bool '   HFmodem support for WSS and Crystal cards' CONFIG_HFMODEM_WSS
+fi
