@@ -26,9 +26,11 @@ S: CH-1015 Lausanne
 S: Switzerland
 
 N: H. Peter Anvin
-E: Peter.Anvin@linux.org 
+E: hpa@zytor.com
+W: http://www.zytor.com/~hpa/
+P: 2047/2A960705 BA 03 D3 2C 14 A8 A8 BD  1E DF FE 69 EE 35 BD 74
 D: Author of the SYSLINUX boot loader, maintainer of the linux.* news
-D: hierarchy, responsible for various console and other hacks
+D: hierarchy and the Linux Device List; various kernel hacks
 S: 4390 Albany Dr. #46
 S: San Jose CA 95129
 S: USA
@@ -886,11 +888,11 @@ S: Germany
 
 N: Nigel Metheringham
 E: Nigel.Metheringham@ThePLAnet.net
+P: 1024/31455639 B7 99 BD B8 00 17 BD 46  C1 15 B8 AB 87 BC 25 FA
 D: IP Masquerading work and minor fixes
 S: Planet Online
 S: The White House, Melbourne Street, LEEDS
 S: LS2  7PS,   UK
-P: 1024/31455639 B7 99 BD B8 00 17 BD 46  C1 15 B8 AB 87 BC 25 FA
 
 N: Craig Metz
 E: cmetz@tjhsst.edu
@@ -1242,8 +1244,8 @@ S: USA
 
 N: Leo Spiekman
 E: spiekman@et.tudelft.nl
-D: Optics Storage 8000AT cdrom driver
 W: http://dutettk.et.tudelft.nl/~spiekman
+D: Optics Storage 8000AT cdrom driver
 S: Utrecht
 S: The Netherlands
 
@@ -1258,13 +1260,13 @@ S: DK-1860 Frederiksberg C
 S: Denmark
 
 N: Drew Sullivan
-W: http://www.ss.org/
 E: drew@ss.org
+W: http://www.ss.org/
+P: 1024/ACFFA969 5A 9C 42 AB E4 24 82 31  99 56 00 BF D3 2B 25 46
 D: iBCS2 developer
 S: 22 Irvington Cres.
 S: Willowdale, Ontario
 S: Canada M2N 2Z1
-P: 1024/ACFFA969 5A 9C 42 AB E4 24 82 31  99 56 00 BF D3 2B 25 46
 
 N: Tommy Thorn
 E: Tommy.Thorn@irisa.fr

@@ -1918,12 +1918,8 @@ dc21040_autoconf(struct device *dev)
 	break;
 	
       case NC:
-#ifndef __alpha__
+	/* default to TP for all */
 	reset_init_sia(dev, 0x8f01, 0xffff, 0x0000);
-#else
-	/* JAE: for Alpha, default to BNC/AUI, *not* TP */
-	reset_init_sia(dev, 0x8f09, 0x0705, 0x0006);
-#endif  /* i386 */
 	if (lp->media != lp->c_media) {
 	    de4x5_dbg_media(dev);
 	    lp->c_media = lp->media;

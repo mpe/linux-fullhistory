@@ -842,6 +842,8 @@ int ip_build_xmit(struct sock *sk,
 						NULL, NULL, 0)>0)
 				skb->arp=1;
 		}
+		else
+			skb->arp = 1;
 		
 		/*
 		 *	Find where to start putting bytes.

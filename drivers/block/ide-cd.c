@@ -104,6 +104,7 @@
  *                        from Ben Galliart <bgallia@luc.edu> with 
  *                        special help from Jeff Lightfoot 
  *                        <jeffml@netcom.com>
+ * 3.15a July 9, 1996 -- Improved Sanyo 3 CD changer identification
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2657,7 +2658,8 @@ void ide_cdrom_setup (ide_drive_t *drive)
 
 		/* Sanyo 3 CD changer uses a non-standard command 
                    for CD changing */
-                else if (strcmp (drive->id->model, "CD-ROM CDR-C3 G") == 0) {
+                else if ((strcmp(drive->id->model, "CD-ROM CDR-C3 G") == 0) ||
+                         (strcmp(drive->id->model, "CD-ROM CDR-C3G") == 0)) {
 			/* uses CD in slot 0 when value is set to 3 */
 			CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
 		}

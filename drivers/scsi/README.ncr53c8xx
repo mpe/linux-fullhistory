@@ -29,6 +29,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 14. Control commands under linux-1.2.13
 15. Known problems
       15.1 Tagged commands with Iomega Jaz device
+      15.2 Tagged command queueing cannot be disabled at run time
 
 ===============================================================================
 
@@ -189,8 +190,9 @@ Chip    Device id     Revision Id
 
 The profiling informations are updated upon completion of scsi commands.
 The data structure is allocated and zeroed when the host adapter is 
-attached. So, if the driver is a module you can reset the profiling data 
-by unloading and reloading the driver.
+attached. So, if the driver is a module, the profile counters are cleared each 
+time the driver is loaded.
+The "clearprof" command allow to clear these counters at any time.
 
 The following counters are available:
 ("num" prefix means "number of", "ms" means milli-seconds)
@@ -290,6 +292,7 @@ Available commands:
     target:    target number
     tags:      number of concurrent tagged commands
                must not be greater than SCSI_NCR_MAX_TAGS (default: 4)
+               must not be lower that 1 (see: known problems)
 
 8.4 Set order type for tagged command
 
@@ -316,10 +319,10 @@ Available commands:
 	tiny:    print minimal debugging informations
 	timing:  print timing informations of the ncr chip.
 	nego:    print informations about scsi negotiations
-        phase:   printf informations on script interruptions
+	phase:   print informations on script interruptions
 
 
-8.5 Clear profile counters
+8.6 Clear profile counters
 
     clearprof
 
@@ -555,6 +558,13 @@ to spin down.
 The other problems that may appear are timeouts. The only way to avoid timeouts 
 seems to edit linux/drivers/scsi/sd.c and to increase the current timeout 
 values.
+
+15.2 Tagged command queuing cannot be disabled at run time
+
+Once Tagged command queuing has been enabled, the driver will not allow to 
+disable this feature ("settags <target> 0" is not supported).
+This problem is due to some limitations of the code added to the Linux version 
+of the driver.
 
 ===============================================================================
 End of NCR53C8XX driver README file

@@ -8165,7 +8165,7 @@ printf("ncr_user_command: retv=%d\n", retv);
 #endif
 	}
 	else {
-		if (*start)
+		if (start)
 			*start = buffer;
 		retv = ncr_host_info(ncb, buffer, offset, length);
 	}

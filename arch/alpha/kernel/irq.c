@@ -446,6 +446,41 @@ static inline void cabriolet_and_eb66p_device_interrupt(unsigned long vector,
 	restore_flags(flags);
 }
 
+static inline void mikasa_device_interrupt(unsigned long vector,
+					   struct pt_regs * regs)
+{
+	unsigned long pld;
+	unsigned int i;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+        /* read the interrupt summary registers */
+        pld = (((unsigned long) (~inw(0x534)) & 0x0000ffffUL) << 16) |
+	       (((unsigned long) inb(0xa0))  <<  8) |
+	       ((unsigned long) inb(0x20));
+
+#if 0
+        printk("[0x%08lx]", pld);
+#endif
+
+        /*
+         * Now for every possible bit set, work through them and call
+         * the appropriate interrupt handler.
+         */
+        while (pld) {
+		i = ffz(~pld);
+		pld &= pld - 1; /* clear least bit set */
+		if (i < 16) {
+			isa_device_interrupt(vector, regs);
+		} else {
+			device_interrupt(i, i, regs);
+		}
+        }
+	restore_flags(flags);
+}
+
 static inline void eb66_and_eb64p_device_interrupt(unsigned long vector,
 						   struct pt_regs * regs)
 {
@@ -622,12 +657,10 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			srm_device_interrupt(vector, &regs);
 #elif NR_IRQS == 33
 			cabriolet_and_eb66p_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_MIKASA)
+			mikasa_device_interrupt(vector, &regs);
 #elif NR_IRQS == 32
-# ifdef CONFIG_ALPHA_MIKASA
-#	error  we got a problem here Charlie MIKASA should be SRM console
-# else
 			eb66_and_eb64p_device_interrupt(vector, &regs);
-# endif
 #elif NR_IRQS == 16
 			isa_device_interrupt(vector, &regs);
 #endif

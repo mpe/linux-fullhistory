@@ -130,13 +130,13 @@ sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 
   sb_devc        *devc = irq2devc[irq];
 
-  devc->irq_ok = 1;
-
   if (devc == NULL || devc->irq != irq)
     {
       DEB (printk ("sbintr: Bogus interrupt IRQ%d\n", irq));
       return;
     }
+
+  devc->irq_ok = 1;
 
   if (devc->model == MDL_SB16)
     {
@@ -671,10 +671,14 @@ sb_dsp_init (struct address_info *hw_config)
   devc->dev = num_audiodevs;
   devc->caps = hw_config->driver_use_1;
 
+  irq2devc[hw_config->irq] = devc;
+  devc->irq_ok = 0;
+
   if (snd_set_irq_handler (hw_config->irq,
 			   sbintr, "sound blaster", devc->osp) < 0)
     {
       printk ("SB: Can't allocate IRQ%d\n", hw_config->irq);
+      irq2devc[hw_config->irq] = NULL;
       return;
     }
 
@@ -696,9 +700,6 @@ sb_dsp_init (struct address_info *hw_config)
 	    DDB (printk ("This is a genuine SB Pro\n"));
 	  }
     }
-
-  irq2devc[hw_config->irq] = devc;
-  devc->irq_ok = 0;
 
   for (n = 0; n < 3 && devc->irq_ok == 0; n++)
     if (sb_dsp_command (devc, 0xf2))	/* Cause interrupt immediately */
@@ -1173,7 +1174,7 @@ probe_sbmpu (struct address_info *hw_config)
 	}
       hw_config->name = "Sound Blaster 16";
       hw_config->irq = -devc->irq;
-      sb16_set_mpu_port(devc, hw_config)
+      sb16_set_mpu_port(devc, hw_config);
       break;
 
     case MDL_ESS:

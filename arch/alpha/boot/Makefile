@@ -56,7 +56,7 @@ vmlinux.nh: tools/build
 
 vmlinux: $(TOPDIR)/vmlinux
 	cp $(TOPDIR)/vmlinux vmlinux
-	quickstrip vmlinux
+	strip vmlinux
 
 tools/lxboot: tools/build
 	tools/build > tools/lxboot

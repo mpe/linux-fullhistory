@@ -491,27 +491,30 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 			 struct pt_regs * regs)
 {
 	struct el_common *mchk_header;
+	struct el_procdata *mchk_procdata;
 	struct el_apecs_sysdata_mcheck *mchk_sysdata;
+	unsigned long *ptr;
+	int i;
+
 
 	mchk_header = (struct el_common *)la_ptr;
-
+	mchk_procdata = (struct el_procdata *)
+	  (la_ptr + mchk_header->proc_offset - sizeof(mchk_procdata->paltemp));
 	mchk_sysdata = 
 	  (struct el_apecs_sysdata_mcheck *)(la_ptr + mchk_header->sys_offset);
 
-	DBG(("apecs_machine_check: vector=0x%lx la_ptr=0x%lx\n", vector, la_ptr));
-	DBG(("                     pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-	     regs->pc, mchk_header->size, mchk_header->proc_offset, mchk_header->sys_offset));
-	DBG(("apecs_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
-	     apecs_mcheck_expected, mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear));
 #ifdef DEBUG
-	{
-	    unsigned long *ptr;
-	    int i;
-
-	    ptr = (unsigned long *)la_ptr;
-	    for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+	printk("apecs_machine_check: vector=0x%lx la_ptr=0x%lx\n",
+	       vector, la_ptr);
+	printk("        pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+	       regs->pc, mchk_header->size, mchk_header->proc_offset,
+	       mchk_header->sys_offset);
+	printk("apecs_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
+	       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
+	       mchk_sysdata->epic_pear);
+	ptr = (unsigned long *)la_ptr;
+	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
 		printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
-	    }
 	}
 #endif /* DEBUG */
 
@@ -520,9 +523,13 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 	 * ignore the machine check.
 	 */
 #ifdef CONFIG_ALPHA_MIKASA
-	/* for now on MIKASA, if it was expected, ignore it */
-	/* we need the details of the mcheck frame to really know... */
-	if (apecs_mcheck_expected) {
+#define MCHK_NO_DEVSEL 0x205L
+#define MCHK_NO_TABT 0x204L
+	if (apecs_mcheck_expected &&
+	    (((unsigned int)mchk_procdata->paltemp[0] == MCHK_NO_DEVSEL) ||
+	     ((unsigned int)mchk_procdata->paltemp[0] == MCHK_NO_TABT))
+	    )
+	{
 #else
 	if (apecs_mcheck_expected && (mchk_sysdata->epic_dcsr && 0x0c00UL)) {
 #endif
@@ -534,7 +541,33 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 		wrmces(0x7);
 		mb();
 		draina();
+		DBG(("apecs_machine_check: EXPECTED\n"));
+	}
+	else if (vector == 0x620 || vector == 0x630) {
+		wrmces(0x1f); /* disable correctable from now on */
+		mb();
+		draina();
+		printk("apecs_machine_check: HW correctable (0x%lx)\n", vector);
+	}
+	else {
+		printk("APECS machine check:\n");
+		printk("  vector=0x%lx la_ptr=0x%lx\n",
+		       vector, la_ptr);
+		printk("  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+		       regs->pc, mchk_header->size, mchk_header->proc_offset,
+		       mchk_header->sys_offset);
+		printk("  expected %d DCSR 0x%lx PEAR 0x%lx\n",
+		       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
+		       mchk_sysdata->epic_pear);
+
+		ptr = (unsigned long *)la_ptr;
+		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+		    printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
+		}
+#if 0
+		/* doesn't work with MILO */
+		show_regs(regs);
+#endif
 	}
 }
-
 #endif /* CONFIG_ALPHA_APECS */

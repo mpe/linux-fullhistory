@@ -1549,7 +1549,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
       gus_write_addr (0x02, sample_ptrs[sample] + samples[sample].loop_start,
 		      samples[sample].fractions & 0x0f,
 		      is16bits);	/* Loop start location */
-      gus_write_addr (0x04, sample_ptrs[sample] + samples[sample].len,
+      gus_write_addr (0x04, sample_ptrs[sample] + samples[sample].loop_end,
 		      (samples[sample].fractions >> 4) & 0x0f,
 		      is16bits);	/* Loop end location */
     }
@@ -1560,7 +1560,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
       voices[voice].loop_irq_parm = 1;
       gus_write_addr (0x02, sample_ptrs[sample],
 		      0, is16bits);	/* Loop start location */
-      gus_write_addr (0x04, sample_ptrs[sample] + samples[sample].loop_end - 1,
+      gus_write_addr (0x04, sample_ptrs[sample] + samples[sample].len - 1,
 		      (samples[sample].fractions >> 4) & 0x0f,
 		      is16bits);	/* Loop end location */
     }

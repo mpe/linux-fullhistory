@@ -1054,7 +1054,7 @@ static int sd_init_onedisk(int i)
 	     * Issue command to spin up drive for these cases. */
 	    if(the_result && !rscsi_disks[i].device->removable && 
 	       SCpnt->sense_buffer[2] == NOT_READY) {
-		int time1;
+		unsigned long time1;
 		if(!spintime){
 		    printk( "sd%c: Spinning up disk...", 'a' + i );
 		    cmd[0] = START_STOP;
@@ -1081,8 +1081,8 @@ static int sd_init_onedisk(int i)
 		    spintime = jiffies;
 		}
 		
-		time1 = jiffies;
-		while(jiffies < time1 + HZ); /* Wait 1 second for next try */
+		time1 = jiffies + HZ;
+		while(jiffies < time1); /* Wait 1 second for next try */
 		printk( "." );
 	    }
 	} while(the_result && spintime && spintime+100*HZ > jiffies);

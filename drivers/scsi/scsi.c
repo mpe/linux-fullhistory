@@ -92,7 +92,7 @@ static int update_timeout (Scsi_Cmnd *, int);
 static void print_inquiry(unsigned char *data);
 static void scsi_times_out (Scsi_Cmnd * SCpnt);
 static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
-                 Scsi_Device ** SDpnt, Scsi_Cmnd * SCpnt,
+                 int * sparse_lun, Scsi_Device ** SDpnt, Scsi_Cmnd * SCpnt,
                  struct Scsi_Host *shpnt, char * scsi_result);
 void scsi_build_commandblocks(Scsi_Device * SDpnt);
 
@@ -226,6 +226,7 @@ static void scsi_dump_status(void);
 #define BLIST_KEY       0x08
 #define BLIST_SINGLELUN 0x10
 #define BLIST_NOTQ	0x20
+#define BLIST_SPARSELUN 0x40
 
 struct dev_info{
     const char * vendor;
@@ -292,7 +293,8 @@ static struct dev_info device_list[] =
 {"NRC","MBR-7","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
-{"EMULEX","MD21/S2     ESDI","*",BLIST_SINGLELUN},
+{"EMULEX","MD21/S2     ESDI","*", BLIST_SINGLELUN},
+{"CANON","IPUBJD","*", BLIST_SPARSELUN},
 /*
  * Must be at end of list...
  */
@@ -415,7 +417,7 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
   unsigned char scsi_result0[256];
   unsigned char *scsi_result;
   Scsi_Device *SDpnt;
-  int max_dev_lun;
+  int max_dev_lun, sparse_lun;
   Scsi_Cmnd *SCpnt;
 
   SCpnt = (Scsi_Cmnd *) scsi_init_malloc (sizeof (Scsi_Cmnd), GFP_ATOMIC | GFP_DMA);
@@ -449,8 +451,8 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
     if(dev >= shpnt->max_id) goto leave;
     lun = hlun;
     if(lun >= shpnt->max_lun) goto leave;
-    scan_scsis_single (channel, dev, lun, &max_dev_lun,
-                   &SDpnt, SCpnt, shpnt, scsi_result);
+    scan_scsis_single (channel, dev, lun, &max_dev_lun, &sparse_lun,
+		       &SDpnt, SCpnt, shpnt, scsi_result);
     if(SDpnt!=oldSDpnt) {
 
 	/* it could happen the blockdevice hasn't yet been inited */
@@ -483,9 +485,12 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
            */
           max_dev_lun = (max_scsi_luns < shpnt->max_lun ?
                          max_scsi_luns : shpnt->max_lun);
+	  sparse_lun = 0;
           for (lun = 0; lun < max_dev_lun; ++lun) {
             if (!scan_scsis_single (channel, dev, lun, &max_dev_lun,
-                                    &SDpnt, SCpnt, shpnt, scsi_result))
+				    &sparse_lun, &SDpnt, SCpnt, shpnt,
+				    scsi_result)
+		&& !sparse_lun)
               break; /* break means don't probe further for luns!=0 */
           }                     /* for lun ends */
         }                       /* if this_id != id ends */
@@ -528,8 +533,8 @@ static void scan_scsis (struct Scsi_Host *shpnt, unchar hardcoded,
  * Global variables used : scsi_devices(linked list)
  */
 int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
-    Scsi_Device **SDpnt2, Scsi_Cmnd * SCpnt, struct Scsi_Host * shpnt, 
-    char *scsi_result)
+    int *sparse_lun, Scsi_Device **SDpnt2, Scsi_Cmnd * SCpnt,
+    struct Scsi_Host * shpnt, char *scsi_result)
 {
   unsigned char scsi_cmd[12];
   struct Scsi_Device_Template *sdtpnt;
@@ -794,6 +799,16 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
    */
   if (bflags & BLIST_SINGLELUN)
     SDpnt->single_lun = 1;
+
+  /*
+   * If this device is known to support sparse multiple units, override the
+   * other settings, and scan all of them.
+   */
+  if (bflags & BLIST_SPARSELUN) {
+    *max_dev_lun = 8;
+    *sparse_lun = 1;
+    return 1;
+  }
 
   /*
    * If this device is known to support multiple units, override the other

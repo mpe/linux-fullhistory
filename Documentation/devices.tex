@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: June 9, 1996}
+\date{Last revised: July 9, 1996}
 \maketitle
 %
 \noindent
@@ -64,7 +64,9 @@ To have a major number allocated, or a minor number in situations
 where that applies (e.g.\ busmice), please contact me with the
 appropriate device information.  Also, if you have additional
 information regarding any of the devices listed below, or if I have
-made a mistake, I would greatly appreciate a note.
+made a mistake, I would greatly appreciate a note.  When sending me
+mail, please include the word ``device'' in the subject so your mail
+won't accidentally get buried!
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -163,6 +165,7 @@ reply.
 \major{40}{}{char }{Matrox Meteor frame grabber}
 \major{  }{}{block}{Syquest EZ135 parallel port removable drive}
 \major{41}{}{char }{Yet Another Micro Monitor}
+\major{  }{}{block}{MicroSolutions BackPack parallel port CD-ROM}
 \major{42}{}{}{Demo/sample use}
 \major{43}{}{char }{isdn4linux virtual modem}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
@@ -175,7 +178,8 @@ reply.
 \major{51}{}{char }{Baycom radio modem}
 \major{52}{}{char }{Spellcaster DataComm/BRI ISDN card}
 \major{53}{}{char }{BDM interface for remote debugging MC683xx microcontrollers}
-\major{54}{--59}{}{Unallocated}
+\major{54}{}{char }{Electrocardiognosis Holter serial card}
+\major{55}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -460,6 +464,7 @@ physical disks.
 	\minor{136}{/dev/qcam0}{QuickCam on {\file lp0}}
 	\minor{137}{/dev/qcam1}{QuickCam on {\file lp1}}
 	\minor{138}{/dev/qcam2}{QuickCam on {\file lp2}}
+	\minor{139}{/dev/openprom}{SPARC OpenBoot PROM}
 \end{devicelist}
 
 \noindent
@@ -989,6 +994,9 @@ Partitions are handled the same way as for IDE disks (see major number
 \begin{devicelist}
 \major{41}{}{char }{Yet Another Micro Monitor}
 	\minor{0}{/dev/yamm}{Yet Another Micro Monitor}
+\\
+\major{  }{}{block}{MicroSolutions BackPack parallel port CD-ROM}
+	\minor{0}{/dev/bpcd}{BackPack CD-ROM}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1096,7 +1104,19 @@ interface. PD is the Motorola Public Domain Interface and ICD is the
 commercial interface by P\&E.
 
 \begin{devicelist}
-\major{54}{--59}{}{Unallocated}
+\major{54}{Electrocardiognosis Holter serial card}
+	\minor{0}{/dev/holter0}{First Holter port}
+	\minor{1}{/dev/holter1}{Second Holter port}
+	\minor{2}{/dev/holter2}{Third Holter port}
+\end{devicelist}
+
+\noindent
+A custom serial card used by Electrocardiognosis SRL
+$<$mseritan@ottonel.pub.ro$>$ to transfer data from Holter 24-hour
+heart monitoring equipment.
+
+\begin{devicelist}
+\major{55}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

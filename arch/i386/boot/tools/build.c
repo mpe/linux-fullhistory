@@ -19,6 +19,7 @@
 /*
  * Changes by tytso to allow root device specification
  * High loaded stuff by Hans Lermen & Werner Almesberger, Feb. 1996
+ * Cross compiling fixes by Gertjan van Wingerde, July 1996
  */
 
 #include <stdio.h>	/* fprintf */
@@ -56,6 +57,7 @@ static int GCC_HEADER = sizeof(struct exec);
 #define STRINGIFY(x) #x
 
 typedef union {
+	int i;
 	long l;
 	short s[2];
 	char b[4];
@@ -70,6 +72,17 @@ long intel_long(long l)
 	t.b[2] = l & 0xff; l >>= 8;
 	t.b[3] = l & 0xff; l >>= 8;
 	return t.l;
+}
+
+int intel_int(int i)
+{
+	conv t;
+
+	t.b[0] = i & 0xff; i >>= 8;
+        t.b[1] = i & 0xff; i >>= 8;
+        t.b[2] = i & 0xff; i >>= 8;
+        t.b[3] = i & 0xff; i >>= 8;
+        return t.i;
 }
 
 short intel_short(short l)
@@ -94,8 +107,8 @@ void usage(void)
 
 int main(int argc, char ** argv)
 {
-	int i,c,id, sz;
-	unsigned long sys_size;
+	int i,c,id,sz,tmp_int;
+	unsigned long sys_size, tmp_long;
 	char buf[1024];
 #ifndef __BFD__
 	struct exec *ex = (struct exec *)buf;
@@ -180,12 +193,17 @@ int main(int argc, char ** argv)
 #ifdef __BIG_KERNEL__
 	{
 		if (!i) {
-			if (*((long *)(&buf[2])) != 0x53726448 )
+			/* Working with memcpy because of alignment constraints
+			   on Sparc - Gertjan */
+			memcpy(&tmp_long, &buf[2], sizeof(long));
+			if (tmp_long != intel_long(0x53726448) )
 				die("Wrong magic in loader header of 'setup'");
-			if (*((int *)(&buf[6])) < 0x200 )
+			memcpy(&tmp_int, &buf[6], sizeof(int));
+			if (tmp_int < intel_int(0x200))
 				die("Wrong version of loader header of 'setup'");
 			buf[0x11] = 1; /* LOADED_HIGH */
-			*((long *)(&buf[0x14])) = 0x100000; /* code32_start */
+			tmp_long = intel_long(0x100000);
+			memcpy(&buf[0x14], &tmp_long, sizeof(long));  /* code32_start */
 		}
 #endif
 		if (write(1,buf,c)!=c)

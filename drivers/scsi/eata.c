@@ -1,6 +1,9 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      09 Jul 1996 rev. 2.11 for linux 2.0.4
+ *          Number of internal retries is now limited.
+ *
  *      16 Apr 1996 rev. 2.10 for linux 1.3.90
  *          New argument "reset_flags" to the reset routine.
  *
@@ -156,6 +159,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define MAX_BOARDS 18
 #define MAX_MAILBOXES 64
 #define MAX_SGLIST 64
+#define MAX_INTERNAL_RETRIES 64
 #define MAX_CMD_PER_LUN 2
 
 #define FALSE 0
@@ -313,6 +317,8 @@ struct hostdata {
    int in_reset;                        /* True if board is doing a reset */
    int target_time_out[MAX_TARGET];     /* N. of timeout errors on target */
    int target_reset[MAX_TARGET];        /* If TRUE redo operation on target */
+   unsigned int retries;                /* Number of internal retries */
+   unsigned long last_retried_pid;      /* Pid of last retried command */
    unsigned char subversion;            /* Bus type, either ISA or ESA */
    unsigned char protocol_rev;          /* EATA 2.0 rev., 'A' or 'B' or 'C' */
    struct mssp sp[MAX_MAILBOXES];       /* Returned status for this board */
@@ -802,6 +808,8 @@ int eata2x_reset (Scsi_Cmnd *SCarg, unsigned int reset_flags) {
       return SCSI_RESET_ERROR;
       }
 
+   HD(j)->retries = 0;
+
    for (k = 0; k < MAX_TARGET; k++) HD(j)->target_reset[k] = TRUE;
 
    for (k = 0; k < MAX_TARGET; k++) HD(j)->target_time_out[k] = 0;
@@ -1008,6 +1016,8 @@ static void eata2x_interrupt_handler(int irq, void *dev_id, struct pt_regs * reg
    
 		  HD(j)->target_time_out[SCpnt->target] = 0;
    
+                  if (HD(j)->last_retried_pid == SCpnt->pid) HD(j)->retries = 0;
+
 		  break;
 	       case ASST:     /* Selection Time Out */
 	       case 0x02:     /* Command Time Out   */
@@ -1020,17 +1030,23 @@ static void eata2x_interrupt_handler(int irq, void *dev_id, struct pt_regs * reg
 		     }
    
 		  break;
+
+               /* Perform a limited number of internal retries */
 	       case 0x03:     /* SCSI Bus Reset Received */
 	       case 0x04:     /* Initial Controller Power-up */
-   
-		  if (SCpnt->device->type != TYPE_TAPE)
-		     status = DID_BUS_BUSY << 16;
-		  else
-		     status = DID_ERROR << 16;
    
 		  for (k = 0; k < MAX_TARGET; k++) 
 		     HD(j)->target_reset[k] = TRUE;
    
+	          if (SCpnt->device->type != TYPE_TAPE
+                      && HD(j)->retries < MAX_INTERNAL_RETRIES) {
+		     status = DID_BUS_BUSY << 16;
+		     HD(j)->retries++;
+                     HD(j)->last_retried_pid = SCpnt->pid;
+                     }
+	          else 
+		     status = DID_ERROR << 16;
+
 		  break;
 	       case 0x07:     /* Bus Parity Error */
 	       case 0x0c:     /* Controller Ram Parity */
@@ -1058,7 +1074,7 @@ static void eata2x_interrupt_handler(int irq, void *dev_id, struct pt_regs * reg
 		 spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
 		do_trace)
 #endif
-	       printk("%s: ihdlr, mbox %d, err 0x%x:%x,"\
+	       printk("%s: ihdlr, mbox %2d, err 0x%x:%x,"\
 		      " target %d:%d, pid %ld, count %d.\n",
 		      BN(j), i, spp->adapter_status, spp->target_status,
 		      SCpnt->target, SCpnt->lun, SCpnt->pid, HD(j)->iocount);

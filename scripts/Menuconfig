@@ -733,7 +733,7 @@ EOM
 # Create a menu item to load an alternate configuration file.
 #
 g_alt_config () {
-	echo -n "get_alt_config 'Load  an Alternate Configuration File' "\
+	echo -n "get_alt_config 'Load an Alternate Configuration File' "\
 		>>MCmenu
 }
 
@@ -742,6 +742,8 @@ g_alt_config () {
 # configuration from it.
 #
 get_alt_config () {
+	set -f ## Switch file expansion OFF
+
 	while true
 	do
 		ALT_CONFIG="${ALT_CONFIG:-$DEFAULTS}"
@@ -759,9 +761,9 @@ last retrieved.  Leave blank to abort."\
 
 			[ "_" = "_$ALT_CONFIG" ] && break
 
-			if [ -r "$ALT_CONFIG" ]
+			if eval [ -r "$ALT_CONFIG" ]
 			then
-				load_config_file "$ALT_CONFIG"
+				eval load_config_file "$ALT_CONFIG"
 				break
 			else
 				echo -ne "\007"
@@ -789,6 +791,7 @@ EOM
 		fi
 	done
 
+	set +f ## Switch file expansion ON
 	rm -f help.out MCdialog.out
 }
 
@@ -796,7 +799,7 @@ EOM
 # Create a menu item to store an alternate config file.
 #
 s_alt_config () {
-	echo -n "save_alt_config 'Store an Alternate Configuration File' "\
+	echo -n "save_alt_config 'Save Configuration to an Alternate File' "\
 		 >>MCmenu
 }
 
@@ -805,6 +808,8 @@ s_alt_config () {
 # configuration to it.
 #
 save_alt_config () {
+	set -f  ## Switch file expansion OFF
+			
 	while true
 	do
 		$DIALOG --backtitle "$backtitle" \
@@ -818,10 +823,10 @@ as an alternate.  Leave blank to abort."\
 			ALT_CONFIG=`cat MCdialog.out`
 
 			[ "_" = "_$ALT_CONFIG" ] && break
-			
-			if touch $ALT_CONFIG 2>/dev/null
+
+			if eval touch $ALT_CONFIG 2>/dev/null
 			then
-				save_configuration $ALT_CONFIG
+				eval save_configuration $ALT_CONFIG
 				load_functions  ## RELOAD
 				break
 			else
@@ -844,11 +849,12 @@ If you are uncertain what all this means then you should probably
 leave this blank.
 EOM
 			$DIALOG	--backtitle "$backtitle"\
-				--title "Store Alternate Configuration"\
+				--title "Save Alternate Configuration"\
 				--textbox help.out $ROWS $COLS
 		fi
 	done
 
+	set +f  ## Switch file expansion ON
 	rm -f help.out MCdialog.out
 }
 

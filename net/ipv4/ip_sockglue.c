@@ -178,17 +178,18 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  	kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
 			  return 0;
 		  }
-		case IP_TOS:		/* This sets both TOS and Precedence */
-			if (val<0 || val>63)	/* Reject setting of unused bits */
+		case IP_TOS:			/* This sets both TOS and Precedence */
+			if (val & ~0xfe)	/* Reject setting of unused bits */
 				return -EINVAL;
-			if ((val&7) > 4 && !suser())	/* Only root can set Prec>4 */
+			if ((val>>5) > 4 && !suser())	/* Only root can set Prec>4 */
 				return -EPERM;
 			sk->ip_tos=val;
-			switch (val & 0x38) {
+			switch (val & 0x1E) {
 				case IPTOS_LOWDELAY:
 					sk->priority=SOPRI_INTERACTIVE;
 					break;
 				case IPTOS_THROUGHPUT:
+				case IPTOS_MINCOST:
 					sk->priority=SOPRI_BACKGROUND;
 					break;
 				default:
@@ -270,7 +271,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
  *	FIXME: Add/Del membership should have a semaphore protecting them from re-entry
  */
 			struct ip_mreq mreq;
-			__u32 route_src;
 			struct rtable *rt;
 			struct device *dev=NULL;
 			
@@ -295,9 +295,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				 */
 				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
 				{
-					dev=rt->rt_dev;
-					route_src = rt->rt_src;
-					atomic_dec(&rt->rt_use);
+					dev=rt->u.dst.dev;
+					atomic_dec(&rt->u.dst.use);
 					ip_rt_put(rt);
 				}
 			}
@@ -328,7 +327,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		{
 			struct ip_mreq mreq;
 			struct rtable *rt;
-			__u32 route_src;
 			struct device *dev=NULL;
 
 			/*
@@ -349,9 +347,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			{
 				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
 			        {
-					dev=rt->rt_dev;
-					atomic_dec(&rt->rt_use);
-					route_src = rt->rt_src;
+					dev=rt->u.dst.dev;
+					atomic_dec(&rt->u.dst.use);
 					ip_rt_put(rt);
 				}
 			}

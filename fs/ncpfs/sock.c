@@ -599,7 +599,7 @@ ncp_request(struct ncp_server *server, int function)
 
 	if (server->has_subfunction != 0)
 	{
-		*(__u16 *)&(h->data[0]) = request_size - 2;
+		*(__u16 *)&(h->data[0]) = htons(request_size - 2);
 	}
 
 	h->type = NCP_REQUEST;

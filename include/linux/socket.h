@@ -102,6 +102,7 @@ struct msghdr
 #define	IPTOS_LOWDELAY		0x10
 #define	IPTOS_THROUGHPUT	0x08
 #define	IPTOS_RELIABILITY	0x04
+#define	IPTOS_MINCOST		0x02
 #define IP_TTL		2
 #define IP_HDRINCL	3
 #define IP_OPTIONS	4

@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		      Last revised: June 9, 1996
+		     Last revised: July 9, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -21,7 +21,9 @@ To have a major number allocated, or a minor number in situations
 where that applies (e.g. busmice), please contact me with the
 appropriate device information.  Also, if you have additional
 information regarding any of the devices listed below, or if I have
-made a mistake, I would greatly appreciate a note.
+made a mistake, I would greatly appreciate a note.  When sending me
+mail, please include the word "device" in the subject so your mail
+won't accidentally get buried!
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -278,6 +280,7 @@ reply.
 		136 = /dev/qcam0	QuickCam on lp0
 		137 = /dev/qcam1	QuickCam on lp1
 		138 = /dev/qcam2	QuickCam on lp2
+		139 = /dev/openprom	SPARC OpenBoot PROM
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -689,6 +692,8 @@ reply.
 
  41 char	Yet Another Micro Monitor
 		  0 = /dev/yamm		Yet Another Micro Monitor
+    block	MicroSolutions BackPack parallel port CD-ROM
+		  0 = /dev/bpcd		BackPack CD-ROM
 
  42		Demo/sample use
 
@@ -771,7 +776,16 @@ reply.
 		Domain Interface and ICD is the commercial interface
 		by P&E.
 
- 54-59		UNALLOCATED
+ 54 char	Electrocardiognosis Holter serial card
+		  0 = /dev/holter0	First Holter port
+		  1 = /dev/holter1	Second Holter port
+		  2 = /dev/holter2	Third Holter port
+
+		A custom serial card used by Electrocardiognosis SRL
+		<mseritan@ottonel.pub.ro> to transfer data from Holter
+		24-hour heart monitoring equipment.
+
+ 55-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

@@ -63,7 +63,7 @@
    the latest firmware provided by QLogic.  This may be an earlier/later
    revision than supplied by your board. */
 
-#define RELOAD_FIRMWARE		0
+#define RELOAD_FIRMWARE		1
 
 /* Set the following macro to 1 to reload the ISP1020's defaults from nvram.
    If you are not sure of your settings, leave this alone, the driver will

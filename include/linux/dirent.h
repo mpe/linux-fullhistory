@@ -3,7 +3,7 @@
 
 struct dirent {
 	long		d_ino;
-	off_t		d_off;
+	__kernel_off_t	d_off;
 	unsigned short	d_reclen;
 	char		d_name[256]; /* We must not include limits.h! */
 };

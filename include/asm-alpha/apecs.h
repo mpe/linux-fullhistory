@@ -414,6 +414,77 @@ extern unsigned long apecs_init (unsigned long mem_start,
 /*
  * Data structure for handling APECS machine checks:
  */
+#ifdef CONFIG_ALPHA_MIKASA
+struct el_apecs_sysdata_mcheck {
+    unsigned long coma_gcr;
+    unsigned long coma_edsr;
+    unsigned long coma_ter;
+    unsigned long coma_elar;
+    unsigned long coma_ehar;
+    unsigned long coma_ldlr;
+    unsigned long coma_ldhr;
+    unsigned long coma_base0;
+    unsigned long coma_base1;
+    unsigned long coma_base2;
+    unsigned long coma_base3;
+    unsigned long coma_cnfg0;
+    unsigned long coma_cnfg1;
+    unsigned long coma_cnfg2;
+    unsigned long coma_cnfg3;
+    unsigned long epic_dcsr;
+    unsigned long epic_pear;
+    unsigned long epic_sear;
+    unsigned long epic_tbr1;
+    unsigned long epic_tbr2;
+    unsigned long epic_pbr1;
+    unsigned long epic_pbr2;
+    unsigned long epic_pmr1;
+    unsigned long epic_pmr2;
+    unsigned long epic_harx1;
+    unsigned long epic_harx2;
+    unsigned long epic_pmlt;
+    unsigned long epic_tag0;
+    unsigned long epic_tag1;
+    unsigned long epic_tag2;
+    unsigned long epic_tag3;
+    unsigned long epic_tag4;
+    unsigned long epic_tag5;
+    unsigned long epic_tag6;
+    unsigned long epic_tag7;
+    unsigned long epic_data0;
+    unsigned long epic_data1;
+    unsigned long epic_data2;
+    unsigned long epic_data3;
+    unsigned long epic_data4;
+    unsigned long epic_data5;
+    unsigned long epic_data6;
+    unsigned long epic_data7;
+
+    unsigned long pceb_vid;
+    unsigned long pceb_did;
+    unsigned long pceb_revision;
+    unsigned long pceb_command;
+    unsigned long pceb_status;
+    unsigned long pceb_latency;
+    unsigned long pceb_control;
+    unsigned long pceb_arbcon;
+    unsigned long pceb_arbpri;
+
+    unsigned long esc_id;
+    unsigned long esc_revision;
+    unsigned long esc_int0;
+    unsigned long esc_int1;
+    unsigned long esc_elcr0;
+    unsigned long esc_elcr1;
+    unsigned long esc_last_eisa;
+    unsigned long esc_nmi_stat;
+
+    unsigned long pci_ir;
+    unsigned long pci_imr;
+    unsigned long svr_mgr;
+};
+#else /* CONFIG_ALPHA_MIKASA */
+/* this for the normal APECS machines */
 struct el_apecs_sysdata_mcheck {
     unsigned long coma_gcr;
     unsigned long coma_edsr;
@@ -457,6 +528,31 @@ struct el_apecs_sysdata_mcheck {
     unsigned long epic_data6;
     unsigned long epic_data7;
 };
+#endif /* CONFIG_ALPHA_MIKASA */
+
+struct el_procdata {
+    unsigned long paltemp[32];  /* PAL TEMP REGS. */
+    /* EV4-specific fields */
+    unsigned long exc_addr;     /* Address of excepting instruction. */
+    unsigned long exc_sum;      /* Summary of arithmetic traps. */
+    unsigned long exc_mask;     /* Exception mask (from exc_sum). */
+    unsigned long iccsr;        /* IBox hardware enables. */
+    unsigned long pal_base;     /* Base address for PALcode. */
+    unsigned long hier;         /* Hardware Interrupt Enable. */
+    unsigned long hirr;         /* Hardware Interrupt Request. */
+    unsigned long csr;          /* D-stream fault info. */
+    unsigned long dc_stat;      /* D-cache status (ECC/Parity Err). */
+    unsigned long dc_addr;      /* EV3 Phys Addr for ECC/DPERR. */
+    unsigned long abox_ctl;     /* ABox Control Register. */
+    unsigned long biu_stat;     /* BIU Status. */
+    unsigned long biu_addr;     /* BUI Address. */
+    unsigned long biu_ctl;      /* BIU Control. */
+    unsigned long fill_syndrome;/* For correcting ECC errors. */
+    unsigned long fill_addr;    /* Cache block which was being read */
+    unsigned long va;           /* Effective VA of fault or miss. */
+    unsigned long bc_tag;       /* Backup Cache Tag Probe Results.*/
+};
+
 
 #define RTC_PORT(x)	(0x70 + (x))
 #define RTC_ADDR(x)	(0x80 | (x))
