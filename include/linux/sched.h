@@ -85,6 +85,13 @@ extern int nr_running, nr_tasks;
 #define TASK_STOPPED		4
 #define TASK_SWAPPING		5
 
+/*
+ * Scheduling policies
+ */
+#define SCHED_OTHER		0
+#define SCHED_FIFO		1
+#define SCHED_RR		2
+
 #ifndef NULL
 #define NULL ((void *) 0)
 #endif
@@ -129,7 +136,8 @@ struct mm_struct {
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack, start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
-	unsigned long rss;
+	unsigned long rss, total_vm, locked_vm;
+	unsigned long def_flags;
 	struct vm_area_struct * mmap;
 	struct vm_area_struct * mmap_avl;
 };
@@ -140,6 +148,7 @@ struct mm_struct {
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
+		0, 0, 0, \
 		0, \
 		&init_mmap, &init_mmap }
 
@@ -184,7 +193,7 @@ struct task_struct {
 	struct wait_queue *wait_chldexit;	/* for wait4() */
 	unsigned short uid,euid,suid,fsuid;
 	unsigned short gid,egid,sgid,fsgid;
-	unsigned long timeout;
+	unsigned long timeout, policy;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	struct timer_list real_timer;
@@ -244,7 +253,7 @@ struct task_struct {
  */
 #define _STK_LIM	(8*1024*1024)
 
-#define DEF_PRIORITY	(15*HZ/100)	/* 150 ms time slices */
+#define DEF_PRIORITY	(20*HZ/100)	/* 200 ms time slices */
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -262,7 +271,7 @@ struct task_struct {
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0,0,0, \
-/* timeout */	0,0,0,0,0,0,0, \
+/* timeout */	0,SCHED_OTHER,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	0,0,0,0,0, \
 /* flt */	0,0,0,0,0,0, \

@@ -62,12 +62,7 @@
 
 */
 
-
 #include <linux/module.h>
-
-#ifdef MODULE
-#define mcd_init init_module
-#endif
 
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -88,6 +83,7 @@
 
 #define MAJOR_NR MITSUMI_CDROM_MAJOR
 #include <linux/blk.h>
+
 #define mcd_port mcd    /* for compatible parameter passing with "insmod" */
 #include <linux/mcd.h>
 
@@ -132,15 +128,10 @@ static int mcdPresent = 0;
 #endif
 /* #define DOUBLE_QUICK_ONLY */
 
-#if LINUX_VERSION_CODE < 66338
-    #define CURRENT_VALID \
-    (CURRENT && MAJOR(CURRENT -> dev) == MAJOR_NR && CURRENT -> cmd == READ \
-    && CURRENT -> sector != -1)
-#else
-    #define CURRENT_VALID \
-    (CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
-    && CURRENT -> sector != -1)
-#endif
+#define CURRENT_VALID \
+(CURRENT && MAJOR(CURRENT -> rq_dev) == MAJOR_NR && CURRENT -> cmd == READ \
+&& CURRENT -> sector != -1)
+
 #define MFL_STATUSorDATA (MFL_STATUS | MFL_DATA)
 #define MCD_BUF_SIZ 16
 static volatile int mcd_transfer_is_active;
@@ -213,11 +204,7 @@ void mcd_setup(char *str, int *ints)
 
  
 static int
-#if LINUX_VERSION_CODE < 66338
-check_mcd_change(dev_t full_dev)
-#else
 check_mcd_change(kdev_t full_dev)
-#endif
 {
    int retval, target;
 
@@ -1173,8 +1160,7 @@ static struct file_operations mcd_fops = {
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
-int
-mcd_init(void)
+int mcd_init(void)
 {
 	int count;
 	unsigned char result[3];
@@ -1619,6 +1605,11 @@ Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
 }
 
 #ifdef MODULE
+int init_module(void)
+{
+	return mcd_init();
+}
+
 void cleanup_module(void)
 { if (MOD_IN_USE)
      { printk("mcd module in use - can't remove it.\n");

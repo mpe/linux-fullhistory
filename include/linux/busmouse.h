@@ -2,7 +2,7 @@
 #define _LINUX_BUSMOUSE_H
 
 /*
- * linux/include/linux/mouse.h: header file for Logitech Bus Mouse driver
+ * linux/include/linux/busmouse.h: header file for Logitech Bus Mouse driver
  * by James Banks
  *
  * based on information gleamed from various mouse drivers on the net

@@ -21,9 +21,13 @@
 #define MAP_GROWSDOWN	0x1000		/* stack-like segment */
 #define MAP_DENYWRITE	0x2000		/* ETXTBSY */
 #define MAP_EXECUTABLE	0x4000		/* mark it as a executable */
+#define MAP_LOCKED	0x8000		/* lock the mapping */
 
 #define MS_ASYNC	1		/* sync memory asynchronously */
 #define MS_SYNC		2		/* synchronous memory sync */
 #define MS_INVALIDATE	4		/* invalidate the caches */
+
+#define MCL_CURRENT	 8192		/* lock all currently mapped pages */
+#define MCL_FUTURE	16384		/* lock all additions to address space */
 
 #endif /* __ALPHA_MMAN_H__ */

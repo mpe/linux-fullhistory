@@ -57,8 +57,8 @@ void hard_reset_now(void)
 
 void show_regs(struct pt_regs * regs)
 {
-	printk("\nps: %04lx pc: %016lx\n", regs->ps, regs->pc);
-	printk("rp: %016lx sp: %p\n", regs->r26, regs+1);
+	printk("\nps: %04lx pc: [<%016lx>]\n", regs->ps, regs->pc);
+	printk("rp: [<%016lx>] sp: %p\n", regs->r26, regs+1);
 	printk(" r0: %016lx  r1: %016lx  r2: %016lx  r3: %016lx\n",
 	       regs->r0, regs->r1, regs->r2, regs->r3);
 	printk(" r4: %016lx  r5: %016lx  r6: %016lx  r7: %016lx\n",

@@ -1,7 +1,7 @@
 /*
  * The Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.3
+ * VERSION: 1.5
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,9 +34,10 @@
 
 #if RCS
 static const char *mcdx_c_version
-		= "mcdx.c,v 1.17 1995/11/06 01:07:57 heiko Exp";
+		= "mcdx.c,v 1.19 1995/11/20 17:06:25 heiko Exp";
 #endif
 
+#include <linux/version.h>
 #include <linux/module.h>
 
 #include <linux/errno.h>
@@ -55,19 +56,6 @@ static const char *mcdx_c_version
 
 
 #include <linux/major.h>
-
-/* old kernel (doesn't know about MCDX) */
-#ifndef MITSUMI_X_CDROM_MAJOR
-#define MITSUMI_X_CDROM_MAJOR 20
-#define DEVICE_NAME "mcdx"
-
-/* #define DEVICE_INTR do_mcdx */
-#define DEVICE_REQUEST do_mcdx_request
-#define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
-#endif
-
 #define MAJOR_NR MITSUMI_X_CDROM_MAJOR
 #include <linux/blk.h>
 
@@ -191,18 +179,9 @@ struct s_drive_stuff {
 	changed elsewhere. */
 
 /* declared in blk.h */
-#if LINUX_VERSION_CODE < 66338
-unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end);
-#else
 int mcdx_init(void);
-#endif
 void do_mcdx_request(void);
-
-#if LINUX_VERSION_CODE < 66338
-int check_mcdx_media_change(dev_t);
-#else
 int check_mcdx_media_change(kdev_t);
-#endif
 
 /* already declared in init/main */
 void mcdx_setup(char *, int *);
@@ -561,36 +540,20 @@ void do_mcdx_request()
 
 	TRACE((REQUEST, "do_request()\n"));
 
-#if LINUX_VERSION_CODE < 66338
-	if ((CURRENT == NULL) || (CURRENT->dev < 0))  {
-#else
 	if ((CURRENT == NULL) || (CURRENT->rq_status == RQ_INACTIVE))  {
-#endif
 		TRACE((REQUEST, "do_request() done\n"));
 		return;
 	}
 
-#if LINUX_VERSION_CODE < 66338
-    stuffp = mcdx_stuffp[MINOR(CURRENT->dev)];
-#else
     stuffp = mcdx_stuffp[MINOR(CURRENT->rq_dev)];
-#endif
 	TRACE((REQUEST, "do_request() stuffp = %p\n", stuffp));
 
     INIT_REQUEST;
-#if LINUX_VERSION_CODE < 66338
-    dev = MINOR(CURRENT->dev);
-#else
     dev = MINOR(CURRENT->rq_dev);
-#endif
 
 	if ((dev < 0) || (dev >= MCDX_NDRIVES) || (!stuffp->present)) {
-#if LINUX_VERSION_CODE < 66338
-		WARN(("do_request(): bad device: 0x%04x\n", CURRENT->dev));
-#else
 		WARN(("do_request(): bad device: %s\n", 
             kdevname(CURRENT->rq_dev)));
-#endif
 		end_request(0);
 		goto again;
     }
@@ -817,24 +780,15 @@ mcdx_close(struct inode *ip, struct file *fp)
     return;
 }
 
-#if LINUX_VERSION_CODE < 66338
-int check_mcdx_media_change(dev_t full_dev)
-#else
 int check_mcdx_media_change(kdev_t full_dev)
-#endif
 /*	Return: 1 if media changed since last call to 
 			  this function
 			0 else
 	Setting flag to 0 resets the changed state. */
 
 {
-#if LINUX_VERSION_CODE < 66338
-    INFO(("check_mcdx_media_change called for device %x\n",
-	  full_dev));
-#else
     INFO(("check_mcdx_media_change called for device %s\n",
 	  kdevname(full_dev)));
-#endif
     return 0;
 }
 
@@ -1021,11 +975,7 @@ int init_module(void)
 	int i;
 	int drives = 0;
 
-#if LINUX_VERSION_CODE < 66338
-	mcdx_init(0, 0);
-#else
 	mcdx_init();
-#endif
 	for (i = 0; i < MCDX_NDRIVES; i++)  {
 		if (mcdx_stuffp[i]) {
 		TRACE((INIT, "init_module() drive %d stuff @ %p\n",
@@ -1097,18 +1047,14 @@ void warn(const char* fmt, ...)
 }
 
 
-#if LINUX_VERSION_CODE < 66338
-unsigned long mcdx_init(unsigned long mem_start, unsigned long mem_end)
-#else
 int mcdx_init(void)
-#endif
 {
 	int drive;
 
-	WARN(("Version 1.3 "
-			"mcdx.c,v 1.17 1995/11/06 01:07:57 heiko Exp\n"));
-	INFO((": Version 1.3 "
-			"mcdx.c,v 1.17 1995/11/06 01:07:57 heiko Exp\n"));
+	WARN(("Version 1.5 "
+			"mcdx.c,v 1.19 1995/11/20 17:06:25 heiko Exp\n"));
+	INFO((": Version 1.5 "
+			"mcdx.c,v 1.19 1995/11/20 17:06:25 heiko Exp\n"));
 
 	/* zero the pointer array */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++)
@@ -1124,18 +1070,12 @@ int mcdx_init(void)
 		
 		TRACE((INIT, "init() try drive %d\n", drive));
 
-#if defined(MODULE) || LINUX_VERSION_CODE > 66338
         TRACE((INIT, "kmalloc space for stuffpt's\n"));
 		TRACE((MALLOC, "init() malloc %d bytes\n", size));
 		if (!(stuffp = kmalloc(size, GFP_KERNEL))) {
 			WARN(("init() malloc failed\n"));
 			break; 
 		}
-#else
-        TRACE((INIT, "adjust mem_start\n"));
-        stuffp = (struct s_drive_stuff *) mem_start;
-        mem_start += size;
-#endif
 
 		TRACE((INIT, "init() got %d bytes for drive stuff @ %p\n", sizeof(*stuffp), stuffp));
 
@@ -1267,11 +1207,7 @@ int mcdx_init(void)
 		TRACE((INIT, "init() mcdx_stuffp[%d] = %p\n", drive, stuffp));
 	}
 
-#if MODULE || LINUX_VERSION_CODE > 66338
 	return 0;
-#else
-	return mem_start;
-#endif
 }
 
 

@@ -566,15 +566,10 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long end;
 
 	/* Don't swap out areas like shared memory which have their
-	    own separate swapping mechanism. */
-	if (vma->vm_flags & VM_SHM)
+	    own separate swapping mechanism or areas which are locked down */
+	if (vma->vm_flags & (VM_SHM | VM_LOCKED))
 		return 0;
 
-	/* Don't swap out areas like shared memory which have their
-           own separate swapping mechanism. */
-	if (vma->vm_flags & VM_DONTSWAP)
-		return 0;
-	
 	end = vma->vm_end;
 	while (start < end) {
 		int result = swap_out_pgd(tsk, vma, pgdir, start, end, limit);

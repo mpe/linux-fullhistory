@@ -26,6 +26,10 @@
  *   added fasync support
  *
  * Modularised 6-Sep-95 Philip Blundell <pjb27@cam.ac.uk> 
+ *
+ * Replaced dumb busy loop with udelay()  16 Nov 95
+ *   Nathan Laredo <laredo@gnu.ai.mit.edu>
+ *
  */
 
 #include <linux/module.h>
@@ -38,6 +42,7 @@
 #include <linux/mm.h>
 #include <linux/mouse.h>
 #include <linux/random.h>
+#include <linux/delay.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -241,8 +246,7 @@ int bus_mouse_init(void)
 
 	outb(MSE_CONFIG_BYTE, MSE_CONFIG_PORT);
 	outb(MSE_SIGNATURE_BYTE, MSE_SIGNATURE_PORT);
-	for (i = 0; i < 100000; i++)
-		/* busy loop */;
+	udelay(100L);	/* wait for reply from mouse */
 	if (inb(MSE_SIGNATURE_PORT) != MSE_SIGNATURE_BYTE) {
 		mouse.present = 0;
 		return -EIO;

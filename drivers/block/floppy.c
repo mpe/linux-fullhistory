@@ -1089,10 +1089,8 @@ static inline void perpendicular_mode(void)
 {
 	unsigned char perp_mode;
 
-	if (!floppy)
-		return;
-	if (floppy->rate & 0x40){
-		switch(raw_cmd->rate){
+	if (raw_cmd->rate & 0x40){
+		switch(raw_cmd->rate & 3){
 			case 0:
 				perp_mode=2;
 				break;
@@ -1222,18 +1220,18 @@ static void fdc_specify(void)
 static int fdc_dtr(void)
 {
 	/* If data rate not already set to desired value, set it. */
-	if (raw_cmd->rate == FDCS->dtr)
+	if ((raw_cmd->rate & 3) == FDCS->dtr)
 		return 0;
 
 	/* Set dtr */
-	fd_outb(raw_cmd->rate, FD_DCR);
+	fd_outb(raw_cmd->rate & 3, FD_DCR);
 
 	/* TODO: some FDC/drive combinations (C&T 82C711 with TEAC 1.2MB)
 	 * need a stabilization period of several milliseconds to be
 	 * enforced after data rate changes before R/W operations.
 	 * Pause 5 msec to avoid trouble. (Needs to be 2 jiffies)
 	 */
-	FDCS->dtr = raw_cmd->rate;
+	FDCS->dtr = raw_cmd->rate & 3;
 	return(wait_for_completion(jiffies+2*HZ/100,
 				   (timeout_fn) floppy_ready));
 } /* fdc_dtr */
@@ -1979,7 +1977,7 @@ static void setup_format_params(int track)
 
 	raw_cmd->flags = FD_RAW_WRITE | FD_RAW_INTR | FD_RAW_SPIN |
 		/*FD_RAW_NEED_DISK |*/ FD_RAW_NEED_SEEK;
-	raw_cmd->rate = floppy->rate & 0x3;
+	raw_cmd->rate = floppy->rate & 0x43;
 	raw_cmd->cmd_count = NR_F;
 	COMMAND = FM_MODE(floppy,FD_FORMAT);
 	DR_SELECT = UNIT(current_drive) + PH_HEAD(floppy,format_req.head);
@@ -2385,7 +2383,7 @@ static int make_raw_rw_request(void)
 		SIZECODE = 2;
 	} else
 		SIZECODE = FD_SIZECODE(floppy);
-	raw_cmd->rate = floppy->rate & 3;
+	raw_cmd->rate = floppy->rate & 0x43;
 	if ((floppy->rate & FD_2M) &&
 	    (TRACK || HEAD) &&
 	    raw_cmd->rate == 2)
@@ -2951,7 +2949,7 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 		rcmd = & (ptr->next);
 		if (!(ptr->flags & FD_RAW_MORE))
 			return 0;
-		ptr->rate &= 0x03;
+		ptr->rate &= 0x43;
 	}
 }
 

@@ -104,17 +104,21 @@
 /* Set this to 0 after you have configured your interface definitions right. */
 #define DISTRIBUTION 1
 
+#if DISTRIBUTION
+#define READ_AUDIO 0
+#else
 /* max. number of audio frames to read with one     */
 /* request (allocates n* 2352 bytes kernel memory!) */
 /* may be freely adjusted, f.e. 75 (= 1 sec.), at   */
 /* runtime by use of the CDROMAUDIOBUFSIZ ioctl.    */
-#define READ_AUDIO 0 
+#define READ_AUDIO 75
 
 /* tray control: eject tray if no disk is in (0 or 1) */
 #define JUKEBOX 1
 
 /* tray control: eject tray after last use (0 or 1) */
 #define EJECT 1
+#endif DISTRIBUTION
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -641,6 +645,7 @@ Read XA Parameter:
 
 #define CMD0_READ_XA	0x03
 #define CMD2_READ_XA	0xd4
+#define CMD2_READ_XA2	0xd5
 #define CMDL_READ_XA	CMD0_READ_XA /* really ?? */
 
 #define CMD0_READ_HEAD	0x04
@@ -683,6 +688,7 @@ Read XA Parameter:
 #define CMD2_STATUS	0x00
 #define CMDT_STATUS	CMD2_STATUS
 #define CMDL_STATUS	CMD0_STATUS
+#define CMD2_SEEK_LEADIN 0x00
 
 #define CMD0_READ_ERR	0x82
 #define CMD1_READ_ERR	CMD0_READ_ERR

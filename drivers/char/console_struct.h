@@ -62,6 +62,8 @@ struct vc_data {
 	unsigned char 	vc_G1_charset;
 	unsigned char 	vc_saved_G0;
 	unsigned char 	vc_saved_G1;
+	unsigned int	vc_bell_pitch;		/* Console bell pitch */
+	unsigned int	vc_bell_duration;	/* Console bell duration */
 	/* additional information is in vt_kern.h */
 };
 
@@ -132,6 +134,8 @@ extern struct vc vc_cons [MAX_NR_CONSOLES];
 #define	halfcolor	(vc_cons[currcons].d->vc_halfcolor)
 #define tab_stop	(vc_cons[currcons].d->vc_tab_stop)
 #define palette		(vc_cons[currcons].d->vc_palette)
+#define bell_pitch	(vc_cons[currcons].d->vc_bell_pitch)
+#define bell_duration	(vc_cons[currcons].d->vc_bell_duration)
 
 #define vcmode		(vt_cons[currcons]->vc_mode)
 #define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))

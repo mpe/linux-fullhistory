@@ -14,12 +14,9 @@
 #define RLIMIT_NOFILE	6		/* max number of open files */
 #define RLIMIT_AS	7		/* address space limit(?) */
 #define RLIMIT_NPROC	8		/* max number of processes */
+#define RLIMIT_MEMLOCK	9		/* max locked-in-memory address space */
 
-#ifdef notdef
-#define RLIMIT_MEMLOCK	9		/* max locked-in-memory address space*/
-#endif
-
-#define RLIM_NLIMITS	9
+#define RLIM_NLIMITS	10
 
 #ifdef __KERNEL__
 
@@ -34,6 +31,7 @@
     { NR_OPEN,  NR_OPEN},			/* RLIMIT_NOFILE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_AS */		\
     {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	/* RLIMIT_NPROC */	\
+    {LONG_MAX, LONG_MAX},			/* RLIMIT_MEMLOCK */	\
 }
 
 #endif /* __KERNEL__ */

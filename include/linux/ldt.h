@@ -26,9 +26,4 @@ struct modify_ldt_ldt_s {
 #define MODIFY_LDT_CONTENTS_STACK	1
 #define MODIFY_LDT_CONTENTS_CODE	2
 
-extern int get_ldt(void *buffer);
-extern int set_ldt_entry(int entry, unsigned long base, unsigned int limit,
-			 int seg_32bit_flag, int contents, int read_only_flag,
-			 int limit_in_pages_flag);
-
 #endif

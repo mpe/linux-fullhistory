@@ -425,6 +425,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
 
 	/* add new mapping */
+	current->mm->total_vm += (shmd->vm_end - shmd->vm_start) >> PAGE_SHIFT;
 	insert_vm_struct(current, shmd);
 	merge_segments(current, shmd->vm_start, shmd->vm_end);
 
@@ -516,7 +517,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->vm_mm = current->mm;
 	shmd->vm_page_prot = (shmflg & SHM_RDONLY) ? PAGE_READONLY : PAGE_SHARED;
-	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED | VM_DONTSWAP
+	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
 	shmd->vm_next_share = shmd->vm_prev_share = NULL;

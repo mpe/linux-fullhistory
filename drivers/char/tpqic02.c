@@ -220,6 +220,9 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
+/* We really shouldn't be using this define.. */
+#define IOCCMD_MASK 0x0000ffff
+
 /* check existence of required configuration parameters */
 #if !defined(QIC02_CMD_PORT) || \
     !defined(QIC02_TAPE_IRQ) || \

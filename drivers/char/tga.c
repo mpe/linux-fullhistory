@@ -301,7 +301,7 @@ set_cursor(int currcons)
 }
 
 unsigned long
-con_type_init(unsigned long kmem_start, char *display_desc)
+con_type_init(unsigned long kmem_start, const char **display_desc)
 {
         can_do_color = 1;
 
@@ -314,7 +314,7 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 
         video_type = VIDEO_TYPE_TGAC;
 
-        strcpy(display_desc,"TGA");
+        *display_desc = "TGA";
 
 	return kmem_start;
 }
@@ -830,17 +830,20 @@ tga_blitc(unsigned int charattr, unsigned long addr)
 
     for ( j = 0; j < TGA_F_HEIGHT_PADDED; j++ ) {
       if (j < TGA_F_HEIGHT) {
-	rowbits = *font_row++;
-	data = fontmask_bits[(rowbits>>4)&0xf];
-	data = (data & fgmask) | (~data & bgmask);
-	writel(data, dst);
-	data = fontmask_bits[rowbits&0xf];
-	data = (data & fgmask) | (~data & bgmask);
-	writel(data, (dst+1));
+	rowbits = font_row[j];
       } else {
-	writel(bgmask, dst);
-	writel(bgmask, (dst+1));
+	/* dup the last n rows only if char > 0x7f */
+	if (c & 0x80)
+	  rowbits = font_row[j-(TGA_F_HEIGHT_PADDED-TGA_F_HEIGHT)];
+	else
+	  rowbits = 0;
       }
+      data = fontmask_bits[(rowbits>>4)&0xf];
+      data = (data & fgmask) | (~data & bgmask);
+      writel(data, dst);
+      data = fontmask_bits[rowbits&0xf];
+      data = (data & fgmask) | (~data & bgmask);
+      writel(data, (dst+1));
       dst += stride;
     }
   } else { /* 24-plane */
@@ -854,18 +857,20 @@ tga_blitc(unsigned int charattr, unsigned long addr)
 
     for ( i = 0; i < TGA_F_HEIGHT_PADDED; i++ ) {
       if (i < TGA_F_HEIGHT) {
-	rowbits = *font_row++;
-	data = 1 << (TGA_F_WIDTH - 1);
-	for (j = 0; j < TGA_F_WIDTH; j++, data >>= 1) {
-	  if (rowbits & data)
-	    writel(fgmask, (dst+j));
-	  else
-	    writel(bgmask, (dst+j));
-	}
+	rowbits = font_row[i];
       } else {
-	for (j = 0; j < TGA_F_WIDTH; j++) {
+	/* dup the last n rows only if char > 0x7f */
+	if (c & 0x80)
+	  rowbits = font_row[i-(TGA_F_HEIGHT_PADDED-TGA_F_HEIGHT)];
+	else
+	  rowbits = 0;
+      }
+      data = 1 << (TGA_F_WIDTH - 1);
+      for (j = 0; j < TGA_F_WIDTH; j++, data >>= 1) {
+	if (rowbits & data)
+	  writel(fgmask, (dst+j));
+	else
 	  writel(bgmask, (dst+j));
-	}
       }
       dst += stride;
     }

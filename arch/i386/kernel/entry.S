@@ -343,10 +343,6 @@ ret_from_sys_call:
 #endif
 	cmpl SYMBOL_NAME(task),%eax	# task[0] cannot have signals
 	je 2f
-	cmpl $0,state(%eax)		# state
-	jne reschedule
-	cmpl $0,counter(%eax)		# counter
-	je reschedule
 	movl blocked(%eax),%ecx
 	movl %ecx,%ebx			# save blocked in %ebx for signal handling
 	notl %ecx
@@ -660,4 +656,11 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_msync)
 	.long SYMBOL_NAME(sys_readv)		/* 145 */
 	.long SYMBOL_NAME(sys_writev)
-	.space (NR_syscalls-146)*4
+	.long 0
+	.long 0
+	.long 0
+	.long SYMBOL_NAME(sys_mlock)		/* 150 */
+	.long SYMBOL_NAME(sys_munlock)
+	.long SYMBOL_NAME(sys_mlockall)
+	.long SYMBOL_NAME(sys_munlockall)
+	.space (NR_syscalls-154)*4

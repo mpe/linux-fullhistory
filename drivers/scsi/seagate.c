@@ -46,9 +46,7 @@
  *	transfer rate if handshaking isn't working correctly.
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif
 
 #include <asm/io.h>
 #include <asm/system.h>

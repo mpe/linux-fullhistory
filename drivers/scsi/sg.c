@@ -509,7 +509,19 @@ static struct file_operations sg_fops = {
 
 
 static int sg_detect(Scsi_Device * SDp){
-    ++sg_template.dev_noticed;
+
+    switch (SDp->type) {
+	case TYPE_DISK:
+	case TYPE_MOD:
+	case TYPE_ROM:
+	case TYPE_WORM:
+	case TYPE_TAPE: break;
+	default: 
+	printk("Detected scsi generic sg%c at scsi%d, channel %d, id %d, lun %d\n",
+           'a'+sg_template.dev_noticed,
+           SDp->host->host_no, SDp->channel, SDp->id, SDp->lun);
+    }
+    sg_template.dev_noticed++;
     return 1;
 }
 

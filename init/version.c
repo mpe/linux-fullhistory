@@ -15,6 +15,11 @@
 #ifdef CONFIG_BOGUS
 #endif
 
+#define version(a) Version_ ## a
+#define version_string(a) version(a)
+
+int version_string(LINUX_VERSION_CODE) = 0;
+
 struct new_utsname system_utsname = {
 	UTS_SYSNAME, UTS_NODENAME, UTS_RELEASE, UTS_VERSION,
 	UTS_MACHINE, UTS_DOMAINNAME

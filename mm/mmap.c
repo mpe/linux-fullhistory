@@ -66,6 +66,14 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (off + len < off)
 		return -EINVAL;
 
+	/* mlock MCL_FUTURE? */
+	if (current->mm->def_flags & VM_LOCKED) {
+		unsigned long locked = current->mm->locked_vm << PAGE_SHIFT;
+		locked += len;
+		if (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur)
+			return -EAGAIN;
+	}
+
 	/*
 	 * do simple checking here so the lower-level routines won't have
 	 * to. we assume access permissions have been handled by the open
@@ -127,6 +135,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_end = addr + len;
 	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
 	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE | VM_EXECUTABLE);
+	vma->vm_flags |= current->mm->def_flags;
 
 	if (file) {
 		if (file->f_mode & 1)
@@ -167,6 +176,17 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	}
 	insert_vm_struct(current, vma);
 	merge_segments(current, vma->vm_start, vma->vm_end);
+	current->mm->total_vm += len >> PAGE_SHIFT;
+	if (vma->vm_flags & VM_LOCKED) {
+		unsigned long start = vma->vm_start;
+		unsigned long end = vma->vm_end;
+		current->mm->locked_vm += len >> PAGE_SHIFT;
+		while (start < end) {
+			char c = get_user((char *) start);
+			__asm__ __volatile__("": :"r" (c));
+			start += PAGE_SIZE;
+		}
+	}
 	return addr;
 }
 
@@ -604,6 +624,9 @@ static void unmap_fixup(struct vm_area_struct *area,
 		       area->vm_start, area->vm_end, addr, end);
 		return;
 	}
+	area->vm_mm->total_vm -= len >> PAGE_SHIFT;
+	if (area->vm_flags & VM_LOCKED)
+		area->vm_mm->locked_vm -= len >> PAGE_SHIFT;
 
 	/* Unmapping the whole area */
 	if (addr == area->vm_start && end == area->vm_end) {
@@ -747,6 +770,9 @@ void exit_mmap(struct mm_struct * mm)
 	mpnt = mm->mmap;
 	mm->mmap = NULL;
 	mm->mmap_avl = NULL;
+	mm->rss = 0;
+	mm->total_vm = 0;
+	mm->locked_vm = 0;
 	while (mpnt) {
 		struct vm_area_struct * next = mpnt->vm_next;
 		if (mpnt->vm_ops) {

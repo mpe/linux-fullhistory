@@ -40,9 +40,9 @@ struct screen_info {
 	unsigned short orig_video_page;
 	unsigned char  orig_video_mode;
 	unsigned char  orig_video_cols;
-	unsigned short orig_video_ega_ax;
+	unsigned short unused2;
 	unsigned short orig_video_ega_bx;
-	unsigned short orig_video_ega_cx;
+	unsigned short unused3;
 	unsigned char  orig_video_lines;
 	unsigned char  orig_video_isVGA;
 	unsigned short orig_video_points;
@@ -55,9 +55,7 @@ extern struct screen_info screen_info;
 #define ORIG_VIDEO_PAGE		(screen_info.orig_video_page)
 #define ORIG_VIDEO_MODE		(screen_info.orig_video_mode)
 #define ORIG_VIDEO_COLS 	(screen_info.orig_video_cols)
-#define ORIG_VIDEO_EGA_AX	(screen_info.orig_video_ega_ax)
 #define ORIG_VIDEO_EGA_BX	(screen_info.orig_video_ega_bx)
-#define ORIG_VIDEO_EGA_CX	(screen_info.orig_video_ega_cx)
 #define ORIG_VIDEO_LINES	(screen_info.orig_video_lines)
 #define ORIG_VIDEO_ISVGA	(screen_info.orig_video_isVGA)
 #define ORIG_VIDEO_POINTS       (screen_info.orig_video_points)
@@ -272,6 +270,7 @@ extern struct termios tty_std_termios;
 extern struct tty_struct * redirect;
 extern struct tty_ldisc ldiscs[];
 extern int fg_console;
+extern int kmsg_redirect;
 extern struct wait_queue * keypress_wait;
 
 extern unsigned long con_init(unsigned long);

@@ -229,6 +229,19 @@ void set_device_ro(kdev_t dev,int flag)
 	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
 }
 
+static inline void drive_stat_acct(int cmd, unsigned long nr_sectors, short disk_index)
+{
+	kstat.dk_drive[disk_index]++;
+	if (cmd == READ || cmd == READA) {
+		kstat.dk_drive_rio[disk_index]++;
+		kstat.dk_drive_rblk[disk_index] += nr_sectors;
+	}
+	else if (cmd == WRITE || cmd == WRITEA) {
+		kstat.dk_drive_wio[disk_index]++;
+		kstat.dk_drive_wblk[disk_index] += nr_sectors;
+	}
+}
+
 /*
  * add-request adds a request to the linked list.
  * It disables interrupts so that it can muck with the
@@ -243,16 +256,16 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 		case SCSI_DISK_MAJOR:
 			disk_index = (MINOR(req->rq_dev) & 0x0070) >> 4;
 			if (disk_index < 4)
-				kstat.dk_drive[disk_index]++;
+				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE0_MAJOR:	/* same as HD_MAJOR */
 		case XT_DISK_MAJOR:
 			disk_index = (MINOR(req->rq_dev) & 0x0040) >> 6;
-			kstat.dk_drive[disk_index]++;
+			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE1_MAJOR:
 			disk_index = ((MINOR(req->rq_dev) & 0x0040) >> 6) + 2;
-			kstat.dk_drive[disk_index]++;
+			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 		default:
 			break;
 	}

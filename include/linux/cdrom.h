@@ -20,7 +20,7 @@
 #define CD_HEAD_SIZE         4 /* header (address) bytes per raw data frame */
 #define CD_SUBHEAD_SIZE      8 /* subheader bytes per raw XA data frame */
 #define CD_XA_HEAD        (CD_HEAD_SIZE+CD_SUBHEAD_SIZE) /* "before data" part of raw XA frame */
-#define CD_XA_SYNC_HEAD   (CD_XA_HEAD+12)/* sync bytes + header of XA frame */
+#define CD_XA_SYNC_HEAD   (CD_SYNC_SIZE+CD_XA_HEAD)/* sync bytes + header of XA frame */
 
 #define CD_FRAMESIZE      2048 /* bytes per frame, "cooked" mode */
 #define CD_FRAMESIZE_RAW  2352 /* bytes per frame, "raw" mode */
@@ -258,7 +258,7 @@ struct cdrom_multisession
 #define CDROMSUBCHNL		0x530b	/* (struct cdrom_subchnl) */
 
 #define CDROMREADMODE2		0x530c	/* (struct cdrom_read) */
-                                          /* read type-2 data (not suppt) */
+                                          /* read type-2 data */
 
 #define CDROMREADMODE1		0x530d	/* (struct cdrom_read) */
                                           /* read type-1 data */
@@ -290,12 +290,13 @@ struct cdrom_multisession
  */
 #define CDROMREADRAW		0x5314	/* read data in raw mode */
 #define CDROMREADCOOKED		0x5315	/* read data in cooked mode */
-#define CDROMSEEK		0x5316  /*seek msf address*/
+#define CDROMSEEK		0x5316  /* seek msf address */
   
 /*
  * for playing audio in logical block addressing mode
  */
 #define CDROMPLAYBLK		0x5317	/* (struct cdrom_blk) */
+
 
 /*
  * CD-ROM-specific SCSI command opcodes

@@ -46,8 +46,6 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
-		goto bad_area;
 	if (error_code & 4) {
 		/*
 		 * accessing the stack below %esp is always a bug.
@@ -58,8 +56,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 		if (address + 32 < regs->esp)
 			goto bad_area;
 	}
-	vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
-	vma->vm_start = (address & PAGE_MASK);
+	if (expand_stack(vma, address))
+		goto bad_area;
 /*
  * Ok, we have a good vm_area for this memory access, so
  * we can handle it..

@@ -120,6 +120,7 @@ int rows, cols;
 
 int ramdisk_size;
 int root_mountflags = MS_RDONLY;
+char *execute_command = 0;
 
 #ifdef CONFIG_ROOT_NFS
 char nfs_root_name[256] = { 0, };
@@ -421,6 +422,11 @@ static void parse_options(char *line)
 			console_loglevel = 10;
 			continue;
 		}
+		if (!strncmp(line,"init=",5)) {
+			line += 5;
+			execute_command = line;
+			continue;
+		}
 		if (checksetup(line))
 			continue;
 		/*
@@ -651,17 +657,22 @@ static int init(void * unused)
 	(void) dup(0);
 	(void) dup(0);
 
-	execve("/etc/init",argv_init,envp_init);
-	execve("/bin/init",argv_init,envp_init);
-	execve("/sbin/init",argv_init,envp_init);
-	/* if this fails, fall through to original stuff */
+	if (!execute_command) {
+		execve("/etc/init",argv_init,envp_init);
+		execve("/bin/init",argv_init,envp_init);
+		execve("/sbin/init",argv_init,envp_init);
+		/* if this fails, fall through to original stuff */
 
-	pid = kernel_thread(do_rc, "/etc/rc", SIGCHLD);
-	if (pid>0)
-		while (pid != wait(&i))
-			/* nothing */;
+		pid = kernel_thread(do_rc, "/etc/rc", SIGCHLD);
+		if (pid>0)
+			while (pid != wait(&i))
+				/* nothing */;
+		}
+
 	while (1) {
-		pid = kernel_thread(do_shell, "/bin/sh", SIGCHLD);
+		pid = kernel_thread(do_shell,
+			execute_command ? execute_command : "/bin/sh",
+			SIGCHLD);
 		if (pid < 0) {
 			printf("Fork failed in init\n\r");
 			continue;

@@ -27,7 +27,7 @@
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
-struct desc_struct default_ldt;
+struct desc_struct default_ldt = { 0, 0 };
 
 static inline void console_verbose(void)
 {
@@ -113,7 +113,7 @@ int kstack_depth_to_print = 24;
 	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
 	printk("CPU:    %d\n", smp_processor_id());
-	printk("EIP:    %04x:%08lx\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
+	printk("EIP:    %04x:[<%08lx>]\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
 	printk("esi: %08lx   edi: %08lx   ebp: %08lx   esp: %08lx\n",
@@ -153,7 +153,7 @@ int kstack_depth_to_print = 24;
 		    ((addr >= module_start) && (addr <= module_end))) {
 			if (i && ((i % 8) == 0))
 				printk("\n       ");
-			printk("%08lx ", addr);
+			printk("[<%08lx>] ", addr);
 			i++;
 		}
 	}

@@ -25,8 +25,8 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 		return;
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
 	sp = (unsigned long) (regs+1);
-	printk("pc = %lx ps = %04lx\n", regs->pc, regs->ps);
-	printk("rp = %lx sp = %lx\n", regs->r26, sp);
+	printk("pc = [<%lx>] ps = %04lx\n", regs->pc, regs->ps);
+	printk("rp = [<%lx>] sp = %lx\n", regs->r26, sp);
 	printk("r0=%lx r1=%lx r2=%lx r3=%lx\n",
 		regs->r0, regs->r1, regs->r2, regs->r3);
 	printk("r8=%lx\n", regs->r8);

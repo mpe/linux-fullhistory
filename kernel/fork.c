@@ -88,6 +88,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 			return -ENOMEM;
 		}
 		*tmp = *mpnt;
+		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
 		tmp->vm_next = NULL;
 		if (tmp->vm_inode) {
@@ -122,6 +123,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		return -1;
 	*tsk->mm = *current->mm;
 	tsk->mm->count = 1;
+	tsk->mm->def_flags = 0;
 	tsk->min_flt = tsk->maj_flt = 0;
 	tsk->cmin_flt = tsk->cmaj_flt = 0;
 	tsk->nswap = tsk->cnswap = 0;

@@ -41,11 +41,6 @@ asmlinkage int sys_setup(void)
 
 	device_setup();
 
-#ifdef CONFIG_MINIX_FS
-	register_filesystem(&(struct file_system_type)
-		{minix_read_super, "minix", 1, NULL});
-#endif
-
 #ifdef CONFIG_EXT_FS
 	register_filesystem(&(struct file_system_type)
 		{ext_read_super, "ext", 1, NULL});
@@ -60,6 +55,12 @@ asmlinkage int sys_setup(void)
 	register_filesystem(&(struct file_system_type)
 		{xiafs_read_super, "xiafs", 1, NULL});
 #endif
+
+#ifdef CONFIG_MINIX_FS
+	register_filesystem(&(struct file_system_type)
+		{minix_read_super, "minix", 1, NULL});
+#endif
+
 #ifdef CONFIG_UMSDOS_FS
 	register_filesystem(&(struct file_system_type)
 	{UMSDOS_read_super,	"umsdos",	1, NULL});

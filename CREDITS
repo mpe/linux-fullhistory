@@ -593,6 +593,15 @@ S: 25 McMillan Street
 S: Victoria Park 6100
 S: Australia
 
+N: Martin Mares
+E: mj@k332.feld.cvut.cz
+D: BIOS video mode handling code
+D: Miscellaneous kernel fixes
+D: MOXA C-218 serial board driver
+S: Kankovskeho 1241
+S: 182 00 Praha 8
+S: Czech Republic 
+
 N: John A. Martin
 E: jam@acm.org
 D: FSSTND contributor

@@ -46,6 +46,10 @@
  *		Craig Schlenter :	Don't modify permanent entry 
  *					during arp_rcv.
  *		Russ Nelson	:	Tidied up a few bits.
+ *		Alexey Kuznetsov:	Major changes to caching and behaviour,
+ *					eg intelligent arp probing and generation
+ *					of host down events.
+ *		Alan Cox	:	Missing unlock in device events.
  */
 
 /* RFC1122 Status:
@@ -70,18 +74,19 @@
 #include <linux/if_arp.h>
 #include <linux/in.h>
 #include <linux/mm.h>
-#include <asm/system.h>
-#include <asm/segment.h>
-#include <stdarg.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/trdevice.h>
+#include <linux/skbuff.h>
+#include <linux/proc_fs.h>
+#include <linux/stat.h>
+
 #include <net/ip.h>
+#include <net/icmp.h>
 #include <net/route.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
-#include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
 #ifdef CONFIG_AX25
@@ -90,9 +95,11 @@
 #include <net/netrom.h>
 #endif
 #endif
-#include <linux/proc_fs.h>
-#include <linux/stat.h>
 
+#include <asm/system.h>
+#include <asm/segment.h>
+
+#include <stdarg.h>
 
 /*
  *	This structure defines the ARP mapping cache. As long as we make changes
@@ -600,6 +607,7 @@ int arp_device_event(struct notifier_block *this, unsigned long event, void *ptr
 				pentry = &entry->next;	/* go to next entry */
 		}
 	}
+	arp_unlock();
 	return NOTIFY_DONE;
 }
 
@@ -1179,6 +1187,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 				 */
 				else
 				{
+#if 0				
 					/*
 					 * FIXME: ICMP HOST UNREACHABLE should be
 					 *	  sent in this situation. --ANK
@@ -1188,6 +1197,9 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 						skb->sk->err = EHOSTDOWN;
 						skb->sk->error_report(skb->sk);
 					}
+#else
+					icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
+#endif										
 					dev_kfree_skb(skb, FREE_WRITE);
 				}
 			}

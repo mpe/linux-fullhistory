@@ -12,7 +12,26 @@
  *            Not for Sanyo drives (but sjcd is there...).
  *            Not for any other Funai drives than E2550UA (="CD200" with "F").
  *
- *  NOTE:     This is release 3.9.
+ *  NOTE:     This is release 4.0
+ *
+ *   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
+ *
+ *                  If you change this software, you should mail a .diff
+ *                  file with some description lines to emoenke@gwdg.de.
+ *                  I want to know about it.
+ *
+ *                  If you are the editor of a Linux CD, you should
+ *                  enable sbpcd.c within your boot floppy kernel and
+ *                  send me one of your CDs for free.
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2, or (at your option)
+ *   any later version.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   (for example /usr/src/linux/COPYING); if not, write to the Free
+ *   Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  VERSION HISTORY
  *
@@ -222,6 +241,13 @@
  *       Now Corey, Heiko, Ken, Leo, Vadim/Eric & Werner are invited to copy
  *       the config_spea() routine into their drivers. ;-)
  *
+ *  4.0  No "big step" - normal version increment.
+ *       Adapted the benefits from 1.3.33.
+ *       Fiddled with CDROMREADAUDIO flaws.
+ *       Avoid ReadCapacity command with CD200 drives (the MKE 1.01 version
+ *       seems not to support it).
+ *       Fulfilled "read audio" for CD200 drives, with help of Pete Heist
+ *       (heistp@rpi.edu).
  *
  *  TODO
  *
@@ -235,25 +261,6 @@
  *     elaborated speed-up experiments (and the fabulous results!), for
  *     the "push" towards load-free wait loops, and for the extensive mail
  *     thread which brought additional hints and bug fixes.
- *
- *   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
- *
- *                  If you change this software, you should mail a .diff
- *                  file with some description lines to emoenke@gwdg.de.
- *                  I want to know about it.
- *
- *                  If you are the editor of a Linux CD, you should
- *                  enable sbpcd.c within your boot floppy kernel and
- *                  send me one of your CDs for free.
- *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; either version 2, or (at your option)
- *   any later version.
- *
- *   You should have received a copy of the GNU General Public License
- *   (for example /usr/src/linux/COPYING); if not, write to the Free
- *   Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
 
@@ -294,7 +301,7 @@
 
 #include <linux/blk.h>
 
-#define VERSION "v3.9 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v4.0 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*==========================================================================*/
 /*
@@ -468,6 +475,7 @@ static int sbpcd_debug = (1<<DBG_INF);
 static int sbpcd_debug = ((1<<DBG_INF) |
 			  (1<<DBG_TOC) |
 			  (1<<DBG_MUL) |
+			  (1<<DBG_AUD) |
 			  (1<<DBG_UPC));
 #endif DISTRIBUTION
 
@@ -522,9 +530,9 @@ static struct wait_queue *sbp_waitq = NULL;
 #define SBP_BUFFER_FRAMES 8 /* driver's own read_ahead, data mode */
 /*==========================================================================*/
 
-static u_char family0[]="MATSHITA"; /* MKE CR-52x */
-static u_char family1[]="CR-56";    /* MKE CR-56x */
-static u_char family2[]="CD200";    /* MKE CD200 */
+static u_char family0[]="MATSHITA"; /* MKE CR-521, CR-522, CR-523 */
+static u_char family1[]="CR-56";    /* MKE CR-562, CR-563 */
+static u_char family2[]="CD200";    /* MKE CD200, Funai CD200F */
 static u_char familyL[]="LCS-7260"; /* Longshine LCS-7260 */
 static u_char familyT[]="CD-55";    /* TEAC CD-55A */
 
@@ -756,17 +764,6 @@ static void mark_timeout_audio(u_long i)
  */
 static void sbp_sleep(u_int time)
 {
-#ifndef MODULE
-	if (current == task[0]) 
-	{
-		del_timer(&delay_timer);
-		delay_timer.expires=jiffies+time;
-		timed_out_delay=0;
-		add_timer(&delay_timer);
-		while (!timed_out_delay) ;
-		return;
-	}
-#endif MODULE
 	sti();
 	current->state = TASK_INTERRUPTIBLE;
 	current->timeout = jiffies + time;
@@ -904,25 +901,14 @@ static void flush_status(void)
 {
 	int i;
 	
-#ifdef MODULE
 	sbp_sleep(15*HZ/10);
 	for (i=maxtim_data;i!=0;i--) inb(CDi_status);
-#else
-	if (current == task[0])
-		for (i=maxtim02;i!=0;i--) inb(CDi_status);
-	else 
-	{
-		sbp_sleep(15*HZ/10);
-		for (i=maxtim_data;i!=0;i--) inb(CDi_status);
-	}
-#endif MODULE
 }
 /*==========================================================================*/
 static int CDi_stat_loop(void)
 {
 	int i,j;
 	
-#ifdef MODULE
 	for(timeout = jiffies + 10*HZ, i=maxtim_data; timeout > jiffies; )
 	{
 		for ( ;i!=0;i--)
@@ -935,29 +921,6 @@ static int CDi_stat_loop(void)
 		sbp_sleep(1);
 		i = 1;
 	}
-#else
-	if (current == task[0])
-		for(i=maxtim16;i!=0;i--)
-		{
-			j=inb(CDi_status);
-			if (!(j&s_not_data_ready)) return (j);
-			if (!(j&s_not_result_ready)) return (j);
-			if (fam0L_drive) if (j&s_attention) return (j);
-		}
-	else
-		for(timeout = jiffies + 10*HZ, i=maxtim_data; timeout > jiffies; )
-		{
-			for ( ;i!=0;i--)
-			{
-				j=inb(CDi_status);
-				if (!(j&s_not_data_ready)) return (j);
-				if (!(j&s_not_result_ready)) return (j);
-				if (fam0L_drive) if (j&s_attention) return (j);
-			}
-			sbp_sleep(1);
-			i = 1;
-		}
-#endif MODULE
 	msg(DBG_LCS,"CDi_stat_loop failed\n");
 	return (-1);
 }
@@ -998,43 +961,21 @@ static int ResponseInfo(void)
 	int i,j,st=0;
 	u_long timeout;
 	
-#ifdef MODULE
-	if (0)
-#else
-	if (current == task[0])
-#endif MODULE
-		for (i=0;i<response_count;i++)
+	for (i=0,timeout=jiffies+HZ;i<response_count;i++) 
+	{
+		for (j=maxtim_data; ; )
 		{
-			for (j=maxtim_8;j!=0;j--)
+			for ( ;j!=0;j-- )
 			{
 				st=inb(CDi_status);
 				if (!(st&s_not_result_ready)) break;
 			}
-			if (j==0) 
-			{
-				msg(DBG_SEQ,"ResponseInfo: not_result_ready (got %d of %d bytes).\n", i, response_count);
-				break;
-			}
-			infobuf[i]=inb(CDi_info);
+			if ((j!=0)||(timeout<=jiffies)) break;
+			sbp_sleep(1);
+			j = 1;
 		}
-	else 
-	{
-		for (i=0,timeout=jiffies+HZ;i<response_count;i++) 
-		{
-			for (j=maxtim_data; ; )
-			{
-				for ( ;j!=0;j-- )
-				{
-					st=inb(CDi_status);
-					if (!(st&s_not_result_ready)) break;
-				}
-				if ((j!=0)||(timeout<=jiffies)) break;
-				sbp_sleep(1);
-				j = 1;
-			}
-			if (timeout<=jiffies) break;
-			infobuf[i]=inb(CDi_info);
-		}
+		if (timeout<=jiffies) break;
+		infobuf[i]=inb(CDi_info);
 	}
 #if 000
 	while (!(inb(CDi_status)&s_not_result_ready))
@@ -1156,40 +1097,22 @@ static int ResponseStatus(void)
 	
 	msg(DBG_STA,"doing ResponseStatus...\n");
 	if (famT_drive) return (get_state_T());
-#ifdef MODULE
-	if (0)
-#else
-	if (current == task[0])
-#endif MODULE
+	if (flags_cmd_out & f_respo3) timeout = jiffies;
+	else if (flags_cmd_out & f_respo2) timeout = jiffies + 16*HZ;
+	else timeout = jiffies + 4*HZ;
+	j=maxtim_8;
+	do
 	{
-		if (flags_cmd_out & f_respo3) j = maxtim_8;
-		else if (flags_cmd_out&f_respo2) j=maxtim16;
-		else j=maxtim04;
-		for (;j!=0;j--)
-		{
+		for ( ;j!=0;j--)
+		{ 
 			i=inb(CDi_status);
 			if (!(i&s_not_result_ready)) break;
 		}
+		if ((j!=0)||(timeout<jiffies)) break;
+		sbp_sleep(1);
+		j = 1;
 	}
-	else
-	{
-		if (flags_cmd_out & f_respo3) timeout = jiffies;
-		else if (flags_cmd_out & f_respo2) timeout = jiffies + 16*HZ;
-		else timeout = jiffies + 4*HZ;
-		j=maxtim_8;
-		do
-		{
-			for ( ;j!=0;j--)
-			{ 
-				i=inb(CDi_status);
-				if (!(i&s_not_result_ready)) break;
-			}
-			if ((j!=0)||(timeout<jiffies)) break;
-			sbp_sleep(1);
-			j = 1;
-		}
-		while (1);
-	}
+	while (1);
 	if (j==0) 
 	{
 		if ((flags_cmd_out & f_respo3) == 0)
@@ -1200,15 +1123,8 @@ static int ResponseStatus(void)
 	i=inb(CDi_info);
 	msg(DBG_STA,"ResponseStatus: response %02X.\n", i);
 	EvaluateStatus(i);
-#if 0
-	if (fam0_drive)
-#endif
-		msg(DBG_STA,"status_bits=%02X, i=%02X\n",D_S[d].status_bits,i);
-#if 1
+	msg(DBG_STA,"status_bits=%02X, i=%02X\n",D_S[d].status_bits,i);
 	return (D_S[d].status_bits);
-#else
-	return (i);
-#endif 0
 }
 /*==========================================================================*/
 static void cc_ReadStatus(void)
@@ -2463,6 +2379,7 @@ static int cc_ReadCapacity(void)
 {
 	int i, j;
 	
+	if (fam2_drive) return (0); /* some firmware lacks this command */
 	if (famL_drive) return (0); /* some firmware lacks this command */
 	if (famT_drive) return (0); /* done with cc_ReadTocDescr() */
 	D_S[d].diskstate_flags &= ~cd_size_bit;
@@ -2475,12 +2392,14 @@ static int cc_ReadCapacity(void)
 			response_count=5;
 			flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
 		}
+#if 00
 		else if (fam2_drive)
 		{
 			drvcmd[0]=CMD2_CAPACITY;
 			response_count=8;
 			flags_cmd_out=f_putcmd;
 		}
+#endif
 		else if (fam0_drive)
 		{
 			drvcmd[0]=CMD0_CAPACITY;
@@ -2495,7 +2414,9 @@ static int cc_ReadCapacity(void)
 	if (j==0) return (i);
 	if (fam1_drive) D_S[d].CDsize_frm=msf2blk(make32(make16(0,infobuf[0]),make16(infobuf[1],infobuf[2])))+CD_MSF_OFFSET;
 	else if (fam0_drive) D_S[d].CDsize_frm=make32(make16(0,infobuf[0]),make16(infobuf[1],infobuf[2]));
+#if 00
 	else if (fam2_drive) D_S[d].CDsize_frm=make32(make16(infobuf[0],infobuf[1]),make16(infobuf[2],infobuf[3]));
+#endif
 	D_S[d].diskstate_flags |= cd_size_bit;
 	msg(DBG_000,"cc_ReadCapacity: %d frames.\n", D_S[d].CDsize_frm);
 	return (0);
@@ -2589,6 +2510,7 @@ static int cc_ReadTocDescr(void)
 		if (i<0) return (i);
 		D_S[d].size_msf=make32(make16(0,infobuf[2]),make16(infobuf[3],infobuf[4]));
 		D_S[d].size_blk=msf2blk(D_S[d].size_msf);
+		D_S[d].CDsize_frm=D_S[d].size_blk+1;
 	}
 	else if (famT_drive)
 	{
@@ -3032,7 +2954,7 @@ static int check_version(void)
 	response_count=9;
 	flags_cmd_out=f_putcmd;
 	i=cmd_out();
-	if (i<0) msg(DBG_INI,"CMD0_READERR returns %d (ok anyway).\n",i);
+	if (i<0) msg(DBG_INI,"CMD0_READ_ERR returns %d (ok anyway).\n",i);
 	/* read drive version */
 	clr_cmdbuf();
 	for (i=0;i<12;i++) infobuf[i]=0;
@@ -3270,9 +3192,15 @@ static int check_version(void)
 		}
 		else if (fam2_drive)
 		{
-			msg(DBG_INF,"new drive CD200 (%s)detected.\n", D_S[d].firmware_version);
-			msg(DBG_INF,"CD200 is not fully supported yet - CD200F should work.\n");
-			if ((j!=1)&&(j!=101)&&(j!=35)) ask_mail(); /* unknown version at time */
+			if (D_S[d].drive_model[5]=='F')
+			{
+				if ((j!=1)&&(j!=35)&&(j!=200)&&(j!=210)) ask_mail(); /* unknown version at time */
+			}
+			else
+			{
+				msg(DBG_INF,"this CD200 drive is not fully supported yet - only audio will work.\n");
+				if ((j!=101)&&(j!=35)) ask_mail(); /* unknown version at time */
+			}
 		}
 	}
 	msg(DBG_LCS,"drive type %02X\n",D_S[d].drv_type);
@@ -4090,10 +4018,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		
 	case CDROMAUDIOBUFSIZ: /* configure the audio buffer size */
 		msg(DBG_IOC,"ioctl: CDROMAUDIOBUFSIZ entered.\n");
-#ifdef MODULE
-		if (D_S[d].sbp_audsiz>0)
-			vfree(D_S[d].aud_buf);
-#endif MODULE
+		if (D_S[d].sbp_audsiz>0) vfree(D_S[d].aud_buf);
 		D_S[d].aud_buf=NULL;
 		D_S[d].sbp_audsiz=arg;
 		if (D_S[d].sbp_audsiz>0)
@@ -4123,7 +4048,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		msg(DBG_IOC,"ioctl: CDROMREADAUDIO entered.\n");
 		if (fam0_drive) return (-EINVAL);
 		if (famL_drive) return (-EINVAL);
-		if (fam2_drive) return (-EINVAL);
 		if (famT_drive) return (-EINVAL);
 		if (D_S[d].aud_buf==NULL) return (-EINVAL);
 		i=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_read_audio));
@@ -4139,8 +4063,10 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		else if (read_audio.addr_format==CDROM_LBA) /* lba specification of where to start */
 			block=read_audio.addr.lba;
 		else return (-EINVAL);
+#if 000
 		i=cc_SetSpeed(speed_150,0,0);
 		if (i) msg(DBG_AUD,"read_audio: SetSpeed error %d\n", i);
+#endif
 		msg(DBG_AUD,"read_audio: lba: %d, msf: %06X\n",
 		    block, blk2msf(block));
 		msg(DBG_AUD,"read_audio: before cc_ReadStatus.\n");
@@ -4158,6 +4084,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				flags_cmd_out |= f_respo3;
 				cc_ReadStatus();
 				if (sbp_status() != 0) break;
+				if (st_check) cc_ReadError();
 				sbp_sleep(1);    /* wait a bit, try again */
 			}
 			if (status_tries == 0)
@@ -4188,8 +4115,13 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				drvcmd[5]=0;
 				drvcmd[6]=read_audio.nframes; /* # of frames */
 			}
-			else if (fam2_drive) /* CD200: not tested yet */
+			else if (fam2_drive)
 			{
+				drvcmd[0]=CMD2_READ_XA2;
+				lba2msf(block,&drvcmd[1]); /* msf-bin format required */
+				drvcmd[4]=0;
+				drvcmd[5]=read_audio.nframes; /* # of frames */
+				drvcmd[6]=0x11; /* raw mode */
 			}
 			else if (famT_drive) /* CD-55A: not tested yet */
 			{
@@ -5080,7 +5012,8 @@ static int config_spea(void)
 }
 /*==========================================================================*/
 /*
- *  Test for presence of drive and initialize it.  Called at boot time.
+ *  Test for presence of drive and initialize it.
+ *  Called once at boot or load time.
  */
 #ifdef MODULE
 int init_module(void)
@@ -5183,13 +5116,10 @@ int SBPCD_INIT(void)
 		D_S[d].sbp_current = 0;       /* Frame being currently read */
 		D_S[d].CD_changed=1;
 		D_S[d].frame_size=CD_FRAMESIZE;
+		D_S[d].f_eject=0;
 #if EJECT
 		if (!fam0_drive) D_S[d].f_eject=1;
-		else D_S[d].f_eject=0;
-#else
-		D_S[d].f_eject=0;
-#endif
-		
+#endif EJECT
 		cc_ReadStatus();
 		i=ResponseStatus();  /* returns orig. status or p_busy_new */
 		if (famT_drive) i=ResponseStatus();  /* returns orig. status or p_busy_new */
@@ -5274,7 +5204,9 @@ int SBPCD_INIT(void)
 			msg(DBG_INF,"data buffer (%d frames) not available.\n",D_S[j].sbp_bufsiz);
 			return -EIO;
 		}
+#ifdef MODULE
 		msg(DBG_INF,"data buffer size: %d frames.\n",SBP_BUFFER_FRAMES);
+#endif MODULE
 		if (D_S[j].sbp_audsiz>0)
 		{
 			D_S[j].aud_buf=(u_char *) vmalloc(D_S[j].sbp_audsiz*CD_FRAMESIZE_RAW);
@@ -5288,23 +5220,21 @@ int SBPCD_INIT(void)
 	}
 	blksize_size[MAJOR_NR]=sbpcd_blocksizes;
 	
-#ifdef MODULE
-	return (0);
-#else
  init_done:
+#ifndef MODULE
 #if !(SBPCD_ISSUE-1)
 #ifdef CONFIG_SBPCD2
 	sbpcd2_init();
-#endif
+#endif CONFIG_SBPCD2
 #ifdef CONFIG_SBPCD3
 	sbpcd3_init();
-#endif
+#endif CONFIG_SBPCD3
 #ifdef CONFIG_SBPCD4
 	sbpcd4_init();
-#endif
-#endif
-	return 0;
+#endif CONFIG_SBPCD4
+#endif !(SBPCD_ISSUE-1)
 #endif MODULE
+	return 0;
 }
 /*==========================================================================*/
 #ifdef MODULE
@@ -5328,8 +5258,7 @@ void cleanup_module(void)
 	{
 		if (D_S[j].drv_id==-1) continue;
 		vfree(D_S[j].sbp_buf);
-		if (D_S[j].sbp_audsiz>0)
-			vfree(D_S[j].aud_buf);
+		if (D_S[j].sbp_audsiz>0) vfree(D_S[j].aud_buf);
 	}
 	msg(DBG_INF, "%s module released.\n", major_name);
 }

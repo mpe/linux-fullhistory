@@ -328,6 +328,7 @@ unsigned long * create_tables(char * p, struct linux_binprm * bprm, int ibcs)
 		mpnt->vm_inode = NULL;
 		mpnt->vm_pte = 0;
 		insert_vm_struct(current, mpnt);
+		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	}
 	sp = (unsigned long *) ((-(unsigned long)sizeof(char *)) & (unsigned long) p);
 #ifdef __alpha__
@@ -541,9 +542,12 @@ static void exec_mmap(void)
 			return;
 		}
 		*mm = *current->mm;
+		mm->def_flags = 0;	/* should future lockings be kept? */
 		mm->count = 1;
 		mm->mmap = NULL;
 		mm->mmap_avl = NULL;
+		mm->total_vm = 0;
+		mm->rss = 0;
 		current->mm->count--;
 		current->mm = mm;
 		new_page_tables(current);
@@ -814,6 +818,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned long error;
 	unsigned long p = bprm->p;
 	unsigned long fd_offset;
+	unsigned long rlim;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC && 
@@ -838,6 +843,16 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		return -ENOEXEC;
 	}
 #endif
+
+	/* Check initial limits. This avoids letting people circumvent
+	 * size limits imposed on them by creating programs with large
+	 * arrays in the data or bss.
+	 */
+	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
+	if (rlim >= RLIM_INFINITY)
+		rlim = ~0;
+	if (ex.a_data + ex.a_bss > rlim)
+		return -ENOMEM;
 
 	/* OK, This is the point of no return */
 	flush_old_exec(bprm);

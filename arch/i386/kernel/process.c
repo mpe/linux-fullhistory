@@ -124,7 +124,7 @@ void hard_reset_now(void)
 void show_regs(struct pt_regs * regs)
 {
 	printk("\n");
-	printk("EIP: %04x:%08lx",0xffff & regs->cs,regs->eip);
+	printk("EIP: %04x:[<%08lx>]",0xffff & regs->cs,regs->eip);
 	if (regs->cs & 3)
 		printk(" ESP: %04x:%08lx",0xffff & regs->ss,regs->esp);
 	printk(" EFLAGS: %08lx\n",regs->eflags);

@@ -349,7 +349,7 @@ static struct nfs_bool_opts
 	{ NULL,		0,			0 }};
 
 
-unsigned long get_address (char **str)
+static unsigned long get_address (char **str)
 {
    unsigned long l;
    unsigned int val;
@@ -490,7 +490,7 @@ static void root_nfs_setup(void)
   sin=(struct sockaddr_in *)&server_route.rt_genmask;
   sin->sin_family=AF_INET;
   sin->sin_addr.s_addr= root_dev->pa_mask;
-  server_route.rt_dev[0]=0;
+  server_route.rt_dev=NULL;
   server_route.rt_flags=RTF_HOST|RTF_UP;
   
   /* Now add a route to the server */

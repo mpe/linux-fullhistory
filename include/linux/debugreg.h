@@ -21,7 +21,7 @@
 
 /* Now define a bunch of things for manipulating the control register.
    The top two bytes of the control register consist of 4 fields of 4
-   bytes - each field corresponds to one of the four debug registers,
+   bits - each field corresponds to one of the four debug registers,
    and indicates what types of access we trap on, and how large the data
    field is that we are looking at */
 

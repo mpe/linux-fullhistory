@@ -71,12 +71,11 @@ struct vm_area_struct {
 
 #define VM_GROWSDOWN	0x0100	/* general info on the segment */
 #define VM_GROWSUP	0x0200
-#define VM_SHM		0x0400
+#define VM_SHM		0x0400	/* shared memory area, don't swap out */
 #define VM_DENYWRITE	0x0800	/* ETXTBSY on write attempts.. */
 
 #define VM_EXECUTABLE	0x1000
-#define VM_DONTSWAP	0x2000  /* Some vm types have their own
-				 * hard-coded swap mechanism */
+#define VM_LOCKED	0x2000
 
 #define VM_STACK_FLAGS	0x0177
 
@@ -107,27 +106,14 @@ struct vm_operations_struct {
 	pte_t (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
+typedef struct {
+	unsigned count:24,
+		 age:6,
+		 dirty:1,
+		 reserved:1;
+} mem_map_t;
+
 extern mem_map_t * mem_map;
-extern unsigned char *age_map;
-
-/* planning stage.. */
-#define P_DIRTY		0x0001
-#define P_LOCKED	0x0002
-#define P_UPTODATE	0x0004
-#define P_RESERVED	0x8000
-
-struct page_info {
-	unsigned short flags;
-	unsigned short count;
-	struct inode * inode;
-	unsigned long offset;
-	struct page_info * next_same_inode;
-	struct page_info * prev_same_inode;
-	struct page_info * next_hash;
-	struct page_info * prev_hash;
-	struct wait_queue *wait;
-};
-/* end of planning stage */
 
 /*
  * Free area management
@@ -243,6 +229,22 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 #define GFP_LEVEL_MASK 0xf
 
 #define avl_empty	(struct vm_area_struct *) NULL
+
+static inline int expand_stack(struct vm_area_struct * vma, unsigned long address)
+{
+	unsigned long grow;
+
+	address &= PAGE_MASK;
+	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
+		return -ENOMEM;
+	grow = vma->vm_start - address;
+	vma->vm_start = address;
+	vma->vm_offset -= grow;
+	vma->vm_mm->total_vm += grow >> PAGE_SHIFT;
+	if (vma->vm_flags & VM_LOCKED)
+		vma->vm_mm->locked_vm += grow >> PAGE_SHIFT;
+	return 0;
+}
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 static inline struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)

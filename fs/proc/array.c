@@ -198,6 +198,10 @@ static int get_kstat(char * buffer)
 	len = sprintf(buffer,
 		"cpu  %u %u %u %lu\n"
 		"disk %u %u %u %u\n"
+		"disk_rio %u %u %u %u\n"
+		"disk_wio %u %u %u %u\n"
+		"disk_rblk %u %u %u %u\n"
+		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
 		"swap %u %u\n"
 		"intr %u",
@@ -205,10 +209,16 @@ static int get_kstat(char * buffer)
 		kstat.cpu_nice,
 		kstat.cpu_system,
 		jiffies - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
-		kstat.dk_drive[0],
-		kstat.dk_drive[1],
-		kstat.dk_drive[2],
-		kstat.dk_drive[3],
+		kstat.dk_drive[0], kstat.dk_drive[1],
+		kstat.dk_drive[2], kstat.dk_drive[3],
+		kstat.dk_drive_rio[0], kstat.dk_drive_rio[1],
+		kstat.dk_drive_rio[2], kstat.dk_drive_rio[3],
+		kstat.dk_drive_wio[0], kstat.dk_drive_wio[1],
+		kstat.dk_drive_wio[2], kstat.dk_drive_wio[3],
+		kstat.dk_drive_rblk[0], kstat.dk_drive_rblk[1],
+		kstat.dk_drive_rblk[2], kstat.dk_drive_rblk[3],
+		kstat.dk_drive_wblk[0], kstat.dk_drive_wblk[1],
+		kstat.dk_drive_wblk[2], kstat.dk_drive_wblk[3],
 		kstat.pgpgin,
 		kstat.pgpgout,
 		kstat.pswpin,

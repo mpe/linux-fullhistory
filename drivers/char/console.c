@@ -57,6 +57,9 @@
  * Code for xterm like mouse click reporting by Peter Orbaek 20-Jul-94
  * <poe@daimi.aau.dk>
  *
+ * User-defined bell sound, new setterm control sequences and printk
+ * redirection by Martin Mares <mj@k332.feld.cvut.cz> 19-Nov-95
+ *
  */
 
 #define BLANK 0x0020
@@ -134,7 +137,7 @@ extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
 extern void reset_palette(int currcons);
 extern void set_palette(void);
-extern unsigned long con_type_init(unsigned long, char *);
+extern unsigned long con_type_init(unsigned long, const char **);
 extern int set_get_cmap(unsigned char *, int);
 extern int set_get_font(unsigned char *, int, int);
 
@@ -1126,6 +1129,27 @@ static void setterm_command(int currcons)
 			blankinterval = ((par[1] < 60) ? par[1] : 60) * 60 * HZ;
 			poke_blanked_console();
 			break;
+		case 10: /* set bell frequency in Hz */
+			if (npar >= 1)
+				bell_pitch = (par[1] < 20 || par[1] > 32767) ?
+					0 : 1193180 / par[1];
+			else
+				bell_pitch = 0x637;
+			break;
+		case 11: /* set bell duration in msec */
+			if (npar >= 1)
+				bell_duration = (par[1] < 2000) ?
+					par[1]*HZ/1000 : 0;
+			else
+				bell_duration = HZ/8;
+			break;
+		case 12: /* bring specified console to the front */
+			if (par[1] >= 1 && vc_cons_allocated(par[1]-1))
+				update_screen(par[1]-1);
+			break;
+		case 13: /* unblank the screen */
+			unblank_screen();
+			break;
 	}
 }
 
@@ -1286,6 +1310,9 @@ static void reset_terminal(int currcons, int do_clear)
 	tab_stop[3]	=
 	tab_stop[4]	= 0x01010101;
 
+	bell_pitch = 0x637;
+	bell_duration = HZ/8;
+
 	gotoxy(currcons,0,0);
 	save_cur(currcons);
 	if (do_clear)
@@ -1440,7 +1467,8 @@ static int con_write(struct tty_struct * tty, int from_user,
 		 */
 		switch (c) {
 			case 7:
-				kd_mksound(0x637, HZ/8);
+				if (bell_pitch && bell_duration)
+					kd_mksound(bell_pitch, bell_duration);
 				continue;
 			case 8:
 				bs(currcons);
@@ -1816,6 +1844,9 @@ void console_print(const char * b)
 		return;	 /* console not yet initialized */
 	printing = 1;
 
+	if (kmsg_redirect && vc_cons_allocated(kmsg_redirect - 1))
+		currcons = kmsg_redirect - 1;
+
 	if (!vc_cons_allocated(currcons)) {
 		/* impossible */
 		printk("console_print: tty %d not allocated ??\n", currcons+1);
@@ -1909,7 +1940,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
  */
 unsigned long con_init(unsigned long kmem_start)
 {
-	char display_desc[] = "????";
+	const char *display_desc = "????";
 	int currcons = 0;
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;
@@ -1954,7 +1985,7 @@ unsigned long con_init(unsigned long kmem_start)
 		timer_active |= 1<<BLANK_TIMER;
 	}
 
-	kmem_start = con_type_init(kmem_start, display_desc);
+	kmem_start = con_type_init(kmem_start, &display_desc);
 
 	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
 

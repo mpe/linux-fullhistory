@@ -34,6 +34,8 @@ NEW!	- support for reliable operation of buggy CMD-640 interfaces
 		- PCI support is automatic
 		- for VLB, use kernel command line option:   ide0=cmd640_vlb
 		- this support also enables the secondary i/f on most cards
+		- experimental interface timing parameter support
+NEW!	- experimental support for UMC 8672 interfaces
 NEW!	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
 		- use kernel command line option:   ide1=ht6560
 NEW!	- experimental "fast" speed support for QD6580 interfaces
@@ -45,7 +47,10 @@ NEW!	- support for removeable devices, including door lock/unlock
 NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
 	- works with Linux fdisk, LILO, loadlin, bootln, etc..
 NEW!	- mostly transparent support for EZ-Drive
-		- LILO is incompatible (also harmless) with EZ-Drive
+NEW!		- to use LILO with EZ, install LILO on the linux partition
+		  rather than on the master boot record, and then mark the
+		  linux partition as "bootable" or "active" using fdisk.
+		  (courtesy of Juha Laiho <jlaiho@ichaos.nullnet.fi>).
 NEW!	- ide-cd.c now compiles separate from ide.c
 NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
 		- for details, see comments at top of triton.c
@@ -466,24 +471,62 @@ Silicon Valley - best day job in the world
 
 ================================================================================
 
- from:       'delman@mipg.upenn.edu'
- subject:    rz1000
+ 1995 Nov 16 at 08:25  EST
+ from:       'dwhysong@dolphin.physics.ucsb.edu' (BNR400)
 
-Hi Mark! Looks like you managed to get the info from Intel to disable
-the read-ahead feature of the RZ1000. My encounter with
-Zeos (subsidiary of Micron which owns PCTech) has not been as
-successful --- one guy needs to ask his supervisors about NDA, another
-guy thinks that there is too much of a performance hit with read-ahead
-disabled.
+[I'm cc'ing this to Mark Lord: FYI, I've got at DTC2278S VLB EIDE
+controller with a Connor CFA850A as /dev/hda and a Maxtor 7213A as
+/dev/hdb using Linux 1.2.13 w/patches for assembly strcpy and the kswap
+patches. I'm getting strange behavior and an unstable system when I try to
+use 32 bit VLB data transfer to the interface card. However, hdparm
+reports that the Connor is extremely fast when I can get the 32 bit mode
+enabled using hdparm -c1 /dev/hd(a|b). However, if I don't do hdparm -c1
+on both /dev/hda and /dev/hdb, then when I run "hdparm -t /dev/hda" the
+disk subsystem locks up... the disk LED comes on and stays on, and no
+other programs are able to get disk access (I can switch VC's, but I can't
+get past the username prompt). I thought you should know about this. I'm
+not sure if it's a problem with the support for the DTC cards, or a
+peculiarity with my hardware configuration. I doubt that my hardware
+itself is flaky, though that's always a possibility.]
 
-Did the following benchmark to see how true the claim is.
-With Linux 1.2.13, average of 10 "hdparm -t" in MB/s:
+On Wed, 15 Nov 1995, Michael Faurot wrote:
 
-                       hdparm -c0        hdparm -c1
-read-ahead enabled        4.28              4.25
-read-ahead disabled       3.58              4.30
+> > The trick is setting BOTH drives to use the 32 bit interface.
+>
+> Congrats on getting it going.  Those are some great transfer
+> rates.  I noticed you did switch on the unmasking.  Noticed any
+> problems with things under extreme load or with serial transfers?
 
-Maybe -c1 should be the default for the RZ1000, or as a suggestion in
-the README for people with the RZ1000.
+I've never had any problems which I could trace to interrupt unmasking.
+Of course, my system usually doesn't have a really heavy load, either.
+These numbers seem way too high for a disk with something like 3500 (?)
+RPM.
 
-Cheers, Delman.
+Sleepy# hdparm -t /dev/hda
+
+/dev/hda:
+ Timing buffer-cache reads:   32 MB in  2.24 seconds =14.29 MB/sec
+ Timing buffered disk reads:  16 MB in  3.63 seconds = 4.41 MB/sec
+ Estimating raw driver speed: 16 MB in  2.51 seconds = 6.37 MB/sec
+
+> Not sure I was much help to you, but I'm glad to hear you got it
+> working--and pretty impressivly at that. :-)
+
+Mmm, well, about that... I've found that my Connor drive (/dev/hda) is
+pretty fast when I have my system configured like this. I'm still not
+sure I trust the "hdparm -t"  results, though. However, when I try
+"hdparm -t /dev/hdb" (/dev/hdb is an older Maxtor 7213A) I have the same
+problem I had before with my disk subsystem locking up.
+
+I've tried just about every possible combination of flags in ide.c and
+hdparm, and I can't get decent performance out of this drive/controller
+combination without some kind of instability creeping in. I'm living with
+the situation now only because /dev/hdb is a DOS-only drive, and I don't
+need it under Linux. However, I don't really like the situation.
+
+-Dave
+dwhysong@physics.ucsb.edu
+
+(Why can't this stuff be simple? Plug the card in, and it works? Every
+hardware manufacturer has to have their own way of doing things...)
+

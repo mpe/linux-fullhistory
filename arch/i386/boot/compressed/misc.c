@@ -5,13 +5,14 @@
  * adapted for Linux.
  *
  * malloc by Hannu Savolainen 1993 and Matthias Urlichs 1994
- * puts by Nick Holloway 1993
+ * puts by Nick Holloway 1993, better puts by Martin Mares 1995
  */
 
 #include "gzip.h"
 #include "lzw.h"
 
 #include <asm/segment.h>
+#include <asm/io.h>
 
 /*
  * These are set up by the setup-routine at boot-time:
@@ -24,9 +25,9 @@ struct screen_info {
 	unsigned short orig_video_page;
 	unsigned char  orig_video_mode;
 	unsigned char  orig_video_cols;
-	unsigned short orig_video_ega_ax;
+	unsigned short unused2;
 	unsigned short orig_video_ega_bx;
-	unsigned short orig_video_ega_cx;
+	unsigned short unused3;
 	unsigned char  orig_video_lines;
 	unsigned char  orig_video_isVGA;
 };
@@ -77,6 +78,7 @@ void makecrc(void);
 local int get_method(int);
 
 char *vidmem = (char *)0xb8000;
+int vidport;
 int lines, cols;
 
 static void puts(const char *);
@@ -128,7 +130,7 @@ static void scroll()
 
 static void puts(const char *s)
 {
-	int x,y;
+	int x,y,pos;
 	char c;
 
 	x = SCREEN_INFO.orig_x;
@@ -155,6 +157,12 @@ static void puts(const char *s)
 
 	SCREEN_INFO.orig_x = x;
 	SCREEN_INFO.orig_y = y;
+
+	pos = (x + cols * y) * 2;	/* Update cursor position */
+	outb_p(14, vidport);
+	outb_p(0xff & (pos >> 9), vidport+1);
+	outb_p(15, vidport);
+	outb_p(0xff & (pos >> 1), vidport+1);
 }
 
 __ptr_t memset(__ptr_t s, int c, size_t n)
@@ -315,10 +323,13 @@ struct {
 
 void decompress_kernel()
 {
-	if (SCREEN_INFO.orig_video_mode == 7)
+	if (SCREEN_INFO.orig_video_mode == 7) {
 		vidmem = (char *) 0xb0000;
-	else
+		vidport = 0x3b4;
+	} else {
 		vidmem = (char *) 0xb8000;
+		vidport = 0x3d4;
+	}
 
 	lines = SCREEN_INFO.orig_video_lines;
 	cols = SCREEN_INFO.orig_video_cols;

@@ -14,6 +14,10 @@
 struct kernel_stat {
 	unsigned int cpu_user, cpu_nice, cpu_system;
 	unsigned int dk_drive[DK_NDRIVE];
+	unsigned int dk_drive_rio[DK_NDRIVE];
+	unsigned int dk_drive_wio[DK_NDRIVE];
+	unsigned int dk_drive_rblk[DK_NDRIVE];
+	unsigned int dk_drive_wblk[DK_NDRIVE];
 	unsigned int pgpgin, pgpgout;
 	unsigned int pswpin, pswpout;
 	unsigned int interrupts[NR_IRQS];

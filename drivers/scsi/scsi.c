@@ -478,8 +478,6 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			if (((driver_byte(SCpnt->result) & DRIVER_SENSE) ||
 			     (status_byte(SCpnt->result) & CHECK_CONDITION)) &&
 			    ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
-			    if (SCpnt->sense_buffer[2] &0xe0)
-				continue; /* No devices here... */
 			    if(((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
 			       ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION))
 				continue;
@@ -2313,7 +2311,7 @@ int scsi_dev_init(void)
     timer_table[SCSI_TIMER].expires = 0;
 
 
-    /* Register the core /proc/scsi entry */
+    /* Register the /proc/scsi/scsi entry */
 #if CONFIG_PROC_FS 
     proc_scsi_register(0, &proc_scsi_scsi);    
 #endif
@@ -3094,6 +3092,12 @@ int init_module(void) {
     timer_table[SCSI_TIMER].expires = 0;
     register_symtab(&scsi_symbol_table);
     scsi_loadable_module_flag = 1;
+
+    /* Register the /proc/scsi/scsi entry */
+#if CONFIG_PROC_FS
+    proc_scsi_register(0, &proc_scsi_scsi);
+#endif
+
     
     dma_sectors = PAGE_SIZE / 512;
     dma_free_sectors= dma_sectors;
@@ -3117,11 +3121,10 @@ int init_module(void) {
 
 void cleanup_module( void) 
 {
-    if (MOD_IN_USE) {
-	printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
-	return;
-    }
-    
+#if CONFIG_PROC_FS
+    proc_scsi_unregister(0, PROC_SCSI_SCSI);
+#endif
+
     /* No, we're not here anymore. Don't show the /proc/scsi files. */
     dispatch_scsi_info_ptr = 0L;
 

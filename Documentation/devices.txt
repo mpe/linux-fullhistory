@@ -522,7 +522,10 @@ an unreasonable effort.
 		      ...
 		255 = /dev/ram255	256th modular RAM disk
 
- 36 block	MCA ESDI hard disk
+ 36 char	Netlink support
+		  0 = /dev/route	Routing, device updates, kernel to user
+		  1 = /dev/skip		enSKIP security cache control
+    block	MCA ESDI hard disk
 		  0 = /dev/eda		First ESDI disk whole disk
 		 64 = /dev/edb		Second ESDI disk whole disk
 		      ...
@@ -530,9 +533,33 @@ an unreasonable effort.
 		Partitions are handled in the same way as IDE disks
 		(see major number 3).
 
- 37-223		UNALLOCATED
+ 37-41		UNALLOCATED
 
-224-254		LOCAL USE
+ 42		Demo/sample use
+
+		This number is indended for use in sample code, as
+		well as a general "example" device number.  It
+		should never be used for a device driver that is being
+		distributed; either obtain an official number or use
+		the local/experimental range.  The sudden addition or
+		removal of a driver with this number should not cause
+		ill effects to the system (bugs excepted.)
+
+ 43-223		UNALLOCATED
+
+224-239		SEE NOTE
+
+		This range is currently assigned as part of the
+		local/experimental range.  However, because of the
+		Linux way of setting a limit on the highest device
+		number in the system, currently set at 63 by default,
+		I am considering changing the local/experimental use
+		to 60-63, 120-127, 240-254.  If you are currently
+		using the range 224-239 and such a change would pose a
+		problem for you, please contact <hpa@storm.net> as
+		soon as possible.
+
+240-254		LOCAL USE
 		Allocated for local/experimental use
 
 		Please note that MAX_CHRDEV and MAX_BLKDEV in
@@ -586,6 +613,8 @@ exist, they should have the following uses.
 /dev/mouse	mouse port	symbolic	Current mouse device
 /dev/tape	tape device	symbolic	Current tape device
 /dev/cdrom	CD-ROM device	symbolic	Current CD-ROM device
+/dev/cdwriter	CD-writer	symbolic	Current CD-writer device
+/dev/scanner	scanner		symbolic	Current scanner device
 /dev/modem	modem port	symbolic	Current dialout device
 /dev/root	root device	symbolic	Current root filesystem
 /dev/swap	swap device	symbolic	Current swap device
@@ -595,6 +624,13 @@ well as dialout, as it tends to cause lock file problems.  If it
 exists, /dev/modem shold point to the appropriate dialout (alternate)
 device.
 
+For SCSI devices, /dev/tape and /dev/cdrom should point to the
+``cooked'' devices (/dev/st* and /dev/sr*, respectively), whereas
+/dev/cdwriter and /dev/scanner should point to the appropriate generic
+SCSI devices (/dev/sg*).
+
+/dev/mouse may point to a dialout (alternate) TTY device, a hardware
+mouse device, or a socket for a mouse driver program.
 
 	Sockets and pipes
 

@@ -5,7 +5,7 @@
  */
 
 /*
- * This file handles the architecture-dependent parts of process handling..
+ * This file handles the architecture-dependent parts of initialization
  */
 
 #include <linux/errno.h>
@@ -152,12 +152,39 @@ void setup_arch(char **cmdline_p,
 	request_region(0xf0,0x10,"npu");
 }
 
+static const char * i486model(unsigned int nr)
+{
+	static const char *model[] = {
+		"0", "DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4"
+	};
+	if (nr < sizeof(model)/sizeof(char *))
+		return model[nr];
+	return "Unknown";
+}
+
+static const char * i586model(unsigned int nr)
+{
+	static const char *model[] = {
+		"0", "Pentium 60/66","Pentium 75+"
+	};
+	if (nr < sizeof(model)/sizeof(char *))
+		return model[nr];
+	return "Unknown";
+}
+
+static const char * getmodel(int x86, int model)
+{
+	switch (x86) {
+		case 4:
+			return i486model(model);
+		case 5:
+			return i586model(model);
+	}
+	return "Unknown";
+}
+
 int get_cpuinfo(char * buffer)
 {
-	static const char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
-				"DX/2-WB","DX/4"},
-			{"Pentium 60/66","Pentium 75+","3",
-				"4","5","6","7","8"}};
 	char mask[2];
 #ifndef __SMP__	
 	mask[0] = x86_mask+'@';
@@ -180,7 +207,7 @@ int get_cpuinfo(char * buffer)
 			      "CMPXCHGB8B\t: %s\n"
 		              "BogoMips\t: %lu.%02lu\n",
 			      x86+'0', 
-			      x86_model ? model[x86-4][x86_model-1] : "Unknown",
+			      getmodel(x86, x86_model),
 			      x86_mask ? mask : "Unknown",
 			      x86_vendor_id,
 			      fdiv_bug ? "yes" : "no",
@@ -207,8 +234,7 @@ int get_cpuinfo(char * buffer)
 	bp+=sprintf(bp,"\nmodel\t\t: ");
 	for(i=0;i<32;i++)
 		if(cpu_present_map&(1<<i))
-			bp+=sprintf(bp,"%-16s",cpu_data[i].x86_model?
-					model[cpu_data[i].x86-4][cpu_data[i].x86_model-1]:"Unknown");
+			bp+=sprintf(bp,"%-16s",getmodel(cpu_data[i].x86,cpu_data[i].x86_model));
 	bp+=sprintf(bp,"\nmask\t\t: ");
 	for(i=0;i<32;i++)
 		if(cpu_present_map&(1<<i))

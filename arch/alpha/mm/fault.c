@@ -54,10 +54,8 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr, long c
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
+	if (expand_stack(vma, address))
 		goto bad_area;
-	vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
-	vma->vm_start = (address & PAGE_MASK);
 /*
  * Ok, we have a good vm_area for this memory access, so
  * we can handle it..

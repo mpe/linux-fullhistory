@@ -106,9 +106,9 @@ static inline void add_to_runqueue(struct task_struct * p)
 	if (p->counter > current->counter + 3)
 		need_resched = 1;
 	nr_running++;
-	(p->next_run = init_task.next_run)->prev_run = p;
-	p->prev_run = &init_task;
-	init_task.next_run = p;
+	(p->prev_run = init_task.prev_run)->next_run = p;
+	p->next_run = &init_task;
+	init_task.prev_run = p;
 }
 
 static inline void del_from_runqueue(struct task_struct * p)
@@ -135,6 +135,18 @@ static inline void del_from_runqueue(struct task_struct * p)
 	prev->next_run = next;
 	p->next_run = NULL;
 	p->prev_run = NULL;
+}
+
+static inline void move_last_runqueue(struct task_struct * p)
+{
+	struct task_struct *next = p->next_run;
+	struct task_struct *prev = p->prev_run;
+
+	next->prev_run = prev;
+	prev->next_run = next;
+	(p->prev_run = init_task.prev_run)->next_run = p;
+	p->next_run = &init_task;
+	init_task.prev_run = p;
 }
 
 /*
@@ -189,6 +201,14 @@ static inline int goodness(struct task_struct * p, int this_cpu)
 #endif
 
 	/*
+	 * Realtime process, select the first one on the
+	 * runqueue (taking priorities within processes
+	 * into account).
+	 */
+	if (p->policy != SCHED_OTHER)
+		return 1000 + p->priority;
+
+	/*
 	 * Give the process a first-approximation goodness value
 	 * according to the number of clock-ticks it has left.
 	 *
@@ -197,7 +217,7 @@ static inline int goodness(struct task_struct * p, int this_cpu)
 	 */
 	weight = p->counter;
 	if (weight) {
-
+			
 #ifdef __SMP__
 		/* Give a largish advantage to the same processor...   */
 		/* (this is equivalent to penalizing other processors) */
@@ -241,6 +261,11 @@ asmlinkage void schedule(void)
 
 	need_resched = 0;
 	cli();
+	/* move an exhausted RR process to be last.. */
+	if (!current->counter && current->policy == SCHED_RR) {
+		current->counter = current->priority;
+		move_last_runqueue(current);
+	}
 	switch (current->state) {
 		case TASK_INTERRUPTIBLE:
 			if (current->signal & ~current->blocked)

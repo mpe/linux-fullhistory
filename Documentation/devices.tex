@@ -41,8 +41,8 @@ foo \kill}%
  {\end{tabbing}}
 %
 \title{{\bf Linux Allocated Devices}}
-\author{Maintained by H. Peter Anvin $<$Peter.Anvin@linux.org$>$}
-\date{Last revised: September 20, 1995}
+\author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
+\date{Last revised: November 17, 1995}
 \maketitle
 %
 \noindent
@@ -140,9 +140,13 @@ an unreasonable effort.
 \major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
 \major{35}{}{char }{tclmidi MIDI driver}
 \major{  }{}{block}{Modular RAM disk}
-\major{36}{}{block}{MCA ESDI hard disk}
-\major{37--223}{}{}{Unallocated}
-\major{224--254}{}{}{Local use}
+\major{36}{}{char }{Netlink support}
+\major{  }{}{block}{MCA ESDI hard disk}
+\major{37}{--41}{}{Unallocated}
+\major{42}{}{}{Demo/sample use}
+\major{43}{--223}{}{Unallocated}
+\major{224}{--239}{}{SEE NOTE}
+\major{240}{--254}{}{Local use}
 \major{255}{}{}{Reserved}
 \end{devicelist}
 
@@ -770,7 +774,11 @@ major number 3).
 \end{devicelist}
 
 \begin{devicelist}
-\major{36}{}{block}{MCA ESDI hard disk}
+\major{36}{}{char }{Netlink support}
+	\minor{0}{/dev/route}{Routing, device updates (kernel to user)}
+	\minor{1}{/dev/skip}{enSKIP security cache control}
+\\
+\major{  }{}{block}{MCA ESDI hard disk}
 	\minor{0}{/dev/eda}{First ESDI disk whole disk}
 	\minor{64}{/dev/edb}{Second ESDI disk whole disk}
 	\minordots
@@ -781,11 +789,40 @@ Partitions are handled the same way as for IDE disks (see major number
 3).
 
 \begin{devicelist}
-\major{37}{--223}{}{Unallocated}
+\major{37}{--41}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
-\major{224}{--254}{}{Local/experimental use}
+\major{42}{}{}{Demo/sample use}
+\end{devicelist}
+
+\noindent
+This number is indended for use in sample code, as well as a general
+``example'' device number.  It should never be used for a device
+driver that is being distributed; either obtain an official number or
+use the local/experimental range.  The sudden addition or removal of a
+driver with this number should not cause ill effects to the system
+(bugs excepted.)
+
+\begin{devicelist}
+\major{43}{--223}{}{Unallocated}
+\end{devicelist}
+
+\begin{devicelist}
+\major{224}{--239}{}{SEE NOTE}
+\end{devicelist}
+
+\noindent
+This range is currently assigned as part of the local/experimental
+range.  However, because of the Linux way of setting a limit on the
+highest device number in the system, currently set at 63 by default, I
+am considering changing the local/experimental use to 60--63,
+120--127, 240--254.  If you are currently using the range 224--239 and
+such a change would pose a problem for you, please contact
+$<$hpa@storm.net$>$ as soon as possible.
+
+\begin{devicelist}
+\major{240}{--254}{}{Local/experimental use}
 \end{devicelist}
 
 \noindent
@@ -846,6 +883,8 @@ exist, they should have the following uses.
 \vlink{/dev/mouse}{mouse port}{symbolic}{Current mouse device}
 \vlink{/dev/tape}{tape device}{symbolic}{Current tape device}
 \vlink{/dev/cdrom}{CD-ROM device}{symbolic}{Current CD-ROM device}
+\vlink{/dev/cdwriter}{CD-writer}{symbolic}{Current CD-writer device}
+\vlink{/dev/scanner}{scanner device}{symbolic}{Current scanner device}
 \vlink{/dev/modem}{modem port}{symbolic}{Current dialout device}
 \vlink{/dev/root}{root device}{symbolic}{Current root filesystem}
 \vlink{/dev/swap}{swap device}{symbolic}{Current swap device}
@@ -856,6 +895,15 @@ exist, they should have the following uses.
 dialin as well as dialout, as it tends to cause lock file problems.
 If it exists, {\file /dev/modem} should point to the appropriate
 dialout (alternate) device.
+
+For SCSI devices, {\file /dev/tape} and {\file /dev/cdrom} should
+point to the ``cooked'' devices ({\file /dev/st*} and {\file
+/dev/sr*}, respectively), whereas {\file /dev/cdwriter} and {\file
+/dev/scanner} should point to the appropriate generic SCSI devices
+({\file /dev/sg*}.)
+
+{\file /dev/mouse} may point to a dialout (alternate) TTY device, a
+hardware mouse device, or a socket for a mouse driver program.
 
 \subsection{Sockets and pipes}
 
@@ -868,3 +916,4 @@ Common entries are:
 \end{nodelist}
 
 \end{document}
+

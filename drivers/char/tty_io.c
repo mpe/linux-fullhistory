@@ -38,6 +38,9 @@
  *
  * Reorganized FASYNC support so mouse code can share it.
  *	-- ctm@ardi.com, 9Sep95
+ *
+ * New TIOCLINUX variants added.
+ *	-- mj@k332.feld.cvut.cz, 19-Nov-95
  */
 
 #include <linux/config.h>
@@ -84,12 +87,14 @@ struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 
 /*
  * fg_console is the current virtual console,
- * last_console is the last used one
+ * last_console is the last used one,
+ * kmsg_redirect is the console for kernel messages,
  * redirect is the pseudo-tty that console output
  * is redirected to if asked by TIOCCONS.
  */
 int fg_console = 0;
 int last_console = 0;
+int kmsg_redirect = 0;
 struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
 
@@ -1542,6 +1547,17 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				case 10:
 					set_vesa_blanking(arg);
 					return 0;
+				case 11:	/* set kmsg redirect */
+					if (!suser())
+						return -EPERM;
+					retval = verify_area(VERIFY_READ,
+						(void *) arg+1, 1);
+					if (retval)
+						return retval;
+					kmsg_redirect = get_user((char *)arg+1);
+					return 0;
+				case 12:	/* get fg_console */
+					return fg_console;
 				default: 
 					return -EINVAL;
 			}

@@ -133,7 +133,7 @@ set_cursor(int currcons)
 }
 
 unsigned long
-con_type_init(unsigned long kmem_start, char *display_desc)
+con_type_init(unsigned long kmem_start, const char **display_desc)
 {
 	if (ORIG_VIDEO_MODE == 7)	/* Is this a monochrome display? */
 	{
@@ -144,14 +144,14 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 		{
 			video_type = VIDEO_TYPE_EGAM;
 			video_mem_term = 0xb8000;
-			strcpy(display_desc, "EGA+");
+			*display_desc = "EGA+";
 			request_region(0x3b0,16,"ega");
 		}
 		else
 		{
 			video_type = VIDEO_TYPE_MDA;
 			video_mem_term = 0xb2000;
-			strcpy(display_desc, "*MDA");
+			*display_desc = "*MDA";
 			request_region(0x3b0,12,"mda");
 			request_region(0x3bf, 1,"mda");
 		}
@@ -170,11 +170,11 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 
 			if (!ORIG_VIDEO_ISVGA) {
 				video_type = VIDEO_TYPE_EGAC;
-				strcpy(display_desc, "EGA");
+				*display_desc = "EGA";
 				request_region(0x3c0,32,"ega");
 			} else {
 				video_type = VIDEO_TYPE_VGAC;
-				strcpy(display_desc, "VGA+");
+				*display_desc = "VGA+";
 				request_region(0x3c0,32,"vga+");
 
 #ifdef VGA_CAN_DO_64KB
@@ -215,7 +215,7 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 		{
 			video_type = VIDEO_TYPE_CGA;
 			video_mem_term = 0xba000;
-			strcpy(display_desc, "*CGA");
+			*display_desc = "*CGA";
 			request_region(0x3d4,2,"cga");
 		}
 	}

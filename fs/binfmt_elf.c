@@ -95,22 +95,13 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
 		mpnt->vm_end = TASK_SIZE;
 		mpnt->vm_page_prot = PAGE_COPY;
-#ifdef VM_STACK_FLAGS
 		mpnt->vm_flags = VM_STACK_FLAGS;
 		mpnt->vm_pte = 0;
-#else
-#  ifdef VM_GROWSDOWN
-		mpnt->vm_flags = VM_GROWSDOWN;
-#  endif
-#endif
 		mpnt->vm_inode = NULL;
 		mpnt->vm_offset = 0;
 		mpnt->vm_ops = NULL;
 		insert_vm_struct(current, mpnt);
-#ifndef VM_GROWSDOWN
-		current->mm->stk_vma = mpnt;
-#endif
-
+		current->mm->total_vm += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
 	sp -= exec ? DLINFO_ITEMS*2 : 2;
@@ -792,7 +783,6 @@ do_load_elf_library(int fd){
 	k = elf_phdata->p_vaddr + elf_phdata->p_filesz;
 	if(k > elf_bss) elf_bss = k;
 	
-	SYS(close)(fd);
 	if (error != (elf_phdata->p_vaddr & 0xfffff000)) {
 		kfree(elf_phdata);
 		return error;
