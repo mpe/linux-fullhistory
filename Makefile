@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 85
+SUBLEVEL = 86
 
 ARCH = i386
 
@@ -228,10 +228,6 @@ clean:	archclean
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
 	rm -fr modules/*
-ifdef CONFIG_MODVERSIONS
-	rm -f $(TOPDIR)/include/linux/modversions.h
-	rm -f $(TOPDIR)/include/linux/modules/*
-endif
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
@@ -239,6 +235,10 @@ mrproper: clean
 	rm -f .version .config* config.in config.old
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
+ifdef CONFIG_MODVERSIONS
+	rm -f $(TOPDIR)/include/linux/modversions.h
+	rm -f $(TOPDIR)/include/linux/modules/*
+endif
 
 distclean: mrproper
 

@@ -24,11 +24,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-/* These should maybe be in <linux/tasks.h> */
-
-#define MAX_TASKS_PER_USER (NR_TASKS/2)
-#define MIN_TASKS_LEFT_FOR_ROOT 4
-
 long last_pid=0;
 
 static int find_empty_process(void)
@@ -57,7 +52,7 @@ repeat:
 			goto repeat;
 	}
 	if (tasks_free <= MIN_TASKS_LEFT_FOR_ROOT ||
-	    this_user_tasks > MAX_TASKS_PER_USER)
+	    this_user_tasks > current->rlim[RLIMIT_NPROC].rlim_cur)
 		if (current->uid)
 			return -EAGAIN;
 	return free_task;

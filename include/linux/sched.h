@@ -227,7 +227,8 @@ struct task_struct {
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
-		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}}, \
+		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}, \
+		  {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER}, {NR_OPEN, NR_OPEN}}, \
 /* math */	0, \
 /* comm */	"swapper", \
 /* fs info */	0,NULL, \

@@ -131,6 +131,7 @@
  *		Alan Cox	:	Extracted closing code better
  *		Alan Cox	:	Fixed the closing state machine to
  *					resemble the RFC.
+ *		Alan Cox	:	More 'per spec' fixes.
  *
  *
  * To Fix:
@@ -202,6 +203,7 @@
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/time.h>
 #include <linux/string.h>
 #include <linux/config.h>
 #include <linux/socket.h>
@@ -365,12 +367,12 @@ static struct sk_buff *tcp_dequeue_established(struct sock *s)
  *	tcp_close, and timeout mirrors the value there. 
  */
 
-static void tcp_close_pending (struct sock *sk, int timeout) 
+static void tcp_close_pending (struct sock *sk) 
 {
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) {
-		tcp_close(skb->sk, timeout);
+		tcp_close(skb->sk, 0);
 		kfree_skb(skb, FREE_READ);
 	}
 	return;
@@ -399,6 +401,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	struct sk_buff * skb;
 	struct proto *prot;
 	struct device *dev;
+	int ct=0;
 
 	prot = sk->prot;
 	skb = sk->send_head;
@@ -480,7 +483,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 *	Count retransmissions
 		 */
 		 
-		sk->retransmits++;
+		ct++;
 		sk->prot->retransmits ++;
 
 		/*
@@ -494,7 +497,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 *	This should cut it off before we send too many packets.
 		 */
 
-		if (sk->retransmits >= sk->cong_window)
+		if (ct >= sk->cong_window)
 			break;
 		skb = skb->link3;
 	}
@@ -600,7 +603,7 @@ static int tcp_write_timeout(struct sock *sk)
 	/*
 	 *	Has it gone just too far ?
 	 */
-	if (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR2) 
+	if (sk->retransmits > TCP_RETR2) 
 	{
 		sk->err = ETIMEDOUT;
 		/*
@@ -616,7 +619,7 @@ static int tcp_write_timeout(struct sock *sk)
 			/*
 			 *	Clean up time.
 			 */
-			sk->prot->close (sk, 1);
+			tcp_set_state(sk, TCP_CLOSE);
 			return 0;
 		}
 	}
@@ -2241,7 +2244,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
  *	closed.
  */
  
-static int tcp_close_state(struct sock *sk)
+static int tcp_close_state(struct sock *sk, int dead)
 {
 	int ns=TCP_CLOSE;
 	int send_fin=0;
@@ -2279,7 +2282,7 @@ static int tcp_close_state(struct sock *sk)
 	 *	that we won't make the old 4*rto = almost no time - whoops
 	 *	reset mistake.
 	 */
-	if(sk->dead && ns==TCP_FIN_WAIT2)
+	if(dead && ns==TCP_FIN_WAIT2)
 	{
 		int timer_active=del_timer(&sk->timer);
 		if(timer_active)
@@ -2334,6 +2337,7 @@ static void tcp_send_fin(struct sock *sk)
 			   sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl);
 	if (tmp < 0) 
 	{
+		int t;
   		/*
   		 *	Finish anyway, treat this as a send that got lost. 
   		 *	(Not good).
@@ -2342,6 +2346,11 @@ static void tcp_send_fin(struct sock *sk)
 	  	buff->free = 1;
 		prot->wfree(sk,buff->mem_addr, buff->mem_len);
 		sk->write_seq++;
+		t=del_timer(&sk->timer);
+		if(t)
+			add_timer(&sk->timer);
+		else
+			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 		return;
 	}
 	
@@ -2438,7 +2447,7 @@ void tcp_shutdown(struct sock *sk, int how)
 	 *	FIN if needed
 	 */
 	 
-	if(tcp_close_state(sk))
+	if(tcp_close_state(sk,0))
 		tcp_send_fin(sk);
 		
 	release_sock(sk);
@@ -2936,7 +2945,7 @@ static void tcp_close(struct sock *sk, int timeout)
 	{
 		/* Special case */
 		tcp_set_state(sk, TCP_CLOSE);
-		tcp_close_pending(sk, timeout);
+		tcp_close_pending(sk);
 		release_sock(sk);
 		return;
 	}
@@ -2959,14 +2968,14 @@ static void tcp_close(struct sock *sk, int timeout)
 		 
 		while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 			kfree_skb(skb, FREE_READ);
+		/*
+		 *	Get rid off any half-completed packets. 
+		 */
+
+		if (sk->partial) 
+			tcp_send_partial(sk);
 	}
 
-	/*
-	 *	Get rid off any half-completed packets. 
-	 */
-	 
-	if (sk->partial) 
-		tcp_send_partial(sk);
 		
 	/*
 	 *	Timeout is not the same thing - however the code likes
@@ -2975,21 +2984,11 @@ static void tcp_close(struct sock *sk, int timeout)
 	 
 	if(timeout)
 	{
-		/*
-		 *	Time wait to avoid port reusage accidents if 
-		 *	appropriate. If we have timed out from one
-		 *	of these states then move straight to close.
-		 */
-		 
-		if( sk->state == TCP_TIME_WAIT || sk->state == TCP_LAST_ACK 
-			|| sk->state == TCP_SYN_SENT || sk->state == TCP_CLOSE)
-			tcp_set_state(sk, TCP_CLOSE);	/* Dead */
-		else
-			tcp_time_wait(sk);			
+		tcp_set_state(sk, TCP_CLOSE);	/* Dead */
 	}
 	else
 	{
-		if(tcp_close_state(sk)==1)
+		if(tcp_close_state(sk,1)==1)
 		{
 			tcp_send_fin(sk);
 		}
@@ -3570,7 +3569,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 		if(sk->debug)
 			printk("rcv_ack_seq: %lX==%lX, acked_seq: %lX==%lX\n",
 				sk->rcv_ack_seq,sk->write_seq,sk->acked_seq,sk->fin_seq);
-		if (sk->rcv_ack_seq == sk->write_seq && sk->acked_seq == sk->fin_seq) 
+		if (sk->rcv_ack_seq == sk->write_seq /*&& sk->acked_seq == sk->fin_seq*/) 
 		{
 			flag |= 1;
 			tcp_set_state(sk,TCP_CLOSE);
@@ -3715,8 +3714,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			/*
 			 * move to CLOSE_WAIT, tcp_data() already handled
 			 * sending the ack.
-			 */	/* Check me --------------vvvvvvv */
-			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			 */
 			tcp_set_state(sk,TCP_CLOSE_WAIT);
 			if (th->rst)
 				sk->shutdown = SHUTDOWN_MASK;

@@ -8,6 +8,15 @@
  *
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -27,11 +36,6 @@
 
 #include <linux/config.h>
 
-#ifndef CONFIG_BINFMT_ELF
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 #include <linux/unistd.h>
 typedef int (*sysfun_p)();
 extern sysfun_p sys_call_table[];
@@ -45,7 +49,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs);
 static int load_elf_library(int fd);
 
 struct linux_binfmt elf_format = {
-#ifdef CONFIG_BINFMT_ELF
+#ifndef MODULE
 	NULL, NULL, load_elf_binary, load_elf_library, NULL
 #else
 	NULL, &mod_use_count_, load_elf_binary, load_elf_library, NULL
@@ -314,9 +318,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned int elf_stack;
 	char passed_fileno[6];
 	
-#ifndef CONFIG_BINFMT_ELF
 	MOD_INC_USE_COUNT;
-#endif
 
 	ibcs2_interpreter = 0;
 	status = 0;
@@ -325,9 +327,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	if (elf_ex.e_ident[0] != 0x7f ||
 	    strncmp(&elf_ex.e_ident[1], "ELF",3) != 0) {
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return  -ENOEXEC;
 	}
 	
@@ -337,9 +337,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
 	   (!bprm->inode->i_op || !bprm->inode->i_op->default_file_ops ||
 	    !bprm->inode->i_op->default_file_ops->mmap)){
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return -ENOEXEC;
 	};
 	
@@ -355,9 +353,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	set_fs(old_fs);
 	if (retval < 0) {
 	        kfree (elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return retval;
 	}
 	
@@ -370,9 +366,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	if (elf_exec_fileno < 0) {
 	        kfree (elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return elf_exec_fileno;
 	}
 	
@@ -419,9 +413,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(retval < 0) {
 			  kfree (elf_phdata);
 			  kfree(elf_interpreter);
-#ifndef CONFIG_BINFMT_ELF
 			  MOD_DEC_USE_COUNT;
-#endif
 			  return retval;
 			};
 		};
@@ -436,9 +428,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		if(retval < 0) {
 			kfree(elf_interpreter);
 			kfree(elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 			MOD_DEC_USE_COUNT;
-#endif
 			return -ELIBACC;
 		};
 		/* Now figure out which format our binary is */
@@ -455,9 +445,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  {
 		    kfree(elf_interpreter);
 		    kfree(elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 		    MOD_DEC_USE_COUNT;
-#endif
 		    return -ELIBBAD;
 		  };
 	}
@@ -482,9 +470,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			      kfree(elf_interpreter);
 			}
 		        kfree (elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 			MOD_DEC_USE_COUNT;
-#endif
 			return -E2BIG;
 		}
 	}
@@ -536,9 +522,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    printk("Unable to load interpreter\n");
 		    kfree(elf_phdata);
 		    send_sig(SIGSEGV, current, 0);
-#ifndef CONFIG_BINFMT_ELF
 		    MOD_DEC_USE_COUNT;
-#endif
 		    return 0;
 		  };
 		};
@@ -640,9 +624,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	start_thread(regs, elf_entry, bprm->p);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
-#ifndef CONFIG_BINFMT_ELF
 	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
@@ -662,10 +644,7 @@ load_elf_library(int fd){
 	int error;
 	int i,j, k;
 
-#ifndef CONFIG_BINFMT_ELF
 	MOD_INC_USE_COUNT;
-#endif
-
 	len = 0;
 	file = current->files->fd[fd];
 	inode = file->f_inode;
@@ -674,18 +653,14 @@ load_elf_library(int fd){
 	set_fs(KERNEL_DS);
 	if (file->f_op->read(inode, file, (char *) &elf_ex, sizeof(elf_ex)) != sizeof(elf_ex)) {
 		SYS(close)(fd);
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return -EACCES;
 	}
 	set_fs(USER_DS);
 	
 	if (elf_ex.e_ident[0] != 0x7f ||
 	    strncmp(&elf_ex.e_ident[1], "ELF",3) != 0) {
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return -ENOEXEC;
 	}
 	
@@ -693,18 +668,14 @@ load_elf_library(int fd){
 	if(elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
 	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
 	   (!inode->i_op || !inode->i_op->default_file_ops->mmap)){
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return -ENOEXEC;
 	};
 	
 	/* Now read in all of the header information */
 	
 	if(sizeof(struct elf_phdr) * elf_ex.e_phnum > PAGE_SIZE) {
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return -ENOEXEC;
 	}
 	
@@ -723,9 +694,7 @@ load_elf_library(int fd){
 	
 	if(j != 1)  {
 		kfree(elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return -ENOEXEC;
 	};
 	
@@ -745,9 +714,7 @@ load_elf_library(int fd){
 	SYS(close)(fd);
 	if (error != elf_phdata->p_vaddr & 0xfffff000) {
 	        kfree(elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 		MOD_DEC_USE_COUNT;
-#endif
 		return error;
 	}
 
@@ -760,13 +727,11 @@ load_elf_library(int fd){
 		  PROT_READ|PROT_WRITE|PROT_EXEC,
 		  MAP_FIXED|MAP_PRIVATE, 0);
 	kfree(elf_phdata);
-#ifndef CONFIG_BINFMT_ELF
 	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
-#ifndef CONFIG_BINFMT_ELF
+#ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 
 int init_module(void) {

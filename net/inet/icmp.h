@@ -26,7 +26,7 @@ extern struct icmp_mib icmp_statistics;
 
 
 extern void	icmp_send(struct sk_buff *skb_in,  int type, int code,
-			  struct device *dev);
+			  unsigned long info, struct device *dev);
 extern int	icmp_rcv(struct sk_buff *skb1, struct device *dev,
 			 struct options *opt, unsigned long daddr,
 			 unsigned short len, unsigned long saddr,

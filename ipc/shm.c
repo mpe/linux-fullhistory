@@ -463,7 +463,7 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 			if (!(page_table = (pte_t *) get_free_page(GFP_KERNEL)))
 				return -ENOMEM;
 			pgd_set(page_dir, page_table);
-			tmp |= ((PAGE_SIZE << 10) - PAGE_SIZE);
+			tmp |= (PGDIR_SIZE - PAGE_SIZE);
 		}
 	}
 
@@ -669,14 +669,14 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		}
 		pte_val(pte) = shp->shm_pages[idx];
 		if (pte_present(pte)) {
-			free_page (page);
+			free_page (page); /* doesn't sleep */
 			goto done;
 		}
 		if (!pte_none(pte)) {
 			read_swap_page(pte_val(pte), (char *) page);
 			pte_val(pte) = shp->shm_pages[idx];
 			if (pte_present(pte))  {
-				free_page (page);
+				free_page (page); /* doesn't sleep */
 				goto done;
 			}
 			swap_free(pte_val(pte));
@@ -688,7 +688,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 	} else
 		--current->mm->maj_flt;  /* was incremented in do_no_page */
 
-done:
+done:	/* pte_val(pte) == shp->shm_pages[idx] */
 	current->mm->min_flt++;
 	mem_map[MAP_NR(pte_page(pte))]++;
 	return pte_modify(pte, shmd->vm_page_prot);
@@ -743,7 +743,8 @@ int shm_swap (int prio)
 		swap_free (swap_nr);
 		return 0;
 	}
-	for (shmd = shp->attaches; ; ) {
+	if (shp->attaches)
+	  for (shmd = shp->attaches; ; ) {
 	    do {
 		pgd_t *page_dir;
 		pte_t *page_table, pte;

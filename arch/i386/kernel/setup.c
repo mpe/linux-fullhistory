@@ -54,7 +54,7 @@ struct screen_info screen_info;
 unsigned char aux_device_present;
 extern int ramdisk_size;
 extern int root_mountflags;
-extern int end;
+extern int etext, edata, end;
 
 extern char empty_zero_page[PAGE_SIZE];
 
@@ -95,6 +95,10 @@ void setup_arch(char **cmdline_p,
 	if (MOUNT_ROOT_RDONLY)
 		root_mountflags |= MS_RDONLY;
 	memory_start = (unsigned long) &end;
+	init_task.mm->start_code = TASK_SIZE;
+	init_task.mm->end_code = TASK_SIZE + (unsigned long) &etext;
+	init_task.mm->end_data = TASK_SIZE + (unsigned long) &edata;
+	init_task.mm->brk = TASK_SIZE + (unsigned long) &end;
 
 	for (;;) {
 		if (c == ' ' && *(unsigned long *)from == *(unsigned long *)"mem=") {

@@ -164,6 +164,21 @@ int UMSDOS_ioctl_dir (
 				umsdos_parse (data.umsdos_dirent.name
 					,data.umsdos_dirent.name_len,&info);
 				ret = umsdos_newentry (dir,&info);
+			}else if (cmd == UMSDOS_RENAME_DOS){
+				/* #Specification: ioctl / UMSDOS_RENAME_DOS
+					A file or directory is rename in a DOS directory
+					(not moved accross directory). The source name
+					is in the dos_dirent.name field and the destination
+					is in umsdos_dirent.name field.
+
+					This ioctl allows umssync to rename a mangle file
+					name before syncing it back in the EMD.
+				*/
+				dir->i_count += 2;
+				ret = msdos_rename (dir
+					,data.dos_dirent.d_name,data.dos_dirent.d_reclen
+					,dir
+					,data.umsdos_dirent.name,data.umsdos_dirent.name_len);
 			}else if (cmd == UMSDOS_UNLINK_EMD){
 				/* #Specification: ioctl / UMSDOS_UNLINK_EMD
 					The umsdos_dirent field of the struct umsdos_ioctl is used

@@ -3,12 +3,20 @@
 # see the Configure script.
 #
 
+comment 'Machine setup'
+
+bool 'Support for Deskstation Tyne' CONFIG_DESKSTATION_TYNE y
+bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61 y
+bool 'Support for DECstation' CONFIG_DECSTATION n
+
+bool 'Generate code for R4x00' CONFIG_R4X00 y
+
 comment 'General setup'
 
-bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD n
-bool 'Normal harddisk support' CONFIG_BLK_DEV_HD n
+bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 y
 if [ "$CONFIG_ST506" = "y" ]; then
+  comment 'Please see block/drivers/README.ide for help/info on IDE drives'
   bool '   Use old (reliable) disk-only driver for primary i/f' CONFIG_BLK_DEV_HD y
   if [ "$CONFIG_BLK_DEV_HD" = "y" ]; then
     bool '   Include new IDE driver for secondary i/f support' CONFIG_BLK_DEV_IDE n
@@ -27,7 +35,7 @@ bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF n
 
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
-bool 'TCP/IP networking' CONFIG_INET n
+bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" "=" "y" ]; then
 bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD y
 bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
@@ -89,7 +97,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 
 comment 'Network device support'
 
-bool 'Network device support?' CONFIG_NETDEVICES y
+bool 'Network device support?' CONFIG_NETDEVICES n
 if [ "$CONFIG_NETDEVICES" = "n" ]; then
 
 comment 'Skipping network driver configuration options...'

@@ -12,10 +12,11 @@
  */
 
 #include <linux/sys.h>
+#include <linux/autoconf.h>
 #include <asm/segment.h>
 #include <asm/mipsregs.h>
 #include <asm/mipsconfig.h>
-#include <asm/mm.h>
+#include <asm/page.h>
 #include <asm/stackframe.h>
 #include <asm/regdef.h>
 #include <asm/processor.h>
@@ -185,16 +186,17 @@ skip_signal_return:
 return:		RESTORE_ALL
 		.set	at
 
+#ifdef CONFIG_DESKSTATION_TYNE
 /*
- * Assumptions for _handle_int:
- *  - only bank a or b are possible interrupt sources
+ * Deskstation Tyne interrupt handler
  */
 		.text
 		.set	noreorder
 		.set	noat
-		.globl	_handle_int
+		.globl	_deskstation_tyne_handle_int
 		.align	5
-_handle_int:	SAVE_ALL
+_deskstation_tyne_handle_int:
+		SAVE_ALL
 		.set	at
 		CLI
 		lui	s0,%hi(PORT_BASE)
@@ -202,7 +204,7 @@ _handle_int:	SAVE_ALL
 		sb	t1,%lo(PORT_BASE+0x20)(s0)	# poll command
 		lb	t1,%lo(PORT_BASE+0x20)(s0)	# read result
 		li	s1,1
-		bgtz	t1,poll_second
+		bgtz	t1,Lpoll_second
 		andi	t1,t1,7
 		/*
 		 * Acknowledge first pic
@@ -243,11 +245,11 @@ _handle_int:	SAVE_ALL
 		sb	t1,%lo(PORT_BASE+0x21)(s0)	# delay slot
 
 		.align	5
-poll_second:	li	t1,0x0f
+Lpoll_second:	li	t1,0x0f
 		sb	t1,%lo(PORT_BASE+0xa0)(s0)	# poll command
 		lb	t1,%lo(PORT_BASE+0xa0)(s0)	# read result
 		lui	s4,%hi(_cache_A1)
-		bgtz	t1,spurious_interrupt
+		bgtz	t1,Lspurious_interrupt
 		andi	t1,t1,7
 		/*
 		 * Acknowledge second pic
@@ -288,7 +290,7 @@ poll_second:	li	t1,0x0f
 		sb	t1,%lo(PORT_BASE+0xa1)(s0)	# delay slot
 
 		.align	5
-spurious_interrupt:
+Lspurious_interrupt:
 		/*
 		 * Nothing happened... (whistle)
 		 */
@@ -298,7 +300,29 @@ spurious_interrupt:
 		addiu	t0,t0,1
 		jr	ra
 		sw	t0,%lo(_spurious_count)(t1)
+#endif /* CONFIG_DESKSTATION_TYNE */
 		
+#ifdef CONFIG_ACER_PICA_61
+/*
+ * Acer PICA interrupt handler dummy
+ */
+		.set	noreorder
+		.set	noat
+		.globl	_acer_pica_61_handle_int
+		.align	5
+_acer_pica_61_handle_int:
+		la	a0,acer_text
+		jal	_panic
+		nop
+1:		b	1b
+		nop
+acer_text:	.asciz	"Interrupt handler for Acer PICA not written yet"
+		.align	2
+#endif /* CONFIG_ACER_PICA_61 */
+
+		.text
+		.set	noreorder
+		.set	at
 		.globl	_interrupt
 		.align	5
 _interrupt:	move	s2,ra
@@ -418,13 +442,13 @@ invalid_tlbl:
 		ori	k0,k0,3
 		xori	k0,k0,3
 		lw	k1,(k0)
-		andi	k1,k1,PAGE_PRESENT
+		andi	k1,k1,_PAGE_PRESENT
 		beqz	k1,nopage_tlbl
 		/*
 		 * Present bit is set -> set valid and accessed bits
 		 */
 		lw	k1,(k0)				# delay slot
-		ori	k1,k1,PAGE_ACCESSED
+		ori	k1,k1,_PAGE_ACCESSED
 		sw	k1,(k0)
 		eret
 
@@ -483,13 +507,13 @@ _handle_tlbs:
 		ori	k0,k0,3
 		xori	k0,k0,3
 		lw	k1,(k0)
-		andi	k1,k1,(PAGE_PRESENT|PAGE_RW)
+		andi	k1,k1,(_PAGE_PRESENT|_PAGE_RW)
 		beqz	k1,nopage_tlbs
 		/*
 		 * Present and writable bits set -> set accessed and dirty bits.
 		 */
 		lw	k1,(k0)				# delay slot
-		ori	k1,k1,PAGE_ACCESSED|PAGE_DIRTY
+		ori	k1,k1,(_PAGE_ACCESSED|_PAGE_DIRTY)
 		sw	k1,(k0)
 		/*
 		 * Now reload the entry into the tlb
@@ -567,13 +591,13 @@ _handle_mod:
 		ori	k0,k0,3
 		xori	k0,k0,3
 		lw	k1,(k0)
-		andi	k1,k1,PAGE_RW
+		andi	k1,k1,_PAGE_RW
 		beqz	k1,nopage_tlbs
 		/*
 		 * Present and writable bits set -> set accessed and dirty bits.
 		 */
 		lw	k1,(k0)				# delay slot
-		ori	k1,k1,(PAGE_ACCESSED|PAGE_DIRTY)
+		ori	k1,k1,(_PAGE_ACCESSED|_PAGE_DIRTY)
 		sw	k1,(k0)
 		/*
 		 * Now reload the entry into the tlb

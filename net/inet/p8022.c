@@ -27,6 +27,7 @@ p8022_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	proto = find_8022_client(*(skb->h.raw));
 	if (proto != NULL) {
 		skb->h.raw += 3;
+		skb->len -= 3;
 		return proto->rcvfunc(skb, dev, pt);
 	}
 
@@ -87,7 +88,7 @@ register_8022_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct
 		proto->rcvfunc = rcvfunc;
 		proto->header_length = 3;
 		proto->datalink_header = p8022_datalink_header;
-
+		proto->string_name = "802.2";
 		proto->next = p8022_list;
 		p8022_list = proto;
 	}

@@ -6,4 +6,7 @@
  */
 #define NR_TASKS	128
 
+#define MAX_TASKS_PER_USER (NR_TASKS/2)
+#define MIN_TASKS_LEFT_FOR_ROOT 4
+
 #endif

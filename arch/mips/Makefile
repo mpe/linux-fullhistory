@@ -1,5 +1,5 @@
 #
-# mips/Makefile
+# arch/mips/Makefile
 #
 # This file is included by the global makefile so that you can add your own
 # architecture-specific flags and dependencies. Remember to do have actions
@@ -20,18 +20,23 @@ LD		= mips-linux-ld
 LINKFLAGS	= -Ttext 0xa0000000
 #HOSTCC		= gcc
 #
-# KERNELBASE isn't quite useless, but I need it to work
+# KERNELBASE is quite useless, but I need it to work
 # around a hardware bug in my Wreckstation board. Other people
 # would burn that @#!%# thing...
 #
 CC		= mips-linux-gcc -V 2.5.8 -D__KERNEL__ -I$(TOPDIR)/include
+CPP		= $(CC) -E $(CFLAGS)
 AR		= mips-linux-ar
 RANLIB		= mips-linux-ranlib
 STRIP		= mips-linux-strip
 
 CFLAGS := $(CFLAGS) #-pipe
 
-CFLAGS := $(CFLAGS) -Wa,-mips3 -mcpu=r4000 -D__R4000__ -DKERNELBASE=0xa0000000
+CFLAGS := $(CFLAGS) -DKERNELBASE=0xa0000000
+
+ifdef CONFIG_R4X00
+CFLAGS := $(CFLAGS) -Wa,-mips3 -mcpu=r4000 -D__R4000__
+endif
 
 HEAD := arch/mips/kernel/head.o
 

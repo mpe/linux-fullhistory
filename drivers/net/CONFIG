@@ -39,6 +39,10 @@
 #  EWRK3		The DIGITAL series of AT Ethernet Cards (DE203/4/5)
 #       EWRK3_DEBUG	Set the desired debug level
 #
+#  DE4x5		The DIGITAL series of PCI/EISA Ethernet Cards,
+#			DE425, DE434 and DE435
+#       DE4x5_DEBUG	Set the desired debug level
+#
 
 # The following options exist, but cannot be set in this file.
 #  lance.c
@@ -60,3 +64,4 @@ HP_OPTS		=
 PLIP_OPTS	=
 DEPCA_OPTS	= -DDEPCA_DEBUG=1
 EWRK3_OPTS	= -DEWRK3_DEBUG=1
+DE4x5_OPTS	= -DDE4x5_DEBUG=1

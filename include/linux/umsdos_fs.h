@@ -2,7 +2,7 @@
 #define LINUX_UMSDOS_FS_H
 
 #define UMSDOS_VERSION	0
-#define UMSDOS_RELEASE	3
+#define UMSDOS_RELEASE	4
 
 #ifndef LINUX_FS_H
 #include <linux/fs.h>
@@ -78,6 +78,9 @@ struct umsdos_info{
 #define UMSDOS_GETVERSION	1241	/* Get the release number of UMSDOS */
 #define UMSDOS_INIT_EMD		1242	/* Create the EMD file if not there */
 #define UMSDOS_DOS_SETUP	1243	/* Set the defaults of the MsDOS driver */
+
+#define UMSDOS_RENAME_DOS	1244	/* rename a file/directory in the DOS */
+									/* directory only */
 
 struct umsdos_ioctl{
 	struct dirent dos_dirent;

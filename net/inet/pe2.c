@@ -27,6 +27,7 @@ make_EII_client(void)
 		proto->type_len = 0;
 		proto->header_length = 0;
 		proto->datalink_header = pEII_datalink_header;
+		proto->string_name = "EtherII";
 	}
 
 	return proto;

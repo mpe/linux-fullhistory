@@ -581,9 +581,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			break;
 #endif
 		case ARPHRD_ETHER:
-#ifdef CONFIG_ARCNET
 		case ARPHRD_ARCNET:
-#endif
 			if(arp->ar_pro != htons(ETH_P_IP))
 			{
 				kfree_skb(skb, FREE_READ);
@@ -659,7 +657,10 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /* 
  * 	It is now an arp request 
  */
-		if(addr_hint != IS_MYADDR)
+/*
+ * Only reply for the real device address or when it's in our proxy tables
+ */
+		if(tip!=dev->pa_addr)
 		{
 /*
  * 	To get in here, it is a request for someone else.  We need to
@@ -704,8 +705,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  * 	To get here, it must be an arp request for us.  We need to reply.
  */
- 			if(tip==dev->pa_addr)	/* Only reply for the real device address */
-				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr);
+			arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr);
 		}
 	}
 
@@ -1057,12 +1057,12 @@ static int arp_req_set(struct arpreq *req)
 			htype = ARPHRD_ETHER;
 			hlen = ETH_ALEN;
 			break;
-#ifdef CONFIG_ARCNET
+
 		case ARPHRD_ARCNET:
 			htype = ARPHRD_ARCNET;
 			hlen = 1;	/* length of arcnet addresses */
 			break;
-#endif
+
 #ifdef CONFIG_AX25
 		case ARPHRD_AX25:
 			htype = ARPHRD_AX25;
@@ -1099,6 +1099,13 @@ static int arp_req_set(struct arpreq *req)
 	 *	Find the entry
 	 */
 	entry = arp_lookup(ip, 1);
+	if (entry && (entry->flags & ATF_PUBL) != (r.arp_flags & ATF_PUBL))
+	{
+		sti();
+		arp_destroy(ip,1);
+		cli();
+		entry = NULL;
+	}
 
 	/*
 	 *	Do we need to create a new entry

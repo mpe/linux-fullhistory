@@ -110,14 +110,16 @@ int open_inode(struct inode * inode, int mode)
 		return -EINVAL;
 	f = get_empty_filp();
 	if (!f)
-		return -EMFILE;
+		return -ENFILE;
 	fd = 0;
 	fpp = current->files->fd;
 	for (;;) {
 		if (!*fpp)
 			break;
-		if (++fd > NR_OPEN)
-			return -ENFILE;
+		if (++fd >= NR_OPEN) {
+			f->f_count--;
+			return -EMFILE;
+		}
 		fpp++;
 	}
 	*fpp = f;

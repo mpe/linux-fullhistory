@@ -11,13 +11,14 @@
 #ifndef _NET_INET_IPX_H_
 #define _NET_INET_IPX_H_
 
-#include <linux/ipx.h>
+#include <linux/skbuff.h>
 #include "datalink.h"
+#include <linux/ipx.h>
 
 typedef struct
 {
 	unsigned long net;
-	unsigned char  node[6]; 
+	unsigned char  node[IPX_NODE_LEN]; 
 	unsigned short sock;
 } ipx_address;
 
@@ -41,31 +42,43 @@ typedef struct ipx_packet
 } ipx_packet;
 
 
-typedef struct ipx_route
-{
-	unsigned long net;
-	unsigned char router_node[6];
-	unsigned long router_net;
-	unsigned short flags;
-#define IPX_RT_ROUTED	1		/* This isn't a direct route. Send via this if to node router_node */
-#define IPX_RT_BLUEBOOK	2		
-#define IPX_RT_8022	4		
-#define IPX_RT_SNAP	8		
-	unsigned short dlink_type;
-	struct device *dev;
-	struct datalink_proto *datalink;
-	struct ipx_route *next;
-	struct ipx_route *nextlocal;
-} ipx_route;
-
-
 typedef struct sock ipx_socket;
-
 
 #include "ipxcall.h"
 extern int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);
 extern void ipxrtr_device_down(struct device *dev);
 
+typedef struct ipx_interface {
+	/* IPX address */
+	unsigned long	if_netnum;
+	unsigned char	if_node[IPX_NODE_LEN];
 
+	/* physical device info */
+	struct device	*if_dev;
+	struct datalink_proto	*if_dlink;
+	unsigned short	if_dlink_type;
+
+	/* socket support */
+	unsigned short	if_sknum;
+	ipx_socket	*if_sklist;
+
+	/* administrative overhead */
+	int		if_ipx_offset;
+	unsigned char	if_internal;
+	unsigned char	if_primary;
+	
+	struct ipx_interface	*if_next;
+}	ipx_interface;
+
+typedef struct ipx_route {
+	unsigned long ir_net;
+	ipx_interface *ir_intrfc;
+	unsigned char ir_routed;
+	unsigned char ir_router_node[IPX_NODE_LEN];
+	struct ipx_route *ir_next;
+}	ipx_route;
+
+#define IPX_MIN_EPHEMERAL_SOCKET	0x4000
+#define IPX_MAX_EPHEMERAL_SOCKET	0x7fff
 
 #endif

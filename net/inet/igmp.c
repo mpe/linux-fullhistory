@@ -32,7 +32,7 @@
 #include "route.h"
 #include <linux/skbuff.h>
 #include "sock.h"
-#include "igmp.h"
+#include <linux/igmp.h>
 
 #ifdef CONFIG_IP_MULTICAST
 

@@ -59,14 +59,7 @@ _resume:
 		 */
 		ori	t2,t1,0x1f
 		xori	t2,0x1e
-
-		/*
-		 * Save fs (may be pointing to kernel memory)
-		 */
-		lui	t4,%hi(_segment_fs)
-		lw	t3,%lo(_segment_fs)(t4)
 		mtc0	t2,CP0_STATUS
-		sw	t3,TOFF_FS(t0)
 
 		/*
 		 * Save non-scratch registers
@@ -248,14 +241,10 @@ _resume:
 		lw	ra,TOFF_REG31(a0)
 
 		/*
-		 * Restore fs segment pointer
 		 * Restore status register
 		 */
-		lw	t0,TOFF_FS(a0)
-		lw	t1,TOFF_KSP(a0)
-		sw	t0,%lo(_segment_fs)(t4)
-		sw	t1,_kernelsp
+		lw	t0,TOFF_KSP(a0)
+		sw	t0,_kernelsp
 
 		jr	ra
 		mtc0	a2,CP0_STATUS			# delay slot
-

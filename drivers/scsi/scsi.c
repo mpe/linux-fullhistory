@@ -410,10 +410,19 @@ void scan_scsis (struct Scsi_Host * shpnt)
 			scsi_result[1] |= 0x80;  /* removable */
 		}
 
+/*
+ *     Unfortunately the Toshiba CD-ROM XM-3401TA doesn't
+ *     understand the vendor specific mode select/sense
+ *     commands which are used by the photo cd routines in 
+ *     sr.c.
+ */
+
 	      SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 	      if (!strncmp(scsi_result+8,"NEC",3))
 		SDpnt->manufacturer = SCSI_MAN_NEC;
-	      if (!strncmp(scsi_result+8,"TOSHIBA",7))
+	      if (!strncmp(scsi_result+8,"TOSHIBA",7) &&
+		  strncmp(scsi_result+16,"CD-ROM XM-3401TA",16) &&
+		  strncmp(scsi_result+32,"3593",4))
 		SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
 
 	      SDpnt->removable = (0x80 & 

@@ -374,7 +374,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 
   /* RFC 1331, section 7.2 says the minimum value is 1500 bytes */
   if (mru < PPP_MRU)
-    mru = PPP_MRU;
+    mru = new_mru = PPP_MRU;
 
   mtu = (mtu * 2) + 20;
   mru = (mru * 2) + 20;

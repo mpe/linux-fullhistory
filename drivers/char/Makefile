@@ -94,7 +94,9 @@ endif
 
 dep:
 	$(CPP) -M $(SRCS) > .depend
+#ifdef MODULES
 	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
+#endif
 
 dummy:
 

@@ -577,7 +577,7 @@ static void znet_rx(struct device *dev)
 #else
 			skb->lock = 0;
 			if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-				kfree_s(skb, sksize);
+				kfree(skb);
 				lp->stats.rx_dropped++;
 				break;
 			}

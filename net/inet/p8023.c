@@ -27,6 +27,7 @@ make_8023_client(void)
 		proto->type_len = 0;
 		proto->header_length = 0;
 		proto->datalink_header = p8023_datalink_header;
+		proto->string_name = "802.3";
 	}
 
 	return proto;

@@ -41,8 +41,7 @@
 #define ETH_P_AX25	0x0002		/* Dummy protocol id for AX.25  */
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
 #define ETH_P_802_2	0x0004		/* 802.2 frames 		*/
-#define ETH_P_SNAP	0x0005		/* 802.2 SNAP frames  		*/
-
+#define ETH_P_SNAP	0x0005		/* Internal only		*/
 /* This is an Ethernet frame header. */
 struct ethhdr {
   unsigned char		h_dest[ETH_ALEN];	/* destination eth addr	*/

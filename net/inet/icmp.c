@@ -11,6 +11,7 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Mark Evans, <evansmp@uhura.aston.ac.uk>
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Stefan Becker, <stefanb@yello.ping.de>
  *
  * Fixes:	
  *		Alan Cox	:	Generic queue usage.
@@ -28,6 +29,7 @@
  *		Laco Rusnak	:	Multihoming fixes.
  *		Alan Cox	:	Tightened up icmp_send().
  *		Alan Cox	:	Multicasts.
+ *		Stefan Becker   :       ICMP redirects in icmp_send().
  *
  * 
  *
@@ -94,7 +96,7 @@ struct icmp_err icmp_err_convert[] = {
  *	Fixme: Fragment handling is wrong really.
  */
  
-void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
+void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, struct device *dev)
 {
 	struct sk_buff *skb;
 	struct iphdr *iph;
@@ -139,8 +141,29 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	 
 	if(type==ICMP_DEST_UNREACH||type==ICMP_REDIRECT||type==ICMP_SOURCE_QUENCH||type==ICMP_TIME_EXCEEDED)
 	{
+
+		/*
+		 *	Is the original packet an ICMP packet?
+		 */
+
 		if(iph->protocol==IPPROTO_ICMP)
-			return;
+		{
+			icmph = (struct icmphdr *) ((char *) iph +
+                                                    4 * iph->ihl);
+			/*
+			 *	Check for ICMP error packets (Must never reply to
+			 *	an ICMP error).
+			 */
+	
+			if (icmph->type == ICMP_DEST_UNREACH ||
+				icmph->type == ICMP_SOURCE_QUENCH ||
+				icmph->type == ICMP_REDIRECT ||
+				icmph->type == ICMP_TIME_EXCEEDED ||
+				icmph->type == ICMP_PARAMETERPROB)
+				return;
+		}
+  
+		return;
 
 	}
 	icmp_statistics.IcmpOutMsgs++;
@@ -232,7 +255,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	icmph->type = type;
 	icmph->code = code;
 	icmph->checksum = 0;
-	icmph->un.gateway = 0;
+	icmph->un.gateway = info;	/* This might not be meant for 
+					   this form of the union but it will
+					   be right anyway */
 	memcpy(icmph + 1, iph, sizeof(struct iphdr) + 8);
 
 	icmph->checksum = ip_compute_csum((unsigned char *)icmph,

@@ -4,9 +4,6 @@
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>	
  *
- *	WARNING:
- *		This is a 'preliminary' implementation... on your own head
- *	be it.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -14,8 +11,8 @@
  *	2 of the License, or (at your option) any later version.
  */
 
-#ifndef _IGMP_H
-#define _IGMP_H
+#ifndef _LINUX_IGMP_H
+#define _LINUX_IGMP_H
 
 /*
  *	IGMP protocol structures
@@ -40,6 +37,7 @@ struct igmphdr
  * struct for keeping the multicast list in
  */
 
+#ifdef __KERNEL__
 struct ip_mc_socklist
 {
 	unsigned long multiaddr[IP_MAX_MEMBERSHIPS];	/* This is a speed trade off */
@@ -59,7 +57,6 @@ struct ip_mc_list
 extern struct ip_mc_list *ip_mc_head;
 
 
-#ifdef __KERNEL__
 extern int igmp_rcv(struct sk_buff *, struct device *, struct options *, unsigned long, unsigned short,
 	unsigned long, int , struct inet_protocol *);
 extern void ip_mc_drop_device(struct device *dev); 

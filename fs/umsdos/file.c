@@ -37,8 +37,10 @@ static int UMSDOS_file_read(
 {
 	/* We have to set the access time because msdos don't care */
 	int ret = msdos_file_read(inode,filp,buf,count);
-	inode->i_atime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	if (!IS_RDONLY(inode)){
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
 	return ret;
 }
 /*

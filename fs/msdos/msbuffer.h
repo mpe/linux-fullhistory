@@ -15,6 +15,18 @@ void msdos_ll_rw_block (struct super_block *sb, int opr,
 /* These macros exist to avoid modifying all the code */
 /* They should be removed one day I guess */
 
+/* The versionning mecanism of the modules system define those macros */
+/* This remove some warnings */
+#ifdef brelse
+	#undef brelse
+#endif
+#ifdef bread
+	#undef bread
+#endif
+#ifdef getblk
+	#undef getblk
+#endif
+
 #define brelse(b)				msdos_brelse(sb,b)
 #define bread(d,b,s)			msdos_bread(sb,b)
 #define getblk(d,b,s)			msdos_getblk(sb,b)

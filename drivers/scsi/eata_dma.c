@@ -42,7 +42,7 @@
  *  Thanks also to Greg Hosler who did a lot of testing and *
  *  found quite a number of bugs during the development.    *
  ************************************************************
- *  last change: 95/01/20                                   *
+ *  last change: 95/01/24                                   *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration information */
@@ -141,20 +141,13 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 	}
 
 	eata_stat = inb(base + HA_RSTATUS);	
-	DBG(DBG_INTR, printk("IRQ %d received, base 0x%04x, pid %lx, target: "
-			     "%x, lun: %x, ea_s: 0x%02x, hba_s: 0x%02x \n", 
+	DBG(DBG_INTR, printk("IRQ %d received, base %#.4x, pid %ld, target: "
+			     "%x, lun: %x, ea_s: %#.2x, hba_s: %#.2x \n", 
 			     irq, base, cmd->pid, cmd->target, cmd->lun, 
 			     eata_stat, hba_stat));
 
 	switch (hba_stat) {
 	case 0x00:		/* NO Error */
-#if 0
-	    if (scsi_stat == INTERMEDIATE_GOOD && cmd->device->type != TYPE_TAPE)
-	        result = DID_ERROR << 16;
-
-	    /* If there was a bus reset, redo operation on each target */
-	    else 
-#endif
 	    if (scsi_stat == CONDITION_GOOD
 		&& cmd->device->type == TYPE_DISK
 		&& (HD(cmd)->t_state[cmd->target] == RESET))
@@ -198,37 +191,19 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 	    result = DID_ERROR << 16;
 	    break;
 	}
-	cmd->result = result; 
+	cmd->result = result | scsi_stat; 
+        if (scsi_stat == CHECK_CONDITION && 
+	    (cmd->sense_buffer[2] & 0xf) == UNIT_ATTENTION) 
+	    cmd->result |= (DRIVER_SENSE << 24);
 
-#if DGB_INTR2
-	if (scsi_stat || result || hba_stat) 
-	  printk("hba_stat: 0x%02x,scsi_stat: 0x%02x, sense_key: 0x%x, "
-		 "result: 0x%08x\n", hba_stat, 
-		 scsi_stat,cmd->sense_buffer[2] & 0xf, result); 
+#if DBG_INTR2
+	if (scsi_stat || result || hba_stat || eata_stat != 0x50) 
+	  printk("eata_stat: %#x hba_stat: %#.2x,scsi_stat: %#.2x, sense_key: %#x, "
+		 "result: %#.8x\n", eata_stat, hba_stat, 
+		 scsi_stat,cmd->sense_buffer[2] & 0xf, cmd->result); 
 	DBG(DBG_INTR&&DBG_DELAY,DEL2(800));
 #endif
-	if (scsi_stat == CHECK_CONDITION) { 
-	    switch (cmd->sense_buffer[2] & 0xf) {
-	        case NO_SENSE:
-		case RECOVERED_ERROR:
-	            break;
-		case ILLEGAL_REQUEST:
-	            cmd->result |= (DID_BAD_TARGET << 16);
-		    break;
-		case NOT_READY:
-		case MEDIUM_ERROR:
-		case HARDWARE_ERROR:
-		case UNIT_ATTENTION:
-	        case DATA_PROTECT:
-	        case BLANK_CHECK:
-	        case COPY_ABORTED:
-	        case ABORTED_COMMAND:
-	        case VOLUME_OVERFLOW:
-	        case MISCOMPARE:
-	        default:
-	            cmd->result |= (DRIVER_SENSE << 24);
-	    }
-	}
+
 	cp->status = FREE;   /* now we can release the slot  */
  
 	restore_flags(flags);
@@ -304,7 +279,7 @@ int eata_queue(Scsi_Cmnd * cmd, void *(done) (Scsi_Cmnd *))
 
     cp->status = USED;		/* claim free slot */
     
-    DBG(DBG_QUEUE, printk("eata_queue pid %lx, target: %x, lun: %x, y %d\n",
+    DBG(DBG_QUEUE, printk("eata_queue pid %ld, target: %x, lun: %x, y %d\n",
 			  cmd->pid, cmd->target, cmd->lun, y));
     DBG(DBG_QUEUE && DBG_DELAY, DEL2(250));
  
@@ -355,7 +330,7 @@ int eata_queue(Scsi_Cmnd * cmd, void *(done) (Scsi_Cmnd *))
       done(cmd);
       return (0);
     }
-    DBG(DBG_QUEUE,printk("Queued base 0x%04lx pid: %lx target: %x lun: %x slot %d irq %d\n",
+    DBG(DBG_QUEUE,printk("Queued base %#.4lx pid: %ld target: %x lun: %x slot %d irq %d\n",
 	   (long)sh->base, cmd->pid, cmd->target, cmd->lun, y, sh->irq));
     DBG(DBG_QUEUE && DBG_DELAY, DEL2(200));
     restore_flags(flags);
@@ -391,7 +366,7 @@ int eata_abort(Scsi_Cmnd * cmd)
     save_flags(flags);
     cli();
 
-    DBG(DBG_ABNORM, printk("eata_abort called pid: %lx target: %x lun: %x reason %x\n",
+    DBG(DBG_ABNORM, printk("eata_abort called pid: %ld target: %x lun: %x reason %x\n",
 			   cmd->pid, cmd->target, cmd->lun, cmd->abort_reason));
     DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  
@@ -439,12 +414,12 @@ int eata_reset(Scsi_Cmnd * cmd)
     save_flags(flags);
     cli();
 
-    DBG(DBG_ABNORM, printk("eata_reset called pid:%lx target: %x lun: %x reason %x\n",
+    DBG(DBG_ABNORM, printk("eata_reset called pid:%ld target: %x lun: %x reason %x\n",
 			   cmd->pid, cmd->target, cmd->lun, cmd->abort_reason));
 
 
     if (HD(cmd)->state == RESET) {
-	printk("eata_dma: reset, exit, already in reset.\n");
+	printk("eata_reset: exit, already in reset.\n");
 	restore_flags(flags);
         DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  	return (SCSI_RESET_ERROR);
@@ -452,7 +427,7 @@ int eata_reset(Scsi_Cmnd * cmd)
 
     while (inb((uint)(cmd->host->base) + HA_RAUXSTAT) & HA_ABUSY)
         if (--loop == 0) {
- 	    printk("eata_dma: reset, exit, timeout error.\n");
+ 	    printk("eata_reset: exit, timeout error.\n");
 	    restore_flags(flags);
 	    DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	    return (SCSI_RESET_ERROR);
@@ -467,17 +442,17 @@ int eata_reset(Scsi_Cmnd * cmd)
 
 	if (HD(cmd)->ccb[x].status == LOCKED) {
 	    HD(cmd)->ccb[x].status = FREE;
-	    printk("eata_dma: reset, locked slot %d forced free.\n", x);
+	    printk("eata_reset: locked slot %d forced free.\n", x);
 	    DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  	    continue;
 	}
 	sp = HD(cmd)->ccb[x].cmd;
 	HD(cmd)->ccb[x].status = RESET;
-	printk("eata_dma: reset, slot %d in reset, pid %ld.\n", x, sp->pid);
+	printk("eata_reset: slot %d in reset, pid %ld.\n", x, sp->pid);
         DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  
 	if (sp == NULL)
-	    panic("eata_dma: reset, slot %d, sp==NULL.\n", x);
+	    panic("eata_reset: slot %d, sp==NULL.\n", x);
             DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  
 	if (sp == cmd)
@@ -488,7 +463,7 @@ int eata_reset(Scsi_Cmnd * cmd)
     inb((uint) (cmd->host->base) + HA_RSTATUS);   /* This might cause trouble */
     eata_send_command(0, (uint) cmd->host->base, EATA_CMD_RESET);
 
-    DBG(DBG_ABNORM, printk("eata_dma: reset, board reset done, enabling interrupts.\n"));
+    DBG(DBG_ABNORM, printk("eata_reset: board reset done, enabling interrupts.\n"));
     HD(cmd)->state = RESET;
 
     restore_flags(flags);
@@ -499,8 +474,7 @@ int eata_reset(Scsi_Cmnd * cmd)
     save_flags(flags);
     cli();
 
-    DBG(DBG_ABNORM, printk("eata_dma: reset, interrupts disabled, loops %d.\n",
-			   limit));
+    DBG(DBG_ABNORM, printk("eata_reset: interrupts disabled, loops %d.\n", limit));
     DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  
     for (x = 0; x < cmd->host->can_queue; x++) {
@@ -515,7 +489,7 @@ int eata_reset(Scsi_Cmnd * cmd)
 	/* This mailbox is still waiting for its interrupt */
 	HD(cmd)->ccb[x].status = LOCKED;
 
-	printk("eata_dma, reset, slot %d locked, DID_RESET, pid %ld done.\n",
+	printk("eata_reset: slot %d locked, DID_RESET, pid %ld done.\n",
 	    x, sp->pid);
         DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	restore_flags(flags);
@@ -527,11 +501,11 @@ int eata_reset(Scsi_Cmnd * cmd)
     restore_flags(flags);
 
     if (success) {
-	DBG(DBG_ABNORM, printk("eata_dma: reset, exit, success.\n"));
+	DBG(DBG_ABNORM, printk("eata_reset: exit, success.\n"));
         DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  	return (SCSI_RESET_SUCCESS);
     } else {
-	DBG(DBG_ABNORM, printk("eata_dma: reset, exit, wakeup.\n"));
+	DBG(DBG_ABNORM, printk("eata_reset: exit, wakeup.\n"));
         DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
  	return (SCSI_RESET_PUNT);
     }
@@ -667,7 +641,7 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     DBG(DBG_REGISTER, print_config(gc));
 
     if (!gc->DMA_support) {
-	printk("HBA at 0x%08lx doesn't support DMA. Sorry\n",base);
+	printk("HBA at %#.8lx doesn't support DMA. Sorry\n",base);
 	return (FALSE);
     }
 
@@ -685,7 +659,7 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	if (!request_irq(gc->IRQ, eata_int_handler, SA_INTERRUPT, "EATA-DMA")){
 	    reg_IRQ[gc->IRQ]++;
 	    if (!gc->IRQ_TR)
-		reg_IRQL[gc->IRQ] = 1;	/* IRQ is edge triggered */
+		reg_IRQL[gc->IRQ] = TRUE;	/* IRQ is edge triggered */
 
 	    /* We free it again so we can do a get_conf_dma and 
 	     * allocate the interrupt again later */
@@ -695,7 +669,7 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	    return (FALSE);
 	}
     } else {			/* More than one HBA on this IRQ */
-	if (reg_IRQL[gc->IRQ]) {
+	if (reg_IRQL[gc->IRQ] == TRUE) {
 	    printk("Can't support more than one HBA on this IRQ,\n"
 		   "  if the IRQ is edge triggered. Sorry.\n");
 	    return (FALSE);
@@ -706,7 +680,7 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     request_region(base, 9, "eata_dma");
 
     if ((buff = get_board_data((uint)base, gc->IRQ, gc->scsi_id[3])) == NULL){
-        printk("HBA at %#x didn't react on INQUIRY. Sorry.\n", (ulong) base);
+        printk("HBA at %#lx didn't react on INQUIRY. Sorry.\n", (ulong) base);
 	return (FALSE);
     }
 
@@ -764,7 +738,10 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
  	}
 	sh->base = (char *) base;
 	sh->irq = gc->IRQ;
-	sh->dma_channel = dma_channel;
+	if (gc->DMA_valid) 
+	  sh->dma_channel = dma_channel;
+	else 
+	  sh->dma_channel = 0;
 
 	sh->this_id = gc->scsi_id[3 - i];
 
@@ -824,9 +801,9 @@ int register_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
 	hd->next = NULL;	/* build a linked list of all HBAs */
 	hd->prev = last_HBA;
 	if(hd->prev != NULL)
-	    hd->prev->next = sh;
+	    SD(hd->prev)->next = sh;
 	last_HBA = sh;
-
+	
 	registered_HBAs++;
     }
     return (1);
@@ -1033,20 +1010,20 @@ int eata_detect(Scsi_Host_Template * tpnt)
         HBA_ptr = SD(HBA_ptr)->prev;
 
     printk("Registered HBAs:\n");
-    printk("HBA no. VID: Boardtype: Revis: EATA: Bus: BaseIO: IRQ: Ch: ID: Pr: QS: SG: CPL:\n");
+    printk("HBA no. Boardtype: Revis: EATA: Bus: BaseIO: IRQ: DMA: Ch: ID: Pr: QS: SG: CPL:\n");
     for (i = 1; i <= registered_HBAs; i++) {
-        printk("scsi%-2d: %.4s %.10s v%s 2.0%c  ", HBA_ptr->host_no, 
-	       SD(HBA_ptr)->vendor, SD(HBA_ptr)->name, SD(HBA_ptr)->revision,
+        printk("scsi%-2d: %.10s v%s 2.0%c  ", HBA_ptr->host_no, 
+	       SD(HBA_ptr)->name, SD(HBA_ptr)->revision,
 	       SD(HBA_ptr)->EATA_revision);
 	if(SD(HBA_ptr)->bustype == 'P') printk("PCI "); 
 	else if(SD(HBA_ptr)->bustype == 'E') printk("EISA"); 
 	else printk("ISA ");
-	printk(" %#.4x   %2d   %d   %d   %d  %2d  %2d   %2d\n", 
-	       (uint) HBA_ptr->base, HBA_ptr->irq, SD(HBA_ptr)->channel, 
+	printk(" %#.4x   %2d   %2d   %d   %d   %d  %2d  %2d   %2d\n", 
+	       (uint) HBA_ptr->base, HBA_ptr->irq, HBA_ptr->dma_channel, SD(HBA_ptr)->channel, 
 	       HBA_ptr->this_id, SD(HBA_ptr)->primary, HBA_ptr->can_queue, 
 	       HBA_ptr->sg_tablesize, HBA_ptr->cmd_per_lun);
         HBA_ptr = SD(HBA_ptr)->next;
-      }
+    }
     DBG(DPT_DEBUG,DELAY(1200));
 
     return (registered_HBAs);

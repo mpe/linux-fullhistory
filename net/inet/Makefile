@@ -39,14 +39,17 @@ endif
 ifdef CONFIG_IPX
 
 OBJS	:= $(OBJS) ipx.o pe2.o p8022.o p8023.o
+SNAPO	:= psnap.o
 
 endif
 
-ifdef CONFIG_APPLETALK
+ifdef CONFIG_ATALK
 
-OBJS	:= $(OBJS) atalk_ddp.o atalk_arp.o
-
+OBJS	:= $(OBJS) aarp.o ddp.o
+SNAPO	:= psnap.o
 endif
+
+OBJS	:= $(OBJS) $(SNAPO)
 
 ifdef CONFIG_NET
 

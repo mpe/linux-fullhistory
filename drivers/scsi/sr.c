@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/cdrom.h>
@@ -406,6 +407,8 @@ static void sr_photocd(struct inode *inode)
     break; }
 
   scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;
+  /* The code above may have changed the sector size or capacity. */
+  scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size = 1;
   return;
 }
 
@@ -424,6 +427,10 @@ static int sr_open(struct inode * inode, struct file * filp)
 	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
 	  (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)++;
 
+#if 1	/* don't use for now - it doesn't seem to work for everybody */
+	sr_photocd(inode);
+#endif
+
 	/* If this device did not have media in the drive at boot time, then
 	   we would have been unable to get the sector size.  Check to see if
 	   this is the case, and try again.
@@ -431,10 +438,6 @@ static int sr_open(struct inode * inode, struct file * filp)
 
 	if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
 	  get_sectorsize(MINOR(inode->i_rdev));
-
-#if 1	/* don't use for now - it doesn't seem to work for everybody */
-	sr_photocd(inode);
-#endif
 
 	return 0;
 }
@@ -691,7 +694,7 @@ are any multiple of 512 bytes long.  */
 	      };  /* if need DMA fixup */
 	    };  /* for loop to fill list */
 #ifdef DEBUG
-	    printk("SG: %d %d %d %d %d *** ",SCpnt->use_sg, SCpnt->request.sector,
+	    printk("SR: %d %d %d %d %d *** ",SCpnt->use_sg, SCpnt->request.sector,
 		   this_count, 
 		   SCpnt->request.current_nr_sectors,
 		   SCpnt->request.nr_sectors);
@@ -916,6 +919,7 @@ static void get_sectorsize(int i){
     if(scsi_CDs[i].sector_size == 2048)
       scsi_CDs[i].capacity *= 4;
     scsi_CDs[i].needs_sector_size = 0;
+    sr_sizes[i] = scsi_CDs[i].capacity;
   };
   scsi_free(buffer, 512);
 }

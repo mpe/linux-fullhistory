@@ -2,6 +2,7 @@
 #ifndef _LINUX_INTERRUPT_H
 #define _LINUX_INTERRUPT_H
 
+#include <linux/linkage.h>
 #include <asm/bitops.h>
 
 struct bh_struct {

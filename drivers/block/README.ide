@@ -128,7 +128,8 @@ The ATA Interface spec for IDE disk drives allows a total of 28 bits
 (8 bits for sector, 16 bits for cylinder, and 4 bits for head) for addressing
 individual disk sectors of 512 bytes each (in "Linear Block Address" (LBA)
 mode, there is still only a total of 28 bits available in the hardware).
-This "limits" the capacity of an IDE drive to no more than 128GB (Giga-bytes).  All current day IDE drives are somewhat smaller than this upper limit, and
+This "limits" the capacity of an IDE drive to no more than 128GB (Giga-bytes).
+All current day IDE drives are somewhat smaller than this upper limit, and
 within a few years, ATAPI disk drives will raise the limit considerably.
 
 All IDE disk drives "suffer" from a "16-heads" limitation:  the hardware has
@@ -229,7 +230,7 @@ by doing the following after installing slackware (or whatever):
 	A danger with this approach is that whenever an MS-DOS "defragmentation"
 	program is run (like Norton "speeddisk"), it may move the Linux boot
 	files around, confusing LILO and making the (Linux) system unbootable.
-	Be sure to keep a "boot floppy" kernel at hand for such circumstances.
+	Be sure to keep a kernel "boot floppy" at hand for such circumstances.
 
 If you "don't do DOS", then partition as you please, but remember to create
 a small partition to hold the /boot directory (and vmlinuz) as described above

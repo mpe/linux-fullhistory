@@ -1,0 +1,27 @@
+The  de425/de434/de435 driver in this  distribution is designed to work with
+the Digital Equipment Corporation series  of PCI/EISA ethernet cards (DE425,
+DE434, DE435) and with all kernels that support PCI.
+
+Auto media detection is provided so that the  media choice isn't compiled in
+and is flexible enough to be able to reconfigure on-the-fly.
+
+The ability to  load this  driver as  a loadable  module has been  included,
+although I don't recommend its use with PCI, since PCI dynamically allocates
+where the card will go at boot time.
+
+The performance we've achieved  so far has been  measured through the 'ttcp'
+tool at   1.08MB/s.  This measures   the total tcp stack  performance which
+includes  the  card,  so  don't expect   to  get  much  nearer the  1.25MB/s
+theoretical ethernet rate.
+
+    ************************************************************************
+    However there is still a known bug which causes ttcp to hang on transmit
+    (receive  is  OK), although  the  adapter/driver  continues to  function
+    normally for  other applications e.g.  nfs  mounting disks, pinging etc.
+    The cause is under investigation.
+    ************************************************************************
+
+
+Enjoy!
+
+Dave

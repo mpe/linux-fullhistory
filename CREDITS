@@ -508,6 +508,13 @@ N: Kai M"akisara
 E: Kai.Makisara@vtt.fi
 D: SCSI Tape Driver
 
+N: Hamish Macdonald
+E: hamish@border.ocunix.on.ca
+D: Linux/68k port
+S: 102-B Valleystream Drive
+S: Nepean, Ontario
+S: Canada K2H-9E1
+
 N: Peter MacDonald
 D: SLS distribution
 D: Initial implementation of VC's, pty's and select()
@@ -914,6 +921,7 @@ D: Original kernel README
 D: Linux News (electronic magazine)
 D: Meta-FAQ, originator
 D: INFO-SHEET, former maintainer
+D: Author of the longest-living linux bug
 S: Ohratie 16 C 198
 S: sf-01370 Vantaa
 S: Finland

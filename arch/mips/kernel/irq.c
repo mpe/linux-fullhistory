@@ -15,6 +15,13 @@
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
 
+/*
+ * The Deskstation Tyne is almost completly like an IBM compatible PC with
+ * another type of microprocessor. Therefore this code is almost completly
+ * the same. More work needs to be done to support Acer PICA and other
+ * machines.
+ */
+
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>

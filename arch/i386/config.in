@@ -9,7 +9,7 @@ bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 y
 if [ "$CONFIG_ST506" = "y" ]; then
-  comment 'Please see block/drivers/README.ide for help/info on IDE drives'
+  comment 'Please see drivers/block/README.ide for help/info on IDE drives'
   bool '   Use old (reliable) disk-only driver for primary i/f' CONFIG_BLK_DEV_HD y
   if [ "$CONFIG_BLK_DEV_HD" = "y" ]; then
     bool '   Include new IDE driver for secondary i/f support' CONFIG_BLK_DEV_IDE n
@@ -53,6 +53,7 @@ bool 'Assume subnets are local' CONFIG_INET_SNARL y
 bool 'Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
 fi
 bool 'The IPX protocol' CONFIG_IPX n
+#bool 'Appletalk DDP' CONFIG_ATALK n
 #bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
 fi
 
@@ -109,7 +110,7 @@ if [ "$CONFIG_NETDEVICES" = "n" ]; then
 comment 'Skipping network driver configuration options...'
 
 else
-bool 'Dummy net driver support' CONFIG_DUMMY n
+bool 'Dummy net driver support' CONFIG_DUMMY y
 bool 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" = "y" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED y
@@ -160,6 +161,7 @@ if [ "$CONFIG_NET_EISA" = "y" ]; then
 		bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 	fi
 	bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
+	bool 'DE425, DE434, DE435 support' CONFIG_DE4x5 n
 #	bool 'DEC 21040 PCI support' CONFIG_DEC_ELCP n
 #	bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100 n
 #	bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32 n

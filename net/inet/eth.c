@@ -191,8 +191,6 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	
 	if (*(unsigned short *)rawp == 0xFFFF)
 		return htons(ETH_P_802_3);
-	if (*(unsigned short *)rawp == 0xAAAA)
-		return htons(ETH_P_SNAP);
 		
 	return htons(ETH_P_802_2);
 }

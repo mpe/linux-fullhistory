@@ -57,7 +57,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
     	NULL, NULL,						\
 	NULL, NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,\
         NULL, scsicam_bios_param, 					\
-	/* can queue */ 1, /* id */ 7, 255 /* old SG_ALL */, 		\
+	/* can queue */ 1, /* id */ 7, 127 /* old SG_ALL */, 		\
 	/* cmd per lun */ 1 , 0, 0, DISABLE_CLUSTERING}
 #else
 /* Register addresses, ordered numerically */

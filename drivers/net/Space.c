@@ -49,6 +49,7 @@ extern int at1700_probe(struct device *);
 extern int depca_probe(struct device *);
 extern int apricot_probe(struct device *);
 extern int ewrk3_probe(struct device *);
+extern int de4x5_probe(struct device *);
 extern int el1_probe(struct device *);
 extern int el16_probe(struct device *);
 extern int elplus_probe(struct device *);
@@ -110,6 +111,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_EWRK3             /* DEC EtherWORKS 3 */
         && ewrk3_probe(dev)
+#endif
+#ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
+        && de4x5_probe(dev)
 #endif
 #ifdef CONFIG_APRICOT		/* Apricot I82596 */
 	&& apricot_probe(dev)

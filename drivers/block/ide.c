@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.10  January 21, 1995
+ *  linux/drivers/block/ide.c	Version 3.11  January 25, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -100,6 +100,7 @@
  *			fix probing for old Seagates without HD_ALTSTATUS
  *			fix byte-ordering for some NEC cdrom drives
  *  Version 3.10	disable multiple mode by default; was causing trouble
+ *  Version 3.11	fix mis-identification of old WD disks as cdroms
  *
  *  To do:
  *	- special 32-bit controller-type detection & support
@@ -1597,10 +1598,9 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 
 static unsigned long probe_mem_start;	/* used by drive/irq probing routines */
 
-static void do_identify (ide_dev_t *dev)
+static void do_identify (ide_dev_t *dev, byte cmd)
 {
 	int bswap;
-	unsigned short model01;
 	struct hd_driveid *id;
 	unsigned long capacity, check;
 
@@ -1610,24 +1610,10 @@ static void do_identify (ide_dev_t *dev)
 	sti();
 
 	/*
-	 * Non-ATAPI drives seem to always use big-endian string ordering.
-	 * Most ATAPI cdrom drives, such as the Vertos, and some NEC and Mitsumi
-	 * models, use little-endian.  But some NEC/Mitsumi revisions appear to
-	 * use big-endian, confusing the issue.  We try to take all of this
-	 * into consideration, "knowing" that Mitsumi drive model names begin
-	 * with "FX" and NEC drive model names begin with "NE".
+	 *  WIN_IDENTIFY returns little-endian info,
+	 *  WIN_PIDENTIFY return big-endian info.
 	 */
-#define PAIR(hi,lo)	((unsigned short)((hi<<8)|(lo&0xff)))
-	model01 = PAIR(id->model[0],id->model[1]);
-	if (model01 == PAIR('N','E') || model01 == PAIR('F','X'))
-		bswap = 0;	/* little endian NEC or Mitsumi */
-	else if (model01 == PAIR('E','N') || model01 == PAIR('X','F'))
-		bswap = 1;	/* big endian NEC or Mitsumi */
-	else if ((id->config & 0x8000) || dev->type == cdrom)
-		bswap = 0;	/* all other ATAPI drives */
-	else
-		bswap = 1;	/* all other non-ATAPI drives */
-#undef PAIR
+	bswap = (cmd == WIN_IDENTIFY);
 	fixstring (id->model,     sizeof(id->model),     bswap);
 	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
 	fixstring (id->serial_no, sizeof(id->serial_no), bswap);
@@ -1635,7 +1621,7 @@ static void do_identify (ide_dev_t *dev)
 	/*
 	 * Check for an ATAPI device
 	 */
-	if (id->config & 0x8000) {
+	if (cmd == WIN_PIDENTIFY) {
 #ifdef CONFIG_BLK_DEV_IDECD
 		byte type = (id->config >> 8) & 0x0f;
 #endif	/* CONFIG_BLK_DEV_IDECD */
@@ -1781,7 +1767,7 @@ static int try_to_identify (ide_dev_t *dev, byte cmd)
 	delay_10ms();		/* wait for IRQ and DRQ_STAT */
 	if (OK_STAT(GET_STAT(DEV_HWIF),DRQ_STAT,BAD_RW_STAT)) {
 		cli();			/* some systems need this */
-		do_identify(dev);	/* drive returned ID */
+		do_identify(dev, cmd);	/* drive returned ID */
 		rc = 0;			/* success */
 	} else
 		rc = 2;			/* drive refused ID */

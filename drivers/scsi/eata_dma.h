@@ -16,7 +16,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 1
-#define VER_SUB   "0h"
+#define VER_SUB   "0i"
 
 /************************************************************************
  * Here you can configure your drives that are using a non-standard     *

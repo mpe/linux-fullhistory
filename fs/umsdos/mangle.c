@@ -302,7 +302,7 @@ int umsdos_parse (
 			*/
 		}else{
 			/* Conforming MSDOS file name */
-			strcpy (info->fake.fname,fname);	/* GLU	C'est sur on a un 0 a la fin */
+			strncpy (info->fake.fname,fname,len);
 			info->msdos_reject = 0;
 			base_len = firstpt != NULL ? (int)(firstpt - fname) : len;
 		}

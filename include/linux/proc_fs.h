@@ -76,8 +76,14 @@ enum net_directory_inos {
 #endif
 #endif
 #ifdef CONFIG_IPX
+	PROC_NET_IPX_INTERFACE,
 	PROC_NET_IPX_ROUTE,
 	PROC_NET_IPX,
+#endif
+#ifdef CONFIG_ATALK
+	PROC_NET_ATALK,
+	PROC_NET_AT_ROUTE,
+	PROC_NET_ATIF,
 #endif
 #ifdef CONFIG_AX25
 	PROC_NET_AX25_ROUTE,

@@ -411,10 +411,10 @@ int do_open(const char * filename,int flags,int mode)
 	struct file * f;
 	int flag,error,fd;
 
-	for(fd=0 ; fd<NR_OPEN ; fd++)
+	for(fd=0; fd<NR_OPEN && fd<current->rlim[RLIMIT_NOFILE].rlim_cur; fd++)
 		if (!current->files->fd[fd])
 			break;
-	if (fd>=NR_OPEN)
+	if (fd>=NR_OPEN || fd>=current->rlim[RLIMIT_NOFILE].rlim_cur)
 		return -EMFILE;
 	FD_CLR(fd,&current->files->close_on_exec);
 	f = get_empty_filp();

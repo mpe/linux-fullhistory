@@ -23,6 +23,7 @@
 
 extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 
+extern void deskstation_tyne_dma_init(void);
 extern void scsi_mem_init(unsigned long);
 extern void sound_mem_init(void);
 extern void die_if_kernel(char *,struct pt_regs *,long);
@@ -41,7 +42,7 @@ extern void show_net_buffers(void);
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-unsigned long __bad_pagetable(void)
+pte_t * __bad_pagetable(void)
 {
 	extern char empty_bad_page_table[PAGE_SIZE];
 	unsigned long dummy;
@@ -55,14 +56,14 @@ unsigned long __bad_pagetable(void)
 		".set\treorder"
 		:"=r" (dummy),
 		 "=r" (dummy)
-		:"r" (BAD_PAGE + PAGE_TABLE),
+		:"r" (pte_val(BAD_PAGE)),
 		 "0" ((long) empty_bad_page_table),
 		 "1" (PTRS_PER_PAGE));
 
-	return (unsigned long) empty_bad_page_table;
+	return (pte_t *) empty_bad_page_table;
 }
 
-unsigned long __bad_page(void)
+pte_t __bad_page(void)
 {
 	extern char empty_bad_page[PAGE_SIZE];
 	unsigned long dummy;
@@ -79,7 +80,7 @@ unsigned long __bad_page(void)
 		:"0" ((long) empty_bad_page),
 		 "1" (PTRS_PER_PAGE));
 
-	return (unsigned long) empty_bad_page;
+	return pte_mkdirty(mk_pte((unsigned long) empty_bad_page, PAGE_SHARED));
 }
 
 unsigned long __zero_page(void)
@@ -141,8 +142,8 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  */
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
-	unsigned long * pg_dir;
-	unsigned long * pg_table;
+	pgd_t * pg_dir;
+	pte_t * pg_table;
 	unsigned long tmp;
 	unsigned long address;
 
@@ -150,23 +151,21 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	address = 0;
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
-		tmp = *pg_dir;
-		tmp &= PAGE_MASK;
-		if (!tmp) {
-			tmp = start_mem;
+		if (pgd_none(pg_dir[0])) {
+			pgd_set(pg_dir, (pte_t *) start_mem);
 			start_mem += PAGE_SIZE;
 		}
 		/*
 		 * also map it in at 0x00000000 for init
 		 */
-		*pg_dir = tmp | PAGE_TABLE;
+		pg_table = (pte_t *) pgd_page(pg_dir[0]);
+		pgd_set(pg_dir, pg_table);
 		pg_dir++;
-		pg_table = (unsigned long *) (tmp & PAGE_MASK);
 		for (tmp = 0 ; tmp < PTRS_PER_PAGE ; tmp++,pg_table++) {
 			if (address < end_mem)
-				*pg_table = address | PAGE_SHARED;
+				*pg_table = mk_pte(address, PAGE_SHARED);
 			else
-				*pg_table = 0;
+				pte_clear(pg_table);
 			address += PAGE_SIZE;
 		}
 	}
@@ -195,6 +194,9 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		mem_map[MAP_NR(start_mem)] = 0;
 		start_mem += PAGE_SIZE;
 	}
+#ifdef CONFIG_DESKSTATION_TYNE
+	deskstation_tyne_dma_init();
+#endif
 #ifdef CONFIG_SCSI
 	scsi_mem_init(high_memory);
 #endif
@@ -225,6 +227,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		codepages << (PAGE_SHIFT-10),
 		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));
+	pg0[0] = pte_val(mk_pte(0, PAGE_READONLY));
 
 	invalidate();
 	return;

@@ -84,23 +84,30 @@ static inline int put_stack_long(struct task_struct *task, int offset,
  */
 static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
 {
+	pgd_t * pgdir;
+	pte_t * pgtable;
 	unsigned long page;
 
 repeat:
-	page = *PAGE_DIR_OFFSET(vma->vm_task, addr);
-	if (page & PAGE_PRESENT) {
-		page &= PAGE_MASK;
-		page += PAGE_PTR(addr);
-		page = *((unsigned long *) page);
-	}
-	if (!(page & PAGE_PRESENT)) {
+	pgdir = PAGE_DIR_OFFSET(vma->vm_task, addr);
+	if (pgd_none(*pgdir)) {
 		do_no_page(vma, addr, 0);
 		goto repeat;
 	}
+	if (pgd_bad(*pgdir)) {
+		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
+		pgd_clear(pgdir);
+		return 0;
+	}
+	pgtable = (pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+	if (!pte_present(*pgtable)) {
+		do_no_page(vma, addr, 0);
+		goto repeat;
+	}
+	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	if (page >= high_memory)
 		return 0;
-	page &= PAGE_MASK;
 	page += addr & ~PAGE_MASK;
 	return *(unsigned long *) page;
 }
@@ -117,39 +124,40 @@ repeat:
 static void put_long(struct vm_area_struct * vma, unsigned long addr,
 	unsigned long data)
 {
-	unsigned long page, pte = 0;
-	int readonly = 0;
+	pgd_t *pgdir;
+	pte_t *pgtable;
+	unsigned long page;
 
 repeat:
-	page = *PAGE_DIR_OFFSET(vma->vm_task, addr);
-	if (page & PAGE_PRESENT) {
-		page &= PAGE_MASK;
-		page += PAGE_PTR(addr);
-		pte = page;
-		page = *((unsigned long *) page);
-	}
-	if (!(page & PAGE_PRESENT)) {
-		do_no_page(vma, addr, 0 /* PAGE_RW */);
+	pgdir = PAGE_DIR_OFFSET(vma->vm_task, addr);
+	if (!pgd_present(*pgdir)) {
+		do_no_page(vma, addr, 1);
 		goto repeat;
 	}
-	if (!(page & PAGE_RW)) {
-		if (!(page & PAGE_COW))
-			readonly = 1;
-		do_wp_page(vma, addr, PAGE_RW | PAGE_PRESENT);
+	if (pgd_bad(*pgdir)) {
+		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
+		pgd_clear(pgdir);
+		return;
+	}
+	pgtable = (pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+	if (!pte_present(*pgtable)) {
+		do_no_page(vma, addr, 1);
+		goto repeat;
+	}
+	page = pte_page(*pgtable);
+	if (!pte_write(*pgtable)) {
+		do_wp_page(vma, addr, 1);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page >= high_memory)
-		return;
+	if (page < high_memory) {
+		page += addr & ~PAGE_MASK;
+		*(unsigned long *) page = data;
+	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-	*(unsigned long *) pte |= (PAGE_DIRTY|PAGE_COW);
-	page &= PAGE_MASK;
-	page += addr & ~PAGE_MASK;
-	*(unsigned long *) page = data;
-	if (readonly) {
-		*(unsigned long *) pte &=~ (PAGE_RW|PAGE_COW);
-		invalidate();
-	} 
+/* this should also re-instate whatever read-only mode there was before */
+	*pgtable = pte_mkdirty(mk_pte(page, vma->vm_page_prot));
+	invalidate();
 }
 
 static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)

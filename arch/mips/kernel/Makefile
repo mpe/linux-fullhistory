@@ -19,18 +19,26 @@
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
 OBJS  = process.o signal.o entry.o traps.o irq.o ptrace.o cache.o resume.o \
-	ioport.o setup.o bios32.o
+	ioport.o setup.o bios32.o tynedma.o
 
 all: kernel.o head.o
-
-head.o: head.s
-
-head.s: head.S $(TOPDIR)/include/linux/tasks.h
 
 cache.o: cache.s
 
 cache.s: cache.S $(TOPDIR)/include/asm/mipsconfig.h \
 	$(TOPDIR)/include/asm/regdef.h $(TOPDIR)/include/asm/segment.h
+
+entry.o: entry.s
+
+entry.s: entry.S $(TOPDIR)/include/linux/sys.h \
+	$(TOPDIR)/include/linux/autoconf.h $(TOPDIR)/include/asm/segment.h \
+	$(TOPDIR)/include/asm/mipsregs.h $(TOPDIR)/include/asm/mipsconfig.h \
+	$(TOPDIR)/include/asm/page.h $(TOPDIR)/include/asm/stackframe.h \
+	$(TOPDIR)/include/asm/regdef.h $(TOPDIR)/include/asm/processor.h
+
+head.o: head.s
+
+head.s: head.S $(TOPDIR)/include/linux/tasks.h
 
 resume.o: resume.s
 
@@ -48,7 +56,7 @@ kernel.o: $(OBJS)
 	sync
 
 dep:
-	$(CPP) $(CFLAGS) -M *.c > .depend
+	$(CPP) -M *.c > .depend
 
 modules:
 

@@ -43,8 +43,11 @@
 #ifdef CONFIG_IPX
 #include "ipx.h"
 #endif
+#ifdef CONFIG_ATALK
+#include <linux/atalk.h>
+#endif
 
-#include "igmp.h"
+#include <linux/igmp.h>
 
 #define SOCK_ARRAY_SIZE	256		/* Think big (also on some systems a byte is faster */
 
@@ -139,7 +142,9 @@ struct sock {
   unsigned short		type;
   unsigned char			localroute;	/* Route locally only */
 #ifdef CONFIG_IPX
-  ipx_address			ipx_source_addr,ipx_dest_addr;
+  ipx_address			ipx_dest_addr;
+  ipx_interface			*ipx_intrfc;
+  unsigned short		ipx_port;
   unsigned short		ipx_type;
 #endif
 #ifdef CONFIG_AX25
@@ -157,6 +162,10 @@ struct sock {
   unsigned short		ax25_t1,ax25_t2,ax25_t3;
   ax25_digi			*ax25_digipeat;
 #endif  
+#ifdef CONFIG_ATALK
+  struct atalk_sock		at;
+#endif
+
 /* IP 'private area' or will be eventually */
   int				ip_ttl;		/* TTL setting */
   int				ip_tos;		/* TOS */

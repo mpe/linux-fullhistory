@@ -94,5 +94,9 @@
  
 #define SIOCDEVPRIVATE	0x89F0	/* to 89FF */
 
-
+/*
+ *	These 16 ioctl calls are protocol private
+ */
+ 
+#define SIOCPROTOPRIVATE 0x89E0 /* to 89EF */
 #endif	/* _LINUX_SOCKIOS_H */

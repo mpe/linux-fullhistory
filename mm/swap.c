@@ -298,6 +298,8 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 		free_page(page);
 		return;
 	}
+	vma->vm_task->mm->rss++;
+	vma->vm_task->mm->maj_flt++;
 	if (!write_access && add_to_swap_cache(page, entry)) {
 		*page_table = mk_pte(page, vma->vm_page_prot);
 		return;
@@ -554,6 +556,10 @@ static inline void remove_mem_queue(struct mem_list * head, struct mem_list * en
  *
  * With the above two rules, you get a straight-line execution path
  * for the normal case, giving better asm-code.
+ *
+ * free_page() may sleep since the page being freed may be a buffer
+ * page or present in the swap cache. It will not sleep, however,
+ * for a freshly allocated page (get_free_page()).
  */
 
 /*

@@ -54,7 +54,6 @@ extern void *sys_call_table;
 
 #ifdef CONFIG_FTAPE
 extern char * ftape_big_buffer;
-extern void (*do_floppy)(void);
 #endif
 
 #ifdef CONFIG_SCSI
@@ -256,7 +255,6 @@ struct symbol_table symbol_table = {
 #ifdef CONFIG_FTAPE
 	/* The next labels are needed for ftape driver.  */
 	X(ftape_big_buffer),
-	X(do_floppy),
 #endif
 	X(floppy_track_buffer),
 #ifdef CONFIG_INET

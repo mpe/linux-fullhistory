@@ -188,6 +188,12 @@ ifdef CONFIG_ATP
 NETDRV_OBJS := $(NETDRV_OBJS) atp.o
 endif
 
+ifdef CONFIG_DE4x5
+NETDRV_OBJS := $(NETDRV_OBJS) de4x5.o
+de4x5.o: de4x5.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4x5_OPTS) -c $<
+endif
+
 ifdef CONFIG_NI52
 NETDRV_OBJS := $(NETDRV_OBJS) ni52.o
 endif

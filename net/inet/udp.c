@@ -650,7 +650,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   		udp_statistics.UdpNoPorts++;
 		if (addr_type == IS_MYADDR) 
 		{
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
 		}
 		/*
 		 * Hmm.  We got an UDP broadcast to a port to which we

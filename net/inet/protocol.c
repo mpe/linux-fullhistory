@@ -40,7 +40,7 @@
 #include "sock.h"
 #include "icmp.h"
 #include "udp.h"
-#include "igmp.h"
+#include <linux/igmp.h>
 
 
 static struct inet_protocol tcp_protocol = {

@@ -700,6 +700,10 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&
 	    !suser())
 		return -EPERM;
+	if (resource == RLIMIT_NOFILE) {
+		if (new_rlim.rlim_cur > NR_OPEN || new_rlim.rlim_max > NR_OPEN)
+			return -EPERM;
+	}
 	*old_rlim = new_rlim;
 	return 0;
 }

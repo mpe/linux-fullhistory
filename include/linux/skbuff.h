@@ -75,6 +75,7 @@ struct sk_buff {
 #define PACKET_MULTICAST	2
 #define PACKET_OTHERHOST	3		/* Unmatched promiscuous */
   unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
+  unsigned short		pkt_class;	/* For drivers that need to cache the packet type with the skbuff (new PPP) */
 #ifdef CONFIG_SLAVE_BALANCING
   unsigned short		in_dev_queue;
 #endif  

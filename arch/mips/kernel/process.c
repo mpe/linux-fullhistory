@@ -44,7 +44,7 @@ asmlinkage int sys_idle(void)
 #if 0
 	/* Map out the low memory: it's no longer needed */
 	for (i = 0 ; i < 512 ; i++)
-		swapper_pg_dir[i] = 0;
+		pgd_clear(swapper_pg_dir + i);
 #endif
 
 	/* endless idle loop with no priority at all */

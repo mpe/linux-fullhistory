@@ -12,6 +12,8 @@
  *		Donald Becker, <becker@super.org>
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  *		Richard Underwood
+ *		Stefan Becker, <stefanb@yello.ping.de>
+ *		
  *
  * Fixes:
  *		Alan Cox	:	Commented a couple of minor bits of surplus code
@@ -65,6 +67,8 @@
  *		Alan Cox	:	Use notifiers.
  *		Bjorn Ekwall	:	Removed ip_csum (from slhc.c too)
  *		Bjorn Ekwall	:	Moved ip_fast_csum to ip.h (inline!)
+ *		Stefan Becker   :       Send out ICMP HOST REDIRECT
+ *  
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -110,7 +114,7 @@
 #include "arp.h"
 #include "icmp.h"
 #include "raw.h"
-#include "igmp.h"
+#include <linux/igmp.h>
 #include <linux/ip_fw.h>
 
 #define CONFIG_IP_DEFRAG
@@ -688,7 +692,7 @@ static void ip_expire(unsigned long arg)
 	/* This if is always true... shrug */
 	if(qp->fragments!=NULL)
 		icmp_send(qp->fragments->skb,ICMP_TIME_EXCEEDED,
-				ICMP_EXC_FRAGTIME, qp->dev);
+				ICMP_EXC_FRAGTIME, 0, qp->dev);
 
 	/*
 	 *	Nuke the fragment queue.
@@ -1113,8 +1117,11 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 
 	if (ntohs(iph->frag_off) & IP_DF)
 	{
+		/*
+		 *	Reply giving the MTU of the failed hop.
+		 */
 		ip_statistics.IpFragFails++;
-		icmp_send(skb,ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev);
+		icmp_send(skb,ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev->mtu, dev);
 		return;
 	}
 
@@ -1127,7 +1134,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	if(mtu<8)
 	{
 		/* It's wrong but its better than nothing */
-		icmp_send(skb,ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED,dev);
+		icmp_send(skb,ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED,dev->mtu, dev);
 		ip_statistics.IpFragFails++;
 		return;
 	}
@@ -1282,7 +1289,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	if (iph->ttl <= 0)
 	{
 		/* Tell the sender its packet died... */
-		icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, dev);
+		icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0, dev);
 		return;
 	}
 
@@ -1306,7 +1313,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 		 *	Tell the sender its packet cannot be delivered. Again
 		 *	ICMP is screened later.
 		 */
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, dev);
+		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);
 		return;
 	}
 
@@ -1333,7 +1340,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 			/*
 			 *	Tell the sender its packet cannot be delivered...
 			 */
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, dev);
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
 			return;
 		}
 		if (rt->rt_gateway != 0)
@@ -1349,14 +1356,17 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	dev2 = rt->rt_dev;
 
 	/*
-	 *	In IP you never forward a frame on the interface that it arrived
-	 *	upon. We should generate an ICMP HOST REDIRECT giving the route
+	 *	In IP you never have to forward a frame on the interface that it 
+	 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
 	 *	we calculated.
-	 *	For now just dropping the packet is an acceptable compromise.
 	 */
-
+#ifdef IP_NO_ICMP_REDIRECT
 	if (dev == dev2)
 		return;
+#else
+	if (dev == dev2)
+		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
+#endif		
 
 	/*
 	 * We now allocate a new buffer, and copy the datagram into it.
@@ -1708,7 +1718,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	else if (!flag)		/* Free and report errors */
 	{
 		if (brd != IS_BROADCAST && brd!=IS_MULTICAST)
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0, dev);
 		kfree_skb(skb, FREE_WRITE);
 	}
 

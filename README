@@ -111,11 +111,12 @@ COMPILING the kernel:
  - keep a backup kernel handy in case something goes wrong. 
 
  - In order to boot your new kernel, you'll need to copy the kernel
-   image (found in /usr/src/linux/zImage after compilation) to the place
-   where your regular bootable kernel is found. 
+   image (found in /usr/src/linux/arch/i386/boot/zImage after compilation)
+   to the place where your regular bootable kernel is found. 
 
    For some, this is on a floppy disk, in which case you can "cp
-   /usr/src/linux/zImage /dev/fd0" to make a bootable floppy. 
+   /usr/src/linux/arch/i386/boot/zImage /dev/fd0" to make a bootable
+   floppy. 
 
    If you boot Linux from the hard drive, chances are you use LILO which
    uses the kernel image as specified in the file /etc/lilo/config.  The

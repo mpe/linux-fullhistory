@@ -34,21 +34,16 @@ static inline void console_verbose(void)
 
 #define get_seg_byte(seg,addr) ({ \
 register unsigned char __res; \
-int unsigned long save; \
-save = segment_fs; \
 __res = get_user_byte(addr); \
-segment_fs = save; \
 __res;})
 
 #define get_seg_long(seg,addr) ({ \
 register unsigned long __res; \
-int unsigned long save; \
-save = segment_fs; \
 __res = get_user_word(addr); \
-segment_fs = save; \
 __res;})
 
-extern asmlinkage void handle_int(void);
+extern asmlinkage void deskstation_tyne_handle_int(void);
+extern asmlinkage void acer_pica_61_handle_int(void);
 extern asmlinkage void handle_mod(void);
 extern asmlinkage void handle_tlbl(void);
 extern asmlinkage void handle_tlbs(void);
@@ -373,6 +368,12 @@ void trap_init(void)
 	 */
 	switch(boot_info.machtype) {
 	case MACH_DESKSTATION_TYNE:
-		set_except_vector(0, handle_int);
+		set_except_vector(0, deskstation_tyne_handle_int);
+		break;
+	case MACH_ACER_PICA_61:
+		set_except_vector(0, acer_pica_61_handle_int);
+		break;
+	default:
+		panic("Unknown machine type");
 		}
 }

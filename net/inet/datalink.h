@@ -4,7 +4,7 @@
 struct datalink_proto {
 	unsigned short	type_len;
 	unsigned char	type[8];
-	unsigned short	datalink_type;
+	char		*string_name;
 	unsigned short	header_length;
 	int	(*rcvfunc)(struct sk_buff *, struct device *, 
 				struct packet_type *);

@@ -69,6 +69,13 @@
 #define BLANK 0x0020
 #define CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
 
+/* A bitmap for codes <32. A bit of 1 indicates that the code
+ * corresponding to that bit number invokes some special action
+ * (such as cursor movement) and should not be displayed as a
+ * glyph unless the disp_ctrl mode is explicitly enabled.
+ */
+#define CTRL_ACTION 0xd00ff80
+
 /*
  *  NOTE!!! We sometimes disable and enable interrupts for a short while
  * (to put a word in video IO), but this will work even for keyboard
@@ -1143,6 +1150,9 @@ static void set_mode(int currcons, int on_off)
 				report_mouse = on_off ? 2 : 0;
 				break;
 		} else switch(par[i]) {		/* ANSI modes set/reset */
+			case 3:			/* Monitor (display ctrls) */
+				disp_ctrl = on_off;
+				break;
 			case 4:			/* Insert Mode on/off */
 				decim = on_off;
 				break;
@@ -1312,7 +1322,7 @@ static void reset_terminal(int currcons, int do_clear)
 	utf             = 0;
 	utf_count       = 0;
 
-	disp_ctrl	= 1;
+	disp_ctrl	= 0;
 	toggle_meta	= 0;
 
 	decscnm		= 0;
@@ -1445,9 +1455,15 @@ static int con_write(struct tty_struct * tty, int from_user,
 		    ok = 0;
 		}
 
-		/* Can print ibm (even if 0), and latin1 provided
-		   it is a printing char or control chars are printed ^@ */
-		if (!ok && tc && (c >= 32 || (disp_ctrl && (c&0x7f) != 27)))
+		/* If the original code was < 32 we only allow a
+		 * glyph to be displayed if the code is not normally
+		 * used (such as for cursor movement) or if the
+		 * disp_ctrl mode has been explicitly enabled.
+		 * Note: ESC is *never* allowed to be displayed as
+		 * that would disable all escape sequences!
+		 */
+		if (!ok && tc && (c >= 32 || (disp_ctrl && c != 0x1b)
+		|| !((CTRL_ACTION >> c) & 1)))
 		    ok = 1;
 
 		if (vc_state == ESnormal && ok) {
@@ -1497,10 +1513,12 @@ static int con_write(struct tty_struct * tty, int from_user,
 			case 14:
 				charset = 1;
 				translate = G1_charset;
+				disp_ctrl = 1;
 				continue;
 			case 15:
 				charset = 0;
 				translate = G0_charset;
+				disp_ctrl = 0;
 				continue;
 			case 24: case 26:
 				vc_state = ESnormal;

@@ -319,7 +319,7 @@ static int umsdos_rename_f(
 	int flags)		/* 0 == copy flags from old_name */
 					/* != 0, this is the value of flags */
 {
-	int ret = EPERM;
+	int ret = -EPERM;
 	struct umsdos_info old_info;
 	int old_ret = umsdos_parse (old_name,old_len,&old_info);
 	struct umsdos_info new_info;
@@ -334,58 +334,79 @@ chkstk();
 chkstk();
 		PRINTK (("ret %d ",ret));
 		if (ret == 0){
-			PRINTK (("new newentry "));
-			umsdos_ren_init(&new_info,&old_info,flags);
-			ret = umsdos_newentry (new_dir,&new_info);
+			/* check sticky bit on old_dir */
+			if ( !(old_dir->i_mode & S_ISVTX) || fsuser() ||
+			    current->fsuid == old_info.entry.uid ||
+			    current->fsuid == old_dir->i_uid ) {
+				/* Does new_name already exist? */
+				PRINTK(("new findentry "));
+				ret = umsdos_findentry(new_dir,&new_info,0);
+				if (ret != 0 || /* if destination file exists, are we allowed to replace it ? */
+				    !(new_dir->i_mode & S_ISVTX) || fsuser() ||
+				    current->fsuid == new_info.entry.uid ||
+				    current->fsuid == new_dir->i_uid ) {
+					PRINTK (("new newentry "));
+					umsdos_ren_init(&new_info,&old_info,flags);
+					ret = umsdos_newentry (new_dir,&new_info);
 chkstk();
-			PRINTK (("ret %d %d ",ret,new_info.fake.len));
-			if (ret == 0){
-				PRINTK (("msdos_rename "));
-				old_dir->i_count++;
-				new_dir->i_count++;	/* Both inode are needed later */
-				ret = msdos_rename (old_dir
-					,old_info.fake.fname,old_info.fake.len
-					,new_dir
-					,new_info.fake.fname,new_info.fake.len);
-chkstk();
-				PRINTK (("after m_rename ret %d ",ret));
-				if (ret != 0){
-					umsdos_delentry (new_dir,&new_info
-						,S_ISDIR(new_info.entry.mode));
-chkstk();
-				}else{
-					ret = umsdos_delentry (old_dir,&old_info
-						,S_ISDIR(old_info.entry.mode));
-chkstk();
+					PRINTK (("ret %d %d ",ret,new_info.fake.len));
 					if (ret == 0){
-						/*
-							This UMSDOS_lookup does not look very useful.
-							It makes sure that the inode of the file will
-							be correctly setup (umsdos_patch_inode()) in
-							case it is already in use.
-
-							Not very efficient ...
-						*/
-						struct inode *inode;
-						new_dir->i_count++;
-						PRINTK (("rename lookup len %d %d -- ",new_len,new_info.entry.flags));
-						ret = UMSDOS_lookup (new_dir,new_name,new_len
-							,&inode);
+						PRINTK (("msdos_rename "));
+						old_dir->i_count++;
+						new_dir->i_count++;	/* Both inode are needed later */
+						ret = msdos_rename (old_dir
+								    ,old_info.fake.fname,old_info.fake.len
+								    ,new_dir
+								    ,new_info.fake.fname,new_info.fake.len);
 chkstk();
+						PRINTK (("after m_rename ret %d ",ret));
 						if (ret != 0){
-							printk ("UMSDOS: partial rename for file %s\n"
-								,new_info.entry.name);
-						}else{
-							/*
-								Update f_pos so notify_change will succeed
-								if the file was already in use.
-							*/
-							umsdos_set_dirinfo (inode,new_dir,new_info.f_pos);
+							umsdos_delentry (new_dir,&new_info
+									 ,S_ISDIR(new_info.entry.mode));
 chkstk();
-							iput (inode);
+						}else{
+							ret = umsdos_delentry (old_dir,&old_info
+									       ,S_ISDIR(old_info.entry.mode));
+chkstk();
+							if (ret == 0){
+								/*
+								   This UMSDOS_lookup does not look very useful.
+								   It makes sure that the inode of the file will
+								   be correctly setup (umsdos_patch_inode()) in
+								   case it is already in use.
+								   
+								   Not very efficient ...
+								   */
+								struct inode *inode;
+								new_dir->i_count++;
+								PRINTK (("rename lookup len %d %d -- ",new_len,new_info.entry.flags));
+								ret = UMSDOS_lookup (new_dir,new_name,new_len
+										     ,&inode);
+chkstk();
+								if (ret != 0){
+									printk ("UMSDOS: partial rename for file %s\n"
+										,new_info.entry.name);
+								}else{
+									/*
+									   Update f_pos so notify_change will succeed
+									   if the file was already in use.
+									   */
+									umsdos_set_dirinfo (inode,new_dir,new_info.f_pos);
+chkstk();
+									iput (inode);
+								}
+							}
 						}
 					}
+				}else{
+					/* sticky bit set on new_dir */
+					PRINTK(("sticky set on new "));
+					ret = -EPERM;
 				}
+			}else{
+				/* sticky bit set on old_dir */
+				PRINTK(("sticky set on old "));
+				ret = -EPERM;
 			}
 		}
 		umsdos_unlockcreate(old_dir);
@@ -858,28 +879,37 @@ int UMSDOS_rmdir(
 				ret = -EBUSY;
 			}else if ((empty = umsdos_isempty (sdir)) != 0){
 				PRINTK (("isempty %d i_count %d ",empty,sdir->i_count));
-				if (empty == 1){
-					/* We have to removed the EMD file */
-					ret = msdos_unlink(sdir,UMSDOS_EMD_FILE
-						,UMSDOS_EMD_NAMELEN);
-					sdir = NULL;
-				}
-				/* sdir must be free before msdos_rmdir() */
-				iput (sdir);
-				sdir = NULL;
-				PRINTK (("isempty ret %d nlink %d ",ret,dir->i_nlink));
-				if (ret == 0){
-					struct umsdos_info info;
-					dir->i_count++;
-					umsdos_parse (name,len,&info);
-					/* The findentry is there only to complete */
-					/* the mangling */
-					umsdos_findentry (dir,&info,2);
-					ret = msdos_rmdir (dir,info.fake.fname
-						,info.fake.len);
-					if (ret == 0){
-						ret = umsdos_delentry (dir,&info,1);
+				/* check sticky bit */
+				if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
+				    current->fsuid == sdir->i_uid ||
+				    current->fsuid == dir->i_uid ) {
+					if (empty == 1){
+						/* We have to removed the EMD file */
+						ret = msdos_unlink(sdir,UMSDOS_EMD_FILE
+								   ,UMSDOS_EMD_NAMELEN);
+						sdir = NULL;
 					}
+					/* sdir must be free before msdos_rmdir() */
+					iput (sdir);
+					sdir = NULL;
+					PRINTK (("isempty ret %d nlink %d ",ret,dir->i_nlink));
+					if (ret == 0){
+						struct umsdos_info info;
+						dir->i_count++;
+						umsdos_parse (name,len,&info);
+						/* The findentry is there only to complete */
+						/* the mangling */
+						umsdos_findentry (dir,&info,2);
+						ret = msdos_rmdir (dir,info.fake.fname
+								   ,info.fake.len);
+						if (ret == 0){
+							ret = umsdos_delentry (dir,&info,1);
+						}
+					}
+				}else{
+					/* sticky bit set and we don't have permission */
+					PRINTK(("sticky set "));
+					ret = -EPERM;
 				}
 			}else{	
 				/*
@@ -903,63 +933,72 @@ int UMSDOS_unlink (
 	const char * name,
 	int len)
 {
-	struct umsdos_info info;
 	int ret = umsdos_nevercreat(dir,name,len,-EPERM);
 	if (ret == 0){
+		struct umsdos_info info;
 		ret = umsdos_parse (name,len,&info);
 		if (ret == 0){
 			umsdos_lockcreate(dir);
 			ret = umsdos_findentry(dir,&info,1);
 			if (ret == 0){
 				PRINTK (("UMSDOS_unlink %s ",info.fake.fname));
-				if (info.entry.flags & UMSDOS_HLINK){
-					/* #Specification: hard link / deleting a link
-						When we deletes a file, and this file is a link
-						we must subtract 1 to the nlink field of the
-						hidden link.
-
-						If the count goes to 0, we delete this hidden
-						link too.
-					*/
-					/*
-						First, get the inode of the hidden link
-						using the standard lookup function.
-					*/
-					struct inode *inode;
-					dir->i_count++;
-					ret = UMSDOS_lookup (dir,name,len,&inode);
-					if (ret == 0){
-						PRINTK (("unlink nlink = %d ",inode->i_nlink));
-						inode->i_nlink--;
-						if (inode->i_nlink == 0){
-							struct inode *hdir = iget(inode->i_sb
-								,inode->u.umsdos_i.i_dir_owner);
-							struct umsdos_dirent entry;
-							ret = umsdos_inode2entry (hdir,inode,&entry);
-							if (ret == 0){
-								ret = UMSDOS_unlink (hdir,entry.name
-									,entry.name_len);
-							}else{
-								iput (hdir);
-							}
-						}else{
-							struct iattr newattrs;
-							newattrs.ia_valid = 0;
-							ret = UMSDOS_notify_change (inode, &newattrs);
-						}
-						iput (inode);
-					}
-				}
-				if (ret == 0){
-					ret = umsdos_delentry (dir,&info,0);
-					if (ret == 0){
-						PRINTK (("Avant msdos_unlink %s ",info.fake.fname));
+				/* check sticky bit */
+				if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
+				    current->fsuid == info.entry.uid ||
+				    current->fsuid == dir->i_uid ) {
+					if (info.entry.flags & UMSDOS_HLINK){
+						/* #Specification: hard link / deleting a link
+						   When we deletes a file, and this file is a link
+						   we must subtract 1 to the nlink field of the
+						   hidden link.
+						   
+						   If the count goes to 0, we delete this hidden
+						   link too.
+						   */
+						/*
+						   First, get the inode of the hidden link
+						   using the standard lookup function.
+						   */
+						struct inode *inode;
 						dir->i_count++;
-						ret = msdos_unlink_umsdos (dir,info.fake.fname
-							,info.fake.len);
-						PRINTK (("msdos_unlink %s %o ret %d ",info.fake.fname
-							,info.entry.mode,ret));
+						ret = UMSDOS_lookup (dir,name,len,&inode);
+						if (ret == 0){
+							PRINTK (("unlink nlink = %d ",inode->i_nlink));
+							inode->i_nlink--;
+							if (inode->i_nlink == 0){
+								struct inode *hdir = iget(inode->i_sb
+											  ,inode->u.umsdos_i.i_dir_owner);
+								struct umsdos_dirent entry;
+								ret = umsdos_inode2entry (hdir,inode,&entry);
+								if (ret == 0){
+									ret = UMSDOS_unlink (hdir,entry.name
+											     ,entry.name_len);
+								}else{
+									iput (hdir);
+								}
+							}else{
+								struct iattr newattrs;
+								newattrs.ia_valid = 0;
+								ret = UMSDOS_notify_change (inode, &newattrs);
+							}
+							iput (inode);
+						}
 					}
+					if (ret == 0){
+						ret = umsdos_delentry (dir,&info,0);
+						if (ret == 0){
+							PRINTK (("Avant msdos_unlink %s ",info.fake.fname));
+							dir->i_count++;
+							ret = msdos_unlink_umsdos (dir,info.fake.fname
+										   ,info.fake.len);
+							PRINTK (("msdos_unlink %s %o ret %d ",info.fake.fname
+								 ,info.entry.mode,ret));
+						}
+					}
+				}else{
+					/* sticky bit set and we've not got permission */
+					PRINTK(("sticky set "));
+					ret = -EPERM;
 				}
 			}
 			umsdos_unlockcreate(dir);
@@ -1002,7 +1041,7 @@ int UMSDOS_rename(
 			,new_len,0);
 		if (ret == -EEXIST){
 			/* #Specification: rename / new name exist
-				If the destination name already exist, it will
+			        If the destination name already exist, it will
 				silently be removed. EXT2 does it this way
 				and this is the spec of SUNOS. So does UMSDOS.
 
