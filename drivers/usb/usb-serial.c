@@ -1347,6 +1347,8 @@ static int ftdi_sio_ioctl (struct tty_struct *tty, struct file * file, unsigned 
 					       urb_value , 0,
 					       buf, 0, HZ * 5));
 	}
+
+	return -ENOIOCTLCMD;
 }
 
 #endif	/* CONFIG_USB_SERIAL_FTDI_SIO */

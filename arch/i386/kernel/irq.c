@@ -199,13 +199,13 @@ static void show(char * str)
 		printk(" %d",local_bh_count(i));
 
 	printk(" ]\nStack dumps:");
-	for(i=0;i< smp_num_cpus;i++) {
+	for(i = 0; i < smp_num_cpus; i++) {
 		unsigned long esp;
-		if(i==cpu)
+		if (i == cpu)
 			continue;
 		printk("\nCPU %d:",i);
 		esp = init_tss[i].esp0;
-		if(esp==NULL) {
+		if (!esp) {
 			/* tss->esp0 is set to NULL in cpu_init(),
 			 * it's initialized when the cpu returns to user
 			 * space. -- manfreds

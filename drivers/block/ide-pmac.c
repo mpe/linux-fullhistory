@@ -420,7 +420,7 @@ pmac_ide_probe(void)
 		hwif = &ide_hwifs[i];
 		pmac_ide_init_hwif_ports(&hwif->hw, base, 0, &hwif->irq);
 		memcpy(hwif->io_ports, hwif->hw.io_ports, sizeof(hwif->io_ports));
-		hwif->chipset = ide_generic;
+		hwif->chipset = ide_pmac;
 		hwif->noprobe = !hwif->io_ports[IDE_DATA_OFFSET];
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC

@@ -217,6 +217,7 @@
 #define ENDEC_LOOPBACK 0x0200
 #define AUI_LOOPBACK 0x0400
 #define BACKOFF_OFF 0x0800
+#define FDX_8900 0x4000
 #define FAST_TEST 0x8000
 
 /* PP_RxEvent - Receive Event Bit definition - Read-only */

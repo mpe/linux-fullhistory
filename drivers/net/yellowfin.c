@@ -1263,7 +1263,7 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 	real_ioaddr = ioaddr = pci_resource_start (pdev, 0);
 #else
 	real_ioaddr = ioaddr = pci_resource_start (pdev, 1);
-	ioaddr = ioremap(ioaddr, YELLOWFIN_SIZE);
+	ioaddr = (long) ioremap(ioaddr, YELLOWFIN_SIZE);
 #endif
 	irq = pdev->irq;
 

@@ -3,7 +3,7 @@
 #
 
 mainmenu_option next_comment
-comment 'Token Ring driver support'
+comment 'Token Ring devices'
 
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" != "n" ]; then

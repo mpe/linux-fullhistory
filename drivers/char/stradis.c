@@ -28,6 +28,7 @@
 #include <linux/major.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/pci.h>
 #include <linux/signal.h>
@@ -2236,13 +2237,9 @@ static void release_saa(void)
 	}
 }
 
-#ifdef MODULE
-int init_module(void)
+
+static int __init stradis_init (void)
 {
-#else
-int init_stradis_cards(struct video_init *unused)
-{
-#endif
 	struct pci_dev *dev = NULL;
 	int result = 0, i;
 
@@ -2269,11 +2266,14 @@ int init_stradis_cards(struct video_init *unused)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+
+static void __exit stradis_exit (void)
 {
 	release_saa();
 	printk(KERN_INFO "stradis: module cleanup complete\n");
 }
 
-#endif
+
+module_init(stradis_init);
+module_exit(stradis_exit);
+

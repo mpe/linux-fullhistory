@@ -114,9 +114,9 @@ static struct device_node *allnodes = 0;
 static void clearscreen(void);
 static void flushscreen(void);
 
-void drawchar(char c);
-void drawstring(const char *c);
-static void drawhex(unsigned long v);
+void prom_drawchar(char c);
+void prom_drawstring(const char *c);
+void prom_drawhex(unsigned long v);
 static void scrollscreen(void);
 
 static void draw_byte(unsigned char c, long locX, long locY);
@@ -133,6 +133,8 @@ static long				g_max_loc_Y = 0;
 #define cmapsz	(16*256)
 
 static unsigned char vga_font[cmapsz];
+
+int bootx_text_mapped = 1;
 
 #endif /* CONFIG_BOOTX_TEXT */
 
@@ -257,7 +259,7 @@ prom_print(const char *msg)
 	{
 #ifdef CONFIG_BOOTX_TEXT
 		if (RELOC(disp_bi) != 0)
-			drawstring(msg);
+			prom_drawstring(msg);
 #endif
 		return;
 	}		
@@ -385,6 +387,7 @@ prom_init(int r3, int r4, prom_entry pp)
 #ifdef CONFIG_BOOTX_TEXT
 		prom_print(RELOC("booting...\n"));
 		flushscreen();
+		RELOC(bootx_text_mapped) = 0;
 #endif
 		return phys;
 	}
@@ -633,6 +636,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		prom_welcome(PTRRELOC(RELOC(disp_bi)), phys);
 		prom_print(RELOC("booting...\n"));
 	}
+	RELOC(bootx_text_mapped) = 0;
 #endif
 
 	return phys;
@@ -648,28 +652,30 @@ prom_welcome(boot_infos_t* bi, unsigned long phys)
 	
 	prom_print(RELOC("Welcome to Linux, kernel " UTS_RELEASE "\n"));
 	prom_print(RELOC("\nstarted at       : 0x"));
-	drawhex(phys);
+	prom_drawhex(phys);
 	prom_print(RELOC("\nlinked at        : 0x"));
-	drawhex(KERNELBASE);
+	prom_drawhex(KERNELBASE);
 	prom_print(RELOC("\nframe buffer at  : 0x"));
-	drawhex((unsigned long)bi->dispDeviceBase);
+	prom_drawhex((unsigned long)bi->dispDeviceBase);
 	prom_print(RELOC(" (phys), 0x"));
-	drawhex((unsigned long)bi->logicalDisplayBase);
+	prom_drawhex((unsigned long)bi->logicalDisplayBase);
 	prom_print(RELOC(" (log)"));
+	prom_print(RELOC("\nklimit           : 0x"));
+	prom_drawhex(RELOC(klimit));
 	prom_print(RELOC("\nMSR              : 0x"));
 	__asm__ __volatile__ ("mfmsr %0" : "=r" (flags));
-	drawhex(flags);
+	prom_drawhex(flags);
 	__asm__ __volatile__ ("mfspr %0, 287" : "=r" (pvr));
 	pvr >>= 16;
 	if (pvr > 1) {
 	    prom_print(RELOC("\nHID0             : 0x"));
 	    __asm__ __volatile__ ("mfspr %0, 1008" : "=r" (flags));
-	    drawhex(flags);
+	    prom_drawhex(flags);
 	}
 	if (pvr == 8 || pvr == 12) {
 	    prom_print(RELOC("\nICTC             : 0x"));
 	    __asm__ __volatile__ ("mfspr %0, 1019" : "=r" (flags));
-	    drawhex(flags);
+	    prom_drawhex(flags);
 	}
 	prom_print(RELOC("\n\n"));
 }
@@ -807,13 +813,18 @@ setup_disp_fake_bi(ihandle dp)
 	
 	prom_print(RELOC("Initializing fake screen\n"));
 
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("width"), &width, sizeof(width));
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("height"), &height, sizeof(height));
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("depth"), &len, sizeof(len));
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("width"),
+		  &width, sizeof(width));
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("height"),
+		  &height, sizeof(height));
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("depth"),
+		  &depth, sizeof(depth));
 	pitch = width * ((depth + 7) / 8);
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("linebytes"), &len, sizeof(len));
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("linebytes"),
+		  &pitch, sizeof(pitch));
 	address = 0;
-	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("address"), &len, sizeof(len));
+	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("address"),
+		  &address, sizeof(address));
 	if (address == 0) {
 		prom_print(RELOC("Failed to get address\n"));
 		return;
@@ -837,7 +848,6 @@ setup_disp_fake_bi(ihandle dp)
 	bi->dispDeviceRect[0] = bi->dispDeviceRect[1] = 0;
 	bi->dispDeviceRect[2] = width;
 	bi->dispDeviceRect[3] = height;
-	RELOC(disp_bi) = 0;
 }
 #endif
 
@@ -1844,6 +1854,7 @@ map_bootx_text(void)
 	disp_bi->logicalDisplayBase =
 		ioremap((unsigned long) disp_bi->dispDeviceBase,
 			disp_bi->dispDeviceRowBytes * disp_bi->dispDeviceRect[3]);
+	bootx_text_mapped = 1;
 }
 
 /* Calc the base address of a given point (x,y) */
@@ -1940,10 +1951,13 @@ scrollscreen(void)
 
 __pmac
 void
-drawchar(char c)
+prom_drawchar(char c)
 {
 	unsigned long offset = reloc_offset();
 	int cline = 0, x;
+
+	if (!RELOC(bootx_text_mapped))
+		return;
 
 	switch (c) {
 	case '\b':
@@ -1988,27 +2002,33 @@ drawchar(char c)
 
 __pmac
 void
-drawstring(const char *c)
+prom_drawstring(const char *c)
 {
+	unsigned long offset	= reloc_offset();
+
+	if (!RELOC(bootx_text_mapped))
+		return;
 	while (*c)
-		drawchar(*c++);
+		prom_drawchar(*c++);
 }
 
 __pmac
-static void
-drawhex(unsigned long v)
+void
+prom_drawhex(unsigned long v)
 {
 	static char hex_table[] = "0123456789abcdef";
 	unsigned long offset	= reloc_offset();
 	
-	drawchar(RELOC(hex_table)[(v >> 28) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >> 24) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >> 20) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >> 16) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >> 12) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >>  8) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >>  4) & 0x0000000FUL]);
-	drawchar(RELOC(hex_table)[(v >>  0) & 0x0000000FUL]);
+	if (!RELOC(bootx_text_mapped))
+		return;
+	prom_drawchar(RELOC(hex_table)[(v >> 28) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >> 24) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >> 20) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >> 16) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >> 12) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >>  8) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >>  4) & 0x0000000FUL]);
+	prom_drawchar(RELOC(hex_table)[(v >>  0) & 0x0000000FUL]);
 }
 
 

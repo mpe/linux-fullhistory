@@ -45,7 +45,9 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/irq.h>
+#include <linux/proc_fs.h>
 
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/hydra.h>
 #include <asm/system.h>
@@ -611,3 +613,160 @@ void __global_restore_flags(unsigned long flags)
 }
 #endif /* __SMP__ */
 
+static struct proc_dir_entry * root_irq_dir;
+static struct proc_dir_entry * irq_dir [NR_IRQS];
+static struct proc_dir_entry * smp_affinity_entry [NR_IRQS];
+
+unsigned int irq_affinity [NR_IRQS] = { [0 ... NR_IRQS-1] = 0xffffffff};
+
+#define HEX_DIGITS 8
+
+static int irq_affinity_read_proc (char *page, char **start, off_t off,
+			int count, int *eof, void *data)
+{
+	if (count < HEX_DIGITS+1)
+		return -EINVAL;
+	return sprintf (page, "%08x\n", irq_affinity[(int)data]);
+}
+
+static unsigned int parse_hex_value (const char *buffer,
+		unsigned long count, unsigned long *ret)
+{
+	unsigned char hexnum [HEX_DIGITS];
+	unsigned long value;
+	int i;
+
+	if (!count)
+		return -EINVAL;
+	if (count > HEX_DIGITS)
+		count = HEX_DIGITS;
+	if (copy_from_user(hexnum, buffer, count))
+		return -EFAULT;
+
+	/*
+	 * Parse the first 8 characters as a hex string, any non-hex char
+	 * is end-of-string. '00e1', 'e1', '00E1', 'E1' are all the same.
+	 */
+	value = 0;
+
+	for (i = 0; i < count; i++) {
+		unsigned int c = hexnum[i];
+
+		switch (c) {
+			case '0' ... '9': c -= '0'; break;
+			case 'a' ... 'f': c -= 'a'-10; break;
+			case 'A' ... 'F': c -= 'A'-10; break;
+		default:
+			goto out;
+		}
+		value = (value << 4) | c;
+	}
+out:
+	*ret = value;
+	return 0;
+}
+
+static int irq_affinity_write_proc (struct file *file, const char *buffer,
+					unsigned long count, void *data)
+{
+	int irq = (int) data, full_count = count, err;
+	unsigned long new_value;
+
+	if (!irq_desc[irq].handler->set_affinity)
+		return -EIO;
+
+	err = parse_hex_value(buffer, count, &new_value);
+
+#if CONFIG_SMP
+	/*
+	 * Do not allow disabling IRQs completely - it's a too easy
+	 * way to make the system unusable accidentally :-) At least
+	 * one online CPU still has to be targeted.
+	 */
+	if (!(new_value & cpu_online_map))
+		return -EINVAL;
+#endif
+
+	irq_affinity[irq] = new_value;
+	irq_desc[irq].handler->set_affinity(irq, new_value);
+
+	return full_count;
+}
+
+static int prof_cpu_mask_read_proc (char *page, char **start, off_t off,
+			int count, int *eof, void *data)
+{
+	unsigned long *mask = (unsigned long *) data;
+	if (count < HEX_DIGITS+1)
+		return -EINVAL;
+	return sprintf (page, "%08lx\n", *mask);
+}
+
+static int prof_cpu_mask_write_proc (struct file *file, const char *buffer,
+					unsigned long count, void *data)
+{
+	unsigned long *mask = (unsigned long *) data, full_count = count, err;
+	unsigned long new_value;
+
+	err = parse_hex_value(buffer, count, &new_value);
+	if (err)
+		return err;
+
+	*mask = new_value;
+	return full_count;
+}
+
+#define MAX_NAMELEN 10
+
+static void register_irq_proc (unsigned int irq)
+{
+	struct proc_dir_entry *entry;
+	char name [MAX_NAMELEN];
+
+	if (!root_irq_dir || (irq_desc[irq].handler == NULL))
+		return;
+
+	memset(name, 0, MAX_NAMELEN);
+	sprintf(name, "%d", irq);
+
+	/* create /proc/irq/1234 */
+	irq_dir[irq] = proc_mkdir(name, root_irq_dir);
+
+	/* create /proc/irq/1234/smp_affinity */
+	entry = create_proc_entry("smp_affinity", 0700, irq_dir[irq]);
+
+	entry->nlink = 1;
+	entry->data = (void *)irq;
+	entry->read_proc = irq_affinity_read_proc;
+	entry->write_proc = irq_affinity_write_proc;
+
+	smp_affinity_entry[irq] = entry;
+}
+
+unsigned long prof_cpu_mask = -1;
+
+void init_irq_proc (void)
+{
+	struct proc_dir_entry *entry;
+	int i;
+
+	/* create /proc/irq */
+	root_irq_dir = proc_mkdir("irq", 0);
+
+	/* create /proc/irq/prof_cpu_mask */
+	entry = create_proc_entry("prof_cpu_mask", 0700, root_irq_dir);
+
+	entry->nlink = 1;
+	entry->data = (void *)&prof_cpu_mask;
+	entry->read_proc = prof_cpu_mask_read_proc;
+	entry->write_proc = prof_cpu_mask_write_proc;
+
+	/*
+	 * Create entries for all existing IRQs.
+	 */
+	for (i = 0; i < NR_IRQS; i++) {
+		if (irq_desc[i].handler == NULL)
+			continue;
+		register_irq_proc(i);
+	}
+}

@@ -131,11 +131,6 @@ char __init *pcibios_setup(char *str)
 	return str;
 }
 
-int pcibios_assign_resource(struct pci_dev *pdev, int resource)
-{
-	return 0;
-}
-
 /* the next two are stolen from the alpha port... */
 void __init
 pcibios_update_resource(struct pci_dev *dev, struct resource *root,
@@ -187,50 +182,5 @@ int pcibios_enable_device(struct pci_dev *dev)
 		       dev->slot_name, old_cmd, cmd);
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
-	return 0;
-}
-
-/*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.  We don't re-assign resources unless we are
- * forced to do so.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-
-int pci_assign_resource(struct pci_dev *dev, int i)
-{
-	struct resource *r = &dev->resource[i];
-	struct resource *pr = pci_find_parent_resource(dev, r);
-	unsigned long size = r->end + 1;
-	u32 new, check;
-
-	if (!pr) {
-		printk(KERN_ERR "PCI: Cannot find parent resource for device %s\n", dev->slot_name);
-		return -EINVAL;
-	}
-	if (r->flags & IORESOURCE_IO) {
-		if (allocate_resource(pr, r, size, 0x100, ~0, size, NULL, NULL)) {
-			printk(KERN_ERR "PCI: Allocation of I/O region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
-			return -EBUSY;
-		}
-	} else {
-		if (allocate_resource(pr, r, size, 0x10000, ~0, size, NULL, NULL)) {
-			printk(KERN_ERR "PCI: Allocation of memory region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
-			return -EBUSY;
-		}
-	}
-	if (i < 6) {
-		int reg = PCI_BASE_ADDRESS_0 + 4*i;
-		new = r->start | (r->flags & PCI_REGION_FLAG_MASK);
-		pci_write_config_dword(dev, reg, new);
-		pci_read_config_dword(dev, reg, &check);
-		if (new != check)
-			printk(KERN_ERR "PCI: Error while updating region %s/%d (%08x != %08x)\n", dev->slot_name, i, new, check);
-	} else if (i == PCI_ROM_RESOURCE) {
-		r->flags |= PCI_ROM_ADDRESS_ENABLE;
-		pci_write_config_dword(dev, dev->rom_base_reg, r->start | (r->flags & PCI_REGION_FLAG_MASK));
-	}
-	printk("PCI: Assigned addresses %08lx-%08lx to region %s/%d\n", r->start, r->end, dev->slot_name, i);
 	return 0;
 }

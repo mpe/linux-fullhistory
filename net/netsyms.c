@@ -586,6 +586,8 @@ EXPORT_SYMBOL(nf_register_queue_handler);
 EXPORT_SYMBOL(nf_unregister_queue_handler);
 EXPORT_SYMBOL(nf_hook_slow);
 EXPORT_SYMBOL(nf_hooks);
+EXPORT_SYMBOL(nf_setsockopt);
+EXPORT_SYMBOL(nf_getsockopt);
 #endif
 
 EXPORT_SYMBOL(register_gifconf);

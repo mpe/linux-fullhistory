@@ -233,6 +233,7 @@ typedef struct {
 #define DMA_WRITE_MAX_128	0xa0
 #define DMA_WRITE_MAX_256	0xc0
 #define DMA_WRITE_MAX_1K	0xe0
+#define DMA_READ_WRITE_MASK	0xfc
 #define MEM_READ_MULTIPLE	0x00020000
 #define PCI_66MHZ		0x00080000
 #define PCI_32BIT		0x00100000
@@ -635,6 +636,7 @@ struct ace_private
 	unsigned char		*trace_buf;
 	struct pci_dev		*pdev;
 	struct net_device	*next;
+	int			board_idx;
 	u16			pci_command;
 	u8			pci_latency;
 	char			name[48];
@@ -698,7 +700,7 @@ static inline void ace_set_txprd(struct ace_regs *regs,
 /*
  * Prototypes
  */
-static int ace_init(struct net_device *dev, int board_idx);
+static int ace_init(struct net_device *dev);
 static void ace_load_std_rx_ring(struct ace_private *ap, int nr_bufs);
 static void ace_load_mini_rx_ring(struct ace_private *ap, int nr_bufs);
 static void ace_load_jumbo_rx_ring(struct ace_private *ap, int nr_bufs);
@@ -717,8 +719,10 @@ extern int ace_recycle(struct sk_buff *skb);
 #endif
 static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int ace_set_mac_addr(struct net_device *dev, void *p);
+static void ace_set_rxtx_parms(struct net_device *dev, int jumbo);
 static int ace_allocate_descriptors(struct net_device *dev);
 static void ace_free_descriptors(struct net_device *dev);
+static void ace_init_cleanup(struct net_device *dev);
 static struct net_device_stats *ace_get_stats(struct net_device *dev);
 static int read_eeprom_byte(struct net_device *dev, unsigned long offset);
 

@@ -60,13 +60,13 @@
 #define TRIDENT_FMT_16BIT      0x02
 #define TRIDENT_FMT_MASK       0x03
 
-#define DMA_ENABLE	0x01
-#define DMA_RUNNING	0x02
-
+#define DAC_RUNNING	0x01
+#define ADC_RUNNING	0x02
 /* Register Addresses */
 
 /* operational registers common to DX, NX, 7018 */
 enum trident_op_registers {
+	T4D_REC_CH	= 0x70,
 	T4D_START_A     = 0x80, T4D_STOP_A      = 0x84,
 	T4D_DLY_A       = 0x88, T4D_SIGN_CSO_A  = 0x8c,
 	T4D_CSPF_A      = 0x90, T4D_CEBC_A      = 0x94,

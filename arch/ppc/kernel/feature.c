@@ -154,6 +154,9 @@ feature_init(void)
 {
 	struct device_node *np;
 
+	if (_machine != _MACH_Pmac)
+		return;
+
 	np = find_devices("mac-io");
 	while (np != NULL) {
 		/* KeyLargo contains several (5 ?) FCR registers in mac-io,

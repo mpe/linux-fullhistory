@@ -142,6 +142,8 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 #define	STLI_EISAPROBE	0
 
+static devfs_handle_t devfs_handle = NULL;
+
 /*****************************************************************************/
 
 /*
@@ -829,8 +831,6 @@ int init_module()
 }
 
 /*****************************************************************************/
-
-static devfs_handle_t devfs_handle = NULL;
 
 void cleanup_module()
 {

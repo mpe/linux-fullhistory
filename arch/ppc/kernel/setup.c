@@ -29,6 +29,7 @@
 #endif
 #include <asm/bootx.h>
 #include <asm/machdep.h>
+#include <asm/feature.h>
 #ifdef CONFIG_OAK
 #include "oak_setup.h"
 #endif /* CONFIG_OAK */
@@ -417,7 +418,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
 	parse_bootinfo();
-
+	
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
 	
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
@@ -687,6 +688,7 @@ void __init setup_arch(char **cmdline_p)
 
 	ppc_md.setup_arch();
 	if ( ppc_md.progress ) ppc_md.progress("arch: exit", 0x3eab);
+	paging_init();
 }
 
 void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
@@ -733,12 +735,12 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->eide_dma_time  = __le16_to_cpu(id->eide_dma_time);
 	id->eide_pio       = __le16_to_cpu(id->eide_pio);
 	id->eide_pio_iordy = __le16_to_cpu(id->eide_pio_iordy);
-	for (i=0; i<2 i++)
+	for (i=0; i<2; i++)
 		id->words69_70[i] = __le16_to_cpu(id->words69_70[i]);
-        for (i=0; i<4 i++)
+        for (i=0; i<4; i++)
                 id->words71_74[i] = __le16_to_cpu(id->words71_74[i]);
 	id->queue_depth	   = __le16_to_cpu(id->queue_depth);
-	for (i=0; i<4 i++)
+	for (i=0; i<4; i++)
 		id->words76_79[i] = __le16_to_cpu(id->words76_79[i]);
 	id->major_rev_num  = __le16_to_cpu(id->major_rev_num);
 	id->minor_rev_num  = __le16_to_cpu(id->minor_rev_num);

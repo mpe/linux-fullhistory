@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.37 2000/02/14 02:52:04 davem Exp $
+/* $Id: ultra.S,v 1.38 2000/03/03 23:48:44 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -35,7 +35,7 @@ __flush_tlb_mm: /* %o0=(ctx & 0x3ff), %o1=SECONDARY_CONTEXT */
 __flush_tlb_range: /* %o0=(ctx&0x3ff), %o1=start&PAGE_MASK, %o2=SECONDARY_CONTEXT,
 		    * %o3=end&PAGE_MASK, %o4=PAGE_SIZE, %o5=(end - start)
 		    */
-#define TLB_MAGIC	206 /* Students, do you know how I calculated this?  -DaveM */
+#define TLB_MAGIC	207 /* Students, do you know how I calculated this?  -DaveM */
 /*IC3*/	cmp		%o5, %o4
 	be,pt		%xcc, __flush_tlb_page
 	 srlx		%o5, 13, %g5
@@ -58,6 +58,12 @@ __flush_tlb_range_constant_time: /* %o0=ctx, %o1=start, %o3=end */
 	wrpr		%g1, PSTATE_IE, %pstate
 	mov		TLB_TAG_ACCESS, %g3
 	mov		(62 << 3), %g2
+
+	/* Spitfire Errata #32 workaround. */
+	mov		0x8, %o4
+	stxa		%g0, [%o4] ASI_DMMU
+	flush		%g6
+
 1:	ldxa		[%g2] ASI_ITLB_TAG_READ, %o4
 	and		%o4, 0x3ff, %o5
 	cmp		%o5, %o0
@@ -83,12 +89,27 @@ __flush_tlb_range_constant_time: /* %o0=ctx, %o1=start, %o3=end */
 	 wrpr		%g1, 0x0, %pstate
 4:	stxa		%g0, [%g3] ASI_IMMU
 	stxa		%g0, [%g2] ASI_ITLB_DATA_ACCESS
+	flush		%g6
+
+	/* Spitfire Errata #32 workaround. */
+	mov		0x8, %o4
+	stxa		%g0, [%o4] ASI_DMMU
+	flush		%g6
+
 	ba,pt		%xcc, 2b
-	 flush		%g6
+	 nop
+
 5:	stxa		%g0, [%g3] ASI_DMMU
 /*IC9*/	stxa		%g0, [%g2] ASI_DTLB_DATA_ACCESS
+	flush		%g6
+
+	/* Spitfire Errata #32 workaround. */
+	mov		0x8, %o4
+	stxa		%g0, [%o4] ASI_DMMU
+	flush		%g6
+
 	ba,pt		%xcc, 3b
-	 flush		%g6
+	 nop
 
 	.align		32
 __flush_tlb_mm_slow:
@@ -293,28 +314,51 @@ xcall_receive_signal:
 	 clr		%l6
 99:	retry
 
+	.data
+
+errata32_hwbug:
+	.xword	0
+
+	.text
+
 	/* These two are not performance critical... */
 	.globl		xcall_flush_tlb_all
 xcall_flush_tlb_all:
+
+	/* Spitfire Errata #32 workaround. */
+	sethi		%hi(errata32_hwbug), %g4
+	stx		%g0, [%g4 + %lo(errata32_hwbug)]
+
 	clr		%g2
 	clr		%g3
 1:	ldxa		[%g3] ASI_DTLB_DATA_ACCESS, %g4
 	and		%g4, _PAGE_L, %g5
 	brnz,pn		%g5, 2f
 	 mov		TLB_TAG_ACCESS, %g7
+
 	stxa		%g0, [%g7] ASI_DMMU
 	membar		#Sync
-
 	stxa		%g0, [%g3] ASI_DTLB_DATA_ACCESS
 	membar		#Sync
+
+	/* Spitfire Errata #32 workaround. */
+	sethi		%hi(errata32_hwbug), %g4
+	stx		%g0, [%g4 + %lo(errata32_hwbug)]
+
 2:	ldxa		[%g3] ASI_ITLB_DATA_ACCESS, %g4
 	and		%g4, _PAGE_L, %g5
 	brnz,pn		%g5, 2f
 	 mov		TLB_TAG_ACCESS, %g7
+
 	stxa		%g0, [%g7] ASI_IMMU
 	membar		#Sync
-
 	stxa		%g0, [%g3] ASI_ITLB_DATA_ACCESS
+	membar		#Sync
+
+	/* Spitfire Errata #32 workaround. */
+	sethi		%hi(errata32_hwbug), %g4
+	stx		%g0, [%g4 + %lo(errata32_hwbug)]
+
 2:	add		%g2, 1, %g2
 	cmp		%g2, 63
 	ble,pt		%icc, 1b

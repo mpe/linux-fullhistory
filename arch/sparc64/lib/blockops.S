@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.19 1999/11/19 05:52:45 davem Exp $
+/* $Id: blockops.S,v 1.20 2000/03/03 23:48:38 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996,1998 David S. Miller (davem@caip.rutgers.edu)
@@ -46,13 +46,37 @@ copy_page: /* %o0=dest, %o1=src */
 	sethi		%hi(TLBTEMP_ENT1), %o3
 	rdpr		%pstate, %g3
 	wrpr		%g3, PSTATE_IE, %pstate
+
+	/* Spitfire Errata #32 workaround */
+	mov		0x8, %o4
+	stxa		%g0, [%o4] ASI_DMMU
+	flush		%g6
+
 	ldxa		[%o3] ASI_DTLB_TAG_READ, %o4
+
+	/* Spitfire Errata #32 workaround */
+	mov		0x8, %o5
+	stxa		%g0, [%o5] ASI_DMMU
+	flush		%g6
+
 	ldxa		[%o3] ASI_DTLB_DATA_ACCESS, %o5
 	stxa		%o0, [%o2] ASI_DMMU
 	stxa		%g1, [%o3] ASI_DTLB_DATA_ACCESS
 	membar		#Sync
 	add		%o3, (TLBTEMP_ENTSZ), %o3
+
+	/* Spitfire Errata #32 workaround */
+	mov		0x8, %g5
+	stxa		%g0, [%g5] ASI_DMMU
+	flush		%g6
+
 	ldxa		[%o3] ASI_DTLB_TAG_READ, %g5
+
+	/* Spitfire Errata #32 workaround */
+	mov		0x8, %g7
+	stxa		%g0, [%g7] ASI_DMMU
+	flush		%g6
+
 	ldxa		[%o3] ASI_DTLB_DATA_ACCESS, %g7
 	stxa		%o1, [%o2] ASI_DMMU
 	stxa		%g2, [%o3] ASI_DTLB_DATA_ACCESS
@@ -120,7 +144,19 @@ clear_page:		/* %o0=dest */
 	sethi		%hi(TLBTEMP_ENT2), %o3
 	rdpr		%pstate, %g3
 	wrpr		%g3, PSTATE_IE, %pstate
+
+	/* Spitfire Errata #32 workaround */
+	mov		0x8, %g5
+	stxa		%g0, [%g5] ASI_DMMU
+	flush		%g6
+
 	ldxa		[%o3] ASI_DTLB_TAG_READ, %g5
+
+	/* Spitfire Errata #32 workaround */
+	mov		0x8, %g7
+	stxa		%g0, [%g7] ASI_DMMU
+	flush		%g6
+
 	ldxa		[%o3] ASI_DTLB_DATA_ACCESS, %g7
 	stxa		%o0, [%o2] ASI_DMMU
 	stxa		%g1, [%o3] ASI_DTLB_DATA_ACCESS

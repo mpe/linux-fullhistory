@@ -1049,7 +1049,6 @@ static int send_packet(struct net_device *dev, struct sk_buff *skb)
  
 static void elp_timeout(struct net_device *dev)
 {
-	unsigned long flags;
 	elp_device *adapter = dev->priv;
 	int stat;
 

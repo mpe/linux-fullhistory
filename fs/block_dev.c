@@ -630,7 +630,7 @@ int blkdev_put(struct block_device *bdev, int kind)
 	/* syncing will go here */
 	if (kind == BDEV_FILE || kind == BDEV_FS)
 		fsync_dev(rdev);
-	if (atomic_dec_and_test(&bdev->bd_openers) && MAJOR(rdev) != RAMDISK_MAJOR) {
+	if (atomic_dec_and_test(&bdev->bd_openers)) {
 		/* invalidating buffers will go here */
 		invalidate_buffers(rdev);
 	}

@@ -961,8 +961,9 @@ void __init MMU_init(void)
 		}
 #endif
 #if 0
-		setbat(0, disp_bi->dispDeviceBase, disp_bi->dispDeviceBase, 0x100000, IO_PAGE);
-		disp_bi->logicalDisplayBase = disp_bi->dispDeviceBase;
+// This is bogus, BAT must be aligned.
+//		setbat(0, disp_bi->dispDeviceBase, disp_bi->dispDeviceBase, 0x100000, IO_PAGE);
+//		disp_bi->logicalDisplayBase = disp_bi->dispDeviceBase;
 #endif		
 		ioremap_base = 0xf0000000;
 		break;

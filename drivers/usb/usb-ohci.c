@@ -1264,7 +1264,7 @@ static int rh_submit_urb (urb_t * urb)
 	int status = TD_CC_NOERROR;
 	
 	__u32 datab[4];
-	__u8  * data_buf = datab;
+	__u8  * data_buf = (__u8 *) datab;
 	
  	__u16 bmRType_bReq;
 	__u16 wValue; 

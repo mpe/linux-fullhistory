@@ -53,7 +53,7 @@ tristate 'The IPX protocol' CONFIG_IPX
 if [ "$CONFIG_IPX" != "n" ]; then
    source net/ipx/Config.in
 fi
-tristate 'Appletalk DDP' CONFIG_ATALK
+tristate 'Appletalk protocol support' CONFIG_ATALK
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate 'DECnet Support (EXPERIMENTAL)' CONFIG_DECNET
    if [ "$CONFIG_DECNET" != "n" ]; then

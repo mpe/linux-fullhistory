@@ -69,18 +69,24 @@
 static struct net_device *init_alloc_dev(int sizeof_priv)
 {
 	struct net_device *dev;
-	int alloc_size = sizeof(struct net_device) + IFNAMSIZ
-		+ sizeof_priv + 3;
-	alloc_size &= ~3;		/* Round to dword boundary. */
-	dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
-	if(dev==NULL)
+	int alloc_size;
+	
+	/* 32-byte alignment */
+	alloc_size = sizeof (*dev) + IFNAMSIZ + sizeof_priv + 31;
+	alloc_size &= ~31;		
+
+	dev = (struct net_device *) kmalloc (alloc_size, GFP_KERNEL);
+	if (dev == NULL)
 	{
 		printk(KERN_ERR "alloc_dev: Unable to allocate device memory.\n");
 		return NULL;
 	}
+
 	memset(dev, 0, alloc_size);
+
 	if (sizeof_priv)
 		dev->priv = (void *) (dev + 1);
+
 	dev->name = sizeof_priv + (char *)(dev + 1);
 	return dev;
 }

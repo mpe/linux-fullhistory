@@ -119,7 +119,8 @@ void
 xmon(struct pt_regs *excp)
 {
 	struct pt_regs regs;
-	int msr, cmd;
+	int msr, cmd, i;
+	unsigned *sp;
 
 	if (excp == NULL) {
 		asm volatile ("stw	0,0(%0)\n\
@@ -135,6 +136,29 @@ xmon(struct pt_regs *excp)
 		excp = &regs;
 	}
 
+	prom_drawstring("xmon pc="); prom_drawhex(excp->nip);
+	prom_drawstring(" lr="); prom_drawhex(excp->link);
+	prom_drawstring(" msr="); prom_drawhex(excp->msr);
+	prom_drawstring(" trap="); prom_drawhex(excp->trap);
+	prom_drawstring(" sp="); prom_drawhex(excp->gpr[1]);
+	sp = &excp->gpr[0];
+	for (i = 0; i < 32; ++i) {
+		if ((i & 7) == 0)
+			prom_drawstring("\n");
+		prom_drawstring(" ");
+		prom_drawhex(sp[i]);
+	}
+	sp = (unsigned *) excp->gpr[1];
+	for (i = 0; i < 64; ++i) {
+		if ((i & 7) == 0) {
+			prom_drawstring("\n");
+			prom_drawhex(sp);
+			prom_drawstring(" ");
+		}
+		prom_drawstring(" ");
+		prom_drawhex(sp[i]);
+	}
+	prom_drawstring("\n");
 	msr = get_msr();
 	set_msr(msr & ~0x8000);	/* disable interrupts */
 	remove_bpts();
@@ -521,7 +545,7 @@ void
 excprint(struct pt_regs *fp)
 {
 	printf("vector: %x at pc = %x %s",
-	       fp->trap, fp->nip,/* pretty_lookup_name(fp->nip)*/"");
+	       fp->trap, fp->nip, pretty_lookup_name(fp->nip));
 	printf(", msr = %x, sp = %x [%x]\n",
 	       fp->msr, fp->gpr[1], fp);
 	if (fp->trap == 0x300 || fp->trap == 0x600)
@@ -1390,6 +1414,10 @@ static char *lookup_name(unsigned long addr)
 	if ( !sysmap || !sysmap_size )
 		return NULL;
 	
+	/* adjust if addr is relative to kernelbase */
+	if ( addr < PAGE_OFFSET )
+		addr += PAGE_OFFSET;
+
 	cmp = simple_strtoul(c, &c, 8);
 	strcpy( last, strsep( &c, "\n"));
 	while ( c < (sysmap+sysmap_size) )

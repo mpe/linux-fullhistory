@@ -62,6 +62,9 @@
 /***
  *
  * $Log: ltpc.c,v $
+ * Revision 1.1.2.1  2000/03/01 05:35:07  jgarzik
+ * at and tr cleanup
+ *
  * Revision 1.8  1997/01/28 05:44:54  bradford
  * Clean up for non-module a little.
  * Hacked about a bit to clean things up - Alan Cox 

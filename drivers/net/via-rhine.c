@@ -17,10 +17,21 @@
 
 	Support and updates available at
 	http://cesdis.gsfc.nasa.gov/linux/drivers/via-rhine.html
+
+
+	Linux kernel version history:
+	
+	LK1.1.0:
+	- Jeff Garzik: softnet 'n stuff
+	
+	LK1.1.1:
+	- Justin Guyett: softnet and locking fixes
+	- Jeff Garzik: use PCI interface
+		
 */
 
 static const char *versionA =
-"via-rhine.c:v1.01 2/27/99  Written by Donald Becker\n";
+"via-rhine.c:v1.01-LK1.1.1  3/2/2000  Written by Donald Becker\n";
 static const char *versionB =
 "  http://cesdis.gsfc.nasa.gov/linux/drivers/via-rhine.html\n";
 
@@ -29,7 +40,6 @@ static const char *versionB =
 
 static int debug = 1;			/* 1 normal messages, 0 quiet .. 7 verbose. */
 static int max_interrupt_work = 20;
-static int min_pci_latency = 64;
 
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1518 effectively disables this feature. */
@@ -112,7 +122,6 @@ static const int multicast_filter_limit = 32;
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("VIA Rhine PCI Fast Ethernet driver");
 MODULE_PARM(max_interrupt_work, "i");
-MODULE_PARM(min_pci_latency, "i");
 MODULE_PARM(debug, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
@@ -157,7 +166,7 @@ buffers.  When an incoming frame is less than RX_COPYBREAK bytes long,
 a fresh skbuff is allocated and the frame is copied to the new skbuff.
 When the incoming frame is larger, the skbuff is passed directly up the
 protocol stack.  Buffers consumed this way are replaced by newly allocated
-skbuffs in the last phase of netdev_rx().
+skbuffs in the last phase of via_rhine_rx().
 
 The RX_COPYBREAK value is chosen to trade-off the memory wasted by
 using a full-sized skbuff for small frames vs. the copying costs of larger
@@ -208,34 +217,50 @@ The chip does not pad to minimum transmit length.
 
 */
 
-
+
 
 /* This table drives the PCI probe routines.  It's mostly boilerplate in all
    of the drivers, and will likely be provided by some future kernel.
    Note the matching code -- the first table entry matchs all 56** cards but
    second only the 1234 card.
 */
+
 enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
 	PCI_ADDR0=0x10<<0, PCI_ADDR1=0x10<<1, PCI_ADDR2=0x10<<2, PCI_ADDR3=0x10<<3,
 };
-struct pci_id_info {
+
+enum via_rhine_chips {
+	vt86c100a = 0,
+	vt3043,
+};
+
+struct via_rhine_chip_info {
 	const char *name;
-	u16	vendor_id, device_id, device_id_mask, flags;
+	u16 flags;
 	int io_size;
-	struct net_device *(*probe1)(struct pci_dev *pdev, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct net_device *via_probe1(struct pci_dev *pdev, long ioaddr, int irq,
-								 int chp_idx, int fnd_cnt);
 
-static struct pci_id_info pci_tbl[] = {
-	{ "VIA VT86C100A Rhine-II", 0x1106, 0x6100, 0xffff,
-	  PCI_USES_MEM|PCI_USES_IO|PCI_USES_MEM|PCI_USES_MASTER, 128, via_probe1},
-	{ "VIA VT3043 Rhine", 0x1106, 0x3043, 0xffff,
-	  PCI_USES_IO|PCI_USES_MEM|PCI_USES_MASTER, 128, via_probe1},
-	{0,},						/* 0 terminated list. */
+/* directly indexed by enum via_rhine_chips, above */
+static struct via_rhine_chip_info via_rhine_chip_info[] __devinitdata =
+{
+	{"VIA VT86C100A Rhine-II",
+	 PCI_USES_MEM | PCI_USES_IO | PCI_USES_MEM | PCI_USES_MASTER,
+	 128,},
+	{"VIA VT3043 Rhine",
+	 PCI_USES_IO | PCI_USES_MEM | PCI_USES_MASTER,
+	 128,},
 };
+
+static struct pci_device_id via_rhine_pci_tbl[] __devinitdata =
+{
+	{0x1106, 0x6100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, vt86c100a},
+	{0x1106, 0x3043, PCI_ANY_ID, PCI_ANY_ID, 0, 0, vt3043},
+	{0,},			/* terminate list */
+};
+MODULE_DEVICE_TABLE(pci, via_rhine_pci_tbl);
+
 
 
 /* A chip capabilities table, matching the entries in pci_tbl[] above. */
@@ -315,16 +340,14 @@ struct netdev_private {
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	unsigned char *tx_buf[TX_RING_SIZE];	/* Tx bounce buffers */
 	unsigned char *tx_bufs;				/* Tx bounce buffer region. */
-	struct net_device *next_module;			/* Link for devices of this type. */
 	struct net_device_stats stats;
 	struct timer_list timer;	/* Media monitoring timer. */
 	spinlock_t lock;
 	/* Frequently used values: keep some adjacent for cache effect. */
 	int chip_id;
-	long in_interrupt;			/* Word-long for SMP locks. */
 	struct rx_desc *rx_head_desc;
-	unsigned int cur_rx, dirty_rx;		/* Producer/consumer ring indices */
-	unsigned int cur_tx, dirty_tx;
+	unsigned short int cur_rx, dirty_rx;		/* Producer/consumer ring indices */
+	unsigned short int cur_tx, dirty_tx;
 	unsigned int rx_buf_sz;				/* Based on MTU+slack. */
 	u16 chip_cmd;						/* Current setting for ChipCmd */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
@@ -342,135 +365,93 @@ struct netdev_private {
 
 static int  mdio_read(struct net_device *dev, int phy_id, int location);
 static void mdio_write(struct net_device *dev, int phy_id, int location, int value);
-static int  netdev_open(struct net_device *dev);
-static void check_duplex(struct net_device *dev);
-static void netdev_timer(unsigned long data);
-static void tx_timeout(struct net_device *dev);
-static void init_ring(struct net_device *dev);
-static int  start_tx(struct sk_buff *skb, struct net_device *dev);
-static void intr_handler(int irq, void *dev_instance, struct pt_regs *regs);
-static int  netdev_rx(struct net_device *dev);
-static void netdev_error(struct net_device *dev, int intr_status);
-static void set_rx_mode(struct net_device *dev);
-static struct net_device_stats *get_stats(struct net_device *dev);
+static int  via_rhine_open(struct net_device *dev);
+static void via_rhine_check_duplex(struct net_device *dev);
+static void via_rhine_timer(unsigned long data);
+static void via_rhine_tx_timeout(struct net_device *dev);
+static void via_rhine_init_ring(struct net_device *dev);
+static int  via_rhine_start_tx(struct sk_buff *skb, struct net_device *dev);
+static void via_rhine_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
+static void via_rhine_tx(struct net_device *dev);
+static void via_rhine_rx(struct net_device *dev);
+static void via_rhine_error(struct net_device *dev, int intr_status);
+static void via_rhine_set_rx_mode(struct net_device *dev);
+static struct net_device_stats *via_rhine_get_stats(struct net_device *dev);
 static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
-static int  netdev_close(struct net_device *dev);
-
-
-
-/* A list of our installed devices, for removing the driver module. */
-static struct net_device *root_net_dev = NULL;
-
-/* Ideally we would detect all network cards in slot order.  That would
-   be best done a central PCI probe dispatch, which wouldn't work
-   well when dynamically adding drivers.  So instead we detect just the
-   cards we know about in slot order. */
-
-static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
-{
-	int cards_found = 0;
-	int pci_index = 0;
-	unsigned char pci_bus, pci_device_fn;
-	struct net_device *dev;
-
-	for (;pci_index < 0xff; pci_index++) {
-		u16 vendor, device, pci_command, new_command;
-		int chip_idx, irq;
-		long pciaddr;
-		long ioaddr;
-		struct pci_dev *pdev;
-
-		if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8, pci_index,
-								&pci_bus, &pci_device_fn)
-			!= PCIBIOS_SUCCESSFUL)
-			break;
-		
-		pdev = pci_find_slot (pci_bus, pci_device_fn);
-		if (!pdev) continue;
-		vendor = pdev->vendor;
-		device = pdev->device;
-
-		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
-			if (vendor == pci_tbl[chip_idx].vendor_id
-				&& (device & pci_tbl[chip_idx].device_id_mask) ==
-				pci_tbl[chip_idx].device_id)
-				break;
-		if (pci_tbl[chip_idx].vendor_id == 0) 		/* Compiled out! */
-			continue;
-
-#ifdef VIA_USE_IO
-		pciaddr = pdev->resource[0].start;
-#else
-		pciaddr = pdev->resource[1].start;
-#endif
-		irq = pdev->irq;
-
-		if (debug > 2)
-			printk(KERN_INFO "Found %s at PCI address %#lx, IRQ %d.\n",
-				   pci_tbl[chip_idx].name, pciaddr, irq);
-
-		if (pci_tbl[chip_idx].flags & PCI_USES_IO) {
-			ioaddr = pciaddr & ~3;
-			if (check_region(ioaddr, pci_tbl[chip_idx].io_size))
-				continue;
-		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xf,
-										 pci_tbl[chip_idx].io_size)) == 0) {
-			printk(KERN_INFO "Failed to map PCI address %#lx.\n",
-				   pciaddr);
-			continue;
-		}
-
-		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
-		new_command = pci_command | (pci_tbl[chip_idx].flags & 7);
-		if (pci_command != new_command) {
-			printk(KERN_INFO "  The PCI BIOS has not enabled the"
-				   " device at %d/%d!  Updating PCI command %4.4x->%4.4x.\n",
-				   pdev->bus->number, pdev->devfn, pci_command, new_command);
-			pci_write_config_word(pdev, PCI_COMMAND, new_command);
-		}
-
-		dev = pci_tbl[chip_idx].probe1(pdev, ioaddr, irq, chip_idx, cards_found);
-
-		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
-			u8 pci_latency;
-			pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
-			if (pci_latency < min_pci_latency) {
-				printk(KERN_INFO "  PCI latency timer (CFLT) is "
-					   "unreasonably low at %d.  Setting to %d clocks.\n",
-					   pci_latency, min_pci_latency);
-				pci_write_config_byte(pdev, PCI_LATENCY_TIMER, min_pci_latency);
-			}
-		}
-		dev = 0;
-		cards_found++;
-	}
-
-	return cards_found ? 0 : -ENODEV;
-}
+static int  via_rhine_close(struct net_device *dev);
 
 
-static struct net_device *via_probe1(struct pci_dev *pdev,
-					 long ioaddr, int irq,
-					 int chip_id, int card_idx)
+static int __devinit via_rhine_init_one (struct pci_dev *pdev,
+					 const struct pci_device_id *ent)
 {
 	struct net_device *dev;
 	struct netdev_private *np;
-	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
+	int i, option;
+	int chip_id = (int) ent->driver_data;
+	int irq = pdev->irq;
+	static int card_idx = -1;
+	static int did_version = 0;
+	long ioaddr;
+	int io_size;
+	
+	/* print version once and once only */
+	if (! did_version++) {
+		printk (KERN_INFO "%s", versionA);
+		printk (KERN_INFO "%s", versionB);
+	}
+	
+	card_idx++;
+	option = card_idx < MAX_UNITS ? options[card_idx] : 0;
+	io_size = via_rhine_chip_info[chip_id].io_size;
 
-	dev = init_etherdev(NULL, 0);
-	if(dev==NULL)
-		return NULL;
-
-	printk(KERN_INFO "%s: %s at 0x%lx, ",
-		   dev->name, pci_tbl[chip_id].name, ioaddr);
 
 #ifdef VIA_USE_IO
-	if (!request_region(ioaddr, pci_tbl[chip_id].io_size, dev->name)) {
-		unregister_netdev (dev);
-		kfree (dev);
-		return NULL;
+	ioaddr = pci_resource_start (pdev, 0);
+#else
+	ioaddr = pci_resource_start (pdev, 1);
+#endif
+
+	if (pci_enable_device (pdev)) {
+		printk (KERN_ERR "unable to init PCI device (card #%d)\n",
+			card_idx);
+		goto err_out;
+	}
+	
+	if (via_rhine_chip_info[chip_id].flags & PCI_USES_MASTER)
+		pci_set_master (pdev);
+
+	dev = init_etherdev(NULL, sizeof (*np));
+	if (dev == NULL) {
+		printk (KERN_ERR "init_ethernet failed for card #%d\n",
+			card_idx);
+		goto err_out;
+	}
+	
+	if (!request_region(pci_resource_start (pdev, 0), io_size, dev->name)) {
+		printk (KERN_ERR "request_region failed for device %s, region 0x%X @ 0x%lX\n",
+			dev->name, io_size,
+			pci_resource_start (pdev, 0));
+		goto err_out_free_netdev;
+	}
+	if (!request_mem_region(pci_resource_start (pdev, 1), io_size, dev->name)) {
+		printk (KERN_ERR "request_mem_region failed for device %s, region 0x%X @ 0x%lX\n",
+			dev->name, io_size,
+			pci_resource_start (pdev, 1));
+		goto err_out_free_pio;
+	}
+
+#ifndef VIA_USE_IO
+	ioaddr = (long) ioremap (ioaddr, io_size);
+	if (!ioaddr) {
+		printk (KERN_ERR "ioremap failed for device %s, region 0x%X @ 0x%X\n",
+			dev->name, io_size,
+			pci_resource_start (pdev, 1));
+		goto err_out_free_mmio;
 	}
 #endif
+
+	printk(KERN_INFO "%s: %s at 0x%lx, ",
+		   dev->name, via_rhine_chip_info[chip_id].name, ioaddr);
 
 	/* Ideally we would be read the EEPROM but access may be locked. */
 	for (i = 0; i <6; i++)
@@ -485,16 +466,8 @@ static struct net_device *via_probe1(struct pci_dev *pdev,
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
-	/* Make certain the descriptor lists are cache-aligned. */
-	np = (void *)(((long)kmalloc(sizeof(*np), GFP_KERNEL) + 31) & ~31);
-	/* FIXME! check return !!! */		
-	memset(np, 0, sizeof(*np));
-	dev->priv = np;
-
-	np->next_module = root_net_dev;
-	root_net_dev = dev;
-
-	np->lock = SPIN_LOCK_UNLOCKED;
+	np = dev->priv;
+	spin_lock_init (&np->lock);
 	np->chip_id = chip_id;
 
 	if (dev->mem_start)
@@ -515,14 +488,16 @@ static struct net_device *via_probe1(struct pci_dev *pdev,
 		np->duplex_lock = 1;
 
 	/* The chip-specific entries in the device structure. */
-	dev->open = &netdev_open;
-	dev->hard_start_xmit = &start_tx;
-	dev->stop = &netdev_close;
-	dev->get_stats = &get_stats;
-	dev->set_multicast_list = &set_rx_mode;
-	dev->do_ioctl = &mii_ioctl;
-	dev->tx_timeout = tx_timeout;
+	dev->open = via_rhine_open;
+	dev->hard_start_xmit = via_rhine_start_tx;
+	dev->stop = via_rhine_close;
+	dev->get_stats = via_rhine_get_stats;
+	dev->set_multicast_list = via_rhine_set_rx_mode;
+	dev->do_ioctl = mii_ioctl;
+	dev->tx_timeout = via_rhine_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
+	
+	pdev->driver_data = dev;
 
 	if (cap_tbl[np->chip_id].flags & CanHaveMII) {
 		int phy, phy_idx = 0;
@@ -541,10 +516,25 @@ static struct net_device *via_probe1(struct pci_dev *pdev,
 		np->mii_cnt = phy_idx;
 	}
 
-	return dev;
+	return 0;
+
+#ifndef VIA_USE_IO
+/* note this is ifdef'd because the ioremap is ifdef'd...
+ * so additional exit conditions above this must move
+ * release_mem_region outside of the ifdef */
+err_out_free_mmio:
+	release_mem_region(pci_resource_start (pdev, 1), io_size, dev->name));
+#endif
+err_out_free_pio:
+	release_region(pci_resource_start (pdev, 0), io_size);
+err_out_free_netdev:
+	unregister_netdev (dev);
+	kfree (dev);
+err_out:
+	return -ENODEV;
 }
 
-
+
 /* Read and write over the MII Management Data I/O (MDIO) interface. */
 
 static int mdio_read(struct net_device *dev, int phy_id, int regnum)
@@ -581,8 +571,8 @@ static void mdio_write(struct net_device *dev, int phy_id, int regnum, int value
 	return;
 }
 
-
-static int netdev_open(struct net_device *dev)
+
+static int via_rhine_open(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -591,16 +581,16 @@ static int netdev_open(struct net_device *dev)
 	/* Reset the chip. */
 	writew(CmdReset, ioaddr + ChipCmd);
 
-	if (request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev))
+	if (request_irq(dev->irq, &via_rhine_interrupt, SA_SHIRQ, dev->name, dev))
 		return -EAGAIN;
 
 	if (debug > 1)
-		printk(KERN_DEBUG "%s: netdev_open() irq %d.\n",
+		printk(KERN_DEBUG "%s: via_rhine_open() irq %d.\n",
 			   dev->name, dev->irq);
 
 	MOD_INC_USE_COUNT;
 
-	init_ring(dev);
+	via_rhine_init_ring(dev);
 
 	writel(virt_to_bus(np->rx_ring), ioaddr + RxRingPtr);
 	writel(virt_to_bus(np->tx_ring), ioaddr + TxRingPtr);
@@ -613,15 +603,14 @@ static int netdev_open(struct net_device *dev)
 	/* Configure the FIFO thresholds. */
 	writeb(0x20, ioaddr + TxConfig);	/* Initial threshold 32 bytes */
 	np->tx_thresh = 0x20;
-	np->rx_thresh = 0x60;				/* Written in set_rx_mode(). */
+	np->rx_thresh = 0x60;				/* Written in via_rhine_set_rx_mode(). */
 
 	if (dev->if_port == 0)
 		dev->if_port = np->default_port;
 
 	netif_start_queue(dev);
-	np->in_interrupt = 0;
 
-	set_rx_mode(dev);
+	via_rhine_set_rx_mode(dev);
 
 	/* Enable interrupts by setting the interrupt mask. */
 	writew(IntrRxDone | IntrRxErr | IntrRxEmpty| IntrRxOverflow| IntrRxDropped|
@@ -634,10 +623,10 @@ static int netdev_open(struct net_device *dev)
 		np->chip_cmd |= CmdFDuplex;
 	writew(np->chip_cmd, ioaddr + ChipCmd);
 
-	check_duplex(dev);
+	via_rhine_check_duplex(dev);
 
 	if (debug > 2)
-		printk(KERN_DEBUG "%s: Done netdev_open(), status %4.4x "
+		printk(KERN_DEBUG "%s: Done via_rhine_open(), status %4.4x "
 			   "MII status: %4.4x.\n",
 			   dev->name, readw(ioaddr + ChipCmd),
 			   mdio_read(dev, np->phys[0], 1));
@@ -646,22 +635,23 @@ static int netdev_open(struct net_device *dev)
 	init_timer(&np->timer);
 	np->timer.expires = RUN_AT(1);
 	np->timer.data = (unsigned long)dev;
-	np->timer.function = &netdev_timer;				/* timer handler */
+	np->timer.function = &via_rhine_timer;				/* timer handler */
 	add_timer(&np->timer);
 
 	return 0;
 }
 
-static void check_duplex(struct net_device *dev)
+static void via_rhine_check_duplex(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int mii_reg5 = mdio_read(dev, np->phys[0], 5);
+	int negotiated = mii_reg5 & np->advertising;
 	int duplex;
 
 	if (np->duplex_lock  ||  mii_reg5 == 0xffff)
 		return;
-	duplex = (mii_reg5 & 0x0100) || (mii_reg5 & 0x01C0) == 0x0040;
+	duplex = (negotiated & 0x0100) || (negotiated & 0x01C0) == 0x0040;
 	if (np->full_duplex != duplex) {
 		np->full_duplex = duplex;
 		if (debug)
@@ -676,7 +666,7 @@ static void check_duplex(struct net_device *dev)
 	}
 }
 
-static void netdev_timer(unsigned long data)
+static void via_rhine_timer(unsigned long data)
 {
 	struct net_device *dev = (struct net_device *)data;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
@@ -687,41 +677,41 @@ static void netdev_timer(unsigned long data)
 		printk(KERN_DEBUG "%s: VIA Rhine monitor tick, status %4.4x.\n",
 			   dev->name, readw(ioaddr + IntrStatus));
 	}
-	check_duplex(dev);
+	via_rhine_check_duplex(dev);
 
 	np->timer.expires = RUN_AT(next_tick);
 	add_timer(&np->timer);
 }
 
-static void tx_timeout(struct net_device *dev)
+static void via_rhine_tx_timeout (struct net_device *dev)
 {
-	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	struct netdev_private *np = (struct netdev_private *) dev->priv;
 	long ioaddr = dev->base_addr;
 
-	printk(KERN_WARNING "%s: Transmit timed out, status %4.4x, PHY status "
-		   "%4.4x, resetting...\n",
-		   dev->name, readw(ioaddr + IntrStatus),
-		   mdio_read(dev, np->phys[0], 1));
+	printk (KERN_WARNING "%s: Transmit timed out, status %4.4x, PHY status "
+		"%4.4x, resetting...\n",
+		dev->name, readw (ioaddr + IntrStatus),
+		mdio_read (dev, np->phys[0], 1));
 
-  /* Perhaps we should reinitialize the hardware here. */
-  dev->if_port = 0;
-  /* Stop and restart the chip's Tx processes . */
+	/* Perhaps we should reinitialize the hardware here. */
+	dev->if_port = 0;
+	/* Stop and restart the chip's Tx processes . */
 
-  /* Trigger an immediate transmit demand. */
+	/* Trigger an immediate transmit demand. */
 
-  dev->trans_start = jiffies;
-  np->stats.tx_errors++;
-  return;
+	dev->trans_start = jiffies;
+	np->stats.tx_errors++;
+
+	netif_start_queue (dev);
 }
 
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
-static void init_ring(struct net_device *dev)
+static void via_rhine_init_ring(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	int i;
 
-	np->tx_full = 0;
 	np->cur_rx = np->cur_tx = 0;
 	np->dirty_rx = np->dirty_tx = 0;
 
@@ -749,7 +739,6 @@ static void init_ring(struct net_device *dev)
 		np->rx_ring[i].rx_status = 0;
 		np->rx_ring[i].rx_length = DescOwn;
 	}
-	np->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		np->tx_skbuff[i] = 0;
@@ -763,13 +752,17 @@ static void init_ring(struct net_device *dev)
 	return;
 }
 
-static int start_tx(struct sk_buff *skb, struct net_device *dev)
+static int via_rhine_start_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	unsigned entry;
+	unsigned long flags;
 
 	/* Caution: the write order is important here, set the field
 	   with the "ownership" bits last. */
+
+	/* lock eth irq */
+	spin_lock_irqsave (&np->lock, flags);
 
 	/* Calculate the next Tx descriptor entry. */
 	entry = np->cur_tx % TX_RING_SIZE;
@@ -796,11 +789,12 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	/* Wake the potentially-idle transmit channel. */
 	writew(CmdTxDemand | np->chip_cmd, dev->base_addr + ChipCmd);
 
-	if (np->cur_tx - np->dirty_tx < TX_RING_SIZE - 1)
-		netif_start_queue(dev);		/* Typical path */
-	else
-		np->tx_full = 1;
+	if (np->cur_tx == np->dirty_tx + TX_RING_SIZE)
+		netif_stop_queue(dev);
+
 	dev->trans_start = jiffies;
+
+	spin_unlock_irqrestore (&np->lock, flags);
 
 	if (debug > 4) {
 		printk(KERN_DEBUG "%s: Transmit frame #%d queued in slot %d.\n",
@@ -811,20 +805,15 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
+static void via_rhine_interrupt(int irq, void *dev_instance, struct pt_regs *rgs)
 {
 	struct net_device *dev = (struct net_device *)dev_instance;
-	struct netdev_private *np;
 	long ioaddr, boguscnt = max_interrupt_work;
+	u32 intr_status;
 
 	ioaddr = dev->base_addr;
-	np = (struct netdev_private *)dev->priv;
 	
-	spin_lock (&np->lock);
-
-	do {
-		u32 intr_status = readw(ioaddr + IntrStatus);
-
+	while ((intr_status = readw(ioaddr + IntrStatus))) {
 		/* Acknowledge all of the current interrupt sources ASAP. */
 		writew(intr_status & 0xffff, ioaddr + IntrStatus);
 
@@ -832,54 +821,18 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 			printk(KERN_DEBUG "%s: Interrupt, status %4.4x.\n",
 				   dev->name, intr_status);
 
-		if (intr_status == 0)
-			break;
-
 		if (intr_status & (IntrRxDone | IntrRxErr | IntrRxDropped |
 						   IntrRxWakeUp | IntrRxEmpty | IntrRxNoBuf))
-			netdev_rx(dev);
+			via_rhine_rx(dev);
 
-		for (; np->cur_tx - np->dirty_tx > 0; np->dirty_tx++) {
-			int entry = np->dirty_tx % TX_RING_SIZE;
-			int txstatus;
-			if (np->tx_ring[entry].tx_own)
-				break;
-			txstatus = np->tx_ring[entry].tx_status;
-			if (debug > 6)
-				printk(KERN_DEBUG " Tx scavenge %d status %4.4x.\n",
-					   entry, txstatus);
-			if (txstatus & 0x8000) {
-				if (debug > 1)
-					printk(KERN_DEBUG "%s: Transmit error, Tx status %4.4x.\n",
-						   dev->name, txstatus);
-				np->stats.tx_errors++;
-				if (txstatus & 0x0400) np->stats.tx_carrier_errors++;
-				if (txstatus & 0x0200) np->stats.tx_window_errors++;
-				if (txstatus & 0x0100) np->stats.tx_aborted_errors++;
-				if (txstatus & 0x0080) np->stats.tx_heartbeat_errors++;
-				if (txstatus & 0x0002) np->stats.tx_fifo_errors++;
-				/* Transmitter restarted in 'abnormal' handler. */
-			} else {
-				np->stats.collisions += (txstatus >> 3) & 15;
-				np->stats.tx_bytes += np->tx_ring[entry].desc_length & 0x7ff;
-				np->stats.tx_packets++;
-			}
-			/* Free the original skb. */
-			dev_kfree_skb_irq(np->tx_skbuff[entry]);
-			np->tx_skbuff[entry] = 0;
-		}
-		if (np->tx_full &&
-		    netif_queue_stopped(dev) &&
-		    np->cur_tx - np->dirty_tx < TX_RING_SIZE - 4) {
-			/* The ring is no longer full, clear tbusy. */
-			np->tx_full = 0;
-			netif_wake_queue (dev);
-		}
+		if (intr_status & (IntrTxDone | IntrTxAbort | IntrTxUnderrun |
+						   IntrTxAborted))
+			via_rhine_tx(dev);
 
 		/* Abnormal error summary/uncommon events handlers. */
 		if (intr_status & (IntrPCIErr | IntrLinkChange | IntrMIIChange |
 						   IntrStatsMax | IntrTxAbort | IntrTxUnderrun))
-			netdev_error(dev, intr_status);
+			via_rhine_error(dev, intr_status);
 
 		if (--boguscnt < 0) {
 			printk(KERN_WARNING "%s: Too much work at interrupt, "
@@ -887,25 +840,67 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 				   dev->name, intr_status);
 			break;
 		}
-	} while (1);
+	}
 
 	if (debug > 3)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
 			   dev->name, readw(ioaddr + IntrStatus));
+}
+
+/* This routine is logically part of the interrupt handler, but isolated
+   for clarity and better register allocation. */
+static void via_rhine_tx(struct net_device *dev)
+{
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	int txstatus = 0, entry = np->dirty_tx % TX_RING_SIZE;
+
+	spin_lock (&np->lock);
+
+	/* if tx_full is set, they're all dirty, not clean */
+	while (np->dirty_tx != np->cur_tx) {
+		if (np->tx_ring[entry].tx_own) /* transmit request pending */
+			break;
+		txstatus = np->tx_ring[entry].tx_status;
+		if (debug > 6)
+			printk(KERN_DEBUG " Tx scavenge %d status %4.4x.\n",
+				   entry, txstatus);
+		if (txstatus & 0x8000) {
+			if (debug > 1)
+				printk(KERN_DEBUG "%s: Transmit error, Tx status %4.4x.\n",
+					   dev->name, txstatus);
+			np->stats.tx_errors++;
+			if (txstatus & 0x0400) np->stats.tx_carrier_errors++;
+			if (txstatus & 0x0200) np->stats.tx_window_errors++;
+			if (txstatus & 0x0100) np->stats.tx_aborted_errors++;
+			if (txstatus & 0x0080) np->stats.tx_heartbeat_errors++;
+			if (txstatus & 0x0002) np->stats.tx_fifo_errors++;
+			/* Transmitter restarted in 'abnormal' handler. */
+		} else {
+			np->stats.collisions += (txstatus >> 3) & 15;
+			np->stats.tx_bytes += np->tx_ring[entry].desc_length & 0x7ff;
+			np->stats.tx_packets++;
+        	}
+        	/* Free the original skb. */
+        	dev_kfree_skb_irq(np->tx_skbuff[entry]);
+        	np->tx_skbuff[entry] = NULL;
+		entry = (++np->dirty_tx) % TX_RING_SIZE;
+	}
+	if ((np->cur_tx - np->dirty_tx) <= TX_RING_SIZE/2)
+		netif_wake_queue (dev);
 
 	spin_unlock (&np->lock);
 }
 
 /* This routine is logically part of the interrupt handler, but isolated
    for clarity and better register allocation. */
-static int netdev_rx(struct net_device *dev)
+static void via_rhine_rx(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
-	int entry = np->cur_rx % RX_RING_SIZE;
-	int boguscnt = np->dirty_rx + RX_RING_SIZE - np->cur_rx;
+	int entry = (np->dirty_rx = np->cur_rx) % RX_RING_SIZE;
+	int boguscnt = RX_RING_SIZE;
 
 	if (debug > 4) {
-		printk(KERN_DEBUG " In netdev_rx(), entry %d status %4.4x.\n",
+		printk(KERN_DEBUG " In via_rhine_rx(), entry %d status %4.4x.\n",
 			   entry, np->rx_head_desc->rx_length);
 	}
 
@@ -916,7 +911,7 @@ static int netdev_rx(struct net_device *dev)
 		u16 desc_status = desc->rx_status;
 
 		if (debug > 4)
-			printk(KERN_DEBUG "  netdev_rx() status is %4.4x.\n",
+			printk(KERN_DEBUG "  via_rhine_rx() status is %4.4x.\n",
 				   desc_status);
 		if (--boguscnt < 0)
 			break;
@@ -924,15 +919,15 @@ static int netdev_rx(struct net_device *dev)
 			if ((desc_status & RxWholePkt) !=  RxWholePkt) {
 				printk(KERN_WARNING "%s: Oversized Ethernet frame spanned "
 					   "multiple buffers, entry %#x length %d status %4.4x!\n",
-					   dev->name, np->cur_rx, data_size, desc_status);
+					   dev->name, entry, data_size, desc_status);
 				printk(KERN_WARNING "%s: Oversized Ethernet frame %p vs %p.\n",
 					   dev->name, np->rx_head_desc,
-					   &np->rx_ring[np->cur_rx % RX_RING_SIZE]);
+					   &np->rx_ring[entry]);
 				np->stats.rx_length_errors++;
 			} else if (desc_status & RxErr) {
 				/* There was a error. */
 				if (debug > 2)
-					printk(KERN_DEBUG "  netdev_rx() Rx error was %8.8x.\n",
+					printk(KERN_DEBUG "  via_rhine_rx() Rx error was %8.8x.\n",
 						   desc_status);
 				np->stats.rx_errors++;
 				if (desc_status & 0x0030) np->stats.rx_length_errors++;
@@ -973,9 +968,9 @@ static int netdev_rx(struct net_device *dev)
 	}
 
 	/* Refill the Rx ring buffers. */
-	for (; np->cur_rx - np->dirty_rx > 0; np->dirty_rx++) {
+	while (np->dirty_rx != np->cur_rx) {
 		struct sk_buff *skb;
-		entry = np->dirty_rx % RX_RING_SIZE;
+		entry = np->dirty_rx++ % RX_RING_SIZE;
 		if (np->rx_skbuff[entry] == NULL) {
 			skb = dev_alloc_skb(np->rx_buf_sz);
 			np->rx_skbuff[entry] = skb;
@@ -990,10 +985,9 @@ static int netdev_rx(struct net_device *dev)
 
 	/* Pre-emptively restart Rx engine. */
 	writew(CmdRxDemand | np->chip_cmd, dev->base_addr + ChipCmd);
-	return 0;
 }
 
-static void netdev_error(struct net_device *dev, int intr_status)
+static void via_rhine_error(struct net_device *dev, int intr_status)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1003,7 +997,7 @@ static void netdev_error(struct net_device *dev, int intr_status)
 			/* Link failed, restart autonegotiation. */
 			mdio_write(dev, np->phys[0], 0, 0x3300);
 		else
-			check_duplex(dev);
+			via_rhine_check_duplex(dev);
 		if (debug)
 			printk(KERN_ERR "%s: MII status changed: Autonegotiation "
 				   "advertising %4.4x  partner %4.4x.\n", dev->name,
@@ -1026,7 +1020,7 @@ static void netdev_error(struct net_device *dev, int intr_status)
 			printk(KERN_INFO "%s: Transmitter underrun, increasing Tx "
 				   "threshold setting to %2.2x.\n", dev->name, np->tx_thresh);
 	}
-	if ((intr_status & ~(IntrLinkChange|IntrStatsMax|IntrTxAbort)) && debug) {
+	if ((intr_status & ~(IntrLinkChange|IntrStatsMax|IntrTxAbort)) && debug > 1) {
 		printk(KERN_ERR "%s: Something Wicked happened! %4.4x.\n",
 			   dev->name, intr_status);
 		/* Recovery for other fault sources not known. */
@@ -1034,7 +1028,7 @@ static void netdev_error(struct net_device *dev, int intr_status)
 	}
 }
 
-static struct enet_statistics *get_stats(struct net_device *dev)
+static struct net_device_stats *via_rhine_get_stats(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1068,7 +1062,7 @@ static inline u32 ether_crc(int length, unsigned char *data)
     return crc;
 }
 
-static void set_rx_mode(struct net_device *dev)
+static void via_rhine_set_rx_mode(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1120,7 +1114,7 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 }
 
-static int netdev_close(struct net_device *dev)
+static int via_rhine_close(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
@@ -1162,45 +1156,49 @@ static int netdev_close(struct net_device *dev)
 	return 0;
 }
 
-static int __init via_rhine_init_module (void)
+
+static void __devexit via_rhine_remove_one (struct pci_dev *pdev)
 {
-	if (debug)					/* Emit version even if no cards detected. */
-		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
-#ifdef CARDBUS
-	register_driver(&etherdev_ops);
-	return 0;
-#else
-	return pci_etherdev_probe(pci_tbl);
+	struct net_device *dev = pdev->driver_data;
+	struct netdev_private *np = (struct netdev_private *)(dev->priv);
+	
+	unregister_netdev(dev);
+
+	release_region(pci_resource_start (pdev, 0),
+		       via_rhine_chip_info[np->chip_id].io_size);
+	release_mem_region(pci_resource_start (pdev, 1),
+		           via_rhine_chip_info[np->chip_id].io_size);
+
+#ifndef VIA_USE_IO
+	iounmap((char *)(dev->base_addr));
 #endif
+
+	kfree(dev);
 }
 
-static void __exit via_rhine_cleanup_module (void)
+
+static struct pci_driver via_rhine_driver = {
+	name:		"via-rhine",
+	id_table:	via_rhine_pci_tbl,
+	probe:		via_rhine_init_one,
+	remove:		via_rhine_remove_one,
+};
+
+
+static int __init via_rhine_init (void)
 {
-
-#ifdef CARDBUS
-	unregister_driver(&etherdev_ops);
-#endif
-
-	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
-	while (root_net_dev) {
-		struct netdev_private *np =
-			(struct netdev_private *)(root_net_dev->priv);
-		unregister_netdev(root_net_dev);
-#ifdef VIA_USE_IO
-		release_region(root_net_dev->base_addr, pci_tbl[np->chip_id].io_size);
-#else
-		iounmap((char *)(root_net_dev->base_addr));
-#endif
-		kfree(root_net_dev);
-		root_net_dev = np->next_module;
-#if 0
-		kfree(np);				/* Assumption: no struct realignment. */
-#endif
-	}
+	return pci_module_init (&via_rhine_driver);
 }
 
-module_init(via_rhine_init_module);
-module_exit(via_rhine_cleanup_module);
+
+static void __exit via_rhine_cleanup (void)
+{
+	pci_unregister_driver (&via_rhine_driver);
+}
+
+
+module_init(via_rhine_init);
+module_exit(via_rhine_cleanup);
 
 
 /*

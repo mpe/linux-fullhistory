@@ -85,10 +85,7 @@
    $Header: /fsys2/home/chrisb/linux-1.3.59-MCA/drivers/net/RCS/3c523.c,v 1.1 1996/02/05 01:53:46 chrisb Exp chrisb $
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -902,7 +899,7 @@ static void elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 #ifndef NO_NOPCOMMANDS
 		if (stat & STAT_CNA) {
 			/* CU went 'not ready' */
-			if (netif_running(dev->state)) {
+			if (netif_running(dev)) {
 				printk(KERN_WARNING "%s: oops! CU has left active state. stat: %04x/%04x.\n", dev->name, (int) stat, (int) p->scb->status);
 			}
 		}

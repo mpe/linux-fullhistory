@@ -98,7 +98,7 @@ ifeq ($(CONFIG_ALL_PPC),y)
   OX_OBJS += prep_setup.o
 endif
 ifeq ($(CONFIG_GEMINI),y)
-  O_OBJS += gemini_prom.o gemini_pci.o gemini_setup.o
+  O_OBJS += gemini_prom.o gemini_pci.o gemini_setup.o open_pic.o
 endif
 
 all: $(KHEAD) kernel.o
@@ -114,6 +114,8 @@ ppc_defs.h: mk_defs.c ppc_defs.head \
 		$(TOPDIR)/include/asm/ptrace.h
 	$(CC) $(CFLAGS) -S mk_defs.c
 	cp ppc_defs.head ppc_defs.h
+# for bk, this way we can write to the file even if it's not checked out
+	chmod u+w ppc_defs.h
 	grep '^#define' mk_defs.s >> ppc_defs.h
 	rm mk_defs.s
 

@@ -1883,7 +1883,7 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 	char buffer[16];
 	int stat;
 
-	init_cdrom_command(&cgc, buffer, sizeof(buffer));
+	init_cdrom_command(&cgc, buffer, sizeof(buffer), CGC_DATA_UNKNOWN);
 
 	/* These will be moved into the Uniform layer shortly... */
 	switch (cmd) {
@@ -2075,7 +2075,7 @@ int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
 	if ((stat = cdrom_select_speed (drive, speed)) < 0)
 		return stat;
 
-	init_cdrom_command(&cgc, &buf, sizeof(buf));
+	init_cdrom_command(&cgc, &buf, sizeof(buf), CGC_DATA_UNKNOWN);
 
 #ifndef __ACER50__
 	/* Now with that done, update the speed fields */
@@ -2303,7 +2303,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		return nslots;
 	}
 
-	init_cdrom_command(&cgc, &buf, sizeof(buf));
+	init_cdrom_command(&cgc, &buf, sizeof(buf), CGC_DATA_UNKNOWN);
 	/* we have to cheat a little here. the packet will eventually
 	 * be queued with ide_cdrom_packet(), which extracts the
 	 * drive from cdi->handle. Since this device hasn't been

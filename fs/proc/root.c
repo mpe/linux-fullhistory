@@ -70,9 +70,6 @@ void __init proc_root_init(void)
 	proc_mkdir("openprom", 0);
 #endif
 	proc_tty_init();
-#ifdef __powerpc__
-	proc_register(&proc_root, &proc_root_ppc_htab);
-#endif
 #ifdef CONFIG_PROC_DEVICETREE
 	proc_device_tree_init();
 #endif

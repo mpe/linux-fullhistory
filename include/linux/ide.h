@@ -358,7 +358,8 @@ typedef enum {	ide_unknown,	ide_generic,	ide_pci,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
 		ide_qd6580,	ide_umc8672,	ide_ht6560b,
 		ide_pdc4030,	ide_rz1000,	ide_trm290,
-		ide_cmd646,	ide_cy82c693,	ide_4drives
+		ide_cmd646,	ide_cy82c693,	ide_4drives,
+		ide_pmac
 } hwif_chipset_t;
 
 #ifdef CONFIG_BLK_DEV_IDEPCI

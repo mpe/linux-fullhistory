@@ -5,6 +5,9 @@
 # Parport configuration.
 #
 
+mainmenu_option next_comment
+comment 'Parallel port support'
+
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
    dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
@@ -47,3 +50,5 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
 
    bool '  IEEE 1284 transfer modes' CONFIG_PARPORT_1284
 fi
+
+endmenu

@@ -44,12 +44,6 @@ extern unsigned long htab_evicts;
 extern unsigned long pte_misses;
 extern unsigned long pte_errors;
 
-struct file_operations ppc_htab_operations = {
-	llseek:		ppc_htab_lseek,
-	read:		ppc_htab_read,
-	write:		ppc_htab_write,
-};
-
 /* these will go into processor.h when I'm done debugging -- Cort */
 #define MMCR0 952
 #define MMCR0_PMC1_CYCLES (0x1<<7)
@@ -62,6 +56,12 @@ struct file_operations ppc_htab_operations = {
 
 #define PMC1 953
 #define PMC2 954
+
+struct file_operations ppc_htab_operations = {
+        llseek:         ppc_htab_lseek,
+        read:           ppc_htab_read,
+        write:          ppc_htab_write,
+};
 
 char *pmc1_lookup(unsigned long mmcr0)
 {

@@ -30,7 +30,6 @@
 #include <linux/locks.h>
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
-#include <linux/raid/md.h>
 #include <linux/timer.h>
 #endif
 

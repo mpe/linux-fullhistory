@@ -320,7 +320,7 @@ static void __init pagetable_init(void)
 		if (vaddr >= end)
 			break;
 #if CONFIG_X86_PAE
-		pmd = (pmd_t *) alloc_bootmem_pages(PAGE_SIZE);
+		pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
 		set_pgd(pgd, __pgd(__pa(pmd) + 0x1));
 #else
 		pmd = (pmd_t *)pgd;

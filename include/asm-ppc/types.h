@@ -2,10 +2,7 @@
 #define _PPC_TYPES_H
 
 #ifndef __ASSEMBLY__
-/*
- * __xx is ok: it doesn't pollute the POSIX namespace. Use these in the
- * header files exported to user space
- */
+#ifdef __KERNEL__
 
 typedef unsigned short umode_t;
 
@@ -41,8 +38,6 @@ typedef unsigned long long u64;
 typedef struct {
 	u32 u[4];
 } __attribute((aligned(16))) vector128;
-
-#ifdef __KERNEL__
 
 #define BITS_PER_LONG 32
 

@@ -20,6 +20,8 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * History
+ * v0.3 Feb 22 2000 Ollie Lho
+ *	bug fix for record mask setting
  * v0.2 Feb 10 2000 Ollie Lho
  *	add ac97_read_proc for /proc/driver/vnedor/ac97
  * v0.1 Jan 14 2000 Ollie Lho <ollie@sis.com.tw> 
@@ -40,7 +42,9 @@ static void ac97_set_mixer(struct ac97_codec *codec, unsigned int oss_mixer, uns
 static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask);
 static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned long arg);
 
-#define arraysize(x)	(sizeof(x)/sizeof((x)[0]))
+static int sigmatel_init(struct ac97_codec * codec);
+
+#define arraysize(x)   (sizeof(x)/sizeof((x)[0]))
 
 static struct {
 	unsigned int id;
@@ -50,14 +54,16 @@ static struct {
 	{0x414B4D00, "Asahi Kasei AK4540"     , NULL},
 	{0x41445340, "Analog Devices AD1881"  , NULL},
 	{0x43525900, "Cirrus Logic CS4297"    , NULL},
+	{0x43525903, "Cirrus Logic CS4297"  ,	NULL},
 	{0x43525913, "Cirrus Logic CS4297A"   , NULL},
+	{0x43525923, "Cirrus Logic CS4298"    , NULL},
 	{0x43525931, "Cirrus Logic CS4299"    , NULL},
-	{0x4e534331, "National Semiconductor LM4549", NULL},
+	{0x4e534331, "National Semiconductor LM4549" ,	NULL},
 	{0x83847600, "SigmaTel STAC????"      , NULL},
 	{0x83847604, "SigmaTel STAC9701/3/4/5", NULL},
 	{0x83847605, "SigmaTel STAC9704"      , NULL},
 	{0x83847608, "SigmaTel STAC9708"      , NULL},
-	{0x83847609, "SigmaTel STAC9721/23"   , NULL},
+	{0x83847609, "SigmaTel STAC9721/23"   , sigmatel_init},
 	{0x54524108, "TriTech TR28028"        , NULL},
 	{0x574D4C00, "Wolfson WM9704"         , NULL},
 	{0x00000000, NULL, NULL}
@@ -156,11 +162,12 @@ enum ac97_recsettings {
 };
 
 static unsigned int ac97_rm2oss[] = {
-	[AC97_REC_MIC] 	 = SOUND_MIXER_MIC, 
-	[AC97_REC_CD] 	 = SOUND_MIXER_CD, 
-	[AC97_REC_VIDEO] = SOUND_MIXER_VIDEO, 
-	[AC97_REC_AUX] 	 = SOUND_MIXER_LINE1, 
-	[AC97_REC_LINE]  = SOUND_MIXER_LINE, 
+	[AC97_REC_MIC] 	 = SOUND_MIXER_MIC,
+	[AC97_REC_CD] 	 = SOUND_MIXER_CD,
+	[AC97_REC_VIDEO] = SOUND_MIXER_VIDEO,
+	[AC97_REC_AUX] 	 = SOUND_MIXER_LINE1,
+	[AC97_REC_LINE]  = SOUND_MIXER_LINE,
+	[AC97_REC_STEREO]= SOUND_MIXER_IGAIN,
 	[AC97_REC_PHONE] = SOUND_MIXER_PHONEIN
 };
 
@@ -171,6 +178,7 @@ static unsigned int ac97_oss_rm[] = {
 	[SOUND_MIXER_VIDEO] 	= AC97_REC_VIDEO,
 	[SOUND_MIXER_LINE1] 	= AC97_REC_AUX,
 	[SOUND_MIXER_LINE] 	= AC97_REC_LINE,
+	[SOUND_MIXER_IGAIN]	= AC97_REC_STEREO,
 	[SOUND_MIXER_PHONEIN] 	= AC97_REC_PHONE
 };
 
@@ -216,8 +224,10 @@ static int ac97_read_mixer(struct ac97_codec *codec, int oss_channel)
 	}
 
 #ifdef DEBUG
-	printk("ac97_codec: read OSS mixer %2d (ac97 register 0x%02x), "
-	       "0x%04x -> 0x%04x\n", oss_channel, mh->offset, val, ret);
+	printk("ac97_codec: read OSS mixer %2d (%s ac97 register 0x%02x), "
+	       "0x%04x -> 0x%04x\n",
+	       oss_channel, codec->id ? "Secondary" : "Primary",
+	       mh->offset, val, ret);
 #endif
 
 	return ret;
@@ -269,6 +279,7 @@ static void ac97_write_mixer(struct ac97_codec *codec, int oss_channel,
 #ifdef DEBUG
 	printk(" 0x%04x", val);
 #endif
+
 	codec->codec_write(codec, mh->offset, val);
 
 #ifdef DEBUG
@@ -303,8 +314,11 @@ static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask)
 
 	if (rw) {
 		/* read it from the card */
-		val = codec->codec_read(codec, 0x1a) & 0x7;
-		return ac97_rm2oss[val];
+		val = codec->codec_read(codec, AC97_RECORD_SELECT);
+#ifdef DEBUG
+		printk("ac97_codec: ac97 recmask to set to 0x%04x\n", val);
+#endif
+		return (1 << ac97_rm2oss[val & 0x07]);
 	}
 
 	/* else, write the first set in the mask as the
@@ -315,10 +329,10 @@ static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask)
 	val |= val << 8;  /* set both channels */
 
 #ifdef DEBUG
-	printk("ac97_codec: setting ac97 recmask to 0x%x\n", val);
+	printk("ac97_codec: setting ac97 recmask to 0x%04x\n", val);
 #endif
 
-	codec->codec_write(codec, 0x1a, val);
+	codec->codec_write(codec, AC97_RECORD_SELECT, val);
 
 	return 0;
 };
@@ -384,9 +398,9 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 				return -EINVAL;
 
 			/* do we ever want to touch the hardware? */
-			val = codec->read_mixer(codec, i);
-			/* val = codec->mixer_state[i]; */
-			break;
+		        /* val = codec->read_mixer(codec, i); */
+			val = codec->mixer_state[i];
+ 			break;
 		}
 		return put_user(val, (int *)arg);
 	}
@@ -497,9 +511,10 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	codec->codec_write(codec, AC97_RESET, 0L);
 	if ((cap = codec->codec_read(codec, AC97_RESET)) & 0x8000)
 		return 0;
-	
+
 	codec->name = NULL;
 	codec->codec_init = NULL;
+
 	id1 = codec->codec_read(codec, AC97_VENDOR_ID1);
 	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
 	for (i = 0; i < arraysize(ac97_codec_ids); i++) {
@@ -520,6 +535,8 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	codec->record_sources = AC97_RECORD_MASK;
 	if (!(cap & 0x04))
 		codec->supported_mixers &= ~(SOUND_MASK_BASS|SOUND_MASK_TREBLE);
+	if (!(cap & 0x10))
+		codec->supported_mixers &= ~SOUND_MASK_ALTPCM;
 
 	/* generic OSS to AC97 wrapper */
 	codec->read_mixer = ac97_read_mixer;

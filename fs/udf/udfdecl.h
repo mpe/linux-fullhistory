@@ -9,6 +9,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/types.h>
 
 #ifndef LINUX_VERSION_CODE

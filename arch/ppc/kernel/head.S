@@ -222,7 +222,7 @@ __after_prom_start:
 	mtspr	IBAT0L,r8
 	mtspr	IBAT0U,r11
 #if 0 /* Useful debug code, please leave in for now so I don't have to
-       * look at docs when I need to setup a BAT ;
+       * look at docs when I need to setup a BAT ...
        */
 	bl	setup_screen_bat
 #endif
@@ -256,6 +256,8 @@ __after_prom_start:
  * prep needs the mmu to be turned on here, but pmac already has it on.
  * this shouldn't bother the pmac since it just gets turned on again
  * as we jump to our code at KERNELBASE. -- Cort
+ * Actually no, pmac doesn't have it on any more. BootX enters with MMU
+ * off, and in other cases, we now turn it off before changing BATs above.
  */
 turn_on_mmu:
 	mfmsr	r0
@@ -1423,6 +1425,7 @@ start_here:
 	li	r3,MSR_KERNEL & ~(MSR_IR|MSR_DR)
 	mtspr	SRR0,r4
 	mtspr	SRR1,r3
+	SYNC
 	rfi
 /* Load up the kernel context */
 2:
@@ -1433,6 +1436,7 @@ start_here:
 	tlbsync			/* ... on all CPUs */
 	sync
 #endif
+	
 	bl	load_up_mmu
 
 /* Set up for using our exception vectors */
@@ -1448,6 +1452,7 @@ start_here:
 	ori	r3,r3,start_kernel@l
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
+	SYNC
 	rfi			/* enable MMU and jump to start_kernel */
 
 /*
@@ -1530,11 +1535,11 @@ setup_screen_bat:
 	li	r3,0
 	mtspr	DBAT1U,r3
 	mtspr	IBAT1U,r3
-	lis	r3, 0x9100
+	lis	r3, 0x8200
 	ori	r4,r3,0x2a
 	mtspr	DBAT1L,r4
 	mtspr	IBAT1L,r4
-	ori	r3,r3,(BL_8M<<2)|0x2	/* set up BAT registers for 604 */
+	ori	r3,r3,(BL_16M<<2)|0x2	/* set up BAT registers for 604 */
 	mtspr	DBAT1U,r3
 	mtspr	IBAT1U,r3
 	blr

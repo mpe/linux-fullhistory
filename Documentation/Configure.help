@@ -2268,10 +2268,11 @@ CONFIG_M386
      UMC U5D or U5S.
    - "586" for generic Pentium CPUs, possibly lacking the TSC 
      (time stamp counter) register.
-   - "Pentium" for the Intel Pentium/Pentium MMX, AMD K5, K6 and 
-     K6-3D.
+   - "Pentium" for the Intel Pentium/Pentium MMX, AMD K5.
    - "PPro" for the Cyrix/IBM/National Semiconductor 6x86MX, MII and
      Intel Pentium II/Pentium Pro.
+   - "K6/II/III" for the AMD K6, K6-II and K6-III (aka K6-3D).
+   - "Athlon" for the AMD Athlon (aka K7)
 
   If you don't know what to do, choose "386".
 
@@ -5990,7 +5991,8 @@ CONFIG_AIRONET4500
 	adhoc=1  	there are no Access Points around
 	master=1 	Adhoc master (the one who creates network sync)
 	slave=1		Adhoc slave(btw, it is still forming own net 
-			sometimes)
+			sometimes, and has problems with firmware...
+			change IbssJoinNetTimeout from /proc...)
 	channel=1..? 	meaningful in adhoc mode
   all other parameters can be set via /proc interface
   These parameters belong to .._card module, but alas, they are here
@@ -8411,7 +8413,7 @@ CONFIG_USB_UHCI
   
 USB-UHCI High Bandwidth support
 CONFIG_USB_UHCI_HIGH_BANDWIDTH
-  This option enables the so called reclamation loop in usb-uhci, thus
+  This option enables the so-called reclamation loop in usb-uhci, thus
   allowing much higher transfer bandwidth for USB-bulk and control
   messages; isochronous transfers (audio, video etc.) are not affected.
   Due to a very simple design of the UHCI controller, this may cause
@@ -8651,13 +8653,14 @@ CONFIG_USB_OV511
   The module will be called ov511.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB ADMtek's Pegasus based ethernet devices support
+USB ADMtek Pegasus-based ethernet device support
 CONFIG_USB_PEGASUS
-  Say Y if you want to use your usb ethernet device. Note that
-  the code is still experimental. If you have devices with other
-  vendor IDs than ADMtek's you should change/add them in the
+  Say Y if you want to use your USB ethernet device. Note that
+  the code is still experimental. If you have devices with vendor
+  IDs other than ADMtek's, you should change/add them in the
   driver code and send a message to me (petkan@spct.net) for 
   update.
+
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called ov511.o. If you want to compile it as a
@@ -8742,9 +8745,9 @@ CONFIG_USB_DABUSB
  
 PLUSB driver
 CONFIG_USB_PLUSB
-  A driver for the Prolific PL-2302 USB to USB network device. This 'USB
-  cable' connects two hosts via a point to point network with bandwidth of
-  5Mbit/s.  Configure this driver after connecting the USB cable via
+  A driver for the Prolific PL-2302 USB-to-USB network device. This 'USB
+  cable' connects two hosts via a point-to-point network with bandwidth of
+  5 Mbit/s.  Configure this driver after connecting the USB cable via
   ifconfig plusb0 10.0.0.1 pointopoint 10.0.0.2 
   (and vice versa on the other host).
 

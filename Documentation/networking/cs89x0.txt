@@ -1,11 +1,24 @@
-CRYSTAL LAN CS8900/CS8920 ETHERNET ADAPTERS
-Linux Network Interface Driver ver. 1.02
+
+NOTE
+----
+
+This document was contributed by Cirrus Logic for kernel 2.2.5.  This version
+has been updated for 2.3.48 by Andrew Morton <andrewm@uow.edu.au>
+
+Cirrus make a copy of this driver available at their website, as
+described below.  In general, you should use the driver version which
+comes with your Linux distribution.
+
+
+
+CIRRUS LOGIC LAN CS8900/CS8920 ETHERNET ADAPTERS
+Linux Network Interface Driver ver. 2.00 <kernel 2.3.48>
 ===============================================================================
  
 
 TABLE OF CONTENTS
 
-1.0 CRYSTAL LAN CS8900/CS8920 ETHERNET ADAPTERS
+1.0 CIRRUS LOGIC LAN CS8900/CS8920 ETHERNET ADAPTERS
     1.1 Product Overview 
     1.2 Driver Description
 	1.2.1 Driver Name
@@ -20,9 +33,10 @@ TABLE OF CONTENTS
 3.0 LOADING THE DRIVER AS A MODULE
 
 4.0 COMPILING THE DRIVER
-    4.1 Compiling the Driver As a Loadable Module
-    4.2 Compiling the Driver Into the Kernel
-    4.3 Compiling the Driver for a Linux v1.2.13 Kernel
+    4.1 Compiling the Driver as a Loadable Module
+    4.2 Compiling the driver to support memory mode
+    4.3 Compiling the driver to support Rx DMA 
+    4.4 Compiling the Driver into the Kernel
 
 5.0 TESTING AND TROUBLESHOOTING
     5.1 Known Defects and Limitations
@@ -33,25 +47,24 @@ TABLE OF CONTENTS
     5.4 Resolving I/O Conflicts
 
 6.0 TECHNICAL SUPPORT
-    6.1 Contacting Crystal's Technical Support
+    6.1 Contacting Cirrus Logic's Technical Support
     6.2 Information Required Before Contacting Technical Support
     6.3 Obtaining the Latest Driver Version
-        6.3.1 Crystal's Web Site
-        6.3.2 Crystal's Bulletin Board Service
+    6.4 Current maintainer
 
 
 
-1.0 CRYSTAL LAN CS8900/CS8920 ETHERNET ADAPTERS
+1.0 CIRRUS LOGIC LAN CS8900/CS8920 ETHERNET ADAPTERS
 ===============================================================================
 
 
 1.1 PRODUCT OVERVIEW
 
-The CS8900-based ISA Ethernet Adapters from Crystal Semiconductor follow 
+The CS8900-based ISA Ethernet Adapters from Cirrus Logic follow 
 IEEE 802.3 standards and support half or full-duplex operation in ISA bus 
-computers on 10 Mbps Ethernet networks.  The adapters are designed for 
-operation in 16-bit ISA or EISA bus expansion slots and are available in 
-10BaseT-only or 3-media configurations (10BaseT, 10Base2, and AUI for 10Base-5
+computers on 10 Mbps Ethernet networks.  The adapters are designed for operation 
+in 16-bit ISA or EISA bus expansion slots and are available in 
+10BaseT-only or 3-media configurations (10BaseT, 10Base2, and AUI for 10Base-5 
 or fiber networks).  
 
 CS8920-based adapters are similar to the CS8900-based adapter with additional 
@@ -63,19 +76,24 @@ configuring both types of adapters.
 
 1.2 DRIVER DESCRIPTION
 
-The CS8900/CS8920 Ethernet Adapter driver for Linux supports the Linux v1.2.13 
-and v2.0 (or greater) kernels.  It can be compiled directly into the kernel or 
-loaded at run-time as a device driver module.
+The CS8900/CS8920 Ethernet Adapter driver for Linux supports the Linux
+v2.3.48 or greater kernel.  It can be compiled directly into the kernel
+or loaded at run-time as a device driver module.
 
 1.2.1 Driver Name: cs89x0
 
 1.2.2 Files in the Driver Archive:
 
-  readme.txt  - this file
-  release.txt - known defects and modification log
-  cs89x0.c    - driver C code
-  cs89x0.h    - driver header file
-  cs89x0.o    - pre-compiled module (for v2.0 kernel)
+The files in the driver at Cirrus' website include:
+
+  readme.txt         - this file
+  build              - batch file to compile cs89x0.c.
+  cs89x0.c           - driver C code
+  cs89x0.h           - driver header file
+  cs89x0.o           - pre-compiled module (for v2.2.5 kernel)
+  config/Config.in   - sample file to include cs89x0 driver in the kernel.
+  config/Makefile    - sample file to include cs89x0 driver in the kernel.
+  config/Space.c     - sample file to include cs89x0 driver in the kernel.
 
 
 
@@ -83,7 +101,7 @@ loaded at run-time as a device driver module.
 
 The following hardware is required:
 
-   * Crystal LAN (CS8900/20-based) Ethernet ISA Adapter   
+   * Cirrus Logic LAN (CS8900/20-based) Ethernet ISA Adapter   
 
    * IBM or IBM-compatible PC with:
      * An 80386 or higher processor
@@ -95,7 +113,7 @@ The following hardware is required:
 
 The following software is required:
 
-   * LINUX kernel version 1.2.13 or 2.X
+* LINUX kernel version 2.3.48 or higher
 
    * CS8900/20 Setup Utility (DOS-based)
 
@@ -142,7 +160,7 @@ installing a CS8900-based adapter and the default configuration is acceptable.)
 
 2.1 CS8900-BASED ADAPTER CONFIGURATION
 
-CS8900-based adapters shipped from Crystal Semiconductor have been configured 
+CS8900-based adapters shipped from Cirrus Logic have been configured 
 with the following "default" settings:
 
   Operation Mode:      Memory Mode
@@ -156,26 +174,26 @@ with the following "default" settings:
                        10BASE-T (10BASE-T only adapter)
 
 You should only change the default configuration settings if conflicts with 
-another adapter exist. To change the adapter's configuration, run the 
+another adapter exists. To change the adapter's configuration, run the 
 CS8900/20 Setup Utility. 
 
 
 2.2 CS8920-BASED ADAPTER CONFIGURATION
 
-CS8920-based adapters are shipped from Crystal Semiconductor configured as Plug
-and Play (PnP) enabled.  However, since Linux is not currently a PnP compatible 
-operating system, you must install the CS8920 adapter in a DOS-based PC and 
-run the CS8900/20 Setup Utility to disable PnP and configure the adapter before
-installation in the target Linux system.  Failure to do this will leave the 
-adapter inactive and the driver will be unable to communicate with the
-adapter.
+CS8920-based adapters are shipped from Cirrus Logic configured as Plug
+and Play (PnP) enabled.  However, since the cs89x0 driver does NOT
+support PnP, you must install the CS8920 adapter in a DOS-based PC and
+run the CS8900/20 Setup Utility to disable PnP and configure the
+adapter before installation in the target Linux system.  Failure to do
+this will leave the adapter inactive and the driver will be unable to
+communicate with the adapter.  
 
 
         **************************************************************** 
         *                    CS8920-BASED ADAPTERS:                    *
         *                                                              * 
         * CS8920-BASED ADAPTERS ARE PLUG and PLAY ENABLED BY DEFAULT.  * 
-        * SCO UNIX IS NOT A PnP OPERATING SYSTEM. THEREFORE, YOU MUST  *
+        * THE CS89X0 DRIVER DOES NOT SUPPORT PnP. THEREFORE, YOU MUST  *
         * RUN THE CS8900/20 SETUP UTILITY TO DISABLE PnP SUPPORT AND   *
         * TO ACTIVATE THE ADAPTER.                                     *
         ****************************************************************
@@ -187,7 +205,7 @@ adapter.
 ===============================================================================
 
 If the driver is compiled as a loadable module, you can load the driver module
-with the 'insmod' command.  Many of the adapter's configuration parameters can 
+with the 'modprobe' command.  Many of the adapter's configuration parameters can 
 be specified as command-line arguments to the load command.  This facility 
 provides a means to override the EEPROM's settings or for interface 
 configuration when an EEPROM is not used.
@@ -196,58 +214,99 @@ Example:
 
     insmod cs89x0.o io=0x200 irq=0xA media=aui
 
-This example loads the module and configures the adapter to use an IO port base
+This exmaple loads the module and configures the adapter to use an IO port base
 address of 200h, interrupt 10, and use the AUI media connection.  The following
 configuration options are available on the command line:
 
-* io=###              - specify IO address (200h-360h)
-* irq=##              - specify interrupt level
-* mmode=#####         - specify memory base address
-* dma=#               - specify DMA channel
-* media=rj45          - specify media type
-   or media=2
+* io=###               - specify IO address (200h-360h)
+* irq=##               - specify interrupt level
+* use_dma=1            - Enable DMA
+* dma=#                - specify dma channel (Driver is compiled to support
+                         Rx DMA only)
+* dmasize=# (16 or 64) - DMA size 16K or 64K.  Default value is set to 16.
+* media=rj45           - specify media type
+   or media=bnc
    or media=aui
    or medai=auto
-* duplex=f            - specify forced half/full/autonegotiate duplex
-   or duplex=h
+* duplex=full          - specify forced half/full/autonegotiate duplex
+   or duplex=half
    or duplex=auto
-* debug=#             - debug level
+* debug=#              - debug level (only available if the driver was compiled
+                         for debugging)
 
 NOTES:
-* If an EEPROM is present, any specified command-line parameter will override
-the corresponding configuration value stored in EEPROM.
 
-* If no "io" or "mmode" parameter is specified on the command-line, the driver
-will scan for the adapter.  When scanning, the driver only reads I/O ports.  
-This sometimes is not sufficient, (e.g. after a warm boot).  If you wish to 
-allow the driver to perform a more aggressive scan (one write to the IO base 
-addresses to reset the data port pointer) you can specify an I/O address with 
-an address value one greater than the configured address.  Example, to scan for
-an adapter located at IO base 0x300, specify an IO address of 0x301.  Only 
-ports between 200h and 360h at 20h intervals are scanned.  
+a) If an EEPROM is present, any specified command-line parameter
+   will override the corresponding configuration value stored in
+   EEPROM.
 
-* The "duplex=auto" parameter is only supported for the CS8920.
+b) The "io" parameter must be specified on the command-line.  
 
-* The minimum command-line configuration required if an EEPROM is not present
-is:
+c) In case you can not re-load the driver because Linux system
+   returns the "device or resource busy" message, try to re-load it by
+   increment the IO port address by one.  The driver will write
+   commands to the IO base addresses to reset the data port pointer. 
+   You can specify an I/O address with an address value one greater
+   than the configured address.  Example, to scan for an adapter
+   located at IO base 0x300, specify an IO address of 0x301.  
 
-  * io or mmode base address
-  * irq 
-  * media type (no autodetect)
+d) The "duplex=auto" parameter is only supported for the CS8920.
 
-The following additional parameters are CS89XX defaults (values used with no 
-EEPROM or command-line argument).
+e) The minimum command-line configuration required if an EEPROM is
+   not present is:
 
-  * DMA Burst = enabled
-  * IOCHRDY Enabled = enabled
-  * UseSA = enabled
-  * CS8900 defaults to half-duplex if not specified on command-line
-  * CS8920 defaults to autoneg if not specified on command-line
-  * Use reset defaults for other config parameters
+   io 
+   irq 
+   media type (no autodetect)
 
-* You can use ifconfig to set the adapter's Ethernet address.
+f) The following addtional parameters are CS89XX defaults (values
+   used with no EEPROM or command-line argument).
 
+   * DMA Burst = enabled
+   * IOCHRDY Enabled = enabled
+   * UseSA = enabled
+   * CS8900 defaults to half-duplex if not specified on command-line
+   * CS8920 defaults to autoneg if not specified on command-line
+   * Use reset defaults for other config parameters
+   * dma_mode = 0
 
+g) You can use ifconfig to set the adapter's Ethernet address.
+
+h) Many Linux distributions use the 'modprobe' command to load
+   modules.  This program uses the '/etc/conf.modules' file to
+   determine configuration information which is passed to a driver
+   module when it is loaded.  All the configuration options which are
+   described above may be placed within /etc/conf.modules.
+
+   For example:
+
+   > cat /etc/conf.modules
+   ...
+   alias eth0 cs89x0
+   options cs89x0 io=0x0200 dma=5 use_dma=1
+   ...
+
+   In this example we are telling the module system that the
+   ethernet driver for this machine should use the cs89x0 driver.  We
+   are asking 'modprobe' to pass the 'io', 'dma' and 'use_dma'
+   arguments to the driver when it is loaded.
+
+i) Cirrus recommend that the cs89x0 use the ISA DMA channels 5, 6 or
+   7.  You will probably find that other DMA channels will not work.
+
+j) The cs89x0 supports DMA for receiving only.  DMA mode is
+   significantly more efficient.  Flooding a 400 MHz Celeron machine
+   with large ping packets consumes 82% of its CPU capacity in non-DMA
+   mode.  With DMA this is reduced to 45%.
+
+k) If your Linux kernel was compiled with inbuilt plug-and-play
+   support you will be able to find information about the cs89x0 card
+   with the command
+
+   cat /proc/isapnp
+
+l) If during DMA operation you find erratic behavior or network data
+   corruption you should use your PC's BIOS to slow the EISA bus clock.
 
 
 4.0 COMPILING THE DRIVER
@@ -256,8 +315,6 @@ EEPROM or command-line argument).
 The cs89x0 driver can be compiled directly into the kernel or compiled into
 a loadable device driver module.
 
-NOTE: This part of the description relates to adding the driver to a kernel
-not containing the cs89x0 driver. This kernel already contains it.
 
 4.1 COMPILING THE DRIVER AS A LOADABLE MODULE
 
@@ -268,32 +325,33 @@ To compile the driver into a loadable module, use the following command
 -Wstrict-prototypes -O2 -fomit-frame-pointer -DMODULE -DCONFIG_MODVERSIONS 
 -c cs89x0.c"
 
+4.2 COMPILING THE DRIVER TO SUPPORT MEMORY MODE
 
-4.2 COMPILING THE DRIVER INTO THE KERNEL
+Support for memory mode was not carried over into the 2.3 series kernels.
 
-To compile the driver directly into the kernel requires editing four 
-configuration files, copying the source file to the /linux/drivers/net
-directory and then running the make utility to rebuild the kernel.
+4.3 COMPILING THE DRIVER TO SUPPORT Rx DMA
+
+The compile-time optionality for DMA was removed in the 2.3 kernel
+series.  DMA support is now unconditionally part of the driver.  It is
+enabled by the 'use_dma=1' module option.
+
+4.4 COMPILING THE DRIVER INTO THE KERNEL
+
+If your Linux distribution already has support for the cs89x0 driver
+then simply copy the source file to the /usr/src/linux/drivers/net
+directory to replace the original ones and run the make utility to
+rebuild the kernel.  See Step 3 for rebuilding the kernel.
+
+If your Linux does not include the cs89x0 driver, you need to edit three 
+configuration files, copy the source file to the /usr/src/linux/drivers/net
+directory, and then run the make utility to rebuild the kernel.
 
 1. Edit the following configuration files by adding the statements as
 indicated.  (When possible, try to locate the added text to the section of the
 file containing similar statements).
 
-a.) In /usr/src/linux/drivers/net/CONFIG, add
 
-CS89x0_OPTS   =
-
-Example:
-
- WD_OPTS	= #-DWD_SHMEM=0xDD000
- EL2_OPTS	= #-DEL2_AUI
- CS89x0_OPTS	=                
- NE_OPTS	=
- HP_OPTS	=
- PLIP_OPTS	=
-
-
-b.) In /usr/src/linux/drivers/net/Config.in, add:
+a.) In /usr/src/linux/drivers/net/Config.in, add:
 
 tristate 'CS89x0 support' CONFIG_CS89x0
 
@@ -310,7 +368,7 @@ Example:
        tristate 'NI5210 support' CONFIG_NI52
 
 
-c.) In /usr/src/linux/drivers/net/Makefile, add the following lines: 
+b.) In /usr/src/linux/drivers/net/Makefile, add the following lines: 
 
 ifeq ($(CONFIG_CS89x0),y)
 L_OBJS += cs89x0.o
@@ -321,49 +379,39 @@ else
 endif
 
 
-d.) In /linux/drivers/net/Space.c file, add the line:
+c.) In /linux/drivers/net/Space.c file, add the line:
 
-extern int cs89x0_probe(struct net_device *dev);
+extern int cs89x0_probe(struct device *dev);
 
 
 Example:
 
- extern int ultra_probe(struct net_device *dev);
- extern int wd_probe(struct net_device *dev);
- extern int el2_probe(struct net_device *dev);
+ extern int ultra_probe(struct device *dev);
+ extern int wd_probe(struct device *dev);
+ extern int el2_probe(struct device *dev);
 
- extern int cs89x0_probe(struct net_device *dev);
+ extern int cs89x0_probe(struct device *dev);
 
- extern int ne_probe(struct net_device *dev);
- extern int hp_probe(struct net_device *dev);
- extern int hp_plus_probe(struct net_device *dev);
+ extern int ne_probe(struct device *dev);
+ extern int hp_probe(struct device *dev);
+ extern int hp_plus_probe(struct device *dev);
 
 
 Also add:
 
  #ifdef CONFIG_CS89x0
- 	&& cs89x0_probe(dev)
+ 	{ cs89x0_probe,0 },
  #endif
 
 
-2.) Copy the driver source files (cs89x0.c and cs89x0.h) and this README file 
+2.) Copy the driver source files (cs89x0.c and cs89x0.h) 
 into the /usr/src/linux/drivers/net directory.
 
 
-3.) Run 'make config' followed by 'make dep' and finally 'make' to rebuild 
-the kernel. 
+3.) Go to /usr/src/linux directory and run 'make config' followed by 'make dep' 
+and finally 'make' (or make bzImage) to rebuild the kernel. 
 
-
-4.3 COMPILING THE DRIVER FOR A LINUX v1.2.13 KERNEL
-
-To compile the driver for Linux v1.2.13 (into the kernel or as a module), 
-change the "SUPPORTS" define at the beginning of the cs89x0.c file.  
-Example:
-
-#define SUPPORTS_1_2_13 1   /* supports Linux kernel v1.2.13 */
-   or
-#define SUPPORTS_1_2_13 0   /* supports Linux kernel v2.0 (default) */
-
+4.) Use the DOS 'setup' utility to disable plug and play on the NIC.
 
 
 5.0 TESTING AND TROUBLESHOOTING
@@ -391,8 +439,6 @@ Utility).
          from a DOS or command prompt session under Windows 95, Windows NT, 
          OS/2, or other operating system.
 
-	[AC - Question : Do they work in DOSEMU ?]
-
 To run the diagnostics tests on the CS8900/20 adapter:
 
    1.) Boot DOS on the PC and start the CS8900/20 Setup Utility.
@@ -412,33 +458,33 @@ its ability to communicate across the ISA bus based on the system resources
 assigned during hardware configuration.  The following tests are performed:
 
    * IO Register Read/Write Test
-     The IO Register Read/Write test ensures that the CS8900/20 can be 
+     The IO Register Read/Write test insures that the CS8900/20 can be 
      accessed in IO mode, and that the IO base address is correct.
 
    * Shared Memory Test
-     The Shared Memory test ensures the CS8900/20 can be accessed in memory 
+     The Shared Memory test insures the CS8900/20 can be accessed in memory 
      mode and that the range of memory addresses assigned does not conflict 
      with other devices in the system.
 
    * Interrupt Test
-     The Interrupt test ensures there are no conflicts with the assigned IRQ
+     The Interrupt test insures there are no conflicts with the assigned IRQ
      signal.
 
    * EEPROM Test
-     The EEPROM test ensures the EEPROM can be read.
+     The EEPROM test insures the EEPROM can be read.
 
    * Chip RAM Test
-     The Chip RAM test ensures the 4 K of memory internal to the CS8900/20 is
+     The Chip RAM test insures the 4K of memory internal to the CS8900/20 is
      working properly.
 
    * Internal Loop-back Test
-     The Internal Loop Back test ensures the adapter's transmitter and 
+     The Internal Loop Back test insures the adapter's transmitter and 
      receiver are operating properly.  If this test fails, make sure the 
      adapter's cable is connected to the network (check for LED activity for 
      example).
 
    * Boot PROM Test
-     The Boot PROM test ensures the Boot PROM is present, and can be read.
+     The Boot PROM  test insures the Boot PROM is present, and can be read.
      Failure indicates the Boot PROM  was not successfully read due to a
      hardware problem or due to a conflicts on the Boot PROM address
      assignment. (Test only applies if the adapter is configured to use the
@@ -541,12 +587,12 @@ I/O Address    	Device                        IRQ      Device
  2F0-2FF       	COM2: second serial port       6       Floppy Disk controller
  320-32F       	Fixed disk controller          7       LPT1
                                       	       8       Real-time Clock
-                                               9       EGA/VGA display adapter    
-                                              12       Mouse (PS/2)                              
-Memory Address  Device                        13       Math Coprocessor
---------------  ---------------------         14       Hard Disk controller
-A000-BFFF	EGA Graphics Adapter
-A000-C7FF	VGA Graphics Adapter
+                                                 9       EGA/VGA display adapter    
+                                                12       Mouse (PS/2)                              
+Memory Address  Device                          13       Math Coprocessor
+--------------  ---------------------           14       Hard Disk controller
+A000-BFFF	EGA Graphics Adpater
+A000-C7FF	VGA Graphics Adpater
 B000-BFFF	Mono Graphics Adapter
 B800-BFFF	Color Graphics Adapter
 E000-FFFF	AT BIOS
@@ -557,21 +603,21 @@ E000-FFFF	AT BIOS
 6.0 TECHNICAL SUPPORT
 ===============================================================================
 
-6.1 CONTACTING CRYSTAL'S TECHNICAL SUPPORT
+6.1 CONTACTING CIRRUS LOGIC'S TECHNICAL SUPPORT
 
-Crystal's CS89XX Technical Application Support can be reached at:
+Cirrus Logic's CS89XX Technical Application Support can be reached at:
 
 Telephone  :(800) 888-5016 (from inside U.S. and Canada)
            :(512) 442-7555 (from outside the U.S. and Canada)
-Fax	   :(512) 912-3871
-E-mail	   :ethernet@crystal.cirrus.com
-WWW        :http://www.crystal.com
+Fax        :(512) 912-3871
+Email      :ethernet@crystal.cirrus.com
+WWW        :http://www.cirrus.com
 
 
 6.2 INFORMATION REQUIRED BEFORE CONTACTING TECHNICAL SUPPORT
 
-Before contacting Crystal for technical support, be prepared to provide as much
-of the following information as possible. 
+Before contacting Cirrus Logic for technical support, be prepared to provide as 
+Much of the following information as possible. 
 
 1.) Adapter type (CRD8900, CDB8900, CDB8920, etc.)
 
@@ -603,33 +649,18 @@ of the following information as possible.
 
 6.3 OBTAINING THE LATEST DRIVER VERSION
 
-You can obtain the latest CS89XX drivers and support software from Crystal's 
-BBS or Web site.  You can also contact Crystal's Technical Support (email:
+You can obtain the latest CS89XX drivers and support software from Cirrus Logic's 
+Web site.  You can also contact Cirrus Logic's Technical Support (email:
 ethernet@crystal.cirrus.com) and request that you be registered for automatic 
 software-update notification.
 
-
-6.3.1 CRYSTAL'S WEB SITE
-
-Crystal Semiconductor maintains a web page at http://www.crystal.com with the
-latest drivers and technical publications.
+Cirrus Logic maintains a web page at http://www.cirrus.com with the
+the latest drivers and technical publications.
 
 
-6.3.2 CRYSTAL'S BULLETIN BOARD SERVICE
+6.4 Current maintainer
 
-Access to the BBS is available 24 hours a day, seven days a week. Baud 
-rates from 300K to 14.4K are supported as well as most common file transfer 
-protocols.  
-
-To access the BBS, set your terminal software to use 8 data bits, 1 stop bit, 
-and no parity.  Dial (512) 441-3265 and press <ENTER> after connection is made.
-Login using your account name and password.  (If you do not have an account, 
-you may login as "GUEST".  No password is required for the Guest account.)
-
-From the main system menu, select the "Enter Public File Area" menu option.  
-From the Public File Area menu, select the "LAN (Local Area Network)" file
-area.  A list of the latest drivers and support utilities available for the
-CS89XX ISA Ethernet adapter will be presented along with the option to download
-the file(s) of your choice.
+In February 2000 the maintenance of this driver was assumed by Andrew
+Morton <andrewm@uow.edu.au>
 
 

@@ -1,5 +1,5 @@
 #
-# Makefile for drivers/net/tokenring
+# Makefile for drivers/net/appletalk
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -16,18 +16,15 @@ obj-m   :=
 obj-    :=
 export-objs :=
 
-obj-$(CONFIG_IBMTR) 	+= ibmtr.o
-obj-$(CONFIG_IBMOL) 	+= olympic.o
-obj-$(CONFIG_TMS380TR) 	+= tms380tr.o
-obj-$(CONFIG_ABYSS) 	+= abyss.o
-obj-$(CONFIG_MADGEMC) 	+= madgemc.o
-obj-$(CONFIG_TMSPCI) 	+= tmspci.o
-obj-$(CONFIG_SMCTR) 	+= smctr.o
+obj-$(CONFIG_LTPC) += ltpc.o
+obj-$(CONFIG_COPS) += cops.o
+obj-$(CONFIG_IPDDP) += ipddp.o
 
-L_TARGET := tr.a
+L_TARGET := appletalk.a
 L_OBJS   := $(filter-out $(export-objs), $(obj-y))
 LX_OBJS  := $(filter     $(export-objs), $(obj-y))
 M_OBJS   := $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS  := $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
+

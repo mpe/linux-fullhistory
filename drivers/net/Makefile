@@ -18,7 +18,7 @@ SUB_DIRS     :=
 MOD_SUB_DIRS :=
 MOD_IN_SUB_DIRS :=
 ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin \
-		arcnet skfp tulip
+		arcnet skfp tulip appletalk
 
 O_TARGET := net.o
 MOD_LIST_NAME := NET_MODULES
@@ -101,6 +101,15 @@ MOD_IN_SUB_DIRS += arcnet
 else
   ifeq ($(CONFIG_ARCNET),m)
   MOD_IN_SUB_DIRS += arcnet
+  endif
+endif
+
+ifeq ($(CONFIG_ATALK),y)
+SUB_DIRS += appletalk
+MOD_IN_SUB_DIRS += appletalk
+else
+  ifeq ($(CONFIG_ATALK),m)
+  MOD_IN_SUB_DIRS += appletalk
   endif
 endif
 
@@ -280,9 +289,6 @@ obj-$(CONFIG_A2065) += a2065.o
 obj-$(CONFIG_HYDRA) += hydra.o
 obj-$(CONFIG_ARIADNE) += ariadne.o
 obj-$(CONFIG_CS89x0) += cs89x0.o
-obj-$(CONFIG_LTPC) += ltpc.o
-obj-$(CONFIG_COPS) += cops.o
-obj-$(CONFIG_IPDDP) += ipddp.o
 obj-$(CONFIG_MACSONIC) += macsonic.o
 obj-$(CONFIG_MACMACE) += macmace.o
 obj-$(CONFIG_MAC89x0) += mac89x0.o

@@ -60,9 +60,6 @@ static struct video_init video_init_list[]={
 	{"i2c-tuner", i2c_tuner_init},
 	{"bttv", init_bttv_cards},
 #endif	
-#ifdef CONFIG_VIDEO_STRADIS
-	{"stradis", init_stradis_cards},
-#endif	
 #ifdef CONFIG_VIDEO_BWQCAM
 	{"bw-qcam", init_bw_qcams},
 #endif	

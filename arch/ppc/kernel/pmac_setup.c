@@ -283,8 +283,6 @@ pmac_setup_arch(void)
 			ppc_override_l2cr_value, (ppc_override_l2cr_value & 0x80000000)
 				? "enabled" : "disabled");
 
-	feature_init();
-
 #ifdef CONFIG_KGDB
 	zs_kgdb_hook(0);
 #endif
@@ -325,14 +323,15 @@ static void __init init_p2pbridge(void)
 	    || p2pbridge->parent == NULL
 	    || strcmp(p2pbridge->parent->name, "pci") != 0)
 		return;
-
 	if (pci_device_loc(p2pbridge, &bus, &devfn) < 0)
 		return;
-
-	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
+	if (ppc_md.pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val) < 0) {
+		printk(KERN_ERR "init_p2pbridge: couldn't read bridge control\n");
+		return;
+	}
 	val &= ~PCI_BRIDGE_CTL_MASTER_ABORT;
-	pcibios_write_config_word(bus, devfn, PCI_BRIDGE_CONTROL, val);
-	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
+	ppc_md.pcibios_write_config_word(bus, devfn, PCI_BRIDGE_CONTROL, val);
+	ppc_md.pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
 }
 
 static void __init ohare_init(void)
@@ -703,8 +702,8 @@ pmac_progress(char *s, unsigned short hex)
 {
 	if (disp_bi == 0)
 		return;
-	drawstring(s);
-	drawchar('\n');
+	prom_drawstring(s);
+	prom_drawchar('\n');
 }
 #endif CONFIG_BOOTX_TEXT
 

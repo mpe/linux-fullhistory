@@ -5,13 +5,12 @@
  *               1994, 1995   Eberhard Moenkeberg, emoenke@gwdg.de
  *               1996         David van Leeuwen, david@tm.tno.nl
  *               1997, 1998   Erik Andersen, andersee@debian.org
- *               1998, 1999   Jens Axboe, axboe@image.dk
+ *               1998-2000    Jens Axboe, axboe@suse.de
  */
  
 #ifndef	_LINUX_CDROM_H
 #define	_LINUX_CDROM_H
 
-#include <linux/types.h>
 #include <asm/byteorder.h>
 
 /*******************************************************
@@ -225,7 +224,7 @@ struct cdrom_tocentry
 struct cdrom_read      
 {
 	int	cdread_lba;
-	caddr_t	cdread_bufaddr;
+	char 	*cdread_bufaddr;
 	int	cdread_buflen;
 };
 
@@ -267,6 +266,11 @@ struct cdrom_blk
 
 #define CDROM_PACKET_SIZE	12
 
+#define CGC_DATA_UNKNOWN	0
+#define CGC_DATA_WRITE		1
+#define CGC_DATA_READ		2
+#define CGC_DATA_NONE		3
+
 /* for CDROM_PACKET_COMMAND ioctl */
 struct cdrom_generic_command
 {
@@ -275,6 +279,7 @@ struct cdrom_generic_command
 	unsigned int 		buflen;
 	int			stat;
 	struct request_sense	*sense;
+	unsigned char		data_direction;
 	void			*reserved[3];
 };
 
@@ -790,7 +795,8 @@ extern int cdrom_mode_sense(struct cdrom_device_info *cdi,
 			    struct cdrom_generic_command *cgc,
 			    int page_code, int page_control);
 extern void init_cdrom_command(struct cdrom_generic_command *cgc,
-			       void *buffer, int len);
+			       void *buffer, int len, int type);
+extern struct cdrom_device_info *cdrom_find_device(kdev_t dev);
 
 typedef struct {
 	__u16 disc_information_length;
@@ -798,9 +804,9 @@ typedef struct {
 	__u8 reserved1			: 3;
         __u8 erasable			: 1;
         __u8 border_status		: 2;
-        __u8 disc_border		: 2;
+        __u8 disc_status		: 2;
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
-        __u8 disc_border		: 2;
+        __u8 disc_status		: 2;
         __u8 border_status		: 2;
         __u8 erasable			: 1;
 	__u8 reserved1			: 3;
@@ -938,7 +944,6 @@ struct mode_page_header {
 };
 
 typedef struct {
-	struct mode_page_header header;
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 ps			: 1;
 	__u8 reserved1		: 1;
@@ -991,7 +996,7 @@ typedef struct {
 	__u8 subhdr1;
 	__u8 subhdr2;
 	__u8 subhdr3;
-} write_param_page __attribute__((packed));
+} __attribute__((packed)) write_param_page;
 
 #endif  /* End of kernel only stuff */ 
 

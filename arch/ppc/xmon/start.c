@@ -17,12 +17,12 @@
 static volatile unsigned char *sccc, *sccd;
 unsigned long TXRDY, RXRDY;
 extern void xmon_printf(const char *fmt, ...);
-extern void drawchar(char);
-extern void drawstring(const char *str);
+extern void prom_drawchar(char);
+extern void prom_drawstring(const char *str);
 static int xmon_expect(const char *str, unsigned int timeout);
 
 static int console = 0;
-static int use_screen = 0;
+static int use_screen = 1; /* default */
 static int via_modem = 0;
 static int xmon_use_sccb = 0;
 static struct device_node *macio_node;
@@ -48,6 +48,8 @@ xmon_map_scc(void)
 {
 	volatile unsigned char *base;
 
+	use_screen = 0;
+	
 	if ( _machine == _MACH_Pmac )
 	{
 		struct device_node *np;
@@ -58,7 +60,7 @@ xmon_map_scc(void)
 		/* needs to be hacked if xmon_printk is to be used
  		   from within find_via_pmu() */
 		if (!via_modem && disp_bi && find_via_pmu()) {
-			drawstring("xmon uses screen and keyboard\n");
+			prom_drawstring("xmon uses screen and keyboard\n");
 			use_screen = 1;
 			return;
 		}
@@ -122,7 +124,7 @@ xmon_write(void *handle, void *ptr, int nb)
 	if (use_screen) {
 		/* write it on the screen */
 		for (i = 0; i < nb; ++i)
-			drawchar(*p++);
+			prom_drawchar(*p++);
 		return nb;
 	}
 #endif
@@ -142,6 +144,7 @@ xmon_write(void *handle, void *ptr, int nb)
 			ct = 1;
 			--i;
 		} else {
+			prom_drawchar(c);
 			if (console)
 				printk("%c", c);
 			ct = 0;
@@ -187,15 +190,15 @@ xmon_get_pmu_key(void)
 		do {
 			if (--t < 0) {
 				on = 1 - on;
-				drawchar(on? 0xdb: 0x20);
-				drawchar('\b');
+				prom_drawchar(on? 0xdb: 0x20);
+				prom_drawchar('\b');
 				t = 200000;
 			}
 			pmu_poll();
 		} while (xmon_pmu_keycode == -1);
 		k = xmon_pmu_keycode;
 		if (on)
-			drawstring(" \b");
+			prom_drawstring(" \b");
 
 		/* test for shift keys */
 		if ((k & 0x7f) == 0x38 || (k & 0x7f) == 0x7b) {
@@ -284,6 +287,8 @@ xmon_init_scc()
 	{
 		int i, x;
 
+		if (macio_node != 0)
+			feature_set(macio_node, FEATURE_Serial_enable);
 		if (via_modem && macio_node != 0) {
 			unsigned int t0;
 
@@ -399,15 +404,12 @@ int xmon_expect(const char *str, unsigned int timeout)
 		for (;;) {
 			c = xmon_read_poll();
 			if (c == -1) {
-				if (readtb() - t0 > timeout) {
-					printk("timeout\n");
+				if (readtb() - t0 > timeout)
 					return 0;
-				}
 				continue;
 			}
 			if (c == '\n')
 				break;
-			printk("%c", c);
 			if (c != '\r' && lineptr < &line[sizeof(line) - 1])
 				*lineptr++ = c;
 		}

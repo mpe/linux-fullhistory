@@ -1545,12 +1545,13 @@ int __init init_module()
 } /* End init_module */
 
 #endif
-#ifdef MODULE
-/* -------------------- Begin cleanup_module  ---------------------- */
 
 #ifdef ENABLE_PCI
 static struct pci_driver epca_driver;
 #endif
+
+#ifdef MODULE
+/* -------------------- Begin cleanup_module  ---------------------- */
 
 void cleanup_module()
 { /* Begin cleanup_module */

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.51 2000/02/26 04:24:32 davem Exp $
+/*  $Id: setup.c,v 1.52 2000/03/03 23:48:41 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -164,9 +164,17 @@ int prom_callback(long *args)
 		}
 
 		if ((va >= KERNBASE) && (va < (KERNBASE + (4 * 1024 * 1024)))) {
+			/* Spitfire Errata #32 workaround */
+			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
+					     "flush	%%g6"
+					     : /* No outputs */
+					     : "r" (0),
+					     "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
+
 			/*
 			 * Locked down tlb entry 63.
 			 */
+
 			tte = spitfire_get_dtlb_data(63);
 			res = PROM_TRUE;
 			goto done;

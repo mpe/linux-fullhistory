@@ -602,7 +602,19 @@ static int yenta_init(pci_socket_t *socket)
 static int yenta_suspend(pci_socket_t *socket)
 {
 	yenta_set_socket(socket, &dead_socket);
+
+	/*
+	 * This does not work currently. The controller
+	 * loses too much informationduring D3 to come up
+	 * cleanly. We should probably fix yenta_init()
+	 * to update all the critical registers, notably
+	 * the IO and MEM bridging region data.. That is
+	 * something that pci_set_power_state() should
+	 * probably know about bridges anyway.
+	 *
 	pci_set_power_state(socket->dev, 3);
+	 */
+
 	return 0;
 }
 

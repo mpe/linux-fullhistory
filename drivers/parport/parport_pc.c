@@ -70,26 +70,48 @@
 #define ECR_TST 06
 #define ECR_CNF 07
 
+#undef DEBUG
+
+#ifdef DEBUG
+#define DPRINTK  printk
+#else
+#define DPRINTK(stuff...)
+#endif
+
+
+#define NR_SUPERIOS 3
+static struct superio_struct {	/* For Super-IO chips autodetection */
+	int io;
+	int irq;
+	int dma;
+} superios[NR_SUPERIOS]= { {0,},};
+	
 /* frob_control, but for ECR */
 static void frob_econtrol (struct parport *pb, unsigned char m,
 			   unsigned char v)
 {
 	unsigned char ectr = inb (ECONTROL (pb));
-#ifdef DEBUG_PARPORT
-	printk (KERN_DEBUG "frob_econtrol(%02x,%02x): %02x -> %02x\n",
+	DPRINTK (KERN_DEBUG "frob_econtrol(%02x,%02x): %02x -> %02x\n",
 		m, v, ectr, (ectr & ~m) ^ v);
-#endif
+
 	outb ((ectr & ~m) ^ v, ECONTROL (pb));
 }
 
 #ifdef CONFIG_PARPORT_PC_FIFO
-/* Safely change the mode bits in the ECR */
+/* Safely change the mode bits in the ECR 
+   Returns:
+	    0    : Success
+	   -EBUSY: Could not drain FIFO in some finite amount of time,
+		   mode not changed!
+ */
 static int change_mode(struct parport *p, int m)
 {
 	const struct parport_pc_private *priv = p->physport->private_data;
 	int ecr = ECONTROL(p);
 	unsigned char oecr;
 	int mode;
+
+	DPRINTK("parport change_mode ECP-ISA to mode 0x%02x\n",m);
 
 	if (!priv->ecr) {
 		printk (KERN_DEBUG "change_mode: but there's no ECR!\n");
@@ -993,6 +1015,305 @@ struct parport_operations parport_pc_ops =
 	parport_ieee1284_read_byte,
 };
 
+/* Super-IO chipset detection, Winbond, SMSC */
+
+static void show_parconfig_smsc37c669(int io, int key)
+{
+	int cr1,cr4,cra,cr23,cr26,cr27,i=0;
+	char *modes[]={ "SPP and Bidirectional (PS/2)",	
+			"EPP and SPP",
+			"ECP",
+			"ECP and EPP"};
+
+	outb(key,io);
+	outb(key,io);
+	outb(1,io);
+	cr1=inb(io+1);
+	outb(4,io);
+	cr4=inb(io+1);
+	outb(0x0a,io);
+	cra=inb(io+1);
+	outb(0x23,io);
+	cr23=inb(io+1);
+	outb(0x26,io);
+	cr26=inb(io+1);
+	outb(0x27,io);
+	cr27=inb(io+1);
+	outb(0xaa,io);
+
+	printk ("SMSC 37c669 LPT Config: cr_1=0x%02x, 4=0x%02x, "
+		"A=0x%2x, 23=0x%02x, 26=0x%02x, 27=0x%02x\n",
+		cr1,cr4,cra,cr23,cr26,cr27);
+
+	/* The documentation calls DMA and IRQ-Lines by letters, so
+	   the board maker can/will wire them
+	   appropriately/randomly...  G=reserved H=IDE-irq, */
+	printk ("SMSC LPT Config: io=0x%04x, irq=%c, dma=%c, "
+		"fifo threshold=%d\n", cr23*4,
+		(cr27 &0x0f) ? 'A'-1+(cr27 &0x0f): '-',
+		(cr26 &0x0f) ? 'A'-1+(cr26 &0x0f): '-', cra & 0x0f);
+	printk("SMSC LPT Config: enabled=%s power=%s\n",
+	       (cr23*4 >=0x100) ?"yes":"no", (cr1 & 4) ? "yes" : "no");
+	printk("SMSC LPT Config: Port mode=%s, EPP version =%s\n",
+	       (cr1 & 0x08 ) ? "Standard mode only (SPP)" : modes[cr4 & 0x03], 
+	       (cr4 & 40) ? "1.7" : "1.9");
+
+	/* Heuristics !  BIOS setup for this mainboard device limits
+	   the choices to standard settings, i.e. io-address and IRQ
+	   are related, however DMA can be 1 or 3, assume DMA_A=DMA1,
+	   DMA_C=DMA3 (this is true e.g. for TYAN 1564D Tomcat IV) */
+	if(cr23*4 >=0x100) { /* if active */
+		while((superios[i].io!= 0) && (i<NR_SUPERIOS))
+			i++;
+		if(i==NR_SUPERIOS)
+			printk("Super-IO: too many chips!\n");
+		else {
+			int d;
+			switch (cr23*4) {
+				case 0x3bc:
+					superios[i].io = 0x3bc;
+					superios[i].irq = 7;
+					break;
+				case 0x378:
+					superios[i].io = 0x378;
+					superios[i].irq = 7;
+					break;
+				case 0x278:
+					superios[i].io = 0x278;
+					superios[i].irq = 5;
+			}
+			d=(cr26 &0x0f);
+			if((d==1) || (d==3)) 
+				superios[i].dma= d;
+			else
+				superios[i].dma= PARPORT_DMA_NONE;
+		}
+ 	}
+}
+
+
+static void show_parconfig_winbond(int io, int key)
+{
+	int cr30,cr60,cr61,cr70,cr74,crf0,i=0;
+	char *modes[]={ "Standard (SPP) and Bidirectional(PS/2)", /* 0 */
+			"EPP-1.9 and SPP",
+			"ECP",
+			"ECP and EPP-1.9",
+			"Standard (SPP)",
+			"EPP-1.7 and SPP",		/* 5 */
+			"undefined!",
+			"ECP and EPP-1.7"};
+	char *irqtypes[]={"pulsed low, high-Z", "follows nACK"};
+		
+	/* The registers are called compatible-PnP because the
+           register layout is modelled after ISA-PnP, the access
+           method is just another ... */
+	outb(key,io);
+	outb(key,io);
+	outb(0x07,io);   /* Register 7: Select Logical Device */
+	outb(0x01,io+1); /* LD1 is Parallel Port */
+	outb(0x30,io);
+	cr30=inb(io+1);
+	outb(0x60,io);
+	cr60=inb(io+1);
+	outb(0x61,io);
+	cr61=inb(io+1);
+	outb(0x70,io);
+	cr70=inb(io+1);
+	outb(0x74,io);
+	cr74=inb(io+1);
+	outb(0xf0,io);
+	crf0=inb(io+1);
+	outb(0xaa,io);
+
+	printk("Winbond LPT Config: cr_30=%02x 60,61=%02x%02x "
+	       "70=%02x 74=%02x, f0=%02x\n", cr30,cr60,cr61,cr70,cr74,crf0);
+	printk("Winbond LPT Config: active=%s, io=0x%02x%02x irq=%d, ", 
+	       (cr30 & 0x01) ? "yes":"no", cr60,cr61,cr70&0x0f );
+	if ((cr74 & 0x07) > 3)
+		printk("dma=none\n");
+	else
+		printk("dma=%d\n",cr74 & 0x07);
+	printk("Winbond LPT Config: irqtype=%s, ECP fifo threshold=%d\n",
+	       irqtypes[crf0>>7], (crf0>>3)&0x0f);
+	printk("Winbond LPT Config: Port mode=%s\n", modes[crf0 & 0x07]);
+
+	if(cr30 & 0x01) { /* the settings can be interrogated later ... */
+		while((superios[i].io!= 0) && (i<NR_SUPERIOS))
+			i++;
+		if(i==NR_SUPERIOS) 
+			printk("Super-IO: too many chips!\n");
+		else {
+			superios[i].io = (cr60<<8)|cr61;
+			superios[i].irq = cr70&0x0f;
+			superios[i].dma = (((cr74 & 0x07) > 3) ?
+					   PARPORT_DMA_NONE : (cr74 & 0x07));
+		}
+	}
+}
+
+static void decode_winbond(int efer, int key, int devid, int devrev, int oldid)
+{
+	char *type=NULL;
+	int id,progif=2;
+
+	if (devid == devrev)
+		/* simple heuristics, we happened to read some
+                   non-winbond register */
+		return;
+
+	printk("Winbond chip at EFER=0x%x key=0x%02x devid=%02x devrev=%02x "
+	       "oldid=%02x\n", efer,key,devid,devrev,oldid);
+	id=(devid<<8) | devrev;
+
+	/* Values are from public data sheets pdf files, I can just
+           confirm 83977TF is correct :-) */
+	if      (id == 0x9773) type="83977TF";
+	else if (id == 0x9774) type="83977ATF";
+	else if ((id & ~0x0f) == 0x5270) type="83977CTF / SMSC 97w36x";
+	else if ((id & ~0x0f) == 0x52f0) type="83977EF / SMSC 97x35x";
+	else if ((id & ~0x0f) == 0x5210) type="83627";
+	else if ((id & ~0x0f) == 0x6010) type="83697HF";
+	else if ((oldid &0x0f ) == 0x0c) { type="83877TF"; progif=1;}
+	else if ((oldid &0x0f ) == 0x0c) { type="83877ATF"; progif=1;}
+	else progif=0;
+
+	if(type==NULL) 
+		printk("Winbond unkown chip type\n");
+	else	
+	 	printk("Winbond chip type %s\n",type);
+
+	if(progif==2)
+		show_parconfig_winbond(efer,key);
+	return;
+}
+
+static void decode_smsc(int efer, int key, int devid, int devrev)
+{
+        char *type=NULL;
+	void (*func)(int io, int key);
+        int id;
+
+        if (devid == devrev)
+		/* simple heuristics, we happened to read some
+                   non-winbond register */
+		return;
+
+	func=NULL;
+        printk("SMSC chip at EFER=0x%x key=0x%02x devid=%02x devrev=%02x\n",
+	       efer,key,devid,devrev);
+        id=(devid<<8) | devrev;
+
+	if	(id==0x0302) {type="37c669"; func=show_parconfig_smsc37c669;}
+	else if	(id==0x6582) type="37c665IR";
+	else if	((id==0x6502) && (key==0x44)) type="37c665GT";
+	else if	((id==0x6502) && (key==0x55)) type="37c666GT";
+
+	if(type==NULL)
+                printk("SMSC unknown chip type\n");
+        else
+                printk("SMSC chip type %s\n",type);
+
+	if(func) (func)(efer,key);
+	return;
+}
+
+
+static void winbond_check(int io, int key)
+{
+	int devid,devrev,oldid;
+
+	outb(key,io);
+	outb(key,io);     /* Write Magic Sequence to EFER, extended
+                             funtion enable register */
+	outb(0x20,io);    /* Write EFIR, extended function index register */
+	devid=inb(io+1);  /* Read EFDR, extended function data register */
+	outb(0x21,io);
+	devrev=inb(io+1);
+	outb(0x09,io);
+	oldid=inb(io+1);
+	outb(0xaa,io);    /* Magic Seal */
+
+	decode_winbond(io,key,devid,devrev,oldid);
+}
+
+static void winbond_check2(int io,int key)
+{
+        int devid,devrev,oldid;
+
+        outb(key,io);     /* Write Magic Byte to EFER, extended
+                             funtion enable register */
+        outb(0x20,io+2);  /* Write EFIR, extended function index register */
+        devid=inb(io+2);  /* Read EFDR, extended function data register */
+        outb(0x21,io+1);
+        devrev=inb(io+2);
+        outb(0x09,io+1);
+        oldid=inb(io+2);
+        outb(0xaa,io);    /* Magic Seal */
+
+        decode_winbond(io,key,devid,devrev,oldid);
+}
+
+static void smsc_check(int io, int key)
+{
+        int devid,devrev;
+
+        outb(key,io);
+        outb(key,io);     /* Write Magic Sequence to EFER, extended
+                             funtion enable register */
+        outb(0x0d,io);    /* Write EFIR, extended function index register */
+        devid=inb(io+1);  /* Read EFDR, extended function data register */
+        outb(0x0e,io);
+        devrev=inb(io+1);
+        outb(0xaa,io);    /* Magic Seal */
+
+        decode_smsc(io,key,devid,devrev);
+}
+
+
+static void detect_and_report_winbond (void)
+{ 
+	printk("Winbond Super-IO detection, now testing ports 3F0,370,250,4E,2E ...\n");
+
+	winbond_check(0x3f0,0x87);
+	winbond_check(0x370,0x87);
+	winbond_check(0x2e ,0x87);
+	winbond_check(0x4e ,0x87);
+	winbond_check(0x3f0,0x86);
+	winbond_check2(0x250,0x88); 
+	winbond_check2(0x250,0x89);
+}
+
+static void detect_and_report_smsc (void)
+{
+	printk("SMSC Super-IO detection, now testing Ports 2F0, 370 ...\n");
+	smsc_check(0x3f0,0x55);
+	smsc_check(0x370,0x55);
+	smsc_check(0x3f0,0x44);
+	smsc_check(0x370,0x44);
+}
+
+static int get_superio_dma (struct parport *p)
+{
+	int i=0;
+	while( (superios[i].io != p->base) && (i<NR_SUPERIOS))
+		i++;
+	if (i!=NR_SUPERIOS)
+		return superios[i].dma;
+	return PARPORT_DMA_NONE;
+}
+
+static int get_superio_irq (struct parport *p)
+{
+	int i=0;
+        while( (superios[i].io != p->base) && (i<NR_SUPERIOS))
+                i++;
+        if (i!=NR_SUPERIOS)
+                return superios[i].irq;
+        return PARPORT_IRQ_NONE;
+}
+	
+
 /* --- Mode detection ------------------------------------- */
 
 /*
@@ -1158,9 +1479,12 @@ static int __devinit parport_PS2_supported(struct parport *pb)
 static int __devinit parport_ECP_supported(struct parport *pb)
 {
 	int i;
-	int config;
+	int config, configb;
 	int pword;
 	struct parport_pc_private *priv = pb->private_data;
+	int intrline[]={0,7,9,10,11,14,15,5}; /* Translate ECP
+                                                 intrLine to ISA irq
+                                                 value */
 
 	/* If there is no ECR, we have no hope of supporting ECP. */
 	if (!priv->ecr)
@@ -1253,11 +1577,23 @@ static int __devinit parport_ECP_supported(struct parport *pb)
 	printk (KERN_DEBUG "0x%lx: Interrupts are ISA-%s\n", pb->base,
 		config & 0x80 ? "Level" : "Pulses");
 
-	config = inb (CONFIGB (pb));
-	if (!(config & 0x40)) {
+	configb = inb (CONFIGB (pb));
+	if (!(configb & 0x40)) {
 		printk (KERN_WARNING "0x%lx: IRQ conflict!\n", pb->base);
 		pb->irq = PARPORT_IRQ_NONE;
 	}
+	printk (KERN_DEBUG "0x%lx: ECP port cfgA=0x%02x cfgB=0x%02x\n",
+		pb->base, config, configb);
+        printk (KERN_DEBUG "0x%lx: ECP settings irq=", pb->base);
+	if ((configb >>3) & 0x07)
+		printk("%d",intrline[(configb >>3) & 0x07]);
+	else
+		printk("<none or set by other means>");
+	printk ( " dma=");
+	if( (configb & 0x03 ) == 0x00)
+		printk("<none or set by other means>\n");
+	else
+		printk("%d\n",configb & 0x07);
 
 	/* Go back to mode 000 */
 	frob_econtrol (pb, 0xe0, ECR_SPP << 5);
@@ -1476,8 +1812,6 @@ static int __devinit parport_irq_probe(struct parport *pb)
 
 	if (priv->ecr) {
 		pb->irq = programmable_irq_support(pb);
-		if (pb->irq != PARPORT_IRQ_NONE)
-			goto out;
 	}
 
 	if (pb->modes & PARPORT_MODE_ECP)
@@ -1497,7 +1831,9 @@ static int __devinit parport_irq_probe(struct parport *pb)
 	if (pb->irq == PARPORT_IRQ_NONE)
 		pb->irq = irq_probe_SPP(pb);
 
-out:
+	if (pb->irq == PARPORT_IRQ_NONE)
+		pb->irq = get_superio_irq(pb);
+
 	return pb->irq;
 }
 
@@ -1525,7 +1861,12 @@ static int __devinit parport_dma_probe (struct parport *p)
 {
 	const struct parport_pc_private *priv = p->private_data;
 	if (priv->ecr)
-		p->dma = programmable_dma_support(p);
+		p->dma = programmable_dma_support(p); /* ask ECP chipset first */
+	if (p->dma == PARPORT_DMA_NONE)
+		/* ask known Super-IO chips proper, although these
+		   claim ECP compatible, some don't report their DMA
+		   conforming to ECP standards */
+		p->dma = get_superio_dma(p);
 
 	return p->dma;
 }
@@ -1533,9 +1874,9 @@ static int __devinit parport_dma_probe (struct parport *p)
 /* --- Initialisation code -------------------------------- */
 
 struct parport *__devinit parport_pc_probe_port (unsigned long int base,
-						    unsigned long int base_hi,
-						    int irq, int dma,
-						    struct pci_dev *dev)
+						 unsigned long int base_hi,
+						 int irq, int dma,
+						 struct pci_dev *dev)
 {
 	struct parport_pc_private *priv;
 	struct parport_operations *ops;
@@ -1625,7 +1966,8 @@ struct parport *__devinit parport_pc_probe_port (unsigned long int base,
 			parport_dma_probe(p);
 		}
 	}
-	if (p->dma == PARPORT_DMA_AUTO)		
+	if (p->dma == PARPORT_DMA_AUTO) /* To use DMA, giving the irq
+                                           is mandatory (see above) */
 		p->dma = PARPORT_DMA_NONE;
 
 #ifdef CONFIG_PARPORT_PC_FIFO
@@ -2040,6 +2382,7 @@ static int dmaval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PAR
 static int irqval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_PROBEONLY };
 static const char *irq[PARPORT_PC_MAX_PORTS] = { NULL, };
 static const char *dma[PARPORT_PC_MAX_PORTS] = { NULL, };
+static int superio = 0;
 
 MODULE_AUTHOR("Phil Blundell, Tim Waugh, others");
 MODULE_DESCRIPTION("PC-style parallel port driver");
@@ -2051,12 +2394,18 @@ MODULE_PARM_DESC(irq, "IRQ line");
 MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
 MODULE_PARM_DESC(dma, "DMA channel");
 MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
+MODULE_PARM_DESC(superio, "Enable Super-IO chipset probe");
+MODULE_PARM(superio, "i");
 
 int init_module(void)
 {	
 	/* Work out how many ports we have, then get parport_share to parse
 	   the irq values. */
 	unsigned int i;
+	if (superio) {
+		detect_and_report_winbond ();
+		detect_and_report_smsc ();
+	}
 	for (i = 0; i < PARPORT_PC_MAX_PORTS && io[i]; i++);
 	if (i) {
 		if (parport_parse_irqs(i, irq, irqval)) return 1;

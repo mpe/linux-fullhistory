@@ -925,9 +925,9 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 			swap_free(entry);
 			if ((shp != shm_lock(shp->id)) && (is_shmzero == 0))
 				BUG();
-			if (is_shmzero) shm_swp--;
+			if (is_shmzero == 0) shm_swp--;
 		}
-		if (is_shmzero) shm_rss++;
+		if (is_shmzero == 0) shm_rss++;
 		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
 		SHM_ENTRY(shp, idx) = pte;
 	} else

@@ -3,6 +3,7 @@
 #
 
 source drivers/net/arcnet/Config.in
+source drivers/net/appletalk/Config.in
 
 tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'Bonding driver support' CONFIG_BONDING
@@ -131,9 +132,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       fi
 
       tristate '    Apricot Xen-II on board Ethernet' CONFIG_APRICOT
-      if [ "$CONFIG_OBSOLETE" = "y" ]; then
-         tristate '    CS89x0 support' CONFIG_CS89x0
-      fi
+      tristate '    CS89x0 support' CONFIG_CS89x0
       tristate '    Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
       tristate '    DECchip Tulip (dc21x4x) PCI support' CONFIG_TULIP
       tristate '    Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
@@ -207,27 +206,6 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 bool '    Use large TX/RX rings' CONFIG_ROADRUNNER_LARGE_RINGS
       fi
    fi
-fi
-
-#
-# AppleTalk
-#
-
-if [ "$CONFIG_ATALK" != "n" ]; then
-   mainmenu_option next_comment
-   comment 'Appletalk devices'
-   dep_tristate 'Apple/Farallon LocalTalk PC support' CONFIG_LTPC $CONFIG_ATALK
-   dep_tristate 'COPS LocalTalk PC support' CONFIG_COPS $CONFIG_ATALK
-   if [ "$CONFIG_COPS" != "n" ]; then
-      bool '  Dayna firmware support' CONFIG_COPS_DAYNA
-      bool '  Tangent firmware support' CONFIG_COPS_TANGENT
-   fi
-   dep_tristate 'Appletalk-IP driver support' CONFIG_IPDDP $CONFIG_ATALK
-   if [ "$CONFIG_IPDDP" != "n" ]; then
-      bool '  IP to Appletalk-IP Encapsulation support' CONFIG_IPDDP_ENCAP
-      bool '  Appletalk-IP to IP Decapsulation support' CONFIG_IPDDP_DECAP
-   fi
-   endmenu
 fi
 
 if [ ! "$CONFIG_PARPORT" = "n" ]; then

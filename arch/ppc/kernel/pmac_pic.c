@@ -10,6 +10,7 @@
 #include <asm/io.h>
 #include <asm/smp.h>
 #include <asm/prom.h>
+#include <asm/pci-bridge.h>
 #include "pmac_pic.h"
 
 /* pmac */struct pmac_irq_hw {

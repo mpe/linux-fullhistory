@@ -1210,9 +1210,6 @@ static int __init ncr885e_probe(void)
 	unsigned short cmd;
 	unsigned char irq, latency;
 
-	if ( debug >= 0)
-		ncr885e_debug = debug;
-
 	while(( pdev = pci_find_device( PCI_VENDOR_ID_NCR, 
 					PCI_DEVICE_ID_NCR_53C885_ETHERNET,
 					pdev )) != NULL ) {
@@ -1399,9 +1396,6 @@ write_mii( unsigned long ioaddr, int reg, int data )
 int
 init_module(void)
 {
-	if ( debug >= 0)
-		ncr885e_debug = debug;
-
 	return ncr885e_probe();
 }
 

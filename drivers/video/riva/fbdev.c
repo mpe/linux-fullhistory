@@ -517,8 +517,8 @@ static int __devinit rivafb_init_one (struct pci_dev *pd,
 	rinfo->riva.Architecture = rci->arch_rev;
 
 	rinfo->pd = pd;
-	rinfo->base0_region_size = pci_resource_start (pd, 0);
-	rinfo->base1_region_size = pci_resource_start (pd, 1);
+	rinfo->base0_region_size = pci_resource_len (pd, 0);
+	rinfo->base1_region_size = pci_resource_len (pd, 1);
 
 	assert (rinfo->base0_region_size >= 0x00800000);	/* from GGI */
 	assert (rinfo->base0_region_size >= 0x01000000);	/* from GGI */

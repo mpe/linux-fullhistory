@@ -54,13 +54,12 @@
 /* record mux defines */
 #define AC97_RECMUX_MIC           0x0000
 #define AC97_RECMUX_CD            0x0101
-#define AC97_RECMUX_VIDEO         0x0202       /* not used */
-#define AC97_RECMUX_AUX           0x0303      
-#define AC97_RECMUX_LINE          0x0404      
+#define AC97_RECMUX_VIDEO         0x0202
+#define AC97_RECMUX_AUX           0x0303
+#define AC97_RECMUX_LINE          0x0404
 #define AC97_RECMUX_STEREO_MIX    0x0505
 #define AC97_RECMUX_MONO_MIX      0x0606
 #define AC97_RECMUX_PHONE         0x0707
-
 
 /* general purpose register bit defines */
 #define AC97_GP_LPBK              0x0080       /* Loopback mode */
@@ -72,7 +71,6 @@
 #define AC97_GP_3D                0x2000       /* 3D Enhancement 1=on */
 #define AC97_GP_ST                0x4000       /* Stereo Enhancement 1=on */
 #define AC97_GP_POP               0x8000       /* Pcm Out Path, 0=pre 3D, 1=post 3D */
-
 
 /* powerdown control and status bit defines */
 
@@ -116,7 +114,7 @@
 	SOUND_MASK_PHONEIN|SOUND_MASK_PHONEOUT)
 
 #define AC97_RECORD_MASK (SOUND_MASK_MIC|\
-	SOUND_MASK_CD|SOUND_MASK_VIDEO|\
+	SOUND_MASK_CD|SOUND_MASK_IGAIN|SOUND_MASK_VIDEO|\
 	SOUND_MASK_LINE1| SOUND_MASK_LINE|\
 	SOUND_MASK_PHONEIN)
 

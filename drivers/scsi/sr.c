@@ -666,11 +666,7 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	/* scsi_wait_cmd sets the command length */
 	SRpnt->sr_cmd_len = 0;
 
-	/*
-	 * FIXME(eric) - need to set the data direction here.
-	 */
-	SRpnt->sr_data_direction = SCSI_DATA_UNKNOWN;
-
+	SRpnt->sr_data_direction = cgc->data_direction;
 	scsi_wait_req(SRpnt, (void *) cgc->cmd, (void *) buffer, cgc->buflen,
 		      SR_TIMEOUT, MAX_RETRIES);
 

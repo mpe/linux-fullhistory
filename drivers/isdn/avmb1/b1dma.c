@@ -40,7 +40,7 @@ static char *revision = "$Revision: 1.3 $";
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
 
-int suppress_pollack = 0;
+static int suppress_pollack = 0;
 MODULE_PARM(suppress_pollack, "0-1i");
 
 /* ------------------------------------------------------------- */
