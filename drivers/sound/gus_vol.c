@@ -81,7 +81,7 @@ gus_adagio_vol (int vel, int mainv, int xpn, int voicev)
     return ((15 << 8) | 255);
 
   /*
-   * Convert to gus's logarithmic form with 4 bit exponent i and 8 bit
+   * Convert to GUS's logarithmic form with 4 bit exponent i and 8 bit
    * mantissa m.
    */
   n = x;

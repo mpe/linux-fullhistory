@@ -1666,7 +1666,7 @@ guswave_open (int dev, int mode)
 
   if ((err = DMAbuf_open_dma (gus_devnum)) < 0)
     {
-      /* printk ("GUS: Loading saples without DMA\n"); */
+      /* printk ("GUS: Loading samples without DMA\n"); */
       gus_no_dma = 1;		/* Upload samples using PIO */
     }
   else
@@ -1788,7 +1788,7 @@ guswave_load_patch (int dev, int format, const char *addr,
       if ((free_mem_ptr / GUS_BANK_SIZE) !=
 	  ((free_mem_ptr + patch.len) / GUS_BANK_SIZE))
 	{
-	  unsigned long   tmp_mem =	/* Aling to 256K */
+	  unsigned long   tmp_mem =	/* Align to 256K */
 	  ((free_mem_ptr / GUS_BANK_SIZE) + 1) * GUS_BANK_SIZE;
 
 	  if ((tmp_mem + patch.len) > gus_mem_size)
@@ -2514,7 +2514,7 @@ gus_transfer_output_block (int dev, unsigned long buf,
   if (audio_devs[dev]->dmachan1 > 3)
     dma_command |= 0x04;	/* 16 bit DMA channel */
 
-  gus_write8 (0x41, dma_command);	/* Kickstart */
+  gus_write8 (0x41, dma_command);	/* Kick start */
 
   if (chn == (gus_audio_channels - 1))	/* Last channel */
     {
@@ -2715,7 +2715,7 @@ guswave_setup_voice (int dev, int voice, int chn)
   guswave_set_instr (dev, voice, info->pgm_num);
 
   voices[voice].expression_vol =
-    info->controllers[CTL_EXPRESSION];	/* Just msb */
+    info->controllers[CTL_EXPRESSION];	/* Just MSB */
   voices[voice].main_vol =
     (info->controllers[CTL_MAIN_VOLUME] * 100) / (unsigned) 128;
   voices[voice].panning =
@@ -2862,7 +2862,7 @@ guswave_patchmgr (int dev, struct patmgr_info *rec)
 				 */
 
 	offs += sample_ptrs[sample];	/*
-					 * Begin offsess + offset to DRAM
+					 * Begin offsets + offset to DRAM
 					 */
 
 	for (n = 0; n < l; n++)
@@ -2907,7 +2907,7 @@ guswave_patchmgr (int dev, struct patmgr_info *rec)
 				 */
 
 	offs += sample_ptrs[sample];	/*
-					 * Begin offsess + offset to DRAM
+					 * Begin offsets + offset to DRAM
 					 */
 
 	for (n = 0; n < l; n++)

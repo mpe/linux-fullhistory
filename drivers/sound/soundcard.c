@@ -98,7 +98,7 @@ sound_open (inode_handle * inode, file_handle * file)
 
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
     {
-      printk ("SoundCard Error: The soundcard system has not been configured\n");
+      printk ("Sound Card Error: The soundcard system has not been configured\n");
       return -(ENXIO);
     }
 
@@ -734,7 +734,7 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap)
 }
 
 int
-soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc * info)
+sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc * info)
 {
   printk ("Entered sound_map_buffer()\n");
   printk ("Exited sound_map_buffer()\n");

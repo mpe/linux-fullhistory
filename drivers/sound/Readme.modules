@@ -45,10 +45,10 @@ For example:
 
 	insmod sound dma_buffsize=32768
 
-Minimum buffer size is 4096 and the maximum depends on the DMA channe. 
+Minimum buffer size is 4096 and the maximum depends on the DMA channel. 
 For 8 bit channels (0 to 3) the limit is 64k and for 16 bit ones (5 to 7)
-it's 128k. Driver selects a suitable buffer size automaticly in case
-you try to spesify an invalid size.
+it's 128k. Driver selects a suitable buffer size automatically in case
+you try to specify an invalid size.
 
 Q: What is the right DMA buffer size?
 
@@ -58,17 +58,17 @@ audio or when there are other processes running on the same system. Also
 recording to hard disk is likely to require large buffers.
 
 Very small buffers are sufficient when you are just playing 8kHz audio files 
-on an empty P133 system. Using a 128k byffer just wastes 120k (or 250k)
+on an empty P133 system. Using a 128k buffer just wastes 120k (or 250k)
 of valuable physical RAM memory. 
 
-The right buffer sice can be easily found by making some experiments
+The right buffer size can be easily found by making some experiments
 with the dma_buffsize= parameter. I use usually 16k buffers on a DX4/100 system
 and 64k on an old 386 system. 
 
 NOTE!	DMA buffers are used only by /dev/audio# and /dev/dsp# devices.
 	Other device files don't use them but there are two exceptions:
 	GUS driver uses DMA buffers when loading samples to the card.
-	Ensoniq SoundScape driver uses them when doanloading the microcode
+	Ensoniq SoundScape driver uses them when downloading the microcode
 	file (sndscape.co[012]) to the card. Using large buffers doesn't
 	increase performance in these cases.
 

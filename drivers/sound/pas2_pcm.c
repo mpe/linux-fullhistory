@@ -62,7 +62,7 @@ pcm_set_speed (int arg)
   tmp = pas_read (0x0B8A);
 
   /*
-     * Set anti-aliasing filters according to sample rate. You reall *NEED*
+     * Set anti-aliasing filters according to sample rate. You really *NEED*
      * to enable this feature for all normal recording unless you want to
      * experiment with aliasing effects.
      * These filters apply to the selected "recording" source.

@@ -25,7 +25,7 @@
 #define OFF		0
 
 static int      audio_mode[MAX_AUDIO_DEV];
-static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in noblocking mode */
+static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in nonblocking mode */
 
 #define		AM_NONE		0
 #define		AM_WRITE	1

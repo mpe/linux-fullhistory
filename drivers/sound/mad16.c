@@ -17,7 +17,7 @@
  *      OPTi 82C929     MAD16 Pro
  *      OPTi 82C930
  *
- * These audio interface chips don't prduce sound themselves. They just
+ * These audio interface chips don't produce sound themselves. They just
  * connect some other components (OPL-[234] and a WSS compatible codec)
  * to the PC bus and perform I/O, DMA and IRQ address decoding. There is
  * also a UART for the MPU-401 mode (not 82C928/Mozart).
@@ -33,7 +33,7 @@
  *      0x00    - none
  *      0x02    - Sony 31A
  *      0x04    - Mitsumi
- *      0x06    - Panasonic (type "LaserMate", not "SoundBlaster")
+ *      0x06    - Panasonic (type "LaserMate", not "Sound Blaster")
  *      0x08    - Secondary IDE (address 0x170)
  *      0x0a    - Primary IDE (address 0x1F0)
  *      
@@ -83,8 +83,8 @@ static int      already_initialized = 0;
  */
 
 #define MC0_PORT	0xf8c	/* Dummy port */
-#define MC1_PORT	0xf8d	/* SB address, CDROM interface type, joystick */
-#define MC2_PORT	0xf8e	/* CDROM address, IRQ, DMA, plus OPL4 bit */
+#define MC1_PORT	0xf8d	/* SB address, CD-ROM interface type, joystick */
+#define MC2_PORT	0xf8e	/* CD-ROM address, IRQ, DMA, plus OPL4 bit */
 #define MC3_PORT	0xf8f
 #define PASSWD_REG	0xf8f
 #define MC4_PORT	0xf90
@@ -200,14 +200,14 @@ detect_c930 (void)
   mad_write (MC7_PORT, 0);
   if ((tmp = mad_read (MC7_PORT)) != 0)
     {
-      DDB (printk ("MC7 not writeable (%x)\n", tmp));
+      DDB (printk ("MC7 not writable (%x)\n", tmp));
       return 0;
     }
 
   mad_write (MC7_PORT, 0xcb);
   if ((tmp = mad_read (MC7_PORT)) != 0xcb)
     {
-      DDB (printk ("MC7 not writeable2 (%x)\n", tmp));
+      DDB (printk ("MC7 not writable2 (%x)\n", tmp));
       return 0;
     }
 
@@ -248,7 +248,7 @@ detect_mad16 (void)
       return 0;
     }
 
-  mad_write (MC1_PORT, tmp ^ 0x80);	/* Togge a bit */
+  mad_write (MC1_PORT, tmp ^ 0x80);	/* Toggle a bit */
   if ((tmp2 = mad_read (MC1_PORT)) != (tmp ^ 0x80))	/* Compare the bit */
     {
       mad_write (MC1_PORT, tmp);	/* Restore */
@@ -365,7 +365,7 @@ init_c930 (struct address_info *hw_config)
     return 0;
 
 /*
- * A temporarary kludge which drops the device back to mode1.
+ * A temporary kludge which drops the device back to mode1.
  * This removes problems with interrupts but disables full duplex.
  * A better solution should be introduced later.
  */

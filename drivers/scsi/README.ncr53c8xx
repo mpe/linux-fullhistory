@@ -1,0 +1,560 @@
+The linux NCR53C8XX driver README file
+
+Written by Gerard Roudier <groudier@club-internet.fr>
+21 Rue Carnot
+95170 DEUIL LA BARRE - FRANCE
+
+12 June 1995
+===============================================================================
+
+1.  Introduction
+2.  Supported chips and SCSI features
+3.  Summary of other supported features
+4.  Memory mapped IO versus normal IO
+5.  Tagged command queueing
+6.  Parity checking
+7.  Profiling information
+8.  Control commands
+      8.1  Set minimum synchronous period
+      8.2  Set wide size
+      8.3  Set maximum number of concurrent tagged commands
+      8.4  Set order type for tagged command
+      8.5  Set debug mode
+      8.6  Clear profile counters
+9.  Configuration parameters
+10. Some constants and flags of the ncr53c8xx.h header files
+11. Provided files
+12. Installation procedure for Linux version 1
+13. Installation procedure for Linux version 2
+14. Control commands under linux-1.2.13
+15. Known problems
+      15.1 Tagged commands with Iomega Jaz device
+
+===============================================================================
+
+1. Introduction
+
+This driver has been ported from FreeBSD to Linux and is currently 
+maintained by:
+          Gerard Roudier              <groudier@club-internet.fr>
+
+The original driver has been written for 386bsd and FreeBSD by
+          Wolfgang Stanglmeier        <wolf@cologne.de>
+          Stefan Esser                <se@mi.Uni-Koeln.de>
+
+You can find technical informations about the NCR 8xx family in the PCI-HOWTO 
+written by Michael Will and in the SCSI-HOWTO written by Drew Eckhardt.
+
+Informations about new chips is available at SYMBIOS web server:
+          http://www.symbios.com
+
+This short documentation only describes the features of the NCR53C8XX driver, 
+configuration parameters and control commands available through the proc scsi 
+file system read / write operations.
+
+This driver has been tested ok with linux/i386  and is currently untested
+under linux/Alpha. If you intend to use this driver under linux/Alpha, just 
+try it first with read-only or mounted read-only devices.
+
+I am not a native speaker of English and there is probably lots of 
+mistakes in this README file. Any help will be welcome.
+
+
+2. Supported chips and SCSI features
+
+The following features are supported for all chips:
+
+	Synchronous negotiation
+	Disconnection
+	Tagged command queuing
+	Scsi parity checking
+	Master parity checking
+
+"Wide negotiation" is supported for chips that allow it.
+The following table shows some characteristics of NCR 8xx family chips:
+
+       On board                        Supported by    Tested with
+Chip   SDMS BIOS   Wide   Ultra Scsi   the driver      the driver
+----   ---------   ----   ----------   ------------    -----------
+810        N         N        N            Y             Y
+810A       N         N        N            Y             Y
+815        Y         N        N            Y             Y
+825        Y         Y        N            Y             Y
+825A       Y         Y        N            Y             Not yet
+875        Y         Y        Y(1)         Y             Not yet
+
+(1) Ultra scsi extensions will be supported in a future release of the 
+    driver.
+
+
+3. Summary of other supported features.
+
+        Module:                allow to load the driver
+        Memory mapped IO:      increase performances
+        Profiling information: read operations from the proc scsi file system
+        Control commands:      write operations to the proc scsi file system
+        Debugging information: written to syslog (expert only)
+	Scatter / gather
+	Shared interrupt
+
+
+4. Memory mapped IO versus normal IO
+
+Memory mapped IO have less latency than normal IO.
+Since linux-1.3.x, memory mapped IO is used rather than normal IO.
+Memory mapped IO seems to works fine on most hardware configuration, but some 
+bad designed motherboards may break this feature.
+
+During initialisation phase, the driver first tries to use memory mapped io.
+If nothing seems wrong, it will use memory mapped io.
+If a flaw is detected,  it will use normal io.
+
+However, it's possible that memory mapped io does not work properly and the 
+driver has not detected the problem.
+
+The configuration option CONFIG_SCSI_NCR53C8XX_IOMAPPED allow to force the 
+driver to use normal io in all cases.
+
+
+5. Tagged command queueing
+
+Some scsi devices donnot support properly tagged command queuing.
+A safe configuration can be to not enable tagged command queuing support at 
+boot-up, and to enable support of it with the control command "settags" 
+described further in this text.
+
+Once you are sure that all your devices support properly tagged command queuing,
+you can enable it by default with the CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE 
+configuration option.
+
+
+6. Parity checking
+
+The driver supports scsi parity checking and PCI bus master parity checking.
+These features must be enabled in order to ensure safe data transfers.
+However, some flawed devices or mother boards will have problems with 
+parity. You can disable parity by choosing first "CONFIG_EXPERIMENTAL".
+Then, "make config" will allow to set the following configuration options:
+
+   CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK  (disable scsi parity checking)
+   CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK (disable master parity checking)
+
+
+7. Profiling information
+
+Profiling information are available through the proc scsi file system.
+The device associated with a host has the following pathname:
+          /proc/scsi/ncr53c8xx/N     (N=0,1,2 ....)
+
+Generally, only 1 board is used on hardware configuration, and the device is:
+          /proc/scsi/ncr53c8xx/0
+
+However, if the driver has been made as module, the number of the host is 
+incremented each time the driver is loaded.
+
+In order to display profiling informations, just enter:
+         cat /proc/scsi/ncr53c8xx/0
+and you will get something like the following text:
+
+-------------------------------------------------------
+General informations:
+  Chip NCR53C810, device id 0x1, revision id 0x2
+  IO port address 0x6000, IRQ number 10
+  Using memory mapped IO at virtual address 0x282c000
+Profiling informations:
+  num_trans    = 18014
+  num_kbytes   = 671314
+  num_disc     = 25763
+  num_break    = 1673
+  num_int      = 1685
+  num_fly      = 18038
+  ms_setup     = 4940
+  ms_data      = 369940
+  ms_disc      = 183090
+  ms_post      = 1320
+-------------------------------------------------------
+
+General informations are easy to understand. The device id and the 
+revision id identify the scsi chip as follow:
+
+Chip    Device id     Revision Id
+----    ---------     -----------
+810       0x1            <  0x10
+810A      0x1            >= 0x10
+815       0x4
+825       0x3            <  0x10
+860       0x6
+825A      0x3            >= 0x10
+875       0xf
+
+The profiling informations are updated upon completion of scsi commands.
+The data structure is allocated and zeroed when the host adapter is 
+attached. So, if the driver is a module you can reset the profiling data 
+by unloading and reloading the driver.
+
+The following counters are available:
+("num" prefix means "number of", "ms" means milli-seconds)
+
+num_trans
+	Number of completed commands
+	Example above: 18014 completed commands
+
+num_kbytes
+	Number of kbytes transferred
+	Example above: 671 MB transferred
+
+num_disc
+	Number of scsi disconnections
+	Example above: 25763 scsi disconnections
+
+num_break
+	number of script interruptions (phase mismatch)
+	Example above: 1673 script interruptions
+
+num_int
+	Number of interrupts other than "on the fly"
+	Example above: 1685 interruptions not "on the fly"
+
+num_fly
+	Number of interrupts "on the fly"
+	Example above: 18038 interruptions "on the fly"
+
+ms_setup
+	Elapsed time for scsi commands setups
+	Example above: 4.94 seconds
+
+ms_data
+	Elapsed time for data transfers
+	Example above: 369.94 seconds spent for data transfer
+
+ms_disc
+	Elapsed time for scsi disconnections
+	Example above: 183.09 seconds spent disconnected
+
+ms_post
+	Elapsed time for command post processing
+	(time from scsi status get to command completion call)
+	Example above: 1.32 seconds spent for post processing
+
+Due to the 1/100 second tick of the system clock, "ms_post" time may be 
+wrong.
+
+In the example above, we got 18038 interrupts "on the fly" and only 1673 script 
+breaks probably due to disconnections inside a segment of the scatter list. 
+It is an excellent result due to the fact that the driver tries to use small 
+data segments (512) for the scatter list. The CPU load of this rescatter process 
+is acceptable. Unlike other scsi processors, NCR53C8XX controllers do not need  
+large data chunks in order to get better performances, and it seems that it 
+is the opposite.
+The scatter/gather algorithm of the middle scsi driver is not optimal for 
+NCR scsi processors and should be tunable according to host type.
+
+You can tune the "wished" segment size for the scatterlist by changing the 
+following "define" in the file ncr53c8xx.h.
+Use only power of 2 greater than 512 (1024, 2048 or 4096).
+
+SCSI_NCR_SEGMENT_SIZE		(default: 512)
+
+
+8. Control commands
+
+Control commands can be sent to the driver with write operations to the 
+proc scsi file system. The generic command syntax is the following:
+
+      echo "<verb> <parameters>" >/proc/scsi/ncr53c8xx/0
+      (assumes controller number is 0)
+
+Available commands:
+
+8.1 Set minimum synchronous period
+
+    setsync <target> <period>
+
+    target:    target number
+    period:    minimum synchronous period in nano-seconds.
+               Maximum speed = 1000/(4*period) MB/second
+
+    Specify a period of 255, to force asynchronous transfer mode.
+
+8.2 Set wide size
+
+    setwide <target> <size>
+
+    target:    target number
+    size:      0=8 bits, 1=16bits
+
+8.3 Set maximum number of concurrent tagged commands
+ 
+    settags <target> <tags>
+
+    target:    target number
+    tags:      number of concurrent tagged commands
+               must not be greater than SCSI_NCR_MAX_TAGS (default: 4)
+
+8.4 Set order type for tagged command
+
+    setorder <order>
+
+    order:     3 possible values:
+               simple: use SIMPLE TAG for all operations (read and write)
+               ordered: use ORDERED TAG for all operations
+               default: use default tag type,
+                        SIMPLE  TAG for read  operations
+                        ORDERED TAG for write operations
+
+
+8.5 Set debug mode
+
+    setdebug <list of debug flags>
+
+    Available debug flags:
+        alloc:   print infos about memory allocations (ccb, lcb)
+        queue:   print infos about insertions into the command start queue
+        result:  print sense data on CHECK CONDITION status
+        scatter: print infos about the scatter process
+        scripts: print infos about the script binding process
+	tiny:    print minimal debugging informations
+	timing:  print timing informations of the ncr chip.
+	nego:    print informations about scsi negotiations
+        phase:   printf informations on script interruptions
+
+
+8.5 Clear profile counters
+
+    clearprof
+
+    The profile counters are automatically cleared when the amount of data 
+    transfered reach 1000 GB in order to avoid overflow.
+    The "clearprof" command allow to clear these counters at any time.
+
+
+9. Configuration parameters
+
+If the firmware of all your devices is perfect enough, all the features 
+supported by the driver can be enabled at start-up.
+However, if only one has a flaw for some scsi feature, you can disable the 
+support by the driver of this feature at linux start-up and enable this 
+feature after boot-up only for devices that support it safely.
+
+CONFIG_SCSI_NCR53C8XX_IOMAPPED       (default answer: n)
+    Answer "y" if you suspect your mother board to not allow memory mapped IO.
+    May slow down a little performances.
+
+CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE    (default answer: n)
+    Answer "y" if you are sure that all your scsi devices that are able to 
+    accept tagged commands will proceed safely.
+
+CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS (default answer: n)
+    This option allow to force asynchronous transfer mode for all scsi devices. 
+ 
+CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO (default answer: n)
+    Force synchronous negotiation for all scsi-2 devices.
+    Some scsi-2 devices do not report this feature in byte 7 of inquiry 
+    response and however support it properly (TAMARACK scanners for example).
+
+CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT   (default and only reasonnable answer: n)
+    If you suspect a device of yours to not support properly disconnections,
+    you can answer "y". Then, all scsi devices will never disconnect the bus 
+    even while long scsi operations.
+
+
+10. Some constants and flags of the ncr53c8xx.h header files
+
+Some of these are defined from the configuration parameters.
+To change other "defines", you must edit the header file.
+Do that only if you know what you are doing.
+
+SCSI_NCR_IOMAPPED		(default: not defined)
+	If defined, normal IO is forced.
+
+SCSI_NCR_SHARE_IRQ		(default: defined)
+	If defined, request shared irq.
+	
+SCSI_NCR_MAX_TAGS		(default: 4)
+	Maximum number of simultaneous tagged commands to a device.
+	Can be changed by "settags <target> <maxtags>"
+
+SCSI_NCR_ALWAYS_SIMPLE_TAG	(default: defined)
+	Use SIMPLE TAG for read and write commands
+	Can be changed by "setorder <ordered|simple|default>"
+
+SCSI_NCR_TAGGED_QUEUE_DISABLED	(default: defined)
+	If defined, tagged command queuing is disable at start-up.
+	Can be changed by "settags <target> <maxtags>"
+
+SCSI_NCR_NO_DISCONNECT		(default: not defined)
+	If defined, targets are not allowed to disconnect.
+
+SCSI_NCR_FORCE_SYNC_NEGO	(default: not defined)
+	If defined, synchronous negotiation is tried for all scsi-2 devices.
+	Can be changed by "setsync <target> <period>"
+
+SCSI_NCR_DISABLE_MPARITY_CHECK	(default: not defined)
+	If defined, master parity checking is disabled.
+
+SCSI_NCR_DISABLE_PARITY_CHECK	(default: not defined)
+	If defined, scsi parity checking is disabled.
+
+SCSI_NCR_PROFILE		(default: defined)
+	If defined, profile informations are gathered
+
+SCSI_NCR_MAX_SCATTER		(default: 128)
+	Scatter list size of the driver ccb.
+
+SCSI_NCR_SEGMENT_SIZE		(default: 512)
+	If defined, the driver try to use scatter segments of this size.
+	If not defined, the Linux scatter list is used as is.
+
+SCSI_NCR_MAX_TARGET		(default: 16)
+	Max number of target per host.
+
+SCSI_NCR_MAX_HOST		(default: 2)
+	Max number of host controllers.
+
+SCSI_NCR_SETTLE_TIME		(default: 2)
+	Number of seconds the driver wait after reset.
+
+SCSI_NCR_TIMEOUT_ALERT		(default: 3)
+	If a pending command will time out after this amount of seconds,
+	an ordered tag is used for the next command.
+	Avoid timeouts for unordered tagged commands.
+
+SCSI_NCR_CAN_QUEUE		(default: 7*SCSI_NCR_MAX_TAGS)
+	Max number of commands that can be queued to a host.
+
+SCSI_NCR_CMD_PER_LUN		(default: SCSI_NCR_MAX_TAGS)
+	Max number of commands queued to a host for a device.
+
+SCSI_NCR_SG_TABLESIZE		(default: SCSI_NCR_MAX_SCATTER-1)
+	Max size of the Linux scatter/gather list.
+
+SCSI_NCR_MAX_LUN	(default: 8)
+	Max number of luns per target
+
+
+11. Provided files
+
+Driver and common files:
+
+	README.ncr53c8xx	: this file
+	ChangeLog.ncr53c8xx	: change log
+	ncr53c8xx.h		: definitions
+	ncr53c8xx.c		: the driver code
+	scsitag.c		: command tool to enable tagged queue
+	conf.modules		: sample of /etc/conf.modules
+
+Installation procedure 1 replacing the standard NCR53c7,8xx driver:
+
+	Install.ncr53c8xx	: installation script
+	Uninstall.ncr53c8xx	: uninstallation script
+	53c7,8xx.h		: included by hosts.c, override the standard driver
+
+	Patch-1.2.13.ncr53c8xx     : patch for linux-1.2.13
+	Patch-1.3.45-49.ncr53c8xx  : patch for linux-1.3.45 to linux-1.3.49
+	Patch-1.3.50-100.ncr53c8xx : patch for linux-1.3.50 to linux-1.3.100
+
+Installation procedure 2 adding the driver to the kernel tree:
+
+	Install2.ncr53c8xx	   : installation script
+
+	Patch2-2.0.0-1.ncr53c8xx   : patch for linux-2.0.0 and linux-2.0.1
+	Patch2-Current.ncr53c8xx   : patch used for sub-levels > 1
+
+Prior to installing the driver, you must untar the distribution, as follow:
+
+	mkdir ncrB2L
+	cd ncrB2L
+	tar zxvf ncrBsd2Linux-1.12a-src.tar.gz
+
+
+12. Installation procedure for Linux version 1
+
+This install script only supports linux-1.2.13 and linux-1.3.45 to 1.3.100.
+
+This procedure just move the standard driver files to SAVE_53 sub-directory 
+of linux/drivers/scsi, copies the drivers file to that directory and patches 
+the scsi Makefile.
+The standard driver can be restored with Uninstall.ncr53c8xx
+
+	If your linux directory is at the standard location
+	"/usr/src/linux", just enter:
+		Install.ncr53c8xx
+
+	Else enter:
+		Install.ncr53c8xx <your_linux_directory>
+
+	Make the kernel:
+		Change to linux source directory
+		Configure with 53c7,8xx support (Y or m)  for Install.ncr53c8xx
+		Make dependancies
+		Make the kernel (use make zdisk first)
+		Make and install modules if you have configured with 'm'
+
+	Notes:
+		Since release 1.3.90, additionnal configuation parameters 
+		have been added for the standard NCR driver.
+		Just reply Y or N as you want to these questions;
+		The NCR53C8XX driver ignore those parameters.
+
+	If you prefer the standard NCR driver of Linux:
+	just enter:
+		Uninstall.ncr53c8xx
+	or
+		Uninstall.ncr53c8xx <your_linux_directory>
+	if your linux root is not /usr/src/linux.
+
+
+13. Installation procedure for Linux version 2
+
+This procedure add the driver to the kernel tree.
+Using "make config" you can choose between the standard driver and the BSD one.
+It is possible to configure the both drivers as module and to switch from one 
+to the other at run time.
+Take care to unload the current driver module before loading the other one.
+
+	If your linux directory is at the standard location
+	"/usr/src/linux", just enter:
+		Install2.ncr53c8xx
+
+	Else enter:
+		Install2.ncr53c8xx <your_linux_directory>
+
+	Make the kernel:
+		Change to linux source directory
+		Configure with NCR53C8XX support (Y or m)
+		Make dependancies
+		Make the kernel (use make zdisk first)
+		Make and install modules if you have configured with 'm'
+
+
+14. Control commands under linux-1.2.13
+
+Profile data and control commands using the proc scsi file system are not 
+available for linux-1.2.13.
+The only control command available is "scsitag" which allows to enable 
+tagged command queuing support after linux boot-up.
+
+Tagged command queueing is disabled by default at system startup.
+
+You can enable tagged queue per device with the following command:
+	scsitag device_name (ex: scsitag /dev/sda)
+
+Use "cc -o scsitag scsitag.c" to create the "scsitag" executable.
+
+
+15. Known problems
+
+15.1 Tagged commands with Iomega Jaz device
+
+I never tried such devices, however it has been reported to me the following:
+This device is capable of Tagged command queuing. However while spinning up,
+it rejects Tagged commands. This behaviour is conforms to 6.8.2 of scsi-2 
+specifications. The current behaviour of the driver in that situation is not 
+satisfying. So do not enable Tagged command queuing for devices that are able 
+to spin down.
+The other problems that may appear are timeouts. The only way to avoid timeouts 
+seems to edit linux/drivers/scsi/sd.c and to increase the current timeout 
+values.
+
+===============================================================================
+End of NCR53C8XX driver README file

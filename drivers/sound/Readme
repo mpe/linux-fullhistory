@@ -3,11 +3,11 @@ USS Lite version 3.5.4 release notes
 
 Most up to date information about this driver is available from 
 http://www.4front-tech.com/usslite or http://personal.eunet.fi/pp/voxware
-(european mirror).
+(European mirror).
 
 
 
-Please read the SOUND-HOWTO (available from sunsite.unc.edu and other Linux ftp 
+Please read the SOUND-HOWTO (available from sunsite.unc.edu and other Linux FTP 
 sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
 is available from the web page (see below).
@@ -23,7 +23,7 @@ It's very likely that this driver version is incompatible with
 Linux versions later than 2.0.x.
 
 Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
-contain usefull utilities to be used with this driver.
+contain useful utilities to be used with this driver.
 See http://www.4front-tech.com/usslite/getting.html for
 download instructions.
 
@@ -42,7 +42,7 @@ Contributors
 ------------
 
 This driver contains code by several contributors. In addition several other
-persons have given usefull suggestions. The following is a list of major
+persons have given useful suggestions. The following is a list of major
 contributors. (I could have forgotten some names.)
 
 	Craig Metz	1/2 of the PAS16 Mixer and PCM support
@@ -54,7 +54,7 @@ contributors. (I could have forgotten some names.)
 	Andy Warner	ISC port
 	Jim Lowe,
 	Amancio Hasty Jr	FreeBSD/NetBSD port
-	Anders Baekgaard 	Bughunting and valuable suggestions.
+	Anders Baekgaard 	Bug hunting and valuable suggestions.
 	Joerg Schubert	SB16 DSP support (initial version).
 	Andrew Robinson Improvements to the GUS driver
 	Megens SA	MIDI recording for SB and SB Pro (initial version).
@@ -76,7 +76,7 @@ contributors. (I could have forgotten some names.)
 	
 	Please look at lowlevel/README for more contributors.
 
-There are propably many other names missing. If you have sent me some
+There are probably many other names missing. If you have sent me some
 patches and your name is not in the above list, please inform me.
 
 Sponsors etc.
@@ -125,7 +125,7 @@ If you get an error message when trying to use the driver, please look
 at /var/adm/messages for more verbose error message.
 
 
-In general the easiest way to diagnoze problems is to do "cat /dev/sndstat".
+In general the easiest way to diagnose problems is to do "cat /dev/sndstat".
 
 If you get an error message, there are some problems with the driver setup:
 
@@ -133,7 +133,7 @@ If you get an error message, there are some problems with the driver setup:
 	the sound driver are missing. Use the script at the end of
 	linux/drivers/sound/Readme.linux to create them.
 
-	- "No such device" telss that the sound driver is not in the kernel.
+	- "No such device" tells that the sound driver is not in the kernel.
 	You have to reconfigure and recompile the kernel to have the sound
 	driver. Compiling the driver doesn't help alone. You have to boot
 	with the newly compiled one before the driver becomes active.
@@ -148,7 +148,7 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	this particular device. For example /dev/audio and /dev/dsp will not
 	work if "digitized voice support" was not enabled during "make config".
 	
-	- "Device or resource busy". Propably the IRQ (or DMA) channel 
+	- "Device or resource busy". Probably the IRQ (or DMA) channel 
 	required by the soundcard is in use by some other device/driver.
 
 	- "I/O error". Almost certainly (99%) it's an IRQ or DMA conflict.

@@ -63,7 +63,7 @@
 
 #undef  DEBUG             /* if defined, produce a verbose report via syslog */
 
-int aci_port = 0x354; /* as determined by bit 4 in the Opti 929 MC4 register */
+int aci_port = 0x354; /* as determined by bit 4 in the OPTi 929 MC4 register */
 unsigned char aci_idcode[2] = {0, 0};         /* manufacturer and product ID */
 unsigned char aci_version = 0;                       /* ACI firmware version */
 int aci_solo;                     /* status bit of the card that can't be    *
@@ -129,7 +129,7 @@ static int read_general_status(void)
 /*
  * The four ACI command types (implied, write, read and indexed) can
  * be sent to the microcontroller using the following four functions.
- * If a problem occured, they return -1.
+ * If a problem occurred, they return -1.
  */
 
 static int implied_cmd(unsigned char opcode)

@@ -25,7 +25,7 @@ static unsigned char sb_dma_bits[] =
  * be relative to the given base -register
  */
 
-int             translat_code;
+int             translate_code;
 static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 static int      pas_sb_base = 0;
@@ -46,13 +46,13 @@ extern void     mix_write (unsigned char data, int ioaddr);
 unsigned char
 pas_read (int ioaddr)
 {
-  return inb (ioaddr ^ translat_code);
+  return inb (ioaddr ^ translate_code);
 }
 
 void
 pas_write (unsigned char data, int ioaddr)
 {
-  outb (data, ioaddr ^ translat_code);
+  outb (data, ioaddr ^ translate_code);
 }
 
 /******************* Begin of the Interrupt Handler ********************/
@@ -284,7 +284,7 @@ detect_pas_hw (struct address_info *hw_config)
 
   outb (0xBC, 0x9A01);		/* Activate first board */
   outb (hw_config->io_base >> 2, 0x9A01);	/* Set base address */
-  translat_code = 0x388 ^ hw_config->io_base;
+  translate_code = 0x388 ^ hw_config->io_base;
   pas_write (1, 0xBF88);	/* Select one wait states */
 
   board_id = pas_read (0x0B8B);

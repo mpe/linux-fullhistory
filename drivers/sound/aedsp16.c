@@ -70,7 +70,7 @@
 
    The Audio Excel DSP 16 Sound Card emulates both SBPRO and MSS;
    the voxware sound driver can be configured for SBPRO and MSS cards
-   at the same time, but the aedsp16 can't be two cards!!
+   at the same time, but the AEDSP16 can't be two cards!!
    When we configure it, we have to choose the SBPRO or the MSS emulation
    for AEDSP16. We also can install a *REAL* card of the other type
    (see [1], not tested but I can't see any reason for it to fail).
@@ -143,7 +143,7 @@
    this way.
 
    Should be interesting eventually write down a new ioctl for the
-   aedsp16, to let the suser() change the irq/dma/mirq on the fly.
+   AEDSP16, to let the suser() change the irq/dma/mirq on the fly.
    The thing is not trivial.
    In the real world, there's no need to have such an ioctl because
    when we configure the kernel for compile, we can choose the config
@@ -154,7 +154,7 @@
    the code to do it.
 
    More integration with voxware, using voxware low level routines to
-   read-write dsp is not possible because you may want to have MSS
+   read-write DSP is not possible because you may want to have MSS
    support and in that case we can not rely on the functions included
    in sb_dsp.c to control 0x2yy I/O ports. I will continue to use my
    own I/O functions.
@@ -170,20 +170,20 @@
    I think the request regions should be done this way:
 
    if (check_region(...))
-   return ERR; // I/O region alredy reserved
+   return ERR; // I/O region already reserved
    device_probe(...);
    device_attach(...);
    request_region(...); // reserve only when we are sure all is okay
 
    Request the 2x0h region in any case if we are using this card.
 
-   NOTE: the "(sbpro)" string with which we are requesting the aedsp16 region
-   (see code) does not mean necessarly that we are emulating sbpro.
-   It mean that the region is the sbpro I/O ports region. We use this
+   NOTE: the "(SBPro)" string with which we are requesting the AEDSP16 region
+   (see code) does not mean necessarily that we are emulating SBPro.
+   It mean that the region is the SBPro I/O ports region. We use this
    region to access the control registers of the card, and if emulating
-   sbpro, I/O sbpro registers too. If we are emulating MSS, the sbpro
-   registers are not used, in no way, to emulate an sbpro: they are
-   used only for configuration pourposes.
+   SBPro, I/O SBPro registers too. If we are emulating MSS, the SBPro
+   registers are not used, in no way, to emulate an SBPro: they are
+   used only for configuration purposes.
 
    Someone pointed out that should be possible use both the SBPRO and MSS
    modes because the sound card have all the two chipsets, supposing that
@@ -191,7 +191,7 @@
    modes work together, but, for some reason unknown to me, without success.
 
    I think all the soft-config only cards have an init sequence similar to
-   this. If you have a card that is not an aedsp16, you can try to start
+   this. If you have a card that is not an AEDSP16, you can try to start
    with this module changing it (mainly in the CMD? I think) to fit your
    needs.
 
@@ -202,7 +202,7 @@
    v0.2 (ALPHA)
    - Cleanups.
    - Integrated with Linux voxware v 2.90-2 kernel sound driver.
-   - SoundBlaster Pro mode configuration.
+   - Sound Blaster Pro mode configuration.
    - Microsoft Sound System mode configuration.
    - MPU-401 mode configuration.
    v0.3 (ALPHA)
@@ -216,16 +216,16 @@
    - Added the code to request_region at device init (should go in
    the main body of voxware).
    v0.4 (BETA)
-   - Better configure.c patch for aedsp16 configuration (better
+   - Better configure.c patch for AEDSP16 configuration (better
    logic of inclusion of AEDSP16 support)
    - Modified the conditional compilation to better support more than
    one sound card of the emulated type (read the NOTES above)
    - Moved the sb init routine from the attach to the very first
    probe in sb_card.c
-   - Rearrangemens and cleanups
+   - Rearrangements and cleanups
    - Wiped out some unnecessary code and variables: this is kernel
    code so it is better save some TEXT and DATA
-   - Fixed the request_region code. We must allocate the aedsp16 (sbpro)
+   - Fixed the request_region code. We must allocate the AEDSP16 (SBPro)
    I/O ports in any case because they are used to access the DSP
    configuration registers and we can not allow anyone to get them.
    v0.5
@@ -263,7 +263,7 @@
 #define CMD6 0x8c		/* Enable Microsoft Sound System mode   */
 
 /*
- * Offsets of AEDSP16 DSP I/O ports. The offest is added to portbase
+ * Offsets of AEDSP16 DSP I/O ports. The offset is added to portbase
  * to have the actual I/O port.
  * Register permissions are:
  * (wo) == Write Only
@@ -431,7 +431,7 @@ WriteDSPCommand (int port, int cmd)
     }
   while (loop--);
 
-  printk ("[aedsp16] DSP Command (0x%x) timeout.\n", cmd);
+  printk ("[AEDSP16] DSP Command (0x%x) timeout.\n", cmd);
   return -1;
 }
 
@@ -443,7 +443,7 @@ InitMSS (int port)
 
   if (WriteDSPCommand (port, CMD6))
     {
-      printk ("[aedsp16] CMD 0x%x: failed!\n", CMD6);
+      printk ("[AEDSP16] CMD 0x%x: failed!\n", CMD6);
       return -1;
     }
 
@@ -461,7 +461,7 @@ SetUpBoard (int port)
     {
       if (WriteDSPCommand (portbase, CMD3))
 	{
-	  printk ("[aedsp16] CMD 0x%x: failed!\n", CMD3);
+	  printk ("[AEDSP16] CMD 0x%x: failed!\n", CMD3);
 	  return -1;
 	}
 
@@ -473,32 +473,32 @@ SetUpBoard (int port)
 #if defined(THIS_SHOULD_GO_AWAY)
   if (CheckDSPOkay (port))
     {
-      printk ("[aedsp16]     CheckDSPOkay: failed\n");
+      printk ("[AEDSP16]     CheckDSPOkay: failed\n");
       return -1;
     }
 #else
   if (ReadData (port) == -1)
     {
-      printk ("[aedsp16] ReadData after CMD 0x%x: failed\n", CMD3);
+      printk ("[AEDSP16] ReadData after CMD 0x%x: failed\n", CMD3);
       return -1;
     }
 #endif
 
   if (WriteDSPCommand (portbase, CMD4))
     {
-      printk ("[aedsp16] CMD 0x%x: failed!\n", CMD4);
+      printk ("[AEDSP16] CMD 0x%x: failed!\n", CMD4);
       return -1;
     }
 
   if (WriteDSPCommand (portbase, CMD5))
     {
-      printk ("[aedsp16] CMD 0x%x: failed!\n", CMD5);
+      printk ("[AEDSP16] CMD 0x%x: failed!\n", CMD5);
       return -1;
     }
 
   if (WriteDSPCommand (portbase, oredparams))
     {
-      printk ("[aedsp16] Initialization of (M)IRQ and DMA: failed!\n");
+      printk ("[AEDSP16] Initialization of (M)IRQ and DMA: failed!\n");
       return -1;
     }
   return 0;
@@ -516,7 +516,7 @@ GetCardVersion (int port)
       if ((ret = ReadData (port)) == -1)
 	return -1;
       /*
-         * We alredy know how many int are stored (2), so we know when the
+         * We already know how many int are stored (2), so we know when the
          * string is finished.
        */
       ver[len++] = ret;
@@ -536,7 +536,7 @@ GetCardName (int port)
     {
       if ((ret = ReadData (port)) == -1)
 	/*
-	   * If no more data availabe, return to the caller, no error if len>0.
+	   * If no more data available, return to the caller, no error if len>0.
 	   * We have no other way to know when the string is finished.
 	 */
 	return (len ? 0 : -1);
@@ -577,27 +577,27 @@ InitAEDSP16 (int which)
 
   if (ResetBoard (portbase))
     {
-      printk ("[aedsp16] ResetBoard: failed!\n");
+      printk ("[AEDSP16] ResetBoard: failed!\n");
       return -1;
     }
 
 #if defined(THIS_SHOULD_GO_AWAY)
   if (CheckDSPOkay (portbase))
     {
-      printk ("[aedsp16] CheckDSPOkay: failed!\n");
+      printk ("[AEDSP16] CheckDSPOkay: failed!\n");
       return -1;
     }
 #endif
 
   if (WriteDSPCommand (portbase, CMD1))
     {
-      printk ("[aedsp16] CMD 0x%x: failed!\n", CMD1);
+      printk ("[AEDSP16] CMD 0x%x: failed!\n", CMD1);
       return -1;
     }
 
   if (GetCardName (portbase))
     {
-      printk ("[aedsp16] GetCardName: failed!\n");
+      printk ("[AEDSP16] GetCardName: failed!\n");
       return -1;
     }
 
@@ -606,23 +606,23 @@ InitAEDSP16 (int which)
      * if we have something different, we have to be warned.
    */
   if (strcmp ("SC-6000", AudioExcelName))
-    printk ("[aedsp16] Warning: non SC-6000 audio card!\n");
+    printk ("[AEDSP16] Warning: non SC-6000 audio card!\n");
 
   if (WriteDSPCommand (portbase, CMD2))
     {
-      printk ("[aedsp16] CMD 0x%x: failed!\n", CMD2);
+      printk ("[AEDSP16] CMD 0x%x: failed!\n", CMD2);
       return -1;
     }
 
   if (GetCardVersion (portbase))
     {
-      printk ("[aedsp16] GetCardVersion: failed!\n");
+      printk ("[AEDSP16] GetCardVersion: failed!\n");
       return -1;
     }
 
   if (SetUpBoard (portbase))
     {
-      printk ("[aedsp16] SetUpBoard: failed!\n");
+      printk ("[AEDSP16] SetUpBoard: failed!\n");
       return -1;
     }
 
@@ -630,7 +630,7 @@ InitAEDSP16 (int which)
     {
       if (InitMSS (portbase))
 	{
-	  printk ("[aedsp16] Can't initialize Microsoft Sound System mode.\n");
+	  printk ("[AEDSP16] Can't initialize Microsoft Sound System mode.\n");
 	  return -1;
 	}
     }
@@ -666,7 +666,7 @@ int
 InitAEDSP16_SBPRO (struct address_info *hw_config)
 {
   /*
-     * If the card is alredy init'ed MSS, we can not init it to SBPRO too
+     * If the card is already init'ed MSS, we can not init it to SBPRO too
      * because the board can not emulate simultaneously MSS and SBPRO.
    */
   if (ae_init & INIT_MSS)
@@ -683,7 +683,7 @@ InitAEDSP16_SBPRO (struct address_info *hw_config)
     {
       if (check_region (hw_config->io_base, 0x0f))
 	{
-	  printk ("AEDSP16/SBPRO I/O port region is alredy in use.\n");
+	  printk ("AEDSP16/SBPRO I/O port region is already in use.\n");
 	  return -1;
 	}
     }
@@ -706,7 +706,7 @@ InitAEDSP16_SBPRO (struct address_info *hw_config)
      * can allow me to release the requested region.
    */
   if (!(ae_init & INIT_MPU401))
-    request_region (hw_config->io_base, 0x0f, "aedsp16 (sbpro)");
+    request_region (hw_config->io_base, 0x0f, "AEDSP16 (SBPro)");
 #endif
 
   ae_init |= INIT_SBPRO;
@@ -721,7 +721,7 @@ int
 InitAEDSP16_MSS (struct address_info *hw_config)
 {
   /*
-     * If the card is alredy init'ed SBPRO, we can not init it to MSS too
+     * If the card is already init'ed SBPRO, we can not init it to MSS too
      * because the board can not emulate simultaneously MSS and SBPRO.
    */
   if (ae_init & INIT_SBPRO)
@@ -736,7 +736,7 @@ InitAEDSP16_MSS (struct address_info *hw_config)
    */
   if (check_region (hw_config->io_base, 0x08))
     {
-      printk ("MSS I/O port region is alredy in use.\n");
+      printk ("MSS I/O port region is already in use.\n");
       return -1;
     }
 
@@ -748,7 +748,7 @@ InitAEDSP16_MSS (struct address_info *hw_config)
     {
       if (check_region (AEDSP16_BASE, 0x0f))
 	{
-	  printk ("AEDSP16 I/O port region is alredy in use.\n");
+	  printk ("AEDSP16 I/O port region is already in use.\n");
 	  return -1;
 	}
     }
@@ -774,11 +774,11 @@ InitAEDSP16_MSS (struct address_info *hw_config)
      * can allow me to release the requested region. So when unloading
      * and then reloading it, we are going to have some nice Oops!
    */
-  request_region (hw_config->io_base, 0x08, "aedsp16 (mss)");
+  request_region (hw_config->io_base, 0x08, "AEDSP16 (MSS)");
 #endif
 
   if (!(ae_init & INIT_MPU401))
-    request_region (AEDSP16_BASE, 0x0f, "aedsp16 (sbpro)");
+    request_region (AEDSP16_BASE, 0x0f, "AEDSP16 (SBPro)");
 
   ae_init |= INIT_MSS;
   return 0;
@@ -801,7 +801,7 @@ InitAEDSP16_MPU401 (struct address_info *hw_config)
    */
   if (check_region (hw_config->io_base, 0x02))
     {
-      printk ("SB I/O port region is alredy in use.\n");
+      printk ("SB I/O port region is already in use.\n");
       return -1;
     }
 
@@ -813,15 +813,15 @@ InitAEDSP16_MPU401 (struct address_info *hw_config)
     {
       if (check_region (AEDSP16_BASE, 0x0f))
 	{
-	  printk ("AEDSP16 I/O port region is alredy in use.\n");
+	  printk ("AEDSP16 I/O port region is already in use.\n");
 	  return -1;
 	}
     }
 
   /*
      * If mpu401, the irq and dma are not important, do not touch it
-     * because we may use the default if sbpro is not yet configured,
-     * we may use the sbpro ones if configured, and nothing wrong
+     * because we may use the default if SBPro is not yet configured,
+     * we may use the SBPro ones if configured, and nothing wrong
      * should happen.
      *
      * The mirq default is 0, but once set it to non-0 value, we should
@@ -837,11 +837,11 @@ InitAEDSP16_MPU401 (struct address_info *hw_config)
      * request any region because there is not a uninit routine that
      * can allow me to release the requested region.
    */
-  request_region (hw_config->io_base, 0x02, "aedsp16 (mpu401)");
+  request_region (hw_config->io_base, 0x02, "AEDSP16 (mpu401)");
 #endif
 
   if (!(ae_init & (INIT_MSS | INIT_SBPRO)))
-    request_region (AEDSP16_BASE, 0x0f, "aedsp16 (sbpro)");
+    request_region (AEDSP16_BASE, 0x0f, "AEDSP16 (SBPro)");
 
   ae_init |= INIT_MPU401;
   return 0;
@@ -859,7 +859,7 @@ int
 ResetAEDSP16 (void)
 {
 #if defined(AEDSP16_DEBUG)
-  printk ("[aedsp16] ResetAEDSP16 called.\n");
+  printk ("[AEDSP16] ResetAEDSP16 called.\n");
 #endif
   return InitAEDSP16 (RESET_DSP16);
 }

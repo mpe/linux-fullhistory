@@ -523,8 +523,8 @@ ad1848_set_speed (int dev, int arg)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
   /*
-     * The sampling speed is encoded in the least significant nible of I8. The
-     * LSB selects the clock source (0=24.576 MHz, 1=16.9344 Mhz) and other
+     * The sampling speed is encoded in the least significant nibble of I8. The
+     * LSB selects the clock source (0=24.576 MHz, 1=16.9344 MHz) and other
      * three bits select the divisor (indirectly):
      *
      * The available speeds are in the following table. Keep the speeds in
@@ -961,7 +961,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 
   ad_write (devc, 8, fs);
   /*
-   * Write to I8 starts resyncronization. Wait until it completes.
+   * Write to I8 starts resynchronization. Wait until it completes.
    */
   timeout = 10000;
   while (timeout > 0 && inb (devc->base) == 0x80)
@@ -975,7 +975,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
       ad_write (devc, 28, fs);
 
       /*
-         * Write to I28 starts resyncronization. Wait until it completes.
+         * Write to I28 starts resynchronization. Wait until it completes.
        */
       timeout = 10000;
       while (timeout > 0 && inb (devc->base) == 0x80)
@@ -1183,7 +1183,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
      * Check that the I/O address is in use.
      *
      * The bit 0x80 of the base I/O port is known to be 0 after the
-     * chip has performed it's power on initialization. Just assume
+     * chip has performed its power on initialization. Just assume
      * this has happened before the OS is starting.
      *
      * If the I/O address is unused, it typically returns 0xff.
@@ -1481,7 +1481,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 	ad_write (devc, 27, ad_read (devc, 27) | 0x08);		/* Alternate freq select enabled */
 
       if (devc->model == MD_IWAVE)
-	{			/* Some magic Interwave spesific initialization */
+	{			/* Some magic Interwave specific initialization */
 	  ad_write (devc, 12, 0x6c);	/* Select codec mode 3 */
 	  ad_write (devc, 17, 0xc2);	/* Alternate feature enable */
 	}
@@ -1537,8 +1537,8 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 
 	  devc->timer_ticks = 0;
 
-	  ad_write (devc, 21, 0x00);	/* Timer msb */
-	  ad_write (devc, 20, 0x10);	/* Timer lsb */
+	  ad_write (devc, 21, 0x00);	/* Timer MSB */
+	  ad_write (devc, 20, 0x10);	/* Timer LSB */
 
 	  ad_write (devc, 16, tmp | 0x40);	/* Enable timer */
 	  for (x = 0; x < 100000 && devc->timer_ticks == 0; x++);
@@ -1618,7 +1618,7 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
 	}
     }
   else
-    printk ("ad1848: Can't find device to be undoaded. Base=%x\n",
+    printk ("ad1848: Can't find device to be unloaded. Base=%x\n",
 	    io_base);
 }
 
@@ -1816,7 +1816,7 @@ init_deskpro (struct address_info *hw_config)
 /*
  * I/O port 0xc45 FM Address Decode/MSS ID Register.
  *
- * bank=0, bits 0xfe:   FM synthesis Decode Comare bits 7:1 (default=0x88)
+ * bank=0, bits 0xfe:   FM synthesis Decode Compare bits 7:1 (default=0x88)
  * bank=0, bit 0x01:    SBIC Power Control Bit
  *                      0x00 = Powered up
  *                      0x01 = Powered down
@@ -1880,7 +1880,7 @@ init_deskpro (struct address_info *hw_config)
 /*
  * I/O port 0xc47 FM Address Decode Register.
  *
- * bank=0, bits 0xff:   Decode enble selection for various FM address bits
+ * bank=0, bits 0xff:   Decode enable selection for various FM address bits
  * bank=1, bits 0xff:   Reserved
  */
 
@@ -2152,7 +2152,7 @@ ad1848_tmr_start (int dev, unsigned int usecs)
 {
   unsigned long   flags;
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
-  unsigned long   xtal_nsecs;	/* nanoseconds per xtal oscillaror tick */
+  unsigned long   xtal_nsecs;	/* nanoseconds per xtal oscillator tick */
   unsigned long   divider;
 
   save_flags (flags);

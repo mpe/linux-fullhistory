@@ -57,7 +57,7 @@ typedef struct {
 #define __FD_ZERO(fdsetp) \
 		__asm__ __volatile__("cld ; rep ; stosl" \
 			:"=m" (*(__kernel_fd_set *) (fdsetp)) \
-			:"a" (0), "c" (__FDSET_INTS), \
+			:"a" (0), "c" (__FDSET_LONGS), \
 			"D" ((__kernel_fd_set *) (fdsetp)) :"cx","di")
 
 #endif

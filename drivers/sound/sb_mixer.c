@@ -2,7 +2,7 @@
 /*
  * sound/sb_mixer.c
  *
- * The low level mixer driver for the SoundBlaster compatible cards.
+ * The low level mixer driver for the Sound Blaster compatible cards.
  */
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
@@ -352,7 +352,7 @@ sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 static struct mixer_operations sb_mixer_operations =
 {
   "SB",
-  "SoundBlaster",
+  "Sound Blaster",
   sb_mixer_ioctl
 };
 

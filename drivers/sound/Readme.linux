@@ -19,7 +19,7 @@ IMPORTANT!	Read this if you are installing a separately
   sources). Remove old version of linux/drivers/sound directory before
   installing new files.
 
-- To build the device files you need to run the enclosed shell scrip 
+- To build the device files you need to run the enclosed shell script 
   (see below). You need to do this only when installing sound driver
   first time or when upgrading to much recent version than the earlier
   one.
@@ -27,13 +27,13 @@ IMPORTANT!	Read this if you are installing a separately
 - Configure and compile Linux as normally (remember to include the
   sound support during "make config"). Please refer to kernel documentation
   for instructions about configuring and compiling kernel. File Readme.cards
-  contains card spesific instructions for configuring this driver for
+  contains card specific instructions for configuring this driver for
   use with various soundcards.
 
 Boot time configuration (using lilo and insmod) 
 -----------------------------------------------
 
-This information has been removed. Too many users did't believe
+This information has been removed. Too many users didn't believe
 that it's really not necessary to use this method. Please look at
 Readme of sound driver version 3.0.1 if you still want to use this method.
 
@@ -46,7 +46,7 @@ command:
 
 	cat /dev/sndstat 
 
-and look at the output. It should display some usefull info about the
+and look at the output. It should display some useful info about the
 driver configuration. If there is no /dev/sndstat 
 (/dev/sndstat: No such file or directory), ensure that you have executed the
 soundinstall script (at the end of this file).

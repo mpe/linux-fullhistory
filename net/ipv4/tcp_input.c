@@ -1863,7 +1863,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			 * handle them locally, due to transparent proxying.
 			 * Thus, narrow down the test to what is really meant.
 			 */
-			if(th->rst || !th->syn || th->ack || (r = ip_chk_addr(daddr) == IS_BROADCAST || r == IS_MULTICAST))
+			if(th->rst || !th->syn || th->ack || (r = ip_chk_addr(daddr)) == IS_BROADCAST || r == IS_MULTICAST)
 #else
 			if(th->rst || !th->syn || th->ack || ip_chk_addr(daddr)!=IS_MYADDR)
 #endif

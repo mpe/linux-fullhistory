@@ -260,7 +260,7 @@ pss_download_boot (pss_confdata * devc, unsigned char *block, int size, int flag
 	    break;
 	  else
 	    {
-	      printk ("\nPSS: DownLoad timeout problems, byte %d=%d\n",
+	      printk ("\nPSS: Download timeout problems, byte %d=%d\n",
 		      count, size);
 	      return 0;
 	    }
@@ -710,7 +710,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	    return -(EIO);
 	  }
 
-	if (!pss_get_dspword (devc, &tmp))	/* Read msb */
+	if (!pss_get_dspword (devc, &tmp))	/* Read MSB */
 	  {
 	    restore_flags (flags);
 	    return -(EIO);
@@ -718,7 +718,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	buf.parm1 = tmp << 8;
 
-	if (!pss_get_dspword (devc, &tmp))	/* Read lsb */
+	if (!pss_get_dspword (devc, &tmp))	/* Read LSB */
 	  {
 	    restore_flags (flags);
 	    return -(EIO);
@@ -800,7 +800,7 @@ probe_pss_mss (struct address_info *hw_config)
 
   /*
      * For some reason the card returns 0xff in the WSS status register
-     * immediately after boot. Propably MIDI+SB emulation algorithm
+     * immediately after boot. Probably MIDI+SB emulation algorithm
      * downloaded to the ADSP2115 spends some time initializing the card.
      * Let's try to wait until it finishes this task.
    */

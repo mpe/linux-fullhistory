@@ -83,7 +83,7 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
       sz /= 8;			/* #bits -> #bytes */
 
       /*
-         * Compute a buffer size for time not exeeding 1 second.
+         * Compute a buffer size for time not exceeding 1 second.
          * Usually this algorithm gives a buffer size for 0.5 to 1.0 seconds
          * of sound (using the current speed, sample size and #channels).
        */
@@ -120,8 +120,8 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
   else
     {
       /*
-         * The process has specified the buffer sice with SNDCTL_DSP_SETFRAGMENT or
-         * the buffer sice computation has already been done.
+         * The process has specified the buffer size with SNDCTL_DSP_SETFRAGMENT or
+         * the buffer size computation has already been done.
        */
       if (dmap->fragment_size > (audio_devs[dev]->buffsize / 2))
 	dmap->fragment_size = (audio_devs[dev]->buffsize / 2);
@@ -661,7 +661,7 @@ dma_subdivide (int dev, struct dma_buffparms *dmap, caddr_t arg, int fact)
     }
 
   if (dmap->subdivision != 0 ||
-      dmap->fragment_size)	/* Loo late to change */
+      dmap->fragment_size)	/* Too late to change */
     return -(EINVAL);
 
   if (fact > MAX_REALTIME_FACTOR)
@@ -683,7 +683,7 @@ dma_set_fragment (int dev, struct dma_buffparms *dmap, caddr_t arg, int fact)
     return -(EIO);
 
   if (dmap->subdivision != 0 ||
-      dmap->fragment_size)	/* Loo late to change */
+      dmap->fragment_size)	/* Too late to change */
     return -(EINVAL);
 
   bytes = fact & 0xffff;
@@ -1273,7 +1273,7 @@ DMAbuf_start_output (int dev, int buff_no, int l)
     restart = 1;
 
 /*
- * Bypass buffering if using mmaped access
+ * Bypass buffering if using mmapped access
  */
 
   if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)

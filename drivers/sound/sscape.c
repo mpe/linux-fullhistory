@@ -1,7 +1,7 @@
 /*
  * sound/sscape.c
  *
- * Low level driver for Ensoniq Soundscape
+ * Low level driver for Ensoniq SoundScape
  */
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
@@ -304,10 +304,10 @@ sscapeintr (int irq, void *dev_id, struct pt_regs *dummy)
       printk ("SSCAPE: Host interrupt, data=%02x\n", host_read (devc));
     }
 
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
+#if defined(CONFIG_MPU401) && defined(CONFIG_MIDI)
   if (bits & 0x01)
     {
-      uart401intr (irq, NULL, NULL);
+      mpuintr (irq, NULL, NULL);
       if (debug++ > 10)		/* Temporary debugging hack */
 	{
 	  sscape_write (devc, GA_INTENA_REG, 0x00);	/* Disable all interrupts */
@@ -436,8 +436,10 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
       save_flags (flags);
       cli ();
       codec_dma_bits = sscape_read (devc, GA_CDCFG_REG);
+#if 0
       sscape_write (devc, GA_CDCFG_REG,
 		    codec_dma_bits & ~0x08);	/* Disable codec DMA */
+#endif
 
       if (devc->dma_allocated == 0)
 	{
@@ -716,10 +718,10 @@ attach_sscape (struct address_info *hw_config)
   if (old_hardware)
     {
       valid_interrupts = valid_interrupts_old;
-      conf_printf ("Ensoniq Soundscape (old)", hw_config);
+      conf_printf ("Ensoniq SoundScape (old)", hw_config);
     }
   else
-    conf_printf ("Ensoniq Soundscape", hw_config);
+    conf_printf ("Ensoniq SoundScape", hw_config);
 
   for (i = 0; i < sizeof (valid_interrupts); i++)
     if (hw_config->irq == valid_interrupts[i])
@@ -785,17 +787,17 @@ attach_sscape (struct address_info *hw_config)
   }
 #endif
 
-#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
-  if (probe_uart401 (hw_config))
+#if defined(CONFIG_MIDI) && defined(CONFIG_MPU401)
+  if (probe_mpu401 (hw_config))
     hw_config->always_detect = 1;
   {
     int             prev_devs;
 
     prev_devs = num_midis;
-    hw_config->name = "Soundscape";
+    hw_config->name = "SoundScape";
 
     hw_config->irq *= -1;	/* Negative value signals IRQ sharing */
-    attach_uart401 (hw_config);
+    attach_mpu401 (hw_config);
     hw_config->irq *= -1;	/* Restore it */
 
     if (num_midis == (prev_devs + 1))	/* The MPU driver installed itself */
@@ -824,7 +826,7 @@ probe_sscape (struct address_info *hw_config)
 
   /*
      * First check that the address register of "ODIE" is
-     * there and that it has exactly 4 writeable bits.
+     * there and that it has exactly 4 writable bits.
      * First 4 bits
    */
   if ((save = inb (PORT (ODIE_ADDR))) & 0xf0)
@@ -938,7 +940,7 @@ attach_ss_ms_sound (struct address_info *hw_config)
   sscape_write (devc, GA_DMACFG_REG, 0x50);
 
   /*
-     * Take the gate-arry off of the DMA channel.
+     * Take the gate-array off of the DMA channel.
    */
   sscape_write (devc, GA_DMAB_REG, 0x20);
 
@@ -988,8 +990,8 @@ attach_ss_ms_sound (struct address_info *hw_config)
 void
 unload_sscape (struct address_info *hw_config)
 {
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
-  unload_uart401 (hw_config);
+#if defined(CONFIG_MPU401) && defined(CONFIG_MIDI)
+  unload_mpu401 (hw_config);
 #endif
   snd_release_irq (hw_config->irq);
 }

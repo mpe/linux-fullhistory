@@ -1,0 +1,613 @@
+Mon Jul 03  23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Release 1.12a
+	Tested linux releases: 1.2.13, 2.0.0, 2.0.1
+
+Mon Jul 01  21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	ncr53c8xx.h, ncr53c8xx.c
+	Add "clearprof" user command that clear the profile counters.
+	Automatically clear profile counters when num_kbytes=1000000000 
+	in order to avoid ugly overflow.
+	Donnot compile user command code and profile data with 1.2.13.
+
+Wed Jun 29  20:38 1996 Gerard Roudier (groudier@club-internet.fr)
+	Matthew Geier reported to me a weird problem of unexpected 
+	disconnection while asynchronous negotiation.
+	The message sent by the driver is 1-3-1-ff-00. I sent a patch to 
+	Matthew that change the message to 1-3-1-00-00.
+	The sync msgout was correct however some devices might be to happy 
+	with ff.
+
+Wed Jun 26  22:57 1996 Gerard Roudier (groudier@club-internet.fr)
+	Patch no 4 sent to Harald.
+	The drived used "wtime" for timeouts adn time measurements.
+	I change for jiffies.
+	Work with my P133.
+
+Mon Jun 24  23:05 1996 Gerard Roudier (groudier@club-internet.fr)
+	Patch no 3 sent to Harald.
+
+Sun Jun 23  22:29 1996 Gerard Roudier (groudier@club-internet.fr)
+	Patch no 2 sent to Harald.
+	I think that the driver have some chance to work.
+	
+Sun Jun 23  15:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Harald Koenig is interested in the adaptation of the driver to 
+	Linux/Alpha.
+	I have prepared a patch and sent it to Harald.
+
+Sun Jun 16  19:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Release 1.11
+	Tested linux releases: 1.2.13, 2.0.0
+
+Sat Jun 15 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h, Configure.help, scsi/Config.in
+	Add CONFIG_SCSI_NCR53C8XX_IOMAPPED config option.
+	Prepare the 2.0.0 with the new version of the driver.
+
+Wed Jun 12 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Rewrite the README file.
+	Add some documentations of the proc file system support.
+
+Sun Jun 9 18:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Add proc filesystem support of the driver.
+	Read operations returns profile information.
+	Write operations send control commands to the host adapter driver.
+
+Wed Jun 5 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Change xfer direction for SCAN command to write.
+	Was bogus.
+
+Tue May 30 18:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Set the DMA FIFO to 88 for 825A and 875 boards.
+	The previous value of 536 is bogus since the script only read 7 
+	bits for the fifo size (thanks to Stefan).
+
+Mon May 27 18:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Correct the xfer direction guessing for scanner SCAN command (write).
+
+Mon May 27 18:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Add the following config options:
+	SCSI_NCR_DISABLE_MPARITY_CHECK : disable master parity checking.
+	SCSI_NCR_DISABLE_PARITY_CHECK  : disable scsi parity checking.
+	SCSI_NCR_FORCE_SYNC_NEGO       : force sync nego for all scsi 2 devices.
+
+Sat May 25 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Release 1.10
+	Tested linux releases: 1.2.13, 1.3.45, 1.3.71, 1.3.90, 1.3.100
+	                       1.99.6, 1.99.7
+	Switch between Drew's driver and Bsd driver tested for 1.99.7.
+	Both driver was made as modules.
+
+Sat May 25 16:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Some weird problems happen with multi-lun configurations and HDs.
+	SDTR seems to be sent with TEST UNIT READY of lun 1.
+	Tagged Queue cannot be enabled. It seems that inqdata are 
+	filled with garbage probably due to some INQUIRY command to
+	lun 1.
+	I have fixed the problem as follow:
+	- negotiation are initiated only with a command to lun 0.
+	- inquiry data are store only for lun 0.
+
+Wed May 22 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h
+	Have prepared the patch that allow to install the driver in the 
+	kernel tree, without moving Drew's one.
+	Seems to work. However, I have to check that nothing has been 
+	broken for 1.2.13 and 1.3.45 to 1.3.100.
+
+Sun May 4 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h
+	Adapt the source to some modifications of the linux tree of 1.3.98.
+	(include/linux/scsicam.h moved to include/scsi/scsicam.h)
+
+Thu Apr 25 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h, ncr53c8xx.c
+	Release 1.9
+	Prepare conditionnal compilations for the future Linux version(s).
+	Assume that these versions will be nicely compatible with current 
+	one. 
+	1.3.255, 1.4.0 or 2.0.0 ?
+	I suggest 3.0.0 for some obvious reason.
+
+Wed Apr 24 23:15 1996 Gerard Roudier (groudier@club-internet.fr)
+	* Install.ncr53c8xx
+	Add Patch-Current.ncr53c8xx to the distribution.
+	This patch is applied to the scsi Makefile at installation time for
+	Linux release V.P.S (V*1000000000+P*100000000+S > 1300000094).
+	Each time it'll be necessary I will send the patch corresponding to 
+	the current Linux release to the linux-scsi@vger.rutgers.edu.
+
+Sun Apr 21 19:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* README.ncr53c8xx
+	Update Bonnie results of linux-1.3.92 + prepatch read-ahead 1.3.93.
+	Results are so good that I must remove FreeBSD-2.0.5 results from the
+	README file, otherwise I should cause trouble for myself.
+
+Sun Apr 07 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h
+	Define SCSI_NCR_MAX_LUN (8) inconditionaly.
+	Previous releases did not work for multi-lun devices.
+	This definition was wrongly conditionned:
+	(SCSI_CONFIG_MULTI_LUN instead of CONFIG_SCSI_MULTI_LUN).
+	No luck, since I donnot have multi-lun devices and could'nt
+	test it.
+	Some tests under linux-1.3.84 with an experimental patch that
+	try to do asynchronous read-ahead.
+
+Wed Apr 03 23:15 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h, ncr53c8xx.c
+	Change some wrong "assert (target == cmd->target & 7)" to
+                          "assert (target == (cmd->target & 0xf)".
+	Remove   NCR_TIMEOUT_ALERT from ncr53c8xx.c
+	Add SCSI_NCR_TIMEOUT_ALERT to   ncr53c8xx.h
+
+Sun Mar 24 21:15 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h
+	During "make dep" of linux-1.2.13, LINUX_VERSION_CODE is undefined.
+	Have to assume 1.2.13 in such situation.
+	Release 1.8
+
+Sun Mar 24 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* README.ncr53c8xx
+	Make changes according to the new uninstallation procedure.
+
+Sun Mar 24 20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* Uninstall.ncr53c8xx
+	Add an uninstallation script to the distribution.
+	This shell script restore the standard driver.
+	Very usefull for people who prefers to use a driver that
+	does not support:
+	- Master parity check
+	- Tagged command queuing
+	- Fast Wide Scsi-2 features (up to 20 MB/sec)
+	and that would be capable to reject a Wide Negotiation that it had
+	previously initiated.
+
+Sat Mar 23 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* README.ncr53c8xx
+	Make changes according to the new installation procedure.
+
+Fri Mar 22 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* Install.ncr53c8xx
+	Add an installation script to the distribution.
+	3 differents patches are necessary:
+	- linux-1.2.13
+	- linux-1.3.45 to linux-1.3.49
+        - linux-1.3.50 to linux-1.3.77
+
+Wed Mar 13 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h
+	Add share irq support.
+	This facility appears with linux-1.3.70. It seems that the
+	corresponding code of the kernel was questionnable before 1.3.72.
+	I decide to support this options from linux-1.3.72 and above.
+	(Add define option SCSI_NCR_SHARE_IRQ)
+	Release 1.7
+
+Tue Mar 12 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Download BSD ncr.c 1.67 and apply the correction of negotiations order.
+	Now the Wide and Sync negotiation are done in the proper order.
+	(Problem reported by Johannes Plass).
+	Round up correctly the announced speed in MB/sec.
+
+Tue Mar 05 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* README.ncr53c8xx
+	Have to upload release 1.6 for users of linux-1.3.70-71
+
+Mon Mar 04 16:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* README.ncr53c8xx
+	Add some Bonnie results to the README file.
+
+Sun Mar 03 20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Make changes for linux-1.3.70 according to the new specification of
+	irq services interface (request_irq(), free_irq()).
+	With 26 letters, "_", and 10 digits we can build about:
+		53x62**9 C names of 10 characters.
+	Why to use SAME function names with DIFFERENT parameters ?
+
+Sat Mar 02 22:30 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Using SIMPLE QUEUE TAG for all operations is good for performances,
+	but may be bad for assumed timeout values.
+	Under heavy disk load (Bonnie), the drive may start IO process of a 
+	command, then disconnect, then execute lots of other commands 
+	before completing the interrupted command.
+	The standard value of SD_TIMEOUT (6 sec or 7 sec) seems (is) too short.
+	I fix the problem by forcing an ORDERED QUEUE TAG for the next  
+	command when I found some "old" pending command.
+	"Old" means that they might be timeouted in a few seconds.
+	Add NCR_TIMEOUT_ALERT and set it to 3 seconds.
+
+Fri Mar 01 22:30 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h, ncr53c8xx.c
+	Add define SCSI_NCR_SEGMENT_SIZE and set it by default to 512.
+	If undefined, the driver use the scatter list given by the upper 
+	scsi driver, else it tries to split segments into shorter one 
+	according to the value of SCSI_NCR_SEGMENT_SIZE.
+
+Tue Feb 27 21:30 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h
+	Set sg_tablesize to 127 = SCSI_NCR_MAX_SCATTER-1.
+	(was 64 = SCSI_NCR_MAX_SCATTER/2).
+	May increase the speed (about 20%) for linear read/write operations.
+	Bonnie results may be better, but I prefered the previous
+	value.
+
+Tue Feb 27 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr54c8xx.c, ncr53c8xx.h
+	Tagged command queueing seems to affect linux-1.3.XY kernels.
+	I decide to disable tagged queue by default and to provide a command
+	tool to enable it per device after boot-up.
+	Add scsitag.c to the distribution.
+	Usage: scsitag device
+	Examples: scsitag /dev/sda
+	          scsitag /dev/sdb
+
+Sun Feb 25 14:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h
+	Add INQ7_Default definition and set the target capabilities to this
+	value by default.
+	Add some code to reject a synchronous negotiation request from a target
+	that is defined as not capable of Sync in the table of capabilities.
+	
+Sat Feb 24 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Add some code to fill some write-only host instance fields:
+	- base
+	- io_port
+	- n_io_port
+	- dma_channel
+	This fields may be used with some "standard" drivers that do not 
+	process correctly the release function.
+
+Fri Feb 23 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	I receive a mail from Jason Duerstock.
+	A new bug in ncrBsd2Linux which is probably outside the driver code
+	and inside Linux kernel code.
+	The kernel memory is quite corrupted and we cannot get any informations
+	by looking into the messages about the crash. However Linus see a bug in
+	ncrBsd2Linux because it is a "non standard" driver.
+	I think too that ncrBsd2Linux is not a standard driver of Linux kernel,
+	because it has no bugs enough to become standard for Linux.
+	Drew's driver is quite standard.
+
+Wed Feb 21 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h
+	I incorporate the differences between FreeBSD ncr.c revision 1.62 and
+	revision 1.64.
+	- Some cosmetic changes.
+	- Use M_SIMPLE_TAG by default (even for write operations).
+	  I seems to me that SIMPLE TAG is safe only if the flag "queue
+	  algorithm modifier" is set to zero.
+	  I will ask some questions to Stefan Esser about this.
+	Add option SCSI_NCR_ALWAYS_SIMPLE_TAG in ncr53c8xx.h.
+
+Fri Feb 16 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	I have found the bug. It is a recursion in __get_free_pages().
+	I will send a mail to Linus about this.
+
+Sat Feb 10 20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	I am sure that the kernel stack overflow is due to a severe bug in
+	the Linux kernel.
+	I decide to try to find the bug by myself.
+
+Fri Feb 09 20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h
+	Limit commands per lun to 2 for linux-1.3.XY.
+	The patch-1.3.60 does not correct the kernel stack overflow problem.
+	I decide to make some tests with Drew's driver and Bsd2Linux with same 
+	working conditions (3 commands per lun, FAST SCSI, no command queueing).
+	I get the stack overflow problem with the 2 drivers at the same 
+	frequency.
+	With only 2 commands per lun, I dont have the problem with any driver.
+	It seems that the madness of recursion and the recent introduction of
+	the silly generic read function have broken performance and reliability 
+	of scsi drivers.
+
+Thu Feb 08 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr_attach()
+	Release memory mapped region and io port if initialisation
+	does not succeed.
+
+Thu Feb 08 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.c
+	Try to spare some CPU time in queue_command() function and interrupt
+	handler:
+	Add SCSI_NCR_PARANOIA define option in ncr53c8xx.h.
+	Add SCSI_NCR_PROFILE  define option in ncr53c8xx.h.
+	Avoid useless code and function calls.
+
+Tue Feb 06 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h, ncr_timeout()
+	Add SCSI_NCR_BROKEN_INTR define option in ncr53c8xx.h.
+	If this option is set, the timeout handler polls the interrupt status
+	register every tick (10 ms). So, boards with broken interrupt can work. 
+
+Mon Feb 05 21:30 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Print the correct speed, for devices with successfull wide negotiation.
+	For same period, such devices are two times faster then narrow ones.
+
+Mon Feb 05 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h, ncr53c8xx.c, ncr_attach()
+	Add define SCSI_NCR_SETTLE_TIME in header file and set it by default
+	to 2 seconds.
+
+Sat Jan 27 14:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Upload release 1.3
+
+Wed Jan 24 24:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Update from ncr Bsd 1.60 (Stefan Esser):
+	The handshake timeout is disabled, since
+	a few devices will delay ACK for more than a 
+	second: Scanner, CDROM writer and a few old hard 
+	disk drives.
+
+Wed Jan 24 22:30 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Set the selection timeout to 0.4 sec, since 0.25 sec
+	is recommended for scsi-1 devices.
+	Note that the Bsd ncr driver sets this timeout to 0.1 sec
+	and the linux standard ncr driver sets it to 0.8 sec.
+
+Wed Jan 24 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Add a 5 seconds delay after chip initialization,
+	waiting for scsi devices to settle their stomach,
+	as FreeBSD generic scsi driver does.
+
+Tue Jan 23 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Set burst length value according to chip type.
+	The original Bsd ncr driver sets burst length to 16 for
+	all chip types.
+
+Tue Jan 16 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c, ncr53c8xx.h
+	Add comments to linux specific glue code.
+
+Mon Jan 15 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	io mapped versus memory mapped.
+	* ncr53c8xx.c
+	Add some code to dynamicaly switch to io mapped if memory mapped
+	does not work.
+	No more need to reconfigure, compile and link the kernel if
+	memory mapped is not possible.
+
+Sun Jan 14 18:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	Patch sent to ncr mailing list by Jason Duerstock
+	<jduersto@kendall.mdcc.edu>
+	I have omitted to provide the proc_dir_entry to the middle
+	scsi driver.
+	* ncr53c8xxx.c
+	Add the declaration of the ncr53c8xx proc_dir_entry and return
+	the pointer to middle scsi driver.
+
+Sat Jan 13 01:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	ncrBsd2Linux 1.1 is ready.
+	Upload to sunsite immediatly.
+
+Fri Jan 12 23:45 1996 Gerard Roudier (groudier@club-internet.fr)
+	It seems that scsi-2 devices too may cause problems because they
+	have flawes in the firmware.
+	* ncr53c8xx.h
+	I add a table of capabilities per target.
+	This table contains one byte per target. The value of this byte
+	is anded with byte 7 of INQUIRY data.
+	Edit ncr53c8xx.h and read the corresponding comments for more
+	details.
+
+Wed Jan 10 22:35 1996 Gerard Roudier (groudier@club-internet.fr)
+	I have some time to read the scsi-1 specifications.
+	Some very old scsi devices may cause problems with the ncr Bsd driver
+	for the following raisons:
+	    The Synchronous Negotiation protocol was optional.
+	    The standardized INQUIRY data does not include the byte 7 of
+	    the scsi-2 specifications which contains the capabilities of
+	    the device.
+	I think that negotiation with such devices are very questionnable.
+	* ncr53c8xx.c
+	ncrBsd2Linux 1.1 does not negotiate with scsi-1 devices.
+
+Sat Jan 06 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c function ncr_attach()
+	Disable chip interrupt before soft reset in attach procedure.
+	When loadlin is used to boot the system, the state of the NCR chip
+	is unpredicable. This modification avoid unexpected interrupts.
+	
+Thu Jan 04 23:45 1996 Gerard Roudier (groudier@club-internet.fr)
+	ncrBsd2Linux 1.0 is ready.
+	Upload to sunsite immediatly.
+
+Tue Jan 02 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Add a waiting list for Scsi Commands than can be inserted
+	into the start queue immediatly.
+	When a command complete, the waiting commands are requeued by calling
+	the queuecommand() function.
+
+Sun Dec 31 23:59 1995 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Use kmalloc()/kfree() for internal data structures allocation to
+	avoid scsi memory pool shortage.
+
+Sat Dec 30 23:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	ncrBsd2Linux can now use memory mapped IO.
+	Works fine.
+	* ncr53c8xx.c
+	    Call vremap() from ncr_attach() to map the physical page which
+	    contains the memory IO window.
+	    Call vfree() from ncr_detach() (release module).
+
+Fri Dec 29 23:45 1995 Gerard Roudier (groudier@club-internet.fr)
+	ncrBsd2Linux can now be configured as a module.
+	Works fine.
+	* ncr53c8xx.c: add new functions ncr53c8xx_release() and ncr_detach()
+	Add the code to (per host):
+	    Stop the timer.
+	    Stop the chip.
+	    Free allocated memory.
+
+Fri Dec 29 23:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Problem: detection routine returns 0 and can detect only one host.
+	* ncr53c8xx.c function ncr_attach()
+	ncr_attach() now returns 0 on success and -1 on error.
+	ncr53c8xx_detect() returns the number of detected hosts.
+
+Thu Dec 28 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	I must upload the new version which corrects the severe problem with
+	WRITE_10 command.
+	Release 0.5
+	Known or probable problems with this ncr driver release:
+	--------------------------------------------------------
+	    Same as the previous release.
+
+Wed Dec 27 23:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Problem:
+	    System CRASH or scsi ERROR "extra data disgarded" on WRITE(10)
+	    command. 
+	* ncr53c8xx.c function guess_xfer_direction()
+	I add the WRITE(10) (0x2A) into the list of Data Out scsi commands.
+	It was a big mistake.
+	This BUG was introduced in the release 0.3 and is obvious present in
+	the release 0.4.
+
+Wed Dec 27 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Problem:
+	    When I was testing tagged command queueing and disconnections
+	    with one hard disk at a time (IBM S12), the script process hung 
+	    every 5 minutes with a non empty stall queue.
+	* ncr53c8xx.c function ncr_exception()
+	I replace "OUTB (nc_istat, INTF)" by
+	          "OUTB (nc_istat, (istat & SIGP) | INTF)".
+	This statement cleared the INTF condition, but cleared the SIGP flag too.
+	(This bug is in the original FreeBSD ncr driver).
+
+Mon Dec 25 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Release 0.4
+	Known or probable problems with this ncr driver release:
+	--------------------------------------------------------
+	  Hardware (or software) conflicts with some ethernet cards.
+	      See release 0.2 above.
+	  Crash with Intel saturn chipset with write-back cache enabled.
+	      The SCSI SCRIPT access the internal registers of
+	      the NCR chip by memory addressing.
+              Ensure that the memory area of the NCR chip is not cacheable.
+	      Use scanpci to get the base memory address of the ncr chip.
+	      The 128 bytes following this address must not be cached.
+
+Sat Dec 23 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Problem:
+		FreeBSD driver important comments
+		---------------------------------
+		We try to reduce the number of interrupts caused
+		by unexpected phase changes due to disconnects.
+		A typical harddisk may disconnect before ANY block.
+		If we wanted to avoid unexpected phase changes at all
+		we had to use a break point every 512 bytes.
+		Of course the number of scatter/gather blocks is
+		limited.
+	* ncr53c8xx.c function ncr_scatter()
+	This function has been rewritten according to the above comments.
+	The Linux scatter list is scanned, and blocks are broken as possible
+	into 512 bytes chunks.
+
+Wed Dec 22 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Problem: ensure that there are enough allocated Command Control Blocks
+	         for each unit to enqueue commands according to cmd_per_lun.
+	* ncr53c8xx.c function ncr_allocate_ccb()
+	Allocate all required ccb(s) instead of one at a time.
+
+Mon Dec 18 23:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Problem: A copy of the system time is used to compute timeouts.
+	         When the system time is changed , we can get spurious timeouts
+	         if scsi commands are pending.
+	* ncr53c8xx.c function ncr_timeout()
+	In FreeBSD the kernel time (volatile struct timeval time) is not
+	affected by settimeofday() or other change time functions.
+	For Linux, I replace "time" by "xtime". But "xtime" is the system time,
+	and is affected by change time functions.
+	If we detect a change <=-1s or >1s we assume system time has been changed.
+	For all active ccb(s), we recompute tlimit.
+	We set heartbeat to thistime to prevent spurious chip reset.
+
+Sun Dec 17 23:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	Release 0.3.
+
+Sun Dec 17 11:00 1995 Gerard Roudier (groudier@club-internet.fr)
+
+	Problem: Linux middle-level scsi driver does not provide the
+	direction of transfert in scsi command parameters.
+	FreeBSD ncr driver need this information to patch the SCSI script
+	for SAVE DATA POINTER and to check actual data transfer direction.
+	* ncr53c8xx.c
+	I add the function guess_xfer_direction(int opcode) which try to
+	guess the transfer direction.
+ 	Unfortunately my documentation about SCSI-II standard is very old.
+	It does not contain PHOTO-CD command specifications.
+	I assume input transfer direction, for unknown command. (not perfect)
+
+Wed Dec 15 23:00 1995 Gerard Roudier (groudier@club-internet.fr)
+
+	It's time to schedule the release 0.2
+	Known or probable problems with this ncr driver release:
+	--------------------------------------------------------
+	  Scsi tapes do not work.
+	  scsi-config-1.5 does not work too.
+	  Hardware (or software) conflicts with some ethernet cards.
+		The linux native ncr53c810 scsi driver does'not use memory
+		mapped IO at all.
+		The BSD driver can use memory mapped IO.
+		Under Linux, i seems to be difficult (or impossible) to map
+		a PCI memory area. So I decide to use normal IO in the code of
+		the ported driver.
+		However, the SCSI SCRIPT access the internal registers of
+		the NCR chip by memory addressing.
+		EThernet cards use a memory area to communicate with the system.
+		I think that this memory area conflicts with the memory area
+		used by the NCR chip.
+		The configuration diskette of your ethernet card can help you
+		to fix the problem (try sofware configurations).
+
+Wed Dec 15 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+
+	Problem: detection of CD change did not work.
+	* ncr53c8xx.c
+	Signal a CHECK_CONDITION (S_CHECK_COND) to the middle-level
+	scsi drivers when the scsi completion status = S_SENSE|S_GOOD.
+
+	Problem: System hang with status <4/82> after mounting the root
+	         partition. System disk is a QUANTUM EMPIRE 1080 S.
+	Submitted by rwilhelm@Physik.TU-Muenchen.DE (Robert Wilhelm)
+	Thu, 14 Dec 1995 10:18:43 +0100 (MET)
+	* ncr53c8xx.c
+	Signal a CHECK_CONDITION (S_CHECK_COND) to the middle-level
+	scsi drivers when the scsi completion status = S_SENSE|S_CHECK_COND.
+	(HS_COMPLETE=4, S_SENSE|S_CHECK_COND=x82).
+	I can't test this fix. I think that it should work.
+
+Thu Dec 14 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+
+	Problem	submitted by Bill Dyess <Bill@Dyess.com> Tue 12 Dec 1995
+	Only one lun detected on a Pioneer DRM-602X 6-disk CD-ROM changer.
+	* ncr53c8xx.h, ncr53c8xx.c
+	Define NCR_SCSI_MAX_LUN to 8 if the Linux configuration flag
+	SCSI_CONFIG_MULTI_LUN is set.
+	My CD device has only one lun. I can't test multi-lun device,
+	but I think that it should work.
+
+	* ncr53c8xx.c
+	Write the ncr_abort_command() and ncr_reset_command() functions.
+	I intend to test these functions next week.
+
+Sun Dec 10 22:00 1995 Gerard Roudier (groudier@club-internet.fr)
+	* Release 0.1
+	Works fine with hard disks under Linux 1.2.13 and Linux 1.3.45.

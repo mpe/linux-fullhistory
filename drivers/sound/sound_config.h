@@ -34,7 +34,7 @@
 
 /************* PCM DMA buffer sizes *******************/
 
-/* If you are using high playback or recording speeds, the default buffersize
+/* If you are using high playback or recording speeds, the default buffer size
    is too small. DSP_BUFFSIZE must be 64k or less.
 
    A rule of thumb is 64k for PAS16, 32k for PAS+, 16k for SB Pro and
@@ -97,7 +97,7 @@
 #define SND_DEV_DSP16	5	/* Like /dev/dsp but 16 bits/sample */
 #define SND_DEV_STATUS	6	/* /dev/sndstat */
 #define SND_DEV_AWFM	7	/* Reserved */
-#define SND_DEV_SEQ2	8	/* /dev/sequecer, level 2 interface */
+#define SND_DEV_SEQ2	8	/* /dev/sequencer, level 2 interface */
 #define SND_DEV_SNDPROC 9	/* /dev/sndproc for programmable devices */
 #define SND_DEV_PSS	SND_DEV_SNDPROC
 
@@ -127,8 +127,8 @@ struct address_info {
 	char *name;
 	int driver_use_1;	/* Driver defined field 1 */
 	int driver_use_2;	/* Driver defined field 2 */
-	int *osp;	/* OS spesific info */
-	int card_subtype;	/* Driver spesific. Usually 0 */
+	int *osp;	/* OS specific info */
+	int card_subtype;	/* Driver specific. Usually 0 */
 };
 
 #define SYNTH_MAX_VOICES	32

@@ -68,8 +68,8 @@
 		B (OPT_MSS) | B (OPT_GUS16) | B (OPT_GUSMAX) | B (OPT_TRIX) | \
 		B (OPT_SSCAPE)| B(OPT_MAD16) | B(OPT_CS4232))
 #define MPU_DEVS (B(OPT_PSS)|\
-		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI))
-#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_SSCAPE))
+		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI)|B(OPT_SSCAPE))
+#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16))
 #define MIDI_CARDS (MPU_DEVS | UART401_DEVS | \
 		    B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | \
 		    B (OPT_GUS) | B (OPT_TRIX) | B (OPT_SSCAPE)|B(OPT_MAD16) | \
@@ -148,7 +148,7 @@ hw_entry        hw_table[] =
 char           *questions[] =
 {
   "ProAudioSpectrum 16 support",
-  "SoundBlaster (SB, SBPro, SB16, clones) support",
+  "Sound Blaster (SB, SBPro, SB16, clones) support",
   "Generic OPL2/OPL3 FM synthesizer support",
   "Gravis Ultrasound support",
   "MPU-401 support (NOT for SB16)",
@@ -157,7 +157,7 @@ char           *questions[] =
   "16 bit sampling option of GUS (_NOT_ GUS MAX)",
   "GUS MAX support",
   "Microsoft Sound System support",
-  "Ensoniq Soundscape support",
+  "Ensoniq SoundScape support",
   "MediaTrix AudioTrix Pro support",
   "Support for MAD16 and/or Mozart based cards",
   "Support for Crystal CS4232 based (PnP) cards",
@@ -183,10 +183,10 @@ char           *help[] =
   "you have some other card made by MediaVision or Logitech as\n"
   "they are not PAS16 compatible.\n",
 
-  "Enable this if you have an original SoundBlaster card made by\n"
+  "Enable this if you have an original Sound Blaster card made by\n"
   "Creative Labs or a 100%% hardware compatible clone. For an\n"
   "unknown card you may want to try this if it claims to be\n"
-  "SoundBlaster compatible.\n",
+  "Sound Blaster compatible.\n",
 
   "Enable this option if your sound card has a Yamaha OPL2 or OPL3\n"
   "FM synthesizer chip.\n",
@@ -219,7 +219,7 @@ char           *help[] =
   "card made by Microsoft or the Aztech SG 16 Pro or NX16 Pro.\n",
 
   "Enable this if you have a sound card based on the Ensoniq\n"
-  "Soundscape chipset. Such cards are being manufactured by Ensoniq,\n"
+  "SoundScape chipset. Such cards are being manufactured by Ensoniq,\n"
   "Spea and Reveal (Reveal makes other cards as well).\n",
 
   "Enable this option if you have the AudioTrix Pro sound card\n"
@@ -240,10 +240,10 @@ char           *help[] =
   "Use this option to enable experimental support for cards that\n"
   "use the Plug and Play protocol.\n",
 
-  "Enable this option if your card is a SoundBlaster Pro or\n"
-  "SoundBlaster 16. It also works with many SoundBlaster Pro clones.\n",
+  "Enable this option if your card is a Sound Blaster Pro or\n"
+  "Sound Blaster 16. It also works with many Sound Blaster Pro clones.\n",
 
-  "Enable this if you have a SoundBlaster 16, including the AWE32.\n",
+  "Enable this if you have a Sound Blaster 16, including the AWE32.\n",
 
   "Enable this if you have an Audio Excel DSP16 card. See the file\n"
   "Readme.aedsp16 for more information.\n",
@@ -748,19 +748,19 @@ ask_parameters (void)
 		  "Check from manual of the card");
 
   ask_int_choice (B (OPT_SB), "SBC_IRQ",
-		  "SoundBlaster IRQ",
+		  "Sound Blaster IRQ",
 		  FMT_INT,
 		  7,
 		  "Check from manual of the card");
 
   ask_int_choice (B (OPT_SB), "SBC_DMA",
-		  "SoundBlaster DMA",
+		  "Sound Blaster DMA",
 		  FMT_INT,
 		  1,
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_SB), "SB_DMA2",
-		"SoundBlaster 16 bit DMA (_REQUIRED_for SB16, Jazz16, SMW)",
+		"Sound Blaster 16 bit DMA (_REQUIRED_for SB16, Jazz16, SMW)",
 		  FMT_INT,
 		  5,
 		  "5, 6 or 7 (use 1 for 8 bit cards)");
@@ -775,7 +775,7 @@ ask_parameters (void)
 		  "SB MPU401 IRQ (Jazz16, SM Wave and ES1688)",
 		  FMT_INT,
 		  -1,
-		  "Check from manual of the card");
+		  "Use -1 with SB16");
 
   ask_int_choice (B (OPT_PAS), "PAS_IRQ",
 		  "PAS16 IRQ",
@@ -944,31 +944,31 @@ ask_parameters (void)
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_BASE",
-		  "Soundscape MIDI I/O base",
+		  "SoundScape MIDI I/O base",
 		  FMT_HEX,
 		  0x330,
 		  "320, 330, 340 or 350");
 
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_IRQ",
-		  "Soundscape MIDI IRQ",
+		  "SoundScape MIDI IRQ",
 		  FMT_INT,
 		  9,
 		  "");
 
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_DMA",
-		  "Soundscape initialization DMA",
+		  "SoundScape initialization DMA",
 		  FMT_INT,
 		  3,
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_MSS_BASE",
-		  "Soundscape audio I/O base",
+		  "SoundScape audio I/O base",
 		  FMT_HEX,
 		  0x534,
 		  "534, 608, E84 or F44");
 
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_MSS_IRQ",
-		  "Soundscape audio IRQ",
+		  "SoundScape audio IRQ",
 		  FMT_INT,
 		  11,
 		  "7, 9, 10 or 11");
@@ -1365,10 +1365,10 @@ main (int argc, char *argv[])
 	{
 
 	  if (think_positively (
-	    "Do you want support for the Audio Excel SoundBlaster Pro mode",
+	    "Do you want support for the Audio Excel Sound Blaster Pro mode",
 				 1,
 				 "Enable this option if you want the Audio Excel sound card to operate\n"
-				 "in SoundBlaster Pro mode.\n"))
+				 "in Sound Blaster Pro mode.\n"))
 	    {
 	      printf ("#define AEDSP16_SBPRO\n");
 	      sel1 = 1;
@@ -1403,7 +1403,7 @@ main (int argc, char *argv[])
     {
     genld_again:
       if (think_positively ("Do you wish to include an LD file", 1,
-			    "If you want to emulate the SoundBlaster card and you have a DSPxxx.LD\n"
+			    "If you want to emulate the Sound Blaster card and you have a DSPxxx.LD\n"
 		      "file then you must include the LD in the kernel.\n"))
 	{
 	  char            path[512];
@@ -1430,7 +1430,7 @@ main (int argc, char *argv[])
 	{
 	  FILE           *sf = fopen ("synth-ld.h", "w");
 
-	  fprintf (sf, "/* automaticaly generated by configure */\n");
+	  fprintf (sf, "/* automatically generated by configure */\n");
 	  fprintf (sf, "unsigned char pss_synth[1];\n"
 		   "#define pss_synthLen 0\n");
 	  fclose (sf);
@@ -1443,7 +1443,7 @@ main (int argc, char *argv[])
 
       if (think_positively ("Do you want to include TRXPRO.HEX in your kernel",
 			    1,
-	"The MediaTrix AudioTrix Pro has an onboard microcontroller which\n"
+	"The MediaTrix AudioTrix Pro has an on-board microcontroller which\n"
 			    "needs to be initialized by downloading the code from the file TRXPRO.HEX\n"
 			    "in the DOS driver directory. If you don't have the TRXPRO.HEX file handy\n"
 			    "you may skip this step. However, the SB and MPU-401 modes of AudioTrix\n"

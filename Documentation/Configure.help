@@ -1433,6 +1433,81 @@ CONFIG_SCSI_NCR53C7xx_DISCONNECT
   will cause your SCSI system to hang, which might cause a system crash. 
   The safe answer therefore is to say N.
 
+NCR53C8XX SCSI support
+CONFIG_SCSI_NCR53C8XX
+  This is the BSD ncr driver adapted to linux for NCR53C8XX family of PCI-SCSI 
+  controllers. This driver supports parity checking, tagged command queueing,
+  fast scsi II transfer up to 10 MB/s with narrow scsi devices and 20 MB/s
+  with wide scsi devices.
+  This driver has been tested ok with linux/i386  and is currently untested
+  under linux/Alpha. If you intend to use this driver under linux/Alpha, just 
+  try it first with read-only or mounted read-only devices.
+
+force normal IO
+CONFIG_SCSI_NCR53C8XX_IOMAPPED
+  This option allow to force the driver to use normal IO.
+  Memory mapped IO have less latency than normal IO.
+  During initialisation phase, the driver first tries to use memory mapped io.
+  If nothing seems wrong, it will use memory mapped io.
+  If a flaw is detected,  it will use normal io.
+  However, it's possible that memory mapped does not work properly for you and 
+  the driver has not detected the problem.
+  The normal answer therefore is N.
+
+not allow targets to disconnect
+CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
+  This option is only provided for safe if you suspect some scsi device 
+  of yours to not support properly this feature.
+  To not allow targets to disconnect is not reasonnable if there is more 
+  than 1 device on a scsi bus.
+  The normal answer therefore is N.
+
+enable tagged command queueing
+CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+  This option allow to enable tagged command queuing support at linux start-up.
+  Some scsi devices do not support properly this feature.
+  The suggested method may be to not validate this option in the configuration 
+  but to use the "settags" control command after boot-up to enable this feature.
+      echo "settags 2 4" >/proc/scsi/ncr53c8xx/0
+  Ask the driver to use up to 4 concurrent tagged commands for target 2 of 
+  controller 0.
+  See the README.ncr53c8xx file for more information.
+  WARNING! tagged queue support requires to allow targets to disconnect.
+  The safe answer therefore is N.
+  The normal answer therefore is Y.
+
+force asynchronous transfer mode
+CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
+  This option allow to force asynchronous transfer mode for all devices at 
+  linux startup. You can enable synchronous negotiation with the "setsync" 
+  control command after boot-up, for example:
+     echo "setsync 2 25" >/proc/scsi/ncr53c8xx/0
+  Ask the driver to set the period to 25 ns (10MB/sec) for target 2 of 
+  controller 0.
+  The safe answer therefore is Y.
+  The normal answer therefore is N.
+ 
+force synchronous negotiation
+CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
+  Some scsi-2 devices support synchronous negotiations but do not report 
+  this feature in byte 7 of inquiry data.
+  Answer Y only if you suspect some device to be so humble.
+  The normal answer therefore is N.
+ 
+disable master parity checking
+CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
+  Some hardware may have problems with parity during master cycles on PCI bus.
+  Only seen once. Answer Y if you suspect such problem.
+  The normal answer therefore is N.
+
+disable scsi parity checking
+CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
+  Parity on scsi bus is a system option. If one device checks parity, then 
+  all devices on the scsi bus must generate parity.
+  However, the parity can be ignored by the scsi devices.
+  Answer Y only if you know what you are doing.
+  The normal answer therefore is N.
+
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
   This is support for an ISA bus SCSI host adaptor. You'll find

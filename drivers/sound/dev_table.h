@@ -34,7 +34,7 @@ extern int sound_started;
 
 struct driver_info {
 	char *driver_id;
-	int card_subtype;	/* Driver spesific. Usually 0 */
+	int card_subtype;	/* Driver specific. Usually 0 */
 	int card_type;		/*	From soundcard.h	*/
 	char *name;
 	void (*attach) (struct address_info *hw_config);
@@ -329,7 +329,7 @@ struct sound_timer_operations {
 		{"MIDI6850", 0, SNDCARD_UART6850,"6860 UART Midi",	attach_uart6850, probe_uart6850, unload_uart6850},
 #endif
 #ifdef CONFIG_SB
-		{"SBLAST", 0, SNDCARD_SB,	"SoundBlaster",		attach_sb_card, probe_sb, unload_sb},
+		{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
 #ifdef CONFIG_MIDI
 		{"UART401", 0, SNDCARD_UART401,"MPU-401 UART",	attach_uart401, probe_uart401, unload_uart401},
 #endif
@@ -342,13 +342,13 @@ struct sound_timer_operations {
 		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
 #endif
 #ifdef CONFIG_SSCAPE
-		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq Soundscape",	attach_sscape, probe_sscape, unload_sscape},
+		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
 		{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
 #endif
 #ifdef CONFIG_TRIX
-		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTriX AudioTriX Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
-		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTriX (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
-		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTriX MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
+		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTrix AudioTrix Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
+		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
+		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 	};
@@ -531,7 +531,7 @@ void sound_setup (char *str, int *ints);
 
 int sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan);
 void sound_free_dmap (int dev, struct dma_buffparms *dmap);
-extern int soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
+extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
 void install_pnp_sounddrv(struct pnp_sounddev *drv);
 int sndtable_probe (int unit, struct address_info *hw_config);
 int sndtable_init_card (int unit, struct address_info *hw_config);

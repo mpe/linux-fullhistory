@@ -263,6 +263,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_NCR53C8XX),y)
+L_OBJS += ncr53c8xx.o 
+else
+  ifeq ($(CONFIG_SCSI_NCR53C8XX),m)
+  M_OBJS += ncr53c8xx.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_PAS16),y)
 L_OBJS += pas16.o
 else
@@ -361,6 +369,9 @@ seagate.o: seagate.c
 	mv script.h 53c8xx_d.h
 	mv scriptu.h 53c8xx_u.h
 	rm fake.c
+
+ncr53c8xx.o : ncr53c8xx.c
+	$(CC) $(CFLAGS) -c ncr53c8xx.c
 
 scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o

@@ -35,7 +35,7 @@ static int      max_synthdev = 0;
 /*
  * The seq_mode gives the operating mode of the sequencer:
  *      1 = level1 (the default)
- *      2 = level2 (extended capabilites)
+ *      2 = level2 (extended capabilities)
  */
 
 #define SEQ_1	1
@@ -69,7 +69,7 @@ static volatile int qhead = 0, qtail = 0, qlen = 0;
 static volatile int iqhead = 0, iqtail = 0, iqlen = 0;
 static volatile int seq_playing = 0;
 static volatile int sequencer_busy = 0;
-static int      output_treshold;
+static int      output_threshold;
 static int      pre_event_timeout;
 static unsigned synth_open_mask;
 
@@ -688,7 +688,7 @@ seq_timing_event (unsigned char *event_rec)
 
       if ((ret = tmr->event (tmr_no, event_rec)) == TIMER_ARMED)
 	{
-	  if ((SEQ_MAX_QUEUE - qlen) >= output_treshold)
+	  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
 	    {
 	      unsigned long   flags;
 
@@ -728,7 +728,7 @@ seq_timing_event (unsigned char *event_rec)
 
 	  request_sound_timer (time);
 
-	  if ((SEQ_MAX_QUEUE - qlen) >= output_treshold)
+	  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
 	    {
 	      unsigned long   flags;
 
@@ -864,7 +864,7 @@ play_event (unsigned char *q)
 
 	  request_sound_timer (time);
 
-	  if ((SEQ_MAX_QUEUE - qlen) >= output_treshold)
+	  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
 	    {
 	      unsigned long   flags;
 
@@ -1003,7 +1003,7 @@ seq_startplay (void)
 
   seq_playing = 0;
 
-  if ((SEQ_MAX_QUEUE - qlen) >= output_treshold)
+  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
     {
       unsigned long   flags;
 
@@ -1203,7 +1203,7 @@ sequencer_open (int dev, struct fileinfo *file)
 
   seq_sleep_flag.flags = WK_NONE;
   midi_sleep_flag.flags = WK_NONE;
-  output_treshold = SEQ_MAX_QUEUE / 2;
+  output_threshold = SEQ_MAX_QUEUE / 2;
 
   for (i = 0; i < num_synths; i++)
     if (pmgr_present[i])
@@ -1373,7 +1373,7 @@ midi_outc (int dev, unsigned char data)
 
   /*
    * This routine sends one byte to the Midi channel.
-   * If the output Fifo is full, it waits until there
+   * If the output FIFO is full, it waits until there
    * is space in the queue
    */
 
@@ -1843,7 +1843,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	  tmp = 1;
 	if (tmp >= SEQ_MAX_QUEUE)
 	  tmp = SEQ_MAX_QUEUE - 1;
-	output_treshold = tmp;
+	output_threshold = tmp;
 	return 0;
       }
       break;
@@ -1908,7 +1908,7 @@ sequencer_select (int dev, struct fileinfo *file, int sel_type, select_table_han
     case SEL_OUT:
       save_flags (flags);
       cli ();
-      if ((SEQ_MAX_QUEUE - qlen) < output_treshold)
+      if ((SEQ_MAX_QUEUE - qlen) < output_threshold)
 	{
 
 	  seq_sleep_flag.flags = WK_SLEEP;

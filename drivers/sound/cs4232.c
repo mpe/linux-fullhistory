@@ -5,7 +5,7 @@
  * a PnP compatible chip which contains a CS4231A codec, SB emulation,
  * a MPU401 compatible MIDI port, joystick and synthesizer and IDE CD-ROM 
  * interfaces. This is just a temporary driver until full PnP support
- * gets inplemented. Just the WSS codec, FM synth and the MIDI ports are
+ * gets implemented. Just the WSS codec, FM synth and the MIDI ports are
  * supported. Other interfaces are left uninitialized.
  */
 /*
@@ -142,14 +142,14 @@ probe_cs4232 (struct address_info *hw_config)
  */
 
       CS_OUT2 (0x15, 0x00);	/* Select logical device 0 (WSS/SB/FM) */
-      CS_OUT3 (0x47, (base >> 8) & 0xff, base & 0xff);	/* WSSbase */
+      CS_OUT3 (0x47, (base >> 8) & 0xff, base & 0xff);	/* WSS base */
 
       if (check_region (0x388, 4))	/* Not free */
-	CS_OUT3 (0x48, 0x00, 0x00)	/* FMbase off */
+	CS_OUT3 (0x48, 0x00, 0x00)	/* FM base off */
 	  else
-	CS_OUT3 (0x48, 0x03, 0x88);	/* FMbase 0x388 */
+	CS_OUT3 (0x48, 0x03, 0x88);	/* FM base 0x388 */
 
-      CS_OUT3 (0x42, 0x00, 0x00);	/* SBbase off */
+      CS_OUT3 (0x42, 0x00, 0x00);	/* SB base off */
       CS_OUT2 (0x22, irq);	/* SB+WSS IRQ */
       CS_OUT2 (0x2a, dma1);	/* SB+WSS DMA */
 
@@ -186,7 +186,7 @@ probe_cs4232 (struct address_info *hw_config)
       if (mpu_base != 0 && mpu_irq != 0)
 	{
 	  CS_OUT2 (0x15, 0x03);	/* Select logical device 3 (MPU) */
-	  CS_OUT3 (0x47, (mpu_base >> 8) & 0xff, mpu_base & 0xff);	/* MPUbase */
+	  CS_OUT3 (0x47, (mpu_base >> 8) & 0xff, mpu_base & 0xff);	/* MPU base */
 	  CS_OUT2 (0x22, mpu_irq);	/* MPU IRQ */
 	  CS_OUT2 (0x33, 0x01);	/* Activate logical dev 3 */
 	}

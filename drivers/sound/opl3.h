@@ -18,7 +18,7 @@
  *
  *	The percussive mode is implemented in the left side only.
  *
- *	With the above exeptions the both sides can be operated independently.
+ *	With the above exceptions the both sides can be operated independently.
  *	
  *	A 4 OP voice can be created by setting the corresponding
  *	bit at offset 4 of the right side.
@@ -144,7 +144,7 @@
  *	register offset).
  *
  *	For 4 OP voices the connection bit is used in the
- *	both halfs (gives 4 ways to connect the operators).
+ *	both halves (gives 4 ways to connect the operators).
  */
 #define FEEDBACK_CONNECTION				0xc0
 #define   FEEDBACK_MASK				0x0e	/* Valid just for 1st OP of a voice */
@@ -153,7 +153,7 @@
  *	In the 4 OP mode there is four possible configurations how the
  *	operators can be connected together (in 2 OP modes there is just
  *	AM or FM). The 4 OP connection mode is defined by the rightmost
- *	bit of the FEEDBACK_CONNECTION (0xC0-0xC8) on the both halfs.
+ *	bit of the FEEDBACK_CONNECTION (0xC0-0xC8) on the both halves.
  *
  *	First half	Second half	Mode
  *

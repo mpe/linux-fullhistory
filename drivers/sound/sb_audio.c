@@ -1,7 +1,7 @@
 /*
  * sound/sb_audio.c
  *
- * Audio routines for SoundBlaster compatible cards.
+ * Audio routines for Sound Blaster compatible cards.
  */
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
@@ -399,7 +399,7 @@ sb20_audio_trigger (int dev, int bits)
 }
 
 /*
- * SB2.01 spesific speed setup
+ * SB2.01 specific speed setup
  */
 
 static int
@@ -433,7 +433,7 @@ sb201_audio_set_speed (int dev, int speed)
 }
 
 /*
- * SB Pro spesific routines
+ * SB Pro specific routines
  */
 
 static int
@@ -575,7 +575,7 @@ jazz16_audio_set_speed (int dev, int speed)
 }
 
 /*
- * ESS spesific routines
+ * ESS specific routines
  */
 
 static void
@@ -607,7 +607,7 @@ ess_speed (sb_devc * devc)
  * Set filter divider register
  */
 
-  speed = (speed * 9) / 20;	/* Set filter rolloff to 90% of speed/2 */
+  speed = (speed * 9) / 20;	/* Set filter roll-off to 90% of speed/2 */
   divider = 256 - 7160000 / (speed * 82);
   ess_write (devc, 0xa2, divider);
 
@@ -798,7 +798,7 @@ ess_audio_trigger (int dev, int bits)
 }
 
 /*
- * SB16 spesific routines
+ * SB16 specific routines
  */
 
 static int

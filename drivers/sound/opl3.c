@@ -158,7 +158,7 @@ int
 opl3_detect (int ioaddr, int *osp)
 {
   /*
-   * This function returns 1 if the FM chicp is present at the given I/O port
+   * This function returns 1 if the FM chip is present at the given I/O port
    * The detection algorithm plays with the timer built in the FM chip and
    * looks for a change in the status register.
    *
@@ -238,7 +238,7 @@ opl3_detect (int ioaddr, int *osp)
     }
 
   /*
-   * There is a FM chicp in this address. Detect the type (OPL2 to OPL4)
+   * There is a FM chip in this address. Detect the type (OPL2 to OPL4)
    */
 
   if (signature == 0x06 && !force_opl3_mode)	/* OPL2 */
@@ -252,7 +252,7 @@ opl3_detect (int ioaddr, int *osp)
       detected_model = 3;
 
       /*
-       * Detect availability of OPL4 (_experimental_). Works propably
+       * Detect availability of OPL4 (_experimental_). Works probably
        * only after a cold boot. In addition the OPL4 port
        * of the chip may not be connected to the PC bus at all.
        */

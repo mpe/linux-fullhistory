@@ -461,8 +461,8 @@ static void mark_timeout_data(u_long);
 #if 0
 static void mark_timeout_audio(u_long);
 #endif
-static void sbp_read_cmd(void);
-static int sbp_data(void);
+static void sbp_read_cmd(struct request *req);
+static int sbp_data(struct request *req);
 static int cmd_out(void);
 static int DiskInfo(void);
 static int sbpcd_chk_disk_change(kdev_t);
@@ -4428,20 +4428,52 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 /*
  *  Take care of the different block sizes between cdrom and Linux.
  */
-static void sbp_transfer(void)
+static void sbp_transfer(struct request *req)
 {
 	long offs;
 	
-	while ( (CURRENT->nr_sectors > 0) &&
-	       (CURRENT->sector/4 >= D_S[d].sbp_first_frame) &&
-	       (CURRENT->sector/4 <= D_S[d].sbp_last_frame) )
+	while ( (req->nr_sectors > 0) &&
+	       (req->sector/4 >= D_S[d].sbp_first_frame) &&
+	       (req->sector/4 <= D_S[d].sbp_last_frame) )
 	{
-		offs = (CURRENT->sector - D_S[d].sbp_first_frame * 4) * 512;
-		memcpy(CURRENT->buffer, D_S[d].sbp_buf + offs, 512);
-		CURRENT->nr_sectors--;
-		CURRENT->sector++;
-		CURRENT->buffer += 512;
+		offs = (req->sector - D_S[d].sbp_first_frame * 4) * 512;
+		memcpy(req->buffer, D_S[d].sbp_buf + offs, 512);
+		req->nr_sectors--;
+		req->sector++;
+		req->buffer += 512;
 	}
+}
+/*==========================================================================*/
+/*
+ *  special end_request for sbpcd to solve CURRENT==NULL bug. (GTL)
+ *
+ *  This is a kluge so we don't need to modify end_request
+ *  We put the req we take out after INIT_REQUEST in the requests list,
+ *  so that end_request will discard it. 
+ *
+ *  The bug could be present in other block devices, perhaps we
+ *  should modify INIT_REQUEST and end_request instead, and
+ *  change every block device.. 
+ *
+ *  Could be a race here?? Could e.g. a timer interrupt schedule() us?
+ *  If so, we should copy end_request here, and do it right.. (or
+ *  modify end_request and the block devices.
+ *
+ *  In any case, the race here would be much small than it was, and
+ *  I couldn't reproduce..
+ *
+ *  The race could be: suppose CURRENT==NULL. We put our req in the list,
+ *  and we are scheduled. Other process takes over, and gets into
+ *  do_sbpcd_request. It sees CURRENT!=NULL (it is == to our req), so
+ *  proceds. It ends, so CURRENT is now NULL.. Now we awake somewhere in
+ *  end_request, but now CURRENT==NULL... oops!
+ *
+ */
+#undef DEBUG_GTL
+static inline void sbpcd_end_request(struct request *req, int uptodate) {
+	req->next=CURRENT;
+	CURRENT=req;
+	end_request(uptodate);
 }
 /*==========================================================================*/
 /*
@@ -4452,27 +4484,48 @@ static void DO_SBPCD_REQUEST(void)
 	u_int block;
 	u_int nsect;
 	int i, status_tries, data_tries;
-	
+	struct request *req;
+#ifdef DEBUG_GTL
+	static int xx_nr=0;
+	int xnr;
+#endif
+
  request_loop:
-	INIT_REQUEST;
-	sti();
-	
-	if ((CURRENT == NULL) || CURRENT->rq_status == RQ_INACTIVE) {
+#ifdef DEBUG_GTL
+	xnr=++xx_nr;
+
+	if(!CURRENT)
+	{
+		printk( "do_sbpcd_request[%di](NULL), Pid:%d, Time:%li\n",
+			xnr, current->pid, jiffies);
+		printk( "do_sbpcd_request[%do](NULL) end 0 (null), Time:%li\n",
+			xnr, jiffies);
 		CLEAR_INTR;
 		return;
 	}
-	if (CURRENT -> sector == -1)
+
+	printk(" do_sbpcd_request[%di](%p:%ld+%ld), Pid:%d, Time:%li\n",
+		xnr, CURRENT, CURRENT->sector, CURRENT->nr_sectors, current->pid, jiffies);
+#endif
+	INIT_REQUEST;
+	req=CURRENT;		/* take out our request so no other */
+	CURRENT=req->next;	/* task can fuck it up         GTL  */
+	sti();
+	
+	if (req->rq_status == RQ_INACTIVE)
 		goto err_done;
-	if (CURRENT->cmd != READ)
+	if (req -> sector == -1)
+		goto err_done;
+	if (req->cmd != READ)
 	{
-		msg(DBG_INF, "bad cmd %d\n", CURRENT->cmd);
+		msg(DBG_INF, "bad cmd %d\n", req->cmd);
 		goto err_done;
 	}
-	i = MINOR(CURRENT->rq_dev);
+	i = MINOR(req->rq_dev);
 	if ( (i<0) || (i>=NR_SBPCD) || (D_S[i].drv_id==-1))
 	{
 		msg(DBG_INF, "do_request: bad device: %s\n",
-			kdevname(CURRENT->rq_dev));
+			kdevname(req->rq_dev));
 		goto err_done;
 	}
 	while (busy_audio) sbp_sleep(HZ); /* wait a bit */
@@ -4481,19 +4534,23 @@ static void DO_SBPCD_REQUEST(void)
 	if (D_S[i].audio_state==audio_playing) goto err_done;
 	if (d!=i) switch_drive(i);
 	
-	block = CURRENT->sector; /* always numbered as 512-byte-pieces */
-	nsect = CURRENT->nr_sectors; /* always counted as 512-byte-pieces */
+	block = req->sector; /* always numbered as 512-byte-pieces */
+	nsect = req->nr_sectors; /* always counted as 512-byte-pieces */
 	
 	msg(DBG_BSZ,"read sector %d (%d sectors)\n", block, nsect);
 #if 0
 	msg(DBG_MUL,"read LBA %d\n", block/4);
 #endif
 	
-	sbp_transfer();
+	sbp_transfer(req);
 	/* if we satisfied the request from the buffer, we're done. */
-	if (CURRENT->nr_sectors == 0)
+	if (req->nr_sectors == 0)
 	{
-		end_request(1);
+#ifdef DEBUG_GTL
+		printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 2, Time:%li\n",
+			xnr, req, req->sector, req->nr_sectors, jiffies);
+#endif
+		sbpcd_end_request(req, 1);
 		goto request_loop;
 	}
 
@@ -4521,21 +4578,29 @@ static void DO_SBPCD_REQUEST(void)
 			break;
 		}
 		
-		sbp_read_cmd();
+		sbp_read_cmd(req);
 		sbp_sleep(0);
-		if (sbp_data() != 0)
+		if (sbp_data(req) != 0)
 		{
 #if SAFE_MIXED
 			D_S[d].has_data=2; /* is really a data disk */
 #endif SAFE_MIXED
-			end_request(1);
+#ifdef DEBUG_GTL
+			printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 3, Time:%li\n",
+				xnr, req, req->sector, req->nr_sectors, jiffies);
+#endif
+			sbpcd_end_request(req, 1);
 			goto request_loop;
 		}
 	}
 	
  err_done:
 	busy_data=0;
-	end_request(0);
+#ifdef DEBUG_GTL
+	printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 4 (error), Time:%li\n",
+		xnr, req, req->sector, req->nr_sectors, jiffies);
+#endif
+	sbpcd_end_request(req, 0);
 	sbp_sleep(0);    /* wait a bit, try again */
 	goto request_loop;
 }
@@ -4543,7 +4608,7 @@ static void DO_SBPCD_REQUEST(void)
 /*
  *  build and send the READ command.
  */
-static void sbp_read_cmd(void)
+static void sbp_read_cmd(struct request *req)
 {
 #undef OLD
 
@@ -4552,7 +4617,7 @@ static void sbp_read_cmd(void)
 	
 	D_S[d].sbp_first_frame=D_S[d].sbp_last_frame=-1;      /* purge buffer */
 	D_S[d].sbp_current = 0;
-	block=CURRENT->sector/4;
+	block=req->sector/4;
 	if (block+D_S[d].sbp_bufsiz <= D_S[d].CDsize_frm)
 		D_S[d].sbp_read_frames = D_S[d].sbp_bufsiz;
 	else
@@ -4650,7 +4715,7 @@ static void sbp_read_cmd(void)
  *  Check the completion of the read-data command.  On success, read
  *  the D_S[d].sbp_bufsiz * 2048 bytes of data from the disk into buffer.
  */
-static int sbp_data(void)
+static int sbp_data(struct request *req)
 {
 	int i=0, j=0, l, frame;
 	u_int try=0;
@@ -4913,9 +4978,9 @@ static int sbp_data(void)
 		return (0);
 	}
 	
-	D_S[d].sbp_first_frame = CURRENT -> sector / 4;
+	D_S[d].sbp_first_frame = req -> sector / 4;
 	D_S[d].sbp_last_frame = D_S[d].sbp_first_frame + D_S[d].sbp_read_frames - 1;
-	sbp_transfer();
+	sbp_transfer(req);
 	return (1);
 }
 /*==========================================================================*/

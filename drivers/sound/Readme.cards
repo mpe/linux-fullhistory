@@ -16,8 +16,8 @@ IMPORTANT!	This document covers only cards that were "known" when
 		work with them.
 
 		When using make xconfig and/or make menuconfig, you should
-		carefully check each sound configuration option (particularily
-		"Support for /dev/dsp and /dev/ausio").
+		carefully check each sound configuration option (particularly
+		"Support for /dev/dsp and /dev/audio").
 
 Cards that are not (fully) supported by this driver
 ---------------------------------------------------
@@ -29,9 +29,9 @@ http://www.4front-tech.com/usslite for latest news. Please don't
 mail me and ask about these cards. The unsupported cards are:
 
 	- All PnP soundcards (SB PnP, GUS PnP, Soundscape PnP etc.)
-		Schecule for availability of PnP soundcard support in
+		Schedule for availability of PnP soundcard support in
 		USS/Lite depends on progress made by kernel PnP team
-		(propably in Linux 2.1.xx versions). With Linux 2.0.x
+		(probably in Linux 2.1.xx versions). With Linux 2.0.x
 		versions there are two ways to get PnP soundcards to work:
 	 	- Use isapnptools, DOS, Win95 or PnP aware BIOS to wake up the
 		card before starting the sound driver. See "Configuring PnP 
@@ -42,7 +42,7 @@ mail me and ask about these cards. The unsupported cards are:
 		(Version 3.6 or 3.7. Depends on how fast I get
 		suitable documents for Mwave).
 	- Emu8k (SB 32/AWE)
-		(Propably not _before_ summer 97. I know the unofficial
+		(Probably not _before_ summer 97. I know the unofficial
 		AWE programmers guide so don't send me more copies of it).
 	- Diamond Edge 3D
 		(ASAP. In practice this may take relatively long time).
@@ -69,8 +69,8 @@ New versions of most soundcards use so called ISA PnP protocol for
 soft configuring their I/O, IRQ, DMA and shared memory resources.
 Currently at least cards made by Creative Technology (SB32 and SB32AWE
 PnP), Gravis (GUS PnP and GUS PnP Pro), Ensoniq (Soundscape PnP) and
-Aztech (some Sound Galazy models) use PnP technology. The CS4232 audio
-chip by Crystal Semiconductor (Intel Atlantis, HP Pavillon and many other
+Aztech (some Sound Galaxy models) use PnP technology. The CS4232 audio
+chip by Crystal Semiconductor (Intel Atlantis, HP Pavilion and many other
 motherboards) is also based on PnP technology but there is a "native" driver
 available for it (see information about CS4232 later in this document).
 
@@ -93,7 +93,7 @@ DOS. The hard part is to find which settings were used. See documentation of
 your card for more info.
 
 Windows 95 could work as well as DOS but running loadlin may be somehow 
-difficult. Propably you should "shut down" your machine to MS-DOS mode
+difficult. Probably you should "shut down" your machine to MS-DOS mode
 before running it.
 
 Some machines have BIOS utility for setting PnP resources. This is a good
@@ -238,7 +238,7 @@ MAD16 and Mozart based cards
 	interface chip performs address decoding for the other chips.
 	NOTE! Tropez Plus is not MAD16 but CS4232 based.
 
-Audio Excell DSP16 
+Audio Excel DSP16 
 	Support for this card was written by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
 	(This driver is not functional in version 3.5 of this driver. A
@@ -275,14 +275,14 @@ are software configurable. Sometimes there are few other jumpers too.
 Latest cards are fully software configurable or they are PnP ISA
 compatible. There are no jumpers on the board.
 
-The driver handles software configurable cards automaticly. Just configure
+The driver handles software configurable cards automatically. Just configure
 the driver to use I/O, IRQ and DMA settings which are known to work.
 You could usually use the same values than with DOS and/or Windows.
 Using different settings is possible but not recommended since it may cause
 some trouble (for example when warm booting from an OS to another or
 when installing new hardware to the machine).
 
-Sound driver sets the soft configurable parameters of the card automaticly
+Sound driver sets the soft configurable parameters of the card automatically
 during boot. Usually you don't need to run any extra initialization
 programs when booting Linux but there are some exceptions. See the
 card specific instructions (below) for more info.
@@ -379,12 +379,12 @@ questions. The default answer is shown so that (y/n) means 'y' by default and
 since using the default _doesn't_ guarantee anything.
 
 Note also that all questions may not be asked. The configuration program
-may disable some questions dependig on the earlier choices. It may also
-select some options automaticly as well.
+may disable some questions depending on the earlier choices. It may also
+select some options automatically as well.
 
   "ProAudioSpectrum 16 support",
 	- Answer 'y'_ONLY_ if you have a Pro Audio Spectrum _16_,
-	  ProAudio Studio 16 or Logitech SoundMan 16 (be sure that
+	  Pro Audio Studio 16 or Logitech SoundMan 16 (be sure that
 	  you read the above list correctly). Don't answer 'y' if you
 	  have some other card made by Media Vision or Logitech since they
 	  are not PAS16 compatible.
@@ -392,7 +392,7 @@ select some options automaticly as well.
 	  if you want to use the SB emulation of PAS16. It's also possible to
    	  the emulation if you want to use a true SB card together with PAS16
 	  (there is another question about this that is asked later).
-  "SoundBlaster support",
+  "Sound Blaster support",
 	- Answer 'y' if you have an original SB card made by Creative Labs
 	  or a full 100% hardware compatible clone (like Thunderboard or
 	  SM Games). If your card was in the list of supported cards (above),
@@ -448,7 +448,7 @@ select some options automaticly as well.
 	  conflict.
   "Ensoniq Soundscape support",
 	- Answer 'y' if you have a soundcard based on the Ensoniq SoundScape
-	  chipset. Suach cards are being manufactured at least by Ensoniq,
+	  chipset. Such cards are being manufactured at least by Ensoniq,
 	  Spea and Reveal (note that Reveal makes other cards also).
   "MediaTrix AudioTrix Pro support",
 	- Answer 'y' if you have the AudioTrix Pro.
@@ -460,7 +460,7 @@ select some options automaticly as well.
 	  cards made by known manufacturers such as Turtle Beach (Tropez),
 	  Reveal (some models) and Diamond (some recent models).
   "Support for TB Maui"
-	- This enables TB Maui spesific initialization. Works with TB Maui
+	- This enables TB Maui specific initialization. Works with TB Maui
 	and TB Tropez (may not work with Tropez Plus).
 
   "Audio Excel DSP 16 initialization support",
@@ -505,7 +505,7 @@ the same settings with DOS/Windows and Linux is recommended. Using
 different values could cause some problems when switching between
 different operating systems.
 
-SoundBlasters (the original ones by Creative)
+Sound Blasters (the original ones by Creative)
 ---------------------------------------------
 
 It's possible to configure these cards to use different I/O, IRQ and
@@ -543,7 +543,7 @@ hardware initialization before they become SB compatible. Check if your card
 was listed in the beginning of this file. In this case you should follow
 instructions for your card later in this file.
 
-For other not fully SB clones yoy may try initialization using DOS in
+For other not fully SB clones you may try initialization using DOS in
 the following way:
 
 	- Boot DOS so that the card specific driver gets run.
@@ -685,10 +685,10 @@ to the native AudioTrix driver. Don't enable MSS or MPU drivers.
 
 Configuring ATP is little bit tricky since it uses so many I/O, IRQ and
 DMA numbers. Using the same values than with DOS/Win is a good idea. Don't
-attemp to use the same IRQ or DMA channels twice.
+attempt to use the same IRQ or DMA channels twice.
 
 The SB mode of ATP is implemented so the the ATP driver just enables SB
-in the proper address. The SB driver handles the rest. Yoy have to configure
+in the proper address. The SB driver handles the rest. You have to configure
 both the SB driver and the SB mode of ATP to use the same IRQ, DMA and I/O
 settings.
 
@@ -720,7 +720,7 @@ itself so you don't need to enable other drivers than SoundScape
 !!!!!	    point to /dev/dsp1.						!!!!
 !!!!!                                                                   !!!!
 !!!!!	    This is not required with USS versions 3.5-beta6 and later	!!!!
-!!!!!	    since there is now just one audio device file. Pleace 	!!!!
+!!!!!	    since there is now just one audio device file. Please 	!!!!
 !!!!!	    change /dev/dsp to point back to /dev/dsp0 if you are	!!!!
 !!!!!	    upgrading from an earlier driver version using		!!!!
 !!!!!	    (cd /dev;rm dsp;ln -s dsp0 dsp).				!!!!
@@ -730,7 +730,7 @@ itself so you don't need to enable other drivers than SoundScape
 The configuration program asks one DMA channel and two interrupts. One IRQ
 and one DMA is used by the MSS codec. The second IRQ is required for the
 MPU401 mode (you have to use different IRQs for both purposes).
-There were earlier two DMA channels for soundscape but the current driver
+There were earlier two DMA channels for SoundScape but the current driver
 version requires just one.
 
 The SoundScape card has a Motorola microcontroller which must initialized
@@ -795,7 +795,7 @@ this should not be a problem.
 
 If you have a MAD16 card which have an OPL4 (FM + Wave table) synthesizer
 chip (_not_ an OPL3), you have to append a line containing #define MAD16_OPL4
-to the file linux/dirvers/sound/local.h (after running make config).
+to the file linux/drivers/sound/local.h (after running make config).
 
 MAD16 cards having a CS4231 codec support full duplex mode. This mode
 can be enabled by configuring the card to use two DMA channels. Possible
@@ -814,12 +814,12 @@ The Jazz16 driver uses the MPU401 driver in a way which will cause
 problems if you have another MPU401 compatible card. In this case you must
 give address of the Jazz16 based MPU401 interface when the config
 program prompts for the MPU401 information. Then look at the MPU401
-spesific section for instructions about configuring more than one MPU401 cards.
+specific section for instructions about configuring more than one MPU401 cards.
 
 Logitech Soundman Wave
 ----------------------
 
-Read the above MV Jazz spesific instructions first.
+Read the above MV Jazz specific instructions first.
 
 The Logitech SoundMan Wave (don't confuse with the SM16 or SM Games) is
 a MV Jazz based card which has an additional OPL4 based wave table
@@ -839,7 +839,7 @@ versions (pre 3.5-alpha8)).
 
 NOTE!	Don't answer 'y' when the driver asks about SM Games support
 	(the next question after the MIDI0001.BIN name). However
-	aneswering 'y' doesn't cause damage your computer so don't panic. 
+	answering 'y' doesn't cause damage your computer so don't panic. 
 
 Sound Galaxies
 --------------
@@ -850,7 +850,7 @@ with them.
 
 The older 16 bit cards (SG Pro16, SG NX Pro16, Nova and Lyra) have
 an EEPROM chip for storing the configuration data. There is a microcontroller
-which initializes the card to match the EEPROM settigs when the machine
+which initializes the card to match the EEPROM settings when the machine
 is powered on. These cards actually behave just like they have jumpers
 for all of the settings. Configure driver for MSS, MPU, SB/SB Pro  and OPL3 
 supports with these cards. 
@@ -868,7 +868,7 @@ ESS ES1688 and ES688 'AudioDrive' based cards
 Support for these two ESS chips is embedded in the SB driver.
 Configure these cards just like SB. Enable the 'SB MPU401 MIDI port'
 if you want to use MIDI features of ES1688. ES688 doesn't have MPU mode
-so you don't need to enable it (the driver uses normal SB MIDI automaticly
+so you don't need to enable it (the driver uses normal SB MIDI automatically
 with ES688).
 
 NOTE! ESS cards are not compatible with MSS/WSS.
@@ -969,19 +969,19 @@ Cards not supported yet
 Please check which version of sound driver you are using before 
 complaining that your card is not supported. It's possible that you are 
 using a driver version which was released months before your card was
-introduced. Driver's release date is listed after it's version number
+introduced. Driver's release date is listed after its version number
 in "cat /dev/sndstat" printout and in file linux/drivers/sound/soundvers.h.
 
 First of all. There is an easy way to make most soundcards to work
 with Linux. Just use the DOS based driver to initialize the card
 to a _known_ state. Then use loadlin.exe to boot Linux. If Linux is configured
-to use the sama I/O, IRQ and DMA numbers than DOS, the card could work.
+to use the same I/O, IRQ and DMA numbers than DOS, the card could work.
 (ctrl-alt-del can be used in place of loadlin.exe but it doesn't work with
 new motherboards). This method works also with all/most PnP soundcards.
 
 Don't get fooled with SB compatibility. Most cards are compatible with
 SB but that may require a TSR which is not possible with Linux. If
-the card is compatible with MSS, it's a better choise. Some cards
+the card is compatible with MSS, it's a better choice. Some cards
 don't work in the SB and MSS modes at the same time.
 
 Then there are cards which are no longer manufactured and/or which
@@ -990,7 +990,7 @@ models). It's extremely unlikely that such cards never get supported.
 Adding support for a new card requires much work and increases time
 required in maintaining the driver (some changes need to be done
 to all low level drivers and be tested too, maybe with multiple
-operating systems). For this reason I have made a desicion to not support
+operating systems). For this reason I have made a decision to not support
 obsolete cards. It's possible that someone else makes a separately 
 distributed driver (diffs) for the card. Version v3.6 will be much more
 modular so making separately distributed drivers will be easier with it.
@@ -1004,12 +1004,12 @@ manufacturer of the card and ask if they have (or are willing to)
 released technical details of the card. Do this before contacting me. I
 can only answer 'no' if there are no programming information available.
 
-I have made decicion to not accept code based on reverse engineering
+I have made decision to not accept code based on reverse engineering
 to the driver. There are three main reasons: First I don't want to break
 relationships to sound card manufacturers. The second reason is that
-maintaining and supporting a driver withoun any specs will be a pain.
+maintaining and supporting a driver without any specs will be a pain.
 The third reason is that companies have freedom to refuse selling their
-products to other than Windows useres.
+products to other than Windows users.
 
 Some companies don't give low level technical information about their
 products to public or at least their require signing a NDA. It's not
