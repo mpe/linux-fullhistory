@@ -1126,6 +1126,7 @@ static void apm_mainloop(void)
 		}
 #endif
 	}
+	remove_wait_queue(&apm_waitqueue, &wait);
 }
 
 static int check_apm_user(struct apm_user *as, const char *func)

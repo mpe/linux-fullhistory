@@ -129,7 +129,9 @@ int __init apne_probe(struct net_device *dev)
 
 	if (apne_owned)
 		return -ENODEV;
-        
+
+	SET_MODULE_OWNER(dev);
+
 	if ( !(AMIGAHW_PRESENT(PCMCIA)) )
 		return (-ENODEV);
                                 
@@ -329,7 +331,6 @@ static int
 apne_open(struct net_device *dev)
 {
     ei_open(dev);
-    MOD_INC_USE_COUNT;
     return 0;
 }
 
@@ -339,7 +340,6 @@ apne_close(struct net_device *dev)
     if (ei_debug > 1)
 	printk("%s: Shutting down ethercard.\n", dev->name);
     ei_close(dev);
-    MOD_DEC_USE_COUNT;
     return 0;
 }
 
@@ -547,12 +547,13 @@ static void apne_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 #ifdef MODULE
-static struct net_device apne_dev = { init: apne_probe };
+static struct net_device apne_dev;
 
 int init_module(void)
 {
 	int err;
 
+	apne_dev.init = apne_probe;
 	if ((err = register_netdev(&apne_dev))) {
 		if (err == -EIO)
 			printk("No PCMCIA NEx000 ethernet card found.\n");

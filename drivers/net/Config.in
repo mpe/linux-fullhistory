@@ -100,7 +100,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    if [ "$CONFIG_ISA" = "y" -o "$CONFIG_EISA" = "y" -o "$CONFIG_PCI" = "y" ]; then
       tristate '  HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
    fi
-   bool '  Other ISA cards' CONFIG_NET_ISA
+   dep_bool '  Other ISA cards' CONFIG_NET_ISA $CONFIG_ISA
    if [ "$CONFIG_NET_ISA" = "y" ]; then
       tristate '    Cabletron E21xx support' CONFIG_E2100
       if [ "$CONFIG_OBSOLETE" = "y" ]; then

@@ -306,18 +306,19 @@ affs_new_inode(const struct inode *dir)
 	struct super_block	*sb;
 	s32			 block;
 
-	if (!dir || !(inode = get_empty_inode()))
+	if (!dir)
 		return NULL;
 
 	sb = dir->i_sb;
-	inode->i_sb    = sb;
+	inode = new_inode(sb);
+	if (!inode)
+		return NULL;
 
 	if (!(block = affs_new_header((struct inode *)dir))) {
 		iput(inode);
 		return NULL;
 	}
 
-	inode->i_dev     = sb->s_dev;
 	inode->i_uid     = current->fsuid;
 	inode->i_gid     = current->fsgid;
 	inode->i_ino     = block;

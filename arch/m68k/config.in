@@ -26,6 +26,7 @@ comment 'Platform dependent setup'
 
 define_bool CONFIG_ISA n
 define_bool CONFIG_EISA n
+define_bool CONFIG_MCA n
 define_bool CONFIG_PCMCIA n
 
 bool 'Amiga support' CONFIG_AMIGA

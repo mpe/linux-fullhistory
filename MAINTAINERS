@@ -1245,8 +1245,9 @@ W:	http://www.kernel.dk
 S:	Maintained
 
 USB SUBSYSTEM
-P:	Randy Dunlap
-M:	randy.dunlap@intel.com
+P:	Johannes Erdfelt
+M:	jerdfelt@valinux.com
+M:	johannes@erdfelt.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 W:	http://www.linux-usb.org

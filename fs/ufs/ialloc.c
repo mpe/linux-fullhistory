@@ -161,19 +161,16 @@ struct inode * ufs_new_inode (const struct inode * dir,	int mode, int * err )
 		*err = -EPERM;
 		return NULL;
 	}
-	inode = get_empty_inode ();
+	sb = dir->i_sb;
+	inode = new_inode(sb);
 	if (!inode) {
 		*err = -ENOMEM;
 		return NULL;
 	}
-	sb = dir->i_sb;
 	swab = sb->u.ufs_sb.s_swab;
 	uspi = sb->u.ufs_sb.s_uspi;
 	usb1 = ubh_get_usb_first(USPI_UBH);
 
-	inode->i_sb = sb;
-	inode->i_flags = 0;
-	
 	lock_super (sb);
 
 	*err = -ENOSPC;
@@ -261,9 +258,6 @@ cg_found:
 	sb->s_dirt = 1;
 
 	inode->i_mode = mode;
-	inode->i_sb = sb;
-	inode->i_nlink = 1;
-	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
 	if (dir->i_mode & S_ISGID) {
 		inode->i_gid = dir->i_gid;

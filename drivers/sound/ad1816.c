@@ -916,7 +916,7 @@ ad1816_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	if (((cmd >> 8) & 0xff) == 'M') { 
 		
 		/* set ioctl */
-		if (_IOC_DIR (cmd) & _IOC_WRITE) { 
+		if (_SIOC_DIR (cmd) & _SIOC_WRITE) { 
 			switch (cmd & 0xff){
 			case SOUND_MIXER_RECSRC:
 				

@@ -855,7 +855,7 @@ cleanup_filename_protocol:
 cleanup_filename_hardware:
 	remove_proc_entry(FILENAME_HARDWARE, new_dir);
 cleanup_new_dir:
-	remove_proc_entry(dentry->d_name.name, &comx_root_dir);
+	remove_proc_entry(dentry->d_name.name, comx_root_dir);
 cleanup_dev:
 	kfree(dev);
 	return ret;

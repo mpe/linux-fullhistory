@@ -80,10 +80,9 @@ static int bfs_create(struct inode * dir, struct dentry * dentry, int mode)
 	struct super_block * s = dir->i_sb;
 	unsigned long ino;
 
-	inode = get_empty_inode();
+	inode = new_inode(s);
 	if (!inode)
 		return -ENOSPC;
-	inode->i_sb = s;
 	ino = find_first_zero_bit(s->su_imap, s->su_lasti);
 	if (ino > s->su_lasti) {
 		iput(inode);
@@ -91,7 +90,6 @@ static int bfs_create(struct inode * dir, struct dentry * dentry, int mode)
 	}
 	set_bit(ino, s->su_imap);	
 	s->su_freei--;
-	inode->i_dev = s->s_dev;
 	inode->i_uid = current->fsuid;
 	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->fsgid;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;

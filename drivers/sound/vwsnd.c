@@ -1826,8 +1826,8 @@ static void pcm_shutdown_port(vwsnd_dev_t *devc,
 
 	aport->swstate = SW_INITIAL;
 	add_wait_queue(&aport->queue, &wait);
-	current->state = TASK_UNINTERRUPTIBLE;
 	while (1) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		spin_lock_irqsave(&aport->lock, flags);
 		{
 			hwstate = aport->hwstate;
@@ -2196,8 +2196,8 @@ static void pcm_write_sync(vwsnd_dev_t *devc)
 
 	DBGEV("(devc=0x%p)\n", devc);
 	add_wait_queue(&wport->queue, &wait);
-	current->state = TASK_UNINTERRUPTIBLE;
 	while (1) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		spin_lock_irqsave(&wport->lock, flags);
 		{
 			hwstate = wport->hwstate;
@@ -2284,9 +2284,9 @@ static ssize_t vwsnd_audio_do_read(struct file *file,
 	while (count) {
 		DECLARE_WAITQUEUE(wait, current);
 		add_wait_queue(&rport->queue, &wait);
-		current->state = TASK_INTERRUPTIBLE;
 		while ((nb = swb_inc_u(rport, 0)) == 0) {
 			DBGPV("blocking\n");
+			set_current_state(TASK_INTERRUPTIBLE);
 			if (rport->flags & DISABLED ||
 			    file->f_flags & O_NONBLOCK) {
 				current->state = TASK_RUNNING;
@@ -2360,8 +2360,8 @@ static ssize_t vwsnd_audio_do_write(struct file *file,
 	while (count) {
 		DECLARE_WAITQUEUE(wait, current);
 		add_wait_queue(&wport->queue, &wait);
-		current->state = TASK_INTERRUPTIBLE;
 		while ((nb = swb_inc_u(wport, 0)) == 0) {
+			set_current_state(TASK_INTERRUPTIBLE);
 			if (wport->flags & DISABLED ||
 			    file->f_flags & O_NONBLOCK) {
 				current->state = TASK_RUNNING;

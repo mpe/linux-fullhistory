@@ -342,15 +342,14 @@ de600_read_byte(unsigned char type, struct net_device *dev) { /* dev used by mac
 static int
 de600_open(struct net_device *dev)
 {
-	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600", dev)) {
+	int ret = request_irq(DE600_IRQ, de600_interrupt, 0, dev->name, dev);
+	if (ret) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE600_IRQ);
-		return 1;
+		return ret;
 	}
 
-	MOD_INC_USE_COUNT;
-	if (adapter_init(dev)) {
-		return 1;
-	}
+	if (adapter_init(dev))
+		return -EIO;
 
 	return 0;
 }
@@ -370,7 +369,6 @@ de600_close(struct net_device *dev)
 
 	if (netif_running(dev)) { /* perhaps not needed? */
 		free_irq(DE600_IRQ, dev);
-		MOD_DEC_USE_COUNT;
 	}
 	return 0;
 }
@@ -637,6 +635,8 @@ de600_probe(struct net_device *dev)
 	static struct net_device_stats de600_netstats;
 	/*dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);*/
 
+	SET_MODULE_OWNER(dev);
+
 	printk("%s: D-Link DE-600 pocket adapter", dev->name);
 	/* Alpha testers must have the version number to report bugs. */
 	if (de600_debug > 1)
@@ -819,12 +819,12 @@ de600_rspace(struct sock *sk)
 #endif
 
 #ifdef MODULE
-static struct net_device de600_dev = {
-	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
+static struct net_device de600_dev;
 
 int
 init_module(void)
 {
+	de600_dev.init = de600_probe;
 	if (register_netdev(&de600_dev) != 0)
 		return -EIO;
 	return 0;

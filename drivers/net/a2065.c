@@ -490,17 +490,12 @@ static int lance_open (struct net_device *dev)
 	volatile struct lance_regs *ll = lp->ll;
 	int ret;
 
-	MOD_INC_USE_COUNT;
-
 	last_dev = dev;
 
 	/* Install the Interrupt handler */
 	ret = request_irq(IRQ_AMIGA_PORTS, lance_interrupt, SA_SHIRQ,
 			  dev->name, dev);
-	if (ret) {
-		MOD_DEC_USE_COUNT;
-		return ret;
-	}
+	if (ret) return ret;
 
 	/* Stop the Lance */
 	ll->rap = LE_CSR0;
@@ -527,9 +522,6 @@ static int lance_close (struct net_device *dev)
 	ll->rdp = LE_C0_STOP;
 
 	free_irq(IRQ_AMIGA_PORTS, dev);
-
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
@@ -759,7 +751,8 @@ static int __init a2065_probe(void)
 			release_resource(r2);
 			return -ENOMEM;
 		}
-		priv = (struct lance_private *)dev->priv;
+		SET_MODULE_OWNER(dev);
+		priv = dev->priv;
 
 		r1->name = dev->name;
 		r2->name = dev->name;

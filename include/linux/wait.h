@@ -142,6 +142,7 @@ static inline void init_waitqueue_entry(wait_queue_t *q,
 	if (!q || !p)
 		WQ_BUG();
 #endif
+	q->flags = 0;
 	q->task = p;
 #if WAITQUEUE_DEBUG
 	q->__magic = (long)&q->__magic;

@@ -117,17 +117,6 @@ echo 1 > /proc/sys/net/khttpd/start
 
    Port 8080
 
-   in /etc/apache/httpd.conf. For security-reasons, you can also change 
-   
-   BindAddress *
-
-   to
-
-   BindAddress 127.0.0.1
-
-   (in the same file) to prevent outside users from accessing Apache 
-   directly. 
-
 
    
    Stopping kHTTPd

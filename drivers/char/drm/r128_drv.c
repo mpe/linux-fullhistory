@@ -252,8 +252,7 @@ static int r128_takedown(drm_device_t *dev)
 		}
 		dev->agp->memory = NULL;
 
-		if (dev->agp->acquired && drm_agp_p->release)
-			(*(drm_agp_p->release))();
+		if (dev->agp->acquired)	_drm_agp_release();
 
 		dev->agp->acquired = 0;
 		dev->agp->enabled  = 0;

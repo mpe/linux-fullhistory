@@ -287,15 +287,11 @@ am79c961_open(struct net_device *dev)
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	int ret;
 
-	MOD_INC_USE_COUNT;
-
 	memset (&priv->stats, 0, sizeof (priv->stats));
 
 	ret = request_irq(dev->irq, am79c961_interrupt, 0, dev->name, dev);
-	if (ret) {
-		MOD_DEC_USE_COUNT;
+	if (ret)
 		return ret;
-	}
 
 	am79c961_init_for_open(dev);
 
@@ -322,7 +318,6 @@ am79c961_close(struct net_device *dev)
 
 	free_irq (dev->irq, dev);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -659,7 +654,8 @@ static int __init am79c961_init(void)
 	if (!dev)
 		goto out;
 
-	priv = (struct dev_priv *) dev->priv;
+	SET_MODULE_OWNER(dev);
+	priv = dev->priv;
 
 	/*
 	 * Fixed address and IRQ lines here.

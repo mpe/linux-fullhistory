@@ -2517,6 +2517,8 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	firm_id = (struct FIRM_ID *)
 			(base_addr + ID_ADDRESS);
         if (!ISZLOADED(*cinfo)){
+            current->state = TASK_RUNNING;
+	    remove_wait_queue(&info->open_wait, &wait);
 	    return -EINVAL;
 	}
 

@@ -382,13 +382,14 @@ static void do_pollfd(unsigned int num, struct pollfd * fdpage,
 static int do_poll(unsigned int nfds, unsigned int nchunks, unsigned int nleft, 
 	struct pollfd *fds[], poll_table *wait, long timeout)
 {
-	int count = 0;
+	int count;
 	poll_table* pt = wait;
 
 	for (;;) {
 		unsigned int i;
 
 		set_current_state(TASK_INTERRUPTIBLE);
+		count = 0;
 		for (i=0; i < nchunks; i++)
 			do_pollfd(POLLFD_PER_PAGE, fds[i], &pt, &count);
 		if (nleft)
@@ -396,9 +397,9 @@ static int do_poll(unsigned int nfds, unsigned int nchunks, unsigned int nleft,
 		pt = NULL;
 		if (count || !timeout || signal_pending(current))
 			break;
-		if(wait->error) {
-			return wait->error;
-		}
+		count = wait->error;
+		if (count)
+			break;
 		timeout = schedule_timeout(timeout);
 	}
 	current->state = TASK_RUNNING;

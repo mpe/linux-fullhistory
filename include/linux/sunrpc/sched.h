@@ -80,8 +80,7 @@ struct rpc_task {
 	unsigned short		tk_lock;	/* Task lock counter */
 	unsigned char		tk_active   : 1,/* Task has been activated */
 				tk_wakeup   : 1;/* Task waiting to wake up */
-	volatile unsigned char	tk_running  : 1,/* Task is running */
-				tk_sleeping : 1;/* Task is truly asleep */
+	unsigned int		tk_runstate;	/* Task run status */
 #ifdef RPC_DEBUG
 	unsigned short		tk_pid;		/* debugging aid */
 #endif
@@ -110,10 +109,25 @@ typedef void			(*rpc_action)(struct rpc_task *);
 #define RPC_IS_SWAPPER(t)	((t)->tk_flags & RPC_TASK_SWAPPER)
 #define RPC_DO_ROOTOVERRIDE(t)	((t)->tk_flags & RPC_TASK_ROOTCREDS)
 #define RPC_ASSASSINATED(t)	((t)->tk_flags & RPC_TASK_KILLED)
-#define RPC_IS_RUNNING(t)	((t)->tk_running)
-#define RPC_IS_SLEEPING(t)	((t)->tk_sleeping)
 #define RPC_IS_ACTIVATED(t)	((t)->tk_active)
 #define RPC_DO_CALLBACK(t)	((t)->tk_callback != NULL)
+
+#define RPC_TASK_SLEEPING	0
+#define RPC_TASK_RUNNING	1
+#define RPC_IS_SLEEPING(t)	(test_bit(RPC_TASK_SLEEPING, &(t)->tk_runstate))
+#define RPC_IS_RUNNING(t)	(test_bit(RPC_TASK_RUNNING, &(t)->tk_runstate))
+
+#define rpc_set_running(t)	(set_bit(RPC_TASK_RUNNING, &(t)->tk_runstate))
+#define rpc_clear_running(t)	(clear_bit(RPC_TASK_RUNNING, &(t)->tk_runstate))
+
+#define rpc_set_sleeping(t)	(set_bit(RPC_TASK_SLEEPING, &(t)->tk_runstate))
+
+#define rpc_clear_sleeping(t) \
+	do { \
+		smp_mb__before_clear_bit(); \
+		clear_bit(RPC_TASK_SLEEPING, &(t)->tk_runstate); \
+		smp_mb__after_clear_bit(); \
+	} while(0)
 
 /*
  * RPC synchronization objects

@@ -214,13 +214,11 @@ ncp_iget(struct super_block *sb, struct ncp_entry_info *info)
 		return NULL;
 	}
 
-	inode = get_empty_inode();
+	inode = new_inode(sb);
 	if (inode) {
 		init_MUTEX(&NCP_FINFO(inode)->open_sem);
 		atomic_set(&NCP_FINFO(inode)->opened, info->opened);
 
-		inode->i_sb = sb;
-		inode->i_dev = sb->s_dev;
 		inode->i_ino = info->ino;
 		ncp_set_attr(inode, info);
 		if (S_ISREG(inode->i_mode)) {

@@ -653,6 +653,7 @@ static int net1080_stop (struct net_device *net)
 		dbg ("waited for %d urb completions", temp);
 	}
 	dev->wait = 0;
+	current->state = TASK_RUNNING;
 	remove_wait_queue (&unlink_wakeup, &wait); 
 
 	mutex_unlock (&dev->mutex);

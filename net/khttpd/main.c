@@ -106,8 +106,7 @@ static int MainDaemon(void *cpu_pointer)
 	CPUNR=(int)*(int*)cpu_pointer;
 
 	sprintf(current->comm,"khttpd - %i",CPUNR);
-	lock_kernel();   /* This seems to be required for exit_mm */
-	exit_mm(current);
+	daemonize();
 	
 	init_waitqueue_head(&(DummyWQ[CPUNR]));
 	
@@ -198,8 +197,7 @@ static int ManagementDaemon(void *unused)
 	
 	
 	sprintf(current->comm,"khttpd manager");
-	lock_kernel();   /* This seems to be required for exit_mm */
-	exit_mm(current);
+	daemonize();
 	
 
 	/* Block all signals except SIGKILL and SIGSTOP */

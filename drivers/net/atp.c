@@ -292,6 +292,7 @@ static int __init atp_probe1(struct net_device *dev, long ioaddr)
 	dev = init_etherdev(dev, sizeof(struct net_local));
 	if (!dev)
 		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 
 	/* Find the IRQ used by triggering an interrupt. */
 	write_reg_byte(ioaddr, CMR2, 0x01);			/* No accept mode, IRQ out. */
@@ -427,16 +428,12 @@ static int net_open(struct net_device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ret;
 
-	MOD_INC_USE_COUNT;
-
 	/* The interrupt line is turned off (tri-stated) when the device isn't in
 	   use.  That's especially important for "attached" interfaces where the
 	   port or interrupt may be shared. */
 	ret = request_irq(dev->irq, &atp_interrupt, 0, dev->name, dev);
-	if (ret) {
-		MOD_DEC_USE_COUNT;
+	if (ret)
 		return ret;
-	}
 
 	hardware_init(dev);
 
@@ -837,10 +834,7 @@ net_close(struct net_device *dev)
 	free_irq(dev->irq, dev);
 
 	/* Reset the ethernet hardware and activate the printer pass-through. */
-    write_reg_high(ioaddr, CMR1, CMR1h_RESET | CMR1h_MUX);
-
-	MOD_DEC_USE_COUNT;
-
+	write_reg_high(ioaddr, CMR1, CMR1h_RESET | CMR1h_MUX);
 	return 0;
 }
 

@@ -2703,3 +2703,65 @@ int __init net_dev_init(void)
 
 	return 0;
 }
+
+
+/* Notify userspace when a netdevice event occurs,
+ * by running '/sbin/hotplug net' with certain
+ * environment variables set.
+ *
+ * Currently reported events are listed in netdev_event_names[].
+ */
+
+/* /sbin/hotplug ONLY executes for events named here */
+static char *netdev_event_names[] = {
+	[NETDEV_REGISTER]	= "register",
+	[NETDEV_UNREGISTER]	= "unregister",
+};
+
+static int run_sbin_hotplug(struct notifier_block *this,
+			    unsigned long event, void *ptr)
+{
+	struct net_device *dev = (struct net_device *) ptr;
+	char *argv[3], *envp[5], ifname[12 + IFNAMSIZ], action[32];
+	int i;
+
+	if ((event >= ARRAY_SIZE(netdev_event_names)) ||
+	    !netdev_event_names[event])
+		return NOTIFY_DONE;
+
+	sprintf(ifname, "INTERFACE=%s", dev->name);
+	sprintf(action, "ACTION=%s", netdev_event_names[event]);
+
+        i = 0;
+        argv[i++] = hotplug_path;
+        argv[i++] = "net";
+        argv[i] = 0;
+
+	i = 0;
+	/* minimal command environment */
+	envp [i++] = "HOME=/";
+	envp [i++] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
+	envp [i++] = ifname;
+	envp [i++] = action;
+	envp [i] = 0;
+	
+	call_usermodehelper (argv [0], argv, envp);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block sbin_hotplug = {
+	notifier_call: run_sbin_hotplug,
+};
+
+/*
+ * called from init/main.c, -after- all the initcalls are complete.
+ * Registers a hook that calls /sbin/hotplug on every netdev
+ * addition and removal.
+ */
+void __init net_notifier_init (void)
+{
+	if (register_netdevice_notifier(&sbin_hotplug))
+		printk (KERN_WARNING "unable to register netdev notifier\n"
+			KERN_WARNING "/sbin/hotplug will not be run.\n");
+}

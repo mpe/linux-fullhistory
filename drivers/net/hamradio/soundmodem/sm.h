@@ -299,8 +299,6 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
 
 #ifdef __i386__
 
-#define HAS_RDTSC (current_cpu_data.x86_capability & X86_FEATURE_TSC)
-
 /*
  * only do 32bit cycle counter arithmetic; we hope we won't overflow.
  * in fact, overflowing modems would require over 2THz CPU clock speeds :-)
@@ -308,7 +306,7 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
 
 #define time_exec(var,cmd)                                              \
 ({                                                                      \
-	if (HAS_RDTSC) {                                                \
+	if (cpu_has_tsc) {                                              \
 		unsigned int cnt1, cnt2, cnt3;                          \
 		__asm__(".byte 0x0f,0x31" : "=a" (cnt1), "=d" (cnt3));  \
 		cmd;                                                    \

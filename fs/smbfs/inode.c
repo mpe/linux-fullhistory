@@ -78,11 +78,9 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 
 	DEBUG1("smb_iget: %p\n", fattr);
 
-	result = get_empty_inode();
+	result = new_inode(sb);
 	if (!result)
 		return result;
-	result->i_sb = sb;
-	result->i_dev = sb->s_dev;
 	result->i_ino = fattr->f_ino;
 	memset(&(result->u.smbfs_i), 0, sizeof(result->u.smbfs_i));
 	smb_set_inode_attr(result, fattr);

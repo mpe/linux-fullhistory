@@ -707,7 +707,7 @@ static inline void __wake_up_common (wait_queue_head_t *q, unsigned int mode,
 	unsigned long flags;
 	int best_cpu, irq;
 
-	if (!q || !waitqueue_active(q))
+	if (!q)
 		goto out;
 
 	best_cpu = smp_processor_id();

@@ -3185,6 +3185,7 @@ static ssize_t devfsd_read (struct file *file, char *buf, size_t len,
 	    current->state = TASK_RUNNING;
 	    return -EINTR;
 	}
+	set_current_state(TASK_INTERRUPTIBLE);
     }
     remove_wait_queue (&fs_info->devfsd_wait_queue, &wait);
     current->state = TASK_RUNNING;

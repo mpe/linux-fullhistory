@@ -951,6 +951,7 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 	if (status) {
 		// something went wrong
 		usb_free_urb(urb);
+		current->state = TASK_RUNNING;
 		remove_wait_queue(&wqh, &wait);
 		return status;
 	}
@@ -961,6 +962,7 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 	} else
 		status = 1;
 
+	current->state = TASK_RUNNING;
 	remove_wait_queue(&wqh, &wait);
 
 	if (!status) {

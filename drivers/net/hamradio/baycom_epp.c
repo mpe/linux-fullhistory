@@ -814,7 +814,7 @@ static int receive(struct net_device *dev, int cnt)
 #ifdef __i386__
 #define GETTICK(x)                                                \
 ({                                                                \
-	if (current_cpu_data.x86_capability & X86_FEATURE_TSC)    \
+	if (cpu_has_tsc)                                          \
 		__asm__ __volatile__("rdtsc" : "=a" (x) : : "dx");\
 })
 #else /* __i386__ */

@@ -1697,12 +1697,12 @@ static int mixer_ioctl(struct cs4281_state *s, unsigned int cmd,
 	if (cmd == OSS_GETVERSION)
 		return put_user(SOUND_VERSION, (int *) arg);
 
-	if (_IOC_TYPE(cmd) != 'M' || _IOC_SIZE(cmd) != sizeof(int))
+	if (_IOC_TYPE(cmd) != 'M' || _SIOC_SIZE(cmd) != sizeof(int))
 		return -EINVAL;
 
-	// If ioctl has only the IOC_READ bit(bit 31)
+	// If ioctl has only the SIOC_READ bit(bit 31)
 	// on, process the only-read commands. 
-	if (_IOC_DIR(cmd) == _IOC_READ) {
+	if (_SIOC_DIR(cmd) == _SIOC_READ) {
 		switch (_IOC_NR(cmd)) {
 		case SOUND_MIXER_RECSRC:	// Arg contains a bit for each recording source 
 			cs4281_read_ac97(s, BA0_AC97_RECORD_SELECT,
@@ -1740,9 +1740,9 @@ static int mixer_ioctl(struct cs4281_state *s, unsigned int cmd,
 			return put_user(s->mix.vol[vidx - 1], (int *) arg);
 		}
 	}
-	// If ioctl doesn't have both the IOC_READ and 
-	// the IOC_WRITE bit set, return invalid.
-	if (_IOC_DIR(cmd) != (_IOC_READ | _IOC_WRITE))
+	// If ioctl doesn't have both the SIOC_READ and 
+	// the SIOC_WRITE bit set, return invalid.
+	if (_SIOC_DIR(cmd) != (_SIOC_READ | _SIOC_WRITE))
 		return -EINVAL;
 
 	// Increment the count of volume writes.
@@ -2038,9 +2038,9 @@ static int drain_adc(struct cs4281_state *s, int nonblock)
 
 	if (s->dma_adc.mapped)
 		return 0;
-	current->state = TASK_INTERRUPTIBLE;
 	add_wait_queue(&s->dma_adc.wait, &wait);
 	for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_adc.count;
 		CS_DBGOUT(CS_FUNCTION, 2,
@@ -2086,9 +2086,9 @@ static int drain_dac(struct cs4281_state *s, int nonblock)
 
 	if (s->dma_dac.mapped)
 		return 0;
-	current->state = TASK_INTERRUPTIBLE;
 	add_wait_queue(&s->dma_dac.wait, &wait);
 	for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac.count;
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -3478,9 +3478,9 @@ static int cs4281_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
+			set_current_state(TASK_INTERRUPTIBLE);
 			spin_lock_irqsave(&s->lock, flags);
 			count = s->midi.ocnt;
 			spin_unlock_irqrestore(&s->lock, flags);

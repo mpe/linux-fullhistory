@@ -626,14 +626,12 @@ static struct inode *proc_pid_make_inode(struct super_block * sb, struct task_st
 
 	/* We need a new inode */
 	
-	inode = get_empty_inode();
+	inode = new_inode(sb);
 	if (!inode)
 		goto out;
 
 	/* Common stuff */
 
-	inode->i_sb = sb;
-	inode->i_dev = sb->s_dev;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_ino = fake_ino(task->pid, ino);
 
@@ -918,11 +916,9 @@ struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
 	name = dentry->d_name.name;
 	len = dentry->d_name.len;
 	if (len == 4 && !memcmp(name, "self", 4)) {
-		inode = get_empty_inode();
+		inode = new_inode(dir->i_sb);
 		if (!inode)
 			return ERR_PTR(-ENOMEM);
-		inode->i_sb = dir->i_sb;
-		inode->i_dev = dir->i_sb->s_dev;
 		inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 		inode->i_ino = fake_ino(0, PROC_PID_INO);
 		inode->u.proc_i.file = NULL;

@@ -140,14 +140,11 @@ struct super_block *devpts_read_super(struct super_block *s, void *data,
 		goto fail_free;
 	}
 
-	inode = get_empty_inode();
+	inode = new_inode(s);
 	if (!inode)
 		goto fail_free;
-	inode->i_sb = s;
-	inode->i_dev = s->s_dev;
 	inode->i_ino = 1;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	inode->i_size = 0;
 	inode->i_blocks = 0;
 	inode->i_blksize = 1024;
 	inode->i_uid = inode->i_gid = 0;
@@ -192,11 +189,9 @@ void devpts_pty_new(int number, kdev_t device)
 	if ( sbi->inodes[number] )
 		return; /* Already registered, this does happen */
 		
-	inode = get_empty_inode();
+	inode = new_inode(sb);
 	if (!inode)
 		return;
-	inode->i_sb = sb;
-	inode->i_dev = sb->s_dev;
 	inode->i_ino = number+2;
 	inode->i_blocks = 0;
 	inode->i_blksize = 1024;

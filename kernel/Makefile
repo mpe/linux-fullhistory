@@ -12,7 +12,7 @@ O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o \
 	    module.o exit.o itimer.o info.o time.o softirq.o resource.o \
 	    sysctl.o acct.o capability.o ptrace.o timer.o user.o
 
-OX_OBJS  += signal.o sys.o kmod.o
+OX_OBJS  += signal.o sys.o kmod.o context.o
 
 ifeq ($(CONFIG_UID16),y)
 O_OBJS += uid16.o

@@ -190,10 +190,12 @@ struct at1720_mca_adapters_struct at1720_mca_adapters[] = {
    (detachable devices only).
    */
 
-int at1700_probe(struct net_device *dev)
+int __init at1700_probe(struct net_device *dev)
 {
 	int i;
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
+
+	SET_MODULE_OWNER(dev);
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return at1700_probe1(dev, base_addr);
@@ -532,9 +534,6 @@ static int net_open(struct net_device *dev)
 	}
 
 	netif_start_queue(dev);
-
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -784,9 +783,6 @@ static int net_close(struct net_device *dev)
 
 	/* Power-down the chip.  Green, green, green! */
 	outb(0x00, ioaddr + CONFIG_1);
-
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 

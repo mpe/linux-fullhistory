@@ -10,7 +10,10 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 
+#include <pcmcia/version.h>
+#include <pcmcia/cs_types.h>
 #include <pcmcia/ss.h>
+#include <pcmcia/cs.h>
 
 #include <asm/io.h>
 
@@ -464,6 +467,20 @@ static unsigned int yenta_events(pci_socket_t *socket)
 	return events;
 }
 
+
+static void yenta_bh(void *data)
+{
+	pci_socket_t *socket = data;
+	unsigned int events;
+
+	spin_lock_irq(&socket->event_lock);
+	events = socket->events;
+	socket->events = 0;
+	spin_unlock_irq(&socket->event_lock);
+	if (socket->handler)
+		socket->handler(socket->info, events);
+}
+
 static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned int events;
@@ -471,9 +488,20 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	events = yenta_events(socket);
 	if (events) {
+		spin_lock(&socket->event_lock);
 		socket->events |= events;
-		wake_up_interruptible(&socket->wait);
+		spin_unlock(&socket->event_lock);
+		schedule_task(&socket->tq_task);
 	}
+}
+
+static void yenta_interrupt_wrapper(unsigned long data)
+{
+	pci_socket_t *socket = (pci_socket_t *) data;
+
+	yenta_interrupt(0, (void *)socket, NULL);
+	socket->poll_timer.expires = jiffies + HZ;
+	add_timer(&socket->poll_timer);
 }
 
 /*
@@ -546,23 +574,23 @@ static void yenta_get_socket_capabilities(pci_socket_t *socket, u32 isa_irq_mask
 extern void cardbus_register(pci_socket_t *socket);
 
 /*
- * Watch a socket every second (and possibly in a
- * more timely manner if the state change interrupt
- * works..)
+ * 'Bottom half' for the yenta_open routine. Allocate the interrupt line
+ *  and register the socket with the upper layers.
  */
-static int yenta_socket_thread(void * data)
+static void yenta_open_bh(void * data)
 {
 	pci_socket_t * socket = (pci_socket_t *) data;
-	DECLARE_WAITQUEUE(wait, current);
 
-	MOD_INC_USE_COUNT;
-	daemonize();
-	strcpy(current->comm, "CardBus Watcher");
+	/* It's OK to overwrite this now */
+	socket->tq_task.routine = yenta_bh;
 
-	if (socket->cb_irq && request_irq(socket->cb_irq, yenta_interrupt, SA_SHIRQ, socket->dev->name, socket)) {
-		printk ("Yenta: unable to register irq %d\n", socket->cb_irq);
-		MOD_DEC_USE_COUNT;
-		return (1);
+	if (!socket->cb_irq || request_irq(socket->cb_irq, yenta_interrupt, SA_SHIRQ, socket->dev->name, socket)) {
+		/* No IRQ or request_irq failed. Poll */
+		socket->cb_irq = 0; /* But zero is a valid IRQ number. */
+		socket->poll_timer.function = yenta_interrupt_wrapper;
+		socket->poll_timer.data = (unsigned long)socket;
+		socket->poll_timer.expires = jiffies + HZ;
+		add_timer(&socket->poll_timer);
 	}
 
 	/* Figure out what the dang thing can do for the PCMCIA layer... */
@@ -572,23 +600,7 @@ static int yenta_socket_thread(void * data)
 	/* Register it with the pcmcia layer.. */
 	cardbus_register(socket);
 
-	do {
-		unsigned int events = socket->events | yenta_events(socket);
-
-		if (events) {
-			socket->events = 0;
-			if (socket->handler)
-				socket->handler(socket->info, events);
-		}
-
-		current->state = TASK_INTERRUPTIBLE;
-		add_wait_queue(&socket->wait, &wait);
-		if (!socket->events)
-			schedule_timeout(HZ);
-		remove_wait_queue(&socket->wait, &wait);
-	} while (!signal_pending(current));
 	MOD_DEC_USE_COUNT;
-	return 0;
 }
 
 static void yenta_clear_maps(pci_socket_t *socket)
@@ -745,6 +757,9 @@ static void yenta_close(pci_socket_t *sock)
 {
 	if (sock->cb_irq)
 		free_irq(sock->cb_irq, sock);
+	else
+		del_timer_sync(&sock->poll_timer);
+
 	if (sock->base)
 		iounmap(sock->base);
 }
@@ -836,7 +851,16 @@ static int yenta_open(pci_socket_t *socket)
 		}
 	}
 
-	kernel_thread(yenta_socket_thread, socket, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	/* Get the PCMCIA kernel thread to complete the
+	   initialisation later. We can't do this here,
+	   because, er, because Linus says so :)
+	*/
+	socket->tq_task.routine = yenta_open_bh;
+	socket->tq_task.data = socket;
+
+	MOD_INC_USE_COUNT;
+	schedule_task(&socket->tq_task);
+
 	return 0;
 }
 

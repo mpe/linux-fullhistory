@@ -86,6 +86,8 @@ int __init ariadne2_probe(struct net_device *dev)
     unsigned long board, ioaddr;
     int err;
 
+    SET_MODULE_OWNER(dev);
+
     while ((z = zorro_find_device(ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2, z))) {
 	board = z->resource.start;
 	ioaddr = board+ARIADNE2_BASE*2;
@@ -212,7 +214,6 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
 static int ariadne2_open(struct net_device *dev)
 {
     ei_open(dev);
-    MOD_INC_USE_COUNT;
     return 0;
 }
 
@@ -221,7 +222,6 @@ static int ariadne2_close(struct net_device *dev)
     if (ei_debug > 1)
 	printk("%s: Shutting down ethercard.\n", dev->name);
     ei_close(dev);
-    MOD_DEC_USE_COUNT;
     return 0;
 }
 
@@ -380,15 +380,15 @@ static void ariadne2_block_output(struct net_device *dev, int count,
 }
 
 #ifdef MODULE
-static struct net_device ariadne2_dev = { init: ariadne2_probe };
+static struct net_device ariadne2_dev;
 
 int init_module(void)
 {
     int err;
 
+    ariadne2_dev.init = ariadne2_probe;
     if ((err = register_netdev(&ariadne2_dev))) {
-	if (err == -EIO)
-	    printk("No AriadNE2 ethernet card found.\n");
+	printk(KERN_WARNING "No AriadNE2 ethernet card found.\n");
 	return err;
     }
     return 0;

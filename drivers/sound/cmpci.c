@@ -983,9 +983,9 @@ static int mixer_ioctl(struct cm_state *s, unsigned int cmd, unsigned long arg)
 	}
 	if (cmd == OSS_GETVERSION)
 		return put_user(SOUND_VERSION, (int *)arg);
-	if (_IOC_TYPE(cmd) != 'M' || _IOC_SIZE(cmd) != sizeof(int))
+	if (_IOC_TYPE(cmd) != 'M' || _SIOC_SIZE(cmd) != sizeof(int))
                 return -EINVAL;
-        if (_IOC_DIR(cmd) == _IOC_READ) {
+        if (_SIOC_DIR(cmd) == _SIOC_READ) {
                 switch (_IOC_NR(cmd)) {
                 case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 			return put_user(mixer_recmask(s), (int *)arg);
@@ -1033,7 +1033,7 @@ static int mixer_ioctl(struct cm_state *s, unsigned int cmd, unsigned long arg)
 #endif /* OSS_DOCUMENTED_MIXER_SEMANTICS */
 		}
 	}
-        if (_IOC_DIR(cmd) != (_IOC_READ|_IOC_WRITE)) 
+        if (_SIOC_DIR(cmd) != (_SIOC_READ|_SIOC_WRITE)) 
 		return -EINVAL;
 	s->mix.modcnt++;
 	switch (_IOC_NR(cmd)) {
@@ -1197,9 +1197,9 @@ static int drain_dac(struct cm_state *s, int nonblock)
 
 	if (s->dma_dac.mapped || !s->dma_dac.ready)
 		return 0;
-        current->state = TASK_INTERRUPTIBLE;
         add_wait_queue(&s->dma_dac.wait, &wait);
         for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac.count;
                 spin_unlock_irqrestore(&s->lock, flags);
@@ -1839,6 +1839,7 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 	ret = 0;
 	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
 		cnt = MIDIINBUF - ptr;
@@ -1854,7 +1855,6 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 					ret = -EAGAIN;
 				break;
 			}
-			__set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 			if (signal_pending(current)) 
 			{
@@ -1903,6 +1903,7 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 	ret = 0;
 	add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
 		cnt = MIDIOUTBUF - ptr;
@@ -1919,7 +1920,6 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 					ret = -EAGAIN;
 				break;
 			}
-			__set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 			if (signal_pending(current)) {
 				if (!ret)
@@ -2041,9 +2041,9 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 
 	lock_kernel();
 	if (file->f_mode & FMODE_WRITE) {
-		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
+			set_current_state(TASK_INTERRUPTIBLE);
 			spin_lock_irqsave(&s->lock, flags);
 			count = s->midi.ocnt;
 			spin_unlock_irqrestore(&s->lock, flags);

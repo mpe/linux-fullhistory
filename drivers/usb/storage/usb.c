@@ -312,10 +312,14 @@ static int usb_stor_control_thread(void * __us)
 			US_DEBUGP("-- US_ACT_EXIT command recieved\n");
 			break;
 		}
+
+		set_current_state(TASK_INTERRUPTIBLE);
 	} /* for (;;) */
 
 	/* notify the exit routine that we're actually exiting now */
 	up(&(us->notify));
+
+	remove_wait_queue(&(us->wqh), &wait);
 
 	return 0;
 }	

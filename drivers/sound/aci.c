@@ -441,7 +441,7 @@ aci_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	}
 	
 	if (((cmd >> 8) & 0xff) == 'M') {
-		if (cmd & IOC_IN)
+		if (cmd & SIOC_IN)
 			/* read and write */
 			switch (cmd & 0xff) {
 				case SOUND_MIXER_VOLUME:

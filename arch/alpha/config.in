@@ -69,6 +69,7 @@ unset CONFIG_ALPHA_BROKEN_IRQ_MASK
 define_bool CONFIG_ISA y
 define_bool CONFIG_EISA y
 define_bool CONFIG_SBUS n
+define_bool CONFIG_MCA n
 
 if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
 then

@@ -292,14 +292,12 @@ static int autofs4_statfs(struct super_block *sb, struct statfs *buf)
 struct inode *autofs4_get_inode(struct super_block *sb,
 				struct autofs_info *inf)
 {
-	struct inode *inode = get_empty_inode();
+	struct inode *inode = new_inode(sb);
 
 	if (inode == NULL)
 		return NULL;
 
 	inf->inode = inode;
-	inode->i_sb = sb;
-	inode->i_dev = sb->s_dev;
 	inode->i_mode = inf->mode;
 	if (sb->s_root) {
 		inode->i_uid = sb->s_root->d_inode->i_uid;
@@ -308,13 +306,9 @@ struct inode *autofs4_get_inode(struct super_block *sb,
 		inode->i_uid = 0;
 		inode->i_gid = 0;
 	}
-	inode->i_size = 0;
 	inode->i_blksize = PAGE_CACHE_SIZE;
 	inode->i_blocks = 0;
 	inode->i_rdev = 0;
-	inode->i_nlink = 1;
-	inode->i_op = NULL;
-	inode->i_fop = NULL;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 
 	if (S_ISDIR(inf->mode)) {

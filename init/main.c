@@ -95,6 +95,7 @@ extern void sysctl_init(void);
 extern void signals_init(void);
 extern void bdev_init(void);
 extern int init_pcmcia_ds(void);
+extern void net_notifier_init(void);
 
 extern void free_initmem(void);
 extern void filesystem_setup(void);
@@ -710,6 +711,13 @@ static void __init do_basic_setup(void)
 #ifdef CONFIG_PCMCIA
 	init_pcmcia_ds();		/* Do this last */
 #endif
+
+	/* do this after other 'do this last' stuff, because we want
+	 * to minimize spurious executions of /sbin/hotplug
+	 * during boot-up
+	 */
+	net_notifier_init();
+
 	/* Mount the root filesystem.. */
 	mount_root();
 

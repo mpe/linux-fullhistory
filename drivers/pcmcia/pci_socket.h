@@ -18,9 +18,11 @@ typedef struct pci_socket {
 	void *info;
 	struct pci_socket_ops *op;
 	socket_cap_t cap;
-	wait_queue_head_t wait;
+	spinlock_t event_lock;
 	unsigned int events;
 	struct socket_info_t *pcmcia_socket;
+	struct tq_struct tq_task;
+	struct timer_list poll_timer;
 
 	/* A few words of private data for the low-level driver.. */
 	unsigned int private[8];

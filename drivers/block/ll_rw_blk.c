@@ -347,10 +347,9 @@ static void generic_plug_device(request_queue_t *q, kdev_t dev)
  */
 static inline void __generic_unplug_device(request_queue_t *q)
 {
-	if (q->plugged) {
+	if (!list_empty(&q->queue_head)) {
 		q->plugged = 0;
-		if (!list_empty(&q->queue_head))
-			q->request_fn(q);
+		q->request_fn(q);
 	}
 }
 

@@ -66,6 +66,7 @@ if [ "$CONFIG_PCI" != "y" ]; then
    define_bool CONFIG_PCI n
 fi
 
+define_bool CONFIG_MCA n
 define_bool CONFIG_SBUS n
 
 mainmenu_option next_comment

@@ -2057,6 +2057,13 @@ static struct {
 		"Intel",
 		"440GX",
 		intel_generic_setup },
+	/* could we add support for PCI_DEVICE_ID_INTEL_815_1 too ? */
+	{ PCI_DEVICE_ID_INTEL_815_0,
+		PCI_VENDOR_ID_INTEL,
+		INTEL_I815,
+		"Intel",
+		"i815",
+		intel_generic_setup },
 	{ PCI_DEVICE_ID_INTEL_840_0,
 		PCI_VENDOR_ID_INTEL,
 		INTEL_I840,

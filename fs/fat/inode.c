@@ -138,13 +138,11 @@ struct inode *fat_build_inode(struct super_block *sb,
 	inode = fat_iget(sb, ino);
 	if (inode)
 		goto out;
-	inode = get_empty_inode();
+	inode = new_inode(sb);
 	*res = -ENOMEM;
 	if (!inode)
 		goto out;
 	*res = 0;
-	inode->i_sb = sb;
-	inode->i_dev = sb->s_dev;
 	inode->i_ino = iunique(sb, MSDOS_ROOT_INO);
 	fat_fill_inode(inode, de);
 	fat_attach(inode, ino);
@@ -658,11 +656,9 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	if (! sbi->nls_io)
 		sbi->nls_io = load_nls_default();
 
-	root_inode=get_empty_inode();
+	root_inode=new_inode(sb);
 	if (!root_inode)
 		goto out_unload_nls;
-	root_inode->i_sb = sb;
-	root_inode->i_dev = sb->s_dev;
 	root_inode->i_ino = MSDOS_ROOT_INO;
 	fat_read_root(root_inode);
 	insert_inode_hash(root_inode);

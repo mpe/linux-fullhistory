@@ -870,7 +870,7 @@ vgacon_adjust_height(unsigned fontheight)
 	ovr = inb_p(vga_video_port_val);
 	outb_p( 0x09, vga_video_port_reg );		/* Font size register */
 	fsr = inb_p(vga_video_port_val);
-	spin_lock_irq(&vga_lock);
+	spin_unlock_irq(&vga_lock);
 
 	vde = maxscan & 0xff;			/* Vertical display end reg */
 	ovr = (ovr & 0xbd) +			/* Overflow register */

@@ -2355,7 +2355,7 @@ CONFIG_AGP
 Intel 440LX/BX/GX support
 CONFIG_AGP_INTEL
   This option gives you AGP support for the GLX component of the
-  XFree86 4.x on Intel 440LX/BX/GX chipsets.
+  XFree86 4.x on Intel 440LX/BX/GX, 815, and 840 chipsets.
 
   For the moment, you should probably say N, unless you want to test
   the GLX component for XFree86 3.3.6, which can be downloaded from
@@ -2363,9 +2363,9 @@ CONFIG_AGP_INTEL
 
 Intel I810/I810 DC100/I810e support
 CONFIG_AGP_I810
-  This option gives you AGP support for the Xserver for the Intel
-  810 chipset boards. This is required to do any useful video
-  modes.
+  This option gives you AGP support for the Xserver on the Intel 810
+  and 815 chipset boards for their on-board integrated graphics. This
+  is required to do any useful video modes with these boards.
 
 VIA chipset support
 CONFIG_AGP_VIA
@@ -2481,6 +2481,20 @@ CONFIG_MCA
   laptops. It is a bus system similar to PCI or ISA. See
   Documentation/mca.txt (and especially the web page given there)
   before attempting to build an MCA bus kernel.
+
+EISA support
+CONFIG_EISA
+  The Extended Industry Standard Architecture (EISA) bus was
+  developed as an open alternative to the IBM MicroChannel bus.
+
+  The EISA bus provided some of the features of the IBM MicroChannel
+  bus while maintaining backward compatibility with cards made for
+  the older ISA bus. The EISA bus saw limited use between 1988 and 1995
+  when it was made obsolete by the PCI bus.
+
+  Say Y here if you are building a kernel for an EISA-based machine.
+
+  Otherwise, say N.
 
 SGI Visual Workstation support
 CONFIG_VISWS
@@ -2855,6 +2869,7 @@ CONFIG_M386
    - "Pentium-MMX" for the Intel Pentium MMX.
    - "Pentium-Pro" for the Intel Pentium Pro/Celeron/Pentium II.
    - "Pentium-III" for the Intel Pentium III.
+   - "Pentium-4" for the Intel Pentium 4
    - "K6" for the AMD K6, K6-II and K6-III (aka K6-3D).
    - "Athlon" for the AMD Athlon (K7).
    - "Crusoe" for the Transmeta Crusoe series.
@@ -14045,8 +14060,7 @@ CONFIG_TRIX_BOOT_FILE
 Support for OPTi MAD16 and/or Mozart based cards
 CONFIG_SOUND_MAD16
   Answer Y if your card has a Mozart (OAK OTI-601) or MAD16 (OPTi
-  82C928 or 82C929 or 82C931) audio interface chip. For the 82C931,
-  please read drivers/sound/README.C931. These chips are currently
+  82C928 or 82C929 or 82C931) audio interface chip. These chips are 
   quite common so it's possible that many no-name cards have one of
   them. In addition the MAD16 chip is used in some cards made by known
   manufacturers such as Turtle Beach (Tropez), Reveal (some models)

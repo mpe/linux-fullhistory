@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.42 2000/10/14 10:09:04 davem Exp $
+/* $Id: su.c,v 1.43 2000/11/15 07:28:09 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -2001,6 +2001,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 #endif
 		schedule();
 	}
+	current->state = TASK_RUNNING;
 	remove_wait_queue(&info->open_wait, &wait);
 	if (extra_count)
 		info->count++;
@@ -2219,7 +2220,7 @@ done:
  */
 static __inline__ void __init show_su_version(void)
 {
-	char *revision = "$Revision: 1.42 $";
+	char *revision = "$Revision: 1.43 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

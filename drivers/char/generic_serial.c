@@ -1077,4 +1077,3 @@ EXPORT_SYMBOL(gs_init_port);
 EXPORT_SYMBOL(gs_setserial);
 EXPORT_SYMBOL(gs_getserial);
 
-EXPORT_SYMBOL(gs_debug);

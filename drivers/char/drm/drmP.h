@@ -510,7 +510,6 @@ typedef struct drm_agp_head {
 	unsigned long      base;
    	int 		   agp_mtrr;
 } drm_agp_head_t;
-
 #endif
 
 typedef struct drm_sigdata {
@@ -812,6 +811,7 @@ extern drm_agp_head_t *drm_agp_init(void);
 extern void           drm_agp_uninit(void);
 extern int            drm_agp_acquire(struct inode *inode, struct file *filp,
 				      unsigned int cmd, unsigned long arg);
+extern void           _drm_agp_release(void);
 extern int            drm_agp_release(struct inode *inode, struct file *filp,
 				      unsigned int cmd, unsigned long arg);
 extern int            drm_agp_enable(struct inode *inode, struct file *filp,
@@ -826,6 +826,10 @@ extern int            drm_agp_unbind(struct inode *inode, struct file *filp,
 				     unsigned int cmd, unsigned long arg);
 extern int            drm_agp_bind(struct inode *inode, struct file *filp,
 				   unsigned int cmd, unsigned long arg);
+extern agp_memory     *drm_agp_allocate_memory(size_t pages, u32 type);
+extern int            drm_agp_free_memory(agp_memory *handle);
+extern int            drm_agp_bind_memory(agp_memory *handle, off_t start);
+extern int            drm_agp_unbind_memory(agp_memory *handle);
 #endif
 #endif
 #endif

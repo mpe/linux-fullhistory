@@ -1485,6 +1485,7 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 #endif
 	extern void mcheck_init(struct cpuinfo_x86 *c);
 	char *p = NULL;
+	unsigned int l1i = 0, l1d = 0, l2 = 0, l3 = 0; /* Cache sizes */
 
 #ifndef CONFIG_M686
 	/*
@@ -1506,43 +1507,80 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 
 	if (c->cpuid_level > 1) {
 		/* supports eax=2  call */
-		int edx = cpuid_edx(2);
+		int i, j, n;
+		int regs[4];
+		unsigned char *dp = (unsigned char *)regs;
 
-		/* We need only the LSB */
-		edx &= 0xff;
+		/* Number of times to iterate */
+		n = cpuid_eax(2) & 0xFF;
 
-		switch (edx) {
-		case 0x40:
-			c->x86_cache_size = 0;
-			break;
+		for ( i = 0 ; i < n ; i++ ) {
+			cpuid(2, &regs[0], &regs[1], &regs[2], &regs[3]);
 			
-		case 0x41: /* 4-way 128 */
-			c->x86_cache_size = 128;
-			break;
-			
-		case 0x42: /* 4-way 256 */
-		case 0x82: /* 8-way 256 */
-			c->x86_cache_size = 256;
-			break;
-			
-		case 0x43: /* 4-way 512 */
-			c->x86_cache_size = 512;
-			break;
-			
-		case 0x44: /* 4-way 1024 */
-		case 0x84: /* 8-way 1024 */
-			c->x86_cache_size = 1024;
-			break;
-			
-		case 0x45: /* 4-way 2048 */
-		case 0x85: /* 8-way 2048 */
-			c->x86_cache_size = 2048;
-			break;
-			
-		default:
-			c->x86_cache_size = 0;
-			break;
+			/* If bit 31 is set, this is an unknown format */
+			for ( j = 0 ; j < 3 ; j++ ) {
+				if ( regs[j] < 0 ) regs[j] = 0;
+			}
+
+			/* Byte 0 is level count, not a descriptor */
+			for ( j = 1 ; j < 16 ; j++ ) {
+				unsigned char des = dp[j];
+				unsigned char dl, dh;
+				unsigned int cs;
+
+				dh = des >> 4;
+				dl = des & 0x0F;
+
+				switch ( dh )
+				{
+				case 2:
+					if ( dl ) {
+						/* L3 cache */
+						cs = (dl-1) << 9;
+						l3 += cs;
+					}
+					break;
+				case 4:
+				case 8:
+					if ( dl ) {
+						/* L2 cache */
+						cs = 128 << (dl-1);
+						l2 += cs;
+					}
+					break;
+				case 6:
+					if (dl > 5) {
+						/* L1 D cache */
+						cs = 8<<(dl-6);
+						l1d += cs;
+					}
+					break;
+				case 7:
+					/* L1 I cache */
+					cs = dl ? (16 << (dl-1)) : 12;
+					l1i += cs;
+					break;
+				default:
+					/* TLB, or something else we don't know about */
+					break;
+				}
+			}
 		}
+		if ( l1i || l1d )
+			printk("CPU: L1 I cache: %dK, L1 D cache: %dK\n",
+			       l1i, l1d);
+		if ( l2 )
+			printk("CPU: L2 cache: %dK\n", l2);
+		if ( l3 )
+			printk("CPU: L3 cache: %dK\n", l3);
+
+		/*
+		 * This assumes the L3 cache is shared; it typically lives in
+		 * the northbridge.  The L1 caches are included by the L2
+		 * cache, and so should not be included for the purpose of
+		 * SMP switching weights.
+		 */
+		c->x86_cache_size = l2 ? l2 : (l1i+l1d);
 	}
 
 	/* SEP CPUID bug: Pentium Pro reports SEP but doesn't have it */
@@ -1555,19 +1593,19 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 	if (c->x86 == 6) {
 		switch (c->x86_model) {
 		case 5:
-			if (c->x86_cache_size == 0)
+			if (l2 == 0)
 				p = "Celeron (Covington)";
-			if (c->x86_cache_size == 256)
+			if (l2 == 256)
 				p = "Mobile Pentium II (Dixon)";
 			break;
 			
 		case 6:
-			if (c->x86_cache_size == 128)
+			if (l2 == 128)
 				p = "Celeron (Mendocino)";
 			break;
 			
 		case 8:
-			if (c->x86_cache_size == 128)
+			if (l2 == 128)
 				p = "Celeron (Coppermine)";
 			break;
 		}
@@ -2028,7 +2066,7 @@ int get_cpuinfo(char * buffer)
 		/* Intel-defined */
 	        "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
 	        "cx8", "apic", NULL, "sep", "mtrr", "pge", "mca", "cmov",
-	        "pat", "pse36", "pn", "clflsh", NULL, "dtes", NULL, "mmx",
+	        "pat", "pse36", "pn", "clflsh", NULL, "dtes", "acpi", "mmx",
 	        "fxsr", "sse", "sse2", "selfsnoop", NULL, "acc", "ia64", NULL,
 
 		/* AMD-defined */

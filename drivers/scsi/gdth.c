@@ -3577,11 +3577,12 @@ static void gdth_flush(int hanum)
     ha = HADATA(gdth_ctr_tab[hanum]);
 
     sdev = scsi_get_host_dev(gdth_ctr_tab[hanum]);
-    if(sdev)
-    	scp  = scsi_allocate_device(sdev, 1, FALSE);
-    
-    if(sdev!= NULL && scp != NULL)
-    {
+    if (!sdev)
+	return;
+
+    scp  = scsi_allocate_device(sdev, 1, FALSE);
+
+    if (scp) {
         scp->cmd_len = 12;
         scp->use_sg = 0;
 
@@ -3597,11 +3598,9 @@ static void gdth_flush(int hanum)
                  gdth_do_cmd(scp, &gdtcmd, 30);
             }
         }
-    }
-    if(scp!=NULL)
     	scsi_release_command(scp);
-    if(sdev!=NULL)
-        scsi_free_host_dev(sdev);
+    }
+    scsi_free_host_dev(sdev);
 }
 
 /* shutdown routine */

@@ -327,17 +327,15 @@ jffs_new_inode(const struct inode * dir, struct jffs_raw_inode *raw_inode,
 	struct inode * inode;
 	struct jffs_control *c;
 
-	inode = get_empty_inode();
+	sb = dir->i_sb;
+	inode = new_inode(sb);
 	if (!inode) {
 		*err = -ENOMEM;
 		return NULL;
 	}
 
-	sb = dir->i_sb;
 	c = (struct jffs_control *)sb->u.generic_sbp;
 
-	inode->i_sb = sb;
-	inode->i_dev = sb->s_dev;
 	inode->i_ino = raw_inode->ino;
 	inode->i_mode = raw_inode->mode;
 	inode->i_nlink = raw_inode->nlink;

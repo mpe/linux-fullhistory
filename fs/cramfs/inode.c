@@ -34,7 +34,7 @@ static struct address_space_operations cramfs_aops;
 
 static struct inode *get_cramfs_inode(struct super_block *sb, struct cramfs_inode * cramfs_inode)
 {
-	struct inode * inode = get_empty_inode();
+	struct inode * inode = new_inode(sb);
 
 	if (inode) {
 		inode->i_mode = cramfs_inode->mode;
@@ -42,14 +42,10 @@ static struct inode *get_cramfs_inode(struct super_block *sb, struct cramfs_inod
 		inode->i_size = cramfs_inode->size;
 		inode->i_gid = cramfs_inode->gid;
 		inode->i_ino = CRAMINO(cramfs_inode);
-		inode->i_sb = sb;
-		inode->i_dev = sb->s_dev;
-		inode->i_nlink = 1; /* arguably wrong for directories,
-				       but it's the best we can do
-				       without reading the directory
-				       contents.  1 yields the right
-				       result in GNU find, even
-				       without -noleaf option. */
+		/* inode->i_nlink is left 1 - arguably wrong for directories,
+		   but it's the best we can do without reading the directory
+	           contents.  1 yields the right result in GNU find, even
+		   without -noleaf option. */
 		insert_inode_hash(inode);
 		if (S_ISREG(inode->i_mode)) {
 			inode->i_fop = &generic_ro_fops;

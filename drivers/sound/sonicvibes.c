@@ -1073,9 +1073,9 @@ static int mixer_ioctl(struct sv_state *s, unsigned int cmd, unsigned long arg)
 			return put_user(0, (int *)arg);
 		return put_user(((4 - (l & 7)) << 2) | ((4 - (r & 7)) << 5) | 2, (int *)arg);
 	}
-	if (_IOC_TYPE(cmd) != 'M' || _IOC_SIZE(cmd) != sizeof(int))
+	if (_IOC_TYPE(cmd) != 'M' || _SIOC_SIZE(cmd) != sizeof(int))
                 return -EINVAL;
-        if (_IOC_DIR(cmd) == _IOC_READ) {
+        if (_SIOC_DIR(cmd) == _SIOC_READ) {
                 switch (_IOC_NR(cmd)) {
                 case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 			return put_user(mixer_recmask(s), (int *)arg);
@@ -1114,7 +1114,7 @@ static int mixer_ioctl(struct sv_state *s, unsigned int cmd, unsigned long arg)
 #endif /* OSS_DOCUMENTED_MIXER_SEMANTICS */
 		}
 	}
-        if (_IOC_DIR(cmd) != (_IOC_READ|_IOC_WRITE)) 
+        if (_SIOC_DIR(cmd) != (_SIOC_READ|_SIOC_WRITE)) 
 		return -EINVAL;
 	s->mix.modcnt++;
 	switch (_IOC_NR(cmd)) {

@@ -1296,6 +1296,7 @@ static void __init bmac_probe1(struct device_node *bmac, int is_bmac_plus)
 		       bmac->full_name);
 		return;
 	}
+	SET_MODULE_OWNER(dev);
 
 	dev->base_addr = (unsigned long)
 		ioremap(bmac->addrs[0].address, bmac->addrs[0].size);
@@ -1393,8 +1394,6 @@ static int bmac_open(struct net_device *dev)
 		return -ENOMEM;
 
 	dev->flags |= IFF_RUNNING;
-
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1439,8 +1438,6 @@ static int bmac_close(struct net_device *dev)
 	}
 	bp->reset_and_enabled = 0;
 	XXDEBUG(("bmac: all bufs freed\n"));
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

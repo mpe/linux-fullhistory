@@ -316,6 +316,8 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 		while (port->write_urb->status == -EINPROGRESS) {
 			dbg(__FUNCTION__ " write in progress - retrying");
 			if (0 /* file->f_flags & O_NONBLOCK */) {
+				remove_wait_queue(&port->write_wait, &wait);
+				set_current_state(TASK_RUNNING);
 				rc = -EAGAIN;
 				goto err;
 			}
@@ -326,6 +328,7 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 				goto err;
 			}
 			schedule();
+			set_current_state (TASK_INTERRUPTIBLE);
 		}		
 		remove_wait_queue(&port->write_wait, &wait);
 		set_current_state(TASK_RUNNING);

@@ -1103,8 +1103,6 @@ void fix_rio_pci (PDEV)
 #define rio_init init_module
 #endif
 
-extern int gs_debug;
-
 int rio_init(void) 
 {
   int found = 0;
@@ -1129,7 +1127,6 @@ int rio_init(void)
   func_enter();
   rio_dprintk (RIO_DEBUG_INIT, "Initing rio module... (rio_debug=%d)\n", 
 	       rio_debug);
-  gs_debug = rio_debug >> 24;
 
   if (abs ((long) (&rio_debug) - rio_debug) < 0x10000) {
     printk (KERN_WARNING "rio: rio_debug is an address, instead of a value. "

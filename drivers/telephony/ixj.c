@@ -1812,6 +1812,8 @@ ssize_t ixj_read(struct file * file_p, char *buf, size_t length, loff_t * ppos)
 	while (!j->read_buffer_ready || (j->dtmf_state && j->flags.dtmf_oob)) {
 		++j->read_wait;
 		if(j->tone_state) {
+			set_current_state(TASK_RUNNING);
+			remove_wait_queue(&j->read_q, &wait);
 			j->flags.inread = 0;
 			return -EAGAIN;
 		}
@@ -1894,6 +1896,8 @@ ssize_t ixj_write(struct file *file_p, const char *buf, size_t count, loff_t * p
 	while (!j->write_buffers_empty) {
 		++j->write_wait;
 		if(j->tone_state) {
+			set_current_state(TASK_RUNNING);
+			remove_wait_queue(&j->write_q, &wait);
 			j->flags.inwrite = 0;
 			return -EAGAIN;
 		}

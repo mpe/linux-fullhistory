@@ -34,6 +34,7 @@ choice 'Processor family' \
 	 Pentium-MMX			CONFIG_M586MMX \
 	 Pentium-Pro/Celeron/Pentium-II	CONFIG_M686 \
 	 Pentium-III			CONFIG_M686FXSR \
+	 Pentium-4			CONFIG_MPENTIUM4 \
 	 K6/K6-II/K6-III		CONFIG_MK6 \
 	 Athlon/K7			CONFIG_MK7 \
 	 Crusoe				CONFIG_MCRUSOE \
@@ -85,6 +86,15 @@ if [ "$CONFIG_M686" = "y" ]; then
 fi
 if [ "$CONFIG_M686FXSR" = "y" ]; then
    define_int  CONFIG_X86_L1_CACHE_SHIFT 5
+   define_bool CONFIG_X86_TSC y
+   define_bool CONFIG_X86_GOOD_APIC y
+   define_bool CONFIG_X86_PGE y
+   define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
+   define_bool CONFIG_X86_FXSR y
+   define_bool CONFIG_X86_XMM y
+fi
+if [ "$CONFIG_MPENTIUM4" = "y" ]; then
+   define_int  CONFIG_X86_L1_CACHE_SHIFT 7
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_PGE y
@@ -158,6 +168,7 @@ if [ "$CONFIG_SMP" != "y" ]; then
        define_bool CONFIG_X86_LOCAL_APIC y
     fi
 fi
+
 if [ "$CONFIG_SMP" = "y" -a "$CONFIG_X86_CMPXCHG" = "y" ]; then
     define_bool CONFIG_HAVE_DEC_LOCK y
 fi
@@ -198,6 +209,8 @@ bool 'EISA support' CONFIG_EISA
 
 if [ "$CONFIG_VISWS" != "y" ]; then
    bool 'MCA support' CONFIG_MCA
+else
+   define_bool CONFIG_MCA n
 fi
 
 bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG

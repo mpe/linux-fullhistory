@@ -224,14 +224,12 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 	struct buffer_head * bh;
 	int i,j;
 
-	inode = get_empty_inode();
+	sb = dir->i_sb;
+	inode = new_inode(sb);
 	if (!inode) {
 		*error = -ENOMEM;
 		return NULL;
 	}
-	sb = dir->i_sb;
-	inode->i_sb = sb;
-	inode->i_flags = 0;
 	j = 8192;
 	bh = NULL;
 	*error = -ENOSPC;
@@ -259,8 +257,6 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 		unlock_super(sb);
 		return NULL;
 	}
-	inode->i_nlink = 1;
-	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
 	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->fsgid;
 	inode->i_ino = j;

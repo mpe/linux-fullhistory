@@ -39,6 +39,7 @@ unset CONFIG_MIPS_JAZZ
 unset CONFIG_VIDEO_G364
 unset CONFIG_PC_KEYB
 
+define_bool CONFIG_MCA n
 define_bool CONFIG_SBUS n
 
 if [ "$CONFIG_ALGOR_P4032" = "y" ]; then

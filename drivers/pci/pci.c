@@ -20,6 +20,8 @@
 #include <linux/ioport.h>
 #include <linux/spinlock.h>
 #include <linux/pm.h>
+#include <linux/slab.h>
+#include <linux/kmod.h>		/* for hotplug_path */
 
 #include <asm/page.h>
 #include <asm/dma.h>	/* isa_dma_bridge_buggy */
@@ -343,6 +345,49 @@ pci_unregister_driver(struct pci_driver *drv)
 
 #ifdef CONFIG_HOTPLUG
 
+#ifndef FALSE
+#define FALSE	(0)
+#define TRUE	(!FALSE)
+#endif
+
+static void
+run_sbin_hotplug(struct pci_dev *pdev, int insert)
+{
+	int i;
+	char *argv[3], *envp[7];
+	char id[20], sub_id[24], bus_id[64], class_id[20];
+
+	if (!hotplug_path[0])
+		return;
+
+	sprintf(class_id, "PCI_CLASS=%X", pdev->class >> 8);
+	sprintf(id, "PCI_ID=%X/%X", pdev->vendor, pdev->device);
+	sprintf(sub_id, "PCI_SUBSYS_ID=%X/%X", pdev->subsystem_vendor, pdev->subsystem_device);
+	sprintf(bus_id, "PCI_BUS_ID=%s", pdev->slot_name);
+
+	i = 0;
+	argv[i++] = hotplug_path;
+	argv[i++] = "pci";
+	argv[i] = 0;
+
+	i = 0;
+	/* minimal command environment */
+	envp[i++] = "HOME=/";
+	envp[i++] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
+	
+	/* other stuff we want to pass to /sbin/hotplug */
+	envp[i++] = id;
+	envp[i++] = sub_id;
+	envp[i++] = bus_id;
+	if (insert)
+		envp[i++] = "ACTION=add";
+	else
+		envp[i++] = "ACTION=remove";
+	envp[i] = 0;
+
+	call_usermodehelper (argv [0], argv, envp);
+}
+
 void
 pci_insert_device(struct pci_dev *dev, struct pci_bus *bus)
 {
@@ -358,9 +403,13 @@ pci_insert_device(struct pci_dev *dev, struct pci_bus *bus)
 		if (drv->remove && pci_announce_device(drv, dev))
 			break;
 	}
+
+	/* notify userspace of new hotplug device */
+	run_sbin_hotplug(dev, TRUE);
 }
 
-static void pci_free_resources(struct pci_dev *dev)
+static void
+pci_free_resources(struct pci_dev *dev)
 {
 	int i;
 
@@ -385,6 +434,9 @@ pci_remove_device(struct pci_dev *dev)
 #ifdef CONFIG_PROC_FS
 	pci_proc_detach_device(dev);
 #endif
+
+	/* notify userspace of hotplug device removal */
+	run_sbin_hotplug(dev, FALSE);
 }
 
 #endif

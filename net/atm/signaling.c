@@ -50,6 +50,7 @@ static void sigd_put_skb(struct sk_buff *skb)
 		}
 		schedule();
 	}
+	current->state = TASK_RUNNING;
 	remove_wait_queue(&sigd_sleep,&wait);
 #else
 	if (!sigd) {

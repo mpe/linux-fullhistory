@@ -245,13 +245,11 @@ adfs_iget(struct super_block *sb, struct object_info *obj)
 {
 	struct inode *inode;
 
-	inode = get_empty_inode();
+	inode = new_inode(sb);
 	if (!inode)
 		goto out;
 
 	inode->i_version = ++event;
-	inode->i_sb	 = sb;
-	inode->i_dev	 = sb->s_dev;
 	inode->i_uid	 = sb->u.adfs_sb.s_uid;
 	inode->i_gid	 = sb->u.adfs_sb.s_gid;
 	inode->i_ino	 = obj->file_id;

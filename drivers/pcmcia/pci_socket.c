@@ -177,7 +177,7 @@ static int __devinit add_pci_socket(int nr, struct pci_dev *dev, struct pci_sock
 	socket->dev = dev;
 	socket->op = ops;
 	dev->driver_data = socket;
-	init_waitqueue_head(&socket->wait);
+	spin_lock_init(&socket->event_lock);
 	return socket->op->open(socket);
 }
 

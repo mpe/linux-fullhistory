@@ -257,7 +257,7 @@ rpc_make_runnable(struct rpc_task *task)
 		printk(KERN_ERR "RPC: task w/ running timer in rpc_make_runnable!!\n");
 		return;
 	}
-	task->tk_running = 1;
+	rpc_set_running(task);
 	if (RPC_IS_ASYNC(task)) {
 		if (RPC_IS_SLEEPING(task)) {
 			int status;
@@ -265,13 +265,14 @@ rpc_make_runnable(struct rpc_task *task)
 			if (status < 0) {
 				printk(KERN_WARNING "RPC: failed to add task to queue: error: %d!\n", status);
 				task->tk_status = status;
-			} else
-				task->tk_sleeping = 0;
+				return;
+			}
+			rpc_clear_sleeping(task);
+			if (waitqueue_active(&rpciod_idle))
+				wake_up(&rpciod_idle);
 		}
-		if (waitqueue_active(&rpciod_idle))
-			wake_up(&rpciod_idle);
 	} else {
-		task->tk_sleeping = 0;
+		rpc_clear_sleeping(task);
 		if (waitqueue_active(&task->tk_wait))
 			wake_up(&task->tk_wait);
 	}
@@ -287,7 +288,7 @@ rpc_schedule_run(struct rpc_task *task)
 	if (RPC_IS_ACTIVATED(task))
 		return;
 	task->tk_active = 1;
-	task->tk_sleeping = 1;
+	rpc_set_sleeping(task);
 	rpc_make_runnable(task);
 }
 
@@ -326,7 +327,7 @@ __rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 	/* Mark the task as being activated if so needed */
 	if (!RPC_IS_ACTIVATED(task)) {
 		task->tk_active = 1;
-		task->tk_sleeping = 1;
+		rpc_set_sleeping(task);
 	}
 
 	status = __rpc_add_wait_queue(q, task);
@@ -334,7 +335,7 @@ __rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 		printk(KERN_WARNING "RPC: failed to add task to queue: error: %d!\n", status);
 		task->tk_status = status;
 	} else {
-		task->tk_running = 0;
+		rpc_clear_running(task);
 		if (task->tk_callback) {
 			dprintk(KERN_ERR "RPC: %4d overwrites an active callback\n", task->tk_pid);
 			BUG();
@@ -590,21 +591,15 @@ __rpc_execute(struct rpc_task *task)
 
 		/*
 		 * Check whether task is sleeping.
-		 * Note that if the task goes to sleep in tk_action,
-		 * and the RPC reply arrives before we get here, it will
-		 * have state RUNNING, but will still be on schedq.
-		 * 27/9/99: The above has been attempted fixed by
-		 *          introduction of task->tk_sleeping.
 		 */
 		spin_lock_bh(&rpc_queue_lock);
 		if (!RPC_IS_RUNNING(task)) {
-			task->tk_sleeping = 1;
+			rpc_set_sleeping(task);
 			if (RPC_IS_ASYNC(task)) {
 				spin_unlock_bh(&rpc_queue_lock);
 				return 0;
 			}
-		} else
-			task->tk_sleeping = 0;
+		}
 		spin_unlock_bh(&rpc_queue_lock);
 
 		while (RPC_IS_SLEEPING(task)) {
@@ -684,7 +679,7 @@ rpc_execute(struct rpc_task *task)
 	}
 
 	task->tk_active = 1;
-	task->tk_running = 1;
+	rpc_set_running(task);
 	return __rpc_execute(task);
  out_release:
 	rpc_release_task(task);

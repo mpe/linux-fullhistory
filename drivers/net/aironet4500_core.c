@@ -2574,7 +2574,7 @@ MODULE_PARM(awc_simple_bridge,"i");
 MODULE_PARM(max_mtu,"i");
 MODULE_PARM(large_buff_mem,"i");
 MODULE_PARM(small_buff_no,"i");
-MODULE_PARM(SSID,"1-4c31");
+MODULE_PARM(SSID,"c33");
 #endif
 
 /*EXPORT_SYMBOL(tx_queue_len);

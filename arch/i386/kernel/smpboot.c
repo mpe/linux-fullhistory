@@ -455,7 +455,7 @@ int __init start_secondary(void *unused)
 	cpu_init();
 	smp_callin();
 	while (!atomic_read(&smp_commenced))
-		/* nothing */ ;
+		rep_nop();
 	/*
 	 * low-memory mappings have been cleared, flush them from
 	 * the local TLBs too.

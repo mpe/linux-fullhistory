@@ -770,6 +770,8 @@ static void cfi_intelext_sync (struct mtd_info *mtd)
 			spin_unlock_bh(chip->mutex);
 			schedule();
 			
+			remove_wait_queue(&chip->wq, &wait);
+
 			goto retry;
 		}
 	}

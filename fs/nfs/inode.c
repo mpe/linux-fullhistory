@@ -720,11 +720,9 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 	if ((dentry->d_parent->d_inode->u.nfs_i.flags & NFS_IS_SNAPSHOT) ||
 	    (dentry->d_name.len == 9 &&
 	     memcmp(dentry->d_name.name, ".snapshot", 9) == 0)) {
-		struct inode *inode = get_empty_inode();
+		struct inode *inode = new_inode(sb);
 		if (!inode)
-			goto out;	
-		inode->i_sb = sb;
-		inode->i_dev = sb->s_dev;
+			goto out;
 		inode->i_flags = 0;
 		inode->i_ino = nfs_fattr_to_ino_t(fattr);
 		nfs_read_inode(inode);

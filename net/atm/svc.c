@@ -205,7 +205,6 @@ static int svc_connect(struct socket *sock,struct sockaddr *sockaddr,
 					set_current_state(TASK_UNINTERRUPTIBLE);
 					schedule();
 				}
-			remove_wait_queue(&vcc->sleep,&wait);
 			clear_bit(ATM_VF_REGIS,&vcc->flags);
 			clear_bit(ATM_VF_RELEASED,&vcc->flags);
 			clear_bit(ATM_VF_CLOSE,&vcc->flags);

@@ -274,15 +274,13 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
 		return NULL;
 	}
 
-	inode = get_empty_inode ();
+	sb = dir->i_sb;
+	inode = new_inode(sb);
 	if (!inode) {
 		*err = -ENOMEM;
 		return NULL;
 	}
 
-	sb = dir->i_sb;
-	inode->i_sb = sb;
-	inode->i_flags = 0;
 	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 repeat:
@@ -430,9 +428,6 @@ repeat:
 	mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 	sb->s_dirt = 1;
 	inode->i_mode = mode;
-	inode->i_sb = sb;
-	inode->i_nlink = 1;
-	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
 	if (test_opt (sb, GRPID))
 		inode->i_gid = dir->i_gid;

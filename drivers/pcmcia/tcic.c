@@ -530,6 +530,28 @@ static void __exit exit_tcic(void)
 
 /*====================================================================*/
 
+static u_int pending_events[2];
+static spinlock_t pending_event_lock = SPIN_LOCK_UNLOCKED;
+
+static void tcic_bh(void *dummy)
+{
+	u_int events;
+	int i;
+
+	for (i=0; i < sockets; i++) {
+		spin_lock_irq(&pending_event_lock);
+		events = pending_events[i];
+		pending_events[i] = 0;
+		spin_unlock_irq(&pending_event_lock);
+		if (socket_table[i].handler)
+			socket_table[i].handler(socket_table[i].info, events);
+	}
+}
+
+static struct tq_struct tcic_task = {
+	routine:	tcic_bh
+};
+
 static void tcic_interrupt(int irq, void *dev, struct pt_regs *regs)
 {
     int i, quick = 0;
@@ -568,8 +590,12 @@ static void tcic_interrupt(int irq, void *dev, struct pt_regs *regs)
 	    events |= (latch & TCIC_SSTAT_LBAT1) ? SS_BATDEAD : 0;
 	    events |= (latch & TCIC_SSTAT_LBAT2) ? SS_BATWARN : 0;
 	}
-	if (events)
-	    socket_table[i].handler(socket_table[i].info, events);
+	if (events) {
+		spin_lock(&pending_event_lock);
+		pending_events[i] |= events;
+		spin_unlock(&pending_event_lock);
+		schedule_task(&tcic_task);
+	}
     }
 
     /* Schedule next poll, if needed */

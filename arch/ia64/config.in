@@ -22,6 +22,7 @@ define_bool CONFIG_SWIOTLB y	# for now...
 
 define_bool CONFIG_ISA n
 define_bool CONFIG_EISA n
+define_bool CONFIG_MCA n
 define_bool CONFIG_SBUS n
 
 choice 'IA-64 system type'					\

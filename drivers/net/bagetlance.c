@@ -329,8 +329,7 @@ struct lance_addr {
 
 static int addr_accessible( volatile void *regp, int wordflag, int
                             writeflag );
-static unsigned long lance_probe1( struct net_device *dev, struct lance_addr
-                                   *init_rec );
+static int lance_probe1( struct net_device *dev, struct lance_addr *init_rec );
 static int lance_open( struct net_device *dev );
 static void lance_init_ring( struct net_device *dev );
 static int lance_start_xmit( struct sk_buff *skb, struct net_device *dev );
@@ -474,6 +473,8 @@ int __init bagetlance_probe( struct net_device *dev )
 {	int i;
 	static int found = 0;
 
+	SET_MODULE_OWNER(dev);
+
 	if (found)
 		/* Assume there's only one board possible... That seems true, since
 		 * the Riebl/PAM board's address cannot be changed. */
@@ -508,8 +509,8 @@ static int __init addr_accessible( volatile void *regp,
 #define IRQ_TYPE_PRIO SA_INTERRUPT
 #define IRQ_SOURCE_TO_VECTOR(x) (x)
 
-static unsigned long __init lance_probe1( struct net_device *dev,
-					   struct lance_addr *init_rec )
+static int __init lance_probe1( struct net_device *dev,
+				struct lance_addr *init_rec )
 
 {	volatile unsigned short *memaddr =
 		(volatile unsigned short *)init_rec->memaddr;
@@ -759,8 +760,6 @@ static int lance_open( struct net_device *dev )
 	dev->start = 1;
 
 	DPRINTK( 2, ( "%s: LANCE is open, csr0 %04x\n", dev->name, DREG ));
-	MOD_INC_USE_COUNT;
-
 	return( 0 );
 }
 
@@ -1222,7 +1221,6 @@ static int lance_close( struct net_device *dev )
 	   memory if we don't. */
 	DREG = CSR0_STOP;
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1324,20 +1322,13 @@ static int lance_set_mac_address( struct net_device *dev, void *addr )
 
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-
-static struct net_device bagetlance_dev =
-{
-	devicename,	/* filled in by register_netdev() */
-	0, 0, 0, 0,	/* memory */
-	0, 0,		/* base, irq */
-	0, 0, 0, NULL, bagetlance_probe,
-};
+static struct net_device bagetlance_dev;
 
 int init_module(void)
 
 {	int err;
 
+	bagetlance_dev.init = bagetlance_probe;
 	if ((err = register_netdev( &bagetlance_dev ))) {
 		if (err == -EIO)  {
 			printk( "No Vme Lance board found. Module not loaded.\n");

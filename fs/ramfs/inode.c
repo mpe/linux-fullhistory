@@ -109,21 +109,15 @@ static int ramfs_commit_write(struct file *file, struct page *page, unsigned off
 
 struct inode *ramfs_get_inode(struct super_block *sb, int mode, int dev)
 {
-	struct inode * inode = get_empty_inode();
+	struct inode * inode = new_inode(sb);
 
 	if (inode) {
-		inode->i_sb = sb;
-		inode->i_dev = sb->s_dev;
 		inode->i_mode = mode;
 		inode->i_uid = current->fsuid;
 		inode->i_gid = current->fsgid;
-		inode->i_size = 0;
 		inode->i_blksize = PAGE_CACHE_SIZE;
 		inode->i_blocks = 0;
 		inode->i_rdev = to_kdev_t(dev);
-		inode->i_nlink = 1;
-		inode->i_op = NULL;
-		inode->i_fop = NULL;
 		inode->i_mapping->a_ops = &ramfs_aops;
 		inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 		switch (mode & S_IFMT) {

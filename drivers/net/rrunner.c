@@ -1548,12 +1548,13 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	unsigned int i;
 	int error = -EOPNOTSUPP;
 
-	rrpriv = (struct rr_private *)dev->priv;
+	rrpriv = dev->priv;
 
 	switch(cmd){
 	case SIOCRRGFW:
-		if (!capable(CAP_SYS_RAWIO))
+		if (!capable(CAP_SYS_RAWIO)){
 			return -EPERM;
+		}
 
 		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!image){
@@ -1584,8 +1585,9 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		return error;
 		
 	case SIOCRRPFW:
-		if (!capable(CAP_SYS_RAWIO))
+		if (!capable(CAP_SYS_RAWIO)){
 			return -EPERM;
+		}
 
 		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
 		if (!image){

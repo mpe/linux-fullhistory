@@ -91,10 +91,12 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	struct sysv_inode * raw_inode;
 	int i,j,ino,block;
 
-	if (!dir || !(inode = get_empty_inode()))
+	if (!dir)
 		return NULL;
 	sb = dir->i_sb;
-	inode->i_sb = sb;
+	inode = new_inode(sb);
+	if (!inode)
+		return NULL;
 	lock_super(sb);		/* protect against task switches */
 	if ((*sb->sv_sb_fic_count == 0)
 	    || (*sv_sb_fic_inode(sb,(*sb->sv_sb_fic_count)-1) == 0) /* Applies only to SystemV2 FS */
@@ -131,7 +133,6 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	mark_buffer_dirty(sb->sv_bh1); /* super-block has been modified */
 	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2);
 	sb->s_dirt = 1; /* and needs time stamp */
-	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
 	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->fsgid;
 	inode->i_ino = ino;

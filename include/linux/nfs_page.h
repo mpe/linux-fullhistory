@@ -19,7 +19,7 @@
 /*
  * Valid flags for a dirty buffer
  */
-#define PG_BUSY			0x0001
+#define PG_BUSY			0
 
 struct nfs_page {
 	struct list_head	wb_hash,	/* Inode */
@@ -38,7 +38,7 @@ struct nfs_page {
 	struct nfs_writeverf	wb_verf;	/* Commit cookie */
 };
 
-#define NFS_WBACK_BUSY(req)	((req)->wb_flags & PG_BUSY)
+#define NFS_WBACK_BUSY(req)	(test_bit(PG_BUSY,&(req)->wb_flags))
 
 extern	struct nfs_page *nfs_create_request(struct file *file,
 					    struct page *page,
@@ -68,10 +68,9 @@ extern	spinlock_t nfs_wreq_lock;
 static __inline__ int
 nfs_lock_request(struct nfs_page *req)
 {
-	if (NFS_WBACK_BUSY(req))
+	if (test_and_set_bit(PG_BUSY, &req->wb_flags))
 		return 0;
 	req->wb_count++;
-	req->wb_flags |= PG_BUSY;
 	return 1;
 }
 
@@ -80,10 +79,13 @@ nfs_unlock_request(struct nfs_page *req)
 {
 	if (!NFS_WBACK_BUSY(req)) {
 		printk(KERN_ERR "NFS: Invalid unlock attempted\n");
-		return;
+		BUG();
 	}
-	req->wb_flags &= ~PG_BUSY;
-	wake_up(&req->wb_wait);
+	smp_mb__before_clear_bit();
+	clear_bit(PG_BUSY, &req->wb_flags);
+	smp_mb__after_clear_bit();
+	if (waitqueue_active(&req->wb_wait))
+		wake_up(&req->wb_wait);
 	nfs_release_request(req);
 }
 

@@ -423,6 +423,7 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 	if (status) {
 		/* something went wrong */
 		up(&(us->current_urb_sem));
+		current->state = TASK_RUNNING;
 		remove_wait_queue(&wqh, &wait);
 		kfree(dr);
 		return status;
@@ -480,6 +481,7 @@ int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 	if (status) {
 		/* something went wrong */
 		up(&(us->current_urb_sem));
+		current->state = TASK_RUNNING;
 		remove_wait_queue(&wqh, &wait);
 		return status;
 	}

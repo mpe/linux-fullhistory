@@ -1,3 +1,9 @@
+/*
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> 08/23/2000
+ * - get rid of some verify_areas and use __copy*user and __get/put_user
+ *   for the ones that remain
+ */
 #define __NO_VERSION__
 #include <linux/module.h>
 
@@ -39,16 +45,14 @@
 
 static int ioctl_probe(struct Scsi_Host *host, void *buffer)
 {
-	int temp, result;
 	unsigned int len, slen;
 	const char *string;
+	int temp = host->hostt->present;
 
-	if ((temp = host->hostt->present) && buffer) {
-		result = verify_area(VERIFY_READ, buffer, sizeof(long));
-		if (result)
-			return result;
+	if (temp && buffer) {
+		if (get_user(len, (unsigned int *) buffer))
+			return -EFAULT;
 
-		get_user(len, (unsigned int *) buffer);
 		if (host->hostt->info)
 			string = host->hostt->info(host);
 		else
@@ -57,11 +61,8 @@ static int ioctl_probe(struct Scsi_Host *host, void *buffer)
 			slen = strlen(string);
 			if (len > slen)
 				len = slen + 1;
-			result = verify_area(VERIFY_WRITE, buffer, len);
-			if (result)
-				return result;
-
-			copy_to_user(buffer, string, len);
+			if (copy_to_user(buffer, string, len))
+				return -EFAULT;
 		}
 	}
 	return temp;
@@ -202,12 +203,11 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	/*
 	 * Verify that we can read at least this much.
 	 */
-	result = verify_area(VERIFY_READ, sic, sizeof(Scsi_Ioctl_Command));
-	if (result)
-		return result;
+	if (verify_area(VERIFY_READ, sic, sizeof(Scsi_Ioctl_Command)))
+		return -EFAULT;
 
-	get_user(inlen, &sic->inlen);
-	get_user(outlen, &sic->outlen);
+	__get_user(inlen, &sic->inlen);
+	__get_user(outlen, &sic->outlen);
 
 	/*
 	 * We do not transfer more than MAX_BUF with this interface.
@@ -220,7 +220,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 		return -EINVAL;
 
 	cmd_in = sic->data;
-	get_user(opcode, cmd_in);
+	__get_user(opcode, cmd_in);
 
 	needed = buf_needed = (inlen > outlen ? inlen : outlen);
 	if (buf_needed) {
@@ -252,16 +252,15 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	 */
 	cmdlen = COMMAND_SIZE(opcode);
 
-	result = verify_area(VERIFY_READ, cmd_in, cmdlen + inlen);
-	if (result)
-		return result;
+	if (verify_area(VERIFY_READ, cmd_in, cmdlen + inlen))
+		return -EFAULT;
 
-	copy_from_user(cmd, cmd_in, cmdlen);
+	__copy_from_user(cmd, cmd_in, cmdlen);
 
 	/*
 	 * Obtain the data to be sent to the device (if any).
 	 */
-	copy_from_user(buf, cmd_in + cmdlen, inlen);
+	__copy_from_user(buf, cmd_in + cmdlen, inlen);
 
 	/*
 	 * Set the lun field to the correct value.
@@ -314,18 +313,13 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 		int sb_len = sizeof(SRpnt->sr_sense_buffer);
 
 		sb_len = (sb_len > OMAX_SB_LEN) ? OMAX_SB_LEN : sb_len;
-		result = verify_area(VERIFY_WRITE, cmd_in, sb_len);
-		if (result)
-			return result;
-		copy_to_user(cmd_in, SRpnt->sr_sense_buffer, sb_len);
-	} else {
-		result = verify_area(VERIFY_WRITE, cmd_in, outlen);
-		if (result)
-			return result;
-		copy_to_user(cmd_in, buf, outlen);
-	}
-	result = SRpnt->sr_result;
+		if (copy_to_user(cmd_in, SRpnt->sr_sense_buffer, sb_len))
+			return -EFAULT;
+	} else
+		if (copy_to_user(cmd_in, buf, outlen))
+			return -EFAULT;
 
+	result = SRpnt->sr_result;
 
 	SDpnt = SRpnt->sr_device;
 	scsi_release_request(SRpnt);
@@ -361,7 +355,6 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
  */
 int scsi_ioctl(Scsi_Device * dev, int cmd, void *arg)
 {
-	int result;
 	char scsi_cmd[MAX_COMMAND_SIZE];
 
 	/* No idea how this happens.... */
@@ -379,23 +372,18 @@ int scsi_ioctl(Scsi_Device * dev, int cmd, void *arg)
 	}
 	switch (cmd) {
 	case SCSI_IOCTL_GET_IDLUN:
-		result = verify_area(VERIFY_WRITE, arg, sizeof(Scsi_Idlun));
-		if (result)
-			return result;
+		if (verify_area(VERIFY_WRITE, arg, sizeof(Scsi_Idlun)))
+			return -EFAULT;
 
-		put_user(dev->id
+		__put_user(dev->id
 			 + (dev->lun << 8)
 			 + (dev->channel << 16)
 			 + ((dev->host->host_no & 0xff) << 24),
 			 &((Scsi_Idlun *) arg)->dev_id);
-		put_user(dev->host->unique_id, &((Scsi_Idlun *) arg)->host_unique_id);
+		__put_user(dev->host->unique_id, &((Scsi_Idlun *) arg)->host_unique_id);
 		return 0;
 	case SCSI_IOCTL_GET_BUS_NUMBER:
-		result = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
-		if (result)
-			return result;
-		put_user(dev->host->host_no, (int *) arg);
-		return 0;
+		return put_user(dev->host->host_no, (int *) arg);
 	case SCSI_IOCTL_TAGGED_ENABLE:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;

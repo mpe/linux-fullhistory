@@ -501,8 +501,11 @@ printk("sync\n");
 			add_wait_queue(&chip->wq, &wait);
 			
 			spin_unlock_bh(chip->mutex);
+
 			schedule();
 			
+			remove_wait_queue(&chip->wq, &wait);
+
 			goto retry;
 		}
 	}

@@ -150,11 +150,10 @@ setup_netjet_u(struct IsdnCard *card))
 		return(0);
 	test_and_clear_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags);
 
-	for ( ;; )
-	{
-
 #if CONFIG_PCI
 
+	for ( ;; )
+	{
 		if (!pci_present()) {
 			printk(KERN_ERR "NETspider-U: no PCI bus present\n");
 			return(0);

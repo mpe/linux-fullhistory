@@ -101,6 +101,9 @@ define_bool CONFIG_ISA n
 define_bool CONFIG_EISA n
 define_bool CONFIG_SBUS n
 
+# Yes MCA RS/6000s exist but Linux-PPC does not currently support any
+define_bool CONFIG_MCA n
+
 if [ "$CONFIG_APUS" = "y" -o "$CONFIG_4xx" = "y" -o \
      "$CONFIG_8260" = "y" ]; then
    define_bool CONFIG_PCI n

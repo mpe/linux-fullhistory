@@ -601,14 +601,10 @@ nfs_wait_on_request(struct nfs_page *req)
 {
 	struct inode	*inode = req->wb_dentry->d_inode;
         struct rpc_clnt	*clnt = NFS_CLIENT(inode);
-        int retval;
 
 	if (!NFS_WBACK_BUSY(req))
 		return 0;
-	req->wb_count++;
-	retval = nfs_wait_event(clnt, req->wb_wait, !NFS_WBACK_BUSY(req));
-	nfs_release_request(req);
-        return retval;
+	return nfs_wait_event(clnt, req->wb_wait, !NFS_WBACK_BUSY(req));
 }
 
 /*
@@ -1239,6 +1235,13 @@ nfs_writeback_done(struct rpc_task *task)
 	}
 #endif
 
+	/*
+	 * Update attributes as result of writeback.
+	 * FIXME: There is an inherent race with invalidate_inode_pages and
+	 *	  writebacks since the page->count is kept > 1 for as long
+	 *	  as the page has a write request pending.
+	 */
+	nfs_write_attributes(inode, resp->fattr);
 	while (!list_empty(&data->pages)) {
 		req = nfs_list_entry(data->pages.next);
 		nfs_list_remove_request(req);
@@ -1278,9 +1281,6 @@ nfs_writeback_done(struct rpc_task *task)
 	next:
 		nfs_unlock_request(req);
 	}
-	/* Update attributes as result of writeback. */
-	nfs_write_attributes(inode, resp->fattr);
-
 }
 
 
@@ -1395,6 +1395,7 @@ nfs_commit_done(struct rpc_task *task)
         dprintk("NFS: %4d nfs_commit_done (status %d)\n",
                                 task->tk_pid, task->tk_status);
 
+	nfs_write_attributes(inode, resp->fattr);
 	while (!list_empty(&data->pages)) {
 		req = nfs_list_entry(data->pages.next);
 		nfs_list_remove_request(req);
@@ -1426,8 +1427,6 @@ nfs_commit_done(struct rpc_task *task)
 	next:
 		nfs_unlock_request(req);
 	}
-
-	nfs_write_attributes(inode, resp->fattr);
 }
 #endif
 

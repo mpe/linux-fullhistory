@@ -357,7 +357,7 @@ static int lance_set_mac_address( struct net_device *dev, void *addr );
 
 
 
-void *slow_memcpy( void *dst, const void *src, size_t len )
+static void *slow_memcpy( void *dst, const void *src, size_t len )
 
 {	char *cto = dst;
 	const char *cfrom = src;
@@ -374,6 +374,8 @@ int __init atarilance_probe( struct net_device *dev )
 {	
     int i;
 	static int found = 0;
+
+	SET_MODULE_OWNER(dev);
 
 	if (!MACH_IS_ATARI || found)
 		/* Assume there's only one board possible... That seems true, since
@@ -659,7 +661,6 @@ static int lance_open( struct net_device *dev )
 	dev->start = 1;
 
 	DPRINTK( 2, ( "%s: LANCE is open, csr0 %04x\n", dev->name, DREG ));
-	MOD_INC_USE_COUNT;
 
 	return( 0 );
 }
@@ -1062,7 +1063,6 @@ static int lance_close( struct net_device *dev )
 	   memory if we don't. */
 	DREG = CSR0_STOP;
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1152,20 +1152,13 @@ static int lance_set_mac_address( struct net_device *dev, void *addr )
 
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-
-static struct net_device atarilance_dev =
-{
-	devicename,	/* filled in by register_netdev() */
-	0, 0, 0, 0,	/* memory */
-	0, 0,		/* base, irq */
-	0, 0, 0, NULL, atarilance_probe,
-};
+static struct net_device atarilance_dev;
 
 int init_module(void)
 
 {	int err;
 
+	atarilance_dev.init = atarilance_probe;
 	if ((err = register_netdev( &atarilance_dev ))) {
 		if (err == -EIO)  {
 			printk( "No Atari Lance board found. Module not loaded.\n");

@@ -4321,7 +4321,7 @@ awe_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	level = ((level & 0xff) + (level >> 8)) / 2;
 	DEBUG(0,printk("AWEMix: cmd=%x val=%d\n", cmd & 0xff, level));
 
-	if (_SIOC_DIR(cmd) & _IOC_WRITE) {
+	if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 		switch (cmd & 0xff) {
 		case SOUND_MIXER_BASS:
 			value = level * 12 / 100;

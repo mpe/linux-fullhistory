@@ -1756,16 +1756,12 @@ static int sx_fw_ioctl (struct inode *inode, struct file *filp,
 			sx_initialized++;
 		break;
 	case SXIO_SETDEBUG:
+	case SXIO_SETGSDEBUG:
 		sx_debug = arg;
 		break;
 	case SXIO_GETDEBUG:
-		rc = sx_debug;
-		break;
-	case SXIO_SETGSDEBUG:
-		gs_debug = arg;
-		break;
 	case SXIO_GETGSDEBUG:
-		rc = gs_debug;
+		rc = sx_debug;
 		break;
 	case SXIO_GETNPORTS:
 		rc = sx_nports;

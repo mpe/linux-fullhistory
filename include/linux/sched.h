@@ -149,6 +149,8 @@ extern void update_one_process(struct task_struct *p, unsigned long user,
 extern signed long FASTCALL(schedule_timeout(signed long timeout));
 asmlinkage void schedule(void);
 
+extern void schedule_task(struct tq_struct *task);
+
 /*
  * The default fd array needs to be at least BITS_PER_LONG,
  * as this is the granularity returned by copy_fdset().

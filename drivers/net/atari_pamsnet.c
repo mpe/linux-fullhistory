@@ -561,7 +561,7 @@ bad:
 /* Check for a network adaptor of this type, and return '0' if one exists.
  */
 
-extern int __init 
+int __init 
 pamsnet_probe (dev)
 	struct net_device *dev;
 {
@@ -575,6 +575,8 @@ pamsnet_probe (dev)
 
 	if (no_more_found)
 		return -ENODEV;
+
+	SET_MODULE_OWNER(dev);
 
 	no_more_found = 1;
 
@@ -686,7 +688,6 @@ pamsnet_open(struct net_device *dev) {
 	pamsnet_timer.data = (long)dev;
 	pamsnet_timer.expires = jiffies + lp->poll_time;
 	add_timer(&pamsnet_timer);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -848,7 +849,6 @@ pamsnet_close(struct net_device *dev) {
 
 	ENABLE_IRQ();
 	stdma_release();
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -864,19 +864,13 @@ static struct net_device_stats *net_get_stats(struct net_device *dev)
 
 #ifdef MODULE
 
-static char devicename[9] = { 0, };
-static struct net_device pam_dev =
-	{
-		devicename,	/* filled in by register_netdev() */
-		0, 0, 0, 0,	/* memory */
-		0, 0,		/* base, irq */
-		0, 0, 0, NULL, pamsnet_probe,
-	};
+static struct net_device pam_dev;
 
 int
 init_module(void) {
 	int err;
 
+	pam_dev.init = pamsnet_probe;
 	if ((err = register_netdev(&pam_dev))) {
 		if (err == -EEXIST)  {
 			printk("PAM's Net/GK: devices already present. Module not loaded.\n");

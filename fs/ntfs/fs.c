@@ -428,7 +428,7 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 	int error=0;
 	ntfs_attribute *si;
 
-	r=get_empty_inode();
+	r=new_inode(dir->i_sb);
 	if(!r){
 		error=ENOMEM;
 		goto fail;
@@ -456,8 +456,6 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 
 	r->i_uid=vol->uid;
 	r->i_gid=vol->gid;
-	r->i_nlink=1;
-	r->i_sb=dir->i_sb;
 	/* FIXME: dirty? dev? */
 	/* get the file modification times from the standard information */
 	si=ntfs_find_attr(ino,vol->at_standard_information,NULL);
@@ -502,7 +500,7 @@ _linux_ntfs_mkdir(struct inode *dir, struct dentry* d, int mode)
 		goto out;
 
 	error = EIO;
-	r = get_empty_inode();
+	r = new_inode(dir->i_sb);
 	if (!r)
 		goto out;
 	
@@ -522,8 +520,6 @@ _linux_ntfs_mkdir(struct inode *dir, struct dentry* d, int mode)
 		goto out;
 	r->i_uid = vol->uid;
 	r->i_gid = vol->gid;
-	r->i_nlink = 1;
-	r->i_sb = dir->i_sb;
 	si = ntfs_find_attr(ino,vol->at_standard_information,NULL);
 	if(si){
 		char *attr = si->d.data;
