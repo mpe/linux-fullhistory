@@ -6,7 +6,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 960528==
+ *  ==FILEVERSION 970126==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -138,7 +138,6 @@ extern inline int lock_buffer (register struct ppp_buffer *buf);
 
 static int rcv_proto_ip		(struct ppp *, __u16, __u8 *, int);
 static int rcv_proto_ipx	(struct ppp *, __u16, __u8 *, int);
-static int rcv_proto_ipv6	(struct ppp *, __u16, __u8 *, int);
 static int rcv_proto_vjc_comp	(struct ppp *, __u16, __u8 *, int);
 static int rcv_proto_vjc_uncomp (struct ppp *, __u16, __u8 *, int);
 static int rcv_proto_unknown	(struct ppp *, __u16, __u8 *, int);
@@ -266,7 +265,6 @@ static
 ppp_proto_type proto_list[] = {
 	{ PPP_IP,	  rcv_proto_ip	       },
 	{ PPP_IPX,	  rcv_proto_ipx	       },
-	{ PPP_IPV6,	  rcv_proto_ipv6       },
 	{ PPP_VJC_COMP,	  rcv_proto_vjc_comp   },
 	{ PPP_VJC_UNCOMP, rcv_proto_vjc_uncomp },
 	{ PPP_LQR,	  rcv_proto_lqr	       },
@@ -1226,18 +1224,6 @@ rcv_proto_ipx (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 {
 	if (((ppp2dev (ppp)->flags & IFF_UP) != 0) && (count > 0))
 		return ppp_rcv_rx (ppp, htons (ETH_P_IPX), data, count);
-	return 0;
-}
-
-/*
- * Process the receipt of an IPV6 frame
- */
-
-static int
-rcv_proto_ipv6 (struct ppp *ppp, __u16 proto, __u8 * data, int count)
-{
-	if (((ppp2dev (ppp)->flags & IFF_UP) != 0) && (count > 0))
-		return ppp_rcv_rx (ppp, htons (ETH_P_IPV6), data, count);
 	return 0;
 }
 
@@ -3074,10 +3060,6 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 
 	case ETH_P_IP:
 		answer = ppp_dev_xmit_ip (dev, ppp, data);
-		break;
-
-	case ETH_P_IPV6:
-		answer = ppp_dev_xmit_ipx (dev, ppp, data, len, PPP_IPV6);
 		break;
 
 	default: /* All others have no support at this time. */

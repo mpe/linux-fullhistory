@@ -1484,8 +1484,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	/* Build a packet */
 
-	if(sk->debug)
-		printk("SK %p: Got address.\n",sk);
+	SOCK_DEBUG(sk, "SK %p: Got address.\n",sk);
 
 	size=sizeof(struct ddpehdr)+len+ddp_dl->header_length;	/* For headers */
 
@@ -1507,8 +1506,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		dev=rt->dev;
 	}
 
-	if(sk->debug)
-		printk("SK %p: Size needed %d, device %s\n", sk, size, dev->name);
+	SOCK_DEBUG(sk, "SK %p: Size needed %d, device %s\n", sk, size, dev->name);
 
 	size += dev->hard_header_len;
 
@@ -1523,8 +1521,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	skb->dev=dev;
 
-	if(sk->debug)
-		printk("SK %p: Begin build.\n", sk);
+	SOCK_DEBUG(sk, "SK %p: Begin build.\n", sk);
 
 	ddp=(struct ddpehdr *)skb_put(skb,sizeof(struct ddpehdr));
 	ddp->deh_pad=0;
@@ -1544,8 +1541,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	ddp->deh_dport=usat->sat_port;
 	ddp->deh_sport=sk->protinfo.af_at.src_port;
 
-	if(sk->debug)
-		printk("SK %p: Copy user data (%d bytes).\n", sk, len);
+	SOCK_DEBUG(sk, "SK %p: Copy user data (%d bytes).\n", sk, len);
 
 	err = memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
 	if (err)
@@ -1582,8 +1578,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			if(skb2)
 			{
 				loopback=1;
-				if(sk->debug)
-					printk("SK %p: send out(copy).\n", sk);
+				SOCK_DEBUG(sk, "SK %p: send out(copy).\n", sk);
 				if(aarp_send_ddp(dev,skb2,&usat->sat_addr, NULL)==-1)
 					kfree_skb(skb2, FREE_WRITE);
 				/* else queued/sent above in the aarp queue */
@@ -1593,8 +1588,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	if((dev->flags&IFF_LOOPBACK) || loopback)
 	{
-		if(sk->debug)
-			printk("SK %p: Loop back.\n", sk);
+		SOCK_DEBUG(sk, "SK %p: Loop back.\n", sk);
 		/* loop back */
 		skb_orphan(skb);
 		ddp_dl->datalink_header(ddp_dl, skb, dev->dev_addr);
@@ -1606,9 +1600,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 	else
 	{
-		if(sk->debug)
-			printk("SK %p: send out.\n", sk);
-
+		SOCK_DEBUG(sk, "SK %p: send out.\n", sk);
 		if ( rt->flags & RTF_GATEWAY ) {
 		    gsat.sat_addr = rt->gateway;
 		    usat = &gsat;
@@ -1618,8 +1610,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			kfree_skb(skb, FREE_WRITE);
 		/* else queued/sent above in the aarp queue */
 	}
-	if(sk->debug)
-		printk("SK %p: Done write (%d).\n", sk, len);
+	SOCK_DEBUG(sk, "SK %p: Done write (%d).\n", sk, len);
 	return len;
 }
 

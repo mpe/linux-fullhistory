@@ -377,7 +377,7 @@ void tcp_write_xmit(struct sock *sk)
 	 *	c) not retransmiting [Nagle]
 	 */
 
-	start_bh_atomic();
+	lock_sock(sk);
 
 	rcv_wnd = htons(tcp_select_window(sk));
 	
@@ -456,7 +456,7 @@ void tcp_write_xmit(struct sock *sk)
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	}
 
-	end_bh_atomic();
+	release_sock(sk);
 }
 
 
@@ -637,7 +637,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	int ct=0;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-	start_bh_atomic();
+	lock_sock(sk);
 
 	if (tp->retrans_head == NULL)
 		tp->retrans_head = skb_peek(&sk->write_queue);
@@ -693,9 +693,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			break;
 		}
 
-		if (sk->debug)
-			printk("retransmit sending\n");
-
+		SOCK_DEBUG(sk, "retransmit sending\n");
 		/*
 		 *	update ack and window
 		 */
@@ -705,13 +703,13 @@ void tcp_do_retransmit(struct sock *sk, int all)
 
 		size = skb->tail - (unsigned char *) th;
 		tp->af_specific->send_check(sk, th, size, skb);
-		
+
 		skb->when = jiffies;
 		buff = skb_clone(skb, GFP_ATOMIC);
 		skb_set_owner_w(buff, sk);
-		
+
 		clear_delayed_acks(sk);
-		
+
 		tp->af_specific->queue_xmit(buff);
 		
 		/*
@@ -722,14 +720,8 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		sk->prot->retransmits ++;
 		tcp_statistics.TcpRetransSegs++;
 
-		/*
-		 * Record the high sequence number to help avoid doing
-		 * to much fast retransmission.
-		 */
+		tp->high_seq = tp->snd_nxt;
 
-		if (sk->retransmits)
-		       tp->high_seq = tp->snd_nxt;
-		
 		/*
 		 *	Only one retransmit requested.
 		 */
@@ -756,7 +748,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		}
 	}
 
-	end_bh_atomic();
+	release_sock(sk);
 }
 
 /*
@@ -1035,12 +1027,8 @@ void tcp_send_ack(struct sock *sk)
 
 	tp->af_specific->send_check(sk, th, sizeof(struct tcphdr), buff);
 
-  	if (sk->debug)
-  		 printk("\rtcp_send_ack: seq %x ack %x\n", 
-			tp->snd_nxt, tp->rcv_nxt);
-
+	SOCK_DEBUG(sk, "\rtcp_send_ack: seq %x ack %x\n", tp->snd_nxt, tp->rcv_nxt);
 	tp->af_specific->queue_xmit(buff);
-
   	tcp_statistics.TcpOutSegs++;
 }
 

@@ -1895,9 +1895,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			sk->protinfo.af_ipx.node,
 			sk->protinfo.af_ipx.port) != NULL)
 		{
-			if(sk->debug)
-				printk("IPX: bind failed because port %X in"
-				       " use.\n", (int)addr->sipx_port);
+			SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n", (int)addr->sipx_port);
 			return -EADDRINUSE;
 		}
 	}
@@ -1912,9 +1910,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			IPX_NODE_LEN);
 
 		if(ipxitf_find_socket(intrfc, addr->sipx_port)!=NULL) {
-			if(sk->debug)
-				printk("IPX: bind failed because port %X in"
-				       " use.\n", (int)addr->sipx_port);
+			SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n", (int)addr->sipx_port);
 			return -EADDRINUSE;
 		}
 	}
@@ -1925,9 +1921,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	   an interface routed to IPX with the ipx routing ioctl() */
 
 	if(ipxitf_find_socket(intrfc, addr->sipx_port)!=NULL) {
-		if(sk->debug)
-			printk("IPX: bind failed because port %X in use.\n",
-				(int)addr->sipx_port);
+		SOCK_DEBUG(sk, "IPX: bind failed because port %X in use.\n", (int)addr->sipx_port);
 		return -EADDRINUSE;
 	}
 
@@ -1935,8 +1929,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	ipxitf_insert_socket(intrfc, sk);
 	sk->zapped=0;
-	if(sk->debug)
-		printk("IPX: socket is bound.\n");
+	SOCK_DEBUG(sk, "IPX: socket is bound.\n");
 	return 0;
 }
 

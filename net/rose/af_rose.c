@@ -797,8 +797,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 
 	if ((dev = rose_dev_get(&addr->srose_addr)) == NULL) {
-		if (sk->debug)
-			printk("Rose: bind failed: invalid address\n");
+		SOCK_DEBUG(sk, "Rose: bind failed: invalid address\n");
 		return -EADDRNOTAVAIL;
 	}
 
@@ -822,10 +821,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	rose_insert_socket(sk);
 
 	sk->zapped = 0;
-
-	if (sk->debug)
-		printk("Rose: socket is bound\n");
-
+	SOCK_DEBUG(sk, "Rose: socket is bound\n");
 	return 0;
 }
 
@@ -1134,14 +1130,10 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			srose.srose_digi   = sk->protinfo.rose->dest_digi;
 		}
 	}
-
-	if (sk->debug)
-		printk("Rose: sendto: Addresses built.\n");
+	SOCK_DEBUG(sk, "Rose: sendto: Addresses built.\n");
 
 	/* Build a packet */
-	if (sk->debug)
-		printk("Rose: sendto: building packet.\n");
-
+	SOCK_DEBUG(sk, "Rose: sendto: building packet.\n");
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + ROSE_MIN_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
@@ -1156,18 +1148,14 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	 */
 
 	asmptr = skb_push(skb, ROSE_MIN_LEN);
-
-	if (sk->debug)
-		printk("Building Rose Header.\n");
+	SOCK_DEBUG(sk, "Building Rose Header.\n");
 
 	/* Build a Rose Transport header */
 
 	*asmptr++ = ((sk->protinfo.rose->lci >> 8) & 0x0F) | ROSE_GFI;
 	*asmptr++ = (sk->protinfo.rose->lci >> 0) & 0xFF;
 	*asmptr++ = ROSE_DATA;
-
-	if (sk->debug)
-		printk("Built header.\n");
+	SOCK_DEBUG(sk, "Built header.\n");
 
 	/*
 	 *	Put the data on the end
@@ -1176,15 +1164,11 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	skb->h.raw = skb_put(skb, len);
 
 	asmptr = skb->h.raw;
-
-	if (sk->debug)
-		printk("Rose: Appending user data\n");
+	SOCK_DEBUG(sk, "Rose: Appending user data\n");
 
 	/* User data follows immediately after the Rose transport header */
 	memcpy_fromiovec(asmptr, msg->msg_iov, len);
-
-	if (sk->debug)
-		printk("Rose: Transmitting buffer\n");
+	SOCK_DEBUG(sk, "Rose: Transmitting buffer\n");
 
 	if (sk->state != TCP_ESTABLISHED) {
 		kfree_skb(skb, FREE_WRITE);

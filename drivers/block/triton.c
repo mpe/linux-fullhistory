@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.13  Aug 12, 1996
+ *  linux/drivers/block/triton.c	Version 1.20  Jan 27, 1997
  *
- *  Copyright (c) 1995-1996  Mark Lord
+ *  Copyright (c) 1995-1997  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
  */
 
@@ -95,6 +95,9 @@
  * available from ftp://ftp.intel.com/pub/bios/10004bs0.exe
  * (thanks to Glen Morrell <glen@spin.Stanford.edu> for researching this).
  *
+ * Thanks to "Christopher J. Reimer" <reimer@doe.carleton.ca> for fixing the
+ * problem with some (all?) ACER motherboards/BIOSs.
+ *
  * And, yes, Intel Zappa boards really *do* use the Triton IDE ports.
  */
 #include <linux/types.h>
@@ -143,7 +146,11 @@ const char *good_dma_drives[] = {"Micropolis 2112A",
  */
 #define PRD_BYTES	8
 #define PRD_ENTRIES	(PAGE_SIZE / (2 * PRD_BYTES))
-#define DEFAULT_BMIBA	0xe800	/* in case BIOS did not init it */
+
+/*
+ * Interface to access piix registers
+ */
+static unsigned int piix_key;
 
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
@@ -366,6 +373,53 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 	printk("\n");
 }
 
+/* The next two functions were stolen from cmd640.c, with
+   a few modifications  */
+
+static void put_piix_reg (unsigned short reg, long val)
+{
+  unsigned long flags;
+
+  save_flags(flags);
+  cli();
+  outl_p((reg & 0xfc) | piix_key, 0xcf8);
+  outl_p(val, (reg & 3) | 0xcfc);
+  restore_flags(flags);
+}
+
+static long get_piix_reg (unsigned short reg)
+{
+  long b;
+  unsigned long flags;
+
+  save_flags(flags);
+  cli();
+  outl_p((reg & 0xfc) | piix_key, 0xcf8);
+  b = inl_p((reg & 3) | 0xcfc);
+  restore_flags(flags);
+  return b;
+}
+
+/*
+ * Search for an (apparently) unused block of I/O space
+ * of "size" bytes in length.
+ */
+static short find_free_region (unsigned short size)
+{
+	unsigned short i, base = 0xe800;
+	for (base = 0xe800; base > 0; base -= 0x800) {
+		if (!check_region(base,size)) {
+			for (i = 0; i < size; i++) {
+				if (inb(base+i) != 0xff)
+					goto next;
+			}
+			return base;	/* success */
+		}
+	next:
+	}
+	return 0;	/* failure */
+}
+
 /*
  * ide_init_triton() prepares the IDE driver for DMA operation.
  * This routine is called once, from ide.c during driver initialization,
@@ -379,8 +433,9 @@ void ide_init_triton (byte bus, byte fn)
 	unsigned int bmiba, timings;
 
 	printk("ide: i82371 PIIX (Triton) on PCI bus %d function %d\n", bus, fn);
+
 	/*
-	 * See if IDE and BM-DMA features are enabled:
+	 * See if IDE ports are enabled
 	 */
 	if ((rc = pcibios_read_config_word(bus, fn, 0x04, &pcicmd)))
 		goto quit;
@@ -388,42 +443,44 @@ void ide_init_triton (byte bus, byte fn)
 		printk("ide: ports are not enabled (BIOS)\n");
 		goto quit;
 	}
+	if ((rc = pcibios_read_config_dword(bus, fn, 0x40, &timings)))
+		goto quit;
+	if (!(timings & 0x80008000)) {
+		printk("ide: neither port is enabled\n");
+		goto quit;
+	}
+
+	/*
+	 * See if Bus-Mastered DMA is enabled
+	 */
 	if ((pcicmd & 4) == 0) {
 		printk("ide: BM-DMA feature is not enabled (BIOS)\n");
 	} else {
 		/*
 		 * Get the bmiba base address
 		 */
-		int try_again = 1;
-		do {
-			if ((rc = pcibios_read_config_dword(bus, fn, 0x20, &bmiba)))
-				goto quit;
-			bmiba &= 0xfff0;	/* extract port base address */
-			if (bmiba) {
-				dma_enabled = 1;
-				break;
-			} else {
-				printk("ide: BM-DMA base register is invalid (0x%04x, PnP BIOS problem)\n", bmiba);
-				if (inb(DEFAULT_BMIBA) != 0xff || !try_again)
-					break;
-				printk("ide: setting BM-DMA base register to 0x%04x\n", DEFAULT_BMIBA);
-				if ((rc = pcibios_write_config_word(bus, fn, 0x04, pcicmd&~1)))
-					goto quit;
-				rc = pcibios_write_config_dword(bus, fn, 0x20, DEFAULT_BMIBA|1);
-				if (pcibios_write_config_word(bus, fn, 0x04, pcicmd|5) || rc)
-					goto quit;
+		if ((rc = pcibios_read_config_dword(bus, fn, 0x20, &bmiba)))
+			goto quit;
+		bmiba &= 0xfff0;	/* extract port base address */
+		if (bmiba) {
+			dma_enabled = 1;
+		} else {
+			unsigned short base;
+		        printk("ide: BM-DMA base register is invalid (0x%04x, PnP BIOS problem)\n", bmiba);
+			base = find_free_region(16);
+		        if (base) {
+				printk("ide: bypassing BIOS; setting BMIBA to 0x%04x\n", base);
+				piix_key = 0x80000000 + (fn * 0x100);
+				put_piix_reg(0x04,get_piix_reg(0x04)&~5);
+				put_piix_reg(0x20,(get_piix_reg(0x20)&0xFFFF000F)|base|1);
+				put_piix_reg(0x04,get_piix_reg(0x04)|5);
+				bmiba = get_piix_reg(0x20)&0x0000FFF0;
+				if (bmiba == base && (get_piix_reg(0x04) & 5) == 5)
+					dma_enabled = 1;
+				else
+					printk("ide: no such luck; DMA disabled\n");
 			}
-		} while (try_again--);
-	}
-
-	/*
-	 * See if ide port(s) are enabled
-	 */
-	if ((rc = pcibios_read_config_dword(bus, fn, 0x40, &timings)))
-		goto quit;
-	if (!(timings & 0x80008000)) {
-		printk("ide: neither port is enabled\n");
-		goto quit;
+		}
 	}
 
 	/*

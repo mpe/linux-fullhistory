@@ -4128,7 +4128,6 @@ static void floppy_release_irq_and_dma(void)
 extern char *get_options(char *str, int *ints);
 
 char *floppy=NULL;
-MODULE_PARM(floppy, "s");
 
 static void parse_floppy_cfg_string(char *cfg)
 {

@@ -12,7 +12,7 @@
  * for more info.
  */
 #include <linux/config.h>
-
+#include <linux/poll.h>
 
 #include "sound_config.h"
 
@@ -542,44 +542,31 @@ audio_init_devices (void)
    */
 }
 
-int
-audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+unsigned int
+audio_poll (kdev_t dev, struct fileinfo *file, poll_table * wait)
 {
   char           *dma_buf;
+  unsigned int	  mask = 0;
   int             buf_no, buf_ptr, buf_size;
 
   dev = dev >> 4;
 
-  switch (sel_type)
-    {
-    case SEL_IN:
-      if (audio_mode[dev] & AM_WRITE && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	{
-	  return 0;		/* Not recording */
-	}
+  mask = DMAbuf_poll (dev, file, wait);
 
-      return DMAbuf_select (dev, file, sel_type, wait);
-      break;
+/* sel_in */
+  if (audio_mode[dev] & AM_WRITE && !(audio_devs[dev]->flags & DMA_DUPLEX))
+    mask &= ~(POLLIN | POLLRDNORM); /* Wrong direction */
 
-    case SEL_OUT:
-      if (audio_mode[dev] & AM_READ && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	{
-	  return 0;		/* Wrong direction */
-	}
+/* sel_out */
+  if (audio_mode[dev] & AM_READ && !(audio_devs[dev]->flags & DMA_DUPLEX)) {
+    mask &= ~(POLLOUT | POLLWRNORM); /* Wrong direction */
+    goto sel_ex;
+  }
+  if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
+    mask |= POLLOUT | POLLWRNORM;
 
-      if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
-	{
-	  return 1;		/* There is space in the current buffer */
-	}
-
-      return DMAbuf_select (dev, file, sel_type, wait);
-      break;
-
-    case SEL_EX:
-      return 0;
-    }
-
-  return 0;
+ sel_ex:
+  return mask;
 }
 
 

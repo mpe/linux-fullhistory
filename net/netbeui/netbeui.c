@@ -510,10 +510,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	}
 
 	/* Build a packet */
-
-	if(sk->debug)
-		printk("SK %p: Got address.\n",sk);
-
+	SOCK_DEBUG(sk, "SK %p: Got address.\n",sk);
 	size=sizeof(struct ddpehdr)+len+nb_dl->header_length;	/* For headers */
 
 	if(usat->sat_addr.s_net!=0 || usat->sat_addr.s_node == ATADDR_ANYNODE)
@@ -533,12 +530,8 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 			return -ENETUNREACH;
 		dev=rt->dev;
 	}
-
-	if(sk->debug)
-		printk("SK %p: Size needed %d, device %s\n", sk, size, dev->name);
-
+	SOCK_DEBUG(sk, "SK %p: Size needed %d, device %s\n", sk, size, dev->name);
 	size += dev->hard_header_len;
-
 	skb = sock_alloc_send_skb(sk, size, 0, 0 , &err);
 	if(skb==NULL)
 		return err;
@@ -548,12 +541,8 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	skb->arp=1;
 	skb_reserve(skb,nb_dl->header_length);
 	skb_reserve(skb,dev->hard_header_len);
-
 	skb->dev=dev;
-
-	if(sk->debug)
-		printk("SK %p: Begin build.\n", sk);
-
+	SOCK_DEBUG(sk, "SK %p: Begin build.\n", sk);
 	ddp=(struct ddpehdr *)skb_put(skb,sizeof(struct ddpehdr));
 	ddp->deh_pad=0;
 	ddp->deh_hops=0;
@@ -571,10 +560,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	ddp->deh_snode=sk->protinfo.af_at.src_node;
 	ddp->deh_dport=usat->sat_port;
 	ddp->deh_sport=sk->protinfo.af_at.src_port;
-
-	if(sk->debug)
-		printk("SK %p: Copy user data (%d bytes).\n", sk, len);
-
+	SOCK_DEBUG(sk, "SK %p: Copy user data (%d bytes).\n", sk, len);
 	err = memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
 	if (err)
 	{
@@ -610,8 +596,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 			if(skb2)
 			{
 				loopback=1;
-				if(sk->debug)
-					printk("SK %p: send out(copy).\n", sk);
+				SOCK_DEBUG(sk, "SK %p: send out(copy).\n", sk);
 				if(aarp_send_ddp(dev,skb2,&usat->sat_addr, NULL)==-1)
 					kfree_skb(skb2, FREE_WRITE);
 				/* else queued/sent above in the aarp queue */
@@ -621,8 +606,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 
 	if((dev->flags&IFF_LOOPBACK) || loopback)
 	{
-		if(sk->debug)
-			printk("SK %p: Loop back.\n", sk);
+		SOCK_DEBUG(sk, "SK %p: Loop back.\n", sk);
 		/* loop back */
 		atomic_sub(skb->truesize, &sk->wmem_alloc);
 		nb_dl->datalink_header(nb_dl, skb, dev->dev_addr);
@@ -635,9 +619,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	}
 	else
 	{
-		if(sk->debug)
-			printk("SK %p: send out.\n", sk);
-
+		SOCK_DEBUG(sk, "SK %p: send out.\n", sk);
 		if ( rt->flags & RTF_GATEWAY ) {
 		    gsat.sat_addr = rt->gateway;
 		    usat = &gsat;
@@ -647,8 +629,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 			kfree_skb(skb, FREE_WRITE);
 		/* else queued/sent above in the aarp queue */
 	}
-	if(sk->debug)
-		printk("SK %p: Done write (%d).\n", sk, len);
+	SOCK_DEBUG(sk, "SK %p: Done write (%d).\n", sk, len);
 	return len;
 }
 

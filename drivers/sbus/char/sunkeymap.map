@@ -51,13 +51,13 @@ keycode 0x0e = F6			F16	Console_18
 # BLANK KEY on type 5 keyboards
 keycode 0x0f =
 keycode 0x10 = F7			F17	Console_19
-	control	Keycode			0x10 = F7
+	control	keycode			0x10 = F7
 	alt	keycode			0x10 = Console_7
 	control	alt	keycode		0x10 = Console_7
 keycode 0x11 = F8			F18	Console_20
-	control	keycode			0x10 = F8
-	alt	keycode			0x10 = Console_8
-	control	alt	keycode		0x10 = Console_8
+	control	keycode			0x11 = F8
+	alt	keycode			0x11 = Console_8
+	control	alt	keycode		0x11 = Console_8
 keycode 0x12 = F9			F19	Console_21
 	control	keycode			0x12 = F9
 	alt	keycode			0x12 = Console_9

@@ -735,8 +735,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 
 	if ((dev = nr_dev_get(&addr->fsa_ax25.sax25_call)) == NULL) {
-		if (sk->debug)
-			printk("NET/ROM: bind failed: invalid node callsign\n");
+		SOCK_DEBUG(sk, "NET/ROM: bind failed: invalid node callsign\n");
 		return -EADDRNOTAVAIL;
 	}
 
@@ -765,10 +764,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	nr_insert_socket(sk);
 
 	sk->zapped = 0;
-
-	if (sk->debug)
-		printk("NET/ROM: socket is bound\n");
-
+	SOCK_DEBUG(sk, "NET/ROM: socket is bound\n");
 	return 0;
 }
 
@@ -1105,14 +1101,10 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 		sax.sax25_family = AF_NETROM;
 		sax.sax25_call   = sk->protinfo.nr->dest_addr;
 	}
-
-	if (sk->debug)
-		printk("NET/ROM: sendto: Addresses built.\n");
+	SOCK_DEBUG(sk, "NET/ROM: sendto: Addresses built.\n");
 
 	/* Build a packet */
-	if (sk->debug)
-		printk("NET/ROM: sendto: building packet.\n");
-
+	SOCK_DEBUG(sk, "NET/ROM: sendto: building packet.\n");
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
@@ -1127,9 +1119,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 	 */
 
 	asmptr = skb_push(skb, NR_TRANSPORT_LEN);
-
-	if (sk->debug)
-		printk("Building NET/ROM Header.\n");
+	SOCK_DEBUG(sk, "Building NET/ROM Header.\n");
 
 	/* Build a NET/ROM Transport header */
 
@@ -1138,9 +1128,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 	*asmptr++ = 0;		/* To be filled in later */
 	*asmptr++ = 0;		/*      Ditto            */
 	*asmptr++ = NR_INFO;
-
-	if (sk->debug)
-		printk("Built header.\n");
+	SOCK_DEBUG(sk, "Built header.\n");
 
 	/*
 	 *	Put the data on the end
@@ -1149,15 +1137,11 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 	skb->h.raw = skb_put(skb, len);
 
 	asmptr = skb->h.raw;
-
-	if (sk->debug)
-		printk("NET/ROM: Appending user data\n");
+	SOCK_DEBUG(sk, "NET/ROM: Appending user data\n");
 
 	/* User data follows immediately after the NET/ROM transport header */
 	memcpy_fromiovec(asmptr, msg->msg_iov, len);
-
-	if (sk->debug)
-		printk("NET/ROM: Transmitting buffer\n");
+	SOCK_DEBUG(sk, "NET/ROM: Transmitting buffer\n");
 
 	if (sk->state != TCP_ESTABLISHED) {
 		kfree_skb(skb, FREE_WRITE);

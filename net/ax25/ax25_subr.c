@@ -528,8 +528,7 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 void ax25_dama_on(ax25_cb *ax25)
 {
 	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
-		if (ax25->sk != NULL && ax25->sk->debug)
-			printk("ax25_dama_on: DAMA on\n");
+		SOCK_DEBUG(ax25->sk, "ax25_dama_on: DAMA on\n");
 		ax25_kiss_cmd(ax25, 5, 1);
 	}
 }
@@ -541,8 +540,7 @@ void ax25_dama_off(ax25_cb *ax25)
 
 	ax25->dama_slave = 0;
 	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
-		if (ax25->sk != NULL && ax25->sk->debug)
-			printk("ax25_dama_off: DAMA off\n");
+		SOCK_DEBUG(ax25->sk, "ax25_dama_off: DAMA off\n");
 		ax25_kiss_cmd(ax25, 5, 0);
 	}
 }

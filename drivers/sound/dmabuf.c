@@ -11,7 +11,7 @@
  * for more info.
  */
 #include <linux/config.h>
-
+#include <linux/poll.h>
 
 #include "sound_config.h"
 
@@ -1834,109 +1834,70 @@ DMAbuf_reset_dma (int dev)
 {
 }
 
-int
-DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+unsigned int
+DMAbuf_poll (kdev_t dev, struct fileinfo *file, poll_table * wait)
 {
+  unsigned int mask = 0;
   struct dma_buffparms *dmap;
   unsigned long   flags;
 
-  switch (sel_type)
-    {
-    case SEL_IN:
-      if (!(audio_devs[dev]->open_mode))
-	return 0;
+  save_flags (flags);
+  cli ();
 
-      dmap = audio_devs[dev]->dmap_in;
+  in_sleep_flag[dev].opts = WK_SLEEP;
+  poll_wait (&in_sleeper[dev], wait);
+  out_sleep_flag[dev].opts = WK_SLEEP;
+  poll_wait (&out_sleeper[dev], wait);
 
-      if (dmap->mapping_flags & DMA_MAP_MAPPED)
-	{
-	  if (dmap->qlen)
-	    return 1;
+  restore_flags (flags);
 
-	  save_flags (flags);
-	  cli ();
+/* sel_in */
+  dmap = audio_devs[dev]->dmap_in;
+  if (!(audio_devs[dev]->open_mode))
+    goto sel_out;
+  if (dmap->mapping_flags & DMA_MAP_MAPPED) {
+    if (dmap->qlen)
+      mask |= POLLIN | POLLRDNORM;
+    goto sel_out;
+  }
+  if (dmap->dma_mode != DMODE_INPUT) {
+    if (dmap->dma_mode == DMODE_NONE &&
+	audio_devs[dev]->enable_bits & PCM_ENABLE_INPUT &&
+	!dmap->qlen &&
+	audio_devs[dev]->go) {
+      unsigned long   flags;
 
-	  in_sleep_flag[dev].opts = WK_SLEEP;
-	  select_wait (&in_sleeper[dev], wait);
-	  restore_flags (flags);
-	  return 0;
-	}
-
-      if (dmap->dma_mode != DMODE_INPUT)
-	{
-	  if (dmap->dma_mode == DMODE_NONE &&
-	      audio_devs[dev]->enable_bits & PCM_ENABLE_INPUT &&
-	      !dmap->qlen &&
-	      audio_devs[dev]->go)
-	    {
-	      unsigned long   flags;
-
-	      save_flags (flags);
-	      cli ();
-	      activate_recording (dev, dmap);
-	      restore_flags (flags);
-	    }
-	  return 0;
-	}
-
-      if (!dmap->qlen)
-	{
-	  save_flags (flags);
-	  cli ();
-
-	  in_sleep_flag[dev].opts = WK_SLEEP;
-	  select_wait (&in_sleeper[dev], wait);
-	  restore_flags (flags);
-	  return 0;
-	}
-      return 1;
-      break;
-
-    case SEL_OUT:
-      dmap = audio_devs[dev]->dmap_out;
-
-      if (dmap->mapping_flags & DMA_MAP_MAPPED)
-	{
-	  if (dmap->qlen)
-	    return 1;
-
-	  save_flags (flags);
-	  cli ();
-
-	  out_sleep_flag[dev].opts = WK_SLEEP;
-	  select_wait (&out_sleeper[dev], wait);
-	  restore_flags (flags);
-	  return 0;
-	}
-
-      if (dmap->dma_mode == DMODE_INPUT)
-	{
-	  return 0;
-	}
-
-      if (dmap->dma_mode == DMODE_NONE)
-	{
-	  return 1;
-	}
-
-      if (!space_in_queue (dev))
-	{
-	  save_flags (flags);
-	  cli ();
-
-	  out_sleep_flag[dev].opts = WK_SLEEP;
-	  select_wait (&out_sleeper[dev], wait);
-	  restore_flags (flags);
-	  return 0;
-	}
-      return 1;
-      break;
-
-    case SEL_EX:
-      return 0;
+      save_flags (flags);
+      cli ();
+      activate_recording (dev, dmap);
+      restore_flags (flags);
     }
+    goto sel_out;
+  }
+  if (!dmap->qlen)
+    goto sel_out;
+  mask |= POLLIN | POLLRDNORM;
 
-  return 0;
+ sel_out:
+  dmap = audio_devs[dev]->dmap_out;
+
+  if (dmap->mapping_flags & DMA_MAP_MAPPED) {
+    if (dmap->qlen)
+      mask |= POLLOUT | POLLWRNORM;
+    goto sel_ex;
+  }
+  if (dmap->dma_mode == DMODE_INPUT)
+    goto sel_ex;
+  if (dmap->dma_mode == DMODE_NONE) {
+    mask |= POLLOUT | POLLWRNORM;
+    goto sel_ex;
+  }
+  if (!space_in_queue (dev))
+    goto sel_ex;
+  mask |= POLLOUT | POLLWRNORM;
+
+sel_ex:
+  return mask;
 }
 
 

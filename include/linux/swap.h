@@ -19,6 +19,7 @@
 struct swap_info_struct {
 	unsigned int flags;
 	kdev_t swap_device;
+	char *swap_filename;
 	struct inode * swap_file;
 	unsigned char * swap_map;
 	unsigned char * swap_lockmap;

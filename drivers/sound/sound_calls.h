@@ -18,7 +18,7 @@ void DMAbuf_close_dma (int dev);
 void DMAbuf_reset_dma (int dev);
 void DMAbuf_inputintr(int dev);
 void DMAbuf_outputintr(int dev, int underflow_flag);
-int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+unsigned int DMAbuf_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
 void DMAbuf_start_device(int dev);
 void DMAbuf_start_devices(unsigned int devmask);
 void DMAbuf_reset (int dev);
@@ -36,7 +36,7 @@ int audio_ioctl (int dev, struct fileinfo *file,
 	   unsigned int cmd, caddr_t arg);
 void audio_init_devices (void);
 
-int audio_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+unsigned int audio_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
 
 /*
  *	System calls for the /dev/sequencer
@@ -56,7 +56,7 @@ unsigned long compute_finetune(unsigned long base_freq, int bend, int range);
 void seq_input_event(unsigned char *event, int len);
 void seq_copy_to_input (unsigned char *event, int len);
 
-int sequencer_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+unsigned int sequencer_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
 
 /*
  *	System calls for the /dev/midi
@@ -72,7 +72,7 @@ int MIDIbuf_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 void MIDIbuf_init(void);
 
-int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+unsigned int MIDIbuf_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
 
 /*
  *

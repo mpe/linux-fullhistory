@@ -154,7 +154,7 @@ struct mm_struct {
 #define INIT_MM { \
 		1, \
 		swapper_pg_dir, \
-		-1, \
+		0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \

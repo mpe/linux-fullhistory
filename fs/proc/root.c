@@ -510,6 +510,10 @@ static struct proc_dir_entry proc_root_mounts = {
 	PROC_MTAB, 6, "mounts",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 };
+static struct proc_dir_entry proc_root_swaps = {
+	PROC_MTAB, 5, "swaps",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+};
 static struct proc_dir_entry proc_root_profile = {
 	PROC_PROFILE, 7, "profile",
 	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
@@ -572,6 +576,7 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_locks);
 
 	proc_register(&proc_root, &proc_root_mounts);
+	proc_register(&proc_root, &proc_root_swaps);
 
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
 #ifdef CONFIG_SUN_OPENPROMFS

@@ -1011,6 +1011,7 @@ extern int get_pci_list(char*);
 extern int get_md_status (char *);
 extern int get_rtc_status (char *);
 extern int get_locks_status (char *);
+extern int get_swaparea_info (char *);
 #ifdef __SMP_PROF__
 extern int get_smp_prof_list(char *);
 #endif
@@ -1088,6 +1089,9 @@ static long get_root_array(char * page, int type, char **start,
 
                 case PROC_MTAB:
                        return get_filesystem_info( page );
+
+                case PROC_SWAP:
+                       return get_swaparea_info(page);
 #ifdef CONFIG_RTC
 		case PROC_RTC:
 			return get_rtc_status(page);

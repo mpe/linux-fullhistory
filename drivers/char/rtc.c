@@ -54,6 +54,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/poll.h>
 
 /*
  *	We sponge a minor off of the misc major. No need slurping

@@ -477,10 +477,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	/* If the socket is dead, don't accept the connection.	*/
 	if (sk->dead)
 	{
-		if(sk->debug)
-		{
-			printk("Reset on %p: Connect on dead socket.\n",sk);
-		}
+		SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
 		tcp_statistics.TcpAttemptFails++;
 		return -ENOTCONN;		
 	}

@@ -524,16 +524,13 @@ static int tcp_readable(struct sock *sk)
 	int sum;
 	unsigned long flags;
 
-	if(sk && sk->debug)
-	  	printk("tcp_readable: %p - ",sk);
-
+	SOCK_DEBUG(sk, "tcp_readable: %p - ",sk);
 	save_flags(flags);
 	cli();
 	if (sk == NULL || (skb = skb_peek(&sk->receive_queue)) == NULL)
 	{
 		restore_flags(flags);
-	  	if(sk && sk->debug)
-	  		printk("empty\n");
+		SOCK_DEBUG(sk, "empty\n");
 	  	return(0);
 	}
 
@@ -592,8 +589,7 @@ static int tcp_readable(struct sock *sk)
 	while(skb != (struct sk_buff *)&sk->receive_queue);
 
 	restore_flags(flags);
-	if(sk->debug)
-	  	printk("got %lu bytes.\n",amount);
+	SOCK_DEBUG(sk, "got %lu bytes.\n",amount);
 	return(amount);
 }
 
@@ -1043,9 +1039,6 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			sk->write_seq += copy;
 		
 			tcp_send_skb(sk, skb);
-
-			release_sock(sk);
-			lock_sock(sk);
 		}
 	}
 
@@ -1159,7 +1152,7 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 
 static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 {
-	sk->ack_backlog++;
+	sk->delayed_acks++;
 
 	__skb_unlink(skb, &sk->receive_queue);
 	kfree_skb(skb, FREE_READ);
@@ -1169,41 +1162,36 @@ static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 static void cleanup_rbuf(struct sock *sk)
 {
 	struct sk_buff *skb;
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	unsigned long pspace, rspace;
 
 	/*
 	 * NOTE! The socket must be locked, so that we don't get
 	 * a messed-up receive queue.
 	 */
 
-	pspace = sock_rspace(sk);
-	
 	while ((skb=skb_peek(&sk->receive_queue)) != NULL) {
 		if (!skb->used || skb->users>1)
 			break;
 		tcp_eat_skb(sk, skb);
 	}
-       
-	if(sk->debug)
-		printk("sk->rspace = %lu\n", sock_rspace(sk));
-	
+
+	SOCK_DEBUG(sk, "sk->rspace = %lu\n", sock_rspace(sk));
+
 	/*
 	 *  We send a ACK if the sender is blocked
 	 *  else let tcp_data deal with the acking policy.
 	 */
 
-	rspace = sock_rspace(sk);
-
-	if ((rspace > pspace) &&
-	    (rspace > tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup)) && 
-	    (tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup) < sk->mss)) 
+	if (sk->delayed_acks)
 	{
-		/* Send an ack right now. */
-		sk->delayed_acks++;
-		tcp_read_wakeup(sk);
-	}	
-} 
+		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+		__u32 rcv_wnd;
+
+		rcv_wnd = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
+
+		if ((rcv_wnd < sk->mss) && (sock_rspace(sk) > rcv_wnd))
+			tcp_read_wakeup(sk);
+	}
+}
 
 
 /*
@@ -1413,7 +1401,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			 */
 			*seq -= err;
 			atomic_dec(&skb->users);
-			return -EFAULT;
+			copied = -EFAULT;
+			break;
 		}
 
 		copied += used;
@@ -1467,7 +1456,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 					       msg->msg_name);       
 	}
 	if(addr_len)
-		*addr_len= tp->af_specific->sockaddr_len;
+		*addr_len = tp->af_specific->sockaddr_len;
 
 	remove_wait_queue(sk->sleep, &wait);
 	current->state = TASK_RUNNING;
@@ -1583,10 +1572,10 @@ void tcp_shutdown(struct sock *sk, int how)
 	/*
 	 *	FIN if needed
 	 */
-	 
+
 	if (tcp_close_state(sk,0))
 		tcp_send_fin(sk);
-		
+
 	release_sock(sk);
 }
 

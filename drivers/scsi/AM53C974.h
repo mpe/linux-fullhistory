@@ -194,12 +194,12 @@
 #define CNTLREG2	    	0x2C	/* rw	control register two		   */
 #define CNTLREG2_ENF		0x40	/* enable features			   */
 
-#define CNTLREG3	    	0x30	/* rw	control register three		   */ 
+#define CNTLREG3	    	0x30	/* rw	control register three		   */
 #define CNTLREG3_ADIDCHK	0x80	/* additional ID check			   */
 #define CNTLREG3_FASTSCSI	0x10	/* fast SCSI				   */
 #define CNTLREG3_FASTCLK	0x08	/* fast SCSI clocking			   */
 
-#define CNTLREG4	    	0x34	/* rw	control register four		   */ 
+#define CNTLREG4	    	0x34	/* rw	control register four		   */
 #define CNTLREG4_GLITCH		0xC0	/* glitch eater				   */
 #define CNTLREG4_PWD		0x20	/* reduced power feature		   */
 #define CNTLREG4_RAE		0x08	/* write only, active negot. ctrl.	   */
@@ -268,7 +268,7 @@ extern struct proc_dir_entry proc_scsi_am53c974;
 
 #define AM53C974 { \
     NULL,              		/* pointer to next in list                      */  \
-    NULL,			/* long * usage_count				*/  \
+    NULL,			/* struct module *module			*/  \
     &proc_scsi_am53c974,        /* struct proc_dir_entry *proc_dir              */ \
     NULL,                       /* int (*proc_info)(char *, char **, off_t, int, int, int); */ \
     "AM53C974",        		/* name                                         */  \

@@ -432,8 +432,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	sk->state = state;
 
 #ifdef STATE_TRACE
-	if(sk->debug)
-		printk("TCP sk=%p, State %s -> %s\n",sk, statename[oldstate],statename[state]);
+	SOCK_DEBUG(sk, "TCP sk=%p, State %s -> %s\n",sk, statename[oldstate],statename[state]);
 #endif	
 
 	switch (state) {

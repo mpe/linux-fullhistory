@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.1 1996/12/13 14:48:20 jj Exp $
+/* $Id: namei.h,v 1.3 1997/01/26 23:36:36 davem Exp $
  * linux/include/asm-sparc/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -11,8 +11,7 @@
 #define SPARC_BSD_EMUL "usr/gnemul/sunos/"
 #define SPARC_SOL_EMUL "usr/gnemul/solaris/"
 
-#if 1
-#define gnemul_namei(pathname, base, follow_links, res_inode) ({					\
+#define translate_namei(pathname, base, follow_links, res_inode) ({					\
 	if ((current->personality & (PER_BSD|PER_SVR4)) && !base && *pathname == '/') {			\
 		struct inode *emul_ino;									\
 		int namelen;										\
@@ -31,11 +30,8 @@
 		base->i_count++;									\
 	}												\
 })
-#else
-#define gnemul_namei(pathname, base, follow_links, res_inode) do { } while (0)
-#endif
 
-#define gnemul_open_namei(pathname, flag, mode, res_inode, base) ({					\
+#define translate_open_namei(pathname, flag, mode, res_inode, base) ({					\
 	if ((current->personality & (PER_BSD|PER_SVR4)) && !base && *pathname == '/') {			\
 		struct inode *emul_ino;									\
 		int namelen;										\

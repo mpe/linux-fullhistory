@@ -11,6 +11,7 @@
  * for more info.
  */
 #include <linux/config.h>
+#include <linux/poll.h>
 
 
 #define SEQUENCER_C
@@ -1768,50 +1769,28 @@ sequencer_ioctl (int dev, struct fileinfo *file,
   return -EINVAL;
 }
 
-int
-sequencer_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+unsigned int
+sequencer_poll (kdev_t dev, struct fileinfo *file, poll_table * wait)
 {
+  unsigned int	  mask = 0;
   unsigned long   flags;
 
-  dev = dev >> 4;
+  save_flags (flags);
+  cli ();
 
-  switch (sel_type)
-    {
-    case SEL_IN:
-      save_flags (flags);
-      cli ();
-      if (!iqlen)
-	{
+  midi_sleep_flag.opts = WK_SLEEP;
+  poll_wait (&midi_sleeper, wait);
+  seq_sleep_flag.opts = WK_SLEEP;
+  poll_wait (&seq_sleeper, wait);
 
-	  midi_sleep_flag.opts = WK_SLEEP;
-	  select_wait (&midi_sleeper, wait);
-	  restore_flags (flags);
-	  return 0;
-	}
-      restore_flags (flags);
-      return 1;
-      break;
+  restore_flags (flags);
 
-    case SEL_OUT:
-      save_flags (flags);
-      cli ();
-      if ((SEQ_MAX_QUEUE - qlen) < output_threshold)
-	{
+  if (iqlen)
+    mask |= POLLIN | POLLRDNORM;
+  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
+    mask |= POLLOUT | POLLWRNORM;
 
-	  seq_sleep_flag.opts = WK_SLEEP;
-	  select_wait (&seq_sleeper, wait);
-	  restore_flags (flags);
-	  return 0;
-	}
-      restore_flags (flags);
-      return 1;
-      break;
-
-    case SEL_EX:
-      return 0;
-    }
-
-  return 0;
+  return mask;
 }
 
 

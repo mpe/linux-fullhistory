@@ -11,6 +11,7 @@
  * for more info.
  */
 #include <linux/config.h>
+#include <linux/poll.h>
 
 
 #include "sound_config.h"
@@ -497,40 +498,21 @@ MIDIbuf_ioctl (int dev, struct fileinfo *file,
       }
 }
 
-int
-MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
+unsigned int
+MIDIbuf_poll (kdev_t dev, struct fileinfo *file, poll_table * wait)
 {
-  dev = dev >> 4;
+  unsigned int mask = 0;
 
-  switch (sel_type)
-    {
-    case SEL_IN:
-      if (!DATA_AVAIL (midi_in_buf[dev]))
-	{
+  input_sleep_flag[dev].opts = WK_SLEEP;
+  poll_wait (&input_sleeper[dev], wait);
+  midi_sleep_flag[dev].opts = WK_SLEEP;
+  poll_wait (&midi_sleeper[dev], wait);
 
-	  input_sleep_flag[dev].opts = WK_SLEEP;
-	  select_wait (&input_sleeper[dev], wait);
-	  return 0;
-	}
-      return 1;
-      break;
-
-    case SEL_OUT:
-      if (SPACE_AVAIL (midi_out_buf[dev]))
-	{
-
-	  midi_sleep_flag[dev].opts = WK_SLEEP;
-	  select_wait (&midi_sleeper[dev], wait);
-	  return 0;
-	}
-      return 1;
-      break;
-
-    case SEL_EX:
-      return 0;
-    }
-
-  return 0;
+  if (DATA_AVAIL (midi_in_buf[dev]))
+    mask |= POLLIN | POLLRDNORM;
+  if (!SPACE_AVAIL (midi_out_buf[dev]))
+    mask |= POLLOUT | POLLWRNORM;
+  return mask;
 }
 
 

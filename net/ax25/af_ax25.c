@@ -1374,41 +1374,32 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	else
 		sk->protinfo.ax25->source_addr = *call;
 
-	if (sk->debug)
-		printk("AX25: source address set to %s\n", ax2asc(&sk->protinfo.ax25->source_addr));
+	SOCK_DEBUG(sk, "AX25: source address set to %s\n", ax2asc(&sk->protinfo.ax25->source_addr));
 
 	if (addr_len == sizeof(struct full_sockaddr_ax25) && addr->fsa_ax25.sax25_ndigis == 1) {
 		if (ax25cmp(&addr->fsa_digipeater[0], &null_ax25_address) == 0) {
 			dev = NULL;
-			if (sk->debug)
-				printk("AX25: bound to any device\n");
+			SOCK_DEBUG(sk, "AX25: bound to any device\n");
 		} else {
 			if ((dev = ax25rtr_get_dev(&addr->fsa_digipeater[0])) == NULL) {
-				if (sk->debug)
-					printk("AX25: bind failed - no device\n");
+				SOCK_DEBUG(sk, "AX25: bind failed - no device\n");
 				return -EADDRNOTAVAIL;
 			}
-			if (sk->debug)
-				printk("AX25: bound to device %s\n", dev->name);
+			SOCK_DEBUG(sk, "AX25: bound to device %s\n", dev->name);
 		}
 	} else {
 		if ((dev = ax25rtr_get_dev(&addr->fsa_ax25.sax25_call)) == NULL) {
-			if (sk->debug)
-				printk("AX25: bind failed - no device\n");
+			SOCK_DEBUG(sk, "AX25: bind failed - no device\n");
 			return -EADDRNOTAVAIL;
 		}
-		if (sk->debug)
-			printk("AX25: bound to device %s\n", dev->name);
+		SOCK_DEBUG(sk, "AX25: bound to device %s\n", dev->name);
 	}
 
 	ax25_fillin_cb(sk->protinfo.ax25, dev);
 	ax25_insert_socket(sk->protinfo.ax25);
 
 	sk->zapped = 0;
-
-	if (sk->debug)
-		printk("AX25: socket is bound\n");
-
+	SOCK_DEBUG(sk, "AX25: socket is bound\n");
 	return 0;
 }
 
@@ -2028,12 +2019,10 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		dp = sk->protinfo.ax25->digipeat;
 	}
 
-	if (sk->debug)
-		printk("AX.25: sendto: Addresses built.\n");
+	SOCK_DEBUG(sk, "AX.25: sendto: Addresses built.\n");
 
 	/* Build a packet */
-	if (sk->debug)
-		printk("AX.25: sendto: building packet.\n");
+	SOCK_DEBUG(sk, "AX.25: sendto: building packet.\n");
 
 	/* Assume the worst case */
 	size = len + 3 + size_ax25_addr(dp) + AX25_BPQ_HEADER_LEN;
@@ -2045,8 +2034,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	skb_reserve(skb, size - len);
 
-	if (sk->debug)
-		printk("AX.25: Appending user data\n");
+	SOCK_DEBUG(sk, "AX.25: Appending user data\n");
 
 	/* User data follows immediately after the AX.25 data */
 	memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
@@ -2055,8 +2043,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	asmptr  = skb_push(skb, 1);
 	*asmptr = sk->protocol;
 
-	if (sk->debug)
-		printk("AX.25: Transmitting buffer\n");
+	SOCK_DEBUG(sk, "AX.25: Transmitting buffer\n");
 
 	if (sk->type == SOCK_SEQPACKET) {
 		/* Connected mode sockets go via the LAPB machine */
@@ -2071,22 +2058,18 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	} else {
 		asmptr = skb_push(skb, 1 + size_ax25_addr(dp));
 
-		if (sk->debug) {
-			printk("Building AX.25 Header (dp=%p).\n", dp);
-			if (dp != 0)
-				printk("Num digipeaters=%d\n", dp->ndigi);
-		}
+		SOCK_DEBUG(sk, "Building AX.25 Header (dp=%p).\n", dp);
+		if(dp != 0)
+			SOCK_DEBUG(sk, "Num digipeaters=%d\n", dp->ndigi);
 
 		/* Build an AX.25 header */
 		asmptr += (lv = build_ax25_addr(asmptr, &sk->protinfo.ax25->source_addr, &sax.sax25_call, dp, AX25_COMMAND, AX25_MODULUS));
 
-		if (sk->debug)
-			printk("Built header (%d bytes)\n",lv);
+		SOCK_DEBUG(sk, "Built header (%d bytes)\n",lv);
 
 		skb->h.raw = asmptr;
 
-		if (sk->debug)
-			printk("base=%p pos=%p\n", skb->data, asmptr);
+		SOCK_DEBUG(sk, "base=%p pos=%p\n", skb->data, asmptr);
 
 		*asmptr = AX25_UI;
 

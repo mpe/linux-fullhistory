@@ -1,4 +1,4 @@
-Sat Jan 18 15:51:45 1997  Richard Henderson  <richard@twiddle.rth.home>
+Sat Jan 18 15:51:45 1997  Richard Henderson  <rth@tamu.edu>
 
 	* Don't play with usage_count directly, instead hand around
 	the module header and use the module macros.

@@ -192,29 +192,29 @@ sound_ioctl (struct inode *inode, struct file *file,
   return err;
 }
 
-static int
-sound_select (struct inode *inode, struct file *file, int sel_type, select_table * wait)
+static unsigned int
+sound_poll (struct file *file, poll_table * wait)
 {
   int             dev;
 
-  dev = MINOR (inode->i_rdev);
+  dev = MINOR (file->f_inode->i_rdev);
 
   files[dev].flags = file->f_flags;
 
-  DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
+  DEB (printk ("sound_poll(dev=%d)\n", dev));
 
   switch (dev & 0x0f)
     {
 #ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
-      return sequencer_select (dev, &files[dev], sel_type, wait);
+      return sequencer_poll (dev, &files[dev], wait);
       break;
 #endif
 
 #ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
-      return MIDIbuf_select (dev, &files[dev], sel_type, wait);
+      return MIDIbuf_poll (dev, &files[dev], wait);
       break;
 #endif
 
@@ -222,7 +222,7 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
-      return audio_select (dev, &files[dev], sel_type, wait);
+      return audio_poll (dev, &files[dev], wait);
       break;
 #endif
 
@@ -327,7 +327,7 @@ static struct file_operations sound_fops =
   sound_read,
   sound_write,
   NULL,				/* sound_readdir */
-  sound_select,
+  sound_poll,
   sound_ioctl,
   sound_mmap,
   sound_open,

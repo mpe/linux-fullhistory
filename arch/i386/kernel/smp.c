@@ -638,11 +638,11 @@ void smp_callin(void)
 	load_ldt(0);
 	local_flush_tlb();
 	
-	while(!task[cpuid] || current_set[cpuid] != task[cpuid])
+	while (cpu_number_map[cpuid] == -1)
 		barrier();
 
-	if (cpu_number_map[cpuid] == -1)
-		while(1);
+	while(!task[cpuid] || current_set[cpuid] != task[cpu_number_map[cpuid]])
+		barrier();
 
 	local_flush_tlb();
 	load_TR(cpu_number_map[cpuid]);

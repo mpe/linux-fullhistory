@@ -18,6 +18,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/swapctl.h>
+#include <linux/malloc.h>
 #include <linux/blkdev.h> /* for blk_size */
 #include <linux/vmalloc.h>
 
@@ -393,6 +394,8 @@ asmlinkage int sys_swapoff(const char * specialfile)
 
 	nr_swap_pages -= p->pages;
 	iput(p->swap_file);
+	if (p->swap_filename)
+		kfree(p->swap_filename);
 	p->swap_file = NULL;
 	p->swap_device = 0;
 	vfree(p->swap_map);
@@ -404,6 +407,37 @@ asmlinkage int sys_swapoff(const char * specialfile)
 out:
 	unlock_kernel();
 	return err;
+}
+
+int get_swaparea_info(char *buf)
+{
+	struct swap_info_struct *ptr = swap_info;
+	int i, j, len = 0, usedswap;
+
+	len += sprintf(buf, "Filename\t\t\tType\t\tSize\tUsed\tPriority\n");
+	for (i = 0 ; i < nr_swapfiles ; i++, ptr++)
+		if (ptr->flags & SWP_USED) {
+			if (ptr->swap_filename)
+				len += sprintf(buf + len, "%-31s ", ptr->swap_filename);
+			else
+				len += sprintf(buf + len, "(null)\t\t\t");
+			if (ptr->swap_file)
+				len += sprintf(buf + len, "file\t\t");
+			else
+				len += sprintf(buf + len, "partition\t");
+			usedswap = 0;
+			for (j = 0; j < ptr->max; ++j)
+				switch (ptr->swap_map[j]) {
+					case 128:
+					case 0:
+						continue;
+					default:
+						usedswap++;
+				}
+			len += sprintf(buf + len, "%d\t%d\t%d\n", ptr->pages << (PAGE_SHIFT - 10), 
+				usedswap << (PAGE_SHIFT - 10), ptr->prio);
+		}
+	return len;
 }
 
 /*
@@ -418,6 +452,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	unsigned int type;
 	int i, j, prev;
 	int error = -EPERM;
+	char *tmp;
 	struct file filp;
 	static int least_priority = 0;
 
@@ -434,6 +469,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	if (type >= nr_swapfiles)
 		nr_swapfiles = type+1;
 	p->flags = SWP_USED;
+	p->swap_filename = NULL;
 	p->swap_file = NULL;
 	p->swap_device = 0;
 	p->swap_map = NULL;
@@ -541,6 +577,12 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		prev = i;
 	}
 	p->next = i;
+	if (!getname(specialfile, &tmp)) {
+		if ((p->swap_filename =
+		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
+			strcpy(p->swap_filename, tmp);
+		putname(tmp);
+	}
 	if (prev < 0) {
 		swap_list.head = swap_list.next = p - swap_info;
 	} else {

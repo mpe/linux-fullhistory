@@ -293,6 +293,14 @@ struct tcp_opt
  *	}
  */
 
+/* Define this to get the sk->debug debugging facility. */
+#define SOCK_DEBUGGING
+#ifdef SOCK_DEBUGGING
+#define SOCK_DEBUG(sk, msg...) if((sk) && ((sk)->debug)) printk(KERN_DEBUG ## msg)
+#else
+#define SOCK_DEBUG(sk, msg...) do { } while (0)
+#endif
+
 /*
  *  TCP will start to use the new protinfo while *still using the old* fields 
  */

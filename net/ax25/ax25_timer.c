@@ -149,8 +149,7 @@ static void ax25_timer(unsigned long param)
 
 			ax25->state = AX25_STATE_0;
 			if (ax25->sk != NULL) {
-				if (ax25->sk->debug)
-					printk(KERN_DEBUG "AX.25 T3 Timeout\n");
+				SOCK_DEBUG(ax25->sk, "AX.25 T3 Timeout\n");
 				ax25->sk->state     = TCP_CLOSE;
 				ax25->sk->err       = ETIMEDOUT;
 				ax25->sk->shutdown |= SEND_SHUTDOWN;
@@ -298,8 +297,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 				ax25_send_control(ax25, AX25_DM, AX25_POLLON, AX25_RESPONSE);
 				ax25->state = AX25_STATE_0;
 				if (ax25->sk != NULL) {
-					if (ax25->sk->debug)
-						printk(KERN_DEBUG "AX.25 link Failure\n");
+					SOCK_DEBUG(ax25->sk, "AX.25 link Failure\n");
 					ax25->sk->state     = TCP_CLOSE;
 					ax25->sk->err       = ETIMEDOUT;
 					ax25->sk->shutdown |= SEND_SHUTDOWN;

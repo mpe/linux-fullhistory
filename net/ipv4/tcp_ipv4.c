@@ -346,7 +346,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 	struct tcphdr *th = (struct tcphdr*)(dp+(iph->ihl<<2));
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
-	struct tcp_opt *tp;
 	struct sock *sk;
 
 	sk = get_sock(&tcp_prot, th->source, iph->daddr, th->dest, iph->saddr);
@@ -356,19 +355,12 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 
 	if (type == ICMP_SOURCE_QUENCH)
 	{
-		/*
-		 * FIXME:
-		 * Follow BSD for now and just reduce cong_window to 1 again.
-		 * It is possible that we just want to reduce the
-		 * window by 1/2, or that we want to reduce ssthresh by 1/2
-		 * here as well.
-		 */
+		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-		tp = &sk->tp_pinfo.af_tcp;
-
-		sk->cong_window = 1;
+		sk->ssthresh = max(sk->cong_window >> 1, 2);
+		sk->cong_window = sk->ssthresh + 3;
 		tp->high_seq = tp->snd_nxt;
-		
+
 		return;
 	}
 
@@ -629,10 +621,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 	/* If the socket is dead, don't accept the connection.	*/
 	if (sk->dead)
 	{
-		if(sk->debug)
-		{
-			printk("Reset on %p: Connect on dead socket.\n",sk);
-		}
+		SOCK_DEBUG(sk, "Reset on %p: Connect on dead socket.\n",sk);
 		tcp_statistics.TcpAttemptFails++;
 		return -ENOTCONN;		
 	}
@@ -1229,10 +1218,3 @@ struct proto tcp_prot = {
 	0, 0,
 	NULL
 };
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -c -o tcp_ipv4.o tcp_ipv4.c"
- * c-file-style: "Linux"
- * End:
- */
