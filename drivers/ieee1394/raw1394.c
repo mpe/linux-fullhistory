@@ -2737,7 +2737,8 @@ static int raw1394_release(struct inode *inode, struct file *file)
 						    list) {
 					entry = fi_hlp->addr_list.next;
 					while (entry != &(fi_hlp->addr_list)) {
-						arm_addr = list_entry(entry, struct
+						arm_addr = list_entry(entry,
+								      struct
 								      arm_addr,
 								      addr_list);
 						if (arm_addr->start ==
