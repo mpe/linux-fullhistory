@@ -160,7 +160,7 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 	struct file * file = NULL;
 
 	if (flags & (MAP_HASSEMAPHORE | MAP_INHERIT | MAP_UNALIGNED))
-		printk("%s: unimplemented OSF mmap flags %04lx\n", current->comm, osf_flags);
+		printk("%s: unimplemented OSF mmap flags %04lx\n", current->comm, flags);
 	if (!(flags & MAP_ANONYMOUS)) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;

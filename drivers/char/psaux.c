@@ -12,13 +12,13 @@
  * Changed to prevent keyboard lockups on AST Power Exec.
  * 28Jul93  Brad Bosch - brad@lachman.com
  *
- * Modified by Johan Myreen (jem@cs.hut.fi) 04Aug93
+ * Modified by Johan Myreen (jempandora.pp.fi) 04Aug93
  *   to include support for QuickPort mouse.
  *
  * Changed references to "QuickPort" with "82C710" since "QuickPort"
  * is not what this driver is all about -- QuickPort is just a
  * connector type, and this driver is for the mouse port on the Chips
- * & Technologies 82C710 interface chip. 15Nov93 jem@cs.hut.fi
+ * & Technologies 82C710 interface chip. 15Nov93 jem@pandora.pp.fi
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
@@ -103,6 +103,7 @@ static int aux_ready = 0;
 static int aux_busy = 0;
 static int aux_present = 0;
 static int poll_aux_status(void);
+static int poll_aux_status_nosleep(void);
 
 #ifdef CONFIG_82C710_MOUSE
 static int qp_present = 0;
@@ -121,9 +122,9 @@ static int probe_qp(void);
 
 static void aux_write_dev(int val)
 {
-	poll_aux_status();
+	poll_aux_status_nosleep();
 	outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);	/* write magic cookie */
-	poll_aux_status();
+	poll_aux_status_nosleep();
 	outb_p(val,AUX_OUTPUT_PORT);		/* write data */
 }
 
@@ -137,13 +138,7 @@ static int aux_write_ack(int val)
         int retries = 0;
 
 	aux_write_dev(val);		/* write the value to the device */
-	while ((inb(AUX_STATUS) & AUX_OBUF_FULL) != AUX_OBUF_FULL
-	            && retries < MAX_RETRIES) {          /* wait for ack */
-       		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (5*HZ + 99) / 100;
-		schedule();
-		retries++;
-        }
+	poll_aux_status_nosleep();
 
 	if ((inb(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
 	{
@@ -451,14 +446,12 @@ unsigned long psaux_init(unsigned long kmem_start)
 		psaux_fops.write = write_qp;
 		psaux_fops.open = open_qp;
 		psaux_fops.release = release_qp;
-		poll_qp_status();
 	} else
 #endif
 	if (aux_device_present == 0xaa) {
 	        printk("PS/2 auxiliary pointing device detected -- driver installed.\n");
          	aux_present = 1;
 		kbd_read_mask = AUX_OBUF_FULL;
-	        poll_aux_status();
 	} else {
 		return kmem_start;              /* No mouse at all */
 	}
@@ -474,11 +467,10 @@ unsigned long psaux_init(unsigned long kmem_start)
 	        aux_write_ack(AUX_SET_RES);
 	        aux_write_ack(3);			/* 8 counts per mm */
 	        aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
-	        poll_aux_status();
+	        poll_aux_status_nosleep();
 #endif /* INITIALIZE_DEVICE */
         	outb_p(AUX_DISABLE,AUX_COMMAND);   /* Disable Aux device */
 	        aux_write_cmd(AUX_INTS_OFF);    /* disable controller ints */
-		poll_aux_status();
 	}
 	return kmem_start;
 }
@@ -496,6 +488,18 @@ static int poll_aux_status(void)
 		retries++;
 	}
 	return !(retries==MAX_RETRIES);
+}
+
+static int poll_aux_status_nosleep(void)
+{
+	int retries = 0;
+
+	while ((inb(AUX_STATUS)&0x03) && retries < 1000000) {
+ 		if ((inb_p(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
+			inb_p(AUX_INPUT_PORT);
+		retries++;
+	}
+	return !(retries == 1000000);
 }
 
 #ifdef CONFIG_82C710_MOUSE

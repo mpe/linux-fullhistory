@@ -388,6 +388,9 @@ struct symbol_table symbol_table = {
  	X(scsi_devices),
 	X(gendisk_head), /* Needed for sd.c */
 	X(resetup_one_dev), /* Needed for sd.c */
+#if defined(CONFIG_PROC_FS)
+	X(proc_print_scsidevice),
+#endif
 #else
 	/*
 	 * With no scsi configured, we still need to export a few

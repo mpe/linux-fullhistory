@@ -1,18 +1,5 @@
-
-#define MAX_SCSI_DEVICE_CODE 10
-const char *const scsi_dev_types[MAX_SCSI_DEVICE_CODE] =
-{
-    "Direct-Access    ",
-    "Sequential-Access",
-    "Printer	      ",
-    "Processor	      ",
-    "WORM	      ",
-    "CD-ROM	      ",
-    "Scanner	      ",
-    "Optical Device   ",
-    "Medium Changer   ",
-    "Communications   "
-};
+extern void proc_print_scsidevice(Scsi_Device *scd, char *buffer, 
+				  int *size, int len);
 
 
 void swap_statistics(u8 *p)
@@ -47,22 +34,24 @@ void swap_statistics(u8 *p)
  */
 int eata_set_info(char *buffer, int length, struct Scsi_Host *HBA_ptr)
 {
+    int orig_length = length;
+
     if (length >= 8 && strncmp(buffer, "eata_dma", 8) == 0) {
-        buffer += 9;
-        length -= 9;
-        if(length >= 8 && strncmp(buffer, "latency", 7) == 0) {
-            SD(HBA_ptr)->do_latency = TRUE;
-            return(length+9);
-        } 
-        
-        if(length >=10 && strncmp(buffer, "nolatency", 9) == 0) {
-            SD(HBA_ptr)->do_latency = FALSE;
-            return(length+9);
-        } 
-        
-        printk("Unknown command:%s length: %d\n", buffer, length);
+	buffer += 9;
+	length -= 9;
+	if(length >= 8 && strncmp(buffer, "latency", 7) == 0) {
+	    SD(HBA_ptr)->do_latency = TRUE;
+	    return(orig_length);
+	} 
+	
+	if(length >=10 && strncmp(buffer, "nolatency", 9) == 0) {
+	    SD(HBA_ptr)->do_latency = FALSE;
+	    return(orig_length);
+	} 
+	
+	printk("Unknown command:%s length: %d\n", buffer, length);
     } else 
-        printk("Wrong Signature:%10s\n", (char *) ((ulong)buffer-9));
+	printk("Wrong Signature:%10s\n", buffer);
     
     return(-EINVAL);
 }
@@ -70,21 +59,22 @@ int eata_set_info(char *buffer, int length, struct Scsi_Host *HBA_ptr)
 /*
  * eata_proc_info
  * inout : decides on the direction of the dataflow and the meaning of the 
- *         variables
+ *	   variables
  * buffer: If inout==FALSE data is beeing written to it else read from it
  * *start: If inout==FALSE start of the valid data in the buffer
  * offset: If inout==FALSE offset from the beginning of the imaginary file 
- *         from which we start writing into the buffer
+ *	   from which we start writing into the buffer
  * length: If inout==FALSE max number of bytes to be written into the buffer 
- *         else number of bytes in the buffer
+ *	   else number of bytes in the buffer
  */
 int eata_proc_info(char *buffer, char **start, off_t offset, int length, 
-                   int hostno, int inout)
+		   int hostno, int inout)
 {
 
-    Scsi_Device *scd;
+    Scsi_Device *scd, SDev;
     struct Scsi_Host *HBA_ptr;
     Scsi_Cmnd scmd;
+    char cmnd[10];
     static u8 buff[512];
     static u8 buff2[512];
     hst_cmd_stat *rhcs, *whcs;
@@ -162,34 +152,59 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	size = sprintf(buffer + len, "Host Bus: EISA\n"); 
 	len += size; 
 	pos = begin + len;
-    } else {
 
-	scmd.cmnd[0] = LOG_SENSE;
-	scmd.cmnd[1] = 0;
-	scmd.cmnd[2] = 0x33 + (3<<6);
-	scmd.cmnd[3] = 0;
-	scmd.cmnd[4] = 0;
-	scmd.cmnd[5] = 0;
-	scmd.cmnd[6] = 0;
-	scmd.cmnd[7] = 0x00;
-	scmd.cmnd[8] = 0x66;
-	scmd.cmnd[9] = 0;
+    } else {
+	memset(&SDev, 0, sizeof(Scsi_Device));
+	memset(&scmd, 0, sizeof(Scsi_Cmnd));
+
+	SDev.host = HBA_ptr;
+	SDev.id = HBA_ptr->this_id;
+	SDev.lun = 0;
+	SDev.channel = 0;
+
+	cmnd[0] = LOG_SENSE;
+	cmnd[1] = 0;
+	cmnd[2] = 0x33 + (3<<6);
+	cmnd[3] = 0;
+	cmnd[4] = 0;
+	cmnd[5] = 0;
+        cmnd[6] = 0;
+	cmnd[7] = 0x00;
+	cmnd[8] = 0x66;
+	cmnd[9] = 0;
+
 	scmd.cmd_len = 10;
 	
 	scmd.host = HBA_ptr; 
+	scmd.device = &SDev;
 	scmd.target = HBA_ptr->this_id; 
 	scmd.lun = 0; 
 	scmd.channel = 0;
-	
 	scmd.use_sg = 0;
-	scmd.request_bufflen = 0x66;
-	scmd.request_buffer = buff + 0x144;
-	HBA_interpret = TRUE;
+
+	/* Used for mutex if loading devices after boot */
+	scmd.request.sem = NULL;
+	scmd.request.dev = 0xffff; /* Mark busy */
 	
-	eata_queue(&scmd, (void *) eata_scsi_done);
-	while (internal_command_finished == FALSE)
-	    barrier();
-	
+	scsi_do_cmd (&scmd, cmnd, buff + 0x144, 0x66,  
+		     eata_scsi_done, 1 * HZ, 1);
+	/*
+	 * Wait for command to finish. Use simple wait if we are
+	 * booting, else do it right and use a mutex
+	 */	
+	if (current->pid == 0) {
+	    while (scmd.request.dev != 0xfffe)
+		barrier();
+	} else if (scmd.request.dev != 0xfffe) {
+	    struct semaphore sem = MUTEX_LOCKED;
+	    
+	    scmd.request.sem = &sem;
+	    down(&sem);
+	    
+	    /* Hmm.. Have to ask about this one */
+	    while (scmd.request.dev != 0xfffe) schedule();
+	}
+
 	size = sprintf(buffer + len, "IRQ: %2d, %s triggered\n", cc->interrupt,
 		       (cc->intt == TRUE)?"level":"edge");
 	len += size; 
@@ -220,7 +235,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 		       (sb->ext == TRUE)?"With external cable detection":"");
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "SCSI channel expansion Module: %s installed\n",
+	size = sprintf(buffer + len, "SCSI channel expansion Module: %s present\n",
 		       (bt->sx1 == TRUE)?"SX1 (one channel)":
 		       ((bt->sx2 == TRUE)?"SX2 (two channels)":"not"));
 	len += size; 
@@ -229,7 +244,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 		       (cc->srs == TRUE)?"":"not ");
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "	  Type: %s\n",
+	size = sprintf(buffer + len, "    Type: %s\n",
 		       ((cc->key == TRUE)?((bt->dmi == TRUE)?"integrated"
 					   :((bt->dm4 == TRUE)?"DM401X"
 					   :(bt->dm4k == TRUE)?"DM4000"
@@ -238,23 +253,23 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	len += size; 
 	pos = begin + len;
 	
-	size = sprintf(buffer + len, "	  Max array groups:		 %d\n",
+	size = sprintf(buffer + len, "    Max array groups:              %d\n",
 		       (al->code == 0x0e)?al->max_groups:7);
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "	  Max drives per RAID 0 array:	 %d\n",
+	size = sprintf(buffer + len, "    Max drives per RAID 0 array:   %d\n",
 		       (al->code == 0x0e)?al->raid0_drv:7);
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "	  Max drives per RAID 3/5 array: %d\n",
+	size = sprintf(buffer + len, "    Max drives per RAID 3/5 array: %d\n",
 		       (al->code == 0x0e)?al->raid35_drv:7);
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "Cache Module: %sinstalled.\n",
+	size = sprintf(buffer + len, "Cache Module: %spresent.\n",
 		       (cc->csh)?"":"not ");
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "	  Type: %s\n",
+	size = sprintf(buffer + len, "    Type: %s\n",
 		       ((cc->csh == TRUE)?((bt->cmi == TRUE)?"integrated"
 					 :((bt->cm4 == TRUE)?"CM401X"
 					 :((bt->cm4k == TRUE)?"CM4000"
@@ -269,20 +284,20 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    len += size; 
 	    pos = begin + len;	    
 	}   
-	size = sprintf(buffer + len, "Timer Modification: %sinstalled\n",
+	size = sprintf(buffer + len, "Timer Mod.: %spresent\n",
 		       (cc->tmr == TRUE)?"":"not ");
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "NVRAM: %spresent\n",
+	size = sprintf(buffer + len, "NVRAM     : %spresent\n",
 		       (cc->nvr == TRUE)?"":"not ");
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "SmartROM: %senabled\n",
-		       (bt->srom == TRUE)?"not ":"");
+	size = sprintf(buffer + len, "SmartROM  : %sabled\n",
+		       (bt->srom == TRUE)?"dis":"en");
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer + len, "HBA indicates %salarm.\n",
-		       (bt->alrm == TRUE)?"":"no ");
+	size = sprintf(buffer + len, "Alarm     : %s\n",
+		       (bt->alrm == TRUE)?"on":"off");
 	len += size; 
 	pos = begin + len;
 	
@@ -293,29 +308,41 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	if (pos > offset + length)
 	    goto stop_output; 
 	
-	scmd.cmnd[0] = LOG_SENSE;
-	scmd.cmnd[1] = 0;
-	scmd.cmnd[2] = 0x32 + (3<<6); 
-	scmd.cmnd[3] = 0;
-	scmd.cmnd[4] = 0;
-	scmd.cmnd[5] = 0;
-	scmd.cmnd[6] = 0;
-	scmd.cmnd[7] = 0x01;
-	scmd.cmnd[8] = 0x44;
-	scmd.cmnd[9] = 0;
+	cmnd[0] = LOG_SENSE;
+	cmnd[1] = 0;
+	cmnd[2] = 0x32 + (3<<6); 
+	cmnd[3] = 0;
+	cmnd[4] = 0;
+	cmnd[5] = 0;
+	cmnd[6] = 0;
+	cmnd[7] = 0x01;
+	cmnd[8] = 0x44;
+	cmnd[9] = 0;
+ 
 	scmd.cmd_len = 10;
-	scmd.host = HBA_ptr; 
-	scmd.target = HBA_ptr->this_id; 
-	scmd.lun = 0; 
-	scmd.channel = 0;
-	scmd.use_sg = 0;
-	scmd.request_bufflen = 0x144;
-	scmd.request_buffer = buff2;
-	HBA_interpret = TRUE;
+
+	/* Used for mutex if loading devices after boot */
+	scmd.request.sem = NULL;
+	scmd.request.dev = 0xffff; /* Mark busy */
 	
-	eata_queue(&scmd, (void *) eata_scsi_done);
-	while (internal_command_finished == FALSE)
-	    barrier();
+	scsi_do_cmd (&scmd, cmnd, buff2, 0x144,  
+		     eata_scsi_done, 1 * HZ, 1);
+	/*
+	 * Wait for command to finish. Use simple wait if we are
+	 * booting, else do it right and use a mutex
+	 */	
+	if (current->pid == 0)
+	    while (scmd.request.dev != 0xfffe)
+		barrier();
+	else if (scmd.request.dev != 0xfffe) {
+	    struct semaphore sem = MUTEX_LOCKED;
+	    
+	    scmd.request.sem = &sem;
+	    down(&sem);
+	    
+	    /* Hmm.. Have to ask about this one */
+	    while (scmd.request.dev != 0xfffe) schedule();
+	}
 	
 	swap_statistics(buff2);
 	rhcs = (hst_cmd_stat *)(buff2 + 0x2c); 
@@ -327,8 +354,8 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    SD(HBA_ptr)->reads[12] += rhcs->sizes[x];
 	    SD(HBA_ptr)->writes[12] += whcs->sizes[x];
 	}
-	size = sprintf(buffer + len, "Host Disk Command Statistics:\n"
-		       "	 Reads:	     Writes:\n");
+	size = sprintf(buffer + len, "Host<->Disk command statistics:\n"
+		       "         Reads:	     Writes:\n");
 	len += size; 
 	pos = begin + len;
 	for (x = 0; x <= 10; x++) {
@@ -359,75 +386,75 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 
     if(SD(HBA_ptr)->do_latency == TRUE) {
 	size = sprintf(buffer + len, "Host Latency Command Statistics:\n"
-                       "Current timer resolution: 10ms\n"
-		       "	 Reads:	      Min:(ms)     Max:(ms)     Ave:(ms)\n");
+		       "Current timer resolution: 10ms\n"
+		       "         Reads:	      Min:(ms)     Max:(ms)     Ave:(ms)\n");
 	len += size; 
 	pos = begin + len;
 	for (x = 0; x <= 10; x++) {
 	    size = sprintf(buffer+len,"%5dk:%12u %12u %12u %12u\n", 
-                           1 << x,
+			   1 << x,
 			   SD(HBA_ptr)->reads_lat[x][0], 
 			   (SD(HBA_ptr)->reads_lat[x][1] == 0xffffffff) 
-                           ? 0:(SD(HBA_ptr)->reads_lat[x][1] * 10), 
+			   ? 0:(SD(HBA_ptr)->reads_lat[x][1] * 10), 
 			   SD(HBA_ptr)->reads_lat[x][2] * 10, 
 			   SD(HBA_ptr)->reads_lat[x][3] * 10 /
-                           ((SD(HBA_ptr)->reads_lat[x][0])
-                            ? SD(HBA_ptr)->reads_lat[x][0]:1));
+			   ((SD(HBA_ptr)->reads_lat[x][0])
+			    ? SD(HBA_ptr)->reads_lat[x][0]:1));
 	    len += size; 
 	    pos = begin + len;
 	}
 	size = sprintf(buffer+len,">1024k:%12u %12u %12u %12u\n",
 			   SD(HBA_ptr)->reads_lat[11][0], 
 			   (SD(HBA_ptr)->reads_lat[11][1] == 0xffffffff)
-                           ? 0:(SD(HBA_ptr)->reads_lat[11][1] * 10), 
+			   ? 0:(SD(HBA_ptr)->reads_lat[11][1] * 10), 
 			   SD(HBA_ptr)->reads_lat[11][2] * 10, 
 			   SD(HBA_ptr)->reads_lat[11][3] * 10 /
-                           ((SD(HBA_ptr)->reads_lat[x][0])
-                            ? SD(HBA_ptr)->reads_lat[x][0]:1));
+			   ((SD(HBA_ptr)->reads_lat[x][0])
+			    ? SD(HBA_ptr)->reads_lat[x][0]:1));
 	len += size; 
 	pos = begin + len;
 
-        if (pos < offset) {
-            len = 0;
-            begin = pos;
-        }
-        if (pos > offset + length)
-            goto stop_output;
+	if (pos < offset) {
+	    len = 0;
+	    begin = pos;
+	}
+	if (pos > offset + length)
+	    goto stop_output;
 
 	size = sprintf(buffer + len,
-		       "	 Writes:      Min:(ms)     Max:(ms)     Ave:(ms)\n");
+		       "         Writes:      Min:(ms)     Max:(ms)     Ave:(ms)\n");
 	len += size; 
 	pos = begin + len;
 	for (x = 0; x <= 10; x++) {
 	    size = sprintf(buffer+len,"%5dk:%12u %12u %12u %12u\n", 
-                           1 << x,
+			   1 << x,
 			   SD(HBA_ptr)->writes_lat[x][0], 
 			   (SD(HBA_ptr)->writes_lat[x][1] == 0xffffffff)
-                           ? 0:(SD(HBA_ptr)->writes_lat[x][1] * 10), 
+			   ? 0:(SD(HBA_ptr)->writes_lat[x][1] * 10), 
 			   SD(HBA_ptr)->writes_lat[x][2] * 10, 
 			   SD(HBA_ptr)->writes_lat[x][3] * 10 /
-                           ((SD(HBA_ptr)->writes_lat[x][0])
-                            ? SD(HBA_ptr)->writes_lat[x][0]:1));
+			   ((SD(HBA_ptr)->writes_lat[x][0])
+			    ? SD(HBA_ptr)->writes_lat[x][0]:1));
 	    len += size; 
 	    pos = begin + len;
 	}
 	size = sprintf(buffer+len,">1024k:%12u %12u %12u %12u\n",
 			   SD(HBA_ptr)->writes_lat[11][0], 
 			   (SD(HBA_ptr)->writes_lat[11][1] == 0xffffffff)
-                           ? 0:(SD(HBA_ptr)->writes_lat[x][1] * 10), 
+			   ? 0:(SD(HBA_ptr)->writes_lat[x][1] * 10), 
 			   SD(HBA_ptr)->writes_lat[11][2] * 10, 
 			   SD(HBA_ptr)->writes_lat[11][3] * 10/
-                           ((SD(HBA_ptr)->writes_lat[x][0])
-                            ? SD(HBA_ptr)->writes_lat[x][0]:1));
+			   ((SD(HBA_ptr)->writes_lat[x][0])
+			    ? SD(HBA_ptr)->writes_lat[x][0]:1));
 	len += size; 
 	pos = begin + len;
 
-        if (pos < offset) {
-            len = 0;
-            begin = pos;
-        }
-        if (pos > offset + length)
-            goto stop_output;
+	if (pos < offset) {
+	    len = 0;
+	    begin = pos;
+	}
+	if (pos > offset + length)
+	    goto stop_output;
     }
 
     scd = scsi_devices;
@@ -438,41 +465,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     
     while (scd) {
 	if (scd->host == HBA_ptr) {
-	    
-	    size = sprintf(buffer + len, 
-                           "Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
-			   scd->channel, scd->id, scd->lun);
-	    for (x = 0; x < 8; x++) {
-		if (scd->vendor[x] >= 0x20)
-		    size += sprintf(buffer + len + size, "%c", scd->vendor[x]);
-		else
-		    size += sprintf(buffer + len + size," ");
-	    }
-	    size += sprintf(buffer + len + size, " Model: ");
-	    for (x = 0; x < 16; x++) {
-		if (scd->model[x] >= 0x20)
-		    size +=  sprintf(buffer + len + size, "%c", scd->model[x]);
-		else
-		    size += sprintf(buffer + len + size, " ");
-	    }
-	    size += sprintf(buffer + len + size, " Rev: ");
-	    for (x = 0; x < 4; x++) {
-		if (scd->rev[x] >= 0x20)
-		    size += sprintf(buffer + len + size, "%c", scd->rev[x]);
-		else
-		    size += sprintf(buffer + len + size, " ");
-	    }
-	    size += sprintf(buffer + len + size, "\n");
-	    
-	    size += sprintf(buffer + len + size, "  Type:   %s ",
-			    scd->type < MAX_SCSI_DEVICE_CODE ? 
-			    scsi_dev_types[(int)scd->type] : "Unknown	       " );
-	    size += sprintf(buffer + len + size, "		 ANSI"
-			    " SCSI revision: %02x", (scd->scsi_level < 3)?1:2);
-	    if (scd->scsi_level == 2)
-		size += sprintf(buffer + len + size, " CCS\n");
-	    else
-		size += sprintf(buffer + len + size, "\n");
+	    proc_print_scsidevice(scd, buffer, &size, len);
 	    len += size; 
 	    pos = begin + len;
 	    
@@ -511,7 +504,6 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
  * c-label-offset: -4
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
  * tab-width: 8
  * End:
  */

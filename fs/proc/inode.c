@@ -166,7 +166,7 @@ void proc_read_inode(struct inode * inode)
 	}
 
 	if (ino == PROC_SCSI_SCSI) {
-		inode->i_mode = S_IFREG | S_IWUSR;
+		inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
 		inode->i_op = &proc_scsi_inode_operations;
 		return;
 	}

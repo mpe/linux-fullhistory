@@ -15,6 +15,14 @@ N: Werner Almesberger
 E: almesber@bernina.ethz.ch
 D: dosfs, LILO, some fd features, various other hacks here and there
 
+N: H. Peter Anvin
+E: Peter.Anvin@linux.org 
+D: Author of the SYSLINUX boot loader, maintainer of the linux.* news
+D: hierarchy, responsible for various console and other hacks
+S: 4390 Albany Dr. #46
+S: San Jose CA 95129
+S: USA
+
 N: Derek Atkins
 E: warlord@MIT.EDU
 D: Linux-AFS Port, random kernel hacker,

@@ -552,6 +552,8 @@ extern int scsi_reset (Scsi_Cmnd *);
 extern int max_scsi_hosts;
 
 extern void build_proc_dir_entries(void);
+extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
+
 
 extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern int	  scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);

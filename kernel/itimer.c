@@ -29,14 +29,20 @@ static void jiffiestotv(unsigned long jiffies, struct timeval *value)
 	return;
 }
 
-int _getitimer(int which, struct itimerval *value)
+static int _getitimer(int which, struct itimerval *value)
 {
-	register unsigned long val, interval;
+	register long val, interval;
 
 	switch (which) {
 	case ITIMER_REAL:
-		val = current->it_real_value;
 		interval = current->it_real_incr;
+		val = 0;
+		if (del_timer(&current->real_timer)) {
+			val = current->real_timer.expires;
+			add_timer(&current->real_timer);
+			if (val <= 0)
+				val = interval;
+		}
 		break;
 	case ITIMER_VIRTUAL:
 		val = current->it_virt_value;
@@ -51,7 +57,7 @@ int _getitimer(int which, struct itimerval *value)
 	}
 	jiffiestotv(val, &value->it_value);
 	jiffiestotv(interval, &value->it_interval);
-	return(0);
+	return 0;
 }
 
 asmlinkage int sys_getitimer(int which, struct itimerval *value)

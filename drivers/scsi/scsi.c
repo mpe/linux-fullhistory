@@ -106,8 +106,13 @@ Scsi_Cmnd * last_cmnd = NULL;
 /* This is the pointer to the /proc/scsi code. 
  * It is only initialized to !=0 if the scsi code is present 
  */ 
-extern int (* dispatch_scsi_info_ptr)(int ino, char *buffer, char **start, off_t offset, int length, int inout); 
-extern int dispatch_scsi_info(int ino, char *buffer, char **start, off_t offset, int length, int inout); 
+extern int (* dispatch_scsi_info_ptr)(int ino, char *buffer, char **start, 
+                                      off_t offset, int length, int inout); 
+extern int dispatch_scsi_info(int ino, char *buffer, char **start, 
+                              off_t offset, int length, int inout); 
+
+extern void proc_print_scsidevice(Scsi_Device *scd, char *buffer, 
+                                  int *size, int len);
 
 /*
  *  As the scsi do command functions are intelligent, and may need to
@@ -977,6 +982,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
             while(SCpnt){
                 if(SCpnt->target == device->id &&
                    SCpnt->lun == device->lun) {
+                   SCwait = SCpnt;
                     if(SCpnt->request.dev < 0) break;
                 }
                 SCpnt = SCpnt->next;
@@ -985,6 +991,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
             while(SCpnt){
                 if(SCpnt->target == device->id) {
                     if (SCpnt->lun == device->lun) {
+                        SCwait = SCpnt;
                         if(found == NULL 
                            && SCpnt->request.dev < 0) 
                         {
@@ -2427,12 +2434,49 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
     struct Scsi_Host *HBA_ptr;
     int  parameter[4];
     char *p;
+    int	  size, len = 0;
+    off_t begin = 0;
+    off_t pos = 0;
 
     scd = scsi_devices;
     HBA_ptr = scsi_hostlist;
 
-    if(inout == 0)    /* We can only write to this file right now */
-	return(-ENOSYS);  /* This is still a no-op */
+    if(inout == 0) { 
+        size = sprintf(buffer+len,"Attached devices: %s\n", (scd)?"":"none");
+        len += size; 
+        pos = begin + len;
+        while (HBA_ptr) {
+#if 0
+            size += sprintf(buffer+len,"scsi%2d: %s\n", (int) HBA_ptr->host_no, HBA_ptr->hostt->procname);
+            len += size; 
+            pos = begin + len;
+#endif
+            scd = scsi_devices;
+            while (scd) {
+                if (scd->host == HBA_ptr) {
+                    proc_print_scsidevice(scd, buffer, &size, len);
+                    len += size; 
+                    pos = begin + len;
+                    
+                    if (pos < offset) {
+                        len = 0;
+                        begin = pos;
+                    }
+                    if (pos > offset + length)
+                        goto stop_output;
+                }
+                scd = scd->next;
+            }
+	    HBA_ptr = HBA_ptr->next;
+        }
+        
+    stop_output:
+        *start=buffer+(offset-begin);   /* Start of wanted data */
+        len-=(offset-begin);	    /* Start slop */
+        if(len>length)
+            len = length;		    /* Ending slop */
+        return (len);     
+    }
 
     if(!buffer || length < 25 || strncmp("scsi", buffer, 4))
 	return(-EINVAL);

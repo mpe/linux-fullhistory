@@ -1293,7 +1293,7 @@ static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
 	/*
 	 * name not found.
 	 */
-
+	brelse4(qbh);
 	return 0;
 }
 

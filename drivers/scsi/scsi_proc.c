@@ -7,7 +7,7 @@
  * information directly to the lowlevel driver.
  *
  * (c) 1995 Michael Neuffer neuffer@goofy.zdv.uni-mainz.de 
- * Version: 0.99.6   last change: 95/07/04
+ * Version: 0.99.7   last change: 95/07/18
  * 
  * generic command parser provided by: 
  * Andreas Heilwagen <crashcar@informatik.uni-koblenz.de>
@@ -330,6 +330,63 @@ int parseOpt(parseHandle *handle, char **param)
     return(cmdIndex);
 }
 
+#define MAX_SCSI_DEVICE_CODE 10
+const char *const scsi_dev_types[MAX_SCSI_DEVICE_CODE] =
+{
+    "Direct-Access    ",
+    "Sequential-Access",
+    "Printer          ",
+    "Processor        ",
+    "WORM             ",
+    "CD-ROM           ",
+    "Scanner          ",
+    "Optical Device   ",
+    "Medium Changer   ",
+    "Communications   "
+};
+
+void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
+{	    
+    int x, y = *size;
+    
+    y = sprintf(buffer + len, 
+		    "Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
+		    scd->channel, scd->id, scd->lun);
+    for (x = 0; x < 8; x++) {
+	if (scd->vendor[x] >= 0x20)
+	    y += sprintf(buffer + len + y, "%c", scd->vendor[x]);
+	else
+	    y += sprintf(buffer + len + y," ");
+    }
+    y += sprintf(buffer + len + y, " Model: ");
+    for (x = 0; x < 16; x++) {
+	if (scd->model[x] >= 0x20)
+	    y +=  sprintf(buffer + len + y, "%c", scd->model[x]);
+	else
+	    y += sprintf(buffer + len + y, " ");
+    }
+    y += sprintf(buffer + len + y, " Rev: ");
+    for (x = 0; x < 4; x++) {
+	if (scd->rev[x] >= 0x20)
+	    y += sprintf(buffer + len + y, "%c", scd->rev[x]);
+	else
+	    y += sprintf(buffer + len + y, " ");
+    }
+    y += sprintf(buffer + len + y, "\n");
+    
+    y += sprintf(buffer + len + y, "  Type:   %s ",
+		     scd->type < MAX_SCSI_DEVICE_CODE ? 
+		     scsi_dev_types[(int)scd->type] : "Unknown          " );
+    y += sprintf(buffer + len + y, "               ANSI"
+		     " SCSI revision: %02x", (scd->scsi_level < 3)?1:2);
+    if (scd->scsi_level == 2)
+	y += sprintf(buffer + len + y, " CCS\n");
+    else
+	y += sprintf(buffer + len + y, "\n");
+
+    *size = y; 
+    return;
+}
 
 /*
  * Overrides for Emacs so that we get a uniform tabbing style.

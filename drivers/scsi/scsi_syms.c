@@ -68,6 +68,9 @@ struct symbol_table scsi_symbol_table = {
     X(kernel_scsi_ioctl),
     X(need_isa_buffer),
     X(request_queueable),
+#if defined(CONFIG_PROC_FS)
+    X(proc_print_scsidevice),
+#endif
 /*
  * These are here only while I debug the rest of the scsi stuff.
  */

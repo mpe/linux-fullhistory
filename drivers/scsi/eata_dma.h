@@ -2,7 +2,7 @@
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
 * (c) 1993,94,95 Michael Neuffer                        *
 *********************************************************
-* last change: 95/06/20                                 *
+* last change: 95/07/18                                 *
 ********************************************************/
 
 
@@ -16,7 +16,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 5
-#define VER_SUB   "7a"
+#define VER_SUB   "7b"
 
 
 /************************************************************************
@@ -24,6 +24,7 @@
  ************************************************************************/
 
 #define CHECKPAL        0        /* EISA pal checking on/off            */
+#define NEWSTUFF        1        /* Some changes for ISA/EISA boards    */
 
 /************************************************************************
  * Debug options.                                                       * 
@@ -74,10 +75,10 @@ int eata_release(struct Scsi_Host *);
 
 #define EATA_DMA {                   \
 	NULL, NULL,                  \
-	eata_proc_info,/* procinfo */        \
-	"eata_dma",    /* proc dir entry */  \
-	PROC_SCSI_EATA,/* proc dir inode */  \
-	"EATA (Extended Attachment) driver", \
+	eata_proc_info,/* procinfo       */      \
+	"eata_dma",    /* proc dir entry */      \
+	PROC_SCSI_EATA,/* proc dir inode */      \
+	"EATA (Extended Attachment) HBA driver", \
 	eata_detect,                 \
 	eata_release,                \
 	NULL, NULL,                  \

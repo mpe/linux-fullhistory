@@ -120,7 +120,11 @@ static inline void del_from_runqueue(struct task_struct * p)
 	}
 #endif
 	if (p == &init_task) {
-		printk("idle task may not sleep\n");
+		static int nr = 0;
+		if (nr < 5) {
+			nr++;
+			printk("idle task may not sleep\n");
+		}
 		return;
 	}
 	nr_running--;

@@ -142,7 +142,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 
 /*
  * Handle user-level unaligned fault.  For now, simply send a
- * SIGSEGV---there should be little reason for users not wanting to
+ * SIGBUS---there should be little reason for users not wanting to
  * fix their code instead.  Notice that we have the regular kernel
  * stack layout here, so finding the appropriate registers is a little
  * more difficult than in the kernel case.  Also, we'd need to do
@@ -153,7 +153,7 @@ asmlinkage void do_entUnaUser(void *va, unsigned long opcode, unsigned long reg,
 			      struct pt_regs regs)
 {
 	regs.pc -= 4;	/* make pc point to faulting insn */
-	send_sig(SIGSEGV, current, 1);
+	send_sig(SIGBUS, current, 1);
 }
 
 /*

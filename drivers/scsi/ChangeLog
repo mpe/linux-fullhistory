@@ -1,4 +1,83 @@
+Wed Jul 19 10:43:15 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+        * scsi.c (scsi_proc_info): /proc/scsi/scsi now also lists all
+	attached devices.
+
+	* scsi_proc.c (proc_print_scsidevice): Added. Used by scsi.c and
+	eata_dma_proc.c to produce some device info for /proc/scsi.
+
+	* eata_dma.c (eata_queue)(eata_int_handler)(eata_scsi_done):
+	Changed handling of internal SCSI commands send to the HBA.
+
+
+Wed Jul 19 10:09:17 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+	* Linux 1.3.11 released.
+
+	* eata_dma.c (eata_queue)(eata_int_handler): Added code to do
+	command latency measurements if requested by root through
+	/proc/scsi interface. 
+	Throughout Use HZ constant for time references.
+
+	* eata_pio.c: Use HZ constant for time references. 
+
+	* aic7xxx.c, aic7xxx.h, aic7xxx_asm.c: Changed copyright from BSD
+	to GNU style.
+
+	* scsi.h: Added READ_12 command opcode constant
+
+Wed Jul 19 09:25:30 1995  Michael Neuffer <neuffer@goofy.zdv.uni-mainz.de>
+
+	* Linux 1.3.10 released.
+
+	* scsi_proc.c (dispatch_scsi_info): Removed unused variable.	
+
+Wed Jul 19 09:25:30 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+	* Linux 1.3.9 released.
+
+	* scsi.c Blacklist concept expanded to 'support' more device
+	deficiencies. blacklist[] renamed to device_list[]
+	(scan_scsis): Code cleanup.  
+	
+	* scsi_debug.c (scsi_debug_proc_info): Added support to control
+	device lockup simulation via /proc/scsi interface.  
+	
+
+Wed Jul 19 09:22:34 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+	* Linux 1.3.7 released.
+
+	* scsi_proc.c: Fixed a number of bugs in directory handling
+
+Wed Jul 19 09:18:28 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+	* Linux 1.3.5 released.
+
+	* Native wide, multichannel and /proc/scsi support now in official
+	kernel distibution.
+ 
+        * scsi.c/h, hosts.c/h et al reindended to increase readability
+	(especially on 80 column wide terminals).
+
+	* scsi.c, scsi_proc.c, ../../fs/proc/inode.c: Added
+	/proc/scsi/scsi which allows root to scan for hotplugged devices.
+
+	* scsi.c (scsi_proc_info): Added, to support /proc/scsi/scsi.
+	(scan_scsis): Added some 'spagetti' code to allow scanning for
+	single devices.
+	
+
+Thu Jun 20 15:20:27 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+        * proc.c: Renamed to scsi_proc.c 
+
+Mon Jun 12 20:32:45 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
+	* Linux 1.3.0 released.
+
 Mon May 15 19:33:14 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
+
 	* scsi.c: Added native multichannel and wide scsi support. 
 
 	* proc.c (dispatch_scsi_info) (build_proc_dir_hba_entries): 
@@ -6,13 +85,13 @@ Mon May 15 19:33:14 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
 Thu May  4 17:58:48 1995  Michael Neuffer  <neuffer@goofy.zdv.uni-mainz.de>
 
-	* sd.c (requeue_sd_request): zero out the scatterlist only if
+	* sd.c (requeue_sd_request): Zero out the scatterlist only if
 	scsi_malloc returned memory for it.	
 
-	* eata_dma.c (register_HBA) (eata_queue): add support for
+	* eata_dma.c (register_HBA) (eata_queue): Add support for
 	large scatter/gatter tables and set use_clustering accordingly
 
-	* hosts.c: make use_clustering changable in the Scsi_Host structure.
+	* hosts.c: Make use_clustering changable in the Scsi_Host structure.
 
 Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
 

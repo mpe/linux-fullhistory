@@ -101,9 +101,9 @@ int strncmp(const char * cs,const char * ct,size_t count)
 #endif
 
 #ifndef __HAVE_ARCH_STRCHR
-char * strchr(const char * s,char c)
+char * strchr(const char * s, int c)
 {
-	for(; *s != c; ++s)
+	for(; *s != (char) c; ++s)
 		if (*s == '\0')
 			return NULL;
 	return (char *) s;
@@ -265,7 +265,7 @@ int memcmp(const void * cs,const void * ct,size_t count)
  * find the first occurrence of byte 'c', or 1 past the area if none
  */
 #ifndef __HAVE_ARCH_MEMSCAN
-void * memscan(void * addr, unsigned char c, size_t size)
+void * memscan(void * addr, int c, size_t size)
 {
 	unsigned char * p = (unsigned char *) addr;
 

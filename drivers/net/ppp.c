@@ -1268,6 +1268,12 @@ ppp_read(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigned
         } else goto wait;
       }
 
+      i = verify_area (VERIFY_WRITE,buf,nr);
+      if (i != 0) {
+	ppp->us_rbuff_lock = 0;
+	return i;
+      }
+
       /* reset the time of the last read operation */
       ppp->ddinfo.nip_rjiffies = jiffies;
 
@@ -1309,6 +1315,12 @@ ppp_read(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigned
     current->timeout = 0;
     PRINTKN (3,(KERN_DEBUG "ppp_read: sleeping\n"));
     interruptible_sleep_on (&ppp->read_wait);
+
+    /* Ensure that the ppp device is still attached. */
+    ppp = ppp_find(tty);
+    if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse)
+      return 0;
+      
     if (current->signal & ~current->blocked)
       return -EINTR;
   } while (1);
@@ -1360,6 +1372,10 @@ ppp_write(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigne
     nr = ppp->mtu;
   }
 
+  i = verify_area (VERIFY_READ,buf,nr);
+  if (i != 0)
+    return i;
+
   if (ppp_debug >= 3)
     ppp_print_buffer ("write frame", buf, nr, USER_DS);
 
@@ -1369,6 +1385,12 @@ ppp_write(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigne
     current->timeout = 0;
     PRINTKN (3,(KERN_DEBUG "ppp_write: sleeping\n"));
     interruptible_sleep_on(&ppp->write_wait);
+
+    /* Ensure that the ppp device is still attached. */
+    ppp = ppp_find(tty);
+    if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse)
+      return 0;
+
     if (current->signal & ~current->blocked)
       return -EINTR;
   }
