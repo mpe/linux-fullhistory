@@ -76,6 +76,16 @@ char sn_system_serial_number_string[128];
 EXPORT_SYMBOL(sn_system_serial_number_string);
 u64 sn_partition_serial_number;
 EXPORT_SYMBOL(sn_partition_serial_number);
+u8 sn_partition_id;
+EXPORT_SYMBOL(sn_partition_id);
+u8 sn_system_size;
+EXPORT_SYMBOL(sn_system_size);
+u8 sn_sharing_domain_size;
+EXPORT_SYMBOL(sn_sharing_domain_size);
+u8 sn_coherency_id;
+EXPORT_SYMBOL(sn_coherency_id);
+u8 sn_region_size;
+EXPORT_SYMBOL(sn_region_size);
 
 short physical_node_map[MAX_PHYSNODE_ID];
 
@@ -424,15 +434,13 @@ void __init sn_cpu_init(void)
 	int slice;
 	int cnode;
 	int i;
-	u64 shubtype, nasid_bitmask, nasid_shift;
 	static int wars_have_been_checked;
 
 	memset(pda, 0, sizeof(pda));
-	if (ia64_sn_get_hub_info(0, &shubtype, &nasid_bitmask, &nasid_shift))
+	if (ia64_sn_get_sn_info(0, &pda->shub2, &pda->nasid_bitmask, &pda->nasid_shift, 
+				&sn_system_size, &sn_sharing_domain_size, &sn_partition_id,
+				&sn_coherency_id, &sn_region_size))
 		BUG();
-	pda->shub2 = (u8)shubtype;
-	pda->nasid_bitmask = (u16)nasid_bitmask;
-	pda->nasid_shift = (u8)nasid_shift;
 	pda->as_shift = pda->nasid_shift - 2;
 
 	/*

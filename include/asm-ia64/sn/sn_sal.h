@@ -18,6 +18,7 @@
 #include <asm/sn/arch.h>
 #include <asm/sn/geo.h>
 #include <asm/sn/nodepda.h>
+#include <asm/sn/shub_mmr.h>
 
 // SGI Specific Calls
 #define  SN_SAL_POD_MODE                           0x02000001
@@ -34,7 +35,7 @@
 #define  SN_SAL_PRINT_ERROR			   0x02000012
 #define  SN_SAL_SET_ERROR_HANDLING_FEATURES	   0x0200001a	// reentrant
 #define  SN_SAL_GET_FIT_COMPT			   0x0200001b	// reentrant
-#define  SN_SAL_GET_HUB_INFO                       0x0200001c
+#define  SN_SAL_GET_SN_INFO                        0x0200001c
 #define  SN_SAL_GET_SAPIC_INFO                     0x0200001d
 #define  SN_SAL_CONSOLE_PUTC                       0x02000021
 #define  SN_SAL_CONSOLE_GETC                       0x02000022
@@ -935,15 +936,24 @@ ia64_sn_get_sapic_info(int sapicid, int *nasid, int *subnode, int *slice)
 /*
  * Returns information about the HUB/SHUB.
  *  In:
- *	arg0 - SN_SAL_GET_HUB_INFO
+ *	arg0 - SN_SAL_GET_SN_INFO
  * 	arg1 - 0 (other values reserved for future use)
  *  Out:
- *	v0 - shub type (0=shub1, 1=shub2)
- *	v1 - masid mask (ex., 0x7ff for 11 bit nasid)
- *	v2 - bit position of low nasid bit
+ *	v0 
+ *		[7:0]   - shub type (0=shub1, 1=shub2)
+ *		[15:8]  - Log2 max number of nodes in entire system (includes
+ *			  C-bricks, I-bricks, etc)
+ *		[23:16] - Log2 of nodes per sharing domain			 
+ * 		[31:24] - partition ID
+ * 		[39:32] - coherency_id
+ * 		[47:40] - regionsize
+ *	v1 
+ *		[15:0]  - nasid mask (ex., 0x7ff for 11 bit nasid)
+ *	 	[23:15] - bit position of low nasid bit
  */
 static inline u64
-ia64_sn_get_hub_info(int fc, u64 *arg1, u64 *arg2, u64 *arg3)
+ia64_sn_get_sn_info(int fc, u8 *shubtype, u16 *nasid_bitmask, u8 *nasid_shift, 
+		u8 *systemsize, u8 *sharing_domain_size, u8 *partid, u8 *coher, u8 *reg)
 {
 	struct ia64_sal_retval ret_stuff;
 
@@ -951,13 +961,22 @@ ia64_sn_get_hub_info(int fc, u64 *arg1, u64 *arg2, u64 *arg3)
 	ret_stuff.v0 = 0;
 	ret_stuff.v1 = 0;
 	ret_stuff.v2 = 0;
-	SAL_CALL_NOLOCK(ret_stuff, SN_SAL_GET_HUB_INFO, fc, 0, 0, 0, 0, 0, 0);
+	SAL_CALL_NOLOCK(ret_stuff, SN_SAL_GET_SN_INFO, fc, 0, 0, 0, 0, 0, 0);
 
 /***** BEGIN HACK - temp til old proms no longer supported ********/
 	if (ret_stuff.status == SALRET_NOT_IMPLEMENTED) {
-		if (arg1) *arg1 = 0;
-		if (arg2) *arg2 = 0x7ff;
-		if (arg3) *arg3 = 38;
+		int nasid = get_sapicid() & 0xfff;;
+#define SH_SHUB_ID_NODES_PER_BIT_MASK 0x001f000000000000UL                                               
+#define SH_SHUB_ID_NODES_PER_BIT_SHFT 48                                                               
+		if (shubtype) *shubtype = 0;
+		if (nasid_bitmask) *nasid_bitmask = 0x7ff;
+		if (nasid_shift) *nasid_shift = 38;
+		if (systemsize) *systemsize = 11;
+		if (sharing_domain_size) *sharing_domain_size = 9;
+		if (partid) *partid = ia64_sn_sysctl_partition_get(nasid);
+		if (coher) *coher = nasid >> 9;
+		if (reg) *reg = (HUB_L((u64 *) LOCAL_MMR_ADDR(SH1_SHUB_ID)) & SH_SHUB_ID_NODES_PER_BIT_MASK) >>
+			SH_SHUB_ID_NODES_PER_BIT_SHFT;
 		return 0;
 	}
 /***** END HACK *******/
@@ -965,9 +984,14 @@ ia64_sn_get_hub_info(int fc, u64 *arg1, u64 *arg2, u64 *arg3)
 	if (ret_stuff.status < 0)
 		return ret_stuff.status;
 
-	if (arg1) *arg1 = ret_stuff.v0;
-	if (arg2) *arg2 = ret_stuff.v1;
-	if (arg3) *arg3 = ret_stuff.v2;
+	if (shubtype) *shubtype = ret_stuff.v0 & 0xff;
+	if (systemsize) *systemsize = (ret_stuff.v0 >> 8) & 0xff;
+	if (sharing_domain_size) *sharing_domain_size = (ret_stuff.v0 >> 16) & 0xff;
+	if (partid) *partid = (ret_stuff.v0 >> 24) & 0xff;
+	if (coher) *coher = (ret_stuff.v0 >> 32) & 0xff;
+	if (reg) *reg = (ret_stuff.v0 >> 40) & 0xff;
+	if (nasid_bitmask) *nasid_bitmask = (ret_stuff.v1 & 0xffff);
+	if (nasid_shift) *nasid_shift = (ret_stuff.v1 >> 16) & 0xff;
 	return 0;
 }
  
