@@ -1,3 +1,52 @@
+Wed Jun  5 18:52:04 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (do_tty_hangup): 
+	* pty.c (pty_close): When closing a pty, make sure packet mode is
+	 	cleared.
+
+Sun May 26 09:33:52 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* vesa_blank.c (set_vesa_blanking): Add missing verify_area() call.
+
+	* selection.c (set_selection): Add missing verify_area() call.
+
+	* tty_io.c (tty_ioctl): Add missing verify_area() calls.
+
+	* serial.c (rs_ioctl): Add missing verify_area() calls.
+		(rs_init): Allow initialization of serial driver
+		configuration from a module.
+
+	* random.c (extract_entropy): Add missing verify_area call.
+		Don't limit number of characters returned to
+		32,768. Extract entropy is now no longer a inlined
+		function.
+
+		(random_read): Check return value in case extract_entropy
+		returns an error.
+
+		(secure_tcp_sequence_number): New function which returns a
+		secure TCP sequence number.  This is needed to prevent some
+		nasty TCP hijacking attacks.
+	
+		(init_std_data): Initialize using gettimeofday() instead of
+		struct timveal xtime.
+
+		(fast_add_entropy_word, add_entropy_word): Rename the
+		inline function add_entropy_word() to
+		fast_add_entropy_word().  Make add_entropy_word() be the
+		non-inlined function which is used in non-timing critical
+		places, in order to save space.
+
+		(initialize_benchmark, begin_benchmark, end_benchmark): New
+		functions defined when RANDOM_BENCHMARK is defined.  They
+		allow us to benchmark the speed of the
+		add_timer_randomness() call.
+
+		(int_ln, rotate_left): Add two new inline functions with
+		i386 optimized asm instructions.  This speeds up the
+		critical add_entropy_word() and add_timer_randomness()
+		functions, which are called from interrupt handlers.
+
 Tue May  7 22:51:11 1996    <tytso@rsts-11.mit.edu>
 
 	* random.c (add_timer_randomness): Limit the amount randomness
@@ -14,7 +63,6 @@ Tue May  7 22:51:11 1996    <tytso@rsts-11.mit.edu>
 		ioctl values used by the /dev/random driver.  Allow the
 		old ioctl values to be used for backwards compatibility
 		(for a limited amount of time).
-
 
 Wed Apr 24 14:02:04 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 

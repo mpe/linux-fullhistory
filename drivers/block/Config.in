@@ -6,7 +6,7 @@ comment 'Floppy, IDE, and other block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 bool 'Enhanced IDE/MFM/RLL disk/cdrom/tape support' CONFIG_BLK_DEV_IDE
-comment 'Please see drivers/block/README.ide for help/info on IDE drives'
+comment 'Please see Documentation/ide.txt for help/info on IDE drives'
 if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
   bool 'Old harddisk (MFM/RLL/IDE) driver' CONFIG_BLK_DEV_HD_ONLY
 else
@@ -25,7 +25,9 @@ else
     bool '      ALI M1439/M1445 support' CONFIG_BLK_DEV_ALI14XX
     bool '      DTC-2278        support' CONFIG_BLK_DEV_DTC2278
     bool '      Holtek HT6560B  support' CONFIG_BLK_DEV_HT6560B
-    bool '      PROMISE DC4030  support (ALPHA)' CONFIG_BLK_DEV_PROMISE
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '      PROMISE DC4030  support (EXPERIMENTAL)' CONFIG_BLK_DEV_PROMISE
+    fi
     bool '      QDI QD6580      support' CONFIG_BLK_DEV_QD6580
     bool '      UMC 8672        support' CONFIG_BLK_DEV_UMC8672
   fi

@@ -413,14 +413,8 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 				dev_kfree_skb(skb, FREE_WRITE);
 				return;
 			}
-			cli();
-			skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
-			__skb_queue_tail(list, skb);
-			skb = __skb_dequeue(list);
-			skb_device_lock(skb);		/* New buffer needs locking down */
-			restore_flags(flags);
 		}
-		
+
 		/* copy outgoing packets to any sniffer packet handlers */
 		if (dev_nit) {
 			struct packet_type *ptype;
@@ -441,6 +435,15 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 					ptype->func(skb2, skb->dev, ptype);
 				}
 			}
+		}
+
+		if (skb_queue_len(list)) {
+			cli();
+			skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
+			__skb_queue_tail(list, skb);
+			skb = __skb_dequeue(list);
+			skb_device_lock(skb);		/* New buffer needs locking down */
+			restore_flags(flags);
 		}
 	}
 	if (dev->hard_start_xmit(skb, dev) == 0) {

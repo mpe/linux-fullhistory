@@ -165,6 +165,7 @@ tx_full and tbusy flags.
  *	- added support for Linux/Alpha, but removed most of it, because
  *        it worked only for the PCI chip. 
  *      - added hook for the 32bit lance driver
+ *      - added PCnetPCI II (79C970A) to chip table
  *
  *	Paul Gortmaker (gpg109@rsphy1.anu.edu.au):
  *	- hopefully fix above so Linux/Alpha can use ISA cards too.
@@ -268,12 +269,15 @@ static struct lance_chip_type {
 	{0x2430, "PCnet32",					/* 79C965 PCnet for VL bus. */
 		LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
 			LANCE_HAS_MISSED_FRAME},
+        {0x2621, "PCnet/PCI-II 79C970A",        /* 79C970A PCInetPCI II. */
+                LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
+                        LANCE_HAS_MISSED_FRAME},
 	{0x0, 	 "PCnet (unknown)",
 		LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
 			LANCE_HAS_MISSED_FRAME},
 };
 
-enum {OLD_LANCE = 0, PCNET_ISA=1, PCNET_ISAP=2, PCNET_PCI=3, PCNET_VLB=4, LANCE_UNKNOWN=5};
+enum {OLD_LANCE = 0, PCNET_ISA=1, PCNET_ISAP=2, PCNET_PCI=3, PCNET_VLB=4, PCNET_PCI_II=5, LANCE_UNKNOWN=6};
 
 /* Non-zero only if the current card is a PCI with BIOS-set IRQ. */
 static unsigned char pci_irq_line = 0;
@@ -437,7 +441,7 @@ void lance_probe1(int ioaddr)
 
 #ifdef CONFIG_LANCE32
         /* look if it's a PCI or VLB chip */
-        if (lance_version == PCNET_PCI || lance_version == PCNET_VLB) {
+        if (lance_version == PCNET_PCI || lance_version == PCNET_VLB || lance_version == PCNET_PCI_II) {
 	    extern void lance32_probe1 (struct device *dev, const char *chipname, int pci_irq_line);
 	    
 	    lance32_probe1 (dev, chipname, pci_irq_line);

@@ -214,7 +214,8 @@ struct sock
 	__u32                   lastwin_seq;    /* sequence number when we last updated the window we offer */
 	__u32			high_seq;	/* sequence number when we did current fast retransmit */
 	volatile unsigned long  ato;            /* ack timeout */
-	volatile unsigned long  lrcvtime;       /* jiffies at last rcv */
+	volatile unsigned long  lrcvtime;       /* jiffies at last data rcv */
+	volatile unsigned long  idletime;       /* jiffies at last rcv */
 	unsigned short		bytes_rcv;
 /*
  *	mss is min(mtu, max_window) 
@@ -391,7 +392,7 @@ struct proto
 #define SOCK_DESTROY_TIME (10*HZ)
 
 /*
- *	Sockets 0-1023 can't be bound too unless you are superuser 
+ *	Sockets 0-1023 can't be bound to unless you are superuser 
  */
  
 #define PROT_SOCK	1024

@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
- * (H) Hackright 1996 by Marcin Dalecki <dalecki@namu03.gwdg.de>
- * VERSION: 2.5
+ * Copyright (C) 1995 1996 Heiko Schlittermann <heiko@lotte.sax.de>
+ * VERSION: @VERSION@
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,102 +16,169 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ * Thanks to
+ *  The Linux Community at all and ...
+ *  Martin Harris (he wrote the first Mitsumi Driver)
+ *  Eberhard Moenkeberg (he gave me much support and the initial kick)
+ *  Bernd Huebner, Ruediger Helsch (Unifix-Software Gmbh, they
+ *      improved the original driver)
+ *  Jon Tombs, Bjorn Ekwall (module support)
+ *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
+ *  Gerd Knorr (he lent me his PhotoCD)
+ *  Nils Faerber and Roger E. Wolff (extensivly tested the LU portion)
+ *  Andreas Kies (testing the mysterious hang up's)
+ *  ... somebody forgotten?
+ *  Marcin Dalecki
+ *  
  */
 
-#ifndef __MCDX_H
-#define __MCDX_H
 /*
- * 	PLEASE CONFIGURE THIS ACCORDING TO YOUR HARDWARE/JUMPER SETTINGS.
+ *	The following lines are for user configuration
+ *	~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  *
- *      o       MCDX_NDRIVES  :  number of used entries of the following table
- *      o       MCDX_DRIVEMAP :  table of {i/o base, irq} per controller
+ *	{0|1} -- 1 if you want the driver detect your drive, may crash and
+ *	needs a long time to seek.  The higher the address the longer the
+ *	seek.
  *
- *      NOTE: Don't even think about connecting the drive to IRQ 9(2).
- *	In the AT architecture this interrupt is used to cascade the two
- *	interrupt controllers and isn't therefore usable for anything else!
+ *  WARNING: AUTOPROBE doesn't work.
  */
- /* #define I_WAS_IN_MCDX_H */
-#define MCDX_NDRIVES 1
-#define MCDX_DRIVEMAP {	{0x230, 11},	\
+#define MCDX_AUTOPROBE 0
+
+/*
+ *	Drive specific settings according to the jumpers on the controller
+ *	board(s).
+ *	o	MCDX_NDRIVES  :  number of used entries of the following table
+ *	o	MCDX_DRIVEMAP :  table of {i/o base, irq} per controller
+ *
+ *	NOTE: I didn't get a drive at irq 9(2) working.  Not even alone.
+ */
+#if MCDX_AUTOPROBE == 0
+	#define MCDX_NDRIVES 1
+	#define MCDX_DRIVEMAP {		\
+			{0x300, 11},	\
 			{0x304, 05},  	\
 			{0x000, 00},  	\
 			{0x000, 00},  	\
 			{0x000, 00},  	\
-}
-	  	
-/* 
- * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!NO USER INTERVENTION NEEDED BELOW
- * If You are sure that all configuration is done, please uncomment the
- * line below. 
- */
-
-#undef MCDX_DEBUG	/* This is *REALLY* only for development! */
-
-#ifdef MCDX_DEBUG
-#define MCDX_TRACE(x) printk x
-#define MCDX_TRACE_IOCTL(x) printk x
+	  	}
 #else
-#define MCDX_TRACE(x)
-#define MCDX_TRACE_IOCTL(x)
+	#error Autoprobing is not implemented yet.
 #endif
 
-/*      The name of the device */
-#define MCDX "mcdx"
+#ifndef MCDX_QUIET
+#define MCDX_QUIET   1
+#endif
 
-/*
- *      Per controller 4 bytes i/o are needed. 
+#ifndef MCDX_DEBUG
+#define MCDX_DEBUG   0
+#endif
+
+/* *** make the following line uncommented, if you're sure,
+ * *** all configuration is done */
+/* #define I_WAS_HERE */
+#define I_WAS_HERE   /* delete this line, it's for heiko only */
+
+/*	The name of the device */
+#define MCDX "mcdx"	
+
+/* Flags for DEBUGGING */
+#define INIT 		0
+#define MALLOC 		0
+#define IOCTL 		0
+#define PLAYTRK     0
+#define SUBCHNL     0
+#define TOCHDR      0
+#define MS          0
+#define PLAYMSF     0
+#define READTOC     0
+#define OPENCLOSE 	0
+#define HW		    0
+#define TALK		0
+#define IRQ 		0
+#define XFER 		0
+#define REQUEST	 	0
+#define SLEEP		0
+
+/*	The following addresses are taken from the Mitsumi Reference 
+ *  and describe the possible i/o range for the controller.
  */
+#define MCDX_IO_BEGIN	((char*) 0x300)	/* first base of i/o addr */
+#define MCDX_IO_END		((char*) 0x3fc)	/* last base of i/o addr */
+
+/*	Per controller 4 bytes i/o are needed. */
 #define MCDX_IO_SIZE		4
 
-/* 
- * Masks for the status byte, returned from every command, set if
- * the description is true 
+/*
+ *	Bits
  */
+
+/* The status byte, returned from every command, set if
+ * the description is true */
 #define MCDX_RBIT_OPEN       0x80	/* door is open */
 #define MCDX_RBIT_DISKSET    0x40	/* disk set (recognised) */
 #define MCDX_RBIT_CHANGED    0x20	/* disk was changed */
 #define MCDX_RBIT_CHECK      0x10	/* disk rotates, servo is on */
-#define MCDX_RBIT_AUDIOTR    0x08	/* current track is audio */
+#define MCDX_RBIT_AUDIOTR    0x08   /* current track is audio */
 #define MCDX_RBIT_RDERR      0x04	/* read error, refer SENSE KEY */
 #define MCDX_RBIT_AUDIOBS    0x02	/* currently playing audio */
 #define MCDX_RBIT_CMDERR     0x01	/* command, param or format error */
 
-/* 
- * The I/O Register holding the h/w status of the drive,
- * can be read at i/o base + 1 
- */
+/* The I/O Register holding the h/w status of the drive,
+ * can be read at i/o base + 1 */
 #define MCDX_RBIT_DOOR       0x10	/* door is open */
 #define MCDX_RBIT_STEN       0x04	/* if 0, i/o base contains drive status */
 #define MCDX_RBIT_DTEN       0x02	/* if 0, i/o base contains data */
 
 /*
- *    The commands.
+ *	The commands.
  */
-#define MCDX_CMD_GET_TOC		0x10
-#define MCDX_CMD_GET_MDISK_INFO		0x11
-#define MCDX_CMD_GET_SUBQ_CODE		0x20
-#define MCDX_CMD_GET_STATUS		0x40
-#define MCDX_CMD_SET_DRIVE_MODE		0x50
-#define MCDX_CMD_RESET			0x60
-#define MCDX_CMD_HOLD			0x70
-#define MCDX_CMD_CONFIG			0x90
-#define MCDX_CMD_SET_ATTENATOR		0xae
-#define MCDX_CMD_PLAY			0xc0
-#define MCDX_CMD_PLAY_2X		0xc1
-#define MCDX_CMD_GET_DRIVE_MODE		0xc2
-#define MCDX_CMD_SET_INTERLEAVE		0xc8
-#define MCDX_CMD_GET_FIRMWARE		0xdc
-#define MCDX_CMD_SET_DATA_MODE		0xa0
-#define MCDX_CMD_STOP			0xf0
-#define MCDX_CMD_EJECT			0xf6
-#define MCDX_CMD_CLOSE_DOOR		0xf8
-#define MCDX_CMD_LOCK_DOOR		0xfe
 
-#define READ_AHEAD			8	/* 16 Sectors (4K) */
+#define OPCODE	1		/* offset of opcode */
+#define MCDX_CMD_REQUEST_TOC		1, 0x10
+#define MCDX_CMD_REQUEST_STATUS		1, 0x40 
+#define MCDX_CMD_RESET				1, 0x60
+#define MCDX_CMD_REQUEST_DRIVE_MODE	1, 0xc2
+#define MCDX_CMD_SET_INTERLEAVE		2, 0xc8, 0
+#define MCDX_CMD_DATAMODE_SET		2, 0xa0, 0
+	#define MCDX_DATAMODE1		0x01
+	#define MCDX_DATAMODE2		0x02
+#define MCDX_CMD_LOCK_DOOR		2, 0xfe, 0
 
-#ifndef I_WAS_IN_MCDX_H
+#define READ_AHEAD			4	/* 8 Sectors (4K) */
+
+/*	Useful macros */
+#define e_door(x)		((x) & MCDX_RBIT_OPEN)
+#define e_check(x)		(~(x) & MCDX_RBIT_CHECK)
+#define e_notset(x)		(~(x) & MCDX_RBIT_DISKSET)
+#define e_changed(x)	((x) & MCDX_RBIT_CHANGED)
+#define e_audio(x)		((x) & MCDX_RBIT_AUDIOTR)
+#define e_audiobusy(x)	((x) & MCDX_RBIT_AUDIOBS)
+#define e_cmderr(x)		((x) & MCDX_RBIT_CMDERR)
+#define e_readerr(x)	((x) & MCDX_RBIT_RDERR)
+
+/**	no drive specific */
+#define MCDX_CDBLK	2048	/* 2048 cooked data each blk */
+
+#define MCDX_DATA_TIMEOUT	(HZ/10)	/* 0.1 second */
+
+/*
+ * Access to the msf array
+ */
+#define MSF_MIN		0			/* minute */
+#define MSF_SEC		1			/* second */
+#define MSF_FRM		2			/* frame  */
+
+/*
+ * Errors
+ */
+#define MCDX_E		1			/* unspec error */
+#define MCDX_ST_EOM 0x0100		/* end of media */
+#define MCDX_ST_DRV 0x00ff		/* mask to query the drive status */
+
+#ifndef I_WAS_HERE
 #warning You have not edited mcdx.h
 #warning Perhaps irq and i/o settings are wrong.
 #endif
 
-#endif 	/* __MCDX_H */
+/* ex:set ts=4 sw=4: */

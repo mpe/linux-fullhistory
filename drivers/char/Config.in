@@ -16,7 +16,7 @@ tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
 tristate 'Parallel printer support' CONFIG_PRINTER
 
 
-bool 'Bus Mouse Support' CONFIG_MOUSE
+bool 'Mouse Support (not serial mice)' CONFIG_MOUSE
 if [ "$CONFIG_MOUSE" = "y" ]; then
 	tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
 	tristate 'Logitech busmouse support' CONFIG_BUSMOUSE

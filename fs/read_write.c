@@ -203,7 +203,7 @@ static int do_readv_writev(int type, struct inode * inode, struct file * file,
 	const struct iovec * vector, unsigned long count)
 {
 	size_t tot_len;
-	struct iovec iov[MAX_IOVEC];
+	struct iovec iov[UIO_MAXIOV];
 	int retval, i;
 	IO_fn_t fn;
 
@@ -213,7 +213,7 @@ static int do_readv_writev(int type, struct inode * inode, struct file * file,
 	 */
 	if (!count)
 		return 0;
-	if (count > MAX_IOVEC)
+	if (count > UIO_MAXIOV)
 		return -EINVAL;
 	retval = verify_area(VERIFY_READ, vector, count*sizeof(*vector));
 	if (retval)

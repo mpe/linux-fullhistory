@@ -1250,7 +1250,7 @@ CONFIG_SCSI_ADVANSYS
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
-Adaptec AHA152X support
+Adaptec AHA152X/2825 support
 CONFIG_SCSI_AHA152X
   This is support for a SCSI host adaptor. It is explained in section
   3.3 of the SCSI-HOWTO, available via ftp (user: anonymous) at
@@ -2991,6 +2991,16 @@ CONFIG_SMB_FS
   SMB support as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt. Most people say N, however.
+
+SMB long filename support (EXPERIMENTAL)
+CONFIG_SMB_LONG
+  SMBFS was designed to support long filenames using the LanManager
+  2.0 protocol. I had to find out that the support for long filenames
+  sometimes causes problems, which can even result in kernel OOPSes. I
+  did not yet find out what the problem is, but hopefully I will find
+  this bug eventually. As many people seem to run long filenames with
+  no problems, I leave this support in the kernel as an option. The
+  careful among you should say N here.
 
 NCP filesystem support (to mount NetWare volumes)
 CONFIG_NCP_FS

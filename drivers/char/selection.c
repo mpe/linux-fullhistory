@@ -123,6 +123,10 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 
 	  args = (unsigned short *)(arg + 1);
 	  if (user) {
+	  	  int err;
+		  err = verify_area(VERIFY_READ, args, sizeof(short) * 5);
+		  if (err)
+		  	return err;
 		  xs = get_user(args++) - 1;
 		  ys = get_user(args++) - 1;
 		  xe = get_user(args++) - 1;

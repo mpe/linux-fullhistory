@@ -989,9 +989,11 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_dep_tristate:
 	case tok_define:
 	case tok_choose:
-	  if(cfg->flags & GLOBAL_WRITTEN) break;
-	  cfg->flags |= GLOBAL_WRITTEN;
-	  printf("\tglobal %s\n", cfg->optionname);
+	  if(!(cfg->flags & GLOBAL_WRITTEN))
+	    {
+	      cfg->flags |= GLOBAL_WRITTEN;
+	      printf("\tglobal %s\n", cfg->optionname);
+	    }
 	  /* fall through */
 	case tok_make:
 	case tok_comment:

@@ -1113,7 +1113,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	struct socket *sock;
 	struct file *file;
 	char address[MAX_SOCK_ADDR];
-	struct iovec iov[MAX_IOVEC];
+	struct iovec iov[UIO_MAXIOV];
 	struct msghdr msg_sys;
 	int err;
 	int total_len;
@@ -1134,7 +1134,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
 
 	/* do not move before msg_sys is valid */
-	if(msg_sys.msg_iovlen>MAX_IOVEC)
+	if(msg_sys.msg_iovlen>UIO_MAXIOV)
 		return -EINVAL;
 
 	/* This will also move the address data into kernel space */
@@ -1154,7 +1154,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 {
 	struct socket *sock;
 	struct file *file;
-	struct iovec iov[MAX_IOVEC];
+	struct iovec iov[UIO_MAXIOV];
 	struct msghdr msg_sys;
 	int err;
 	int total_len;
@@ -1177,7 +1177,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if(err)
 		return err;
 	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
-	if(msg_sys.msg_iovlen>MAX_IOVEC)
+	if(msg_sys.msg_iovlen>UIO_MAXIOV)
 		return -EINVAL;
 
 	/*

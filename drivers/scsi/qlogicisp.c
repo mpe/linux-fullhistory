@@ -48,10 +48,10 @@
 #include <linux/types.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
-#include <unistd.h>
+#include <linux/delay.h>
+#include <linux/unistd.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/delay.h>
 
 #include "sd.h"
 #include "hosts.h"
@@ -70,10 +70,6 @@
    use a set of 'safe' defaults */
 
 #define USE_NVRAM_DEFAULTS	0
-
-/*  Set this macro to 1 if you want to create a scsi loadable module. */
-
-#define MODULE			0
 
 /*  Macros used for debugging */
 
@@ -1681,8 +1677,8 @@ int isp1020_return_status(struct Status_Entry *sts)
     return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
 }
 
-#if MODULE
-Scsi_Host_Template driver_template = ISP1020;
+#ifdef MODULE
+Scsi_Host_Template driver_template = QLOGICISP;
 
 #include "scsi_module.c"
 #endif /* MODULE */

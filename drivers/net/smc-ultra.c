@@ -40,10 +40,11 @@
 
 	Paul Gortmaker	: multiple card support for module users.
 	Donald Becker	: 4/17/96 PIO support, minor potential problems avoided.
+	Donald Becker	: 6/6/96 correctly set auto-wrap bit.
 */
 
 static const char *version =
-	"smc-ultra.c:v1.99 4/17/96 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+	"smc-ultra.c:v2.00 6/6/96 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 
 #include <linux/module.h>
@@ -256,9 +257,10 @@ ultra_open(struct device *dev)
 
 	outb(0x00, ioaddr);	/* Disable shared memory for safety. */
 	outb(0x80, ioaddr + 5);
-	if (ei_status.block_input == &ultra_pio_input)
+	if (ei_status.block_input == &ultra_pio_input) {
 		outb(0x11, ioaddr + 6);		/* Enable interrupts and PIO. */
-	else
+		outb(0x01, ioaddr + 0x19);  	/* Enable ring read auto-wrap. */
+	} else
 		outb(0x01, ioaddr + 6);		/* Enable interrupts and memory. */
 	/* Set the early receive warning level in window 0 high enough not
 	   to receive ERW interrupts. */

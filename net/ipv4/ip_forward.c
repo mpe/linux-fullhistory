@@ -469,7 +469,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			 *	Count mapping we shortcut
 			 */
 			 
-			ip_fw_chk(iph,dev2,NULL,ip_acct_chain,IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_OUT);
+			ip_fw_chk(iph,dev2,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_OUT);
 #endif			
 			
 			/*

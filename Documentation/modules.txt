@@ -6,8 +6,15 @@ and use modules.
 In this kernel you also have a possibility to create modules that are
 less dependent on the kernel version.  This option can be selected
 during "make config", by enabling CONFIG_MODVERSIONS.
-Note: If you enable CONFIG_MODVERSIONS, you will need some utilities
-      from the latest module support package: "modules-1.1.8*.tar.gz"!
+
+Note: You should ensure that the modules-X.Y.Z.tar.gz you are using
+is the most up to date one for this kernel. The "X.Y.Z" will reflect
+the kernel version at the time of the release of the modules package.
+Some older modules packages aren't aware of some of the newer modular
+features that the kernel now supports. (If you are unsure, you can 
+usually find out what the current release of the modules-X.Y.Z.tar.gz
+package is by looking up the URL listed for "Bjorn Ekwall" in the 
+file ./linux/CREDITS)
 
 Anyway, your first step is to compile the kernel, as explained in the
 file README.  It generally goes like:
@@ -38,12 +45,8 @@ The set of modules is rapidly increasing, but so far these are known:
 	Most low-level SCSI drivers: (i.e. aha1542, in2000)
 	All SCSI high-level drivers: disk, tape, cdrom, generic.
 
-	Some ethernet drivers:
-		plip, slip, dummy,
-		de600, de620
-		3c501, 3c509
-		eexpress, depca,
-		ewrk3, apricot
+	Most ethernet drivers: (too many to list, please see the file
+				./Documentation/networking/net-modules.txt)
 
 	Most CDROM drivers:
 		aztcd:     Aztech,Orchid,Okano,Wearnes
@@ -80,14 +83,12 @@ Now, after you have made all modules, you can also do:
 
 This will copy all newly made modules into subdirectories under
 "/lib/modules/kernel_release/", where "kernel_release" is something
-like 1.1.83, or whatever the current kernel version is...
+like 2.0.1, or whatever the current kernel version is...
 
 
 Nifty features:
 
-If you have installed the utilities from "modules-1.1.8*.tar.gz",
-you will have access to two new utilities: "modprobe" and "depmod"
-
+You have access to two utilities: "modprobe" and "depmod".
 Using the modprobe utility, you can load any module like this:
 
 	/sbin/modprobe module

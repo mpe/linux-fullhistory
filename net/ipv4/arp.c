@@ -2025,36 +2025,31 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 
 	while ((entry = *entryp) != NULL)
 	{
-		if (entry->ip == ip && entry->mask == mask && entry->dev == dev)
-			break;
-		if ((entry->mask & mask) != mask)
-		{
-			entry = NULL;
-			break;
+		/* User supplied arp entries are definitive - RHP 960603 */
+
+		if (entry->ip == ip && entry->mask == mask && entry->dev == dev) {
+			*entryp=entry->next;
+			arp_free_entry(entry);
+			continue;
 		}
+		if ((entry->mask & mask) != mask)
+			break;
 		entryp = &entry->next;
 	}
 
-	/*
-	 *	Do we need to create a new entry?
-	 */
-	
+	entry = arp_alloc_entry();
 	if (entry == NULL)
 	{
-		entry = arp_alloc_entry();
-		if (entry == NULL)
-		{
-			arp_unlock();
-			return -ENOMEM;
-		}
-		entry->ip = ip;
-		entry->dev = dev;
-		entry->mask = mask;
-		entry->flags = r->arp_flags;
-
-		entry->next = *entryp;
-		*entryp = entry;
+		arp_unlock();
+		return -ENOMEM;
 	}
+	entry->ip = ip;
+	entry->dev = dev;
+	entry->mask = mask;
+	entry->flags = r->arp_flags;
+
+	entry->next = *entryp;
+	*entryp = entry;
 
 	ha = r->arp_ha.sa_data;
 	if (empty(ha, dev->addr_len))

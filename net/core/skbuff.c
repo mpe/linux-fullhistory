@@ -283,7 +283,6 @@ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 
 void __skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 {
-	unsigned long flags;
 	struct sk_buff *list = (struct sk_buff *)list_;
 
 	if (newsk->next || newsk->prev)
@@ -308,7 +307,7 @@ void __skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 
 struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 {
-	long flags;
+	unsigned long flags;
 	struct sk_buff *result;
 	struct sk_buff *list = (struct sk_buff *)list_;
 

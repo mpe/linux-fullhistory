@@ -20,9 +20,9 @@ if [ "$CONFIG_AX25" = "y" ]; then
   bool 'AX.25 over Ethernet' CONFIG_BPQETHER
   bool 'Amateur Radio NET/ROM' CONFIG_NETROM
 fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
-fi
+#if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+#  bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
+#fi
 bool 'Kernel/User network link driver' CONFIG_NETLINK
 if [ "$CONFIG_NETLINK" = "y" ]; then
   bool 'Routing messages' CONFIG_RTNETLINK

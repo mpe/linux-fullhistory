@@ -35,8 +35,9 @@ DOCUMENTATION:
    system: there are much better sources available.
 
  - There are various readme's in the kernel Documentation/ subdirectory:
-   these are mainly used for kernel developers and some very kernel-specific
-   installation notes for some drivers for example.
+   these typically contain kernel-specific installation notes for some 
+   drivers for example. See ./Documentation/00-INDEX for a list of what
+   is contained in each file.
 
 INSTALLING the kernel:
 
@@ -105,7 +106,7 @@ CONFIGURING the kernel:
 	- having unnecessary drivers will make the kernel bigger, and can
 	  under some circumstances lead to problems: probing for a
 	  nonexistent controller card may confuse your other controllers
-	- compiling the kernel with "-m486" for a number of 486-specific
+	- compiling the kernel with "Processor type" set higher than 386
 	  will result in a kernel that does NOT work on a 386.  The
 	  kernel will detect this on bootup, and give up.
 	- A kernel with math-emulation compiled in will still use the
@@ -183,7 +184,10 @@ COMPILING the kernel:
 
 IF SOMETHING GOES WRONG:
 
- - if you have problems that seem to be due to kernel bugs, please mail
+ - if you have problems that seem to be due to kernel bugs, please check
+   the file MAINTAINERS to see if there is a particualr person associated
+   with the part of the kernel that you are having trouble with. If there
+   isn't anyone listed there, then the second best thing is to mail
    them to me (Linus.Torvalds@Helsinki.FI), and possibly to any other
    relevant mailing-list or to the newsgroup.  The mailing-lists are
    useful especially for SCSI and NETworking problems, as I can't test
@@ -210,7 +214,8 @@ IF SOMETHING GOES WRONG:
    incomprehensible to you, but it does contain information that may
    help debugging the problem.  The text above the dump is also
    important: it tells something about why the kernel dumped code (in
-   the above example it's due to a bad kernel pointer)
+   the above example it's due to a bad kernel pointer). More information
+   on making sense of the dump is in Documentation/oops-tracing.txt
 
  - You can use the "ksymoops" program to make sense of the dump.  Find
    the C++ sources under the scripts/ directory to avoid having to do

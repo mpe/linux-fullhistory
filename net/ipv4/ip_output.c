@@ -320,6 +320,44 @@ void ip_send_check(struct iphdr *iph)
 	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 }
 
+
+/*
+ *	If a sender wishes the packet to remain unfreed
+ *	we add it to his send queue. This arguably belongs
+ *	in the TCP level since nobody else uses it. BUT
+ *	remember IPng might change all the rules.
+ */
+static inline void add_to_send_queue(struct sock * sk, struct sk_buff * skb)
+{
+	unsigned long flags;
+
+	/* The socket now has more outstanding blocks */
+	sk->packets_out++;
+
+	/* Protect the list for a moment */
+	save_flags(flags);
+	cli();
+
+	if (skb->link3 != NULL)
+	{
+		NETDEBUG(printk("ip.c: link3 != NULL\n"));
+		skb->link3 = NULL;
+	}
+	if (sk->send_head == NULL)
+	{
+		sk->send_tail = skb;
+		sk->send_head = skb;
+		sk->send_next = skb;
+	}
+	else
+	{
+		sk->send_tail->link3 = skb;
+		sk->send_tail = skb;
+	}
+	restore_flags(flags);
+}
+
+
 /*
  * Queues a packet to be sent, and starts the transmitter
  * if necessary.  if free = 1 then we free the block after
@@ -332,15 +370,8 @@ void ip_send_check(struct iphdr *iph)
 void ip_queue_xmit(struct sock *sk, struct device *dev,
 	      struct sk_buff *skb, int free)
 {
+	unsigned int tot_len;
 	struct iphdr *iph;
-/*	unsigned char *ptr;*/
-
-	/* Sanity check */
-	if (dev == NULL)
-	{
-		NETDEBUG(printk("IP: ip_queue_xmit dev = NULL\n"));
-		return;
-	}
 
 	IS_SKB(skb);
 
@@ -348,7 +379,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	Do some book-keeping in the packet for later
 	 */
 
-
+	skb->sk = sk;
 	skb->dev = dev;
 	skb->when = jiffies;
 
@@ -361,32 +392,30 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 */
 
 	iph = skb->ip_hdr;
-	iph->tot_len = htons(skb->len-(((unsigned char *)iph)-skb->data));
+	tot_len = skb->len - (((unsigned char *)iph) - skb->data);
+	iph->tot_len = htons(tot_len);
 
-	/*
-	 *	No reassigning numbers to fragments...
-	 */
-
-	if(free!=2)
-		iph->id      = htons(ip_id_count++);
-	else
-		free=1;
-
-	/* All buffers without an owner socket get freed */
-	if (sk == NULL)
-		free = 1;
+	switch (free) {
+		/* No reassigning numbers to fragments... */
+		default:
+			free = 1;
+			break;
+		case 0:
+			add_to_send_queue(sk, skb);
+			/* fall through */
+		case 1:
+			iph->id = htons(ip_id_count++);
+	}
 
 	skb->free = free;
 
+	/* Sanity check */
+	if (dev == NULL)
+		goto no_device;
+
 #ifdef CONFIG_FIREWALL
-	if(call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT) {
-		/* just don't send this packet */
-		/* and free socket buffers ;) <aldem@barnet.kharkov.ua> */
-		if (free)
-		  skb->sk = sk;		/* I am not sure *this* really need, */
-		kfree_skb(skb, FREE_WRITE);	/* but *this* must be here */
-		return;
-	}
+	if (call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT)
+		goto out;
 #endif	
 
 	/*
@@ -395,23 +424,14 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	bits of it.
 	 */
 
-	if(ntohs(iph->tot_len)> dev->mtu)
-	{
-		ip_fragment(sk,skb,dev,0);
-		IS_SKB(skb);
-		kfree_skb(skb,FREE_WRITE);
-		return;
-	}
+	if (tot_len > dev->mtu)
+		goto fragment;
 
 	/*
 	 *	Add an IP checksum
 	 */
 
 	ip_send_check(iph);
-
-	/*
-	 *	Print the frame when debugging
-	 */
 
 	/*
 	 *	More debugging. You cannot queue a packet already on a list
@@ -424,57 +444,14 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	}
 
 	/*
-	 *	If a sender wishes the packet to remain unfreed
-	 *	we add it to his send queue. This arguably belongs
-	 *	in the TCP level since nobody else uses it. BUT
-	 *	remember IPng might change all the rules.
-	 */
-
-	if (!free)
-	{
-		unsigned long flags;
-		/* The socket now has more outstanding blocks */
-
-		sk->packets_out++;
-
-		/* Protect the list for a moment */
-		save_flags(flags);
-		cli();
-
-		if (skb->link3 != NULL)
-		{
-			NETDEBUG(printk("ip.c: link3 != NULL\n"));
-			skb->link3 = NULL;
-		}
-		if (sk->send_head == NULL)
-		{
-			sk->send_tail = skb;
-			sk->send_head = skb;
-			sk->send_next = skb;
-		}
-		else
-		{
-			sk->send_tail->link3 = skb;
-			sk->send_tail = skb;
-		}
-		/* skb->link3 is NULL */
-
-		/* Interrupt restore */
-		restore_flags(flags);
-	}
-	else
-		/* Remember who owns the buffer */
-		skb->sk = sk;
-
-	/*
 	 *	If the indicated interface is up and running, send the packet.
 	 */
 	 
 	ip_statistics.IpOutRequests++;
 #ifdef CONFIG_IP_ACCT
-	ip_fw_chk(iph,dev,NULL,ip_acct_chain,IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_OUT);
+	ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_OUT);
 #endif	
-	
+
 #ifdef CONFIG_IP_MULTICAST	
 
 	/*
@@ -505,14 +482,12 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 		}
 		/* Multicasts with ttl 0 must not go beyond the host */
 		
-		if(skb->ip_hdr->ttl==0)
-		{
-			kfree_skb(skb, FREE_READ);
-			return;
-		}
+		if (iph->ttl==0)
+			goto out;
 	}
 #endif
-	if((dev->flags&IFF_BROADCAST) && (iph->daddr==dev->pa_brdaddr||iph->daddr==0xFFFFFFFF) && !(dev->flags&IFF_LOOPBACK))
+	if ((dev->flags & IFF_BROADCAST) && !(dev->flags & IFF_LOOPBACK)
+	    && (iph->daddr==dev->pa_brdaddr || iph->daddr==0xFFFFFFFF))
 		ip_loopback(dev,skb);
 		
 	if (dev->flags & IFF_UP)
@@ -521,24 +496,28 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 		 *	If we have an owner use its priority setting,
 		 *	otherwise use NORMAL
 		 */
+		int priority = SOPRI_NORMAL;
+		if (sk)
+			priority = sk->priority;
 
-		if (sk != NULL)
-		{
-			dev_queue_xmit(skb, dev, sk->priority);
-		}
-		else
-		{
-			dev_queue_xmit(skb, dev, SOPRI_NORMAL);
-		}
+		dev_queue_xmit(skb, dev, priority);
+		return;
 	}
-	else
-	{
-		if(sk)
-			sk->err = ENETDOWN;
-		ip_statistics.IpOutDiscards++;
-		if (free)
-			kfree_skb(skb, FREE_WRITE);
-	}
+	if(sk)
+		sk->err = ENETDOWN;
+	ip_statistics.IpOutDiscards++;
+out:
+	if (free)
+		kfree_skb(skb, FREE_WRITE);
+	return;
+
+no_device:
+	NETDEBUG(printk("IP: ip_queue_xmit dev = NULL\n"));
+	goto out;
+
+fragment:
+	ip_fragment(sk,skb,dev,0);
+	goto out;
 }
 
 
@@ -720,7 +699,7 @@ int ip_build_xmit(struct sock *sk,
 		}
 #endif
 #ifdef CONFIG_IP_ACCT
-		ip_fw_chk(iph,dev,NULL,ip_acct_chain, IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_OUT);
+		ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_OUT);
 #endif		
 		if(dev->flags&IFF_UP)
 			dev_queue_xmit(skb,dev,sk->priority);
@@ -926,7 +905,7 @@ int ip_build_xmit(struct sock *sk,
 #endif		
 #ifdef CONFIG_IP_ACCT
 		if(!offset)
-			ip_fw_chk(iph, dev, NULL, ip_acct_chain, IP_FW_F_ACCEPT, IP_FW_MODE_ACCT_OUT);
+			ip_fw_chk(iph, dev, NULL, ip_acct_chain, 0, IP_FW_MODE_ACCT_OUT);
 #endif	
 		offset -= (maxfraglen-fragheaderlen);
 		fraglen = maxfraglen;

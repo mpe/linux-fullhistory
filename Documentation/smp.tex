@@ -67,7 +67,7 @@ effectively atomic with respect to other processes and greatly simplifies
 many operation. Secondly interrupts may pre-empt a kernel running process, 
 but will always return to that process. A process in kernel mode may 
 disable interrupts on the processor and guarantee such an interruption will 
-not occur. The final guarantee is that an interrupt will not bne pre-empted 
+not occur. The final guarantee is that an interrupt will not be pre-empted 
 by a kernel task. That is interrupts will run to completion or be 
 pre-empted by other interrupts only.
 

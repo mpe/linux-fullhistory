@@ -97,6 +97,48 @@ the bus ever care what it is? Is cable quality a factor here?
 Regardless, you can choose your own default through the command-
 line with the 'period' keyword.
 
+
+------------------------------------------------
+***********  DIP switch settings  **************
+------------------------------------------------
+
+   sw1-1 sw1-2    BIOS address (hex)
+   -----------------------------------------
+    off   off     C8000 - CBFF0
+    on    off     D8000 - DBFF0
+    off   on      D0000 - D3FF0
+    on    on      BIOS disabled
+
+   sw1-3 sw1-4    IO port address (hex)
+   ------------------------------------
+    off   off     220 - 22F
+    on    off     200 - 20F
+    off   on      110 - 11F
+    on    on      100 - 10F
+
+   sw1-5 sw1-6 sw1-7    Interrupt
+   ------------------------------
+    off   off   off     15
+    off   on    off     14
+    off   off   on      11
+    off   on    on      10
+    on    -     -       disabled
+
+   sw1-8 function depends on BIOS version. In earlier versions this
+   controlled synchronous data transfer support for MSDOS:
+      off = disabled
+      on  = enabled
+   In later ROMs (starting with 01.3 in April 1994) sw1-8 controls
+   the "greater than 2 disk drive" feature that first appeared in
+   MSDOS 5.0 (ignored by linux):
+      off = 2 drives maximum
+      on  = 7 drives maximum
+
+   sw1-9    Floppy controller
+   --------------------------
+    off     disabled
+    on      enabled
+
 ------------------------------------------------
 
    I should mention that Drew Eckhardt's 'Generic NCR5380' sources

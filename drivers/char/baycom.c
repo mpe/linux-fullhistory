@@ -66,6 +66,11 @@
  *                  Various resource allocation cleanups
  *   0.2  12.05.96  Changed major to allocated 51. Integrated into kernel
  *                  source tree
+ *   0.3  04.06.96  Major bug fixed (forgot to wake up after write) which
+ *                  interestingly manifested only with kernel ax25
+ *                  (the slip line discipline)
+ *                  introduced bottom half and tq_baycom
+ *                  HDLC processing now done with interrupts on
  */
 
 /*****************************************************************************/
@@ -89,7 +94,8 @@
 #include <linux/ioport.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
-
+#include <linux/interrupt.h>
+#include <linux/tqueue.h>
 #include <linux/baycom.h>
 
 /* --------------------------------------------------------------------- */
@@ -106,13 +112,12 @@
  * circuitry is usually slow.
  */
 
-#define BUFLEN_RX 16384
-#define BUFLEN_TX 16384
+#define BUFLEN_RX 8192
+#define BUFLEN_TX 8192
 
 #define NR_PORTS 4
 
 #define KISS_VERBOSE
-#undef HDLC_LOOPBACK
 
 #define BAYCOM_MAGIC 0x3105bac0
 
@@ -184,10 +189,11 @@ struct access_params {
 
 struct hdlc_state_rx {
 	int rx_state;	/* 0 = sync hunt, != 0 receiving */
-	unsigned char lastbit;
 	unsigned int bitstream;
-	unsigned int assembly;
-	
+	unsigned int bitbuf;
+	int numbits;
+	unsigned int shreg1, shreg2;
+
 	int len;
 	unsigned char *bp;
 	unsigned char buffer[BAYCOM_MAXFLEN+2];	   /* make room for CRC */
@@ -204,6 +210,10 @@ struct hdlc_state_tx {
 	unsigned int bitstream;
 	unsigned int current_byte;
 	unsigned char ptt;
+
+	unsigned int bitbuf;
+	int numbits;
+	unsigned int shreg1, shreg2;
 
 	int len;
 	unsigned char *bp;
@@ -226,12 +236,13 @@ struct modem_state_par96 {
 	unsigned int dcd_shreg;
 	unsigned long descram;
 	unsigned long scram;
-	unsigned int tx_bits;
+	unsigned char last_rxbit;
 };
 
 struct modem_state {
 	unsigned char dcd;
 	short arb_divider;
+	unsigned char flags;
 	struct modem_state_ser12 ser12;
 	struct modem_state_par96 par96;
 };
@@ -288,6 +299,10 @@ struct baycom_state {
 	int opened;
 	struct tty_struct *tty;
 
+#ifdef BAYCOM_USE_BH
+	struct tq_struct tq_receiver, tq_transmitter, tq_arbitrate;
+#endif /* BAYCOM_USE_BH */
+
 	struct packet_buffer rx_buf;
 	struct packet_buffer tx_buf;
 
@@ -315,6 +330,10 @@ struct baycom_state {
 /* --------------------------------------------------------------------- */
 
 struct baycom_state baycom_state[NR_PORTS];
+
+#ifdef BAYCOM_USE_BH
+DECLARE_TASK_QUEUE(tq_baycom);
+#endif /* BAYCOM_USE_BH */
 
 /* --------------------------------------------------------------------- */
 
@@ -520,15 +539,28 @@ static int store_kiss_packet(struct packet_buffer *buf, unsigned char *data,
 #ifdef BAYCOM_DEBUG
 static inline void add_bitbuffer(struct bit_buffer * buf, unsigned int bit)
 {
+	unsigned char new;
+
 	if (!buf) return;
-	buf->shreg <<= 1;
+	new = buf->shreg & 1;
+	buf->shreg >>= 1;
 	if (bit)
-		buf->shreg |= 1;
-	if (buf->shreg & 0x100) {
+		buf->shreg |= 0x80;
+	if (new) {
 		buf->buffer[buf->wr] = buf->shreg;
 		buf->wr = (buf->wr+1) % sizeof(buf->buffer);
-		buf->shreg = 1;
+		buf->shreg = 0x80;
 	}
+}
+
+static inline void add_bitbuffer_word(struct bit_buffer * buf, 
+				      unsigned int bits)
+{
+	buf->buffer[buf->wr] = bits & 0xff;
+	buf->wr = (buf->wr+1) % sizeof(buf->buffer);
+	buf->buffer[buf->wr] = (bits >> 8) & 0xff;
+	buf->wr = (buf->wr+1) % sizeof(buf->buffer);
+
 }
 #endif /* BAYCOM_DEBUG */
 
@@ -553,67 +585,98 @@ static inline unsigned int tenms_to_flags(struct baycom_state *bc,
  * one bit per call
  */
 
-static void hdlc_rx_bit(struct baycom_state *bc, unsigned int bit)
+static inline int hdlc_rx_add_bytes(struct baycom_state *bc, 
+				    unsigned int bits, int num)
 {
+	int added = 0;
+	while (bc->hdlc_rx.rx_state && num >= 8) {
+		if (bc->hdlc_rx.len >= sizeof(bc->hdlc_rx.buffer)) {
+			bc->hdlc_rx.rx_state = 0;
+			return 0;
+		}
+		*bc->hdlc_rx.bp++ = bits >> (32-num);
+		bc->hdlc_rx.len++;
+		num -= 8;
+		added += 8;
+	}
+	return added;
+}
+
+static inline void hdlc_rx_flag(struct baycom_state *bc)
+{
+	if (bc->hdlc_rx.len < 4) 
+		return;
+	if (!check_crc_ccitt(bc->hdlc_rx.buffer, bc->hdlc_rx.len)) 
+		return;
+       	bc->stat.rx_packets++;
+	if (!store_kiss_packet(&bc->rx_buf,
+			       bc->hdlc_rx.buffer,
+			       bc->hdlc_rx.len-2))
+		bc->stat.rx_bufferoverrun++;
+}
+
+static void hdlc_rx_word(struct baycom_state *bc, unsigned int word)
+{
+	int i;
+	unsigned int mask1, mask2, mask3, mask4, mask5, mask6;
+	
 	if (!bc) return;
 
-	bc->hdlc_rx.bitstream <<= 1;
-	if (bit)
-		bc->hdlc_rx.bitstream |= 1;
+	word &= 0xffff;
 #ifdef BAYCOM_DEBUG
-	add_bitbuffer(&bc->bitbuf_hdlc, bc->hdlc_rx.bitstream & 1);
+	add_bitbuffer_word(&bc->bitbuf_hdlc, word);
 #endif /* BAYCOM_DEBUG */
-	if(bc->hdlc_rx.rx_state) {
-		if ((bc->hdlc_rx.bitstream & 0x3f) != 0x3e) {
-			/* not a stuffed bit */
-			if (bc->hdlc_rx.bitstream & 1)
-				bc->hdlc_rx.assembly |= 0x100;
-			if (bc->hdlc_rx.assembly & 1) {
-				/* store byte */
-				if (bc->hdlc_rx.len >= sizeof(bc->hdlc_rx.buffer)) {
-					bc->hdlc_rx.rx_state = 0;
-				} else {
-					*bc->hdlc_rx.bp++ = bc->hdlc_rx.assembly>>1;
-					bc->hdlc_rx.len++;
-					bc->hdlc_rx.assembly = 0x80;
-				}
-			} else {
-				bc->hdlc_rx.assembly >>= 1;
-			}
-		}
-		if ((bc->hdlc_rx.bitstream & 0x7f) == 0x7e) {
-			if (bc->hdlc_rx.len >= 4) {
-				if (check_crc_ccitt(bc->hdlc_rx.buffer,bc->hdlc_rx.len)) {
-					bc->stat.rx_packets++;
-					if (!store_kiss_packet(&bc->rx_buf,bc->hdlc_rx.buffer,bc->hdlc_rx.len-2))
-						bc->stat.rx_bufferoverrun++;
-				}
+       	bc->hdlc_rx.bitstream >>= 16;
+	bc->hdlc_rx.bitstream |= word << 16;
+	bc->hdlc_rx.bitbuf >>= 16;
+	bc->hdlc_rx.bitbuf |= word << 16;
+	bc->hdlc_rx.numbits += 16;
+	for(i = 15, mask1 = 0x1fc00, mask2 = 0x1fe00, mask3 = 0x0fc00,
+	    mask4 = 0x1f800, mask5 = 0xf800, mask6 = 0xffff; 
+	    i >= 0; 
+	    i--, mask1 <<= 1, mask2 <<= 1, mask3 <<= 1, mask4 <<= 1, 
+	    mask5 <<= 1, mask6 = (mask6 << 1) | 1) {
+		if ((bc->hdlc_rx.bitstream & mask1) == mask1)
+			bc->hdlc_rx.rx_state = 0; /* abort received */
+		else if ((bc->hdlc_rx.bitstream & mask2) == mask3) {
+			/* flag received */
+			if (bc->hdlc_rx.rx_state) {
+				hdlc_rx_add_bytes(bc, bc->hdlc_rx.bitbuf << 
+						  (8 + i), bc->hdlc_rx.numbits
+						  - 8 - i);
+				hdlc_rx_flag(bc);
 			}
 			bc->hdlc_rx.len = 0;
 			bc->hdlc_rx.bp = bc->hdlc_rx.buffer;
-			bc->hdlc_rx.assembly = 0x80;
-		}
-		if ((bc->hdlc_rx.bitstream & 0x7f) == 0x7f)
-			bc->hdlc_rx.rx_state = 0;
-	} else {
-		if ((bc->hdlc_rx.bitstream & 0x7f) == 0x7e) {
-			bc->hdlc_rx.len = 0;
-			bc->hdlc_rx.bp = bc->hdlc_rx.buffer;
-			bc->hdlc_rx.assembly = 0x80;
 			bc->hdlc_rx.rx_state = 1;
+			bc->hdlc_rx.numbits = i;
+		} else if ((bc->hdlc_rx.bitstream & mask4) == mask5) {
+			/* stuffed bit */
+			bc->hdlc_rx.numbits--;
+			bc->hdlc_rx.bitbuf = (bc->hdlc_rx.bitbuf & (~mask6)) |
+				((bc->hdlc_rx.bitbuf & mask6) << 1);
 		}
 	}
+	bc->hdlc_rx.numbits -= hdlc_rx_add_bytes(bc, bc->hdlc_rx.bitbuf,
+						 bc->hdlc_rx.numbits);
 }
 
 /* ---------------------------------------------------------------------- */
 
-static unsigned char hdlc_tx_bit(struct baycom_state *bc)
+static unsigned int hdlc_tx_word(struct baycom_state *bc)
 {
-	unsigned char bit;
+	unsigned int mask1, mask2, mask3;
+	int i;
 
 	if (!bc || !bc->hdlc_tx.ptt)
 		return 0;
-	for(;;) {
+	for (;;) {
+		if (bc->hdlc_tx.numbits >= 16) {
+			unsigned int ret = bc->hdlc_tx.bitbuf & 0xffff;
+			bc->hdlc_tx.bitbuf >>= 16;
+			bc->hdlc_tx.numbits -= 16;
+			return ret;
+		}
 		switch (bc->hdlc_tx.tx_state) {
 		default:
 			bc->hdlc_tx.ptt = 0;
@@ -621,80 +684,68 @@ static unsigned char hdlc_tx_bit(struct baycom_state *bc)
 			return 0;
 		case 0:
 		case 1:
-			if (bc->hdlc_tx.current_byte > 1) {
-				/*
-				 * return bit 
-				 */
-				bit = bc->hdlc_tx.current_byte & 1;
-				bc->hdlc_tx.current_byte >>= 1;
-				return bit;
-			}
-			/*
-			 * get new bit 
-			 */
 			if (bc->hdlc_tx.numflags) {
 				bc->hdlc_tx.numflags--;
-				bc->hdlc_tx.current_byte = 0x17e;
-			} else {
-				if (bc->hdlc_tx.tx_state == 1) {
-					bc->hdlc_tx.ptt = 0;
-					return 0;
-				}
-				get_packet(&bc->tx_buf, &bc->hdlc_tx.bp,
-					   &bc->hdlc_tx.len);
-				if (!bc->hdlc_tx.bp || !bc->hdlc_tx.len) {
-					bc->hdlc_tx.tx_state = 1;
-					bc->hdlc_tx.current_byte = 0;
-					bc->hdlc_tx.numflags = tenms_to_flags
-						(bc, bc->ch_params.tx_tail);
-				} else if (bc->hdlc_tx.len >= BAYCOM_MAXFLEN) {
-					bc->hdlc_tx.tx_state = 0;
-					bc->hdlc_tx.current_byte = 0;
-					bc->hdlc_tx.numflags = 1;
-					ack_packet(&bc->tx_buf);
-				} else {
-					memcpy(bc->hdlc_tx.buffer,
-					       bc->hdlc_tx.bp, 
-					       bc->hdlc_tx.len);
-					ack_packet(&bc->tx_buf);
-					bc->hdlc_tx.bp = bc->hdlc_tx.buffer;
-					append_crc_ccitt(bc->hdlc_tx.buffer,
-							 bc->hdlc_tx.len);
-					/* the appended CRC */
-					bc->hdlc_tx.len += 2; 
-					bc->hdlc_tx.tx_state = 2;
-					bc->hdlc_tx.current_byte = 0;
-					bc->hdlc_tx.bitstream = 0;
-					bc->stat.tx_packets++;
-				}
+				bc->hdlc_tx.bitbuf |= 
+					0x7e7e << bc->hdlc_tx.numbits;
+				bc->hdlc_tx.numbits += 16;
+				break;
 			}
-			break;
-		case 2:
-			if ((bc->hdlc_tx.bitstream & 0x1f) == 0x1f) {
-				/*
-				 * bit stuffing
-				 */
-				bc->hdlc_tx.bitstream <<= 1;
+			if (bc->hdlc_tx.tx_state == 1) {
+				bc->hdlc_tx.ptt = 0;
 				return 0;
 			}
-			if (bc->hdlc_tx.current_byte > 1) {
-				/*
-				 * return bit 
-				 */
-				bc->hdlc_tx.bitstream <<= 1;
-				bit = bc->hdlc_tx.current_byte & 1;
-				bc->hdlc_tx.bitstream |= bit;
-				bc->hdlc_tx.current_byte >>= 1;
-				return bit;
+			get_packet(&bc->tx_buf, &bc->hdlc_tx.bp,
+				   &bc->hdlc_tx.len);
+			if (!bc->hdlc_tx.bp || !bc->hdlc_tx.len) {
+				bc->hdlc_tx.tx_state = 1;
+				bc->hdlc_tx.numflags = tenms_to_flags
+					(bc, bc->ch_params.tx_tail);
+				break;
 			}
+			if (bc->hdlc_tx.len >= BAYCOM_MAXFLEN) {
+				bc->hdlc_tx.tx_state = 0;
+				bc->hdlc_tx.numflags = 1;
+				ack_packet(&bc->tx_buf);
+				break;
+			}
+			memcpy(bc->hdlc_tx.buffer, bc->hdlc_tx.bp, 
+			       bc->hdlc_tx.len);
+			ack_packet(&bc->tx_buf);
+			bc->hdlc_tx.bp = bc->hdlc_tx.buffer;
+			append_crc_ccitt(bc->hdlc_tx.buffer, bc->hdlc_tx.len);
+			/* the appended CRC */
+			bc->hdlc_tx.len += 2; 
+			bc->hdlc_tx.tx_state = 2;
+			bc->hdlc_tx.bitstream = 0;
+			bc->stat.tx_packets++;
+			break;
+		case 2:
 			if (!bc->hdlc_tx.len) {
 				bc->hdlc_tx.tx_state = 0;
-				bc->hdlc_tx.current_byte = 0;
 				bc->hdlc_tx.numflags = 1;
-			} else {
-				bc->hdlc_tx.len--;
-				bc->hdlc_tx.current_byte = 0x100 | 
-					(*bc->hdlc_tx.bp++);
+				break;
+			}
+			bc->hdlc_tx.len--;
+			bc->hdlc_tx.bitbuf |= *bc->hdlc_tx.bp <<
+				bc->hdlc_tx.numbits;
+			bc->hdlc_tx.bitstream >>= 8;
+			bc->hdlc_tx.bitstream |= (*bc->hdlc_tx.bp++) << 16;
+			mask1 = 0x1f000;
+			mask2 = 0x10000;
+			mask3 = 0xffffffff >> (31-bc->hdlc_tx.numbits);
+			bc->hdlc_tx.numbits += 8;
+			for(i = 0; i < 8; i++, mask1 <<= 1, mask2 <<= 1, 
+			    mask3 = (mask3 << 1) | 1) {
+				if ((bc->hdlc_tx.bitstream & mask1) != mask1) 
+					continue;
+				bc->hdlc_tx.bitstream &= ~mask2;
+				bc->hdlc_tx.bitbuf = 
+					(bc->hdlc_tx.bitbuf & mask3) |
+						((bc->hdlc_tx.bitbuf & 
+						 (~mask3)) << 1);
+				bc->hdlc_tx.numbits++;
+				mask3 = (mask3 << 1) | 1;
 			}
 			break;
 		}
@@ -720,7 +771,7 @@ static inline void tx_arbitrate(struct baycom_state *bc)
 	
 	if (!bc || bc->hdlc_tx.ptt || bc->modem.dcd)
 		return;
-	get_packet(&bc->tx_buf,&bp,&len);
+	get_packet(&bc->tx_buf, &bp, &len);
 	if (!bp || !len)
 		return;
 	
@@ -845,18 +896,34 @@ static void baycom_ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		 * since this may take quite long
 		 */
 		outb(0x0e | (bc->modem.ser12.tx_bit ? 1 : 0), MCR(bc->iobase));
-		if (bc->calibrate > 0) {
-			bc->modem.ser12.tx_bit = !bc->modem.ser12.tx_bit;
-			bc->calibrate--;
-			return;
-		}
+		if (bc->hdlc_tx.shreg1 <= 1) {
+			if (bc->calibrate > 0) {
+				bc->hdlc_tx.shreg1 = 0x10000;
+				bc->calibrate--;
+			} else {
+#ifdef BAYCOM_USE_BH
+				bc->hdlc_tx.shreg1 = bc->hdlc_tx.shreg2;
+				bc->hdlc_tx.shreg2 = 0;
+				queue_task_irq_off(&bc->tq_transmitter, 
+						   &tq_baycom);
+				mark_bh(BAYCOM_BH);
 #ifdef HDLC_LOOPBACK
-		hdlc_rx_bit(bc, bc->modem.ser12.tx_bit == 
-			    bc->modem.ser12.last_rxbit);
-		bc->modem.ser12.last_rxbit = bc->modem.ser12.tx_bit;
+				bc->hdlc_rx.shreg2 = bc->hdlc_tx.shreg1;
+				queue_task_irq_off(&bc->tq_receiver, 
+						   &tq_baycom);
 #endif /* HDLC_LOOPBACK */
-		if (!hdlc_tx_bit(bc))
+#else /* BAYCOM_USE_BH */
+				bc->hdlc_tx.shreg1 = hdlc_tx_word(bc) 
+					| 0x10000;
+#ifdef HDLC_LOOPBACK
+				hdlc_rx_word(bc, bc->hdlc_tx.shreg1);
+#endif /* HDLC_LOOPBACK */
+#endif /* BAYCOM_USE_BH */
+			}	
+		}
+		if (!(bc->hdlc_tx.shreg1 & 1))
 			bc->modem.ser12.tx_bit = !bc->modem.ser12.tx_bit;
+		bc->hdlc_tx.shreg1 >>= 1;
 		return;
 	}
 	/*
@@ -928,8 +995,10 @@ static void baycom_ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				ser12_set_divisor(bc, 4);
 				break;
 			}
-			hdlc_rx_bit(bc, bc->modem.ser12.last_sample == 
-			    bc->modem.ser12.last_rxbit);
+			bc->hdlc_rx.shreg1 >>= 1;
+			if (bc->modem.ser12.last_sample == 
+			    bc->modem.ser12.last_rxbit)
+				bc->hdlc_rx.shreg1 |= 0x10000;
 			bc->modem.ser12.last_rxbit = 
 				bc->modem.ser12.last_sample;
 		}
@@ -965,15 +1034,32 @@ static void baycom_ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				ser12_set_divisor(bc, 6);
 				break;
 			}
-			hdlc_rx_bit(bc, bc->modem.ser12.last_sample == 
-			    bc->modem.ser12.last_rxbit);
+			bc->hdlc_rx.shreg1 >>= 1;
+			if (bc->modem.ser12.last_sample == 
+			    bc->modem.ser12.last_rxbit)
+				bc->hdlc_rx.shreg1 |= 0x10000;
 			bc->modem.ser12.last_rxbit = 
 				bc->modem.ser12.last_sample;
 		}
 		bc->modem.ser12.interm_sample = !bc->modem.ser12.interm_sample;
 	}
+	if (bc->hdlc_rx.shreg1 & 1) {
+#ifdef BAYCOM_USE_BH
+		bc->hdlc_rx.shreg2 = (bc->hdlc_rx.shreg1 >> 1) | 0x10000;
+		queue_task_irq_off(&bc->tq_receiver, &tq_baycom);
+		mark_bh(BAYCOM_BH);
+#else /* BAYCOM_USE_BH */
+		hdlc_rx_word(bc, bc->hdlc_rx.shreg1 >> 1);
+#endif /* BAYCOM_USE_BH */
+		bc->hdlc_rx.shreg1 = 0x10000;
+	}
 	if (--bc->modem.arb_divider <= 0) {
+#ifdef BAYCOM_USE_BH
+		queue_task_irq_off(&bc->tq_arbitrate, &tq_baycom);
+		mark_bh(BAYCOM_BH);
+#else /* BAYCOM_USE_BH */
 		tx_arbitrate(bc);
+#endif /* BAYCOM_USE_BH */
 		bc->modem.arb_divider = bc->ch_params.slottime * 
 			SER12_ARB_DIVIDER(bc);
 	}
@@ -1126,7 +1212,7 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	register struct baycom_state *bc = (struct baycom_state *)dev_id;
 	int i;
-	unsigned int data, mask, mask2;
+	unsigned int data, rawdata, mask, mask2;
 	
 	if (!bc || bc->magic != BAYCOM_MAGIC)
 		return;
@@ -1144,12 +1230,12 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		 * transmitter, since this may take quite long
 		 * do the differential encoder and the scrambler on the fly
 		 */
-		data = bc->modem.par96.tx_bits;
-		for(i = 0; i < PAR96_BURSTBITS; i++, data <<= 1) {
+		data = bc->hdlc_tx.shreg1;
+		for(i = 0; i < PAR96_BURSTBITS; i++, data >>= 1) {
 			unsigned char val = PAR97_POWER;
 			bc->modem.par96.scram = ((bc->modem.par96.scram << 1) |
 						 (bc->modem.par96.scram & 1));
-			if (!(data & 0x8000))
+			if (!(data & 1))
 				bc->modem.par96.scram ^= 1;
 			if (bc->modem.par96.scram & (PAR96_SCRAM_TAP1 << 1))
 				bc->modem.par96.scram ^= 
@@ -1160,26 +1246,31 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			outb(val | PAR96_BURST, LPT_DATA(bc->iobase));
 		}
 		if (bc->calibrate > 0) {
-			bc->modem.par96.tx_bits = 0;
+			bc->hdlc_tx.shreg1 = 0x10000;
 			bc->calibrate--;
-			return;
-		}
+		} else {
+#ifdef BAYCOM_USE_BH
+			bc->hdlc_tx.shreg1 = bc->hdlc_tx.shreg2;
+			bc->hdlc_tx.shreg2 = 0;
+			queue_task_irq_off(&bc->tq_transmitter, &tq_baycom);
+			mark_bh(BAYCOM_BH);
 #ifdef HDLC_LOOPBACK
-		for(mask = 0x8000, i = 0; i < PAR96_BURSTBITS; i++, mask >>= 1)
-			hdlc_rx_bit(bc, bc->modem.par96.tx_bits & mask);
+			bc->hdlc_rx.shreg2 = bc->hdlc_tx.shreg1;
+			queue_task_irq_off(&bc->tq_receiver, &tq_baycom);
 #endif /* HDLC_LOOPBACK */
-		bc->modem.par96.tx_bits = 0;
-		for(i = 0; i < PAR96_BURSTBITS; i++) {
-			bc->modem.par96.tx_bits <<= 1;
-			if (hdlc_tx_bit(bc))
-				bc->modem.par96.tx_bits |= 1;
+#else /* BAYCOM_USE_BH */
+			bc->hdlc_tx.shreg1 = hdlc_tx_word(bc);
+#ifdef HDLC_LOOPBACK
+			hdlc_rx_word(bc, bc->hdlc_tx.shreg1);
+#endif /* HDLC_LOOPBACK */
+#endif /* BAYCOM_USE_BH */
 		}
 		return;
 	}
 	/*
 	 * do receiver; differential decode and descramble on the fly
 	 */
-	for(data = i = 0; i < PAR96_BURSTBITS; i++) {
+	for(rawdata = data = i = 0; i < PAR96_BURSTBITS; i++) {
 		unsigned int descx;
 		bc->modem.par96.descram = (bc->modem.par96.descram << 1);
 		if (inb(LPT_STATUS(bc->iobase)) & PAR96_RXBIT)
@@ -1190,19 +1281,31 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		outb(PAR97_POWER | PAR96_PTT, LPT_DATA(bc->iobase));
 		descx ^= ((descx >> PAR96_DESCRAM_TAPSH1) ^
 			  (descx >> PAR96_DESCRAM_TAPSH2));
-		data <<= 1;
-		data |= !(descx & 1);
+		if (descx & 1)
+			bc->modem.par96.last_rxbit = 
+				!bc->modem.par96.last_rxbit;
+		data >>= 1;
+		if (bc->modem.par96.last_rxbit)
+			data |= 0x8000;
+		rawdata <<= 1;
+		rawdata |= !(descx & 1);
 		outb(PAR97_POWER | PAR96_PTT | PAR96_BURST, 
 		     LPT_DATA(bc->iobase));
 	}
-	for(mask = 0x8000, i = 0; i < PAR96_BURSTBITS; i++, mask >>= 1)
-		hdlc_rx_bit(bc, data & mask);
+#ifdef BAYCOM_USE_BH
+	bc->hdlc_rx.shreg2 = bc->hdlc_rx.shreg1;
+	bc->hdlc_rx.shreg1 = data | 0x10000;
+	queue_task_irq_off(&bc->tq_receiver, &tq_baycom);
+	mark_bh(BAYCOM_BH);
+#else /* BAYCOM_USE_BH */
+	hdlc_rx_word(bc, data);
+#endif /* BAYCOM_USE_BH */
 	/*
 	 * do DCD algorithm
 	 */
 	if (bc->options & BAYCOM_OPTIONS_SOFTDCD) {
 		bc->modem.par96.dcd_shreg = (bc->modem.par96.dcd_shreg << 16)
-			| data;
+			| rawdata;
 		/* search for flags and set the dcd counter appropriately */
 		for(mask = 0x7f8000, mask2 = 0x3f0000, i = 0; 
 		    i < PAR96_BURSTBITS; i++, mask >>= 1, mask2 >>= 1)
@@ -1223,7 +1326,12 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		bc->modem.dcd = !!(inb(LPT_STATUS(bc->iobase)) & PAR96_DCD);
 	}
 	if (--bc->modem.arb_divider <= 0) {
+#ifdef BAYCOM_USE_BH
+		queue_task_irq_off(&bc->tq_arbitrate, &tq_baycom);
+		mark_bh(BAYCOM_BH);
+#else /* BAYCOM_USE_BH */
 		tx_arbitrate(bc);
+#endif /* BAYCOM_USE_BH */
 		bc->modem.arb_divider = bc->ch_params.slottime * 6;
 	}
 }
@@ -1320,6 +1428,58 @@ static void par96_on_close(struct baycom_state *bc)
 
 /* --------------------------------------------------------------------- */
 /*
+ * ===================== Bottom half (soft interrupt) ====================
+ */
+
+#ifdef BAYCOM_USE_BH
+static void bh_receiver(void *private)
+{
+	struct baycom_state *bc = (struct baycom_state *)private;
+	unsigned int temp;
+
+	if (!bc || bc->magic != BAYCOM_MAGIC)
+		return;
+	if (!bc->hdlc_rx.shreg2)
+		return;
+	temp = bc->hdlc_rx.shreg2;
+	bc->hdlc_rx.shreg2 = 0;
+	hdlc_rx_word(bc, temp);
+}
+
+/* --------------------------------------------------------------------- */
+
+static void bh_transmitter(void *private)
+{
+	struct baycom_state *bc = (struct baycom_state *)private;
+
+	if (!bc || bc->magic != BAYCOM_MAGIC)
+		return;
+	if (bc->hdlc_tx.shreg2)
+		return;
+	bc->hdlc_tx.shreg2 = hdlc_tx_word(bc) | 0x10000;
+}
+
+/* --------------------------------------------------------------------- */
+
+static void bh_arbitrate(void *private)
+{
+	struct baycom_state *bc = (struct baycom_state *)private;
+
+	if (!bc || bc->magic != BAYCOM_MAGIC)
+		return;
+	tx_arbitrate(bc);
+}
+
+/* --------------------------------------------------------------------- */
+
+static void baycom_bottom_half(void)
+{
+	run_task_queue(&tq_baycom);
+}
+#endif /* BAYCOM_USE_BH */
+
+/* --------------------------------------------------------------------- */
+/*
  * ===================== TTY interface routines ==========================
  */
 
@@ -1369,7 +1529,7 @@ static void baycom_put_fend(struct baycom_state *bc)
 			break;
 		bc->ch_params.ppersist = bc->kiss_decode.pkt_buf[1];
 #ifdef KISS_VERBOSE
-		printk("KERN_INFO baycom: p-persistence = %u\n", 
+		printk(KERN_INFO "baycom: p-persistence = %u\n", 
 		       bc->ch_params.ppersist);
 #endif /* KISS_VERBOSE */
 		break;
@@ -1379,7 +1539,7 @@ static void baycom_put_fend(struct baycom_state *bc)
 			break;
 		bc->ch_params.slottime = bc->kiss_decode.pkt_buf[1];
 #ifdef KISS_VERBOSE
-		printk("baycom: slottime = %ums\n", 
+		printk(KERN_INFO "baycom: slottime = %ums\n", 
 		       bc->ch_params.slottime * 10);
 #endif /* KISS_VERBOSE */
 		break;
@@ -1477,6 +1637,10 @@ static int baycom_write(struct tty_struct * tty, int from_user,
 		for(c = count, bp = buf; c > 0; c--,bp++)
 			baycom_put_char(tty, *bp);
 	}
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+		tty->ldisc.write_wakeup)
+			(tty->ldisc.write_wakeup)(tty);
+	wake_up_interruptible(&tty->write_wait);
 	return count;
 }
 
@@ -1513,10 +1677,10 @@ static int baycom_chars_in_buffer(struct tty_struct *tty)
 		return 0;
 	if (baycom_paranoia_check(bc = tty->driver_data, "chars_in_buffer"))
 		return 0;
-		
-	cnt = bc->rx_buf.wr - bc->rx_buf.rd;
+
+	cnt = bc->tx_buf.wr - bc->tx_buf.rd;
 	if (cnt < 0)
-		cnt += bc->rx_buf.buflen;
+		cnt += bc->tx_buf.buflen;
 		
 	return cnt;
 }
@@ -1669,7 +1833,7 @@ static int baycom_ioctl(struct tty_struct *tty, struct file * file,
 		
 	case BAYCOMCTL_CALIBRATE:
 		bc->calibrate = arg * ((bc->modem_type == BAYCOM_MODEM_PAR96) ?
-				       600 : 1200);
+				       600 : 75);
 		return 0;
 
 	case BAYCOMCTL_GETPARAMS:
@@ -1917,16 +2081,28 @@ static void init_channel(struct baycom_state *bc)
 
 #ifdef BAYCOM_DEBUG
 	bc->bitbuf_channel.rd = bc->bitbuf_channel.wr = 0;
-	bc->bitbuf_channel.shreg = 1;
+	bc->bitbuf_channel.shreg = 0x80;
 
 	bc->bitbuf_hdlc.rd = bc->bitbuf_hdlc.wr = 0;
-	bc->bitbuf_hdlc.shreg = 1;
+	bc->bitbuf_hdlc.shreg = 0x80;
 #endif /* BAYCOM_DEBUG */
 
 	bc->kiss_decode.dec_state = bc->kiss_decode.escaped = 
 	bc->kiss_decode.wr = 0;
 
 	bc->ch_params = dflt_ch_params;
+
+#ifdef BAYCOM_USE_BH
+	bc->tq_receiver.next = bc->tq_transmitter.next =
+		bc->tq_arbitrate.next = NULL;
+	bc->tq_receiver.sync = bc->tq_transmitter.sync =
+		bc->tq_arbitrate.sync = 0;
+	bc->tq_receiver.data = bc->tq_transmitter.data =
+		bc->tq_arbitrate.data = bc;
+	bc->tq_receiver.routine = bh_receiver;
+	bc->tq_transmitter.routine = bh_transmitter;
+	bc->tq_arbitrate.routine = bh_arbitrate;
+#endif /* BAYCOM_USE_BH */
 }
 
 static void init_datastructs(void)
@@ -1962,6 +2138,12 @@ int baycom_init(void) {
 	 * initialize the data structures
 	 */
 	init_datastructs();
+	/*
+	 * initialize bottom half handler
+ 	 */
+#ifdef BAYCOM_USE_BH
+	init_bh(BAYCOM_BH, baycom_bottom_half);
+#endif /* BAYCOM_USE_BH */
 	/*
 	 * register the driver as tty driver
 	 */
@@ -2080,7 +2262,7 @@ int init_module(void)
 	if (i)
 		return i;
 
-	printk(KERN_INFO "baycom: version 0.2; "
+	printk(KERN_INFO "baycom: version 0.3; "
 	       "(C) 1996 by Thomas Sailer HB9JNX, sailer@ife.ee.ethz.ch\n");
 
 	return 0;
@@ -2092,10 +2274,6 @@ void cleanup_module(void)
 {
 	int i;
 
-#if 0
-	if (MOD_IN_USE)
-		printk(KERN_INFO "baycom: device busy, remove delayed\n");
-#endif
 	printk(KERN_INFO "baycom: cleanup_module called\n");
 
 	if (tty_unregister_driver(&baycom_driver))

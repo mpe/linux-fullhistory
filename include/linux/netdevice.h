@@ -28,7 +28,6 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/skbuff.h>
-#include <linux/interrupt.h>
 
 /* for future expansion when we will have different priorities. */
 #define DEV_NUMBUFFS	3
@@ -205,6 +204,7 @@ struct packet_type {
 
 #ifdef __KERNEL__
 
+#include <linux/interrupt.h>
 #include <linux/notifier.h>
 
 /* Used by dev_rint */

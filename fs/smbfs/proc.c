@@ -5,6 +5,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/smbno.h>
 #include <linux/smb_fs.h>
@@ -1603,12 +1604,14 @@ smb_proc_reconnect(struct smb_server *server)
           { PROTOCOL_LANMAN1,"MICROSOFT NETWORKS 3.0"},
           { PROTOCOL_LANMAN1,"LANMAN1.0"},
 #endif
+#ifdef CONFIG_SMB_LONG
 #ifdef LANMAN2
           { PROTOCOL_LANMAN2,"LM1.2X002"},
 #endif
 #ifdef NT1
 	  { PROTOCOL_NT1,"NT LM 0.12"},
 	  { PROTOCOL_NT1,"NT LANMAN 1.0"},
+#endif
 #endif
           {-1, NULL} };
 	char dev[] = "A:";
@@ -2026,20 +2029,3 @@ smb_printerr(int class, int num)
 }
 
 #endif /* DEBUG_SMB > 0 */
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 8
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -8
- * c-argdecl-indent: 8
- * c-label-offset: -8
- * c-continued-statement-offset: 8
- * c-continued-brace-offset: 0
- * End:
- */

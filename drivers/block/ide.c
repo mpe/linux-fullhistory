@@ -3114,7 +3114,7 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Allocate the irq, if not already obtained for another hwif
 	 */
 	if (!match || match->irq != hwif->irq) {
-		if (request_irq(hwif->irq, ide_intr, SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name, hwgroup)) {
+		if (request_irq(hwif->irq, ide_intr, SA_INTERRUPT, hwif->name, hwgroup)) {
 			if (!match)
 				kfree(hwgroup);
 			restore_flags(flags);

@@ -104,6 +104,7 @@ extern __inline__ void tcp_rtt_estimator(struct sock *sk, struct sk_buff *oskb)
 	 */
 	
 	m = jiffies - oskb->when;  /* RTT */
+
 	if (sk->rtt != 0) {
 		if(m<=0)
 			m=1;		/* IS THIS RIGHT FOR <0 ??? */
@@ -421,6 +422,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->cong_count = 0;
 	newsk->ssthresh = 0x7fffffff;
 
+	newsk->lrcvtime = 0;
+	newsk->idletime = 0;
 	newsk->high_seq = 0;
 	newsk->backoff = 0;
 	newsk->blog = 0;
@@ -653,13 +656,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		goto uninteresting_ack;
 
 	/*
-	 *	If there is data set flag 1
-	 */
-	 
-	if (len != th->doff*4) 
-		flag |= 1;
-
-	/*
 	 *	Have we discovered a larger window
 	 */
 	window_seq = ntohs(th->window);
@@ -679,10 +675,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	/*
 	 *	See if our window has been shrunk. 
 	 */
-	if (after(sk->window_seq, window_seq)) {
-		flag |= 4;
+	if (after(sk->window_seq, window_seq))
 		tcp_window_shrunk(sk, window_seq);
-	}
 
 	/*
 	 *	Pipe has emptied
@@ -758,7 +752,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 
 	if (sk->rcv_ack_seq == ack
 		&& sk->window_seq == window_seq
-		&& !(flag&1)
+		&& len != th->doff*4
 		&& before(ack, sk->sent_seq)
 		&& after(ack, sk->high_seq))
 	{
@@ -777,9 +771,16 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		 * of what we are doing here.
 		 */
 		if (sk->rcv_ack_cnt == MAX_DUP_ACKS+1) {
+			int tmp;
+
+			/* We need to be a bit careful to preserve the
+			 * count of packets that are out in the system here.
+			 */
 			sk->ssthresh = max(sk->cong_window >> 1, 2);
 			sk->cong_window = sk->ssthresh+MAX_DUP_ACKS+1;
+			tmp = sk->packets_out;
 			tcp_do_retransmit(sk,0);
+			sk->packets_out = tmp;
 		} else if (sk->rcv_ack_cnt > MAX_DUP_ACKS+1) {
 			sk->cong_window++;
 			/*
@@ -884,6 +885,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		if ((sk->send_head = skb->link3) == NULL)
 		{
 			sk->send_tail = NULL;
+			sk->send_next = NULL;
 			sk->retransmits = 0;
 		}
 
@@ -912,10 +914,15 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		if (sk->packets_out > 0) 
 			sk->packets_out --;
 
+		/* This is really only supposed to be called when we
+		 * are actually ACKing new data, which should exclude
+		 * the ACK handshake on an initial SYN packet as well.
+		 * Rather than introducing a new test here for this
+		 * special case, we just reset the initial values for
+		 * rtt immediatly after we move to the established state.
+		 */
 		if (!(flag&2)) 	/* Not retransmitting */
 			tcp_rtt_estimator(sk,skb);
-		flag |= (2|4);	/* 2 is really more like 'don't adjust the rtt 
-				   In this case as we just set it up */
 		IS_SKB(skb);
 
 		/*
@@ -949,7 +956,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		/*
 		 *	Add more data to the send queue.
 		 */
-		flag |= 1;
 		tcp_write_xmit(sk);
 	}
 
@@ -1034,7 +1040,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	    && skb_queue_empty(&sk->write_queue)
 	    && sk->send_head == NULL) 
 	{
-		flag |= 1;
 		tcp_send_partial(sk);
 	}
 
@@ -1055,7 +1060,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 				sk->rcv_ack_seq,sk->write_seq,sk->acked_seq,sk->fin_seq);
 		if (sk->rcv_ack_seq == sk->write_seq /*&& sk->acked_seq == sk->fin_seq*/) 
 		{
-			flag |= 1;
 			sk->shutdown = SHUTDOWN_MASK;
 			tcp_set_state(sk,TCP_CLOSE);
 			return 1;
@@ -1076,7 +1080,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			sk->state_change(sk);
 		if (sk->rcv_ack_seq == sk->write_seq) 
 		{
-			flag |= 1;
 			sk->shutdown |= SEND_SHUTDOWN;
 			tcp_set_state(sk, TCP_FIN_WAIT2);
 			/* If the socket is dead, then there is no
@@ -1101,7 +1104,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			sk->state_change(sk);
 		if (sk->rcv_ack_seq == sk->write_seq) 
 		{
-			flag |= 1;
 			tcp_time_wait(sk);
 		}
 	}
@@ -1110,7 +1112,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 *	Final ack of a three way shake 
 	 */
 	 
-	if(sk->state==TCP_SYN_RECV)
+	if (sk->state==TCP_SYN_RECV)
 	{
 		tcp_set_state(sk, TCP_ESTABLISHED);
 		tcp_options(sk,th);
@@ -1123,6 +1125,13 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			sk->max_window=32;	/* Sanity check */
 			sk->mss=min(sk->max_window,sk->mtu);
 		}
+		/* Reset the RTT estimator to the initial
+		 * state rather than testing to avoid
+		 * updating it on the ACK to the SYN packet.
+		 */
+		sk->rtt = 0;
+		sk->rto = TCP_TIMEOUT_INIT;
+		sk->mdev = TCP_TIMEOUT_INIT;
 	}
 	
 	/*
@@ -1679,7 +1688,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct sock *sk;
 	int syn_ok=0;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-	int r=0;
+	int r;
 #endif
 
 	/*
@@ -1763,6 +1772,11 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	skb->sk=sk;
 	atomic_add(skb->truesize, &sk->rmem_alloc);
+
+	/*
+	 * Mark the time of the last received packet.
+	 */
+	sk->idletime = jiffies;
 	
 	/*
 	 *	We should now do header prediction.
@@ -1897,6 +1911,13 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					sk->max_window = 32;
 					sk->mss = min(sk->max_window, sk->mtu);
 				}
+				/* Reset the RTT estimator to the initial
+				 * state rather than testing to avoid
+				 * updating it on the ACK to the SYN packet.
+				 */
+				sk->rtt = 0;
+				sk->rto = TCP_TIMEOUT_INIT;
+				sk->mdev = TCP_TIMEOUT_INIT;
 			}
 			else
 			{

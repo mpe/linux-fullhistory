@@ -180,6 +180,7 @@ static struct symbol_table net_syms = {
 #ifdef CONFIG_NETLINK
 	X(netlink_attach),
 	X(netlink_detach),
+	X(netlink_donothing),
 	X(netlink_post),
 #endif /* CONFIG_NETLINK */
 	

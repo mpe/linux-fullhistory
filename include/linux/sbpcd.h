@@ -108,12 +108,21 @@
 
 #if DISTRIBUTION
 #define READ_AUDIO 0
+#define KLOGD_PAUSE 55
 #else
 /* max. number of audio frames to read with one     */
 /* request (allocates n* 2352 bytes kernel memory!) */
 /* may be freely adjusted, f.e. 75 (= 1 sec.), at   */
 /* runtime by use of the CDROMAUDIOBUFSIZ ioctl.    */
 #define READ_AUDIO 75
+
+/*
+ * Time to wait after giving a message.
+ * This gets important if you enable non-standard DBG_xxx flags.
+ * You will see what happens if you omit the pause or make it
+ * too short. Be warned!
+ */
+#define KLOGD_PAUSE 1
 
 /* tray control: eject tray if no disk is in (0 or 1) */
 #define JUKEBOX 1
@@ -134,6 +143,7 @@
 /*==========================================================================*/
 #define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
 #undef  FUTURE
+#undef SAFE_MIXED
 
 #define TEST_UPC 0
 #define SPEA_TEST 0

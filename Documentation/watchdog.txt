@@ -25,8 +25,9 @@ degrees farenheit. Each read returns a single byte giving the temperature.
 
 The third interface logs kernel messages on additional alert events.
 
-At the moment only the software watchdog is available in the standard
-kernel.
+Both software and hardware watchdog drivers are available in the standard
+kernel. If you are using the software watchdog, you probably also want
+to use "panic=60" as a boot argument as well.
 
 Features
 --------

@@ -14,6 +14,7 @@
  *	Juan Jose Ciarlante	:	Added NO_ADDR status flag.
  *	Nigel Metheringham	:	Added ICMP handling for demasquerade
  *	Nigel Metheringham	:	Checksum checking of masqueraded data
+ *	Nigel Metheringham	:	Better handling of timeouts of TCP conns
  *
  *	
  */
@@ -539,20 +540,29 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		struct tcphdr *th;
  		th = (struct tcphdr *)portptr;
 
+		/* Set the flags up correctly... */
+		if (th->fin)
+		{
+			ms->flags |= IP_MASQ_F_SAW_FIN_OUT;
+		}
+
+		if (th->rst)
+		{
+			ms->flags |= IP_MASQ_F_SAW_RST;
+		}
+
  		/*
- 		 *	Timeout depends if FIN packet was seen
+ 		 *	Timeout depends if FIN packet has been seen
 		 *	Very short timeout if RST packet seen.
  		 */
- 		if (ms->flags & IP_MASQ_F_SAW_RST || th->rst)
-                {
+ 		if (ms->flags & IP_MASQ_F_SAW_RST)
+		{
                         timeout = 1;
- 			ms->flags |= IP_MASQ_F_SAW_RST;
- 		}
- 		else if (ms->flags & IP_MASQ_F_SAW_FIN || th->fin)
-                {
+		}
+ 		else if ((ms->flags & IP_MASQ_F_SAW_FIN) == IP_MASQ_F_SAW_FIN)
+		{
                         timeout = ip_masq_expire->tcp_fin_timeout;
- 			ms->flags |= IP_MASQ_F_SAW_FIN;
- 		}
+		}
  		else timeout = ip_masq_expire->tcp_timeout;
 
 		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
@@ -775,6 +785,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	__u16	*portptr;
  	struct ip_masq	*ms;
 	unsigned short len;
+	unsigned long 	timeout;
 
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
@@ -827,6 +838,9 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 
         if (ms != NULL)
         {
+		/* Stop the timer ticking.... */
+		ip_masq_set_expire(ms,0);
+
                 /*
                  *	Set dport if not defined yet.
                  */
@@ -869,16 +883,13 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 
                 /*
                  * Yug! adjust UDP/TCP and IP checksums, also update
-		 * UDP timeouts since you cannot depend on traffic
-		 * going through the other way to hold the timeout open.
-		 * (With TCP the ACK packets hold the tunnel open).
-		 * If a TCP RST is seen collapse the tunnel!
+		 * timeouts.
+		 * If a TCP RST is seen collapse the tunnel (by using short timeout)!
                  */
                 if (iph->protocol==IPPROTO_UDP)
 		{
                         recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,len);
-			ip_masq_set_expire(ms, 0);
-			ip_masq_set_expire(ms, ip_masq_expire->udp_timeout);
+			timeout = ip_masq_expire->udp_timeout;
 		}
                 else
                 {
@@ -886,16 +897,30 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                         skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
                                                  len - sizeof(struct tcphdr), 0);
                         tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,len,skb);
-			/* Check if TCP RST */
+
+			/* Check if TCP FIN or RST */
 			th = (struct tcphdr *)portptr;
+			if (th->fin)
+			{
+				ms->flags |= IP_MASQ_F_SAW_FIN_IN;
+			}
 			if (th->rst)
 			{
-				ip_masq_set_expire(ms, 0);
 				ms->flags |= IP_MASQ_F_SAW_RST;
-				ip_masq_set_expire(ms, 1);
 			}
-
+			
+			/* Now set the timeouts */
+			if (ms->flags & IP_MASQ_F_SAW_RST)
+			{
+				timeout = 1;
+			}
+			else if ((ms->flags & IP_MASQ_F_SAW_FIN) == IP_MASQ_F_SAW_FIN)
+			{
+				timeout = ip_masq_expire->tcp_fin_timeout;
+			}
+			else timeout = ip_masq_expire->tcp_timeout;
                 }
+		ip_masq_set_expire(ms, timeout);
                 ip_send_check(iph);
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
                 printk("I-routed to %lX:%X\n",ntohl(iph->daddr),ntohs(portptr[1]));

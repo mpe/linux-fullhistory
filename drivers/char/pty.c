@@ -74,8 +74,10 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	}
 	wake_up_interruptible(&tty->read_wait);
 	wake_up_interruptible(&tty->write_wait);
+	tty->packet = 0;
 	if (!tty->link)
 		return;
+	tty->link->packet = 0;
 	wake_up_interruptible(&tty->link->read_wait);
 	wake_up_interruptible(&tty->link->write_wait);
 	set_bit(TTY_OTHER_CLOSED, &tty->link->flags);

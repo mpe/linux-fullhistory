@@ -302,7 +302,7 @@ static inline int
 rpc_send(struct rpc_sock *rsock, struct rpc_wait *slot)
 {
 	struct rpc_ioreq *req = slot->w_req;
-	struct iovec	iov[MAX_IOVEC];
+	struct iovec	iov[UIO_MAXIOV];
 
 	if (rsock->shutdown)
 		return -EIO;
@@ -336,7 +336,7 @@ rpc_grok(struct rpc_sock *rsock)
 {
 	struct rpc_wait	*rovr;
 	struct rpc_ioreq *req;
-	struct iovec	iov[MAX_IOVEC];
+	struct iovec	iov[UIO_MAXIOV];
 	u32		xid;
 	int		safe, result;
 

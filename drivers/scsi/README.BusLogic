@@ -1,9 +1,9 @@
 		  BusLogic MultiMaster SCSI Driver for Linux
 
-		       Version 1.2.3 for Linux 1.2.13
-		       Version 2.0.3 for Linux 2.0.0
+		       Version 1.2.4 for Linux 1.2.13
+		       Version 2.0.4 for Linux 2.0.0
 
-				  17 May 1996
+				  5 June 1996
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -325,7 +325,7 @@ substantially impact performance.
 			     INSTALLATION
 
 This distribution was prepared for Linux kernel version 1.2.13
-(BusLogic-1.2.3.tar.gz) or Linux kernel version 2.0.0 (BusLogic-2.0.3.tar.gz).
+(BusLogic-1.2.4.tar.gz) or Linux kernel version 2.0.0 (BusLogic-2.0.4.tar.gz).
 Installation in later versions will probably be successful as well, though
 BusLogic.patch may not be required.  Installation in earlier versions is not
 recommended.
@@ -335,7 +335,7 @@ replacing "/usr/src" with wherever you keep your Linux kernel source tree
 (substitute "1.2" or "2.0" for "x.y" in the tar command as appropriate):
 
   cd /usr/src
-  tar -xvzf BusLogic-x.y.3.tar.gz
+  tar -xvzf BusLogic-x.y.4.tar.gz
   mv README.* BusLogic.[ch] linux/drivers/scsi
   patch -p < BusLogic.patch	    (on Linux 1.2.13 only)
   patch -p < BusLogic.elf_patch	    (on Linux 1.2.13 ELF systems only)

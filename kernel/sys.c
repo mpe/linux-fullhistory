@@ -18,8 +18,6 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
-#include <linux/pagemap.h>
-#include <linux/swap.h>
 #include <linux/fcntl.h>
 #include <linux/acct.h>
 #include <linux/tty.h>
@@ -548,70 +546,6 @@ asmlinkage long sys_times(struct tms * tbuf)
 		put_user(current->cstime,&tbuf->tms_cstime);
 	}
 	return jiffies;
-}
-
-asmlinkage unsigned long sys_brk(unsigned long brk)
-{
-	int freepages;
-	unsigned long rlim;
-	unsigned long newbrk, oldbrk;
-
-	if (brk < current->mm->end_code)
-		return current->mm->brk;
-	newbrk = PAGE_ALIGN(brk);
-	oldbrk = PAGE_ALIGN(current->mm->brk);
-	if (oldbrk == newbrk)
-		return current->mm->brk = brk;
-
-	/*
-	 * Always allow shrinking brk
-	 */
-	if (brk <= current->mm->brk) {
-		current->mm->brk = brk;
-		do_munmap(newbrk, oldbrk-newbrk);
-		return brk;
-	}
-	/*
-	 * Check against rlimit and stack..
-	 */
-	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
-	if (rlim >= RLIM_INFINITY)
-		rlim = ~0;
-	if (brk - current->mm->end_code > rlim)
-		return current->mm->brk;
-	/*
-	 * Check against existing mmap mappings.
-	 */
-	if (find_vma_intersection(current, oldbrk, newbrk+PAGE_SIZE))
-		return current->mm->brk;
-	/*
-	 * stupid algorithm to decide if we have enough memory: while
-	 * simple, it hopefully works in most obvious cases.. Easy to
-	 * fool it, but this should catch most mistakes.
-	 */
-	freepages = buffermem >> PAGE_SHIFT;
-	freepages += page_cache_size;
-	freepages >>= 1;
-	freepages += nr_free_pages;
-	freepages += nr_swap_pages;
-	freepages -= MAP_NR(high_memory) >> 4;
-	freepages -= (newbrk-oldbrk) >> PAGE_SHIFT;
-	if (freepages < 0)
-		return current->mm->brk;
-#if 0
-	freepages += current->mm->rss;
-	freepages -= oldbrk >> 12;
-	if (freepages < 0)
-		return current->mm->brk;
-#endif
-	/*
-	 * Ok, we have probably got enough memory - let it rip.
-	 */
-	current->mm->brk = brk;
-	do_mmap(NULL, oldbrk, newbrk-oldbrk,
-		PROT_READ|PROT_WRITE|PROT_EXEC,
-		MAP_FIXED|MAP_PRIVATE, 0);
-	return brk;
 }
 
 /*

@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 0.98, last modified 7-May-96
+ * Version 1.00, last modified 26-May-96
  * 
  * Copyright Theodore Ts'o, 1994, 1995, 1996.  All rights reserved.
  *
@@ -226,7 +226,6 @@
  * Eastlake, Steve Crocker, and Jeff Schiller.
  */
 
-#include <linux/sched.h>
 #include <linux/utsname.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -242,6 +241,8 @@
 /*
  * Configuration information
  */
+#undef RANDOM_BENCHMARK
+#undef BENCHMARK_NOINT
 
 /*
  * The pool is stirred with a primitive polynomial of degree 128
@@ -288,6 +289,29 @@ struct random_bucket {
 	__u32 *pool;
 };
 
+#ifdef RANDOM_BENCHMARK
+/* For benchmarking only */
+struct random_benchmark {
+	unsigned long long 	start_time;
+	int			times;		/* # of samples */
+	unsigned long		min;
+	unsigned long		max;
+	unsigned long		accum;		/* accumulator for average */
+	const char		*descr;
+	int			unit;
+	unsigned long		flags;
+};
+
+#define BENCHMARK_INTERVAL 500
+
+static void initialize_benchmark(struct random_benchmark *bench,
+				 const char *descr, int unit);
+static void begin_benchmark(struct random_benchmark *bench);
+static void end_benchmark(struct random_benchmark *bench);
+
+struct random_benchmark timer_benchmark;
+#endif
+
 /* There is one of these per entropy source */
 struct timer_rand_state {
 	unsigned long	last_time;
@@ -315,12 +339,73 @@ static int random_write(struct inode * inode, struct file * file,
 static int random_ioctl(struct inode * inode, struct file * file,
 			unsigned int cmd, unsigned long arg);
 
-static inline void add_entropy_word(struct random_bucket *r,
+static inline void fast_add_entropy_word(struct random_bucket *r,
+					 const __u32 input);
+
+static void add_entropy_word(struct random_bucket *r,
 				    const __u32 input);
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
+
+/*
+ * Unfortunately, while the GCC optimizer for the i386 understands how
+ * to opimize a static rotate left of x bits, it doesn't know how to
+ * deal with a variable rotate of x bits.  So we use a bit of asm magic.
+ */
+#if (!defined (__i386__))
+extern inline __u32 rotate_left(int i, __u32 word)
+{
+	__u32 nbits = 0;
+	
+	return (word << i) | (word >> (32 - i));
+	
+}
+#else
+extern inline __u32 rotate_left(int i, __u32 word)
+{
+	__asm__("roll %%cl,%0"
+		:"=r" (word)
+		:"0" (word),"c" (i));
+	return word;
+}
+#endif
+
+/*
+ * More asm magic....
+ * 
+ * For entropy estimation, we need to do an integral base 2
+ * logarithm.  By default, use an open-coded C version, although we do
+ * have a version which takes advantage of the Intel's x86's "bsr"
+ * instruction.
+ */
+#if (!defined (__i386__))
+static inline __u32 int_ln(__u32 word)
+{
+	__u32 nbits = 0;
+	
+	while (1) {
+		word >>= 1;
+		if (!word)
+			break;
+		nbits++;
+	}
+	return nbits;
+}
+#else
+static inline __u32 int_ln(__u32 word)
+{
+	__asm__("bsrl %1,%0\n\t"
+		"jnz 1f\n\t"
+		"movl $0,%0\n"
+		"1:"
+		:"=r" (word)
+		:"r" (word));
+	return word;
+}
+#endif
+
 	
 /*
  * Initialize the random pool with standard stuff.
@@ -331,9 +416,11 @@ static void init_std_data(struct random_bucket *r)
 {
 	__u32 word, *p;
 	int i;
-	
-	add_entropy_word(r, xtime.tv_sec);
-	add_entropy_word(r, xtime.tv_usec);
+	struct timeval 	tv;
+
+	do_gettimeofday(&tv);
+	add_entropy_word(r, tv.tv_sec);
+	add_entropy_word(r, tv.tv_usec);
 
 	for (p = (__u32 *) &system_utsname,
 	     i = sizeof(system_utsname) / sizeof(__u32);
@@ -364,6 +451,12 @@ void rand_initialize(void)
 		irq_timer_state[i] = NULL;
 	for (i = 0; i < MAX_BLKDEV; i++)
 		blkdev_timer_state[i] = NULL;
+	memset(&keyboard_timer_state, 0, sizeof(struct timer_rand_state));
+	memset(&mouse_timer_state, 0, sizeof(struct timer_rand_state));
+	memset(&extract_timer_state, 0, sizeof(struct timer_rand_state));
+#ifdef RANDOM_BENCHMARK
+	initialize_benchmark(&timer_benchmark, "timer", 0);
+#endif
 	extract_timer_state.dont_count_entropy = 1;
 	random_wait = NULL;
 }
@@ -418,23 +511,25 @@ void rand_initialize_blkdev(int major, int mode)
  * scancodes, for example), the upper bits of the entropy pool don't
  * get affected. --- TYT, 10/11/95
  */
-static inline void add_entropy_word(struct random_bucket *r,
-				    const __u32 input)
+static inline void fast_add_entropy_word(struct random_bucket *r,
+					 const __u32 input)
 {
 	unsigned i;
+	int new_rotate;
 	__u32 w;
 
-	w = (input << r->input_rotate) | (input >> (32 - r->input_rotate));
+	w = rotate_left(r->input_rotate, input);
 	i = r->add_ptr = (r->add_ptr - 1) & (POOLWORDS-1);
+	/*
+	 * Normally, we add 7 bits of rotation to the pool.  At the
+	 * beginning of the pool, add an extra 7 bits rotation, so
+	 * that successive passes spread the input bits across the
+	 * pool evenly.
+	 */
+	new_rotate = r->input_rotate + 14;
 	if (i)
-		r->input_rotate = (r->input_rotate + 7) & 31;
-	else
-		/*
-		 * At the beginning of the pool, add an extra 7 bits
-		 * rotation, so that successive passes spread the
-		 * input bits across the pool evenly.
-		 */
-		r->input_rotate = (r->input_rotate + 14) & 31;
+		new_rotate = r->input_rotate + 7;
+	r->input_rotate = new_rotate & 31;
 
 	/* XOR in the various taps */
 	w ^= r->pool[(i+TAP1)&(POOLWORDS-1)];
@@ -445,6 +540,15 @@ static inline void add_entropy_word(struct random_bucket *r,
 	w ^= r->pool[i];
 	/* Rotate w left 1 bit (stolen from SHA) and store */
 	r->pool[i] = (w << 1) | (w >> 31);
+}
+
+/*
+ * For places where we don't need the inlined version
+ */
+static void add_entropy_word(struct random_bucket *r,
+				    const __u32 input)
+{
+	fast_add_entropy_word(r, input);
 }
 
 /*
@@ -463,9 +567,11 @@ static void add_timer_randomness(struct random_bucket *r,
 				 struct timer_rand_state *state, unsigned num)
 {
 	int	delta, delta2, delta3;
-	unsigned	nbits;
 	__u32		time;
 
+#ifdef RANDOM_BENCHMARK
+	begin_benchmark(&timer_benchmark);
+#endif
 #if defined (__i386__)
 	if (x86_capability & 16) {
 		unsigned long low, high;
@@ -480,15 +586,16 @@ static void add_timer_randomness(struct random_bucket *r,
 	time = jiffies;
 #endif
 
-	add_entropy_word(r, (__u32) num);
-	add_entropy_word(r, time);
-
+	fast_add_entropy_word(r, (__u32) num);
+	fast_add_entropy_word(r, time);
+	
 	/*
 	 * Calculate number of bits of randomness we probably
 	 * added.  We take into account the first and second order
 	 * deltas in order to make our estimate.
 	 */
-	if (!state->dont_count_entropy) {
+	if (!state->dont_count_entropy &&
+	    (r->entropy_count < POOLBITS)) {
 		delta = time - state->last_time;
 		state->last_time = time;
 		if (delta < 0) delta = -delta;
@@ -502,17 +609,10 @@ static void add_timer_randomness(struct random_bucket *r,
 		if (delta3 < 0) delta3 = -delta3;
 
 		delta = MIN(MIN(delta, delta2), delta3) >> 1;
-		for (nbits = 0; delta; nbits++)
-			delta >>= 1;
+		/* Limit entropy estimate to 12 bits */
+		delta &= (1 << 12) - 1;
 
-		/*
-		 * In no case do we assume we've added more than 12
-		 * bits of randomness.
-		 */
-		if (nbits > 12)
-			nbits = 12;
-
-		r->entropy_count += nbits;
+		r->entropy_count += int_ln(delta);
 
 		/* Prevent overflow */
 		if (r->entropy_count > POOLBITS)
@@ -521,7 +621,10 @@ static void add_timer_randomness(struct random_bucket *r,
 		
 	/* Wake up waiting processes, if we have enough entropy. */
 	if (r->entropy_count >= WAIT_INPUT_BITS)
-		wake_up_interruptible(&random_wait);	
+		wake_up_interruptible(&random_wait);
+#ifdef RANDOM_BENCHMARK
+	end_benchmark(&timer_benchmark);
+#endif
 }
 
 void add_keyboard_randomness(unsigned char scancode)
@@ -830,21 +933,24 @@ static void MD5Transform(__u32 buf[4],
  * bits of entropy are left in the pool, but it does not restrict the
  * number of bytes that are actually obtained.
  */
-static inline int extract_entropy(struct random_bucket *r, char * buf,
+static int extract_entropy(struct random_bucket *r, char * buf,
 				  int nbytes, int to_user)
 {
 	int ret, i;
 	__u32 tmp[HASH_BUFFER_SIZE];
 	char *cp,*dp;
+
+	if (to_user) {
+		ret = verify_area(VERIFY_WRITE, (void *) buf, nbytes);
+		if (ret)
+			return(ret);
+	}
 	
 	add_timer_randomness(r, &extract_timer_state, nbytes);
 	
 	/* Redundant, but just in case... */
 	if (r->entropy_count > POOLBITS) 
 		r->entropy_count = POOLBITS;
-	/* Why is this here?  Left in from Ted Ts'o.  Perhaps to limit time. */
-	if (nbytes > 32768)
-		nbytes = 32768;
 
 	ret = nbytes;
 	if (r->entropy_count / 8 >= nbytes)
@@ -947,6 +1053,11 @@ random_read(struct inode * inode, struct file * file, char * buf, int nbytes)
 			continue;
 		}
 		n = extract_entropy(&random_state, buf, n, 1);
+		if (n < 0) {
+			if (count == 0)
+				retval = n;
+			break;
+		}
 		count += n;
 		buf += n;
 		nbytes -= n;
@@ -1182,3 +1293,120 @@ struct file_operations urandom_fops = {
 	NULL		/* no special release code */
 };
 
+/*
+ * TCP initial sequence number picking.  This uses the random number
+ * generator to pick an initial secret value.  This value is hashed
+ * along with the TCP endpoint information to provide a unique
+ * starting point for each pair of TCP endpoints.  This defeats
+ * attacks which rely on guessing the initial TCP sequence number.
+ * This algorithm was suggested by Steve Bellovin.
+ */
+__u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
+				 __u16 sport, __u16 dport)
+{
+	static int	is_init = 0;
+	static __u32	secret[16];
+	struct timeval 	tv;
+	__u32 		tmp[16];
+	__u32		seq;
+
+	/*
+	 * Pick a random secret the first time we open a TCP
+	 * connection.
+	 */
+	if (is_init == 0) {
+		get_random_bytes(&secret, sizeof(secret));
+		is_init = 1;
+	}
+
+	memcpy(tmp, secret, sizeof(tmp));
+	/*
+	 * Pick a unique starting offset for each
+	 * TCP connection endpoints (saddr, daddr, sport, dport)
+	 */
+	tmp[8]=saddr;
+	tmp[9]=daddr;
+	tmp[10]=(sport << 16) + dport;
+	HASH_TRANSFORM(tmp, tmp);
+	
+	/*
+	 *	As close as possible to RFC 793, which
+	 *	suggests using a 250kHz clock.
+	 *	Further reading shows this assumes 2MB/s networks.
+	 *	For 10MB/s ethernet, a 1MHz clock is appropriate.
+	 *	That's funny, Linux has one built in!  Use it!
+	 */
+	do_gettimeofday(&tv);
+	seq = tmp[1] + tv.tv_usec+tv.tv_sec*1000000;
+#if 0
+	printk("init_seq(%lx, %lx, %d, %d) = %d\n",
+	       saddr, daddr, sport, dport, seq);
+#endif
+	return (seq);
+}
+
+#ifdef RANDOM_BENCHMARK
+/*
+ * This is so we can do some benchmarking of the random driver, to see
+ * how much overhead add_timer_randomness really takes.  This only
+ * works on a Pentium, since it depends on the timer clock...
+ *
+ * Note: the results of this benchmark as of this writing (5/27/96)
+ *
+ * On a Pentium, add_timer_randomness() takes between 150 and 1000
+ * clock cycles, with an average of around 600 clock cycles.  On a 75
+ * MHz Pentium, this translates to 2 to 13 microseconds, with an
+ * average time of 8 microseconds.  This should be fast enough so we
+ * can use add_timer_randomness() even with the fastest of interrupts...
+ */
+static inline unsigned long long get_clock_cnt(void)
+{
+	unsigned long low, high;
+	__asm__(".byte 0x0f,0x31" :"=a" (low), "=d" (high));
+	return (((unsigned long long) high << 31) | low); 
+}
+
+static void initialize_benchmark(struct random_benchmark *bench,
+				 const char *descr, int unit)
+{
+	bench->times = 0;
+	bench->accum = 0;
+	bench->max = 0;
+	bench->min = 1 << 31;
+	bench->descr = descr;
+	bench->unit = unit;
+}
+
+static void begin_benchmark(struct random_benchmark *bench)
+{
+#ifdef BENCHMARK_NOINT
+	save_flags(bench->flags); cli();
+#endif
+	bench->start_time = get_clock_cnt();
+}
+
+static void end_benchmark(struct random_benchmark *bench)
+{
+	unsigned long ticks;
+	
+	ticks = (unsigned long) (get_clock_cnt() - bench->start_time);
+#ifdef BENCHMARK_NOINT
+	restore_flags(bench->flags);
+#endif
+	if (ticks < bench->min)
+		bench->min = ticks;
+	if (ticks > bench->max)
+		bench->max = ticks;
+	bench->accum += ticks;
+	bench->times++;
+	if (bench->times == BENCHMARK_INTERVAL) {
+		printk("Random benchmark: %s %d: %lu min, %lu avg, "
+		       "%lu max\n", bench->descr, bench->unit, bench->min,
+		       bench->accum / BENCHMARK_INTERVAL, bench->max);
+		bench->times = 0;
+		bench->accum = 0;
+		bench->max = 0;
+		bench->min = 1 << 31;
+	}
+}	
+#endif /* RANDOM_BENCHMARK */

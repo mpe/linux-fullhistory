@@ -36,5 +36,3 @@ struct smb_mount_data {
 };
 
 #endif
-
-

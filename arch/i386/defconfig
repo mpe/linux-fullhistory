@@ -37,7 +37,7 @@ CONFIG_BLK_DEV_FD=y
 CONFIG_BLK_DEV_IDE=y
 
 #
-# Please see drivers/block/README.ide for help/info on IDE drives
+# Please see Documentation/ide.txt for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_IDE is not set
 CONFIG_BLK_DEV_IDECD=y

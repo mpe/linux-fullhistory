@@ -1,0 +1,16 @@
+00-INDEX
+	- this file (info on some of the filesystems supported by linux).
+affs.txt
+	- info and mount options for the Amiga Fast File System.
+hpfs.txt
+	- info and mount options for the OS/2 HPFS.
+ncpfs.txt
+	- info on Novell Netware(tm) filesystem using NCP protocol.
+smbfs.txt
+	- info on using filesystems with the SMB protocol (Win 3.11, Win NT)
+sysv-fs.txt
+	- info on the SystemV/Coherent filesystem.
+umsdos.txt
+	- info on the umsdos extensions to the msdos filesystem.
+vfat.txt
+	- info on using the VFAT filesystem used in Win NT and Win 95

@@ -44,6 +44,7 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <linux/mm.h>
 
 extern unsigned short video_port_reg, video_port_val;
 
@@ -267,7 +268,12 @@ void vesa_unblank(void)
 void set_vesa_blanking(const unsigned long arg)
 {
 	unsigned char *argp = (unsigned char *)(arg + 1);
-	unsigned int mode = get_user(argp);
+	unsigned int mode;
+
+	if (verify_area(VERIFY_READ, argp, 1))
+		return;
+
+	mode = get_user(argp);
 	vesa_blanking_mode = suspend_vesa_blanking_mode =
 		((mode <= VESA_POWERDOWN) ? mode : DEFAULT_VESA_BLANKING_MODE);
 }

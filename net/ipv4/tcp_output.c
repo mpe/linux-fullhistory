@@ -25,8 +25,10 @@
 
 #include <linux/config.h>
 #include <net/tcp.h>
-
+#include <linux/ip_fw.h>
+#include <linux/firewall.h>
 #include <linux/interrupt.h>
+
 
 /*
  * RFC 1122 says:
@@ -146,13 +148,22 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	}
 
 	/*
+	 * Jacobson recommends this in the appendix of his SIGCOMM'88 paper.
+	 * The idea is to do a slow start again if we haven't been doing
+	 * anything for a long time, in which case we have no reason to
+	 * believe that our congestion window is still correct.
+	 */
+	if (sk->send_head == 0 && (jiffies - sk->idletime) > sk->rto)
+		sk->cong_window = 1;
+
+	/*
 	 *	Actual processing.
 	 */
-	 
+
 	tcp_statistics.TcpOutSegs++;  
 	skb->seq = ntohl(th->seq);
 	skb->end_seq = skb->seq + size - 4*th->doff;
-	
+
 	/*
 	 *	We must queue if
 	 *
@@ -394,7 +405,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		sk->send_next = sk->send_head;
 		sk->packets_out = 0;
 	}
-	skb = sk->send_head;
+	skb = sk->send_next;
 
 	while (skb != NULL)
 	{
@@ -468,6 +479,11 @@ void tcp_do_retransmit(struct sock *sk, int all)
 				skb->sk->err_soft=ENETUNREACH;
 				skb->sk->error_report(skb->sk);
 			}
+			/* Can't transmit this packet, no reason
+			 * to transmit the later ones, even if
+			 * the congestion window allows.
+			 */
+			break;
 		}
 		else
 		{
@@ -475,6 +491,17 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			skb->raddr=rt->rt_gateway;
 			skb->dev=dev;
 			skb->arp=1;
+#ifdef CONFIG_FIREWALL
+        		if (call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT) {
+				/* The firewall wants us to dump the packet.
+			 	* We have to check this here, because
+			 	* the drop in ip_queue_xmit only catches the
+			 	* first time we send it. We must drop on
+				* every resend as well.
+			 	*/
+				break;
+        		}
+#endif 
 			if (rt->rt_hh)
 			{
 				memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);

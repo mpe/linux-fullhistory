@@ -1,0 +1,31 @@
+00-INDEX
+	- this file
+3c505.txt
+	- information on the 3Com EtherLink Plus (3c505) driver.
+Configurable
+	- info on some of the configurable network parameters
+alias.txt
+	- info on using alias network devices 
+arcnet-hardware.txt
+	- tons of info on arcnet, hubs, arcnet card jumper settings, etc.
+arcnet.txt
+	- info on the using the arcnet driver itself.
+ax25.txt
+	- info on using AX.25 and NET/ROM code for Linux
+framerelay.txt
+	- info on using Frame Relay/Data Link Connection Identifier (DLCI).
+ncsa-telnet
+	- notes on how NCSA telnet (DOS) breaks with MTU discovery enabled.
+net-modules.txt
+	- info and "insmod" parameters for all network driver modules.
+ppp.txt
+	- info on what software you should use to run PPP.
+tcp.txt
+	- short blurb on how TCP output takes place.
+tulip.txt
+	- info on using DEC 21040/21041/21140 based PCI ethernet cards.
+vortex.txt
+	- info on using 3Com Vortex (3c590, 3c592, 3c595, 3c597) e'net cards.
+z8530drv.txt
+	- info about Linux driver for Z8530 based HDLC cards for AX.25
+

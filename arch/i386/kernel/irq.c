@@ -343,6 +343,7 @@ int get_smp_prof_list(char *buf) {
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action = *(irq + irq_action);
+	int do_random = 0;
 
 #ifdef __SMP__
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id())
@@ -354,11 +355,12 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	int_count[smp_processor_id()][irq]++;
 #endif
 	while (action) {
-		if (action->flags & SA_SAMPLE_RANDOM)
-			add_interrupt_randomness(irq);
+		do_random |= action->flags;
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
 	}
+	if (do_random & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
 }
 
 /*
@@ -369,6 +371,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 asmlinkage void do_fast_IRQ(int irq)
 {
 	struct irqaction * action = *(irq + irq_action);
+	int do_random = 0;
+	
 #ifdef __SMP__
 	/* IRQ 13 is allowed - that's a flush tlb */
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id() && irq!=13)
@@ -380,9 +384,12 @@ asmlinkage void do_fast_IRQ(int irq)
 	int_count[smp_processor_id()][irq]++;
 #endif
 	while (action) {
+		do_random |= action->flags;
 		action->handler(irq, action->dev_id, NULL);
 		action = action->next;
 	}
+	if (do_random & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
 }
 
 int setup_x86_irq(int irq, struct irqaction * new)

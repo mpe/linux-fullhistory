@@ -119,12 +119,13 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *, KernelDevice_T, int *);
 
 
 /*
-  Define the maximum and default Queue Depth to allow for Target Devices
-  depending on whether or not they support Tagged Queuing and whether or not
-  ISA Bounce Buffers are required.
+  Define the maximum, preferred, and default Queue Depth to allow for Target
+  Devices depending on whether or not they support Tagged Queuing and whether
+  or not ISA Bounce Buffers are required.
 */
 
-#define BusLogic_MaxTaggedQueueDepth		31
+#define BusLogic_MaxTaggedQueueDepth		63
+#define BusLogic_PreferredTaggedQueueDepth	28
 #define BusLogic_TaggedQueueDepth_BB		2
 #define BusLogic_UntaggedQueueDepth		3
 
@@ -189,6 +190,13 @@ static char
 #define false 0
 #define true  1
 typedef unsigned char boolean;
+
+
+/*
+  Define a 32 bit bus address data type.
+*/
+
+typedef unsigned int bus_address_t;
 
 
 /*
@@ -401,7 +409,7 @@ BusLogic_SetupInformation_T;
 typedef struct BusLogic_ExtendedMailboxRequest
 {
   unsigned char MailboxCount;				/* Byte 0 */
-  void *BaseMailboxAddress __attribute__ ((packed));	/* Bytes 1-4 */
+  bus_address_t BaseMailboxAddress __attribute__ ((packed)); /* Bytes 1-4 */
 }
 BusLogic_ExtendedMailboxRequest_T;
 
@@ -466,7 +474,7 @@ typedef struct BusLogic_ExtendedSetupInformation
   unsigned char BIOS_Address;				/* Byte 1 */
   unsigned short ScatterGatherLimit;			/* Bytes 2-3 */
   unsigned char MailboxCount;				/* Byte 4 */
-  void *BaseMailboxAddress __attribute__ ((packed));	/* Bytes 5-8 */
+  bus_address_t BaseMailboxAddress __attribute__ ((packed)); /* Bytes 5-8 */
   struct { unsigned char :6;				/* Byte 9 Bits 0-5 */
 	   boolean LevelSensitiveInterrupts:1;		/* Byte 9 Bit 6 */
 	   unsigned char :1; } Misc;			/* Byte 9 Bit 7 */
@@ -709,23 +717,14 @@ typedef unsigned char SCSI_CDB_T[BusLogic_CDB_MaxLength];
 
 
 /*
-  Define the SCSI Sense Data.
-*/
-
-#define BusLogic_SenseDataMaxLength		255
-
-typedef unsigned char SCSI_SenseData_T[BusLogic_SenseDataMaxLength];
-
-
-/*
   Define the Scatter/Gather Segment structure required by the Host Adapter
   Firmware Interface.
 */
 
 typedef struct BusLogic_ScatterGatherSegment
 {
-  unsigned long SegmentByteCount;			/* Bytes 0-3 */
-  void *SegmentDataPointer;				/* Bytes 4-7 */
+  unsigned int SegmentByteCount;			/* Bytes 0-3 */
+  bus_address_t SegmentDataPointer;			/* Bytes 4-7 */
 }
 BusLogic_ScatterGatherSegment_T;
 
@@ -754,8 +753,8 @@ typedef struct BusLogic_CCB
   BusLogic_QueueTag_T WideModeQueueTag:2;		/* Byte 1 Bits 6-7 */
   unsigned char CDB_Length;				/* Byte 2 */
   unsigned char SenseDataLength;			/* Byte 3 */
-  unsigned long DataLength;				/* Bytes 4-7 */
-  void *DataPointer;					/* Bytes 8-11 */
+  unsigned int DataLength;				/* Bytes 4-7 */
+  bus_address_t DataPointer;				/* Bytes 8-11 */
   unsigned char :8;					/* Byte 12 */
   unsigned char :8;					/* Byte 13 */
   BusLogic_HostAdapterStatus_T HostAdapterStatus:8;	/* Byte 14 */
@@ -767,8 +766,8 @@ typedef struct BusLogic_CCB
   SCSI_CDB_T CDB;					/* Bytes 18-29 */
   unsigned char :8;					/* Byte 30 */
   unsigned char :8;					/* Byte 31 */
-  unsigned long :32;					/* Bytes 32-35 */
-  SCSI_SenseData_T *SenseDataPointer;			/* Bytes 36-39 */
+  unsigned int :32;					/* Bytes 32-35 */
+  bus_address_t SenseDataPointer;			/* Bytes 36-39 */
   /*
     BusLogic Linux Driver Portion.
   */
@@ -779,7 +778,7 @@ typedef struct BusLogic_CCB
 	 BusLogic_CCB_Completed =   2,
 	 BusLogic_CCB_Reset =	    3 } Status;
   BusLogic_CompletionCode_T MailboxCompletionCode;
-  unsigned int SerialNumber;
+  unsigned long SerialNumber;
   struct BusLogic_CCB *Next;
   struct BusLogic_CCB *NextAll;
   BusLogic_ScatterGatherSegment_T
@@ -794,8 +793,8 @@ BusLogic_CCB_T;
 
 typedef struct BusLogic_OutgoingMailbox
 {
-  BusLogic_CCB_T *CCB;					/* Bytes 0-3 */
-  unsigned long :24;					/* Byte 4 */
+  bus_address_t CCB;					/* Bytes 0-3 */
+  unsigned int :24;					/* Byte 4 */
   BusLogic_ActionCode_T ActionCode:8;			/* Bytes 5-7 */
 }
 BusLogic_OutgoingMailbox_T;
@@ -807,7 +806,7 @@ BusLogic_OutgoingMailbox_T;
 
 typedef struct BusLogic_IncomingMailbox
 {
-  BusLogic_CCB_T *CCB;					/* Bytes 0-3 */
+  bus_address_t CCB;					/* Bytes 0-3 */
   BusLogic_HostAdapterStatus_T HostAdapterStatus:8;	/* Byte 4 */
   BusLogic_TargetDeviceStatus_T TargetDeviceStatus:8;	/* Byte 5 */
   unsigned char :8;					/* Byte 6 */
@@ -842,7 +841,7 @@ static char
 
 typedef struct BusLogic_CommandLineEntry
 {
-  unsigned short IO_Address;
+  unsigned int IO_Address;
   unsigned short TaggedQueueDepth;
   unsigned short BusSettleTime;
   unsigned short LocalOptions;
@@ -860,12 +859,12 @@ BusLogic_CommandLineEntry_T;
 typedef struct BusLogic_HostAdapter
 {
   SCSI_Host_T *SCSI_Host;
+  unsigned int IO_Address;
   unsigned char HostNumber;
   unsigned char ModelName[9];
   unsigned char FirmwareVersion[6];
   unsigned char BoardName[18];
   unsigned char InterruptLabel[62];
-  unsigned short IO_Address;
   unsigned char IRQ_Channel;
   unsigned char DMA_Channel;
   unsigned char SCSI_ID;
@@ -901,7 +900,7 @@ typedef struct BusLogic_HostAdapter
   unsigned short LocalOptions;
   unsigned short DisconnectPermitted;
   unsigned short TaggedQueuingPermitted;
-  unsigned long BIOS_Address;
+  bus_address_t BIOS_Address;
   BusLogic_InstalledDevices_T InstalledDevices;
   BusLogic_SynchronousValues_T SynchronousValues;
   BusLogic_SynchronousPeriod_T SynchronousPeriod;
@@ -1060,6 +1059,22 @@ static inline void BusLogic_Delay(int Seconds)
   sti();
   while (jiffies < TimeoutJiffies) ;
   restore_flags(ProcessorFlags);
+}
+
+
+/*
+  Virtual_to_Bus and Bus_to_Virtual map between Kernel Virtual Addresses
+  and PCI/VLB/EISA/ISA Bus Addresses.
+*/
+
+static inline bus_address_t Virtual_to_Bus(void *VirtualAddress)
+{
+  return (bus_address_t) virt_to_bus(VirtualAddress);
+}
+
+static inline void *Bus_to_Virtual(bus_address_t BusAddress)
+{
+  return (void *) bus_to_virt(BusAddress);
 }
 
 

@@ -1,0 +1,21 @@
+00-INDEX
+	- this file (info on ISDN implementation for Linux)
+CREDITS
+	- list of the kind folks that brought you this stuff.
+INTERFACE
+	- description of Linklevel and Hardwarelevel ISDN interface.
+README
+	- general info on what you need and what to do for Linux ISDN.
+README.audio
+	- info for running audio over ISDN.
+README.icn
+	- info on the ICN-ISDN-card and its driver.
+README.pcbit
+	- info on the PCBIT-D ISDN adapter and driver.
+README.syncppp
+	- info on running Sync PPP over ISDN.
+README.teles
+	- info on driver for Teles compatible ISDN cards.
+syncPPP.FAQ
+	- frequently asked questions about running PPP over ISDN.
+

@@ -12,7 +12,7 @@
 
 
 /* A word of warning: Our uio structure will clash with the C library one (which is now obsolete). Remove the C
-   library one from sys/uio.h */
+   library one from sys/uio.h if you have a very old library set */
 
 struct iovec
 {
@@ -20,6 +20,7 @@ struct iovec
 	int iov_len;
 };
 
-#define MAX_IOVEC	8	/* Maximum iovec's in one operation */
+#define UIO_MAXIOV	16	/* Maximum iovec's in one operation 
+				   16 matches BSD */
 
 #endif

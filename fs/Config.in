@@ -28,6 +28,9 @@ if [ "$CONFIG_INET" = "y" ]; then
     fi
   fi
   tristate 'SMB filesystem support (to mount WfW shares etc..)' CONFIG_SMB_FS
+  if [ "$CONFIG_SMB_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'SMB long filename support (EXPERIMENTAL)' CONFIG_SMB_LONG
+  fi
 fi
 if [ "$CONFIG_IPX" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS

@@ -49,7 +49,7 @@
 #include <asm/bitops.h>
 
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.12";
+static char *serial_version = "4.13";
 
 DECLARE_TASK_QUEUE(tq_serial);
 
@@ -90,6 +90,13 @@ static int serial_refcount;
 
 #define _INLINE_ inline
   
+#ifdef MODULE
+static int io[PORT_MAX] = { 0, };
+static int irq[PORT_MAX]  = { 0, };
+static int type[PORT_MAX]  = { 0, };
+static int flags[PORT_MAX]  = { 0, };
+#endif
+
 #if defined(MODULE) && defined(SERIAL_DEBUG_MCOUNT)
 #define DBG_CNT(s) printk("(%s): [%x] refc=%d, serc=%d, ttyc=%d -> %s\n", \
  kdevname(tty->device), (info->flags), serial_refcount,info->count,tty->count,s)
@@ -1944,6 +1951,9 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 				    (unsigned long *) arg);
 			return 0;
 		case TIOCSSOFTCAR:
+			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
+			if (error)
+				return error;
 			arg = get_fs_long((unsigned long *) arg);
 			tty->termios->c_cflag =
 				((tty->termios->c_cflag & ~CLOCAL) |
@@ -1967,6 +1977,10 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			return get_serial_info(info,
 					       (struct serial_struct *) arg);
 		case TIOCSSERIAL:
+			error = verify_area(VERIFY_READ, (void *) arg,
+						sizeof(struct serial_struct));
+			if (error)
+				return error;
 			return set_serial_info(info,
 					       (struct serial_struct *) arg);
 		case TIOCSERCONFIG:
@@ -1991,6 +2005,9 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		case TIOCSERSWILD:
 			if (!suser())
 				return -EPERM;
+			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
+			if (error)
+				return error;
 			rs_wild_int_mask = get_fs_long((unsigned long *) arg);
 			if (rs_wild_int_mask < 0)
 				rs_wild_int_mask = check_wild_interrupts(0);
@@ -2013,6 +2030,10 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			return get_multiport_struct(info,
 				       (struct serial_multiport_struct *) arg);
 		case TIOCSERSETMULTI:
+			error = verify_area(VERIFY_READ, (void *) arg,
+				    sizeof(struct serial_multiport_struct));
+			if (error)
+				return error;
 			return set_multiport_struct(info,
 				       (struct serial_multiport_struct *) arg);
 		/*
@@ -2804,13 +2825,25 @@ int rs_init(void)
 			info->icount.rng = info->icount.dcd = 0;
 		info->next_port = 0;
 		info->prev_port = 0;
+#ifdef MODULE
+		if(irq[i])
+			info->irq=irq[i];
+		if (io[i])
+			info->port=io[i];
+		if (type[i])
+			info->type = type[i];
+		if (flags[i])
+			info->flags = flags[i];
+#endif
 		if (info->irq == 2)
 			info->irq = 9;
-		if (!(info->flags & ASYNC_BOOT_AUTOCONF))
-			continue;
-		autoconfig(info);
-		if (info->type == PORT_UNKNOWN)
-			continue;
+		if (info->type == PORT_UNKNOWN) {
+			if (!(info->flags & ASYNC_BOOT_AUTOCONF))
+				continue;
+			autoconfig(info);
+			if (info->type == PORT_UNKNOWN)
+				continue;
+		}
 		printk(KERN_INFO "tty%02d%s at 0x%04x (irq = %d)", info->line, 
 		       (info->flags & ASYNC_FOURPORT) ? " FourPort" : "",
 		       info->port, info->irq);

@@ -257,7 +257,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 #ifdef CONFIG_IP_ACCT
-	ip_fw_chk(iph,dev,NULL,ip_acct_chain,IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_IN);
+	ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_IN);
 #endif	
 
 	/*

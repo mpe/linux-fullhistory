@@ -431,6 +431,9 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 	tty->session = 0;
 	tty->pgrp = -1;
 	tty->ctrl_status = 0;
+	tty->packet = 0;
+	if (tty->link)
+		tty->link->packet = 0;
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS)
 		*tty->termios = tty->driver.init_termios;
 	if (tty->driver.hangup)
@@ -1520,6 +1523,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			retval = tty_check_change(tty);
 			if (retval)
 				return retval;
+			retval = verify_area(VERIFY_READ, (void *) arg,
+					     sizeof (int));
+			if (retval)
+				return retval;
 			arg = get_user((int *) arg);
 			return tty_set_ldisc(tty, arg);
 		case TIOCLINUX:
@@ -1558,9 +1565,15 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			 * kernel-internal variable; programs not closely
 			 * related to the kernel should not use this.
 			 */
+					retval = verify_area(VERIFY_WRITE, (void *) arg, 1);
+					if (retval)
+						return retval;
 					put_user(shift_state,(char *) arg);
 					return 0;
 				case 7:
+					retval = verify_area(VERIFY_WRITE, (void *) arg, 1);
+					if (retval)
+						return retval;
 					put_user(mouse_reporting(),(char *) arg);
 					return 0;
 				case 10:

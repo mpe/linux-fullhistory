@@ -26,8 +26,12 @@
 #define IP_MASQ_F_NO_DPORT    		0x04	/* no dport set yet */
 #define IP_MASQ_F_NO_DADDR      	0x08 	/* no daddr yet */
 #define IP_MASQ_F_HASHED		0x10 	/* hashed entry */
-#define IP_MASQ_F_SAW_FIN		0x20 	/* tcp fin pkt seen */
-#define IP_MASQ_F_SAW_RST		0x40 	/* tcp rst pkt seen */
+#define IP_MASQ_F_SAW_RST		0x20 	/* tcp rst pkt seen */
+#define IP_MASQ_F_SAW_FIN_IN		0x40 	/* tcp fin pkt seen incoming */
+#define IP_MASQ_F_SAW_FIN_OUT		0x80 	/* tcp fin pkt seen outgoing */
+#define IP_MASQ_F_SAW_FIN		(IP_MASQ_F_SAW_FIN_IN | \
+					 IP_MASQ_F_SAW_FIN_OUT)
+						/* tcp fin pkts seen */
 
 #ifdef __KERNEL__
 

@@ -53,6 +53,11 @@ struct baycom_params {
 #define KISS_CMD_FULLDUP    5
 
 /*
+ * use bottom halves? (HDLC processing done with interrupts on or off)
+ */
+#define BAYCOM_USE_BH
+
+/*
  * modem types
  */
 

@@ -53,6 +53,9 @@ extern void add_blkdev_randomness(int major);
 
 extern void get_random_bytes(void *buf, int nbytes);
 
+extern __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
+					__u16 sport, __u16 dport);
+
 #ifndef MODULE
 extern struct file_operations random_fops, urandom_fops;
 #endif
