@@ -40,7 +40,7 @@ unsigned char *Motherboard_routes;
 static unsigned long	*ProcInfo;
 
 extern int chrp_get_irq(struct pt_regs *);
-extern void chrp_post_irq(int);
+extern void chrp_post_irq(struct pt_regs* regs, int);
 
 /* Tables for known hardware */   
 

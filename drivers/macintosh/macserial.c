@@ -8,7 +8,7 @@
  *
  * Receive DMA code by Takashi Oe <toe@unlserve.unl.edu>.
  *
- * $Id: macserial.c,v 1.24.2.3 1999/09/10 02:05:58 paulus Exp $
+ * $Id: macserial.c,v 1.24.2.4 1999/10/19 04:36:42 paulus Exp $
  */
 
 #include <linux/config.h>
@@ -129,6 +129,22 @@ static int serial_refcount;
 #define RS_ISR_PASS_LIMIT 256
 
 #define _INLINE_ inline
+
+#ifdef SERIAL_DEBUG_OPEN
+#define OPNDBG(fmt, arg...)	printk(KERN_INFO fmt , ## arg)
+#else
+#define OPNDBG(fmt, arg...)	do { } while (0)
+#endif
+#ifdef SERIAL_DEBUG_POWER
+#define PWRDBG(fmt, arg...)	printk(KERN_INFO fmt , ## arg)
+#else
+#define PWRDBG(fmt, arg...)	do { } while (0)
+#endif
+#ifdef SERIAL_DEBUG_BAUDS
+#define BAUDBG(fmt, arg...)	printk(KERN_INFO fmt , ## arg)
+#else
+#define BAUDBG(fmt, arg...)	do { } while (0)
+#endif
 
 static void probe_sccs(void);
 static void change_speed(struct mac_serial *info, struct termios *old);
@@ -318,7 +334,7 @@ static void dbdma_reset(volatile struct dbdma_regs *dma)
 	 * to it. - paulus)
 	 */
 	for (i = 200; i > 0; --i)
-		if (ld_le32(&dma->control) & RUN)
+		if (ld_le32(&dma->status) & RUN)
 			udelay(1);
 }
 
@@ -718,14 +734,10 @@ static int startup(struct mac_serial * info, int can_sleep)
 {
 	int delay;
 
-#ifdef SERIAL_DEBUG_OPEN
-	printk("startup() (ttyS%d, irq %d)\n", info->line, info->irq);
-#endif
+	OPNDBG("startup() (ttyS%d, irq %d)\n", info->line, info->irq);
  
 	if (info->flags & ZILOG_INITIALIZED) {
-#ifdef SERIAL_DEBUG_OPEN
-		printk(" -> already inited\n");
-#endif
+		OPNDBG(" -> already inited\n");
  		return 0;
 	}
 
@@ -735,17 +747,13 @@ static int startup(struct mac_serial * info, int can_sleep)
 			return -ENOMEM;
 	}
 
-#ifdef SERIAL_DEBUG_OPEN
-	printk("starting up ttyS%d (irq %d)...\n", info->line, info->irq);
-#endif
+	OPNDBG("starting up ttyS%d (irq %d)...\n", info->line, info->irq);
 
 	delay = set_scc_power(info, 1);
 	
 	setup_scc(info);
 
-#ifdef SERIAL_DEBUG_OPEN
-	printk("enabling IRQ on ttyS%d (irq %d)...\n", info->line, info->irq);
-#endif
+	OPNDBG("enabling IRQ on ttyS%d (irq %d)...\n", info->line, info->irq);
 
 	info->flags |= ZILOG_INITIALIZED;
 	enable_irq(info->irq);
@@ -951,9 +959,7 @@ static int setup_scc(struct mac_serial * info)
 {
 	unsigned long flags;
 	
-#ifdef SERIAL_DEBUG_OPEN
-	printk("setting up ttys%d SCC...\n", info->line);
-#endif
+	OPNDBG("setting up ttys%d SCC...\n", info->line);
 
 	save_flags(flags); cli(); /* Disable interrupts */	
 
@@ -1050,16 +1056,11 @@ static int setup_scc(struct mac_serial * info)
  */
 static void shutdown(struct mac_serial * info)
 {
-#ifdef SERIAL_DEBUG_OPEN
-	printk("Shutting down serial port %d (irq %d)....\n", info->line,
+	OPNDBG("Shutting down serial port %d (irq %d)....\n", info->line,
 	       info->irq);
-#endif
 	
 	if (!(info->flags & ZILOG_INITIALIZED)) {
-#ifdef SERIAL_DEBUG_OPEN
-		printk("(already shutdown)\n");
-#endif
-	
+		OPNDBG("(already shutdown)\n");
 		return;
 	}
 
@@ -1125,24 +1126,27 @@ static int set_scc_power(struct mac_serial * info, int state)
 	   ones, at least whe not using the modem, this should be tested.
 	 */				
 	if (state) {
-#ifdef SERIAL_DEBUG_POWER
-		printk(KERN_INFO "ttyS%02d: powering up hardware\n", info->line);
-#endif
+		PWRDBG("ttyS%02d: powering up hardware\n", info->line);
 		if (feature_test(info->dev_node, FEATURE_Serial_enable) == 0) {
-			feature_clear(info->dev_node, FEATURE_Serial_reset);
-			mdelay(5);
 			feature_set(info->dev_node, FEATURE_Serial_enable);
+			mdelay(10);
+			feature_set(info->dev_node, FEATURE_Serial_reset);
+			mdelay(15);
+			feature_clear(info->dev_node, FEATURE_Serial_reset);
+			mdelay(10);
 		}
 		if (info->zs_chan_a == info->zs_channel)
 			feature_set(info->dev_node, FEATURE_Serial_IO_A);
 		else
 			feature_set(info->dev_node, FEATURE_Serial_IO_B);
-		delay = 1;
-		
+		delay = 10;
 		if (info->is_cobalt_modem){
-			feature_set(info->dev_node, FEATURE_Modem_Reset);
+			mdelay(300);
+			feature_set(info->dev_node, FEATURE_Modem_power);
 	   		mdelay(5);
-			feature_clear(info->dev_node, FEATURE_Modem_Reset);
+			feature_clear(info->dev_node, FEATURE_Modem_power);
+	   		mdelay(10);
+			feature_set(info->dev_node, FEATURE_Modem_power);
 			delay = 2500;	/* wait for 2.5s before using */
 		}
 #ifdef CONFIG_PMAC_PBOOK
@@ -1150,33 +1154,11 @@ static int set_scc_power(struct mac_serial * info, int state)
 			pmu_enable_irled(1);
 #endif /* CONFIG_PMAC_PBOOK */
 	} else {
-#ifdef SERIAL_DEBUG_POWER
-		printk(KERN_INFO "ttyS%02d: shutting down hardware\n", info->line);
-#endif
-#ifdef CONFIG_KGDB
-		if (info->kgdb_channel) {
-#ifdef SERIAL_DEBUG_POWER
-			printk(KERN_INFO "        (canceled by KGDB)\n");
-#endif
-			return 0;
-		}
-#endif
-#ifdef CONFIG_XMON
-		if (!info->is_cobalt_modem) {
-#ifdef SERIAL_DEBUG_POWER
-			printk(KERN_INFO "        (canceled by XMON)\n");
-#endif
-			return 0;
-		}
-#endif
+		PWRDBG("ttyS%02d: shutting down hardware\n", info->line);
 		if (info->is_cobalt_modem) {
-#ifdef SERIAL_DEBUG_POWER
-			printk(KERN_INFO "ttyS%02d: shutting down modem\n", info->line);
-#endif
-			feature_set(info->dev_node, FEATURE_Modem_Reset);
-			mdelay(15);
-			feature_clear(info->dev_node, FEATURE_Modem_Reset);
-			mdelay(25);
+			PWRDBG("ttyS%02d: shutting down modem\n", info->line);
+			feature_clear(info->dev_node, FEATURE_Modem_power);
+			mdelay(10);
 		}
 #ifdef CONFIG_PMAC_PBOOK
 		if (info->is_pwbk_ir)
@@ -1184,25 +1166,21 @@ static int set_scc_power(struct mac_serial * info, int state)
 #endif /* CONFIG_PMAC_PBOOK */
 			
 		if (info->zs_chan_a == info->zs_channel) {
-#ifdef SERIAL_DEBUG_POWER
-			printk(KERN_INFO "ttyS%02d: shutting down SCC channel A\n", info->line);
-#endif
+			PWRDBG("ttyS%02d: shutting down SCC channel A\n", info->line);
 			feature_clear(info->dev_node, FEATURE_Serial_IO_A);
 		} else {
-#ifdef SERIAL_DEBUG_POWER
-			printk(KERN_INFO "ttyS%02d: shutting down SCC channel B\n", info->line);
-#endif
+			PWRDBG("ttyS%02d: shutting down SCC channel B\n", info->line);
 			feature_clear(info->dev_node, FEATURE_Serial_IO_B);
 		}
 		/* XXX for now, shut down SCC core only on powerbooks */
 		if (is_powerbook
 		    && !(feature_test(info->dev_node, FEATURE_Serial_IO_A) ||
 			 feature_test(info->dev_node, FEATURE_Serial_IO_B))) {
-#ifdef SERIAL_DEBUG_POWER
-			printk(KERN_INFO "ttyS%02d: shutting down SCC core\n", info->line);
-#endif
+			PWRDBG("ttyS%02d: shutting down SCC core\n", info->line);
 			feature_set(info->dev_node, FEATURE_Serial_reset);
-			mdelay(10);
+			mdelay(15);
+			feature_clear(info->dev_node, FEATURE_Serial_reset);
+			mdelay(25);
 			feature_clear(info->dev_node, FEATURE_Serial_enable);
 			mdelay(5);
 		}
@@ -1249,9 +1227,7 @@ static void change_speed(struct mac_serial *info, struct termios *old_termios)
 	info->zs_baud = baud;
 	info->clk_divisor = 16;
 
-#ifdef SERIAL_DEBUG_BAUDS
-	printk("set speed to %d bds, ", baud);
-#endif
+	BAUDBG("set speed to %d bds, ", baud);
 
 	switch (baud) {
 	case ZS_CLOCK/16:	/* 230400 */
@@ -1278,34 +1254,26 @@ static void change_speed(struct mac_serial *info, struct termios *old_termios)
 	case CS5:
 		info->curregs[3] |= Rx5;
 		info->curregs[5] |= Tx5;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("5 bits, ");
-#endif
+		BAUDBG("5 bits, ");
 		bits = 7;
 		break;
 	case CS6:
 		info->curregs[3] |= Rx6;
 		info->curregs[5] |= Tx6;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("6 bits, ");
-#endif
+		BAUDBG("6 bits, ");
 		bits = 8;
 		break;
 	case CS7:
 		info->curregs[3] |= Rx7;
 		info->curregs[5] |= Tx7;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("7 bits, ");
-#endif
+		BAUDBG("7 bits, ");
 		bits = 9;
 		break;
 	case CS8:
 	default: /* defaults to 8 bits */
 		info->curregs[3] |= Rx8;
 		info->curregs[5] |= Tx8;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("8 bits, ");
-#endif
+		BAUDBG("8 bits, ");
 		bits = 10;
 		break;
 	}
@@ -1316,21 +1284,15 @@ static void change_speed(struct mac_serial *info, struct termios *old_termios)
 	if (cflag & CSTOPB) {
 		info->curregs[4] |= SB2;
 		bits++;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("2 stop, ");
-#endif
+		BAUDBG("2 stop, ");
 	} else {
 		info->curregs[4] |= SB1;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("1 stop, ");
-#endif
+		BAUDBG("1 stop, ");
 	}
 	if (cflag & PARENB) {
 		bits++;
  		info->curregs[4] |= PAR_ENA;
-#ifdef SERIAL_DEBUG_BAUDS
-		printk("parity, ");
-#endif
+		BAUDBG("parity, ");
 	}
 	if (!(cflag & PARODD)) {
 		info->curregs[4] |= PAR_EVEN;
@@ -1360,9 +1322,8 @@ static void change_speed(struct mac_serial *info, struct termios *old_termios)
 	info->timeout = ((info->xmit_fifo_size*HZ*bits) / baud);
 	info->timeout += HZ/50+1;	/* Add .02 seconds of slop */
 
-#ifdef SERIAL_DEBUG_BAUDS
-	printk("timeout=%d/%ds, base:%d\n", (int)info->timeout, (int)HZ, (int)info->baud_base);
-#endif
+	BAUDBG("timeout=%d/%ds, base:%d\n", (int)info->timeout, (int)HZ,
+	       (int)info->baud_base);
 
 	/* Load up the new values */
 	load_zsregs(info->zs_channel, info->curregs);
@@ -1823,9 +1784,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		return;
 	}
 	
-#ifdef SERIAL_DEBUG_OPEN
-	printk("rs_close ttys%d, count = %d\n", info->line, info->count);
-#endif
+	OPNDBG("rs_close ttys%d, count = %d\n", info->line, info->count);
 	if ((tty->count == 1) && (info->count != 1)) {
 		/*
 		 * Uh, oh.  tty->count is 1, which means that the tty
@@ -1861,9 +1820,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	 * Now we wait for the transmit buffer to clear; and we notify 
 	 * the line discipline to only process XON/XOFF characters.
 	 */
-#ifdef SERIAL_DEBUG_OPEN
-	printk("waiting end of Tx... (timeout:%d)\n", info->closing_wait);
-#endif
+	OPNDBG("waiting end of Tx... (timeout:%d)\n", info->closing_wait);
 	tty->closing = 1;
 	if (info->closing_wait != ZILOG_CLOSING_WAIT_NONE) {
 		restore_flags(flags);
@@ -1887,9 +1844,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		 * Before we drop DTR, make sure the SCC transmitter
 		 * has completely drained.
 		 */
-#ifdef SERIAL_DEBUG_OPEN
-		printk("waiting end of Rx...\n");
-#endif
+		OPNDBG("waiting end of Rx...\n");
 		restore_flags(flags);
 		rs_wait_until_sent(tty, info->timeout);
 		save_flags(flags); cli();
@@ -2059,10 +2014,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	 */
 	retval = 0;
 	add_wait_queue(&info->open_wait, &wait);
-#ifdef SERIAL_DEBUG_OPEN
-	printk("block_til_ready before block: ttys%d, count = %d\n",
+	OPNDBG("block_til_ready before block: ttys%d, count = %d\n",
 	       info->line, info->count);
-#endif
 	cli();
 	if (!tty_hung_up_p(filp)) 
 		info->count--;
@@ -2095,10 +2048,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			retval = -ERESTARTSYS;
 			break;
 		}
-#ifdef SERIAL_DEBUG_OPEN
-		printk("block_til_ready blocking: ttys%d, count = %d\n",
+		OPNDBG("block_til_ready blocking: ttys%d, count = %d\n",
 		       info->line, info->count);
-#endif
 		schedule();
 	}
 	current->state = TASK_RUNNING;
@@ -2106,10 +2057,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	if (!tty_hung_up_p(filp))
 		info->count++;
 	info->blocked_open--;
-#ifdef SERIAL_DEBUG_OPEN
-	printk("block_til_ready after blocking: ttys%d, count = %d\n",
+	OPNDBG("block_til_ready after blocking: ttys%d, count = %d\n",
 	       info->line, info->count);
-#endif
 	if (retval)
 		return retval;
 	info->flags |= ZILOG_NORMAL_ACTIVE;
@@ -2144,10 +2093,8 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 #endif
 	if (serial_paranoia_check(info, tty->device, "rs_open"))
 		return -ENODEV;
-#ifdef SERIAL_DEBUG_OPEN
-	printk("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
+	OPNDBG("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
 	       info->count);
-#endif
 
 	info->count++;
 	tty->driver_data = info;
@@ -2188,10 +2135,8 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
-#ifdef SERIAL_DEBUG_OPEN
-		printk("rs_open returning after block_til_ready with %d\n",
+		OPNDBG("rs_open returning after block_til_ready with %d\n",
 			retval);
-#endif
 		return retval;
 	}
 
@@ -2213,9 +2158,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	info->session = current->session;
 	info->pgrp = current->pgrp;
 
-#ifdef SERIAL_DEBUG_OPEN
-	printk("rs_open ttys%d successful...\n", info->line);
-#endif
+	OPNDBG("rs_open ttys%d successful...\n", info->line);
 	return 0;
 }
 
@@ -2237,6 +2180,10 @@ chan_init(struct mac_serial *zss, struct mac_zschannel *zs_chan,
 	struct device_node *ch = zss->dev_node;
 	char *conn;
 	int len;
+	struct slot_names_prop {
+		int	count;
+		char	name[1];
+	} *slots;
 
 	zss->irq = ch->intrs[0].line;
 	zss->has_dma = 0;
@@ -2262,6 +2209,10 @@ chan_init(struct mac_serial *zss, struct mac_zschannel *zs_chan,
 	   should do no harm anyway */
 	conn = get_property(ch, "AAPL,connector", &len);
 	zss->is_pwbk_ir = conn && (strcmp(conn, "infrared") == 0);
+	/* 1999 Powerbook G3 has slot-names property instead */
+	slots = (struct slot_names_prop *)get_property(ch, "slot-names", &len);
+	if (slots && slots->count > 0 && strcmp(slots->name, "IrDA") == 0)
+		zss->is_pwbk_ir = 1;
 
 	if (zss->has_dma) {
 		zss->dma_priv = NULL;
@@ -2506,16 +2457,13 @@ int macserial_init(void)
 			printk(" (powerbook IR)");
 		printk("\n");
 
+#ifndef CONFIG_XMON
 #ifdef CONFIG_KGDB
-		if (info->kgdb_channel)
-			continue;
-#endif			
-#ifdef CONFIG_XMON
-		if (!info->is_cobalt_modem)
-			continue;
-#endif			
+		if (!info->kgdb_channel)
+#endif /* CONFIG_KGDB */
 		/* By default, disable the port */
 		set_scc_power(info, 0);
+#endif /* CONFIG_XMON */
  	}
 	tmp_buf = 0;
 

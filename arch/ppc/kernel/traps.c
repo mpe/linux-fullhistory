@@ -128,6 +128,20 @@ MachineCheckException(struct pt_regs *regs)
 	_exception(SIGSEGV, regs);	
 }
 
+void
+SMIException(struct pt_regs *regs)
+{
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+	{
+		debugger(regs);
+		return;
+	}
+#endif
+	show_regs(regs);
+	print_backtrace((unsigned long *)regs->gpr[1]);
+	panic("System Management Interrupt");
+}
+
 #if defined(CONFIG_ALTIVEC)
 void
 AltiVecUnavailable(struct pt_regs *regs)

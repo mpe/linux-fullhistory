@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 #
+# CONFIG_UID16 is not set
 
 #
 # Code maturity level options
@@ -217,6 +218,11 @@ CONFIG_SCSI_NCR53C8XX_SYNC=20
 # CONFIG_SCSI_MAC53C94 is not set
 
 #
+# IEEE 1394 (FireWire) support
+#
+# CONFIG_IEEE1394 is not set
+
+#
 # Network device support
 #
 CONFIG_NETDEVICES=y
@@ -237,6 +243,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_MACE is not set
 # CONFIG_BMAC is not set
 CONFIG_NCR885E=y
+# CONFIG_OAKNET is not set
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
@@ -414,4 +421,4 @@ CONFIG_MSDOS_PARTITION=y
 #
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_KGDB is not set
-CONFIG_XMON=y
+# CONFIG_XMON is not set

@@ -14,7 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -c -o $*.o $<
+	$(CC) $(CFLAGS)  -DINITRD_OFFSET=$(IOFF) -DINITRD_SIZE=$(ISZ) -DZIMAGE_OFFSET=$(ZOFF) -DZIMAGE_SIZE=$(ZSZ) -D__BOOTER__ -c -o $*.o $<
 .S.s:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.o $<
 .S.o:
@@ -49,7 +49,7 @@ endif
 
 ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00800000
 
-GZIP_FLAGS = -v9
+GZIP_FLAGS = -v9f
 
 OBJECTS := head.o misc.o ../coffboot/zlib.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin
@@ -73,6 +73,7 @@ zvmlinux.initrd: zvmlinux
 		-DINITRD_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd initrd` \
 		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux.initrd image` \
 		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux.initrd image` \
+		-D__BOOTER__ \
 		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
@@ -84,6 +85,10 @@ zvmlinux.initrd: zvmlinux
 zImage: zvmlinux mkprep sImage
 ifdef CONFIG_PREP
 	./mkprep -pbp zvmlinux zImage
+endif
+ifdef CONFIG_APUS
+	$(STRIP) ../../../vmlinux -o vmapus
+	gzip $(GZIP_FLAGS) vmapus
 endif
 
 sImage: ../../../vmlinux
@@ -110,6 +115,7 @@ zvmlinux: $(OBJECTS) ../coffboot/vmlinux.gz
 	$(CC) $(CFLAGS) -DINITRD_OFFSET=0 -DINITRD_SIZE=0 \
 		-DZIMAGE_OFFSET=`sh offset $(OBJDUMP) zvmlinux image` \
 		-DZIMAGE_SIZE=`sh size $(OBJDUMP) zvmlinux image` \
+		-D__BOOTER__ \
 		-c -o misc.o misc.c
 	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
 	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment --add-section=image=../coffboot/vmlinux.gz \

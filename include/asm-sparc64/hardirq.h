@@ -16,9 +16,12 @@ extern unsigned int local_irq_count;
 
 /*
  * Are we in an interrupt context? Either doing bottom half
- * or hardware interrupt processing?
+ * or hardware interrupt processing?  On any cpu?
  */
 #define in_interrupt() ((local_irq_count + local_bh_count) != 0)
+
+/* This tests only the local processors hw IRQ context disposition.  */
+#define in_irq() (local_irq_count != 0)
 
 #ifndef __SMP__
 

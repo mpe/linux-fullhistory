@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.64 2000/01/16 05:11:03 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.66 2000/02/09 21:11:30 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -61,17 +61,14 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-/*
- *	Resource tracking variables
- */
-
-static atomic_t net_skbcount = ATOMIC_INIT(0);
-static atomic_t net_allocs = ATOMIC_INIT(0);
-static atomic_t net_fails  = ATOMIC_INIT(0);
-
-extern atomic_t ip_frag_mem;
+int sysctl_hot_list_len = 128;
 
 static kmem_cache_t *skbuff_head_cache;
+
+static union {
+	struct sk_buff_head	list;
+	char			pad[SMP_CACHE_BYTES];
+} skb_head_pool[NR_CPUS];
 
 /*
  *	Keep out-of-line to prevent kernel bloat.
@@ -93,19 +90,38 @@ void skb_under_panic(struct sk_buff *skb, int sz, void *here)
 	*(int*)0 = 0;
 }
 
-void show_net_buffers(void)
+static __inline__ struct sk_buff *skb_head_from_pool(void)
 {
-	printk("Networking buffers in use          : %u\n",
-	       atomic_read(&net_skbcount));
-	printk("Total network buffer allocations   : %u\n",
-	       atomic_read(&net_allocs));
-	printk("Total failed network buffer allocs : %u\n",
-	       atomic_read(&net_fails));
-#ifdef CONFIG_INET
-	printk("IP fragment buffer size            : %u\n",
-	       atomic_read(&ip_frag_mem));
-#endif	
+	struct sk_buff_head *list = &skb_head_pool[smp_processor_id()].list;
+
+	if (skb_queue_len(list)) {
+		struct sk_buff *skb;
+		unsigned long flags;
+
+		local_irq_save(flags);
+		skb = __skb_dequeue(list);
+		local_irq_restore(flags);
+		return skb;
+	}
+	return NULL;
 }
+
+static __inline__ void skb_head_to_pool(struct sk_buff *skb)
+{
+	struct sk_buff_head *list = &skb_head_pool[smp_processor_id()].list;
+
+	if (skb_queue_len(list) < sysctl_hot_list_len) {
+		unsigned long flags;
+
+		local_irq_save(flags);
+		__skb_queue_head(list, skb);
+		local_irq_restore(flags);
+
+		return;
+	}
+	kmem_cache_free(skbuff_head_cache, skb);
+}
+
 
 /* 	Allocate a new skbuff. We do this ourselves so we can fill in a few
  *	'private' fields and also do memory statistics to find all the
@@ -129,9 +145,12 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	}
 
 	/* Get the HEAD */
-	skb = kmem_cache_alloc(skbuff_head_cache, gfp_mask);
-	if (skb == NULL) 
-		goto nohead;
+	skb = skb_head_from_pool();
+	if (skb == NULL) {
+		skb = kmem_cache_alloc(skbuff_head_cache, gfp_mask);
+		if (skb == NULL)
+			goto nohead;
+	}
 
 	/* Get the DATA. Size must match skb_add_mtu(). */
 	size = ((size + 15) & ~15); 
@@ -139,16 +158,8 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	if (data == NULL)
 		goto nodata;
 
-	/* Note that this counter is useless now - you can just look in the
-	 * skbuff_head entry in /proc/slabinfo. We keep it only for emergency
-	 * cases.
-	 */
-	atomic_inc(&net_allocs);
-
 	/* XXX: does not include slab overhead */ 
 	skb->truesize = size + sizeof(struct sk_buff);
-
-	atomic_inc(&net_skbcount);
 
 	/* Load the data pointers. */
 	skb->head = data;
@@ -166,9 +177,8 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 	return skb;
 
 nodata:
-	kmem_cache_free(skbuff_head_cache, skb);
+	skb_head_to_pool(skb);
 nohead:
-	atomic_inc(&net_fails);
 	return NULL;
 }
 
@@ -213,8 +223,7 @@ void kfree_skbmem(struct sk_buff *skb)
 	if (!skb->cloned || atomic_dec_and_test(skb_datarefp(skb)))  
 		kfree(skb->head);
 
-	kmem_cache_free(skbuff_head_cache, skb);
-	atomic_dec(&net_skbcount);
+	skb_head_to_pool(skb);
 }
 
 /*
@@ -230,8 +239,13 @@ void __kfree_skb(struct sk_buff *skb)
 	}
 
 	dst_release(skb->dst);
-	if(skb->destructor)
+	if(skb->destructor) {
+		if (in_irq()) {
+			printk(KERN_WARNING "Warning: kfree_skb on hard IRQ %p\n",
+				NET_CALLER(skb));
+		}
 		skb->destructor(skb);
+	}
 #ifdef CONFIG_NET		
 	if(skb->rx_dev)
 		dev_put(skb->rx_dev);
@@ -247,17 +261,18 @@ void __kfree_skb(struct sk_buff *skb)
 struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
 {
 	struct sk_buff *n;
-	
-	n = kmem_cache_alloc(skbuff_head_cache, gfp_mask);
-	if (!n)
-		return NULL;
+
+	n = skb_head_from_pool();
+	if (!n) {
+		n = kmem_cache_alloc(skbuff_head_cache, gfp_mask);
+		if (!n)
+			return NULL;
+	}
 
 	memcpy(n, skb, sizeof(*n));
 	atomic_inc(skb_datarefp(skb));
 	skb->cloned = 1;
        
-	atomic_inc(&net_allocs);
-	atomic_inc(&net_skbcount);
 	dst_clone(n->dst);
 	n->rx_dev = NULL;
 	n->cloned = 1;
@@ -379,6 +394,8 @@ void skb_add_mtu(int mtu)
 
 void __init skb_init(void)
 {
+	int i;
+
 	skbuff_head_cache = kmem_cache_create("skbuff_head_cache",
 					      sizeof(struct sk_buff),
 					      0,
@@ -386,4 +403,7 @@ void __init skb_init(void)
 					      skb_headerinit, NULL);
 	if (!skbuff_head_cache)
 		panic("cannot create skbuff cache");
+
+	for (i=0; i<NR_CPUS; i++)
+		skb_queue_head_init(&skb_head_pool[i].list);
 }

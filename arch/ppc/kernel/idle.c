@@ -154,11 +154,12 @@ unsigned long get_zero_page_fast(void)
 	if ( zero_quicklist )
 	{
 		/* atomically remove this page from the list */
-		asm (	"101:lwarx  %1,0,%2\n"  /* reserve zero_cache */
+		register unsigned long tmp;
+		asm (	"101:lwarx  %1,0,%3\n"  /* reserve zero_cache */
 			"    lwz    %0,0(%1)\n" /* get next -- new zero_cache */
-			"    stwcx. %0,0,%2\n"  /* update zero_cache */
+			"    stwcx. %0,0,%3\n"  /* update zero_cache */
 			"    bne-   101b\n"     /* if lost reservation try again */
-			: "=&r" (zero_quicklist), "=&r" (page)
+			: "=&r" (tmp), "=&r" (page), "+m" (zero_cache)
 			: "r" (&zero_quicklist)
 			: "cc" );
 #ifdef __SMP__
@@ -193,6 +194,7 @@ void zero_paged(void)
 {
 	unsigned long pageptr = 0;	/* current page being zero'd */
 	unsigned long bytecount = 0;  
+        register unsigned long tmp;
 	pte_t *pte;
 
 	if ( atomic_read(&zero_cache_sz) >= zero_cache_water[0] )
@@ -249,15 +251,14 @@ void zero_paged(void)
 		pte_cache(*pte);
 		flush_tlb_page(find_vma(&init_mm,pageptr),pageptr);
 		/* atomically add this page to the list */
-		asm (	"101:lwarx  %0,0,%1\n"  /* reserve zero_cache */
-			"    stw    %0,0(%2)\n" /* update *pageptr */
+		asm (	"101:lwarx  %0,0,%2\n"  /* reserve zero_cache */
+			"    stw    %0,0(%3)\n" /* update *pageptr */
 #ifdef __SMP__
 			"    sync\n"            /* let store settle */
 #endif			
-			"    mr     %0,%2\n"    /* update zero_cache in reg */
-			"    stwcx. %2,0,%1\n"  /* update zero_cache in mem */
+			"    stwcx. %3,0,%2\n"  /* update zero_cache in mem */
 			"    bne-   101b\n"     /* if lost reservation try again */
-			: "=&r" (zero_quicklist)
+			: "=&r" (tmp), "+m" (zero_quicklist)
 			: "r" (&zero_quicklist), "r" (pageptr)
 			: "cc" );
 		/*

@@ -4,6 +4,8 @@
 #include <linux/interrupt.h>
 #include <linux/keyboard.h>
 
+extern struct tasklet_struct keyboard_tasklet;
+
 extern int shift_state;
 
 extern char *func_table[MAX_NR_FUNC];
@@ -85,7 +87,7 @@ extern inline void set_console(int nr)
 
 extern inline void set_leds(void)
 {
-	mark_bh(KEYBOARD_BH);
+	tasklet_schedule(&keyboard_tasklet);
 }
 
 extern inline int vc_kbd_mode(struct kbd_struct * kbd, int flag)

@@ -76,6 +76,7 @@ sigpending	=  8
 addr_limit	= 12
 exec_domain	= 16
 need_resched	= 20
+processor	= 56
 
 ENOSYS = 38
 
@@ -203,9 +204,17 @@ ENTRY(system_call)
 	.globl ret_from_sys_call
 	.globl ret_from_intr
 ret_from_sys_call:
-	movl SYMBOL_NAME(bh_mask),%eax
-	andl SYMBOL_NAME(bh_active),%eax
-	jne handle_bottom_half
+#ifdef __SMP__
+	movl processor(%ebx),%eax
+	shll $5,%eax
+	movl SYMBOL_NAME(softirq_state)(,%eax),%ecx
+	testl SYMBOL_NAME(softirq_state)+4(,%eax),%ecx
+#else
+	movl SYMBOL_NAME(softirq_state),%ecx
+	testl SYMBOL_NAME(softirq_state)+4,%ecx
+#endif
+	jne   handle_softirq
+	
 ret_with_reschedule:
 	cmpl $0,need_resched(%ebx)
 	jne reschedule
@@ -250,9 +259,18 @@ badsys:
 
 	ALIGN
 ret_from_exception:
-	movl SYMBOL_NAME(bh_mask),%eax
-	andl SYMBOL_NAME(bh_active),%eax
-	jne handle_bottom_half
+#ifdef __SMP__
+	GET_CURRENT(%ebx)
+	movl processor(%ebx),%eax
+	shll $5,%eax
+	movl SYMBOL_NAME(softirq_state)(,%eax),%ecx
+	testl SYMBOL_NAME(softirq_state)+4(,%eax),%ecx
+#else
+	movl SYMBOL_NAME(softirq_state),%ecx
+	testl SYMBOL_NAME(softirq_state)+4,%ecx
+#endif
+	jne   handle_softirq
+
 	ALIGN
 ret_from_intr:
 	GET_CURRENT(%ebx)
@@ -263,10 +281,10 @@ ret_from_intr:
 	jmp restore_all
 
 	ALIGN
-handle_bottom_half:
-	call SYMBOL_NAME(do_bottom_half)
+handle_softirq:
+	call SYMBOL_NAME(do_softirq)
 	jmp ret_from_intr
-
+	
 	ALIGN
 reschedule:
 	call SYMBOL_NAME(schedule)    # test

@@ -1,4 +1,4 @@
-/* $Id: sunbmac.h,v 1.5 1999/09/21 14:36:26 davem Exp $
+/* $Id: sunbmac.h,v 1.6 2000/02/09 11:15:36 davem Exp $
  * sunbmac.h: Defines for the Sun "Big MAC" 100baseT ethernet cards.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -309,6 +309,8 @@ struct bigmac {
 	unsigned long	tregs;	/* BigMAC Transceiver                 */
 	struct bmac_init_block	*bmac_block;	/* RX and TX descriptors */
 	__u32			 bblock_dvma;	/* RX and TX descriptors */
+
+	spinlock_t		lock;
 
 	struct sk_buff		*rx_skbs[RX_RING_SIZE];
 	struct sk_buff		*tx_skbs[TX_RING_SIZE];

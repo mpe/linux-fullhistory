@@ -527,7 +527,7 @@ static int ppp_ioctl(struct inode *inode, struct file *file,
 		} else {
 			ppp->npmode[i] = npi.mode;
 			/* we may be able to transmit more packets now (??) */
-			mark_bh(NET_BH);
+			netif_wake_queue(ppp->dev);
 		}
 		err = 0;
 		break;
@@ -626,11 +626,7 @@ ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	pp[0] = proto >> 8;
 	pp[1] = proto;
 
-	/*
-	 * ppp->xq should only ever have more than 1 data packet on it
-	 * if the core net code calls us when dev->tbusy == 1.
-	 */
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	skb_queue_tail(&ppp->xq, skb);
 	if (trylock_xmit_path(ppp))
 		ppp_xmit_unlock(ppp, 0);
@@ -731,12 +727,9 @@ ppp_xmit_unlock(struct ppp *ppp, int do_mark_bh)
 		while (ppp->xmit_pending == 0
 		       && (skb = skb_dequeue(&ppp->xq)) != 0)
 			ppp_send_frame(ppp, skb);
-		if (ppp->xmit_pending == 0 && skb_peek(&ppp->xq) == 0
-		    && ppp->dev->tbusy) {
-			ppp->dev->tbusy = 0;
-			if (do_mark_bh)
-				mark_bh(NET_BH);
-		}
+		if (ppp->xmit_pending == 0 && skb_peek(&ppp->xq) == 0)
+			netif_wake_queue(ppp->dev);
+
 		/* Now unlock the transmit path, let others in. */
 		unlock_xmit_path(ppp);
 		/* Check whether any work was queued up

@@ -20,13 +20,13 @@
 #include <asm/page.h>
 #include "ppc_asm.h"
 
-#ifndef CONFIG_8xx
-CACHE_LINE_SIZE = 32
-LG_CACHE_LINE_SIZE = 5
-#else
+#if defined(CONFIG_4xx) || defined(CONFIG_8xx)
 CACHE_LINE_SIZE = 16
 LG_CACHE_LINE_SIZE = 4
-#endif /* CONFIG_8xx */
+#else
+CACHE_LINE_SIZE = 32
+LG_CACHE_LINE_SIZE = 5
+#endif /* CONFIG_4xx || CONFIG_8xx */
 
 	.text
 
@@ -590,6 +590,20 @@ _GLOBAL(_set_THRM3)
 _GLOBAL(_get_PVR)
 	mfspr	r3,PVR
 	blr
+	
+_GLOBAL(_get_HID0)
+	mfspr	r3,HID0
+	blr
+
+_GLOBAL(_get_ICTC)
+	mfspr	r3,ICTC
+	blr
+
+_GLOBAL(_set_ICTC)
+	mtspr	ICTC,r3
+	blr
+
+	
 /*
 	L2CR functions
 	Copyright © 1997-1998 by PowerLogix R & D, Inc.
@@ -656,6 +670,8 @@ _GLOBAL(_set_L2CR)
 	rlwinm	r4,r4,16,16,31
 	cmplwi	r4,0x0008
 	beq	thisIs750
+	cmplwi	r4,0x000c
+	beq thisIs750
 	li	r3,-1
 	blr
 	
@@ -750,9 +766,11 @@ _GLOBAL(_get_L2CR)
 	mfspr	r3,PVR
 	rlwinm	r3,r3,16,16,31
 	cmplwi	r3,0x0008
+	beq	1f
+	cmplwi	r3,0x000c
 	li	r3,0
 	bnelr
-	
+1:	
 	/* Return the L2CR contents */
 	mfspr	r3,L2CR
 	blr

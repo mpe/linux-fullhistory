@@ -3,6 +3,8 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
+#include <linux/pci.h>
+#include <linux/openpic.h>
 
 #include <asm/init.h>
 #include <asm/io.h>
@@ -27,11 +29,37 @@ static volatile struct pmac_irq_hw *pmac_irq_hw[4] = {
 
 static int max_irqs;
 static int max_real_irqs;
+static int has_openpic = 0;
 
 #define MAXCOUNT 10000000
 
 #define GATWICK_IRQ_POOL_SIZE        10
 static struct interrupt_info gatwick_int_pool[GATWICK_IRQ_POOL_SIZE];
+
+extern int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+                                      unsigned char offset, unsigned short *val);
+extern int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+                                      unsigned char offset, unsigned short val);
+
+static void pmac_openpic_mask_irq(unsigned int irq_nr)
+{
+	openpic_disable_irq(irq_nr);
+}
+
+static void pmac_openpic_unmask_irq(unsigned int irq_nr)
+{
+	openpic_enable_irq(irq_nr);
+}
+
+struct hw_interrupt_type pmac_open_pic = {
+	" OpenPIC  ",
+	NULL,
+	NULL,
+	pmac_openpic_unmask_irq,
+	pmac_openpic_mask_irq,
+	pmac_openpic_mask_irq,
+	0
+};
 
 static void __pmac pmac_mask_and_ack_irq(unsigned int irq_nr)
 {
@@ -141,74 +169,6 @@ static void gatwick_action(int cpl, void *dev_id, struct pt_regs *regs)
 		ppc_irq_dispatch_handler( regs, irq );
 }
 
-#if 0
-void
-pmac_do_IRQ(struct pt_regs *regs,
-	    int            cpu,
-            int            isfake)
-{
-	int irq;
-	unsigned long bits = 0;
-
-#ifdef __SMP__
-        /* IPI's are a hack on the powersurge -- Cort */
-        if ( cpu != 0 )
-        {
-#ifdef CONFIG_XMON
-		static int xmon_2nd;
-		if (xmon_2nd)
-			xmon(regs);
-#endif
-		pmac_smp_message_recv();
-		return -1;
-        }
-
-        {
-                unsigned int loops = MAXCOUNT;
-                while (test_bit(0, &global_irq_lock)) {
-                        if (smp_processor_id() == global_irq_holder) {
-                                printk("uh oh, interrupt while we hold global irq lock!\n");
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                                break;
-                        }
-                        if (loops-- == 0) {
-                                printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                        }
-                }
-        }
-#endif /* __SMP__ */
-
-        for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
-                int i = irq >> 5;
-                bits = ld_le32(&pmac_irq_hw[i]->flag)
-                        | ppc_lost_interrupts[i];
-                if (bits == 0)
-                        continue;
-                irq -= cntlzw(bits);
-                break;
-        }
-
-        if (irq < 0)
-        {
-                printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
-                       irq, regs->nip);
-                ppc_spurious_interrupts++;
-        }
-        else
-        {
-                ppc_irq_dispatch_handler( regs, irq );
-        }
-#ifdef CONFIG_SMP	
-out:
-#endif /* CONFIG_SMP */
-}
-#endif
-
 int
 pmac_get_irq(struct pt_regs *regs)
 {
@@ -248,15 +208,30 @@ pmac_get_irq(struct pt_regs *regs)
         }
 #endif /* __SMP__ */
 
-        for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
-                int i = irq >> 5;
-                bits = ld_le32(&pmac_irq_hw[i]->flag)
-                        | ppc_lost_interrupts[i];
-                if (bits == 0)
-                        continue;
-                irq -= cntlzw(bits);
-                break;
-        }
+	/* Yeah, I know, this could be a separate do_IRQ function */
+	if (has_openpic)
+	{
+		irq = openpic_irq(smp_processor_id());
+		if (irq == OPENPIC_VEC_SPURIOUS)
+			/* We get those when doing polled ADB requests,
+			 * using -2 is a temp hack to disable the printk
+			 */
+			irq = -2; /*-1; */
+		else
+			openpic_eoi(smp_processor_id());
+	}
+	else
+	{
+		for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
+			int i = irq >> 5;
+			bits = ld_le32(&pmac_irq_hw[i]->flag)
+				| ppc_lost_interrupts[i];
+			if (bits == 0)
+				continue;
+			irq -= cntlzw(bits);
+			break;
+		}
+	}
 
 	return irq;
 }
@@ -339,6 +314,51 @@ pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base)
 	}
 }
 
+/*
+ * The PowerBook 3400/2400/3500 can have a combo ethernet/modem
+ * card which includes an ohare chip that acts as a second interrupt
+ * controller.  If we find this second ohare, set it up and fix the
+ * interrupt value in the device tree for the ethernet chip.
+ */
+static void __init enable_second_ohare(void)
+{
+	unsigned char bus, devfn;
+	unsigned short cmd;
+        unsigned long addr;
+	int second_irq;
+	struct device_node *irqctrler = find_devices("pci106b,7");
+	struct device_node *ether;
+
+	if (irqctrler == NULL || irqctrler->n_addrs <= 0)
+		return;
+	addr = (unsigned long) ioremap(irqctrler->addrs[0].address, 0x40);
+	pmac_irq_hw[1] = (volatile struct pmac_irq_hw *)(addr + 0x20);
+	max_irqs = 64;
+	if (pci_device_loc(irqctrler, &bus, &devfn) == 0) {
+		pmac_pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
+		cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+		cmd &= ~PCI_COMMAND_IO;
+		pmac_pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
+	}
+
+	second_irq = irqctrler->intrs[0].line;
+	printk(KERN_INFO "irq: secondary controller on irq %d\n", second_irq);
+	request_irq(second_irq, gatwick_action, SA_INTERRUPT,
+		    "interrupt cascade", 0 );
+
+	/* Fix interrupt for the modem/ethernet combo controller. The number
+	   in the device tree (27) is bogus (correct for the ethernet-only
+	   board but not the combo ethernet/modem board).
+	   The real interrupt is 28 on the second controller -> 28+32 = 60.
+	*/
+	ether = find_devices("pci1011,14");
+	if (ether && ether->n_intrs > 0) {
+		ether->intrs[0].line = 60;
+		printk(KERN_INFO "irq: Fixed ethernet IRQ to %d\n",
+		       ether->intrs[0].line);
+	}
+}
+
 void __init
 pmac_pic_init(void)
 {
@@ -347,9 +367,44 @@ pmac_pic_init(void)
         unsigned long addr;
 	int second_irq = -999;
 
+	/* We first try to detect Apple's new Core99 chipset, since mac-io
+	 * is quite different on those machines and contains an IBM MPIC2.
+	 */
+	irqctrler = find_type_devices("open-pic");
+	if (irqctrler != NULL)
+	{
+		printk("PowerMac using OpenPIC irq controller\n");
+		if (irqctrler->n_addrs > 0)
+		{
+#ifdef CONFIG_XMON
+			struct device_node* pswitch;
+#endif /* CONFIG_XMON */	
+			OpenPIC = (volatile struct OpenPIC *)
+				ioremap(irqctrler->addrs[0].address,
+					irqctrler->addrs[0].size);
+			for ( i = 0 ; i < NR_IRQS ; i++ )
+				irq_desc[i].handler = &pmac_open_pic;
+			openpic_init(1);
+			has_openpic = 1;
+#ifdef CONFIG_XMON
+			pswitch = find_devices("programmer-switch");
+			if (pswitch && pswitch->n_intrs)
+				request_irq(pswitch->intrs[0].line, xmon_irq, 0,
+					    "NMI - XMON", 0);
+#endif	/* CONFIG_XMON */
+			return;
+		}
+		irqctrler = NULL;
+	}
 
-	/* G3 powermacs have 64 interrupts, G3 Series PowerBook have 128, 
-	   others have 32 */
+	/*
+	 * G3 powermacs and 1999 G3 PowerBooks have 64 interrupts,
+	 * 1998 G3 Series PowerBooks have 128, 
+	 * other powermacs have 32.
+	 * The combo ethernet/modem card for the Powerstar powerbooks
+	 * (2400/3400/3500, ohare based) has a second ohare chip
+	 * effectively making a total of 64.
+	 */
 	max_irqs = max_real_irqs = 32;
 	irqctrler = find_devices("mac-io");
 	if (irqctrler)
@@ -388,6 +443,12 @@ pmac_pic_init(void)
 		addr = (unsigned long) ioremap(0xf3000000, 0x40);
 		pmac_irq_hw[0] = (volatile struct pmac_irq_hw *) (addr + 0x20);
 	}
+
+	/* PowerBooks 3400 and 3500 can have a second controller in a second
+	   ohare chip, on the combo ethernet/modem card */
+	if (machine_is_compatible("AAPL,3400/2400")
+	     || machine_is_compatible("AAPL,3500"))
+		enable_second_ohare();
 
 	/* disable all interrupts in all controllers */
 	for (i = 0; i * 32 < max_irqs; ++i)
@@ -435,7 +496,12 @@ sleep_save_intrs(int viaint)
 	out_le32(&pmac_irq_hw[0]->enable, ppc_cached_irq_mask[0]);
 	if (max_real_irqs > 32)
 		out_le32(&pmac_irq_hw[1]->enable, ppc_cached_irq_mask[1]);
-	mb();
+	(void)in_le32(&pmac_irq_hw[0]->flag);
+        do {
+                /* make sure mask gets to controller before we
+                   return to user */
+                mb();
+        } while(in_le32(&pmac_irq_hw[0]->enable) != ppc_cached_irq_mask[0]);
 }
 
 void

@@ -8,7 +8,7 @@
 
 #include "hpfs_fn.h"
 
-int hpfs_dir_read(struct file *filp, char *name, size_t len, loff_t *loff)
+ssize_t hpfs_dir_read(struct file *filp, char *name, size_t len, loff_t *loff)
 {
 	return -EISDIR;
 }

@@ -34,7 +34,6 @@ extern pmd_t empty_bad_pmd_table[PTRS_PER_PMD];
 extern pte_t empty_bad_pte_table[PTRS_PER_PTE];
 
 extern void ia64_tlb_init (void);
-extern void show_net_buffers (void);
 
 static unsigned long totalram_pages;
 
@@ -222,9 +221,6 @@ show_mem (void)
 	printk("%d pages swap cached\n", cached);
 	printk("%ld pages in page table cache\n", pgtable_cache_size);
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 /*

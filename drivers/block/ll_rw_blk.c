@@ -68,7 +68,7 @@ DECLARE_WAIT_QUEUE_HEAD(wait_for_request);
 
 /* This specifies how many sectors to read ahead on the disk. */
 
-int read_ahead[MAX_BLKDEV] = {0, };
+int read_ahead[MAX_BLKDEV];
 
 /* blk_dev_struct is:
  *	*request_fn
@@ -84,7 +84,7 @@ struct blk_dev_struct blk_dev[MAX_BLKDEV]; /* initialized by blk_dev_init() */
  *
  * if (!blk_size[MAJOR]) then no minor size checking is done.
  */
-int * blk_size[MAX_BLKDEV] = { NULL, NULL, };
+int * blk_size[MAX_BLKDEV];
 
 /*
  * blksize_size contains the size of all block-devices:
@@ -93,7 +93,7 @@ int * blk_size[MAX_BLKDEV] = { NULL, NULL, };
  *
  * if (!blksize_size[MAJOR]) then 1024 bytes is assumed.
  */
-int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
+int * blksize_size[MAX_BLKDEV];
 
 /*
  * hardsect_size contains the size of the hardware sector of a device.
@@ -107,17 +107,17 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
  * This is currently set by some scsi devices and read by the msdos fs driver.
  * Other uses may appear later.
  */
-int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
+int * hardsect_size[MAX_BLKDEV];
 
 /*
  * The following tunes the read-ahead algorithm in mm/filemap.c
  */
-int * max_readahead[MAX_BLKDEV] = { NULL, NULL, };
+int * max_readahead[MAX_BLKDEV];
 
 /*
  * Max number of sectors per request
  */
-int * max_sectors[MAX_BLKDEV] = { NULL, NULL, };
+int * max_sectors[MAX_BLKDEV];
 
 static inline int get_max_sectors(kdev_t dev)
 {
@@ -486,10 +486,6 @@ static inline void __make_request(request_queue_t * q, int rw,
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
-
-	/* It had better not be a new buffer by the time we see it */
-	if (buffer_new(bh))
-		BUG();
 
 	if (blk_size[major]) {
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;
@@ -1002,4 +998,5 @@ EXPORT_SYMBOL(end_that_request_last);
 EXPORT_SYMBOL(blk_init_queue);
 EXPORT_SYMBOL(blk_cleanup_queue);
 EXPORT_SYMBOL(blk_queue_headactive);
+EXPORT_SYMBOL(blk_queue_pluggable);
 EXPORT_SYMBOL(generic_make_request);

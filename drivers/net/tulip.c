@@ -374,10 +374,7 @@ struct tulip_private {
 	struct enet_statistics stats;
 #endif
 	struct timer_list timer;	/* Media selection timer. */
-	int interrupt;				/* In-interrupt flag. */
-#ifdef SMP_CHECK
-	int smp_proc_id;			/* Which processor in IRQ handler. */
-#endif
+	spinlock_t tx_lock;       
 	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
@@ -753,6 +750,8 @@ static struct net_device *tulip_probe1(int pci_bus, int pci_device_fn,
 	/* The Tulip-specific entries in the device structure. */
 	dev->open = &tulip_open;
 	dev->hard_start_xmit = &tulip_start_xmit;
+	dev->tx_timeout = &tulip_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 	dev->stop = &tulip_close;
 	dev->get_stats = &tulip_get_stats;
 #ifdef HAVE_PRIVATE_IOCTL
@@ -1249,6 +1248,7 @@ tulip_open(struct net_device *dev)
 
 	MOD_INC_USE_COUNT;
 
+    spin_lock_init(&tp->tx_lock);
 	tulip_init_ring(dev);
 
 	/* This is set_rx_mode(), but without starting the transmitter. */
@@ -1329,10 +1329,6 @@ media_picked:
 	outl(tp->csr6, ioaddr + CSR6);
 	outl(tp->csr6 | 0x2000, ioaddr + CSR6);
 
-	dev->tbusy = 0;
-	tp->interrupt = 0;
-	dev->start = 1;
-
 	/* Enable interrupts by setting the interrupt mask. */
 	outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR5);
 	outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR7);
@@ -1351,6 +1347,8 @@ media_picked:
 	tp->timer.data = (unsigned long)dev;
 	tp->timer.function = tulip_tbl[tp->chip_id].media_timer;
 	add_timer(&tp->timer);
+
+	netif_start_queue(dev);
 
 	return 0;
 }
@@ -1958,9 +1956,13 @@ static void tulip_tx_timeout(struct net_device *dev)
   struct tulip_private *tp = (struct tulip_private *)dev->priv;
   long ioaddr = dev->base_addr;
 
+  printk("%s: transmit timed out\n", dev->name);
+
   if (media_cap[dev->if_port] & MediaIsMII) {
 	  /* Do nothing -- the media monitor should handle this. */
+#if 0
 	  if (tulip_debug > 1)
+#endif
 		  printk(KERN_WARNING "%s: Transmit timeout using MII device.\n",
 				 dev->name);
 	  dev->trans_start = jiffies;
@@ -2090,18 +2092,12 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int entry;
 	u32 flag;
-
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		tulip_tx_timeout(dev);
-		return 1;
-	}
+	unsigned long cpuflags;
 
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
+
+	spin_lock_irqsave(&tp->tx_lock, cpuflags);
 
 	/* Calculate the next Tx descriptor entry. */
 	entry = tp->cur_tx % TX_RING_SIZE;
@@ -2111,17 +2107,15 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 	  flag = 0x60000000; /* No interrupt */
-	  dev->tbusy = 0;
 	} else if (tp->cur_tx - tp->dirty_tx == TX_RING_SIZE/2) {
 	  flag = 0xe0000000; /* Tx-done intr. */
-	  dev->tbusy = 0;
 	} else if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE - 2) {
 	  flag = 0x60000000; /* No Tx-done intr. */
-	  dev->tbusy = 0;
 	} else {
 	  /* Leave room for set_rx_mode() to fill entries. */
 	  flag = 0xe0000000; /* Tx-done intr. */
 	  tp->tx_full = 1;
+	  netif_stop_queue(dev);
 	}
 	if (entry == TX_RING_SIZE-1)
 		flag |= 0xe2000000;
@@ -2129,6 +2123,8 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	tp->tx_ring[entry].length = skb->len | flag;
 	tp->tx_ring[entry].status = 0x80000000;	/* Pass ownership to the chip. */
 	tp->cur_tx++;
+	spin_unlock_irqrestore(&tp->tx_lock, cpuflags);
+
 	/* Trigger an immediate transmit demand. */
 	outl(0, dev->base_addr + CSR1);
 
@@ -2159,20 +2155,6 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 
 	ioaddr = dev->base_addr;
 	tp = (struct tulip_private *)dev->priv;
-	if (test_and_set_bit(0, (void*)&tp->interrupt)) {
-#ifdef SMP_CHECK
-		printk(KERN_ERR "%s: Re-entering the interrupt handler with proc %d,"
-			   " proc %d already handling.\n", dev->name,
-			   tp->smp_proc_id, smp_processor_id());
-#else
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-#endif
-		return;
-	}
-	dev->interrupt = 1;
-#ifdef SMP_CHECK
-	tp->smp_proc_id = smp_processor_id();
-#endif
 
 	do {
 		csr5 = inl(ioaddr + CSR5);
@@ -2188,6 +2170,8 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 
 		if (csr5 & (RxIntr | RxNoBuf))
 			work_budget -= tulip_rx(dev);
+
+		spin_lock(&tp->tx_lock);
 
 		if (csr5 & (TxNoBuf | TxDied | TxIntr)) {
 			unsigned int dirty_tx;
@@ -2233,7 +2217,7 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 
 				/* Free the original skb. */
 #if (LINUX_VERSION_CODE > 0x20155)
-				dev_kfree_skb(tp->tx_skbuff[entry]);
+				dev_kfree_skb_irq(tp->tx_skbuff[entry]);
 #else
 				dev_kfree_skb(tp->tx_skbuff[entry], FREE_WRITE);
 #endif
@@ -2248,15 +2232,14 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 			}
 #endif
 
-			if (tp->tx_full && dev->tbusy
-				&& tp->cur_tx - dirty_tx  < TX_RING_SIZE - 2) {
+			if (tp->tx_full && tp->cur_tx - dirty_tx  < TX_RING_SIZE - 2) {
 				/* The ring is no longer full, clear tbusy. */
 				tp->tx_full = 0;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);
+				netif_wake_queue(dev);
 			}
 
 			tp->dirty_tx = dirty_tx;
+
 			if (csr5 & TxDied) {
 				if (tulip_debug > 1)
 					printk(KERN_WARNING "%s: The transmitter stopped!"
@@ -2266,6 +2249,7 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 				outl(tp->csr6 | 0x2002, ioaddr + CSR6);
 			}
 		}
+		spin_unlock(&tp->tx_lock);
 
 		/* Log errors. */
 		if (csr5 & AbnormalIntr) {	/* Abnormal error summary bit. */
@@ -2316,8 +2300,6 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 		printk(KERN_DEBUG "%s: exiting interrupt, csr5=%#4.4x.\n",
 			   dev->name, inl(ioaddr + CSR5));
 
-	dev->interrupt = 0;
-	clear_bit(0, (void*)&tp->interrupt);
 	return;
 }
 
@@ -2429,8 +2411,7 @@ tulip_close(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (tulip_debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
@@ -2495,7 +2476,7 @@ tulip_get_stats(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 
 	return &tp->stats;
@@ -2601,6 +2582,7 @@ static void set_rx_mode(struct net_device *dev, int num_addrs, void *addrs)
 	long ioaddr = dev->base_addr;
 	int csr6 = inl(ioaddr + CSR6) & ~0x00D5;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	unsigned long cpuflags;
 
 	tp->csr6 &= ~0x00D5;
 	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
@@ -2660,13 +2642,12 @@ static void set_rx_mode(struct net_device *dev, int num_addrs, void *addrs)
 			*setup_frm++ = eaddrs[2];
 		} while (++i < 15);
 		/* Now add this frame to the Tx list. */
+		spin_lock_irqsave(&tp->tx_lock, cpuflags);
 		if (tp->cur_tx - tp->dirty_tx > TX_RING_SIZE - 2) {
 			/* Same setup recently queued, we need not add it. */
 		} else {
-			unsigned long flags;
 			unsigned int entry, dummy = 0;
 
-			save_flags(flags); cli();
 			entry = tp->cur_tx++ % TX_RING_SIZE;
 
 			if (entry != 0) {
@@ -2688,12 +2669,12 @@ static void set_rx_mode(struct net_device *dev, int num_addrs, void *addrs)
 			tp->tx_ring[entry].buffer1 = virt_to_bus(tp->setup_frame);
 			tp->tx_ring[entry].status = 0x80000000;
 			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2) {
-				dev->tbusy = 1;
+				netif_stop_queue(dev);
 				tp->tx_full = 1;
 			}
 			if (dummy >= 0)
 				tp->tx_ring[dummy].status = DescOwned;
-			restore_flags(flags);
+			spin_unlock_irqrestore(&tp->tx_lock, cpuflags);
 			/* Trigger an immediate transmit demand. */
 			outl(0, ioaddr + CSR1);
 		}

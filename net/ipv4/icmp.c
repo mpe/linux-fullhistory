@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.63 2000/01/09 02:19:45 davem Exp $
+ *	Version: $Id: icmp.c,v 1.64 2000/02/09 11:16:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -468,7 +468,7 @@ static void icmp_out_count(int type)
 {
 	if (type>NR_ICMP_TYPES)
 		return;
-	(icmp_pointers[type].output)[(smp_processor_id()*2+!in_interrupt())*sizeof(struct icmp_mib)/sizeof(unsigned long)]++;
+	(icmp_pointers[type].output)[(smp_processor_id()*2+!in_softirq())*sizeof(struct icmp_mib)/sizeof(unsigned long)]++;
 	ICMP_INC_STATS(IcmpOutMsgs);
 }
  

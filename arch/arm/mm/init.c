@@ -35,8 +35,6 @@
 static unsigned long totalram_pages;
 pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
-extern void show_net_buffers(void);
-
 /*
  * empty_bad_page is the page that is used for page faults when
  * linux is out-of-memory. Older versions of linux just did a
@@ -157,9 +155,6 @@ void show_mem(void)
 	printk("%ld page tables cached\n", pgtable_cache_size);
 #endif
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 /*

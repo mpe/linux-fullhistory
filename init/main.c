@@ -111,6 +111,7 @@ extern void dquot_init_hash(void);
 #define MAX_INIT_ENVS 8
 
 extern void time_init(void);
+extern void softirq_init(void);
 
 int rows, cols;
 
@@ -469,6 +470,7 @@ asmlinkage void __init start_kernel(void)
 	init_IRQ();
 	sched_init();
 	time_init();
+	softirq_init();
 	parse_options(command_line);
 
 	/*

@@ -462,7 +462,7 @@ extern struct page *filemap_nopage(struct vm_area_struct * area,
 
 #define __GFP_DMA	0x20
 
-#define GFP_BUFFER	(__GFP_WAIT)
+#define GFP_BUFFER	(__GFP_HIGH | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
 #define GFP_USER	(__GFP_WAIT | __GFP_IO)
 #define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)

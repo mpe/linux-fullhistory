@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.100 2000/01/29 01:38:04 anton Exp $
+/*  $Id: irq.c,v 1.101 2000/02/09 11:15:03 davem Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -205,9 +205,6 @@ unsigned int local_irq_count;
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 
-atomic_t global_bh_lock = ATOMIC_INIT(0);
-spinlock_t global_bh_count = SPIN_LOCK_UNLOCKED;
-
 /* Who has global_irq_lock. */
 unsigned char global_irq_holder = NO_PROC_ID;
 
@@ -216,9 +213,6 @@ spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
 
 /* Global IRQ locking depth. */
 atomic_t global_irq_count = ATOMIC_INIT(0);
-
-/* This protects BH software state (masks, things like that). */
-spinlock_t sparc_bh_lock = SPIN_LOCK_UNLOCKED;
 
 void smp_show_backtrace_all_cpus(void);
 void show_backtrace(void);
@@ -239,7 +233,7 @@ static void show(char * str)
 	}
 	printk("]\n");
 
-	printk("bh:   %d [ ", (spin_is_locked(&global_bh_count) ? 1 : 0));
+	printk("bh:   %d [ ", (spin_is_locked(&global_bh_lock) ? 1 : 0));
 
 	for (i = 0; i < NR_CPUS; i++) {
 		printk("%d ", local_bh_count[cpu]);
@@ -251,18 +245,6 @@ static void show(char * str)
 #else
 	show_backtrace();
 #endif
-}
-
-static inline void wait_on_bh(void)
-{
-	int count = MAXCOUNT;
-	do {
-		if(!--count) {
-			show("wait_on_bh");
-			count = 0;
-		}
-		barrier();
-	} while(spin_is_locked(&global_bh_count));
 }
 
 /*
@@ -281,7 +263,7 @@ static inline void wait_on_irq(int cpu)
 		 * already executing in one..
 		 */
 		if (!atomic_read(&global_irq_count)) {
-			if (local_bh_count[cpu] || !spin_is_locked(&global_bh_count))
+			if (local_bh_count[cpu] || !spin_is_locked(&global_bh_lock))
 				break;
 		}
 
@@ -300,26 +282,12 @@ static inline void wait_on_irq(int cpu)
 				continue;
 			if (spin_is_locked (&global_irq_lock))
 				continue;
-			if (!local_bh_count[cpu] && spin_is_locked(&global_bh_count))
+			if (!local_bh_count[cpu] && spin_is_locked(&global_bh_lock))
 				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
 		}
 	}
-}
-
-/*
- * This is called when we want to synchronize with
- * bottom half handlers. We need to wait until
- * no other CPU is executing any bottom half handler.
- *
- * Don't wait if we're already running in an interrupt
- * context or are inside a bh handler. 
- */
-void synchronize_bh(void)
-{
-        if (spin_is_locked (&global_bh_count) && !in_interrupt())
-                wait_on_bh();
 }
 
 /*

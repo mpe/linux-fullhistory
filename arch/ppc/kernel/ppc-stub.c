@@ -351,7 +351,7 @@ static inline int get_msr()
 
 static inline void set_msr(int msr)
 {
-	asm volatile("mfmsr %0" : : "r" (msr));
+	asm volatile("mtmsr %0" : : "r" (msr));
 }
 
 /* Set up exception handlers for tracing and breakpoints

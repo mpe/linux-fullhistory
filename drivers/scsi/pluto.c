@@ -112,7 +112,7 @@ int __init pluto_detect(Scsi_Host_Template *tpnt)
 #endif
 			return 0;
 	}
-	fcs = (struct ctrl_inquiry *) scsi_init_malloc (sizeof (struct ctrl_inquiry) * fcscount, GFP_DMA);
+	fcs = (struct ctrl_inquiry *) kmalloc (sizeof (struct ctrl_inquiry) * fcscount, GFP_DMA);
 	if (!fcs) {
 		printk ("PLUTO: Not enough memory to probe\n");
 		return 0;
@@ -265,7 +265,7 @@ int __init pluto_detect(Scsi_Host_Template *tpnt)
 		} else
 			fc->fcp_register(fc, TYPE_SCSI_FCP, 1);
 	}
-	scsi_init_free((char *)fcs, sizeof (struct ctrl_inquiry) * fcscount);
+	kfree((char *)fcs);
 	if (nplutos)
 		printk ("PLUTO: Total of %d SparcSTORAGE Arrays found\n", nplutos);
 	return nplutos;

@@ -130,12 +130,11 @@ __rpc_add_wait_queue(struct rpc_wait_queue *queue, struct rpc_task *task)
 int
 rpc_add_wait_queue(struct rpc_wait_queue *q, struct rpc_task *task)
 {
-	unsigned long oldflags;
 	int result;
 
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	result = __rpc_add_wait_queue(q, task);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 	return result;
 }
 
@@ -160,11 +159,9 @@ __rpc_remove_wait_queue(struct rpc_task *task)
 void
 rpc_remove_wait_queue(struct rpc_task *task)
 {
-	unsigned long oldflags;
-
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	__rpc_remove_wait_queue(task);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*
@@ -286,13 +283,12 @@ void
 rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 				rpc_action action, rpc_action timer)
 {
-	unsigned long	oldflags;
 	/*
 	 * Protect the queue operations.
 	 */
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	__rpc_sleep_on(q, task, action, timer);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*
@@ -342,11 +338,9 @@ __rpc_default_timer(struct rpc_task *task)
 void
 rpc_wake_up_task(struct rpc_task *task)
 {
-	unsigned long	oldflags;
-
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	__rpc_wake_up(task);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*
@@ -355,14 +349,13 @@ rpc_wake_up_task(struct rpc_task *task)
 struct rpc_task *
 rpc_wake_up_next(struct rpc_wait_queue *queue)
 {
-	unsigned long	oldflags;
 	struct rpc_task	*task;
 
 	dprintk("RPC:      wake_up_next(%p \"%s\")\n", queue, rpc_qname(queue));
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	if ((task = queue->task) != 0)
 		__rpc_wake_up(task);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 
 	return task;
 }
@@ -373,12 +366,10 @@ rpc_wake_up_next(struct rpc_wait_queue *queue)
 void
 rpc_wake_up(struct rpc_wait_queue *queue)
 {
-	unsigned long	oldflags;
-
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	while (queue->task)
 		__rpc_wake_up(queue->task);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*
@@ -388,14 +379,13 @@ void
 rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
 {
 	struct rpc_task	*task;
-	unsigned long	oldflags;
 
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	while ((task = queue->task) != NULL) {
 		task->tk_status = status;
 		__rpc_wake_up(task);
 	}
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*
@@ -422,7 +412,6 @@ __rpc_atrun(struct rpc_task *task)
 static int
 __rpc_execute(struct rpc_task *task)
 {
-	unsigned long	oldflags;
 	int		status = 0;
 
 	dprintk("RPC: %4d rpc_execute flgs %x\n",
@@ -476,13 +465,13 @@ __rpc_execute(struct rpc_task *task)
 		 * and the RPC reply arrives before we get here, it will
 		 * have state RUNNING, but will still be on schedq.
 		 */
-		spin_lock_irqsave(&rpc_queue_lock, oldflags);
+		spin_lock_bh(&rpc_queue_lock);
 		if (RPC_IS_RUNNING(task)) {
 			if (task->tk_rpcwait == &schedq)
 				__rpc_remove_wait_queue(task);
 		} else while (!RPC_IS_RUNNING(task)) {
 			if (RPC_IS_ASYNC(task)) {
-				spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+				spin_unlock_bh(&rpc_queue_lock);
 				return 0;
 			}
 
@@ -492,9 +481,9 @@ __rpc_execute(struct rpc_task *task)
 			if (current->pid == rpciod_pid)
 				printk(KERN_ERR "RPC: rpciod waiting on sync task!\n");
 
-			spin_unlock_irq(&rpc_queue_lock);
+			spin_unlock_bh(&rpc_queue_lock);
 			__wait_event(task->tk_wait, RPC_IS_RUNNING(task));
-			spin_lock_irq(&rpc_queue_lock);
+			spin_lock_bh(&rpc_queue_lock);
 
 			/*
 			 * When the task received a signal, remove from
@@ -506,7 +495,7 @@ __rpc_execute(struct rpc_task *task)
 			dprintk("RPC: %4d sync task resuming\n",
 							task->tk_pid);
 		}
-		spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+		spin_unlock_bh(&rpc_queue_lock);
 
 		/*
 		 * When a sync task receives a signal, it exits with
@@ -562,20 +551,19 @@ __rpc_schedule(void)
 {
 	struct rpc_task	*task;
 	int		count = 0;
-	unsigned long	oldflags;
 	int need_resched = current->need_resched;
 
 	dprintk("RPC:      rpc_schedule enter\n");
 	while (1) {
-		spin_lock_irqsave(&rpc_queue_lock, oldflags);
+		spin_lock_bh(&rpc_queue_lock);
 		if (!(task = schedq.task)) {
-			spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+			spin_unlock_bh(&rpc_queue_lock);
 			break;
 		}
 		rpc_del_timer(task);
 		__rpc_remove_wait_queue(task);
 		task->tk_flags |= RPC_TASK_RUNNING;
-		spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+		spin_unlock_bh(&rpc_queue_lock);
 
 		__rpc_execute(task);
 
@@ -726,7 +714,6 @@ void
 rpc_release_task(struct rpc_task *task)
 {
 	struct rpc_task	*next, *prev;
-	unsigned long	oldflags;
 
 	dprintk("RPC: %4d release task\n", task->tk_pid);
 
@@ -744,7 +731,7 @@ rpc_release_task(struct rpc_task *task)
 	spin_unlock(&rpc_sched_lock);
 
 	/* Protect the execution below. */
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 
 	/* Delete any running timer */
 	rpc_del_timer(task);
@@ -752,7 +739,7 @@ rpc_release_task(struct rpc_task *task)
 	/* Remove from any wait queue we're still on */
 	__rpc_remove_wait_queue(task);
 
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 
 	/* Release resources */
 	if (task->tk_rqstp)
@@ -800,15 +787,14 @@ rpc_find_parent(struct rpc_task *child)
 static void
 rpc_child_exit(struct rpc_task *child)
 {
-	unsigned long	oldflags;
 	struct rpc_task	*parent;
 
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	if ((parent = rpc_find_parent(child)) != NULL) {
 		parent->tk_status = child->tk_status;
 		__rpc_wake_up(parent);
 	}
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 	rpc_release_task(child);
 }
 
@@ -835,13 +821,11 @@ fail:
 void
 rpc_run_child(struct rpc_task *task, struct rpc_task *child, rpc_action func)
 {
-	unsigned long oldflags;
-
-	spin_lock_irqsave(&rpc_queue_lock, oldflags);
+	spin_lock_bh(&rpc_queue_lock);
 	/* N.B. Is it possible for the child to have already finished? */
 	__rpc_sleep_on(&childq, task, func, NULL);
 	rpc_make_runnable(child);
-	spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
+	spin_unlock_bh(&rpc_queue_lock);
 }
 
 /*

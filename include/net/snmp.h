@@ -202,7 +202,7 @@ struct linux_mib
 	unsigned long	__pad[32-26];
 };
 
-#define SNMP_INC_STATS(mib, field) ((mib)[2*smp_processor_id()+!in_interrupt()].field++)
+#define SNMP_INC_STATS(mib, field) ((mib)[2*smp_processor_id()+!in_softirq()].field++)
 #define SNMP_INC_STATS_BH(mib, field) ((mib)[2*smp_processor_id()].field++)
 #define SNMP_INC_STATS_USER(mib, field) ((mib)[2*smp_processor_id()+1].field++)
  	

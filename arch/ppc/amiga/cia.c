@@ -45,10 +45,10 @@ struct ciabase {
 do {						\
 	if (irq >= IRQ_AMIGA_CIAB) {		\
 		base = &ciab_base;		\
-		irq =- IRQ_AMIGA_CIAB;		\
+		irq -= IRQ_AMIGA_CIAB;		\
 	} else {				\
 		base = &ciaa_base;		\
-		irq =- IRQ_AMIGA_CIAA;		\
+		irq -= IRQ_AMIGA_CIAA;		\
 	}					\
 } while (0)
 

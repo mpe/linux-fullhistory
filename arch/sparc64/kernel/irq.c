@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.81 2000/01/21 06:33:59 davem Exp $
+/* $Id: irq.c,v 1.82 2000/02/09 11:15:07 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>
+#include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
 #include <linux/random.h> /* XXX ADD add_foo_randomness() calls... -DaveM */
@@ -546,8 +547,6 @@ unsigned int local_bh_count;
 #define irq_enter(cpu, irq)	(local_irq_count++)
 #define irq_exit(cpu, irq)	(local_irq_count--)
 #else
-atomic_t global_bh_lock = ATOMIC_INIT(0);
-spinlock_t global_bh_count = SPIN_LOCK_UNLOCKED;
 
 /* Who has global_irq_lock. */
 unsigned char global_irq_holder = NO_PROC_ID;
@@ -573,23 +572,11 @@ static void show(char * str)
 	       atomic_read(&global_irq_count),
 	       cpu_data[0].irq_count, cpu_data[1].irq_count);
 	printk("bh:   %d [%u %u]\n",
-	       (spin_is_locked(&global_bh_count) ? 1 : 0),
+	       (spin_is_locked(&global_bh_lock) ? 1 : 0),
 	       cpu_data[0].bh_count, cpu_data[1].bh_count);
 }
 
 #define MAXCOUNT 100000000
-
-static inline void wait_on_bh(void)
-{
-	int count = MAXCOUNT;
-	do {
-		if(!--count) {
-			show("wait_on_bh");
-			count = 0;
-		}
-		membar("#LoadLoad");
-	} while(spin_is_locked(&global_bh_count));
-}
 
 #define SYNC_OTHER_ULTRAS(x)	udelay(x+1)
 
@@ -599,7 +586,7 @@ static inline void wait_on_irq(int cpu)
 	for(;;) {
 		membar("#LoadLoad");
 		if (!atomic_read (&global_irq_count)) {
-			if (local_bh_count || ! spin_is_locked(&global_bh_count))
+			if (local_bh_count || ! spin_is_locked(&global_bh_lock))
 				break;
 		}
 		spin_unlock (&global_irq_lock);
@@ -616,18 +603,12 @@ static inline void wait_on_irq(int cpu)
 				continue;
 			if (spin_is_locked (&global_irq_lock))
 				continue;
-			if (!local_bh_count && spin_is_locked (&global_bh_count))
+			if (!local_bh_count && spin_is_locked (&global_bh_lock))
 				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
 		}
 	}
-}
-
-void synchronize_bh(void)
-{
-	if (spin_is_locked (&global_bh_count) && !in_interrupt())
-		wait_on_bh();
 }
 
 void synchronize_irq(void)

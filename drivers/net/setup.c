@@ -29,6 +29,7 @@ extern int awc4500_365_probe(void);
 extern int arcnet_init(void); 
 extern int bigmac_probe(void); 
 extern int bmac_probe(void); 
+extern int gmac_probe(void); 
 extern int cpm_enet_init(void); 
 extern int oaknet_init(void);
 extern int dlci_setup(void); 
@@ -166,6 +167,9 @@ struct net_probe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_BMAC
 	{bmac_probe, 0},
+#endif
+#ifdef CONFIG_GMAC
+	{gmac_probe, 0},
 #endif
 #ifdef CONFIG_NCR885E
 	{ncr885e_probe, 0},

@@ -323,7 +323,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	{
 		int i;
 		printk("scsi_ioctl : device %d.  command = ", dev->id);
-		for (i = 0; i < 12; ++i)
+		for (i = 0; i < cmdlen; ++i)
 			printk("%02x ", cmd[i]);
 		printk("\nbuffer =");
 		for (i = 0; i < 20; ++i)

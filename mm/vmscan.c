@@ -451,7 +451,7 @@ done:
 	return priority >= 0;
 }
 
-static struct task_struct *kswapd_process;
+DECLARE_WAIT_QUEUE_HEAD(kswapd_wait);
 
 /*
  * The background pageout daemon, started as a kernel thread
@@ -471,7 +471,6 @@ int kswapd(void *unused)
 {
 	struct task_struct *tsk = current;
 
-	kswapd_process = tsk;
 	tsk->session = 1;
 	tsk->pgrp = 1;
 	strcpy(tsk->comm, "kswapd");
@@ -510,7 +509,7 @@ int kswapd(void *unused)
 			run_task_queue(&tq_disk);
 		} while (!tsk->need_resched);
 		tsk->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(HZ);
+		interruptible_sleep_on(&kswapd_wait);
 	}
 }
 
@@ -533,7 +532,6 @@ int try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 {
 	int retval = 1;
 
-	wake_up_process(kswapd_process);
 	if (gfp_mask & __GFP_WAIT) {
 		current->flags |= PF_MEMALLOC;
 		retval = do_try_to_free_pages(gfp_mask, zone);

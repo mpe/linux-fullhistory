@@ -287,6 +287,7 @@ static void shaper_timer(unsigned long data)
 {
 	struct shaper *sh=(struct shaper *)data;
 	shaper_kick(sh);
+	timer_exit(&sh->timer);
 }
 
 /*
@@ -404,9 +405,7 @@ static int shaper_close(struct net_device *dev)
 {
 	struct shaper *shaper=dev->priv;
 	shaper_flush(shaper);
-	start_bh_atomic();
-	del_timer(&shaper->timer);
-	end_bh_atomic();
+	del_timer_sync(&shaper->timer);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }

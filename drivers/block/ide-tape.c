@@ -4372,12 +4372,12 @@ static ssize_t idetape_chrdev_read (struct file *file, char *buf,
 		return -ENXIO;
 	}
 	if (tape->onstream && (count != tape->tape_block_size)) {
-		printk(KERN_ERR "ide-tape: %s: use %d bytes as block size (%d used)\n", tape->name, tape->tape_block_size, count);
+		printk(KERN_ERR "ide-tape: %s: use %d bytes as block size (%Zd used)\n", tape->name, tape->tape_block_size, count);
 		return -EINVAL;
 	}
 #if IDETAPE_DEBUG_LOG
 	if (tape->debug_level >= 3)
-		printk (KERN_INFO "ide-tape: Reached idetape_chrdev_read, count %d\n", count);
+		printk (KERN_INFO "ide-tape: Reached idetape_chrdev_read, count %Zd\n", count);
 #endif /* IDETAPE_DEBUG_LOG */
 
 	if (tape->chrdev_direction != idetape_direction_read) {
@@ -4552,12 +4552,12 @@ static ssize_t idetape_chrdev_write (struct file *file, const char *buf,
 		return -ENXIO;
 	}
 	if (tape->onstream && (count != tape->tape_block_size)) {
-		printk(KERN_ERR "ide-tape: %s: use %d bytes as block size (%d used)\n", tape->name, tape->tape_block_size, count);
+		printk(KERN_ERR "ide-tape: %s: use %d bytes as block size (%Zd used)\n", tape->name, tape->tape_block_size, count);
 		return -EINVAL;
 	}
 #if IDETAPE_DEBUG_LOG
 	if (tape->debug_level >= 3)
-		printk (KERN_INFO "ide-tape: Reached idetape_chrdev_write, count %d\n", count);
+		printk (KERN_INFO "ide-tape: Reached idetape_chrdev_write, count %Zd\n", count);
 #endif /* IDETAPE_DEBUG_LOG */
 
 	if (tape->chrdev_direction != idetape_direction_write) {	/* Initialize write operation */

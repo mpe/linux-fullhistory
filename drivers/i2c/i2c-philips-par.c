@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------- */
 /* i2c-philips-par.c i2c-hw access for philips style parallel port adapters  */
 /* ------------------------------------------------------------------------- */
-/*   Copyright (C) 1995-99 Simon G. Vogl
+/*   Copyright (C) 1995-2000 Simon G. Vogl
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,33 +16,19 @@
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
-/* ------------------------------------------------------------------------- 
+/* ------------------------------------------------------------------------- */ 
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-philips-par.c,v 1.12 1999/12/21 23:45:58 frodo Exp $ */
+/* $Id: i2c-philips-par.c,v 1.16 2000/01/18 23:54:07 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
-#if LINUX_VERSION_CODE >= 0x020135
 #include <linux/init.h>
-#else
-#define __init 
-#endif
 #include <asm/io.h>
 #include <linux/stddef.h>
-
-/* 2.0.0 kernel compatibility */
-#if LINUX_VERSION_CODE < 0x020100
-#define MODULE_AUTHOR(noone)
-#define MODULE_DESCRIPTION(none)
-#define MODULE_PARM(no,param)
-#define MODULE_PARM_DESC(no,description)
-#define EXPORT_SYMBOL(noexport)
-#define EXPORT_NO_SYMBOLS
-#endif
 
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
@@ -147,12 +133,12 @@ static int bit_lp_unreg(struct i2c_client *client)
 
 static void bit_lp_inc_use(struct i2c_adapter *adap)
 {
-  MOD_INC_USE_COUNT;
+	MOD_INC_USE_COUNT;
 }
 
 static void bit_lp_dec_use(struct i2c_adapter *adap)
 {
-  MOD_DEC_USE_COUNT;
+	MOD_DEC_USE_COUNT;
 }
 
 /* ------------------------------------------------------------------------
@@ -183,7 +169,7 @@ static struct i2c_adapter bit_lp_ops = {
 
 int __init i2c_bitlp_init(void)
 {
-        printk("i2c-philips-par.o: i2c Philips parallel port adapter module\n");
+	printk("i2c-philips-par.o: i2c Philips parallel port adapter module\n");
 	if (base==0) {
 		/* probe some values */
 		base=DEFAULT_BASE;

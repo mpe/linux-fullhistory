@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.93 2000/01/28 13:42:31 jj Exp $
+/* $Id: sunlance.c,v 1.94 2000/02/09 11:15:40 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -240,6 +240,8 @@ struct lance_private {
 	unsigned long	dregs;		/* DMA controller regs.		*/
 	volatile struct lance_init_block *init_block;
     
+	spinlock_t	lock;
+
 	int		rx_new, tx_new;
 	int		rx_old, tx_old;
     
@@ -317,7 +319,6 @@ static void load_csrs(struct lance_private *lp)
 }
 
 /* Setup the Lance Rx and Tx rings */
-/* Sets dev->tbusy */
 static void lance_init_ring_dvma(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
@@ -327,7 +328,7 @@ static void lance_init_ring_dvma(struct net_device *dev)
 	int i;
     
 	/* Lock out other processes while setting up hardware */
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	lp->rx_new = lp->tx_new = 0;
 	lp->rx_old = lp->tx_old = 0;
 
@@ -383,7 +384,7 @@ static void lance_init_ring_pio(struct net_device *dev)
 	int i;
     
 	/* Lock out other processes while setting up hardware */
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	lp->rx_new = lp->tx_new = 0;
 	lp->rx_old = lp->tx_old = 0;
 
@@ -573,6 +574,8 @@ static void lance_tx_dvma(struct net_device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	int i, j;
 
+	spin_lock(&lp->lock);
+
 	j = lp->tx_old;
 	for (i = j; i != lp->tx_new; i = j) {
 		volatile struct lance_tx_desc *td = &ib->btx_ring [i];
@@ -637,6 +640,12 @@ static void lance_tx_dvma(struct net_device *dev)
 		j = TX_NEXT(j);
 	}
 	lp->tx_old = j;
+
+	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	    TX_BUFFS_AVAIL > 0)
+		netif_wake_queue(dev);
+
+	spin_unlock(&lp->lock);
 }
 
 static void lance_piocopy_to_skb(struct sk_buff *skb, volatile void *piobuf, int len)
@@ -736,6 +745,8 @@ static void lance_tx_pio(struct net_device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	int i, j;
 
+	spin_lock(&lp->lock);
+
 	j = lp->tx_old;
 	for (i = j; i != lp->tx_new; i = j) {
 		volatile struct lance_tx_desc *td = &ib->btx_ring [i];
@@ -800,6 +811,12 @@ static void lance_tx_pio(struct net_device *dev)
 		j = TX_NEXT(j);
 	}
 	lp->tx_old = j;
+
+	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	    TX_BUFFS_AVAIL > 0)
+		netif_wake_queue(dev);
+
+	spin_unlock(&lp->lock);
 }
 
 static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -808,11 +825,6 @@ static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int csr0;
     
-	if (dev->interrupt)
-		printk(KERN_ERR "%s: again", dev->name);
-    
-	dev->interrupt = 1;
-
 	sbus_writew(LE_CSR0, lp->lregs + RAP);
 	csr0 = sbus_readw(lp->lregs + RDP);
 
@@ -833,11 +845,6 @@ static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (csr0 & LE_C0_TINT)
 		lp->tx(dev);
     
-	if ((TX_BUFFS_AVAIL > 0) && dev->tbusy) {
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
-
 	if (csr0 & LE_C0_BABL)
 		lp->stats.tx_errors++;
 
@@ -867,11 +874,10 @@ static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		lp->init_ring(dev);
 		load_csrs(lp);
 		init_restart_lance(lp);
-		dev->tbusy = 0;
+		netif_wake_queue(dev);
 	}
 
 	sbus_writew(LE_C0_INEA, lp->lregs + RDP);
-	dev->interrupt = 0;
 }
 
 /* Build a fake network packet and send it to ourselves. */
@@ -953,9 +959,7 @@ static int lance_open(struct net_device *dev)
 	lp->init_ring(dev);
 	load_csrs(lp);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	status = init_restart_lance(lp);
 	if (!status && lp->auto_select) {
@@ -973,9 +977,8 @@ static int lance_close(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 
-	dev->start = 0;
-	dev->tbusy = 1;
-	del_timer(&lp->multicast_timer);
+	netif_stop_queue(dev);
+	del_timer_sync(&lp->multicast_timer);
 
 	STOP_LANCE(lp);
 
@@ -1007,9 +1010,6 @@ static int lance_reset(struct net_device *dev)
 	lp->init_ring(dev);
 	load_csrs(lp);
 	dev->trans_start = jiffies;
-	dev->interrupt = 0;
-	dev->start = 1;
-	dev->tbusy = 0;
 	status = init_restart_lance(lp);
 	return status;
 }
@@ -1108,39 +1108,29 @@ static void lance_piozero(volatile void *dest, int len)
 		sbus_writeb(0, piobuf);
 }
 
+static void lance_tx_timeout(struct net_device *dev)
+{
+	struct lance_private *lp = (struct lance_private *) dev->priv;
+
+	printk(KERN_ERR "%s: transmit timed out, status %04x, reset\n",
+	       dev->name, sbus_readw(lp->lregs + RDP));
+	lance_reset(dev);
+	netif_wake_queue(dev);
+}
+
 static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
-	unsigned long flags;
 	int entry, skblen, len;
 
-	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		int tickssofar = jiffies - dev->trans_start;
-
-		if (tickssofar < 100)
-			return 1;
-
-		printk(KERN_ERR "%s: transmit timed out, status %04x, reset\n",
-		       dev->name, sbus_readw(lp->lregs + RDP));
-		lp->stats.tx_errors++;
-		lance_reset(dev);
-
-		return 1;
-	}
-
 	skblen = skb->len;
-
-	save_and_cli(flags);
-
-	if (!TX_BUFFS_AVAIL) {
-		restore_flags(flags);
-		return 1;
-	}
 
 	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
 
 	lp->stats.tx_bytes += len;
+
+	spin_lock_irq(&lp->lock);
 
 	entry = lp->tx_new & TX_RING_MOD_MASK;
 	if (lp->pio_buffer) {
@@ -1161,21 +1151,22 @@ static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	lp->tx_new = TX_NEXT(entry);
 
+	if (TX_BUFFS_AVAIL <= 0)
+		netif_stop_queue(dev);
+
+	spin_unlock_irq(&lp->lock);
+
 	/* Kick the lance: transmit now */
 	sbus_writew(LE_C0_INEA | LE_C0_TDMD, lp->lregs + RDP);
 	dev->trans_start = jiffies;
 	dev_kfree_skb(skb);
     
-	if (TX_BUFFS_AVAIL)
-		dev->tbusy = 0;
-
 	/* Read back CSR to invalidate the E-Cache.
 	 * This is needed, because DMA_DSBL_WR_INV is set.
 	 */
 	if (lp->dregs)
 		sbus_readw(lp->lregs + RDP);
 
-	restore_flags(flags);
 	return 0;
 }
 
@@ -1255,19 +1246,16 @@ static void lance_set_multicast(struct net_device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	u16 mode;
 
-	if (!dev->start)
+	if (!test_bit(LINK_STATE_START, &dev->state))
 		return;
-
-	if (test_and_set_bit(0, (void *)&dev->tbusy)) {
-		mod_timer(&lp->multicast_timer, jiffies + 2);
-		return;
-	}
 
 	if (lp->tx_old != lp->tx_new) {
 		mod_timer(&lp->multicast_timer, jiffies + 4);
-		dev->tbusy = 0;
+		netif_wake_queue(dev);
 		return;
 	}
+
+	netif_stop_queue(dev);
 
 	STOP_LANCE(lp);
 	lp->init_ring(dev);
@@ -1292,8 +1280,14 @@ static void lance_set_multicast(struct net_device *dev)
 	}
 	load_csrs(lp);
 	init_restart_lance(lp);
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
+	netif_wake_queue(dev);
+}
+
+static void lance_set_multicast_retry(unsigned long _opaque)
+{
+	struct net_device *dev = (struct net_device *) _opaque;
+
+	lance_set_multicast(dev);
 }
 
 static void lance_free_hwresources(struct lance_private *lp)
@@ -1476,6 +1470,8 @@ no_link_test:
 	dev->open = &lance_open;
 	dev->stop = &lance_close;
 	dev->hard_start_xmit = &lance_start_xmit;
+	dev->tx_timeout = &lance_tx_timeout;
+	dev->watchdog_timeo = 5*HZ;
 	dev->get_stats = &lance_get_stats;
 	dev->set_multicast_list = &lance_set_multicast;
 
@@ -1491,8 +1487,7 @@ no_link_test:
 	 */
 	init_timer(&lp->multicast_timer);
 	lp->multicast_timer.data = (unsigned long) dev;
-	lp->multicast_timer.function =
-		(void (*)(unsigned long)) &lance_set_multicast;
+	lp->multicast_timer.function = &lance_set_multicast_retry;
 
 #ifdef MODULE
 	dev->ifindex = dev_new_index();

@@ -10505,8 +10505,8 @@ asc_prt_scsi_host(struct Scsi_Host *s)
         (ulong) s->host_queue, (ulong) s->hostt, (ulong) s->block);
 
     printk(
-" wish_block %d, base %lu, io_port %lu, n_io_port %u, irq %d,\n",
-        s->wish_block, (ulong) s->base, (ulong) s->io_port, s->n_io_port,
+" base %lu, io_port %lu, n_io_port %u, irq %d,\n",
+	(ulong) s->base, (ulong) s->io_port, s->n_io_port,
         s->irq);
 
     printk(

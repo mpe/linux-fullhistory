@@ -53,7 +53,7 @@ static unsigned int cpu_6xx[16] = {
 };
 
 int chrp_get_irq(struct pt_regs *);
-void chrp_post_irq(int);		 
+void chrp_post_irq(struct pt_regs* regs, int);
 
 static inline unsigned long _get_HID1(void)
 {
@@ -132,6 +132,19 @@ extern unsigned long loops_per_sec;
 extern int root_mountflags;
 extern char cmd_line[];
 
+void
+gemini_heartbeat(void)
+{
+	static unsigned long led = GEMINI_LEDBASE+(4*8);
+	static char direction = 8;
+	*(char *)led = 0;
+	if ( (led + direction) > (GEMINI_LEDBASE+(7*8)) ||
+	     (led + direction) < (GEMINI_LEDBASE+(4*8)) )
+		direction *= -1;
+	led += direction;
+	*(char *)led = 0xff;
+	ppc_md.heartbeat_count = ppc_md.heartbeat_reset;
+}
 
 void __init gemini_setup_arch(void)
 {
@@ -175,6 +188,10 @@ void __init gemini_setup_arch(void)
 	printk("CPU manufacturer: %s [rev=%04x]\n", (cpu & (1<<15)) ? "IBM" :
 	       "Motorola", (cpu & 0xffff));
 
+	ppc_md.heartbeat = gemini_heartbeat;
+	ppc_md.heartbeat_reset = HZ/8;
+	ppc_md.heartbeat_count = 1;
+	
 	/* take special pains to map the MPIC, since it isn't mapped yet */
 	gemini_openpic_init();
 	/* start the L2 */
@@ -505,7 +522,7 @@ int gemini_get_irq( struct pt_regs *regs )
 	return irq;
 }
 
-void gemini_post_irq(int irq)
+void gemini_post_irq(struct pt_regs* regs, int irq)
 {
 	/*
 	 * If it's an i8259 irq then we've already done the

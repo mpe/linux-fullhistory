@@ -960,15 +960,15 @@ static int sd_init()
 		return 0;
 
 	rscsi_disks = (Scsi_Disk *)
-	    scsi_init_malloc(sd_template.dev_max * sizeof(Scsi_Disk), GFP_ATOMIC);
+	    kmalloc(sd_template.dev_max * sizeof(Scsi_Disk), GFP_ATOMIC);
 	memset(rscsi_disks, 0, sd_template.dev_max * sizeof(Scsi_Disk));
 
 	/* for every (necessary) major: */
-	sd_sizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	sd_sizes = (int *) kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
 	memset(sd_sizes, 0, (sd_template.dev_max << 4) * sizeof(int));
 
-	sd_blocksizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
-	sd_hardsizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	sd_blocksizes = (int *) kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	sd_hardsizes = (int *) kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
 
 	for (i = 0; i < sd_template.dev_max << 4; i++) {
 		sd_blocksizes[i] = 1024;
@@ -979,9 +979,10 @@ static int sd_init()
 		blksize_size[SD_MAJOR(i)] = sd_blocksizes + i * (SCSI_DISKS_PER_MAJOR << 4);
 		hardsect_size[SD_MAJOR(i)] = sd_hardsizes + i * (SCSI_DISKS_PER_MAJOR << 4);
 	}
-	sd = (struct hd_struct *) scsi_init_malloc((sd_template.dev_max << 4) *
-						sizeof(struct hd_struct),
-						   GFP_ATOMIC);
+	sd = (struct hd_struct *) kmalloc((sd_template.dev_max << 4) *
+					  sizeof(struct hd_struct),
+					  GFP_ATOMIC);
+	memset(sd, 0, (sd_template.dev_max << 4) * sizeof(struct hd_struct));
 
 	if (N_USED_SD_MAJORS > 1)
 		sd_gendisks = (struct gendisk *)
@@ -1215,13 +1216,11 @@ void cleanup_module(void)
 
 	sd_registered--;
 	if (rscsi_disks != NULL) {
-		scsi_init_free((char *) rscsi_disks,
-			       sd_template.dev_max * sizeof(Scsi_Disk));
-		scsi_init_free((char *) sd_sizes, sd_template.dev_max * sizeof(int));
-		scsi_init_free((char *) sd_blocksizes, sd_template.dev_max * sizeof(int));
-		scsi_init_free((char *) sd_hardsizes, sd_template.dev_max * sizeof(int));
-		scsi_init_free((char *) sd,
-		  (sd_template.dev_max << 4) * sizeof(struct hd_struct));
+		kfree((char *) rscsi_disks);
+		kfree((char *) sd_sizes);
+		kfree((char *) sd_blocksizes);
+		kfree((char *) sd_hardsizes);
+		kfree((char *) sd);
 
 		/*
 		 * Now remove sd_gendisks from the linked list

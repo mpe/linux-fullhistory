@@ -99,6 +99,8 @@ svc_sock_enqueue(struct svc_sock *svsk)
 	struct svc_serv	*serv = svsk->sk_server;
 	struct svc_rqst	*rqstp;
 
+	BUG_TRAP(spin_is_locked(&svsk->sk_lock));
+
 	if (serv->sv_threads && serv->sv_sockets)
 		printk(KERN_ERR
 			"svc_sock_enqueue: threads and sockets both waiting??\n");
@@ -141,10 +143,10 @@ svc_sock_dequeue(struct svc_serv *serv)
 {
 	struct svc_sock	*svsk;
 
-	start_bh_atomic();
+	spin_lock_bh(&serv->sv_lock);
 	if ((svsk = serv->sv_sockets) != NULL)
 		rpc_remove_list(&serv->sv_sockets, svsk);
-	end_bh_atomic();
+	spin_unlock_bh(&serv->sv_lock);
 
 	if (svsk) {
 		dprintk("svc: socket %p dequeued, inuse=%d\n",
@@ -162,7 +164,7 @@ svc_sock_dequeue(struct svc_serv *serv)
 static inline void
 svc_sock_received(struct svc_sock *svsk, int count)
 {
-	start_bh_atomic();
+	spin_lock_bh(&svsk->sk_lock);
 	if ((svsk->sk_data -= count) < 0) {
 		printk(KERN_NOTICE "svc: sk_data negative!\n");
 		svsk->sk_data = 0;
@@ -174,7 +176,7 @@ svc_sock_received(struct svc_sock *svsk, int count)
 						svsk->sk_sk);
 		svc_sock_enqueue(svsk);
 	}
-	end_bh_atomic();
+	spin_unlock_bh(&svsk->sk_lock);
 }
 
 /*
@@ -183,7 +185,7 @@ svc_sock_received(struct svc_sock *svsk, int count)
 static inline void
 svc_sock_accepted(struct svc_sock *svsk)
 {
-	start_bh_atomic();
+	spin_lock_bh(&svsk->sk_lock);
         svsk->sk_busy = 0;
         svsk->sk_conn--;
         if (svsk->sk_conn || svsk->sk_data || svsk->sk_close) {
@@ -191,7 +193,7 @@ svc_sock_accepted(struct svc_sock *svsk)
 						svsk->sk_sk);
                 svc_sock_enqueue(svsk);
         }
-	end_bh_atomic();
+	spin_unlock_bh(&svsk->sk_lock);
 }
 
 /*
@@ -342,8 +344,10 @@ svc_udp_data_ready(struct sock *sk, int count)
 		return;
 	dprintk("svc: socket %p(inet %p), count=%d, busy=%d\n",
 		svsk, sk, count, svsk->sk_busy);
+	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_data = 1;
 	svc_sock_enqueue(svsk);
+	spin_unlock_bh(&svsk->sk_lock);
 }
 
 /*
@@ -454,8 +458,10 @@ svc_tcp_state_change1(struct sock *sk)
 		printk("svc: socket %p: no user data\n", sk);
 		return;
 	}
+	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_conn++;
 	svc_sock_enqueue(svsk);
+	spin_unlock_bh(&svsk->sk_lock);
 }
 
 /*
@@ -473,8 +479,10 @@ svc_tcp_state_change2(struct sock *sk)
 		printk("svc: socket %p: no user data\n", sk);
 		return;
 	}
+	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_close = 1;
 	svc_sock_enqueue(svsk);
+	spin_unlock_bh(&svsk->sk_lock);
 }
 
 static void
@@ -492,8 +500,10 @@ svc_tcp_data_ready(struct sock *sk, int count)
 			sk, sk->user_data);
 	if (!(svsk = (struct svc_sock *)(sk->user_data)))
 		return;
+	spin_lock_bh(&svsk->sk_lock);
 	svsk->sk_data++;
 	svc_sock_enqueue(svsk);
+	spin_unlock_bh(&svsk->sk_lock);
 }
 
 /*
@@ -560,9 +570,11 @@ svc_tcp_accept(struct svc_sock *svsk)
 	/* Precharge. Data may have arrived on the socket before we
 	 * installed the data_ready callback. 
 	 */
+	spin_lock_bh(&newsvsk->sk_lock);
 	newsvsk->sk_data = 1;
 	newsvsk->sk_temp = 1;
 	svc_sock_enqueue(newsvsk);
+	spin_unlock_bh(&newsvsk->sk_lock);
 
 	if (serv->sv_stats)
 		serv->sv_stats->nettcpconn++;
@@ -756,7 +768,7 @@ again:
 	if (signalled())
 		return -EINTR;
 
-	start_bh_atomic();
+	spin_lock_bh(&serv->sv_lock);
 	if ((svsk = svc_sock_dequeue(serv)) != NULL) {
 		rqstp->rq_sock = svsk;
 		svsk->sk_inuse++;
@@ -770,20 +782,21 @@ again:
 		 */
 		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&rqstp->rq_wait, &wait);
-		end_bh_atomic();
+		spin_unlock_bh(&serv->sv_lock);
+
 		schedule_timeout(timeout);
 
+		spin_lock_bh(&serv->sv_lock);
 		remove_wait_queue(&rqstp->rq_wait, &wait);
 
-		start_bh_atomic();
 		if (!(svsk = rqstp->rq_sock)) {
 			svc_serv_dequeue(serv, rqstp);
-			end_bh_atomic();
+			spin_unlock_bh(&serv->sv_lock);
 			dprintk("svc: server %p, no data yet\n", rqstp);
 			return signalled()? -EINTR : -EAGAIN;
 		}
 	}
-	end_bh_atomic();
+	spin_unlock_bh(&serv->sv_lock);
 
 	dprintk("svc: server %p, socket %p, inuse=%d\n",
 		 rqstp, svsk, svsk->sk_inuse);
@@ -876,6 +889,7 @@ svc_setup_socket(struct svc_serv *serv, struct socket *sock,
 	svsk->sk_ostate = inet->state_change;
 	svsk->sk_odata = inet->data_ready;
 	svsk->sk_server = serv;
+	spin_lock_init(&svsk->sk_lock);
 
 	/* Initialize the socket */
 	if (sock->type == SOCK_DGRAM)

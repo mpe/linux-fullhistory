@@ -50,12 +50,6 @@
  * This entire source file deals with the new queueing code.
  */
 
-/*
- * For hosts that request single-file access to the ISA bus, this is a pointer to
- * the currently active host.
- */
-volatile struct Scsi_Host *host_active = NULL;
-
 
 /*
  * Function:    scsi_insert_special_cmd()
@@ -190,7 +184,6 @@ int scsi_init_cmd_errh(Scsi_Cmnd * SCpnt)
 
 	return 1;
 }
-
 
 /*
  * Function:    scsi_queue_next_request()
@@ -1009,4 +1002,21 @@ void scsi_request_fn(request_queue_t * q)
 		 */
 		spin_lock_irq(&io_request_lock);
 	}
+}
+
+/*
+ * FIXME(eric) - these are empty stubs for the moment.  I need to re-implement
+ * host blocking from scratch. The theory is that hosts that wish to block
+ * will register/deregister using these functions instead of the old way
+ * of setting the wish_block flag.
+ *
+ * The details of the implementation remain to be settled, however the
+ * stubs are here now so that the actual drivers will properly compile.
+ */
+void scsi_register_blocked_host(struct Scsi_Host * SHpnt)
+{
+}
+
+void scsi_deregister_blocked_host(struct Scsi_Host * SHpnt)
+{
 }

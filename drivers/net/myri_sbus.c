@@ -551,7 +551,6 @@ static void myri_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		DIRQ(("IRQ_DISAB "));
 		myri_disable_irq(lregs, mp->cregs);
-		dev->interrupt = 1;
 		softstate = sbus_readl(&chan->state);
 		DIRQ(("state[%08x] ", softstate));
 		if (softstate != STATE_READY) {
@@ -562,7 +561,6 @@ static void myri_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		myri_rx(mp, dev);
 		DIRQ(("\nistat=ISTAT_HOST "));
 		sbus_writel(ISTAT_HOST, lregs + LANAI_ISTAT);
-		dev->interrupt = 0;
 		DIRQ(("IRQ_ENAB "));
 		myri_enable_irq(lregs, mp->cregs);
 	}
@@ -584,6 +582,17 @@ static int myri_close(struct net_device *dev)
 	return 0;
 }
 
+static void myri_tx_timeout(struct net_device *dev)
+{
+	struct myri_eth *mp = (struct myri_eth *) dev->priv;
+
+	printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
+
+	mp->enet_stats.tx_errors++;
+	myri_init(mp, 0);
+	netif_start_queue(dev);
+}
+
 static int myri_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct myri_eth *mp = (struct myri_eth *) dev->priv;
@@ -598,29 +607,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	myri_tx(mp, dev);
 
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-
-		DTX(("tbusy tickssofar[%d] ", tickssofar));
-		if (tickssofar < 40) {
-			DTX(("returning 1\n"));
-			return 1;
-		} else {
-			DTX(("resetting, return 0\n"));
-			printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
-			mp->enet_stats.tx_errors++;
-			myri_init(mp, in_interrupt());
-			dev->tbusy = 0;
-			dev->trans_start = jiffies;
-			return 0;
-		}
-	}
-
-	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		DTX(("tbusy, maybe a race? returning 1\n"));
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
+	netif_stop_queue(dev);
 
 	/* This is just to prevent multiple PIO reads for TX_BUFFS_AVAIL. */
 	head = sbus_readl(&sq->head);
@@ -677,7 +664,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	bang_the_chip(mp);
 
 	DTX(("tbusy=0, returning 0\n"));
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 	restore_flags(flags);
 	return 0;
 }
@@ -1059,6 +1046,8 @@ static int __init myri_ether_init(struct net_device *dev, struct sbus_dev *sdev,
 	dev->open = &myri_open;
 	dev->stop = &myri_close;
 	dev->hard_start_xmit = &myri_start_xmit;
+	dev->tx_timeout = &myri_tx_timeout;
+	dev->watchdog_timeo = 5*HZ;
 	dev->get_stats = &myri_get_stats;
 	dev->set_multicast_list = &myri_set_multicast;
 	dev->irq = sdev->irqs[0];

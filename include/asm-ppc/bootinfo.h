@@ -9,6 +9,12 @@
 #ifndef _PPC_BOOTINFO_H
 #define _PPC_BOOTINFO_H
 
+#include <linux/config.h>
+
+#if defined(CONFIG_APUS) && !defined(__BOOTER__)
+#include <asm-m68k/bootinfo.h>
+#else
+
 struct bi_record {
     unsigned long tag;			/* tag ID */
     unsigned long size;			/* size of record (in bytes) */
@@ -22,6 +28,8 @@ struct bi_record {
 #define BI_INITRD		0x1014
 #define BI_SYSMAP		0x1015
 #define BI_MACHTYPE		0x1016
+
+#endif /* CONFIG_APUS */
 
 #endif /* _PPC_BOOTINFO_H */
 

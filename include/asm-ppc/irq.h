@@ -129,10 +129,9 @@ static __inline__ int irq_cannonicalize(int irq)
 
 /*
  * this is the # irq's for all ppc arch's (pmac/chrp/prep)
- * so it is the max of them all - which happens to be powermac
- * at present (G3 powermacs have 64).
+ * so it is the max of them all
  */
-#define NR_IRQS			128
+#define NR_IRQS			256
 
 #endif /* CONFIG_APUS */
 

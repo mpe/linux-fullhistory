@@ -377,10 +377,6 @@ spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
 /* Global IRQ locking depth. */
 atomic_t global_irq_count = ATOMIC_INIT(0);
 
-/* This protects BH software state (masks, things like that). */
-atomic_t global_bh_lock = ATOMIC_INIT(0);
-atomic_t global_bh_count = ATOMIC_INIT(0);
-
 static void *previous_irqholder = NULL;
 
 #define MAXCOUNT 100000000
@@ -401,7 +397,7 @@ wait_on_irq(int cpu, void *where)
 		 */
 		if (!atomic_read(&global_irq_count)) {
 			if (local_bh_count(cpu)
-			    || !atomic_read(&global_bh_count))
+			    || !spin_is_locked(&global_bh_lock))
 				break;
 		}
 
@@ -422,7 +418,7 @@ wait_on_irq(int cpu, void *where)
 			if (spin_is_locked(&global_irq_lock))
 				continue;
 			if (!local_bh_count(cpu)
-			    && atomic_read(&global_bh_count))
+			    && spin_is_locked(&global_bh_lock))
 				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
@@ -552,7 +548,7 @@ show(char * str, void *where)
 	       cpu_data[1].irq_count);
 
         printk("bh:   %d [%d %d]\n",
-	       atomic_read(&global_bh_count),
+	       spin_is_locked(&global_bh_lock) ? 1 : 0,
 	       cpu_data[0].bh_count,
 	       cpu_data[1].bh_count);
 #if 0
@@ -567,35 +563,6 @@ show(char * str, void *where)
 #endif
 }
         
-static inline void
-wait_on_bh(void)
-{
-	int count = MAXCOUNT;
-        do {
-		if (!--count) {
-			show("wait_on_bh", 0);
-                        count = ~0;
-                }
-                /* nothing .. wait for the other bh's to go away */
-		barrier();
-        } while (atomic_read(&global_bh_count) != 0);
-}
-
-/*
- * This is called when we want to synchronize with
- * bottom half handlers. We need to wait until
- * no other CPU is executing any bottom half handler.
- *
- * Don't wait if we're already running in an interrupt
- * context or are inside a bh handler.
- */
-void
-synchronize_bh(void)
-{
-	if (atomic_read(&global_bh_count) && !in_interrupt())
-		wait_on_bh();
-}
-
 /*
  * From its use, I infer that synchronize_irq() stalls a thread until
  * the effects of a command to an external device are known to have

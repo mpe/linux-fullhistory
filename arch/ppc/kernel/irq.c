@@ -126,7 +126,7 @@ void irq_kfree(void *ptr)
  */
 int request_8xxirq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 #elif defined(CONFIG_APUS)
-int sys_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+int request_sysirq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 #else
 int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 #endif
@@ -315,7 +315,7 @@ asmlinkage int do_IRQ(struct pt_regs *regs, int isfake)
 	}
 	ppc_irq_dispatch_handler( regs, irq );
 	if ( ppc_md.post_irq )
-		ppc_md.post_irq( irq );
+		ppc_md.post_irq( regs, irq );
 
  out:	
         hardirq_exit( cpu );

@@ -1698,14 +1698,14 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 		 * Ie. skip the comparison of the tx producer vs. the
 		 * consumer.
 		 */
-		if (ap->tx_full && dev->tbusy) {
+		if (ap->tx_full &&
+		    test_bit(LINK_STATE_XOFF, &dev->state)) {
 			ap->tx_full = 0;
 			/*
 			 * This does not need to be atomic (and expensive),
 			 * I've seen cases where it would fail otherwise ;-(
 			 */
-			clear_bit(0, &dev->tbusy);
-			mark_bh(NET_BH);
+			netif_wake_queue(dev);
 
 			/*
 			 * TX ring is no longer full, aka the
@@ -1730,7 +1730,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	 * This has to go last in the interrupt handler and run with
 	 * the spin lock released ... what lock?
 	 */
-	if (dev->start) {
+	if (test_bit(LINK_STATE_START, &dev->state)) {
 		int cur_size;
 		int run_bh = 0;
 
@@ -1835,10 +1835,6 @@ static int ace_open(struct net_device *dev)
 	ace_issue_cmd(regs, &cmd);
 #endif
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
 	MOD_INC_USE_COUNT;
 
 	/*
@@ -1868,8 +1864,7 @@ static int ace_close(struct net_device *dev)
 	unsigned long flags;
 	short i;
 
-	dev->start = 0;
-	set_bit(0, &dev->tbusy);
+	netif_stop_queue(dev);
 
 	ap = (struct ace_private *)dev->priv;
 	regs = ap->regs;
@@ -1928,9 +1923,6 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned long addr;
 	u32 idx, flagsize;
 
-	if (test_and_set_bit(0, &dev->tbusy))
-		return 1;
-
 	idx = ap->tx_prd;
 
 	if ((idx + 1) % TX_RING_ENTRIES == ap->tx_ret_csm) {
@@ -1976,7 +1968,7 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		/*
 		 * No need for it to be atomic - seems it needs to be
 		 */
-		clear_bit(0, &dev->tbusy);
+		netif_stop_queue(dev);
 	}
 
 	dev->trans_start = jiffies;
@@ -2148,7 +2140,7 @@ static int ace_set_mac_addr(struct net_device *dev, void *p)
 	u16 *da;
 	struct cmd cmd;
 
-	if(dev->start)
+	if(test_bit(LINK_STATE_START, &dev->state))
 		return -EBUSY;
 
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);

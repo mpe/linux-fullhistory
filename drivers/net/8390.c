@@ -167,7 +167,8 @@ int ei_open(struct net_device *dev)
 	NS8390_init(dev, 1);
 	/* Set the flag before we drop the lock, That way the IRQ arrives
 	   after its set and we get no silly warnings */
-	dev->start = 1;
+	clear_bit(LINK_STATE_RXSEM, &dev->state);
+	netif_start_queue(dev);
       	spin_unlock_irqrestore(&ei_local->page_lock, flags);
 	ei_local->irqlock = 0;
 	return 0;
@@ -186,7 +187,7 @@ int ei_close(struct net_device *dev)
       	spin_lock_irqsave(&ei_local->page_lock, flags);
 	NS8390_init(dev, 0);
       	spin_unlock_irqrestore(&ei_local->page_lock, flags);
-	dev->start = 0;
+	netif_stop_queue(dev);
 	return 0;
 }
 
@@ -198,13 +199,11 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned long flags;
 
 	/*
-	 *  We normally shouldn't be called if dev->tbusy is set, but the
-	 *  existing code does anyway. If it has been too long since the
-	 *  last Tx, we assume the board has died and kick it. We are
-	 *  bh_atomic here.
+	 *  If it has been too long since the last Tx, we assume the
+	 *  board has died and kick it.
 	 */
  
-	if (dev->tbusy) 
+	if (test_bit(LINK_STATE_XOFF, &dev->state)) 
 	{	/* Do timeouts, just like the 8003 driver. */
 		int txsr;
 		int isr;
@@ -225,7 +224,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		ei_local->stat.tx_errors++;
 		isr = inb(e8390_base+EN0_ISR);
-		if (dev->start == 0) 
+		if (!test_bit(LINK_STATE_START, &dev->state))
 		{
 			spin_unlock_irqrestore(&ei_local->page_lock, flags);
 			printk(KERN_WARNING "%s: xmit on stopped card\n", dev->name);
@@ -289,16 +288,6 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	
 	spin_lock(&ei_local->page_lock);
 	
-	if (dev->interrupt) 
-	{
-		printk(KERN_WARNING "%s: Tx request while isr active.\n",dev->name);
-		outb_p(ENISR_ALL, e8390_base + EN0_IMR);
-		spin_unlock(&ei_local->page_lock);
-		enable_irq(dev->irq);
-		ei_local->stat.tx_errors++;
-		dev_kfree_skb(skb);
-		return 0;
-	}
 	ei_local->irqlock = 1;
 
 	send_length = ETH_ZLEN < length ? length : ETH_ZLEN;
@@ -332,10 +321,10 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	else
 	{	/* We should never get here. */
 		if (ei_debug)
-			printk(KERN_DEBUG "%s: No Tx buffers free! irq=%ld tx1=%d tx2=%d last=%d\n",
-				dev->name, dev->interrupt, ei_local->tx1, ei_local->tx2, ei_local->lasttx);
+			printk(KERN_DEBUG "%s: No Tx buffers free! tx1=%d tx2=%d last=%d\n",
+				dev->name, ei_local->tx1, ei_local->tx2, ei_local->lasttx);
 		ei_local->irqlock = 0;
-		dev->tbusy = 1;
+		netif_stop_queue(dev);
 		outb_p(ENISR_ALL, e8390_base + EN0_IMR);
 		spin_unlock(&ei_local->page_lock);
 		enable_irq(dev->irq);
@@ -368,7 +357,10 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 	else ei_local->txqueue++;
 
-	dev->tbusy = (ei_local->tx1  &&  ei_local->tx2);
+	if (ei_local->tx1  &&  ei_local->tx2)
+		netif_stop_queue(dev);
+	else
+		netif_start_queue(dev);
 
 #else	/* EI_PINGPONG */
 
@@ -382,7 +374,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	ei_local->txing = 1;
 	NS8390_trigger_send(dev, send_length, ei_local->tx_start_page);
 	dev->trans_start = jiffies;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 #endif	/* EI_PINGPONG */
 
@@ -424,7 +416,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	 
 	spin_lock(&ei_local->page_lock);
 
-	if (dev->interrupt || ei_local->irqlock) 
+	if (ei_local->irqlock) 
 	{
 #if 1 /* This might just be an interrupt for a PCI device sharing this line */
 		/* The "irqlock" check is only for testing. */
@@ -438,8 +430,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		return;
 	}
     
-	
-	dev->interrupt = 1;
+	set_bit(LINK_STATE_RXSEM, &dev->state);
     
 	/* Change to page 0 and read the intr status reg. */
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base + E8390_CMD);
@@ -451,7 +442,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	while ((interrupts = inb_p(e8390_base + EN0_ISR)) != 0
 		   && ++nr_serviced < MAX_SERVICE) 
 	{
-		if (dev->start == 0) 
+		if (!test_bit(LINK_STATE_START, &dev->state))
 		{
 			printk(KERN_WARNING "%s: interrupt from stopped card\n", dev->name);
 			interrupts = 0;
@@ -500,7 +491,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			outb_p(0xff, e8390_base + EN0_ISR); /* Ack. all intrs. */
 		}
 	}
-	dev->interrupt = 0;
+	clear_bit(LINK_STATE_RXSEM, &dev->state);
 	spin_unlock(&ei_local->page_lock);
 	return;
 }
@@ -576,7 +567,7 @@ static void ei_tx_intr(struct net_device *dev)
 			printk(KERN_ERR "%s: bogus last_tx_buffer %d, tx1=%d.\n",
 				ei_local->name, ei_local->lasttx, ei_local->tx1);
 		ei_local->tx1 = 0;
-		dev->tbusy = 0;
+		netif_start_queue(dev);
 		if (ei_local->tx2 > 0) 
 		{
 			ei_local->txing = 1;
@@ -593,7 +584,7 @@ static void ei_tx_intr(struct net_device *dev)
 			printk("%s: bogus last_tx_buffer %d, tx2=%d.\n",
 				ei_local->name, ei_local->lasttx, ei_local->tx2);
 		ei_local->tx2 = 0;
-		dev->tbusy = 0;
+		netif_start_queue(dev);
 		if (ei_local->tx1 > 0) 
 		{
 			ei_local->txing = 1;
@@ -613,7 +604,7 @@ static void ei_tx_intr(struct net_device *dev)
 	 *  Single Tx buffer: mark it free so another packet can be loaded.
 	 */
 	ei_local->txing = 0;
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 #endif
 
 	/* Minimize Tx latency: update the statistics after we restart TXing. */
@@ -638,7 +629,7 @@ static void ei_tx_intr(struct net_device *dev)
 		if (status & ENTSR_OWC)
 			ei_local->stat.tx_window_errors++;
 	}
-	mark_bh (NET_BH);
+	netif_wake_queue(dev);
 }
 
 /* We have a good packet(s), get it/them out of the buffers. 
@@ -849,7 +840,7 @@ static struct net_device_stats *get_stats(struct net_device *dev)
 	unsigned long flags;
     
 	/* If the card is stopped, just return the present stats. */
-	if (dev->start == 0) 
+	if (!test_bit(LINK_STATE_START, &dev->state))
 		return &ei_local->stat;
 
 	spin_lock_irqsave(&ei_local->page_lock,flags);
@@ -945,7 +936,7 @@ static void do_set_multicast_list(struct net_device *dev)
 	 * Ultra32 EISA) appears to have this bug fixed.
 	 */
 	 
-	if (dev->start)
+	if (test_bit(LINK_STATE_START, &dev->state))
 		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR);
 	outb_p(E8390_NODMA + E8390_PAGE1, e8390_base + E8390_CMD);
 	for(i = 0; i < 8; i++) 
@@ -1064,8 +1055,7 @@ void NS8390_init(struct net_device *dev, int startp)
 	outb_p(ei_local->rx_start_page, e8390_base + EN1_CURPAG);
 	outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base+E8390_CMD);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
+	netif_start_queue(dev);
 	ei_local->tx1 = ei_local->tx2 = 0;
 	ei_local->txing = 0;
 

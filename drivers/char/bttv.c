@@ -1765,6 +1765,14 @@ static long bttv_read(struct video_device *v, char *buf, unsigned long count, in
 	return count;
 }
 
+static inline void burst(int on)
+{
+	tvnorms[0].scaledtwidth = 1135 - (on?BURSTOFFSET-2:0);
+	tvnorms[0].hdelayx1     = 186  - (on?BURSTOFFSET  :0);
+	tvnorms[2].scaledtwidth = 1135 - (on?BURSTOFFSET-2:0);
+	tvnorms[2].hdelayx1     = 186  - (on?BURSTOFFSET  :0);
+}
+
 /*
  *	Open a bttv card. Right now the flags stuff is just playing
  */
@@ -1775,6 +1783,7 @@ static int bttv_open(struct video_device *dev, int flags)
         int i,ret;
 
 	ret = -EBUSY;
+	down(&btv->lock);
 	if (btv->user)
 		goto out_unlock;
 	
@@ -1789,6 +1798,7 @@ static int bttv_open(struct video_device *dev, int flags)
         for (i = 0; i < MAX_GBUFFERS; i++)
                 btv->frame_stat[i] = GBUFFER_UNUSED;
 
+        burst(0);
         btv->user++;
 	up(&btv->lock);
         MOD_INC_USE_COUNT;
@@ -2454,19 +2464,13 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		
 	case BTTV_BURST_ON:
 	{
-		tvnorms[0].scaledtwidth=1135-BURSTOFFSET-2;
-		tvnorms[0].hdelayx1=186-BURSTOFFSET;
-		tvnorms[2].scaledtwidth=1135-BURSTOFFSET-2;
-		tvnorms[2].hdelayx1=186-BURSTOFFSET;
+		burst(1);
 		return 0;
 	}
 
 	case BTTV_BURST_OFF:
 	{
-		tvnorms[0].scaledtwidth=1135;
-		tvnorms[0].hdelayx1=186;
-		tvnorms[2].scaledtwidth=1135;
-		tvnorms[2].hdelayx1=186;
+		burst(0);
 		return 0;
 	}
 

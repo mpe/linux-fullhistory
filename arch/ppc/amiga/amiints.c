@@ -350,7 +350,8 @@ inline void amiga_do_irq(int irq, struct pt_regs *fp)
 void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 {
 	irq_node_t *node, *slow_nodes;
-	unsigned short flags, intena;
+	unsigned short intena;
+	unsigned long flags;
 
 	kstat.irqs[0][SYS_IRQS + irq]++;
 	if (server->count++)

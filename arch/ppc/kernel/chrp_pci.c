@@ -273,14 +273,13 @@ void __init
 chrp_pcibios_fixup(void)
 {
 	struct pci_dev *dev;
-	
-	/* some of IBM chrps have > 1 bus */
-	if ( !strncmp("IBM", get_property(find_path_device("/"),
-					 "name", NULL),3) )
-	{
-		
-	}
-	
+	int i;
+	extern struct pci_ops generic_pci_ops;
+
+	/* Some IBM's with the python have >1 bus, this finds them */
+	for ( i = 0; i < python_busnr ; i++ )
+		pci_scan_bus(i+1, &generic_pci_ops, NULL);
+
 	/* PCI interrupts are controlled by the OpenPIC */
 	pci_for_each_dev(dev) {
 		if ( dev->irq )

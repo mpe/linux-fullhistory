@@ -459,7 +459,6 @@ ips_detect(Scsi_Host_Template *SHT) {
       sh->cmd_per_lun = sh->hostt->cmd_per_lun;
       sh->unchecked_isa_dma = sh->hostt->unchecked_isa_dma;
       sh->use_clustering = sh->hostt->use_clustering;
-//FIXME//      sh->wish_block = FALSE;
 
       /* Store info in HA structure */
       ha->io_addr = io_addr;

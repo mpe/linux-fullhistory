@@ -1,5 +1,5 @@
 /*
- * $Id: bitops.h,v 1.11 1999/01/03 20:16:48 cort Exp $
+ * $Id: bitops.h,v 1.12 2000/02/09 03:28:31 davem Exp $
  * bitops.h: Bit string operations on the ppc
  */
 
@@ -88,11 +88,11 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
 }
 #endif
 
-extern __inline__ unsigned long test_bit(int nr, __const__ volatile void *addr)
+extern __inline__ int test_bit(int nr, __const__ volatile void *addr)
 {
 	__const__ unsigned int *p = (__const__ unsigned int *) addr;
 
-	return (p[nr >> 5] >> (nr & 0x1f)) & 1UL;
+	return ((p[nr >> 5] >> (nr & 0x1f)) & 1) != 0;
 }
 
 extern __inline__ int ffz(unsigned int x)

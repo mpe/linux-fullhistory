@@ -34,7 +34,6 @@
 static unsigned long totalram_pages;
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
-extern void show_net_buffers(void);
 
 struct thread_struct original_pcb;
 
@@ -173,9 +172,6 @@ show_mem(void)
 	printk("%ld pages swap cached\n",cached);
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 static inline unsigned long
@@ -195,7 +191,7 @@ paging_init(void)
 {
 	unsigned long newptbr;
 	unsigned long original_pcb_ptr;
-	unsigned int zones_size[MAX_NR_ZONES] = {0, 0, 0};
+	unsigned long zones_size[MAX_NR_ZONES] = {0, 0, 0};
 	unsigned long dma_pfn, high_pfn;
 
 	dma_pfn = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;

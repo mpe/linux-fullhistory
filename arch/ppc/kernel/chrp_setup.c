@@ -249,7 +249,6 @@ chrp_setup_arch(void)
 	else
 #endif
 		ROOT_DEV = to_kdev_t(0x0802); /* sda2 (sda1 is for the kernel) */
-sprintf(cmd_line, "console=ttyS0,9600 console=tty0");
 	printk("Boot arguments: %s\n", cmd_line);
 	
 	request_region(0x20,0x20,"pic1");
@@ -384,7 +383,7 @@ int chrp_get_irq( struct pt_regs *regs )
 	return irq;
 }
 
-void chrp_post_irq(int irq)
+void chrp_post_irq(struct pt_regs* regs, int irq)
 {
 	/*
 	 * If it's an i8259 irq then we've already done the
@@ -394,7 +393,7 @@ void chrp_post_irq(int irq)
 	 * We do it this way since our irq_desc[irq].handler can change
 	 * with RTL and no longer be open_pic -- Cort
 	 */
-	if ( irq >= open_pic.irq_offset)
+	if ( irq >= open_pic_irq_offset)
 		openpic_eoi( smp_processor_id() );
 }
 
@@ -411,10 +410,11 @@ void __init chrp_init_IRQ(void)
 			(*(unsigned long *)get_property(np,
 							"8259-interrupt-acknowledge", NULL));
 	}
-	open_pic.irq_offset = 16;
+	open_pic_irq_offset = 16;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
 		irq_desc[i].handler = &open_pic;
 	openpic_init(1);
+	enable_irq(IRQ_8259_CASCADE);
 	for ( i = 0 ; i < 16  ; i++ )
 		irq_desc[i].handler = &i8259_pic;
 	i8259_init();

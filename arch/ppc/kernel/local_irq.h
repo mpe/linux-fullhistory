@@ -4,6 +4,8 @@
 
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h>
+#include <linux/cache.h>
+#include <linux/spinlock.h>
 #include <linux/irq.h>
 
 void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq);

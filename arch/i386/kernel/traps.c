@@ -153,7 +153,7 @@ void show_stack(unsigned long * esp)
 	stack = esp;
 	i = 1;
 	module_start = VMALLOC_START;
-	module_end = module_start + MODULE_RANGE;
+	module_end = VMALLOC_END;
 	while (((long) stack & (THREAD_SIZE-1)) != 0) {
 		addr = *stack++;
 		/*

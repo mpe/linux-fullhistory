@@ -6,6 +6,7 @@
 #include <linux/stddef.h>
 #include <linux/nvram.h>
 #include <linux/init.h>
+#include <linux/slab.h>
 #include <asm/init.h>
 #include <asm/io.h>
 #include <asm/system.h>
@@ -20,23 +21,37 @@
 static int nvram_naddrs;
 static volatile unsigned char *nvram_addr;
 static volatile unsigned char *nvram_data;
-static int nvram_mult;
-
-#define NVRAM_SIZE	0x2000	/* 8kB of non-volatile RAM */
-
+static int nvram_mult, is_core_99;
+static char* nvram_image;
+ 
+#define NVRAM_SIZE		0x2000	/* 8kB of non-volatile RAM */
+ 
 __init
 void pmac_nvram_init(void)
 {
 	struct device_node *dp;
 
+	nvram_naddrs = 0;
+
 	dp = find_devices("nvram");
 	if (dp == NULL) {
 		printk(KERN_ERR "Can't find NVRAM device\n");
-		nvram_naddrs = 0;
 		return;
 	}
 	nvram_naddrs = dp->n_addrs;
-	if (_machine == _MACH_chrp && nvram_naddrs == 1) {
+	is_core_99 = device_is_compatible(dp, "nvram,flash");
+	if (is_core_99)
+	{
+		int i;
+		if (nvram_naddrs < 1)
+			return;
+		nvram_image = kmalloc(dp->addrs[0].size, GFP_KERNEL);
+		if (!nvram_image)
+			return;
+		nvram_data = ioremap(dp->addrs[0].address, dp->addrs[0].size);
+		for (i=0; i<dp->addrs[0].size; i++)
+			nvram_image[i] = in_8(nvram_data + i);
+	} else if (_machine == _MACH_chrp && nvram_naddrs == 1) {
 		nvram_data = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_mult = 1;
 	} else if (nvram_naddrs == 1) {
@@ -69,6 +84,8 @@ unsigned char nvram_read_byte(int addr)
 		return req.reply[1];
 #endif
 	case 1:
+		if (is_core_99)
+			return nvram_image[addr];
 		return nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult];
 	case 2:
 		*nvram_addr = addr >> 5;
@@ -94,6 +111,10 @@ void nvram_write_byte(unsigned char val, int addr)
 		break;
 #endif
 	case 1:
+		if (is_core_99) {
+			nvram_image[addr] = val;
+			break;
+		}
 		nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult] = val;
 		break;
 	case 2:

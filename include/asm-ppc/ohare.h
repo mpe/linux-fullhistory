@@ -2,6 +2,9 @@
  * ohare.h: definitions for using the "O'Hare" I/O controller chip.
  *
  * Copyright (C) 1997 Paul Mackerras.
+ * 
+ * BenH: Changed to match those of heathrow (but not all of them). Please
+ *       check if I didn't break anything (especially the media bay).
  */
 
 /* offset from ohare base for feature control register */
@@ -13,21 +16,21 @@
  * and may differ for other machines.
  */
 #define OH_SCC_RESET		1
-#define OH_BAY_RESET		2	/* a guess */
+#define OH_BAY_POWER_N		2	/* a guess */
 #define OH_BAY_PCI_ENABLE	4	/* a guess */
 #define OH_BAY_IDE_ENABLE	8
 #define OH_BAY_FLOPPY_ENABLE	0x10
-#define OH_IDE_ENABLE		0x20
-#define OH_IDE_POWER		0x40	/* a guess */
-#define OH_BAY_ENABLE		0x80
-#define OH_IDE_RESET		0x100	/* 0-based, a guess */
+#define OH_IDE0_ENABLE		0x20
+#define OH_IDE0_RESET_N		0x40	/* a guess */
+#define OH_BAY_RESET_N		0x80
+#define OH_IOBUS_ENABLE		0x100	/* IOBUS seems to be IDE */
 #define OH_SCC_ENABLE		0x200
 #define OH_MESH_ENABLE		0x400
 #define OH_FLOPPY_ENABLE	0x800
 #define OH_SCCA_IO		0x4000
 #define OH_SCCB_IO		0x8000
-#define OH_VIA_ENABLE		0x10000
-#define OH_IDECD_POWER		0x800000
+#define OH_VIA_ENABLE		0x10000	/* Is apparently wrong, to be verified */
+#define OH_IDE1_RESET_N		0x800000
 
 /*
  * Bits to set in the feature control register on PowerBooks.

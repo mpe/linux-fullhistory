@@ -256,7 +256,7 @@ static int saa5249_command(struct i2c_client *device,
 static struct i2c_driver i2c_driver_videotext = 
 {
 	IF_NAME,		/* name */
-	I2C_DRIVERID_VIDEOTEXT, /* in i2c.h */
+	I2C_DRIVERID_SAA5249, /* in i2c.h */
 	I2C_DF_NOTIFY,
 	saa5249_probe,
 	saa5249_detach,

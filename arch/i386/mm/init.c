@@ -40,8 +40,6 @@ unsigned long highstart_pfn, highend_pfn;
 static unsigned long totalram_pages = 0;
 static unsigned long totalhigh_pages = 0;
 
-extern void show_net_buffers(void);
-
 /*
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a
@@ -228,9 +226,6 @@ void show_mem(void)
 	printk("%d pages swap cached\n",cached);
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 /* References to section boundaries */

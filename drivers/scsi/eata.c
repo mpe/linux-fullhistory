@@ -1049,7 +1049,7 @@ static inline int port_detect \
       sh[j]->unchecked_isa_dma = FALSE;
    else {
       unsigned long flags;
-//FIXME//      sh[j]->wish_block = TRUE;
+      scsi_register_blocked_host(sh[j]);
       sh[j]->unchecked_isa_dma = TRUE;
       
       flags=claim_dma_lock();
@@ -2273,6 +2273,10 @@ int eata2x_release(struct Scsi_Host *shpnt) {
 
    if (sh[j] == NULL) panic("%s: release, invalid Scsi_Host pointer.\n",
                             driver_name);
+
+   if( sh[j]->unchecked_isa_dma ) {
+	   scsi_deregister_blocked_host(sh[j]);
+   }
 
    for (i = 0; i < sh[j]->can_queue; i++)
       if ((&HD(j)->cp[i])->sglist) kfree((&HD(j)->cp[i])->sglist);

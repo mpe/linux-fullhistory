@@ -69,6 +69,13 @@ extern void gemini_init(unsigned long r3,
                       unsigned long r6,
                       unsigned long r7);
 
+#ifdef CONFIG_BOOTX_TEXT
+extern void map_bootx_text(void);
+#endif
+#ifdef CONFIG_XMON
+extern void xmon_map_scc(void);
+#endif
+
 extern boot_infos_t *boot_infos;
 char saved_command_line[256];
 unsigned char aux_device_present;
@@ -261,7 +268,7 @@ int get_cpuinfo(char *buffer)
 			}
 			break;
 		case 0x000C:
-			len += sprintf(len+buffer, "7400\n");
+			len += sprintf(len+buffer, "7400 (G4)\n");
 			break;
 		case 0x0020:
 			len += sprintf(len+buffer, "403G");
@@ -292,7 +299,7 @@ int get_cpuinfo(char *buffer)
 		 * Assume here that all clock rates are the same in a
 		 * smp system.  -- Cort
 		 */
-#ifndef CONFIG_8xx
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 		if ( have_of )
 		{
 			struct device_node *cpu_node;
@@ -316,7 +323,7 @@ int get_cpuinfo(char *buffer)
 			len += sprintf(len+buffer, "clock\t\t: %dMHz\n",
 				       *fp / 1000000);
 		}
-#endif
+#endif /* !CONFIG_4xx && !CONFIG_8xx */
 
 		if (ppc_md.setup_residual != NULL)
 		{
@@ -410,8 +417,9 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
 	parse_bootinfo();
-	
+
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
+	
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 #ifndef CONFIG_MACH_SPECIFIC
 	/* if we didn't get any bootinfo telling us what we are... */
@@ -477,11 +485,12 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 			char *p;
 			
 #ifdef CONFIG_BLK_DEV_INITRD
-			if (r3 - KERNELBASE < 0x800000
-			    && r4 != 0 && r4 != 0xdeadbeef) {
+			if (r3 && r4 && r4 != 0xdeadbeef)
+			{
 				initrd_start = r3;
 				initrd_end = r3 + r4;
 				ROOT_DEV = MKDEV(RAMDISK_MAJOR, 0);
+				initrd_below_start_ok = 1;
 			}
 #endif
 			cmd_line[0] = 0;
@@ -519,6 +528,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
+
 	/* Check for nobats option (used in mapin_ram). */
 	if (strstr(cmd_line, "nobats")) {
 		extern int __map_without_bats;
@@ -567,9 +577,11 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 int parse_bootinfo(void)
 {
 	struct bi_record *rec;
-	extern char _end[];
+	extern char __bss_start[];
+	extern char *sysmap;
+	extern unsigned long sysmap_size;
 
-	rec = (struct bi_record *)PAGE_ALIGN((ulong)_end);
+	rec = (struct bi_record *)_ALIGN((ulong)__bss_start+(1<<20)-1,(1<<20));
 	if ( rec->tag != BI_FIRST )
 	{
 		/*
@@ -577,11 +589,10 @@ int parse_bootinfo(void)
 		 * we have the bootloader handle all the relocation and
 		 * prom calls -- Cort
 		 */
-		rec = (struct bi_record *)PAGE_ALIGN((ulong)_end+0x10000);
+		rec = (struct bi_record *)_ALIGN((ulong)__bss_start+0x10000+(1<<20)-1,(1<<20));
 		if ( rec->tag != BI_FIRST )
 			return -1;
 	}
-
 	for ( ; rec->tag != BI_LAST ;
 	      rec = (struct bi_record *)((ulong)rec + rec->size) )
 	{
@@ -590,6 +601,11 @@ int parse_bootinfo(void)
 		{
 		case BI_CMD_LINE:
 			memcpy(cmd_line, (void *)data, rec->size);
+			break;
+		case BI_SYSMAP:
+			sysmap = (char *)((data[0] >= (KERNELBASE)) ? data[0] :
+					  (data[0]+KERNELBASE));
+			sysmap_size = data[1];
 			break;
 #ifdef CONFIG_BLK_DEV_INITRD
 		case BI_INITRD:
@@ -603,7 +619,6 @@ int parse_bootinfo(void)
 			have_of = data[1];
 			break;
 #endif /* CONFIG_MACH_SPECIFIC */
-			
 		}
 	}
 
@@ -613,7 +628,7 @@ int parse_bootinfo(void)
 /* Checks "l2cr=xxxx" command-line option */
 void ppc_setup_l2cr(char *str, int *ints)
 {
-	if ( (_get_PVR() >> 16) == 8)
+	if ( ((_get_PVR() >> 16) == 8) || ((_get_PVR() >> 16) == 12) )
 	{
 		unsigned long val = simple_strtoul(str, NULL, 0);
 		printk(KERN_INFO "l2cr set to %lx\n", val);
@@ -639,12 +654,21 @@ void __init setup_arch(char **cmdline_p)
 	extern char *klimit;
 	extern void do_init_bootmem(void);
 
+#ifdef CONFIG_BOOTX_TEXT
+	map_bootx_text();
+	prom_print("identify machine\n");
+#endif
+
 #ifdef CONFIG_XMON
-	extern void xmon_map_scc(void);
 	xmon_map_scc();
 	if (strstr(cmd_line, "xmon"))
 		xmon(0);
 #endif /* CONFIG_XMON */
+	if ( ppc_md.progress ) ppc_md.progress("setup_arch: enter", 0x3eab);
+#if defined(CONFIG_KGDB)
+	set_debug_traps();
+	breakpoint();
+#endif
 
 	/* reboot on panic */
 	panic_timeout = 180;
@@ -653,16 +677,16 @@ void __init setup_arch(char **cmdline_p)
 	init_mm.end_code = (unsigned long) _etext;
 	init_mm.end_data = (unsigned long) _edata;
 	init_mm.brk = (unsigned long) klimit;
-
+	
 	/* Save unparsed command line copy for /proc/cmdline */
 	strcpy(saved_command_line, cmd_line);
 	*cmdline_p = cmd_line;
 
 	/* set up the bootmem stuff with available memory */
 	do_init_bootmem();
+	if ( ppc_md.progress ) ppc_md.progress("setup_arch: bootmem", 0x3eab);
 
 	ppc_md.setup_arch();
-	/* clear the progress line */
 	if ( ppc_md.progress ) ppc_md.progress("arch: exit", 0x3eab);
 }
 

@@ -1378,7 +1378,10 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 		bdev = do_umount(old_root_dev,1, 0);
 		if (!IS_ERR(bdev)) {
 			printk("okay\n");
-			invalidate_buffers(old_root_dev);
+			/* special: the old device driver is going to be
+			   a ramdisk and the point of this call is to free its
+			   protected memory (even if dirty). */
+			destroy_buffers(old_root_dev);
 			if (bdev) {
 				blkdev_put(bdev, BDEV_FS);
 				bdput(bdev);

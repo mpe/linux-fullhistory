@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------- */
 /* i2c-velleman.c i2c-hw access for Velleman K9000 adapters		     */
 /* ------------------------------------------------------------------------- */
-/*   Copyright (C) 1995-96 Simon G. Vogl
+/*   Copyright (C) 1995-96, 2000 Simon G. Vogl
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,31 +16,17 @@
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
-/* ------------------------------------------------------------------------- 
+/* ------------------------------------------------------------------------- */
 
-/* $Id: i2c-velleman.c,v 1.14 1999/12/21 23:45:58 frodo Exp $ */
+/* $Id: i2c-velleman.c,v 1.19 2000/01/24 02:06:33 mds Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
-#if LINUX_VERSION_CODE >= 0x020135
 #include <linux/init.h>
-#else
-#define __init 
-#endif
 #include <linux/string.h>  /* for 2.0 kernels to get NULL   */
 #include <asm/errno.h>     /* for 2.0 kernels to get ENODEV */
 #include <asm/io.h>
-
-/* 2.0.0 kernel compatibility */
-#if LINUX_VERSION_CODE < 0x020100
-#define MODULE_AUTHOR(noone)
-#define MODULE_DESCRIPTION(none)
-#define MODULE_PARM(no,param)
-#define MODULE_PARM_DESC(no,description)
-#define EXPORT_SYMBOL(noexport)
-#define EXPORT_NO_SYMBOLS
-#endif
 
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
@@ -55,7 +41,7 @@
 #define I2C_SCL		0x08		/*  ctrl bit 3 	(inv)	*/
 
 #define I2C_SDAIN	0x10		/* stat bit 4		*/
-#define I2C_SCLIN	0x08		/*  ctrl bit 3 (inv) (reads own output) */
+#define I2C_SCLIN	0x08		/* ctrl bit 3 (inv)(reads own output)*/
 
 #define I2C_DMASK	0xfd
 #define I2C_CMASK	0xf7
@@ -105,7 +91,8 @@ static int bit_velle_getsda(void *data)
 static int bit_velle_init(void)
 {
 	if (check_region(base,(base == 0x3bc)? 3 : 8) < 0 ) {
-		DEBE(printk("i2c-velleman.o: Port %#x already in use.\n", base));
+		DEBE(printk("i2c-velleman.o: Port %#x already in use.\n",
+		     base));
 		return -ENODEV;
 	} else {
 		request_region(base, (base == 0x3bc)? 3 : 8, 
@@ -173,7 +160,7 @@ static struct i2c_adapter bit_velle_ops = {
 
 int __init  i2c_bitvelle_init(void)
 {
-        printk("i2c-velleman.o: i2c Velleman K8000 adapter module\n");
+	printk("i2c-velleman.o: i2c Velleman K8000 adapter module\n");
 	if (base==0) {
 		/* probe some values */
 		base=DEFAULT_BASE;

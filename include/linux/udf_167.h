@@ -390,10 +390,13 @@ struct LogicalVolIntegrityDesc {
 #define INTEGRITY_TYPE_CLOSE	1
 
 /* Recorded Address (ECMA 167 4/7.1) */
+#ifndef _LINUX_UDF_FS_I_H
+/* Declared in udf_fs_i.h */
 typedef struct {
 	Uint32 logicalBlockNum;
 	Uint16 partitionReferenceNum;
 } lb_addr;
+#endif
 
 /* Extent interpretation (ECMA 167 4/14.14.1.1) */
 #define EXTENT_RECORDED_ALLOCATED               0x00

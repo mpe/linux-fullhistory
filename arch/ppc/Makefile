@@ -106,19 +106,24 @@ $(BOOT_TARGETS): $(CHECKS) vmlinux
 znetboot: $(CHECKS) vmlinux
 ifdef CONFIG_ALL_PPC
 ifdef CONFIG_SMP
-ifdef CONFIG_PPC64
-	cp -f vmlinux /tftpboot/vmlinux.smp.64
-else
 	cp -f vmlinux /tftpboot/vmlinux.smp
-endif
-else
-ifdef CONFIG_PPC64
-	cp -f vmlinux /tftpboot/vmlinux.64
 else
 	cp -f vmlinux /tftpboot/vmlinux
 endif
 endif
+	@$(MAKECOFFBOOT) $@
+	@$(MAKEBOOT) $@
+	@$(MAKECHRPBOOT) $@
 endif
+
+ifdef CONFIG_PPC64
+$(BOOT_TARGETS): $(CHECKS) vmlinux
+	@$(MAKECOFFBOOT) $@
+	@$(MAKEBOOT) $@
+	@$(MAKECHRPBOOT) $@
+
+znetboot: $(CHECKS) vmlinux
+	cp -f vmlinux /tftpboot/vmlinux.64
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
 	@$(MAKECHRPBOOT) $@
@@ -129,31 +134,31 @@ clean_config:
 	rm -f .config arch/ppc/defconfig
 
 gemini_config: clean_config
-	ln -s configs/gemini_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/gemini_defconfig arch/ppc/defconfig
 
 pmac_config: clean_config
-	ln -s configs/pmac_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/pmac_defconfig arch/ppc/defconfig
 
 prep_config: clean_config
-	ln -s configs/prep_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/prep_defconfig arch/ppc/defconfig
 
 chrp_config: clean_config
-	ln -s configs/chrp_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/chrp_defconfig arch/ppc/defconfig
 
 common_config: clean_config
-	ln -s configs/common_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/common_defconfig arch/ppc/defconfig
 
 mbx_config: clean_config
-	ln -s configs/mbx_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/mbx_defconfig arch/ppc/defconfig
 
 apus_config: clean_config
-	ln -s configs/apus_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/apus_defconfig arch/ppc/defconfig
 
 oak_config: clean_config
-	ln -s configs/oak_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/oak_defconfig arch/ppc/defconfig
 
 walnut_config: clean_config
-	ln -s configs/walnut_defconfig arch/ppc/defconfig
+	cp -f arch/ppc/configs/walnut_defconfig arch/ppc/defconfig
 
 archclean:
 	rm -f arch/ppc/kernel/{mk_defs,ppc_defs.h,find_name,checks}

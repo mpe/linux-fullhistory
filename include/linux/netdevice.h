@@ -29,6 +29,8 @@
 #include <linux/if_packet.h>
 
 #include <asm/atomic.h>
+#include <asm/cache.h>
+#include <asm/byteorder.h>
 
 #ifdef __KERNEL__
 #include <linux/config.h>
@@ -107,15 +109,6 @@ struct net_device_stats
 	unsigned long	tx_compressed;
 };
 
-#ifdef CONFIG_NET_FASTROUTE
-struct net_fastroute_stats
-{
-	int		hits;
-	int		succeed;
-	int		deferred;
-	int		latency_reduction;
-};
-#endif
 
 /* Media selection options. */
 enum {
@@ -137,6 +130,23 @@ extern const char *if_port_text[];
 struct neighbour;
 struct neigh_parms;
 struct sk_buff;
+
+struct netif_rx_stats
+{
+	unsigned total;
+	unsigned dropped;
+	unsigned time_squeeze;
+	unsigned throttled;
+	unsigned fastroute_hit;
+	unsigned fastroute_success;
+	unsigned fastroute_defer;
+	unsigned fastroute_deferred_out;
+	unsigned fastroute_latency_reduction;
+	unsigned cpu_collision;
+} __attribute__ ((__aligned__(SMP_CACHE_BYTES)));
+
+extern struct netif_rx_stats netdev_rx_stat[];
+
 
 /*
  *	We tag multicasts with these structures.
@@ -161,6 +171,16 @@ struct hh_cache
 	rwlock_t	hh_lock;
 	/* cached hardware header; allow for machine alignment needs.        */
 	unsigned long	hh_data[16/sizeof(unsigned long)];
+};
+
+enum netdev_state_t
+{
+	LINK_STATE_XOFF=0,
+	LINK_STATE_DOWN,
+	LINK_STATE_START,
+	LINK_STATE_RXSEM,
+	LINK_STATE_TXSEM,
+	LINK_STATE_SCHED
 };
 
 
@@ -194,26 +214,6 @@ struct net_device
 	unsigned long		mem_start;	/* shared mem start	*/
 	unsigned long		base_addr;	/* device I/O address	*/
 	unsigned int		irq;		/* device IRQ number	*/
-	
-	/* Low-level status flags. */
-	volatile unsigned char	start;		/* start an operation	*/
-	/*
-	 * These two are just single-bit flags, but due to atomicity
-	 * reasons they have to be inside a "unsigned long". However,
-	 * they should be inside the SAME unsigned long instead of
-	 * this wasteful use of memory..
-	 */
-	unsigned long		interrupt;	/* bitops.. */
-	unsigned long		tbusy;		/* transmitter busy */
-	
-	struct net_device		*next;
-	
-	/* The device initialization function. Called only once. */
-	int			(*init)(struct net_device *dev);
-
-	/* Interface index. Unique device identifier	*/
-	int			ifindex;
-	int			iflink;
 
 	/*
 	 *	Some hardware also needs these fields, but they are not
@@ -222,6 +222,22 @@ struct net_device
 
 	unsigned char		if_port;	/* Selectable AUI, TP,..*/
 	unsigned char		dma;		/* DMA channel		*/
+
+	unsigned long		state;
+
+	struct net_device	*next;
+	
+	/* The device initialization function. Called only once. */
+	int			(*init)(struct net_device *dev);
+
+	/* ------- Fields preinitialized in Space.c finish here ------- */
+
+	struct net_device	*next_sched;
+
+	/* Interface index. Unique device identifier	*/
+	int			ifindex;
+	int			iflink;
+
 
 	struct net_device_stats* (*get_stats)(struct net_device *dev);
 	struct iw_statistics*	(*get_wireless_stats)(struct net_device *dev);
@@ -235,14 +251,18 @@ struct net_device
 	/* These may be needed for future network-power-down code. */
 	unsigned long		trans_start;	/* Time (in jiffies) of last Tx	*/
 	unsigned long		last_rx;	/* Time of last Rx	*/
-	
+
 	unsigned short		flags;	/* interface flags (a la BSD)	*/
 	unsigned short		gflags;
 	unsigned		mtu;	/* interface MTU value		*/
 	unsigned short		type;	/* interface hardware type	*/
 	unsigned short		hard_header_len;	/* hardware hdr length	*/
 	void			*priv;	/* pointer to private data	*/
-	
+
+	struct net_device	*master; /* Pointer to master device of a group,
+					  * which this device is member of.
+					  */
+
 	/* Interface address info. */
 	unsigned char		broadcast[MAX_ADDR_LEN];	/* hw bcast add	*/
 	unsigned char		pad;		/* make dev_addr aligned to 8 bytes */
@@ -253,11 +273,9 @@ struct net_device
 	int			mc_count;	/* Number of installed mcasts	*/
 	int			promiscuity;
 	int			allmulti;
-    
-	/* For load balancing driver pair support */
-  
-	unsigned long		pkt_queue;	/* Packets queued	*/
-	struct net_device		*slave;		/* Slave device		*/
+
+	int			watchdog_timeo;
+	struct timer_list	watchdog_timer;
 
 	/* Protocol specific pointers */
 	
@@ -329,13 +347,15 @@ struct net_device
 #define HAVE_CHANGE_MTU
 	int			(*change_mtu)(struct net_device *dev, int new_mtu);
 
+#define HAVE_TX_TIMOUT
+	void			(*tx_timeout) (struct net_device *dev);
+
 	int			(*hard_header_parse)(struct sk_buff *skb,
 						     unsigned char *haddr);
 	int			(*neigh_setup)(struct net_device *dev, struct neigh_parms *);
 	int			(*accept_fastpath)(struct net_device *, struct dst_entry*);
 
 #ifdef CONFIG_NET_FASTROUTE
-	unsigned long		tx_semaphore;
 #define NETDEV_FASTROUTE_HMASK 0xF
 	/* Semi-private data. Keep it at the end of device struct. */
 	rwlock_t		fastpath_lock;
@@ -361,8 +381,6 @@ struct packet_type
 extern struct net_device		loopback_dev;		/* The loopback */
 extern struct net_device		*dev_base;		/* All devices */
 extern rwlock_t			dev_base_lock;		/* Device list lock */
-extern int			netdev_dropping;
-extern int			net_cpu_congestion;
 
 extern struct net_device    *dev_getbyhwaddr(unsigned short type, char *hwaddr);
 extern void		dev_add_pack(struct packet_type *pt);
@@ -392,9 +410,77 @@ extern __inline__ int unregister_gifconf(unsigned int family)
 	return register_gifconf(family, 0);
 }
 
+/*
+ * Incoming packets are placed on per-cpu queues so that
+ * no locking is needed.
+ */
+
+struct softnet_data
+{
+	int			throttle;
+	struct sk_buff_head	input_pkt_queue;
+	struct net_device	*output_queue;
+	struct sk_buff		*completion_queue;
+} __attribute__((__aligned__(SMP_CACHE_BYTES)));
+
+
+extern struct softnet_data softnet_data[NR_CPUS];
+
+#define HAS_NETIF_QUEUE
+
+extern __inline__ void __netif_schedule(struct net_device *dev)
+{
+	if (!test_and_set_bit(LINK_STATE_SCHED, &dev->state)) {
+		unsigned long flags;
+		int cpu = smp_processor_id();
+
+		local_irq_save(flags);
+		dev->next_sched = softnet_data[cpu].output_queue;
+		softnet_data[cpu].output_queue = dev;
+		__cpu_raise_softirq(cpu, NET_TX_SOFTIRQ);
+		local_irq_restore(flags);
+	}
+}
+
+extern __inline__ void netif_schedule(struct net_device *dev)
+{
+	if (!test_bit(LINK_STATE_XOFF, &dev->state))
+		__netif_schedule(dev);
+}
+
+extern __inline__ void netif_start_queue(struct net_device *dev)
+{
+	clear_bit(LINK_STATE_XOFF, &dev->state);
+}
+
+extern __inline__ void netif_wake_queue(struct net_device *dev)
+{
+	if (test_and_clear_bit(LINK_STATE_XOFF, &dev->state))
+		__netif_schedule(dev);
+}
+
+extern __inline__ void netif_stop_queue(struct net_device *dev)
+{
+	set_bit(LINK_STATE_XOFF, &dev->state);
+}
+
+extern __inline__ void dev_kfree_skb_irq(struct sk_buff *skb)
+{
+	if (atomic_dec_and_test(&skb->users)) {
+		int cpu =smp_processor_id();
+		unsigned long flags;
+
+		local_irq_save(flags);
+		skb->next = softnet_data[cpu].completion_queue;
+		softnet_data[cpu].completion_queue = skb;
+		__cpu_raise_softirq(cpu, NET_TX_SOFTIRQ);
+		local_irq_restore(flags);
+	}
+}
+
+
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);
-extern void		net_bh(void);
 extern int		dev_ioctl(unsigned int cmd, void *);
 extern int		dev_change_flags(struct net_device *, unsigned);
 extern void		dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev);
@@ -448,15 +534,13 @@ extern void		dev_load(const char *name);
 extern void		dev_mcast_init(void);
 extern int		netdev_register_fc(struct net_device *dev, void (*stimul)(struct net_device *dev));
 extern void		netdev_unregister_fc(int bit);
-extern int		netdev_dropping;
 extern int		netdev_max_backlog;
-extern atomic_t		netdev_rx_dropped;
 extern unsigned long	netdev_fc_xoff;
+extern int		netdev_set_master(struct net_device *dev, struct net_device *master);
 #ifdef CONFIG_NET_FASTROUTE
 extern int		netdev_fastroute;
 extern int		netdev_fastroute_obstacles;
 extern void		dev_clear_fastroute(struct net_device *dev);
-extern struct net_fastroute_stats dev_fastroute_stat;
 #endif
 
 

@@ -263,9 +263,7 @@ extern unsigned long __bad_increment_for_ia64_fetch_and_add (void);
 		_tmp = __bad_increment_for_ia64_fetch_and_add();		\
 		break;								\
 	}									\
-	if (sizeof(*(v)) == 4)							\
-		_tmp = (int) _tmp;						\
-	_tmp + (i);	/* return new value */					\
+	(__typeof__(*v)) (_tmp + (i));	/* return new value */			\
 })
 
 /*

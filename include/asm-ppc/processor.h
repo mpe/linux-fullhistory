@@ -174,7 +174,11 @@
 #define	  HID0_DLOCK	(1<<12)		/* Data Cache Lock */
 #define	  HID0_ICFI	(1<<11)		/* Instr. Cache Flash Invalidate */
 #define	  HID0_DCI	(1<<10)		/* Data Cache Invalidate */
+#define   HID0_SPD	(1<<9)		/* Speculative disable */
+#define   HID0_SGE	(1<<7)		/* Store Gathering Enable */
 #define	  HID0_SIED	(1<<7)		/* Serial Instr. Execution [Disable] */
+#define   HID0_BTIC	(1<<5)		/* Branch Target Instruction Cache Enable */
+#define   HID0_ABE	(1<<3)		/* Address Broadcast Enable */
 #define	  HID0_BHTE	(1<<2)		/* Branch History Table Enable */
 #define	  HID0_BTCD	(1<<1)		/* Branch target cache disable */
 #define	SPRN_HID1	0x3F1	/* Hardware Implementation Register 1 */
@@ -339,6 +343,7 @@
 #define	TBRU	SPRN_TBRU	/* Time Base Read Upper Register */
 #define	TBWL	SPRN_TBWL	/* Time Base Write Lower Register */
 #define	TBWU	SPRN_TBWU	/* Time Base Write Upper Register */
+#define ICTC	1019
 #define	THRM1	SPRN_THRM1	/* Thermal Management Register 1 */
 #define	THRM2	SPRN_THRM2	/* Thermal Management Register 2 */
 #define	THRM3	SPRN_THRM3	/* Thermal Management Register 3 */

@@ -256,6 +256,15 @@ _GLOBAL(_switch)
 	REST_8GPRS(23, r1)
 	REST_GPR(31, r1)
 	lwz	r2,_NIP(r1)	/* Restore environment */
+	/* 
+	 * We need to hard disable here even if RTL is active since
+	 * being interrupted after here trashes SRR{0,1}
+	 *  -- Cort
+	 */ 
+	mfmsr	r0		/* Get current interrupt state */
+	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
+	mtmsr	r0		/* Update machine state */
+	
 	lwz	r0,_MSR(r1)
 	mtspr	SRR0,r2
 	mtspr	SRR1,r0
@@ -271,7 +280,7 @@ ret_from_smpfork:
 	bl	schedule_tail
 	b	ret_from_except
 #endif
-		
+
 	.globl	ret_from_intercept
 ret_from_intercept:
 	/*
@@ -291,7 +300,7 @@ ret_from_intercept:
 
 	.globl	ret_from_except
 ret_from_except:
-0:	/* disable interrupts */	
+0:	/* disable interrupts */
 	lis	r30,int_control@h
 	ori	r30,r30,int_control@l
 	lwz	r30,0(r30)
@@ -342,16 +351,26 @@ do_bottom_half_ret:
 	.globl	do_signal_ret
 do_signal_ret:
 	b	0b
-8:	addi	r4,r1,INT_FRAME_SIZE	/* size of frame */
+8:	/* 
+	 * We need to hard disable here even if RTL is active since
+	 * being interrupted after here trashes the SPRG2
+	 *  -- Cort
+	 */ 
+	mfmsr	r0		/* Get current interrupt state */
+	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
+	mtmsr	r0		/* Update machine state */
+	
+	addi	r4,r1,INT_FRAME_SIZE	/* size of frame */
 	stw	r4,THREAD+KSP(r2)	/* save kernel stack pointer */
 	tophys(r3,r1)
 	mtspr	SPRG2,r3	/* phys exception stack pointer */
+	b	11f
 10:	/* make sure we hard disable here, even if rtl is active -- Cort */
 	mfmsr	r0		/* Get current interrupt state */
 	rlwinm	r0,r0,0,17,15	/* clear MSR_EE in r0 */
 	sync			/* Some chip revs have problems here... */
 	mtmsr	r0		/* Update machine state */
-	
+11: 
 	lwz	r2,_CTR(r1)
 	lwz	r0,_LINK(r1)
 	mtctr	r2

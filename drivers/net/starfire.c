@@ -562,6 +562,8 @@ starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, i
 	/* The chip-specific entries in the device structure. */
 	dev->open = &netdev_open;
 	dev->hard_start_xmit = &start_tx;
+	dev->tx_timeout = tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 	dev->stop = &netdev_close;
 	dev->get_stats = &get_stats;
 	dev->set_multicast_list = &set_rx_mode;
@@ -701,16 +703,11 @@ static int netdev_open(struct net_device *dev)
 	if (dev->if_port == 0)
 		dev->if_port = np->default_port;
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-
 	if (debug > 1)
 		printk(KERN_DEBUG "%s:  Setting the Rx and Tx modes.\n", dev->name);
 	set_rx_mode(dev);
 
 	check_duplex(dev, 1);
-
-	dev->start = 1;
 
 	/* Set the interrupt mask and enable PCI interrupts. */
 	writel(IntrRxDone | IntrRxEmpty | IntrRxPCIErr |
@@ -821,7 +818,7 @@ static void tx_timeout(struct net_device *dev)
 
   /* Trigger an immediate transmit demand. */
 
-  dev->trans_start = jiffies;
+  netif_wake_queue(dev);
   np->stats.tx_errors++;
   return;
 }
@@ -881,14 +878,7 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	unsigned entry;
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		tx_timeout(dev);
-		return 1;
-	}
+	netif_stop_queue(dev);
 
 	/* Caution: the write order is important here, set the field
 	   with the "ownership" bits last. */
@@ -925,7 +915,7 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	if (np->cur_tx - np->dirty_tx >= TX_RING_SIZE - 1)
 		np->tx_full = 1;
 	if (! np->tx_full)
-		clear_bit(0, (void*)&dev->tbusy);
+		netif_start_queue(dev);
 	dev->trans_start = jiffies;
 
 	if (debug > 4) {
@@ -953,21 +943,6 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 
 	ioaddr = dev->base_addr;
 	np = (struct netdev_private *)dev->priv;
-#if defined(__i386__)
-	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
-	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_ERR"%s: SMP simultaneous entry of an interrupt handler.\n",
-			   dev->name);
-		dev->interrupt = 0;	/* Avoid halting machine. */
-		return;
-	}
-#else
-	if (dev->interrupt) {
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
-#endif
 
 	do {
 		u32 intr_status = readl(ioaddr + IntrClear);
@@ -1027,10 +1002,9 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 			writew(np->tx_done, ioaddr + CompletionQConsumerIdx + 2);
 		}
 		if (np->tx_full && np->cur_tx - np->dirty_tx < TX_RING_SIZE - 4) {
-			/* The ring is no longer full, clear tbusy. */
+			/* The ring is no longer full, wake the queue. */
 			np->tx_full = 0;
-			clear_bit(0, (void*)&dev->tbusy);
-			mark_bh(NET_BH);
+			netif_wake_queue(dev);
 		}
 
 		/* Abnormal error summary/uncommon events handlers. */
@@ -1049,23 +1023,6 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
 			   dev->name, readl(ioaddr + IntrStatus));
 
-#ifndef final_version
-	/* Code that should never be run!  Remove after testing.. */
-	{
-		static int stopit = 10;
-		if (dev->start == 0  &&  --stopit < 0) {
-			printk(KERN_ERR "%s: Emergency stop, looping startup interrupt.\n",
-				   dev->name);
-			free_irq(irq, dev);
-		}
-	}
-#endif
-
-#if defined(__i386__)
-	clear_bit(0, (void*)&dev->interrupt);
-#else
-	dev->interrupt = 0;
-#endif
 	return;
 }
 
@@ -1357,8 +1314,7 @@ static int netdev_close(struct net_device *dev)
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (debug > 1) {
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was Int %4.4x.\n",

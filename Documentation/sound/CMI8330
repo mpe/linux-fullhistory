@@ -1,3 +1,83 @@
+Documentation for CMI 8330 (SoundPRO) 
+-------------------------------------
+Alessandro Zummo <azummo@ita.flashnet.it>
+
+This adapter is now directly supported by the sb driver.
+
+ The only thing you have to do is to compile the kernel sound
+support as a module and to enable kernel ISAPnP support,
+as shown below.
+
+
+CONFIG_SOUND=m
+CONFIG_SOUND_SB=m
+
+CONFIG_PNP=y
+CONFIG_ISAPNP=y
+
+
+and optionally:
+
+
+CONFIG_SOUND_MPU401=m
+
+ for MPU401 support.
+
+
+CONFIG_SOUND_YM3812=m
+
+ for OPL3 support. Please note that there are better ways to play midi files, like
+ timidity or the softoss2 module.
+
+
+CONFIG_JOYSTICK=y
+
+ to activate the joystick port.
+
+
+(I suggest you to use "make menuconfig" or "make xconfig" 
+ for a more comfortable configuration editing)
+
+
+
+Then you can do
+
+ modprobe sb
+
+and everything will be (hopefully) configured.
+
+You should get something similar in syslog:
+
+sb: CMI8330 detected.
+sb: CMI8330 sb base located at 0x220
+sb: CMI8330 mpu base located at 0x330
+sb: CMI8330 gameport base located at 0x200
+sb: CMI8330 opl3 base located at 0x388
+sb: CMI8330 mail reports to Alessandro Zummo <azummo@ita.flashnet.it>
+sb: ISAPnP reports CMI 8330 SoundPRO at i/o 0x220, irq 7, dma 1,5
+
+
+
+
+To activate the OPL3 support, you need these lines in /etc/modules.conf
+or in a file in /etc/modutils
+
+alias synth0 opl3
+options opl3 io=0x388
+
+and then you can do:
+
+ modprobe opl3
+
+
+
+
+
+
+The old documentation file follows for reference
+purposes.
+
+
 How to enable CMI 8330 (SOUNDPRO) soundchip on Linux
 ------------------------------------------
 Stefan Laudat <Stefan.Laudat@asit.ro>

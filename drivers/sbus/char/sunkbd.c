@@ -243,19 +243,13 @@ static unsigned char sunkbd_clickp;
 #define KEY_ALT         0x86
 #define KEY_L1          0x87
 
-/* Do to sun_kbd_init() being called before rs_init(), and sun_kbd_init() doing:
+/* Due to sun_kbd_init() being called before rs_init(), and sun_kbd_init() doing:
  *
- *	init_bh(KEYBOARD_BH, kbd_bh);
- *	mark_bh(KEYBOARD_BH);
+ *	tasklet_enable(&keyboard_tasklet);
+ *	tasklet_schedule(&keyboard_tasklet);
  *
  * this might well be called before some driver has claimed interest in
  * handling the keyboard input/output. So we need to assign an initial nop.
- *
- * Otherwise this would lead to the following (DaveM might want to look at):
- *
- *	sparc64_dtlb_refbit_catch(),
- *	do_sparc64_fault(),
- *	kernel NULL pointer dereference at do_sparc64_fault + 0x2c0 ;-(
  */
 static void nop_kbd_put_char(unsigned char c) { }
 static void (*kbd_put_char)(unsigned char) = nop_kbd_put_char;
@@ -460,6 +454,10 @@ keyboard_timer (unsigned long ignored)
 	restore_flags(flags);
 }
 
+#ifndef CONFIG_PCI
+DECLARE_TASKLET_DISABLED(keyboard_tasklet, sun_kbd_bh, 0);
+#endif
+
 /* #define SKBD_DEBUG */
 /* This is our keyboard 'interrupt' routine. */
 void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
@@ -610,7 +608,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 		}
 	}
 out:
-	mark_bh(KEYBOARD_BH);
+	tasklet_schedule(&keyboard_tasklet);
 }
 
 static void put_queue(int ch)
@@ -1086,7 +1084,6 @@ static void do_lock(unsigned char value, char up_flag)
  */
 
 static unsigned char ledstate = 0xff; /* undefined */
-static unsigned char sunkbd_ledstate = 0xff; /* undefined */
 static unsigned char ledioctl;
 
 unsigned char sun_getledstate(void) {
@@ -1163,7 +1160,8 @@ static inline unsigned char getleds(void){
  * used, but this allows for easy and efficient race-condition
  * prevention later on.
  */
-static void kbd_bh(void)
+static unsigned char sunkbd_ledstate = 0xff; /* undefined */
+void sun_kbd_bh(unsigned long dummy)
 {
 	unsigned char leds = getleds();
 	unsigned char kbd_leds = vcleds_to_sunkbd(leds);
@@ -1247,8 +1245,12 @@ int __init sun_kbd_init(void)
 	} else {
 		sunkbd_clickp = 0;
 	}
-	init_bh(KEYBOARD_BH, kbd_bh);
-	mark_bh(KEYBOARD_BH);
+
+	keyboard_tasklet.func = sun_kbd_bh;
+
+	tasklet_enable(&keyboard_tasklet);
+	tasklet_schedule(&keyboard_tasklet);
+
 	return 0;
 }
 

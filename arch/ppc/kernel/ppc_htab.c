@@ -523,7 +523,8 @@ int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
 		"0.5", "1.0", "(reserved2)", "(reserved3)"
 	};
 
-	if ( (_get_PVR() >> 16) != 8) return -EFAULT;
+	if ( ((_get_PVR() >> 16) != 8) && ((_get_PVR() >> 16) != 12))
+		return -EFAULT;
 	
 	if ( /*!table->maxlen ||*/ (filp->f_pos && !write)) {
 		*lenp = 0;

@@ -113,6 +113,20 @@ static int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
 }
 
 /*
+ * Undo incomplete request
+ */
+static void pm_undo_request(struct pm_dev *last, pm_request_t undo, void *data)
+{
+	struct list_head *entry = last->entry.prev;
+	while (entry != &pm_devs) {
+		struct pm_dev *dev = list_entry(entry, struct pm_dev, entry);
+		if (dev->callback)
+			pm_send(dev, undo, data);
+		entry = entry->prev;
+	}
+}
+
+/*
  * Send a request to all devices
  */
 int pm_send_request(pm_request_t rqst, void *data)
@@ -122,8 +136,12 @@ int pm_send_request(pm_request_t rqst, void *data)
 		struct pm_dev *dev = list_entry(entry, struct pm_dev, entry);
 		if (dev->callback) {
 			int status = pm_send(dev, rqst, data);
-			if (status)
+			if (status) {
+				/* resume devices on failed suspend request */
+				if (rqst == PM_SUSPEND)
+					pm_undo_request(dev, PM_RESUME, 0);
 				return status;
+			}
 		}
 		entry = entry->next;
 	}

@@ -1344,3 +1344,31 @@ char *str;
 {
 	lineptr = str;
 }
+
+char last[64];
+char *
+lookup_addr(unsigned long addr)
+{
+	extern char *sysmap;
+	extern unsigned long sysmap_size;
+	char *c = sysmap;
+	unsigned long cmp;
+
+	if ( !sysmap || !sysmap_size )
+		return NULL;
+	
+	/* adjust if addr is relative to kernelbase */
+	if ( addr < PAGE_OFFSET )
+		addr += PAGE_OFFSET;
+
+	cmp = simple_strtoul(c, &c, 8);
+	strcpy( last, strsep( &c, "\n"));
+	while ( c < (sysmap+sysmap_size) )
+	{
+		cmp = simple_strtoul(c, &c, 8);
+		if ( cmp < addr )
+			break;
+		strcpy( last, strsep( &c, "\n"));
+	}
+	return last;
+}

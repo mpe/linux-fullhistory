@@ -210,6 +210,12 @@ typedef struct	SHT
      */
     int (* bios_param)(Disk *, kdev_t, int []);
 
+
+    /*
+     * Used to set the queue depth for a specific device.
+     */
+    void (*select_queue_depths)(struct Scsi_Host *, Scsi_Device *);
+
     /*
      * This determines if we will use a non-interrupt driven
      * or an interrupt driven scheme,  It is set to the maximum number
@@ -417,16 +423,6 @@ extern void build_proc_dir_entries(Scsi_Host_Template  *);
  *  scsi_init initializes the scsi hosts.
  */
 
-/*
- * We use these goofy things because the MM is not set up when we init
- * the scsi subsystem.	By using these functions we can write code that
- * looks normal.  Also, it makes it possible to use the same code for a
- * loadable module.
- */
-
-extern void * scsi_init_malloc(unsigned int size, int priority);
-extern void scsi_init_free(char * ptr, unsigned int size);
-
 extern int next_scsi_host;
 
 extern int scsi_loadable_module_flag;
@@ -434,7 +430,8 @@ unsigned int scsi_init(void);
 extern struct Scsi_Host * scsi_register(Scsi_Host_Template *, int j);
 extern void scsi_unregister(struct Scsi_Host * i);
 
-extern request_fn_proc * scsi_get_request_handler(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt);
+extern void scsi_register_blocked_host(struct Scsi_Host * SHpnt);
+extern void scsi_deregister_blocked_host(struct Scsi_Host * SHpnt);
 
 /*
  * Prototypes for functions/data in scsi_scan.c
@@ -473,6 +470,8 @@ struct Scsi_Device_Template
                                            Selects command for blkdevs */
 };
 
+void  scsi_initialize_queue(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt);
+
 extern struct Scsi_Device_Template sd_template;
 extern struct Scsi_Device_Template st_template;
 extern struct Scsi_Device_Template sr_template;
@@ -499,10 +498,14 @@ extern void scsi_unregister_module(int, void *);
  *
  * Even bigger hack for SparcSTORAGE arrays. Those are at least 6 disks, but
  * usually up to 30 disks, so everyone would need to change this. -jj
+ *
+ * Note: These things are all evil and all need to go away.  My plan is to
+ * tackle the character devices first, as there aren't any locking implications
+ * in the block device layer.   The block devices will require more work.
  */
-#define SD_EXTRA_DEVS 40
-#define ST_EXTRA_DEVS 2
-#define SR_EXTRA_DEVS 2
+#define SD_EXTRA_DEVS CONFIG_SD_EXTRA_DEVS
+#define ST_EXTRA_DEVS CONFIG_ST_EXTRA_DEVS
+#define SR_EXTRA_DEVS CONFIG_SR_EXTRA_DEVS
 #define SG_EXTRA_DEVS (SD_EXTRA_DEVS + SR_EXTRA_DEVS + ST_EXTRA_DEVS)
 
 #endif

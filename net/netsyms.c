@@ -487,6 +487,7 @@ EXPORT_SYMBOL(__dev_get_by_index);
 EXPORT_SYMBOL(dev_get_by_name);
 EXPORT_SYMBOL(__dev_get_by_name);
 EXPORT_SYMBOL(netdev_finish_unregister);
+EXPORT_SYMBOL(netdev_set_master);
 EXPORT_SYMBOL(eth_type_trans);
 #ifdef CONFIG_FDDI
 EXPORT_SYMBOL(fddi_type_trans);
@@ -510,7 +511,6 @@ EXPORT_SYMBOL(dev_load);
 #endif
 EXPORT_SYMBOL(dev_ioctl);
 EXPORT_SYMBOL(dev_queue_xmit);
-EXPORT_SYMBOL(netdev_dropping);
 #ifdef CONFIG_NET_FASTROUTE
 EXPORT_SYMBOL(dev_fastroute_stat);
 #endif
@@ -552,11 +552,9 @@ EXPORT_SYMBOL(ltalk_setup);
 EXPORT_SYMBOL(qdisc_destroy);
 EXPORT_SYMBOL(qdisc_reset);
 EXPORT_SYMBOL(qdisc_restart);
-EXPORT_SYMBOL(qdisc_head);
 EXPORT_SYMBOL(qdisc_create_dflt);
 EXPORT_SYMBOL(noop_qdisc);
 EXPORT_SYMBOL(qdisc_tree_lock);
-EXPORT_SYMBOL(qdisc_runqueue_lock);
 #ifdef CONFIG_NET_SCHED
 PSCHED_EXPORTLIST;
 EXPORT_SYMBOL(pfifo_qdisc_ops);
@@ -597,5 +595,8 @@ EXPORT_SYMBOL(nf_hooks);
 #endif
 
 EXPORT_SYMBOL(register_gifconf);
+
+EXPORT_SYMBOL(softirq_state);
+EXPORT_SYMBOL(softnet_data);
 
 #endif  /* CONFIG_NET */

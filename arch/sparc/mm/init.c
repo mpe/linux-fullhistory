@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.79 2000/01/29 01:09:06 anton Exp $
+/*  $Id: init.c,v 1.80 2000/02/09 21:11:06 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -32,8 +32,6 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/vaddrs.h>
-
-extern void show_net_buffers(void);
 
 unsigned long *sparc_valid_addr_bitmap;
 
@@ -89,9 +87,6 @@ void show_mem(void)
 		printk("%ld entries in page dir cache\n",pgd_cache_size);
 #endif	
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 extern pgprot_t protection_map[16];

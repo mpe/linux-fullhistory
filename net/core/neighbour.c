@@ -209,10 +209,11 @@ int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 		}
 	}
 
-	del_timer(&tbl->proxy_timer);
 	skb_queue_purge(&tbl->proxy_queue);
 	pneigh_ifdown(tbl, dev);
 	write_unlock_bh(&tbl->lock);
+
+	del_timer_sync(&tbl->proxy_timer);
 	return 0;
 }
 
@@ -533,7 +534,7 @@ static void neigh_sync(struct neighbour *n)
 	}
 }
 
-static void neigh_periodic_timer(unsigned long arg)
+static void SMP_TIMER_NAME(neigh_periodic_timer)(unsigned long arg)
 {
 	struct neigh_table *tbl = (struct neigh_table*)arg;
 	unsigned long now = jiffies;
@@ -592,10 +593,20 @@ next_elt:
 		}
 	}
 
-	tbl->gc_timer.expires = now + tbl->gc_interval;
-	add_timer(&tbl->gc_timer);
+	mod_timer(&tbl->gc_timer, now + tbl->gc_interval);
 	write_unlock(&tbl->lock);
 }
+
+#ifdef __SMP__
+static void neigh_periodic_timer(unsigned long arg)
+{
+	struct neigh_table *tbl = (struct neigh_table*)arg;
+	
+	tasklet_schedule(&tbl->gc_task);
+
+	timer_exit(&tbl->gc_timer);
+}
+#endif
 
 static __inline__ int neigh_max_probes(struct neighbour *n)
 {
@@ -665,6 +676,7 @@ static void neigh_timer_handler(unsigned long arg)
 
 	neigh->ops->solicit(neigh, skb_peek(&neigh->arp_queue));
 	atomic_inc(&neigh->probes);
+	timer_exit(&neigh->timer);
 	return;
 
 out:
@@ -673,6 +685,7 @@ out:
 	if (notify && neigh->parms->app_probes)
 		neigh_app_notify(neigh);
 #endif
+	timer_exit(&neigh->timer);
 	neigh_release(neigh);
 }
 
@@ -1008,6 +1021,7 @@ static void neigh_proxy_process(unsigned long arg)
 		tbl->proxy_timer.expires = jiffies + sched_next;
 		add_timer(&tbl->proxy_timer);
 	}
+	timer_exit(&tbl->proxy_timer);
 }
 
 void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
@@ -1092,6 +1106,9 @@ void neigh_table_init(struct neigh_table *tbl)
 						     0, SLAB_HWCACHE_ALIGN,
 						     NULL, NULL);
 
+#ifdef __SMP__
+	tasklet_init(&tbl->gc_task, SMP_TIMER_NAME(neigh_periodic_timer), (unsigned long)tbl);
+#endif
 	init_timer(&tbl->gc_timer);
 	tbl->lock = RW_LOCK_UNLOCKED;
 	tbl->gc_timer.data = (unsigned long)tbl;
@@ -1116,8 +1133,10 @@ int neigh_table_clear(struct neigh_table *tbl)
 {
 	struct neigh_table **tp;
 
-	del_timer(&tbl->gc_timer);
-	del_timer(&tbl->proxy_timer);
+	/* It is not clean... Fix it to unload IPv6 module safely */
+	del_timer_sync(&tbl->gc_timer);
+	tasklet_kill(&tbl->gc_task);
+	del_timer_sync(&tbl->proxy_timer);
 	skb_queue_purge(&tbl->proxy_queue);
 	neigh_ifdown(tbl, NULL);
 	if (tbl->entries)

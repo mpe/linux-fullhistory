@@ -12,6 +12,7 @@
  * Copyright (C) 1998, 1999 Hewlett-Packard Co
  * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
  */
+#include <linux/config.h>
 #include <linux/types.h>
 
 #include <asm/system.h>
@@ -76,14 +77,14 @@ atomic_add_negative (int i, atomic_t *v)
 	((__builtin_constant_p(i) &&					\
 	  (   (i ==  1) || (i ==  4) || (i ==  8) || (i ==  16)		\
 	   || (i == -1) || (i == -4) || (i == -8) || (i == -16)))	\
-	 ? ia64_fetch_and_add(i, v)					\
+	 ? ia64_fetch_and_add(i, &(v)->counter)				\
 	 : ia64_atomic_add(i, v))
 
 #define atomic_sub_return(i,v)						\
 	((__builtin_constant_p(i) &&					\
 	  (   (i ==  1) || (i ==  4) || (i ==  8) || (i ==  16)		\
 	   || (i == -1) || (i == -4) || (i == -8) || (i == -16)))	\
-	 ? ia64_fetch_and_add(-i, v)					\
+	 ? ia64_fetch_and_add(-(i), &(v)->counter)			\
 	 : ia64_atomic_sub(i, v))
 
 #define atomic_dec_return(v)		atomic_sub_return(1, (v))

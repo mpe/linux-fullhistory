@@ -26,6 +26,8 @@ extern unsigned int local_irq_count;
 
 #define synchronize_irq()	barrier()
 
+#define in_irq() (local_irq_count != 0)
+
 #else
 
 #include <asm/atomic.h>
@@ -44,6 +46,9 @@ extern atomic_t global_irq_count;
  */
 #define in_interrupt() ({ int __cpu = smp_processor_id(); \
 	(local_irq_count[__cpu] + local_bh_count[__cpu] != 0); })
+
+#define in_irq() ({ int __cpu = smp_processor_id(); \
+	(local_irq_count[__cpu] != 0); })
 
 static inline void release_irqlock(int cpu)
 {

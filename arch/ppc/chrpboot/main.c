@@ -34,6 +34,8 @@ extern char image_data[];
 extern int image_len;
 extern char initrd_data[];
 extern int initrd_len;
+extern char sysmap_data[];
+extern int sysmap_len;
 
 
 chrpboot(int a1, int a2, void *prom)
@@ -78,12 +80,12 @@ chrpboot(int a1, int a2, void *prom)
     {
 	    struct bi_record *rec;
 	    
-	    rec = (struct bi_record *)PAGE_ALIGN((unsigned long)dst+len);
-	    
+	    rec = (struct bi_record *)_ALIGN((unsigned long)dst+len+(1<<20)-1,(1<<20));
+
 	    rec->tag = BI_FIRST;
 	    rec->size = sizeof(struct bi_record);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
-
+	    
 	    rec->tag = BI_BOOTLOADER_ID;
 	    sprintf( (char *)rec->data, "chrpboot");
 	    rec->size = sizeof(struct bi_record) + strlen("chrpboot") + 1;
@@ -95,6 +97,11 @@ chrpboot(int a1, int a2, void *prom)
 	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
 	    
+	    rec->tag = BI_SYSMAP;
+	    rec->data[0] = sysmap_data;
+	    rec->data[1] = sysmap_len;
+	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
 	    rec->tag = BI_LAST;
 	    rec->size = sizeof(struct bi_record);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);

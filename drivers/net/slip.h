@@ -52,7 +52,9 @@ struct slip {
 
   /* Various fields. */
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
-  struct net_device		*dev;		/* easy for intr handling	*/
+  struct net_device	*dev;		/* easy for intr handling	*/
+  spinlock_t		lock;
+
 #ifdef SL_INCLUDE_CSLIP
   struct slcompress	*slcomp;	/* for header compression 	*/
   unsigned char		*cbuff;		/* compression buffer		*/

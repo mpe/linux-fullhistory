@@ -528,17 +528,23 @@ static void __init init_control(struct fb_info_control *p)
 	p->sense = read_control_sense(p);
 	printk(KERN_INFO "Monitor sense value = 0x%x, ", p->sense);
 	/* Try to pick a video mode out of NVRAM if we have one. */
-	par->vmode = nvram_read_byte(NV_VMODE);
-	if(par->vmode <= 0 || par->vmode > VMODE_MAX || !control_reg_init[par->vmode - 1])
-		par->vmode = VMODE_CHOOSE;
-	if(par->vmode == VMODE_CHOOSE)
-		par->vmode = mac_map_monitor_sense(p->sense);
-	if(!control_reg_init[par->vmode - 1])
-		par->vmode = VMODE_640_480_60;
+	if (default_vmode == VMODE_NVRAM) {
+		par->vmode = nvram_read_byte(NV_VMODE);
+		if(par->vmode <= 0 || par->vmode > VMODE_MAX || !control_reg_init[par->vmode - 1])
+			par->vmode = VMODE_CHOOSE;
+		if(par->vmode == VMODE_CHOOSE)
+			par->vmode = mac_map_monitor_sense(p->sense);
+		if(!control_reg_init[par->vmode - 1])
+			par->vmode = VMODE_640_480_60;
+	} else
+		par->vmode=default_vmode;
 
-	par->cmode = nvram_read_byte(NV_CMODE);
-	if(par->cmode < CMODE_8 || par->cmode > CMODE_32)
-		par->cmode = CMODE_8;
+	if (default_cmode == CMODE_NVRAM){
+		par->cmode = nvram_read_byte(NV_CMODE);
+		if(par->cmode < CMODE_8 || par->cmode > CMODE_32)
+			par->cmode = CMODE_8;}
+	else
+		par->cmode=default_cmode;
 	/*
 	 * Reduce the pixel size if we don't have enough VRAM.
 	 */

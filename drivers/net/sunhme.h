@@ -1,4 +1,4 @@
-/* $Id: sunhme.h,v 1.28 1999/09/21 14:36:34 davem Exp $
+/* $Id: sunhme.h,v 1.29 2000/02/09 11:15:40 davem Exp $
  * sunhme.h: Definitions for Sparc HME/BigMac 10/100baseT ethernet driver.
  *           Also known as the "Happy Meal".
  *
@@ -509,6 +509,8 @@ struct happy_meal {
 
 	/* This is either a sbus_dev or a pci_dev. */
 	void			  *happy_dev;
+
+	spinlock_t		  happy_lock;
 
 	struct sk_buff           *rx_skbs[RX_RING_SIZE];
 	struct sk_buff           *tx_skbs[TX_RING_SIZE];

@@ -53,6 +53,7 @@
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		(void)(lock) /* Not "unused variable". */
+#define spin_is_locked(lock)	(0)
 #define spin_trylock(lock)	({1; })
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
@@ -65,6 +66,7 @@ typedef struct {
 #define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
 
 #define spin_lock_init(x)	do { (x)->lock = 0; } while (0)
+#define spin_is_locked(lock)	(test_bit(0,(lock)))
 #define spin_trylock(lock)	(!test_and_set_bit(0,(lock)))
 
 #define spin_lock(x)		do { (x)->lock = 1; } while (0)
@@ -83,6 +85,7 @@ typedef struct {
 #include <linux/kernel.h>
 
 #define spin_lock_init(x)	do { (x)->lock = 0; } while (0)
+#define spin_is_locked(lock)	(test_bit(0,(lock)))
 #define spin_trylock(lock)	(!test_and_set_bit(0,(lock)))
 
 #define spin_lock(x)		do {unsigned long __spinflags; save_flags(__spinflags); cli(); if ((x)->lock&&(x)->babble) {printk("%s:%d: spin_lock(%s:%p) already locked\n", __BASE_FILE__,__LINE__, (x)->module, (x));(x)->babble--;} (x)->lock = 1; restore_flags(__spinflags);} while (0)

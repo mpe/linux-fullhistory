@@ -29,54 +29,64 @@
     with a TX-TX optimisation to see if we can touch 180-200K/second as seems
     theoretically maximum.
     		19950402 Alan Cox <Alan.Cox@linux.org>
-
-    Some notes on this thing if you have to hack it.  [Alan]
-
-    1]	Some documentation is available from 3Com. Due to the boards age
-    	standard responses when you ask for this will range from 'be serious'
-    	to 'give it to a museum'. The documentation is incomplete and mostly
-    	of historical interest anyway.
-
-    2]  The basic system is a single buffer which can be used to receive or
-    	transmit a packet. A third command mode exists when you are setting
-    	things up.
-
-    3]	If it's transmitting it's not receiving and vice versa. In fact the
-    	time to get the board back into useful state after an operation is
-    	quite large.
-
-    4]	The driver works by keeping the board in receive mode waiting for a
-    	packet to arrive. When one arrives it is copied out of the buffer
-    	and delivered to the kernel. The card is reloaded and off we go.
-
-    5]	When transmitting dev->tbusy is set and the card is reset (from
-    	receive mode) [possibly losing a packet just received] to command
-    	mode. A packet is loaded and transmit mode triggered. The interrupt
-    	handler runs different code for transmit interrupts and can handle
-    	returning to receive mode or retransmissions (yes you have to help
-    	out with those too).
-
-    Problems:
-    	There are a wide variety of undocumented error returns from the card
-    and you basically have to kick the board and pray if they turn up. Most
-    only occur under extreme load or if you do something the board doesn't
-    like (eg touching a register at the wrong time).
-
-    	The driver is less efficient than it could be. It switches through
-    receive mode even if more transmits are queued. If this worries you buy
-    a real Ethernet card.
-
-    	The combination of slow receive restart and no real multicast
-    filter makes the board unusable with a kernel compiled for IP
-    multicasting in a real multicast environment. That's down to the board,
-    but even with no multicast programs running a multicast IP kernel is
-    in group 224.0.0.1 and you will therefore be listening to all multicasts.
-    One nv conference running over that Ethernet and you can give up.
-
+    		
+    Cleaned up for 2.3.x because we broke SMP now. 
+    		20000208 Alan Cox <alan@redhat.com>
+    		
 */
 
+
+/**
+ * DOC: 3c501 Card Notes
+ *
+ *  Some notes on this thing if you have to hack it.  [Alan]
+ *
+ *  Some documentation is available from 3Com. Due to the boards age
+ *  standard responses when you ask for this will range from 'be serious'
+ *  to 'give it to a museum'. The documentation is incomplete and mostly
+ *  of historical interest anyway. 
+ *
+ *  The basic system is a single buffer which can be used to receive or
+ *  transmit a packet. A third command mode exists when you are setting
+ *  things up.
+ *
+ *  If it's transmitting it's not receiving and vice versa. In fact the
+ *  time to get the board back into useful state after an operation is
+ *  quite large.
+ *
+ *  The driver works by keeping the board in receive mode waiting for a
+ *  packet to arrive. When one arrives it is copied out of the buffer
+ *  and delivered to the kernel. The card is reloaded and off we go.
+ *
+ *  When transmitting dev->tbusy is set and the card is reset (from
+ *  receive mode) [possibly losing a packet just received] to command
+ *  mode. A packet is loaded and transmit mode triggered. The interrupt
+ *  handler runs different code for transmit interrupts and can handle
+ *  returning to receive mode or retransmissions (yes you have to help
+ *  out with those too).
+ *
+ * DOC: Problems
+ *  
+ *  There are a wide variety of undocumented error returns from the card
+ *  and you basically have to kick the board and pray if they turn up. Most
+ *  only occur under extreme load or if you do something the board doesn't
+ *  like (eg touching a register at the wrong time).
+ *
+ *  The driver is less efficient than it could be. It switches through
+ *  receive mode even if more transmits are queued. If this worries you buy
+ *  a real Ethernet card.
+ *
+ *  The combination of slow receive restart and no real multicast
+ *  filter makes the board unusable with a kernel compiled for IP
+ *  multicasting in a real multicast environment. That's down to the board,
+ *  but even with no multicast programs running a multicast IP kernel is
+ *  in group 224.0.0.1 and you will therefore be listening to all multicasts.
+ *  One nv conference running over that Ethernet and you can give up.
+ *
+ */
+
 static const char *version =
-    "3c501.c: 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov).\n";
+    "3c501.c: 2000/02/08 Alan Cox (alan@redhat.com).\n";
 
 /*
  *	Braindamage remaining:
@@ -210,6 +220,19 @@ struct net_local
 struct netdev_entry el1_drv = {"3c501", el1_probe1, EL1_IO_EXTENT, netcard_portlist};
 #else
 
+/**
+ * el1_probe:
+ * @dev: The device structure passed in to probe. 
+ *
+ * This can be called from two places. The network layer will probe using
+ * a device structure passed in with the probe information completed. For a
+ * modular driver we use #init_module to fill in our own structure and probe
+ * for it.
+ *
+ * Returns 0 on success. ENXIO if asked not to probe and ENODEV if asked to
+ * probe and failing to find anything.
+ */
+ 
 int __init el1_probe(struct net_device *dev)
 {
 	int i;
@@ -233,8 +256,17 @@ int __init el1_probe(struct net_device *dev)
 }
 #endif
 
-/*
- *	The actual probe.
+/**
+ *	el1_probe: 
+ *	@dev: The device structure to use
+ *	@ioaddr: An I/O address to probe at.
+ *
+ *	The actual probe. This is iterated over by #el1_probe in order to
+ *	check all the applicable device locations.
+ *
+ *	Returns 0 for a success, in which case the device is activated,
+ *	EAGAIN if the IRQ is in use by another driver, and ENODEV if the
+ *	board cannot be found.
  */
 
 static int __init el1_probe1(struct net_device *dev, int ioaddr)
@@ -310,11 +342,11 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 	if (autoirq)
 		dev->irq = autoirq;
 
-	printk("%s: %s EtherLink at %#lx, using %sIRQ %d.\n", dev->name, mname, dev->base_addr,
+	printk(KERN_INFO "%s: %s EtherLink at %#lx, using %sIRQ %d.\n", dev->name, mname, dev->base_addr,
 			autoirq ? "auto":"assigned ", dev->irq);
 
 #ifdef CONFIG_IP_MULTICAST
-	printk("WARNING: Use of the 3c501 in a multicast kernel is NOT recommended.\n");
+	printk(KERN_WARNING "WARNING: Use of the 3c501 in a multicast kernel is NOT recommended.\n");
 #endif
 
 	if (el_debug)
@@ -351,13 +383,24 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 	return 0;
 }
 
-/*
- *	Open/initialize the board.
+/**
+ *	el1_open:
+ *	@dev: device that is being opened
+ *
+ *	When an ifconfig is issued which changes the device flags to include
+ *	IFF_UP this function is called. It is only called when the change 
+ *	occurs, not when the interface remains up. #el1_close will be called
+ *	when it goes down.
+ *
+ *	Returns 0 for a successful open, or -EAGAIN if someone has run off
+ *	with our interrupt line.
  */
 
 static int el_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
+	struct net_local *lp = (struct net_local *)dev->priv;
+	unsigned long flags;
 
 	if (el_debug > 2)
 		printk("%s: Doing el_open()...", dev->name);
@@ -365,7 +408,9 @@ static int el_open(struct net_device *dev)
 	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", dev))
 		return -EAGAIN;
 
+	spin_lock_irqsave(&lp->lock, flags);
 	el_reset(dev);
+	spin_unlock_irqrestore(&lp->lock, flags);
 
 	dev->start = 1;
 
@@ -373,6 +418,28 @@ static int el_open(struct net_device *dev)
 	MOD_INC_USE_COUNT;
 	return 0;
 }
+
+/**
+ * e1_start_xmit:
+ * @skb: The packet that is queued to be sent
+ * @dev: The 3c501 card we want to throw it down
+ *
+ * Attempt to send a packet to a 3c501 card. There are some interesting
+ * catches here because the 3c501 is an extremely old and therefore
+ * stupid piece of technology.
+ *
+ * If we are handling an interrupt on the other CPU we cannot load a packet
+ * as we may still be attempting to retrieve the last RX packet buffer.
+ *
+ * When a transmit times out we dump the card into control mode and just
+ * start again. It happens enough that it isnt worth logging.
+ *
+ * We avoid holding the spin locks when doing the packet load to the board.
+ * The device is very slow, and its DMA mode is even slower. If we held the
+ * lock while loading 1500 bytes onto the controller we would drop a lot of
+ * serial port characters. This requires we do extra locking, but we have
+ * no real choice.
+ */
 
 static int el_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
@@ -385,7 +452,7 @@ static int el_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (dev->tbusy)
 	{
-		if (jiffies - dev->trans_start < 20)
+		if (jiffies - dev->trans_start < HZ)
 		{
 			if (el_debug > 2)
 				printk(" transmitter busy, deferred.\n");
@@ -473,9 +540,27 @@ load_it_again_sam:
 }
 
 
-/*
- *	The typical workload of the driver:
- *	Handle the ether interface interrupts.
+/**
+ * el_interrupt:
+ * @irq: Interrupt number
+ * @dev_id: The 3c501 that burped
+ * @regs: Register data (surplus to our requirements)
+ *
+ * Handle the ether interface interrupts. The 3c501 needs a lot more 
+ * hand holding than most cards. In paticular we get a transmit interrupt
+ * with a collision error because the board firmware isnt capable of rewinding
+ * its own transmit buffer pointers. It can however count to 16 for us.
+ *
+ * On the receive side the card is also very dumb. It has no buffering to
+ * speak of. We simply pull the packet out of its PIO buffer (which is slow)
+ * and queue it for the kernel. Then we reset the card for the next packet.
+ *
+ * We sometimes get suprise interrupts late both because the SMP IRQ delivery
+ * is message passing and because the card sometimes seems to deliver late. I
+ * think if it is part way through a receive and the mode is changed it carries
+ * on receiving and sends us an interrupt. We have to band aid all these cases
+ * to get a sensible 150kbytes/second performance. Even then you want a small
+ * TCP window.
  */
 
 static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -656,9 +741,14 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-/*
- *	We have a good packet. Well, not really "good", just mostly not broken.
- *	We must check everything to see if it is good.
+/**
+ * el_receive:
+ * @dev: Device to pull the packets from
+ *
+ * We have a good packet. Well, not really "good", just mostly not broken.
+ * We must check everything to see if it is good. In paticular we occasionally
+ * get wild packet sizes from the card. If the packet seems sane we PIO it
+ * off the card and queue it for the protocol layers.
  */
 
 static void el_receive(struct net_device *dev)
@@ -717,6 +807,15 @@ static void el_receive(struct net_device *dev)
 	return;
 }
 
+/**
+ * el_reset: Reset a 3c501 card
+ * @dev: The 3c501 card about to get zapped
+ *
+ * Even resetting a 3c501 isnt simple. When you activate reset it loses all
+ * its configuration. You must hold the lock when doing this. The function
+ * cannot take the lock itself as it is callable from the irq handler.
+ */
+
 static void  el_reset(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
@@ -732,16 +831,25 @@ static void  el_reset(struct net_device *dev)
 	}
 
 	outw(0, RX_BUF_CLR);		/* Set rx packet area to 0. */
-	cli();				/* Avoid glitch on writes to CMD regs */
 	outb(TX_NORM, TX_CMD);		/* tx irq on done, collision */
 	outb(RX_NORM, RX_CMD);		/* Set Rx commands. */
 	inb(RX_STATUS);			/* Clear status. */
 	inb(TX_STATUS);
 	dev->interrupt = 0;
 	dev->tbusy = 0;
-	sti();
 }
 
+/**
+ * el1_close:
+ * @dev: 3c501 card to shut down
+ *
+ * Close a 3c501 card. The IFF_UP flag has been cleared by the user via
+ * the SIOCSIFFLAGS ioctl. We stop any further transmissions being queued,
+ * and then disable the interrupts. Finally we reset the chip. The effects
+ * of the rest will be cleaned up by #el1_open. Always returns 0 indicating
+ * a success.
+ */
+ 
 static int el1_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
@@ -751,7 +859,7 @@ static int el1_close(struct net_device *dev)
 
 	dev->tbusy = 1;
 	dev->start = 0;
-
+	
 	/*
 	 *	Free and disable the IRQ.
 	 */
@@ -763,15 +871,31 @@ static int el1_close(struct net_device *dev)
 	return 0;
 }
 
+/**
+ * el1_get_stats:
+ * @dev: The card to get the statistics for
+ *
+ * In smarter devices this function is needed to pull statistics off the
+ * board itself. The 3c501 has no hardware statistics. We maintain them all
+ * so they are by definition always up to date.
+ *
+ * Returns the statistics for the card from the card private data
+ */
+ 
 static struct net_device_stats *el1_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
 }
 
-/*
- *	Set or clear the multicast filter for this adaptor.
- *			best-effort filtering.
+/**
+ * set_multicast_list:
+ * @dev: The device to adjust
+ *
+ * Set or clear the multicast filter for this adaptor to use the best-effort 
+ * filtering supported. The 3c501 supports only three modes of filtering.
+ * It always receives broadcasts and packets for itself. You can choose to
+ * optionally receive all packets, or all multicast packets on top of this.
  */
 
 static void set_multicast_list(struct net_device *dev)
@@ -812,6 +936,18 @@ static int irq=5;
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
 
+/**
+ * init_module:
+ *
+ * When the driver is loaded as a module this function is called. We fake up
+ * a device structure with the base I/O and interrupt set as if it was being
+ * called from Space.c. This minimises the extra code that would otherwise
+ * be required.
+ *
+ * Returns 0 for success or -EIO if a card is not found. Returning an error
+ * here also causes the module to be unloaded
+ */
+ 
 int init_module(void)
 {
 	dev_3c501.irq=irq;
@@ -821,6 +957,13 @@ int init_module(void)
 	return 0;
 }
 
+/**
+ * cleanup_module:
+ * 
+ * The module is being unloaded. We unhook our network device from the system
+ * and then free up the resources we took when the card was found.
+ */
+ 
 void cleanup_module(void)
 {
 	/*

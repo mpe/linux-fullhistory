@@ -3,7 +3,7 @@
 /* i2c.h - definitions for the i2c-bus interface			     */
 /* 									     */
 /* ------------------------------------------------------------------------- */
-/*   Copyright (C) 1995-1999 Simon G. Vogl
+/*   Copyright (C) 1995-2000 Simon G. Vogl
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c.h,v 1.32 1999/12/21 23:45:58 frodo Exp $ */
+/* $Id: i2c.h,v 1.36 2000/01/18 23:54:07 frodo Exp $ */
 
 #ifndef I2C_H
 #define I2C_H
@@ -94,6 +94,8 @@ struct i2c_msg {
 	unsigned short flags;		
 #define I2C_M_TEN	0x10	/* we have a ten bit chip address	*/
 #define I2C_M_RD	0x01
+#define I2C_M_NOSTART	0x4000
+#define I2C_M_REV_DIR_ADDR	0x2000
 #if 0
 #define I2C_M_PROBE	0x20
 #endif
@@ -171,8 +173,8 @@ struct i2c_driver {
 	 * dec_use is the inverse operation.
 	 * NB: Make sure you have no circular dependencies, or else you get a 
 	 * deadlock when trying to unload the modules.
-         * You should use the i2c_{inc,dec}_use_client functions instead of
-         * calling this function directly.
+	* You should use the i2c_{inc,dec}_use_client functions instead of
+	* calling this function directly.
 	 */
 	void (*inc_use)(struct i2c_client *client);
 	void (*dec_use)(struct i2c_client *client);
@@ -190,9 +192,9 @@ struct i2c_client {
 	unsigned int addr;		/* chip address - NOTE: 7bit 	*/
 					/* addresses are stored in the	*/
 					/* _LOWER_ 7 bits of this char	*/
-        /* addr: unsigned int to make lm_sensors i2c-isa adapter work
-           more cleanly. It does not take any more memory space, due to
-           alignment considerations */
+	/* addr: unsigned int to make lm_sensors i2c-isa adapter work
+	  more cleanly. It does not take any more memory space, due to
+	  alignment considerations */
 	struct i2c_adapter *adapter;	/* the adapter we sit on	*/
 	struct i2c_driver *driver;	/* and our access routines	*/
 	void *data;			/* for the clients		*/
@@ -207,17 +209,17 @@ struct i2c_client {
  */
 struct i2c_algorithm {
 	char name[32];				/* textual description 	*/
-	unsigned int id;       
+	unsigned int id;
 
 	/* If a adapter algorithm can't to I2C-level access, set master_xfer
-           to NULL. If an adapter algorithm can do SMBus access, set 
-           smbus_xfer. If set to NULL, the SMBus protocol is simulated
-           using common I2C messages */
+	   to NULL. If an adapter algorithm can do SMBus access, set 
+	   smbus_xfer. If set to NULL, the SMBus protocol is simulated
+	   using common I2C messages */
 	int (*master_xfer)(struct i2c_adapter *adap,struct i2c_msg msgs[], 
-                           int num);
+	                   int num);
 	int (*smbus_xfer) (struct i2c_adapter *adap, u16 addr, 
-                           unsigned short flags, char read_write,
-                           u8 command, int size, union i2c_smbus_data * data);
+	                   unsigned short flags, char read_write,
+	                   u8 command, int size, union i2c_smbus_data * data);
 
 	/* --- these optional/future use for some adapter types.*/
 	int (*slave_send)(struct i2c_adapter *,char*,int);
@@ -245,7 +247,7 @@ struct i2c_adapter {
 	struct i2c_algorithm *algo;/* the algorithm to access the bus	*/
 	void *algo_data;
 
-        /* --- These may be NULL, but should increase the module use count */
+	/* --- These may be NULL, but should increase the module use count */
 	void (*inc_use)(struct i2c_adapter *);
 	void (*dec_use)(struct i2c_adapter *);
 
@@ -279,20 +281,20 @@ struct i2c_adapter {
 
 /*flags for the driver struct: */
 #define I2C_DF_NOTIFY	0x01		/* notify on bus (de/a)ttaches 	*/
-#define I2C_DF_DUMMY    0x02    	/* do not connect any clients */
+#define I2C_DF_DUMMY	0x02		/* do not connect any clients */
 
 /* i2c_client_address_data is the struct for holding default client
  * addresses for a driver and for the parameters supplied on the
  * command line
  */
 struct i2c_client_address_data {
-  unsigned short *normal_i2c;
-  unsigned short *normal_i2c_range;
-  unsigned short *probe;
-  unsigned short *probe_range;
-  unsigned short *ignore;
-  unsigned short *ignore_range;
-  unsigned short *force;
+	unsigned short *normal_i2c;
+	unsigned short *normal_i2c_range;
+	unsigned short *probe;
+	unsigned short *probe_range;
+	unsigned short *ignore;
+	unsigned short *ignore_range;
+	unsigned short *force;
 };
 
 /* Internal numbers to terminate lists */
@@ -361,20 +363,21 @@ extern int i2c_check_functionality (struct i2c_adapter *adap, u32 func);
 
 /* To determine what functionality is present */
 
-#define I2C_FUNC_I2C                    0x00000001
-#define I2C_FUNC_10BIT_ADDR             0x00000002
-#define I2C_FUNC_SMBUS_QUICK            0x00010000 
-#define I2C_FUNC_SMBUS_READ_BYTE        0x00020000 
-#define I2C_FUNC_SMBUS_WRITE_BYTE       0x00040000 
-#define I2C_FUNC_SMBUS_READ_BYTE_DATA   0x00080000 
-#define I2C_FUNC_SMBUS_WRITE_BYTE_DATA  0x00100000 
-#define I2C_FUNC_SMBUS_READ_WORD_DATA   0x00200000 
-#define I2C_FUNC_SMBUS_WRITE_WORD_DATA  0x00400000 
-#define I2C_FUNC_SMBUS_PROC_CALL        0x00800000 
-#define I2C_FUNC_SMBUS_READ_BLOCK_DATA  0x01000000 
+#define I2C_FUNC_I2C			0x00000001
+#define I2C_FUNC_10BIT_ADDR		0x00000002
+#define I2C_FUNC_PROTOCOL_MANGLING	0x00000004 /* I2C_M_{REV_DIR_ADDR,NOSTART} */
+#define I2C_FUNC_SMBUS_QUICK		0x00010000 
+#define I2C_FUNC_SMBUS_READ_BYTE	0x00020000 
+#define I2C_FUNC_SMBUS_WRITE_BYTE	0x00040000 
+#define I2C_FUNC_SMBUS_READ_BYTE_DATA	0x00080000 
+#define I2C_FUNC_SMBUS_WRITE_BYTE_DATA	0x00100000 
+#define I2C_FUNC_SMBUS_READ_WORD_DATA	0x00200000 
+#define I2C_FUNC_SMBUS_WRITE_WORD_DATA	0x00400000 
+#define I2C_FUNC_SMBUS_PROC_CALL	0x00800000 
+#define I2C_FUNC_SMBUS_READ_BLOCK_DATA	0x01000000 
 #define I2C_FUNC_SMBUS_WRITE_BLOCK_DATA 0x02000000 
-#define I2C_FUNC_SMBUS_READ_I2C_BLOCK   0x04000000 /* New I2C-like block */
-#define I2C_FUNC_SMBUS_WRITE_I2C_BLOCK  0x08000000 /* transfers          */
+#define I2C_FUNC_SMBUS_READ_I2C_BLOCK	0x04000000 /* New I2C-like block */
+#define I2C_FUNC_SMBUS_WRITE_I2C_BLOCK	0x08000000 /* transfer */
 
 #define I2C_FUNC_SMBUS_BYTE I2C_FUNC_SMBUS_READ_BYTE | \
                             I2C_FUNC_SMBUS_WRITE_BYTE
@@ -398,23 +401,23 @@ extern int i2c_check_functionality (struct i2c_adapter *adap, u32 func);
  * Data for SMBus Messages 
  */
 union i2c_smbus_data {
-        __u8 byte;
-        __u16 word;
-        __u8 block[33]; /* block[0] is used for length */
+	__u8 byte;
+	__u16 word;
+	__u8 block[33]; /* block[0] is used for length */
 };
 
 /* smbus_access read or write markers */
-#define I2C_SMBUS_READ      1
-#define I2C_SMBUS_WRITE     0
+#define I2C_SMBUS_READ	1
+#define I2C_SMBUS_WRITE	0
 
 /* SMBus transaction types (size parameter in the above functions) 
    Note: these no longer correspond to the (arbitrary) PIIX4 internal codes! */
-#define I2C_SMBUS_QUICK      0
-#define I2C_SMBUS_BYTE       1
-#define I2C_SMBUS_BYTE_DATA  2 
-#define I2C_SMBUS_WORD_DATA  3
-#define I2C_SMBUS_PROC_CALL  4
-#define I2C_SMBUS_BLOCK_DATA 5
+#define I2C_SMBUS_QUICK		0
+#define I2C_SMBUS_BYTE		1
+#define I2C_SMBUS_BYTE_DATA	2 
+#define I2C_SMBUS_WORD_DATA	3
+#define I2C_SMBUS_PROC_CALL	4
+#define I2C_SMBUS_BLOCK_DATA	5
 
 
 /* ----- commands for the ioctl like i2c_command call:
@@ -423,7 +426,7 @@ union i2c_smbus_data {
  *	corresponding header files.
  */
 				/* -> bit-adapter specific ioctls	*/
-#define I2C_RETRIES	0x0701  /* number times a device adress should  */
+#define I2C_RETRIES	0x0701	/* number times a device adress should	*/
 				/* be polled when not acknowledging 	*/
 #define I2C_TIMEOUT	0x0702	/* set timeout - call with int 		*/
 
@@ -433,11 +436,11 @@ union i2c_smbus_data {
 				/* Attn.: Slave address is 7 or 10 bits */
 #define I2C_SLAVE_FORCE	0x0706	/* Change slave address			*/
 				/* Attn.: Slave address is 7 or 10 bits */
-                                /* This changes the address, even if it */
-                                /* is already taken!                    */
-#define I2C_TENBIT	0x0704	/* 0 for 7 bit addrs, != 0 for 10 bit   */
+				/* This changes the address, even if it */
+				/* is already taken!			*/
+#define I2C_TENBIT	0x0704	/* 0 for 7 bit addrs, != 0 for 10 bit	*/
 
-#define I2C_FUNCS       0x0705  /* Get the adapter functionality */
+#define I2C_FUNCS	0x0705	/* Get the adapter functionality */
 #if 0
 #define I2C_ACK_TEST	0x0710	/* See if a slave is at a specific adress */
 #endif
@@ -445,7 +448,7 @@ union i2c_smbus_data {
 #define I2C_SMBUS	0x0720	/* SMBus-level access */
 
 /* ... algo-bit.c recognizes */
-#define I2C_UDELAY	0x0705  /* set delay in microsecs between each  */
+#define I2C_UDELAY	0x0705	/* set delay in microsecs between each	*/
 				/* written byte (except address)	*/
 #define I2C_MDELAY	0x0706	/* millisec delay between written bytes */
 

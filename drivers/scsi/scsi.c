@@ -147,7 +147,7 @@ extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
 
 
 /*
- * Function:    scsi_get_request_handler()
+ * Function:    scsi_initialize_queue()
  *
  * Purpose:     Selects queue handler function for a device.
  *
@@ -165,20 +165,17 @@ extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
  *              For this case, we have a special handler function, which
  *              does some checks and ultimately calls scsi_request_fn.
  *
- *              As a future enhancement, it might be worthwhile to add support
- *              for stacked handlers - there might get to be too many permutations
- *              otherwise.  Then again, we might just have one handler that does
- *              all of the special cases (a little bit slower), and those devices
- *              that don't need the special case code would directly call 
- *              scsi_request_fn.
+ *              The single_lun feature is a similar special case.
  *
- *              As it stands, I can think of a number of special cases that
- *              we might need to handle.  This would not only include the blocked
- *              case, but single_lun (for changers), and any special handling
- *              we might need for a spun-down disk to spin it back up again.
+ *              We handle these things by stacking the handlers.  The
+ *              special case handlers simply check a few conditions,
+ *              and return if they are not supposed to do anything.
+ *              In the event that things are OK, then they call the next
+ *              handler in the list - ultimately they call scsi_request_fn
+ *              to do the dirty deed.
  */
-request_fn_proc * scsi_get_request_handler(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt) {
-        return scsi_request_fn;
+void  scsi_initialize_queue(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt) {
+	blk_init_queue(&SDpnt->request_queue, scsi_request_fn);
 }
 
 #ifdef MODULE
@@ -530,7 +527,7 @@ int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt)
 #endif
 	struct Scsi_Host *host;
 	int rtn = 0;
-	unsigned long flags;
+	unsigned long flags = 0;
 	unsigned long timeout;
 
 	ASSERT_LOCK(&io_request_lock, 0);
@@ -1075,45 +1072,46 @@ static void scsi_unregister_host(Scsi_Host_Template *);
 
 int scsi_loadable_module_flag;	/* Set after we scan builtin drivers */
 
-void *scsi_init_malloc(unsigned int size, int gfp_mask)
+/*
+ * Function:    scsi_release_commandblocks()
+ *
+ * Purpose:     Release command blocks associated with a device.
+ *
+ * Arguments:   SDpnt   - device
+ *
+ * Returns:     Nothing
+ *
+ * Lock status: No locking assumed or required.
+ *
+ * Notes:
+ */
+void scsi_release_commandblocks(Scsi_Device * SDpnt)
 {
-	void *retval;
+	Scsi_Cmnd *SCpnt;
+	unsigned long flags;
 
-	/*
-	 * For buffers used by the DMA pool, we assume page aligned 
-	 * structures.
-	 */
-	if ((size % PAGE_SIZE) == 0) {
-		int order, a_size;
-		for (order = 0, a_size = PAGE_SIZE;
-		     a_size < size; order++, a_size <<= 1);
-		retval = (void *) __get_free_pages(gfp_mask | GFP_DMA, order);
-	} else
-		retval = kmalloc(size, gfp_mask);
-
-	if (retval)
-		memset(retval, 0, size);
-	return retval;
+	spin_lock_irqsave(&device_request_lock, flags);
+	for (SCpnt = SDpnt->device_queue; SCpnt; SCpnt = SCpnt->next) {
+		SDpnt->device_queue = SCpnt->next;
+		kfree((char *) SCpnt);
+	}
+	SDpnt->has_cmdblocks = 0;
+	spin_unlock_irqrestore(&device_request_lock, flags);
 }
 
-
-void scsi_init_free(char *ptr, unsigned int size)
-{
-	/*
-	 * We need this special code here because the DMA pool assumes
-	 * page aligned data.  Besides, it is wasteful to allocate
-	 * page sized chunks with kmalloc.
-	 */
-	if ((size % PAGE_SIZE) == 0) {
-		int order, a_size;
-
-		for (order = 0, a_size = PAGE_SIZE;
-		     a_size < size; order++, a_size <<= 1);
-		free_pages((unsigned long) ptr, order);
-	} else
-		kfree(ptr);
-}
-
+/*
+ * Function:    scsi_build_commandblocks()
+ *
+ * Purpose:     Allocate command blocks associated with a device.
+ *
+ * Arguments:   SDpnt   - device
+ *
+ * Returns:     Nothing
+ *
+ * Lock status: No locking assumed or required.
+ *
+ * Notes:
+ */
 void scsi_build_commandblocks(Scsi_Device * SDpnt)
 {
 	unsigned long flags;
@@ -1129,9 +1127,10 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 
 	for (j = 0; j < SDpnt->queue_depth; j++) {
 		SCpnt = (Scsi_Cmnd *)
-		    scsi_init_malloc(sizeof(Scsi_Cmnd),
+		    kmalloc(sizeof(Scsi_Cmnd),
 				     GFP_ATOMIC |
 				(host->unchecked_isa_dma ? GFP_DMA : 0));
+		memset(SCpnt, 0, sizeof(Scsi_Cmnd));
 		if (NULL == SCpnt)
 			break;	/* If not, the next line will oops ... */
 		memset(&SCpnt->eh_timeout, 0, sizeof(SCpnt->eh_timeout));
@@ -1323,7 +1322,6 @@ stop_output:
 static int proc_scsi_gen_write(struct file * file, const char * buf,
                               unsigned long length, void *data)
 {
-	Scsi_Cmnd *SCpnt;
 	struct Scsi_Device_Template *SDTpnt;
 	Scsi_Device *scd;
 	struct Scsi_Host *HBA_ptr;
@@ -1537,10 +1535,8 @@ static int proc_scsi_gen_write(struct file * file, const char * buf,
 			 * Nobody is using this device any more.
 			 * Free all of the command structures.
 			 */
-			for (SCpnt = scd->device_queue; SCpnt; SCpnt = SCpnt->next) {
-				scd->device_queue = SCpnt->next;
-				scsi_init_free((char *) SCpnt, sizeof(*SCpnt));
-			}
+			scsi_release_commandblocks(scd);
+
 			/* Now we can remove the device structure */
 			if (scd->next != NULL)
 				scd->next->prev = scd->prev;
@@ -1552,7 +1548,7 @@ static int proc_scsi_gen_write(struct file * file, const char * buf,
 				HBA_ptr->host_queue = scd->next;
 			}
 			blk_cleanup_queue(&scd->request_queue);
-			scsi_init_free((char *) scd, sizeof(Scsi_Device));
+			kfree((char *) scd);
 		} else {
 			goto out;
 		}
@@ -1865,17 +1861,12 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 		}
 		for (SDpnt = shpnt->host_queue; SDpnt;
 		     SDpnt = shpnt->host_queue) {
-			while (SDpnt->device_queue) {
-				SCpnt = SDpnt->device_queue->next;
-				scsi_init_free((char *) SDpnt->device_queue, sizeof(Scsi_Cmnd));
-				SDpnt->device_queue = SCpnt;
-			}
-			SDpnt->has_cmdblocks = 0;
+			scsi_release_commandblocks(SDpnt);
 
 			blk_cleanup_queue(&SDpnt->request_queue);
 			/* Next free up the Scsi_Device structures for this host */
 			shpnt->host_queue = SDpnt->next;
-			scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
+			kfree((char *) SDpnt);
 
 		}
 	}
@@ -2023,7 +2014,6 @@ static int scsi_register_device_module(struct Scsi_Device_Template *tpnt)
 static int scsi_unregister_device(struct Scsi_Device_Template *tpnt)
 {
 	Scsi_Device *SDpnt;
-	Scsi_Cmnd *SCpnt;
 	struct Scsi_Host *shpnt;
 	struct Scsi_Device_Template *spnt;
 	struct Scsi_Device_Template *prev_spnt;
@@ -2050,13 +2040,7 @@ static int scsi_unregister_device(struct Scsi_Device_Template *tpnt)
 				 * Nobody is using this device any more.  Free all of the
 				 * command structures.
 				 */
-				for (SCpnt = SDpnt->device_queue; SCpnt;
-				     SCpnt = SCpnt->next) {
-					if (SCpnt == SDpnt->device_queue)
-						SDpnt->device_queue = SCpnt->next;
-					scsi_init_free((char *) SCpnt, sizeof(*SCpnt));
-				}
-				SDpnt->has_cmdblocks = 0;
+				scsi_release_commandblocks(SDpnt);
 			}
 		}
 	}
@@ -2309,7 +2293,7 @@ void cleanup_module(void)
 Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt)
 {
         Scsi_Device * SDpnt;
-        Scsi_Cmnd   * SCpnt;
+
         /*
          * Attach a single Scsi_Device to the Scsi_Host - this should
          * be made to look like a "pseudo-device" that points to the
@@ -2330,18 +2314,9 @@ Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt)
         SDpnt->type = -1;
         SDpnt->queue_depth = 1;
         
-        SCpnt = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
-        memset(SCpnt, 0, sizeof(Scsi_Cmnd));
-        SCpnt->host = SHpnt;
-        SCpnt->device = SDpnt;
-        SCpnt->target = SDpnt->id;
-        SCpnt->state = SCSI_STATE_UNUSED;
-        SCpnt->owner = SCSI_OWNER_NOBODY;
-        SCpnt->request.rq_status = RQ_INACTIVE;
+	scsi_build_commandblocks(SDpnt);
 
-        SDpnt->device_queue = SCpnt;
-
-        blk_init_queue(&SDpnt->request_queue, scsi_get_request_handler(SDpnt, SDpnt->host));
+	scsi_initialize_queue(SDpnt, SHpnt);
         blk_queue_headactive(&SDpnt->request_queue, 0);
         SDpnt->request_queue.queuedata = (void *) SDpnt;
 
@@ -2380,7 +2355,7 @@ void scsi_free_host_dev(Scsi_Device * SDpnt)
          * We only have a single SCpnt attached to this device.  Free
          * it now.
          */
-        kfree(SDpnt->device_queue);
+	scsi_release_commandblocks(SDpnt);
         kfree(SDpnt);
 }
 

@@ -852,20 +852,17 @@ extern inline void mark_buffer_protected(struct buffer_head * bh)
 }
 
 extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
+extern void FASTCALL(mark_buffer_dirty(struct buffer_head *bh, int flag));
 
 #define atomic_set_buffer_dirty(bh) test_and_set_bit(BH_Dirty, &(bh)->b_state)
-
-extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
-{
-	if (!atomic_set_buffer_dirty(bh))
-		__mark_buffer_dirty(bh, flag);
-}
 
 extern void balance_dirty(kdev_t);
 extern int check_disk_change(kdev_t);
 extern int invalidate_inodes(struct super_block *);
 extern void invalidate_inode_pages(struct inode *);
-extern void invalidate_buffers(kdev_t);
+#define invalidate_buffers(dev)	__invalidate_buffers((dev), 0)
+#define destroy_buffers(dev)	__invalidate_buffers((dev), 1)
+extern void __invalidate_buffers(kdev_t dev, int);
 extern int floppy_is_wp(int);
 extern void sync_inodes(kdev_t);
 extern void write_inode_now(struct inode *);

@@ -151,6 +151,7 @@ EXPORT_SYMBOL(d_instantiate);
 EXPORT_SYMBOL(d_alloc);
 EXPORT_SYMBOL(d_lookup);
 EXPORT_SYMBOL(d_path);
+EXPORT_SYMBOL(mark_buffer_dirty);
 EXPORT_SYMBOL(__mark_buffer_dirty);
 EXPORT_SYMBOL(__mark_inode_dirty);
 EXPORT_SYMBOL(free_kiovec);
@@ -163,7 +164,7 @@ EXPORT_SYMBOL(filp_close);
 EXPORT_SYMBOL(put_filp);
 EXPORT_SYMBOL(files_lock);
 EXPORT_SYMBOL(check_disk_change);
-EXPORT_SYMBOL(invalidate_buffers);
+EXPORT_SYMBOL(__invalidate_buffers);
 EXPORT_SYMBOL(invalidate_inodes);
 EXPORT_SYMBOL(invalidate_inode_pages);
 EXPORT_SYMBOL(truncate_inode_pages);
@@ -315,12 +316,11 @@ EXPORT_SYMBOL(request_irq);
 EXPORT_SYMBOL(free_irq);
 EXPORT_SYMBOL(probe_irq_on);
 EXPORT_SYMBOL(probe_irq_off);
-EXPORT_SYMBOL(bh_active);
-EXPORT_SYMBOL(bh_mask);
-EXPORT_SYMBOL(bh_mask_count);
-EXPORT_SYMBOL(bh_base);
 EXPORT_SYMBOL(add_timer);
 EXPORT_SYMBOL(del_timer);
+#ifdef __SMP__
+EXPORT_SYMBOL(del_timer_sync);
+#endif
 EXPORT_SYMBOL(mod_timer);
 EXPORT_SYMBOL(tq_timer);
 EXPORT_SYMBOL(tq_immediate);
@@ -457,5 +457,12 @@ EXPORT_SYMBOL(get_fast_time);
 /* library functions */
 EXPORT_SYMBOL(strnicmp);
 
+/* software interrupts */
+EXPORT_SYMBOL(tasklet_hi_vec);
+EXPORT_SYMBOL(bh_task_vec);
+EXPORT_SYMBOL(init_bh);
+EXPORT_SYMBOL(remove_bh);
+
 /* init task, for moving kthread roots - ought to export a function ?? */
+
 EXPORT_SYMBOL(init_task_union);

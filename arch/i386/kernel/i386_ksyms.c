@@ -44,8 +44,6 @@ EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL(__io_virt_debug);
-EXPORT_SYMBOL(local_bh_count);
-EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
@@ -107,11 +105,7 @@ EXPORT_SYMBOL_NOVERS(__read_lock_failed);
 
 /* Global SMP irq stuff */
 EXPORT_SYMBOL(synchronize_irq);
-EXPORT_SYMBOL(synchronize_bh);
-EXPORT_SYMBOL(global_bh_count);
-EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_holder);
-EXPORT_SYMBOL(i386_bh_lock);
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);
@@ -142,3 +136,7 @@ EXPORT_SYMBOL(screen_info);
 #endif
 
 EXPORT_SYMBOL(get_wchan);
+
+
+EXPORT_SYMBOL(local_bh_count); 
+EXPORT_SYMBOL(local_irq_count); 

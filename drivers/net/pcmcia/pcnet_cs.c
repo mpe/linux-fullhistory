@@ -315,7 +315,8 @@ static dev_link_t *pcnet_attach(void)
     dev->open = &pcnet_open;
     dev->stop = &pcnet_close;
     dev->set_config = &set_config;
-    dev->tbusy = 1;
+
+    netif_stop_queue(dev);
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -681,7 +682,7 @@ static void pcnet_config(dev_link_t *link)
     } else {
 	dev->if_port = 0;
     }
-    dev->tbusy = 0;
+    netif_start_queue(dev);
     if (register_netdev(dev) != 0) {
 	printk(KERN_NOTICE "pcnet_cs: register_netdev() failed\n");
 	goto failed;
@@ -806,7 +807,8 @@ static int pcnet_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
-	    info->dev.tbusy = 1; info->dev.start = 0;
+	    netif_stop_queue(&info->dev);
+	    clear_bit(LINK_STATE_START, &info->dev.state);
 	    link->release.expires = jiffies + HZ/20;
 	    link->state |= DEV_RELEASE_PENDING;
 	    add_timer(&link->release);
@@ -822,7 +824,8 @@ static int pcnet_event(event_t event, int priority,
     case CS_EVENT_RESET_PHYSICAL:
 	if (link->state & DEV_CONFIG) {
 	    if (link->open) {
-		info->dev.tbusy = 1; info->dev.start = 0;
+		netif_stop_queue(&info->dev);
+		clear_bit(LINK_STATE_START, &info->dev);
 	    }
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
@@ -836,7 +839,8 @@ static int pcnet_event(event_t event, int priority,
 	    if (link->open) {
 		pcnet_reset_8390(&info->dev);
 		NS8390_init(&info->dev, 1);
-		info->dev.tbusy = 0; info->dev.start = 1;
+		netif_start_queue(&info->dev);
+		set_bit(LINK_STATE_START, &info->dev);
 	    }
 	}
 	break;
@@ -903,7 +907,8 @@ static int pcnet_close(struct net_device *dev)
 
     free_irq(dev->irq, dev);
     
-    link->open--; dev->start = 0;
+    link->open--;
+    clear_bit(LINK_STATE_START, &dev->state);
     del_timer(&info->watchdog);
     if (link->state & DEV_STALE_CONFIG) {
 	link->release.expires = jiffies + HZ/20;
@@ -979,7 +984,8 @@ static void ei_watchdog(u_long arg)
     struct net_device *dev = &info->dev;
     ioaddr_t nic_base = dev->base_addr;
 
-    if (dev->start == 0) goto reschedule;
+    if (!test_bit(LINK_STATE_START, &dev->state))
+	    goto reschedule;
 
     /* Check for pending interrupt with expired latency timer: with
        this, we can limp along even if the interrupt is blocked */
@@ -1023,9 +1029,8 @@ static void dma_get_8390_hdr(struct net_device *dev,
 
     if (ei_status.dmaing) {
 	printk(KERN_NOTICE "%s: DMAing conflict in dma_block_input."
-	       "[DMAstat:%1x][irqlock:%1x][intr:%ld]\n",
-	       dev->name, ei_status.dmaing, ei_status.irqlock,
-	       (long)dev->interrupt);
+	       "[DMAstat:%1x][irqlock:%1x]\n",
+	       dev->name, ei_status.dmaing, ei_status.irqlock);
 	return;
     }
     
@@ -1061,9 +1066,8 @@ static void dma_block_input(struct net_device *dev, int count,
 #endif
     if (ei_status.dmaing) {
 	printk(KERN_NOTICE "%s: DMAing conflict in dma_block_input."
-	       "[DMAstat:%1x][irqlock:%1x][intr:%ld]\n",
-	       dev->name, ei_status.dmaing, ei_status.irqlock,
-	       (long)dev->interrupt);
+	       "[DMAstat:%1x][irqlock:%1x]\n",
+	       dev->name, ei_status.dmaing, ei_status.irqlock);
 	return;
     }
     ei_status.dmaing |= 0x01;
@@ -1127,9 +1131,8 @@ static void dma_block_output(struct net_device *dev, int count,
 	count++;
     if (ei_status.dmaing) {
 	printk(KERN_NOTICE "%s: DMAing conflict in dma_block_output."
-	       "[DMAstat:%1x][irqlock:%1x][intr:%ld]\n",
-	       dev->name, ei_status.dmaing, ei_status.irqlock,
-	       (long)dev->interrupt);
+	       "[DMAstat:%1x][irqlock:%1x]\n",
+	       dev->name, ei_status.dmaing, ei_status.irqlock);
 	return;
     }
     ei_status.dmaing |= 0x01;

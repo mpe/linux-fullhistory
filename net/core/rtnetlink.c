@@ -171,6 +171,11 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 	r->ifi_flags = dev->flags;
 	r->ifi_change = change;
 
+	if (test_bit(LINK_STATE_DOWN, &dev->state))
+		r->ifi_flags &= ~IFF_RUNNING;
+	else
+		r->ifi_flags |= IFF_RUNNING;
+
 	RTA_PUT(skb, IFLA_IFNAME, strlen(dev->name)+1, dev->name);
 	if (dev->addr_len) {
 		RTA_PUT(skb, IFLA_ADDRESS, dev->addr_len, dev->dev_addr);
@@ -186,6 +191,8 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 		RTA_PUT(skb, IFLA_QDISC,
 			strlen(dev->qdisc_sleeping->ops->id) + 1,
 			dev->qdisc_sleeping->ops->id);
+	if (dev->master)
+		RTA_PUT(skb, IFLA_MASTER, sizeof(int), &dev->master->ifindex);
 	if (dev->get_stats) {
 		struct net_device_stats *stats = dev->get_stats(dev);
 		if (stats)
@@ -243,7 +250,7 @@ int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
-void rtmsg_ifinfo(int type, struct net_device *dev)
+void rtmsg_ifinfo(int type, struct net_device *dev, unsigned change)
 {
 	struct sk_buff *skb;
 	int size = NLMSG_GOODSIZE;
@@ -252,7 +259,7 @@ void rtmsg_ifinfo(int type, struct net_device *dev)
 	if (!skb)
 		return;
 
-	if (rtnetlink_fill_ifinfo(skb, dev, type, 0, 0, ~0U) < 0) {
+	if (rtnetlink_fill_ifinfo(skb, dev, type, 0, 0, change) < 0) {
 		kfree_skb(skb);
 		return;
 	}
@@ -488,10 +495,20 @@ static int rtnetlink_event(struct notifier_block *this, unsigned long event, voi
 	struct net_device *dev = ptr;
 	switch (event) {
 	case NETDEV_UNREGISTER:
-		rtmsg_ifinfo(RTM_DELLINK, dev);
+		rtmsg_ifinfo(RTM_DELLINK, dev, ~0U);
+		break;
+	case NETDEV_REGISTER:
+		rtmsg_ifinfo(RTM_NEWLINK, dev, ~0U);
+		break;
+	case NETDEV_UP:
+	case NETDEV_DOWN:
+		rtmsg_ifinfo(RTM_NEWLINK, dev, IFF_UP|IFF_RUNNING);
+		break;
+	case NETDEV_CHANGE:
+	case NETDEV_GOING_DOWN:
 		break;
 	default:
-		rtmsg_ifinfo(RTM_NEWLINK, dev);
+		rtmsg_ifinfo(RTM_NEWLINK, dev, 0);
 		break;
 	}
 	return NOTIFY_DONE;

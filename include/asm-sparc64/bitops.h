@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.26 1999/01/07 14:14:15 jj Exp $
+/* $Id: bitops.h,v 1.27 2000/02/09 03:28:33 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -20,7 +20,7 @@
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void *addr)
+extern __inline__ int test_and_set_bit(unsigned long nr, void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 	unsigned long oldbit;
@@ -60,7 +60,7 @@ extern __inline__ void set_bit(unsigned long nr, void *addr)
 	: "g5", "g7", "cc", "memory");
 }
 
-extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void *addr)
+extern __inline__ int test_and_clear_bit(unsigned long nr, void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 	unsigned long oldbit;
@@ -100,7 +100,7 @@ extern __inline__ void clear_bit(unsigned long nr, void *addr)
 	: "g5", "g7", "cc", "memory");
 }
 
-extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void *addr)
+extern __inline__ int test_and_change_bit(unsigned long nr, void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 	unsigned long oldbit;
@@ -135,9 +135,9 @@ extern __inline__ void change_bit(unsigned long nr, void *addr)
 	: "g5", "g7", "cc", "memory");
 }
 
-extern __inline__ unsigned long test_bit(int nr, __const__ void *addr)
+extern __inline__ int test_bit(int nr, __const__ void *addr)
 {
-	return 1UL & (((__const__ long *) addr)[nr >> 6] >> (nr & 63));
+	return (1UL & (((__const__ long *) addr)[nr >> 6] >> (nr & 63))) != 0UL;
 }
 
 /* The easy/cheese version for now. */

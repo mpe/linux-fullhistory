@@ -199,30 +199,17 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 		goto send_now;
 
 	/*
-	 * The only heuristics - we use the tsk->avg_slice value
-	 * to detect 'frequent reschedulers'.
-	 *
-	 * If both the woken-up process and the preferred CPU is
-	 * is a frequent rescheduler, then skip the asynchronous
-	 * wakeup, the frequent rescheduler will likely chose this
-	 * task during it's next schedule():
-	 */
-	if (p->policy == SCHED_OTHER) {
-		tsk = cpu_curr(best_cpu);
-		if (p->avg_slice + tsk->avg_slice < cacheflush_time)
-			goto out_no_target;
-	}
-
-	/*
 	 * We know that the preferred CPU has a cache-affine current
 	 * process, lets try to find a new idle CPU for the woken-up
 	 * process:
 	 */
-	for (i = 0; i < smp_num_cpus; i++) {
+	for (i = smp_num_cpus - 1; i >= 0; i--) {
 		cpu = cpu_logical_map(i);
+		if (cpu == best_cpu)
+			continue;
 		tsk = cpu_curr(cpu);
 		/*
-		 * We use the first available idle CPU. This creates
+		 * We use the last available idle CPU. This creates
 		 * a priority list between idle CPUs, but this is not
 		 * a problem.
 		 */
@@ -232,26 +219,32 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 
 	/*
 	 * No CPU is idle, but maybe this process has enough priority
-	 * to preempt it's preferred CPU. (this is a shortcut):
+	 * to preempt it's preferred CPU.
 	 */
 	tsk = cpu_curr(best_cpu);
 	if (preemption_goodness(tsk, p, best_cpu) > 0)
 		goto send_now;
 
 	/*
-	 * We should get here rarely - or in the high CPU contention
+	 * We will get here often - or in the high CPU contention
 	 * case. No CPU is idle and this process is either lowprio or
-	 * the preferred CPU is highprio. Maybe some other CPU can/must
-	 * be preempted:
+	 * the preferred CPU is highprio. Try to preemt some other CPU
+	 * only if it's RT or if it's iteractive and the preferred
+	 * cpu won't reschedule shortly.
 	 */
-	for (i = 0; i < smp_num_cpus; i++) {
-		cpu = cpu_logical_map(i);
-		tsk = cpu_curr(cpu);
-		if (preemption_goodness(tsk, p, cpu) > 0)
-			goto send_now;
+	if ((p->avg_slice < cacheflush_time && cpu_curr(best_cpu)->avg_slice > cacheflush_time) ||
+	    p->policy != SCHED_OTHER)
+	{
+		for (i = smp_num_cpus - 1; i >= 0; i--) {
+			cpu = cpu_logical_map(i);
+			if (cpu == best_cpu)
+				continue;
+			tsk = cpu_curr(cpu);
+			if (preemption_goodness(tsk, p, cpu) > 0)
+				goto send_now;
+		}
 	}
 
-out_no_target:
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 		
@@ -397,6 +390,9 @@ signed long schedule_timeout(signed long timeout)
 	add_timer(&timer);
 	schedule();
 	del_timer(&timer);
+	/* RED-PEN. Timer may be running now on another cpu.
+	 * Pray that process will not exit enough fastly.
+	 */
 
 	timeout = expire - jiffies;
 
@@ -460,9 +456,9 @@ tq_scheduler_back:
 	release_kernel_lock(prev, this_cpu);
 
 	/* Do "administrative" work here while we don't hold any locks */
-	if (bh_mask & bh_active)
-		goto handle_bh;
-handle_bh_back:
+	if (softirq_state[this_cpu].active & softirq_state[this_cpu].mask)
+		goto handle_softirq;
+handle_softirq_back:
 
 	/*
 	 * 'sched_data' is protected by the fact that we can run
@@ -621,9 +617,9 @@ still_running:
 	next = prev;
 	goto still_running_back;
 
-handle_bh:
-	do_bottom_half();
-	goto handle_bh_back;
+handle_softirq:
+	do_softirq();
+	goto handle_softirq_back;
 
 handle_tq_scheduler:
 	run_task_queue(&tq_scheduler);
@@ -1187,4 +1183,3 @@ void __init sched_init(void)
 	atomic_inc(&init_mm.mm_count);
 	enter_lazy_tlb(&init_mm, current, cpu);
 }
-

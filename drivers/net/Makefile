@@ -248,6 +248,7 @@ obj-$(CONFIG_MACSONIC) += macsonic.o
 obj-$(CONFIG_MACMACE) += macmace.o
 obj-$(CONFIG_MAC89x0) += mac89x0.o
 obj-$(CONFIG_BMAC) += bmac.o
+obj-$(CONFIG_GMAC) += gmac.o
 obj-$(CONFIG_NCR885E) += ncr885e.o
 obj-$(CONFIG_ADAPTEC_STARFIRE) += starfire.o
 obj-$(CONFIG_OAKNET) += oaknet.o 8390.o

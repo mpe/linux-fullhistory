@@ -804,10 +804,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				 * When we actually do the console switch,
 				 * make sure we are atomic with respect to
 				 * other console switches..
+				 *
+				 * Damn! Was it difficult to make this clean?
 				 */
-				start_bh_atomic();
+				disable_bh(CONSOLE_BH);
 				complete_change_console(newvt);
-				end_bh_atomic();
+				enable_bh(CONSOLE_BH);
 			}
 		}
 

@@ -722,7 +722,7 @@ again:
 		return -EBUSY;
 
 	while (*(void **)lock)
-		schedule();
+		barrier();
 	goto again;
 }
 

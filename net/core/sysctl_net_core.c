@@ -23,6 +23,7 @@ extern __u32 sysctl_rmem_default;
 
 extern int sysctl_core_destroy_delay;
 extern int sysctl_optmem_max;
+extern int sysctl_hot_list_len;
 
 ctl_table core_table[] = {
 #ifdef CONFIG_NET
@@ -54,6 +55,9 @@ ctl_table core_table[] = {
 	 &proc_dointvec_jiffies},
 	{NET_CORE_OPTMEM_MAX, "optmem_max",
 	 &sysctl_optmem_max, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_CORE_HOT_LIST_LENGTH, "hot_list_length",
+	 &sysctl_hot_list_len, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
 #endif /* CONFIG_NET */
 	{ 0 }

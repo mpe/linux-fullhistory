@@ -156,6 +156,16 @@ __start:
 	bl	fix_mem_constants
 #endif /* CONFIG_APUS */
 
+#ifndef CONFIG_GEMINI
+/* Switch MMU off, clear BATs and flush TLB. At this point, r3 contains
+ * the physical address we are running at, returned by prom_init()
+ */
+__after_prom_start:
+ 	bl	mmu_off
+	bl	clear_bats
+	bl	flush_tlbs
+#endif
+
 /*
  * Use the first pair of BAT registers to map the 1st 16MB
  * of RAM to KERNELBASE.  From this point on we can't safely
@@ -211,6 +221,11 @@ __start:
 	mtspr	DBAT0U,r11		/* bit in upper BAT register */
 	mtspr	IBAT0L,r8
 	mtspr	IBAT0U,r11
+#if 0 /* Useful debug code, please leave in for now so I don't have to
+       * look at docs when I need to setup a BAT ;
+       */
+	bl	setup_screen_bat
+#endif
 5:	isync
 
 #ifndef CONFIG_APUS
@@ -627,12 +642,8 @@ DataStoreTLBMiss:
 	mtcrf	0x80,r3
 	rfi	
 
-/* Instruction address breakpoint exception (on 603/604) */
 	STD_EXCEPTION(0x1300, Trap_13, InstructionBreakpoint)
-
-/* System management exception (603?) */
-	STD_EXCEPTION(0x1400, Trap_14, UnknownException)
-
+	STD_EXCEPTION(0x1400, SMI, SMIException)
 	STD_EXCEPTION(0x1500, Trap_15, UnknownException)
 	STD_EXCEPTION(0x1600, Trap_16, UnknownException)
 	STD_EXCEPTION(0x1700, Trap_17, TAUException)
@@ -644,10 +655,7 @@ DataStoreTLBMiss:
 	STD_EXCEPTION(0x1d00, Trap_1d, UnknownException)
 	STD_EXCEPTION(0x1e00, Trap_1e, UnknownException)
 	STD_EXCEPTION(0x1f00, Trap_1f, UnknownException)
-
-	/* Run mode exception */
 	STD_EXCEPTION(0x2000, RunMode, RunModeException)
-
 	STD_EXCEPTION(0x2100, Trap_21, UnknownException)
 	STD_EXCEPTION(0x2200, Trap_22, UnknownException)
 	STD_EXCEPTION(0x2300, Trap_23, UnknownException)
@@ -911,12 +919,16 @@ giveup_fpu:
  * the kernel image to physical address 0.
  */
 relocate_kernel:
+#if 0 /* Is this still needed ? I don't think so. It breaks new
+       *  boot-with-mmu-off stuff
+       */
 	lis	r9,0x426f		/* if booted from BootX, don't */
 	addi	r9,r9,0x6f58		/* translate source addr */
 	cmpw	r31,r9			/* (we have to on chrp) */
 	beq	7f
 	rlwinm	r4,r4,0,8,31		/* translate source address */
 	add	r4,r4,r3		/* to region mapped with BATs */
+#endif	
 7:	addis	r9,r26,klimit@ha	/* fetch klimit */
 	lwz	r25,klimit@l(r9)
 	addis	r25,r25,-KERNELBASE@h
@@ -1194,14 +1206,26 @@ enable_caches:
 	cmpi	0,r9,4			/* check for 604 */
 	cmpi	1,r9,9			/* or 604e */
 	cmpi	2,r9,10			/* or mach5 */
+	cmpi	3,r9,8			/* check for 750 (G3) */
+	cmpi	4,r9,12			/* or 7400 (G4) */
 	cror	2,2,6
 	cror	2,2,10
 	bne	4f
 	ori	r11,r11,HID0_SIED|HID0_BHTE /* for 604[e], enable */
 	bne	2,5f
 	ori	r11,r11,HID0_BTCD
+	b	5f
+4:
+	cror	14,14,18
+	bne	3,6f
+	/* We should add ABE here if we want to use Store Gathering
+	 * and other nifty bridge features
+	 */
+	ori	r11,r11,HID0_SGE|HID0_BHTE|HID0_BTIC /* for g3/g4, enable */
+ 	li	r3,0
+ 	mtspr	ICTC,r3
 5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
-4:	blr
+6:	blr
 
 /*
  * Load stuff into the MMU.  Intended to be called with
@@ -1388,6 +1412,45 @@ clear_bats:
 #endif /* !defined(CONFIG_GEMINI) */
 	blr
 
+#ifndef CONFIG_GEMINI
+flush_tlbs:
+	lis	r20, 0x1000
+1:	addic.	r20, r20, -0x1000
+	tlbie	r20
+	blt	1b
+	sync
+	blr
+
+mmu_off:
+ 	addi	r4, r3, __after_prom_start - _start
+	mfmsr	r3
+	andi.	r0,r3,MSR_DR|MSR_IR		/* MMU enabled? */
+	beq	1f
+	ori	r3,r3,MSR_DR|MSR_IR
+	xori	r3,r3,MSR_DR|MSR_IR
+	mtspr	SRR0,r4
+	mtspr	SRR1,r3
+	sync
+	rfi
+1:	blr
+#endif
+
+#if 0 /* That's useful debug stuff */
+setup_screen_bat:
+	lis	r3, 0x9100
+#ifdef __SMP__
+	ori	r3,r3,0x12
+#else
+	ori	r3,r3,0x2
+#endif
+	mtspr	DBAT1L, r3
+	mtspr	IBAT1L, r3
+	ori	r3,r3,(BL_8M<<2)|0x2	/* set up BAT registers for 604 */
+	mtspr	DBAT1U, r3
+	mtspr	IBAT1U, r3
+	blr
+#endif
+	
 /*
  * We put a few things here that have to be page-aligned.
  * This stuff goes at the beginning of the data segment,

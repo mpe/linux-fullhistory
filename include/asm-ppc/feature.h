@@ -8,12 +8,13 @@
  * for more details.
  *
  * Copyright (C) 1998 Paul Mackerras.
+ * 
  */
 #ifndef __ASM_PPC_FEATURE_H
 #define __ASM_PPC_FEATURE_H
 
 /*
- * The FCR bits for particular features vary somewhat between
+ * The FCR selector for particular features vary somewhat between
  * different machines.  So we abstract a list of features here
  * and let the feature_* routines map them to the actual bits.
  */
@@ -25,19 +26,23 @@ enum system_feature {
 	FEATURE_Serial_IO_B,
 	FEATURE_SWIM3_enable,
 	FEATURE_MESH_enable,
-	FEATURE_IDE_enable,
-	FEATURE_VIA_enable,
-	FEATURE_CD_power,
+	FEATURE_IDE0_enable,		/* Internal IDE */
+	FEATURE_IDE0_reset,		/* Internal IDE */
+	FEATURE_IOBUS_enable,		/* Internal IDE */
 	FEATURE_Mediabay_reset,
-	FEATURE_Mediabay_enable,
+	FEATURE_Mediabay_power,
 	FEATURE_Mediabay_PCI_enable,
-	FEATURE_Mediabay_IDE_enable,
+	FEATURE_Mediabay_IDE_enable,	/* Also IDE 1 */
+	FEATURE_Mediabay_IDE_reset,	/* Also IDE 1 */
 	FEATURE_Mediabay_floppy_enable,
 	FEATURE_BMac_reset,
 	FEATURE_BMac_IO_enable,
-	FEATURE_Modem_Reset,
-	FEATURE_IDE_DiskPower,
-	FEATURE_IDE_Reset,
+	FEATURE_Modem_power,
+	FEATURE_Slow_SCC_PCLK,
+	FEATURE_Sound_power,
+	FEATURE_Sound_CLK_enable,
+	FEATURE_IDE2_enable,
+	FEATURE_IDE2_reset,
 	FEATURE_last,
 };
 

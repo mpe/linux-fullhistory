@@ -434,11 +434,15 @@ enum
 	IFLA_QDISC,
 	IFLA_STATS,
 	IFLA_COST,
-	IFLA_PRIORITY
+#define IFLA_COST IFLA_COST
+	IFLA_PRIORITY,
+#define IFLA_PRIORITY IFLA_PRIORITY
+	IFLA_MASTER
+#define IFLA_MASTER IFLA_MASTER
 };
 
 
-#define IFLA_MAX IFLA_STATS
+#define IFLA_MAX IFLA_MASTER
 
 #define IFLA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ifinfomsg))))
 #define IFLA_PAYLOAD(n) NLMSG_PAYLOAD(n,sizeof(struct ifinfomsg))
@@ -464,7 +468,7 @@ enum
    IFF_BROADCAST devices are able to use multicasts too.
  */
 
-/* ifi_link.
+/* IFLA_LINK.
    For usual devices it is equal ifi_index.
    If it is a "virtual interface" (f.e. tunnel), ifi_link
    can point to real physical interface (f.e. for bandwidth calculations),
@@ -558,6 +562,13 @@ extern void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const voi
 #define RTA_PUT(skb, attrtype, attrlen, data) \
 ({ if (skb_tailroom(skb) < (int)RTA_SPACE(attrlen)) goto rtattr_failure; \
    __rta_fill(skb, attrtype, attrlen, data); })
+
+extern void rtmsg_ifinfo(int type, struct net_device *dev, unsigned change);
+
+#else
+
+#define rtmsg_ifinfo(a,b,c) do { } while (0)
+
 #endif
 
 extern struct semaphore rtnl_sem;

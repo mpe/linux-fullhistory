@@ -451,9 +451,8 @@ ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int rin
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 	if (ei_status.dmaing) {
 		printk("%s: DMAing conflict in ne2k_pci_get_8390_hdr "
-			   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
-			   dev->name, ei_status.dmaing, ei_status.irqlock,
-			   (int)dev->interrupt);
+			   "[DMAstat:%d][irqlock:%d].\n",
+			   dev->name, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 
@@ -490,9 +489,8 @@ ne2k_pci_block_input(struct net_device *dev, int count, struct sk_buff *skb, int
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 	if (ei_status.dmaing) {
 		printk("%s: DMAing conflict in ne2k_pci_block_input "
-			   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
-			   dev->name, ei_status.dmaing, ei_status.irqlock,
-			   (int)dev->interrupt);
+			   "[DMAstat:%d][irqlock:%d].\n",
+			   dev->name, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 	ei_status.dmaing |= 0x01;
@@ -543,9 +541,8 @@ ne2k_pci_block_output(struct net_device *dev, int count,
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 	if (ei_status.dmaing) {
 		printk("%s: DMAing conflict in ne2k_pci_block_output."
-			   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
-			   dev->name, ei_status.dmaing, ei_status.irqlock,
-			   (int)dev->interrupt);
+			   "[DMAstat:%d][irqlock:%d]\n",
+			   dev->name, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 	ei_status.dmaing |= 0x01;

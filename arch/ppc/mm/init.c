@@ -107,7 +107,6 @@ unsigned long *oak_find_end_of_memory(void);
 static void mapin_ram(void);
 void map_page(unsigned long va, unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
-extern void show_net_buffers(void);
 
 struct mem_pieces phys_mem;
 
@@ -281,9 +280,6 @@ void show_mem(void)
 	printk("%d pages swap cached\n",cached);
 	printk("%d pages in page table cache\n",(int)pgtable_cache_size);
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 	printk("%-8s %3s %8s %8s %8s %9s %8s", "Process", "Pid",
 	       "Ctx", "Ctx<<4", "Last Sys", "pc", "task");
 #ifdef __SMP__
@@ -643,7 +639,9 @@ void __init setbat(int index, unsigned long virt, unsigned long phys,
 		wimgxpp |= (flags & _PAGE_RW)? BPP_RW: BPP_RX;
 		bat[1].word[0] = virt | (bl << 2) | 2; /* Vs=1, Vp=0 */
 		bat[1].word[1] = phys | wimgxpp;
+#ifndef CONFIG_KGDB /* want user access for breakpoints */
 		if (flags & _PAGE_USER)
+#endif
 			bat[1].bat.batu.vp = 1;
 		if (flags & _PAGE_GUARDED) {
 			/* G bit must be zero in IBATs */
@@ -732,6 +730,10 @@ static void __init mapin_ram(void)
                          * don't get ASID compares on kernel space.
                          */
 			f = _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_SHARED;
+#ifdef CONFIG_KGDB
+ 			/* Allows stub to set breakpoints everywhere */
+ 			f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
+#else
 			if ((char *) v < _stext || (char *) v >= etext)
 				f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
 #ifndef CONFIG_8xx
@@ -740,6 +742,7 @@ static void __init mapin_ram(void)
 				   forces R/W kernel access */
 				f |= _PAGE_USER;
 #endif /* CONFIG_8xx */
+#endif /* CONFIG_KGDB */
 			map_page(v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
@@ -844,6 +847,8 @@ void free_initrd_mem(unsigned long start, unsigned long end)
 }
 #endif
 
+extern boot_infos_t *disp_bi;
+
 /*
  * Do very early mm setup such as finding the size of memory
  * and setting up the hash table.
@@ -855,25 +860,45 @@ void free_initrd_mem(unsigned long start, unsigned long end)
 void __init
 MMU_init(void)
 {
-	PPC4xx_tlb_pin(KERNELBASE, 0, TLB_PAGESZ(PAGESZ_16M), 1);
-	PPC4xx_tlb_pin(OAKNET_IO_BASE, OAKNET_IO_BASE, TLB_PAGESZ(PAGESZ_4K), 0);
-        end_of_DRAM = oak_find_end_of_memory();
-
-        /* Map in all of RAM starting at KERNELBASE */
-
-        mapin_ram();
-
-        /* Zone 0 - kernel (above 0x80000000), zone 1 - user */
+	/*
+	 * The Zone Protection Register (ZPR) defines how protection will
+	 * be applied to every page which is a member of a given zone. At
+	 * present, we utilize only two of the 4xx's zones. The first, zone
+	 * 0, is set at '00b and only allows access in supervisor-mode based
+	 * on the EX and WR bits. No user-mode access is allowed. The second,
+	 * zone 1, is set at '10b and in supervisor-mode allows access
+	 * without regard to the EX and WR bits. In user-mode, access is
+	 * allowed based on the EX and WR bits.
+	 */
 
         mtspr(SPRN_ZPR, 0x2aaaaaaa);
-        mtspr(SPRN_DCWR, 0x00000000);	/* all caching is write-back */
 
-        /* Cache 128MB of space starting at KERNELBASE. */
+	/* Hardwire any TLB entries necessary here. */
 
-        mtspr(SPRN_DCCR, 0x00000000);
-        /* flush_instruction_cache(); XXX */
-        mtspr(SPRN_ICCR, 0x00000000);
-        
+	PPC4xx_tlb_pin(KERNELBASE, 0, TLB_PAGESZ(PAGESZ_16M), 1);
+
+	/*
+	 * Find the top of physical memory and map all of it in starting
+	 * at KERNELBASE.
+	 */
+
+        end_of_DRAM = oak_find_end_of_memory();
+        mapin_ram();
+
+	/*
+	 * Set up the real-mode cache parameters for the exception vector
+	 * handlers (which are run in real-mode).
+	 */
+
+        mtspr(SPRN_DCWR, 0x00000000);	/* All caching is write-back */
+
+        /*
+	 * Cache instruction and data space where the exception
+	 * vectors and the kernel live in real-mode.
+	 */
+
+        mtspr(SPRN_DCCR, 0x80000000);	/* 128 MB of data space at 0x0. */
+        mtspr(SPRN_ICCR, 0x80000000);	/* 128 MB of instr. space at 0x0. */
 }
 #else
 void __init MMU_init(void)
@@ -895,7 +920,11 @@ void __init MMU_init(void)
 
 	if ( ppc_md.progress ) ppc_md.progress("MMU:hash init", 0x300);
         hash_init();
+#ifdef CONFIG_PPC64
+	_SDR1 = 0;	/* temporary hack to just use bats -- Cort */
+#else	
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
+#endif	
 	ioremap_base = 0xf8000000;
 
 	if ( ppc_md.progress ) ppc_md.progress("MMU:mapin", 0x301);
@@ -916,8 +945,14 @@ void __init MMU_init(void)
 		break;
 	case _MACH_chrp:
 		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
+#ifdef CONFIG_PPC64
+		/* temporary hack to get working until page tables are stable -- Cort*/
+		setbat(1, 0x80000000, 0xc0000000, 0x10000000, IO_PAGE);
+		setbat(3, 0xd0000000, 0xd0000000, 0x10000000, IO_PAGE);
+#else
 		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
 		setbat(3, 0x90000000, 0x90000000, 0x10000000, IO_PAGE);
+#endif		
 		break;
 	case _MACH_Pmac:
 #if 0
@@ -929,6 +964,10 @@ void __init MMU_init(void)
 			setbat(0, base, base, 0x100000, IO_PAGE);
 		}
 #endif
+#if 0
+		setbat(0, disp_bi->dispDeviceBase, disp_bi->dispDeviceBase, 0x100000, IO_PAGE);
+		disp_bi->logicalDisplayBase = disp_bi->dispDeviceBase;
+#endif		
 		ioremap_base = 0xf0000000;
 		break;
 	case _MACH_apus:
@@ -1087,6 +1126,8 @@ void __init paging_init(void)
 
 void __init mem_init(void)
 {
+	extern char *sysmap; 
+	extern unsigned long sysmap_size;
 	unsigned long addr;
 	int codepages = 0;
 	int datapages = 0;
@@ -1116,6 +1157,11 @@ void __init mem_init(void)
 		     addr += PAGE_SIZE)
 			SetPageReserved(mem_map + MAP_NR(addr));
 #endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
+	if ( sysmap_size )
+		for (addr = (unsigned long)sysmap;
+		     addr < PAGE_ALIGN((unsigned long)sysmap+sysmap_size) ;
+		     addr += PAGE_SIZE)
+			SetPageReserved(mem_map + MAP_NR(addr));
 	
 	for (addr = PAGE_OFFSET; addr < (unsigned long)end_of_DRAM;
 	     addr += PAGE_SIZE) {
@@ -1131,10 +1177,8 @@ void __init mem_init(void)
 	}
 
         printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08x,%08lx]\n",
-	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
-	       codepages << (PAGE_SHIFT-10),
-	       datapages << (PAGE_SHIFT-10), 
-	       initpages << (PAGE_SHIFT-10),
+	       (unsigned long)nr_free_pages()<< (PAGE_SHIFT-10),
+	       codepages, datapages, initpages,
 	       PAGE_OFFSET, (unsigned long) end_of_DRAM);
 	mem_init_done = 1;
 }
@@ -1153,7 +1197,7 @@ unsigned long __init *pmac_find_end_of_memory(void)
 	unsigned long a, total;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (768<<20)
+#define RAM_LIMIT (64<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1384,7 +1428,7 @@ static void __init hash_init(void)
 	{
 		if ( ppc_md.progress ) ppc_md.progress("hash:patch", 0x345);
 		Hash_end = (PTE *) ((unsigned long)Hash + Hash_size);
-		__clear_user(Hash, Hash_size);
+		/*__clear_user(Hash, Hash_size);*/
 
 		/*
 		 * Patch up the instructions in head.S:hash_page

@@ -270,7 +270,7 @@ repeat:
 		}
 	}
 	if (rbh) {
- 		set_bit(BH_Protected, &rbh->b_state);
+		mark_buffer_protected(rbh);
 		brelse(rbh);
 	}
 
@@ -290,7 +290,10 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	switch (cmd) {
 		case BLKFLSBUF:
 			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
-			invalidate_buffers(inode->i_rdev);
+			/* special: we want to release the ramdisk memory,
+			   it's not like with the other blockdevices where
+			   this ioctl only flushes away the buffer cache. */
+			destroy_buffers(inode->i_rdev);
 			break;
 
          	case BLKGETSIZE:   /* Return device size */
@@ -382,7 +385,7 @@ static void __exit rd_cleanup (void)
 	int i;
 
 	for (i = 0 ; i < NUM_RAMDISKS; i++)
-		invalidate_buffers(MKDEV(MAJOR_NR, i));
+		destroy_buffers(MKDEV(MAJOR_NR, i));
 
 	unregister_blkdev( MAJOR_NR, "ramdisk" );
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));

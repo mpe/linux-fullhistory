@@ -45,6 +45,7 @@ svc_create(struct svc_program *prog, unsigned int bufsize, unsigned int xdrsize)
 	serv->sv_stats     = prog->pg_stats;
 	serv->sv_bufsz	   = bufsize? bufsize : 4096;
 	serv->sv_xdrsize   = xdrsize;
+	spin_lock_init(&serv->sv_lock);
 
 	serv->sv_name      = prog->pg_name;
 

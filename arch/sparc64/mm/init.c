@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.145 2000/02/08 07:46:11 davem Exp $
+/*  $Id: init.c,v 1.146 2000/02/09 21:11:09 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -30,7 +30,6 @@
 #include <asm/vaddrs.h>
 #include <asm/dma.h>
 
-extern void show_net_buffers(void);
 extern void device_scan(void);
 
 struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
@@ -130,9 +129,6 @@ void show_mem(void)
 	printk("%d entries in page dir cache\n",pgd_cache_size);
 #endif	
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 int mmu_info(char *buf)

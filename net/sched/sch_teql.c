@@ -126,10 +126,7 @@ teql_dequeue(struct Qdisc* sch)
 		struct net_device *m = dat->m->dev.qdisc->dev;
 		if (m) {
 			dat->m->slaves = sch;
-			spin_lock(&m->queue_lock);
-			m->tbusy = 0;
-			qdisc_restart(m);
-			spin_unlock(&m->queue_lock);
+			netif_wake_queue(m);
 		}
 	}
 	sch->q.qlen = dat->q.qlen + dat->m->dev.qdisc->q.qlen;
@@ -285,8 +282,6 @@ static int teql_master_xmit(struct sk_buff *skb, struct net_device *dev)
 	int len = skb->len;
 	struct sk_buff *skb_res = NULL;
 
-	dev->tbusy = 1;
-
 	start = master->slaves;
 
 restart:
@@ -301,23 +296,22 @@ restart:
 		
 		if (slave->qdisc_sleeping != q)
 			continue;
-		if (slave->tbusy) {
+		if (test_bit(LINK_STATE_XOFF, &slave->state) ||
+		    test_bit(LINK_STATE_DOWN, &slave->state)) {
 			busy = 1;
 			continue;
 		}
-
-		if (!qdisc_on_runqueue(q))
-			qdisc_run(q);
 
 		switch (teql_resolve(skb, skb_res, slave)) {
 		case 0:
 			if (spin_trylock(&slave->xmit_lock)) {
 				slave->xmit_lock_owner = smp_processor_id();
-				if (slave->hard_start_xmit(skb, slave) == 0) {
+				if (!test_bit(LINK_STATE_XOFF, &slave->state) &&
+				    slave->hard_start_xmit(skb, slave) == 0) {
 					slave->xmit_lock_owner = -1;
 					spin_unlock(&slave->xmit_lock);
 					master->slaves = NEXT_SLAVE(q);
-					dev->tbusy = 0;
+					netif_wake_queue(dev);
 					master->stats.tx_packets++;
 					master->stats.tx_bytes += len;
 					return 0;
@@ -325,12 +319,11 @@ restart:
 				slave->xmit_lock_owner = -1;
 				spin_unlock(&slave->xmit_lock);
 			}
-			if (dev->tbusy)
+			if (test_bit(LINK_STATE_XOFF, &dev->state))
 				busy = 1;
 			break;
 		case 1:
 			master->slaves = NEXT_SLAVE(q);
-			dev->tbusy = 0;
 			return 0;
 		default:
 			nores = 1;
@@ -344,9 +337,10 @@ restart:
 		goto restart;
 	}
 
-	dev->tbusy = busy;
-	if (busy)
+	if (busy) {
+		netif_stop_queue(dev);
 		return 1;
+	}
 	master->stats.tx_errors++;
 
 drop:
@@ -393,13 +387,14 @@ static int teql_master_open(struct net_device *dev)
 
 	m->dev.mtu = mtu;
 	m->dev.flags = (m->dev.flags&~FMASK) | flags;
-	m->dev.tbusy = 0;
+	netif_start_queue(&m->dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 static int teql_master_close(struct net_device *dev)
 {
+	netif_stop_queue(dev);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }

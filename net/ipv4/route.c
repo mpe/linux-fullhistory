@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.80 2000/01/21 06:37:27 davem Exp $
+ * Version:	$Id: route.c,v 1.81 2000/02/09 11:16:42 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -313,7 +313,7 @@ static __inline__ int rt_may_expire(struct rtable *rth, int tmo1, int tmo2)
 }
 
 /* This runs via a timer and thus is always in BH context. */
-static void rt_check_expire(unsigned long dummy)
+static void SMP_TIMER_NAME(rt_check_expire)(unsigned long dummy)
 {
 	int i, t;
 	static int rover;
@@ -359,10 +359,12 @@ static void rt_check_expire(unsigned long dummy)
 	mod_timer(&rt_periodic_timer, now + ip_rt_gc_interval);
 }
 
+SMP_TIMER_DEFINE(rt_check_expire, rt_gc_task);
+
 /* This can run from both BH and non-BH contexts, the latter
  * in the case of a forced flush event.
  */
-static void rt_run_flush(unsigned long dummy)
+static void SMP_TIMER_NAME(rt_run_flush)(unsigned long dummy)
 {
 	int i;
 	struct rtable * rth, * next;
@@ -382,13 +384,15 @@ static void rt_run_flush(unsigned long dummy)
 		}
 	}
 }
+
+SMP_TIMER_DEFINE(rt_run_flush, rt_cache_flush_task);
   
 static spinlock_t rt_flush_lock = SPIN_LOCK_UNLOCKED;
 
 void rt_cache_flush(int delay)
 {
 	unsigned long now = jiffies;
-	int user_mode = !in_interrupt();
+	int user_mode = !in_softirq();
 
 	if (delay < 0)
 		delay = ip_rt_min_delay;
@@ -414,7 +418,7 @@ void rt_cache_flush(int delay)
 
 	if (delay <= 0) {
 		spin_unlock_bh(&rt_flush_lock);
-		rt_run_flush(0);
+		SMP_TIMER_NAME(rt_run_flush)(0);
 		return;
 	}
 
@@ -529,7 +533,7 @@ static int rt_garbage_collect(void)
 
 		if (atomic_read(&ipv4_dst_ops.entries) < ip_rt_max_size)
 			return 0;
-	} while (!in_interrupt() && jiffies - now < 1);
+	} while (!in_softirq() && jiffies - now < 1);
 
 	if (atomic_read(&ipv4_dst_ops.entries) < ip_rt_max_size)
 		return 0;
@@ -552,7 +556,7 @@ static int rt_intern_hash(unsigned hash, struct rtable * rt, struct rtable ** rp
 {
 	struct rtable	*rth, **rthp;
 	unsigned long	now = jiffies;
-	int attempts = !in_interrupt();
+	int attempts = !in_softirq();
 
 restart:
 	rthp = &rt_hash_table[hash].chain;

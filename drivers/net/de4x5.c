@@ -1403,8 +1403,6 @@ de4x5_open(struct net_device *dev)
 	}
     }
 
-    dev->tbusy = 0;                         
-    dev->start = 1;
     lp->interrupt = UNMASK_INTERRUPTS;
     dev->trans_start = jiffies;
     
@@ -1440,7 +1438,7 @@ static int
 de4x5_init(struct net_device *dev)
 {  
     /* Lock out other processes whilst setting up the hardware */
-    test_and_set_bit(0, (void *)&dev->tbusy);
+    netif_stop_queue(dev);
     
     de4x5_sw_reset(dev);
     
@@ -1536,7 +1534,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct net_device *dev)
     int status = 0;
     u_long flags = 0;
 
-    test_and_set_bit(0, (void*)&dev->tbusy);     /* Stop send re-tries */
+    netif_stop_queue(dev);
     if (lp->tx_enable == NO) {                   /* Cannot send for now */
 	return -1;                                
     }
@@ -1555,14 +1553,15 @@ de4x5_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 	return -1;
 
     /* Transmit descriptor ring full or stale skb */
-    if (dev->tbusy || (u_long) lp->tx_skb[lp->tx_new] > 1) {
+    if (test_bit(LINK_STATE_XOFF, &dev->state) ||
+	(u_long) lp->tx_skb[lp->tx_new] > 1) {
 	if (lp->interrupt) {
 	    de4x5_putb_cache(dev, skb);          /* Requeue the buffer */
 	} else {
 	    de4x5_put_cache(dev, skb);
 	}
 	if (de4x5_debug & DEBUG_TX) {
-	    printk("%s: transmit busy, lost media or stale skb found:\n  STS:%08x\n  tbusy:%ld\n  IMR:%08x\n  OMR:%08x\n Stale skb: %s\n",dev->name, inl(DE4X5_STS), dev->tbusy, inl(DE4X5_IMR), inl(DE4X5_OMR), ((u_long) lp->tx_skb[lp->tx_new] > 1) ? "YES" : "NO");
+	    printk("%s: transmit busy, lost media or stale skb found:\n  STS:%08x\n  tbusy:%d\n  IMR:%08x\n  OMR:%08x\n Stale skb: %s\n",dev->name, inl(DE4X5_STS), test_bit(LINK_STATE_XOFF, &dev->state), inl(DE4X5_IMR), inl(DE4X5_OMR), ((u_long) lp->tx_skb[lp->tx_new] > 1) ? "YES" : "NO");
 	}
     } else if (skb->len > 0) {
 	/* If we already have stuff queued locally, use that first */
@@ -1571,9 +1570,9 @@ de4x5_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 	    skb = de4x5_get_cache(dev);
 	}
 
-	while (skb && !dev->tbusy && (u_long) lp->tx_skb[lp->tx_new] <= 1) {
+	while (skb && !test_bit(LINK_STATE_XOFF, &dev->state) && (u_long) lp->tx_skb[lp->tx_new] <= 1) {
 	    spin_lock_irqsave(&lp->lock, flags);
-	    test_and_set_bit(0, (void*)&dev->tbusy);
+	    netif_stop_queue(dev);
 	    load_packet(dev, skb->data, TD_IC | TD_LS | TD_FS | skb->len, skb);
  	    lp->stats.tx_bytes += skb->len;
 	    outl(POLL_DEMAND, DE4X5_TPD);/* Start the TX */
@@ -1582,7 +1581,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 	    dev->trans_start = jiffies;
 		    
 	    if (TX_BUFFS_AVAIL) {
-		dev->tbusy = 0;         /* Another pkt may be queued */
+		netif_start_queue(dev);         /* Another pkt may be queued */
 	    }
 	    skb = de4x5_get_cache(dev);
 	    spin_unlock_irqrestore(&lp->lock, flags);
@@ -1659,7 +1658,7 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
     /* Load the TX ring with any locally stored packets */
     if (!test_and_set_bit(0, (void *)&lp->cache.lock)) {
-	while (lp->cache.skb && !dev->tbusy && lp->tx_enable) {
+	while (lp->cache.skb && !test_bit(LINK_STATE_XOFF, &dev->state) && lp->tx_enable) {
 	    de4x5_queue_pkt(de4x5_get_cache(dev), dev);
 	}
 	lp->cache.lock = 0;
@@ -1802,9 +1801,12 @@ de4x5_tx(struct net_device *dev)
 	lp->tx_old = (++lp->tx_old) % lp->txRingSize;
     }
 
-    if (TX_BUFFS_AVAIL && dev->tbusy) {  /* Any resources available? */
-	dev->tbusy = 0;                  /* Clear TX busy flag */
-	if (lp->interrupt) mark_bh(NET_BH);
+    /* Any resources available? */
+    if (TX_BUFFS_AVAIL && test_bit(LINK_STATE_XOFF, &dev->state)) {
+	if (lp->interrupt)
+	    netif_wake_queue(dev);
+	else
+	    netif_start_queue(dev);
     }
 	
     return 0;
@@ -1885,8 +1887,8 @@ de4x5_close(struct net_device *dev)
     s32 imr, omr;
     
     disable_ast(dev);
-    dev->start = 0;
-    dev->tbusy = 1;
+
+    netif_stop_queue(dev);
     
     if (de4x5_debug & DEBUG_CLOSE) {
 	printk("%s: Shutting down ethercard, status was %8.8x.\n",
@@ -3288,10 +3290,10 @@ de4x5_init_connection(struct net_device *dev)
     de4x5_rst_desc_ring(dev);
     de4x5_setup_intr(dev);
     lp->tx_enable = YES;
-    dev->tbusy = 0;
     spin_unlock_irqrestore(&lp->lock, flags);
     outl(POLL_DEMAND, DE4X5_TPD);
-    mark_bh(NET_BH);
+
+    netif_wake_queue(dev);
 
     return;
 }
@@ -5597,12 +5599,13 @@ de4x5_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 	build_setup_frame(dev, PHYS_ADDR_ONLY);
 	/* Set up the descriptor and give ownership to the card */
-	while (test_and_set_bit(0, (void *)&dev->tbusy) != 0) barrier();
+	while (test_and_set_bit(LINK_STATE_XOFF, &dev->state) != 0)
+	    barrier();
 	load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
 		                                       SETUP_FRAME_LEN, (struct sk_buff *)1);
 	lp->tx_new = (++lp->tx_new) % lp->txRingSize;
 	outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
-	dev->tbusy = 0;                              /* Unlock the TX ring */
+	netif_start_queue(dev);                      /* Unlock the TX ring */
 	break;
 
     case DE4X5_SET_PROM:             /* Set Promiscuous Mode */
@@ -5754,7 +5757,7 @@ de4x5_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 	
 	tmp.addr[j++] = lp->txRingSize;
-	tmp.addr[j++] = dev->tbusy;
+	tmp.addr[j++] = test_bit(LINK_STATE_XOFF, &dev->state);
 	
 	ioc->len = j;
 	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;

@@ -29,7 +29,7 @@ typedef struct zone_struct {
 	unsigned long offset;
 	unsigned long free_pages;
 	int low_on_memory;
-	unsigned long pages_low, pages_high;
+	unsigned long pages_min, pages_low, pages_high;
 	struct pglist_data *zone_pgdat;
 
 	/*

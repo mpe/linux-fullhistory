@@ -32,6 +32,7 @@
 #define TASK_ADDR_LIMIT		24	
 #define TASK_EXEC_DOMAIN	32
 #define TASK_NEED_RESCHED	40
+#define TASK_PROCESSOR		100
 
 /*
  * task flags (must match include/linux/sched.h):
@@ -572,12 +573,15 @@ entSys:
 .align 3
 ret_from_sys_call:
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
-	/* check bottom half interrupts */
-	ldq	$3,bh_active
-	ldq	$4,bh_mask
-	and	$3,$4,$2
-	bne	$2,handle_bottom_half
-ret_from_handle_bh:
+	ldq	$3,TASK_PROCESSOR($8)
+	lda	$4,softirq_state
+	sll	$3,5,$3
+	addq	$3,$4,$4
+	ldq	$4,0($4)
+	sll	$4,32,$3
+	and	$4,$3,$4
+	bne	$4,handle_softirq
+ret_from_softirq:
 	ldq	$0,SP_OFF($30)
 	and	$0,8,$0
 	beq	$0,restore_all
@@ -656,16 +660,16 @@ strace_error:
 	br	ret_from_sys_call
 
 	.align 3
-handle_bottom_half:
+handle_softirq:
 	subq	$30,16,$30
 	stq	$19,0($30)	/* save syscall nr */
 	stq	$20,8($30)	/* and error indication (a3) */
-	jsr	$26,do_bottom_half
+	jsr	$26,do_softirq
 	ldq	$19,0($30)
 	ldq	$20,8($30)
 	addq	$30,16,$30
-	br	ret_from_handle_bh
-
+	br	ret_from_softirq
+	
 	.align 3
 syscall_error:
 	/*

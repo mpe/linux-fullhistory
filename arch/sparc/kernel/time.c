@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.51 2000/01/29 01:08:59 anton Exp $
+/* $Id: time.c,v 1.53 2000/02/09 21:11:04 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -429,12 +429,14 @@ void __init time_init(void)
 
 extern __inline__ unsigned long do_gettimeoffset(void)
 {
+	struct tasklet_struct *t;
 	unsigned long offset = 0;
 	unsigned int count;
 
 	count = (*master_l10_counter >> 10) & 0x1fffff;
 
-	if(test_bit(TIMER_BH, &bh_active))
+	t = &bh_task_vec[TIMER_BH];
+	if (test_bit(TASKLET_STATE_SCHED, &t->state))
 		offset = 1000000;
 
 	return offset + count;

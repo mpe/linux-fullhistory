@@ -1,4 +1,3 @@
-
 /* 3c527.c: 3Com Etherlink/MC32 driver for Linux
  *
  *	(c) Copyright 1998 Red Hat Software Inc
@@ -18,11 +17,8 @@
 static const char *version =
 	"3c527.c:v0.07 2000/01/18 Alan Cox (alan@redhat.com)\n";
 
-/*
- *	Things you need
- *	o	The databook.
- *
- *	Traps for the unwary
+/**
+ * DOC: Traps for the unwary
  *
  *	The diagram (Figure 1-1) and the POS summary disagree with the
  *	"Interrupt Level" section in the manual.
@@ -30,6 +26,32 @@ static const char *version =
  *	The documentation in places seems to miss things. In actual fact
  *	I've always eventually found everything is documented, it just
  *	requires careful study.
+ *
+ * DOC: Theory Of Operation
+ *
+ *	The 3com 3c527 is a 32bit MCA bus mastering adapter with a large
+ *	amount of on board intelligence that housekeeps a somewhat dumber
+ *	Intel NIC. For performance we want to keep the transmit queue deep
+ *	as the card can transmit packets while fetching others from main
+ *	memory by bus master DMA. Transmission and reception are driven by
+ *	ring buffers. When updating the ring we are required to do some
+ *	housekeeping work using the mailboxes and the command register.
+ *
+ *	The mailboxes provide a method for sending control requests to the
+ *	card. The transmit mail box is used to update the transmit ring 
+ *	pointers and the receive mail box to update the receive ring
+ *	pointers. The exec mailbox allows a variety of commands to be
+ *	executed. Each command must complete before the next is executed.
+ *	Primarily we use the exec mailbox for controlling the multicast lists.
+ *	We have to do a certain amount of interesting hoop jumping as the 
+ *	multicast list changes can occur in interrupt state when the card
+ *	has an exec command pending. We defer such events until the command
+ *	completion interrupt.
+ *
+ *	The control register is used to pass status information. It tells us
+ *	the transmit and receive status for packets and allows us to control
+ *	the card operation mode. You must stop the card when emptying the
+ *	receive ring, or you will race with the ring buffer and lose packets.
  */
 
 #include <linux/module.h>
@@ -143,12 +165,14 @@ static void	mc32_set_multicast_list(struct net_device *dev);
 static void	mc32_reset_multicast_list(struct net_device *dev);
 
 
-/*
- * Check for a network adaptor of this type, and return '0' iff one exists.
- * If dev->base_addr == 0, probe all likely locations.
- * If dev->base_addr == 1, always return failure.
- * If dev->base_addr == 2, allocate space for the device and return success
- * (detachable devices only).
+/**
+ * mc32_probe:
+ * @dev: device to probe
+ *
+ * Because MCA bus is a real bus and we can scan for cards we could do a
+ * single scan for all boards here. Right now we use the passed in device
+ * structure and scan for only one board. This needs fixing for modules
+ * in paticular.
  */
 
 int __init mc32_probe(struct net_device *dev)
@@ -182,11 +206,17 @@ int __init mc32_probe(struct net_device *dev)
 	return -ENODEV;
 }
 
-/*
- * This is the real probe routine. Linux has a history of friendly device
- * probes on the ISA bus. A good device probes avoids doing writes, and
- * verifies that the correct device exists and functions.
+/**
+ * mc32_probe1:
+ * @dev:  Device structure to fill in
+ * @slot: The MCA bus slot being used by this card
+ *
+ * Decode the slot data and configure the card structures. Having done this we
+ * can reset the card and configure it. The card does a full self test cycle
+ * in firmware so we have to wait for it to return and post us either a 
+ * failure case or some addresses we use to find the board internals.
  */
+ 
 static int __init mc32_probe1(struct net_device *dev, int slot)
 {
 	static unsigned version_printed = 0;
@@ -239,13 +269,14 @@ static int __init mc32_probe1(struct net_device *dev, int slot)
 		return -ENODEV;
 	}
 
-	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL) {
-		/*
-		 * Don't allocate the private data here, it is done later
-		 * This makes it easier to free the memory when this driver
-		 * is used as a module.
-		 */
+	/*
+	 * Don't allocate the private data here, it is done later
+	 * This makes it easier to free the memory when this driver
+	 * is used as a module.
+	 */
+
+	if(dev==NULL)
+	{
 		dev = init_etherdev(0, 0);
 		if (dev == NULL)
 			return -ENOMEM;
@@ -435,8 +466,13 @@ static int __init mc32_probe1(struct net_device *dev, int slot)
 }
 
 
-/*
- *	Polled command stuff 
+/**
+ *	mc32_ring_poll:
+ *	@dev:	The device to wait for
+ *	
+ *	Wait until a command we issues to the control register is completed.
+ *	This actually takes very little time at all, which is fortunate as
+ *	we often have to busy wait it.
  */
  
 static void mc32_ring_poll(struct net_device *dev)
@@ -446,25 +482,20 @@ static void mc32_ring_poll(struct net_device *dev)
 }
 
 
-/*
- *	Send exec commands. This requires a bit of explaining.
- *
- *	You feed the card a command, you wait, it interrupts you get a 
- *	reply. All well and good. The complication arises because you use
- *	commands for filter list changes which come in at bh level from things
- *	like IPV6 group stuff.
- *
- *	We have a simple state machine
- *
- *	0	- nothing issued
- *	1	- command issued, wait reply
- *	2	- reply waiting - reader then goes to state 0
- *	3	- command issued, trash reply. In which case the irq
- *		  takes it back to state 0
- */
 
-/*
- *	Send command from interrupt state
+/**
+ *	mc32_command_nowait:
+ *	@dev: The 3c527 to issue the command to
+ *	@cmd: The command word to write to the mailbox
+ *	@data: A data block if the command expects one
+ *	@len: Length of the data block
+ *
+ *	Send a command from interrupt state. If there is a command currently
+ *	being executed then we return an error of -1. It simply isnt viable
+ *	to wait around as commands may be slow. Providing we get in then
+ *	we send the command and busy wait for the board to acknowledge that
+ *	a command request is pending. We do not wait for the command to 
+ *	complete, just for the card to admit to noticing it.  
  */
 
 static int mc32_command_nowait(struct net_device *dev, u16 cmd, void *data, int len)
@@ -488,7 +519,35 @@ static int mc32_command_nowait(struct net_device *dev, u16 cmd, void *data, int 
 }
 
 
-/*
+/**
+ *	mc32_command: 
+ *	@dev: The 3c527 card to issue the command to
+ *	@cmd: The command word to write to the mailbox
+ *	@data: A data block if the command expects one
+ *	@len: Length of the data block
+ *
+ *	Sends exec commands in a user context. This permits us to wait around
+ *	for the replies and also to wait for the command buffer to complete
+ *	from a previous command before we execute our command. After our 
+ *	command completes we will complete any pending multicast reload
+ *	we blocked off by hogging the exec buffer.
+ *
+ *	You feed the card a command, you wait, it interrupts you get a 
+ *	reply. All well and good. The complication arises because you use
+ *	commands for filter list changes which come in at bh level from things
+ *	like IPV6 group stuff.
+ *
+ *	We have a simple state machine
+ *
+ *	0	- nothing issued
+ *
+ *	1	- command issued, wait reply
+ *
+ *	2	- reply waiting - reader then goes to state 0
+ *
+ *	3	- command issued, trash reply. In which case the irq
+ *		  takes it back to state 0
+ *
  *	Send command and block for results. On completion spot and reissue
  *	multicasts
  */
@@ -548,8 +607,13 @@ static int mc32_command(struct net_device *dev, u16 cmd, void *data, int len)
 }
 
 
-/*
- *	RX abort
+/**
+ *	mc32_rx_abort:
+ *	@dev: 3c527 to abort
+ *
+ *	Peforms a receive abort sequence on the card. In fact after some
+ *	experimenting we now simply tell the card to suspend reception. When
+ *	issuing aborts occasionally odd things happened.
  */
  
 static void mc32_rx_abort(struct net_device *dev)
@@ -564,8 +628,13 @@ static void mc32_rx_abort(struct net_device *dev)
 }
 
  
-/*
- *	RX enable
+/**
+ *	mc32_rx_begin:
+ *	@dev: 3c527 to enable
+ *
+ *	We wait for any pending command to complete and then issue 
+ *	a start reception command to the board itself. At this point 
+ *	receive handling continues as it was before.
  */
  
 static void mc32_rx_begin(struct net_device *dev)
@@ -582,6 +651,18 @@ static void mc32_rx_begin(struct net_device *dev)
 	lp->rx_halted=0;
 }
 
+/**
+ *	mc32_tx_abort:
+ *	@dev: 3c527 to abort
+ *
+ *	Peforms a receive abort sequence on the card. In fact after some
+ *	experimenting we now simply tell the card to suspend transmits . When
+ *	issuing aborts occasionally odd things happened. In theory we want
+ *	an abort to be sure we can recycle our buffers. As it happens we
+ *	just have to be careful to shut the card down on close, and
+ *	boot it carefully from scratch on setup.
+ */
+ 
 static void mc32_tx_abort(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
@@ -625,8 +706,16 @@ static void mc32_tx_abort(struct net_device *dev)
 	lp->tx_skb_top=lp->tx_skb_end=0;
 }
 
-/*
- *	TX enable
+/**
+ *	mc32_tx_begin:
+ *	@dev: 3c527 to enable
+ *
+ *	We wait for any pending command to complete and then issue 
+ *	a start transmit command to the board itself. At this point 
+ *	transmit handling continues as it was before. The ring must
+ *	be setup before you do this and must have an end marker in it.
+ *	It turns out we can avoid issuing this specific command when
+ *	doing our setup so we avoid it.
  */
  
 static void mc32_tx_begin(struct net_device *dev)
@@ -648,8 +737,17 @@ static void mc32_tx_begin(struct net_device *dev)
 }
 
 	
-/*
- *	Load the rx ring
+/**
+ *	mc32_load_rx_ring:
+ *	@dev: 3c527 to build the ring for
+ *
+ *	The card setups up the receive ring for us. We are required to
+ *	use the ring it provides although we can change the size of the
+ *	ring.
+ *
+ *	We allocate an sk_buff for each ring entry in turn and set the entry
+ *	up for a single non s/g buffer. The first buffer we mark with the
+ *	end marker bits. Finally we clear the rx mailbox.
  */
  
 static int mc32_load_rx_ring(struct net_device *dev)
@@ -686,12 +784,30 @@ static int mc32_load_rx_ring(struct net_device *dev)
 	return 0;
 }	
 
+/**
+ *	mc32_flush_rx_ring:
+ *	@lp: Local data of 3c527 to flush the rx ring of
+ *
+ *	Free the buffer for each ring slot. Because of the receive 
+ *	algorithm we use the ring will always be loaded will a full set
+ *	of buffers.
+ */
+
 static void mc32_flush_rx_ring(struct mc32_local *lp)
 {
 	int i;
 	for(i=0;i<RX_RING_MAX;i++)
 		kfree_skb(lp->rx_skb[i]);
 }
+
+/**
+ *	mc32_flush_tx_ring:
+ *	@lp: Local data of 3c527 to flush the tx ring of
+ *
+ *	We have to consider two cases here. We want to free the pending
+ *	buffers only. If the ring buffer head is past the start then the
+ *	ring segment we wish to free wraps through zero.
+ */
 
 static void mc32_flush_tx_ring(struct mc32_local *lp)
 {
@@ -711,9 +827,20 @@ static void mc32_flush_tx_ring(struct mc32_local *lp)
 	}
 }
  	
-/*
- * Open/initialize the board. This is called (in the current kernel)
- * sometime after booting when the 'ifconfig' program is run.
+/**
+ *	mc32_open
+ *	@dev: device to open
+ *
+ *	The user is trying to bring the card into ready state. This requires
+ *	a brief dialogue with the card. Firstly we enable interrupts and then
+ *	'indications'. Without these enabled the card doesn't bother telling
+ *	us what it has done. This had me puzzled for a week.
+ *
+ *	We then load the network address and multicast filters. Turn on the
+ *	workaround mode. This works around a bug in the 82586 - it asks the
+ *	firmware to do so. It has a performance hit but is needed on busy
+ *	[read most] lans. We load the ring with buffers then we kick it
+ *	all off.
  */
 
 static int mc32_open(struct net_device *dev)
@@ -781,6 +908,22 @@ static int mc32_open(struct net_device *dev)
 	return 0;
 }
 
+/**
+ *	mc32_send_packet:
+ *	@skb: buffer to transmit
+ *	@dev: 3c527 to send it out of
+ *
+ *	Transmit a buffer. This normally means throwing the buffer onto
+ *	the transmit queue as the queue is quite large. If the queue is
+ *	full then we set tx_busy and return. Once the interrupt handler
+ *	gets messages telling it to reclaim transmit queue entries we will
+ *	clear tx_busy and the kernel will start calling this again.
+ *
+ *	We use cli rather than spinlocks. Since I have no access to an SMP
+ *	MCA machine I don't plan to change it. It is probably the top 
+ *	performance hit for this driver on SMP however.
+ */
+ 
 static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
@@ -791,7 +934,7 @@ static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 		 * There should really be a "kick me" function call instead.
 		 */
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
+		if (tickssofar < HZ/20)
 			return 1;
 		printk(KERN_WARNING "%s: transmit timed out?\n", dev->name);
 		/* Try to restart the adaptor. */
@@ -864,11 +1007,42 @@ static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 	return 0;
 }
 
+/**
+ *	mc32_update_stats:
+ *	@dev: 3c527 to service
+ *
+ *	When the board signals us that its statistics need attention we
+ *	should query the table and clear it. In actual fact we currently
+ *	track all our statistics in software and I haven't implemented it yet.
+ */
+ 
 static void mc32_update_stats(struct net_device *dev)
 {
 }
 
-
+/**
+ *	mc32_rx_ring:
+ *	@dev: 3c527 that needs its receive ring processing
+ *
+ *	We have received one or more indications from the card that
+ *	a receive has completed. The ring buffer thus contains dirty
+ *	entries. Firstly we tell the card to stop receiving, then We walk 
+ *	the ring from the first filled entry, which is pointed to by the 
+ *	card rx mailbox and for each completed packet we will either copy 
+ *	it and pass it up the stack or if the packet is near MTU sized we 
+ *	allocate another buffer and flip the old one up the stack.
+ *
+ *	We must succeed in keeping a buffer on the ring. If neccessary we
+ *	will toss a received packet rather than lose a ring entry. Once the
+ *	first packet that is unused is found we reload the mailbox with the
+ *	buffer so that the card knows it can use the buffers again. Finally
+ *	we set it receiving again. 
+ *
+ *	We must stop reception during the ring walk. I thought it would be
+ *	neat to avoid it by clever tricks, but it turns out the event order
+ *	on the card means you have to play by the manual.
+ */
+ 
 static void mc32_rx_ring(struct net_device *dev)
 {
 	struct mc32_local *lp=dev->priv;
@@ -877,6 +1051,12 @@ static void mc32_rx_ring(struct net_device *dev)
 	volatile struct skb_header *p;
 	u16 base;
 	u16 top;
+
+	/* Halt RX before walking the ring */
+	
+	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
+	outb(3<<3, ioaddr+HOST_CMD);
+	while(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR);
 	
 	top = base = lp->rx_box->data[0];
 	do
@@ -927,13 +1107,6 @@ static void mc32_rx_ring(struct net_device *dev)
 	}
 	while(x++<48);
 	
-	/* 
-	 *	This is curious. It seems the receive stop and receive continue
-	 *	commands race against each other, even though we poll for 
-	 *	command ready to be issued. The delay is hackish but is a workaround
-	 *	while I investigate in depth
-	 */
-	
 	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
 	lp->rx_box->mbox=0;
 	lp->rx_box->data[0] = top;
@@ -941,10 +1114,20 @@ static void mc32_rx_ring(struct net_device *dev)
 }
 
 
-/*
- * The typical workload of the driver:
- *   Handle the network interface interrupts.
+/**
+ *	mc32_interrupt:
+ *	@irq: Interrupt number
+ *	@dev_id: 3c527 that requires servicing
+ *	@regs: Registers (unused)
+ *
+ *	The 3c527 interrupts us for four reasons. The command register 
+ *	contains the message it wishes to send us packed into a single
+ *	byte field. We keep reading status entries until we have processed
+ *	all the transmit and control items, but simply count receive
+ *	reports. When the receive reports are in we can call the mc32_rx_ring
+ *	and empty the ring. This saves the overhead of multiple command requests
  */
+ 
 static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct net_device *dev = dev_id;
@@ -1071,8 +1254,23 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 }
 
 
-/* The inverse routine to mc32_open(). */
-
+/**
+ *	mc32_close:
+ *	@dev: 3c527 card to shut down
+ *
+ *	The 3c527 is a bus mastering device. We must be careful how we
+ *	shut it down. It may also be running shared interrupt so we have
+ *	to be sure to silence it properly
+ *
+ *	We abort any receive and transmits going on and then wait until
+ *	any pending exec commands have completed in other code threads.
+ *	In theory we can't get here while that is true, in practice I am
+ *	paranoid
+ *
+ *	We turn off the interrupt enable for the board to be sure it can't
+ *	intefere with other devices.
+ */
+ 
 static int mc32_close(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
@@ -1116,9 +1314,14 @@ static int mc32_close(struct net_device *dev)
 
 }
 
-/*
- * Get the current statistics.
- * This may be called with the card open or closed.
+/**
+ *	mc32_get_stats:
+ *	@dev: The 3c527 card to handle
+ *
+ *	As we currently handle our statistics in software this one is
+ *	easy to handle. With hardware statistics it will get messy
+ *	as the get_stats call will need to send exec mailbox messages and
+ *	need to lock out the multicast reloads.
  */
 
 static struct net_device_stats *mc32_get_stats(struct net_device *dev)
@@ -1127,13 +1330,24 @@ static struct net_device_stats *mc32_get_stats(struct net_device *dev)
 	return &lp->net_stats;
 }
 
-/*
- * Set or clear the multicast filter for this adaptor.
+/**
+ *	do_mc32_set_multicast_list:
+ *	@dev: 3c527 device to load the list on
+ *	@retry: indicates this is not the first call. 
+ *
+ * Actually set or clear the multicast filter for this adaptor. The locking
+ * issues are handled by this routine. We have to track state as it may take
+ * multiple calls to get the command sequence completed. We just keep trying
+ * to schedule the loads until we manage to process them all.
+ *
  * num_addrs == -1	Promiscuous mode, receive all packets
+ *
  * num_addrs == 0	Normal mode, clear multicast list
+ *
  * num_addrs > 0	Multicast mode, receive normal and MC packets,
  *			and do best-effort filtering.
  */
+
 static void do_mc32_set_multicast_list(struct net_device *dev, int retry)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
@@ -1189,10 +1403,29 @@ static void do_mc32_set_multicast_list(struct net_device *dev, int retry)
 	}
 }
 
+/**
+ *	mc32_set_multicast_list:
+ *	@dev: The 3c527 to use
+ *
+ *	Commence loading the multicast list. This is called when the kernel
+ *	changes the lists. It will override any pending list we are trying to
+ *	load.
+ */
+ 
 static void mc32_set_multicast_list(struct net_device *dev)
 {
 	do_mc32_set_multicast_list(dev,0);
 }
+
+/**
+ *	mc32_reset_multicast_list:
+ *	@dev: The 3c527 to use
+ *
+ *	Attempt the next step in loading the multicast lists. If this attempt
+ *	fails to complete then it will be scheduled and this function called
+ *	again later from elsewhere.
+ */
+ 
 
 static void mc32_reset_multicast_list(struct net_device *dev)
 {
@@ -1208,6 +1441,15 @@ static struct net_device this_device = {
 	0, 0,  /* I/O address, IRQ */
 	0, 0, 0, NULL, mc32_probe };
 
+
+/**
+ *	init_module:
+ *
+ *	Probe and locate a 3c527 card. This really should probe and locate
+ *	all the 3c527 cards in the machine not just one of them. Yes you can
+ *	insmod multiple modules for now but its a hack.
+ */
+ 
 int init_module(void)
 {
 	int result;
@@ -1218,6 +1460,17 @@ int init_module(void)
 	return 0;
 }
 
+/**
+ *	cleanup_module:
+ *
+ *	Unloading time. We release the MCA bus resources and the interrupt
+ *	at which point everything is ready to unload. The card must be stopped
+ *	at this point or we would not have been called. When we unload we
+ *	leave the card stopped but not totally shut down. When the card is
+ *	initialized it must be rebooted or the rings reloaded before any
+ *	transmit operations are allowed to start scribbling into memory.
+ */
+ 
 void cleanup_module(void)
 {
 	int slot;
@@ -1227,8 +1480,6 @@ void cleanup_module(void)
 
 	/*
 	 * If we don't do this, we can't re-insmod it later.
-	 * Release irq/dma here, when you have jumpered versions and
-	 * allocate them in mc32_probe1().
 	 */
 	 
 	if (this_device.priv)

@@ -171,6 +171,11 @@ _GLOBAL(low_sleep_handler)
  */
 	
 wake_up:
+	/* Flash inval the instruction cache */
+	mfspr	r3,HID0
+	ori	r3,r3, HID0_ICFI
+	mtspr	HID0,r3
+	isync
 	/* Restore the HID0 register.  This turns on the L1 caches. */
 	subi	r1,r1,SL_PC
 	lwz	r3,SL_HID0(r1)

@@ -28,6 +28,14 @@ extern void note_bootable_part(kdev_t dev, int part);
  * Code to understand MacOS partition tables.
  */
 
+static inline void mac_fix_string(char *stg, int len)
+{
+	int i;
+
+	for (i = len - 1; i >= 0 && stg[i] == ' '; i--)
+		stg[i] = 0;
+}
+
 int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_part_minor)
 {
 	struct buffer_head *bh;
@@ -35,7 +43,8 @@ int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_
 	int dev_bsize, dev_pos, pos;
 	unsigned secsize;
 #ifdef CONFIG_PPC
-	int first_bootable = 1;
+	int found_root = 0;
+	int found_root_goodness = 0;
 #endif
 	struct mac_partition *part;
 	struct mac_driver_desc *md;
@@ -93,16 +102,49 @@ int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec, int first_
 		 * If this is the first bootable partition, tell the
 		 * setup code, in case it wants to make this the root.
 		 */
-		if ( (_machine == _MACH_Pmac) && first_bootable
-		    && (be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
-		    && strcasecmp(part->processor, "powerpc") == 0) {
-			note_bootable_part(dev, blk);
-			first_bootable = 0;
+		if (_machine == _MACH_Pmac) {
+			int goodness = 0;
+
+			mac_fix_string(part->processor, 16);
+			mac_fix_string(part->name, 32);
+			mac_fix_string(part->type, 32);					
+		    
+			if ((be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
+			    && strcasecmp(part->processor, "powerpc") == 0)
+				goodness++;
+
+			if (strcasecmp(part->type, "Apple_UNIX_SVR2") == 0
+			    || strcasecmp(part->type, "Linux_PPC") == 0) {
+				int i, l;
+
+				goodness++;
+				l = strlen(part->name);
+				if (strcmp(part->name, "/") == 0)
+					goodness++;
+				for (i = 0; i <= l - 4; ++i) {
+					if (strnicmp(part->name + i, "root",
+						     4) == 0) {
+						goodness += 2;
+						break;
+					}
+				}
+				if (strnicmp(part->name, "swap", 4) == 0)
+					goodness--;
+			}
+
+			if (goodness > found_root_goodness) {
+				found_root = blk;
+				found_root_goodness = goodness;
+			}
 		}
 #endif /* CONFIG_PPC */
 
 		++first_part_minor;
 	}
+#ifdef CONFIG_PPC
+	if (found_root_goodness)
+		note_bootable_part(dev, found_root);
+#endif
 	brelse(bh);
 	printk("\n");
 	return 1;

@@ -57,6 +57,8 @@ union task_union __attribute((aligned(16))) init_task_union = {
 };
 /* only used to get secondary processor up */
 struct task_struct *current_set[NR_CPUS] = {&init_task, };
+char *sysmap = NULL; 
+unsigned long sysmap_size = 0;
 
 #undef SHOW_TASK_SWITCHES 1
 #undef CHECK_STACK 1

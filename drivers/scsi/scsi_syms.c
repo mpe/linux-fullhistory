@@ -50,8 +50,6 @@ EXPORT_SYMBOL(scsi_allocate_device);
 EXPORT_SYMBOL(scsi_do_cmd);
 EXPORT_SYMBOL(scsi_wait_cmd);
 EXPORT_SYMBOL(scsi_command_size);
-EXPORT_SYMBOL(scsi_init_malloc);
-EXPORT_SYMBOL(scsi_init_free);
 EXPORT_SYMBOL(scsi_ioctl);
 EXPORT_SYMBOL(print_command);
 EXPORT_SYMBOL(print_sense);
@@ -79,6 +77,9 @@ EXPORT_SYMBOL(proc_scsi);
 
 EXPORT_SYMBOL(scsi_io_completion);
 EXPORT_SYMBOL(scsi_end_request);
+
+EXPORT_SYMBOL(scsi_register_blocked_host);
+EXPORT_SYMBOL(scsi_deregister_blocked_host);
 
 /*
  * These are here only while I debug the rest of the scsi stuff.

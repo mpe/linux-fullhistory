@@ -2,6 +2,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 
 extern struct proc_dir_entry *proc_sys_root;
 
@@ -26,7 +27,7 @@ static struct file_system_type proc_fs_type = {
 	NULL
 };
 
-int init_proc_fs(void)
+int __init init_proc_fs(void)
 {
 	return register_filesystem(&proc_fs_type) == 0;
 }

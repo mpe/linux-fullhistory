@@ -42,7 +42,7 @@ struct http_request
 	char		LengthS[14];	/* File length, string representation */
 	char		*MimeType;	/* Pointer to a string with the mime-type 
 					   based on the filename */
-	int		MimeLength;	/* The length of this string */
+	__kernel_size_t	MimeLength;	/* The length of this string */
 	
 };
 

@@ -44,6 +44,7 @@ typedef struct {
  */
 
 #define spin_unlock_wait(x)	do { barrier(); } while(((volatile spinlock_t *)(x))->lock)
+#define spin_is_locked(x)	((x)->lock != 0)
 
 #define spin_lock_string \
 	"\n1:\t" \

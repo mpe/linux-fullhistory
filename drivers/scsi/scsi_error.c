@@ -972,9 +972,13 @@ int scsi_decide_disposition(Scsi_Cmnd * SCpnt)
 		 * When the low level driver returns DID_SOFT_ERROR,
 		 * it is responsible for keeping an internal retry counter 
 		 * in order to avoid endless loops (DB)
+		 *
+		 * Actually this is a bug in this function here.  We should
+		 * be mindful of the maximum number of retries specified
+		 * and not get stuck in a loop.
 		 */
 	case DID_SOFT_ERROR:
-		return NEEDS_RETRY;
+		goto maybe_retry;
 
 	case DID_BUS_BUSY:
 	case DID_PARITY:
@@ -1830,6 +1834,8 @@ void scsi_error_handler(void *data)
          */
         if( host->loaded_as_module ) {
 	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
+	} else {
+	siginitsetinv(&current->blocked, 0);
         }
 
 	lock_kernel();
@@ -1865,13 +1871,20 @@ void scsi_error_handler(void *data)
 		 * trying to unload a module.
 		 */
 		SCSI_LOG_ERROR_RECOVERY(1, printk("Error handler sleeping\n"));
-                if( host->loaded_as_module ) {
-		down_interruptible(&sem);
 
-		if (signal_pending(current))
-			break;
-                } else {
-                        down(&sem);
+		/*
+		 * Note - we always use down_interruptible with the semaphore
+		 * even if the module was loaded as part of the kernel.  The
+		 * reason is that down() will cause this thread to be counted
+		 * in the load average as a running process, and down
+		 * interruptible doesn't.  Given that we need to allow this
+		 * thread to die if the driver was loaded as a module, using
+		 * semaphores isn't unreasonable.
+		 */
+		down_interruptible(&sem);
+		if( host->loaded_as_module ) {
+			if (signal_pending(current))
+				break;
                 }
 
 		SCSI_LOG_ERROR_RECOVERY(1, printk("Error handler waking up\n"));

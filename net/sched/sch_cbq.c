@@ -597,8 +597,9 @@ static void cbq_ovl_drop(struct cbq_class *cl)
 static void cbq_watchdog(unsigned long arg)
 {
 	struct Qdisc *sch = (struct Qdisc*)arg;
+
 	sch->flags &= ~TCQ_F_THROTTLED;
-	qdisc_wakeup(sch->dev);
+	netif_schedule(sch->dev);
 }
 
 static unsigned long cbq_undelay_prio(struct cbq_sched_data *q, int prio)
@@ -666,7 +667,7 @@ static void cbq_undelay(unsigned long arg)
 	}
 
 	sch->flags &= ~TCQ_F_THROTTLED;
-	qdisc_wakeup(sch->dev);
+	netif_schedule(sch->dev);
 }
 
 
@@ -1052,7 +1053,7 @@ cbq_dequeue(struct Qdisc *sch)
 
 	if (sch->q.qlen) {
 		sch->stats.overlimits++;
-		if (q->wd_expires && !sch->dev->tbusy) {
+		if (q->wd_expires && !test_bit(LINK_STATE_XOFF, &sch->dev->state)) {
 			long delay = PSCHED_US2JIFFIE(q->wd_expires);
 			del_timer(&q->wd_timer);
 			if (delay <= 0)

@@ -36,6 +36,9 @@ TFTPIMAGE=/tftpboot/zImage.pmac$(MSIZE)
 endif
 
 ifeq ($(CONFIG_PMAC),y)
+chrpmain.o: chrpmain.c
+	$(CC) $(CFLAGS) -DSYSMAP_OFFSET=0 -DSYSMAP_SIZE=0 -c chrpmain.c
+
 hack-coff: hack-coff.c
 	$(HOSTCC) $(HOSTCFLAGS) -o hack-coff hack-coff.c
 
@@ -51,6 +54,12 @@ floppy: zImage
 #	mount -t hfs /dev/fd0 /mnt
 #	cp vmlinux.coff /mnt
 #	umount /mnt
+
+miboot.image: dummy.o vmlinux.gz
+	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=image=vmlinux.gz dummy.o $@
+
+miboot.image.initrd: dummy.o vmlinux.gz
+	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=initrd=ramdisk.image.gz miboot.image $@
 
 coffboot: $(COFFOBJS) no_initrd.o ld.script
 	$(LD) -o $@ $(COFF_LD_ARGS) $(COFFOBJS) no_initrd.o $(LIBS)
@@ -82,16 +91,23 @@ vmlinux.coff.initrd: coffboot.initrd hack-coff
 vmlinux.elf: $(CHRPOBJS) no_initrd.o mknote
 	$(LD) $(CHRP_LD_ARGS) -o $@ $(CHRPOBJS) no_initrd.o $(LIBS)
 	./mknote > note
-	$(OBJCOPY) $@ $@ --add-section=.note=note -R .comment
+	$(OBJCOPY) $@ $@ --add-section=.note=note \
+		--add-section=sysmap=../../../System.map -R .comment
+	$(CC) $(CFLAGS) chrpmain.c -c -o chrpmain.o \
+		-DSYSMAP_OFFSET=`sh ../boot/offset $(OBJDUMP) $@ sysmap` \
+		-DSYSMAP_SIZE=`sh ../boot/size $(OBJDUMP) $@ sysmap`
+	$(LD) $(CHRP_LD_ARGS) -o $@ $(CHRPOBJS) no_initrd.o $(LIBS)
+	$(OBJCOPY) $@ $@ --add-section=.note=note \
+		--add-section=sysmap=../../../System.map -R .comment
 
 vmlinux.elf.initrd: $(CHRPOBJS) initrd.o mknote
 	$(LD) $(CHRP_LD_ARGS) -o $@ $(CHRPOBJS) initrd.o $(LIBS)
 	./mknote > note
 	$(OBJCOPY) $@ $@ --add-section=.note=note -R .comment
 
-zImage: vmlinux.coff vmlinux.elf
+zImage: vmlinux.coff vmlinux.elf miboot.image
 
-zImage.initrd: vmlinux.coff.initrd vmlinux.elf.initrd
+zImage.initrd: vmlinux.coff.initrd vmlinux.elf.initrd miboot.image.initrd
 
 else
 znetboot: vmlinux.gz
@@ -118,5 +134,7 @@ vmlinux.gz: $(TOPDIR)/vmlinux
 
 clean:
 	rm -f hack-coff coffboot zImage vmlinux.coff vmlinux.gz
+	rm -f mknote piggyback vmlinux.elf note
+	rm -f miboot.image miboot.image.initrd
 
 fastdep:

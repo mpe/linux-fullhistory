@@ -585,7 +585,7 @@ int __init chr_dev_init(void)
 	usb_init();
 #endif
 #ifdef CONFIG_I2C
-        i2c_init_all();
+	i2c_init_all();
 #endif
 #if defined (CONFIG_FB)
 	fbmem_init();

@@ -25,8 +25,10 @@ get_order (unsigned long size)
 
 	printk ("get_order: size=%lu, order=%lu\n", size, order);
 
-	if (log > PAGE_SHIFT)
-		order -= PAGE_SHIFT;;
+	if (order > PAGE_SHIFT)
+		order -= PAGE_SHIFT;
+	else
+		order = 0;
 	return order;
 }
 

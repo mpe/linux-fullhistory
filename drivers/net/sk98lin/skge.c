@@ -653,7 +653,7 @@ SK_EVPARA EvPara;
 		pAC = (SK_AC*)root_dev->priv;
 		next = pAC->Next;
 
-		root_dev->tbusy = 1;
+		netif_stop_queue(root_dev);
 		SkGeYellowLED(pAC, pAC->IoBase, 0);
 		
 		if(pAC->BoardLevel == 2) {
@@ -1432,10 +1432,6 @@ SK_EVPARA	EvPara;		/* an event parameter union */
 	SkEventDispatcher(pAC, pAC->IoBase);
 	spin_unlock_irqrestore(&pAC->SlowPathLock, Flags);
 	
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
 	MOD_INC_USE_COUNT;
 	
 	SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_ENTRY,
@@ -1464,9 +1460,8 @@ unsigned int	Flags;		/* for spin lock */
 int		i;
 SK_EVPARA	EvPara;
 
-	dev->start = 0;
-	set_bit(0, (void*)&dev->tbusy);
-	
+	netif_stop_queue(dev);
+
 	pAC = (SK_AC*) dev->priv;
 	
 	SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_ENTRY,
@@ -1533,7 +1528,7 @@ int		Rc;	/* return code of XmitFrame */
 
 	if (Rc == 0) {
 		/* transmitter out of resources */
-		set_bit(0, (void*) &dev->tbusy);
+		netif_stop_queue(dev);
 
 		/* give buffer ownership back to the queueing layer */
 		return (1);
@@ -1688,13 +1683,13 @@ SK_U64	PhysAddr;	/* address of DMA mapping */
 			 * freed ( -> ring completely free now).
 			 */
 			pTxPort->pTxdRingTail = pTxd;
-			pAC->dev->tbusy = 0;
+			netif_start_queue(pAC->dev);
 			return;
 		}
 		if (Control & TX_CTRL_OWN_BMU) {
 			pTxPort->pTxdRingTail = pTxd;
 			if (pTxPort->TxdRingFree > 0) {
-				pAC->dev->tbusy = 0;
+				netif_start_queue(pAC->dev);
 			}
 			return;
 		}
@@ -2300,7 +2295,7 @@ unsigned int	Flags;
 	
 	SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_ENTRY,
 		("SkGeSetMacAddr starts now...\n"));
-	if(dev->start) {
+	if(test_bit(LINK_STATE_START, &dev->state)) {
 		return -EBUSY;
 	}
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
@@ -2426,7 +2421,7 @@ SK_EVPARA 	EvPara;
 		spin_lock_irqsave(
 			&pAC->TxPort[i][TX_PRIO_LOW].TxDesRingLock, Flags);
 	}
-	pAC->dev->tbusy = 1;
+	netif_stop_queue(pAC->dev);
 
 	/* 
 	 * adjust number of rx buffers allocated
@@ -2515,7 +2510,7 @@ SK_EVPARA 	EvPara;
 	}
 #endif
 
-	pAC->dev->tbusy = 0;
+	netif_start_queue(pAC->dev);
 	for (i=pAC->GIni.GIMacsFound-1; i>=0; i--) {
 		spin_unlock_irqrestore(
 			&pAC->TxPort[i][TX_PRIO_LOW].TxDesRingLock, Flags);

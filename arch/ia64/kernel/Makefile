@@ -16,7 +16,7 @@ all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
 O_OBJS	 := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_default.o irq_internal.o ivt.o \
-	    pal.o process.o perfmon.o ptrace.o sal.o sal_stub.o semaphore.o setup.o signal.o \
+	    pal.o pci-dma.o process.o perfmon.o ptrace.o sal.o sal_stub.o semaphore.o setup.o signal.o \
 	    sys_ia64.o traps.o time.o unaligned.o unwind.o
 #O_OBJS   := fpreg.o
 #OX_OBJS  := ia64_ksyms.o

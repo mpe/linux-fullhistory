@@ -1864,11 +1864,10 @@ next:
 	} while (--scan && searchp != clock_searchp);
 
 	clock_searchp = searchp;
-	up(&cache_chain_sem);
 
 	if (!best_cachep) {
 		/* couldn't find anything to reap */
-		return;
+		goto out;
 	}
 
 	spin_lock_irq(&best_cachep->c_spinlock);
@@ -1902,6 +1901,8 @@ good_dma:
 	}
 dma_fail:
 	spin_unlock_irq(&best_cachep->c_spinlock);
+out:
+	up(&cache_chain_sem);
 	return;
 }
 
@@ -1990,14 +1991,14 @@ get_slabinfo(char *buf)
 		unsigned long allocs = cachep->c_num_allocations;
 		errors = (unsigned long) atomic_read(&cachep->c_errors);
 		spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
-		len += sprintf(buf+len, "%-16s %6lu %6lu %4lu %4lu %4lu %6lu %7lu %5lu %4lu %4lu\n",
-				cachep->c_name, active_objs, num_objs, active_slabs, num_slabs,
+		len += sprintf(buf+len, "%-16s %6lu %6lu %6lu %4lu %4lu %4lu %6lu %7lu %5lu %4lu %4lu\n",
+				cachep->c_name, active_objs, num_objs, cachep->c_offset, active_slabs, num_slabs,
 				(1<<cachep->c_gfporder)*num_slabs,
 				high, allocs, grown, reaped, errors);
 		}
 #else
 		spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
-		len += sprintf(buf+len, "%-17s %6lu %6lu\n", cachep->c_name, active_objs, num_objs);
+		len += sprintf(buf+len, "%-17s %6lu %6lu %6lu\n", cachep->c_name, active_objs, num_objs, cachep->c_offset);
 #endif	/* SLAB_STATS */
 	} while ((cachep = cachep->c_nextp) != &cache_cache);
 	up(&cache_chain_sem);

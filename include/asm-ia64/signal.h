@@ -4,6 +4,9 @@
 /*
  * Copyright (C) 1998-2000 Hewlett-Packard Co
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
+ *
+ * Unfortunately, this file is being included by bits/signal.h in
+ * glibc-2.x.  Hence the #ifdef __KERNEL__ ugliness.
  */
 
 #define SIGHUP		 1
@@ -86,6 +89,8 @@
 #define MINSIGSTKSZ	2048
 #define SIGSTKSZ	8192
 
+#ifdef __KERNEL__
+
 #define _NSIG		64
 #define _NSIG_BPW	64
 #define _NSIG_WORDS	(_NSIG / _NSIG_BPW)
@@ -102,6 +107,8 @@
 #define SA_SHIRQ		0x04000000
 #define SA_LEGACY		0x02000000	/* installed via a legacy irq? */
 
+#endif /* __KERNEL__ */
+
 #define SIG_BLOCK          0	/* for blocking signals */
 #define SIG_UNBLOCK        1	/* for unblocking signals */
 #define SIG_SETMASK        2	/* for setting the signal mask */
@@ -117,6 +124,17 @@
 /* Avoid too many header ordering problems.  */
 struct siginfo;
 
+/* Type of a signal handler.  */
+typedef void (*__sighandler_t)(int);
+
+typedef struct sigaltstack {
+	void *ss_sp;
+	int ss_flags;
+	size_t ss_size;
+} stack_t;
+
+#ifdef __KERNEL__
+
 /* Most things should be clean enough to redefine this at will, if care
    is taken to make libc match.  */
 
@@ -125,9 +143,6 @@ typedef unsigned long old_sigset_t;
 typedef struct {
 	unsigned long sig[_NSIG_WORDS];
 } sigset_t;
-
-/* Type of a signal handler.  */
-typedef void (*__sighandler_t)(int);
 
 struct sigaction {
 	__sighandler_t sa_handler;
@@ -139,14 +154,9 @@ struct k_sigaction {
 	struct sigaction sa;
 };
 
-typedef struct sigaltstack {
-	void *ss_sp;
-	int ss_flags;
-	size_t ss_size;
-} stack_t;
-
-   /* sigcontext.h needs stack_t... */
 #  include <asm/sigcontext.h>
+
+#endif /* __KERNEL__ */
 
 # endif /* !__ASSEMBLY__ */
 #endif /* _ASM_IA64_SIGNAL_H */

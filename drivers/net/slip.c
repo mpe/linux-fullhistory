@@ -169,9 +169,9 @@ sl_alloc_bufs(struct slip *sl, int mtu)
 	if (slcomp == NULL)
 		goto err_exit;
 #endif
-	start_bh_atomic();
+	spin_lock_bh(&sl->lock);
 	if (sl->tty == NULL) {
-		end_bh_atomic();
+		spin_unlock_bh(&sl->lock);
 		err = -ENODEV;
 		goto err_exit;
 	}
@@ -189,7 +189,7 @@ sl_alloc_bufs(struct slip *sl, int mtu)
 	sl->xbits    = 0;
 #endif
 #endif
-	end_bh_atomic();
+	spin_unlock_bh(&sl->lock);
 	err = 0;
 
 	/* Cleanup */
@@ -268,7 +268,7 @@ static int sl_realloc_bufs(struct slip *sl, int mtu)
 		goto done;
 	}
 
-	start_bh_atomic();
+	spin_lock_bh(&sl->lock);
 
 	err = -ENODEV;
 	if (sl->tty == NULL)
@@ -304,7 +304,7 @@ static int sl_realloc_bufs(struct slip *sl, int mtu)
 	err = 0;
 
 done_on_bh:
-	end_bh_atomic();
+	spin_unlock_bh(&sl->lock);
 
 done:
 	if (xbuff)
@@ -323,9 +323,7 @@ done:
 static inline void
 sl_lock(struct slip *sl)
 {
-	if (test_and_set_bit(0, (void *) &sl->dev->tbusy))  {
-		printk("%s: trying to lock already locked device!\n", sl->dev->name);
-        }
+	netif_stop_queue(sl->dev);
 }
 
 
@@ -333,9 +331,7 @@ sl_lock(struct slip *sl)
 static inline void
 sl_unlock(struct slip *sl)
 {
-	if (!test_and_clear_bit(0, (void *)&sl->dev->tbusy))  {
-		printk("%s: trying to unlock already unlocked device!\n", sl->dev->name);
-        }
+	netif_wake_queue(sl->dev);
 }
 
 /* Send one completely decapsulated IP datagram to the IP layer. */
@@ -453,7 +449,7 @@ static void slip_write_wakeup(struct tty_struct *tty)
 	struct slip *sl = (struct slip *) tty->disc_data;
 
 	/* First make sure we're connected. */
-	if (!sl || sl->magic != SLIP_MAGIC || !sl->dev->start) {
+	if (!sl || sl->magic != SLIP_MAGIC || !test_bit(LINK_STATE_START, &sl->dev->state)) {
 		return;
 	}
 	if (sl->xleft <= 0)  {
@@ -462,7 +458,6 @@ static void slip_write_wakeup(struct tty_struct *tty)
 		sl->tx_packets++;
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 		sl_unlock(sl);
-		mark_bh(NET_BH);
 		return;
 	}
 
@@ -471,40 +466,25 @@ static void slip_write_wakeup(struct tty_struct *tty)
 	sl->xhead += actual;
 }
 
-/* Encapsulate an IP datagram and kick it into a TTY queue. */
-static int
-sl_xmit(struct sk_buff *skb, struct net_device *dev)
+static void sl_tx_timeout(struct net_device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
-	if (!dev->start)  {
-		printk("%s: xmit call when iface is down\n", dev->name);
-		dev_kfree_skb(skb);
-		return 0;
-	}
-	if (sl->tty == NULL) {
-		dev_kfree_skb(skb);
-		return 0;
-	}
+	spin_lock(&sl->lock);
 
-	/*
-	 * If we are busy already- too bad.  We ought to be able
-	 * to queue things at this point, to allow for a little
-	 * frame buffer.  Oh well...
-	 * -----------------------------------------------------
-	 * I hate queues in SLIP driver. May be it's efficient,
-	 * but for me latency is more important. ;)
-	 * So, no queues !
-	 *        14 Oct 1994  Dmitry Gorodchanin.
-	 */
-	if (dev->tbusy) {
+	if (test_bit(LINK_STATE_XOFF, &dev->state)) {
+		struct slip *sl = (struct slip*)(dev->priv);
+
+		if (!test_bit(LINK_STATE_START, &dev->state))
+			goto out;
+
 		/* May be we must check transmitter timeout here ?
 		 *      14 Oct 1994 Dmitry Gorodchanin.
 		 */
 #ifdef SL_CHECK_TRANSMIT
 		if (jiffies - dev->trans_start  < 20 * HZ)  {
 			/* 20 sec timeout not reached */
-			return 1;
+			goto out;
 		}
 		printk("%s: transmit timed out, %s?\n", dev->name,
 		       (sl->tty->driver.chars_in_buffer(sl->tty) || sl->xleft) ?
@@ -512,19 +492,39 @@ sl_xmit(struct sk_buff *skb, struct net_device *dev)
 		sl->xleft = 0;
 		sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 		sl_unlock(sl);
-#else
-		return 1;
 #endif
 	}
 
-	/* We were not busy, so we are now... :-) */
-	if (skb != NULL) 
-	{
-		sl_lock(sl);
-		sl->tx_bytes+=skb->len;
-		sl_encaps(sl, skb->data, skb->len);
+out:
+	spin_unlock(&sl->lock);
+}
+
+
+/* Encapsulate an IP datagram and kick it into a TTY queue. */
+static int
+sl_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	struct slip *sl = (struct slip*)(dev->priv);
+
+	spin_lock(&sl->lock);
+	if (!test_bit(LINK_STATE_START, &dev->state))  {
+		spin_unlock(&sl->lock);
+		printk("%s: xmit call when iface is down\n", dev->name);
 		dev_kfree_skb(skb);
+		return 0;
 	}
+	if (sl->tty == NULL) {
+		spin_unlock(&sl->lock);
+		dev_kfree_skb(skb);
+		return 0;
+	}
+
+	sl_lock(sl);
+	sl->tx_bytes+=skb->len;
+	sl_encaps(sl, skb->data, skb->len);
+	spin_unlock(&sl->lock);
+
+	dev_kfree_skb(skb);
 	return 0;
 }
 
@@ -540,16 +540,15 @@ sl_close(struct net_device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
-	start_bh_atomic();
+	spin_lock_bh(&sl->lock);
 	if (sl->tty) {
 		/* TTY discipline is running. */
 		sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	}
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 	sl->rcount   = 0;
 	sl->xleft    = 0;
-	end_bh_atomic();
+	spin_unlock_bh(&sl->lock);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -565,8 +564,7 @@ static int sl_open(struct net_device *dev)
 		return -ENODEV;
 
 	sl->flags &= (1 << SLF_INUSE);
-	dev->start = 1;
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -634,6 +632,10 @@ static int sl_init(struct net_device *dev)
 
 	dev->mtu		= sl->mtu;
 	dev->hard_start_xmit	= sl_xmit;
+#ifdef SL_CHECK_TRANSMIT
+	dev->tx_timeout		= sl_tx_timeout;
+	dev->watchdog_timeo	= 20*HZ;
+#endif
 	dev->open		= sl_open;
 	dev->stop		= sl_close;
 	dev->get_stats	        = sl_get_stats;
@@ -676,7 +678,8 @@ static void slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, ch
 {
 	struct slip *sl = (struct slip *) tty->disc_data;
 
-	if (!sl || sl->magic != SLIP_MAGIC || !sl->dev->start)
+	if (!sl || sl->magic != SLIP_MAGIC ||
+	    !test_bit(LINK_STATE_START, &sl->dev->state))
 		return;
 
 	/* Read the characters out of the buffer */
@@ -800,6 +803,7 @@ sl_alloc(kdev_t line)
 	/* Initialize channel control data */
 	sl->magic       = SLIP_MAGIC;
 	sl->dev	      	= &slp->dev;
+	spin_lock_init(&sl->lock);
 	sl->mode        = SL_MODE_DEFAULT;
 	sprintf(slp->if_name, "sl%d", i);
 	slp->dev.name         = slp->if_name;
@@ -946,10 +950,8 @@ slip_close(struct tty_struct *tty)
 
 	/* VSV = very important to remove timers */
 #ifdef CONFIG_SLIP_SMART
-	if (sl->keepalive)
-		del_timer (&sl->keepalive_timer);
-	if (sl->outfill)
-		del_timer (&sl->outfill_timer);
+	del_timer_sync(&sl->keepalive_timer);
+	del_timer_sync(&sl->outfill_timer);
 #endif
 
 	/* Count references from TTY module */
@@ -1182,20 +1184,18 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
                 if (tmp > 255) /* max for unchar */
 			return -EINVAL;
 
-		start_bh_atomic();
+		spin_lock_bh(&sl->lock);
 		if (!sl->tty) {
-			end_bh_atomic();
+			spin_unlock_bh(&sl->lock);
 			return -ENODEV;
 		}
-                if (sl->keepalive)
-                        (void)del_timer (&sl->keepalive_timer);
 		if ((sl->keepalive = (unchar) tmp) != 0) {
-			sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
-			add_timer(&sl->keepalive_timer);
+			mod_timer(&sl->keepalive_timer, jiffies+sl->keepalive*HZ);
 			set_bit(SLF_KEEPTEST, &sl->flags);
-                }
-	        end_bh_atomic();
-	
+                } else {
+                        del_timer (&sl->keepalive_timer);
+		}
+		spin_unlock_bh(&sl->lock);
 		return 0;
 
         case SIOCGKEEPALIVE:
@@ -1208,19 +1208,18 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 			return -EFAULT;
                 if (tmp > 255) /* max for unchar */
 			return -EINVAL;
-		start_bh_atomic();
+		spin_lock_bh(&sl->lock);
 		if (!sl->tty) {
-			end_bh_atomic();
+			spin_unlock_bh(&sl->lock);
 			return -ENODEV;
 		}
-                if (sl->outfill)
-                         (void)del_timer (&sl->outfill_timer);
                 if ((sl->outfill = (unchar) tmp) != 0){
-			sl->outfill_timer.expires=jiffies+sl->outfill*HZ;
-			add_timer(&sl->outfill_timer);
+			mod_timer(&sl->outfill_timer, jiffies+sl->outfill*HZ);
 			set_bit(SLF_OUTWAIT, &sl->flags);
+		} else {
+                        del_timer (&sl->outfill_timer);
 		}
-		end_bh_atomic();
+		spin_unlock_bh(&sl->lock);
                 return 0;
 
         case SIOCGOUTFILL:
@@ -1253,10 +1252,10 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 	if (sl == NULL)		/* Allocation failed ?? */
 		return -ENODEV;
 
-	start_bh_atomic(); /* Hangup would kill us */
+	spin_lock_bh(&sl->lock);
 
 	if (!sl->tty) {
-		end_bh_atomic();
+		spin_unlock_bh(&sl->lock);
 		return -ENODEV;
 	}
 
@@ -1265,14 +1264,15 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 		/* max for unchar */
                 if (((unsigned int)((unsigned long)rq->ifr_data)) > 255)
 			return -EINVAL;
-                if (sl->keepalive)
-                        (void)del_timer (&sl->keepalive_timer);
 		sl->keepalive = (unchar) ((unsigned long)rq->ifr_data);
 		if (sl->keepalive != 0) {
 			sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
-			add_timer(&sl->keepalive_timer);
+			mod_timer(&sl->keepalive_timer, jiffies+sl->keepalive*HZ);
 			set_bit(SLF_KEEPTEST, &sl->flags);
-                }
+                } else {
+                        del_timer(&sl->keepalive_timer);
+		}
+		spin_unlock_bh(&sl->lock);
 		break;
 
         case SIOCGKEEPALIVE:
@@ -1282,12 +1282,11 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
         case SIOCSOUTFILL:
                 if (((unsigned)((unsigned long)rq->ifr_data)) > 255) /* max for unchar */
 			return -EINVAL;
-                if (sl->outfill)
-			del_timer (&sl->outfill_timer);
                 if ((sl->outfill = (unchar)((unsigned long) rq->ifr_data)) != 0){
-			sl->outfill_timer.expires=jiffies+sl->outfill*HZ;
-			add_timer(&sl->outfill_timer);
+			mod_timer(&sl->outfill_timer, jiffies+sl->outfill*HZ);
 			set_bit(SLF_OUTWAIT, &sl->flags);
+		} else {
+                        del_timer (&sl->outfill_timer);
 		}
                 break;
 
@@ -1300,7 +1299,7 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 		   and opened by another process device.
 		 */
 		if (sl->tty != current->tty && sl->pid != current->pid) {
-			end_bh_atomic();
+			spin_unlock_bh(&sl->lock);
 			return -EPERM;
 		}
 		sl->leased = 0;
@@ -1311,7 +1310,7 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
         case SIOCGLEASE:
 		rq->ifr_data=(caddr_t)((unsigned long)sl->leased);
 	};
-	end_bh_atomic();
+	spin_unlock_bh(&sl->lock);
 	return 0;
 }
 #endif
@@ -1399,15 +1398,19 @@ cleanup_module(void)
 			}
 
 			busy = 0;
-			start_bh_atomic();
+			local_bh_disable();
 			for (i = 0; i < slip_maxdev; i++) {
 				struct slip_ctrl *slc = slip_ctrls[i];
-				if (slc && slc->ctrl.tty) {
+				if (!slc)
+					continue;
+				spin_lock(&slc->ctrl.lock);
+				if (slc->ctrl.tty) {
 					busy++;
 					tty_hangup(slc->ctrl.tty);
 				}
+				spin_unlock(&slc->ctrl.lock);
 			}
-			end_bh_atomic();
+			local_bh_enable();
 		} while (busy && jiffies - start < 1*HZ);
 
 		busy = 0;
@@ -1449,8 +1452,10 @@ static void sl_outfill(unsigned long sls)
 {
 	struct slip *sl=(struct slip *)sls;
 
-	if (sl==NULL || sl->tty == NULL)
-		return;
+	spin_lock(&sl->lock);
+
+	if (sl->tty == NULL)
+		goto out;
 
 	if(sl->outfill)
 	{
@@ -1463,7 +1468,7 @@ static void sl_outfill(unsigned long sls)
 			unsigned char s = END;
 #endif
 			/* put END into tty queue. Is it right ??? */
-			if (!test_bit(0, (void *) &sl->dev->tbusy))
+			if (!test_bit(LINK_STATE_XOFF, &sl->dev->state))
 			{
 				/* if device busy no outfill */
 				sl->tty->driver.write(sl->tty, 0, &s, 1);
@@ -1471,18 +1476,22 @@ static void sl_outfill(unsigned long sls)
 		}
 		else
 			set_bit(SLF_OUTWAIT, &sl->flags);
-		(void)del_timer(&sl->outfill_timer);
-		sl->outfill_timer.expires=jiffies+sl->outfill*HZ;
-		add_timer(&sl->outfill_timer);
+
+		mod_timer(&sl->outfill_timer, jiffies+sl->outfill*HZ);
 	}
+out:
+	spin_unlock(&sl->lock);
+	timer_exit(&sl->outfill_timer);
 }
 
 static void sl_keepalive(unsigned long sls)
 {
 	struct slip *sl=(struct slip *)sls;
 
-	if (sl == NULL || sl->tty == NULL)
-		return;
+	spin_lock(&sl->lock);
+
+	if (sl->tty == NULL)
+		goto out;
 
 	if( sl->keepalive)
 	{
@@ -1494,13 +1503,17 @@ static void sl_keepalive(unsigned long sls)
 			printk("%s: no packets received during keepalive timeout, hangup.\n", sl->dev->name);
 			tty_hangup(sl->tty); /* this must hangup tty & close slip */
 			/* I think we need not something else */
-			return;
+			goto out;
 		}
 		else
 			set_bit(SLF_KEEPTEST, &sl->flags);
-		sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
-		add_timer(&sl->keepalive_timer);
+
+		mod_timer(&sl->keepalive_timer, jiffies+sl->keepalive*HZ);
 	}
+
+out:
+	spin_unlock(&sl->lock);
+	timer_exit(&sl->keepalive_timer);
 }
 
 #endif

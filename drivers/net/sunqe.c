@@ -1,4 +1,4 @@
-/* $Id: sunqe.c,v 1.41 2000/01/28 13:42:30 jj Exp $
+/* $Id: sunqe.c,v 1.43 2000/02/09 21:11:19 davem Exp $
  * sunqe.c: Sparc QuadEthernet 10baseT SBUS card driver.
  *          Once again I am out to prove that every ethernet
  *          controller out there can be most efficiently programmed
@@ -455,6 +455,8 @@ static void qe_rx(struct sunqe *qep)
 		printk(KERN_NOTICE "%s: Memory squeeze, deferring packet.\n", qep->dev->name);
 }
 
+static void qe_tx_reclaim(struct sunqe *qep);
+
 /* Interrupts for all QE's get filtered out via the QEC master controller,
  * so we just run through each qe and check to see who is signaling
  * and thus needs to be serviced.
@@ -470,10 +472,7 @@ static void qec_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	while (channel < 4) {
 		if (qec_status & 0xf) {
 			struct sunqe *qep = qecp->qes[channel];
-			struct net_device *dev = qep->dev;
 			u32 qe_status;
-
-			dev->interrupt = 1;
 
 			qe_status = sbus_readl(qep->qcregs + CREG_STAT);
 			if (qe_status & CREG_STAT_ERRORS) {
@@ -482,8 +481,20 @@ static void qec_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			}
 			if (qe_status & CREG_STAT_RXIRQ)
 				qe_rx(qep);
+			if (test_bit(LINK_STATE_XOFF, &qep->dev->state) &&
+			    (qe_status & CREG_STAT_TXIRQ)) {
+				spin_lock(&qep->lock);
+				qe_tx_reclaim(qep);
+				if (TX_BUFFS_AVAIL(qep) > 0) {
+					/* Wake net queue and return to
+					 * lazy tx reclaim.
+					 */
+					netif_wake_queue(qep->dev);
+					sbus_writel(1, qep->qcregs + CREG_TIMASK);
+				}
+				spin_unlock(&qep->lock);
+			}
 	next:
-			dev->interrupt = 0;
 		}
 		qec_status >>= 4;
 		channel++;
@@ -514,11 +525,12 @@ static int qe_close(struct net_device *dev)
 	return 0;
 }
 
-/* Reclaim TX'd frames from the ring. */
+/* Reclaim TX'd frames from the ring.  This must always run under
+ * the IRQ protected qep->lock.
+ */
 static void qe_tx_reclaim(struct sunqe *qep)
 {
 	struct qe_txd *txbase = &qep->qe_block->qe_txd[0];
-	struct net_device *dev = qep->dev;
 	int elem = qep->tx_old;
 
 	while (elem != qep->tx_new) {
@@ -529,11 +541,31 @@ static void qe_tx_reclaim(struct sunqe *qep)
 		elem = NEXT_TX(elem);
 	}
 	qep->tx_old = elem;
+}
 
-	if (dev->tbusy && (TX_BUFFS_AVAIL(qep) > 0)) {
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
+static void qe_tx_timeout(struct net_device *dev)
+{
+	struct sunqe *qep = (struct sunqe *) dev->priv;
+	int tx_full;
+
+	spin_lock_irq(&qep->lock);
+
+	/* Try to reclaim, if that frees up some tx
+	 * entries, we're fine.
+	 */
+	qe_tx_reclaim(qep);
+	tx_full = TX_BUFFS_AVAIL(qep) <= 0;
+
+	spin_unlock_irq(&qep->lock);
+
+	if (! tx_full)
+		goto out;
+
+	printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
+	qe_init(qep, 1);
+
+out:
+	netif_wake_queue(dev);
 }
 
 /* Get a packet queued to go onto the wire. */
@@ -545,19 +577,9 @@ static int qe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned char *txbuf;
 	int len, entry;
 
+	spin_lock_irq(&qep->lock);
+
 	qe_tx_reclaim(qep);
-
-	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		long tickssofar = jiffies - dev->trans_start;
-
-		if (tickssofar >= 40) {
-			printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
-			qe_init(qep, 1);
-			dev->tbusy = 0;
-			dev->trans_start = jiffies;
-		}
-		return 1;
-	}
 
 	len = skb->len;
 	entry = qep->tx_new;
@@ -583,10 +605,18 @@ static int qe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	qep->net_stats.tx_packets++;
 	qep->net_stats.tx_bytes += len;
 
-	dev_kfree_skb(skb);
+	if (TX_BUFFS_AVAIL(qep) <= 0) {
+		/* Halt the net queue and enable tx interrupts.
+		 * When the tx queue empties the tx irq handler
+		 * will wake up the queue and return us back to
+		 * the lazy tx reclaim scheme.
+		 */
+		netif_stop_queue(dev);
+		sbus_writel(0, qep->qcregs + CREG_TIMASK);
+	}
+	spin_unlock_irq(&qep->lock);
 
-	if (TX_BUFFS_AVAIL(qep))
-		dev->tbusy = 0;
+	dev_kfree_skb(skb);
 
 	return 0;
 }
@@ -611,7 +641,7 @@ static void qe_set_multicast(struct net_device *dev)
 	u32 crc, poly = CRC_POLYNOMIAL_LE;
 
 	/* Lock out others. */
-	set_bit(0, (void *) &dev->tbusy);
+	netif_stop_queue(dev);
 
 	if ((dev->flags & IFF_ALLMULTI) || (dev->mc_count > 64)) {
 		sbus_writeb(MREGS_IACONFIG_ACHNGE | MREGS_IACONFIG_LARESET,
@@ -673,7 +703,7 @@ static void qe_set_multicast(struct net_device *dev)
 	sbus_writeb(qep->mconfig, qep->mregs + MREGS_MCONFIG);
 
 	/* Let us get going again. */
-	dev->tbusy = 0;
+	netif_wake_queue(dev);
 }
 
 /* This is only called once at boot time for each card probed. */
@@ -722,6 +752,7 @@ static int __init qec_ether_init(struct net_device *dev, struct sbus_dev *sdev)
 	qe_devs[0] = dev;
 	qeps[0] = (struct sunqe *) dev->priv;
 	qeps[0]->channel = 0;
+	spin_lock_init(&qeps[0]->lock);
 	for (j = 0; j < 6; j++)
 		qe_devs[0]->dev_addr[j] = idprom->id_ethaddr[j];
 
@@ -857,6 +888,8 @@ static int __init qec_ether_init(struct net_device *dev, struct sbus_dev *sdev)
 		qe_devs[i]->hard_start_xmit = qe_start_xmit;
 		qe_devs[i]->get_stats = qe_get_stats;
 		qe_devs[i]->set_multicast_list = qe_set_multicast;
+		qe_devs[i]->tx_timeout = qe_tx_timeout;
+		qe_devs[i]->watchdog_timeo = 5*HZ;
 		qe_devs[i]->irq = sdev->irqs[0];
 		qe_devs[i]->dma = 0;
 		ether_setup(qe_devs[i]);

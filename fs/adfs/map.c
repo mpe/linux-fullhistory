@@ -44,7 +44,7 @@ lookup_zone(const struct adfs_discmap *dm, const unsigned int idlen,
 		/*
 		 * get fragment id
 		 */
-		asm("@ get fragment id start");
+		//asm("@ get fragment id start");
 		{
 			unsigned long v2;
 			unsigned int tmp;
@@ -60,14 +60,14 @@ lookup_zone(const struct adfs_discmap *dm, const unsigned int idlen,
 
 			frag &= idmask;
 		}
-		asm("@ get fragment id end");
+		//asm("@ get fragment id end");
 
 		mapptr = start + idlen;
 
 		/*
 		 * find end of fragment
 		 */
-		asm("@ find end of fragment start");
+		//asm("@ find end of fragment start");
 		{
 			unsigned long v2;
 
@@ -79,7 +79,7 @@ lookup_zone(const struct adfs_discmap *dm, const unsigned int idlen,
 
 			mapptr += 1 + ffz(~v2);
 		}
-		asm("@ find end of fragment end");
+		//asm("@ find end of fragment end");
 
 		if (frag == frag_id)
 			goto found;
@@ -122,7 +122,7 @@ scan_free_map(struct adfs_sb_info *asb, struct adfs_discmap *dm)
 	/*
 	 * get fragment id
 	 */
-	asm("@ get fragment id start");
+	//asm("@ get fragment id start");
 	{
 		unsigned long v2;
 		unsigned int tmp;
@@ -138,7 +138,7 @@ scan_free_map(struct adfs_sb_info *asb, struct adfs_discmap *dm)
 
 		frag &= idmask;
 	}
-	asm("@ get fragment id end");
+	//asm("@ get fragment id end");
 
 	/*
 	 * If the freelink is null, then no free fragments
@@ -153,7 +153,7 @@ scan_free_map(struct adfs_sb_info *asb, struct adfs_discmap *dm)
 		/*
 		 * get fragment id
 		 */
-		asm("@ get fragment id start");
+		//asm("@ get fragment id start");
 		{
 			unsigned long v2;
 			unsigned int tmp;
@@ -169,14 +169,14 @@ scan_free_map(struct adfs_sb_info *asb, struct adfs_discmap *dm)
 
 			frag &= idmask;
 		}
-		asm("@ get fragment id end");
+		//asm("@ get fragment id end");
 
 		mapptr = start + idlen;
 
 		/*
 		 * find end of fragment
 		 */
-		asm("@ find end of fragment start");
+		//asm("@ find end of fragment start");
 		{
 			unsigned long v2;
 
@@ -188,7 +188,7 @@ scan_free_map(struct adfs_sb_info *asb, struct adfs_discmap *dm)
 
 			mapptr += 1 + ffz(~v2);
 		}
-		asm("@ find end of fragment end");
+		//asm("@ find end of fragment end");
 
 		total += mapptr - start;
 	} while (frag >= idlen + 1);

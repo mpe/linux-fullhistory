@@ -16,6 +16,7 @@
 
 #include <linux/errno.h>
 #include <linux/stat.h>
+#include <linux/smp_lock.h>
 
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>

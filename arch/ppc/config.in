@@ -15,7 +15,7 @@ mainmenu_option next_comment
 comment 'Platform support'
 define_bool CONFIG_PPC y
 choice 'Processor Type'	\
-	"6xx/7xx		CONFIG_6xx	\
+	"6xx/7xx/7400		CONFIG_6xx	\
 	 4xx			CONFIG_4xx	\
 	 630/Power3(64-Bit)	CONFIG_PPC64	\
 	 82xx			CONFIG_82xx	\
@@ -97,6 +97,9 @@ fi
 if [ "$CONFIG_6xx" = "y" -a "$CONFIG_APUS" != "y" ]; then
     define_bool CONFIG_PCI y
 fi
+if [ "$CONFIG_PREP" = "y" -o "$CONFIG_PMAC" = "y" -o "$CONFIG_CHRP" = "y" -o "$CONFIG_ALL_PPC" = "y"]; then
+    define_bool CONFIG_PCI y
+fi
 
 bool 'Networking support' CONFIG_NET
 bool 'Sysctl support' CONFIG_SYSCTL
@@ -140,6 +143,7 @@ if [ "$CONFIG_4xx" != "y" -a "$CONFIG_8xx" != "y" ]; then
      bool '   Include MacIO ADB driver' CONFIG_ADB_MACIO
      bool '   Include PMU (Powerbook) ADB driver' CONFIG_ADB_PMU
      bool 'Support for ADB keyboard' CONFIG_ADB_KEYBOARD 
+     bool 'Support for ADB mouse' CONFIG_ADBMOUSE
   fi
   bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
   bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP

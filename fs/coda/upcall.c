@@ -392,7 +392,7 @@ int venus_readlink(struct super_block *sb, struct ViceFid *fid,
 		if ( retlen > *length )
 		        retlen = *length;
 		*length = retlen;
-		result =  (char *)outp + (int)outp->coda_readlink.data;
+		result =  (char *)outp + (long)outp->coda_readlink.data;
 		memcpy(buffer, result, retlen);
 		*(buffer + retlen) = '\0';
 	}
@@ -541,7 +541,7 @@ int venus_pioctl(struct super_block *sb, struct ViceFid *fid,
         inp->coda_ioctl.data = (char *)(INSIZE(ioctl));
      
         /* get the data out of user space */
-        if ( copy_from_user((char*)inp + (int)inp->coda_ioctl.data,
+        if ( copy_from_user((char*)inp + (long)inp->coda_ioctl.data,
 			    data->vi.in, data->vi.in_size) ) {
 	        error = EINVAL;
 	        goto exit;
@@ -567,7 +567,7 @@ int venus_pioctl(struct super_block *sb, struct ViceFid *fid,
 		if ( error ) goto exit;
 
 		if (copy_to_user(data->vi.out, 
-				 (char *)outp + (int)outp->coda_ioctl.data, 
+				 (char *)outp + (long)outp->coda_ioctl.data, 
 				 data->vi.out_size)) {
 		        error = EINVAL;
 			goto exit;
@@ -660,7 +660,8 @@ static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 	}
 
 	CDEBUG(D_SPECIAL, "begin: %ld.%06ld, elapsed: %ld.%06ld\n",
-		begin.tv_sec, begin.tv_usec, end.tv_sec, end.tv_usec);
+		begin.tv_sec, (unsigned long)begin.tv_usec,
+		end.tv_sec, (unsigned long)end.tv_usec);
 
 	return 	((end.tv_sec * 1000000) + end.tv_usec);
 }

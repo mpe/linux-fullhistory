@@ -8,43 +8,33 @@
 #define _LINUX_ASM_VGA_H_
 
 #include <asm/io.h>
-#include <asm/processor.h>
 
 #include <linux/config.h>
-#include <linux/console.h>
+
+#if defined(CONFIG_VGA_CONSOLE) || defined(CONFIG_MDA_CONSOLE)
 
 #define VT_BUF_HAVE_RW
+/*
+ *  These are only needed for supporting VGA or MDA text mode, which use little
+ *  endian byte ordering.
+ *  In other cases, we can optimize by using native byte ordering and
+ *  <linux/vt_buffer.h> has already done the right job for us.
+ */
 
 extern inline void scr_writew(u16 val, u16 *addr)
 {
-	/* If using vgacon (not fbcon) byteswap the writes.
-	 * If non-vgacon assume fbcon and don't byteswap
-	 * just like include/linux/vt_buffer.h.
-	 * XXX: this is a performance loss so get rid of it
-	 *      as soon as fbcon works on prep.
-	 * -- Cort
-	 */
-#ifdef CONFIG_FB
-	if ( conswitchp != &vga_con )
-		(*(addr) = (val));
-	else
-#endif /* CONFIG_FB */
-		st_le16(addr, val);
+    writew(val, (unsigned long)addr);
 }
 
 extern inline u16 scr_readw(const u16 *addr)
 {
-#ifdef CONFIG_FB
-	if ( conswitchp != &vga_con )
-		return (*(addr));
-	else
-#endif /* CONFIG_FB */
-		return ld_le16((unsigned short *)addr);
+    return readw((unsigned long)addr);
 }
 
-#define VT_BUF_HAVE_MEMCPYF
-#define scr_memcpyw_from memcpy
-#define scr_memcpyw_to memcpy
+#define VT_BUF_HAVE_MEMCPYW
+#define scr_memcpyw	memcpy
+
+#endif /* !CONFIG_VGA_CONSOLE && !CONFIG_MDA_CONSOLE */
 
 extern unsigned long vgacon_remap_base;
 #define VGA_MAP_MEM(x) (x + vgacon_remap_base)

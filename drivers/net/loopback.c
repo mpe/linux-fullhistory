@@ -107,17 +107,10 @@ static struct net_device_stats *get_stats(struct net_device *dev)
 	return (struct net_device_stats *)dev->priv;
 }
 
-static int loopback_open(struct net_device *dev)
-{
-	dev->flags|=IFF_LOOPBACK;
-	return 0;
-}
-
 /* Initialize the rest of the LOOPBACK device. */
 int __init loopback_init(struct net_device *dev)
 {
 	dev->mtu		= LOOPBACK_MTU;
-	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;
 	dev->hard_header	= eth_header;
 	dev->hard_header_cache	= eth_header_cache;
@@ -127,7 +120,6 @@ int __init loopback_init(struct net_device *dev)
 	dev->tx_queue_len	= 0;
 	dev->type		= ARPHRD_LOOPBACK;	/* 0x0001		*/
 	dev->rebuild_header	= eth_rebuild_header;
-	dev->open		= loopback_open;
 	dev->flags		= IFF_LOOPBACK;
 	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)

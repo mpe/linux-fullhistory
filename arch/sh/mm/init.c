@@ -41,7 +41,6 @@ unsigned long mmu_context_cache;
 static unsigned long totalram_pages = 0;
 static unsigned long totalhigh_pages = 0;
 
-extern void show_net_buffers(void);
 extern unsigned long init_smp_mappings(unsigned long);
 
 /*
@@ -173,9 +172,6 @@ void show_mem(void)
 	printk("%d pages swap cached\n",cached);
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 /* References to section boundaries */

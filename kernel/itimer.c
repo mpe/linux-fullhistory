@@ -48,7 +48,9 @@ int do_getitimer(int which, struct itimerval *value)
 	case ITIMER_REAL:
 		interval = current->it_real_incr;
 		val = 0;
-		start_bh_atomic();
+		/* 
+		 * FIXME! This needs to be atomic, in case the kernel timer happens!
+		 */
 		if (timer_pending(&current->real_timer)) {
 			val = current->real_timer.expires - jiffies;
 
@@ -56,7 +58,6 @@ int do_getitimer(int which, struct itimerval *value)
 			if ((long) val <= 0)
 				val = 1;
 		}
-		end_bh_atomic();
 		break;
 	case ITIMER_VIRTUAL:
 		val = current->it_virt_value;
@@ -102,6 +103,7 @@ void it_real_fn(unsigned long __data)
 		p->real_timer.expires = jiffies + interval;
 		add_timer(&p->real_timer);
 	}
+	timer_exit(&p->real_timer);
 }
 
 int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
@@ -115,9 +117,7 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 		return k;
 	switch (which) {
 		case ITIMER_REAL:
-			start_bh_atomic();
-			del_timer(&current->real_timer);
-			end_bh_atomic();
+			del_timer_sync(&current->real_timer);
 			current->it_real_value = j;
 			current->it_real_incr = i;
 			if (!j)

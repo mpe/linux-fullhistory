@@ -395,9 +395,7 @@ NORET_TYPE void do_exit(long code)
 	if (!tsk->pid)
 		panic("Attempted to kill the idle task!");
 	tsk->flags |= PF_EXITING;
-	start_bh_atomic();
-	del_timer(&tsk->real_timer);
-	end_bh_atomic();
+	del_timer_sync(&tsk->real_timer);
 
 	lock_kernel();
 fake_volatile:

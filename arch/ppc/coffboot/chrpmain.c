@@ -92,8 +92,7 @@ boot(int a1, int a2, void *prom)
 void make_bi_recs(unsigned long addr)
 {
 	struct bi_record *rec;
-
-	rec = (struct bi_record *)PAGE_ALIGN(addr);
+	rec = (struct bi_record *)_ALIGN((unsigned long)addr+(1<<20)-1,(1<<20));
 	    
 	rec->tag = BI_FIRST;
 	rec->size = sizeof(struct bi_record);
@@ -109,7 +108,15 @@ void make_bi_recs(unsigned long addr)
 	rec->data[1] = 1;
 	rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
 	rec = (struct bi_record *)((unsigned long)rec + rec->size);
-	    
+	
+#ifdef SYSMAP_OFFSET
+	rec->tag = BI_SYSMAP;
+	rec->data[0] = SYSMAP_OFFSET;
+	rec->data[1] = SYSMAP_SIZE;
+	rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
+	rec = (struct bi_record *)((unsigned long)rec + rec->size);
+#endif /* SYSMAP_OFFSET */
+	
 	rec->tag = BI_LAST;
 	rec->size = sizeof(struct bi_record);
 	rec = (struct bi_record *)((unsigned long)rec + rec->size);

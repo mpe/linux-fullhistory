@@ -83,8 +83,8 @@ typedef uLong FAR uLongf;
 typedef void FAR *voidpf;
 typedef void     *voidp;
 
-#include <sys/types.h> /* for off_t */
-#include <unistd.h>    /* for SEEK_* and off_t */
+#include <linux/types.h> /* for off_t */
+#include <linux/unistd.h>    /* for SEEK_* and off_t */
 #define z_off_t  off_t
 
 #endif /* _ZCONF_H */

@@ -51,6 +51,7 @@ enum {
 	PMU_OHARE_BASED,	/* 2400, 3400, 3500 (old G3 powerbook) */
 	PMU_HEATHROW_BASED,	/* PowerBook G3 series */
 	PMU_PADDINGTON_BASED,	/* 1999 PowerBook G3 */
+	PMU_KEYLARGO_BASED,	/* Core99 motherboard (PMU99) */
 };
 
 /*
@@ -66,6 +67,8 @@ enum {
 #define PMU_IOC_SET_BACKLIGHT	_IOW('B', 2, sizeof(__u32))
 /* out param: u32*	backlight value: 0 to 31 */
 #define PMU_IOC_GET_MODEL	_IOR('B', 3, sizeof(__u32*))
+/* out param: u32*	has_adb: 0 or 1 */
+#define PMU_IOC_HAS_ADB		_IOR('B', 4, sizeof(__u32*)) 
 
 #ifdef __KERNEL__
 

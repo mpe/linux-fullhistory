@@ -42,7 +42,7 @@
 
 static void print_inquiry(unsigned char *data);
 static int scan_scsis_single(int channel, int dev, int lun, int *max_scsi_dev,
-		int *sparse_lun, Scsi_Device ** SDpnt, Scsi_Cmnd * SCpnt,
+		int *sparse_lun, Scsi_Device ** SDpnt,
 			     struct Scsi_Host *shpnt, char *scsi_result);
 
 struct dev_info {
@@ -119,6 +119,7 @@ static struct dev_info device_list[] =
 	{"IOMEGA", "Io20S         *F", "*", BLIST_KEY},
 	{"INSITE", "Floptical   F*8I", "*", BLIST_KEY},
 	{"INSITE", "I325VM", "*", BLIST_KEY},
+	{"LASOUND","CDX7405","3.10", BLIST_MAX5LUN | BLIST_SINGLELUN},
 	{"NRC", "MBR-7", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
 	{"NRC", "MBR-7.4", "*", BLIST_FORCELUN | BLIST_SINGLELUN},
 	{"REGAL", "CDC-4X", "*", BLIST_MAX5LUN | BLIST_SINGLELUN},
@@ -259,7 +260,6 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	int dev;
 	int lun;
 	int max_dev_lun;
-	Scsi_Cmnd *SCpnt;
 	unsigned char *scsi_result;
 	unsigned char scsi_result0[256];
 	Scsi_Device *SDpnt;
@@ -267,29 +267,26 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	int sparse_lun;
 
 	scsi_result = NULL;
-	SCpnt = (Scsi_Cmnd *) kmalloc(sizeof(Scsi_Cmnd),
-					       GFP_ATOMIC | GFP_DMA);
-	if (SCpnt) {
-                memset(SCpnt, 0, sizeof(Scsi_Cmnd));
-		SDpnt = (Scsi_Device *) kmalloc(sizeof(Scsi_Device),
-							 GFP_ATOMIC);
-		if (SDpnt) {
-                        memset(SDpnt, 0, sizeof(Scsi_Device));
-			/*
-			 * Register the queue for the device.  All I/O requests will come
-			 * in through here.  We also need to register a pointer to
-			 * ourselves, since the queue handler won't know what device
-			 * the queue actually represents.   We could look it up, but it
-			 * is pointless work.
-			 */
-			blk_init_queue(&SDpnt->request_queue, scsi_get_request_handler(SDpnt, shpnt));
-			blk_queue_headactive(&SDpnt->request_queue, 0);
-			SDpnt->request_queue.queuedata = (void *) SDpnt;
-			/* Make sure we have something that is valid for DMA purposes */
-			scsi_result = ((!shpnt->unchecked_isa_dma)
-				       ? &scsi_result0[0] : kmalloc(512, GFP_DMA));
-		}
+
+	SDpnt = (Scsi_Device *) kmalloc(sizeof(Scsi_Device),
+					GFP_ATOMIC);
+	if (SDpnt) {
+		memset(SDpnt, 0, sizeof(Scsi_Device));
+		/*
+		 * Register the queue for the device.  All I/O requests will come
+		 * in through here.  We also need to register a pointer to
+		 * ourselves, since the queue handler won't know what device
+		 * the queue actually represents.   We could look it up, but it
+		 * is pointless work.
+		 */
+		scsi_initialize_queue(SDpnt, shpnt);
+		blk_queue_headactive(&SDpnt->request_queue, 0);
+		SDpnt->request_queue.queuedata = (void *) SDpnt;
+		/* Make sure we have something that is valid for DMA purposes */
+		scsi_result = ((!shpnt->unchecked_isa_dma)
+			       ? &scsi_result0[0] : kmalloc(512, GFP_DMA));
 	}
+
 	if (scsi_result == NULL) {
 		printk("Unable to obtain scsi_result buffer\n");
 		goto leave;
@@ -297,10 +294,11 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	/*
 	 * We must chain ourself in the host_queue, so commands can time out 
 	 */
-	SCpnt->next = NULL;
-	SDpnt->device_queue = SCpnt;
+	SDpnt->queue_depth = 1;
 	SDpnt->host = shpnt;
 	SDpnt->online = TRUE;
+
+	scsi_build_commandblocks(SDpnt);
 
 	initialize_merge_fn(SDpnt);
 
@@ -329,9 +327,6 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	 * We need to increment the counter for this one device so we can track when
 	 * things are quiet.
 	 */
-	atomic_inc(&shpnt->host_active);
-	atomic_inc(&SDpnt->device_active);
-
 	if (hardcoded == 1) {
 		Scsi_Device *oldSDpnt = SDpnt;
 		struct Scsi_Device_Template *sdtpnt;
@@ -345,7 +340,7 @@ void scan_scsis(struct Scsi_Host *shpnt,
 		if (lun >= shpnt->max_lun)
 			goto leave;
 		scan_scsis_single(channel, dev, lun, &max_dev_lun, &sparse_lun,
-				  &SDpnt, SCpnt, shpnt, scsi_result);
+				  &SDpnt, shpnt, scsi_result);
 		if (SDpnt != oldSDpnt) {
 
 			/* it could happen the blockdevice hasn't yet been inited */
@@ -397,7 +392,7 @@ void scan_scsis(struct Scsi_Host *shpnt,
 					sparse_lun = 0;
 					for (lun = 0; lun < max_dev_lun; ++lun) {
 						if (!scan_scsis_single(channel, order_dev, lun, &max_dev_lun,
-								       &sparse_lun, &SDpnt, SCpnt, shpnt,
+								       &sparse_lun, &SDpnt, shpnt,
 							     scsi_result)
 						    && !sparse_lun)
 							break;	/* break means don't probe further for luns!=0 */
@@ -406,13 +401,6 @@ void scan_scsis(struct Scsi_Host *shpnt,
 			}	/* for dev ends */
 		}		/* for channel ends */
 	}			/* if/else hardcoded */
-
-	/*
-	 * We need to decrement the counter for this one device
-	 * so we know when everything is quiet.
-	 */
-	atomic_dec(&shpnt->host_active);
-	atomic_dec(&SDpnt->device_active);
 
       leave:
 
@@ -434,12 +422,11 @@ void scan_scsis(struct Scsi_Host *shpnt,
 		}
 	}
 
+	scsi_release_commandblocks(SDpnt);
+
 	/* Last device block does not exist.  Free memory. */
 	if (SDpnt != NULL)
 		kfree((char *) SDpnt);
-
-	if (SCpnt != NULL)
-		kfree((char *) SCpnt);
 
 	/* If we allocated a buffer so we could do DMA, free it now */
 	if (scsi_result != &scsi_result0[0] && scsi_result != NULL) {
@@ -464,13 +451,14 @@ void scan_scsis(struct Scsi_Host *shpnt,
  * Returning 0 means Please don't ask further for lun!=0, 1 means OK go on.
  * Global variables used : scsi_devices(linked list)
  */
-int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
-	       int *sparse_lun, Scsi_Device ** SDpnt2, Scsi_Cmnd * SCpnt,
+static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
+	       int *sparse_lun, Scsi_Device ** SDpnt2, 
 		      struct Scsi_Host *shpnt, char *scsi_result)
 {
 	unsigned char scsi_cmd[MAX_COMMAND_SIZE];
 	struct Scsi_Device_Template *sdtpnt;
 	Scsi_Device *SDtail, *SDpnt = *SDpnt2;
+	Scsi_Cmnd * SCpnt;
 	int bflags, type = -1;
 	static int ghost_channel=-1, ghost_dev=-1;
 	int org_lun = lun;
@@ -505,6 +493,8 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	scsi_cmd[1] = lun << 5;
 	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
 
+	SCpnt = scsi_allocate_device(SDpnt, 0, 0);
+
 	SCpnt->host = SDpnt->host;
 	SCpnt->device = SDpnt;
 	SCpnt->target = SDpnt->id;
@@ -527,10 +517,14 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 		    ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
 			if (((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
 			    ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION) &&
-			    ((SCpnt->sense_buffer[2] & 0xf) != ILLEGAL_REQUEST || lun > 0))
+			    ((SCpnt->sense_buffer[2] & 0xf) != ILLEGAL_REQUEST || lun > 0)) {
+				scsi_release_command(SCpnt);
 				return 1;
-		} else
+			}
+		} else {
+			scsi_release_command(SCpnt);
 			return 0;
+		}
 	}
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: performing INQUIRY\n"));
 	/*
@@ -551,14 +545,17 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: INQUIRY %s with code 0x%x\n",
 		SCpnt->result ? "failed" : "successful", SCpnt->result));
 
-	if (SCpnt->result)
+	if (SCpnt->result) {
+		scsi_release_command(SCpnt);
 		return 0;	/* assume no peripheral if any sort of error */
+	}
 
 	/*
 	 * Check the peripheral qualifier field - this tells us whether LUNS
 	 * are supported here or not.
 	 */
 	if ((scsi_result[0] >> 5) == 3) {
+		scsi_release_command(SCpnt);
 		return 0;	/* assume no peripheral if any sort of error */
 	}
 
@@ -703,11 +700,11 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	        	(void *) scsi_result, 0x2a,
 	        	SCSI_TIMEOUT, 3);
 	}
-	/*
-	 * Detach the command from the device. It was just a temporary to be used while
-	 * scanning the bus - the real ones will be allocated later.
-	 */
-	SDpnt->device_queue = NULL;
+
+	scsi_release_command(SCpnt);
+	SCpnt = NULL;
+
+	scsi_release_commandblocks(SDpnt);
 
 	/*
 	 * This device was already hooked up to the host in question,
@@ -715,12 +712,18 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	 * allocate a new one and attach it to the host so that we can further scan the bus.
 	 */
 	SDpnt = (Scsi_Device *) kmalloc(sizeof(Scsi_Device), GFP_ATOMIC);
-	*SDpnt2 = SDpnt;
 	if (!SDpnt) {
 		printk("scsi: scan_scsis_single: Cannot malloc\n");
 		return 0;
 	}
         memset(SDpnt, 0, sizeof(Scsi_Device));
+
+	*SDpnt2 = SDpnt;
+	SDpnt->queue_depth = 1;
+	SDpnt->host = shpnt;
+	SDpnt->online = TRUE;
+
+	scsi_build_commandblocks(SDpnt);
 
 	/*
 	 * Register the queue for the device.  All I/O requests will come
@@ -729,17 +732,15 @@ int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	 * the queue actually represents.   We could look it up, but it
 	 * is pointless work.
 	 */
-	blk_init_queue(&SDpnt->request_queue, scsi_get_request_handler(SDpnt, shpnt));
+	scsi_initialize_queue(SDpnt, shpnt);
 	blk_queue_headactive(&SDpnt->request_queue, 0);
 	SDpnt->request_queue.queuedata = (void *) SDpnt;
 	SDpnt->host = shpnt;
 	initialize_merge_fn(SDpnt);
 
 	/*
-	 * And hook up our command block to the new device we will be testing
-	 * for.
+	 * Mark this device as online, or otherwise we won't be able to do much with it.
 	 */
-	SDpnt->device_queue = SCpnt;
 	SDpnt->online = TRUE;
 
         /*

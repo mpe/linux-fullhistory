@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.41 2000/01/08 07:01:20 davem Exp $
+/* $Id: pcikbd.c,v 1.43 2000/02/09 22:33:25 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -21,6 +21,7 @@
 #include <linux/random.h>
 #include <linux/miscdevice.h>
 #include <linux/kbd_ll.h>
+#include <linux/kbd_kern.h>
 #include <linux/delay.h>
 #include <linux/init.h>
 
@@ -325,7 +326,7 @@ pcikbd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			handle_scancode(scancode, !(scancode & 0x80));
 		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 	} while(status & KBD_STAT_OBF);
-	mark_bh(KEYBOARD_BH);
+	tasklet_schedule(&keyboard_tasklet);
 }
 
 static int send_data(unsigned char data)
@@ -713,12 +714,13 @@ static DECLARE_MUTEX(aux_sema4);
 static inline void aux_start_atomic(void)
 {
 	down(&aux_sema4);
-	disable_bh(KEYBOARD_BH);
+	tasklet_disable_nosync(&keyboard_tasklet);
+	tasklet_unlock_wait(&keyboard_tasklet);
 }
 
 static inline void aux_end_atomic(void)
 {
-	enable_bh(KEYBOARD_BH);
+	tasklet_enable(&keyboard_tasklet);
 	up(&aux_sema4);
 }
 
@@ -1022,6 +1024,9 @@ int __init ps2kbd_probe(void)
 		goto found;
 	}
 #endif
+	if (!pci_present())
+		goto do_enodev;
+
 	/*
 	 * Get the nodes for keyboard and mouse from aliases on normal systems.
 	 */

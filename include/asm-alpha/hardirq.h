@@ -23,6 +23,8 @@ extern int __local_irq_count;
 	(local_irq_count(__cpu) + local_bh_count(__cpu)) != 0;	\
 })
 
+#define in_irq() (local_irq_count(smp_processor_id()) != 0)
+
 #ifndef __SMP__
 
 #define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)

@@ -411,7 +411,6 @@ static __inline__ int dn_queue_skb(struct sock *sk, struct sk_buff *skb, int sig
 #ifdef CONFIG_FILTER
 	struct sk_filter *filter;
 #endif
-	unsigned long flags;
 
         /* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
            number of warnings when compiling with -W --ANK
@@ -433,7 +432,10 @@ static __inline__ int dn_queue_skb(struct sock *sk, struct sk_buff *skb, int sig
         skb_set_owner_r(skb, sk);
         skb_queue_tail(queue, skb);
 
-	read_lock_irqsave(&sk->callback_lock, flags);
+	/* This code only runs from BH or BH protected context.
+	 * Therefore the plain read_lock is ok here. -DaveM
+	 */
+	read_lock(&sk->callback_lock);
         if (!sk->dead) {
 		struct socket *sock = sk->socket;
 		wake_up_interruptible(sk->sleep);
@@ -441,7 +443,7 @@ static __inline__ int dn_queue_skb(struct sock *sk, struct sk_buff *skb, int sig
 			kill_fasync(sock->fasync_list, sig, 
 				    (sig == SIGURG) ? POLL_PRI : POLL_IN);
 	}
-	read_unlock_irqrestore(&sk->callback_lock, flags);
+	read_unlock(&sk->callback_lock);
 
         return 0;
 }

@@ -123,9 +123,7 @@ static int ethertap_open(struct net_device *dev)
 		MOD_DEC_USE_COUNT;
 		return -ENOBUFS;
 	}
-
-	dev->start = 1;
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 	return 0;
 }
 
@@ -319,8 +317,7 @@ static int ethertap_close(struct net_device *dev)
 	if (ethertap_debug > 2)
 		printk("%s: Shutting down.\n", dev->name);
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 
 	if (sk) {
 		lp->nl = NULL;

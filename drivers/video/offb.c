@@ -51,6 +51,7 @@ struct fb_info_offb {
     struct { u_char red, green, blue, pad; } palette[256];
     volatile unsigned char *cmap_adr;
     volatile unsigned char *cmap_data;
+    int is_rage_128;
     union {
 #ifdef FBCON_HAS_CFB16
 	u16 cfb16[16];
@@ -107,7 +108,8 @@ extern boot_infos_t *boot_infos;
 static int offb_init_driver(struct device_node *);
 static void offb_init_nodriver(struct device_node *);
 static void offb_init_fb(const char *name, const char *full_name, int width,
-		      int height, int depth, int pitch, unsigned long address);
+		      int height, int depth, int pitch, unsigned long address,
+		      struct device_node *dp);
 
     /*
      *  Interface to the low level console driver
@@ -390,7 +392,7 @@ int __init offb_init(void)
 			 boot_infos->dispDeviceRect[2],
 			 boot_infos->dispDeviceRect[3],
 			 boot_infos->dispDeviceDepth,
-			 boot_infos->dispDeviceRowBytes, addr);
+			 boot_infos->dispDeviceRowBytes, addr, NULL);
 	}
     }
 
@@ -518,13 +520,14 @@ static void __init offb_init_nodriver(struct device_node *dp)
 	    address += 0x1000;
     }
     offb_init_fb(dp->name, dp->full_name, width, height, depth,
-		 pitch, address);
+		 pitch, address, dp);
     
 }
 
 static void offb_init_fb(const char *name, const char *full_name,
 				    int width, int height, int depth,
-				    int pitch, unsigned long address)
+				    int pitch, unsigned long address,
+				    struct device_node *dp)
 {
     int i;
     struct fb_fix_screeninfo *fix;
@@ -569,10 +572,18 @@ static void offb_init_fb(const char *name, const char *full_name,
     fix->type = FB_TYPE_PACKED_PIXELS;
     fix->type_aux = 0;
 
+    info->is_rage_128 = 0;
     if (depth == 8)
     {
     	/* XXX kludge for ati */
-    	if (strncmp(name, "ATY,", 4) == 0) {
+	if (strncmp(name, "ATY,Rage128", 11) == 0) {
+	    if (dp) {
+		unsigned long regbase = dp->addrs[2].address;
+		info->cmap_adr = ioremap(regbase, 0x1FFF) + 0x00b0;
+		info->cmap_data = info->cmap_adr + 4;
+		info->is_rage_128 = 1;
+	    }
+	} else if (strncmp(name, "ATY,", 4) == 0) {
 		unsigned long base = address & 0xff000000UL;
 		info->cmap_adr = ioremap(base + 0x7ff000, 0x1000) + 0xcc0;
 		info->cmap_data = info->cmap_adr + 1;
@@ -853,12 +864,17 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
     *info2->cmap_adr = regno;/* On some chipsets, add << 3 in 15 bits */
     mach_eieio();
-    *info2->cmap_data = red;
-    mach_eieio();
-    *info2->cmap_data = green;
-    mach_eieio();
-    *info2->cmap_data = blue;
-    mach_eieio();
+    if (info2->is_rage_128) {
+    	out_le32((unsigned int *)info2->cmap_data,
+    		(red << 16 | green << 8 | blue));
+    } else {
+	*info2->cmap_data = red;
+    	mach_eieio();
+    	*info2->cmap_data = green;
+    	mach_eieio();
+    	*info2->cmap_data = blue;
+    	mach_eieio();
+    }
 
     if (regno < 16)
 	switch (info2->var.bits_per_pixel) {

@@ -1,6 +1,6 @@
 /*
  *
- *    Copyright (c) 1999 Grant Erickson <grant@lcse.umn.edu>
+ *    Copyright (c) 1999-2000 Grant Erickson <grant@lcse.umn.edu>
  *
  *    Module name: oaknet.c
  *
@@ -9,10 +9,14 @@
  *      on-board the IBM PowerPC "Oak" evaluation board. Adapted from the
  *      various other 8390 drivers written by Donald Becker and Paul Gortmaker.
  *
+ *      Additional inspiration from the "tcd8390.c" driver from TiVo, Inc. 
+ *      and "enetLib.c" from IBM.
+ *
  */
 
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/delay.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 
@@ -32,19 +36,21 @@
 #define	FALSE	0
 #endif
 
-#define	OAKNET_CMD     		0x00
-#define OAKNET_DATA		0x10	/* NS-defined port window offset. */
-#define OAKNET_RESET		0x1f	/* A read resets, a write clears. */
-
 #define	OAKNET_START_PG		0x20	/* First page of TX buffer */
 #define	OAKNET_STOP_PG		0x40	/* Last pagge +1 of RX ring */
 
-#define	OAKNET_BASE		(dev->base_addr)
-
 #define	OAKNET_WAIT		(2 * HZ / 100)	/* 20 ms */
+
+/* Experimenting with some fixes for a broken driver... */
+
+#define	OAKNET_DISINT
+#define	OAKNET_HEADCHECK
+#define	OAKNET_RWFIX
 
 
 /* Global Variables */
+
+static const char *name = "National DP83902AV";
 
 #if defined(MODULE)
 static struct net_device *oaknet_devs;
@@ -90,14 +96,25 @@ oaknet_init(void)
 {
 	register int i;
 	int reg0, regd;
-	struct net_device *dev = NULL;
-	unsigned long ioaddr = OAKNET_IO_BASE;
-	const char *name = "National DP83902AV";
+	struct net_device tmp, *dev = NULL;
+#if 0
+	unsigned long ioaddr = OAKNET_IO_BASE; 
+#else
+	unsigned long ioaddr = ioremap(OAKNET_IO_BASE, OAKNET_IO_SIZE);
+#endif
 	bd_t *bip = (bd_t *)__res;
+
+	/*
+	 * This MUST happen here because of the nic_* macros
+	 * which have an implicit dependency on dev->base_addr.
+	 */
+
+	tmp.base_addr = ioaddr;
+	dev = &tmp;
 
 	/* Quick register check to see if the device is really there. */
 
-	if ((reg0 = inb_p(ioaddr)) == 0xFF)
+	if ((reg0 = ei_ibp(ioaddr)) == 0xFF)
 		return (ENODEV);
 
 	/*
@@ -106,17 +123,17 @@ oaknet_init(void)
 	 * and semi-functional.
 	 */
 
-	outb_p(E8390_NODMA + E8390_PAGE1 + E8390_STOP, ioaddr + E8390_CMD);
-	regd = inb_p(ioaddr + 0x0D);
-	outb_p(0xFF, ioaddr + 0x0D);
-	outb_p(E8390_NODMA + E8390_PAGE0, ioaddr + E8390_CMD);
-	inb_p(ioaddr + EN0_COUNTER0);
+	ei_obp(E8390_NODMA + E8390_PAGE1 + E8390_STOP, ioaddr + E8390_CMD);
+	regd = ei_ibp(ioaddr + 0x0D);
+	ei_obp(0xFF, ioaddr + 0x0D);
+	ei_obp(E8390_NODMA + E8390_PAGE0, ioaddr + E8390_CMD);
+	ei_ibp(ioaddr + EN0_COUNTER0);
 
 	/* It's no good. Fix things back up and leave. */
 
-	if (inb_p(ioaddr + EN0_COUNTER0) != 0) {
-		outb_p(reg0, ioaddr);
-		outb_p(regd, ioaddr + 0x0D);
+	if (ei_ibp(ioaddr + EN0_COUNTER0) != 0) {
+		ei_obp(reg0, ioaddr);
+		ei_obp(regd, ioaddr + 0x0D);
 		dev->base_addr = 0;
 
 		return (ENODEV);
@@ -145,7 +162,7 @@ oaknet_init(void)
 	 * and interrupt assignments are pre-assigned and unchageable.
 	 */
 
-	dev->base_addr = OAKNET_IO_BASE;
+	dev->base_addr = ioaddr;
 	dev->irq = OAKNET_INT;
 
 	/* Allocate 8390-specific device-private area and fields. */
@@ -156,19 +173,12 @@ oaknet_init(void)
 	}
 
 	/*
-	 * Just to be safe, reset the card as we cannot really* be sure
-	 * what state it was last left in.
-	 */
-
-	oaknet_reset_8390(dev);
-
-	/*
 	 * Disable all chip interrupts for now and ACK all pending
 	 * interrupts.
 	 */
 
-	outb_p(0x0, ioaddr + EN0_IMR);
-	outb_p(0xFF, ioaddr + EN0_ISR);
+	ei_obp(0x0, ioaddr + EN0_IMR);
+	ei_obp(0xFF, ioaddr + EN0_ISR);
 
 	/* Attempt to get the interrupt line */
 
@@ -273,7 +283,7 @@ oaknet_close(struct net_device *dev)
  *   This routine resets the DP83902 chip.
  *
  * Input(s):
- *  *dev - 
+ *  *dev - Pointer to the device structure for this driver.
  *
  * Output(s):
  *   N/A
@@ -285,36 +295,48 @@ oaknet_close(struct net_device *dev)
 static void
 oaknet_reset_8390(struct net_device *dev)
 {
-	int base = OAKNET_BASE;
-	unsigned long start = jiffies;
+	int base = E8390_BASE;
 
-	outb(inb(base + OAKNET_RESET), base + OAKNET_RESET);
+	/*
+	 * We have no provision of reseting the controller as is done
+	 * in other drivers, such as "ne.c". However, the following
+	 * seems to work well enough in the TiVo driver.
+	 */
 
+	printk("Resetting %s...\n", dev->name);
+	ei_obp(E8390_STOP | E8390_NODMA | E8390_PAGE0, base + E8390_CMD);
 	ei_status.txing = 0;
 	ei_status.dmaing = 0;
-
-	/* This check shouldn't be necessary eventually */
-
-	while ((inb_p(base + EN0_ISR) & ENISR_RESET) == 0) {
-		if (jiffies - start > OAKNET_WAIT) {
-			printk("%s: reset didn't complete\n", dev->name);
-			break;
-		}
-	}
-
-	outb_p(ENISR_RESET, base + EN0_ISR);	/* ACK reset interrupt */
 
 	return;
 }
 
 /*
- * XXX - Document me.
+ * static void oaknet_get_8390_hdr()
+ *
+ * Description:
+ *   This routine grabs the 8390-specific header. It's similar to the
+ *   block input routine, but we don't need to be concerned with ring wrap
+ *   as the header will be at the start of a page, so we optimize accordingly.
+ *
+ * Input(s):
+ *  *dev       - Pointer to the device structure for this driver.
+ *  *hdr       - Pointer to storage for the 8390-specific packet header.
+ *   ring_page - ?
+ *
+ * Output(s):
+ *  *hdr       - Pointer to the 8390-specific packet header for the just-
+ *               received frame.
+ *
+ * Returns:
+ *   N/A
+ *
  */
 static void
 oaknet_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 		    int ring_page)
 {
-	int base = OAKNET_BASE;
+	int base = dev->base_addr;
 
 	/*
 	 * This should NOT happen. If it does, it is the LAST thing you'll
@@ -340,6 +362,10 @@ oaknet_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 	else
 		insb(base + OAKNET_DATA, hdr,
 		     sizeof(struct e8390_pkt_hdr));
+
+	/* Byte-swap the packet byte count */
+
+	hdr->count = le16_to_cpu(hdr->count);
 
 	outb_p(ENISR_RDC, base + EN0_ISR);	/* ACK Remote DMA interrupt */
 	ei_status.dmaing &= ~0x01;
@@ -367,38 +393,99 @@ oaknet_block_input(struct net_device *dev, int count, struct sk_buff *skb,
 		return;
 	}
 
+#ifdef OAKNET_DISINT
+	save_flags(flags);
+	cli();
+#endif
+
 	ei_status.dmaing |= 0x01;
-	outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START, base + OAKNET_CMD);
-	outb_p(count & 0xff, base + EN0_RCNTLO);
-	outb_p(count >> 8, base + EN0_RCNTHI);
-	outb_p(ring_offset & 0xff, base + EN0_RSARLO);
-	outb_p(ring_offset >> 8, base + EN0_RSARHI);
-	outb_p(E8390_RREAD + E8390_START, base + OAKNET_CMD);
+	ei_obp(E8390_NODMA + E8390_PAGE0 + E8390_START, base + E8390_CMD);
+	ei_obp(count & 0xff, base + EN0_RCNTLO);
+	ei_obp(count >> 8, base + EN0_RCNTHI);
+	ei_obp(ring_offset & 0xff, base + EN0_RSARLO);
+	ei_obp(ring_offset >> 8, base + EN0_RSARHI);
+	ei_obp(E8390_RREAD + E8390_START, base + E8390_CMD);
 	if (ei_status.word16) {
-		insw(base + OAKNET_DATA, buf, count >> 1);
+		ei_isw(base + E8390_DATA, buf, count >> 1);
 		if (count & 0x01) {
-			buf[count-1] = inb(base + OAKNET_DATA);
+			buf[count - 1] = ei_ib(base + E8390_DATA);
+#ifdef OAKNET_HEADCHECK
+			bytes++;
+#endif
 		}
 	} else {
-		insb(base + OAKNET_DATA, buf, count);
+		ei_isb(base + E8390_DATA, buf, count);
 	}
-	outb_p(ENISR_RDC, base + EN0_ISR);	/* ACK Remote DMA interrupt */
+#ifdef OAKNET_HEADCHECK
+	/*
+	 * This was for the ALPHA version only, but enough people have
+	 * been encountering problems so it is still here.  If you see
+	 * this message you either 1) have a slightly incompatible clone
+	 * or 2) have noise/speed problems with your bus.
+	 */
+
+	/* DMA termination address check... */
+	{
+		int addr, tries = 20;
+		do {
+			/* DON'T check for 'ei_ibp(EN0_ISR) & ENISR_RDC' here
+			   -- it's broken for Rx on some cards! */
+			int high = ei_ibp(base + EN0_RSARHI);
+			int low = ei_ibp(base + EN0_RSARLO);
+			addr = (high << 8) + low;
+			if (((ring_offset + bytes) & 0xff) == low)
+				break;
+		} while (--tries > 0);
+	 	if (tries <= 0)
+			printk("%s: RX transfer address mismatch,"
+			       "%#4.4x (expected) vs. %#4.4x (actual).\n",
+			       dev->name, ring_offset + bytes, addr);
+	}
+#endif
+	ei_obp(ENISR_RDC, base + EN0_ISR);	/* ACK Remote DMA interrupt */
 	ei_status.dmaing &= ~0x01;
+
+#ifdef OAKNET_DISINT
+	restore_flags(flags);
+#endif
 
 	return;
 }
 
 /*
- * XXX - Document me.
+ * static void oaknet_block_output()
+ *
+ * Description:
+ *   This routine...
+ *
+ * Input(s):
+ *  *dev        - Pointer to the device structure for this driver.
+ *   count      - Number of bytes to be transferred.
+ *  *buf        - 
+ *   start_page - 
+ *
+ * Output(s):
+ *   N/A
+ *
+ * Returns:
+ *   N/A
+ *
  */
 static void
 oaknet_block_output(struct net_device *dev, int count,
 		    const unsigned char *buf, int start_page)
 {
-	int base = OAKNET_BASE;
+	int base = E8390_BASE;
+#if 0
 	int bug;
+#endif
 	unsigned long start;
-	unsigned char lobyte;
+#ifdef OAKNET_DISINT
+	unsigned long flags;
+#endif
+#ifdef OAKNET_HEADCHECK
+	int retries = 0;
+#endif
 
 	/* Round the count up for word writes. */
 
@@ -415,12 +502,22 @@ oaknet_block_output(struct net_device *dev, int count,
 		return;
 	}
 
+#ifdef OAKNET_DISINT
+	save_flags(flags);
+	cli();
+#endif
+
 	ei_status.dmaing |= 0x01;
 
 	/* Make sure we are in page 0. */
 
-	outb_p(E8390_PAGE0 + E8390_START + E8390_NODMA, base + OAKNET_CMD);
+	ei_obp(E8390_PAGE0 + E8390_START + E8390_NODMA, base + E8390_CMD);
 
+#ifdef OAKNET_HEADCHECK
+retry:
+#endif
+
+#if 0
 	/*
 	 * The 83902 documentation states that the processor needs to
 	 * do a "dummy read" before doing the remote write to work
@@ -433,60 +530,131 @@ oaknet_block_output(struct net_device *dev, int count,
 		unsigned int rdlo;
 
 		/* Now the normal output. */
-		outb_p(ENISR_RDC, base + EN0_ISR);
-		outb_p(count & 0xff, base + EN0_RCNTLO);
-		outb_p(count >> 8,   base + EN0_RCNTHI);
-		outb_p(0x00, base + EN0_RSARLO);
-		outb_p(start_page, base + EN0_RSARHI);
+		ei_obp(ENISR_RDC, base + EN0_ISR);
+		ei_obp(count & 0xff, base + EN0_RCNTLO);
+		ei_obp(count >> 8,   base + EN0_RCNTHI);
+		ei_obp(0x00, base + EN0_RSARLO);
+		ei_obp(start_page, base + EN0_RSARHI);
 
 		if (bug++)
 			break;
 
 		/* Perform the dummy read */
-		rdhi = inb_p(base + EN0_CRDAHI);
-		rdlo = inb_p(base + EN0_CRDALO);
-		outb_p(E8390_RREAD + E8390_START, base + OAKNET_CMD);
+		rdhi = ei_ibp(base + EN0_CRDAHI);
+		rdlo = ei_ibp(base + EN0_CRDALO);
+		ei_obp(E8390_RREAD + E8390_START, base + E8390_CMD);
 
 		while (1) {
 			unsigned int nrdhi;
 			unsigned int nrdlo;
-			nrdhi = inb_p(base + EN0_CRDAHI);
-			nrdlo = inb_p(base + EN0_CRDALO);
+			nrdhi = ei_ibp(base + EN0_CRDAHI);
+			nrdlo = ei_ibp(base + EN0_CRDALO);
 			if ((rdhi != nrdhi) || (rdlo != nrdlo))
 				break;
 		}
 	}
+#else
+#ifdef OAKNET_RWFIX
+	/*
+	 * Handle the read-before-write bug the same way as the
+	 * Crynwr packet driver -- the Nat'l Semi. method doesn't work.
+	 * Actually this doesn't always work either, but if you have
+	 * problems with your 83902 this is better than nothing!
+	 */
 
-	outb_p(E8390_RWRITE+E8390_START, base + OAKNET_CMD);
+	ei_obp(0x42, base + EN0_RCNTLO);
+	ei_obp(0x00, base + EN0_RCNTHI);
+	ei_obp(0x42, base + EN0_RSARLO);
+	ei_obp(0x00, base + EN0_RSARHI);
+	ei_obp(E8390_RREAD + E8390_START, base + E8390_CMD);
+	/* Make certain that the dummy read has occurred. */
+	udelay(6);
+#endif
+
+	ei_obp(ENISR_RDC, base + EN0_ISR);
+
+	/* Now the normal output. */
+	ei_obp(count & 0xff, base + EN0_RCNTLO);
+	ei_obp(count >> 8,   base + EN0_RCNTHI);
+	ei_obp(0x00, base + EN0_RSARLO);
+	ei_obp(start_page, base + EN0_RSARHI);
+#endif /* 0/1 */
+
+	ei_obp(E8390_RWRITE + E8390_START, base + E8390_CMD);
 	if (ei_status.word16) {
-		outsw(OAKNET_BASE + OAKNET_DATA, buf, count >> 1);
+		ei_osw(E8390_BASE + E8390_DATA, buf, count >> 1);
 	} else {
-		outsb(OAKNET_BASE + OAKNET_DATA, buf, count);
+		ei_osb(E8390_BASE + E8390_DATA, buf, count);
 	}
+
+#ifdef OAKNET_DISINT
+	restore_flags(flags);
+#endif
 
 	start = jiffies;
 
-	while (((lobyte = inb_p(base + EN0_ISR)) & ENISR_RDC) == 0) {
+#ifdef OAKNET_HEADCHECK
+	/*
+	 * This was for the ALPHA version only, but enough people have
+	 * been encountering problems so it is still here.
+	 */
+	
+	{
+		/* DMA termination address check... */
+		int addr, tries = 20;
+		do {
+			int high = ei_ibp(base + EN0_RSARHI);
+			int low = ei_ibp(base + EN0_RSARLO);
+			addr = (high << 8) + low;
+			if ((start_page << 8) + count == addr)
+				break;
+		} while (--tries > 0);
+
+		if (tries <= 0) {
+			printk("%s: Tx packet transfer address mismatch,"
+			       "%#4.4x (expected) vs. %#4.4x (actual).\n",
+			       dev->name, (start_page << 8) + count, addr);
+			if (retries++ == 0)
+				goto retry;
+		}
+	}
+#endif
+
+	while ((ei_ibp(base + EN0_ISR) & ENISR_RDC) == 0) {
 		if (jiffies - start > OAKNET_WAIT) {
-			unsigned char hicnt, locnt;
-			hicnt = inb_p(base + EN0_CRDAHI);
-			locnt = inb_p(base + EN0_CRDALO);
-			printk("%s: timeout waiting for Tx RDC, stat = 0x%x\n",
-			       dev->name, lobyte);
-			printk("\tstart address 0x%x, current address 0x%x, count %d\n",
-			       (start_page << 8), (hicnt << 8) | locnt, count);
+			printk("%s: timeout waiting for Tx RDC.\n", dev->name);
 			oaknet_reset_8390(dev);
 			NS8390_init(dev, TRUE);
 			break;
 		}
 	}
 	
-	outb_p(ENISR_RDC, base + EN0_ISR);	/* Ack intr. */
+	ei_obp(ENISR_RDC, base + EN0_ISR);	/* Ack intr. */
 	ei_status.dmaing &= ~0x01;
 
 	return;
 }
 
+/*
+ * static void oaknet_dma_error()
+ *
+ * Description:
+ *   This routine prints out a last-ditch informative message to the console
+ *   indicating that a DMA error occured. If you see this, it's the last
+ *   thing you'll see.
+ *
+ * Input(s):
+ *  *dev  - Pointer to the device structure for this driver.
+ *  *name - Informative text (e.g. function name) indicating where the
+ *          DMA error occurred.
+ *
+ * Output(s):
+ *   N/A
+ *
+ * Returns:
+ *   N/A
+ *
+ */
 static void
 oaknet_dma_error(struct net_device *dev, const char *name)
 {

@@ -29,6 +29,8 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.11.1 Jan 28 2000 Ollie Lho
+ *	small bug in setting sample rate for 4d-nx (reported by Aaron)
  *  v0.11 Jan 27 2000 Ollie Lho
  *	DMA bug, scheduler latency, second try
  *  v0.10 Jan 24 2000 Ollie Lho
@@ -85,7 +87,7 @@
 
 #undef DEBUG
 
-#define DRIVER_VERSION "0.11"
+#define DRIVER_VERSION "0.11.1"
 
 /* magic numbers to protect our data structures */
 #define TRIDENT_CARD_MAGIC	0x5072696E /* "Prin" */
@@ -522,7 +524,7 @@ static int trident_write_voice_regs(struct trident_state *state, unsigned int re
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
 		data[0] = (channel->delta << 24);
-		data[2] = ((channel->delta << 24) & 0xff000000) | (channel->eso & 0x00ffffff);
+		data[2] = ((channel->delta << 16) & 0xff000000) | (channel->eso & 0x00ffffff);
 		data[3] = channel->fm_vol & 0xffff;
 		break;
 	default:

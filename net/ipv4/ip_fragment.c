@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.46 2000/01/09 02:19:36 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.47 2000/02/09 21:11:33 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -77,7 +77,7 @@ static spinlock_t ipfrag_lock = SPIN_LOCK_UNLOCKED;
 #define ipqhashfn(id, saddr, daddr, prot) \
 	((((id) >> 1) ^ (saddr) ^ (daddr) ^ (prot)) & (IPQ_HASHSZ - 1))
 
-atomic_t ip_frag_mem = ATOMIC_INIT(0);		/* Memory used for fragments */
+static atomic_t ip_frag_mem = ATOMIC_INIT(0);	/* Memory used for fragments */
 
 /* Memory Tracking Functions. */
 extern __inline__ void frag_kfree_skb(struct sk_buff *skb)

@@ -691,12 +691,12 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 	printk("%s: IDE controller on PCI bus %02x dev %02x\n", d2->name, dev2->bus->number, dev2->devfn);
 	if (hpt363_shared_pin && !hpt363_shared_irq) {
 		printk("%s: IDE controller run unsupported mode three!!!\n", d2->name);
-#ifndef HPT366_MODE3
+#ifndef CONFIG_HPT366_MODE3
 		printk("%s: IDE controller report to <andre@suse.com>\n", d->name);
 		return;
-#else /* HPT366_MODE3 */
+#else /* CONFIG_HPT366_MODE3 */
 		printk("%s: OVERRIDE IDE controller not advisable this mode!!!\n", d2->name);
-#endif /* HPT366_MODE3 */
+#endif /* CONFIG_HPT366_MODE3 */
 	}
 	ide_setup_pci_device(dev2, d2);
 }

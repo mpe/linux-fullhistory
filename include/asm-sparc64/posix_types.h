@@ -9,11 +9,12 @@
 
 #if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
 typedef unsigned long int      __kernel_size_t;
+typedef long int               __kernel_ssize_t;
 #else
 typedef unsigned long long     __kernel_size_t;
+typedef long long              __kernel_ssize_t;
 #endif
 
-typedef long long              __kernel_ssize_t;
 typedef long                   __kernel_ptrdiff_t;
 typedef long                   __kernel_time_t;
 typedef long                   __kernel_clock_t;

@@ -415,8 +415,7 @@ extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
 /*
  * Prototypes for functions in scsi_lib.c
  */
-extern void scsi_maybe_unblock_host(Scsi_Device * SDpnt);
-extern void scsi_blocked_request_fn(request_queue_t * q);
+extern int scsi_maybe_unblock_host(Scsi_Device * SDpnt);
 extern Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate,
 				   int sectors);
 extern struct Scsi_Device_Template *scsi_get_request_dev(struct request *);
@@ -426,13 +425,14 @@ extern void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
 			       int block_sectors);
 extern void scsi_queue_next_request(request_queue_t * q, Scsi_Cmnd * SCpnt);
 extern void scsi_request_fn(request_queue_t * q);
-
+extern int scsi_starvation_completion(Scsi_Device * SDpnt);
 
 /*
  * Prototypes for functions in scsi.c
  */
 extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
 extern void scsi_bottom_half_handler(void);
+extern void scsi_release_commandblocks(Scsi_Device * SDpnt);
 extern void scsi_build_commandblocks(Scsi_Device * SDpnt);
 extern void scsi_done(Scsi_Cmnd * SCpnt);
 extern void scsi_finish_command(Scsi_Cmnd *);
@@ -447,6 +447,7 @@ extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
 			  void *buffer, unsigned bufflen,
 			  int timeout, int retries);
 extern int scsi_dev_init(void);
+
 
 
 /*

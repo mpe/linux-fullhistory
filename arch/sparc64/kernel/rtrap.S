@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.47 1999/07/30 09:35:23 davem Exp $
+/* $Id: rtrap.S,v 1.48 2000/02/09 11:15:07 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -20,15 +20,17 @@
 		.globl			rtrap_clr_l6, rtrap
 rtrap_clr_l6:	clr			%l6
 		/* Fall through */
-rtrap:		sethi			%hi(bh_active), %l2
-		sethi			%hi(bh_mask), %l1
-		ldx			[%l2 + %lo(bh_active)], %l4
-		ldx			[%l1 + %lo(bh_mask)], %l7
+rtrap:		lduw			[%g6 + AOFF_task_processor], %l0
+		sethi			%hi(softirq_state), %l2
+		or			%l2, %lo(softirq_state), %l2
+		sllx			%l0, 6, %l0
+		ldx			[%l2 + %l0], %l1
+		srlx			%l1, 32, %l2
 
-		andcc			%l4, %l7, %g0
-		be,pt			%xcc, 2f
+		andcc			%l1, %l2, %g0
+		be,pt			%icc, 2f
 		 nop
-		call			do_bottom_half
+		call			do_softirq
 		 nop
 2:		ldx			[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
 		sethi			%hi(0xf << 20), %l4

@@ -35,9 +35,10 @@
 #define IA64_MAX_VECTORED_IRQ	255
 
 #define IA64_SPURIOUS_INT	0x0f
+#define PERFMON_IRQ		0x28	/* performanc monitor interrupt vector */
 #define TIMER_IRQ		0xef	/* use highest-prio group 15 interrupt for timer */
 #define IPI_IRQ			0xfe	/* inter-processor interrupt vector */
-#define PERFMON_IRQ		0x28	/* performanc monitor interrupt vector */
+#define CMC_IRQ			0xff	/* correctable machine-check interrupt vector */
 
 #define IA64_MIN_VECTORED_IRQ	 16
 #define IA64_MAX_VECTORED_IRQ	255
@@ -103,6 +104,7 @@ irq_cannonicalize (int irq)
 
 extern int invoke_irq_handlers (unsigned int irq, struct pt_regs *regs, struct irqaction *action);
 extern void disable_irq (unsigned int);
+extern void disable_irq_nosync (unsigned int);
 extern void enable_irq (unsigned int);
 extern void ipi_send (int cpu, int vector, int delivery_mode);
 

@@ -16,6 +16,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/locks.h>
+#include <linux/smp_lock.h>
 
 #include <linux/fs.h>
 #include <linux/minix_fs.h>

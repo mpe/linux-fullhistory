@@ -1,6 +1,6 @@
 /*
  *
- *    Copyright (c) 1999 Grant Erickson <grant@lcse.umn.edu>
+ *    Copyright (c) 1999-2000 Grant Erickson <grant@lcse.umn.edu>
  *
  *    Module name: oak_setup.c
  *
@@ -19,6 +19,7 @@
 #include <linux/interrupt.h>
 #include <linux/param.h>
 #include <linux/string.h>
+#include <linux/blk.h>
 
 #include <asm/processor.h>
 #include <asm/board.h>
@@ -29,6 +30,12 @@
 #include "ppc4xx_pic.h"
 #include "time.h"
 #include "oak_setup.h"
+
+
+
+
+
+
 
 /* Function Prototypes */
 
@@ -95,32 +102,32 @@ oak_init(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	/* Initialize machine-dependency vectors */
 
-	ppc_md.setup_arch	 = oak_setup_arch;
-	ppc_md.setup_residual	 = oak_setup_residual;
-	ppc_md.get_cpuinfo	 = NULL;
-	ppc_md.irq_cannonicalize = NULL;
-	ppc_md.init_IRQ		 = oak_init_IRQ;
-	ppc_md.get_irq		 = oak_get_irq;
-	ppc_md.init		 = NULL;
+	ppc_md.setup_arch	 	= oak_setup_arch;
+	ppc_md.setup_residual	 	= oak_setup_residual;
+	ppc_md.get_cpuinfo	 	= NULL;
+	ppc_md.irq_cannonicalize 	= NULL;
+	ppc_md.init_IRQ		 	= oak_init_IRQ;
+	ppc_md.get_irq		 	= oak_get_irq;
+	ppc_md.init		 	= NULL;
 
-	ppc_md.restart		 = oak_restart;
-	ppc_md.power_off	 = oak_power_off;
-	ppc_md.halt		 = oak_halt;
+	ppc_md.restart		 	= oak_restart;
+	ppc_md.power_off	 	= oak_power_off;
+	ppc_md.halt		 	= oak_halt;
 
-	ppc_md.time_init	 = oak_time_init;
-	ppc_md.set_rtc_time	 = oak_set_rtc_time;
-	ppc_md.get_rtc_time	 = oak_get_rtc_time;
-	ppc_md.calibrate_decr	 = oak_calibrate_decr;
+	ppc_md.time_init	 	= oak_time_init;
+	ppc_md.set_rtc_time	 	= oak_set_rtc_time;
+	ppc_md.get_rtc_time	 	= oak_get_rtc_time;
+	ppc_md.calibrate_decr	 	= oak_calibrate_decr;
 
-	ppc_md.kbd_setkeycode    = NULL;
-	ppc_md.kbd_getkeycode    = NULL;
-	ppc_md.kbd_translate     = NULL;
-	ppc_md.kbd_unexpected_up = NULL;
-	ppc_md.kbd_leds          = NULL;
-	ppc_md.kbd_init_hw       = NULL;
+	ppc_md.kbd_setkeycode    	= NULL;
+	ppc_md.kbd_getkeycode    	= NULL;
+	ppc_md.kbd_translate     	= NULL;
+	ppc_md.kbd_unexpected_up 	= NULL;
+	ppc_md.kbd_leds          	= NULL;
+	ppc_md.kbd_init_hw       	= NULL;
 
 #if defined(CONFIG_MAGIC_SYSRQ)
-	ppc_md.kbd_sysrq_xlate	 = NULL;
+	ppc_md.ppc_kbd_sysrq_xlate	= NULL;
 #endif
 
 	return;

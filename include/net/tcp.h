@@ -1188,7 +1188,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)
-			tcp_statistics[smp_processor_id()*2+!in_interrupt()].TcpCurrEstab--;
+			tcp_statistics[smp_processor_id()*2+!in_softirq()].TcpCurrEstab--;
 	}
 
 	/* Change state AFTER socket is unhashed to avoid closed

@@ -35,8 +35,6 @@
 #endif
 #include <asm/mmu_context.h>
 
-extern void show_net_buffers(void);
-
 void __bad_pte_kernel(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
@@ -266,9 +264,6 @@ void show_mem(void)
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	printk("%d free pages\n", free);
 	show_buffers();
-#ifdef CONFIG_NET
-	show_net_buffers();
-#endif
 }
 
 extern unsigned long free_area_init(unsigned long, unsigned long);

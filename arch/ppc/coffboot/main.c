@@ -112,8 +112,8 @@ coffboot(int a1, int a2, void *prom)
 #endif
     {
 	    struct bi_record *rec;
-
-	    rec = (struct bi_record *)PAGE_ALIGN((unsigned long)dst+len);
+	    
+	    rec = (struct bi_record *)_ALIGN((unsigned long)dst+len+(1<<20)-1,(1<<20));
 	    
 	    rec->tag = BI_FIRST;
 	    rec->size = sizeof(struct bi_record);

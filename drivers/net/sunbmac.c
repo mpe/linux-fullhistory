@@ -1,4 +1,4 @@
-/* $Id: sunbmac.c,v 1.13 2000/01/28 13:42:29 jj Exp $
+/* $Id: sunbmac.c,v 1.14 2000/02/09 11:15:35 davem Exp $
  * sunbmac.c: Driver for Sparc BigMAC 100baseT ethernet adapters.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -190,14 +190,20 @@ static void bigmac_clean_rings(struct bigmac *bp)
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		if (bp->rx_skbs[i] != NULL) {
-			dev_kfree_skb(bp->rx_skbs[i]);
+			if (in_irq())
+				dev_kfree_skb_irq(bp->rx_skbs[i]);
+			else
+				dev_kfree_skb(bp->rx_skbs[i]);
 			bp->rx_skbs[i] = NULL;
 		}
 	}
 
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (bp->tx_skbs[i] != NULL) {
-			dev_kfree_skb(bp->tx_skbs[i]);
+			if (in_irq())
+				dev_kfree_skb_irq(bp->tx_skbs[i]);
+			else
+				dev_kfree_skb(bp->tx_skbs[i]);
 			bp->tx_skbs[i] = NULL;
 		}
 	}
@@ -750,8 +756,12 @@ static void bigmac_is_medium_rare(struct bigmac *bp, u32 qec_status, u32 bmac_st
 static void bigmac_tx(struct bigmac *bp)
 {
 	struct be_txd *txbase = &bp->bmac_block->be_txd[0];
-	int elem = bp->tx_old;
+	struct net_device *dev = bp->dev;
+	int elem;
 
+	spin_lock(&bp->lock);
+
+	elem = bp->tx_old;
 	DTX(("bigmac_tx: tx_old[%d] ", elem));
 	while (elem != bp->tx_new) {
 		struct sk_buff *skb;
@@ -770,12 +780,18 @@ static void bigmac_tx(struct bigmac *bp)
 
 		DTX(("skb(%p) ", skb));
 		bp->tx_skbs[elem] = NULL;
-		dev_kfree_skb(skb);
+		dev_kfree_skb_irq(skb);
 
 		elem = NEXT_TX(elem);
 	}
 	DTX((" DONE, tx_old=%d\n", elem));
 	bp->tx_old = elem;
+
+	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+	    TX_BUFFS_AVAIL(bp) > 0)
+		netif_wake_queue(bp->dev);
+
+	spin_unlock(&bp->lock);
 }
 
 /* BigMAC receive complete service routines. */
@@ -874,8 +890,6 @@ static void bigmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	bmac_status = sbus_readl(bp->creg + CREG_STAT);
 	qec_status = sbus_readl(bp->gregs + GLOB_STAT);
 
-	bp->dev->interrupt = 1;
-
 	DIRQ(("qec_status=%08x bmac_status=%08x\n", qec_status, bmac_status));
 	if ((qec_status & (GLOB_STAT_ER | GLOB_STAT_BM)) ||
 	   (bmac_status & CREG_STAT_ERRORS))
@@ -886,13 +900,6 @@ static void bigmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (bmac_status & CREG_STAT_RXIRQ)
 		bigmac_rx(bp);
-
-	if (bp->dev->tbusy && (TX_BUFFS_AVAIL(bp) > 0)) {
-		bp->dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
-
-	bp->dev->interrupt = 0;
 }
 
 static int bigmac_open(struct net_device *dev)
@@ -928,55 +935,43 @@ static int bigmac_close(struct net_device *dev)
 	return 0;
 }
 
+static void bigmac_tx_timeout(struct net_device *dev)
+{
+	struct bigmac *bp = (struct bigmac *) dev->priv;
+
+	bigmac_init(bp, 0);
+	netif_wake_queue(dev);
+}
+
 /* Put a packet on the wire. */
 static int bigmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 	int len, entry;
-
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-	    
-		if (tickssofar < 40) {
-			return 1;
-		} else {
-			printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
-			bp->enet_stats.tx_errors++;
-			bigmac_init(bp, 0);
-			dev->tbusy = 0;
-			dev->trans_start = jiffies;
-			dev_kfree_skb(skb);
-			return 0;
-		}
-	}
-
-	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		printk(KERN_ERR "%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
-
-	if (!TX_BUFFS_AVAIL(bp))
-		return 1;
+	u32 mapping;
 
 	len = skb->len;
-	entry = bp->tx_new;
-	DTX(("bigmac_start_xmit: len(%d) entry(%d)\n", len, entry));
+	mapping = sbus_map_single(bp->bigmac_sdev, skb->data, len);
 
 	/* Avoid a race... */
+	spin_lock_irq(&bp->lock);
+	entry = bp->tx_new;
+	DTX(("bigmac_start_xmit: len(%d) entry(%d)\n", len, entry));
 	bp->bmac_block->be_txd[entry].tx_flags = TXD_UPDATE;
 	bp->tx_skbs[entry] = skb;
-	bp->bmac_block->be_txd[entry].tx_addr =
-		sbus_map_single(bp->bigmac_sdev, skb->data, len);
+	bp->bmac_block->be_txd[entry].tx_addr = mapping;
 	bp->bmac_block->be_txd[entry].tx_flags =
 		(TXD_OWN | TXD_SOP | TXD_EOP | (len & TXD_LENGTH));
-	dev->trans_start = jiffies;
 	bp->tx_new = NEXT_TX(entry);
+	if (TX_BUFFS_AVAIL(bp) <= 0)
+		netif_stop_queue(dev);
+	spin_unlock_irq(&bp->lock);
 
 	/* Get it going. */
 	sbus_writel(CREG_CTRL_TWAKEUP, bp->creg + CREG_CTRL);
 
-	if (TX_BUFFS_AVAIL(bp))
-		dev->tbusy = 0;
+
+	dev->trans_start = jiffies;
 
 	return 0;
 }
@@ -1083,6 +1078,8 @@ static int __init bigmac_ether_init(struct net_device *dev, struct sbus_dev *qec
 	bp = (struct bigmac *) dev->priv;
 	bp->qec_sdev = qec_sdev;
 	bp->bigmac_sdev = qec_sdev->child;
+
+	spin_lock_init(&bp->lock);
 
 	/* All further failures we find return this. */
 	res = ENODEV;
@@ -1193,6 +1190,9 @@ static int __init bigmac_ether_init(struct net_device *dev, struct sbus_dev *qec
 	/* Set links to BigMAC statistic and multi-cast loading code. */
 	dev->get_stats = &bigmac_get_stats;
 	dev->set_multicast_list = &bigmac_set_multicast;
+
+	dev->tx_timeout = &bigmac_tx_timeout;
+	dev->watchdog_timeo = 5*HZ;
 
 	/* Finish net device registration. */
 	dev->irq = bp->bigmac_sdev->irqs[0];

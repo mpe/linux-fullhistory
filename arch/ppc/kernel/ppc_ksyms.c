@@ -229,6 +229,8 @@ EXPORT_SYMBOL(find_path_device);
 EXPORT_SYMBOL(find_phandle);
 EXPORT_SYMBOL(device_is_compatible);
 EXPORT_SYMBOL(machine_is_compatible);
+EXPORT_SYMBOL(find_pci_device_OFnode);
+EXPORT_SYMBOL(find_all_nodes);
 EXPORT_SYMBOL(get_property);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);

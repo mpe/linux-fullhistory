@@ -1,4 +1,4 @@
-/* $Id: sunqe.h,v 1.12 1999/09/21 14:36:44 davem Exp $
+/* $Id: sunqe.h,v 1.13 2000/02/09 11:15:42 davem Exp $
  * sunqe.h: Definitions for the Sun QuadEthernet driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -335,6 +335,7 @@ struct sunqe {
 	unsigned long			mregs;		/* Per-channel MACE Registers  */
 	struct qe_init_block      	*qe_block;	/* RX and TX descriptors       */
 	__u32                      	qblock_dvma;	/* RX and TX descriptors       */
+	spinlock_t			lock;		/* Protects txfull state       */
 	int                        	rx_new, rx_old;	/* RX ring extents	       */
 	int			   	tx_new, tx_old;	/* TX ring extents	       */
 	struct sunqe_buffers		*buffers;	/* CPU visible address.        */

@@ -20,7 +20,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi>.
    All SMBus-related things are written by Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-core.c,v 1.48 2000/01/24 21:41:19 frodo Exp $ */
+/* $Id: i2c-core.c,v 1.50 2000/02/02 23:29:54 frodo Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -474,38 +474,58 @@ ssize_t i2cproc_bus_read(struct file * file, char * buf,size_t count,
 	struct inode * inode = file->f_dentry->d_inode;
 	char *kbuf;
 	struct i2c_client *client;
-	int i,j,len=0;
+	int i,j,k,order_nr,len=0,len_total;
+	int order[I2C_CLIENT_MAX];
 
 	if (count < 0)
-		return -EINVAL;
-	if (count > 4000)
-		count = 4000;
+		return -EINVAL; 
+	len_total = file->f_pos + count;
+	/* Too bad if this gets longer (unlikely) */
+	if (len_total > 4000)
+		len_total = 4000;
 	for (i = 0; i < I2C_ADAP_MAX; i++)
 		if (adapters[i]->inode == inode->i_ino) {
 		/* We need a bit of slack in the kernel buffer; this makes the
 		   sprintf safe. */
 			if (! (kbuf = kmalloc(count + 80,GFP_KERNEL)))
 				return -ENOMEM;
-			for (j = 0; j < I2C_CLIENT_MAX; j++)
-				if ((client = adapters[i]->clients[j]))
-					/* Filter out dummy clients */
-					if (client->driver->id != I2C_DRIVERID_I2CDEV)
-						len += sprintf(kbuf+len,"%02x\t%-32s\t%-32s\n",
-						              client->addr,
-						              client->name,client->driver->name);
-					if (file->f_pos+len > count)
-						len = count - file->f_pos;
-					len = len - file->f_pos;
-					if (len < 0) 
-						len = 0;
-					if (copy_to_user (buf,kbuf+file->f_pos,
-					    len)) {
-						kfree(kbuf);
-						return -EFAULT;
-					}
-					file->f_pos += len;
-					kfree(kbuf);
-					return len;
+			/* Order will hold the indexes of the clients
+			   sorted by address */
+			order_nr=0;
+			for (j = 0; j < I2C_CLIENT_MAX; j++) {
+				if ((client = adapters[i]->clients[j]) && 
+				    (client->driver->id != I2C_DRIVERID_I2CDEV))  {
+					for(k = order_nr; 
+					    (k > 0) && 
+					    adapters[i]->clients[order[k-1]]->
+					             addr > client->addr; 
+					    k--)
+						order[k] = order[k-1];
+					order[k] = j;
+					order_nr++;
+				}
+			}
+
+
+			for (j = 0; (j < order_nr) && (len < len_total); j++) {
+				client = adapters[i]->clients[order[j]];
+				len += sprintf(kbuf+len,"%02x\t%-32s\t%-32s\n",
+				              client->addr,
+				              client->name,
+				              client->driver->name);
+			}
+			len = len - file->f_pos;
+			if (len > count)
+				len = count;
+			if (len < 0) 
+				len = 0;
+			if (copy_to_user (buf,kbuf+file->f_pos, len)) {
+				kfree(kbuf);
+				return -EFAULT;
+			}
+			file->f_pos += len;
+			kfree(kbuf);
+			return len;
 		}
 	return -ENOENT;
 }

@@ -38,8 +38,6 @@ static unsigned long totalram_pages = 0;
 void mmu_emu_reserve_pages(unsigned long max_page);
 #endif
 
-extern void show_net_buffers(void);
-
 int do_check_pgt_cache(int low, int high)
 {
 	int freed = 0;
@@ -116,9 +114,6 @@ void show_mem(void)
     printk("%d pages swap cached\n",cached);
     printk("%ld pages in page table cache\n",pgtable_cache_size);
     show_buffers();
-#ifdef CONFIG_NET
-    show_net_buffers();
-#endif
 }
 
 extern void init_pointer_table(unsigned long ptable);

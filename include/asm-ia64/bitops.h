@@ -11,8 +11,11 @@
 #include <asm/system.h>
 
 /*
- * These operations need to be atomic.  The address must be "long"
- * aligned.
+ * These operations need to be atomic.  The address must be (at least)
+ * 32-bit aligned.  Note that there are driver (e.g., eepro100) which
+ * use these operations to operate on hw-defined data-structures, so
+ * we can't easily change these operations to force a bigger
+ * alignment.
  *
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
  */
@@ -20,12 +23,12 @@
 extern __inline__ void
 set_bit (int nr, volatile void *addr)
 {
-	__u64 bit, old, new;
-	volatile __u64 *m;
+	__u32 bit, old, new;
+	volatile __u32 *m;
 	CMPXCHG_BUGCHECK_DECL
 
-	m = (volatile __u64 *) addr + (nr >> 6);
-	bit = 1UL << (nr & 63);
+	m = (volatile __u32 *) addr + (nr >> 5);
+	bit = 1 << (nr & 31);
 	do {
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
@@ -36,12 +39,12 @@ set_bit (int nr, volatile void *addr)
 extern __inline__ void
 clear_bit (int nr, volatile void *addr)
 {
-	__u64 mask, old, new;
-	volatile __u64 *m;
+	__u32 mask, old, new;
+	volatile __u32 *m;
 	CMPXCHG_BUGCHECK_DECL
 
-	m = (volatile __u64 *) addr + (nr >> 6);
-	mask = ~(1UL << (nr & 63));
+	m = (volatile __u32 *) addr + (nr >> 5);
+	mask = ~(1 << (nr & 31));
 	do {
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
@@ -52,12 +55,12 @@ clear_bit (int nr, volatile void *addr)
 extern __inline__ void
 change_bit (int nr, volatile void *addr)
 {
-	__u64 bit, old, new;
-	volatile __u64 *m;
+	__u32 bit, old, new;
+	volatile __u32 *m;
 	CMPXCHG_BUGCHECK_DECL
 
-	m = (volatile __u64 *) addr + (nr >> 6);
-	bit = (1UL << (nr & 63));
+	m = (volatile __u32 *) addr + (nr >> 5);
+	bit = (1 << (nr & 31));
 	do {
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
@@ -68,12 +71,12 @@ change_bit (int nr, volatile void *addr)
 extern __inline__ int
 test_and_set_bit (int nr, volatile void *addr)
 {
-	__u64 bit, old, new;
-	volatile __u64 *m;
+	__u32 bit, old, new;
+	volatile __u32 *m;
 	CMPXCHG_BUGCHECK_DECL
 
-	m = (volatile __u64 *) addr + (nr >> 6);
-	bit = 1UL << (nr & 63);
+	m = (volatile __u32 *) addr + (nr >> 5);
+	bit = 1 << (nr & 31);
 	do {
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
@@ -85,12 +88,12 @@ test_and_set_bit (int nr, volatile void *addr)
 extern __inline__ int
 test_and_clear_bit (int nr, volatile void *addr)
 {
-	__u64 mask, old, new;
-	volatile __u64 *m;
+	__u32 mask, old, new;
+	volatile __u32 *m;
 	CMPXCHG_BUGCHECK_DECL
 
-	m = (volatile __u64 *) addr + (nr >> 6);
-	mask = ~(1UL << (nr & 63));
+	m = (volatile __u32 *) addr + (nr >> 5);
+	mask = ~(1 << (nr & 31));
 	do {
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
@@ -102,12 +105,12 @@ test_and_clear_bit (int nr, volatile void *addr)
 extern __inline__ int
 test_and_change_bit (int nr, volatile void *addr)
 {
-	__u64 bit, old, new;
-	volatile __u64 *m;
+	__u32 bit, old, new;
+	volatile __u32 *m;
 	CMPXCHG_BUGCHECK_DECL
 
-	m = (volatile __u64 *) addr + (nr >> 6);
-	bit = (1UL << (nr & 63));
+	m = (volatile __u32 *) addr + (nr >> 5);
+	bit = (1 << (nr & 31));
 	do {
 		CMPXCHG_BUGCHECK(m);
 		old = *m;
@@ -119,7 +122,7 @@ test_and_change_bit (int nr, volatile void *addr)
 extern __inline__ int
 test_bit (int nr, volatile void *addr)
 {
-	return 1UL & (((const volatile __u64 *) addr)[nr >> 6] >> (nr & 63));
+	return 1 & (((const volatile __u32 *) addr)[nr >> 5] >> (nr & 31));
 }
 
 /*

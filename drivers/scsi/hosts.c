@@ -698,7 +698,7 @@ scsi_unregister(struct Scsi_Host * sh){
 	}
     }
     next_scsi_host--;
-    scsi_init_free((char *) sh, sizeof(struct Scsi_Host) + sh->extra_bytes);
+    kfree((char *) sh);
 }
 
 /* We call this when we come across a new host adapter. We only do this
@@ -708,8 +708,9 @@ scsi_unregister(struct Scsi_Host * sh){
 
 struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     struct Scsi_Host * retval, *shpnt;
-    retval = (struct Scsi_Host *)scsi_init_malloc(sizeof(struct Scsi_Host) + j,
-						  (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
+    retval = (struct Scsi_Host *)kmalloc(sizeof(struct Scsi_Host) + j,
+					 (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
+    memset(retval, 0, sizeof(struct Scsi_Host) + j);
     atomic_set(&retval->host_active,0);
     retval->host_busy = 0;
     retval->host_failed = 0;
@@ -754,7 +755,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->unchecked_isa_dma = tpnt->unchecked_isa_dma;
     retval->use_clustering = tpnt->use_clustering;   
 
-    retval->select_queue_depths = NULL;
+    retval->select_queue_depths = tpnt->select_queue_depths;
 
     if(!scsi_hostlist)
 	scsi_hostlist = retval;

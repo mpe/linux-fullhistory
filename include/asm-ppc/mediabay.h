@@ -8,6 +8,7 @@
 #define _PPC_MEDIABAY_H
 
 #define MB_FD	0		/* media bay contains floppy drive */
+#define MB_FD1	1		/* media bay contains floppy drive */
 #define MB_CD	3		/* media bay contains ATA drive such as CD */
 #define MB_NO	7		/* media bay contains nothing */
 

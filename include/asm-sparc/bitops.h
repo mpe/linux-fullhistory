@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.54 1998/09/21 05:07:34 jj Exp $
+/* $Id: bitops.h,v 1.55 2000/02/09 03:28:32 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -94,7 +94,7 @@ extern __inline__ void change_bit(unsigned long nr, void *addr)
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ unsigned long test_and_set_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ int test_and_set_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -116,7 +116,7 @@ extern __inline__ void set_bit(unsigned long nr, __SMPVOL void *addr)
 	(void) test_and_set_bit(nr, addr);
 }
 
-extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ int test_and_clear_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -139,7 +139,7 @@ extern __inline__ void clear_bit(unsigned long nr, __SMPVOL void *addr)
 	(void) test_and_clear_bit(nr, addr);
 }
 
-extern __inline__ unsigned long test_and_change_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ int test_and_change_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -165,9 +165,9 @@ extern __inline__ void change_bit(unsigned long nr, __SMPVOL void *addr)
 #endif /* __KERNEL__ */
 
 /* The following routine need not be atomic. */
-extern __inline__ unsigned long test_bit(int nr, __const__ __SMPVOL void *addr)
+extern __inline__ int test_bit(int nr, __const__ __SMPVOL void *addr)
 {
-	return 1UL & (((__const__ unsigned int *) addr)[nr >> 5] >> (nr & 31));
+	return (1 & (((__const__ unsigned int *) addr)[nr >> 5] >> (nr & 31))) != 0;
 }
 
 /* The easy/cheese version for now. */

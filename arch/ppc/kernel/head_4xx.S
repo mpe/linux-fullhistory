@@ -78,13 +78,17 @@ _GLOBAL(_start)
 
 	li	r24,0
 
+	## Invalidate all TLB entries
+
+	tlbia
+	
 	## We should still be executing code at physical address 0x0000xxxx
 	## at this point. However, start_here is at virtual address
 	## 0xC000xxxx. So, set up a TLB mapping to cover this once
 	## translation is enabled.
 
 	lis	r3,KERNELBASE@h		# Load the kernel virtual address
-	addis	r3,r3,KERNELBASE@l
+	ori	r3,r3,KERNELBASE@l
 	tophys(r4,r3)			# Load the kernel physical address
 
 	## Save the existing PID and load the kernel PID.
@@ -96,11 +100,7 @@ _GLOBAL(_start)
 	## Configure and load entry into TLB slot 0.
 	
 	clrrwi	r4,r4,10		# Mask off the real page number
-
-	## XXX - Temporarily set the TLB_I bit because of cache issues that
-	##       seem to foul-up the exception handling code.
-
-	ori	r4,r4,(TLB_WR | TLB_EX | TLB_I)	# Set the write and execute bits
+	ori	r4,r4,(TLB_WR | TLB_EX)	# Set the write and execute bits
 	
 	clrrwi	r3,r3,10		# Mask off the effective page number
 	ori	r3,r3,(TLB_VALID | TLB_PAGESZ(PAGESZ_16M))
@@ -333,22 +333,12 @@ _GLOBAL(timer_interrupt_intercept)
 #endif
 
 ### 0x1100 - Data TLB Miss Exception
-	
-	START_EXCEPTION(0x1100,	DTLBMiss)
-	STND_EXCEPTION_PROLOG
-	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r7,STND_EXC
-	li	r20,MSR_KERNEL
-	FINISH_EXCEPTION(UnknownException)
+
+	STND_EXCEPTION(0x1100,	DTLBMiss, 		PPC4xx_dtlb_miss)
 
 ### 0x1200 - Instruction TLB Miss Exception
-	
-	START_EXCEPTION(0x1200,	ITLBMiss)
-	STND_EXCEPTION_PROLOG
-	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r7,STND_EXC
-	li	r20,MSR_KERNEL
-	FINISH_EXCEPTION(UnknownException)	
+
+	STND_EXCEPTION(0x1200,	ITLBMiss, 		PPC4xx_itlb_miss)
 
 	STND_EXCEPTION(0x1300,	Trap_13,		UnknownException)
 	STND_EXCEPTION(0x1400,	Trap_14,		UnknownException)
@@ -560,8 +550,6 @@ start_here:
 
 _GLOBAL(set_context)
 	mtspr	SPRN_PID,r3
-	tlbia
-	SYNC
 	blr
 
 ###

@@ -257,7 +257,7 @@ size_t parport_ieee1284_read_byte (struct parport *port,
 		if (parport_read_status (port) & PARPORT_STATUS_ERROR) {
 			port->physport->ieee1284.phase = IEEE1284_PH_HBUSY_DNA;
 			DPRINTK (KERN_DEBUG
-				 "%s: No more byte data (%d bytes)\n",
+				 "%s: No more byte data (%Zd bytes)\n",
 				 port->name, count);
 
 			/* Go to reverse idle phase. */
@@ -735,22 +735,28 @@ size_t parport_ieee1284_epp_write_data (struct parport *port,
 			      PARPORT_CONTROL_SELECT);
 	port->ops->data_forward (port);
 	for (; len > 0; len--, bp++) {
+		/* Event 62: Write data and strobe data */
 		parport_write_data (port, *bp);
-
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
-					     PARPORT_STATUS_BUSY))
-			break;
-
-		/* Strobe data */
 		parport_frob_control (port, PARPORT_CONTROL_AUTOFD,
 				      PARPORT_CONTROL_AUTOFD);
 
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+		/* Event 58 */
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY, 0, 10))
 			break;
 
+		/* Event 63 */
 		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
+
+		/* Event 60 */
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY, 5))
+			break;
+
 		ret++;
 	}
+
+	/* Event 61 */
+	parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 
 	return ret;
 }
@@ -766,23 +772,24 @@ size_t parport_ieee1284_epp_read_data (struct parport *port,
 
 	parport_frob_control (port,
 			      PARPORT_CONTROL_STROBE |
-			      PARPORT_CONTROL_AUTOFD |
 			      PARPORT_CONTROL_SELECT, 0);
 	port->ops->data_reverse (port);
 	for (; len > 0; len--, bp++) {
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
-					     PARPORT_STATUS_BUSY))
-			break;
+		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
 
-		parport_frob_control (port, PARPORT_CONTROL_AUTOFD,
-				      PARPORT_CONTROL_AUTOFD);
-
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+		/* Event 58 */
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY, 10))
 			break;
 
 		*bp = parport_read_data (port);
 
-		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
+		parport_frob_control (port, PARPORT_CONTROL_AUTOFD,
+				      PARPORT_CONTROL_AUTOFD);
+
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY, 0, 5))
+			break;
+
 		ret++;
 	}
 	port->ops->data_forward (port);
@@ -807,22 +814,24 @@ size_t parport_ieee1284_epp_write_addr (struct parport *port,
 			      PARPORT_CONTROL_SELECT);
 	port->ops->data_forward (port);
 	for (; len > 0; len--, bp++) {
+		/* Write data and assert nAStrb. */
 		parport_write_data (port, *bp);
-
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
-					     PARPORT_STATUS_BUSY))
-			break;
-
-		/* Strobe data */
 		parport_frob_control (port, PARPORT_CONTROL_SELECT,
 				      PARPORT_CONTROL_SELECT);
 
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY, 10))
 			break;
 
 		parport_frob_control (port, PARPORT_CONTROL_SELECT, 0);
+
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY, 0, 5))
+			break;
+
 		ret++;
 	}
+
+	parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 
 	return ret;
 }
@@ -838,23 +847,24 @@ size_t parport_ieee1284_epp_read_addr (struct parport *port,
 
 	parport_frob_control (port,
 			      PARPORT_CONTROL_STROBE |
-			      PARPORT_CONTROL_SELECT |
 			      PARPORT_CONTROL_AUTOFD, 0);
 	port->ops->data_reverse (port);
 	for (; len > 0; len--, bp++) {
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY,
-					     PARPORT_STATUS_BUSY))
-			break;
+		parport_frob_control (port, PARPORT_CONTROL_SELECT, 0);
 
-		parport_frob_control (port, PARPORT_CONTROL_SELECT,
-				      PARPORT_CONTROL_SELECT);
-
-		if (parport_wait_peripheral (port, PARPORT_STATUS_BUSY, 0))
+		/* Event 58 */
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY,
+					     PARPORT_STATUS_BUSY, 10))
 			break;
 
 		*bp = parport_read_data (port);
 
-		parport_frob_control (port, PARPORT_CONTROL_SELECT, 0);
+		parport_frob_control (port, PARPORT_CONTROL_SELECT,
+				      PARPORT_CONTROL_SELECT);
+
+		if (parport_poll_peripheral (port, PARPORT_STATUS_BUSY, 0, 5))
+			break;
+
 		ret++;
 	}
 	port->ops->data_forward (port);

@@ -934,20 +934,20 @@ extern __inline__ void sock_put(struct sock *sk)
  */
 extern __inline__ void sock_orphan(struct sock *sk)
 {
-	write_lock_irq(&sk->callback_lock);
+	write_lock_bh(&sk->callback_lock);
 	sk->dead = 1;
 	sk->socket = NULL;
 	sk->sleep = NULL;
-	write_unlock_irq(&sk->callback_lock);
+	write_unlock_bh(&sk->callback_lock);
 }
 
 extern __inline__ void sock_graft(struct sock *sk, struct socket *parent)
 {
-	write_lock_irq(&sk->callback_lock);
+	write_lock_bh(&sk->callback_lock);
 	sk->sleep = &parent->wait;
 	parent->sk = sk;
 	sk->socket = parent;
-	write_unlock_irq(&sk->callback_lock);
+	write_unlock_bh(&sk->callback_lock);
 }
 
 
@@ -1150,7 +1150,7 @@ extern __inline__ int sock_writeable(struct sock *sk)
 
 extern __inline__ int gfp_any(void)
 {
-	return in_interrupt() ? GFP_ATOMIC : GFP_KERNEL;
+	return in_softirq() ? GFP_ATOMIC : GFP_KERNEL;
 }
 
 extern __inline__ long sock_rcvtimeo(struct sock *sk, int noblock)

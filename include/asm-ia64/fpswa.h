@@ -1,5 +1,5 @@
-#ifndef _ASM_IA64_FPSWA_H_
-#define _ASM_IA64_FPSWA_H_
+#ifndef _ASM_IA64_FPSWA_H
+#define _ASM_IA64_FPSWA_H
 
 /*
  * Floating-point Software Assist
@@ -9,7 +9,9 @@
  * Copyright (C) 1999 Goutham Rao <goutham.rao@intel.com>
  */
 
+#if 0
 #define FPSWA_BUG
+#endif
 
 typedef struct {
 	/* 4 * 128 bits */
@@ -70,4 +72,4 @@ typedef struct {
 	efi_fpswa_t	 fpswa;
 } fpswa_interface_t;
 
-#endif /* _ASM_IA64_FPSWA_H_ */
+#endif /* _ASM_IA64_FPSWA_H */

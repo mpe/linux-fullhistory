@@ -131,12 +131,11 @@ int eata_release(struct Scsi_Host *sh)
     if (sh->irq && reg_IRQ[sh->irq] == 1) free_irq(sh->irq, NULL);
     else reg_IRQ[sh->irq]--;
     
-    scsi_init_free((void *)status, 512);
-    scsi_init_free((void *)dma_scratch - 4, 1024);
+    kfree((void *)status);
+    kfree((void *)dma_scratch - 4);
     for (i = 0; i < sh->can_queue; i++){ /* Free all SG arrays */
 	if(SD(sh)->ccb[i].sg_list != NULL)
-	    scsi_init_free((void *) SD(sh)->ccb[i].sg_list, 
-			   sh->sg_tablesize * sizeof(struct eata_sg_list));
+	    kfree((void *) SD(sh)->ccb[i].sg_list);
     }
     
     if (SD(sh)->channel == 0) {
@@ -908,9 +907,9 @@ char * get_board_data(u32 base, u32 irq, u32 id)
     static char *buff;
     ulong i;
 
-    cp = (struct eata_ccb *) scsi_init_malloc(sizeof(struct eata_ccb),
-					      GFP_ATOMIC | GFP_DMA);
-    sp = (struct eata_sp *) scsi_init_malloc(sizeof(struct eata_sp), 
+    cp = (struct eata_ccb *) kmalloc(sizeof(struct eata_ccb),
+				     GFP_ATOMIC | GFP_DMA);
+    sp = (struct eata_sp *) kmalloc(sizeof(struct eata_sp), 
 					     GFP_ATOMIC | GFP_DMA);
 
     buff = dma_scratch;
@@ -954,8 +953,8 @@ char * get_board_data(u32 base, u32 irq, u32 id)
 			  fake_int_result, (u32) (sp->hba_stat /*& 0x7f*/), 
 			  (u32) sp->scsi_stat, buff, sp));
 
-    scsi_init_free((void *)cp, sizeof(struct eata_ccb));
-    scsi_init_free((void *)sp, sizeof(struct eata_sp));
+    kfree((void *)cp);
+    kfree((void *)sp);
     
     if ((fake_int_result & HA_SERROR) || time_after(jiffies, i)){
 	printk(KERN_WARNING "eata_dma: trying to reset HBA at %x to clear "
@@ -1287,8 +1286,6 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     else
 	hd->primary = TRUE;
     
-//FIXME//    sh->wish_block = FALSE;	   
-    
     if (hd->bustype != IS_ISA) {
 	sh->unchecked_isa_dma = FALSE;
     } else {
@@ -1459,8 +1456,8 @@ int eata_detect(Scsi_Host_Template * tpnt)
 
     tpnt->proc_name = "eata_dma";
 
-    status = scsi_init_malloc(512, GFP_ATOMIC | GFP_DMA);
-    dma_scratch = scsi_init_malloc(1024, GFP_ATOMIC | GFP_DMA);
+    status = kmalloc(512, GFP_ATOMIC | GFP_DMA);
+    dma_scratch = kmalloc(1024, GFP_ATOMIC | GFP_DMA);
 
     if(status == NULL || dma_scratch == NULL) {
 	printk("eata_dma: can't allocate enough memory to probe for hosts !\n");
@@ -1511,10 +1508,10 @@ int eata_detect(Scsi_Host_Template * tpnt)
 	    HBA_ptr = SD(HBA_ptr)->next;
 	}
     } else {
-	scsi_init_free((void *)status, 512);
+	kfree((void *)status);
     }
 
-    scsi_init_free((void *)dma_scratch - 4, 1024);
+    kfree((void *)dma_scratch - 4);
 
     DBG(DPT_DEBUG, DELAY(12));
 

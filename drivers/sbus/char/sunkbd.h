@@ -1,4 +1,4 @@
-/* $Id: sunkbd.h,v 1.3 1997/09/08 03:05:10 tdyas Exp $
+/* $Id: sunkbd.h,v 1.4 2000/02/09 11:15:54 davem Exp $
  * sunkbd.h: Defines needed by SUN Keyboard drivers
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -26,6 +26,7 @@ extern void keyboard_zsinit(void (*kbd_put_char)(unsigned char));
 extern void sunkbd_inchar(unsigned char, struct pt_regs *);
 extern void batten_down_hatches(void);
 
+extern void sun_kbd_bh(unsigned long);
 extern int sun_kbd_init(void);
 extern void sun_compute_shiftstate(void);
 extern void sun_setledstate(struct kbd_struct *, unsigned int);

@@ -27,6 +27,7 @@
 
 #include <linux/fs.h>
 #include <linux/locks.h>
+#include <linux/smp_lock.h>
 #include <linux/udf_fs.h>
 #include "udf_i.h"
 

@@ -216,10 +216,10 @@ static int AddSocketToAcceptQueue(struct socket *sock,const int Port)
 	sock->state = SS_UNCONNECTED;
 
 	req->class	= &Dummy;
-	write_lock_irq(&nsk->callback_lock);
+	write_lock_bh(&nsk->callback_lock);
 	nsk->socket = NULL;
         nsk->sleep  = NULL;
-	write_unlock_irq(&nsk->callback_lock);
+	write_unlock_bh(&nsk->callback_lock);
 
 	tcp_acceptq_queue(sk, req, nsk);	
 

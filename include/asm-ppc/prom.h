@@ -63,7 +63,7 @@ typedef void (*prom_entry)(struct prom_args *);
 
 /* Prototypes */
 extern void abort(void);
-extern void prom_init(int, int, prom_entry);
+extern unsigned long prom_init(int, int, prom_entry);
 extern void prom_print(const char *msg);
 extern void relocate_nodes(void);
 extern void finish_device_tree(void);
@@ -72,7 +72,10 @@ extern struct device_node *find_type_devices(const char *type);
 extern struct device_node *find_path_device(const char *path);
 extern struct device_node *find_compatible_devices(const char *type,
 						   const char *compat);
+extern struct device_node *find_pci_device_OFnode(unsigned char bus,
+	unsigned char dev_fn);
 extern struct device_node *find_phandle(phandle);
+extern struct device_node *find_all_nodes(void);
 extern int device_is_compatible(struct device_node *device, const char *);
 extern int machine_is_compatible(const char *compat);
 extern unsigned char *get_property(struct device_node *node, const char *name,

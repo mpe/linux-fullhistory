@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.18 1999/08/31 18:51:36 davem Exp $
+/* $Id: rtc.c,v 1.19 2000/02/09 22:33:26 davem Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)

@@ -252,6 +252,7 @@ ia64_handle_irq (unsigned long irq, struct pt_regs *regs)
 		max_prio = prev_prio;
 # endif /* !CONFIG_SMP */
 #endif /* CONFIG_ITANIUM_ASTEP_SPECIFIC */
+
 	ia64_srlz_d();
 	ia64_set_tpr(saved_tpr);
 	ia64_srlz_d();
@@ -631,6 +632,9 @@ init_IRQ (void)
 	irq_desc[IPI_IRQ].handler = &irq_type_ia64_internal;
 	init_IRQ_SMP();
 #endif
+
+	ia64_set_pmv(1 << 16);
+	ia64_set_cmcv(CMC_IRQ);			/* XXX fix me */
 
 	platform_irq_init(irq_desc);
 

@@ -187,7 +187,7 @@ recover:
 	cmp.eq p6,p0=8,val1	// val1==8 ?
 (p6)	br.wtop.dptk.few 2b	// loop until p6 == 0
 	sub ret0=base,orig	// distance from base
-	sub tmp=7,val1		// 7=8-1 because this strlen returns strlen+1
+	sub tmp=8,val1
 	mov pr=saved_pr,0xffffffffffff0000
 	;;
 	sub ret0=ret0,tmp	// length=now - back -1

@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------- */
 /* i2c-elv.c i2c-hw access for philips style parallel port adapters	     */
 /* ------------------------------------------------------------------------- */
-/*   Copyright (C) 1995-99 Simon G. Vogl
+/*   Copyright (C) 1995-2000 Simon G. Vogl
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,39 +16,21 @@
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
-/* ------------------------------------------------------------------------- 
+/* ------------------------------------------------------------------------- */
 
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-elv.c,v 1.12 1999/12/21 23:45:58 frodo Exp $ */
+/* $Id: i2c-elv.c,v 1.16 2000/01/18 23:54:07 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/malloc.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= 0x020135
 #include <linux/init.h>
-#else
-#define __init 
-#endif
 
-/* 2.0.0 kernel compatibility */
-#if LINUX_VERSION_CODE < 0x020100
-#define MODULE_AUTHOR(noone)
-#define MODULE_DESCRIPTION(none)
-#define MODULE_PARM(no,param)
-#define MODULE_PARM_DESC(no,description)
-#define EXPORT_SYMBOL(noexport)
-#define EXPORT_NO_SYMBOLS
-#endif
-
-#if LINUX_VERSION_CODE >= 0x020100
-#  include <asm/uaccess.h>
-#else
-#  include <asm/segment.h>
-#endif
+#include <asm/uaccess.h>
 
 #include <linux/ioport.h>
 #include <asm/io.h>
@@ -66,11 +48,11 @@ static unsigned char PortData = 0;
 #define DEBE(x)	x	/* error messages 				*/
 #define DEBINIT(x) x	/* detection status messages			*/
 
-/* --- Convenience defines for the parallel port:                       */
-#define BASE    (unsigned int)(data)
-#define DATA    BASE                    /* Centronics data port         */
-#define STAT    (BASE+1)                /* Centronics status port       */
-#define CTRL    (BASE+2)                /* Centronics control port      */
+/* --- Convenience defines for the parallel port:			*/
+#define BASE	(unsigned int)(data)
+#define DATA	BASE			/* Centronics data port		*/
+#define STAT	(BASE+1)		/* Centronics status port	*/
+#define CTRL	(BASE+2)		/* Centronics control port	*/
 
 
 /* ----- local functions ----------------------------------------------	*/
@@ -127,8 +109,8 @@ static int bit_elv_init(void)
 		request_region(base,(base == 0x3bc)? 3 : 8,
 			"i2c (ELV adapter)");
 		PortData = 0;
-                bit_elv_setsda((void*)base,1);
-                bit_elv_setscl((void*)base,1);
+		bit_elv_setsda((void*)base,1);
+		bit_elv_setscl((void*)base,1);
 	}
 	return 0;
 }
@@ -140,7 +122,7 @@ static void bit_elv_exit(void)
 
 static int bit_elv_reg(struct i2c_client *client)
 {
-        return 0;
+	return 0;
 }
 
 static int bit_elv_unreg(struct i2c_client *client)
@@ -151,14 +133,14 @@ static int bit_elv_unreg(struct i2c_client *client)
 static void bit_elv_inc_use(struct i2c_adapter *adap)
 {
 #ifdef MODULE
-  MOD_INC_USE_COUNT;
+	MOD_INC_USE_COUNT;
 #endif
 }
 
 static void bit_elv_dec_use(struct i2c_adapter *adap)
 {
 #ifdef MODULE
-  MOD_DEC_USE_COUNT;
+	MOD_DEC_USE_COUNT;
 #endif
 }
 
@@ -172,7 +154,7 @@ static struct i2c_algo_bit_data bit_elv_data = {
 	bit_elv_setscl,
 	bit_elv_getsda,
 	bit_elv_getscl,
-	80, 80, 100,		/*      waits, timeout */
+	80, 80, 100,		/*	waits, timeout */
 };
 
 static struct i2c_adapter bit_elv_ops = {
@@ -186,30 +168,30 @@ static struct i2c_adapter bit_elv_ops = {
 	bit_elv_unreg,	
 };
 
-int  __init i2c_bitelv_init(void)
+int __init i2c_bitelv_init(void)
 {
 	printk("i2c-elv.o: i2c ELV parallel port adapter module\n");
-        if (base==0) {
-                /* probe some values */
-                base=DEFAULT_BASE;
-                bit_elv_data.data=(void*)DEFAULT_BASE;
-                if (bit_elv_init()==0) {
-                        if(i2c_bit_add_bus(&bit_elv_ops) < 0)
+	if (base==0) {
+		/* probe some values */
+		base=DEFAULT_BASE;
+		bit_elv_data.data=(void*)DEFAULT_BASE;
+		if (bit_elv_init()==0) {
+			if(i2c_bit_add_bus(&bit_elv_ops) < 0)
 				return -ENODEV;
-                } else {
-                        return -ENODEV;
-                }
-        } else {
-                bit_elv_ops.data=(void*)base;
-                if (bit_elv_init()==0) {
-                        if(i2c_bit_add_bus(&bit_elv_ops) < 0)
+		} else {
+			return -ENODEV;
+		}
+	} else {
+		bit_elv_ops.data=(void*)base;
+		if (bit_elv_init()==0) {
+			if(i2c_bit_add_bus(&bit_elv_ops) < 0)
 				return -ENODEV;
-                } else {
-                        return -ENODEV;
-                }
-        }
-        printk("i2c-elv.o: found device at %#x.\n",base);
-        return 0;
+		} else {
+			return -ENODEV;
+		}
+	}
+	printk("i2c-elv.o: found device at %#x.\n",base);
+	return 0;
 }
 
 
@@ -224,13 +206,13 @@ MODULE_PARM(base, "i");
 
 int init_module(void)
 {
-        return i2c_bitelv_init();
+	return i2c_bitelv_init();
 }
 
 void cleanup_module(void)
 {
-        i2c_bit_del_bus(&bit_elv_ops);
-        bit_elv_exit();
+	i2c_bit_del_bus(&bit_elv_ops);
+	bit_elv_exit();
 }
 
 #endif

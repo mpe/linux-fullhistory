@@ -460,7 +460,7 @@ static int atyfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			 u_int transp, struct fb_info *fb);
 static void do_install_cmap(int con, struct fb_info *info);
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 static int read_aty_sense(const struct fb_info_aty *info);
 #endif
 
@@ -499,8 +499,8 @@ static int default_mclk __initdata = 0;
 static const char *mode_option __initdata = NULL;
 #endif
 
-#ifdef CONFIG_PMAC
-#ifdef CONFIG_NVRAM
+#ifdef CONFIG_PPC
+#ifdef CONFIG_NVRAM_NOT_DEFINED
 static int default_vmode __initdata = VMODE_NVRAM;
 static int default_cmode __initdata = CMODE_NVRAM;
 #else
@@ -571,7 +571,7 @@ static inline u32 aty_ld_le32(unsigned int regindex,
     u32 val;
 
     temp = info->ati_regbase;
-    asm volatile("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
+    asm volatile("lwbrx %0,%1,%2;eieio" : "=r"(val) : "b" (regindex), "r" (temp));
     return val;
 #elif defined(__mc68000__)
     return le32_to_cpu(*((volatile u32 *)(info->ati_regbase+regindex)));
@@ -587,7 +587,7 @@ static inline void aty_st_le32(unsigned int regindex, u32 val,
     unsigned long temp;
 
     temp = info->ati_regbase;
-    asm volatile("stwbrx %0,%1,%2" : : "r" (val), "b" (regindex), "r" (temp) :
+    asm volatile("stwbrx %0,%1,%2;eieio" : : "r" (val), "b" (regindex), "r" (temp) :
 	"memory");
 #elif defined(__mc68000__)
     *((volatile u32 *)(info->ati_regbase+regindex)) = cpu_to_le32(val);
@@ -765,9 +765,7 @@ static void aty_st_514(int offset, u8 val, const struct fb_info_aty *info)
     aty_st_8(DAC_W_INDEX, offset & 0xff, info);
     /* left addr byte */
     aty_st_8(DAC_DATA, (offset >> 8) & 0xff, info);
-    eieio();
     aty_st_8(DAC_MASK, val, info);
-    eieio();
     aty_st_8(DAC_CNTL, 0, info);
 }
 
@@ -775,10 +773,8 @@ static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info)
 {
     /* write addr byte */
     aty_st_8(CLOCK_CNTL + 1, (offset << 2) | PLL_WR_EN, info);
-    eieio();
     /* write the register value */
     aty_st_8(CLOCK_CNTL + 2, val, info);
-    eieio();
     aty_st_8(CLOCK_CNTL + 1, (offset << 2) & ~PLL_WR_EN, info);
 }
 
@@ -788,14 +784,12 @@ static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
 
     /* write addr byte */
     aty_st_8(CLOCK_CNTL + 1, (offset << 2), info);
-    eieio();
     /* read the register value */
     res = aty_ld_8(CLOCK_CNTL + 2, info);
-    eieio();
     return res;
 }
 
-#ifdef CONFIG_PMAC
+#if defined(CONFIG_PPC)
 
     /*
      *  Apple monitor sense
@@ -835,7 +829,7 @@ static int read_aty_sense(const struct fb_info_aty *info)
     return sense;
 }
 
-#endif /* CONFIG_PMAC */
+#endif /* defined(CONFIG_PPC) */
 
 /* ------------------------------------------------------------------------- */
 
@@ -2489,7 +2483,7 @@ static void atyfb_set_par(const struct atyfb_par *par,
 	init_engine(par, info);
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
-    if (console_fb_info == &info->fb_info) {
+    if (!console_fb_info || console_fb_info == &info->fb_info) {
 	struct fb_var_screeninfo var;
 	int vmode, cmode;
 	display_info.height = ((par->crtc.v_tot_disp>>16) & 0x7ff)+1;
@@ -3276,7 +3270,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     struct display *disp;
     const char *chipname = NULL, *ramname = NULL, *xtal;
     int pll, mclk, gtb_memsize;
-#ifdef CONFIG_PMAC
+#if defined(CONFIG_PPC)
     int sense;
 #endif
     u8 pll_ref_div;
@@ -3365,11 +3359,15 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	    } else if (Gx == GB_CHIP_ID || Gx == GD_CHIP_ID ||
 		       Gx == GI_CHIP_ID || Gx == GP_CHIP_ID ||
 		       Gx == GQ_CHIP_ID || Gx == LB_CHIP_ID ||
-		       Gx == LD_CHIP_ID || Gx == LG_CHIP_ID ||
+		       Gx == LD_CHIP_ID ||
 		       Gx == LI_CHIP_ID || Gx == LP_CHIP_ID) {
 		/* RAGE PRO or LT PRO */
 		pll = 230;
 		mclk = 100;
+	    } else if (Gx == LG_CHIP_ID) {
+		/* Rage LT */
+		pll = 230;
+		mclk = 63;
 	    } else {
 		/* other RAGE */
 		pll = 135;
@@ -3538,43 +3536,47 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     var = default_var;
 #else /* !MODULE */
     memset(&var, 0, sizeof(var));
-#ifdef CONFIG_PMAC
-    /*
-     *  FIXME: The NVRAM stuff should be put in a Mac-specific file, as it
-     *         applies to all Mac video cards
-     */
-    if (mode_option) {
-	if (!mac_find_mode(&var, &info->fb_info, mode_option, 8))
-	    var = default_var;
-    } else {
+#ifdef CONFIG_PPC
+    if (_machine == _MACH_Pmac) {
+	    /*
+	     *  FIXME: The NVRAM stuff should be put in a Mac-specific file, as it
+	     *         applies to all Mac video cards
+	     */
+	    if (mode_option) {
+		if (!mac_find_mode(&var, &info->fb_info, mode_option, 8))
+		    var = default_var;
+	    } else {
 #ifdef CONFIG_NVRAM
-	if (default_vmode == VMODE_NVRAM) {
-	    default_vmode = nvram_read_byte(NV_VMODE);
-	    if (default_vmode <= 0 || default_vmode > VMODE_MAX)
-		default_vmode = VMODE_CHOOSE;
-	}
+		if (default_vmode == VMODE_NVRAM) {
+		    default_vmode = nvram_read_byte(NV_VMODE);
+		    if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+			default_vmode = VMODE_CHOOSE;
+		}
 #endif
-	if (default_vmode == VMODE_CHOOSE) {
-	    if (Gx == LG_CHIP_ID)
-		/* G3 PowerBook with 1024x768 LCD */
-		default_vmode = VMODE_1024_768_60;
-	    else {
-		sense = read_aty_sense(info);
-		default_vmode = mac_map_monitor_sense(sense);
+		if (default_vmode == VMODE_CHOOSE) {
+		    if (Gx == LG_CHIP_ID)
+			/* G3 PowerBook with 1024x768 LCD */
+			default_vmode = VMODE_1024_768_60;
+		    else {
+			sense = read_aty_sense(info);
+			default_vmode = mac_map_monitor_sense(sense);
+		    }
+		}
+		if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+		    default_vmode = VMODE_640_480_60;
+#ifdef CONFIG_NVRAM
+		if (default_cmode == CMODE_NVRAM)
+		    default_cmode = nvram_read_byte(NV_CMODE);
+#endif
+		if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
+		    default_cmode = CMODE_8;
+		if (mac_vmode_to_var(default_vmode, default_cmode, &var))
+		    var = default_var;
 	    }
-	}
-	if (default_vmode <= 0 || default_vmode > VMODE_MAX)
-	    default_vmode = VMODE_640_480_60;
-#ifdef CONFIG_NVRAM
-	if (default_cmode == CMODE_NVRAM)
-	    default_cmode = nvram_read_byte(NV_CMODE);
-#endif
-	if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
-	    default_cmode = CMODE_8;
-	if (mac_vmode_to_var(default_vmode, default_cmode, &var))
-	    var = default_var;
     }
-#else /* !CONFIG_PMAC */
+    else if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
+	var = default_var;
+#else /* !CONFIG_PPC */
 #ifdef __sparc__
     if (mode_option) {
     	if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
@@ -3585,7 +3587,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
 	var = default_var;
 #endif /* !__sparc__ */
-#endif /* !CONFIG_PMAC */
+#endif /* !CONFIG_PPC */
 #endif /* !MODULE */
     if (noaccel)
         var.accel_flags &= ~FB_ACCELF_TEXT;
@@ -4264,7 +4266,6 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	i |= 0x2;	/*DAC_CNTL|0x2 turns off the extra brightness for gt*/
     aty_st_8(DAC_CNTL, i, info);
     aty_st_8(DAC_MASK, 0xff, info);
-    eieio();
     scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 	     (info->current_par.crtc.bpp == 16)) ? 3 : 0;
     info->aty_cmap_regs->windex = regno << scale;

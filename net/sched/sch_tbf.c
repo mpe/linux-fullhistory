@@ -186,7 +186,7 @@ static void tbf_watchdog(unsigned long arg)
 	struct Qdisc *sch = (struct Qdisc*)arg;
 
 	sch->flags &= ~TCQ_F_THROTTLED;
-	qdisc_wakeup(sch->dev);
+	netif_schedule(sch->dev);
 }
 
 static struct sk_buff *
@@ -226,7 +226,7 @@ tbf_dequeue(struct Qdisc* sch)
 			return skb;
 		}
 
-		if (!sch->dev->tbusy) {
+		if (!test_bit(LINK_STATE_XOFF, &sch->dev->state)) {
 			long delay = PSCHED_US2JIFFIE(max(-toks, -ptoks));
 
 			if (delay == 0)

@@ -51,6 +51,7 @@ struct timer_list {
 	unsigned long expires;
 	unsigned long data;
 	void (*function)(unsigned long);
+	volatile int running;
 };
 
 extern void add_timer(struct timer_list * timer);
@@ -61,7 +62,7 @@ extern int  del_timer(struct timer_list * timer);
  * active timer (if the timer is inactive it will be activated)
  * mod_timer(a,b) is equivalent to del_timer(a); a->expires = b; add_timer(a)
  */
-void mod_timer(struct timer_list *timer, unsigned long expires);
+int mod_timer(struct timer_list *timer, unsigned long expires);
 
 extern void it_real_fn(unsigned long);
 
@@ -69,12 +70,29 @@ extern inline void init_timer(struct timer_list * timer)
 {
 	timer->next = NULL;
 	timer->prev = NULL;
+#ifdef __SMP__
+	timer->running = 0;
+#endif
 }
 
 extern inline int timer_pending(const struct timer_list * timer)
 {
 	return timer->prev != NULL;
 }
+
+#ifdef __SMP__
+#define timer_exit(t) do { (t)->running = 0; mb(); } while (0)
+#define timer_set_running(t) do { (t)->running = 1; mb(); } while (0)
+#define timer_is_running(t) ((t)->running != 0)
+#define timer_synchronize(t) while (timer_is_running(t)) barrier()
+extern int del_timer_sync(struct timer_list * timer);
+#else
+#define timer_exit(t) do { } while (0)
+#define timer_set_running(t) do { } while (0)
+#define timer_is_running(t) (0)
+#define timer_synchronize(t) barrier()
+#define del_timer_sync(t) del_timer(t)
+#endif
 
 /*
  *	These inlines deal with timer wrapping correctly. You are 

@@ -79,8 +79,8 @@ else
 	       fi
 	       bool '    HPT366 chipset support' CONFIG_BLK_DEV_HPT366
 	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_HPT366" = "y" ]; then
-		  bool '      HPT366 Fast Interrupt support (EXPERIMENTAL) (WIP)' HPT366_FAST_IRQ_PREDICTION
-		  bool '      HPT366 mode three unsupported (EXPERIMENTAL) (WIP)' HPT366_MODE3
+		  bool '      HPT366 Fast Interrupt support (EXPERIMENTAL) (WIP)' CONFIG_HPT366_FAST_IRQ_PREDICTION
+		  bool '      HPT366 mode three unsupported (EXPERIMENTAL) (WIP)' CONFIG_HPT366_MODE3
 	       fi
 	       if [ "$CONFIG_X86" = "y" ]; then
 		  bool '    Intel PIIXn chipsets support' CONFIG_BLK_DEV_PIIX

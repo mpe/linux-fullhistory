@@ -30,6 +30,7 @@
 #include <linux/poll.h>
 #include <linux/miscdevice.h>
 #include <linux/malloc.h>
+#include <linux/kbd_kern.h>
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
@@ -418,7 +419,7 @@ static inline void handle_keyboard_event(unsigned char scancode)
 	if (do_acknowledge(scancode))
 		handle_scancode(scancode, !(scancode & 0x80));
 #endif				
-	mark_bh(KEYBOARD_BH);
+	tasklet_schedule(&keyboard_tasklet);
 }	
 
 /*

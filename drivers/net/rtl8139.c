@@ -500,6 +500,8 @@ static struct net_device *rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
 	/* The Rtl8129-specific entries in the device structure. */
 	dev->open = &rtl8129_open;
 	dev->hard_start_xmit = &rtl8129_start_xmit;
+	dev->tx_timeout = &rtl8129_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 	dev->stop = &rtl8129_close;
 	dev->get_stats = &rtl8129_get_stats;
 	dev->set_multicast_list = &set_rx_mode;
@@ -742,10 +744,6 @@ rtl8129_open(struct net_device *dev)
 
 	outb(CmdRxEnb | CmdTxEnb, ioaddr + ChipCmd);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
 	/* Enable all known interrupts by setting the interrupt mask. */
 	outw(PCIErr | PCSTimeout | RxUnderrun | RxOverflow | RxFIFOOver
 		 | TxErr | TxOK | RxErr | RxOK, ioaddr + IntrMask);
@@ -796,7 +794,8 @@ static void rtl8129_timer(unsigned long data)
 			rtl8129_interrupt(dev->irq, dev, 0);
 		}
 	}
-	if (dev->tbusy  &&  jiffies - dev->trans_start >= 2*TX_TIMEOUT)
+	if (test_bit(LINK_STATE_XOFF, &dev->state) &&
+		(jiffies - dev->trans_start) >= 2*TX_TIMEOUT)
 		rtl8129_tx_timeout(dev);
 
 #if 0
@@ -944,7 +943,7 @@ static void rtl8129_tx_timeout(struct net_device *dev)
 			i++;
 		}
 		if (tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {/* Typical path */
-			dev->tbusy = 0;
+			netif_wake_queue(dev);
 			tp->tx_full = 0;
 		} else {
 			tp->tx_full = 1;
@@ -985,13 +984,7 @@ rtl8129_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	int entry;
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start >= TX_TIMEOUT)
-			rtl8129_tx_timeout(dev);
-		return 1;
-	}
+	netif_stop_queue(dev);
 
 	/* Calculate the next Tx descriptor entry. */
 	entry = tp->cur_tx % NUM_TX_DESC;
@@ -1012,7 +1005,7 @@ rtl8129_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		 ioaddr + TxStatus0 + entry*4);
 
 	if (++tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {	/* Typical path */
-		clear_bit(0, (void*)&dev->tbusy);
+		netif_start_queue(dev);
 	} else {
 		tp->tx_full = 1;
 	}
@@ -1034,22 +1027,6 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	int boguscnt = max_interrupt_work;
 	int status, link_changed = 0;
 	long ioaddr = dev->base_addr;
-
-#if defined(__i386__)
-	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
-	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_ERR"%s: SMP simultaneous entry of an interrupt handler.\n",
-			   dev->name);
-		dev->interrupt = 0;	/* Avoid halting machine. */
-		return;
-	}
-#else
-	if (dev->interrupt) {
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
-#endif
 
 	do {
 		status = inw(ioaddr + IntrStatus);
@@ -1122,10 +1099,9 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				dev_free_skb(tp->tx_info[entry].skb);
 				tp->tx_info[entry].skb = NULL;
 				if (tp->tx_full) {
-					/* The ring is no longer full, clear tbusy. */
+					/* The ring is no longer full, wake the queue. */
 					tp->tx_full = 0;
-					clear_bit(0, (void*)&dev->tbusy);
-					mark_bh(NET_BH);
+					netif_wake_queue(dev);
 				}
 				dirty_tx++;
 			}
@@ -1198,12 +1174,6 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	if (rtl8129_debug > 3)
 		printk(KERN_DEBUG"%s: exiting interrupt, intr_status=%#4.4x.\n",
 			   dev->name, inl(ioaddr + IntrStatus));
-
-#if defined(__i386__)
-	clear_bit(0, (void*)&dev->interrupt);
-#else
-	dev->interrupt = 0;
-#endif
 	return;
 }
 
@@ -1325,8 +1295,7 @@ rtl8129_close(struct net_device *dev)
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (rtl8129_debug > 1)
 		printk(KERN_DEBUG"%s: Shutting down ethercard, status was 0x%4.4x.\n",
@@ -1403,7 +1372,7 @@ rtl8129_get_stats(struct net_device *dev)
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (dev->start) {
+	if (test_bit(LINK_STATE_START, &dev->state)) {
 		tp->stats.rx_missed_errors += inl(ioaddr + RxMissed);
 		outl(0, ioaddr + RxMissed);
 	}

@@ -289,9 +289,6 @@ static inline int DRIVE(kdev_t x) {
 
 #define CLEARSTRUCT(x) memset((x), 0, sizeof(*(x)))
 
-#define INT_OFF save_flags(flags); cli()
-#define INT_ON  restore_flags(flags)
-
 /* read/write */
 #define COMMAND raw_cmd->cmd[0]
 #define DR_SELECT raw_cmd->cmd[1]
@@ -471,7 +468,8 @@ static int probing = 0;
 #define FD_COMMAND_ERROR 2
 #define FD_COMMAND_OKAY 3
 
-static volatile int command_status = FD_COMMAND_NONE, fdc_busy = 0;
+static volatile int command_status = FD_COMMAND_NONE;
+static unsigned long fdc_busy = 0;
 static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
 static DECLARE_WAIT_QUEUE_HEAD(command_done);
 
@@ -846,24 +844,36 @@ static void set_fdc(int drive)
 /* locks the driver */
 static int lock_fdc(int drive, int interruptible)
 {
-	unsigned long flags;
-
 	if (!usage_count){
 		printk(KERN_ERR "Trying to lock fdc while usage count=0\n");
 		return -1;
 	}
 	if(floppy_grab_irq_and_dma()==-1)
 		return -EBUSY;
-	INT_OFF;
-	while (fdc_busy && NO_SIGNAL)
-		interruptible_sleep_on(&fdc_wait);
-	if (fdc_busy){
-		INT_ON;
-		return -EINTR;
+
+	if (test_and_set_bit(0, &fdc_busy)) {
+		DECLARE_WAITQUEUE(wait, current);
+		add_wait_queue(&fdc_wait, &wait);
+
+		for (;;) {
+			set_current_state(TASK_INTERRUPTIBLE);
+
+			if (!test_and_set_bit(0, &fdc_busy))
+				break;
+
+			schedule();
+
+			if (!NO_SIGNAL) {
+				remove_wait_queue(&fdc_wait, &wait);
+				return -EINTR;
+			}
+		}
+
+		set_current_state(TASK_RUNNING);
+		remove_wait_queue(&fdc_wait, &wait);
 	}
-	fdc_busy = 1;
-	INT_ON;
 	command_status = FD_COMMAND_NONE;
+
 	reschedule_timeout(drive, "lock fdc", 0);
 	set_fdc(drive);
 	return 0;
@@ -886,7 +896,7 @@ static inline void unlock_fdc(void)
 	command_status = FD_COMMAND_NONE;
 	del_timer(&fd_timeout);
 	cont = NULL;
-	fdc_busy = 0;
+	clear_bit(0, &fdc_busy);
 	floppy_release_irq_and_dma();
 	wake_up(&fdc_wait);
 }
@@ -1031,39 +1041,39 @@ static int wait_for_completion(unsigned long delay, timeout_fn function)
 	return 0;
 }
 
+static spinlock_t floppy_hlt_lock = SPIN_LOCK_UNLOCKED;
 static int hlt_disabled=0;
 static void floppy_disable_hlt(void)
 {
 	unsigned long flags;
 
-	INT_OFF;
-	if (!hlt_disabled){
+	spin_lock_irqsave(&floppy_hlt_lock, flags);
+	if (!hlt_disabled) {
 		hlt_disabled=1;
 #ifdef HAVE_DISABLE_HLT
 		disable_hlt();
 #endif
 	}
-	INT_ON;
+	spin_unlock_irqrestore(&floppy_hlt_lock, flags);
 }
 
 static void floppy_enable_hlt(void)
 {
 	unsigned long flags;
 
-	INT_OFF;
+	spin_lock_irqsave(&floppy_hlt_lock, flags);
 	if (hlt_disabled){
 		hlt_disabled=0;
 #ifdef HAVE_DISABLE_HLT
 		enable_hlt();
 #endif
 	}
-	INT_ON;
+	spin_unlock_irqrestore(&floppy_hlt_lock, flags);
 }
 
 
 static void setup_DMA(void)
 {
-	unsigned long flags;
 	unsigned long f;
 
 #ifdef FLOPPY_SANITY_CHECK
@@ -1085,7 +1095,6 @@ static void setup_DMA(void)
 		return;
 	}
 #endif
-	INT_OFF;
 	f=claim_dma_lock();
 	fd_disable_dma();
 #ifdef fd_dma_setup
@@ -1094,7 +1103,6 @@ static void setup_DMA(void)
 			DMA_MODE_READ : DMA_MODE_WRITE,
 			FDCS->address) < 0) {
 		release_dma_lock(f);
-		INT_ON;
 		cont->done(0);
 		FDCS->reset=1;
 		return;
@@ -1111,7 +1119,6 @@ static void setup_DMA(void)
 	fd_enable_dma();
 	release_dma_lock(f);
 #endif
-	INT_ON;
 	floppy_disable_hlt();
 }
 
@@ -1759,14 +1766,7 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2 && max_sensei);
 	}
 	if (handler) {
-		int cpu = smp_processor_id();
-		if(softirq_trylock(cpu)) {
-			/* got the lock, call the handler immediately */
-			handler();
-			softirq_endlock(cpu);
-		} else
-			/* we interrupted a bottom half. Defer handler */
-			schedule_bh( (void *)(void *) handler);
+		schedule_bh( (void *)(void *) handler);
 	} else
 		FDCS->reset = 1;
 	is_alive("normal interrupt end");
@@ -1854,7 +1854,7 @@ static void show_floppy(void)
 #endif
 
 	printk("status=%x\n", fd_inb(FD_STATUS));
-	printk("fdc_busy=%d\n", fdc_busy);
+	printk("fdc_busy=%lu\n", fdc_busy);
 	if (DEVICE_INTR)
 		printk("DEVICE_INTR=%p\n", DEVICE_INTR);
 	if (floppy_tq.sync)
@@ -2025,25 +2025,36 @@ static struct cont_t intr_cont={
 static int wait_til_done(void (*handler)(void), int interruptible)
 {
 	int ret;
-	unsigned long flags;
 
 	schedule_bh((void *)(void *)handler);
-	INT_OFF;
-	while(command_status < 2 && NO_SIGNAL){
-		is_alive("wait_til_done");
-		if (interruptible)
-			interruptible_sleep_on(&command_done);
-		else
-			sleep_on(&command_done);
+
+	if (command_status < 2 && NO_SIGNAL) {
+		DECLARE_WAITQUEUE(wait, current);
+
+		add_wait_queue(&command_done, &wait);
+		for (;;) {
+			set_current_state(interruptible?
+					  TASK_INTERRUPTIBLE:
+					  TASK_UNINTERRUPTIBLE);
+
+			if (command_status >= 2 || !NO_SIGNAL)
+				break;
+
+			is_alive("wait_til_done");
+
+			schedule();
+		}
+
+		set_current_state(TASK_RUNNING);
+		remove_wait_queue(&command_done, &wait);
 	}
+
 	if (command_status < 2){
 		cancel_activity();
 		cont = &intr_cont;
 		reset_fdc();
-		INT_ON;
 		return -EINTR;
 	}
-	INT_ON;
 
 	if (FDCS->reset)
 		command_status = FD_COMMAND_ERROR;
@@ -4177,22 +4188,26 @@ int __init floppy_init(void)
 	return have_no_fdc;
 }
 
+static spinlock_t floppy_usage_lock = SPIN_LOCK_UNLOCKED;
+
 static int floppy_grab_irq_and_dma(void)
 {
 	unsigned long flags;
 
-	INT_OFF;
+	spin_lock_irqsave(&floppy_usage_lock, flags);
 	if (usage_count++){
-		INT_ON;
+		spin_unlock_irqrestore(&floppy_usage_lock, flags);
 		return 0;
 	}
-	INT_ON;
+	spin_unlock_irqrestore(&floppy_usage_lock, flags);
 	MOD_INC_USE_COUNT;
 	if (fd_request_irq()) {
 		DPRINT("Unable to grab IRQ%d for the floppy driver\n",
 			FLOPPY_IRQ);
 		MOD_DEC_USE_COUNT;
+		spin_lock_irqsave(&floppy_usage_lock, flags);
 		usage_count--;
+		spin_unlock_irqrestore(&floppy_usage_lock, flags);
 		return -1;
 	}
 	if (fd_request_dma()) {
@@ -4200,7 +4215,9 @@ static int floppy_grab_irq_and_dma(void)
 			FLOPPY_DMA);
 		fd_free_irq();
 		MOD_DEC_USE_COUNT;
+		spin_lock_irqsave(&floppy_usage_lock, flags);
 		usage_count--;
+		spin_unlock_irqrestore(&floppy_usage_lock, flags);
 		return -1;
 	}
 
@@ -4216,7 +4233,9 @@ static int floppy_grab_irq_and_dma(void)
 					release_region(FDCS->address+7, 1);
 				}
 				MOD_DEC_USE_COUNT;
+				spin_lock_irqsave(&floppy_usage_lock, flags);
 				usage_count--;
+				spin_unlock_irqrestore(&floppy_usage_lock, flags);
 				return -1;
 			}
 			request_region(FDCS->address, 6, "floppy");
@@ -4258,12 +4277,12 @@ static void floppy_release_irq_and_dma(void)
 	unsigned long tmpaddr;
 	unsigned long flags;
 
-	INT_OFF;
+	spin_lock_irqsave(&floppy_usage_lock, flags);
 	if (--usage_count){
-		INT_ON;
+		spin_unlock_irqrestore(&floppy_usage_lock, flags);
 		return;
 	}
-	INT_ON;
+	spin_unlock_irqrestore(&floppy_usage_lock, flags);
 	if(irqdma_allocated)
 	{
 		fd_disable_dma();

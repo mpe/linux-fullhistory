@@ -13,7 +13,7 @@
  */
  
 
-#define VIA_VERSION	"1.1.2"
+#define VIA_VERSION	"1.1.2.1"
 
 
 
@@ -65,7 +65,7 @@
 #define	LINE_SIZE	10
 
 #define VIA_CARD_NAME	"VIA 82Cxxx Audio driver " VIA_VERSION
-#define VIA_MODULE_NAME "via82cxxx"
+#define VIA_MODULE_NAME "via_audio"
 #define PFX		VIA_MODULE_NAME ": "
 
 #define VIA_COUNTER_LIMIT	100000

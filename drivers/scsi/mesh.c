@@ -253,7 +253,7 @@ mesh_detect(Scsi_Host_Template *tp)
 			continue;
 		}
 		mesh_host->unique_id = nmeshes;
-#ifndef MODULE
+#if !defined(MODULE) && (defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC))
 		note_scsi_host(mesh, mesh_host);
 #endif
 
@@ -305,7 +305,9 @@ mesh_detect(Scsi_Host_Template *tp)
 		if (mesh_sync_period < minper)
 			mesh_sync_period = minper;
 
+#if defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC)
 		feature_set(mesh, FEATURE_MESH_enable);
+#endif
 		mdelay(200);
 
 		mesh_init(ms);

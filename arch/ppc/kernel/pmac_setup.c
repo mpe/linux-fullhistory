@@ -104,6 +104,10 @@ extern char saved_command_line[];
 extern void zs_kgdb_hook(int tty_num);
 static void ohare_init(void);
 static void init_p2pbridge(void);
+static void init_uninorth(void);
+#ifdef CONFIG_BOOTX_TEXT
+void pmac_progress(char *s, unsigned short hex);
+#endif
 
 __pmac
 int
@@ -232,8 +236,10 @@ pmac_setup_arch(void)
 		if (fp != 0) {
 			switch (_get_PVR() >> 16) {
 			case 4:		/* 604 */
+			case 8:		/* G3 */
 			case 9:		/* 604e */
 			case 10:	/* mach V (604ev5) */
+			case 12:	/* G4 */
 			case 20:	/* 620 */
 				loops_per_sec = *fp;
 				break;
@@ -252,9 +258,10 @@ pmac_setup_arch(void)
 
 	pmac_find_bridges();
 	init_p2pbridge();
-
+	init_uninorth();
+	
 	/* Checks "l2cr-value" property in the registry */
-	if ( (_get_PVR() >> 16) == 8) {
+	if ( (_get_PVR() >> 16) == 8 || (_get_PVR() >> 16) == 12 ) {
 		struct device_node *np = find_devices("cpus");		
 		if (np == 0)
 			np = find_type_devices("cpu");		
@@ -346,6 +353,33 @@ static void __init ohare_init(void)
 	}
 }
 
+static void __init
+init_uninorth(void)
+{
+	/* 
+	 * Turns on the gmac clock so that it responds to PCI cycles
+	 * later, the driver may want to turn it off again to save
+	 * power when interface is down
+	 */
+	struct device_node* uni_n = find_devices("uni-n");
+	struct device_node* gmac = find_devices("ethernet");
+	unsigned long* addr;
+	
+	if (!uni_n || uni_n->n_addrs < 1)
+		return;
+	addr = ioremap(uni_n->addrs[0].address, 0x300);
+
+	while(gmac) {
+		if (device_is_compatible(gmac, "gmac"))
+			break;
+		gmac = gmac->next;
+	}
+	if (gmac) {
+		*(addr + 8) |= 2;
+		eieio();
+	}
+}
+
 extern char *bootpath;
 extern char *bootdevice;
 void *boot_host;
@@ -401,14 +435,11 @@ note_scsi_host(struct device_node *node, void *host)
 #endif
 
 #if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
-extern int pmac_ide_count;
-extern struct device_node *pmac_ide_node[];
-static int ide_majors[] = { 3, 22, 33, 34, 56, 57, 88, 89, 90, 91 };
 
 kdev_t __init find_ide_boot(void)
 {
 	char *p;
-	int i, n;
+	int n;
 
 	if (bootdevice == NULL)
 		return 0;
@@ -417,18 +448,7 @@ kdev_t __init find_ide_boot(void)
 		return 0;
 	n = p - bootdevice;
 
-	/*
-	 * Look through the list of IDE interfaces for this one.
-	 */
-	for (i = 0; i < pmac_ide_count; ++i) {
-		char *name = pmac_ide_node[i]->full_name;
-		if (memcmp(name, bootdevice, n) == 0 && name[n] == 0) {
-			/* XXX should cope with the 2nd drive as well... */
-			return MKDEV(ide_majors[i], 0);
-		}
-	}
-
-	return 0;
+	return pmac_find_ide_boot(bootdevice, n);
 }
 #endif /* CONFIG_BLK_DEV_IDE && CONFIG_BLK_DEV_IDE_PMAC */
 
@@ -464,10 +484,10 @@ void note_bootable_part(kdev_t dev, int part)
 		find_boot_device();
 		found_boot = 1;
 	}
-	if (dev == boot_dev) {
+	if (boot_dev == 0 || dev == boot_dev) {
 		ROOT_DEV = MKDEV(MAJOR(dev), MINOR(dev) + part);
 		boot_dev = NODEV;
-		printk(" (root)");
+		printk(" (root on %d)", part);
 	}
 }
 
@@ -550,11 +570,15 @@ pmac_ide_default_irq(ide_ioreg_t base)
         return 0;
 }
 
+#if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
+extern ide_ioreg_t pmac_ide_get_base(int index);
+#endif
+
 ide_ioreg_t
 pmac_ide_default_io_base(int index)
 {
 #if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
-        return pmac_ide_regbase[index];
+        return pmac_ide_get_base(index);
 #else
 	return 0;
 #endif
@@ -660,5 +684,22 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.ide_init_hwif = pmac_ide_init_hwif_ports;
 
         ppc_ide_md.io_base = _IO_BASE;	/* actually too early for this :-( */
-#endif		
+#endif
+#ifdef CONFIG_BOOTX_TEXT
+	ppc_md.progress = pmac_progress;
+#endif
+	if (ppc_md.progress) ppc_md.progress("pmac_init(): exit", 0);
+	
 }
+
+#ifdef CONFIG_BOOTX_TEXT
+extern void drawchar(char c);
+extern void drawstring(const char *c);
+void
+pmac_progress(char *s, unsigned short hex)
+{
+	drawstring(s);
+	drawchar('\n');
+}
+#endif CONFIG_BOOTX_TEXT
+

@@ -221,12 +221,9 @@ send_IPI(int dest_cpu, unsigned char vector)
 	/*
 	 * Disable IVR reads
 	 */
-	save_flags(flags);
-	__cli();
-	spin_lock(&ivr_read_lock);
+	spin_lock_irqsave(&ivr_read_lock, flags);
 	writeq(ipi_data, ipi_addr);
-	spin_unlock(&ivr_read_lock);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&ivr_read_lock, flags);
 #else
  	writeq(ipi_data, ipi_addr);
 #endif	/* CONFIG_ITANIUM_ASTEP_SPECIFIC */

@@ -105,13 +105,15 @@ static struct timer_vec * const tvecs[] = {
 
 static unsigned long timer_jiffies = 0;
 
-static inline void insert_timer(struct timer_list *timer,
-				struct timer_list **vec, int idx)
+static inline void insert_timer(struct timer_list *timer, struct timer_list **vec)
 {
-	if ((timer->next = vec[idx]))
-		vec[idx]->prev = timer;
-	vec[idx] = timer;
-	timer->prev = (struct timer_list *)&vec[idx];
+	struct timer_list *next = *vec;
+
+	timer->next = next;
+	if (next)
+		next->prev = timer;
+	*vec = timer;
+	timer->prev = (struct timer_list *)vec;
 }
 
 static inline void internal_add_timer(struct timer_list *timer)
@@ -121,31 +123,34 @@ static inline void internal_add_timer(struct timer_list *timer)
 	 */
 	unsigned long expires = timer->expires;
 	unsigned long idx = expires - timer_jiffies;
+	struct timer_list ** vec;
 
 	if (idx < TVR_SIZE) {
 		int i = expires & TVR_MASK;
-		insert_timer(timer, tv1.vec, i);
+		vec = tv1.vec + i;
 	} else if (idx < 1 << (TVR_BITS + TVN_BITS)) {
 		int i = (expires >> TVR_BITS) & TVN_MASK;
-		insert_timer(timer, tv2.vec, i);
+		vec = tv2.vec + i;
 	} else if (idx < 1 << (TVR_BITS + 2 * TVN_BITS)) {
 		int i = (expires >> (TVR_BITS + TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv3.vec, i);
+		vec =  tv3.vec + i;
 	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
 		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv4.vec, i);
+		vec = tv4.vec + i;
 	} else if ((signed long) idx < 0) {
 		/* can happen if you add a timer with expires == jiffies,
 		 * or you set a timer to go off in the past
 		 */
-		insert_timer(timer, tv1.vec, tv1.index);
+		vec = tv1.vec + tv1.index;
 	} else if (idx <= 0xffffffffUL) {
 		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv5.vec, i);
+		vec = tv5.vec + i;
 	} else {
 		/* Can only get here on architectures with 64-bit jiffies */
 		timer->next = timer->prev = timer;
+		return;
 	}
+	insert_timer(timer, vec);
 }
 
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
@@ -181,15 +186,17 @@ static inline int detach_timer(struct timer_list *timer)
 	return 0;
 }
 
-void mod_timer(struct timer_list *timer, unsigned long expires)
+int mod_timer(struct timer_list *timer, unsigned long expires)
 {
+	int ret;
 	unsigned long flags;
 
 	spin_lock_irqsave(&timerlist_lock, flags);
 	timer->expires = expires;
-	detach_timer(timer);
+	ret = detach_timer(timer);
 	internal_add_timer(timer);
 	spin_unlock_irqrestore(&timerlist_lock, flags);
+	return ret;
 }
 
 int del_timer(struct timer_list * timer)
@@ -203,6 +210,39 @@ int del_timer(struct timer_list * timer)
 	spin_unlock_irqrestore(&timerlist_lock, flags);
 	return ret;
 }
+
+#ifdef __SMP__
+/*
+ * SMP specific function to delete periodic timer.
+ * Caller must disable by some means restarting the timer
+ * for new. Upon exit the timer is not queued and handler is not running
+ * on any CPU. It returns number of times, which timer was deleted
+ * (for reference counting).
+ */
+
+int del_timer_sync(struct timer_list * timer)
+{
+	int ret = 0;
+
+	for (;;) {
+		unsigned long flags;
+		int running;
+
+		spin_lock_irqsave(&timerlist_lock, flags);
+		ret += detach_timer(timer);
+		timer->next = timer->prev = 0;
+		running = timer->running;
+		spin_unlock_irqrestore(&timerlist_lock, flags);
+
+		if (!running)
+			return ret;
+		timer_synchronize(timer);
+	}
+
+	return ret;
+}
+#endif
+
 
 static inline void cascade_timers(struct timer_vec *tv)
 {
@@ -238,6 +278,7 @@ static inline void run_timer_list(void)
 			unsigned long data = timer->data;
 			detach_timer(timer);
 			timer->next = timer->prev = NULL;
+			timer_set_running(timer);
 			spin_unlock_irq(&timerlist_lock);
 			fn(data);
 			spin_lock_irq(&timerlist_lock);

@@ -585,9 +585,9 @@ int sock_close(struct inode *inode, struct file *filp)
  *	   i.e. under semaphore.
  *	2. fasync_list is used under read_lock(&sk->callback_lock)
  *	   or under socket lock.
- *	3. fasync_list is used from any context including IRQ, so that
+ *	3. fasync_list can be used from softirq context, so that
  *	   modification under socket lock have to be enhanced with
- *	   write_lock_irq(&sk->callback_lock).
+ *	   write_lock_bh(&sk->callback_lock).
  *							--ANK (990710)
  */
 
@@ -622,9 +622,9 @@ static int sock_fasync(int fd, struct file *filp, int on)
 	{
 		if(fa!=NULL)
 		{
-			write_lock_irq(&sk->callback_lock);
+			write_lock_bh(&sk->callback_lock);
 			fa->fa_fd=fd;
-			write_unlock_irq(&sk->callback_lock);
+			write_unlock_bh(&sk->callback_lock);
 
 			kfree_s(fna,sizeof(struct fasync_struct));
 			goto out;
@@ -633,17 +633,17 @@ static int sock_fasync(int fd, struct file *filp, int on)
 		fna->fa_fd=fd;
 		fna->magic=FASYNC_MAGIC;
 		fna->fa_next=sock->fasync_list;
-		write_lock_irq(&sk->callback_lock);
+		write_lock_bh(&sk->callback_lock);
 		sock->fasync_list=fna;
-		write_unlock_irq(&sk->callback_lock);
+		write_unlock_bh(&sk->callback_lock);
 	}
 	else
 	{
 		if (fa!=NULL)
 		{
-			write_lock_irq(&sk->callback_lock);
+			write_lock_bh(&sk->callback_lock);
 			*prev=fa->fa_next;
-			write_unlock_irq(&sk->callback_lock);
+			write_unlock_bh(&sk->callback_lock);
 			kfree_s(fa,sizeof(struct fasync_struct));
 		}
 	}

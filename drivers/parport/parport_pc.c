@@ -551,21 +551,22 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 	unsigned long dmaflag;
 	size_t left = length;
 	const struct parport_pc_private *priv = port->physport->private_data;
-	unsigned long dma_addr;
+	dma_addr_t dma_addr, dma_handle;
 	size_t maxlen = 0x10000; /* max 64k per DMA transfer */
 	unsigned long start = (unsigned long) buf;
 	unsigned long end = (unsigned long) buf + length - 1;
 
-	/* above 16 MB we use a bounce buffer as ISA-DMA is not possible */
-	if (end <= MAX_DMA_ADDRESS) {
-                /* If it would cross a 64k boundary, cap it at the end. */
-                if ((start ^ end) & ~0xffff)
-                        maxlen = (0x10000 - start) & 0xffff;
+	if (end < MAX_DMA_ADDRESS) {
+		/* If it would cross a 64k boundary, cap it at the end. */
+		if ((start ^ end) & ~0xffffUL)
+			maxlen = (0x10000 - start) & 0xffff;
 
-		dma_addr = virt_to_bus(buf);
+		dma_addr = dma_handle = pci_map_single(priv->dev, (void *)buf, length);
         } else {
-		dma_addr = priv->dma_handle;
+		/* above 16 MB we use a bounce buffer as ISA-DMA is not possible */
 		maxlen   = PAGE_SIZE;          /* sizeof(priv->dma_buf) */
+		dma_addr = priv->dma_handle;
+		dma_handle = 0;
 	}
 
 	port = port->physport;
@@ -585,7 +586,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 		if (count > maxlen)
 			count = maxlen;
 
-		if (maxlen == PAGE_SIZE)   /* bounce buffer ! */
+		if (!dma_handle)   /* bounce buffer ! */
 			memcpy(priv->dma_buf, buf, count);
 
 		dmaflag = claim_dma_lock();
@@ -607,6 +608,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 		/* assume DMA will be successful */
 		left -= count;
 		buf  += count;
+		if (dma_handle) dma_addr += count;
 
 		/* Wait for interrupt. */
 	false_alarm:
@@ -645,6 +647,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 		/* update for possible DMA residue ! */
 		buf  -= count;
 		left += count;
+		if (dma_handle) dma_addr -= count;
 	}
 
 	/* Maybe got here through break, so adjust for DMA residue! */
@@ -656,6 +659,9 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 
 	/* Turn off DMA mode */
 	frob_econtrol (port, 1<<3, 0);
+	
+	if (dma_handle)
+		pci_unmap_single(priv->dev, dma_handle, length);
 
 	return length - left;
 }

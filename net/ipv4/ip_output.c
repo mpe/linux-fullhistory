@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.79 2000/02/08 21:27:11 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.80 2000/02/09 11:16:41 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -645,14 +645,14 @@ static int ip_build_xmit_slow(struct sock *sk,
 	} while (offset >= 0);
 
 	if (nfrags>1)
-		ip_statistics[smp_processor_id()*2 + !in_interrupt()].IpFragCreates += nfrags;
+		ip_statistics[smp_processor_id()*2 + !in_softirq()].IpFragCreates += nfrags;
 out:
 	return 0;
 
 error:
 	IP_INC_STATS(IpOutDiscards);
 	if (nfrags>1)
-		ip_statistics[smp_processor_id()*2 + !in_interrupt()].IpFragCreates += nfrags;
+		ip_statistics[smp_processor_id()*2 + !in_softirq()].IpFragCreates += nfrags;
 	return err; 
 }
 

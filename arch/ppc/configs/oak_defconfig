@@ -18,7 +18,6 @@ CONFIG_4xx=y
 # CONFIG_8xx is not set
 CONFIG_OAK=y
 # CONFIG_WALNUT is not set
-# CONFIG_PCI is not set
 # CONFIG_SMP is not set
 CONFIG_MACH_SPECIFIC=y
 # CONFIG_MATH_EMULATION is not set
@@ -33,6 +32,7 @@ CONFIG_KMOD=y
 #
 # General setup
 #
+# CONFIG_PCI is not set
 CONFIG_NET=y
 CONFIG_SYSCTL=y
 CONFIG_SYSVIPC=y
@@ -233,6 +233,11 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_SERIAL_EXTENDED is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
 # CONFIG_UNIX98_PTYS is not set
+
+#
+# I2C support
+#
+# CONFIG_I2C is not set
 
 #
 # Mice

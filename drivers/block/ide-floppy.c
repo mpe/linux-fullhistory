@@ -1397,6 +1397,13 @@ static int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 
 	*((unsigned short *) &gcw) = id->config;
 
+#ifdef CONFIG_PPC
+	/* kludge for Apple PowerBook internal zip */
+	if ((gcw.device_type == 5) && !strstr(id->model, "CD-ROM")
+	    && strstr(id->model, "ZIP"))
+		gcw.device_type = 0;			
+#endif
+
 #if IDEFLOPPY_DEBUG_INFO
 	printk (KERN_INFO "Dumping ATAPI Identify Device floppy parameters\n");
 	switch (gcw.protocol) {

@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.36 2000/01/06 00:41:54 davem Exp $
+ *	Version: $Id: igmp.c,v 1.37 2000/02/09 11:16:40 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -154,11 +154,9 @@ static __inline__ void igmp_start_timer(struct ip_mc_list *im, int max_delay)
 	int tv=net_random() % max_delay;
 
 	spin_lock_bh(&im->lock);
-	if (!del_timer(&im->timer))
-		atomic_inc(&im->refcnt);
-	im->timer.expires=jiffies+tv+2;
 	im->tm_running=1;
-	add_timer(&im->timer);
+	if (!mod_timer(&im->timer, jiffies+tv+2))
+		atomic_inc(&im->refcnt);
 	spin_unlock_bh(&im->lock);
 }
 

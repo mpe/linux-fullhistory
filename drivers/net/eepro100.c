@@ -81,11 +81,11 @@ static int debug = -1;			/* The debug level */
 
 #include <linux/kernel.h>
 #include <linux/string.h>
-#include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/timer.h>
 #ifdef HAS_PCI_NETIF
 #include "pci-netif.h"
 #else
@@ -466,7 +466,6 @@ struct speedo_private {
 	struct descriptor *mc_setup_frm; 	/* ..multicast setup frame. */
 	int mc_setup_busy;					/* Avoid double-use of setup frame. */
 	dma_addr_t mc_setup_dma;
-	unsigned long in_interrupt;			/* Word-aligned dev->interrupt */
 	char rx_mode;						/* Current PROMISC/ALLMULTI setting. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
@@ -478,7 +477,6 @@ struct speedo_private {
 	unsigned short phy[2];				/* PHY media interfaces available. */
 	unsigned short advertising;			/* Current PHY advertised caps. */
 	unsigned short partner;				/* Link partner caps. */
-	long last_reset;
 };
 
 /* The parameters for a CmdConfigure operation.
@@ -846,6 +844,8 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 	/* The Speedo-specific entries in the device structure. */
 	dev->open = &speedo_open;
 	dev->hard_start_xmit = &speedo_start_xmit;
+	dev->tx_timeout = &speedo_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 	dev->stop = &speedo_close;
 	dev->get_stats = &speedo_get_stats;
 	dev->set_multicast_list = &set_rx_mode;
@@ -942,7 +942,6 @@ speedo_open(struct net_device *dev)
 	sp->last_cmd = 0;
 	sp->tx_full = 0;
 	spin_lock_init(&sp->lock);
-	sp->in_interrupt = 0;
 
 	/* .. we can safely take handler calls during init. */
 	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ, dev->name, dev)) {
@@ -975,9 +974,8 @@ speedo_open(struct net_device *dev)
 	/* Fire up the hardware. */
 	speedo_resume(dev);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	clear_bit(LINK_STATE_RXSEM, &dev->state);
+	netif_start_queue(dev);
 
 	/* Setup the chip and configure the multicast list. */
 	sp->mc_setup_frm = NULL;
@@ -1098,12 +1096,6 @@ static void speedo_timer(unsigned long data)
 	if (speedo_debug > 3) {
 		printk(KERN_DEBUG "%s: Media control tick, status %4.4x.\n",
 			   dev->name, inw(ioaddr + SCBStatus));
-	}
-	/* This has a small false-trigger window. */
-	if (test_bit(0, (void*)&dev->tbusy) &&
-		(jiffies - dev->trans_start) > TX_TIMEOUT) {
-		speedo_tx_timeout(dev);
-		sp->last_reset = jiffies;
 	}
 	if (sp->rx_mode < 0  ||
 		(sp->rx_bug  && jiffies - sp->last_rx_time > 2*HZ)) {
@@ -1242,22 +1234,6 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	int entry;
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-	   If this ever occurs the queue layer is doing something evil! */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < TX_TIMEOUT - 2)
-			return 1;
-		if (tickssofar < TX_TIMEOUT) {
-			/* Reap sent packets from the full Tx queue. */
-			outw(SCBTriggerIntr, ioaddr + SCBCmd);
-			return 1;
-		}
-		speedo_tx_timeout(dev);
-		return 1;
-	}
-
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
 
@@ -1296,10 +1272,10 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
 			last_cmd->cmd_status &= cpu_to_le32(~(CmdSuspend | CmdIntr));
 		}
-		if (sp->cur_tx - sp->dirty_tx >= TX_QUEUE_LIMIT)
+		if (sp->cur_tx - sp->dirty_tx >= TX_QUEUE_LIMIT) {
 			sp->tx_full = 1;
-		else
-			clear_bit(0, (void*)&dev->tbusy);
+			netif_stop_queue(dev);
+		}
 		spin_unlock_irqrestore(&sp->lock, flags);
 	}
 	wait_for_cmd_done(ioaddr + SCBCmd);
@@ -1327,16 +1303,6 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 	ioaddr = dev->base_addr;
 	sp = (struct speedo_private *)dev->priv;
-#ifndef final_version
-	/* A lock to prevent simultaneous entry on SMP machines. */
-	if (test_and_set_bit(0, (void*)&sp->in_interrupt)) {
-		printk(KERN_ERR"%s: SMP simultaneous entry of an interrupt handler.\n",
-			   dev->name);
-		sp->in_interrupt = 0;	/* Avoid halting machine. */
-		return;
-	}
-	dev->interrupt = 1;
-#endif
 
 	do {
 		status = inw(ioaddr + SCBStatus);
@@ -1392,7 +1358,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					pci_unmap_single(sp->pdev,
 							 le32_to_cpu(sp->tx_ring[entry].tx_buf_addr0),
 							 sp->tx_skbuff[entry]->len);
-					dev_free_skb(sp->tx_skbuff[entry]);
+					dev_kfree_skb_irq(sp->tx_skbuff[entry]);
 					sp->tx_skbuff[entry] = 0;
 				} else if ((status & 0x70000) == CmdNOp) {
 					if (sp->mc_setup_busy)
@@ -1418,7 +1384,6 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				&&  sp->cur_tx - dirty_tx < TX_QUEUE_LIMIT - 1) {
 				/* The ring is no longer full, clear tbusy. */
 				sp->tx_full = 0;
-				clear_bit(0, (void*)&dev->tbusy);
 				spin_unlock(&sp->lock);
 				netif_wake_queue(dev);
 			} else
@@ -1438,8 +1403,6 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
 			   dev->name, inw(ioaddr + SCBStatus));
 
-	dev->interrupt = 0;
-	clear_bit(0, (void*)&sp->in_interrupt);
 	return;
 }
 
@@ -1560,8 +1523,7 @@ speedo_close(struct net_device *dev)
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (speedo_debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %4.4x.\n",
@@ -1654,7 +1616,7 @@ speedo_get_stats(struct net_device *dev)
 		sp->stats.rx_fifo_errors += le32_to_cpu(sp->lstats->rx_overrun_errs);
 		sp->stats.rx_length_errors += le32_to_cpu(sp->lstats->rx_runt_errs);
 		sp->lstats->done_marker = 0x0000;
-		if (dev->start) {
+		if (test_bit(LINK_STATE_START, &dev->state)) {
 			wait_for_cmd_done(ioaddr + SCBCmd);
 			outw(CUDumpStats, ioaddr + SCBCmd);
 		}

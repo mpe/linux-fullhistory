@@ -42,6 +42,7 @@
 #define VMODE_CHOOSE		99
 
 #define CMODE_NVRAM		-1
+#define CMODE_CHOOSE		-2
 #define CMODE_8			0	/* 8 bits/pixel */
 #define CMODE_16		1	/* 16 (actually 15) bits/pixel */
 #define CMODE_32		2	/* 32 (actually 24) bits/pixel */

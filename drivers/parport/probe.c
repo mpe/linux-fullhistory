@@ -164,8 +164,9 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 		retval = parport_read (dev->port, buffer, len);
 
 		if (retval != len)
-			printk (KERN_DEBUG "%s: only read %d of %d ID bytes\n",
-				dev->port->name, retval, len);
+			printk (KERN_DEBUG "%s: only read %Zd of %Zd ID bytes\n",
+				dev->port->name, retval,
+				len);
 
 		/* Some printer manufacturers mistakenly believe that
                    the length field is supposed to be _exclusive_. */
@@ -179,7 +180,7 @@ ssize_t parport_device_id (int devnum, char *buffer, size_t len)
 			if (diff)
 				printk (KERN_DEBUG
 					"%s: device reported incorrect "
-					"length field (%d, should be %d)\n",
+					"length field (%d, should be %Zd)\n",
 					dev->port->name, idlen, retval);
 			else {
 				/* One semi-colon short of a device ID. */

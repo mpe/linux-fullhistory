@@ -38,7 +38,7 @@ O_OBJS += hashtable.o
 endif
 
 ifdef CONFIG_PCI
-O_OBJS += pci.o
+O_OBJS += pci.o pci-dma.o
 endif
 
 ifdef CONFIG_KGDB
@@ -59,8 +59,16 @@ endif
 
 ifeq ($(CONFIG_4xx),y)
   O_OBJS += ppc4xx_pic.o
-  ifeq ($(CONFIG_OAK),y)
-    O_OBJS += oak_setup.o
+endif
+
+ifeq ($(CONFIG_OAK),y)
+  O_OBJS += oak_setup.o
+endif
+
+ifeq ($(CONFIG_WALNUT),y)
+  O_OBJS += walnut_setup.o
+  ifeq ($(CONFIG_PCI),y)
+    O_OBJS += galaxy_pci.o
   endif
 endif
 
@@ -81,6 +89,9 @@ ifeq ($(CONFIG_NVRAM),y)
   O_OBJS += pmac_nvram.o
 endif
 ifeq ($(CONFIG_6xx),y)
+  O_OBJS += open_pic.o indirect_pci.o
+endif
+ifeq ($(CONFIG_PPC64),y)
   O_OBJS += open_pic.o indirect_pci.o
 endif
 ifeq ($(CONFIG_APUS),y)

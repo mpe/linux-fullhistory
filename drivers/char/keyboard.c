@@ -898,7 +898,7 @@ static inline unsigned char getleds(void){
  * used, but this allows for easy and efficient race-condition
  * prevention later on.
  */
-static void kbd_bh(void)
+static void kbd_bh(unsigned long dummy)
 {
 	unsigned char leds = getleds();
 
@@ -908,6 +908,8 @@ static void kbd_bh(void)
 		if (kbd_ledfunc) kbd_ledfunc(leds);
 	}
 }
+
+DECLARE_TASKLET_DISABLED(keyboard_tasklet, kbd_bh, 0);
 
 int __init kbd_init(void)
 {
@@ -928,8 +930,9 @@ int __init kbd_init(void)
 	ttytab = console_driver.table;
 
 	kbd_init_hw();
-	init_bh(KEYBOARD_BH, kbd_bh);
-	mark_bh(KEYBOARD_BH);
+
+	tasklet_enable(&keyboard_tasklet);
+	tasklet_schedule(&keyboard_tasklet);
 	
 	pm_kbd = pm_register(PM_SYS_DEV, PM_SYS_KBC, NULL);
 

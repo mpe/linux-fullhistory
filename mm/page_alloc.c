@@ -29,7 +29,9 @@ int nr_lru_pages;
 LIST_HEAD(lru_cache);
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
-static int zone_balance_ratio[MAX_NR_ZONES] = { 128, 128, 128 };
+static int zone_balance_ratio[MAX_NR_ZONES] = { 128, 128, 128, };
+static int zone_balance_min[MAX_NR_ZONES] = { 10 , 10, 10, };
+static int zone_balance_max[MAX_NR_ZONES] = { 255 , 255, 255, };
 
 /*
  * Free_page() adds the page to the free lists. This is optimized for
@@ -196,9 +198,6 @@ static inline struct page * rmqueue (zone_t *zone, unsigned long order)
 	return NULL;
 }
 
-#define ZONE_BALANCED(zone) \
-	(((zone)->free_pages > (zone)->pages_low) && (!(zone)->low_on_memory))
-
 static inline unsigned long classfree(zone_t *zone)
 {
 	unsigned long free = 0;
@@ -215,21 +214,6 @@ static inline unsigned long classfree(zone_t *zone)
 static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 {
 	int freed;
-	unsigned long free = classfree(zone);
-
-	if (free >= zone->pages_low) {
-		if (!zone->low_on_memory)
-			return 1;
-		/*
-		 * Simple hysteresis: exit 'low memory mode' if
-		 * the upper limit has been reached:
-		 */
-		if (free >= zone->pages_high) {
-			zone->low_on_memory = 0;
-			return 1;
-		}
-	} else
-		zone->low_on_memory = 1;
 
 	/*
 	 * In the atomic allocation case we only 'kick' the
@@ -242,43 +226,6 @@ static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 		return 0;
 	return 1;
 }
-
-#if 0
-/*
- * We are still balancing memory in a global way:
- */
-static inline int balance_memory (zone_t *zone, int gfp_mask)
-{
-	unsigned long free = nr_free_pages();
-	static int low_on_memory = 0;
-	int freed;
-
-	if (free >= freepages.low) {
-		if (!low_on_memory)
-			return 1;
-		/*
-		 * Simple hysteresis: exit 'low memory mode' if
-		 * the upper limit has been reached:
-		 */
-		if (free >= freepages.high) {
-			low_on_memory = 0;
-			return 1;
-		}
-	} else
-		low_on_memory = 1;
-
-	/*
-	 * In the atomic allocation case we only 'kick' the
-	 * state machine, but do not try to free pages
-	 * ourselves.
-	 */
-	freed = try_to_free_pages(gfp_mask, zone);
-
-	if (!freed && !(gfp_mask & __GFP_HIGH))
-		return 0;
-	return 1;
-}
-#endif
 
 /*
  * This is the 'heart' of the zoned buddy allocator:
@@ -310,11 +257,31 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 		 * further thought.
 		 */
 		if (!(current->flags & PF_MEMALLOC))
-			/*
-			 * fastpath
-			 */
-			if (!ZONE_BALANCED(z))
-				goto balance;
+		{
+			if (classfree(z) > z->pages_high)
+			{
+				if (z->low_on_memory)
+					z->low_on_memory = 0;
+			}
+			else
+			{
+				extern wait_queue_head_t kswapd_wait;
+
+				if (z->low_on_memory)
+					goto balance;
+
+				if (classfree(z) <= z->pages_low)
+				{
+					wake_up_interruptible(&kswapd_wait);
+
+					if (classfree(z) <= z->pages_min)
+					{
+						z->low_on_memory = 1;
+						goto balance;
+					}
+				}
+			}
+		}
 		/*
 		 * This is an optimization for the 'higher order zone
 		 * is empty' case - it can happen even in well-behaved
@@ -378,7 +345,7 @@ unsigned int nr_free_buffer_pages (void)
 	zone_t *zone;
 	int i;
 
-	sum = nr_lru_pages;
+	sum = nr_lru_pages - atomic_read(&page_cache_size);
 	for (i = 0; i < NUMNODES; i++)
 		for (zone = NODE_DATA(i)->node_zones; zone <= NODE_DATA(i)->node_zones+ZONE_NORMAL; zone++)
 			sum += zone->free_pages;
@@ -590,7 +557,11 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		zone->offset = offset;
 		cumulative += size;
 		mask = (cumulative / zone_balance_ratio[j]);
-		if (mask < 1) mask = 1;
+		if (mask < zone_balance_min[j])
+			mask = zone_balance_min[j];
+		else if (mask > zone_balance_max[j])
+			mask = zone_balance_max[j];
+		zone->pages_min = mask;
 		zone->pages_low = mask*2;
 		zone->pages_high = mask*3;
 		zone->low_on_memory = 0;

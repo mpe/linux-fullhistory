@@ -911,6 +911,7 @@ static void dn_dev_timer_func(unsigned long arg)
 	}
 
 	dn_dev_set_timer(dev);
+	timer_exit(&dn_db->timer);
 }
 
 static void dn_dev_set_timer(struct net_device *dev)
@@ -1010,8 +1011,7 @@ static void dn_dev_delete(struct net_device *dev)
 	if (dn_db == NULL)
 		return;
 
-	del_timer(&dn_db->timer);
-	synchronize_bh();
+	del_timer_sync(&dn_db->timer);
 
 	dn_dev_sysctl_unregister(&dn_db->parms);
 

@@ -703,17 +703,17 @@ static int sr_init()
 		return 0;
 	sr_template.dev_max =
 	    sr_template.dev_noticed + SR_EXTRA_DEVS;
-	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
+	scsi_CDs = (Scsi_CD *) kmalloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
 	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
 
-	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
+	sr_sizes = (int *) kmalloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
 	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
 
-	sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max *
-						 sizeof(int), GFP_ATOMIC);
+	sr_blocksizes = (int *) kmalloc(sr_template.dev_max *
+					sizeof(int), GFP_ATOMIC);
 
-	sr_hardsizes = (int *) scsi_init_malloc(sr_template.dev_max *
-						 sizeof(int), GFP_ATOMIC);
+	sr_hardsizes = (int *) kmalloc(sr_template.dev_max *
+				       sizeof(int), GFP_ATOMIC);
 	/*
 	 * These are good guesses for the time being.
 	 */
@@ -831,16 +831,14 @@ void cleanup_module(void)
 	unregister_blkdev(MAJOR_NR, "sr");
 	sr_registered--;
 	if (scsi_CDs != NULL) {
-		scsi_init_free((char *) scsi_CDs,
-			       (sr_template.dev_noticed + SR_EXTRA_DEVS)
-			       * sizeof(Scsi_CD));
+		kfree((char *) scsi_CDs);
 
-		scsi_init_free((char *) sr_sizes, sr_template.dev_max * sizeof(int));
+		kfree((char *) sr_sizes);
 		sr_sizes = NULL;
 
-		scsi_init_free((char *) sr_blocksizes, sr_template.dev_max * sizeof(int));
+		kfree((char *) sr_blocksizes);
 		sr_blocksizes = NULL;
-		scsi_init_free((char *) sr_hardsizes, sr_template.dev_max * sizeof(int));
+		kfree((char *) sr_hardsizes);
 		sr_hardsizes = NULL;
 	}
 	blksize_size[MAJOR_NR] = NULL;

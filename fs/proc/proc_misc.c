@@ -29,6 +29,7 @@
 #include <linux/smp.h>
 #include <linux/signal.h>
 #include <linux/module.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -616,7 +617,7 @@ static struct proc_dir_entry proc_root_profile = {
 	0, &proc_profile_inode_operations
 };
 
-void proc_misc_init(void)
+void __init proc_misc_init(void)
 {
 	static struct {
 		char *name;

@@ -171,9 +171,10 @@ void __init chrp_calibrate_decr(void)
 		if (fp != 0)
 			freq = *fp;
 	}
-	freq *= 60;	/* try to make freq/1e6 an integer */
-        divisor = 60;
-        printk("time_init: decrementer frequency = %lu/%d\n", freq, divisor);
+	freq *= 30;
+	divisor = 30; 
+        printk("time_init: decrementer frequency = %lu/%d (%d MHz)\n", freq,
+	       divisor, (freq/divisor)>>20);
         decrementer_count = freq / HZ / divisor;
         count_period_num = divisor;
         count_period_den = freq / 1000000;

@@ -63,19 +63,10 @@ struct Qdisc_ops
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 };
 
-struct Qdisc_head
-{
-	struct Qdisc_head *forw;
-	struct Qdisc_head *back;
-};
-
-extern struct Qdisc_head qdisc_head;
-extern spinlock_t qdisc_runqueue_lock;
 extern rwlock_t qdisc_tree_lock;
 
 struct Qdisc
 {
-	struct Qdisc_head	h;
 	int 			(*enqueue)(struct sk_buff *skb, struct Qdisc *dev);
 	struct sk_buff *	(*dequeue)(struct Qdisc *dev);
 	unsigned		flags;
@@ -87,11 +78,9 @@ struct Qdisc
 	u32			handle;
 	atomic_t		refcnt;
 	struct sk_buff_head	q;
-	struct net_device 		*dev;
+	struct net_device	*dev;
 
 	struct tc_stats		stats;
-	unsigned long		tx_timeo;
-	unsigned long		tx_last;
 	int			(*reshape_fail)(struct sk_buff *skb, struct Qdisc *q);
 
 	/* This field is deprecated, but it is still used by CBQ
@@ -437,60 +426,13 @@ int teql_init(void);
 int tc_filter_init(void);
 int pktsched_init(void);
 
-extern void qdisc_run_queues(void);
 extern int qdisc_restart(struct net_device *dev);
 
-extern spinlock_t qdisc_runqueue_lock;
-
-/* Is it on run list? Reliable only under qdisc_runqueue_lock. */
-
-extern __inline__ int qdisc_on_runqueue(struct Qdisc *q)
+extern __inline__ void qdisc_run(struct net_device *dev)
 {
-	return q->h.forw != NULL;
-}
-
-/* Is run list not empty? Reliable only under qdisc_runqueue_lock. */
-
-extern __inline__ int qdisc_pending(void)
-{
-	return qdisc_head.forw != &qdisc_head;
-}
-
-/* Add qdisc to tail of run list. Called with BH, disabled on this CPU */
-
-extern __inline__ void qdisc_run(struct Qdisc *q)
-{
-	spin_lock(&qdisc_runqueue_lock);
-	if (!qdisc_on_runqueue(q) && q->dev) {
-		q->h.forw = &qdisc_head;
-		q->h.back = qdisc_head.back;
-		qdisc_head.back->forw = &q->h;
-		qdisc_head.back = &q->h;
-	}
-	spin_unlock(&qdisc_runqueue_lock);
-}
-
-extern __inline__ int __qdisc_wakeup(struct net_device *dev)
-{
-	int res;
-
-	while ((res = qdisc_restart(dev))<0 && !dev->tbusy)
+	while (!test_bit(LINK_STATE_XOFF, &dev->state) &&
+	       qdisc_restart(dev)<0)
 		/* NOTHING */;
-
-	return res;
-}
-
-
-/* If the device is not throttled, restart it and add to run list.
- * BH must be disabled on this CPU. Usually, it is called by timers.
- */
-
-extern __inline__ void qdisc_wakeup(struct net_device *dev)
-{
-	spin_lock(&dev->queue_lock);
-	if (dev->tbusy || __qdisc_wakeup(dev))
-		qdisc_run(dev->qdisc);
-	spin_unlock(&dev->queue_lock);
 }
 
 /* Calculate maximal size of packet seen by hard_start_xmit

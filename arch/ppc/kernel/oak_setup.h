@@ -1,14 +1,14 @@
 /*
  *
- *    Copyright (c) 1999 Grant Erickson <grant@lcse.umn.edu>
+ *    Copyright (c) 1999-2000 Grant Erickson <grant@lcse.umn.edu>
  *
- *    Module name: oak_setup.c
+ *    Module name: oak_setup.h
  *
  *    Description:
  *      Architecture- / platform-specific boot-time initialization code for
  *      the IBM PowerPC 403GCX "Oak" evaluation board. Adapted from original
  *      code by Gary Thomas, Cort Dougan <cort@cs.nmt.edu>, and Dan Malek
- *      <dmalek@jlc.net>.
+ *      <dan@netx4.com>.
  *
  */
 
