@@ -476,7 +476,7 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 {
 	int nr;
-	int error = -ENOMEM;
+	int retval = -ENOMEM;
 	struct task_struct *p;
 
 	down(&current->mm->mmap_sem);
@@ -485,7 +485,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	if (!p)
 		goto bad_fork;
 
-	error = -EAGAIN;
+	retval = -EAGAIN;
 	nr = find_empty_process();
 	if (nr < 0)
 		goto bad_fork_free;
@@ -504,8 +504,16 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	copy_flags(clone_flags, p);
 	p->pid = get_pid(clone_flags);
 
-	p->next_run = NULL;
-	p->prev_run = NULL;
+	/*
+	 * This is a "shadow run" state. The process
+	 * is marked runnable, but isn't actually on
+	 * any run queue yet.. (that happens at the
+	 * very end).
+	 */
+	p->state = TASK_RUNNING;
+	p->next_run = p;
+	p->prev_run = p;
+
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	init_waitqueue(&p->wait_chldexit);
@@ -535,12 +543,13 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		spin_lock_init(&p->sigmask_lock);
 	}
 #endif
-	p->lock_depth = 0;
+	p->lock_depth = -1;		/* -1 = no lock */
 	p->start_time = jiffies;
 	p->tarray_ptr = &task[nr];
 	*p->tarray_ptr = p;
 
 	{
+		/* This makes it visible to the rest of the system */
 		unsigned long flags;
 		write_lock_irqsave(&tasklist_lock, flags);
 		SET_LINKS(p);
@@ -550,7 +559,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	nr_tasks++;
 
-	error = -ENOMEM;
+	retval = -ENOMEM;
 	/* copy all the process information */
 	if (copy_files(clone_flags, p))
 		goto bad_fork_cleanup;
@@ -560,8 +569,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		goto bad_fork_cleanup_fs;
 	if (copy_mm(nr, clone_flags, p))
 		goto bad_fork_cleanup_sighand;
-	error = copy_thread(nr, clone_flags, usp, p, regs);
-	if (error)
+	retval = copy_thread(nr, clone_flags, usp, p, regs);
+	if (retval)
 		goto bad_fork_cleanup_sighand;
 	p->semundo = NULL;
 
@@ -579,18 +588,18 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	current->counter >>= 1;
 	p->counter = current->counter;
 
-	if(p->pid) {
-		wake_up_process(p);		/* do this last, just in case */
-	} else {
-		p->state = TASK_RUNNING;
-		p->next_run = p->prev_run = p;
+	/* Ok, add it to the run-queues, let it rip! */
+	retval = p->pid;
+	if (retval) {
+		p->next_run = NULL;
+		p->prev_run = NULL;
+		wake_up_process(p);		/* do this last */
 	}
 	++total_forks;
-	error = p->pid;
 bad_fork:
 	up(&current->mm->mmap_sem);
 	unlock_kernel();
-	return error;
+	return retval;
 
 bad_fork_cleanup_sighand:
 	exit_sighand(p);

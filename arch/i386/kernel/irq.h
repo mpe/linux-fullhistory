@@ -56,17 +56,11 @@ extern int handle_IRQ_event(unsigned int, struct pt_regs *);
 
 void mask_irq(unsigned int irq);
 void unmask_irq(unsigned int irq);
-void enable_IO_APIC_irq (unsigned int irq);
-void disable_IO_APIC_irq (unsigned int irq);
-void unmask_IO_APIC_irq (unsigned int irq);
-void mask_IO_APIC_irq (unsigned int irq);
 void set_8259A_irq_mask (unsigned int irq);
 int i8259A_irq_pending (unsigned int irq);
 void ack_APIC_irq (void);
 void setup_IO_APIC (void);
-void init_IO_APIC_traps(void);
 int IO_APIC_get_PCI_irq_vector (int bus, int slot, int fn);
-int IO_APIC_irq_trigger (int irq);
 void make_8259A_irq (unsigned int irq);
 void send_IPI (int dest, int vector);
 void init_pic_mode (void);

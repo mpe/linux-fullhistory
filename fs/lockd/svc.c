@@ -186,7 +186,8 @@ lockd(struct svc_rqst *rqstp)
 		nlm_shutdown_hosts();
 		nlmsvc_pid = 0;
 	} else
-		printk("lockd: new process, skipping host shutdown\n");
+		printk(KERN_DEBUG
+			"lockd: new process, skipping host shutdown\n");
 	wake_up(&lockd_exit);
 		
 	/* Exit the RPC thread */
@@ -205,6 +206,7 @@ lockd(struct svc_rqst *rqstp)
 int
 lockd_up(void)
 {
+	static int		warned = 0; 
 	struct svc_serv *	serv;
 	int			error = 0;
 
@@ -225,27 +227,32 @@ lockd_up(void)
 	 * we should be the first user ...
 	 */
 	if (nlmsvc_users > 1)
-		printk("lockd_up: no pid, %d users??\n", nlmsvc_users);
+		printk(KERN_WARNING
+			"lockd_up: no pid, %d users??\n", nlmsvc_users);
 
 	error = -ENOMEM;
 	serv = svc_create(&nlmsvc_program, 0, NLMSVC_XDRSIZE);
 	if (!serv) {
-		printk("lockd_up: create service failed\n");
+		printk(KERN_WARNING "lockd_up: create service failed\n");
 		goto out;
 	}
 
 	if ((error = svc_makesock(serv, IPPROTO_UDP, 0)) < 0 
 	 || (error = svc_makesock(serv, IPPROTO_TCP, 0)) < 0) {
-		printk("lockd_up: makesock failed, error=%d\n", error);
+		if (warned++ == 0) 
+			printk(KERN_WARNING
+				"lockd_up: makesock failed, error=%d\n", error);
 		goto destroy_and_out;
-	}
+	} 
+	warned = 0;
 
 	/*
 	 * Create the kernel thread and wait for it to start.
 	 */
 	error = svc_create_thread(lockd, serv);
 	if (error) {
-		printk("lockd_up: create thread failed, error=%d\n", error);
+		printk(KERN_WARNING
+			"lockd_up: create thread failed, error=%d\n", error);
 		goto destroy_and_out;
 	}
 	sleep_on(&lockd_start);
@@ -267,17 +274,21 @@ out:
 void
 lockd_down(void)
 {
+	static int warned = 0; 
+
 	down(&nlmsvc_sema);
 	if (nlmsvc_users) {
 		if (--nlmsvc_users)
 			goto out;
 	} else
-		printk("lockd_down: no users! pid=%d\n", nlmsvc_pid);
+		printk(KERN_WARNING "lockd_down: no users! pid=%d\n", nlmsvc_pid);
 
 	if (!nlmsvc_pid) {
-		printk("lockd_down: nothing to do!\n"); 
+		if (warned++ == 0)
+			printk(KERN_WARNING "lockd_down: no lockd running.\n"); 
 		goto out;
 	}
+	warned = 0;
 
 	kill_proc(nlmsvc_pid, SIGKILL, 1);
 	/*
@@ -289,7 +300,8 @@ lockd_down(void)
 	interruptible_sleep_on(&lockd_exit);
 	current->timeout = 0;
 	if (nlmsvc_pid) {
-		printk("lockd_down: lockd failed to exit, clearing pid\n");
+		printk(KERN_WARNING 
+			"lockd_down: lockd failed to exit, clearing pid\n");
 		nlmsvc_pid = 0;
 	}
 	spin_lock_irq(&current->sigmask_lock);

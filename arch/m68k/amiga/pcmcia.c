@@ -12,7 +12,6 @@
 ** Created: 12/10/97 by Alain Malek
 */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <asm/amigayle.h>

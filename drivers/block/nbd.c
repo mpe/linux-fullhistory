@@ -110,8 +110,8 @@ int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 
 		if (result <= 0) {
 #ifdef PARANOIA
-			printk(KERN_ERR "NBD: %s - sock=%d at buf=%d, size=%d returned %d.\n",
-			       send ? "send" : "receive", (int) sock, (int) buf, size, result);
+			printk(KERN_ERR "NBD: %s - sock=%ld at buf=%ld, size=%d returned %d.\n",
+			       send ? "send" : "receive", (long) sock, (long) buf, size, result);
 #endif
 			break;
 		}
@@ -371,8 +371,8 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		return 0;
 #ifdef PARANOIA
 	case NBD_PRINT_DEBUG:
-		printk(KERN_INFO "NBD device %d: head = %x, tail = %x. Global: in %d, out %d\n",
-		       dev, (int) lo->head, (int) lo->tail, requests_in, requests_out);
+		printk(KERN_INFO "NBD device %d: head = %lx, tail = %lx. Global: in %d, out %d\n",
+		       dev, (long) lo->head, (long) lo->tail, requests_in, requests_out);
 		return 0;
 #endif
 	}

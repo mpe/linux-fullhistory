@@ -146,14 +146,21 @@ static inline void reschedule_idle(struct task_struct * p)
 		current->need_resched = 1;	
 }
 
-	
+/*
+ * Careful!
+ *
+ * This has to add the process to the _beginning_ of the
+ * run-queue, not the end. See the comment about "This is
+ * subtle" in the scheduler proper..
+ */
 static inline void add_to_runqueue(struct task_struct * p)
 {
-	nr_running++;
-	reschedule_idle(p);
-	(p->prev_run = init_task.prev_run)->next_run = p;
-	p->next_run = &init_task;
-	init_task.prev_run = p;
+	struct task_struct *next = init_task.next_run;
+
+	p->prev_run = &init_task;
+	init_task.next_run = p;
+	p->next_run = next;
+	next->prev_run = p;
 }
 
 static inline void del_from_runqueue(struct task_struct * p)
@@ -229,8 +236,11 @@ inline void wake_up_process(struct task_struct * p)
 
 	spin_lock_irqsave(&runqueue_lock, flags);
 	p->state = TASK_RUNNING;
-	if (!p->next_run)
+	if (!p->next_run) {
 		add_to_runqueue(p);
+		reschedule_idle(p);
+		nr_running++;
+	}
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 }
 
@@ -420,6 +430,9 @@ int del_timer(struct timer_list * timer)
 	ret = detach_timer(timer);
 	timer->next = timer->prev = 0;
 	spin_unlock_irqrestore(&timerlist_lock, flags);
+
+	/* Make sure the timer isn't running in parallell.. */
+	synchronize_bh();
 	return ret;
 }
 
@@ -1351,8 +1364,8 @@ static int setscheduler(pid_t pid, int policy,
 	/*
 	 * We play safe to avoid deadlocks.
 	 */
-	spin_lock_irq(&scheduler_lock);
-	spin_lock(&runqueue_lock);
+	spin_lock(&scheduler_lock);
+	spin_lock_irq(&runqueue_lock);
 	read_lock(&tasklist_lock);
 
 	p = find_process_by_pid(pid);
@@ -1398,8 +1411,8 @@ static int setscheduler(pid_t pid, int policy,
 
 out_unlock:
 	read_unlock(&tasklist_lock);
-	spin_unlock(&runqueue_lock);
-	spin_unlock_irq(&scheduler_lock);
+	spin_unlock_irq(&runqueue_lock);
+	spin_unlock(&scheduler_lock);
 
 out_nounlock:
 	return retval;
@@ -1590,13 +1603,13 @@ static void show_task(int nr,struct task_struct * p)
 	else
 		printk(" %016lx ", thread_saved_pc(&p->tss));
 #endif
-#if 0
-	for (free = 1; free < PAGE_SIZE/sizeof(long) ; free++) {
-		if (((unsigned long *)p->kernel_stack_page)[free])
-			break;
+	{
+		unsigned long * n = (unsigned long *) (p+1);
+		while (!*n)
+			n++;
+		free = (unsigned long) n - (unsigned long)(p+1);
 	}
-#endif
-	printk("%5lu %5d %6d ", free*sizeof(long), p->pid, p->p_pptr->pid);
+	printk("%5lu %5d %6d ", free, p->pid, p->p_pptr->pid);
 	if (p->p_cptr)
 		printk("%5d ", p->p_cptr->pid);
 	else

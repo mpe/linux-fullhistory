@@ -108,7 +108,7 @@ static void show_registers(struct pt_regs *regs)
 	unsigned long *stack, addr, module_start, module_end;
 	extern char _stext, _etext;
 
-	esp = (unsigned long) &regs->esp;
+	esp = (unsigned long) (1+regs);
 	ss = __KERNEL_DS;
 	if (regs->xcs & 3) {
 		in_kernel = 0;
@@ -169,8 +169,8 @@ static void show_registers(struct pt_regs *regs)
 		printk("\nCode: ");
 		for(i=0;i<20;i++)
 			printk("%02x ", ((unsigned char *)regs->eip)[i]);
-		printk("\n");
 	}
+	printk("\n");
 }	
 
 spinlock_t die_lock;

@@ -441,13 +441,26 @@ void show_regs(struct pt_regs * regs)
  *
  * This extra buffer essentially acts to make for less
  * "jitter" in the allocations..
+ *
+ * On SMP we don't do this right now because:
+ *  - we aren't holding any locks when called, and we might
+ *    as well just depend on the generic memory management
+ *    to do proper locking for us instead of complicating it
+ *    here.
+ *  - if you use SMP you have a beefy enough machine that
+ *    this shouldn't matter..
  */
+#ifndef __SMP__
 #define EXTRA_TASK_STRUCT	16
 static struct task_struct * task_struct_stack[EXTRA_TASK_STRUCT];
 static int task_struct_stack_ptr = -1;
+#endif
 
 struct task_struct * alloc_task_struct(void)
 {
+#ifndef EXTRA_TASK_STRUCT
+	return (struct task_struct *) __get_free_pages(GFP_KERNEL,1);
+#else
 	int index;
 	struct task_struct *ret;
 
@@ -464,16 +477,19 @@ use_cache:
 		}
 	}
 	return ret;
+#endif
 }
 
 void free_task_struct(struct task_struct *p)
 {
+#ifdef EXTRA_TASK_STRUCT
 	int index = task_struct_stack_ptr+1;
 
 	if (index < EXTRA_TASK_STRUCT) {
 		task_struct_stack[index] = p;
 		task_struct_stack_ptr = index;
 	} else
+#endif
 		free_pages((unsigned long) p, 1);
 }
 

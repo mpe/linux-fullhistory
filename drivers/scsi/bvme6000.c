@@ -8,7 +8,6 @@
 #include <linux/blk.h>
 #include <linux/sched.h>
 #include <linux/version.h>
-#include <linux/config.h>
 #include <linux/zorro.h>
 
 #include <asm/setup.h>

@@ -213,9 +213,16 @@ struct task_struct {
 /* various fields */
 	long counter;
 	long priority;
-	struct linux_binfmt *binfmt;
+/* SMP and runqueue state */
+	int has_cpu;
+	int processor;
+	int last_processor;
+	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
 	struct task_struct *next_task, *prev_task;
 	struct task_struct *next_run,  *prev_run;
+
+/* task state */
+	struct linux_binfmt *binfmt;
 	int exit_code, exit_signal;
 	int pdeath_signal;  /*  The signal sent when the parent dies  */
 	/* ??? */
@@ -282,18 +289,12 @@ struct task_struct {
 /* memory management info */
 	struct mm_struct *mm;
 /* signal handlers */
+	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 	struct signal_struct *sig;
 	sigset_t signal, blocked;
 	struct signal_queue *sigqueue, **sigqueue_tail;
 	unsigned long sas_ss_sp;
 	size_t sas_ss_size;
-/* SMP state */
-	int has_cpu;
-	int processor;
-	int last_processor;
-	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
-	/* Spinlocks for various pieces or per-task state. */
-	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 };
 
 /*
@@ -338,8 +339,9 @@ struct task_struct {
 #define INIT_TASK \
 /* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0, \
 /* counter */	DEF_PRIORITY,DEF_PRIORITY, \
-/* binfmt */	NULL, \
+/* SMP */	0,0,0,-1, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
+/* binfmt */	NULL, \
 /* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
@@ -365,10 +367,7 @@ struct task_struct {
 /* fs */	&init_fs, \
 /* files */	&init_files, \
 /* mm */	&init_mm, \
-/* signals */	&init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, \
-		0, 0, \
-/* SMP */	0,0,0,0, \
-/* locks */	INIT_LOCKS \
+/* signals */	INIT_LOCKS, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 }
 
 union task_union {

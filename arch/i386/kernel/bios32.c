@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.42 1998/07/26 09:33:07 mj Exp $
+ * $Id: bios32.c,v 1.43 1998/08/03 15:59:20 mj Exp $
  *
  * Copyright 1993, 1994 Drew Eckhardt
  *      Visionary Computing
@@ -920,6 +920,13 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 	struct pci_bus *b = &pci_root;
 	int i;
 
+	/*
+	 * Don't search for peer host bridges if we use config type 2
+	 * since it reads bogus values for non-existent busses and
+	 * chipsets supporting multiple primary busses use conf1 anyway.
+	 */
+	if (access_pci == &pci_direct_conf2)
+		return;
 	do {
 		int n = b->subordinate+1;
 		u16 l;
@@ -972,8 +979,13 @@ __initfunc(void pcibios_fixup_devices(void))
 		/*
 		 * Don't enable VGA-compatible cards since they have
 		 * fixed I/O and memory space.
+		 * 
+		 * Don't enabled disabled IDE interfaces either because
+		 * some BIOSes may reallocate the same address when they
+		 * find that no devices are attached. 
 		 */
-		if ((dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
+		if (((dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) &&
+		    ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE)) {
 			pci_read_config_word(dev, PCI_COMMAND, &cmd);
 			if (has_io && !(cmd & PCI_COMMAND_IO)) {
 				printk("PCI: Enabling I/O for device %02x:%02x\n",
