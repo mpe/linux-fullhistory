@@ -482,7 +482,7 @@ void fat_write_inode(struct inode *inode)
 	}
 	raw_entry->attr |= MSDOS_MKATTR(inode->i_mode) |
 	    MSDOS_I(inode)->i_attrs;
-	raw_entry->start = CT_LE_L(MSDOS_I(inode)->i_start);
+	raw_entry->start = CT_LE_W(MSDOS_I(inode)->i_start);
 	fat_date_unix2dos(inode->i_mtime,&raw_entry->time,&raw_entry->date);
 	raw_entry->time = CT_LE_W(raw_entry->time);
 	raw_entry->date = CT_LE_W(raw_entry->date);

@@ -12,7 +12,7 @@
 struct consolefontdesc {
 	unsigned short charcount;	/* characters in font (256 or 512) */
 	unsigned short charheight;	/* scan lines per character (1-32) */
-	char *chardata;		/* font data in expanded form */
+	char *chardata;			/* font data in expanded form */
 };
 
 #define PIO_FONTRESET   0x4B6D	/* reset to default font */

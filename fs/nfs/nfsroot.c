@@ -90,6 +90,7 @@
 #include <net/route.h>
 #include <net/sock.h>
 
+#include <asm/segment.h>
 
 /* Range of privileged ports */
 #define STARTPORT	600

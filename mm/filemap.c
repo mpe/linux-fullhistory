@@ -27,10 +27,6 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 
-#if 0
-#define DEBUG_ASYNC_AHEAD
-#endif
-
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,
  * though.
@@ -306,16 +302,128 @@ repeat:
 	current->state = TASK_RUNNING;
 }
 
+#if 0
+#define PROFILE_READAHEAD
+#define DEBUG_READAHEAD
+#endif
 
 /*
- * This is a generic file read routine, and uses the
- * inode->i_op->readpage() function for the actual low-level
- * stuff.
- *
- * This is really ugly. But the goto's actually try to clarify some
- * of the logic when it comes to error handling etc.
+ * Read-ahead profiling informations
+ * ---------------------------------
+ * Every PROFILE_MAXREADCOUNT, the following informations are written 
+ * to the syslog:
+ *   Percentage of asynchronous read-ahead.
+ *   Average of read-ahead fields context value.
+ * If DEBUG_READAHEAD is defined, a snapshot of these fields is written 
+ * to the syslog.
  */
-#define MAX_READAHEAD (PAGE_SIZE*8)
+
+#ifdef PROFILE_READAHEAD
+
+#define PROFILE_MAXREADCOUNT 1000
+
+static unsigned long total_reada;
+static unsigned long total_async;
+static unsigned long total_ramax;
+static unsigned long total_ralen;
+static unsigned long total_rawin;
+
+static void profile_readahead(int async, struct file *filp)
+{
+	unsigned long flags;
+
+	++total_reada;
+	if (async)
+		++total_async;
+
+	total_ramax	+= filp->f_ramax;
+	total_ralen	+= filp->f_ralen;
+	total_rawin	+= filp->f_rawin;
+
+	if (total_reada > PROFILE_MAXREADCOUNT) {
+		save_flags(flags);
+		cli();
+		if (!(total_reada > PROFILE_MAXREADCOUNT)) {
+			restore_flags(flags);
+			return;
+		}
+
+		printk("Readahead average:  max=%ld, len=%ld, win=%ld, async=%ld%%\n",
+			total_ramax/total_reada,
+			total_ralen/total_reada,
+			total_rawin/total_reada,
+			(total_async*100)/total_reada);
+#ifdef DEBUG_READAHEAD
+		printk("Readahead snapshot: max=%ld, len=%ld, win=%ld, rapos=%ld\n",
+			filp->f_ramax, filp->f_ralen, filp->f_rawin, filp->f_rapos);
+#endif
+
+		total_reada	= 0;
+		total_async	= 0;
+		total_ramax	= 0;
+		total_ralen	= 0;
+		total_rawin	= 0;
+
+		restore_flags(flags);
+	}
+}
+#endif  /* defined PROFILE_READAHEAD */
+
+/*
+ * Read-ahead context:
+ * -------------------
+ * The read ahead context fields of the "struct file" are the following:
+ * - f_rapos : position of the first byte after the last page we tried to
+ *             read ahead.
+ * - f_ramax : current read-ahead maximum size.
+ * - f_ralen : length of the current IO read block we tried to read-ahead.
+ * - f_rawin : length of the current read-ahead window.
+ *             if last read-ahead was synchronous then
+ *                  f_rawin = f_ralen
+ *             otherwise (was asynchronous)
+ *                  f_rawin = previous value of f_ralen + f_ralen
+ *
+ * Read-ahead limits:
+ * ------------------
+ * MIN_READAHEAD   : minimum read-ahead size when read-ahead.
+ * MAX_READAHEAD   : maximum read-ahead size when read-ahead.
+ * MAX_READWINDOW  : maximum read window length.
+ *
+ * Synchronous read-ahead benefits:
+ * --------------------------------
+ * Using reasonnable IO xfer length from peripheral devices increase system 
+ * performances.
+ * Reasonnable means, in this context, not too large but not too small.
+ * The actual maximum value is MAX_READAHEAD + PAGE_SIZE = 32k
+ *
+ * Asynchronous read-ahead benefits:
+ * ---------------------------------
+ * Overlapping next read request and user process execution increase system 
+ * performance.
+ *
+ * Read-ahead risks:
+ * -----------------
+ * We have to guess which further data are needed by the user process.
+ * If these data are often not really needed, it's bad for system 
+ * performances.
+ * However, we know that files are often accessed sequentially by 
+ * application programs and it seems that it is possible to have some good 
+ * strategy in that guessing.
+ * We only try to read-ahead files that seems to be read sequentially.
+ *
+ * Asynchronous read-ahead risks:
+ * ------------------------------
+ * In order to maximize overlapping, we must start some asynchronous read 
+ * request from the device, as soon as possible.
+ * We must be very carefull about:
+ * - The number of effective pending IO read requests.
+ *   ONE seems to be the only reasonnable value.
+ * - The total memory pool usage for the file access stream.
+ *   We try to have a limit of MAX_READWINDOW = 48K.
+ */
+
+#define MAX_READWINDOW (PAGE_SIZE*12)
+#define MAX_READAHEAD (PAGE_SIZE*7)
 #define MIN_READAHEAD (PAGE_SIZE)
 
 static inline unsigned long generic_file_readahead(struct file * filp, struct inode * inode,
@@ -333,43 +441,30 @@ static inline unsigned long generic_file_readahead(struct file * filp, struct in
  * to avoid too small IO requests.
  */
 	if (PageLocked(page)) {
-		max_ahead = filp->f_ramax;
 		rapos = ppos;
+		if (rapos < inode->i_size)
+			max_ahead = filp->f_ramax;
 		filp->f_rawin = 0;
 		filp->f_ralen = PAGE_SIZE;
 	}
 /*
  * The current page is not locked
- * It may be the moment to try asynchronous read-ahead.
- * If asynchronous is the suggested tactics and if the current position is
- * inside the previous read-ahead window, check the last read page:
- * - if locked, the previous IO request is probably not complete, and
- *   we will not try to do another IO request.
- * - if not locked, the previous IO request is probably complete, and
- *   this is a good moment to try a new asynchronous read-ahead request.
+ * If the current position is inside the last read-ahead IO request,
+ * it is the moment to try asynchronous read-ahead.
  * try_async = 2 means that we have to force unplug of the device in
- * order to force call to the strategy routine of the disk driver and 
- * start IO asynchronously.
+ * order to force read IO asynchronously.
  */
 	else if (try_async == 1 && rapos >= PAGE_SIZE &&
 	         ppos <= rapos && ppos + filp->f_ralen >= rapos) {
-		struct page *a_page;
 /*
- * Add ONE page to max_ahead in order to try to have the same IO max size as
- * synchronous read-ahead (MAX_READAHEAD + 1)*PAGE_SIZE.
+ * Add ONE page to max_ahead in order to try to have about the same IO max size
+ * as synchronous read-ahead (MAX_READAHEAD + 1)*PAGE_SIZE.
  * Compute the position of the last page we have tried to read.
  */
-		max_ahead = filp->f_ramax + PAGE_SIZE;
 		rapos -= PAGE_SIZE;
+		if (rapos < inode->i_size)
+			max_ahead = filp->f_ramax + PAGE_SIZE;
 
-		if (rapos < inode->i_size) {
-			a_page = find_page(inode, rapos);
-			if (a_page) {
-				if (PageLocked(a_page))
-					max_ahead = 0;
-				a_page->count--;
-			}
-		}
 		if (max_ahead) {
 			filp->f_rawin = filp->f_ralen;
 			filp->f_ralen = 0;
@@ -388,17 +483,32 @@ static inline unsigned long generic_file_readahead(struct file * filp, struct in
 	}
 /*
  * If we tried to read some pages,
- * Compute the new read-ahead position.
- * It is the position of the next byte.
+ * Update the read-ahead context.
  * Store the length of the current read-ahead window.
- * If necessary,
+ * Add PAGE_SIZE to the max read ahead size each time we have read-ahead
+ *   That recipe avoid to do some large IO for files that are not really
+ *   accessed sequentially.
+ * Do that only if the read ahead window is lower that MAX_READWINDOW
+ * in order to limit the amount of pages used for this file access context.
+ * If asynchronous,
  *    Try to force unplug of the device in order to start an asynchronous
- *    read IO.
+ *    read IO request.
  */
 	if (ahead) {
 		filp->f_ralen += ahead;
 		filp->f_rawin += filp->f_ralen;
 		filp->f_rapos = rapos + ahead + PAGE_SIZE;
+
+		if (filp->f_rawin < MAX_READWINDOW)
+			filp->f_ramax += PAGE_SIZE;
+		else if (filp->f_rawin > MAX_READWINDOW && filp->f_ramax > PAGE_SIZE)
+			filp->f_ramax -= PAGE_SIZE;
+
+		if (filp->f_ramax > MAX_READAHEAD)
+			filp->f_ramax = MAX_READAHEAD;
+#ifdef PROFILE_READAHEAD
+		profile_readahead((try_async == 2), filp);
+#endif
 		if (try_async == 2) {
 			run_task_queue(&tq_disk);
 		}
@@ -413,17 +523,21 @@ static inline unsigned long generic_file_readahead(struct file * filp, struct in
 }
 
 
+/*
+ * This is a generic file read routine, and uses the
+ * inode->i_op->readpage() function for the actual low-level
+ * stuff.
+ *
+ * This is really ugly. But the goto's actually try to clarify some
+ * of the logic when it comes to error handling etc.
+ */
+
 int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int error, read;
 	unsigned long pos, ppos, page_cache;
 	int try_async;
 
-#ifdef DEBUG_ASYNC_AHEAD
-static long ccount = 0;
-if (count > 0) ccount += count;
-#endif
-	
 	if (count <= 0)
 		return 0;
 
@@ -435,7 +549,7 @@ if (count > 0) ccount += count;
 	ppos = pos & PAGE_MASK;
 /*
  * Check if the current position is inside the previous read-ahead window.
- * If that's true, I assume that the file accesses are sequential enough to
+ * If that's true, We assume that the file accesses are sequential enough to
  * continue asynchronous read-ahead.
  * Do minimum read-ahead at the beginning of the file since some tools
  * only read the beginning of files.
@@ -449,40 +563,21 @@ if (count > 0) ccount += count;
 	if (pos+count < MIN_READAHEAD || !filp->f_rapos ||
 	    ppos > filp->f_rapos || ppos + filp->f_rawin < filp->f_rapos) {
 		try_async = 0;
-#ifdef DEBUG_ASYNC_AHEAD
-		if (ccount > 10000000) {
-			ccount = 0;
-			printk("XXXXXXXX ppos=%ld rapos=%ld ralen=%ld ramax=%ld rawin=%ld\n",
-				ppos, filp->f_rapos, filp->f_ralen, filp->f_ramax, filp->f_rawin);
-		}
-#endif
 		filp->f_rapos = 0;
 		filp->f_ralen = 0;
 		filp->f_ramax = 0;
 		filp->f_rawin = 0;
 /*
  * Will try asynchronous read-ahead.
- * Double the max read ahead size each time.
- *   That heuristic avoid to do some large IO for files that are not really
- *   accessed sequentially.
  */
 	} else {
 		try_async = 1;
-#ifdef DEBUG_ASYNC_AHEAD
-		if (ccount > 10000000) {
-			ccount = 0;
-			printk("XXXXXXXX ppos=%ld rapos=%ld ralen=%ld ramax=%ld rawin=%ld\n",
-				ppos, filp->f_rapos, filp->f_ralen, filp->f_ramax, filp->f_rawin);
-		}
-#endif
-		filp->f_ramax += filp->f_ramax;
 	}
 /*
- * Compute a good value for read-ahead max
+ * Adjust the current value of read-ahead max.
  * If the read operation stay in the first half page, force no readahead.
- * Else try first some value near count.
+ * Otherwise try first some value near count.
  *      do at least MIN_READAHEAD and at most MAX_READAHEAD.
- * (Should be a little reworked)
  */
 	if (pos + count <= (PAGE_SIZE >> 1)) {
 		try_async = 0;
@@ -547,9 +642,8 @@ found_page:
 		if (PageUptodate(page) || PageLocked(page))
 			page_cache = generic_file_readahead(filp, inode, try_async, pos, page, page_cache);
 		else if (try_async) {
-			filp->f_ramax = (filp->f_ramax / 2) & PAGE_MASK;
-			if (filp->f_ramax < MIN_READAHEAD)
-				filp->f_ramax = MIN_READAHEAD;
+			if (filp->f_ramax > MIN_READAHEAD)
+				filp->f_ramax -= PAGE_SIZE;
 		}
 
 		if (!PageUptodate(page))
@@ -859,8 +953,8 @@ static inline int filemap_sync_pmd_range(pgd_t * pgd,
 		return 0;
 	}
 	pmd = pmd_offset(pgd, address);
-	offset = address & PMD_MASK;
-	address &= ~PMD_MASK;
+	offset = address & PGDIR_MASK;
+	address &= ~PGDIR_MASK;
 	end = address + size;
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;

@@ -1,7 +1,7 @@
 Mon Apr  1 10:22:01 1996    <tytso@rsts-11.mit.edu>
 
 	* serial.c (rs_close): Cleaned up modularization changes.
-		Remove code which forced line discpline back to N_TTY
+		Remove code which forced line discipline back to N_TTY
 		this is done in the tty upper layers, and there's no
 		reason to do it here.  (Making this change also
 		removed the requirement that the serial module access

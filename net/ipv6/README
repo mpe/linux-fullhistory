@@ -1,4 +1,8 @@
-To join in the work on Linux IPv6 join the majordomo managed mailing list
-		"netdev@nuclecu.unam.mx"
+To join in the work on Linux IPv6 send mail to:
 
-Alan
+        majordomo@nuclecu.unam.mx
+
+and in the body of the message include:
+
+subscribe netdev
+

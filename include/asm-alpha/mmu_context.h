@@ -36,11 +36,31 @@
 #define MAX_ASN 127
 #else
 #define MAX_ASN 63
+#define BROKEN_ASN 1
 #endif
+
+extern unsigned long asn_cache;
 
 #define ASN_VERSION_SHIFT 16
 #define ASN_VERSION_MASK ((~0UL) << ASN_VERSION_SHIFT)
 #define ASN_FIRST_VERSION (1UL << ASN_VERSION_SHIFT)
+
+extern inline void get_new_mmu_context(struct task_struct *p,
+	struct mm_struct *mm,
+	unsigned long asn)
+{
+	/* check if it's legal.. */
+	if ((asn & ~ASN_VERSION_MASK) > MAX_ASN) {
+		/* start a new version, invalidate all old asn's */
+		tbiap(); imb();
+		asn = (asn & ASN_VERSION_MASK) + ASN_FIRST_VERSION;
+		if (!asn)
+			asn = ASN_FIRST_VERSION;
+	}
+	asn_cache = asn + 1;
+	mm->context = asn;			/* full version + asn */
+	p->tss.asn = asn & ~ASN_VERSION_MASK;	/* just asn */
+}
 
 /*
  * NOTE! The way this is set up, the high bits of the "asn_cache" (and
@@ -55,28 +75,14 @@
  */
 extern inline void get_mmu_context(struct task_struct *p)
 {
-#ifdef CONFIG_ALPHA_EV5
-	static unsigned long asn_cache = ASN_FIRST_VERSION;
+#ifndef BROKEN_ASN
 	struct mm_struct * mm = p->mm;
 
 	if (mm) {
-		unsigned long asn = mm->context;
+		unsigned long asn = asn_cache;
 		/* Check if our ASN is of an older version and thus invalid */
-		if ((asn_cache ^ asn) & ASN_VERSION_MASK) {
-			/* get a new asn of the current version */
-			asn = asn_cache++;
-			/* check if it's legal.. */
-			if ((asn & ~ASN_VERSION_MASK) > MAX_ASN) {
-				/* start a new version, invalidate all old asn's */
-				tbiap(); imb();
-				asn_cache = (asn_cache & ASN_VERSION_MASK) + ASN_FIRST_VERSION;
-				if (!asn_cache)
-					asn_cache = ASN_FIRST_VERSION;
-				asn = asn_cache++;
-			}
-			mm->context = asn;			/* full version + asn */
-			p->tss.asn = asn & ~ASN_VERSION_MASK;	/* just asn */
-		}
+		if ((mm->context ^ asn) & ASN_VERSION_MASK)
+			get_new_mmu_context(p, mm, asn);
 	}
 #endif
 }

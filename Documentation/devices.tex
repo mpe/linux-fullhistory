@@ -554,9 +554,9 @@ number 3).
 
 \begin{devicelist}
 \major{19}{}{char }{Cyclades serial card}
-	\minor{32}{/dev/ttyC0}{First Cyclades port}
+	\minor{0}{/dev/ttyC0}{First Cyclades port}
 	\minordots
-	\minor{63}{/dev/ttyC31}{32nd Cyclades port}
+	\minor{31}{/dev/ttyC31}{32nd Cyclades port}
 \end{devicelist}
 \noindent
 It would make more sense for these to start at 0...
@@ -575,9 +575,9 @@ See the Double documentation for an explanation of the ``mirror'' devices.
 
 \begin{devicelist}
 \major{20}{}{char }{Cyclades serial card -- alternate devices}
-	\minor{32}{/dev/cub0}{Callout device corresponding to {\file ttyC0}}
+	\minor{0}{/dev/cub0}{Callout device corresponding to {\file ttyC0}}
 	\minordots
-	\minor{63}{/dev/cub31}{Callout device corresponding to {\file ttyC31}}
+	\minor{31}{/dev/cub31}{Callout device corresponding to {\file ttyC31}}
 \\
 \major{  }{}{block}{Hitachi CD-ROM}
 	\minor{0}{/dev/hitcd}{Hitachi CD-ROM}

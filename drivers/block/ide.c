@@ -507,14 +507,12 @@ static unsigned long current_capacity (ide_drive_t  *drive)
 		return 0;
 	if (drive->media != ide_disk)
 		return 0x7fffffff;	/* cdrom or tape */
-	if (!IS_PROMISE_DRIVE) {
-		drive->select.b.lba = 0;
-		/* Determine capacity, and use LBA if the drive properly supports it */
-		if (id != NULL && (id->capability & 2) && lba_capacity_is_ok(id)) {
-			if (id->lba_capacity >= capacity) {
-				capacity = id->lba_capacity;
-				drive->select.b.lba = 1;
-			}
+	drive->select.b.lba = 0;
+	/* Determine capacity, and use LBA if the drive properly supports it */
+	if (id != NULL && (id->capability & 2) && lba_capacity_is_ok(id)) {
+		if (id->lba_capacity >= capacity) {
+			capacity = id->lba_capacity;
+			drive->select.b.lba = 1;
 		}
 	}
 	return (capacity - drive->sect0);
@@ -1248,10 +1246,22 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 {
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned short io_base = hwif->io_base;
+#ifdef CONFIG_BLK_DEV_PROMISE
+	int use_promise_io = 0;
+#endif /* CONFIG_BLK_DEV_PROMISE */
 
 	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE(rq->nr_sectors,io_base+IDE_NSECTOR_OFFSET);
+#ifdef CONFIG_BLK_DEV_PROMISE
+	if (IS_PROMISE_DRIVE) {
+		if (hwif->is_promise2 || rq->cmd == READ) {
+			use_promise_io = 1;
+		}
+	}
+	if (drive->select.b.lba || use_promise_io) {
+#else /* !CONFIG_BLK_DEV_PROMISE */
 	if (drive->select.b.lba) {
+#endif /* CONFIG_BLK_DEV_PROMISE */
 #ifdef DEBUG
 		printk("%s: %sing: LBAsect=%ld, sectors=%ld, buffer=0x%08lx\n",
 			drive->name, (rq->cmd==READ)?"read":"writ",
@@ -1278,11 +1288,9 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 #endif
 	}
 #ifdef CONFIG_BLK_DEV_PROMISE
-	if (IS_PROMISE_DRIVE) {
-		if (hwif->is_promise2 || rq->cmd == READ) {
-			do_promise_io (drive, rq);
-			return;
-		}
+	if (use_promise_io) {
+		do_promise_io (drive, rq);
+		return;
 	}
 #endif /* CONFIG_BLK_DEV_PROMISE */
 	if (rq->cmd == READ) {
@@ -2533,8 +2541,6 @@ static void probe_hwif (ide_hwif_t *hwif)
 			ide_drive_t *drive = &hwif->drives[unit];
 			(void) probe_for_drive (drive);
 			if (drive->present && drive->media == ide_disk) {
-				if (IS_PROMISE_DRIVE)
-					drive->select.b.lba = 1; /* required by promise driver */
 				if ((!drive->head || drive->head > 16) && !drive->select.b.lba) {
 					printk("%s: INVALID GEOMETRY: %d PHYSICAL HEADS?\n",
 					 drive->name, drive->head);

@@ -474,7 +474,7 @@ static int eql_enslave(struct device *dev, slaving_request_t *srqp)
 		}
 #ifdef EQL_DEBUG
 	if (eql_debug >= 20)
-		printk ("EQL enslsave: slave is master or slave is already slave\n");
+		printk ("EQL enslave: slave is master or slave is already slave\n");
 #endif  
 
 		return -EINVAL;

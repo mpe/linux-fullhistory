@@ -1,5 +1,5 @@
 /*+M*************************************************************************
- * Adaptec 274x/284x/294x device driver for Linux.
+ * Adaptec AIC7xxx device driver for Linux.
  *
  * Copyright (c) 1994 John Aycock
  *   The University of Calgary Department of Computer Science.
@@ -18,15 +18,15 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  * 
- * $Id: aic7xxx.h,v 2.2 1995/09/20 05:18:18 deang Exp $
+ * $Id: aic7xxx.h,v 3.0 1996/04/16 09:11:53 deang Exp $
  *-M*************************************************************************/
 #ifndef _aic7xxx_h
 #define _aic7xxx_h
 
-#define AIC7XXX_H_VERSION  "$Revision: 2.2 $"
+#define AIC7XXX_H_VERSION  "$Revision: 3.0 $"
 
 /*
- * Scsi_Host_Template (see hosts.h) for AIC-7770/AIC-7870 - some fields
+ * Scsi_Host_Template (see hosts.h) for AIC-7xxx - some fields
  * to do with card config are filled in after the card is detected.
  */
 #define AIC7XXX	{						\

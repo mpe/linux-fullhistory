@@ -1,5 +1,5 @@
 /*+M*************************************************************************
- * Adaptec AIC7770/AIC7870 sequencer code assembler.
+ * Adaptec AIC7xxx sequencer code assembler.
  *
  * Copyright (c) 1994 John Aycock
  *   The University of Calgary Department of Computer Science.
@@ -27,7 +27,7 @@
  * A <label> is an <undef-sym> ending in a colon.  Spaces, tabs, and commas
  * are token separators.
  *-M*************************************************************************/
-static const char id[] = "$Id: aic7xxx_asm.c,v 2.4 1996/01/30 07:17:29 deang Exp $";
+static const char id[] = "$Id: aic7xxx_asm.c,v 3.0 1996/04/16 08:52:23 deang Exp $";
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
@@ -589,7 +589,7 @@ main(int argc, char **argv)
 
 	ofile = NULL;
 	ofilename = NULL;
-	while ((c = getopt(argc, argv, "dho:vD")) != EOF) {
+	while ((c = getopt(argc, argv, "dho:vD:")) != EOF) {
 		switch (c) {
 		    case 'd':
 			debug = !0;
@@ -607,7 +607,7 @@ main(int argc, char **argv)
 		    }
 		    case 'o':
 		        ofilename = optarg;
-			if ((ofile = fopen(ofilename, "w")) < 0) {
+			if ((ofile = fopen(ofilename, "w")) == NULL) {
 				perror(optarg);
 				exit(EXIT_FAILURE);
 			}

@@ -1925,7 +1925,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	 */
 
 	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
-		IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
+		IPPROTO_TCP, sk->opt, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0)
 	{
 		sock_wfree(sk, buff);

@@ -578,6 +578,7 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 	if(uh_cache_sk==sk)
 		udp_cache_zap();
 	release_sock(sk);
+	sk->dead = 1;
 	destroy_sock(sk);
 }
 

@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.3.5 $$Date: 1996/03/07 15:20:17 $";
+"$Revision: 1.36.3.7 $$Date: 1996/04/19 21:06:18 $";
 /*
  *  linux/drivers/char/cyclades.c
  *
@@ -24,6 +24,17 @@ static char rcsid[] =
  *   int cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
+ * Revision 1.36.3.7  1996/04/19 21:06:18  bentson
+ * remove unneeded boot message & fix CLOCAL hardware flow
+ * control (Miquel van Smoorenburg <miquels@Q.cistron.nl>);
+ * remove unused diagnostic statements; minor 0 is first;
+ *
+ * Revision 1.36.3.6  1996/03/13 13:21:17  marcio
+ * The kernel function vremap (available only in later 1.3.xx kernels)
+ * allows the access to memory addresses above the RAM. This revision
+ * of the driver supports PCI boards below 1Mb (device id 0x100) and
+ * above 1Mb (device id 0x101).
+ *
  * Revision 1.36.3.5  1996/03/07 15:20:17  bentson
  * Some global changes to interrupt handling spilled into
  * this driver--mostly unused arguments in system function
@@ -326,7 +337,7 @@ static unsigned char *cy_isa_addresses[] = {
 /* This is the per-card data structure containing address, irq, number of
    channels, etc. This driver supports a maximum of NR_CARDS cards. If
    you need to install more boards, change this constant in the definition
-   bellow. No other change is necessary to support more boards. */
+   below. No other change is necessary to support more boards. */
 
 #define NR_CARDS	4
 
@@ -335,7 +346,7 @@ static struct cyclades_card cy_card[NR_CARDS];
 /* This is the per-channel data structure containing pointers, flags
    and variables for the port. This driver supports a maximum of NR_PORTS.
    If the total number of ports is larger than NR_PORTS, change this
-   constant in the definition bellow. No other change is necessary to
+   constant in the definition below. No other change is necessary to
    support more boards/ports. */
 
 #define NR_PORTS        64
@@ -361,6 +372,11 @@ static int cy_chip_offset [] =
 static unsigned short	cy_pci_nboard = 0;
 static unsigned short	cy_isa_nboard = 0;
 static unsigned short	cy_nboard = 0;
+static unsigned short	cy_pci_dev_id[] = {
+				PCI_DEVICE_ID_CYCLOM_Y_Lo,/* PCI below 1Mb */
+				PCI_DEVICE_ID_CYCLOM_Y_Hi,/* PCI above 1Mb */
+				0			/* end of table */
+			};
 
 int			cy_detect_isa(void);
 int			cy_detect_pci(void);
@@ -615,8 +631,10 @@ cy_probe(int irq, void *dev_id, struct pt_regs *regs)
   int save_xir, save_car;
   int index = 0;	/* probing interrupts is only for ISA */
 
-    if (!probe_ready)
+    if (!probe_ready) {
+	*(intr_base_addr + (Cy_ClrIntr<<index)) = 0;
         return;
+    }
 
     cy_irq_triggered = irq;
     cy_triggered |= 1 << irq;
@@ -929,27 +947,25 @@ cy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                         if((mdm_change & CyDCD)
                         && (info->flags & ASYNC_CHECK_CD)){
                             if(mdm_status & CyDCD){
-/* CP('!'); */
                                 cy_sched_event(info, Cy_EVENT_OPEN_WAKEUP);
                             }else if(!((info->flags & ASYNC_CALLOUT_ACTIVE)
                                      &&(info->flags & ASYNC_CALLOUT_NOHUP))){
-/* CP('@'); */
                                 cy_sched_event(info, Cy_EVENT_HANGUP);
                             }
                         }
                         if((mdm_change & CyCTS)
                         && (info->flags & ASYNC_CTS_FLOW)){
-                            if(info->tty->stopped){
+                            if(info->tty->hw_stopped){
                                 if(mdm_status & CyCTS){
                                     /* !!! cy_start isn't used because... */
-                                    info->tty->stopped = 0;
+                                    info->tty->hw_stopped = 0;
 				    base_addr[CySRER<<index] |= CyTxMpty;
 				    cy_sched_event(info, Cy_EVENT_WRITE_WAKEUP);
                                 }
                             }else{
                                 if(!(mdm_status & CyCTS)){
                                     /* !!! cy_stop isn't used because... */
-                                    info->tty->stopped = 1;
+                                    info->tty->hw_stopped = 1;
 				    base_addr[CySRER<<index] &= ~CyTxMpty;
                                 }
                             }
@@ -1234,7 +1250,6 @@ startup(struct cyclades_port * info)
 
 	base_addr[CyCAR<<index] = (u_char)channel; /* !!! Is this needed? */
 	base_addr[CyMSVR1<<index] = CyRTS;
-/* CP('S');CP('1'); */
 	base_addr[CyMSVR2<<index] = CyDTR;
 
 #ifdef SERIAL_DEBUG_DTR
@@ -1291,7 +1306,6 @@ shutdown(struct cyclades_port * info)
   int card,chip,channel,index;
 
     if (!(info->flags & ASYNC_INITIALIZED)){
-/* CP('$'); */
 	return;
     }
 
@@ -1508,11 +1522,11 @@ config_setup(struct cyclades_port * info)
 			     : 0x02); /* 10ms rx timeout */
 
 	if (C_CLOCAL(info->tty)) {
-	    base_addr[CySRER<<index] |= 0; /* without modem intr */
-				    /* ignore 1->0 modem transitions */
-	    base_addr[CyMCOR1<<index] = 0x0;
-				    /* ignore 0->1 modem transitions */
-	    base_addr[CyMCOR2<<index] = 0x0;
+	    base_addr[CySRER<<index] |= CyMdmCh; /* without modem intr */
+				    /* act on 1->0 modem transitions */
+	    base_addr[CyMCOR1<<index] = CyCTS;
+				    /* act on 0->1 modem transitions */
+	    base_addr[CyMCOR2<<index] = CyCTS;
 	} else {
 	    base_addr[CySRER<<index] |= CyMdmCh; /* with modem intr */
 				    /* act on 1->0 modem transitions */
@@ -1820,7 +1834,6 @@ get_serial_info(struct cyclades_port * info,
   struct serial_struct tmp;
   struct cyclades_card *cinfo = &cy_card[info->card];
 
-/* CP('g'); */
     if (!retinfo)
             return -EFAULT;
     memset(&tmp, 0, sizeof(tmp));
@@ -1844,7 +1857,6 @@ set_serial_info(struct cyclades_port * info,
   struct serial_struct new_serial;
   struct cyclades_port old_info;
 
-/* CP('s'); */
     if (!new_info)
 	    return -EFAULT;
     memcpy_fromfs(&new_serial,new_info,sizeof(new_serial));
@@ -1941,7 +1953,6 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	if (arg & TIOCM_DTR){
 	    save_flags(flags); cli();
 	    base_addr[CyCAR<<index] = (u_char)channel;
-/* CP('S');CP('2'); */
 	    base_addr[CyMSVR2<<index] = CyDTR;
 #ifdef SERIAL_DEBUG_DTR
             printk("cyc: %d: raising DTR\n", __LINE__);
@@ -1960,7 +1971,6 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	if (arg & TIOCM_DTR){
 	    save_flags(flags); cli();
 	    base_addr[CyCAR<<index] = (u_char)channel;
-/* CP('C');CP('2'); */
 	    base_addr[CyMSVR2<<index] = ~CyDTR;
 #ifdef SERIAL_DEBUG_DTR
             printk("cyc: %d: dropping DTR\n", __LINE__);
@@ -1984,7 +1994,6 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	if (arg & TIOCM_DTR){
 	    save_flags(flags); cli();
 	    base_addr[CyCAR<<index] = (u_char)channel;
-/* CP('S');CP('3'); */
 	    base_addr[CyMSVR2<<index] = CyDTR;
 #ifdef SERIAL_DEBUG_DTR
             printk("cyc: %d: raising DTR\n", __LINE__);
@@ -1994,7 +2003,6 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	}else{
 	    save_flags(flags); cli();
 	    base_addr[CyCAR<<index] = (u_char)channel;
-/* CP('C');CP('3'); */
 	    base_addr[CyMSVR2<<index] = ~CyDTR;
 #ifdef SERIAL_DEBUG_DTR
             printk("cyc: %d: dropping DTR\n", __LINE__);
@@ -2318,7 +2326,6 @@ cy_close(struct tty_struct * tty, struct file * filp)
   struct cyclades_port * info = (struct cyclades_port *)tty->driver_data;
   unsigned long flags;
 
-/* CP('C'); */
 #ifdef SERIAL_DEBUG_OTHER
     printk("cy_close ttyC%d\n", info->line);
 #endif
@@ -2528,7 +2535,6 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	    if (!(info->flags & ASYNC_CALLOUT_ACTIVE)){
 		base_addr[CyCAR<<index] = (u_char)channel;
 		base_addr[CyMSVR1<<index] = CyRTS;
-/* CP('S');CP('4'); */
 		base_addr[CyMSVR2<<index] = CyDTR;
 #ifdef SERIAL_DEBUG_DTR
                 printk("cyc: %d: raising DTR\n", __LINE__);
@@ -2548,7 +2554,6 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	}
 	save_flags(flags); cli();
 	    base_addr[CyCAR<<index] = (u_char)channel;
-/* CP('L');CP1(1 && C_CLOCAL(tty)); CP1(1 && (base_addr[CyMSVR1<<index] & CyDCD) ); */
 	    if (!(info->flags & ASYNC_CALLOUT_ACTIVE)
 	    && !(info->flags & ASYNC_CLOSING)
 	    && (C_CLOCAL(tty)
@@ -2596,7 +2601,6 @@ cy_open(struct tty_struct *tty, struct file * filp)
   struct cyclades_port  *info;
   int retval, line;
 
-/* CP('O'); */
     line = MINOR(tty->device) - tty->driver.minor_start;
     if ((line < 0) || (NR_PORTS <= line)){
         return -ENODEV;
@@ -3026,27 +3030,33 @@ cy_detect_isa()
 int
 cy_detect_pci()
 {
+#ifdef CONFIG_PCI
   unsigned char		cyy_bus, cyy_dev_fn, cyy_rev_id;
   unsigned long		pci_intr_ctrl;
   unsigned char		cy_pci_irq;
   unsigned int		cy_pci_address, cy_pci_io;
   unsigned short	i,j,cy_pci_nchan;
+  unsigned short	device_id,dev_index = 0,board_index = 0;
 
-#ifndef CONFIG_PCI
-	printk ("Kernel without PCI support.\n");
-	return(0);
-#else
 	if(pcibios_present() == 0) {	/* PCI bus not present */
 	 	return(0);
 	}
 	for (i = 0; i < NR_CARDS; i++) {
 		/* look for a Cyclom-Y card by vendor and device id */
-		if(pcibios_find_device (PCI_VENDOR_ID_CYCLADES,
-					PCI_DEVICE_ID_CYCLOMY,i,
-					&cyy_bus, &cyy_dev_fn) != 0)
-		{
-			break;
-		}
+		while((device_id = cy_pci_dev_id[dev_index]) != 0) {
+			if(pcibios_find_device(PCI_VENDOR_ID_CYCLADES,
+					device_id,board_index,
+  					&cyy_bus, &cyy_dev_fn) != 0)
+			{
+				dev_index++;	/* try next device id */
+				board_index = 0;
+			} else {
+				board_index++;
+				break;		/* found a board */
+			}
+  		}
+		if (device_id == 0)	break;
+
 		/* read PCI configuration area */
 		pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
 				 PCI_INTERRUPT_LINE, &cy_pci_irq);
@@ -3057,6 +3067,10 @@ cy_detect_pci()
 		pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
 				  PCI_REVISION_ID, &cyy_rev_id);
 		cy_pci_address &= 0xfffffff0;
+		if ((ulong)cy_pci_address >= 0x100000) { /* above 1M? */
+			cy_pci_address =
+			    (unsigned int) vremap(cy_pci_address,0x4000);
+		}
 		cy_pci_io  &= 0xfffffffc;
 		cy_pci_nchan = 4 * cy_init_card((unsigned char *)
 						cy_pci_address,1);
@@ -3115,7 +3129,9 @@ cy_detect_pci()
 		cy_next_channel += cy_pci_nchan;
 	}
 	return(i);
-#endif /* ifndef CONFIG_PCI */
+#else
+	return(0);
+#endif /* ifdef CONFIG_PCI */
 }
 
 

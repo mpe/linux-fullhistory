@@ -1,5 +1,5 @@
 /*+M*************************************************************************
- * Adaptec 274x/284x/294x device driver proc support for Linux.
+ * Adaptec AIC7xxx device driver proc support for Linux.
  *
  * Copyright (c) 1995 Dean W. Gehnert
  *
@@ -22,9 +22,9 @@
  *  o Additional support for device block statistics provided by
  *    Matthew Jacob.
  *
- *  Dean W. Gehnert, deang@ims.com, 08/30/95
+ *  Dean W. Gehnert, deang@teleport.com, 08/30/95
  *
- *  $Id: aic7xxx_proc.c,v 2.5 1995/12/16 23:11:55 deang Exp $
+ *  $Id: aic7xxx_proc.c,v 3.0 1996/04/16 08:52:23 deang Exp $
  *-M*************************************************************************/
 
 #define BLS buffer + len + size
@@ -82,7 +82,8 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   int   len = 0;
   off_t begin = 0;
   off_t pos = 0;
-  static char *bus_name[] = {"Single", "Twin", "Wide"};
+  static char *bus_names[] = { "Single", "Twin", "Wide" };
+  static char *chip_names[] = { "AIC-777x", "AIC-785x", "AIC-787x", "AIC-788x" };
 
   HBAptr = NULL;
   for (i = 0; i < NUMBER(aic7xxx_boards); i++)
@@ -137,6 +138,9 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 #ifdef AIC7XXX_RESET_DELAY
   size += sprintf(BLS, "  AIC7XXX_RESET_DELAY    : %d\n", AIC7XXX_RESET_DELAY);
 #endif
+#ifdef AIC7XXX_CMDS_PER_LUN
+  size += sprintf(BLS, "  AIC7XXX_CMDS_PER_LUN   : %d\n", AIC7XXX_CMDS_PER_LUN);
+#endif
 #ifdef AIC7XXX_TWIN_SUPPORT
   size += sprintf(BLS, "  AIC7XXX_TWIN_SUPPORT   : Enabled\n");
 #else
@@ -162,7 +166,9 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Adapter Configuration:\n");
   size += sprintf(BLS, "          SCSI Adapter: %s\n", board_names[p->type]);
-  size += sprintf(BLS, "              Host Bus: %s\n", bus_name[p->bus_type]);
+  size += sprintf(BLS, "                        (%s chipset)\n",
+      chip_names[p->chip_type]);
+  size += sprintf(BLS, "              Host Bus: %s\n", bus_names[p->bus_type]);
   size += sprintf(BLS, "               Base IO: %#.4x\n", p->base);
   size += sprintf(BLS, "                   IRQ: %d\n", HBAptr->irq);
   size += sprintf(BLS, "                   SCB: %d (%d)\n", p->numscb, p->maxscb);
@@ -178,14 +184,14 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   }
   size += sprintf(BLS, "         Serial EEPROM: %s\n",
       p->have_seeprom ? "True" : "False");
-  size += sprintf(BLS, "         Pause/Unpause: %#.2x/%#.2x\n", p->pause,
-      p->unpause);
   size += sprintf(BLS, "  Extended Translation: %sabled\n",
       p->extended ? "En" : "Dis");
   size += sprintf(BLS, "        SCSI Bus Reset: %sabled\n",
       aic7xxx_no_reset ? "Dis" : "En");
   size += sprintf(BLS, "            Ultra SCSI: %sabled\n",
       p->ultra_enabled ? "En" : "Dis");
+  size += sprintf(BLS, "     Target Disconnect: %sabled\n",
+      p->discenable ? "En" : "Dis");
   len += size; pos = begin + len; size = 0;
 
 #ifdef AIC7XXX_PROC_STATS

@@ -361,9 +361,11 @@ extern void free_irq(unsigned int irq, void *dev_id);
  */
 extern inline int suser(void)
 {
-	if (current->euid == 0)
+	if (current->euid == 0) {
 		current->flags |= PF_SUPERPRIV;
-	return (current->euid == 0);
+		return 1;
+	}
+	return 0;
 }
 
 extern void copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);

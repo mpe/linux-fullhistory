@@ -10,6 +10,7 @@
  */
 
 #include <asm/system.h>
+#include <asm/mmu_context.h>
 
 /* Caches aren't brain-dead on the alpha. */
 #define flush_cache_all()			do { } while (0)
@@ -19,11 +20,63 @@
 #define flush_page_to_ram(page)			do { } while (0)
 
 /*
+ * Force a context reload. This is needed when we
+ * change the page table pointer or when we update
+ * the ASN of the current process.
+ */
+static inline void reload_context(struct task_struct *task)
+{
+	__asm__ __volatile__(
+		"bis %0,%0,$16\n\t"
+		"call_pal %1"
+		: /* no outputs */
+		: "r" (&task->tss), "i" (PAL_swpctx)
+		: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
+}
+
+/*
+ * Use a few helper functions to hide the ugly broken ASN
+ * numbers on early alpha's (ev4 and ev45)
+ */
+#ifdef BROKEN_ASN
+
+#define flush_tlb_current(x) tbiap()
+#define flush_tlb_other(x) do { } while (0)
+
+#else
+
+extern void get_new_asn_and_reload(struct task_struct *, struct mm_struct *);
+
+#define flush_tlb_current(mm) get_new_asn_and_reload(current, mm)
+#define flush_tlb_other(mm) do { (mm)->context = 0; } while (0)
+
+#endif
+
+/*
+ * Flush just one page in the current TLB set.
+ * We need to be very careful about the icache here, there
+ * is no way to invalidate a specific icache page..
+ */
+static inline void flush_tlb_current_page(struct mm_struct * mm,
+	struct vm_area_struct *vma,
+	unsigned long addr)
+{
+#ifdef BROKEN_ASN
+	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
+#else
+	if (vma->vm_flags & VM_EXEC)
+		flush_tlb_current(mm);
+	else
+		tbi(2, addr);
+#endif
+}
+
+/*
  * Flush current user mapping.
  */
 static inline void flush_tlb(void)
 {
-	tbiap();
+	flush_tlb_current(current->mm);
 }
 
 /*
@@ -41,9 +94,9 @@ static inline void flush_tlb_all(void)
 static inline void flush_tlb_mm(struct mm_struct *mm)
 {
 	if (mm != current->mm)
-		mm->context = 0;
+		flush_tlb_other(mm);
 	else
-		tbiap();
+		flush_tlb_current(mm);
 }
 
 /*
@@ -60,9 +113,9 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
 	struct mm_struct * mm = vma->vm_mm;
 
 	if (mm != current->mm)
-		mm->context = 0;
+		flush_tlb_other(mm);
 	else
-		tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
+		flush_tlb_current_page(mm, vma, addr);
 }
 
 /*
@@ -72,10 +125,7 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
 static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
-	if (mm != current->mm)
-		mm->context = 0;
-	else
-		tbiap();
+	flush_tlb_mm(mm);
 }
 
 /* Certain architectures need to do special things when pte's
@@ -291,12 +341,7 @@ extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 	pgd_val(pgdir[PTRS_PER_PGD]) = pte_val(mk_pte((unsigned long) pgdir, PAGE_KERNEL));
 	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
 	if (tsk == current)
-		__asm__ __volatile__(
-			"bis %0,%0,$16\n\t"
-			"call_pal %1"
-			: /* no outputs */
-			: "r" (&tsk->tss), "i" (PAL_swpctx)
-			: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
+		reload_context(tsk);
 }
 
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))

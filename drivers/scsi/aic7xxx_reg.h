@@ -18,7 +18,7 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: aic7xxx_reg.h,v 1.2 1996/02/10 06:23:39 deang Exp $
+ * $Id: aic7xxx_reg.h,v 3.0 1996/04/16 08:52:23 deang Exp $
  *-M*************************************************************************/
 
 /*
@@ -425,10 +425,6 @@
 						 * when we were expecting
 						 * another msgin byte.
 						 */
-#define			PARITY_ERROR	0xe1	/*
-						 * Sequencer detected a parity
-						 * error.
-						 */
 #define 	BRKADRINT 0x08
 #define		SCSIINT	  0x04
 #define		CMDCMPLT  0x02
@@ -706,9 +702,11 @@
 					 * head of list of SCBs awaiting
 					 * selection
 					 */
-#define WAITING_SCBT		0x058	/*
-					 * tail of list of SCBs awaiting
-					 * selection
+#define QCNTMASK		0x058	/*
+					 * Mask of bits to test against
+					 * when looking at the Queue Count
+					 * registers.  Works around a bug
+					 * on aic7850 chips. 
 					 */
 #define	COMP_SCBCOUNT		0x059
 #define		SCB_LIST_NULL	0xff

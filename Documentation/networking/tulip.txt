@@ -52,11 +52,11 @@ Known bug(s)
 ============
 This driver's media detection is very simple and sometimes
 it causes serious problem. The driver automatically switches
-media when it causes timeout. If you want to speficy or to fix
+media when it causes timeout. If you want to specify or to fix
 a media;
 
 - Modify TULIP_PORT in tulip.c, line 33.
-- Uncommennt the definition of TULIP_FIX_PORT in tulip.c, line 40.
+- Uncomment the definition of TULIP_FIX_PORT in tulip.c, line 40.
 
 or
 

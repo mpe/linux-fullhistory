@@ -71,6 +71,7 @@ extern int ni65_probe(struct device *);
 extern int SK_init(struct device *);
 extern int seeq8005_probe(struct device *);
 extern int tc59x_probe(struct device *);
+extern int dgrs_probe(struct device *);
 extern int smc_init( struct device * );
 
 /* Detachable devices ("pocket adaptors") */
@@ -87,6 +88,9 @@ ethif_probe(struct device *dev)
 	return 1;		/* ENXIO */
 
     if (1
+#ifdef CONFIG_DGRS
+	&& dgrs_probe(dev)
+#endif
 #if defined(CONFIG_VORTEX)
 	&& tc59x_probe(dev)
 #endif

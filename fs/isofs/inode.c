@@ -431,7 +431,8 @@ void isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 
 	tmp.f_type = ISOFS_SUPER_MAGIC;
 	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = sb->u.isofs_sb.s_nzones;
+	tmp.f_blocks = (sb->u.isofs_sb.s_nzones
+                  << (sb->u.isofs_sb.s_log_zone_size - sb->s_blocksize_bits));
 	tmp.f_bfree = 0;
 	tmp.f_bavail = 0;
 	tmp.f_files = sb->u.isofs_sb.s_ninodes;

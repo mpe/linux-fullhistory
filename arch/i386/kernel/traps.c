@@ -266,7 +266,7 @@ void math_error(void)
 
 	/*
 	 * Give the process a clean slate next time they use
-	 * the FPU (and if they haven't accepted the SIGFP before
+	 * the FPU (and if they haven't accepted the SIGFPE before
 	 * that, it's their problem..)
 	 */
 	stts();

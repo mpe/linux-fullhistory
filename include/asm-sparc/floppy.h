@@ -263,9 +263,16 @@ static inline void sun_fd_enable_dma(void)
 
 static int sun_fd_eject(void)
 {
-	set_auxio(AUXIO_FLPY_DSEL, AUXIO_FLPY_EJCT);
-	udelay(1000);
-	set_auxio(AUXIO_FLPY_EJCT, AUXIO_FLPY_DSEL);
+	if(sparc_cpu_model == sun4c) {
+		set_auxio(AUXIO_FLPY_DSEL, AUXIO_FLPY_EJCT);
+		udelay(1000);
+		set_auxio(AUXIO_FLPY_EJCT, AUXIO_FLPY_DSEL);
+	} else {
+		set_dor(fdc, ~0, 0x90);
+		udelay(500);
+		set_dor(fdc, ~0x80, 0);
+		udelay(500);
+	}
 	return 0;
 }
 

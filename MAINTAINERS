@@ -78,6 +78,13 @@ M:	phil@tazenda.demon.co.uk
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+DIGI RIGHTSWITCH NETWORK DRIVER
+P:	Rick Richardson
+M:	rick@dgii.com
+L:	linux-net@vger.rutgers.edu
+W:	http://www.dgii.com/linux/
+S:	Maintained
+
 APM DRIVER
 P:      Rik Faith & Stephen Rothwell
 M:      faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
@@ -101,6 +108,12 @@ P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
+
+CYCLADES ASYNC MUX DRIVER
+P:	Marcio Saito
+M:	Marcio Saito <marcio@cyclades.com>
+W:	http://www.cyclades.com/
+S:	Supported
 
 EATA ISA/EISA SCSI DRIVER
 P:	Dario Ballabio
@@ -245,7 +258,7 @@ MOUSE AND MISC DEVICES [GENERAL]
 P:	Alessandro Rubini
 M:	rubini@ipvvis.unipv.it
 L:	linux-kernel@vger.rutgers.edu
-S:	Mantained
+S:	Maintained
 
 MENUCONFIG:
 P:	William Roadcap

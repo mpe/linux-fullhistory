@@ -82,36 +82,38 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 
 extern __inline__ unsigned long test_bit(int nr, const void * addr)
 {
-	return 1UL & (((int *) addr)[nr >> 5] >> (nr & 31));
+	return 1UL & (((const int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 /*
  * ffz = Find First Zero in word. Undefined if no zero exists,
  * so code should check against ~0UL first..
  *
- * This uses the cmpbge insn to check which byte contains the zero.
- * I don't know if that's actually a good idea, but it's fun and the
- * resulting LBS tests should be natural on the alpha.. Besides, I'm
- * just teaching myself the asm of the alpha anyway.
+ * Do a binary search on the bits.  Due to the nature of large
+ * constants on the alpha, it is worthwhile to split the search.
  */
+extern inline unsigned long ffz_b(unsigned long x)
+{
+	unsigned long sum = 0;
+
+	x = ~x & -~x;		/* set first 0 bit, clear others */
+	if (x & 0xF0) sum += 4;
+	if (x & 0xCC) sum += 2;
+	if (x & 0xAA) sum += 1;
+
+	return sum;
+}
+
 extern inline unsigned long ffz(unsigned long word)
 {
-	unsigned long result = 0;
-	unsigned long tmp;
+	unsigned long bits, qofs, bofs;
 
-	__asm__("cmpbge %1,%0,%0"
-		:"=r" (tmp)
-		:"r" (word), "0" (~0UL));
-	while (tmp & 1) {
-		word >>= 8;
-		tmp >>= 1;
-		result += 8;
-	}
-	while (word & 1) {
-		result++;
-		word >>= 1;
-	}
-	return result;
+	__asm__("cmpbge %1,%2,%0" : "=r"(bits) : "r"(word), "r"(~0UL));
+	qofs = ffz_b(bits);
+	__asm__("extbl %1,%2,%0" : "=r"(bits) : "r"(word), "r"(qofs));
+	bofs = ffz_b(bits);
+
+	return qofs*8 + bofs;
 }
 
 /*

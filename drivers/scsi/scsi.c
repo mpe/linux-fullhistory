@@ -248,6 +248,9 @@ static struct dev_info device_list[] =
 {"MICROP", "4110", "*", BLIST_NOTQ},		/* Buggy Tagged Queuing */
 {"NEC","CD-ROM DRIVE:841","1.0", BLIST_NOLUN},  /* Locks-up when LUN>0 polled. */
 {"RODIME","RO3000S","2.33", BLIST_NOLUN},       /* Locks up if polled for lun != 0 */
+{"SANYO", "CRD-250S", "1.20", BLIST_NOLUN},     /* causes failed REQUEST SENSE on lun 1 
+						 * for aha152x controller, which causes 
+						 * SCSI code to reset bus.*/
 {"SEAGATE", "ST157N", "\004|j", BLIST_NOLUN},   /* causes failed REQUEST SENSE on lun 1 
 						 * for aha152x controller, which causes 
 						 * SCSI code to reset bus.*/

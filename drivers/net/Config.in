@@ -80,6 +80,7 @@ if [ "$CONFIG_NET_EISA" = "y" ]; then
   tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
   tristate 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5
   tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
+  tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
 # bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100
 # bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32
   bool 'Zenith Z-Note support' CONFIG_ZNET

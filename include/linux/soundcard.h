@@ -27,7 +27,7 @@
 #define SOUND_VERSION	350
 #define UNIX_SOUND_SYSTEM
 
-#include <sys/ioctl.h>
+#include <linux/ioctl.h>
 
 /*
  *	Supported card ID numbers (Should be somewhere else?)

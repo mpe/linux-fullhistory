@@ -1,5 +1,5 @@
 /*+M*************************************************************************
- * Adaptec 274x/284x/294x device driver for Linux and FreeBSD.
+ * Adaptec AIC7xxx device driver for Linux and FreeBSD.
  *
  * Copyright (c) 1994 John Aycock
  *   The University of Calgary Department of Computer Science.
@@ -25,7 +25,7 @@
  * optimizations provided by Justin T. Gibbs (gibbs@FreeBSD.org)
  *-M*************************************************************************/
 
-VERSION AIC7XXX_SEQ_VER "$Id: aic7xxx.seq,v 2.8 1996/02/10 06:23:39 deang Exp $"
+VERSION AIC7XXX_SEQ_VER "$Id: aic7xxx.seq,v 3.0 1996/04/16 08:52:23 deang Exp $"
 
 #ifdef linux
 #include "aic7xxx_reg.h"
@@ -57,8 +57,14 @@ A = ACCUM
  */
 
 /*
- * Initialize any state valid during the idle loop here.  This code is
- * executed on startup and after every bus free.
+ * We assume that the kernel driver may reset us at any time, even in the
+ * middle of a DMA, so clear DFCNTRL too.
+ */
+reset:
+	clr	DFCNTRL
+	clr	SCSISIGO		/* De-assert BSY */
+/*
+ * We jump to start after every bus free.
  */
 start:
 	mvi	SCSISEQ,ENRSELI		/* Always allow reselection */
@@ -76,7 +82,8 @@ poll_for_work:
 start2:
 	test	SSTAT0,SELDI	jnz reselect
 	cmp	WAITING_SCBH,SCB_LIST_NULL jne start_waiting
-	test	QINCNT,0xff	jz poll_for_work
+	mov	A, QCNTMASK
+	test	QINCNT,A	jz poll_for_work
 
 /*
  * We have at least one queued SCB now and we don't have any 
@@ -255,15 +262,6 @@ ITloop:
 	test	SSTAT1,BUSFREE	jnz p_busfree
 	test	SSTAT1,REQINIT	jz ITloop
 
-/*
- * If we've had a parity error, let the driver know before
- * we overwrite LASTPHASE.
- */
-	test	SSTAT1, SCSIPERR jz parity_okay
-	or	CLRSINT1, CLRSCSIPERR
-	mvi	INTSTAT, PARITY_ERROR
-
-parity_okay:
 	and	A,PHASE_MASK,SCSISIGI
 	mov	LASTPHASE,A
 	mov	SCSISIGO,A
@@ -361,7 +359,7 @@ dma_finish2:
 /*
  * Copy data from FIFO into SCB data pointer and data count.  This assumes
  * that the struct scatterlist has this structure (this and sizeof(struct
- * scatterlist) == 12 are asserted in aic7xxx.c):
+ * scatterlist) == 12 are asserted in aic7xxx.c for the Linux driver):
  *
  *	struct scatterlist {
  *		char *address;		four bytes, little-endian order
@@ -370,7 +368,7 @@ dma_finish2:
  *	}
  *
  *
- * Not in FreeBSD.  the scatter list entry is only 8 bytes.
+ * In FreeBSD, the scatter list entry is only 8 bytes.
  * 
  * struct ahc_dma_seg {
  *       physaddr addr;                  four bytes, little-endian order
@@ -378,34 +376,23 @@ dma_finish2:
  * };
  */
 
+	mov	HADDR0,DFDAT
+	mov	HADDR1,DFDAT
+	mov	HADDR2,DFDAT
+	mov	HADDR3,DFDAT
 /*
  * For Linux, we must throw away four bytes since there is a 32bit gap
- * in the middle of a struct scatterlist
+ * in the middle of a struct scatterlist.
  */
 #ifdef linux
-	mov	HADDR0,DFDAT
-	mov	HADDR1,DFDAT
-	mov	HADDR2,DFDAT
-	mov	HADDR3,DFDAT
 	mov	NONE,DFDAT
 	mov	NONE,DFDAT
 	mov	NONE,DFDAT
 	mov	NONE,DFDAT
-	mov	HCNT0,DFDAT
-	mov	HCNT1,DFDAT
-	mov	HCNT2,DFDAT
-#else
-/*
- * For FreeBSD, just copy it wholesale
- */
-	mov	HADDR0,DFDAT
-	mov	HADDR1,DFDAT
-	mov	HADDR2,DFDAT
-	mov	HADDR3,DFDAT
-	mov	HCNT0,DFDAT
-	mov	HCNT1,DFDAT
-	mov	HCNT2,DFDAT
 #endif
+	mov	HCNT0,DFDAT
+	mov	HCNT1,DFDAT
+	mov	HCNT2,DFDAT
 
 /* Load STCNT as well.  It is a mirror of HCNT */
 	mov	STCNT0,HCNT0
@@ -775,6 +762,7 @@ mesgin_reject:
  */
 p_busfree:
 	mvi	CLRSINT1,CLRATNO
+	clr	LASTPHASE
 
 /*
  * if this is an immediate command, perform a pseudo command complete to
@@ -783,28 +771,6 @@ p_busfree:
 	test	SCB_CMDLEN,0xff	jz status_ok
 	jmp	start
 
-#if 0
-/*
- * Instead of a generic bcopy routine that requires an argument, we unroll
- * the cases that are actually used, and call them explicitly.  This
- * not only reduces the overhead of doing a bcopy, but ends up saving space 
- * in the program since you don't have to put the argument into the accumulator
- * before the call.  Both functions expect DINDEX to contain the destination 
- * address and SINDEX to contain the source address.
- */
-bcopy_7:
-	mov	DINDIR,SINDIR
-	mov	DINDIR,SINDIR
-bcopy_5:
-	mov	DINDIR,SINDIR
-bcopy_4:
-	mov	DINDIR,SINDIR
-bcopy_3:
-	mov	DINDIR,SINDIR
-	mov	DINDIR,SINDIR
-	mov	DINDIR,SINDIR	ret
-#endif
-	
 /*
  * Locking the driver out, build a one-byte message passed in SINDEX
  * if there is no active message already.  SINDEX is returned intact.
@@ -812,7 +778,7 @@ bcopy_3:
 mk_mesg:
 	mvi	SEQCTL,0x50			/* PAUSEDIS|FASTMODE */
 	test	MSG_LEN,0xff	jz mk_mesg1	/* Should always succeed */
-	
+
 	/*
 	 * Hmmm.  For some reason the mesg buffer is in use.
 	 * Tell the driver.  It should look at SINDEX to find

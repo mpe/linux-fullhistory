@@ -462,6 +462,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DGRS),y)
+L_OBJS += dgrs.o
+else
+  ifeq ($(CONFIG_DGRS),m)
+  M_OBJS += dgrs.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 clean:
@@ -526,5 +534,7 @@ sdla.o: sdla.c CONFIG
 
 dlci.o: dlci.c CONFIG
 
+dgrs.o: dgrs.c dgrs.h CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 tulip.o: tulip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TULIP_OPTS) -c $<

@@ -68,7 +68,8 @@ else
 	define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 fi
 
-if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
+if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
+	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" ]
 then
 	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
 fi

@@ -11,8 +11,6 @@ bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
 
 bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
 
-bool 'Automatic Disk Geometry determination' CONFIG_SCSI_AUTO_BIOSP
-
 mainmenu_option next_comment
 comment 'SCSI low-level drivers'
 

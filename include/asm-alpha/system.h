@@ -118,33 +118,29 @@ extern __inline__ unsigned long xchg_u64 (volatile long * m, unsigned long val);
 
 extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
-	unsigned long dummy, dummy2;
-
+	unsigned long dummy;
 	__asm__ __volatile__(
 		"\n1:\t"
-		"ldl_l %0,0(%1)\n\t"
-		"bis %2,%2,%3\n\t"
-		"stl_c %3,0(%1)\n\t"
-		"beq %3,1b\n"
-		: "=r" (val), "=r" (m), "=r" (dummy), "=r" (dummy2)
-		: "1" (m), "2" (val)
-		: "memory");
+		"ldl_l %0,%2\n\t"
+		"bis %3,%3,%1\n\t"
+		"stl_c %1,%2\n\t"
+		"beq %1,1b\n"
+		: "=&r" (val), "=&r" (dummy), "=m" (*m)
+		: "r" (val), "m" (*m));
 	return val;
 }
 
 extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 {
-	unsigned long dummy, dummy2;
-
+	unsigned long dummy;
 	__asm__ __volatile__(
 		"\n1:\t"
-		"ldq_l %0,0(%1)\n\t"
-		"bis %2,%2,%3\n\t"
-		"stq_c %3,0(%1)\n\t"
-		"beq %3,1b\n"
-		: "=r" (val), "=r" (m), "=r" (dummy), "=r" (dummy2)
-		: "1" (m), "2" (val)
-		: "memory");
+		"ldq_l %0,%2\n\t"
+		"bis %3,%3,%1\n\t"
+		"stq_c %1,%2\n\t"
+		"beq %1,1b\n"
+		: "=&r" (val), "=&r" (dummy), "=m" (*m)
+		: "r" (val), "m" (*m));
 	return val;
 }
 

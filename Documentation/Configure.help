@@ -2213,6 +2213,22 @@ CONFIG_DEC_ELCP
       If your card is NOT SMC EtherPower 10/100 PCI (smc9332dst),
       you can try the de4x5.c driver.
 
+Digi Intl. RightSwitch support
+CONFIG_DGRS
+  This is support for the Digi International RightSwitch series of
+  PCI/EISA ethernet switch cards.  These include the SE-4 and the SE-6
+  models. If you have a network card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  More specific information is
+  contained in drivers/net/README.dgrs. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
 ICL EtherTeam 16i/32 support
 CONFIG_ETH16I
   If you have a network (ethernet) card of this type, say Y and read
@@ -2795,7 +2811,8 @@ CONFIG_CYCLADES
   to compile this as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt. If you haven't heard about it, it's
-  safe to say N.
+  safe to say N. (As of 1.3.9x kernels, this driver's minor numbers
+  start at 0 instead of 32.)
 
 Stallion multiport serial support 
 CONFIG_STALDRV

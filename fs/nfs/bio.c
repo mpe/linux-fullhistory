@@ -63,8 +63,12 @@ do_read_nfs_sync(struct inode * inode, struct page * page)
 				NFS_SERVER(inode)->hostname,
 				inode->i_dev, inode->i_ino,
 				pos, rsize, buf, result);
+		/*
+		 * Even if we had a partial success we can't mark the page
+		 * cache valid.
+		 */
 		if (result < 0)
-			break;
+			goto io_error;
 		refresh = 1;
 		count -= result;
 		pos += result;
@@ -74,11 +78,12 @@ do_read_nfs_sync(struct inode * inode, struct page * page)
 	} while (count);
 
 	memset(buf, 0, count);
-	if (refresh) {
+	set_bit(PG_uptodate, &page->flags);
+	result = 0;
+
+io_error:
+	if (refresh)
 		nfs_refresh_inode(inode, &fattr);
-		result = 0;
-		set_bit(PG_uptodate, &page->flags);
-	}
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	return result;

@@ -266,6 +266,22 @@ void flush_thread(void)
 
 	for (i=0 ; i<8 ; i++)
 		current->debugreg[i] = 0;
+
+	/*
+	 * Forget coprocessor state..
+	 */
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU) {
+		stts();
+	}
+#else
+	if (last_task_used_math == current) {
+		last_task_used_math = NULL;
+		stts();
+	}
+#endif
+	current->used_math = 0;
+	current->flags &= ~PF_USEDFPU;
 }
 
 void release_thread(struct task_struct *dead_task)

@@ -4,7 +4,6 @@
  * ioctl handling for SCSI disks
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -45,15 +44,12 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 
 /* override with calculated, extended default, or driver values */
 
-#ifdef CONFIG_SCSI_AUTO_BIOSP
-        scsicam_bios_param(&rscsi_disks[MINOR(dev) >> 4],
-				    dev, &diskinfo[0]);
-#else
 	if(host->hostt->bios_param != NULL)
 	    host->hostt->bios_param(&rscsi_disks[MINOR(dev) >> 4],
 				    dev,
 				    &diskinfo[0]);
-#endif
+        else scsicam_bios_param(&rscsi_disks[MINOR(dev) >> 4],
+				dev, &diskinfo[0]);
 
 	put_user(diskinfo[0], &loc->heads);
 	put_user(diskinfo[1], &loc->sectors);

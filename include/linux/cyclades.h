@@ -16,16 +16,6 @@
 #ifndef _LINUX_CYCLADES_H
 #define _LINUX_CYCLADES_H
 
-/* PCI vendor and device ID's */
-
-#ifndef PCI_VENDOR_ID_CYCLADES
-#define	PCI_VENDOR_ID_CYCLADES	0x120e
-#endif
-
-#ifndef PCI_DEVICE_ID_CYCLOMY
-#define	PCI_DEVICE_ID_CYCLOMY	0x0100
-#endif
-
 struct cyclades_monitor {
         unsigned long           int_count;
         unsigned long           char_count;

@@ -26,7 +26,9 @@
 #include <linux/config.h>
 
 #if 0
-#define DEBUG_PRINT_DEVS 1
+# define DBG_DEVS(args)		printk args
+#else
+# define DBG_DEVS(args)
 #endif
 
 #ifndef CONFIG_PCI
@@ -269,10 +271,8 @@ static void layout_dev(struct pci_dev *dev)
 
 	pcibios_write_config_word(bus->number, dev->devfn, PCI_COMMAND,
 				  cmd | PCI_COMMAND_MASTER);
-#if DEBUG_PRINT_DEVS
-printk("layout_dev: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  class 0x%x\n",
-       bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, dev->class);
-#endif
+	DBG_DEVS(("layout_dev: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  class 0x%x\n",
+		  bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, dev->class));
 }
 
 
@@ -282,9 +282,7 @@ static void layout_bus(struct pci_bus *bus)
 	struct pci_bus *child;
 	struct pci_dev *dev;
 
-#if DEBUG_PRINT_DEVS
-printk("layout_bus: starting bus %d\n", bus->number);
-#endif
+	DBG_DEVS(("layout_bus: starting bus %d\n", bus->number));
 
 	if (!bus->devices && !bus->children)
 	  return;
@@ -314,9 +312,7 @@ printk("layout_bus: starting bus %d\n", bus->number);
 	/*
 	 * Allocate space to each device:
 	 */
-#if DEBUG_PRINT_DEVS
-printk("layout_bus: starting bus %d devices\n", bus->number);
-#endif
+	DBG_DEVS(("layout_bus: starting bus %d devices\n", bus->number));
 
 	for (dev = bus->devices; dev; dev = dev->sibling) {
 		if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) {
@@ -326,9 +322,7 @@ printk("layout_bus: starting bus %d devices\n", bus->number);
 	/*
 	 * Recursively allocate space for all of the sub-buses:
 	 */
-#if DEBUG_PRINT_DEVS
-printk("layout_bus: starting bus %d children\n", bus->number);
-#endif
+	DBG_DEVS(("layout_bus: starting bus %d children\n", bus->number));
 
     	for (child = bus->children; child; child = child->next) {
 		layout_bus(child);
@@ -760,15 +754,17 @@ static inline void sio_fixup(void)
 	/*
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
-	level_bits = inb(0x4d0) | (inb(0x4d1) << 8);
+	level_bits = 0;
 	for (dev = pci_devices; dev; dev = dev->next) {
 	        if (dev->class >> 16 == PCI_BASE_CLASS_BRIDGE)
 			continue;
 		dev->irq = 0;
 		if (dev->bus->number != 0) {
 			struct pci_dev *curr = dev ;
-			/* read the pin and do the PCI-PCI bridge
-			   interrupt pin swizzle */
+			/*
+			 * read the pin and do the PCI-PCI bridge
+			 * interrupt pin swizzle
+			 */
 			pcibios_read_config_byte(dev->bus->number, dev->devfn,
 						 PCI_INTERRUPT_PIN, &pin);
 			/* cope with 0 */
@@ -790,17 +786,18 @@ static inline void sio_fixup(void)
 						 PCI_INTERRUPT_PIN, &pin);
 		}
 
-		pirq = pirq_tab[slot - 6][pin];
-
-#if DEBUG_PRINT_DEVS
-printk("sio_fixup: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  int_slot 0x%x  int_pin 0x%x,  pirq 0x%x\n",
-       dev->bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, slot, pin, pirq);
-#endif
-
-		if (pirq < 0) {
+		if (slot < 6 || slot >= 6 + sizeof(pirq_tab)/sizeof(pirq_tab[0])) {
+			printk("bios32.sio_fixup: "
+			       "weird, found device %04x:%04x in non-existent slot %d!!\n",
+			       dev->vendor, dev->device, slot);
 			continue;
 		}
+		pirq = pirq_tab[slot - 6][pin];
 
+		DBG_DEVS(("sio_fixup: bus %d  slot 0x%x  VID 0x%x  DID 0x%x\n"
+			  "           int_slot 0x%x  int_pin 0x%x,  pirq 0x%x\n",
+			  dev->bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device,
+			  slot, pin, pirq));
 		/*
 		 * if its a VGA, enable its BIOS ROM at C0000
 		 */
@@ -812,6 +809,14 @@ printk("sio_fixup: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  int_slot 0x%x  int_pin
 		if ((dev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
 			continue; /* for now, displays get no IRQ */
 		}
+
+		if (pirq < 0) {
+			printk("bios32.sio_fixup: "
+			       "weird, device %04x:%04x coming in on slot %d has no irq line!!\n",
+			       dev->vendor, dev->device, slot);
+			continue;
+		}
+
 		dev->irq = (route_tab >> (8 * pirq)) & 0xff;
 
 		/* must set the PCI IRQs to level triggered */
@@ -825,8 +830,8 @@ printk("sio_fixup: bus %d  slot 0x%x  VID 0x%x  DID 0x%x  int_slot 0x%x  int_pin
 	}
 	/*
 	 * Now, make all PCI interrupts level sensitive.  Notice:
-	 * these registers must be accessed byte-wise.  outw() doesn't
-	 * work.
+	 * these registers must be accessed byte-wise.  inw()/outw()
+	 * don't work.
 	 */
 	level_bits |= (inb(0x4d0) | (inb(0x4d1) << 8));
 	outb((level_bits >> 0) & 0xff, 0x4d0);

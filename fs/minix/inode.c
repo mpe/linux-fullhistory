@@ -117,6 +117,50 @@ int minix_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
+/*
+ * Check the root directory of the filesystem to make sure
+ * it really _is_ a minix filesystem, and to check the size
+ * of the directory entry.
+ */
+static const char * minix_checkroot(struct super_block *s)
+{
+	struct inode * dir;
+	struct buffer_head *bh;
+	struct minix_dir_entry *de;
+	const char * errmsg;
+	int dirsize;
+
+	dir = s->s_mounted;
+	if (!S_ISDIR(dir->i_mode))
+		return "root directory is not a directory";
+
+	bh = minix_bread(dir, 0, 0);
+	if (!bh)
+		return "unable to read root directory";
+
+	de = (struct minix_dir_entry *) bh->b_data;
+	errmsg = "bad root directory '.' entry";
+	dirsize = BLOCK_SIZE;
+	if (de->inode == MINIX_ROOT_INO && strcmp(de->name, ".") == 0) {
+		errmsg = "bad root directory '..' entry";
+		dirsize = 8;
+	}
+
+	while ((dirsize <<= 1) < BLOCK_SIZE) {
+		de = (struct minix_dir_entry *) (bh->b_data + dirsize);
+		if (de->inode != MINIX_ROOT_INO)
+			continue;
+		if (strcmp(de->name, ".."))
+			continue;
+		s->u.minix_sb.s_dirsize = dirsize;
+		s->u.minix_sb.s_namelen = dirsize - 2;
+		errmsg = NULL;
+		break;
+	}
+	brelse(bh);
+	return errmsg;
+}
+
 struct super_block *minix_read_super(struct super_block *s,void *data, 
 				     int silent)
 {
@@ -124,6 +168,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	struct minix_super_block *ms;
 	int i, block;
 	kdev_t dev = s->s_dev;
+	const char * errmsg;
 
 	if (32 != sizeof (struct minix_inode))
 		panic("bad V1 i-node size");
@@ -186,6 +231,15 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		s->u.minix_sb.s_imap[i] = NULL;
 	for (i=0;i < MINIX_Z_MAP_SLOTS;i++)
 		s->u.minix_sb.s_zmap[i] = NULL;
+	if (s->u.minix_sb.s_zmap_blocks > MINIX_Z_MAP_SLOTS) {
+		s->s_dev = 0;
+		unlock_super (s);
+		brelse (bh);
+		if (!silent)
+			printk ("MINIX-fs: filesystem too big\n");
+		MOD_DEC_USE_COUNT;
+		return NULL;
+	}
 	block=2;
 	for (i=0 ; i < s->u.minix_sb.s_imap_blocks ; i++)
 		if ((s->u.minix_sb.s_imap[i]=bread(dev,block,BLOCK_SIZE)) != NULL)
@@ -219,10 +273,23 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	if (!s->s_mounted) {
 		s->s_dev = 0;
 		brelse(bh);
-		printk("MINIX-fs: get root inode failed\n");
+		if (!silent)
+			printk("MINIX-fs: get root inode failed\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
+
+	errmsg = minix_checkroot(s);
+	if (errmsg) {
+		if (!silent)
+			printk("MINIX-fs: %s\n", errmsg);
+		iput (s->s_mounted);
+		s->s_dev = 0;
+		brelse (bh);
+		MOD_DEC_USE_COUNT;
+		return NULL;
+	}
+
 	if (!(s->s_flags & MS_RDONLY)) {
 		ms->s_state &= ~MINIX_VALID_FS;
 		mark_buffer_dirty(bh, 1);
@@ -314,7 +381,7 @@ static int V2_block_bmap(struct buffer_head * bh, int nr)
 	return tmp;
 }
 
-int V2_minix_bmap(struct inode * inode,int block)
+static int V2_minix_bmap(struct inode * inode,int block)
 {
 	int i;
 

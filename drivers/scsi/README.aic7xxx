@@ -1,95 +1,115 @@
-@(#)README 1.19 94/11/30 jda
+			    AIC7xxx Driver for Linux
+				 April 15, 1996
 
-AHA274x/284x/294x DRIVER
+Introduction
+------------------------
+The AIC7xxx SCSI driver adds support for Adaptec (http://www.adaptec.com)
+SCSI controllers and chipsets. Major portions of the driver and driver
+development are shared between both Linux and FreeBSD. Support for the
+AIC-7xxx chipsets have been in the default Linux kernel since approximately
+linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
+2.1.0 or later.
 
-***  THIS SHOULD BE CONSIDERED BETA SOFTWARE  ***
+  Supported cards/chipsets
+  ------------------------
+    Adaptec Cards
+    -----------------------
+    AHA-274x               
+    AHA-2842               
+    AHA-2940               
+    AHA-2940W              
+    AHA-2940U              
+    AHA-2940UW             
+    AHA-2944D              
+    AHA-2944WD
+    AHA-3940
+    AHA-3940W
+    AHA-3985
+    AHA-3985W
 
-BACKGROUND & LIMITATIONS
+    Motherboard Chipsets
+    -----------------------
+    AIC-777x   
+    AIC-785x
+    AIC-787x
+    AIC-788x
 
-For various reasons, we ended up with one of these cards under the
-impression that support was soon forthcoming.  In mid-May, I asked
-Scott Ferris (the official person who's supposed to be writing this
-driver) what documentation he used, _finally_ got it from Adaptec,
-and started writing this driver.  It is now at what I would consider
-a stable state - it runs our news server and is battered by SCSI
-requests 24 hours a day without dying.  There are a few devices it
-reportedly doesn't like working with - those are being sorted out.  Due
-to some unexpected equipment loans, I am able to support this at least
-for the time being.
+    Bus Types
+    -----------------------
+    W - Wide SCSI, SCSI-3, 16bit bus, 68pin connector, will also support
+        SCSI-1/SCSI-2 50pin devices, transfer rates up to 20MB/s.
+    U - Ultra SCSI, transfer rates up to 40MB/s.
+    D - Differential SCSI.
+    T - Twin Channel SCSI. Up to 14 SCSI devices.
 
-YOU MUST HAVE THE BIOS ENABLED OR THIS WILL NOT WORK.  The BIOS extracts
-some configuration information that I cannot get to portably yet, as
-well as provides some self-tests which this driver does not attempt to
-duplicate.
+    AHA-274x - EISA SCSI controller
+    AHA-284x - VLB SCSI controller
+    AHA-29xx - PCI SCSI controller
+    AHA-394x - PCI controllers with two separate SCSI controllers on-board.
+    AHA-398x - PCI RAID controllers with three separate SCSI controllers
+               on-board.
 
-Scott's driver development is stalled for now, and after discussions
-with him, this is now officially out of "pre-alpha" status and into
-beta until the remaining device problems can be resolved.  The latest
-patches can be obtained via anonymous ftp from ftp.cpsc.ucalgary.ca in
-/pub/systems/linux/aha274x.
+    NOTE: The AHA-2920 is NOT a AIC-7xxx based controller, and is not
+          handled by this driver.
 
-It supports EISA 274x, VL-bus 284x, and PCI 294x, either single or twin-bus
-cards (but not the second SCSI bus of twin cards - see aha274x.c), and supports
-disconnection, synchronous SCSI, and scatter-gather.  Unlike previous
-versions, abort() and reset() are now implemented, and both hosts.c and
-aha274x.c should give a clean compile.  Code is now present to detect parity
-errors, but has not been tested.  Wide cards are not yet supported.
+  People
+  ------------------------
+    Justin T Gibbs  gibbs@freefall.FreeBSD.org     (BSD Driver Author)
+    Dan Eischen     deischen@iworks.InterWorks.org (Linux Driver Co-maintainer)
+    Dean Gehnert    deang@teleport.com             (Linux FTP/patch maintainer)
+    Jess Johnson    jester@frenzy.com              (AIC7xxx FAQ author)
 
-I wrote this using a 1.0.9 kernel.  Unfortunately, I'm getting tired of
-#ifdef'ing everything to handle two or three different evolutionary steps
-in the SCSI kernel code, so I've upgraded my system to 1.1.49, and will
-only leave in code to support versions from about 1.1.45 onward.
+    Special thanks go to John Aycock (aycock@cpsc.ucalgary.ca), the original
+    author of the driver. John has since retired from the project. Thanks
+    again for all his work!
 
-Thanks to patches supplied by Mark Olson <molson@tricord.com>, this driver
-will now work with the 284x series (the VL-bus version of this card).  The
-294x (PCI-bus) support is based on patches sent to me by Mark Olson and
-Alan Hourihane <alanh@fairlite.demon.co.uk>.
+  Mailing list
+  ------------------------
+    There is a mailing list available for users who want to track development
+    and converse with other users and developers. This list is for both
+    FreeBSD and Linux support of the AIC7xxx chipsets.
 
-Under protest, this driver is subject to the GPL - see the file
-COPYING for details.
+    To subscribe to the AIC7xxx mailing list send mail to the list server,
+    with "subscribe AIC7xxx" in the body (no Subject: required):
+        To: majordomo@FreeBSD.ORG
+        ---
+        subscribe AIC7xxx
 
-Thanks to the following people for bug fixes/code improvements (also
-thanks to the people who have sent me feedback):
+    To unsubscribe from the list, send mail to the list server with:
+        To: majordomo@FreeBSD.ORG
+        ---
+        unsubscribe AIC7xxx
 
-	"David F. Carlson" <dave@ee.rochester.edu>
-	Jimen Ching <jiching@wiliki.eng.hawaii.edu>
-	mday@artisoft.com (Matt Day)
-	"Dean W. Gehnert" <deang@ims.com>
-	Darcy Grant <darcy@cpsc.ucalgary.ca>
-	Alan Hourihane <alanh@fairlite.demon.co.uk>
-	isely@fncrd8.fnal.gov (Mike Isely)
-	Mike Jerger <jerger@ux1.cso.uiuc.edu>
-	tm@netcom.com (Toshiyasu Morita)
-	neal@interact.org (Neal Norwitz)
-	Mark Olson <molson@tricord.com>
-	map@europa.ecn.uoknor.edu (Michael A. Parker)
-	Thomas Scheunemann <thomas@dagobert.uni-duisburg.de>
-	Eric Youngdale <eric@aib.com>
+    Send regular messages and replies to: AIC7xxx@FreeBSD.ORG
+    
+  Command line options
+  ------------------------
+    "aic7xxx=no_reset" -  Eliminate the SCSI reset delay during startup.
+        Some SCSI devices need some extra time to reset.
 
-Special thanks to Drew Eckhardt <drew@kinglear.cs.Colorado.EDU> for
-fielding my questions about synchronous negotiation.  Steffen Moeller
-<smoe0024@rz.uni-hildesheim.de> sent me installation instructions which
-were previously included in this README.
+  /proc support
+  ------------------------
+    The /proc support for the AIC7xxx can be found in the /proc/scsi/aic7xxx/
+    directory. That directory contains a file for each SCSI controller in
+    the system. Each file presents the current configuration and transfer
+    statistics (enabled with #define in aic7xxx.c) for each controller.
 
-David Pirie <pirie@cpsc.ucalgary.ca> was nice enough to loan me his
-2842 card for a week so I could track down one bug, as well as his
-CD-ROM drive later, and also thanks to Doug Fortune at Riley's Data Share
-in Calgary, who arranged a long-term loan of a 2842 board for further work.
+    Thanks to Michael Neuffer for for his upper-level SCSI help, and
+    Matthew Jacob for statistics support.
 
-Many thanks to the fearless prerelease testers!  Dean Gehnert has been
-building Slackware boot disks for the driver, which are available from
-ftp.cpsc.ucalgary.ca in /pub/systems/linux/aha274x/slackware_boot.
+  FTP sites
+  ------------------------
+    ftp://ftp.teleport.com/users/deang/Linux/aic7xxx/
+      - Main Linux AIC7xxx driver release/pre-release site
+      - Experimental/development patches and bootdisks
+    ftp://ftp.dialnet.net/pub/linux/aic7xxx/
+      - US Linux mirror of Teleport site
+    ftp://ekf2.vsb.cz/pub/linux/kernel/aic7xxx/ftp.teleport.com/
+      - European Linux mirror of Teleport site
 
-Carl Riches <cgr@poplar1.cfr.washington.edu> has set up a mailing list
-for aic7xxx driver development.  To subscribe, send a message to
-aic7770-list-request@poplar1.cfr.washington.edu with a message body of:
 
-    subscribe AIC7770-LIST <your name here, without the angle brackets>
+Dean W. Gehnert
+deang@teleport.com
 
-Please direct questions and discussions to that list instead of me.  When
-sending bug reports, please include a description of your hardware, the
-release numbers displayed by the driver at boot time, and as accurate a
-facsimile of any error message you're mailing about.
+$Revision: 3.0 $
 
-John Aycock
-aycock@cpsc.ucalgary.ca

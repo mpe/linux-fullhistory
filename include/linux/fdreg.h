@@ -105,8 +105,8 @@
 #define FDC_8272A	0x20	/* Intel 8272a, NEC 765 */
 #define FDC_765ED	0x30	/* Non-Intel 1MB-compatible FDC, can't detect */
 #define FDC_82072	0x40	/* Intel 82072; 8272a + FIFO + DUMPREGS */
-#define FDC_82072A	0x50	/* 82072 on a Sparc */
-				/* Was: Original version of 82077AA, sans LOCK */
+#define FDC_82072A	0x50	/* 82072A (on Sparcs) */
+#define FDC_82077_ORIG	0x51	/* Original version of 82077AA, sans LOCK */
 #define FDC_82077	0x52	/* 82077AA-1 */
 #define FDC_82077_UNKN	0x53	/* Unknown 82077 variant */
 #define FDC_82078	0x60	/* 44pin 82078 or 64pin 82078SL */

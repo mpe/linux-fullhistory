@@ -37,7 +37,7 @@
 #ifndef CONFIG_NET_IPIP
 #define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
 #else
-#define MAX_HEADER	48		/* We need to allow for having tunnel headers */
+#define MAX_HEADER	80		/* We need to allow for having tunnel headers */
 #endif  /* IPIP */
 #else
 #define MAX_HEADER	48		/* Token Ring header needs 40 bytes ... 48 is aligned */ 

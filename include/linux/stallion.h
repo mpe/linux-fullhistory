@@ -44,7 +44,7 @@
  *	Define a ring queue structure for each port. This will hold the
  *	TX data waiting to be output. Characters are fed into this buffer
  *	from the line discipline (or even direct from user space!) and
- *	then fed into the UARTs during interrupts. Will use a clasic ring
+ *	then fed into the UARTs during interrupts. Will use a classic ring
  *	queue here for this. The good thing about this type of ring queue
  *	is that the head and tail pointers can be updated without interrupt
  *	protection - since "write" code only needs to change the head, and

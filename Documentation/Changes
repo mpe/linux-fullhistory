@@ -162,7 +162,7 @@ Named pipes
    Linux's handling of named pipes changed (it now does it The Right Way
 instead of the SunOS way ;-).  This broke some programs that depended
 on the SunOS behavior, most notably SysVinit.  If you're running 2.59
-or earlier, you will probably get a wierd error on shutdown in which
+or earlier, you will probably get a weird error on shutdown in which
 your computer shuts down fine but "INIT: error reading initrequest" or
 words to that effect scroll across your screen hundreds of times.  To
 fix, upgrade to

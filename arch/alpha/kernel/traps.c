@@ -87,11 +87,11 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 
 	      case 2: /* gentrap */
 		/*
-		 * The translation from the gentrap error code into a
-		 * siginfo structure (see /usr/include/sys/siginfo.h)
-		 * is missing as Linux does not presently support the
-		 * siginfo argument that is normally passed to a
-		 * signal handler.
+		 * The exception code should be passed on to the signal
+		 * handler as the second argument.  Linux doesn't do that
+		 * yet (also notice that Linux *always* behaves like
+		 * DEC Unix with SA_SIGINFO off; see DEC Unix man page
+		 * for sigaction(2)).
 		 */
 		switch ((long) regs.r16) {
 		      case GEN_INTOVF: case GEN_INTDIV: case GEN_FLTOVF:

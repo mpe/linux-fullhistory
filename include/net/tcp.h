@@ -21,10 +21,15 @@
 #include <linux/tcp.h>
 #include <net/checksum.h>
 
-#define MAX_SYN_SIZE	44 + MAX_HEADER + 15
-#define MAX_FIN_SIZE	40 + MAX_HEADER + 15
-#define MAX_ACK_SIZE	40 + MAX_HEADER + 15
-#define MAX_RESET_SIZE	40 + MAX_HEADER + 15
+/*
+ * 40 is maximal IP options size
+ * 4  is TCP option size (MSS)
+ */
+#define MAX_SYN_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + 4 + MAX_HEADER + 15)
+#define MAX_FIN_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + MAX_HEADER + 15)
+#define MAX_ACK_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + MAX_HEADER + 15)
+#define MAX_RESET_SIZE	(sizeof(struct iphdr) + 40 + sizeof(struct tcphdr) + MAX_HEADER + 15)
+
 #define MAX_WINDOW	32767		/* Never offer a window over 32767 without using
 					   window scaling (not yet supported). Some poor
 					   stacks do signed 16bit maths! */

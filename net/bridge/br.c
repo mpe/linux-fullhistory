@@ -82,7 +82,7 @@ static struct notifier_block br_dev_notifier={
 /** Elements of Procedure (4.6) **/
 
 /*
- * this section of code was gratiously borrowed from the IEEE 802.1d
+ * this section of code was graciously borrowed from the IEEE 802.1d
  * specification section 4.9.1 starting on pg 69.  It has been
  * modified somewhat to fit within out framework and structure.  It
  * implements the spanning tree algorithm that is the heart of the

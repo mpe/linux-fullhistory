@@ -691,7 +691,7 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	 */
 
 	tmp = sk->prot->build_header(buff, newsk->saddr, newsk->daddr, &ndev,
-			       IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&newsk->ip_route_cache);
+			       IPPROTO_TCP, newsk->opt, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl,&newsk->ip_route_cache);
 
 	/*
 	 *	Something went wrong. 

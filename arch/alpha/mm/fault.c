@@ -18,6 +18,22 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/pgtable.h>
+#include <asm/mmu_context.h>
+
+unsigned long asn_cache = ASN_FIRST_VERSION;
+
+#ifndef BROKEN_ASN
+/*
+ * Select a new ASN and reload the context. This is
+ * not inlined as this expands to a pretty large
+ * function.
+ */
+void get_new_asn_and_reload(struct task_struct *tsk, struct mm_struct *mm)
+{
+	get_new_mmu_context(tsk, mm, asn_cache);
+	reload_context(tsk);
+}
+#endif
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 

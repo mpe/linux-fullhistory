@@ -436,9 +436,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 		if (FD_ISSET(i,&current->files->close_on_exec))
 			sys_close(i);
 	FD_ZERO(&current->files->close_on_exec);
-	if (last_task_used_math == current)
-		last_task_used_math = NULL;
-	current->used_math = 0;
 }
 
 /* 
@@ -447,39 +444,60 @@ void flush_old_exec(struct linux_binprm * bprm)
  */
 int prepare_binprm(struct linux_binprm *bprm)
 {
-	int retval,i;
-	if (!S_ISREG(bprm->inode->i_mode))  /* must be regular file */
+	int mode;
+	int retval,id_change;
+
+	mode = bprm->inode->i_mode;
+	if (!S_ISREG(mode))			/* must be regular file */
 		return -EACCES;
-	if (IS_NOEXEC(bprm->inode))         /* FS mustn't be mounted noexec */
+	if (!(mode & 0111))			/* with at least _one_ execute bit set */
+		return -EACCES;
+	if (IS_NOEXEC(bprm->inode))		/* FS mustn't be mounted noexec */
 		return -EACCES;
 	if (!bprm->inode->i_sb)
 		return -EACCES;
-	i = bprm->inode->i_mode;
-	if (IS_NOSUID(bprm->inode) && 
-		(((i & S_ISUID) && bprm->inode->i_uid != current->euid) 
-			|| ((i & S_ISGID) && !in_group_p(bprm->inode->i_gid))) && !suser())
-		return -EPERM;
-	/* make sure we don't let suid, sgid files be ptraced. */
-	if (current->flags & PF_PTRACED) {
-		bprm->e_uid = current->euid;
-		bprm->e_gid = current->egid;
-	} else {
-		bprm->e_uid = (i & S_ISUID) ? bprm->inode->i_uid : current->euid;
-		/*
-		 * If setgid is set but no group execute bit then this
-		 * is a candidate for mandatory locking, not a setgid
-		 * executable.
-		 */
-		bprm->e_gid = ((i & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) ?
-			bprm->inode->i_gid : current->egid;
-	}
 	if ((retval = permission(bprm->inode, MAY_EXEC)) != 0)
 		return retval;
-	if (!(bprm->inode->i_mode & 0111) && fsuser())
-		return -EACCES;
 	/* better not execute files which are being written to */
 	if (bprm->inode->i_writecount > 0)
 		return -ETXTBSY;
+
+	bprm->e_uid = current->euid;
+	bprm->e_gid = current->egid;
+	id_change = 0;
+
+	/* Set-uid? */
+	if (mode & S_ISUID) {
+		bprm->e_uid = bprm->inode->i_uid;
+		if (bprm->e_uid != current->euid)
+			id_change = 1;
+	}
+
+	/* Set-gid? */
+	/*
+	 * If setgid is set but no group execute bit then this
+	 * is a candidate for mandatory locking, not a setgid
+	 * executable.
+	 */
+	if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) {
+		bprm->e_gid = bprm->inode->i_gid;
+		if (!in_group_p(bprm->e_gid))
+			id_change = 1;
+	}
+
+	if (id_change) {
+		/* We can't suid-execute if we're sharing parts of the executable */
+		/* or if we're being traced (or if suid execs are not allowed)    */
+		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
+		if (IS_NOSUID(bprm->inode)
+		    || (current->flags & PF_PTRACED)
+		    || (current->fs->count > 1)
+		    || (current->sig->count > 1)
+		    || (current->files->count > 1)) {
+			if (!suser())
+				return -EPERM;
+		}
+	}
 
 	memset(bprm->buf,0,sizeof(bprm->buf));
 	return read_exec(bprm->inode,0,bprm->buf,128,1);

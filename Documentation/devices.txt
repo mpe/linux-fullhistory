@@ -342,9 +342,9 @@ an unreasonable effort.
 		  0 = /dev/sjcd		Sanyo CD-ROM
 
  19 char	Cyclades serial card
-		 32 = /dev/ttyC0	First Cyclades port
+		 0 = /dev/ttyC0		First Cyclades port
 		      ...
-		 63 = /dev/ttyC31	32nd Cyclades port
+		 31 = /dev/ttyC31	32nd Cyclades port
 		
 		It would make more sense for these to start at 0...
 
@@ -360,9 +360,9 @@ an unreasonable effort.
 		mirror devices.
 
  20 char	Cyclades serial card - alternate devices
-		 32 = /dev/cub0		Callout device corresponding to ttyC0
+		 0 = /dev/cub0		Callout device corresponding to ttyC0
 		      ...
-		 63 = /dev/cub31	Callout device corresponding to ttyC31
+		 31 = /dev/cub31	Callout device corresponding to ttyC31
     block	Hitachi CD-ROM (under development)
 		  0 = /dev/hitcd	Hitachi CD-ROM
 
