@@ -19,6 +19,7 @@ extern void usb_lock_all_devices(void);
 extern void usb_unlock_all_devices(void);
 
 extern void usb_kick_khubd(struct usb_device *dev);
+extern void usb_resume_root_hub(struct usb_device *dev);
 
 /* for labeling diagnostics */
 extern const char *usbcore_name;

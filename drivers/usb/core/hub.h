@@ -217,6 +217,7 @@ struct usb_hub {
 
 	unsigned		quiescing:1;
 	unsigned		activating:1;
+	unsigned		resume_root_hub:1;
 
 	unsigned		has_indicators:1;
 	enum hub_led_mode	indicator[USB_MAXCHILDREN];

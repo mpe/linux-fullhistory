@@ -1442,7 +1442,31 @@ static int hcd_hub_resume (struct usb_bus *bus)
 	return 0;
 }
 
+/**
+ * usb_hcd_resume_root_hub - called by HCD to resume its root hub 
+ * @hcd: host controller for this root hub
+ *
+ * The USB host controller calls this function when its root hub is
+ * suspended (with the remote wakeup feature enabled) and a remote
+ * wakeup request is received.  It queues a request for khubd to
+ * resume the root hub.
+ */
+void usb_hcd_resume_root_hub (struct usb_hcd *hcd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave (&hcd_root_hub_lock, flags);
+	if (hcd->rh_registered)
+		usb_resume_root_hub (hcd->self.root_hub);
+	spin_unlock_irqrestore (&hcd_root_hub_lock, flags);
+}
+
+#else
+void usb_hcd_resume_root_hub (struct usb_hcd *hcd)
+{
+}
 #endif
+EXPORT_SYMBOL_GPL(usb_hcd_resume_root_hub);
 
 /*-------------------------------------------------------------------------*/
 

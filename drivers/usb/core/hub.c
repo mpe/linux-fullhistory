@@ -1961,8 +1961,17 @@ static int hub_resume(struct usb_interface *intf)
 	}
 	intf->dev.power.power_state = PMSG_ON;
 
+	hub->resume_root_hub = 0;
 	hub_activate(hub);
 	return 0;
+}
+
+void usb_resume_root_hub(struct usb_device *hdev)
+{
+	struct usb_hub *hub = hdev_to_hub(hdev);
+
+	hub->resume_root_hub = 1;
+	kick_khubd(hub);
 }
 
 #else	/* !CONFIG_USB_SUSPEND */
@@ -2621,7 +2630,12 @@ static void hub_events(void)
 				(u16) hub->event_bits[0]);
 
 		usb_get_intf(intf);
+		i = hub->resume_root_hub;
 		spin_unlock_irq(&hub_event_lock);
+
+		/* Is this is a root hub wanting to be resumed? */
+		if (i)
+			usb_resume_device(hdev);
 
 		/* Lock the device, then check to see if we were
 		 * disconnected while waiting for the lock to succeed. */
