@@ -741,6 +741,119 @@ qeth_dev_layer2_store(struct device *dev, const char *buf, size_t count)
 static DEVICE_ATTR(layer2, 0644, qeth_dev_layer2_show,
 		   qeth_dev_layer2_store);
 
+static ssize_t
+qeth_dev_blkt_show(char *buf, struct qeth_card *card, int value )
+{
+
+	if (!card)
+		return -EINVAL;
+
+	return sprintf(buf, "%i\n", value);
+}
+
+static ssize_t
+qeth_dev_blkt_store(struct qeth_card *card, const char *buf, size_t count,
+			  int *value, int max_value)
+{
+	char *tmp;
+	int i;
+
+	if (!card)
+		return -EINVAL;
+
+	if ((card->state != CARD_STATE_DOWN) &&
+	    (card->state != CARD_STATE_RECOVER))
+		return -EPERM;
+
+	i = simple_strtoul(buf, &tmp, 10);
+	if (i <= max_value) {
+		*value = i;
+	} else {
+		PRINT_WARN("blkt total time: write values between"
+			   " 0 and %d to this file!\n", max_value);
+		return -EINVAL;
+	}
+	return count;
+}
+
+static ssize_t
+qeth_dev_blkt_total_show(struct device *dev, char *buf)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	return qeth_dev_blkt_show(buf, card, card->info.blkt.time_total);
+}
+
+
+static ssize_t
+qeth_dev_blkt_total_store(struct device *dev, const char *buf, size_t count)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	return qeth_dev_blkt_store(card, buf, count,
+				   &card->info.blkt.time_total,1000);
+}
+
+
+
+static DEVICE_ATTR(total, 0644, qeth_dev_blkt_total_show,
+		   qeth_dev_blkt_total_store);
+
+static ssize_t
+qeth_dev_blkt_inter_show(struct device *dev, char *buf)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	return qeth_dev_blkt_show(buf, card, card->info.blkt.inter_packet);
+}
+
+
+static ssize_t
+qeth_dev_blkt_inter_store(struct device *dev, const char *buf, size_t count)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	return qeth_dev_blkt_store(card, buf, count,
+				   &card->info.blkt.inter_packet,100);
+}
+
+static DEVICE_ATTR(inter, 0644, qeth_dev_blkt_inter_show,
+		   qeth_dev_blkt_inter_store);
+
+static ssize_t
+qeth_dev_blkt_inter_jumbo_show(struct device *dev, char *buf)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	return qeth_dev_blkt_show(buf, card,
+				  card->info.blkt.inter_packet_jumbo);
+}
+
+
+static ssize_t
+qeth_dev_blkt_inter_jumbo_store(struct device *dev, const char *buf, size_t count)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	return qeth_dev_blkt_store(card, buf, count,
+				   &card->info.blkt.inter_packet_jumbo,100);
+}
+
+static DEVICE_ATTR(inter_jumbo, 0644, qeth_dev_blkt_inter_jumbo_show,
+		   qeth_dev_blkt_inter_jumbo_store);
+
+static struct device_attribute * qeth_blkt_device_attrs[] = {
+	&dev_attr_total,
+	&dev_attr_inter,
+	&dev_attr_inter_jumbo,
+	NULL,
+};
+
+static struct attribute_group qeth_device_blkt_group = {
+	.name = "blkt",
+	.attrs = (struct attribute **)qeth_blkt_device_attrs,
+};
+
 static struct device_attribute * qeth_device_attrs[] = {
 	&dev_attr_state,
 	&dev_attr_chpid,
@@ -1516,6 +1629,8 @@ qeth_create_device_attributes(struct device *dev)
 		sysfs_remove_group(&dev->kobj, &qeth_device_ipato_group);
 		sysfs_remove_group(&dev->kobj, &qeth_device_vipa_group);
 	}
+	if ((ret = sysfs_create_group(&dev->kobj, &qeth_device_blkt_group)))
+		return ret;
 
 	return ret;
 }
@@ -1527,6 +1642,7 @@ qeth_remove_device_attributes(struct device *dev)
 	sysfs_remove_group(&dev->kobj, &qeth_device_ipato_group);
 	sysfs_remove_group(&dev->kobj, &qeth_device_vipa_group);
 	sysfs_remove_group(&dev->kobj, &qeth_device_rxip_group);
+	sysfs_remove_group(&dev->kobj, &qeth_device_blkt_group);
 }
 
 /**********************/

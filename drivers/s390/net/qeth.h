@@ -668,6 +668,14 @@ struct qeth_reply {
 #define QETH_BROADCAST_WITH_ECHO    1
 #define QETH_BROADCAST_WITHOUT_ECHO 2
 
+struct qeth_card_blkt {
+	int time_total;
+	int inter_packet;
+	int inter_packet_jumbo;
+};
+
+
+
 struct qeth_card_info {
 	unsigned short unit_addr2;
 	unsigned short cula;
@@ -686,6 +694,7 @@ struct qeth_card_info {
 	int max_mtu;
 	int broadcast_capable;
 	int unique_id;
+	struct qeth_card_blkt blkt;
 	__u32 csum_mask;
 };
 

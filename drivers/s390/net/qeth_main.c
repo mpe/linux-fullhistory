@@ -2868,17 +2868,9 @@ qeth_qdio_output_handler(struct ccw_device * ccwdev, unsigned int status,
 #endif
 }
 
-static char*
-qeth_create_qib_param_field(struct qeth_card *card)
+static void
+qeth_create_qib_param_field(struct qeth_card *card, char *param_field)
 {
-	char *param_field;
-
-	param_field = kmalloc(QDIO_MAX_BUFFERS_PER_Q * sizeof(char),
-			      GFP_KERNEL);
- 	if (!param_field)
-		return NULL;
-
- 	memset(param_field, 0, QDIO_MAX_BUFFERS_PER_Q * sizeof(char));
 
 	param_field[0] = _ascebc['P'];
 	param_field[1] = _ascebc['C'];
@@ -2887,8 +2879,18 @@ qeth_create_qib_param_field(struct qeth_card *card)
 	*((unsigned int *) (&param_field[4])) = QETH_PCI_THRESHOLD_A(card);
 	*((unsigned int *) (&param_field[8])) = QETH_PCI_THRESHOLD_B(card);
 	*((unsigned int *) (&param_field[12])) = QETH_PCI_TIMER_VALUE(card);
+}
 
-	return param_field;
+static void
+qeth_create_qib_param_field_blkt(struct qeth_card *card, char *param_field)
+{
+	param_field[16] = _ascebc['B'];
+        param_field[17] = _ascebc['L'];
+        param_field[18] = _ascebc['K'];
+        param_field[19] = _ascebc['T'];
+        *((unsigned int *) (&param_field[20])) = card->info.blkt.time_total;
+        *((unsigned int *) (&param_field[24])) = card->info.blkt.inter_packet;
+        *((unsigned int *) (&param_field[28])) = card->info.blkt.inter_packet_jumbo;
 }
 
 static void
@@ -3148,9 +3150,16 @@ qeth_qdio_establish(struct qeth_card *card)
 	int rc;
 
 	QETH_DBF_TEXT(setup, 2, "qdioest");
-	qib_param_field = qeth_create_qib_param_field(card);
-	if (!qib_param_field)
+
+	qib_param_field = kmalloc(QDIO_MAX_BUFFERS_PER_Q * sizeof(char),
+			      GFP_KERNEL);
+ 	if (!qib_param_field)
 		return -ENOMEM;
+
+ 	memset(qib_param_field, 0, QDIO_MAX_BUFFERS_PER_Q * sizeof(char));
+
+	qeth_create_qib_param_field(card, qib_param_field);
+	qeth_create_qib_param_field_blkt(card, qib_param_field);
 
 	in_sbal_ptrs = kmalloc(QDIO_MAX_BUFFERS_PER_Q * sizeof(void *),
 			       GFP_KERNEL);
