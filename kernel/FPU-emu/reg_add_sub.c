@@ -17,7 +17,8 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
-
+#include "control_w.h"
+#include "fpu_system.h"
 
 
 void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
@@ -41,28 +42,55 @@ void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 	{
 	  diff = a->sigh - b->sigh;  /* Works only if ms bits are identical */
 	  if (!diff)
-	    diff = a->sigl > b->sigl;
+	    {
+	      diff = a->sigl > b->sigl;
+	      if (!diff)
+		diff = -(a->sigl < b->sigl);
+	    }
 	}
       
       if (diff > 0)
 	{
 	  reg_u_sub(a, b, dest);
 	  dest->sign = a->sign;
-	  return;
+	}
+      else if ( diff == 0 )
+	{
+	  reg_move(&CONST_Z, dest);
+	  /* sign depends upon rounding mode */
+	  dest->sign = ((control_word & CW_RC) != RC_DOWN)
+	    ? SIGN_POS : SIGN_NEG;
 	}
       else
 	{
 	  reg_u_sub(b, a, dest);
 	  dest->sign = b->sign;
-	  return;
 	}
+      return;
     }
   else
     {
       if ( (a->tag == TW_NaN) || (b->tag == TW_NaN) )
 	{ real_2op_NaN(a, b, dest); return; }
       else if (a->tag == TW_Zero)
-	{ reg_move(b, dest); return; }
+	{
+	  if (b->tag == TW_Zero)
+	    {
+	      char different_signs = a->sign ^ b->sign;
+	      /* Both are zero, result will be zero. */
+	      reg_move(a, dest);
+	      if (different_signs)
+		{
+		  /* Signs are different. */
+		  /* Sign of answer depends upon rounding mode. */
+		  dest->sign = ((control_word & CW_RC) != RC_DOWN)
+		    ? SIGN_POS : SIGN_NEG;
+		}
+	    }
+	  else
+	    reg_move(b, dest);
+	  return;
+	}
       else if (b->tag == TW_Zero)
 	{ reg_move(a, dest); return; }
       else if (a->tag == TW_Infinity)
@@ -97,7 +125,11 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 	{
 	  diff = a->sigh - b->sigh;  /* Works only if ms bits are identical */
 	  if (!diff)
-	    diff = a->sigl > b->sigl;
+	    {
+	      diff = a->sigl > b->sigl;
+	      if (!diff)
+		diff = -(a->sigl < b->sigl);
+	    }
 	}
       
       switch (a->sign*2 + b->sign)
@@ -108,6 +140,13 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 	    {
 	      reg_u_sub(a, b, dest);
 	      dest->sign = a->sign;
+	    }
+	  else if ( diff == 0 )
+	    {
+	      reg_move(&CONST_Z, dest);
+	      /* sign depends upon rounding mode */
+	      dest->sign = ((control_word & CW_RC) != RC_DOWN)
+		? SIGN_POS : SIGN_NEG;
 	    }
 	  else
 	    {
@@ -130,7 +169,23 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
       if ( (a->tag == TW_NaN) || (b->tag == TW_NaN) )
 	{ real_2op_NaN(a, b, dest); return; }
       else if (b->tag == TW_Zero)
-	{ reg_move(a, dest); return; }
+	{ 
+	  if (a->tag == TW_Zero)
+	    {
+	      char same_signs = !(a->sign ^ b->sign);
+	      /* Both are zero, result will be zero. */
+	      reg_move(a, dest); /* Answer for different signs. */
+	      if (same_signs)
+		{
+		  /* Sign depends upon rounding mode */
+		  dest->sign = ((control_word & CW_RC) != RC_DOWN)
+		    ? SIGN_POS : SIGN_NEG;
+		}
+	    }
+	  else
+	    reg_move(a, dest);
+	  return;
+	}
       else if (a->tag == TW_Zero)
 	{
 	  reg_move(b, dest);

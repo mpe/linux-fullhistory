@@ -345,11 +345,11 @@ void minix_read_inode(struct inode * inode)
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &minix_symlink_inode_operations;
 	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &minix_chrdev_inode_operations;
+		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &minix_blkdev_inode_operations;
+		inode->i_op = &blkdev_inode_operations;
 	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &minix_fifo_inode_operations;
+		inode->i_op = &fifo_inode_operations;
 		inode->i_pipe = 1;
 		PIPE_BASE(*inode) = NULL;
 		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
@@ -373,8 +373,11 @@ void minix_write_inode(struct inode * inode)
 	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks + inode->i_sb->u.minix_sb.s_zmap_blocks +
 		(ino-1)/MINIX_INODES_PER_BLOCK;
-	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE)))
-		panic("unable to read i-node block");
+	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE))) {
+		printk("unable to read i-node block\n");
+		inode->i_dirt = 0;
+		return;
+	}
 	raw_inode = ((struct minix_inode *)bh->b_data) +
 		(ino-1)%MINIX_INODES_PER_BLOCK;
 	raw_inode->i_mode = inode->i_mode;

@@ -37,7 +37,7 @@ math.a: $(OBJS)
 	sync
 
 clean:
-	rm -f core *.o *.a *.s *~
+	rm -f core *.o *.a *.s
 
 dep:
 	$(CPP) -M *.c *.S > .depend

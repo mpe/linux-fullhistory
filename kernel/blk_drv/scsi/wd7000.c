@@ -506,24 +506,7 @@ void wd7000_revision(void)
 }
 
 
-static const char *wd_bases[] = {
-				 (char *)0xde000,
-				 (char *)0xdc000,
-				 (char *)0xda000,
-				 (char *)0xd8000,
-				 (char *)0xd6000,
-				 (char *)0xd4000,
-				 (char *)0xd2000,
-				 (char *)0xd0000,
-				 (char *)0xce000,
-				 (char *)0xcc000,
-				 (char *)0xca000,
-				 (char *)0xc8000,
-				 (char *)0xc6000,
-				 (char *)0xc4000,
-				 (char *)0xc2000,
-				 (char *)0xc0000
-				};
+static const char *wd_bases[] = {(char *)0xce000};
 typedef struct {
     char * signature;
     unsigned offset;

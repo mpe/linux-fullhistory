@@ -481,6 +481,8 @@ dev_tint( struct device *dev)
 	  sti();
 	  /* this will send it through the process again. */
 	  dev->queue_xmit (skb, dev, -i-1);
+	  if (dev->tbusy)
+	  	return;
 	}
     }
 }

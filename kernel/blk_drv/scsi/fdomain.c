@@ -1,6 +1,6 @@
 /* fdomain.c -- Future Domain TMC-1660/TMC-1680 driver
  * Created: Sun May  3 18:53:19 1992 by faith
- * Revised: Sun Jan 10 01:23:29 1993 by root
+ * Revised: Thu Feb 18 21:02:12 1993 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993 Rickard E. Faith
  *
@@ -108,7 +108,7 @@
 #include <asm/system.h>
 #include <linux/errno.h>
 
-#define VERSION          "3.3"	/* Change with each revision */
+#define VERSION          "3.5"	/* Change with each revision */
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -169,7 +169,6 @@ static int               this_host = 0;
 static int               can_queue = QUEUE;
 
 static volatile int      in_command = 0;
-static volatile int      in_interrupt_code = 0;
 static Scsi_Cmnd         *current_SC = NULL;
 
 enum { non_queueing   = 0x01,
@@ -646,7 +645,6 @@ void my_done( int error )
 {
    if (in_command) {
       in_command = 0;
-      in_interrupt_code = 0;
       outb( 0x00, Interrupt_Cntl_port );
       fdomain_make_bus_idle();
       current_SC->result = error;
@@ -664,13 +662,13 @@ void fdomain_16x0_intr( int unused )
    unsigned data_count;
 
    sti();
-
-   if (in_interrupt_code)
-	 panic( "SCSI (Future Domain): fdomain_16x0_intr() NOT REENTRANT!\n" );
-   else
-	 ++in_interrupt_code;
    
    outb( 0x00, Interrupt_Cntl_port );
+
+   /* We usually have one spurious interrupt after each command.  Ignore it. */
+   if (!in_command || !current_SC) {	/* Spurious interrupt */
+      return;
+   }
 
    if (current_SC->SCp.phase & aborted) {
 #if EVERY_ACCESS
@@ -690,12 +688,6 @@ void fdomain_16x0_intr( int unused )
       } else {
 	 my_done( current_SC->result << 16 );
       }
-      return;
-   }
-
-   /* We usually have one spurious interrupt after each command.  Ignore it. */
-   if (!in_command) {		/* Spurious interrupt */
-      in_interrupt_code = 0;
       return;
    }
 
@@ -735,7 +727,6 @@ void fdomain_16x0_intr( int unused )
       /* Stop arbitration (also set FIFO for output and enable parity) */
       outb( 0xd0 | PARITY_MASK, TMC_Cntl_port );
 
-      in_interrupt_code = 0;
       return;
    } else if (current_SC->SCp.phase & in_selection) {
       status = inb( SCSI_Status_port );
@@ -756,7 +747,6 @@ void fdomain_16x0_intr( int unused )
        }
       }
       current_SC->SCp.phase = in_other;
-      in_interrupt_code = 0;
       outb( 0x90 | FIFO_COUNT, Interrupt_Cntl_port );
 #if RESELECTION
       outb( 0x88, SCSI_Cntl_port );
@@ -979,7 +969,6 @@ void fdomain_16x0_intr( int unused )
 #endif
       
    } else {
-      in_interrupt_code = 0;
       if (current_SC->SCp.phase & disconnect) {
 	 outb( 0xd0 | FIFO_COUNT, Interrupt_Cntl_port );
 	 outb( 0x00, SCSI_Cntl_port );
@@ -1239,9 +1228,8 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
 #endif
 
 #if DEBUG_ABORT
-   printk( "Phase = %d, flag = %d, target = %d cmnd = 0x%02x pieces = %d size = %u\n",
+   printk( "Phase = %d, target = %d cmnd = 0x%02x pieces = %d size = %u\n",
     current_SC->SCp.phase,
-    in_interrupt_code,
     current_SC->target,
     *(unsigned char *)current_SC->cmnd,
     current_SC->use_sg,

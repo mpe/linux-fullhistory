@@ -336,7 +336,8 @@ static struct file_operations memory_fops = {
 
 long chr_dev_init(long mem_start, long mem_end)
 {
-	chrdev_fops[1] = &memory_fops;
+	if (register_chrdev(1,"mem",&memory_fops))
+		printk("unable to get major 1 for memory devs\n");
 	mem_start = tty_init(mem_start);
 	mem_start = lp_init(mem_start);
 	mem_start = mouse_init(mem_start);

@@ -21,14 +21,6 @@
 
 extern void fcntl_remove_locks(struct task_struct *, struct file *);
 
-struct file_operations * chrdev_fops[MAX_CHRDEV] = {
-	NULL,
-};
-
-struct file_operations * blkdev_fops[MAX_BLKDEV] = {
-	NULL,
-};
-
 int sys_ustat(int dev, struct ustat * ubuf)
 {
 	return -ENOSYS;
@@ -452,102 +444,19 @@ int sys_close(unsigned int fd)
 }
 
 /*
- * This routine is used by vhangup.  It send's sigkill to everything
- * waiting on a particular wait_queue.  It assumes root privledges.
- * We don't want to destroy the wait queue here, because the caller
- * should call wake_up immediately after calling kill_wait.
- */
-static void kill_wait(struct wait_queue **q, int sig)
-{
-	struct wait_queue *next;
-	struct wait_queue *tmp;
-	struct task_struct *p;
-
-	if (!q || !(next = *q))
-		return;
-	do { 
-		tmp = next;
-		next = tmp->next;
-		if ((p = tmp->task) != NULL)
-			send_sig (sig, p , 1);
-	} while (next && next != *q);
-}
-
-/*
- * This routine looks through all the process's and closes any
- * references to the current processes tty.  To avoid problems with
- * process sleeping on an inode which has already been iput, anyprocess
- * which is sleeping on the tty is sent a sigkill (It's probably a rogue
- * process.)  Also no process should ever have /dev/console as it's
- * controlling tty, or have it open for reading.  So we don't have to
- * worry about messing with all the daemons abilities to write messages
- * to the console.  (Besides they should be using syslog.)
+ * This routine simulates a hangup on the tty, to arrange that users
+ * are given clean terminals at login time.
  */
 int sys_vhangup(void)
 {
-	int j;
-	struct task_struct ** process;
-	struct file *filep;
-	struct inode *inode;
 	struct tty_struct *tty;
-	extern int kill_pg (int pgrp, int sig, int priv);
 
 	if (!suser())
 		return -EPERM;
 	/* See if there is a controlling tty. */
 	if (current->tty < 0)
 		return 0;
-	/* send the SIGHUP signal. */
-	tty = TTY_TABLE(current->tty);
-	if (tty && tty->pgrp > 0)
-		kill_pg(tty->pgrp, SIGHUP, 0);
-
-	for (process = task + 0; process < task + NR_TASKS; process++) {
-		for (j = 0; j < NR_OPEN; j++) {
-			if (!*process)
-				break;
-			if (!(filep = (*process)->filp[j]))
-				continue;
-			if (!(inode = filep->f_inode))
-				continue;
-	 		if (!S_ISCHR(inode->i_mode))
-				continue;
-			if ((MAJOR(inode->i_rdev) == 5 ||
-			     MAJOR(inode->i_rdev) == 4 ) &&
-			    (MAJOR(filep->f_rdev) == 4 &&
-			     MINOR(filep->f_rdev) == MINOR (current->tty))) {
-		  /* so now we have found something to close.  We
-		     need to kill every process waiting on the
-		     inode. */
-				(*process)->filp[j] = NULL;
-				kill_wait (&inode->i_wait, SIGKILL);
-
-		  /* now make sure they are awake before we close the
-		     file. */
-
-				wake_up (&inode->i_wait);
-
-		  /* finally close the file. */
-
-				FD_CLR(j, &(*process)->close_on_exec);
-				close_fp (filep);
-			}
-		}
-	/* can't let them keep a reference to it around.
-	   But we can't touch current->tty until after the
-	   loop is complete. */
-
-		if (*process && (*process)->tty == current->tty && *process != current) {
-			(*process)->tty = -1;
-		}
-	}
-   /* need to do tty->session = 0 */
 	tty = TTY_TABLE(MINOR(current->tty));
-	if (tty) {
-		tty->session = 0;
-		tty->pgrp = -1;
-		current->tty = -1;
-	}
+	tty_hangup(tty);
 	return 0;
 }
-

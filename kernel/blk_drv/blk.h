@@ -1,7 +1,8 @@
 #ifndef _BLK_H
 #define _BLK_H
 
-#define NR_BLK_DEV	12
+#include <linux/fs.h>
+
 /*
  * NR_REQUEST is the number of entries in the request-queue.
  * NOTE that writes may use only the low 2/3 of these: reads
@@ -62,12 +63,12 @@ struct sec_size {
 #define SECTOR_MASK ((1 << (BLOCK_SIZE_BITS - 9)) -1)
 #define SUBSECTOR(block) ((block) & SECTOR_MASK)
 
-extern struct sec_size * blk_sec[NR_BLK_DEV];
-extern struct blk_dev_struct blk_dev[NR_BLK_DEV];
+extern struct sec_size * blk_sec[MAX_BLKDEV];
+extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern struct request request[NR_REQUEST];
 extern struct wait_queue * wait_for_request;
 
-extern int * blk_size[NR_BLK_DEV];
+extern int * blk_size[MAX_BLKDEV];
 
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern int is_read_only(int dev);

@@ -146,6 +146,8 @@ no_psmouse:
 ! now we want to move to protected mode ...
 
 	cli			! no interrupts allowed !
+	mov	al,#0x80	! disable NMI for the bootup sequence
+	out	#0x70,al
 
 ! first we move the system to it's rightful place
 

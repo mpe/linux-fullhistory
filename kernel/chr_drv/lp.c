@@ -233,7 +233,8 @@ long lp_init(long kmem_start)
 	unsigned int testvalue = 0;
 	int count = 0;
 
-	chrdev_fops[6] = &lp_fops;
+	if (register_chrdev(6,"lp",&lp_fops))
+		printk("unable to get major 6 for line printer\n");
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {
 		/* write to port & read back to check */

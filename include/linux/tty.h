@@ -138,6 +138,7 @@ extern int get_tty_queue(struct tty_queue * queue);
 #define START_CHAR(tty) ((tty)->termios->c_cc[VSTART])
 #define STOP_CHAR(tty) ((tty)->termios->c_cc[VSTOP])
 #define SUSPEND_CHAR(tty) ((tty)->termios->c_cc[VSUSP])
+#define LNEXT_CHAR(tty)	((tty)->termios->c_cc[VLNEXT])
 
 #define _L_FLAG(tty,f)	((tty)->termios->c_lflag & f)
 #define _I_FLAG(tty,f)	((tty)->termios->c_iflag & f)
@@ -188,7 +189,7 @@ struct tty_struct {
 	struct termios *termios;
 	int pgrp;
 	int session;
-	unsigned char stopped:1, status_changed:1, packet:1;
+	unsigned char stopped:1, status_changed:1, packet:1, lnext:1;
 	unsigned char ctrl_status;
 	short line;
 	int disc;

@@ -1224,7 +1224,10 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
 {
   int i;
 
-  chrdev_fops[MAJOR_NR] = &st_fops;
+  if (register_chrdev(MAJOR_NR,"st",&st_fops)) {
+    printk("Unable to get major %d for SCSI tapes\n",MAJOR_NR);
+    return mem_start;
+  }
   if (NR_ST == 0) return mem_start;
 
 #ifdef DEBUG

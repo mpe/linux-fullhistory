@@ -213,6 +213,7 @@ static struct file_operations hung_up_tty_fops = {
 void tty_hangup(struct tty_struct * tty)
 {
 	struct file * filp;
+	struct task_struct **p;
 	int dev;
 
 	if (!tty)
@@ -233,6 +234,12 @@ void tty_hangup(struct tty_struct * tty)
 	wake_up_interruptible(&tty->write_q.proc_list);
 	if (tty->session > 0)
 		kill_sl(tty->session,SIGHUP,1);
+	tty->session = 0;
+	tty->pgrp = -1;
+ 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		if ((*p) && (*p)->tty == tty->line)
+			(*p)->tty = -1;
+	}
 }
 
 void tty_unhangup(struct file *filp)
@@ -463,9 +470,10 @@ void copy_to_cooked(struct tty_struct * tty)
 			c=13;
 		if (I_UCLC(tty))
 			c=tolower(c);
-		if (L_CANON(tty)) {
-			if ((KILL_CHAR(tty) != __DISABLED_CHAR) &&
-			    (c==KILL_CHAR(tty))) {
+		if (c == __DISABLED_CHAR)
+			tty->lnext = 1;
+		if (L_CANON(tty) && !tty->lnext) {
+			if (c == KILL_CHAR(tty)) {
 				/* deal with killing the input line */
 				while(!(EMPTY(&tty->secondary) ||
 					(c=LAST(&tty->secondary))==10 ||
@@ -485,8 +493,7 @@ void copy_to_cooked(struct tty_struct * tty)
 				}
 				continue;
 			}
-			if ((ERASE_CHAR(tty) != __DISABLED_CHAR) &&
-			    (c==ERASE_CHAR(tty))) {
+			if (c == ERASE_CHAR(tty)) {
 				if (EMPTY(&tty->secondary) ||
 				   (c=LAST(&tty->secondary))==10 ||
 				   ((EOF_CHAR(tty) != __DISABLED_CHAR) &&
@@ -505,39 +512,42 @@ void copy_to_cooked(struct tty_struct * tty)
 				DEC(tty->secondary.head);
 				continue;
 			}
+			if (c == LNEXT_CHAR(tty)) {
+				tty->lnext = 1;
+				if (L_ECHO(tty)) {
+					put_tty_queue('^',&tty->write_q);
+					put_tty_queue(8,&tty->write_q);
+				}
+				continue;
+			}
 		}
-		if (I_IXON(tty)) {
-			if ((STOP_CHAR(tty) != __DISABLED_CHAR) &&
-			    (c==STOP_CHAR(tty))) {
+		if (I_IXON(tty) && !tty->lnext) {
+			if (c == STOP_CHAR(tty)) {
 			        tty->status_changed = 1;
 				tty->ctrl_status |= TIOCPKT_STOP;
 				tty->stopped=1;
 				continue;
 			}
 			if (((I_IXANY(tty)) && tty->stopped) ||
-			    ((START_CHAR(tty) != __DISABLED_CHAR) &&
-			     (c==START_CHAR(tty)))) {
+			    (c == START_CHAR(tty))) {
 			        tty->status_changed = 1;
 				tty->ctrl_status |= TIOCPKT_START;
 				tty->stopped=0;
 				continue;
 			}
 		}
-		if (L_ISIG(tty)) {
-			if ((INTR_CHAR(tty) != __DISABLED_CHAR) &&
-			    (c==INTR_CHAR(tty))) {
+		if (L_ISIG(tty) && !tty->lnext) {
+			if (c == INTR_CHAR(tty)) {
 				kill_pg(tty->pgrp, SIGINT, 1);
 				flush_input(tty);
 				continue;
 			}
-			if ((QUIT_CHAR(tty) != __DISABLED_CHAR) &&
-			    (c==QUIT_CHAR(tty))) {
+			if (c == QUIT_CHAR(tty)) {
 				kill_pg(tty->pgrp, SIGQUIT, 1);
 				flush_input(tty);
 				continue;
 			}
-			if ((SUSPEND_CHAR(tty) != __DISABLED_CHAR) &&
-			    (c==SUSPEND_CHAR(tty))) {
+			if (c == SUSPEND_CHAR(tty)) {
 				if (!is_orphaned_pgrp(tty->pgrp))
 					kill_pg(tty->pgrp, SIGTSTP, 1);
 				continue;
@@ -553,9 +563,15 @@ void copy_to_cooked(struct tty_struct * tty)
 			if (c<32 && L_ECHOCTL(tty)) {
 				put_tty_queue('^',&tty->write_q);
 				put_tty_queue(c+64, &tty->write_q);
+				if (EOF_CHAR(tty) != __DISABLED_CHAR &&
+				    c==EOF_CHAR(tty) && !tty->lnext) {
+					put_tty_queue(8,&tty->write_q);
+					put_tty_queue(8,&tty->write_q);
+				}
 			} else
 				put_tty_queue(c, &tty->write_q);
 		}
+		tty->lnext = 0;
 		put_tty_queue(c, &tty->secondary);
 	}
 	TTY_WRITE_FLUSH(tty);
@@ -644,6 +660,10 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 	}
 	add_wait_queue(&tty->secondary.proc_list, &wait);
 	while (nr>0) {
+		if (hung_up(file)) {
+			file->f_flags &= ~O_NONBLOCK;
+			break;  /* force read() to return 0 */
+		}
 		TTY_READ_FLUSH(tty);
 		if (tty->link)
 			TTY_WRITE_FLUSH(tty->link);
@@ -680,8 +700,6 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 			TTY_WRITE_FLUSH(tty->link);
 		if (!EMPTY(&tty->secondary))
 			continue;
-		if (hung_up(file))
-			break;
 		current->state = TASK_INTERRUPTIBLE;
 		if (EMPTY(&tty->secondary))
 			schedule();
@@ -819,7 +837,8 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	tty = TTY_TABLE(dev);
 	if (!tty || (tty->flags & (1 << TTY_IO_ERROR)))
 		return -EIO;
-	if (MINOR(inode->i_rdev) && (tty->pgrp > 0) &&
+	if ((inode->i_rdev != 0x0400) && /* don't stop on /dev/console */
+	    (tty->pgrp > 0) &&
 	    (current->tty == dev) &&
 	    (tty->pgrp != current->pgrp))
 		if (is_ignored(SIGTTIN) || is_orphaned_pgrp(current->pgrp))
@@ -1391,9 +1410,10 @@ long tty_init(long kmem_start)
 
 	if (sizeof(struct tty_struct) > 4096)
 		panic("size of tty structure > 4096!");
-	
-	chrdev_fops[4] = &tty_fops;
-	chrdev_fops[5] = &tty_fops;
+	if (register_chrdev(4,"tty",&tty_fops))
+		panic("unable to get major 4 for tty device");
+	if (register_chrdev(5,"tty",&tty_fops))
+		panic("unable to get major 5 for tty device");
 	for (i=0 ; i< MAX_TTYS ; i++) {
 		tty_table[i] =  0;
 		tty_termios[i] = 0;

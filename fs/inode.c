@@ -177,6 +177,8 @@ void sync_inodes(dev_t dev)
 	struct inode * inode;
 
 	for(inode = 0+inode_table ; inode < NR_INODE+inode_table ; inode++) {
+		if (dev && inode->i_dev != dev)
+			continue;
 		wait_on_inode(inode);
 		if (inode->i_dirt)
 			write_inode(inode);

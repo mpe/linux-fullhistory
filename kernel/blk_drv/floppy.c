@@ -1091,6 +1091,14 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			format_status = FORMAT_NONE;
 			wake_up(&format_done);
 			return okay ? 0 : -EIO;
+		case FDFLUSH:
+			if (!permission(inode, 2))
+				return -EPERM;
+			cli();
+			fake_change |= 1 << (drive & 3);
+			sti();
+			check_disk_change(inode->i_rdev);
+			return 0;
  	}
 	if (!suser())
 		return -EPERM;
@@ -1140,7 +1148,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 }
 
 #define CMOS_READ(addr) ({ \
-outb_p(0x80|addr,0x70); \
+outb_p(addr,0x70); \
 inb_p(0x71); \
 })
 
@@ -1258,9 +1266,12 @@ static struct sigaction floppy_sigaction = {
 void floppy_init(void)
 {
 	outb(current_DOR,FD_DOR);
+	if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
+		printk("Unable to get major %d for floppy\n",MAJOR_NR);
+		return;
+	}
 	blk_size[MAJOR_NR] = floppy_sizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	blkdev_fops[MAJOR_NR] = &floppy_fops;
 	timer_table[FLOPPY_TIMER].fn = floppy_shutdown;
 	timer_active &= ~(1 << FLOPPY_TIMER);
 	config_types();

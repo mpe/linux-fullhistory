@@ -43,7 +43,8 @@ static struct file_operations isofs_file_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* no special open is needed */
-	NULL			/* release */
+	NULL,			/* release */
+	NULL			/* fsync */
 };
 
 struct inode_operations isofs_file_inode_operations = {

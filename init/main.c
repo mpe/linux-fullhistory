@@ -220,8 +220,13 @@ void start_kernel(void)
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
 #endif
-	memory_start = 1024*1024;
-	low_memory_start = (unsigned long) &end;
+	if ((unsigned long)&end >= (1024*1024)) {
+		memory_start = (unsigned long) &end;
+		low_memory_start = 4096;
+	} else {
+		memory_start = 1024*1024;
+		low_memory_start = (unsigned long) &end;
+	}
 	low_memory_start += 0xfff;
 	low_memory_start &= 0xfffff000;
 	memory_start = paging_init(memory_start,memory_end);
@@ -260,11 +265,14 @@ void start_kernel(void)
 	 */
 	if (hard_math) {
 		unsigned short control_word;
+
+		printk("Checking for 387 error mechanism ...");
 		__asm__("fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
 		control_word &= 0xffc0;
 		__asm__("fldcw %0 ; fwait"::"m" (*&control_word));
 		outb_p(inb_p(0x21) | (1 << 2), 0x21);
 		__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
+		printk(" ok, using %s.\n",ignore_irq13?"exception 16":"irq13");
 	}
 	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */

@@ -147,17 +147,14 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl5-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl6-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 
 Image: $(CONFIGURE) boot/bootsect boot/setup tools/system tools/build
-	cp tools/system system.tmp
-	$(STRIP) system.tmp
-	tools/build boot/bootsect boot/setup system.tmp $(ROOT_DEV) > Image
-	rm system.tmp
+	tools/build boot/bootsect boot/setup tools/system $(ROOT_DEV) > Image
 	sync
 
 disk: Image
@@ -200,6 +197,33 @@ boot/bootsect:	boot/bootsect.s
 	$(AS86) -o boot/bootsect.o boot/bootsect.s
 	$(LD86) -s -o boot/bootsect boot/bootsect.o
 
+zBoot/zSystem: zBoot/*.c zBoot/*.S tools/zSystem
+	cd zBoot;$(MAKE)
+
+zImage: $(CONFIGURE) boot/bootsect boot/setup zBoot/zSystem tools/build
+	cp zBoot/zSystem system.tmp
+	$(STRIP) system.tmp
+	tools/build boot/bootsect boot/setup system.tmp $(ROOT_DEV) > zImage
+	rm system.tmp
+	sync
+
+zdisk: zImage
+	dd bs=8192 if=zImage of=/dev/fd0
+
+zlilo: $(CONFIGURE) zImage
+	cat zImage > /vmlinuz
+	/etc/lilo/install
+
+
+tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
+	$(LD) $(LDFLAGS) -T 100000 -M boot/head.o init/main.o tools/version.o \
+		$(ARCHIVES) \
+		$(FILESYSTEMS) \
+		$(DRIVERS) \
+		$(MATH) \
+		$(LIBS) \
+		-o tools/zSystem > zSystem.map
+
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs
 
@@ -210,10 +234,11 @@ kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=kernel
 
 clean:
+	rm -f zImage zSystem.map tools/zSystem
 	rm -f Image System.map core boot/bootsect boot/setup \
 		boot/bootsect.s boot/setup.s boot/head.s init/main.s
 	rm -f init/*.o tools/system tools/build boot/*.o tools/*.o
-	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
+	for i in zBoot $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 backup: clean
 	cd .. && tar cf - linux | compress - > backup.Z

@@ -46,7 +46,8 @@ static struct file_operations nfs_dir_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
-	NULL			/* no special release code */
+	NULL,			/* no special release code */
+	NULL			/* fsync */
 };
 
 struct inode_operations nfs_dir_inode_operations = {
@@ -627,11 +628,11 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 		else if (S_ISLNK(inode->i_mode))
 			inode->i_op = &nfs_symlink_inode_operations;
 		else if (S_ISCHR(inode->i_mode))
-			inode->i_op = &nfs_chrdev_inode_operations;
+			inode->i_op = &chrdev_inode_operations;
 		else if (S_ISBLK(inode->i_mode))
-			inode->i_op = &nfs_blkdev_inode_operations;
+			inode->i_op = &blkdev_inode_operations;
 		else if (S_ISFIFO(inode->i_mode)) {
-			inode->i_op = &nfs_fifo_inode_operations;
+			inode->i_op = &fifo_inode_operations;
 			inode->i_pipe = 1;
 			PIPE_BASE(*inode) = NULL;
 			PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;

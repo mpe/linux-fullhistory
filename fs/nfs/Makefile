@@ -15,7 +15,7 @@
 	$(AS) -o $*.o $<
 
 OBJS=	proc.o sock.o inode.o file.o dir.o \
-	symlink.o blkdev.o chrdev.o fifo.o
+	symlink.o 
 
 nfs.o: $(OBJS)
 	$(LD) -r -o nfs.o $(OBJS)

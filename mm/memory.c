@@ -917,6 +917,7 @@ void mem_init(unsigned long start_low_mem,
 	int datapages = 0;
 	unsigned long tmp;
 	unsigned short * p;
+	extern int etext;
 
 	cli();
 	end_mem &= 0xfffff000;
@@ -946,10 +947,10 @@ void mem_init(unsigned long start_low_mem,
 	nr_free_pages = 0;
 	for (tmp = 0 ; tmp < end_mem ; tmp += 4096) {
 		if (mem_map[MAP_NR(tmp)]) {
-			if (tmp < 0xA0000)
-				codepages++;
-			else if (tmp < 0x100000)
+			if (tmp >= 0xA0000 && tmp < 0x100000)
 				reservedpages++;
+			else if (tmp < (unsigned long) &etext)
+				codepages++;
 			else
 				datapages++;
 			continue;
@@ -959,7 +960,7 @@ void mem_init(unsigned long start_low_mem,
 		nr_free_pages++;
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
-	printk("Memory: %dk/%dk available (%dk kernel, %dk reserved, %dk data)\n",
+	printk("Memory: %dk/%dk available (%dk kernel code, %dk reserved, %dk data)\n",
 		tmp >> 10,
 		end_mem >> 10,
 		codepages << 2,

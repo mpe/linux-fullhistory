@@ -79,8 +79,10 @@ static void single_arg_error(void)
 	  /* Convert to a QNaN */
 	  FPU_st0_ptr->sigh |= 0x40000000;
 	}
+      break;              /* return with a NaN in st(0) */
     case TW_Empty:
-      stack_underflow();
+      stack_underflow();  /* Puts a QNaN in st(0) */
+      break;
 #ifdef PARANOID
     default:
       EXCEPTION(EX_INTERNAL|0x0112);

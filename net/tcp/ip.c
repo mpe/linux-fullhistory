@@ -834,7 +834,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	PRINTK(("\nIP: *** datagram routing not yet implemented ***\n"));
 	PRINTK(("    SRC = %s   ", in_ntoa(iph->saddr)));
 	PRINTK(("    DST = %s (ignored)\n", in_ntoa(iph->daddr)));
-        icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
+/*      icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev); */
 
        skb->sk = NULL;
        kfree_skb(skb, 0);

@@ -24,6 +24,7 @@
  */
 
 extern struct file_system_type file_systems[];
+extern struct file_operations * blkdev_fops[];
 
 extern void wait_for_keypress(void);
 extern void fcntl_init_locks(void);
@@ -66,6 +67,8 @@ void sync_supers(dev_t dev)
 
 	for (sb = super_block + 0 ; sb < super_block + NR_SUPER ; sb++) {
 		if (!sb->s_dev)
+			continue;
+		if (dev && sb->s_dev != dev)
 			continue;
 		wait_on_super(sb);
 		if (!sb->s_dev || !sb->s_dirt)

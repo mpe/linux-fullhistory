@@ -35,7 +35,7 @@ endif
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	open.o read_write.o inode.o file_table.o buffer.o super.o \
+OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
 	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o \
 	select.o fifo.o locks.o filesystems.o
 

@@ -1,6 +1,8 @@
 #ifndef _LINUX_DIRENT_H
 #define _LINUX_DIRENT_H
 
+#include <linux/limits.h>
+
 struct dirent {
 	long		d_ino;
 	off_t		d_off;

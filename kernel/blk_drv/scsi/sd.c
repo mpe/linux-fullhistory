@@ -761,7 +761,10 @@ unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
 
-	blkdev_fops[MAJOR_NR] = &sd_fops; /* to get sd_open in table */
+	if (register_blkdev(MAJOR_NR,"sd",&sd_fops)) {
+		printk("Unable to get major %d for SCSI disk\n",MAJOR_NR);
+		return memory_start;
+	}
 	if (MAX_SD == 0) return memory_start;
 
 	sd_sizes = (int *) memory_start;

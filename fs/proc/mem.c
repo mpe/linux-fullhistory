@@ -149,7 +149,8 @@ static struct file_operations proc_mem_operations = {
 	NULL,		/* mem_ioctl */
 	NULL,		/* mmap */
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* can't fsync */
 };
 
 struct inode_operations proc_mem_inode_operations = {

@@ -41,7 +41,8 @@ static struct file_operations minix_file_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open is needed */
-	NULL			/* release */
+	NULL,			/* release */
+	NULL			/* fsync */
 };
 
 struct inode_operations minix_file_inode_operations = {

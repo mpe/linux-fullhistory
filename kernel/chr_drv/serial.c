@@ -524,7 +524,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	if (info->blocked_open) {
 		shutdown(info);
 		startup(info);
-		wake_up_interruptible(&info->open_wait);
 		return;
 	}
 	if (info->flags & ASYNC_INITIALIZED) {
@@ -737,7 +736,8 @@ static int set_serial_info(struct async_struct * info,
 	}
 	
 	info->baud_base = new.baud_base;
-	info->flags = new.flags & ASYNC_FLAGS;
+	info->flags = ((info->flags & ~ASYNC_FLAGS) |
+			(new.flags & ASYNC_FLAGS));
 	info->custom_divisor = new.custom_divisor;
 	info->type = new.type;
 	
@@ -1275,7 +1275,7 @@ long rs_init(long kmem_start)
 		init(info);
 		if (info->type == PORT_UNKNOWN)
 			continue;
-		printk("ttyS%d%s at 0x%04x (irq = %d)", info->line, 
+		printk("tty%02d%s at 0x%04x (irq = %d)", info->line, 
 		       (info->flags & ASYNC_FOURPORT) ? " FourPort" : "",
 		       info->port, info->irq);
 		switch (info->type) {

@@ -217,7 +217,7 @@ struct task_struct {
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
- * your own risk!. Base=0, limit=0x9ffff (=640kB)
+ * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
@@ -244,8 +244,8 @@ struct task_struct {
 /* cloe */	{{ 0, }}, \
 		{ \
 			{0,0}, \
-/* ldt */		{0x9f,0xc0c0fa00}, \
-			{0x9f,0xc0c0f200}, \
+/* ldt */		{0x1ff,0xc0c0fa00}, \
+			{0x1ff,0xc0c0f200}, \
 		}, \
 /*tss*/	{0,sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
 	 0x10,0,0,0,0,(long) &swapper_pg_dir,\

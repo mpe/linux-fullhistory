@@ -29,7 +29,8 @@ static struct file_operations isofs_dir_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* no special open code */
-	NULL			/* no special release code */
+	NULL,			/* no special release code */
+	NULL			/* fsync */
 };
 
 /*

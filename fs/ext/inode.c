@@ -372,11 +372,11 @@ void ext_read_inode(struct inode * inode)
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &ext_symlink_inode_operations;
 	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &ext_chrdev_inode_operations;
+		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &ext_blkdev_inode_operations;
+		inode->i_op = &blkdev_inode_operations;
 	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &ext_fifo_inode_operations;
+		inode->i_op = &fifo_inode_operations;
 		inode->i_pipe = 1;
 		PIPE_BASE(*inode) = NULL;
 		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;

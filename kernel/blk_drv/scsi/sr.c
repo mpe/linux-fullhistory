@@ -601,7 +601,10 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
 
-	blkdev_fops[MAJOR_NR] = &sr_fops; 
+	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
+		printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
+		return memory_start;
+	}
 	if(MAX_SR == 0) return memory_start;
 
 	sr_sizes = (int *) memory_start;

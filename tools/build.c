@@ -29,6 +29,7 @@
 #include <unistd.h>	/* contains read/write */
 #include <fcntl.h>
 #include <linux/config.h>
+#include <linux/a.out.h>
 
 #define MINIX_HEADER 32
 #define GCC_HEADER 1024
@@ -83,8 +84,9 @@ void usage(void)
 
 int main(int argc, char ** argv)
 {
-	int i,c,id;
+	int i,c,id, sz;
 	char buf[1024];
+	struct exec *ex = (struct exec *)buf;
 	char major_root, minor_root;
 	struct stat sb;
 
@@ -116,9 +118,9 @@ int main(int argc, char ** argv)
 		die("Non-Minix header of 'boot'");
 	if (((long *) buf)[1]!=intel_long(MINIX_HEADER))
 		die("Non-Minix header of 'boot'");
-	if (((long *) buf)[3]!=0)
+	if (((long *) buf)[3] != 0)
 		die("Illegal data segment in 'boot'");
-	if (((long *) buf)[4]!=0)
+	if (((long *) buf)[4] != 0)
 		die("Illegal bss in 'boot'");
 	if (((long *) buf)[5] != 0)
 		die("Non-Minix header of 'boot'");
@@ -145,9 +147,9 @@ int main(int argc, char ** argv)
 		die("Non-Minix header of 'setup'");
 	if (((long *) buf)[1]!=intel_long(MINIX_HEADER))
 		die("Non-Minix header of 'setup'");
-	if (((long *) buf)[3]!=0)
+	if (((long *) buf)[3] != 0)
 		die("Illegal data segment in 'setup'");
-	if (((long *) buf)[4]!=0)
+	if (((long *) buf)[4] != 0)
 		die("Illegal bss in 'setup'");
 	if (((long *) buf)[5] != 0)
 		die("Non-Minix header of 'setup'");
@@ -156,6 +158,8 @@ int main(int argc, char ** argv)
 	for (i=0 ; (c=read(id,buf,sizeof buf))>0 ; i+=c )
 		if (write(1,buf,c)!=c)
 			die("Write call failed");
+	if (c != 0)
+		die("read-error on 'setup'");
 	close (id);
 	if (i > SETUP_SECTS*512)
 		die("Setup exceeds " STRINGIFY(SETUP_SECTS)
@@ -176,14 +180,28 @@ int main(int argc, char ** argv)
 		die("Unable to open 'system'");
 	if (read(id,buf,GCC_HEADER) != GCC_HEADER)
 		die("Unable to read header of 'system'");
-	if (((long *) buf)[5] != 0)
+	if (N_MAGIC(*ex) != ZMAGIC)
 		die("Non-GCC header of 'system'");
-	for (i=0 ; (c=read(id,buf,sizeof buf))>0 ; i+=c )
-		if (write(1,buf,c)!=c)
-			die("Write call failed");
-	close(id);
-	fprintf(stderr,"System is %d bytes.\n",i);
-	if (i > SYS_SIZE*16)
+	sz = N_SYMOFF(*ex) - GCC_HEADER + 4;
+	fprintf(stderr,"System is %d bytes.\n", sz);
+	if (sz > SYS_SIZE*16)
 		die("System is too big");
+	while (sz > 0) {
+		int l, n;
+
+		l = sz;
+		if (l > sizeof(buf))
+			l = sizeof(buf);
+		if ((n=read(id, buf, l)) != l) {
+			if (n == -1) 
+				perror(argv[1]);
+			else
+				fprintf(stderr, "Unexpected EOF\n");
+			die("Can't read 'system'");
+		}
+		write(1, buf, l);
+		sz -= l;
+	}
+	close(id);
 	return(0);
 }

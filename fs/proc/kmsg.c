@@ -54,7 +54,8 @@ static struct file_operations proc_kmsg_operations = {
 	NULL,		/* kmsg_ioctl */
 	NULL,		/* mmap */
 	kmsg_open,
-	kmsg_release
+	kmsg_release,
+	NULL		/* can't fsync */
 };
 
 struct inode_operations proc_kmsg_inode_operations = {

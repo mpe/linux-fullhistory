@@ -25,7 +25,8 @@ static struct file_operations proc_fd_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
-	NULL			/* no special release code */
+	NULL,			/* no special release code */
+	NULL			/* can't fsync */
 };
 
 /*

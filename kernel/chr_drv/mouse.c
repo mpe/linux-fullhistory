@@ -18,6 +18,7 @@
 #include <linux/errno.h>
 #include <linux/mouse.h>
 #include <linux/config.h>
+#include <linux/kernel.h>
 
 /*
  * note that you can remove any or all of the drivers by undefining
@@ -90,6 +91,7 @@ unsigned long mouse_init(unsigned long kmem_start)
 #ifdef CONFIG_ATIXL_BUSMOUSE
  	kmem_start = atixl_busmouse_init(kmem_start);
 #endif
-	chrdev_fops[10] = &mouse_fops;
+	if (register_chrdev(10,"mouse",&mouse_fops))
+		printk("unable to get major 10 for mouse devices\n");
 	return kmem_start;
 }

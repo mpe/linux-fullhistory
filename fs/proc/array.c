@@ -181,7 +181,7 @@ static int get_stat(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
 	unsigned long sigignore=0, sigcatch=0, bit=1, wchan;
-	int i;
+	int i,tty_pgrp;
 	char state;
 
 	if (!p || !*p)
@@ -198,6 +198,11 @@ static int get_stat(int pid, char * buffer)
 		default: sigcatch |= bit;
 		} bit <<= 1;
 	}
+	tty_pgrp = (*p)->tty;
+	if (tty_pgrp > 0 && tty_table[tty_pgrp])
+		tty_pgrp = tty_table[tty_pgrp]->pgrp;
+	else
+		tty_pgrp = -1;
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %u %u \
 %u %u %u %d %d %d %d %d %d %u %u %d %u %u %u %u %u %u %u %u %d \
 %d %d %d %u\n",
@@ -208,8 +213,7 @@ static int get_stat(int pid, char * buffer)
 		(*p)->pgrp,
 		(*p)->session,
 		(*p)->tty,
-		((*p)->tty == -1) ? -1 :
-		       tty_table[(*p)->tty]->pgrp,
+		tty_pgrp,
 		(*p)->flags,
 		(*p)->min_flt,
 		(*p)->cmin_flt,
@@ -354,7 +358,8 @@ static struct file_operations proc_array_operations = {
 	NULL,		/* array_ioctl */
 	NULL,		/* mmap */
 	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL,		/* no special release code */
+	NULL		/* can't fsync */
 };
 
 struct inode_operations proc_array_inode_operations = {

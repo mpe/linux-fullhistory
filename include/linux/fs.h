@@ -109,7 +109,7 @@ extern unsigned long inode_init(unsigned long start, unsigned long end);
  *
  * Exception: MS_RDONLY is always applied to the entire file system.
  */
-#define IS_RDONLY(inode) ((inode)->i_sb->s_flags & MS_RDONLY)
+#define IS_RDONLY(inode) (((inode)->i_sb) && ((inode)->i_sb->s_flags & MS_RDONLY))
 #define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
@@ -260,6 +260,7 @@ struct file_operations {
 	int (*mmap) (void);
 	int (*open) (struct inode *, struct file *);
 	void (*release) (struct inode *, struct file *);
+	int (*fsync) (struct inode *, struct file *);
 };
 
 struct inode_operations {
@@ -296,8 +297,17 @@ struct file_system_type {
 	int requires_dev;
 };
 
-extern struct file_operations * chrdev_fops[MAX_CHRDEV];
-extern struct file_operations * blkdev_fops[MAX_BLKDEV];
+extern int register_blkdev(unsigned int, const char *, struct file_operations *);
+extern int blkdev_open(struct inode * inode, struct file * filp);
+extern struct file_operations def_blk_fops;
+extern struct inode_operations blkdev_inode_operations;
+
+extern int register_chrdev(unsigned int, const char *, struct file_operations *);
+extern int chrdev_open(struct inode * inode, struct file * filp);
+extern struct file_operations def_chr_fops;
+extern struct inode_operations chrdev_inode_operations;
+
+extern struct inode_operations fifo_inode_operations;
 
 extern struct file_system_type *get_fs_type(char *name);
 

@@ -154,7 +154,7 @@ static void put_queue(int ch)
 	struct tty_queue *qp;
 	unsigned long new_head;
 
-	wake_up_interruptible(&keypress_wait);
+	wake_up(&keypress_wait);
 	if (!tty)
 		return;
 	qp = &tty->read_q;

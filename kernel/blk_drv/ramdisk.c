@@ -67,8 +67,11 @@ long rd_init(long mem_start, int length)
 	int	i;
 	char	*cp;
 
+	if (register_blkdev(MAJOR_NR,"rd",&rd_fops)) {
+		printk("Unable to get major %d for ramdisk\n",MAJOR_NR);
+		return 0;
+	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	blkdev_fops[MAJOR_NR] = &rd_fops;
 	rd_start = (char *) mem_start;
 	rd_length = length;
 	cp = rd_start;

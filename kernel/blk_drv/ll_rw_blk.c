@@ -31,13 +31,13 @@ struct wait_queue * wait_for_request = NULL;
 
 /* This specifies how many sectors to read ahead on the disk.  */
 
-int read_ahead[NR_BLK_DEV] = {0, };
+int read_ahead[MAX_BLKDEV] = {0, };
 
 /* blk_dev_struct is:
  *	do_request-address
  *	next-request
  */
-struct blk_dev_struct blk_dev[NR_BLK_DEV] = {
+struct blk_dev_struct blk_dev[MAX_BLKDEV] = {
 	{ NULL, NULL },		/* no_dev */
 	{ NULL, NULL },		/* dev mem */
 	{ NULL, NULL },		/* dev fd */
@@ -57,11 +57,11 @@ struct blk_dev_struct blk_dev[NR_BLK_DEV] = {
  *
  * if (!blk_size[MAJOR]) then no minor size checking is done.
  */
-int * blk_size[NR_BLK_DEV] = { NULL, NULL, };
+int * blk_size[MAX_BLKDEV] = { NULL, NULL, };
 
 /* RO fail safe mechanism */
 
-static long ro_bits[NR_BLK_DEV][8];
+static long ro_bits[MAX_BLKDEV][8];
 
 int is_read_only(int dev)
 {
@@ -69,7 +69,7 @@ int is_read_only(int dev)
 
 	major = MAJOR(dev);
 	minor = MINOR(dev);
-	if (major < 0 || major >= NR_BLK_DEV) return 0;
+	if (major < 0 || major >= MAX_BLKDEV) return 0;
 	return ro_bits[major][minor >> 5] & (1 << (minor & 31));
 }
 
@@ -79,7 +79,7 @@ void set_device_ro(int dev,int flag)
 
 	major = MAJOR(dev);
 	minor = MINOR(dev);
-	if (major < 0 || major >= NR_BLK_DEV) return;
+	if (major < 0 || major >= MAX_BLKDEV) return;
 	if (flag) ro_bits[major][minor >> 5] |= 1 << (minor & 31);
 	else ro_bits[major][minor >> 5] &= ~(1 << (minor & 31));
 }
@@ -222,7 +222,7 @@ void ll_rw_page(int rw, int dev, int page, char * buffer)
 	struct request * req;
 	unsigned int major = MAJOR(dev);
 
-	if (major >= NR_BLK_DEV || !(blk_dev[major].request_fn)) {
+	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
 		printk("Trying to read nonexistent block-device %04x (%d)\n",dev,page*8);
 		return;
 	}
@@ -289,7 +289,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	  }
 	};
 
-	if ((major=MAJOR(bh[0]->b_dev)) >= NR_BLK_DEV ||
+	if ((major=MAJOR(bh[0]->b_dev)) >= MAX_BLKDEV ||
 	!(blk_dev[major].request_fn)) {
 		printk("ll_rw_block: Trying to read nonexistent block-device %04x (%d)\n",bh[0]->b_dev,bh[0]->b_blocknr);
 		for (i=0;i<nr; i++)
@@ -332,7 +332,7 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 	struct request * req;
 	unsigned int major = MAJOR(dev);
 
-	if (major >= NR_BLK_DEV || !(blk_dev[major].request_fn)) {
+	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
 		printk("ll_rw_swap_file: trying to swap nonexistent block-device\n\r");
 		return;
 	}

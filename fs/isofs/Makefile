@@ -14,8 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	namei.o inode.o file.o dir.o util.o rock.o symlink.o \
-	fifo.o blkdev.o chrdev.o
+OBJS=	namei.o inode.o file.o dir.o util.o rock.o symlink.o
 
 isofs.o: $(OBJS)
 	$(LD) -r -o isofs.o $(OBJS)
