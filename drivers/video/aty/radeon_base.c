@@ -1743,8 +1743,7 @@ static int radeonfb_set_par(struct fb_info *info)
 		} else {
 			/* DFP */
 			newmode->fp_gen_cntl |= (FP_FPON | FP_TMDS_EN);
-			newmode->tmds_transmitter_cntl = (TMDS_RAN_PAT_RST | TMDS_ICHCSEL) &
-							 ~(TMDS_PLLRST);
+			newmode->tmds_transmitter_cntl &= ~(TMDS_PLLRST);
 			/* TMDS_PLL_EN bit is reversed on RV (and mobility) chips */
 			if (IS_R300_VARIANT(rinfo) ||
 			    (rinfo->family == CHIP_FAMILY_R200) || !rinfo->has_CRTC2)
