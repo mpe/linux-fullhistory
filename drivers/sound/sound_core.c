@@ -456,6 +456,7 @@ static int soundcore_open(struct inode *, struct file *);
 
 static struct file_operations soundcore_fops=
 {
+	owner:	THIS_MODULE,
 	open:	soundcore_open,
 };
 
@@ -508,12 +509,25 @@ int soundcore_open(struct inode *inode, struct file *file)
 		s = __look_for_unit(chain, unit);
 	}
 	if (s) {
-		file->f_op=s->unit_fops;
+		/*
+		 * We rely upon the fact that we can't be unloaded while the
+		 * subdriver is there, so if ->open() is successful we can
+		 * safely drop the reference counter and if it is not we can
+		 * revert to old ->f_op. Ugly, indeed, but that's the cost of
+		 * switching ->f_op in the first place.
+		 */
+		int err = 0;
+		struct file_operations *old_fops = file->f_op;
+		file->f_op = fops_get(s->unit_fops);
 		spin_unlock(&sound_loader_lock);
 		if(file->f_op->open)
-			return file->f_op->open(inode,file);
-		else
-			return 0;
+			err = file->f_op->open(inode,file);
+		if (err) {
+			fops_put(file->f_op);
+			file->f_op = fops_get(old_fops);
+		}
+		fops_put(old_fops);
+		return err;
 	}
 	spin_unlock(&sound_loader_lock);
 	return -ENODEV;

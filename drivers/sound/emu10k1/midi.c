@@ -98,14 +98,11 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 	if (entry == &emu10k1_devs)
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
-
 	/* Wait for device to become free */
 	down(&card->open_sem);
 	while (card->open_mode & (file->f_mode << FMODE_MIDI_SHIFT)) {
 		if (file->f_flags & O_NONBLOCK) {
 			up(&card->open_sem);
-			MOD_DEC_USE_COUNT;
 			return -EBUSY;
 		}
 
@@ -113,7 +110,6 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 		interruptible_sleep_on(&card->open_wait);
 
 		if (signal_pending(current)) {
-			MOD_DEC_USE_COUNT;
 			return -ERESTARTSYS;
 		}
 
@@ -121,7 +117,6 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 	}
 
 	if ((midi_dev = (struct emu10k1_mididevice *) kmalloc(sizeof(*midi_dev), GFP_KERNEL)) == NULL) {
-		MOD_DEC_USE_COUNT;
 		return -EINVAL;
 	}
 
@@ -145,14 +140,12 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 		    != CTSTATUS_SUCCESS) {
 			ERROR();
 			kfree(midi_dev);
-			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 
 		/* Add two buffers to receive sysex buffer */
 		if (midiin_add_buffer(midi_dev, &midihdr1) != CTSTATUS_SUCCESS) {
 			kfree(midi_dev);
-			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 
@@ -161,7 +154,6 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 			kfree(midihdr1->data);
 			kfree(midihdr1);
 			kfree(midi_dev);
-			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 	}
@@ -175,7 +167,6 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 		    != CTSTATUS_SUCCESS) {
 			ERROR();
 			kfree(midi_dev);
-			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 	}
@@ -236,8 +227,6 @@ static int emu10k1_midi_release(struct inode *inode, struct file *file)
 	card->open_mode &= ~((file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE));
 	up(&card->open_sem);
 	wake_up_interruptible(&card->open_wait);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -438,6 +427,7 @@ int emu10k1_midi_callback(unsigned long msg, unsigned long refdata, unsigned lon
 
 /* MIDI file operations */
 struct file_operations emu10k1_midi_fops = {
+	owner:THIS_MODULE,
 	read:emu10k1_midi_read,
 	write:emu10k1_midi_write,
 	poll:emu10k1_midi_poll,

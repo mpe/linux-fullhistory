@@ -39,53 +39,50 @@ extern int atari_mouse_buttons;
 
 static void atari_mouse_interrupt(char *buf)
 {
-    int buttons;
+	int buttons;
 
-/*    ikbd_mouse_disable(); */
+/*	ikbd_mouse_disable(); */
 
-    buttons = ((buf[0] & 1)
+	buttons = ((buf[0] & 1)
 	       | ((buf[0] & 2) << 1)
 	       | (atari_mouse_buttons & 2));
-    atari_mouse_buttons = buttons;
+	atari_mouse_buttons = buttons;
 
-    busmouse_add_movementbuttons(msedev, buf[1], -buf[2], buttons ^ 7);
-/*    ikbd_mouse_rel_pos(); */
+	busmouse_add_movementbuttons(msedev, buf[1], -buf[2], buttons ^ 7);
+/*	ikbd_mouse_rel_pos(); */
 }
 
 static int release_mouse(struct inode *inode, struct file *file)
 {
-    ikbd_mouse_disable();
-
-    atari_mouse_interrupt_hook = NULL;
-    MOD_DEC_USE_COUNT;
-    return 0;
+	ikbd_mouse_disable();
+	atari_mouse_interrupt_hook = NULL;
+	return 0;
 }
 
 static int open_mouse(struct inode *inode, struct file *file)
 {
-    atari_mouse_buttons = 0;
-    ikbd_mouse_y0_top ();
-    ikbd_mouse_thresh (mouse_threshold[0], mouse_threshold[1]);
-    ikbd_mouse_rel_pos();
-    MOD_INC_USE_COUNT;
-    atari_mouse_interrupt_hook = atari_mouse_interrupt;
-    return 0;
+	atari_mouse_buttons = 0;
+	ikbd_mouse_y0_top ();
+	ikbd_mouse_thresh (mouse_threshold[0], mouse_threshold[1]);
+	ikbd_mouse_rel_pos();
+	atari_mouse_interrupt_hook = atari_mouse_interrupt;
+	return 0;
 }
 
 static struct busmouse atarimouse = {
-	ATARIMOUSE_MINOR, "atarimouse", open_mouse, release_mouse, 0
+	ATARIMOUSE_MINOR, "atarimouse", THIS_MODULE, open_mouse, release_mouse, 0
 };
 
 static int __init atari_mouse_init(void)
 {
-    if (!MACH_IS_ATARI)
-	return -ENODEV;
-    msedev = register_busmouse(&atarimouse);
-    if (msedev < 0)
-    	printk(KERN_WARNING "Unable to register Atari mouse driver.\n");
-    else
-    	printk(KERN_INFO "Atari mouse installed.\n");
-    return msedev < 0 ? msedev : 0;
+	if (!MACH_IS_ATARI)
+		return -ENODEV;
+	msedev = register_busmouse(&atarimouse);
+	if (msedev < 0)
+    		printk(KERN_WARNING "Unable to register Atari mouse driver.\n");
+	else
+		printk(KERN_INFO "Atari mouse installed.\n");
+	return msedev < 0 ? msedev : 0;
 }
 
 

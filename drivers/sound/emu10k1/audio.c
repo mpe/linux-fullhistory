@@ -969,12 +969,9 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 	if (entry == &emu10k1_devs)
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
-
 	if ((wave_dev = (struct emu10k1_wavedevice *)
 	     kmalloc(sizeof(struct emu10k1_wavedevice), GFP_KERNEL)) == NULL) {
 		ERROR();
-		MOD_DEC_USE_COUNT;
 		return -EINVAL;
 	}
 
@@ -988,7 +985,6 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 
 		if ((woinst = (struct woinst *) kmalloc(sizeof(struct woinst), GFP_KERNEL)) == NULL) {
 			ERROR();
-			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 
@@ -1055,7 +1051,6 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 
 		if ((wiinst = (struct wiinst *) kmalloc(sizeof(struct wiinst), GFP_KERNEL)) == NULL) {
 			ERROR();
-			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 
@@ -1176,7 +1171,6 @@ static int emu10k1_audio_release(struct inode *inode, struct file *file)
 	kfree(wave_dev);
 
 	wake_up_interruptible(&card->open_wait);
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -1430,6 +1424,7 @@ void emu10k1_waveout_bh(unsigned long refdata)
 }
 
 struct file_operations emu10k1_audio_fops = {
+	owner:THIS_MODULE,
 	llseek:emu10k1_audio_llseek,
 	read:emu10k1_audio_read,
 	write:emu10k1_audio_write,

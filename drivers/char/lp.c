@@ -371,8 +371,6 @@ static int lp_open(struct inode * inode, struct file * file)
 	if (test_and_set_bit(LP_BUSY_BIT_POS, &LP_F(minor)))
 		return -EBUSY;
 
-	MOD_INC_USE_COUNT;
-
 	/* If ABORTOPEN is set and the printer is offline or out of paper,
 	   we may still want to open it to perform ioctl()s.  Therefore we
 	   have commandeered O_NONBLOCK, even though it is being used in
@@ -385,24 +383,20 @@ static int lp_open(struct inode * inode, struct file * file)
 		parport_release (lp_table[minor].dev);
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
-			MOD_DEC_USE_COUNT;
 			LP_F(minor) &= ~LP_BUSY;
 			return -ENOSPC;
 		} else if (!(status & LP_PSELECD)) {
 			printk(KERN_INFO "lp%d off-line\n", minor);
-			MOD_DEC_USE_COUNT;
 			LP_F(minor) &= ~LP_BUSY;
 			return -EIO;
 		} else if (!(status & LP_PERRORP)) {
 			printk(KERN_ERR "lp%d printer error\n", minor);
-			MOD_DEC_USE_COUNT;
 			LP_F(minor) &= ~LP_BUSY;
 			return -EIO;
 		}
 	}
 	lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
 	if (!lp_table[minor].lp_buffer) {
-		MOD_DEC_USE_COUNT;
 		LP_F(minor) &= ~LP_BUSY;
 		return -ENOMEM;
 	}
@@ -415,7 +409,6 @@ static int lp_release(struct inode * inode, struct file * file)
 
 	kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 	lp_table[minor].lp_buffer = NULL;
-	MOD_DEC_USE_COUNT;
 	LP_F(minor) &= ~LP_BUSY;
 	return 0;
 }
@@ -526,6 +519,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 }
 
 static struct file_operations lp_fops = {
+	owner:		THIS_MODULE,
 	write:		lp_write,
 	ioctl:		lp_ioctl,
 	open:		lp_open,

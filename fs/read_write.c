@@ -199,9 +199,19 @@ static ssize_t do_readv_writev(int type, struct file *file,
 	if (copy_from_user(iov, vector, count*sizeof(*vector)))
 		goto out;
 
+	/* BSD readv/writev returns EINVAL if one of the iov_len
+	   values < 0 or tot_len overflowed a 32-bit integer. -ink */
 	tot_len = 0;
-	for (i = 0 ; i < count ; i++)
-		tot_len += iov[i].iov_len;
+	ret = -EINVAL;
+	for (i = 0 ; i < count ; i++) {
+		size_t tmp = tot_len;
+		int len = iov[i].iov_len;
+		if (len < 0)
+			goto out;
+		(u32)tot_len += len;
+		if (tot_len < tmp || tot_len < (u32)len)
+			goto out;
+	}
 
 	inode = file->f_dentry->d_inode;
 	/* VERIFY_WRITE actually means a read, as we write to user space */

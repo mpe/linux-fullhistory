@@ -32,7 +32,7 @@
 #define AC97_PCM_FRONT_DAC_RATE   0x002C       /* PCM Front DAC Rate */
 #define AC97_PCM_SURR_DAC_RATE    0x002E       /* PCM Surround DAC Rate */
 #define AC97_PCM_LFE_DAC_RATE     0x0030       /* PCM LFE DAC Rate */
-#define AC97_PCM_LR_ADC_RATE      0x0032       /* PCM LR ADC Rate */
+#define AC97_PCM_LR_DAC_RATE      0x0032       /* PCM LR DAC Rate */
 #define AC97_PCM_MIC_ADC_RATE     0x0034       /* PCM MIC ADC Rate */
 #define AC97_CENTER_LFE_MASTER    0x0036       /* Center + LFE Master Volume */
 #define AC97_SURROUND_MASTER      0x0038       /* Surround (Rear) Master Volume */
@@ -133,7 +133,7 @@
 	SOUND_MASK_LINE1| SOUND_MASK_LINE|\
 	SOUND_MASK_PHONEIN)
 
-#define supported_mixer(CODEC,FOO) ( CODEC->supported_mixers & (1<<FOO) )
+#define supported_mixer(CODEC,FOO) ((CODEC)->supported_mixers & (1<<FOO) )
 
 struct ac97_codec {
 	/* AC97 controller connected with */
@@ -149,6 +149,9 @@ struct ac97_codec {
 	/* controller specific lower leverl ac97 accessing routines */
 	u16  (*codec_read)  (struct ac97_codec *codec, u8 reg);
 	void (*codec_write) (struct ac97_codec *codec, u8 reg, u16 val);
+
+	/* Wait for codec-ready.  Ok to sleep here.  */
+	void  (*codec_wait)  (struct ac97_codec *codec);
 
 	/* OSS mixer masks */
 	int modcnt;

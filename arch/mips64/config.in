@@ -1,7 +1,7 @@
 # $Id: config.in,v 1.19 2000/03/27 01:44:45 ralf Exp $
 #
 # For a description of the syntax of this configuration file,
-# see the Configure script.
+# see Documentation/kbuild/config-language.txt.
 #
 mainmenu_name "Linux Kernel Configuration"
 

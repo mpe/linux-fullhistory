@@ -3,7 +3,7 @@
  */
 #include <linux/config.h>
 
-#if defined(CONFIG_IDE) && !defined(CONFIG_BLK_DEV_HD)
+#if defined(CONFIG_IDE) && !defined(CONFIG_BLK_DEV_HD_ONLY)
 #include <linux/ide.h>
 
 #include <asm/io.h>
@@ -211,4 +211,4 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, int ptheads, const char *msg)
 		       drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	return ret;
 }
-#endif /* (CONFIG_IDE) && !(CONFIG_BLK_DEV_HD) */
+#endif /* (CONFIG_IDE) && !(CONFIG_BLK_DEV_HD_ONLY) */

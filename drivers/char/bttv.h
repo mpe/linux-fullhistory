@@ -21,7 +21,12 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,28) 
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,31)
+
+#ifndef PCI_GET_DRIVER_DATA
+# define PCI_GET_DRIVER_DATA(pdev)         ((pdev)->driver_data)
+# define PCI_SET_DRIVER_DATA(pdev,data)    (((pdev)->driver_data) = (data))
+#endif /* PCI_GET_DRIVER_DATA */
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -32,12 +37,13 @@
 #include "audiochip.h"
 #include "bt848.h"
 
-#define WAIT_QUEUE                 wait_queue_head_t
-
-/* returns card type, 
+/* returns card type + card ID (for bt878-based ones)
    for possible values see lines below beginning with #define BTTV_UNKNOWN
    returns negative value if error ocurred 
 */
+extern int bttv_get_cardinfo(unsigned int card, int *type, int *cardid);
+
+/* obsolete, use bttv_get_cardinfo instead */
 extern int bttv_get_id(unsigned int card);
 
 /* sets GPOE register (BT848_GPIO_OUT_EN) to new value:
@@ -68,7 +74,7 @@ extern int bttv_write_gpio(unsigned int card,
    WARNING: because there is no buffer for GPIO data, one MUST 
    process data ASAP
 */
-extern WAIT_QUEUE* bttv_get_gpio_queue(unsigned int card);
+extern wait_queue_head_t* bttv_get_gpio_queue(unsigned int card);
 
 
 #ifndef O_NONCAP  
@@ -130,6 +136,7 @@ struct bttv {
 	struct video_picture picture;		/* Current picture params */
 	struct video_audio audio_dev;		/* Current audio params */
 
+	spinlock_t s_lock;
         struct semaphore lock;
 	int user;
 	int capuser;
@@ -143,8 +150,6 @@ struct bttv {
 
         int tuner_type;
         int channel;
-
-	spinlock_t s_lock;
         
         unsigned int nr;
 	unsigned short id;
@@ -160,6 +165,7 @@ struct bttv {
 	struct bttv_window win;
 	int fb_color_ctl;
 	int type;            /* card type  */
+	int cardid;
 	int audio;           /* audio mode */
 	int audio_chip;      /* set to one of the chips supported by bttv.c */
 	int radio;
@@ -169,10 +175,8 @@ struct bttv {
 	u32 *vbi_even;
 	u32 bus_vbi_even;
 	u32 bus_vbi_odd;
-        WAIT_QUEUE vbiq;
-	WAIT_QUEUE capq;
-	WAIT_QUEUE capqo;
-	WAIT_QUEUE capqe;
+        wait_queue_head_t vbiq;
+	wait_queue_head_t capq;
 	int vbip;
 
 	u32 *risc_scr_odd;
@@ -198,7 +202,7 @@ struct bttv {
 	int errors;
 	int needs_restart;
 
-	WAIT_QUEUE gpioq;
+	wait_queue_head_t gpioq;
 	int shutdown;
 };
 #endif
@@ -277,6 +281,8 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define BTTV_STB2          0x28
 #define BTTV_AVPHONE98     0x29
 #define BTTV_PV951         0x2a
+#define BTTV_ONAIR_TV      0x2b
+#define BTTV_SIGMA_TVII_FM 0x2c
 
 #define PLL_NONE 0
 #define PLL_28   1

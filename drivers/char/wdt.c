@@ -337,7 +337,6 @@ static int wdt_open(struct inode *inode, struct file *file)
 		case WATCHDOG_MINOR:
 			if(wdt_is_open)
 				return -EBUSY;
-			MOD_INC_USE_COUNT;
 			/*
 			 *	Activate 
 			 */
@@ -353,7 +352,6 @@ static int wdt_open(struct inode *inode, struct file *file)
 			outb_p(0, WDT_DC);	/* Enable */
 			return 0;
 		case TEMP_MINOR:
-			MOD_INC_USE_COUNT;
 			return 0;
 		default:
 			return -ENODEV;
@@ -382,7 +380,6 @@ static int wdt_release(struct inode *inode, struct file *file)
 #endif		
 		wdt_is_open=0;
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -416,6 +413,7 @@ static int wdt_notify_sys(struct notifier_block *this, unsigned long code,
  
  
 static struct file_operations wdt_fops = {
+	owner:		THIS_MODULE,
 	llseek:		wdt_llseek,
 	read:		wdt_read,
 	write:		wdt_write,

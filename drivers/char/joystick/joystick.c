@@ -752,6 +752,7 @@ void js_unregister_device(struct js_dev *dev)
 
 static struct file_operations js_fops =
 {
+	owner:		THIS_MODULE,
 	read:		js_read,
 	poll:		js_poll,
 	ioctl:		js_ioctl,

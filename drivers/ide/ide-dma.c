@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/ide/ide-dma.c		Version 4.09	April 23, 1999
+ *  linux/drivers/ide/ide-dma.c		Version 4.10	June 9, 2000
  *
- *  Copyright (c) 1999  Andre Hedrick
+ *  Copyright (c) 1999-2000	Andre Hedrick <andre@linux-ide.org>
  *  May be copied or modified under the terms of the GNU General Public License
  */
 
@@ -70,12 +70,11 @@
  *
  * And, yes, Intel Zappa boards really *do* use both PIIX IDE ports.
  *
- * ACARD ATP850UF Chipset "Modified SCSI Class" with other names
- *       AEC6210 U/UF
- *       SIIG's UltraIDE Pro CN-2449
- * TTI   HPT343 Chipset "Modified SCSI Class" but reports as an
- *       unknown storage device.
- * NEW	 check_drive_lists(ide_drive_t *drive, int good_bad)
+ * check_drive_lists(ide_drive_t *drive, int good_bad)
+ *
+ * ATA-66/100 and recovery functions, I forgot the rest......
+ * SELECT_READ_WRITE(hwif,drive,func) for active tuning based on IO direction.
+ *
  */
 
 #include <linux/config.h>
@@ -358,10 +357,11 @@ int report_drive_dmaing (ide_drive_t *drive)
 {
 	struct hd_driveid *id = drive->id;
 
-	if ((id->field_valid & 4) && (id->hw_config & 0x2000) &&
-	    (HWIF(drive)->udma_four) &&
-	    (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
-		if ((id->dma_ultra >> 12) & 1) {
+	if ((id->field_valid & 4) && (eighty_ninty_three(drive)) &&
+	    (id->dma_ultra & (id->dma_ultra >> 11) & 7)) {
+		if ((id->dma_ultra >> 13) & 1) {
+			printk(", UDMA(100)");	/* UDMA BIOS-enabled! */
+		} else if ((id->dma_ultra >> 12) & 1) {
 			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
 		} else {
 			printk(", UDMA(44)");	/* UDMA BIOS-enabled! */
@@ -393,9 +393,9 @@ static int config_drive_for_dma (ide_drive_t *drive)
 		if (ide_dmaproc(ide_dma_bad_drive, drive))
 			return hwif->dmaproc(ide_dma_off, drive);
 
-		/* Enable DMA on any drive that has UltraDMA (mode 3/4) enabled */
-		if ((id->field_valid & 4) && (hwif->udma_four) && (id->hw_config & 0x2000))
-			if ((id->dma_ultra & (id->dma_ultra >> 11) & 3))
+		/* Enable DMA on any drive that has UltraDMA (mode 3/4/5) enabled */
+		if ((id->field_valid & 4) && (eighty_ninty_three(drive)))
+			if ((id->dma_ultra & (id->dma_ultra >> 11) & 7))
 				return hwif->dmaproc(ide_dma_on, drive);
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
 		if (id->field_valid & 4)	/* UltraDMA */
@@ -410,6 +410,22 @@ static int config_drive_for_dma (ide_drive_t *drive)
 			return hwif->dmaproc(ide_dma_on, drive);
 	}
 	return hwif->dmaproc(ide_dma_off_quietly, drive);
+}
+
+/*
+ * 1 dmaing, 2 error, 4 intr
+ */
+static int dma_timer_expiry (ide_drive_t *drive)
+{
+	byte dma_stat = inb(HWIF(drive)->dma_base+2);
+
+#ifdef DEBUG
+	printk("%s: dma_timer_expiry: dma status == 0x%02x\n", drive->name, dma_stat);
+#endif /* DEBUG */
+
+	if (dma_stat & 1)	/* DMAing */
+		return WAIT_CMD;
+	return 0;
 }
 
 /*
@@ -451,6 +467,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_read:
 			reading = 1 << 3;
 		case ide_dma_write:
+			SELECT_READ_WRITE(hwif,drive,func);
 			if (!(count = ide_build_dmatable(drive, func)))
 				return 1;	/* try PIO instead of DMA */
 			outl(hwif->dmatable_dma, dma_base + 4); /* PRD table */
@@ -459,7 +476,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			drive->waiting_for_dma = 1;
 			if (drive->media != ide_disk)
 				return 0;
-			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL);	/* issue cmd to drive */
+			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, dma_timer_expiry);	/* issue cmd to drive */
 			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 		case ide_dma_begin:
 			/* Note that this is done *after* the cmd has
@@ -570,8 +587,8 @@ unsigned long __init ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const
 	if (hwif->mate && hwif->mate->dma_base) {
 		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);
 	} else {
-		dma_base = dev->resource[4].start;
-		if (!dma_base || dma_base == PCI_BASE_ADDRESS_IO_MASK) {
+		dma_base = pci_resource_start(dev, 4);
+		if (!dma_base) {
 			printk("%s: dma_base is invalid (0x%04lx)\n", name, dma_base);
 			dma_base = 0;
 		}

@@ -48,6 +48,15 @@ be added to your /etc/conf.modules (or /etc/modules.conf) file:
 
 Driver notes
 ------------------------------------------------------------------------
+Two /proc pseudo-files provide diagnostic information.  This is generally
+not useful to most users.  Power users can disable VIA_PROC_FS macro in the 
+driver source code, and remove the /proc support code.  In any case, once
+version 2.0.0 is released, the /proc support code will be disabled by
+default.  Available /proc pseudo-files:
+
+	/proc/driver/via/0/info
+	/proc/driver/via/0/ac97
+
 This driver by default supports all PCI audio devices which report
 a vendor id of 0x1106, and a device id of 0x3058.  Subsystem vendor
 and device ids are not examined.
@@ -110,7 +119,8 @@ Known bugs (patches/suggestions welcome)
 1) Volume too low on many systems.  Workaround:  use mixer program
 such as xmixer to increase volume.
 
-2) RealPlayer output very scratchy.
+2) RealPlayer output very scratchy.  Workaround:  use esd, and
+configure RealPlayer to output to esd.
 
 3) Applications which attempt to open the sound device in read/write
 mode (O_RDWR) will fail.  This is incorrect OSS behavior, but since
@@ -137,5 +147,30 @@ enabled), or via the 'dmesg' program.
 If you wish to increase the size of the buffer displayed by 'dmesg', then
 change the LOG_BUF_LEN macro at the top of linux/kernel/printk.c, recompile
 your kernel, and pass the "-s <size>" option to 'dmesg'.
+
+
+
+Change history
+------------------------------------------------------------------------
+Version 1.1.7:
+* Fix module unload bug where mixer device left registered
+  after driver exit
+
+Version 1.1.6:
+* Rewrite via_set_rate to mimic ALSA basic AC97 rate setting
+* Remove much dead code
+* Complete spin_lock_irqsave -> spin_lock_irq conversion in via_dsp_ioctl
+* Fix build problem in via_dsp_ioctl
+* Optimize included headers to eliminate headers found in linux/drivers/sound
+
+Version 1.1.5:
+* Disable some overly-verbose debugging code
+* Remove unnecessary sound locks
+* Fix some ioctls for better time resolution
+* Begin spin_lock_irqsave -> spin_lock_irq conversion in via_dsp_ioctl
+
+Version 1.1.4:
+* Completed rewrite of driver.  Eliminated SoundBlaster compatibility
+  completely, and now uses the much-faster scatter-gather DMA engine.
 
 

@@ -86,8 +86,6 @@ static char re_schedule = 1;
 static unsigned long tx_count = 0;
 #endif
 
-static int ISILoad_open(struct inode *inode, struct file *filp);
-static int ISILoad_release(struct inode *inode, struct file *filp);
 static int ISILoad_ioctl(struct inode *inode, struct file *filp, unsigned  int cmd, unsigned long arg);
 
 static void isicom_tx(unsigned long _data);
@@ -109,9 +107,8 @@ static signed char linuxb_to_isib[] = {
  */
 
 static struct file_operations ISILoad_fops = {
+	owner:		THIS_MODULE,
 	ioctl:		ISILoad_ioctl,
-	open:		ISILoad_open,
-	release:	ISILoad_release,
 };
 
 struct miscdevice isiloader_device = {
@@ -127,24 +124,6 @@ extern inline int WaitTillCardIsFree(unsigned short base)
 		return 0;
 	else
 		return 1;
-}
-
-static int ISILoad_open(struct inode *inode, struct file *filp)
-{
-#ifdef ISICOM_DEBUG	
-	printk(KERN_DEBUG "ISILoad:Firmware loader Opened!!!\n");
-#endif	
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int ISILoad_release(struct inode *inode, struct file *filp)
-{
-#ifdef ISICOM_DEBUG
-	printk(KERN_DEBUG "ISILoad:Firmware loader Close(Release)d\n",);
-#endif	
-	MOD_DEC_USE_COUNT;
-	return 0;
 }
 
 static int ISILoad_ioctl(struct inode *inode, struct file *filp,

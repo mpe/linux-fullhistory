@@ -261,6 +261,7 @@ static char pg_scratch[512];            /* scratch block buffer */
 /* kernel glue structures */
 
 static struct file_operations pg_fops = {
+	owner:		THIS_MODULE,
 	read:		pg_read,
 	write:		pg_write,
 	open:		pg_open,
@@ -578,8 +579,6 @@ static int pg_open (struct inode *inode, struct file *file)
 		return -EBUSY;
 	}
 
-	MOD_INC_USE_COUNT;
-
 	if (PG.busy) {
 		pg_reset(unit);
 		PG.busy = 0;
@@ -591,7 +590,6 @@ static int pg_open (struct inode *inode, struct file *file)
 	PG.bufptr = kmalloc(PG_MAX_DATA,GFP_KERNEL);
 	if (PG.bufptr == NULL) {
 		PG.access--;
-		MOD_DEC_USE_COUNT;
 		printk("%s: buffer allocation failed\n",PG.name);
 		return -ENOMEM;
 	}
@@ -610,8 +608,6 @@ static int pg_release (struct inode *inode, struct file *file)
 
 	kfree(PG.bufptr);
 	PG.bufptr = NULL;
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 

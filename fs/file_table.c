@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/init.h>
+#include <linux/module.h>
 #include <linux/smp_lock.h>
 
 /* SLAB cache for filp's. */
@@ -127,6 +128,7 @@ static void __fput(struct file *filp)
 
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
+	fops_put(filp->f_op);
 	filp->f_dentry = NULL;
 	filp->f_vfsmnt = NULL;
 	if (filp->f_mode & FMODE_WRITE)

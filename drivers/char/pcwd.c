@@ -414,7 +414,6 @@ static int pcwd_open(struct inode *ino, struct file *filep)
                     is_open = 1;
                     return(0);
                 case TEMP_MINOR:
-                    MOD_INC_USE_COUNT;
                     return(0);
                 default:
                     return (-ENODEV);
@@ -450,7 +449,6 @@ static ssize_t pcwd_read(struct file *file, char *buf, size_t count,
 
 static int pcwd_close(struct inode *ino, struct file *filep)
 {
-	MOD_DEC_USE_COUNT;
 	if (MINOR(ino->i_rdev)==WATCHDOG_MINOR)
 	{
 	        is_open = 0;
@@ -543,6 +541,7 @@ static void debug_off(void)
 }
 
 static struct file_operations pcwd_fops = {
+	owner:		THIS_MODULE,
 	read:		pcwd_read,
 	write:		pcwd_write,
 	ioctl:		pcwd_ioctl,

@@ -2059,14 +2059,14 @@ static void isapnp_free_all_resources(void)
 	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff)
 		release_resource(isapnp_rdp_res);
 #ifdef MODULE
+#ifdef CONFIG_PROC_FS
+	isapnp_proc_done();
+#endif
 	while (!list_empty(&isapnp_cards)) {
 		struct list_head *list = isapnp_cards.next;
 		list_del(list);
 		isapnp_free_card(pci_bus_b(list));
 	}
-#ifdef CONFIG_PROC_FS
-	isapnp_proc_done();
-#endif
 #endif
 }
 

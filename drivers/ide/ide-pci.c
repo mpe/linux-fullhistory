@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/ide/ide-pci.c		Version 1.04	July 27, 1999
+ *  linux/drivers/ide/ide-pci.c		Version 1.05	June 9, 2000
  *
  *  Copyright (c) 1998-2000  Andre Hedrick <andre@linux-ide.org>
  *
@@ -33,10 +33,13 @@
 #define DEVID_PIIX4E2	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82443MX_1})
 #define DEVID_PIIX4U	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AA_1})
 #define DEVID_PIIX4U2	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82372FB_1})
+#define DEVID_PIIX4NX	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82451NX})
+#define DEVID_PIIX4U3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82820FW_5})
 #define DEVID_VIA_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C561})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
 #define DEVID_PDC20262	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20262})
+#define DEVID_PDC20267	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20267})
 #define DEVID_RZ1000	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_RZ1000})
 #define DEVID_RZ1001	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_RZ1001})
 #define DEVID_SAMURAI	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_SAMURAI_IDE})
@@ -44,6 +47,7 @@
 #define DEVID_CMD643	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_643})
 #define DEVID_CMD646	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_646})
 #define DEVID_CMD648	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_648})
+#define DEVID_CMD649	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_649})
 #define DEVID_SIS5513	((ide_pci_devid_t){PCI_VENDOR_ID_SI,      PCI_DEVICE_ID_SI_5513})
 #define DEVID_OPTI621	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C621})
 #define DEVID_OPTI621V	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C558})
@@ -65,6 +69,7 @@
 #define DEVID_CY82C693	((ide_pci_devid_t){PCI_VENDOR_ID_CONTAQ,  PCI_DEVICE_ID_CONTAQ_82C693})
 #define DEVID_HINT	((ide_pci_devid_t){0x3388,                0x8013})
 #define DEVID_CS5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
+#define DEVID_AMD7403	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_COBRA_7403})
 #define DEVID_AMD7409	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_VIPER_7409})
 
 #define	IDE_IGNORE	((void *)-1)
@@ -288,7 +293,7 @@ typedef struct ide_pci_enablebit_s {
 
 typedef struct ide_pci_device_s {
 	ide_pci_devid_t		devid;
-	const char		*name;
+	char			*name;
 	unsigned int		(*init_chipset)(struct pci_dev *dev, const char *name);
 	unsigned int		(*ata66_check)(ide_hwif_t *hwif);
 	void 			(*init_hwif)(ide_hwif_t *hwif);
@@ -307,10 +312,13 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_PIIX4E2,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_PIIX4U,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_PIIX4U2,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
+	{DEVID_PIIX4NX,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
+	{DEVID_PIIX4U3,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_VIA_IDE,	"VIA_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_VP_IDE,	"VP_IDE",	PCI_VIA82CXXX,	ATA66_VIA82CXXX,INIT_VIA82CXXX,	DMA_VIA82CXXX,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	ON_BOARD,	0 },
 	{DEVID_PDC20246,"PDC20246",	PCI_PDC202XX,	NULL,		INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	OFF_BOARD,	16 },
 	{DEVID_PDC20262,"PDC20262",	PCI_PDC202XX,	ATA66_PDC202XX,	INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}},	OFF_BOARD,	48 },
+	{DEVID_PDC20267,"PDC20267",	PCI_PDC202XX,	ATA66_PDC202XX,	INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}},	OFF_BOARD,	48 },
 	{DEVID_RZ1000,	"RZ1000",	NULL,		NULL,		INIT_RZ1000,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_RZ1001,	"RZ1001",	NULL,		NULL,		INIT_RZ1000,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_SAMURAI,	"SAMURAI",	NULL,		NULL,		INIT_SAMURAI,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
@@ -320,6 +328,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CMD643,	"CMD643",	PCI_CMD64X,	NULL,		INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_CMD646,	"CMD646",	PCI_CMD64X,	NULL,		INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x51,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_CMD648,	"CMD648",	PCI_CMD64X,	ATA66_CMD64X,	INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_CMD649,	"CMD649",	PCI_CMD64X,	ATA66_CMD64X,	INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HT6565,	"HT6565",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_OPTI621,	"OPTI621",	NULL,		NULL,		INIT_OPTI621,	NULL,		{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_OPTI621X,"OPTI621X",	NULL,		NULL,		INIT_OPTI621,	NULL,		{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
@@ -338,6 +347,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CY82C693,"CY82C693",	PCI_CY82C693,	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_CS5530,	"CS5530",	PCI_CS5530,	NULL,		INIT_CS5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_AMD7403,	"AMD7403",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_AMD7409,	"AMD7409",	PCI_AMD7409,	ATA66_AMD7409,	INIT_AMD7409,	DMA_AMD7409,	{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
@@ -352,6 +362,7 @@ static unsigned int __init ide_special_settings (struct pci_dev *dev, const char
 		case PCI_DEVICE_ID_TTI_HPT366:
 		case PCI_DEVICE_ID_PROMISE_20246:
 		case PCI_DEVICE_ID_PROMISE_20262:
+		case PCI_DEVICE_ID_PROMISE_20267:
 		case PCI_DEVICE_ID_ARTOP_ATP850UF:
 		case PCI_DEVICE_ID_ARTOP_ATP860:
 		case PCI_DEVICE_ID_ARTOP_ATP860R:
@@ -510,6 +521,14 @@ check_if_enabled:
 
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
 	class_rev &= 0xff;
+
+	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X)) {
+		/* see comments in hpt34x.c on why..... */
+		char *chipset_names[] = {"HPT343", "HPT345"};
+		strcpy(d->name, chipset_names[(pcicmd & PCI_COMMAND_MEMORY)]);
+		d->bootable = (pcicmd & PCI_COMMAND_MEMORY) ? OFF_BOARD : NEVER_BOARD;
+	}
+
 	printk("%s: chipset revision %d\n", d->name, class_rev);
 
 	/*
@@ -541,10 +560,7 @@ check_if_enabled:
 		printk("%s: 100%% native mode on irq %d\n", d->name, pciirq);
 #endif
 	}
-	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X)) {
-		/* see comments in hpt34x.c on why..... */
-		d->bootable = (pcicmd & PCI_COMMAND_MEMORY) ? OFF_BOARD : NEVER_BOARD;
-	}
+
 	/*
 	 * Set up the IDE ports
 	 */
@@ -553,14 +569,14 @@ check_if_enabled:
 		ide_pci_enablebit_t *e = &(d->enablebits[port]);
 		if (e->reg && (pci_read_config_byte(dev, e->reg, &tmp) || (tmp & e->mask) != e->val))
 			continue;	/* port not enabled */
-		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) && (port) && (class_rev != 0x03))
+		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) && (port) && (class_rev < 0x03))
 			return;
 		if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE || (dev->class & (port ? 4 : 1)) != 0) {
 			ctl  = dev->resource[(2*port)+1].start;
 			base = dev->resource[2*port].start;
 			if (!(ctl & PCI_BASE_ADDRESS_IO_MASK) ||
 			    !(base & PCI_BASE_ADDRESS_IO_MASK)) {
-				printk("%s: IO baseregs (BIOS) are reported as MEM, report to <andre@suse.com>.\n", d->name);
+				printk("%s: IO baseregs (BIOS) are reported as MEM, report to <andre@linux-ide.org>.\n", d->name);
 #if 0
 				/* FIXME! This really should check that it really gets the IO/MEM part right! */
 				continue;
@@ -603,19 +619,21 @@ check_if_enabled:
 			goto bypass_umc_dma;
 		}
 		if (hwif->udma_four) {
-			printk("%s: ATA-66 forced bit set (WARNING)!!\n", d->name);
+			printk("%s: ATA-66/100 forced bit set (WARNING)!!\n", d->name);
 		} else {
 			hwif->udma_four = (d->ata66_check) ? d->ata66_check(hwif) : 0;
 		}
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6260) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_PIIX4NX) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X))
 			autodma = 0;
 		if (autodma)
 			hwif->autodma = 1;
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20262) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20267) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6260) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6260R) ||
@@ -625,6 +643,7 @@ check_if_enabled:
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD646) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD648) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD649) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {
@@ -665,6 +684,7 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 	ide_pci_device_t *d2;
 	unsigned char pin1 = 0, pin2 = 0;
 	unsigned int class_rev;
+	char *chipset_names[] = {"HPT366", "HPT366", "HPT368", "HPT370", "HPT370A"};
 
 	if (PCI_FUNC(dev->devfn) & 1)
 		return;
@@ -672,8 +692,13 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
 	class_rev &= 0xff;
 
+	strcpy(d->name, chipset_names[class_rev]);
+
 	switch(class_rev) {
-		case 3:		return;
+		case 4:
+		case 3:	printk("%s: IDE controller on PCI bus %02x dev %02x\n", d->name, dev->bus->number, dev->devfn);
+			ide_setup_pci_device(dev, d);
+			return;
 		default:	break;
 	}
 
@@ -700,15 +725,6 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 		return;
 	d2 = d;
 	printk("%s: IDE controller on PCI bus %02x dev %02x\n", d2->name, dev2->bus->number, dev2->devfn);
-	if (hpt363_shared_pin && !hpt363_shared_irq) {
-		printk("%s: IDE controller run unsupported mode three!!!\n", d2->name);
-#ifndef CONFIG_HPT366_MODE3
-		printk("%s: IDE controller report to <andre@suse.com>\n", d->name);
-		return;
-#else /* CONFIG_HPT366_MODE3 */
-		printk("%s: OVERRIDE IDE controller not advisable this mode!!!\n", d2->name);
-#endif /* CONFIG_HPT366_MODE3 */
-	}
 	ide_setup_pci_device(dev2, d2);
 }
 

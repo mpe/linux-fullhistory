@@ -1184,7 +1184,7 @@ static void awacs_nosound(unsigned long xx)
 }
 
 static struct timer_list beep_timer = {
-	NULL, NULL, 0, 0, awacs_nosound
+	function: awacs_nosound
 };
 
 static void awacs_mksound(unsigned int hz, unsigned int ticks)
@@ -1703,14 +1703,14 @@ static int awacs_mixer_ioctl(u_int cmd, u_long arg)
 	case SOUND_MIXER_READ_RECLEV:
 		data = awacs_get_volume(awacs_reg[0], 4);
 		return IOCTL_OUT(arg, data);
-	case MIXER_WRITE(SOUND_MASK_MONITOR):
+	case MIXER_WRITE(SOUND_MIXER_MONITOR):
 		IOCTL_IN(arg, data);
 		awacs_reg[1] &= ~MASK_LOOPTHRU;
 		if ((data & 0xff) >= 50)
 			awacs_reg[1] |= MASK_LOOPTHRU;
 		awacs_write(MASK_ADDR1 | awacs_reg[1]);
 		/* fall through */
-	case MIXER_READ(SOUND_MASK_MONITOR):
+	case MIXER_READ(SOUND_MIXER_MONITOR):
 		data = (awacs_reg[1] & MASK_LOOPTHRU)? 100: 0;
 		return IOCTL_OUT(arg, data);
 	}

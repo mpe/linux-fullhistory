@@ -58,6 +58,10 @@ void cmd640_dump_regs (void);
 #endif
 #endif  /* CONFIG_BLK_DEV_CMD640 */
 
+#ifndef DISABLE_IRQ_NOSYNC
+#define DISABLE_IRQ_NOSYNC	0
+#endif
+
 /*
  * IDE_DRIVE_CMD is used to implement many features of the hdparm utility
  */
@@ -179,6 +183,32 @@ typedef unsigned char	byte;	/* used everywhere */
 	if (hwif->selectproc)					\
 		hwif->selectproc(drive);			\
 	OUT_BYTE((drive)->select.all, hwif->io_ports[IDE_SELECT_OFFSET]); \
+}
+
+#define SELECT_INTERRUPT(hwif,drive)				\
+{								\
+	if (hwif->intrproc)					\
+		hwif->intrproc(drive);				\
+	else							\
+		OUT_BYTE((drive)->ctl|2, hwif->io_ports[IDE_CONTROL_OFFSET]);	\
+}
+
+#define SELECT_MASK(hwif,drive,mask)				\
+{								\
+	if (hwif->maskproc)					\
+		hwif->maskproc(drive,mask);			\
+}
+
+#define SELECT_READ_WRITE(hwif,drive,func)			\
+{								\
+	if (hwif->rwproc)					\
+		hwif->rwproc(drive,func);			\
+}
+
+#define QUIRK_LIST(hwif,drive)					\
+{								\
+	if (hwif->quirkproc)					\
+		(drive)->quirk_list = hwif->quirkproc(drive);	\
 }
 
 /*
@@ -309,6 +339,8 @@ typedef struct ide_drive_s {
 	int		last_lun;	/* last logical unit */
 	int		forced_lun;	/* if hdxlun was given at boot */
 	int		lun;		/* logical unit */
+	int		crc_count;	/* crc counter to reduce drive speed */
+	byte		quirk_list;	/* drive is considered quirky if set for a specific host */
 	byte		init_speed;	/* transfer rate set at boot */
 	byte		current_speed;	/* current transfer rate set */
 	byte		dn;		/* now wide spread use */
@@ -354,6 +386,10 @@ typedef int (ide_speedproc_t) (ide_drive_t *, byte);
  */
 typedef void (ide_selectproc_t) (ide_drive_t *);
 typedef void (ide_resetproc_t) (ide_drive_t *);
+typedef int (ide_quirkproc_t) (ide_drive_t *);
+typedef void (ide_intrproc_t) (ide_drive_t *);
+typedef void (ide_maskproc_t) (ide_drive_t *, int);
+typedef void (ide_rw_proc_t) (ide_drive_t *, ide_dma_action_t);
 
 /*
  * hwif_chipset_t is used to keep track of the specific hardware
@@ -388,6 +424,10 @@ typedef struct hwif_s {
 	ide_speedproc_t	*speedproc;	/* routine to retune DMA modes for drives */
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
 	ide_resetproc_t	*resetproc;	/* routine to reset controller after a disk reset */
+	ide_intrproc_t	*intrproc;	/* special interrupt handling for shared pci interrupts */
+	ide_maskproc_t	*maskproc;	/* special host masking for drive selection */
+	ide_quirkproc_t	*quirkproc;	/* check host's drive quirk list */
+	ide_rw_proc_t	*rwproc;	/* adjust timing based upon rq->cmd direction */
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned int	*dmatable_cpu;	/* dma physical region descriptor table (cpu view) */
 	dma_addr_t	dmatable_dma;	/* dma physical region descriptor table (dma view) */
@@ -423,6 +463,7 @@ typedef struct hwif_s {
 	byte		straight8;	/* Alan's straight 8 check */
 	void		*hwif_data;	/* extra hwif data */
 } ide_hwif_t;
+
 
 /*
  * Status returned from various ide_ functions
@@ -614,12 +655,14 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 
 /*
  * This is used for (nearly) all data transfers from/to the IDE interface
+ * FIXME for 2.5, to a pointer pass verses memcpy........
  */
 void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
 void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
 
 /*
  * This is used for (nearly) all ATAPI data transfers from/to the IDE interface
+ * FIXME for 2.5, to a pointer pass verses memcpy........
  */
 void atapi_input_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount);
 void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount);
@@ -750,6 +793,7 @@ byte ide_auto_reduce_xfer (ide_drive_t *drive);
 int ide_driveid_update (ide_drive_t *drive);
 int ide_ata66_check (ide_drive_t *drive, byte cmd, byte nsect, byte feature);
 int ide_config_drive_speed (ide_drive_t *drive, byte speed);
+byte eighty_ninty_three (ide_drive_t *drive);
 int set_transfer (ide_drive_t *drive, byte cmd, byte nsect, byte feature);
 
 /*

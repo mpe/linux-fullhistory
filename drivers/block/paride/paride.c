@@ -120,8 +120,8 @@ static void pi_claim( PIA *pi)
 	pi->claimed = 1;
 #ifdef CONFIG_PARPORT
         if (pi->pardev)
-          while (parport_claim((struct pardevice *)(pi->pardev)))
-            sleep_on(&(pi->parq));
+		wait_event (pi->parq,
+			    !parport_claim ((struct pardevice *)pi->pardev));
 #endif
 }
 

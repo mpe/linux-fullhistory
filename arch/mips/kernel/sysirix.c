@@ -1099,7 +1099,9 @@ asmlinkage unsigned long irix_mmap32(unsigned long addr, size_t len, int prot,
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
+	down(&current->mm->mmap_sem);
 	retval = do_mmap(file, addr, len, prot, flags, offset);
+	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 

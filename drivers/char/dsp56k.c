@@ -472,10 +472,6 @@ static int dsp56k_open(struct inode *inode, struct file *file)
 		return -ENXIO;
 	}
 
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif /* MODULE */
-
 	return 0;
 }
 
@@ -495,13 +491,11 @@ static int dsp56k_release(struct inode *inode, struct file *file)
 		return -ENXIO;
 	}
 
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 	return 0;
 }
 
 static struct file_operations dsp56k_fops = {
+	owner:		THIS_MODULE,
 	read:		dsp56k_read,
 	write:		dsp56k_write,
 	ioctl:		dsp56k_ioctl,

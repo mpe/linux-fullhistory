@@ -1,7 +1,8 @@
 #undef	BLOCKMOVE
 #define	Z_WAKE
+#undef	Z_EXT_CHARS_IN_BUFFER
 static char rcsid[] =
-"$Revision: 2.3.2.6 $$Date: 2000/05/05 13:56:05 $";
+"$Revision: 2.3.2.7 $$Date: 2000/06/01 18:26:34 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -24,6 +25,12 @@ static char rcsid[] =
  * This version supports shared IRQ's (only for PCI boards).
  *
  * $Log: cyclades.c,v $
+ * Revision 2.3.2.7   2000/06/01 18:26:34 ivan
+ * Request PLX I/O region, although driver doesn't use it, to avoid
+ * problems with other drivers accessing it.
+ * Removed count for on-board buffer characters in cy_chars_in_buffer
+ * (Cyclades-Z only).
+ *
  * Revision 2.3.2.6   2000/05/05 13:56:05 ivan
  * Driver now reports physical instead of virtual memory addresses.
  * Masks were added to some Cyclades-Z read accesses.
@@ -636,6 +643,7 @@ static char rcsid[] =
 #include <linux/ptrace.h>
 #include <linux/cyclades.h>
 #include <linux/mm.h>
+#include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
@@ -882,9 +890,8 @@ static void cyz_poll(unsigned long);
 static long cyz_polling_cycle = CZ_DEF_POLL;
 
 static int cyz_timeron = 0;
-static struct timer_list
-cyz_timerlist = {
-    NULL, NULL, 0, 0, cyz_poll
+static struct timer_list cyz_timerlist = {
+    function: cyz_poll
 };
 #else /* CONFIG_CYZ_INTR */
 static void cyz_rx_restart(unsigned long);
@@ -3122,12 +3129,15 @@ cy_chars_in_buffer(struct tty_struct *tty)
     card = info->card;
     channel = (info->line) - (cy_card[card].first_line);
 
+#ifdef Z_EXT_CHARS_IN_BUFFER
     if (!IS_CYC_Z(cy_card[card])) {
+#endif /* Z_EXT_CHARS_IN_BUFFER */
 #ifdef CY_DEBUG_IO
 	printk("cyc:cy_chars_in_buffer ttyC%d %d\n",
 		info->line, info->xmit_cnt); /* */
 #endif
 	return info->xmit_cnt;
+#ifdef Z_EXT_CHARS_IN_BUFFER
     } else {
 	static volatile struct FIRM_ID *firm_id;
 	static volatile struct ZFW_CTRL *zfw_ctrl;
@@ -3156,6 +3166,7 @@ cy_chars_in_buffer(struct tty_struct *tty)
 #endif
 	return (info->xmit_cnt + char_count);
     }
+#endif /* Z_EXT_CHARS_IN_BUFFER */
 } /* cy_chars_in_buffer */
 
 
@@ -4856,7 +4867,7 @@ cy_detect_pci(void)
   struct pci_dev	*pdev = NULL;
   unsigned char		cyy_rev_id;
   unsigned char         cy_pci_irq = 0;
-  uclong		cy_pci_phys0, cy_pci_phys2;
+  uclong		cy_pci_phys0, cy_pci_phys1, cy_pci_phys2;
   uclong		cy_pci_addr0, cy_pci_addr2;
   unsigned short        i,j,cy_pci_nchan, plx_ver;
   unsigned short        device_id,dev_index = 0;
@@ -4885,6 +4896,7 @@ cy_detect_pci(void)
                 /* read PCI configuration area */
 		cy_pci_irq = pdev->irq;
 		cy_pci_phys0 = pci_resource_start(pdev, 0);
+		cy_pci_phys1 = pci_resource_start(pdev, 1);
 		cy_pci_phys2 = pci_resource_start(pdev, 2);
 		pci_read_config_byte(pdev, PCI_REVISION_ID, &cyy_rev_id);
 
@@ -4906,6 +4918,11 @@ cy_detect_pci(void)
 			   "Ignoring it...\n");
 		    pdev->resource[2].flags &= ~IORESOURCE_IO;
 		}
+
+		/* Although we don't use this I/O region, we should
+		   request it from the kernel anyway, to avoid problems
+		   with other drivers accessing it. */
+		request_region(cy_pci_phys1, CyPCI_Yctl, "Cyclom-Y");
 
 #if defined(__alpha__)
                 if (device_id  == PCI_DEVICE_ID_CYCLOM_Y_Lo) { /* below 1M? */
@@ -5054,6 +5071,12 @@ cy_detect_pci(void)
 			   "Ignoring it...\n");
 		    pdev->resource[2].flags &= ~IORESOURCE_IO;
 		}
+
+		/* Although we don't use this I/O region, we should
+		   request it from the kernel anyway, to avoid problems
+		   with other drivers accessing it. */
+		request_region(cy_pci_phys1, CyPCI_Zctl, "Cyclades-Z");
+
 		if (mailbox == ZE_V1) {
 #if !defined(__alpha__)
                	    cy_pci_addr2 = (ulong)ioremap(cy_pci_phys2, CyPCI_Ze_win);

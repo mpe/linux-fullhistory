@@ -687,8 +687,6 @@ static int	stli_portinfo(stlibrd_t *brdp, stliport_t *portp, int portnr, char *p
 
 static int	stli_brdinit(stlibrd_t *brdp);
 static int	stli_startbrd(stlibrd_t *brdp);
-static int	stli_memopen(struct inode *ip, struct file *fp);
-static int	stli_memclose(struct inode *ip, struct file *fp);
 static ssize_t	stli_memread(struct file *fp, char *buf, size_t count, loff_t *offp);
 static ssize_t	stli_memwrite(struct file *fp, const char *buf, size_t count, loff_t *offp);
 static int	stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
@@ -780,11 +778,10 @@ static inline int	stli_initpcibrd(int brdtype, struct pci_dev *devp);
  *	board. This is also a very useful debugging tool.
  */
 static struct file_operations	stli_fsiomem = {
+	owner:		THIS_MODULE,
 	read:		stli_memread,
 	write:		stli_memwrite,
 	ioctl:		stli_memioctl,
-	open:		stli_memopen,
-	release:	stli_memclose,
 };
 
 /*****************************************************************************/
@@ -5177,27 +5174,6 @@ static int stli_getbrdstruct(unsigned long arg)
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
 	copy_to_user((void *) arg, brdp, sizeof(stlibrd_t));
-	return(0);
-}
-
-/*****************************************************************************/
-
-/*
- *	Memory device open code. Need to keep track of opens and close
- *	for module handling.
- */
-
-static int stli_memopen(struct inode *ip, struct file *fp)
-{
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-/*****************************************************************************/
-
-static int stli_memclose(struct inode *ip, struct file *fp)
-{
-	MOD_DEC_USE_COUNT;
 	return(0);
 }
 

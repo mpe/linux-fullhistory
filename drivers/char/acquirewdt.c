@@ -125,7 +125,6 @@ static int acq_open(struct inode *inode, struct file *file)
 				spin_unlock(&acq_lock);
 				return -EBUSY;
 			}
-			MOD_INC_USE_COUNT;
 			/*
 			 *	Activate 
 			 */
@@ -150,7 +149,6 @@ static int acq_close(struct inode *inode, struct file *file)
 		acq_is_open=0;
 		spin_unlock(&acq_lock);
 	}
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -175,6 +173,7 @@ static int acq_notify_sys(struct notifier_block *this, unsigned long code,
  
  
 static struct file_operations acq_fops = {
+	owner:		THIS_MODULE,
 	read:		acq_read,
 	write:		acq_write,
 	ioctl:		acq_ioctl,

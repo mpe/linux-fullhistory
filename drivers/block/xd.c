@@ -258,20 +258,19 @@ static int xd_open (struct inode *inode,struct file *file)
 {
 	int dev = DEVICE_NR(inode->i_rdev);
 
+	MOD_INC_USE_COUNT;
+
 	if (dev < xd_drives) {
 		while (!xd_valid[dev])
 			sleep_on(&xd_wait_open);
-
-#ifdef MODULE
-		MOD_INC_USE_COUNT;
-#endif /* MODULE */
 
 		xd_access[dev]++;
 
 		return (0);
 	}
-	else
-		return -ENXIO;
+
+	MOD_DEC_USE_COUNT;
+	return -ENXIO;
 }
 
 /* do_xd_request: handle an incoming request */

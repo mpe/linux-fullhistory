@@ -67,11 +67,13 @@ static int __init gayle_offsets[IDE_NR_PORTS] = {
 #define GAYLE_NUM_HWIFS		1
 #define GAYLE_NUM_PROBE_HWIFS	GAYLE_NUM_HWIFS
 #define GAYLE_HAS_CONTROL_REG	1
+#define GAYLE_IDEREG_SIZE	0x2000
 #else /* CONFIG_BLK_DEV_IDEDOUBLER */
 #define GAYLE_NUM_HWIFS		2
 #define GAYLE_NUM_PROBE_HWIFS	(ide_doubler ? GAYLE_NUM_HWIFS : \
 					       GAYLE_NUM_HWIFS-1)
 #define GAYLE_HAS_CONTROL_REG	(!ide_doubler)
+#define GAYLE_IDEREG_SIZE	(ide_doubler ? 0x1000 : 0x2000)
 int ide_doubler = 0;	/* support IDE doublers? */
 #endif /* CONFIG_BLK_DEV_IDEDOUBLER */
 
@@ -121,23 +123,27 @@ void __init gayle_init(void)
 	ide_ack_intr_t *ack_intr;
 	hw_regs_t hw;
 	int index;
+	unsigned long phys_base, res_start, res_n;
 
 	if (a4000) {
-	    base = (ide_ioreg_t)ZTWO_VADDR(GAYLE_BASE_4000);
+	    phys_base = GAYLE_BASE_4000;
 	    irqport = (ide_ioreg_t)ZTWO_VADDR(GAYLE_IRQ_4000);
 	    ack_intr = gayle_ack_intr_a4000;
 	} else {
-	    base = (ide_ioreg_t)ZTWO_VADDR(GAYLE_BASE_1200);
+	    phys_base = GAYLE_BASE_1200;
 	    irqport = (ide_ioreg_t)ZTWO_VADDR(GAYLE_IRQ_1200);
 	    ack_intr = gayle_ack_intr_a1200;
 	}
+	phys_base += i*GAYLE_NEXT_PORT;
 
-	if (GAYLE_HAS_CONTROL_REG)
-	    ctrlport = base + GAYLE_CONTROL;
-	else
-	    ctrlport = 0;
+	res_start = ((unsigned long)phys_base) & ~(GAYLE_NEXT_PORT-1);
+	res_n = GAYLE_IDEREG_SIZE;
 
-	base += i*GAYLE_NEXT_PORT;
+	if (!request_mem_region(res_start, res_n, "IDE"))
+	    continue;
+
+	base = (ide_ioreg_t)ZTWO_VADDR(phys_base);
+	ctrlport = GAYLE_HAS_CONTROL_REG ? (base + GAYLE_CONTROL) : 0;
 
 	ide_setup_ports(&hw, base, gayle_offsets,
 			ctrlport, irqport, ack_intr, IRQ_AMIGA_PORTS);
@@ -155,7 +161,9 @@ void __init gayle_init(void)
 		    break;
 #endif /* CONFIG_BLK_DEV_IDEDOUBLER */
 	    }
-	}
+	} else
+	    release_mem_region(res_start, res_n);
+
 #if 1 /* TESTING */
 	if (i == 1) {
 	    volatile u_short *addr = (u_short *)base;

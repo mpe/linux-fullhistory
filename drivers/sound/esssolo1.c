@@ -909,7 +909,6 @@ static int solo1_open_mixdev(struct inode *inode, struct file *file)
 	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -918,7 +917,6 @@ static int solo1_release_mixdev(struct inode *inode, struct file *file)
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
 
 	VALIDATE_STATE(s);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -928,6 +926,7 @@ static int solo1_ioctl_mixdev(struct inode *inode, struct file *file, unsigned i
 }
 
 static /*const*/ struct file_operations solo1_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		solo1_llseek,
 	ioctl:		solo1_ioctl_mixdev,
 	open:		solo1_open_mixdev,
@@ -1526,7 +1525,6 @@ static int solo1_release(struct inode *inode, struct file *file)
 	s->open_mode &= ~(FMODE_READ | FMODE_WRITE);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1572,12 +1570,12 @@ static int solo1_open(struct inode *inode, struct file *file)
 	s->dma_dac.ossfragshift = s->dma_dac.ossmaxfrags = s->dma_dac.subdivision = 0;
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	prog_codec(s);
 	return 0;
 }
 
 static /*const*/ struct file_operations solo1_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		solo1_llseek,
 	read:		solo1_read,
 	write:		solo1_write,
@@ -1869,7 +1867,6 @@ static int solo1_midi_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= (file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1915,11 +1912,11 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations solo1_midi_fops = {
+	owner:		THIS_MODULE,
 	llseek:		solo1_llseek,
 	read:		solo1_midi_read,
 	write:		solo1_midi_write,
@@ -2075,7 +2072,6 @@ static int solo1_dmfm_open(struct inode *inode, struct file *file)
 	outb(1, s->sbbase+3);  /* enable OPL3 */
 	s->open_mode |= FMODE_DMFM;
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2096,11 +2092,11 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 	release_region(s->sbbase, FMSYNTH_EXTENT);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations solo1_dmfm_fops = {
+	owner:		THIS_MODULE,
 	llseek:		solo1_llseek,
 	ioctl:		solo1_dmfm_ioctl,
 	open:		solo1_dmfm_open,

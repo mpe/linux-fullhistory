@@ -411,6 +411,7 @@ static inline void add_request(request_queue_t * q, struct request * req,
 
 	drive_stat_acct(req->rq_dev, req->cmd, req->nr_sectors, 1);
 
+	elevator_account_request(&q->elevator, req);
 	if (list_empty(head)) {
 		req->elevator_sequence = elevator_sequence(&q->elevator, latency);
 		list_add(&req->queue, &q->queue_head);
@@ -748,7 +749,6 @@ get_rq:
 	req->bhtail = bh;
 	req->q = q;
 	add_request(q, req, head, orig_latency);
-	elevator_account_request(elevator, req);
 
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	return;

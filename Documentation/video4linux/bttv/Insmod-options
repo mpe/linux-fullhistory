@@ -3,7 +3,7 @@ bttv.o
 	the bt848 (grabber chip) driver
 
 	insmod args:
-		card=n		card type, see cardlist for a list.
+		card=n		card type, see CARDLIST for a list.
 		radio=0/1	card supports radio
 		pll=0/1/2	pll settings
 			0: don't use PLL
@@ -31,6 +31,29 @@ bttv.o
 	remap, card, radio and pll accept up to four comma-separated arguments
 	(for multiple boards).
 
+tuner.o
+	The tuner driver.  You need this unless you want to use only
+	with a camera or external tuner ...
+
+	insmod args:
+		debug=1		print some debug info to the syslog
+		type=n		type of the tuner chip. n as follows:
+				see CARDLIST for a complete list.
+
+tvmixer.o
+	registers a mixer device for the TV card's volume/bass/treble
+	controls (requires a i2c audio control chip like the msp3400).
+
+	insmod args:
+		debug=1		print some debug info to the syslog.
+		devnr=n		allocate device #n (0 == /dev/mixer,
+				1 = /dev/mixer1, ...), default is to
+				use the first free one.
+
+tvaudio.o
+	new, experimental module which is supported to provide a single
+	driver for all simple i2c audio control chips (tda/tea*).
+
 msp3400.o
 	The driver for the msp34xx sound processor chips. If you have a
 	stereo card, you probably want to insmod this one.
@@ -47,8 +70,6 @@ msp3400.o
 		amsound=1	Audio carrier is AM/NICAM at 6.5 Mhz.  This
 				should improve things for french people, the
 				carrier autoscan seems to work with FM only...
-		mixer=n		allocate mixer device #n.  Default is the
-				first free slot.
 
 tea6300.o
 	The driver for the tea6300 fader chip.  If you have a stereo
@@ -73,20 +94,3 @@ tda985x.o
 	insmod args:
 		debug=1		print some debug info to the syslog.
 		chip=9850/9855	set the chip type.
-
-tuner.o
-	The tuner driver.  You need this unless you want to use only
-	with a camera or external tuner ...
-
-	insmod args:
-		debug=1		print some debug info to the syslog
-		type=n		type of the tuner chip. n as follows:
-			0: Temic PAL tuner
-			1: Philips PAL_I tuner
-			2: Philips NTSC tuner
-			3: Philips SECAM tuner
-			4: no tuner
-			5: Philips PAL tuner
-			6: Temic NTSC tuner
-			7: Temic PAL tuner
-

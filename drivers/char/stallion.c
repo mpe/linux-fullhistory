@@ -511,8 +511,6 @@ static void	stl_breakctl(struct tty_struct *tty, int state);
 static void	stl_waituntilsent(struct tty_struct *tty, int timeout);
 static void	stl_sendxchar(struct tty_struct *tty, char ch);
 static void	stl_hangup(struct tty_struct *tty);
-static int	stl_memopen(struct inode *ip, struct file *fp);
-static int	stl_memclose(struct inode *ip, struct file *fp);
 static int	stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 static int	stl_portinfo(stlport_t *portp, int portnr, char *pos);
 static int	stl_readproc(char *page, char **start, off_t off, int count, int *eof, void *data);
@@ -744,9 +742,8 @@ static unsigned int	sc26198_baudtable[] = {
  *	to get at port stats - only not using the port device itself.
  */
 static struct file_operations	stl_fsiomem = {
+	owner:		THIS_MODULE,
 	ioctl:		stl_memioctl,
-	open:		stl_memopen,
-	release:	stl_memclose,
 };
 
 /*****************************************************************************/
@@ -2795,8 +2792,8 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
  */
 #if DEBUG
 	printk("%s(%d): BAR[]=%x,%x,%x,%x IRQ=%x\n", __FILE__, __LINE__,
-		devp->resource[0].start, devp->resource[1].start,
-		devp->resource[2].start, devp->resource[3].start, devp->irq);
+		pci_resource_start(devp, 0), pci_resource_start(devp, 1),
+		pci_resource_start(devp, 2), pci_resource_start(devp, 3), devp->irq);
 #endif
 
 /*
@@ -2805,22 +2802,16 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
  */
 	switch (brdtype) {
 	case BRD_ECHPCI:
-		brdp->ioaddr2 = (devp->resource[0].start &
-			PCI_BASE_ADDRESS_IO_MASK);
-		brdp->ioaddr1 = (devp->resource[1].start &
-			PCI_BASE_ADDRESS_IO_MASK);
+		brdp->ioaddr2 = pci_resource_start(devp, 0);
+		brdp->ioaddr1 = pci_resource_start(devp, 1);
 		break;
 	case BRD_ECH64PCI:
-		brdp->ioaddr2 = (devp->resource[2].start &
-			PCI_BASE_ADDRESS_IO_MASK);
-		brdp->ioaddr1 = (devp->resource[1].start &
-			PCI_BASE_ADDRESS_IO_MASK);
+		brdp->ioaddr2 = pci_resource_start(devp, 2);
+		brdp->ioaddr1 = pci_resource_start(devp, 1);
 		break;
 	case BRD_EASYIOPCI:
-		brdp->ioaddr1 = (devp->resource[2].start &
-			PCI_BASE_ADDRESS_IO_MASK);
-		brdp->ioaddr2 = (devp->resource[1].start &
-			PCI_BASE_ADDRESS_IO_MASK);
+		brdp->ioaddr1 = pci_resource_start(devp, 2);
+		brdp->ioaddr2 = pci_resource_start(devp, 1);
 		break;
 	default:
 		printk("STALLION: unknown PCI board type=%d\n", brdtype);
@@ -3117,27 +3108,6 @@ static int stl_getbrdstruct(unsigned long arg)
 	if (brdp == (stlbrd_t *) NULL)
 		return(-ENODEV);
 	copy_to_user((void *) arg, brdp, sizeof(stlbrd_t));
-	return(0);
-}
-
-/*****************************************************************************/
-
-/*
- *	Memory device open code. Need to keep track of opens and close
- *	for module handling.
- */
-
-static int stl_memopen(struct inode *ip, struct file *fp)
-{
-	MOD_INC_USE_COUNT;
-	return(0);
-}
-
-/*****************************************************************************/
-
-static int stl_memclose(struct inode *ip, struct file *fp)
-{
-	MOD_DEC_USE_COUNT;
 	return(0);
 }
 

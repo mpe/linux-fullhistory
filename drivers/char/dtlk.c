@@ -102,6 +102,7 @@ static int dtlk_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations dtlk_fops =
 {
+	owner:		THIS_MODULE,
 	read:		dtlk_read,
 	write:		dtlk_write,
 	poll:		dtlk_poll,
@@ -306,7 +307,6 @@ static int dtlk_ioctl(struct inode *inode,
 
 static int dtlk_open(struct inode *inode, struct file *file)
 {
-	MOD_INC_USE_COUNT;
 	TRACE_TEXT("(dtlk_open");
 
 	switch (MINOR(inode->i_rdev)) {
@@ -322,7 +322,6 @@ static int dtlk_open(struct inode *inode, struct file *file)
 
 static int dtlk_release(struct inode *inode, struct file *file)
 {
-	MOD_DEC_USE_COUNT;
 	TRACE_TEXT("(dtlk_release");
 
 	switch (MINOR(inode->i_rdev)) {

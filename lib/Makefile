@@ -8,5 +8,6 @@
 
 L_TARGET := lib.a
 L_OBJS   := errno.o ctype.o string.o vsprintf.o brlock.o
+LX_OBJS  := cmdline.o
 
 include $(TOPDIR)/Rules.make

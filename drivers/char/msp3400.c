@@ -1,7 +1,7 @@
 /*
  * programming the msp34* sound processor family
  *
- * (c) 1997,1998 Gerd Knorr <kraxel@goldbach.in-berlin.de>
+ * (c) 1997-2000 Gerd Knorr <kraxel@goldbach.in-berlin.de>
  *
  * what works and what doesn't:
  *
@@ -46,6 +46,7 @@
 #include <linux/i2c.h>
 #include <linux/videodev.h>
 #include <asm/semaphore.h>
+#include <linux/init.h>
 
 #ifdef CONFIG_SMP
 #include <asm/pgtable.h>
@@ -57,16 +58,14 @@
 
 #include "audiochip.h"
 
-#define WAIT_QUEUE                 wait_queue_head_t
-
 /* sound mixer stuff */ 
-#if defined(CONFIG_SOUND) || defined(CONFIG_SOUND_MODULE)
+#if 0 /* defined(CONFIG_SOUND) || defined(CONFIG_SOUND_MODULE) */
 # define REGISTER_MIXER 1
 #endif
 
 /* Addresses to scan */
 static unsigned short normal_i2c[] = {I2C_CLIENT_END};
-static unsigned short normal_i2c_range[] = {0x40,0x44,I2C_CLIENT_END};
+static unsigned short normal_i2c_range[] = {0x40,0x40,I2C_CLIENT_END};
 static unsigned short probe[2]        = { I2C_CLIENT_END, I2C_CLIENT_END };
 static unsigned short probe_range[2]  = { I2C_CLIENT_END, I2C_CLIENT_END };
 static unsigned short ignore[2]       = { I2C_CLIENT_END, I2C_CLIENT_END };
@@ -102,7 +101,7 @@ struct msp3400c {
 
 	/* thread */
 	struct task_struct  *thread;
-	WAIT_QUEUE           wq;
+	wait_queue_head_t    wq;
 
 	struct semaphore    *notify;
 	int                  active,restart,rmmod;
@@ -680,10 +679,10 @@ static int msp3400c_thread(void *data)
 #endif
     
 	exit_mm(current);
+	exit_fs(current);
 	current->session = 1;
 	current->pgrp = 1;
 	sigfillset(&current->blocked);
-	current->fs->umask = 0;
 	strcpy(current->comm,"msp3400");
 
 	msp->thread = current;
@@ -932,10 +931,10 @@ static int msp3410d_thread(void *data)
 #endif
     
 	exit_mm(current);
+	exit_fs(current);
 	current->session = 1;
 	current->pgrp = 1;
 	sigfillset(&current->blocked);
-	current->fs->umask = 0;
 	strcpy(current->comm,"msp3410 [auto]");
 
 	msp->thread = current;
@@ -1256,7 +1255,6 @@ msp3400c_mixer_open(struct inode *inode, struct file *file)
 	if (client->adapter->inc_use)
 		client->adapter->inc_use(client->adapter);
 	
-        MOD_INC_USE_COUNT;
         return 0;
 }
 
@@ -1267,7 +1265,6 @@ msp3400c_mixer_release(struct inode *inode, struct file *file)
 
 	if (client->adapter->dec_use) 
 		client->adapter->dec_use(client->adapter);
-        MOD_DEC_USE_COUNT;
         return 0;
 }
 
@@ -1278,6 +1275,7 @@ msp3400c_mixer_llseek(struct file *file, loff_t offset, int origin)
 }
 
 static struct file_operations msp3400c_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:         msp3400c_mixer_llseek,
 	ioctl:          msp3400c_mixer_ioctl,
 	open:           msp3400c_mixer_open,
@@ -1370,7 +1368,7 @@ static int msp_attach(struct i2c_adapter *adap, int addr,
 
 	if (simple == -1) {
 		/* default mode */
-		msp->simple = 0;
+		msp->simple = (((rev2>>8)&0xff) == 0) ? 0 : 1;
 	} else {
 		/* use insmod option */
 		msp->simple = simple;
@@ -1632,22 +1630,19 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 
 /* ----------------------------------------------------------------------- */
 
-#ifdef MODULE
-int init_module(void)
-#else
-int msp3400c_init(void)
-#endif
+int msp3400_init_module(void)
 {
 	i2c_add_driver(&driver);
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+void msp3400_cleanup_module(void)
 {
 	i2c_del_driver(&driver);
 }
-#endif
+
+module_init(msp3400_init_module);
+module_exit(msp3400_cleanup_module);
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

@@ -373,24 +373,6 @@ static void __init probe_roms(void)
 	}
 }
 
-unsigned long __init memparse(char *ptr, char **retptr)
-{
-	unsigned long ret;
-
-	ret = simple_strtoul(ptr, retptr, 0);
-
-	if (**retptr == 'K' || **retptr == 'k') {
-		ret <<= 10;
-		(*retptr)++;
-	}
-	else if (**retptr == 'M' || **retptr == 'm') {
-		ret <<= 20;
-		(*retptr)++;
-	}
-	return ret;
-} /* memparse */
-
-
 void __init add_memory_region(unsigned long start,
                                   unsigned long size, int type)
 {

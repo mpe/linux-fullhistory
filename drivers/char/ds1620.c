@@ -311,22 +311,6 @@ ds1620_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned 
 	return 0;
 }
 
-static int
-ds1620_open(struct inode *inode, struct file *file)
-{
-	MOD_INC_USE_COUNT;
-
-	return 0;
-}
-
-static int
-ds1620_release(struct inode *inode, struct file *file)
-{
-	MOD_DEC_USE_COUNT;
-
-	return 0;
-}
-
 #ifdef THERM_USE_PROC
 static int
 proc_therm_ds1620_read(char *buf, char **start, off_t offset,
@@ -352,10 +336,9 @@ static struct proc_dir_entry *proc_therm_ds1620;
 #endif
 
 static struct file_operations ds1620_fops = {
+	owner:		THIS_MODULE,
 	read:		ds1620_read,
 	ioctl:		ds1620_ioctl,
-	open:		ds1620_open,
-	release:	ds1620_release,
 };
 
 static struct miscdevice ds1620_miscdev = {

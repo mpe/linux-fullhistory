@@ -1240,7 +1240,6 @@ static int sv_open_mixdev(struct inode *inode, struct file *file)
 	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1249,7 +1248,6 @@ static int sv_release_mixdev(struct inode *inode, struct file *file)
 	struct sv_state *s = (struct sv_state *)file->private_data;
 	
 	VALIDATE_STATE(s);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1259,6 +1257,7 @@ static int sv_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int 
 }
 
 static /*const*/ struct file_operations sv_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		sv_llseek,
 	ioctl:		sv_ioctl_mixdev,
 	open:		sv_open_mixdev,
@@ -1900,7 +1899,6 @@ static int sv_open(struct inode *inode, struct file *file)
 	set_fmt(s, fmtm, fmts);
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1923,11 +1921,11 @@ static int sv_release(struct inode *inode, struct file *file)
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations sv_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		sv_llseek,
 	read:		sv_read,
 	write:		sv_write,
@@ -2157,7 +2155,6 @@ static int sv_midi_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= (file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2203,11 +2200,11 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations sv_midi_fops = {
+	owner:		THIS_MODULE,
 	llseek:		sv_llseek,
 	read:		sv_midi_read,
 	write:		sv_midi_write,
@@ -2357,7 +2354,6 @@ static int sv_dmfm_open(struct inode *inode, struct file *file)
 	outb(1, s->iosynth+3);  /* enable OPL3 */
 	s->open_mode |= FMODE_DMFM;
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2377,11 +2373,11 @@ static int sv_dmfm_release(struct inode *inode, struct file *file)
 	}
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations sv_dmfm_fops = {
+	owner:		THIS_MODULE,
 	llseek:		sv_llseek,
 	ioctl:		sv_dmfm_ioctl,
 	open:		sv_dmfm_open,

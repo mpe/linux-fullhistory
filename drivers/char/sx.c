@@ -304,8 +304,6 @@ static int sx_init_board (struct sx_board *board);
 static int sx_init_portstructs (int nboards, int nports);
 static int sx_fw_ioctl (struct inode *inode, struct file *filp,
                         unsigned int cmd, unsigned long arg);
-static int sx_fw_open(struct inode *inode, struct file *filp);
-static INT sx_fw_release(struct inode *inode, struct file *filp);
 static int sx_init_drivers(void);
 
 
@@ -419,9 +417,8 @@ static struct real_driver sx_real_driver = {
  */
 
 static struct file_operations sx_fw_fops = {
+	owner:		THIS_MODULE,
 	ioctl:		sx_fw_ioctl,
-	open:		sx_fw_open,
-	release:	sx_fw_release,
 };
 
 struct miscdevice sx_fw_device = {
@@ -1417,25 +1414,6 @@ static void sx_shutdown_port (void * ptr)
  *                Here are the routines that actually                     *
  *               interface with the rest of the system                    *
  * ********************************************************************** */
-
-
-static int sx_fw_open(struct inode *inode, struct file *filp)
-{
-	func_enter ();
-	MOD_INC_USE_COUNT;
-	func_exit ();
-	return 0;
-}
-
-
-static INT sx_fw_release(struct inode *inode, struct file *filp)
-{
-	func_enter ();
-	MOD_DEC_USE_COUNT;
-	func_exit ();
-	return NO_ERROR;
-}
-
 
 static int sx_open  (struct tty_struct * tty, struct file * filp)
 {

@@ -1,8 +1,8 @@
 /*
- *  linux/drivers/ide/piix.c		Version 0.31	Mar. 18, 2000
+ *  linux/drivers/ide/piix.c		Version 0.32	June 9, 2000
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
- *  Copyright (C) 1998-2000 Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-2000 Andre Hedrick <andre@linux-ide.org>
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  PIO mode setting function for Intel chipsets.  
@@ -83,7 +83,7 @@ static struct pci_dev *bmide_dev;
 static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
-	u32 bibma = bmide_dev->resource[4].start;
+	u32 bibma = pci_resource_start(bmide_dev, 4);
         u16 reg40 = 0, psitre = 0, reg42 = 0, ssitre = 0;
 	u8  c0 = 0, c1 = 0;
 	u8  reg44 = 0, reg48 = 0, reg4a = 0, reg4b = 0, reg54 = 0, reg55 = 0;
@@ -108,10 +108,14 @@ static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 	c1 = inb_p((unsigned short)bibma + 0x0a);
 
 	switch(bmide_dev->device) {
+		case PCI_DEVICE_ID_INTEL_82820FW_5:
+			p += sprintf(p, "\n                                Intel PIIX4 Ultra 100 Chipset.\n");
+			break;
 		case PCI_DEVICE_ID_INTEL_82372FB_1:
 		case PCI_DEVICE_ID_INTEL_82801AA_1:
 			p += sprintf(p, "\n                                Intel PIIX4 Ultra 66 Chipset.\n");
 			break;
+		case PCI_DEVICE_ID_INTEL_82451NX:
 		case PCI_DEVICE_ID_INTEL_82801AB_1:
 		case PCI_DEVICE_ID_INTEL_82443MX_1:
 		case PCI_DEVICE_ID_INTEL_82371AB:
@@ -142,21 +146,25 @@ static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 			(reg48&0x04) ? "yes" : "no ",
 			(reg48&0x08) ? "yes" : "no " );
 	p += sprintf(p, "UDMA enabled:   %s                %s               %s                 %s\n",
+			((reg54&0x11) && (reg55&0x10) && (reg4a&0x01)) ? "5" :
 			((reg54&0x11) && (reg4a&0x02)) ? "4" :
 			((reg54&0x11) && (reg4a&0x01)) ? "3" :
 			(reg4a&0x02) ? "2" :
 			(reg4a&0x01) ? "1" :
 			(reg4a&0x00) ? "0" : "X",
+			((reg54&0x22) && (reg55&0x20) && (reg4a&0x10)) ? "5" :
 			((reg54&0x22) && (reg4a&0x20)) ? "4" :
 			((reg54&0x22) && (reg4a&0x10)) ? "3" :
 			(reg4a&0x20) ? "2" :
 			(reg4a&0x10) ? "1" :
 			(reg4a&0x00) ? "0" : "X",
+			((reg54&0x44) && (reg55&0x40) && (reg4b&0x03)) ? "5" :
 			((reg54&0x44) && (reg4b&0x02)) ? "4" :
 			((reg54&0x44) && (reg4b&0x01)) ? "3" :
 			(reg4b&0x02) ? "2" :
 			(reg4b&0x01) ? "1" :
 			(reg4b&0x00) ? "0" : "X",
+			((reg54&0x88) && (reg55&0x80) && (reg4b&0x30)) ? "5" :
 			((reg54&0x88) && (reg4b&0x20)) ? "4" :
 			((reg54&0x88) && (reg4b&0x10)) ? "3" :
 			(reg4b&0x20) ? "2" :
@@ -188,6 +196,7 @@ extern char *ide_xfer_verbose (byte xfer_rate);
  */
 static byte piix_dma_2_pio (byte xfer_rate) {
 	switch(xfer_rate) {
+		case XFER_UDMA_5:
 		case XFER_UDMA_4:
 		case XFER_UDMA_3:
 		case XFER_UDMA_2:
@@ -286,6 +295,7 @@ static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 	switch(speed) {
 		case XFER_UDMA_4:
 		case XFER_UDMA_2:	u_speed = 2 << (drive->dn * 4); break;
+		case XFER_UDMA_5:
 		case XFER_UDMA_3:
 		case XFER_UDMA_1:	u_speed = 1 << (drive->dn * 4); break;
 		case XFER_UDMA_0:	u_speed = 0 << (drive->dn * 4); break;
@@ -298,7 +308,11 @@ static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 	if (speed >= XFER_UDMA_0) {
 		if (!(reg48 & u_flag))
 			pci_write_config_word(dev, 0x48, reg48|u_flag);
-		pci_write_config_byte(dev, 0x55, (byte) reg55 & ~w_flag);
+		if (speed == XFER_UDMA_5) {
+			pci_write_config_byte(dev, 0x55, (byte) reg55|w_flag);
+		} else {
+			pci_write_config_byte(dev, 0x55, (byte) reg55 & ~w_flag);
+		}
 		if (!(reg4a & u_speed)) {
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
 			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
@@ -341,15 +355,20 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 	struct pci_dev *dev	= hwif->pci_dev;
 	byte			speed;
 
-	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
-	int ultra66		= ((dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
+	byte udma_66		= eighty_ninty_three(drive);
+	int ultra100		= ((dev->device == PCI_DEVICE_ID_INTEL_82820FW_5)) ? 1 : 0;
+	int ultra66		= ((ultra100) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
 				   (dev->device == PCI_DEVICE_ID_INTEL_82372FB_1)) ? 1 : 0;
 	int ultra		= ((ultra66) ||
 				   (dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
 				   (dev->device == PCI_DEVICE_ID_INTEL_82443MX_1) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82451NX) ||
 				   (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1)) ? 1 : 0;
 
-	if ((id->dma_ultra & 0x0010) && (ultra)) {
+	if ((id->dma_ultra & 0x0020) && (udma_66) && (ultra100)) {
+		speed = XFER_UDMA_5;
+	} else if ((id->dma_ultra & 0x0010) && (ultra)) {
 		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_4 : XFER_UDMA_2;
 	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
 		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_3 : XFER_UDMA_1;
@@ -371,7 +390,7 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 
 	(void) piix_tune_chipset(drive, speed);
 
-	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
+	return ((int)	((id->dma_ultra >> 11) & 7) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :

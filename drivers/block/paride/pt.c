@@ -263,6 +263,7 @@ static char pt_scratch[512];            /* scratch block buffer */
 /* kernel glue structures */
 
 static struct file_operations pt_fops = {
+	owner:		THIS_MODULE,
 	read:		pt_read,
 	write:		pt_write,
 	ioctl:		pt_ioctl,
@@ -701,19 +702,15 @@ static int pt_open (struct inode *inode, struct file *file)
 		return -EBUSY;
 	}
 
-        MOD_INC_USE_COUNT;
-
 	pt_identify(unit);
 
 	if (!PT.flags & PT_MEDIA) {
 		PT.access--;
-		MOD_DEC_USE_COUNT;
 		return -ENODEV;
 		}
 
 	if ((!PT.flags & PT_WRITE_OK) && (file ->f_mode & 2)) {
 		PT.access--;
-		MOD_DEC_USE_COUNT;
 		return -EROFS;
 		}
 
@@ -723,7 +720,6 @@ static int pt_open (struct inode *inode, struct file *file)
 	PT.bufptr = kmalloc(PT_BUFSIZE,GFP_KERNEL);
 	if (PT.bufptr == NULL) {
 		PT.access--;
-		MOD_DEC_USE_COUNT;
 		printk("%s: buffer allocation failed\n",PT.name);
 		return -ENOMEM;
 	}
@@ -785,8 +781,6 @@ static int pt_release (struct inode *inode, struct file *file)
 
 	kfree(PT.bufptr);
 	PT.bufptr = NULL;
-
-        MOD_DEC_USE_COUNT;
 
 	return 0;
 

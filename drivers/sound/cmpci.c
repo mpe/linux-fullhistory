@@ -1161,7 +1161,6 @@ static int cm_open_mixdev(struct inode *inode, struct file *file)
 		return -ENODEV;
        	VALIDATE_STATE(s);
 	file->private_data = s;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1170,7 +1169,6 @@ static int cm_release_mixdev(struct inode *inode, struct file *file)
 	struct cm_state *s = (struct cm_state *)file->private_data;
 	
 	VALIDATE_STATE(s);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1180,6 +1178,7 @@ static int cm_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int 
 }
 
 static /*const*/ struct file_operations cm_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		cm_llseek,
 	ioctl:		cm_ioctl_mixdev,
 	open:		cm_open_mixdev,
@@ -1765,7 +1764,6 @@ static int cm_open(struct inode *inode, struct file *file)
 	set_fmt(s, fmtm, fmts);
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1788,11 +1786,11 @@ static int cm_release(struct inode *inode, struct file *file)
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations cm_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		cm_llseek,
 	read:		cm_read,
 	write:		cm_write,
@@ -2012,7 +2010,6 @@ static int cm_midi_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= (file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2062,11 +2059,11 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations cm_midi_fops = {
+	owner:		THIS_MODULE,
 	llseek:		cm_llseek,
 	read:		cm_midi_read,
 	write:		cm_midi_write,
@@ -2207,7 +2204,6 @@ static int cm_dmfm_open(struct inode *inode, struct file *file)
 	outb(1, s->iosynth+3);  /* enable OPL3 */
 	s->open_mode |= FMODE_DMFM;
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2227,11 +2223,11 @@ static int cm_dmfm_release(struct inode *inode, struct file *file)
 	}
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations cm_dmfm_fops = {
+	owner:		THIS_MODULE,
 	llseek:		cm_llseek,
 	ioctl:		cm_dmfm_ioctl,
 	open:		cm_dmfm_open,
@@ -2321,6 +2317,8 @@ int __init init_cmpci(void)
  	       (pcidev = pci_find_device(PCI_VENDOR_ID_CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338A, pcidev)) ||
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338B, pcidev)) ||
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8738, pcidev)))) {
+		if (pci_enable_device(pcidev))
+			continue;
 		if (pcidev->irq == 0)
 			continue;
 		if (!(s = kmalloc(sizeof(struct cm_state), GFP_KERNEL))) {
@@ -2345,7 +2343,7 @@ int __init init_cmpci(void)
 		init_MUTEX(&s->open_sem);
 		spin_lock_init(&s->lock);
 		s->magic = CM_MAGIC;
-		s->iobase = pcidev->resource[0].start;
+		s->iobase = pci_resource_start(pcidev, 0);
 		s->iosynth = 0x388;
 		s->iomidi = 0x330;
 		spin_lock_init(&s->lock);

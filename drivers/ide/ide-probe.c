@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/ide/ide-probe.c	Version 1.05	July 3, 1999
+ *  linux/drivers/ide/ide-probe.c	Version 1.06	June 9, 2000
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -7,6 +7,7 @@
 /*
  *  Mostly written by Mark Lord <mlord@pobox.com>
  *                and Gadi Oxman <gadio@netvision.net.il>
+ *                and Andre Hedrick <andre@linux-ide.org>
  *
  *  See linux/MAINTAINERS for address of current maintainer.
  *
@@ -23,6 +24,7 @@
  *			added ide6/7/8/9
  *			allowed for secondary flash card to be detectable
  *			 with new flag : drive->ata_flash : 1;
+ * Version 1.06		stream line request queue and prep for cascade project.
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -41,6 +43,7 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
+#include <linux/spinlock.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -167,6 +170,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	}
 	drive->media = ide_disk;
 	printk("ATA DISK drive\n");
+	QUIRK_LIST(HWIF(drive),drive);
 	return;
 }
 

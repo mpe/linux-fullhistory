@@ -132,20 +132,22 @@ static void adb_mouse_interrupt(unsigned char *buf, int nb)
 static int release_mouse(struct inode *inode, struct file *file)
 {
 	adb_mouse_interrupt_hook = NULL;
-	MOD_DEC_USE_COUNT;
+	/*
+	 *	FIXME?: adb_mouse_interrupt_hook may still be executing
+	 *	on another CPU.
+	 */
 	return 0;
 }
 
 static int open_mouse(struct inode *inode, struct file *file)
 {
-	MOD_INC_USE_COUNT;
 	adb_mouse_interrupt_hook = adb_mouse_interrupt;
 	return 0;
 }
 
 static struct busmouse adb_mouse =
 {
-	ADB_MOUSE_MINOR, "adbmouse", open_mouse, release_mouse, 7
+	ADB_MOUSE_MINOR, "adbmouse", THIS_MODULE, open_mouse, release_mouse, 7
 };
 
 static int __init adb_mouse_init(void)

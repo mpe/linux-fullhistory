@@ -45,7 +45,7 @@ else
     NEED_SUNI_MX = suni.o
     endif
     ifeq ($(CONFIG_ATM_NICSTAR_USE_IDT77105),y)
-    NEED_SUNI_MX = idt77105.o
+    NEED_IDT77105_MX = idt77105.o
     endif
   endif
 endif

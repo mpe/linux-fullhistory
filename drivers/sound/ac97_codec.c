@@ -21,7 +21,7 @@
  *
  * History
  * v0.4 Mar 15 2000 Ollie Lho
- *	dual codec support verified with 4 channel output
+ *	dual codecs support verified with 4 channels output
  * v0.3 Feb 22 2000 Ollie Lho
  *	bug fix for record mask setting
  * v0.2 Feb 10 2000 Ollie Lho
@@ -332,9 +332,10 @@ static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask)
 	/* else, write the first set in the mask as the
 	   output */	
 	/* clear out current set value first (AC97 supports only 1 input!) */
-	val = (1 << ac97_rm2oss[codec->codec_read(codec, AC97_RECORD_SELECT)&0x07]);
-	if (mask != val) mask &= ~val;
-	
+	val = (1 << ac97_rm2oss[codec->codec_read(codec, AC97_RECORD_SELECT) & 0x07]);
+	if (mask != val)
+	    mask &= ~val;
+       
 	val = ffs(mask); 
 	val = ac97_oss_rm[val-1];
 	val |= val << 8;  /* set both channels */
@@ -423,7 +424,7 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 		switch (_IOC_NR(cmd)) {
 		case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 			if (!codec->recmask_io) return -EINVAL;
-			if(!val) return 0;
+			if (!val) return 0;
 			if (!(val &= codec->record_sources)) return -EINVAL;
 
 			codec->recmask_io(codec, 0, val);
@@ -449,6 +450,7 @@ int ac97_read_proc (char *page, char **start, off_t off,
 {
 	int len = 0, cap, extid, val, id1, id2;
 	struct ac97_codec *codec;
+	int is_ac97_20 = 0;
 
 	if ((codec = data) == NULL)
 		return -ENODEV;
@@ -462,6 +464,7 @@ int ac97_read_proc (char *page, char **start, off_t off,
 	extid &= ~((1<<2)|(1<<4)|(1<<5)|(1<<10)|(1<<11)|(1<<12)|(1<<13));
 	len += sprintf (page+len, "AC97 Version     : %s\n",
 			extid ? "2.0 or later" : "1.0");
+	if (extid) is_ac97_20 = 1;
 
 	cap = codec->codec_read(codec, AC97_RESET);
 	len += sprintf (page+len, "Capabilities     :%s%s%s%s%s%s\n",
@@ -500,6 +503,7 @@ int ac97_read_proc (char *page, char **start, off_t off,
 			val & 0x0100 ? "MIC2" : "MIC1",
 			val & 0x0080 ? "on" : "off");
 
+	extid = codec->codec_read(codec, AC97_EXTENDED_ID);
 	cap = extid;
 	len += sprintf (page+len, "Ext Capabilities :%s%s%s%s%s%s%s\n",
 			cap & 0x0001 ? " -var rate PCM audio-" : "",
@@ -509,10 +513,37 @@ int ac97_read_proc (char *page, char **start, off_t off,
 			cap & 0x0080 ? " -PCM surround DAC-" : "",
 			cap & 0x0100 ? " -PCM LFE DAC-" : "",
 			cap & 0x0200 ? " -slot/DAC mappings-" : "");
+	if (is_ac97_20) {
+		len += sprintf (page+len, "Front DAC rate   : %d\n",
+				codec->codec_read(codec, AC97_PCM_FRONT_DAC_RATE));
+	}
 
 	return len;
 }
 
+/**
+ *	ac97_probe_codec - Initialize and setup AC97-compatible codec
+ *	@codec: (in/out) Kernel info for a single AC97 codec
+ *
+ *	Reset the AC97 codec, then initialize the mixer and
+ *	the rest of the @codec structure.
+ *
+ *	The codec_read and codec_write fields of @codec are
+ *	required to be setup and working when this function
+ *	is called.  All other fields are set by this function.
+ *
+ *	codec_wait field of @codec can optionally be provided
+ *	when calling this function.  If codec_wait is not %NULL,
+ *	this function will call codec_wait any time it is
+ *	necessary to wait for the audio chip to reach the
+ *	codec-ready state.  If codec_wait is %NULL, then
+ *	the default behavior is to call schedule_timeout.
+ *	Currently codec_wait is used to wait for AC97 codec
+ *	reset to complete. 
+ *
+ *	Returns 1 (true) on success, or 0 (false) on failure.
+ */
+ 
 int ac97_probe_codec(struct ac97_codec *codec)
 {
 	u16 id1, id2;
@@ -520,8 +551,19 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	int i;
 
 	/* probing AC97 codec, AC97 2.0 says that bit 15 of register 0x00 (reset) should 
-	   be read zero. Probing of AC97 in this way is not reliable, it is not even SAFE !! */
+	 * be read zero.
+	 *
+	 * FIXME: is the following comment outdated?  -jgarzik 
+	 * Probing of AC97 in this way is not reliable, it is not even SAFE !!
+	 */
 	codec->codec_write(codec, AC97_RESET, 0L);
+
+	/* also according to spec, we wait for codec-ready state */	
+	if (codec->codec_wait)
+		codec->codec_wait(codec);
+	else
+		schedule_timeout(5);
+
 	if ((audio = codec->codec_read(codec, AC97_RESET)) & 0x8000) {
 		printk(KERN_ERR "ac97_codec: %s ac97 codec not present\n",
 		       codec->id ? "Secondary" : "Primary");
@@ -546,8 +588,8 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	}
 	if (codec->name == NULL)
 		codec->name = "Unknown";
-	printk(KERN_INFO "ac97_codec: AC97 %s codec, vendor id1: 0x%04x, "
-	       "id2: 0x%04x (%s)\n", audio ? "Audio" : (modem ? "Modem" : ""),
+	printk(KERN_INFO "ac97_codec: AC97%s codec, id: 0x%04x:0x%04x (%s)\n",
+	       audio ? " audio" : (modem ? " modem" : ""),
 	       id1, id2, codec->name);
 
 	return ac97_init_mixer(codec);
@@ -595,11 +637,6 @@ static int ac97_init_mixer(struct ac97_codec *codec)
 	}
 
 	return 1;
-}
-
-static int ac97_init_modem(struct ac97_codec *codec)
-{
-	return 0;
 }
 
 static int sigmatel_init(struct ac97_codec * codec)

@@ -639,6 +639,7 @@ static unsigned int pp_poll (struct file * file, poll_table * wait)
 }
 
 static struct file_operations pp_fops = {
+	owner:		THIS_MODULE,
 	llseek:		pp_lseek,
 	read:		pp_read,
 	write:		pp_write,

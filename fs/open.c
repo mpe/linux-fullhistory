@@ -10,6 +10,7 @@
 #include <linux/file.h>
 #include <linux/smp_lock.h>
 #include <linux/quotaops.h>
+#include <linux/module.h>
 
 #include <asm/uaccess.h>
 
@@ -653,7 +654,7 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	f->f_vfsmnt = mnt;
 	f->f_pos = 0;
 	f->f_reada = 0;
-	f->f_op = inode->i_fop;
+	f->f_op = fops_get(inode->i_fop);
 	if (inode->i_sb)
 		file_move(f, &inode->i_sb->s_files);
 	if (f->f_op && f->f_op->open) {
@@ -666,6 +667,7 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	return f;
 
 cleanup_all:
+	fops_put(f->f_op);
 	if (f->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 	f->f_dentry = NULL;

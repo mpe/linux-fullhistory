@@ -201,8 +201,6 @@ static void rio_close (void  *ptr);
 static int rio_chars_in_buffer (void * ptr);
 static int rio_fw_ioctl (struct inode *inode, struct file *filp,
 		         unsigned int cmd, unsigned long arg);
-static int rio_fw_open(struct inode *inode, struct file *filp);
-static INT rio_fw_release(struct inode *inode, struct file *filp);
 static int rio_init_drivers(void);
 
 
@@ -277,9 +275,8 @@ static struct real_driver rio_real_driver = {
  */
 
 static struct file_operations rio_fw_fops = {
+	owner:		THIS_MODULE,
 	ioctl:		rio_fw_ioctl,
-	open:		rio_fw_open,
-	release:	rio_fw_release,
 };
 
 struct miscdevice rio_fw_device = {
@@ -633,32 +630,6 @@ static void rio_shutdown_port (void * ptr)
 
   func_exit();
 }
-
-
-
-/* ********************************************************************** *
- *                Here are the routines that actually                     *
- *               interface with the rest of the system                    *
- * ********************************************************************** */
-
-
-static int rio_fw_open(struct inode *inode, struct file *filp)
-{
-  func_enter ();
-  rio_inc_mod_count ();
-  func_exit ();
-  return 0;
-}
-
-
-static INT rio_fw_release(struct inode *inode, struct file *filp)
-{
-  func_enter ();
-  rio_dec_mod_count ();
-  func_exit ();
-  return NO_ERROR;
-}
-
 
 /* I haven't the foggiest why the decrement use count has to happen
    here. The whole linux serial drivers stuff needs to be redesigned.
@@ -1149,6 +1120,7 @@ int rio_init(void)
     while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
                                     PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8, 
                                     pdev))) {
+	if (pci_enable_device(pdev)) continue;
 #else
     for (i=0;i< RIO_NBOARDS;i++) {
       if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 
@@ -1234,6 +1206,7 @@ int rio_init(void)
     while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
                                     PCI_DEVICE_ID_SPECIALIX_RIO, 
                                     pdev))) {
+	if (pci_enable_device(pdev)) continue;
 #else
     for (i=0;i< RIO_NBOARDS;i++) {
       if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 

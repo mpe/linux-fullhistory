@@ -168,6 +168,7 @@
 #define CT5880REV_CT5880_C  0x02
 #define ES1371REV_ES1371_B  0x09
 #define EV1938REV_EV1938_A  0x00
+#define ES1371REV_ES1373_8  0x08
 
 #define ES1371_MAGIC  ((PCI_VENDOR_ID_ENSONIQ<<16)|PCI_DEVICE_ID_ENSONIQ_ES1371)
 
@@ -1216,7 +1217,6 @@ static int es1371_open_mixdev(struct inode *inode, struct file *file)
 	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1225,7 +1225,6 @@ static int es1371_release_mixdev(struct inode *inode, struct file *file)
 	struct es1371_state *s = (struct es1371_state *)file->private_data;
 	
 	VALIDATE_STATE(s);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1238,6 +1237,7 @@ static int es1371_ioctl_mixdev(struct inode *inode, struct file *file, unsigned 
 }
 
 static /*const*/ struct file_operations es1371_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1371_llseek,
 	ioctl:		es1371_ioctl_mixdev,
 	open:		es1371_open_mixdev,
@@ -1895,7 +1895,6 @@ static int es1371_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1918,11 +1917,11 @@ static int es1371_release(struct inode *inode, struct file *file)
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations es1371_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1371_llseek,
 	read:		es1371_read,
 	write:		es1371_write,
@@ -2150,7 +2149,7 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return 0;
 
 	case SNDCTL_DSP_GETOSPACE:
-		if (!(s->ctrl & CTRL_DAC2_EN) && (val = prog_dmabuf_dac1(s)) != 0)
+		if (!(s->ctrl & CTRL_DAC1_EN) && (val = prog_dmabuf_dac1(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
@@ -2290,7 +2289,6 @@ static int es1371_open_dac(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= FMODE_DAC;
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2306,11 +2304,11 @@ static int es1371_release_dac(struct inode *inode, struct file *file)
 	s->open_mode &= ~FMODE_DAC;
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations es1371_dac_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1371_llseek,
 	write:		es1371_write_dac,
 	poll:		es1371_poll_dac,
@@ -2531,7 +2529,6 @@ static int es1371_midi_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= (file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2576,11 +2573,11 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations es1371_midi_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1371_llseek,
 	read:		es1371_midi_read,
 	write:		es1371_midi_write,
@@ -2778,7 +2775,8 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	/* if we are a 5880 turn on the AC97 */
 	if (s->vendor == PCI_VENDOR_ID_ENSONIQ &&
 	    ((s->device == PCI_DEVICE_ID_ENSONIQ_CT5880 && s->rev == CT5880REV_CT5880_C) || 
-	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_CT5880_A))) { 
+	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_CT5880_A) || 
+	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_ES1373_8))) { 
 		cssr |= CSTAT_5880_AC97_RST;
 		outl(cssr, s->io+ES1371_REG_STATUS);
 		/* need to delay around 20ms(bleech) to give

@@ -4007,6 +4007,9 @@ static int __init epca_init_one (struct pci_dev *pdev,
 	int board_idx, info_idx = ent->driver_data;
 	unsigned long addr;
 
+	if (pci_enable_device(pdev))
+		return -EIO;
+
 	board_num++;
 	board_idx = board_num + num_cards;
 	if (board_idx >= MAXBOARDS)

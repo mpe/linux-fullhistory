@@ -1,8 +1,8 @@
 /*
  * linux/drivers/ide/cy82c693.c		Version 0.34	Dec. 13, 1999
  *
- *  Copyright (C) 1998-99 Andreas S. Krebs (akrebs@altavista.net), Maintainer
- *  Copyright (C) 1998-99 Andre Hedrick, Integrater
+ *  Copyright (C) 1998-2000 Andreas S. Krebs (akrebs@altavista.net), Maintainer
+ *  Copyright (C) 1998-2000 Andre Hedrick <andre@linux-ide.org>, Integrater
  *
  * CYPRESS CY82C693 chipset IDE controller
  *

@@ -281,6 +281,7 @@ efi_rtc_close(struct inode *inode, struct file *file)
  */
 
 static struct file_operations efi_rtc_fops = {
+	owner:		THIS_MODULE,
 	ioctl:		efi_rtc_ioctl,
 	open:		efi_rtc_open,
 	release:	efi_rtc_close,

@@ -6,12 +6,16 @@
  * See the "COPYING" file distributed with this software for more info.
  *
  * For a list of known bugs (errata) and documentation,
- * see via82cxxx.txt in linux/Documentation/sound.
+ * see via-audio.pdf in linux/Documentation/DocBook.
+ * If this documentation does not exist, run "make pdfdocs".
+ * If "make pdfdocs" fails, obtain the documentation from
+ * the driver's Website at
+ * http://gtf.org/garzik/drivers/via82cxxx/
  *
  */
  
 
-#define VIA_VERSION	"1.1.6"
+#define VIA_VERSION	"1.1.8"
 
 
 #include <linux/config.h>
@@ -304,7 +308,7 @@ static void via_chan_pcm_fmt (struct via_info *card,
 
 
 static struct pci_device_id via_pci_tbl[] __initdata = {
-	{ PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686_5, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686_5, PCI_ANY_ID, PCI_ANY_ID, },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci,via_pci_tbl);
@@ -325,12 +329,40 @@ static struct pci_driver via_driver = {
  *
  */
 
+/**
+ *	via_chan_stop - Terminate DMA on specified PCM channel
+ *	@iobase: PCI base address for SGD channel registers
+ *
+ *	Terminate scatter-gather DMA operation for given
+ *	channel (derived from @iobase), if DMA is active.
+ *
+ *	Note that @iobase is not the PCI base address,
+ *	but the PCI base address plus an offset to
+ *	one of three PCM channels supported by the chip.
+ *
+ */
+ 
 static inline void via_chan_stop (int iobase)
 {
 	if (inb (iobase + VIA_PCM_STATUS) & VIA_SGD_ACTIVE)
 		outb (VIA_SGD_TERMINATE, iobase + VIA_PCM_CONTROL);
 }
 
+
+/**
+ *	via_chan_status_clear - Clear status flags on specified DMA channel
+ *	@iobase: PCI base address for SGD channel registers
+ *
+ *	Clear any pending status flags for the given
+ *	DMA channel (derived from @iobase), if any
+ *	flags are asserted.
+ *
+ *	Note that @iobase is not the PCI base address,
+ *	but the PCI base address plus an offset to
+ *	one of three PCM channels supported by the chip.
+ *
+ */
+ 
 static inline void via_chan_status_clear (int iobase)
 {
 	u8 tmp = inb (iobase + VIA_PCM_STATUS);
@@ -339,12 +371,33 @@ static inline void via_chan_status_clear (int iobase)
 		outb (tmp, iobase + VIA_PCM_STATUS);
 }
 
+
+/**
+ *	sg_begin - Begin recording or playback on a PCM channel
+ *	@chan: Channel for which DMA operation shall begin
+ *
+ *	Start scatter-gather DMA for the given channel.
+ *
+ */
+ 
 static inline void sg_begin (struct via_channel *chan)
 {
 	outb (VIA_SGD_START, chan->iobase + VIA_PCM_CONTROL);
 }
 
 
+/**
+ *	via_chan_bufs_in_use - Number of buffers waiting to be consumed
+ *	@chan: Channel for which DMA buffers will be counted
+ *
+ *	Count the number of buffers waiting to be consumed.  For a
+ *	playback operation, this is the number of buffers which have
+ *	yet to be sent to the DAC.  For a recording operation, this
+ *	is the number of buffers waiting to be consumed by software
+ *	calling read() system call.
+ *
+ */
+ 
 static inline int via_chan_bufs_in_use (struct via_channel *chan)
 {
 	return atomic_read(&chan->next_buf) -
@@ -352,12 +405,31 @@ static inline int via_chan_bufs_in_use (struct via_channel *chan)
 }
 
 
+/**
+ *	via_chan_full - Check for no-free-buffers condition
+ *	@chan: Channel for which DMA full condition will be checked
+ *
+ *	Count the number of buffers waiting to be consumed, and return
+ *	true (non-zero) if no buffers are available to be filled on the
+ *	given DMA channel.
+ *
+ */
+ 
 static inline int via_chan_full (struct via_channel *chan)
 {
 	return (via_chan_bufs_in_use (chan) == VIA_DMA_BUFFERS);
 }
 
 
+/**
+ *	via_chan_empty - Check for no-buffers-in-use condition
+ *	@chan: Channel for which DMA empty condition will be checked
+ *
+ *	Count the number of buffers waiting to be consumed, and return
+ *	true (non-zero) if no buffers are currently in use.
+ *
+ */
+ 
 static inline int via_chan_empty (struct via_channel *chan)
 {
 	return (atomic_read(&chan->next_buf) ==
@@ -370,6 +442,15 @@ static inline int via_chan_empty (struct via_channel *chan)
  * Miscellaneous debris
  *
  *
+ */
+
+
+/**
+ *	via_stop_everything - Stop all audio operations
+ *	@card: Private info for specified board
+ *
+ *	Stops all DMA operations and interrupts, and clear
+ *	any pending status bits resulting from those operations.
  */
 
 static void via_stop_everything (struct via_info *card)
@@ -402,6 +483,24 @@ static void via_stop_everything (struct via_info *card)
 }
 
 
+/**
+ *	via_set_rate - Set PCM rate for given channel
+ *	@card: Private info for specified board
+ *	@rate: Desired PCM sample rate, in Khz
+ *	@inhale_deeply: Boolean.  If non-zero (true), the recording sample rate
+ *			is set.  If zero (false), the playback sample rate
+ *			is set.
+ *
+ *	Sets the PCM sample rate for a channel.
+ *
+ *	Values for @rate are clamped to a range of 4000 Khz through 48000 Khz,
+ *	due to hardware constraints.
+ *
+ *	FIXME:  @inhale_deeply argument is ignored, and %AC97_PCM_FRONT_DAC_RATE
+ *	is the only rate which is really set.  This needs to be fixed when
+ *	recording support is added.
+ */
+
 static int via_set_rate (struct via_info *card, unsigned rate, int inhale_deeply)
 {
 
@@ -423,11 +522,31 @@ static int via_set_rate (struct via_info *card, unsigned rate, int inhale_deeply
 }
 
 
+/**
+ *	via_set_adc_rate - Set PCM rate for recording channel
+ *	@card: Private info for specified board
+ *	@rate: Desired PCM sample rate, in Khz
+ *
+ *	Sets the PCM sample rate for a recording channel.
+ *
+ *	FIXME:  @inhale_deeply argument to via_set_rate is ignored, and %AC97_PCM_FRONT_DAC_RATE
+ *	is the only rate which is really set.  Thus, this function will
+ *	not work until via_set_rate is fixed.
+ */
+
 static inline int via_set_adc_rate (struct via_info *card, int rate)
 {
 	return via_set_rate (card, rate, 1);
 }
 
+
+/**
+ *	via_set_dac_rate - Set PCM rate for playback channel
+ *	@card: Private info for specified board
+ *	@rate: Desired PCM sample rate, in Khz
+ *
+ *	Sets the PCM sample rate for a playback channel.
+ */
 
 static inline int via_set_dac_rate (struct via_info *card, int rate)
 {
@@ -442,6 +561,27 @@ static inline int via_set_dac_rate (struct via_info *card, int rate)
  *
  */
  
+/**
+ *	via_chan_init - Initialize PCM channel
+ *	@card: Private audio chip info
+ *	@chan: Channel to be initialized
+ *	@chan_ofs: Offset from PCI address, which determines the
+ *		   set of SGD registers to use.
+ *
+ *	Performs all the preparations necessary to begin
+ *	using a PCM channel.
+ *
+ *	Currently the preparations include allocating the
+ *	scatter-gather DMA table and buffers, setting the
+ *	PCM channel to a known state, and passing the
+ *	address of the DMA table to the hardware.
+ *
+ *	Note that special care is taken when passing the
+ *	DMA table address to hardware, because it was found
+ *	during driver development that the hardware did not
+ *	always "take" the address.
+ */
+
 static int via_chan_init (struct via_info *card, 
 			  struct via_channel *chan, long chan_ofs)
 {
@@ -533,6 +673,20 @@ err_out_nomem:
 }
 
 
+/**
+ *	via_chan_free - Release a PCM channel
+ *	@card: Private audio chip info
+ *	@chan: Channel to be released
+ *
+ *	Performs all the functions necessary to clean up
+ *	an initialized channel.
+ *
+ *	Currently these functions include disabled any
+ *	active DMA operations, setting the PCM channel
+ *	back to a known state, and releasing any allocated
+ *	sound buffers.
+ */
+ 
 static void via_chan_free (struct via_info *card, struct via_channel *chan)
 {
 	int i;
@@ -575,6 +729,22 @@ static void via_chan_free (struct via_info *card, struct via_channel *chan)
 }
 
 
+/**
+ *	via_chan_pcm_fmt - Update PCM channel settings
+ *	@card: Private audio chip info
+ *	@chan: Channel to be updated
+ *	@reset: Boolean.  If non-zero, channel will be reset
+ *		to 8-bit mono mode.
+ *
+ *	Stores the settings of the current PCM format,
+ *	8-bit or 16-bit, and mono/stereo, into the
+ *	hardware settings for the specified channel.
+ *	If @reset is non-zero, the channel is reset
+ *	to 8-bit mono mode.  Otherwise, the channel
+ *	is set to the values stored in the channel
+ *	information struct @chan.
+ */
+ 
 static void via_chan_pcm_fmt (struct via_info *card,
 			      struct via_channel *chan, int reset)
 {
@@ -603,6 +773,14 @@ static void via_chan_pcm_fmt (struct via_info *card,
 }
 
 
+/**
+ *	via_chan_clear - Stop DMA channel operation, and reset pointers
+ *	@chan: Channel to be cleared
+ *
+ *	Call via_chan_stop to halt DMA operations, and then resets
+ *	all software pointers which track DMA operation.
+ */
+
 static void via_chan_clear (struct via_channel *chan)
 {
 	via_chan_stop (chan->iobase);
@@ -611,6 +789,21 @@ static void via_chan_clear (struct via_channel *chan)
 	atomic_set (&chan->next_buf, 0);
 }
 
+
+/**
+ *	via_chan_set_speed - Set PCM sample rate for given channel
+ *	@card: Private info for specified board
+ *	@chan: Channel whose sample rate will be adjusted
+ *	@val: New sample rate, in Khz
+ *
+ *	Helper function for the %SNDCTL_DSP_SPEED ioctl.  OSS semantics
+ *	demand that all audio operations halt (if they are not already
+ *	halted) when the %SNDCTL_DSP_SPEED is given.
+ *
+ *	This function halts all audio operations for the given channel
+ *	@chan, and then calls via_set_rate to set the audio hardware
+ *	to the new rate.
+ */
 
 static int via_chan_set_speed (struct via_info *card,
 			       struct via_channel *chan, int val)
@@ -625,6 +818,21 @@ static int via_chan_set_speed (struct via_info *card,
 	return val;
 }
 
+
+/**
+ *	via_chan_set_fmt - Set PCM sample size for given channel
+ *	@card: Private info for specified board
+ *	@chan: Channel whose sample size will be adjusted
+ *	@val: New sample size, use the %AFMT_xxx constants
+ *
+ *	Helper function for the %SNDCTL_DSP_SETFMT ioctl.  OSS semantics
+ *	demand that all audio operations halt (if they are not already
+ *	halted) when the %SNDCTL_DSP_SETFMT is given.
+ *
+ *	This function halts all audio operations for the given channel
+ *	@chan, and then calls via_chan_pcm_fmt to set the audio hardware
+ *	to the new sample size, either 8-bit or 16-bit.
+ */
 
 static int via_chan_set_fmt (struct via_info *card,
 			     struct via_channel *chan, int val)
@@ -655,6 +863,21 @@ static int via_chan_set_fmt (struct via_info *card,
 	return val;
 }
 
+
+/**
+ *	via_chan_set_stereo - Enable or disable stereo for a DMA channel
+ *	@card: Private info for specified board
+ *	@chan: Channel whose stereo setting will be adjusted
+ *	@val: New sample size, use the %AFMT_xxx constants
+ *
+ *	Helper function for the %SNDCTL_DSP_CHANNELS and %SNDCTL_DSP_STEREO ioctls.  OSS semantics
+ *	demand that all audio operations halt (if they are not already
+ *	halted) when %SNDCTL_DSP_CHANNELS or SNDCTL_DSP_STEREO is given.
+ *
+ *	This function halts all audio operations for the given channel
+ *	@chan, and then calls via_chan_pcm_fmt to set the audio hardware
+ *	to enable or disable stereo.
+ */
 
 static int via_chan_set_stereo (struct via_info *card,
 			        struct via_channel *chan, int val)
@@ -690,6 +913,14 @@ static int via_chan_set_stereo (struct via_info *card,
 
 
 #if 0
+/**
+ *	via_chan_dump_bufs - Display DMA table contents
+ *	@chan: Channel whose DMA table will be displayed
+ *
+ *	Debugging function which displays the contents of the
+ *	scatter-gather DMA table for the given channel @chan.
+ */
+
 static void via_chan_dump_bufs (struct via_channel *chan)
 {
 	int i;
@@ -715,6 +946,15 @@ static void via_chan_dump_bufs (struct via_channel *chan)
  *
  */
  
+/**
+ *	via_ac97_wait_idle - Wait until AC97 codec is not busy
+ *	@card: Private info for specified board
+ *
+ *	Sleep until the AC97 codec is no longer busy.
+ *	Returns the final value read from the SGD
+ *	register being polled.
+ */
+
 static u8 via_ac97_wait_idle (struct via_info *card)
 {
 	u8 tmp8;
@@ -739,6 +979,21 @@ static u8 via_ac97_wait_idle (struct via_info *card)
 	return tmp8;
 }
 
+
+/**
+ *	via_ac97_read_reg - Read AC97 standard register
+ *	@codec: Pointer to generic AC97 codec info
+ *	@reg: Index of AC97 register to be read
+ *
+ *	Read the value of a single AC97 codec register,
+ *	as defined by the Intel AC97 specification.
+ *
+ *	Defines the standard AC97 read-register operation
+ *	required by the kernel's ac97_codec interface.
+ *
+ *	Returns the 16-bit value stored in the specified
+ *	register.
+ */
 
 static u16 via_ac97_read_reg (struct ac97_codec *codec, u8 reg)
 {
@@ -788,6 +1043,19 @@ err_out:
 }
 
 
+/**
+ *	via_ac97_write_reg - Write AC97 standard register
+ *	@codec: Pointer to generic AC97 codec info
+ *	@reg: Index of AC97 register to be written
+ *	@value: Value to be written to AC97 register
+ *
+ *	Write the value of a single AC97 codec register,
+ *	as defined by the Intel AC97 specification.
+ *
+ *	Defines the standard AC97 write-register operation
+ *	required by the kernel's ac97_codec interface.
+ */
+
 static void via_ac97_write_reg (struct ac97_codec *codec, u8 reg, u16 value)
 {
 	u32 data;
@@ -829,8 +1097,6 @@ static int via_mixer_open (struct inode *inode, struct file *file)
 	
 	DPRINTK ("ENTER\n");
 
-	MOD_INC_USE_COUNT;
-
 	pci_for_each_dev(pdev) {
 		drvr = pci_dev_driver (pdev);
 		if (drvr == &via_driver) {
@@ -843,7 +1109,6 @@ static int via_mixer_open (struct inode *inode, struct file *file)
 	}
 
 	DPRINTK ("EXIT, returning -ENODEV\n");
-	MOD_DEC_USE_COUNT;
 	return -ENODEV;
 
 match:
@@ -852,18 +1117,6 @@ match:
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;
 }
-
-
-static int via_mixer_release (struct inode *inode, struct file *file)
-{
-	DPRINTK ("ENTER\n");
-
-	MOD_DEC_USE_COUNT;
-
-	DPRINTK ("EXIT, returning 0\n");
-	return 0;
-}
-
 
 static int via_mixer_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
 			    unsigned long arg)
@@ -889,8 +1142,8 @@ static loff_t via_llseek(struct file *file, loff_t offset, int origin)
 
 
 static struct file_operations via_mixer_fops = {
+	owner:		THIS_MODULE,
 	open:		via_mixer_open,
-	release:	via_mixer_release,
 	llseek:		via_llseek,
 	ioctl:		via_mixer_ioctl,
 };
@@ -971,9 +1224,11 @@ static int __init via_ac97_reset (struct via_info *card)
                                VIA_CR41_VRA | VIA_CR41_AC97_RESET);
         udelay (100);
 
+#if 0 /* this breaks on K7M */
 	/* disable legacy stuff */
 	pci_write_config_byte (pdev, 0x42, 0x00);
 	udelay(10);
+#endif
 
 	/* route FM trap to IRQ, disable FM trap */
 	pci_write_config_byte (pdev, 0x48, 0x05);
@@ -1097,50 +1352,36 @@ static void via_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct via_info *card = dev_id;
 	struct via_channel *chan;
 	u8 status;
-	int unhandled = 1;
-	static long intcount = 0;
 
-	assert (irq == card->pdev->irq);
-	
-	intcount++;
-	
 	status = inb (card->baseaddr + 0x00);
 	if (status) {
 		assert (card->open_mode & FMODE_WRITE);
 		
 		chan = &card->ch_out;
-		unhandled = 0;
 		
 		if (status & VIA_SGD_FLAG) {
 			assert ((status & VIA_SGD_EOL) == 0);
 			outb (VIA_SGD_FLAG, chan->iobase + 0x00);
-			DPRINTK("FLAG intr, status=0x%02X, intcount=%ld\n",
-				status, intcount);
+			DPRINTK("FLAG intr, status=0x%02X\n", status);
 			via_interrupt_write (chan);
 		}
 		
 		if (status & VIA_SGD_EOL) {
 			assert ((status & VIA_SGD_FLAG) == 0);
 			outb (VIA_SGD_EOL, chan->iobase + 0x00);
-			DPRINTK("EOL intr, status=0x%02X, intcount=%ld\n",
-				status, intcount);
+			DPRINTK("EOL intr, status=0x%02X\n", status);
 			via_interrupt_write (chan);
 		}
 		
 		if (status & VIA_SGD_STOPPED) {
 			outb (VIA_SGD_STOPPED, chan->iobase + 0x00);
-			DPRINTK("STOPPED intr, status=0x%02X, intcount=%ld\n",
-				status, intcount);
+			DPRINTK("STOPPED intr, status=0x%02X\n", status);
 		}
 
 #if 0
 		via_chan_dump_bufs (&card->ch_out);
 #endif
 	}
-	
-	if (unhandled)
-		printk (KERN_WARNING PFX "unhandled interrupt, st=%02x, st32=%08x\n",
-			status, inl (card->baseaddr + 0x84));
 }
 
 
@@ -1229,6 +1470,7 @@ static void via_interrupt_cleanup (struct via_info *card)
  */
  
 static struct file_operations via_dsp_fops = {
+	owner:		THIS_MODULE,
 	open:		via_dsp_open,
 	release:	via_dsp_release,
 	read:		via_dsp_read,
@@ -1860,8 +2102,6 @@ static int via_dsp_open (struct inode *inode, struct file *file)
 
 	DPRINTK ("ENTER, minor=%d, file->f_mode=0x%x\n", minor, file->f_mode);
 	
-	MOD_INC_USE_COUNT;
-	
 	if (file->f_mode & FMODE_READ) /* no input ATM */
 		goto err_out;
 
@@ -1951,7 +2191,6 @@ err_out_clear_mode:
 	card->open_mode &= ~file->f_mode;
 	spin_unlock_irqrestore (&card->lock, flags);
 err_out:
-	MOD_DEC_USE_COUNT;
 	DPRINTK("ERROR EXIT, returning %d\n", rc);
 	return rc;
 }
@@ -1981,7 +2220,6 @@ static int via_dsp_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore (&card->lock, flags);
 
  	wake_up (&card->open_wait);
-	MOD_DEC_USE_COUNT;
 
 	DPRINTK("EXIT, returning 0\n");
 	return 0;
@@ -2331,6 +2569,7 @@ static void __exit via_remove_one (struct pci_dev *pdev)
 	via_interrupt_cleanup (card);
 	via_card_cleanup_proc (card);
 	via_dsp_cleanup (card);
+	via_ac97_cleanup (card);
 
 	release_region (pci_resource_start (pdev, 0), pci_resource_len (pdev, 0));
 
@@ -2360,12 +2599,9 @@ static int __init init_via82cxxx_audio(void)
 	int rc;
 
 	DPRINTK ("ENTER\n");
-	
-	MOD_INC_USE_COUNT;
 
 	rc = via_init_proc ();
 	if (rc) {
-		MOD_DEC_USE_COUNT;
 		DPRINTK ("EXIT, returning %d\n", rc);
 		return rc;
 	}
@@ -2375,12 +2611,9 @@ static int __init init_via82cxxx_audio(void)
 		if (rc == 0)
 			pci_unregister_driver (&via_driver);
 		via_cleanup_proc ();
-		MOD_DEC_USE_COUNT;
 		DPRINTK ("EXIT, returning -ENODEV\n");
 		return -ENODEV;
 	}
-
-	MOD_DEC_USE_COUNT;
 
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;

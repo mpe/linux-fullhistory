@@ -10,6 +10,7 @@
 #include <linux/i2c.h>
 #include <linux/types.h>
 #include <linux/videodev.h>
+#include <linux/init.h>
 
 #include "tuner.h"
 #include "audiochip.h"
@@ -428,22 +429,19 @@ static struct i2c_client client_template =
 
 EXPORT_NO_SYMBOLS;
 
-#ifdef MODULE
-int init_module(void)
-#else
-int i2c_tuner_init(void)
-#endif
+int tuner_init_module(void)
 {
 	i2c_add_driver(&driver);
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+void tuner_cleanup_module(void)
 {
 	i2c_del_driver(&driver);
 }
-#endif
+
+module_init(tuner_init_module);
+module_exit(tuner_cleanup_module);
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

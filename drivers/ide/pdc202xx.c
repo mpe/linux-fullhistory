@@ -1,7 +1,7 @@
 /*
  *  linux/drivers/ide/pdc202xx.c	Version 0.30	Mar. 18, 2000
  *
- *  Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-2000	Andre Hedrick <andre@linux-ide.org>
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  Promise Ultra33 cards with BIOS v1.20 through 1.28 will need this
@@ -11,6 +11,8 @@
  *
  *  Promise Ultra66 cards with BIOS v1.11 this
  *  compiled into the kernel if you have more than one card installed.
+ *
+ *  Promise Ultra100 cards.
  *
  *  The latest chipset code will support the following ::
  *  Three Ultra33 controllers and 12 drives.
@@ -50,6 +52,10 @@
 #define PDC202XX_DECODE_REGISTER_INFO		0
 
 #define DISPLAY_PDC202XX_TIMINGS
+
+#ifndef SPLIT_BYTE
+#define SPLIT_BYTE(B,H,L)	((H)=(B>>4), (L)=(B-((B>>4)<<4)))
+#endif
 
 #if defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
@@ -99,10 +105,25 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 {
 	char *p = buffer;
 
-	u32 bibma = bmide_dev->resource[4].start;
+	u32 bibma  = pci_resource_start(bmide_dev, 4);
 	u32 reg60h = 0, reg64h = 0, reg68h = 0, reg6ch = 0;
 	u16 reg50h = 0, pmask = (1<<10), smask = (1<<11);
-	u8 c0 = 0, c1 = 0;
+	u8 hi = 0, lo = 0;
+
+        /*
+         * at that point bibma+0x2 et bibma+0xa are byte registers
+         * to investigate:
+         */
+	u8 c0	= inb_p((unsigned short)bibma + 0x02);
+	u8 c1	= inb_p((unsigned short)bibma + 0x0a);
+
+	u8 sc11	= inb_p((unsigned short)bibma + 0x11);
+	u8 sc1a	= inb_p((unsigned short)bibma + 0x1a);
+	u8 sc1b	= inb_p((unsigned short)bibma + 0x1b);
+	u8 sc1c	= inb_p((unsigned short)bibma + 0x1c); 
+	u8 sc1d	= inb_p((unsigned short)bibma + 0x1d);
+	u8 sc1e	= inb_p((unsigned short)bibma + 0x1e);
+	u8 sc1f	= inb_p((unsigned short)bibma + 0x1f);
 
 	pci_read_config_word(bmide_dev, 0x50, &reg50h);
 	pci_read_config_dword(bmide_dev, 0x60, &reg60h);
@@ -110,14 +131,10 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 	pci_read_config_dword(bmide_dev, 0x68, &reg68h);
 	pci_read_config_dword(bmide_dev, 0x6c, &reg6ch);
 
-        /*
-         * at that point bibma+0x2 et bibma+0xa are byte registers
-         * to investigate:
-         */
-	c0 = inb_p((unsigned short)bibma + 0x02);
-	c1 = inb_p((unsigned short)bibma + 0x0a);
-
-	switch(bmide_dev->device) {	
+	switch(bmide_dev->device) {
+		case PCI_DEVICE_ID_PROMISE_20267:
+			p += sprintf(p, "\n                                PDC20267 Chipset.\n");
+			break;
 		case PCI_DEVICE_ID_PROMISE_20262:
 			p += sprintf(p, "\n                                PDC20262 Chipset.\n");
 			break;
@@ -130,9 +147,40 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 			break;
 	}
 
+	p += sprintf(p, "------------------------------- General Status ---------------------------------\n");
+	p += sprintf(p, "Burst Mode                           : %sabled\n", (sc1f & 0x01) ? "en" : "dis");
+	p += sprintf(p, "Host Mode                            : %s\n", (sc1f & 0x08) ? "Tri-Stated" : "Normal");
+	p += sprintf(p, "Bus Clocking                         : %s\n",
+		((sc1f & 0xC0) == 0xC0) ? "100 External" :
+		((sc1f & 0x80) == 0x80) ? "66 External" :
+		((sc1f & 0x40) == 0x40) ? "33 External" : "33 PCI Internal");
+	p += sprintf(p, "IO pad select                        : %s mA\n",
+		((sc1c & 0x03) == 0x03) ? "10" :
+		((sc1c & 0x02) == 0x02) ? "8" :
+		((sc1c & 0x01) == 0x01) ? "6" :
+		((sc1c & 0x00) == 0x00) ? "4" : "??");
+	SPLIT_BYTE(sc1e, hi, lo);
+	p += sprintf(p, "Status Polling Period                : %d\n", hi);
+	p += sprintf(p, "Interrupt Check Status Polling Delay : %d\n", lo);
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
-	p += sprintf(p, "                %sabled                         %sabled\n",
-		(c0&0x80)?"dis":" en",(c1&0x80)?"dis":" en");
+	p += sprintf(p, "                %s                         %s\n",
+		(c0&0x80)?"disabled":"enabled ",
+		(c1&0x80)?"disabled":"enabled ");
+	p += sprintf(p, "66 Clocking     %s                         %s\n",
+		(sc11&0x02)?"enabled ":"disabled",
+		(sc11&0x08)?"enabled ":"disabled");
+	p += sprintf(p, "           Mode %s                      Mode %s\n",
+		(sc1a & 0x01) ? "MASTER" : "PCI   ",
+		(sc1b & 0x01) ? "MASTER" : "PCI   ");
+	p += sprintf(p, "                %s                     %s\n",
+		(sc1d & 0x08) ? "Error       " :
+		(sc1d & 0x04) ? "Interrupting" :
+		(sc1d & 0x02) ? "FIFO Full   " :
+		(sc1d & 0x01) ? "FIFO Empty  " : "????????????",
+		(sc1d & 0x80) ? "Error       " :
+		(sc1d & 0x40) ? "Interrupting" :
+		(sc1d & 0x20) ? "FIFO Full   " :
+		(sc1d & 0x10) ? "FIFO Empty  " : "????????????");
 	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
 	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
 		(c0&0x20)?"yes":"no ",(c0&0x40)?"yes":"no ",(c1&0x20)?"yes":"no ",(c1&0x40)?"yes":"no ");
@@ -141,9 +189,13 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 		pdc202xx_ultra_verbose(reg64h, (reg50h & pmask)),
 		pdc202xx_ultra_verbose(reg68h, (reg50h & smask)),
 		pdc202xx_ultra_verbose(reg6ch, (reg50h & smask)));
-	p += sprintf(p, " PIO Mode:      %s            %s           %s             %s\n",
+	p += sprintf(p, "PIO Mode:       %s            %s           %s            %s\n",
 		pdc202xx_pio_verbose(reg60h),pdc202xx_pio_verbose(reg64h),
 		pdc202xx_pio_verbose(reg68h),pdc202xx_pio_verbose(reg6ch));
+#if 0
+	p += sprintf(p, "--------------- Can ATAPI DMA ---------------\n");
+#endif
+	
 	return p-buffer;	/* => must be less than 4k! */
 }
 #endif  /* defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS) */
@@ -324,6 +376,7 @@ static int pdc202xx_tune_chipset (ide_drive_t *drive, byte speed)
 
 	switch(speed) {
 #ifdef CONFIG_BLK_DEV_IDEDMA
+		case XFER_UDMA_5:
 		case XFER_UDMA_4:	TB = 0x20; TC = 0x01; break;	/* speed 8 == UDMA mode 4 */
 		case XFER_UDMA_3:	TB = 0x40; TC = 0x02; break;	/* speed 7 == UDMA mode 3 */
 		case XFER_UDMA_2:	TB = 0x20; TC = 0x01; break;	/* speed 6 == UDMA mode 2 */
@@ -408,7 +461,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	struct hd_driveid *id	= drive->id;
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	unsigned long high_16	= dev->resource[4].start & PCI_BASE_ADDRESS_IO_MASK;
+	unsigned long high_16   = pci_resource_start(dev, 4);
 	unsigned long dma_base  = hwif->dma_base;
 	byte unit		= (drive->select.b.unit & 0x01);
 
@@ -418,8 +471,9 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	byte			AP;
 	unsigned short		EP;
 	byte CLKSPD		= IN_BYTE(high_16 + 0x11);
-	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 	byte udma_33		= ultra ? (inb(high_16 + 0x001f) & 1) : 0;
+	byte udma_66		= ((eighty_ninty_three(drive)) && udma_33) ? 1 : 0;
+	byte udma_100		= ((dev->device == PCI_DEVICE_ID_PROMISE_20267) && udma_66) ? 1 : 0;
 
 	/*
 	 * Set the control register to use the 66Mhz system
@@ -436,11 +490,15 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 
 	byte mask		= hwif->channel ? 0x08 : 0x02;
 	unsigned short c_mask	= hwif->channel ? (1<<11) : (1<<10);
-	byte ultra_66		= ((id->dma_ultra & 0x0010) || (id->dma_ultra & 0x0008)) ? 1 : 0;
+	byte ultra_66		= ((id->dma_ultra & 0x0010) ||
+				   (id->dma_ultra & 0x0008)) ? 1 : 0;
+	byte ultra_100		= ((id->dma_ultra & 0x0020) ||
+				   (id->dma_ultra & 0x0010) ||
+				   (id->dma_ultra & 0x0008)) ? 1 : 0;
 
 	pci_read_config_word(dev, 0x50, &EP);
 
-	if ((ultra_66) && (EP & c_mask)) {
+	if (((ultra_66) || (ultra_100)) && (EP & c_mask)) {
 #ifdef DEBUG
 		printk("ULTRA66: %s channel of Ultra 66 requires an 80-pin cable for Ultra66 operation.\n", hwif->channel ? "Secondary", "Primary");
 		printk("         Switching to Ultra33 mode.\n");
@@ -449,13 +507,14 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		/* Secondary : zero out fourth bit */
 		OUT_BYTE(CLKSPD & ~mask, (high_16 + 0x11));
 	} else {
-		if (ultra_66) {
+		if ((ultra_66) || (ultra_100)) {
 			/*
 			 * check to make sure drive on same channel
 			 * is u66 capable
 			 */
 			if (hwif->drives[!(drive->dn%2)].id) {
-				if ((hwif->drives[!(drive->dn%2)].id->dma_ultra & 0x0010) ||
+				if ((hwif->drives[!(drive->dn%2)].id->dma_ultra & 0x0020) ||
+				    (hwif->drives[!(drive->dn%2)].id->dma_ultra & 0x0010) ||
 				    (hwif->drives[!(drive->dn%2)].id->dma_ultra & 0x0008)) {
 					OUT_BYTE(CLKSPD | mask, (high_16 + 0x11));
 				} else {
@@ -517,17 +576,18 @@ chipset_is_set:
 	if (drive->media == ide_disk)	/* PREFETCH_EN */
 		pci_write_config_byte(dev, (drive_pci), AP|PREFETCH_EN);
 
-	if ((id->dma_ultra & 0x0010) && (udma_66) && (udma_33))		speed = XFER_UDMA_4;
-	else if ((id->dma_ultra & 0x0008) && (udma_66) && (udma_33))	speed = XFER_UDMA_3;
-	else if ((id->dma_ultra & 0x0004) && (udma_33)) 		speed = XFER_UDMA_2;
-	else if ((id->dma_ultra & 0x0002) && (udma_33))			speed = XFER_UDMA_1;
-	else if ((id->dma_ultra & 0x0001) && (udma_33))			speed = XFER_UDMA_0;
-	else if (id->dma_mword & 0x0004)				speed = XFER_MW_DMA_2;
-	else if (id->dma_mword & 0x0002)				speed = XFER_MW_DMA_1;
-	else if (id->dma_mword & 0x0001)				speed = XFER_MW_DMA_0;
-	else if (id->dma_1word & 0x0004)				speed = XFER_SW_DMA_2;
-	else if (id->dma_1word & 0x0002)				speed = XFER_SW_DMA_1;
-	else if (id->dma_1word & 0x0001)				speed = XFER_SW_DMA_0;
+	if ((id->dma_ultra & 0x0020) && (udma_100))	speed = XFER_UDMA_5;
+	else if ((id->dma_ultra & 0x0010) && (udma_66))	speed = XFER_UDMA_4;
+	else if ((id->dma_ultra & 0x0008) && (udma_66))	speed = XFER_UDMA_3;
+	else if ((id->dma_ultra & 0x0004) && (udma_33))	speed = XFER_UDMA_2;
+	else if ((id->dma_ultra & 0x0002) && (udma_33))	speed = XFER_UDMA_1;
+	else if ((id->dma_ultra & 0x0001) && (udma_33))	speed = XFER_UDMA_0;
+	else if (id->dma_mword & 0x0004)		speed = XFER_MW_DMA_2;
+	else if (id->dma_mword & 0x0002)		speed = XFER_MW_DMA_1;
+	else if (id->dma_mword & 0x0001)		speed = XFER_MW_DMA_0;
+	else if (id->dma_1word & 0x0004)		speed = XFER_SW_DMA_2;
+	else if (id->dma_1word & 0x0002)		speed = XFER_SW_DMA_1;
+	else if (id->dma_1word & 0x0001)		speed = XFER_SW_DMA_0;
 	else {
 		/* restore original pci-config space */
 		pci_write_config_dword(dev, drive_pci, drive_conf);
@@ -537,7 +597,7 @@ chipset_is_set:
 	outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
 	(void) pdc202xx_tune_chipset(drive, speed);
 
-	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
+	return ((int)	((id->dma_ultra >> 11) & 7) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on : 
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
@@ -558,7 +618,7 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 		}
 		dma_func = ide_dma_off_quietly;
 		if (id->field_valid & 4) {
-			if (id->dma_ultra & 0x001F) {
+			if (id->dma_ultra & 0x002F) {
 				/* Force if Capable UltraDMA */
 				dma_func = config_chipset_for_dma(drive, 1);
 				if ((id->field_valid & 2) &&
@@ -603,6 +663,10 @@ int pdc202xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
+		case ide_dma_lostirq:
+		case ide_dma_timeout:
+			if (HWIF(drive)->resetproc != NULL)
+				HWIF(drive)->resetproc(drive);
 		default:
 			break;
 	}
@@ -610,14 +674,29 @@ int pdc202xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 }
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 
+void pdc202xx_reset (ide_drive_t *drive)
+{
+	unsigned long high_16	= pci_resource_start(HWIF(drive)->pci_dev, 4);
+	byte udma_speed_flag	= inb(high_16 + 0x001f);
+	int i			= 0;
+
+	OUT_BYTE(udma_speed_flag | 0x10, high_16 + 0x001f);
+	ide_delay_50ms();
+	ide_delay_50ms();
+	OUT_BYTE(udma_speed_flag & ~0x10, high_16 + 0x001f);
+	for (i = 0; i < 40; i++)
+		ide_delay_50ms();
+}
+
 unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 {
-	unsigned long high_16	= dev->resource[4].start & PCI_BASE_ADDRESS_IO_MASK;
+	unsigned long high_16 = pci_resource_start(dev, 4);
 	byte udma_speed_flag	= inb(high_16 + 0x001f);
 	byte primary_mode	= inb(high_16 + 0x001a);
 	byte secondary_mode	= inb(high_16 + 0x001b);
 
-	if (dev->device == PCI_DEVICE_ID_PROMISE_20262) {
+	if ((dev->device == PCI_DEVICE_ID_PROMISE_20262) ||
+	    (dev->device == PCI_DEVICE_ID_PROMISE_20267)) {
 		int i = 0;
 		/*
 		 * software reset -  this is required because the bios
@@ -646,7 +725,7 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 		byte irq = 0, irq2 = 0;
 		pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
 		pci_read_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, &irq2);	/* 0xbc */
-		if (irq != irq2) {
+		if ((irq != irq2) && (dev->device != PCI_DEVICE_ID_PROMISE_20267)) {
 			pci_write_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, irq);	/* 0xbc */
 			printk("%s: pci-config space interrupt mirror fixed.\n", name);
 		}
@@ -705,8 +784,12 @@ unsigned int __init ata66_pdc202xx (ide_hwif_t *hwif)
 
 void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 {
-	hwif->tuneproc = &pdc202xx_tune_drive;
-	hwif->speedproc = &pdc202xx_tune_chipset;
+	hwif->tuneproc	= &pdc202xx_tune_drive;
+	hwif->speedproc	= &pdc202xx_tune_chipset;
+
+	if ((hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20262) ||
+	    (hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20267))
+		hwif->resetproc	= &pdc202xx_reset;
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {

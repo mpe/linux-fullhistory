@@ -49,6 +49,7 @@ static int phone_open(struct inode *inode, struct file *file)
 	unsigned int minor = MINOR(inode->i_rdev);
 	int err = 0;
 	struct phone_device *p;
+	struct file_operations *old_fops;
 
 	if (minor >= PHONE_NUM_DEVICES)
 		return -ENODEV;
@@ -69,12 +70,15 @@ static int phone_open(struct inode *inode, struct file *file)
 			goto end;
 		}
 	}
-	if (p->open) {
+	old_fops = file->f_op;
+	file->f_op = fops_get(p->f_op);
+	if (p->open)
 		err = p->open(p, file);	/* Tell the device it is open */
-		if (err)
-			goto end;
+	if (err) {
+		fops_put(file->f_op);
+		file->f_op = fops_get(old_fops);
 	}
-	file->f_op = p->f_op;
+	fops_put(old_fops);
 end:
 	up(&phone_lock);
 	return err;
@@ -129,6 +133,7 @@ void phone_unregister_device(struct phone_device *pfd)
 
 static struct file_operations phone_fops =
 {
+	owner:		THIS_MODULE,
 	open:		phone_open,
 };
 

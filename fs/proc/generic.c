@@ -14,6 +14,8 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 #include <asm/bitops.h>
 
 static ssize_t proc_file_read(struct file * file, char * buf,
@@ -397,13 +399,14 @@ static void proc_kill_inodes(struct proc_dir_entry *de)
 			continue;
 		if (inode->u.generic_ip != de)
 			continue;
+		fops_put(filp->f_op);
 		filp->f_op = NULL;
 	}
 	file_list_unlock();
 }
 
 struct proc_dir_entry *proc_symlink(const char *name,
-		struct proc_dir_entry *parent, char *dest)
+		struct proc_dir_entry *parent, const char *dest)
 {
 	struct proc_dir_entry *ent = NULL;
 	const char *fn = name;
@@ -535,7 +538,7 @@ void free_proc_entry(struct proc_dir_entry *de)
 {
 	int ino = de->low_ino;
 
-	if (ino < PROC_DYNAMIC_FIRST &&
+	if (ino < PROC_DYNAMIC_FIRST ||
 	    ino >= PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
 		return;
 	if (S_ISLNK(de->mode) && de->data)

@@ -236,6 +236,7 @@
 #include <linux/reboot.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
+#include <linux/bitops.h>
 
 #include <linux/pm.h>
 static int maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *d);
@@ -2081,7 +2082,6 @@ static int ess_open_mixdev(struct inode *inode, struct file *file)
 		return -ENODEV;
 
 	file->private_data = card;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2091,7 +2091,6 @@ static int ess_release_mixdev(struct inode *inode, struct file *file)
 
 	VALIDATE_CARD(card);
 	
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -2105,6 +2104,7 @@ static int ess_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int
 }
 
 static /*const*/ struct file_operations ess_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:         ess_llseek,
 	ioctl:          ess_ioctl_mixdev,
 	open:           ess_open_mixdev,
@@ -2976,7 +2976,6 @@ ess_open(struct inode *inode, struct file *file)
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -3007,11 +3006,11 @@ ess_release(struct inode *inode, struct file *file)
 	}
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static struct file_operations ess_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:         ess_llseek,
 	read:           ess_read,
 	write:          ess_write,
@@ -3447,11 +3446,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	return 1; 
 }
 
-#ifdef MODULE
-int init_module(void)
-#else
-int SILLY_MAKE_INIT(init_maestro(void))
-#endif
+int __init init_maestro(void)
 {
 	struct pci_dev *pcidev = NULL;
 	int foundone = 0;
@@ -3558,8 +3553,6 @@ void cleanup_module(void) {
 	nuke_maestros();
 }
 
-#else /* MODULE */
-__initcall(init_maestro);
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -3718,3 +3711,5 @@ maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 out:
 	return 0;
 }
+
+module_init(init_maestro);

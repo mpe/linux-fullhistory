@@ -1,7 +1,7 @@
 /*
  * linux/drivers/ide/cs5530.c		Version 0.6	Mar. 18, 2000
  *
- * Copyright (C) 2000			Andre Hedrick <andre@suse.com>
+ * Copyright (C) 2000			Andre Hedrick <andre@linux-ide.org>
  * Ditto of GNU General Public License.
  *
  * Copyright (C) 2000			Mark Lord <mlord@pobox.com>
@@ -43,7 +43,7 @@ static struct pci_dev *bmide_dev;
 static int cs5530_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
-	u32 bibma = bmide_dev->resource[4].start;
+	u32 bibma = pci_resource_start(bmide_dev, 4);
 	u8  c0 = 0, c1 = 0;
 
 	/*

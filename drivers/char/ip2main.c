@@ -311,6 +311,7 @@ static struct termios    * TermiosLocked[IP2_MAX_PORTS];
  * download the loadware to the boards.
  */
 static struct file_operations ip2_ipl = {
+	owner:		THIS_MODULE,
 	read:		ip2_ipl_read,
 	write:		ip2_ipl_write,
 	ioctl:		ip2_ipl_ioctl,
@@ -3201,8 +3202,6 @@ ip2_ipl_open( struct inode *pInode, struct file *pFile )
 #ifdef IP2DEBUG_IPL
 	printk (KERN_DEBUG "IP2IPL: open\n" );
 #endif
-
-	//MOD_INC_USE_COUNT; // Needs close entry with decrement.
 
 	switch(iplminor) {
 	// These are the IPL devices

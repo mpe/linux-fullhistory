@@ -415,7 +415,7 @@ static void a5kkbd_tx(int irq, void *dev_id, struct pt_regs *regs)
 
 #ifdef CONFIG_KBDMOUSE
 static struct busmouse a5kkbd_mouse = {
-	6, "kbdmouse", NULL, NULL, 7
+	6, "kbdmouse", NULL, NULL, NULL, 7
 };
 #endif
 

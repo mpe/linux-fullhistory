@@ -2177,10 +2177,6 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
     int open_error;
 
     open_error = qic02_tape_open_no_use_count(inode, filp);
-    if (!open_error)
-    {
-	MOD_INC_USE_COUNT;
-    }
     return open_error;
 }
 
@@ -2440,9 +2436,6 @@ static int qic02_tape_release(struct inode * inode, struct file * filp)
 	    (void) do_qic_cmd(QCMD_REWIND, TIM_R);
 	}
     }
-#ifdef MODULE
-    MOD_DEC_USE_COUNT;
-#endif
     return 0;
 } /* qic02_tape_release */
 
@@ -2766,6 +2759,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 
 /* These are (most) of the interface functions: */
 static struct file_operations qic02_tape_fops = {
+	owner:		THIS_MODULE,
 	llseek:		qic02_tape_lseek,	/* not allowed */
 	read:		qic02_tape_read,
 	write:		qic02_tape_write,

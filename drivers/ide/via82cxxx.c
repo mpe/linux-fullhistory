@@ -1,10 +1,10 @@
 /*
- * linux/drivers/ide/via82cxxx.c	Version 0.09	Apr. 02, 2000
+ * linux/drivers/ide/via82cxxx.c	Version 0.10	June 9, 2000
  *
  *  Copyright (C) 1998-99	Michel Aubry, Maintainer
  *  Copyright (C) 1999		Jeff Garzik, MVP4 Support
  *					(jgarzik@mandrakesoft.com)
- *  Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-2000	Andre Hedrick <andre@linux-ide.org>
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  The VIA MVP-4 is reported OK with UDMA.
@@ -101,19 +101,19 @@ static struct pci_dev *isa_dev = NULL;
 struct chipset_bus_clock_list_entry {
 	byte	xfer_speed;
 
-	byte	chipset_settings_25;
 	byte	ultra_settings_25;
-	byte	chipset_settings_33;
+	byte	chipset_settings_25;
 	byte	ultra_settings_33;
-	byte	chipset_settings_37;
+	byte	chipset_settings_33;
 	byte	ultra_settings_37;
-	byte	chipset_settings_41;
+	byte	chipset_settings_37;
 	byte	ultra_settings_41;
+	byte	chipset_settings_41;
 };
 
 static struct chipset_bus_clock_list_entry * via82cxxx_table = NULL;
 
-struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
+static struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */	
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
@@ -134,7 +134,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_one [] = {
 	{	0,		0x03,	0xA8,	0x03,	0xA8,	0x03,	0xA9,	0x00,	0x00	}
 };
 
-struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
+static struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
@@ -155,7 +155,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_two [] = {
 	{	0,		0x03,	0xA8,	0x03,	0xA8,	0x03,	0xDB,	0x03,	0xFE	}
 };
 
-struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
+static struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00,	0x00	},
@@ -176,7 +176,7 @@ struct chipset_bus_clock_list_entry via82cxxx_type_three [] = {
 	{	0,		0x03,	0xA8,	0x03,	0xA8,	0x03,	0xDB,	0x03,	0xFE	}
 };
 
-struct chipset_bus_clock_list_entry via82cxxx_type_four [] = {
+static struct chipset_bus_clock_list_entry via82cxxx_type_four [] = {
 		/* speed */	/* 25 */	/* 33 */	/* 37.5 */	/* 41.5 */
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	{	XFER_UDMA_4,	0x00,	0x00,	0xE0,	0x20,	0xE1,	0x31,	0x00,	0x00	},
@@ -243,20 +243,20 @@ static const struct {
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
 
-#undef DISPLAY_VIA_TIMINGS
+#define DISPLAY_VIA_TIMINGS
 
 #if defined(DISPLAY_VIA_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 
-static char *FIFO_str[] __initdata = {
+static char *FIFO_str[] = {
 	" 1 ",
 	"3/4",
 	"1/2",
 	"1/4"
 };
 
-static char *control3_str[] __initdata = {
+static char *control3_str[] = {
 	"No limitation",
 	"64",
 	"128",
@@ -760,11 +760,15 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
 	byte speed		= 0x00;
+	byte ultra66		= eighty_ninty_three(drive);
+	byte ultra100		= 0;
 	int  rval;
 
-	if ((id->dma_ultra & 0x0010) && (HWIF(drive)->udma_four)) {
+	if ((id->dma_ultra & 0x0020) && (ultra66) && (ultra100)) {
+		speed = XFER_UDMA_5;
+	} else if ((id->dma_ultra & 0x0010) && (ultra66)) {
 		speed = XFER_UDMA_4;
-	} else if ((id->dma_ultra & 0x0008) && (HWIF(drive)->udma_four)) {
+	} else if ((id->dma_ultra & 0x0008) && (ultra66)) {
 		speed = XFER_UDMA_3;
 	} else if (id->dma_ultra & 0x0004) {
 		speed = XFER_UDMA_2;
@@ -778,12 +782,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		speed = XFER_MW_DMA_1;
 	} else if (id->dma_mword & 0x0001) {
 		speed = XFER_MW_DMA_0;
-	} else if (id->dma_1word & 0x0004) {
-		speed = XFER_SW_DMA_2;
-	} else if (id->dma_1word & 0x0002) {
-		speed = XFER_SW_DMA_1;
-	} else if (id->dma_1word & 0x0001) {
-		speed = XFER_SW_DMA_0;
 	} else {
 		return ((int) ide_dma_off_quietly);
 	}
@@ -793,7 +791,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
-			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
 	return rval;
 }
@@ -811,7 +808,7 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 		}
 		dma_func = ide_dma_off_quietly;
 		if (id->field_valid & 4) {
-			if (id->dma_ultra & 0x001F) {
+			if (id->dma_ultra & 0x002F) {
 				/* Force if Capable UltraDMA */
 				dma_func = config_chipset_for_dma(drive);
 				if ((id->field_valid & 2) &&
@@ -820,8 +817,7 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 			}
 		} else if (id->field_valid & 2) {
 try_dma_modes:
-			if ((id->dma_mword & 0x0007) ||
-			    (id->dma_1word & 0x0007)) {
+			if (id->dma_mword & 0x0007) {
 				/* Force if Capable regular DMA modes */
 				dma_func = config_chipset_for_dma(drive);
 				if (dma_func != ide_dma_on)
@@ -870,7 +866,7 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 	byte revision = 0;
 
 	for (i = 0; i < arraysize (ApolloHostChipInfo) && !host_dev; i++) {
-		host = pci_find_device (PCI_VENDOR_ID_VIA,
+		host = pci_find_device (ApolloHostChipInfo[i].vendor_id,
 					ApolloHostChipInfo[i].host_id,
 					NULL);
 		if (!host)

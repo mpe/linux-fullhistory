@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1997-1998	Mark Lord <mlord@pobox.com>
  * Copyright (C) 1998		Eddie C. Dost <ecd@skynet.be>
- * Copyright (C) 1999-2000	Andre Hedrick <andre@suse.com>
+ * Copyright (C) 1999-2000	Andre Hedrick <andre@linux-ide.org>
  *
  * Inspired by an earlier effort from David S. Miller <davem@redhat.com>
  */

@@ -1,16 +1,14 @@
 /*
- * linux/drivers/ide/alim15x3.c		Version 0.09	Mar. 18, 2000
+ * linux/drivers/ide/alim15x3.c		Version 0.10	Jun. 9, 2000
  *
  *  Copyright (C) 1998-2000 Michel Aubry, Maintainer
  *  Copyright (C) 1998-2000 Andrzej Krzysztofowicz, Maintainer
+ *  Copyright (C) 1999-2000 CJ, cjtsai@ali.com.tw, Maintainer
  *
- *  Copyright (C) 1998-2000 Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-2000 Andre Hedrick (andre@linux-ide.org)
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  (U)DMA capable version of ali 1533/1543(C), 1535(D)
- *
- *  version: 1.0 beta2 (Sep. 2, 1999)
- *	e-mail your problems to cjtsai@ali.com.tw
  *
  **********************************************************************
  *  9/7/99 --Parts from the above author are included and need to be
@@ -237,7 +235,6 @@ static int ali_get_info (char *buffer, char **addr, off_t offset, int count)
 
 static byte m5229_revision	= 0;
 static byte chip_is_1543c_e	= 0;
-static byte cable_80_pin[2]	= { 0, 0 };
 
 byte ali_proc = 0;
 static struct pci_dev *isa_dev;
@@ -346,7 +343,7 @@ static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 		/*
 		 * enable ultra dma and set timing
 		 */
-		tmpbyte |= ((0x08 | (4-speed)) << (unit << 2));
+		tmpbyte |= ((0x08 | ((4-speed)&0x07)) << (unit << 2));
 		pci_write_config_byte(dev, m5229_udma, tmpbyte);
 		if (speed >= XFER_UDMA_3) {
 			pci_read_config_byte(dev, 0x4b, &tmpbyte);
@@ -370,12 +367,14 @@ static void config_chipset_for_pio (ide_drive_t *drive)
 static int config_chipset_for_dma (ide_drive_t *drive, byte ultra33)
 {
 	struct hd_driveid *id	= drive->id;
-	ide_hwif_t *hwif	= HWIF(drive);
 	byte speed		= 0x00;
-	byte ultra66		= ((hwif->udma_four) && (id->hw_config & 0x2000)) ? 1 : 0;
+	byte ultra66		= eighty_ninty_three(drive);
+	byte ultra100		= (m5229_revision>=0xc4) ? 1 : 0;
 	int  rval;
 
-	if ((id->dma_ultra & 0x0010) && (ultra66) && (ultra33)) {
+	if ((id->dma_ultra & 0x0020) && (ultra100) && (ultra66) && (ultra33)) {
+		speed = XFER_UDMA_5;
+	} else if ((id->dma_ultra & 0x0010) && (ultra66) && (ultra33)) {
 		speed = XFER_UDMA_4;
 	} else if ((id->dma_ultra & 0x0008) && (ultra66) && (ultra33)) {
 		speed = XFER_UDMA_3;
@@ -454,7 +453,7 @@ static int ali15x3_config_drive_for_dma(ide_drive_t *drive)
 		}
 		dma_func = ide_dma_off_quietly;
 		if ((id->field_valid & 4) && (m5229_revision >= 0xC2)) {
-			if (id->dma_ultra & 0x001F) {
+			if (id->dma_ultra & 0x002F) {
 				/* Force if Capable UltraDMA */
 				dma_func = config_chipset_for_dma(drive, can_ultra_dma);
 				if ((id->field_valid & 2) &&
@@ -508,13 +507,13 @@ static int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 {
-	unsigned long fixdma_base = dev->resource[4].start;
+	unsigned long fixdma_base = pci_resource_start(dev, 4);
 
 	pci_read_config_byte(dev, PCI_REVISION_ID, &m5229_revision);
 
 	isa_dev = pci_find_device(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, NULL);
 
-	if (!fixdma_base || fixdma_base == PCI_BASE_ADDRESS_IO_MASK) {
+	if (!fixdma_base) {
 		/*
 		 *
 		 */
@@ -539,11 +538,16 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 	return 0;
 }
 
+/*
+ * This checks if the controller and the cable are capable
+ * of UDMA66 transfers. It doesn't check the drives.
+ * But see note 2 below!
+ */
 unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 {
 	struct pci_dev *dev	= hwif->pci_dev;
-	byte ata66mask		= hwif->channel ? 0x02 : 0x01;
 	unsigned int ata66	= 0;
+	byte cable_80_pin[2]	= { 0, 0 };
 
 	unsigned long flags;
 	byte tmpbyte;
@@ -575,7 +579,7 @@ unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 			 * 1543C-B0 (m1533, 0x79, bit 2)
 			 */
 			pci_write_config_byte(isa_dev, 0x79, tmpbyte | 0x04);
-		} else if (m5229_revision == 0xC3) {
+		} else if (m5229_revision >= 0xC3) {
 			/*
 			 * 1553/1535 (m1533, 0x79, bit 1)
 			 */
@@ -596,6 +600,10 @@ unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 		 * has 80-pin (from host view)
 		 */
 		if (!(tmpbyte & 0x02)) cable_80_pin[1] = 1;
+		/*
+		 * Allow ata66 if cable of current channel has 80 pins
+		 */
+		ata66 = (hwif->channel)?cable_80_pin[1]:cable_80_pin[0];
 	} else {
 		/*
 		 * revision 0x20 (1543-E, 1543-F)
@@ -625,18 +633,6 @@ unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 
 	pci_write_config_byte(dev, 0x53, tmpbyte);
 
-	/*
-	 * Ultra66 cable detection (from Host View)
-	 * m5229, 0x4a, bit0: primary, bit1: secondary 80 pin
-	 *
-	 * 0x4a, bit0 is 0 => primary channel
-	 * has 80-pin (from host view)
-	 *
-	 * 0x4a, bit1 is 0 => secondary channel
-	 * has 80-pin (from host view)
-	 */
-	pci_read_config_byte(dev, 0x4a, &tmpbyte);
-	ata66 = (!(tmpbyte & ata66mask)) ? 1 : 0;
 	__restore_flags(flags);
 
 	return(ata66);

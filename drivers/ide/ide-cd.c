@@ -426,11 +426,13 @@ void cdrom_analyze_sense_data(ide_drive_t *drive,
 
 			while (hi > lo) {
 				mid = (lo + hi) / 2;
-				if (packet_command_texts[mid].packet_command == failed_command->c[0]) {
+				if (packet_command_texts[mid].packet_command ==
+				    failed_command->c[0]) {
 					s = packet_command_texts[mid].text;
 					break;
 				}
-				else if (packet_command_texts[mid].packet_command > failed_command->c[0])
+				if (packet_command_texts[mid].packet_command >
+				    failed_command->c[0])
 					hi = mid;
 				else
 					lo = mid+1;
@@ -1524,7 +1526,7 @@ cdrom_lockdoor(ide_drive_t *drive, int lockflag, struct request_sense *sense)
 		memset(&pc, 0, sizeof(pc));
 		pc.sense = sense;
 		pc.c[0] = GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL;
-		pc.c[4] = lockflag ? 3 : 0;
+		pc.c[4] = lockflag ? 1 : 0;
 		stat = cdrom_queue_packet_command (drive, &pc);
 	}
 
@@ -1624,7 +1626,8 @@ static int cdrom_read_tocentry(ide_drive_t *drive, int trackno, int msf_flag,
 /* Try to read the entire TOC for the disk into our internal buffer. */
 static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 {
-	int stat, ntracks, i;
+	int minor, stat, ntracks, i;
+	kdev_t dev;
 	struct cdrom_info *info = drive->driver_data;
 	struct atapi_toc *toc = info->toc;
 	struct {
@@ -1663,8 +1666,10 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 #endif  /* not STANDARD_ATAPI */
 
 	ntracks = toc->hdr.last_track - toc->hdr.first_track + 1;
-	if (ntracks <= 0) return -EIO;
-	if (ntracks > MAX_TRACKS) ntracks = MAX_TRACKS;
+	if (ntracks <= 0)
+		return -EIO;
+	if (ntracks > MAX_TRACKS)
+		ntracks = MAX_TRACKS;
 
 	/* Now read the whole schmeer. */
 	stat = cdrom_read_tocentry(drive, toc->hdr.first_track, 1, 0,
@@ -1755,13 +1760,13 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 	toc->xa_flag = (ms_tmp.hdr.first_track != ms_tmp.hdr.last_track);
 
 	/* Now try to get the total cdrom capacity. */
-#if 0
-	stat = cdrom_get_last_written(MKDEV(HWIF(drive)->major, minor),
-				     (long *)&toc->capacity);
+	minor = (drive->select.b.unit) << PARTN_BITS;
+	dev = MKDEV(HWIF(drive)->major, minor);
+	stat = cdrom_get_last_written(dev, (long *)&toc->capacity);
 	if (stat)
-#endif
-	stat = cdrom_read_capacity(drive, &toc->capacity, sense);
-	if (stat) toc->capacity = 0x1fffff;
+		stat = cdrom_read_capacity(drive, &toc->capacity, sense);
+	if (stat)
+		toc->capacity = 0x1fffff;
 
 	/* Remember that we've read this stuff. */
 	CDROM_STATE_FLAGS (drive)->toc_valid = 1;
@@ -2552,7 +2557,8 @@ unsigned long ide_cdrom_capacity (ide_drive_t *drive)
 {
 	unsigned capacity;
 
-	return cdrom_read_capacity(drive, &capacity, NULL) ? 0 : capacity * SECTORS_PER_FRAME;
+	return cdrom_read_capacity(drive, &capacity, NULL)
+		? 0 : capacity * SECTORS_PER_FRAME;
 }
 
 static

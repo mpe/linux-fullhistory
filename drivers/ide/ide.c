@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/ide/ide.c		Version 6.30	Dec 28, 1999
+ *  linux/drivers/ide/ide.c		Version 6.31	June 9, 2000
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -7,6 +7,7 @@
 /*
  *  Mostly written by Mark Lord  <mlord@pobox.com>
  *                and Gadi Oxman <gadio@netvision.net.il>
+ *                and Andre Hedrick <andre@linux-ide.org>
  *
  *  See linux/MAINTAINERS for address of current maintainer.
  *
@@ -109,6 +110,9 @@
  * Version 6.21		Fixing/Fixed SMP spinlock issue with insight from an old
  *			  hat that clarified original low level driver design.
  * Version 6.30		Added SMP support; fixed multmode issues.  -ml
+ * Version 6.31		Debug Share INTR's and request queue streaming
+ *			Native ATA-100 support
+ *			Prep for Cascades Project
  *
  *  Some additional driver compile-time options are in ./include/linux/ide.h
  *
@@ -117,8 +121,8 @@
  *
  */
 
-#define	REVISION	"Revision: 6.30"
-#define	VERSION		"Id: ide.c 6.30 1999/12/28"
+#define	REVISION	"Revision: 6.31"
+#define	VERSION		"Id: ide.c 6.31 2000/06/09"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -482,7 +486,8 @@ static inline int drive_is_ready (ide_drive_t *drive)
 #if 0
 	udelay(1);	/* need to guarantee 400ns since last command was issued */
 #endif
-	if (GET_STAT() & BUSY_STAT)	/* Note: this may clear a pending IRQ!! */
+//	if (GET_STAT() & BUSY_STAT)	/* Note: this may clear a pending IRQ!! */
+	if (IN_BYTE(IDE_ALTSTATUS_REG) & BUSY_STAT)
 		return 0;	/* drive busy:  definitely not interrupting */
 	return 1;		/* drive ready: *might* be interrupting */
 }
@@ -651,6 +656,19 @@ static ide_startstop_t reset_pollfunc (ide_drive_t *drive)
 	return ide_stopped;
 }
 
+static void check_dma_crc (ide_drive_t *drive)
+{
+	if (drive->crc_count) {
+		(void) HWIF(drive)->dmaproc(ide_dma_off_quietly, drive);
+		if ((HWIF(drive)->speedproc) != NULL)
+			HWIF(drive)->speedproc(drive, ide_auto_reduce_xfer(drive));
+		if (drive->current_speed >= XFER_SW_DMA_0)
+			(void) HWIF(drive)->dmaproc(ide_dma_on, drive);
+	} else {
+		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
+	}
+}
+
 static void pre_reset (ide_drive_t *drive)
 {
 	if (drive->driver != NULL)
@@ -658,12 +676,15 @@ static void pre_reset (ide_drive_t *drive)
 
 	if (!drive->keep_settings) {
 		if (drive->using_dma) {
-			(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
+			check_dma_crc(drive);
 		} else {
 			drive->unmask = 0;
 			drive->io_32bit = 0;
 		}
+		return;
 	}
+	if (drive->using_dma)
+		check_dma_crc(drive);
 }
 
 /*
@@ -902,9 +923,9 @@ ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, byte stat)
 			if (err == ABRT_ERR) {
 				if (drive->select.b.lba && IN_BYTE(IDE_COMMAND_REG) == WIN_SPECIFY)
 					return ide_stopped; /* some newer drives don't support WIN_SPECIFY */
-			} else if ((err & (ABRT_ERR | ICRC_ERR)) == (ABRT_ERR | ICRC_ERR))
-				; /* UDMA crc error -- just retry the operation */
-			else if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
+			} else if ((err & (ABRT_ERR | ICRC_ERR)) == (ABRT_ERR | ICRC_ERR)) {
+				drive->crc_count++; /* UDMA crc error -- just retry the operation */
+			} else if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
 				rq->errors = ERROR_MAX;
 			else if (err & TRK0_ERR)	/* help it find track zero */
 				rq->errors |= ERROR_RECAL;
@@ -941,6 +962,7 @@ void ide_cmd (ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
 	ide_set_handler (drive, handler, WAIT_CMD, NULL);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* clear nIEN */
+	SELECT_MASK(HWIF(drive),drive,0);
 	OUT_BYTE(nsect,IDE_NSECTOR_REG);
 	OUT_BYTE(cmd,IDE_COMMAND_REG);
 }
@@ -1298,7 +1320,7 @@ static void ide_do_request(ide_hwgroup_t *hwgroup, int masked_irq)
 		hwif = HWIF(drive);
 		if (hwgroup->hwif->sharing_irq && hwif != hwgroup->hwif && hwif->io_ports[IDE_CONTROL_OFFSET]) {
 			/* set nIEN for previous hwif */
-			OUT_BYTE(hwgroup->drive->ctl|2, hwgroup->hwif->io_ports[IDE_CONTROL_OFFSET]);
+			SELECT_INTERRUPT(hwif, drive);
 		}
 		hwgroup->hwif = hwif;
 		hwgroup->drive = drive;
@@ -1316,13 +1338,13 @@ static void ide_do_request(ide_hwgroup_t *hwgroup, int masked_irq)
 		 * happens anyway when any interrupt comes in, IDE or otherwise
 		 *  -- the kernel masks the IRQ while it is being handled.
 		 */
-		if (hwif->irq != masked_irq)
+		if (masked_irq && hwif->irq != masked_irq)
 			disable_irq_nosync(hwif->irq);
 		spin_unlock(&io_request_lock);
 		ide__sti();	/* allow other IRQs while we start this request */
 		startstop = start_request(drive);
 		spin_lock_irq(&io_request_lock);
-		if (hwif->irq != masked_irq)
+		if (masked_irq && hwif->irq != masked_irq)
 			enable_irq(hwif->irq);
 		if (startstop == ide_stopped)
 			hwgroup->busy = 0;
@@ -1404,7 +1426,11 @@ void ide_timer_expiry (unsigned long data)
 			 */
 			spin_unlock(&io_request_lock);
 			hwif  = HWIF(drive);
+#if DISABLE_IRQ_NOSYNC
+			disable_irq_nosync(hwif->irq);
+#else
 			disable_irq(hwif->irq);	/* disable_irq_nosync ?? */
+#endif /* DISABLE_IRQ_NOSYNC */
 			__cli();	/* local CPU only, as if we were handling an interrupt */
 			if (hwgroup->poll_timeout != 0) {
 				startstop = handler(drive);
@@ -2008,12 +2034,12 @@ void ide_unregister (unsigned int index)
 	else
 		hwgroup->hwif = HWIF(hwgroup->drive);
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#if defined(CONFIG_BLK_DEV_IDEDMA) && !defined(CONFIG_DMA_NONPCI)
 	if (hwif->dma_base) {
 		(void) ide_release_dma(hwif);
 		hwif->dma_base = 0;
 	}
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* (CONFIG_BLK_DEV_IDEDMA) && !(CONFIG_DMA_NONPCI) */
 
 	/*
 	 * Remove us from the kernel's knowledge
@@ -2048,6 +2074,10 @@ void ide_unregister (unsigned int index)
 	hwif->speedproc		= old_hwif.speedproc;
 	hwif->selectproc	= old_hwif.selectproc;
 	hwif->resetproc		= old_hwif.resetproc;
+	hwif->intrproc		= old_hwif.intrproc;
+	hwif->maskproc		= old_hwif.maskproc;
+	hwif->quirkproc		= old_hwif.quirkproc;
+	hwif->rwproc		= old_hwif.rwproc;
 	hwif->dmaproc		= old_hwif.dmaproc;
 	hwif->dma_base		= old_hwif.dma_base;
 	hwif->dma_extra		= old_hwif.dma_extra;
@@ -2275,17 +2305,18 @@ int ide_spin_wait_hwgroup (ide_drive_t *drive)
 	unsigned long timeout = jiffies + (3 * HZ);
 
 	spin_lock_irq(&io_request_lock);
+
 	while (hwgroup->busy) {
-		unsigned long flags;
+		unsigned long lflags;
 		spin_unlock_irq(&io_request_lock);
-		__save_flags(flags);	/* local CPU only */
+		__save_flags(lflags);	/* local CPU only */
 		__sti();		/* local CPU only; needed for jiffies */
 		if (0 < (signed long)(jiffies - timeout)) {
-			__restore_flags(flags);
+			__restore_flags(lflags);	/* local CPU only */
 			printk("%s: channel busy\n", drive->name);
 			return -EBUSY;
 		}
-		__restore_flags(flags);	/* local CPU only */
+		__restore_flags(lflags);	/* local CPU only */
 		spin_lock_irq(&io_request_lock);
 	}
 	return 0;
@@ -2422,13 +2453,13 @@ int ide_wait_cmd_task (ide_drive_t *drive, byte *buf)
  */
 void ide_delay_50ms (void)
 {
-#if 0
+#ifndef CONFIG_BLK_DEV_IDECS
 	unsigned long timeout = jiffies + ((HZ + 19)/20) + 1;
 	while (0 < (signed long)(timeout - jiffies));
 #else
 	__set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout(HZ/20);
-#endif
+#endif /* CONFIG_BLK_DEV_IDECS */
 }
 
 int system_bus_clock (void)
@@ -2576,7 +2607,6 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				err = -EFAULT;
 			return err;
 		}
-
 		case HDIO_SCAN_HWIF:
 		{
 			int args[3];
@@ -3266,6 +3296,7 @@ void __init ide_init_builtin_drivers (void)
 	if (ide_hwifs[0].io_ports[IDE_DATA_OFFSET]) {
 		ide_get_lock(&ide_lock, NULL, NULL);	/* for atari only */
 		disable_irq(ide_hwifs[0].irq);	/* disable_irq_nosync ?? */
+//		disable_irq_nosync(ide_hwifs[0].irq);
 	}
 #endif /* __mc68000__ || CONFIG_APUS */
 
@@ -3619,10 +3650,10 @@ void cleanup_module (void)
 
 	for (index = 0; index < MAX_HWIFS; ++index) {
 		ide_unregister(index);
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#if defined(CONFIG_BLK_DEV_IDEDMA) && !defined(CONFIG_DMA_NONPCI)
 		if (ide_hwifs[index].dma_base)
 			(void) ide_release_dma(&ide_hwifs[index]);
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* (CONFIG_BLK_DEV_IDEDMA) && !(CONFIG_DMA_NONPCI) */
 	}
 
 #ifdef CONFIG_PROC_FS
@@ -3636,6 +3667,7 @@ void cleanup_module (void)
 static int parse_ide_setup (char *line)
 {
 	parse_options(line);
+	/* We MUST return 0 as otherwise no subsequent __setup option works... */
 	return 0;
 }
 __setup("", parse_ide_setup);

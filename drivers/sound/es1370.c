@@ -1030,7 +1030,6 @@ static int es1370_open_mixdev(struct inode *inode, struct file *file)
 	}
        	VALIDATE_STATE(s);
 	file->private_data = s;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1039,7 +1038,6 @@ static int es1370_release_mixdev(struct inode *inode, struct file *file)
 	struct es1370_state *s = (struct es1370_state *)file->private_data;
 	
 	VALIDATE_STATE(s);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1049,6 +1047,7 @@ static int es1370_ioctl_mixdev(struct inode *inode, struct file *file, unsigned 
 }
 
 static /*const*/ struct file_operations es1370_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1370_llseek,
 	ioctl:		es1370_ioctl_mixdev,
 	open:		es1370_open_mixdev,
@@ -1710,7 +1709,6 @@ static int es1370_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1734,11 +1732,11 @@ static int es1370_release(struct inode *inode, struct file *file)
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations es1370_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1370_llseek,
 	read:		es1370_read,
 	write:		es1370_write,
@@ -1975,7 +1973,7 @@ static int es1370_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return 0;
 
 	case SNDCTL_DSP_GETOSPACE:
-		if (!(s->ctrl & CTRL_DAC2_EN) && (val = prog_dmabuf_dac1(s)) != 0)
+		if (!(s->ctrl & CTRL_DAC1_EN) && (val = prog_dmabuf_dac1(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
@@ -2116,7 +2114,6 @@ static int es1370_open_dac(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= FMODE_DAC;
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2132,11 +2129,11 @@ static int es1370_release_dac(struct inode *inode, struct file *file)
 	s->open_mode &= ~FMODE_DAC;
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations es1370_dac_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1370_llseek,
 	write:		es1370_write_dac,
 	poll:		es1370_poll_dac,
@@ -2357,7 +2354,6 @@ static int es1370_midi_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	s->open_mode |= (file->f_mode << FMODE_MIDI_SHIFT) & (FMODE_MIDI_READ | FMODE_MIDI_WRITE);
 	up(&s->open_sem);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2403,11 +2399,11 @@ static int es1370_midi_release(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&s->lock, flags);
 	wake_up(&s->open_wait);
 	up(&s->open_sem);
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations es1370_midi_fops = {
+	owner:		THIS_MODULE,
 	llseek:		es1370_llseek,
 	read:		es1370_midi_read,
 	write:		es1370_midi_write,

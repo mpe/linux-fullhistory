@@ -168,8 +168,6 @@ static int rtc_open(struct inode *inode, struct file *file)
 	if(rtc_status & RTC_IS_OPEN)
 		return -EBUSY;
 
-	MOD_INC_USE_COUNT;
-
 	rtc_status |= RTC_IS_OPEN;
 	return 0;
 }
@@ -181,8 +179,6 @@ static int rtc_release(struct inode *inode, struct file *file)
 	 * in use, and clear the data.
 	 */
 
-	MOD_DEC_USE_COUNT;
-
 	rtc_status &= ~RTC_IS_OPEN;
 	return 0;
 }
@@ -192,6 +188,7 @@ static int rtc_release(struct inode *inode, struct file *file)
  */
 
 static struct file_operations rtc_fops = {
+	owner:		THIS_MODULE,
 	ioctl:		rtc_ioctl,
 	open:		rtc_open,
 	release:	rtc_release,

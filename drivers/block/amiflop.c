@@ -70,6 +70,7 @@
 #include <linux/init.h>
 #include <linux/amifdreg.h>
 #include <linux/amifd.h>
+#include <linux/ioport.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -126,11 +127,6 @@ MODULE_PARM(fd_def_df0,"l");
 #define SELECT(mask)    (ciab.prb &= ~mask)
 #define DESELECT(mask)  (ciab.prb |= mask)
 #define SELMASK(drive)  (1 << (3 + (drive & 3)))
-
-#define DRIVE(x) ((x) & 3)
-#define PROBE(x) ((x) >> 2) & 1)
-#define TYPE(x)  ((x) >> 3) & 2)
-#define DATA(x)  ((x) >> 5) & 3)
 
 static struct fd_drive_type drive_types[] = {
 /*  code	name	   tr he   rdsz   wrsz sm pc1 pc2 sd  st st*/
@@ -1794,17 +1790,26 @@ int __init amiga_floppy_init(void)
 		printk("fd: Unable to get major %d for floppy\n",MAJOR_NR);
 		return -EBUSY;
 	}
-
+	/*
+	 *  We request DSKPTR, DSKLEN and DSKDATA only, because the other
+	 *  floppy registers are too spreaded over the custom register space
+	 */
+	if (!request_mem_region(CUSTOM_PHYSADDR+0x20, 8, "amiflop [Paula]")) {
+		printk("fd: cannot get floppy registers\n");
+		unregister_blkdev(MAJOR_NR,"fd");
+		return -EBUSY;
+	}
 	if ((raw_buf = (char *)amiga_chip_alloc (RAW_BUF_SIZE, "Floppy")) ==
 	    NULL) {
 		printk("fd: cannot get chip mem buffer\n");
+		release_mem_region(CUSTOM_PHYSADDR+0x20, 8);
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -ENOMEM;
 	}
-
 	if (request_irq(IRQ_AMIGA_DSKBLK, fd_block_done, 0, "floppy_dma", NULL)) {
 		printk("fd: cannot get irq for dma\n");
 		amiga_chip_free(raw_buf);
+		release_mem_region(CUSTOM_PHYSADDR+0x20, 8);
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -EBUSY;
 	}
@@ -1812,6 +1817,7 @@ int __init amiga_floppy_init(void)
 		printk("fd: cannot get irq for timer\n");
 		free_irq(IRQ_AMIGA_DSKBLK, NULL);
 		amiga_chip_free(raw_buf);
+		release_mem_region(CUSTOM_PHYSADDR+0x20, 8);
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -EBUSY;
 	}
@@ -1819,6 +1825,7 @@ int __init amiga_floppy_init(void)
 		free_irq(IRQ_AMIGA_CIAA_TB, NULL);
 		free_irq(IRQ_AMIGA_DSKBLK, NULL);
 		amiga_chip_free(raw_buf);
+		release_mem_region(CUSTOM_PHYSADDR+0x20, 8);
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -ENXIO;
 	}
@@ -1889,6 +1896,7 @@ void cleanup_module(void)
 	blk_size[MAJOR_NR] = NULL;
 	blksize_size[MAJOR_NR] = NULL;
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
+	release_mem_region(CUSTOM_PHYSADDR+0x20, 8);
 	unregister_blkdev(MAJOR_NR, "fd");
 }
 #endif

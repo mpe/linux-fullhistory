@@ -30,7 +30,6 @@ u_int zorro_num_autocon = 0;
 struct zorro_dev zorro_autocon[ZORRO_NUM_AUTO];
 
 
-#if 0
     /*
      *  Zorro Bus Resources
      *  Order _does_ matter! (see code below)
@@ -42,8 +41,9 @@ static struct resource zorro_res[4] = {
     { "Zorro III exp", 0xff000000, 0xffffffff },
     { "Zorro III cfg", 0x40000000, 0x7fffffff }
 };
-#endif
-   
+
+static u_int __init zorro_num_res = 0;
+
 
     /*
      *  Find Zorro Devices
@@ -107,6 +107,18 @@ static void __init mark_region(unsigned long start, unsigned long end,
 }
 
 
+static struct resource __init *zorro_find_parent_resource(struct zorro_dev *z)
+{
+    int i;
+
+    for (i = 0; i < zorro_num_res; i++)
+	if (z->resource.start >= zorro_res[i].start &&
+	    z->resource.end <= zorro_res[i].end)
+		return &zorro_res[i];
+    return &iomem_resource;
+}
+
+
     /*
      *  Initialization
      */
@@ -123,10 +135,9 @@ void __init zorro_init(void)
 	   zorro_num_autocon, zorro_num_autocon == 1 ? "" : "s");
 
     /* Request the resources */
-#if 0
-    for (i = 0; i < (AMIGAHW_PRESENT(ZORRO3) ? 4 : 2); i++)
+    zorro_num_res = AMIGAHW_PRESENT(ZORRO3) ? 4 : 2;
+    for (i = 0; i < zorro_num_res; i++)
 	request_resource(&iomem_resource, &zorro_res[i]);
-#endif
     for (i = 0; i < zorro_num_autocon; i++) {
 	dev = &zorro_autocon[i];
 	dev->id = (dev->rom.er_Manufacturer<<16) | (dev->rom.er_Product<<8);
@@ -137,7 +148,7 @@ void __init zorro_init(void)
 	}
 	dev->resource.name = dev->name;
 	zorro_namedevice(dev);
-	if (request_resource(&iomem_resource, &dev->resource))
+	if (request_resource(zorro_find_parent_resource(dev), &dev->resource))
 	    printk("zorro_init: cannot request resource for board %d\n", i);
     }
 

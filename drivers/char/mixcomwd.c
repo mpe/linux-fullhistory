@@ -94,8 +94,6 @@ static int mixcomwd_open(struct inode *inode, struct file *file)
 		mixcomwd_timer_alive=0;
 	} 
 #endif
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -114,7 +112,6 @@ static int mixcomwd_release(struct inode *inode, struct file *file)
 	mixcomwd_timer_alive=1;
 	add_timer(&mixcomwd_timer);
 #endif
-	MOD_DEC_USE_COUNT;
 
 	clear_bit(0,&mixcomwd_opened);
 	return 0;
@@ -171,6 +168,7 @@ static int mixcomwd_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations mixcomwd_fops=
 {
+	owner:		THIS_MODULE,
 	write:		mixcomwd_write,
 	ioctl:		mixcomwd_ioctl,
 	open:		mixcomwd_open,

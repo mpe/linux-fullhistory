@@ -1,7 +1,7 @@
 /*
- * linux/drivers/ide/aec62xx.c		Version 0.08	Mar. 28, 2000
+ * linux/drivers/ide/aec62xx.c		Version 0.09	June. 9, 2000
  *
- * Copyright (C) 2000	Andre Hedrick (andre@suse.com)
+ * Copyright (C) 1999-2000	Andre Hedrick (andre@linux-ide.org)
  * May be copied or modified under the terms of the GNU General Public License
  *
  */
@@ -55,7 +55,7 @@ static int aec62xx_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
 
-	u32 bibma = bmide_dev->resource[4].start;
+	u32 bibma = pci_resource_start(bmide_dev, 4);
 	u8 c0 = 0, c1 = 0;
 	u8 art = 0, uart = 0;
 
@@ -358,7 +358,7 @@ static int config_aec6260_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	byte unit		= (drive->select.b.unit & 0x01);
 	unsigned long dma_base	= hwif->dma_base;
 	byte speed		= -1;
-	byte ultra66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	byte ultra66		= eighty_ninty_three(drive);
 
 	if (drive->media != ide_disk)
 		return ((int) ide_dma_off_quietly);
@@ -497,6 +497,23 @@ int aec62xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
+		case ide_dma_lostirq:
+		case ide_dma_timeout:
+			switch(HWIF(drive)->pci_dev->device) {
+				case PCI_DEVICE_ID_ARTOP_ATP860:
+				case PCI_DEVICE_ID_ARTOP_ATP860R:
+//					{
+//						int i = 0;
+//						byte reg49h = 0;
+//						pci_read_config_byte(HWIF(drive)->pci_dev, 0x49, &reg49h);
+//						for (i=0;i<256;i++)
+//							pci_write_config_byte(HWIF(drive)->pci_dev, 0x49, reg49h|0x10);
+//						pci_write_config_byte(HWIF(drive)->pci_dev, 0x49, reg49h & ~0x10);
+//					}
+//					return 0;
+				default:
+					break;
+			}
 		default:
 			break;
 	}
@@ -529,9 +546,6 @@ unsigned int __init ata66_aec62xx (ide_hwif_t *hwif)
 	byte ata66	= 0;
 
 	pci_read_config_byte(hwif->pci_dev, 0x49, &ata66);
-#if 1
-	printk("AEC6260: reg49h=0x%02x ATA-%s Cable Port%d\n", ata66, (ata66 & mask) ? "33" : "66", hwif->channel);
-#endif
 	return ((ata66 & mask) ? 0 : 1);
 }
 

@@ -1953,7 +1953,6 @@ wavefront_open (struct inode *inode, struct file *file)
 {
 	/* XXX fix me */
 	dev.opened = file->f_flags;
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1962,7 +1961,6 @@ wavefront_release(struct inode *inode, struct file *file)
 {
 	dev.opened = 0;
 	dev.debug = 0;
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1996,6 +1994,7 @@ wavefront_ioctl(struct inode *inode, struct file *file,
 }
 
 static /*const*/ struct file_operations wavefront_fops = {
+	owner:		THIS_MODULE,
 	llseek:		wavefront_llseek,
 	ioctl:		wavefront_ioctl,
 	open:		wavefront_open,

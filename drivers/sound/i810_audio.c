@@ -46,6 +46,18 @@
  *	There is no midi support, no synth support. Use timidity. To get
  *	esd working you need to use esd -r 48000 as it won't probe 48KHz
  *	by default. mpg123 can't handle 48Khz only audio so use xmms.
+ *
+ *	Fix The Sound On Dell
+ *
+ *	Not everyone uses 48KHz. We know of no way to detect this reliably
+ *	and certainly not to get the right data. If your i810 audio sounds
+ *	stupid you may need to investigate other speeds. According to Analog
+ *	they tend to use a 14.318MHz clock which gives you a base rate of
+ *	41194Hz.
+ *
+ *	This is available via the 'ftsodell=1' option. 
+ *
+ *	If you need to force a specific rate set the clocking= option
  */
  
 #include <linux/module.h>
@@ -74,9 +86,16 @@
 #ifndef PCI_DEVICE_ID_INTEL_82901
 #define PCI_DEVICE_ID_INTEL_82901	0x2425
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_ICH2
+#define PCI_DEVICE_ID_INTEL_ICH2	0x2445
+#endif
 #ifndef PCI_DEVICE_ID_INTEL_440MX
 #define PCI_DEVICE_ID_INTEL_440MX	0x7195
 #endif
+
+static int ftsodell=0;
+static int clocking=48000;
+
 
 #define ADC_RUNNING	1
 #define DAC_RUNNING	2
@@ -180,13 +199,15 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 enum {
 	ICH82801AA = 0,
 	ICH82901AB,
-	INTEL440MX
+	INTEL440MX,
+	INTELICH2,
 };
 
 static char * card_names[] = {
 	"Intel ICH 82801AA",
 	"Intel ICH 82901AB",
-	"Intel 440MX"
+	"Intel 440MX",
+	"Intel ICH2"
 };
 
 static struct pci_device_id i810_pci_tbl [] __initdata = {
@@ -196,6 +217,8 @@ static struct pci_device_id i810_pci_tbl [] __initdata = {
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, ICH82901AB},
 	{PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_440MX,
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, INTEL440MX},
+	{PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH2,
+	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, INTELICH2},
 	{0,}
 };
 
@@ -295,7 +318,6 @@ struct i810_card {
 static struct i810_card *devs = NULL;
 
 static int i810_open_mixdev(struct inode *inode, struct file *file);
-static int i810_release_mixdev(struct inode *inode, struct file *file);
 static int i810_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int cmd,
 				unsigned long arg);
 static loff_t i810_llseek(struct file *file, loff_t offset, int origin);
@@ -363,12 +385,27 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 	struct ac97_codec *codec=state->card->ac97_codec[0];
 	
 	if(!(state->card->ac97_features&0x0001))
-		return 48000;
+	{
+		dmabuf->rate = clocking;
+		return clocking;
+	}
 			
 	if (rate > 48000)
 		rate = 48000;
-	if (rate < 4000)
-		rate = 4000;
+	if (rate < 8000)
+		rate = 8000;
+		
+	/*
+	 *	Adjust for misclocked crap
+	 */
+	 
+	rate = ( rate * clocking)/48000;
+	
+	/* Analog codecs can go lower via magic registers but others
+	   might not */
+	   
+	if(rate < 8000)
+		rate = 8000;
 
 	/* Power down the DAC */
 	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
@@ -378,10 +415,10 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 	i810_ac97_set(codec, AC97_PCM_FRONT_DAC_RATE, rate);
 	rp=i810_ac97_get(codec, AC97_PCM_FRONT_DAC_RATE);
 	
-	printk("DAC rate set to %d Returned %d\n", 
-		rate, (int)rp);
+//	printk("DAC rate set to %d Returned %d\n", 
+//		rate, (int)rp);
 		
-	rate=rp;
+	rate=(rp * 48000) / clocking;
 		
 	/* Power it back up */
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
@@ -402,25 +439,41 @@ static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int ra
 	struct ac97_codec *codec=state->card->ac97_codec[0];
 	
 	if(!(state->card->ac97_features&0x0001))
-		return 48000;
+	{
+		dmabuf->rate = clocking;
+		return clocking;
+	}
 			
 	if (rate > 48000)
 		rate = 48000;
-	if (rate < 4000)
-		rate = 4000;
+	if (rate < 8000)
+		rate = 8000;
+
+	/*
+	 *	Adjust for misclocked crap
+	 */
+	 
+	rate = ( rate * clocking)/48000;
+	
+	/* Analog codecs can go lower via magic registers but others
+	   might not */
+	   
+	if(rate < 8000)
+		rate = 8000;
+
 
 	/* Power down the ADC */
 	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0100);
 	
 	/* Load the rate and read the effective rate */
-	i810_ac97_set(codec, AC97_PCM_LR_ADC_RATE, rate);
-	rp=i810_ac97_get(codec, AC97_PCM_LR_ADC_RATE);
+	i810_ac97_set(codec, AC97_PCM_LR_DAC_RATE, rate);
+	rp=i810_ac97_get(codec, AC97_PCM_LR_DAC_RATE);
 	
-	printk("ADC rate set to %d Returned %d\n", 
-		rate, (int)rp);
+//	printk("ADC rate set to %d Returned %d\n", 
+//		rate, (int)rp);
 		
-	rate=rp;
+	rate = (rp * 48000) / clocking;
 		
 	/* Power it back up */
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
@@ -1547,7 +1600,6 @@ static int i810_open(struct inode *inode, struct file *file)
 	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&state->open_sem);
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1582,11 +1634,11 @@ static int i810_release(struct inode *inode, struct file *file)
 	/* we're covered by the open_sem */
 	up(&state->open_sem);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 static /*const*/ struct file_operations i810_audio_fops = {
+	owner:		THIS_MODULE,
 	llseek:		i810_llseek,
 	read:		i810_read,
 	write:		i810_write,
@@ -1640,13 +1692,6 @@ static int i810_open_mixdev(struct inode *inode, struct file *file)
  match:
 	file->private_data = card->ac97_codec[i];
 
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int i810_release_mixdev(struct inode *inode, struct file *file)
-{
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1659,10 +1704,10 @@ static int i810_ioctl_mixdev(struct inode *inode, struct file *file, unsigned in
 }
 
 static /*const*/ struct file_operations i810_mixer_fops = {
+	owner:		THIS_MODULE,
 	llseek:		i810_llseek,
 	ioctl:		i810_ioctl_mixdev,
 	open:		i810_open_mixdev,
-	release:	i810_release_mixdev,
 };
 
 /* AC97 codec initialisation. */
@@ -1828,8 +1873,11 @@ static void __exit i810_remove(struct pci_dev *pci_dev)
 	kfree(card);
 }
 
+
 MODULE_AUTHOR("");
 MODULE_DESCRIPTION("Intel 810 audio support");
+MODULE_PARM(ftsodell, "i");
+MODULE_PARM(clocking, "i");
 
 #define I810_MODULE_NAME "intel810_audio"
 
@@ -1845,6 +1893,9 @@ static int __init i810_init_module (void)
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
 
+	if(ftsodell==1)
+		clocking=41194;
+		
 	printk(KERN_INFO "Intel 810 + AC97 Audio, version "
 	       DRIVER_VERSION ", " __TIME__ " " __DATE__ "\n");
 

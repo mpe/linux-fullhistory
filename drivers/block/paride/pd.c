@@ -487,7 +487,7 @@ static int pd_open (struct inode *inode, struct file *file)
 
         MOD_INC_USE_COUNT;
 
-        while (!pd_valid) sleep_on(&pd_wait_open);
+	wait_event (pd_wait_open, pd_valid);
 
         PD.access++;
 

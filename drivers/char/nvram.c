@@ -332,7 +332,6 @@ static int nvram_open( struct inode *inode, struct file *file )
 	if (file->f_mode & 2)
 		nvram_open_mode |= NVRAM_WRITE;
 	nvram_open_cnt++;
-	MOD_INC_USE_COUNT;
 	return( 0 );
 }
 
@@ -344,7 +343,6 @@ static int nvram_release( struct inode *inode, struct file *file )
 	if (file->f_mode & 2)
 		nvram_open_mode &= ~NVRAM_WRITE;
 
-	MOD_DEC_USE_COUNT;
 	return( 0 );
 }
 
@@ -393,6 +391,7 @@ static int nvram_read_proc( char *buffer, char **start, off_t offset,
 #endif /* CONFIG_PROC_FS */
 
 static struct file_operations nvram_fops = {
+	owner:		THIS_MODULE,
 	llseek:		nvram_llseek,
 	read:		nvram_read,
 	write:		nvram_write,

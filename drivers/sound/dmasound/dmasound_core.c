@@ -494,7 +494,6 @@ static struct {
 
 static int mixer_open(struct inode *inode, struct file *file)
 {
-	MOD_INC_USE_COUNT;
 	dmasound.mach.open();
 	mixer.busy = 1;
 	return 0;
@@ -504,7 +503,6 @@ static int mixer_release(struct inode *inode, struct file *file)
 {
 	mixer.busy = 0;
 	dmasound.mach.release();
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
@@ -533,6 +531,7 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 static struct file_operations mixer_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		sound_lseek,
 	ioctl:		mixer_ioctl,
 	open:		mixer_open,
@@ -843,11 +842,9 @@ static int sq_open(struct inode *inode, struct file *file)
 {
 	int rc;
 
-	MOD_INC_USE_COUNT;
 	dmasound.mach.open();
 	if ((rc = write_sq_open(file)) || (rc = read_sq_open(file))) {
 		dmasound.mach.release();
-		MOD_DEC_USE_COUNT;
 		return rc;
 	}
 
@@ -917,7 +914,6 @@ static int sq_release(struct inode *inode, struct file *file)
 	write_sq_release_buffers();
 	read_sq_release_buffers();
 	dmasound.mach.release();
-	MOD_DEC_USE_COUNT;
 
 	/* There is probably a DOS atack here. They change the mode flag. */
 	/* XXX add check here */
@@ -1029,6 +1025,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 static struct file_operations sq_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		sound_lseek,
 	write:		sq_write,
 	ioctl:		sq_ioctl,
@@ -1088,7 +1085,6 @@ static int state_open(struct inode *inode, struct file *file)
 	if (state.busy)
 		return -EBUSY;
 
-	MOD_INC_USE_COUNT;
 	dmasound.mach.open();
 	state.ptr = 0;
 	state.busy = 1;
@@ -1147,7 +1143,6 @@ static int state_release(struct inode *inode, struct file *file)
 {
 	state.busy = 0;
 	dmasound.mach.release();
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1165,8 +1160,8 @@ static ssize_t state_read(struct file *file, char *buf, size_t count,
 	return n;
 }
 
-static struct file_operations state_fops =
-{
+static struct file_operations state_fops = {
+	owner:		THIS_MODULE,
 	llseek:		sound_lseek,
 	read:		state_read,
 	open:		state_open,

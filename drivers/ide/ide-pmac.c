@@ -813,12 +813,6 @@ pmac_ide_dma_onoff(ide_drive_t *drive, int enable)
 	return 0;
 }
 
-static int
-pmac_ide_tune_chipset(ide_drive_t *drive, byte speed)
-{
-	return 0;
-}
-
 int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = HWIF(drive);

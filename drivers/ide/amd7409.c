@@ -1,7 +1,7 @@
 /*
- * linux/drivers/ide/amd7409.c		Version 0.04	Mar. 18, 2000
+ * linux/drivers/ide/amd7409.c		Version 0.05	June 9, 2000
  *
- * Copyright (C) 2000			Andre Hedrick <andre@suse.com>
+ * Copyright (C) 1999-2000		Andre Hedrick <andre@linux-ide.org>
  * May be copied or modified under the terms of the GNU General Public License
  *
  */
@@ -40,7 +40,7 @@ static struct pci_dev *bmide_dev;
 static int amd7409_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
-	u32 bibma = bmide_dev->resource[4].start;
+	u32 bibma = pci_resource_start(bmide_dev, 4);
 	u8 c0 = 0, c1 = 0;
 
 	/*
@@ -70,6 +70,20 @@ static int amd7409_get_info (char *buffer, char **addr, off_t offset, int count)
 byte amd7409_proc = 0;
 
 extern char *ide_xfer_verbose (byte xfer_rate);
+
+static unsigned int amd7409_swdma_check (struct pci_dev *dev)
+{
+	unsigned int class_rev;
+	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
+	class_rev &= 0xff;
+	return ((int) (class_rev >= 7) ? 1 : 0);
+}
+
+static int amd7409_swdma_error(ide_drive_t *drive)
+{
+	printk("%s: single-word DMA not support (revision < C4)\n", drive->name);
+	return 0;
+}
 
 /*
  * Here is where all the hard work goes to program the chipset.
@@ -122,63 +136,67 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 		case XFER_UDMA_4:
 			ultra_timing |= 0x45;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_3:
 			ultra_timing |= 0x44;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_2:
 			ultra_timing |= 0x40;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_1:
 			ultra_timing |= 0x41;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_UDMA_0:
 			ultra_timing |= 0x42;
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_MW_DMA_2:
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_MW_DMA_1:
 			dma_pio_timing |= 0x21;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_MW_DMA_0:
 			dma_pio_timing |= 0x77;
-			pio_timing |= (0x03 << drive->dn);
+			break;
+		case XFER_SW_DMA_2:
+			if (!amd7409_swdma_check(dev))
+				return amd7409_swdma_error(drive);
+			dma_pio_timing |= 0x42;
+			break;
+		case XFER_SW_DMA_1:
+			if (!amd7409_swdma_check(dev))
+				return amd7409_swdma_error(drive);
+			dma_pio_timing |= 0x65;
+			break;
+		case XFER_SW_DMA_0:
+			if (!amd7409_swdma_check(dev))
+				return amd7409_swdma_error(drive);
+			dma_pio_timing |= 0xA8;
 			break;
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 		case XFER_PIO_4:
 			dma_pio_timing |= 0x20;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_3:
 			dma_pio_timing |= 0x22;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_2:
 			dma_pio_timing |= 0x42;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_1:
 			dma_pio_timing |= 0x65;
-			pio_timing |= (0x03 << drive->dn);
 			break;
 		case XFER_PIO_0:
 		default:
 			dma_pio_timing |= 0xA8;
-			pio_timing |= (0x03 << drive->dn);
 			break;
         }
+
+	pio_timing |= (0x03 << drive->dn);
 
 	if (!drive->init_speed)
 		drive->init_speed = speed;
@@ -268,12 +286,14 @@ static void amd7409_tune_drive (ide_drive_t *drive, byte pio)
 static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
-	byte udma_66		= ((id->hw_config & 0x2000) &&
-				   (HWIF(drive)->udma_four)) ? 1 : 0;
+	byte udma_66		= eighty_ninty_three(drive);
+	byte udma_100		= 0;
 	byte speed		= 0x00;
 	int  rval;
 
-	if ((id->dma_ultra & 0x0010) && (udma_66)) {
+	if ((id->dma_ultra & 0x0020) && (udma_66)&& (udma_100)) {
+		speed = XFER_UDMA_5;
+	} else if ((id->dma_ultra & 0x0010) && (udma_66)) {
 		speed = XFER_UDMA_4;
 	} else if ((id->dma_ultra & 0x0008) && (udma_66)) {
 		speed = XFER_UDMA_3;
@@ -318,7 +338,7 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 		}
 		dma_func = ide_dma_off_quietly;
 		if (id->field_valid & 4) {
-			if (id->dma_ultra & 0x001F) {
+			if (id->dma_ultra & 0x002F) {
 				/* Force if Capable UltraDMA */
 				dma_func = config_chipset_for_dma(drive);
 				if ((id->field_valid & 2) &&
@@ -327,12 +347,15 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 			}
 		} else if (id->field_valid & 2) {
 try_dma_modes:
-			if (id->dma_mword & 0x0007) {
+			if ((id->dma_mword & 0x0007) ||
+			    ((id->dma_1word & 0x007) &&
+			     (amd7409_swdma_check(HWIF(drive)->pci_dev)))) {
 				/* Force if Capable regular DMA modes */
 				dma_func = config_chipset_for_dma(drive);
 				if (dma_func != ide_dma_on)
 					goto no_dma_set;
 			}
+			
 		} else if (ide_dmaproc(ide_dma_good_drive, drive)) {
 			if (id->eide_dma_time > 150) {
 				goto no_dma_set;
@@ -372,9 +395,14 @@ int amd7409_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 unsigned int __init pci_init_amd7409 (struct pci_dev *dev, const char *name)
 {
-	unsigned long fixdma_base = dev->resource[4].start;
+	unsigned long fixdma_base = pci_resource_start(dev, 4);
 
-	if (!fixdma_base || fixdma_base == PCI_BASE_ADDRESS_IO_MASK) {
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	if (!amd7409_swdma_check(dev))
+		printk("%s: disabling single-word DMA support (revision < C4)\n", name);
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
+	if (!fixdma_base) {
 		/*
 		 *
 		 */

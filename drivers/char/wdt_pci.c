@@ -28,6 +28,7 @@
  *					Parameterized timeout
  *		JP Nollmann	:	Added support for PCI wdt501p
  *		Alan Cox	:	Split ISA and PCI cards into two drivers
+ *		Jeff Garzik	:	PCI cleanups
  */
 
 #include <linux/config.h>
@@ -52,6 +53,8 @@
 #include <linux/init.h>
 
 #include <linux/pci.h>
+
+#define PFX "wdt_pci: "
 
 /*
  * Until Access I/O gets their application for a PCI vendor ID approved,
@@ -487,12 +490,86 @@ static struct notifier_block wdtpci_notifier=
 	0
 };
 
-#ifdef MODULE
 
-#define wdtpci_init init_module
+static int __init wdtpci_init_one (struct pci_dev *dev,
+				   const struct pci_device_id *ent)
+{
+	static int dev_count = 0;
+
+	dev_count++;
+	if (dev_count > 1) {
+		printk (KERN_ERR PFX
+			"this driver only supports 1 device\n");
+		return -ENODEV;
+	}
+
+	irq = dev->irq;
+	io = pci_resource_start (dev, 2);
+	printk ("WDT501-P(PCI-WDG-CSM) driver 0.07 at %X "
+		"(Interrupt %d)\n", io, irq);
+
+	if (pci_enable_device (dev))
+		goto err_out;
+
+	if (request_region (io, 16, "wdt-pci") == NULL) {
+		printk (KERN_ERR PFX "I/O %d is not free.\n", io);
+		goto err_out;
+	}
+
+	if (request_irq (irq, wdtpci_interrupt, SA_INTERRUPT | SA_SHIRQ,
+			 "wdt-pci", &wdtpci_miscdev)) {
+		printk (KERN_ERR PFX "IRQ %d is not free.\n", irq);
+		goto err_out_free_res;
+	}
+
+	misc_register (&wdtpci_miscdev);
+
+#ifdef CONFIG_WDT_501
+	misc_register (&temp_miscdev);
+#endif
+
+	register_reboot_notifier (&wdtpci_notifier);
+
+	return 0;
+
+err_out_free_res:
+	release_region (io, 16);
+err_out:
+	return -EIO;
+}
+
+
+static void __exit wdtpci_remove_one (struct pci_dev *pdev)
+{
+	/* here we assume only one device will ever have
+	 * been picked up and registered by probe function */
+	unregister_reboot_notifier(&wdtpci_notifier);
+#ifdef CONFIG_WDT_501_PCI
+	misc_deregister(&temp_miscdev);
+#endif	
+	misc_deregister(&wdtpci_miscdev);
+	free_irq(irq, &wdtpci_miscdev);
+	release_region(io, 16);
+}
+
+
+static struct pci_device_id wdtpci_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_ACCESSIO, PCI_DEVICE_ID_WDG_CSM, PCI_ANY_ID, PCI_ANY_ID, },
+	{ 0, }, /* terminate list */
+};
+MODULE_DEVICE_TABLE(pci, wdtpci_pci_tbl);
+
+
+static struct pci_driver wdtpci_driver = {
+	name:		"wdt-pci",
+	id_table:	wdtpci_pci_tbl,
+	probe:		wdtpci_init_one,
+	remove:		wdtpci_remove_one,
+};
+
 
 /**
- *	cleanup_module:
+ *	wdtpci_cleanup:
  *
  *	Unload the watchdog. You cannot do this with any file handles open.
  *	If your watchdog is set to continue ticking on close and you unload
@@ -501,18 +578,11 @@ static struct notifier_block wdtpci_notifier=
  *	module in 60 seconds or reboot.
  */
  
-void cleanup_module(void)
+static void __exit wdtpci_cleanup(void)
 {
-	misc_deregister(&wdtpci_miscdev);
-#ifdef CONFIG_WDT_501_PCI
-	misc_deregister(&temp_miscdev);
-#endif	
-	unregister_reboot_notifier(&wdtpci_notifier);
-	release_region(io,16);
-	free_irq(irq, &wdtpci_miscdev);
+	pci_unregister_driver (&wdtpci_driver);
 }
 
-#endif
 
 /**
  * 	wdtpci_init:
@@ -522,37 +592,16 @@ void cleanup_module(void)
  *	The open() function will actually kick the board off.
  */
  
-int __init wdtpci_init(void)
+static int __init wdtpci_init(void)
 {
- 	struct pci_dev *dev = NULL;
- 
- 	if (pci_present()) 
- 	{
- 		while ((dev = pci_find_device(PCI_VENDOR_ID_ACCESSIO,
- 					     PCI_DEVICE_ID_WDG_CSM, dev))) {
- 			/* See if we can do this device */
- 			irq = dev->irq;
-			io = dev->resource[2].start;
- 			printk("WDT501-P(PCI-WDG-CSM) driver 0.07 at %X "
-			       "(Interrupt %d)\n", io, irq);
- 		}
- 	}
-	if(request_region(io, 16, "wdt-pci")==NULL)
-	{
-		printk(KERN_ERR "I/O %d is not free.\n", io);
-		return -EIO;
-	}
-	if(request_irq(irq, wdtpci_interrupt, SA_INTERRUPT|SA_SHIRQ, "wdt-pci", &wdtpci_miscdev))
-	{
-		printk(KERN_ERR "IRQ %d is not free.\n", irq);
-		release_region(io, 16);
-		return -EIO;
-	}
-	misc_register(&wdtpci_miscdev);
-#ifdef CONFIG_WDT_501	
-	misc_register(&temp_miscdev);
-#endif	
-	register_reboot_notifier(&wdtpci_notifier);
+	int rc = pci_register_driver (&wdtpci_driver);
+	
+	if (rc < 1)
+		return -ENODEV;
+	
 	return 0;
 }
 
+
+module_init(wdtpci_init);
+module_exit(wdtpci_cleanup);

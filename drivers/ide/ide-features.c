@@ -1,13 +1,15 @@
 /*
- * linux/drivers/block/ide-features.c	Version 0.03	Feb. 10, 2000
+ * linux/drivers/block/ide-features.c	Version 0.04	June 9, 2000
  *
  *  Copyright (C) 1999-2000	Linus Torvalds & authors (see below)
  *  
- *  Copyright (C) 1999-2000	Andre Hedrick <andre@suse.com>
+ *  Copyright (C) 1999-2000	Andre Hedrick <andre@linux-ide.org>
  *
  *  Extracts if ide.c to address the evolving transfer rate code for
  *  the SETFEATURES_XFER callouts.  Various parts of any given function
  *  are credited to previous ATA-IDE maintainers.
+ *
+ *  Auto-CRC downgrade for Ultra DMA(ing)
  *
  *  May be copied or modified under the terms of the GNU General Public License
  */
@@ -115,6 +117,10 @@ char *ide_dmafunc_verbose (ide_dma_action_t dmafunc)
  */
 byte ide_auto_reduce_xfer (ide_drive_t *drive)
 {
+	if (!drive->crc_count)
+		return drive->current_speed;
+	drive->crc_count = 0;
+
 	switch(drive->current_speed) {
 		case XFER_UDMA_7:	return XFER_UDMA_6;
 		case XFER_UDMA_6:	return XFER_UDMA_5;
@@ -164,6 +170,7 @@ int ide_driveid_update (ide_drive_t *drive)
 
 	probe_irq_off(probe_irq_on());
 	irqs = probe_irq_on();
+	SELECT_MASK(HWIF(drive), drive, 1);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
 	ide_delay_50ms();
@@ -173,17 +180,20 @@ int ide_driveid_update (ide_drive_t *drive)
 		if (0 < (signed long)(jiffies - timeout)) {
 			if (irqs)
 				(void) probe_irq_off(irqs);
+			SELECT_MASK(HWIF(drive), drive, 0);
 			return 0;	/* drive timed-out */
 		}
 		ide_delay_50ms();	/* give drive a breather */
 	} while (IN_BYTE(IDE_ALTSTATUS_REG) & BUSY_STAT);
 	ide_delay_50ms();	/* wait for IRQ and DRQ_STAT */
 	if (!OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
+		SELECT_MASK(HWIF(drive), drive, 0);
 		printk("%s: CHECK for good STATUS\n", drive->name);
 		return 0;
 	}
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only; some systems need this */
+	SELECT_MASK(HWIF(drive), drive, 0);
 	id = kmalloc(SECTOR_WORDS*4, GFP_ATOMIC);
 	ide_input_data(drive, id, SECTOR_WORDS);
 	(void) GET_STAT();	/* clear drive IRQ */
@@ -214,11 +224,15 @@ int ide_ata66_check (ide_drive_t *drive, byte cmd, byte nsect, byte feature)
 	    (nsect > XFER_UDMA_2) &&
 	    (feature == SETFEATURES_XFER)) {
 		if (!HWIF(drive)->udma_four) {
-			printk("%s: Speed warnings UDMA 3/4 is not functional.\n", HWIF(drive)->name);
+			printk("%s: Speed warnings UDMA 3/4/5 is not functional.\n", HWIF(drive)->name);
 			return 1;
 		}
+#ifndef CONFIG_IDEDMA_IVB
+		if ((drive->id->hw_config & 0x6000) == 0) {
+#else /* !CONFIG_IDEDMA_IVB */
 		if ((drive->id->hw_config & 0x2000) == 0) {
-			printk("%s: Speed warnings UDMA 3/4 is not functional.\n", drive->name);
+#endif /* CONFIG_IDEDMA_IVB */
+			printk("%s: Speed warnings UDMA 3/4/5 is not functional.\n", drive->name);
 			return 1;
 		}
 	}
@@ -244,6 +258,18 @@ int set_transfer (ide_drive_t *drive, byte cmd, byte nsect, byte feature)
 }
 
 /*
+ *  All hosts that use the 80c ribbon mus use!
+ */
+byte eighty_ninty_three (ide_drive_t *drive)
+{
+	return ((byte) ((HWIF(drive)->udma_four) &&
+#ifndef CONFIG_IDEDMA_IVB
+			(drive->id->hw_config & 0x4000) &&
+#endif /* CONFIG_IDEDMA_IVB */
+			(drive->id->hw_config & 0x2000)) ? 1 : 0);
+}
+
+/*
  * Similar to ide_wait_stat(), except it never calls ide_error internally.
  * This is a kludge to handle the new ide_config_drive_speed() function,
  * and should not otherwise be used anywhere.  Eventually, the tuneproc's
@@ -260,10 +286,11 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	int	i, error = 1;
 	byte stat;
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#if defined(CONFIG_BLK_DEV_IDEDMA) && !defined(CONFIG_DMA_NONPCI)
 	byte unit = (drive->select.b.unit & 0x01);
 	outb(inb(hwif->dma_base+2) & ~(1<<(5+unit)), hwif->dma_base+2);
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* (CONFIG_BLK_DEV_IDEDMA) && !(CONFIG_DMA_NONPCI) */
+
 	/*
 	 * Don't use ide_wait_cmd here - it will
 	 * attempt to set_geometry and recalibrate,
@@ -276,6 +303,7 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	disable_irq(hwif->irq);	/* disable_irq_nosync ?? */
 	udelay(1);
 	SELECT_DRIVE(HWIF(drive), drive);
+	SELECT_MASK(HWIF(drive), drive, 0);
 	udelay(1);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
@@ -315,6 +343,8 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 		}
 	}
 
+	SELECT_MASK(HWIF(drive), drive, 0);
+
 	enable_irq(hwif->irq);
 
 	if (error) {
@@ -326,13 +356,13 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	drive->id->dma_mword &= ~0x0F00;
 	drive->id->dma_1word &= ~0x0F00;
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#if defined(CONFIG_BLK_DEV_IDEDMA) && !defined(CONFIG_DMA_NONPCI)
 	if (speed > XFER_PIO_4) {
 		outb(inb(hwif->dma_base+2)|(1<<(5+unit)), hwif->dma_base+2);
 	} else {
 		outb(inb(hwif->dma_base+2) & ~(1<<(5+unit)), hwif->dma_base+2);
 	}
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* (CONFIG_BLK_DEV_IDEDMA) && !(CONFIG_DMA_NONPCI) */
 
 	switch(speed) {
 		case XFER_UDMA_7:   drive->id->dma_ultra |= 0x8080; break;
@@ -358,5 +388,5 @@ EXPORT_SYMBOL(ide_auto_reduce_xfer);
 EXPORT_SYMBOL(ide_driveid_update);
 EXPORT_SYMBOL(ide_ata66_check);
 EXPORT_SYMBOL(set_transfer);
+EXPORT_SYMBOL(eighty_ninty_three);
 EXPORT_SYMBOL(ide_config_drive_speed);
-

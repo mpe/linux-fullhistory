@@ -38,6 +38,8 @@
 #include <linux/ioctl.h>
 #include <net/sock.h>
 
+#include <linux/devfs_fs_kernel.h>
+
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <asm/types.h>
@@ -53,6 +55,7 @@ static int nbd_sizes[MAX_NBD];
 static u64 nbd_bytesizes[MAX_NBD];
 
 static struct nbd_device nbd_dev[MAX_NBD];
+static devfs_handle_t devfs_handle = NULL;
 
 #define DEBUG( s )
 /* #define DEBUG( s ) printk( s ) 
@@ -514,12 +517,20 @@ int nbd_init(void)
 		register_disk(NULL, MKDEV(MAJOR_NR,i), 1, &nbd_fops,
 				nbd_bytesizes[i]>>9);
 	}
+	devfs_handle = devfs_mk_dir (NULL, "nbd", 0, NULL);
+	devfs_register_series (devfs_handle, "%u", MAX_NBD,
+		DEVFS_FL_DEFAULT, MAJOR_NR, 0,
+		S_IFBLK | S_IRUSR | S_IWUSR, 0, 0,
+		&nbd_fops, NULL);
+
 	return 0;
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
+	devfs_unregister (devfs_handle);
+
 	if (unregister_blkdev(MAJOR_NR, "nbd") != 0)
 		printk("nbd: cleanup_module failed\n");
 	else

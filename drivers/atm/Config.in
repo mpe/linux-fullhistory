@@ -59,7 +59,7 @@ if [ "$CONFIG_PCI" = "y" -o "$CONFIG_SBUS" = "y" ]; then
       if [ "$CONFIG_ATM_FORE200E_PCA" = "y" ]; then
 	bool '   Use default PCA-200E firmware (normally enabled)' CONFIG_ATM_FORE200E_PCA_DEFAULT_FW
         if [ "$CONFIG_ATM_FORE200E_PCA_DEFAULT_FW" = "n" ]; then
-          string '   Pathname of user-supplied binary firmware' CONFIG_ATM_FORE200E_PCA_FW
+          string '   Pathname of user-supplied binary firmware' CONFIG_ATM_FORE200E_PCA_FW ""
         fi
       fi
     fi

@@ -351,7 +351,7 @@ icside_config_if(ide_drive_t *drive, int xfer_mode)
 static int
 icside_set_speed(ide_drive_t *drive, byte speed)
 {
-	return ((int) icside_config_if(drive, (int) speed));
+	return icside_config_if(drive, speed);
 }
 
 static int
@@ -508,9 +508,9 @@ icside_setup_dma(ide_hwif_t *hwif, int autodma)
 		goto failed;
 	}
 
-	hwif->dmaproc = &icside_dmaproc;
+	hwif->speedproc = icside_set_speed;
+	hwif->dmaproc = icside_dmaproc;
 	hwif->autodma = autodma;
-	hwif->speedproc = &icside_set_speed;
 
 	printk(" capable%s\n", autodma ?
 		", auto-enable" : "");

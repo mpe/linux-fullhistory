@@ -39,7 +39,6 @@ MSTATIC int get_flash_id(void);
 MSTATIC int erase_block(int nBlock);
 MSTATIC int write_block(unsigned long p, const char *buf, int count);
 static int open_flash(struct inode *inodep, struct file *filep);
-static int release_flash(struct inode *inodep, struct file *filep);
 static int flash_ioctl(struct inode *inodep, struct file *filep, unsigned int cmd, unsigned long arg);
 static ssize_t flash_read(struct file *file, char *buf, size_t count, loff_t * ppos);
 static ssize_t flash_write(struct file *file, const char *buf, size_t count, loff_t * ppos);
@@ -60,12 +59,12 @@ extern spinlock_t gpio_lock;
 
 static struct file_operations flash_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		flash_llseek,
 	read:		flash_read,
 	write:		flash_write,
 	ioctl:		flash_ioctl,
 	open:		open_flash,
-	release:	release_flash,
 };
 
 static struct miscdevice flash_miscdev =
@@ -128,18 +127,9 @@ static int open_flash(struct inode *inodep, struct file *filep)
 		printk("Flash: incorrect ID 0x%04X.\n", id);
 		return -ENXIO;
 	}
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
-
-
-static int release_flash(struct inode *inodep, struct file *filep)
-{
-	MOD_DEC_USE_COUNT;
-	return 0;
-}
-
 
 static int flash_ioctl(struct inode *inodep, struct file *filep, unsigned int cmd, unsigned long arg)
 {

@@ -1061,6 +1061,7 @@ ioctl_out:
 
 static struct file_operations agp_fops =
 {
+	owner:		THIS_MODULE,
 	llseek:		agp_lseek,
 	read:		agp_read,
 	write:		agp_write,

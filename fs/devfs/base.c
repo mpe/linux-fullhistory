@@ -737,7 +737,8 @@ static struct file_operations devfsd_fops =
  *	@namelen:  The number of characters in @name.
  *	@traverse_symlink:  If %TRUE then the entry is traversed if it is a symlink.
  *
- *	Returns a pointer to the entry on success, else %NULL.
+ *  Search for a devfs entry inside another devfs entry and returns a pointer
+ *   to the entry on success, else %NULL.
  */
 
 static struct devfs_entry *search_for_entry_in_dir (struct devfs_entry *parent,
@@ -902,6 +903,7 @@ static struct devfs_entry *search_for_entry (struct devfs_entry *dir,
 
 /**
  *	find_by_dev - Find a devfs entry in a directory.
+ *	@dir: The directory where to search
  *	@major: The major number to search for.
  *	@minor: The minor number to search for.
  *	@type: The type of special file to search for. This may be either
@@ -1746,8 +1748,8 @@ void *devfs_get_ops (devfs_handle_t de)
 
 /**
  *	devfs_set_file_size - Set the file size for a devfs regular file.
- *	de: The handle to the device entry.
- *	size: The new file size.
+ *	@de: The handle to the device entry.
+ *	@size: The new file size.
  *
  *	Returns 0 on success, else a negative error code.
  */
@@ -1788,6 +1790,7 @@ void *devfs_get_info (devfs_handle_t de)
 /**
  *	devfs_set_info - Set the info pointer written to private_data upon open.
  *	@de: The handle to the device entry.
+ *	@info: pointer to the data
  *
  *	Returns 0 on success, else a negative error code.
  */
@@ -1940,8 +1943,8 @@ int devfs_register_blkdev (unsigned int major, const char *name,
 
 /**
  *	devfs_unregister_chrdev - Optionally unregister a conventional character driver.
- *	major: The major number for the driver.
- *	name: The name of the driver (as seen in /proc/devices).
+ *	@major: The major number for the driver.
+ *	@name: The name of the driver (as seen in /proc/devices).
  *
  *	This function will unregister a character driver provided the "devfs=only"
  *	option was not provided at boot time.
@@ -1976,7 +1979,6 @@ int devfs_unregister_blkdev (unsigned int major, const char *name)
 /**
  *	devfs_setup - Process kernel boot options.
  *	@str: The boot options after the "devfs=".
- *	@unused: Unused.
  */
 
 SETUP_STATIC int __init devfs_setup (char *str)
@@ -2404,7 +2406,7 @@ static void devfs_read_inode (struct inode *inode)
 #endif
 }   /*  End Function devfs_read_inode  */
 
-static void devfs_write_inode (struct inode *inode)
+static void devfs_write_inode (struct inode *inode, int unused)
 {
     int index;
     struct devfs_inode *di;
@@ -2638,7 +2640,7 @@ static int devfs_open (struct inode *inode, struct file *file)
 	file->f_op = &def_blk_fops;
 	if (df->ops) inode->i_bdev->bd_op = df->ops;
     }
-    else file->f_op = df->ops;
+    else file->f_op = fops_get((struct file_operations*)df->ops);
     if (file->f_op)
 	err = file->f_op->open ? (*file->f_op->open) (inode, file) : 0;
     else

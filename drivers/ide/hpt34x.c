@@ -1,7 +1,7 @@
 /*
- * linux/drivers/ide/hpt34x.c		Version 0.30	Mar. 18, 2000
+ * linux/drivers/ide/hpt34x.c		Version 0.31	June. 9, 2000
  *
- * Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
+ * Copyright (C) 1998-2000	Andre Hedrick <andre@linux-ide.org>
  * May be copied or modified under the terms of the GNU General Public License
  *
  *
@@ -62,7 +62,7 @@ static struct pci_dev *bmide_dev;
 static int hpt34x_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
-	u32 bibma = bmide_dev->resource[4].start;
+	u32 bibma = pci_resource_start(bmide_dev, 4);
 	u8  c0 = 0, c1 = 0;
 
         /*
@@ -360,7 +360,7 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 {
 	int i = 0;
-	unsigned long hpt34xIoBase = dev->resource[4].start;
+	unsigned long hpt34xIoBase = pci_resource_start(dev, 4);
 	unsigned short cmd;
 	unsigned long flags;
 
@@ -371,7 +371,7 @@ unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 
 	if (cmd & PCI_COMMAND_MEMORY) {
-		if (dev->resource[PCI_ROM_RESOURCE].start) {
+		if (pci_resource_start(dev, PCI_ROM_RESOURCE)) {
 			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
 			printk(KERN_INFO "HPT345: ROM enabled at 0x%08lx\n", dev->resource[PCI_ROM_RESOURCE].start);
 		}

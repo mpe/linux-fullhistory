@@ -622,7 +622,7 @@ static int __devinit emu10k1_probe(struct pci_dev *pci_dev, const struct pci_dev
 
 	pci_set_master(pci_dev);
 
-	card->iobase = pci_dev->resource[0].start;
+	card->iobase = pci_resource_start(pci_dev, 0);
 
 	if (request_region(card->iobase, EMU10K1_EXTENT, card_names[pci_id->driver_data]) == NULL) {
 		printk(KERN_ERR "emu10k1: IO space in use\n");

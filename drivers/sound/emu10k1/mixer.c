@@ -803,8 +803,6 @@ static int emu10k1_mixer_open(struct inode *inode, struct file *file)
 	if (entry == &emu10k1_devs)
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
-
 	file->private_data = card;
 	return 0;
 }
@@ -812,11 +810,11 @@ static int emu10k1_mixer_open(struct inode *inode, struct file *file)
 static int emu10k1_mixer_release(struct inode *inode, struct file *file)
 {
 	DPF(3, "emu10k1_mixer_release()\n");
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 struct file_operations emu10k1_mixer_fops = {
+	owner:THIS_MODULE,
 	llseek:emu10k1_mixer_llseek,
 	ioctl:emu10k1_mixer_ioctl,
 	open:emu10k1_mixer_open,

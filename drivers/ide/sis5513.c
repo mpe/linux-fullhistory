@@ -1,7 +1,7 @@
 /*
- * linux/drivers/ide/sis5513.c		Version 0.10	Mar. 18, 2000
+ * linux/drivers/ide/sis5513.c		Version 0.11	June 9, 2000
  *
- * Copyright (C) 1999-2000	Andre Hedrick (andre@suse.com)
+ * Copyright (C) 1999-2000	Andre Hedrick <andre@linux-ide.org>
  * May be copied or modified under the terms of the GNU General Public License
  *
  * Thanks to SIS Taiwan for direct support and hardware.
@@ -111,12 +111,12 @@ static int sis_get_info(char *, char **, off_t, int);
 extern int (*sis_display_info)(char *, char **, off_t, int); /* ide-proc.c */
 static struct pci_dev *bmide_dev;
 
-static char *cable_type[] __initdata = {
+static char *cable_type[] = {
 	"80 pins",
 	"40 pins"
 };
 
-static char *recovery_time [] __initdata ={
+static char *recovery_time [] ={
 	"12 PCICLK", "1 PCICLK",
 	"2 PCICLK", "3 PCICLK",
 	"4 PCICLK", "5 PCICLCK",
@@ -127,14 +127,14 @@ static char *recovery_time [] __initdata ={
 	"15 PCICLK", "15 PCICLK"
 };
 
-static char * cycle_time [] __initdata = {
+static char * cycle_time [] = {
 	"Undefined", "2 CLCK",
 	"3 CLK", "4 CLK",
 	"5 CLK", "6 CLK",
 	"7 CLK", "8 CLK"
 };
 
-static char * active_time [] __initdata = {
+static char * active_time [] = {
 	"8 PCICLK", "1 PCICLCK",
 	"2 PCICLK", "2 PCICLK",
 	"4 PCICLK", "5 PCICLK",
@@ -185,7 +185,7 @@ static int sis_get_info (char *buffer, char **addr, off_t offset, int count)
 	p += sprintf(p, "                UDMA Cycle Time    %s \t UDMA Cycle Time    %s\n",
 		     cycle_time[(reg & 0x70) >> 4], cycle_time[(reg1 & 0x70) >> 4]);
 	p += sprintf(p, "                Data Active Time   %s \t Data Active Time   %s\n",
-		     active_time[(reg & 0x07)], active_time[(reg &0x07)] ); 
+		     active_time[(reg & 0x07)], active_time[(reg1 &0x07)] ); 
 
 	rc = pci_read_config_byte(bmide_dev, 0x40, &reg);
 	rc = pci_read_config_byte(bmide_dev, 0x44, &reg1);
@@ -209,7 +209,7 @@ static int sis_get_info (char *buffer, char **addr, off_t offset, int count)
 	p += sprintf(p, "                UDMA Cycle Time    %s \t UDMA Cycle Time    %s\n",
 		     cycle_time[(reg & 0x70) >> 4], cycle_time[(reg1 & 0x70) >> 4]);
 	p += sprintf(p, "                Data Active Time   %s \t Data Active Time   %s\n",
-		     active_time[(reg & 0x07)], active_time[(reg &0x07)] ); 
+		     active_time[(reg & 0x07)], active_time[(reg1 &0x07)] ); 
 
 	rc = pci_read_config_byte(bmide_dev, 0x42, &reg);
 	rc = pci_read_config_byte(bmide_dev, 0x46, &reg1);
@@ -335,7 +335,7 @@ static void sis5513_tune_drive (ide_drive_t *drive, byte pio)
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 /*
- * ((id->hw_config & 0x2000) && (HWIF(drive)->udma_four))
+ * ((id->hw_config & 0x4000|0x2000) && (HWIF(drive)->udma_four))
  */
 static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 {
@@ -349,7 +349,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	unsigned long dma_base	= hwif->dma_base;
 	byte unit		= (drive->select.b.unit & 0x01);
 	byte speed		= 0x00, unmask = 0xE0, four_two = 0x00;
-	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	byte udma_66		= eighty_ninty_three(drive);
 
 	if (host_dev) {
 		switch(host_dev->device) {
@@ -536,7 +536,7 @@ unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 
 		pci_read_config_byte(dev, 0x52, &reg52h);
 		if (!(reg52h & 0x04)) {
-			/* set IDE controller to operate in Compabitility mode obly */
+			/* set IDE controller to operate in Compabitility mode only */
 			pci_write_config_byte(dev, 0x52, reg52h|0x04);
 		}
 #if defined(DISPLAY_SIS_TIMINGS) && defined(CONFIG_PROC_FS)

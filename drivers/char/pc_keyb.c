@@ -452,7 +452,9 @@ static unsigned char handle_kbd_event(void)
 
 		scancode = kbd_read_input();
 
-#if 0
+		/* Error bytes must be ignored to make the 
+		   Synaptics touchpads compaq use work */
+#if 1
 		/* Ignore error bytes */
 		if (!(status & (KBD_STAT_GTO | KBD_STAT_PERR)))
 #endif

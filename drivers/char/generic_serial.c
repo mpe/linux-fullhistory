@@ -330,7 +330,7 @@ int gs_chars_in_buffer(struct tty_struct *tty)
 
 int gs_real_chars_in_buffer(struct tty_struct *tty)
 {
-	struct gs_port *port = tty->driver_data;
+	struct gs_port *port;
 	func_enter ();
 
 	if (!tty) return 0;

@@ -46,7 +46,7 @@ mouse_rpc_irq(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static struct busmouse rpcmouse = {
-	6, "arcmouse", NULL, NULL, 7
+	6, "arcmouse", NULL, NULL, NULL, 7
 };
 
 static int __init mouse_rpc_init(void)

@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
+#include <linux/module.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 
@@ -142,8 +143,9 @@ int chrdev_open(struct inode * inode, struct file * filp)
 {
 	int ret = -ENODEV;
 
-	filp->f_op = get_chrfops(MAJOR(inode->i_rdev), MINOR(inode->i_rdev));
-	if (filp->f_op != NULL){
+	filp->f_op = fops_get(get_chrfops(MAJOR(inode->i_rdev),
+				MINOR(inode->i_rdev)));
+	if (filp->f_op) {
 		ret = 0;
 		if (filp->f_op->open != NULL)
 			ret = filp->f_op->open(inode,filp);

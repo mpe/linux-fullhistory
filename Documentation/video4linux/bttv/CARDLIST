@@ -42,6 +42,8 @@ bttv.o
   card=40 - STB2
   card=41 - AVerMedia TVPhone 98
   card=42 - ProVideo PV951
+  card=43 - Little OnAir TV
+  card=44 - Sigma TVII-FM
 
 tuner.o
   type=0 - Temic PAL

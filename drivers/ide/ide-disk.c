@@ -1,14 +1,13 @@
 /*
- *  linux/drivers/ide/ide-disk.c	Version 1.09	April 23, 1999
+ *  linux/drivers/ide/ide-disk.c	Version 1.10	June 9, 2000
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
 
 /*
  *  Mostly written by Mark Lord <mlord@pobox.com>
- *                and  Gadi Oxman <gadio@netvision.net.il>
- *
- *  See linux/MAINTAINERS for address of current maintainer.
+ *                and Gadi Oxman <gadio@netvision.net.il>
+ *                and Andre Hedrick <andre@linux-ide.org>
  *
  * This is the IDE/ATA disk driver, as evolved from hd.c and ide.c.
  *
@@ -27,9 +26,10 @@
  *			the entire disk.
  * Version 1.09		added increment of rq->sector in ide_multwrite
  *			added UDMA 3/4 reporting
+ * Version 1.10		request queue changes, Ultra DMA 100
  */
 
-#define IDEDISK_VERSION	"1.09"
+#define IDEDISK_VERSION	"1.10"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -140,11 +140,8 @@ static ide_startstop_t read_intr (ide_drive_t *drive)
 	int i;
 	unsigned int msect, nsect;
 	struct request *rq;
-#if 0
-	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
-		return ide_error(drive, "read_intr", stat);
-	}
-#else	/* new way for dealing with premature shared PCI interrupts */
+
+	/* new way for dealing with premature shared PCI interrupts */
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
 		if (stat & (ERR_STAT|DRQ_STAT)) {
 			return ide_error(drive, "read_intr", stat);
@@ -153,7 +150,6 @@ static ide_startstop_t read_intr (ide_drive_t *drive)
 		ide_set_handler(drive, &read_intr, WAIT_CMD, NULL);
 		return ide_started;
 	}
-#endif
 	msect = drive->mult_count;
 	
 read_next:
@@ -688,7 +684,6 @@ static int set_nowerr(ide_drive_t *drive, int arg)
 {
 	if (ide_spin_wait_hwgroup(drive))
 		return -EBUSY;
-
 	drive->nowerr = arg;
 	drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
 	spin_unlock_irq(&io_request_lock);

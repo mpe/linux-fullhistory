@@ -889,7 +889,7 @@ static int parse_hd_setup (char *line) {
 	(void) get_options(line, ARRAY_SIZE(ints), ints);
 	hd_setup(NULL, ints);
 
-	return 0;
+	return 1;
 }
 __setup("hd=", parse_hd_setup);
 
