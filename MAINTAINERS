@@ -733,6 +733,12 @@ M:	longyear@pobox.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
 
+PROMISE DC4030 CACHING DISK CONTROLLER DRIVER
+P:	Peter Denison
+M:	promise@pnd-pc.demon.co.uk
+W:	http://www.pnd-pc.demon.co.uk/promise/
+S:	Maintained
+
 RAYLINK/WEBGEAR 802.11 WIRELESS LAN DRIVER
 P:	Corey Thomas
 M:	corey@world.std.com

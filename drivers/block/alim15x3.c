@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/alim15x3.c	Version 0.06	Sept. 3, 1999
+ * linux/drivers/block/alim15x3.c	Version 0.07	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99 Michel Aubry, Maintainer
  *  Copyright (C) 1998-99 Andrzej Krzysztofowicz, Maintainer
@@ -251,6 +251,8 @@ static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
 	unsigned long flags;
 	int bus_speed = ide_system_bus_speed();
 	int port = hwif->index ? 0x5c : 0x58;
+	int portFIFO = hwif->channel ? 0x55 : 0x54;
+	byte cd_dma_fifo = 0;
 
 	pio = ide_get_best_pio_mode(drive, pio, 5, &d);
 	s_time = ide_pio_timings[pio].setup_time;
@@ -270,10 +272,29 @@ static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
 		r_clc = 1;
 	} else {
 		if (r_clc >= 16)
-		r_clc = 0;
+			r_clc = 0;
 	}
 	save_flags(flags);
 	cli();
+	
+	/* 
+	 * PIO mode => ATA FIFO on, ATAPI FIFO off
+	 */
+	pci_read_config_byte(dev, portFIFO, &cd_dma_fifo);
+	if (drive->media==ide_disk) {
+		if (hwif->index) {
+			pci_write_config_byte(dev, portFIFO, (cd_dma_fifo & 0x0F) | 0x50);
+		} else {
+			pci_write_config_byte(dev, portFIFO, (cd_dma_fifo & 0xF0) | 0x05);
+		}
+	} else {
+		if (hwif->index) {
+			pci_write_config_byte(dev, portFIFO, cd_dma_fifo & 0x0F);
+		} else {
+			pci_write_config_byte(dev, portFIFO, cd_dma_fifo & 0xF0);
+		}
+	}
+	
 	pci_write_config_byte(dev, port, s_clc);
 	pci_write_config_byte(dev, port+drive->select.b.unit+2, (a_clc << 4) | r_clc);
 	restore_flags(flags);
@@ -374,6 +395,7 @@ static void ali15x3_dma2_enable(ide_drive_t *drive, unsigned long dma_base)
 {
 	byte unit = (drive->select.b.unit & 0x01);
 	byte bits = (drive->id->dma_mword | drive->id->dma_1word) & 0x07;
+	byte ultra = (unit) ? 0x7f : 0xf7;
 	byte tmpbyte;
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned long flags;
@@ -385,11 +407,15 @@ static void ali15x3_dma2_enable(ide_drive_t *drive, unsigned long dma_base)
 	 * clear "ultra enable" bit
 	 */
 	pci_read_config_byte(hwif->pci_dev, m5229_udma_setting_index, &tmpbyte);
+#if 0
 	if (unit) {
 		tmpbyte &= 0x7f;
 	} else {
 		tmpbyte &= 0xf7;
 	}
+#else
+	tmpbyte &= ultra;
+#endif
 	save_flags(flags);
 	cli();
 	pci_write_config_byte(hwif->pci_dev, m5229_udma_setting_index, tmpbyte);
@@ -586,6 +612,7 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 	struct pci_dev *isa;
 	unsigned long fixdma_base = dev->resource[4].start;
 	byte tmpbyte;
+	unsigned long flags;
 
 	pci_read_config_byte(dev, PCI_REVISION_ID, &m5229_revision);
 
@@ -717,17 +744,123 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 			m5229_revision = 0xC2;
 		}
 	}
+	
+	/*
+	 * CD_ROM DMA on (m5229, 0x53, bit0)
+	 * 	Enable this bit even if we want to use PIO
+	 * PIO FIFO off (m5229, 0x53, bit1)
+	 * 	The hardware will use 0x54h and 0x55h to control PIO FIFO
+	 */
+	pci_read_config_byte(dev, 0x53, &tmpbyte);
+	tmpbyte = (tmpbyte & (~0x02)) | 0x01;
+	save_flags(flags);
+	cli();
+	pci_write_config_byte(dev, 0x53, tmpbyte);
+	restore_flags(flags);	 
 
 	return 0;
 }
 
 unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 {
+#if 0
 	/*
-	 * FIXME !!!!
-	 * {0x4a,0x01,0x01}, {0x4a,0x02,0x02}
+	 * FIXME !!! This detection needs to be in "ata66_ali15x3()"
+	 * below as a standard detection return.
 	 */
+
+	if (m5229_revision >= 0xC2) {
+		unsigned long flags;
+		/*
+		 * 1543C-B?, 1535, 1535D, 1553
+		 * Note 1: not all "motherboard" support this detection
+		 * Note 2: if no udma 66 device, the detection may "error".
+		 *         but in this case, we will not set the device to
+		 *         ultra 66, the detection result is not important
+		 */
+		save_flags(flags);
+		cli();
+
+		/*
+		 * enable "Cable Detection", m5229, 0x4b, bit3
+		 */
+		pci_read_config_byte(dev, 0x4b, &tmpbyte);
+		pci_write_config_byte(dev, 0x4b, tmpbyte | 0x08);
+
+		/*
+		 * set south-bridge's enable bit, m1533, 0x79
+		 */
+		pci_read_config_byte(isa_dev, 0x79, &tmpbyte);
+		if (m5229_revision == 0xC2) {
+			/*
+			 * 1543C-B0 (m1533, 0x79, bit 2)
+			 */
+			pci_write_config_byte(isa_dev, 0x79, tmpbyte | 0x04);
+		} else if (m5229_revision == 0xC3) {
+			/*
+			 * 1553/1535 (m1533, 0x79, bit 1)
+			 */
+			pci_write_config_byte(isa_dev, 0x79, tmpbyte | 0x02);
+		}
+		restore_flags(flags);
+		/*
+		 * Ultra66 cable detection (from Host View)
+		 * m5229, 0x4a, bit0: primary, bit1: secondary 80 pin
+		 */
+		pci_read_config_byte(dev, 0x4a, &tmpbyte);
+		/*
+		 * 0x4a, bit0 is 0 => primary channel
+		 * has 80-pin (from host view)
+		 */
+		if (!(tmpbyte & 0x01))
+			cable_80_pin[0] = 1;
+		/*
+		 * 0x4a, bit1 is 0 => secondary channel
+		 * has 80-pin (from host view)
+		 */
+		if (!(tmpbyte & 0x02))
+			cable_80_pin[1] = 1;
+	} else {
+		unsigned long flags;
+		/*
+		 * revision 0x20 (1543-E, 1543-F)
+		 * revision 0xC0, 0xC1 (1543C-C, 1543C-D, 1543C-E)
+		 * clear CD-ROM DMA write bit, m5229, 0x4b, bit 7
+		 */
+		pci_read_config_byte(dev, 0x4b, &tmpbyte);
+		save_flags(flags);
+		cli();
+		/*
+		 * clear bit 7
+		 */
+		pci_write_config_byte(dev, 0x4b, tmpbyte & 0x7F);
+		restore_flags(flags);
+
+		/*
+		 * check m1533, 0x5e, bit 1~4 == 1001 => & 00011110 = 00010010
+		 */
+		pci_read_config_byte(isa_dev, 0x5e, &tmpbyte);
+		chip_is_1543c_e = ((tmpbyte & 0x1e) == 0x12) ? 1: 0;
+	}
+
+	byte ata66mask		= hwif->channel ? 0x02 : 0x01;
+	unsigned int ata66	= 0;
+	/*
+	 * Ultra66 cable detection (from Host View)
+	 * m5229, 0x4a, bit0: primary, bit1: secondary 80 pin
+	 *
+	 * 0x4a, bit0 is 0 => primary channel
+	 * has 80-pin (from host view)
+	 *
+	 * 0x4a, bit1 is 0 => secondary channel
+	 * has 80-pin (from host view)
+	 */
+	pci_read_config_byte(hwif->pci_dev, 0x4a, &tmpbyte);
+	ata66 = (!(tmpbyte & ata66mask)) ? 0 : 1;
+	return(ata66);
+#else
 	return 0;
+#endif
 }
 
 void __init ide_init_ali15x3 (ide_hwif_t *hwif)
@@ -773,12 +906,14 @@ void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 		 */
 		hwif->dmaproc = &ali15x3_dmaproc;
 		hwif->autodma = 1;
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
-
+	
 #if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
 	ali_proc = 1;
 	bmide_dev = hwif->pci_dev;

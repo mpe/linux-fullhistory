@@ -29,19 +29,23 @@
  *   0.3  01.09.99  Async Bulk and ISO support
  *   0.4  01.09.99  Set callback_frames to the total number of frames to make
  *                  it work with OHCI-HCD
- *
+ *        03.12.99  Now that USB error codes are negative, return them to application
+ *                  instead of ENXIO
+ *  $Id: ezusb.c,v 1.22 1999/12/03 15:06:28 tom Exp $
  */
 
 /*****************************************************************************/
-
+#include <linux/version.h>
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
+#include <linux/miscdevice.h>
 #include <linux/list.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
 
-#include <linux/spinlock.h>
+//#include <linux/spinlock.h>
 
 #include "usb.h"
 #include "ezusb.h"
@@ -62,17 +66,31 @@ static struct ezusb {
 struct async {
 	struct list_head asynclist;
 	struct ezusb *ez;
-	void *data;
-	unsigned dataorder;
 	void *userdata;
 	unsigned datalen;
-	union {
-		struct usb_isoc_desc *iso;
-		void *bulk;
-	} desc;
-	unsigned numframes; /* 0 means bulk, > 0 means iso */
-	struct ezusb_asynccompleted completed;
+	void *context;
+	urb_t urb;
 };
+
+/*-------------------------------------------------------------------*/
+
+static struct async *alloc_async(unsigned int numisoframes)
+{
+	unsigned int assize = sizeof(struct async) + numisoframes * sizeof(iso_packet_descriptor_t);
+	struct async *as = kmalloc(assize, GFP_KERNEL);
+	if (!as)
+		return NULL;
+	memset(as, 0, assize);
+	as->urb.number_of_packets = numisoframes;
+	return as;
+}
+
+static void free_async(struct async *as)
+{
+	if (as->urb.transfer_buffer)
+		kfree(as->urb.transfer_buffer);
+	kfree(as);
+}
 
 /* --------------------------------------------------------------------- */
 
@@ -135,14 +153,14 @@ extern __inline__ void async_newpending(struct async *as)
 	spin_unlock_irqrestore(&ez->lock, flags);
 }
 
-extern __inline__ void async_movetocompleted(struct async *as)
+extern __inline__ void async_removepending(struct async *as)
 {
 	struct ezusb *ez = as->ez;
 	unsigned long flags;
-
+	
 	spin_lock_irqsave(&ez->lock, flags);
 	list_del(&as->asynclist);
-	list_add_tail(&as->asynclist, &ez->async_completed);
+	INIT_LIST_HEAD(&as->asynclist);
 	spin_unlock_irqrestore(&ez->lock, flags);
 }
 
@@ -171,7 +189,7 @@ extern __inline__ struct async *async_getpending(struct ezusb *ez, void *context
 	for (p = ez->async_pending.next; p != &ez->async_pending; ) {
 		as = list_entry(p, struct async, asynclist);
 		p = p->next;
-		if (as->completed.context != context)
+		if (as->context != context)
 			continue;
 		list_del(&as->asynclist);
 		INIT_LIST_HEAD(&as->asynclist);
@@ -184,69 +202,19 @@ extern __inline__ struct async *async_getpending(struct ezusb *ez, void *context
 
 /* --------------------------------------------------------------------- */
 
-static int bulk_completed(int status, void *__buffer, int rval, void *dev_id)
+static void async_completed(purb_t urb)
 {
-	struct async *as = (struct async *)dev_id;
+	struct async *as = (struct async *)urb->context;
 	struct ezusb *ez = as->ez;
 	unsigned cnt;
 
-printk(KERN_DEBUG "ezusb: bulk_completed: status %d rval %d\n", status, rval);
-	as->completed.length = rval;
-	as->completed.status = status;
+printk(KERN_DEBUG "ezusb: async_completed: status %d errcount %d actlen %d pipe 0x%x\n", 
+       urb->status, urb->error_count, urb->actual_length, urb->pipe);
 	spin_lock(&ez->lock);
 	list_del(&as->asynclist);
 	list_add_tail(&as->asynclist, &ez->async_completed);
 	spin_unlock(&ez->lock);
 	wake_up(&ez->wait);
-	return 0;
-}
-
-static int iso_completed(int status, void *__buffer, int rval, void *dev_id)
-{
-#if 1
-	struct async *as = (struct async *)dev_id;
-#else
-	struct usb_isoc_desc *id = (struct usb_isoc_desc *)dev_id;
-	struct async *as = (struct async *)id->context;
-#endif
-	struct ezusb *ez = as->ez;
-	unsigned cnt;
-
-printk(KERN_DEBUG "ezusb: iso_completed: status %d rval %d\n", status, rval);
-	as->completed.length = rval;
-	as->completed.status = USB_ST_NOERROR;
-	for (cnt = 0; cnt < as->numframes; cnt++) {
-		as->completed.isostat[cnt].status = as->desc.iso->frames[cnt].frame_status;
-		as->completed.isostat[cnt].length = as->desc.iso->frames[cnt].frame_length;
-	}
-	spin_lock(&ez->lock);
-	list_del(&as->asynclist);
-	list_add_tail(&as->asynclist, &ez->async_completed);
-	spin_unlock(&ez->lock);
-	wake_up(&ez->wait);
-	return 0;
-}
-
-static void remove_async(struct async *as)
-{
-	if (as->data && as->dataorder)
-		free_pages((unsigned long)as->data, as->dataorder);
-	if (as->numframes)
-		usb_free_isoc(as->desc.iso);
-	kfree(as);
-}
-
-static void kill_async(struct async *as)
-{
-	struct ezusb *ez = as->ez;
-
-	if (as->numframes)
-		/* ISO case */
-		usb_kill_isoc(as->desc.iso);
-	else
-		usb_terminate_bulk(ez->usbdev, as->desc.bulk);
-	as->completed.status = USB_ST_REMOVED;
-	async_movetocompleted(as);
 }
 
 static void destroy_all_async(struct ezusb *ez)
@@ -260,12 +228,13 @@ static void destroy_all_async(struct ezusb *ez)
 		list_del(&as->asynclist);
 		INIT_LIST_HEAD(&as->asynclist);
 		spin_unlock_irqrestore(&ez->lock, flags);
-		kill_async(as);
+		/* discard_urb calls the completion handler with status == USB_ST_URB_KILLED */
+		usb_unlink_urb(&as->urb);
 		spin_lock_irqsave(&ez->lock, flags);
 	}
 	spin_unlock_irqrestore(&ez->lock, flags);
 	while ((as = async_getcompleted(ez)))
-		remove_async(as);
+		free_async(as);
 }
 
 /* --------------------------------------------------------------------- */
@@ -316,7 +285,7 @@ static ssize_t ezusb_read(struct file *file, char *buf, size_t sz, loff_t *ppos)
 			*ppos = pos;
 			if (ret)
 				return ret;
-			return -ENXIO;
+			return i;
 		}
 		if (copy_to_user(buf, b, len)) {
 			up(&ez->mutex);
@@ -364,6 +333,7 @@ static ssize_t ezusb_write(struct file *file, const char *buf, size_t sz, loff_t
 				return ret;
 			return -EFAULT;
 		}
+		printk("writemem: %d %p %d\n",pos,b,len);
 		i = usb_control_msg(ez->usbdev, usb_sndctrlpipe(ez->usbdev, 0), 0xa0, 0x40, pos, 0, b, len, HZ);
 		if (i < 0) {
 			up(&ez->mutex);
@@ -371,7 +341,7 @@ static ssize_t ezusb_write(struct file *file, const char *buf, size_t sz, loff_t
 			*ppos = pos;
 			if (ret)
 				return ret;
-			return -ENXIO;
+			return i;
 		}
 		pos += len;
 		buf += len;
@@ -453,7 +423,7 @@ static int ezusb_control(struct usb_device *usbdev, unsigned char requesttype,
 			free_page((unsigned long)tbuf);
 		printk(KERN_WARNING "ezusb: EZUSB_CONTROL failed rqt %u rq %u len %u ret %d\n", 
 		       requesttype, request, length, i);
-		return -ENXIO;
+		return i;
 	}
 	if (requesttype & 0x80 && length > 0 && copy_to_user(data, tbuf, length))
 		i = -EFAULT;
@@ -531,10 +501,57 @@ static int ezusb_setconfiguration(struct usb_device *usbdev, unsigned int config
 	return 0;
 }
 
+#define usb_sndintpipe(dev,endpoint)   ((PIPE_INTERRUPT << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvintpipe(dev,endpoint)   ((PIPE_INTERRUPT << 30) | __create_pipe(dev,endpoint) | USB_DIR_IN)
+
+char* stuff[512];
+
+static void int_compl(purb_t purb)
+{
+  printk("INT_COMPL\n");
+  
+}
+
+static int ezusb_interrupt(struct ezusb *ez, struct ezusb_interrupt *ab)
+{
+  urb_t *urb;
+  unsigned int pipe;
+
+  urb=(urb_t*)kmalloc(sizeof(urb_t),GFP_KERNEL);
+  if (!urb)
+  {
+    return -ENOMEM;
+  }
+  memset(urb,0,sizeof(urb_t));
+  
+ 
+  if ((ab->ep & ~0x80) >= 16)
+    return -EINVAL;
+  if (ab->ep & 0x80) 
+    {
+      pipe = usb_rcvintpipe(ez->usbdev, ab->ep & 0x7f);
+      if (ab->len > 0 && !access_ok(VERIFY_WRITE, ab->data, ab->len))
+	return -EFAULT;
+    } 
+  else
+    pipe = usb_sndintpipe(ez->usbdev, ab->ep & 0x7f);
+  
+  memcpy(stuff,ab->data,64);
+  urb->transfer_buffer=stuff;
+  urb->transfer_buffer_length=ab->len;
+  urb->complete=int_compl;
+  urb->pipe=pipe;
+  urb->dev=ez->usbdev;
+  urb->interval=ab->interval;
+  return usb_submit_urb(urb);
+}
+
 static int ezusb_requestbulk(struct ezusb *ez, struct ezusb_asyncbulk *ab)
 {
 	struct async *as = NULL;
+	void *data = NULL;
 	unsigned int pipe;
+	int ret;
 
 	if (ab->len > PAGE_SIZE)
 		return -EINVAL;
@@ -548,58 +565,48 @@ static int ezusb_requestbulk(struct ezusb *ez, struct ezusb_asyncbulk *ab)
 		pipe = usb_sndbulkpipe(ez->usbdev, ab->ep & 0x7f);
 	if (!usb_maxpacket(ez->usbdev, pipe, !(ab->ep & 0x80)))
 		return -EINVAL;
-	if (!(as = kmalloc(sizeof(struct async), GFP_KERNEL)))
+	if (ab->len > 0 && !(data = kmalloc(ab->len, GFP_KERNEL)))
 		return -ENOMEM;
+	if (!(as = alloc_async(0))) {
+		if (data)
+			kfree(data);
+		return -ENOMEM;
+	}
 	INIT_LIST_HEAD(&as->asynclist);
 	as->ez = ez;
 	as->userdata = ab->data;
-	as->numframes = 0;
-	as->data = 0;
-	as->dataorder = 0;
 	as->datalen = ab->len;
-	as->completed.context = ab->context;
-	if (ab->len > 0) {
-		as->dataorder = 1;
-		if (!(as->data = (unsigned char *)__get_free_page(GFP_KERNEL))) {
-			kfree(as);
-			return -ENOMEM;
+	as->context = ab->context;
+	as->urb.dev = ez->usbdev;
+	as->urb.pipe = pipe;
+	as->urb.transfer_flags = 0;
+	as->urb.transfer_buffer = data;
+	as->urb.transfer_buffer_length = ab->len;
+	as->urb.context = as;
+	as->urb.complete = (usb_complete_t)async_completed;
+	if (ab->len > 0 && !(ab->ep & 0x80)) {
+		if (copy_from_user(data, ab->data, ab->len)) {
+			free_async(as);
+			return -EFAULT;
 		}
-		if (!(ab->ep & 0x80)) {
-			if (copy_from_user(as->data, ab->data, ab->len))
-				goto err_fault;
-			as->datalen = 0; /* no need to copy back at completion */
-		}
+		as->userdata = NULL; /* no need to copy back at completion */
 	}
 	async_newpending(as);
-	if (!(as->desc.bulk = usb_request_bulk(ez->usbdev, pipe, bulk_completed, as->data, ab->len, as))) {
-		async_removelist(as);
-		goto err_inval;
+	if ((ret = usb_submit_urb(&as->urb))) {
+ printk(KERN_DEBUG "ezusb: bulk: usb_submit_urb returned %d\n", ret);
+		async_removepending(as);
+		free_async(as);
+		return -EINVAL; /* return ret; */
 	}
 	return 0;
-
- err_fault:
-	if (as) {
-		if (as->data)
-			free_page((unsigned long)as->data);
-		kfree(as);
-	}
-	return -EFAULT;
-
- err_inval:
-	if (as) {
-		if (as->data)
-			free_page((unsigned long)as->data);
-		kfree(as);
-	}
-	return -EINVAL;
 }
 
 static int ezusb_requestiso(struct ezusb *ez, struct ezusb_asynciso *ai, unsigned char *cmd)
 {
 	struct async *as;
-	unsigned int maxpkt, pipe;
-	unsigned int dsize, order, assize, j;
-	int i;
+	void *data = NULL;
+	unsigned int maxpkt, pipe, dsize, totsize, i, j;
+	int ret;
 
 	if ((ai->ep & ~0x80) >= 16 || ai->framecnt < 1 || ai->framecnt > 128)
 		return -EINVAL;
@@ -610,87 +617,62 @@ static int ezusb_requestiso(struct ezusb *ez, struct ezusb_asynciso *ai, unsigne
 	if (!(maxpkt = usb_maxpacket(ez->usbdev, pipe, !(ai->ep & 0x80))))
 		return -EINVAL;
 	dsize = maxpkt * ai->framecnt;
-printk(KERN_DEBUG "ezusb: iso: dsize %d\n", dsize);
+//printk(KERN_DEBUG "ezusb: iso: dsize %d\n", dsize);
 	if (dsize > 65536) 
 		return -EINVAL;
-	order = ld2(dsize >> PAGE_SHIFT);
-	if (dsize > (PAGE_SIZE << order))
-		order++;
 	if (ai->ep & 0x80)
 		if (dsize > 0 && !access_ok(VERIFY_WRITE, ai->data, dsize))
 			return -EFAULT;
-	assize = sizeof(struct async) + ai->framecnt * sizeof(struct ezusb_isoframestat);
-	if (!(as = kmalloc(assize, GFP_KERNEL)))
+	if (dsize > 0 && !(data = kmalloc(dsize, GFP_KERNEL)))
+	{
+		printk("dsize: %d failed\n",dsize);
 		return -ENOMEM;
-printk(KERN_DEBUG "ezusb: iso: assize %d\n", assize);
-	memset(as, 0, assize);
+	}
+	if (!(as = alloc_async(ai->framecnt))) {
+		if (data)
+			kfree(data);
+		printk("alloc_async failed\n");			
+		return -ENOMEM;
+	}
 	INIT_LIST_HEAD(&as->asynclist);
+	
 	as->ez = ez;
 	as->userdata = ai->data;
-	as->numframes = ai->framecnt;
-	as->data = 0;
-	as->dataorder = order;
 	as->datalen = dsize;
-	as->completed.context = ai->context;
-	as->desc.iso = NULL;
-	if (dsize > 0) {
-		if (!(as->data = (unsigned char *)__get_free_pages(GFP_KERNEL, order))) {
-			kfree(as);
-			return -ENOMEM;
-		}
-		if (!(ai->ep & 0x80)) {
-			if (copy_from_user(as->data, ai->data, dsize))
-				goto err_fault;
-			as->datalen = 0; /* no need to copy back at completion */
-		}
-	}
-	if ((i = usb_init_isoc(ez->usbdev, pipe, ai->framecnt, as, &as->desc.iso))) {
-		printk(KERN_DEBUG "ezusb: usb_init_isoc error %d\n", i);
-		goto err_inval;
-	}
-	as->desc.iso->start_type = START_ABSOLUTE;
-	as->desc.iso->start_frame = ai->startframe;
-	as->desc.iso->callback_frames = /*0*/ai->framecnt;
-	as->desc.iso->callback_fn = iso_completed;
-	as->desc.iso->data = as->data;
-	as->desc.iso->buf_size = dsize;
-	for (j = 0; j < ai->framecnt; j++) {
-		if (get_user(i, (int *)(cmd + j * sizeof(struct ezusb_isoframestat)))) {
-			usb_free_isoc(as->desc.iso);
-			kfree(as);
+	as->context = ai->context;
+	
+	as->urb.dev = ez->usbdev;
+	as->urb.pipe = pipe;
+	as->urb.transfer_flags = USB_ISO_ASAP;
+	as->urb.transfer_buffer = data;
+	as->urb.transfer_buffer_length = dsize;
+	as->urb.context = as;
+	as->urb.complete = (usb_complete_t)async_completed;
+
+	for (i = totsize = 0; i < as->urb.number_of_packets; i++) {
+		as->urb.iso_frame_desc[i].offset = totsize;
+		if (get_user(j, (int *)(cmd + i * sizeof(struct ezusb_isoframestat)))) {
+			free_async(as);
 			return -EFAULT;
 		}
-		if (i < 0)
-			i = 0;
-		as->desc.iso->frames[j].frame_length = i;
+		as->urb.iso_frame_desc[i].length = j;
+		totsize += j;
 	}
-       	async_newpending(as);
-	if ((i = usb_run_isoc(as->desc.iso, NULL))) {
-		printk(KERN_DEBUG "ezusb: usb_run_isoc error %d\n", i);
-		async_removelist(as);
-		goto err_inval;
+	if (dsize > 0 && totsize > 0 && !(ai->ep & 0x80)) {
+		if (copy_from_user(data, ai->data, totsize)) {
+			free_async(as);
+			return -EFAULT;
+		}
+		as->userdata = NULL; /* no need to copy back at completion */
+	}
+	async_newpending(as);
+	if ((ret = usb_submit_urb(&as->urb))) {
+ printk(KERN_DEBUG "ezusb: iso: usb_submit_urb returned %d\n", ret);
+		async_removepending(as);
+		free_async(as);
+		return -EINVAL; /* return ret; */
 	}
 	return 0;
-
- err_fault:
-	if (as) {
-		if (as->desc.iso)
-			usb_free_isoc(as->desc.iso);
-		if (as->data)
-			free_page((unsigned long)as->data);
-		kfree(as);
-	}
-	return -EFAULT;
-
- err_inval:
-	if (as) {
-		if (as->desc.iso)
-			usb_free_isoc(as->desc.iso);
-		if (as->data)
-			free_page((unsigned long)as->data);
-		kfree(as);
-	}
-	return -EINVAL;
 }
 
 static int ezusb_terminateasync(struct ezusb *ez, void *context)
@@ -699,7 +681,7 @@ static int ezusb_terminateasync(struct ezusb *ez, void *context)
 	int ret = 0;
 
 	while ((as = async_getpending(ez, context))) {
-		kill_async(as);
+		usb_unlink_urb(&as->urb);
 		ret++;
 	}
 	return ret;
@@ -707,19 +689,34 @@ static int ezusb_terminateasync(struct ezusb *ez, void *context)
 
 static int ezusb_asynccompl(struct async *as, void *arg)
 {
-	if (as->datalen > 0) {
-		if (copy_to_user(as->userdata, as->data, as->datalen)) {
-			remove_async(as);
+	struct ezusb_asynccompleted *cpl;
+	unsigned int numframes, cplsize, i;
+
+	if (as->userdata) {
+		if (copy_to_user(as->userdata, as->urb.transfer_buffer, as->datalen)) {
+			free_async(as);
 			return -EFAULT;
 		}
 	}
-	if (copy_to_user(arg, &as->completed, 
-			 sizeof(struct ezusb_asynccompleted) + 
-			 as->numframes * sizeof(struct ezusb_isoframestat))) {
-		remove_async(as);
+	numframes = as->urb.number_of_packets;
+	cplsize = sizeof(struct ezusb_asynccompleted) + numframes * sizeof(struct ezusb_isoframestat);
+	if (!(cpl = kmalloc(cplsize, GFP_KERNEL))) {
+		free_async(as);
+		return -ENOMEM;
+	}
+	cpl->status = as->urb.status;
+	cpl->length = as->urb.actual_length;
+	cpl->context = as->context;
+	for (i = 0; i < numframes; i++) {
+		cpl->isostat[i].length = as->urb.iso_frame_desc[i].length;
+		cpl->isostat[i].status = as->urb.iso_frame_desc[i].status;
+	}
+	free_async(as);
+	if (copy_to_user(arg, cpl, cplsize)) {
+		kfree(cpl);
 		return -EFAULT;
 	}
-	remove_async(as);
+	kfree(cpl);
 	return 0;
 }
 
@@ -739,6 +736,7 @@ static int ezusb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	struct ezusb_setinterface setintf;
 	struct ezusb_asyncbulk abulk;
 	struct ezusb_asynciso aiso;
+	struct ezusb_interrupt ezint;
 	struct async *as;
 	void *context;
 	unsigned int ep, cfg;
@@ -939,6 +937,14 @@ static int ezusb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		ret = put_user(i, (int *)arg);
 		break;
 
+	case EZUSB_INTERRUPT:
+	  printk("INT START\n");
+		if (copy_from_user(&ezint, (void *)arg, sizeof(ezint))) {
+			ret = -EFAULT;
+			break;
+		}
+		ret=ezusb_interrupt(ez,&ezint);
+		break;
 	default:
 		ret = -ENOIOCTLCMD;
 		break;
@@ -979,8 +985,13 @@ static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
                usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
 
 	/* the 1234:5678 is just a self assigned test ID */
-        if ((usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x2131) &&
-	    (usbdev->descriptor.idVendor != 0x1234 || usbdev->descriptor.idProduct != 0x5678))
+	if ((usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x2131) 
+	#if 1
+		&&
+	    (usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x9999) &&
+	    (usbdev->descriptor.idVendor != 0x1234 || usbdev->descriptor.idProduct != 0x5678)
+	   #endif 
+	    )
                 return NULL;
 
         /* We don't handle multiple configurations */
@@ -989,7 +1000,7 @@ static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 
 #if 0
         /* We don't handle multiple interfaces */
-        if (usbdev->actconfig.bNumInterfaces != 1)
+	if (usbdev->config[0].bNumInterfaces != 1)
                 return NULL;
 #endif
 
@@ -1000,8 +1011,13 @@ static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 		return NULL;
 	}
 	ez->usbdev = usbdev;
-        interface = &usbdev->actconfig->interface[ifnum].altsetting[1];
-	if (usb_set_interface(usbdev, ifnum, 1) < 0) {
+	if (usb_set_configuration(usbdev, usbdev->config[0].bConfigurationValue) < 0) {
+		printk(KERN_ERR "ezusb: set_configuration failed\n");
+		goto err;
+	}
+
+	interface = &usbdev->config[0].interface[0].altsetting[1];
+	if (usb_set_interface(usbdev, 0, 1) < 0) {
 		printk(KERN_ERR "ezusb: set_interface failed\n");
 		goto err;
 	}
@@ -1017,7 +1033,7 @@ static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 
 static void ezusb_disconnect(struct usb_device *usbdev, void *ptr)
 {
-	struct ezusb *ez = (struct ezusb *) ptr;
+	struct ezusb *ez = (struct ezusb *)ptr;
 
 	down(&ez->mutex);
 	destroy_all_async(ez);
@@ -1033,7 +1049,7 @@ static struct usb_driver ezusb_driver = {
         ezusb_disconnect,
         { NULL, NULL },
 	&ezusb_fops,
-	32
+	192
 };
 
 /* --------------------------------------------------------------------- */
@@ -1051,9 +1067,8 @@ int ezusb_init(void)
 		init_waitqueue_head(&ezusb[u].wait);
 		spin_lock_init(&ezusb[u].lock);
 	}
-	if (usb_register(&ezusb_driver) < 0)
-		return -1;
-
+	/* register misc device */
+	usb_register(&ezusb_driver);
         printk(KERN_INFO "ezusb: Anchorchip firmware download driver registered\n");
 	return 0;
 }
@@ -1066,6 +1081,8 @@ void ezusb_cleanup(void)
 /* --------------------------------------------------------------------- */
 
 #ifdef MODULE
+
+int minor = 192;
 
 int init_module(void)
 {

@@ -6,43 +6,48 @@
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
-#include <linux/version.h>
-
+#include <linux/poll.h>
 #include <linux/i2c.h>
+#include <linux/types.h>
 #include <linux/videodev.h>
 
 #include "tuner.h"
 
+/* Addresses to scan */
+static unsigned short normal_i2c[] = {I2C_CLIENT_END};
+static unsigned short normal_i2c_range[] = {0x60,0x6f,I2C_CLIENT_END};
+static unsigned short probe[2]        = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short probe_range[2]  = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short ignore[2]       = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short ignore_range[2] = { I2C_CLIENT_END, I2C_CLIENT_END };
+static unsigned short force[2]        = { I2C_CLIENT_END, I2C_CLIENT_END };
+static struct i2c_client_address_data addr_data = {
+	normal_i2c, normal_i2c_range, 
+	probe, probe_range, 
+	ignore, ignore_range, 
+	force
+};
+
 static int debug =  0; /* insmod parameter */
-static int type  = -1; /* tuner type */
+static int type = -1;  /* insmod parameter */
 
 #define dprintk     if (debug) printk
 
-#if LINUX_VERSION_CODE > 0x020100
 MODULE_PARM(debug,"i");
 MODULE_PARM(type,"i");
-#endif
 
-#if LINUX_VERSION_CODE < 0x02017f
-void schedule_timeout(int j)
+struct tuner
 {
-	current->state   = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + j;
-	schedule();
-}
-#endif
-
-struct tuner 
-{
-	struct i2c_bus   *bus;     /* where is our chip */
-	int               addr;
-
 	int type;            /* chip type */
 	int freq;            /* keep track of the current settings */
-	int radio;
+	int std;
 
+	int radio;
 	int mode;            /* PAL(0)/SECAM(1) mode (PHILIPS_SECAM only) */
 };
+
+static struct i2c_driver driver;
+static struct i2c_client client_template;
 
 /* ---------------------------------------------------------------------- */
 
@@ -58,13 +63,12 @@ struct tunertype
 	unsigned char VHF_H;
 	unsigned char UHF;
 	unsigned char config; 
-	unsigned char I2C;
 	unsigned short IFPCoff;
-
 	unsigned char mode; /* mode change value (tested PHILIPS_SECAM only) */
 			/* 0x01 -> ??? no change ??? */
 			/* 0x02 -> PAL BDGHI / SECAM L */
 			/* 0x04 -> ??? PAL others / SECAM others ??? */
+	int capability;
 };
 
 /*
@@ -73,42 +77,47 @@ struct tunertype
  *	"no float in kernel" rule.
  */
 static struct tunertype tuners[] = {
-        {"Temic PAL", TEMIC, PAL,
-                16*140.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2,623},
-	{"Philips PAL_I", Philips, PAL_I,
-	        16*140.25,16*463.25,0xa0,0x90,0x30,0x8e,0xc0,623},
-	{"Philips NTSC", Philips, NTSC,
-	        16*157.25,16*451.25,0xA0,0x90,0x30,0x8e,0xc0,732},
-	{"Philips SECAM", Philips, SECAM,
-	        16*168.25,16*447.25,0xA7,0x97,0x37,0x8e,0xc0,623,0x02},
-	{"NoTuner", NoTuner, NOTUNER,
-	         0        ,0        ,0x00,0x00,0x00,0x00,0x00,000},
-	{"Philips PAL", Philips, PAL,
-	        16*168.25,16*447.25,0xA0,0x90,0x30,0x8e,0xc0,623},
-	{"Temic NTSC", TEMIC, NTSC,
-	        16*157.25,16*463.25,0x02,0x04,0x01,0x8e,0xc2,732},
-	{"TEMIC PAL_I", TEMIC, PAL_I,
-	      //  16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,0xc2,623},
-	        16*170.00,16*450.00,0x02,0x04,0x01,0x8e,0xc2,623},
-	{"Temic 4036 FY5 NTSC", TEMIC, NTSC,
-		16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,0xc2,732},
-	{"Alps TSBH1",TEMIC,NTSC,
-		16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
-	{"Alps TSBE1",TEMIC,PAL,
-		16*137.25,16*385.25,0x01,0x02,0x08,0x8e,0xc2,732},
-	{"Alps TSBB5", Alps, PAL_I, /* tested (UK UHF) with Modtec MM205 */
-	 	16*133.25,16*351.25,0x01,0x02,0x08,0x8e,0xc0,632},
-	{"Alps TSBE5", Alps, PAL,/* untested - data sheet guess. Only IF differs. */
-	 	16*133.25,16*351.25,0x01,0x02,0x08,0x8e,0xc0,622},
-	{"Alps TSBC5", Alps, PAL,/* untested - data sheet guess. Only IF differs. */
-	 	16*133.25,16*351.25,0x01,0x02,0x08,0x8e,0xc0,608},
+        { "Temic PAL", TEMIC, PAL,
+	  16*140.25,16*463.25,0x02,0x04,0x01,0x8e,623},
+	{ "Philips PAL_I", Philips, PAL_I,
+	  16*140.25,16*463.25,0xa0,0x90,0x30,0x8e,623},
+	{ "Philips NTSC", Philips, NTSC,
+	  16*157.25,16*451.25,0xA0,0x90,0x30,0x8e,732},
+	{ "Philips SECAM", Philips, SECAM,
+	  16*168.25,16*447.25,0xA7,0x97,0x37,0x8e,623,0x02},
+	{ "NoTuner", NoTuner, NOTUNER,
+	  0,0,0x00,0x00,0x00,0x00,0x00,000},
+	{ "Philips PAL", Philips, PAL,
+	  16*168.25,16*447.25,0xA0,0x90,0x30,0x8e,623},
+	{ "Temic NTSC", TEMIC, NTSC,
+	  16*157.25,16*463.25,0x02,0x04,0x01,0x8e,732},
+	{ "Temic PAL_I", TEMIC, PAL_I,
+	  // 16*170.00,16*450.00,0xa0,0x90,0x30,0x8e,623}, 
+	  16*170.00,16*450.00,0x02,0x04,0x01,0x8e,623},
+ 	{ "Temic 4036 FY5 NTSC", TEMIC, NTSC,
+	  16*157.25,16*463.25,0xa0,0x90,0x30,0x8e,732},
+        { "Alps HSBH1", TEMIC, NTSC,
+	  16*137.25,16*385.25,0x01,0x02,0x08,0x8e,732},
+        { "Alps TSBE1",TEMIC,PAL,
+	  16*137.25,16*385.25,0x01,0x02,0x08,0x8e,732},
+        { "Alps TSBB5", Alps, PAL_I, /* tested (UK UHF) with Modtec MM205 */
+	  16*133.25,16*351.25,0x01,0x02,0x08,0x8e,632},
+        { "Alps TSBE5", Alps, PAL, /* untested - data sheet guess. Only IF differs. */
+	  16*133.25,16*351.25,0x01,0x02,0x08,0x8e,622},
+        { "Alps TSBC5", Alps, PAL, /* untested - data sheet guess. Only IF differs. */
+	  16*133.25,16*351.25,0x01,0x02,0x08,0x8e,608},
 };
+#define TUNERS (sizeof(tuners)/sizeof(struct tunertype))
 
 /* ---------------------------------------------------------------------- */
 
-static int tuner_getstatus (struct tuner *t)
+static int tuner_getstatus(struct i2c_client *c)
 {
-	return i2c_read(t->bus,t->addr+1);
+	unsigned char byte;
+
+	if (1 != i2c_master_recv(c,&byte,1))
+		return 0;
+	return byte;
 }
 
 #define TUNER_POR       0x80
@@ -116,22 +125,31 @@ static int tuner_getstatus (struct tuner *t)
 #define TUNER_MODE      0x38
 #define TUNER_AFC       0x07
 
-static int tuner_islocked (struct tuner *t)
+static int tuner_islocked (struct i2c_client *c)
 {
-        return (tuner_getstatus (t) & TUNER_FL);
+        return (tuner_getstatus (c) & TUNER_FL);
 }
 
-static int tuner_afcstatus (struct tuner *t)
+static int tuner_afcstatus (struct i2c_client *c)
 {
-        return (tuner_getstatus (t) & TUNER_AFC) - 2;
+        return (tuner_getstatus (c) & TUNER_AFC) - 2;
 }
 
-static void set_tv_freq(struct tuner *t, int freq)
+#if 0 /* unused */
+static int tuner_mode (struct i2c_client *c)
+{
+        return (tuner_getstatus (c) & TUNER_MODE) >> 3;
+}
+#endif
+
+static void set_tv_freq(struct i2c_client *c, int freq)
 {
 	u8 config;
 	u16 div;
 	struct tunertype *tun;
-	LOCK_FLAGS;
+	struct tuner *t = c->data;
+        unsigned char buffer[4];
+	int rc;
 
 	if (t->type == -1) {
 		printk("tuner: tuner type not set\n");
@@ -146,53 +164,58 @@ static void set_tv_freq(struct tuner *t, int freq)
 	else
 		config = tun->UHF;
 
-	if (t->type == TUNER_PHILIPS_SECAM && t->mode)
+#if 0   // Fix colorstandard mode change
+	if (t->type == TUNER_PHILIPS_SECAM 
+		&& t->std == V4L2_STANDARD_DDD )
 		config |= tun->mode;
 	else
 		config &= ~tun->mode;
+#else
+		config &= ~tun->mode;
+#endif
 
 	div=freq + tun->IFPCoff;
-  	div&=0x7fff;
 
-	LOCK_I2C_BUS(t->bus);
+    /*
+     * Philips FI1216MK2 remark from specification :
+     * for channel selection involving band switching, and to ensure
+     * smooth tuning to the desired channel without causing
+     * unnecessary charge pump action, it is recommended to consider
+     * the difference between wanted channel frequency and the
+     * current channel frequency.  Unnecessary charge pump action
+     * will result in very low tuning voltage which may drive the
+     * oscillator to extreme conditions.
+     */
+    /*
+     * Progfou: specification says to send config data before
+     * frequency in case (wanted frequency < current frequency).
+     */
+
 	if (t->type == TUNER_PHILIPS_SECAM && freq < t->freq) {
-	    /*
-	     * Philips FI1216MK2 remark from specification :
-	     * for channel selection involving band switching, and to ensure
-	     * smooth tuning to the desired channel without causing
-	     * unnecessary charge pump action, it is recommended to consider
-	     * the difference between wanted channel frequency and the
-	     * current channel frequency.  Unnecessary charge pump action
-	     * will result in very low tuning voltage which may drive the
-	     * oscillator to extreme conditions.
-	     */
-	    /*
-	     * Progfou: specification says to send config data before
-	     * frequency in case (wanted frequency < current frequency).
-	     */
-	    if (i2c_write(t->bus, t->addr, tun->config, config, 1)) {
-		printk("tuner: i2c i/o error #1\n");
-	    } else {
-		if (i2c_write(t->bus, t->addr, (div>>8)&0x7f, div&0xff, 1)<0)
-		    printk("tuner: i2c i/o error #2\n");
-	    }
+		buffer[0] = tun->config;
+		buffer[1] = config;
+		buffer[2] = (div>>8) & 0x7f;
+		buffer[3] = div      & 0xff;
 	} else {
-	    if (i2c_write(t->bus, t->addr, (div>>8)&0x7f, div&0xff, 1)<0) {
-		printk("tuner: i2c i/o error #1\n");
-	    } else {
-		if (i2c_write(t->bus, t->addr, tun->config, config, 1))
-		    printk("tuner: i2c i/o error #2\n");
-	    }
+		buffer[0] = (div>>8) & 0x7f;
+		buffer[1] = div      & 0xff;
+		buffer[2] = tun->config;
+		buffer[3] = config;
 	}
-	UNLOCK_I2C_BUS(t->bus);
+
+        if (4 != (rc = i2c_master_send(c,buffer,4)))
+                printk("tuner: i2c i/o error: rc == %d (should be 4)\n",rc);
+
 }
 
-static void set_radio_freq(struct tuner *t, int freq)
+static void set_radio_freq(struct i2c_client *c, int freq)
 {
 	u8 config;
 	u16 div;
 	struct tunertype *tun;
-        LOCK_FLAGS;
+	struct tuner *t = (struct tuner*)c->data;
+        unsigned char buffer[4];
+	int rc;
 
 	if (t->type == -1) {
 		printk("tuner: tuner type not set\n");
@@ -204,128 +227,184 @@ static void set_radio_freq(struct tuner *t, int freq)
 	div=freq + (int)(16*10.7);
   	div&=0x7fff;
 
-	LOCK_I2C_BUS(t->bus);
-	if (i2c_write(t->bus, t->addr, (div>>8)&0x7f, div&0xff, 1)<0) {
-	    printk("tuner: i2c i/o error #1\n");
-	} else {
-	    if (i2c_write(t->bus, t->addr, tun->config, config, 1))
-		printk("tuner: i2c i/o error #2\n");
-	}
+        buffer[0] = (div>>8) & 0x7f;
+        buffer[1] = div      & 0xff;
+        buffer[2] = tun->config;
+        buffer[3] = config;
+        if (4 != (rc = i2c_master_send(c,buffer,4)))
+                printk("tuner: i2c i/o error: rc == %d (should be 4)\n",rc);
+
 	if (debug) {
-		UNLOCK_I2C_BUS(t->bus);
 		current->state   = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ/10);
-		LOCK_I2C_BUS(t->bus);
 		
-		if (tuner_islocked (t))
+		if (tuner_islocked (c))
 			printk ("tuner: PLL locked\n");
 		else
 			printk ("tuner: PLL not locked\n");
 		
-		printk ("tuner: AFC: %d\n", tuner_afcstatus (t));
+		printk ("tuner: AFC: %d\n", tuner_afcstatus (c));
 	}
-	UNLOCK_I2C_BUS(t->bus);
 }
-
 /* ---------------------------------------------------------------------- */
 
-static int tuner_attach(struct i2c_device *device)
+
+static int tuner_attach(struct i2c_adapter *adap, int addr,
+			unsigned short flags, int kind)
 {
 	struct tuner *t;
+	struct i2c_client *client;
 
-	/*
-	 *	For now we only try and attach these tuners to the BT848
-	 *	or ZORAN bus. This same module will however work different
-	 *	species	of card using these chips. Just change the constraints
-	 *	(i2c doesn't have a totally clash free 'address' space)
-	 */
-	 
-	if(device->bus->id!=I2C_BUSID_BT848 &&
-	   device->bus->id!=I2C_BUSID_ZORAN)
-		return -EINVAL;
-		
-	device->data = t = kmalloc(sizeof(struct tuner),GFP_KERNEL);
-	if (NULL == t)
-		return -ENOMEM;
-	memset(t,0,sizeof(struct tuner));
-	strcpy(device->name,"tuner");
-	t->bus  = device->bus;
-	t->addr = device->addr;
-	t->type = type;
-	dprintk("tuner: type is %d (%s)\n",t->type,
-		(t->type == -1 ) ? "autodetect" : tuners[t->type].name);
-	
+        client_template.adapter = adap;
+        client_template.addr = addr;
+
+        printk("tuner: chip found @ 0x%x\n",addr);
+
+        if (NULL == (client = kmalloc(sizeof(struct i2c_client), GFP_KERNEL)))
+                return -ENOMEM;
+        memcpy(client,&client_template,sizeof(struct i2c_client));
+        client->data = t = kmalloc(sizeof(struct tuner),GFP_KERNEL);
+        if (NULL == t) {
+                kfree(client);
+                return -ENOMEM;
+        }
+        memset(t,0,sizeof(struct tuner));
+	if (type >= 0 && type < TUNERS) {
+		t->type = type;
+		strncpy(client->name, tuners[t->type].name, sizeof(client->name));
+	} else {
+		t->type = -1;
+	}
+        i2c_attach_client(client);
 	MOD_INC_USE_COUNT;
+
 	return 0;
 }
 
-static int tuner_detach(struct i2c_device *device)
+static int tuner_probe(struct i2c_adapter *adap)
 {
-	struct tuner *t = (struct tuner*)device->data;
+	if (adap->id == (I2C_ALGO_BIT | I2C_HW_B_BT848))
+		return i2c_probe(adap, &addr_data, tuner_attach);
+	return 0;
+}
+
+static int tuner_detach(struct i2c_client *client)
+{
+	struct tuner *t = (struct tuner*)client->data;
+
+	i2c_detach_client(client);
 	kfree(t);
+	kfree(client);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-static int tuner_command(struct i2c_device *device,
-	      unsigned int cmd, void *arg)
+static int
+tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 {
-	struct tuner *t = (struct tuner*)device->data;
-	int *iarg = (int*)arg;
+	struct tuner *t = (struct tuner*)client->data;
+        int   *iarg = (int*)arg;
+#if 0
+        __u16 *sarg = (__u16*)arg;
+#endif
 
-	switch (cmd) 
+        switch (cmd) {
+
+	/* --- configuration --- */
+	case TUNER_SET_TYPE:
+		if (t->type != -1)
+			return 0;
+		if (*iarg < 0 || *iarg >= TUNERS)
+			return 0;
+		t->type = *iarg;
+		dprintk("tuner: type set to %d (%s)\n",
+                        t->type,tuners[t->type].name);
+		strncpy(client->name, tuners[t->type].name, sizeof(client->name));
+		break;
+		
+	/* --- v4l ioctls --- */
+	/* take care: bttv does userspace copying, we'll get a
+	   kernel pointer here... */
+	case VIDIOCSCHAN:
 	{
-		case TUNER_SET_TYPE:
-			if (t->type != -1)
-				return 0;
-			t->type = *iarg;
-			dprintk("tuner: type set to %d (%s)\n",
-			t->type,tuners[t->type].name);
-			break;
+		struct video_channel *vc = arg;
+		
+		if (t->type == TUNER_PHILIPS_SECAM) {
+			t->mode = (vc->norm == VIDEO_MODE_SECAM) ? 1 : 0;
+			set_tv_freq(client,t->freq);
+		}
+		return 0;
+	}
+	case VIDIOCSFREQ:
+	{
+		unsigned long *v = arg;
 
-		case TUNER_SET_TVFREQ:
-			dprintk("tuner: tv freq set to %d.%02d\n",
-				(*iarg)/16,(*iarg)%16*100/16);
-			set_tv_freq(t,*iarg);
-			t->radio = 0;
-			t->freq = *iarg;
-			break;
-	    
-		case TUNER_SET_RADIOFREQ:
+		t->freq = *v;
+		if (t->radio) {
 			dprintk("tuner: radio freq set to %d.%02d\n",
 				(*iarg)/16,(*iarg)%16*100/16);
-			set_radio_freq(t,*iarg);
-			t->radio = 1;
-			t->freq = *iarg;
-			break;
-	    
-		case TUNER_SET_MODE:
-			if (t->type != TUNER_PHILIPS_SECAM) {
-				dprintk("tuner: trying to change mode for other than TUNER_PHILIPS_SECAM\n");
-			} else {
-				dprintk("tuner: mode set to %d\n", *iarg);
-				t->mode = *iarg;
-				set_tv_freq(t,t->freq);
-			}
-			break;
-
-		default:
-			return -EINVAL;
+			set_radio_freq(client,t->freq);
+		} else {
+			dprintk("tuner: tv freq set to %d.%02d\n",
+				(*iarg)/16,(*iarg)%16*100/16);
+			set_tv_freq(client,t->freq);
+		}
+		return 0;
 	}
+#if 0
+	/* --- old, obsolete interface --- */
+	case TUNER_SET_TVFREQ:
+		dprintk("tuner: tv freq set to %d.%02d\n",
+			(*iarg)/16,(*iarg)%16*100/16);
+		set_tv_freq(client,*iarg);
+		t->radio = 0;
+		t->freq = *iarg;
+		break;
+
+	case TUNER_SET_RADIOFREQ:
+		dprintk("tuner: radio freq set to %d.%02d\n",
+			(*iarg)/16,(*iarg)%16*100/16);
+		set_radio_freq(client,*iarg);
+		t->radio = 1;
+		t->freq = *iarg;
+		break;
+	case TUNER_SET_MODE:
+		if (t->type != TUNER_PHILIPS_SECAM) {
+			dprintk("tuner: trying to change mode for other than TUNER_PHILIPS_SECAM\n");
+		} else {
+			int mode=(*sarg==VIDEO_MODE_SECAM)?1:0;
+			dprintk("tuner: mode set to %d\n", *sarg);
+			t->mode = mode;
+			set_tv_freq(client,t->freq);
+		}
+		break;
+#endif
+	default:
+		/* nothing */
+	}
+	
 	return 0;
 }
 
 /* ----------------------------------------------------------------------- */
 
-struct i2c_driver i2c_driver_tuner = 
-{
-	"tuner",                      /* name       */
-	I2C_DRIVERID_TUNER,           /* ID         */
-	0xc0, 0xce,                   /* addr range */
+static struct i2c_driver driver = {
+        "i2c TV tuner driver",
+        I2C_DRIVERID_TUNER,
+        I2C_DF_NOTIFY,
+        tuner_probe,
+        tuner_detach,
+        tuner_command,
+};
 
-	tuner_attach,
-	tuner_detach,
-	tuner_command
+static struct i2c_client client_template =
+{
+        "(unset)",		/* name       */
+        -1,
+        0,
+        0,
+        NULL,
+        &driver
 };
 
 EXPORT_NO_SYMBOLS;
@@ -336,14 +415,14 @@ int init_module(void)
 int i2c_tuner_init(void)
 #endif
 {
-	i2c_register_driver(&i2c_driver_tuner);
+	i2c_add_driver(&driver);
 	return 0;
 }
 
 #ifdef MODULE
 void cleanup_module(void)
 {
-	i2c_unregister_driver(&i2c_driver_tuner);
+	i2c_del_driver(&driver);
 }
 #endif
 

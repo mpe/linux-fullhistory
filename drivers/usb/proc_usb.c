@@ -56,6 +56,20 @@
 
 #include "usb.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
+extern inline struct proc_dir_entry *create_proc_read_entry(const char *name,
+	mode_t mode, struct proc_dir_entry *base, 
+	read_proc_t *read_proc, void * data)
+{
+	struct proc_dir_entry *res=create_proc_entry(name,mode,base);
+	if (res) {
+		res->read_proc=read_proc;
+		res->data=data;
+	}
+	return res;
+}
+#endif
+
 #define DUMP_LIMIT		(PAGE_SIZE - 100)
 	/* limit to only one memory page of output */
 
@@ -548,7 +562,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 					    ctrl.value, ctrl.index, tbuf, ctrl.length, 
 					    (ctrl.timeout * HZ + 500) / 1000);
-			if (!i && ctrl.length) {
+			if ((i > 0) && ctrl.length) {
 				copy_to_user_ret(ctrl.data, tbuf, ctrl.length, -EFAULT);
 			}
 		} else {
@@ -560,12 +574,12 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 					    (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i < 0) {
 			printk(KERN_WARNING "procusb: EZUSB_CONTROL failed rqt %u rq %u len %u ret %d\n", 
 			       ctrl.requesttype, ctrl.request, ctrl.length, i);
-			return -ENXIO;
+			return i;
 		}
-		return 0;
+		return i;
 
 	case EZUSB_BULK:
 		if (obsolete_warn < 20) {
@@ -593,7 +607,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 				return -EINVAL;
 			}
 			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
-			if (!i && len2) {
+			if ((i > 0) && len2) {
 				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
 			}
 		} else {
@@ -603,10 +617,10 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i < 0) {
 			printk(KERN_WARNING "procusb: EZUSB_BULK failed ep 0x%x len %u ret %d\n", 
 			       bulk.ep, bulk.len, i);
-			return -ENXIO;
+			return i;
 		}
 		return len2;
 
@@ -628,23 +642,23 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 				free_page((unsigned long)tbuf);
 				return -EINVAL;
 			}
-			i = dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), (devrequest *)&octrl, tbuf, octrl.dlen, HZ);
-			if (!i && octrl.dlen) {
+			i = usb_internal_control_msg(dev, usb_rcvctrlpipe(dev, 0), (devrequest *)&octrl, tbuf, octrl.dlen, HZ);
+			if ((i > 0) && octrl.dlen) {
 				copy_to_user_ret(octrl.data, tbuf, octrl.dlen, -EFAULT);
 			}
 		} else {
 			if (octrl.dlen) {
 				copy_from_user_ret(tbuf, octrl.data, octrl.dlen, -EFAULT);
 			}
-			i = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), (devrequest *)&octrl, tbuf, octrl.dlen, HZ);
-		}
+			i = usb_internal_control_msg(dev, usb_sndctrlpipe(dev, 0), (devrequest *)&octrl, tbuf, octrl.dlen, HZ);
+					}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i < 0) {
 			printk(KERN_WARNING "procusb: EZUSB_OLD_CONTROL failed rqt %u rq %u len %u ret %d\n", 
 			       octrl.requesttype, octrl.request, octrl.length, i);
-			return -ENXIO;
+			return i;
 		}
-		return 0;
+		return i;
 
 	case EZUSB_OLD_BULK:
 		if (obsolete_warn < 20) {
@@ -672,7 +686,7 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 				return -EINVAL;
 			}
 			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
-			if (!i && len2) {
+			if ((i > 0) && len2) {
 				copy_to_user_ret(obulk.data, tbuf, len2, -EFAULT);
 			}
 		} else {
@@ -682,10 +696,10 @@ static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsi
 			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
 		}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i < 0) {
 			printk(KERN_WARNING "procusb: EZUSB_OLD_BULK failed ep 0x%x len %u ret %d\n", 
 			       obulk.ep, obulk.len, i);
-			return -ENXIO;
+			return i;
 		}
 		return len2;
 
@@ -766,7 +780,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, 
 					    ctrl.requesttype, ctrl.value, ctrl.index, tbuf, 
 					    ctrl.length, (ctrl.timeout * HZ + 500) / 1000);
-			if (!i && ctrl.length) {
+			if ((i > 0) && ctrl.length) {
 				copy_to_user_ret(ctrl.data, tbuf, ctrl.length, -EFAULT);
 			}
 		} else {
@@ -778,10 +792,10 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 					    ctrl.length, (ctrl.timeout * HZ + 500) / 1000);
 		}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i<0) {
 			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_CONTROL failed rqt %u rq %u len %u ret %d\n", 
 			       ctrl.requesttype, ctrl.request, ctrl.length, i);
-			return -ENXIO;
+			return i;
 		}
 		return 0;
 
@@ -839,7 +853,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), octrl.request, 
 					    octrl.requesttype, octrl.value, octrl.index, tbuf, 
 					    octrl.length, HZ);
-			if (!i && octrl.length) {
+			if ((i > 0) && octrl.length) {
 				copy_to_user_ret(octrl.data, tbuf, octrl.length, -EFAULT);
 			}
 		} else {
@@ -851,10 +865,10 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 					    octrl.length, HZ);
 		}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i < 0) {
 			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_OLD_CONTROL failed rqt %u rq %u len %u ret %d\n", 
 			       octrl.requesttype, octrl.request, octrl.length, i);
-			return -ENXIO;
+			return i;
 		}
 		return 0;
 
@@ -879,7 +893,7 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 				return -EINVAL;
 			}
 			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
-			if (!i && len2) {
+			if ((i > 0) && len2) {
 				copy_to_user_ret(obulk.data, tbuf, len2, -EFAULT);
 			}
 		} else {
@@ -889,10 +903,10 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			i = usb_bulk_msg(dev, pipe, tbuf, len1, &len2, HZ*5);
 		}
 		free_page((unsigned long)tbuf);
-		if (i) {
+		if (i < 0) {
 			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_OLD_BULK failed ep 0x%x len %u ret %d\n", 
 			       obulk.ep, obulk.len, i);
-			return -ENXIO;
+			return i;
 		}
 		return len2;
 

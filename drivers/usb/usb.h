@@ -3,6 +3,8 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
+#include <linux/version.h>
+
 
 /* USB constants */
 
@@ -126,14 +128,14 @@ struct usb_proc_ctrltransfer {
 	__u16 value;
 	__u16 index;
 	__u16 length;
-	__u32 timeout;	/* in milliseconds */
-	void *data;
+	__u32 timeout;  /* in milliseconds */
+ 	void *data;
 };
 
 struct usb_proc_bulktransfer {
 	unsigned int ep;
 	unsigned int len;
-	unsigned int timeout;	/* in milliseconds */
+	unsigned int timeout; /* in milliseconds */
 	void *data;
 };
 
@@ -158,13 +160,16 @@ struct usb_proc_setinterface {
 	unsigned int altsetting;
 };
 
-#define USB_PROC_CONTROL	_IOWR('U', 0, struct usb_proc_ctrltransfer)
-#define USB_PROC_BULK		_IOWR('U', 2, struct usb_proc_bulktransfer)
-#define USB_PROC_OLD_CONTROL	_IOWR('U', 0, struct usb_proc_old_ctrltransfer)
-#define USB_PROC_OLD_BULK	_IOWR('U', 2, struct usb_proc_old_bulktransfer)
-#define USB_PROC_RESETEP	_IOR('U', 3, unsigned int)
-#define USB_PROC_SETINTERFACE	_IOR('U', 4, struct usb_proc_setinterface)
-#define USB_PROC_SETCONFIGURATION	_IOR('U', 5, unsigned int)
+#define USB_PROC_CONTROL           _IOWR('U', 0, struct usb_proc_ctrltransfer)
+#define USB_PROC_BULK              _IOWR('U', 2, struct usb_proc_bulktransfer)
+#define USB_PROC_OLD_CONTROL       _IOWR('U', 0, struct usb_proc_old_ctrltransfer)
+#define USB_PROC_OLD_BULK          _IOWR('U', 2, struct usb_proc_old_bulktransfer)
+#define USB_PROC_RESETEP           _IOR('U', 3, unsigned int)
+#define USB_PROC_SETINTERFACE      _IOR('U', 4, struct usb_proc_setinterface)
+#define USB_PROC_SETCONFIGURATION  _IOR('U', 5, unsigned int)
+
+
+
 
 #ifdef __KERNEL__
 
@@ -184,6 +189,42 @@ extern int usb_printer_init(void);
 extern void usb_hub_cleanup(void);
 extern void usb_mouse_cleanup(void);
 
+/* for 2.2-kernels */
+ 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
+static __inline__ void list_add_tail(struct list_head *new, struct list_head *head)
+{
+	__list_add(new, head->prev, head);
+}
+#define LIST_HEAD_INIT(name) { &(name), &(name) }
+
+typedef struct wait_queue wait_queue_t;
+
+typedef struct wait_queue *wait_queue_head_t;
+#define DECLARE_WAITQUEUE(wait, current) \
+	struct wait_queue wait = { current, NULL }
+#define DECLARE_WAIT_QUEUE_HEAD(wait)\
+	wait_queue_head_t wait
+
+#define init_waitqueue_head(x) *x=NULL
+#define init_MUTEX(x) *(x)=MUTEX
+#define DECLARE_MUTEX(name) struct semaphore name=MUTEX
+#define DECLARE_MUTEX_LOCKED(name) struct semaphore name=MUTEX_LOCKED
+
+
+#define __set_current_state(state_value)                        \
+	do { current->state = state_value; } while (0)
+#ifdef __SMP__
+#define set_current_state(state_value)          \
+	set_mb(current->state, state_value)
+#else
+#define set_current_state(state_value)          \
+	__set_current_state(state_value)
+#endif
+
+#endif // 2.2.x
+
+
 static __inline__ void wait_ms(unsigned int ms)
 {
         current->state = TASK_UNINTERRUPTIBLE;
@@ -198,34 +239,30 @@ typedef struct {
 	__u16 length;
 } devrequest __attribute__ ((packed));
 
-/* 
- * Status codes (these [used to] follow OHCI controllers condition codes)
- */
+/* USB-status codes:
+ * USB_ST* maps to -E* and should go away in the future
+*/
+
 #define USB_ST_NOERROR		0
-#define USB_ST_CRC		-1
-#define USB_ST_BITSTUFF		-2
-#define USB_ST_DTMISMATCH	-3	/* data toggle mismatch */
-#define USB_ST_STALL		-4
-#define USB_ST_NORESPONSE	-5	/* device not responding/handshaking */
-#define USB_ST_PIDCHECK		-6	/* Check bits on PID failed */
-#define USB_ST_PIDUNDEF		-7	/* PID unexpected/undefined */
-#define USB_ST_DATAOVERRUN	-8
-#define USB_ST_DATAUNDERRUN	-9
-#define USB_ST_RESERVED1	-10
-#define USB_ST_RESERVED2	-11
-#define USB_ST_BUFFEROVERRUN	-12
-#define USB_ST_BUFFERUNDERRUN	-13
-#define USB_ST_RESERVED3	-14
-#define USB_ST_RESERVED4	-15
-
-/* internal errors */
-#define USB_ST_REMOVED		-100
-#define USB_ST_TIMEOUT		-101
-#define USB_ST_INTERNALERROR	-200
-#define USB_ST_NOTSUPPORTED	-201
-#define USB_ST_BANDWIDTH_ERROR	-202
-#define USB_ST_NOCHANGE		-203
-
+#define USB_ST_CRC		(-EILSEQ)
+#define USB_ST_BITSTUFF		(-EPROTO)
+#define USB_ST_NORESPONSE	(-ETIMEDOUT)			/* device not responding/handshaking */
+#define USB_ST_DATAOVERRUN	(-EOVERFLOW)
+#define USB_ST_DATAUNDERRUN	(-EREMOTEIO)
+#define USB_ST_BUFFEROVERRUN	(-ECOMM)
+#define USB_ST_BUFFERUNDERRUN	(-ENOSR)
+#define USB_ST_INTERNALERROR	(-EPROTO) 			/* unknown error */
+#define USB_ST_SHORT_PACKET    	(-EREMOTEIO)
+#define USB_ST_PARTIAL_ERROR  	(-EXDEV)			/* ISO transfer only partially completed */
+#define USB_ST_URB_KILLED     	(-ENOENT)			/* URB canceled by user */
+#define USB_ST_URB_PENDING       (-EINPROGRESS)
+#define USB_ST_REMOVED		(-ENODEV) 			/* device not existing or removed */
+#define USB_ST_TIMEOUT		(-ETIMEDOUT)			/* communication timed out, also in urb->status**/
+#define USB_ST_NOTSUPPORTED	(-ENOSYS)			
+#define USB_ST_BANDWIDTH_ERROR	(-ENOSPC)			/* too much bandwidth used */
+#define USB_ST_URB_INVALID_ERROR  (-EINVAL)			/* invalid value/transfer type */
+#define USB_ST_URB_REQUEST_ERROR  (-ENXIO)			/* invalid endpoint */
+#define USB_ST_STALL		(-EPIPE) 			/* pipe stalled, also in urb->status*/
 
 /*
  * USB device number allocation bitmap. There's one bitmap
@@ -249,8 +286,8 @@ struct usb_busmap {
 
 /* Everything but the endpoint maximums are aribtrary */
 #define USB_MAXCONFIG		8
-#define USB_ALTSETTINGALLOC	4
-#define USB_MAXALTSETTING	128	/* Hard limit */
+#define USB_ALTSETTINGALLOC     4
+#define USB_MAXALTSETTING	128  /* Hard limit */
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
 
@@ -289,7 +326,7 @@ struct usb_endpoint_descriptor {
 	__u8  bRefresh;
 	__u8  bSynchAddress;
 
-	unsigned char *extra;	/* Extra descriptors */
+   	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
 } __attribute__ ((packed));
 
@@ -321,7 +358,7 @@ struct usb_interface_descriptor {
 	__u8  bInterfaceProtocol;
 	__u8  iInterface;
 
-	struct usb_endpoint_descriptor *endpoint;
+  	struct usb_endpoint_descriptor *endpoint;
 
 	unsigned char *extra;
 	int extralen;
@@ -332,8 +369,8 @@ struct usb_interface {
 
 	int act_altsetting;		/* active alternate setting */
 	int num_altsetting;		/* number of alternate settings */
-	int max_altsetting;		/* total memory allocated */
-
+	int max_altsetting;             /* total memory allocated */
+ 
         struct usb_driver *driver;	/* driver */
 	void *private_data;
 };
@@ -391,102 +428,116 @@ struct usb_driver {
  */
 typedef int (*usb_device_irq)(int, void *, int, void *);
 
-/*
- * Isoc. support additions
- */
-#define START_FRAME_FUDGE      3
+/* -------------------------------------------------------------------------------------* 
+ * New USB Structures                                                                   *
+ * -------------------------------------------------------------------------------------*/
 
-#define USB_WRAP_FRAMENR(x) ((x) & 2047)
 
-/* for start_type: */
-enum {
-	START_ASAP = 0,
-	START_ABSOLUTE,
-	START_RELATIVE
+#define USB_DISABLE_SPD           1
+#define USB_ISO_ASAP              2
+#define USB_URB_EARLY_COMPLETE    4
+
+typedef struct
+{
+	unsigned int offset;
+	unsigned int length;		// expected length
+	unsigned int actual_length;
+	unsigned int status;
+} iso_packet_descriptor_t, *piso_packet_descriptor_t;
+
+struct urb;
+typedef void (*usb_complete_t)(struct urb *);
+
+typedef struct urb
+{
+	void *hcpriv;			// private data for host controller
+	struct list_head urb_list;	// list pointer to all active urbs 
+	struct urb* next;		// pointer to next URB	
+	struct usb_device *dev;		// pointer to associated USB device
+	unsigned int pipe;		// pipe information
+	int status;			// returned status
+	unsigned int transfer_flags;	// USB_DISABLE_SPD | USB_ISO_ASAP | USB_URB_EARLY_COMPLETE
+	void *transfer_buffer;		// associated data buffer
+	int transfer_buffer_length;	// data buffer length
+	int actual_length;              // actual data buffer length	
+	unsigned char* setup_packet;	// setup packet (control only)
+	//
+	int start_frame;		// start frame (iso/irq only)
+	int number_of_packets;		// number of packets in this request (iso/irq only)
+	int interval;                   // polling interval (irq only)
+	int error_count;		// number of errors in this transfer (iso only)
+	//
+	void *context;			// context for completion routine
+	usb_complete_t complete;	// pointer to completion routine
+	//
+	iso_packet_descriptor_t	 iso_frame_desc[0];
+} urb_t, *purb_t;
+
+#define FILL_CONTROL_URB(a,aa,b,c,d,e,f,g) \
+    do {\
+	a->dev=aa;\
+	a->pipe=b;\
+	a->setup_packet=c;\
+	a->transfer_buffer=d;\
+	a->transfer_buffer_length=e;\
+	a->complete=f;\
+	a->context=g;\
+    } while (0)
+
+#define FILL_BULK_URB(a,aa,b,c,d,e,f) \
+    do {\
+	a->dev=aa;\
+	a->pipe=b;\
+	a->transfer_buffer=c;\
+	a->transfer_buffer_length=d;\
+	a->complete=e;\
+	a->context=f;\
+    } while (0)
+    
+#define FILL_INT_URB(a,aa,b,c,d,e,f,g) \
+    do {\
+	a->dev=aa;\
+	a->pipe=b;\
+	a->transfer_buffer=c;\
+	a->transfer_buffer_length=d;\
+	a->complete=e;\
+	a->context=f;\
+	a->interval=g;\
+	a->start_frame=-1;\
+    } while (0)
+
+purb_t usb_alloc_urb(int iso_packets);
+void usb_free_urb (purb_t purb);
+int usb_submit_urb(purb_t purb);
+int usb_unlink_urb(purb_t purb);
+int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd,  void *data, int len, int timeout);
+int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout);
+
+/*-------------------------------------------------------------------*
+ *                         COMPATIBILITY STUFF                       *
+ *-------------------------------------------------------------------*/
+typedef struct
+{
+  wait_queue_head_t *wakeup;
+
+  usb_device_irq handler;
+  void* stuff;
+  /* more to follow */
+} api_wrapper_data;
+
+struct irq_wrapper_data {
+	void *context;
+	usb_device_irq handler;
 };
-#define START_TYPE_MAX     START_RELATIVE
 
-/*
- * Completion/Callback routine returns an enum,
- * which tells the interrupt handler what to do
- * with the completed frames (TDs).
- */
-enum {
-	CB_CONTINUE = 0,	/* OK, remove all TDs;
-				   needs to be 0 to be consistent with
-				   current callback function ret. values */
-	CB_REUSE,		/* leave descriptors as NULL, not active */
-	CB_RESTART,		/* leave descriptors as they are, alive */
-	CB_ABORT,		/* kill this USB transfer request */
-	CB_CONT_RUN		/* append the isoc_desc at the end of all active isoc_desc */
-};
-
-struct isoc_frame_desc {
-	int             frame_length;   /* may be 0 (i.e., allowed) */
-			/* set by driver for OUTs to devices;
-			 * set by USBD for INs from devices,
-			 * after I/O complete */
-	unsigned int    frame_status;
-			/* set by USBD after I/O complete */
-};
-
-struct usb_isoc_desc {
-	/*
-	 * The following fields are set by the usb_init_isoc() call.
-	 */
-	struct usb_device *usb_dev;
-	unsigned int    pipe;
-	int             frame_count;
-	void            *context;       /* driver context (private) ptr */
-	int             frame_size;
-	/*
-	 * The following fields are set by the driver between the
-	 * usb_init_isoc() and usb_run_isoc() calls
-	 * (along with the "frames" array for OUTput).
-	 */
-	int             start_type;
-	int             start_frame;    /* optional, depending on start_type */
-	int             frame_spacing;  /* not using (yet?) */
-	int             callback_frames; /* every # frames + last one */
-				/* 0 means no callbacks until IOC on last frame */
-	usb_device_irq  callback_fn;
-	void            *data;
-	int             buf_size;
-	struct usb_isoc_desc *prev_isocdesc; /* previous isoc_desc, for CB_CONT_RUN */
-
-	/*
-	 * The following fields are set by the usb_run_isoc() call.
-	 */
-	int             end_frame;
-	void            *td;            /* UHCI or OHCI TD ptr */
-	/*
-	 * The following fields are set by the USB HCD interrupt handler
-	 * before calling the driver's callback function.
-	 */
-	int             total_completed_frames;
-	int             prev_completed_frame;   /* from the previous callback */
-	int             cur_completed_frame;    /* from this callback */
-	int             total_length;           /* accumulated */
-	int             error_count;            /* accumulated */
-	struct isoc_frame_desc frames [0];      /* variable size: [frame_count] */
-};
+/* ------------------------------------------------------------------------------------- */
 
 struct usb_operations {
 	int (*allocate)(struct usb_device *);
 	int (*deallocate)(struct usb_device *);
-	int (*control_msg)(struct usb_device *, unsigned int, devrequest *, void *, int, int);
-	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int, unsigned long *, int);
-	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **, long);
-	int (*release_irq)(struct usb_device *, void *);
-	void *(*request_bulk)(struct usb_device *, unsigned int, usb_device_irq,
- void *, int, void *);
-	int (*terminate_bulk)(struct usb_device *, void *);
 	int (*get_frame_number) (struct usb_device *usb_dev);
-	int (*init_isoc) (struct usb_device *usb_dev, unsigned int pipe,
-				int frame_count, void *context, struct usb_isoc_desc **isocdesc);
-	void (*free_isoc) (struct usb_isoc_desc *isocdesc);
-	int (*run_isoc) (struct usb_isoc_desc *isocdesc, struct usb_isoc_desc *pr_isocdesc);
-	int (*kill_isoc) (struct usb_isoc_desc *isocdesc);
+	int (*submit_urb) (struct urb* purb);
+	int (*unlink_urb) (struct urb* purb);
 };
 
 /*
@@ -510,6 +561,7 @@ struct usb_bus {
 	int bandwidth_isoc_reqs;	/* number of Isoc. requesters */
 
 	/* procfs entry */
+	int proc_busnum;
 	struct proc_dir_entry *proc_entry;
 };
 
@@ -539,7 +591,7 @@ struct usb_device {
 	int string_langid;		/* language ID for strings */
   
 	void *hcpriv;			/* Host Controller private data */
-
+	
 	/* procfs entry */
 	struct proc_dir_entry *proc_entry;
 
@@ -579,7 +631,6 @@ extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 reque
 extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **);
 extern int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe);
 
-extern int usb_bulk_msg(struct usb_device *, unsigned int, void *, int, unsigned long *, int);
 extern void *usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
 extern int usb_terminate_bulk(struct usb_device *, void *);
 
@@ -590,19 +641,6 @@ extern void usb_disconnect(struct usb_device **);
 extern void usb_destroy_configuration(struct usb_device *dev);
 
 int usb_get_current_frame_number (struct usb_device *usb_dev);
-
-int usb_init_isoc (struct usb_device *usb_dev,
-			unsigned int pipe,
-			int frame_count,
-			void *context,
-			struct usb_isoc_desc **isocdesc);
-
-void usb_free_isoc (struct usb_isoc_desc *isocdesc);
-
-int usb_run_isoc (struct usb_isoc_desc *isocdesc,
-			struct usb_isoc_desc *pr_isocdesc);
-
-int usb_kill_isoc (struct usb_isoc_desc *isocdesc);
 
 /*
  * Calling this entity a "pipe" is glorifying it. A USB pipe

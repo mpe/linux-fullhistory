@@ -42,6 +42,8 @@
 char *ide_xfer_verbose (byte xfer_rate)
 {
 	switch(xfer_rate) {
+		case XFER_UDMA_6:	return("UDMA 6");
+		case XFER_UDMA_5:	return("UDMA 5");
 		case XFER_UDMA_4:	return("UDMA 4");
 		case XFER_UDMA_3:	return("UDMA 3");
 		case XFER_UDMA_2:	return("UDMA 2");
@@ -251,6 +253,10 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	drive->id->dma_1word &= ~0x0F00;
 
 	switch(speed) {
+#if 0
+		case XFER_UDMA_6:   drive->id->dma_ultra |= 0x1010; break;
+		case XFER_UDMA_5:   drive->id->dma_ultra |= 0x1010; break;
+#endif
 		case XFER_UDMA_4:   drive->id->dma_ultra |= 0x1010; break;
 		case XFER_UDMA_3:   drive->id->dma_ultra |= 0x0808; break;
 		case XFER_UDMA_2:   drive->id->dma_ultra |= 0x0404; break;

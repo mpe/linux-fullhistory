@@ -1,105 +1,91 @@
  /*
- * OHCI HCD (Host Controller Driver) for USB.
- *
- * (C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
- *
- * The OHCI HCD layer is a simple but nearly complete implementation of what the
- * USB people would call a HCD  for the OHCI. 
- * (ISO comming soon, Bulk, INT u. CTRL transfers enabled)
- * The layer on top of it, is for interfacing to the alternate-usb device-drivers.
+ * URB OHCI HCD (Host Controller Driver) for USB.
  * 
- * [ This is based on Linus' UHCI code and gregs OHCI fragments (0.03c source tree). ]
- * [ Open Host Controller Interface driver for USB. ]
- * [ (C) Copyright 1999 Linus Torvalds (uhci.c) ]
- * [ (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com> ]
- * [ _Log: ohci-hcd.h,v _
- * [ Revision 1.1  1999/04/05 08:32:30  greg ]
+ *(C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at>
  * 
- * v4.0 1999/08/18
- * v2.1 1999/05/09 ep_addr correction, code clean up
- * v2.0 1999/05/04 
- * v1.0 1999/04/27
  * ohci-hcd.h
+ * 
  */
- 
-#define OHCI_DBG    /* printk some debug information */
 
  
-#include <linux/config.h>
+#define MODSTR "ohci: "
 
-// #ifdef CONFIG_USB_OHCI_VROOTHUB
-#define VROOTHUB  
-// #endif
-/* enables virtual root hub 
- * (root hub will be managed by the hub controller 
- *  hub.c of the alternate usb driver)
- *  must be on now
- */
- 
- 
-  
-#ifdef OHCI_DBG
-#define OHCI_DEBUG(X) X
-#else 
-#define OHCI_DEBUG(X)
-#endif 
 
-/* for readl writel functions */
-#include <linux/list.h>
-#include <asm/io.h>
-struct usb_ohci_ed;
-struct usb_ohci_td;
+static int cc_to_error[16] = { 
+
+/* mapping of the OHCI CC status to error codes */ 
+#ifdef USB_ST_CRC /* status codes */
+	/* No  Error  */               USB_ST_NOERROR,
+	/* CRC Error  */               USB_ST_CRC,
+	/* Bit Stuff  */               USB_ST_BITSTUFF,
+	/* Data Togg  */               USB_ST_CRC,
+	/* Stall      */               USB_ST_STALL,
+	/* DevNotResp */               USB_ST_NORESPONSE,
+	/* PIDCheck   */               USB_ST_BITSTUFF,
+	/* UnExpPID   */               USB_ST_BITSTUFF,
+	/* DataOver   */               USB_ST_DATAOVERRUN,
+	/* DataUnder  */               USB_ST_DATAUNDERRUN,
+	/* reservd    */               USB_ST_NORESPONSE,
+	/* reservd    */               USB_ST_NORESPONSE,
+	/* BufferOver */               USB_ST_BUFFEROVERRUN,
+	/* BuffUnder  */               USB_ST_BUFFERUNDERRUN,
+	/* Not Access */               USB_ST_NORESPONSE,
+	/* Not Access */               USB_ST_NORESPONSE
+};
+
+#else  /* error codes */
+	/* No  Error  */               0,
+	/* CRC Error  */               -EILSEQ,
+	/* Bit Stuff  */               -EPROTO,
+	/* Data Togg  */               -EILSEQ,
+	/* Stall      */               -EPIPE,
+	/* DevNotResp */               -ETIMEDOUT,
+	/* PIDCheck   */               -EPROTO,
+	/* UnExpPID   */               -EPROTO,
+	/* DataOver   */               -EOVERFLOW,
+	/* DataUnder  */               -EREMOTEIO,
+	/* reservd    */               -ETIMEDOUT,
+	/* reservd    */               -ETIMEDOUT,
+	/* BufferOver */               -ECOMM,
+	/* BuffUnder  */               -ECOMM,
+	/* Not Access */               -ETIMEDOUT,
+	/* Not Access */               -ETIMEDOUT  
+};
+#define USB_ST_URB_PENDING		-EINPROGRESS
+#endif
+
+ 
+
+struct ed;
+struct td;
 /* for ED and TD structures */
 
-typedef void * __OHCI_BAG;
-typedef int (*f_handler )(void * ohci, struct usb_ohci_td *td, void *data, int data_len, int dlen, int status, __OHCI_BAG lw0, __OHCI_BAG lw1);
-
- 
- 
 /* ED States */
 
 #define ED_NEW 		0x00
 #define ED_UNLINK 	0x01
 #define ED_OPER		0x02
-#define ED_STOP     0x03
 #define ED_DEL		0x04
-#define ED_TD_DEL	0x05
-#define ED_RH		0x07 /* marker for RH ED */
+#define ED_URB_DEL  0x08
 
-#define ED_STATE(ed) 			(((ed)->hwINFO >> 29) & 0x7)
-#define ED_setSTATE(ed,state) 	(ed)->hwINFO = ((ed)->hwINFO & ~(0x7 << 29)) | (((state)& 0x7) << 29)
-#define ED_TYPE(ed) 			(((ed)->hwINFO >> 27) & 0x3)
-
-struct usb_ohci_ed {
+/* usb_ohci_ed */
+typedef struct ed {
 	__u32 hwINFO;       
 	__u32 hwTailP;
 	__u32 hwHeadP;
 	__u32 hwNextED;
-	 
-	void * buffer_start;
-	unsigned int len;
-	struct usb_ohci_ed *ed_prev;  
+
+	struct ed *ed_prev;  
 	__u8 int_period;
 	__u8 int_branch;
 	__u8 int_load; 
 	__u8 int_interval;
+	__u8 state;
+	__u8 type; 
+	__u16 last_iso;
+    struct ed * ed_rm_list;
    
-} __attribute((aligned(32)));
-
-struct usb_hcd_ed {
-	int endpoint;
-	int function;
-	int out;
-	int type;
-	int slow;
-	int maxpack;
-};
-
-struct ohci_state {
-	int len;
-	int status;
-};
-
+} ed_t, * ped_t;
 
  
 /* TD info field */
@@ -138,23 +124,21 @@ struct ohci_state {
 #define TD_NOTACCESSED     0x0F
 
 
-#define MAXPSW 2
+#define MAXPSW 8
 
-struct usb_ohci_td { 
+typedef struct td { 
 	__u32 hwINFO;
   	__u32 hwCBP;		/* Current Buffer Pointer */
   	__u32 hwNextTD;		/* Next TD Pointer */
   	__u32 hwBE;		/* Memory Buffer End Pointer */
   	__u16 hwPSW[MAXPSW];
 
-  	__u32 type;
-  	void *  buffer_start;
-  	f_handler handler;
-  	struct usb_ohci_ed *ed;
-  	struct usb_ohci_td *next_dl_td;
-  	__OHCI_BAG lw0;
-  	__OHCI_BAG lw1;
-} __attribute((aligned(32)));
+  	__u8 type;
+  	__u8 index;
+  	struct ed *ed;
+  	struct td *next_dl_td;
+  	purb_t urb;
+} td_t, * ptd_t;
 
 
 /* TD types */
@@ -162,39 +146,21 @@ struct usb_ohci_td {
 #define INT			0x01
 #define CTRL		0x02
 #define ISO			0x00
-/* TD types with direction */
-#define BULK_IN		0x07
-#define BULK_OUT	0x03
-#define INT_IN		0x05
-#define INT_OUT		0x01
-#define CTRL_IN		0x06
-#define CTRL_OUT	0x02
-#define ISO_IN		0x04
-#define ISO_OUT		0x00
-
-#define CTRL_SETUP  	0x102
-#define CTRL_DATA_IN	0x206
-#define CTRL_DATA_OUT	0x202
-#define CTRL_STATUS_IN	0x306
-#define CTRL_STATUS_OUT	0x302
-
  
-#define SEND            0x00001000
-#define ST_ADDR         0x00002000
-#define ADD_LEN         0x00004000
-#define DEL             0x00008000
-#define DEL_ED          0x00040000
-#define TD_RM			0x00080000
+#define SEND            0x01
+#define ST_ADDR         0x02
+#define ADD_LEN         0x04
+#define DEL             0x08
+
 
 #define OHCI_ED_SKIP	(1 << 14)
- 
 
- 
 /*
  * The HCCA (Host Controller Communications Area) is a 256 byte
  * structure defined in the OHCI spec. that the host controller is
  * told the base address of.  It must be 256-byte aligned.
  */
+ 
 #define NUM_INTS 32	/* part of the OHCI standard */
 struct ohci_hcca {
     __u32	int_table[NUM_INTS];	/* Interrupt ED table */
@@ -206,14 +172,7 @@ struct ohci_hcca {
 
   
 /*
- * This is the maximum number of root hub ports.  I don't think we'll
- * ever see more than two as that's the space available on an ATX
- * motherboard's case, but it could happen.  The OHCI spec allows for
- * up to 15... (which is insane!)
- * 
- * Although I suppose several "ports" could be connected directly to
- * internal laptop devices such as a keyboard, mouse, camera and
- * serial/parallel ports.  hmm...  That'd be neat.
+ * Maximum number of root hub ports.  
  */
 #define MAX_ROOT_PORTS	15	/* maximum OHCI root hub ports */
 
@@ -253,17 +212,6 @@ struct ohci_regs {
 	} roothub;
 } __attribute((aligned(32)));
 
-
-/* 
- * Read a MMIO register and re-write it after ANDing with (m)
- */
-#define writel_mask(m, a) writel( (readl((__u32)(a))) & (__u32)(m), (__u32)(a) )
-
-/*
- * Read a MMIO register and re-write it after ORing with (b)
- */
-#define writel_set(b, a) writel( (readl((__u32)(a))) | (__u32)(b), (__u32)(a) )
-
 /*
  * cmdstatus register */
 #define OHCI_CLF  0x02
@@ -286,79 +234,71 @@ struct ohci_regs {
  * Control register masks
  */
 #define OHCI_USB_RESET		0
+#define OHCI_USB_RESUME     (1 << 6)
 #define OHCI_USB_OPER		(2 << 6)
 #define OHCI_USB_SUSPEND	(3 << 6)
 
+
+/* Virtual Root HUB */
 struct virt_root_hub {
 	int devnum; /* Address of Root Hub endpoint */ 
-	usb_device_irq handler;
-	void * dev_id;
+	void * urb;
 	void * int_addr;
 	int send;
 	int interval;
 	struct timer_list rh_int_timer;
 };
-/*
- * This is the full ohci controller description
- *
- * Note how the "proper" USB information is just
- * a subset of what the full implementation needs. (Linus)
- */
-
-
-struct ohci {
-	int irq;
-	struct ohci_regs *regs;					/* OHCI controller's memory */	
-	struct ohci_hc_area *hc_area;			/* hcca, int ed-tree, ohci itself .. */                
-
-    struct list_head ohci_hcd_list;         /* list of all ohci_hcd */           
-
-	int ohci_int_load[32];                  /* load of the 32 Interrupt Chains (for load ballancing)*/     
-	struct usb_ohci_ed * ed_rm_list;        /* list of all endpoints to be removed */
-	struct usb_ohci_ed * ed_bulktail;       /* last endpoint of bulk list */
-	struct usb_ohci_ed * ed_controltail;    /* last endpoint of control list */
- 	struct usb_ohci_ed * ed_isotail;        /* last endpoint of iso list */
-	int intrstatus;
-	struct ohci_rep_td *repl_queue;			/* for internal requests */
-	int rh_int_interval;
-	int rh_int_timer;   
-	struct usb_bus *bus;    
-	struct virt_root_hub rh;
-};
-
-
-#define NUM_TDS	0		/* num of preallocated transfer descriptors */
-#define NUM_EDS 32		/* num of preallocated endpoint descriptors */
-
-struct ohci_hc_area {
-	struct ohci_hcca 	hcca;		/* OHCI mem. mapped IO area 256 Bytes*/
- 	struct ohci         ohci;
-        
-};
-struct ohci_device {
-	struct usb_device	*usb;
-	atomic_t			refcnt;
-	struct ohci			*ohci;
-	struct usb_ohci_ed	ed[NUM_EDS];
-	unsigned long		data[16];
-};
-
-#define ohci_to_usb(ohci)	((ohci)->usb)
-#define usb_to_ohci(usb)	((struct ohci_device *)(usb)->hcpriv)
-
-/* hcd */
-struct usb_ohci_td * ohci_trans_req(struct ohci * ohci, struct usb_ohci_ed * ed, int cmd_len, void  *cmd, void * data, int data_len, __OHCI_BAG lw0, __OHCI_BAG lw1, unsigned int type, f_handler handler); 
-struct usb_ohci_ed *usb_ohci_add_ep(struct usb_device * usb_dev, struct usb_hcd_ed * hcd_ed, int interval, int load);
-int usb_ohci_rm_function(struct usb_device * usb_dev, f_handler handler, __OHCI_BAG lw0, __OHCI_BAG lw1); 
-int usb_ohci_rm_ep(struct usb_device * usb_dev, struct  usb_ohci_ed *ed, f_handler handler, __OHCI_BAG lw0, __OHCI_BAG lw1, int send);
-struct usb_ohci_ed * ohci_find_ep(struct usb_device * usb_dev, struct usb_hcd_ed *hcd_ed);
  
-/* roothub */
+/* destination of request */
+#define RH_INTERFACE               0x01
+#define RH_ENDPOINT                0x02
+#define RH_OTHER                   0x03
 
-int root_hub_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len);
-int root_hub_release_irq(struct usb_device *usb_dev, void * ed);  
-int root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle);
+#define RH_CLASS                   0x20
+#define RH_VENDOR                  0x40
 
+/* Requests: bRequest << 8 | bmRequestType */
+#define RH_GET_STATUS           0x0080
+#define RH_CLEAR_FEATURE        0x0100
+#define RH_SET_FEATURE          0x0300
+#define RH_SET_ADDRESS			0x0500
+#define RH_GET_DESCRIPTOR		0x0680
+#define RH_SET_DESCRIPTOR       0x0700
+#define RH_GET_CONFIGURATION	0x0880
+#define RH_SET_CONFIGURATION	0x0900
+#define RH_GET_STATE            0x0280
+#define RH_GET_INTERFACE        0x0A80
+#define RH_SET_INTERFACE        0x0B00
+#define RH_SYNC_FRAME           0x0C80
+/* Our Vendor Specific Request */
+#define RH_SET_EP               0x2000
+
+
+/* Hub port features */
+#define RH_PORT_CONNECTION         0x00
+#define RH_PORT_ENABLE             0x01
+#define RH_PORT_SUSPEND            0x02
+#define RH_PORT_OVER_CURRENT       0x03
+#define RH_PORT_RESET              0x04
+#define RH_PORT_POWER              0x08
+#define RH_PORT_LOW_SPEED          0x09
+#define RH_C_PORT_CONNECTION       0x10
+#define RH_C_PORT_ENABLE           0x11
+#define RH_C_PORT_SUSPEND          0x12
+#define RH_C_PORT_OVER_CURRENT     0x13
+#define RH_C_PORT_RESET            0x14  
+
+/* Hub features */
+#define RH_C_HUB_LOCAL_POWER       0x00
+#define RH_C_HUB_OVER_CURRENT      0x01
+
+#define RH_DEVICE_REMOTE_WAKEUP    0x00
+#define RH_ENDPOINT_STALL          0x01
+
+#define RH_ACK                     0x01
+#define RH_REQ_ERR                 -1
+#define RH_NACK                    0x00
+ 
 /* Root-Hub Register info */
 
 #define RH_PS_CCS            0x00000001   
@@ -375,17 +315,86 @@ int root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_devi
 #define RH_PS_PRSC           0x00100000   
 
 
-#ifdef OHCI_DBG
+#define min(a,b) (((a)<(b))?(a):(b))  
+ 
+
+/* urb */
+typedef struct 
+{
+	ped_t ed;
+	__u16 length;	// number of tds associated with this request
+	__u16 td_cnt;	// number of tds already serviced
+	int   state;
+	void * wait;
+	ptd_t td[0];	// list pointer to all corresponding TDs associated with this request
+
+} urb_priv_t, *purb_priv_t;
+#define URB_DEL 1
+
+/*
+ * This is the full ohci controller description
+ *
+ * Note how the "proper" USB information is just
+ * a subset of what the full implementation needs. (Linus)
+ */
+
+
+typedef struct ohci {
+	struct ohci_hcca hcca;					/* hcca */                
+
+	int irq;
+	struct ohci_regs *regs;					/* OHCI controller's memory */	
+    struct list_head ohci_hcd_list;         /* list of all ohci_hcd */           
+
+	struct ohci *next; 		// chain of uhci device contexts
+	struct list_head urb_list; 	// list of all pending urbs
+	spinlock_t urb_list_lock; 	// lock to keep consistency 
+  
+	int ohci_int_load[32];                  /* load of the 32 Interrupt Chains (for load ballancing)*/     
+	ped_t ed_rm_list[2];     /* lists of all endpoints to be removed */
+	ped_t ed_bulktail;       /* last endpoint of bulk list */
+	ped_t ed_controltail;    /* last endpoint of control list */
+ 	ped_t ed_isotail;        /* last endpoint of iso list */
+	int intrstatus;
+	__u32 hc_control;						/* copy of the hc control reg */  
+	struct usb_bus *bus;    
+	struct usb_device * dev[128];
+	struct virt_root_hub rh;
+} ohci_t, * pohci_t;
+
+
+#define NUM_TDS	0		/* num of preallocated transfer descriptors */
+#define NUM_EDS 32		/* num of preallocated endpoint descriptors */
+
+struct ohci_device {
+	ed_t 	ed[NUM_EDS];
+	int ed_cnt;
+	void  * wait;
+};
+
+// #define ohci_to_usb(ohci)	((ohci)->usb)
+#define usb_to_ohci(usb)	((struct ohci_device *)(usb)->hcpriv)
+
+/* hcd */
+/* endpoint */
+static int ep_link(pohci_t ohci, ped_t ed);
+static int ep_unlink(pohci_t ohci, ped_t ed);
+static ped_t ep_add_ed(struct usb_device * usb_dev, unsigned int pipe, int interval, int load);
+static void ep_rm_ed(struct usb_device * usb_dev, ped_t ed);
+/* td */
+static void td_fill(unsigned int info, void * data, int len, purb_t purb, int type, int index);
+static void td_submit_urb(purb_t purb);
+/* root hub */
+static int rh_submit_urb(purb_t purb);
+static int rh_unlink_urb(purb_t purb);
+static int rh_init_int_timer(purb_t purb);
+
+#ifdef DEBUG
 #define OHCI_FREE(x) kfree(x); printk("OHCI FREE: %d: %4x\n", -- __ohci_free_cnt, (unsigned int) x)
-#define OHCI_ALLOC(x,size) (x) = kmalloc(size, GFP_KERNEL); printk("OHCI ALLO: %d: %4x\n", ++ __ohci_free_cnt,(unsigned int) x)
-#define USB_FREE(x) kfree(x); printk("USB FREE: %d: %4x\n", -- __ohci_free1_cnt, (unsigned int) x)
-#define USB_ALLOC(x,size) (x) = kmalloc(size, GFP_KERNEL); printk("USB ALLO: %d: %4x\n", ++ __ohci_free1_cnt, (unsigned int) x)
+#define OHCI_ALLOC(x,size) (x) = kmalloc(size, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL); printk("OHCI ALLO: %d: %4x\n", ++ __ohci_free_cnt,(unsigned int) x)
 static int __ohci_free_cnt = 0;
-static int __ohci_free1_cnt = 0;
 #else
 #define OHCI_FREE(x) kfree(x) 
-#define OHCI_ALLOC(x,size) (x) = kmalloc(size, GFP_KERNEL) 
-#define USB_FREE(x) kfree(x) 
-#define USB_ALLOC(x,size) (x) = kmalloc(size, GFP_KERNEL) 
+#define OHCI_ALLOC(x,size) (x) = kmalloc(size, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL) 
 #endif
  

@@ -9,6 +9,7 @@
  * library, while this file handles starting drivers, etc.
  *
  */
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/config.h>
 
@@ -18,9 +19,6 @@
 #ifndef CONFIG_USB_MODULE
 #	ifdef CONFIG_USB_UHCI
 		int uhci_init(void);
-#	endif
-#	ifdef CONFIG_USB_OHCI
-		int ohci_init(void);
 #	endif
 #	ifdef CONFIG_USB_OHCI_HCD
 		int ohci_hcd_init(void);
@@ -38,9 +36,6 @@ int usb_init(void)
 #ifndef CONFIG_USB_MODULE
 #	ifdef CONFIG_USB_UHCI
 		uhci_init();
-#	endif
-#	ifdef CONFIG_USB_OHCI
-		ohci_init();
 #	endif
 #	ifdef CONFIG_USB_OHCI_HCD
 		ohci_hcd_init(); 
@@ -75,6 +70,9 @@ int usb_init(void)
 #	ifdef CONFIG_USB_SCSI
 		usb_scsi_init();
 #	endif
+#	ifdef CONFIG_USB_DABUSB
+		dabusb_init();
+#	endif
 #endif
 	return 0;
 }
@@ -88,14 +86,18 @@ void cleanup_drivers(void)
 #ifdef CONFIG_USB_PROC
 	proc_usb_cleanup ();
 #endif
-	usb_hub_cleanup();
+	usb_hub_cleanup();	
 #ifndef MODULE
+
 #	ifdef CONFIG_USB_MOUSE
         	usb_mouse_cleanup();
 #	endif
 #       ifdef CONFIG_USB_HP_SCANNER
                 usb_hp_scanner_cleanup();
 #       endif
+#	ifdef CONFIG_USB_DABUSB
+		dabusb_cleanup();
+#	endif
 #endif
 }
 

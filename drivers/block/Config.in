@@ -73,7 +73,7 @@ else
 	    fi
 	    if [ "$CONFIG_X86" = "y" ]; then
 	       bool '    Intel PIIXn chipsets support' CONFIG_BLK_DEV_PIIX
-	       if [ "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
+	       if [ "$CONFIG_BLK_DEV_PIIX" = "y" -a "$CONFIG_IDEDMA_PCI_AUTO" = "y" ]; then
 		  bool '      PIIXn Tuning support' CONFIG_BLK_DEV_PIIX_TUNING
 	       fi
 	    fi
@@ -98,7 +98,7 @@ else
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       bool '    Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
 	       if [ "$CONFIG_X86" = "y" ]; then
-		  bool '     VIA82CXXX chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82CXXX
+		  bool '      VIA82CXXX chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82CXXX
 	       fi
 	    fi
          fi

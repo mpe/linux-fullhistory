@@ -15,7 +15,7 @@
 #include <linux/locks.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
-#include <linux/i2c.h>
+#include <linux/i2c-old.h>
 
 #define REGPRINT(x)   if (verbose)   (x)
 #define I2C_DEBUG(x)  if (i2c_debug) (x)

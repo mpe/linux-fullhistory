@@ -36,7 +36,8 @@ struct net_device;
 typedef unsigned int nf_hookfn(unsigned int hooknum,
 			       struct sk_buff **skb,
 			       const struct net_device *in,
-			       const struct net_device *out);
+			       const struct net_device *out,
+			       int (*okfn)(struct sk_buff *));
 
 typedef unsigned int nf_cacheflushfn(const void *packet,
 				     const struct net_device *in,

@@ -449,6 +449,8 @@ CONFIG_BLK_DEV_IDETAPE
   to the SCSI protocol. If you have an SCSI tape drive however, you
   can say N here.
 
+  This now includes the OnStream DI-30 tape drive support.
+
   If you say Y here, the tape drive will be identified at boot time
   along with other IDE devices, as "hdb" or "hdc", or something
   similar, and will be mapped to a character device such as "ht0"
@@ -7880,36 +7882,15 @@ CONFIG_USB_UHCI
   The module will be called usb-uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-OHCI (compaq and some others) support?
-CONFIG_USB_OHCI
+OHCI-HCD (compaq and some others) support?
+CONFIG_USB_OHCI_HCD
   The Open Host Controller Interface is a standard by Compaq for
   accessing the USB PC hardware (also called USB host controller). If
   your USB host controller conforms to this standard, say Y. The USB
   host controllers on most non-Intel architectures and on several x86
   compatibles with non-Intel chipsets conform to this standard.
 
-  There are currently two OHCI drivers in development. You should
-  compile at most one. The other one is "OHCI-HCD (other OHCI opt.
-  Virt. Root Hub) support?", below.
-
-  You may want to read the file drivers/usb/README.ohci.
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called usb-ohci.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
-
-Enable tons of OHCI debugging output
-CONFIG_USB_OHCI_DEBUG
-  Say Y here in order to have the OHCI code generate verbose debugging
-  output.
-
-OHCI-HCD (other OHCI opt. Virt. Root Hub) support?
-CONFIG_USB_OHCI_HCD
-  This is an alternative driver for USB PC hardware (also called USB
-  host controller) which complies with Compaq's Open Host Controller
-  Interface. You may want to read the file
-  drivers/usb/README.ohci_hcd.
+  You may want to read the file drivers/usb/README.ohci_hcd.
 
   There are currently two OHCI drivers in development. You should
   compile at most one. The other one is "OHCI (compaq and some others)
@@ -7919,29 +7900,6 @@ CONFIG_USB_OHCI_HCD
   inserted in and removed from the running kernel whenever you want).
   The module will be called usb-ohci-hcd.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt.
-
-OHCI-HCD Virtual Root Hub
-CONFIG_USB_OHCI_VROOTHUB
-  The virtual root hub support is currently unstable, so you probably
-  want to say N unless you are a hacker. But you aren't a hacker since
-  you are reading help texts.
-
-Enable lots of ISOC debugging output
-CONFIG_USB_DEBUG_ISOC
-  Say Y here if you want to get lots of debugging output related to
-  the USB code.
-
-USB hub support
-CONFIG_USB_HUB
-  Say Y here if you want to connect several USB devices to a single
-  USB port. You will need an USB hub to do this.
-    
-  If unsure, say Y.
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called hub.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
 
 USB mouse support
 CONFIG_USB_MOUSE
@@ -8085,6 +8043,13 @@ CONFIG_USB_PROC
 
   Note that you must say Y to "/proc filesystem support" below for
   this to work.
+
+DABUSB driver
+CONFIG_USB_DABUSB
+  A Digital Audio Broadcasting (DAB) Receiver for USB and Linux brought to
+  you by the DAB-Team (http://dab.in.tum.de). 
+  This driver can be taken as an example for URB-based bulk, control, and
+  isochronous transactions.
 
 ACPI support
 CONFIG_ACPI

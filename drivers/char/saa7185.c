@@ -40,7 +40,7 @@
 #include <linux/version.h>
 #include <asm/uaccess.h>
 
-#include <linux/i2c.h>
+#include <linux/i2c-old.h>
 #include <linux/video_encoder.h>
 
 #define DEBUG(x)   x		/* Debug driver */

@@ -160,6 +160,7 @@
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
 #include <linux/version.h>
+#include <linux/init.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
@@ -557,6 +558,10 @@ typedef union icb {
     unchar data[18];
 } Icb;
 
+#ifdef MODULE
+static char * wd7000 = NULL;
+MODULE_PARM(wd7000, "s");
+#endif
 
 /*
  *  Driver SCB structure pool.
@@ -599,108 +604,102 @@ static void setup_error (char *mesg, int *ints)
  * will configure the driver for a WD-7000 controller
  * using IRQ 15 with a DMA channel 6, at IO base address 0x350.
  */
-void wd7000_setup (char *str, int *ints)
+static int __init wd7000_setup(char *str)
 {
-    static short wd7000_card_num = 0;
-    short i, j;
+	static short wd7000_card_num = 0;
+	short i, j;
+	int ints[6];
 
-    if (wd7000_card_num >= NUM_CONFIGS) {
-	printk ("wd7000_setup: Too many \"wd7000=\" configurations in "
+	(void)get_options(str, ARRAY_SIZE(ints), ints);
+
+	if (wd7000_card_num >= NUM_CONFIGS) {
+		printk("wd7000_setup: Too many \"wd7000=\" configurations in "
 		"command line!\n");
-	return;
-    }
+		return 0;
+	}
 
-    if ((ints[0] < 3) || (ints[0] > 5))
-	printk ("wd7000_setup: Error in command line!  "
+	if ((ints[0] < 3) || (ints[0] > 5)) {
+		printk("wd7000_setup: Error in command line!  "
 		"Usage: wd7000=<IRQ>,<DMA>,IO>[,<BUS_ON>[,<BUS_OFF>]]\n");
-    else {
-	for (i = 0; i < NUM_IRQS; i++)
-	    if (ints[1] == wd7000_irq[i])
-		break;
+	} else {
+		for (i = 0; i < NUM_IRQS; i++)
+			if (ints[1] == wd7000_irq[i])
+				break;
 
-	if (i == NUM_IRQS) {
-	    setup_error ("invalid IRQ.", ints);
-	    return;
-	}
-	else
-	    configs[wd7000_card_num].irq = ints[1];
+		if (i == NUM_IRQS) {
+			setup_error("invalid IRQ.", ints);
+			return 0;
+		} else
+			configs[wd7000_card_num].irq = ints[1];
 
-	for (i = 0; i < NUM_DMAS; i++)
-	    if (ints[2] == wd7000_dma[i])
-		break;
+		for (i = 0; i < NUM_DMAS; i++)
+			if (ints[2] == wd7000_dma[i])
+				break;
 
-	if (i == NUM_DMAS) {
-	    setup_error ("invalid DMA channel.", ints);
-	    return;
-	}
-	else
-	    configs[wd7000_card_num].dma = ints[2];
+		if (i == NUM_DMAS) {
+			setup_error("invalid DMA channel.", ints);
+			return 0;
+		} else
+			configs[wd7000_card_num].dma = ints[2];
 
-	for (i = 0; i < NUM_IOPORTS; i++)
-	    if (ints[3] == wd7000_iobase[i])
-		break;
+		for (i = 0; i < NUM_IOPORTS; i++)
+			if (ints[3] == wd7000_iobase[i])
+				break;
 
-	if (i == NUM_IOPORTS) {
-	    setup_error ("invalid I/O base address.", ints);
-	    return;
-	}
-	else
-	    configs[wd7000_card_num].iobase = ints[3];
+		if (i == NUM_IOPORTS) {
+			setup_error("invalid I/O base address.", ints);
+			return 0;
+		} else
+			configs[wd7000_card_num].iobase = ints[3];
 
-	if (ints[0] > 3) {
-	    if ((ints[4] < 500) || (ints[4] > 31875)) {
-	        setup_error ("BUS_ON value is out of range (500 to 31875 nanoseconds)!",
-		             ints);
-	        configs[wd7000_card_num].bus_on = BUS_ON;
-	    }
-	    else
-	        configs[wd7000_card_num].bus_on = ints[4] / 125;
-	}
-	else
-	    configs[wd7000_card_num].bus_on = BUS_ON;
+		if (ints[0] > 3) {
+			if ((ints[4] < 500) || (ints[4] > 31875)) {
+				setup_error("BUS_ON value is out of range (500 to 31875 nanoseconds)!", ints);
+				configs[wd7000_card_num].bus_on = BUS_ON;
+			} else
+				configs[wd7000_card_num].bus_on = ints[4] / 125;
+		} else
+			configs[wd7000_card_num].bus_on = BUS_ON;
 
-	if (ints[0] > 4) {
-	    if ((ints[5] < 500) || (ints[5] > 31875)) {
-	        setup_error ("BUS_OFF value is out of range (500 to 31875 nanoseconds)!",
-		             ints);
-	        configs[wd7000_card_num].bus_off = BUS_OFF;
-	    }
-	    else
-	        configs[wd7000_card_num].bus_off = ints[5] / 125;
-	}
-	else
-	    configs[wd7000_card_num].bus_off = BUS_OFF;
+		if (ints[0] > 4) {
+			if ((ints[5] < 500) || (ints[5] > 31875)) {
+				setup_error("BUS_OFF value is out of range (500 to 31875 nanoseconds)!", ints);
+				configs[wd7000_card_num].bus_off = BUS_OFF;
+			} else
+				configs[wd7000_card_num].bus_off = ints[5] / 125;
+		} else
+			configs[wd7000_card_num].bus_off = BUS_OFF;
 
-	if (wd7000_card_num) {
-	    for (i = 0; i < (wd7000_card_num - 1); i++)
-		for (j = i + 1; j < wd7000_card_num; j++)
-		    if (configs[i].irq == configs[j].irq) {
-	                setup_error ("duplicated IRQ!", ints);
-			return;
-		    }
-		    else if (configs[i].dma == configs[j].dma) {
-	                setup_error ("duplicated DMA channel!", ints);
-			return;
-		    }
-		    else if (configs[i].iobase == configs[j].iobase) {
-	                setup_error ("duplicated I/O base address!", ints);
-			return;
-		    }
-	}
+		if (wd7000_card_num) {
+			for (i = 0; i < (wd7000_card_num - 1); i++)
+				for (j = i + 1; j < wd7000_card_num; j++)
+					if (configs[i].irq == configs[j].irq) {
+						setup_error("duplicated IRQ!", ints);
+						return 0;
+					} else if (configs[i].dma == configs[j].dma) {
+						setup_error("duplicated DMA channel!", ints);
+						return 0;
+					} else if (configs[i].iobase == configs[j].iobase) {
+						setup_error ("duplicated I/O base address!", ints);
+						return 0;
+					}
+		}
 
 #ifdef WD7000_DEBUG
-	printk ("wd7000_setup: IRQ=%d, DMA=%d, I/O=0x%x, BUS_ON=%dns, BUS_OFF=%dns\n",
-		configs[wd7000_card_num].irq,
-		configs[wd7000_card_num].dma,
-		configs[wd7000_card_num].iobase,
-		configs[wd7000_card_num].bus_on * 125,
-		configs[wd7000_card_num].bus_off * 125);
+		printk ("wd7000_setup: IRQ=%d, DMA=%d, I/O=0x%x, BUS_ON=%dns, BUS_OFF=%dns\n",
+			configs[wd7000_card_num].irq,
+			configs[wd7000_card_num].dma,
+			configs[wd7000_card_num].iobase,
+			configs[wd7000_card_num].bus_on * 125,
+			configs[wd7000_card_num].bus_off * 125);
 #endif
 
-	wd7000_card_num++;
-    }
+		wd7000_card_num++;
+	}
+	return 1;
 }
 
+__setup("wd7000=", wd7000_setup);
 
 #ifdef ANY2SCSI_INLINE
 /*
@@ -1526,6 +1525,11 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
 
 #ifdef WD7000_DEBUG
     printk ("wd7000_detect: started\n");
+#endif
+
+#ifdef MODULE
+	if (wd7000)
+		wd7000_setup(wd7000);     
 #endif
 
     for (i = 0; i < IRQS; wd7000_host[i++] = NULL) ;

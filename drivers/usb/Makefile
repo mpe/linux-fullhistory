@@ -40,20 +40,12 @@ ifeq ($(CONFIG_USB_UHCI),m)
       MI_OBJS += uhci.o uhci-debug.o
 endif
 
-ifeq ($(CONFIG_USB_OHCI),y)
-    L_OBJS += ohci.o ohci-debug.o
-endif
-ifeq ($(CONFIG_USB_OHCI),m)
-      M_OBJS += usb-ohci.o
-      MI_OBJS += ohci.o ohci-debug.o
-endif
-
 ifeq ($(CONFIG_USB_OHCI_HCD),y)
-    L_OBJS += ohci-hcd.o ohci-root-hub.o
+    L_OBJS += ohci-hcd.o
 endif
 ifeq ($(CONFIG_USB_OHCI_HCD),m)
       M_OBJS += usb-ohci-hcd.o
-      MI_OBJS += ohci-hcd.o ohci-root-hub.o
+      MI_OBJS += ohci-hcd.o
 endif
 
 ifeq ($(CONFIG_USB_MOUSE),y)
@@ -172,6 +164,15 @@ ifeq ($(CONFIG_USB_USS720),m)
   MI_OBJS += uss720.o
 endif
 
+ifeq ($(CONFIG_USB_DABUSB),y)
+  L_OBJS += dabusb.o
+endif
+
+ifeq ($(CONFIG_USB_DABUSB),m)
+  M_OBJS += dabusb.o
+  MI_OBJS += dabusb.o
+endif
+
 include $(TOPDIR)/Rules.make
 
 keymap.o: keymap.c
@@ -197,11 +198,8 @@ endif
 usb-uhci.o: uhci.o uhci-debug.o 
 	$(LD) $(LD_RFLAG) -r -o $@  uhci.o uhci-debug.o 
 
-usb-ohci.o: ohci.o ohci-debug.o 
-	$(LD) $(LD_RFLAG) -r -o $@ ohci.o ohci-debug.o 
-
-usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o 
-	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o 
+usb-ohci-hcd.o: ohci-hcd.o
+	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o
 
 ifeq ($(CONFIG_USB_PROC),y)
 usbcore.o: usb.o usb-debug.o usb-core.o proc_usb.o hub.o

@@ -44,7 +44,7 @@
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/videodev.h>
-#include <linux/i2c.h>
+#include <linux/i2c-old.h>
 
 #include "saa7146.h"
 #include "saa7146reg.h"

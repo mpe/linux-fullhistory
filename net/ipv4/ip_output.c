@@ -182,7 +182,7 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	ip_send_check(iph);
 
 	/* Send it out. */
-	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, NULL,
+	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
 		output_maybe_reroute);
 }
 
@@ -850,6 +850,7 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		if (skb->sk)
 			skb_set_owner_w(skb2, skb->sk);
 		skb2->dst = dst_clone(skb->dst);
+		skb2->dev = skb->dev;
 
 		/*
 		 *	Copy the packet header into the new buffer.

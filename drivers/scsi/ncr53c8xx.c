@@ -73,7 +73,7 @@
 */
 
 /*
-**	Sep 10 1999, version 3.2c
+**	December 6 1999, version 3.2d
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -93,6 +93,7 @@
 **		53C895		(Wide,   Fast 40,     on board rom BIOS)
 **		53C895A		(Wide,   Fast 40,     on board rom BIOS)
 **		53C896		(Wide,   Fast 40,     on board rom BIOS)
+**		53C1510D	(Wide,   Fast 40,     on board rom BIOS)
 **
 **	Other features:
 **		Memory mapped IO (linux-1.3.X and above only)
@@ -103,7 +104,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - 3.2c"
+#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2d"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 
@@ -511,6 +512,134 @@ typedef	int		vm_size_t;
 #endif
 
 /*
+**	 Simple Wrapper to kernel PCI bus interface.
+**
+**	 This wrapper allows to get rid of old kernel PCI interface
+**	 and still allows to preserve linux-2.0 compatibilty.
+**	 In fact, it is mostly an incomplete emulation of the new
+**	 PCI code for pre-2.2 kernels. When kernel-2.0 support
+**	 will be dropped, we will just have to remove most of this
+**	 code.
+*/
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,2,0)
+
+typedef struct pci_dev *pcidev_t;
+#define PCIDEV_NULL		(0)
+#define PciBusNumber(d)		(d)->bus->number
+#define PciDeviceFn(d)		(d)->devfn
+#define PciVendorId(d)		(d)->vendor
+#define PciDeviceId(d)		(d)->device
+#define PciIrqLine(d)		(d)->irq
+
+#if LINUX_VERSION_CODE > LinuxVersionCode(2,3,12)
+
+static int __init
+pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
+{
+	*base = pdev->resource[index].start;
+	if ((pdev->resource[index].flags & 0x7) == 0x4)
+		++index;
+	return ++index;
+}
+#else
+static int __init
+pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
+{
+	*base = pdev->base_address[index++];
+	if ((*base & 0x7) == 0x4) {
+#if BITS_PER_LONG > 32
+		*base |= (((u_long)pdev->base_address[index]) << 32);
+#endif
+		++index;
+	}
+	return index;
+}
+#endif
+
+#else  /* Incomplete emulation of current PCI code for pre-2.2 kernels */
+
+typedef unsigned int pcidev_t;
+#define PCIDEV_NULL            (~0u)
+#define PciBusNumber(d)                ((d)>>8)
+#define PciDeviceFn(n)         ((d)&0xff)
+#define __PciDev(busn, devfn)  (((busn)<<8)+(devfn))
+
+#define pci_present pcibios_present
+
+#define pci_read_config_byte(d, w, v) \
+	pcibios_read_config_byte(PciBusNumber(d), PciDeviceFn(d), w, v)
+#define pci_read_config_word(d, w, v) \
+	pcibios_read_config_word(PciBusNumber(d), PciDeviceFn(d), w, v)
+#define pci_read_config_dword(d, w, v) \
+	pcibios_read_config_dword(PciBusNumber(d), PciDeviceFn(d), w, v)
+
+
+#define pci_write_config_byte(d, w, v) \
+	pcibios_write_config_byte(PciBusNumber(d), PciDeviceFn(d), w, v)
+#define pci_write_config_word(d, w, v) \
+	pcibios_write_config_word(PciBusNumber(d), PciDeviceFn(d), w, v)
+#define pci_write_config_dword(d, w, v) \
+	pcibios_write_config_dword(PciBusNumber(d), PciDeviceFn(d), w, v)
+
+static pcidev_t __init
+pci_find_device(unsigned int vendor, unsigned int device, pcidev_t prev)
+{
+	static unsigned short pci_index;
+	int retv;
+	unsigned char bus_number, device_fn;
+
+	if (prev == PCIDEV_NULL)
+		pci_index = 0;
+	else
+		++pci_index;
+	retv = pcibios_find_device (vendor, device, pci_index,
+					&bus_number, &device_fn);
+	return retv ? PCIDEV_NULL : __PciDev(bus_number, device_fn);
+}
+
+static u_short __init PciVendorId(pcidev_t dev)
+{
+	u_short vendor_id;
+	pcibios_read_config_word(dev, PCI_VENDOR_ID, &vendor_id);
+	return vendor_id;
+}
+
+static u_short __init PciDeviceId(pcidev_t dev)
+{
+	u_short device_id;
+	pci_read_config_word(dev, PCI_DEVICE_ID, &device_id);
+	return device_id;
+}
+
+static u_int __init PciIrqLine(pcidev_t dev)
+{
+	u_short irq;
+	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
+	return irq;
+}
+
+static int __init
+pci_get_base_address(pcidev_t dev, int offset, u_long *base)
+{
+	u_int32 tmp;
+
+	pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + offset, &tmp);
+	*base = tmp;
+	offset += sizeof(u_int32);
+	if ((tmp & 0x7) == 0x4) {
+#if BITS_PER_LONG > 32
+		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + offset, &tmp);
+		*base |= (((u_long)tmp) << 32);
+#endif
+		offset += sizeof(u_int32);
+	}
+	return offset;
+}
+
+#endif /* LINUX_VERSION_CODE >= LinuxVersionCode(2,2,0) */
+
+/*
 **	SMP threading.
 **
 **	Assuming that SMP systems are generally high end systems and may 
@@ -537,19 +666,10 @@ static spinlock_t driver_lock = SPIN_LOCK_UNLOCKED;
 #define	NCR_LOCK_NCB(np, flags)    spin_lock_irqsave(&np->smp_lock, flags)
 #define	NCR_UNLOCK_NCB(np, flags)  spin_unlock_irqrestore(&np->smp_lock, flags)
 
-#	if LINUX_VERSION_CODE < LinuxVersionCode(2,3,99)
-
-#	define	NCR_LOCK_SCSI_DONE(np, flags) \
+#define	NCR_LOCK_SCSI_DONE(np, flags) \
 		spin_lock_irqsave(&io_request_lock, flags)
-#	define	NCR_UNLOCK_SCSI_DONE(np, flags) \
+#define	NCR_UNLOCK_SCSI_DONE(np, flags) \
 		spin_unlock_irqrestore(&io_request_lock, flags)
-
-#	else
-
-#	define	NCR_LOCK_SCSI_DONE(np, flags)    do {;} while (0)
-#	define	NCR_UNLOCK_SCSI_DONE(np, flags)  do {;} while (0)
-
-#	endif
 
 #else
 
@@ -733,6 +853,12 @@ static Scsi_Host_Template	*the_template	= NULL;
 **	/proc directory entry and proc_info function
 */
 
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,27)
+static struct proc_dir_entry proc_scsi_ncr53c8xx = {
+    PROC_SCSI_NCR53C8XX, 9, "ncr53c8xx",
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
+#endif
 #ifdef SCSI_NCR_PROC_INFO_SUPPORT
 static int ncr53c8xx_proc_info(char *buffer, char **start, off_t offset,
 			int length, int hostno, int func);
@@ -773,7 +899,8 @@ static void ncr53c8xx_timeout(unsigned long np);
 #define bootverbose (np->verbose)
 
 #ifdef SCSI_NCR_NVRAM_SUPPORT
-static u_char Tekram_sync[12] __initdata = {25,31,37,43,50,62,75,125,12,15,18,21};
+static u_char Tekram_sync[16] __initdata =
+	{25,31,37,43, 50,62,75,125, 12,15,18,21, 6,7,9,10};
 #endif /* SCSI_NCR_NVRAM_SUPPORT */
 
 /*
@@ -1763,6 +1890,8 @@ struct ncb {
 	*/
 	u_short		device_id;	/* PCI device id		*/
 	u_char		revision_id;	/* PCI device revision id	*/
+	u_char		bus;		/* PCI BUS number		*/
+	u_char		device_fn;	/* PCI BUS device and function	*/
 	u_long		port;		/* IO space base address	*/
 	u_int		irq;		/* IRQ level			*/
 	u_int		features;	/* Chip features map		*/
@@ -2060,6 +2189,7 @@ static void process_waiting_list(ncb_p np, int sts);
 #define reset_waiting_list(np) process_waiting_list((np), DID_RESET)
 
 #ifdef SCSI_NCR_NVRAM_SUPPORT
+static  void	ncr_get_nvram		(ncr_device *devp, ncr_nvram *nvp);
 static	int	ncr_get_Symbios_nvram	(ncr_slot *np, Symbios_nvram *nvram);
 static	int	ncr_get_Tekram_nvram	(ncr_slot *np, Tekram_nvram *nvram);
 #endif
@@ -3938,7 +4068,7 @@ ncr_Tekram_setup_target(ncb_p np, int target, Tekram_nvram *nvram)
 
 	if (tn->flags & TEKRAM_SYNC_NEGO) {
 		i = tn->sync_index & 0xf;
-		tp->usrsync = i < 12 ? Tekram_sync[i] : 255;
+		tp->usrsync = Tekram_sync[i];
 	}
 
 	tp->usrwide = (tn->flags & TEKRAM_WIDE_NEGO) ? 1 : 0;
@@ -4328,7 +4458,7 @@ void __init ncr_display_Tekram_nvram(ncb_p np, Tekram_nvram *nvram)
 		int sync, j;
 		struct Tekram_target *tn = &nvram->target[i];
 		j = tn->sync_index & 0xf;
-		sync = j < 12 ? Tekram_sync[j] : 255;
+		sync = Tekram_sync[j];
 		printk(KERN_DEBUG "%s-%d:%s%s%s%s%s%s PERIOD=%d\n",
 		ncr_name(np), i,
 		(tn->flags & TEKRAM_PARITY_CHECK)	? " PARITY"	: "",
@@ -4362,16 +4492,21 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	ncr_nvram *nvram = device->nvram;
 	int i;
 
+	printk(KERN_INFO "ncr53c%s-%d: rev 0x%x on pci bus %d device %d function %d "
 #ifdef __sparc__
-printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%s\n",
-	device->chip.name, unit, device->chip.revision_id, device->slot.base,
-	device->slot.io_port, __irq_itoa(device->slot.irq));
+		"irq %s\n",
 #else
-printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
-	device->chip.name, unit, device->chip.revision_id, device->slot.base,
-	device->slot.io_port, device->slot.irq);
+		"irq %d\n",
 #endif
- 
+		device->chip.name, unit, device->chip.revision_id,
+		device->slot.bus, (device->slot.device_fn & 0xf8) >> 3,
+		device->slot.device_fn & 7,
+#ifdef __sparc__
+		__irq_itoa(device->slot.irq));
+#else
+		device->slot.irq);
+#endif
+
 	/*
 	**	Allocate host_data structure
 	*/
@@ -4402,6 +4537,8 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	sprintf(np->inst_name, "ncr53c%s-%d", np->chip_name, np->unit);
 	np->device_id	= device->chip.device_id;
 	np->revision_id	= device->chip.revision_id;
+	np->bus		= device->slot.bus;
+	np->device_fn	= device->slot.device_fn;
 	np->features	= device->chip.features;
 	np->clock_divn	= device->chip.nr_divisor;
 	np->maxoffs	= device->chip.offset_max;
@@ -4498,7 +4635,11 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	instance->max_id	= np->maxwide ? 16 : 8;
 	instance->max_lun	= SCSI_NCR_MAX_LUN;
 #ifndef NCR_IOMAPPED
-	instance->base		= (unsigned long)np->reg;
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,29)
+	instance->base		= (unsigned long) np->reg;
+#else
+	instance->base		= (char *) np->reg;
+#endif
 #endif
 	instance->irq		= device->slot.irq;
 	instance->unique_id	= device->slot.io_port;
@@ -6073,13 +6214,11 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 	/*
 	**	DEL 441 - 53C876 Rev 5 - Part Number 609-0392787/2788 - ITEM 2.
 	**	Disable overlapped arbitration.
-	**	The 896 Rev 1 is also affected by this errata.
+	**	All 896 chips are also affected by this errata.
 	*/
-	if (np->device_id == PCI_DEVICE_ID_NCR_53C875 &&
-	    np->revision_id >= 0x10 && np->revision_id <= 0x15)
+	if (np->device_id == PCI_DEVICE_ID_NCR_53C875)
 		OUTB (nc_ctest0, (1<<5));
-	else if (np->device_id == PCI_DEVICE_ID_NCR_53C896 &&
-	         np->revision_id <= 0x1)
+	else if (np->device_id == PCI_DEVICE_ID_NCR_53C896)
 		OUTB (nc_ccntl0, DPR);
 
 	/*
@@ -9217,8 +9356,8 @@ __setup("ncr53c8xx=", ncr53c8xx_setup);
 #endif
 #endif
 
-static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
-	     uchar bus, uchar device_fn, ncr_device *device);
+static int 
+ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device);
 
 /*
 **   Linux entry point for NCR53C8XX devices detection routine.
@@ -9273,114 +9412,43 @@ static void __init ncr_print_driver_setup(void)
 static ncr_chip	ncr_chip_table[] __initdata	= SCSI_NCR_CHIP_TABLE;
 static ushort	ncr_chip_ids[]   __initdata	= SCSI_NCR_CHIP_IDS;
 
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-static int __init 
-ncr_attach_using_nvram(Scsi_Host_Template *tpnt, int nvram_index, int count, ncr_device device[])
-{
-	int i, j;
-	int attach_count = 0;
-	ncr_nvram  *nvram;
-	ncr_device *devp = 0;	/* to shut up gcc */
 
-	if (!nvram_index)
-		return 0;
-
-	/* find first Symbios NVRAM if there is one as we need to check it for host boot order */
-	for (i = 0, nvram_index = -1; i < count; i++) {
-		devp  = &device[i];
-		nvram = devp->nvram;
-		if (!nvram)
-			continue;
-		if (nvram->type == SCSI_NCR_SYMBIOS_NVRAM) {
-			if (nvram_index == -1)
-				nvram_index = i;
-#ifdef SCSI_NCR_DEBUG_NVRAM
-			printk("ncr53c8xx: NVRAM: Symbios format Boot Block, 53c%s, PCI bus %d, device %d, function %d\n",
-				devp->chip.name, devp->slot.bus, 
-				(int) (devp->slot.device_fn & 0xf8) >> 3, 
-				(int) devp->slot.device_fn & 7);
-			for (j = 0 ; j < 4 ; j++) {
-				Symbios_host *h = &nvram->data.Symbios.host[j];
-			printk("ncr53c8xx: BOOT[%d] device_id=%04x vendor_id=%04x device_fn=%02x io_port=%04x %s\n",
-				j,		h->device_id,	h->vendor_id,
-				h->device_fn,	h->io_port,
-				(h->flags & SYMBIOS_INIT_SCAN_AT_BOOT) ? "SCAN AT BOOT" : "");
-			}
-		}
-		else if (nvram->type == SCSI_NCR_TEKRAM_NVRAM) {
-			/* display Tekram nvram data */
-			printk("ncr53c8xx: NVRAM: Tekram format data, 53c%s, PCI bus %d, device %d, function %d\n",
-				devp->chip.name, devp->slot.bus, 
-				(int) (devp->slot.device_fn & 0xf8) >> 3, 
-				(int) devp->slot.device_fn & 7);
-#endif
-		}
-	}
-
-	if (nvram_index >= 0 && nvram_index < count)
-		nvram = device[nvram_index].nvram;
-	else
-		nvram = 0;
-
-	if (!nvram)
-		goto out;
-
-	/* 
-	** check devices in the boot record against devices detected. 
-	** attach devices if we find a match. boot table records that 
-	** do not match any detected devices will be ignored. 
-	** devices that do not match any boot table will not be attached
-	** here but will attempt to be attached during the device table 
-	** rescan.
-	*/
-     	for (i = 0; i < 4; i++) {
-		Symbios_host *h = &nvram->data.Symbios.host[i];
-		for (j = 0 ; j < count ; j++) {
-			devp = &device[j];
-			if (h->device_fn == devp->slot.device_fn &&
-#if 0	/* bus number location in nvram ? */
-			    h->bus	 == devp->slot.bus	 &&
-#endif
-			    h->device_id == devp->chip.device_id)
-				break;
-		}
-		if (j < count && !devp->attach_done) {
-			if (!ncr_attach (tpnt, attach_count, devp))
-				attach_count++;
-			devp->attach_done = 1;
-		}
-	}
-
-out:
-	return attach_count;
-}
-#endif /* SCSI_NCR_NVRAM_SUPPORT */
-
+/*===================================================================
+**    Detect all 53c8xx hosts and then attach them.
+**
+**    If we are using NVRAM, once all hosts are detected, we need to 
+**    check any NVRAM for boot order in case detect and boot order 
+**    differ and attach them using the order in the NVRAM.
+**
+**    If no NVRAM is found or data appears invalid attach boards in 
+**    the the order they are detected.
+**===================================================================
+*/
 int __init ncr53c8xx_detect(Scsi_Host_Template *tpnt)
 {
-	int i, j;
-	int chips;
-	int count = 0;
-	uchar bus, device_fn;
-	short index;
+	pcidev_t pcidev;
+	int i, j, chips, hosts, count;
 	int attach_count = 0;
-	ncr_device device[8];
+	ncr_device *devtbl, *devp;
 #ifdef SCSI_NCR_NVRAM_SUPPORT
-	ncr_nvram  nvram[4];
-	int k, nvrams;
-#endif
-	int hosts;
-
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	int nvram_index = 0;
+	ncr_nvram  nvram0, nvram, *nvp;
 #endif
 
-#ifdef SCSI_NCR_DEBUG_INFO_SUPPORT
-	ncr_debug = driver_setup.debug;
-#endif
+	/*
+	**    PCI is required.
+	*/
+	if (!pci_present())
+		return 0;
 
-     tpnt->proc_name = "ncr53c8xx";
+	/*
+	**    Initialize driver general stuff.
+	*/
 #ifdef SCSI_NCR_PROC_INFO_SUPPORT
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,27)
+     tpnt->proc_dir  = &proc_scsi_ncr53c8xx;
+#else
+     tpnt->proc_name = "ncr53c8xx";
+#endif
      tpnt->proc_info = ncr53c8xx_proc_info;
 #endif
 
@@ -9388,145 +9456,194 @@ int __init ncr53c8xx_detect(Scsi_Host_Template *tpnt)
 if (ncr53c8xx)
 	ncr53c8xx_setup(ncr53c8xx);
 #endif
+#ifdef SCSI_NCR_DEBUG_INFO_SUPPORT
+	ncr_debug = driver_setup.debug;
+#endif
 
 	if (initverbose >= 2)
 		ncr_print_driver_setup();
 
-	/* 
-	** Detect all 53c8xx hosts and then attach them.
-	**
-	** If we are using NVRAM, once all hosts are detected, we need to check
-	** any NVRAM for boot order in case detect and boot order differ and
-	** attach them using the order in the NVRAM.
-	**
-	** If no NVRAM is found or data appears invalid attach boards in the 
-	** the order they are detected.
+	/*
+	**	Allocate the device table since we donnot want to 
+	**	overflow the kernel stack.
+	**	1 x 4K PAGE is enough for more than 40 devices for i386.
 	*/
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,92)
-	if (!pci_present())
-#else
-	if (!pcibios_present())
-#endif
+	devtbl = kmalloc(4000, GFP_ATOMIC);
+	if (!devtbl)
 		return 0;
 
+	/* 
+	**    Detect all 53c8xx hosts.
+	**    Save the first Symbios NVRAM content if any 
+	**    for the boot order.
+	*/
 	chips	= sizeof(ncr_chip_ids)	/ sizeof(ncr_chip_ids[0]);
-	hosts	= sizeof(device)	/ sizeof(device[0]);
+	hosts	= 4000			/ sizeof(*devtbl);
 #ifdef SCSI_NCR_NVRAM_SUPPORT
-	k = 0;
-	if (driver_setup.use_nvram & 0x1)
-		nvrams	= sizeof(nvram)	/ sizeof(nvram[0]);
-	else
-		nvrams	= 0;
+	nvp = (driver_setup.use_nvram & 0x1) ? &nvram0 : 0;
+#endif
+	j = 0;
+	count = 0;
+	pcidev = PCIDEV_NULL; 
+	while (1) {
+		char *msg = "";
+		if (count >= hosts)
+			break;
+		if (j >= chips)
+			break;
+		i = driver_setup.reverse_probe ? chips - 1 - j : j;
+		pcidev = pci_find_device(PCI_VENDOR_ID_NCR, ncr_chip_ids[i],
+					pcidev);
+		if (pcidev == PCIDEV_NULL) {
+			++j;
+			continue;
+		}
+		/* Some HW as the HP LH4 may report twice PCI devices */
+		for (i = 0; i < count ; i++) {
+			if (devtbl[i].slot.bus	     == PciBusNumber(pcidev) && 
+			    devtbl[i].slot.device_fn == PciDeviceFn(pcidev))
+				break;
+		}
+		if (i != count)	/* Ignore this device if we already have it */
+			continue;
+		devp = &devtbl[count];
+		devp->host_id = driver_setup.host_id;
+		devp->attach_done = 0;
+		if (ncr53c8xx_pci_init(tpnt, pcidev, devp)) {
+			continue;
+		}
+		++count;
+#ifdef SCSI_NCR_NVRAM_SUPPORT
+		if (nvp) {
+			ncr_get_nvram(devp, nvp);
+			switch(nvp->type) {
+			case SCSI_NCR_SYMBIOS_NVRAM:
+				/*
+				 *   Switch to the other nvram buffer, so that 
+				 *   nvram0 will contain the first Symbios 
+				 *   format NVRAM content with boot order.
+				 */
+				nvp = &nvram;
+				msg = "with Symbios NVRAM";
+				break;
+			case SCSI_NCR_TEKRAM_NVRAM:
+				msg = "with Tekram NVRAM";
+				break;
+			}
+		}
+#endif
+		printk(KERN_INFO "ncr53c8xx: 53c%s detected %s\n",
+		       devp->chip.name, msg);
+	}
+
+	/*
+	**    If we have found a SYMBIOS NVRAM, use first the NVRAM boot 
+	**    sequence as device boot order.
+	**    check devices in the boot record against devices detected. 
+	**    attach devices if we find a match. boot table records that 
+	**    do not match any detected devices will be ignored. 
+	**    devices that do not match any boot table will not be attached
+	**    here but will attempt to be attached during the device table 
+	**    rescan.
+	*/
+#ifdef SCSI_NCR_NVRAM_SUPPORT
+	if (!nvp || nvram0.type != SCSI_NCR_SYMBIOS_NVRAM)
+		goto next;
+	for (i = 0; i < 4; i++) {
+		Symbios_host *h = &nvram0.data.Symbios.host[i];
+		for (j = 0 ; j < count ; j++) {
+			devp = &devtbl[j];
+			if (h->device_fn != devp->slot.device_fn ||
+			    h->bus_nr	 != devp->slot.bus	 ||
+			    h->device_id != devp->chip.device_id)
+				continue;
+			if (devp->attach_done)
+				continue;
+			ncr_get_nvram(devp, nvp);
+			if (!ncr_attach (tpnt, attach_count, devp))
+				attach_count++;
+			devp->attach_done = 1;
+			break;
+		}
+	}
+next:
 #endif
 
-	for (j = 0; j < chips ; ++j) {
-		i = driver_setup.reverse_probe ? chips-1 - j : j;
-		for (index = 0; ; index++) {
-			char *msg = "";
-			if ((pcibios_find_device(PCI_VENDOR_ID_NCR, ncr_chip_ids[i],
-						index, &bus, &device_fn)) ||
-			    (count == hosts))
-				break;
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-			device[count].nvram = k < nvrams ? &nvram[k] : 0;
-#else
-			device[count].nvram = 0;
-#endif
-			device[count].host_id = driver_setup.host_id;
-			if (ncr53c8xx_pci_init(tpnt, bus, device_fn, &device[count])) {
-				device[count].nvram = 0;
-				continue;
-			}
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-			if (device[count].nvram) {
-				++k;
-				nvram_index |= device[count].nvram->type;
-				switch (device[count].nvram->type) {
-				case SCSI_NCR_TEKRAM_NVRAM:
-					msg = "with Tekram NVRAM";
-					break;
-				case SCSI_NCR_SYMBIOS_NVRAM:
-					msg = "with Symbios NVRAM";
-					break;
-				default:
-					msg = "";
-					device[count].nvram = 0;
-					--k;
-				}
-			}
-#endif
-			printk(KERN_INFO "ncr53c8xx: 53c%s detected %s\n",
-				device[count].chip.name, msg);
-			++count;
-		}
-	}
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	attach_count = ncr_attach_using_nvram(tpnt, nvram_index, count, device);
-#endif
 	/* 
-	** rescan device list to make sure all boards attached.
-	** devices without boot records will not be attached yet
-	** so try to attach them here.
+	**    Rescan device list to make sure all boards attached.
+	**    Devices without boot records will not be attached yet
+	**    so try to attach them here.
 	*/
 	for (i= 0; i < count; i++) {
-		if (!device[i].attach_done && 
-		    !ncr_attach (tpnt, attach_count, &device[i])) {
-			attach_count++;
+		devp = &devtbl[i];
+		if (!devp->attach_done) {
+#ifdef SCSI_NCR_NVRAM_SUPPORT
+			ncr_get_nvram(devp, nvp);
+#endif
+			if (!ncr_attach (tpnt, attach_count, devp))
+				attach_count++;
 		}
 	}
+
+	kfree(devtbl);
 
 	return attach_count;
 }
 
-/*
-**   Generically read a base address from the PCI configuration space.
-**   Return the offset immediately after the base address that has 
-**   been read. Btw, we blindly assume that the high 32 bits of 64 bit 
-**   base addresses are set to zero on 32 bit architectures.
+/*===================================================================
+**    Detect and try to read SYMBIOS and TEKRAM NVRAM.
 **
+**    Data can be used to order booting of boards.
+**
+**    Data is saved in ncr_device structure if NVRAM found. This
+**    is then used to find drive boot order for ncr_attach().
+**
+**    NVRAM data is passed to Scsi_Host_Template later during 
+**    ncr_attach() for any device set up.
+*===================================================================
 */
-#if LINUX_VERSION_CODE <= LinuxVersionCode(2,1,92)
-static int __init 
-pci_read_base_address(u_char bus, u_char device_fn, int offset, u_long *base)
+#ifdef SCSI_NCR_NVRAM_SUPPORT
+static void __init ncr_get_nvram(ncr_device *devp, ncr_nvram *nvp)
 {
-	u_int32 tmp;
+	devp->nvram = nvp;
+	if (!nvp)
+		return;
+	/*
+	**    Get access to chip IO registers
+	*/
+#ifdef NCR_IOMAPPED
+	request_region(devp->slot.io_port, 128, "ncr53c8xx");
+	devp->slot.port = devp->slot.io_port;
+#else
+	devp->slot.reg = (struct ncr_reg *) remap_pci_mem(devp->slot.base, 128);
+	if (!devp->slot.reg)
+		return;
+#endif
 
-	pcibios_read_config_dword(bus, device_fn, offset, &tmp);
-	*base = tmp;
-	offset += sizeof(u_int32);
-	if ((tmp & 0x7) == 0x4) {
-#if BITS_PER_LONG > 32
-		pcibios_read_config_dword(bus, device_fn, offset, &tmp);
-		*base |= (((u_long)tmp) << 32);
-#endif
-		offset += sizeof(u_int32);
+	/*
+	**    Try to read SYMBIOS nvram.
+	**    Try to read TEKRAM nvram if Symbios nvram not found.
+	*/
+	if	(!ncr_get_Symbios_nvram(&devp->slot, &nvp->data.Symbios))
+		nvp->type = SCSI_NCR_SYMBIOS_NVRAM;
+	else if	(!ncr_get_Tekram_nvram(&devp->slot, &nvp->data.Tekram))
+		nvp->type = SCSI_NCR_TEKRAM_NVRAM;
+	else {
+		nvp->type = 0;
+		devp->nvram = 0;
 	}
-	return offset;
-}
-#elif	LINUX_VERSION_CODE <= LinuxVersionCode(2,3,12)
-static int __init 
-pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
-{
-	*base = pdev->base_address[index++];
-	if ((*base & 0x7) == 0x4) {
-#if BITS_PER_LONG > 32
-		*base |= (((u_long)pdev->base_address[index]) << 32);
+
+	/*
+	** Release access to chip IO registers
+	*/
+#ifdef NCR_IOMAPPED
+	release_region(devp->slot.port, 128);
+#else
+	unmap_pci_mem((u_long) devp->slot.reg, 128ul);
 #endif
-		++index;
-	}
-	return index;
+
 }
-#else	/* LINUX_VERSION_CODE > LinuxVersionCode(2,3,12) */
-static int __init 
-pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
-{
-	*base = pdev->resource[index].start;
-	if ((pdev->resource[index].flags & 0x7) == 0x4)
-		++index;
-	return ++index;
-}
-#endif
+#endif	/* SCSI_NCR_NVRAM_SUPPORT */
 
 /*
 **   Read and check the PCI configuration for any detected NCR 
@@ -9534,18 +9651,13 @@ pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
 **   been detected.
 */
 
-static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
-			      uchar bus, uchar device_fn, ncr_device *device)
+static int __init 
+ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 {
 	ushort vendor_id, device_id, command;
 	uchar cache_line_size, latency_timer;
 	uchar revision;
-#if LINUX_VERSION_CODE > LinuxVersionCode(2,1,92)
-	struct pci_dev *pdev;
 	uint irq;
-#else
-	uchar irq;
-#endif
 	ulong base, base_2, io_port; 
 	int i;
 #ifdef SCSI_NCR_NVRAM_SUPPORT
@@ -9555,33 +9667,20 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 
 	/*
 	**    Read info from the PCI config space.
-	**    pcibios_read_config_xxx() functions are assumed to be used for 
+	**    pci_read_config_xxx() functions are assumed to be used for 
 	**    successfully detected PCI devices.
 	*/
-#if LINUX_VERSION_CODE > LinuxVersionCode(2,1,92)
-	pdev = pci_find_slot(bus, device_fn);
-	vendor_id = pdev->vendor;
-	device_id = pdev->device;
-	irq = pdev->irq;
+	vendor_id = PciVendorId(pdev);
+	device_id = PciDeviceId(pdev);
+	irq = PciIrqLine(pdev);
 	i =	0;
 	i =	pci_get_base_address(pdev, i, &io_port);
 	i =	pci_get_base_address(pdev, i, &base);
 	(void)	pci_get_base_address(pdev, i, &base_2);
-#else
-	pcibios_read_config_word(bus, device_fn, PCI_VENDOR_ID, &vendor_id);
-	pcibios_read_config_word(bus, device_fn, PCI_DEVICE_ID, &device_id);
-	pcibios_read_config_byte(bus, device_fn, PCI_INTERRUPT_LINE, &irq);
-	i =	PCI_BASE_ADDRESS_0;
-	i =	pci_read_base_address(bus, device_fn, i, &io_port);
-	i =	pci_read_base_address(bus, device_fn, i, &base);
-	(void)	pci_read_base_address(bus, device_fn, i, &base_2);
-#endif
-	pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
-	pcibios_read_config_byte(bus, device_fn, PCI_CLASS_REVISION, &revision);
-	pcibios_read_config_byte(bus, device_fn, PCI_CACHE_LINE_SIZE,
-				 &cache_line_size);
-	pcibios_read_config_byte(bus, device_fn, PCI_LATENCY_TIMER,
-				 &latency_timer);
+	pci_read_config_word(pdev, PCI_COMMAND, &command);
+	pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
+	pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
+	pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &latency_timer);
 
 	/*
 	**	If user excludes this chip, donnot initialize it.
@@ -9631,7 +9730,9 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 #endif
 
 	printk(KERN_INFO "ncr53c8xx: at PCI bus %d, device %d, function %d\n",
-		bus, (int) (device_fn & 0xf8) >> 3, (int) device_fn & 7);
+		PciBusNumber(pdev),
+		(int) (PciDeviceFn(pdev) & 0xf8) >> 3,
+		(int) (PciDeviceFn(pdev) & 0x7));
 
 	if (!chip) {
 		printk("ncr53c8xx: not initializing, device not supported\n");
@@ -9646,8 +9747,8 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	if (!(command & PCI_COMMAND_MASTER)) {
 		printk("ncr53c8xx: attempting to force PCI_COMMAND_MASTER...");
 		command |= PCI_COMMAND_MASTER;
-		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
-		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		pci_write_config_word(pdev, PCI_COMMAND, command);
+		pci_read_config_word(pdev, PCI_COMMAND, &command);
 		if (!(command & PCI_COMMAND_MASTER)) {
 			printk("failed!\n");
 		} else {
@@ -9658,8 +9759,8 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	if (!(command & PCI_COMMAND_IO)) {
 		printk("ncr53c8xx: attempting to force PCI_COMMAND_IO...");
 		command |= PCI_COMMAND_IO;
-		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
-		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		pci_write_config_word(pdev, PCI_COMMAND, command);
+		pci_read_config_word(pdev, PCI_COMMAND, &command);
 		if (!(command & PCI_COMMAND_IO)) {
 			printk("failed!\n");
 		} else {
@@ -9670,8 +9771,8 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	if (!(command & PCI_COMMAND_MEMORY)) {
 		printk("ncr53c8xx: attempting to force PCI_COMMAND_MEMORY...");
 		command |= PCI_COMMAND_MEMORY;
-		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
-		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		pci_write_config_word(pdev, PCI_COMMAND, command);
+		pci_read_config_word(pdev, PCI_COMMAND, &command);
 		if (!(command & PCI_COMMAND_MEMORY)) {
 			printk("failed!\n");
 		} else {
@@ -9685,17 +9786,17 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		if (io_port >= 0x10000000) {
 			printk("ncr53c8xx: reallocating io_port (Wacky IBM)");
 			io_port = (io_port & 0x00FFFFFF) | 0x01000000;
-			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
+			pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, io_port);
 		}
 		if (base >= 0x10000000) {
 			printk("ncr53c8xx: reallocating base (Wacky IBM)");
 			base = (base & 0x00FFFFFF) | 0x01000000;
-			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_1, base);
+			pci_write_config_dword(pdev, PCI_BASE_ADDRESS_1, base);
 		}
 		if (base_2 >= 0x10000000) {
 			printk("ncr53c8xx: reallocating base2 (Wacky IBM)");
 			base_2 = (base_2 & 0x00FFFFFF) | 0x01000000;
-			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_2, base_2);
+			pci_write_config_dword(pdev, PCI_BASE_ADDRESS_2, base_2);
 		}
 	}
 #endif
@@ -9716,16 +9817,16 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_COMMAND_MASTER bit (fixup)\n");
 		command |= PCI_COMMAND_MASTER;
-		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
-		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		pci_write_config_word(pdev, PCI_COMMAND, command);
+		pci_read_config_word(pdev, PCI_COMMAND, &command);
 	}
 
 	if ((chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_COMMAND_INVALIDATE bit (fixup)\n");
 		command |= PCI_COMMAND_INVALIDATE;
-		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
-		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		pci_write_config_word(pdev, PCI_COMMAND, command);
+		pci_read_config_word(pdev, PCI_COMMAND, &command);
 	}
 
 	if ((chip->features & FE_CLSE) && !cache_line_size) {
@@ -9733,20 +9834,16 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		cache_line_size = 64 / sizeof(u_int32);
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n", cache_line_size);
-		pcibios_write_config_byte(bus, device_fn,
-					  PCI_CACHE_LINE_SIZE, cache_line_size);
-		pcibios_read_config_byte(bus, device_fn,
-					 PCI_CACHE_LINE_SIZE, &cache_line_size);
+		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, cache_line_size);
+		pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
 	}
 
 	if (!latency_timer) {
 		latency_timer = 128;
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
-		pcibios_write_config_byte(bus, device_fn,
-					  PCI_LATENCY_TIMER, latency_timer);
-		pcibios_read_config_byte(bus, device_fn,
-					 PCI_LATENCY_TIMER, &latency_timer);
+		pci_write_config_byte(pdev, PCI_LATENCY_TIMER, latency_timer);
+		pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &latency_timer);
 	}
 #endif	/* __sparc__ */
 
@@ -9824,8 +9921,7 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		case 5:	cache_line_size = 8; break;
 		}
 		if (cache_line_size)
-			(void) pcibios_write_config_byte(bus, device_fn,
-					PCI_CACHE_LINE_SIZE, cache_line_size);
+			(void) pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, cache_line_size);
 		if (initverbose)
 			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fix-up).\n", cache_line_size);
 	}
@@ -9833,8 +9929,7 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	if ((driver_setup.pci_fix_up & 2) && cache_line_size &&
 	    (chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
 		command |= PCI_COMMAND_INVALIDATE;
-		(void) pcibios_write_config_word(bus, device_fn,
-						PCI_COMMAND, command);
+		(void) pci_write_config_word(pdev, PCI_COMMAND, command);
 		if (initverbose)
 			printk("ncr53c8xx: setting PCI_COMMAND_INVALIDATE bit (fix-up).\n");
 	}
@@ -9876,8 +9971,7 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 			latency_timer = lt;
 			if (initverbose)
 				printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fix-up).\n", latency_timer);
-			 (void) pcibios_write_config_byte(bus, device_fn,
-					PCI_LATENCY_TIMER, latency_timer);
+			 (void) pci_write_config_byte(pdev, PCI_LATENCY_TIMER, latency_timer);
 		}
 	}
 
@@ -9900,8 +9994,8 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 #endif	/* SCSI_NCR_PCI_FIX_UP_SUPPORT */
 
  	/* initialise ncr_device structure with items required by ncr_attach */
-	device->slot.bus	= bus;
-	device->slot.device_fn	= device_fn;
+	device->slot.bus	= PciBusNumber(pdev);
+	device->slot.device_fn	= PciDeviceFn(pdev);
 	device->slot.base	= base;
 	device->slot.base_2	= base_2;
 	device->slot.io_port	= io_port;
@@ -10638,29 +10732,28 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 	info.offset	= offset;
 	info.pos	= 0;
 
-	copy_info(&info, "General information:\n");
-	copy_info(&info, "  Chip NCR53C%s, ",	np->chip_name);
-	copy_info(&info, "device id 0x%x, ",	np->device_id);
-	copy_info(&info, "revision id 0x%x\n",	np->revision_id);
-
-	copy_info(&info, "  IO port address 0x%lx, ", (u_long) np->port);
+	copy_info(&info, "  Chip NCR53C%s, device id 0x%x, "
+			 "revision id 0x%x\n",
+			 np->chip_name, np->device_id,	np->revision_id);
+	copy_info(&info, "  On PCI bus %d, device %d, function %d, "
 #ifdef __sparc__
-	copy_info(&info, "IRQ number %s\n", __irq_itoa(np->irq));
+		"IRQ %s\n",
 #else
-	copy_info(&info, "IRQ number %d\n", (int) np->irq);
+		"IRQ %d\n",
 #endif
-
-#ifndef NCR_IOMAPPED
-	if (np->reg)
-		copy_info(&info, "  Using memory mapped IO at virtual address 0x%lx\n",
-		                  (u_long) np->reg);
+		np->bus, (np->device_fn & 0xf8) >> 3, np->device_fn & 7,
+#ifdef __sparc__
+		__irq_itoa(np->irq));
+#else
+		(int) np->irq);
 #endif
-	copy_info(&info, "  Synchronous period factor %d, ", (int) np->minsync);
-	copy_info(&info, "max commands per lun %d\n", MAX_TAGS);
+	copy_info(&info, "  Synchronous period factor %d, "
+			 "max commands per lun %d\n",
+			 (int) np->minsync, MAX_TAGS);
 
 	if (driver_setup.debug || driver_setup.verbose > 1) {
-		copy_info(&info, "  Debug flags 0x%x, ", driver_setup.debug);
-		copy_info(&info, "verbosity level %d\n", driver_setup.verbose);
+		copy_info(&info, "  Debug flags 0x%x, verbosity level %d\n",
+			  driver_setup.debug, driver_setup.verbose);
 	}
 
 #ifdef SCSI_NCR_PROFILE_SUPPORT

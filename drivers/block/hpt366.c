@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/hpt366.c		Version 0.13	Sept. 3, 1999
+ * linux/drivers/block/hpt366.c		Version 0.14	Dec. 13, 1999
  *
  * Copyright (C) 1999			Andre Hedrick <andre@suse.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -507,6 +507,10 @@ void __init ide_init_hpt366 (ide_hwif_t *hwif)
 	hwif->tuneproc = &hpt366_tune_drive;
 	if (hwif->dma_base) {
 		hwif->dmaproc = &hpt366_dmaproc;
+#if 0
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
+#endif
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;

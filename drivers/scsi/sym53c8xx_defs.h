@@ -458,6 +458,10 @@
 #define PCI_DEVICE_ID_NCR_53C895A 0x12
 #endif
 
+#ifndef PCI_DEVICE_ID_NCR_53C1510D
+#define PCI_DEVICE_ID_NCR_53C1510D 0xa
+#endif
+
 /*
 **   NCR53C8XX devices features table.
 */
@@ -572,6 +576,10 @@ typedef struct {
  {PCI_DEVICE_ID_NCR_53C895A, 0xff, "895a",  6, 31, 7,			\
  FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|	\
  FE_RAM|FE_RAM8K|FE_64BIT|FE_IO256|FE_NOPM|FE_LEDC}			\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C1510D, 0xff, "1510D",  7, 31, 7,			\
+ FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|	\
+ FE_RAM|FE_IO256}\
 }
 
 /*
@@ -589,7 +597,8 @@ typedef struct {
 	PCI_DEVICE_ID_NCR_53C885,	\
 	PCI_DEVICE_ID_NCR_53C895,	\
 	PCI_DEVICE_ID_NCR_53C896,	\
-	PCI_DEVICE_ID_NCR_53C895A	\
+	PCI_DEVICE_ID_NCR_53C895A,	\
+	PCI_DEVICE_ID_NCR_53C1510D	\
 }
 
 /*
@@ -787,7 +796,8 @@ typedef struct Symbios_scam	Symbios_scam;
 **	Tekram NvRAM data format.
 */
 #define TEKRAM_NVRAM_SIZE 64
-#define TEKRAM_NVRAM_ADDRESS 0
+#define TEKRAM_93C46_NVRAM_ADDRESS 0
+#define TEKRAM_24C16_NVRAM_ADDRESS 0x40
 
 struct Tekram_nvram {
 	struct Tekram_target {

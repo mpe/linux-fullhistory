@@ -52,7 +52,7 @@ be entered as an environment variable, whereas its absence indicates that
 it will appear as a kernel argument readable via /proc/cmdline by programs
 running once the system is up.
 
-    53c7xx=		[HW,SCSI]
+    53c7xx=		[HW,SCSI] Amiga SCSI controllers
 
     adb_buttons=	[HW,MOUSE]
 
@@ -69,6 +69,8 @@ running once the system is up.
     apm=		[APM] Advanced Power Management.
 
     arcrimi=		[HW,NET]
+
+	ataflop=		[HW, M68k]
 
     atamouse=		[HW,MOUSE] Atari Mouse.
 
@@ -98,22 +100,22 @@ running once the system is up.
 
     com90xx=		[HW,NET]
 
-    console=		
+    console=		[KNL] output console + comm spec (speed, control, parity)
 
     cyclades=		[HW,SERIAL] Cyclades multi-serial port adapter.
 
-    debug		[KNL] Enable kernel debugging.
+    debug		[KNL] Enable kernel debugging (events log level).
 
     decnet=		[HW,NET]
 
-    digi=		[HW,SERIAL]
+    digi=		[HW,SERIAL] io parameters + enable/disable command
 
     digiepca=		[HW,SERIAL]
 
     dmascc=		[HW,AX25,SERIAL] AX.25 Z80SCC driver with DMA
 			support available.
 
-    dmasound=		[HW,SOUND]
+    dmasound=		[HW,SOUND] (sound subsystem buffers)
 
     dtc3181e=		[HW,SCSI]
 
@@ -123,7 +125,7 @@ running once the system is up.
 
     edb=		[HW,PS2]
 
-    ether=		[HW,NET] Ethernet.
+    ether=		[HW,NET] Ethernet cards parameters (iomem,irq,dev_name).
 
     fd_mcs=		[HW,SCSI]
 
@@ -131,7 +133,7 @@ running once the system is up.
 
     floppy=		[HW]
 
-    ftape=		[HW] Floppy Tape subsystem.
+    ftape=		[HW] Floppy Tape subsystem debugging options.
 
     gdth=		[HW,SCSI]
 
@@ -139,7 +141,8 @@ running once the system is up.
 
     gvp11=		[HW,SCSI]
 
-    hd= 		[EIDE] IDE and EIDE hard drive subsystem.
+    hd= 		[EIDE] (E)IDE hard drive subsystem
+                geometry (Cyl/heads/sectors) or tune parameters.
 
     hfmodem=		[HW,AX25]
 
@@ -147,13 +150,27 @@ running once the system is up.
 
     hisax=		[HW,ISDN]
 
+      in2000=       [HW,SCSI]
+
+      init=     [KNL]
+
+
+
     ibmmcascsi= 	[HW,MCA,SCSI] IBM MicroChannel SCSI adapter.
 
     icn=		[HW,ISDN]
 
+	ide?=		[HW] (E)IDE subsystem : config (iomem/irq), tuning or
+				debugging (serialize,reset,no{dma,tune,probe}) or
+				chipset specific parameters
+	
+	idebus=		[HW] (E)IDE subsystem : VLB/PCI bus speed
+
     in2000=		[HW,SCSI]
 
-    init=		[KNL]
+    init=		[KNL] default init level
+
+	initrd=		[KNL] initial ramdisk path
 
     ip= 		[PNP]
 
@@ -187,7 +204,7 @@ running once the system is up.
 
     kbd-reset		[VT]
 
-    load_ramdisk=	[RAM]
+    load_ramdisk=	[RAM] initrd loading boolean
 
     lp=0 		[LP] Specify parallel ports to use, e.g,
 or  lp=port[,port...]	lp=none,parport0 (lp0 not configured, lp1 uses
@@ -223,9 +240,12 @@ or  lp=auto		driver.  'lp=reset' (which can be specified in
 
     mcdx=		[HW,CD]
 
-    md= 		[HW]
+    md= 		[HW] RAID subsystems devices and level
 
     mdacon=		[MDA]
+
+    mem=		[KNL] force use XX Mb of memory when the kernel is not able
+                      to see the whole system memory or for test
 
     msmouse=		[HW,MOUSE] Microsoft Mouse.
 
@@ -241,7 +261,9 @@ or  lp=auto		driver.  'lp=reset' (which can be specified in
 
     nfsaddrs=		[NFS]
 
-    nfsroot=		[NFS]
+    nfsroot=		[NFS] nfs root filesystem for disk-less boxes
+
+	nmi_watchdog=	[KNL, BUGS=ix86] debugging features for SMP kernels
 
     no387		[BUGS=ix86] Tells the kernel to use the 387 maths
 			emulation library even if a 387 maths coprocessor
@@ -249,6 +271,10 @@ or  lp=auto		driver.  'lp=reset' (which can be specified in
 
     noapic		[SMP,APIC] Tells the kernel not to make use of any
 			APIC that may be present on the system.
+
+    noasync		[HW, M68K] Disables async and sync negotiation for all devices.
+
+    nodisconnect	[HW,SCSI, M68K] Disables SCSI disconnects.
 
     no-halt		[BUGS=ix86]
 
@@ -259,9 +285,11 @@ or  lp=auto		driver.  'lp=reset' (which can be specified in
 
     nosmp		[SMP] Tells an SMP kernel to act as a UP kernel.
 
+    nosync		[HW, M68K] Disables sync negotiation for all devices.
+
     optcd=		[HW,CD]
 
-    panic=		
+    panic=		[KNL] kernel behaviour on panic
 
     parport=0			[HW,PPT] Specify parallel ports.  0
 or  parport=auto		disables.  Use 'auto' to force the driver
@@ -293,11 +321,11 @@ or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
 
     pg. 		[PARIDE]
 
-    pirq=		[SMP,APIC]
+    pirq=		[SMP,APIC] mp-table
 
     plip=		[PPT,NET] Parallel port network link.
 
-    profile=
+    profile=	[KNL] enable kernel profiling via /proc/profile (param:log level)
 
     prompt_ramdisk=	[RAM] Whether to prompt for ramdisk before loading
 			its contents into memory.
@@ -312,15 +340,17 @@ or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
 
     reboot=		[BUGS=ix86]
 
-    reserve=
+    reserve=	[KNL,BUGS] force the kernel to ignore some iomem area
 
     riscom8=		[HW,SERIAL]
 
     ro			[KNL] Mount root device read-only on boot.
 
-    root=		
+    root=		[KNL] root filesystem
 
     rw			[KNL] Mount root device read-write on boot.
+
+    S			[KNL] run init in single mode
 
     sbpcd=		[HW,CD] Soundblaster CD adapter.
 
@@ -336,11 +366,13 @@ or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
 
     specialix=		[HW,SERIAL] Specialix multi-serial port adapter.
 
-    st= 		[HW]
+    st= 		[HW] SCSI tape parameters (buffers, ..)
 
     st0x=		[HW,SCSI]
 
     stram_swap= 	[HW]
+
+    switches=		[HW, M68K]
 
     sym53c416=		[HW,SCSI]
 
@@ -356,7 +388,10 @@ or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
 
     u14-34f=		[HW,SCSI]
 
-    video=		[FB]
+    video=		[FB]  frame buffer configuration
+
+    vga=		[KNL]  on ix386, enable to choose a peculiar video mode
+                       vga=ask
 
     wd33c93=		[HW,SCSI]
 
@@ -364,6 +399,6 @@ or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
 
     wdt=		[HW]
 
-    xd= 		[HW,XT]
+    xd= 		[HW,XT] Original XT pre-IDE (RLL encoded) disks
 
     xd_geo=		[HW,XT]

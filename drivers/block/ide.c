@@ -136,6 +136,9 @@
 #include <linux/genhd.h>
 #include <linux/blkpg.h>
 #include <linux/malloc.h>
+#ifndef MODULE
+#include <linux/init.h>
+#endif /* MODULE */
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
@@ -1219,6 +1222,8 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 
 	ide_get_lock(&ide_lock, ide_intr, hwgroup);	/* for atari only: POSSIBLY BROKEN HERE(?) */
 
+	__cli();	/* necessary paranoia: ensure IRQs are masked on local CPU */
+
 	while (!hwgroup->busy) {
 		hwgroup->busy = 1;
 		drive = choose_drive(hwgroup);
@@ -1538,14 +1543,8 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 		} else {
 			/*
 			 * Whack the status register, just in case we have a leftover pending IRQ.
-			 *
-			 * Unless we are some version of a Promise Ultra66 :: PDC20262.
-			 * We will hang like a rock....
 			 */
-			byte skip_status = ((hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20262) ||
-					    (hwif->pci_dev->device == PCI_DEVICE_ID_TTI_HPT366)) ? 1 : 0;
-			if (!skip_status)
-				(void) IN_BYTE(hwif->io_ports[IDE_STATUS_OFFSET]);
+			(void) IN_BYTE(hwif->io_ports[IDE_STATUS_OFFSET]);
 #endif /* CONFIG_BLK_DEV_IDEPCI */
 		}
 		spin_unlock_irqrestore(&io_request_lock, flags);
@@ -2337,6 +2336,7 @@ void ide_add_generic_settings (ide_drive_t *drive)
 	ide_add_setting(drive,	"slow",			SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	1,				1,		1,		&drive->slow,			NULL);
 	ide_add_setting(drive,	"unmaskirq",		drive->no_unmask ? SETTING_READ : SETTING_RW,	HDIO_GET_UNMASKINTR,	HDIO_SET_UNMASKINTR,	TYPE_BYTE,	0,	1,				1,		1,		&drive->unmask,			NULL);
 	ide_add_setting(drive,	"using_dma",		SETTING_RW,					HDIO_GET_DMA,		HDIO_SET_DMA,		TYPE_BYTE,	0,	1,				1,		1,		&drive->using_dma,		set_using_dma);
+	ide_add_setting(drive,	"ide_scsi",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	1,				1,		1,		&drive->scsi,			NULL);
 }
 
 int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int sectors, byte *buf)
@@ -2457,54 +2457,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			err = ide_wait_cmd(drive, args[0], args[1], args[2], args[3], argbuf);
 
 			if (!err && set_transfer(drive, args[0], args[1], args[2])) {
-
-#if 1
 				ide_driveid_update(drive);
-#else				/* 
-				 * Re-read drive->id for possible DMA mode 
-				 * change (copied from ide-probe.c)
-				 */
-				struct hd_driveid *id;
-				unsigned long timeout, irqs, flags;
-
-				probe_irq_off(probe_irq_on());
-				irqs = probe_irq_on();
-				if (IDE_CONTROL_REG)
-					OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
-				ide_delay_50ms();
-				OUT_BYTE(WIN_IDENTIFY, IDE_COMMAND_REG);
-				timeout = jiffies + WAIT_WORSTCASE;
-				do {
-					if (0 < (signed long)(jiffies - timeout)) {
-						if (irqs)
-							(void) probe_irq_off(irqs);
-						goto abort;	/* drive timed-out */
-					}
-					ide_delay_50ms();		/* give drive a breather */
-				} while (IN_BYTE(IDE_ALTSTATUS_REG) & BUSY_STAT);
-				ide_delay_50ms();           /* wait for IRQ and DRQ_STAT */
-				if (!OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT))
-					goto abort;
-				__save_flags(flags);	/* local CPU only */
-				__cli();		/* local CPU only; some systems need this */
-				id = kmalloc(SECTOR_WORDS*4, GFP_ATOMIC);
-				ide_input_data(drive, id, SECTOR_WORDS);
-				(void) GET_STAT();	/* clear drive IRQ */
-				ide__sti();		/* local CPU only */
-				__restore_flags(flags);	/* local CPU only */
-				ide_fix_driveid(id);
-				if (id && id->cyls) {
-					drive->id->dma_ultra = id->dma_ultra;
-					drive->id->dma_mword = id->dma_mword;
-					drive->id->dma_1word = id->dma_1word;
-					/* anything more ? */
-#ifdef DEBUG
-					printk("%s: dma_ultra=%04X, dma_mword=%04X, dma_1word=%04X\n",
-						drive->name, id->dma_ultra, id->dma_mword, id->dma_1word);
-#endif
-				kfree(id);
-				}
-#endif
 			}
 		abort:
 			if (copy_to_user((void *)arg, argbuf, argsize))
@@ -2690,7 +2643,9 @@ static int __init match_parm (char *s, const char *keywords[], int vals[], int m
  * "hdx=flash"		: allows for more than one ata_flash disk to be
  *				registered. In most cases, only one device
  *				will be present.
- *
+ * "hdx=scsi"		: the return of the ide-scsi flag, this is useful for
+ *				allowwing ide-floppy, ide-tape, and ide-cdrom|writers
+ *				to use ide-scsi emulation on a device specific option.
  * "idebus=xx"		: inform IDE driver of VESA/PCI bus speed in MHz,
  *				where "xx" is between 20 and 66 inclusive,
  *				used when tuning chipset PIO modes.
@@ -2752,7 +2707,7 @@ static int __init match_parm (char *s, const char *keywords[], int vals[], int m
  * "idex=dc4030"	: probe/support Promise DC4030VL interface
  * "ide=doubler"	: probe/support IDE doublers on Amiga
  */
-void __init ide_setup (char *s)
+int __init ide_setup (char *s)
 {
 	int i, vals[3];
 	ide_hwif_t *hwif;
@@ -2769,7 +2724,7 @@ void __init ide_setup (char *s)
 
 		printk("ide: Enabled support for IDE doublers\n");
 		ide_doubler = 1;
-		return;
+		return 0;
 	}
 #endif /* CONFIG_BLK_DEV_IDEDOUBLER */
 
@@ -2782,7 +2737,7 @@ void __init ide_setup (char *s)
 		const char *hd_words[] = {"none", "noprobe", "nowerr", "cdrom",
 				"serialize", "autotune", "noautotune",
 				"slow", "swapdata", "bswap", "flash",
-				"remap", "noremap", NULL};
+				"remap", "noremap", "scsi", NULL};
 		unit = s[2] - 'a';
 		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
@@ -2845,6 +2800,15 @@ void __init ide_setup (char *s)
 			case -13: /* "noremap" */
 				drive->remap_0_to_1 = 2;
 				goto done;
+			case -14: /* "scsi" */
+#if defined(CONFIG_BLK_DEV_IDESCSI) && defined(CONFIG_SCSI)
+				drive->scsi = 1;
+				goto done;
+#else
+#warning ide scsi-emulation selected but no SCSI-subsystem in kernel
+				drive->scsi = 0;
+				goto bad_option;
+#endif /* defined(CONFIG_BLK_DEV_IDESCSI) && defined(CONFIG_SCSI) */
 			case 3: /* cyl,head,sect */
 				drive->media	= ide_disk;
 				drive->cyl	= drive->bios_cyl  = vals[0];
@@ -3076,25 +3040,18 @@ void __init ide_setup (char *s)
 			case 0: goto bad_option;
 			default:
 				printk(" -- SUPPORT NOT CONFIGURED IN THIS KERNEL\n");
-				return;
+				return 0;
 		}
 	}
 bad_option:
 	printk(" -- BAD OPTION\n");
-	return;
+	return 0;
 bad_hwif:
 	printk("-- NOT SUPPORTED ON ide%d", hw);
 done:
 	printk("\n");
+	return 0;
 }
-
-/*
- * __setup("ide", ide_setup);
- * #ifdef CONFIG_BLK_DEV_VIA82CXXX
- * __setup("splitfifo", ide_setup);
- * #endif
- * __setup("hd", ide_setup);
- */
 
 /*
  * probe_for_hwifs() finds/initializes "known" IDE interfaces
@@ -3517,10 +3474,6 @@ int __init ide_init (void)
 	return 0;
 }
 
-#ifdef MODULE
-char *options = NULL;
-MODULE_PARM(options,"s");
-
 static void __init parse_options (char *line)
 {
 	char *next = line;
@@ -3534,10 +3487,15 @@ static void __init parse_options (char *line)
 #ifdef CONFIG_BLK_DEV_VIA82CXXX
 		    !strncmp(line,"splitfifo",9) ||
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */
+		    !strncmp(line,"hdxlun",6) ||
 		    (!strncmp(line,"hd",2) && line[2] != '='))
-			ide_setup(line);
+			(void) ide_setup(line);
 	}
 }
+
+#ifdef MODULE
+char *options = NULL;
+MODULE_PARM(options,"s");
 
 int init_module (void)
 {
@@ -3560,4 +3518,14 @@ void cleanup_module (void)
 	proc_ide_destroy();
 #endif
 }
+
+#else /* !MODULE */
+
+static int parse_ide_setup (char *line)
+{
+	parse_options(line);
+	return 0;
+}
+__setup("", parse_ide_setup);
+
 #endif /* MODULE */

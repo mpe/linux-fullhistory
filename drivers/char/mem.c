@@ -15,7 +15,6 @@
 #include <linux/random.h>
 #include <linux/init.h>
 #include <linux/joystick.h>
-#include <linux/i2c.h>
 #include <linux/raw.h>
 #include <linux/capability.h>
 
@@ -23,6 +22,12 @@
 #include <asm/io.h>
 #include <asm/pgalloc.h>
 
+#ifdef CONFIG_VIDEO_BT848
+extern int i2c_init(void);
+#endif
+#ifdef CONFIG_I2C
+extern int i2c_init_all(void);
+#endif
 #ifdef CONFIG_SOUND
 void soundcore_init(void);
 #ifdef CONFIG_SOUND_OSS
@@ -664,6 +669,10 @@ int __init chr_dev_init(void)
 #ifdef CONFIG_FTAPE
 	ftape_init();
 #endif
+#ifdef CONFIG_I2C
+	i2c_init_all();
+#endif
+
 #ifdef CONFIG_VIDEO_BT848
 	i2c_init();
 #endif

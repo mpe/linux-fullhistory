@@ -11,7 +11,7 @@ SUB_DIRS     := block char net parport sound misc
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp i2o \
 				macintosh video dio zorro fc4 usb \
-				nubus tc ap1000 atm pcmcia
+				nubus tc ap1000 atm pcmcia i2c
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -139,6 +139,15 @@ endif
 ifeq ($(CONFIG_HAMRADIO),y)
   SUB_DIRS += net/hamradio
   MOD_SUB_DIRS += net/hamradio
+endif
+
+ifeq ($(CONFIG_I2C),y)
+SUB_DIRS += i2c
+MOD_SUB_DIRS += i2c
+else
+  ifeq ($(CONFIG_I2C),m)
+  MOD_SUB_DIRS += i2c
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

@@ -99,6 +99,8 @@
 
 #define SETFEATURES_EN_WCACHE	0x02	/* Enable write cache */
 #define SETFEATURES_XFER	0x03	/* Set transfer mode */
+#	define XFER_UDMA_6	0x46	/* 0100|0110 */
+#	define XFER_UDMA_5	0x45	/* 0100|0101 */
 #	define XFER_UDMA_4	0x44	/* 0100|0100 */
 #	define XFER_UDMA_3	0x43	/* 0100|0011 */
 #	define XFER_UDMA_2	0x42	/* 0100|0010 */

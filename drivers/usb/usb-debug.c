@@ -4,8 +4,8 @@
  * I just want these out of the way where they aren't in your
  * face, but so that you can still use them..
  */
+#include <linux/version.h>
 #include <linux/kernel.h>
-
 #include "usb.h"
 
 static void usb_show_endpoint(struct usb_endpoint_descriptor *endpoint)

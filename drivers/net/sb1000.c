@@ -1251,8 +1251,8 @@ init_module(void)
 void cleanup_module(void)
 {
 	unregister_netdev(&dev_sb1000);
-	release_region(&dev_sb1000.base_addr, 16);
-	release_region(&dev_sb1000.rmem_end, 16);
+	release_region(dev_sb1000.base_addr, 16);
+	release_region(dev_sb1000.rmem_end, 16);
 	kfree_s(dev_sb1000.priv, sizeof(struct sb1000_private));
 	dev_sb1000.priv = NULL;
 }

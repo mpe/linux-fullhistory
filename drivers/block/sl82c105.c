@@ -79,13 +79,13 @@ static int ide_set_drive_pio_mode(ide_drive_t *drive, byte pio)
 				  BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD)) {
 			printk("%s: drive not ready for command\n",
 			       drive->name);
-			return 1;
+			return 1;	/* return startstop; ?? */
 		}
 		if (IDE_CONTROL_REG)
 			OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
 	}
 
-	return 0;
+	return 0;	/* return startstop; ?? */
 }
 
 /*

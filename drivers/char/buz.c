@@ -54,7 +54,7 @@
 #include <linux/version.h>
 #include <asm/uaccess.h>
 
-#include <linux/i2c.h>
+#include <linux/i2c-old.h>
 #include "buz.h"
 #include <linux/video_decoder.h>
 #include <linux/video_encoder.h>

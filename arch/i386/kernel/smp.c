@@ -11,6 +11,7 @@
 #include <linux/init.h>
 
 #include <linux/mm.h>
+#include <linux/spinlock.h>
 #include <linux/kernel_stat.h>
 #include <linux/smp_lock.h>
 #include <linux/irq.h>
@@ -638,11 +639,18 @@ int prof_counter[NR_CPUS] = { 1, };
  */
 static unsigned int __init get_8254_timer_count(void)
 {
+	extern rwlock_t xtime_lock;
+	unsigned long flags;
+
 	unsigned int count;
+
+	write_lock_irqsave(&xtime_lock, flags);
 
 	outb_p(0x00, 0x43);
 	count = inb_p(0x40);
 	count |= inb_p(0x40) << 8;
+
+	write_unlock_irqrestore(&xtime_lock, flags);
 
 	return count;
 }

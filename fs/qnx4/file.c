@@ -249,7 +249,7 @@ static int qnx4_readpage(struct dentry *dentry, struct page *page)
 	} else {
 		set_bit(PG_uptodate, &page->flags);
 	}
-	Unlock_Page(page);
+	UnlockPage(page);
 /*  free_page(buf); */
 
 	return res;

@@ -480,6 +480,11 @@ D: trivial hack to add variable address length routing to Rose.
 D: AX25-HOWTO, HAM-HOWTO, IPX-HOWTO, NET-2-HOWTO
 D: ax25-utils maintainer.
 
+N: Peter Denison
+E: peterd@pnd-pc.demon.co.uk
+W: http://www.pnd-pc.demon.co.uk/promise/
+D: Promise DC4030VL caching HD controller drivers
+
 N: Todd J. Derr
 E: tjd@fore.com
 W: http://www.wordsmith.org/~tjd
@@ -727,7 +732,7 @@ D: Transformed old user space bdflush into 1st kernel thread - kflushd.
 D: Many other patches, documentation files, mini kernels, utilities, ...
 
 N: John E. Gotts
-E: jgotts@engin.umich.edu
+E: jgotts@linuxsavvy.com
 D: kernel hacker
 S: 8124 Constitution Apt. 7
 S: Sterling Heights, Michigan 48313
@@ -820,6 +825,7 @@ N: Andre Hedrick
 E: andre@suse.com
 D: Random SMP kernel hacker...
 D: Uniform Multi-Platform E-IDE driver
+D: AEC6210UF Ultra33
 D: Aladdin 1533/1543(C) chipset
 D: Active-Chipset maddness..........
 D: HighPoint HPT343/5 Ultra/33 & HPT366 Ultra/66 chipsets
@@ -827,7 +833,8 @@ D: Intel PIIX chipset
 D: Promise PDC20246/20247 & PDC20262 chipsets
 D: SiS5513 Ultra/66/33 chipsets
 D: VIA 82C586/596/686 chipsets
-S: Nashville, TN
+S: 580 Second Street, Suite 2
+S: Oakland, CA
 S: USA
 
 N: Jochen Hein

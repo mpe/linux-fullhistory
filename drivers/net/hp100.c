@@ -192,8 +192,8 @@ struct hp100_private {
   struct pci_dev *pci_dev;
 #endif
   short mem_mapped;	  /* memory mapped access */
-  u_int *mem_ptr_virt;    /* virtual memory mapped area, maybe NULL */
-  u_int *mem_ptr_phys;	  /* physical memory mapped area */
+  u32 *mem_ptr_virt;    /* virtual memory mapped area, maybe NULL */
+  unsigned long mem_ptr_phys;	  /* physical memory mapped area */
   short lan_type;	  /* 10Mb/s, 100Mb/s or -1 (error) */
   int hub_status;	  /* was login to hub successful? */
   u_char mac1_mode;
@@ -532,7 +532,8 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   u_int memory_size = 0, virt_memory_size = 0;
   u_short local_mode, lsw;
   short mem_mapped;
-  u_int *mem_ptr_phys, *mem_ptr_virt;
+  unsigned long mem_ptr_phys;
+  u32 **mem_ptr_virt;
   struct hp100_private *lp;
   struct hp100_eisa_id *eid;
 
@@ -722,21 +723,22 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   /* Check for shared memory on the card, eventually remap it */
   hp100_page( HW_MAP );
   mem_mapped = (( hp100_inw( OPTION_LSW ) & ( HP100_MEM_EN ) ) != 0);
-  mem_ptr_phys = mem_ptr_virt = NULL;
+  mem_ptr_phys = 0UL;
+  mem_ptr_virt = NULL;
   memory_size = (8192<<( (hp100_inb(SRAM)>>5)&0x07));
   virt_memory_size = 0;
 
   /* For memory mapped or busmaster mode, we want the memory address */
   if ( mem_mapped || (local_mode==1))
     {
-      mem_ptr_phys = (u_int *)( hp100_inw( MEM_MAP_LSW ) | 
+      mem_ptr_phys = ( hp100_inw( MEM_MAP_LSW ) | 
 				( hp100_inw( MEM_MAP_MSW ) << 16 ) );
-      (u_int)mem_ptr_phys &= ~0x1fff;  /* 8k alignment */
+      mem_ptr_phys &= ~0x1fff;  /* 8k alignment */
 
-      if ( bus == HP100_BUS_ISA && ( (u_long)mem_ptr_phys & ~0xfffff ) != 0 )
+      if ( bus == HP100_BUS_ISA && (mem_ptr_phys & ~0xfffff ) != 0 )
         {
 	  printk("hp100: %s: Can only use programmed i/o mode.\n", dev->name);
-          mem_ptr_phys = NULL;
+          mem_ptr_phys = 0;
           mem_mapped = 0;
 	  local_mode=3; /* Use programmed i/o */
         }
@@ -745,7 +747,7 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
       /* However in slave mode we need to remap high (>1GB) card memory  */
       if(local_mode!=1) /* = not busmaster */
 	{
-	  if ( bus == HP100_BUS_PCI && mem_ptr_phys >= (u_int *)0x100000 )
+	  if ( bus == HP100_BUS_PCI && mem_ptr_phys >= 0x100000 )
 	    {
 	      /* We try with smaller memory sizes, if ioremap fails */
 	      for(virt_memory_size = memory_size; virt_memory_size>16383; virt_memory_size>>=1)
@@ -753,13 +755,13 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
 		  if((mem_ptr_virt=ioremap((u_long)mem_ptr_phys,virt_memory_size))==NULL)
 		    {
 #ifdef HP100_DEBUG
-		      printk( "hp100: %s: ioremap for 0x%x bytes high PCI memory at 0x%lx failed\n", dev->name, virt_memory_size, (u_long)mem_ptr_phys );
+		      printk( "hp100: %s: ioremap for 0x%x bytes high PCI memory at 0x%lx failed\n", dev->name, virt_memory_size, mem_ptr_phys );
 #endif
 		    }	
 		  else
 		    {
 #ifdef HP100_DEBUG
-		      printk( "hp100: %s: remapped 0x%x bytes high PCI memory at 0x%lx to 0x%lx.\n", dev->name, virt_memory_size, (u_long)mem_ptr_phys, (u_long)mem_ptr_virt);
+		      printk( "hp100: %s: remapped 0x%x bytes high PCI memory at 0x%lx to 0x%lx.\n", dev->name, virt_memory_size, mem_ptr_phys, (u_long)mem_ptr_virt);
 #endif
 		      break;
 		    }
@@ -779,7 +781,8 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   if(local_mode==3) /* io mapped forced */
     {
       mem_mapped = 0;
-      mem_ptr_phys = mem_ptr_virt = NULL;
+      mem_ptr_phys = 0;
+      mem_ptr_virt = NULL;
       printk("hp100: %s: Using (slow) programmed i/o mode.\n", dev->name);
     }
 
@@ -908,15 +911,15 @@ static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, 
   if ( lp->mode==2 ) /* memory mapped */ 
     {
       printk( "hp100: %s: Memory area at 0x%lx-0x%lx",
-              dev->name,(u_long)mem_ptr_phys,
-              ((u_long)mem_ptr_phys+(mem_ptr_phys>(u_int *)0x100000?(u_long)lp->memory_size:16*1024))-1 );
+              dev->name,mem_ptr_phys,
+              (mem_ptr_phys+(mem_ptr_phys>0x100000?(u_long)lp->memory_size:16*1024))-1 );
       if ( mem_ptr_virt )
 	printk( " (virtual base 0x%lx)", (u_long)mem_ptr_virt );
       printk( ".\n" );
 
       /* Set for info when doing ifconfig */
-      dev->mem_start = (u_long)mem_ptr_phys;
-      dev->mem_end = (u_long)mem_ptr_phys+(u_long)lp->memory_size;
+      dev->mem_start = mem_ptr_phys;
+      dev->mem_end = mem_ptr_phys+lp->memory_size;
     }
   printk( "hp100: %s: ", dev->name );
   if ( lp->lan_type != HP100_LAN_ERR )
@@ -1935,9 +1938,9 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
       else
 	{
 	  /* Note: The J2585B needs alignment to 32bits here!  */
-	  memcpy_toio( lp->mem_ptr_phys, skb->data, (skb->len + 3) & ~3 );
+	  isa_memcpy_toio( lp->mem_ptr_phys, skb->data, (skb->len + 3) & ~3 );
 	  if ( !ok_flag )
-	    memset_io( lp->mem_ptr_phys, 0, HP100_MIN_PACKET_SIZE - skb->len );
+	    isa_memset_io( lp->mem_ptr_phys, 0, HP100_MIN_PACKET_SIZE - skb->len );
 	}
     }
   else /* programmed i/o */
@@ -2019,9 +2022,9 @@ static void hp100_rx( struct net_device *dev )
       if( lp->mode==2 ) /* memory mapped mode */
         {
           if ( lp->mem_ptr_virt )    /* if memory was remapped */
-            header = *(__u32 *)lp->mem_ptr_virt;
+            header = readl(lp->mem_ptr_virt);
           else
-            header = readl( lp->mem_ptr_phys );
+            header = isa_readl( lp->mem_ptr_phys );
         }
       else /* programmed i/o */
         header = hp100_inl( DATA32 );
@@ -2060,7 +2063,7 @@ static void hp100_rx( struct net_device *dev )
                 memcpy( ptr, lp->mem_ptr_virt, pkt_len );
               /* Note alignment to 32bit transfers */
               else
-                memcpy_fromio( ptr, lp->mem_ptr_phys, pkt_len );
+                isa_memcpy_fromio( ptr, lp->mem_ptr_phys, pkt_len );
             }
 	  else /* io mapped */
 	    insl( ioaddr + HP100_REG_DATA32, ptr, pkt_len >> 2 );

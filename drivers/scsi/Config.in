@@ -11,7 +11,7 @@ dep_tristate '  SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
 
 #if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'Enable extra checks in new queueing code' CONFIG_SCSI_DEBUG_QUEUES
+   bool '  Enable extra checks in new queueing code' CONFIG_SCSI_DEBUG_QUEUES
 #fi
 
 bool '  Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
@@ -46,11 +46,11 @@ if [ "$CONFIG_SCSI_BUSLOGIC" != "n" ]; then
 fi
 dep_tristate 'DTC3180/3280 SCSI support' CONFIG_SCSI_DTC3280 $CONFIG_SCSI
 dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support' CONFIG_SCSI_EATA $CONFIG_SCSI
-   if [ "$CONFIG_SCSI_EATA" != "n" ]; then
-      bool '  enable tagged command queueing' CONFIG_SCSI_EATA_TAGGED_QUEUE
-      bool '  enable elevator sorting' CONFIG_SCSI_EATA_LINKED_COMMANDS
-      int  'maximum number of queued commands' CONFIG_SCSI_EATA_MAX_TAGS 16
-   fi
+if [ "$CONFIG_SCSI_EATA" != "n" ]; then
+   bool '  enable tagged command queueing' CONFIG_SCSI_EATA_TAGGED_QUEUE
+   bool '  enable elevator sorting' CONFIG_SCSI_EATA_LINKED_COMMANDS
+   int  'maximum number of queued commands' CONFIG_SCSI_EATA_MAX_TAGS 16
+fi
 dep_tristate 'EATA-DMA [Obsolete] (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support' CONFIG_SCSI_EATA_DMA $CONFIG_SCSI
 dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
 dep_tristate 'Future Domain 16xx SCSI/AHA-2920A support' CONFIG_SCSI_FUTURE_DOMAIN $CONFIG_SCSI

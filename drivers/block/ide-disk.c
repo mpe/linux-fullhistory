@@ -241,9 +241,10 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 #ifdef CONFIG_BLK_DEV_PDC4030
 		rq->sector += nsect;
 #endif
-		if ((rq->nr_sectors -= nsect) <= 0)
-		{
-	                spin_unlock_irqrestore(&io_request_lock, flags);
+		if ((rq->nr_sectors -= nsect) <= 0) {
+			printk("%s: multwrite: count=%d, current=%ld\n",
+				drive->name, nsect, rq->nr_sectors);
+			spin_unlock_irqrestore(&io_request_lock, flags);
 			break;
 		}
 		if ((rq->current_nr_sectors -= nsect) == 0) {

@@ -9,20 +9,11 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4 and others) support' CONFIG_USB_UHCI \
 	$CONFIG_USB
-   dep_tristate '  OHCI (Compaq and some others) support' CONFIG_USB_OHCI \
-	$CONFIG_USB
 
-   if [ "$CONFIG_USB_OHCI" != "n" ]; then
-      bool '    Enable tons of OHCI debugging output' CONFIG_USB_OHCI_DEBUG
-   fi
-   dep_tristate '  OHCI-HCD (other OHCI opt. Virt. Root Hub) support' \
+   dep_tristate '  OHCI-HCD (compaq and some others) support' \
 		CONFIG_USB_OHCI_HCD $CONFIG_USB
-   if [ "$CONFIG_USB_OHCI_HCD" != "n" ]; then
-      bool '    OHCI-HCD Virtual Root Hub' CONFIG_USB_OHCI_VROOTHUB
-   fi
 
 comment 'Miscellaneous USB options'
-   bool '  Enable lots of ISOC debugging output' CONFIG_USB_DEBUG_ISOC
    if [ "$CONFIG_PROC_FS" != "n" ]; then
       bool '  Preliminary /proc/bus/usb support' CONFIG_USB_PROC
    fi
@@ -43,6 +34,7 @@ comment 'USB Devices'
       bool '    USB SCSI verbose debug' CONFIG_USB_SCSI_DEBUG
    fi
    dep_tristate '  USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
+   dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB 
 fi
 
 endmenu

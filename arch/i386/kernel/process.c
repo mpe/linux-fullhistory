@@ -69,6 +69,16 @@ void (*acpi_idle)(void) = NULL;
 void (*acpi_power_off)(void) = NULL;
 
 /*
+ * We use this if we don't have any better
+ * idle routine..
+ */
+static void default_idle(void)
+{
+	if (current_cpu_data.hlt_works_ok && !hlt_counter)
+		asm volatile("sti ; hlt" : : : "memory");
+}
+
+/*
  * The idle thread. There's no useful work to be
  * done, so just try to conserve power and have a
  * low exit latency (ie sit in a loop waiting for
@@ -82,25 +92,15 @@ void cpu_idle(void)
 	current->counter = -100;
 
 	while (1) {
-		while (!current->need_resched) {
-			if (!current_cpu_data.hlt_works_ok)
-				continue;
-			if (hlt_counter)
-				continue;
-			asm volatile("sti ; hlt" : : : "memory");
-		}
+		void (*idle)(void) = acpi_idle;
+		if (!idle)
+			idle = default_idle;
+		while (!current->need_resched)
+			idle();
 		schedule();
 		check_pgt_cache();
-		if (acpi_idle)
-			acpi_idle();
 	}
 }
-
-/*
- * This routine reboots the machine by asking the keyboard
- * controller to pulse the reset-line low. We try that for a while,
- * and if it doesn't work, we do some other stupid things.
- */
 
 static long no_idt[2] = {0, 0};
 static int reboot_mode = 0;

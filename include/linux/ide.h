@@ -262,6 +262,7 @@ typedef struct ide_drive_s {
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 	unsigned remap_0_to_1	: 2;	/* 0=remap if ezdrive, 1=remap, 2=noremap */
 	unsigned ata_flash	: 1;	/* 1=present, 0=default */
+	byte		scsi;		/* 0=default, 1=skip current ide-subdriver for ide-scsi emulation */
 	byte		media;		/* disk, cdrom, tape, floppy, ... */
 	select_t	select;		/* basic drive/head select reg value */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
@@ -399,7 +400,7 @@ typedef struct hwif_s {
 #endif
 } ide_hwif_t;
 
-  /*
+/*
  * Status returned from various ide_ functions
  */
 typedef enum {
@@ -428,7 +429,7 @@ typedef struct hwgroup_s {
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
 	unsigned long		poll_timeout;	/* timeout value during long polls */
-	ide_expiry_t		*expiry; /* queried upon timeouts */
+	ide_expiry_t		*expiry;	/* queried upon timeouts */
 } ide_hwgroup_t;
 
 /*

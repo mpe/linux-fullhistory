@@ -38,4 +38,8 @@ struct stat {
 	unsigned long  __unused5;
 };
 
+/* stat64 struct goes here -- someone please make
+ * it mesh with whatever glibc does in userland on
+ * m68k's.
+ */
 #endif /* _M68K_STAT_H */

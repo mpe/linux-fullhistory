@@ -1,0 +1,53 @@
+make[1]: Entering directory `/home/kraxel/2/src/bttv-0.7.10/driver'
+bttv.o
+  card=0 - unknown
+  card=1 - MIRO PCTV
+  card=2 - Hauppauge old
+  card=3 - STB
+  card=4 - Intel
+  card=5 - Diamond DTV2000
+  card=6 - AVerMedia TVPhone
+  card=7 - MATRIX-Vision MV-Delta
+  card=8 - Fly Video II
+  card=9 - TurboTV
+  card=10 - Hauppauge new (bt878)
+  card=11 - MIRO PCTV pro
+  card=12 - ADS Technologies Channel Surfer TV
+  card=13 - AVerMedia TVCapture 98
+  card=14 - Aimslab VHX
+  card=15 - Zoltrix TV-Max
+  card=16 - Pixelview PlayTV (bt878)
+  card=17 - Leadtek WinView 601
+  card=18 - AVEC Intercapture
+  card=19 - LifeView FlyKit w/o Tuner
+  card=20 - CEI Raffles Card
+  card=21 - Lucky Star Image World ConferenceTV
+  card=22 - Phoebe Tv Master + FM
+  card=23 - Modular Technology MM205 PCTV, bt878
+  card=24 - Magic TView CPH061 (bt878)
+  card=25 - Terratec/Vobis TV-Boostar
+  card=26 - Newer Hauppauge WinCam (bt878)
+  card=27 - MAXI TV Video PCI2
+  card=28 - Terratec TerraTV+
+  card=29 - Imagenation PXC200
+  card=30 - FlyVideo 98
+  card=31 - iProTV
+  card=32 - Intel Create and Share PCI
+  card=33 - Askey/Typhoon/Anubis Magic TView
+
+tuner.o
+  type=0 - Temic PAL
+  type=1 - Philips PAL_I
+  type=2 - Philips NTSC
+  type=3 - Philips SECAM
+  type=4 - NoTuner
+  type=5 - Philips PAL
+  type=6 - Temic NTSC
+  type=7 - Temic PAL_I
+  type=8 - Temic 4036 FY5 NTSC
+  type=9 - Alps HSBH1
+  type=10 - Alps TSBE1
+  type=11 - Alps TSBB5
+  type=12 - Alps TSBE5
+  type=13 - Alps TSBC5
+make[1]: Leaving directory `/home/kraxel/2/src/bttv-0.7.10/driver'

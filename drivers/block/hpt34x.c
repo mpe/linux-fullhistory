@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/hpt34x.c		Version 0.27	Sept 03, 1999
+ * linux/drivers/block/hpt34x.c		Version 0.28	Dec. 13, 1999
  *
  * Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
@@ -377,6 +377,8 @@ void __init ide_init_hpt34x (ide_hwif_t *hwif)
 #endif
 #endif /* CONFIG_BLK_DEV_HPT34X_DMA */
 		hwif->dmaproc = &hpt34x_dmaproc;
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;

@@ -22,7 +22,7 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 
-#include "ide.h"
+#include <linux/ide.h>
 
     /*
      *  Bases of the IDE interfaces

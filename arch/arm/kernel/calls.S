@@ -85,7 +85,7 @@
 		.long	SYMBOL_NAME(sys_sigpending)
 		.long	SYMBOL_NAME(sys_sethostname)
 /* 75 */	.long	SYMBOL_NAME(sys_setrlimit)
-		.long	SYMBOL_NAME(sys_getrlimit)
+		.long	SYMBOL_NAME(sys_old_getrlimit)
 		.long	SYMBOL_NAME(sys_getrusage)
 		.long	SYMBOL_NAME(sys_gettimeofday)
 		.long	SYMBOL_NAME(sys_settimeofday)
@@ -200,8 +200,15 @@
 		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_ni_syscall)
 /* 190 */	.long	SYMBOL_NAME(sys_vfork_wrapper)
+		.long	SYMBOL_NAME(sys_getrlimit)
+		.long	SYMBOL_NAME(sys_mmap2)
+		.long	SYMBOL_NAME(sys_truncate64)
+		.long	SYMBOL_NAME(sys_ftruncate64)
+/* 195 */	.long	SYMBOL_NAME(sys_stat64)
+		.long	SYMBOL_NAME(sys_lstat64)
+		.long	SYMBOL_NAME(sys_fstat64)
 
-		.rept	NR_syscalls-186
+		.rept	NR_syscalls-197
 			.long	SYMBOL_NAME(sys_ni_syscall)
 		.endr
 #endif

@@ -29,6 +29,8 @@
 #define DEVID_PIIXb	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
+#define DEVID_PIIX4E	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AA_1})
+#define DEVID_PIIX4U	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AB_1})
 #define DEVID_VIA_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C561})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
@@ -171,11 +173,14 @@ extern void ide_init_pdc202xx(ide_hwif_t *);
 
 #ifdef CONFIG_BLK_DEV_PIIX
 extern unsigned int pci_init_piix(struct pci_dev *, const char *);
+extern unsigned int ata66_piix(ide_hwif_t *);
 extern void ide_init_piix(ide_hwif_t *);
 #define PCI_PIIX	&pci_init_piix
+#define ATA66_PIIX	&ata66_piix
 #define INIT_PIIX	&ide_init_piix
 #else
 #define PCI_PIIX	NULL
+#define ATA66_PIIX	NULL
 #define INIT_PIIX	NULL
 #endif
 
@@ -254,6 +259,8 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_PIIXb,	"PIIX",		NULL,		NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX3,	"PIIX3",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX4,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_PIIX4E,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
+	{DEVID_PIIX4U,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_VIA_IDE,	"VIA_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_VP_IDE,	"VP_IDE",	PCI_VIA82CXXX,	ATA66_VIA82CXXX,INIT_VIA82CXXX,	DMA_VIA82CXXX,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	ON_BOARD,	0 },
 	{DEVID_PDC20246,"PDC20246",	PCI_PDC202XX,	NULL,		INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	OFF_BOARD,	16 },
@@ -566,7 +573,11 @@ check_if_enabled:
 			hwif->irq = hwif->channel ? 15 : 14;
 			goto bypass_umc_dma;
 		}
-		hwif->udma_four = (d->ata66_check) ? d->ata66_check(hwif) : 0;
+		if (hwif->udma_four) {
+			printk("%s: ATA-66 forced bit set (WARNING)!!\n", d->name);
+		} else {
+			hwif->udma_four = (d->ata66_check) ? d->ata66_check(hwif) : 0;
+		}
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X))

@@ -84,6 +84,7 @@ pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
 			continue;
 
 		min = (res->flags & IORESOURCE_IO ? min_io : min_mem);
+		min += root->start;
 		size = res->end + 1;
 		DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
 		      root->start, root->end, min, size));

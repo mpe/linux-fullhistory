@@ -595,7 +595,10 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_mmap2)
 	.long SYMBOL_NAME(sys_truncate64)
 	.long SYMBOL_NAME(sys_ftruncate64)
-	/* 195 */
+	.long SYMBOL_NAME(sys_stat64)		/* 195 */
+	.long SYMBOL_NAME(sys_lstat64)
+	.long SYMBOL_NAME(sys_fstat64)
+
 
 	/*
 	 * NOTE!! This doesn't have to be exact - we just have
@@ -603,6 +606,6 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-194
+	.rept NR_syscalls-197
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/aec6210.c	Version 0.03	Nov. 12, 1999
+ * linux/drivers/block/aec6210.c	Version 0.04	Dec. 13, 1999
  *
  * Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License

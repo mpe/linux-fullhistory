@@ -38,4 +38,5 @@ struct stat {
 	unsigned long  __unused5;
 };
 
+/* Someone please add a glibc/arm compatible stat64 struct here. */
 #endif

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/pdc202xx.c	Version 0.27	Sept. 3, 1999
+ *  linux/drivers/block/pdc202xx.c	Version 0.28	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
  *  May be copied or modified under the terms of the GNU General Public License
@@ -78,7 +78,6 @@
  *  Released under terms of General Public License
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
@@ -221,7 +220,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 
 	int			err;
 	unsigned int		drive_conf;
-	byte			drive_pci, speed_ok = 0;
+	byte			drive_pci;
 	byte			test1, test2, speed = -1;
 	byte			AP, BP, CP, DP, TB, TC;
 	unsigned short		EP;
@@ -279,20 +278,16 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	switch(drive_number) {
 		case 0:	drive_pci = 0x60;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4)) {
-				speed_ok = 1;
+			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
 				goto chipset_is_set;
-			}
 			pci_read_config_byte(dev, (drive_pci), &test1);
 			if (!(test1 & SYNC_ERRDY_EN))
 				pci_write_config_byte(dev, (drive_pci), test1|SYNC_ERRDY_EN);
 			break;
 		case 1:	drive_pci = 0x64;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4)) {
-				speed_ok = 1;
+			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
 				goto chipset_is_set;
-			}
 			pci_read_config_byte(dev, 0x60, &test1);
 			pci_read_config_byte(dev, (drive_pci), &test2);
 			if ((test1 & SYNC_ERRDY_EN) && !(test2 & SYNC_ERRDY_EN))
@@ -300,20 +295,16 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 			break;
 		case 2:	drive_pci = 0x68;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4)) {
-				speed_ok = 1;
+			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
 				goto chipset_is_set;
-			}
 			pci_read_config_byte(dev, (drive_pci), &test1);
 			if (!(test1 & SYNC_ERRDY_EN))
 				pci_write_config_byte(dev, (drive_pci), test1|SYNC_ERRDY_EN);
 			break;
 		case 3:	drive_pci = 0x6c;
 			pci_read_config_dword(dev, drive_pci, &drive_conf);
-			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4)) {
-				speed_ok = 1;
+			if ((drive_conf != 0x004ff304) && (drive_conf != 0x004ff3c4))
 				goto chipset_is_set;
-			}
 			pci_read_config_byte(dev, 0x68, &test1);
 			pci_read_config_byte(dev, (drive_pci), &test2);
 			if ((test1 & SYNC_ERRDY_EN) && !(test2 & SYNC_ERRDY_EN))
@@ -411,8 +402,7 @@ chipset_is_set:
 	decode_registers(REG_D, DP);
 #endif /* PDC202XX_DECODE_REGISTER_INFO */
 
-	if (!speed_ok)
-		err = ide_config_drive_speed(drive, speed);
+	err = ide_config_drive_speed(drive, speed);
 
 #if PDC202XX_DEBUG_DRIVE_INFO
 	printk("%s: %s drive%d 0x%08x ",
@@ -670,6 +660,8 @@ void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 
 	if (hwif->dma_base) {
 		hwif->dmaproc = &pdc202xx_dmaproc;
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;

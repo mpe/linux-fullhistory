@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/piix.c	Version 0.27	Sept. 3, 1999
+ * linux/drivers/block/piix.c	Version 0.28	Dec. 13, 1999
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
  *  Copyright (C) 1998-1999 Andre Hedrick (andre@suse.com)
@@ -82,7 +82,9 @@ static struct pci_dev *bmide_dev;
 static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	/* int rc; */
-	int piix_who = (bmide_dev->device == PCI_DEVICE_ID_INTEL_82371AB) ? 4 : 3;
+	int piix_who = ((bmide_dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
+			(bmide_dev->device == PCI_DEVICE_ID_INTEL_82801AB_1) ||
+			(bmide_dev->device == PCI_DEVICE_ID_INTEL_82371AB)) ? 4 : 3;
 	char *p = buffer;
 	p += sprintf(p, "\n                                Intel PIIX%d Chipset.\n", piix_who);
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n\n");
@@ -186,11 +188,11 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 
 #ifdef CONFIG_BLK_DEV_PIIX_TUNING
 
-static int piix_config_drive_for_dma(ide_drive_t *drive)
+static int piix_config_drive_for_dma (ide_drive_t *drive)
 {
-	struct hd_driveid *id = drive->id;
-	ide_hwif_t *hwif = HWIF(drive);
-	struct pci_dev *dev = hwif->pci_dev;
+	struct hd_driveid *id	= drive->id;
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
 
 	int			sitre;
 	short			reg4042, reg44, reg48, reg4a;
@@ -198,7 +200,10 @@ static int piix_config_drive_for_dma(ide_drive_t *drive)
 	int			u_speed;
 
 	byte maslave		= hwif->channel ? 0x42 : 0x40;
-	int ultra		= (dev->device == PCI_DEVICE_ID_INTEL_82371AB) ? 1 : 0;
+	byte udma_66		= ((id->word93 & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	int ultra		= ((dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82801AA_1)) ? 1 : 0;
+	int ultra66		= (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1) ? 1 :  0; 
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	int a_speed		= 2 << (drive_number * 4);
 	int u_flag		= 1 << drive_number;
@@ -264,7 +269,7 @@ static int piix_config_drive_for_dma(ide_drive_t *drive)
 	printk("\n");
 #endif /* PIIX_DEBUG_DRIVE_INFO */
 
-	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_off :
+	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
@@ -296,6 +301,13 @@ unsigned int __init pci_init_piix (struct pci_dev *dev, const char *name)
 	return 0;
 }
 
+unsigned int __init ata66_piix (ide_hwif_t *hwif)
+{
+	if (0)
+		return 1;
+	return 0;
+}
+
 void __init ide_init_piix (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &piix_tune_drive;
@@ -310,4 +322,6 @@ void __init ide_init_piix (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
+	if (!hwif->irq)
+		hwif->irq = hwif->channel ? 15 : 14;
 }

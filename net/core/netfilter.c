@@ -353,11 +353,12 @@ static unsigned int nf_iterate(struct list_head *head,
 			       int hook,
 			       const struct net_device *indev,
 			       const struct net_device *outdev,
-			       struct list_head **i)
+			       struct list_head **i,
+			       int (*okfn)(struct sk_buff *))
 {
 	for (*i = (*i)->next; *i != head; *i = (*i)->next) {
 		struct nf_hook_ops *elem = (struct nf_hook_ops *)*i;
-		switch (elem->hook(hook, skb, indev, outdev)) {
+		switch (elem->hook(hook, skb, indev, outdev, okfn)) {
 		case NF_QUEUE:
 			NFDEBUG("nf_iterate: NF_QUEUE for %p.\n", *skb);
 			return NF_QUEUE;
@@ -471,7 +472,7 @@ int nf_hook_slow(int pf, unsigned int hook, struct sk_buff *skb,
 	read_lock_bh(&nf_lock);
 	elem = &nf_hooks[pf][hook];
 	verdict = nf_iterate(&nf_hooks[pf][hook], &skb, hook, indev,
-			     outdev, &elem);
+			     outdev, &elem, okfn);
 	if (verdict == NF_QUEUE) {
 		NFDEBUG("nf_hook: Verdict = QUEUE.\n");
 		nf_queue(skb, elem, pf, hook, indev, outdev, okfn);
@@ -553,7 +554,8 @@ void nf_reinject(struct sk_buff *skb, unsigned long mark, unsigned int verdict)
 		skb->nfmark = mark;
 		verdict = nf_iterate(&nf_hooks[info->pf][info->hook],
 				     &skb, info->hook, 
-				     info->indev, info->outdev, &elem);
+				     info->indev, info->outdev, &elem,
+				     info->okfn);
 	}
 
 	if (verdict == NF_QUEUE) {

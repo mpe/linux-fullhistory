@@ -25,7 +25,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-#include <linux/i2c.h>
+#include <linux/i2c-old.h>
 #include <linux/videodev.h>
 #include "linux/video_decoder.h"
 

@@ -5,6 +5,7 @@
  * (C) Copyright Johannes Erdfelt 1999
  * (C) Copyright Andreas Gal 1999
  * (C) Copyright Gregory P. Smith 1999
+ * (C) Copyright Deti Fliegl 1999 (new USB architecture)
  *
  * NOTE! This is not actually a driver at all, rather this is
  * just a collection of helper routines that implement the
@@ -26,8 +27,20 @@
 #include <linux/string.h>
 #include <linux/bitops.h>
 #include <linux/malloc.h>
+#include <linux/interrupt.h>  /* for in_interrupt() */
 
 #include "usb.h"
+
+#define MODSTR "usbcore: "
+
+#ifdef USB_DEBUG
+	#define dbg printk
+#else
+	#define dbg nix
+static void nix(const char *format, ...)
+{
+}
+#endif
 
 /*
  * Prototypes for the device driver probing/loading functions
@@ -35,8 +48,6 @@
 static void usb_find_drivers(struct usb_device *);
 static int  usb_find_interface_driver(struct usb_device *, unsigned int);
 static void usb_check_support(struct usb_device *);
-
-static int usb_debug = 1;
 
 /*
  * We have a per-interface "registered driver" list.
@@ -54,15 +65,14 @@ int usb_register(struct usb_driver *new_driver)
 
 	if (new_driver->fops != NULL) {
 		if (usb_minors[new_driver->minor/16]) {
-			printk(KERN_ERR "Error registering %s driver\n",
+			 printk(KERN_ERR "Error registering %s driver\n",
 				new_driver->name);
-			return USB_ST_NOTSUPPORTED;
+			return -EINVAL;
 		}
 		usb_minors[new_driver->minor/16] = new_driver;
 	}
 
 	printk("usbcore: Registered new driver %s\n", new_driver->name);
-
 	/* Add it to the list of known drivers */
 	list_add(&new_driver->driver_list, &usb_driver_list);
 
@@ -422,9 +432,8 @@ static void usb_find_drivers(struct usb_device *dev)
 		}
 	}
  
-	if (rejected) {
+	if (rejected)
 		printk(KERN_DEBUG "usbcore: unhandled interfaces on device.\n");
-	}
 }
 
 /*
@@ -463,7 +472,357 @@ void usb_inc_dev_use(struct usb_device *dev)
 {
 	atomic_inc(&dev->refcnt);
 }
+/* ------------------------------------------------------------------------------------- 
+ * New USB Core Functions
+ * -------------------------------------------------------------------------------------*/
 
+urb_t* usb_alloc_urb(int iso_packets)
+{
+	urb_t *urb;
+	urb=(urb_t*)kmalloc(sizeof(urb_t) + iso_packets*sizeof(iso_packet_descriptor_t),
+	      in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
+	if (!urb)
+	{
+		printk(KERN_ERR MODSTR"alloc_urb: kmalloc failed\n");
+		return 0;
+	}
+	memset(urb,0,sizeof(urb_t));
+	return urb;
+}
+
+/*-------------------------------------------------------------------*/
+void usb_free_urb(urb_t* urb)
+{
+	kfree(urb);
+}
+/*-------------------------------------------------------------------*/
+int usb_submit_urb(urb_t *urb)
+{
+	if(urb && urb->dev)
+		return urb->dev->bus->op->submit_urb(urb);
+	else
+		return -1;
+}
+
+/*-------------------------------------------------------------------*/
+int usb_unlink_urb(urb_t *urb)
+{
+	if(urb && urb->dev)
+		return urb->dev->bus->op->unlink_urb(urb);
+	else
+		return -1;
+}
+/*-------------------------------------------------------------------*
+ *                     COMPLETION HANDLERS                           *
+ *-------------------------------------------------------------------*/
+
+/*-------------------------------------------------------------------*
+ * completion handler for compatibility wrappers (sync control/bulk) *
+ *-------------------------------------------------------------------*/
+static void usb_api_blocking_completion(urb_t *urb)
+{
+	api_wrapper_data *awd = (api_wrapper_data *)urb->context;
+  
+	if (waitqueue_active(awd->wakeup))
+		wake_up(awd->wakeup);
+#if 0
+	else
+		dbg(KERN_DEBUG MODSTR "(blocking_completion): waitqueue empty!\n"); 
+		// even occurs if urb was unlinked by timeout...
+#endif
+}
+
+/*-------------------------------------------------------------------*
+ * completion handler for compatibility wrappers (async bulk)        *
+ *-------------------------------------------------------------------*/
+static void usb_api_async_completion(urb_t *urb)
+{
+	api_wrapper_data *awd=(api_wrapper_data*)urb->context;
+
+	if (awd->handler)
+		awd->handler(urb->status,urb->transfer_buffer,urb->actual_length,awd->stuff);
+ }
+
+/*-------------------------------------------------------------------*
+ *                         COMPATIBILITY STUFF                       *
+ *-------------------------------------------------------------------*/
+
+// Starts urb and waits for completion or timeout
+static int usb_start_wait_urb(urb_t *urb, int timeout, unsigned long* rval)
+{ 
+	DECLARE_WAITQUEUE(wait, current);
+	DECLARE_WAIT_QUEUE_HEAD(wqh);
+	api_wrapper_data awd;
+	int status;
+  
+	awd.wakeup=&wqh;
+	awd.handler=0;
+	init_waitqueue_head(&wqh); 	
+	current->state = TASK_UNINTERRUPTIBLE;
+	add_wait_queue(&wqh, &wait);
+	urb->context=&awd;
+	status=usb_submit_urb(urb);
+	if (status) {
+		// something went wrong
+		usb_free_urb(urb);
+		remove_wait_queue(&wqh, &wait);
+		return status;
+	}
+
+	if (urb->status == -EINPROGRESS)
+		status=schedule_timeout(timeout); // ZZzzzz....
+	else
+		status = 1;
+
+	remove_wait_queue(&wqh, &wait);
+
+	if (!status) {
+		// timeout
+		printk(KERN_DEBUG MODSTR"usb_control/bulk_msg: timeout\n");
+		usb_unlink_urb(urb);  // remove urb safely
+		status=-ETIMEDOUT;
+	}
+	else
+		status=urb->status;
+
+	if (rval)
+		*rval=urb->actual_length;
+
+	usb_free_urb(urb);
+  	return status;
+}
+
+/*-------------------------------------------------------------------*/
+// returns status (negative) are length (positive)
+int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe, 
+			    devrequest *cmd,  void *data, int len, int timeout)
+{
+	urb_t *urb;
+	int retv;
+	unsigned long length;
+
+	urb=usb_alloc_urb(0);
+	if (!urb)
+		return -ENOMEM;
+  
+	FILL_CONTROL_URB(urb, usb_dev, pipe, (unsigned char*)cmd, data, len,    /* build urb */  
+		   (usb_complete_t)usb_api_blocking_completion,0);
+	
+	retv=usb_start_wait_urb(urb,timeout, &length);
+	if (retv < 0)
+		return retv;
+	else
+		return length;
+	
+}
+/*-------------------------------------------------------------------*/
+int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype,
+			 __u16 value, __u16 index, void *data, __u16 size, int timeout)
+{
+	devrequest dr;
+	  
+	dr.requesttype = requesttype;
+	dr.request = request;
+	dr.value = cpu_to_le16p(&value);
+	dr.index = cpu_to_le16p(&index);
+	dr.length = cpu_to_le16p(&size);
+	//dbg(KERN_DEBUG MODSTR"usb_control_msg\n");	
+	return usb_internal_control_msg(dev, pipe, &dr, data, size, timeout);
+}
+
+/*-------------------------------------------------------------------*/
+/* compatibility wrapper, builds bulk urb, and waits for completion */
+/* synchronous behavior */
+
+int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, 
+			void *data, int len, unsigned long *rval, int timeout)
+{
+	urb_t *urb;
+
+	if (len < 0)
+		return -EINVAL;
+
+	urb=usb_alloc_urb(0);
+	if (!urb)
+		return -ENOMEM;
+
+	FILL_BULK_URB(urb,usb_dev,pipe,(unsigned char*)data,len,   /* build urb */
+			(usb_complete_t)usb_api_blocking_completion,0);
+
+	return usb_start_wait_urb(urb,timeout,rval);
+}
+/*-------------------------------------------------------------------*/
+
+void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
+{
+	urb_t *urb;
+	DECLARE_WAITQUEUE(wait, current);
+	DECLARE_WAIT_QUEUE_HEAD(wqh);
+	api_wrapper_data *awd;
+
+	if (!(urb=usb_alloc_urb(0)))
+		return NULL;
+	if (!(awd = kmalloc(sizeof(api_wrapper_data), in_interrupt() ? GFP_ATOMIC : GFP_KERNEL))) {
+		kfree(urb);
+		return NULL;
+	}
+
+	/* build urb */
+	FILL_BULK_URB(urb, dev, pipe, data, len, (usb_complete_t)usb_api_async_completion, awd);
+
+	awd->handler=handler;
+	awd->stuff=dev_id;
+	if (usb_submit_urb(urb) < 0) {
+		kfree(awd);
+		kfree(urb);
+		return NULL;
+	}
+	return urb;
+}
+
+// compatibility wrapper. Remove urb only if it is called before the
+// transaction's completion interrupt. If called from within the
+// completion handler (urb->completed==1), it does nothing, since the
+// qh is already removed 
+
+int usb_terminate_bulk(struct usb_device *dev, void *first)
+{
+	urb_t *urb=(urb_t*)first;
+	dbg(KERN_DEBUG MODSTR"usb_terminate_bulk: urb:%p\n",urb);
+	if (!urb) // none found? there is nothing to remove!
+		return -ENODEV;
+  
+	if (urb->status!= -EINPROGRESS)
+		usb_unlink_urb(urb);
+	kfree(urb->context);
+	kfree(urb);
+	return USB_ST_NOERROR;
+}
+
+/*
+ * usb_release_bandwidth():
+ *
+ * called to release an interrupt pipe's bandwidth (in microseconds)
+ */
+void usb_release_bandwidth(struct usb_device *dev, int bw_alloc)
+{
+	dev->bus->bandwidth_allocated -= bw_alloc;
+	dev->bus->bandwidth_int_reqs--;
+	PRINTD ("bw_alloc reduced to %d for %d requesters",
+		dev->bus->bandwidth_allocated,
+		dev->bus->bandwidth_int_reqs +
+		dev->bus->bandwidth_isoc_reqs);
+}
+
+static void irq_callback(urb_t *urb)
+{
+	struct irq_wrapper_data *wd = (struct irq_wrapper_data *)urb->context;
+
+	if (!wd->handler)
+		return;
+#if 0 // verbose...
+	if (!wd->handler(urb->status, urb->transfer_buffer, urb->actual_length, wd->context))
+		printk(KERN_ERR "usb: legacy irq callback returned 0!!!\n");
+#else
+	wd->handler(urb->status, urb->transfer_buffer, urb->actual_length, wd->context);
+#endif
+}
+
+int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
+{
+	long    bustime;
+	int     ret;
+	struct irq_wrapper_data *wd;
+	urb_t *urb;
+	unsigned int maxsze = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+
+	*handle = NULL;
+	printk("irq: dev:%p pipe:%08X handler:%p period:%d dev_id:%p max:%d\n", dev, pipe, handler, period, dev_id, maxsze);
+	/* Check host controller's bandwidth for this int. request. */
+	bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
+			usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
+	bustime = NS_TO_US(bustime);	/* work in microseconds */
+	if (check_bandwidth_alloc (dev->bus->bandwidth_allocated, bustime))
+		return -EUSERS;  // no bandwidth left
+
+	if (!maxsze || !usb_pipeint(pipe))
+		return -EINVAL;
+
+	if (!(urb = usb_alloc_urb(0)))
+		return -ENOMEM;
+
+	if (!(wd = kmalloc(sizeof(struct irq_wrapper_data), in_interrupt() ? GFP_ATOMIC : GFP_KERNEL))) {
+		kfree(urb);
+		return -ENOMEM;
+	}
+	if (!(urb->transfer_buffer = kmalloc(maxsze, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL))) {
+		kfree(urb);
+		kfree(wd);
+		return -ENOMEM;
+	}
+	wd->handler=handler;
+	wd->context=dev_id;
+	urb->dev = dev;
+	urb->pipe = pipe;
+	urb->transfer_buffer_length = urb->actual_length = maxsze;
+	urb->interval = period;
+	urb->context = wd;
+	urb->complete = irq_callback;
+	if ((ret = usb_submit_urb(urb)) < 0) {
+		kfree(wd);
+		kfree(urb->transfer_buffer);
+		kfree(urb);
+		return ret;
+	}
+	*handle = urb;
+
+	/* Claim the USB bandwidth if no error. */
+	if (!ret) {
+		dev->bus->bandwidth_allocated += bustime;
+		dev->bus->bandwidth_int_reqs++;
+		PRINTD ("bw_alloc bumped to %d for %d requesters",
+			dev->bus->bandwidth_allocated,
+			dev->bus->bandwidth_int_reqs +
+			dev->bus->bandwidth_isoc_reqs);
+	}
+
+	return ret;
+}
+
+int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
+{
+	long    bustime;
+	int	err;
+	urb_t *urb = (urb_t*)handle;
+
+	if (!urb)
+		return -EBADF;
+	err=usb_unlink_urb(urb);
+	kfree(urb->context);
+	kfree(urb->transfer_buffer);
+	kfree(urb);
+
+	/* Return the USB bandwidth if no error. */
+	if (!err) {
+		bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
+				usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
+		bustime = NS_TO_US(bustime);	/* work in microseconds */
+		usb_release_bandwidth(dev, bustime);
+	}
+	return err;
+}
+
+/*
+ * usb_get_current_frame_number()
+ *
+ * returns the current frame number for the parent USB bus/controller
+ * of the given USB device.
+ */
+int usb_get_current_frame_number(struct usb_device *usb_dev)
+{
+	return usb_dev->bus->op->get_frame_number (usb_dev);
+}
+/*-------------------------------------------------------------------*/
 static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descriptor *endpoint, unsigned char *buffer, int size)
 {
 	struct usb_descriptor_header *header;
@@ -485,7 +844,11 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 		return parsed;
 	}
 
-	memcpy(endpoint, buffer, USB_DT_ENDPOINT_SIZE);
+	if (header->bLength == USB_DT_ENDPOINT_AUDIO_SIZE)
+		memcpy(endpoint, buffer, USB_DT_ENDPOINT_AUDIO_SIZE);
+	else
+		memcpy(endpoint, buffer, USB_DT_ENDPOINT_SIZE);
+	
         le16_to_cpus(&endpoint->wMaxPacketSize);
 
 	buffer += header->bLength;
@@ -505,20 +868,21 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 		}
 
 		/* If we find another descriptor which is at or below us */
-		/*  in the descriptor heirarchy then we're done */
+		/*  in the descriptor heirarchy then we're done  */
 		if ((header->bDescriptorType == USB_DT_ENDPOINT) ||
 		    (header->bDescriptorType == USB_DT_INTERFACE) ||
 		    (header->bDescriptorType == USB_DT_CONFIG) ||
 		    (header->bDescriptorType == USB_DT_DEVICE))
 			break;
 
+		printk(KERN_INFO "usb: skipping descriptor 0x%X\n",
+			header->bDescriptorType);
 		numskipped++;
 
 		buffer += header->bLength;
 		size -= header->bLength;
 		parsed += header->bLength;
 	}
-
 	if (numskipped)
 		printk(KERN_INFO "usb: skipped %d class/vendor specific endpoint descriptors\n", numskipped);
 
@@ -694,7 +1058,7 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface *int
 	return parsed;
 }
 
-static int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor *config, char *buffer)
+int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor *config, char *buffer)
 {
 	int i;
 	int retval;
@@ -702,7 +1066,7 @@ static int usb_parse_configuration(struct usb_device *dev, struct usb_config_des
 	struct usb_descriptor_header *header;
 
 	memcpy(config, buffer, USB_DT_INTERFACE_SIZE);
-
+	usb_show_config_descriptor(config);
 	le16_to_cpus(&config->wTotalLength);
 	size = config->wTotalLength;
 
@@ -714,6 +1078,7 @@ static int usb_parse_configuration(struct usb_device *dev, struct usb_config_des
 	config->interface = (struct usb_interface *)
 		kmalloc(config->bNumInterfaces *
 		sizeof(struct usb_interface), GFP_KERNEL);
+	printk("kmalloc IF %p, numif %i\n",config->interface,config->bNumInterfaces);
 	if (!config->interface) {
 		printk(KERN_WARNING "usb: out of memory\n");
 		return -1;	
@@ -778,7 +1143,6 @@ void usb_destroy_configuration(struct usb_device *dev)
 
 				if (!as->endpoint)
 					break;
-
 				kfree(as->endpoint);
 			}
 			kfree(ifp->altsetting);
@@ -838,8 +1202,9 @@ void usb_disconnect(struct usb_device **pdev)
 	/* Free up the device itself, including its device number */
 	if (dev->devnum > 0)
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
-
+	
 	usb_free_dev(dev);
+	
 }
 
 /*
@@ -851,9 +1216,8 @@ void usb_disconnect(struct usb_device **pdev)
 void usb_connect(struct usb_device *dev)
 {
 	int devnum;
-
-	dev->descriptor.bMaxPacketSize0 = 8;	/* Start off at 8 bytes */
-
+	// FIXME needs locking for SMP!!
+	dev->descriptor.bMaxPacketSize0 = 8;  /* Start off at 8 bytes  */
 	devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, 1);
 	if (devnum < 128) {
 		set_bit(devnum, dev->bus->devmap.devicemap);
@@ -865,10 +1229,14 @@ void usb_connect(struct usb_device *dev)
  * These are the actual routines to send
  * and receive control messages.
  */
+
+#define GET_TIMEOUT 3
+#define SET_TIMEOUT 3
+
 int usb_set_address(struct usb_device *dev)
 {
 	return usb_control_msg(dev, usb_snddefctrl(dev), USB_REQ_SET_ADDRESS,
-		0, dev->devnum, 0, NULL, 0, HZ);
+		0, dev->devnum, 0, NULL, 0, HZ * GET_TIMEOUT);
 }
 
 int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char index, void *buf, int size)
@@ -879,8 +1247,8 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	while (i--) {
 		if ((result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 			USB_REQ_GET_DESCRIPTOR, USB_DIR_IN,
-			(type << 8) + index, 0, buf, size, HZ)) >= 0 ||
-		    result == USB_ST_STALL)
+			(type << 8) + index, 0, buf, size, HZ * GET_TIMEOUT)) >= 0 ||
+		     result == -EPIPE)
 			break;
 	}
 	return result;
@@ -890,7 +1258,7 @@ int usb_get_string(struct usb_device *dev, unsigned short langid, unsigned char 
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_DESCRIPTOR, USB_DIR_IN,
-		(USB_DT_STRING << 8) + index, langid, buf, size, HZ);
+		(USB_DT_STRING << 8) + index, langid, buf, size, HZ * GET_TIMEOUT);
 }
 
 int usb_get_device_descriptor(struct usb_device *dev)
@@ -909,7 +1277,7 @@ int usb_get_device_descriptor(struct usb_device *dev)
 int usb_get_status(struct usb_device *dev, int type, int target, void *data)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_STATUS, USB_DIR_IN | type, 0, target, data, 2, HZ);
+		USB_REQ_GET_STATUS, USB_DIR_IN | type, 0, target, data, 2, HZ * GET_TIMEOUT);
 }
 
 int usb_get_protocol(struct usb_device *dev)
@@ -919,7 +1287,7 @@ int usb_get_protocol(struct usb_device *dev)
 
 	if ((ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 	    USB_REQ_GET_PROTOCOL, USB_DIR_IN | USB_RT_HIDD,
-	    0, 1, &type, 1, HZ)) < 0)
+	    0, 1, &type, 1, HZ * GET_TIMEOUT)) < 0)
 		return ret;
 
 	return type;
@@ -928,7 +1296,7 @@ int usb_get_protocol(struct usb_device *dev)
 int usb_set_protocol(struct usb_device *dev, int protocol)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_SET_PROTOCOL, USB_RT_HIDD, protocol, 1, NULL, 0, HZ);
+		USB_REQ_SET_PROTOCOL, USB_RT_HIDD, protocol, 1, NULL, 0, HZ * SET_TIMEOUT);
 }
 
 /* keyboards want a nonzero duration according to HID spec, but
@@ -936,7 +1304,7 @@ int usb_set_protocol(struct usb_device *dev, int protocol)
 int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0), USB_REQ_SET_IDLE,
-		USB_RT_HIDD, (duration << 8) | report_id, 1, NULL, 0, HZ);
+		USB_RT_HIDD, (duration << 8) | report_id, 1, NULL, 0, HZ * SET_TIMEOUT);
 }
 
 static void usb_set_maxpacket(struct usb_device *dev)
@@ -979,7 +1347,7 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 */
 
 	result = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_CLEAR_FEATURE, USB_RT_ENDPOINT, 0, endp, NULL, 0, HZ);
+		USB_REQ_CLEAR_FEATURE, USB_RT_ENDPOINT, 0, endp, NULL, 0, HZ * SET_TIMEOUT);
 
 	/* don't clear if failed */
 	if (result < 0)
@@ -987,12 +1355,12 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 
 	result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_ENDPOINT, 0, endp,
-		&status, sizeof(status), HZ);
+		&status, sizeof(status), HZ * SET_TIMEOUT);
 	if (result < 0)
 		return result;
 
 	if (status & 1)
-		return USB_ST_STALL;		/* still halted */
+		return -EPIPE;		/* still halted */
 
 	usb_endpoint_running(dev, endp & 0x0f, usb_endpoint_out(endp));
 
@@ -1005,14 +1373,26 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 
 int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 {
-	int ret;
+	struct usb_interface *iface = NULL;
+	int ret, i;
+
+	for (i=0; i<dev->actconfig->bNumInterfaces; i++) {
+		if (dev->actconfig->interface[i].altsetting->bInterfaceNumber == interface) {
+			iface = &dev->actconfig->interface[i];
+			break;
+		}
+	}
+	if (!iface) {
+		printk(KERN_INFO "usb: selecting invalid interface %d\n", interface);
+		return -EINVAL;
+	}
 
 	if ((ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
 	    USB_REQ_SET_INTERFACE, USB_RT_INTERFACE, alternate,
-	    interface, NULL, 0, HZ)) < 0)
+	    interface, NULL, 0, HZ * 5)) < 0)
 		return ret;
 
-	dev->actconfig->interface[interface].act_altsetting = alternate;
+	iface->act_altsetting = alternate;
 	usb_set_maxpacket(dev);
 	return 0;
 }
@@ -1034,7 +1414,7 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 	}
 
 	if ((ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-	    USB_REQ_SET_CONFIGURATION, 0, configuration, 0, NULL, 0, HZ)) < 0)
+	    USB_REQ_SET_CONFIGURATION, 0, configuration, 0, NULL, 0, HZ * SET_TIMEOUT)) < 0)
 		return ret;
 
 	dev->actconfig = cp;
@@ -1049,11 +1429,12 @@ int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id,
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_REPORT, USB_DIR_IN | USB_RT_HIDD,
-		(type << 8) + id, index, buf, size, HZ);
+		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
 }
 
 int usb_get_configuration(struct usb_device *dev)
 {
+       	int result;
 	unsigned int cfgno;
 	unsigned char buffer[8];
 	unsigned char *bigbuffer;
@@ -1076,14 +1457,14 @@ int usb_get_configuration(struct usb_device *dev)
 		sizeof(struct usb_config_descriptor));
 
 	for (cfgno = 0; cfgno < dev->descriptor.bNumConfigurations; cfgno++) {
-        	int result;
+
 
 		/* We grab the first 8 bytes so we know how long the whole */
 		/*  configuration is */
 		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, buffer, 8);
 		if (result < 0) {
 			printk(KERN_ERR "usb: unable to get descriptor\n");
-			return result;
+			goto err;
 		}
 
   	  	/* Get the full buffer */
@@ -1092,7 +1473,8 @@ int usb_get_configuration(struct usb_device *dev)
 		bigbuffer = kmalloc(desc->wTotalLength, GFP_KERNEL);
 		if (!bigbuffer) {
 			printk(KERN_ERR "unable to allocate memory for configuration descriptors\n");
-			return USB_ST_INTERNALERROR;
+			result=-ENOMEM;
+			goto err;
 		}
 
 		/* Now that we know the length, get the whole thing */
@@ -1100,19 +1482,24 @@ int usb_get_configuration(struct usb_device *dev)
 		if (result < 0) {
 			printk(KERN_ERR "couldn't get all of config descriptors\n");
 			kfree(bigbuffer);
-			return result;
-		}
-			
+			goto err;
+		}		
 		result = usb_parse_configuration(dev, &dev->config[cfgno], bigbuffer);
 		kfree(bigbuffer);
 
 		if (result > 0)
 			printk(KERN_INFO "usb: descriptor data left\n");
 		else if (result < 0)
-			return -1;
+		{
+			result=-1;
+			goto err;
+		}
 	}
 
 	return 0;
+	err:
+	dev->descriptor.bNumConfigurations=cfgno;
+	return result;
 }
 
 char *usb_string(struct usb_device *dev, int index)
@@ -1178,7 +1565,7 @@ int usb_new_device(struct usb_device *dev)
 
 	printk(KERN_INFO "USB new device connect, assigned device number %d\n",
 		dev->devnum);
-
+ 
 	dev->maxpacketsize = 0;		/* Default to 8 byte max packet size */
 	dev->epmaxpacketin [0] = 8;
 	dev->epmaxpacketout[0] = 8;
@@ -1190,6 +1577,7 @@ int usb_new_device(struct usb_device *dev)
 	err = usb_get_descriptor(dev, USB_DT_DEVICE, 0, &dev->descriptor, 8);
 	if (err < 0) {
 		printk(KERN_ERR "usbcore: USB device not responding, giving up (error=%d)\n", err);
+		clear_bit(addr, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
 	}
@@ -1208,6 +1596,7 @@ int usb_new_device(struct usb_device *dev)
 	err = usb_set_address(dev);
 	if (err < 0) {
 		printk(KERN_ERR "usbcore: USB device not accepting new address (error=%d)\n", err);
+		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
 	}
@@ -1216,14 +1605,16 @@ int usb_new_device(struct usb_device *dev)
 
 	err = usb_get_device_descriptor(dev);
 	if (err < 0) {
-		printk(KERN_ERR "usbcore: unable to get device descriptor (error=%d)\n", err);
+		printk(KERN_ERR "usbcore: unable to get device descriptor (error=%d)\n",err);
+		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
 	}
 
-	err = usb_get_configuration(dev);
+	err=usb_get_configuration(dev);
 	if (err < 0) {
 		printk(KERN_ERR "usbcore: unable to get configuration (error=%d)\n", err);
+		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
 	}
@@ -1240,7 +1631,7 @@ int usb_new_device(struct usb_device *dev)
 	usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
 	usb_show_string(dev, "Product", dev->descriptor.iProduct);
 	usb_show_string(dev, "SerialNumber", dev->descriptor.iSerialNumber);
-
+	
 	/* now that the basic setup is over, add a /proc/bus/usb entry */
 	proc_usb_add_device(dev);
 
@@ -1248,184 +1639,6 @@ int usb_new_device(struct usb_device *dev)
         usb_find_drivers(dev);
 
 	return 0;
-}
-
-int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size, int timeout)
-{
-        devrequest dr;
-	int ret;
-
-        dr.requesttype = requesttype;
-        dr.request = request;
-        dr.value = cpu_to_le16p(&value);
-        dr.index = cpu_to_le16p(&index);
-        dr.length = cpu_to_le16p(&size);
-
-        ret = dev->bus->op->control_msg(dev, pipe, &dr, data, size, timeout);
-
-	if (ret < 0 && usb_debug) {
-		unsigned char *p = (unsigned char *)&dr;
-
-		printk(KERN_DEBUG "Failed control msg - r:%02X rt:%02X v:%04X i:%04X s:%04X - ret: %d\n",
-			request, requesttype, value, index, size, ret);
-		printk(KERN_DEBUG "  %02X %02X %02X %02X %02X %02X %02X %02X\n",
-			p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-	}
-
-	return ret;
-}
-
-int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
-{
-	long    bustime;
-	int	ret;
-
-	*handle = NULL;
-
-	/* Check host controller's bandwidth for this int. request. */
-	bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
-			usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
-	bustime = NS_TO_US(bustime);	/* work in microseconds */
-	if (check_bandwidth_alloc (dev->bus->bandwidth_allocated, bustime))
-		return (USB_ST_BANDWIDTH_ERROR);
-
-	ret = dev->bus->op->request_irq(dev, pipe, handler, period, dev_id, handle, bustime);
-
-	/* Claim the USB bandwidth if no error. */
-	if (!ret) {
-		dev->bus->bandwidth_allocated += bustime;
-		dev->bus->bandwidth_int_reqs++;
-		PRINTD ("bw_alloc bumped to %d for %d requesters",
-			dev->bus->bandwidth_allocated,
-			dev->bus->bandwidth_int_reqs +
-			dev->bus->bandwidth_isoc_reqs);
-	}
-
-	return ret;
-}
-
-int usb_bulk_msg(struct usb_device *dev, unsigned int pipe, void *data, int len, unsigned long *rval, int timeout)
-{
-	return dev->bus->op->bulk_msg(dev, pipe, data, len, rval, timeout);
-}
-
-void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
-{
-	return dev->bus->op->request_bulk(dev, pipe, handler, data, len, dev_id);
-}
-
-int usb_terminate_bulk(struct usb_device *dev, void *first)
-{
-	return dev->bus->op->terminate_bulk(dev, first);
-}
-
-/*
- * usb_release_bandwidth():
- *
- * called to release an interrupt pipe's bandwidth (in microseconds)
- */
-void usb_release_bandwidth(struct usb_device *dev, int bw_alloc)
-{
-	dev->bus->bandwidth_allocated -= bw_alloc;
-	dev->bus->bandwidth_int_reqs--;
-	PRINTD ("bw_alloc reduced to %d for %d requesters",
-		dev->bus->bandwidth_allocated,
-		dev->bus->bandwidth_int_reqs +
-		dev->bus->bandwidth_isoc_reqs);
-}
-
-int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
-{
-	long    bustime;
-	int	err;
-
-	err = dev->bus->op->release_irq(dev, handle);
-
-	/* Return the USB bandwidth if no error. */
-	if (!err) {
-		bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
-				usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
-		bustime = NS_TO_US(bustime);	/* work in microseconds */
-		usb_release_bandwidth(dev, bustime);
-	}
-
-	return err;
-}
-
-/*
- * usb_get_current_frame_number()
- *
- * returns the current frame number for the parent USB bus/controller
- * of the given USB device.
- */
-int usb_get_current_frame_number(struct usb_device *usb_dev)
-{
-	return usb_dev->bus->op->get_frame_number (usb_dev);
-}
-
-int usb_init_isoc(struct usb_device *usb_dev,
-			unsigned int pipe,
-			int frame_count,
-			void *context,
-			struct usb_isoc_desc **isocdesc)
-{
-	long    bustime;
-	int	err;
-
-	if (frame_count <= 0)
-		return -EINVAL;
-
-	/* Check host controller's bandwidth for this Isoc. request. */
-	/* TBD: some way to factor in frame_spacing ??? */
-	bustime = calc_bus_time (0, usb_pipein(pipe), 1,
-			usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe)));
-	bustime = NS_TO_US(bustime) / frame_count;	/* work in microseconds */
-	if (check_bandwidth_alloc (usb_dev->bus->bandwidth_allocated, bustime))
-		return USB_ST_BANDWIDTH_ERROR;
-
-	err = usb_dev->bus->op->init_isoc (usb_dev, pipe, frame_count, context, isocdesc);
-
-	/* Claim the USB bandwidth if no error. */
-	if (!err) {
-		usb_dev->bus->bandwidth_allocated += bustime;
-		usb_dev->bus->bandwidth_isoc_reqs++;
-		PRINTD ("bw_alloc bumped to %d for %d requesters",
-			usb_dev->bus->bandwidth_allocated,
-			usb_dev->bus->bandwidth_int_reqs +
-			usb_dev->bus->bandwidth_isoc_reqs);
-	}
-
-	return err;
-}
-
-void usb_free_isoc(struct usb_isoc_desc *isocdesc)
-{
-	long    bustime;
-
-	/* Return the USB bandwidth. */
-	bustime = calc_bus_time (0, usb_pipein(isocdesc->pipe), 1,
-			usb_maxpacket(isocdesc->usb_dev, isocdesc->pipe,
-			usb_pipeout(isocdesc->pipe)));
-	bustime = NS_TO_US(bustime) / isocdesc->frame_count;
-	isocdesc->usb_dev->bus->bandwidth_allocated -= bustime;
-	isocdesc->usb_dev->bus->bandwidth_isoc_reqs--;
-	PRINTD ("bw_alloc reduced to %d for %d requesters",
-		isocdesc->usb_dev->bus->bandwidth_allocated,
-		isocdesc->usb_dev->bus->bandwidth_int_reqs +
-		isocdesc->usb_dev->bus->bandwidth_isoc_reqs);
-
-	isocdesc->usb_dev->bus->op->free_isoc (isocdesc);
-}
-
-int usb_run_isoc(struct usb_isoc_desc *isocdesc,
-			struct usb_isoc_desc *pr_isocdesc)
-{
-	return isocdesc->usb_dev->bus->op->run_isoc (isocdesc, pr_isocdesc);
-}
-
-int usb_kill_isoc(struct usb_isoc_desc *isocdesc)
-{
-	return isocdesc->usb_dev->bus->op->kill_isoc (isocdesc);
 }
 
 static int usb_open(struct inode * inode, struct file * file)
@@ -1519,15 +1732,16 @@ EXPORT_SYMBOL(usb_set_interface);
 EXPORT_SYMBOL(usb_get_configuration);
 EXPORT_SYMBOL(usb_set_configuration);
 
+EXPORT_SYMBOL(usb_get_current_frame_number);
+
+EXPORT_SYMBOL(usb_alloc_urb);
+EXPORT_SYMBOL(usb_free_urb);
+EXPORT_SYMBOL(usb_submit_urb);
+EXPORT_SYMBOL(usb_unlink_urb);
+
 EXPORT_SYMBOL(usb_control_msg);
 EXPORT_SYMBOL(usb_request_irq);
 EXPORT_SYMBOL(usb_release_irq);
 EXPORT_SYMBOL(usb_bulk_msg);
 EXPORT_SYMBOL(usb_request_bulk);
 EXPORT_SYMBOL(usb_terminate_bulk);
-
-EXPORT_SYMBOL(usb_get_current_frame_number);
-EXPORT_SYMBOL(usb_init_isoc);
-EXPORT_SYMBOL(usb_free_isoc);
-EXPORT_SYMBOL(usb_run_isoc);
-EXPORT_SYMBOL(usb_kill_isoc);

@@ -1,3 +1,26 @@
+Mon Dec 6  22:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2d
+	- Change messages written by the driver at initialisation and 
+	  through the /proc FS (rather cosmetic changes that consist in
+	  printing out the PCI bus number and device/function).
+	- Get rid of the old PCI bios interface, but preserve kernel 2.0 
+	  compatibility from a simple wrapper.
+	- Remove the compilation condition about having to acquire the 
+	  io_request_lock since it seems to be a definite feature now.:)
+	- proc_dir structure no longer needed for kernel >= 2.3.27.
+	- Change the driver detection code by the sym53c8xx one, modulo 
+	  some minor changes. The driver can now attach any number of 
+	  controllers (>40) and does no longer hoger stack space at 
+	  initialisation.
+	- Definitely disable overlapped PCI arbitration for all dual 
+	  function chips, since I cannot make sure for what chip revisions 
+	  it is actually safe.
+	- Add support for the SYM53C1510D.
+	- Update the poor Tekram sync factor table.
+	- Remove the compilation condition about having to acquire the 
+	  io_request_lock since it seems to be a definite feature now.:)
+	- proc_dir structure no longer needed for kernel >= 2.3.27.
+
 Sat Sep 11  18:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2c
 	- Handle correctly (hopefully) jiffies wrap-around.

@@ -592,13 +592,16 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	max_pfn = 0;
 	for (i = 0; i < e820.nr_map; i++) {
-		unsigned long curr_pfn;
+		unsigned long start, end;
 		/* RAM? */
 		if (e820.map[i].type != E820_RAM)
 			continue;
-		curr_pfn = PFN_DOWN(e820.map[i].addr + e820.map[i].size);
-		if (curr_pfn > max_pfn)
-			max_pfn = curr_pfn;
+		start = PFN_UP(e820.map[i].addr);
+		end = PFN_DOWN(e820.map[i].addr + e820.map[i].size);
+		if (start >= end)
+			continue;
+		if (end > max_pfn)
+			max_pfn = end;
 	}
 
 	/*

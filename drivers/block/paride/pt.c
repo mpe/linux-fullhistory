@@ -147,6 +147,7 @@ static int pt_drive_count;
 #include <linux/delay.h>
 #include <linux/malloc.h>
 #include <linux/mtio.h>
+#include <linux/wait.h>
 
 #include <asm/uaccess.h>
 

@@ -6,19 +6,19 @@ mainmenu_option next_comment
 comment 'PCMCIA character device support'
 
 if [ "$CONFIG_SERIAL" = "y" ]; then
-   dep_tristate '  PCMCIA serial device support' \
+   dep_tristate 'PCMCIA serial device support' \
       CONFIG_PCMCIA_SERIAL_CS $CONFIG_PCMCIA
    if [ "$CONFIG_CARDBUS" = "y" ]; then
-      dep_tristate '  CardBus serial device support' \
+      dep_tristate 'CardBus serial device support' \
          CONFIG_PCMCIA_SERIAL_CB $CONFIG_PCMCIA
    fi
 fi
 
 if [ "$CONFIG_SERIAL" = "m" ]; then
-   dep_tristate '  PCMCIA serial device support' \
+   dep_tristate 'PCMCIA serial device support' \
       CONFIG_PCMCIA_SERIAL_CS m
    if [ "$CONFIG_CARDBUS" = "y" ]; then
-      dep_tristate '  CardBus serial device support' \
+      dep_tristate 'CardBus serial device support' \
          CONFIG_PCMCIA_SERIAL_CB m
    fi
 fi

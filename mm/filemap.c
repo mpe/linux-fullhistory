@@ -1620,7 +1620,9 @@ static int filemap_sync(struct vm_area_struct * vma, unsigned long address,
  */
 static void filemap_unmap(struct vm_area_struct *vma, unsigned long start, size_t len)
 {
+	lock_kernel();
 	filemap_sync(vma, start, len, MS_ASYNC);
+	unlock_kernel();
 }
 
 /*

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/cy82c693.c	Version 0.34	Sept 3, 1999
+ * linux/drivers/block/cy82c693.c	Version 0.34	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99 Andreas S. Krebs (akrebs@altavista.net), Maintainer
  *  Copyright (C) 1998-99 Andre Hedrick, Integrater
@@ -426,8 +426,14 @@ unsigned int __init pci_init_cy82c693(struct pci_dev *dev, const char *name)
 void __init ide_init_cy82c693(ide_hwif_t *hwif)
 {
 	hwif->chipset = ide_cy82c693;
-	if (hwif->dma_base)
-		hwif->dmaproc = &cy82c693_dmaproc;
 	hwif->tuneproc = &cy82c693_tune_drive;
+	if (hwif->dma_base) {
+		hwif->dmaproc = &cy82c693_dmaproc;
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
+	} else {
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
+	}
 }
 

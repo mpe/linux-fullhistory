@@ -1,41 +1,88 @@
-bttv - BT848 frame grabber driver
 
-Copyright (C) 1996,97 Ralph Metzler  (rjkm@thp.uni-koeln.de)
-                    & Marcus Metzler (mocm@thp.uni-koeln.de)
-                    according to GNU GPL in file COPYING.
+Release notes for bttv-0.7.x
+============================
+
+This version is based on Ralphs 0.6.4 release.  There are alot of
+changes.  Bugfixes, merged patches from other people, merged fixes
+from the kernel version, port to the new i2c stack, removed support
+for 2.0.x, code cleanups, ...
+
+You'll need the new i2c stack, download it from
+	http://www2.lm-sensors.nu/~lm78/download.html
+
+You'll find Ralphs original (mostly outdated) documentation in the
+ralphs-doc subdirectory.
 
 
-Bttv is a device driver for frame grabber cards using the Bt848 family
-of video decoder chips.
-Among those are the Bt848, Bt848A, Bt849, Bt878 and Bt879.
-The only major differences between the cards by different manufacturers 
-are the types of tuners and extra components on the boards.
-E.g., some cards by Hauppauge have an additional Videotext decoder 
-and/or sound decoder chip.
-Also type (Composite or S-VHS) and number of inputs differ.
-Other Brooktree chips (e.g. the Bt829) or chips by other manufacturers 
-(Philips, Zoran, ...) are NOT supported by bttv.
+Compile bttv
+------------
 
-You can use several cards at the same time.
-Interrupts can be shared with other Bt848 cards or any other drivers
-which allow it.
-The (arbitrary) maximum number of cards is 4 but can be adjusted by
-changing BTTV_MAX at the beginning of bttv.c if you need more.
-(But which board has more than 4 PCI slots plus 1 for the VGA card?)
+If you are compiling the kernel version, just say 'm' if you are asked
+for bttv.  I /strongly/ suggest to compile bttv as module, because
+there are some insmod options for configuring the driver.
 
-Bttv is a standard component of all newer 2.1.x kernels.
-This distribution additionally supports 2.0.x kernels and all other
-changes and improvements which did not make it into the kernel version
-yet. 
-It also includes versions of videodev.c, i2.c, tuner.c and others
-which are the same as in the latest 2.1.x kernel but with 2.0.x support.
-A kernel version >2.0.30 is recommended.
+If you downloaded the separate bttv bundle:  You need configured kernel
+sources to compile the bttv driver.  The driver uses some Makefile
+magic to compile the modules with your kernel's configuration
+(wrt. module-versions, SMP, ...).  If you already have compiled the
+kernel at least once, you probably don't have do worry about this.  If
+not, go to /usr/src/linux and run at least "make config".  Even
+better, compile your own kernel, you'll never become a real hacker
+else ;-)
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-Although bttv is now used and tested by many people it still might crash your
-computer! Take all precautions to avoid data loss until you are certain
-bttv runs on your setup without problems.
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-The latest version of bttv can be found at:
-http://www.thp.uni-koeln.de/~rjkm/linux/bttv.html
+Make bttv work with your card
+-----------------------------
+
+Of cource you have to load the modules as very first thing.  The
+separate bttv bundle comes with a script called "update".  I use this
+one to load a new version while doing driver hacking.  You can use it
+too, but check the module arguments first.  They work for my setup,
+and probably do *not* for yours.  Another way is to setup your
+/etc/modules.conf file and let kmod load the modules.  See also:
+
+Modules.conf:	some sample entries for /etc/modules.conf
+Insmod-options:	list of all insmod options available for bttv and
+		the helper modules.
+MAKEDEV:	a script to create the special files for v4l
+CARDLIST:	List of all supported cards
+
+Loading just the bttv modules is'nt enouth for most cards.  The
+drivers for the i2c tuner/sound chips must also be loaded.  bttv tries
+to load them automagically by calling request_module() now, but this
+obviously works only with kmod enabled.
+
+The most important insmod option for bttv is "card=n" to select the
+correct card type.  If you get video but no sound you've very likely
+specified the wrong (or no) card type.  A list of supported cards is
+in CARDLIST.
+
+If your card is'nt listed in CARDLIST, you should read the Sound-FAQ.
+
+
+Still does'nt work?
+-------------------
+
+I do NOT have a lab with 30+ different grabber boards and a
+PAL/NTSC/SECAM test signal generator at home, so I often can't
+reproduce your problems.  This makes debugging very difficuilt for me.
+If you have some knowledge and spare time, please try to fix this
+yourself (patches very welcome of course...)  You know: The linux
+slogan is "Do it yourself".
+
+There is a mailing list: video4linux-list@redhat.com.  If you have
+trouble with some specific TV card, try to ask there instead of
+mailing me directly.  The chance that someone with the same card
+listens there is much higher...
+
+
+Finally: If you mail some patches for bttv around the world (to
+linux-kernel/Alan/Linus/...), please Cc: me.
+
+
+Have fun with bttv,
+
+  Gerd
+
+--
+Gerd Knorr <kraxel@goldbach.in-berlin.de>

@@ -2613,6 +2613,10 @@ int __init ide_cdrom_init (void)
 				continue;
 			}
 		}
+		if (drive->scsi) {
+			printk("ide-cd: passing drive %s to ide-scsi emulation.\n", drive->name);
+			continue;
+		}
 		info = (struct cdrom_info *) kmalloc (sizeof (struct cdrom_info), GFP_KERNEL);
 		if (info == NULL) {
 			printk ("%s: Can't allocate a cdrom structure\n", drive->name);

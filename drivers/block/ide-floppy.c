@@ -1614,6 +1614,10 @@ int idefloppy_init (void)
 			printk (KERN_ERR "ide-floppy: %s: not supported by this version of ide-floppy\n", drive->name);
 			continue;
 		}
+		if (drive->scsi) {
+			printk("ide-floppy: passing drive %s to ide-scsi emulation.\n", drive->name);
+			continue;
+		}
 		if ((floppy = (idefloppy_floppy_t *) kmalloc (sizeof (idefloppy_floppy_t), GFP_KERNEL)) == NULL) {
 			printk (KERN_ERR "ide-floppy: %s: Can't allocate a floppy structure\n", drive->name);
 			continue;

@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/wait.h>
 #include <linux/types.h>
 #include <asm/io.h>
 

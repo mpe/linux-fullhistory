@@ -1,0 +1,108 @@
+$Id: README.error-codes,v 1.1 1999/12/14 14:03:02 fliegl Exp $
+
+This is the documentation of (hopefully) all possible error codes (and
+their interpretation) that can be returned from the hostcontroller driver 
+and from usbcore.
+
+NOTE:
+The USB_ST_* codes are deferred and are only listed for compatibility, new
+software should use only -E* instead!
+
+
+
+**************************************************************************
+*                   Error codes returned by usb_submit_urb               *
+**************************************************************************
+
+Non-USB-specific:
+
+USB_ST_NOERROR
+0		URB submission went fine
+
+-ENOMEM		no memory for allocation of internal structures	
+
+USB-specific:
+
+-ENODEV		specified USB-device or bus doesn't exist
+
+-ENXIO		specified endpoint doesn't exist on the device
+
+USB_ST_URB_INVALID_ERROR
+-EINVAL		a) Invalid transfer type specified (or not supported)
+		b) Invalid interrupt interval (0<=n<256)
+		c) more than one interrupt packet requested
+
+-EAGAIN		a) specified ISO start frame too early
+		b) (using ISO-ASAP) too much scheduled for the future
+		   wait some time and try again.
+
+-EFBIG		too much ISO frames requested (currently uhci>900)
+
+-EPIPE		specified pipe-handle is already stalled
+
+-EMSGSIZE	endpoint message size is zero, do interface/alternate setting
+
+
+**************************************************************************
+*                   Error codes returned by in urb->status               *
+*                   or in iso_frame_desc[n].status (for ISO)             *
+**************************************************************************
+
+USB_ST_NOERROR
+0			Transfer completed successfully
+
+USB_ST_URB_KILLED
+-ENOENT			URB was canceled by unlink_urb
+
+USB_ST_URB_PENDING
+-EINPROGRESS		URB still pending, no results yet
+			(actually no error until now;-)
+
+USB_ST_BITSTUFF
+USB_ST_INTERNALERROR
+-EPROTO			a) bitstuff error
+			b) unknown USB error 
+
+USB_ST_CRC
+-EILSEQ			CRC mismatch
+
+-EPIPE			a) babble detect
+			b) endpoint stalled
+
+USB_ST_BUFFERUNDERRUN
+-ENOST			buffer error
+
+USB_ST_NORESPONSE
+USB_ST_TIMEOUT
+-ETIMEDOUT		transfer timed out, NAK
+
+USB_ST_REMOVED	
+-ENODEV			device was removed
+
+USB_ST_SHORT_PACKET
+-EREMOTEIO		short packet detected
+
+USB_ST_PARTIAL_ERROR
+-EXDEV			ISO transfer only partially completed
+			look at individual frame status for details
+
+USB_ST_URB_INVALID_ERROR
+-EINVAL			ISO madness, if this happens: Log off and go home
+
+**************************************************************************
+*              Error codes returned by usbcore-functions                 *
+*           (expect also other submit and transfer status codes)         *
+**************************************************************************
+
+usb_register():
+USB_ST_NOTSUPPORTED
+-EINVAL			error during registering new driver
+
+usb_terminate_bulk():
+USB_ST_REMOVED
+-ENODEV			urb already removed
+
+usb_get_*/usb_set_*():
+			All USB errors (submit/status) can occur
+
+

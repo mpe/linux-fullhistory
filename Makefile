@@ -233,6 +233,10 @@ ifeq ($(CONFIG_IRDA),y)
 DRIVERS := $(DRIVERS) drivers/net/irda/irda_drivers.a
 endif
 
+ifeq ($(CONFIG_I2C),y)
+DRIVERS := $(DRIVERS) drivers/i2c/i2c.a
+endif
+
 include arch/$(ARCH)/Makefile
 
 .S.s:

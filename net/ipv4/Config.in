@@ -8,22 +8,20 @@ if [ "$CONFIG_IP_ADVANCED_ROUTER" = "y" ]; then
    define_bool CONFIG_NETLINK y
    bool '    IP: policy routing' CONFIG_IP_MULTIPLE_TABLES
    if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
-      bool '  IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+      bool '      IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+      bool '      IP: fast network address translation' CONFIG_IP_ROUTE_NAT
    fi
    bool '    IP: equal cost multipath' CONFIG_IP_ROUTE_MULTIPATH
    bool '    IP: use TOS value as routing key' CONFIG_IP_ROUTE_TOS
    bool '    IP: verbose route monitoring' CONFIG_IP_ROUTE_VERBOSE
    bool '    IP: large routing tables' CONFIG_IP_ROUTE_LARGE_TABLES
-   if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
-      bool '      IP: fast network address translation' CONFIG_IP_ROUTE_NAT
-   fi
 fi
 bool '  IP: kernel level autoconfiguration' CONFIG_IP_PNP
 if [ "$CONFIG_IP_PNP" = "y" ]; then
-   bool '    BOOTP support' CONFIG_IP_PNP_BOOTP
-   bool '    RARP support' CONFIG_IP_PNP_RARP
+   bool '    IP: BOOTP support' CONFIG_IP_PNP_BOOTP
+   bool '    IP: RARP support' CONFIG_IP_PNP_RARP
 # not yet ready..
-#   bool '    ARP support' CONFIG_IP_PNP_ARP		
+#   bool '    IP: ARP support' CONFIG_IP_PNP_ARP		
 fi
 bool '  IP: optimize as router not host' CONFIG_IP_ROUTER
 tristate '  IP: tunneling' CONFIG_NET_IPIP

@@ -50,7 +50,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <stdarg.h>
-#include <linux/i2c.h>
+#include <linux/i2c-old.h>
 #include <linux/videotext.h>
 #include <linux/videodev.h>
 

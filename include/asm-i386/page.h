@@ -69,8 +69,8 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  * a virtual address space of one gigabyte, which limits the
  * amount of physical memory you can use to about 950MB. 
  *
- * If you want more physical memory than this then see the CONFIG_BIGMEM
- * option in the kernel configuration.
+ * If you want more physical memory than this then see the CONFIG_HIGHMEM4G
+ * amd CONFIG_HIGHMEM64G options in the kernel configuration.
  */
 
 #define __PAGE_OFFSET		(0xC0000000)

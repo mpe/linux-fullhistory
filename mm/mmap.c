@@ -684,10 +684,8 @@ int do_munmap(unsigned long addr, size_t len)
 		end = end > mpnt->vm_end ? mpnt->vm_end : end;
 		size = end - st;
 
-		lock_kernel();
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
-		unlock_kernel();
 
 		remove_shared_vm_struct(mpnt);
 		mm->map_count--;

@@ -683,9 +683,11 @@ static void acpi_idle_handler(void)
 		if (pm2_cnt) {
 			/* Disable PCI arbitration while sleeping,
 			   to avoid DMA corruption? */
+			cli();
 			outb(inb(pm2_cnt) | ACPI_ARB_DIS, pm2_cnt);
 			inb(acpi_p_blk + ACPI_P_LVL3);
 			outb(inb(pm2_cnt) & ~ACPI_ARB_DIS, pm2_cnt);
+			sti();
 		}
 		else {
 			inb(acpi_p_blk + ACPI_P_LVL3);

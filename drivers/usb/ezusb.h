@@ -66,6 +66,12 @@ struct ezusb_bulktransfer {
 	void *data;
 };
 
+struct ezusb_interrupt {
+	unsigned int ep;
+	unsigned int len;
+	unsigned int interval;  /* in milliseconds */
+	void *data;
+};
 struct ezusb_setinterface {
 	unsigned int interface;
 	unsigned int altsetting;
@@ -113,7 +119,8 @@ struct ezusb_asynciso {
 #define EZUSB_REQUESTBULK       _IOR('E', 16, struct ezusb_asyncbulk)
 #define EZUSB_REQUESTISO        _IOR('E', 17, struct ezusb_asynciso)
 #define EZUSB_TERMINATEASYNC    _IOR('E', 18, void *)
-#define EZUSB_GETFRAMENUMBER    _IOW('E', 18, unsigned int)
+#define EZUSB_GETFRAMENUMBER    _IOW('E', 19, unsigned int)
+#define EZUSB_INTERRUPT		_IOWR('E', 20, struct ezusb_interrupt)
 
 /* --------------------------------------------------------------------- */
 #endif /* _LINUX_EZUSB_H */

@@ -169,6 +169,7 @@ static int pg_drive_count;
 #include <linux/malloc.h>
 #include <linux/mtio.h>
 #include <linux/pg.h>
+#include <linux/wait.h>
 
 #include <asm/uaccess.h>
 

@@ -80,7 +80,7 @@
 #define __NR_sigpending		 73
 #define __NR_sethostname	 74
 #define __NR_setrlimit		 75
-#define __NR_getrlimit		 76
+#define __NR_old_getrlimit	 76
 #define __NR_getrusage		 77
 #define __NR_gettimeofday	 78
 #define __NR_settimeofday	 79
@@ -194,6 +194,13 @@
 #define __NR_getpmsg		188	/* some people actually want streams */
 #define __NR_putpmsg		189	/* some people actually want streams */
 #define __NR_vfork		190
+#define __NR_getrlimit		191
+#define __NR_mmap2		192
+#define __NR_truncate64		193
+#define __NR_ftruncate64	194
+#define __NR_stat64		195
+#define __NR_lstat64		196
+#define __NR_fstat64		197
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */

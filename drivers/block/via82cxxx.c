@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/via82cxxx.c	Version 0.05	Sept. 03, 1999
+ * linux/drivers/block/via82cxxx.c	Version 0.06	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99 Michel Aubry, Maintainer
  *  Copyright (C) 1999 Jeff Garzik, MVP4 Support (jgarzik@pobox.com)
@@ -542,6 +542,18 @@ unsigned int __init ata66_via82cxxx (ide_hwif_t *hwif)
 void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 {
 	set_via_timings(hwif);
+#if 0
+	hwif->tuneproc = &via82cxxx_tune_drive;
+	if (hwif->dma_base) {
+		hwif->dmaproc = &via82cxxx_dmaproc;
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
+	} else {
+		hwif->autodma = 0;
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
+	}
+#endif
 }
 
 /*

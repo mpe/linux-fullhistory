@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/sis5513.c	Version 0.07	Sept. 3, 1999
+ * linux/drivers/block/sis5513.c	Version 0.08	Dec. 13, 1999
  *
  * Copyright (C) 1999	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
@@ -266,15 +266,13 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		pci_read_config_byte(dev, drive_pci|0x01, &test2);
 	}
 
-	if ((id->dma_ultra & 0x0010) && (ultra) &&
-	    (udma_66) && (four_two)) {
+	if ((id->dma_ultra & 0x0010) && (ultra) && (udma_66) && (four_two)) {
 		if (!(test2 & 0x90)) {
 			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
 			pci_write_config_byte(dev, drive_pci|0x01, test2|0x90);
 		}
 		speed = XFER_UDMA_4;
-	} else if ((id->dma_ultra & 0x0008) && (ultra) &&
-		   (udma_66) && (four_two)) {
+	} else if ((id->dma_ultra & 0x0008) && (ultra) && (udma_66) && (four_two)) {
 		if (!(test2 & 0xA0)) {
 			pci_write_config_byte(dev, drive_pci|0x01, test2 & ~unmask);
 			pci_write_config_byte(dev, drive_pci|0x01, test2|0xA0);

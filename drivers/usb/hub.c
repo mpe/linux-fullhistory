@@ -11,7 +11,7 @@
 #include <linux/list.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
-#include <linux/spinlock.h>
+//#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
@@ -19,6 +19,15 @@
 #include "usb.h"
 #include "hub.h"
 
+#ifdef __alpha
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
+extern long __kernel_thread(unsigned long, int (*)(void *), void *);
+static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	return __kernel_thread(flags | CLONE_VM, fn, arg);
+}
+#endif
+#endif
 /* Wakes up khubd */
 static spinlock_t hub_event_lock = SPIN_LOCK_UNLOCKED;
 
@@ -73,10 +82,10 @@ static int hub_irq(int status, void *__buffer, int len, void *dev_id)
 	unsigned long flags;
 
 	switch (status) {
-	case USB_ST_REMOVED:
+	case -ENODEV:
 		/* Just ignore it */
 		break;
-	case USB_ST_NOERROR:
+	case 0:
 		/* Something happened, let khubd figure it out */
 		if (waitqueue_active(&khubd_wait)) {
 			/* Add the hub to the event queue */
@@ -237,12 +246,12 @@ static void * hub_probe(struct usb_device *dev, unsigned int i)
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 
 	if (usb_hub_configure(hub) >= 0) {
-		hub->irqpipe = usb_rcvctrlpipe(dev, endpoint->bEndpointAddress);
+		hub->irqpipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 		ret = usb_request_irq(dev, hub->irqpipe,
 			hub_irq, endpoint->bInterval,
 			hub, &hub->irq_handle);
 		if (ret) {
-			printk (KERN_WARNING "usb-hub: usb_request_irq failed (0x%x)\n", ret);
+			printk (KERN_WARNING "hub: usb_request_irq failed (%d)\n", ret);
 			/* free hub, but first clean up its list. */
 			spin_lock_irqsave(&hub_event_lock, flags);
 
@@ -295,29 +304,27 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	struct usb_port_status portsts;
 	unsigned short portstatus, portchange;
 
-	/* Disconnect anything that may have been there */
-	usb_disconnect(&hub->children[port]);
-
-	/* Reset the port */
-	usb_set_port_feature(hub, port + 1, USB_PORT_FEAT_RESET);
-
-	wait_ms(50);	/* FIXME: This is from the *BSD stack, thanks! :) */
-
 	/* Check status */
-	if (usb_get_port_status(hub, port + 1, &portsts) < 0) {
+	if (usb_get_port_status(hub, port + 1, &portsts)<0) {
 		printk(KERN_ERR "get_port_status failed\n");
 		return;
 	}
 
 	portstatus = le16_to_cpu(portsts.wPortStatus);
 	portchange = le16_to_cpu(portsts.wPortChange);
-
+	printk("hub.c: portstatus %x, change %x\n",portstatus,portchange);
 	/* If it's not in CONNECT and ENABLE state, we're done */
 	if ((!(portstatus & USB_PORT_STAT_CONNECTION)) &&
-	    (!(portstatus & USB_PORT_STAT_ENABLE)))
+	    (!(portstatus & USB_PORT_STAT_ENABLE))) {
+		/* Disconnect anything that may have been there */
+		usb_disconnect(&hub->children[port]);
 		/* We're done now, we already disconnected the device */
 		return;
-
+	}
+	wait_ms(500);	
+	/* Reset the port */
+	usb_set_port_feature(hub, port + 1, USB_PORT_FEAT_RESET);
+	wait_ms(500);	
 	/* Allocate a new device struct for it */
 	usb = usb_alloc_dev(hub, hub->bus);
 	if (!usb) {
@@ -518,3 +525,6 @@ void usb_hub_cleanup(void)
 	 */
 	usb_deregister(&hub_driver);
 } /* usb_hub_cleanup() */
+
+
+

@@ -83,7 +83,7 @@
 #define __NR_sigpending			(__NR_SYSCALL_BASE+ 73)
 #define __NR_sethostname		(__NR_SYSCALL_BASE+ 74)
 #define __NR_setrlimit			(__NR_SYSCALL_BASE+ 75)
-#define __NR_getrlimit			(__NR_SYSCALL_BASE+ 76)
+#define __NR_old_getrlimit		(__NR_SYSCALL_BASE+ 76)
 #define __NR_getrusage			(__NR_SYSCALL_BASE+ 77)
 #define __NR_gettimeofday		(__NR_SYSCALL_BASE+ 78)
 #define __NR_settimeofday		(__NR_SYSCALL_BASE+ 79)
@@ -198,6 +198,13 @@
 					/* 188 reserved */
 					/* 189 reserved */
 #define __NR_vfork			(__NR_SYSCALL_BASE+190)
+#define __NR_getrlimit			(__NR_SYSCALL_BASE+191)
+#define __NR_mmap2			(__NR_SYSCALL_BASE+192)
+#define __NR_truncate64			(__NR_SYSCALL_BASE+193)
+#define __NR_ftruncate64		(__NR_SYSCALL_BASE+194)
+#define __NR_stat64			(__NR_SYSCALL_BASE+195)
+#define __NR_lstat64			(__NR_SYSCALL_BASE+196)
+#define __NR_fstat64			(__NR_SYSCALL_BASE+197)
 
 #define __sys2(x) #x
 #define __sys1(x) __sys2(x)
