@@ -543,8 +543,6 @@ config VFP
 
 source "fs/Kconfig.binfmt"
 
-source "drivers/base/Kconfig"
-
 config PM
 	bool "Power Management support"
 	---help---
@@ -646,21 +644,21 @@ config CMDLINE
 
 endmenu
 
-source "drivers/parport/Kconfig"
+menu "Device Drivers"
+
+source "drivers/base/Kconfig"
 
 if ALIGNMENT_TRAP
 source "drivers/mtd/Kconfig"
 endif
 
+source "drivers/parport/Kconfig"
+
 source "drivers/pnp/Kconfig"
 
 source "drivers/block/Kconfig"
 
-source "drivers/md/Kconfig"
-
 source "drivers/acorn/block/Kconfig"
-
-source "net/Kconfig"
 
 if ARCH_CLPS7500 || ARCH_IOP3XX || ARCH_IXP4XX || ARCH_L7200 || ARCH_LH7A40X || ARCH_PXA || ARCH_RPC || ARCH_S3C2410 || ARCH_SA1100 || ARCH_SHARK || FOOTBRIDGE
 source "drivers/ide/Kconfig"
@@ -668,17 +666,20 @@ endif
 
 source "drivers/scsi/Kconfig"
 
+source "drivers/md/Kconfig"
+
 source "drivers/message/fusion/Kconfig"
 
 source "drivers/ieee1394/Kconfig"
 
 source "drivers/message/i2o/Kconfig"
 
+source "net/Kconfig"
+
 source "drivers/isdn/Kconfig"
 
-#
 # input before char - char/joystick depends on it. As does USB.
-#
+
 source "drivers/input/Kconfig"
 
 source "drivers/char/Kconfig"
@@ -687,21 +688,23 @@ source "drivers/i2c/Kconfig"
 
 #source "drivers/l3/Kconfig"
 
+source "drivers/misc/Kconfig"
+
 source "drivers/media/Kconfig"
-
-source "fs/Kconfig"
-
-source "arch/arm/oprofile/Kconfig"
 
 source "drivers/video/Kconfig"
 
 source "sound/Kconfig"
 
-source "drivers/misc/Kconfig"
-
 source "drivers/usb/Kconfig"
 
 source "drivers/mmc/Kconfig"
+
+endmenu
+
+source "fs/Kconfig"
+
+source "arch/arm/oprofile/Kconfig"
 
 source "arch/arm/Kconfig.debug"
 
