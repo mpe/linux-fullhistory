@@ -1421,8 +1421,8 @@ static int pkt_set_write_settings(struct pktcdvd_device *pd)
 	char buffer[128];
 	int ret, size;
 
-	/* doesn't apply to DVD+RW */
-	if (pd->mmc3_profile == 0x1a)
+	/* doesn't apply to DVD+RW or DVD-RAM */
+	if ((pd->mmc3_profile == 0x1a) || (pd->mmc3_profile == 0x12))
 		return 0;
 
 	memset(buffer, 0, sizeof(buffer));
@@ -1536,6 +1536,7 @@ static int pkt_good_disc(struct pktcdvd_device *pd, disc_information *di)
 			break;
 		case 0x1a: /* DVD+RW */
 		case 0x13: /* DVD-RW */
+		case 0x12: /* DVD-RAM */
 			return 0;
 		default:
 			printk("pktcdvd: Wrong disc profile (%x)\n", pd->mmc3_profile);
@@ -1600,6 +1601,9 @@ static int pkt_probe_settings(struct pktcdvd_device *pd)
 			break;
 		case 0x13: /* DVD-RW */
 			printk("pktcdvd: inserted media is DVD-RW\n");
+			break;
+		case 0x12: /* DVD-RAM */
+			printk("pktcdvd: inserted media is DVD-RAM\n");
 			break;
 		default:
 			printk("pktcdvd: inserted media is CD-R%s\n", di.erasable ? "W" : "");
@@ -1893,6 +1897,7 @@ static int pkt_open_write(struct pktcdvd_device *pd)
 	switch (pd->mmc3_profile) {
 		case 0x13: /* DVD-RW */
 		case 0x1a: /* DVD+RW */
+		case 0x12: /* DVD-RAM */
 			DPRINTK("pktcdvd: write speed %ukB/s\n", write_speed);
 			break;
 		default:
