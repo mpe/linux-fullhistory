@@ -20,10 +20,18 @@
  * General Public License for more details.
  
  *
- * $Id: aha152x.c,v 0.99 1993/10/24 16:19:59 root Exp root $
+ * $Id: aha152x.c,v 0.101 1993/12/13 01:16:27 root Exp $
  *
 
  * $Log: aha152x.c,v $
+ * Revision 0.101  1993/12/13  01:16:27  root
+ * - fixed STATUS phase (non-GOOD stati were dropped sometimes;
+ *   fixes problems with CD-ROM sector size detection & media change)
+ *
+ * Revision 0.100  1993/12/10  16:58:47  root
+ * - fix for unsuccessful selections in case of non-continuous id assignments
+ *   on the scsi bus.
+ *
  * Revision 0.99  1993/10/24  16:19:59  root
  * - fixed DATA IN (rare read errors gone)
  *
@@ -220,7 +228,7 @@
 #define P_BUSFREE  1
 #define P_PARITY   2
 
-char *aha152x_id = "Adaptec 152x SCSI driver; $Revision: 0.99 $\n";
+char *aha152x_id = "Adaptec 152x SCSI driver; $Revision: 0.101 $\n";
 
 static int port_base      = 0;
 static int this_host      = 0;
@@ -662,6 +670,7 @@ int aha152x_detect(int hostno)
   SETBITS(SCSISEQ, SCSIRSTO );
   do_pause(5);
   CLRBITS(SCSISEQ, SCSIRSTO );
+  do_pause(10);
 
   aha152x_reset(NULL);
 
@@ -948,6 +957,7 @@ int aha152x_reset(Scsi_Cmnd * __unused)
        SETPORT(SCSISEQ, SCSIRSTO);
        do_pause(5);
        SETPORT(SCSISEQ, 0);
+       do_pause(10);
 
        SETPORT(SIMODE0, 0 );
        SETPORT(SIMODE1, issue_SC ? ENBUSFREE : 0);
@@ -1140,7 +1150,7 @@ void aha152x_intr( int irqno )
 
       SETPORT( SXFRCTL0, CH1);
 
-      identify_msg = GETPORT(SCSIDAT);
+      identify_msg = GETPORT(SCSIBUS);
 
       if(!(identify_msg & IDENTIFY_BASE))
         {
@@ -1301,6 +1311,9 @@ void aha152x_intr( int irqno )
 #if defined(DEBUG_SELECTION) || defined(DEBUG_PHASES)
           printk("SELTO, ");
 #endif
+	  /* end selection attempt */
+          CLRBITS(SCSISEQ, ENSELO|ENAUTOATNO );
+
           /* timeout */
           SETPORT( SSTAT1, CLRSELTIMO );
 
@@ -1498,7 +1511,7 @@ void aha152x_intr( int irqno )
   
       while( phase == P_MSGI ) 
         {
-          current_SC->SCp.Message = GETPORT( SCSIDAT );
+          current_SC->SCp.Message = GETPORT( SCSIBUS );
           switch(current_SC->SCp.Message)
             {
             case DISCONNECT:
@@ -1541,7 +1554,7 @@ void aha152x_intr( int irqno )
                 if(getphase()!=P_MSGI)
                   break;
   
-                i=GETPORT(SCSIDAT);
+                i=GETPORT(SCSIBUS);
 
 #if defined(DEBUG_MSGI)
                 printk("length (%d), ", i);
@@ -1555,7 +1568,7 @@ void aha152x_intr( int irqno )
                 if(getphase()!=P_MSGI)
                   break;
 
-                code = GETPORT(SCSIDAT);
+                code = GETPORT(SCSIBUS);
 
                 switch( code )
                   {
@@ -1598,9 +1611,9 @@ void aha152x_intr( int irqno )
                 while( --i && (make_acklow(), getphase()==P_MSGI))
                   {
 #if defined(DEBUG_MSGI)
-                    printk("%x ", GETPORT(SCSIDAT) );
+                    printk("%x ", GETPORT(SCSIBUS) );
 #else
-                    GETPORT(SCSIDAT);
+                    GETPORT(SCSIBUS);
 #endif
                   }
 #if defined(DEBUG_MSGI)
@@ -1655,24 +1668,12 @@ void aha152x_intr( int irqno )
       SETPORT( SXFRCTL0, CH1);
 
       SETPORT( SIMODE0, 0 );
-      SETPORT( SIMODE1, ENPHASEMIS|ENREQINIT );
+      SETPORT( SIMODE1, ENREQINIT );
 
-      SETBITS( SXFRCTL0, SCSIEN );
-#if defined(DEBUG_STATUS)
-      printk("waiting for status, ");
-#endif
-#if defined(DEBUG_STATUS)
-      disp_ports();
-#endif
-      while( TESTLO( DMASTAT, INTSTAT ) )
-        ;
-
-#if 0
-      if(TESTLO( SSTAT0, SPIORDY ) )
-        aha152x_panic("passing STATUS phase");
-#endif
-
-      current_SC->SCp.Status = GETPORT( SCSIDAT );
+      if( TESTHI( SSTAT1, PHASEMIS ) )
+	printk("aha152x: passing STATUS phase");
+	
+      current_SC->SCp.Status = GETPORT( SCSIBUS );
       make_acklow();
       getphase();
 
@@ -1680,13 +1681,6 @@ void aha152x_intr( int irqno )
       printk("inbound status ");
       print_status( current_SC->SCp.Status );
       printk(", ");
-#endif
-      CLRBITS( SXFRCTL0, SCSIEN );
-      while( TESTHI( SXFRCTL0, SCSIEN ) )
-        ;
-        
-#if 0
-      CLRBITS( SXFRCTL0, SPIOEN);
 #endif
       break;
 

@@ -974,6 +974,7 @@ void con_write(struct tty_struct * tty)
 	if (!EMPTY(&tty->write_q) && currcons == sel_cons)
 		clear_selection();
 #endif /* CONFIG_SELECTION */
+	disable_bh(KEYBOARD_BH);
 	while (!tty->stopped &&	(c = get_tty_queue(&tty->write_q)) >= 0) {
 		if (state == ESnormal && translate[c]) {
 			if (need_wrap) {
@@ -1270,9 +1271,9 @@ void con_write(struct tty_struct * tty)
 				state = ESnormal;
 		}
 	}
-	if (vcmode == KD_GRAPHICS)
-		return;
-	set_cursor(currcons);
+	if (vcmode != KD_GRAPHICS)
+		set_cursor(currcons);
+	enable_bh(KEYBOARD_BH);
 }
 
 void do_keyboard_interrupt(void)
@@ -1288,7 +1289,7 @@ void do_keyboard_interrupt(void)
 		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
 		timer_active |= 1<<BLANK_TIMER;
 	}
-}	
+}
 
 void * memsetw(void * s,unsigned short c,int count)
 {

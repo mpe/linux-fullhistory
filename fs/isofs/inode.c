@@ -585,6 +585,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 
 		if (offset >= bufsize)
 		{
+			if((block & 1) != 0) return -1;
 			cpnt = kmalloc(1<<ISOFS_BLOCK_BITS,GFP_KERNEL);
 			memcpy(cpnt, bh->b_data, bufsize);
 			de = (struct iso_directory_record *)
@@ -592,9 +593,10 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			brelse(bh);
 			offset -= bufsize;
 			block++;
-			if((block & 1) == 0) return -1;
-			if (!(bh = bread(parent->i_dev,block,bufsize)))
+			if (!(bh = bread(parent->i_dev,block,bufsize))) {
+			        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 				return -1;
+			};
 			memcpy((char *)cpnt+bufsize, bh->b_data, bufsize);
 		}
 		

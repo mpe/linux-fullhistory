@@ -126,8 +126,10 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			offset = filp->f_pos & (bufsize - 1);
 			block = isofs_bmap(inode,(filp->f_pos)>> bufbits);
 			if (!block
-			    || !(bh = bread(inode->i_dev,block,bufsize)))
+			    || !(bh = bread(inode->i_dev,block,bufsize))) {
+			        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 				return 0;
+			};
 			memcpy((char *)cpnt+bufsize, bh->b_data, bufsize);
 		}
 		

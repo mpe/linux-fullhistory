@@ -122,8 +122,10 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			brelse(bh);
 			offset = f_pos & (bufsize - 1);
 			block = isofs_bmap(dir,f_pos>>bufbits);
-			if (!block || !(bh = bread(dir->i_dev,block,bufsize)))
+			if (!block || !(bh = bread(dir->i_dev,block,bufsize))) {
+			        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 				return 0;
+			};
 			memcpy((char *)cpnt+bufsize,bh->b_data,bufsize);
 		}
 		

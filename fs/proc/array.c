@@ -413,6 +413,8 @@ static int get_maps(int pid, char *buf)
 	return sz;
 }
 
+asmlinkage int get_module_list( char *);
+
 static int array_read(struct inode * inode, struct file * file,char * buf, int count)
 {
 	char * page;
@@ -462,6 +464,9 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 			return read_core(inode, file, buf, count);
 		case 15:
 			length = get_maps(pid, page);
+			break;
+		case 16:
+			length = get_module_list(page);
 			break;
 		default:
 			free_page((unsigned long) page);
