@@ -593,7 +593,7 @@ static struct sk_buff * pfkey_xfrm_state2msg(struct xfrm_state *x, int add_keys,
 	/* address family check */
 	sockaddr_size = pfkey_sockaddr_size(x->props.family);
 	if (!sockaddr_size)
-		ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);
 
 	/* base, SA, (lifetime (HSC),) address(SD), (address(P),)
 	   key(AE), (identity(SD),) (sensitivity)> */

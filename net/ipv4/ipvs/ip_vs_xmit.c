@@ -178,7 +178,7 @@ ip_vs_bypass_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 	}
 
 	/* MTU checking */
-	mtu = dst_pmtu(&rt->u.dst);
+	mtu = dst_mtu(&rt->u.dst);
 	if ((skb->len > mtu) && (iph->frag_off&__constant_htons(IP_DF))) {
 		ip_rt_put(rt);
 		icmp_send(skb, ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED, htonl(mtu));
@@ -245,7 +245,7 @@ ip_vs_nat_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 		goto tx_error_icmp;
 
 	/* MTU checking */
-	mtu = dst_pmtu(&rt->u.dst);
+	mtu = dst_mtu(&rt->u.dst);
 	if ((skb->len > mtu) && (iph->frag_off&__constant_htons(IP_DF))) {
 		ip_rt_put(rt);
 		icmp_send(skb, ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED, htonl(mtu));
@@ -342,7 +342,7 @@ ip_vs_tunnel_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 
 	tdev = rt->u.dst.dev;
 
-	mtu = dst_pmtu(&rt->u.dst) - sizeof(struct iphdr);
+	mtu = dst_mtu(&rt->u.dst) - sizeof(struct iphdr);
 	if (mtu < 68) {
 		ip_rt_put(rt);
 		IP_VS_DBG_RL("ip_vs_tunnel_xmit(): mtu less than 68\n");
@@ -445,7 +445,7 @@ ip_vs_dr_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 		goto tx_error_icmp;
 
 	/* MTU checking */
-	mtu = dst_pmtu(&rt->u.dst);
+	mtu = dst_mtu(&rt->u.dst);
 	if ((iph->frag_off&__constant_htons(IP_DF)) && skb->len > mtu) {
 		icmp_send(skb, ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED, htonl(mtu));
 		ip_rt_put(rt);
@@ -520,7 +520,7 @@ ip_vs_icmp_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 		goto tx_error_icmp;
 
 	/* MTU checking */
-	mtu = dst_pmtu(&rt->u.dst);
+	mtu = dst_mtu(&rt->u.dst);
 	if ((skb->len > mtu) && (skb->nh.iph->frag_off&__constant_htons(IP_DF))) {
 		ip_rt_put(rt);
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));

@@ -69,7 +69,7 @@ static void xfrm6_encap(struct sk_buff *skb)
 		dsfield &= ~INET_ECN_MASK;
 	ipv6_change_dsfield(top_iph, 0, dsfield);
 	top_iph->nexthdr = IPPROTO_IPV6; 
-	top_iph->hop_limit = dst_path_metric(dst, RTAX_HOPLIMIT);
+	top_iph->hop_limit = dst_metric(dst->child, RTAX_HOPLIMIT);
 	ipv6_addr_copy(&top_iph->saddr, (struct in6_addr *)&x->props.saddr);
 	ipv6_addr_copy(&top_iph->daddr, (struct in6_addr *)&x->id.daddr);
 }

@@ -233,7 +233,7 @@ void netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 
 	udp_len = len + sizeof(*udph);
 	ip_len = eth_len = udp_len + sizeof(*iph);
-	total_len = eth_len + ETH_HLEN;
+	total_len = eth_len + ETH_HLEN + NET_IP_ALIGN;
 
 	skb = find_skb(np, total_len, total_len - len);
 	if (!skb)

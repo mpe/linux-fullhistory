@@ -894,7 +894,7 @@ static int __init early_init_dt_scan_chosen(unsigned long node,
 	if (get_flat_dt_prop(node, "linux,iommu-force-on", NULL) != NULL)
 		iommu_force_on = 1;
 
-#ifdef CONFIG_PPC_PSERIES
+#ifdef CONFIG_PPC_RTAS
 	/* To help early debugging via the front panel, we retreive a minimal
 	 * set of RTAS infos now if available
 	 */
@@ -910,7 +910,7 @@ static int __init early_init_dt_scan_chosen(unsigned long node,
 			rtas.size = *prop;
 		}
 	}
-#endif /* CONFIG_PPC_PSERIES */
+#endif /* CONFIG_PPC_RTAS */
 
 	/* break now */
 	return 1;

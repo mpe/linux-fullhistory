@@ -601,9 +601,15 @@ static int hci_sock_create(struct socket *sock, int protocol)
 
 	sock->ops = &hci_sock_ops;
 
-	sk = bt_sock_alloc(sock, protocol, sizeof(struct hci_pinfo), GFP_KERNEL);
+	sk = sk_alloc(PF_BLUETOOTH, GFP_KERNEL, sizeof(struct hci_pinfo), NULL);
 	if (!sk)
 		return -ENOMEM;
+
+	sock_init_data(sock, sk);
+
+	sock_reset_flag(sk, SOCK_ZAPPED);
+
+	sk->sk_protocol = protocol;
 
 	sk_set_owner(sk, THIS_MODULE);
 

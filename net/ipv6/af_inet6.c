@@ -711,20 +711,17 @@ static int __init inet6_init(void)
 	}
 
 	err = sk_alloc_slab(&tcpv6_prot, "tcpv6_sock");
-	if (err) {
-		sk_alloc_slab_error(&tcpv6_prot);
+	if (err)
 		goto out;
-	}
+
 	err = sk_alloc_slab(&udpv6_prot, "udpv6_sock");
-	if (err) {
-		sk_alloc_slab_error(&udpv6_prot);
+	if (err)
 		goto out_tcp_free_slab;
-	}
+
 	err = sk_alloc_slab(&rawv6_prot, "rawv6_sock");
-	if (err) {
-		sk_alloc_slab_error(&rawv6_prot);
+	if (err)
 		goto out_udp_free_slab;
-	}
+
 
 	/* Register the socket-side information for inet6_create.  */
 	for(r = &inetsw6[0]; r < &inetsw6[SOCK_MAX]; ++r)

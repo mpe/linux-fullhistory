@@ -521,13 +521,13 @@ katana_platform_notify(struct device *dev)
 		void	((*rtn)(struct platform_device *pdev));
 	} dev_map[] = {
 #if defined(CONFIG_SERIAL_MPSC)
-		{ MPSC_CTLR_NAME "0", katana_fixup_mpsc_pdata },
-		{ MPSC_CTLR_NAME "1", katana_fixup_mpsc_pdata },
+		{ MPSC_CTLR_NAME ".0", katana_fixup_mpsc_pdata },
+		{ MPSC_CTLR_NAME ".1", katana_fixup_mpsc_pdata },
 #endif
 #if defined(CONFIG_MV643XX_ETH)
-		{ MV643XX_ETH_NAME "0", katana_fixup_eth_pdata },
-		{ MV643XX_ETH_NAME "1", katana_fixup_eth_pdata },
-		{ MV643XX_ETH_NAME "2", katana_fixup_eth_pdata },
+		{ MV643XX_ETH_NAME ".0", katana_fixup_eth_pdata },
+		{ MV643XX_ETH_NAME ".1", katana_fixup_eth_pdata },
+		{ MV643XX_ETH_NAME ".2", katana_fixup_eth_pdata },
 #endif
 	};
 	struct platform_device	*pdev;

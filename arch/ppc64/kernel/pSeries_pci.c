@@ -540,6 +540,9 @@ EXPORT_SYMBOL(pcibios_remove_root_bus);
 
 static void __init pSeries_request_regions(void)
 {
+	if (!isa_io_base)
+		return;
+
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");
 	request_region(0x00,0x20,"dma1");

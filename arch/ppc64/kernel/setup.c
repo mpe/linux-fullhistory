@@ -269,15 +269,9 @@ static void __init setup_cpu_maps(void)
 		nthreads = len / sizeof(u32);
 
 		for (j = 0; j < nthreads && cpu < NR_CPUS; j++) {
-			/*
-			 * Only spin up secondary threads if SMT is enabled.
-			 * We must leave space in the logical map for the
-			 * threads.
-			 */
-			if (j == 0 || smt_enabled_at_boot) {
-				cpu_set(cpu, cpu_present_map);
-				set_hard_smp_processor_id(cpu, intserv[j]);
-			}
+			cpu_set(cpu, cpu_present_map);
+			set_hard_smp_processor_id(cpu, intserv[j]);
+
 			if (intserv[j] == boot_cpuid_phys)
 				swap_cpuid = cpu;
 			cpu_set(cpu, cpu_possible_map);
@@ -605,12 +599,12 @@ void __init setup_system(void)
 	 */
 	initialize_cache_info();
 
-#ifdef CONFIG_PPC_PSERIES
+#ifdef CONFIG_PPC_RTAS
 	/*
 	 * Initialize RTAS if available
 	 */
 	rtas_initialize();
-#endif /* CONFIG_PPC_PSERIES */
+#endif /* CONFIG_PPC_RTAS */
 
 	/*
 	 * Check if we have an initrd provided via the device-tree
@@ -1367,6 +1361,12 @@ EXPORT_SYMBOL(check_legacy_ioport);
 static int __init early_xmon(char *p)
 {
 	/* ensure xmon is enabled */
+	if (p) {
+		if (strncmp(p, "on", 2) == 0)
+			xmon_init();
+		if (strncmp(p, "early", 5) != 0)
+			return 0;
+	}
 	xmon_init();
 	debugger(NULL);
 

@@ -507,8 +507,8 @@ static int nvram_scan_partitions(void)
 	struct nvram_partition * tmp_part;
 	unsigned char c_sum;
 	char * header;
-	long size;
 	int total_size;
+	int err;
 
 	if (ppc_md.nvram_size == NULL)
 		return -ENODEV;
@@ -522,29 +522,37 @@ static int nvram_scan_partitions(void)
 
 	while (cur_index < total_size) {
 
-		size = ppc_md.nvram_read(header, NVRAM_HEADER_LEN, &cur_index);
-		if (size != NVRAM_HEADER_LEN) {
+		err = ppc_md.nvram_read(header, NVRAM_HEADER_LEN, &cur_index);
+		if (err != NVRAM_HEADER_LEN) {
 			printk(KERN_ERR "nvram_scan_partitions: Error parsing "
 			       "nvram partitions\n");
-			kfree(header);
-			return size;
+			goto out;
 		}
 
 		cur_index -= NVRAM_HEADER_LEN; /* nvram_read will advance us */
 
 		memcpy(&phead, header, NVRAM_HEADER_LEN);
 
+		err = 0;
 		c_sum = nvram_checksum(&phead);
-		if (c_sum != phead.checksum)
-			printk(KERN_WARNING "WARNING: nvram partition checksum "
-			       "was %02x, should be %02x!\n", phead.checksum, c_sum);
-		
+		if (c_sum != phead.checksum) {
+			printk(KERN_WARNING "WARNING: nvram partition checksum"
+			       " was %02x, should be %02x!\n",
+			       phead.checksum, c_sum);
+			printk(KERN_WARNING "Terminating nvram partition scan\n");
+			goto out;
+		}
+		if (!phead.length) {
+			printk(KERN_WARNING "WARNING: nvram corruption "
+			       "detected: 0-length partition\n");
+			goto out;
+		}
 		tmp_part = (struct nvram_partition *)
 			kmalloc(sizeof(struct nvram_partition), GFP_KERNEL);
+		err = -ENOMEM;
 		if (!tmp_part) {
 			printk(KERN_ERR "nvram_scan_partitions: kmalloc failed\n");
-			kfree(header);
-			return -ENOMEM;
+			goto out;
 		}
 		
 		memcpy(&tmp_part->header, &phead, NVRAM_HEADER_LEN);
@@ -553,9 +561,11 @@ static int nvram_scan_partitions(void)
 		
 		cur_index += phead.length * NVRAM_BLOCK_LEN;
 	}
+	err = 0;
 
+ out:
 	kfree(header);
-	return 0;
+	return err;
 }
 
 static int __init nvram_init(void)

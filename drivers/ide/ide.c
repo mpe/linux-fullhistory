@@ -1414,10 +1414,9 @@ static int generic_ide_resume(struct device *dev)
 	return ide_do_drive_cmd(drive, &rq, ide_head_wait);
 }
 
-int generic_ide_ioctl(struct file *file, struct block_device *bdev,
+int generic_ide_ioctl(ide_drive_t *drive, struct file *file, struct block_device *bdev,
 			unsigned int cmd, unsigned long arg)
 {
-	ide_drive_t *drive = bdev->bd_disk->private_data;
 	ide_settings_t *setting;
 	int err = 0;
 	void __user *p = (void __user *)arg;

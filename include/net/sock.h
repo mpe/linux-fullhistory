@@ -561,11 +561,6 @@ struct proto {
 extern int sk_alloc_slab(struct proto *prot, char *name);
 extern void sk_free_slab(struct proto *prot);
 
-static inline void sk_alloc_slab_error(struct proto *proto)
-{
-	printk(KERN_CRIT "%s: Can't create sock SLAB cache!\n", proto->name);
-}
-
 static __inline__ void sk_set_owner(struct sock *sk, struct module *owner)
 {
 	/*
