@@ -184,6 +184,31 @@ int hfs_notify_change(struct dentry *dentry, struct iattr * attr)
 	return 0;
 }
 
+static int hfs_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,hfs_get_block);
+}
+static int hfs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,hfs_get_block);
+}
+static int hfs_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return cont_prepare_write(page,from,to,hfs_get_block,
+		&((struct inode*)page->mapping->host)->u.hfs_i.mmu_private);
+}
+static int hfs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,hfs_get_block);
+}
+struct address_space_operations hfs_aops = {
+	readpage: hfs_readpage,
+	writepage: hfs_writepage,
+	prepare_write: hfs_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: hfs_bmap
+};
+
 /*
  * __hfs_iget()
  *
@@ -308,6 +333,8 @@ void hfs_cap_ifill(struct inode * inode, ino_t type, const int version)
 		init_file_inode(inode, (type == HFS_CAP_DATA) ?
 						HFS_FK_DATA : HFS_FK_RSRC);
 		inode->i_op = &hfs_file_inode_operations;
+		inode->i_mapping->a_ops = &hfs_aops;
+		inode->u.hfs_i.mmu_private = inode->i_size;
 	} else { /* Directory */
 		struct hfs_dir *hdir = &entry->u.dir;
 
@@ -361,6 +388,8 @@ void hfs_dbl_ifill(struct inode * inode, ino_t type, const int version)
 	} else if (entry->type == HFS_CDR_FIL) {
 		init_file_inode(inode, HFS_FK_DATA);
 		inode->i_op = &hfs_file_inode_operations;
+		inode->i_mapping->a_ops = &hfs_aops;
+		inode->u.hfs_i.mmu_private = inode->i_size;
 	} else { /* Directory */
 		struct hfs_dir *hdir = &entry->u.dir;
 
@@ -402,6 +431,8 @@ void hfs_nat_ifill(struct inode * inode, ino_t type, const int version)
 	} else if (entry->type == HFS_CDR_FIL) {
 		init_file_inode(inode, HFS_FK_DATA);
 		inode->i_op = &hfs_file_inode_operations;
+		inode->i_mapping->a_ops = &hfs_aops;
+		inode->u.hfs_i.mmu_private = inode->i_size;
 	} else { /* Directory */
 		struct hfs_dir *hdir = &entry->u.dir;
 

@@ -46,17 +46,7 @@ static int max_interrupt_work = 10;
 #define TX_FIFO_THRESH 256		/* Rounded down to 4 byte units. */
 #define RX_FIFO_THRESH 1		/* 0-3, 0==32, 64,96, or 3==128 bytes  */
 
-#include <linux/version.h>		/* Evil, but neccessary */
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/timer.h>
@@ -65,11 +55,8 @@ static int max_interrupt_work = 10;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#if LINUX_VERSION_CODE >= 0x20155
+#include <linux/init.h>
 #define PCI_SUPPORT_VER2
-#else
-#include <linux/bios32.h>
-#endif
 #include <linux/delay.h>
 
 #include <asm/processor.h>		/* Processor type for cache alignment. */
@@ -83,13 +70,8 @@ static int max_interrupt_work = 10;
 /* Kernel compatibility defines, common to David Hind's PCMCIA package.
    This is only in the support-all-kernels source code. */
 
-#if ! defined (LINUX_VERSION_CODE) || LINUX_VERSION_CODE < 0x20000
-#warning This driver version is only for kernel versions 2.0.0 and later.
-#endif
-
 #define RUN_AT(x) (jiffies + (x))
 
-#if defined(MODULE) && (LINUX_VERSION_CODE >= 0x20115)
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("SMC 83c170 EPIC series Ethernet driver");
 MODULE_PARM(debug, "i");
@@ -97,19 +79,7 @@ MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(max_interrupt_work, "i");
-#endif
-#if LINUX_VERSION_CODE < 0x20123
-#define test_and_set_bit(val, addr) set_bit(val, addr)
-#endif
-#if LINUX_VERSION_CODE <= 0x20139
-#define	net_device_stats enet_statistics
-#define NETSTATS_VER2
-#endif
-#if LINUX_VERSION_CODE < 0x20159
-#define DEV_FREE_SKB(skb) dev_kfree_skb(skb, FREE_WRITE);
-#else  /* Grrr, unneeded incompatible change. */
 #define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
-#endif
 
 /* The I/O extent. */
 #define EPIC_TOTAL_SIZE 0x100
@@ -151,7 +121,7 @@ IVc. Errata
 
 /* The rest of these values should never change. */
 
-static struct net_device *epic_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq,
+static struct net_device *epic_probe1(struct pci_dev *pdev, long ioaddr, int irq,
 					  int chip_id, int card_idx);
 
 enum pci_flags_bit {
@@ -163,8 +133,9 @@ struct chip_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, pci_flags;
 	int io_size, min_latency;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(struct pci_dev *pdev,
+				     long ioaddr, int irq, int chip_idx,
+				     int fnd_cnt);
 } chip_tbl[] = {
 	{"SMSC EPIC/100 83c170", 0x10B8, 0x0005, 0x7fff,
 	 PCI_USES_IO|PCI_USES_MASTER|PCI_ADDR0, EPIC_TOTAL_SIZE, 32, epic_probe1},
@@ -217,6 +188,8 @@ struct epic_private {
 	char devname[8];			/* Used only for kernel debugging. */
 	const char *product_name;
 	struct net_device *next_module;
+	
+	spinlock_t lock;
 
 	/* Tx and Rx rings here so that they remain paragraph aligned. */
 	struct epic_rx_desc rx_ring[RX_RING_SIZE];
@@ -273,7 +246,7 @@ static void set_rx_mode(struct net_device *dev);
 static struct net_device *root_epic_dev = NULL;
 
 #ifndef CARDBUS
-int epic100_probe(void)
+static int __init epic100_probe(void)
 {
 	int cards_found = 0;
 	int chip_idx, irq;
@@ -281,7 +254,6 @@ int epic100_probe(void)
 	unsigned char pci_bus, pci_device_fn;
 	struct net_device *dev;
 
-#ifdef PCI_SUPPORT_VER2
 	struct pci_dev *pcidev = NULL;
 	while ((pcidev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pcidev))
 			!= NULL) {
@@ -300,76 +272,33 @@ int epic100_probe(void)
 		pci_bus = pcidev->bus->number;
 		pci_device_fn = pcidev->devfn;
 		irq = pcidev->irq;
-#else
-	int pci_index;
-
-	if ( ! pcibios_present())
-		return -ENODEV;
-
-	for (pci_index = 0; pci_index < 0xff; pci_index++) {
-		u8 pci_irq_line;
-		u16 vendor, device;
-		u32 pci_ioaddr;
-
-		if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
-								pci_index, &pci_bus, &pci_device_fn)
-			!= PCIBIOS_SUCCESSFUL)
-			break;
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
-
-		for (chip_idx = 0; chip_tbl[chip_idx].vendor_id; chip_idx++)
-			if (vendor == chip_tbl[chip_idx].vendor_id
-				&& (device & chip_tbl[chip_idx].device_id_mask) ==
-				chip_tbl[chip_idx].device_id)
-				break;
-		if (chip_tbl[chip_idx].vendor_id == 0) 		/* Compiled out! */
-			continue;
-
-		pcibios_read_config_dword(pci_bus, pci_device_fn,
-								  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-								 PCI_INTERRUPT_LINE, &pci_irq_line);
-		/* Remove I/O space marker in bit 0. */
-		pci_ioaddr &= ~3;
-		irq = pci_irq_line;
-
-		if (check_region(pci_ioaddr, chip_tbl[chip_idx].io_size))
-			continue;
-#endif
 
 		/* EPIC-specific code: Soft-reset the chip ere setting as master. */
 		outl(0x0001, pci_ioaddr + GENCTL);
 
 		/* Activate the card: fix for brain-damaged Win98 BIOSes. */
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
+		pci_read_config_word(pcidev, PCI_COMMAND, &pci_command);
 		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
 		if (pci_command != new_command) {
 			printk(KERN_INFO "  The PCI BIOS has not enabled Ethernet"
 				   " device %4.4x-%4.4x."
 				   "  Updating PCI command %4.4x->%4.4x.\n",
 				   vendor, device, pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
+			pci_write_config_word(pcidev, PCI_COMMAND, new_command);
 		}
 
-		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn, pci_ioaddr,
-									   irq, chip_idx, cards_found);
+		dev = chip_tbl[chip_idx].probe1(pcidev, pci_ioaddr, irq,
+						chip_idx, cards_found);
 
 		/* Check the latency timer. */
 		if (dev) {
 			u8 pci_latency;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_LATENCY_TIMER, &pci_latency);
+			pci_read_config_byte(pcidev, PCI_LATENCY_TIMER, &pci_latency);
 			if (pci_latency < chip_tbl[chip_idx].min_latency) {
 				printk(KERN_INFO "  PCI latency timer (CFLT) value of %d is "
 					   "unreasonably low, setting to %d.\n", pci_latency,
 					   chip_tbl[chip_idx].min_latency);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										  PCI_LATENCY_TIMER,
+				pci_write_config_byte(pcidev, PCI_LATENCY_TIMER,
 										  chip_tbl[chip_idx].min_latency);
 			}
 			dev = 0;
@@ -381,8 +310,8 @@ int epic100_probe(void)
 }
 #endif  /* not CARDBUS */
 
-static struct net_device *epic_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq,
-								  int chip_idx, int card_idx)
+static struct net_device *epic_probe1(struct pci_dev *pdev, long ioaddr, int irq,
+				      int chip_idx, int card_idx)
 {
 	struct epic_private *ep;
 	int i, option = 0, duplex = 0;
@@ -444,13 +373,10 @@ static struct net_device *epic_probe1(int pci_bus, int pci_devfn, long ioaddr, i
 	ep->next_module = root_epic_dev;
 	root_epic_dev = dev;
 
-	ep->pci_bus = pci_bus;
-	ep->pci_dev_fn = pci_devfn;
-#if defined(PCI_SUPPORT_VER2)
-	ep->chip_id = pci_find_slot(pci_bus, pci_devfn)->device;
-#else
-	ep->chip_id = chip_tbl[chip_idx].device_id;
-#endif
+	ep->lock = SPIN_LOCK_UNLOCKED;
+	ep->pci_bus = pdev->bus->number;
+	ep->pci_dev_fn = pdev->devfn;
+	ep->chip_id = pdev->device;
 
 	/* Find the connected MII xcvrs.
 	   Doing this in open() would allow detecting external xcvrs later, but
@@ -497,6 +423,8 @@ static struct net_device *epic_probe1(int pci_bus, int pci_devfn, long ioaddr, i
 	dev->get_stats = &epic_get_stats;
 	dev->set_multicast_list = &set_rx_mode;
 	dev->do_ioctl = &mii_ioctl;
+	dev->tx_timeout = epic_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 
 	return dev;
 }
@@ -653,9 +581,7 @@ epic_open(struct net_device *dev)
 	set_rx_mode(dev);
 	outl(0x000A, ioaddr + COMMAND);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	/* Enable interrupts by setting the interrupt mask. */
 	outl((ep->chip_id == 6 ? PCIBusErr175 : PCIBusErr170)
@@ -864,15 +790,6 @@ epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int entry;
 	u32 flag;
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		epic_tx_timeout(dev);
-		return 1;
-	}
-
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
 
@@ -889,13 +806,13 @@ epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	
 	if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 	  flag = 0x10; /* No interrupt */
-	  clear_bit(0, (void*)&dev->tbusy);
+	  netif_start_queue(dev);
 	} else if (ep->cur_tx - ep->dirty_tx == TX_RING_SIZE/2) {
 	  flag = 0x14; /* Tx-done intr. */
-	  clear_bit(0, (void*)&dev->tbusy);
+	  netif_start_queue(dev);
 	} else if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE - 2) {
 	  flag = 0x10; /* No Tx-done intr. */
-	  clear_bit(0, (void*)&dev->tbusy);
+	  netif_start_queue(dev);
 	} else {
 	  /* Leave room for two additional entries. */
 	  flag = 0x14; /* Tx-done intr. */
@@ -927,21 +844,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	long ioaddr = dev->base_addr;
 	int status, boguscnt = max_interrupt_work;
 
-#if defined(__i386__)
-	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
-	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_ERR "%s: SMP simultaneous entry of an interrupt handler.\n",
-			   dev->name);
-		dev->interrupt = 0;	/* Avoid halting machine. */
-		return;
-	}
-#else
-	if (dev->interrupt) {
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
-#endif
+	spin_lock (&ep->lock);
 
 	do {
 		status = inl(ioaddr + INTSTAT);
@@ -1004,12 +907,12 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			}
 #endif
 
-			if (ep->tx_full && dev->tbusy
-				&& dirty_tx > ep->cur_tx - TX_RING_SIZE + 2) {
+			if (ep->tx_full &&
+			    test_bit(LINK_STATE_XOFF, &dev->flags) &&
+			    dirty_tx > ep->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				ep->tx_full = 0;
-				clear_bit(0, (void*)&dev->tbusy);
-				mark_bh(NET_BH);
+				netif_wake_queue (dev);
 			}
 
 			ep->dirty_tx = dirty_tx;
@@ -1057,12 +960,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		printk(KERN_DEBUG "%s: exiting interrupt, intr_status=%#4.4x.\n",
 			   dev->name, inl(ioaddr + INTSTAT));
 
-#if defined(__i386__)
-	clear_bit(0, (void*)&dev->interrupt);
-#else
-	dev->interrupt = 0;
-#endif
-	return;
+	spin_unlock (&ep->lock);
 }
 
 static int epic_rx(struct net_device *dev)
@@ -1147,8 +1045,7 @@ static int epic_close(struct net_device *dev)
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (epic_debug > 1)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
@@ -1176,9 +1073,6 @@ static int epic_close(struct net_device *dev)
 		ep->rx_ring[i].buflength = 0;
 		ep->rx_ring[i].bufaddr = 0xBADF00D0; /* An invalid address. */
 		if (skb) {
-#if LINUX_VERSION_CODE < 0x20100
-			skb->free = 1;
-#endif
 			DEV_FREE_SKB(skb);
 		}
 	}
@@ -1202,7 +1096,7 @@ static struct net_device_stats *epic_get_stats(struct net_device *dev)
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (dev->start) {
+	if (test_bit(LINK_STATE_START, &dev->state)) {
 		/* Update the error counts. */
 		ep->stats.rx_missed_errors += inb(ioaddr + MPCNT);
 		ep->stats.rx_frame_errors += inb(ioaddr + ALICNT);
@@ -1288,12 +1182,12 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		data[0] = ((struct epic_private *)dev->priv)->phys[0] & 0x1f;
 		/* Fall Through */
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
-		if (! dev->start) {
+		if (! test_bit(LINK_STATE_START, &dev->state)) {
 			outl(0x0200, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 		}
 		data[3] = mdio_read(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
-		if (! dev->start) {
+		if (! test_bit(LINK_STATE_START, &dev->state)) {
 #ifdef notdef
 			outl(0x0008, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x483C) | 0x0000, ioaddr + NVCTL);
@@ -1303,12 +1197,12 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
 		if (!suser())
 			return -EPERM;
-		if (! dev->start) {
+		if (! test_bit(LINK_STATE_START, &dev->state)) {
 			outl(0x0200, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 		}
 		mdio_write(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2]);
-		if (! dev->start) {
+		if (! test_bit(LINK_STATE_START, &dev->state)) {
 #ifdef notdef
 			outl(0x0008, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x483C) | 0x0000, ioaddr + NVCTL);
@@ -1331,13 +1225,15 @@ static dev_node_t *epic_attach(dev_locator_t *loc)
 	u16 dev_id;
 	u32 io;
 	u8 bus, devfn, irq;
+	struct pci_dev *pdev;
 
 	if (loc->bus != LOC_PCI) return NULL;
-	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
+	pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
+	if (!pdev) return NULL;
 	printk(KERN_DEBUG "epic_attach(bus %d, function %d)\n", bus, devfn);
-	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
-	pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
-	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
+	io = pdev->resource[0].start;
+	irq = pdev->irq;
+	dev_id = pdev->device;
 	io &= ~3;
 	if (io == 0 || irq == 0) {
 		printk(KERN_ERR "The EPIC/C CardBus Ethernet interface was not "
@@ -1407,10 +1303,8 @@ struct driver_operations epic_ops = {
 
 #endif  /* Cardbus support */
 
-
-#ifdef MODULE
 
-int init_module(void)
+static int __init epic100_init_module(void)
 {
 	if (epic_debug)
 		printk(KERN_INFO "%s", version);
@@ -1423,7 +1317,7 @@ int init_module(void)
 #endif
 }
 
-void cleanup_module(void)
+static void __exit epic100_cleanup_module(void)
 {
 	struct net_device *next_dev;
 
@@ -1443,8 +1337,10 @@ void cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
-
+module_init(epic100_init_module);
+module_exit(epic100_cleanup_module);
+
+
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c epic100.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"

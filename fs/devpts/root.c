@@ -28,21 +28,6 @@ struct inode_operations devpts_root_inode_operations = {
 	&devpts_root_operations, /* file operations */
 	NULL,                   /* create */
 	devpts_root_lookup,     /* lookup */
-	NULL,                   /* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,                   /* mknod */
-	NULL,                   /* rename */
-	NULL,                   /* readlink */
-	NULL,                   /* follow_link */
-	NULL,                   /* get_block */
-	NULL,                   /* readpage */
-	NULL,                   /* writepage */
-	NULL,                   /* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 static struct dentry_operations devpts_dentry_operations = {

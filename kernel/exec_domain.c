@@ -103,12 +103,11 @@ asmlinkage long sys_personality(unsigned long personality)
 	unsigned long old_personality;
 	int ret;
 
-	lock_kernel();
-	ret = current->personality;
 	if (personality == 0xffffffff)
-		goto out;
+		return current->personality;
 
 	ret = -EINVAL;
+	lock_kernel();
 	it = lookup_exec_domain(personality);
 	if (!it)
 		goto out;

@@ -49,14 +49,6 @@ struct inode_operations sysv_dir_inode_operations = {
 	sysv_rmdir,		/* rmdir */
 	sysv_mknod,		/* mknod */
 	sysv_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 static int sysv_readdir(struct file * filp, void * dirent, filldir_t filldir)

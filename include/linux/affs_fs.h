@@ -105,11 +105,11 @@ extern void   affs_dir_truncate(struct inode *);
 extern struct inode_operations	 affs_file_inode_operations;
 extern struct inode_operations	 affs_file_inode_operations_ofs;
 extern struct inode_operations	 affs_dir_inode_operations;
-extern struct inode_operations	 affs_symlink_inode_operations;
-extern struct inode_operations	 affs_chrdev_inode_operations;
-extern struct inode_operations	 affs_blkdev_inode_operations;
+extern struct address_space_operations	 affs_symlink_aops;
+extern struct address_space_operations	 affs_aops;
 
 extern struct dentry_operations	 affs_dentry_operations;
 extern struct dentry_operations	 affs_dentry_operations_intl;
 
+extern int affs_bmap(struct inode *, int);
 #endif

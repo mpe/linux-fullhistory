@@ -595,14 +595,6 @@ struct inode_operations msdos_dir_inode_operations = {
 	msdos_rmdir,		/* rmdir */
 	NULL,			/* mknod */
 	msdos_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,                   /* revalidate */
 };
 
 static void msdos_put_super_callback(struct super_block *sb)

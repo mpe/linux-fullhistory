@@ -606,9 +606,8 @@ static void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, i
 	if (ei_status.dmaing) 
 	{
 		printk(KERN_EMERG "%s: DMAing conflict in ne_get_8390_hdr "
-			"[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-			dev->name, ei_status.dmaing, ei_status.irqlock,
-			dev->interrupt);
+			"[DMAstat:%d][irqlock:%d].\n",
+			dev->name, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 
@@ -646,9 +645,8 @@ static void ne_block_input(struct net_device *dev, int count, struct sk_buff *sk
 	if (ei_status.dmaing) 
 	{
 		printk(KERN_EMERG "%s: DMAing conflict in ne_block_input "
-			"[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-			dev->name, ei_status.dmaing, ei_status.irqlock,
-			dev->interrupt);
+			"[DMAstat:%d][irqlock:%d].\n",
+			dev->name, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 	ei_status.dmaing |= 0x01;
@@ -721,9 +719,8 @@ static void ne_block_output(struct net_device *dev, int count,
 	if (ei_status.dmaing) 
 	{
 		printk(KERN_EMERG "%s: DMAing conflict in ne_block_output."
-			"[DMAstat:%d][irqlock:%d][intr:%ld]\n",
-			dev->name, ei_status.dmaing, ei_status.irqlock,
-			dev->interrupt);
+			"[DMAstat:%d][irqlock:%d]\n",
+			dev->name, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 	ei_status.dmaing |= 0x01;

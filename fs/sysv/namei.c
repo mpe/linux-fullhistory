@@ -204,6 +204,7 @@ int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 	if (!inode) 
 		return -ENOSPC;
 	inode->i_op = &sysv_file_inode_operations;
+	inode->i_mapping->a_ops = &sysv_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
 	error = sysv_add_entry(dir, dentry->d_name.name,
@@ -455,7 +456,8 @@ int sysv_symlink(struct inode * dir, struct dentry * dentry,
 		goto out;
 
 	inode->i_mode = S_IFLNK | 0777;
-	inode->i_op = &sysv_symlink_inode_operations;
+	inode->i_op = &page_symlink_inode_operations;
+	inode->i_mapping->a_ops = &sysv_aops;
 	err = block_symlink(inode, symname, l);
 	if (err)
 		goto out_no_entry;

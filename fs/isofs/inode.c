@@ -1006,6 +1006,19 @@ int isofs_bmap(struct inode *inode, int block)
 	return 0;
 }
 
+static int isofs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,isofs_get_block);
+}
+static int _isofs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,isofs_get_block);
+}
+static struct address_space_operations isofs_aops = {
+	readpage: isofs_readpage,
+	bmap: _isofs_bmap
+};
+
 static void test_and_set_uid(uid_t *p, uid_t value)
 {
 	if(value) {
@@ -1254,13 +1267,15 @@ static void isofs_read_inode(struct inode * inode)
 	} else
 #endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	{
-	  if (S_ISREG(inode->i_mode))
+	  if (S_ISREG(inode->i_mode)) {
 	    inode->i_op = &isofs_file_inode_operations;
-	  else if (S_ISDIR(inode->i_mode))
+	    inode->i_data.a_ops = &isofs_aops;
+	  } else if (S_ISDIR(inode->i_mode))
 	    inode->i_op = &isofs_dir_inode_operations;
-	  else if (S_ISLNK(inode->i_mode))
-	    inode->i_op = &isofs_symlink_inode_operations;
-	  else
+	  else if (S_ISLNK(inode->i_mode)) {
+	    inode->i_op = &page_symlink_inode_operations;
+	    inode->i_data.a_ops = &isofs_symlink_aops;
+	  } else
 	    /* XXX - parse_rock_ridge_inode() had already set i_rdev. */
 	    init_special_inode(inode, inode->i_mode, kdev_t_to_nr(inode->i_rdev));
 	}

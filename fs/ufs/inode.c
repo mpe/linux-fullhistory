@@ -395,7 +395,7 @@ out:
 	return result;
 }
 
-int ufs_getfrag_block (struct inode *inode, long fragment, struct buffer_head *bh_result, int create)
+static int ufs_getfrag_block (struct inode *inode, long fragment, struct buffer_head *bh_result, int create)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
@@ -540,6 +540,30 @@ struct buffer_head * ufs_bread (struct inode * inode, unsigned fragment,
 	return NULL;
 }
 
+static int ufs_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,ufs_getfrag_block);
+}
+static int ufs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,ufs_getfrag_block);
+}
+static int ufs_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return block_prepare_write(page,from,to,ufs_getfrag_block);
+}
+static int ufs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,ufs_getfrag_block);
+}
+struct address_space_operations ufs_aops = {
+	readpage: ufs_readpage,
+	writepage: ufs_writepage,
+	prepare_write: ufs_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: ufs_bmap
+};
+
 void ufs_read_inode (struct inode * inode)
 {
 	struct super_block * sb;
@@ -619,15 +643,19 @@ void ufs_read_inode (struct inode * inode)
 
 	inode->i_op = NULL;
 
-	if (S_ISREG(inode->i_mode))
+	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ufs_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+		inode->i_mapping->a_ops = &ufs_aops;
+	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &ufs_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = inode->i_blocks
-				?&ufs_symlink_inode_operations
-				:&ufs_fast_symlink_inode_operations;
-	else
+	else if (S_ISLNK(inode->i_mode)) {
+		if (!inode->i_blocks)
+			inode->i_op = &ufs_fast_symlink_inode_operations;
+		else {
+			inode->i_op = &page_symlink_inode_operations;
+			inode->i_mapping->a_ops = &ufs_aops;
+		}
+	} else
 		init_special_inode(inode, inode->i_mode,
 				   SWAB32(ufs_inode->ui_u2.ui_addr.ui_db[0]));
 

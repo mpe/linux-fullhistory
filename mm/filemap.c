@@ -98,7 +98,7 @@ void invalidate_inode_pages(struct inode * inode)
 	struct list_head *head, *curr;
 	struct page * page;
 
-	head = &inode->i_data.pages;
+	head = &inode->i_mapping->pages;
 	spin_lock(&pagecache_lock);
 	curr = head->next;
 
@@ -134,7 +134,7 @@ void truncate_inode_pages(struct inode * inode, loff_t lstart)
 	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 
 repeat:
-	head = &inode->i_data.pages;
+	head = &inode->i_mapping->pages;
 	spin_lock(&pagecache_lock);
 	curr = head->next;
 	while (curr != head) {
@@ -423,7 +423,7 @@ static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigne
 	struct page *page;
 	int retval = 0;
 
-	head = &inode->i_data.pages;
+	head = &inode->i_mapping->pages;
 
 	spin_lock(&pagecache_lock);
 	curr = head->next;
@@ -525,11 +525,12 @@ static int add_to_page_cache_unique(struct page * page,
 static inline int page_cache_read(struct file * file, unsigned long offset) 
 {
 	struct inode *inode = file->f_dentry->d_inode;
-	struct page **hash = page_hash(&inode->i_data, offset);
+	struct address_space *mapping = inode->i_mapping;
+	struct page **hash = page_hash(mapping, offset);
 	struct page *page; 
 
 	spin_lock(&pagecache_lock);
-	page = __find_page_nolock(&inode->i_data, offset, *hash); 
+	page = __find_page_nolock(mapping, offset, *hash); 
 	spin_unlock(&pagecache_lock);
 	if (page)
 		return 0;
@@ -538,8 +539,8 @@ static inline int page_cache_read(struct file * file, unsigned long offset)
 	if (!page)
 		return -ENOMEM;
 
-	if (!add_to_page_cache_unique(page, &inode->i_data, offset, hash)) {
-		int error = inode->i_op->readpage(file->f_dentry, page);
+	if (!add_to_page_cache_unique(page, mapping, offset, hash)) {
+		int error = mapping->a_ops->readpage(file->f_dentry, page);
 		page_cache_release(page);
 		return error;
 	}
@@ -955,6 +956,7 @@ void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * 
 {
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
+	struct address_space *mapping = inode->i_mapping;
 	unsigned long index, offset;
 	struct page *cached_page;
 	int reada_ok;
@@ -1023,10 +1025,10 @@ void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * 
 		/*
 		 * Try to find the data in the page cache..
 		 */
-		hash = page_hash(&inode->i_data, index);
+		hash = page_hash(mapping, index);
 
 		spin_lock(&pagecache_lock);
-		page = __find_page_nolock(&inode->i_data, index, *hash);
+		page = __find_page_nolock(mapping, index, *hash);
 		if (!page)
 			goto no_cached_page;
 found_page:
@@ -1074,7 +1076,7 @@ page_not_up_to_date:
 
 readpage:
 		/* ... and start the actual read. The read will unlock the page. */
-		error = inode->i_op->readpage(filp->f_dentry, page);
+		error = mapping->a_ops->readpage(filp->f_dentry, page);
 
 		if (!error) {
 			if (Page_Uptodate(page))
@@ -1113,7 +1115,7 @@ no_cached_page:
 			 * dropped the page cache lock. Check for that.
 			 */
 			spin_lock(&pagecache_lock);
-			page = __find_page_nolock(&inode->i_data, index, *hash);
+			page = __find_page_nolock(mapping, index, *hash);
 			if (page)
 				goto found_page;
 		}
@@ -1122,7 +1124,7 @@ no_cached_page:
 		 * Ok, add the new page to the hash-queues...
 		 */
 		page = cached_page;
-		__add_to_page_cache(page, &inode->i_data, index, hash);
+		__add_to_page_cache(page, mapping, index, hash);
 		spin_unlock(&pagecache_lock);
 		cached_page = NULL;
 
@@ -1233,7 +1235,7 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 	in_inode = in_file->f_dentry->d_inode;
 	if (!in_inode)
 		goto fput_in;
-	if (!in_inode->i_op || !in_inode->i_op->readpage)
+	if (!in_inode->i_mapping->a_ops->readpage)
 		goto fput_in;
 	retval = locks_verify_area(FLOCK_VERIFY_READ, in_inode, in_file, in_file->f_pos, count);
 	if (retval)
@@ -1307,6 +1309,7 @@ struct page * filemap_nopage(struct vm_area_struct * area,
 	struct file *file = area->vm_file;
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
+	struct address_space *mapping = inode->i_mapping;
 	struct page *page, **hash, *old_page;
 	unsigned long size = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 
@@ -1325,9 +1328,9 @@ struct page * filemap_nopage(struct vm_area_struct * area,
 	/*
 	 * Do we have something in the page cache already?
 	 */
-	hash = page_hash(&inode->i_data, pgoff);
+	hash = page_hash(mapping, pgoff);
 retry_find:
-	page = __find_get_page(&inode->i_data, pgoff, hash);
+	page = __find_get_page(mapping, pgoff, hash);
 	if (!page)
 		goto no_cached_page;
 
@@ -1396,7 +1399,7 @@ page_not_uptodate:
 		goto success;
 	}
 
-	if (!inode->i_op->readpage(file->f_dentry, page)) {
+	if (!mapping->a_ops->readpage(file->f_dentry, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1414,7 +1417,7 @@ page_not_uptodate:
 		goto success;
 	}
 	ClearPageError(page);
-	if (!inode->i_op->readpage(file->f_dentry, page)) {
+	if (!mapping->a_ops->readpage(file->f_dentry, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1446,7 +1449,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 		if (size_idx <= index)
 			return -EIO;
 	}
-	writepage = inode->i_op->writepage;
+	writepage = inode->i_mapping->a_ops->writepage;
 	lock_page(page);
 
 	retval = writepage(file->f_dentry, page);
@@ -1658,13 +1661,13 @@ int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 
 	ops = &file_private_mmap;
 	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE)) {
-		if (!inode->i_op || !inode->i_op->writepage)
+		if (!inode->i_mapping->a_ops->writepage)
 			return -EINVAL;
 		ops = &file_shared_mmap;
 	}
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
-	if (!inode->i_op || !inode->i_op->readpage)
+	if (!inode->i_mapping->a_ops->readpage)
 		return -ENOEXEC;
 	UPDATE_ATIME(inode);
 	vma->vm_ops = ops;
@@ -1816,6 +1819,21 @@ struct page *grab_cache_page(struct address_space *mapping, unsigned long index)
 	return page;
 }
 
+static inline void remove_suid(struct inode *inode)
+{
+	unsigned int mode;
+
+	/* set S_IGID if S_IXGRP is set, and always set S_ISUID */
+	mode = (inode->i_mode & S_IXGRP)*(S_ISGID/S_IXGRP) | S_ISUID;
+
+	/* was any of the uid bits set? */
+	mode &= inode->i_mode;
+	if (mode && !capable(CAP_FSETID)) {
+		inode->i_mode &= ~mode;
+		mark_inode_dirty(inode);
+	}
+}
+
 /*
  * Write to a file through the page cache. This is mainly for the
  * benefit of NFS and possibly other network-based file systems.
@@ -1833,12 +1851,11 @@ struct page *grab_cache_page(struct address_space *mapping, unsigned long index)
  *							okir@monad.swb.de
  */
 ssize_t
-generic_file_write(struct file *file, const char *buf,
-		   size_t count, loff_t *ppos,
-		   writepage_t write_one_page)
+generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 {
 	struct dentry	*dentry = file->f_dentry; 
 	struct inode	*inode = dentry->d_inode; 
+	struct address_space *mapping = inode->i_mapping;
 	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	loff_t		pos;
 	struct page	*page, *cached_page;
@@ -1882,9 +1899,15 @@ generic_file_write(struct file *file, const char *buf,
 	}
 
 	status  = 0;
+	if (count) {
+		remove_suid(inode);
+		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+		mark_inode_dirty(inode);
+	}
 
 	while (count) {
 		unsigned long bytes, index, offset;
+		char *kaddr;
 
 		/*
 		 * Try to find the page in the cache. If it isn't there,
@@ -1897,7 +1920,7 @@ generic_file_write(struct file *file, const char *buf,
 			bytes = count;
 
 		status = -ENOMEM;	/* we'll assign it later anyway */
-		page = __grab_cache_page(&inode->i_data, index, &cached_page);
+		page = __grab_cache_page(mapping, index, &cached_page);
 		if (!page)
 			break;
 
@@ -1906,7 +1929,16 @@ generic_file_write(struct file *file, const char *buf,
 			PAGE_BUG(page);
 		}
 
-		status = write_one_page(file, page, offset, bytes, buf);
+		status = mapping->a_ops->prepare_write(page, offset, offset+bytes);
+		if (status)
+			goto unlock;
+		kaddr = (char*)page_address(page);
+		status = copy_from_user(kaddr+offset, buf, bytes);
+		if (status)
+			goto fail_write;
+		status = mapping->a_ops->commit_write(file, page, offset, offset+bytes);
+		if (!status)
+			status = bytes;
 
 		if (status >= 0) {
 			written += status;
@@ -1916,6 +1948,7 @@ generic_file_write(struct file *file, const char *buf,
 			if (pos > inode->i_size)
 				inode->i_size = pos;
 		}
+unlock:
 		/* Mark it unlocked again and drop the page.. */
 		UnlockPage(page);
 		page_cache_release(page);
@@ -1932,6 +1965,11 @@ generic_file_write(struct file *file, const char *buf,
 out:
 	up(&inode->i_sem);
 	return err;
+fail_write:
+	status = -EFAULT;
+	ClearPageUptodate(page);
+	kunmap(page);
+	goto unlock;
 }
 
 void __init page_cache_init(unsigned long mempages)

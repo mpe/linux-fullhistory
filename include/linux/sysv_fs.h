@@ -384,7 +384,6 @@ extern int sysv_new_block(struct super_block * sb);
 extern void sysv_free_block(struct super_block * sb, unsigned int block);
 extern unsigned long sysv_count_free_blocks(struct super_block *sb);
 
-extern int sysv_get_block(struct inode *, long, struct buffer_head *, int);
 extern struct buffer_head * sysv_file_bread(struct inode *, int, int);
 
 extern void sysv_truncate(struct inode *);
@@ -394,9 +393,8 @@ extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct file *, struct dentry *);
 
 extern struct inode_operations sysv_file_inode_operations;
-extern struct inode_operations sysv_file_inode_operations_with_bmap;
 extern struct inode_operations sysv_dir_inode_operations;
-extern struct inode_operations sysv_symlink_inode_operations;
+extern struct address_space_operations sysv_aops;
 
 #endif /* __KERNEL__ */
 

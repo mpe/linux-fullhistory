@@ -63,8 +63,8 @@ struct super_block;
 
 extern struct inode_operations udf_dir_inode_operations;
 extern struct inode_operations udf_file_inode_operations;
-extern struct inode_operations udf_file_inode_operations_adinicb;
-extern struct inode_operations udf_symlink_inode_operations;
+extern struct address_space_operations udf_adinicb_aops;
+extern struct address_space_operations udf_symlink_aops;
 
 struct udf_fileident_bh
 {
@@ -137,9 +137,6 @@ extern int udf_sync_inode(struct inode *);
 extern void udf_expand_file_adinicb(struct file *, int, int *);
 extern struct buffer_head * udf_expand_dir_adinicb(struct inode *, int *, int *);
 extern struct buffer_head * udf_getblk(struct inode *, long, int, int *);
-extern int udf_get_block(struct inode *, long, struct buffer_head *, int);
-extern int udf_readpage_adinicb (struct dentry *, struct page *);
-extern int udf_writepage_adinicb (struct dentry *, struct page *);
 extern struct buffer_head * udf_bread(struct inode *, int, int, int *);
 extern void udf_read_inode(struct inode *);
 extern void udf_put_inode(struct inode *);
@@ -187,14 +184,12 @@ extern struct inode * udf_new_inode (const struct inode *, int, int *);
 /* truncate.c */
 extern void udf_trunc(struct inode *);
 extern void udf_truncate(struct inode *);
-extern void udf_truncate_adinicb(struct inode *);
 
 /* balloc.c */
 extern void udf_free_blocks(const struct inode *, lb_addr, Uint32, Uint32);
 extern int udf_alloc_blocks(const struct inode *, Uint16, Uint32, Uint32);
 extern int udf_new_block(const struct inode *, Uint16, Uint32, int *);
 extern int udf_sync_file(struct file *, struct dentry *);
-extern int udf_sync_file_adinicb(struct file *, struct dentry *);
 
 /* directory.c */
 extern Uint8 * udf_filead_read(struct inode *, Uint8 *, Uint8, lb_addr, int *, int *, struct buffer_head **, int *);

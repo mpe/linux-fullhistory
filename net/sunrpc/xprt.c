@@ -65,16 +65,8 @@
 
 #include <asm/uaccess.h>
 
-#define SOCK_HAS_USER_DATA
 /* Following value should be > 32k + RPC overhead */
 #define XPRT_MIN_WRITE_SPACE 35000
-
-/*
- * Local variables
- */
-#ifndef SOCK_HAS_USER_DATA
-static struct rpc_xprt *	sock_list = NULL;
-#endif
 
 /* Spinlock for critical sections in the code. */
 spinlock_t xprt_lock = SPIN_LOCK_UNLOCKED;
@@ -140,15 +132,7 @@ xprt_pktdump(char *msg, u32 *packet, unsigned int count)
 static inline struct rpc_xprt *
 xprt_from_sock(struct sock *sk)
 {
-#ifndef SOCK_HAS_USER_DATA
-	struct rpc_xprt		*xprt;
-
-	for (xprt = sock_list; xprt && sk != xprt->inet; xprt = xprt->link)
-		;
-	return xprt;
-#else
 	return (struct rpc_xprt *) sk->user_data;
-#endif
 }
 
 /*
@@ -352,9 +336,7 @@ xprt_close(struct rpc_xprt *xprt)
 
 	xprt_disconnect(xprt);
 
-#ifdef SOCK_HAS_USER_DATA
 	sk->user_data    = NULL;
-#endif
 	sk->data_ready   = xprt->old_data_ready;
 	sk->state_change = xprt->old_state_change;
 	sk->write_space  = xprt->old_write_space;
@@ -433,9 +415,7 @@ xprt_reconnect(struct rpc_task *task)
 	inet->data_ready   = xprt->inet->data_ready;
 	inet->state_change = xprt->inet->state_change;
 	inet->write_space  = xprt->inet->write_space;
-#ifdef SOCK_HAS_USER_DATA
 	inet->user_data    = xprt;
-#endif
 
 	dprintk("RPC: %4d closing old socket\n", task->tk_pid);
 	xprt_close(xprt);
@@ -1456,12 +1436,7 @@ xprt_setup(struct socket *sock, int proto,
 	xprt->stream = (proto == IPPROTO_TCP)? 1 : 0;
 	xprt->congtime = jiffies;
 	init_waitqueue_head(&xprt->cong_wait);
-#ifdef SOCK_HAS_USER_DATA
 	inet->user_data = xprt;
-#else
-	xprt->link = sock_list;
-	sock_list = xprt;
-#endif
 	xprt->old_data_ready = inet->data_ready;
 	xprt->old_state_change = inet->state_change;
 	xprt->old_write_space = inet->write_space;
@@ -1627,18 +1602,6 @@ xprt_clear_backlog(struct rpc_xprt *xprt) {
 int
 xprt_destroy(struct rpc_xprt *xprt)
 {
-#ifndef SOCK_HAS_USER_DATA
-	struct rpc_xprt	**q;
-
-	for (q = &sock_list; *q && *q != xprt; q = &((*q)->link))
-		;
-	if (!*q) {
-		printk(KERN_WARNING "xprt_destroy: unknown socket!\n");
-		return -EIO;	/* why is there no EBUGGYSOFTWARE */
-	}
-	*q = xprt->link;
-#endif
-
 	dprintk("RPC:      destroying transport %p\n", xprt);
 	xprt_close(xprt);
 	kfree(xprt);

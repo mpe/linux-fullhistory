@@ -560,14 +560,10 @@ extern unsigned long ext2_count_free_inodes (struct super_block *);
 extern void ext2_check_inodes_bitmap (struct super_block *);
 
 /* inode.c */
-extern long ext2_bmap (struct inode *, long);
-extern int ext2_get_block (struct inode *, long, struct buffer_head *, int);
 
 extern struct buffer_head * ext2_getblk (struct inode *, long, int, int *);
-extern int ext2_getblk_block (struct inode *, long, int, int *, int *);
 extern struct buffer_head * ext2_bread (struct inode *, int, int, int *);
 
-extern int ext2_getcluster (struct inode * inode, long block);
 extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
@@ -620,8 +616,9 @@ extern struct inode_operations ext2_dir_inode_operations;
 extern struct inode_operations ext2_file_inode_operations;
 
 /* symlink.c */
-extern struct inode_operations ext2_symlink_inode_operations;
 extern struct inode_operations ext2_fast_symlink_inode_operations;
+
+extern struct address_space_operations ext2_aops;
 
 #endif	/* __KERNEL__ */
 

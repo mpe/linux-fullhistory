@@ -52,13 +52,13 @@ static char *version =
 
 
 #include <linux/module.h>
-#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/in.h>
+#include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
@@ -67,14 +67,7 @@ static char *version =
 #include <asm/irq.h>            /* For NR_IRQS only. */
 #include <asm/bitops.h>
 #include <asm/io.h>
-
-#if LINUX_VERSION_CODE >= 0x020100
-#define LINUX_2_1
-#endif
-
-#ifdef LINUX_2_1
 #include <asm/uaccess.h>
-#endif
 
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
@@ -90,11 +83,6 @@ static char *version =
 
 #define NEW_MULTICAST
 #include <linux/delay.h>
-
-#ifndef LINUX_2_1
-#define ioremap vremap
-#define iounmap vfree
-#endif
 
 /* PCI/45 Configuration space values */
 #define RC_PCI45_VENDOR_ID  0x4916
@@ -178,11 +166,7 @@ static int RC_allocate_and_post_buffers(struct net_device *, int);
 /* A list of all installed RC devices, for removing the driver module. */
 static struct net_device *root_RCdev = NULL;
 
-#ifdef MODULE
-int init_module(void)
-#else
-int rcpci_probe(void)
-#endif
+static int __init rcpci_init_module (void)
 {
     int cards_found;
 
@@ -562,11 +546,7 @@ RCxmit_callback(U32 Status,
             printk("rc: skb = 0x%x\n", (uint)skb);
 #endif
             BufferContext++;
-#ifdef LINUX_2_1
             dev_kfree_skb (skb);
-#else
-            dev_kfree_skb (skb, FREE_WRITE);
-#endif
         }
         dev->tbusy = 0;
 
@@ -727,18 +707,10 @@ RCrecv_callback(U32  Status,
                 while(PktCount--)
                 {
                     skb = (struct sk_buff *)PacketDescBlock[0];
-#ifndef LINUX_2_1
-                    skb->free = 1;
-                    skb->lock = 0;    
-#endif
 #ifdef RCDEBUG
                     printk("free skb 0x%p\n", skb);
 #endif
-#ifdef LINUX_2_1
                     dev_kfree_skb (skb);
-#else
-                    dev_kfree_skb(skb, FREE_READ);
-#endif
                     pDpa->numOutRcvBuffers--;
                     PacketDescBlock += BD_SIZE; /* point to next context field */
                 }
@@ -777,12 +749,7 @@ RCrecv_callback(U32  Status,
                     if ( RCPostRecvBuffers(pDpa->id, (PRCTCB)ptcb ) != RC_RTN_NO_ERROR)
                     {
                         printk("rc: RCrecv_callback: post buffer failed!\n");
-#ifdef LINUX_2_1
                         dev_kfree_skb (skb);
-#else
-                        skb->free = 1;
-                        dev_kfree_skb(skb, FREE_READ);
-#endif
                     }
                     else
                     {
@@ -1089,17 +1056,8 @@ static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
     case RCU_COMMAND:
     {
-#ifdef LINUX_2_1
         if(copy_from_user(&RCuser, rq->ifr_data, sizeof(RCuser)))
              return -EFAULT;
-#else
-        int error;
-        error=verify_area(VERIFY_WRITE, rq->ifr_data, sizeof(RCuser));
-        if (error)  {
-            return error;
-        }
-        memcpy_fromfs(&RCuser, rq->ifr_data, sizeof(RCuser));
-#endif
         
 #ifdef RCDEBUG
         printk("RCioctl: RCuser_cmd = 0x%x\n", RCuser.cmd);
@@ -1208,11 +1166,7 @@ static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
             RCUD_DEFAULT -> rc = 0x11223344;
             break;
         }
-#ifdef LINUX_2_1
         copy_to_user(rq->ifr_data, &RCuser, sizeof(RCuser));
-#else
-        memcpy_tofs(rq->ifr_data, &RCuser, sizeof(RCuser));
-#endif
         break;
     }   /* RCU_COMMAND */ 
 
@@ -1243,9 +1197,7 @@ static int RCconfig(struct net_device *dev, struct ifmap *map)
 }
 
 
-#ifdef MODULE
-void
-cleanup_module(void)
+static void __exit rcpci_cleanup_module (void)
 {
     PDPA pDpa;
     struct net_device *next;
@@ -1273,7 +1225,9 @@ cleanup_module(void)
         root_RCdev = next;
     }
 }
-#endif
+
+module_init(rcpci_init_module);
+module_exit(rcpci_clenaup_module);
 
 
 static int
@@ -1356,17 +1310,10 @@ RC_allocate_and_post_buffers(struct net_device *dev, int numBuffers)
         while(p[0])
         {
             skb = (struct sk_buff *)pB->context;
-#ifndef LINUX_2_1
-            skb->free = 1;    
-#endif
 #ifdef RCDEBUG
             printk("rc: freeing 0x%x\n", (uint)skb);
 #endif
-#ifdef LINUX_2_1
             dev_kfree_skb (skb);
-#else
-            dev_kfree_skb(skb, FREE_READ);
-#endif
             p[0]--;
             pB++;
         }

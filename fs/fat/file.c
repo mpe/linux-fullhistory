@@ -50,12 +50,7 @@ struct inode_operations fat_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	fat_get_block,		/* get_block */
-	block_read_full_page,	/* readpage */
-	NULL,			/* writepage */
 	fat_truncate,		/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 ssize_t fat_file_read(
@@ -81,7 +76,7 @@ int fat_get_block(struct inode *inode, long iblock, struct buffer_head *bh_resul
 	}
 	if (!create)
 		return 0;
-	if (iblock<<9 != MSDOS_I(inode)->i_realsize) {
+	if (iblock<<9 != MSDOS_I(inode)->mmu_private) {
 		BUG();
 		return -EIO;
 	}
@@ -89,7 +84,7 @@ int fat_get_block(struct inode *inode, long iblock, struct buffer_head *bh_resul
 		if (fat_add_cluster(inode))
 			return -ENOSPC;
 	}
-	MSDOS_I(inode)->i_realsize+=SECTOR_SIZE;
+	MSDOS_I(inode)->mmu_private += 512;
 	phys=fat_bmap(inode, iblock);
 	if (!phys)
 		BUG();
@@ -98,30 +93,6 @@ int fat_get_block(struct inode *inode, long iblock, struct buffer_head *bh_resul
 	bh_result->b_state |= (1UL << BH_Mapped);
 	bh_result->b_state |= (1UL << BH_New);
 	return 0;
-}
-
-static int fat_write_partial_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
-{
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
-	struct page *new_page;
-	unsigned long pgpos;
-	long status;
-
-	while((pgpos=MSDOS_I(inode)->i_realsize>>PAGE_CACHE_SHIFT)<page->index){
-		status = -ENOMEM;
-		new_page = grab_cache_page(&inode->i_data, pgpos);
-		if (!new_page)
-			goto out;
-		status = block_write_cont_page(file, new_page, PAGE_SIZE, 0, NULL);
-		UnlockPage(new_page);
-		page_cache_release(new_page);
-		if (status < 0)
-			goto out;
-	}
-	status = block_write_cont_page(file, page, offset, bytes, buf);
-out:
-	return status;
 }
 
 ssize_t fat_file_write(
@@ -145,8 +116,7 @@ ssize_t default_fat_file_write(
 	struct inode *inode = filp->f_dentry->d_inode;
 	int retval;
 
-	retval = generic_file_write(filp, buf, count, ppos,
-					fat_write_partial_page);
+	retval = generic_file_write(filp, buf, count, ppos);
 	if (retval > 0) {
 		inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 		MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
@@ -166,7 +136,7 @@ void fat_truncate(struct inode *inode)
 	if (IS_IMMUTABLE(inode))
 		return /* -EPERM */;
 	cluster = SECTOR_SIZE*sbi->cluster_size;
-	MSDOS_I(inode)->i_realsize = ((inode->i_size-1) | (SECTOR_SIZE-1)) + 1;
+	MSDOS_I(inode)->mmu_private = inode->i_size;
 	fat_free(inode,(inode->i_size+(cluster-1))>>sbi->cluster_bits);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;

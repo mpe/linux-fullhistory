@@ -62,6 +62,7 @@ static void bfs_read_inode(struct inode * inode)
 	} else if (di->i_vtype == BFS_VREG) {
 		inode->i_mode |= S_IFREG;
 		inode->i_op = &bfs_file_inops;
+		inode->i_mapping->a_ops = &bfs_aops;
 	} else 
 		inode->i_op = NULL;
 

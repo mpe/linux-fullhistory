@@ -76,13 +76,8 @@ proc_dodebug(ctl_table *table, int write, struct file *file,
 		if (!access_ok(VERIFY_READ, buffer, left))
 			return -EFAULT;
 		p = (char *) buffer;
-#if LINUX_VERSION_CODE >= 0x020100
 		while (left && __get_user(c, p) >= 0 && isspace(c))
 			left--, p++;
-#else
-		while (left && (c = get_fs_byte(p)) >= 0 && isspace(c))
-			left--, p++;
-#endif
 		if (!left)
 			goto done;
 

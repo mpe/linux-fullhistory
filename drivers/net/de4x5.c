@@ -1133,7 +1133,6 @@ de4x5_hw_init(struct net_device *dev, u_long iobase, struct pci_dev *pdev)
     struct bus_type *lp = &bus;
     int i, status=0;
     char *tmp;
-    dma_addr_t dma_rx_bufs;
     
     /* Ensure we're not sleeping */
     if (lp->bus == EISA) {
@@ -1261,17 +1260,23 @@ de4x5_hw_init(struct net_device *dev, u_long iobase, struct pci_dev *pdev)
 	}
 
 #else
-	dma_rx_bufs = lp->dma_rings + (NUM_RX_DESC + NUM_TX_DESC)
-		      * sizeof(struct de4x5_desc);
-	dma_rx_bufs = (dma_rx_bufs + ALIGN) & ~ALIGN;
-	lp->rx_bufs = (char *)(((long)(lp->rx_ring + NUM_RX_DESC
-		      + NUM_TX_DESC) + ALIGN) & ~ALIGN);
-	for (i=0; i<NUM_RX_DESC; i++) {
-	    lp->rx_ring[i].status = 0;
-	    lp->rx_ring[i].des1 = cpu_to_le32(RX_BUFF_SZ);
-	    lp->rx_ring[i].buf = cpu_to_le32(dma_rx_bufs+i*RX_BUFF_SZ);
-	    lp->rx_ring[i].next = 0;
-	    lp->rx_skb[i] = (struct sk_buff *) 1;     /* Dummy entry */
+	{
+		dma_addr_t dma_rx_bufs;
+
+		dma_rx_bufs = lp->dma_rings + (NUM_RX_DESC + NUM_TX_DESC)
+		      	* sizeof(struct de4x5_desc);
+		dma_rx_bufs = (dma_rx_bufs + ALIGN) & ~ALIGN;
+		lp->rx_bufs = (char *)(((long)(lp->rx_ring + NUM_RX_DESC
+		      	+ NUM_TX_DESC) + ALIGN) & ~ALIGN);
+		for (i=0; i<NUM_RX_DESC; i++) {
+	    		lp->rx_ring[i].status = 0;
+	    		lp->rx_ring[i].des1 = cpu_to_le32(RX_BUFF_SZ);
+	    		lp->rx_ring[i].buf =
+				cpu_to_le32(dma_rx_bufs+i*RX_BUFF_SZ);
+	    		lp->rx_ring[i].next = 0;
+	    		lp->rx_skb[i] = (struct sk_buff *) 1; /* Dummy entry */
+		}
+
 	}
 #endif
 

@@ -479,7 +479,7 @@ updated:
 	if (req->wb_bytes == PAGE_SIZE)
 		SetPageUptodate(page);
 
-	retval = count;
+	retval = 0;
 	if (synchronous) {
 		int status = wait_on_write_request(req);
 		if (status) {

@@ -48,8 +48,6 @@ fail:
 	return err;
 }
 
-struct inode_operations efs_symlink_inode_operations = {
-	readlink:	page_readlink,
-	follow_link:	page_follow_link,
+struct address_space_operations efs_symlink_aops = {
 	readpage:	efs_symlink_readpage
 };

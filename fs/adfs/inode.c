@@ -48,6 +48,30 @@ abort_negative:
 abort_toobig:
 	return 0;
 }
+static int adfs_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,adfs_get_block);
+}
+static int adfs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,adfs_get_block);
+}
+static int adfs_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return cont_prepare_write(page,from,to,adfs_get_block,
+		&((struct inode*)page->mapping->host)->u.adfs_i.mmu_private);
+}
+static int _adfs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,adfs_get_block);
+}
+struct address_space_operations adfs_aops = {
+	readpage: adfs_readpage,
+	writepage: adfs_writepage,
+	prepare_write: adfs_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: _adfs_bmap
+};
 #else
 int adfs_bmap(struct inode *inode, int block)
 {
@@ -255,8 +279,11 @@ adfs_iget(struct super_block *sb, struct object_info *obj)
 
 	if (S_ISDIR(inode->i_mode))
 		inode->i_op	= &adfs_dir_inode_operations;
-	else if (S_ISREG(inode->i_mode))
-		inode->i_op	= &adfs_file_inode_operations;
+	else if (S_ISREG(inode->i_mode)) {
+		inode->i_op	 = &adfs_file_inode_operations;
+		inode->i_mapping->a_ops = &adfs_aops;
+		inode->u.adfs_i.mmu_private = inode->i_size;
+	}
 
 	insert_inode_hash(inode);
 

@@ -819,12 +819,4 @@ struct inode_operations umsdos_dir_inode_operations =
 	UMSDOS_rmdir,		/* rmdir */
 	UMSDOS_mknod,		/* mknod */
 	UMSDOS_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* followlink */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };

@@ -228,6 +228,7 @@ static const char SysKonnectBuildNumber[] =
 	"@(#)SK-BUILD: 3.02 (19991111) PL: 01"; 
 
 #include	<linux/module.h>
+#include	<linux/init.h>
 
 #include	"h/skdrv1st.h"
 #include	"h/skdrv2nd.h"
@@ -341,13 +342,14 @@ static uintptr_t RxQueueAddr[SK_MAX_MACS] = {0x400, 0x480};
  *	0, if everything is ok
  *	!=0, on error
  */
-int __init skge_probe (struct net_device *dev)
+static int __init skge_probe (void)
 {
-int boards_found = 0;
-int		version_disp = 0;
-SK_AC		*pAC;
-struct pci_dev	*pdev = NULL;
-unsigned long	base_address;
+	int boards_found = 0;
+	int		version_disp = 0;
+	SK_AC		*pAC;
+	struct pci_dev	*pdev = NULL;
+	unsigned long	base_address;
+	struct net_device *dev = NULL;
 
 	if (probed)
 		return -ENODEV;
@@ -375,21 +377,12 @@ unsigned long	base_address;
 		}
 		dev = init_etherdev(dev, sizeof(SK_AC));
 
-		if (dev == NULL){
+		if (dev == NULL || dev->priv == NULL){
 			printk(KERN_ERR "Unable to allocate etherdev "
 			       "structure!\n");
 			break;
 		}
 
-		if (!dev->priv)
-			dev->priv = kmalloc(sizeof(SK_AC), GFP_KERNEL);
-		if (dev->priv == NULL){
-			printk(KERN_ERR "Unable to allocate adapter "
-			       "structure!\n");
-			break;
-		}
-
-		
 		memset(dev->priv, 0, sizeof(SK_AC));
 
 		pAC = dev->priv;
@@ -471,14 +464,7 @@ unsigned long	base_address;
 	 * or more boards. Otherwise, return failure (-ENODEV).
 	 */
 
-#ifdef MODULE
 	return boards_found;
-#else
-	if (boards_found > 0)
-		return 0;
-	else
-		return -ENODEV;
-#endif
 } /* skge_probe */
 
 
@@ -515,8 +501,6 @@ SK_AC	*pAC;
 } /* FreeResources */
 
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Christoph Goos <cgoos@syskonnect.de>");
 MODULE_DESCRIPTION("SysKonnect SK-NET Gigabit Ethernet SK-98xx driver");
 MODULE_PARM(AutoNeg_A,  "1-" __MODULE_STRING(SK_MAX_CARD_PARAM) "s");
@@ -532,8 +516,6 @@ MODULE_PARM(RlmtMode,   "1-" __MODULE_STRING(SK_MAX_CARD_PARAM) "s");
 /* not used, just there because every driver should have them: */
 MODULE_PARM(options,    "1-" __MODULE_STRING(SK_MAX_CARD_PARAM) "i");
 MODULE_PARM(debug,      "i");
-
-#endif // MODULE
 
 
 #ifdef AUTO_NEG_A
@@ -597,15 +579,13 @@ static char *RlmtMode[SK_MAX_CARD_PARAM] = {"", };
 #endif
 
 
-#ifdef MODULE
-
 static int debug = 0; /* not used */
 static int options[SK_MAX_CARD_PARAM] = {0, }; /* not used */
 
 
 /*****************************************************************************
  *
- * 	init_module - module initialization function
+ * 	skge_init_module - module initialization function
  *
  * Description:
  *	Very simple, only call skge_probe and return approriate result.
@@ -614,9 +594,9 @@ static int options[SK_MAX_CARD_PARAM] = {0, }; /* not used */
  *	0, if everything is ok
  *	!=0, on error
  */
-int init_module(void)
+static int __init skge_init_module(void)
 {
-int cards;
+	int cards;
 
 	root_dev = NULL;
 	
@@ -624,17 +604,17 @@ int cards;
 	debug = 0;
 	options[0] = 0;
 
-	cards = skge_probe(NULL);
+	cards = skge_probe();
 	if (cards == 0) {
 		printk("No adapter found\n");
 	}
 	return cards ? 0 : -ENODEV;
-} /* init_module */
+} /* skge_init_module */
 
 
 /*****************************************************************************
  *
- * 	cleanup_module - module unload function
+ * 	skge_cleanup_module - module unload function
  *
  * Description:
  *	Disable adapter if it is still running, free resources,
@@ -642,7 +622,7 @@ int cards;
  *
  * Returns: N/A
  */
-void cleanup_module(void)
+static void __exit skge_cleanup_module(void)
 {
 SK_AC	*pAC;
 struct net_device *next;
@@ -687,9 +667,10 @@ SK_EVPARA EvPara;
 
 		root_dev = next;
 	}
-}
-#endif /* cleanup_module */
+} /* skge_cleanup_module */
 
+module_init(skge_init_module);
+module_exit(skge_cleanup_module);
 
 /*****************************************************************************
  *

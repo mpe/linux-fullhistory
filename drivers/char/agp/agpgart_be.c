@@ -96,7 +96,7 @@ static void smp_flush_cache(void)
 {
 	atomic_set(&cpus_waiting, smp_num_cpus - 1);
 	if (smp_call_function(ipi_handler, NULL, 1, 0) != 0)
-		panic("agpgart: timed out waiting for the other CPUs!\n");
+		panic(PFX "timed out waiting for the other CPUs!\n");
 	flush_cache();
 	while (atomic_read(&cpus_waiting) > 0)
 		barrier();
@@ -811,7 +811,7 @@ static int intel_i810_fetch_size(void)
 	values = A_SIZE_FIX(agp_bridge.aperture_sizes);
 
 	if ((smram_miscc & I810_GMS) == I810_GMS_DISABLE) {
-		printk("agpgart: i810 is disabled\n");
+		printk(KERN_WARNING PFX "i810 is disabled\n");
 		return 0;
 	}
 	if ((smram_miscc & I810_GFX_MEM_WIN_SIZE) == I810_GFX_MEM_WIN_32M) {
@@ -846,8 +846,7 @@ static int intel_i810_configure(void)
 	if ((INREG32(intel_i810_private.registers, I810_DRAM_CTL)
 	     & I810_DRAM_ROW_0) == I810_DRAM_ROW_0_SDRAM) {
 		/* This will need to be dynamically assigned */
-		printk(KERN_INFO
-		       "agpgart: detected 4MB dedicated video ram.\n");
+		printk(KERN_INFO PFX "detected 4MB dedicated video ram.\n");
 		intel_i810_private.num_dcache_entries = 1024;
 	}
 	pci_read_config_dword(intel_i810_private.i810_dev, I810_GMADDR, &temp);
@@ -1024,7 +1023,7 @@ static unsigned long intel_i810_mask_memory(unsigned long addr, int type)
 	return addr | agp_bridge.masks[type].mask;
 }
 
-static void intel_i810_setup(struct pci_dev *i810_dev)
+static int __init intel_i810_setup(struct pci_dev *i810_dev)
 {
 	intel_i810_private.i810_dev = i810_dev;
 
@@ -1048,9 +1047,11 @@ static void intel_i810_setup(struct pci_dev *i810_dev)
 	agp_bridge.remove_memory = intel_i810_remove_entries;
 	agp_bridge.alloc_by_type = intel_i810_alloc_by_type;
 	agp_bridge.free_by_type = intel_i810_free_by_type;
+
+	return 0;
 }
 
-#endif
+#endif /* CONFIG_AGP_I810 */
 
 #ifdef CONFIG_AGP_INTEL
 
@@ -1150,7 +1151,7 @@ static aper_size_info_16 intel_generic_sizes[7] =
 	{4, 1024, 0, 63}
 };
 
-static void intel_generic_setup(void)
+static int __init intel_generic_setup (struct pci_dev *pdev)
 {
 	agp_bridge.masks = intel_generic_masks;
 	agp_bridge.num_of_masks = 1;
@@ -1172,9 +1173,13 @@ static void intel_generic_setup(void)
 	agp_bridge.remove_memory = agp_generic_remove_memory;
 	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
 	agp_bridge.free_by_type = agp_generic_free_by_type;
+
+	return 0;
+	
+	(void) pdev; /* unused */
 }
 
-#endif
+#endif /* CONFIG_AGP_INTEL */
 
 #ifdef CONFIG_AGP_VIA
 
@@ -1259,7 +1264,7 @@ static gatt_mask via_generic_masks[] =
 	{0x00000000, 0}
 };
 
-static void via_generic_setup(void)
+static int __init via_generic_setup (struct pci_dev *pdev)
 {
 	agp_bridge.masks = via_generic_masks;
 	agp_bridge.num_of_masks = 1;
@@ -1281,9 +1286,13 @@ static void via_generic_setup(void)
 	agp_bridge.remove_memory = agp_generic_remove_memory;
 	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
 	agp_bridge.free_by_type = agp_generic_free_by_type;
+
+	return 0;
+	
+	(void) pdev; /* unused */
 }
 
-#endif
+#endif /* CONFIG_AGP_VIA */
 
 #ifdef CONFIG_AGP_SIS
 
@@ -1364,7 +1373,7 @@ static gatt_mask sis_generic_masks[] =
 	{0x00000000, 0}
 };
 
-static void sis_generic_setup(void)
+static int __init sis_generic_setup (struct pci_dev *pdev)
 {
 	agp_bridge.masks = sis_generic_masks;
 	agp_bridge.num_of_masks = 1;
@@ -1386,9 +1395,13 @@ static void sis_generic_setup(void)
 	agp_bridge.remove_memory = agp_generic_remove_memory;
 	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
 	agp_bridge.free_by_type = agp_generic_free_by_type;
+
+	return 0;
+	
+	(void) pdev; /* unused */
 }
 
-#endif
+#endif /* CONFIG_AGP_SIS */
 
 #ifdef CONFIG_AGP_AMD
 
@@ -1523,7 +1536,7 @@ static gatt_mask amd_irongate_masks[] =
 	{0x00000001, 0}
 };
 
-static void amd_irongate_setup(void)
+static int __init amd_irongate_setup (struct pci_dev *pdev)
 {
 	agp_bridge.masks = amd_irongate_masks;
 	agp_bridge.num_of_masks = 1;
@@ -1545,9 +1558,13 @@ static void amd_irongate_setup(void)
 	agp_bridge.remove_memory = agp_generic_remove_memory;
 	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
 	agp_bridge.free_by_type = agp_generic_free_by_type;
+
+	return 0;
+	
+	(void) pdev; /* unused */
 }
 
-#endif
+#endif /* CONFIG_AGP_AMD */
 
 #ifdef CONFIG_AGP_ALI
 
@@ -1645,7 +1662,7 @@ static aper_size_info_32 ali_generic_sizes[7] =
 	{4, 1024, 0, 3}
 };
 
-static void ali_generic_setup(void)
+static int __init ali_generic_setup (struct pci_dev *pdev)
 {
 	agp_bridge.masks = ali_generic_masks;
 	agp_bridge.num_of_masks = 1;
@@ -1667,24 +1684,188 @@ static void ali_generic_setup(void)
 	agp_bridge.remove_memory = agp_generic_remove_memory;
 	agp_bridge.alloc_by_type = agp_generic_alloc_by_type;
 	agp_bridge.free_by_type = agp_generic_free_by_type;
+
+	return 0;
+	
+	(void) pdev; /* unused */
 }
 
-#endif
+#endif /* CONFIG_AGP_ALI */
 
+
+/* per-chipset initialization data.
+ * note -- all chipsets for a single vendor MUST be grouped together
+ */
+static struct {
+	unsigned short device_id; /* first, to make table easier to read */
+	unsigned short vendor_id;
+	enum chipset_type chipset;
+	const char *vendor_name;
+	const char *chipset_name;
+	int (*chipset_setup) (struct pci_dev *pdev);
+} agp_bridge_info[] __initdata = {
+
+#ifdef CONFIG_AGP_ALI
+	{ PCI_DEVICE_ID_AL_M1541_0,
+		PCI_VENDOR_ID_AL,
+		ALI_M1541,
+		"Ali",
+		"M1541",
+		ali_generic_setup },
+	{ 0,
+		PCI_VENDOR_ID_AL,
+		ALI_GENERIC,
+		"Ali",
+		"Generic",
+		ali_generic_setup },
+#endif /* CONFIG_AGP_ALI */
+
+#ifdef CONFIG_AGP_AMD
+	{ PCI_DEVICE_ID_AMD_IRONGATE_0,
+		PCI_VENDOR_ID_AMD,
+		AMD_IRONGATE,
+		"AMD",
+		"Irongate",
+		amd_irongate_setup },
+	{ 0,
+		PCI_VENDOR_ID_AMD,
+		AMD_GENERIC,
+		"AMD",
+		"Generic",
+		amd_irongate_setup },
+#endif /* CONFIG_AGP_AMD */
+
+#ifdef CONFIG_AGP_INTEL
+	{ PCI_DEVICE_ID_INTEL_82443LX_0,
+		PCI_VENDOR_ID_INTEL,
+		INTEL_LX,
+		"Intel",
+		"440LX",
+		intel_generic_setup },
+	{ PCI_DEVICE_ID_INTEL_82443BX_0,
+		PCI_VENDOR_ID_INTEL,
+		INTEL_BX,
+		"Intel",
+		"440BX",
+		intel_generic_setup },
+	{ PCI_DEVICE_ID_INTEL_82443GX_0,
+		PCI_VENDOR_ID_INTEL,
+		INTEL_GX,
+		"Intel",
+		"440GX",
+		intel_generic_setup },
+	{ 0,
+		PCI_VENDOR_ID_INTEL,
+		INTEL_GENERIC,
+		"Intel",
+		"Generic",
+		intel_generic_setup },
+#endif /* CONFIG_AGP_INTEL */
+
+#ifdef CONFIG_AGP_SIS
+	{ 0,
+		PCI_VENDOR_ID_SI,
+		SIS_GENERIC,
+		"SiS",
+		"Generic",
+		sis_generic_setup },
+#endif /* CONFIG_AGP_SIS */
+
+#ifdef CONFIG_AGP_VIA
+	{ PCI_DEVICE_ID_VIA_8501_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_MVP4,
+		"Via",
+		"MVP4",
+		via_generic_setup },
+	{ PCI_DEVICE_ID_VIA_82C597_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_VP3,
+		"Via",
+		"VP3",
+		via_generic_setup },
+	{ PCI_DEVICE_ID_VIA_82C598_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_MVP3,
+		"Via",
+		"MVP3",
+		via_generic_setup },
+	{ PCI_DEVICE_ID_VIA_82C691_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_APOLLO_PRO,
+		"Via",
+		"Apollo Pro",
+		via_generic_setup },
+	{ 0,
+		PCI_VENDOR_ID_VIA,
+		VIA_GENERIC,
+		"Via",
+		"Generic",
+		via_generic_setup },
+#endif /* CONFIG_AGP_VIA */
+
+	{ 0, }, /* dummy final entry, always present */
+};
+
+
+/* scan table above for supported devices */
+static int __init agp_lookup_host_bridge (struct pci_dev *pdev)
+{
+	int i;
+	
+	for (i = 0; i < arraysize (agp_bridge_info); i++)
+		if (pdev->vendor == agp_bridge_info[i].vendor_id)
+			break;
+
+	if (i >= arraysize (agp_bridge_info)) {
+		printk (KERN_DEBUG PFX "unsupported bridge\n");
+		return -ENODEV;
+	}
+
+	while ((i < arraysize (agp_bridge_info)) &&
+	       (agp_bridge_info[i].vendor_id == pdev->vendor)) {
+		if (pdev->device == agp_bridge_info[i].device_id) {
+			printk (KERN_INFO PFX "Detected %s %s chipset\n",
+				agp_bridge_info[i].vendor_name,
+				agp_bridge_info[i].chipset_name);
+			agp_bridge.type = agp_bridge_info[i].chipset;
+			return agp_bridge_info[i].chipset_setup (pdev);
+		}
+		
+		i++;
+	}
+
+	i--; /* point to vendor generic entry (device_id == 0) */
+
+	/* try init anyway, if user requests it AND
+	 * there is a 'generic' bridge entry for this vendor */
+	if (agp_try_unsupported && agp_bridge_info[i].device_id == 0) {
+		printk(KERN_WARNING PFX "Trying generic %s routines"
+		       " for device id: %x\n",
+		       agp_bridge_info[i].vendor_name, pdev->device);
+		agp_bridge.type = agp_bridge_info[i].chipset;
+		return agp_bridge_info[i].chipset_setup (pdev);
+	}
+
+	printk(KERN_ERR PFX "Unsupported %s chipset,"
+	       " you might want to try "
+	       "agp_try_unsupported=1.\n",
+	       agp_bridge_info[i].vendor_name);
+	return -ENODEV;
+}
 
 
 /* Supported Device Scanning routine */
 
-static void agp_find_supported_device(void)
+static int __init agp_find_supported_device(void)
 {
 	struct pci_dev *dev = NULL;
 	u8 cap_ptr = 0x00;
 	u32 cap_id, scratch;
 
-	if ((dev = pci_find_class(PCI_CLASS_BRIDGE_HOST << 8, NULL)) == NULL) {
-		agp_bridge.type = NOT_SUPPORTED;
-		return;
-	}
+	if ((dev = pci_find_class(PCI_CLASS_BRIDGE_HOST << 8, NULL)) == NULL)
+		return -ENODEV;
+
 	agp_bridge.dev = dev;
 
 	/* Need to test for I810 here */
@@ -1698,65 +1879,58 @@ static void agp_find_supported_device(void)
 					       PCI_DEVICE_ID_INTEL_810_1,
 						   NULL);
 			if (i810_dev == NULL) {
-				printk("agpgart: Detected an Intel i810,"
+				printk(KERN_ERR PFX "Detected an Intel i810,"
 				       " but could not find the secondary"
 				       " device.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
+				return -ENODEV;
 			}
-			printk(KERN_INFO "agpgart: Detected an Intel "
+			printk(KERN_INFO PFX "Detected an Intel "
 			       "i810 Chipset.\n");
 			agp_bridge.type = INTEL_I810;
-			agp_bridge.intel_i810_setup(i810_dev);
-			return;
+			return intel_i810_setup (i810_dev);
 
 		case PCI_DEVICE_ID_INTEL_810_DC100_0:
 			i810_dev = pci_find_device(PCI_VENDOR_ID_INTEL,
 					 PCI_DEVICE_ID_INTEL_810_DC100_1,
 						   NULL);
 			if (i810_dev == NULL) {
-				printk("agpgart: Detected an Intel i810 "
+				printk(KERN_ERR PFX "Detected an Intel i810 "
 				       "DC100, but could not find the "
 				       "secondary device.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
+				return -ENODEV;
 			}
-			printk(KERN_INFO "agpgart: Detected an Intel i810 "
+			printk(KERN_INFO PFX "Detected an Intel i810 "
 			       "DC100 Chipset.\n");
 			agp_bridge.type = INTEL_I810;
-			agp_bridge.intel_i810_setup(i810_dev);
-			return;
+			return intel_i810_setup(i810_dev);
 
 		case PCI_DEVICE_ID_INTEL_810_E_0:
 			i810_dev = pci_find_device(PCI_VENDOR_ID_INTEL,
 					     PCI_DEVICE_ID_INTEL_810_E_1,
 						   NULL);
 			if (i810_dev == NULL) {
-				printk("agpgart: Detected an Intel i810 E"
+				printk(KERN_ERR PFX "Detected an Intel i810 E"
 				    ", but could not find the secondary "
 				       "device.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
+				return -ENODEV;
 			}
-			printk(KERN_INFO "agpgart: Detected an Intel i810 E "
+			printk(KERN_INFO PFX "Detected an Intel i810 E "
 			       "Chipset.\n");
 			agp_bridge.type = INTEL_I810;
-			agp_bridge.intel_i810_setup(i810_dev);
-			return;
+			return intel_i810_setup(i810_dev);
+
 		default:
 			break;
 		}
 	}
-#endif
+#endif /* CONFIG_AGP_I810 */
+
 	/* find capndx */
 	pci_read_config_dword(dev, 0x04, &scratch);
+	if (!(scratch & 0x00100000))
+		return -ENODEV;
 
-	if (!(scratch & 0x00100000)) {
-		agp_bridge.type = NOT_SUPPORTED;
-		return;
-	}
 	pci_read_config_byte(dev, 0x34, &cap_ptr);
-
 	if (cap_ptr != 0x00) {
 		do {
 			pci_read_config_dword(dev, cap_ptr, &cap_id);
@@ -1766,10 +1940,8 @@ static void agp_find_supported_device(void)
 		}
 		while (((cap_id & 0xff) != 0x02) && (cap_ptr != 0x00));
 	}
-	if (cap_ptr == 0x00) {
-		agp_bridge.type = NOT_SUPPORTED;
-		return;
-	}
+	if (cap_ptr == 0x00)
+		return -ENODEV;
 	agp_bridge.capndx = cap_ptr;
 
 	/* Fill in the mode register */
@@ -1777,175 +1949,8 @@ static void agp_find_supported_device(void)
 			      agp_bridge.capndx + 4,
 			      &agp_bridge.mode);
 
-	switch (dev->vendor) {
-#ifdef CONFIG_AGP_INTEL
-	case PCI_VENDOR_ID_INTEL:
-		switch (dev->device) {
-		case PCI_DEVICE_ID_INTEL_82443LX_0:
-			agp_bridge.type = INTEL_LX;
-			printk(KERN_INFO "agpgart: Detected an Intel 440LX"
-			       " Chipset.\n");
-			agp_bridge.intel_generic_setup();
-			return;
-
-		case PCI_DEVICE_ID_INTEL_82443BX_0:
-			agp_bridge.type = INTEL_BX;
-			printk(KERN_INFO "agpgart: Detected an Intel 440BX "
-			       "Chipset.\n");
-			agp_bridge.intel_generic_setup();
-			return;
-
-		case PCI_DEVICE_ID_INTEL_82443GX_0:
-			agp_bridge.type = INTEL_GX;
-			printk(KERN_INFO "agpgart: Detected an Intel 440GX "
-			       "Chipset.\n");
-			agp_bridge.intel_generic_setup();
-			return;
-
-		default:
-			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying generic intel "
-				       "routines for device id: %x\n",
-				       dev->device);
-				agp_bridge.type = INTEL_GENERIC;
-				agp_bridge.intel_generic_setup();
-				return;
-			} else {
-				printk("agpgart: Unsupported intel chipset,"
-				       " you might want to try "
-				       "agp_try_unsupported=1.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
-			}
-		}
-		break;
-#endif
-
-#ifdef CONFIG_AGP_VIA
-	case PCI_VENDOR_ID_VIA:
-		switch (dev->device) {
-		case PCI_DEVICE_ID_VIA_82C597_0:
-			agp_bridge.type = VIA_VP3;
-			printk(KERN_INFO "agpgart: Detected a VIA VP3 "
-			       "Chipset.\n");
-			agp_bridge.via_generic_setup();
-			return;
-
-		case PCI_DEVICE_ID_VIA_82C598_0:
-			agp_bridge.type = VIA_MVP3;
-			printk(KERN_INFO "agpgart: Detected a VIA MVP3 "
-			       "Chipset.\n");
-			agp_bridge.via_generic_setup();
-			return;
-
-		case PCI_DEVICE_ID_VIA_82C691_0:
-			agp_bridge.type = VIA_APOLLO_PRO;
-			printk(KERN_INFO "agpgart: Detected a VIA Apollo "
-			       "Pro Chipset.\n");
-			agp_bridge.via_generic_setup();
-			return;
-
-		default:
-			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying generic VIA routines"
-				    " for device id: %x\n", dev->device);
-				agp_bridge.type = VIA_GENERIC;
-				agp_bridge.via_generic_setup();
-				return;
-			} else {
-				printk("agpgart: Unsupported VIA chipset,"
-				       " you might want to try "
-				       "agp_try_unsupported=1.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
-			}
-		}
-		break;
-#endif
-
-#ifdef CONFIG_AGP_SIS
-	case PCI_VENDOR_ID_SI:
-		switch (dev->device) {
-			/* ToDo need to find out the
-			 * specific devices supported.
-			 */
-		default:
-			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying generic SiS routines"
-				    " for device id: %x\n", dev->device);
-				agp_bridge.type = SIS_GENERIC;
-				agp_bridge.sis_generic_setup();
-				return;
-			} else {
-				printk("agpgart: Unsupported SiS chipset, "
-				       "you might want to try "
-				       "agp_try_unsupported=1.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
-			}
-		}
-		break;
-#endif
-
-#ifdef CONFIG_AGP_AMD
-	case PCI_VENDOR_ID_AMD:
-		switch (dev->device) {
-		case PCI_DEVICE_ID_AMD_IRONGATE_0:
-			agp_bridge.type = AMD_IRONGATE;
-			printk(KERN_INFO "agpgart: Detected an AMD Irongate"
-			       " Chipset.\n");
-			agp_bridge.amd_irongate_setup();
-			return;
-
-		default:
-			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying Amd irongate"
-				       " routines for device id: %x\n",
-				       dev->device);
-				agp_bridge.type = AMD_GENERIC;
-				agp_bridge.amd_irongate_setup();
-				return;
-			} else {
-				printk("agpgart: Unsupported Amd chipset,"
-				       " you might want to try "
-				       "agp_try_unsupported=1.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
-			}
-		}
-		break;
-#endif
-
-#ifdef CONFIG_AGP_ALI
-	case PCI_VENDOR_ID_AL:
-		switch (dev->device) {
-		case PCI_DEVICE_ID_AL_M1541_0:
-			agp_bridge.type = ALI_M1541;
-			printk(KERN_INFO "agpgart: Detected an ALi M1541"
-			       " Chipset\n");
-			agp_bridge.ali_generic_setup();
-			return;
-		default:
-			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying ALi generic routines"
-				    " for device id: %x\n", dev->device);
-				agp_bridge.type = ALI_GENERIC;
-				agp_bridge.ali_generic_setup();
-				return;
-			} else {
-				printk("agpgart: Unsupported ALi chipset,"
-				       " you might want to type "
-				       "agp_try_unsupported=1.\n");
-				agp_bridge.type = NOT_SUPPORTED;
-				return;
-			}
-		}
-		break;
-#endif
-	default:
-		agp_bridge.type = NOT_SUPPORTED;
-		return;
-	}
+	/* probe for known chipsets */
+	return agp_lookup_host_bridge (dev);
 }
 
 struct agp_max_table {
@@ -1953,7 +1958,7 @@ struct agp_max_table {
 	int agp;
 };
 
-static struct agp_max_table maxes_table[9] =
+static struct agp_max_table maxes_table[9] __initdata =
 {
 	{0, 0},
 	{32, 4},
@@ -1966,7 +1971,7 @@ static struct agp_max_table maxes_table[9] =
 	{4096, 3932}
 };
 
-static int agp_find_max(void)
+static int __init agp_find_max (void)
 {
 	long memory, index, result;
 
@@ -1983,7 +1988,7 @@ static int agp_find_max(void)
 	     (maxes_table[index].agp - maxes_table[index - 1].agp)) /
 	   (maxes_table[index].mem - maxes_table[index - 1].mem);
 
-	printk(KERN_INFO "agpgart: Maximum main memory to use "
+	printk(KERN_INFO PFX "Maximum main memory to use "
 	       "for agp memory: %ldM\n", result);
 	result = result << (20 - PAGE_SHIFT);
         return result;
@@ -1998,39 +2003,27 @@ static agp_version agp_current_version =
 	AGPGART_VERSION_MINOR
 };
 
-static int agp_backend_initialize(void)
+static int __init agp_backend_initialize(void)
 {
-	int size_value;
+	int size_value, rc, got_gatt=0, got_keylist=0;
 
 	memset(&agp_bridge, 0, sizeof(struct agp_bridge_data));
 	agp_bridge.type = NOT_SUPPORTED;
-#ifdef CONFIG_AGP_INTEL
-	agp_bridge.intel_generic_setup = intel_generic_setup;
-#endif
-#ifdef CONFIG_AGP_I810
-	agp_bridge.intel_i810_setup = intel_i810_setup;
-#endif
-#ifdef CONFIG_AGP_VIA
-	agp_bridge.via_generic_setup = via_generic_setup;
-#endif
-#ifdef CONFIG_AGP_SIS
-	agp_bridge.sis_generic_setup = sis_generic_setup;
-#endif
-#ifdef CONFIG_AGP_AMD
-	agp_bridge.amd_irongate_setup = amd_irongate_setup;
-#endif
-#ifdef CONFIG_AGP_ALI
-	agp_bridge.ali_generic_setup = ali_generic_setup;
-#endif
 	agp_bridge.max_memory_agp = agp_find_max();
 	agp_bridge.version = &agp_current_version;
-	agp_find_supported_device();
+
+	rc = agp_find_supported_device();
+	if (rc) {
+		/* not KERN_ERR because error msg should have already printed */
+		printk(KERN_DEBUG PFX "no supported devices found.\n");
+		return rc;
+	}
 
 	if (agp_bridge.needs_scratch_page == TRUE) {
 		agp_bridge.scratch_page = agp_alloc_page();
 
 		if (agp_bridge.scratch_page == 0) {
-			printk("agpgart: unable to get memory for "
+			printk(KERN_ERR PFX "unable to get memory for "
 			       "scratch page.\n");
 			return -ENOMEM;
 		}
@@ -2039,43 +2032,59 @@ static int agp_backend_initialize(void)
 		agp_bridge.scratch_page =
 		    agp_bridge.mask_memory(agp_bridge.scratch_page, 0);
 	}
-	if (agp_bridge.type == NOT_SUPPORTED) {
-		printk("agpgart: no supported devices found.\n");
-		return -EINVAL;
-	}
+
 	size_value = agp_bridge.fetch_size();
 
 	if (size_value == 0) {
-		printk("agpgart: unable to detrimine aperture size.\n");
-		return -EINVAL;
+		printk(KERN_ERR PFX "unable to detrimine aperture size.\n");
+		rc = -EINVAL;
+		goto err_out;
 	}
 	if (agp_bridge.create_gatt_table()) {
-		printk("agpgart: unable to get memory for graphics "
+		printk(KERN_ERR PFX "unable to get memory for graphics "
 		       "translation table.\n");
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err_out;
 	}
+	got_gatt = 1;
+	
 	agp_bridge.key_list = vmalloc(PAGE_SIZE * 4);
-
 	if (agp_bridge.key_list == NULL) {
-		printk("agpgart: error allocating memory for key lists.\n");
-		agp_bridge.free_gatt_table();
-		return -ENOMEM;
+		printk(KERN_ERR PFX "error allocating memory for key lists.\n");
+		rc = -ENOMEM;
+		goto err_out;
 	}
+	got_keylist = 1;
+	
+	/* FIXME vmalloc'd memory not guaranteed contiguous */
 	memset(agp_bridge.key_list, 0, PAGE_SIZE * 4);
 
 	if (agp_bridge.configure()) {
-		printk("agpgart: error configuring host chipset.\n");
-		agp_bridge.free_gatt_table();
-		vfree(agp_bridge.key_list);
-		return -EINVAL;
+		printk(KERN_ERR PFX "error configuring host chipset.\n");
+		rc = -EINVAL;
+		goto err_out;
 	}
-	printk(KERN_INFO "agpgart: Physical address of the agp aperture:"
-	       " 0x%lx\n", agp_bridge.gart_bus_addr);
-	printk(KERN_INFO "agpgart: Agp aperture is %dM in size.\n",
-	       size_value);
+
+	printk(KERN_INFO PFX "AGP aperture is %dM @ 0x%lx\n",
+	       size_value, agp_bridge.gart_bus_addr);
+
 	return 0;
+
+err_out:
+	if (agp_bridge.needs_scratch_page == TRUE) {
+		agp_bridge.scratch_page &= ~(0x00000fff);
+		agp_destroy_page((unsigned long)
+				 phys_to_virt(agp_bridge.scratch_page));
+	}
+	if (got_gatt)
+		agp_bridge.free_gatt_table();
+	if (got_keylist)
+		vfree(agp_bridge.key_list);
+	return rc;
 }
 
+
+/* cannot be __exit b/c as it could be called from __init code */
 static void agp_backend_cleanup(void)
 {
 	agp_bridge.cleanup();
@@ -2098,17 +2107,17 @@ static int __init agp_init(void)
 
 	printk(KERN_INFO "Linux agpgart interface v%d.%d (c) Jeff Hartmann\n",
 	       AGPGART_VERSION_MAJOR, AGPGART_VERSION_MINOR);
+
 	ret_val = agp_backend_initialize();
-
-	if (ret_val != 0) {
+	if (ret_val)
 		return ret_val;
-	}
-	ret_val = agp_frontend_initialize();
 
-	if (ret_val != 0) {
+	ret_val = agp_frontend_initialize();
+	if (ret_val) {
 		agp_backend_cleanup();
 		return ret_val;
 	}
+
 	return 0;
 }
 

@@ -75,6 +75,7 @@ static int rx_copybreak = 100;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
@@ -99,10 +100,6 @@ static int rx_copybreak = 100;
 #define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
 #else
 #define IRQ(irq, dev_id, pt_regs) (irq, pt_regs)
-#endif
-
-#if (LINUX_VERSION_CODE < 0x20123)
-#define test_and_set_bit(val, addr) set_bit(val, addr)
 #endif
 
 /* This my implementation of shared IRQs, now only used for 1.2.13. */
@@ -368,11 +365,7 @@ struct tulip_private {
 	u32 setup_frame[48];		/* Pseudo-Tx frame to init address table. */
 	int chip_id;
 	int revision;
-#if LINUX_VERSION_CODE > 0x20139
 	struct net_device_stats stats;
-#else
-	struct enet_statistics stats;
-#endif
 	struct timer_list timer;	/* Media selection timer. */
 	spinlock_t tx_lock;       
 	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
@@ -432,7 +425,7 @@ static struct net_device *root_tulip_dev = NULL;
    This allows the probe routine to use the old driver initialization
    interface. */
 
-int tulip_probe(void)
+static int __init tulip_probe(void)
 {
 	int cards_found = 0;
 	static int pci_index = 0;	/* Static, for multiple probe calls. */
@@ -443,17 +436,13 @@ int tulip_probe(void)
 	   well with the current structure.  So instead we detect just the
 	   Tulip cards in slot order. */
 
-#if LINUX_VERSION_CODE >= 0x20155
 	if (! pci_present())
 		return -ENODEV;
-#else
-	if (! pcibios_present())
-		return -ENODEV;
-#endif
 	for (;pci_index < 0xff; pci_index++) {
 		u16 vendor, device, pci_command, new_command;
 		unsigned long pci_ioaddr = 0;
 		int chip_idx = 0;
+		struct pci_dev *pdev;
 
 		if (pcibios_find_class
 			(PCI_CLASS_NETWORK_ETHERNET << 8,
@@ -465,10 +454,10 @@ int tulip_probe(void)
 			else
 				break;
 		}
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
+		
+		pdev = pci_find_slot (pci_bus, pci_device_fn);
+		vendor = pdev->vendor;
+		device = pdev->device;
 
 		for (chip_idx = 0; tulip_tbl[chip_idx].chip_name; chip_idx++)
 			if (vendor == tulip_tbl[chip_idx].vendor_id  &&
@@ -482,12 +471,7 @@ int tulip_probe(void)
 					   vendor, device);
 			continue;
 		}
-#if LINUX_VERSION_CODE >= 0x20155
 		pci_ioaddr = pci_find_slot(pci_bus, pci_device_fn)->resource[0].start;
-#else
-		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
-								  &pci_ioaddr);
-#endif
 		/* Remove I/O space marker in bit 0. */
 		pci_ioaddr &= ~3;
 
@@ -498,37 +482,32 @@ int tulip_probe(void)
 		if (check_region(pci_ioaddr, tulip_tbl[chip_idx].io_size))
 			continue;
 
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
+		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
 		if (pci_command != new_command) {
 			printk(KERN_INFO "  The PCI BIOS has not enabled this"
 				   " device!  Updating PCI command %4.4x->%4.4x.\n",
 				   pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
+			pci_write_config_word(pdev, PCI_COMMAND, new_command);
 		}
 
 		if(tulip_probe1(pci_bus, pci_device_fn, chip_idx, cards_found))
 		{
 			/* Get and check the bus-master and latency values. */
 			unsigned char pci_latency;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_LATENCY_TIMER, &pci_latency);
+			pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
 			if (pci_latency < 10) {
 				printk(KERN_INFO "  PCI latency timer (CFLT) is "
 					   "unreasonably low at %d.  Setting to 64 clocks.\n",
 					   pci_latency);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										  PCI_LATENCY_TIMER, 64);
+				pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
 			} else if (tulip_debug > 1)
 				printk(KERN_INFO "  PCI latency timer (CFLT) is %#x, "
 					   " PCI command is %4.4x.\n",
 					   pci_latency, new_command);
 			/* Bring the 21143 out power-down mode. */
 			if (device == PCI_DEVICE_ID_DEC_TULIP_21142)
-				pcibios_write_config_dword(pci_bus, pci_device_fn,
-										   0x40, 0x40000000);
+				pci_write_config_dword(pdev, 0x40, 0x40000000);
 			cards_found++;
 		}
 	}
@@ -1215,9 +1194,7 @@ tulip_open(struct net_device *dev)
 	/* When a module we don't have 'x86' to check. */
 	outl(0x01A00000 | 0x4800, ioaddr + CSR0);
 #else
-#if (LINUX_VERSION_CODE > 0x2014c)
 #define x86 boot_cpu_data.x86
-#endif
 	outl(0x01A00000 | (x86 <= 4 ? 0x4800 : 0x8000), ioaddr + CSR0);
 	if (x86 <= 4)
 	  printk(KERN_INFO "%s: This is a 386/486 PCI system, setting cache "
@@ -2208,19 +2185,13 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 #ifdef ETHER_STATS
 					if (status & 0x0001) tp->stats.tx_deferred++;
 #endif
-#if LINUX_VERSION_CODE > 0x20127
 					tp->stats.tx_bytes += tp->tx_ring[entry].length & 0x7ff;
-#endif
 					tp->stats.collisions += (status >> 3) & 15;
 					tp->stats.tx_packets++;
 				}
 
 				/* Free the original skb. */
-#if (LINUX_VERSION_CODE > 0x20155)
 				dev_kfree_skb_irq(tp->tx_skbuff[entry]);
-#else
-				dev_kfree_skb(tp->tx_skbuff[entry], FREE_WRITE);
-#endif
 				tp->tx_skbuff[entry] = 0;
 			}
 
@@ -2379,9 +2350,7 @@ tulip_rx(struct net_device *dev)
 			netif_rx(skb);
 			dev->last_rx = jiffies;
 			tp->stats.rx_packets++;
-#if LINUX_VERSION_CODE > 0x20127
 			tp->stats.rx_bytes += pkt_len;
-#endif
 		}
 		entry = (++tp->cur_rx) % RX_RING_SIZE;
 	}
@@ -2444,23 +2413,12 @@ tulip_close(struct net_device *dev)
 		tp->rx_ring[i].length = 0;
 		tp->rx_ring[i].buffer1 = 0xBADF00D0; /* An invalid address. */
 		if (skb) {
-#if LINUX_VERSION_CODE < 0x20100
-			skb->free = 1;
-#endif
-#if (LINUX_VERSION_CODE > 0x20155)
 			dev_kfree_skb(skb);
-#else
-			dev_kfree_skb(skb, FREE_WRITE);
-#endif
 		}
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (tp->tx_skbuff[i])
-#if (LINUX_VERSION_CODE > 0x20155)
 			dev_kfree_skb(tp->tx_skbuff[i]);
-#else
-			dev_kfree_skb(tp->tx_skbuff[i], FREE_WRITE);
-#endif
 		tp->tx_skbuff[i] = 0;
 	}
 
@@ -2692,12 +2650,14 @@ static dev_node_t *tulip_attach(dev_locator_t *loc)
 	u32 io;
 	u8 bus, devfn;
 	struct net_device *dev;
+	struct pci_dev *pdev;
 
 	if (loc->bus != LOC_PCI) return NULL;
-	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
+	pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
+	if (!pdev) return NULL;
 	printk(KERN_INFO "tulip_attach(bus %d, function %d)\n", bus, devfn);
-	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
-	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
+	io = pdev->resource[0].start;
+	dev_id = pdev->device;
 	io &= ~3;
 	dev = tulip_probe1(bus, devfn, DC21142, -1);
 	if (dev) {
@@ -2734,9 +2694,6 @@ struct driver_operations tulip_ops = {
 
 #endif  /* Cardbus support */
 
-
-#ifdef MODULE
-#if LINUX_VERSION_CODE > 0x20118
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Digital 21*4* Tulip ethernet driver");
 MODULE_PARM(debug, "i");
@@ -2745,13 +2702,11 @@ MODULE_PARM(reverse_probe, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
-#endif
 
 /* An additional parameter that may be passed in... */
 static int debug = -1;
 
-int
-init_module(void)
+static int __init tulip_init_module (void)
 {
 	if (debug >= 0)
 		tulip_debug = debug;
@@ -2764,8 +2719,7 @@ init_module(void)
 #endif
 }
 
-void
-cleanup_module(void)
+static void __exit tulip_cleanup_module (void)
 {
 	struct net_device *next_dev;
 
@@ -2783,8 +2737,10 @@ cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
-
+module_init(tulip_init_module);
+module_exit(tulip_cleanup_module);
+
+
 /*
  * Local variables:
  *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c tulip.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"

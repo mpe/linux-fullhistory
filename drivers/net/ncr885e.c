@@ -14,18 +14,8 @@ static const char *version =
 "ncr885e.c:v0.8 11/30/98 dan@synergymicro.com\n";
 
 #include <linux/config.h>
-
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
 #include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT 
-#define MOD_DEC_USE_COUNT
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -91,6 +81,8 @@ static const char *chipname = "ncr885e";
 
 int ncr885e_debug = NCR885E_DEBUG;
 static int print_version = 0;
+static int debug = NCR885E_DEBUG; /* module parm */
+
 
 struct ncr885e_private {
 
@@ -124,10 +116,7 @@ struct ncr885e_private {
 	spinlock_t lock;
 };
 
-#ifdef MODULE
 static struct net_device *root_dev = NULL;
-#endif
-
 
 static int ncr885e_open( struct net_device *dev );
 static int ncr885e_close( struct net_device *dev );
@@ -1169,13 +1158,18 @@ ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 	unsigned char *p;
 	int  i;
 
+	if (!request_region( ioaddr, NCR885E_TOTAL_SIZE, dev->name))
+		return -EBUSY;
+
 	dev = init_etherdev(NULL, 0 );
 
 	/* construct private data for the 885 ethernet */
 	dev->priv = kmalloc( sizeof( struct ncr885e_private ), GFP_KERNEL );
 
-	if ( dev->priv == NULL )
+	if ( dev->priv == NULL ) {
+		release_region( ioaddr, NCR885E_TOTAL_SIZE );
 		return -ENOMEM;
+	}
 
 	sp = (struct ncr885e_private *) dev->priv;
 	memset( sp, 0, sizeof( struct ncr885e_private ));
@@ -1198,8 +1192,6 @@ ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 
 	printk(", IRQ %d.\n", irq );
 
-	request_region( ioaddr, NCR885E_TOTAL_SIZE, dev->name );
-
 	/* set up a timer */
 	init_timer( &sp->tx_timeout );
 	sp->timeout_active = 0;
@@ -1216,6 +1208,8 @@ ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 	dev->hard_start_xmit = ncr885e_xmit_start;
 	dev->set_multicast_list = ncr885e_set_multicast;
 	dev->set_mac_address = ncr885e_set_address;
+	
+	root_dev = dev;
 
 	return 0;
 }
@@ -1226,12 +1220,15 @@ ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
  *  worry about the rest.
  */
 
-int __init ncr885e_probe(void)
+static int __init ncr885e_probe(void)
 {
 	struct pci_dev *pdev = NULL;
 	unsigned int ioaddr, chips = 0;
 	unsigned short cmd;
 	unsigned char irq, latency;
+
+	if ( debug >= 0)
+		ncr885e_debug = debug;
 
 	while(( pdev = pci_find_device( PCI_VENDOR_ID_NCR, 
 					PCI_DEVICE_ID_NCR_53C885_ETHERNET,
@@ -1416,26 +1413,12 @@ write_mii( unsigned long ioaddr, int reg, int data )
 
 #endif /* NCR885E_DEBUG_MII */
 
-#ifdef MODULE
-#if defined(LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x20118
 MODULE_AUTHOR("dan@synergymicro.com");
 MODULE_DESCRIPTION("Symbios 53C885 Ethernet driver");
 MODULE_PARM(debug, "i");
-#endif 
 
-static int debug = 1;
 
-int
-init_module(void)
-{
-	if ( debug >= 0)
-		ncr885e_debug = debug;
-
-	return ncr885e_probe();
-}
-
-void
-cleanup_module(void)
+static void __exit ncr885e_cleanup (void)
 {
 	struct ncr885e_private *np;
 
@@ -1448,7 +1431,10 @@ cleanup_module(void)
 		root_dev = NULL;
 	}  
 }
-#endif /* MODULE */
+
+module_init(ncr885e_probe);
+module_exit(ncr885e_cleanup);
+
 
 /*
  * Local variables:

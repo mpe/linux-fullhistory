@@ -18,23 +18,8 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-#define	NBUF	32
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
-
-/*
- * Write to a file (through the page cache).
- */
-static ssize_t
-minix_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
-{
-	return generic_file_write(file, buf, count,
-				  ppos, block_write_partial_page);
-}
 
 /*
  * We have mostly NULLs here: the current defaults are OK for
@@ -42,28 +27,12 @@ minix_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
  */
 static struct file_operations minix_file_operations = {
 	read:		generic_file_read,
-	write:		minix_file_write,
+	write:		generic_file_write,
 	mmap:		generic_file_mmap,
 	fsync:		minix_sync_file,
 };
 
 struct inode_operations minix_file_inode_operations = {
-	&minix_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	minix_get_block,	/* get_block */
-	block_read_full_page,	/* readpage */
-	block_write_full_page,	/* writepage */
-	minix_truncate,		/* truncate */
-	NULL,			/* permission */
-	NULL,			/* revalidate */
+	&minix_file_operations,
+	truncate:	minix_truncate,
 };

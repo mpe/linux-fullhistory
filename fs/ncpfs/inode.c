@@ -51,7 +51,7 @@ static struct super_operations ncp_sops =
 
 extern struct dentry_operations ncp_dentry_operations;
 #ifdef CONFIG_NCPFS_EXTRAS
-extern struct inode_operations ncp_symlink_inode_operations;
+extern struct address_space_operations ncp_symlink_aops;
 extern int ncp_symlink(struct inode*, struct dentry*, const char*);
 #endif
 
@@ -226,7 +226,8 @@ ncp_iget(struct super_block *sb, struct ncp_entry_info *info)
 			inode->i_op = &ncp_dir_inode_operations;
 #ifdef CONFIG_NCPFS_EXTRAS
 		} else if (S_ISLNK(inode->i_mode)) {
-			inode->i_op = &ncp_symlink_inode_operations;
+			inode->i_op = &page_symlink_inode_operations;
+			inode->i_data.a_ops = &ncp_symlink_aops;
 #endif
 		}
 		insert_inode_hash(inode);

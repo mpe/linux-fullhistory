@@ -1094,13 +1094,17 @@ static int __init myri_sbus_match(struct sbus_dev *sdev)
 	return 0;
 }
 
-int __init myri_sbus_probe(void)
+static int __init myri_sbus_probe(void)
 {
 	struct net_device *dev = NULL;
 	struct sbus_bus *bus;
 	struct sbus_dev *sdev = 0;
 	static int called = 0;
 	int cards = 0, v;
+
+#ifdef MODULE
+	root_myri_dev = NULL;
+#endif
 
 	if (called)
 		return ENODEV;
@@ -1123,18 +1127,9 @@ int __init myri_sbus_probe(void)
 	return 0;
 }
 
+static void __exit myri_sbus_cleanup(void)
+{
 #ifdef MODULE
-
-int
-init_module(void)
-{
-	root_myri_dev = NULL;
-	return myri_sbus_probe();
-}
-
-void
-cleanup_module(void)
-{
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_myri_dev) {
 		struct myri_eth *next = root_myri_dev->next_module;
@@ -1143,6 +1138,8 @@ cleanup_module(void)
 		kfree(root_myri_dev->dev);
 		root_myri_dev = next;
 	}
+#endif /* MODULE */
 }
 
-#endif /* MODULE */
+module_init(myri_sbus_probe);
+module_exit(myri_sbus_cleanup);

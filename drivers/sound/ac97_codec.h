@@ -154,4 +154,5 @@ struct ac97_codec {
 };
 
 extern int ac97_probe_codec(struct ac97_codec *);
-#endif
+
+#endif /* _AC97_CODEC_H_ */

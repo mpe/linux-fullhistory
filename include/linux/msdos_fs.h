@@ -271,11 +271,6 @@ extern ssize_t fat_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t fat_file_write(struct file *, const char *, size_t, loff_t *);
 extern void fat_truncate(struct inode *inode);
 
-/* mmap.c */
-extern int fat_mmap(struct file *, struct vm_area_struct *);
-extern int fat_readpage(struct file *, struct page *);
-
-
 /* vfat.c */
 extern int init_vfat_fs(void);
 

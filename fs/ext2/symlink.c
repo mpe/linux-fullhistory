@@ -1,6 +1,8 @@
 /*
  *  linux/fs/ext2/symlink.c
  *
+ * Only fast symlinks left here - the rest is done by generic code. AV, 1999
+ *
  * Copyright (C) 1992, 1993, 1994, 1995
  * Remy Card (card@masi.ibp.fr)
  * Laboratoire MASI - Institut Blaise Pascal
@@ -16,7 +18,6 @@
  */
 
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
 
 static int ext2_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
@@ -33,11 +34,4 @@ static struct dentry *ext2_follow_link(struct dentry *dentry, struct dentry *bas
 struct inode_operations ext2_fast_symlink_inode_operations = {
 	readlink:	ext2_readlink,
 	follow_link:	ext2_follow_link,
-};
-
-struct inode_operations ext2_symlink_inode_operations = {
-	readlink:	page_readlink,
-	follow_link:	page_follow_link,
-	get_block:	ext2_get_block,
-	readpage:	block_read_full_page,
 };

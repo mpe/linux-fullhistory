@@ -717,7 +717,10 @@ int snd_find_driver(int type);
 void sound_unload_drivers(void);
 void sound_unload_driver(int type);
 int sndtable_identify_card(char *name);
+
+#if FIXED_FOR_2_4_0
 void sound_setup (char *str, int *ints);
+#endif
 
 extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
 int sndtable_probe (int unit, struct address_info *hw_config);

@@ -188,21 +188,10 @@ void udf_truncate(struct inode * inode)
 	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
 		return;
 
-	udf_trunc(inode);
-
-	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	mark_inode_dirty(inode);
-}
-
-void udf_truncate_adinicb(struct inode * inode)
-{
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
-			S_ISLNK(inode->i_mode)))
-		return;
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		return;
-
-	UDF_I_LENALLOC(inode) = inode->i_size;
+	if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
+		UDF_I_LENALLOC(inode) = inode->i_size;
+	else
+		udf_trunc(inode);
 
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);

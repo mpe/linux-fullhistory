@@ -166,16 +166,20 @@ affs_read_inode(struct inode *inode)
 	if (S_ISREG(inode->i_mode)) {
 		if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
 			inode->i_op = &affs_file_inode_operations_ofs;
-		} else {
-			inode->i_op = &affs_file_inode_operations;
+			return;
 		}
+		inode->i_op = &affs_file_inode_operations;
+		inode->i_mapping->a_ops = &affs_aops;
+		inode->u.affs_i.mmu_private = inode->i_size;
 	} else if (S_ISDIR(inode->i_mode)) {
 		/* Maybe it should be controlled by mount parameter? */
 		inode->i_mode |= S_ISVTX;
 		inode->i_op = &affs_dir_inode_operations;
 	}
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &affs_symlink_inode_operations;
+	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_data.a_ops = &affs_symlink_aops;
+	}
 }
 
 void

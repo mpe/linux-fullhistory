@@ -311,7 +311,7 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 		    ~(SECTOR_SIZE-1);
 	}
 	inode->i_size += SECTOR_SIZE*cluster_size;
-	MSDOS_I(inode)->i_realsize += SECTOR_SIZE*cluster_size;
+	MSDOS_I(inode)->mmu_private += SECTOR_SIZE*cluster_size;
 	mark_inode_dirty(inode);
 	return res;
 }

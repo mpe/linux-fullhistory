@@ -298,9 +298,6 @@ struct inode_operations ncp_file_inode_operations =
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL			/* revalidate */

@@ -580,19 +580,6 @@ static struct inode_operations openprom_alias_inode_operations = {
 	openpromfs_lookup,	/* lookup */
 	NULL,			/* link */
 	openpromfs_unlink,	/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 extern struct inode_operations openprom_inode_operations;

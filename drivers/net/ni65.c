@@ -808,7 +808,7 @@ static int ni65_lance_reinit(struct net_device *dev)
  */
 static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
-	int csr0;
+	int csr0 = 0;
 	struct net_device *dev = dev_id;
 	struct priv *p;
 	int bcnt = 32;

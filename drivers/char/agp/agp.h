@@ -112,26 +112,6 @@ struct agp_bridge_data {
 	int (*remove_memory) (agp_memory *, off_t, int);
 	agp_memory *(*alloc_by_type) (size_t, int);
 	void (*free_by_type) (agp_memory *);
-
-	/* Links to vendor/device specific setup functions */
-#ifdef CONFIG_AGP_INTEL
-	void (*intel_generic_setup) (void);
-#endif
-#ifdef CONFIG_AGP_I810
-	void (*intel_i810_setup) (struct pci_dev *);
-#endif
-#ifdef CONFIG_AGP_VIA
-	void (*via_generic_setup) (void);
-#endif
-#ifdef CONFIG_AGP_SIS
-	void (*sis_generic_setup) (void);
-#endif
-#ifdef CONFIG_AGP_AMD
-	void (*amd_irongate_setup) (void);
-#endif
-#ifdef CONFIG_AGP_ALI
-	void (*ali_generic_setup) (void);
-#endif
 };
 
 #define OUTREG32(mmap, addr, val)   __raw_writel((val), (mmap)+(addr))
@@ -156,6 +136,11 @@ struct agp_bridge_data {
 #ifndef min
 #define min(a,b)	(((a)<(b))?(a):(b))
 #endif
+
+#define arraysize(x)            (sizeof(x)/sizeof(*(x)))
+
+#define AGPGART_MODULE_NAME	"agpgart"
+#define PFX			AGPGART_MODULE_NAME ": "
 
 #define PGE_EMPTY(p) (!(p) || (p) == (unsigned long) agp_bridge.scratch_page)
 

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.85 2000/02/08 08:57:45 jj Exp $
+# $Id: config.in,v 1.86 2000/02/10 02:51:10 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -118,11 +118,24 @@ if [ "$CONFIG_SCSI" != "n" ]; then
    comment 'SCSI support type (disk, tape, CDrom)'
 
    dep_tristate '  SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
+
+   if [ "$CONFIG_BLK_DEV_SD" != "n" ]; then
+      int  'Maximum number of SCSI disks that can be loaded as modules' CONFIG_SD_EXTRA_DEVS 40
+   fi
+
    dep_tristate '  SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
+
+   if [ "$CONFIG_BLK_DEV_ST" != "n" ]; then
+      int  'Maximum number of SCSI tapes that can be loaded as modules' CONFIG_ST_EXTRA_DEVS 2
+   fi
+
    dep_tristate '  SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+
    if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
       bool '    Enable vendor-specific extensions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
+      int  'Maximum number of CDROM devices that can be loaded as modules' CONFIG_SR_EXTRA_DEVS 2
    fi
+
    dep_tristate '  SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
    comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
@@ -130,6 +143,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
    bool '  Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
 
    bool '  Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
+   bool '  SCSI logging facility' CONFIG_SCSI_LOGGING
 
    mainmenu_option next_comment
    comment 'SCSI low-level drivers'

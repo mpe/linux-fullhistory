@@ -71,8 +71,6 @@ fail:
 	return err;
 }
 
-struct inode_operations affs_symlink_inode_operations = {
-	readlink:	page_readlink,
-	follow_link:	page_follow_link,
+struct address_space_operations affs_symlink_aops = {
 	readpage:	affs_symlink_readpage,
 };

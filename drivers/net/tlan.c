@@ -89,15 +89,11 @@ static	int		aui = 0;
 static	int		duplex = 0; 
 static	int		speed = 0;
 
-#ifdef MODULE
-
 MODULE_PARM(aui, "i");
 MODULE_PARM(duplex, "i");
 MODULE_PARM(speed, "i");
 MODULE_PARM(debug, "i");
 EXPORT_NO_SYMBOLS;
-
-#endif
 
 /* Turn on debugging. See linux/Documentation/networking/tlan.txt for details */
 static  int		debug = 0;
@@ -314,7 +310,7 @@ TLan_SetTimer( struct net_device *dev, u32 ticks, u32 type )
 	 **************************************************************/
 
 
-void __exit tlan_exit(void)
+static void __exit tlan_exit(void)
 {
 	struct net_device	*dev;
 	TLanPrivateInfo	*priv;
@@ -355,7 +351,7 @@ void __exit tlan_exit(void)
 	 *
 	 **************************************************************/
 
-int __init tlan_probe(void)
+static int __init tlan_probe(void)
 {
 
 	struct net_device  *dev;
@@ -645,9 +641,7 @@ int TLan_Open( struct net_device *dev )
 		return -EAGAIN;
 	}
 	
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	/* NOTE: It might not be necessary to read the stats before a
 			 reset if you don't care what the values are.
@@ -704,7 +698,7 @@ int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 
 	if ( tail_list->cStat != TLAN_CSTAT_UNUSED ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TRANSMIT:  %s is busy (Head=%d Tail=%d)\n", dev->name, priv->txHead, priv->txTail );
-		dev->tbusy = 1;
+		netif_stop_queue(dev);
 		priv->txBusyCount++;
 		return 1;
 	}
@@ -799,10 +793,6 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 	priv = (TLanPrivateInfo *) dev->priv;
 
 	spin_lock(&priv->lock);
-	if ( dev->interrupt ) {
-		printk( "TLAN:   Re-entering interrupt handler for %s: %ld.\n" , dev->name, dev->interrupt );
-	}
-	dev->interrupt++;
 
 	host_int = inw( dev->base_addr + TLAN_HOST_INT );
 	outw( host_int, dev->base_addr + TLAN_HOST_INT );
@@ -816,7 +806,6 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 		outl( host_cmd, dev->base_addr + TLAN_HOST_CMD );
 	}
 
-	dev->interrupt--;
 	spin_unlock(&priv->lock);
 
 } /* TLan_HandleInterrupts */
@@ -843,8 +832,7 @@ int TLan_Close(struct net_device *dev)
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	TLan_ReadAndClearStats( dev, TLAN_RECORD );
 	outl( TLAN_HC_AD_RST, dev->base_addr + TLAN_HOST_CMD );
@@ -1058,7 +1046,7 @@ u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 	priv->stats.tx_bytes += head_list->frameSize;
 
 	head_list->cStat = TLAN_CSTAT_UNUSED;
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 	CIRC_INC( priv->txHead, TLAN_NUM_TX_LISTS );
 	if ( eoc ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TRANSMIT:  Handling TX EOC (Head=%d Tail=%d)\n", priv->txHead, priv->txTail );
@@ -1367,7 +1355,7 @@ u32 TLan_HandleStatusCheck( struct net_device *dev, u16 host_int )
 		TLan_FreeLists( dev );
 		TLan_ResetLists( dev );
 		TLan_ResetAdapter( dev );
-		dev->tbusy = 0;
+		netif_start_queue(dev);
 		ack = 0;
 	} else {
 		TLAN_DBG( TLAN_DEBUG_GNRL, "%s: Status Check\n", dev->name );
@@ -2377,9 +2365,7 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
 	sio = dev->base_addr + TLAN_DIO_DATA + TLAN_NET_SIO;
 
-	if ( dev->interrupt == 0 )
-		spin_lock_irqsave(&priv->lock, flags);
-	dev->interrupt++;
+	spin_lock_irqsave(&priv->lock, flags);
 
 	TLan_MiiSync(dev->base_addr);
 
@@ -2426,10 +2412,7 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 
 	*val = tmp;
 
-	dev->interrupt--;
-	if ( dev->interrupt == 0 )
-		spin_unlock_irqrestore(&priv->lock, flags);
-
+	spin_unlock_irqrestore(&priv->lock, flags);
 	return err;
 
 } /* TLan_MiiReadReg */
@@ -2546,9 +2529,7 @@ void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
 	sio = dev->base_addr + TLAN_DIO_DATA + TLAN_NET_SIO;
 
-	if ( dev->interrupt == 0 )
-		spin_lock_irqsave(&priv->lock, flags);
-	dev->interrupt++;
+	spin_lock_irqsave(&priv->lock, flags);
 
 	TLan_MiiSync( dev->base_addr );
 
@@ -2570,10 +2551,7 @@ void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 	if ( minten )
 		TLan_SetBit( TLAN_NET_SIO_MINTEN, sio );
 
-	dev->interrupt--;
-	if ( dev->interrupt == 0 )
-		spin_unlock_irqrestore(&priv->lock, flags);
-
+	spin_unlock_irqrestore(&priv->lock, flags);
 } /* TLan_MiiWriteReg */
 
 
@@ -2774,9 +2752,7 @@ int TLan_EeReadByte( struct net_device *dev, u8 ee_addr, u8 *data )
 	unsigned long flags = 0;
 	int ret=0;
 
-	if ( dev->interrupt == 0 )
-		spin_lock_irqsave(&priv->lock, flags);
-	dev->interrupt++;
+	spin_lock_irqsave(&priv->lock, flags);
 
 	TLan_EeSendStart( dev->base_addr );
 	err = TLan_EeSendByte( dev->base_addr, 0xA0, TLAN_EEPROM_ACK );
@@ -2799,11 +2775,9 @@ int TLan_EeReadByte( struct net_device *dev, u8 ee_addr, u8 *data )
 		goto fail;
 	}
 	TLan_EeReceiveByte( dev->base_addr, data, TLAN_EEPROM_STOP );
-fail:
-	dev->interrupt--;
-	if ( dev->interrupt == 0 )
-		spin_unlock_irqrestore(&priv->lock, flags);
 
+fail:
+	spin_unlock_irqrestore(&priv->lock, flags);
 	return ret;
 
 } /* TLan_EeReadByte */

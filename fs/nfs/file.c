@@ -64,9 +64,6 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	nfs_readpage,		/* readpage */
-	nfs_writepage,		/* writepage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	nfs_revalidate,		/* revalidate */
@@ -160,20 +157,28 @@ nfs_fsync(struct file *file, struct dentry *dentry)
  * If the writer ends up delaying the write, the writer needs to
  * increment the page use counts until he is done with the page.
  */
-static int nfs_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+static int nfs_prepare_write(struct page *page, unsigned offset, unsigned to)
+{
+	kmap(page);
+	return 0;
+}
+static int nfs_commit_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
 	long status;
 
-	bytes -= copy_from_user((u8*)kmap(page) + offset, buf, bytes);
 	kunmap(page);
-	status = -EFAULT;
-	if (bytes) {
-		lock_kernel();
-		status = nfs_updatepage(file, page, offset, bytes);
-		unlock_kernel();
-	}
+	lock_kernel();
+	status = nfs_updatepage(file, page, offset, to-offset);
+	unlock_kernel();
 	return status;
 }
+
+struct address_space_operations nfs_file_aops = {
+	readpage: nfs_readpage,
+	writepage: nfs_writepage,
+	prepare_write: nfs_prepare_write,
+	commit_write: nfs_commit_write
+};
 
 /* 
  * Write to a file (through the page cache).
@@ -200,7 +205,7 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	if (!count)
 		goto out;
 
-	result = generic_file_write(file, buf, count, ppos, nfs_write_one_page);
+	result = generic_file_write(file, buf, count, ppos);
 out:
 	return result;
 

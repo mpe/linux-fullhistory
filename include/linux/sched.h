@@ -80,7 +80,6 @@ extern int last_pid;
 #define TASK_UNINTERRUPTIBLE	2
 #define TASK_ZOMBIE		4
 #define TASK_STOPPED		8
-#define TASK_SWAPPING		16
 #define TASK_EXCLUSIVE		32
 
 #define __set_task_state(tsk, state_value)		\

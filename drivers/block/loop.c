@@ -386,7 +386,11 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		   a file structure */
 		lo->lo_backing_file = NULL;
 	} else if (S_ISREG(inode->i_mode)) {
-		if (!inode->i_op->get_block) { 
+		/*
+		 * Total crap. We should just use pagecache instead of trying
+		 * to redirect on block level.
+		 */
+		if (!inode->i_mapping->a_ops->bmap) {
 			printk(KERN_ERR "loop: device has no block access/not implemented\n");
 			goto out_putf;
 		}

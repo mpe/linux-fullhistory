@@ -186,7 +186,7 @@ static int __init ni5010_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	int i;
-	unsigned int data;
+	unsigned int data = 0;
 	int boguscount = 40;
 
 	/*

@@ -39,6 +39,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/init.h>
 
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
@@ -112,6 +113,8 @@ struct sis900_private {
 	struct net_device *next_module;
 	struct net_device_stats stats;
 	struct pci_dev * pci_dev;
+	
+	spinlock_t lock;
 
 	struct mac_chip_info * mac;
 	struct mii_phy * mii;
@@ -131,15 +134,11 @@ struct sis900_private {
 	int LinkOn;
 };
 
-#ifdef MODULE
-#if LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Jim Huang <cmhuang@sis.com.tw>");
 MODULE_DESCRIPTION("SiS 900 PCI Fast Ethernet driver");
 MODULE_PARM(multicast_filter_limit, "i");
 MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(debug, "i");
-#endif
-#endif
 
 static int sis900_open(struct net_device *net_dev);
 static int sis900_mii_probe (struct net_device * net_dev);
@@ -167,18 +166,16 @@ static void sis900_reset(struct net_device *net_dev);
 static struct net_device *root_sis900_dev = NULL;
 
 /* walk through every ethernet PCI devices to see if some of them are matched with our card list*/
-int sis900_probe (struct net_device * net_dev)
+static int __init sis900_probe (void)
 {
 	int found = 0;
 	struct pci_dev * pci_dev = NULL;
-		
-	if (!pci_present())
-		return -ENODEV;
 		
 	while ((pci_dev = pci_find_class (PCI_CLASS_NETWORK_ETHERNET << 8, pci_dev)) != NULL) {
 		/* pci_dev contains all ethernet devices */
 		u32 pci_io_base;
 		struct mac_chip_info * mac;
+		struct net_device *net_dev = NULL;
 
 		for (mac = mac_chip_table; mac->vendor_id; mac++) {
 			/* try to match our card list */
@@ -198,6 +195,7 @@ int sis900_probe (struct net_device * net_dev)
 			continue;
 		
 		/* setup various bits in PCI command register */
+		pci_enable_device (pci_dev);
 		pci_set_master(pci_dev);
 
 		/* do the real low level jobs */
@@ -258,6 +256,7 @@ static struct net_device * sis900_mac_probe (struct mac_chip_info * mac, struct 
 	net_dev->irq = irq;
 	sis_priv->pci_dev = pci_dev;
 	sis_priv->mac = mac;
+	sis_priv->lock = SPIN_LOCK_UNLOCKED;
 
 	/* probe for mii transciver */
 	if (sis900_mii_probe(net_dev) == 0) {
@@ -277,6 +276,8 @@ static struct net_device * sis900_mac_probe (struct mac_chip_info * mac, struct 
 	net_dev->get_stats = &sis900_get_stats;
 	net_dev->set_multicast_list = &set_rx_mode;
 	net_dev->do_ioctl = &mii_ioctl;
+	net_dev->tx_timeout = sis900_tx_timeout;
+	net_dev->watchdog_timeo = TX_TIMEOUT;
 
 	return net_dev;
 }
@@ -506,9 +507,7 @@ sis900_open(struct net_device *net_dev)
 
 	set_rx_mode(net_dev);
 
-	net_dev->tbusy = 0;
-	net_dev->interrupt = 0;
-	net_dev->start = 1;
+	netif_start_queue(net_dev);
 
 	/* Enable all known interrupts by setting the interrupt mask. */
 	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxIDLE), ioaddr + imr);
@@ -811,7 +810,8 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 	}
 
 	net_dev->trans_start = jiffies;
-	net_dev->tbusy = sis_priv->tx_full = 0;
+	sis_priv->tx_full = 0;
+	netif_start_queue(net_dev);
 
 	/* FIXME: Should we restart the transmission thread here  ?? */
 
@@ -827,13 +827,6 @@ sis900_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 	long ioaddr = net_dev->base_addr;
 	unsigned int  entry;
 
-	/* test tbusy to see if we have timeout situation then set it */
-	if (test_and_set_bit(0, (void*)&net_dev->tbusy) != 0) {
-		if (jiffies - net_dev->trans_start > TX_TIMEOUT)
-			sis900_tx_timeout(net_dev);
-		return 1;
-	}
-
 	/* Calculate the next Tx descriptor entry. */
 	entry = sis_priv->cur_tx % NUM_TX_DESC;
 	sis_priv->tx_skbuff[entry] = skb;
@@ -846,7 +839,7 @@ sis900_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 	if (++sis_priv->cur_tx - sis_priv->dirty_tx < NUM_TX_DESC) {
 		/* Typical path, clear tbusy to indicate more 
 		   transmission is possible */
-		clear_bit(0, (void*)&net_dev->tbusy);
+		netif_start_queue(net_dev);
 	} else {
 		/* no more transmit descriptor avaiable, tbusy remain set */
 		sis_priv->tx_full = 1;
@@ -867,26 +860,12 @@ sis900_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
 	struct net_device *net_dev = (struct net_device *)dev_instance;
+	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	int boguscnt = max_interrupt_work;
 	long ioaddr = net_dev->base_addr;
 	u32 status;
 
-#if defined(__i386__)
-	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
-	if (test_and_set_bit(0, (void*)&net_dev->interrupt)) {
-		printk(KERN_INFO "%s: SMP simultaneous entry of "
-		       "an interrupt handler.\n", net_dev->name);
-		net_dev->interrupt = 0;     /* Avoid halting machine. */
-		return;
-	}
-#else
-	if (net_dev->interrupt) {
-		printk(KERN_INFO "%s: Re-entering the interrupt handler.\n", 
-		       net_dev->name);
-		return;
-	}
-	net_dev->interrupt = 1;
-#endif
+	spin_lock (&sis_priv->lock);
 
 	do {
 		status = inl(ioaddr + isr);
@@ -923,11 +902,7 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		       "interrupt status = 0x%#8.8x.\n",
 		       net_dev->name, inl(ioaddr + isr));
 	
-#if defined(__i386__)
-	clear_bit(0, (void*)&net_dev->interrupt);
-#else
-	net_dev->interrupt = 0;
-#endif
+	spin_unlock (&sis_priv->lock);
 	return;
 }
 
@@ -1079,13 +1054,12 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 		sis_priv->tx_ring[entry].cmdsts = 0;
 	}
 	
-	if (sis_priv->tx_full && net_dev->tbusy && 
+	if (sis_priv->tx_full && test_bit(LINK_STATE_XOFF, &net_dev->flags) && 
 	    sis_priv->cur_tx - sis_priv->dirty_tx < NUM_TX_DESC - 4) {
 		/* The ring is no longer full, clear tbusy, tx_full and
 		   schedule more transmission by marking NET_BH */
 		sis_priv->tx_full = 0;
-		clear_bit(0, (void *)&net_dev->tbusy);
-		mark_bh(NET_BH);
+		netif_wake_queue (net_dev);
 	}
 }
 
@@ -1096,8 +1070,7 @@ sis900_close(struct net_device *net_dev)
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	int i;
 	
-	net_dev->start = 0;
-	net_dev->tbusy = 1;
+	netif_stop_queue(net_dev);
 
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x0000, ioaddr + imr);
@@ -1264,14 +1237,7 @@ static void sis900_reset(struct net_device *net_dev)
 	outl(PESEL, ioaddr + cfg);
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return sis900_probe(NULL);
-}
-
-void
-cleanup_module(void)
+static void __exit sis900_cleanup_module(void)
 {
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_sis900_dev) {
@@ -1289,4 +1255,5 @@ cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
+module_init(sis900_probe);
+module_exit(sis900_cleanup_module);

@@ -178,7 +178,6 @@ extern int iso_date(char *, int);
 extern int parse_rock_ridge_inode(struct iso_directory_record *, struct inode *);
 extern int get_rock_ridge_filename(struct iso_directory_record *, char *, struct inode *);
 
-extern int rock_ridge_symlink_readpage(struct dentry *, struct page *);
 extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
 
 int get_joliet_filename(struct iso_directory_record *, struct inode *, unsigned char *);
@@ -192,10 +191,7 @@ extern int isofs_lookup_grandparent(struct inode *, int);
 
 extern struct inode_operations isofs_file_inode_operations;
 extern struct inode_operations isofs_dir_inode_operations;
-extern struct inode_operations isofs_symlink_inode_operations;
-extern struct inode_operations isofs_chrdev_inode_operations;
-extern struct inode_operations isofs_blkdev_inode_operations;
-extern struct inode_operations isofs_fifo_inode_operations;
+extern struct address_space_operations isofs_symlink_aops;
 
 /* The following macros are used to check for memory leaks. */
 #ifdef LEAK_CHECK

@@ -47,6 +47,8 @@
 #include <asm/page.h>
 #include <asm/mman.h>
 
+#include "agp.h"
+
 static struct agp_front_data agp_fe;
 
 static agp_memory *agp_find_mem_by_key(int key)
@@ -298,7 +300,7 @@ static agp_memory *agp_allocate_memory_wrap(size_t pg_count, u32 type)
 	agp_memory *memory;
 
 	memory = agp_allocate_memory(pg_count, type);
-   printk("memory : %p\n", memory);
+   	printk(KERN_DEBUG "memory : %p\n", memory);
 	if (memory == NULL) {
 		return NULL;
 	}
@@ -969,95 +971,90 @@ static int agp_ioctl(struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg)
 {
 	agp_file_private *curr_priv = (agp_file_private *) file->private_data;
-	int ret_val;
+	int ret_val = -ENOTTY;
 
 	AGP_LOCK();
 
 	if ((agp_fe.current_controller == NULL) &&
 	    (cmd != AGPIOC_ACQUIRE)) {
-		return -EINVAL;
+		ret_val = -EINVAL;
+	   	goto ioctl_out;
 	}
 	if ((agp_fe.backend_acquired != TRUE) &&
 	    (cmd != AGPIOC_ACQUIRE)) {
-		return -EBUSY;
+		ret_val = -EBUSY;
+	   	goto ioctl_out;
 	}
 	if (cmd != AGPIOC_ACQUIRE) {
 		if (!(test_bit(AGP_FF_IS_CONTROLLER,
 			       &curr_priv->access_flags))) {
-			return -EPERM;
+			ret_val = -EPERM;
+		   	goto ioctl_out;
 		}
 		/* Use the original pid of the controller,
 		 * in case it's threaded */
 
 		if (agp_fe.current_controller->pid != curr_priv->my_pid) {
-			return -EBUSY;
+			ret_val = -EBUSY;
+		   	goto ioctl_out;
 		}
 	}
 	switch (cmd) {
 	case AGPIOC_INFO:
 		{
 			ret_val = agpioc_info_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_ACQUIRE:
 		{
 			ret_val = agpioc_acquire_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_RELEASE:
 		{
 			ret_val = agpioc_release_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_SETUP:
 		{
 			ret_val = agpioc_setup_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_RESERVE:
 		{
 			ret_val = agpioc_reserve_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_PROTECT:
 		{
 			ret_val = agpioc_protect_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_ALLOCATE:
 		{
 			ret_val = agpioc_allocate_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_DEALLOCATE:
 		{
 			ret_val = agpioc_deallocate_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_BIND:
 		{
 			ret_val = agpioc_bind_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	case AGPIOC_UNBIND:
 		{
 			ret_val = agpioc_unbind_wrap(curr_priv, arg);
-			AGP_UNLOCK();
-			return ret_val;
+		   	goto ioctl_out;
 		}
 	}
-
+   
+ioctl_out:
 	AGP_UNLOCK();
-	return -ENOTTY;
+	return ret_val;
 }
 
 static struct file_operations agp_fops =
@@ -1074,24 +1071,23 @@ static struct file_operations agp_fops =
 static struct miscdevice agp_miscdev =
 {
 	AGPGART_MINOR,
-	"agpgart",
+	AGPGART_MODULE_NAME,
 	&agp_fops
 };
 
-int agp_frontend_initialize(void)
+int __init agp_frontend_initialize(void)
 {
 	memset(&agp_fe, 0, sizeof(struct agp_front_data));
 	AGP_LOCK_INIT();
 
 	if (misc_register(&agp_miscdev)) {
-		printk("agpgart: unable to get minor: %d\n", AGPGART_MINOR);
+		printk(KERN_ERR PFX "unable to get minor: %d\n", AGPGART_MINOR);
 		return -EIO;
 	}
 	return 0;
 }
 
-void agp_frontend_cleanup(void)
+void __exit agp_frontend_cleanup(void)
 {
 	misc_deregister(&agp_miscdev);
-	return;
 }

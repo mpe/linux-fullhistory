@@ -283,7 +283,7 @@ int default_fat_bmap(struct inode *inode,int sector)
 			return 0;
 		return sector+sb->dir_start;
 	}
-	if (sector >= (MSDOS_I(inode)->i_realsize>>9))
+	if (sector >= MSDOS_I(inode)->mmu_private>>9)
 		return 0;
 	cluster = sector/sb->cluster_size;
 	offset = sector % sb->cluster_size;

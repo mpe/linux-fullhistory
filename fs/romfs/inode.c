@@ -446,6 +446,10 @@ romfs_readpage(struct dentry * dentry, struct page * page)
 
 /* Mapping from our types to the kernel */
 
+static struct address_space_operations romfs_aops = {
+	readpage: romfs_readpage
+};
+
 static struct file_operations romfs_file_operations = {
 	read:		generic_file_read,
 	mmap:		generic_file_mmap,
@@ -453,23 +457,6 @@ static struct file_operations romfs_file_operations = {
 
 static struct inode_operations romfs_file_inode_operations = {
 	&romfs_file_operations,
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block -- not really */
-	romfs_readpage,		/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 static struct file_operations romfs_dir_operations = {
@@ -484,27 +471,6 @@ static struct inode_operations romfs_dir_inode_operations = {
 	&romfs_dir_operations,
 	NULL,			/* create */
 	romfs_lookup,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
-};
-
-static struct inode_operations romfs_link_inode_operations = {
-	readlink:	page_readlink,
-	follow_link:	page_follow_link,
-	readpage:	romfs_readpage
 };
 
 static mode_t romfs_modemap[] =
@@ -518,7 +484,7 @@ static struct inode_operations *romfs_inoops[] =
 	NULL,				/* hardlink, handled elsewhere */
 	&romfs_dir_inode_operations,
 	&romfs_file_inode_operations,
-	&romfs_link_inode_operations,
+	&page_symlink_inode_operations,
 	NULL,				/* device/fifo/socket nodes, */
 	NULL,				/*   set by init_special_inode */
 	NULL,
@@ -574,6 +540,8 @@ romfs_read_inode(struct inode *i)
 		i->i_mode = ino;
 		if (S_ISDIR(ino))
 			i->i_size = i->u.romfs_i.i_metasize;
+		else
+			i->i_data.a_ops = &romfs_aops;
 	} else {
 		/* depending on MBZ for sock/fifos */
 		nextfh = ntohl(ri.spec);

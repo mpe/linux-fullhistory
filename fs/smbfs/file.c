@@ -260,19 +260,30 @@ out:
  * If the writer ends up delaying the write, the writer needs to
  * increment the page use counts until he is done with the page.
  */
-static int smb_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+static int smb_prepare_write(struct page *page, unsigned offset, unsigned to)
+{
+	kmap(page);
+	return 0;
+}
+
+static int smb_commit_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
 	int status;
 
-	bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
 	status = -EFAULT;
-	if (bytes) {
-		lock_kernel();
-		status = smb_updatepage(file, page, offset, bytes);
-		unlock_kernel();
-	}
+	lock_kernel();
+	status = smb_updatepage(file, page, offset, to-offset);
+	unlock_kernel();
+	kunmap(page);
 	return status;
 }
+
+struct address_space_operations smb_file_aops = {
+	readpage: smb_readpage,
+	writepage: smb_writepage,
+	prepare_write: smb_prepare_write,
+	commit_write: smb_commit_write
+};
 
 /* 
  * Write to a file (through the page cache).
@@ -305,7 +316,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 
 	if (count > 0)
 	{
-		result = generic_file_write(file, buf, count, ppos, smb_write_one_page);
+		result = generic_file_write(file, buf, count, ppos);
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_file_write: pos=%ld, size=%ld, mtime=%ld, atime=%ld\n",
 (long) file->f_pos, dentry->d_inode->i_size, dentry->d_inode->i_mtime,
@@ -390,9 +401,6 @@ struct inode_operations smb_file_inode_operations =
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	smb_readpage,		/* readpage */
-	smb_writepage,		/* writepage */
 	NULL,			/* truncate */
 	smb_file_permission,	/* permission */
 	smb_revalidate_inode,	/* revalidate */

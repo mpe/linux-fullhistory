@@ -25,7 +25,7 @@
 static struct super_operations cramfs_ops;
 static struct inode_operations cramfs_file_inode_operations;
 static struct inode_operations cramfs_dir_inode_operations;
-static struct inode_operations cramfs_symlink_inode_operations;
+static struct address_space_operations cramfs_aops;
 
 /* These two macros may change in future, to provide better st_ino
    semantics. */
@@ -51,13 +51,15 @@ static struct inode *get_cramfs_inode(struct super_block *sb, struct cramfs_inod
 				       result in GNU find, even
 				       without -noleaf option. */
 		insert_inode_hash(inode);
-		if (S_ISREG(inode->i_mode))
+		if (S_ISREG(inode->i_mode)) {
 			inode->i_op = &cramfs_file_inode_operations;
-		else if (S_ISDIR(inode->i_mode))
+			inode->i_data.a_ops = &cramfs_aops;
+		} else if (S_ISDIR(inode->i_mode))
 			inode->i_op = &cramfs_dir_inode_operations;
-		else if (S_ISLNK(inode->i_mode))
-			inode->i_op = &cramfs_symlink_inode_operations;
-		else {
+		else if (S_ISLNK(inode->i_mode)) {
+			inode->i_op = &page_symlink_inode_operations;
+			inode->i_data.a_ops = &cramfs_aops;
+		} else {
 			inode->i_size = 0;
 			init_special_inode(inode, inode->i_mode, cramfs_inode->size);
 		}
@@ -344,53 +346,9 @@ static int cramfs_readpage(struct dentry *dentry, struct page * page)
 	return 0;
 }
 
-static struct page *get_symlink_page(struct dentry *dentry)
-{
-	return read_cache_page(&dentry->d_inode->i_data, 0, (filler_t *)cramfs_readpage, dentry);
-}
-
-static int cramfs_readlink(struct dentry *dentry, char *buffer, int len)
-{
-	struct inode *inode = dentry->d_inode;
-	int retval;
-
-	if (!inode || !S_ISLNK(inode->i_mode))
-		return -EBADF;
-
-	retval = inode->i_size;
-	if (retval) {
-		int len;
-		struct page *page = get_symlink_page(dentry);
-
-		if (IS_ERR(page))
-			return PTR_ERR(page);
-		wait_on_page(page);
-		len = retval;
-		retval = -EIO;
-		if (Page_Uptodate(page)) {
-			retval = -EFAULT;
-			if (!copy_to_user(buffer, (void *) page_address(page), len))
-				retval = len;
-		}
-		page_cache_release(page);
-	}
-	return retval;
-}
-
-static struct dentry *cramfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
-{
-	struct page *page = get_symlink_page(dentry);
-	struct dentry *result;
-
-	if (IS_ERR(page)) {
-		dput(base);
-		return ERR_PTR(PTR_ERR(page));
-	}
-
-	result = lookup_dentry((void *) page_address(page), base, follow);
-	page_cache_release(page);
-	return result;
-}
+static struct address_space_operations cramfs_aops = {
+	readpage: cramfs_readpage
+};
 
 /*
  * Our operations:
@@ -411,65 +369,12 @@ static struct file_operations cramfs_directory_operations = {
 
 static struct inode_operations cramfs_file_inode_operations = {
 	&cramfs_file_operations,
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	cramfs_readpage,	/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 static struct inode_operations cramfs_dir_inode_operations = {
 	&cramfs_directory_operations,
 	NULL,			/* create */
 	cramfs_lookup,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
-};
-
-static struct inode_operations cramfs_symlink_inode_operations = {
-	NULL,			/* symlinks do not have files */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	cramfs_readlink,		/* readlink */
-	cramfs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 static struct super_operations cramfs_ops = {

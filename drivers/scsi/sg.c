@@ -36,6 +36,7 @@
  *          # cat /proc/scsi/sg/debug
  *
  */
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/fs.h>

@@ -40,7 +40,6 @@ static const char *version =
 	info that the casual reader might think that it documents the i82586 :-<.
 */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -437,9 +436,7 @@ static int el16_open(struct net_device *dev)
 	/* Initialize the 82586 memory and start it. */
 	init_82586_mem(dev);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	MOD_INC_USE_COUNT;
 
@@ -453,7 +450,8 @@ static int el16_send_packet(struct sk_buff *skb, struct net_device *dev)
 	unsigned long shmem = dev->mem_start;
 	unsigned long flags;
 
-	if (dev->tbusy) 
+#if 0 /* LINK_STATE_XOFF is never set when we reach here */
+	if (test_bit(LINK_STATE_XOFF, &dev->flags))
 	{
 		/* If we get here, some higher level has decided we are broken.
 		   There should really be a "kick me" function call instead. */
@@ -476,31 +474,30 @@ static int el16_send_packet(struct sk_buff *skb, struct net_device *dev)
 			outb(0, ioaddr + SIGNAL_CA);			/* Issue channel-attn. */
 			lp->last_restart = lp->stats.tx_packets;
 		}
-		dev->tbusy=0;
+		netif_start_queue(dev);
 		dev->trans_start = jiffies;
 	}
+#endif
 
-	/* Block a timer-based transmit from overlapping. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else
 	{
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
 
+		spin_lock_irqsave(&lp->lock, flags);
+
 		lp->stats.tx_bytes+=length;
 		/* Disable the 82586's input to the interrupt line. */
 		outb(0x80, ioaddr + MISC_CTRL);
-#ifdef CONFIG_SMP
-		spin_lock_irqsave(&lp->lock, flags);
+
 		hardware_send_packet(dev, buf, length);
-		spin_unlock_irqrestore(&lp->lock, flags);
-#else
-		hardware_send_packet(dev, buf, length);
-#endif		
+
 		dev->trans_start = jiffies;
 		/* Enable the 82586 interrupt input. */
 		outb(0x84, ioaddr + MISC_CTRL);
+
+		spin_unlock_irqrestore(&lp->lock, flags);
+
+		netif_stop_queue(dev);
 	}
 
 	dev_kfree_skb (skb);
@@ -524,8 +521,6 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk ("net_interrupt(): irq %d for unknown device.\n", irq);
 		return;
 	}
-	dev->interrupt = 1;
-	
 
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
@@ -553,8 +548,7 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	  if (tx_status & 0x2000) {
 		lp->stats.tx_packets++;
 		lp->stats.collisions += tx_status & 0xf;
-		dev->tbusy = 0;
-		mark_bh(NET_BH);		/* Inform upper layers. */
+		netif_wake_queue(dev);
 	  } else {
 		lp->stats.tx_errors++;
 		if (tx_status & 0x0600)  lp->stats.tx_carrier_errors++;
@@ -580,7 +574,8 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Acknowledge the interrupt sources. */
 	ack_cmd = status & 0xf000;
 
-	if ((status & 0x0700) != 0x0200 && dev->start) {
+	if ((status & 0x0700) != 0x0200 &&
+	    (test_bit(LINK_STATE_START, &dev->state))) {
 		if (net_debug)
 			printk("%s: Command unit stopped, status %04x, restarting.\n",
 				   dev->name, status);
@@ -590,7 +585,8 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		ack_cmd |= CUC_RESUME;
 	}
 
-	if ((status & 0x0070) != 0x0040  &&  dev->start) 
+	if ((status & 0x0070) != 0x0040  &&
+	    (test_bit(LINK_STATE_START, &dev->state)))
 	{
 		static void init_rx_bufs(struct net_device *);
 		/* The Rx unit is not ready, it must be hung.  Restart the receiver by
@@ -612,8 +608,6 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Enable the 82586's interrupt input. */
 	outb(0x84, ioaddr + MISC_CTRL);
 	spin_unlock(&lp->lock);
-
-	return;
 }
 
 static int el16_close(struct net_device *dev)
@@ -621,8 +615,7 @@ static int el16_close(struct net_device *dev)
 	int ioaddr = dev->base_addr;
 	unsigned long shmem = dev->mem_start;
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 
 	/* Flush the Tx and disable Rx. */
 	isa_writew(RX_SUSPEND | CUC_SUSPEND,shmem+iSCB_CMD);
@@ -795,7 +788,7 @@ static void hardware_send_packet(struct net_device *dev, void *buf, short length
 	}
 
 	if (lp->tx_head != lp->tx_reap)
-		dev->tbusy = 0;
+		netif_start_queue(dev);
 }
 
 static void el16_rx(struct net_device *dev)

@@ -29,13 +29,7 @@
 #include <linux/nfsd/xdr.h>
 #include <linux/nfsd/syscall.h>
 
-#if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
-#else
-# define copy_from_user		memcpy_fromfs
-# define copy_to_user		memcpy_tofs
-# define access_ok		!verify_area
-#endif
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -249,10 +243,8 @@ done:
 
 #ifdef MODULE
 /* New-style module support since 2.1.18 */
-#if LINUX_VERSION_CODE >= 131346
 EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
-#endif
 
 extern int (*do_nfsservctl)(int, void *, void *);
 

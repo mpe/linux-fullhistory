@@ -48,6 +48,7 @@ enum chipset_type {
 	VIA_GENERIC,
 	VIA_VP3,
 	VIA_MVP3,
+	VIA_MVP4,
 	VIA_APOLLO_PRO,
 	SIS_GENERIC,
 	AMD_GENERIC,

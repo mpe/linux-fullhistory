@@ -79,14 +79,6 @@ struct inode_operations hfs_nat_ndir_inode_operations = {
 	nat_rmdir,		/* rmdir */
 	NULL,			/* mknod */
 	hfs_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL                    /* revalidate */
 };
 
 struct inode_operations hfs_nat_hdir_inode_operations = {
@@ -100,14 +92,6 @@ struct inode_operations hfs_nat_hdir_inode_operations = {
 	NULL,			/* rmdir */
 	NULL,			/* mknod */
 	nat_hdr_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL                    /* revalidate */
 };
 
 /*================ File-local functions ================*/

@@ -445,7 +445,7 @@ static char *get_symlink_chunk(char *rpnt, struct rock_ridge *rr)
 /* readpage() for symlinks: reads symlink contents into the page and either
    makes it uptodate and returns 0 or returns error (-EIO) */
 
-int rock_ridge_symlink_readpage(struct dentry *dentry, struct page *page)
+static int rock_ridge_symlink_readpage(struct dentry *dentry, struct page *page)
 {
 	struct inode *inode = dentry->d_inode;
 	char *link = (char*)kmap(page);
@@ -540,3 +540,7 @@ int rock_ridge_symlink_readpage(struct dentry *dentry, struct page *page)
 	UnlockPage(page);
 	return -EIO;
 }
+
+struct address_space_operations isofs_symlink_aops = {
+	readpage:	rock_ridge_symlink_readpage
+};

@@ -251,6 +251,7 @@ extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned long
 
 #define touch_buffer(bh)	set_bit(PG_referenced, &bh->b_page->flags)
 
+
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
 #include <linux/ext2_fs_i.h>
@@ -332,10 +333,23 @@ struct iattr {
  * oh the beauties of C type declarations.
  */
 struct page;
+struct address_space;
+
+struct address_space_operations {
+	int (*writepage) (struct dentry *, struct page *);
+	int (*readpage)(struct dentry *, struct page *);
+	int (*prepare_write)(struct page *, unsigned, unsigned);
+	int (*commit_write)(struct file *, struct page *, unsigned, unsigned);
+	/* Unfortunately this kludge is needed for FIBMAP. Don't use it */
+	int (*bmap)(struct address_space *, long);
+};
 
 struct address_space {
-	struct list_head	pages;
-	unsigned long		nrpages;
+	struct list_head	pages;		/* list of pages */
+	unsigned long		nrpages;	/* number of pages */
+	struct address_space_operations *a_ops;	/* methods */
+	void			*host;		/* owner: inode, block_device */
+	void			*private;	/* private data */
 };
 
 struct block_device {
@@ -374,6 +388,7 @@ struct inode {
 	wait_queue_head_t	i_wait;
 	struct file_lock	*i_flock;
 	struct vm_area_struct	*i_mmap;
+	struct address_space	*i_mapping;	
 	struct address_space	i_data;	
 	spinlock_t		i_shared_lock;
 	struct dquot		*i_dquot[MAXQUOTAS];
@@ -655,24 +670,6 @@ struct inode_operations {
 			struct inode *, struct dentry *);
 	int (*readlink) (struct dentry *, char *,int);
 	struct dentry * (*follow_link) (struct dentry *, struct dentry *, unsigned int);
-	/*
-	 * the order of these functions within the VFS template has been
-	 * changed because SMP locking has changed: from now on all get_block,
-	 * readpage and writepage functions are supposed to do
-	 * whatever locking they need to get proper SMP operation - for
-	 * now in most cases this means a lock/unlock_kernel at entry/exit.
-	 * [The new order is also slightly more logical :)]
-	 */
-	/*
-	 * Generic block allocator exported by the lowlevel fs. All metadata
-	 * details are handled by the lowlevel fs, all 'logical data content'
-	 * details are handled by the highlevel block layer.
-	 */
-	int (*get_block) (struct inode *, long, struct buffer_head *, int);
-
-	int (*readpage) (struct dentry *, struct page *);
-	int (*writepage) (struct dentry *, struct page *);
-
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*revalidate) (struct dentry *);
@@ -779,7 +776,6 @@ extern int blkdev_put(struct block_device *, int);
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_chrdev(unsigned int, const char *);
 extern int chrdev_open(struct inode *, struct file *);
-extern struct file_operations def_chr_fops;
 extern const char * bdevname(kdev_t);
 extern const char * cdevname(kdev_t);
 extern const char * kdevname(kdev_t);
@@ -975,30 +971,29 @@ extern void wakeup_bdflush(int wait);
 extern int brw_page(int, struct page *, kdev_t, int [], int);
 
 typedef int (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
+typedef int (get_block_t)(struct inode*,long,struct buffer_head*,int);
 
 /* Generic buffer handling for block filesystems.. */
-extern int block_read_full_page(struct dentry *, struct page *);
-extern int block_write_full_page (struct dentry *, struct page *);
-extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
-extern int block_write_cont_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
-extern int block_write_zero_range(struct inode *, struct page *, unsigned, unsigned, unsigned, const char *);
-extern inline int block_write_range(struct inode *inode, struct page *page,
-				unsigned from, unsigned len,const char *buf) 
-{
-	return block_write_zero_range(inode, page, from, from, from+len, buf);
-}
 extern int block_flushpage(struct page *, unsigned long);
 extern int block_symlink(struct inode *, const char *, int);
+extern int block_write_full_page(struct page*, get_block_t*);
+extern int block_read_full_page(struct page*, get_block_t*);
+extern int block_prepare_write(struct page*, unsigned, unsigned, get_block_t*);
+extern int cont_prepare_write(struct page*, unsigned, unsigned, get_block_t*,
+				unsigned long *);
+int generic_block_bmap(struct address_space *, long, get_block_t *);
+int generic_commit_write(struct file *, struct page *, unsigned, unsigned);
 
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
-extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
+extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *);
 extern void do_generic_file_read(struct file *, loff_t *, read_descriptor_t *, read_actor_t);
 
 extern int vfs_readlink(struct dentry *, char *, int, const char *);
 extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, const char *);
 extern int page_readlink(struct dentry *, char *, int);
 extern struct dentry *page_follow_link(struct dentry *, struct dentry *, unsigned);
+struct inode_operations page_symlink_inode_operations;
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);

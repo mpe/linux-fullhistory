@@ -16,10 +16,9 @@
 
 #include <linux/errno.h>
 #include <linux/stat.h>
-#include <linux/smp_lock.h>
-
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
+#include <linux/smp_lock.h>
 
 
 /* return values: 0 means OK/done, 1 means redo, -1 means I/O error. */

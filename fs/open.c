@@ -898,16 +898,9 @@ asmlinkage long sys_close(unsigned int fd)
  */
 asmlinkage long sys_vhangup(void)
 {
-	int ret = -EPERM;
-
-	if (!capable(CAP_SYS_TTY_CONFIG))
-		goto out;
-	/* If there is a controlling tty, hang it up */
-	lock_kernel();
-	if (current->tty)
+	if (capable(CAP_SYS_TTY_CONFIG)) {
 		tty_vhangup(current->tty);
-	unlock_kernel();
-	ret = 0;
-out:
-	return ret;
+		return 0;
+	}
+	return -EPERM;
 }

@@ -121,23 +121,6 @@ out:
 /*
  * symlinks can't do much...
  */
-struct inode_operations udf_symlink_inode_operations = {
-	NULL,				/* no file-operations */
-	NULL,				/* create */
-	NULL,				/* lookup */
-	NULL,				/* link */
-	NULL,				/* unlink */
-	NULL,				/* symlink */
-	NULL,				/* mkdir */
-	NULL,				/* rmdir */
-	NULL,				/* mknod */
-	NULL,				/* rename */
-	page_readlink,		/* readlink */
-	page_follow_link,	/* follow_link */
-	NULL,				/* get_block */
-	udf_symlink_filler,	/* readpage */
-	NULL,				/* writepage */
-	NULL,				/* truncate */
-	NULL,				/* permission */
-	NULL				/* revalidate */
+struct address_space_operations udf_symlink_aops = {
+	readpage:	udf_symlink_filler,
 };

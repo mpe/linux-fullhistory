@@ -29,6 +29,14 @@ ifeq ($(CONFIG_MODULES),y)
 OX_OBJS  += ksyms.o
 endif
 
+ifdef CONFIG_ACPI
+OX_OBJS += pm.o
+else
+  ifdef CONFIG_APM
+  OX_OBJS += pm.o
+  endif
+endif
+
 CFLAGS_sched.o := $(PROFILING) -fno-omit-frame-pointer
 
 include $(TOPDIR)/Rules.make

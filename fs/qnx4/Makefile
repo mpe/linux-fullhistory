@@ -8,8 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := qnx4.o
-O_OBJS   := inode.o dir.o namei.o file.o bitmap.o symlinks.o truncate.o \
-fsync.o
+O_OBJS   := inode.o dir.o namei.o file.o bitmap.o truncate.o fsync.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

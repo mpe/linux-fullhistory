@@ -23,51 +23,18 @@
 #include <linux/locks.h>
 #include <linux/pagemap.h>
 
-#include <asm/uaccess.h>
-
-#define	NBUF	32
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
-/*
- * Write to a file (through the page cache).
- */
-static ssize_t
-sysv_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
-{
-	return generic_file_write(file, buf, count,
-				  ppos, block_write_partial_page);
-}
-
 /*
  * We have mostly NULLs here: the current defaults are OK for
  * the coh filesystem.
  */
 static struct file_operations sysv_file_operations = {
 	read:		generic_file_read,
-	write:		sysv_file_write,
+	write:		generic_file_write,
 	mmap:		generic_file_mmap,
 	fsync:		sysv_sync_file,
 };
 
 struct inode_operations sysv_file_inode_operations = {
-	&sysv_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	sysv_get_block,		/* get_block */
-	block_read_full_page,	/* readpage */
-	block_write_full_page,	/* writepage */
-	sysv_truncate,		/* truncate */
-	NULL,   		/* permission */
-	NULL			/* revalidate */
+	&sysv_file_operations,
+	truncate:	sysv_truncate,
 };

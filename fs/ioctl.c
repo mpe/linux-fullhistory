@@ -19,21 +19,18 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 	switch (cmd) {
 		case FIBMAP:
 		{
-			struct buffer_head tmp;
-
-			if (inode->i_op == NULL)
-				return -EBADF;
-		    	if (inode->i_op->get_block == NULL)
+			struct address_space *mapping = inode->i_mapping;
+			int res;
+			/* do we support this mess? */
+			if (!mapping->a_ops->bmap)
 				return -EINVAL;
 			if (!capable(CAP_SYS_RAWIO))
 				return -EPERM;
 			if ((error = get_user(block, (int *) arg)) != 0)
 				return error;
 
-			tmp.b_state = 0;
-			tmp.b_blocknr = 0;
-			inode->i_op->get_block(inode, block, &tmp, 0);
-			return put_user(tmp.b_blocknr, (int *) arg);
+			res = mapping->a_ops->bmap(mapping, block);
+			return put_user(res, (int *) arg);
 		}
 		case FIGETBSZ:
 			if (inode->i_sb == NULL)

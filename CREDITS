@@ -2621,6 +2621,13 @@ D: CMI8330 support is sb_card.c
 D: ISAPnP fixes in sb_card.c
 S: Italy
 
+N: Alessandro Zummo
+E: azummo@ita.flashnet.it
+W: http://freepage.logicom.it/azummo/
+D: CMI8330 support is sb_card.c
+D: ISAPnP fixes in sb_card.c
+S: Italy
+
 N: Marc Zyngier
 E: maz@wild-wind.fr.eu.org
 D: MD driver

@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/timer.h>
+#include <linux/init.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -78,7 +79,7 @@ static int gmac_tx_cleanup(struct gmac *gm);
 static void gmac_receive(struct net_device *dev);
 static void gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static struct net_device_stats *gmac_stats(struct net_device *dev);
-int gmac_probe(struct net_device *dev);
+static int gmac_probe(void);
 
 /* Stuff for talking to the physical-layer chip */
 static int
@@ -502,7 +503,7 @@ static struct net_device_stats *gmac_stats(struct net_device *dev)
 	return &gm->stats;
 }
 
-int gmac_probe(struct net_device *dev)
+static int __init gmac_probe(void)
 {
 	static int gmacs_found;
 	static struct device_node *next_gmac;
@@ -511,6 +512,9 @@ int gmac_probe(struct net_device *dev)
 	unsigned long descpage;
 	unsigned char *addr;
 	int i;
+
+	if (gmacs != NULL)
+		return -EBUSY;
 
 	/*
 	 * We could (and maybe should) do this using PCI scanning
@@ -583,19 +587,11 @@ int gmac_probe(struct net_device *dev)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Paul Mackerras");
 MODULE_DESCRIPTION("PowerMac GMAC driver.");
 
-int init_module(void)
-{
-	if (gmacs != NULL)
-		return -EBUSY;
-	return gmac_probe(NULL);
-}
 
-void cleanup_module(void)
+static void __exit gmac_cleanup_module(void)
 {
 	struct gmac *gm;
 
@@ -611,4 +607,6 @@ void cleanup_module(void)
 	gmacs = NULL;
 }
 
-#endif
+module_init(gmac_probe);
+module_exit(gmac_cleanup_module);
+

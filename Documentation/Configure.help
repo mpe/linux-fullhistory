@@ -2347,6 +2347,14 @@ CONFIG_FB_VESA
   You will get a boot time penguin logo at no additional cost. Please
   read Documentation/fb/vesafb.txt. If unsure, say Y.
 
+VGA 16-color planar support
+CONFIG_FBCON_VGA_PLANES
+  This low level frame buffer console driver enable the kernel to use
+  the 16-color planar modes of the old VGA cards where the bits of each
+  pixel are separated into 4 plans.
+  Only answer Y here if you have an (very old) VGA card that isn't
+  VESA 2 compatible.
+
 VGA 16-color graphics console
 CONFIG_FB_VGA16
   This is the frame buffer device driver for VGA 16 color graphic
@@ -2356,6 +2364,25 @@ CONFIG_FB_VGA16
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called vga16fb.o.
+
+VGA 8x16 font
+CONFIG_FONT_8x16
+  This is the "high resolution" font for the VGA frame buffer (the one
+  provided by the text console 80x25 mode.
+
+Support only 8 pixels wide fonts
+CONFIG_FBCON_FONTWIDTH8_ONLY
+  Answer Y here will make the kernel provide only the 8x8 fonts (these
+  are the less readable).
+
+VGA 8x8 font
+CONFIG_FONT_8x8
+  This is the "high resolution" font for the VGA frame buffer (the one
+  provided by the text console 80x50 (and higher) modes.
+  Note this is a poor quality font. The VGA 8x16 font is quite a lot
+  more readable.
+  Given the resolution provided by the frame buffer device, anwser N
+  here is safe.
 
 Backward compatibility mode for Xpmac
 CONFIG_FB_COMPAT_XPMAC
@@ -2649,6 +2676,12 @@ CONFIG_PARPORT_AX
   Say Y here if you need support for the parallel port hardware on Sun
   Ultra/AX machines. This code is also available as a module (say M),
   called parport_ax.o. If in doubt, saying N is the safe plan.
+
+Support IEEE1284 status readback
+CONFIG_PRINTER_READBACK
+  If you have a device on your parrallel port that support this protocol,
+  this option'll enable it to report its status.
+  It is safe to say Y.
 
 IEEE1284 transfer modes
 CONFIG_PARPORT_1284
@@ -7362,7 +7395,7 @@ CONFIG_DE4X5
   Documentation/networking/net-modules.txt.
 
 DECchip Tulip (dc21x4x) PCI support
-CONFIG_DEC_ELCP
+CONFIG_TULIP
   This driver is developed for the SMC EtherPower series Ethernet
   cards and also works with cards based on the DECchip
   21040/21041/21140 (Tulip series) chips. Some LinkSys PCI cards are
@@ -9495,9 +9528,9 @@ CONFIG_NLS_ISO8859_14
   from the Microsoft fat filesystem family or from JOLIET CDROMs
   correctly on the screen, you need to include the appropriate
   input/output character sets. Say Y here for the Latin 8 character
-  set, which adds the last accented vowels for Welsh (and Manx Gaelic)
-  that were missing in Latin 1. http://linux.speech.cymru.org/
-  has further information.
+  set, which adds the last accented vowels for Welsh (aka Cymraeg)
+  (and Manx Gaelic) hat were missing in Latin 1.
+  http://linux.speech.cymru.org/ has further information.
 
 nls iso8859-15
 CONFIG_NLS_ISO8859_15
@@ -10453,6 +10486,11 @@ CONFIG_APPLICOM
   applicom.o.
 
   If unsure, say N.
+
+Enter S1 for sleep (EXPERIMENTAL)
+CONFIG_ACPI_S1_SLEEP
+  This enable ACPI compliant devices to enter level 1 of ACPI saving
+  power levels. Basically, this will let them entering in sleep mode.
 
 Advanced Power Management
 CONFIG_APM
@@ -13055,7 +13093,84 @@ CONFIG_PHONE_IXJ
 
   If you do not have any Quicknet telephony cards, you can safely
   ignore this option.
- 
+
+/dev/agpgart (AGP Support) (EXPERIMENTAL)
+CONFIG_AGP
+  The agpgart kernel module is necessary to use the AGP features
+  of your 3D rendering video card.  It acts as a sort of "AGP
+  driver" for the motherboard's chipset.
+  Loading this module into the kernel will allow the glx module to
+  program the GART (graphics aperture relocation table) registers
+  with appropriate values to transfer commands to the card. 
+
+  If you need more texture memory than you can get with the AGP GART
+  (theoretically up to 256 megs, but in practice usually 64 or 128
+  megs due to kernel allocation issues), you could use PCI accesses
+  and have up to a couple gigs of texture space.
+
+  Note that this is the only meas to have get XFree4/GLX use
+  write-combining with MTRR support on AGP bus. Without, OpenGL
+  direct rendering will be a lot slower but still faster than PIO.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+  or need to use the 810 Xserver in XFree 3.3.6
+
+Intel 440LX/BX/GX support
+CONFIG_AGP_INTEL
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on Intel 440LX/BX/GX chipsets.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+Intel I810/I810 DC100/I810e support
+CONFIG_AGP_I810
+  This option give you AGP support for the Xserver for the intel
+  810 chipset boards. This is required to do any useful video
+  modes.
+
+VIA VP3/MVP3/Apollo Pro support
+CONFIG_AGP_VIA
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on VIA MPV3/Apollo Pro chipsets.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+AMD Irongate support
+CONFIG_AGP_AMD
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on Intel AMD Irongate chipset.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+Generic SiS support
+CONFIG_AGP_SIS
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on Silicon Integrated Systems [SiS]
+  chipsets.
+
+  Note than 5591/5592 AGP chipsets are NOT supported.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+ALI M1541 support
+CONFIG_AGP_ALI
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on ALI M1541 chipset.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
 
 #
 # ARM options
@@ -13584,7 +13699,6 @@ CONFIG_KHTTPD
   The kHTTPd is experimental. Be careful when using it on a production
   machine. Also note that kHTTPd doesn't support virtual servers yet.
 
-#
 I2C support
 CONFIG_I2C
   I2C (pronounce: I-square-C) is a slow bus protocol developed by
@@ -13637,6 +13751,7 @@ CONFIG_I2C_CHARDEV
   files, usually found in the /dev directory on your system. They
   make it possible to have user-space programs use the I2C bus.
 
+#
 # A couple of things I keep forgetting:
 #   capitalize: AppleTalk, Ethernet, DOS, DMA, FAT, FTP, Internet, 
 #               Intel, IRQ, Linux, MSDOS, NetWare, NetWinder, NFS, 

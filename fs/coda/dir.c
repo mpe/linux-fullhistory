@@ -77,9 +77,6 @@ struct inode_operations coda_dir_inode_operations =
 	coda_rename,	        /* rename */
 	NULL,	                /* readlink */
 	NULL,	                /* follow_link */
-	NULL,		        /* get_block */
-	NULL,	                /* readpage */
-	NULL,		        /* writepage */
 	NULL,	                /* truncate */
 	coda_permission,        /* permission */
         coda_revalidate_inode   /* revalidate */
@@ -199,7 +196,6 @@ int coda_permission(struct inode *inode, int mask)
 }
 
 
-
 /* creation routines: create, mknod, mkdir, link, symlink */
 
 static int coda_create(struct inode *dir, struct dentry *de, int mode)
@@ -260,7 +256,8 @@ static int coda_mknod(struct inode *dir, struct dentry *de, int mode, int rdev)
 
 	coda_vfs_stat.create++;
 
-	CDEBUG(D_INODE, "name: %s, length %d, mode %o, rdev %x\n",name, length, mode, rdev);
+	CDEBUG(D_INODE, "name: %s, length %d, mode %o, rdev %x\n",
+	       name, length, mode, rdev);
 
 	if (coda_isroot(dir) && coda_iscontrol(name, length))
 		return -EPERM;
@@ -521,7 +518,6 @@ static int coda_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 
 
-
 /* file operations for directories */
 int coda_readdir(struct file *file, void *dirent,  filldir_t filldir)
 {
@@ -600,11 +596,11 @@ int coda_open(struct inode *i, struct file *f)
 	coda_load_creds(cred);
 	f->private_data = cred;
 
-        if (  cnp->c_ovp ) {
+	if (  cnp->c_ovp )
 		iput(cnp->c_ovp);
-		cnp->c_ovp = NULL;
-	}
+
 	cnp->c_ovp = cont_inode; 
+	i->i_mapping = cont_inode->i_mapping;
         cnp->c_ocount++;
 
         CDEBUG(D_FILE, "result %d, coda i->i_count is %d for ino %ld\n", 
@@ -619,7 +615,7 @@ int coda_open(struct inode *i, struct file *f)
 int coda_release(struct inode *i, struct file *f)
 {
         struct coda_inode_info *cnp;
-        int error;
+	int error = 0;
         unsigned short flags = (f->f_flags) & (~O_EXCL);
 	unsigned short cflags = coda_flags_to_cflags(flags);
 	struct coda_cred *cred;
@@ -645,14 +641,17 @@ int coda_release(struct inode *i, struct file *f)
 
         --cnp->c_ocount;
 
-        if (flags & (O_WRONLY | O_RDWR)) {
+	if ( flags & (O_WRONLY | O_RDWR) )
                 --cnp->c_owrite;
-        }
 
+	/* Venus closing a container file? don't bother making the upcall. */
+	if ( current->pid != coda_upc_comm.vc_pid ) {
 	error = venus_release(i->i_sb, &(cnp->c_fid), cflags, cred);
+	}
 
-	CODA_FREE(cred, sizeof(*cred));
 	f->private_data = NULL;
+	if (cred)
+		CODA_FREE(cred, sizeof(*cred));
 
         CDEBUG(D_FILE, "coda_release: result: %d\n", error);
         return error;
@@ -850,19 +849,18 @@ int coda_revalidate_inode(struct dentry *dentry)
 	if ( cii->c_flags == 0 )
 		return 0;
 
-	/* Venus closed the device .... */
-	if ( cii->c_flags & C_DYING ) { 
-		make_bad_inode(inode);
-		return -EIO;
-	}
+	/* Venus accessing a container file, don't try to revalidate */
+	if ( current->pid == coda_upc_comm.vc_pid )
+		return 0;
 
+	/* Venus closed the device .... */
+	if ( cii->c_flags & C_DYING )
+		goto return_bad_inode;
 	
 	if (cii->c_flags & (C_VATTR | C_PURGE | C_FLUSH)) {
 		error = venus_getattr(inode->i_sb, &(cii->c_fid), &attr);
-		if ( error ) { 
-			make_bad_inode(inode);
-			return -EIO;
-		}
+		if ( error )
+			goto return_bad_inode;
 
 		/* this inode may be lost if:
 		   - it's ino changed 
@@ -880,12 +878,9 @@ int coda_revalidate_inode(struct dentry *dentry)
 		}
 
 		/* the following can happen when a local fid is replaced 
-		   with a global one, here we lose and declar the inode bad */
-		if (inode->i_ino != old_ino) {
-			make_bad_inode(inode);
-			inode->i_mode = old_mode;
-			return -EIO;
-		}
+		   with a global one, here we lose and declare the inode bad */
+		if (inode->i_ino != old_ino)
+			goto return_bad_inode;
 		
 		if ( cii->c_flags ) 
 			coda_flag_inode_children(inode, C_FLUSH);
@@ -894,5 +889,14 @@ int coda_revalidate_inode(struct dentry *dentry)
 	}
 
 	return 0;
+
+return_bad_inode:
+	if ( cii->c_ovp ) {
+		iput(cii->c_ovp);
+		inode->i_mapping = &inode->i_data;
+		cii->c_ovp = NULL;
+	}
+	make_bad_inode(inode);
+	return -EIO;
 }
 

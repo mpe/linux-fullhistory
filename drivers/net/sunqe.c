@@ -986,13 +986,17 @@ static int __init qec_match(struct sbus_dev *sdev)
 	return 1;
 }
 
-int __init qec_probe(void)
+static int __init qec_probe(void)
 {
 	struct net_device *dev = NULL;
 	struct sbus_bus *bus;
 	struct sbus_dev *sdev = 0;
 	static int called = 0;
 	int cards = 0, v;
+
+#ifdef MODULE
+	root_qec_dev = NULL;
+#endif
 
 	if (called)
 		return ENODEV;
@@ -1015,18 +1019,9 @@ int __init qec_probe(void)
 	return 0;
 }
 
+static void __exit qec_cleanup(void)
+{
 #ifdef MODULE
-
-int
-init_module(void)
-{
-	root_qec_dev = NULL;
-	return qec_probe();
-}
-
-void
-cleanup_module(void)
-{
 	struct sunqec *next_qec;
 	int i;
 
@@ -1054,6 +1049,8 @@ cleanup_module(void)
 		kfree(root_qec_dev);
 		root_qec_dev = next_qec;
 	}
+#endif /* MODULE */
 }
 
-#endif /* MODULE */
+module_init(qec_probe);
+module_exit(qec_cleanup);

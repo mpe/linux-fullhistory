@@ -1386,8 +1386,8 @@ unsigned int follow, const char *link)
 static char *page_getlink(struct dentry * dentry, struct page **ppage)
 {
 	struct page * page;
-	page = read_cache_page(&dentry->d_inode->i_data, 0,
-				(filler_t *)dentry->d_inode->i_op->readpage,
+	struct address_space *mapping = dentry->d_inode->i_mapping;
+	page = read_cache_page(mapping, 0, (filler_t *)mapping->a_ops->readpage,
 				dentry);
 	if (IS_ERR(page))
 		goto sync_fail;
@@ -1429,3 +1429,8 @@ page_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow
 	}
 	return res;
 }
+
+struct inode_operations page_symlink_inode_operations = {
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+};

@@ -397,7 +397,7 @@ static void fat_read_root(struct inode *inode)
 		((inode->i_size+inode->i_blksize-1)>>sbi->cluster_bits) *
 		    sbi->cluster_size;
 	MSDOS_I(inode)->i_logstart = 0;
-	MSDOS_I(inode)->i_realsize = inode->i_size;
+	MSDOS_I(inode)->mmu_private = inode->i_size;
 
 	MSDOS_I(inode)->i_attrs = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
@@ -746,6 +746,31 @@ static int is_exec(char *extension)
 	return 0;
 }
 
+static int fat_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,fat_get_block);
+}
+static int fat_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,fat_get_block);
+}
+static int fat_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return cont_prepare_write(page,from,to,fat_get_block,
+		&MSDOS_I((struct inode*)page->mapping->host)->mmu_private);
+}
+static int _fat_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,fat_get_block);
+}
+static struct address_space_operations fat_aops = {
+	readpage: fat_readpage,
+	writepage: fat_writepage,
+	prepare_write: fat_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: _fat_bmap
+};
+
 /* doesn't deal with root inode */
 static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 {
@@ -788,7 +813,7 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 					break;
 				}
 			}
-		MSDOS_I(inode)->i_realsize = inode->i_size;
+		MSDOS_I(inode)->mmu_private = inode->i_size;
 	} else { /* not a directory */
 		inode->i_mode = MSDOS_MKMODE(de->attr,
 		    ((IS_NOEXEC(inode) || 
@@ -796,7 +821,6 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 		       !is_exec(de->ext)))
 		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
 		    & ~sbi->options.fs_umask) | S_IFREG;
-	        inode->i_op = &fat_file_inode_operations;
 		MSDOS_I(inode)->i_start = CF_LE_W(de->start);
 		if (sbi->fat_bits == 32) {
 			MSDOS_I(inode)->i_start |=
@@ -805,7 +829,9 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 		MSDOS_I(inode)->i_logstart = MSDOS_I(inode)->i_start;
 		inode->i_nlink = 1;
 		inode->i_size = CF_LE_L(de->size);
-		MSDOS_I(inode)->i_realsize = ((inode->i_size-1)|(SECTOR_SIZE-1))+1;
+	        inode->i_op = &fat_file_inode_operations;
+		inode->i_mapping->a_ops = &fat_aops;
+		MSDOS_I(inode)->mmu_private = inode->i_size;
 	}
 	if(de->attr & ATTR_SYS)
 		if (sbi->options.sys_immutable)

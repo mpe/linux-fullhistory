@@ -572,6 +572,19 @@ extern inline int pci_enable_device(struct pci_dev *dev) { return 0; }
 
 #endif /* !CONFIG_PCI */
 
+/* these helpers provide future and backwards compatibility
+ * for accessing popular PCI BAR info */
+#define pci_resource_start(dev,bar)   ((dev)->resource[(bar)].start)
+#define pci_resource_end(dev,bar)     ((dev)->resource[(bar)].end)
+#define pci_resource_flags(dev,bar)   ((dev)->resource[(bar)].flags)
+#define pci_resource_len(dev,bar) \
+	((pci_resource_start((dev),(bar)) == 0 &&	\
+	  pci_resource_end((dev),(bar)) ==		\
+	  pci_resource_start((dev),(bar))) ? 0 :	\
+	  						\
+	 (pci_resource_end((dev),(bar)) -		\
+	  pci_resource_start((dev),(bar)) + 1))
+
 /*
  *  The world is not perfect and supplies us with broken PCI devices.
  *  For at least a part of these bugs we need a work-around, so both

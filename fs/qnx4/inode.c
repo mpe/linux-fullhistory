@@ -423,6 +423,31 @@ static void qnx4_put_super(struct super_block *sb)
 	return;
 }
 
+static int qnx4_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,qnx4_get_block);
+}
+static int qnx4_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,qnx4_get_block);
+}
+static int qnx4_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return cont_prepare_write(page,from,to,qnx4_get_block,
+		&((struct inode*)page->mapping->host)->u.qnx4_i.mmu_private);
+}
+static int qnx4_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,qnx4_get_block);
+}
+struct address_space_operations qnx4_aops = {
+	readpage: qnx4_readpage,
+	writepage: qnx4_writepage,
+	prepare_write: qnx4_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: qnx4_bmap
+};
+
 static void qnx4_read_inode(struct inode *inode)
 {
 	struct buffer_head *bh;
@@ -461,14 +486,17 @@ static void qnx4_read_inode(struct inode *inode)
 	inode->i_blksize = QNX4_DIR_ENTRY_SIZE;
 
 	memcpy(&inode->u.qnx4_i, (struct qnx4_inode_info *) raw_inode, QNX4_DIR_ENTRY_SIZE);
-	inode->i_op = &qnx4_file_inode_operations;
-	if (S_ISREG(inode->i_mode))
+	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &qnx4_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+		inode->i_mapping->a_ops = &qnx4_aops;
+		inode->u.qnx4_i.mmu_private = inode->i_size;
+	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &qnx4_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &qnx4_symlink_inode_operations;
-	else
+	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_mapping->a_ops = &qnx4_aops;
+		inode->u.qnx4_i.mmu_private = inode->i_size;
+	} else
 		/* HUH??? Where is device number? Oh, well... */
 		init_special_inode(inode, inode->i_mode, 0);
 

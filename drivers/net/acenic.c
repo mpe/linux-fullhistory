@@ -27,7 +27,6 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
@@ -84,10 +83,6 @@
 
 #ifndef wmb
 #define wmb()	mb()
-#endif
-
-#if (LINUX_VERSION_CODE < 0x02030e)
-#define net_device device
 #endif
 
 #include "acenic.h"
@@ -393,7 +388,7 @@ fail:
 	return 1;
 }
 
-int __init acenic_probe(void)
+static int __init acenic_probe(void)
 {
 	int boards_found = 0;
 	int version_disp;
@@ -487,11 +482,7 @@ int __init acenic_probe(void)
 		 * dev->base_addr since it was means for I/O port
 		 * addresses but who gives a damn.
 		 */
-#if (LINUX_VERSION_CODE < 0x02030d)
-		dev->base_addr = pdev->base_address[0];
-#else
 		dev->base_addr = pdev->resource[0].start;
-#endif
 
 		ap->regs = (struct ace_regs *)ioremap(dev->base_addr, 0x4000);
 		if (!ap->regs){
@@ -575,8 +566,6 @@ int __init acenic_probe(void)
 }
 
 
-#ifdef MODULE
-#if LINUX_VERSION_CODE > 0x20118
 MODULE_AUTHOR("Jes Sorensen <Jes.Sorensen@cern.ch>");
 MODULE_DESCRIPTION("AceNIC/3C985 Gigabit Ethernet driver");
 MODULE_PARM(link, "1-" __MODULE_STRING(8) "i");
@@ -585,10 +574,9 @@ MODULE_PARM(tx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_tx_desc, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_rx_desc, "1-" __MODULE_STRING(8) "i");
-#endif
 
 
-int init_module(void)
+static int __init acenic_init_module (void)
 {
 	int cards;
 
@@ -599,7 +587,7 @@ int init_module(void)
 }
 
 
-void cleanup_module(void)
+static void __exit acenic_cleanup_module (void)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -681,7 +669,9 @@ void cleanup_module(void)
 		root_dev = next;
 	}
 }
-#endif
+
+module_init(acenic_init_module);
+module_exit(acenic_cleanup_module);
 
 
 /*

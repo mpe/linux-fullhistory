@@ -384,6 +384,7 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 		return err;
 
 	inode->i_op = &ext2_file_inode_operations;
+	inode->i_mapping->a_ops = &ext2_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
@@ -696,7 +697,8 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
 
 	if (l > sizeof (inode->u.ext2_i.i_data)) {
-		inode->i_op = &ext2_symlink_inode_operations;
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_mapping->a_ops = &ext2_aops;
 		err = block_symlink(inode, symname, l);
 		if (err)
 			goto out_no_entry;

@@ -875,8 +875,10 @@ MODULE_PARM(dmabug, "i");
 int init_module(void)
 {
 	int             err;
+#if FIXED_FOR_2_4_0
 	int             ints[21];
 	int             i;
+#endif
 
 	trace_init=traceinit;
 	
@@ -888,6 +890,7 @@ int init_module(void)
 		printk(KERN_ERR "sound: rebuild with PCI_QUIRKS enabled to configure this.\n");
 #endif
 		
+#if FIXED_FOR_2_4_0
 	/*
 	 * "sound=" command line handling by Harald Milz.
 	 */
@@ -898,6 +901,7 @@ int init_module(void)
 
 	if (i)
 		sound_setup("sound=", ints);
+#endif
 
 	err = create_special_devices();
 	if (err)

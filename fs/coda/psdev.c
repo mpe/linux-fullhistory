@@ -76,6 +76,21 @@ static unsigned int coda_psdev_poll(struct file *file, poll_table * wait)
 	return mask;
 }
 
+static int coda_psdev_ioctl(struct inode * inode, struct file * filp, 
+			    unsigned int cmd, unsigned long arg)
+{
+	unsigned int data;
+
+	switch(cmd) {
+	case CIOC_KERNEL_VERSION:
+		data = CODA_KERNEL_VERSION;
+		return put_user(data, (int *) arg);
+	default:
+		return -ENOTTY;
+	}
+
+	return 0;
+}
 
 /*
  *	Receive a message written by Venus to the psdev
@@ -246,7 +261,6 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
 	vcp->vc_inuse++;
 	MOD_INC_USE_COUNT;
 
-
 	if ( file->f_flags == O_RDWR ) {
 		vcp->vc_pid = current->pid;
 		vcp->vc_seq = 0;
@@ -260,7 +274,6 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
 	EXIT;
         return 0;
 }
-
 
 
 static int coda_psdev_release(struct inode * inode, struct file * file)
@@ -298,6 +311,7 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 			CODA_FREE(req, (u_int)sizeof(struct upc_req));
 			continue;
 		}
+		req->uc_flags |= REQ_ABORT;
 		wake_up(&req->uc_sleep);
         }
         
@@ -305,6 +319,7 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 	CDEBUG(D_PSDEV, "wake up processing clients\n");
 	while ( (lh = lh->next) != &vcp->vc_processing) {
 		req = list_entry(lh, struct upc_req, uc_chain);
+		req->uc_flags |= REQ_ABORT;
 	        wake_up(&req->uc_sleep);
         }
 	CDEBUG(D_PSDEV, "Done.\n");
@@ -318,6 +333,7 @@ static struct file_operations coda_psdev_fops = {
 	read:		coda_psdev_read,
 	write:		coda_psdev_write,
 	poll:		coda_psdev_poll,
+	ioctl:		coda_psdev_ioctl,
 	open:		coda_psdev_open,
 	release:	coda_psdev_release,
 };

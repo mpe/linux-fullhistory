@@ -28,7 +28,6 @@ static hfs_rwret_t hfs_file_read(struct file *, char *, hfs_rwarg_t,
 static hfs_rwret_t hfs_file_write(struct file *, const char *, hfs_rwarg_t,
 				  loff_t *);
 static void hfs_file_truncate(struct inode *);
-static int hfs_get_block(struct inode *, long, struct buffer_head *, int);
 
 /*================ Global variables ================*/
 
@@ -52,12 +51,7 @@ struct inode_operations hfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	hfs_get_block,		/* get_block */
-	block_read_full_page,	/* readpage */
-	NULL,			/* writepage */
 	hfs_file_truncate,	/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 /*================ Variable-like macros ================*/

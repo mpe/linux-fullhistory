@@ -43,9 +43,7 @@ static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360,
 static int pcnet32_debug = 1;
 static int tx_start = 1; /* Mapping -- 0:20, 1:64, 2:128, 3:~220 (depends on chip vers) */
 
-#ifdef MODULE
 static struct net_device *pcnet32_dev = NULL;
-#endif
 
 static const int max_interrupt_work = 80;
 static const int rx_copybreak = 200;
@@ -273,17 +271,16 @@ struct pcnet32_private {
 #endif
          full_duplex:1,                     	/* full duplex possible */
          mii:1;                             	/* mii port available */
-#ifdef MODULE
     struct net_device *next;
-#endif    
 };
 
-int  pcnet32_probe(void);
+static int  pcnet32_probe(void);
 static int  pcnet32_probe1(unsigned long, unsigned char, int, int);
 static int  pcnet32_open(struct net_device *);
 static int  pcnet32_init_ring(struct net_device *);
 static int  pcnet32_start_xmit(struct sk_buff *, struct net_device *);
 static int  pcnet32_rx(struct net_device *);
+static void pcnet32_tx_timeout (struct net_device *dev);
 static void pcnet32_interrupt(int, void *, struct pt_regs *);
 static int  pcnet32_close(struct net_device *);
 static struct net_device_stats *pcnet32_get_stats(struct net_device *);
@@ -433,7 +430,7 @@ static struct pcnet32_access pcnet32_dwio = {
 
 
 
-int __init pcnet32_probe(void)
+static int __init pcnet32_probe(void)
 {
     unsigned long ioaddr = 0; // FIXME dev ? dev->base_addr: 0;
     unsigned int  irq_line = 0; // FIXME dev ? dev->irq : 0;
@@ -754,12 +751,11 @@ pcnet32_probe1(unsigned long ioaddr, unsigned char irq_line, int shared, int car
 #ifdef HAVE_PRIVATE_IOCTL
     dev->do_ioctl = &pcnet32_mii_ioctl;
 #endif
+    dev->tx_timeout = pcnet32_tx_timeout;
+    dev->watchdog_timeo = (HZ >> 1);
 
-    
-#ifdef MODULE
     lp->next = pcnet32_dev;
     pcnet32_dev = dev;
-#endif	
 
     /* Fill in the generic fields of the device structure. */
     ether_setup(dev);
@@ -852,9 +848,8 @@ pcnet32_open(struct net_device *dev)
     lp->a.write_csr (ioaddr, 4, 0x0915);
     lp->a.write_csr (ioaddr, 0, 0x0001);
 
-    dev->tbusy = 0;
-    dev->interrupt = 0;
-    dev->start = 1;
+    netif_start_queue(dev);
+
     i = 0;
     while (i++ < 100)
 	if (lp->a.read_csr (ioaddr, 0) & 0x0100)
@@ -963,20 +958,14 @@ pcnet32_restart(struct net_device *dev, unsigned int csr0_bits)
     lp->a.write_csr (ioaddr, 0, csr0_bits);
 }
 
-static int
-pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
+
+static void
+pcnet32_tx_timeout (struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     unsigned int ioaddr = dev->base_addr;
-    u16 status;
-    int entry;
-    unsigned long flags;
 
     /* Transmitter timeout, serious problems. */
-    if (dev->tbusy) {
-	int tickssofar = jiffies - dev->trans_start;
-	if (tickssofar < HZ/2)
-	    return 1;
 	printk("%s: transmit timed out, status %4.4x, resetting.\n",
 	       dev->name, lp->a.read_csr (ioaddr, 0));
 	lp->a.write_csr (ioaddr, 0, 0x0004);
@@ -998,22 +987,23 @@ pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 	pcnet32_restart(dev, 0x0042);
 
-	dev->tbusy = 0;
 	dev->trans_start = jiffies;
-	dev_kfree_skb(skb);
-	return 0;
-    }
+	netif_start_queue(dev);
+}
+
+
+static int
+pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+    struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
+    unsigned int ioaddr = dev->base_addr;
+    u16 status;
+    int entry;
+    unsigned long flags;
 
     if (pcnet32_debug > 3) {
 	printk("%s: pcnet32_start_xmit() called, csr0 %4.4x.\n",
 	       dev->name, lp->a.read_csr (ioaddr, 0));
-    }
-
-    /* Block a timer-based transmit from overlapping.  This could better be
-       done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-    if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-	printk("%s: Transmitter access conflict.\n", dev->name);
-	return 1;
     }
 
     spin_lock_irqsave(&lp->lock, flags);
@@ -1059,7 +1049,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
     dev->trans_start = jiffies;
 
     if (lp->tx_ring[(entry+1) & TX_RING_MOD_MASK].base == 0)
-	clear_bit (0, (void *)&dev->tbusy);
+	netif_start_queue(dev);
     else
 	lp->tx_full = 1;
     spin_unlock_irqrestore(&lp->lock, flags);
@@ -1087,11 +1077,6 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     
     spin_lock(&lp->lock);
     
-    if (dev->interrupt)
-	printk("%s: Re-entering the interrupt handler.\n", dev->name);
-
-    dev->interrupt = 1;
-
     rap = lp->a.read_rap(ioaddr);
     while ((csr0 = lp->a.read_csr (ioaddr, 0)) & 0x8600 && --boguscnt >= 0) {
 	/* Acknowledge all of the current interrupt sources ASAP. */
@@ -1167,12 +1152,12 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		dirty_tx += TX_RING_SIZE;
 	    }
 #endif
-	    if (lp->tx_full && dev->tbusy
-		&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
+	    if (lp->tx_full &&
+	        test_bit(LINK_STATE_XOFF, &dev->flags) &&
+		dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
 		/* The ring is no longer full, clear tbusy. */
 		lp->tx_full = 0;
-		clear_bit(0, (void *)&dev->tbusy);
-		mark_bh(NET_BH);
+		netif_wake_queue (dev);
 	    }
 	    lp->dirty_tx = dirty_tx;
 	}
@@ -1213,10 +1198,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	printk("%s: exiting interrupt, csr0=%#4.4x.\n",
 	       dev->name, lp->a.read_csr (ioaddr, 0));
 
-    dev->interrupt = 0;
-    
     spin_unlock(&lp->lock);
-    return;
 }
 
 static int
@@ -1317,8 +1299,7 @@ pcnet32_close(struct net_device *dev)
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     int i;
 
-    dev->start = 0;
-    set_bit (0, (void *)&dev->tbusy);
+    netif_stop_queue(dev);
 
     lp->stats.rx_missed_errors = lp->a.read_csr (ioaddr, 112);
 
@@ -1478,21 +1459,20 @@ static int pcnet32_mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 }
 #endif  /* HAVE_PRIVATE_IOCTL */
 					    
-#ifdef MODULE
 MODULE_PARM(debug, "i");
 MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(tx_start_pt, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
-					     
+MODULE_AUTHOR("Thomas Bogendoerfer");
+MODULE_DESCRIPTION("Driver for PCnet32 and PCnetPCI based ethercards");
 
 /* An additional parameter that may be passed in... */
 static int debug = -1;
 static int tx_start_pt = -1;
 
-int
-init_module(void)
+static int __init pcnet32_init_module(void)
 {
     if (debug > 0)
 	pcnet32_debug = debug;
@@ -1503,8 +1483,7 @@ init_module(void)
     return pcnet32_probe();
 }
 
-void
-cleanup_module(void)
+static void __exit pcnet32_cleanup_module(void)
 {
     struct net_device *next_dev;
 
@@ -1518,10 +1497,10 @@ cleanup_module(void)
 	pcnet32_dev = next_dev;
     }
 }
-#endif /* MODULE */
 
+module_init(pcnet32_init_module);
+module_exit(pcnet32_cleanup_module);
 
-
 /*
  * Local variables:
  *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c pcnet32.c"

@@ -1,4 +1,4 @@
-/* EtherLinkXL.c: A 3Com EtherLink PCI III/XL ethernet driver for linux. */
+/* 3c59x.c: A 3Com EtherLink PCI III/XL ethernet driver for linux. */
 /*
 	Written 1996-1998 by Donald Becker.
 
@@ -12,10 +12,16 @@
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
-*/
+
+ Version history:
+ 	0.99H+lk1.0 - Jeff Garzik <jgarzik@mandrakesoft.com>
+		Remove compatibility defines for kernel versions < 2.2.x.
+		Update for new 2.3.x module interface
+		
+ */
 
 static char *version =
-"3c59x.c:v0.99H 11/17/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.99H+lk1.0 Feb 9, 2000 The Linux Kernel Team http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -49,22 +55,14 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 
 #include <linux/config.h>
 #include <linux/version.h>
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/in.h>
+#include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
@@ -72,9 +70,6 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-#if LINUX_VERSION_CODE < 0x20155  ||  defined(CARDBUS)
-#include <linux/bios32.h>
-#endif
 #include <asm/irq.h>			/* For NR_IRQS only. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -86,35 +81,9 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 
 #include <linux/delay.h>
 
-#if (LINUX_VERSION_CODE <= 0x20100)
-#ifndef __alpha__
-#define ioremap(a,b) \
-	(((a)<0x100000) ? (void *)((u_long)(a)) : vremap(a,b))
-#define iounmap(v) \
-	do { if ((u_long)(v) > 0x100000) vfree(v); } while (0)
-#endif
-#endif
-#if LINUX_VERSION_CODE <= 0x20139
-#define	net_device_stats enet_statistics
-#define NETSTATS_VER2
-#endif
-#if LINUX_VERSION_CODE < 0x20138
-#define test_and_set_bit(val, addr) set_bit(val, addr)
-#define le32_to_cpu(val) (val)
-#define cpu_to_le32(val) (val)
-#endif
-#if LINUX_VERSION_CODE < 0x20155
-#define PCI_SUPPORT_VER1
-#else
 #define PCI_SUPPORT_VER2
-#endif
-#if LINUX_VERSION_CODE < 0x20159
-#define DEV_FREE_SKB(skb) dev_kfree_skb (skb, FREE_WRITE);
-#else  /* Grrr, unneeded incompatible change. */
 #define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
-#endif
 
-#if defined(MODULE) && LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("3Com 3c590/3c900 series Vortex/Boomerang driver");
 MODULE_PARM(debug, "i");
@@ -125,7 +94,6 @@ MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(compaq_ioaddr, "i");
 MODULE_PARM(compaq_irq, "i");
 MODULE_PARM(compaq_device_id, "i");
-#endif
 
 /* Operational parameter that usually are not changed. */
 
@@ -229,12 +197,12 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int drv_flags, io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(struct pci_dev *pdev, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
 enum { IS_VORTEX=1, IS_BOOMERANG=2, IS_CYCLONE=4,
 	   HAS_PWR_CTRL=0x10, HAS_MII=0x20, HAS_NWAY=0x40, HAS_CB_FNS=0x80, };
-static struct net_device *vortex_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq, int dev_id, int card_idx);
+static struct net_device *vortex_probe1(struct pci_dev *pdev, long ioaddr, int irq, int dev_id, int card_idx);
 
 static struct pci_id_info pci_tbl[] = {
 	{"3c590 Vortex 10Mbps",			0x10B7, 0x5900, 0xffff,
@@ -524,7 +492,6 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 /* A list of all installed Vortex devices, for removing the driver module. */
 static struct net_device *root_vortex_dev = NULL;
 
-#ifdef MODULE
 #ifndef CARDBUS
 /* Variables to work-around the Compaq PCI BIOS32 problem. */
 static int compaq_ioaddr = 0, compaq_irq = 0, compaq_device_id = 0x5900;
@@ -538,18 +505,20 @@ static dev_node_t *vortex_attach(dev_locator_t *loc)
 {
 	u16 dev_id, vendor_id;
 	u32 io;
-	u8 bus, devfn, irq;
+	u8 irq;
 	struct net_device *dev;
+	struct pci_dev *pdev;
 	int chip_idx;
 
 	if (loc->bus != LOC_PCI) return NULL;
-	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
-	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
-	pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
-	pcibios_read_config_word(bus, devfn, PCI_VENDOR_ID, &vendor_id);
-	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
+	pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
+	if (!pdev) return NULL;
+	io = pdev->resource[0].start;
+	irq = pdev->irq;
+	vendor_id = pdev->vendor;
+	dev_id = pdev->device;
 	printk(KERN_INFO "vortex_attach(bus %d, function %d, device %4.4x)\n",
-		   bus, devfn, dev_id);
+		   pdev->bus->number, pdev->devfn, dev_id);
 	io &= ~3;
 	if (io == 0 || irq == 0) {
 		printk(KERN_ERR "The 3Com CardBus Ethernet interface was not "
@@ -567,7 +536,7 @@ static dev_node_t *vortex_attach(dev_locator_t *loc)
 			   "vortex_attach().\n", vendor_id, dev_id);
 		return NULL;
 	}
-	dev = vortex_probe1(bus, devfn, io, irq, chip_idx, MAX_UNITS+1);
+	dev = vortex_probe1(pdev, io, irq, chip_idx, MAX_UNITS+1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);
@@ -610,7 +579,7 @@ struct driver_operations vortex_ops = {
 #endif  /* Cardbus support */
 
 
-int init_module(void)
+static int __init vortex_init_module (void)
 {
 	if (vortex_debug)
 		printk(KERN_INFO "%s", version);
@@ -621,17 +590,6 @@ int init_module(void)
 	return vortex_scan(pci_tbl);
 #endif
 }
-
-#else
-int tc59x_probe(void)
-{
-	static int scanned=0;
-	if(scanned++)
-		return -ENODEV;
-	printk(KERN_INFO "%s", version);
-	return vortex_scan(pci_tbl);
-}
-#endif  /* not MODULE */
 
 #ifndef CARDBUS
 static int vortex_scan(struct pci_id_info pci_tbl[])
@@ -645,7 +603,7 @@ static int vortex_scan(struct pci_id_info pci_tbl[])
 	   be best done a central PCI probe dispatch, which wouldn't work
 	   well with the current structure.  So instead we detect 3Com cards
 	   in slot order. */
-	if (pcibios_present()) {
+	if (pci_present()) {
 		static int pci_index = 0;
 		unsigned char pci_bus, pci_device_fn;
 
@@ -653,15 +611,16 @@ static int vortex_scan(struct pci_id_info pci_tbl[])
 			u16 vendor, device, pci_command, new_command, pwr_cmd;
 			int chip_idx, irq;
 			long ioaddr;
+			struct pci_dev *pdev;
 
 			if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8, pci_index,
 									&pci_bus, &pci_device_fn)
 				!= PCIBIOS_SUCCESSFUL)
 				break;
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_VENDOR_ID, &vendor);
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_DEVICE_ID, &device);
+			pdev = pci_find_slot (pci_bus, pci_device_fn);
+			if (!pdev) continue;
+			vendor = pdev->vendor;
+			device = pdev->device;
 			for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
 				if (vendor == pci_tbl[chip_idx].vendor_id
 					&& (device & pci_tbl[chip_idx].device_id_mask) ==
@@ -677,21 +636,18 @@ static int vortex_scan(struct pci_id_info pci_tbl[])
 			}
 
 			/* Power-up the card. */
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-										 0xe0, &pwr_cmd);
+			pci_read_config_word(pdev, 0xe0, &pwr_cmd);
+			
 			if (pwr_cmd & 0x3) {
 				/* Save the ioaddr and IRQ info! */
 				printk(KERN_INFO "  A 3Com network adapter is powered down!"
 					   "  Setting the power state %4.4x->%4.4x.\n",
 					   pwr_cmd, pwr_cmd & ~3);
-				pcibios_write_config_word(pci_bus, pci_device_fn,
-										  0xe0, pwr_cmd & ~3);
+				pci_write_config_word(pdev, 0xe0, pwr_cmd & ~3);
 				printk(KERN_INFO "  Setting the IRQ to %d, IOADDR to %#lx.\n",
 					   irq, ioaddr);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										 PCI_INTERRUPT_LINE, irq);
-				pcibios_write_config_dword(pci_bus, pci_device_fn,
-										  PCI_BASE_ADDRESS_0, ioaddr);
+				pci_write_config_byte(pdev, PCI_INTERRUPT_LINE, irq);
+				pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, ioaddr);
 			}
 
 			if (ioaddr == 0) {
@@ -706,19 +662,18 @@ static int vortex_scan(struct pci_id_info pci_tbl[])
 				continue;
 
 			/* Activate the card. */
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_COMMAND, &pci_command);
+			pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
+
 			new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
 			if (pci_command != new_command) {
 				printk(KERN_INFO "  The PCI BIOS has not enabled the device "
 					   "at %d/%d. Updating PCI command %4.4x->%4.4x.\n",
 					   pci_bus, pci_device_fn, pci_command, new_command);
-				pcibios_write_config_word(pci_bus, pci_device_fn,
-										  PCI_COMMAND, new_command);
+				pci_write_config_word(pdev, PCI_COMMAND, new_command);
 			}
 
-			dev = vortex_probe1(pci_bus, pci_device_fn, ioaddr, irq,
-								chip_idx, cards_found);
+			dev = vortex_probe1(pdev, ioaddr, irq,
+					    chip_idx, cards_found);
 
 			if (dev) {
 				/* Get and check the latency values.  On the 3c590 series
@@ -728,14 +683,12 @@ static int vortex_scan(struct pci_id_info pci_tbl[])
 				u8 pci_latency;
 				u8 new_latency = (device & 0xff00) == 0x5900 ? 248 : 32;
 				
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_LATENCY_TIMER, &pci_latency);
+				pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
 				if (pci_latency < new_latency) {
 					printk(KERN_INFO "%s: Overriding PCI latency"
 						   " timer (CFLT) setting of %d, new value is %d.\n",
 						   dev->name, pci_latency, new_latency);
-					pcibios_write_config_byte(pci_bus, pci_device_fn,
-											  PCI_LATENCY_TIMER, new_latency);
+					pci_write_config_byte(pdev, PCI_LATENCY_TIMER, new_latency);
 				}
 				dev = 0;
 				cards_found++;
@@ -758,27 +711,33 @@ static int vortex_scan(struct pci_id_info pci_tbl[])
 			device_id = (inb(ioaddr + 0xC82)<<8) + inb(ioaddr + 0xC83);
 			if ((device_id & 0xFF00) != 0x5900)
 				continue;
-			vortex_probe1(0, 0, ioaddr, inw(ioaddr + 0xC88) >> 12,
-						  4, cards_found);
+			vortex_probe1(NULL, ioaddr, inw(ioaddr + 0xC88) >> 12,
+				      4, cards_found);
 			cards_found++;
 		}
 	}
 
-#ifdef MODULE
 	/* Special code to work-around the Compaq PCI BIOS32 problem. */
 	if (compaq_ioaddr) {
-		vortex_probe1(0, 0, compaq_ioaddr, compaq_irq,
+		vortex_probe1(NULL, compaq_ioaddr, compaq_irq,
 					  compaq_device_id, cards_found++);
 		dev = 0;
 	}
-#endif
 
 	return cards_found ? 0 : -ENODEV;
 }
 #endif  /* ! Cardbus */
 
-static struct net_device *vortex_probe1(int pci_bus, int pci_devfn,
-					long ioaddr, int irq, int chip_idx, int card_idx)
+/*
+ * vortex_probe1 - initialize one vortex board, after probing
+ *		   has located one during bus scan.
+ *
+ * NOTE: pdev==NULL is a valid condition, indicating
+ * non-PCI (generally EISA) bus device
+ */
+static struct net_device *vortex_probe1(struct pci_dev *pdev,
+					long ioaddr, int irq,
+					int chip_idx, int card_idx)
 {
 	struct vortex_private *vp;
 	int option;
@@ -805,13 +764,13 @@ static struct net_device *vortex_probe1(int pci_bus, int pci_devfn,
 	root_vortex_dev = dev;
 
 	vp->chip_id = chip_idx;
-	vp->pci_bus = pci_bus;
-	vp->pci_devfn = pci_devfn;
-	vp->pdev = pci_find_slot(pci_bus, pci_devfn);
+	vp->pci_bus = pdev == NULL ? 0 : pdev->bus->number;
+	vp->pci_devfn = pdev == NULL ? 0 : pdev->devfn;
+	vp->pdev = pdev;
 
-	vp->priv_addr = pci_alloc_consistent(vp->pdev, sizeof(struct boom_rx_desc) * RX_RING_SIZE
-						     + sizeof(struct boom_tx_desc) * TX_RING_SIZE
-						     + 15, &vp->ring_dma);
+	vp->priv_addr = pci_alloc_consistent(pdev, sizeof(struct boom_rx_desc) * RX_RING_SIZE
+					     + sizeof(struct boom_tx_desc) * TX_RING_SIZE
+					     + 15, &vp->ring_dma);
 	/* Make sure rings are 16 byte aligned. */
 	vp->rx_ring = (void *)(((long)vp->priv_addr + 15) & ~15);
 	vp->tx_ring = (struct boom_tx_desc *)(vp->rx_ring + RX_RING_SIZE);
@@ -885,8 +844,7 @@ static struct net_device *vortex_probe1(int pci_bus, int pci_devfn,
 
 	if (pci_tbl[vp->chip_id].drv_flags & HAS_CB_FNS) {
 		u32 fn_st_addr;			/* Cardbus function status space */
-		pcibios_read_config_dword(pci_bus, pci_devfn, PCI_BASE_ADDRESS_2,
-								  &fn_st_addr);
+		fn_st_addr = pdev == NULL ? 0 : pdev->resource[2].start;
 		if (fn_st_addr)
 			vp->cb_fn_base = ioremap(fn_st_addr & ~3, 128);
 		printk("%s: CardBus functions mapped %8.8x->%p (PCMCIA committee"
@@ -1870,9 +1828,6 @@ vortex_close(struct net_device *dev)
 		outl(0, ioaddr + UpListPtr);
 		for (i = 0; i < RX_RING_SIZE; i++)
 			if (vp->rx_skbuff[i]) {
-#if LINUX_VERSION_CODE < 0x20100
-				vp->rx_skbuff[i]->free = 1;
-#endif
 				pci_unmap_single(vp->pdev, le32_to_cpu(vp->rx_ring[i].addr), PKT_BUF_SZ);
 				DEV_FREE_SKB(vp->rx_skbuff[i]);
 				vp->rx_skbuff[i] = 0;
@@ -2086,9 +2041,8 @@ static void mdio_write(long ioaddr, int phy_id, int location, int value)
 	return;
 }
 
-
-#ifdef MODULE
-void cleanup_module(void)
+
+static void __exit vortex_cleanup_module (void)
 {
 	struct net_device *next_dev;
 
@@ -2113,8 +2067,10 @@ void cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
-
+module_init(vortex_init_module);
+module_exit(vortex_cleanup_module);
+
+
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"

@@ -21,13 +21,6 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 
-
-
-#define	NBUF	32
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 static loff_t ext2_file_lseek(struct file *, loff_t, int);
 static int ext2_open_file (struct inode *, struct file *);
 
@@ -73,40 +66,6 @@ static loff_t ext2_file_lseek(
 	return offset;
 }
 
-static inline void remove_suid(struct inode *inode)
-{
-	unsigned int mode;
-
-	/* set S_IGID if S_IXGRP is set, and always set S_ISUID */
-	mode = (inode->i_mode & S_IXGRP)*(S_ISGID/S_IXGRP) | S_ISUID;
-
-	/* was any of the uid bits set? */
-	mode &= inode->i_mode;
-	if (mode && !capable(CAP_FSETID)) {
-		inode->i_mode &= ~mode;
-		mark_inode_dirty(inode);
-	}
-}
-
-/*
- * Write to a file (through the page cache).
- */
-static ssize_t
-ext2_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
-{
-	ssize_t retval;
-
-	retval = generic_file_write(file, buf, count,
-						 ppos, block_write_partial_page);
-	if (retval > 0) {
-		struct inode *inode = file->f_dentry->d_inode;
-		remove_suid(inode);
-		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-		mark_inode_dirty(inode);
-	}
-	return retval;
-}
-
 /*
  * Called when an inode is released. Note that this is different
  * from ext2_file_open: open gets called at every open, but release
@@ -139,7 +98,7 @@ static int ext2_open_file (struct inode * inode, struct file * filp)
 static struct file_operations ext2_file_operations = {
 	llseek:		ext2_file_lseek,
 	read:		generic_file_read,
-	write:		ext2_file_write,
+	write:		generic_file_write,
 	ioctl:		ext2_ioctl,
 	mmap:		generic_file_mmap,
 	open:		ext2_open_file,
@@ -148,22 +107,6 @@ static struct file_operations ext2_file_operations = {
 };
 
 struct inode_operations ext2_file_inode_operations = {
-	&ext2_file_operations,/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	ext2_get_block,		/* get_block */
-	block_read_full_page,	/* readpage */
-	block_write_full_page,	/* writepage */
-	ext2_truncate,		/* truncate */
-	NULL,			/* permission */
-	NULL,			/* revalidate */
+	&ext2_file_operations,
+	truncate:	ext2_truncate,
 };

@@ -832,7 +832,7 @@ out:
 	return result;
 }
 
-int sysv_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
+static int sysv_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
 {
 	struct super_block *sb;
 	int ret, err, new;
@@ -961,6 +961,30 @@ struct buffer_head *sysv_file_bread(struct inode *inode, int block, int create)
 	return NULL;
 }
 
+static int sysv_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,sysv_get_block);
+}
+static int sysv_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,sysv_get_block);
+}
+static int sysv_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return block_prepare_write(page,from,to,sysv_get_block);
+}
+static int sysv_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,sysv_get_block);
+}
+struct address_space_operations sysv_aops = {
+	readpage: sysv_readpage,
+	writepage: sysv_writepage,
+	prepare_write: sysv_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: sysv_bmap
+};
+
 #ifdef __BIG_ENDIAN
 
 static inline unsigned long read3byte (unsigned char * p)
@@ -1059,13 +1083,15 @@ static void sysv_read_inode(struct inode *inode)
 		for (block = 0; block < 10+1+1+1; block++)
 			inode->u.sysv_i.i_data[block] =
 				read3byte(&raw_inode->i_a.i_addb[3*block]);
-	if (S_ISREG(inode->i_mode))
+	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &sysv_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+		inode->i_mapping->a_ops = &sysv_aops;
+	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &sysv_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &sysv_symlink_inode_operations;
-	else
+	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_mapping->a_ops = &sysv_aops;
+	} else
 		init_special_inode(inode, inode->i_mode,raw_inode->i_a.i_rdev);
 	brelse(bh);
 }

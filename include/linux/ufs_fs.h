@@ -525,6 +525,8 @@ extern int ufs_check_dir_entry (const char *, struct inode *, struct ufs_dir_ent
 extern struct inode_operations ufs_file_inode_operations;
 extern struct file_operations ufs_file_operations;
 
+extern struct address_space_operations ufs_aops;
+
 /* ialloc.c */
 extern void ufs_free_inode (struct inode *inode);
 extern struct inode * ufs_new_inode (const struct inode *, int, int *);
@@ -538,7 +540,6 @@ extern int ufs_sync_inode (struct inode *);
 extern void ufs_write_inode (struct inode *);
 extern void ufs_delete_inode (struct inode *);
 extern struct buffer_head * ufs_getfrag (struct inode *, unsigned, int, int *);
-extern int ufs_getfrag_block (struct inode *, long, struct buffer_head *, int);
 extern struct buffer_head * ufs_bread (struct inode *, unsigned, int, int *);
 
 /* namei.c */
@@ -562,7 +563,6 @@ extern int init_ufs_fs(void);
 extern void ufs_write_super (struct super_block *);
 
 /* symlink.c */
-extern struct inode_operations ufs_symlink_inode_operations;
 extern struct inode_operations ufs_fast_symlink_inode_operations;
 
 /* truncate.c */

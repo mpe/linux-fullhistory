@@ -48,8 +48,6 @@ fail:
 	return error;
 }
 
-struct inode_operations coda_symlink_inode_operations = {
-	readlink:	page_readlink,
-	follow_link:	page_follow_link,
+struct address_space_operations coda_symlink_aops = {
 	readpage:	coda_symlink_filler
 };

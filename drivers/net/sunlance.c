@@ -1519,10 +1519,14 @@ static inline struct sbus_dma *find_ledma(struct sbus_dev *sdev)
 #include <asm/sun4paddr.h>
 
 /* Find all the lance cards on the system and initialize them */
-int __init sparc_lance_probe(void)
+static int __init sparc_lance_probe(void)
 {
 	static struct sbus_dev sdev;
 	static int called = 0;
+
+#ifdef MODULE
+	root_lance_dev = NULL;
+#endif
 
 	if (called)
 		return ENODEV;
@@ -1541,7 +1545,7 @@ int __init sparc_lance_probe(void)
 #else /* !CONFIG_SUN4 */
 
 /* Find all the lance cards on the system and initialize them */
-int __init sparc_lance_probe(void)
+static int __init sparc_lance_probe(void)
 {
 	struct sbus_bus *bus;
 	struct sbus_dev *sdev = 0;
@@ -1549,6 +1553,10 @@ int __init sparc_lance_probe(void)
 	struct sbus_dma *ledma = 0;
 	static int called = 0;
 	int cards = 0, v;
+
+#ifdef MODULE
+	root_lance_dev = NULL;
+#endif
 
 	if (called)
 		return ENODEV;
@@ -1587,18 +1595,9 @@ int __init sparc_lance_probe(void)
 }
 #endif /* !CONFIG_SUN4 */
 
+static void __exit sparc_lance_cleanup(void)
+{
 #ifdef MODULE
-
-int
-init_module(void)
-{
-	root_lance_dev = NULL;
-	return sparc_lance_probe();
-}
-
-void
-cleanup_module(void)
-{
 	struct lance_private *lp;
 
 	while (root_lance_dev) {
@@ -1609,6 +1608,8 @@ cleanup_module(void)
 		kfree(root_lance_dev->dev);
 		root_lance_dev = lp;
 	}
+#endif /* MODULE */
 }
 
-#endif /* MODULE */
+module_init(sparc_lance_probe);
+module_exit(sparc_lance_cleanup);

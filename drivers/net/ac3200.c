@@ -326,9 +326,6 @@ static void ac_block_output(struct net_device *dev, int count,
 
 static int ac_close_card(struct net_device *dev)
 {
-	dev->start = 0;
-	dev->tbusy = 1;
-
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 

@@ -408,7 +408,7 @@ out:
 	return result;
 }
 
-int ext2_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
+static int ext2_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
 {
 	int ret, err, new;
 	struct buffer_head *bh;
@@ -610,6 +610,30 @@ struct buffer_head * ext2_bread (struct inode * inode, int block,
 	return NULL;
 }
 
+static int ext2_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,ext2_get_block);
+}
+static int ext2_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,ext2_get_block);
+}
+static int ext2_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return block_prepare_write(page,from,to,ext2_get_block);
+}
+static int ext2_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,ext2_get_block);
+}
+struct address_space_operations ext2_aops = {
+	readpage: ext2_readpage,
+	writepage: ext2_writepage,
+	prepare_write: ext2_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: ext2_bmap
+};
+
 void ext2_read_inode (struct inode * inode)
 {
 	struct buffer_head * bh;
@@ -719,15 +743,19 @@ void ext2_read_inode (struct inode * inode)
 	if (inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		/* Nothing to do */ ;
-	else if (S_ISREG(inode->i_mode))
+	else if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ext2_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+		inode->i_mapping->a_ops = &ext2_aops;
+	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &ext2_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = inode->i_blocks
-				?&ext2_symlink_inode_operations
-				:&ext2_fast_symlink_inode_operations;
-	else 
+	else if (S_ISLNK(inode->i_mode)) {
+		if (!inode->i_blocks)
+			inode->i_op = &ext2_fast_symlink_inode_operations;
+		else {
+			inode->i_op = &page_symlink_inode_operations;
+			inode->i_mapping->a_ops = &ext2_aops;
+		}
+	} else 
 		init_special_inode(inode, inode->i_mode,
 				   le32_to_cpu(raw_inode->i_block[0]));
 	brelse (bh);

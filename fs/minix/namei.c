@@ -219,6 +219,7 @@ int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return -ENOSPC;
 	inode->i_op = &minix_file_inode_operations;
+	inode->i_mapping->a_ops = &minix_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
 	error = minix_add_entry(dir, dentry->d_name.name,
@@ -477,7 +478,8 @@ int minix_symlink(struct inode * dir, struct dentry *dentry,
 		goto out;
 
 	inode->i_mode = S_IFLNK | 0777;
-	inode->i_op = &minix_symlink_inode_operations;
+	inode->i_op = &page_symlink_inode_operations;
+	inode->i_mapping->a_ops = &minix_aops;
 	err = block_symlink(inode, symname, i);
 	if (err)
 		goto fail;

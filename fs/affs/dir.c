@@ -47,14 +47,6 @@ struct inode_operations affs_dir_inode_operations = {
 	affs_rmdir,		/* rmdir */
 	NULL,			/* mknod */
 	affs_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permissions */
-	NULL			/* revalidate */
 };
 
 static ssize_t

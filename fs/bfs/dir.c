@@ -107,6 +107,7 @@ static int bfs_create(struct inode * dir, struct dentry * dentry, int mode)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks = inode->i_blksize = 0;
 	inode->i_op = &bfs_file_inops;
+	inode->i_mapping->a_ops = &bfs_aops;
 	inode->i_mode = mode;
 	inode->i_ino = inode->iu_dsk_ino = ino;
 	inode->iu_sblock = inode->iu_eblock = 0;
@@ -265,14 +266,6 @@ struct inode_operations bfs_dir_inops = {
 	rmdir:			NULL,
 	mknod:			NULL,
 	rename:			bfs_rename,
-	readlink:		NULL,
-	follow_link:		NULL,
-	get_block:		NULL,
-	readpage:		NULL,
-	writepage:		NULL,
-	truncate:		NULL,
-	permission:		NULL,
-	revalidate:		NULL
 };
 
 static int bfs_add_entry(struct inode * dir, const char * name, int namelen, int ino)

@@ -68,19 +68,8 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #error You must compile this driver with "-O".
 #endif
 
-/* Include files, designed to support most kernel versions 2.0.0 and later. */
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 #include <linux/kernel.h>
-#include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/timer.h>
@@ -92,6 +81,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -101,7 +91,6 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 #define RUN_AT(x) (jiffies + (x))
 
-#ifdef MODULE
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Adaptec Starfire Ethernet driver");
 MODULE_PARM(max_interrupt_work, "i");
@@ -111,7 +100,6 @@ MODULE_PARM(debug, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
-#endif
 
 /*
 				Theory of Operation
@@ -407,9 +395,6 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 	unsigned char pci_bus, pci_device_fn;
 	struct net_device *dev;
 
-	if ( ! pcibios_present())
-		return -ENODEV;
-
 	for (;pci_index < 0xff; pci_index++) {
 		struct pci_dev *pdev;
 		u16 vendor, device, pci_command, new_command;
@@ -421,28 +406,24 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 								&pci_bus, &pci_device_fn)
 			!= PCIBIOS_SUCCESSFUL)
 			break;
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
+		pdev = pci_find_slot (pci_bus, pci_device_fn);
+		if (!pdev) continue;
+		vendor = pdev->vendor;
+		device = pdev->device;
 
 		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
 			if (vendor == pci_tbl[chip_idx].vendor_id
 				&& (device & pci_tbl[chip_idx].device_id_mask) ==
 				pci_tbl[chip_idx].device_id)
 				break;
-		if (pci_tbl[chip_idx].vendor_id == 0) 		/* Compiled out! */
+		if (pci_tbl[chip_idx].vendor_id == 0)	/* Compiled out! */
 			continue;
 
-		pdev = pci_find_slot(pci_bus, pci_device_fn);
-
-		{
-			pciaddr = pdev->resource[0].start;
+		pciaddr = pdev->resource[0].start;
 #if defined(ADDR_64BITS) && defined(__alpha__)
-			pciaddr |= ((long)pdev->base_address[1]) << 32;
+		pciaddr |= ((long)pdev->base_address[1]) << 32;
 #endif
-			irq = pdev->irq;
-		}
+		irq = pdev->irq;
 
 		if (debug > 2)
 			printk(KERN_INFO "Found %s at PCI address %#lx, IRQ %d.\n",
@@ -458,15 +439,13 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 			continue;
 		}
 
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
+		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 		new_command = pci_command | (pci_tbl[chip_idx].flags & 7);
 		if (pci_command != new_command) {
 			printk(KERN_INFO "  The PCI BIOS has not enabled the"
 				   " device at %d/%d!  Updating PCI command %4.4x->%4.4x.\n",
 				   pci_bus, pci_device_fn, pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
+			pci_write_config_word(pdev, PCI_COMMAND, new_command);
 		}
 
 		dev = pci_tbl[chip_idx].probe1(pdev, pci_bus, pci_device_fn, ioaddr,
@@ -474,14 +453,12 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 
 		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
 			u8 pci_latency;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_LATENCY_TIMER, &pci_latency);
+			pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
 			if (pci_latency < min_pci_latency) {
 				printk(KERN_INFO "  PCI latency timer (CFLT) is "
 					   "unreasonably low at %d.  Setting to %d clocks.\n",
 					   pci_latency, min_pci_latency);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										  PCI_LATENCY_TIMER, min_pci_latency);
+				pci_write_config_byte(pdev, PCI_LATENCY_TIMER, min_pci_latency);
 			}
 		}
 		cards_found++;
@@ -490,21 +467,15 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 	return cards_found ? 0 : -ENODEV;
 }
 
-int starfire_probe(void)
-{
-	if (pci_etherdev_probe(pci_tbl) < 0)
-		return -ENODEV;
-	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
-	return 0;
-}
-
-
 static struct net_device *
 starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_id, int card_idx)
 {
 	struct netdev_private *np;
 	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
-	struct net_device *dev = init_etherdev(NULL, sizeof(struct netdev_private));
+	struct net_device *dev = init_etherdev(NULL, 0);
+
+	if (!dev)
+		return NULL;
 
 	printk(KERN_INFO "%s: %s at 0x%lx, ",
 		   dev->name, skel_netdrv_tbl[chip_id].chip_name, ioaddr);
@@ -991,7 +962,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 									 skb->len);
 
 					/* Scavenge the descriptor. */
-					dev_kfree_skb(skb);
+					kfree_skb(skb);
 					np->tx_info[entry].skb = NULL;
 					np->tx_info[entry].mapping = 0;
 					np->dirty_tx++;
@@ -1185,10 +1156,8 @@ static struct enet_statistics *get_stats(struct net_device *dev)
 	/* We should lock this segment of code for SMP eventually, although
 	   the vulnerability window is very small and statistics are
 	   non-critical. */
-#if LINUX_VERSION_CODE > 0x20119
 	np->stats.tx_bytes = readl(ioaddr + 0x57010);
 	np->stats.rx_bytes = readl(ioaddr + 0x57044);
-#endif
 	np->stats.tx_packets = readl(ioaddr + 0x57000);
 	np->stats.tx_aborted_errors =
 		readl(ioaddr + 0x57024) + readl(ioaddr + 0x57028);
@@ -1356,7 +1325,7 @@ static int netdev_close(struct net_device *dev)
 		np->rx_ring[i].rxaddr = cpu_to_le32(0xBADF00D0); /* An invalid address. */
 		if (np->rx_info[i].skb != NULL) {
 			pci_unmap_single(np->pdev, np->rx_info[i].mapping, np->rx_buf_sz);
-			dev_kfree_skb(np->rx_info[i].skb);
+			kfree_skb(np->rx_info[i].skb);
 		}
 		np->rx_info[i].skb = NULL;
 		np->rx_info[i].mapping = 0;
@@ -1367,7 +1336,7 @@ static int netdev_close(struct net_device *dev)
 			pci_unmap_single(np->pdev,
 							 np->tx_info[i].mapping,
 							 skb->len);
-			dev_kfree_skb(skb);
+			kfree_skb(skb);
 		}
 		np->tx_info[i].skb = NULL;
 		np->tx_info[i].mapping = 0;
@@ -1378,9 +1347,7 @@ static int netdev_close(struct net_device *dev)
 	return 0;
 }
 
-
-#ifdef MODULE
-int init_module(void)
+static int __init starfire_init_module (void)
 {
 	if (debug)					/* Emit version even if no cards detected. */
 		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
@@ -1396,7 +1363,7 @@ int init_module(void)
 #endif
 }
 
-void cleanup_module(void)
+static void __exit starfire_cleanup_module (void)
 {
 	struct net_device *next_dev;
 
@@ -1428,8 +1395,10 @@ void cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
-
+module_init(starfire_init_module);
+module_exit(starfire_cleanup_module);
+
+
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c starfire.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"

@@ -107,10 +107,7 @@ extern int minix_new_block(struct inode * inode);
 extern void minix_free_block(struct inode * inode, int block);
 extern unsigned long minix_count_free_blocks(struct super_block *sb);
 
-extern int minix_bmap(struct inode *,int);
-
 extern struct buffer_head * minix_getblk(struct inode *, int, int);
-extern int minix_get_block(struct inode *, long, struct buffer_head *, int);
 extern struct buffer_head * minix_bread(struct inode *, int, int);
 
 extern void minix_truncate(struct inode *);
@@ -118,9 +115,9 @@ extern int init_minix_fs(void);
 extern int minix_sync_inode(struct inode *);
 extern int minix_sync_file(struct file *, struct dentry *);
 
+extern struct address_space_operations minix_aops;
 extern struct inode_operations minix_file_inode_operations;
 extern struct inode_operations minix_dir_inode_operations;
-extern struct inode_operations minix_symlink_inode_operations;
 extern struct dentry_operations minix_dentry_operations;
 
 #endif /* __KERNEL__ */

@@ -40,14 +40,6 @@ else
   endif
 endif
 
-ifdef CONFIG_ACPI
-OX_OBJS += pm.o
-else
-ifdef CONFIG_APM
-OX_OBJS += pm.o
-endif
-endif
-
 ifeq ($(CONFIG_ACPI),y)
 O_OBJS += acpi.o
 else

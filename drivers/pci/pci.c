@@ -401,7 +401,7 @@ pci_set_master(struct pci_dev *dev)
  * Translate the low bits of the PCI base
  * to the resource type
  */
-static inline unsigned int pci_resource_flags(unsigned int flags)
+static inline unsigned int pci_calc_resource_flags(unsigned int flags)
 {
 	if (flags & PCI_BASE_ADDRESS_SPACE_IO)
 		return IORESOURCE_IO;
@@ -445,7 +445,7 @@ static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 			sz = ~(sz & PCI_BASE_ADDRESS_IO_MASK) & 0xffff;
 		}
 		res->end = res->start + (unsigned long) sz;
-		res->flags |= (l & 0xf) | pci_resource_flags(l);
+		res->flags |= (l & 0xf) | pci_calc_resource_flags(l);
 		if ((l & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
 		    == (PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64)) {
 			pci_read_config_dword(dev, reg+4, &l);

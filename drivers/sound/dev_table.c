@@ -13,6 +13,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 
 
 #define _DEV_TABLE_C_
@@ -313,9 +314,12 @@ int sndtable_identify_card(char *name)
 	return 0;
 }
 
-void sound_setup(char *str, int *ints)
+static int __init sound_setup(char *str)
 {
 	int i, n = num_sound_cards;
+	int ints[32];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
 
 	/*
 	 *	First disable all drivers
@@ -325,7 +329,7 @@ void sound_setup(char *str, int *ints)
 		snd_installed_cards[i].enabled = 0;
 
 	if (ints[0] == 0 || ints[1] == 0)
-		return;
+		return 1;
 	/*
 	 *	Then enable them one by time
 	 */
@@ -343,7 +347,7 @@ void sound_setup(char *str, int *ints)
 			/*
 			 * Add any future extensions here
 			 */
-			return;
+			return 1;
 		}
 		ioaddr = (val & 0x000fff00) >> 8;
 		irq = (val & 0x000000f0) >> 4;
@@ -376,7 +380,11 @@ void sound_setup(char *str, int *ints)
 			snd_installed_cards[ptr].config.card_subtype = 0;
 		}
 	}
+	
+	return 1;
 }
+
+__setup("sound=", sound_setup);
 
 
 struct address_info * sound_getconf(int card_type)

@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/init.h>
 
 #include <asm/board.h>
 #include <asm/io.h>
@@ -52,9 +53,7 @@
 
 static const char *name = "National DP83902AV";
 
-#if defined(MODULE)
-static struct net_device *oaknet_devs;
-#endif
+static struct net_device *oaknet_devs = NULL;
 
 
 /* Function Prototypes */
@@ -91,8 +90,7 @@ static void	 oaknet_dma_error(struct net_device *dev, const char *name);
  *   0 if OK, otherwise system error number on error.
  *
  */
-int
-oaknet_init(void)
+static int __init oaknet_init(void)
 {
 	register int i;
 	int reg0, regd;
@@ -112,10 +110,15 @@ oaknet_init(void)
 	tmp.base_addr = ioaddr;
 	dev = &tmp;
 
+	if (!request_region(OAKNET_IO_BASE, OAKNET_IO_SIZE, name))
+		return -EBUSY;
+
 	/* Quick register check to see if the device is really there. */
 
-	if ((reg0 = ei_ibp(ioaddr)) == 0xFF)
+	if ((reg0 = ei_ibp(ioaddr)) == 0xFF) {
+		release_region(OAKNET_IO_BASE, OAKNET_IO_SIZE);
 		return (ENODEV);
+	}
 
 	/*
 	 * That worked. Now a more thorough check, using the multicast
@@ -136,6 +139,7 @@ oaknet_init(void)
 		ei_obp(regd, ioaddr + 0x0D);
 		dev->base_addr = 0;
 
+		release_region(dev->base_addr, OAKNET_IO_SIZE);
 		return (ENODEV);
 	}
 
@@ -144,8 +148,10 @@ oaknet_init(void)
 	 * sure its symbols are loaded.
 	 */
 
-	if (load_8390_module("oaknet.c"))
+	if (load_8390_module("oaknet.c")) {
+		release_region(dev->base_addr, OAKNET_IO_SIZE);
 		return (-ENOSYS);
+	}
 
 	/*
 	 * We're not using the old-style probing API, so we have to allocate
@@ -153,9 +159,7 @@ oaknet_init(void)
 	 */
 
 	dev = init_etherdev(0, 0);
-#if defined(MODULE)
 	oaknet_devs = dev;
-#endif
 
 	/*
 	 * This controller is on an embedded board, so the base address
@@ -169,6 +173,7 @@ oaknet_init(void)
 
 	if (ethdev_init(dev)) {
 		printk(" unable to get memory for dev->priv.\n");
+		release_region(dev->base_addr, OAKNET_IO_SIZE);
 		return (-ENOMEM);
 	}
 
@@ -186,11 +191,9 @@ oaknet_init(void)
 		printk("%s: unable to request interrupt %d.\n",
 		       dev->name, dev->irq);
 		kfree(dev->priv);
-		dev->priv = NULL;
+		release_region(dev->base_addr, OAKNET_IO_SIZE);
 		return (EAGAIN);
 	}
-
-	request_region(dev->base_addr, OAKNET_IO_SIZE, name);
 
 	/* Tell the world about what and where we've found. */
 
@@ -666,12 +669,10 @@ oaknet_dma_error(struct net_device *dev, const char *name)
 	return;
 }
 
-#if defined(MODULE)
 /*
  * Oak Ethernet module load interface.
  */
-int
-init_module(void)
+static int __init oaknet_init_module (void)
 {
 	int status;
 
@@ -680,7 +681,8 @@ init_module(void)
 
 	status = oaknet_init()
 
-	lock_8390_module();
+	if (status == 0)
+		lock_8390_module();
 
 	return (status);
 }
@@ -688,8 +690,7 @@ init_module(void)
 /*
  * Oak Ethernet module unload interface.
  */
-void
-cleanup_module(void)
+static void __exit oaknet_cleanup_module (void)
 {
 	if (oaknet_devs == NULL)
 		return;
@@ -706,7 +707,7 @@ cleanup_module(void)
 	oaknet_devs = NULL;
 
 	unlock_8390_module();
-
-	return;
 }
-#endif /* MODULE */
+
+module_init(oaknet_init_module);
+module_exit(oaknet_cleanup_module);

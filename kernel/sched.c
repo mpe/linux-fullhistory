@@ -1145,7 +1145,6 @@ void daemonize(void)
 
 void __init init_idle(void)
 {
-	cycles_t t;
 	struct schedule_data * sched_data;
 	sched_data = &aligned_data[smp_processor_id()].schedule_data;
 
@@ -1154,9 +1153,8 @@ void __init init_idle(void)
 			smp_processor_id(), current->pid);
 		del_from_runqueue(current);
 	}
-	t = get_cycles();
 	sched_data->curr = current;
-	sched_data->last_schedule = t;
+	sched_data->last_schedule = get_cycles();
 }
 
 void __init sched_init(void)

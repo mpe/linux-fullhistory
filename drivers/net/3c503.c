@@ -314,7 +314,6 @@ el2_probe1(struct net_device *dev, int ioaddr)
 
     ei_status.saved_irq = dev->irq;
 
-    dev->start = 0;
     dev->open = &el2_open;
     dev->stop = &el2_close;
 

@@ -18,14 +18,9 @@
 #define dprintf(x...)
 #endif
 
-static ssize_t bfs_file_write(struct file * f, const char * buf, size_t count, loff_t *ppos)
-{
-	return generic_file_write(f, buf, count, ppos, block_write_partial_page);
-}
-
 static struct file_operations bfs_file_operations = {
 	read:			generic_file_read,
-	write:			bfs_file_write,
+	write:			generic_file_write,
 	mmap:			generic_file_mmap,
 };
 
@@ -129,23 +124,30 @@ out:
 	return err;
 }
 
+static int bfs_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,bfs_get_block);
+}
+static int bfs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,bfs_get_block);
+}
+static int bfs_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return block_prepare_write(page,from,to,bfs_get_block);
+}
+static int bfs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,bfs_get_block);
+}
+struct address_space_operations bfs_aops = {
+	readpage: bfs_readpage,
+	writepage: bfs_writepage,
+	prepare_write: bfs_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: bfs_bmap
+};
+
 struct inode_operations bfs_file_inops = {
 	default_file_ops:	&bfs_file_operations,
-	create:			NULL,
-	lookup:			NULL,
-	link:			NULL,
-	unlink:			NULL,
-	symlink:		NULL,
-	mkdir:			NULL,
-	rmdir:			NULL,
-	mknod:			NULL,
-	rename:			NULL,
-	readlink:		NULL,
-	follow_link:		NULL,
-	get_block:		bfs_get_block,	
-	readpage:		block_read_full_page,
-	writepage:		block_write_full_page,
-	truncate:		NULL,
-	permission:		NULL,
-	revalidate:		NULL
 };

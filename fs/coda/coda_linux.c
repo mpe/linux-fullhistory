@@ -102,7 +102,6 @@ int coda_fid_is_weird(struct ViceFid *fid)
 	        return 1;
 
 	return 0;
-
 }
 
 
@@ -290,7 +289,6 @@ void coda_iattr_to_vattr(struct iattr *iattr, struct coda_vattr *vattr)
                 vattr->va_ctime.tv_sec = iattr->ia_ctime;
                 vattr->va_ctime.tv_nsec = 0;
 	}
-        
 }
 
 void print_vattr(struct coda_vattr *attr)

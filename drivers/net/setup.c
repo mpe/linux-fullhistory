@@ -8,7 +8,6 @@
 #include <linux/init.h>
 #include <linux/netlink.h>
 
-extern int plip_init(void);
 extern int mkiss_init_ctrl_dev(void);
 extern int ppp_init(void);
 extern int slip_init_ctrl_dev(void);
@@ -21,44 +20,16 @@ extern int dmascc_init(void);
 extern int scc_init(void);
 extern int yam_init(void);
 
-extern int acenic_probe(void); 
 extern int awc4500_pci_probe(void);
 extern int awc4500_isa_probe(void);
 extern int awc4500_pnp_probe(void);
 extern int awc4500_365_probe(void);
 extern int arcnet_init(void); 
-extern int bigmac_probe(void); 
-extern int bmac_probe(void); 
-extern int gmac_probe(void); 
 extern int cpm_enet_init(void); 
-extern int oaknet_init(void);
 extern int dlci_setup(void); 
-extern int dgrs_probe(void); 
-extern int dmfe_reg_board(void); 
-extern int eepro100_probe(void); 
-extern int epic100_probe(void); 
-extern int happy_meal_probe(void); 
 extern int lapbeth_init(void);
-extern int mace_probe(void); 
-extern int myri_sbus_probe(void); 
-extern int ncr885e_probe(void); 
-extern int ne2k_pci_probe(void); 
-extern int pcnet32_probe(void); 
-extern int qec_probe(void); 
-extern int rcpci_probe(void); 
-extern int rr_hippi_probe(void); 
-extern int rtl8139_probe(void); 
 extern int sdla_setup(void); 
 extern int sdla_c_setup(void); 
-extern int sis900_probe(void); 
-extern int skge_probe(void); 
-extern int sparc_lance_probe(void); 
-extern int starfire_probe(void); 
-extern int tc59x_probe(void); 
-extern int tlan_probe(void);
-extern int tulip_probe(void); 
-extern int via_rhine_probe(void); 
-extern int yellowfin_probe(void);
 
 extern int abyss_probe(void);
 extern int madgemc_probe(void);
@@ -106,9 +77,6 @@ struct net_probe pci_probes[] __initdata = {
 #if defined(CONFIG_LAPBETHER)
 	{lapbeth_init, 0},
 #endif
-#if defined(CONFIG_PLIP)
-	{plip_init, 0},
-#endif
 #if defined(CONFIG_ARCNET)
 	{arcnet_init, 0},
 #endif
@@ -126,117 +94,6 @@ struct net_probe pci_probes[] __initdata = {
     || (defined(CONFIG_ISDN) && defined(CONFIG_ISDN_PPP))
 	{slhc_install, 0},
 #endif	
-#endif
-/*
- *	HIPPI
- */
-#ifdef CONFIG_ROADRUNNER
-	{rr_hippi_probe, 0},
-#endif
-
-/*
- *	ETHERNET
- */
- 
-/*
- *	SBUS Ethernet
- */
-
-#ifdef CONFIG_HAPPYMEAL
-	{happy_meal_probe, 0},
-#endif
-#ifdef CONFIG_SUNLANCE
-	{sparc_lance_probe, 0},
-#endif
-#ifdef CONFIG_SUNQE
-	{qec_probe, 0},
-#endif
-#ifdef CONFIG_SUNBMAC
-	{bigmac_probe, 0},
-#endif
-#ifdef CONFIG_MYRI_SBUS
-	{myri_sbus_probe, 0},
-#endif
-
-/*
- *	PowerPC Mainboard
- */
-
-#ifdef CONFIG_MACE
-	{mace_probe, 0},
-#endif
-#ifdef CONFIG_BMAC
-	{bmac_probe, 0},
-#endif
-#ifdef CONFIG_GMAC
-	{gmac_probe, 0},
-#endif
-#ifdef CONFIG_NCR885E
-	{ncr885e_probe, 0},
-#endif
-
-/*
- *	IBM "Oak" Evaluation board
- */
-#ifdef	CONFIG_OAKNET
-	{oaknet_init, 0},
-#endif
-
-/*
- *	PCI Ethernet
- */
-#ifdef CONFIG_DGRS
-	{dgrs_probe, 0},
-#endif
-#ifdef CONFIG_RCPCI
-	{rcpci_probe, 0},
-#endif
-#ifdef CONFIG_VORTEX
-	{tc59x_probe, 0},
-#endif
-#ifdef CONFIG_NE2K_PCI
-	{ne2k_pci_probe, 0},
-#endif
-#ifdef CONFIG_PCNET32
-	{pcnet32_probe, 0},
-#endif	
-#ifdef CONFIG_EEXPRESS_PRO100	/* Intel EtherExpress Pro/100 */
-	{eepro100_probe, 0},
-#endif
-#ifdef CONFIG_TLAN
-	{tlan_probe, 0},
-#endif
-#ifdef CONFIG_DEC_ELCP 
-	{tulip_probe, 0},
-#endif
-#ifdef CONFIG_EPIC100
-	{epic100_probe, 0},
-#endif
-#ifdef CONFIG_RTL8139
-	{rtl8139_probe, 0},
-#endif
-#ifdef CONFIG_SIS900
-	{sis900_probe, 0},
-#endif
-
-#ifdef CONFIG_DM9102
-	{dmfe_reg_board, 0}, 
-#endif
-
-#ifdef CONFIG_YELLOWFIN
-	{yellowfin_probe, 0},
-#endif
-#ifdef CONFIG_ACENIC
-	{acenic_probe, 0},
-#endif
-#ifdef CONFIG_SK98LIN
-	{skge_probe, 0},
-#endif
-#ifdef CONFIG_VIA_RHINE
-	{via_rhine_probe, 0},
-#endif
-#ifdef CONFIG_ADAPTEC_STARFIRE
-	{starfire_probe, 0},
 #endif
 
 /*

@@ -157,6 +157,7 @@ extern int mc32_probe(struct net_device *dev);
 
 static int	mc32_probe1(struct net_device *dev, int ioaddr);
 static int	mc32_open(struct net_device *dev);
+static void	mc32_timeout(struct net_device *dev);
 static int	mc32_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void	mc32_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int	mc32_close(struct net_device *dev);
@@ -456,6 +457,8 @@ static int __init mc32_probe1(struct net_device *dev, int slot)
 	dev->hard_start_xmit	= mc32_send_packet;
 	dev->get_stats		= mc32_get_stats;
 	dev->set_multicast_list = mc32_set_multicast_list;
+	dev->tx_timeout		= mc32_timeout;
+	dev->watchdog_timeo	= HZ*5;	/* Board does all the work */
 	
 	lp->rx_halted		= 1;
 	lp->tx_halted		= 1;
@@ -850,10 +853,6 @@ static int mc32_open(struct net_device *dev)
 	u8 one=1;
 	u8 regs;
 	
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
 	/*
 	 *	Interrupts enabled
 	 */
@@ -902,12 +901,30 @@ static int mc32_open(struct net_device *dev)
 	
 	mc32_rx_begin(dev);
 	mc32_tx_begin(dev);
-	
+
+	netif_wake_queue(dev);	
 	MOD_INC_USE_COUNT;
 
 	return 0;
 }
 
+/**
+ *	mc32_timeout:
+ *	@dev: 3c527 that timed out
+ *
+ *	Handle a timeout on transmit from the 3c527. This normally means
+ *	bad things as the hardware handles cable timeouts and mess for
+ *	us.
+ *
+ */
+
+static void mc32_timeout(struct net_device *dev)
+{
+	printk(KERN_WARNING "%s: transmit timed out?\n", dev->name);
+	/* Try to restart the adaptor. */
+	netif_wake_queue(dev);
+}
+ 
 /**
  *	mc32_send_packet:
  *	@skb: buffer to transmit
@@ -927,83 +944,56 @@ static int mc32_open(struct net_device *dev)
 static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
+	unsigned long flags;
+		
+	u16 tx_head;
+	volatile struct skb_header *p, *np;
 
-	if (dev->tbusy) {
-		/*
-		 * If we get here, some higher level has decided we are broken.
-		 * There should really be a "kick me" function call instead.
-		 */
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < HZ/20)
-			return 1;
-		printk(KERN_WARNING "%s: transmit timed out?\n", dev->name);
-		/* Try to restart the adaptor. */
-		dev->tbusy=0;
-		dev->trans_start = jiffies;
-	}
-
-	/*
-	 * Block a timer-based transmit from overlapping. This could better be
-	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-	 */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
+	netif_stop_queue(dev);
+	
+	save_flags(flags);
+	cli();
+		
+	if(atomic_read(&lp->tx_count)==0)
 	{
-		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
-		dev_kfree_skb(skb);
-	}
-	else 
-	{
-		unsigned long flags;
-		
-		u16 tx_head;
-		volatile struct skb_header *p, *np;
-
-		save_flags(flags);
-		cli();
-		
-		if(atomic_read(&lp->tx_count)==0)
-		{
-			dev->tbusy=1;
-			restore_flags(flags);
-			return 1;
-		}
-
-		tx_head = lp->tx_box->data[0];
-		atomic_dec(&lp->tx_count);
-
-		/* We will need this to flush the buffer out */
-		
-		lp->tx_skb[lp->tx_skb_end] = skb;
-		lp->tx_skb_end++;
-		lp->tx_skb_end&=(TX_RING_MAX-1);
-		
-		/* P is the last sending/sent buffer as a pointer */
-		p=(struct skb_header *)bus_to_virt(lp->base+tx_head);
-		
-		/* NP is the buffer we will be loading */
-		np=(struct skb_header *)bus_to_virt(lp->base+p->next);
-		
-		np->control	|= (1<<6);	/* EOL */
-		wmb();
-		
-		np->length	= skb->len;
-		
-		if(np->length < 60)
-			np->length = 60;
-			
-		np->data	= virt_to_bus(skb->data);
-		np->status	= 0;
-		np->control	= (1<<7)|(1<<6);	/* EOP EOL */
-		wmb();
-		
-		p->status	= 0;
-		p->control	&= ~(1<<6);
-		
-		dev->tbusy	= 0;			/* Keep feeding me */		
-		
-		lp->tx_box->mbox=0;
 		restore_flags(flags);
+		return 1;
 	}
+
+	tx_head = lp->tx_box->data[0];
+	atomic_dec(&lp->tx_count);
+	/* We will need this to flush the buffer out */
+	
+	lp->tx_skb[lp->tx_skb_end] = skb;
+	lp->tx_skb_end++;
+	lp->tx_skb_end&=(TX_RING_MAX-1);
+	
+	/* P is the last sending/sent buffer as a pointer */
+	p=(struct skb_header *)bus_to_virt(lp->base+tx_head);
+	
+	/* NP is the buffer we will be loading */
+	np=(struct skb_header *)bus_to_virt(lp->base+p->next);
+		
+	np->control	|= (1<<6);	/* EOL */
+	wmb();
+		
+	np->length	= skb->len;
+		
+	if(np->length < 60)
+		np->length = 60;
+			
+	np->data	= virt_to_bus(skb->data);
+	np->status	= 0;
+	np->control	= (1<<7)|(1<<6);	/* EOP EOL */
+	wmb();
+		
+	p->status	= 0;
+	p->control	&= ~(1<<6);
+	
+	lp->tx_box->mbox=0;
+	restore_flags(flags);
+	
+	netif_wake_queue(dev);
 	return 0;
 }
 
@@ -1139,8 +1129,6 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		printk(KERN_WARNING "%s: irq %d for unknown device.\n", cardname, irq);
 		return;
 	}
-	dev->interrupt = 1;
-
 	ioaddr = dev->base_addr;
 	lp = (struct mc32_local *)dev->priv;
 
@@ -1173,8 +1161,7 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				lp->tx_skb_top++;
 				lp->tx_skb_top&=(TX_RING_MAX-1);
 				atomic_inc(&lp->tx_count);
-				dev->tbusy=0;
-				mark_bh(NET_BH);
+				netif_wake_queue(dev);
 				break;
 			case 3: /* Halt */
 			case 4: /* Abort */
@@ -1249,7 +1236,6 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	 
 	if(rx_event)
 		mc32_rx_ring(dev);
-	dev->interrupt = 0;
 	return;
 }
 
@@ -1278,6 +1264,8 @@ static int mc32_close(struct net_device *dev)
 	u8 regs;
 	u16 one=1;
 
+	netif_stop_queue(dev);
+	
 	/*
 	 *	Send the indications on command (handy debug check)
 	 */
@@ -1303,9 +1291,6 @@ static int mc32_close(struct net_device *dev)
 	mc32_flush_rx_ring(lp);
 	mc32_flush_tx_ring(lp);
 	
-	dev->tbusy = 1;
-	dev->start = 0;
-
 	/* Update the statistics here. */
 
 	MOD_DEC_USE_COUNT;

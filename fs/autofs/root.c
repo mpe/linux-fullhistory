@@ -37,16 +37,6 @@ struct inode_operations autofs_root_inode_operations = {
         autofs_root_symlink,    /* symlink */
         autofs_root_mkdir,      /* mkdir */
         autofs_root_rmdir,      /* rmdir */
-        NULL,                   /* mknod */
-        NULL,                   /* rename */
-        NULL,                   /* readlink */
-        NULL,                   /* follow_link */
-        NULL,                   /* get_block */
-        NULL,                   /* readpage */
-        NULL,                   /* writepage */
-        NULL,                   /* truncate */
-        NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldir)

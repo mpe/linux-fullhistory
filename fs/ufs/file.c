@@ -36,11 +36,6 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 
-#define	NBUF	32
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 /*
  * Make sure the offset never goes beyond the 32-bit mark..
  */
@@ -72,50 +67,6 @@ static long long ufs_file_lseek(
 	return retval;
 }
 
-static inline void remove_suid(struct inode *inode)
-{
-	unsigned int mode;
-
-	/* set S_IGID if S_IXGRP is set, and always set S_ISUID */
-	mode = (inode->i_mode & S_IXGRP)*(S_ISGID/S_IXGRP) | S_ISUID;
-
-	/* was any of the uid bits set? */
-	mode &= inode->i_mode;
-	if (mode && !suser()) {
-		inode->i_mode &= ~mode;
-		mark_inode_dirty(inode);
-	}
-}
-
-/*
- * Write to a file (through the page cache).
- */
-static ssize_t
-ufs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
-{
-	ssize_t retval;
-
-	retval = generic_file_write(file, buf, count,
-				    ppos, block_write_partial_page);
-	if (retval > 0) {
-		struct inode *inode = file->f_dentry->d_inode;
-		remove_suid(inode);
-		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-		mark_inode_dirty(inode);
-	}
-	return retval;
-}
-
-/*
- * Called when an inode is released. Note that this is different
- * from ufs_open: open gets called at every open, but release
- * gets called only when /all/ the files are closed.
- */
-static int ufs_release_file (struct inode * inode, struct file * filp)
-{
-	return 0;
-}
-
 /*
  * We have mostly NULL's here: the current defaults are ok for
  * the ufs filesystem.
@@ -123,28 +74,11 @@ static int ufs_release_file (struct inode * inode, struct file * filp)
 static struct file_operations ufs_file_operations = {
 	llseek:		ufs_file_lseek,
 	read:		generic_file_read,
-	write:		ufs_file_write,
+	write:		generic_file_write,
 	mmap:		generic_file_mmap,
-	release:	ufs_release_file,
 };
 
 struct inode_operations ufs_file_inode_operations = {
-	&ufs_file_operations,/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	ufs_getfrag_block,	/* get_block */
-	block_read_full_page,	/* readpage */
-	block_write_full_page,	/* writepage */
-	ufs_truncate,		/* truncate */
-	NULL, 			/* permission */
-	NULL			/* revalidate */
+	&ufs_file_operations,
+	truncate:	ufs_truncate,
 };

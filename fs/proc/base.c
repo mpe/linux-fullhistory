@@ -362,9 +362,6 @@ static struct inode_operations proc_mem_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
 	NULL,			/* truncate */
 	proc_permission,	/* permission */
 	NULL			/* revalidate */
@@ -452,18 +449,8 @@ out:
 }
 
 static struct inode_operations proc_pid_link_inode_operations = {
-	NULL,			/* file-operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	proc_pid_readlink,	/* readlink */
-	proc_pid_follow_link,	/* follow_link */
+	readlink:	proc_pid_readlink,
+	follow_link:	proc_pid_follow_link
 };
 
 /* reading from directory - bad */
@@ -777,9 +764,6 @@ static struct inode_operations proc_fd_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
 	NULL,			/* truncate */
 	proc_permission,	/* permission */
 };

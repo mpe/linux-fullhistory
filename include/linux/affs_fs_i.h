@@ -29,6 +29,7 @@ struct ext_cache {
  * affs fs inode data in memory
  */
 struct affs_inode_info {
+	unsigned long mmu_private;
 	u32	 i_protect;			/* unused attribute bits */
 	s32	 i_parent;			/* parent ino */
 	s32	 i_original;			/* if != 0, this is the key of the original */

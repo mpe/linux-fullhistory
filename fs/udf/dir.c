@@ -80,14 +80,6 @@ struct inode_operations udf_dir_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 #endif
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 /*

@@ -58,7 +58,7 @@
  *  packet to arrive. When one arrives it is copied out of the buffer
  *  and delivered to the kernel. The card is reloaded and off we go.
  *
- *  When transmitting dev->tbusy is set and the card is reset (from
+ *  When transmitting lp->txing is set and the card is reset (from
  *  receive mode) [possibly losing a packet just received] to command
  *  mode. A packet is loaded and transmit mode triggered. The interrupt
  *  handler runs different code for transmit interrupts and can handle
@@ -129,6 +129,7 @@ static unsigned int netcard_portlist[] __initdata = {
 int el1_probe(struct net_device *dev);
 static int  el1_probe1(struct net_device *dev, int ioaddr);
 static int  el_open(struct net_device *dev);
+static void el_timeout(struct net_device *dev);
 static int  el_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void el_receive(struct net_device *dev);
@@ -154,6 +155,7 @@ struct net_local
 	int		tx_pkt_start;	/* The length of the current Tx packet. */
 	int		collisions;	/* Tx collisions this packet */
 	int		loading;	/* Spot buffer load collisions */
+	int		txing;		/* True if card is in TX mode */
 	spinlock_t	lock;		/* Serializing lock */
 };
 
@@ -370,6 +372,8 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 
 	dev->open = &el_open;
 	dev->hard_start_xmit = &el_start_xmit;
+	dev->tx_timeout = &el_timeout;
+	dev->watchdog_timeo = HZ;
 	dev->stop = &el1_close;
 	dev->get_stats = &el1_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
@@ -412,15 +416,42 @@ static int el_open(struct net_device *dev)
 	el_reset(dev);
 	spin_unlock_irqrestore(&lp->lock, flags);
 
-	dev->start = 1;
-
+	lp->txing = 0;		/* Board in RX mode */
 	outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 /**
- * e1_start_xmit:
+ * el_timeout:
+ * @dev: The 3c501 card that has timed out
+ *
+ * Attempt to restart the board. This is basically a mixture of extreme
+ * violence and prayer
+ *
+ */
+ 
+static void el_timeout(struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+	int ioaddr = dev->base_addr;
+ 
+	if (el_debug)
+		printk (KERN_DEBUG "%s: transmit timed out, txsr %#2x axsr=%02x rxsr=%02x.\n",
+			dev->name, inb(TX_STATUS), inb(AX_STATUS), inb(RX_STATUS));
+	lp->stats.tx_errors++;
+	outb(TX_NORM, TX_CMD);
+	outb(RX_NORM, RX_CMD);
+	outb(AX_OFF, AX_CMD);	/* Just trigger a false interrupt. */
+	outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
+	lp->txing = 0;		/* Ripped back in to RX */
+	netif_wake_queue(dev);
+}
+
+ 
+/**
+ * el_start_xmit:
  * @skb: The packet that is queued to be sent
  * @dev: The 3c501 card we want to throw it down
  *
@@ -447,32 +478,9 @@ static int el_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	int ioaddr = dev->base_addr;
 	unsigned long flags;
 
-	if(dev->interrupt)		/* May be unloading, don't stamp on */
-		return 1;		/* the packet buffer this time      */
-
-	if (dev->tbusy)
-	{
-		if (jiffies - dev->trans_start < HZ)
-		{
-			if (el_debug > 2)
-				printk(" transmitter busy, deferred.\n");
-			return 1;
-		}
-		if (el_debug)
-			printk ("%s: transmit timed out, txsr %#2x axsr=%02x rxsr=%02x.\n",
-				dev->name, inb(TX_STATUS), inb(AX_STATUS), inb(RX_STATUS));
-		lp->stats.tx_errors++;
-		outb(TX_NORM, TX_CMD);
-		outb(RX_NORM, RX_CMD);
-		outb(AX_OFF, AX_CMD);	/* Just trigger a false interrupt. */
-		outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
-		dev->tbusy = 0;
-		dev->trans_start = jiffies;
-	}
-
 	/*
-	 *	Avoid incoming interrupts between us flipping tbusy and flipping
-	 *	mode as the driver assumes tbusy is a faithful indicator of card
+	 *	Avoid incoming interrupts between us flipping txing and flipping
+	 *	mode as the driver assumes txing is a faithful indicator of card
 	 *	state
 	 */
 
@@ -482,17 +490,13 @@ static int el_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	 *	Avoid timer-based retransmission conflicts.
 	 */
 
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-	{
-		spin_unlock_irqrestore(&lp->lock, flags);
-		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
-	}
-	else
+	netif_stop_queue(dev);
+
+	do
 	{
 		int gp_start = 0x800 - (ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
 		unsigned char *buf = skb->data;
 
-load_it_again_sam:
 		lp->tx_pkt_start = gp_start;
     		lp->collisions = 0;
 
@@ -507,7 +511,8 @@ load_it_again_sam:
 		inb_p(RX_STATUS);
 		inb_p(TX_STATUS);
 
-		lp->loading=1;
+		lp->loading = 1;
+		lp->txing = 1;
 
 		/*
 		 *	Turn interrupts back on while we spend a pleasant afternoon
@@ -520,23 +525,24 @@ load_it_again_sam:
 		outw(gp_start, GP_LOW);		/* aim - packet will be loaded into buffer start */
 		outsb(DATAPORT,buf,skb->len);	/* load buffer (usual thing each byte increments the pointer) */
 		outw(gp_start, GP_LOW);		/* the board reuses the same register */
-
-		if(lp->loading==2)		/* A receive upset our load, despite our best efforts */
+	
+		if(lp->loading != 2)
 		{
-			if(el_debug>2)
-				printk("%s: burped during tx load.\n", dev->name);
-			spin_lock_irqsave(&lp->lock, flags);
-			goto load_it_again_sam;	/* Sigh... */
+			outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
+			lp->loading=0;
+			dev->trans_start = jiffies;
+			if (el_debug > 2)
+				printk(" queued xmit.\n");
+			dev_kfree_skb (skb);
+			return 0;
 		}
-		outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
-		lp->loading=0;
-		dev->trans_start = jiffies;
+		/* A receive upset our load, despite our best efforts */
+		if(el_debug>2)
+			printk("%s: burped during tx load.\n", dev->name);
+		spin_lock_irqsave(&lp->lock, flags);
 	}
+	while(1);
 
-	if (el_debug > 2)
-		printk(" queued xmit.\n");
-	dev_kfree_skb (skb);
-	return 0;
 }
 
 
@@ -570,12 +576,6 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	int ioaddr;
 	int axsr;			/* Aux. status reg. */
 
-	if (dev == NULL  ||  dev->irq != irq)
-	{
-		printk (KERN_ERR "3c501 driver: irq %d for unknown device.\n", irq);
-		return;
-	}
-
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
 
@@ -593,14 +593,12 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (el_debug > 3)
 		printk(KERN_DEBUG "%s: el_interrupt() aux=%#02x", dev->name, axsr);
-	if (dev->interrupt)
-		printk(KERN_WARNING "%s: Reentering the interrupt driver!\n", dev->name);
-	dev->interrupt = 1;
-        if(lp->loading==1 && !dev->tbusy)
+
+        if(lp->loading==1 && !lp->txing)
         	printk(KERN_WARNING "%s: Inconsistent state loading while not in tx\n",
         		dev->name);
 
-	if (dev->tbusy)
+	if (lp->txing)
 	{
 
     		/*
@@ -618,7 +616,6 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				printk(" txsr=%02x gp=%04x rp=%04x]\n", txsr, inw(GP_LOW),inw(RX_LOW));
 			}
 			lp->loading=2;		/* Force a reload */
-			dev->interrupt = 0;
 			spin_unlock(&lp->lock);
 			return;
 		}
@@ -636,8 +633,8 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				printk("%s: Unusual interrupt during Tx, txsr=%02x axsr=%02x"
 			  		" gp=%03x rp=%03x.\n", dev->name, txsr, axsr,
 			inw(ioaddr + EL1_DATAPTR), inw(ioaddr + EL1_RXPTR));
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
+			lp->txing = 0;
+			netif_wake_queue(dev);
 		}
 		else if (txsr & TX_16COLLISIONS)
 		{
@@ -647,7 +644,9 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			if (el_debug)
 				printk("%s: Transmit failed 16 times, Ethernet jammed?\n",dev->name);
 			outb(AX_SYS, AX_CMD);
+			lp->txing = 0;
 			lp->stats.tx_aborted_errors++;
+			netif_wake_queue(dev);
 		}
 		else if (txsr & TX_COLLISION)
 		{
@@ -665,7 +664,6 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			outw(lp->tx_pkt_start, GP_LOW);
 			outb(AX_XMIT, AX_CMD);
 			lp->stats.collisions++;
-			dev->interrupt = 0;
 			spin_unlock(&lp->lock);
 			return;
 		}
@@ -682,8 +680,8 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			 *	This is safe the interrupt is atomic WRT itself.
 			 */
 
-			dev->tbusy = 0;
-			mark_bh(NET_BH);	/* In case more to transmit */
+			lp->txing = 0;
+			netif_wake_queue(dev);	/* In case more to transmit */
 		}
 	}
 	else
@@ -735,7 +733,6 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	outw(0x00, RX_BUF_CLR);
 	inb(RX_STATUS);		/* Be certain that interrupts are cleared. */
 	inb(TX_STATUS);
-	dev->interrupt = 0;
 	spin_unlock(&lp->lock);
 	return;
 }
@@ -818,6 +815,7 @@ static void el_receive(struct net_device *dev)
 
 static void  el_reset(struct net_device *dev)
 {
+	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
 	if (el_debug> 2)
@@ -835,8 +833,7 @@ static void  el_reset(struct net_device *dev)
 	outb(RX_NORM, RX_CMD);		/* Set Rx commands. */
 	inb(RX_STATUS);			/* Clear status. */
 	inb(TX_STATUS);
-	dev->interrupt = 0;
-	dev->tbusy = 0;
+	lp->txing = 0;
 }
 
 /**
@@ -857,8 +854,7 @@ static int el1_close(struct net_device *dev)
 	if (el_debug > 2)
 		printk("%s: Shutting down Ethernet card at %#x.\n", dev->name, ioaddr);
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 	
 	/*
 	 *	Free and disable the IRQ.

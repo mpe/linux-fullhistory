@@ -473,9 +473,10 @@ nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 		NFS_FILEID(inode) = fattr->fileid;
 		NFS_FSID(inode) = fattr->fsid;
 		inode->i_mode = fattr->mode;
-		if (S_ISREG(inode->i_mode))
+		if (S_ISREG(inode->i_mode)) {
 			inode->i_op = &nfs_file_inode_operations;
-		else if (S_ISDIR(inode->i_mode))
+			inode->i_data.a_ops = &nfs_file_aops;
+		} else if (S_ISDIR(inode->i_mode))
 			inode->i_op = &nfs_dir_inode_operations;
 		else if (S_ISLNK(inode->i_mode))
 			inode->i_op = &nfs_symlink_inode_operations;

@@ -108,7 +108,6 @@ extern int init_qnx4_fs(void);
 extern int qnx4_create(struct inode *dir, struct dentry *dentry, int mode);
 extern struct inode_operations qnx4_file_inode_operations;
 extern struct inode_operations qnx4_dir_inode_operations;
-extern struct inode_operations qnx4_symlink_inode_operations;
 extern int qnx4_is_free(struct super_block *sb, long block);
 extern int qnx4_set_bitmap(struct super_block *sb, long block, int busy);
 extern int qnx4_create(struct inode *inode, struct dentry *dentry, int mode);

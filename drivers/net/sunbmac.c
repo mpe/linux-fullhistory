@@ -1251,13 +1251,17 @@ static int __init bigmac_match(struct sbus_dev *sdev)
 	return 1;
 }
 
-int __init bigmac_probe(void)
+static int __init bigmac_probe(void)
 {
 	struct net_device *dev = NULL;
 	struct sbus_bus *sbus;
 	struct sbus_dev *sdev = 0;
 	static int called = 0;
 	int cards = 0, v;
+
+#ifdef MODULE
+	root_bigmac_dev = NULL;
+#endif
 
 	if (called)
 		return ENODEV;
@@ -1280,18 +1284,9 @@ int __init bigmac_probe(void)
 	return 0;
 }
 
+static void __exit bigmac_cleanup(void)
+{
 #ifdef MODULE
-
-int
-init_module(void)
-{
-	root_bigmac_dev = NULL;
-	return bigmac_probe();
-}
-
-void
-cleanup_module(void)
-{
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_bigmac_dev) {
 		struct bigmac *bp = root_bigmac_dev;
@@ -1310,6 +1305,8 @@ cleanup_module(void)
 		kfree(bp->dev);
 		root_bigmac_dev = bp_nxt;
 	}
+#endif /* MODULE */
 }
 
-#endif /* MODULE */
+module_init(bigmac_probe);
+module_exit(bigmac_cleanup);

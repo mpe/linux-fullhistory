@@ -46,9 +46,6 @@ struct inode_operations coda_ioctl_inode_operations =
 	NULL,		        /* rename */
 	NULL,	                /* readlink */
 	NULL,	                /* follow_link */
-	NULL,		        /* get_block */
-	NULL,	                /* readpage */
-	NULL,		        /* writepage */
 	NULL,	                /* truncate */
 	coda_ioctl_permission,  /* permission */
         NULL                    /* revalidate */
@@ -71,7 +68,6 @@ static int coda_ioctl_permission(struct inode *inode, int mask)
 /* The pioctl file ops*/
 int coda_ioctl_open(struct inode *i, struct file *f)
 {
-
         ENTRY;
 
         CDEBUG(D_PIOCTL, "File inode number: %ld\n", 

@@ -70,9 +70,6 @@ struct inode_operations ncp_dir_inode_operations =
 	ncp_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* revalidate */

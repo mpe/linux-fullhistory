@@ -474,6 +474,8 @@ static void clean_inode(struct inode *inode)
 	memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));
 	inode->i_pipe = NULL;
 	inode->i_bdev = NULL;
+	inode->i_mapping = &inode->i_data;
+	inode->i_mapping->host = (void*)inode;
 }
 
 /*
@@ -719,15 +721,10 @@ kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
 
 int bmap(struct inode * inode, int block)
 {
-	struct buffer_head tmp;
-
-	if (inode->i_op && inode->i_op->get_block) {
-		tmp.b_state = 0;
-		tmp.b_blocknr = 0;
-		inode->i_op->get_block(inode, block, &tmp, 0);
-		return tmp.b_blocknr;
-	}
-	return 0;
+	int res = 0;
+	if (inode->i_mapping->a_ops->bmap)
+		res = inode->i_mapping->a_ops->bmap(inode->i_mapping, block);
+	return res;
 }
 
 /*

@@ -83,6 +83,7 @@ extern int init_bfs_fs(void);
 
 /* file.c */
 extern struct inode_operations bfs_file_inops;
+extern struct address_space_operations bfs_aops;
 
 /* dir.c */
 extern struct inode_operations bfs_dir_inops;

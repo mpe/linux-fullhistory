@@ -155,7 +155,8 @@ dentry, f_pos));
 	} else if (S_ISDIR (inode->i_mode)) {
 		umsdos_setup_dir(dentry);
 	} else if (S_ISLNK (inode->i_mode)) {
-		inode->i_op = &umsdos_symlink_inode_operations;
+		/* address_space operations already set */
+		inode->i_op = &page_symlink_inode_operations;
 	} else
 		init_special_inode(inode, inode->i_mode,
 					kdev_t_to_nr(inode->i_rdev));

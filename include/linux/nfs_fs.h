@@ -190,6 +190,7 @@ extern int __nfs_revalidate_inode(struct nfs_server *, struct dentry *);
  * linux/fs/nfs/file.c
  */
 extern struct inode_operations nfs_file_inode_operations;
+extern struct address_space_operations nfs_file_aops;
 
 /*
  * linux/fs/nfs/dir.c

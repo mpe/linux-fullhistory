@@ -62,6 +62,7 @@ typedef unsigned int ntfs_cluster_t;
 
 /* Definition of NTFS in-memory inode structure */
 struct ntfs_inode_info{
+	unsigned long mmu_private;
 	struct ntfs_sb_info *vol;
 	int i_number;                /* should be really 48 bits */
 	unsigned sequence_number;

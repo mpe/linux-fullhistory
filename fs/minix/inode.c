@@ -968,7 +968,7 @@ abort_too_big:
 	goto abort;
 }
 
-int minix_get_block(struct inode *inode, long block,
+static int minix_get_block(struct inode *inode, long block,
 		    struct buffer_head *bh_result, int create)
 {
 	if (INODE_VERSION(inode) == MINIX_V1)
@@ -1016,6 +1016,30 @@ struct buffer_head * minix_bread(struct inode * inode, int block, int create)
 	return NULL;
 }
 
+static int minix_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,minix_get_block);
+}
+static int minix_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,minix_get_block);
+}
+static int minix_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return block_prepare_write(page,from,to,minix_get_block);
+}
+static int minix_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,minix_get_block);
+}
+struct address_space_operations minix_aops = {
+	readpage: minix_readpage,
+	writepage: minix_writepage,
+	prepare_write: minix_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: minix_bmap
+};
+
 /*
  * The minix V1 function to read an inode.
  */
@@ -1053,13 +1077,15 @@ static void V1_minix_read_inode(struct inode * inode)
 	inode->i_blocks = inode->i_blksize = 0;
 	for (block = 0; block < 9; block++)
 		inode->u.minix_i.u.i1_data[block] = raw_inode->i_zone[block];
-	if (S_ISREG(inode->i_mode))
+	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &minix_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+		inode->i_mapping->a_ops = &minix_aops;
+	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &minix_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &minix_symlink_inode_operations;
-	else
+	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_mapping->a_ops = &minix_aops;
+	} else
 		init_special_inode(inode, inode->i_mode, raw_inode->i_zone[0]);
 	brelse(bh);
 }
@@ -1103,13 +1129,15 @@ static void V2_minix_read_inode(struct inode * inode)
 	inode->i_blocks = inode->i_blksize = 0;
 	for (block = 0; block < 10; block++)
 		inode->u.minix_i.u.i2_data[block] = raw_inode->i_zone[block];
-	if (S_ISREG(inode->i_mode))
+	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &minix_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+		inode->i_mapping->a_ops = &minix_aops;
+	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &minix_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &minix_symlink_inode_operations;
-	else
+	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_mapping->a_ops = &minix_aops;
+	} else
 		init_special_inode(inode, inode->i_mode, raw_inode->i_zone[0]);
 	brelse(bh);
 }

@@ -74,6 +74,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/unaligned.h>
@@ -83,27 +84,9 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-/* Kernel compatibility defines, most common to the PCCard package. */
-#include <linux/version.h>		/* Evil and unneccessary */
-
 #define RUN_AT(x) (jiffies + (x))
 
-#if (LINUX_VERSION_CODE < 0x20123)
-#define test_and_set_bit(val, addr) set_bit(val, addr)
-#endif
-#if LINUX_VERSION_CODE <= 0x20139
-#define	net_device_stats enet_statistics
-#define NETSTATS_VER2
-#endif
-#if LINUX_VERSION_CODE < 0x20155
-#define PCI_SUPPORT_VER1
-#define pci_present pcibios_present
-#endif
-#if LINUX_VERSION_CODE < 0x20159
-#define DEV_FREE_SKB(skb) dev_kfree_skb(skb, FREE_WRITE);
-#else
 #define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
-#endif
 
 /* The PCI I/O space extent. */
 #define YELLOWFIN_TOTAL_SIZE 0x100
@@ -280,9 +263,9 @@ struct yellowfin_private {
 	struct tx_status_words tx_status[TX_RING_SIZE];
 	struct timer_list timer;	/* Media selection timer. */
 	struct enet_statistics stats;
+	spinlock_t lock;
 	/* Frequently used and paired value: keep adjacent for cache effect. */
 	int chip_id;
-	int in_interrupt;
 	struct yellowfin_desc *rx_head_desc;
 	struct tx_status_words *tx_tail_desc;
 	unsigned int cur_rx, dirty_rx;		/* Producer/consumer ring indices */
@@ -300,9 +283,6 @@ struct yellowfin_private {
 	u32 pad[4];							/* Used for 32-byte alignment */
 };
 
-#ifdef MODULE
-
-#if LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Packet Engines Yellowfin G-NIC Gigabit Ethernet driver");
 MODULE_PARM(max_interrupt_work, "i");
@@ -312,9 +292,6 @@ MODULE_PARM(debug, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
-#endif
-
-#endif
 
 static struct net_device *yellowfin_probe1(long ioaddr, int irq, int chip_id, int options);
 static int read_eeprom(long ioaddr, int location);
@@ -340,7 +317,7 @@ static void set_rx_mode(struct net_device *dev);
 /* A list of all installed Yellowfin devices, for removing the driver module. */
 static struct net_device *root_yellowfin_dev = NULL;
 
-int yellowfin_probe(void)
+static int __init yellowfin_probe(void)
 {
 	int cards_found = 0;
 	int pci_index = 0;
@@ -355,6 +332,7 @@ int yellowfin_probe(void)
 		int chip_idx;
 		int irq;
 		long ioaddr;
+		struct pci_dev *pdev;
 
 		if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
 								pci_index,
@@ -362,10 +340,10 @@ int yellowfin_probe(void)
 			!= PCIBIOS_SUCCESSFUL)
 			break;
 
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
+		pdev = pci_find_slot (pci_bus, pci_device_fn);
+		if (!pdev) break;
+		vendor = pdev->vendor;
+		device = pdev->device;
 
 		for (chip_idx = 0; chip_tbl[chip_idx].vendor_id; chip_idx++)
 			if (vendor == chip_tbl[chip_idx].vendor_id
@@ -388,28 +366,24 @@ int yellowfin_probe(void)
 		if (check_region(ioaddr, YELLOWFIN_TOTAL_SIZE))
 			continue;
 
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
+		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
 		if (pci_command != new_command) {
 			printk(KERN_INFO "  The PCI BIOS has not enabled the"
 				   " device at %d/%d!  Updating PCI command %4.4x->%4.4x.\n",
 				   pci_bus, pci_device_fn, pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
+			pci_write_config_word(pdev, PCI_COMMAND, new_command);
 		}
 
 		if(yellowfin_probe1(ioaddr, irq, chip_idx, cards_found))
 		{
 			/* Get and check the bus-master and latency values. */
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_LATENCY_TIMER, &pci_latency);
+			pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
 			if (pci_latency < min_pci_latency) {
 				printk(KERN_INFO "  PCI latency timer (CFLT) is "
 					   "unreasonably low at %d.  Setting to %d clocks.\n",
 					   pci_latency, min_pci_latency);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										  PCI_LATENCY_TIMER, min_pci_latency);
+				pci_write_config_byte(pdev, PCI_LATENCY_TIMER, min_pci_latency);
 			} else if (yellowfin_debug > 1)
 				printk(KERN_INFO "  PCI latency timer (CFLT) is %#x.\n",
 					   pci_latency);
@@ -465,6 +439,7 @@ static struct net_device *yellowfin_probe1(long ioaddr, int irq, int chip_id, in
 	root_yellowfin_dev = dev;
 
 	yp->chip_id = chip_id;
+	yp->lock = SPIN_LOCK_UNLOCKED;
 
 	option = card_idx < MAX_UNITS ? options[card_idx] : 0;
 	if (dev->mem_start)
@@ -493,6 +468,9 @@ static struct net_device *yellowfin_probe1(long ioaddr, int irq, int chip_id, in
 #ifdef HAVE_PRIVATE_IOCTL
 	dev->do_ioctl = &mii_ioctl;
 #endif
+	dev->tx_timeout = yellowfin_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
+
 	if (mtu)
 		dev->mtu = mtu;
 
@@ -602,9 +580,7 @@ static int yellowfin_open(struct net_device *dev)
 	if (dev->if_port == 0)
 		dev->if_port = yp->default_port;
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	yp->in_interrupt = 0;
+	netif_start_queue(dev);
 
 	/* Setting the Rx mode will start the Rx process. */
 	if (yp->chip_id == 0) {
@@ -617,8 +593,6 @@ static int yellowfin_open(struct net_device *dev)
 		outw(0x101C | (yp->full_duplex ? 2 : 0), ioaddr + Cnfg);
 	}
 	set_rx_mode(dev);
-
-	dev->start = 1;
 
 	/* Enable interrupts by setting the interrupt mask. */
 	outw(0x81ff, ioaddr + IntrEnb);			/* See enum intr_status_bits */
@@ -787,15 +761,6 @@ static int yellowfin_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	unsigned entry;
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		yellowfin_tx_timeout(dev);
-		return 1;
-	}
-
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
 
@@ -840,7 +805,7 @@ static int yellowfin_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	outl(0x10001000, dev->base_addr + TxCtrl);
 
 	if (yp->cur_tx - yp->dirty_tx < TX_RING_SIZE - 1)
-		clear_bit(0, (void*)&dev->tbusy);		/* Typical path */
+		netif_start_queue(dev);		/* Typical path */
 	else
 		yp->tx_full = 1;
 	dev->trans_start = jiffies;
@@ -869,11 +834,8 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 
 	ioaddr = dev->base_addr;
 	yp = (struct yellowfin_private *)dev->priv;
-	if (test_and_set_bit(0, (void*)&yp->in_interrupt)) {
-		dev->interrupt = 1;
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
-	}
+	
+	spin_lock (&yp->lock);
 
 	do {
 		u16 intr_status = inw(ioaddr + IntrClear);
@@ -900,12 +862,12 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 			yp->tx_skbuff[entry] = 0;
 			yp->stats.tx_packets++;
 		}
-		if (yp->tx_full && dev->tbusy
-			&& yp->cur_tx - yp->dirty_tx < TX_RING_SIZE - 4) {
+		if (yp->tx_full &&
+		    test_bit(LINK_STATE_XOFF, &dev->flags) &&
+		    yp->cur_tx - yp->dirty_tx < TX_RING_SIZE - 4) {
 			/* The ring is no longer full, clear tbusy. */
 			yp->tx_full = 0;
-			clear_bit(0, (void*)&dev->tbusy);
-			mark_bh(NET_BH);
+			netif_wake_queue (dev);
 		}
 #else
 		if (intr_status & IntrTxDone
@@ -973,12 +935,12 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 			}
 #endif
 
-			if (yp->tx_full && dev->tbusy
-				&& yp->cur_tx - dirty_tx < TX_RING_SIZE - 2) {
+			if (yp->tx_full &&
+			    test_bit(LINK_STATE_XOFF, &dev->flags) &&
+			    yp->cur_tx - dirty_tx < TX_RING_SIZE - 2) {
 				/* The ring is no longer full, clear tbusy. */
 				yp->tx_full = 0;
-				clear_bit(0, (void*)&dev->tbusy);
-				mark_bh(NET_BH);
+				netif_wake_queue (dev);
 			}
 
 			yp->dirty_tx = dirty_tx;
@@ -1004,15 +966,14 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 	/* Code that should never be run!  Perhaps remove after testing.. */
 	{
 		static int stopit = 10;
-		if (dev->start == 0  &&  --stopit < 0) {
+		if ((!test_bit(LINK_STATE_START, &dev->state))  &&  --stopit < 0) {
 			printk(KERN_ERR "%s: Emergency stop, looping startup interrupt.\n",
 				   dev->name);
 			free_irq(irq, dev);
 		}
 	}
 
-	dev->interrupt = 0;
-	clear_bit(0, (void*)&yp->in_interrupt);
+	spin_lock (&yp->lock);
 	return;
 }
 
@@ -1171,8 +1132,7 @@ static int yellowfin_close(struct net_device *dev)
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (yellowfin_debug > 1) {
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was Tx %4.4x Rx %4.4x Int %2.2x.\n",
@@ -1233,9 +1193,6 @@ static int yellowfin_close(struct net_device *dev)
 		yp->rx_ring[i].cmd = CMD_STOP;
 		yp->rx_ring[i].addr = 0xBADF00D0; /* An invalid address. */
 		if (yp->rx_skbuff[i]) {
-#if LINUX_VERSION_CODE < 0x20100
-			yp->rx_skbuff[i]->free = 1;
-#endif
 			DEV_FREE_SKB(yp->rx_skbuff[i]);
 		}
 		yp->rx_skbuff[i] = 0;
@@ -1358,13 +1315,11 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 }
 #endif  /* HAVE_PRIVATE_IOCTL */
 
-
-#ifdef MODULE
 
 /* An additional parameter that may be passed in... */
 static int debug = -1;
 
-int init_module(void)
+static int __init yellowfin_init_module(void)
 {
 	if (debug >= 0)
 		yellowfin_debug = debug;
@@ -1372,7 +1327,7 @@ int init_module(void)
 	return yellowfin_probe();
 }
 
-void cleanup_module(void)
+static void __exit yellowfin_cleanup_module (void)
 {
 	struct net_device *next_dev;
 
@@ -1386,8 +1341,10 @@ void cleanup_module(void)
 	}
 }
 
-#endif  /* MODULE */
-
+module_init(yellowfin_init_module);
+module_exit(yellowfin_cleanup_module);
+
+
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c yellowfin.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"

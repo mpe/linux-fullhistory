@@ -182,9 +182,7 @@ int	dgrs_nicmode = 0;
 /*
  *	Chain of device structures
  */
-#ifdef MODULE
-	static struct net_device *dgrs_root_dev = NULL;
-#endif
+static struct net_device *dgrs_root_dev = NULL;
 
 /*
  *	Private per-board data structure (dev->priv)
@@ -355,7 +353,7 @@ do_plx_dma(
 )
 {
         int     	i;
-        ulong   	csr;
+        ulong   	csr = 0;
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 
 	if (pciaddr)
@@ -717,7 +715,7 @@ static int dgrs_start_xmit(struct sk_buff *skb, struct net_device *devN)
 		printk("%s: xmit len=%d\n", devN->name, (int) skb->len);
 
 	devN->trans_start = jiffies;
-	devN->tbusy = 0;
+	netif_start_queue(devN);
 
 	if (priv0->rfdp->cmd & I596_RFD_EL)
 	{	/* Out of RFD's */
@@ -790,13 +788,9 @@ no_resources:
 static int
 dgrs_open( struct net_device *dev )
 {
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 
 	return (0);
 }
@@ -806,12 +800,9 @@ dgrs_open( struct net_device *dev )
  */
 static int dgrs_close( struct net_device *dev )
 {
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 
 	return (0);
 }
@@ -940,10 +931,10 @@ static void dgrs_intr(int irq, void *dev_id, struct pt_regs *regs)
 		if (dgrs_nicmode)
 		{
 			for (i = 0; i < priv0->nports; ++i)
-				priv0->devtbl[i]->tbusy = 0;
+				netif_wake_queue (priv0->devtbl[i]);
 		}
 		else
-			dev0->tbusy = 0;
+			netif_wake_queue (dev0);
 		/* if (bd->flags & TX_QUEUED)
 			DL_sched(bd, bdd); */
 	}
@@ -1451,16 +1442,9 @@ static int __init  dgrs_scan(void)
 	return cards_found;
 }
 
-/*
- *	Module/driver initialization points.  Two ways, depending on
- *	whether we are a module or statically linked, ala Don Becker's
- *	3c59x driver.
- */
-
-#ifdef MODULE
 
 /*
- *	Variables that can be overriden from command line
+ *	Variables that can be overriden from module command line
  */
 static int	debug = -1;
 static int	dma = -1;
@@ -1480,8 +1464,7 @@ MODULE_PARM(iptrap, "1-4i");
 MODULE_PARM(ipxnet, "i");
 MODULE_PARM(nicmode, "i");
 
-int
-init_module(void)
+static int __init dgrs_init_module (void)
 {
 	int	cards_found;
 	int	i;
@@ -1531,8 +1514,7 @@ init_module(void)
 	return cards_found ? 0 : -ENODEV;
 }
 
-void
-cleanup_module(void)
+static void __exit dgrs_cleanup_module (void)
 {
         while (dgrs_root_dev)
 	{
@@ -1560,17 +1542,5 @@ cleanup_module(void)
         }
 }
 
-#else
-
-int __init 
-dgrs_probe(struct net_device *dev)
-{
-	int	cards_found;
-
-	cards_found = dgrs_scan();
-	if (dgrs_debug && cards_found)
-		printk("dgrs: SW=%s FW=Build %d %s\n",
-			version, dgrs_firmnum, dgrs_firmdate);
-	return cards_found ? 0 : -ENODEV;
-}
-#endif
+module_init(dgrs_init_module);
+module_exit(dgrs_cleanup_module);

@@ -83,7 +83,7 @@ extern void add_to_page_cache(struct page * page, struct address_space *mapping,
 
 extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long index)
 {
-	__add_page_to_hash_queue(page, page_hash(&inode->i_data,index));
+	__add_page_to_hash_queue(page, page_hash(inode->i_mapping,index));
 }
 
 extern inline void add_page_to_inode_queue(struct address_space *mapping, struct page * page)

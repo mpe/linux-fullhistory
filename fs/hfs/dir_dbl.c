@@ -73,14 +73,6 @@ struct inode_operations hfs_dbl_dir_inode_operations = {
 	dbl_rmdir,		/* rmdir */
 	NULL,			/* mknod */
 	dbl_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 

@@ -5682,10 +5682,12 @@ void __init dmasound_init(void)
 }
 
 
-#define MAXARGS		8	/* Should be sufficient for now */
-
-void __init dmasound_setup(char *str, int *ints)
+static int __init dmasound_setup(char *str)
 {
+	int ints[6];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
 	/* check the bootstrap parameter for "dmasound=" */
 
 	switch (ints[0]) {
@@ -5709,8 +5711,13 @@ void __init dmasound_setup(char *str, int *ints)
 		break;
 	default:
 		printk("dmasound_setup: illegal number of arguments\n");
+		return 0;
 	}
+	
+	return 1;
 }
+
+__setup("dmasound=", dmasound_setup);
 
 
 #ifdef MODULE

@@ -424,6 +424,7 @@ int ufs_create (struct inode * dir, struct dentry * dentry, int mode)
 	if (!inode)
 		return err;
 	inode->i_op = &ufs_file_inode_operations;
+	inode->i_mapping->a_ops = &ufs_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
 	bh = ufs_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
@@ -776,7 +777,8 @@ int ufs_symlink (struct inode * dir, struct dentry * dentry,
 
 	if (l > sb->u.ufs_sb.s_uspi->s_maxsymlinklen) {
 		/* slow symlink */
-		inode->i_op = &ufs_symlink_inode_operations;
+		inode->i_op = &page_symlink_inode_operations;
+		inode->i_mapping->a_ops = &ufs_aops;
 		err = block_symlink(inode, symname, l);
 		if (err)
 			goto out_no_entry;

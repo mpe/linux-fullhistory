@@ -82,9 +82,10 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 	result->i_ino = fattr->f_ino;
 	memset(&(result->u.smbfs_i), 0, sizeof(result->u.smbfs_i));
 	smb_set_inode_attr(result, fattr);
-	if (S_ISREG(result->i_mode))
+	if (S_ISREG(result->i_mode)) {
 		result->i_op = &smb_file_inode_operations;
-	else if (S_ISDIR(result->i_mode))
+		result->i_data.a_ops = &smb_file_aops;
+	} else if (S_ISDIR(result->i_mode))
 		result->i_op = &smb_dir_inode_operations;
 	else
 		result->i_op = NULL;

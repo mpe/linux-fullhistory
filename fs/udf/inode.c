@@ -56,6 +56,7 @@ static void udf_merge_extents(struct inode *,
 static void udf_update_extents(struct inode *,
 	long_ad [EXTENT_MERGE_SIZE], int, int,
 	lb_addr, Uint32, struct buffer_head **);
+static int udf_get_block(struct inode *, long, struct buffer_head *, int);
 
 /*
  * udf_put_inode
@@ -96,7 +97,7 @@ void udf_delete_inode(struct inode * inode)
 {
 	inode->i_size = 0;
 	if (inode->i_blocks)
-		inode->i_op->truncate(inode);
+		udf_truncate(inode);
 	udf_free_inode(inode);
 }
 
@@ -117,6 +118,30 @@ static int udf_alloc_block(struct inode *inode, Uint16 partition,
 	return result;
 }
 
+static int udf_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,udf_get_block);
+}
+static int udf_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,udf_get_block);
+}
+static int udf_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return block_prepare_write(page,from,to,udf_get_block);
+}
+static int udf_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,udf_get_block);
+}
+static struct address_space_operations udf_aops = {
+	readpage: udf_readpage,
+	writepage: udf_writepage,
+	prepare_write: udf_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: udf_bmap
+};
+
 void udf_expand_file_adinicb(struct file * filp, int newsize, int * err)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
@@ -124,12 +149,13 @@ void udf_expand_file_adinicb(struct file * filp, int newsize, int * err)
 	struct page *page;
 	unsigned long kaddr = 0;
 
+	/* from now on we have normal address_space methods */
+	inode->i_data.a_ops = &udf_aops;
+
 	if (!UDF_I_LENALLOC(inode))
 	{
 		UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_LONG;
 		mark_inode_dirty(inode);
-		inode->i_op = &udf_file_inode_operations;
-		filp->f_op = inode->i_op->default_file_ops;
 		return;
 	}
 
@@ -156,14 +182,12 @@ void udf_expand_file_adinicb(struct file * filp, int newsize, int * err)
 	mark_buffer_dirty(bh, 1);
 	udf_release_data(bh);
 
-	block_write_full_page(filp->f_dentry, page);
+	inode->i_data.a_ops->writepage(filp->f_dentry, page);
 	UnlockPage(page);
 	page_cache_release(page);
 
 	mark_inode_dirty(inode);
 	inode->i_version ++;
-	inode->i_op = &udf_file_inode_operations;
-	filp->f_op = inode->i_op->default_file_ops;
 }
 
 struct buffer_head * udf_expand_dir_adinicb(struct inode *inode, int *block, int *err)
@@ -251,34 +275,7 @@ struct buffer_head * udf_expand_dir_adinicb(struct inode *inode, int *block, int
 	return dbh;
 }
 
-struct buffer_head * udf_getblk(struct inode * inode, long block,
-	int create, int * err)
-{
-	struct buffer_head dummy;
-	int error;
-
-	dummy.b_state = 0;
-	dummy.b_blocknr = -1000;
-	error = udf_get_block(inode, block, &dummy, create);
-	*err = error;
-	if (!error & buffer_mapped(&dummy))
-	{
-		struct buffer_head *bh;
-		bh = getblk(dummy.b_dev, dummy.b_blocknr, inode->i_sb->s_blocksize);
-		if (buffer_new(&dummy))
-		{
-			if (!buffer_uptodate(bh))
-				wait_on_buffer(bh);
-			memset(bh->b_data, 0x00, inode->i_sb->s_blocksize);
-			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh, 1);
-		}
-		return bh;
-	}
-	return NULL;
-}
-
-int udf_get_block(struct inode *inode, long block, struct buffer_head *bh_result, int create)
+static int udf_get_block(struct inode *inode, long block, struct buffer_head *bh_result, int create)
 {
 	int err, new;
 	struct buffer_head *bh;
@@ -333,6 +330,33 @@ abort:
 abort_negative:
 	udf_warning(inode->i_sb, "udf_get_block", "block < 0");
 	goto abort;
+}
+
+struct buffer_head * udf_getblk(struct inode * inode, long block,
+	int create, int * err)
+{
+	struct buffer_head dummy;
+	int error;
+
+	dummy.b_state = 0;
+	dummy.b_blocknr = -1000;
+	error = udf_get_block(inode, block, &dummy, create);
+	*err = error;
+	if (!error & buffer_mapped(&dummy))
+	{
+		struct buffer_head *bh;
+		bh = getblk(dummy.b_dev, dummy.b_blocknr, inode->i_sb->s_blocksize);
+		if (buffer_new(&dummy))
+		{
+			if (!buffer_uptodate(bh))
+				wait_on_buffer(bh);
+			memset(bh->b_data, 0x00, inode->i_sb->s_blocksize);
+			mark_buffer_uptodate(bh, 1);
+			mark_buffer_dirty(bh, 1);
+		}
+		return bh;
+	}
+	return NULL;
 }
 
 static struct buffer_head * inode_getblk(struct inode * inode, long block,
@@ -1061,9 +1085,10 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		case FILE_TYPE_NONE:
 		{
 			if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
-				inode->i_op = &udf_file_inode_operations_adinicb;
+				inode->i_data.a_ops = &udf_adinicb_aops;
 			else
-				inode->i_op = &udf_file_inode_operations;
+				inode->i_data.a_ops = &udf_aops;
+			inode->i_op = &udf_file_inode_operations;
 			inode->i_mode |= S_IFREG;
 			break;
 		}
@@ -1084,7 +1109,8 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		}
 		case FILE_TYPE_SYMLINK:
 		{
-			inode->i_op = &udf_symlink_inode_operations;
+			inode->i_data.a_ops = &udf_symlink_aops;
+			inode->i_op = &page_symlink_inode_operations;
 			inode->i_mode = S_IFLNK|S_IRWXUGO;
 			break;
 		}
@@ -1952,59 +1978,4 @@ long udf_block_map(struct inode *inode, long block)
 	ret = udf_locked_block_map(inode, block);
 	unlock_kernel();
 	return ret;
-}
-
-int udf_readpage_adinicb (struct dentry *dentry, struct page * page)
-{
-	struct inode *inode = dentry->d_inode;
-
-	struct buffer_head *bh;
-	int block;
-	unsigned long kaddr = 0;
-
-	if (!PageLocked(page))
-		PAGE_BUG(page);
-
-	kaddr = kmap(page);
-	memset((char *)kaddr, 0, PAGE_CACHE_SIZE);
-	block = udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0);
-	bh = getblk (inode->i_dev, block, inode->i_sb->s_blocksize);
-	ll_rw_block (READ, 1, &bh);
-	wait_on_buffer(bh);
-	memcpy((char *)kaddr, bh->b_data + udf_ext0_offset(inode),
-		inode->i_size);
-	brelse(bh);
-	SetPageUptodate(page);
-	kunmap(page);
-	UnlockPage(page);
-	return 0;
-}
-
-int udf_writepage_adinicb (struct dentry *dentry, struct page *page)
-{
-	struct inode *inode = dentry->d_inode;
-
-	struct buffer_head *bh;
-	int block;
-	unsigned long kaddr = 0;
-
-	if (!PageLocked(page))
-		BUG();
-
-	kaddr = kmap(page);
-	block = udf_get_lb_pblock(inode->i_sb, UDF_I_LOCATION(inode), 0);
-	bh = getblk (inode->i_dev, block, inode->i_sb->s_blocksize);
-	if (!buffer_uptodate(bh))
-	{
-		ll_rw_block (READ, 1, &bh);
-		wait_on_buffer(bh);
-	}
-	memcpy(bh->b_data + udf_ext0_offset(inode), (char *)kaddr,
-		inode->i_size);
-	ll_rw_block (WRITE, 1, &bh);
-	wait_on_buffer(bh);
-	brelse(bh);
-	SetPageUptodate(page);
-	kunmap(page);
-	return 0;
 }

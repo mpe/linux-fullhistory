@@ -235,16 +235,9 @@ efi_rtc_close(struct inode *inode, struct file *file)
  */
 
 static struct file_operations efi_rtc_fops = {
-	NULL,
-	NULL,		/* no read */
-	NULL,		/* No write */
-	NULL,		/* No readdir */
-	NULL,
-	efi_rtc_ioctl,
-	NULL,		/* No mmap */
-	efi_rtc_open,
-	NULL,		/* flush */
-	efi_rtc_close
+	ioctl:		efi_rtc_ioctl,
+	open:		efi_rtc_open,
+	release:	efi_rtc_close,
 };
 
 static struct miscdevice efi_rtc_dev=

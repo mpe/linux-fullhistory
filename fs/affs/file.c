@@ -63,9 +63,6 @@ struct inode_operations affs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	affs_bmap,		/* get_block */
-	block_read_full_page,	/* readpage */
-	NULL,			/* writepage */
 	affs_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL			/* revalidate */
@@ -90,9 +87,6 @@ struct inode_operations affs_file_inode_operations_ofs = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
 	affs_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL			/* revalidate */
@@ -321,6 +315,37 @@ affs_bmap(struct inode *inode, int block)
 	affs_brelse(bh);
 	return key;
 }
+
+/* AFFS is currently broken */
+static int affs_get_block(struct inode *inode, long block, struct buffer_head *bh, int create)
+{
+	BUG();
+	return -1;
+}
+static int affs_writepage(struct dentry *dentry, struct page *page)
+{
+	return block_write_full_page(page,affs_get_block);
+}
+static int affs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,affs_get_block);
+}
+static int affs_prepare_write(struct page *page, unsigned from, unsigned to)
+{
+	return cont_prepare_write(page,from,to,affs_get_block,
+		&((struct inode*)page->mapping->host)->u.affs_i.mmu_private);
+}
+static int _affs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,affs_get_block);
+}
+struct address_space_operations affs_aops = {
+	readpage: affs_readpage,
+	writepage: affs_writepage,
+	prepare_write: affs_prepare_write,
+	commit_write: generic_commit_write,
+	bmap: _affs_bmap
+};
 
 /* With the affs, getting a random block from a file is not
  * a simple business. Since this fs does not allow holes,

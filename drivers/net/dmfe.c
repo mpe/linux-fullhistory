@@ -275,7 +275,7 @@ unsigned long CrcTable[256] =
 };
 
 /* function declaration ------------------------------------- */
-int dmfe_reg_board(void);
+static int dmfe_reg_board(void);
 static int dmfe_open(struct net_device *);
 static int dmfe_start_xmit(struct sk_buff *, struct net_device *);
 static int dmfe_stop(struct net_device *);
@@ -309,7 +309,7 @@ static unsigned long cal_CRC(unsigned char *, unsigned int);
  *	Search DM910X board, allocate space and register it
  */
  
-int __init dmfe_reg_board(void)
+static int __init dmfe_reg_board(void)
 {
 	u32 pci_iobase;
 	u16 dm9102_count = 0;
@@ -329,7 +329,6 @@ int __init dmfe_reg_board(void)
 	while ((net_dev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, net_dev)))
 	{
 		u32 pci_id;
-		u8 pci_cmd;
 
 		index++;
 		if (pci_read_config_dword(net_dev, PCI_VENDOR_ID, &pci_id) != DMFE_SUCC)
@@ -341,15 +340,14 @@ int __init dmfe_reg_board(void)
 		pci_iobase = net_dev->resource[0].start;
 		pci_irqline = net_dev->irq;
 				
+		if (check_region(pci_iobase, DM9102_IO_SIZE))	/* IO range check */
+			continue;
+
 		/* Enable Master/IO access, Disable memory access */
 		
+		pci_enable_device (net_dev);
 		pci_set_master(net_dev);
 		
-		pci_read_config_byte(net_dev, PCI_COMMAND, &pci_cmd);
-		pci_cmd |= PCI_COMMAND_IO;
-		pci_cmd &= ~PCI_COMMAND_MEMORY;
-		pci_write_config_byte(net_dev, PCI_COMMAND, pci_cmd);
-
 		/* Set Latency Timer 80h */
 		
 		/* FIXME: setting values > 32 breaks some SiS 559x stuff.
@@ -359,22 +357,17 @@ int __init dmfe_reg_board(void)
 
 		/* IO range and interrupt check */
 
-		if (check_region(pci_iobase, DM9102_IO_SIZE))	/* IO range check */
-			continue;
-
 		/* Found DM9102 card and PCI resource allocated OK */
 		dm9102_count++;	/* Found a DM9102 card */
 
 		/* Init network device */
-		dev = init_etherdev(NULL, 0);
+		dev = init_etherdev(NULL, sizeof(*db));
+		if (dev == NULL)
+			continue;
+		
+		db = dev->priv;
 
-		/* Allocated board information structure */
-		db = (void *) (kmalloc(sizeof(*db), GFP_KERNEL | GFP_DMA));
-		if(db==NULL)
-			continue;	/* Out of memory */
-			
 		memset(db, 0, sizeof(*db));
-		dev->priv = db;	/* link device and board info */
 		db->next_dev = dmfe_root_dev;
 		dmfe_root_dev = dev;
 
@@ -405,10 +398,9 @@ int __init dmfe_reg_board(void)
 
 	}
 
-#ifdef MODULE
 	if (!dm9102_count)
 		printk(KERN_WARNING "dmfe: Can't find DM910X board\n");
-#endif		
+
 	return dm9102_count ? 0 : -ENODEV;
 }
 
@@ -1453,7 +1445,6 @@ static unsigned long cal_CRC(unsigned char *Data, unsigned int Len)
 
 }
 
-#ifdef MODULE
 
 MODULE_AUTHOR("Sten Wang, sten_wang@davicom.com.tw");
 MODULE_DESCRIPTION("Davicom DM910X fast ethernet driver");
@@ -1467,7 +1458,7 @@ MODULE_PARM(chkmode, "i");
  *	to initilize and register.
  */
  
-int init_module(void)
+static int __init dmfe_init_module(void)
 {
 	DMFE_DBUG(0, "init_module() ", debug);
 
@@ -1497,7 +1488,7 @@ int init_module(void)
  *	to un-register device.
  */
  
-void cleanup_module(void)
+static void __exit dmfe_cleanup_module(void)
 {
 	struct net_device *next_dev;
 
@@ -1514,4 +1505,5 @@ void cleanup_module(void)
 	DMFE_DBUG(0, "clean_module() exit", 0);
 }
 
-#endif				/* MODULE */
+module_init(dmfe_init_module);
+module_exit(dmfe_cleanup_module);

@@ -138,7 +138,11 @@ int hpfs_create(struct inode *dir, struct dentry *dentry, int mode)
 		result->i_hpfs_ea_size = 0;
 		if (dee.read_only) result->i_mode &= ~0222;
 		if (result->i_blocks == -1) result->i_blocks = 1;
-		if (result->i_size == -1) result->i_size = 0;
+		if (result->i_size == -1) {
+			result->i_size = 0;
+			result->i_data.a_ops = &hpfs_aops;
+			result->u.hpfs_i.mmu_private = 0;
+		}
 		if (result->i_uid != current->fsuid ||
 		    result->i_gid != current->fsgid ||
 		    result->i_mode != (mode | S_IFREG)) {
@@ -221,7 +225,7 @@ int hpfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 	return -ENOSPC;
 }
 
-extern const struct inode_operations hpfs_symlink_iops;
+extern struct address_space_operations hpfs_symlink_aops;
 
 int hpfs_symlink(struct inode *dir, struct dentry *dentry, const char *symlink)
 {
@@ -268,7 +272,8 @@ int hpfs_symlink(struct inode *dir, struct dentry *dentry, const char *symlink)
 		result->i_gid = current->fsgid;
 		result->i_blocks = 1;
 		result->i_size = strlen(symlink);
-		result->i_op = (struct inode_operations *) &hpfs_symlink_iops;
+		result->i_op = &page_symlink_inode_operations;
+		result->i_data.a_ops = &hpfs_symlink_aops;
 		if ((fnode = hpfs_map_fnode(dir->i_sb, fno, &bh))) {
 			hpfs_set_ea(result, fnode, "SYMLINK", (char *)symlink, strlen(symlink));
 			mark_buffer_dirty(bh, 1);

@@ -109,7 +109,8 @@ char *coda_upcall_names[] = {
 	"open_by_path",   /* 31 */
 	"resolve     ",   /* 32 */
 	"reintegrate ",   /* 33 */
-	"statfs      "    /* 34 */
+	"statfs      ",   /* 34 */
+	"make_cinode "    /* 35 */
 };
 
 
@@ -214,8 +215,8 @@ unsigned long get_time_std_deviation( const struct coda_upcall_stats_entry * pen
 		return 0;
   
 	time_avg = get_time_average( pentry );
-	return 
-	        sqr_root( (pentry->time_squared_sum / pentry->count) - 
+
+	return sqr_root( (pentry->time_squared_sum / pentry->count) - 
 			    time_avg * time_avg );
 }
 

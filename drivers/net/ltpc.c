@@ -1250,8 +1250,12 @@ int __init ltpc_probe(struct net_device *dev)
 }
 
 /* handles "ltpc=io,irq,dma" kernel command lines */
-void __init ltpc_setup(char *str, int *ints)
+static int __init ltpc_setup(char *str)
 {
+	int ints[5];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
 	if (ints[0] == 0) {
 		if (str && !strncmp(str, "auto", 4)) {
 			/* do nothing :-) */
@@ -1261,21 +1265,23 @@ void __init ltpc_setup(char *str, int *ints)
 			printk (KERN_ERR
 				"ltpc: usage: ltpc=auto|iobase[,irq[,dma]]\n");
 		}
-		return;
+		return 1;
 	} else {
 		io = ints[1];
 		if (ints[0] > 1) {
 			irq = ints[2];
-			return;
+			return 1;
 		}
 		if (ints[0] > 2) {
 			dma = ints[3];
-			return;
+			return 1;
 		}
 		/* ignore any other paramters */
 	}
-	return;
+	return 1;
 }
+
+__setup("ltpc=", ltpc_setup);
 
 #ifdef MODULE
 

@@ -494,6 +494,9 @@ extern int hfs_extent_map(struct hfs_fork *, int, int);
 extern void hfs_extent_adj(struct hfs_fork *);
 extern void hfs_extent_free(struct hfs_fork *);
 
+/* file.c */
+extern int hfs_get_block(struct inode *, long, struct buffer_head *, int);
+
 /* mdb.c */
 extern struct hfs_mdb *hfs_mdb_get(hfs_sysmdb, int, hfs_s32);
 extern void hfs_mdb_commit(struct hfs_mdb *, int);

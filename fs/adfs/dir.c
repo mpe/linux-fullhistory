@@ -299,25 +299,4 @@ struct inode_operations adfs_dir_inode_operations = {
 	&adfs_dir_operations,	/* default directory file-ops */
 	NULL,			/* create		*/
 	adfs_lookup,		/* lookup		*/
-	NULL,			/* link			*/
-	NULL,			/* unlink		*/
-	NULL,			/* symlink		*/
-	NULL,			/* mkdir		*/
-	NULL,			/* rmdir		*/
-	NULL,			/* mknod		*/
-	NULL,			/* rename		*/
-	NULL,			/* read link		*/
-	NULL,			/* follow link		*/
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-	NULL,			/* bmap			*/
-	NULL,			/* read page		*/
-	NULL,			/* write page		*/
-#else
-	NULL,			/* read page		*/
-	NULL,			/* write page		*/
-	NULL,			/* bmap			*/
-#endif
-	NULL,			/* truncate		*/
-	NULL,			/* permission		*/
-	NULL			/* revalidate		*/
 };

@@ -1371,9 +1371,8 @@ static void unmap_underlying_metadata(struct buffer_head * bh)
  * block_write_full_page() is SMP-safe - currently it's still
  * being called with the kernel lock held, but the code is ready.
  */
-int block_write_full_page(struct dentry *dentry, struct page *page)
+static int __block_write_full_page(struct inode *inode, struct page *page, get_block_t *get_block)
 {
-	struct inode *inode = dentry->d_inode;
 	int err, i, need_balance_dirty = 0;
 	unsigned long block;
 	struct buffer_head *bh, *head;
@@ -1385,17 +1384,11 @@ int block_write_full_page(struct dentry *dentry, struct page *page)
 		create_empty_buffers(page, inode, inode->i_sb->s_blocksize);
 	head = page->buffers;
 
-	/* The page cache is now PAGE_CACHE_SIZE aligned, period.  We handle old a.out
-	 * and others via unaligned private mappings.
-	 */
 	block = page->index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
 
 	bh = head;
 	i = 0;
 	do {
-		if (!bh)
-			BUG();
-
 		/*
 		 * If the buffer isn't up-to-date, we can't be sure
 		 * that the buffer has been initialized with the proper
@@ -1406,7 +1399,7 @@ int block_write_full_page(struct dentry *dentry, struct page *page)
 		 */
 		bh->b_end_io = end_buffer_io_sync;
 		if (!buffer_mapped(bh)) {
-			err = inode->i_op->get_block(inode, block, bh, 1);
+			err = get_block(inode, block, bh, 1);
 			if (err)
 				goto out;
 			if (buffer_new(bh))
@@ -1432,13 +1425,12 @@ out:
 	return err;
 }
 
-int block_write_zero_range(struct inode *inode, struct page *page,
-		unsigned zerofrom, unsigned from, unsigned to,
-		const char * buf)
+static int __block_prepare_write(struct inode *inode, struct page *page,
+		unsigned from, unsigned to, get_block_t *get_block)
 {
-	unsigned zeroto = 0, block_start, block_end;
+	unsigned block_start, block_end;
 	unsigned long block;
-	int err = 0, partial = 0, need_balance_dirty = 0;
+	int err = 0;
 	unsigned blocksize, bbits;
 	struct buffer_head *bh, *head, *wait[2], **wait_bh=wait;
 	char *kaddr = (char *)kmap(page);
@@ -1451,35 +1443,31 @@ int block_write_zero_range(struct inode *inode, struct page *page,
 	bbits = inode->i_sb->s_blocksize_bits;
 	block = page->index << (PAGE_CACHE_SHIFT - bbits);
 
-	/*
-	 * First pass - map what needs to be mapped, initiate reads
-	 * on the boundaries if needed (i.e. if block is partially covered
-	 * _and_ is not up-to-date _and_ is not new).
-	 */
 	for(bh = head, block_start = 0; bh != head || !block_start;
 	    block++, block_start=block_end, bh = bh->b_this_page) {
 		if (!bh)
 			BUG();
 		block_end = block_start+blocksize;
-		if (block_end <= zerofrom)
+		if (block_end <= from)
 			continue;
 		if (block_start >= to)
 			break;
 		bh->b_end_io = end_buffer_io_sync;
 		if (!buffer_mapped(bh)) {
-			err = inode->i_op->get_block(inode, block, bh, 1);
+			err = get_block(inode, block, bh, 1);
 			if (err)
 				goto out;
 			if (buffer_new(bh)) {
 				unmap_underlying_metadata(bh);
-				zeroto = block_end;
-				if (block_start < zerofrom)
-					zerofrom = block_start;
+				if (block_end > to)
+					memset(kaddr+to, 0, block_end-to);
+				if (block_start < from)
+					memset(kaddr+block_start, 0, from-block_start);
 				continue;
 			}
 		}
 		if (!buffer_uptodate(bh) &&
-		     (block_start < zerofrom || block_end > to)) {
+		     (block_start < from || block_end > to)) {
 			ll_rw_block(READ, 1, &bh);
 			*wait_bh++=bh;
 		}
@@ -1493,39 +1481,26 @@ int block_write_zero_range(struct inode *inode, struct page *page,
 		if (!buffer_uptodate(*wait_bh))
 			goto out;
 	}
-	/*
-	 * Now we can copy the data.
-	 */
-	if (zerofrom < from)
-		memset(kaddr+zerofrom, 0, from-zerofrom);
-	if (from < to)
-		err = copy_from_user(kaddr+from, buf, to-from);
-	if (to < zeroto)
-		memset(kaddr+to, 0, zeroto-to);
-	else
-		zeroto = to;
-	if (err < 0)
-		goto out;
-	/*
-	 * Second pass: check if all out-of-range blocks are up-to-date
-	 * and mark the rest up-to-date and dirty.
-	 *
-	 * NOTE! This also does a direct dirty balace check,
-	 * rather than relying on bdflush just waking up every
-	 * once in a while. This is to catch (and slow down)
-	 * the processes that write tons of buffer..
-	 *
-	 * Note how we do NOT want to do this in the full block
-	 * case: full pages are flushed not by the people who
-	 * dirtied them, but by people who need memory. And we
-	 * should not penalize them for somebody else writing
-	 * lots of dirty pages.
-	 */
-	for(bh = head, block_start = 0;
+	return 0;
+out:
+	return err;
+}
+
+static int __block_commit_write(struct inode *inode, struct page *page,
+		unsigned from, unsigned to)
+{
+	unsigned block_start, block_end;
+	int partial = 0, need_balance_dirty = 0;
+	unsigned blocksize;
+	struct buffer_head *bh, *head;
+
+	blocksize = inode->i_sb->s_blocksize;
+
+	for(bh = head = page->buffers, block_start = 0;
 	    bh != head || !block_start;
 	    block_start=block_end, bh = bh->b_this_page) {
 		block_end = block_start + blocksize;
-		if (block_end <= zerofrom || block_start >= zeroto) {
+		if (block_end <= from || block_start >= to) {
 			if (!buffer_uptodate(bh))
 				partial = 1;
 		} else {
@@ -1547,51 +1522,202 @@ int block_write_zero_range(struct inode *inode, struct page *page,
 	 */
 	if (!partial)
 		SetPageUptodate(page);
-	kunmap(page);
 	return 0;
-out:
-	ClearPageUptodate(page);
-	kunmap(page);
-	return err;
 }
 
-int block_write_partial_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+/*
+ * Generic "read page" function for block devices that have the normal
+ * get_block functionality. This is most of the block device filesystems.
+ * Reads the page asynchronously --- the unlock_buffer() and
+ * mark_buffer_uptodate() functions propagate buffer state into the
+ * page struct once IO has completed.
+ */
+static inline int __block_read_full_page(struct inode *inode, struct page *page,
+		get_block_t *get_block)
 {
-	struct inode *inode = file->f_dentry->d_inode;
-	int err;
+	unsigned long iblock;
+	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];
+	unsigned int blocksize, blocks;
+	unsigned long kaddr = 0;
+	int nr, i;
 
 	if (!PageLocked(page))
-		BUG();
-	if (offset < 0 || offset >= PAGE_SIZE)
-		BUG();
-	if (bytes+offset < 0 || bytes+offset > PAGE_SIZE)
-		BUG();
+		PAGE_BUG(page);
+	blocksize = inode->i_sb->s_blocksize;
+	if (!page->buffers)
+		create_empty_buffers(page, inode, blocksize);
+	head = page->buffers;
 
-	err = block_write_range(inode, page, offset, bytes, buf);
-	return err ? err : bytes;
+	blocks = PAGE_CACHE_SIZE >> inode->i_sb->s_blocksize_bits;
+	iblock = page->index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
+	bh = head;
+	nr = 0;
+	i = 0;
+
+	do {
+		if (buffer_uptodate(bh))
+			continue;
+
+		if (!buffer_mapped(bh)) {
+			get_block(inode, iblock, bh, 0);
+			if (!buffer_mapped(bh)) {
+				if (!kaddr)
+					kaddr = kmap(page);
+				memset((char *)(kaddr + i*blocksize), 0, blocksize);
+				set_bit(BH_Uptodate, &bh->b_state);
+				continue;
+			}
+		}
+
+		init_buffer(bh, end_buffer_io_async, NULL);
+		atomic_inc(&bh->b_count);
+		arr[nr] = bh;
+		nr++;
+	} while (i++, iblock++, (bh = bh->b_this_page) != head);
+
+	++current->maj_flt;
+	if (nr) {
+		if (Page_Uptodate(page))
+			BUG();
+		ll_rw_block(READ, nr, arr);
+	} else {
+		/*
+		 * all buffers are uptodate - we can set the page
+		 * uptodate as well.
+		 */
+		SetPageUptodate(page);
+		UnlockPage(page);
+	}
+	if (kaddr)
+		kunmap(page);
+	return 0;
 }
 
 /*
  * For moronic filesystems that do not allow holes in file.
- * we allow offset==PAGE_SIZE, bytes==0
+ * We may have to extend the file.
  */
 
-int block_write_cont_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+int cont_prepare_write(struct page *page, unsigned offset, unsigned to, get_block_t *get_block, unsigned long *bytes)
 {
-	struct inode *inode = file->f_dentry->d_inode;
-	int err;
-	unsigned zerofrom = offset;
+	struct address_space *mapping = page->mapping;
+	struct inode *inode = (struct inode*)mapping->host;
+	struct page *new_page;
+	unsigned long pgpos;
+	long status;
+	unsigned zerofrom;
+	unsigned blocksize = inode->i_sb->s_blocksize;
+	char *kaddr;
 
-	if (page->index > (inode->i_size >> PAGE_CACHE_SHIFT))
-		zerofrom = 0;
-	else if (page->index == (inode->i_size >> PAGE_CACHE_SHIFT) &&
-		 offset > (inode->i_size & ~PAGE_CACHE_MASK))
-		zerofrom = inode->i_size & ~PAGE_CACHE_MASK;
-	err = block_write_zero_range(inode, page, zerofrom,offset,offset+bytes,
-					buf);
-	return err ? err : bytes;
+	while(page->index > (pgpos = *bytes>>PAGE_CACHE_SHIFT)) {
+		status = -ENOMEM;
+		new_page = grab_cache_page(mapping, pgpos);
+		if (!new_page)
+			goto out;
+		/* we might sleep */
+		if (*bytes>>PAGE_CACHE_SHIFT != pgpos) {
+			UnlockPage(new_page);
+			page_cache_release(new_page);
+			continue;
+		}
+		zerofrom = *bytes & ~PAGE_CACHE_MASK;
+		if (zerofrom & (blocksize-1)) {
+			*bytes |= (blocksize-1);
+			(*bytes)++;
+		}
+		status = __block_prepare_write(inode, new_page, zerofrom,
+						PAGE_CACHE_SIZE, get_block);
+		if (status)
+			goto out_unmap;
+		kaddr = (char*)page_address(page);
+		memset(kaddr+zerofrom, 0, PAGE_CACHE_SIZE-zerofrom);
+		__block_commit_write(inode, new_page, zerofrom, to);
+		kunmap(new_page);
+		UnlockPage(new_page);
+		page_cache_release(new_page);
+	}
+
+	if (page->index < pgpos) {
+		/* completely inside the area */
+		zerofrom = offset;
+	} else {
+		/* page covers the boundary, find the boundary offset */
+		zerofrom = *bytes & ~PAGE_CACHE_MASK;
+
+		/* if we will expand the thing last block will be filled */
+		if (to > zerofrom && (zerofrom & (blocksize-1))) {
+			*bytes |= (blocksize-1);
+			(*bytes)++;
+		}
+
+		/* starting below the boundary? Nothing to zero out */
+		if (offset <= zerofrom)
+			zerofrom = offset;
+	}
+	status = __block_prepare_write(inode, page, zerofrom, to, get_block);
+	if (status)
+		goto out1;
+	kaddr = (char*)page_address(page);
+	if (zerofrom < offset) {
+		memset(kaddr+zerofrom, 0, offset-zerofrom);
+		__block_commit_write(inode, page, zerofrom, offset);
+	}
+	return 0;
+out1:
+	ClearPageUptodate(page);
+	kunmap(page);
+	return status;
+
+out_unmap:
+	ClearPageUptodate(new_page);
+	kunmap(new_page);
+	UnlockPage(new_page);
+	page_cache_release(new_page);
+out:
+	return status;
 }
 
+int block_prepare_write(struct page *page, unsigned from, unsigned to,
+			get_block_t *get_block)
+{
+	struct inode *inode = (struct inode*)page->mapping->host;
+	int err = __block_prepare_write(inode, page, from, to, get_block);
+	if (err) {
+		ClearPageUptodate(page);
+		kunmap(page);
+	}
+	return err;
+}
+
+int generic_commit_write(struct file *file, struct page *page,
+		unsigned from, unsigned to)
+{
+	__block_commit_write((struct inode*)page->mapping->host,page,from,to);
+	kunmap(page);
+	return 0;
+}
+
+int block_write_full_page(struct page *page, get_block_t *get_block)
+{
+	struct inode *inode = (struct inode*)page->mapping->host;
+	return __block_write_full_page(inode, page, get_block);
+}
+
+int block_read_full_page(struct page *page, get_block_t *get_block)
+{
+	struct inode *inode = (struct inode*)page->mapping->host;
+	return __block_read_full_page(inode, page, get_block);
+}
+
+int generic_block_bmap(struct address_space *mapping, long block, get_block_t *get_block)
+{
+	struct buffer_head tmp;
+	struct inode *inode = (struct inode*)mapping->host;
+	tmp.b_state = 0;
+	tmp.b_blocknr = 0;
+	get_block(inode, block, &tmp, 0);
+	return tmp.b_blocknr;
+}
 
 /*
  * IO completion routine for a buffer_head being used for kiobuf IO: we
@@ -1869,93 +1995,22 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
 	return 0;
 }
 
-/*
- * Generic "read page" function for block devices that have the normal
- * get_block functionality. This is most of the block device filesystems.
- * Reads the page asynchronously --- the unlock_buffer() and
- * mark_buffer_uptodate() functions propagate buffer state into the
- * page struct once IO has completed.
- */
-static inline int __block_read_full_page(struct inode *inode, struct page *page)
-{
-	unsigned long iblock;
-	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];
-	unsigned int blocksize, blocks;
-	unsigned long kaddr = 0;
-	int nr, i;
-
-	if (!PageLocked(page))
-		PAGE_BUG(page);
-	blocksize = inode->i_sb->s_blocksize;
-	if (!page->buffers)
-		create_empty_buffers(page, inode, blocksize);
-	head = page->buffers;
-
-	blocks = PAGE_CACHE_SIZE >> inode->i_sb->s_blocksize_bits;
-	iblock = page->index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
-	bh = head;
-	nr = 0;
-	i = 0;
-
-	do {
-		if (buffer_uptodate(bh))
-			continue;
-
-		if (!buffer_mapped(bh)) {
-			inode->i_op->get_block(inode, iblock, bh, 0);
-			if (!buffer_mapped(bh)) {
-				if (!kaddr)
-					kaddr = kmap(page);
-				memset((char *)(kaddr + i*blocksize), 0, blocksize);
-				set_bit(BH_Uptodate, &bh->b_state);
-				continue;
-			}
-		}
-
-		init_buffer(bh, end_buffer_io_async, NULL);
-		atomic_inc(&bh->b_count);
-		arr[nr] = bh;
-		nr++;
-	} while (i++, iblock++, (bh = bh->b_this_page) != head);
-
-	++current->maj_flt;
-	if (nr) {
-		if (Page_Uptodate(page))
-			BUG();
-		ll_rw_block(READ, nr, arr);
-	} else {
-		/*
-		 * all buffers are uptodate - we can set the page
-		 * uptodate as well.
-		 */
-		SetPageUptodate(page);
-		UnlockPage(page);
-	}
-	if (kaddr)
-		kunmap(page);
-	return 0;
-}
-
-int block_read_full_page(struct dentry *dentry, struct page *page)
-{
-	return __block_read_full_page(dentry->d_inode, page);
-}
-
 int block_symlink(struct inode *inode, const char *symname, int len)
 {
-	struct page *page = grab_cache_page(&inode->i_data, 0);
-	mm_segment_t fs;
+	struct address_space *mapping = inode->i_mapping;
+	struct page *page = grab_cache_page(mapping, 0);
 	int err = -ENOMEM;
+	char *kaddr;
 
 	if (!page)
 		goto fail;
-	fs = get_fs();
-	set_fs(KERNEL_DS);
-	err = block_write_range(inode, page, 0, len-1, symname);
-	set_fs(fs);
-	inode->i_size = len-1;
+	err = mapping->a_ops->prepare_write(page, 0, len-1);
 	if (err)
-		goto fail_write;
+		goto fail_map;
+	kaddr = (char*)page_address(page);
+	memcpy(kaddr, symname, len-1);
+	mapping->a_ops->commit_write(NULL, page, 0, len-1);
+	inode->i_size = len-1;
 	/*
 	 * Notice that we are _not_ going to block here - end of page is
 	 * unmapped, so this will only try to map the rest of page, see
@@ -1963,14 +2018,15 @@ int block_symlink(struct inode *inode, const char *symname, int len)
 	 * ->i_size will be enough for everything) and zero it out.
 	 * OTOH it's obviously correct and should make the page up-to-date.
 	 */
-	err = __block_read_full_page(inode, page);
+	err = mapping->a_ops->readpage(NULL, page);
 	wait_on_page(page);
 	page_cache_release(page);
 	if (err < 0)
 		goto fail;
 	mark_inode_dirty(inode);
 	return 0;
-fail_write:
+fail_map:
+	inode->i_size = len-1;
 	UnlockPage(page);
 	page_cache_release(page);
 fail:

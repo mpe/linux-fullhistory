@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.16 2000/02/09 22:33:24 davem Exp $
+/* $Id: flash.c,v 1.17 2000/02/10 02:51:35 davem Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -133,9 +133,9 @@ static struct file_operations flash_fops = {
 	 */
 	llseek:		flash_llseek,
 	read:		flash_read,
-	ioctl:		flash_mmap,
-	mmap:		flash_open,
-	flush:		flash_release,
+	mmap:		flash_mmap,
+	open:		flash_open,
+	release:	flash_release,
 };
 
 static struct miscdevice flash_dev = { FLASH_MINOR, "flash", &flash_fops };

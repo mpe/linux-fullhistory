@@ -52,7 +52,9 @@ struct super_operations coda_super_operations =
 	coda_put_super,	        /* put_super */
 	NULL,			/* write_super */
 	coda_statfs,   		/* statfs */
-	NULL			/* remount_fs */
+	NULL,			/* remount_fs */
+	NULL,			/* no clear inode */
+	NULL			/* umount attempt begin */
 };
 
 static struct super_block * coda_read_super(struct super_block *sb, 
@@ -163,15 +165,16 @@ static void coda_read_inode(struct inode *inode)
 	return;
 }
 
-static void coda_put_inode(struct inode *in) 
+static void coda_put_inode(struct inode *inode) 
 {
 	ENTRY;
 
-        CDEBUG(D_INODE,"ino: %ld, count %d\n", in->i_ino, in->i_count);
-
-	if ( in->i_count == 1 ) 
-		in->i_nlink = 0;
+	CDEBUG(D_INODE,"ino: %ld, count %d\n", inode->i_ino, inode->i_count);
 		
+	if ( inode->i_count == 1 ) {
+                write_inode_now(inode);
+		inode->i_nlink = 0;
+        }
 }
 
 static void coda_delete_inode(struct inode *inode)
@@ -189,15 +192,17 @@ static void coda_delete_inode(struct inode *inode)
 		return;
 	}
 
-
-	if ( ! list_empty(&cii->c_volrootlist) )
+	if ( ! list_empty(&cii->c_volrootlist) ) {
 		list_del(&cii->c_volrootlist);
+		INIT_LIST_HEAD(&cii->c_volrootlist);
+        }
 
         open_inode = cii->c_ovp;
         if ( open_inode ) {
                 CDEBUG(D_SUPER, "DELINO cached file: ino %ld count %d.\n",  
 		       open_inode->i_ino,  open_inode->i_count);
                 cii->c_ovp = NULL;
+		inode->i_mapping = &inode->i_data;
                 iput(open_inode);
         }
 	

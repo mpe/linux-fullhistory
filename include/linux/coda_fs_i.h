@@ -40,6 +40,8 @@ struct coda_inode_info {
 #define C_INITED      0x20
 #define C_FLUSH       0x2   /* used after a flush */
 
+struct inode *coda_iget(struct super_block * sb, ViceFid * fid,
+                        struct coda_vattr * attr);
 int coda_cnode_make(struct inode **, struct ViceFid *, struct super_block *);
 int coda_cnode_makectl(struct inode **inode, struct super_block *sb);
 struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb);

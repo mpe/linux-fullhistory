@@ -49,9 +49,7 @@ static int multicast_filter_limit = 64;
    e.g. "options=16" for FD, "options=32" for 100mbps-only. */
 static int full_duplex[] = {-1, -1, -1, -1, -1, -1, -1, -1};
 static int options[] = {-1, -1, -1, -1, -1, -1, -1, -1};
-#ifdef MODULE
 static int debug = -1;			/* The debug level */
-#endif
 
 /* A few values that may be tweaked. */
 /* The ring sizes should be a power of two for efficiency. */
@@ -95,6 +93,7 @@ static int debug = -1;			/* The debug level */
 #endif
 #endif
 #include <linux/spinlock.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 
@@ -103,7 +102,6 @@ static int debug = -1;			/* The debug level */
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 
-#if LINUX_VERSION_CODE > 0x20118  &&  defined(MODULE)
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Intel i82557/i82558 PCI EtherExpressPro driver");
 MODULE_PARM(debug, "i");
@@ -117,7 +115,6 @@ MODULE_PARM(rxdmacount, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(multicast_filter_limit, "i");
-#endif
 
 #define RUN_AT(x) (jiffies + (x))
 
@@ -642,11 +639,10 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 	int i, option;
 	u16 eeprom[0x100];
 	int acpi_idle_state = 0;
-#ifndef MODULE
+
 	static int did_version = 0;			/* Already printed version info. */
 	if (speedo_debug > 0  &&  did_version++ == 0)
 		printk(version);
-#endif
 
 	pdev = pci_find_slot(pci_bus, pci_devfn);
 
@@ -1838,10 +1834,9 @@ static void set_rx_mode(struct net_device *dev)
 
 	sp->rx_mode = new_rx_mode;
 }
-
-#ifdef MODULE
 
-int init_module(void)
+
+static int __init eepro100_init_module(void)
 {
 	int cards_found;
 
@@ -1866,7 +1861,7 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit eepro100_cleanup_module(void)
 {
 	struct net_device *next_dev;
 
@@ -1890,22 +1885,9 @@ void cleanup_module(void)
 	}
 }
 
-#else   /* not MODULE */
+module_init(eepro100_init_module);
+module_exit(eepro100_cleanup_module);
 
-int eepro100_probe(void)
-{
-	int cards_found = 0;
-
-	cards_found = eepro100_init();
-
-	/* Only emit the version if the driver is being used. */
-	if (speedo_debug > 0  &&  cards_found)
-		printk(version);
-
-	return cards_found ? 0 : -ENODEV;
-}
-#endif  /* MODULE */
-
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c eepro100.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS` `[ -f ./pci-netif.h ] && echo -DHAS_PCI_NETIF`"

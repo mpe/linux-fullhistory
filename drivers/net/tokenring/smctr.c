@@ -3684,13 +3684,7 @@ int __init smctr_probe (struct net_device *dev)
                 int ioaddr = smctr_portlist[i];
                 if(check_region(ioaddr, SMCTR_IO_EXTENT))
                         continue;
-                if(smctr_probe1(dev, ioaddr))
-                {
-#ifndef MODULE
-                        tr_freedev(dev);
-#endif
-                }
-                else
+                if (!smctr_probe1(dev, ioaddr))
                         return (0);
         }
 

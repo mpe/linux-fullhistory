@@ -16,6 +16,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 #include <asm/prom.h>
 #include <asm/dbdma.h>
 #include <asm/io.h>
@@ -1256,7 +1257,7 @@ static int bmac_reset_and_enable(struct net_device *dev, int enable)
 	return 1;
 }
 
-int bmac_probe(void)
+static int __init bmac_probe (void)
 {
 	int j, rev;
 	struct bmac_data *bp;
@@ -1264,6 +1265,11 @@ int bmac_probe(void)
 	unsigned char *addr;
 	static struct device_node *all_bmacs = NULL, *next_bmac;
 	struct net_device *dev = NULL;
+
+#ifdef MODULE
+	if(bmac_devs != NULL)
+		return -EBUSY;
+#endif
 
 	if (all_bmacs == NULL) {
 		all_bmacs = find_devices("bmac");
@@ -1593,23 +1599,14 @@ bmac_proc_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
-#ifdef MODULE
 
 MODULE_AUTHOR("Randy Gobbel/Paul Mackerras");
 MODULE_DESCRIPTION("PowerMac BMAC ethernet driver.");
 
-int init_module(void)
-{
-    int res;
-   
-    if(bmac_devs != NULL)
-        return -EBUSY;
-    res = bmac_probe();
-    return res;
-}
 
-void cleanup_module(void)
+static void __exit bmac_cleanup (void)
 {
+#ifdef MODULE
     struct bmac_data *bp;
 
     if (bmac_devs == 0)
@@ -1628,6 +1625,8 @@ void cleanup_module(void)
 #endif
     kfree(bmac_devs);
     bmac_devs = NULL;
+#endif
 }
 
-#endif
+module_init(bmac_probe);
+module_exit(bmac_cleanup);

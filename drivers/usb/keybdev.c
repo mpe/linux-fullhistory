@@ -112,7 +112,7 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 #error "Cannot generate rawmode keyboard for your architecture yet."
 #endif
 
-	mark_bh(KEYBOARD_BH);
+	tasklet_schedule(&keyboard_tasklet);
 }
 
 static int keybdev_connect(struct input_handler *handler, struct input_dev *dev)

@@ -174,7 +174,6 @@ struct umsdos_ioctl {
 #endif
 
 extern struct inode_operations umsdos_dir_inode_operations;
-extern struct inode_operations umsdos_symlink_inode_operations;
 extern int init_umsdos_fs (void);
 
 #include <linux/umsdos_fs.p>

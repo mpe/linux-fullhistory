@@ -2910,11 +2910,15 @@ static int __init happy_meal_pci_probe(struct net_device *dev)
 }
 #endif
 
-int __init happy_meal_probe(void)
+static int __init happy_meal_probe(void)
 {
 	struct net_device *dev = NULL;
 	static int called = 0;
 	int cards;
+
+#ifdef MODULE
+	root_happy_dev = NULL;
+#endif
 
 	if (called)
 		return ENODEV;
@@ -2934,18 +2938,10 @@ int __init happy_meal_probe(void)
 	return 0;
 }
 
+
+static void __exit cleanup_module(void)
+{
 #ifdef MODULE
-
-int
-init_module(void)
-{
-	root_happy_dev = NULL;
-	return happy_meal_probe();
-}
-
-void
-cleanup_module(void)
-{
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_happy_dev) {
 		struct happy_meal *hp = root_happy_dev;
@@ -2976,6 +2972,8 @@ cleanup_module(void)
 		kfree(hp->dev);
 		root_happy_dev = next;
 	}
+#endif /* MODULE */
 }
 
-#endif /* MODULE */
+module_init(happy_meal_probe);
+module_exit(happy_meal_cleanup_module);

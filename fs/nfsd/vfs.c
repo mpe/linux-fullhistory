@@ -39,9 +39,7 @@
 #include <linux/nfsd/nfsfh.h>
 #include <linux/quotaops.h>
 
-#if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
-#endif
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 #define NFSD_PARANOIA

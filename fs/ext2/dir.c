@@ -51,14 +51,6 @@ struct inode_operations ext2_dir_inode_operations = {
 	ext2_rmdir,		/* rmdir */
 	ext2_mknod,		/* mknod */
 	ext2_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 int ext2_check_dir_entry (const char * function, struct inode * dir,

@@ -121,13 +121,3 @@ skip:
 	unlock_kernel();
 	return err ? -EIO : 0;
 }
-
-int udf_sync_file_adinicb(struct file * file, struct dentry *dentry)
-{
-	int ret;
-
-	lock_kernel();
-	ret = udf_sync_inode(dentry->d_inode) ? -EIO : 0;
-	unlock_kernel();
-	return ret;
-}

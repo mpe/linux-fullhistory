@@ -184,11 +184,12 @@ EXPORT_SYMBOL(__bforget);
 EXPORT_SYMBOL(ll_rw_block);
 EXPORT_SYMBOL(__wait_on_buffer);
 EXPORT_SYMBOL(___wait_on_page);
-EXPORT_SYMBOL(block_read_full_page);
 EXPORT_SYMBOL(block_write_full_page);
-EXPORT_SYMBOL(block_write_partial_page);
-EXPORT_SYMBOL(block_write_cont_page);
-EXPORT_SYMBOL(block_write_zero_range);
+EXPORT_SYMBOL(block_read_full_page);
+EXPORT_SYMBOL(block_prepare_write);
+EXPORT_SYMBOL(cont_prepare_write);
+EXPORT_SYMBOL(generic_commit_write);
+EXPORT_SYMBOL(generic_block_bmap);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(do_generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
@@ -223,6 +224,7 @@ EXPORT_SYMBOL(vfs_readlink);
 EXPORT_SYMBOL(vfs_follow_link);
 EXPORT_SYMBOL(page_readlink);
 EXPORT_SYMBOL(page_follow_link);
+EXPORT_SYMBOL(page_symlink_inode_operations);
 EXPORT_SYMBOL(block_symlink);
 
 /* for stackable file systems (lofs, wrapfs, etc.) */

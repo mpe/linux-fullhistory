@@ -160,7 +160,6 @@ static int plip_hard_header_cache(struct neighbour *neigh,
 static int plip_open(struct net_device *dev);
 static int plip_close(struct net_device *dev);
 static struct net_device_stats *plip_get_stats(struct net_device *dev);
-static int plip_config(struct net_device *dev, struct ifmap *map);
 static int plip_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int plip_preempt(void *handle);
 static void plip_wakeup(void *handle);
@@ -1256,9 +1255,7 @@ MODULE_PARM(timid, "1i");
 
 static struct net_device *dev_plip[PLIP_MAX] = { NULL, };
 
-#ifdef MODULE
-void
-cleanup_module(void)
+static void __exit plip_cleanup_module (void)
 {
 	int i;
 
@@ -1278,14 +1275,16 @@ cleanup_module(void)
 	}
 }
 
-#define plip_init  init_module
-
-#else /* !MODULE */
+#ifndef MODULE
 
 static int parport_ptr = 0;
 
-void plip_setup(char *str, int *ints)
+static void __init plip_setup(char *str)
 {
+	int ints[4];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
 	/* Ugh. */
 	if (!strncmp(str, "parport", 7)) {
 		int n = simple_strtoul(str+7, NULL, 10);
@@ -1307,7 +1306,9 @@ void plip_setup(char *str, int *ints)
 	}
 }
 
-#endif /* MODULE */
+__setup("plip=", plip_setup);
+
+#endif /* !MODULE */
 
 static int inline 
 plip_searchfor(int list[], int a)
@@ -1319,8 +1320,7 @@ plip_searchfor(int list[], int a)
 	return 0;
 }
 
-int __init
-plip_init(void)
+static int __init plip_init (void)
 {
 	struct parport *pb = parport_enumerate();
 	int i=0;
@@ -1375,7 +1375,10 @@ plip_init(void)
 	}
 	return 0;
 }
-
+
+module_init(plip_init);
+module_exit(plip_cleanup_module);
+
 /*
  * Local variables:
  * compile-command: "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -Wall -Wstrict-prototypes -O2 -g -fomit-frame-pointer -pipe -c plip.c"

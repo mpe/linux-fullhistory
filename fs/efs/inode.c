@@ -10,6 +10,20 @@
 #include <linux/efs_fs.h>
 #include <linux/efs_fs_sb.h>
 
+extern int efs_get_block(struct inode *, long, struct buffer_head *, int);
+static int efs_readpage(struct dentry *dentry, struct page *page)
+{
+	return block_read_full_page(page,efs_get_block);
+}
+static int _efs_bmap(struct address_space *mapping, long block)
+{
+	return generic_block_bmap(mapping,block,efs_get_block);
+}
+struct address_space_operations efs_aops = {
+	readpage: efs_readpage,
+	bmap: _efs_bmap
+};
+
 static inline void extent_copy(efs_extent *src, efs_extent *dst) {
 	/*
 	 * this is slightly evil. it doesn't just copy
@@ -126,9 +140,11 @@ void efs_read_inode(struct inode *inode) {
 			break;
 		case S_IFREG:
 			inode->i_op = &efs_file_inode_operations;
+			inode->i_data.a_ops = &efs_aops;
 			break;
 		case S_IFLNK:
-			inode->i_op = &efs_symlink_inode_operations;
+			inode->i_op = &page_symlink_inode_operations;
+			inode->i_data.a_ops = &efs_symlink_aops;
 			break;
 		case S_IFCHR:
 		case S_IFBLK:

@@ -5,17 +5,15 @@
  * Copyright (C) 1996 Paul Mackerras.
  */
 
-#ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
-#endif
-
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/timer.h>
+#include <linux/init.h>
 #include <asm/prom.h>
 #include <asm/dbdma.h>
 #include <asm/io.h>
@@ -101,7 +99,7 @@ bitrev(int b)
     return d;
 }
 
-int mace_probe(void)
+static int __init mace_probe (void)
 {
 	int j, rev;
 	struct net_device *dev;
@@ -110,6 +108,11 @@ int mace_probe(void)
 	unsigned char *addr;
 	static int maces_found = 0;
 	static struct device_node *next_mace;
+
+#ifdef MODULE
+	if(mace_devs != NULL)
+		return -EBUSY;
+#endif
 
 	if (!maces_found) {
 		next_mace = find_devices("mace");
@@ -894,25 +897,13 @@ static void mace_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
     }
 }
 
-#ifdef MODULE
 
-#if LINUX_VERSION_CODE > 0x20118
 MODULE_AUTHOR("Paul Mackerras");
 MODULE_DESCRIPTION("PowerMac MACE driver.");
-#endif
 
-int init_module(void)
+static void __exit mace_cleanup (void)
 {
-    int res;
-
-    if(mace_devs != NULL)
-	return -EBUSY;
-    res = mace_probe();
-    return res;
-}
-
-void cleanup_module(void)
-{
+#ifdef MODULE
     struct mace_data *mp = (struct mace_data *) mace_devs->priv;
     unregister_netdev(mace_devs);
 
@@ -922,6 +913,8 @@ void cleanup_module(void)
 
     kfree(mace_devs);
     mace_devs = NULL;
+#endif
 }
 
-#endif
+module_init(mace_probe);
+module_exit(mace_cleanup);

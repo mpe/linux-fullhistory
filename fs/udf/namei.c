@@ -642,7 +642,8 @@ int udf_create(struct inode *dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return err;
 
-	inode->i_op = &udf_file_inode_operations_adinicb;
+	inode->i_data.a_ops = &udf_adinicb_aops;
+	inode->i_op = &udf_file_inode_operations;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
 
@@ -970,7 +971,8 @@ int udf_symlink(struct inode * dir, struct dentry * dentry, const char * symname
 		goto out;
 
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
-	inode->i_op = &udf_symlink_inode_operations;
+	inode->i_data.a_ops = &udf_symlink_aops;
+	inode->i_op = &page_symlink_inode_operations;
 
 	bh = udf_tread(inode->i_sb, inode->i_ino, inode->i_sb->s_blocksize);
 	ea = bh->b_data + udf_file_entry_alloc_offset(inode);

@@ -8,8 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := sysv.o
-O_OBJS   := ialloc.o balloc.o inode.o file.o dir.o symlink.o namei.o \
-		fsync.o truncate.o
+O_OBJS   := ialloc.o balloc.o inode.o file.o dir.o namei.o fsync.o truncate.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
