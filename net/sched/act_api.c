@@ -397,6 +397,8 @@ int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *a,
 		if (a->type == TCA_OLD_COMPAT)
 			err = gnet_stats_start_copy_compat(skb, 0,
 				TCA_STATS, TCA_XSTATS, h->stats_lock, &d);
+		else
+			return 0;
 	} else
 		err = gnet_stats_start_copy(skb, TCA_ACT_STATS,
 			h->stats_lock, &d);

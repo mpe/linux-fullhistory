@@ -605,7 +605,7 @@ P:	Herbert Xu
 M:	herbert@gondor.apana.org.au
 P:	David S. Miller
 M:	davem@davemloft.net
-L:	linux-kernel@vger.kernel.org
+L:	linux-crypto@vger.kernel.org
 S:	Maintained
 
 CYBERPRO FB DRIVER

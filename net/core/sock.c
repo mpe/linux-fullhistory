@@ -1352,7 +1352,7 @@ void sk_common_release(struct sock *sk)
 
 EXPORT_SYMBOL(sk_common_release);
 
-static rwlock_t proto_list_lock;
+static DEFINE_RWLOCK(proto_list_lock);
 static LIST_HEAD(proto_list);
 
 int proto_register(struct proto *prot, int alloc_slab)
