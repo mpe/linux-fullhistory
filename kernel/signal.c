@@ -2219,6 +2219,8 @@ sys_rt_sigtimedwait(const sigset_t __user *uthese,
 			current->state = TASK_INTERRUPTIBLE;
 			timeout = schedule_timeout(timeout);
 
+			if (current->flags & PF_FREEZE)
+				refrigerator(PF_FREEZE);
 			spin_lock_irq(&current->sighand->siglock);
 			sig = dequeue_signal(current, &these, &info);
 			current->blocked = current->real_blocked;
