@@ -169,7 +169,6 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 fi
 bool 'Other ISA cards' CONFIG_NET_ISA n
 if [ "$CONFIG_NET_ISA" = "y" ]; then
-	tristate 'Arcnet support' CONFIG_ARCNET n
 	tristate 'Cabletron E21xx support' CONFIG_E2100 n
 	tristate 'DEPCA support' CONFIG_DEPCA n
 	tristate 'EtherWorks 3 support' CONFIG_EWRK3 n
@@ -216,6 +215,7 @@ bool 'Token Ring driver support' CONFIG_TR n
 if [ "$CONFIG_TR" = "y" ]; then
 	tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR y
 fi
+tristate 'Arcnet support' CONFIG_ARCNET n
 fi
 fi
 
@@ -247,8 +247,8 @@ fi
 comment 'Filesystems'
 
 tristate 'Standard (minix) fs support' CONFIG_MINIX_FS y
-bool 'Extended fs support' CONFIG_EXT_FS n
-bool 'Second extended fs support' CONFIG_EXT2_FS y
+tristate 'Extended fs support' CONFIG_EXT_FS n
+tristate 'Second extended fs support' CONFIG_EXT2_FS y
 tristate 'xiafs filesystem support' CONFIG_XIA_FS n
 tristate 'msdos fs support' CONFIG_MSDOS_FS y
 if [ "$CONFIG_MSDOS_FS" != "n" ]; then
@@ -267,13 +267,13 @@ comment 'character devices'
 
 bool 'Cyclades async mux support' CONFIG_CYCLADES n
 tristate 'Parallel printer support' CONFIG_PRINTER n
-bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
-bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n
+tristate 'Logitech busmouse support' CONFIG_BUSMOUSE n
+tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n
 if [ "$CONFIG_PSMOUSE" = "y" ]; then
   bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE y
 fi
-bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
-bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
+tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
+tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
 
 
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE n

@@ -14,11 +14,13 @@
 #define halt .long PAL_halt
 
 .globl swapper_pg_dir
+.globl _stext
 swapper_pg_dir=SWAPPER_PGD
 
 	.set noreorder
 	.globl	__start
 	.ent	__start
+_stext:
 __start:
 	br	$27,1f
 1:	ldgp	$29,0($27)

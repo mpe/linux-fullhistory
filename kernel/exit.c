@@ -24,7 +24,7 @@ int getrusage(struct task_struct *, int, struct rusage *);
 static int generate(unsigned long sig, struct task_struct * p)
 {
 	unsigned long mask = 1 << (sig-1);
-	struct sigaction * sa = sig + p->sigaction - 1;
+	struct sigaction * sa = sig + p->sig->action - 1;
 
 	/* always generate signals for traced processes ??? */
 	if (!(p->flags & PF_PTRACED)) {
@@ -54,7 +54,7 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 	/*
 	 * Forget it if the process is already zombie'd.
 	 */
-	if (p->state == TASK_ZOMBIE)
+	if (!p->sig)
 		return 0;
 	if ((sig == SIGKILL) || (sig == SIGCONT)) {
 		if (p->state == TASK_STOPPED)
@@ -97,11 +97,7 @@ void release(struct task_struct * p)
 			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)
 				printk(KERN_ALERT "release: %s kernel stack corruption. Aiee\n", p->comm);
 			free_page(p->kernel_stack_page);
-			free_page((long) p->mm);
-			free_page((long) p->files);
-			free_page((long) p->fs);
-			free_page((long) p->sigaction);
-			free_page((long) p);
+			kfree(p);
 			return;
 		}
 	panic("trying to release non-existent task");
@@ -359,51 +355,76 @@ static void forget_original_parent(struct task_struct * father)
 	}
 }
 
-static void exit_files(void)
+void exit_files(struct task_struct *tsk)
 {
-	if (!--current->files->count) {
-		int i;
-		for (i=0 ; i<NR_OPEN ; i++)
-			if (current->files->fd[i])
-				sys_close(i);
+	struct files_struct * files = tsk->files;
+
+	if (files) {
+		tsk->files = NULL;
+		if (!--files->count) {
+			int i;
+			for (i=0 ; i<NR_OPEN ; i++) {
+				struct file * filp = files->fd[i];
+				if (!filp)
+					continue;
+				files->fd[i] = NULL;
+				close_fp(filp);
+			}
+			kfree(files);
+		}
 	}
 }
 
-static void exit_fs(void)
+void exit_fs(struct task_struct *tsk)
 {
-	if (!--current->fs->count) {
-		iput(current->fs->pwd);
-		current->fs->pwd = NULL;
-		iput(current->fs->root);
-		current->fs->root = NULL;
+	struct fs_struct * fs = tsk->fs;
+
+	if (fs) {
+		tsk->fs = NULL;
+		if (!--fs->count) {
+			iput(fs->root);
+			iput(fs->pwd);
+			kfree(fs);
+		}
+	}
+}
+
+void exit_sighand(struct task_struct *tsk)
+{
+	struct signal_struct * sig = tsk->sig;
+
+	if (sig) {
+		tsk->sig = NULL;
+		if (!--sig->count) {
+			kfree(sig);
+		}
 	}
 }
 
 static void exit_mm(void)
 {
-	if (!--current->mm->count) {
-		current->mm->rss = 0;
-		exit_mmap(current->mm);
+	struct mm_struct * mm = current->mm;
+
+	if (mm) {
+		if (!--mm->count) {
+			current->p_pptr->mm->cmin_flt += mm->min_flt + mm->cmin_flt;
+			current->p_pptr->mm->cmaj_flt += mm->maj_flt + mm->cmaj_flt;
+			exit_mmap(mm);
+			free_page_tables(current);
+			kfree(mm);
+		}
+		current->mm = NULL;
 	}
-	free_page_tables(current);
 }
 
-NORET_TYPE void do_exit(long code)
+/* 
+ * Send signals to all our closest relatives so that they know
+ * to properly mourn us..
+ */
+static void exit_notify(void)
 {
-	struct task_struct *p;
+	struct task_struct * p;
 
-	if (intr_count) {
-		printk("Aiee, killing interrupt handler\n");
-		intr_count = 0;
-	}
-fake_volatile:
-	current->flags |= PF_EXITING;
-	del_timer(&current->real_timer);
-	sem_exit();
-	exit_mm();
-	exit_files();
-	exit_fs();
-	exit_thread();
 	forget_original_parent(current);
 	/* 
 	 * Check to see if any process groups have become orphaned
@@ -413,7 +434,7 @@ fake_volatile:
 	 * Case i: Our father is in a different pgrp than we are
 	 * and we were the only connection outside, so our pgrp
 	 * is about to become orphaned.
- 	 */
+	 */
 	if ((current->p_pptr->pgrp != current->pgrp) &&
 	    (current->p_pptr->session == current->session) &&
 	    is_orphaned_pgrp(current->pgrp) &&
@@ -461,8 +482,24 @@ fake_volatile:
 	}
 	if (current->leader)
 		disassociate_ctty(1);
-	if (last_task_used_math == current)
-		last_task_used_math = NULL;
+}
+
+NORET_TYPE void do_exit(long code)
+{
+	if (intr_count) {
+		printk("Aiee, killing interrupt handler\n");
+		intr_count = 0;
+	}
+fake_volatile:
+	current->flags |= PF_EXITING;
+	del_timer(&current->real_timer);
+	sem_exit();
+	exit_mm();
+	exit_files(current);
+	exit_fs(current);
+	exit_sighand(current);
+	exit_thread();
+	exit_notify();
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
 #ifdef DEBUG_PROC_TREE
@@ -540,8 +577,6 @@ repeat:
 			case TASK_ZOMBIE:
 				current->cutime += p->utime + p->cutime;
 				current->cstime += p->stime + p->cstime;
-				current->mm->cmin_flt += p->mm->min_flt + p->mm->cmin_flt;
-				current->mm->cmaj_flt += p->mm->maj_flt + p->mm->cmaj_flt;
 				if (ru != NULL)
 					getrusage(p, RUSAGE_BOTH, ru);
 				flag = p->pid;

@@ -13,7 +13,7 @@
  *      Tommy Thorn <tthorn>
  *      Thomas Wuensche <tw@fgb1.fgb.mw.tu-muenchen.de>
  *
- *  Modified by Eric Youngdale ericy@cais.com to
+ *  Modified by Eric Youngdale eric@aib.com to
  *  add scatter-gather, multiple outstanding request, and other
  *  enhancements.
  *
@@ -430,6 +430,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 		     * and then fix this field later if it turns out it doesn't
 		     */
 		    SDpnt->borken = 1;
+                    SDpnt->was_reset = 0;
 		    
 		    scsi_cmd[0] = TEST_UNIT_READY;
 		    scsi_cmd[1] = lun << 5;
@@ -801,7 +802,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid)
     case IN_ABORT:
 	printk("SCSI host %d abort() timed out - resetting\n",
 	       SCpnt->host->host_no);
-	if (!scsi_reset (SCpnt))
+	if (!scsi_reset (SCpnt, FALSE))
 	    return;
     case IN_RESET:
     case (IN_ABORT | IN_RESET):
@@ -811,6 +812,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid)
 	 */
 	printk("Unable to reset scsi host %d - ", SCpnt->host->host_no);
 	printk("probably a SCSI bus hang.\n");
+        scsi_reset (SCpnt, TRUE);
 	return;
 	
     default:
@@ -1319,7 +1321,7 @@ static void reset (Scsi_Cmnd * SCpnt)
 #endif
 
     SCpnt->flags |= (WAS_RESET | IS_RESETTING);
-    scsi_reset(SCpnt);
+    scsi_reset(SCpnt, FALSE);
 
 #ifdef DEBUG
     printk("performing request sense\n");
@@ -1865,7 +1867,7 @@ int scsi_abort (Scsi_Cmnd * SCpnt, int why, int pid)
     }
 }
 
-int scsi_reset (Scsi_Cmnd * SCpnt)
+int scsi_reset (Scsi_Cmnd * SCpnt, int bus_reset_flag)
 {
     int temp, oldto;
     unsigned long flags;
@@ -1876,6 +1878,43 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
     printk("Danger Will Robinson! - SCSI bus for host %d is being reset.\n",
 	   host->host_no);
 #endif
+ 
+    /*
+     * First of all, we need to make a recommendation to the low-level
+     * driver as to whether a BUS_DEVICE_RESET should be performed,
+     * or whether we should do a full BUS_RESET.  There is no simple
+     * algorithm here - we basically use a series of heuristics
+     * to determine what we should do.
+     */
+    SCpnt->host->suggest_bus_reset = FALSE;
+    
+    /*
+     * First see if all of the active devices on the bus have
+     * been jammed up so that we are attempting resets.  If so,
+     * then suggest a bus reset.  Forcing a bus reset could
+     * result in some race conditions, but no more than
+     * you would usually get with timeouts.  We will cross
+     * that bridge when we come to it.
+     */
+    SCpnt1 = host->host_queue;
+    while(SCpnt1) {
+        if( SCpnt->request.dev > 0
+           && (SCpnt->flags & WAS_RESET) == 0 )
+            break;
+        SCpnt1 = SCpnt1->next;
+ 	}
+    if( SCpnt1 == NULL )
+        SCpnt->host->suggest_bus_reset = TRUE;
+    
+    
+    /*
+     * If the code that called us is suggesting a hard reset, then
+     * definitely request it.  This usually occurs because a
+     * BUS_DEVICE_RESET times out.
+     */
+    if( bus_reset_flag )
+        SCpnt->host->suggest_bus_reset = TRUE;
+    
     while (1) {
 	save_flags(flags);
 	cli();
@@ -1923,7 +1962,26 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
 	    printk("scsi reset function returned %d\n", temp);
 #endif
-	    switch(temp) {
+ 
+            if( temp & SCSI_RESET_BUS_RESET )
+            {
+                /*
+                 * The low level driver did a bus reset, so we should
+                 * go through and mark all of the devices on that bus
+                 * as having been reset.
+                 */
+                SCpnt1 = host->host_queue;
+                while(SCpnt1) {
+                    SCpnt1->device->was_reset = 1;
+                    SCpnt1 = SCpnt1->next;
+                }
+            }
+            
+            /*
+             * Now figure out what we need to do, based upon
+             * what the low level driver said that it did.
+             */
+            switch(temp & SCSI_RESET_ACTION) {
 	    case SCSI_RESET_SUCCESS:
 		save_flags(flags);
 		cli();
@@ -1934,9 +1992,27 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 	    case SCSI_RESET_PENDING:
 		return 0;
 	    case SCSI_RESET_PUNT:
+                SCpnt->internal_timeout &= ~IN_RESET;
+                scsi_request_sense (SCpnt);
+                return 0;
 	    case SCSI_RESET_WAKEUP:
 		SCpnt->internal_timeout &= ~IN_RESET;
 		scsi_request_sense (SCpnt);
+                /*
+                 * Since a bus reset was performed, we
+                 * need to wake up each and every command
+                 * that was active on the bus.
+                 */
+                if( temp & SCSI_RESET_BUS_RESET )
+                {
+                    SCpnt1 = host->host_queue;
+                    while(SCpnt1) {
+                        if( SCpnt->request.dev > 0
+                           && SCpnt1 != SCpnt)
+                            scsi_request_sense (SCpnt);
+                        SCpnt1 = SCpnt1->next;
+                    }
+                }
 		return 0;
 	    case SCSI_RESET_SNOOZE:
 		/* In this case, we set the timeout field to 0
@@ -2856,7 +2932,8 @@ static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
      * If any of the devices would match this driver, then perform the
      * init function.
      */
-    if(tpnt->init && tpnt->dev_noticed) (*tpnt->init)();
+    if(tpnt->init && tpnt->dev_noticed)
+        if ((*tpnt->init)()) return 1;
     
     /*
      * Now actually connect the devices to the new driver.

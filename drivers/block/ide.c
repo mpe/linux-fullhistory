@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.13  Sep 4, 1995
+ *  linux/drivers/block/ide.c	Version 5.13b  Sep 9, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -140,6 +140,8 @@
  *			made do_drive_cmd() into public ide_do_drive_cmd()
  *  Version 5.13	fixed typo ('B'), thanks to houston@boyd.geog.mcgill.ca
  *			fixed ht6560b support
+ *  Version 5.13b (sss)	fix problem in calling ide_cdrom_setup()
+ *                      don't bother invalidating nonexistent partitions
  *
  *  Driver compile-time options are in ide.h
  *
@@ -1720,9 +1722,11 @@ static int revalidate_disk(dev_t  i_rdev)
 	restore_flags(flags);
 
 	for (p = 0; p < (1<<PARTN_BITS); ++p) {
-		sync_dev           (major | (minor + p));
-		invalidate_inodes  (major | (minor + p));
-		invalidate_buffers (major | (minor + p));
+		if (drive->part[p].nr_sects > 0) {
+			sync_dev           (major | (minor + p));
+			invalidate_inodes  (major | (minor + p));
+			invalidate_buffers (major | (minor + p));
+		}
 		drive->part[p].start_sect = 0;
 		drive->part[p].nr_sects   = 0;
 	};
@@ -2292,18 +2296,20 @@ static void probe_for_drives (ide_hwif_t *hwif)
 		 * Second drive should only exist if first drive was found,
 		 * but a lot of cdrom drives seem to be configured as slave-only
 		 */
-		for (unit = 0; unit < 2; ++unit)  /* note the hardcoded '2' */
-			(void) probe_for_drive(&hwif->drives[unit]);
+		for (unit = 0; unit < 2; ++unit) { /* note the hardcoded '2' */
+			ide_drive_t *drive = &hwif->drives[unit];
+			(void) probe_for_drive (drive);
+#ifdef CONFIG_BLK_DEV_IDECD
+			if (drive->present && drive->media == cdrom)
+				ide_cdrom_setup(drive);
+#endif	/* CONFIG_BLK_DEV_IDECD */
+		}
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
 			if (drive->present) {
 				hwif->present = 1;
 				request_region(hwif->io_base,  8, hwif->name);
 				request_region(hwif->ctl_port, 1, hwif->name);
-#ifdef CONFIG_BLK_DEV_IDECD
-				if (drive->media == cdrom)
-					ide_cdrom_setup(drive);
-#endif	/* CONFIG_BLK_DEV_IDECD */
 				break;
 			}
 		}

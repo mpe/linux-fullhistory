@@ -91,6 +91,7 @@ struct mouse_status {
 	int		ready;
 	int		active;
 	struct wait_queue *wait;
+	struct fasync_struct *fasyncptr;
 };
 
 /* Function Prototypes */

@@ -73,15 +73,13 @@ struct ipq	 {
 };
 
 
-extern int		backoff(int n);
-
 extern void		ip_print(const struct iphdr *ip);
 extern int		ip_ioctl(struct sock *sk, int cmd,
 				 unsigned long arg);
-extern void		ip_route_check(unsigned long daddr);
+extern void		ip_route_check(__u32 daddr);
 extern int		ip_build_header(struct sk_buff *skb,
-					unsigned long saddr,
-					unsigned long daddr,
+					__u32 saddr,
+					__u32 daddr,
 					struct device **dev, int type,
 					struct options *opt, int len,
 					int tos,int ttl);
@@ -99,13 +97,13 @@ extern int 		ip_getsockopt(struct sock *sk, int level, int optname, char *optval
 extern void		ip_init(void);
 extern int		ip_build_xmit(struct sock *sk,
 				      void getfrag (const void *,
-						    int,
+						    __u32,
 						    char *,
 						    unsigned int,
 						    unsigned int),
 				      const void *frag,
 				      unsigned short int length,
-				      int daddr,
+				      __u32 daddr,
 				      int flags,
 				      int type);
 

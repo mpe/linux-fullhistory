@@ -119,7 +119,7 @@ static int backlog_size = 0;
  
 static __inline__ unsigned long min(unsigned long a, unsigned long b)
 {
-  return (a < b)? a : b;
+	return (a < b)? a : b;
 }
 
 
@@ -256,10 +256,15 @@ int dev_close(struct device *dev)
 	 *	Call the device specific close. This cannot fail.
 	 *	Only if device is UP
 	 */
+	 
 	if ((dev->flags & IFF_UP) && dev->stop)
 		dev->stop(dev);
 
-	dev->flags = 0;
+	/*
+	 *	Device is now down.
+	 */
+	 
+	dev->flags&=~(IFF_UP|IFF_RUNNING);
 
 	/*
 	 *	Tell people we are going down
@@ -1008,11 +1013,15 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				
 				dev_lock_wait();
 				
-				dev->flags = ifr.ifr_flags & (
-					IFF_UP | IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
+				/*
+				 *	Set the flags on our device.
+				 */
+				 
+				dev->flags = (ifr.ifr_flags & (
+					IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
 					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |
 					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI | IFF_SLAVE | IFF_MASTER
-					| IFF_MULTICAST);
+					| IFF_MULTICAST)) | (dev->flags & IFF_UP);
 				/*
 				 *	Load in the correct multicast list now the flags have changed.
 				 */				
@@ -1020,32 +1029,29 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				dev_mc_upload(dev);
 
 			  	/*
-			  	 *	Have we downed the interface
+			  	 *	Have we downed the interface. We handle IFF_UP ourselves
+			  	 *	according to user attempts to set it, rather than blindly
+			  	 *	setting it.
 			  	 */
-		
-				if ((old_flags & IFF_UP) && ((dev->flags & IFF_UP) == 0)) 
-				{
-					/*
-					 *	Restore IFF_UP so dev_close knows to shut
-					 *	it down. FIXME: Tidy me up sometime.
-					 */
-					dev->flags|=IFF_UP;
-					ret = dev_close(dev);
-				}
-				else
-				{
-					/*
-					 *	Have we upped the interface 
-					 */
-					 
-			      		ret = (! (old_flags & IFF_UP) && (dev->flags & IFF_UP))
-						? dev_open(dev) : 0;
-					/* 
-					 *	Check the flags.
-					 */
-					if(ret<0)
-						dev->flags&=~IFF_UP;	/* Didn't open so down the if */
+			  	 
+			  	if ((old_flags^ifr.ifr_flags)&IFF_UP)	/* Bit is different  ? */
+			  	{
+					if(old_flags&IFF_UP)		/* Gone down */
+						ret=dev_close(dev); 		
+					else				/* Come up */
+					{
+						ret=dev_open(dev);
+						if(ret<0)
+							dev->flags&=~IFF_UP;	/* Open failed */
+					}	
 			  	}
+			  	else
+			  		ret=0;
+				/*
+				 *	Load in the correct multicast list now the flags have changed.
+				 */				
+
+				dev_mc_upload(dev);
 	        	}
 			break;
 		

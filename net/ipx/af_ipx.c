@@ -1990,7 +1990,7 @@ void ipx_proto_init(struct net_proto *pro)
 		ipx_rt_get_info
 	});
 		
-	printk("Swansea University Computer Society IPX 0.31 for NET3.030\n");
+	printk("Swansea University Computer Society IPX 0.31 for NET3.031\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 #endif

@@ -192,7 +192,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	__u32			src, dst;
 	__u16			src_port=0, dst_port=0, icmp_type=0;
 	unsigned short		f_prt=0, prt;
-	char			notcpsyn=1, notcpack=1, frag1, match;
+	char			notcpsyn=1, notcpack=1, match;
 	unsigned short		f_flag;
 	unsigned short		offset;
 
@@ -221,8 +221,6 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 
 	offset = ntohs(ip->frag_off) & IP_OFFSET;
 	
-	frag1 = (offset == 0);
-
 	/*
 	 *	Don't allow a fragment of TCP 8 bytes in. Nobody
 	 *	normal causes this. Its a cracker trying to break
@@ -231,25 +229,25 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	 */
 	 
 	if (offset == 1 && ip->protocol == IPPROTO_TCP)
-		return 0;
+		return FW_BLOCK;
 		
-	if (!frag1 && (opt != 1) && (ip->protocol == IPPROTO_TCP ||
+	if (offset!=0 && (opt != 1) && (ip->protocol == IPPROTO_TCP ||
 			ip->protocol == IPPROTO_UDP))
-		return(1);
+		return FW_ACCEPT;
 		
 	/*
 	 *	 Header fragment for TCP is too small to check the bits.
 	 */
 	 
 	if(ip->protocol==IPPROTO_TCP && (ip->ihl<<2)+16 > ntohs(ip->tot_len))
-		return 0;
+		return FW_BLOCK;
 	
 	/*
 	 *	Too short.
 	 */
 	 
 	else if(ntohs(ip->tot_len)<8+(ip->ihl<<2))
-		return 0;
+		return FW_BLOCK;
 		
 	src = ip->saddr;
 	dst = ip->daddr;
@@ -268,7 +266,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		case IPPROTO_TCP:
 			dprintf1("TCP ");
 			/* ports stay 0 if it is not the first fragment */
-			if (frag1) {
+			if (offset!=0) {
 				src_port=ntohs(tcp->source);
 				dst_port=ntohs(tcp->dest);
 				if(tcp->ack)
@@ -283,7 +281,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		case IPPROTO_UDP:
 			dprintf1("UDP ");
 			/* ports stay 0 if it is not the first fragment */
-			if (frag1) {
+			if (offset!=0) {
 				src_port=ntohs(udp->source);
 				dst_port=ntohs(udp->dest);
 			}
@@ -478,10 +476,10 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	else
 		f_flag=policy;
 	if(f_flag&IP_FW_F_ACCEPT)
-		return ((f_flag&IP_FW_F_MASQ)?2:1);
+		return ((f_flag&IP_FW_F_MASQ)?FW_MASQUERADE:FW_ACCEPT);
 	if(f_flag&IP_FW_F_ICMPRPL)
-		return -1;
-	return 0;
+		return FW_REJECT;
+	return FW_BLOCK;
 }
 
 #ifdef CONFIG_IP_MASQUERADE

@@ -1071,6 +1071,7 @@ static int atalk_create(struct socket *sock, int protocol)
 	sk->next=NULL;
 	sk->broadcast=0;
 	sk->no_check=0;		/* Checksums on by default */
+	sk->allocation=GFP_KERNEL;
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
 	sk->pair=NULL;
@@ -1774,7 +1775,6 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	int err;
 	long amount=0;
 	atalk_socket *sk=(atalk_socket *)sock->data;
-	int v;
 	
 	switch(cmd)
 	{
@@ -1782,16 +1782,16 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		 *	Protocol layer
 		 */
 		case TIOCOUTQ:
-			v=sk->sndbuf-sk->wmem_alloc;
-			if(v<0)
-				v=0;
+			amount=sk->sndbuf-sk->wmem_alloc;
+			if(amount<0)
+				amount=0;
 			break;
 		case TIOCINQ:
 		{
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
-				v=skb->len-sizeof(struct ddpehdr);
+				amount=skb->len-sizeof(struct ddpehdr);
 			break;
 		}
 		case SIOCGSTAMP:
@@ -1921,6 +1921,6 @@ void atalk_proto_init(struct net_proto *pro)
 		atalk_if_get_info
 	});
 
-	printk("Appletalk BETA 0.12 for Linux NET3.030\n");
+	printk("Appletalk BETA 0.13 for Linux NET3.031\n");
 }
 #endif

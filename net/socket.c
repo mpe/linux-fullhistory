@@ -198,7 +198,8 @@ static int get_fd(struct inode *inode)
  * The original socket implementation wasn't very clever, which is
  * why this exists at all..
  */
-inline struct socket *socki_lookup(struct inode *inode)
+
+__inline struct socket *socki_lookup(struct inode *inode)
 {
 	return &inode->u.socket_i;
 }
@@ -207,7 +208,7 @@ inline struct socket *socki_lookup(struct inode *inode)
  *	Go from a file number to its socket slot.
  */
 
-static inline struct socket *sockfd_lookup(int fd, struct file **pfile)
+extern __inline struct socket *sockfd_lookup(int fd, struct file **pfile)
 {
 	struct file *file;
 	struct inode *inode;
@@ -475,83 +476,6 @@ int sock_wake_async(struct socket *sock, int how)
 			break;
 	}
 	return 0;
-}
-
-	
-/*
- *	Wait for a connection.
- */
-
-int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
-{
-	struct socket *last;
-
-	/*
-	 *	We must be listening
-	 */
-	if (!(servsock->flags & SO_ACCEPTCON)) 
-	{
-		return(-EINVAL);
-	}
-
-  	/*
-  	 *	Put ourselves on the server's incomplete connection queue. 
-  	 */
-  	 
-	mysock->next = NULL;
-	cli();
-	if (!(last = servsock->iconn)) 
-		servsock->iconn = mysock;
-	else 
-	{
-		while (last->next) 
-			last = last->next;
-		last->next = mysock;
-	}
-	mysock->state = SS_CONNECTING;
-	mysock->conn = servsock;
-	sti();
-
-	/*
-	 * Wake up server, then await connection. server will set state to
-	 * SS_CONNECTED if we're connected.
-	 */
-	wake_up_interruptible(servsock->wait);
-	sock_wake_async(servsock, 0);
-
-	if (mysock->state != SS_CONNECTED) 
-	{
-		if (flags & O_NONBLOCK)
-			return -EINPROGRESS;
-
-		interruptible_sleep_on(mysock->wait);
-		if (mysock->state != SS_CONNECTED &&
-		    mysock->state != SS_DISCONNECTING) 
-		{
-		/*
-		 * if we're not connected we could have been
-		 * 1) interrupted, so we need to remove ourselves
-		 *    from the server list
-		 * 2) rejected (mysock->conn == NULL), and have
-		 *    already been removed from the list
-		 */
-			if (mysock->conn == servsock) 
-			{
-				cli();
-				if ((last = servsock->iconn) == mysock)
-					servsock->iconn = mysock->next;
-				else 
-				{
-					while (last->next != mysock) 
-						last = last->next;
-					last->next = mysock->next;
-				}
-				sti();
-			}
-			return(mysock->conn ? -EINTR : -EACCES);
-		}
-	}
-	return(0);
 }
 
 
@@ -1361,7 +1285,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.030 Snap #1 for Linux 1.3.4\n");
+	printk("Swansea University Computer Society NET3.031 Snap #1 for Linux 1.3.25\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

@@ -150,33 +150,37 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
  * to find the appropriate port.
  */
 
-void udp_err(int err, unsigned char *header, unsigned long daddr,
-	unsigned long saddr, struct inet_protocol *protocol)
+void udp_err(int type, int code, unsigned char *header, __u32 daddr,
+	__u32 saddr, struct inet_protocol *protocol)
 {
-	struct udphdr *th;
+	struct udphdr *uh;
 	struct sock *sk;
-	struct iphdr *ip=(struct iphdr *)header;
-  
-	header += 4*ip->ihl;
 
 	/*
 	 *	Find the 8 bytes of post IP header ICMP included for us
 	 */  
 	
-	th = (struct udphdr *)header;  
+	uh = (struct udphdr *)header;  
    
-	sk = get_sock(&udp_prot, th->source, daddr, th->dest, saddr);
+	sk = get_sock(&udp_prot, uh->source, daddr, uh->dest, saddr);
 
 	if (sk == NULL) 
 	  	return;	/* No socket for error */
   	
-	if ((err & 0xff00) == (ICMP_SOURCE_QUENCH << 8)) 
+	if (type == ICMP_SOURCE_QUENCH) 
 	{	/* Slow down! */
 		if (sk->cong_window > 1) 
 			sk->cong_window = sk->cong_window/2;
 		return;
 	}
 
+	if (type == ICMP_PARAMETERPROB)
+	{
+		sk->err = EPROTO;
+		sk->error_report(sk);
+		return;
+	}
+			
 	/*
 	 *	Various people wanted BSD UDP semantics. Well they've come 
 	 *	back out because they slow down response to stuff like dead
@@ -189,10 +193,9 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	/* 4.1.3.3. */
 	/* After the comment above, that should be no surprise. */
 
-	err &= 0xff;
-	if (err < 13 && icmp_err_convert[err].fatal)
+	if (code < 13 && icmp_err_convert[code].fatal)
 	{
-		sk->err = icmp_err_convert[err].errno;
+		sk->err = icmp_err_convert[code].errno;
 		sk->error_report(sk);
 	}
 }
@@ -218,7 +221,7 @@ struct udpfakehdr
  *	for direct user->board I/O transfers. That one will be fun.
  */
  
-static void udp_getfrag(const void *p, int saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static void udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
 	const char *src;
@@ -258,7 +261,7 @@ static void udp_getfrag(const void *p, int saddr, char * to, unsigned int offset
  *	this is a valid decision.
  */
  
-static void udp_getfrag_nosum(const void *p, int saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static void udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
 	const char *src;
@@ -523,7 +526,7 @@ int udp_read(struct sock *sk, unsigned char *buff, int len, int noblock,
 int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
 	struct rtable *rt;
-	unsigned long sa;
+	__u32 sa;
 	if (addr_len < sizeof(*usin)) 
 	  	return(-EINVAL);
 
@@ -535,7 +538,7 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;			/* Must turn broadcast on first */
   	
-  	rt=(sk->localroute?ip_rt_local:ip_rt_route)(usin->sin_addr.s_addr, NULL, &sa);
+  	rt=(sk->localroute?ip_rt_local:ip_rt_route)((__u32)usin->sin_addr.s_addr, NULL, &sa);
   	if(rt==NULL)
   		return -ENETUNREACH;
   	sk->saddr = sa;		/* Update source address */
@@ -567,8 +570,8 @@ static void udp_close(struct sock *sk, int timeout)
  */
  
 int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
-	unsigned long daddr, unsigned short len,
-	unsigned long saddr, int redo, struct inet_protocol *protocol)
+	__u32 daddr, unsigned short len,
+	__u32 saddr, int redo, struct inet_protocol *protocol)
 {
   	struct sock *sk;
   	struct udphdr *uh;

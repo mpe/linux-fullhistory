@@ -118,14 +118,15 @@ static volatile void (*do_done[SCSI_DEBUG_MAILBOXES])(Scsi_Cmnd *) = {NULL, };
 extern void scsi_debug_interrupt();
 
 volatile Scsi_Cmnd * SCint[SCSI_DEBUG_MAILBOXES] = {NULL,};
-static volatile unsigned int timeout[SCSI_DEBUG_MAILBOXES] ={0,};
-
-static char sense_buffer[128] = {0,};
+static char SCrst[SCSI_DEBUG_MAILBOXES] = {0,};
+static volatile unsigned int timeout[8] ={0,};
 
 /*
  * Semaphore used to simulate bus lockups.
  */
 static int scsi_debug_lockup = 0;
+
+static char sense_buffer[128] = {0,};
 
 static void scsi_dump(Scsi_Cmnd * SCpnt, int flag){
     int i;
@@ -199,6 +200,15 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	return 0;
     };
     
+    if( SCrst[target] != 0 && !scsi_debug_lockup )
+    {
+        SCrst[target] = 0;
+        memset(SCpnt->sense_buffer, 0, sizeof(SCpnt->sense_buffer));
+        SCpnt->sense_buffer[0] = 0x70;
+        SCpnt->sense_buffer[2] = UNIT_ATTENTION;
+	SCpnt->result = (CHECK_CONDITION << 1);
+	done(SCpnt);         
+    }
     switch(*cmd){
     case REQUEST_SENSE:
 	printk("Request sense...\n");
@@ -559,6 +569,7 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt)
     unsigned long flags;
     
     DEB(printk("scsi_debug_abort\n"));
+#if 0
     SCpnt->result = SCpnt->abort_reason << 16;
     for(j=0;j<SCSI_DEBUG_MAILBOXES; j++) {
 	if(SCpnt == SCint[j]) {
@@ -572,7 +583,8 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt)
 	    restore_flags(flags);
 	};
     };
-    return 0;
+#endif
+    return SCSI_ABORT_SNOOZE;
 }
 
 int scsi_debug_biosparam(Disk * disk, int dev, int* info){
@@ -590,11 +602,12 @@ int scsi_debug_reset(Scsi_Cmnd * SCpnt)
     unsigned long flags;
     
     void (*my_done)(Scsi_Cmnd *);
+    printk("Bus unlocked by reset(%d)\n", SCpnt->host->suggest_bus_reset);
     scsi_debug_lockup = 0;
     DEB(printk("scsi_debug_reset called\n"));
     for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
         if (SCint[i] == NULL) continue;
-        SCint[i]->result = DID_ABORT << 16;
+        SCint[i]->result = DID_RESET << 16;
         my_done = do_done[i];
         my_done(SCint[i]);
         save_flags(flags);
@@ -604,7 +617,7 @@ int scsi_debug_reset(Scsi_Cmnd * SCpnt)
         timeout[i] = 0;
         restore_flags(flags);
     }
-    return 0;
+    return SCSI_RESET_SUCCESS;
 }
 
 const char *scsi_debug_info(void)
@@ -620,6 +633,7 @@ int scsi_debug_proc_info(char *buffer, char **start, off_t offset,
 		     int length, int inode, int inout)
 {
     int len, pos, begin;
+    int orig_length;
 
     if(inout == 1)
     {

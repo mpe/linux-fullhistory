@@ -31,6 +31,7 @@
  *		Jonathan Naylor	:	Added Metric support.
  *	Miquel van Smoorenburg	:	BSD API fixes.
  *	Miquel van Smoorenburg	:	Metrics.
+ *		Alan Cox	:	Use __u32 properly
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -77,8 +78,8 @@ static struct rtable *rt_loopback = NULL;
  *	Should we return a status value here ?
  */
 
-static void rt_del(unsigned long dst, unsigned long mask,
-		char *devname, unsigned long gtw, short rt_flags, short metric)
+static void rt_del(__u32 dst, __u32 mask,
+		char *devname, __u32 gtw, short rt_flags, short metric)
 {
 	struct rtable *r, **rp;
 	unsigned long flags;
@@ -160,7 +161,7 @@ void ip_rt_flush(struct device *dev)
  *	masks judging by the destination address and our device netmask.
  */
  
-static inline unsigned long default_mask(unsigned long dst)
+static __u32 unsigned long default_mask(__u32 dst)
 {
 	dst = ntohl(dst);
 	if (IN_CLASSA(dst))
@@ -175,9 +176,9 @@ static inline unsigned long default_mask(unsigned long dst)
  *	If no mask is specified then generate a default entry.
  */
 
-static unsigned long guess_mask(unsigned long dst, struct device * dev)
+static __u32 guess_mask(__u32 dst, struct device * dev)
 {
-	unsigned long mask;
+	__u32 mask;
 
 	if (!dst)
 		return 0;
@@ -192,7 +193,7 @@ static unsigned long guess_mask(unsigned long dst, struct device * dev)
  *	Find the route entry through which our gateway will be reached
  */
  
-static inline struct device * get_gw_dev(unsigned long gw)
+static inline struct device * get_gw_dev(__u32 gw)
 {
 	struct rtable * rt;
 
@@ -220,8 +221,8 @@ static inline struct device * get_gw_dev(unsigned long gw)
  *	by the superuser.
  */
  
-void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
-	unsigned long gw, struct device *dev, unsigned short mtu,
+void ip_rt_add(short flags, __u32 dst, __u32 mask,
+	__u32 gw, struct device *dev, unsigned short mtu,
 	unsigned long window, unsigned short irtt, short metric)
 {
 	struct rtable *r, *rt;
@@ -393,7 +394,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
  *	Check if a mask is acceptable.
  */
  
-static inline int bad_mask(unsigned long mask, unsigned long addr)
+static inline int bad_mask(__u32 mask, __u32 addr)
 {
 	if (addr & (mask = ~mask))
 		return 1;
@@ -412,7 +413,8 @@ static int rt_new(struct rtentry *r)
 	int err;
 	char * devname;
 	struct device * dev = NULL;
-	unsigned long flags, daddr, mask, gw;
+	unsigned long flags;
+	__u32 daddr, mask, gw;
 	short metric;
 
 	/*
@@ -443,9 +445,9 @@ static int rt_new(struct rtentry *r)
 	 */
 	 
 	flags = r->rt_flags;
-	daddr = ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr;
-	mask = ((struct sockaddr_in *) &r->rt_genmask)->sin_addr.s_addr;
-	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
+	daddr = (__u32) ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr;
+	mask  = (__u32) ((struct sockaddr_in *) &r->rt_genmask)->sin_addr.s_addr;
+	gw    = (__u32) ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
 	metric = r->rt_metric > 0 ? r->rt_metric - 1 : 0;
 
 	/*
@@ -473,7 +475,7 @@ static int rt_new(struct rtentry *r)
 	 */
 	 
 	if (bad_mask(mask, daddr))
-		mask = 0;
+		mask=0;
 
 	/*
 	 *	Set the mask to nothing for host routes.
@@ -539,8 +541,8 @@ static int rt_kill(struct rtentry *r)
 	 * metric can become negative here if it wasn't filled in
 	 * but that's a fortunate accident; we really use that in rt_del.
 	 */
-	rt_del(trg->sin_addr.s_addr, msk->sin_addr.s_addr, devname,
-		gtw->sin_addr.s_addr, r->rt_flags, r->rt_metric - 1);
+	rt_del((__u32)trg->sin_addr.s_addr, (__u32)msk->sin_addr.s_addr, devname,
+		(__u32)gtw->sin_addr.s_addr, r->rt_flags, r->rt_metric - 1);
 	if ( devname != NULL )
 		putname(devname);
 	return 0;
@@ -570,9 +572,9 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 	for (r = rt_base; r != NULL; r = r->rt_next) 
 	{
         	size = sprintf(buffer+len, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\t%d\t%lu\t%u\n",
-			r->rt_dev->name, r->rt_dst, r->rt_gateway,
+			r->rt_dev->name, (unsigned long)r->rt_dst, (unsigned long)r->rt_gateway,
 			r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
-			r->rt_mask, (int)r->rt_mss, r->rt_window, (int)r->rt_irtt);
+			(unsigned long)r->rt_mask, (int)r->rt_mss, r->rt_window, (int)r->rt_irtt);
 		len+=size;
 		pos+=size;
 		if(pos<offset)
@@ -604,7 +606,7 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
  *	ARP/IP routing/Socket pointer cache. Volunteers welcome
  */
  
-struct rtable * ip_rt_route(unsigned long daddr, struct options *opt, unsigned long *src_addr)
+struct rtable * ip_rt_route(__u32 daddr, struct options *opt, __u32 *src_addr)
 {
 	struct rtable *rt;
 
@@ -638,7 +640,7 @@ no_route:
 	return NULL;
 }
 
-struct rtable * ip_rt_local(unsigned long daddr, struct options *opt, unsigned long *src_addr)
+struct rtable * ip_rt_local(__u32 daddr, struct options *opt, __u32 *src_addr)
 {
 	struct rtable *rt;
 

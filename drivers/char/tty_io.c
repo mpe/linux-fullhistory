@@ -35,6 +35,9 @@
  *
  * Rewrote canonical mode and added more termios flags.
  * 	-- julian@uhunix.uhcc.hawaii.edu (J. Cowley), 13Jan94
+ *
+ * Reorganized FASYNC support so mouse code can share it.
+ *	-- ctm@ardi.com, 9Sep95
  */
 
 #include <linux/types.h>
@@ -1217,16 +1220,17 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 	return 0;
 }
 
-static int tty_fasync(struct inode * inode, struct file * filp, int on)
+/*
+ * fasync_helper() is used by some character device drivers (mainly mice)
+ * to set up the fasync queue. It returns negative on error, 0 if it did
+ * no changes and positive if it added/deleted the entry.
+ */
+int fasync_helper(struct inode * inode, struct file * filp, int on, struct fasync_struct **fapp)
 {
-	struct tty_struct * tty;
-	struct fasync_struct *fa, *prev;
+	struct fasync_struct *fa, **fp;
+	unsigned long flags;
 
-	tty = (struct tty_struct *)filp->private_data;
-	if (tty_paranoia_check(tty, inode->i_rdev, "tty_fasync"))
-		return 0;
-
-	for (fa = tty->fasync, prev = 0; fa; prev= fa, fa = fa->fa_next) {
+	for (fp = fapp; (fa = *fp) != NULL; fp = &fa->fa_next) {
 		if (fa->fa_file == filp)
 			break;
 	}
@@ -1239,8 +1243,37 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 			return -ENOMEM;
 		fa->magic = FASYNC_MAGIC;
 		fa->fa_file = filp;
-		fa->fa_next = tty->fasync;
-		tty->fasync = fa;
+		save_flags(flags);
+		cli();
+		fa->fa_next = *fapp;
+		*fapp = fa;
+		restore_flags(flags);
+		return 1;
+	}
+	if (!fa)
+		return 0;
+	save_flags(flags);
+	cli();
+	*fp = fa->fa_next;
+	restore_flags(flags);
+	kfree(fa);
+	return 1;
+}
+
+static int tty_fasync(struct inode * inode, struct file * filp, int on)
+{
+	struct tty_struct * tty;
+	int retval;
+
+	tty = (struct tty_struct *)filp->private_data;
+	if (tty_paranoia_check(tty, inode->i_rdev, "tty_fasync"))
+		return 0;
+	
+	retval = fasync_helper(inode, filp, on, &tty->fasync);
+	if (retval <= 0)
+		return retval;
+
+	if (on) {
 		if (!tty->read_wait)
 			tty->minimum_to_wake = 1;
 		if (filp->f_owner == 0) {
@@ -1250,17 +1283,10 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 				filp->f_owner = current->pid;
 		}
 	} else {
-		if (!fa)
-			return 0;
-		if (prev)
-			prev->fa_next = fa->fa_next;
-		else
-			tty->fasync = fa->fa_next;
-		kfree_s(fa, sizeof(struct fasync_struct));
 		if (!tty->fasync && !tty->read_wait)
 			tty->minimum_to_wake = N_TTY_BUF_SIZE;
 	}
-	return 0;	
+	return 0;
 }
 
 #if 0

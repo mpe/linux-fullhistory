@@ -203,7 +203,27 @@ o	IPIP tunnels work fully we hope			[IN]
 o	Closing socket change (Marc Tamsky)		[IN]
 o	RFC1122 verification of tcp.c <Mike Shaver>	[IN]
 
----------- Things Linus had for a while and not merged ----------------
+-------->>>>> 1.3.26 <<<<<-------
+
+o	Rewrote ICMP completely				[TESTED -
+							 fragmenting is wrong]
+o	Moved most IP addresses to __u32		[IN]
+o	Cleaned up ICMP reporting			[IN]
+o	Tidied remove_sock				[IN]
+o	Added memory allocation type to ip_build_xmit	[IN]
+o	Cleaned up af_inet to use inet_error		[IN]
+o	Named firewall returns				[IN]
+o	Added firewall output checks to ip_build_xmit	[IN]
+o	Multicast router downs VIF's when their
+	physical interface is dropped			[IN]
+o	Reformatted ipv4/protocol.c, dropped frag field	[IN]
+o	Fixed MSS for TCP				[IN]
+o	Dropped sock_awaitconn				[IN]
+o	Added ip_forward to ksyms for IPIP etc		[IN]
+o	Appletalk TIOCINQ/TIOCOUTQ bug fix		[IN]
+o	Rewrote the IFF_UP/IFF_DOWN handling code	[IN]
+
+---------- Things I thought Linus had for a while and not merged ----------------
 
 o	Paul Gortmakers 8390 Copy and checksum		[PLEASE ADD 8)]
 
@@ -222,6 +242,7 @@ o	NEW NET TOOLS..... - wanted one net tools maintainer....
 
 --------------- Tbings That Need Doing Before 1.4 ------------------
 
+o	inet_error for other layers
 o	Finish merging the bridge code
 o	SIOCSLEEPRT patch
 o	Options support in ip_build_xmit		[PENDING]
@@ -239,8 +260,8 @@ o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
 o	Full variable length AX.25 support		[JSN doing]
 o	Tidy BPQ support to use a bpqip tunnel device
 o	Strange eth0-eth3 bug 
-o	Finish IPIP bug fixes
-o	Why doesnt the PROTO_UNREACH get sent ?
+o	Finish IPIP bug fixes				[Done hopefully]
+o	Why doesnt the PROTO_UNREACH get sent ?		[Should now work]
 o	IP protocols using sendmsg()
 o	Kill off old ip_queue_xmit/ip_send stuff.
 o	Remove kernel RARP and replace with user mode daemon.
@@ -248,7 +269,7 @@ o	Throw out existing firewall ioctl()'s and use a single table load.
 
 0.2
 ---
-o	New icmp.c.
+o	New icmp.c.					[IN]
 o	Better TCP window handling [Pedro Roque]
 o	IP option support.
 o	Add tty support to sonix driver.

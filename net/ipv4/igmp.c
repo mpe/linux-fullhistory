@@ -1,6 +1,11 @@
 /*
  *	Linux NET3:	Internet Gateway Management Protocol  [IGMP]
  *
+ *	This code implements the IGMP protocol as defined in RFC1122. There has
+ *	been a further revision of this protocol since, but since it is not 
+ *	cleanly specified in any IETF standards we implement the old one properly
+ *	rather than play a game of guess the BSD unofficial extensions.
+ *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>	
  *
@@ -206,7 +211,7 @@ extern __inline__ void igmp_group_added(struct ip_mc_list *im)
 }
 
 int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
-	unsigned long daddr, unsigned short len, unsigned long saddr, int redo,
+	__u32 daddr, unsigned short len, __u32 saddr, int redo,
 	struct inet_protocol *protocol)
 {
 	/* This basically follows the spec line by line -- see RFC1112 */

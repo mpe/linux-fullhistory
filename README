@@ -199,6 +199,10 @@ IF SOMETHING GOES WRONG:
    important: it tells something about why the kernel dumped code (in
    the above example it's due to a bad kernel pointer)
 
+ - You can use the "ksymoops" program to make sense of the dump.  Find
+   the C++ sources under the scripts/ directory to avoid having to do
+   the dump lookup by hand:
+
  - in debugging dumps like the above, it helps enormously if you can
    look up what the EIP value means.  The hex value as such doesn't help
    me or anybody else very much: it will depend on your particular

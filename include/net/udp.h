@@ -31,10 +31,10 @@
 extern struct proto udp_prot;
 
 
-extern void	udp_err(int err, unsigned char *header, unsigned long daddr,
-			unsigned long saddr, struct inet_protocol *protocol);
-extern void	udp_send_check(struct udphdr *uh, unsigned long saddr, 
-			unsigned long daddr, int len, struct sock *sk);
+extern void	udp_err(int type, int code, unsigned char *header, __u32 daddr,
+			__u32 saddr, struct inet_protocol *protocol);
+extern void	udp_send_check(struct udphdr *uh, __u32 saddr, 
+			__u32 daddr, int len, struct sock *sk);
 extern int	udp_recvfrom(struct sock *sk, unsigned char *to,
 			     int len, int noblock, unsigned flags,
 			     struct sockaddr_in *sin, int *addr_len);
@@ -43,8 +43,8 @@ extern int	udp_read(struct sock *sk, unsigned char *buff,
 extern int	udp_connect(struct sock *sk,
 			    struct sockaddr_in *usin, int addr_len);
 extern int	udp_rcv(struct sk_buff *skb, struct device *dev,
-			struct options *opt, unsigned long daddr,
-			unsigned short len, unsigned long saddr, int redo,
+			struct options *opt, __u32 daddr,
+			unsigned short len, __u32 saddr, int redo,
 			struct inet_protocol *protocol);
 extern int	udp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void	udp_cache_zap(void);	/* Remove udp last socket cache */

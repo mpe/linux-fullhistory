@@ -11,6 +11,7 @@
  *	Fixes:
  *		Alan Cox	:	Update the device on a real delete
  *					rather than any time but...
+ *		Alan Cox	:	IFF_ALLMULTI support.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -70,21 +71,48 @@ void dev_mc_upload(struct device *dev)
 		return;
 		
 		
-	/* Devices with no set multicast don't get set */
+	/*
+	 *	Devices with no set multicast don't get set 
+	 */
+	 
 	if(dev->set_multicast_list==NULL)
 		return;
-	/* Promiscuous is promiscuous - so no filter needed */
+		
+	/*
+	 *	Promiscuous is promiscuous - so no filter needed 
+	 */
+	 
 	if(dev->flags&IFF_PROMISC)
 	{
 		dev->set_multicast_list(dev, -1, NULL);
 		return;
 	}
 	
+	/*
+	 *	All multicasts. Older cards will interpret this as
+	 * 	promisc mode, which is the next best thing.
+	 */
+	
+	if(dev->flags&IFF_ALLMULTI)
+	{
+		dev->set_multicast_list(dev, -2, NULL);
+		return;
+	}
+	
+	/*
+	 *	No multicasts
+	 */
+	
 	if(dev->mc_count==0)
 	{
 		dev->set_multicast_list(dev,0,NULL);
 		return;
 	}
+	
+	/*
+	 *	The drivers need changing to process the list themselves... this is
+	 *	a mess.
+	 */
 	
 	data=kmalloc(dev->mc_count*dev->addr_len, GFP_KERNEL);
 	if(data==NULL)

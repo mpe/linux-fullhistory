@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 25
+SUBLEVEL = 26
 
 ARCH = i386
 
@@ -21,6 +21,7 @@ CPP	=$(CC) -E
 AR	=ar
 NM	=nm
 STRIP	=strip
+AWK	=awk
 
 all:	do-it-all
 
@@ -258,7 +259,7 @@ backup: mrproper
 
 #depend dep: .hdepend
 depend dep: archdep .hdepend include/linux/version.h
-	awk -f scripts/depend.awk init/*.c > .tmpdepend
+	$(AWK) -f scripts/depend.awk init/*.c > .tmpdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
 	mv .tmpdepend .depend
 ifdef CONFIG_MODVERSIONS
@@ -296,5 +297,5 @@ include Rules.make
 
 .hdepend: dummy
 	rm -f $@
-	awk -f scripts/depend.awk `find $(HPATH) -name \*.h -print` > .$@
+	$(AWK) -f scripts/depend.awk `find $(HPATH) -name \*.h -print` > .$@
 	mv .$@ $@

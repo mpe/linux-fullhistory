@@ -1011,6 +1011,8 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 			    }
 		    }
 		    aha_host[irq_level - 9] = shpnt;
+ 		    shpnt->this_id = scsi_id;
+ 		    shpnt->unique_id = base_io;
 		    shpnt->io_port = base_io;
 		    shpnt->n_io_port = 4;  /* Number of bytes of I/O space used */
 		    shpnt->dma_channel = dma_chan;
@@ -1172,33 +1174,28 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
     unchar ahacmd = CMD_START_SCSI;
     int i;
 
-    DEB(printk("aha1542_reset called\n"));
-#if 0
-    /* This does a scsi reset for all devices on the bus */
-    outb(SCRST, CONTROL(SCpnt->host->io_port));
-#else
-    /* This does a selective reset of just the one device */
-    /* First locate the ccb for this command */
-    for(i=0; i< AHA1542_MAILBOXES; i++)
-      if(HOSTDATA(SCpnt->host)->SCint[i] == SCpnt)
-	{
-	  HOSTDATA(SCpnt->host)->ccb[i].op = 0x81;  /* BUS DEVICE RESET */
-	  /* Now tell the 1542 to flush all pending commands for this target */
-	  aha1542_out(SCpnt->host->io_port, &ahacmd, 1);
+    /*
+     * See if a bus reset was suggested.
+     */
+    if( SCpnt->host->suggest_bus_reset )
+      {
+	/* 
+	 * This does a scsi reset for all devices on the bus.
+	 * In principle, we could also reset the 1542 - should
+	 * we do this?  Try this first, and we can add that later
+	 * if it turns out to be useful.
+	 */
+	outb(SCRST, CONTROL(SCpnt->host->io_port));
+	/*
+	 * Now try and pick up the pieces.  Restart all commands
+	 * that are currently active on the bus, and reset all of
+	 * the datastructures.  We have some time to kill while
+	 * things settle down, so print a nice message.
+	 */
+	printk("Sent BUS RESET to scsi host %d\n", SCpnt->host->host_no);
 
-	  /* Here is the tricky part.  What to do next.  Do we get an interrupt
-	     for the commands that we aborted with the specified target, or
-	     do we generate this on our own?  Try it without first and see
-	     what happens */
-	  printk("Sent BUS DEVICE RESET to target %d\n", SCpnt->target);
-
-	  /* If the first does not work, then try the second.  I think the
-	     first option is more likely to be correct. Free the command
-	     block for all commands running on this target... */
-#if 1
-	  for(i=0; i< AHA1542_MAILBOXES; i++)
-	    if(HOSTDATA(SCpnt->host)->SCint[i] &&
-	       HOSTDATA(SCpnt->host)->SCint[i]->target == SCpnt->target)
+	for(i=0; i< AHA1542_MAILBOXES; i++)
+	  if(HOSTDATA(SCpnt->host)->SCint[i] != NULL)
 	    {
 	      Scsi_Cmnd * SCtmp;
 	      SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
@@ -1210,13 +1207,50 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
 	      HOSTDATA(SCpnt->host)->SCint[i] = NULL;
 	      HOSTDATA(SCpnt->host)->mb[i].status = 0;
 	    }
-	  return SCSI_RESET_SUCCESS;
-#else
-	  return SCSI_RESET_PENDING;
-#endif
-	}
-
-#endif
+	/*
+	 * Now tell the mid-level code what we did here.  Since
+	 * we have restarted all of the outstanding commands,
+	 * then report SUCCESS.
+	 */
+	return (SCSI_RESET_SUCCESS | SCSI_RESET_BUS_RESET);
+      }
+    else
+      {
+	/* This does a selective reset of just the one device */
+	/* First locate the ccb for this command */
+	for(i=0; i< AHA1542_MAILBOXES; i++)
+	  if(HOSTDATA(SCpnt->host)->SCint[i] == SCpnt)
+	    {
+	      HOSTDATA(SCpnt->host)->ccb[i].op = 0x81;  /* BUS DEVICE RESET */
+	      /* Now tell the 1542 to flush all pending commands for this target */
+	      aha1542_out(SCpnt->host->io_port, &ahacmd, 1);
+	      
+	      /* Here is the tricky part.  What to do next.  Do we get an interrupt
+		 for the commands that we aborted with the specified target, or
+		 do we generate this on our own?  Try it without first and see
+		 what happens */
+	      printk("Sent BUS DEVICE RESET to target %d\n", SCpnt->target);
+	      
+	      /* If the first does not work, then try the second.  I think the
+		 first option is more likely to be correct. Free the command
+		 block for all commands running on this target... */
+	      for(i=0; i< AHA1542_MAILBOXES; i++)
+		if(HOSTDATA(SCpnt->host)->SCint[i] &&
+		   HOSTDATA(SCpnt->host)->SCint[i]->target == SCpnt->target)
+		  {
+		    Scsi_Cmnd * SCtmp;
+		    SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
+		    SCtmp->result = DID_RESET << 16;
+		    if (SCtmp->host_scribble) scsi_free(SCtmp->host_scribble, 512);
+		    printk("Sending DID_RESET for target %d\n", SCpnt->target);
+		    SCtmp->scsi_done(SCpnt);
+		    
+		    HOSTDATA(SCpnt->host)->SCint[i] = NULL;
+		    HOSTDATA(SCpnt->host)->mb[i].status = 0;
+		  }
+	      return SCSI_RESET_SUCCESS;
+	    }
+      }
     /* No active command at this time, so this means that each time we got
        some kind of response the last time through.  Tell the mid-level code
        to request sense information in order to decide what to do next. */

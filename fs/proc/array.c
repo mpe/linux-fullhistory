@@ -288,7 +288,7 @@ static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
 	pmd_t *page_middle;
 	pte_t pte;
 
-	if (!p || ptr >= TASK_SIZE)
+	if (!p || !p->mm || ptr >= TASK_SIZE)
 		return 0;
 	page_dir = pgd_offset(p->mm,ptr);
 	if (pgd_none(*page_dir))
@@ -349,7 +349,7 @@ static int get_env(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
 
-	if (!p || !*p)
+	if (!p || !*p || !(*p)->mm)
 		return 0;
 	return get_array(p, (*p)->mm->env_start, (*p)->mm->env_end, buffer);
 }
@@ -358,7 +358,7 @@ static int get_arg(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
 
-	if (!p || !*p)
+	if (!p || !*p || !(*p)->mm)
 		return 0;
 	return get_array(p, (*p)->mm->arg_start, (*p)->mm->arg_end, buffer);
 }
@@ -394,76 +394,86 @@ static unsigned long get_wchan(struct task_struct *p)
 
 static int get_stat(int pid, char * buffer)
 {
-	struct task_struct ** p = get_task(pid);
-	unsigned long sigignore=0, sigcatch=0, bit=1, wchan;
+	struct task_struct ** p = get_task(pid), *tsk;
+	unsigned long sigignore=0, sigcatch=0, wchan;
 	unsigned long vsize, eip, esp;
 	int i,tty_pgrp;
 	char state;
 
-	if (!p || !*p)
+	if (!p || (tsk = *p) == NULL)
 		return 0;
-	if ((*p)->state < 0 || (*p)->state > 5)
+	if (tsk->state < 0 || tsk->state > 5)
 		state = '.';
 	else
-		state = "RSDZTD"[(*p)->state];
-	eip = esp = 0;
-	vsize = (*p)->kernel_stack_page;
-	if (vsize) {
-		eip = KSTK_EIP(vsize);
-		esp = KSTK_ESP(vsize);
-		vsize = (*p)->mm->brk - (*p)->mm->start_code + PAGE_SIZE-1;
-		if (esp)
-			vsize += TASK_SIZE - esp;
+		state = "RSDZTD"[tsk->state];
+	vsize = eip = esp = 0;
+	if (tsk->mm) {
+		vsize = tsk->kernel_stack_page;
+		if (vsize) {
+			eip = KSTK_EIP(vsize);
+			esp = KSTK_ESP(vsize);
+			vsize = tsk->mm->brk - tsk->mm->start_code + PAGE_SIZE-1;
+			if (esp)
+				vsize += TASK_SIZE - esp;
+		}
 	}
-	wchan = get_wchan(*p);
-	for(i=0; i<32; ++i) {
-		switch((unsigned long) (*p)->sigaction[i].sa_handler) {
-		case 1: sigignore |= bit; break;
-		case 0: break;
-		default: sigcatch |= bit;
-		} bit <<= 1;
+	wchan = get_wchan(tsk);
+	if (tsk->sig) {
+		unsigned long bit = 1;
+		for(i=0; i<32; ++i) {
+			switch((unsigned long) tsk->sig->action[i].sa_handler) {
+				case 0:
+					break;
+				case 1:
+					sigignore |= bit;
+					break;
+				default:
+					sigcatch |= bit;
+			}
+			bit <<= 1;
+		}
 	}
-	if ((*p)->tty)
-		tty_pgrp = (*p)->tty->pgrp;
+	if (tsk->tty)
+		tty_pgrp = tsk->tty->pgrp;
 	else
 		tty_pgrp = -1;
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu\n",
 		pid,
-		(*p)->comm,
+		tsk->comm,
 		state,
-		(*p)->p_pptr->pid,
-		(*p)->pgrp,
-		(*p)->session,
-	        (*p)->tty ? (*p)->tty->device : 0,
+		tsk->p_pptr->pid,
+		tsk->pgrp,
+		tsk->session,
+	        tsk->tty ? tsk->tty->device : 0,
 		tty_pgrp,
-		(*p)->flags,
-		(*p)->mm->min_flt,
-		(*p)->mm->cmin_flt,
-		(*p)->mm->maj_flt,
-		(*p)->mm->cmaj_flt,
-		(*p)->utime,
-		(*p)->stime,
-		(*p)->cutime,
-		(*p)->cstime,
-		(*p)->counter,  /* this is the kernel priority ---
+		tsk->flags,
+		tsk->mm ? tsk->mm->min_flt : 0,
+		tsk->mm ? tsk->mm->cmin_flt : 0,
+		tsk->mm ? tsk->mm->maj_flt : 0,
+		tsk->mm ? tsk->mm->cmaj_flt : 0,
+		tsk->utime,
+		tsk->stime,
+		tsk->cutime,
+		tsk->cstime,
+		tsk->counter,  /* this is the kernel priority ---
 				   subtract 30 in your user-level program. */
-		(*p)->priority, /* this is the nice value ---
+		tsk->priority, /* this is the nice value ---
 				   subtract 15 in your user-level program. */
-		(*p)->timeout,
-		(*p)->it_real_value,
-		(*p)->start_time,
+		tsk->timeout,
+		tsk->it_real_value,
+		tsk->start_time,
 		vsize,
-		(*p)->mm->rss, /* you might want to shift this left 3 */
-		(*p)->rlim[RLIMIT_RSS].rlim_cur,
-		(*p)->mm->start_code,
-		(*p)->mm->end_code,
-		(*p)->mm->start_stack,
+		tsk->mm ? tsk->mm->rss : 0, /* you might want to shift this left 3 */
+		tsk->rlim ? tsk->rlim[RLIMIT_RSS].rlim_cur : 0,
+		tsk->mm ? tsk->mm->start_code : 0,
+		tsk->mm ? tsk->mm->end_code : 0,
+		tsk->mm ? tsk->mm->start_stack : 0,
 		esp,
 		eip,
-		(*p)->signal,
-		(*p)->blocked,
+		tsk->signal,
+		tsk->blocked,
 		sigignore,
 		sigcatch,
 		wchan);
@@ -544,16 +554,16 @@ static void statm_pgd_range(pgd_t * pgd, unsigned long address, unsigned long en
 
 static int get_statm(int pid, char * buffer)
 {
-	struct task_struct ** p = get_task(pid);
+	struct task_struct ** p = get_task(pid), *tsk;
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
-	if (!p || !*p)
+	if (!p || (tsk = *p) == NULL)
 		return 0;
-	if ((*p)->state != TASK_ZOMBIE) {
-		struct vm_area_struct * vma = (*p)->mm->mmap;
+	if (tsk->mm) {
+		struct vm_area_struct * vma = tsk->mm->mmap;
 
 		while (vma) {
-			pgd_t *pgd = pgd_offset((*p)->mm, vma->vm_start);
+			pgd_t *pgd = pgd_offset(tsk->mm, vma->vm_start);
 			int pages = 0, shared = 0, dirty = 0, total = 0;
 
 			statm_pgd_range(pgd, vma->vm_start, vma->vm_end, &pages, &shared, &dirty, &total);
@@ -613,7 +623,7 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 	if (!p || !*p)
 		return -EINVAL;
 
-	if (count == 0)
+	if (!(*p)->mm || count == 0)
 		return 0;
 
 	/* decode f_pos */

@@ -10,6 +10,14 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/sched.h>
 #include <linux/ext_fs.h>
 #include <linux/kernel.h>
@@ -40,6 +48,7 @@ void ext_put_super(struct super_block *sb)
 	if (sb->u.ext_sb.s_firstfreeblock)
 		brelse (sb->u.ext_sb.s_firstfreeblock);
 	unlock_super(sb);
+	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -61,12 +70,14 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 	struct ext_super_block *es;
 	int dev = s->s_dev,block;
 
+	MOD_INC_USE_COUNT;
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);
 		printk("EXT-fs: unable to read superblock\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	es = (struct ext_super_block *) bh->b_data;
@@ -89,6 +100,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 		if (!silent)
 			printk("VFS: Can't find an extfs filesystem on dev 0x%04x.\n",
 				   dev);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (!s->u.ext_sb.s_firstfreeblocknumber)
@@ -99,6 +111,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 			printk("ext_read_super: unable to read first free block\n");
 			s->s_dev = 0;
 			unlock_super(s);
+			MOD_DEC_USE_COUNT;
 			return NULL;
 		}
 	if (!s->u.ext_sb.s_firstfreeinodenumber)
@@ -110,6 +123,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 			brelse(s->u.ext_sb.s_firstfreeblock);
 			s->s_dev = 0;
 			unlock_super (s);
+			MOD_DEC_USE_COUNT;
 			return NULL;
 		}
 	}
@@ -120,6 +134,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 	if (!(s->s_mounted = iget(s,EXT_ROOT_INO))) {
 		s->s_dev=0;
 		printk("EXT-fs: get root inode failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	return s;
@@ -440,3 +455,23 @@ int ext_sync_inode (struct inode *inode)
 	return err;
 }
 
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type ext_fs_type = {
+        ext_read_super, "ext", 1, NULL
+};
+
+int init_module(void)
+{
+        register_filesystem(&ext_fs_type);
+        return 0;
+}
+
+void cleanup_module(void)
+{
+        unregister_filesystem(&ext_fs_type);
+}
+
+#endif

@@ -22,6 +22,15 @@ extern unsigned long event;
 #include <asm/page.h>
 
 /*
+ * cloning flags:
+ */
+#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
+#define CLONE_VM	0x00000100	/* set if VM shared between processes */
+#define CLONE_FS	0x00000200	/* set if fs info shared between processes */
+#define CLONE_FILES	0x00000400	/* set if open files shared between processes */
+#define CLONE_SIGHAND	0x00000800	/* set if signal handlers shared */
+
+/*
  * These are the constant used to fake the fixed-point load-average
  * counting. Some notes:
  *  - 11 bit fractions expand to 22 bits by the multiplies: this gives
@@ -87,8 +96,6 @@ extern void trap_init(void);
 
 asmlinkage void schedule(void);
 
-#endif /* __KERNEL__ */
-
 struct files_struct {
 	int count;
 	fd_set close_on_exec;
@@ -142,6 +149,15 @@ struct mm_struct {
 /* swap */	0, 0, 0, 0, \
 		&init_mmap, &init_mmap }
 
+struct signal_struct {
+	int count;
+	struct sigaction action[32];
+};
+
+#define INIT_SIGNALS { \
+		1, \
+		{ {0,}, } }
+
 struct task_struct {
 /* these are hardcoded - don't touch */
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
@@ -157,7 +173,6 @@ struct task_struct {
 	struct linux_binfmt *binfmt;
 	struct task_struct *next_task, *prev_task;
 	struct task_struct *next_run,  *prev_run;
-	struct sigaction *sigaction;
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
@@ -199,6 +214,8 @@ struct task_struct {
 	struct files_struct *files;
 /* memory management info */
 	struct mm_struct *mm;
+/* signal handlers */
+	struct signal_struct *sig;
 };
 
 /*
@@ -211,15 +228,6 @@ struct task_struct {
 
 #define PF_STARTING	0x00000100	/* being created */
 #define PF_EXITING	0x00000200	/* getting shut down */
-
-/*
- * cloning flags:
- */
-#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
-#define CLONE_VM	0x00000100	/* set if VM shared between processes */
-#define CLONE_FS	0x00000200	/* set if fs info shared between processes */
-#define CLONE_FILES	0x00000400	/* set if open files shared between processes */
-#define CLONE_SIGHAND	0x00000800	/* set if signal handlers shared */
 
 /*
  * Limit the stack by to some sane default: root can always
@@ -237,7 +245,6 @@ struct task_struct {
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
-/* signals */	init_sigaction, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
@@ -259,10 +266,9 @@ struct task_struct {
 /* tss */	INIT_TSS, \
 /* fs */	&init_fs, \
 /* files */	&init_files, \
-/* mm */	&init_mm \
+/* mm */	&init_mm, \
+/* signals */	&init_signals, \
 }
-
-#ifdef __KERNEL__
 
 extern struct   mm_struct init_mm;
 extern struct task_struct init_task;
@@ -298,6 +304,10 @@ extern void free_irq(unsigned int irq);
 extern void copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);
 extern void exit_thread(void);
+
+extern void exit_fs(struct task_struct *);
+extern void exit_files(struct task_struct *);
+extern void exit_sighand(struct task_struct *);
 
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);

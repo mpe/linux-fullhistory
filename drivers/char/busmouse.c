@@ -21,7 +21,20 @@
  *   removed assignment chr_fops[10] = &mouse_fops; see mouse.c
  *   renamed mouse_fops => bus_mouse_fops, made bus_mouse_fops public.
  *   renamed this file mouse.c => busmouse.c
+ *
+ * Minor addition by Cliff Matthews
+ *   added fasync support
+ *
+ * Modularised 6-Sep-95 Philip Blundell <pjb27@cam.ac.uk> 
  */
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -81,8 +94,21 @@ static void mouse_interrupt(int irq, struct pt_regs *regs)
 	      mouse.dy = -2048;
 	  if (mouse.dy >  2048)
 	      mouse.dy =  2048;
+
+	  if (mouse.fasyncptr)
+	      kill_fasync(mouse.fasyncptr, SIGIO);
 	}
 	MSE_INT_ON();
+}
+
+static int fasync_mouse(struct inode *inode, struct file *filp, int on)
+{
+	int retval;
+
+	retval = fasync_helper(inode, filp, on, &mouse.fasyncptr);
+	if (retval < 0)
+		return retval;
+	return 0;
 }
 
 /*
@@ -96,6 +122,7 @@ static void close_mouse(struct inode * inode, struct file * file)
 	    MSE_INT_OFF();
 	    free_irq(mouse_irq);
 	}
+	fasync_mouse(inode, file, 0);
 }
 
 /*
@@ -212,9 +239,21 @@ struct file_operations bus_mouse_fops = {
 	NULL,		/* mouse_mmap */
 	open_mouse,
 	close_mouse,
+	NULL,
+	fasync_mouse,
 };
 
+static struct mouse bus_mous = {
+	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
+};
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+int init_module(void)
+#else
 unsigned long bus_mouse_init(unsigned long kmem_start)
+#endif
 {
 	int i;
 
@@ -224,7 +263,11 @@ unsigned long bus_mouse_init(unsigned long kmem_start)
 		/* busy loop */;
 	if (inb(MSE_SIGNATURE_PORT) != MSE_SIGNATURE_BYTE) {
 		mouse.present = 0;
+#ifdef MODULE
+		return -EIO;
+#else
 		return kmem_start;
+#endif
 	}
 	outb(MSE_DEFAULT_MODE, MSE_CONFIG_PORT);
 	MSE_INT_OFF();
@@ -237,5 +280,19 @@ unsigned long bus_mouse_init(unsigned long kmem_start)
 	mouse.wait = NULL;
 	printk("Logitech Bus mouse detected and installed with IRQ %d.\n",
 	       mouse_irq);
+	mouse_register(&bus_mouse);
+#ifdef MODULE
+	return 0;
+#else
 	return kmem_start;
+#endif
 }
+
+#ifdef MODULE
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("busmouse: in use - remove delayed\n");
+	mouse_deregister(&bus_mouse);
+}
+#endif

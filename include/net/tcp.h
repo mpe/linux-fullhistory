@@ -111,8 +111,8 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
  * convinced that this is the solution for the 'getpeername(2)'
  * problem. Thanks to Stephen A. Wood <saw@cebaf.gov>  -FvK
  */
-extern __inline const int
-tcp_connected(const int state)
+
+extern __inline const int tcp_connected(const int state)
 {
   return(state == TCP_ESTABLISHED || state == TCP_CLOSE_WAIT ||
 	 state == TCP_FIN_WAIT1   || state == TCP_FIN_WAIT2 ||
@@ -123,12 +123,12 @@ tcp_connected(const int state)
 extern struct proto tcp_prot;
 
 
-extern void	tcp_err(int err, unsigned char *header, unsigned long daddr,
-			unsigned long saddr, struct inet_protocol *protocol);
+extern void	tcp_err(int type, int code, unsigned char *header, __u32 daddr,
+			__u32, struct inet_protocol *protocol);
 extern void	tcp_shutdown (struct sock *sk, int how);
 extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
-			struct options *opt, unsigned long daddr,
-			unsigned short len, unsigned long saddr, int redo,
+			struct options *opt, __u32 daddr,
+			unsigned short len, __u32 saddr, int redo,
 			struct inet_protocol *protocol);
 
 extern int	tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);

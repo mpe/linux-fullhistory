@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sat Sep  2 11:50:15 1995 by root@kai.makisara.fi
+  Last modified: Sun Sep 10 20:33:24 1995 by makisara@kai.makisara.fi
 */
 #ifdef MODULE
 #include <linux/autoconf.h>
@@ -71,6 +71,7 @@ static int debugging = 1;
 #define ST_LONG_TIMEOUT (2000 * HZ)
 
 static int st_nbr_buffers;
+static int st_req_nbr_buffers;
 static ST_buffer **st_buffers;
 static int st_buffer_size = ST_BUFFER_SIZE;
 static int st_write_threshold = ST_WRITE_THRESHOLD;
@@ -78,7 +79,7 @@ static int st_max_buffers = ST_MAX_BUFFERS;
 
 Scsi_Tape * scsi_tapes = NULL;
 
-static void st_init(void);
+static int st_init(void);
 static int st_attach(Scsi_Device *);
 static int st_detect(Scsi_Device *);
 static void st_detach(Scsi_Device *);
@@ -375,6 +376,14 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
   dev = MINOR(inode->i_rdev) & 127;
   STp = &(scsi_tapes[dev]);
   STbuffer = STp->buffer;
+
+
+  /*
+   * If there was a bus reset, block further access
+   * to this device.
+   */
+  if( STp->device->was_reset )
+    return (-EIO);
 
   if (STp->ready != ST_READY)
     return 0;
@@ -765,6 +774,14 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
       return (-EIO);
+
+    /*
+     * If there was a bus reset, block further access
+     * to this device.
+     */
+    if( STp->device->was_reset )
+      return (-EIO);
+
 #if DEBUG
     if (!STp->in_use) {
       printk("st%d: Incorrect device.\n", dev);
@@ -1790,6 +1807,15 @@ st_ioctl(struct inode * inode,struct file * file,
    }
 #endif
 
+   /*
+    * If this is something intended for the lower layer, just pass it
+    * through.
+    */
+   if( cmd_in == SCSI_IOCTL_GET_IDLUN || cmd_in == SCSI_IOCTL_PROBE_HOST )
+     {
+       return scsi_ioctl(STp->device, cmd_in, (void *) arg);
+     }
+   
    cmd = cmd_in & IOCCMD_MASK;
    if (cmd == (MTIOCTOP & IOCCMD_MASK)) {
 
@@ -1799,6 +1825,22 @@ st_ioctl(struct inode * inode,struct file * file,
      i = verify_area(VERIFY_READ, (void *)arg, sizeof(mtc));
      if (i)
 	return i;
+
+     /*
+      * If there was a bus reset, block further access
+      * to this device.  If the user wants to rewind the tape,
+      * then reset the flag and allow access again.
+      */
+     if( STp->device->was_reset) 
+       {
+	 if(mtc.mt_op != MTREW && 
+	    mtc.mt_op != MTOFFL &&
+	    mtc.mt_op != MTRESET && 
+	    mtc.mt_op != MTRETEN && 
+	    mtc.mt_op != MTEOM)
+	   return (-EIO);
+	 STp->device->was_reset = 0;
+       }
 
      memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
@@ -2038,25 +2080,30 @@ static int st_detect(Scsi_Device * SDp)
 static int st_registered = 0;
 
 /* Driver initialization */
-static void st_init()
+static int st_init()
 {
   int i;
   Scsi_Tape * STp;
 
-  if (st_template.dev_noticed == 0) return;
+  if (st_template.dev_noticed == 0) return 0;
 
   if(!st_registered) {
     if (register_chrdev(SCSI_TAPE_MAJOR,"st",&st_fops)) {
       printk("Unable to get major %d for SCSI tapes\n",MAJOR_NR);
-      return;
+      return 1;
     }
     st_registered++;
   }
 
-  if (scsi_tapes) return;
+  if (scsi_tapes) return 0;
   scsi_tapes = (Scsi_Tape *) scsi_init_malloc(
   		(st_template.dev_noticed + ST_EXTRA_DEVS) * 
 					      sizeof(Scsi_Tape), GFP_ATOMIC);
+  if (scsi_tapes == NULL) {
+    printk("Unable to allocate descriptors for SCSI tapes.\n");
+    unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+    return 1;
+  }
   st_template.dev_max = st_template.dev_noticed + ST_EXTRA_DEVS;
 
 #if DEBUG
@@ -2091,11 +2138,24 @@ static void st_init()
   }
 
   /* Allocate the buffers */
-  st_nbr_buffers = st_template.dev_noticed + ST_EXTRA_DEVS;
+  st_nbr_buffers = st_template.dev_noticed;
+  if (st_nbr_buffers < ST_EXTRA_DEVS)
+    st_nbr_buffers = ST_EXTRA_DEVS;
   if (st_nbr_buffers > st_max_buffers)
     st_nbr_buffers = st_max_buffers;
+  st_req_nbr_buffers = st_nbr_buffers;
   st_buffers = (ST_buffer **) scsi_init_malloc(st_nbr_buffers * 
-					       sizeof(ST_buffer *), GFP_ATOMIC);
+					       sizeof(ST_buffer *),
+					       GFP_ATOMIC);
+  if (st_buffers == NULL) {
+    printk("Unable to allocate tape buffer pointers.\n");
+    unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+    scsi_init_free((char *) scsi_tapes,
+		   (st_template.dev_noticed + ST_EXTRA_DEVS) 
+		   * sizeof(Scsi_Tape));
+    return 1;
+  }
+
   /* FIXME - if we are hitting this because we are loading a tape module
   as a loadable driver, we should not use kmalloc - it will allocate
   a 64Kb region in order to buffer about 32Kb.  Try using 31 blocks
@@ -2103,14 +2163,32 @@ static void st_init()
   
   for (i=0; i < st_nbr_buffers; i++) {
     st_buffers[i] = (ST_buffer *) scsi_init_malloc(sizeof(ST_buffer) - 
-						   1 + st_buffer_size, GFP_ATOMIC | GFP_DMA);
+						   1 + st_buffer_size,
+						   GFP_ATOMIC | GFP_DMA);
+    if (st_buffers[i] == NULL) {
+      printk("Not enough memory for buffer %d.\n", i);
+      if (i == 0) {
+	unregister_chrdev(SCSI_TAPE_MAJOR, "st");
+	scsi_init_free((char *) scsi_tapes,
+		       (st_template.dev_noticed + ST_EXTRA_DEVS) 
+		       * sizeof(Scsi_Tape));
+	scsi_init_free((char *) st_buffers,
+		       st_nbr_buffers * sizeof(ST_buffer *));
+	return 1;
+      }
+      st_nbr_buffers = i;
+      printk("Number of tape buffers adjusted.\n");
+      break;
+    }
+    else {
 #if DEBUG
 /*    printk("st: Buffer address: %p\n", st_buffers[i]); */
 #endif
-    st_buffers[i]->in_use = 0;
-    st_buffers[i]->writing = 0;
+      st_buffers[i]->in_use = 0;
+      st_buffers[i]->writing = 0;
+    }
   }
-  return;
+  return 0;
 }
 
 static void st_detach(Scsi_Device * SDp)
@@ -2153,13 +2231,17 @@ void cleanup_module( void)
     scsi_init_free((char *) scsi_tapes,
 		   (st_template.dev_noticed + ST_EXTRA_DEVS) 
 		   * sizeof(Scsi_Tape));
-    
-    for (i=0; i < st_nbr_buffers; i++) {
-      scsi_init_free((char *) st_buffers[i],
-		     sizeof(ST_buffer) - 1 + st_buffer_size);
+
+    if (st_buffers != NULL) {
+      for (i=0; i < st_nbr_buffers; i++)
+	if (st_buffers[i] != NULL) {
+	  scsi_init_free((char *) st_buffers[i],
+			 sizeof(ST_buffer) - 1 + st_buffer_size);
+	}
+      
+      scsi_init_free((char *) st_buffers,
+		     st_req_nbr_buffers * sizeof(ST_buffer *));
     }
-    
-    scsi_init_free((char *) st_buffers, st_nbr_buffers * sizeof(ST_buffer *));
   }
   st_template.dev_max = 0;
 }

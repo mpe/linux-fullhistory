@@ -81,6 +81,7 @@ struct sock {
   struct options		*opt;
   volatile unsigned long	wmem_alloc;
   volatile unsigned long	rmem_alloc;
+  unsigned long			allocation;		/* Allocation mode */
   __u32				write_seq;
   __u32				sent_seq;
   __u32				acked_seq;
@@ -126,8 +127,8 @@ struct sock {
 				receive_queue;
   struct proto			*prot;
   struct wait_queue		**sleep;
-  unsigned long			daddr;
-  unsigned long			saddr;
+  __u32				daddr;
+  __u32				saddr;
   unsigned short		max_unacked;
   unsigned short		window;
   unsigned short		bytes_rcv;
@@ -260,8 +261,8 @@ struct proto {
 				    unsigned flags, struct sockaddr_in *usin,
 				    int *addr_len);
   int			(*build_header)(struct sk_buff *skb,
-					unsigned long saddr,
-					unsigned long daddr,
+					__u32 saddr,
+					__u32 daddr,
 					struct device **dev, int type,
 					struct options *opt, int len,
 					int tos, int ttl);
@@ -275,8 +276,8 @@ struct proto {
   void			(*write_wakeup)(struct sock *sk);
   void			(*read_wakeup)(struct sock *sk);
   int			(*rcv)(struct sk_buff *buff, struct device *dev,
-			       struct options *opt, unsigned long daddr,
-			       unsigned short len, unsigned long saddr,
+			       struct options *opt, __u32 daddr,
+			       unsigned short len, __u32 saddr,
 			       int redo, struct inet_protocol *protocol);
   int			(*select)(struct sock *sk, int which,
 				  select_table *wait);
@@ -292,9 +293,7 @@ struct proto {
   unsigned long		retransmits;
   char			name[32];
   int			inuse, highestinuse;
-#ifndef PACKET_C		/* Hack to save 1K for packet sockets */ 
   struct sock *		sock_array[SOCK_ARRAY_SIZE];
-#endif PACKET_C  
 };
 
 #define TIME_WRITE	1

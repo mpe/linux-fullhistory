@@ -111,16 +111,6 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define BLKRASET 4706 /* Set read ahead for block device */
 #define BLKRAGET 4707 /* get current read ahead setting */
 
-/* These are a few other constants  only used by scsi  devices */
-
-#define SCSI_IOCTL_GET_IDLUN 0x5382
-
-/* Used to turn on and off tagged queuing for scsi devices */
-
-#define SCSI_IOCTL_TAGGED_ENABLE 0x5383
-#define SCSI_IOCTL_TAGGED_DISABLE 0x5384
-
-
 #define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
 #define FIBMAP	   1	/* bmap access */
 #define FIGETBSZ   2	/* get the block size used for bmap */
@@ -284,6 +274,8 @@ struct fasync_struct {
 };
 
 #define FASYNC_MAGIC 0x4601
+
+extern int fasync_helper(struct inode *, struct file *, int, struct fasync_struct **);
 
 #include <linux/minix_fs_sb.h>
 #include <linux/ext_fs_sb.h>
@@ -490,6 +482,7 @@ extern void insert_inode_hash(struct inode *);
 extern void clear_inode(struct inode *);
 extern struct inode * get_pipe_inode(void);
 extern struct file * get_empty_filp(void);
+extern int close_fp(struct file *filp);
 extern struct buffer_head * get_hash_table(dev_t dev, int block, int size);
 extern struct buffer_head * getblk(dev_t dev, int block, int size);
 extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);

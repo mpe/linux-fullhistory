@@ -13,6 +13,14 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <stdarg.h>
 
 #include <asm/bitops.h>
@@ -114,6 +122,7 @@ void ext2_put_super (struct super_block * sb)
 			brelse (sb->u.ext2_sb.s_block_bitmap[i]);
 	brelse (sb->u.ext2_sb.s_sbh);
 	unlock_super (sb);
+	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -369,12 +378,14 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		return NULL;
 	}
 
+	MOD_INC_USE_COUNT;
 	lock_super (sb);
 	set_blocksize (dev, BLOCK_SIZE);
 	if (!(bh = bread (dev, sb_block, BLOCK_SIZE))) {
 		sb->s_dev = 0;
 		unlock_super (sb);
 		printk ("EXT2-fs: unable to read superblock\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	/*
@@ -405,8 +416,10 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		logic_sb_block = (sb_block*BLOCK_SIZE) / sb->s_blocksize;
 		offset = (sb_block*BLOCK_SIZE) % sb->s_blocksize;
 		bh = bread (dev, logic_sb_block, sb->s_blocksize);
-		if(!bh)
+		if(!bh) {
+		        MOD_DEC_USE_COUNT;
 			return NULL;
+		      }
 		es = (struct ext2_super_block *) (((char *)bh->b_data) + offset);
 		sb->u.ext2_sb.s_es = es;
 		if (es->s_magic != EXT2_SUPER_MAGIC) {
@@ -414,6 +427,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			unlock_super (sb);
 			brelse (bh);
 			printk ("EXT2-fs: Magic mismatch, very weird !\n");
+		        MOD_DEC_USE_COUNT;
 			return NULL;
 		}
 	}
@@ -458,6 +472,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		if (!silent)
 			printk ("VFS: Can't find an ext2 filesystem on dev %d/%d.\n",
 				MAJOR(dev), MINOR(dev));
+
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (sb->s_blocksize != bh->b_size) {
@@ -467,6 +483,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		if (!silent)
 			printk ("VFS: Unsupported blocksize on dev 0x%04x.\n",
 				dev);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
@@ -476,6 +493,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		brelse (bh);
 		printk ("EXT2-fs: fragsize %lu != blocksize %lu (not supported yet)\n",
 			sb->u.ext2_sb.s_frag_size, sb->s_blocksize);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
@@ -485,6 +503,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		brelse (bh);
 		printk ("EXT2-fs: #blocks per group too big: %lu\n",
 			sb->u.ext2_sb.s_blocks_per_group);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (sb->u.ext2_sb.s_frags_per_group > sb->s_blocksize * 8) {
@@ -493,6 +512,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		brelse (bh);
 		printk ("EXT2-fs: #fragments per group too big: %lu\n",
 			sb->u.ext2_sb.s_frags_per_group);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (sb->u.ext2_sb.s_inodes_per_group > sb->s_blocksize * 8) {
@@ -501,6 +521,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		brelse (bh);
 		printk ("EXT2-fs: #inodes per group too big: %lu\n",
 			sb->u.ext2_sb.s_inodes_per_group);
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
@@ -516,6 +537,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		unlock_super (sb);
 		brelse (bh);
 		printk ("EXT2-fs: not enough memory\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	for (i = 0; i < db_count; i++) {
@@ -530,6 +552,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 				 db_count * sizeof (struct buffer_head *));
 			brelse (bh);
 			printk ("EXT2-fs: unable to read group descriptors\n");
+			MOD_DEC_USE_COUNT;
 			return NULL;
 		}
 	}
@@ -542,6 +565,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			 db_count * sizeof (struct buffer_head *));
 		brelse (bh);
 		printk ("EXT2-fs: group descriptors corrupted !\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	for (i = 0; i < EXT2_MAX_GROUP_LOADED; i++) {
@@ -568,6 +592,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			 db_count * sizeof (struct buffer_head *));
 		brelse (bh);
 		printk ("EXT2-fs: get root inode failed\n");
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	ext2_setup_super (sb, es);
@@ -659,6 +684,27 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	}
 	return 0;
 }
+
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type ext2_fs_type = {
+        ext2_read_super, "ext2", 1, NULL
+};
+
+int init_module(void)
+{
+        register_filesystem(&ext2_fs_type);
+        return 0;
+}
+
+void cleanup_module(void)
+{
+        unregister_filesystem(&ext2_fs_type);
+}
+
+#endif
 
 void ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 {

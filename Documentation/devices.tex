@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$Peter.Anvin@linux.org$>$}
-\date{Last revised: August 28, 1995}
+\date{Last revised: September 6, 1995}
 \maketitle
 %
 \noindent
@@ -51,11 +51,11 @@ he stopped maintaining when he lost network access in 1993.  It is a
 registry of allocated major device numbers, as well as the recommended
 {\file /dev} directory nodes for these devices.
 
-This list is available via FTP from ftp.yggdrasil.com in the directory
-{\file /pub/device-list}; filename is {\file devices.{\it format\/}}
-where {\it format\/} is {\file txt} (ASCII), {\file tex} (\LaTeX),
-{\file dvi} (DVI) or {\file ps} (PostScript).  In cases of
-discrepancy, the \LaTeX\ version has priority.
+This list is now included with the Linux kernel sources in \LaTeX\ and
+ASCII form.  This list is also vailable via FTP from ftp.yggdrasil.com
+in the directory {\file /pub/device-list}; filename is {\file
+devices.{\it format\/}} where {\it format\/} is {\file txt} (ASCII),
+{\file tex} (\LaTeX), {\file dvi} (DVI) or {\file ps} (PostScript).
 
 This document is included by reference into the Linux Filesystem
 Standard (FSSTND).  The FSSTND is available via FTP from
@@ -68,6 +68,11 @@ have additional information regarding any of the devices listed below,
 or if I have made a mistake, I would greatly appreciate a note.
 
 Allocations marked (68k) apply to Linux/68k only.
+
+This document is in the public domain.  The author requests, however,
+that semantically altered versions are not distributed without
+permission of the author, assuming the author can be contacted without
+an unreasonable effort.
 
 \section{Major numbers}
 
@@ -130,9 +135,10 @@ Allocations marked (68k) apply to Linux/68k only.
 \major{32}{}{char }{Specialix serial card}
 \major{  }{}{block}{Philips LMS-206 CD-ROM}
 \major{33}{}{char }{Specialix serial card -- alternate devices}
-\major{  }{}{block}{Modular RAM disk}
-\major{34}{}{block}{Third IDE hard disk/CD-ROM interface}
-\major{35}{}{block}{Fourth IDE hard disk/CD-ROM interface}
+\major{  }{}{block}{Third IDE hard disk/CD-ROM interface}
+\major{34}{}{char }{Z8530 HDLC driver}
+\major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
+\major{35}{}{block}{Modular RAM disk}
 \major{36--223}{}{}{Unallocated}
 \major{224--254}{}{}{Local use}
 \major{255}{}{}{Reserved}
@@ -705,7 +711,33 @@ support reading only.
 	\minor{0}{/dev/cux0}{Callout device corresponding to {\file ttyX0}}
 	\minor{1}{/dev/cux1}{Callout device corresponding to {\file ttyX1}}
 	\minordots
-\major{  }{}{block}{Modular RAM disk}
+\major{  }{}{block}{Third IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hde}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdf}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\noindent
+Partitions are handled the same way as for the first interface (see
+major number 3).
+
+\begin{devicelist}
+\major{34}{}{char }{Z8530 HDLC driver}
+	\minor{0}{/dev/sc1}{First Z8530, first port}
+	\minor{1}{/dev/sc2}{First Z8530, second port}
+	\minor{2}{/dev/sc3}{Second Z8530, first port}
+	\minor{3}{/dev/sc4}{Second Z8530, second port}
+	\minordots
+\major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hdg}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdh}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\noindent
+Partitions are handled the same way as for the first interface (see
+major number 3).
+
+\begin{devicelist}
+\major{35}{}{block}{Modular RAM disk}
 	\minor{0}{/dev/ram0}{First modular RAM disk}
 	\minor{1}{/dev/ram1}{Second modular RAM disk}
 	\minordots
@@ -713,23 +745,7 @@ support reading only.
 \end{devicelist}
 
 \begin{devicelist}
-\major{33}{}{block}{Third IDE hard disk/CD-ROM interface}
-	\minor{0}{/dev/hde}{Master: whole disk (or CD-ROM)}
-	\minor{64}{/dev/hdf}{Slave: whole disk (or CD-ROM)}
-\end{devicelist}
-
-\begin{devicelist}
-\major{34}{}{block}{Fourth IDE hard disk/CD-ROM interface}
-	\minor{0}{/dev/hdg}{Master: whole disk (or CD-ROM)}
-	\minor{64}{/dev/hdh}{Slave: whole disk (or CD-ROM)}
-\end{devicelist}
-
-\noindent
-For both IDE interfaces: partitions are handled the same way as for
-the first interface (see major number 3).
-
-\begin{devicelist}
-\major{35}{--223}{}{Unallocated}
+\major{36}{--223}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

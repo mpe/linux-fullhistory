@@ -1,11 +1,13 @@
 /*
  *  scsi.h Copyright (C) 1992 Drew Eckhardt 
+ *         Copyright (C) 1993, 1994, 1995 Eric Youngdale
  *  generic SCSI package header file by
- *      Drew Eckhardt 
+ *      Initial versions: Drew Eckhardt
+ *      Subsequent revisions: Eric Youngdale
  *
  *  <drew@colorado.edu>
  *
- *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       Modified by Eric Youngdale eric@aib.com to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
  */
@@ -14,114 +16,26 @@
 #define _SCSI_H
 
 /*
-    $Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.h,v 1.3 1993/09/24 12:20:33 drew Exp $
-
-    For documentation on the OPCODES, MESSAGES, and SENSE values,
-    please consult the SCSI standard.
-
-*/
+ * Some of the public constants are being movedd to this file.
+ * We include it here so that what came from where is transparent.
+ */
+#include <linux/scsi.h>
 
 /*
- *      SCSI opcodes
+ * Some defs, in case these are not defined elsewhere.
  */
+#ifndef TRUE
+# define TRUE 1
+#endif
+#ifndef FALSE
+# define FALSE 0
+#endif
 
-#define TEST_UNIT_READY       0x00
-#define REZERO_UNIT           0x01
-#define REQUEST_SENSE         0x03
-#define FORMAT_UNIT           0x04
-#define READ_BLOCK_LIMITS     0x05
-#define REASSIGN_BLOCKS       0x07
-#define READ_6                0x08
-#define WRITE_6               0x0a
-#define SEEK_6                0x0b
-#define READ_REVERSE          0x0f
-#define WRITE_FILEMARKS       0x10
-#define SPACE                 0x11
-#define INQUIRY               0x12
-#define RECOVER_BUFFERED_DATA 0x14
-#define MODE_SELECT           0x15
-#define RESERVE               0x16
-#define RELEASE               0x17
-#define COPY                  0x18
-#define ERASE                 0x19
-#define MODE_SENSE            0x1a
-#define START_STOP            0x1b
-#define RECEIVE_DIAGNOSTIC    0x1c
-#define SEND_DIAGNOSTIC       0x1d
-#define ALLOW_MEDIUM_REMOVAL  0x1e
-
-#define SET_WINDOW            0x24
-#define READ_CAPACITY         0x25
-#define READ_10               0x28
-#define WRITE_10              0x2a
-#define SEEK_10               0x2b
-#define WRITE_VERIFY          0x2e
-#define VERIFY                0x2f
-#define SEARCH_HIGH           0x30
-#define SEARCH_EQUAL          0x31
-#define SEARCH_LOW            0x32
-#define SET_LIMITS            0x33
-#define PRE_FETCH             0x34
-#define READ_POSITION         0x34
-#define SYNCHRONIZE_CACHE     0x35
-#define LOCK_UNLOCK_CACHE     0x36
-#define READ_DEFECT_DATA      0x37
-#define MEDIUM_SCAN           0x38
-#define COMPARE               0x39
-#define COPY_VERIFY           0x3a
-#define WRITE_BUFFER          0x3b
-#define READ_BUFFER           0x3c
-#define UPDATE_BLOCK          0x3d
-#define READ_LONG             0x3e
-#define WRITE_LONG            0x3f
-#define CHANGE_DEFINITION     0x40
-#define WRITE_SAME            0x41
-#define LOG_SELECT            0x4c
-#define LOG_SENSE             0x4d
-#define MODE_SELECT_10        0x55
-#define MODE_SENSE_10         0x5a
-#define READ_12               0xa8
-#define WRITE_12              0xaa
-#define WRITE_VERIFY_12       0xae
-#define SEARCH_HIGH_12        0xb0
-#define SEARCH_EQUAL_12       0xb1
-#define SEARCH_LOW_12         0xb2
-#define SEND_VOLUME_TAG       0xb6
-#define WRITE_LONG_2          0xea
 
 extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;
 extern const unsigned char scsi_command_size[8];
 #define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
-
-/*
- *  MESSAGE CODES
- */
-
-#define COMMAND_COMPLETE    0x00
-#define EXTENDED_MESSAGE    0x01
-#define     EXTENDED_MODIFY_DATA_POINTER    0x00
-#define     EXTENDED_SDTR                   0x01
-#define     EXTENDED_EXTENDED_IDENTIFY      0x02    /* SCSI-I only */
-#define     EXTENDED_WDTR                   0x03
-#define SAVE_POINTERS       0x02
-#define RESTORE_POINTERS    0x03
-#define DISCONNECT          0x04
-#define INITIATOR_ERROR     0x05
-#define ABORT               0x06
-#define MESSAGE_REJECT      0x07
-#define NOP                 0x08
-#define MSG_PARITY_ERROR    0x09
-#define LINKED_CMD_COMPLETE 0x0a
-#define LINKED_FLG_CMD_COMPLETE 0x0b
-#define BUS_DEVICE_RESET    0x0c
-
-#define INITIATE_RECOVERY   0x0f            /* SCSI-II only */
-#define RELEASE_RECOVERY    0x10            /* SCSI-II only */
-
-#define SIMPLE_QUEUE_TAG    0x20
-#define HEAD_OF_QUEUE_TAG   0x21
-#define ORDERED_QUEUE_TAG   0x22
 
 #define IDENTIFY_BASE       0x80
 #define IDENTIFY(can_disconnect, lun)   (IDENTIFY_BASE |\
@@ -129,20 +43,6 @@ extern const unsigned char scsi_command_size[8];
 		     ((lun) & 0x07)) 
 
 		 
-/*
- *  Status codes
- */
-
-#define GOOD                 0x00
-#define CHECK_CONDITION      0x01
-#define CONDITION_GOOD       0x02
-#define BUSY                 0x04
-#define INTERMEDIATE_GOOD    0x08
-#define INTERMEDIATE_C_GOOD  0x0a
-#define RESERVATION_CONFLICT 0x0c
-#define QUEUE_FULL           0x1a
-
-#define STATUS_MASK          0x1e
     
 /*
  *  the return of the status word will be in the following format :
@@ -200,40 +100,6 @@ extern const unsigned char scsi_command_size[8];
 
 #define DRIVER_MASK         0x0f
 #define SUGGEST_MASK        0xf0
-
-/*
- *  SENSE KEYS
- */
-
-#define NO_SENSE            0x00
-#define RECOVERED_ERROR     0x01
-#define NOT_READY           0x02
-#define MEDIUM_ERROR        0x03
-#define HARDWARE_ERROR      0x04
-#define ILLEGAL_REQUEST     0x05
-#define UNIT_ATTENTION      0x06
-#define DATA_PROTECT        0x07
-#define BLANK_CHECK         0x08
-#define COPY_ABORTED        0x0a
-#define ABORTED_COMMAND     0x0b
-#define VOLUME_OVERFLOW     0x0d
-#define MISCOMPARE          0x0e
-
-
-/*
- *  DEVICE TYPES
- */
-
-#define TYPE_DISK           0x00
-#define TYPE_TAPE           0x01
-#define TYPE_PROCESSOR      0x03    /* HP scanners use this */
-#define TYPE_WORM           0x04    /* Treated as ROM by our system */
-#define TYPE_ROM            0x05
-#define TYPE_SCANNER        0x06
-#define TYPE_MOD            0x07    /* Magneto-optical disk - 
-				     * - treated as TYPE_DISK */
-#define TYPE_NO_LUN         0x7f
-
 
 #define MAX_COMMAND_SIZE    12
 
@@ -300,6 +166,10 @@ typedef struct scsi_device {
     char type;
     char scsi_level;
     char vendor[8], model[16], rev[4];
+    unsigned char current_tag;      /* current tag */
+    unsigned char sync_min_period;  /* Not less than this period */
+    unsigned char sync_max_offset;  /* Not greater than this offset */
+
     unsigned writeable:1;
     unsigned removable:1; 
     unsigned random:1;
@@ -316,9 +186,8 @@ typedef struct scsi_device {
     unsigned sync:1;                /* Negotiate for sync transfers */
     unsigned single_lun:1;          /* Indicates we should only allow I/O to
                                        one of the luns for the device at a time. */
-    unsigned char current_tag;      /* current tag */
-    unsigned char sync_min_period;  /* Not less than this period */
-    unsigned char sync_max_offset;  /* Not greater than this offset */
+    unsigned was_reset:1;	/* There was a bus reset on the bus for this
+                                   device */
 } Scsi_Device;
 
 /*
@@ -366,6 +235,9 @@ struct scatterlist {
  * These are the return codes for the abort and reset functions.  The mid-level
  * code uses these to decide what to do next.  Each of the low level abort
  * and reset functions must correctly indicate what it has done.
+ * The descriptions are written from the point of view of the mid-level code,
+ * so that the return code is telling the mid-level drivers exactly what
+ * the low level driver has already done, and what remains to be done.
  */
 
 /* We did not do anything.  
@@ -410,12 +282,18 @@ struct scatterlist {
  * the commands that should be restarted, and we should be able to continue
  * on normally from here.  We do not expect any interrupts that will return
  * DID_RESET to any of the other commands in the host_queue, and the mid-level
- * code does not need to do anything special to keep the commands alive. */
+ * code does not need to do anything special to keep the commands alive. 
+ * If a hard reset was performed then all outstanding commands on the
+ * bus have been restarted. */
 #define SCSI_RESET_SUCCESS 2
 
 /* We called for a reset of this bus, and we should get an interrupt 
  * when this succeeds.  Each command should get its own status
- * passed up to scsi_done, but this has not happened yet. */
+ * passed up to scsi_done, but this has not happened yet. 
+ * If a hard reset was performed, then we expect an interrupt
+ * for *each* of the outstanding commands that will have the
+ * effect of restarting the commands.
+ */
 #define SCSI_RESET_PENDING 3
 
 /* We did a reset, but do not expect an interrupt to signal DID_RESET.
@@ -425,6 +303,17 @@ struct scatterlist {
 
 /* Something went wrong, and we do not know how to fix it. */
 #define SCSI_RESET_ERROR 5
+
+/*
+ * This is a bitmask that is ored with one of the above codes.
+ * It tells the mid-level code that we did a hard reset.
+ */
+#define SCSI_RESET_BUS_RESET 0x100
+/*
+ * Used to mask off bits and to obtain the basic action that was
+ * performed.  
+ */
+#define SCSI_RESET_ACTION   0xff
 
 void *   scsi_malloc(unsigned int);
 int      scsi_free(void *, unsigned int);
@@ -547,7 +436,7 @@ extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
 extern Scsi_Cmnd * allocate_device(struct request **, Scsi_Device *, int);
 
 extern Scsi_Cmnd * request_queueable(struct request *, Scsi_Device *);
-extern int scsi_reset (Scsi_Cmnd *);
+extern int scsi_reset (Scsi_Cmnd *, int);
 
 extern int max_scsi_hosts;
 

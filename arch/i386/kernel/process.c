@@ -44,16 +44,8 @@ void enable_hlt(void)
  */
 asmlinkage int sys_idle(void)
 {
-	int i;
-	pmd_t * pmd;
-
 	if (current->pid != 0)
 		return -EPERM;
-
-	/* Map out the low memory: it's no longer needed */
-	pmd = pmd_offset(swapper_pg_dir, 0);
-	for (i = 0 ; i < 768 ; i++)
-		pmd_clear(pmd++);
 
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
@@ -120,6 +112,9 @@ void show_regs(struct pt_regs * regs)
  */
 void exit_thread(void)
 {
+	/* forget lazy i387 state */
+	if (last_task_used_math == current)
+		last_task_used_math = NULL;
 	/* forget local segments */
 	__asm__ __volatile__("mov %w0,%%fs ; mov %w0,%%gs ; lldt %w0"
 		: /* no outputs */
@@ -255,8 +250,8 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	unsigned long clone_flags;
 	unsigned long newsp;
 
-	newsp = regs.ebx;
-	clone_flags = regs.ecx;
+	clone_flags = regs.ebx;
+	newsp = regs.ecx;
 	if (!newsp)
 		newsp = regs.esp;
 	return do_fork(clone_flags, newsp, &regs);

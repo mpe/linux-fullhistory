@@ -118,6 +118,7 @@ extern int ip_mroute_getsockopt(struct sock *, int, char *, int *);
 extern int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void mroute_close(struct sock *sk);
 
+
 struct vif_device
 {
 	struct device *dev;		/* Device we are using */

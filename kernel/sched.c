@@ -84,7 +84,7 @@ unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
 static struct files_struct init_files = INIT_FILES;
-static struct sigaction init_sigaction[32] = { {0,}, };
+static struct signal_struct init_signals = INIT_SIGNALS;
 
 struct mm_struct init_mm = INIT_MM;
 struct task_struct init_task = INIT_TASK;
@@ -667,10 +667,11 @@ static void do_timer(int irq, struct pt_regs * regs)
 			kstat.cpu_system++;
 		if (prof_buffer && current != task[0]) {
 			extern int _stext;
-			unsigned long eip = regs->eip - (unsigned long) &_stext;
-			eip >>= prof_shift;
-			if (eip < prof_len)
-				prof_buffer[eip]++;
+			unsigned long ip = instruction_pointer(regs);
+			ip -= (unsigned long) &_stext;
+			ip >>= prof_shift;
+			if (ip < prof_len)
+				prof_buffer[ip]++;
 		}
 	}
 	/*

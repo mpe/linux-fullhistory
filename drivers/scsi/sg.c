@@ -31,7 +31,7 @@
 #include "scsi_ioctl.h"
 #include "sg.h"
 
-static void sg_init(void);
+static int sg_init(void);
 static int sg_attach(Scsi_Device *);
 static int sg_detect(Scsi_Device *);
 static void sg_detach(Scsi_Device *);
@@ -459,12 +459,40 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
     return count;
 }
 
+static int sg_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+{
+    int dev=MINOR(inode->i_rdev);
+    int i;
+    int r = 0;
+    struct scsi_generic *device=&scsi_generics[dev];
+
+    if (sel_type == SEL_IN) {
+        if(device->pending && device->complete)
+        {
+            r = 1;
+    	} else {
+	    select_wait(&scsi_generics[dev].read_wait, wait);
+    	}
+    }
+    if (sel_type == SEL_OUT) {
+        if(!device->pending){
+            r = 1;
+        }
+        else
+        {
+	    select_wait(&scsi_generics[dev].write_wait, wait);
+        }
+    }
+
+    return(r);
+}
+
 static struct file_operations sg_fops = {
     NULL,            /* lseek */
     sg_read,         /* read */
     sg_write,        /* write */
     NULL,            /* readdir */
-    NULL,            /* select */
+    sg_select,       /* select */
     sg_ioctl,        /* ioctl */
     NULL,            /* mmap */
     sg_open,         /* open */
@@ -479,24 +507,24 @@ static int sg_detect(Scsi_Device * SDp){
 }
 
 /* Driver initialization */
-static void sg_init()
+static int sg_init()
 {
     static int sg_registered = 0;
     
-    if (sg_template.dev_noticed == 0) return;
+    if (sg_template.dev_noticed == 0) return 0;
     
     if(!sg_registered) {
 	if (register_chrdev(SCSI_GENERIC_MAJOR,"sg",&sg_fops)) 
 	{
 	    printk("Unable to get major %d for generic SCSI device\n",
 		   SCSI_GENERIC_MAJOR);
-	    return;
+	    return 1;
 	}
 	sg_registered++;
     }
     
     /* If we have already been through here, return */
-    if(scsi_generics) return;
+    if(scsi_generics) return 0;
     
 #ifdef DEBUG
     printk("sg: Init generic device.\n");
@@ -513,6 +541,7 @@ static void sg_init()
 	   * sizeof(struct scsi_generic));
     
     sg_template.dev_max = sg_template.dev_noticed + SG_EXTRA_DEVS;
+    return 0;
 }
 
 static int sg_attach(Scsi_Device * SDp)

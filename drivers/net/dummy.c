@@ -159,6 +159,8 @@ int init_module(void)
 		sprintf(dev_dummy.name,"dummy%d",ct);
 		ct++;
 	}
+	if(ct==100)
+		return -ENFILE;
 	
 	if (register_netdev(&dev_dummy) != 0)
 		return -EIO;

@@ -81,7 +81,7 @@ static sd_init_onedisk(int);
 
 static void requeue_sd_request (Scsi_Cmnd * SCpnt);
 
-static void sd_init(void);
+static int sd_init(void);
 static void sd_finish(void);
 static int sd_attach(Scsi_Device *);
 static int sd_detect(Scsi_Device *);
@@ -338,6 +338,16 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 		    requeue_sd_request(SCpnt);
 		    return;
 		}
+                else
+                {
+                    /*
+                     * Must have been a power glitch, or a bus reset.
+                     * Could not have been a media change, so we just retry
+                     * the request and see what happens.
+                     */
+                    requeue_sd_request(SCpnt);
+                    return;
+                }
 	    }
 	}
 	
@@ -383,6 +393,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 static void do_sd_request (void)
 {
     Scsi_Cmnd * SCpnt = NULL;
+    Scsi_Device * SDev;
     struct request * req = NULL;
     unsigned long flags;
     int flag = 0;
@@ -396,6 +407,27 @@ static void do_sd_request (void)
 	};
 	
 	INIT_SCSI_REQUEST;
+        SDev = rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device;
+        
+        /*
+         * I am not sure where the best place to do this is.  We need
+         * to hook in a place where we are likely to come if in user
+         * space.
+         */
+        if( SDev->was_reset )
+        {
+	    /*
+	     * We need to relock the door, but we might
+	     * be in an interrupt handler.  Only do this
+	     * from user space, since we do not want to
+	     * sleep from an interrupt.
+	     */
+	    if( SDev->removable && !intr_count )
+	    {
+                scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
+	    }
+	    SDev->was_reset = 0;
+        }
 		
 	/* We have to be careful here. allocate_device will get a free pointer,
 	 * but there is no guarantee that it is queueable.  In normal usage, 
@@ -1122,24 +1154,24 @@ static int sd_init_onedisk(int i)
  * their size, and reads partition table entries for them.
  */
 
+static int sd_registered = 0;
 
-static void sd_init()
+static int sd_init()
 {
     int i;
-    static int sd_registered = 0;
     
-    if (sd_template.dev_noticed == 0) return;
+    if (sd_template.dev_noticed == 0) return 0;
     
     if(!sd_registered) {
 	  if (register_blkdev(MAJOR_NR,"sd",&sd_fops)) {
 	      printk("Unable to get major %d for SCSI disk\n",MAJOR_NR);
-	      return;
+	      return 1;
 	  }
 	  sd_registered++;
       }
     
     /* We do not support attaching loadable devices yet. */
-    if(rscsi_disks) return;
+    if(rscsi_disks) return 0;
     
     sd_template.dev_max = sd_template.dev_noticed + SD_EXTRA_DEVS;
     
@@ -1172,7 +1204,7 @@ static void sd_init()
     sd_gendisk.part = sd;
     sd_gendisk.sizes = sd_sizes;
     sd_gendisk.real_devices = (void *) rscsi_disks;
-    
+    return 0;
 }
 
 static void sd_finish()
@@ -1287,6 +1319,11 @@ int revalidate_scsidisk(int dev, int maxusage){
 	invalidate_buffers(major | start | i);
 	gdev->part[start+i].start_sect = 0;
 	gdev->part[start+i].nr_sects = 0;
+        /*
+         * Reset the blocksize for everything so that we can read
+         * the partition table.
+         */
+        blksize_size[MAJOR_NR][i] = 1024;
     };
     
 #ifdef MAYBE_REINIT
@@ -1364,7 +1401,8 @@ void cleanup_module( void)
 	return;
     }
     scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
-    unregister_blkdev(SCSI_GENERIC_MAJOR, "sd");
+    unregister_blkdev(SCSI_DISK_MAJOR, "sd");
+    sd_registered--;
     if( rscsi_disks != NULL )
     {
 	scsi_init_free((char *) rscsi_disks,

@@ -84,14 +84,20 @@ void flush_thread(void)
 }
 
 /*
- * "alpha_fork()".. By the time we get here, the
+ * "alpha_clone()".. By the time we get here, the
  * non-volatile registers have also been saved on the
  * stack. We do some ugly pointer stuff here.. (see
  * also copy_thread)
+ *
+ * Notice that "fork()" is implemented in terms of clone,
+ * with parameters (SIGCHLD, 0).
  */
-int alpha_fork(struct switch_stack * swstack)
+int alpha_clone(unsigned long clone_flags, unsigned long usp,
+	struct switch_stack * swstack)
 {
-	return do_fork(SIGCHLD, rdusp(), (struct pt_regs *) (swstack+1));
+	if (!usp)
+		usp = rdusp();
+	return do_fork(clone_flags, usp, (struct pt_regs *) (swstack+1));
 }
 
 extern void ret_from_sys_call(void);

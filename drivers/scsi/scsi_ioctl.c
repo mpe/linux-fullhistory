@@ -318,15 +318,15 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
     
     switch (cmd) {
     case SCSI_IOCTL_GET_IDLUN:
-        result = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long));
+        result = verify_area(VERIFY_WRITE, (void *) arg, 2*sizeof(long));
         if (result) return result;
 
-	put_user(dev->id + (dev->lun << 8) + (dev->host->host_no << 16) +
-		    /* This has been added to support 
-		     * multichannel HBAs, it might cause 
-		     * problems with some software */ 
-		    (dev->channel << 24), 
+	put_user(dev->id 
+                 + (dev->lun << 8) 
+                 + (dev->channel << 16)
+                 + ((dev->host->hostt->low_ino & 0xff) << 24),
 		    (unsigned long *) arg);
+        put_user( dev->host->unique_id, (unsigned long *) arg+1);
 	return 0;
     case SCSI_IOCTL_TAGGED_ENABLE:
 	if(!suser())  return -EACCES;

@@ -156,7 +156,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			"btrl %1,%0"
 			:"=m" (current->signal),"=r" (signr)
 			:"0" (current->signal), "1" (signr));
-		sa = current->sigaction + signr;
+		sa = current->sig->action + signr;
 		signr++;
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
@@ -172,7 +172,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				current->signal |= _S(signr);
 				continue;
 			}
-			sa = current->sigaction + signr - 1;
+			sa = current->sig->action + signr - 1;
 		}
 		if (sa->sa_handler == SIG_IGN) {
 			if (signr != SIGCHLD)
@@ -194,7 +194,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
-				if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 
+				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags & 
 						SA_NOCLDSTOP))
 					notify_parent(current);
 				schedule();
@@ -235,7 +235,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	eip = regs->eip;
 	frame = (unsigned long *) regs->esp;
 	signr = 1;
-	sa = current->sigaction;
+	sa = current->sig->action;
 	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
 		if (mask > handler_signal)
 			break;

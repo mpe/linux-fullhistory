@@ -611,7 +611,7 @@ static int n_tty_receive_room(struct tty_struct *tty)
 int is_ignored(int sig)
 {
 	return ((current->blocked & (1<<(sig-1))) ||
-	        (current->sigaction[sig-1].sa_handler == SIG_IGN));
+	        (current->sig->action[sig-1].sa_handler == SIG_IGN));
 }
 
 static void n_tty_set_termios(struct tty_struct *tty, struct termios * old)

@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Sun Aug 27 12:49:11 1995 by root@kai.makisara.fi
+Last modified: Sun Sep 10 13:19:02 1995 by root@kai.makisara.fi
 
 BASICS
 
@@ -41,9 +41,15 @@ a filemark to truncate a read request or that don't like backspacing.
 
 The buffer size is defined (in 1024 byte units) by ST_BUFFER_BLOCKS or
 at boot time. The maximum number of buffers allocated is defined by
-ST_MAX_BUFFERS. One buffer is allocated for each detected drive up to
-the maximum. The threshold for triggering asynchronous write is
-defined by ST_WRITE_THRESHOLD.
+ST_MAX_BUFFERS. One buffer is allocated for each drive detected when
+the driver is initialized up to the maximum. The minimum number of
+allocated buffers is ST_EXTRA_DEVS (in hosts.h). This ensures some
+functionality also for the drives found after tape driver
+initialization (a SCSI adapter driver is loaded as a module). The
+default for ST_EXTRA_DEVS is two. This is enough to enable tape copies.
+
+The threshold for triggering asynchronous write is defined by
+ST_WRITE_THRESHOLD.
 
 
 BOOT TIME CONFIGURATION

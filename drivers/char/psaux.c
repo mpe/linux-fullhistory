@@ -21,12 +21,24 @@
  * & Technologies 82C710 interface chip. 15Nov93 jem@pandora.pp.fi
  *
  * Added support for SIGIO. 28Jul95 jem@pandora.pp.fi
+ *
+ * Rearranged SIGIO support to use code from tty_io.  9Sept95 ctm@ardi.com
+ *
+ * Modularised 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
 
 /* #define INITIALIZE_DEVICE */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+ 
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/fcntl.h>
@@ -39,6 +51,10 @@
 #include <asm/system.h>
 
 #include <linux/config.h>
+
+#include "mouse.h"
+
+#define PSMOUSE_MINOR      1            /* minor device # for this mouse */
 
 /* aux controller ports */
 #define AUX_INPUT_PORT	0x60		/* Aux device output buffer */
@@ -273,40 +289,11 @@ static void release_qp(struct inode * inode, struct file * file)
 
 static int fasync_aux(struct inode *inode, struct file *filp, int on)
 {
-	struct fasync_struct *fa, *prev;
-	unsigned long flags;
+	int retval;
 
-	for (fa = queue->fasync, prev = 0; fa; prev= fa, fa = fa->fa_next) {
-		if (fa->fa_file == filp)
-			break;
-	}
-
-	if (on) {
-		if (fa)
-		    return 0;
-		fa = (struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
-		if (!fa)
-			return -ENOMEM;
-		save_flags(flags);
-		cli();
-		fa->magic = FASYNC_MAGIC;
-		fa->fa_file = filp;
-		fa->fa_next = queue->fasync;
-		queue->fasync = fa;
-		restore_flags(flags);
-	}
-	else {
-		if (!fa)
-			return 0;
-		save_flags(flags);
-		cli();
-		if (prev)
-			prev->fa_next = fa->fa_next;
-		else
-			queue->fasync = fa->fa_next;
-		restore_flags(flags);
-		kfree_s(fa, sizeof(struct fasync_struct));
-	}
+	retval = fasync_helper(inode, filp, on, &queue->fasync);
+	if (retval < 0)
+		return retval;
 	return 0;
 }
 
@@ -483,7 +470,7 @@ struct file_operations psaux_fops = {
 	open_aux,
 	release_aux,
 	NULL,
-	fasync_aux
+	fasync_aux,
 };
 
 
@@ -491,6 +478,9 @@ struct file_operations psaux_fops = {
  * Initialize driver. First check for a 82C710 chip; if found
  * forget about the Aux port and use the *_qp functions.
  */
+static struct mouse psaux_mouse = {
+	PSMOUSE_MINOR, "ps2aux", &psaux_fops
+};
 
 unsigned long psaux_init(unsigned long kmem_start)
 {
@@ -510,8 +500,13 @@ unsigned long psaux_init(unsigned long kmem_start)
 		printk("PS/2 auxiliary pointing device detected -- driver installed.\n");
 	 	aux_present = 1;
 		kbd_read_mask = AUX_OBUF_FULL;
+		mouse_register(&psaux_mouse);
 	} else {
+#ifdef MODULE
+		return -EIO;
+#else
 		return kmem_start;              /* No mouse at all */
+#endif
 	}
 	queue = (struct aux_queue *) kmem_start;
 	kmem_start += sizeof (struct aux_queue);
@@ -534,8 +529,21 @@ unsigned long psaux_init(unsigned long kmem_start)
 		poll_aux_status_nosleep();             /* Disable interrupts */
 		outb_p(AUX_INTS_OFF, AUX_OUTPUT_PORT); /*  on the controller */
 	}
+#ifdef MODULE
+	return 0;
+#else
 	return kmem_start;
+#endif
 }
+
+#ifdef MODULE
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("psaux: in use, remove delayed\n");
+	mouse_deregister(&psaux_mouse);
+}
+#endif
 
 static int poll_aux_status(void)
 {

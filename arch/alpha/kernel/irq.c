@@ -449,7 +449,6 @@ static inline void eb66_and_eb64p_device_interrupt(unsigned long vector,
 static inline void srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq, ack;
-	struct irqaction * action;
 
 	ack = irq = (vector - 0x800) >> 4;
 

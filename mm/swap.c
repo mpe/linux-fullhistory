@@ -578,7 +578,7 @@ static int swap_out(unsigned int priority, unsigned long limit)
 			}
 
 			p = task[swap_task];
-			if (p && p->mm->swappable && p->mm->rss)
+			if (p && p->mm && p->mm->swappable && p->mm->rss)
 				break;
 
 			swap_task++;

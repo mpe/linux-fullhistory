@@ -291,6 +291,7 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->broadcast=0;
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
+	sk->allocation=GFP_KERNEL;
 	sk->inuse=0;
 	sk->debug=0;
 	sk->prot=NULL;
@@ -1094,7 +1095,7 @@ static struct proto_ops unix_proto_ops = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk("NET3: Unix domain sockets 0.09 BETA for Linux NET3.030.\n");
+	printk("NET3: Unix domain sockets 0.10 BETA for Linux NET3.031.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_UNIX,  4, "unix",

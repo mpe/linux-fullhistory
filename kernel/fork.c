@@ -23,25 +23,7 @@
 
 #include <asm/segment.h>
 #include <asm/system.h>
-
-/*
- * This is how a process data structure is allocated. In most
- * cases, the "tsk" pointers point to the same allocation unit
- * substructures, but if the new process shares part (or all)
- * of the sub-units with the parent process, the tsk pointers
- * may point to the parent instead.
- *
- * Regardless, we always allocate the full allocation unit, as
- * the normal fork() semantics require all of them and doing
- * suballocations would be wasteful.
- */
-struct allocation_struct {
-	struct task_struct tsk;
-	struct sigaction sigaction[32];
-	struct fs_struct fs;
-	struct files_struct files;
-	struct mm_struct mm;
-};
+#include <asm/pgtable.h>
 
 int nr_tasks=1;
 int nr_running=1;
@@ -103,6 +85,10 @@ static int dup_mmap(struct mm_struct * mm)
 		}
 		if (tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);
+		if (copy_page_range(mm, current->mm, tmp)) {
+			exit_mmap(mm);
+			return -ENOMEM;
+		}
 		*p = tmp;
 		p = &tmp->vm_next;
 	}
@@ -110,74 +96,82 @@ static int dup_mmap(struct mm_struct * mm)
 	return 0;
 }
 
-static int copy_mm(unsigned long clone_flags, struct allocation_struct * u)
+static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_VM) {
-		if (clone_page_tables(&u->tsk))
-			return -1;
+		SET_PAGE_DIR(tsk, current->mm->pgd);
 		current->mm->count++;
-		mem_map[MAP_NR(current->mm)]++;
 		return 0;
 	}
-	u->tsk.mm = &u->mm;
-	u->mm = *current->mm;
-	u->mm.count = 1;
-	u->mm.min_flt = u->mm.maj_flt = 0;
-	u->mm.cmin_flt = u->mm.cmaj_flt = 0;
-	if (copy_page_tables(&u->tsk))
+	tsk->mm = kmalloc(sizeof(*tsk->mm), GFP_KERNEL);
+	if (!tsk->mm)
 		return -1;
-	if (dup_mmap(&u->mm))
+	*tsk->mm = *current->mm;
+	tsk->mm->count = 1;
+	tsk->mm->min_flt = tsk->mm->maj_flt = 0;
+	tsk->mm->cmin_flt = tsk->mm->cmaj_flt = 0;
+	if (new_page_tables(tsk))
 		return -1;
-	mem_map[MAP_NR(u)]++;
+	if (dup_mmap(tsk->mm)) {
+		free_page_tables(tsk);
+		return -1;
+	}
 	return 0;
 }
 
-static void copy_fs(unsigned long clone_flags, struct allocation_struct * u)
+static int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_FS) {
 		current->fs->count++;
-		mem_map[MAP_NR(current->fs)]++;
-		return;
+		return 0;
 	}
-	u->tsk.fs = &u->fs;
-	u->fs = *current->fs;
-	u->fs.count = 1;
-	if (u->fs.pwd)
-		u->fs.pwd->i_count++;
-	if (u->fs.root)
-		u->fs.root->i_count++;
-	mem_map[MAP_NR(u)]++;
+	tsk->fs = kmalloc(sizeof(*tsk->fs), GFP_KERNEL);
+	if (!tsk->fs)
+		return -1;
+	tsk->fs->count = 1;
+	tsk->fs->umask = current->fs->umask;
+	if ((tsk->fs->root = current->fs->root))
+		tsk->fs->root->i_count++;
+	if ((tsk->fs->pwd = current->fs->pwd))
+		tsk->fs->pwd->i_count++;
+	return 0;
 }
 
-static void copy_files(unsigned long clone_flags, struct allocation_struct * u)
+static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 {
 	int i;
 
 	if (clone_flags & CLONE_FILES) {
 		current->files->count++;
-		mem_map[MAP_NR(current->files)]++;
-		return;
+		return 0;
 	}
-	u->tsk.files = &u->files;
-	u->files = *current->files;
-	u->files.count = 1;
+	tsk->files = kmalloc(sizeof(*tsk->files), GFP_KERNEL);
+	if (!tsk->files)
+		return -1;
+	tsk->files->count = 1;
+	memcpy(&tsk->files->close_on_exec, &current->files->close_on_exec,
+		sizeof(tsk->files->close_on_exec));
 	for (i = 0; i < NR_OPEN; i++) {
-		struct file * f = u->files.fd[i];
+		struct file * f = current->files->fd[i];
 		if (f)
 			f->f_count++;
+		tsk->files->fd[i] = f;
 	}
-	mem_map[MAP_NR(u)]++;
+	return 0;
 }
 
-static void copy_sighand(unsigned long clone_flags, struct allocation_struct * u)
+static int copy_sighand(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_SIGHAND) {
-		mem_map[MAP_NR(current->sigaction)]++;
-		return;
+		current->sig->count++;
+		return 0;
 	}
-	u->tsk.sigaction = u->sigaction;
-	memcpy(u->sigaction, current->sigaction, sizeof(u->sigaction));
-	mem_map[MAP_NR(u)]++;
+	tsk->sig = kmalloc(sizeof(*tsk->sig), GFP_KERNEL);
+	if (!tsk->sig)
+		return -1;
+	tsk->sig->count = 1;
+	memcpy(tsk->sig->action, current->sig->action, sizeof(tsk->sig->action));
+	return 0;
 }
 
 /*
@@ -191,12 +185,10 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	int error = -ENOMEM;
 	unsigned long new_stack;
 	struct task_struct *p;
-	struct allocation_struct *alloc;
 
-	alloc = (struct allocation_struct *) __get_free_page(GFP_KERNEL);
-	if (!alloc)
+	p = (struct task_struct *) kmalloc(sizeof(*p), GFP_KERNEL);
+	if (!p)
 		goto bad_fork;
-	p = &alloc->tsk;
 	new_stack = get_free_page(GFP_KERNEL);
 	if (!new_stack)
 		goto bad_fork_free;
@@ -238,13 +230,16 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	error = -ENOMEM;
 	/* copy all the process information */
-	copy_thread(nr, clone_flags, usp, p, regs);
-	if (copy_mm(clone_flags, alloc))
+	if (copy_files(clone_flags, p))
 		goto bad_fork_cleanup;
+	if (copy_fs(clone_flags, p))
+		goto bad_fork_cleanup_files;
+	if (copy_sighand(clone_flags, p))
+		goto bad_fork_cleanup_fs;
+	if (copy_mm(clone_flags, p))
+		goto bad_fork_cleanup_sighand;
+	copy_thread(nr, clone_flags, usp, p, regs);
 	p->semundo = NULL;
-	copy_files(clone_flags, alloc);
-	copy_fs(clone_flags, alloc);
-	copy_sighand(clone_flags, alloc);
 
 	/* ok, now we should be set up.. */
 	p->mm->swappable = 1;
@@ -253,6 +248,12 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	wake_up_process(p);			/* do this last, just in case */
 	return p->pid;
 
+bad_fork_cleanup_sighand:
+	exit_sighand(p);
+bad_fork_cleanup_fs:
+	exit_fs(p);
+bad_fork_cleanup_files:
+	exit_files(p);
 bad_fork_cleanup:
 	if (p->exec_domain && p->exec_domain->use_count)
 		(*p->exec_domain->use_count)--;
@@ -263,7 +264,7 @@ bad_fork_cleanup:
 	nr_tasks--;
 bad_fork_free:
 	free_page(new_stack);
-	free_page((long) p);
+	kfree(p);
 bad_fork:
 	return error;
 }

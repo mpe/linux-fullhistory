@@ -30,6 +30,7 @@
 #include <net/sock.h>
 #include <net/icmp.h>
 #include <net/udp.h>
+#include <linux/notifier.h>
 #include <net/checksum.h>
 
 #ifdef CONFIG_IP_MROUTE
@@ -41,6 +42,20 @@
 static struct vif_device vif_table[MAXVIFS];
 static unsigned long vifc_map;
 int mroute_do_pim = 0;
+
+/*
+ *	Delete a VIF entry
+ */
+ 
+static void vif_delete(struct vif_device *v)
+{
+	if(!(v->flags&VIFF_TUNNEL))
+	{
+		v->dev->flags&=~IFF_ALLMULTI;
+		dev_mc_upload(v->dev);
+	}
+	v->dev=NULL;
+}
  
 /*
  *	Socket options and virtual interface manipulation. The whole
@@ -148,11 +163,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				struct vif_device *v=&vif_table[vif.vifc_vifi];
 				if(vifc_map&(1<<vif.vifc_vifi))
 				{
-					if(!(v->flags&VIFF_TUNNEL))
-					{
-						v->dev->flags&=~IFF_ALLMULTI;
-						dev_mc_upload(v->dev);
-					}
+					vif_delete(v);
 					vifc_map&=~(1<<vif.vifc_vifi);
 					return 0;					
 				}
@@ -282,6 +293,39 @@ void mroute_close(struct sock *sk)
 		v++;
 	}		
 	vifc_map=0;	
+}
+
+static int ipmr_device_event(unsigned long event, void *ptr)
+{
+	struct vif_device *v;
+	int ct;
+	if(event!=NETDEV_DOWN)
+		return NOTIFY_DONE;
+	v=&vif_table[0];
+	for(ct=0;ct<MAXVIFS;ct++)
+	{
+		if((vifc_map&(1<<ct)) && v->dev==ptr)
+		{
+			vif_delete(v);
+			vifc_map&=~(1<<ct);
+		}
+		v++;
+	}
+	return NOTIFY_DONE;
+}
+
+
+static struct notifier_block ip_mr_notifier={
+	ipmr_device_event,
+	NULL,
+	0
+};
+	
+
+void ip_mr_init(void)
+{
+	printk("Linux IP multicast router 0.00pre-working 8)\n");
+	register_netdevice_notifier(&ip_mr_notifier);
 }
 
 #endif

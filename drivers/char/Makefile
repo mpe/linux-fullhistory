@@ -24,14 +24,24 @@ ifdef CONFIG_CYCLADES
 L_OBJS += cyclades.o
 endif
 
-ifdef CONFIG_ATIXL_BUSMOUSE
+ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
 M = y
 L_OBJS += atixlmouse.o
+else
+  ifeq ($(CONFIG_ATIXL_BUSMOUSE),m)
+  M_OBJS += atixlmouse.o
+  MM = m
+  endif
 endif
 
-ifdef CONFIG_BUSMOUSE
+ifeq ($(CONFIG_BUSMOUSE),y)
 M = y
 L_OBJS += busmouse.o
+else
+  ifeq ($(CONFIG_BUSMOUSE),m)
+  M_OBJS += busmouse.o
+  MM = m
+  endif
 endif
 
 ifeq ($(CONFIG_PRINTER),y)
@@ -42,18 +52,24 @@ else
   endif
 endif
 
-ifdef CONFIG_MS_BUSMOUSE
+ifeq ($(CONFIG_MS_BUSMOUSE),y)
 M = y
 L_OBJS += msbusmouse.o
+else
+  ifeq ($(CONFIG_MS_BUSMOUSE),m)
+  M_OBJS += msbusmouse.o
+  MM = m
+  endif
 endif
 
-ifdef CONFIG_82C710_MOUSE
-CONFIG_PSMOUSE = CONFIG_PSMOUSE
-endif
-
-ifdef CONFIG_PSMOUSE
+ifeq ($(CONFIG_PSMOUSE),y)
 M = y
 L_OBJS += psaux.o
+else
+  ifeq ($(CONFIG_PSMOUSE),m)
+  M_OBJS += psaux.o
+  MM = m
+  endif
 endif
 
 ifdef CONFIG_QIC02_TAPE
@@ -62,6 +78,10 @@ endif
 
 ifdef M
 L_OBJS += mouse.o
+else
+  ifdef MM
+  M_OBJS += mouse.o
+  endif
 endif
   
 ifdef CONFIG_SCC

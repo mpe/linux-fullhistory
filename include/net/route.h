@@ -29,9 +29,9 @@
 struct rtable 
 {
 	struct rtable		*rt_next;
-	unsigned long		rt_dst;
-	unsigned long		rt_mask;
-	unsigned long		rt_gateway;
+	__u32			rt_dst;
+	__u32			rt_mask;
+	__u32			rt_gateway;
 	unsigned short		rt_flags;
 	short			rt_metric;
 	unsigned int		rt_refcnt;
@@ -44,10 +44,10 @@ struct rtable
 
 
 extern void		ip_rt_flush(struct device *dev);
-extern void		ip_rt_add(short flags, unsigned long addr, unsigned long mask,
-			       unsigned long gw, struct device *dev, unsigned short mss, unsigned long window, unsigned short irtt, short metric);
-extern struct rtable	*ip_rt_route(unsigned long daddr, struct options *opt, unsigned long *src_addr);
-extern struct rtable 	*ip_rt_local(unsigned long daddr, struct options *opt, unsigned long *src_addr);
+extern void		ip_rt_add(short flags, __u32 addr, __u32 mask,
+			       __u32 gw, struct device *dev, unsigned short mss, unsigned long window, unsigned short irtt, short metric);
+extern struct rtable	*ip_rt_route(__u32 daddr, struct options *opt, __u32 *src_addr);
+extern struct rtable 	*ip_rt_local(__u32 daddr, struct options *opt, __u32 *src_addr);
 extern int		rt_get_info(char * buffer, char **start, off_t offset, int length, int dummy);
 extern int		ip_rt_ioctl(unsigned int cmd, void *arg);
 

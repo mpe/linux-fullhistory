@@ -886,6 +886,7 @@ static int ax25_create(struct socket *sock, int protocol)
 	sk->dead          = 0;
 	sk->next          = NULL;
 	sk->broadcast     = 0;
+	sk->allocation	  = GFP_KERNEL;
 	sk->rcvbuf        = SK_RMEM_MAX;
 	sk->sndbuf        = SK_WMEM_MAX;
 	sk->wmem_alloc    = 0;
@@ -2171,7 +2172,7 @@ void ax25_proto_init(struct net_proto *pro)
 		ax25_cs_get_info
 	});
 
-	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.30 ALPHA for Linux NET3.030 (Linux 1.3.20)\n");
+	printk("G4KLX/GW4PTS AX.25 for Linux. Version 0.30 ALPHA for Linux NET3.031 (Linux 1.3.25)\n");
 }
 
 /*

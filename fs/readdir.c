@@ -86,7 +86,7 @@ struct linux_dirent {
 };
 
 struct getdents_callback {
-	struct linux_dirent * current;
+	struct linux_dirent * current_dir;
 	struct linux_dirent * previous;
 	int count;
 	int error;
@@ -104,14 +104,14 @@ static int filldir(void * __buf, const char * name, int namlen, off_t offset, in
 	dirent = buf->previous;
 	if (dirent)
 		put_user(offset, &dirent->d_off);
-	dirent = buf->current;
+	dirent = buf->current_dir;
 	buf->previous = dirent;
 	put_user(ino, &dirent->d_ino);
 	put_user(reclen, &dirent->d_reclen);
 	memcpy_tofs(dirent->d_name, name, namlen);
 	put_user(0, dirent->d_name + namlen);
 	((char *) dirent) += reclen;
-	buf->current = dirent;
+	buf->current_dir = dirent;
 	buf->count -= reclen;
 	return 0;
 }
@@ -130,7 +130,7 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 	error = verify_area(VERIFY_WRITE, dirent, count);
 	if (error)
 		return error;
-	buf.current = (struct linux_dirent *) dirent;
+	buf.current_dir = (struct linux_dirent *) dirent;
 	buf.previous = NULL;
 	buf.count = count;
 	buf.error = 0;

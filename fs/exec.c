@@ -524,6 +524,32 @@ end_readexec:
 	return result;
 }
 
+static void exec_mmap(void)
+{
+	/*
+	 * The clear_page_tables done later on exec does the right thing
+	 * to the page directory when shared, except for graceful abort
+	 * (the oom is wrong there, too, IMHO)
+	 */
+	if (current->mm->count > 1) {
+		struct mm_struct *mm = kmalloc(sizeof(*mm), GFP_KERNEL);
+		if (!mm) {
+			/* this is wrong, I think. */
+			oom(current);
+			return;
+		}
+		*mm = *current->mm;
+		mm->count = 1;
+		mm->mmap = NULL;
+		mm->mmap_avl = NULL;
+		current->mm->count--;
+		current->mm = mm;
+		new_page_tables(current);
+		return;
+	}
+	exit_mmap(current->mm);
+	clear_page_tables(current);
+}
 
 /*
  * This function flushes out all traces of the currently running executable so
@@ -549,7 +575,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 	current->comm[i] = '\0';
 
 	/* Release all of the old mmap stuff. */
-	exit_mmap(current->mm);
+	exec_mmap();
 
 	flush_thread();
 
@@ -558,16 +584,15 @@ void flush_old_exec(struct linux_binprm * bprm)
 		current->dumpable = 0;
 	current->signal = 0;
 	for (i=0 ; i<32 ; i++) {
-		current->sigaction[i].sa_mask = 0;
-		current->sigaction[i].sa_flags = 0;
-		if (current->sigaction[i].sa_handler != SIG_IGN)
-			current->sigaction[i].sa_handler = NULL;
+		current->sig->action[i].sa_mask = 0;
+		current->sig->action[i].sa_flags = 0;
+		if (current->sig->action[i].sa_handler != SIG_IGN)
+			current->sig->action[i].sa_handler = NULL;
 	}
 	for (i=0 ; i<NR_OPEN ; i++)
 		if (FD_ISSET(i,&current->files->close_on_exec))
 			sys_close(i);
 	FD_ZERO(&current->files->close_on_exec);
-	clear_page_tables(current);
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 	current->used_math = 0;
@@ -583,7 +608,9 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	int i;
 	int retval;
 	int sh_bang = 0;
+#ifdef __alpha__
 	int loader = 0;
+#endif
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */

@@ -178,7 +178,6 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 fi
 bool 'Other ISA cards' CONFIG_NET_ISA y
 if [ "$CONFIG_NET_ISA" = "y" ]; then
-	tristate 'Arcnet support' CONFIG_ARCNET n
 	tristate 'Cabletron E21xx support' CONFIG_E2100 n
 	tristate 'DEPCA support' CONFIG_DEPCA y
 	tristate 'EtherWorks 3 support' CONFIG_EWRK3 n
@@ -225,6 +224,7 @@ bool 'Token Ring driver support' CONFIG_TR n
 if [ "$CONFIG_TR" = "y" ]; then
 	tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR y
 fi
+tristate 'Arcnet support' CONFIG_ARCNET n
 fi
 fi
 

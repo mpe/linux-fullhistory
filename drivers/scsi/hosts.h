@@ -1,11 +1,14 @@
 /*
  *  hosts.h Copyright (C) 1992 Drew Eckhardt 
- *  mid to low-level SCSI driver interface header by	
- *	Drew Eckhardt 
+ *          Copyright (C) 1993, 1994, 1995 Eric Youngdale
+ *
+ *  mid to low-level SCSI driver interface header
+ *      Initial versions: Drew Eckhardt
+ *      Subsequent revisions: Eric Youngdale
  *
  *  <drew@colorado.edu>
  *
- *	 Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *	 Modified by Eric Youngdale eric@aib.com to
  *	 add scatter-gather, multiple outstanding request, and other
  *	 enhancements.
  * 
@@ -274,6 +277,15 @@ struct Scsi_Host
     unsigned char dma_channel;
     
     /*
+     * This is a unique identifier that must be assigned so that we
+     * have some way of identifying each detected host adapter properly
+     * and uniquely.  For hosts that do not support more than one card
+     * in the system at one time, this does not need to be set.  It is
+     * initialized to 0 in scsi_register.
+     */
+    unsigned int unique_id;
+
+    /*
      * Set these if there are conflicts between memory
      * in the < 1mb region and regions at 16mb multiples.
      * The address must be on a page boundary.
@@ -297,6 +309,12 @@ struct Scsi_Host
      */
     unsigned loaded_as_module:1;
     
+    /*
+     * True when we call the low-level reset function, and
+     * the midlevel code suggests a full bus reset.
+     */
+    unsigned suggest_bus_reset:1;
+ 
     int hostdata[0];  /* Used for storage of host specific stuff */
 };
 
@@ -344,7 +362,7 @@ struct Scsi_Device_Template
     unsigned char dev_max;	  /* Current size of arrays */
     unsigned blk:1;		  /* 0 if character device */
     int (*detect)(Scsi_Device *); /* Returns 1 if we can attach this device */
-    void (*init)(void);		  /* Sizes arrays based upon number of devices
+    int (*init)(void);		  /* Sizes arrays based upon number of devices
 		   *  detected */
     void (*finish)(void);	  /* Perform initialization after attachment */
     int (*attach)(Scsi_Device *); /* Attach devices to arrays */

@@ -69,9 +69,12 @@ static inline unsigned long min(unsigned long a, unsigned long b)
 }
 
 
-/* raw_err gets called by the icmp module. */
-void raw_err (int err, unsigned char *header, unsigned long daddr,
-	 unsigned long saddr, struct inet_protocol *protocol)
+/*
+ *	Raw_err does not currently get called by the icmp module - FIXME:
+ */
+ 
+void raw_err (int type, int code, unsigned char *header, __u32 daddr,
+	 __u32 saddr, struct inet_protocol *protocol)
 {
 	struct sock *sk;
    
@@ -82,15 +85,24 @@ void raw_err (int err, unsigned char *header, unsigned long daddr,
 		return;
 
 	/* This is meaningless in raw sockets. */
-	if ((err & 0xff00) == (ICMP_SOURCE_QUENCH << 8)) 
+	if (type == ICMP_SOURCE_QUENCH) 
 	{
 		if (sk->cong_window > 1) sk->cong_window = sk->cong_window/2;
 		return;
 	}
+	
+	if(type == ICMP_PARAMETERPROB)
+	{
+		sk->err = EPROTO;
+		sk->error_report(sk);
+	}
 
-	sk->err = icmp_err_convert[err & 0xff].errno;
-	sk->error_report(sk);
-  
+	if(code<13)
+	{
+		sk->err = icmp_err_convert[code & 0xff].errno;
+		sk->error_report(sk);
+	}
+	
 	return;
 }
 
@@ -101,16 +113,17 @@ void raw_err (int err, unsigned char *header, unsigned long daddr,
  *	in ip.c
  */
 
-int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, long saddr, long daddr)
+int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr)
 {
 	/* Now we need to copy this into memory. */
 	skb->sk = sk;
 	skb_trim(skb,ntohs(skb->ip_hdr->tot_len));
+	
 	skb->h.raw = (unsigned char *) skb->ip_hdr;
 	skb->dev = dev;
 	skb->saddr = daddr;
 	skb->daddr = saddr;
-
+	
 	/* Charge it to the socket. */
 	
 	if(sock_queue_rcv_skb(sk,skb)<0)
@@ -134,7 +147,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, long saddr
  *	Callback support is trivial for SOCK_RAW
  */
   
-static void raw_getfrag(const void *p, int saddr, char *to, unsigned int offset, unsigned int fraglen)
+static void raw_getfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
 	memcpy_fromfs(to, (const unsigned char *)p+offset, fraglen);
 }
@@ -143,7 +156,7 @@ static void raw_getfrag(const void *p, int saddr, char *to, unsigned int offset,
  *	IPPROTO_RAW needs extra work.
  */
  
-static void raw_getrawfrag(const void *p, int saddr, char *to, unsigned int offset, unsigned int fraglen)
+static void raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
 	memcpy_fromfs(to, (const unsigned char *)p+offset, fraglen);
 	if(offset==0)

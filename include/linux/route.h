@@ -50,11 +50,4 @@ struct rtentry {
 #define RTF_IRTT	0x0100		/* Initial round trip time	  */
 #define RTF_REJECT	0x0200		/* Reject route			  */
 
-/*
- *	REMOVE THESE BY 1.2.0 !!!!!!!!!!!!!!!!!
- */
- 
-#define	RTF_MTU		RTF_MSS
-#define rt_mtu		rt_mss		
-
 #endif	/* _LINUX_ROUTE_H */

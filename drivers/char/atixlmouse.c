@@ -5,9 +5,18 @@
  * Uses VFS interface for linux 0.98 (01OCT92)
  *
  * Modified by Chris Colohan (colohan@eecg.toronto.edu)
+ * Modularised 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
  *
- * version 0.3
+ * version 0.3a
  */
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -18,6 +27,8 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/irq.h>
+
+#include "mouse.h"
 
 #define ATIXL_MOUSE_IRQ		5 /* H/W interrupt # set up on ATIXL board */
 #define ATIXL_BUSMOUSE		3 /* Minor device # (mknod c 10 3 /dev/bm) */
@@ -61,6 +72,7 @@ static struct mouse_status {
 	int ready;
 	int active;
 	struct wait_queue *wait;
+	struct fasync_struct *fasync;
 } mouse;
 
 void mouse_interrupt(int irq, struct pt_regs * regs)
@@ -80,8 +92,20 @@ void mouse_interrupt(int irq, struct pt_regs * regs)
 		mouse.dy += dy;
 		mouse.ready = 1;
 		wake_up_interruptible(&mouse.wait);
+		if (mouse.fasync)
+			kill_fasync(mouse.fasync, SIGIO);
 	}
 	ATIXL_MSE_ENABLE_UPDATE();
+}
+
+static int fasync_mouse(struct inode *inode, struct file *filp, int on)
+{
+	int retval;
+
+	retval = fasync_helper(inode, filp, on, &mouse.fasync);
+	if (retval < 0)
+		return retval;
+	return 0;
 }
 
 static void release_mouse(struct inode * inode, struct file * file)
@@ -90,8 +114,8 @@ static void release_mouse(struct inode * inode, struct file * file)
 	mouse.active = 0;
 	mouse.ready = 0;
 	free_irq(ATIXL_MOUSE_IRQ);
+	fasync_mouse(inode, file, 0);
 }
-
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
@@ -169,9 +193,21 @@ struct file_operations atixl_busmouse_fops = {
 	NULL,		/* mouse_mmap */
 	open_mouse,
 	release_mouse,
+	NULL,
+	fasync_mouse,
 };
 
+static struct mouse atixl_mouse = { 
+	ATIXL_BUSMOUSE, "atixl", &atixl_busmouse_fops
+};
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+int init_module(void)
+#else
 unsigned long atixl_busmouse_init(unsigned long kmem_start)
+#endif
 {
 	unsigned char a,b,c;
 
@@ -182,7 +218,11 @@ unsigned long atixl_busmouse_init(unsigned long kmem_start)
 		printk("\nATI Inport ");
 	else{
 		mouse.present = 0;
+#ifdef MODULE
+		return -EIO;
+#else
 		return kmem_start;
+#endif
 	}
 	outb(0x80, ATIXL_MSE_CONTROL_PORT);	/* Reset the Inport device */
 	outb(0x07, ATIXL_MSE_CONTROL_PORT);	/* Select Internal Register 7 */
@@ -194,5 +234,19 @@ unsigned long atixl_busmouse_init(unsigned long kmem_start)
 	mouse.dx = mouse.dy = 0;
 	mouse.wait = NULL;
 	printk("Bus mouse detected and installed.\n");
+	mouse_register(&atixl_mouse);
+#ifdef MODULE
+	return 0;
+#else
 	return kmem_start;
+#endif
 }
+
+#ifdef MODULE
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("atixlmouse: in use, remove delayed\n");
+	mouse_deregister(&atixl_mouse);
+}
+#endif

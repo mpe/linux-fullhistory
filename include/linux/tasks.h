@@ -4,6 +4,9 @@
 /*
  * This is the maximum nr of tasks - change it if you need to
  */
+ 
+#define NR_PROCS	32		/* Max processors that can be running */
+
 #define NR_TASKS	512
 
 #define MAX_TASKS_PER_USER (NR_TASKS/2)

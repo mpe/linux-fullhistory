@@ -33,8 +33,12 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/config.h>
+#include <linux/sem.h>
+#include <linux/minix_fs.h>
+#include <linux/ext2_fs.h>
 
 #ifdef CONFIG_NET
+#include <linux/in.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #ifdef CONFIG_INET
@@ -42,6 +46,8 @@
 #include <linux/etherdevice.h>
 #include <net/protocol.h>
 #include <net/arp.h>
+#include <net/ip.h>
+#include <net/udp.h>
 #include <net/tcp.h>
 #include <net/route.h>
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
@@ -96,7 +102,6 @@ extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 extern int (*rarp_ioctl_hook)(int,void*);
 
-extern int close_fp(struct file *filp);
 extern void (* iABI_hook)(struct pt_regs * regs);
 
 struct symbol_table symbol_table = {
@@ -315,6 +320,9 @@ struct symbol_table symbol_table = {
 	X(init_etherdev),
 	X(ip_rt_route),
 	X(arp_send),
+#ifdef CONFIG_IP_FORWARD
+	X(ip_forward),
+#endif
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
     	/* VJ header compression */
 	X(slhc_init),
@@ -459,6 +467,8 @@ struct symbol_table symbol_table = {
 #ifdef CONFIG_PROC_FS
 	X(proc_register),
 	X(proc_unregister),
+	X(in_group_p),
+	X(generate_cluster),
 #endif
 	/********************************************************
 	 * Do not add anything below this line,

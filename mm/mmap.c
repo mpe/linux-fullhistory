@@ -231,6 +231,8 @@ struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
 #if 0 /* equivalent, but slow */
 	struct vm_area_struct * vma;
 
+	if (!task->mm)
+		return NULL;
 	for (vma = task->mm->mmap ; ; vma = vma->vm_next) {
 		if (!vma)
 			return NULL;
@@ -241,6 +243,8 @@ struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
 	struct vm_area_struct * result = NULL;
 	struct vm_area_struct * tree;
 
+	if (!task->mm)
+		return NULL;
 	for (tree = task->mm->mmap_avl ; ; ) {
 		if (tree == avl_empty)
 			return result;
@@ -798,6 +802,7 @@ void exit_mmap(struct mm_struct * mm)
 		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_inode)
 			iput(mpnt->vm_inode);
+		zap_page_range(mm, mpnt->vm_start, mpnt->vm_end-mpnt->vm_start);
 		kfree(mpnt);
 		mpnt = next;
 	}

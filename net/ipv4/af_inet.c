@@ -247,7 +247,7 @@ void put_sock(unsigned short num, struct sock *sk)
 
 static void remove_sock(struct sock *sk1)
 {
-	struct sock *sk2;
+	struct sock **p;
 	unsigned long flags;
 
 	if (sk1->type==SOCK_PACKET)
@@ -262,26 +262,18 @@ static void remove_sock(struct sock *sk1)
 	/* We can't have this changing out from under us. */
 	save_flags(flags);
 	cli();
-	sk2 = sk1->prot->sock_array[sk1->num &(SOCK_ARRAY_SIZE -1)];
-	if (sk2 == sk1) 
+	
+	p=&(sk1->prot->sock_array[sk1->num & (SOCK_ARRAY_SIZE -1)]);
+	
+	while(*p!=NULL)
 	{
-		sk1->prot->inuse -= 1;
-		sk1->prot->sock_array[sk1->num &(SOCK_ARRAY_SIZE -1)] = sk1->next;
-		restore_flags(flags);
-		return;
-	}
-
-	while(sk2 && sk2->next != sk1) 
-	{
-		sk2 = sk2->next;
-	}
-
-	if (sk2) 
-	{
-		sk1->prot->inuse -= 1;
-		sk2->next = sk1->next;
-		restore_flags(flags);
-		return;
+		if(*p==sk1)
+		{
+			sk1->prot->inuse--;
+			*p=sk1->next;
+			break;
+		}
+		p=&((*p)->next);
 	}
 	restore_flags(flags);
 }
@@ -368,7 +360,7 @@ void destroy_sock(struct sock *sk)
   	/* And now the backlog. */
   	while((skb=skb_dequeue(&sk->back_log))!=NULL) 
   	{
-		/* this should never happen. */
+		/* this should [almost] never happen. */
 /*		printk("cleaning back_log\n");*/
 		kfree_skb(skb, FREE_READ);
 	}
@@ -387,12 +379,12 @@ void destroy_sock(struct sock *sk)
 	 * everything is gone.
 	 */
 
-	  if (sk->dead && sk->rmem_alloc == 0 && sk->wmem_alloc == 0) 
-	  {
+	if (sk->dead && sk->rmem_alloc == 0 && sk->wmem_alloc == 0) 
+	{
 		kfree_s((void *)sk,sizeof(*sk));
-	  } 
-	  else 
-	  {
+	} 
+	else 
+	{
 		/* this should never happen. */
 		/* actually it can if an ack has just been sent. */
 		sk->destroy = 1;
@@ -633,6 +625,7 @@ static int inet_create(struct socket *sock, int protocol)
 #endif  
 	sk->type = sock->type;
 	sk->protocol = protocol;
+	sk->allocation = GFP_KERNEL;
 	sk->sndbuf = SK_WMEM_MAX;
 	sk->rcvbuf = SK_RMEM_MAX;
 	sk->rto = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
@@ -780,6 +773,7 @@ static int inet_dup(struct socket *newsock, struct socket *oldsock)
 /*
  * Return 1 if we still have things to send in our buffers.
  */
+ 
 static inline int closing(struct sock * sk)
 {
 	switch (sk->state) {
@@ -982,13 +976,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK))
 	{
 		if(sk->err!=0)
-		{
-			cli();
-			err=sk->err;
-			sk->err=0;
-			sti();
-			return -err;
-		}
+			return inet_error(sk);
 		return -EALREADY;	/* Connecting is currently in progress */
   	}
 	if (sock->state != SS_CONNECTING) 
@@ -1007,11 +995,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state > TCP_FIN_WAIT2 && sock->state==SS_CONNECTING)
 	{
 		sock->state=SS_UNCONNECTED;
-		cli();
-		err=sk->err;
-		sk->err=0;
-		sti();
-		return -err;
+		return inet_error(sk);
 	}
 
 	if (sk->state != TCP_ESTABLISHED &&(flags & O_NONBLOCK)) 
@@ -1031,10 +1015,8 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		if(sk->err && sk->protocol == IPPROTO_TCP)
 		{
 			sock->state = SS_UNCONNECTED;
-			err = -sk->err;
-			sk->err=0;
 			sti();
-			return err; /* set by tcp_err() */
+			return inet_error(sk); /* set by tcp_err() */
 		}
 	}
 	sti();
@@ -1043,11 +1025,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state != TCP_ESTABLISHED && sk->err) 
 	{
 		sock->state = SS_UNCONNECTED;
-		cli();
-		err=sk->err;
-		sk->err=0;
-		sti();
-		return(-err);
+		return inet_error(sk);
 	}
 	return(0);
 }
@@ -1097,9 +1075,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		sk2 = sk1->prot->accept(sk1,flags);
 		if (sk2 == NULL) 
 		{
-			err=sk1->err;
-			sk1->err=0;
-			return(-err);
+			return inet_error(sk1);
 		}
 	}
 	newsock->data = (void *)sk2;
@@ -1127,12 +1103,11 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	if (sk2->state != TCP_ESTABLISHED && sk2->err > 0) 
 	{
-		err = -sk2->err;
-		sk2->err=0;
-		sk2->dead=1;	/* ANK */
+		err = inet_error(sk2);
+		sk2->dead=1;			/* ANK */
 		destroy_sock(sk2);
 		newsock->data = NULL;
-		return(err);
+		return err;
 	}
 	newsock->state = SS_CONNECTED;
 	return(0);
@@ -1566,7 +1541,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.030 (Snapshot #1)\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.031 (Snapshot #4)\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 
@@ -1610,11 +1585,26 @@ void inet_proto_init(struct net_proto *pro)
   	 *	Set the IP module up
   	 */
 	ip_init();
-
+	/*
+	 *	Set the ICMP layer up
+	 */
+	icmp_init(&inet_proto_ops);
+	/*
+	 *	Set the firewalling up
+	 */
 #if defined(CONFIG_IP_ACCT)||defined(CONFIG_IP_FIREWALL)|| \
     defined(CONFIG_IP_MASQUERADE)
 	ip_fw_init();
 #endif
+	/*
+	 *	Initialise the multicast router
+	 */
+#if defined(CONFIG_IP_MROUTE)
+	ip_mr_init();
+#endif
+	/*
+	 *	Create all the /proc entries.
+	 */
 
 #ifdef CONFIG_INET_RARP
 	proc_net_register(&(struct proc_dir_entry) {

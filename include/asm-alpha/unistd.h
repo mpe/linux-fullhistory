@@ -125,6 +125,7 @@
 #define __NR_get_kernel_syms	309
 #define __NR_syslog		310
 #define __NR_reboot		311
+#define __NR_clone		312
 
 
 #ifdef __LIBRARY__
@@ -172,11 +173,18 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 #ifdef __KERNEL_SYSCALLS__
 
 #include <linux/string.h>
+#include <linux/signal.h>
 
-extern unsigned long kernel_fork(void);
-static inline unsigned long fork(void)
+extern unsigned long kernel_clone(unsigned long clone_flags, void * stack);
+
+static inline long clone(unsigned long clone_flags, void * stack)
 {
-	return kernel_fork();
+	return kernel_clone(clone_flags, stack);
+}
+
+static inline long fork(void)
+{
+	return kernel_clone(SIGCHLD, NULL);
 }
 
 extern void sys_idle(void);

@@ -2,17 +2,18 @@
 
 	 Maintained by H. Peter Anvin <Peter.Anvin@linux.org>
 
-		    Last revised: August 28, 1995
+		   Last revised: September 6, 1995
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he lost network access in 1993.  It is a
 registry of allocated major device numbers, as well as the recommended
 /dev directory nodes for these devices.
 
-This list is available via FTP from ftp.yggdrasil.com in the directory
-/pub/device-list; filename is devices.<format> where <format> is txt
-(ASCII), tex (LaTeX), dvi (DVI) or ps (PostScript).  In cases of
-discrepancy, the LaTeX version has priority.
+This list is now included with the Linux kernel sources in LaTeX and
+ASCII form.  This list is also available via FTP from
+ftp.yggdrasil.com in the directory /pub/device-list; filename is
+devices.<format> where <format> is txt (ASCII), tex (LaTeX), dvi (DVI)
+or ps (PostScript).
 
 This document is included by reference into the Linux Filesystem
 Standard (FSSTND).  The FSSTND is available via FTP from
@@ -24,6 +25,11 @@ have additional information regarding any of the devices listed below,
 or if I have made a mistake, I would greatly appreciate a note.
 
 Allocations marked (68k) apply to Linux/68k only.
+
+This document is in the public domain.  The author requests, however,
+that semantically altered versions are not distributed without
+permission of the author, assuming the author can be contacted without
+an unreasonable effort.
 
   0 		Unnamed devices (NFS mounts, loopback devices)
 		  0 = reserved as null device number
@@ -477,25 +483,33 @@ Allocations marked (68k) apply to Linux/68k only.
 		  0 = /dev/cux0		Callout device corresponding to ttyX0
 		  1 = /dev/cux1		Callout device corresponding to ttyX1
 		      ...
-    block	Modular RAM disk device
+    block	Third IDE hard disk/CD-ROM interface
+    		  0 = /dev/hde		Master: whole disk (or CD-ROM)
+		 64 = /dev/hdf		Slave: whole disk (or CD-ROM)
+
+		Partitions are handled the same way as for the first
+		interface (see major number 3).
+
+ 34 char	Z8530 HDLC driver
+		  0 = /dev/sc1		First Z8530, first port
+		  1 = /dev/sc2		First Z8530, second port
+		  2 = /dev/sc3		Second Z8530, first port
+		  3 = /dev/sc4		Second Z8530, second port
+		      ...
+    block	Fourth IDE hard disk/CD-ROM interface
+    		  0 = /dev/hdg		Master: whole disk (or CD-ROM)
+		 64 = /dev/hdh		Slave: whole disk (or CD-ROM)
+		
+		Partitions are handled the same way as for the first
+		interface (see major number 3).
+
+ 35 block	Modular RAM disk device
 		  0 = /dev/ram0		First modular RAM disk
 		  1 = /dev/ram1		Second modular RAM disk
 		      ...
 		255 = /dev/ram255	256th modular RAM disk
 
- 33 block	Third IDE hard disk/CD-ROM interface
-    		  0 = /dev/hde		Master: whole disk (or CD-ROM)
-		 64 = /dev/hdf		Slave: whole disk (or CD-ROM)
-
- 34 block	Fourth IDE hard disk/CD-ROM interface
-    		  0 = /dev/hdg		Master: whole disk (or CD-ROM)
-		 64 = /dev/hdh		Slave: whole disk (or CD-ROM)
-		
-		For both IDE interfaces: partitions are handled the
-		same way as for the first interface (see major number
-		3).
-
- 35-223		UNALLOCATED
+ 36-223		UNALLOCATED
 
 224-254		LOCAL USE
 		Allocated for local/experimental use

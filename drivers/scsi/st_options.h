@@ -3,7 +3,7 @@
 
    Copyright 1995 Kai Makisara.
 
-   Last modified: Sun Aug 27 22:26:53 1995 by root@kai.makisara.fi
+   Last modified: Sun Sep 10 13:26:02 1995 by root@kai.makisara.fi
 */
 
 #ifndef _ST_OPTIONS_H
@@ -30,8 +30,15 @@
    SENSE. */
 #define ST_DEFAULT_BLOCK 0
 
-/* The tape driver buffer size in kilobytes. */
+/* The tape driver buffer size in kilobytes. When loading as module, the
+   memory block being used is slightly less than a power of two, i.e.,
+   a 64 kB block is used for a 32 kB buffer => we may as well use what is
+   being allocated! */
+#ifdef MODULE
+#define ST_BUFFER_BLOCKS 63
+#else
 #define ST_BUFFER_BLOCKS 32
+#endif
 
 /* The number of kilobytes of data in the buffer that triggers an
    asynchronous write in fixed block mode. See also ST_ASYNC_WRITES

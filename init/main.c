@@ -276,11 +276,20 @@ static int checksetup(char *line)
 	return 0;
 }
 
-unsigned long loops_per_sec = 1;
+/* this should be approx 2 Bo*oMips to start (note initial shift), and will
+   still work even if initally too large, it will just take slightly longer */
+unsigned long loops_per_sec = (1<<12);
+
+/* This is the number of bits of precision for the loops_per_second.  Each
+   bit takes on average 1.5/HZ seconds.  This (like the original) is a little
+   better than 1% */
+#define LPS_PREC 8
 
 static void calibrate_delay(void)
 {
 	int ticks;
+	int loopbit;
+	int lps_precision = LPS_PREC;
 
 	printk("Calibrating delay loop.. ");
 	while (loops_per_sec <<= 1) {
@@ -292,17 +301,31 @@ static void calibrate_delay(void)
 		ticks = jiffies;
 		__delay(loops_per_sec);
 		ticks = jiffies - ticks;
-		if (ticks >= HZ) {
-			loops_per_sec = muldiv(loops_per_sec, HZ, ticks);
-			printk("ok - %lu.%02lu BogoMIPS\n",
-				loops_per_sec/500000,
-				(loops_per_sec/5000) % 100);
-			return;
+		if (ticks)
+			break;
 		}
-	}
-	printk("failed\n");
-}
 
+/* Do a binary approximation to get loops_per_second set to equal one clock
+   (up to lps_precision bits) */
+	loops_per_sec >>= 1;
+	loopbit = loops_per_sec;
+	while ( lps_precision-- && (loopbit >>= 1) ) {
+		loops_per_sec |= loopbit;
+		ticks = jiffies;
+		while (ticks == jiffies);
+		ticks = jiffies;
+		__delay(loops_per_sec);
+		if (jiffies != ticks)	/* longer than 1 tick */
+			loops_per_sec &= ~loopbit;
+	}
+
+/* finally, adjust loops per second in terms of seconds instead of clocks */	
+	loops_per_sec *= HZ;
+/* Round the value and print it */	
+	printk("ok - %lu.%02lu BogoMIPS\n",
+		(loops_per_sec+2500)/500000,
+		((loops_per_sec+2500)/5000) % 100);
+}
 
 /*
  * This is a simple kernel command line parsing function: it parses
@@ -383,6 +406,8 @@ static void parse_options(char *line)
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
 
+static char init_stack[PAGE_SIZE];
+
 asmlinkage void start_kernel(void)
 {
 	char * command_line;
@@ -443,7 +468,8 @@ asmlinkage void start_kernel(void)
 
 	printk(linux_banner);
 
-	if (!fork())		/* we count on this going ok */
+	/* we count on the clone going ok */
+	if (!clone(CLONE_VM, init_stack+sizeof(init_stack)))
 		init();
 /*
  * task[0] is meant to be used as an "idle" task: it may not sleep, but

@@ -229,7 +229,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 	while ((signr = current->signal & mask) != 0) {
 		signr = ffz(~signr);
 		clear_bit(signr, &current->signal);
-		sa = current->sigaction + signr;
+		sa = current->sig->action + signr;
 		signr++;
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
@@ -246,7 +246,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 				current->signal |= _S(signr);
 				continue;
 			}
-			sa = current->sigaction + signr - 1;
+			sa = current->sig->action + signr - 1;
 		}
 		if (sa->sa_handler == SIG_IGN) {
 			if (signr != SIGCHLD)
@@ -268,7 +268,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
-				if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 
+				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags & 
 						SA_NOCLDSTOP))
 					notify_parent(current);
 				schedule();
@@ -315,7 +315,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 	pc = regs->pc;
 	frame = (struct sigcontext_struct *) rdusp();
 	signr = 1;
-	sa = current->sigaction;
+	sa = current->sig->action;
 	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
 		if (mask > handler_signal)
 			break;

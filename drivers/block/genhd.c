@@ -234,6 +234,14 @@ read_mbr:
 			continue;
 		if (p->sys_ind == EXTENDED_PARTITION) {
 			printk(" <");
+			/*
+			 * If we are rereading the partition table, we need
+			 * to set the size of the partition so that we will
+			 * be able to bread the block containing the extended
+			 * partition info.
+			 */
+			hd->sizes[minor] = hd->part[minor].nr_sects 
+			  	>> (BLOCK_SIZE_BITS - 9);
 			extended_partition(hd, (hd->major << 8) | minor);
 			printk(" >");
 			/* prevent someone doing mkfs or mkswap on
@@ -384,6 +392,10 @@ void resetup_one_dev(struct gendisk *dev, int drive)
 	current_minor = 1 + first_minor;
 	check_partition(dev, major + first_minor);
 
+ 	/*
+ 	 * We need to set the sizes array before we will be able to access
+ 	 * any of the partitions on this device.
+ 	 */
 	if (dev->sizes != NULL) {	/* optional safeguard in ll_rw_blk.c */
 		for (i = first_minor; i < end_minor; i++)
 			dev->sizes[i] = dev->part[i].nr_sects >> (BLOCK_SIZE_BITS - 9);

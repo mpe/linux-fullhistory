@@ -65,6 +65,7 @@
  *		Alan Cox	:	Allow anyone to clear SO_DEBUG
  *					(compatibility fix)
  *		Alan Cox	:	Added optimistic memory grabbing for AF_UNIX throughput.
+ *		Alan Cox	:	Allocator for a socket is settable.
  *
  * To Fix:
  *
@@ -448,7 +449,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 		}
 		
 		if(!fallback)
-			skb = sock_wmalloc(sk, size, 0, GFP_KERNEL);
+			skb = sock_wmalloc(sk, size, 0, sk->allocation);
 		else
 		{
 			/* The buffer get won't block, or use the atomic queue. It does

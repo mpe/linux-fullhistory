@@ -94,7 +94,7 @@ static void check_pending(int signum)
 {
 	struct sigaction *p;
 
-	p = signum - 1 + current->sigaction;
+	p = signum - 1 + current->sig->action;
 	if (p->sa_handler == SIG_IGN) {
 		if (signum == SIGCHLD)
 			return;
@@ -126,8 +126,8 @@ asmlinkage unsigned long sys_signal(int signum, void (*handler)(int))
 	memset(&tmp, 0, sizeof(tmp));
 	tmp.sa_handler = handler;
 	tmp.sa_flags = SA_ONESHOT | SA_NOMASK;
-	handler = current->sigaction[signum-1].sa_handler;
-	current->sigaction[signum-1] = tmp;
+	handler = current->sig->action[signum-1].sa_handler;
+	current->sig->action[signum-1] = tmp;
 	check_pending(signum);
 	return (unsigned long) handler;
 }
@@ -141,7 +141,7 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 		return -EINVAL;
 	if (signum==SIGKILL || signum==SIGSTOP)
 		return -EINVAL;
-	p = signum - 1 + current->sigaction;
+	p = signum - 1 + current->sig->action;
 	if (action) {
 		int err = verify_area(VERIFY_READ, action, sizeof(*action));
 		if (err)

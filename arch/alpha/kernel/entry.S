@@ -8,6 +8,7 @@
 
 #define halt	.long PAL_halt
 #define rti	.long PAL_rti
+#define SIGCHLD	20
 
 #define NR_SYSCALLS 320
 #define osf_vfork sys_fork
@@ -189,9 +190,9 @@ entIF:
  * stack buildup, as we can't do system calls from kernel space.
  */
 .align 3
-.globl	kernel_fork
-.ent	kernel_fork
-kernel_fork:
+.globl	kernel_clone
+.ent	kernel_clone
+kernel_clone:
 	subq $30,6*8,$30
 	stq $31,0($30)
 	stq $26,8($30)
@@ -201,11 +202,11 @@ kernel_fork:
 	stq $18,40($30)
 	bis $31,2,$0	/* Register v0: syscall nr for fork() */
 	SAVE_ALL
-	lda $27,sys_fork
-	jsr $26,($27),sys_fork
+	lda $27,sys_clone
+	jsr $26,($27),sys_clone
 	stq $0,0($30)	
 	br ret_from_sys_call
-.end	kernel_fork
+.end	kernel_clone
 
 .align 3
 .ent	do_switch_stack
@@ -401,17 +402,35 @@ entUnaUser:
 
 .end	entUnaUser
 
+/*
+ * A fork is the same as clone(SIGCHLD, 0);
+*/
 .align 3
 .globl	sys_fork
 .ent	sys_fork
 sys_fork:
 	br $1,do_switch_stack
-	bis $30,$30,$16
-	lda $27,alpha_fork
-	jsr $26,($27),alpha_fork
+	bis $31,SIGCHLD,$16
+	bis $31,$31,$17
+	bis $30,$30,$18
+	lda $27,alpha_clone
+	jsr $26,($27),alpha_clone
 	br $1,undo_switch_stack
 	ret $31,($26),1
 .end	sys_fork
+
+.align 3
+.globl	sys_clone
+.ent	sys_clone
+sys_clone:
+	br $1,do_switch_stack
+	/* arg1 and arg2 come from the user */
+	bis $30,$30,$18
+	lda $27,alpha_clone
+	jsr $26,($27),alpha_clone
+	br $1,undo_switch_stack
+	ret $31,($26),1
+.end	sys_clone
 
 .align 3
 .globl  alpha_switch_to
@@ -610,6 +629,6 @@ sys_call_table:
 /* linux-specific system calls start at 300 */
 /*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
 	.quad sys_getdents, sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
-	.quad sys_syslog, sys_reboot, do_entSys, do_entSys, do_entSys
+	.quad sys_syslog, sys_reboot, sys_clone, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 

@@ -68,7 +68,7 @@ endif
 #
 fastdep: dummy
 	if [ -n "$(wildcard *.[chS])" ]; then \
-	awk -f $(TOPDIR)/scripts/depend.awk *.[chS] > .depend; fi
+	$(AWK) -f $(TOPDIR)/scripts/depend.awk *.[chS] > .depend; fi
 ifdef ALL_SUB_DIRS
 	set -e; for i in $(ALL_SUB_DIRS); do $(MAKE) -C $$i fastdep; done
 endif

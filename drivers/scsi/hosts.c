@@ -287,6 +287,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->max_id = 8;      
     retval->max_lun = 8;
 
+    retval->unique_id = 0;
     retval->io_port = 0;
     retval->forbidden_addr = 0;
     retval->forbidden_size = 0;

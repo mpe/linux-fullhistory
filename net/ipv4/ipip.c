@@ -61,7 +61,7 @@ static char kernel_version[] = UTS_RELEASE;
  */
 
 int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt, 
-		unsigned long daddr, unsigned short len, unsigned long saddr,
+		__u32 daddr, unsigned short len, __u32 saddr,
                                    int redo, struct inet_protocol *protocol)
 {
 #ifdef CONFIG_IP_FIREWALL
@@ -90,9 +90,9 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Check the firewall [well spotted Olaf]
 	 */
 	 
-	if((err=ip_fw_chk(skb->ip_hdr,dev,ip_fw_blk_chain, ip_fw_blk_policy,0))<1)
+	if((err=ip_fw_chk(skb->ip_hdr,dev,ip_fw_blk_chain, ip_fw_blk_policy,0))<FW_ACCEPT)
 	{
-		if(err==-1)
+		if(err==FW_REJECT)
 			icmp_send(skb,ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0 , dev);
 		kfree_skb(skb, FREE_READ);
 		return 0;

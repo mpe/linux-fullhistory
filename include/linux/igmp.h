@@ -83,11 +83,12 @@ struct ip_mc_list
 extern struct ip_mc_list *ip_mc_head;
 
 
-extern int igmp_rcv(struct sk_buff *, struct device *, struct options *, unsigned long, unsigned short,
-	unsigned long, int , struct inet_protocol *);
+extern int igmp_rcv(struct sk_buff *, struct device *, struct options *, __u32, unsigned short,
+	__u32, int , struct inet_protocol *);
 extern void ip_mc_drop_device(struct device *dev); 
 extern int ip_mc_join_group(struct sock *sk, struct device *dev, unsigned long addr);
 extern int ip_mc_leave_group(struct sock *sk, struct device *dev,unsigned long addr);
 extern void ip_mc_drop_socket(struct sock *sk);
+extern void ip_mr_init(void);
 #endif
 #endif

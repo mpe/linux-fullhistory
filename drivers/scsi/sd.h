@@ -5,7 +5,7 @@
  *
  *	<drew@colorado.edu>
  *
- *	 Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *	 Modified by Eric Youngdale eric@aib.com to
  *	 add scatter-gather, multiple outstanding request, and other
  *	 enhancements.
  */

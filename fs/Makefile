@@ -26,12 +26,20 @@ else
   endif
 endif
 
-ifdef CONFIG_EXT_FS
+ifeq ($(CONFIG_EXT_FS),y)
 SUB_DIRS += ext
+else
+  ifeq ($(CONFIG_EXT_FS),m)
+  MOD_SUB_DIRS += ext
+  endif
 endif
 
-ifdef CONFIG_EXT2_FS
+ifeq ($(CONFIG_EXT2_FS),y)
 SUB_DIRS += ext2
+else
+  ifeq ($(CONFIG_EXT2_FS),m)
+  MOD_SUB_DIRS += ext2
+  endif
 endif
 
 ifeq ($(CONFIG_MSDOS_FS),y)

@@ -22,6 +22,7 @@
  *	Erik Schoenfelder	:	/proc/net/snmp
  *		Alan Cox	:	Handle dead sockets properly.
  *	Gerhard Koerting	:	Show both timers
+ *		Alan Cox	:	Allow inode to be NULL (kernel socket)
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -113,7 +114,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				format==0?sp->write_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
 				format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
 				timer_active, timer_expires-jiffies, (unsigned) sp->retransmits,
-				sp->socket?SOCK_INODE(sp->socket)->i_uid:0,
+				(sp->socket&&SOCK_INODE(sp->socket))?SOCK_INODE(sp->socket)->i_uid:0,
 				timer_active?sp->timeout:0);
 			if (timer_active1) add_timer(&sp->retransmit_timer);
 			if (timer_active2) add_timer(&sp->timer);

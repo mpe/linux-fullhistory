@@ -91,6 +91,8 @@
  *		Alan Cox	:	Device lock against page fault.
  *		Alan Cox	:	IP_HDRINCL facility.
  *	Werner Almesberger	:	Zero fragment bug
+ *		Alan Cox	:	RAW IP frame length bug
+ *		Alan Cox	:	Outgoing firewall on build_xmit
  *
  *  
  *
@@ -185,7 +187,7 @@ int ip_ioctl(struct sock *sk, int cmd, unsigned long arg)
  *	Take an skb, and fill in the MAC header.
  */
 
-static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct device *dev, unsigned long saddr)
+static int ip_send(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr)
 {
 	int mac = 0;
 
@@ -209,7 +211,7 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 	return mac;
 }
 
-static int ip_send_room(struct sk_buff *skb, unsigned long daddr, int len, struct device *dev, unsigned long saddr)
+static int ip_send_room(struct sk_buff *skb, __u32 daddr, int len, struct device *dev, __u32 saddr)
 {
 	int mac = 0;
 
@@ -237,13 +239,13 @@ int ip_id_count = 0;
  * protocol knows what it's doing, otherwise it uses the
  * routing/ARP tables to select a device struct.
  */
-int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
+int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 		struct device **dev, int type, struct options *opt, int len, int tos, int ttl)
 {
 	struct rtable *rt;
-	unsigned long raddr;
+	__u32 raddr;
 	int tmp;
-	unsigned long src;
+	__u32 src;
 	struct iphdr *iph;
 
 	/*
@@ -1069,12 +1071,12 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 	{
 		fw_res=ip_fw_chk(skb->h.iph, dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0);
 		switch (fw_res) {
-		case 1:
+		case FW_ACCEPT:
 #ifdef CONFIG_IP_MASQUERADE
-		case 2:
+		case FW_MASQUERADE:
 #endif
 			break;
-		case -1:
+		case FW_REJECT:
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
 			/* fall thru */
 		default:
@@ -1394,9 +1396,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 #ifdef	CONFIG_IP_FIREWALL
 	
-	if ((err=ip_fw_chk(iph,dev,ip_fw_blk_chain,ip_fw_blk_policy, 0))<1)
+	if ((err=ip_fw_chk(iph,dev,ip_fw_blk_chain,ip_fw_blk_policy, 0))<FW_ACCEPT)
 	{
-		if(err==-1)
+		if(err==FW_REJECT)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
 		kfree_skb(skb, FREE_WRITE);
 		return 0;	
@@ -1835,7 +1837,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph->tot_len = ntohs(skb->len-(((unsigned char *)iph)-skb->data));
 
 #ifdef CONFIG_IP_FIREWALL
-	if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy, 0) < 1)
+	if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy, 0) < FW_ACCEPT)
 		/* just don't send this packet */
 		return;
 #endif	
@@ -2198,7 +2200,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
  *	FIXME: Add/Del membership should have a semaphore protecting them from re-entry
  */
 			struct ip_mreq mreq;
-			unsigned long route_src;
+			__u32 route_src;
 			struct rtable *rt;
 			struct device *dev=NULL;
 			
@@ -2254,7 +2256,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		{
 			struct ip_mreq mreq;
 			struct rtable *rt;
-                        unsigned long route_src;
+			__u32 route_src;
 			struct device *dev=NULL;
 
 			/*
@@ -2436,20 +2438,20 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 
 int ip_build_xmit(struct sock *sk,
 		   void getfrag (const void *,
-				 int,
+				 __u32,
 				 char *,
-				 unsigned int,
+				 unsigned int,	
 				 unsigned int),
 		   const void *frag,
 		   unsigned short int length,
-		   int daddr,
+		   __u32 daddr,
 		   int flags,
 		   int type) 
 {
 	struct rtable *rt;
 	unsigned int fraglen, maxfraglen, fragheaderlen;
 	int offset, mf;
-	unsigned long saddr;
+	__u32 saddr;
 	unsigned short id;
 	struct iphdr *iph;
 	int local=0;
@@ -2457,7 +2459,6 @@ int ip_build_xmit(struct sock *sk,
 	int nfrags=0;
 	
 	ip_statistics.IpOutRequests++;
-
 
 #ifdef CONFIG_IP_MULTICAST	
 	if(sk && MULTICAST(daddr) && *sk->ip_mc_name)
@@ -2593,8 +2594,15 @@ int ip_build_xmit(struct sock *sk,
 			getfrag(frag,saddr,(void *)(iph+1),0, length-20);
 		}
 		else
-			getfrag(frag,saddr,(void *)iph,0,length);
+			getfrag(frag,saddr,(void *)iph,0,length-20);
 		dev_unlock_list();
+#ifdef CONFIG_IP_FIREWALL
+		if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy,0) < FW_ACCEPT)
+		{
+			kfree_skb(skb, FREE_WRITE);
+			return -EPERM;
+		}
+#endif
 #ifdef CONFIG_IP_ACCT
 		ip_fw_chk((void *)skb->data,dev,ip_acct_chain, IP_FW_F_ACCEPT,1);
 #endif		
@@ -2772,6 +2780,14 @@ int ip_build_xmit(struct sock *sk,
 		 *	Account for the fragment.
 		 */
 		 
+#ifdef CONFIG_IP_FIREWALL
+		if(!offset && ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy,0) < FW_ACCEPT)
+		{
+			kfree_skb(skb, FREE_WRITE);
+			dev_unlock_list();
+			return -EPERM;
+		}
+#endif		
 #ifdef CONFIG_IP_ACCT
 		if(!offset)
 			ip_fw_chk(iph, dev, ip_acct_chain, IP_FW_F_ACCEPT, 1);

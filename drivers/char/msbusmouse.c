@@ -25,8 +25,18 @@
  *	     Changed detection code to use inb_p() instead of doing empty
  *	     loops to delay i/o.
  *
- * version 0.3a
+ * Modularised 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
+ *
+ * version 0.3b
  */
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -67,7 +77,19 @@ static void ms_mouse_interrupt(int irq, struct pt_regs * regs)
 		mouse.dy += dy;
 		mouse.ready = 1;
 		wake_up_interruptible(&mouse.wait);
+		if (mouse.fasyncptr)
+			kill_fasync(mouse.fasyncptr, SIGIO);
 	}
+}
+
+static int fasync_mouse(struct inode *inode, struct file *filp, int on)
+{
+	int retval;
+
+	retval = fasync_helper(inode, filp, on, &mouse.fasyncptr);
+	if (retval < 0)
+		return retval;
+	return 0;
 }
 
 static void release_mouse(struct inode * inode, struct file * file)
@@ -75,6 +97,7 @@ static void release_mouse(struct inode * inode, struct file * file)
 	MS_MSE_INT_OFF();
 	mouse.active = mouse.ready = 0; 
 	free_irq(MOUSE_IRQ);
+	fasync_mouse(inode, file, 0);
 }
 
 static int open_mouse(struct inode * inode, struct file * file)
@@ -142,9 +165,21 @@ struct file_operations ms_bus_mouse_fops = {
 	NULL,		/* mouse_mmap */
 	open_mouse,
 	release_mouse,
+	NULL,
+	fasync_mouse,
 };
 
+static struct mouse ms_bus_mouse = {
+	MICROSOFT_BUSMOUSE, "msbusmouse", &ms_bus_mouse_fops
+};
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+int init_module(void)
+#else
 unsigned long ms_bus_mouse_init(unsigned long kmem_start)
+#endif
 {
 	int mse_byte, i;
 
@@ -167,9 +202,28 @@ unsigned long ms_bus_mouse_init(unsigned long kmem_start)
 		}
 	}
 	if (mouse.present == 0) {
+#ifdef MODULE
+	  return -EIO;
+#else
 		return kmem_start;
+#endif
 	}
 	MS_MSE_INT_OFF();
 	printk("Microsoft BusMouse detected and installed.\n");
+	mouse_register(&ms_bus_mouse);
+#ifdef MODULE
+	return 0;
+#else
 	return kmem_start;
+#endif
 }
+
+#ifdef MODULE
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("msbusmouse: in use, remove delayed\n");
+	mouse_deregister(&ms_bus_mouse);
+}
+#endif
+

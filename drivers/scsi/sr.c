@@ -45,7 +45,7 @@
 #define MAX_RETRIES 3
 #define SR_TIMEOUT (150 * HZ)
 
-static void sr_init(void);
+static int sr_init(void);
 static void sr_finish(void);
 static int sr_attach(Scsi_Device *);
 static int sr_detect(Scsi_Device *);
@@ -543,14 +543,16 @@ static int sr_open(struct inode * inode, struct file * filp)
 
 
 /*
- * do_sr_request() is the request handler function for the sr driver.  Its function in life 
- * is to take block device requests, and translate them to SCSI commands.
+ * do_sr_request() is the request handler function for the sr driver.
+ * Its function in life is to take block device requests, and
+ * translate them to SCSI commands.  
  */
 
 static void do_sr_request (void)
 {
     Scsi_Cmnd * SCpnt = NULL;
     struct request * req = NULL;
+    Scsi_Device * SDev;
     unsigned long flags;
     int flag = 0;
     
@@ -563,7 +565,29 @@ static void do_sr_request (void)
 	};
 	
 	INIT_SCSI_REQUEST;
-	
+ 
+        SDev = scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device;
+        
+        /*
+         * I am not sure where the best place to do this is.  We need
+         * to hook in a place where we are likely to come if in user
+         * space.
+         */
+        if( SDev->was_reset )
+        {
+ 	    /*
+ 	     * We need to relock the door, but we might
+ 	     * be in an interrupt handler.  Only do this
+ 	     * from user space, since we do not want to
+ 	     * sleep from an interrupt.
+ 	     */
+ 	    if( SDev->removable && !intr_count )
+ 	    {
+                scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
+ 	    }
+ 	    SDev->was_reset = 0;
+        }
+        
 	if (flag++ == 0)
 	    SCpnt = allocate_device(&CURRENT,
 				    scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device, 0); 
@@ -1016,23 +1040,24 @@ static void get_sectorsize(int i){
     scsi_free(buffer, 512);
 }
 
-static void sr_init()
+static int sr_registered = 0;
+
+static int sr_init()
 {
 	int i;
-	static int sr_registered = 0;
     
-	if(sr_template.dev_noticed == 0) return;
+	if(sr_template.dev_noticed == 0) return 0;
     
 	if(!sr_registered) {
 	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
 	    printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
-	    return;
+	    return 1;
 	}
 	sr_registered++;
 	}
     
 	
-	if (scsi_CDs) return;
+	if (scsi_CDs) return 0;
 	sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
 	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
 	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
@@ -1044,7 +1069,7 @@ static void sr_init()
 					     sizeof(int), GFP_ATOMIC);
 	for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
 	blksize_size[MAJOR_NR] = sr_blocksizes;
-    
+        return 0;
 }
 
 void sr_finish()
@@ -1136,7 +1161,8 @@ void cleanup_module( void)
 	return;
     }
     scsi_unregister_module(MODULE_SCSI_DEV, &sr_template);
-    unregister_blkdev(SCSI_GENERIC_MAJOR, "sr");
+    unregister_blkdev(SCSI_CDROM_MAJOR, "sr");
+    sr_registered--;
     if(scsi_CDs != NULL) {
 	scsi_init_free((char *) scsi_CDs,
 		       (sr_template.dev_noticed + SR_EXTRA_DEVS) 

@@ -94,9 +94,9 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end, int 
 		| _S(SIGSTOP)
 #endif
 		| ((server->flags & NFS_MOUNT_INTR)
-		? ((current->sigaction[SIGINT - 1].sa_handler == SIG_DFL
+		? ((current->sig->action[SIGINT - 1].sa_handler == SIG_DFL
 			? _S(SIGINT) : 0)
-		| (current->sigaction[SIGQUIT - 1].sa_handler == SIG_DFL
+		| (current->sig->action[SIGQUIT - 1].sa_handler == SIG_DFL
 			? _S(SIGQUIT) : 0))
 		: 0));
 	fs = get_fs();

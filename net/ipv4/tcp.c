@@ -1033,8 +1033,8 @@ static void retransmit_timer(unsigned long data)
  * to find the appropriate port.
  */
 
-void tcp_err(int err, unsigned char *header, unsigned long daddr,
-	unsigned long saddr, struct inet_protocol *protocol)
+void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
+	__u32 saddr, struct inet_protocol *protocol)
 {
 	struct tcphdr *th;
 	struct sock *sk;
@@ -1049,14 +1049,7 @@ void tcp_err(int err, unsigned char *header, unsigned long daddr,
 	if (sk == NULL) 
 		return;
   
-	if(err<0)
-	{
-	  	sk->err = -err;
-	  	sk->error_report(sk);
-	  	return;
-	}
-
-	if ((err & 0xff00) == (ICMP_SOURCE_QUENCH << 8)) 
+	if (type == ICMP_SOURCE_QUENCH) 
 	{
 		/*
 		 * FIXME:
@@ -1067,17 +1060,22 @@ void tcp_err(int err, unsigned char *header, unsigned long daddr,
 			sk->cong_window--;
 		return;
 	}
+	
+	if (type == ICMP_PARAMETERPROB)
+	{
+		sk->err=EPROTO;
+		sk->error_report(sk);
+	}
 
 	/*
 	 * If we've already connected we will keep trying
 	 * until we time out, or the user gives up.
 	 */
 
-	err &= 0xff;
-	if (err < 13 && (icmp_err_convert[err].fatal || sk->state == TCP_SYN_SENT))
+	if (code < 13 && (icmp_err_convert[code].fatal || sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV))
 	{
-		sk->err = icmp_err_convert[err].errno;
-		if (sk->state == TCP_SYN_SENT) 
+		sk->err = icmp_err_convert[code].errno;
+		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) 
 		{
 			tcp_statistics.TcpAttemptFails++;
 			tcp_set_state(sk,TCP_CLOSE);
@@ -3024,7 +3022,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	if (sk->user_mss)
 		newsk->mtu = sk->user_mss;
 	else if(rt!=NULL && (rt->rt_flags&RTF_MSS))
-		newsk->mtu = rt->rt_mss - HEADER_SIZE;
+		newsk->mtu = rt->rt_mss - sizeof(struct iphdr) - sizeof(struct tcphdr);
 	else 
 	{
 #ifdef CONFIG_INET_SNARL	/* Sub Nets Are Local */
@@ -3032,7 +3030,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 #else
 		if ((saddr ^ daddr) & dev->pa_mask)
 #endif
-			newsk->mtu = 576 - HEADER_SIZE;
+			newsk->mtu = 576 - sizeof(struct iphdr) - sizeof(struct tcphdr);
 		else
 			newsk->mtu = MAX_WINDOW;
 	}
@@ -3041,7 +3039,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 *	But not bigger than device MTU 
 	 */
 
-	newsk->mtu = min(newsk->mtu, dev->mtu - HEADER_SIZE);
+	newsk->mtu = min(newsk->mtu, dev->mtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 
 	/*
 	 *	This will min with what arrived in the packet 
@@ -4550,7 +4548,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
 	if (sk->user_mss)
 		sk->mtu = sk->user_mss;
-	else if(rt!=NULL && (rt->rt_flags&RTF_MTU))
+	else if(rt!=NULL && (rt->rt_flags&RTF_MSS))
 		sk->mtu = rt->rt_mss;
 	else 
 	{
@@ -4559,7 +4557,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 #else
 		if ((sk->saddr ^ sk->daddr) & dev->pa_mask)
 #endif
-			sk->mtu = 576 - HEADER_SIZE;
+			sk->mtu = 576 - sizeof(struct iphdr) - sizeof(struct tcphdr);
 		else
 			sk->mtu = MAX_WINDOW;
 	}
@@ -4570,7 +4568,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	if(sk->mtu <32)
 		sk->mtu = 32;	/* Sanity limit */
 		
-	sk->mtu = min(sk->mtu, dev->mtu - HEADER_SIZE);
+	sk->mtu = min(sk->mtu, dev->mtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 	
 	/*
 	 *	Put in the TCP options to say MTU. 
@@ -4700,8 +4698,8 @@ static int tcp_std_reset(struct sock *sk, struct sk_buff *skb)
  */
  
 int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
-	unsigned long daddr, unsigned short len,
-	unsigned long saddr, int redo, struct inet_protocol * protocol)
+	__u32 daddr, unsigned short len,
+	__u32 saddr, int redo, struct inet_protocol * protocol)
 {
 	struct tcphdr *th;
 	struct sock *sk;
