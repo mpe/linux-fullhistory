@@ -6,6 +6,10 @@
 	Copyright Keith Owens <kaos@ocs.com.au>.
 	Released under the GNU Public Licence, Version 2.
 
+	Mon Jan  4 09:08:19 EST 1999
+	Version 0.6d
+	Cast Version to int, glibc 2.1 made elf_addr_t a long.
+
 	Tue Nov  3 02:31:01 EST 1998
 	Version 0.6
 	Fix end of code calculation.
@@ -371,9 +375,9 @@ static const char *format_Version(elf_addr_t Version)
 {
 	static char string[12];	/* 255.255.255\0 worst case */
 	snprintf(string, sizeof(string), "%d.%d.%d",
-		(Version >> 16) & 0xff,
-		(Version >> 8) & 0xff,
-		(Version) & 0xff);
+		(int) ((Version >> 16) & 0xff),
+		(int) ((Version >> 8) & 0xff),
+		(int) ((Version) & 0xff));
 	return(string);
 }
 

@@ -21,14 +21,15 @@
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
 
+int pas2_mididev;
+
 static unsigned char tmp_queue[256];
 static volatile int qlen;
 static volatile unsigned char qhead, qtail;
 
 static void     (*midi_input_intr) (int dev, unsigned char data);
 
-static int
-pas_midi_open(int dev, int mode,
+static int pas_midi_open(int dev, int mode,
 	      void            (*input) (int dev, unsigned char data),
 	      void            (*output) (int dev)
 )
@@ -39,10 +40,8 @@ pas_midi_open(int dev, int mode,
 
 
 	if (midi_busy)
-	  {
-		  printk("PAS16: Midi busy\n");
-		  return -EBUSY;
-	  }
+		return -EBUSY;
+
 	/*
 	 * Reset input and output FIFO pointers
 	 */
@@ -53,10 +52,10 @@ pas_midi_open(int dev, int mode,
 	cli();
 
 	if ((err = pas_set_intr(0x10)) < 0)
-	  {
-		  restore_flags(flags);
-		  return err;
-	  }
+	{
+		restore_flags(flags);
+		return err;
+	}
 	/*
 	 * Enable input available and output FIFO empty interrupts
 	 */
@@ -66,14 +65,14 @@ pas_midi_open(int dev, int mode,
 	midi_input_intr = input;
 
 	if (mode == OPEN_READ || mode == OPEN_READWRITE)
-	  {
-		  ctrl |= 0x04;	/* Enable input */
-		  input_opened = 1;
-	  }
+	{
+		ctrl |= 0x04;	/* Enable input */
+		input_opened = 1;
+	}
 	if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
-	  {
-		  ctrl |= 0x08 | 0x10;	/* Enable output */
-	  }
+	{
+		ctrl |= 0x08 | 0x10;	/* Enable output */
+	}
 	pas_write(ctrl, 0x178b);
 
 	/*
@@ -89,8 +88,7 @@ pas_midi_open(int dev, int mode,
 	return 0;
 }
 
-static void
-pas_midi_close(int dev)
+static void pas_midi_close(int dev)
 {
 
 	/*
@@ -102,35 +100,32 @@ pas_midi_close(int dev)
 	midi_busy = 0;
 }
 
-static int
-dump_to_midi(unsigned char midi_byte)
+static int dump_to_midi(unsigned char midi_byte)
 {
-	int             fifo_space, x;
+	int fifo_space, x;
 
 	fifo_space = ((x = pas_read(0x1B89)) >> 4) & 0x0f;
 
-/*
- * The MIDI FIFO space register and it's documentation is nonunderstandable.
- * There seem to be no way to differentiate between buffer full and buffer
- * empty situations. For this reason we don't never write the buffer
- * completely full. In this way we can assume that 0 (or is it 15)
- * means that the buffer is empty.
- */
+	/*
+	 * The MIDI FIFO space register and it's documentation is nonunderstandable.
+	 * There seem to be no way to differentiate between buffer full and buffer
+	 * empty situations. For this reason we don't never write the buffer
+	 * completely full. In this way we can assume that 0 (or is it 15)
+	 * means that the buffer is empty.
+	 */
 
 	if (fifo_space < 2 && fifo_space != 0)	/* Full (almost) */
-	  {
-		  return 0;	/* Ask upper layers to retry after some time */
-	  }
+		return 0;	/* Ask upper layers to retry after some time */
+
 	pas_write(midi_byte, 0x178A);
 
 	return 1;
 }
 
-static int
-pas_midi_out(int dev, unsigned char midi_byte)
+static int pas_midi_out(int dev, unsigned char midi_byte)
 {
 
-	unsigned long   flags;
+	unsigned long flags;
 
 	/*
 	 * Drain the local queue first
@@ -140,15 +135,15 @@ pas_midi_out(int dev, unsigned char midi_byte)
 	cli();
 
 	while (qlen && dump_to_midi(tmp_queue[qhead]))
-	  {
-		  qlen--;
-		  qhead++;
-	  }
+	{
+		qlen--;
+		qhead++;
+	}
 
 	restore_flags(flags);
 
 	/*
-	 * Output the byte if the local queue is empty.
+	 *	Output the byte if the local queue is empty.
 	 */
 
 	if (!qlen)
@@ -156,7 +151,7 @@ pas_midi_out(int dev, unsigned char midi_byte)
 			return 1;
 
 	/*
-	 * Put to the local queue
+	 *	Put to the local queue
 	 */
 
 	if (qlen >= 256)
@@ -174,25 +169,21 @@ pas_midi_out(int dev, unsigned char midi_byte)
 	return 1;
 }
 
-static int
-pas_midi_start_read(int dev)
+static int pas_midi_start_read(int dev)
 {
 	return 0;
 }
 
-static int
-pas_midi_end_read(int dev)
+static int pas_midi_end_read(int dev)
 {
 	return 0;
 }
 
-static void
-pas_midi_kick(int dev)
+static void pas_midi_kick(int dev)
 {
 }
 
-static int
-pas_buffer_status(int dev)
+static int pas_buffer_status(int dev)
 {
 	return qlen;
 }
@@ -218,23 +209,22 @@ static struct midi_operations pas_midi_operations =
 	NULL
 };
 
-void
-pas_midi_init(void)
+void pas_midi_init(void)
 {
-	int             dev = sound_alloc_mididev();
+	int dev = sound_alloc_mididev();
 
 	if (dev == -1)
-	  {
-		  printk(KERN_WARNING "pas_midi_init: Too many midi devices detected\n");
-		  return;
-	  }
+	{
+		printk(KERN_WARNING "pas_midi_init: Too many midi devices detected\n");
+		return;
+	}
 	std_midi_synth.midi_dev = my_dev = dev;
 	midi_devs[dev] = &pas_midi_operations;
+	pas2_mididev = dev;
 	sequencer_init();
 }
 
-void
-pas_midi_interrupt(void)
+void pas_midi_interrupt(void)
 {
 	unsigned char   stat;
 	int             i, incount;
@@ -243,35 +233,35 @@ pas_midi_interrupt(void)
 	stat = pas_read(0x1B88);
 
 	if (stat & 0x04)	/* Input data available */
-	  {
-		  incount = pas_read(0x1B89) & 0x0f;	/* Input FIFO size */
-		  if (!incount)
-			  incount = 16;
+	{
+		incount = pas_read(0x1B89) & 0x0f;	/* Input FIFO size */
+		if (!incount)
+			incount = 16;
 
-		  for (i = 0; i < incount; i++)
-			  if (input_opened)
-			    {
-				    midi_input_intr(my_dev, pas_read(0x178A));
-			  } else
-				  pas_read(0x178A);	/* Flush */
-	  }
+		for (i = 0; i < incount; i++)
+			if (input_opened)
+			{
+				midi_input_intr(my_dev, pas_read(0x178A));
+			} else
+				pas_read(0x178A);	/* Flush */
+	}
 	if (stat & (0x08 | 0x10))
-	  {
-		  save_flags(flags);
-		  cli();
+	{
+		save_flags(flags);
+		cli();
 
-		  while (qlen && dump_to_midi(tmp_queue[qhead]))
-		    {
-			    qlen--;
-			    qhead++;
-		    }
+		while (qlen && dump_to_midi(tmp_queue[qhead]))
+		{
+			qlen--;
+			qhead++;
+		}
 
-		  restore_flags(flags);
-	  }
+		restore_flags(flags);
+	}
 	if (stat & 0x40)
-	  {
-		  printk("MIDI output overrun %x,%x\n", pas_read(0x1B89), stat);
-	  }
+	{
+		printk(KERN_WARNING "MIDI output overrun %x,%x\n", pas_read(0x1B89), stat);
+	}
 	pas_write(stat, 0x1B88);	/* Acknowledge interrupts */
 }
 

@@ -115,7 +115,8 @@ extern void expand_objects(char * const *object, int objects);
 extern void read_object(const char *object, int i);
 
 /* oops.c */
-extern void Oops_read(int filecount, char * const *filename);
+extern int Oops_read(int filecount, char * const *filename, int code_bytes,
+		     int one_shot);
 
 /* re.c */
 extern void re_compile(regex_t *preg, const char *regex, int cflags,

@@ -1466,7 +1466,8 @@ void __init sock_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "Swansea University Computer Society NET3.039 for Linux 2.1\n");
+	printk(KERN_INFO "Linux NET4.0 for Linux 2.2\n");
+	printk(KERN_INFO "Based upon Swansea University Computer Society NET3.039\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

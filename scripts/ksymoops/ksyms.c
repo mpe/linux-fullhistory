@@ -6,6 +6,10 @@
 	Copyright Keith Owens <kaos@ocs.com.au>.
 	Released under the GNU Public Licence, Version 2.
 
+	Fri Nov  6 10:38:42 EST 1998
+	Version 0.6b
+	Remove false warnings when comparing ksyms and lsmod.
+
 	Tue Nov  3 02:31:01 EST 1998
 	Version 0.6
 	Read lsmod (/proc/modules).
@@ -257,6 +261,9 @@ void compare_ksyms_lsmod(void)
 	SYMBOL_SET *ss;
 	SYMBOL *s;
 	static char const procname[] = "compare_ksyms_lsmod";
+
+	if (!(ss_lsmod.used && ss_ksyms_modules))
+		return;
 
 	s = ss_lsmod.symbol;
 	for (i = 0; i < ss_lsmod.used; ++i, ++s) {

@@ -43,6 +43,7 @@ EXPORT_SYMBOL(sound_unload_synthdev);
 
 EXPORT_SYMBOL(load_mixer_volumes);
 
+
 EXPORT_SYMBOL(conf_printf);
 EXPORT_SYMBOL(conf_printf2);
 
@@ -54,5 +55,5 @@ EXPORT_SYMBOL(softoss_dev);
 EXPORT_SYMBOL(sound_locker);
 EXPORT_SYMBOL(sound_notifier_chain_register);
 
-MODULE_DESCRIPTION("Sound subsystem");
+MODULE_DESCRIPTION("OSS Sound subsystem");
 MODULE_AUTHOR("Hannu Savolainen, et al.");

@@ -49,6 +49,9 @@
 #define MDL_AEDSP	15	/* Audio Excel DSP 16 */
 
 #define SUBMDL_ES188X	0x10	/* Subtype ES188X for specific handling */
+#define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
+#define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
+#define SUBMDL_ES1878	0x13	/* Subtype ES1878 for specific handling */
 #define SUBMDL_ALS007	42	/* ALS-007 differs from SB16 only in mixer */
 				/* register assignment */
 /*
@@ -144,6 +147,7 @@ void sb_audio_init (sb_devc *devc, char *name);
 void sb_midi_interrupt (sb_devc *devc);
 int ess_write (sb_devc *devc, unsigned char reg, unsigned char data);
 int ess_read (sb_devc *devc, unsigned char reg);
+void ess_mixer_reload (sb_devc * devc, int dev);
 
 extern int acer;
 extern sb_devc *last_sb;

@@ -1,13 +1,17 @@
 /*
- *  $Id: ipconfig.c,v 1.16 1998/10/21 22:27:26 davem Exp $
+ *  $Id: ipconfig.c,v 1.18 1999/01/04 20:14:10 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
  *
- *  Copyright (C) 1996, 1997 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *  Copyright (C) 1996--1998 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
  *  Derived from network configuration code in fs/nfs/nfsroot.c,
  *  originally Copyright (C) 1995, 1996 Gero Kuhlmann and me.
+ *
+ *  BOOTP rewritten to construct and analyse packets itself instead
+ *  of misusing the IP layer. num_bugs_causing_wrong_arp_replies--;
+ *					     -- MJ, December 1998
  */
 
 #include <linux/config.h>
@@ -21,22 +25,20 @@
 #include <linux/in.h>
 #include <linux/if.h>
 #include <linux/inet.h>
-#include <linux/net.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/socket.h>
-#include <linux/inetdevice.h>
 #include <linux/route.h>
-#include <net/route.h>
-#include <net/sock.h>
+#include <linux/udp.h>
 #include <net/arp.h>
-#include <net/ip_fib.h>
+#include <net/ip.h>
 #include <net/ipconfig.h>
 
 #include <asm/segment.h>
 #include <asm/uaccess.h>
+#include <asm/checksum.h>
 
 /* Define this to allow debugging output */
 #undef IPCONFIG_DEBUG
@@ -60,8 +62,6 @@ u32 ic_myaddr __initdata = INADDR_NONE;		/* My IP address */
 u32 ic_servaddr __initdata = INADDR_NONE;	/* Server IP address */
 u32 ic_gateway __initdata = INADDR_NONE;	/* Gateway IP address */
 u32 ic_netmask __initdata = INADDR_NONE;	/* Netmask for local subnet */
-int ic_bootp_flag __initdata = 1;		/* Use BOOTP */
-int ic_rarp_flag __initdata = 1;		/* Use RARP */
 int ic_enable __initdata = 1;			/* Automatic IP configuration enabled */
 int ic_host_name_set __initdata = 0;		/* Host name configured manually */
 int ic_set_manually __initdata = 0;		/* IPconfig parameters set manually */
@@ -73,12 +73,16 @@ u8 root_server_path[256] __initdata = { 0, };		/* Path to mount as root */
 
 #define CONFIG_IP_PNP_DYNAMIC
 
-static int ic_got_reply __initdata = 0;
+static int ic_proto_enabled __initdata = IC_BOOTP | IC_RARP;	/* Protocols enabled */
+static int ic_got_reply __initdata = 0;				/* Protocol(s) we got reply from */
 
-#define IC_GOT_BOOTP 1
-#define IC_GOT_RARP 2
+#else
+
+static int ic_proto_enabled __initdata = 0;
 
 #endif
+
+static int ic_proto_have_if __initdata = 0;
 
 /*
  *	Network devices
@@ -88,14 +92,13 @@ struct ic_device {
 	struct ic_device *next;
 	struct device *dev;
 	unsigned short flags;
+	int able;
 };
 
 static struct ic_device *ic_first_dev __initdata = NULL;/* List of open device */
 static struct device *ic_dev __initdata = NULL;		/* Selected device */
-static int bootp_dev_count __initdata = 0;		/* BOOTP capable devices */
-static int rarp_dev_count __initdata = 0;		/* RARP capable devices */
 
-__initfunc(int ic_open_devs(void))
+static int __init ic_open_devs(void)
 {
 	struct ic_device *d, **last;
 	struct device *dev;
@@ -103,10 +106,20 @@ __initfunc(int ic_open_devs(void))
 
 	last = &ic_first_dev;
 	for (dev = dev_base; dev; dev = dev->next)
-		if (dev->type < ARPHRD_SLIP &&
-		    !(dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) &&
-		    strncmp(dev->name, "dummy", 5) &&
-		    (!user_dev_name[0] || !strcmp(dev->name, user_dev_name))) {
+		if (user_dev_name[0] ? !strcmp(dev->name, user_dev_name) :
+		    (!(dev->flags & IFF_LOOPBACK) &&
+		     (dev->flags & (IFF_POINTOPOINT|IFF_BROADCAST)) &&
+		     strncmp(dev->name, "dummy", 5))) {
+			int able = 0;
+			if (dev->mtu >= 364)
+				able |= IC_BOOTP;
+			else
+				printk(KERN_WARNING "BOOTP: Ignoring device %s, MTU %d too small", dev->name, dev->mtu);
+			if (!(dev->flags & IFF_NOARP))
+				able |= IC_RARP;
+			able &= ic_proto_enabled;
+			if (ic_proto_enabled && !able)
+				continue;
 			oflags = dev->flags;
 			if (dev_change_flags(dev, oflags | IFF_UP) < 0) {
 				printk(KERN_ERR "IP-Config: Failed to open %s\n", dev->name);
@@ -118,14 +131,13 @@ __initfunc(int ic_open_devs(void))
 			*last = d;
 			last = &d->next;
 			d->flags = oflags;
-			bootp_dev_count++;
-			if (!(dev->flags & IFF_NOARP))
-				rarp_dev_count++;
-			DBG(("IP-Config: Opened %s\n", dev->name));
+			d->able = able;
+			ic_proto_have_if |= able;
+			DBG(("IP-Config: Opened %s (able=%d)\n", dev->name, able));
 		}
 	*last = NULL;
 
-	if (!bootp_dev_count) {
+	if (!ic_first_dev) {
 		if (user_dev_name[0])
 			printk(KERN_ERR "IP-Config: Device `%s' not found.\n", user_dev_name);
 		else
@@ -135,7 +147,7 @@ __initfunc(int ic_open_devs(void))
 	return 0;
 }
 
-__initfunc(void ic_close_devs(void))
+static void __init ic_close_devs(void)
 {
 	struct ic_device *d, *next;
 	struct device *dev;
@@ -164,7 +176,7 @@ set_sockaddr(struct sockaddr_in *sin, u32 addr, u16 port)
 	sin->sin_port = port;
 }
 
-__initfunc(static int ic_dev_ioctl(unsigned int cmd, struct ifreq *arg))
+static int __init ic_dev_ioctl(unsigned int cmd, struct ifreq *arg)
 {
 	int res;
 
@@ -175,7 +187,7 @@ __initfunc(static int ic_dev_ioctl(unsigned int cmd, struct ifreq *arg))
 	return res;
 }
 
-__initfunc(static int ic_route_ioctl(unsigned int cmd, struct rtentry *arg))
+static int __init ic_route_ioctl(unsigned int cmd, struct rtentry *arg)
 {
 	int res;
 
@@ -190,7 +202,7 @@ __initfunc(static int ic_route_ioctl(unsigned int cmd, struct rtentry *arg))
  *	Set up interface addresses and routes.
  */
 
-__initfunc(static int ic_setup_if(void))
+static int __init ic_setup_if(void)
 {
 	struct ifreq ir;
 	struct sockaddr_in *sin = (void *) &ir.ifr_ifru.ifru_addr;
@@ -216,7 +228,7 @@ __initfunc(static int ic_setup_if(void))
 	return 0;
 }
 
-__initfunc(int ic_setup_routes(void))
+static int __init ic_setup_routes(void)
 {
 	/* No need to setup device routes, only the default route... */
 
@@ -246,7 +258,7 @@ __initfunc(int ic_setup_routes(void))
  *	Fill in default values for all missing parameters.
  */
 
-__initfunc(int ic_defaults(void))
+static int __init ic_defaults(void)
 {
 	/*
 	 *	At this point we have no userspace running so need not
@@ -270,6 +282,7 @@ __initfunc(int ic_defaults(void))
 			printk(KERN_ERR "IP-Config: Unable to guess netmask for address %08x\n", ic_myaddr);
 			return -1;
 		}
+		printk("IP-Config: Guessing netmask %s\n", in_ntoa(ic_netmask));
 	}
 
 	return 0;
@@ -281,25 +294,22 @@ __initfunc(int ic_defaults(void))
 
 #ifdef CONFIG_IP_PNP_RARP
 
-static int ic_rarp_recv(struct sk_buff *skb, struct device *dev,
-			struct packet_type *pt);
+static int ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);
 
 static struct packet_type rarp_packet_type __initdata = {
-	0,			/* Should be: __constant_htons(ETH_P_RARP)
-				 * - but this _doesn't_ come out constant! */
+	__constant_htons(ETH_P_RARP),
 	NULL,			/* Listen to all devices */
 	ic_rarp_recv,
 	NULL,
 	NULL
 };
 
-__initfunc(static void ic_rarp_init(void))
+static inline void ic_rarp_init(void)
 {
-	rarp_packet_type.type = htons(ETH_P_RARP);
 	dev_add_pack(&rarp_packet_type);
 }
 
-__initfunc(static void ic_rarp_cleanup(void))
+static inline void ic_rarp_cleanup(void)
 {
 	dev_remove_pack(&rarp_packet_type);
 }
@@ -307,13 +317,17 @@ __initfunc(static void ic_rarp_cleanup(void))
 /*
  *  Process received RARP packet.
  */
-__initfunc(static int
-ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt))
+static int __init
+ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct arphdr *rarp = (struct arphdr *)skb->h.raw;
 	unsigned char *rarp_ptr = (unsigned char *) (rarp + 1);
 	unsigned long sip, tip;
 	unsigned char *sha, *tha;		/* s for "source", t for "target" */
+
+	/* If we already have a reply, just drop the packet */
+	if (ic_got_reply)
+		goto drop;
 
 	/* If this test doesn't pass, it's not IP, or we should ignore it anyway */
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd))
@@ -346,7 +360,7 @@ ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt))
 
 	/* Victory! The packet is what we were looking for! */
 	if (!ic_got_reply) {
-		ic_got_reply = IC_GOT_RARP;
+		ic_got_reply = IC_RARP;
 		ic_dev = dev;
 		if (ic_myaddr == INADDR_NONE)
 			ic_myaddr = tip;
@@ -363,16 +377,16 @@ drop:
 /*
  *  Send RARP request packet over all devices which allow RARP.
  */
-__initfunc(static void ic_rarp_send(void))
+static void __init ic_rarp_send(void)
 {
 	struct ic_device *d;
 
-	for (d=ic_first_dev; d; d=d->next) {
-		struct device *dev = d->dev;
-		if (!(dev->flags & IFF_NOARP))
+	for (d=ic_first_dev; d; d=d->next)
+		if (d->able & IC_RARP) {
+			struct device *dev = d->dev;
 			arp_send(ARPOP_RREQUEST, ETH_P_RARP, 0, dev, 0, NULL,
 				 dev->dev_addr, dev->dev_addr);
-	}
+		}
 }
 
 #endif
@@ -383,10 +397,9 @@ __initfunc(static void ic_rarp_send(void))
 
 #ifdef CONFIG_IP_PNP_BOOTP
 
-static struct socket *ic_bootp_xmit_sock __initdata = NULL; /* BOOTP send socket */
-static struct socket *ic_bootp_recv_sock __initdata = NULL; /* BOOTP receive socket */
-
 struct bootp_pkt {		/* BOOTP packet format */
+	struct iphdr iph;	/* IP header */
+	struct udphdr udph;	/* UDP header */
 	u8 op;			/* 1=request, 2=reply */
 	u8 htype;		/* HW address type */
 	u8 hlen;		/* HW address length */
@@ -407,150 +420,23 @@ struct bootp_pkt {		/* BOOTP packet format */
 #define BOOTP_REQUEST 1
 #define BOOTP_REPLY 2
 
-static struct bootp_pkt *ic_xmit_bootp __initdata = NULL; /* Packet being transmitted */
-static struct bootp_pkt *ic_recv_bootp __initdata = NULL; /* Packet being received */
+static u32 ic_bootp_xid;
 
-/*
- *  Allocation and freeing of BOOTP packet buffers.
- */
-__initfunc(static int ic_bootp_alloc(void))
-{
-	if (!(ic_xmit_bootp = kmalloc(sizeof(struct bootp_pkt), GFP_KERNEL)) ||
-	    !(ic_recv_bootp = kmalloc(sizeof(struct bootp_pkt), GFP_KERNEL))) {
-		printk(KERN_ERR "BOOTP: Out of memory!\n");
-		return -1;
-	}
-	return 0;
-}
+static int ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);
 
-__initfunc(static void ic_bootp_free(void))
-{
-	if (ic_xmit_bootp) {
-		kfree_s(ic_xmit_bootp, sizeof(struct bootp_pkt));
-		ic_xmit_bootp = NULL;
-	}
-	if (ic_recv_bootp) {
-		kfree_s(ic_recv_bootp, sizeof(struct bootp_pkt));
-		ic_recv_bootp = NULL;
-	}
-}
-
-
-/*
- *  Add / Remove fake interface addresses for BOOTP packet sending.
- */
-__initfunc(static int ic_bootp_addrs_add(void))
-{
-	struct ic_device *d;
-	int err;
-
-	for(d=ic_first_dev; d; d=d->next)
-		if ((err = inet_add_bootp_addr(d->dev)) < 0) {
-			printk(KERN_ERR "BOOTP: Unable to set interface address\n");
-			return -1;
-		}
-	return 0;
-}
-
-__initfunc(static void ic_bootp_addrs_del(void))
-{
-	struct ic_device *d;
-
-	for(d=ic_first_dev; d; d=d->next)
-		inet_del_bootp_addr(d->dev);
-}
-
-/*
- *  UDP socket operations.
- */
-__initfunc(static int ic_udp_open(struct socket **sock))
-{
-	int err;
-
-	if ((err = sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, sock)) < 0)
-		printk(KERN_ERR "BOOTP: Cannot open UDP socket!\n");
-	return err;
-}
-
-static inline void ic_udp_close(struct socket *sock)
-{
-	if (sock)
-		sock_release(sock);
-}
-
-__initfunc(static int ic_udp_connect(struct socket *sock, u32 addr, u16 port))
-{
-	struct sockaddr_in sa;
-	int err;
-
-	set_sockaddr(&sa, htonl(addr), htons(port));
-	err = sock->ops->connect(sock, (struct sockaddr *) &sa, sizeof(sa), 0);
-	if (err < 0) {
-		printk(KERN_ERR "BOOTP: connect() failed (%d)\n", err);
-		return -1;
-	}
-	return 0;
-}
-
-__initfunc(static int ic_udp_bind(struct socket *sock, u32 addr, u16 port))
-{
-	struct sockaddr_in sa;
-	int err;
-
-	set_sockaddr(&sa, htonl(addr), htons(port));
-	err = sock->ops->bind(sock, (struct sockaddr *) &sa, sizeof(sa));
-	if (err < 0) {
-		printk(KERN_ERR "BOOTP: bind() failed (%d)\n", err);
-		return -1;
-	}
-	return 0;
-}
-
-__initfunc(static int ic_udp_send(struct socket *sock, void *buf, int size))
-{
-	mm_segment_t oldfs;
-	int result;
-	struct msghdr msg;
-	struct iovec iov;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-	iov.iov_base = buf;
-	iov.iov_len = size;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	result = sock_sendmsg(sock, &msg, size);
-	set_fs(oldfs);
-
-	return (result != size);
-}
-
-__initfunc(static int ic_udp_recv(struct socket *sock, void *buf, int size))
-{
-	mm_segment_t oldfs;
-	int result;
-	struct msghdr msg;
-	struct iovec iov;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-	iov.iov_base = buf;
-	iov.iov_len = size;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_flags = MSG_DONTWAIT;
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	result = sock_recvmsg(sock, &msg, size, MSG_DONTWAIT);
-	set_fs(oldfs);
-	return result;
-}
+static struct packet_type bootp_packet_type __initdata = {
+	__constant_htons(ETH_P_IP),
+	NULL,			/* Listen to all devices */
+	ic_bootp_recv,
+	NULL,
+	NULL
+};
 
 
 /*
  *  Initialize BOOTP extension fields in the request.
  */
-__initfunc(static void ic_bootp_init_ext(u8 *e))
+static void __init ic_bootp_init_ext(u8 *e)
 {
 	*e++ = 99;		/* RFC1048 Magic Cookie */
 	*e++ = 130;
@@ -578,92 +464,96 @@ __initfunc(static void ic_bootp_init_ext(u8 *e))
 /*
  *  Initialize the BOOTP mechanism.
  */
-__initfunc(static int ic_bootp_init(void))
+static inline void ic_bootp_init(void)
 {
-	/* Allocate memory for BOOTP packets */
-	if (ic_bootp_alloc() < 0)
-		return -1;
-
-	/* Add fake zero addresses to all interfaces */
-	if (ic_bootp_addrs_add() < 0)
-		return -1;
-	
-	/* Setting the addresses automatically creates appropriate
-	   routes. */	
-
-	/* Initialize common portion of BOOTP request */
-	memset(ic_xmit_bootp, 0, sizeof(struct bootp_pkt));
-	ic_xmit_bootp->op = BOOTP_REQUEST;
-	get_random_bytes(&ic_xmit_bootp->xid, sizeof(ic_xmit_bootp->xid));
-	ic_bootp_init_ext(ic_xmit_bootp->vendor_area);
-
-	DBG(("BOOTP: XID=%08x\n", ic_xmit_bootp->xid));
-
-	/* Open the sockets */
-	if (ic_udp_open(&ic_bootp_xmit_sock) ||
-	    ic_udp_open(&ic_bootp_recv_sock))
-		return -1;
-
-	/* Bind/connect the sockets */
-	ic_bootp_xmit_sock->sk->broadcast = 1;
-	ic_bootp_xmit_sock->sk->reuse = 1;
-	ic_bootp_recv_sock->sk->reuse = 1;
-	if (ic_udp_bind(ic_bootp_recv_sock, INADDR_ANY, 68) ||
-	    ic_udp_bind(ic_bootp_xmit_sock, INADDR_ANY, 68) ||
-	    ic_udp_connect(ic_bootp_xmit_sock, INADDR_BROADCAST, 67))
-		return -1;
-
-	return 0;
+	get_random_bytes(&ic_bootp_xid, sizeof(u32));
+	DBG(("BOOTP: XID=%08x\n", ic_bootp_xid));
+	dev_add_pack(&bootp_packet_type);
 }
 
 
 /*
  *  BOOTP cleanup.
  */
-__initfunc(static void ic_bootp_cleanup(void))
+static inline void ic_bootp_cleanup(void)
 {
-	ic_udp_close(ic_bootp_xmit_sock);
-	ic_udp_close(ic_bootp_recv_sock);
-	ic_bootp_addrs_del();
-	ic_bootp_free();
+	dev_remove_pack(&bootp_packet_type);
 }
 
 
 /*
  *  Send BOOTP request to single interface.
  */
-__initfunc(static int ic_bootp_send_if(struct ic_device *d, u32 jiffies))
+static void __init ic_bootp_send_if(struct ic_device *d, u32 jiffies)
 {
 	struct device *dev = d->dev;
-	struct bootp_pkt *b = ic_xmit_bootp;
+	struct sk_buff *skb;
+	struct bootp_pkt *b;
+	int hh_len = (dev->hard_header_len + 15) & ~15;
+	struct iphdr *h;
 
+	/* Allocate packet */
+	skb = alloc_skb(sizeof(struct bootp_pkt) + hh_len + 15, GFP_KERNEL);
+	if (!skb)
+		return;
+	skb_reserve(skb, hh_len);
+	b = (struct bootp_pkt *) skb_put(skb, sizeof(struct bootp_pkt));
+	memset(b, 0, sizeof(struct bootp_pkt));
+
+	/* Construct IP header */
+	skb->nh.iph = h = &b->iph;
+	h->version = 4;
+	h->ihl = 5;
+	h->tot_len = htons(sizeof(struct bootp_pkt));
+	h->frag_off = htons(IP_DF);
+	h->ttl = 1;
+	h->protocol = IPPROTO_UDP;
+	h->daddr = INADDR_BROADCAST;
+	h->check = 0;
+	h->check = ip_fast_csum((unsigned char *) h, h->ihl);
+
+	/* Construct UDP header */
+	b->udph.source = htons(68);
+	b->udph.dest = htons(67);
+	b->udph.len = htons(sizeof(struct bootp_pkt) - sizeof(struct iphdr));
+	/* UDP checksum not calculated -- explicitly allowed in BOOTP RFC */
+
+	/* Construct BOOTP header */
+	b->op = BOOTP_REQUEST;
 	b->htype = dev->type;
 	b->hlen = dev->addr_len;
-	memset(b->hw_addr, 0, sizeof(b->hw_addr));
 	memcpy(b->hw_addr, dev->dev_addr, dev->addr_len);
 	b->secs = htons(jiffies / HZ);
-	return ic_udp_send(ic_bootp_xmit_sock, b, sizeof(struct bootp_pkt));
+	b->xid = ic_bootp_xid;
+	ic_bootp_init_ext(b->vendor_area);
+
+	/* Chain packet down the line... */
+	skb->dev = dev;
+	skb->protocol = __constant_htons(ETH_P_IP);
+	if ((dev->hard_header &&
+	     dev->hard_header(skb, dev, ntohs(skb->protocol), dev->broadcast, dev->dev_addr, skb->len) < 0) ||
+	    dev_queue_xmit(skb) < 0)
+		printk("E");
 }
 
 
 /*
  *  Send BOOTP requests to all interfaces.
  */
-__initfunc(static int ic_bootp_send(u32 jiffies))
+static void __init ic_bootp_send(u32 jiffies)
 {
 	struct ic_device *d;
 
 	for(d=ic_first_dev; d; d=d->next)
-		if (ic_bootp_send_if(d, jiffies) < 0)
-			return -1;
-	return 0;
+		if (d->able & IC_BOOTP)
+			ic_bootp_send_if(d, jiffies);
 }
 
 
 /*
  *  Copy BOOTP-supplied string if not already set.
  */
-__initfunc(static int ic_bootp_string(char *dest, char *src, int len, int max))
+static int __init ic_bootp_string(char *dest, char *src, int len, int max)
 {
 	if (!len)
 		return 0;
@@ -678,7 +568,7 @@ __initfunc(static int ic_bootp_string(char *dest, char *src, int len, int max))
 /*
  *  Process BOOTP extension.
  */
-__initfunc(static void ic_do_bootp_ext(u8 *ext))
+static void __init ic_do_bootp_ext(u8 *ext)
 {
 #ifdef IPCONFIG_DEBUG
 	u8 *c;
@@ -714,65 +604,64 @@ __initfunc(static void ic_do_bootp_ext(u8 *ext))
 
 
 /*
- *  Receive BOOTP request.
+ *  Receive BOOTP reply.
  */
-__initfunc(static void ic_bootp_recv(void))
+static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
+	struct bootp_pkt *b = (struct bootp_pkt *) skb->nh.iph;
+	struct iphdr *h = &b->iph;
 	int len;
-	u8 *ext, *end, *opt;
-	struct ic_device *d;
-	struct bootp_pkt *b = ic_recv_bootp;
 
-	if ((len = ic_udp_recv(ic_bootp_recv_sock, b, sizeof(struct bootp_pkt))) < 0)
-		return;
+	/* If we already have a reply, just drop the packet */
+	if (ic_got_reply)
+		goto drop;
 
-	/* Check consistency of incoming packet */
-	if (len < 300 ||			/* See RFC 1542:2.1 */
+	/* Check whether it's a BOOTP packet */
+	if (skb->pkt_type == PACKET_OTHERHOST ||
+	    skb->len < sizeof(struct udphdr) + sizeof(struct iphdr) ||
+	    h->ihl != 5 ||
+	    h->version != 4 ||
+	    ip_fast_csum((char *) h, h->ihl) != 0 ||
+	    skb->len < ntohs(h->tot_len) ||
+	    h->protocol != IPPROTO_UDP ||
+	    b->udph.source != htons(67) ||
+	    b->udph.dest != htons(68) ||
+	    ntohs(h->tot_len) < ntohs(b->udph.len) + sizeof(struct iphdr))
+		goto drop;
+
+	/* Fragments are not supported */
+	if (h->frag_off & htons(IP_OFFSET|IP_MF)) {
+		printk(KERN_ERR "BOOTP: Ignoring fragmented reply.\n");
+		goto drop;
+	}
+
+	/* Is it a reply to our BOOTP request? */
+	len = ntohs(b->udph.len) - sizeof(struct udphdr);
+	if (len < 300 ||				    /* See RFC 951:2.1 */
 	    b->op != BOOTP_REPLY ||
-	    b->xid != ic_xmit_bootp->xid) {
+	    b->xid != ic_bootp_xid) {
 		printk("?");
-		return;
-		}
-
-	/* Find interface this arrived from */
-	for(d=ic_first_dev; d; d=d->next) {
-		struct device *dev = d->dev;
-		if (b->htype == dev->type ||
-		    b->hlen == dev->addr_len ||
-		    !memcmp(b->hw_addr, dev->dev_addr, dev->addr_len))
-			break;
+		goto drop;
 	}
-	if (!d) {	/* Unknown device */
-		printk("!");
-		return;
-	}
-
-	/* Record BOOTP packet arrival */
-	cli();
-	if (ic_got_reply) {
-		sti();
-		return;
-	}
-	ic_got_reply = IC_GOT_BOOTP;
-	sti();
-	ic_dev = d->dev;
 
 	/* Extract basic fields */
 	ic_myaddr = b->your_ip;
 	ic_servaddr = b->server_ip;
+	ic_got_reply = IC_BOOTP;
+	ic_dev = dev;
 
 	/* Parse extensions */
 	if (b->vendor_area[0] == 99 &&	/* Check magic cookie */
 	    b->vendor_area[1] == 130 &&
 	    b->vendor_area[2] == 83 &&
 	    b->vendor_area[3] == 99) {
-		ext = &b->vendor_area[4];
-		end = (u8 *) b + len;
+		u8 *ext = &b->vendor_area[4];
+		u8 *end = (u8 *) b + len;
 		while (ext < end && *ext != 0xff) {
 			if (*ext == 0)		/* Padding */
 				ext++;
 			else {
-				opt = ext;
+				u8 *opt = ext;
 				ext += ext[1] + 2;
 				if (ext <= end)
 					ic_do_bootp_ext(opt);
@@ -782,7 +671,12 @@ __initfunc(static void ic_bootp_recv(void))
 
 	if (ic_gateway == INADDR_NONE && b->relay_ip)
 		ic_gateway = b->relay_ip;
-}
+
+drop:
+	kfree_skb(skb);
+	return 0;
+}	
+
 
 #endif
 
@@ -793,11 +687,13 @@ __initfunc(static void ic_bootp_recv(void))
 
 #ifdef CONFIG_IP_PNP_DYNAMIC
 
-__initfunc(int ic_dynamic(void))
+static int __init ic_dynamic(void)
 {
 	int retries;
 	unsigned long timeout, jiff;
 	unsigned long start_jiffies;
+	int do_rarp = ic_proto_have_if & IC_RARP;
+	int do_bootp = ic_proto_have_if & IC_BOOTP;
 
 	/*
 	 * If neither BOOTP nor RARP was selected, return with an error. This
@@ -805,30 +701,22 @@ __initfunc(int ic_dynamic(void))
 	 * sing, and without BOOTP and RARP we are not able to get that in-
 	 * formation.
 	 */
-	if (!ic_bootp_flag && !ic_rarp_flag) {
+	if (!ic_proto_enabled) {
 		printk(KERN_ERR "IP-Config: Incomplete network configuration information.\n");
 		return -1;
 	}
 
 #ifdef CONFIG_IP_PNP_BOOTP
-	if (ic_bootp_flag && !bootp_dev_count) {
+	if ((ic_proto_enabled ^ ic_proto_have_if) & IC_BOOTP)
 		printk(KERN_ERR "BOOTP: No suitable device found.\n");
-		ic_bootp_flag = 0;
-	}
-#else
-	ic_bootp_flag = 0;
 #endif
 
 #ifdef CONFIG_IP_PNP_RARP
-	if (ic_rarp_flag && !rarp_dev_count) {
+	if ((ic_proto_enabled ^ ic_proto_have_if) & IC_RARP)
 		printk(KERN_ERR "RARP: No suitable device found.\n");
-		ic_rarp_flag = 0;
-	}
-#else
-	ic_rarp_flag = 0;
 #endif
 
-	if (!ic_bootp_flag && !ic_rarp_flag)
+	if (!ic_proto_have_if)
 		/* Error message already printed */
 		return -1;
 
@@ -836,14 +724,12 @@ __initfunc(int ic_dynamic(void))
 	 * Setup RARP and BOOTP protocols
 	 */
 #ifdef CONFIG_IP_PNP_RARP
-	if (ic_rarp_flag)
+	if (do_rarp)
 		ic_rarp_init();
 #endif
 #ifdef CONFIG_IP_PNP_BOOTP
-	if (ic_bootp_flag && ic_bootp_init() < 0) {
-		ic_bootp_cleanup();
-		return -1;
-	}
+	if (do_bootp)
+		ic_bootp_init();
 #endif
 
 	/*
@@ -855,36 +741,26 @@ __initfunc(int ic_dynamic(void))
 	 *  applies.. - AC]
 	 */
 	printk(KERN_NOTICE "Sending %s%s%s requests...",
-		ic_bootp_flag ? "BOOTP" : "",
-		ic_bootp_flag && ic_rarp_flag ? " and " : "",
-		ic_rarp_flag ? "RARP" : "");
+	        do_bootp ? "BOOTP" : "",
+		do_bootp && do_rarp ? " and " : "",
+		do_rarp ? "RARP" : "");
 	start_jiffies = jiffies;
 	retries = CONF_RETRIES;
 	get_random_bytes(&timeout, sizeof(timeout));
 	timeout = CONF_BASE_TIMEOUT + (timeout % (unsigned) CONF_TIMEOUT_RANDOM);
 	for(;;) {
 #ifdef CONFIG_IP_PNP_BOOTP
-		if (ic_bootp_flag && ic_bootp_send(jiffies - start_jiffies) < 0) {
-			printk(" BOOTP failed!\n");
-			ic_bootp_cleanup();
-			ic_bootp_flag = 0;
-			if (!ic_rarp_flag)
-				break;
-		}
+		if (do_bootp)
+			ic_bootp_send(jiffies - start_jiffies);
 #endif
 #ifdef CONFIG_IP_PNP_RARP
-		if (ic_rarp_flag)
+		if (do_rarp)
 			ic_rarp_send();
 #endif
 		printk(".");
 		jiff = jiffies + timeout;
 		while (jiffies < jiff && !ic_got_reply)
-#ifdef CONFIG_IP_PNP_BOOTP
-			if (ic_bootp_flag)
-				ic_bootp_recv();
-#else
 			;
-#endif
 		if (ic_got_reply) {
 			printk(" OK\n");
 			break;
@@ -899,11 +775,11 @@ __initfunc(int ic_dynamic(void))
 	}
 
 #ifdef CONFIG_IP_PNP_RARP
-	if (ic_rarp_flag)
+	if (do_rarp)
 		ic_rarp_cleanup();
 #endif
 #ifdef CONFIG_IP_PNP_BOOTP
-	if (ic_bootp_flag)
+	if (do_bootp)
 		ic_bootp_cleanup();
 #endif
 
@@ -911,7 +787,7 @@ __initfunc(int ic_dynamic(void))
 		return -1;
 
 	printk("IP-Config: Got %s answer from %s, ",
-		(ic_got_reply == IC_GOT_BOOTP) ? "BOOTP" : "RARP",
+		(ic_got_reply & IC_BOOTP) ? "BOOTP" : "RARP",
 		in_ntoa(ic_servaddr));
 	printk("my address is %s\n", in_ntoa(ic_myaddr));
 
@@ -924,7 +800,7 @@ __initfunc(int ic_dynamic(void))
  *	IP Autoconfig dispatcher.
  */
 
-__initfunc(int ip_auto_config(void))
+int __init ip_auto_config(void)
 {
 	if (!ic_enable)
 		return 0;
@@ -1000,25 +876,44 @@ __initfunc(int ip_auto_config(void))
  *	<device>	- use all available devices
  *	<bootp|rarp|both|off> - use both protocols to determine my own address
  */
-__initfunc(void ip_auto_config_setup(char *addrs, int *ints))
+static int __init ic_proto_name(char *name)
+{
+	if (!strcmp(name, "off")) {
+		ic_proto_enabled = 0;
+		return 1;
+	}
+#ifdef CONFIG_IP_PNP_BOOTP
+	else if (!strcmp(name, "bootp")) {
+		ic_proto_enabled &= ~IC_RARP;
+		return 1;
+	}
+#endif
+#ifdef CONFIG_IP_PNP_RARP
+	else if (!strcmp(name, "rarp")) {
+		ic_proto_enabled &= ~IC_BOOTP;
+		return 1;
+	}
+#endif
+#ifdef CONFIG_IP_PNP_DYNAMIC
+	else if (!strcmp(name, "both")) {
+		return 1;
+	}
+#endif
+	return 0;
+}
+
+void __init ip_auto_config_setup(char *addrs, int *ints)
 {
 	char *cp, *ip, *dp;
 	int num = 0;
 
 	ic_set_manually = 1;
-
-	if (!strcmp(addrs, "bootp")) {
-		ic_rarp_flag = 0;
-		return;
-	} else if (!strcmp(addrs, "rarp")) {
-		ic_bootp_flag = 0;
-		return;
-	} else if (!strcmp(addrs, "both")) {
-		return;
-	} else if (!strcmp(addrs, "off")) {
+	if (!strcmp(addrs, "off")) {
 		ic_enable = 0;
 		return;
 	}
+	if (ic_proto_name(addrs))
+		return;
 
 	/* Parse the whole string */
 	ip = addrs;
@@ -1059,12 +954,7 @@ __initfunc(void ip_auto_config_setup(char *addrs, int *ints))
 				user_dev_name[IFNAMSIZ-1] = '\0';
 				break;
 			case 6:
-				if (!strcmp(ip, "rarp"))
-					ic_bootp_flag = 0;
-				else if (!strcmp(ip, "bootp"))
-					ic_rarp_flag = 0;
-				else if (strcmp(ip, "both"))
-					ic_bootp_flag = ic_rarp_flag = 0;
+				ic_proto_name(ip);
 				break;
 			}
 		}

@@ -1,6 +1,6 @@
 /*
  *	IP_MASQ user space control interface
- *	$Id: ip_masq.h,v 1.1 1998/08/29 23:50:56 davem Exp $
+ *	$Id: ip_masq.h,v 1.2 1998/12/08 05:41:48 davem Exp $
  */
 
 #ifndef _LINUX_IP_MASQ_H
@@ -90,15 +90,18 @@ struct ip_portfw_user {
 };
 
 /* 
- *	MARKFW stuff 
+ *	MFW stuff 
  */
-struct ip_markfw_user {
+struct ip_mfw_user {
 	u_int32_t           fwmark;	/* Firewalling mark */
 	u_int32_t           raddr;  	/* remote port */
 	u_int16_t           rport;	/* remote port */
 	u_int16_t           dummy;          /* Make up to multiple of 4 */
 	int 		pref;		/* Preference value */
+	unsigned 	flags;		/* misc flags */
 };
+
+#define IP_MASQ_MFW_SCHED	0x01
 
 #define IP_FW_MASQCTL_MAX 256
 #define IP_MASQ_TNAME_MAX  32
@@ -110,7 +113,7 @@ struct ip_masq_ctl {
 	union {
 		struct ip_portfw_user portfw_user;
 		struct ip_autofw_user autofw_user;
-		struct ip_markfw_user markfw_user;
+		struct ip_mfw_user mfw_user;
 		struct ip_masq_user user;
 		unsigned char m_raw[IP_FW_MASQCTL_MAX];
 	} u;
@@ -123,14 +126,14 @@ struct ip_masq_ctl {
 #define IP_MASQ_TARGET_USER	3	
 #define IP_MASQ_TARGET_LAST	4
 
-#define IP_MASQ_CMD_NONE	0
+#define IP_MASQ_CMD_NONE	0	/* just peek */
 #define IP_MASQ_CMD_INSERT	1
 #define IP_MASQ_CMD_ADD		2
 #define IP_MASQ_CMD_SET		3
 #define IP_MASQ_CMD_DEL		4
 #define IP_MASQ_CMD_GET		5
 #define IP_MASQ_CMD_FLUSH	6
-#define IP_MASQ_CMD_LIST	7
+#define IP_MASQ_CMD_LIST	7	/* actually fake: done via /proc */
 #define IP_MASQ_CMD_ENABLE	8
 #define IP_MASQ_CMD_DISABLE	9
 

@@ -71,12 +71,7 @@ nlmclnt_block(struct nlm_host *host, struct file_lock *fl, u32 *statp)
 	 * a 1 minute timeout would do. See the comment before
 	 * nlmclnt_lock for an explanation.
 	 */
-	/*
-	 * FIXME, can we be not interruptible and so be allowed to use
-	 * a timeout here? -arca
-	 */
-/*  	current->timeout = jiffies + 30 * HZ; */
-	sleep_on(&block.b_wait);
+	sleep_on_timeout(&block.b_wait, 30*HZ);
 
 	for (head = &nlm_blocked; *head; head = &(*head)->b_next) {
 		if (*head == &block) {

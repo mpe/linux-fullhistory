@@ -403,7 +403,7 @@ EXPORT_SYMBOL(lapb_data_received);
 
 __initfunc(void lapb_proto_init(struct net_proto *pro))
 {
-	printk(KERN_INFO "LAPB for Linux. Version 0.01 for Linux NET3.038 (Linux 2.1)\n");
+	printk(KERN_INFO "NET4: LAPB for Linux. Version 0.01 for NET4.0\n");
 }
 
 #ifdef MODULE

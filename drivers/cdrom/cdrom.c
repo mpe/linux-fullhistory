@@ -376,8 +376,10 @@ int open_for_data(struct cdrom_device_info * cdi)
 			}
 			cdinfo(CD_OPEN, "the tray is now closed.\n"); 
 		}
-		if (ret!=CDS_DISC_OK)
+		if (ret!=CDS_DISC_OK) {
+			ret = -ENOMEDIUM;
 			goto clean_up_and_return;
+		}
 	}
 	cdrom_count_tracks(cdi, &tracks);
 	if (tracks.error == CDS_NO_DISC) {

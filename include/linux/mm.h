@@ -130,20 +130,22 @@ typedef struct page {
 #define PG_locked		 0
 #define PG_error		 1
 #define PG_referenced		 2
-#define PG_uptodate		 3
-#define PG_free_after		 4
-#define PG_decr_after		 5
-#define PG_swap_unlock_after	 6
-#define PG_DMA			 7
-#define PG_Slab			 8
-#define PG_swap_cache		 9
-#define PG_skip			10
+#define PG_dirty		 3
+#define PG_uptodate		 4
+#define PG_free_after		 5
+#define PG_decr_after		 6
+#define PG_swap_unlock_after	 7
+#define PG_DMA			 8
+#define PG_Slab			 9
+#define PG_swap_cache		10
+#define PG_skip			11
 #define PG_reserved		31
 
 /* Make it prettier to test the above... */
 #define PageLocked(page)	(test_bit(PG_locked, &(page)->flags))
 #define PageError(page)		(test_bit(PG_error, &(page)->flags))
 #define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
+#define PageDirty(page)		(test_bit(PG_dirty, &(page)->flags))
 #define PageUptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
 #define PageFreeAfter(page)	(test_bit(PG_free_after, &(page)->flags))
 #define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
@@ -155,12 +157,17 @@ typedef struct page {
 
 #define PageSetSlab(page)	(set_bit(PG_Slab, &(page)->flags))
 #define PageSetSwapCache(page)	(set_bit(PG_swap_cache, &(page)->flags))
+
+#define PageTestandSetDirty(page)	\
+			(test_and_set_bit(PG_dirty, &(page)->flags))
 #define PageTestandSetSwapCache(page)	\
 			(test_and_set_bit(PG_swap_cache, &(page)->flags))
 
 #define PageClearSlab(page)	(clear_bit(PG_Slab, &(page)->flags))
 #define PageClearSwapCache(page)(clear_bit(PG_swap_cache, &(page)->flags))
 
+#define PageTestandClearDirty(page) \
+			(test_and_clear_bit(PG_dirty, &(page)->flags))
 #define PageTestandClearSwapCache(page)	\
 			(test_and_clear_bit(PG_swap_cache, &(page)->flags))
 

@@ -5,13 +5,17 @@
 struct ntfs_attribute;
 struct ntfs_sb_info;
 
-/* Duplicate definitions from ntfs/types.h */
+/* Duplicate definitions from ntfs/ntfstypes.h */
 #ifndef NTFS_INTEGRAL_TYPES
 #define NTFS_INTEGRAL_TYPES
-typedef unsigned char      ntfs_u8;
-typedef unsigned short     ntfs_u16;
-typedef unsigned int       ntfs_u32;
-typedef unsigned long long ntfs_u64;
+typedef u8  ntfs_u8;
+typedef u16 ntfs_u16;
+typedef u32 ntfs_u32;
+typedef u64 ntfs_u64;
+typedef s8  ntfs_s8;
+typedef s16 ntfs_s16;
+typedef s32 ntfs_s32;
+typedef s64 ntfs_s64;
 #endif
 
 #ifndef NTMODE_T

@@ -307,10 +307,10 @@ void generate_if(struct kconfig * item,
     case tok_hex:
     case tok_string:
       printf("} then { ");
-      printf(".menu%d.config.f.x%d.x configure -state normal -fore [ cget .ref -foreground ]; ", menu_num, line_num);
+      printf(".menu%d.config.f.x%d.x configure -state normal -foreground [ cget .ref -foreground ]; ", menu_num, line_num);
       printf(".menu%d.config.f.x%d.l configure -state normal; ", menu_num, line_num);
       printf("} else { ");
-      printf(".menu%d.config.f.x%d.x configure -state disabled -fore [ cget .ref -disabledforeground ];", menu_num, line_num );
+      printf(".menu%d.config.f.x%d.x configure -state disabled -foreground [ cget .ref -disabledforeground ];", menu_num, line_num );
       printf(".menu%d.config.f.x%d.l configure -state disabled;", menu_num, line_num );
       printf("}\n");
       break;

@@ -76,8 +76,6 @@ static int nr_buffers = 0;
 static int nr_buffers_type[NR_LIST] = {0,};
 static int nr_buffer_heads = 0;
 static int nr_unused_buffer_heads = 0;
-static int refilled = 0;       /* Set NZ when a buffer freelist is refilled 
-				  this is used by the loop device */
 
 /* This is used by some architectures to estimate available memory. */
 int buffermem = 0;
@@ -113,8 +111,8 @@ union bdflush_param{
 } bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
-int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
-int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
+int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   1*HZ, 1, 1};
+int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 600*HZ, 600*HZ, 2047, 5};
 
 void wakeup_bdflush(int);
 
@@ -1607,7 +1605,7 @@ void wakeup_bdflush(int wait)
  * and superblocks so that we could write back only the old ones as well
  */
 
-asmlinkage int sync_old_buffers(void)
+static int sync_old_buffers(void)
 {
 	int i;
 	int ndirty, nwritten;
@@ -1774,7 +1772,6 @@ int bdflush(void * unused)
 #endif
 		 {
 			 ndirty = 0;
-			 refilled = 0;
 		 repeat:
 
 			 bh = lru_list[nlist];
@@ -1801,8 +1798,6 @@ int bdflush(void * unused)
 					  major = MAJOR(bh->b_dev);
 					  /* Should we write back buffers that are shared or not??
 					     currently dirty buffers are not shared, so it does not matter */
-					  if (refilled && major == LOOP_MAJOR)
-						   continue;
 					  next->b_count++;
 					  bh->b_count++;
 					  ndirty++;

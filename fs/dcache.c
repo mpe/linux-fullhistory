@@ -190,9 +190,9 @@ int d_invalidate(struct dentry * dentry)
 int select_dcache(int inode_count, int page_count)
 {
 	struct list_head *next, *tail = &dentry_unused;
-	int found = 0, forward = 0, young = 8;
+	int found = 0;
 	int depth = dentry_stat.nr_unused >> 1;
-	unsigned long min_value = 0, max_value = 4;
+	unsigned long max_value = 4;
 
 	if (page_count)
 		max_value = -1;
@@ -205,39 +205,12 @@ int select_dcache(int inode_count, int page_count)
 		unsigned long value = 0;	
 
 		next = tmp->prev;
-		if (forward)
-			next = tmp->next;
 		if (dentry->d_count) {
 			dentry_stat.nr_unused--;
 			list_del(tmp);
 			INIT_LIST_HEAD(tmp);
 			continue;
 		}
-		/*
-		 * Check the dentry's age to see whether to change direction.
-		 */
-		if (!forward) {
-			int age = (jiffies - dentry->d_reftime) / HZ;
-			if (age < dentry_stat.age_limit) {
-				if (!--young) {
-					forward = 1;
-					next = dentry_unused.next;
-					/*
-		 			 * Update the limits -- we don't want
-					 * files with too few or too many pages.
-					 */
- 					if (page_count) {
-						min_value = 3;
-						max_value = 15;
-					}
-#ifdef DCACHE_DEBUG
-printk("select_dcache: %s/%s age=%d, scanning forward\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, age);
-#endif
-				}
-				continue;
-			}
-		} 
 
 		/*
 		 * Select dentries based on the page cache count ...
@@ -247,7 +220,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, age);
 		 */
 		if (inode) {
 			value = inode->i_nrpages;	
-			if (value >= max_value || value < min_value)
+			if (value >= max_value)
 				continue;
 			if (inode->i_state || inode->i_count > 1)
 				continue;

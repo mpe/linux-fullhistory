@@ -67,6 +67,7 @@ static int sb_audio_open(int dev, int mode)
 	devc->fullduplex = devc->duplex &&
 		((mode & OPEN_READ) && (mode & OPEN_WRITE));
 	sb_dsp_reset(devc);
+	ess_mixer_reload (devc, SOUND_MIXER_RECLEV);
 
 	/* The ALS007 seems to require that the DSP be removed from the output */
 	/* in order for recording to be activated properly.  This is done by   */
@@ -91,8 +92,10 @@ static void sb_audio_close(int dev)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
 
-	/* if we did dma juggling put the right dmap in the right place */
-	if(devc->duplex && audio_devs[dev]->dmap_out->dma != devc->dma8)
+	/* fix things if mmap turned off fullduplex */
+	if(devc->duplex
+	   && !devc->fullduplex
+	   && (devc->opened & OPEN_READ) && (devc->opened & OPEN_WRITE))
 	{
 		struct dma_buffparms *dmap_temp;
 		dmap_temp = audio_devs[dev]->dmap_out;

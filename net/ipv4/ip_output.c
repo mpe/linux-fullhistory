@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.63 1998/10/03 09:37:30 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.64 1999/01/04 20:05:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -461,7 +461,7 @@ int ip_build_xmit_slow(struct sock *sk,
 	id = htons(ip_id_count++);
 
 	/*
-	 *	Being outputting the bytes.
+	 *	Begin outputting the bytes.
 	 */
 	 
 	do {

@@ -12,4 +12,11 @@
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
 
+typedef unsigned long cycles_t;
+
+static inline cycles_t get_cycles(void)
+{
+	return 0;
+}
+
 #endif

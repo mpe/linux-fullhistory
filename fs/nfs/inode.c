@@ -474,7 +474,7 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 	 * unhashed inode to avoid aliasing problems.
 	 */
 	if ((dentry->d_parent->d_inode->u.nfs_i.flags & NFS_IS_SNAPSHOT) ||
-	    (IS_ROOT(dentry->d_parent) && dentry->d_name.len == 9 &&
+	    (dentry->d_name.len == 9 &&
 	     memcmp(dentry->d_name.name, ".snapshot", 9) == 0)) {
 		struct inode *inode = get_empty_inode();
 		if (!inode)

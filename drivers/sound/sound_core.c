@@ -57,24 +57,32 @@ struct sound_unit
  *	join into it. Called with the lock asserted
  */
 
-static int __sound_insert_unit(struct sound_unit * s, struct sound_unit **list, struct file_operations *fops, int low, int top)
+static int __sound_insert_unit(struct sound_unit * s, struct sound_unit **list, struct file_operations *fops, int index, int low, int top)
 {
 	int n=low;
 
-	while(n<top)
-	{
-		/* Found a hole ? */
-		if(*list==NULL || (*list)->unit_minor>n)
-			break;
-		list=&((*list)->next);
-		n+=16;
-	}
-	
-	if(n==top)
-	{
-		return -1;
-	}
-	
+	if (index < 0) {	/* first free */
+		while(n<top)
+		{
+			/* Found a hole ? */
+			if(*list==NULL || (*list)->unit_minor>n)
+				break;
+			list=&((*list)->next);
+			n+=16;
+		}
+
+		if(n>=top)
+			return -ENOMEM;
+	} else {
+		n = low+(index*16);
+		while (*list) {
+			if ((*list)->unit_minor==n)
+				return -EBUSY;
+			if ((*list)->unit_minor>n)
+				break;
+			list=&((*list)->next);
+		}
+	}	
 		
 	/*
 	 *	Fill it in
@@ -127,7 +135,7 @@ static spinlock_t sound_loader_lock = SPIN_LOCK_UNLOCKED;
  *	list. Acquires locks as needed
  */
  
-static int sound_insert_unit(struct sound_unit **list, struct file_operations *fops, int low, int top)
+static int sound_insert_unit(struct sound_unit **list, struct file_operations *fops, int index, int low, int top)
 {
 	int r;
 	struct sound_unit *s=(struct sound_unit *)kmalloc(sizeof(struct sound_unit), GFP_KERNEL);
@@ -135,7 +143,7 @@ static int sound_insert_unit(struct sound_unit **list, struct file_operations *f
 		return -1;
 		
 	spin_lock(&sound_loader_lock);
-	r=__sound_insert_unit(s,list,fops,low,top);
+	r=__sound_insert_unit(s,list,fops,index,low,top);
 	spin_unlock(&sound_loader_lock);
 	
 	if(r==-1)
@@ -181,21 +189,21 @@ static struct sound_unit *chains[16];
 
 int register_sound_special(struct file_operations *fops, int unit)
 {
-	return sound_insert_unit(&chains[unit&15], fops, unit, unit+1);
+	return sound_insert_unit(&chains[unit&15], fops, -1, unit, unit+1);
 }
  
 EXPORT_SYMBOL(register_sound_special);
 
-int register_sound_mixer(struct file_operations *fops)
+int register_sound_mixer(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[0], fops, 0, 128);
+	return sound_insert_unit(&chains[0], fops, dev, 0, 128);
 }
 
 EXPORT_SYMBOL(register_sound_mixer);
 
-int register_sound_midi(struct file_operations *fops)
+int register_sound_midi(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[2], fops, 2, 130);
+	return sound_insert_unit(&chains[2], fops, dev, 2, 130);
 }
 
 EXPORT_SYMBOL(register_sound_midi);
@@ -205,16 +213,16 @@ EXPORT_SYMBOL(register_sound_midi);
  *	in open - see below.
  */
  
-int register_sound_dsp(struct file_operations *fops)
+int register_sound_dsp(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[3], fops, 3, 131);
+	return sound_insert_unit(&chains[3], fops, dev, 3, 131);
 }
 
 EXPORT_SYMBOL(register_sound_dsp);
 
-int register_sound_synth(struct file_operations *fops)
+int register_sound_synth(struct file_operations *fops, int dev)
 {
-	return sound_insert_unit(&chains[9], fops, 9, 137);
+	return sound_insert_unit(&chains[9], fops, dev, 9, 137);
 }
 
 EXPORT_SYMBOL(register_sound_synth);
@@ -279,6 +287,20 @@ static struct file_operations soundcore_fops=
 	NULL
 };
 
+static struct sound_unit *__look_for_unit(int chain, int unit)
+{
+	struct sound_unit *s;
+	
+	s=chains[chain];
+	while(s && s->unit_minor <= unit)
+	{
+		if(s->unit_minor==unit)
+			return s;
+		s=s->next;
+	}
+	return NULL;
+}
+
 int soundcore_open(struct inode *inode, struct file *file)
 {
 	int chain;
@@ -294,28 +316,48 @@ int soundcore_open(struct inode *inode, struct file *file)
 	}
 	
 	spin_lock(&sound_loader_lock);
+	s = __look_for_unit(chain, unit);
+#ifdef CONFIG_KMOD
+	if (s == NULL) {
+		char mod[32];
 	
-	s=chains[chain];
-	
-	while(s && s->unit_minor <= unit)
-	{
-		if(s->unit_minor==unit)
-		{
-			file->f_op=s->unit_fops;
-			spin_unlock(&sound_loader_lock);
-			if(file->f_op->open)
-				return file->f_op->open(inode,file);
-			else
-				return 0;
-			break;
-		}
-		s=s->next;
+		spin_unlock(&sound_loader_lock);
+		/*
+		 *  Please, don't change this order or code.
+		 *  For ALSA slot means soundcard and OSS emulation code
+		 *  comes as add-on modules which aren't depend on
+		 *  ALSA toplevel modules for soundcards, thus we need
+		 *  load them at first.	  [Jaroslav Kysela <perex@jcu.cz>]
+		 */
+		sprintf(mod, "sound-slot-%i", unit>>4);
+		request_module(mod);
+		sprintf(mod, "sound-service-%i-%i", unit>>4, chain);
+		request_module(mod);
+		spin_lock(&sound_loader_lock);
+		s = __look_for_unit(chain, unit);
+	}
+#endif
+	if (s) {
+		file->f_op=s->unit_fops;
+		spin_unlock(&sound_loader_lock);
+		if(file->f_op->open)
+			return file->f_op->open(inode,file);
+		else
+			return 0;
 	}
 	spin_unlock(&sound_loader_lock);
 	return -ENODEV;
 }
 
 #ifdef MODULE
+
+MODULE_DESCRIPTION("Core sound module");
+MODULE_AUTHOR("Alan Cox");
+
+extern int mod_firmware_load(const char *, char **);
+EXPORT_SYMBOL(mod_firmware_load);
+
+
 void cleanup_module(void)
 {
 	/* We have nothing to really do here - we know the lists must be

@@ -3604,17 +3604,25 @@ CONFIG_SCSI_AHA1740
 Adaptec AIC7xxx chipset SCSI controller support
 CONFIG_SCSI_AIC7XXX
   This is support for the various aic7xxx based Adaptec SCSI
-  controllers. These include the 274x EISA cards, 284x VLB cards, 294x
-  PCI cards, 394x PCI cards, 3985 PCI card, and several versions of
-  the Adaptec built-in SCSI controllers on various PC motherboards.
+  controllers. These include the 274x EISA cards; 284x VLB cards; 2902,
+  2910, 293x, 294x, 394x, 3985 and several other PCI and motherboard based
+  SCSI controllers from Adaptec.  It does not support the AAA-13x RAID
+  controllers from Adaptec, nor will it likely ever support them.  It
+  does not support the 2920 cards from Adaptec that use the Future Domain
+  SCSI controller chip.  For those cards, you need the "Future Domain
+  16xx SCSI support" driver.
+
+  In general, if the controller is based on an Adaptec SCSI controller
+  chip from the aic777x series or the aic78xx series, it should work.  The
+  only exception is the 7810 which is specifically not supported (that's the
+  RAID controller chip on the AAA-13x cards).
+
   Information on the configuration options for this controller can be
   found by checking the help file for each of the available
-  configuration options. You also want to read
-  drivers/scsi/README.aic7xxx and the SCSI-HOWTO, available via FTP
-  (user: anonymous) at ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
-  Note that the AHA2920 SCSI host adapter is *not* supported by this
-  driver; choose "Future Domain 16xx SCSI support" instead if you have
-  one of those.
+  configuration options. You should read drivers/scsi/README.aic7xxx
+  at a minimum before contacting the maintainer with any questions.  
+  The SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO can also be of great help.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -3626,15 +3634,9 @@ CONFIG_OVERRIDE_CMDS
   Say Y here if you want to override the default maximum number of
   commands that a single device on the aic7xxx controller is allowed
   to have active at one time. This option only affects tagged queueing
-  capable devices. The driver uses a "failsafe" value of 8 by default.
-  This is much lower than many devices can handle, but left in place
-  for safety's sake. If you say Y here, you can adjust the number of
-  commands per LUN with the following configuration option.
-  
-  NOTE: This does not actually enable tagged queueing on any
-  particular device. The driver has changed in this respect. Please
-  see the file drivers/scsi/README.aic7xxx for more information on how
-  to get particular devices to use tagged command queueing.
+  capable devices. The driver uses a value of 24 by default.
+  If you say Y here, you can adjust the number of commands per LUN
+  with the following configuration option.
   
   If unsure, say N.
 
@@ -3771,16 +3773,21 @@ CONFIG_SCSI_U14_34F
 
 enable elevator sorting
 CONFIG_SCSI_U14_34F_LINKED_COMMANDS
-  This is a feature of SCSI-2 which improves performance: the host
-  adapter can send a whole list of commands to a device in one
-  batch. Some SCSI devices might not implement this properly, so the
-  safe answer is N.
+  This option enables elevator sorting for all probed SCSI disks and 
+  CDROMs. It definetly reduces the average seek distance when doing
+  random seeks, but this does not necessarily results in a noticeable
+  performance improvement: your mileage may vary...
+  The safe answer is N.
 
 maximum number of queued commands
 CONFIG_SCSI_U14_34F_MAX_TAGS
-  This specifies how many SCSI commands can be maximally queued for a
-  given SCSI device. Go with the default unless you know what you're
-  doing. Minimum is 2 and maximum is 8.
+  This specifies how many SCSI commands can be maximally queued for each
+  probed SCSI device. You should reduce the default value of 8 only if
+  you have disks with buggy or limited tagged command support.
+  Minimum is 2 and maximum is 14. This value is also the window size
+  used by the elevator sorting option above.
+  The effective value used by the driver for each probed SCSI device is 
+  reported at boot time.
 
 Future Domain 16xx SCSI/AHA-2920A support
 CONFIG_SCSI_FUTURE_DOMAIN
@@ -4237,13 +4244,13 @@ CONFIG_SCSI_7000FASST
 
 EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support
 CONFIG_SCSI_EATA
-  This driver supports all the EATA/DMA-compliant SCSI host adapters
-  and does not need any BIOS32 service. DPT ISA and all EISA i/o
-  addresses are probed looking for the "EATA" signature. If you said Y
-  to "PCI BIOS support", the addresses of all the PCI SCSI controllers
-  reported by BIOS32 are probed as well. You want to read the start of
-  drivers/scsi/eata.c and the SCSI-HOWTO, available via FTP (user:
-  anonymous) at ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
+  This driver supports all the EATA/DMA-compliant SCSI host adapters.
+  DPT ISA and all EISA i/o addresses are probed looking for the "EATA"
+  signature. If you said Y to "PCI support", the addresses of all the 
+  PCI SCSI controllers reported by the PCI subsystem are probed as well.
+  You want to read the start of drivers/scsi/eata.c and the SCSI-HOWTO,
+  available via FTP (user: anonymous) at 
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
 
   Note that there is also another driver for the same hardware
   available: "EATA-DMA support". You should say Y to only one of them.
@@ -4257,22 +4264,27 @@ enable tagged command queuing
 CONFIG_SCSI_EATA_TAGGED_QUEUE
   This is a feature of SCSI-2 which improves performance: the host
   adapter can send several SCSI commands to a device's queue even if
-  previous commands haven't finished yet. Some SCSI devices don't
-  implement this properly, so the safe answer is N.
+  previous commands haven't finished yet. Most EATA adapters negotiate
+  this feature automatically with the device, even if your answer is N.
+  The safe answer is N.
         
 enable elevator sorting
 CONFIG_SCSI_EATA_LINKED_COMMANDS
-  This is a feature of SCSI-2 which improves performance: the host
-  adapter can send a whole list of commands to a device in one
-  batch. Some SCSI devices might not implement this properly, so the
-  safe answer is N.
+  This option enables elevator sorting for all probed SCSI disks and 
+  CDROMs. It definetly reduces the average seek distance when doing
+  random seeks, but this does not necessarily results in a noticeable
+  performance improvement: your mileage may vary...
+  The safe answer is N.
 
 maximum number of queued commands
 CONFIG_SCSI_EATA_MAX_TAGS
-  This specifies how many SCSI commands can be maximally queued for a
-  given SCSI device. Go with the default unless you know what you're
-  doing. Minimum is 2 and maximum is 16. This number will only have an
-  effect if you said Y to "enable tagged command queuing", above.
+  This specifies how many SCSI commands can be maximally queued for each
+  probed SCSI device. You should reduce the default value of 16 only if
+  you have disks with buggy or limited tagged command support.
+  Minimum is 2 and maximum is 62. This value is also the window size
+  used by the elevator sorting option above.
+  The effective value used by the driver for each probed SCSI device is 
+  reported at boot time.
 
 NCR53c406a SCSI support
 CONFIG_SCSI_NCR53C406A

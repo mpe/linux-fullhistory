@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.80 1998/11/08 11:17:03 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.82 1999/01/04 20:36:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -190,8 +190,9 @@ static __inline__ void kill_sk_later(struct sock *sk)
 	 * [PR]
 	 */
 		  
-	printk(KERN_DEBUG "Socket destroy delayed (r=%d w=%d)\n",
-	       atomic_read(&sk->rmem_alloc), atomic_read(&sk->wmem_alloc));
+	NETDEBUG(printk(KERN_DEBUG "Socket destroy delayed (r=%d w=%d)\n",
+			atomic_read(&sk->rmem_alloc),
+			atomic_read(&sk->wmem_alloc)));
 
 	sk->destroy = 1;
 	sk->ack_backlog = 0;
@@ -1059,7 +1060,7 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 	struct sk_buff *dummy_skb;
 	struct inet_protocol *p;
 
-	printk(KERN_INFO "Swansea University Computer Society TCP/IP for NET3.037\n");
+	printk(KERN_INFO "NET4: Linux TCP/IP 1.0 for NET4.0\n");
 
 	if (sizeof(struct inet_skb_parm) > sizeof(dummy_skb->cb))
 	{

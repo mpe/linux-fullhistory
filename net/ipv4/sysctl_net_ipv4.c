@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.36 1998/10/21 05:26:59 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.38 1999/01/02 16:51:48 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -66,6 +66,9 @@ extern int sysctl_icmp_destunreach_time;
 extern int sysctl_icmp_timeexceed_time;
 extern int sysctl_icmp_paramprob_time;
 extern int sysctl_icmp_echoreply_time;
+
+/* From igmp.c */
+extern int sysctl_igmp_max_memberships;
 
 int tcp_retr1_max = 255; 
 
@@ -177,6 +180,10 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_ICMP_ECHOREPLY_RATE, "icmp_echoreply_rate",
 	 &sysctl_icmp_echoreply_time, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_ROUTE, "route", NULL, 0, 0555, ipv4_route_table},
+#ifdef CONFIG_IP_MULTICAST
+	{NET_IPV4_IGMP_MAX_MEMBERSHIPS, "igmp_max_memberships",
+	 &sysctl_igmp_max_memberships, sizeof(int), 0644, NULL, &proc_dointvec},
+#endif
 	{0}
 };
 

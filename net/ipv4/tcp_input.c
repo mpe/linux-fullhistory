@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.143 1998/12/20 20:20:20 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.145 1999/01/04 20:49:11 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -301,7 +301,7 @@ static void tcp_sacktag_write_queue(struct sock *sk, struct tcp_sack_block *sp, 
 			/* The retransmission queue is always in order, so
 			 * we can short-circuit the walk early.
 			 */
-			if(after(TCP_SKB_CB(skb)->seq, start_seq))
+			if(after(TCP_SKB_CB(skb)->seq, end_seq))
 				break;
 
 			/* We play conservative, we don't allow SACKS to partially
@@ -1170,7 +1170,7 @@ coalesce:
 	/* Zap SWALK, by moving every further SACK up by one slot.
 	 * Decrease num_sacks.
 	 */
-	for(this_sack += 1; this_sack < num_sacks-1; this_sack++, swalk++) {
+	for(; this_sack < num_sacks-1; this_sack++, swalk++) {
 		struct tcp_sack_block *next = (swalk + 1);
 		swalk->start_seq = next->start_seq;
 		swalk->end_seq = next->end_seq;

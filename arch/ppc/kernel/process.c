@@ -191,6 +191,19 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 	_enable_interrupts(s);
 }
 
+void instruction_dump (unsigned long *pc)
+{
+	int i;
+
+	if((((unsigned long) pc) & 3))
+                return;
+
+	printk("Instruction DUMP:");
+	for(i = -3; i < 6; i++)
+		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
+	printk("\n");
+}
+
 void show_regs(struct pt_regs * regs)
 {
 	int i;

@@ -163,6 +163,13 @@ static unsigned long nubus_irqs[8];
 static unsigned long *mac_irqs[8];
 
 /*
+ * Some special nutcases ...
+ */
+
+static unsigned long mac_ide_irqs = 0;
+static unsigned long nubus_stuck_events = 0;
+
+/*
  * VIA/RBV/OSS/PSC register base pointers
  */
 
@@ -217,9 +224,13 @@ void mac_debug_handler(int irq, void *dev_id, struct pt_regs *regs);
 static void via_do_nubus(int slot, void *via, struct pt_regs *regs);
 
 /* #define DEBUG_MACINTS */
-/* #define DEBUG_NUBUS_INT */
+
+#define DEBUG_SPURIOUS
+#define DEBUG_NUBUS_SPURIOUS
+#define DEBUG_NUBUS_INT
+
 /* #define DEBUG_VIA */
-/* #define DEBUG_VIA_NUBUS */
+#define DEBUG_VIA_NUBUS
 
 void mac_init_IRQ(void)
 {
@@ -351,6 +362,12 @@ void mac_init_IRQ(void)
 	mac_irqs[7]	 =  &nubus_irqs[0];
 
 	/*
+	 * Nubus Macs: turn off the Nubus dispatch interrupt for now
+	 */
+
+	mac_turnoff_irq(IRQ_MAC_NUBUS);
+
+	/*
 	 *	AV Macs: shutup the PSC ints
 	 */
 	if (macintosh_config->ident == MAC_MODEL_C660
@@ -430,8 +447,10 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 		return 0;
 	} 
 
-	/* add similar hack for Nubus pseudo-irq here - hide nubus_request_irq */
-
+	/* 
+	 * code below: only for VIA irqs currently 
+	 * add similar hack for Nubus pseudo-irq here - hide nubus_request_irq
+	 */
 	via         = (volatile unsigned char *) via_table[srcidx];
 	if (!via) 
 		return -EINVAL;
@@ -697,12 +716,18 @@ int  mac_irq_pending( unsigned int irq )
 	return (pending);
 }
 
+/*
+ * for /proc/interrupts: log interrupt stats broken down by 
+ * autovector int first, then by actual interrupt source.
+ */
+
 int mac_get_irq_list (char *buf)
 {
 	int i, len = 0;
 	int srcidx, irqidx;
 
 	for (i = VIA1_SOURCE_BASE; i < NUM_MAC_SOURCES+8; ++i) {
+	        /* XXX fixme: IRQ_SRC_MASK should cover VIA1 - Nubus */
 		srcidx = ((i & IRQ_SRC_MASK)>>3) - 1;
 		irqidx = (i & IRQ_IDX_MASK);
 
@@ -767,6 +792,32 @@ int mac_get_irq_list (char *buf)
 	}
 	if (num_spurious)
 		len += sprintf(buf+len, "spurio.: %10u\n", num_spurious);
+
+	/* 
+	 * XXX Fixme: Nubus sources are never logged above ...
+	 */
+
+	len += sprintf(buf+len, "Nubus interrupts:\n");
+
+	for (i = 0; i < 7; i++) {
+		if (nubus_handler[i].handler == nubus_wtf)
+			continue;
+		len += sprintf(buf+len, "nubus %01X: %10lu ",
+			       i+9, 
+			       nubus_irqs[i]);
+		len += sprintf(buf+len, "%s\n", 
+			       nubus_param[i].devname);
+
+	}
+	len += sprintf(buf+len, "nubus spurious ints: %10lu\n",
+		       nubus_irqs[7]);
+	len += sprintf(buf+len, "nubus stuck events : %10lu\n",
+		       nubus_stuck_events);
+#ifdef CONFIG_BLK_DEV_IDE
+	len += sprintf(buf+len, "nubus/IDE interrupt: %10lu\n",
+		       mac_ide_irqs);
+#endif	
+
 	return len;
 }
 
@@ -787,8 +838,9 @@ void via_scsi_clear(void)
 
 void mac_default_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
-#ifdef DEBUG_VIA
-	printk("Unexpected IRQ %d on device %p\n", irq, dev_id);
+#ifdef DEBUG_SPURIOUS
+	if (console_loglevel > 6)
+		printk("Unexpected IRQ %d on device %p\n", irq, dev_id);
 #endif
 }
 
@@ -861,6 +913,18 @@ void mac_nmi_handler(int irq, void *dev_id, struct pt_regs *fp)
 #endif
 	}
 	in_nmi--;
+}
+
+/*
+ *	Unexpected via interrupt
+ */
+ 
+void via_wtf(int slot, void *via, struct pt_regs *regs)
+{
+#ifdef DEBUG_SPURIOUS
+	if (console_loglevel > 6)
+		printk("Unexpected nubus event %d on via %p\n",slot,via);
+#endif
 }
 
 /*
@@ -1118,17 +1182,6 @@ void rbv_irq(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 /*
- *	Unexpected via interrupt
- */
- 
-void via_wtf(int slot, void *via, struct pt_regs *regs)
-{
-#ifdef DEBUG_VIA
-	printk("Unexpected event %d on via %p\n",slot,via);
-#endif
-}
-
-/*
  *	Nubus / SCSI interrupts; OSS style
  *	The OSS is even more different than the RBV. OSS appears to stand for 
  *	Obscenely Screwed Silicon ... 
@@ -1267,8 +1320,9 @@ void oss_irq(int irq, void *dev_id, struct pt_regs *regs)
  
 void nubus_wtf(int slot, void *via, struct pt_regs *regs)
 {
-#ifdef DEBUG_VIA_NUBUS
-	printk("Unexpected interrupt on nubus slot %d\n",slot);
+#ifdef DEBUG_NUBUS_SPURIOUS
+	if (console_loglevel > 6)
+		printk("Unexpected interrupt on nubus slot %d\n",slot);
 #endif
 }
 
@@ -1282,9 +1336,10 @@ void mac_SCC_handler(int irq, void *dev_id, struct pt_regs *regs)
 	int i;
 				/* 1+2: compatibility with PSC ! */
 	for (i = 1; i < 3; i++) /* currently only these two used */
-		if (scc_handler[i].handler != mac_default_handler)
+		if (scc_handler[i].handler != mac_default_handler) {
 			(scc_handler[i].handler)(i, scc_handler[i].dev_id, regs);
-
+			scc_irqs[i]++;
+		}
 }
 
 /*
@@ -1426,6 +1481,7 @@ int nubus_request_irq(int slot, void *dev_id, void (*handler)(int,void *,struct 
 	if (!nubus_active && !via2_is_oss) {
 		request_irq(IRQ_MAC_NUBUS, via_do_nubus, IRQ_FLG_LOCK, 
 			    "nubus dispatch", via_do_nubus);
+		mac_turnon_irq(IRQ_MAC_NUBUS);
 	}
 
 	nubus_active|=1<<slot;
@@ -1475,6 +1531,7 @@ int nubus_free_irq(int slot)
  * IDE interrupt hook
  */
 extern void (*mac_ide_intr_hook)(int, void *, struct pt_regs *);
+extern int (*mac_ide_irq_p_hook)(void);
 #endif
 
 /*
@@ -1482,13 +1539,13 @@ extern void (*mac_ide_intr_hook)(int, void *, struct pt_regs *);
  */
 static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 {
-	unsigned char map;
+	unsigned char map, allints;
 	int i;
 	int ct=0;
-
-/*	printk("nubus interrupt\n");*/
+	int ide_pending = 0;
 		
 	/* lock the nubus interrupt */
+	/* That's just 'clear Nubus IRQ bit in VIA2' BTW. Pretty obsolete ? */
 	if (via2_is_rbv) 
 		via_write(rbv_regp, rIFR, 0x82);
 	else
@@ -1496,37 +1553,69 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 	
 #ifdef CONFIG_BLK_DEV_MAC_IDE
 	/* IDE hack */
-	if (mac_ide_intr_hook)
+	if (mac_ide_intr_hook) {
 		/* 'slot' is lacking the machspec bit in 2.0 */
 		/* need to pass proper dev_id = hwgroup here */
 		mac_ide_intr_hook(IRQ_MAC_NUBUS, via, regs);
+		mac_ide_irqs++;
+	}
 #endif
 
 	while(1)
 	{
 		if (via2_is_rbv)
-			map = ~via_read(rbv_regp, rBufA);
+			allints = ~via_read(rbv_regp, rBufA);
 		else
-			map = ~via_read(via2_regp, vBufA);
+			allints = ~via_read(via2_regp, vBufA);
 		
-#ifdef DEBUG_NUBUS_INT
-		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
+#ifdef CONFIG_BLK_DEV_MAC_IDE
+		if (mac_ide_irq_p_hook)
+			ide_pending = mac_ide_irq_p_hook();
 #endif
 
-		if( (map = (map&nubus_active)) ==0 ) {
-#ifdef DEBUG_NUBUS_INT
-			printk("nubus_irq: nothing pending, map %x mask %x\n", 
-				map, nubus_active);
+		if ( (map = (allints&nubus_active)) == 0 
+#ifdef CONFIG_BLK_DEV_MAC_IDE
+		      && !ide_pending 
 #endif
-			nubus_irqs[7]++;
+							) 
+		{
+			if (ct == 0) {
+#ifdef DEBUG_VIA_NUBUS
+				if (console_loglevel > 5)
+					printk("nubus_irq: nothing pending, map %x mask %x active %x\n", 
+						allints, nubus_active, map);
+#endif
+				nubus_irqs[7]++;
+			}
+			/* clear it */
+			if (allints)
+				if (via2_is_rbv)
+					via_write(rbv_regp, rIFR, 0x02);
+				else
+					via_write(via2_regp, vIFR, 0x02);
 			break;
 		}
 
+#ifdef DEBUG_VIA_NUBUS
+		if (console_loglevel > 6)
+			printk("nubus_irq: map %x mask %x active %x\n", 
+				allints, nubus_active, map);
+#endif
+
+#ifdef CONFIG_BLK_DEV_MAC_IDE
+		if (mac_ide_intr_hook && ide_pending) {
+			mac_ide_intr_hook(IRQ_MAC_NUBUS, via, regs);
+			mac_ide_irqs++;
+		}
+#endif
+
 		if(ct++>2)
 		{
-#ifdef DEBUG_NUBUS_INT
-			printk("nubus stuck events - %d/%d\n", map, nubus_active);
-#endif
+			if (console_loglevel > 5)
+				printk("nubus stuck events - %x/%x/%x ide %x\n", 
+				allints, nubus_active, map, ide_pending);
+			nubus_stuck_events++;
+
 			return;
 		}
 
@@ -1583,12 +1672,14 @@ static void oss_do_nubus(int slot, void *via, struct pt_regs *regs)
 		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
 #endif
 		if( (map = (map&nubus_active)) ==0 ) {
+			if (ct == 0) {
 #ifdef CONFIG_BLK_DEV_MAC_IDE
-			if (!mac_ide_intr_hook)
-				printk("nubus_irq: nothing pending, map %x mask %x\n", 
-					map, nubus_active);
+				if (!mac_ide_intr_hook)
+					printk("nubus_irq: nothing pending, map %x mask %x\n", 
+						map, nubus_active);
 #endif
-			nubus_irqs[7]++;
+				nubus_irqs[7]++;
+			}
 			break;
 		}
 

@@ -3853,7 +3853,7 @@ static void __init mixer_init(void)
 #ifndef MODULE
 	int mixer_unit;
 #endif
-	mixer_unit = register_sound_mixer(&mixer_fops);
+	mixer_unit = register_sound_mixer(&mixer_fops, -1);
 	if (mixer_unit < 0)
 		return;
 
@@ -4258,7 +4258,7 @@ static void __init sq_init(void)
 #ifndef MODULE
 	int sq_unit;
 #endif
-	sq_unit = register_sound_dsp(&sq_fops);
+	sq_unit = register_sound_dsp(&sq_fops, -1);
 	if (sq_unit < 0)
 		return;
 

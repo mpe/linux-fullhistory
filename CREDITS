@@ -1150,8 +1150,8 @@ D: NTFS driver
 
 N: Mark Lord
 E: mlord@pobox.com
-D: Author of IDE driver (ide.c), hd.c support
-D: Triton Bus Master IDE driver
+D: EIDE driver, hd.c support
+D: EIDE PCI and bus-master DMA support
 D: Hard Disk Parameter (hdparm) utility
 S: 33 Ridgefield Cr
 S: Nepean, Ontario

@@ -147,12 +147,8 @@ static inline void sync_one(struct inode *inode)
 		__wait_on_inode(inode);
 		spin_lock(&inode_lock);
 	} else {
-		struct list_head *insert = &inode_in_use;
-		if (!inode->i_count)
-			insert = inode_in_use.prev;
 		list_del(&inode->i_list);
-		list_add(&inode->i_list, insert);
-
+		list_add(&inode->i_list, &inode_in_use);
 		/* Set I_LOCK, reset I_DIRTY */
 		inode->i_state ^= I_DIRTY | I_LOCK;
 		spin_unlock(&inode_lock);
@@ -705,7 +701,7 @@ void iput(struct inode *inode)
 			}
 			else if (!(inode->i_state & I_DIRTY)) {
 				list_del(&inode->i_list);
-				list_add(&inode->i_list, inode_in_use.prev);
+				list_add(&inode->i_list, &inode_in_use);
 			}
 #ifdef INODE_PARANOIA
 if (inode->i_flock)

@@ -2745,13 +2745,13 @@ __initfunc(int init_es1371(void))
 		printk(KERN_INFO "es1371: found adapter at io %#06x irq %u\n"
 		       KERN_INFO "es1371: features: joystick 0x%x\n", s->io, s->irq, joystick[index]);
 		/* register devices */
-		if ((s->dev_audio = register_sound_dsp(&es1371_audio_fops)) < 0)
+		if ((s->dev_audio = register_sound_dsp(&es1371_audio_fops, -1)) < 0)
 			goto err_dev1;
-		if ((s->dev_mixer = register_sound_mixer(&es1371_mixer_fops)) < 0)
+		if ((s->dev_mixer = register_sound_mixer(&es1371_mixer_fops, -1)) < 0)
 			goto err_dev2;
-		if ((s->dev_dac = register_sound_dsp(&es1371_dac_fops)) < 0)
+		if ((s->dev_dac = register_sound_dsp(&es1371_dac_fops, -1)) < 0)
 			goto err_dev3;
-		if ((s->dev_midi = register_sound_midi(&es1371_midi_fops)) < 0)
+		if ((s->dev_midi = register_sound_midi(&es1371_midi_fops, -1)) < 0)
 			goto err_dev4;
 		/* initialize codec registers */
 		s->ctrl = 0;

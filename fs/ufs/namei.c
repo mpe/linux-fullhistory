@@ -34,6 +34,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/quotaops.h>
 
 #include "swab.h"
 #include "util.h"
@@ -55,20 +56,17 @@
 #define NAMEI_RA_INDEX(c,b)  (((c) * NAMEI_RA_BLOCKS) + (b))
 
 /*
- * NOTE! unlike strncmp, ufs_match returns 1 for success, 0 for failure.
+ * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
+ *
+ * Len <= UFS_MAXNAMLEN' is guaranteed by caller.
+ * De != NULL' is guaranteed by caller.
  */
-static int ufs_match (int len, const char * const name,
+static inline int ufs_match (int len, const char * const name,
 	struct ufs_dir_entry * de, unsigned flags, unsigned swab)
 {
-	if (!de || !SWAB32(de->d_ino) || len > UFS_MAXNAMLEN)
-		return 0;
-	/*
-	 * "" means "." ---> so paths like "/usr/lib//libc.a" work
-	 */
-	if (!len && ufs_get_de_namlen(de) == 1 && (de->d_name[0] == '.') &&
-	   (de->d_name[1] == '\0'))
-		return 1;
 	if (len != ufs_get_de_namlen(de))
+		return 0;
+	if (!de->d_ino)
 		return 0;
 	return !memcmp(name, de->d_name, len);
 }
@@ -128,8 +126,9 @@ static struct buffer_head * ufs_find_entry (struct inode * dir,
 		}
 		bh = bh_use[block % NAMEI_RA_SIZE];
 		if (!bh) {
-			ufs_error (sb, "ufs_find_entry",
-				"directory #%lu contains a hole at offset %lu", dir->i_ino, offset);
+			ufs_error (sb, "ufs_find_entry", 
+				"directory #%lu contains a hole at offset %lu",
+				dir->i_ino, offset);
 			offset += sb->s_blocksize;
 			continue;
 		}
@@ -144,20 +143,30 @@ static struct buffer_head * ufs_find_entry (struct inode * dir,
 		de = (struct ufs_dir_entry *) bh->b_data;
 		dlimit = bh->b_data + sb->s_blocksize;
 		while ((char *) de < dlimit && offset < dir->i_size) {
-			if (!ufs_check_dir_entry ("ufs_find_entry", dir, de, bh, offset))
-				goto failed;
-			if (SWAB32(de->d_ino) != 0 && ufs_match (namelen, name, de, flags, swab)) {
+			/* this code is executed quadratically often */
+			/* do minimal checking by hand' */
+			int de_len;
+
+			if ((char *) de + namelen <= dlimit &&
+			    ufs_match (namelen, name, de, flags, swab)) {
+				/* found a match -
+				just to be sure, do a full check */
+				if (!ufs_check_dir_entry("ufs_find_entry",
+				    dir, de, bh, offset))
+					goto failed;
 				for (i = 0; i < NAMEI_RA_SIZE; ++i) {
 					if (bh_use[i] != bh)
 						brelse (bh_use[i]);
 				}
 				*res_dir = de;
-				UFSD(("EXIT\n"))
 				return bh;
 			}
-			offset += SWAB16(de->d_reclen);
-			de = (struct ufs_dir_entry *)
-				((char *) de + SWAB16(de->d_reclen));
+                        /* prevent looping on a bad block */
+			de_len = SWAB16(de->d_reclen);
+			if (de_len <= 0)
+				goto failed;
+			offset += de_len;
+			de = (struct ufs_dir_entry *) ((char *) de + de_len);
 		}
 
 		brelse (bh);
@@ -173,7 +182,7 @@ static struct buffer_head * ufs_find_entry (struct inode * dir,
 
 failed:
 	for (i = 0; i < NAMEI_RA_SIZE; ++i) brelse (bh_use[i]);
-	UFSD(("EXIT (FAILED)\n"))
+	UFSD(("EXIT\n"))
 	return NULL;
 }
 
@@ -298,7 +307,7 @@ static struct buffer_head * ufs_add_entry (struct inode * dir,
 			brelse (bh);
 			return NULL;
 		}
-		if (SWAB32(de->d_ino) != 0 && ufs_match (namelen, name, de, flags, swab)) {
+		if (ufs_match (namelen, name, de, flags, swab)) {
 				*err = -EEXIST;
 				brelse (bh);
 				return NULL;
@@ -673,8 +682,7 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 		goto end_rmdir;
 
 	inode = dentry->d_inode;
-	if (inode->i_sb->dq_op)
-		inode->i_sb->dq_op->initialize (inode, -1);
+	DQUOT_INIT(inode);
 
 	retval = -EIO;
 	if (SWAB32(de->d_ino) != inode->i_ino)
@@ -741,8 +749,7 @@ int ufs_unlink(struct inode * dir, struct dentry *dentry)
 		goto end_unlink;
 
 	inode = dentry->d_inode;
-	if (inode->i_sb->dq_op)
-		inode->i_sb->dq_op->initialize (inode, -1);
+	DQUOT_INIT(inode);
 
 	retval = -EIO;
 	if (SWAB32(de->d_ino) != inode->i_ino)
@@ -777,49 +784,6 @@ out:
 	return retval;
 }
 
-
-int ufs_link (struct dentry * old_dentry, struct inode * dir,
-	struct dentry *dentry)
-{
-	struct super_block * sb;
-	struct inode *inode = old_dentry->d_inode;
-	struct ufs_dir_entry * de;
-	struct buffer_head * bh;
-	int err;
-	unsigned swab;
-
-	inode = old_dentry->d_inode;
-	sb = inode->i_sb;
-	swab = sb->u.ufs_sb.s_swab;
-	
-	if (S_ISDIR(inode->i_mode))
-		return -EPERM;
-
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
-		return -EPERM;
-
-	if (inode->i_nlink >= UFS_LINK_MAX)
-		return -EMLINK;
-
-	bh = ufs_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
-	if (!bh)
-		return err;
-
-	de->d_ino = SWAB32(inode->i_ino);
-	dir->i_version = ++event;
-	mark_buffer_dirty(bh, 1);
-	if (IS_SYNC(dir)) {
-		ll_rw_block (WRITE, 1, &bh);
-		wait_on_buffer (bh);
-	}
-	brelse (bh);
-	inode->i_nlink++;
-	inode->i_ctime = CURRENT_TIME;
-	mark_inode_dirty(inode);
-	inode->i_count++;
-	d_instantiate(dentry, inode);
-	return 0;
-}
 
 /*
  * Create symbolic link. We use only slow symlinks at this time.
@@ -901,6 +865,49 @@ out_no_entry:
 	goto out;
 }
 
+int ufs_link (struct dentry * old_dentry, struct inode * dir,
+	struct dentry *dentry)
+{
+	struct super_block * sb;
+	struct inode *inode = old_dentry->d_inode;
+	struct ufs_dir_entry * de;
+	struct buffer_head * bh;
+	int err;
+	unsigned swab;
+
+	inode = old_dentry->d_inode;
+	sb = inode->i_sb;
+	swab = sb->u.ufs_sb.s_swab;
+	
+	if (S_ISDIR(inode->i_mode))
+		return -EPERM;
+
+	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
+		return -EPERM;
+
+	if (inode->i_nlink >= UFS_LINK_MAX)
+		return -EMLINK;
+
+	bh = ufs_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
+	if (!bh)
+		return err;
+
+	de->d_ino = SWAB32(inode->i_ino);
+	dir->i_version = ++event;
+	mark_buffer_dirty(bh, 1);
+	if (IS_SYNC(dir)) {
+		ll_rw_block (WRITE, 1, &bh);
+		wait_on_buffer (bh);
+	}
+	brelse (bh);
+	inode->i_nlink++;
+	inode->i_ctime = CURRENT_TIME;
+	mark_inode_dirty(inode);
+	inode->i_count++;
+	d_instantiate(dentry, inode);
+	return 0;
+}
+
 
 #define PARENT_INO(buffer) \
 	((struct ufs_dir_entry *) ((char *) buffer + \
@@ -939,27 +946,26 @@ static int do_ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 	if (old_dentry->d_name.len > UFS_MAXNAMLEN)
 		goto end_rename;
 
-	UFSD(("name %s, len %u\n", old_dentry->d_name.name, old_dentry->d_name.len)) 
 	old_bh = ufs_find_entry (old_dir, old_dentry->d_name.name, old_dentry->d_name.len, &old_de);
-	UFSD(("ino %u, reclen %u, namlen %u, name %s\n", SWAB32(old_de->d_ino),
-		SWAB16(old_de->d_reclen), ufs_get_de_namlen(old_de), old_de->d_name))
-
-	/* Arrrgh. See comments in ext2 */
+	/*
+	 *  Check for inode number is _not_ due to possible IO errors.
+	 *  We might rmdir the source, keep it as pwd of some process
+	 *  and merrily kill the link to whatever was created under the
+	 *  same name. Goodbye sticky bit ;-<
+	 */
 	retval = -ENOENT;
+	old_inode = old_dentry->d_inode;
 	if (!old_bh || SWAB32(old_de->d_ino) != old_inode->i_ino)
 		goto end_rename;
-	old_inode = old_dentry->d_inode;
 
 	new_inode = new_dentry->d_inode;
-	UFSD(("name %s, len %u\n", new_dentry->d_name.name, new_dentry->d_name.len)) 
 	new_bh = ufs_find_entry (new_dir, new_dentry->d_name.name, new_dentry->d_name.len, &new_de);
 	if (new_bh) {
 		if (!new_inode) {
 			brelse (new_bh);
 			new_bh = NULL;
 		} else {
-			if (new_inode->i_sb->dq_op)
-				new_inode->i_sb->dq_op->initialize (new_inode, -1);
+			DQUOT_INIT(new_inode);
 		}
 	}
 	retval = 0;
@@ -970,6 +976,7 @@ static int do_ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
 		if (new_inode) {
+			/* Prune any children before testing for busy */
 			if (new_dentry->d_count > 1)
 				shrink_dcache_parent(new_dentry);
 			retval = -EBUSY;

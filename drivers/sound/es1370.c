@@ -2321,13 +2321,13 @@ __initfunc(int init_es1370(void))
 		       (s->ctrl & CTRL_XCTL0) ? "out" : "in",
 		       (s->ctrl & CTRL_XCTL1) ? "1" : "0");
 		/* register devices */
-		if ((s->dev_audio = register_sound_dsp(&es1370_audio_fops)) < 0)
+		if ((s->dev_audio = register_sound_dsp(&es1370_audio_fops, -1)) < 0)
 			goto err_dev1;
-		if ((s->dev_mixer = register_sound_mixer(&es1370_mixer_fops)) < 0)
+		if ((s->dev_mixer = register_sound_mixer(&es1370_mixer_fops, -1)) < 0)
 			goto err_dev2;
-		if ((s->dev_dac = register_sound_dsp(&es1370_dac_fops)) < 0)
+		if ((s->dev_dac = register_sound_dsp(&es1370_dac_fops, -1)) < 0)
 			goto err_dev3;
-		if ((s->dev_midi = register_sound_midi(&es1370_midi_fops)) < 0)
+		if ((s->dev_midi = register_sound_midi(&es1370_midi_fops, -1)) < 0)
 			goto err_dev4;
 		/* initialize the chips */
 		outl(s->ctrl, s->io+ES1370_REG_CONTROL);

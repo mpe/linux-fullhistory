@@ -397,14 +397,18 @@ __initfunc(void mac_debug_init(void))
 	/* Mac modem port */
 	mac_init_scc_port( B9600|CS8, 0 );
 	mac_console_driver.write = mac_scca_console_write;
+#ifdef CONFIG_SERIAL_CONSOLE
 	mac_console_driver.wait_key = mac_scca_console_wait_key;
+#endif
 	scc_port = 0;
     }
     else if (!strcmp( m68k_debug_device, "ser2" )) {
 	/* Mac printer port */
 	mac_init_scc_port( B9600|CS8, 1 );
 	mac_console_driver.write = mac_sccb_console_write;
+#ifdef CONFIG_SERIAL_CONSOLE
 	mac_console_driver.wait_key = mac_sccb_console_wait_key;
+#endif
 	scc_port = 1;
     }
 #endif

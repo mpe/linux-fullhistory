@@ -2356,6 +2356,17 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 		char_time = 1;
 	if (timeout)
 	  char_time = MIN(char_time, timeout);
+	/*
+	 * If the transmitter hasn't cleared in twice the approximate
+	 * amount of time to send the entire FIFO, it probably won't
+	 * ever clear.  This assumes the UART isn't doing flow
+	 * control, which is currently the case.  Hence, if it ever
+	 * takes longer than info->timeout, this is probably due to a
+	 * UART bug of some kind.  So, we clamp the timeout parameter at
+	 * 2*info->timeout.
+	 */
+	if (!timeout || timeout > 2*info->timeout)
+		timeout = 2*info->timeout;
 #ifdef SERIAL_DEBUG_RS_WAIT_UNTIL_SENT
 	printk("In rs_wait_until_sent(%d) check=%lu...", timeout, char_time);
 	printk("jiff=%lu...", jiffies);

@@ -26,6 +26,9 @@
  * Scott Murray            Original driver (Jun 14, 1998)
  * Paul J.Y. Lahaie        Changed probing / attach code order
  * Scott Murray            Added mixer support (Dec 03, 1998)
+ * Scott Murray            Changed detection code to be more forgiving,
+ *                         added force option as last resort,
+ *                         fixed ioctl return values. (Dec 30, 1998)
  *
  */
 
@@ -50,6 +53,11 @@
 #define DEFAULT_MIC    50
 #define DEFAULT_TIMBRE 0
 
+/*
+ * NOTE: CHIPSET_UNKNOWN should match the default value of
+ *       CONFIG_OPL3SA2_CHIPSET in Config.in to make everything
+ *       work right in all situations.
+ */
 #define CHIPSET_UNKNOWN -1
 #define CHIPSET_OPL3SA2  1
 #define CHIPSET_OPL3SA3  2
@@ -59,7 +67,12 @@
 #ifdef CONFIG_OPL3SA2
 
 /* What's my version? */
-static int chipset_version = CHIPSET_UNKNOWN;
+#ifdef CONFIG_OPL3SA2_CHIPSET
+/* Set chipset if compiled into the kernel */
+static int chipset = CONFIG_OPL3SA2_CHIPSET;
+#else
+static int chipset = CHIPSET_UNKNOWN;
+#endif
 
 /* Oh well, let's just cache the name */
 static char chipset_name[16];
@@ -276,43 +289,47 @@ static int opl3sa2_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 					return call_ad_mixer(devc, cmd, arg);
 				else
 				{
-					if(*(int *)arg != 0)
+					if(*(int*)arg != 0)
 						return -EINVAL;
 					return 0;
 				}
 
 			case SOUND_MIXER_VOLUME:
-				arg_to_volume_stereo(*(unsigned int *)arg,
+				arg_to_volume_stereo(*(unsigned int*)arg,
 						     &devc->volume_l,
 						     &devc->volume_r); 
 				opl3sa2_set_volume(devc, devc->volume_l,
 						   devc->volume_r);
-				return ret_vol_stereo(devc->volume_l,
-						      devc->volume_r);
+				*(int*)arg = ret_vol_stereo(devc->volume_l,
+							     devc->volume_r);
+				return 0;
 		  
 			case SOUND_MIXER_MIC:
-				arg_to_volume_mono(*(unsigned int *)arg,
+				arg_to_volume_mono(*(unsigned int*)arg,
 						   &devc->mic);
 				opl3sa2_set_mic(devc, devc->mic);
-				return ret_vol_mono(devc->mic);
+				*(int*)arg = ret_vol_mono(devc->mic);
+				return 0;
 		  
 			case SOUND_MIXER_BASS:
-				if(chipset_version != CHIPSET_OPL3SA2)
+				if(chipset != CHIPSET_OPL3SA2)
 				{
-					arg_to_volume_mono(*(unsigned int *)arg,
+					arg_to_volume_mono(*(unsigned int*)arg,
 							   &devc->bass);
 					opl3sa3_set_bass(devc, devc->bass);
-					return ret_vol_mono(devc->bass);
+					*(int*)arg = ret_vol_mono(devc->bass);
+					return 0;
 				}
 				return -EINVAL;
 		  
 			case SOUND_MIXER_TREBLE:
-				if(chipset_version != CHIPSET_OPL3SA2)
+				if(chipset != CHIPSET_OPL3SA2)
 				{
 					arg_to_volume_mono(*(unsigned int *)arg,
 							   &devc->treble);
 					opl3sa3_set_treble(devc, devc->treble);
-					return ret_vol_mono(devc->treble);
+					*(int*)arg = ret_vol_mono(devc->treble);
+					return 0;
 				}
 				return -EINVAL;
 		  
@@ -331,55 +348,83 @@ static int opl3sa2_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				if(call_ad_mixer(devc, cmd, arg) == -EINVAL)
 					*(int*)arg = 0; /* no mixer devices */
 
-				if(chipset_version != CHIPSET_OPL3SA2)
-					return (*(int*)arg |= SOUND_MASK_VOLUME |
-						              SOUND_MASK_MIC |
-						              SOUND_MASK_BASS |
-						              SOUND_MASK_TREBLE);
+				*(int*)arg |= (SOUND_MASK_VOLUME | SOUND_MASK_MIC);
+
 				/* OPL3-SA2 has no bass and treble mixers */
-				return (*(int*)arg |= SOUND_MASK_VOLUME |
-					              SOUND_MASK_MIC);
+				if(chipset != CHIPSET_OPL3SA2)
+					*(int*)arg |= (SOUND_MASK_BASS |
+						       SOUND_MASK_TREBLE);
+				return 0;
 		  
 			case SOUND_MIXER_STEREODEVS:
 				if(call_ad_mixer(devc, cmd, arg) == -EINVAL)
 					*(int*)arg = 0; /* no stereo devices */
-				return (*(int*)arg |= SOUND_MASK_VOLUME);
+				*(int*)arg |= SOUND_MASK_VOLUME;
+				return 0;
 		  
 			case SOUND_MIXER_RECMASK:
 				if(devc->ad_mixer_dev != -1)
+				{
 					return call_ad_mixer(devc, cmd, arg);
+				}
 				else
-					return (*(int*)arg = 0); /* no record devices */
+				{
+					/* No recording devices */
+					return (*(int*)arg = 0);
+				}
 
 			case SOUND_MIXER_CAPS:
 				if(devc->ad_mixer_dev != -1)
+				{
 					return call_ad_mixer(devc, cmd, arg);
+				}
 				else
-					return (*(int*)arg = SOUND_CAP_EXCL_INPUT);
+				{
+					*(int*)arg = SOUND_CAP_EXCL_INPUT;
+					return 0;
+				}
 
 			case SOUND_MIXER_RECSRC:
 				if(devc->ad_mixer_dev != -1)
+				{
 					return call_ad_mixer(devc, cmd, arg);
+				}
 				else
-					return (*(int*)arg = 0); /* no record source */
+				{
+					/* No recording source */
+					return (*(int*)arg = 0);
+				}
 
 			case SOUND_MIXER_VOLUME:
-				return (*(int*)arg = ret_vol_stereo(devc->volume_l,
-								    devc->volume_r));
+				*(int*)arg = ret_vol_stereo(devc->volume_l,
+							    devc->volume_r);
+				return 0;
 			  
 			case SOUND_MIXER_MIC:
-				return (*(int*)arg = ret_vol_mono(devc->mic));
+				*(int*)arg = ret_vol_mono(devc->mic);
+				return 0;
 
 			case SOUND_MIXER_BASS:
-				if(chipset_version != CHIPSET_OPL3SA2)
-					return (*(int*)arg = ret_vol_mono(devc->bass));
-				return -EINVAL;
-
+				if(chipset != CHIPSET_OPL3SA2)
+				{
+					*(int*)arg = ret_vol_mono(devc->bass);
+					return 0;
+				}
+				else
+				{
+					return -EINVAL;
+				}
 			  
 			case SOUND_MIXER_TREBLE:
-				if(chipset_version != CHIPSET_OPL3SA2)
-					return (*(int*)arg = ret_vol_mono(devc->treble));
-				return -EINVAL;
+				if(chipset != CHIPSET_OPL3SA2)
+				{
+					*(int*)arg = ret_vol_mono(devc->treble);
+					return 0;
+				}
+				else
+				{
+					return -EINVAL;
+				}
 			  
 			default:
 				return -EINVAL;
@@ -481,6 +526,15 @@ static void unload_opl3sa2_mss(struct address_info *hw_config)
 
 int probe_opl3sa2(struct address_info *hw_config)
 {
+	unsigned char chipsets[8] = { CHIPSET_UNKNOWN, /* 0 */
+				      CHIPSET_OPL3SA2, /* 1 */
+				      CHIPSET_OPL3SA3, /* 2 */
+				      CHIPSET_UNKNOWN, /* 3 */
+				      CHIPSET_OPL3SAX, /* 4 */
+				      CHIPSET_OPL3SAX, /* 5 */
+				      CHIPSET_UNKNOWN, /* 6 */
+				      CHIPSET_OPL3SA3, /* 7 */ };
+	unsigned char version = 0;
 	char tag;
 
 	/*
@@ -489,20 +543,80 @@ int probe_opl3sa2(struct address_info *hw_config)
 	if(check_region(hw_config->io_base, 2))
 	{
 	    printk(KERN_ERR
-		   "opl3sa2.c: Control I/O port 0x%03x not free\n",
+		   "%s: Control I/O port 0x%03x not free\n",
+		   __FILE__,
 		   hw_config->io_base);
 	    return 0;
 	}
 
 	/*
-	 * Look at chipset version in lower 3 bits of index 0x0A, miscellaneous
+	 * Determine chipset type (SA2, SA3, or SAx)
+	 *
+	 * Have to handle two possible override situations:
+	 * 1) User compiled driver into the kernel and forced chipset type
+	 * 2) User built a module, but wants to override the chipset type
 	 */
-	chipset_version = 0;
-	opl3sa2_read(hw_config->io_base,
-		     OPL3SA2_MISC,
-		     (unsigned char*) &chipset_version);
-	chipset_version &= 0x0007;
-	switch(chipset_version)
+	if(chipset == CHIPSET_UNKNOWN)
+	{
+		if(hw_config->card_subtype == CHIPSET_UNKNOWN)
+		{
+			/*
+			 * Look at chipset version in lower 3 bits of index 0x0A, miscellaneous
+			 */
+			opl3sa2_read(hw_config->io_base,
+				     OPL3SA2_MISC,
+				     (unsigned char*) &version);
+			version &= 0x07;
+
+			/* Match version number to appropiate chipset */
+			chipset = chipsets[version];
+		}
+		else
+		{
+			/* Use user specified chipset */
+			switch(hw_config->card_subtype)
+			{
+				case 2:
+					chipset = CHIPSET_OPL3SA2;
+					break;
+
+				case 3:
+					chipset = CHIPSET_OPL3SA3;
+					break;
+
+				default:
+					printk(KERN_ERR "%s: Unknown chipset %d\n",
+					       __FILE__,
+					       hw_config->card_subtype);
+					chipset = CHIPSET_UNKNOWN;
+					break;
+			}
+		}
+	}
+	else
+	{
+		/* Use user compiled in chipset */
+		switch(chipset)
+		{
+			case 2:
+				chipset = CHIPSET_OPL3SA2;
+				break;
+				
+			case 3:
+				chipset = CHIPSET_OPL3SA3;
+				break;
+
+			default:
+				printk(KERN_ERR "%s: Unknown chipset %d\n",
+				       __FILE__,
+				       chipset);
+				chipset = CHIPSET_UNKNOWN;
+				break;
+		}
+	}
+
+	/* Do chipset specific stuff: */
+	switch(chipset)
 	{
 		case CHIPSET_OPL3SA2:
 			printk(KERN_INFO "Found OPL3-SA2 (YMF711)\n");
@@ -521,15 +635,23 @@ int probe_opl3sa2(struct address_info *hw_config)
 
 		default:
 			printk(KERN_ERR "No Yamaha audio controller found\n");
-			printk(KERN_INFO
-			       "opl3sa2.c: chipset version = %x\n",
-			       chipset_version);
-			chipset_version = CHIPSET_UNKNOWN;
+
+			/* If we've actually checked the version, print it out */
+			if(version)
+			{
+				printk(KERN_INFO
+				       "%s: chipset version = %x\n",
+				       __FILE__,
+				       version);
+			}
+			
+			/* Set some sane values */
+			chipset = CHIPSET_UNKNOWN;
 			tag = '?';
 			break;
 	}
 
-	if(chipset_version != CHIPSET_UNKNOWN) {
+	if(chipset != CHIPSET_UNKNOWN) {
 		/* Generate a pretty name */
 		sprintf(chipset_name, "OPL3-SA%c", tag);
 		return 1;
@@ -565,6 +687,7 @@ int mpu_io  = -1;
 int irq     = -1;
 int dma     = -1;
 int dma2    = -1;
+int force   = -1;
 
 MODULE_PARM(io, "i");
 MODULE_PARM_DESC(io, "Set i/o base of OPL3-SA2 or SA3 card (usually 0x370)");
@@ -581,8 +704,11 @@ MODULE_PARM_DESC(mss_irq, "Set MSS (audio) IRQ (5, 7, 9, 10, 11, 12)");
 MODULE_PARM(dma, "i");
 MODULE_PARM_DESC(dma, "Set MSS (audio) first DMA channel (0, 1, 3)");
 
-MODULE_PARM(dma2,"i");
+MODULE_PARM(dma2, "i");
 MODULE_PARM_DESC(dma2, "Set MSS (audio) second DMA channel (0, 1, 3)");
+
+MODULE_PARM(force, "i");
+MODULE_PARM_DESC(force, "Force audio controller chipset (2, 3)");
 
 MODULE_DESCRIPTION("Module for OPL3-SA2 and SA3 sound cards (uses AD1848 MSS driver).");
 MODULE_AUTHOR("Scott Murray <scottm@interlog.com>");
@@ -605,7 +731,8 @@ int init_module(void)
 
 	if(io == -1 || irq == -1 || dma == -1 || dma2 == -1 || mss_io == -1)
 	{
-		printk(KERN_ERR "opl3sa2.c: io, mss_io, irq, dma, and dma2 must be set.\n");
+		printk(KERN_ERR "%s: io, mss_io, irq, dma, and dma2 must be set.\n",
+		       __FILE__);
 		return -EINVAL;
 	}
    
@@ -614,6 +741,12 @@ int init_module(void)
 	cfg.irq     = irq;
 	cfg.dma     = dma;
 	cfg.dma2    = dma2;
+	
+	/* Does the user want to override the chipset type? */
+	if(force != -1)
+		cfg.card_subtype = force;
+	else
+		cfg.card_subtype = CHIPSET_UNKNOWN;
 
         /* The MSS config: */
 	mss_cfg.io_base      = mss_io;

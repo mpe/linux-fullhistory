@@ -15,8 +15,8 @@ choice 'Processor family' \
 	"386			CONFIG_M386	\
 	 486/Cx486		CONFIG_M486	\
 	 586/K5/5x86/6x86	CONFIG_M586	\
-	 Pentium/TSC		CONFIG_M586TSC	\
-	 PPro/K6/6x86MX		CONFIG_M686" PPro
+	 Pentium/K6/TSC		CONFIG_M586TSC	\
+	 PPro/6x86MX		CONFIG_M686" PPro
 #
 # Define implied options from the CPU selection here
 #

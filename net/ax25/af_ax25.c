@@ -1806,7 +1806,7 @@ __initfunc(void ax25_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_ax25_calls);
 #endif
 
-	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.37 for Linux NET3.038 (Linux 2.1)\n");
+	printk(KERN_INFO "NET4: G4KLX/GW4PTS AX.25 for Linux. Version 0.37 for Linux NET4.0\n");
 }
 
 #ifdef MODULE

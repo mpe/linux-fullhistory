@@ -15,6 +15,9 @@
 #define __FINIT		.previous
 #define __INITDATA	.section	".data.init",#alloc,#write
 
+#define __cacheline_aligned __attribute__ \
+			 ((__section__ (".data.cacheline_aligned")))
+
 #else
 
 /* gdb doesn't like it all if the code for one source file isn't together in
@@ -27,6 +30,7 @@
 #define __INIT
 #define __FINIT
 #define __INITDATA
+#define __cacheline_aligned
 
 #endif /* CONFIG_KGDB */
 	

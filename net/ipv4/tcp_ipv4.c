@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.163 1998/11/30 15:24:22 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.164 1999/01/04 20:36:55 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1642,14 +1642,15 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		skb->csum = csum_partial((char *)th, len, 0);
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
-			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
-			       "len=%d/%d/%d\n",
- 			       NIPQUAD(skb->nh.iph->saddr),
-			       ntohs(th->source), 
-			       NIPQUAD(skb->nh.iph->daddr),
-			       ntohs(th->dest),
-			       len, skb->len,
-			       ntohs(skb->nh.iph->tot_len));
+			NETDEBUG(printk(KERN_DEBUG "TCPv4 bad checksum "
+					"from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
+					"len=%d/%d/%d\n",
+					NIPQUAD(skb->nh.iph->saddr),
+					ntohs(th->source), 
+					NIPQUAD(skb->nh.iph->daddr),
+					ntohs(th->dest),
+					len, skb->len,
+					ntohs(skb->nh.iph->tot_len)));
 	bad_packet:		
 			tcp_statistics.TcpInErrs++;
 			goto discard_it;

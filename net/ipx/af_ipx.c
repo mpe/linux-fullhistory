@@ -2456,7 +2456,7 @@ void ipx_proto_init(struct net_proto *pro)
 	proc_net_register(&ipx_rt_procinfo);
 #endif
 
-	printk(KERN_INFO "Swansea University Computer Society IPX 0.38 for NET3.037\n");
+	printk(KERN_INFO "NET4: Linux IPX 0.38 for NET4.0\n");
 	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 

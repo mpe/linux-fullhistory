@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.71 1998/10/03 09:39:05 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.72 1998/11/21 06:50:00 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -1536,7 +1536,7 @@ __initfunc(void unix_proto_init(struct net_proto *pro))
 	struct sk_buff *dummy_skb;
 	struct proc_dir_entry *ent;
 	
-	printk(KERN_INFO "NET3: Unix domain sockets 0.16 for Linux NET3.038.\n");
+	printk(KERN_INFO "NET4: Unix domain sockets 1.0 for Linux NET4.0.\n");
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "unix_proto_init: panic\n");

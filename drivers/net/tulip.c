@@ -75,7 +75,6 @@ static int rx_copybreak = 100;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>

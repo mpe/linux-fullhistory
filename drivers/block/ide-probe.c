@@ -5,8 +5,10 @@
  */
 
 /*
- *  Maintained by Mark Lord  <mlord@pobox.com>
- *            and Gadi Oxman <gadio@netvision.net.il>
+ *  Mostly written by Mark Lord <mlord@pobox.com>
+ *                and Gadi Oxman <gadio@netvision.net.il>
+ *
+ *  See linux/MAINTAINERS for address of current maintainer.
  *
  * This is the IDE probe module, as evolved from hd.c and ide.c.
  *
@@ -587,7 +589,12 @@ static int init_irq (ide_hwif_t *hwif)
 		drive->next = hwgroup->drive->next;
 		hwgroup->drive->next = drive;
 	}
-	hwgroup->hwif = HWIF(hwgroup->drive);
+	if (!hwgroup->hwif) {
+		hwgroup->hwif = HWIF(hwgroup->drive);
+#ifdef DEBUG
+		printk("%s : Adding missed hwif to hwgroup!!\n", hwif->name);
+#endif
+	}
 	restore_flags(flags);	/* all CPUs; safe now that hwif->hwgroup is set up */
 
 #if !defined(__mc68000__) && !defined(CONFIG_APUS) && !defined(__sparc__)

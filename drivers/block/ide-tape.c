@@ -212,7 +212,7 @@
  *                        number of tape blocks.
  *                       Add support for INTERRUPT DRQ devices.
  * Ver 1.13  Jan  2 98   Add "speed == 0" work-around for HP COLORADO 5GB
- * Ver 1.14  Dec 30 99   Partial fixes for the Sony/AIWA tape drives.
+ * Ver 1.14  Dec 30 98   Partial fixes for the Sony/AIWA tape drives.
  *                       Replace cli()/sti() with hwgroup spinlocks.
  *
  * Here are some words from the first releases of hd.c, which are quoted

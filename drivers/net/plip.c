@@ -1227,7 +1227,6 @@ __initfunc(int
 plip_init(void))
 {
 	struct parport *pb = parport_enumerate();
-	int devices=0;
 	int i=0;
 
 	if (parport[0] == -2)
@@ -1238,7 +1237,7 @@ plip_init(void))
 		timid = 0;
 	}
 
-	/* When user feeds parameters, use them */
+	/* If the user feeds parameters, use them */
 	while (pb) {
 		if ((parport[0] == -1 && (!timid || !pb->devices)) || 
 		    plip_searchfor(parport, i)) {
@@ -1266,14 +1265,13 @@ plip_init(void))
 				kfree(dev_plip[i]->name);
 				kfree(dev_plip[i]);
 			} else {
-				devices++;
+				i++;
 			}
 		}
-		i++;
 		pb = pb->next;
   	}
 
-	if (devices == 0) {
+	if (i == 0) {
 		printk(KERN_INFO "plip: no devices registered\n");
 		return -EIO;
 	}

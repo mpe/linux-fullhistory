@@ -79,6 +79,7 @@ _exception(int signr, struct pt_regs *regs)
 		debugger(regs);
 #endif
 		print_backtrace((unsigned long *)regs->gpr[1]);
+		instruction_dump((unsigned long *)regs->nip);
 		panic("Exception in kernel pc %lx signal %d",regs->nip,signr);
 	}
 	force_sig(signr, current);
@@ -126,6 +127,7 @@ MachineCheckException(struct pt_regs *regs)
 		debugger(regs);
 #endif
 		print_backtrace((unsigned long *)regs->gpr[1]);
+		instruction_dump((unsigned long *)regs->nip);
 		panic("machine check");
 	}
 	_exception(SIGSEGV, regs);	
@@ -219,6 +221,7 @@ StackOverflow(struct pt_regs *regs)
 #endif
 	show_regs(regs);
 	print_backtrace((unsigned long *)regs->gpr[1]);
+	instruction_dump((unsigned long *)regs->nip);
 	panic("kernel stack overflow");
 }
 

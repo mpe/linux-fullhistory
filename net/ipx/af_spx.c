@@ -886,7 +886,7 @@ void spx_proto_init(void)
 
 	/* route socket(PF_IPX, SOCK_SEQPACKET) calls through spx_create() */
 
-	printk(KERN_INFO "Sequenced Packet eXchange (SPX) 0.02 for Linux NET3.037\n");
+	printk(KERN_INFO "NET4: Sequenced Packet eXchange (SPX) 0.02 for Linux NET4.0\n");
 	return;
 }
 

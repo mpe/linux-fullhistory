@@ -842,7 +842,7 @@ __initfunc(void br_init(void))
 {						  /* (4.8.1)	 */
 	int port_no;
 
-	printk(KERN_INFO "Ethernet Bridge 005 for NET3.037 (Linux 2.1)\n");
+	printk(KERN_INFO "NET4: Ethernet Bridge 005 for NET4.0\n");
 
 	/*
 	 * Form initial topology change time.

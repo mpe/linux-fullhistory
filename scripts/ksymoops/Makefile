@@ -1,5 +1,9 @@
 # Description file for ksymoops
 
+#	Thu Nov 26 16:37:46 EST 1998
+#	Version 0.6c
+#	Add -c option.
+
 #	Tue Nov  3 02:31:01 EST 1998
 #	Version 0.6
 #	Read lsmod (/proc/modules).
@@ -24,6 +28,7 @@ DEF_OBJECTS = \"/lib/modules/*r/\"	# default current modules
 DEF_KSYMS = \"/proc/ksyms\"		# default current ksyms
 DEF_LSMOD = \"/proc/modules\"		# default current lsmod
 DEF_MAP = \"/usr/src/linux/System.map\"	# default current map
+DEF_CODE_BYTES = 1			# default bytes per code unit
 
 # RedHat users might want defaults like these
 # DEF_MAP = \"/boot/System.map-*r\"
@@ -55,6 +60,8 @@ endif
 ifneq ($(strip $(DEF_MAP)),)
 	CFLAGS += -DDEF_MAP=$(strip $(DEF_MAP))
 endif
+
+CFLAGS += -DDEF_CODE_BYTES=$(strip $(DEF_CODE_BYTES))
 
 OBJECTS = io.o ksyms.o ksymoops.o map.o misc.o object.o oops.o re.o symbol.o
 

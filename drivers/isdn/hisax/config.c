@@ -97,8 +97,10 @@
 #ifdef CONFIG_HISAX_ELSA
 #define DEFAULT_CARD ISDN_CTYPE_ELSA
 #define DEFAULT_CFG {0,0,0,0}
+#ifdef MODULE
 int elsa_init_pcmcia(void*, int, int*, int);
 EXPORT_SYMBOL(elsa_init_pcmcia);
+#endif
 #endif
 #ifdef CONFIG_HISAX_AVM_A1
 #undef DEFAULT_CARD

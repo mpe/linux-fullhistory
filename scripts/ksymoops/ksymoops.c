@@ -8,9 +8,32 @@
 	Released under the GNU Public Licence, Version 2.
 */
 
-#define VERSION "0.6"
+#define VERSION "0.6e"
 
 /*
+
+	Tue Jan  5 19:26:02 EST 1999
+	Version 0.6e
+	Added to kernel.
+
+	Mon Jan  4 09:48:13 EST 1999
+	Version 0.6d
+	Add ARM support.
+
+	Thu Nov 26 16:37:46 EST 1998
+	Version 0.6c
+	Typo in oops_code.
+	Add -c option.
+	Add -1 option.
+	Report if options were specified or defaulted.
+
+	Fri Nov  6 10:38:42 EST 1998
+	Version 0.6b
+	Remove false warnings when comparing ksyms and lsmod.
+
+	Tue Nov  3 23:33:04 EST 1998
+	Version 0.6a
+	Performance inprovements.
 
 	Tue Nov  3 02:31:01 EST 1998
 	Version 0.6
@@ -68,6 +91,7 @@
 
 #include "ksymoops.h"
 #include <ctype.h>
+#include <errno.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,6 +145,8 @@ static void usage(void)
 		"\t\t[-s save.map]\tSave consolidated map\n"
 		"\t\t[-d]\t\tIncrease debug level by 1\n"
 		"\t\t[-h]\t\tPrint help text\n"
+		"\t\t[-c code_bytes]\tHow many bytes in each unit of code\n"
+		"\t\t[-1]\t\tOne shot toggle (exit after first Oops)\n"
 		"\t\t<Oops.file\tOops report to decode\n"
 		"\n"
 		"\t\tAll flags can occur more than once.  With the exception "
@@ -186,8 +212,10 @@ static void usage(void)
 		"-M"
 #endif
 		"\n"
+		"\t\t\t-c %d\n"	/* DEF_CODE_BYTES */
 		"\t\t\tOops report is read from stdin\n"
-		"\n"
+		"\n",
+	DEF_CODE_BYTES
 	       );
 }
 
@@ -290,6 +318,17 @@ static void convert_uname(char **name)
 	return;
 }
 
+/* Report if the option was specified or defaulted */
+static void spec_or_default(int spec, int *some_spec) {
+	if (spec) {
+		printf(" (specified)\n");
+		if (some_spec)
+			*some_spec = 1;
+	}
+	else
+		printf(" (default)\n");
+}
+
 /* Parse the options.  Verbose but what's new with getopt? */
 static void parse(int argc,
 		  char **argv,
@@ -302,7 +341,9 @@ static void parse(int argc,
 		  char **save_system_map,
 		  char ***filename,
 		  int *filecount,
-		  int *spec_h
+		  int *spec_h,
+		  int *code_bytes,
+		  int *one_shot
 		 )
 {
 	int spec_v = 0, spec_V = 0;
@@ -311,11 +352,12 @@ static void parse(int argc,
 	int spec_l = 0, spec_L = 0;
 	int spec_m = 0, spec_M = 0;
 	int spec_s = 0;
+	int spec_c = 0;
 
-	int c, i;
+	int c, i, some_spec = 0;
 	char *p;
 
-	while ((c = getopt(argc, argv, "v:Vo:Ok:Kl:Lm:Ms:dh")) != EOF) {
+	while ((c = getopt(argc, argv, "v:Vo:Ok:Kl:Lm:Ms:dhc:1")) != EOF) {
 		if (debug && c != 'd')
 			fprintf(stderr, "DEBUG: getopt '%c' '%s'\n", c, optarg);
 		switch(c) {
@@ -390,6 +432,30 @@ static void parse(int argc,
 			usage();
 			++*spec_h;
 			break;
+		case 'c':
+			++spec_c;
+			errno = 0;
+			*code_bytes = strtoul(optarg, &p, 10);
+			/* Oops_code_values assumes that code_bytes is a
+			 * multiple of 2.
+			 */
+			if (!*optarg || *p || errno ||
+				(*code_bytes != 1 &&
+				 *code_bytes != 2 &&
+				 *code_bytes != 4 &&
+				 *code_bytes != 8)) {
+				fprintf(stderr,
+					"%s Invalid value for -c '%s'\n",
+					prefix, optarg);
+				++errors;
+				if (errno)
+					perror(" ");
+				*code_bytes = DEF_CODE_BYTES;
+			}
+			break;
+		case '1':
+			*one_shot = !*one_shot;
+			break;
 		case '?':
 			usage();
 			exit(2);
@@ -421,25 +487,60 @@ static void parse(int argc,
 		printf(" -v %s", *vmlinux);
 	else
 		printf(" -V");
+	spec_or_default(spec_v || spec_V, &some_spec);
+	
+	printf("             ");
 	if (*objects) {
 		for (i = 0; i < *objects; ++i)
 			printf(" -o %s", (*object)[i]);
 	}
 	else
 		printf(" -O");
+	spec_or_default(spec_o || spec_O, &some_spec);
+
+	printf("             ");
 	if (*ksyms)
 		printf(" -k %s", *ksyms);
 	else
 		printf(" -K");
+	spec_or_default(spec_k || spec_K, &some_spec);
+
+	printf("             ");
 	if (*lsmod)
 		printf(" -l %s", *lsmod);
 	else
 		printf(" -L");
+	spec_or_default(spec_l || spec_L, &some_spec);
+
+	printf("             ");
 	if (*system_map)
 		printf(" -m %s", *system_map);
 	else
 		printf(" -M");
-	printf("\n\n");
+	spec_or_default(spec_m || spec_M, &some_spec);
+
+	printf("             ");
+	printf(" -c %d", *code_bytes);
+	spec_or_default(spec_c, NULL);
+
+	if (*one_shot) {
+		printf("             ");
+		printf(" -1");
+	}
+
+	printf("\n");
+
+	if (!some_spec) {
+		printf(
+"You did not tell me where to find symbol information.  I will assume\n"
+"that the log matches the kernel and modules that are running right now\n"
+"and I'll use the default options above for symbol resolution.\n"
+"If the current kernel and/or modules do not match the log, you can get\n"
+"more accurate output by telling me the kernel version and where to find\n"
+"map, modules, ksyms etc.  ksymoops -h explains the options.\n"
+			"\n");
+		++warnings;
+	}
 }
 
 /* Read environment variables */
@@ -474,7 +575,9 @@ int main(int argc, char **argv)
 	char **filename;
 	int filecount = 0;
 	int spec_h = 0;		/* -h was specified */
-	int i;
+	int code_bytes = DEF_CODE_BYTES;
+	int one_shot = 0;
+	int i, ret;
 
 	prefix = *argv;
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -515,11 +618,16 @@ int main(int argc, char **argv)
 	      &save_system_map,
 	      &filename,
 	      &filecount,
-	      &spec_h
+	      &spec_h,
+	      &code_bytes,
+	      &one_shot
 	     );
 
 	if (spec_h && filecount == 0)
 		return(0);	/* just the help text */
+
+	if (errors)
+		return(1);
 
 	if (debug)
 		fprintf(stderr, "DEBUG: level %d\n", debug);
@@ -550,7 +658,7 @@ int main(int argc, char **argv)
 	merge_maps(save_system_map);
 
 	/* After all that work, it is finally time to read the Oops report */
-	Oops_read(filecount, filename);
+	ret = Oops_read(filecount, filename, code_bytes, one_shot);
 
 	if (warnings || errors) {
 		printf("\n");
@@ -562,8 +670,9 @@ int main(int argc, char **argv)
 		if (errors)
 			printf("%d error%s ", errors, errors == 1 ? "" : "s");
 		printf("issued.  Results may not be reliable.\n");
-		return(1);
+		if (!ret)
+			return(1);
 	}
 
-	return(0);
+	return(ret);
 }

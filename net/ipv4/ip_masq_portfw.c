@@ -2,7 +2,7 @@
  *		IP_MASQ_PORTFW masquerading module
  *
  *
- *	$Id: ip_masq_portfw.c,v 1.2 1998/08/29 23:51:11 davem Exp $
+ *	$Id: ip_masq_portfw.c,v 1.3 1998/12/08 05:42:12 davem Exp $
  *
  * Author:	Steven Clarke <steven.clarke@monmouth.demon.co.uk>
  *
@@ -269,15 +269,18 @@ static __inline__ int portfw_ctl(int optname, struct ip_masq_ctl *mctl, int optl
 	IP_MASQ_DEBUG(1-debug, "ip_masq_portfw_ctl(cmd=%d)\n", cmd);
 
 
-        if (cmd != IP_MASQ_CMD_FLUSH) {
-		if (htons(mm->lport) < IP_PORTFW_PORT_MIN 
-				|| htons(mm->lport) > IP_PORTFW_PORT_MAX)
-			return EINVAL;
+	switch (cmd) {
+		case IP_MASQ_CMD_NONE:
+			return 0;
+		case IP_MASQ_CMD_FLUSH:
+			break;
+		default:
+			if (htons(mm->lport) < IP_PORTFW_PORT_MIN || htons(mm->lport) > IP_PORTFW_PORT_MAX)
+				return EINVAL;
 
-                if (mm->protocol!=IPPROTO_TCP && mm->protocol!=IPPROTO_UDP)
-                        return EINVAL;
-        }
-
+			if (mm->protocol!=IPPROTO_TCP && mm->protocol!=IPPROTO_UDP)
+				return EINVAL;
+	}
 
 	switch(cmd) {
 	case IP_MASQ_CMD_ADD:

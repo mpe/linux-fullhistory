@@ -203,6 +203,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
 
   dep_tristate 'Support for Yamaha OPL3-SA2, SA3, and SAx based PnP cards' CONFIG_SOUND_OPL3SA2 $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_OPL3SA2" = "y" ]; then
+      int 'Chipset (-1 for autoprobe, 2, or 3)' CONFIG_OPL3SA2_CHIPSET -1
       hex 'OPL3SA2 audio I/O base (530 - F48 valid)' CONFIG_OPL3SA2_BASE 530
       int 'OPL3SA2 audio IRQ 5, 7, 9, 11, 12 or 15' CONFIG_OPL3SA2_IRQ 9
       int 'OPL3SA2 audio DMA 0, 1 or 3' CONFIG_OPL3SA2_DMA 0

@@ -115,8 +115,8 @@
  * UP.
  *
  * For backchains and counters, we use an array, indexed by
- * [smp_processor_id()*2 + !in_interrupt()]; the array is of size
- * [smp_num_cpus*2].  For v2.0, smp_num_cpus is effectively 1.  So,
+ * [cpu_number_map[smp_processor_id()]*2 + !in_interrupt()]; the array is of 
+ * size [smp_num_cpus*2].  For v2.0, smp_num_cpus is effectively 1.  So,
  * confident of uniqueness, we modify counters even though we only
  * have a read lock (to read the counters, you need a write lock,
  * though).  */
@@ -140,7 +140,11 @@
 static struct sock *ipfwsk;
 #endif
 
-#define SLOT_NUMBER() (smp_processor_id()*2 + !in_interrupt())
+#ifdef __SMP__
+#define SLOT_NUMBER() (cpu_number_map[smp_processor_id()]*2 + !in_interrupt())
+#else
+#define SLOT_NUMBER() (!in_interrupt())
+#endif
 #define NUM_SLOTS (smp_num_cpus*2)
 
 #define SIZEOF_STRUCT_IP_CHAIN (sizeof(struct ip_chain) \

@@ -584,10 +584,8 @@ static char rcsid[] =
 #include <linux/pci.h>
 #include <linux/version.h>
 
-#ifdef CONFIG_PROC_FS
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
-#endif
 
 #define cy_put_user	put_user
 
@@ -781,9 +779,7 @@ static void cyz_poll(unsigned long);
 static void show_status(int);
 #endif
 
-#ifdef CONFIG_PROC_FS
 static int cyclades_get_proc_info(char *, char **, off_t , int , int *, void *);
-#endif
 
 /* The Cyclades-Z polling cycle is defined by this variable */
 static long cyz_polling_cycle = CZ_DEF_POLL;
@@ -4952,7 +4948,6 @@ show_version(void)
 	__DATE__, __TIME__);
 } /* show_version */
 
-#ifdef CONFIG_PROC_FS
 static int 
 cyclades_get_proc_info(char *buf, char **start, off_t offset, int length,
 		       int *eof, void *data)
@@ -5009,7 +5004,6 @@ done:
 	len = 0;
     return len;
 }
-#endif
 
 
 /* The serial driver boot-time initialization code!
@@ -5281,15 +5275,8 @@ cy_init(void))
 #endif
     }
 
-#ifdef CONFIG_PROC_FS
         ent = create_proc_entry("cyclades", S_IFREG | S_IRUGO, 0);
         ent->read_proc = cyclades_get_proc_info;
-#endif
-#if 0
-#ifdef CONFIG_PROC_FS
-    proc_register(&proc_root, &cyclades_proc_entry);
-#endif
-#endif
 
     return 0;
     

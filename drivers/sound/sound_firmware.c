@@ -58,4 +58,3 @@ int mod_firmware_load(const char *fn, char **fp)
 	return r;
 }
 
-EXPORT_SYMBOL(mod_firmware_load);

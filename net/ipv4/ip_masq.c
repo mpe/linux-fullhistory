@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.28 1998/11/21 00:33:30 davem Exp $
+ *	$Id: ip_masq.c,v 1.32 1999/01/04 20:37:05 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -44,6 +44,8 @@
  *	Juan Jose Ciarlante	: 	fixed stupid SMP locking bug
  *	Juan Jose Ciarlante	: 	fixed "tap"ing in demasq path by copy-on-w
  *	Juan Jose Ciarlante	: 	make masq_proto_doff() robust against fake sized/corrupted packets
+ *	Kai Bankett		:	do not toss other IP protos in proto_doff()
+ *	Dan Kegel		:	pointed correct NAT behavior for UDP streams
  *	
  */
 
@@ -391,6 +393,20 @@ EXPORT_SYMBOL(ip_masq_expire);
 struct ip_fw_masq *ip_masq_expire = &ip_masq_dummy;
 #endif
 
+/*
+ *	These flags enable non-strict d{addr,port} checks
+ *	Given that both (in/out) lookup tables are hashed
+ *	by m{addr,port} and s{addr,port} this is quite easy 
+ */
+
+#define MASQ_DADDR_PASS	(IP_MASQ_F_NO_DADDR|IP_MASQ_F_DLOOSE)
+#define MASQ_DPORT_PASS	(IP_MASQ_F_NO_DPORT|IP_MASQ_F_DLOOSE)
+
+/*
+ *	By default enable dest loose semantics
+ */
+#define CONFIG_IP_MASQ_LOOSE_DEFAULT 1
+
 
 /*
  * 	Set masq expiration (deletion) and adds timer,
@@ -522,12 +538,12 @@ static struct ip_masq * __ip_masq_in_get(int protocol, __u32 s_addr, __u16 s_por
 
         hash = ip_masq_hash_key(protocol, d_addr, d_port);
 
-
         for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
- 		if (protocol==ms->protocol &&
-		    ((s_addr==ms->daddr || ms->flags & IP_MASQ_F_NO_DADDR)) &&
-		    (s_port==ms->dport || ms->flags & IP_MASQ_F_NO_DPORT) &&
-		    (d_addr==ms->maddr && d_port==ms->mport)) {
+		if (protocol==ms->protocol && 
+		    (d_addr==ms->maddr && d_port==ms->mport) &&
+		    (s_addr==ms->daddr || ms->flags & MASQ_DADDR_PASS) &&
+		    (s_port==ms->dport || ms->flags & MASQ_DPORT_PASS)
+		    ) {
 			IP_MASQ_DEBUG(2, "look/in %d %08X:%04hX->%08X:%04hX OK\n",
 			       protocol,
 			       s_addr,
@@ -578,7 +594,9 @@ static struct ip_masq * __ip_masq_out_get(int protocol, __u32 s_addr, __u16 s_po
         for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
 		if (protocol == ms->protocol &&
 		    s_addr == ms->saddr && s_port == ms->sport &&
-                    d_addr == ms->daddr && d_port == ms->dport ) {
+		    (d_addr==ms->daddr || ms->flags & MASQ_DADDR_PASS) &&
+		    (d_port==ms->dport || ms->flags & MASQ_DPORT_PASS)
+                   ) {
 			IP_MASQ_DEBUG(2, "lk/out1 %d %08X:%04hX->%08X:%04hX OK\n",
 			       protocol,
 			       s_addr,
@@ -600,7 +618,9 @@ static struct ip_masq * __ip_masq_out_get(int protocol, __u32 s_addr, __u16 s_po
 		if (ms->flags & IP_MASQ_F_NO_SPORT &&
 		    protocol == ms->protocol &&
 		    s_addr == ms->saddr && 
-                    d_addr == ms->daddr && d_port == ms->dport ) {
+		    (d_addr==ms->daddr || ms->flags & MASQ_DADDR_PASS) &&
+		    (d_port==ms->dport || ms->flags & MASQ_DPORT_PASS)
+                    ) {
 			IP_MASQ_DEBUG(2, "lk/out2 %d %08X:%04hX->%08X:%04hX OK\n",
 			       protocol,
 			       s_addr,
@@ -623,7 +643,7 @@ out:
         return ms;
 }
 
-#ifdef CONFIG_IP_MASQUERADE_NREUSE
+#ifdef CONFIG_IP_MASQ_NREUSE
 /*
  *	Returns ip_masq for given proto,m_addr,m_port.
  *      called by allocation routine to find an unused m_port.
@@ -841,7 +861,15 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
 	atomic_set(&ms->refcnt,0);
 
         if (proto == IPPROTO_UDP && !mport)
+#ifdef CONFIG_IP_MASQ_LOOSE_DEFAULT
+		/*
+		 *	Flag this tunnel as "dest loose"
+		 *	
+		 */
+		ms->flags |= IP_MASQ_F_DLOOSE;
+#else
                 ms->flags |= IP_MASQ_F_NO_DADDR;
+#endif
 
         
         /* get masq address from rif */
@@ -916,7 +944,7 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
 		else
 			write_lock(&__ip_masq_lock);
 
-#ifdef CONFIG_IP_MASQUERADE_NREUSE
+#ifdef CONFIG_IP_MASQ_NREUSE
 		mst = __ip_masq_getbym(proto, maddr, mport);
 #else
 		mst = __ip_masq_in_get(proto, daddr, dport, maddr, mport);
@@ -966,6 +994,9 @@ mport_nono:
 
 /*
  *	Get transport protocol data offset, check against size
+ *	return:
+ *		0  if other IP proto
+ *		-1 if error
  */
 static __inline__ int proto_doff(unsigned proto, char *th, unsigned size)
 {
@@ -993,6 +1024,9 @@ static __inline__ int proto_doff(unsigned proto, char *th, unsigned size)
 			}
 
 			break;
+		default:
+			/* 	Other proto: nothing to say, by now :) */
+			ret = 0;
 	}
 	if (ret < 0)
 		IP_MASQ_DEBUG(0, "mess proto_doff for proto=%d, size =%d\n",
@@ -1024,11 +1058,16 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 	h.raw = (char*) iph + iph->ihl * 4;
 	size = ntohs(iph->tot_len) - (iph->ihl * 4);
 
+
 	doff = proto_doff(iph->protocol, h.raw, size);
-	if (doff < 0) {
-		IP_MASQ_DEBUG(0, "O-pkt invalid packet data size\n");
+	if (doff <= 0) {
+		/*	
+		 *	Output path: do not pass other IP protos nor
+		 *	invalid packets.
+		 */
 		return -1;
 	}
+
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
 		return(ip_fw_masq_icmp(skb_p, maddr));
@@ -1130,6 +1169,13 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 			
 			IP_MASQ_DEBUG(1, "ip_fw_masquerade(): filled sport=%d\n",
 			       ntohs(ms->sport));
+		}
+		if (ms->flags & IP_MASQ_F_DLOOSE) {
+			/*
+			 *	update dest loose values
+			 */
+			ms->dport = h.portp[1];
+			ms->daddr = iph->daddr;
 		}
         } else {
 		/*
@@ -1431,8 +1477,8 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	if (ip_compute_csum((unsigned char *) icmph, len))
 	{
 		/* Failed checksum! */
-		IP_MASQ_WARNING( "forward ICMP: failed checksum from %d.%d.%d.%d!\n",
-		       NIPQUAD(iph->saddr));
+		IP_MASQ_DEBUG(0, "forward ICMP: failed checksum from %d.%d.%d.%d!\n",
+			      NIPQUAD(iph->saddr));
 		return(-1);
 	}
 
@@ -1776,9 +1822,17 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 	size = ntohs(iph->tot_len) - (iph->ihl * 4);
 
 	doff = proto_doff(iph->protocol, h.raw, size);
-	if (doff < 0) {
-		IP_MASQ_DEBUG(0, "I-pkt invalid packet data size\n");
-		return -1;
+
+	switch (doff) {
+		case 0:
+			/*
+			 *	Input path: other IP protos Ok, will
+			 *	reach local sockets path.
+			 */
+			return 0;
+		case -1:
+			IP_MASQ_DEBUG(0, "I-pkt invalid packet data size\n");
+			return -1;
 	}
 
 	maddr = iph->daddr;
@@ -1870,10 +1924,18 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
                  */
                 ms->flags &= ~IP_MASQ_F_NO_REPLY;
                 
-                /*
-                 *	Set dport if not defined yet.
+		/*
+		 *	Set daddr,dport if not defined yet
+		 *	and tunnel is not setup as "dest loose"
                  */
 
+		if (ms->flags & IP_MASQ_F_DLOOSE) {
+			/*
+			 *	update dest loose values
+			 */
+			ms->dport = h.portp[0];
+			ms->daddr = iph->saddr;
+		} else {
                 if ( ms->flags & IP_MASQ_F_NO_DPORT ) { /*  && ms->protocol == IPPROTO_TCP ) { */
                         ms->flags &= ~IP_MASQ_F_NO_DPORT;
                         ms->dport = h.portp[0];
@@ -1890,6 +1952,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
                                ntohl(ms->daddr));
 
                 }
+		}
 		if ((skb=masq_skb_cow(skb_p, &iph, &h.raw)) == NULL) {
 			ip_masq_put(ms);
 			return -1;
@@ -2309,8 +2372,8 @@ __initfunc(int ip_masq_init(void))
 #ifdef CONFIG_IP_MASQUERADE_IPPORTFW
 	ip_portfw_init();
 #endif
-#ifdef CONFIG_IP_MASQUERADE_IPMARKFW
-	ip_markfw_init();
+#ifdef CONFIG_IP_MASQUERADE_MFW
+	ip_mfw_init();
 #endif
         ip_masq_app_init();
 

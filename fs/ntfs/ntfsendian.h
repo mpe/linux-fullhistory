@@ -71,7 +71,7 @@
 #define NTFS_PUTU64(p,v)     ((*(ntfs_u64*)(p))=CPU_TO_LE64(v))
  
  /* Macros reading signed integers */
-#define NTFS_GETS8(p)        ((*(ntfs_u8*)(p)))
+#define NTFS_GETS8(p)        ((*(ntfs_s8*)(p)))
 #define NTFS_GETS16(p)       ((ntfs_s16)LE16_TO_CPU(*(short*)(p)))
 #define NTFS_GETS24(p)       (NTFS_GETU24(p) < 0x800000 ? (int)NTFS_GETU24(p) : (int)(NTFS_GETU24(p) - 0x1000000))
 #define NTFS_GETS32(p)       ((ntfs_s32)LE32_TO_CPU(*(int*)(p)))

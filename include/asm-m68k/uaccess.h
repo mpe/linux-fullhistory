@@ -184,7 +184,7 @@ __generic_copy_from_user(void *to, const void *from, unsigned long n)
 	 "   .long 5b,9b\n"
 	 ".previous"
 	 : "=a"(to), "=a"(from), "=d"(n), "=&d"(tmp)
-	 : "r"(n & 3), "0"(to), "1"(from), "2"(n/4)
+	 : "d"(n & 3), "0"(to), "1"(from), "2"(n/4)
 	 : "d0", "memory");
     return n;
 }

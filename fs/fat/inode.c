@@ -243,16 +243,16 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 					ret = 0;
 			}
 		}
-                else if (!strcmp(this_char,"cvf_format")) {
-                        if (!value)
-                                return 0;
-                        strncpy(cvf_format,value,20);
-                }
-                else if (!strcmp(this_char,"cvf_options")) {
-                        if (!value)
-                                return 0;
-                        strncpy(cvf_options,value,100);
-                }
+		else if (!strcmp(this_char,"cvf_format")) {
+			if (!value)
+				return 0;
+			strncpy(cvf_format,value,20);
+		}
+		else if (!strcmp(this_char,"cvf_options")) {
+			if (!value)
+				return 0;
+			strncpy(cvf_options,value,100);
+		}
 
 		if (this_char != options) *(this_char-1) = ',';
 		if (value) *savep = save;
@@ -302,7 +302,7 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 
 	opts.isvfat = MSDOS_SB(sb)->options.isvfat;
 	if (!parse_options((char *) data, &fat, &blksize, &debug, &opts, 
-	                   cvf_format, cvf_options)
+			   cvf_format, cvf_options)
 	    || (blksize != 512 && blksize != 1024 && blksize != 2048))
 		goto out_fail;
 	/* N.B. we should parse directly into the sb structure */
@@ -364,8 +364,8 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		MSDOS_SB(sb)->root_cluster = CF_LE_L(b->root_cluster);
 		MSDOS_SB(sb)->fsinfo_offset =
 			CF_LE_W(b->info_sector) * logical_sector_size + 0x1e0;
-		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(MSDOS_SB(sb)->fsinfo_offset) > sb->s_blocksize) {
-			printk("fat_read_super: Bad fsinfo_offset 0x%x\n", MSDOS_SB(sb)->fsinfo_offset);
+		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(struct fat_boot_fsinfo) > sb->s_blocksize) {
+			printk("fat_read_super: Bad fsinfo_offset\n");
 			fat_brelse(sb, bh);
 			goto out_invalid;
 		}
@@ -524,10 +524,10 @@ int fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 	int free,nr;
 	struct statfs tmp;
        
-        if (MSDOS_SB(sb)->cvf_format &&
+	if (MSDOS_SB(sb)->cvf_format &&
 	    MSDOS_SB(sb)->cvf_format->cvf_statfs)
 		return MSDOS_SB(sb)->cvf_format->cvf_statfs(sb,buf,bufsiz);
-          
+	  
 	lock_fat(sb);
 	if (MSDOS_SB(sb)->free_clusters != -1)
 		free = MSDOS_SB(sb)->free_clusters;

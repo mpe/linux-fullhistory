@@ -5,8 +5,10 @@
  */
 
 /*
- *  Maintained by Mark Lord  <mlord@pobox.com>
- *            and Gadi Oxman <gadio@netvision.net.il>
+ *  Mostly written by Mark Lord  <mlord@pobox.com>
+ *                and Gadi Oxman <gadio@netvision.net.il>
+ *
+ *  See linux/MAINTAINERS for address of current maintainer.
  *
  * This is the multiple IDE interface driver, as evolved from hd.c.
  * It supports up to MAX_HWIFS IDE interfaces, on one or more IRQs (usually 14 & 15).

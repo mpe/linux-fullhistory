@@ -1,9 +1,5 @@
-ide.txt -- Information regarding the Enhanced IDE drive in Linux 2.1.68+
+ide.txt -- Information regarding the Enhanced IDE drive in Linux 2.1/2.2
 ===============================================================================
-Supported by:
-	Mark Lord    <mlord@pobox.com>		-- disks, interfaces, probing
-	Gadi Oxman   <gadio@netvision.net.il>	-- tapes, disks, whatever
-	Scott Snyder <snyder@fnald0.fnal.gov>	-- cdroms, ATAPI, audio
 
    +-----------------------------------------------------------------+
    |  The hdparm utility for controlling various IDE features is     |
@@ -12,7 +8,7 @@ Supported by:
 
 See description later on below for handling BIG IDE drives with >1024 cyls.
 
-Major features of the 2.1.xx IDE driver ("NEW!" marks changes since 2.0.xx):
+Major features of the 2.1/2.2 IDE driver ("NEW!" marks changes since 2.0.xx):
 
 NEW!	- support for IDE ATAPI *floppy* drives
 	- support for IDE ATAPI *tape* drives, courtesy of Gadi Oxman
@@ -69,9 +65,8 @@ NEW!	- generic PCI Bus-Master DMA support
 NEW!		- works with most Pentium PCI systems, chipsets, add-on cards
 NEW!		- works with regular DMA as well as Ultra DMA
 NEW!		- automatically probes for all PCI IDE interfaces
+NEW!	- generic support for using BIOS-configured Ultra-DMA (UDMA) transfers
 
-
-For work in progress, see the comments in ide.c, ide-cd.c, triton.c, ...
 
 ***  IMPORTANT NOTICES:  BUGGY IDE CHIPSETS CAN CORRUPT DATA!!
 ***  =================
@@ -98,24 +93,26 @@ For work in progress, see the comments in ide.c, ide-cd.c, triton.c, ...
 ***  Use of the "serialize" option is no longer necessary.
 
 This is the multiple IDE interface driver, as evolved from hd.c.
-It supports up to four IDE interfaces, on one or more IRQs (usually 14 & 15).
+It supports up to six IDE interfaces, on one or more IRQs (usually 14 & 15).
 There can be up to two drives per interface, as per the ATA-2 spec.
 
 Primary:    ide0, port 0x1f0; major=3;  hda is minor=0; hdb is minor=64
 Secondary:  ide1, port 0x170; major=22; hdc is minor=0; hdd is minor=64
 Tertiary:   ide2, port 0x1e8; major=33; hde is minor=0; hdf is minor=64
 Quaternary: ide3, port 0x168; major=34; hdg is minor=0; hdh is minor=64
+fifth..     ide4, usually PCI, probed
+sixth..     ide5, usually PCI, probed
 
-To access devices on the 2nd/3rd/4th interfaces, device entries must first be
+To access devices on interfaces > ide0, device entries must first be
 created in /dev for them.  To create such entries, simply run the included
 shell script:   /usr/src/linux/scripts/MAKEDEV.ide
 
-Apparently many releases of Slackware 2.2/2.3 have incorrect entries
+Apparently many older releases of Slackware had incorrect entries
 in /dev for hdc* and hdd* -- this can also be corrected by running MAKEDEV.ide
 
-ide.c automatically probes for the standard four IDE interfaces,
+ide.c automatically probes for most IDE interfaces (including all PCI ones),
 for the drives/geometries attached to those interfaces, and for the
-IRQ numbers being used by the interfaces (normally 14, 15, 11 and 10).
+IRQ numbers being used by the interfaces (normally 14, 15 for ide0/ide1).
 
 For special cases, interfaces may be specified using kernel "command line"
 options.  For example,
@@ -179,7 +176,7 @@ Many folks have had "trouble" with cdroms because of this requirement,
 so ide.c now probes for both units, though success is more likely
 when the drive is jumpered correctly.
 
-Courtesy of Scott Snyder, the driver supports ATAPI cdrom drives
+Courtesy of Scott Snyder and others, the driver supports ATAPI cdrom drives
 such as the NEC-260 and the new MITSUMI triple/quad speed drives.
 Such drives will be identified at boot time, just like a hard disk.
 
@@ -227,8 +224,8 @@ disabled by the BIOS.
 The kernel is able to execute binaries directly off of the cdrom,
 provided it is mounted with the default block size of 1024 (as above).
 
-Please pass on any feedback on the cdrom stuff to the author & maintainer,
-Scott Snyder (snyder@fnald0.fnal.gov).
+Please pass on any feedback on any of this stuff to the maintainer,
+whose address can be found in linux/MAINTAINERS.
 
 Note that if BOTH hd.c and ide.c are configured into the kernel,
 hd.c will normally be allowed to control the primary IDE interface.
@@ -256,8 +253,7 @@ driver using the "options=" keyword to insmod, while replacing any ',' with
 
 	insmod ide.o options="ide0=serialize ide2=0x1e8;0x3ee;11"
 
-mlord@pobox.com
-snyder@fnald0.fnal.gov
+
 ================================================================================
 
 Summary of ide driver parameters for kernel "command line":
@@ -307,6 +303,7 @@ Summary of ide driver parameters for kernel "command line":
 				except the cmd640.
  "idex=serialize"	: do not overlap operations on idex and ide(x^1)
  "idex=reset"		: reset interface after probe
+ "idex=dma"		: automatically configure/use DMA if possible.
 
  The following are valid ONLY on ide0,
  and the defaults for the base,ctl ports must not be altered.
@@ -318,6 +315,8 @@ Summary of ide driver parameters for kernel "command line":
  "ide0=qd6580"		: probe/support qd6580 interface
  "ide0=ali14xx"		: probe/support ali14xx chipsets (ALI M1439/M1445)
  "ide0=umc8672"		: probe/support umc8672 chipsets
+
+There may be more options than shown -- use the source, Luke!
 
 Everything else is rejected with a "BAD OPTION" message.
 
@@ -488,19 +487,19 @@ My recommendations to anyone who asks about NEW systems are:
 
         - buy a motherboard that uses the Intel Triton chipset -- very common.
         - use IDE for the first two drives, placing them on separate interfaces.
+		- very fast 7200rpm drives are now available
+		(though many problems have been reported with Seagate ones).
 	- place the IDE cdrom drive as slave on either interface.
         - if additional disks are to be connected, consider your needs:
                 - fileserver?  Buy a SC200 SCSI adaptor for the next few drives.
                 - personal system?  Use IDE for the next two drives.
                 - still not enough?  Keep adding SC200 SCSI cards as needed.
 
-Most manufacturers make both IDE and SCSI-2 versions of each of their drives.
-The IDE ones are usually faster and cheaper, due to the higher data transfer
-speed of PIO mode4 (ATA2), 16.6MBytes/sec versus 10Mbytes/sec for SCSI-2.
-
-In particular, I recommend Quantum FireBalls as cheap and exceptionally fast.
-The new WD1.6GB models are also cheap screamers.
-
-For really high end systems, go for fast/wide 7200rpm SCSI.  But it'll cost ya!
+Most manufacturers make both IDE and SCSI versions of each of their drives.
+The IDE ones are usually as fast and cheaper, due to lower command overhead
+and the higher data transfer speed of UDMA2.  But fast/ultrawide/superlative
+SCSI is still king of the heap, especially for servers, if you've got the bucks.
 
 mlord@pobox.com
+--
+For current maintainers of this stuff, see the linux/MAINTAINERS file.

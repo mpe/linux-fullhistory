@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.27 1998/08/26 12:03:39 davem Exp $
+ *	Version: $Id: igmp.c,v 1.28 1998/11/30 15:53:13 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -538,6 +538,7 @@ static struct in_device * ip_mc_find_dev(struct ip_mreqn *imr)
 /*
  *	Join a socket to a group
  */
+int sysctl_igmp_max_memberships = IP_MAX_MEMBERSHIPS;
 
 int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 {
@@ -578,7 +579,7 @@ int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 		count++;
 	}
 	err = -ENOBUFS;
-	if (iml == NULL || count >= IP_MAX_MEMBERSHIPS)
+	if (iml == NULL || count >= sysctl_igmp_max_memberships)
 		goto done;
 	memcpy(&iml->multi, imr, sizeof(*imr));
 	iml->next = sk->ip_mc_list;

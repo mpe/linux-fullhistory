@@ -449,6 +449,9 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	MOD_INC_USE_COUNT;
 	lock_super (sb);
 
+#ifndef CONFIG_UFS_FS_WRITE
+	sb->s_flags |= MS_RDONLY;
+#endif
 	/*
 	 * Set default mount options
 	 * Parse mount options
@@ -527,9 +530,6 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		goto failed;
 	}
 	
-	if (!(sb->s_flags & MS_RDONLY))
-		printk("!!! warning !!! write support of ufs is still in experimental state\n"); 
-
 again:	
 	set_blocksize (sb->s_dev, block_size);
 

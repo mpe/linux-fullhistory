@@ -1397,6 +1397,7 @@ static int process_unauthorized(int type, int pid)
 		case PROC_PID_STAT:
 		case PROC_PID_MAPS:
 		case PROC_PID_CMDLINE:
+		case PROC_PID_CPU:
 			return 0;	
 	}
 	if(capable(CAP_DAC_OVERRIDE) || current->fsuid == euid)

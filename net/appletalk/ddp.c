@@ -2154,7 +2154,7 @@ __initfunc(void atalk_proto_init(struct net_proto *pro))
 	atalk_register_sysctl();
 #endif /* CONFIG_SYSCTL */
 
-	printk(KERN_INFO "AppleTalk 0.18 for Linux NET3.037\n");
+	printk(KERN_INFO "NET4: AppleTalk 0.18 for Linux NET4.0\n");
 }
 
 #ifdef MODULE

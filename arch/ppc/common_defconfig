@@ -48,7 +48,7 @@ CONFIG_PROC_DEVICETREE=y
 # CONFIG_KGDB is not set
 # CONFIG_XMON is not set
 # CONFIG_TOTALMP is not set
-# CONFIG_BOOTX_TEXT is not set
+CONFIG_BOOTX_TEXT=y
 
 #
 # Plug and Play support
@@ -114,6 +114,10 @@ CONFIG_SKB_LARGE=y
 # CONFIG_NET_FASTROUTE is not set
 # CONFIG_NET_HW_FLOWCONTROL is not set
 # CONFIG_CPU_IS_SLOW is not set
+
+#
+# QoS and/or fair queueing
+#
 # CONFIG_NET_SCHED is not set
 
 #
@@ -133,6 +137,7 @@ CONFIG_BLK_DEV_SR_VENDOR=y
 # SCSI low-level drivers
 #
 # CONFIG_SCSI_7000FASST is not set
+# CONFIG_SCSI_ACARD is not set
 # CONFIG_SCSI_AHA152X is not set
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
@@ -140,14 +145,16 @@ CONFIG_BLK_DEV_SR_VENDOR=y
 # CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_AM53C974 is not set
+# CONFIG_SCSI_MEGARAID is not set
 # CONFIG_SCSI_BUSLOGIC is not set
 # CONFIG_SCSI_DTC3280 is not set
+# CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_EATA_DMA is not set
 # CONFIG_SCSI_EATA_PIO is not set
-# CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_FUTURE_DOMAIN is not set
 # CONFIG_SCSI_GDTH is not set
 # CONFIG_SCSI_GENERIC_NCR5380 is not set
+# CONFIG_SCSI_INITIO is not set
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_NCR53C7xx is not set
 CONFIG_SCSI_NCR53C8XX=y
@@ -171,7 +178,7 @@ CONFIG_SCSI_NCR53C8XX_IOMAPPED=y
 # CONFIG_SCSI_DEBUG is not set
 CONFIG_SCSI_MESH=y
 CONFIG_SCSI_MESH_SYNC_RATE=5
-CONFIG_SCSI_MAC53C94=m
+CONFIG_SCSI_MAC53C94=y
 
 #
 # Network device support
@@ -221,6 +228,7 @@ CONFIG_SLIP=m
 # CONFIG_TR is not set
 # CONFIG_SHAPER is not set
 # CONFIG_HOSTESS_SV11 is not set
+# CONFIG_COSA is not set
 
 #
 # Amateur Radio support
@@ -242,25 +250,29 @@ CONFIG_SLIP=m
 #
 CONFIG_DUMMY_CONSOLE=y
 CONFIG_FB_OF=y
-# CONFIG_FB_CONTROL is not set
-# CONFIG_FB_PLATINUM is not set
-# CONFIG_FB_VALKYRIE is not set
-CONFIG_FB_ATY=y
+CONFIG_FB_CONTROL=y
+CONFIG_FB_PLATINUM=y
+CONFIG_FB_VALKYRIE=y
+# CONFIG_FB_ATY is not set
 CONFIG_FB_IMSTT=y
-# CONFIG_FB_CT65550 is not set
+CONFIG_FB_CT65550=y
 # CONFIG_FB_S3TRIO is not set
 # CONFIG_FB_MATROX is not set
-CONFIG_FB_ATY=y
+# CONFIG_FB_ATY is not set
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_FBCON_ADVANCED is not set
 CONFIG_FBCON_CFB8=y
 CONFIG_FBCON_CFB16=y
-CONFIG_FBCON_CFB24=y
 CONFIG_FBCON_CFB32=y
 # CONFIG_FBCON_FONTWIDTH8_ONLY is not set
-# CONFIG_FBCON_FONTS is not set
+CONFIG_FBCON_FONTS=y
 CONFIG_FONT_8x8=y
 CONFIG_FONT_8x16=y
+# CONFIG_FONT_SUN8x16 is not set
+CONFIG_FONT_SUN12x22=y
+# CONFIG_FONT_6x11 is not set
+# CONFIG_FONT_PEARL_8x8 is not set
+# CONFIG_FONT_ACORN_8x8 is not set
 
 #
 # Character devices
@@ -272,6 +284,10 @@ CONFIG_SERIAL=m
 # CONFIG_SERIAL_NONSTANDARD is not set
 # CONFIG_UNIX98_PTYS is not set
 CONFIG_MOUSE=y
+
+#
+# Mice
+#
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_BUSMOUSE is not set
 # CONFIG_MS_BUSMOUSE is not set
@@ -280,9 +296,17 @@ CONFIG_PSMOUSE=y
 # CONFIG_PC110_PAD is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_WATCHDOG is not set
-# CONFIG_RTC is not set
-# CONFIG_VIDEO_DEV is not set
 # CONFIG_NVRAM is not set
+# CONFIG_RTC is not set
+
+#
+# Video For Linux
+#
+# CONFIG_VIDEO_DEV is not set
+
+#
+# Joystick support
+#
 # CONFIG_JOYSTICK is not set
 
 #
@@ -294,37 +318,46 @@ CONFIG_PSMOUSE=y
 # Filesystems
 #
 # CONFIG_QUOTA is not set
-# CONFIG_MINIX_FS is not set
-CONFIG_EXT2_FS=y
-CONFIG_ISO9660_FS=y
-# CONFIG_JOLIET is not set
+# CONFIG_AUTOFS_FS is not set
+# CONFIG_ADFS_FS is not set
+# CONFIG_AFFS_FS is not set
+CONFIG_HFS_FS=y
 CONFIG_FAT_FS=m
 CONFIG_MSDOS_FS=m
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
+CONFIG_ISO9660_FS=y
+# CONFIG_JOLIET is not set
+# CONFIG_MINIX_FS is not set
+# CONFIG_NTFS_FS is not set
+# CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_QNX4FS_FS is not set
+# CONFIG_ROMFS_FS is not set
+CONFIG_EXT2_FS=y
+# CONFIG_SYSV_FS is not set
+# CONFIG_UFS_FS is not set
+
+#
+# Network File Systems
+#
+# CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
 CONFIG_NFSD=m
 # CONFIG_NFSD_SUN is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
-# CONFIG_CODA_FS is not set
 # CONFIG_SMB_FS is not set
 # CONFIG_NCP_FS is not set
-# CONFIG_HPFS_FS is not set
-# CONFIG_NTFS_FS is not set
-# CONFIG_SYSV_FS is not set
-# CONFIG_AFFS_FS is not set
-CONFIG_HFS_FS=y
-# CONFIG_ROMFS_FS is not set
-# CONFIG_AUTOFS_FS is not set
-# CONFIG_UFS_FS is not set
+
+#
+# Partition Types
+#
 # CONFIG_BSD_DISKLABEL is not set
+CONFIG_MAC_PARTITION=y
 # CONFIG_SMD_DISKLABEL is not set
 # CONFIG_SOLARIS_X86_PARTITION is not set
-# CONFIG_ADFS_FS is not set
-# CONFIG_QNX4FS_FS is not set
-CONFIG_MAC_PARTITION=y
+# CONFIG_UNIXWARE_DISKLABEL is not set
 CONFIG_NLS=y
 
 #
@@ -355,6 +388,7 @@ CONFIG_NLS=y
 # CONFIG_NLS_ISO8859_7 is not set
 # CONFIG_NLS_ISO8859_8 is not set
 # CONFIG_NLS_ISO8859_9 is not set
+# CONFIG_NLS_ISO8859_15 is not set
 # CONFIG_NLS_KOI8_R is not set
 
 #
@@ -383,6 +417,7 @@ CONFIG_SOUND_OSS=y
 # CONFIG_SOUND_OPL3SA2 is not set
 # CONFIG_SOUND_MAUI is not set
 # CONFIG_SOUND_SGALAXY is not set
+# CONFIG_SOUND_AD1816 is not set
 # CONFIG_SOUND_OPL3SA1 is not set
 # CONFIG_SOUND_SOFTOSS is not set
 # CONFIG_SOUND_YM3812 is not set

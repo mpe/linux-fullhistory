@@ -2752,6 +2752,7 @@ __initfunc(void atyfb_init(void))
 		addr = pdev->base_address[1];
 	    if (!addr)
 		continue;
+	    addr &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc__
 	    /*

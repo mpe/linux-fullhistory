@@ -1052,10 +1052,10 @@ static void smp_tune_scheduling (void)
 	 *  the cache size)
 	 */
 
-	if (boot_cpu_data.x86 <= 4) {
+	if (!cpu_hz) {
 		/*
 		 * this basically disables processor-affinity
-		 * scheduling on <=i486 based SMP boards.
+		 * scheduling on SMP without a TSC.
 		 */
 		cacheflush_time = 0;
 		return;

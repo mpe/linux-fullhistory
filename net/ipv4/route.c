@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.58 1998/10/03 09:37:50 davem Exp $
+ * Version:	$Id: route.c,v 1.60 1999/01/04 20:14:52 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -949,10 +949,6 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 
 	if (BADCLASS(daddr) || ZERONET(daddr) || LOOPBACK(daddr))
 		goto martian_destination;
-
-	/* Accept anything arriving at 0.0.0.0 */
-	if (in_dev->ifa_list && in_dev->ifa_list->ifa_local == 0)
-		goto local_input;
 
 	/*
 	 *	Now we are ready to route packet.

@@ -68,7 +68,6 @@ struct fb_info_offb {
 
 static int ofonly = 0;
 
-
     /*
      *  Interface used by the world
      */
@@ -251,8 +250,10 @@ static int offb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
-	fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-		     cmap, kspc ? 0 : 2);
+    {
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+	fb_copy_cmap(fb_default_cmap(size), cmap, kspc ? 0 : 2);
+    }
     return 0;
 }
 
@@ -270,8 +271,8 @@ static int offb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	return -ENOSYS;
 
     if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
-	if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-				 1<<fb_display[con].var.bits_per_pixel, 0)))
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+	if ((err = fb_alloc_cmap(&fb_display[con].cmap, size, 0)))
 	    return err;
     }
     if (con == currcon)			/* current console? */
@@ -522,18 +523,20 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
     fix->type = FB_TYPE_PACKED_PIXELS;
     fix->type_aux = 0;
 
-	/* XXX kludge for ati */
-    if (strncmp(name, "ATY,", 4) == 0) {
-	unsigned long base = address & 0xff000000UL;
-	info->cmap_adr = ioremap(base + 0x7ff000, 0x1000) + 0xcc0;
-	info->cmap_data = info->cmap_adr + 1;
-    }
-
     if (depth == 8)
-	fix->visual = info->cmap_adr ? FB_VISUAL_PSEUDOCOLOR
+    {
+    	/* XXX kludge for ati */
+    	if (strncmp(name, "ATY,", 4) == 0) {
+		unsigned long base = address & 0xff000000UL;
+		info->cmap_adr = ioremap(base + 0x7ff000, 0x1000) + 0xcc0;
+		info->cmap_data = info->cmap_adr + 1;
+	}
+        fix->visual = info->cmap_adr ? FB_VISUAL_PSEUDOCOLOR
 				     : FB_VISUAL_STATIC_PSEUDOCOLOR;
+    }
     else
-	fix->visual = FB_VISUAL_TRUECOLOR;
+	fix->visual = /*info->cmap_adr ? FB_VISUAL_DIRECTCOLOR
+				     : */FB_VISUAL_TRUECOLOR;
 
     var->xoffset = var->yoffset = 0;
     var->bits_per_pixel = depth;
@@ -611,10 +614,14 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
             disp->dispsw = &fbcon_cfb16;
             disp->dispsw_data = info->fbcon_cmap.cfb16;
             for (i = 0; i < 16; i++)
-		info->fbcon_cmap.cfb16[i] =
-		    (((default_blu[i] >> 3) & 0x1f) << 10) |
-		    (((default_grn[i] >> 3) & 0x1f) << 5) |
-		    ((default_red[i] >> 3) & 0x1f);
+            	if (fix->visual == FB_VISUAL_TRUECOLOR)
+		    info->fbcon_cmap.cfb16[i] =
+			    (((default_blu[i] >> 3) & 0x1f) << 10) |
+			    (((default_grn[i] >> 3) & 0x1f) << 5) |
+			    ((default_red[i] >> 3) & 0x1f);
+		else
+		    info->fbcon_cmap.cfb16[i] =
+			    (i << 10) | (i << 5) | i;
             break;
 #endif
 #ifdef FBCON_HAS_CFB32
@@ -622,9 +629,14 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
             disp->dispsw = &fbcon_cfb32;
             disp->dispsw_data = info->fbcon_cmap.cfb32;
             for (i = 0; i < 16; i++)
-		info->fbcon_cmap.cfb32[i] = (default_blu[i] << 16) |
-					    (default_grn[i] << 8) |
-					    default_red[i];
+            	if (fix->visual == FB_VISUAL_TRUECOLOR)
+		    info->fbcon_cmap.cfb32[i] =
+			(default_blu[i] << 16) |
+			(default_grn[i] << 8) |
+			default_red[i];
+		else
+		    info->fbcon_cmap.cfb32[i] =
+			    (i << 16) | (i << 8) | i;
             break;
 #endif
         default:
@@ -791,7 +803,7 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     info2->palette[regno].green = green;
     info2->palette[regno].blue = blue;
 
-    *info2->cmap_adr = regno;
+    *info2->cmap_adr = regno;/* On some chipsets, add << 3 in 15 bits */
     mach_eieio();
     *info2->cmap_data = red;
     mach_eieio();
@@ -804,8 +816,7 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	switch (info2->var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB16
 	    case 16:
-		info2->fbcon_cmap.cfb16[regno] = (regno << 10) | (regno << 5) |
-						 regno;
+		info2->fbcon_cmap.cfb16[regno] = (regno << 10) | (regno << 5) | regno;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB32
@@ -827,8 +838,10 @@ static void do_install_cmap(int con, struct fb_info *info)
     if (fb_display[con].cmap.len)
 	fb_set_cmap(&fb_display[con].cmap, 1, offb_setcolreg, info);
     else
-	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-				    1, offb_setcolreg, info);
+    {
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+	fb_set_cmap(fb_default_cmap(size), 1, offb_setcolreg, info);
+    }
 }
 
 

@@ -44,6 +44,9 @@ extern char modprobe_path[];
 #ifdef CONFIG_CHR_DEV_SG
 extern int sg_big_buff;
 #endif
+#ifdef CONFIG_SYSVIPC
+extern int shmmax;
+#endif
 
 #ifdef __sparc__
 extern char reboot_command [];
@@ -205,6 +208,10 @@ static ctl_table kern_table[] = {
 	 0444, NULL, &proc_dointvec},
 	{KERN_RTSIGMAX, "rtsig-max", &max_queued_signals, sizeof(int),
 	 0644, NULL, &proc_dointvec},
+#ifdef CONFIG_SYSVIPC
+	{KERN_SHMMAX, "shmmax", &shmmax, sizeof (int),
+	 0644, NULL, &proc_dointvec},
+#endif
 	{0}
 };
 

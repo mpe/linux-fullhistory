@@ -161,8 +161,10 @@ send:
  * In particular, if p1 and p2 both want the kernel
  * lock, there is no point in trying to make them
  * extremely parallel..
+ *
+ * (No lock - lock_depth < 0)
  */
-#define related(p1,p2) ((p1)->lock_depth && (p2)->lock_depth)
+#define related(p1,p2) ((p1)->lock_depth >= 0 && (p2)->lock_depth >= 0)
 
 static inline void reschedule_idle(struct task_struct * p)
 {
@@ -854,56 +856,64 @@ void __up(struct semaphore *sem)
  * Either form may be used in conjunction with "up()".
  *
  */
-static inline int __do_down(struct semaphore * sem, int task_state)
-{
-	struct task_struct *tsk = current;
+
+#define DOWN_VAR				\
+	struct task_struct *tsk = current;	\
 	struct wait_queue wait = { tsk, NULL };
-	int		  ret = 0;
 
-	tsk->state = task_state;
-	add_wait_queue(&sem->wait, &wait);
-
-	/*
-	 * Ok, we're set up.  sem->count is known to be less than zero
-	 * so we must wait.
-	 *
-	 * We can let go the lock for purposes of waiting.
-	 * We re-acquire it after awaking so as to protect
-	 * all semaphore operations.
-	 *
-	 * If "up()" is called before we call waking_non_zero() then
-	 * we will catch it right away.  If it is called later then
-	 * we will have to go through a wakeup cycle to catch it.
-	 *
-	 * Multiple waiters contend for the semaphore lock to see
-	 * who gets to gate through and who has to wait some more.
-	 */
-	for (;;) {
-		if (waking_non_zero(sem))	/* are we waking up?  */
+#define DOWN_HEAD(task_state)						 \
+									 \
+									 \
+	tsk->state = (task_state);					 \
+	add_wait_queue(&sem->wait, &wait);				 \
+									 \
+	/*								 \
+	 * Ok, we're set up.  sem->count is known to be less than zero	 \
+	 * so we must wait.						 \
+	 *								 \
+	 * We can let go the lock for purposes of waiting.		 \
+	 * We re-acquire it after awaking so as to protect		 \
+	 * all semaphore operations.					 \
+	 *								 \
+	 * If "up()" is called before we call waking_non_zero() then	 \
+	 * we will catch it right away.  If it is called later then	 \
+	 * we will have to go through a wakeup cycle to catch it.	 \
+	 *								 \
+	 * Multiple waiters contend for the semaphore lock to see	 \
+	 * who gets to gate through and who has to wait some more.	 \
+	 */								 \
+	for (;;) {							 \
+		if (waking_non_zero(sem))	/* are we waking up?  */ \
 			break;			/* yes, exit loop */
 
-		if (task_state == TASK_INTERRUPTIBLE && signal_pending(tsk)) {
-			ret = -EINTR;			/* interrupted */
-			atomic_inc(&sem->count);	/* give up on down operation */
-			break;
-		}
-
-		schedule();
-		tsk->state = task_state;
-	}
-	tsk->state = TASK_RUNNING;
+#define DOWN_TAIL(task_state)			\
+		tsk->state = (task_state);	\
+	}					\
+	tsk->state = TASK_RUNNING;		\
 	remove_wait_queue(&sem->wait, &wait);
-	return ret;
-}
 
 void __down(struct semaphore * sem)
 {
-	__do_down(sem,TASK_UNINTERRUPTIBLE);
+	DOWN_VAR
+	DOWN_HEAD(TASK_UNINTERRUPTIBLE)
+	schedule();
+	DOWN_TAIL(TASK_UNINTERRUPTIBLE)
 }
 
 int __down_interruptible(struct semaphore * sem)
 {
-	return __do_down(sem,TASK_INTERRUPTIBLE);
+	DOWN_VAR
+	int ret = 0;
+	DOWN_HEAD(TASK_INTERRUPTIBLE)
+	if (signal_pending(tsk))
+	{
+		ret = -EINTR;			/* interrupted */
+		atomic_inc(&sem->count);	/* give up on down operation */
+		break;
+	}
+	schedule();
+	DOWN_TAIL(TASK_INTERRUPTIBLE)
+	return ret;
 }
 
 #define	SLEEP_ON_VAR				\
@@ -954,6 +964,19 @@ void sleep_on(struct wait_queue **p)
 	SLEEP_ON_HEAD
 	schedule();
 	SLEEP_ON_TAIL
+}
+
+long sleep_on_timeout(struct wait_queue **p, long timeout)
+{
+	SLEEP_ON_VAR
+	
+	current->state = TASK_UNINTERRUPTIBLE;
+
+	SLEEP_ON_HEAD
+	timeout = schedule_timeout(timeout);
+	SLEEP_ON_TAIL
+
+	return timeout;
 }
 
 void scheduling_functions_end_here(void) { }

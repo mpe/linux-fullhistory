@@ -166,12 +166,7 @@ static inline int is_page_shared(struct page *page)
 		return 1;
 	count = atomic_read(&page->count);
 	if (PageSwapCache(page))
-	{
-		/* PARANOID */
-		if (page->inode != &swapper_inode)
-			panic("swap cache page has wrong inode\n");
 		count += swap_count(page->offset) - 2;
-	}
 	if (PageFreeAfter(page))
 		count--;
 	return  count > 1;

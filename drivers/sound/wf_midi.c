@@ -40,7 +40,7 @@
 
 /*
  * Copyright (C) by Paul Barton-Davis 1998
- * Substantial portions of this file are derived from work that is:
+ * Some portions of this file are derived from work that is:
  *
  *    Copyright (C) by Hannu Savolainen 1993-1996
  *
@@ -50,17 +50,22 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include "sound_config.h"
 #include "soundmodule.h"
 
 #include <linux/wavefront.h>
 
-#if (defined(CONFIG_WAVEFRONT) && defined(CONFIG_MIDI)) || defined(MODULE)
+#if defined(CONFIG_SOUND_WAVEFRONT_MODULE) && defined(MODULE)
 
 struct wf_mpu_config {
-	int             base;	/* I/O base */
+	int             base;
+#define	DATAPORT(d)   (d)->base
+#define	COMDPORT(d)   (d)->base+1
+#define	STATPORT(d)   (d)->base+1
+
 	int             irq;
-	int             opened;	/* Open mode */
+	int             opened;
 	int             devno;
 	int             synthno;
 	int             mode;
@@ -68,69 +73,54 @@ struct wf_mpu_config {
 #define MODE_SYNTH	2
 
 	void            (*inputintr) (int dev, unsigned char data);
-    
-	/* Virtual MIDI support */
-    
-	char configured_for_virtual;   /* setup for virtual completed */
 	char isvirtual;                /* do virtual I/O stuff */
-	char isexternal;               /* i am an external interface */
-	int internal;                  /* external interface midi_devno */
-	int external;                  /* external interface midi_devno */
 };
 
-#define	DATAPORT(base)   (base)
-#define	COMDPORT(base)   (base+1)
-#define	STATPORT(base)   (base+1)
+static struct wf_mpu_config  devs[2];
+static struct wf_mpu_config *phys_dev = &devs[0];
+static struct wf_mpu_config *virt_dev = &devs[1];
 
-static void     start_uart_mode (struct wf_mpu_config *devc);
-
-static int 
-wf_mpu_status (struct wf_mpu_config *devc)
-{
-	return inb (STATPORT (devc->base));
-}
-
-static void 
-wf_mpu_cmd (struct wf_mpu_config *devc, unsigned char cmd)
-{
-	outb ((cmd), COMDPORT(devc->base));
-}
-
-#define input_avail(devc)		(!(wf_mpu_status(devc)&INPUT_AVAIL))
-#define output_ready(devc)		(!(wf_mpu_status(devc)&OUTPUT_READY))
-
-static int 
-read_data (struct wf_mpu_config *devc)
-{
-	return inb (DATAPORT (devc->base));
-}
-
-static void 
-write_data (struct wf_mpu_config *devc, unsigned char byte)
-{
-	outb (byte, DATAPORT (devc->base));
-}
+static void start_uart_mode (void);
 
 #define	OUTPUT_READY	0x40
 #define	INPUT_AVAIL	0x80
 #define	MPU_ACK		0xFE
-#define	MPU_RESET	0xFF
 #define	UART_MODE_ON	0x3F
 
-static struct wf_mpu_config dev_conf[MAX_MIDI_DEV] =
+static inline int 
+wf_mpu_status (void)
+
 {
-	{0}
-};
+	return inb (STATPORT (phys_dev));
+}
 
-static volatile int irq2dev[17] =
-{-1, -1, -1, -1, -1, -1, -1, -1,
- -1, -1, -1, -1, -1, -1, -1, -1, -1};
+static inline int 
+input_avail (void)
 
-static struct synth_info wf_mpu_synth_info_proto =
-{"WaveFront MPU-401 interface", 0,
- SYNTH_TYPE_MIDI, MIDI_TYPE_MPU401, 0, 128, 0, 128, SYNTH_CAP_INPUT};
+{
+	return !(wf_mpu_status() & INPUT_AVAIL);
+}
 
-static struct synth_info wf_mpu_synth_info[MAX_MIDI_DEV];
+static inline int
+output_ready (void)
+
+{
+	return !(wf_mpu_status() & OUTPUT_READY);
+}
+
+static inline int 
+read_data (void)
+
+{
+	return inb (DATAPORT (phys_dev));
+}
+
+static inline void 
+write_data (unsigned char byte)
+
+{
+	outb (byte, DATAPORT (phys_dev));
+}
 
 /*
  * States for the input scanner (should be in dev_table.h)
@@ -162,11 +152,10 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
 };
 
 static int
-wf_mpu_input_scanner (struct wf_mpu_config *devc, unsigned char midic)
-{
-	struct midi_input_info *mi;
+wf_mpu_input_scanner (int devno, int synthdev, unsigned char midic)
 
-	mi = &midi_devs[devc->devno]->in_info;
+{
+	struct midi_input_info *mi = &midi_devs[devno]->in_info;
 
 	switch (mi->m_state) {
 	case MST_INIT:
@@ -236,8 +225,7 @@ wf_mpu_input_scanner (struct wf_mpu_config *devc, unsigned char midic)
 
 			if (mi->m_left <= 0) {
 				mi->m_state = MST_INIT;
-				do_midi_msg (devc->synthno, mi->m_buf,
-					     mi->m_ptr);
+				do_midi_msg (synthdev, mi->m_buf, mi->m_ptr);
 				mi->m_ptr = 0;
 			}
 		} else if (msg == 0xf) {	/* MPU MARK */
@@ -266,8 +254,7 @@ wf_mpu_input_scanner (struct wf_mpu_config *devc, unsigned char midic)
 	      
 			if (mi->m_left <= 0) {
 				mi->m_state = MST_INIT;
-				do_midi_msg (devc->synthno, mi->m_buf,
-					     mi->m_ptr);
+				do_midi_msg (synthdev, mi->m_buf, mi->m_ptr);
 				mi->m_ptr = 0;
 			}
 		}
@@ -362,7 +349,7 @@ wf_mpu_input_scanner (struct wf_mpu_config *devc, unsigned char midic)
 		mi->m_buf[mi->m_ptr++] = midic;
 		if ((--mi->m_left) <= 0) {
 			mi->m_state = MST_INIT;
-			do_midi_msg (devc->synthno, mi->m_buf, mi->m_ptr);
+			do_midi_msg (synthdev, mi->m_buf, mi->m_ptr);
 			mi->m_ptr = 0;
 		}
 		break;
@@ -375,78 +362,65 @@ wf_mpu_input_scanner (struct wf_mpu_config *devc, unsigned char midic)
 	return 1;
 }
 
-void wf_mpuintr (int irq, void *dev_id, struct pt_regs *dummy)
-{
-	struct wf_mpu_config *devc;
-	int dev;
-	static struct wf_mpu_config *isrc = 0;
-	int n;
-	struct midi_input_info *mi;
+void
+wf_mpuintr (int irq, void *dev_id, struct pt_regs *dummy)
 
-	if (irq < 0 || irq > 15) 
-	{
-		printk (KERN_ERR "WF-MPU: bogus interrupt #%d", irq);
+{
+	struct wf_mpu_config *physical_dev = dev_id;
+	static struct wf_mpu_config *input_dev = 0;
+	struct midi_input_info *mi = &midi_devs[physical_dev->devno]->in_info;
+	int n;
+
+	if (!input_avail()) { /* not for us */
 		return;
 	}
-	dev = irq2dev[irq];
-	mi = &midi_devs[dev]->in_info;
-	if (mi->m_busy)
-		return;
+
+	if (mi->m_busy) return;
 	mi->m_busy = 1;
-	
 	sti (); 
 
-	n = 50;
-
-	/* guarantee that we're working with the "real" (internal)
-	   interface before doing anything physical.
-	*/
-
-	devc = &dev_conf[dev];
-	devc = &dev_conf[devc->internal];
-
-	if (isrc == 0) {
-      
-		/* This is just an initial setting. If Virtual MIDI mode is
-		   enabled on the ICS2115, we'll get a switch char before
-		   anything else, and if it isn't, then the guess will be
-		   correct for our purposes.
-		*/
-      
-		isrc = &dev_conf[devc->internal];
+	if (!input_dev) {
+		input_dev = physical_dev;
 	}
-  
-	while (input_avail (devc) && n-- > 0) {
-		unsigned char c = read_data (devc);
+
+	n = 50; /* XXX why ? */
+
+	do {
+		unsigned char c = read_data ();
       
-		if (devc->isvirtual) {
+		if (phys_dev->isvirtual) {
+
 			if (c == WF_EXTERNAL_SWITCH) {
-				isrc = &dev_conf[devc->external];
+				input_dev = virt_dev;
 				continue;
 			} else if (c == WF_INTERNAL_SWITCH) { 
-				isrc = &dev_conf[devc->internal];
+				input_dev = phys_dev;
 				continue;
 			} /* else just leave it as it is */
+
 		} else {
-			isrc = &dev_conf[devc->internal];
+			input_dev = phys_dev;
 		}
 
-		if (isrc->mode == MODE_SYNTH) {
+		if (input_dev->mode == MODE_SYNTH) {
 	  
-			wf_mpu_input_scanner (isrc, c);
+			wf_mpu_input_scanner (input_dev->devno,
+					      input_dev->synthno, c);
 	  
-		} else if (isrc->opened & OPEN_READ) {
+		} else if (input_dev->opened & OPEN_READ) {
 	  
-			if (isrc->inputintr) {
-				isrc->inputintr (isrc->devno, c);
+			if (input_dev->inputintr) {
+				input_dev->inputintr (input_dev->devno, c);
 			} 
 		}
-	}
+
+	} while (input_avail() && n-- > 0);
 
 	mi->m_busy = 0;
 }
 
-static int wf_mpu_open (int dev, int mode,
+static int
+wf_mpu_open (int dev, int mode,
 	     void            (*input) (int dev, unsigned char data),
 	     void            (*output) (int dev)
 	)
@@ -456,7 +430,14 @@ static int wf_mpu_open (int dev, int mode,
 	if (dev < 0 || dev >= num_midis || midi_devs[dev]==NULL)
 		return -(ENXIO);
 
-	devc = &dev_conf[dev];
+	if (phys_dev->devno == dev) {
+		devc = phys_dev;
+	} else if (phys_dev->isvirtual && virt_dev->devno == dev) {
+		devc = virt_dev;
+	} else {
+		printk (KERN_ERR "WF-MPU: unknown device number %d\n", dev);
+		return -(EINVAL);
+	}
 
 	if (devc->opened) {
 		return -(EBUSY);
@@ -475,7 +456,18 @@ wf_mpu_close (int dev)
 {
 	struct wf_mpu_config *devc;
 
-	devc = &dev_conf[dev];
+	if (dev < 0 || dev >= num_midis || midi_devs[dev]==NULL)
+		return;
+
+	if (phys_dev->devno == dev) {
+		devc = phys_dev;
+	} else if (phys_dev->isvirtual && virt_dev->devno == dev) {
+		devc = virt_dev;
+	} else {
+		printk (KERN_ERR "WF-MPU: unknown device number %d\n", dev);
+		return;
+	}
+
 	devc->mode = 0;
 	devc->inputintr = NULL;
 	devc->opened = 0;
@@ -487,40 +479,35 @@ wf_mpu_out (int dev, unsigned char midi_byte)
 	int             timeout;
 	unsigned long   flags;
 	static int lastoutdev = -1;
-
-	struct wf_mpu_config *devc;
 	unsigned char switchch;
 
-	/* The actual output has to occur using the "internal" config info
-	 */
-  
-	devc = &dev_conf[dev_conf[dev].internal];
-  
-	if (devc->isvirtual && lastoutdev != dev) {
+	if (phys_dev->isvirtual && lastoutdev != dev) {
       
-		if (dev == devc->internal) { 
+		if (dev == phys_dev->devno) { 
 			switchch = WF_INTERNAL_SWITCH;
-		} else if (dev == devc->external) { 
+		} else if (dev == virt_dev->devno) { 
 			switchch = WF_EXTERNAL_SWITCH;
 		} else {
 			printk (KERN_ERR "WF-MPU: bad device number %d", dev);
 			return (0);
 		}
+
+		/* XXX fix me */
       
-		for (timeout = 30000; timeout > 0 && !output_ready (devc);
+		for (timeout = 30000; timeout > 0 && !output_ready ();
 		     timeout--);
       
 		save_flags (flags);
 		cli ();
       
-		if (!output_ready (devc)) {
+		if (!output_ready ()) {
 			printk (KERN_WARNING "WF-MPU: Send switch "
 				"byte timeout\n");
 			restore_flags (flags);
 			return 0;
 		}
       
-		write_data (devc, switchch);
+		write_data (switchch);
 		restore_flags (flags);
 	} 
 
@@ -531,17 +518,19 @@ wf_mpu_out (int dev, unsigned char midi_byte)
 	 * (After reset). Normally it takes just about 10 loops.
 	 */
 
-	for (timeout = 30000; timeout > 0 && !output_ready (devc); timeout--);
+	/* XXX fix me */
+
+	for (timeout = 30000; timeout > 0 && !output_ready (); timeout--);
 
 	save_flags (flags);
 	cli ();
-	if (!output_ready (devc)) {
+	if (!output_ready ()) {
 		printk (KERN_WARNING "WF-MPU: Send data timeout\n");
 		restore_flags (flags);
 		return 0;
 	}
 
-	write_data (devc, midi_byte);
+	write_data (midi_byte);
 	restore_flags (flags);
 
 	return 1;
@@ -567,35 +556,63 @@ wf_mpu_ioctl (int dev, unsigned cmd, caddr_t arg)
 	return -(EINVAL);
 }
 
-static void
-wf_mpu_kick (int dev)
-{
-}
-
 static int
 wf_mpu_buffer_status (int dev)
 {
-	return 0;			/*
-					 * No data in buffers
-					 */
+	return 0;
 }
+
+static struct synth_operations wf_mpu_synth_operations[2];
+static struct midi_operations  wf_mpu_midi_operations[2];
+
+static struct midi_operations wf_mpu_midi_proto =
+{
+	{"WF-MPU MIDI", 0, MIDI_CAP_MPU401, SNDCARD_MPU401},
+	NULL,  /*converter*/
+	{0},   /* in_info */
+	wf_mpu_open,
+	wf_mpu_close,
+	wf_mpu_ioctl,
+	wf_mpu_out,
+	wf_mpu_start_read,
+	wf_mpu_end_read,
+	NULL,
+	NULL,
+	wf_mpu_buffer_status,
+	NULL
+};
+
+static struct synth_info wf_mpu_synth_info_proto =
+{"WaveFront MPU-401 interface", 0,
+ SYNTH_TYPE_MIDI, MIDI_TYPE_MPU401, 0, 128, 0, 128, SYNTH_CAP_INPUT};
+
+static struct synth_info wf_mpu_synth_info[2];
 
 static int
 wf_mpu_synth_ioctl (int dev,
 		    unsigned int cmd, caddr_t arg)
 {
 	int             midi_dev;
+	int index;
 
 	midi_dev = synth_devs[dev]->midi_dev;
 
 	if (midi_dev < 0 || midi_dev > num_midis || midi_devs[midi_dev]==NULL)
 		return -(ENXIO);
 
+	if (midi_dev == phys_dev->devno) {
+		index = 0;
+	} else if (phys_dev->isvirtual && midi_dev == virt_dev->devno) {
+		index = 1;
+	} else {
+		return -(EINVAL);
+	}
+
 	switch (cmd) {
 
 	case SNDCTL_SYNTH_INFO:
 		copy_to_user (&((char *) arg)[0],
-			      &wf_mpu_synth_info[midi_dev],
+			      &wf_mpu_synth_info[index],
 			      sizeof (struct synth_info));
 	
 		return 0;
@@ -622,7 +639,15 @@ wf_mpu_synth_open (int dev, int mode)
 		return -(ENXIO);
 	}
   
-	devc = &dev_conf[midi_dev];
+	if (phys_dev->devno == midi_dev) {
+		devc = phys_dev;
+	} else if (phys_dev->isvirtual && virt_dev->devno == midi_dev) {
+		devc = virt_dev;
+	} else {
+		printk (KERN_ERR "WF-MPU: unknown device number %d\n", dev);
+		return -(EINVAL);
+	}
+
 	if (devc->opened) {
 		return -(EBUSY);
 	}
@@ -642,7 +667,15 @@ wf_mpu_synth_close (int dev)
 
 	midi_dev = synth_devs[dev]->midi_dev;
 
-	devc = &dev_conf[midi_dev];
+	if (phys_dev->devno == midi_dev) {
+		devc = phys_dev;
+	} else if (phys_dev->isvirtual && virt_dev->devno == midi_dev) {
+		devc = virt_dev;
+	} else {
+		printk (KERN_ERR "WF-MPU: unknown device number %d\n", dev);
+		return;
+	}
+
 	devc->inputintr = NULL;
 	devc->opened = 0;
 	devc->mode = 0;
@@ -678,233 +711,145 @@ static struct synth_operations wf_mpu_synth_proto =
 	midi_synth_send_sysex
 };
 
-static struct synth_operations wf_mpu_synth_operations[2];
-static struct midi_operations  wf_mpu_midi_operations[2];
-static int wfmpu_cnt = 0;
-
-static struct midi_operations wf_mpu_midi_proto =
-{
-	{"WF-MPU MIDI", 0, MIDI_CAP_MPU401, SNDCARD_MPU401},
-	NULL,  /*converter*/
-	{0},   /* in_info */
-	wf_mpu_open,
-	wf_mpu_close,
-	wf_mpu_ioctl,
-	wf_mpu_out,
-	wf_mpu_start_read,
-	wf_mpu_end_read,
-	wf_mpu_kick,
-	NULL,
-	wf_mpu_buffer_status,
-	NULL
-};
-
-
 static int
-config_wf_mpu (int dev, struct address_info *hw_config)
+config_wf_mpu (struct wf_mpu_config *dev)
 
 {
-	struct wf_mpu_config *devc;
-	int                internal;
+	int is_external;
+	char *name;
+	int index;
 
-	if (wfmpu_cnt >= 2) {
-		printk (KERN_ERR "WF-MPU: more MPU devices than cards ?!!\n");
-		return (-1);
-	}
-  
-	/* There is no synth available on the external interface,
-	   so do the synth stuff to the internal interface only.
-	*/
-
-	internal = dev_conf[dev].internal;
-	devc = &dev_conf[internal];
-
-	if (!dev_conf[dev].isexternal) {
-		memcpy ((char *) &wf_mpu_synth_operations[wfmpu_cnt],
+	if (dev == phys_dev) {
+		name = "WaveFront internal MIDI";
+		is_external = 0;
+		index = 0;
+		memcpy ((char *) &wf_mpu_synth_operations[index],
 			(char *) &wf_mpu_synth_proto,
 			sizeof (struct synth_operations));
-	}
-
-	memcpy ((char *) &wf_mpu_midi_operations[wfmpu_cnt],
-		(char *) &wf_mpu_midi_proto,
-		sizeof (struct midi_operations));
-  
-	if (dev_conf[dev].isexternal) {
-		wf_mpu_midi_operations[wfmpu_cnt].converter = NULL;
 	} else {
-		wf_mpu_midi_operations[wfmpu_cnt].converter =
-			&wf_mpu_synth_operations[wfmpu_cnt];
+		name = "WaveFront external MIDI";
+		is_external = 1;
+		index = 1;
+		/* no synth operations for an external MIDI interface */
 	}
 
-	memcpy ((char *) &wf_mpu_synth_info[dev],
+	memcpy ((char *) &wf_mpu_synth_info[dev->devno],
 		(char *) &wf_mpu_synth_info_proto,
 		sizeof (struct synth_info));
 
-	strcpy (wf_mpu_synth_info[dev].name, hw_config->name);
-	strcpy (wf_mpu_midi_operations[wfmpu_cnt].info.name, hw_config->name);
+	strcpy (wf_mpu_synth_info[index].name, name);
 
-	conf_printf (hw_config->name, hw_config);
+	wf_mpu_synth_operations[index].midi_dev = dev->devno;
+	wf_mpu_synth_operations[index].info = &wf_mpu_synth_info[index];
 
-	if (!dev_conf[dev].isexternal) {
-		wf_mpu_synth_operations[wfmpu_cnt].midi_dev = dev;
+	memcpy ((char *) &wf_mpu_midi_operations[index],
+		(char *) &wf_mpu_midi_proto,
+		sizeof (struct midi_operations));
+  
+	if (is_external) {
+		wf_mpu_midi_operations[index].converter = NULL;
+	} else {
+		wf_mpu_midi_operations[index].converter =
+			&wf_mpu_synth_operations[index];
 	}
-	wf_mpu_synth_operations[wfmpu_cnt].info = &wf_mpu_synth_info[dev];
 
-	midi_devs[dev] = &wf_mpu_midi_operations[wfmpu_cnt];
+	strcpy (wf_mpu_midi_operations[index].info.name, name);
 
-	dev_conf[dev].opened = 0;
-	dev_conf[dev].mode = 0;
-	dev_conf[dev].configured_for_virtual = 0;
-	dev_conf[dev].devno = dev;
+	midi_devs[dev->devno] = &wf_mpu_midi_operations[index];
+	midi_devs[dev->devno]->in_info.m_busy = 0;
+	midi_devs[dev->devno]->in_info.m_state = MST_INIT;
+	midi_devs[dev->devno]->in_info.m_ptr = 0;
+	midi_devs[dev->devno]->in_info.m_left = 0;
+	midi_devs[dev->devno]->in_info.m_prev_status = 0;
 
-	midi_devs[dev]->in_info.m_busy = 0;
-	midi_devs[dev]->in_info.m_state = MST_INIT;
-	midi_devs[dev]->in_info.m_ptr = 0;
-	midi_devs[dev]->in_info.m_left = 0;
-	midi_devs[dev]->in_info.m_prev_status = 0;
-
-	wfmpu_cnt++;
+	devs[index].opened = 0;
+	devs[index].mode = 0;
 
 	return (0);
 }
 
-int
-virtual_midi_enable (int dev, struct address_info *hw_config)
+int virtual_midi_enable (void)
 
 {
-	int idev;
-	int edev;
-	struct wf_mpu_config *devc;
-
-	devc = &dev_conf[dev];
-	
-	if (devc->configured_for_virtual) {
-
-		idev = devc->internal;
-		edev = devc->external;
-
-	} else {
-
-		if (hw_config == NULL) {
-			printk (KERN_ERR
-				"WF-MPU: virtual midi first "
-				"enabled without hw_config!\n");
-			return -EINVAL;
-		}
-
-		idev = devc->internal;
-
-		if ((edev = sound_alloc_mididev()) == -1) {
-			printk (KERN_ERR
-				"WF-MPU: too many midi devices detected\n");
-			return -1;
-		}
-
-		hw_config->slots[WF_EXTERNAL_MIDI_SLOT] = edev;
+	if ((virt_dev->devno < 0) &&
+	    (virt_dev->devno = sound_alloc_mididev()) == -1) {
+		printk (KERN_ERR
+			"WF-MPU: too many midi devices detected\n");
+		return -1;
 	}
 
-	dev_conf[edev].isvirtual = 1;
-	dev_conf[idev].isvirtual = 1;
-    
-	if (dev_conf[idev].configured_for_virtual) {
-		return 0;
-	} 
+	config_wf_mpu (virt_dev);
 
-	/* Configure external interface struct */
-
-	devc = &dev_conf[edev];
-	devc->internal = idev;
-	devc->external = edev;
-	devc->isexternal = 1;
-
-	/* Configure external interface struct 
-	   (devc->isexternal and devc->internal set in attach_wf_mpu())
-	*/
-
-	devc = &dev_conf[idev];
-	devc->external = edev;
-
-	/* Configure the tables for the external */
-
-	if (config_wf_mpu (edev, hw_config)) {
-		printk (KERN_WARNING "WF-MPU: configuration for MIDI "
-			"device %d failed\n", edev);
-		return (-1);
-	}
-
-	/* Don't bother to do this again if we are toggled back and
-	   forth between virtual MIDI mode and "normal" operation.
-	*/
-
-	dev_conf[edev].configured_for_virtual = 1;
-	dev_conf[idev].configured_for_virtual = 1;
-
-	return 0;
+	phys_dev->isvirtual = 1;
+	return virt_dev->devno;
 }
 
-void
-virtual_midi_disable (int dev)
+int
+virtual_midi_disable (void)
 
 {
-	struct wf_mpu_config *devc;
 	unsigned long flags;
 
 	save_flags (flags);
 	cli();
 
-	/* Assumes for logical purposes that the caller has taken
-	   care of fiddling with WaveFront hardware commands to
-	   turn off Virtual MIDI mode. 
-	*/
-    
-	devc = &dev_conf[dev];
-
-	devc = &dev_conf[devc->internal];
-	devc->isvirtual = 0;
-
-	devc = &dev_conf[devc->external];
-	devc->isvirtual = 0;
+	wf_mpu_close (virt_dev->devno);
+	/* no synth on virt_dev, so no need to call wf_mpu_synth_close() */
+	phys_dev->isvirtual = 0;
 
 	restore_flags (flags);
+
+	return 0;
 }
 
-void
-attach_wf_mpu (struct address_info *hw_config)
+__initfunc (static int detect_wf_mpu (int irq, int io_base))
+
 {
-	int m;
-	struct wf_mpu_config *devc;
-
-	if (request_irq (hw_config->irq, wf_mpuintr,
-			 0, "WaveFront MIDI", NULL) < 0) {
-		printk (KERN_ERR "WF-MPU: Failed to allocate IRQ%d\n",
-			hw_config->irq);
-		return;
+	if (check_region (io_base, 2)) {
+		printk (KERN_WARNING "WF-MPU: I/O port %x already in use.\n",
+			io_base);
+		return -1;
 	}
 
-	if ((m = sound_alloc_mididev()) == -1){
+	phys_dev->base = io_base;
+	phys_dev->irq = irq;
+	phys_dev->devno = -1;
+	virt_dev->devno = -1;
+
+	return 0;
+}
+
+__initfunc (int install_wf_mpu (void)) 
+
+{
+	if ((phys_dev->devno = sound_alloc_mididev()) < 0){
+
 		printk (KERN_ERR "WF-MPU: Too many MIDI devices detected.\n");
-		free_irq (hw_config->irq, NULL);
-		release_region (hw_config->io_base, 2);
-		return;
+		return -1;
+
 	}
 
-	request_region (hw_config->io_base, 2, "WaveFront MPU");
+	request_region (phys_dev->base, 2, "wavefront midi");
+	phys_dev->isvirtual = 0;
 
-	hw_config->slots[WF_INTERNAL_MIDI_SLOT] = m;
-	devc = &dev_conf[m];
-	devc->base = hw_config->io_base;
-	devc->irq = hw_config->irq;
-	devc->isexternal = 0;
-	devc->internal = m;
-	devc->external = -1;
-	devc->isvirtual = 0;
+	if (config_wf_mpu (phys_dev)) {
 
-	irq2dev[devc->irq] = m;
-
-	if (config_wf_mpu (m, hw_config)) {
 		printk (KERN_WARNING
-			"WF-MPU: configuration for MIDI device %d failed\n", m);
-		sound_unload_mididev (m);
+			"WF-MPU: configuration for MIDI device %d failed\n",
+			phys_dev->devno);
+		sound_unload_mididev (phys_dev->devno);
+
+	}
+
+	/* OK, now we're configured to handle an interrupt ... */
+
+	if (request_irq (phys_dev->irq, wf_mpuintr, SA_INTERRUPT|SA_SHIRQ,
+			 "wavefront midi", phys_dev) < 0) {
+
+		printk (KERN_ERR "WF-MPU: Failed to allocate IRQ%d\n",
+			phys_dev->irq);
+		return -1;
+
 	}
 
 	/* This being a WaveFront (ICS-2115) emulated MPU-401, we have
@@ -912,64 +857,43 @@ attach_wf_mpu (struct address_info *hw_config)
 	   won't do anything at all.
 	*/
   
-	start_uart_mode (devc);
+	start_uart_mode ();
 
+	return phys_dev->devno;
 }
-
-int
-probe_wf_mpu (struct address_info *hw_config)
-
-{
-	if (hw_config->irq < 0 || hw_config->irq > 16) {
-		printk (KERN_WARNING "WF-MPU: bogus IRQ value requested (%d)\n",
-			hw_config->irq);
-		return 0;
-	}
-
-	if (check_region (hw_config->io_base, 2)) {
-		printk (KERN_WARNING "WF-MPU: I/O port %x already in use\n\n",
-			hw_config->io_base);
-		return 0;
-	}
-
-	if (inb (hw_config->io_base + 1) == 0xff) { /* Just bus float? */
-		printk ("WF-MPU: Port %x looks dead.\n", hw_config->io_base);
-		return 0;
-	}
-
-	return 1;
-}
-
+ 
 void
-unload_wf_mpu (struct address_info *hw_config)
-{
+uninstall_wf_mpu (void)
 
-	release_region (hw_config->io_base, 2); 
-	sound_unload_mididev (hw_config->slots[WF_INTERNAL_MIDI_SLOT]);
-	if (hw_config->irq > 0) {
-		free_irq (hw_config->irq, NULL);
-	}
-	if (hw_config->slots[WF_EXTERNAL_MIDI_SLOT] > 0) {
-		sound_unload_mididev (hw_config->slots[WF_EXTERNAL_MIDI_SLOT]);
+{
+	release_region (phys_dev->base, 2); 
+	free_irq (phys_dev->irq, phys_dev);
+	sound_unload_mididev (phys_dev->devno);
+
+	if (virt_dev->devno >= 0) {
+		sound_unload_mididev (virt_dev->devno);
 	}
 }
 
 static void
-start_uart_mode (struct wf_mpu_config *devc)
+start_uart_mode (void)
+
 {
-	int             ok, timeout;
+	int             ok, i;
 	unsigned long   flags;
 
 	save_flags (flags);
 	cli ();
 
-	for (timeout = 30000; timeout > 0 && !output_ready (devc); timeout--);
+	/* XXX fix me */
 
-	wf_mpu_cmd (devc, UART_MODE_ON);
+	for (i = 0; i < 30000 && !output_ready (); i++);
 
-	for (ok = 0, timeout = 50000; timeout > 0 && !ok; timeout--) {
-		if (input_avail (devc)) {
-			if (read_data (devc) == MPU_ACK) {
+	outb (UART_MODE_ON, COMDPORT(phys_dev));
+
+	for (ok = 0, i = 50000; i > 0 && !ok; i--) {
+		if (input_avail ()) {
+			if (read_data () == MPU_ACK) {
 				ok = 1;
 			}
 		}
@@ -978,6 +902,30 @@ start_uart_mode (struct wf_mpu_config *devc)
 	restore_flags (flags);
 }
 
-#endif
+#ifdef OSS_SUPPORT
+
+int
+probe_wf_mpu (struct address_info *hw_config)
+
+{
+	return !detect_wf_mpu (hw_config->irq, hw_config->io_base);
+}
+
+void
+attach_wf_mpu (struct address_info *hw_config)
+
+{
+	(void) install_wf_mpu ();
+}
+
+void
+unload_wf_mpu (void)
+{
+	uninstall_wf_mpu ();
+}
+
+#endif OSS_SUPPORT
+
+#endif CONFIG_SOUND_WAVEFRONT_MODULE_AND_MODULE
 
 

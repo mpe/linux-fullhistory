@@ -47,6 +47,7 @@ if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
         if [ "$CONFIG_IP_MASQUERADE_MOD" = "y" ]; then
           tristate 'IP: ipautofw masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPAUTOFW
           tristate 'IP: ipportfw masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPPORTFW
+          tristate 'IP: ip fwmark masq-forwarding support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_MFW
 	fi
       fi
     fi

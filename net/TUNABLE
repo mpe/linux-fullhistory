@@ -41,7 +41,7 @@ ARP_TIMEOUT		Timeout on an ARP (tunable)
 ARP_CHECK_INTERVAL	Check interval to refresh an arp (tunable)
 ARP_CONFIRM_INTERVAL	Confirm poll time (tunable)
 ARP_TABLE_SIZE		Hash table size for ARP (tunable)
-IP_MAX_MEMBERSHIPS	Largest number of groups per socket (BSD style)
+IP_MAX_MEMBERSHIPS	Largest number of groups per socket (BSD style) (tunable)
 16			Hard coded constant for amount of room allowed for
 			cache align and faster forwarding (tunable)
 IPFRAG_HIGH_THRESH	Limit on fragments, we free fragments until we reach

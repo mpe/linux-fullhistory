@@ -1549,8 +1549,10 @@ int vfat_rmdir(struct inode *dir,struct dentry* dentry)
 	res = -EBUSY;
 	if (list_empty(&dentry->d_hash)) {
 		res = vfat_rmdirx(dir, dentry);
-		if (res >= 0)
+		if (res >= 0) {
 			drop_replace_inodes(dentry, NULL);
+			d_delete(dentry);
+		}
 	}
 	return res;
 }

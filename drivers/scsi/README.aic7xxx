@@ -37,8 +37,10 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AHA-3940U
     AHA-3940W
     AHA-3940UW
+    AHA-3940AUW
     AHA-3940U2W
     AHA-3950U2B
+    AHA-3950U2D
     AHA-3985
     AHA-3985U
     AHA-3985W
@@ -52,6 +54,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AIC-787x
     AIC-788x
     AIC-789x
+    AIC-3860
 
     Bus Types
     ----------------------------
@@ -69,8 +72,30 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AHA-398x - PCI RAID controllers with three separate SCSI controllers
                on-board.
 
-    NOTE: The AHA-2920 is NOT an AIC-7xxx based controller, and is not
-          handled by this driver.
+  Not Supported Devices
+  ------------------------------
+    Adaptec Cards
+    ----------------------------
+    AHA-2920 (Only the cards that use the Future Domain chipset are not
+              supported, any 2920 cards based on Adaptec AIC chipsets are
+	      supported)
+    AAA-13x Raid Adapters
+    AAA-113x Raid Port Card
+
+    Motherboard Chipsets
+    ----------------------------
+    AIC-7810
+
+    Bus Types
+    ----------------------------
+    R - Raid Port busses are not supported.
+
+    The hardware RAID devices sold by Adaptec are *NOT* supported by this
+    driver (and will people please stop emailing me about them, they are
+    a totally separate beast from the bare SCSI controllers and this driver
+    can not be retrofitted in any sane manner to support the hardware RAID
+    features on those cards - Doug Ledford).
+    
 
   People
   ------------------------------
@@ -299,13 +324,12 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 	binary->hex conversion then send an email to the aic7xxx mailing
 	list and someone can help you out.
 
-    "aic7xxx=tag_info:{{8,8..},{8,8..},..}" - This option is used to enable
-        tagged queueing on specific devices.  As of driver version 5.0.6, we
-        now globally enable tagged queueing by default, but we also disable
-        tagged queueing on all individual devices by default.  In order to
-        enable tagged queueing for certian devices at boot time, a user may
+    "aic7xxx=tag_info:{{8,8..},{8,8..},..}" - This option is used to disable
+        tagged queueing on specific devices.  As of driver version 5.1.8, we
+        now globally enable tagged queueing by default.  In order to
+        disable tagged queueing for certian devices at boot time, a user may
         use this boot param.  The driver will then parse this message out
-        and enable the specific device entries that are present based upon
+        and disable the specific device entries that are present based upon
         the value given.  The param line is parsed in the following manner:
 
           { - first instance indicates the start of this parameter values
@@ -337,18 +361,13 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
           commas with no value specified will simply increment to the next id
           without changing anything for the missing values.
 
-        tag_info:{{8,8},,{8,8}}
-          First adapter, scsi id 0 to 8, id 1 to 8, remainder stay at their
-          default.  Second adapter stays entirely at default.  Third
-          adapter, id 0 to 8, id 1 to 8, remainder at default (identical to
-          first adapter).
-
-        tag_info:{,,,{,,,64}}
+        tag_info:{,,,{,,,255}}
           First, second, and third adapters at default values.  Fourth
-          adapter, id 3 to 64.  Notice that leading commas simply increment
-          what the first number effects, and there are no need for trailing
-          commas.  When you close out an adapter, or the entire entry,
-          anything not explicitly set stays at the default value.
+          adapter, id 3 is disabled.  Notice that leading commas simply
+	  increment what the first number effects, and there are no need
+	  for trailing commas.  When you close out an adapter, or the
+	  entire entry, anything not explicitly set stays at the default
+	  value.
 
         A final note on this option.  The scanner I used for this isn't
         perfect or highly robust.  If you mess the line up, the worst that
@@ -449,10 +468,16 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     ftp://ekf2.vsb.cz/pub/linux/kernel/aic7xxx/ftp.teleport.com/
       - European Linux mirror of Teleport site
 
+  Web sites
+  ------------------------------
+    http://developer.redhat.com/aic7xxx/
+      - Primary web site maintained by Doug Ledford.  I haven't actually
+        put anything up yet....but I'm planning on it.  This information
+	is put here as an add for the vapor page :)
 
 Dean W. Gehnert
 deang@teleport.com
 
 $Revision: 3.0 $
 
-Modified by Doug Ledford 1998
+Modified by Doug Ledford 1998-9

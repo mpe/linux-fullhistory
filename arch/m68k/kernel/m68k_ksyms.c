@@ -45,6 +45,8 @@ EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strstr);
+EXPORT_SYMBOL(strtok);
+EXPORT_SYMBOL(strpbrk);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(enable_irq);

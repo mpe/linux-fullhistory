@@ -307,7 +307,7 @@ struct wf_layer
     UCHAR8 mute:1;
 
     UCHAR8 split_point:7;
-    UCHAR8 updown:1;
+    UCHAR8 play_below:1;
 
     UCHAR8 pan_mod_src:2;
     UCHAR8 pan_or_mod:1;
@@ -507,9 +507,16 @@ typedef union wf_any {
 
 typedef struct wf_patch_info {
     
+    /* the first two fields are used by the OSS "patch loading" interface
+       only, and are unused by the current user-level library.
+    */
+
     INT16   key;               /* Use WAVEFRONT_PATCH here */
     UINT16  devno;             /* fill in when sending */
     UCHAR8  subkey;            /* WF_ST_{SAMPLE,ALIAS,etc.} */
+
+#define WAVEFRONT_FIND_FREE_SAMPLE_SLOT 999
+
     UINT16  number;            /* patch/sample/prog number */
 
     UINT32  size;              /* size of any data included in 
@@ -548,12 +555,14 @@ typedef struct wf_patch_info {
  */
 
 typedef struct wavefront_control {
-    int devno;                         /* from /dev/sequencer interface */
     int cmd;                           /* WFC_* */
     char status;                       /* return status to user-space */
     unsigned char rbuf[WF_MAX_READ];   /* bytes read from card */
     unsigned char wbuf[WF_MAX_WRITE];  /* bytes written to card */
 } wavefront_control;
+
+#define WFCTL_WFCMD    0x1
+#define WFCTL_LOAD_SPP 0x2
 
 /* Modulator table */
 

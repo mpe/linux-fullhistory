@@ -1028,6 +1028,7 @@ static void rx_intr (sdla_t* card)
 		{
 			netif_rx(skb);
 			++chan->ifstats.rx_packets;
+			chan->ifstats.rx_bytes += skb->len;
 		}
 	}
 }
@@ -2122,6 +2123,7 @@ static int chan_send (struct device* dev, struct sk_buff* skb)
 				return 1;
 			}
 			++chan->ifstats.tx_packets;
+			chan->ifstats.tx_bytes += skb->len;
 			break;
 
 		case 0x33:	/* Tx busy */

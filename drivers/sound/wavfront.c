@@ -22,10 +22,17 @@
  * now, you just get the YSS225 in the same state as Turtle Beach's
  * "SETUPSND.EXE" utility leaves it.
  *
- * The boards' CODEC (a Crystal CS4232) is supported by cs4232.[co],
+ * The boards' DAC/ADC (a Crystal CS4232) is supported by cs4232.[co],
  * This chip also controls the configuration of the card: the wavefront
  * synth is logical unit 4.
  *
+ *
+ * Supported devices:
+ *
+ *   /dev/dsp                      - using cs4232+ad1848 modules, OSS compatible
+ *   /dev/midiNN and /dev/midiNN+1 - using wf_midi code, OSS compatible
+ *   /dev/synth00                  - raw synth interface
+ * 
  **********************************************************************
  *
  * Copyright (C) by Paul Barton-Davis 1998
@@ -36,9 +43,9 @@
  * Although the relevant code here is all new, the handling of
  * sample/alias/multi- samples is entirely based on a driver by Matt
  * Martin and Rutger Nijlunsing which demonstrated how to get things
- * to most aspects of this to work correctly. The GUS patch loading
- * code has been almost unaltered by me, except to fit formatting and
- * function names in the rest of the file. Many thanks to them.
+ * to work correctly. The GUS patch loading code has been almost
+ * unaltered by me, except to fit formatting and function names in the
+ * rest of the file. Many thanks to them.
  *
  * Appreciation and thanks to Hannu Savolainen for his early work on the Maui
  * driver, and answering a few questions while this one was developed.
@@ -49,16 +56,23 @@
  * aspects of configuring a WaveFront soundcard, particularly the
  * effects processor.
  *
- * $Id: wavfront.c,v 0.5 1998/07/22 16:16:41 pbd Exp $
+ * $Id: wavfront.c,v 0.7 1998/09/09 15:47:36 pbd Exp $
  *
  * This program is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
- * for more info.
- */
+ * for more info.  */
 
-#include <linux/config.h>
 #include <linux/module.h>
-#include <asm/init.h>
+
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/ptrace.h>
+#include <linux/fcntl.h>
+#include <linux/ioport.h>    
+
+#include <linux/interrupt.h>
+#include <linux/config.h>
+#include <linux/init.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
@@ -69,7 +83,33 @@
 #define MIDI_SYNTH_CAPS	SYNTH_CAP_INPUT
 #include "midi_synth.h"
 
-/* This thing is meant to work as a module */
+/* Compile-time control of the extent to which OSS is supported.
+
+   I consider /dev/sequencer to be an anachronism, but given its
+   widespread usage by various Linux MIDI software, it seems worth
+   offering support to it if its not too painful. Instead of using
+   /dev/sequencer, I recommend:
+
+     for synth programming and patch loading: /dev/synthNN
+     for kernel-synchronized MIDI sequencing: the ALSA sequencer
+     for direct MIDI control: /dev/midiNN
+
+   I have never tried static compilation into the kernel. The #if's
+   for this are really just notes to myself about what the code is
+   for.
+*/
+
+#define OSS_SUPPORT_SEQ            0x1  /* use of /dev/sequencer */
+#define OSS_SUPPORT_STATIC_INSTALL 0x2  /* static compilation into kernel */
+
+#define OSS_SUPPORT_LEVEL          0x1  /* just /dev/sequencer for now */
+
+#if    OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
+static int (*midi_load_patch) (int devno, int format, const char *addr,
+			       int offs, int count, int pmgr_flag) = NULL;
+#endif OSS_SUPPORT_SEQ
+
+/* This is meant to work as a module */
 
 #if defined(CONFIG_SOUND_WAVEFRONT_MODULE) && defined(MODULE)
 
@@ -81,14 +121,28 @@
 
 #define WF_DEBUG 1
 
+#ifdef WF_DEBUG
+
+/* Thank goodness for gcc's preprocessor ... */
+
+#define DPRINT(cond, format, args...) \
+       if ((dev.debug & (cond)) == (cond)) { \
+	     printk (KERN_DEBUG LOGNAME format, ## args); \
+       }
+#else
+#define DPRINT(cond, format, args...)
+#endif
+
+#define LOGNAME "WaveFront: "
+
 /* bitmasks for WaveFront status port value */
 
-#define STAT_INTR_WRITE		0x40
-#define STAT_CAN_WRITE		0x20
-#define STAT_WINTR_ENABLED	0x10
-#define STAT_INTR_READ		0x04
-#define STAT_CAN_READ		0x02
 #define STAT_RINTR_ENABLED	0x01
+#define STAT_CAN_READ		0x02
+#define STAT_INTR_READ		0x04
+#define STAT_WINTR_ENABLED	0x10
+#define STAT_CAN_WRITE		0x20
+#define STAT_INTR_WRITE		0x40
 
 /*** Module-accessible parameters ***************************************/
 
@@ -117,9 +171,6 @@ char *ospath = "/etc/sound/wavefront.os"; /* where to find a processed
 					     version of the WaveFront OS
 					  */
 
-int sleep_interval = 100;     /* HZ/sleep_interval seconds per sleep */
-int sleep_tries = 50;       /* number of times we'll try to sleep */
-
 int wait_usecs = 150; /* This magic number seems to give pretty optimal
 			 throughput based on my limited experimentation.
 			 If you want to play around with it and find a better
@@ -133,24 +184,40 @@ int wait_usecs = 150; /* This magic number seems to give pretty optimal
 			 status waits, only about 250 result in a sleep.
 		      */
 
+int sleep_interval = 100;     /* HZ/sleep_interval seconds per sleep */
+int sleep_tries = 50;       /* number of times we'll try to sleep */
+
+int reset_time = 2;        /* hundreths of a second we wait after a HW reset for
+			      the expected interrupt.
+			   */
+
+int ramcheck_time = 20;    /* time in seconds to wait while ROM code
+			      checks on-board RAM.
+			   */
+
+int osrun_time = 10;       /* time in seconds we wait for the OS to
+			      start running.
+			   */
+
 MODULE_PARM(wf_raw,"i");
 MODULE_PARM(fx_raw,"i");
 MODULE_PARM(debug_default,"i");
+MODULE_PARM(wait_usecs,"i");
 MODULE_PARM(sleep_interval,"i");
 MODULE_PARM(sleep_tries,"i");
-MODULE_PARM(wait_usecs,"i");
 MODULE_PARM(ospath,"s");
+MODULE_PARM(reset_time,"i");
+MODULE_PARM(ramcheck_time,"i");
+MODULE_PARM(osrun_time,"i");
 
 /***************************************************************************/
 
-static struct synth_info wavefront_info =
-{"Turtle Beach WaveFront", 0, SYNTH_TYPE_SAMPLE, SAMPLE_TYPE_WAVEFRONT,
- 0, 32, 0, 0, SYNTH_CAP_INPUT};
+/* Note: because this module doesn't export any symbols, this really isn't
+   a global variable, even if it looks like one. I was quite confused by
+   this when I started writing this as a (newer) module -- pbd.
+*/
 
-static int (*midi_load_patch) (int dev, int format, const char *addr,
-			       int offs, int count, int pmgr_flag) = NULL;
-
-typedef struct wf_config {
+struct wf_config {
 	int devno;            /* device number from kernel */
 	int irq;              /* "you were one, one of the few ..." */
 	int base;             /* low i/o port address */
@@ -181,15 +248,23 @@ typedef struct wf_config {
 #define fx_mod_data     base + 0xf 
 
 	volatile int irq_ok;               /* set by interrupt handler */
-	int opened;                        /* flag, holds open(1) mode */
+        volatile int irq_cnt;              /* ditto */
+	int opened;                        /* flag, holds open(2) mode */
 	char debug;                        /* debugging flags */
 	int freemem;                       /* installed RAM, in bytes */ 
-	int synthdev;                      /* OSS minor devnum for synth */
-	int mididev;                       /* OSS minor devno for internal MIDI */
-	int ext_mididev;                   /* OSS minor devno for external MIDI */ 
+
+	int synth_dev;                     /* devno for "raw" synth */
+	int mididev;                       /* devno for internal MIDI */
+	int ext_mididev;                   /* devno for external MIDI */ 
+        int fx_mididev;                    /* devno for FX MIDI interface */
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
+	int oss_dev;                      /* devno for OSS sequencer synth */
+#endif OSS_SUPPORT_SEQ
+
 	char fw_version[2];                /* major = [0], minor = [1] */
 	char hw_version[2];                /* major = [0], minor = [1] */
 	char israw;                        /* needs Motorola microcode */
+	char has_fx;                       /* has FX processor (Tropez+) */
 	char prog_status[WF_MAX_PROGRAM];  /* WF_SLOT_* */
 	char patch_status[WF_MAX_PATCH];   /* WF_SLOT_* */
 	char sample_status[WF_MAX_SAMPLE]; /* WF_ST_* | WF_SLOT_* */
@@ -197,27 +272,22 @@ typedef struct wf_config {
 	char interrupts_on;                /* h/w MPU interrupts enabled ? */
 	char rom_samples_rdonly;           /* can we write on ROM samples */
 	struct wait_queue *interrupt_sleeper; 
-#ifdef  WF_STATS
-	unsigned long status_found_during_loop;
-	unsigned long status_found_during_sleep[4];
-#endif  WF_STATS
+} dev;
 
-} wf_config;
+static int  detect_wffx(void);
+static int  wffx_ioctl (wavefront_fx_info *);
+static int  wffx_init (void);
 
-/* Note: because this module doesn't export any symbols, this really isn't
-   a global variable, even if it looks like one. I was quite confused by
-   this when I started writing this as a (newer) module -- pbd.
-*/
+static int wavefront_delete_sample (int sampnum);
+static int wavefront_find_free_sample (void);
 
-static wf_config wavefront_configuration;
+/* From wf_midi.c */
 
-#define wavefront_status(hw) (inb (hw->status_port))
-
-/* forward references */
-
-static int wffx_ioctl (struct wf_config *, wavefront_fx_info *);
-static int wffx_init (struct wf_config *hw);
-static int wavefront_delete_sample (struct wf_config *hw, int sampnum);
+extern int  virtual_midi_enable  (void);
+extern int  virtual_midi_disable (void);
+extern int  detect_wf_mpu (int, int);
+extern int  install_wf_mpu (void);
+extern int  uninstall_wf_mpu (void);
 
 typedef struct {
 	int cmd;
@@ -339,92 +409,92 @@ wavefront_get_command (int cmd)
 	return (wavefront_command *) 0;
 }
 
+static inline int
+wavefront_status (void) 
+
+{
+	return inb (dev.status_port);
+}
+
 static int
-wavefront_sleep (wf_config *hw, int limit)
+wavefront_sleep (int limit)
 
 {
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout(limit);
+
 	return signal_pending(current);
 }
-    
+
 static int
-wavefront_wait (wf_config *hw, int mask)
+wavefront_wait (int mask)
 
 {
 	int             i;
 	static int      short_loop_cnt = 0;
 
+	/* Compute the loop count that lets us sleep for about the
+	   right amount of time, cache issues, bus speeds and all
+	   other issues being unequal but largely irrelevant.
+	*/
+
 	if (short_loop_cnt == 0) {
-	    short_loop_cnt = (int) (((double) wait_usecs / 1000000.0) *
-		(double) current_cpu_data.loops_per_sec);
+		short_loop_cnt = wait_usecs *
+			(current_cpu_data.loops_per_sec / 1000000);
 	}
 
+	/* Spin for a short period of time, because >99% of all
+	   requests to the WaveFront can be serviced inline like this.
+	*/
+
 	for (i = 0; i < short_loop_cnt; i++) {
-		if (wavefront_status(hw) & mask) {
-#ifdef WF_STATS
-		        hw->status_found_during_loop++;
-#endif WF_STATS
+		if (wavefront_status() & mask) {
 			return 1;
 		}
 	}
 
 	for (i = 0; i < sleep_tries; i++) {
 
-		if (wavefront_status(hw) & mask) {
-#ifdef WF_STATS
-    		        if (i < 4) {
-				hw->status_found_during_sleep[i]++;
-			}
-#endif WF_STATS
+		if (wavefront_status() & mask) {
 			return 1;
 		}
 
-		if (wavefront_sleep (hw, HZ/sleep_interval)) {
+		if (wavefront_sleep (HZ/sleep_interval)) {
 			return (0);
 		}
 	}
 
-	return 0;
+	return (0);
 }
 
 static int
-wavefront_read (wf_config *hw)
-{
-	if (wavefront_wait (hw, STAT_CAN_READ))
-		return inb (hw->data_port);
+wavefront_read (void)
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_DATA) {
-		printk (KERN_DEBUG "WaveFront: read timeout.\n");
-	}
-#endif WF_DEBUG
+{
+	if (wavefront_wait (STAT_CAN_READ))
+		return inb (dev.data_port);
+
+	DPRINT (WF_DEBUG_DATA, "read timeout.\n");
 
 	return -1;
 }
 
 static int
-wavefront_write (wf_config *hw, unsigned char data)
+wavefront_write (unsigned char data)
 
 {
-	if (wavefront_wait (hw, STAT_CAN_WRITE)) {
-		outb (data, hw->data_port);
-		return 1;
+	if (wavefront_wait (STAT_CAN_WRITE)) {
+		outb (data, dev.data_port);
+		return 0;
 	}
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_DATA) {
-		printk (KERN_DEBUG "WaveFront: write timeout.\n");
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_DATA, "write timeout.\n");
 
-	return 0;
+	return -1;
 }
 
 static int
-wavefront_cmd (wf_config *hw, int cmd,
-	       unsigned char *rbuf,
-	       unsigned char *wbuf)
+wavefront_cmd (int cmd, unsigned char *rbuf, unsigned char *wbuf)
 
 {
 	int ack;
@@ -433,7 +503,7 @@ wavefront_cmd (wf_config *hw, int cmd,
 	wavefront_command *wfcmd;
 
 	if ((wfcmd = wavefront_get_command (cmd)) == (wavefront_command *) 0) {
-		printk (KERN_WARNING "WaveFront: command 0x%x not supported.\n",
+		printk (KERN_WARNING LOGNAME "command 0x%x not supported.\n",
 			cmd);
 		return 1;
 	}
@@ -448,89 +518,59 @@ wavefront_cmd (wf_config *hw, int cmd,
 		rbuf = 0;
 	}
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_CMD) {
-		printk (KERN_DEBUG "Wavefront: 0x%x [%s] (%d,%d,%d)\n",
-			cmd, wfcmd->action, wfcmd->read_cnt, wfcmd->write_cnt,
-			wfcmd->need_ack);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_CMD, "0x%x [%s] (%d,%d,%d)\n",
+			       cmd, wfcmd->action, wfcmd->read_cnt,
+			       wfcmd->write_cnt, wfcmd->need_ack);
     
-	if (!wavefront_write (hw, cmd)) { 
-#ifdef WF_DEBUG
-		if (hw->debug & (WF_DEBUG_IO|WF_DEBUG_CMD)) {
-			printk (KERN_DEBUG "WaveFront: cannot request "
-				"0x%x [%s].\n",
-				cmd, wfcmd->action);
-		}
-#endif WF_DEBUG
+	if (wavefront_write (cmd)) { 
+		DPRINT ((WF_DEBUG_IO|WF_DEBUG_CMD), "cannot request "
+						     "0x%x [%s].\n",
+						     cmd, wfcmd->action);
 		return 1;
 	} 
 
 	if (wfcmd->write_cnt > 0) {
-#ifdef WF_DEBUG
-		if (hw->debug & WF_DEBUG_DATA) {
-			printk (KERN_DEBUG "WaveFront: writing %d bytes "
-				"for 0x%x\n",
-				wfcmd->write_cnt, cmd);
-		}
-#endif WF_DEBUG
+		DPRINT (WF_DEBUG_DATA, "writing %d bytes "
+					"for 0x%x\n",
+					wfcmd->write_cnt, cmd);
 
 		for (i = 0; i < wfcmd->write_cnt; i++) {
-			if (!wavefront_write (hw, wbuf[i])) {
-#ifdef WF_DEBUG
-				if (hw->debug & WF_DEBUG_IO) {
-					printk (KERN_DEBUG
-                           "WaveFront: bad write for byte %d of 0x%x [%s].\n",
-						i, cmd, wfcmd->action);
-				}
-#endif WF_DEBUG
+			if (wavefront_write (wbuf[i])) {
+				DPRINT (WF_DEBUG_IO, "bad write for byte "
+						      "%d of 0x%x [%s].\n",
+						      i, cmd, wfcmd->action);
 				return 1;
 			}
-#ifdef WF_DEBUG
-			if (hw->debug & WF_DEBUG_DATA) {
-				printk (KERN_DEBUG
-                                        "WaveFront: write[%d] = 0x%x\n",
-					i, wbuf[i]);
-#endif WF_DEBUG
-			}
+
+			DPRINT (WF_DEBUG_DATA, "write[%d] = 0x%x\n",
+						i, wbuf[i]);
 		}
 	}
 
 	if (wfcmd->read_cnt > 0) {
-#ifdef WF_DEBUG
-		if (hw->debug & WF_DEBUG_DATA) {
-			printk (KERN_DEBUG "WaveFront: reading %d ints "
-				"for 0x%x\n",
-				wfcmd->read_cnt, cmd);
-		}
-#endif WF_DEBUG
+		DPRINT (WF_DEBUG_DATA, "reading %d ints "
+					"for 0x%x\n",
+					wfcmd->read_cnt, cmd);
 
 		for (i = 0; i < wfcmd->read_cnt; i++) {
 
-			if ((c = wavefront_read(hw)) == -1) {
-#ifdef WF_DEBUG
-				if (hw->debug & WF_DEBUG_IO) {
-					printk (KERN_DEBUG
-                               "WaveFront: bad read for byte %d of 0x%x [%s].\n",
-						i, cmd, wfcmd->action);
-				}
-#endif WF_DEBUG
+			if ((c = wavefront_read()) == -1) {
+				DPRINT (WF_DEBUG_IO, "bad read for byte "
+						      "%d of 0x%x [%s].\n",
+						      i, cmd, wfcmd->action);
 				return 1;
 			}
 
 			/* Now handle errors. Lots of special cases here */
 	    
 			if (c == 0xff) { 
-				if ((c = wavefront_read (hw)) == -1) {
-#ifdef WF_DEBUG
-					if (hw->debug & WF_DEBUG_IO) {
-						printk (KERN_DEBUG
-                                 "WaveFront: bad read for error byte at "
-                                  "read byte %d of 0x%x [%s].\n",
-							i, cmd, wfcmd->action);
-					}
-#endif WF_DEBUG
+				if ((c = wavefront_read ()) == -1) {
+					DPRINT (WF_DEBUG_IO, "bad read for "
+							      "error byte at "
+							      "read byte %d "
+							      "of 0x%x [%s].\n",
+							      i, cmd,
+							      wfcmd->action);
 					return 1;
 				}
 
@@ -553,60 +593,44 @@ wavefront_cmd (wf_config *hw, int cmd,
 
 				} else {
 
-#ifdef WF_DEBUG
-					if (hw->debug & WF_DEBUG_IO) {
-						printk (KERN_DEBUG
-                                            "WaveFront: error %d (%s) during "
-                                                "read for byte "
-					          "%d of 0x%x [%s].\n",
-							c,
-							wavefront_errorstr (c),
-							i, cmd, wfcmd->action);
-					}
-#endif WF_DEBUG
+					DPRINT (WF_DEBUG_IO, "error %d (%s) "
+							      "during "
+							      "read for byte "
+							      "%d of 0x%x "
+							      "[%s].\n",
+							      c,
+							      wavefront_errorstr (c),
+							      i, cmd,
+							      wfcmd->action);
 					return 1;
 
 				}
-			} else {
+		
+		} else {
 				rbuf[i] = c;
 			}
-
-#ifdef WF_DEBUG
-			if (hw->debug & WF_DEBUG_DATA) {
-				printk (KERN_DEBUG
-					"WaveFront: read[%d] = 0x%x\n",
-					i, rbuf[i]);
-			}
-#endif WF_DEBUG
+			
+			DPRINT (WF_DEBUG_DATA, "read[%d] = 0x%x\n",i, rbuf[i]);
 		}
 	}
-
+	
 	if ((wfcmd->read_cnt == 0 && wfcmd->write_cnt == 0) || wfcmd->need_ack) {
 
-#ifdef WF_DEBUG
-		if (hw->debug & WF_DEBUG_CMD) {
-			printk (KERN_DEBUG "WaveFront: reading ACK for 0x%x\n",
-				cmd);
-		}
-#endif WF_DEBUG
+		DPRINT (WF_DEBUG_CMD, "reading ACK for 0x%x\n", cmd);
 
 		/* Some commands need an ACK, but return zero instead
 		   of the standard value.
 		*/
 	    
-		if ((ack = wavefront_read(hw)) == 0) {
+		if ((ack = wavefront_read()) == 0) {
 			ack = WF_ACK;
 		}
 	
 		if (ack != WF_ACK) {
 			if (ack == -1) {
-#ifdef WF_DEBUG
-				if (hw->debug & WF_DEBUG_IO) {
-					printk (KERN_DEBUG
-                               "WaveFront: cannot read ack for 0x%x [%s].\n",
-						cmd, wfcmd->action);
-				}
-#endif WF_DEBUG
+				DPRINT (WF_DEBUG_IO, "cannot read ack for "
+						      "0x%x [%s].\n",
+						      cmd, wfcmd->action);
 				return 1;
 		
 			} else {
@@ -614,47 +638,32 @@ wavefront_cmd (wf_config *hw, int cmd,
 
 				if (ack == 0xff) { /* explicit error */
 		    
-					if ((err = wavefront_read (hw)) == -1) {
-#ifdef WF_DEBUG
-						if (hw->debug & WF_DEBUG_DATA) {
-							printk (KERN_DEBUG
-                               "WaveFront: cannot read err for 0x%x [%s].\n",
-                                                            cmd, wfcmd->action);
-						}
-#endif WF_DEBUG
+					if ((err = wavefront_read ()) == -1) {
+						DPRINT (WF_DEBUG_DATA,
+							"cannot read err "
+							"for 0x%x [%s].\n",
+							cmd, wfcmd->action);
 					}
 				}
-
-#ifdef WF_DEBUG
-				if (hw->debug & WF_DEBUG_IO) {
-					printk (KERN_DEBUG
-						"WaveFront: 0x%x [%s] "
-						"failed (0x%x, 0x%x, %s)\n",
-						cmd, wfcmd->action, ack, err,
-						wavefront_errorstr (err));
-				}
-#endif WF_DEBUG
+				
+				DPRINT (WF_DEBUG_IO, "0x%x [%s] "
+					"failed (0x%x, 0x%x, %s)\n",
+					cmd, wfcmd->action, ack, err,
+					wavefront_errorstr (err));
+				
 				return -err;
-			} 
+			}
 		}
-
-#ifdef WF_DEBUG
-		if (hw->debug & WF_DEBUG_DATA) {
-			printk (KERN_DEBUG "WaveFront: ack received "
-				"for 0x%x [%s]\n",
-				cmd, wfcmd->action);
-		}
-#endif WF_DEBUG
+		
+		DPRINT (WF_DEBUG_DATA, "ack received "
+					"for 0x%x [%s]\n",
+					cmd, wfcmd->action);
 	} else {
-#ifdef WF_DEBUG
-		if (hw->debug & WF_DEBUG_CMD) {
-			printk (KERN_DEBUG 
-				"Wavefront: 0x%x [%s] does not need "
-				"ACK (%d,%d,%d)\n",
-				cmd, wfcmd->action, wfcmd->read_cnt,
-				wfcmd->write_cnt, wfcmd->need_ack);
-#endif WF_DEBUG
-		}
+
+		DPRINT (WF_DEBUG_CMD, "0x%x [%s] does not need "
+				       "ACK (%d,%d,%d)\n",
+				       cmd, wfcmd->action, wfcmd->read_cnt,
+				       wfcmd->write_cnt, wfcmd->need_ack);
 	}
 
 	return 0;
@@ -749,7 +758,7 @@ WaveFront: sample, patch and program management.
 ***********************************************************************/
 
 static int
-wavefront_delete_sample (wf_config *hw, int sample_num)
+wavefront_delete_sample (int sample_num)
 
 {
 	unsigned char wbuf[2];
@@ -758,15 +767,15 @@ wavefront_delete_sample (wf_config *hw, int sample_num)
 	wbuf[0] = sample_num & 0x7f;
 	wbuf[1] = sample_num >> 7;
 
-	if ((x = wavefront_cmd (hw, WFC_DELETE_SAMPLE, 0, wbuf)) == 0) {
-		hw->sample_status[sample_num] = WF_ST_EMPTY;
+	if ((x = wavefront_cmd (WFC_DELETE_SAMPLE, 0, wbuf)) == 0) {
+		dev.sample_status[sample_num] = WF_ST_EMPTY;
 	}
 
 	return x;
 }
 
 static int
-wavefront_get_sample_status (struct wf_config *hw, int assume_rom)
+wavefront_get_sample_status (int assume_rom)
 
 {
 	int i;
@@ -775,29 +784,30 @@ wavefront_get_sample_status (struct wf_config *hw, int assume_rom)
 
 	/* check sample status */
     
-	if (wavefront_cmd (hw, WFC_GET_NSAMPLES, rbuf, wbuf)) {
-		printk ("WaveFront: cannot request sample count.\n");
+	if (wavefront_cmd (WFC_GET_NSAMPLES, rbuf, wbuf)) {
+		printk (KERN_WARNING LOGNAME "cannot request sample count.\n");
+		return -1;
 	} 
     
-	sc_real = sc_alias = sc_multi = hw->samples_used = 0;
+	sc_real = sc_alias = sc_multi = dev.samples_used = 0;
     
 	for (i = 0; i < WF_MAX_SAMPLE; i++) {
 	
 		wbuf[0] = i & 0x7f;
 		wbuf[1] = i >> 7;
 
-		if (wavefront_cmd (hw, WFC_IDENTIFY_SAMPLE_TYPE, rbuf, wbuf)) {
-			printk (KERN_WARNING
-				"WaveFront: cannot identify sample "
+		if (wavefront_cmd (WFC_IDENTIFY_SAMPLE_TYPE, rbuf, wbuf)) {
+			printk (KERN_WARNING LOGNAME
+				"cannot identify sample "
 				"type of slot %d\n", i);
-			hw->sample_status[i] = WF_ST_EMPTY;
+			dev.sample_status[i] = WF_ST_EMPTY;
 			continue;
 		}
 
-		hw->sample_status[i] = (WF_SLOT_FILLED|rbuf[0]);
+		dev.sample_status[i] = (WF_SLOT_FILLED|rbuf[0]);
 
 		if (assume_rom) {
-			hw->sample_status[i] |= WF_SLOT_ROM;
+			dev.sample_status[i] |= WF_SLOT_ROM;
 		}
 
 		switch (rbuf[0] & WF_ST_MASK) {
@@ -814,21 +824,20 @@ wavefront_get_sample_status (struct wf_config *hw, int assume_rom)
 			break;
 
 		default:
-			printk (KERN_WARNING
-				"WaveFront: unknown sample type for "
+			printk (KERN_WARNING LOGNAME "unknown sample type for "
 				"slot %d (0x%x)\n", 
 				i, rbuf[0]);
 		}
 
 		if (rbuf[0] != WF_ST_EMPTY) {
-			hw->samples_used++;
+			dev.samples_used++;
 		} 
 	}
 
-	printk (KERN_INFO
-		"WaveFront: %d samples used (%d real, %d aliases, %d multi), "
-		"%d empty\n", hw->samples_used, sc_real, sc_alias, sc_multi,
-		WF_MAX_SAMPLE - hw->samples_used);
+	printk (KERN_INFO LOGNAME
+		"%d samples used (%d real, %d aliases, %d multi), "
+		"%d empty\n", dev.samples_used, sc_real, sc_alias, sc_multi,
+		WF_MAX_SAMPLE - dev.samples_used);
 
 
 	return (0);
@@ -836,7 +845,8 @@ wavefront_get_sample_status (struct wf_config *hw, int assume_rom)
 }
 
 static int
-wavefront_get_patch_status (struct wf_config *hw)
+wavefront_get_patch_status (void)
+
 {
 	unsigned char patchbuf[WF_PATCH_BYTES];
 	unsigned char patchnum[2];
@@ -847,21 +857,21 @@ wavefront_get_patch_status (struct wf_config *hw)
 		patchnum[0] = i & 0x7f;
 		patchnum[1] = i >> 7;
 
-		if ((x = wavefront_cmd (hw, WFC_UPLOAD_PATCH, patchbuf,
+		if ((x = wavefront_cmd (WFC_UPLOAD_PATCH, patchbuf,
 					patchnum)) == 0) {
 
-			hw->patch_status[i] |= WF_SLOT_FILLED;
+			dev.patch_status[i] |= WF_SLOT_FILLED;
 			p = (wavefront_patch *) patchbuf;
-			hw->sample_status
+			dev.sample_status
 				[p->sample_number|(p->sample_msb<<7)] |=
 				WF_SLOT_USED;
 	    
 		} else if (x == 3) { /* Bad patch number */
-			hw->patch_status[i] = 0;
+			dev.patch_status[i] = 0;
 		} else {
-			printk (KERN_ERR "WaveFront: upload patch "
+			printk (KERN_ERR LOGNAME "upload patch "
 				"error 0x%x\n", x);
-			hw->patch_status[i] = 0;
+			dev.patch_status[i] = 0;
 			return 1;
 		}
 	}
@@ -869,22 +879,23 @@ wavefront_get_patch_status (struct wf_config *hw)
 	/* program status has already filled in slot_used bits */
 
 	for (i = 0, cnt = 0, cnt2 = 0; i < WF_MAX_PATCH; i++) {
-		if (hw->patch_status[i] & WF_SLOT_FILLED) {
+		if (dev.patch_status[i] & WF_SLOT_FILLED) {
 			cnt++;
 		}
-		if (hw->patch_status[i] & WF_SLOT_USED) {
+		if (dev.patch_status[i] & WF_SLOT_USED) {
 			cnt2++;
 		}
 	
 	}
-	printk (KERN_INFO
-		"WaveFront: %d patch slots filled, %d in use\n", cnt, cnt2);
+	printk (KERN_INFO LOGNAME
+		"%d patch slots filled, %d in use\n", cnt, cnt2);
 
 	return (0);
 }
 
 static int
-wavefront_get_program_status (struct wf_config *hw)
+wavefront_get_program_status (void)
+
 {
 	unsigned char progbuf[WF_PROGRAM_BYTES];
 	wavefront_program prog;
@@ -894,64 +905,59 @@ wavefront_get_program_status (struct wf_config *hw)
 	for (i = 0; i < WF_MAX_PROGRAM; i++) {
 		prognum = i;
 
-		if ((x = wavefront_cmd (hw, WFC_UPLOAD_PROGRAM, progbuf,
+		if ((x = wavefront_cmd (WFC_UPLOAD_PROGRAM, progbuf,
 					&prognum)) == 0) {
 
-			hw->prog_status[i] |= WF_SLOT_USED;
+			dev.prog_status[i] |= WF_SLOT_USED;
 
 			demunge_buf (progbuf, (unsigned char *) &prog,
 				     WF_PROGRAM_BYTES);
 
 			for (l = 0; l < WF_NUM_LAYERS; l++) {
 				if (prog.layer[l].mute) {
-					hw->patch_status
+					dev.patch_status
 						[prog.layer[l].patch_number] |=
 						WF_SLOT_USED;
 				}
 			}
 		} else if (x == 1) { /* Bad program number */
-			hw->prog_status[i] = 0;
+			dev.prog_status[i] = 0;
 		} else {
-			printk (KERN_ERR "WaveFront: upload program "
+			printk (KERN_ERR LOGNAME "upload program "
 				"error 0x%x\n", x);
-			hw->prog_status[i] = 0;
+			dev.prog_status[i] = 0;
 		}
 	}
 
 	for (i = 0, cnt = 0; i < WF_MAX_PROGRAM; i++) {
-		if (hw->prog_status[i]) {
+		if (dev.prog_status[i]) {
 			cnt++;
 		}
 	}
 
-	printk (KERN_INFO "WaveFront: %d programs slots in use\n", cnt);
+	printk (KERN_INFO LOGNAME "%d programs slots in use\n", cnt);
 
 	return (0);
 }
 
 static int
-wavefront_send_patch (wf_config *hw, 
-		      wavefront_patch_info *header)
+wavefront_send_patch (wavefront_patch_info *header)
 
 {
 	unsigned char buf[WF_PATCH_BYTES+2];
 	unsigned char *bptr;
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG "WaveFront: downloading patch %d\n",
-			header->number);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "downloading patch %d\n",
+				      header->number);
 
-	hw->patch_status[header->number] |= WF_SLOT_FILLED;
+	dev.patch_status[header->number] |= WF_SLOT_FILLED;
 
 	bptr = buf;
 	bptr = munge_int32 (header->number, buf, 2);
 	munge_buf ((unsigned char *)&header->hdr.p, bptr, WF_PATCH_BYTES);
     
-	if (wavefront_cmd (hw, WFC_DOWNLOAD_PATCH, 0, buf)) {
-		printk (KERN_ERR "WaveFront: download patch failed\n");
+	if (wavefront_cmd (WFC_DOWNLOAD_PATCH, 0, buf)) {
+		printk (KERN_ERR LOGNAME "download patch failed\n");
 		return -(EIO);
 	}
 
@@ -959,21 +965,16 @@ wavefront_send_patch (wf_config *hw,
 }
 
 static int
-wavefront_send_program (wf_config *hw, 
-			wavefront_patch_info *header)
+wavefront_send_program (wavefront_patch_info *header)
 
 {
 	unsigned char buf[WF_PROGRAM_BYTES+1];
 	int i;
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG
-			"WaveFront: downloading program %d\n", header->number);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "downloading program %d\n",
+		header->number);
 
-	hw->prog_status[header->number] = WF_SLOT_USED;
+	dev.prog_status[header->number] = WF_SLOT_USED;
 
 	/* XXX need to zero existing SLOT_USED bit for program_status[i]
 	   where `i' is the program that's being (potentially) overwritten.
@@ -981,7 +982,7 @@ wavefront_send_program (wf_config *hw,
     
 	for (i = 0; i < WF_NUM_LAYERS; i++) {
 		if (header->hdr.pr.layer[i].mute) {
-			hw->patch_status[header->hdr.pr.layer[i].patch_number] |=
+			dev.patch_status[header->hdr.pr.layer[i].patch_number] |=
 				WF_SLOT_USED;
 
 			/* XXX need to mark SLOT_USED for sample used by
@@ -993,8 +994,8 @@ wavefront_send_program (wf_config *hw,
 	buf[0] = header->number;
 	munge_buf ((unsigned char *)&header->hdr.pr, &buf[1], WF_PROGRAM_BYTES);
     
-	if (wavefront_cmd (hw, WFC_DOWNLOAD_PROGRAM, 0, buf)) {
-		printk (KERN_WARNING "WaveFront: download patch failed\n");	
+	if (wavefront_cmd (WFC_DOWNLOAD_PROGRAM, 0, buf)) {
+		printk (KERN_WARNING LOGNAME "download patch failed\n");	
 		return -(EIO);
 	}
 
@@ -1002,13 +1003,13 @@ wavefront_send_program (wf_config *hw,
 }
 
 static int
-wavefront_freemem (wf_config *hw)
+wavefront_freemem (void)
 
 {
 	char rbuf[8];
 
-	if (wavefront_cmd (hw, WFC_REPORT_FREE_MEMORY, rbuf, 0)) {
-		printk (KERN_WARNING "WaveFront: can't get memory stats.\n");
+	if (wavefront_cmd (WFC_REPORT_FREE_MEMORY, rbuf, 0)) {
+		printk (KERN_WARNING LOGNAME "can't get memory stats.\n");
 		return -1;
 	} else {
 		return demunge_int32 (rbuf, 4);
@@ -1016,8 +1017,7 @@ wavefront_freemem (wf_config *hw)
 }
 
 static int
-wavefront_send_sample (wf_config      *hw,
-		       wavefront_patch_info *header,
+wavefront_send_sample (wavefront_patch_info *header,
 		       UINT16 *dataptr,
 		       int data_is_unsigned)
 
@@ -1045,15 +1045,22 @@ wavefront_send_sample (wf_config      *hw,
 	int skip = 0;
 	int initial_skip = 0;
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG "WaveFront: sample %sdownload for slot %d, "
-			"type %d, %d bytes from 0x%x\n",
-			header->size ? "" : "header ", 
-			header->number, header->subkey, header->size,
-			(int) header->dataptr);
+	DPRINT (WF_DEBUG_LOAD_PATCH, "sample %sdownload for slot %d, "
+				      "type %d, %d bytes from 0x%x\n",
+				      header->size ? "" : "header ", 
+				      header->number, header->subkey,
+				      header->size,
+				      (int) header->dataptr);
+
+	if (header->number == WAVEFRONT_FIND_FREE_SAMPLE_SLOT) {
+		int x;
+
+		if ((x = wavefront_find_free_sample ()) < 0) {
+			return -ENOMEM;
+		}
+		printk (KERN_DEBUG LOGNAME "unspecified sample => %d\n", x);
+		header->number = x;
 	}
-#endif WF_DEBUG
 
 	if (header->size) {
 
@@ -1080,24 +1087,24 @@ wavefront_send_sample (wf_config      *hw,
 		   a copy of the patch/program/sample header data.
 		*/
 
-		if (hw->rom_samples_rdonly) {
-			if (hw->sample_status[header->number] & WF_SLOT_ROM) {
-				printk (KERN_ERR "WaveFront: sample slot %d "
+		if (dev.rom_samples_rdonly) {
+			if (dev.sample_status[header->number] & WF_SLOT_ROM) {
+				printk (KERN_ERR LOGNAME "sample slot %d "
 					"write protected\n",
 					header->number);
 				return -EACCES;
 			}
 		}
 
-		wavefront_delete_sample (hw, header->number);
+		wavefront_delete_sample (header->number);
 	}
 
 	if (header->size) {
-		hw->freemem = wavefront_freemem (hw);
+		dev.freemem = wavefront_freemem ();
 
-		if (hw->freemem < header->size) {
-			printk (KERN_ERR
-				"WaveFront: insufficient memory to "
+		if (dev.freemem < header->size) {
+			printk (KERN_ERR LOGNAME
+				"insufficient memory to "
 				"load %d byte sample.\n",
 				header->size);
 			return -ENOMEM;
@@ -1107,16 +1114,10 @@ wavefront_send_sample (wf_config      *hw,
 
 	skip = WF_GET_CHANNEL(&header->hdr.s);
 
-	if (skip > 0) {
-		switch (header->hdr.s.SampleResolution) {
-		case LINEAR_16BIT:
-			break;
-		default:
-			printk (KERN_ERR
-				"WaveFront: channel selection only possible "
-				"on 16-bit samples");
-			return -(EINVAL);
-		}
+	if (skip > 0 && header->hdr.s.SampleResolution != LINEAR_16BIT) {
+		printk (KERN_ERR LOGNAME "channel selection only "
+			"possible on 16-bit samples");
+		return -(EINVAL);
 	}
 
 	switch (skip) {
@@ -1150,13 +1151,10 @@ wavefront_send_sample (wf_config      *hw,
 		break;
 	}
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG "WaveFront: channel selection: %d => "
-			"initial skip = %d, skip = %d\n",
-			WF_GET_CHANNEL (&header->hdr.s), initial_skip, skip);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "channel selection: %d => "
+				      "initial skip = %d, skip = %d\n",
+				      WF_GET_CHANNEL (&header->hdr.s),
+				      initial_skip, skip);
     
 	/* Be safe, and zero the "Unused" bits ... */
 
@@ -1210,10 +1208,10 @@ wavefront_send_sample (wf_config      *hw,
 	shptr = munge_int32 (*(&header->hdr.s.FrequencyBias+1),
 			     shptr, 2);
 
-	if (wavefront_cmd (hw, header->size ?
+	if (wavefront_cmd (header->size ?
 			   WFC_DOWNLOAD_SAMPLE : WFC_DOWNLOAD_SAMPLE_HEADER,
 			   0, sample_hdr)) {
-		printk (KERN_WARNING "WaveFront: sample %sdownload refused.\n",
+		printk (KERN_WARNING LOGNAME "sample %sdownload refused.\n",
 			header->size ? "" : "header ");
 		return -(EIO);
 	}
@@ -1238,8 +1236,8 @@ wavefront_send_sample (wf_config      *hw,
 			blocksize = ((length-written+7)&~0x7);
 		}
 
-		if (wavefront_cmd (hw, WFC_DOWNLOAD_BLOCK, 0, 0)) {
-			printk (KERN_WARNING "WaveFront: download block "
+		if (wavefront_cmd (WFC_DOWNLOAD_BLOCK, 0, 0)) {
+			printk (KERN_WARNING LOGNAME "download block "
 				"request refused.\n");
 			return -(EIO);
 		}
@@ -1248,7 +1246,7 @@ wavefront_send_sample (wf_config      *hw,
 
 			if (dataptr < data_end) {
 		
-				get_user (sample_short, dataptr);
+				__get_user (sample_short, dataptr);
 				dataptr += skip;
 		
 				if (data_is_unsigned) { /* GUS ? */
@@ -1287,21 +1285,23 @@ wavefront_send_sample (wf_config      *hw,
 			}
 	    
 			if (i < blocksize - 1) {
-				outw (sample_short, hw->block_port);
+				outw (sample_short, dev.block_port);
 			} else {
-				outw (sample_short, hw->last_block_port);
+				outw (sample_short, dev.last_block_port);
 			}
 		}
 
-		/* Get "DMA page acknowledge" */
+		/* Get "DMA page acknowledge", even though its really
+		   nothing to do with DMA at all.
+		*/
 	
-		if ((dma_ack = wavefront_read (hw)) != WF_DMA_ACK) {
+		if ((dma_ack = wavefront_read ()) != WF_DMA_ACK) {
 			if (dma_ack == -1) {
-				printk (KERN_ERR "WaveFront: upload sample "
+				printk (KERN_ERR LOGNAME "upload sample "
 					"DMA ack timeout\n");
 				return -(EIO);
 			} else {
-				printk (KERN_ERR "WaveFront: upload sample "
+				printk (KERN_ERR LOGNAME "upload sample "
 					"DMA ack error 0x%x\n",
 					dma_ack);
 				return -(EIO);
@@ -1309,7 +1309,7 @@ wavefront_send_sample (wf_config      *hw,
 		}
 	}
 
-	hw->sample_status[header->number] = (WF_SLOT_FILLED|WF_ST_SAMPLE);
+	dev.sample_status[header->number] = (WF_SLOT_FILLED|WF_ST_SAMPLE);
 
 	/* Note, label is here because sending the sample header shouldn't
 	   alter the sample_status info at all.
@@ -1320,20 +1320,15 @@ wavefront_send_sample (wf_config      *hw,
 }
 
 static int
-wavefront_send_alias (struct wf_config *hw, 
-		      wavefront_patch_info *header)
+wavefront_send_alias (wavefront_patch_info *header)
 
 {
 	unsigned char alias_hdr[WF_ALIAS_BYTES];
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG "WaveFront: download alias, %d is "
-			"alias for %d\n",
-			header->number,
-			header->hdr.a.OriginalSample);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "download alias, %d is "
+				      "alias for %d\n",
+				      header->number,
+				      header->hdr.a.OriginalSample);
     
 	munge_int32 (header->number, &alias_hdr[0], 2);
 	munge_int32 (header->hdr.a.OriginalSample, &alias_hdr[2], 2);
@@ -1348,19 +1343,18 @@ wavefront_send_alias (struct wf_config *hw,
 	munge_int32 (header->hdr.a.FrequencyBias, &alias_hdr[20], 3);
 	munge_int32 (*(&header->hdr.a.FrequencyBias+1), &alias_hdr[23], 2);
 
-	if (wavefront_cmd (hw, WFC_DOWNLOAD_SAMPLE_ALIAS, 0, alias_hdr)) {
-		printk (KERN_ERR "WaveFront: download alias failed.\n");
+	if (wavefront_cmd (WFC_DOWNLOAD_SAMPLE_ALIAS, 0, alias_hdr)) {
+		printk (KERN_ERR LOGNAME "download alias failed.\n");
 		return -(EIO);
 	}
 
-	hw->sample_status[header->number] = (WF_SLOT_FILLED|WF_ST_ALIAS);
+	dev.sample_status[header->number] = (WF_SLOT_FILLED|WF_ST_ALIAS);
 
 	return (0);
 }
 
 static int
-wavefront_send_multisample (struct wf_config *hw,
-			    wavefront_patch_info *header)
+wavefront_send_multisample (wavefront_patch_info *header)
 {
 	int i;
 	int num_samples;
@@ -1376,23 +1370,16 @@ wavefront_send_multisample (struct wf_config *hw,
 	num_samples = (1<<(header->hdr.ms.NumberOfSamples&7));
 	msample_hdr[2] = (unsigned char) header->hdr.ms.NumberOfSamples;
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG "WaveFront: multi %d with %d=%d samples\n",
-			header->number, header->hdr.ms.NumberOfSamples, num_samples);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "multi %d with %d=%d samples\n",
+				      header->number,
+				      header->hdr.ms.NumberOfSamples,
+				      num_samples);
 
 	for (i = 0; i < num_samples; i++) {
-#ifdef WF_DEBUG
-		if ((hw->debug & (WF_DEBUG_LOAD_PATCH|WF_DEBUG_DATA)) ==
-		    (WF_DEBUG_LOAD_PATCH|WF_DEBUG_DATA)) {
-			printk (KERN_DEBUG "WaveFront: sample[%d] = %d\n",
-				i, header->hdr.ms.SampleNumber[i]);
-		}
-#endif WF_DEBUG
+		DPRINT(WF_DEBUG_LOAD_PATCH|WF_DEBUG_DATA, "sample[%d] = %d\n",
+		       i, header->hdr.ms.SampleNumber[i]);
 		munge_int32 (header->hdr.ms.SampleNumber[i],
-			     &msample_hdr[3+(i*2)], 2);
+		     &msample_hdr[3+(i*2)], 2);
 	}
     
 	/* Need a hack here to pass in the number of bytes
@@ -1400,21 +1387,20 @@ wavefront_send_multisample (struct wf_config *hw,
 	   one day, I'll fix it.
 	*/
 
-	if (wavefront_cmd (hw, WFC_DOWNLOAD_MULTISAMPLE, 
+	if (wavefront_cmd (WFC_DOWNLOAD_MULTISAMPLE, 
 			   (unsigned char *) ((num_samples*2)+3),
 			   msample_hdr)) {
-		printk (KERN_ERR "WaveFront: download of multisample failed.\n");
+		printk (KERN_ERR LOGNAME "download of multisample failed.\n");
 		return -(EIO);
 	}
 
-	hw->sample_status[header->number] = (WF_SLOT_FILLED|WF_ST_MULTISAMPLE);
+	dev.sample_status[header->number] = (WF_SLOT_FILLED|WF_ST_MULTISAMPLE);
 
 	return (0);
 }
 
 static int
-wavefront_fetch_multisample (struct wf_config *hw,
-			     wavefront_patch_info *header)
+wavefront_fetch_multisample (wavefront_patch_info *header)
 {
 	int i;
 	unsigned char log_ns[1];
@@ -1423,17 +1409,13 @@ wavefront_fetch_multisample (struct wf_config *hw,
 
 	munge_int32 (header->number, number, 2);
     
-	if (wavefront_cmd (hw, WFC_UPLOAD_MULTISAMPLE, log_ns, number)) {
-		printk (KERN_ERR "WaveFront: upload multisample failed.\n");
+	if (wavefront_cmd (WFC_UPLOAD_MULTISAMPLE, log_ns, number)) {
+		printk (KERN_ERR LOGNAME "upload multisample failed.\n");
 		return -(EIO);
 	}
     
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_DATA) {
-		printk (KERN_DEBUG "WaveFront: msample %d has %d samples\n",
-			header->number, log_ns[0]);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_DATA, "msample %d has %d samples\n",
+				header->number, log_ns[0]);
 
 	header->hdr.ms.NumberOfSamples = log_ns[0];
 
@@ -1444,14 +1426,14 @@ wavefront_fetch_multisample (struct wf_config *hw,
 	for (i = 0; i < num_samples; i++) {
 		char d[2];
 	
-		if ((d[0] = wavefront_read (hw)) == -1) {
-			printk (KERN_ERR "WaveFront: upload multisample failed "
+		if ((d[0] = wavefront_read ()) == -1) {
+			printk (KERN_ERR LOGNAME "upload multisample failed "
 				"during sample loop.\n");
 			return -(EIO);
 		}
 
-		if ((d[1] = wavefront_read (hw)) == -1) {
-			printk (KERN_ERR "WaveFront: upload multisample failed "
+		if ((d[1] = wavefront_read ()) == -1) {
+			printk (KERN_ERR LOGNAME "upload multisample failed "
 				"during sample loop.\n");
 			return -(EIO);
 		}
@@ -1459,13 +1441,8 @@ wavefront_fetch_multisample (struct wf_config *hw,
 		header->hdr.ms.SampleNumber[i] =
 			demunge_int32 ((unsigned char *) d, 2);
 	
-#ifdef WF_DEBUG
-		if (hw->debug & WF_DEBUG_DATA) {
-			printk (KERN_DEBUG "WaveFront: msample "
-				"sample[%d] = %d\n",
-				i, header->hdr.ms.SampleNumber[i]);
-		}
-#endif WF_DEBUG
+		DPRINT (WF_DEBUG_DATA, "msample sample[%d] = %d\n",
+					i, header->hdr.ms.SampleNumber[i]);
 	}
 
 	return (0);
@@ -1473,21 +1450,16 @@ wavefront_fetch_multisample (struct wf_config *hw,
 
 
 static int
-wavefront_send_drum (struct wf_config *hw, wavefront_patch_info *header)
+wavefront_send_drum (wavefront_patch_info *header)
 
 {
 	unsigned char drumbuf[WF_DRUM_BYTES];
 	wavefront_drum *drum = &header->hdr.d;
 	int i;
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG
-			"WaveFront: downloading edrum for MIDI "
-			"note %d, patch = %d\n", 
-			header->number, drum->PatchNumber);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "downloading edrum for MIDI "
+		"note %d, patch = %d\n", 
+		header->number, drum->PatchNumber);
 
 	drumbuf[0] = header->number & 0x7f;
 
@@ -1495,8 +1467,8 @@ wavefront_send_drum (struct wf_config *hw, wavefront_patch_info *header)
 		munge_int32 (((unsigned char *)drum)[i], &drumbuf[1+(i*2)], 2);
 	}
 
-	if (wavefront_cmd (hw, WFC_DOWNLOAD_EDRUM_PROGRAM, 0, drumbuf)) {
-		printk (KERN_ERR "WaveFront: download drum failed.\n");
+	if (wavefront_cmd (WFC_DOWNLOAD_EDRUM_PROGRAM, 0, drumbuf)) {
+		printk (KERN_ERR LOGNAME "download drum failed.\n");
 		return -(EIO);
 	}
 
@@ -1504,32 +1476,32 @@ wavefront_send_drum (struct wf_config *hw, wavefront_patch_info *header)
 }
 
 static int 
-wavefront_find_free_sample (struct wf_config *hw)
+wavefront_find_free_sample (void)
 
 {
 	int i;
 
 	for (i = 0; i < WF_MAX_SAMPLE; i++) {
-		if (!(hw->sample_status[i] & WF_SLOT_FILLED)) {
+		if (!(dev.sample_status[i] & WF_SLOT_FILLED)) {
 			return i;
 		}
 	}
-	printk (KERN_WARNING "WaveFront: no free sample slots!\n");
+	printk (KERN_WARNING LOGNAME "no free sample slots!\n");
 	return -1;
 }
 
 static int 
-wavefront_find_free_patch (struct wf_config *hw)
+wavefront_find_free_patch (void)
 
 {
 	int i;
 
 	for (i = 0; i < WF_MAX_PATCH; i++) {
-		if (!(hw->patch_status[i] & WF_SLOT_FILLED)) {
+		if (!(dev.patch_status[i] & WF_SLOT_FILLED)) {
 			return i;
 		}
 	}
-	printk (KERN_WARNING "WaveFront: no free patch slots!\n");
+	printk (KERN_WARNING LOGNAME "no free patch slots!\n");
 	return -1;
 }
 
@@ -1562,8 +1534,7 @@ log2_2048(int n)
 }
 
 static int
-wavefront_load_gus_patch (struct wf_config *hw,
-			  int dev, int format, const char *addr,
+wavefront_load_gus_patch (int devno, int format, const char *addr,
 			  int offs, int count, int pmgr_flag)
 {
 	struct patch_info guspatch;
@@ -1581,14 +1552,14 @@ wavefront_load_gus_patch (struct wf_config *hw,
 	copy_from_user (&((char *) &guspatch)[offs],
 			&(addr)[offs], sizeof_patch - offs);
 
-	if ((i = wavefront_find_free_patch (hw)) == -1) {
+	if ((i = wavefront_find_free_patch ()) == -1) {
 		return -EBUSY;
 	}
 	pat.number = i;
 	pat.subkey = WF_ST_PATCH;
 	patp = &pat.hdr.p;
 
-	if ((i = wavefront_find_free_sample (hw)) == -1) {
+	if ((i = wavefront_find_free_sample ()) == -1) {
 		return -EBUSY;
 	}
 	samp.number = i;
@@ -1644,7 +1615,7 @@ wavefront_load_gus_patch (struct wf_config *hw,
 	progp->layer[0].mix_level=127  /* guspatch.volume */;
 	progp->layer[0].split_type=0;
 	progp->layer[0].split_point=0;
-	progp->layer[0].updown=0;
+	progp->layer[0].play_below=0;
 
 	for (i = 1; i < 4; i++) {
 		progp->layer[i].mute=0;
@@ -1685,11 +1656,11 @@ wavefront_load_gus_patch (struct wf_config *hw,
 
 	/* Now ship it down */
 
-	wavefront_send_sample (hw, &samp, 
+	wavefront_send_sample (&samp, 
 			       (unsigned short *) &(addr)[sizeof_patch],
 			       (guspatch.mode & WAVE_UNSIGNED) ? 1:0);
-	wavefront_send_patch (hw, &pat);
-	wavefront_send_program (hw, &prog);
+	wavefront_send_patch (&pat);
+	wavefront_send_program (&prog);
 
 	/* Now pan as best we can ... use the slave/internal MIDI device
 	   number if it exists (since it talks to the WaveFront), or the
@@ -1697,8 +1668,8 @@ wavefront_load_gus_patch (struct wf_config *hw,
 	*/
 
 #ifdef CONFIG_MIDI
-	if (hw->mididev > 0) {
-		midi_synth_controller (hw->mididev, guspatch.instr_no, 10,
+	if (dev.mididev > 0) {
+		midi_synth_controller (dev.mididev, guspatch.instr_no, 10,
 				       ((guspatch.panning << 4) > 127) ?
 				       127 : (guspatch.panning << 4));
 	}
@@ -1707,60 +1678,26 @@ wavefront_load_gus_patch (struct wf_config *hw,
 	return(0);
 }
 
-int
-wavefront_load_patch (int dev, int format, const char *addr,
-		      int offs, int count, int pmgr_flag)
+static int
+wavefront_load_patch (const char *addr)
+
+
 {
-
-	struct wf_config *hw = &wavefront_configuration;
 	wavefront_patch_info header;
-
-	if (format == SYSEX_PATCH) {	/* Handled by midi_synth.c */
-		if (midi_load_patch == NULL) {
-			printk (KERN_ERR
-				"WaveFront: SYSEX not loadable: "
-				"no midi patch loader!\n");
-			return -(EINVAL);
-		}
-		return midi_load_patch (dev, format, addr,
-					offs, count, pmgr_flag);
-
-	} else if (format == GUS_PATCH) {
-		return wavefront_load_gus_patch (hw, dev, format,
-						 addr, offs, count, pmgr_flag);
-
-	} else if (format != WAVEFRONT_PATCH) {
-		printk (KERN_ERR "WaveFront: unknown patch format %d\n", format);
+	
+	if (copy_from_user (&header, addr, sizeof(wavefront_patch_info) -
+			    sizeof(wavefront_any))) {
+		printk (KERN_WARNING LOGNAME "bad address for load patch.\n");
 		return -(EINVAL);
 	}
 
-	if (count < sizeof (wavefront_patch_info)) {
-		printk (KERN_ERR "WaveFront: sample header too short\n");
-		return -(EINVAL);
-	}
-
-	/* copied in so far: `offs' bytes from `addr'. We shouldn't copy
-	   them in again, and they correspond to header->key and header->devno.
-	   So now, copy the rest of the wavefront_patch_info struct, except
-	   for the 'hdr' field, since this is handled via indirection
-	   through the 'hdrptr' field.
-	*/
-
-	copy_from_user (&((char *) &header)[offs], &(addr)[offs],
-			sizeof(wavefront_patch_info) -
-			sizeof(wavefront_any) - offs);
-
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_LOAD_PATCH) {
-		printk (KERN_DEBUG "WaveFront: download "
-			"Sample type: %d "
-			"Sample number: %d "
-			"Sample size: %d\n",
-			header.subkey,
-			header.number,
-			header.size);
-	}
-#endif WF_DEBUG
+	DPRINT (WF_DEBUG_LOAD_PATCH, "download "
+				      "Sample type: %d "
+				      "Sample number: %d "
+				      "Sample size: %d\n",
+				      header.subkey,
+				      header.number,
+				      header.size);
 
 	switch (header.subkey) {
 	case WF_ST_SAMPLE:  /* sample or sample_header, based on patch->size */
@@ -1769,7 +1706,7 @@ wavefront_load_patch (int dev, int format, const char *addr,
 				(unsigned char *) header.hdrptr,
 				sizeof (wavefront_sample));
 
-		return wavefront_send_sample (hw, &header, header.dataptr, 0);
+		return wavefront_send_sample (&header, header.dataptr, 0);
 
 	case WF_ST_MULTISAMPLE:
 
@@ -1777,7 +1714,7 @@ wavefront_load_patch (int dev, int format, const char *addr,
 				(unsigned char *) header.hdrptr,
 				sizeof (wavefront_multisample));
 
-		return wavefront_send_multisample (hw, &header);
+		return wavefront_send_multisample (&header);
 
 
 	case WF_ST_ALIAS:
@@ -1786,31 +1723,31 @@ wavefront_load_patch (int dev, int format, const char *addr,
 				(unsigned char *) header.hdrptr,
 				sizeof (wavefront_alias));
 
-		return wavefront_send_alias (hw, &header);
+		return wavefront_send_alias (&header);
 
 	case WF_ST_DRUM:
 		copy_from_user ((unsigned char *) &header.hdr.d, 
 				(unsigned char *) header.hdrptr,
 				sizeof (wavefront_drum));
 
-		return wavefront_send_drum (hw, &header);
+		return wavefront_send_drum (&header);
 
 	case WF_ST_PATCH:
 		copy_from_user ((unsigned char *) &header.hdr.p, 
 				(unsigned char *) header.hdrptr,
 				sizeof (wavefront_patch));
 
-		return wavefront_send_patch (hw, &header);
+		return wavefront_send_patch (&header);
 
 	case WF_ST_PROGRAM:
 		copy_from_user ((unsigned char *) &header.hdr.pr, 
 				(unsigned char *) header.hdrptr,
 				sizeof (wavefront_program));
 
-		return wavefront_send_program (hw, &header);
+		return wavefront_send_program (&header);
 
 	default:
-		printk (KERN_ERR "WaveFront: unknown patch type %d.\n",
+		printk (KERN_ERR LOGNAME "unknown patch type %d.\n",
 			header.subkey);
 		return -(EINVAL);
 	}
@@ -1855,155 +1792,248 @@ process_sample_hdr (UCHAR8 *buf)
 }
 
 static int
-wavefront_synth_control (int dev, int cmd, caddr_t arg)
+wavefront_synth_control (int cmd, wavefront_control *wc)
 
 {
-	struct wf_config *hw = &wavefront_configuration;
-	wavefront_control wc;
 	unsigned char patchnumbuf[2];
 	int i;
 
-	copy_from_user (&wc, arg, sizeof (wc));
+	DPRINT (WF_DEBUG_CMD, "synth control with "
+		"cmd 0x%x\n", wc->cmd);
 
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_CMD) {
-		printk (KERN_DEBUG "WaveFront: synth control with "
-			"cmd 0x%x\n", wc.cmd);
-	}
-#endif WF_DEBUG
+	/* Pre-handling of or for various commands */
 
-	/* special case handling of or for various commands */
-
-	switch (wc.cmd) {
+	switch (wc->cmd) {
 	case WFC_DISABLE_INTERRUPTS:
-		printk (KERN_INFO "WaveFront: interrupts disabled.\n");
-		outb (0x80|0x20, hw->control_port);
-		hw->interrupts_on = 0;
+		printk (KERN_INFO LOGNAME "interrupts disabled.\n");
+		outb (0x80|0x20, dev.control_port);
+		dev.interrupts_on = 0;
 		return 0;
 
 	case WFC_ENABLE_INTERRUPTS:
-		printk (KERN_INFO "WaveFront: interrupts enabled.\n");
-		outb (0x80|0x20|0x40, hw->control_port);
-		hw->interrupts_on = 1;
+		printk (KERN_INFO LOGNAME "interrupts enabled.\n");
+		outb (0x80|0x40|0x20, dev.control_port);
+		dev.interrupts_on = 1;
 		return 0;
 
 	case WFC_INTERRUPT_STATUS:
-		wc.rbuf[0] = hw->interrupts_on;
+		wc->rbuf[0] = dev.interrupts_on;
 		return 0;
 
 	case WFC_ROMSAMPLES_RDONLY:
-		hw->rom_samples_rdonly = wc.wbuf[0];
-		wc.status = 0;
+		dev.rom_samples_rdonly = wc->wbuf[0];
+		wc->status = 0;
 		return 0;
 
 	case WFC_IDENTIFY_SLOT_TYPE:
-		i = wc.wbuf[0] | (wc.wbuf[1] << 7);
+		i = wc->wbuf[0] | (wc->wbuf[1] << 7);
 		if (i <0 || i >= WF_MAX_SAMPLE) {
-			printk (KERN_WARNING "WaveFront: invalid slot ID %d\n",
+			printk (KERN_WARNING LOGNAME "invalid slot ID %d\n",
 				i);
-			wc.status = EINVAL;
+			wc->status = EINVAL;
 			return 0;
 		}
-		wc.rbuf[0] = hw->sample_status[i];
-		wc.status = 0;
+		wc->rbuf[0] = dev.sample_status[i];
+		wc->status = 0;
 		return 0;
 
 	case WFC_DEBUG_DRIVER:
-		hw->debug = wc.wbuf[0];
-		printk (KERN_INFO "WaveFront: debug = 0x%x\n", hw->debug);
+		dev.debug = wc->wbuf[0];
+		printk (KERN_INFO LOGNAME "debug = 0x%x\n", dev.debug);
 		return 0;
 
 	case WFC_FX_IOCTL:
-		wffx_ioctl (hw, (wavefront_fx_info *) &wc.wbuf[0]);
+		wffx_ioctl ((wavefront_fx_info *) &wc->wbuf[0]);
 		return 0;
 
 	case WFC_UPLOAD_PATCH:
-		munge_int32 (*((UINT32 *) wc.wbuf), patchnumbuf, 2);
-		memcpy (wc.wbuf, patchnumbuf, 2);
+		munge_int32 (*((UINT32 *) wc->wbuf), patchnumbuf, 2);
+		memcpy (wc->wbuf, patchnumbuf, 2);
 		break;
 
 	case WFC_UPLOAD_MULTISAMPLE:
+		/* multisamples have to be handled differently, and
+		   cannot be dealt with properly by wavefront_cmd() alone.
+		*/
+		wc->status = wavefront_fetch_multisample
+			((wavefront_patch_info *) wc->rbuf);
+		return 0;
+
 	case WFC_UPLOAD_SAMPLE_ALIAS:
-		printk (KERN_INFO "WaveFront: support for various uploads "
+		printk (KERN_INFO LOGNAME "support for sample alias upload "
 			"being considered.\n");
-		wc.status = EINVAL;
+		wc->status = EINVAL;
 		return -EINVAL;
 	}
 
-	wc.status = wavefront_cmd (hw, wc.cmd, wc.rbuf, wc.wbuf);
+	wc->status = wavefront_cmd (wc->cmd, wc->rbuf, wc->wbuf);
 
-	/* Special case handling of certain commands.
+	/* Post-handling of certain commands.
 
 	   In particular, if the command was an upload, demunge the data
 	   so that the user-level doesn't have to think about it.
 	*/
 
-	if (wc.status == 0) {
-		switch (wc.cmd) {
+	if (wc->status == 0) {
+		switch (wc->cmd) {
 			/* intercept any freemem requests so that we know
 			   we are always current with the user-level view
 			   of things.
 			*/
 
 		case WFC_REPORT_FREE_MEMORY:
-			hw->freemem = demunge_int32 (wc.rbuf, 4);
+			dev.freemem = demunge_int32 (wc->rbuf, 4);
 			break;
 
 		case WFC_UPLOAD_PATCH:
-			demunge_buf (wc.rbuf, wc.rbuf, WF_PATCH_BYTES);
+			demunge_buf (wc->rbuf, wc->rbuf, WF_PATCH_BYTES);
 			break;
 
 		case WFC_UPLOAD_PROGRAM:
-			demunge_buf (wc.rbuf, wc.rbuf, WF_PROGRAM_BYTES);
+			demunge_buf (wc->rbuf, wc->rbuf, WF_PROGRAM_BYTES);
 			break;
 
 		case WFC_UPLOAD_EDRUM_PROGRAM:
-			demunge_buf (wc.rbuf, wc.rbuf, WF_DRUM_BYTES - 1);
+			demunge_buf (wc->rbuf, wc->rbuf, WF_DRUM_BYTES - 1);
 			break;
 
 		case WFC_UPLOAD_SAMPLE_HEADER:
-			process_sample_hdr (wc.rbuf);
+			process_sample_hdr (wc->rbuf);
 			break;
 
-		case WFC_UPLOAD_MULTISAMPLE:
 		case WFC_UPLOAD_SAMPLE_ALIAS:
-			printk (KERN_INFO "WaveFront: support for "
-				"various uploads "
+			printk (KERN_INFO LOGNAME "support for "
+				"sample aliases still "
 				"being considered.\n");
 			break;
 
 		case WFC_VMIDI_OFF:
-			virtual_midi_disable (hw->mididev);
+			if (virtual_midi_disable () < 0) {
+				return -(EIO);
+			}
 			break;
 
 		case WFC_VMIDI_ON:
-			virtual_midi_enable (hw->mididev, 0);
-			break;
-
+			if (virtual_midi_enable () < 0) {
+				return -(EIO);
+			}
 			break;
 		}
 	}
 
-	/* XXX It would be nice to avoid a complete copy of the whole
-	   struct sometimes. But I think its fast enough that this
-	   is a low priority fix.
-	*/
-
-	copy_to_user (arg, &wc, sizeof (wc));
 	return 0;
 }
 
 
-/***********************************************************************
-WaveFront: MIDI synth interface
-***********************************************************************/
+/***********************************************************************/
+/* WaveFront: Linux file system interface (for access via raw synth)    */
+/***********************************************************************/
 
+static loff_t
+wavefront_llseek(struct file *file, loff_t offset, int origin)
+{
+	return -ESPIPE;
+}
+
+static int 
+wavefront_open (struct inode *inode, struct file *file)
+{
+	/* XXX fix me */
+	dev.opened = file->f_flags;
+	MOD_INC_USE_COUNT;
+	return 0;
+}
 
 static int
-wavefront_ioctl (int dev, unsigned int cmd, caddr_t arg)
+wavefront_release(struct inode *inode, struct file *file)
 {
-	wf_config *hw = &wavefront_configuration;
-	unsigned char rbuf[4];
+	dev.opened = 0;
+	dev.debug = 0;
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+static int
+wavefront_ioctl(struct inode *inode, struct file *file,
+		unsigned int cmd, unsigned long arg)
+{
+	wavefront_control wc;
+	int err;
+
+	switch (cmd) {
+
+	case WFCTL_WFCMD:
+		copy_from_user (&wc, (void *) arg, sizeof (wc));
+		
+		if ((err = wavefront_synth_control (cmd, &wc)) == 0) {
+			copy_to_user ((void *) arg, &wc, sizeof (wc));
+		}
+
+		return err;
+		
+	case WFCTL_LOAD_SPP:
+		return wavefront_load_patch ((const char *) arg);
+		
+	default:
+		printk (KERN_WARNING LOGNAME "invalid ioctl %#x\n", cmd);
+		return -(EINVAL);
+
+	}
+	return 0;
+}
+
+static /*const*/ struct file_operations wavefront_fops = {
+	&wavefront_llseek,
+	NULL,  /* read */
+	NULL,  /* write */
+	NULL,  /* readdir */
+	NULL,  /* poll */
+	&wavefront_ioctl,
+	NULL,  /* mmap */
+	&wavefront_open,
+	NULL,  /* flush */
+	&wavefront_release,
+	NULL,  /* fsync */
+	NULL,  /* fasync */
+	NULL,  /* check_media_change */
+	NULL,  /* revalidate */
+	NULL,  /* lock */
+};
+
+
+/***********************************************************************/
+/* WaveFront: OSS installation and support interface                   */
+/***********************************************************************/
+
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
+
+static struct synth_info wavefront_info =
+{"Turtle Beach WaveFront", 0, SYNTH_TYPE_SAMPLE, SAMPLE_TYPE_WAVEFRONT,
+ 0, 32, 0, 0, SYNTH_CAP_INPUT};
+
+static int
+wavefront_oss_open (int devno, int mode)
+
+{
+	dev.opened = mode;
+	return 0;
+}
+
+static void
+wavefront_oss_close (int devno)
+
+{
+	dev.opened = 0;
+	dev.debug = 0;
+	return;
+}
+
+static int
+wavefront_oss_ioctl (int devno, unsigned int cmd, caddr_t arg)
+
+{
+	wavefront_control wc;
+	int err;
 
 	switch (cmd) {
 	case SNDCTL_SYNTH_INFO:
@@ -2013,136 +2043,71 @@ wavefront_ioctl (int dev, unsigned int cmd, caddr_t arg)
 		break;
 
 	case SNDCTL_SEQ_RESETSAMPLES:
-		printk (KERN_WARNING
-			"WaveFront: cannot reset sample status in kernel.\n");
+		printk (KERN_WARNING LOGNAME "driver cannot reset samples.\n");
 		return 0; /* don't force an error */
 		break;
 
 	case SNDCTL_SEQ_PERCMODE:
-		/* XXX does this correspond to anything obvious ?*/
 		return 0; /* don't force an error */
 		break;
 
 	case SNDCTL_SYNTH_MEMAVL:
-		if (wavefront_cmd (hw, WFC_REPORT_FREE_MEMORY, rbuf, 0) != 0) {
-			printk (KERN_ERR
-				"WaveFront: cannot get free memory size\n");
-			return 0;
+		if ((dev.freemem = wavefront_freemem ()) < 0) {
+			printk (KERN_ERR LOGNAME "cannot get memory size\n");
+			return -EIO;
 		} else {
-			hw->freemem = demunge_int32 (rbuf, 4);
-			return hw->freemem;
+			return dev.freemem;
 		}
+		break;
 
 	case SNDCTL_SYNTH_CONTROL:
-		return wavefront_synth_control (dev, cmd, arg);
+		copy_from_user (&wc, arg, sizeof (wc));
+
+		if ((err = wavefront_synth_control (cmd, &wc)) == 0) {
+			copy_to_user (arg, &wc, sizeof (wc));
+		}
+
+		return err;
 
 	default:
 		return -(EINVAL);
 	}
 }
 
-static int
-wavefront_open (int dev, int mode)
-
+int
+wavefront_oss_load_patch (int devno, int format, const char *addr,
+			  int offs, int count, int pmgr_flag)
 {
-	struct wf_config *hw = &wavefront_configuration;
 
-	if (hw->opened) {
-		printk (KERN_WARNING "WaveFront: warning: device in use\n");
+	if (format == SYSEX_PATCH) {	/* Handled by midi_synth.c */
+		if (midi_load_patch == NULL) {
+			printk (KERN_ERR LOGNAME
+				"SYSEX not loadable: "
+				"no midi patch loader!\n");
+			return -(EINVAL);
+		}
+
+		return midi_load_patch (devno, format, addr,
+					offs, count, pmgr_flag);
+
+	} else if (format == GUS_PATCH) {
+		return wavefront_load_gus_patch (devno, format,
+						 addr, offs, count, pmgr_flag);
+
+	} else if (format != WAVEFRONT_PATCH) {
+		printk (KERN_ERR LOGNAME "unknown patch format %d\n", format);
+		return -(EINVAL);
 	}
 
-	hw->opened = mode;
-	return (0);
-}
-
-static void wavefront_close (int dev)
-{
-	struct wf_config *hw = &wavefront_configuration;
-
-#ifdef WF_STATS
-	int i;
-	printk ("Status during loop: %ld\n", hw->status_found_during_loop);
-	for (i = 0; i < 4; i++) {
-		printk ("Status during sleep[%d]: %ld\n",
-			i, hw->status_found_during_sleep[i]);
+	if (count < sizeof (wavefront_patch_info)) {
+		printk (KERN_ERR LOGNAME "sample header too short\n");
+		return -(EINVAL);
 	}
-#endif WF_STATS
-	hw->opened = 0;
-	hw->debug = 0;
 
-	return;
-}
+	/* "addr" points to a user-space wavefront_patch_info */
 
-static void wavefront_aftertouch (int dev, int channel, int pressure)
-{
-	midi_synth_aftertouch (wavefront_configuration.mididev,channel,pressure);
-};
-
-static void wavefront_bender (int dev, int chn, int value)
-{
-	midi_synth_bender (wavefront_configuration.mididev, chn, value);
-};
-
-static void wavefront_controller (int dev, int channel, int ctrl_num, int value)
-{
-	if(ctrl_num==CTRL_PITCH_BENDER) wavefront_bender(0,channel,value);
-	midi_synth_controller (wavefront_configuration.mididev,
-			       channel,ctrl_num,value);
-};
-
-static void wavefront_panning(int dev, int channel, int pressure)
-{
-	midi_synth_controller (wavefront_configuration.mididev,
-			       channel,CTL_PAN,pressure);
-};
-
-static int wavefront_set_instr (int dev, int channel, int instr_no)
-{
-	return(midi_synth_set_instr (wavefront_configuration.mididev,
-				     channel,instr_no));
-};
-
-static int wavefront_kill_note (int dev, int channel, int note, int volume)
-{
-	if (note==255)
-		return (midi_synth_start_note (wavefront_configuration.mididev,
-					       channel, 0, 0));
-	return(midi_synth_kill_note (wavefront_configuration.mididev,
-				     channel, note, volume));
-};
-
-static int wavefront_start_note (int dev, int channel, int note, int volume)
-{
-	if (note==255) {
-		midi_synth_aftertouch (wavefront_configuration.mididev,
-				       channel,volume); 
-		return(0);
-	};
-
-	if (volume==0) {
-		volume=127;
-		midi_synth_aftertouch
-			(wavefront_configuration.mididev,
-			 channel,0);
-	};
-
-	midi_synth_start_note (wavefront_configuration.mididev,
-			       channel, note, volume);
-	return(0);
-};
-
-static void wavefront_setup_voice (int dev, int voice, int chn)
-{
-};
-
-static void wavefront_reset (int dev)
-{
-	int i;
-
-	for (i = 0; i < 16; i++) {
-		midi_synth_kill_note (dev,i,0,0);
-	};
-};
+	return wavefront_load_patch (addr);
+}	
 
 static struct synth_operations wavefront_operations =
 {
@@ -2151,45 +2116,83 @@ static struct synth_operations wavefront_operations =
 	0,
 	SYNTH_TYPE_SAMPLE,
 	SAMPLE_TYPE_WAVEFRONT,
-	wavefront_open,
-	wavefront_close,
-	wavefront_ioctl,
-	wavefront_kill_note,
-	wavefront_start_note,
-	wavefront_set_instr,
-	wavefront_reset,
-	NULL,
-	wavefront_load_patch,
-	wavefront_aftertouch,
-	wavefront_controller,
-	wavefront_panning,
-	NULL,
-	wavefront_bender,
-	NULL,
-	wavefront_setup_voice
-};
+	wavefront_oss_open,
+	wavefront_oss_close,
+	wavefront_oss_ioctl,
 
+	midi_synth_kill_note,
+	midi_synth_start_note,
+	midi_synth_set_instr,
+	midi_synth_reset,
+	NULL, /* hw_control */
+	midi_synth_load_patch,
+	midi_synth_aftertouch,
+	midi_synth_controller,
+	midi_synth_panning,
+	NULL, /* volume method */
+	midi_synth_bender,
+	NULL, /* alloc voice */
+	midi_synth_setup_voice
+};
+#endif OSS_SUPPORT_SEQ
+
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_STATIC_INSTALL
+
+void attach_wavefront (struct address_info *hw_config)
+
+{
+    (void) install_wavefront ();
+}
+
+int probe_wavefront (struct address_info *hw_config)
+
+{
+    return !detect_wavefront (hw_config->irq, hw_config->io_base);
+}
+
+void unload_wavefront (struct address_info *hw_config) 
+{
+    (void) uninstall_wavefront ();
+}
+
+#endif OSS_SUPPORT_STATIC_INSTALL
 
-/***********************************************************************
-WaveFront: OSS/Free and/or Linux kernel installation interface
-***********************************************************************/
+/***********************************************************************/
+/* WaveFront: Linux modular sound kernel installation interface        */
+/***********************************************************************/
 
 void
 wavefrontintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
-        /* We don't use this handler except during device
-	   configuration. While the module is installed, the 
-	   interrupt is used to signal MIDI interrupts, and is 
-	   handled by the interrupt routine in wf_midi.c
-	 */
-	   
-	wf_config *hw = (wf_config *) dev_id;
-	hw->irq_ok = 1;
+	struct wf_config *hw = dev_id;
 
-	if ((wavefront_status(hw) & STAT_INTR_WRITE) ||
-	    (wavefront_status(hw) & STAT_INTR_READ)) {
-		wake_up (&hw->interrupt_sleeper);
+	/*
+	   Some comments on interrupts. I attempted a version of this
+	   driver that used interrupts throughout the code instead of
+	   doing busy and/or sleep-waiting. Alas, it appears that once
+	   the Motorola firmware is downloaded, the card *never*
+	   generates an RX interrupt. These are successfully generated
+	   during firmware loading, and after that wavefront_status()
+	   reports that an interrupt is pending on the card from time
+	   to time, but it never seems to be delivered to this
+	   driver. Note also that wavefront_status() continues to
+	   report that RX interrupts are enabled, suggesting that I
+	   didn't goof up and disable them by mistake.
+
+	   Thus, I stepped back to a prior version of
+	   wavefront_wait(), the only place where this really
+	   matters. Its sad, but I've looked through the code to check
+	   on things, and I really feel certain that the Motorola
+	   firmware prevents RX-ready interrupts.
+	*/
+
+	if ((wavefront_status() & (STAT_INTR_READ|STAT_INTR_WRITE)) == 0) {
+		return;
 	}
+
+	hw->irq_ok = 1;
+	hw->irq_cnt++;
+	wake_up_interruptible (&hw->interrupt_sleeper);
 }
 
 /* STATUS REGISTER 
@@ -2202,16 +2205,6 @@ wavefrontintr (int irq, void *dev_id, struct pt_regs *dummy)
 5 Host Tx Register empty (1=Empty)
 6 Host Tx Interrupt Pending (1=Interrupt)
 7 Unused
-
-11111001 
-  Rx Intr enable
-  nothing to read from board
-  no rx interrupt pending
-  unused
-  tx interrupt enabled
-  space to transmit
-  tx interrupt pending
-
 */
 
 int
@@ -2235,7 +2228,7 @@ wavefront_interrupt_bits (int irq)
 		break;
 	
 	default:
-		printk (KERN_WARNING "WaveFront: invalid IRQ %d\n", irq);
+		printk (KERN_WARNING LOGNAME "invalid IRQ %d\n", irq);
 		bits = -1;
 	}
 
@@ -2243,42 +2236,78 @@ wavefront_interrupt_bits (int irq)
 }
 
 void
-wavefront_should_cause_interrupt (wf_config *hw, int val, int port, int timeout)
+wavefront_should_cause_interrupt (int val, int port, int timeout)
 
 {
 	unsigned long flags;
 
 	save_flags (flags);
 	cli();
-	hw->irq_ok = 0;
+	dev.irq_ok = 0;
 	outb (val,port);
-	interruptible_sleep_on_timeout(&hw->interrupt_sleeper, timeout);
+	interruptible_sleep_on_timeout (&dev.interrupt_sleeper, timeout);
 	restore_flags (flags);
 }
 
 static int
-wavefront_hw_reset (wf_config *hw)
+wavefront_hw_reset (void)
 
 {
 	int bits;
 	int hwv[2];
+	unsigned long irq_mask;
+	short reported_irq;
 
-	/* Check IRQ is legal */
+	/* IRQ already checked in init_module() */
 
-	if ((bits = wavefront_interrupt_bits (hw->irq)) < 0) {
+	bits = wavefront_interrupt_bits (dev.irq);
+
+	printk (KERN_DEBUG LOGNAME "autodetecting WaveFront IRQ\n");
+
+	sti ();
+
+	irq_mask = probe_irq_on ();
+
+	outb (0x0, dev.control_port); 
+	outb (0x80 | 0x40 | bits, dev.data_port);	
+	wavefront_should_cause_interrupt(0x80|0x40|0x10|0x1,
+					 dev.control_port,
+					 (reset_time*HZ)/100);
+
+	reported_irq = probe_irq_off (irq_mask);
+
+	if (reported_irq != dev.irq) {
+		if (reported_irq == 0) {
+			printk (KERN_ERR LOGNAME
+				"No unassigned interrupts detected "
+				"after h/w reset\n");
+		} else if (reported_irq < 0) {
+			printk (KERN_ERR LOGNAME
+				"Multiple unassigned interrupts detected "
+				"after h/w reset\n");
+		} else {
+			printk (KERN_ERR LOGNAME "autodetected IRQ %d not the "
+				"value provided (%d)\n", reported_irq,
+				dev.irq);
+		}
+		dev.irq = -1;
 		return 1;
+	} else {
+		printk (KERN_INFO LOGNAME "autodetected IRQ at %d\n",
+			reported_irq);
 	}
 
-	if (request_irq (hw->irq, wavefrontintr,
-			 0, "WaveFront", (void *) hw) < 0) {
-		printk (KERN_WARNING "WaveFront: IRQ %d not available!\n",
-			hw->irq);
+	if (request_irq (dev.irq, wavefrontintr,
+			 SA_INTERRUPT|SA_SHIRQ,
+			 "wavefront synth", &dev) < 0) {
+		printk (KERN_WARNING LOGNAME "IRQ %d not available!\n",
+			dev.irq);
 		return 1;
 	}
 
 	/* try reset of port */
       
-	outb (0x0, hw->control_port); 
+	outb (0x0, dev.control_port); 
   
 	/* At this point, the board is in reset, and the H/W initialization
 	   register is accessed at the same address as the data port.
@@ -2291,8 +2320,8 @@ wavefront_hw_reset (wf_config *hw)
 
 	   0 - Use the MIDI Input from the 26-pin WaveBlaster
 	   compatible header as the serial MIDI source
-	   1 - Use the MIDI Input from the 9-pin D connector as the serial MIDI 
-	   source.
+	   1 - Use the MIDI Input from the 9-pin D connector as the
+	   serial MIDI source.
      
 	   Bits 5:3 - IRQ Selection
 	   0 0 0 - IRQ 2/9
@@ -2316,7 +2345,7 @@ wavefront_hw_reset (wf_config *hw)
 	   plus external 9-pin MIDI interface selected
 	*/
 
-	outb (0x80 | 0x40 | bits, hw->data_port);	
+	outb (0x80 | 0x40 | bits, dev.data_port);	
   
 	/* CONTROL REGISTER
 
@@ -2329,85 +2358,28 @@ wavefront_hw_reset (wf_config *hw)
 	   6 Master Interrupt Enable (1=Enabled)      0x40
 	   7 Master Reset (0=Reset; 1=Run)            0x80
 
-	   Take us out of reset, unmute, master + TX + RX interrupts on.
+	   Take us out of reset, mute output, master + TX + RX interrupts on.
 	   
 	   We'll get an interrupt presumably to tell us that the TX
-	   register is clear. However, this doesn't mean that the
-	   board is ready. We actually have to send it a command, and
-	   wait till it gets back to use. After a cold boot, this can
-	   take some time.
-	   
-	   I think this is because its only after a cold boot that the
-	   onboard ROM does its memory check, which can take "up to 4
-	   seconds" according to the WaveFront SDK. So, since sleeping
-	   doesn't cost us much, we'll give it *plenty* of time. It
-	   turns out that with 12MB of RAM, it can take up to 16
-	   seconds or so!! See the code after "ABOUT INTERRUPTS"
+	   register is clear.
 	*/
 
-	wavefront_should_cause_interrupt(hw,
-					 0x80|0x40|0x10|0x1,
-					 hw->control_port,
-					 (2*HZ)/100);
+	wavefront_should_cause_interrupt(0x80|0x40|0x10|0x1,
+					 dev.control_port,
+					 (reset_time*HZ)/100);
 
 	/* Note: data port is now the data port, not the h/w initialization
 	   port.
 	 */
 
-	if (!hw->irq_ok) {
-		printk (KERN_WARNING
-			"WaveFront: intr not received after h/w un-reset.\n");
+	if (!dev.irq_ok) {
+		printk (KERN_WARNING LOGNAME
+			"intr not received after h/w un-reset.\n");
 		goto gone_bad;
 	} 
 
-	hw->interrupts_on = 1;
+	dev.interrupts_on = 1;
 	
-	/* ABOUT INTERRUPTS:
-	   -----------------
-	   
-	   When we talk about interrupts, there are two kinds
-	   generated by the ICS2115. The first is to signal MPU data
-	   ready to read, and the second is to signal RX or TX status
-	   changes. We *always* want interrupts for MPU stuff but we 
-	   generally avoid using RX/TX interrupts.
-
-	   In theory, we could use the TX and RX interrupts for all
-	   communication with the card. However, there are 2 good
-	   reasons not to do this.
-
-	   First of all, the MIDI interface is going to use the same
-	   interrupt. This presents no practical problem since Linux
-	   allows us to share IRQ's. However, there are times when it
-	   makes sense for a user to ask the driver to disable
-	   interrupts, to avoid bothering Linux with a stream of MIDI
-	   interrupts that aren't going to be used because nothing
-	   cares about them. If we rely on them for communication with
-	   the WaveFront synth as well, this disabling would be
-	   crippling. Since being able to disable them can save quite
-	   a bit of overhead (consider the interrupt frequency of a
-	   physical MIDI controller like a modwheel being shunted back
-	   and forth - its higher than the mouse, and much of
-	   the time is of absolutely no interest to the kernel or any
-	   user space processes whatsoever), we don't want to do this.
-
-	   Secondly, much of the time, there's no reason to go to
-	   sleep on a TX or RX status: the WaveFront gets back to us
-	   quickly enough that its a lot more efficient to just busy
-	   wait on the relevant status. Once we go to sleep, all is
-	   lost anyway, and so interrupts don't really help us much anyway.
-
-	   Therefore, we don't use interrupts for communication with
-	   the WaveFront synth. We just poll the relevant RX/TX status.
-
-	   However, there is one broad exception to this. During module
-	   loading, to deal with several situations where timing would
-	   be an issue, we use TX/RX interrupts to help us avoid busy
-	   waiting for indeterminate and hard to manage periods of
-	   time. So, TX/RX interrupts are enabled until the end of 
-	   wavefront_init(), and not used again after that.
-
-	 */
-
 	/* Note: data port is now the data port, not the h/w initialization
 	   port.
 
@@ -2421,27 +2393,27 @@ wavefront_hw_reset (wf_config *hw)
 	   subsequent ISC2115 reboots (say, caused by module
 	   reloading) will get through this much faster.
 
-	   Interesting question: why is no RX interrupt received first ?
+	   XXX Interesting question: why is no RX interrupt received first ?
 	*/
-	
-	wavefront_should_cause_interrupt(hw, WFC_HARDWARE_VERSION, 
-					 hw->data_port, 20*HZ);
 
-	if (!hw->irq_ok) {
-		printk (KERN_WARNING
-			"WaveFront: post-RAM-check interrupt not received.\n");
+	wavefront_should_cause_interrupt(WFC_HARDWARE_VERSION, 
+					 dev.data_port, ramcheck_time*HZ);
+
+	if (!dev.irq_ok) {
+		printk (KERN_WARNING LOGNAME
+			"post-RAM-check interrupt not received.\n");
 		goto gone_bad;
 	} 
 
-	if (!(wavefront_status(hw) & STAT_CAN_READ)) {
-		printk (KERN_WARNING
-			"WaveFront: no response to HW version cmd.\n");
+	if (!wavefront_wait (STAT_CAN_READ)) {
+		printk (KERN_WARNING LOGNAME
+			"no response to HW version cmd.\n");
 		goto gone_bad;
 	}
 	
-	if ((hwv[0] = wavefront_read (hw)) == -1) {
-		printk (KERN_WARNING
-			"WaveFront: board not responding correctly.\n");
+	if ((hwv[0] = wavefront_read ()) == -1) {
+		printk (KERN_WARNING LOGNAME
+			"board not responding correctly.\n");
 		goto gone_bad;
 	}
 
@@ -2451,13 +2423,11 @@ wavefront_hw_reset (wf_config *hw)
 		   and tell us about it either way.
 		*/
 		
-		if ((hwv[0] = wavefront_read (hw)) == -1) {
-			printk (KERN_WARNING 
-				"WaveFront: on-board RAM test failed "
+		if ((hwv[0] = wavefront_read ()) == -1) {
+			printk (KERN_WARNING LOGNAME "on-board RAM test failed "
 				"(bad error code).\n");
 		} else {
-			printk (KERN_WARNING 
-				"WaveFront: on-board RAM test failed "
+			printk (KERN_WARNING LOGNAME "on-board RAM test failed "
 				"(error code: 0x%x).\n",
 				hwv[0]);
 		}
@@ -2466,85 +2436,66 @@ wavefront_hw_reset (wf_config *hw)
 
 	/* We're OK, just get the next byte of the HW version response */
 
-	if ((hwv[1] = wavefront_read (hw)) == -1) {
-		printk (KERN_WARNING
-			"WaveFront: board not responding correctly(2).\n");
+	if ((hwv[1] = wavefront_read ()) == -1) {
+		printk (KERN_WARNING LOGNAME "incorrect h/w response.\n");
 		goto gone_bad;
 	}
 
-	printk (KERN_INFO "WaveFront: hardware version %d.%d\n",
+	printk (KERN_INFO LOGNAME "hardware version %d.%d\n",
 		hwv[0], hwv[1]);
 
 	return 0;
 
 
      gone_bad:
-	free_irq (hw->irq, hw);
-	return (1);
+	if (dev.irq >= 0) {
+		free_irq (dev.irq, &dev);
+		dev.irq = -1;
 	}
+	return (1);
+}
 
-int
-probe_wavefront (struct address_info *hw_config)
+__initfunc (static int detect_wavefront (int irq, int io_base))
 
 {
 	unsigned char   rbuf[4], wbuf[4];
-	wf_config       *hw;
 
-	if (hw_config->irq < 0 || hw_config->irq > 16) {
-	    printk (KERN_WARNING "WaveFront: impossible IRQ suggested(%d)\n", 
-		    hw_config->irq);
-	    return 0;
-	}
-  
-	/* Yeah yeah, TB docs say 8, but the FX device on the Tropez Plus
-	   takes up another 8 ...
+	/* TB docs say the device takes up 8 ports, but we know that
+	   if there is an FX device present (i.e. a Tropez+) it really
+	   consumes 16.
 	*/
 
-	if (check_region (hw_config->io_base, 16)) {
-		printk (KERN_ERR "WaveFront: IO address range 0x%x - 0x%x "
-			"already in use - ignored\n", hw_config->io_base,
-			hw_config->io_base+15);
-		return 0;
+	if (check_region (io_base, 16)) {
+		printk (KERN_ERR LOGNAME "IO address range 0x%x - 0x%x "
+			"already in use - ignored\n", dev.base,
+			dev.base+15);
+		return -1;
 	}
   
-	hw = &wavefront_configuration;
+	dev.irq = irq;
+	dev.base = io_base;
+	dev.israw = 0;
+	dev.debug = debug_default;
+	dev.interrupts_on = 0;
+	dev.irq_cnt = 0;
+	dev.rom_samples_rdonly = 1; /* XXX default lock on ROM sample slots */
 
-	hw->irq = hw_config->irq;
-	hw->base = hw_config->io_base;
+	if (wavefront_cmd (WFC_FIRMWARE_VERSION, rbuf, wbuf) == 0) {
 
-	hw->israw = 0;
-	hw->debug = debug_default;
-	hw->interrupts_on = 0;
-	hw->rom_samples_rdonly = 1; /* XXX default lock on ROM sample slots */
-
-#ifdef WF_STATS
-	hw->status_found_during_sleep[0] = 0;
-	hw->status_found_during_sleep[1] = 0;
-	hw->status_found_during_sleep[2] = 0;
-	hw->status_found_during_sleep[3] = 0;
-	hw->status_found_during_loop = 0;
-#endif WF_STATS
-
-	hw_config->slots[WF_SYNTH_SLOT] = hw->synthdev = -1;
-	hw_config->slots[WF_INTERNAL_MIDI_SLOT] = hw->mididev = -1;
-	hw_config->slots[WF_EXTERNAL_MIDI_SLOT] = hw->ext_mididev = -1;
-
-	if (wavefront_cmd (hw, WFC_FIRMWARE_VERSION, rbuf, wbuf) == 0) {
-
-		hw->fw_version[0] = rbuf[0];
-		hw->fw_version[1] = rbuf[1];
-		printk (KERN_INFO
-			"WaveFront: firmware %d.%d already loaded.\n",
+		dev.fw_version[0] = rbuf[0];
+		dev.fw_version[1] = rbuf[1];
+		printk (KERN_INFO LOGNAME
+			"firmware %d.%d already loaded.\n",
 			rbuf[0], rbuf[1]);
 
 		/* check that a command actually works */
       
-		if (wavefront_cmd (hw, WFC_HARDWARE_VERSION,
+		if (wavefront_cmd (WFC_HARDWARE_VERSION,
 				   rbuf, wbuf) == 0) {
-			hw->hw_version[0] = rbuf[0];
-			hw->hw_version[1] = rbuf[1];
+			dev.hw_version[0] = rbuf[0];
+			dev.hw_version[1] = rbuf[1];
 		} else {
-			printk (KERN_INFO "WaveFront: not raw, but no "
+			printk (KERN_WARNING LOGNAME "not raw, but no "
 				"hardware version!\n");
 			return 0;
 		}
@@ -2552,24 +2503,29 @@ probe_wavefront (struct address_info *hw_config)
 		if (!wf_raw) {
 			return 1;
 		} else {
-			printk (KERN_INFO
-				"WaveFront: reloading firmware anyway.\n");
+			printk (KERN_INFO LOGNAME
+				"reloading firmware anyway.\n");
+			dev.israw = 1;
 		}
 
 	} else {
 
-		hw->israw = 1;
-		printk (KERN_INFO "WaveFront: no response to firmware probe, "
-			"assume raw.\n");
+		dev.israw = 1;
+		printk (KERN_INFO LOGNAME
+			"no response to firmware probe, assume raw.\n");
 
 	}
 
-	init_waitqueue (&hw->interrupt_sleeper);
+	init_waitqueue (&dev.interrupt_sleeper);
 
-	if (wavefront_hw_reset (hw)) {
-		printk (KERN_WARNING "WaveFront: hardware reset failed\n");
+	if (wavefront_hw_reset ()) {
+		printk (KERN_WARNING LOGNAME "hardware reset failed\n");
 		return 0;
 	}
+
+	/* Check for FX device, present only on Tropez+ */
+
+	dev.has_fx = (detect_wffx () == 0);
 
 	return 1;
 }
@@ -2585,7 +2541,7 @@ probe_wavefront (struct address_info *hw_config)
 static int errno; 
 
 static int
-wavefront_download_firmware (wf_config *hw, char *path)
+wavefront_download_firmware (char *path)
 
 {
 	unsigned char section[WF_SECTION_MAX];
@@ -2610,7 +2566,7 @@ wavefront_download_firmware (wf_config *hw, char *path)
 	set_fs (get_ds());
 
 	if ((fd = open (path, 0, 0)) < 0) {
-		printk (KERN_WARNING "WaveFront: Unable to load \"%s\".\n",
+		printk (KERN_WARNING LOGNAME "Unable to load \"%s\".\n",
 			path);
 		return 1;
 	}
@@ -2620,7 +2576,7 @@ wavefront_download_firmware (wf_config *hw, char *path)
 
 		if ((x = read (fd, &section_length, sizeof (section_length))) !=
 		    sizeof (section_length)) {
-			printk (KERN_ERR "WaveFront: firmware read error.\n");
+			printk (KERN_ERR LOGNAME "firmware read error.\n");
 			goto failure;
 		}
 
@@ -2629,58 +2585,46 @@ wavefront_download_firmware (wf_config *hw, char *path)
 		}
 
 		if (read (fd, section, section_length) != section_length) {
-			printk (KERN_ERR "WaveFront: firmware section "
+			printk (KERN_ERR LOGNAME "firmware section "
 				"read error.\n");
 			goto failure;
 		}
 
 		/* Send command */
 	
-		if (!wavefront_write (hw, WFC_DOWNLOAD_OS)) {
+		if (wavefront_write (WFC_DOWNLOAD_OS)) {
 			goto failure;
 		}
 	
 		for (i = 0; i < section_length; i++) {
-			if (!wavefront_write (hw, section[i])) {
+			if (wavefront_write (section[i])) {
 				goto failure;
 			}
 		}
 	
 		/* get ACK */
 	
-		if (wavefront_wait (hw, STAT_CAN_READ)) {
+		if (wavefront_wait (STAT_CAN_READ)) {
 
-			if ((c = inb (hw->data_port)) != WF_ACK) {
+			if ((c = inb (dev.data_port)) != WF_ACK) {
 
-				printk (KERN_ERR "WaveFront: download "
+				printk (KERN_ERR LOGNAME "download "
 					"of section #%d not "
 					"acknowledged, ack = 0x%x\n",
 					section_cnt_downloaded + 1, c);
 				goto failure;
 		
-			} else {
-#ifdef WF_DEBUG
-			    if ((hw->debug & WF_DEBUG_IO) &&
-				   !(++section_cnt_downloaded % 10)) {
-				printk (KERN_DEBUG ".");
-			    }
-#endif WF_DEBUG
 			}
 
 		} else {
-			printk (KERN_ERR "WaveFront: timed out "
-				"for download ACK.\n");
+			printk (KERN_ERR LOGNAME "time out for firmware ACK.\n");
+			goto failure;
 		}
 
 	}
 
 	close (fd);
 	set_fs (fs);
-#ifdef WF_DEBUG
-	if (hw->debug & WF_DEBUG_IO) {
-		printk (KERN_DEBUG "\n");
-	}
-#endif WF_DEBUG
 	return 0;
 
  failure:
@@ -2690,38 +2634,33 @@ wavefront_download_firmware (wf_config *hw, char *path)
 	return 1;
 }
 
-static int
-wavefront_config_midi (wf_config *hw, struct address_info *hw_config)
+__initfunc (static int wavefront_config_midi (void)) 
 
 {
 	unsigned char rbuf[4], wbuf[4];
     
-	if (!probe_wf_mpu (hw_config)) {
-		printk (KERN_WARNING "WaveFront: could not install "
-			"MPU-401 device.\n");
-		return 1;
+	if (detect_wf_mpu (dev.irq, dev.base) < 0) {
+		printk (KERN_WARNING LOGNAME
+			"could not find working MIDI device\n");
+		return -1;
 	} 
 
-	/* Attach an modified MPU-401 driver to the master MIDI interface */
-
-	hw_config->name = "WaveFront Internal MIDI";
-	attach_wf_mpu (hw_config);
-
-	if (hw_config->slots[WF_INTERNAL_MIDI_SLOT] == -1) {
-		printk (KERN_WARNING "WaveFront: MPU-401 not configured.\n");
-		return 1;
+	if ((dev.mididev = install_wf_mpu ()) < 0) {
+		printk (KERN_WARNING LOGNAME
+			"MIDI interfaces not configured\n");
+		return -1;
 	}
-
-	hw->mididev = hw_config->slots[WF_INTERNAL_MIDI_SLOT];
 
 	/* Route external MIDI to WaveFront synth (by default) */
     
-	if (wavefront_cmd (hw, WFC_MISYNTH_ON, rbuf, wbuf)) {
-		printk (KERN_WARNING
-			"WaveFront: cannot enable MIDI-IN to synth routing.\n");
+	if (wavefront_cmd (WFC_MISYNTH_ON, rbuf, wbuf)) {
+		printk (KERN_WARNING LOGNAME
+			"cannot enable MIDI-IN to synth routing.\n");
 		/* XXX error ? */
 	}
 
+
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
 	/* Get the regular MIDI patch loading function, so we can
 	   use it if we ever get handed a SYSEX patch. This is
 	   unlikely, because its so damn slow, but we may as well
@@ -2730,12 +2669,14 @@ wavefront_config_midi (wf_config *hw, struct address_info *hw_config)
 	   only use MIDI to do patch loading.
 	*/
 
-	if (midi_devs[hw->mididev]->converter != NULL) {
-		midi_load_patch = midi_devs[hw->mididev]->converter->load_patch;
-		midi_devs[hw->mididev]->converter->load_patch =
-		    &wavefront_load_patch;
+	if (midi_devs[dev.mididev]->converter != NULL) {
+		midi_load_patch = midi_devs[dev.mididev]->converter->load_patch;
+		midi_devs[dev.mididev]->converter->load_patch =
+		    &wavefront_oss_load_patch;
 	}
 
+#endif OSS_SUPPORT_SEQ
+	
 	/* Turn on Virtual MIDI, but first *always* turn it off,
 	   since otherwise consectutive reloads of the driver will
 	   never cause the hardware to generate the initial "internal" or 
@@ -2747,22 +2688,19 @@ wavefront_config_midi (wf_config *hw, struct address_info *hw_config)
 	   the internal interface. Duh.
 	*/
 
-	if (wavefront_cmd (hw, WFC_VMIDI_OFF, rbuf, wbuf)) { 
-		printk (KERN_WARNING "WaveFront: cannot disable "
-			"virtual MIDI mode\n");
-		/* XXX go ahead and try anyway ? */
+	if (wavefront_cmd (WFC_VMIDI_OFF, rbuf, wbuf)) { 
+		printk (KERN_WARNING LOGNAME
+			"virtual MIDI mode not disabled\n");
+		return 0; /* We're OK, but missing the external MIDI dev */
 	}
 
-	hw_config->name = "WaveFront External MIDI";
-    
-	if (virtual_midi_enable (hw->mididev, hw_config)) {
-		printk (KERN_WARNING "WaveFront: no virtual MIDI access.\n");
+	if ((dev.ext_mididev = virtual_midi_enable ()) < 0) {
+		printk (KERN_WARNING LOGNAME "no virtual MIDI access.\n");
 	} else {
-		hw->ext_mididev = hw_config->slots[WF_EXTERNAL_MIDI_SLOT];
-		if (wavefront_cmd (hw, WFC_VMIDI_ON, rbuf, wbuf)) {
-			printk (KERN_WARNING
-				"WaveFront: cannot enable virtual MIDI mode.\n");
-			virtual_midi_disable (hw->mididev);
+		if (wavefront_cmd (WFC_VMIDI_ON, rbuf, wbuf)) {
+			printk (KERN_WARNING LOGNAME
+				"cannot enable virtual MIDI mode.\n");
+			virtual_midi_disable ();
 		} 
 	}
     
@@ -2770,62 +2708,66 @@ wavefront_config_midi (wf_config *hw, struct address_info *hw_config)
 }
 
 static int
-wavefront_do_reset (wf_config *hw, int atboot)
+wavefront_do_reset (int atboot)
 
 {
 	char voices[1];
 
-	if (!atboot && wavefront_hw_reset (hw)) {
-		printk (KERN_WARNING "WaveFront: hw reset failed.\n");
+	if (!atboot && wavefront_hw_reset ()) {
+		printk (KERN_WARNING LOGNAME "hw reset failed.\n");
 		goto gone_bad;
 	}
 
-	if (hw->israw || wf_raw) {
-		if (wavefront_download_firmware (hw, ospath)) {
+	if (dev.israw) {
+		if (wavefront_download_firmware (ospath)) {
 			goto gone_bad;
 		}
+
+		dev.israw = 0;
 
 		/* Wait for the OS to get running. The protocol for
 		   this is non-obvious, and was determined by
 		   using port-IO tracing in DOSemu and some
 		   experimentation here.
 		   
-		   Rather than busy-wait, use interrupts creatively.
+		   Rather than using timed waits, use interrupts creatively.
 		*/
 
-		wavefront_should_cause_interrupt (hw, WFC_NOOP,
-					  hw->data_port, (10*HZ));
-		
-		if (!hw->irq_ok) {
-			printk (KERN_WARNING
-				"WaveFront: no post-OS interrupt.\n");
+		wavefront_should_cause_interrupt (WFC_NOOP,
+						  dev.data_port,
+						  (osrun_time*HZ));
+
+		if (!dev.irq_ok) {
+			printk (KERN_WARNING LOGNAME
+				"no post-OS interrupt.\n");
 			goto gone_bad;
 		}
 		
 		/* Now, do it again ! */
 		
-		wavefront_should_cause_interrupt (hw, WFC_NOOP,
-						  hw->data_port, (10*HZ));
+		wavefront_should_cause_interrupt (WFC_NOOP,
+						  dev.data_port, (10*HZ));
 		
-		if (!hw->irq_ok) {
-			printk (KERN_WARNING
-				"WaveFront: no post-OS interrupt(2).\n");
+		if (!dev.irq_ok) {
+			printk (KERN_WARNING LOGNAME
+				"no post-OS interrupt(2).\n");
 			goto gone_bad;
 		}
 
 		/* OK, no (RX/TX) interrupts any more, but leave mute
-		   on. Master interrupts get enabled when we're done here.
+		   in effect. 
 		*/
 		
-		outb (0x80, hw->control_port); 
-		
+		outb (0x80|0x40, dev.control_port); 
+
 		/* No need for the IRQ anymore */
 		
-		free_irq (hw->irq, hw);
+		free_irq (dev.irq, &dev);
+
 	}
 
-	if (/*XXX has_fx_device() && */ fx_raw) {
-		wffx_init (hw);
+	if (dev.has_fx && fx_raw) {
+		wffx_init ();
 	}
 
 	/* SETUPSND.EXE asks for sample memory config here, but since i
@@ -2833,118 +2775,130 @@ wavefront_do_reset (wf_config *hw, int atboot)
 	   about it.
 	*/
 	
-	if ((hw->freemem = wavefront_freemem (hw)) < 0) {
+	if ((dev.freemem = wavefront_freemem ()) < 0) {
 		goto gone_bad;
 	}
 		
-	printk (KERN_INFO "WaveFront: available DRAM %dk\n", hw->freemem / 1024);
+	printk (KERN_INFO LOGNAME "available DRAM %dk\n", dev.freemem / 1024);
 
-	if (!wavefront_write (hw, 0xf0) ||
-	    !wavefront_write (hw, 1) ||
-	    (wavefront_read (hw) < 0)) {
-		hw->debug = 0;
-		printk (KERN_WARNING "WaveFront: MPU emulation mode not set.\n");
+	if (wavefront_write (0xf0) ||
+	    wavefront_write (1) ||
+	    (wavefront_read () < 0)) {
+		dev.debug = 0;
+		printk (KERN_WARNING LOGNAME "MPU emulation mode not set.\n");
 		goto gone_bad;
 	}
 
 	voices[0] = 32;
 
-	if (wavefront_cmd (hw, WFC_SET_NVOICES, 0, voices)) {
-		printk (KERN_WARNING
-			"WaveFront: cannot set number of voices to 32.\n");
+	if (wavefront_cmd (WFC_SET_NVOICES, 0, voices)) {
+		printk (KERN_WARNING LOGNAME
+			"cannot set number of voices to 32.\n");
+		goto gone_bad;
 	}
+
 
 	return 0;
 
  gone_bad:
 	/* reset that sucker so that it doesn't bother us. */
 
-	outb (0x0, hw->control_port);
-	free_irq (hw->irq, hw);
+	outb (0x0, dev.control_port);
+	dev.interrupts_on = 0;
+	if (dev.irq >= 0) {
+		free_irq (dev.irq, &dev);
+	}
 	return 1;
 }
 
 static int
-wavefront_init (wf_config *hw, int atboot)
+wavefront_init (int atboot)
 
 {
 	int samples_are_from_rom;
 
-	if (hw->israw || wf_raw) {
+	if (dev.israw) {
 		samples_are_from_rom = 1;
 	} else {
+		/* XXX is this always true ? */
 		samples_are_from_rom = 0;
 	}
 
-	if (hw->israw || wf_raw || fx_raw) {
-		if (wavefront_do_reset (hw, atboot)) {
-			return 1;
+	if (dev.israw || fx_raw) {
+		if (wavefront_do_reset (atboot)) {
+			return -1;
 		}
 	}
 
-	wavefront_get_sample_status (hw, samples_are_from_rom);
-	wavefront_get_program_status (hw);
-	wavefront_get_patch_status (hw);
+	wavefront_get_sample_status (samples_are_from_rom);
+	wavefront_get_program_status ();
+	wavefront_get_patch_status ();
 
-	/* Start normal operation: unreset, master interrupt enable
-	   (for MPU interrupts) no mute
+	/* Start normal operation: unreset, master interrupt enabled, no mute
 	*/
 
-	outb (0x80|0x40|0x20, hw->control_port); 
+	outb (0x80|0x40|0x20, dev.control_port); 
 
 	return (0);
 }
 
-void
-attach_wavefront (struct address_info *hw_config)
-{
-	int i;
-	struct wf_config *hw = &wavefront_configuration;
+__initfunc (static int install_wavefront (void))
 
-	if ((i = sound_alloc_synthdev()) == -1) {
-		printk (KERN_ERR "WaveFront: Too many synthesizers\n");
-		return;
-	} else {
-		hw_config->slots[WF_SYNTH_SLOT] = i;
-		hw->synthdev = i;
-		synth_devs[hw->synthdev] = &wavefront_operations;
+{
+	if ((dev.synth_dev = register_sound_synth (&wavefront_fops, -1)) < 0) {
+		printk (KERN_ERR LOGNAME "cannot register raw synth\n");
+		return -1;
 	}
 
-	if (wavefront_init (hw, 1)) {
-		printk (KERN_WARNING "WaveFront: board could not "
-			"be initialized.\n");
-		sound_unload_synthdev (i);
-		return;
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
+	if ((dev.oss_dev = sound_alloc_synthdev()) == -1) {
+		printk (KERN_ERR LOGNAME "Too many sequencers\n");
+		return -1;
+	} else {
+		synth_devs[dev.oss_dev] = &wavefront_operations;
+	}
+#endif OSS_SUPPORT_SEQ
+
+	if (wavefront_init (1) < 0) {
+		printk (KERN_WARNING LOGNAME "initialization failed.\n");
+
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
+		sound_unload_synthdev (dev.oss_dev);
+#endif OSS_SUPPORT_SEQ
+
+		return -1;
 	}
     
-	request_region (hw_config->io_base+2, 6, "WaveFront synth");
-	request_region (hw_config->io_base+8, 8, "WaveFront FX");
+	request_region (dev.base+2, 6, "wavefront synth");
 
-	conf_printf2 ("WaveFront Synth", hw_config->io_base, 0, -1, -1);
-
-#if defined(CONFIG_MIDI)    
-	if (wavefront_config_midi (hw, hw_config)) {
-		printk (KERN_WARNING "WaveFront: could not initialize MIDI.\n");
+	if (dev.has_fx) {
+		request_region (dev.base+8, 8, "wavefront fx");
 	}
-#else
-	printk (KERN_WARNING
-		"WaveFront: MIDI not configured at kernel-config time.\n");
-#endif CONFIG_MIDI
 
-	return;
+	if (wavefront_config_midi ()) {
+		printk (KERN_WARNING LOGNAME "could not initialize MIDI.\n");
+	}
+
+	return dev.oss_dev;
 }
-void
-unload_wavefront (struct address_info *hw_config)
-{
-	struct wf_config *hw = &wavefront_configuration;
 
-	/* the first two are freed by the wf_mpu code */
-	release_region (hw->base+2, 6);
-	release_region (hw->base+8, 8);
-	sound_unload_synthdev (hw->synthdev);
-#if defined(CONFIG_MIDI)
-	unload_wf_mpu (hw_config);
-#endif
+void
+uninstall_wavefront (void)
+
+{
+	/* the first two i/o addresses are freed by the wf_mpu code */
+	release_region (dev.base+2, 6);
+
+	if (dev.has_fx) {
+		release_region (dev.base+8, 8);
+	}
+
+	unregister_sound_synth (dev.synth_dev);
+
+#if OSS_SUPPORT_LEVEL & OSS_SUPPORT_SEQ
+	sound_unload_synthdev (dev.oss_dev);
+#endif OSS_SUPPORT_SEQ
+	uninstall_wf_mpu ();
 }
 
 /***********************************************************************/
@@ -2961,83 +2915,111 @@ unload_wavefront (struct address_info *hw_config)
 #define FX_AUTO_INCR    0x04    /* auto-increment DSP address after transfer */
 
 static int
-wffx_idle (struct wf_config *hw) 
+wffx_idle (void) 
     
 {
 	int i;
 	unsigned int x = 0x80;
     
 	for (i = 0; i < 1000; i++) {
-		x = inb (hw->fx_status);
+		x = inb (dev.fx_status);
 		if ((x & 0x80) == 0) {
 			break;
 		}
 	}
     
 	if (x & 0x80) {
-		printk (KERN_ERR "WaveFront: FX device never idle.\n");
+		printk (KERN_ERR LOGNAME "FX device never idle.\n");
 		return 0;
 	}
     
 	return (1);
 }
 
+__initfunc (static int detect_wffx (void))
+
+{
+	/* This is a crude check, but its the best one I have for now.
+	   Certainly on the Maui and the Tropez, wffx_idle() will
+	   report "never idle", which suggests that this test should
+	   work OK.
+	*/
+
+	if (inb (dev.fx_status) & 0x80) {
+		printk (KERN_INFO LOGNAME "Hmm, probably a Maui or Tropez.\n");
+		return -1;
+	}
+
+	return 0;
+}	
+
+__initfunc (static int attach_wffx (void))
+
+{
+	if ((dev.fx_mididev = sound_alloc_mididev ()) < 0) {
+		printk (KERN_WARNING LOGNAME "cannot install FX Midi driver\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static void
-wffx_mute (struct wf_config *hw, int onoff)
+wffx_mute (int onoff)
     
 {
-	if (!wffx_idle(hw)) {
+	if (!wffx_idle()) {
 		return;
 	}
     
-	outb (onoff ? 0x02 : 0x00, hw->fx_op);
+	outb (onoff ? 0x02 : 0x00, dev.fx_op);
 }
 
 static int
-wffx_memset (struct wf_config *hw, int page,
+wffx_memset (int page,
 	     int addr, int cnt, unsigned short *data)
 {
 	if (page < 0 || page > 7) {
-		printk (KERN_ERR "WaveFront: FX memset: "
+		printk (KERN_ERR LOGNAME "FX memset: "
 			"page must be >= 0 and <= 7\n");
 		return -(EINVAL);
 	}
 
 	if (addr < 0 || addr > 0x7f) {
-		printk (KERN_ERR "WaveFront: FX memset: "
+		printk (KERN_ERR LOGNAME "FX memset: "
 			"addr must be >= 0 and <= 7f\n");
 		return -(EINVAL);
 	}
 
 	if (cnt == 1) {
 
-		outb (FX_LSB_TRANSFER, hw->fx_lcr);
-		outb (page, hw->fx_dsp_page);
-		outb (addr, hw->fx_dsp_addr);
-		outb ((data[0] >> 8), hw->fx_dsp_msb);
-		outb ((data[0] & 0xff), hw->fx_dsp_lsb);
+		outb (FX_LSB_TRANSFER, dev.fx_lcr);
+		outb (page, dev.fx_dsp_page);
+		outb (addr, dev.fx_dsp_addr);
+		outb ((data[0] >> 8), dev.fx_dsp_msb);
+		outb ((data[0] & 0xff), dev.fx_dsp_lsb);
 
-		printk (KERN_INFO "WaveFront: FX: addr %d:%x set to 0x%x\n",
+		printk (KERN_INFO LOGNAME "FX: addr %d:%x set to 0x%x\n",
 			page, addr, data[0]);
 	
 	} else {
 		int i;
 
-		outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-		outb (page, hw->fx_dsp_page);
-		outb (addr, hw->fx_dsp_addr);
+		outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+		outb (page, dev.fx_dsp_page);
+		outb (addr, dev.fx_dsp_addr);
 
 		for (i = 0; i < cnt; i++) {
-			outb ((data[i] >> 8), hw->fx_dsp_msb);
-			outb ((data[i] & 0xff), hw->fx_dsp_lsb);
-			if (!wffx_idle (hw)) {
+			outb ((data[i] >> 8), dev.fx_dsp_msb);
+			outb ((data[i] & 0xff), dev.fx_dsp_lsb);
+			if (!wffx_idle ()) {
 				break;
 			}
 		}
 
 		if (i != cnt) {
-			printk (KERN_WARNING
-				"WaveFront: FX memset "
+			printk (KERN_WARNING LOGNAME
+				"FX memset "
 				"(0x%x, 0x%x, 0x%x, %d) incomplete\n",
 				page, addr, (int) data, cnt);
 			return -(EIO);
@@ -3048,7 +3030,7 @@ wffx_memset (struct wf_config *hw, int page,
 }
 
 static int
-wffx_ioctl (struct wf_config *hw, wavefront_fx_info *r)
+wffx_ioctl (wavefront_fx_info *r)
 
 {
 	unsigned short page_data[256];
@@ -3056,20 +3038,20 @@ wffx_ioctl (struct wf_config *hw, wavefront_fx_info *r)
 
 	switch (r->request) {
 	case WFFX_MUTE:
-		wffx_mute (hw, r->data[0]);
+		wffx_mute (r->data[0]);
 		return 0;
 
 	case WFFX_MEMSET:
 
 		if (r->data[2] <= 0) {
-			printk (KERN_ERR "WaveFront: cannot write "
+			printk (KERN_ERR LOGNAME "cannot write "
 				"<= 0 bytes to FX\n");
 			return -(EINVAL);
 		} else if (r->data[2] == 1) {
 			pd = (unsigned short *) &r->data[3];
 		} else {
 			if (r->data[2] > sizeof (page_data)) {
-				printk (KERN_ERR "WaveFront: cannot write "
+				printk (KERN_ERR LOGNAME "cannot write "
 					"> 255 bytes to FX\n");
 				return -(EINVAL);
 			}
@@ -3078,15 +3060,14 @@ wffx_ioctl (struct wf_config *hw, wavefront_fx_info *r)
 			pd = page_data;
 		}
 
-		return wffx_memset (hw,
-				    r->data[0], /* page */
+		return wffx_memset (r->data[0], /* page */
 				    r->data[1], /* addr */
 				    r->data[2], /* cnt */
 				    pd);
 
 	default:
-		printk (KERN_WARNING
-			"WaveFront: FX: ioctl %d not yet supported\n",
+		printk (KERN_WARNING LOGNAME
+			"FX: ioctl %d not yet supported\n",
 			r->request);
 		return -(EINVAL);
 	}
@@ -3107,7 +3088,7 @@ wffx_ioctl (struct wf_config *hw, wavefront_fx_info *r)
 */
 
 static int
-wffx_init (struct wf_config *hw)
+wffx_init (void)
 
 {
 	int i;
@@ -3119,147 +3100,147 @@ wffx_init (struct wf_config *hw)
 	for (j = 0; j < 2; j++) {
 		for (i = 0x10; i <= 0xff; i++) {
 	    
-			if (!wffx_idle (hw)) {
+			if (!wffx_idle ()) {
 				return (-1);
 			}
 	    
-			outb (i, hw->fx_mod_addr);
-			outb (0x0, hw->fx_mod_data);
+			outb (i, dev.fx_mod_addr);
+			outb (0x0, dev.fx_mod_data);
 		}
 	}
 
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x02, hw->fx_op);                        /* mute on */
+	if (!wffx_idle()) return (-1);
+	outb (0x02, dev.fx_op);                        /* mute on */
 
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x44, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x42, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x43, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x7c, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x7e, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x46, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x49, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x47, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x4a, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x44, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x42, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x43, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x7c, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x7e, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x46, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x49, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x47, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x4a, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
 
 	/* either because of stupidity by TB's programmers, or because it
 	   actually does something, rezero the MOD page.
 	*/
 	for (i = 0x10; i <= 0xff; i++) {
 	
-		if (!wffx_idle (hw)) {
+		if (!wffx_idle ()) {
 			return (-1);
 		}
 	
-		outb (i, hw->fx_mod_addr);
-		outb (0x0, hw->fx_mod_data);
+		outb (i, dev.fx_mod_addr);
+		outb (0x0, dev.fx_mod_data);
 	}
 	/* load page zero */
 
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x00, hw->fx_dsp_page);
-	outb (0x00, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x00, dev.fx_dsp_page);
+	outb (0x00, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_zero); i += 2) {
-		outb (page_zero[i], hw->fx_dsp_msb);
-		outb (page_zero[i+1], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_zero[i], dev.fx_dsp_msb);
+		outb (page_zero[i+1], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
 	/* Now load page one */
 
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x01, hw->fx_dsp_page);
-	outb (0x00, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x01, dev.fx_dsp_page);
+	outb (0x00, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_one); i += 2) {
-		outb (page_one[i], hw->fx_dsp_msb);
-		outb (page_one[i+1], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_one[i], dev.fx_dsp_msb);
+		outb (page_one[i+1], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x02, hw->fx_dsp_page);
-	outb (0x00, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x02, dev.fx_dsp_page);
+	outb (0x00, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_two); i++) {
-		outb (page_two[i], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_two[i], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x03, hw->fx_dsp_page);
-	outb (0x00, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x03, dev.fx_dsp_page);
+	outb (0x00, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_three); i++) {
-		outb (page_three[i], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_three[i], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x04, hw->fx_dsp_page);
-	outb (0x00, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x04, dev.fx_dsp_page);
+	outb (0x00, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_four); i++) {
-		outb (page_four[i], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_four[i], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
 	/* Load memory area (page six) */
     
-	outb (FX_LSB_TRANSFER, hw->fx_lcr); 
-	outb (0x06, hw->fx_dsp_page); 
+	outb (FX_LSB_TRANSFER, dev.fx_lcr); 
+	outb (0x06, dev.fx_dsp_page); 
 
 	for (i = 0; i < sizeof (page_six); i += 3) {
-		outb (page_six[i], hw->fx_dsp_addr);
-		outb (page_six[i+1], hw->fx_dsp_msb);
-		outb (page_six[i+2], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_six[i], dev.fx_dsp_addr);
+		outb (page_six[i+1], dev.fx_dsp_msb);
+		outb (page_six[i+2], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x00, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x00, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_seven); i += 2) {
-		outb (page_seven[i], hw->fx_dsp_msb);
-		outb (page_seven[i+1], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_seven[i], dev.fx_dsp_msb);
+		outb (page_seven[i+1], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
 	/* Now setup the MOD area. We do this algorithmically in order to
@@ -3268,192 +3249,192 @@ wffx_init (struct wf_config *hw)
 	*/
 
 	for (i = 0x00; i <= 0x0f; i++) {
-		outb (0x01, hw->fx_mod_addr);
-		outb (i, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
-		outb (0x02, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (0x01, dev.fx_mod_addr);
+		outb (i, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
+		outb (0x02, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0xb0; i <= 0xbf; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x20, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x20, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0xf0; i <= 0xff; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x20, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x20, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0x10; i <= 0x1d; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0xff, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0xff, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x1e, hw->fx_mod_addr);
-	outb (0x40, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x1e, dev.fx_mod_addr);
+	outb (0x40, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
 	for (i = 0x1f; i <= 0x2d; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0xff, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0xff, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x2e, hw->fx_mod_addr);
-	outb (0x00, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x2e, dev.fx_mod_addr);
+	outb (0x00, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
 	for (i = 0x2f; i <= 0x3e; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x3f, hw->fx_mod_addr);
-	outb (0x20, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x3f, dev.fx_mod_addr);
+	outb (0x20, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
 	for (i = 0x40; i <= 0x4d; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x4e, hw->fx_mod_addr);
-	outb (0x0e, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x4f, hw->fx_mod_addr);
-	outb (0x0e, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x4e, dev.fx_mod_addr);
+	outb (0x0e, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
+	outb (0x4f, dev.fx_mod_addr);
+	outb (0x0e, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
 
 	for (i = 0x50; i <= 0x6b; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x6c, hw->fx_mod_addr);
-	outb (0x40, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x6c, dev.fx_mod_addr);
+	outb (0x40, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
-	outb (0x6d, hw->fx_mod_addr);
-	outb (0x00, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x6d, dev.fx_mod_addr);
+	outb (0x00, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
-	outb (0x6e, hw->fx_mod_addr);
-	outb (0x40, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x6e, dev.fx_mod_addr);
+	outb (0x40, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
-	outb (0x6f, hw->fx_mod_addr);
-	outb (0x40, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0x6f, dev.fx_mod_addr);
+	outb (0x40, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
 	for (i = 0x70; i <= 0x7f; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0xc0, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0xc0, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
     
 	for (i = 0x80; i <= 0xaf; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0xc0; i <= 0xdd; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0xde, hw->fx_mod_addr);
-	outb (0x10, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0xdf, hw->fx_mod_addr);
-	outb (0x10, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
+	outb (0xde, dev.fx_mod_addr);
+	outb (0x10, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
+	outb (0xdf, dev.fx_mod_addr);
+	outb (0x10, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
 
 	for (i = 0xe0; i <= 0xef; i++) {
-		outb (i, hw->fx_mod_addr);
-		outb (0x00, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_mod_addr);
+		outb (0x00, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0x00; i <= 0x0f; i++) {
-		outb (0x01, hw->fx_mod_addr);
-		outb (i, hw->fx_mod_data);
-		outb (0x02, hw->fx_mod_addr);
-		outb (0x01, hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (0x01, dev.fx_mod_addr);
+		outb (i, dev.fx_mod_data);
+		outb (0x02, dev.fx_mod_addr);
+		outb (0x01, dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x02, hw->fx_op); /* mute on */
+	outb (0x02, dev.fx_op); /* mute on */
 
 	/* Now set the coefficients and so forth for the programs above */
 
 	for (i = 0; i < sizeof (coefficients); i += 4) {
-		outb (coefficients[i], hw->fx_dsp_page);
-		outb (coefficients[i+1], hw->fx_dsp_addr);
-		outb (coefficients[i+2], hw->fx_dsp_msb);
-		outb (coefficients[i+3], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (coefficients[i], dev.fx_dsp_page);
+		outb (coefficients[i+1], dev.fx_dsp_addr);
+		outb (coefficients[i+2], dev.fx_dsp_msb);
+		outb (coefficients[i+3], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
 	/* Some settings (?) that are too small to bundle into loops */
 
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x1e, hw->fx_mod_addr);
-	outb (0x14, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0xde, hw->fx_mod_addr);
-	outb (0x20, hw->fx_mod_data);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0xdf, hw->fx_mod_addr);
-	outb (0x20, hw->fx_mod_data);
+	if (!wffx_idle()) return (-1);
+	outb (0x1e, dev.fx_mod_addr);
+	outb (0x14, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
+	outb (0xde, dev.fx_mod_addr);
+	outb (0x20, dev.fx_mod_data);
+	if (!wffx_idle()) return (-1);
+	outb (0xdf, dev.fx_mod_addr);
+	outb (0x20, dev.fx_mod_data);
     
 	/* some more coefficients */
 
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x06, hw->fx_dsp_page);
-	outb (0x78, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x40, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x03, hw->fx_dsp_addr);
-	outb (0x0f, hw->fx_dsp_msb);
-	outb (0xff, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x0b, hw->fx_dsp_addr);
-	outb (0x0f, hw->fx_dsp_msb);
-	outb (0xff, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x02, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x0a, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x46, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
-	if (!wffx_idle(hw)) return (-1);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x49, hw->fx_dsp_addr);
-	outb (0x00, hw->fx_dsp_msb);
-	outb (0x00, hw->fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x06, dev.fx_dsp_page);
+	outb (0x78, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x40, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x03, dev.fx_dsp_addr);
+	outb (0x0f, dev.fx_dsp_msb);
+	outb (0xff, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x0b, dev.fx_dsp_addr);
+	outb (0x0f, dev.fx_dsp_msb);
+	outb (0xff, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x02, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x0a, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x46, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
+	if (!wffx_idle()) return (-1);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x49, dev.fx_dsp_addr);
+	outb (0x00, dev.fx_dsp_msb);
+	outb (0x00, dev.fx_dsp_lsb);
     
 	/* Now, for some strange reason, lets reload every page
 	   and all the coefficients over again. I have *NO* idea
@@ -3461,117 +3442,116 @@ wffx_init (struct wf_config *hw)
 	   is this phase is omitted.
 	*/
 
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x00, hw->fx_dsp_page);  
-	outb (0x10, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x00, dev.fx_dsp_page);  
+	outb (0x10, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_zero_v2); i += 2) {
-		outb (page_zero_v2[i], hw->fx_dsp_msb);
-		outb (page_zero_v2[i+1], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_zero_v2[i], dev.fx_dsp_msb);
+		outb (page_zero_v2[i+1], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x01, hw->fx_dsp_page);
-	outb (0x10, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x01, dev.fx_dsp_page);
+	outb (0x10, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_one_v2); i += 2) {
-		outb (page_one_v2[i], hw->fx_dsp_msb);
-		outb (page_one_v2[i+1], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_one_v2[i], dev.fx_dsp_msb);
+		outb (page_one_v2[i+1], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	if (!wffx_idle(hw)) return (-1);
-	if (!wffx_idle(hw)) return (-1);
+	if (!wffx_idle()) return (-1);
+	if (!wffx_idle()) return (-1);
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x02, hw->fx_dsp_page);
-	outb (0x10, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x02, dev.fx_dsp_page);
+	outb (0x10, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_two_v2); i++) {
-		outb (page_two_v2[i], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_two_v2[i], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x03, hw->fx_dsp_page);
-	outb (0x10, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x03, dev.fx_dsp_page);
+	outb (0x10, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_three_v2); i++) {
-		outb (page_three_v2[i], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_three_v2[i], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x04, hw->fx_dsp_page);
-	outb (0x10, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x04, dev.fx_dsp_page);
+	outb (0x10, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_four_v2); i++) {
-		outb (page_four_v2[i], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_four_v2[i], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
     
-	outb (FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x06, hw->fx_dsp_page);
+	outb (FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x06, dev.fx_dsp_page);
 
 	/* Page six v.2 is algorithmic */
     
 	for (i = 0x10; i <= 0x3e; i += 2) {
-		outb (i, hw->fx_dsp_addr);
-		outb (0x00, hw->fx_dsp_msb);
-		outb (0x00, hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (i, dev.fx_dsp_addr);
+		outb (0x00, dev.fx_dsp_msb);
+		outb (0x00, dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, hw->fx_lcr);
-	outb (0x07, hw->fx_dsp_page);
-	outb (0x10, hw->fx_dsp_addr);
+	outb (FX_AUTO_INCR|FX_LSB_TRANSFER, dev.fx_lcr);
+	outb (0x07, dev.fx_dsp_page);
+	outb (0x10, dev.fx_dsp_addr);
 
 	for (i = 0; i < sizeof (page_seven_v2); i += 2) {
-		outb (page_seven_v2[i], hw->fx_dsp_msb);
-		outb (page_seven_v2[i+1], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (page_seven_v2[i], dev.fx_dsp_msb);
+		outb (page_seven_v2[i+1], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0x00; i < sizeof(mod_v2); i += 2) {
-		outb (mod_v2[i], hw->fx_mod_addr);
-		outb (mod_v2[i+1], hw->fx_mod_data);
-		if (!wffx_idle(hw)) return (-1);
+		outb (mod_v2[i], dev.fx_mod_addr);
+		outb (mod_v2[i+1], dev.fx_mod_data);
+		if (!wffx_idle()) return (-1);
 	}
 
 	for (i = 0; i < sizeof (coefficients2); i += 4) {
-		outb (coefficients2[i], hw->fx_dsp_page);
-		outb (coefficients2[i+1], hw->fx_dsp_addr);
-		outb (coefficients2[i+2], hw->fx_dsp_msb);
-		outb (coefficients2[i+3], hw->fx_dsp_lsb);
-		if (!wffx_idle(hw)) return (-1);
+		outb (coefficients2[i], dev.fx_dsp_page);
+		outb (coefficients2[i+1], dev.fx_dsp_addr);
+		outb (coefficients2[i+2], dev.fx_dsp_msb);
+		outb (coefficients2[i+3], dev.fx_dsp_lsb);
+		if (!wffx_idle()) return (-1);
 	}
 
-	outb (0x00, hw->fx_op);
-	if (!wffx_idle(hw)) return (-1);
-    
 	for (i = 0; i < sizeof (coefficients3); i += 2) {
 		int x;
 
-		outb (0x07, hw->fx_dsp_page);
+		outb (0x07, dev.fx_dsp_page);
 		x = (i % 4) ? 0x4e : 0x4c;
-		outb (x, hw->fx_dsp_addr);
-		outb (coefficients3[i], hw->fx_dsp_msb);
-		outb (coefficients3[i+1], hw->fx_dsp_lsb);
+		outb (x, dev.fx_dsp_addr);
+		outb (coefficients3[i], dev.fx_dsp_msb);
+		outb (coefficients3[i+1], dev.fx_dsp_lsb);
 	}
 
-	outb (0x00, hw->fx_op); /* mute off */
+	outb (0x00, dev.fx_op); /* mute off */
+	if (!wffx_idle()) return (-1);
 
 	return (0);
 }
 
 EXPORT_NO_SYMBOLS;
-struct address_info cfg;
 
 int io = -1;
 int irq = -1;
 
-MODULE_PARM(io,"i");
-MODULE_PARM(irq,"i");
+MODULE_AUTHOR      ("Paul Barton-Davis <pbd@op.net>");
+MODULE_DESCRIPTION ("Turtle Beach WaveFront Linux Driver");
+MODULE_PARM        (io,"i");
+MODULE_PARM        (irq,"i");
 
 int init_module (void)
 
@@ -3580,19 +3560,27 @@ int init_module (void)
 		"Copyright (C) by Hannu Solvainen, "
 		"Paul Barton-Davis 1993-1998.\n");
 
+	/* XXX t'would be lovely to ask the CS4232 for these values, eh ? */
+
 	if (io == -1 || irq == -1) {
-		printk (KERN_INFO "WaveFront: irq and io "
-			"options must be set.\n");
+		printk (KERN_INFO LOGNAME "irq and io options must be set.\n");
 		return -EINVAL;
 	}
 
-	cfg.io_base = io;
-	cfg.irq = irq;
+	if (wavefront_interrupt_bits (irq) < 0) {
+		printk (KERN_INFO LOGNAME
+			"IRQ must be 9, 5, 12 or 15 (not %d)\n", irq);
+		return -ENODEV;
+	}
 
-	if (probe_wavefront (&cfg) == 0) {
+	if (detect_wavefront (irq, io) < 0) {
 		return -ENODEV;
 	} 
-	attach_wavefront (&cfg);
+
+	if (install_wavefront () < 0) {
+		return -EIO;
+	}
+
 	SOUND_LOCK;
 	return 0;
 }
@@ -3600,10 +3588,11 @@ int init_module (void)
 void cleanup_module (void)
 
 {
-	unload_wavefront (&cfg);
+	uninstall_wavefront ();
+
 	SOUND_LOCK_END;
 }
 
-#endif CONFIG_SOUND_WAVEFRONT_MODULE_AND_MODULE
+#endif CONFIG_SOUND_WAVEFRONT_MODULE && MODULE
 
 

@@ -1078,6 +1078,8 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 				++chan->if_send_bfrs_passed_to_adptr;
 				++chan->ifstats.tx_packets;
 				++card->wandev.stats.tx_packets;
+				chan->ifstats.tx_bytes += skb->len;
+				card->wandev.stats.tx_bytes += skb->len;
 			}
 		}
 	}
@@ -1501,6 +1503,8 @@ static void fr502_rx_intr(sdla_t * card)
 			netif_rx(skb);
 			++chan->ifstats.rx_packets;
 			++card->wandev.stats.rx_packets;
+			chan->ifstats.rx_bytes += skb->len;
+			card->wandev.stats.rx_bytes += skb->len;
 		}
 	}
 	sdla_mapmem(&card->hw, FR_MB_VECTOR);
@@ -1621,6 +1625,8 @@ static void fr508_rx_intr(sdla_t * card)
 						++chan->rx_intr_bfr_passed_to_stack;
 						++chan->ifstats.rx_packets;
 						++card->wandev.stats.rx_packets;
+						chan->ifstats.rx_bytes += skb->len;
+						card->wandev.stats.rx_bytes += skb->len;
 					}
 				}
 			}

@@ -570,6 +570,12 @@ check_table:
 				bsd_kdev = MKDEV(hd->major, minor);
 				bsd_maxpart = OPENBSD_MAXPARTITIONS;
 			}
+		} else if (SYS_IND(p) == NETBSD_PARTITION) {
+			printk("!");
+			if (!bsd_kdev) {
+				bsd_kdev = MKDEV(hd->major, minor);
+				bsd_maxpart = BSD_MAXPARTITIONS;
+			}
 		}
 #endif
 #ifdef CONFIG_UNIXWARE_DISKLABEL
@@ -1336,7 +1342,7 @@ __initfunc(void device_setup(void))
 int get_partition_list(char * page)
 {
 	struct gendisk *p;
-	char buf[8];
+	char buf[32];
 	int n, len;
 
 	len = sprintf(page, "major minor  #blocks  name\n\n");

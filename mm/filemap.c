@@ -125,10 +125,16 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count;
 
-	count = limit >> priority;
+	count = (limit << 1) >> priority;
 
 	page = mem_map + clock;
 	do {
+		int referenced;
+
+		/* This works even in the presence of PageSkip because
+		 * the first two entries at the beginning of a hole will
+		 * be marked, not just the first.
+		 */
 		page++;
 		clock++;
 		if (clock >= max_mapnr) {
@@ -141,11 +147,9 @@ int shrink_mmap(int priority, int gfp_mask)
 			clock = page->map_nr;
 		}
 		
-		if (test_and_clear_bit(PG_referenced, &page->flags))
-			continue;
-
-		/* Decrement count only for non-referenced pages */
 		count--;
+		referenced = test_and_clear_bit(PG_referenced, &page->flags);
+
 		if (PageLocked(page))
 			continue;
 
@@ -154,6 +158,21 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* We can't free pages unless there's just one user */
 		if (atomic_read(&page->count) != 1)
+			continue;
+
+		/*
+		 * Is it a page swap page? If so, we want to
+		 * drop it if it is no longer used, even if it
+		 * were to be marked referenced..
+		 */
+		if (PageSwapCache(page)) {
+			if (referenced && swap_count(page->offset) != 1)
+				continue;
+			delete_from_swap_cache(page);
+			return 1;
+		}	
+
+		if (referenced)
 			continue;
 
 		/* Is it a buffer page? */
@@ -165,14 +184,10 @@ int shrink_mmap(int priority, int gfp_mask)
 			return 1;
 		}
 
-		/* is it a swap-cache or page-cache page? */
+		/* is it a page-cache page? */
 		if (page->inode) {
 			if (pgcache_under_min())
 				continue;
-			if (PageSwapCache(page)) {
-				delete_from_swap_cache(page);
-				return 1;
-			}
 			remove_inode_page(page);
 			return 1;
 		}

@@ -19,21 +19,25 @@
 
   and mail /tmp/ksymoops.log to kaos@ocs.com.au
 
-  The patches subdirectory contains some arch specific patches to
-  provide more info on their Oops reports.  At the moment (2.1.126),
-  some archs do not print traces or do not print code lines, makes it
-  impossible to report properly.
-
   TODO:
-  Performance improvements.  Reading a large log is quite slow, probably
-	  one of the Oops regular expressions is pathological.
   Clean up these docs.
-  Add "guess", "same" options, distinguish between default and supplied
-  values on report (Andries, I get the message :).
+  Tweak System.map to include arch information.
+  Tweak modutils to log at least one symbol for each module loaded,
+  otherwise they are invisible to ksymoops.  Also arch and version data.
+  Include sparc/sparc64 patches from Jakub Jelinek <jj@sunsite.mff.cuni.cz>.
+  Add object format override for sparc/soparc64 or any cross platform
+  oops debugging.
 
-  Tue Nov  3 02:31:01 EST 1998
-  Version 0.6
-  Read lsmod (/proc/modules).
+  Mon Jan  4 09:48:13 EST 1999
+  Version 0.6e
+  Added to kernel.
+  Add ARM support.
+  Typo in oops_code.
+  Add -c option.
+  Add -1 option.
+  Report if options were specified or defaulted.
+  Remove false warnings when comparing ksyms and lsmod.
+  Performance inprovements.
 
   Wed Oct 28 23:14:55 EST 1998
   Version 0.5
@@ -123,6 +127,8 @@
 		  [-m system.map]	Where to read System.map
 		  [-M]		No System.map is available
 		  [-s save.map]	Save consolidated map
+		  [-c code_bytes]	How many bytes in each unit of code
+		  [-1]		One shot toggle (exit after first Oops)
 		  [-d]		Increase debug level by 1
 		  [-h]		Print help text
 		  Oops.file	Oops to decode
@@ -150,6 +156,7 @@
 			  -k /proc/ksyms
 			  -l /proc/modules
 			  -m /usr/src/linux/System.map
+			  -c 1
 			  Oops report is read from stdin
 
   Note:	  Unless you tell ksymoops *NOT* to read a particular file, it
@@ -174,15 +181,11 @@
 	  -VOKLM.  Or to just read System.map, ksymoops -VOKL -m mapfile.
 
 
-  WARNING:  The user interface will change slightly in 0.7, users will
-            have to give some indication of the state of their
-            environment.  Otherwise it may be too easy to pick the
-            wrong input files.
-
-  Return codes:	0 - normal.
+  Return codes:	  0 - normal.
 		  1 - error(s) or warning(s) issued, results may not be
 		      reliable.
 		  2 - fatal error, no useful results.
+		  3 - One shot mode, end of input reached.
 
   Supported architectures
 
@@ -191,6 +194,7 @@
 	  MIPS tested.
 	  Sparc tested.
 	  Alpha tested.
+	  ARM tested.
 
 	  The term "eip" is generic, for example it includes the i386 EIP
 	  and the m68k PC.  Remember that objdump output always says EIP,
@@ -346,6 +350,18 @@
     space.  Each hex value must be 2 to 8 digits and must be a multiple of
     2 digits.
 
+    On some architectures the Code: data is a stream of single bytes,
+    in machine order.  On other architectures, it is a stream of shorts
+    or ints in human readable order which does not always match the
+    machine order, endianess raises its ugly head.  We are consistently
+    inconsistent.
+
+    To cater for these architecture inconsistencies, use the -c option.
+    If the Code: line is already in machine order, use -c 1.  If the
+    Code: data is a stream of shorts or ints which do not match the
+    machine order, use -c 2 or -c 4.  Each set of 'c' bytes are swapped
+    to (hopefully) reflect the machine order.
+
     Special cases where Code: can be followed by text.
       'Code: general protection'
       'Code: <n>'
@@ -356,3 +372,24 @@
     Oops_print) or end of file are encountered then ksymoops assumes that
     the Code: line is missing or garbled and dumps the formatted data
     anyway.  Fail safe, I hope.
+
+  * By default, ksymoops reads its entire input file.  If the -1 toggle
+    is set, it will run in one shot mode and exit after the first Oops.
+    This is useful for automatically mailing reports as they happen,
+    like this :-
+
+    #!/bin/sh
+    # ksymoops1
+    while (true)
+    do
+    	ksymoops -1 > $HOME/oops1
+	if [ $? -eq 3 ]
+	then
+	   exit 0
+	fi
+	mail -s Oops admin < $HOME/oops1
+    done
+
+    tail -f /var/log/messages | ksymoops1
+
+    Restarting after log rotation is left as an exercise for the reader.

@@ -2389,11 +2389,11 @@ __initfunc(int init_sonicvibes(void))
 		printk(KERN_INFO "sv: found adapter at io %#06x irq %u dmaa %#06x dmac %#06x revision %u\n",
 		       s->ioenh, s->irq, s->iodmaa, s->iodmac, rdindir(s, SV_CIREVISION));
 		/* register devices */
-		if ((s->dev_audio = register_sound_dsp(&sv_audio_fops)) < 0)
+		if ((s->dev_audio = register_sound_dsp(&sv_audio_fops, -1)) < 0)
 			goto err_dev1;
-		if ((s->dev_mixer = register_sound_mixer(&sv_mixer_fops)) < 0)
+		if ((s->dev_mixer = register_sound_mixer(&sv_mixer_fops, -1)) < 0)
 			goto err_dev2;
-		if ((s->dev_midi = register_sound_midi(&sv_midi_fops)) < 0)
+		if ((s->dev_midi = register_sound_midi(&sv_midi_fops, -1)) < 0)
 			goto err_dev3;
 		if ((s->dev_dmfm = register_sound_special(&sv_dmfm_fops, 15 /* ?? */)) < 0)
 			goto err_dev4;

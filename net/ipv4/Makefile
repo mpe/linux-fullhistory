@@ -81,6 +81,14 @@ ifeq ($(CONFIG_IP_MASQUERADE_MOD),y)
     endif
   endif
   
+  ifeq ($(CONFIG_IP_MASQUERADE_MFW),y)
+  IPV4_OBJS += ip_masq_mfw.o
+  else
+    ifeq ($(CONFIG_IP_MASQUERADE_MFW),m)
+    M_OBJS += ip_masq_mfw.o
+    endif
+  endif
+
 endif
 
 M_OBJS += ip_masq_user.o

@@ -6,6 +6,19 @@
 	Copyright Keith Owens <kaos@ocs.com.au>.
 	Released under the GNU Public Licence, Version 2.
 
+	Mon Jan  4 08:47:55 EST 1999
+	Version 0.6d
+	Add ARM support.
+
+	Thu Nov 26 16:37:46 EST 1998
+	Version 0.6c
+	Typo in oops_code.
+	Add -c option.
+
+	Tue Nov  3 23:33:04 EST 1998
+	Version 0.6a
+	Performance inprovements.
+
 	Tue Nov  3 02:31:01 EST 1998
 	Version 0.6
 	Oops file must be regular.
@@ -279,8 +292,10 @@ static void Oops_decode_one(SYMBOL_SET *ss, const char *line, elf_addr_t eip,
 	re_strings_free(&re_Oops_objdump, &string);
 }
 
-/* Maximum number of code bytes to process */
-#define CODE_SIZE 36	/* sparc and alpha dump 36 bytes */
+/* Maximum number of code bytes to process.  It needs to be a multiple of 2 for
+ * code_byte (-c) swapping.  Sparc and alpha dump 36 bytes so use 64.
+ */
+#define CODE_SIZE 64
 
 /******************************************************************************/
 /*                     Start architecture sensitive code                      */
@@ -288,9 +303,10 @@ static void Oops_decode_one(SYMBOL_SET *ss, const char *line, elf_addr_t eip,
 
 /* Extract the hex values from the Code: line and convert to binary */
 static int Oops_code_values(const unsigned char* code_text, char *code,
-			    int *adjust, char ***string, int string_max)
+			    int *adjust, char ***string, int string_max,
+			    int code_bytes)
 {
-	int byte = 0, l;
+	int byte = 0, i, l;
 	unsigned long c;
 	char *value;
 	const char *p;
@@ -300,8 +316,9 @@ static int Oops_code_values(const unsigned char* code_text, char *code,
 
 	/* Given by re_Oops_code: code_text is a message (e.g. "general
 	 * protection") or one or more hex fields separated by space or tab.
-	 * Some architectures bracket the current instruction with '<' and '>'.
-	 * The first character is nonblank.
+	 * Some architectures bracket the current instruction with '<'
+	 * and '>', others use '(' and ')'.  The first character is
+	 * nonblank.
 	 */
 	if (!isxdigit(*code_text)) {
 		fprintf(stderr,
@@ -319,9 +336,9 @@ static int Oops_code_values(const unsigned char* code_text, char *code,
 	 */
 	re_compile(&re_Oops_code_value,
 			"^"
-			"(<?)"						/* 1 */
+			"([<(]?)"					/* 1 */
 			"([0-9a-fA-F]+)"				/* 2 */
-			">?"
+			"[>)]?"
 			"[ \t]*"
 			,
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
@@ -347,9 +364,11 @@ static int Oops_code_values(const unsigned char* code_text, char *code,
 			++errors;
 			c = 0;
 		}
-		if ((*string[1]) && *((*string)[1]))
+		if ((*string)[1] && *((*string)[1]))
 			*adjust = -byte;	/* this byte is EIP */
 		/* i386 - 2 byte code, m68k - 4 byte, sparc - 8 byte.
+		 * On some architectures Code: is a stream of bytes, on some it
+		 * is a stream of shorts, on some it is a stream of ints.
 		 * Consistent we're not!
 		 */
 		l = strlen(value);
@@ -383,6 +402,30 @@ static int Oops_code_values(const unsigned char* code_text, char *code,
 			p, procname);
 		++warnings;
 	}
+
+	/* The code_bytes parameter says how many readable bytes form a single
+	 * code unit in machine terms.  -c 1 says that the text is already in
+	 * machine order, -c 2 (4, 8) says each chunk of 2 (4, 8) bytes must be
+	 * swapped to get back to machine order.  Which end is up?
+	 */
+	if (code_bytes != 1) {
+		if (byte % code_bytes) {
+			fprintf(stderr,
+				"Warning: the number of code bytes (%d) is not "
+				"a multiple of -c (%d)\n"
+				"Byte swapping may not give sensible results\n",
+				byte, code_bytes);
+			++warnings;
+		}
+		for (l = 0; l < byte; l+= code_bytes) {
+			for (i = 0; i < code_bytes/2; ++i) {
+				c = code[l+i];
+				code[l+i] = code[l+code_bytes-i-1];
+				code[l+code_bytes-i-1] = c;
+			}
+		}
+	}
+
 	return(1);
 }
 
@@ -406,12 +449,13 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_eip_sparc_pmatch);
 
-	re_string_check(re_Oops_eip_sparc.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_eip_sparc, line, re_Oops_eip_sparc.re_nsub+1,
 		re_Oops_eip_sparc_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec sparc %d\n", procname, i);
 	if (i == 0) {
+		re_string_check(re_Oops_eip_sparc.re_nsub+1, string_max,
+			procname);
 		re_strings(&re_Oops_eip_sparc, line, re_Oops_eip_sparc_pmatch,
 			string);
 		return((*string)[re_Oops_eip_sparc.re_nsub]);
@@ -429,12 +473,13 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_eip_ppc_pmatch);
 
-	re_string_check(re_Oops_eip_ppc.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_eip_ppc, line, re_Oops_eip_ppc.re_nsub+1,
 		re_Oops_eip_ppc_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec ppc %d\n", procname, i);
 	if (i == 0) {
+		re_string_check(re_Oops_eip_ppc.re_nsub+1, string_max,
+			procname);
 		re_strings(&re_Oops_eip_ppc, line, re_Oops_eip_ppc_pmatch,
 			string);
 		return((*string)[re_Oops_eip_ppc.re_nsub]);
@@ -449,12 +494,13 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_eip_mips_pmatch);
 
-	re_string_check(re_Oops_eip_mips.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_eip_mips, line, re_Oops_eip_mips.re_nsub+1,
 		re_Oops_eip_mips_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec mips %d\n", procname, i);
 	if (i == 0) {
+		re_string_check(re_Oops_eip_mips.re_nsub+1, string_max,
+			procname);
 		re_strings(&re_Oops_eip_mips, line, re_Oops_eip_mips_pmatch,
 			string);
 		return((*string)[re_Oops_eip_mips.re_nsub]);
@@ -465,18 +511,20 @@ static char *Oops_eip(const char *line, char ***string, int string_max)
 			"^("
 	/* i386 */	"(EIP:[ \t]+.*)"
 	/* m68k */	"|(PC[ \t]*=[ \t]*)"
+	/* ARM */	"|(pc *: *)"
 			")"
 			BRACKETED_ADDRESS
 			,
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_eip_other_pmatch);
 
-	re_string_check(re_Oops_eip_other.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_eip_other, line, re_Oops_eip_other.re_nsub+1,
 		re_Oops_eip_other_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec other %d\n", procname, i);
 	if (i == 0) {
+		re_string_check(re_Oops_eip_other.re_nsub+1, string_max,
+			procname);
 		re_strings(&re_Oops_eip_other, line, re_Oops_eip_other_pmatch,
 			string);
 		return((*string)[re_Oops_eip_other.re_nsub]);
@@ -518,12 +566,12 @@ static char *Oops_ra(const char *line, char ***string, int string_max)
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_ra_pmatch);
 
-	re_string_check(re_Oops_ra.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_ra, line, re_Oops_ra.re_nsub+1,
 		re_Oops_ra_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec %d\n", procname, i);
 	if (i == 0) {
+		re_string_check(re_Oops_ra.re_nsub+1, string_max, procname);
 		re_strings(&re_Oops_ra, line, re_Oops_ra_pmatch,
 			string);
 		return((*string)[re_Oops_ra.re_nsub]);
@@ -560,38 +608,44 @@ static const char *Oops_trace(const char *line, char ***string, int string_max)
 	static const char procname[] = "Oops_trace";
 
 	/* ppc is different, not a bracketed address, just an address */
+	/* ARM is different, two bracketed addresses on each line */
 
 	/* Oops 'Trace' lines */
 	re_compile(&re_Oops_trace,
-			"^(Call Trace: )"			/*  1 */
-	/* alpha */	"|^(Trace: )"				/*  2 */
-	/* various */	"|(" BRACKETED_ADDRESS ")"	   	/* 3,4*/
-	/* ppc */	"|^(Call backtrace:)"			/*  5 */
-	/* ppc */	"|^(" UNBRACKETED_ADDRESS ")"		/* 6,7*/
-			,
+			"^("					/*  1 */
+			"(Call Trace: )"			/*  2 */
+	/* alpha */	"|(Trace: )"				/*  3 */
+	/* various */	"|(" BRACKETED_ADDRESS ")"	   	/* 4,5*/
+	/* ppc */	"|(Call backtrace:)"			/*  6 */
+	/* ppc */	"|(" UNBRACKETED_ADDRESS ")"		/* 7,8*/
+	/* ARM */	"|(Function entered at (" BRACKETED_ADDRESS "))"	/* 9,10,11 */
+			")",
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_trace_pmatch);
 
-	re_string_check(re_Oops_trace.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_trace, line, re_Oops_trace.re_nsub+1,
 		re_Oops_trace_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec %d\n", procname, i);
 	if (i == 0) {
-		re_strings(&re_Oops_trace, line, re_Oops_trace_pmatch,
-			string);
-		if ((*string)[1] || (*string)[2]) {
+#undef MATCHED
+#define MATCHED(n) (re_Oops_trace_pmatch[n].rm_so != -1)
+		if (MATCHED(2) || MATCHED(3)) {
 			trace_line = 1;
 			start = line + re_Oops_trace_pmatch[0].rm_eo;
 		}
-		else if ((*string)[5]) {
+		else if (MATCHED(6)) {
 			trace_line = 2;		/* ppc */
 			start = line + re_Oops_trace_pmatch[0].rm_eo;
 		}
-		else if (trace_line == 1 && (*string)[3])
-			start = line + re_Oops_trace_pmatch[3].rm_so;
-		else if (trace_line == 2 && (*string)[6])	/* ppc */
-			start = line + re_Oops_trace_pmatch[6].rm_so;
+		else if (trace_line == 1 && MATCHED(5))
+			start = line + re_Oops_trace_pmatch[5].rm_so;
+		else if (trace_line == 2 && MATCHED(8))	/* ppc */
+			start = line + re_Oops_trace_pmatch[8].rm_so;
+		else if (MATCHED(10)){
+			trace_line = 1;		/* ARM */
+			start = line + re_Oops_trace_pmatch[10].rm_so;
+		}
 		else
 			trace_line = 0;
 	}
@@ -621,10 +675,16 @@ static void Oops_trace_line(const char *line, const char *p, SYMBOL_SET *ss)
 	}
 
 	/* Loop over [un]?bracketed addresses */
-	while (regexec(pregex, p, pregex->re_nsub+1, pregmatch, 0) == 0) {
-		re_strings(pregex, p, pregmatch, &string);
-		add_symbol(ss, string[1], 'T', 1, "Trace:");
-		p += pregmatch[0].rm_eo;
+	while (1) {
+		if (regexec(pregex, p, pregex->re_nsub+1, pregmatch, 0) == 0) {
+			re_strings(pregex, p, pregmatch, &string);
+			add_symbol(ss, string[1], 'T', 1, "Trace:");
+			p += pregmatch[0].rm_eo;
+		}
+		else if (strncmp(p, "from ", 5) == 0)
+			p += 5;		/* ARM does "address from address" */
+		else
+			break;
 	}
 
 	if (*p && !strcmp(p, "...")) {
@@ -642,16 +702,20 @@ static void Oops_trace_line(const char *line, const char *p, SYMBOL_SET *ss)
  * tss etc.) to go with the decoded text.  Sets text to the start of the useful
  * text, after any prefix.  Note that any leading white space is treated as part
  * of the prefix, later routines do not see any indentation.
+ *
+ * Note: If a line is not printed, it will not be scanned for any other text.
  */
 static int Oops_print(const char *line, const char **text, char ***string,
 		      int string_max)
 {
-	int i, print;
+	int i, print = 0;
 	static int stack_line = 0, trace_line = 0;
 	static regex_t     re_Oops_prefix;
 	static regmatch_t *re_Oops_prefix_pmatch;
-	static regex_t     re_Oops_print;
-	static regmatch_t *re_Oops_print_pmatch;
+	static regex_t     re_Oops_print_s;
+	static regmatch_t *re_Oops_print_s_pmatch;
+	static regex_t     re_Oops_print_a;
+	static regmatch_t *re_Oops_print_a_pmatch;
 	static const char procname[] = "Oops_print";
 
 	*text = line;
@@ -678,7 +742,6 @@ static int Oops_print(const char *line, const char **text, char ***string,
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_prefix_pmatch);
 
-	re_string_check(re_Oops_prefix.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_prefix, *text, re_Oops_prefix.re_nsub+1,
 		re_Oops_prefix_pmatch, 0);
 	if (debug > 3)
@@ -689,67 +752,161 @@ static int Oops_print(const char *line, const char **text, char ***string,
 
 	/* Lots of possibilities.  Expand as required for all architectures.
 	 *
-	 * The order below is required to handle multiline outupt.
-	 * string[2] is defined if the text is 'Stack from '.
-	 * string[3] is defined if the text is 'Stack: '.
-	 * string[4] is defined if the text might be a stack continuation.
-	 * string[5] is defined if the text is 'Call Trace: '.
-	 * string[6] is defined if the text might be a trace continuation.
-	 * string[7] is the address part of the BRACKETED_ADDRESS.
+	 * Trial and error shows that regex does not like a lot of sub patterns
+	 * that start with "^".  So split the patterns into two groups, one set
+	 * must appear at the start of the line, the other set can appear
+	 * anywhere.
+	 */
+
+	/* These patterns must appear at the start of the line, after stripping
+	 * the prefix above.
 	 *
-	 * string[8] is defined if the text contains a version number.  No Oops
+	 * The order below is required to handle multiline outupt.
+	 * string 2 is defined if the text is 'Stack from '.
+	 * string 3 is defined if the text is 'Stack: '.
+	 * string 4 is defined if the text might be a stack continuation.
+	 * string 5 is defined if the text is 'Call Trace: '.
+	 * string 6 is defined if the text might be a trace continuation.
+	 * string 7 is the address part of the BRACKETED_ADDRESS.
+	 *
+	 * string 8 is defined if the text contains a version number.  No Oops
 	 * report contains this as of 2.1.125 but IMHO it should be added.  If
 	 * anybody wants to print a VERSION_nnnn line in their Oops, this code
 	 * is ready.
 	 *
-	 * string[9] is defined if the text is 'Trace: ' (alpha).
-	 * string[10] is defined if the text is 'Call backtrace:' (ppc).
+	 * string 9 is defined if the text is 'Trace: ' (alpha).
+	 * string 10 is defined if the text is 'Call backtrace:' (ppc).
 	 */
-	re_compile(&re_Oops_print,
+	re_compile(&re_Oops_print_s,
        /* arch type */					    /* Required order */
-			"("						/*  1 */
-	/* i386 */	"^(Stack: )"					/*  2 */
-	/* m68k */	"|^(Stack from )"				/*  3 */
-	/* various */	"|^([0-9a-fA-F]{4,})"				/*  4 */
-	/* various */	"|^(Call Trace: )"				/*  5 */
-	/* various */	"|^(" BRACKETED_ADDRESS ")"			/* 6,7*/
-	/* various */	"|^(Version_[0-9]+)"				/*  8 */
-	/* alpha */	"|^(Trace: )"					/*  9 */
-	/* ppc */	"|^(Call backtrace:)"				/* 10 */
+			"^("						/*  1 */
+	/* i386 */	"(Stack: )"					/*  2 */
+	/* m68k */	"|(Stack from )"				/*  3 */
+	/* various */	"|([0-9a-fA-F]{4,})"				/*  4 */
+	/* various */	"|(Call Trace: )"				/*  5 */
+	/* various */	"|(" BRACKETED_ADDRESS ")"			/* 6,7*/
+	/* various */	"|(Version_[0-9]+)"				/*  8 */
+	/* alpha */	"|(Trace: )"					/*  9 */
+	/* ppc */	"|(Call backtrace:)"				/* 10 */
 
 			/* order does not matter from here on */
 	
-	/* various */	"|(Unable to handle kernel)"
-	/* various */	"|^(Process .*stackpage=)"
-	/* various */	"|^(Call Trace:[ \t])"
-	/* various */	"|^(Code *:[ \t])"
-	/* various */	"|^(Kernel panic)"
-	/* various */	"|^(In swapper task)"
+	/* various */	"|(Process .*stackpage=)"
+	/* various */	"|(Call Trace:[ \t])"
+	/* various */	"|(Code *:[ \t])"
+	/* various */	"|(Kernel panic)"
+	/* various */	"|(In swapper task)"
+
+	/* i386 2.0 */	"|(Corrupted stack page)"
+	/* i386 */	"|(invalid operand: )"
+	/* i386 */	"|(Oops: )"
+	/* i386 */	"|(Cpu: +[0-9])"
+	/* i386 */	"|(current->tss)"
+	/* i386 */	"|(\\*pde +=)"
+	/* i386 */	"|(EIP: )"
+	/* i386 */	"|(EFLAGS: )"
+	/* i386 */	"|(eax: )"
+	/* i386 */	"|(esi: )"
+	/* i386 */	"|(ds: )"
+
+	/* m68k */	"|(pc[:=])"
+	/* m68k */	"|(68060 access)"
+	/* m68k */	"|(Exception at )"
+	/* m68k */	"|(d[04]: )"
+	/* m68k */	"|(Frame format=)"
+	/* m68k */	"|(wb [0-9] stat)"
+	/* m68k */	"|(push data: )"
+	/* m68k */	"|(baddr=)"
+	/* any other m68K lines to print? */
+
+	/* sparc */	"|(Bad unaligned kernel)"
+	/* sparc */	"|(Forwarding unaligned exception)"
+	/* sparc */	"|(: unhandled unaligned exception)"
+	/* sparc */	"|(<sc)"
+	/* sparc */	"|(pc *=)"
+	/* sparc */	"|(r[0-9]+ *=)"
+	/* sparc */	"|(gp *=)"
+	/* any other sparc lines to print? */
+
+	/* alpha */	"|(tsk->)"
+	/* alpha */	"|(PSR: )"
+	/* alpha */	"|([goli]0: )"
+	/* alpha */	"|(Instruction DUMP: )"
+	/* any other alpha lines to print? */
+
+	/* ppc */	"|(MSR: )"
+	/* ppc */	"|(TASK = )"
+	/* ppc */	"|(last math )"
+	/* ppc */	"|(GPR[0-9]+: )"
+	/* any other ppc lines to print? */
+
+	/* MIPS */	"|(\\$[0-9 ]+:)"
+	/* MIPS */	"|(epc )"
+	/* MIPS */	"|(Status:)"
+	/* MIPS */	"|(Cause :)"
+	/* any other MIPS lines to print? */
+
+	/* ARM */	"|(Backtrace:)"
+	/* ARM */	"|(Function entered at)"
+	/* ARM */	"|(\\*pgd =)"
+	/* ARM */	"|(Internal error)"
+	/* ARM */	"|(pc :)"
+	/* ARM */	"|(sp :)"
+	/* ARM */	"|(r[0-9][0-9 ]:)"
+	/* ARM */	"|(Flags:)"
+	/* ARM */	"|(Control:)"
+	/* any other ARM lines to print? */
+
+			")",
+		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
+		&re_Oops_print_s_pmatch);
+
+	i = regexec(&re_Oops_print_s, *text, re_Oops_print_s.re_nsub+1,
+		re_Oops_print_s_pmatch, 0);
+	if (debug > 3)
+		fprintf(stderr, "DEBUG: %s regexec start %d\n", procname, i);
+	print = 0;
+	if (i == 0) {
+#undef MATCHED
+#define MATCHED(n) (re_Oops_print_s_pmatch[n].rm_so != -1)
+		print = 1;
+		/* Handle multiline messages, messy */
+		if (!MATCHED(2) && !MATCHED(3) && !MATCHED(4))
+			stack_line = 0;
+		else if (MATCHED(2) || MATCHED(3))
+			stack_line = 1;
+		else if (stack_line && !MATCHED(4)) {
+			print = 0;
+			stack_line = 0;
+		}
+		if (!MATCHED(5) && !MATCHED(6) && !MATCHED(9) && !MATCHED(10))
+			trace_line = 0;
+		else if (MATCHED(5) || MATCHED(9) || MATCHED(10))
+			trace_line = 1;
+		else if (stack_line && !MATCHED(6)) {
+			print = 0;
+			trace_line = 0;
+		}
+		/* delay splitting into strings until we really them */
+		if (MATCHED(8)) {
+			re_string_check(re_Oops_print_s.re_nsub+1, string_max,
+				procname);
+			re_strings(&re_Oops_print_s, *text,
+				re_Oops_print_s_pmatch,
+				string);
+			add_Version((*string)[8]+8, "Oops");
+		}
+	}
+
+	/* These patterns can appear anywhere in the line, after stripping
+	 * the prefix above.
+	 */
+	re_compile(&re_Oops_print_a,
+       /* arch type */
+
+	/* various */	"(Unable to handle kernel)"
 	/* various */	"|(Aiee)"      /* anywhere in text is a bad sign (TM) */
 	/* various */	"|(die_if_kernel)"	/* ditto */
-
-	/* i386 2.0 */	"|^(Corrupted stack page)"
-	/* i386 */	"|^(invalid operand: )"
-	/* i386 */	"|^(Oops: )"
-	/* i386 */	"|^(Cpu: +[0-9])"
-	/* i386 */	"|^(current->tss)"
-	/* i386 */	"|^(\\*pde +=)"
-	/* i386 */	"|^(EIP: )"
-	/* i386 */	"|^(EFLAGS: )"
-	/* i386 */	"|^(eax: )"
-	/* i386 */	"|^(esi: )"
-	/* i386 */	"|^(ds: )"
-
-	/* m68k */	"|^(pc=)"
-	/* m68k */	"|^(68060 access)"
-	/* m68k */	"|^(Exception at )"
-	/* m68k */	"|^(PC: )"
-	/* m68k */	"|^(d[04]: )"
-	/* m68k */	"|^(Frame format=)"
-	/* m68k */	"|^(wb [0-9] stat)"
-	/* m68k */	"|^(push data: )"
-	/* m68k */	"|^(baddr=)"
-	/* any other m68K lines to print? */
 
 	/* sparc */	"|(\\([0-9]\\): Oops )"
 	/* sparc */	"|(: memory violation)"
@@ -757,81 +914,45 @@ static int Oops_print(const char *line, const char **text, char ***string,
 	/* sparc */	"|(: Arithmetic fault)"
 	/* sparc */	"|(: Instruction fault)"
 	/* sparc */	"|(: arithmetic trap)"
-	/* sparc */	"|^(Bad unaligned kernel)"
-	/* sparc */	"|^(Forwarding unaligned exception)"
-	/* sparc */	"|^(: unhandled unaligned exception)"
 	/* sparc */	"|(: unaligned trap)"
-	/* sparc */	"|^(<sc)"
-	/* sparc */	"|^(pc *=)"
-	/* sparc */	"|^(r[0-9]+ *=)"
-	/* sparc */	"|^(gp *=)"
-	/* any other sparc lines to print? */
 
-	/* alpha */	"|^(tsk->)"
-	/* alpha   die_if_kernel has no fixed text, identify by (pid): text. */
-	/* alpha */	"|^(.*\\([0-9]+\\): "
-			   /* Somebody has been playful with the texts.  */
-			   "((Whee)|(Oops)|(Kernel)|(.*Penguin)|(BOGUS))"
-			  ")"
-	/* alpha */	"|^(PSR: )"
-	/* alpha */	"|^(g0: )"
-	/* alpha */	"|^(o0: )"
-	/* alpha */	"|^(l0: )"
-	/* alpha */	"|^(i0: )"
-	/* alpha */	"|^(Instruction DUMP: )"
-	/* any other alpha lines to print? */
+	/* sparc      die_if_kernel has no fixed text, identify by (pid): text.
+	 *            Somebody has been playful with the texts.
+	 *
+	 *            Alas adding this next pattern increases run time by 15% on
+	 *            its own!  It would be considerably faster if sparc had
+	 *            consistent error texts.
+	 */
+	/* sparc */	"|("
+			   "\\([0-9]+\\): "
+			   "("
+			     "(Whee)"
+			     "|(Oops)"
+			     "|(Kernel)"
+			     "|(Penguin)"
+			     "|(Too many Penguin)"
+			     "|(BOGUS)"
+			   ")"
+			 ")"
 
-	/* ppc */	"|^(MSR: )"
-	/* ppc */	"|^(TASK = )"
-	/* ppc */	"|^(last math )"
-	/* ppc */	"|^(GPR[0-9]+: )"
 	/* ppc */	"|(kernel pc )"
 	/* ppc */	"|(trap at PC: )"
 	/* ppc */	"|(bad area pc )"
 	/* ppc */	"|(NIP: )"
-	/* any other ppc lines to print? */
 
-	/* MIPS */	"|^(\\$[0-9 ]+:)"
-	/* MIPS */	"|^(epc )"
-	/* MIPS */	"|^(Status:)"
-	/* MIPS */	"|^(Cause :)"
 	/* MIPS */	"|( ra *=)"
-	/* any other MIPS lines to print? */
 
 			")",
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
-		&re_Oops_print_pmatch);
+		&re_Oops_print_a_pmatch);
 
-	re_string_check(re_Oops_print.re_nsub+1, string_max, procname);
-	i = regexec(&re_Oops_print, *text, re_Oops_print.re_nsub+1,
-		re_Oops_print_pmatch, 0);
+	i = regexec(&re_Oops_print_a, *text, re_Oops_print_a.re_nsub+1,
+		re_Oops_print_a_pmatch, 0);
 	if (debug > 3)
-		fprintf(stderr, "DEBUG: %s regexec %d\n", procname, i);
-	print = 0;
-	if (i == 0) {
-		re_strings(&re_Oops_print, *text, re_Oops_print_pmatch,
-			string);
+		fprintf(stderr, "DEBUG: %s regexec anywhere %d\n", procname, i);
+	if (i == 0)
 		print = 1;
-		/* Handle multiline messages, messy */
-		if (!(*string)[2] && !(*string)[3] && !(*string)[4])
-			stack_line = 0;
-		else if ((*string)[2] || (*string)[3])
-			stack_line = 1;
-		else if (stack_line && !(*string)[4]) {
-			print = 0;
-			stack_line = 0;
-		}
-		if (!(*string)[5] && !(*string)[6] && !(*string)[9])
-			trace_line = 0;
-		else if ((*string)[5] || (*string)[9] || (*string)[10])
-			trace_line = 1;
-		else if (stack_line && !(*string)[6]) {
-			print = 0;
-			trace_line = 0;
-		}
-		if ((*string)[8])
-			add_Version((*string)[8]+8, "Oops");
-	}
+
 	return(print);
 }
 
@@ -844,7 +965,7 @@ static const char *Oops_code(const char *line, char ***string, int string_max)
 	static const char procname[] = "Oops_code";
 
 	/* Oops 'Code: ' hopefully followed by at least one hex code.  sparc
-	 * brackets the PC in '<' and '>'.
+	 * brackets the PC in '<' and '>'.  ARM brackets the PC in '(' and ')'.
 	 */
 	re_compile(&re_Oops_code,
 			"^("						/*  1 */
@@ -855,19 +976,19 @@ static const char *Oops_code(const char *line, char ***string, int string_max)
 			"("						/*  4 */
 			  "(general protection.*)"
 			  "|(<[0-9]+>)"
-			  "|((<?[0-9a-fA-F]+>?[ \t]*)+)"
+			  "|(([<(]?[0-9a-fA-F]+[>)]?[ \t]*)+)"
 			")"
 			"(.*)$"				/* trailing garbage */
 			,
 		REG_NEWLINE|REG_EXTENDED|REG_ICASE,
 		&re_Oops_code_pmatch);
 
-	re_string_check(re_Oops_code.re_nsub+1, string_max, procname);
 	i = regexec(&re_Oops_code, line, re_Oops_code.re_nsub+1,
 		re_Oops_code_pmatch, 0);
 	if (debug > 3)
 		fprintf(stderr, "DEBUG: %s regexec %d\n", procname, i);
 	if (i == 0) {
+		re_string_check(re_Oops_code.re_nsub+1, string_max, procname);
 		re_strings(&re_Oops_code, line, re_Oops_code_pmatch,
 			string);
 		if ((*string)[re_Oops_code.re_nsub] &&
@@ -891,7 +1012,8 @@ static const char *Oops_code(const char *line, char ***string, int string_max)
 
 /* Decode the Oops Code: via objdump*/
 static void Oops_decode(const unsigned char* code_text, elf_addr_t eip,
-			SYMBOL_SET *ss, char ***string, int string_max)
+			SYMBOL_SET *ss, char ***string, int string_max,
+			int code_bytes)
 {
 	FILE *f;
 	char *file, *line = NULL, code[CODE_SIZE];
@@ -901,7 +1023,8 @@ static void Oops_decode(const unsigned char* code_text, elf_addr_t eip,
 	if (debug)
 		fprintf(stderr, "DEBUG: %s\n", procname);
 	/* text to binary */
-	if (!Oops_code_values(code_text, code, &adjust, string, string_max))
+	if (!Oops_code_values(code_text, code, &adjust, string, string_max,
+		code_bytes))
 		return;
 	/* binary to same format as ksymoops */
 	if (!(file = Oops_code_to_file(code, CODE_SIZE)))
@@ -986,7 +1109,8 @@ static FILE *Oops_next_file(int *filecount, char * const **filename)
 
 /* Read the Oops report */
 #define MAX_STRINGS 300	/* Maximum strings in any Oops re */
-void Oops_read(int filecount, char * const *filename)
+int Oops_read(int filecount, char * const *filename, int code_bytes,
+	      int one_shot)
 {
 	char *line = NULL, **string = NULL;
 	const char *start, *text;
@@ -1017,18 +1141,26 @@ void Oops_read(int filecount, char * const *filename)
 			if (Oops_print(line, &text, &string, MAX_STRINGS)) {
 				puts(line);
 				lastprint = lineno;
-			}
-			if ((start = Oops_eip(text, &string, MAX_STRINGS)))
-				Oops_set_eip(start, &eip, &ss_format);
-			if ((start = Oops_ra(text, &string, MAX_STRINGS)))
-				Oops_set_ra(start, &ss_format);
-			if ((start = Oops_trace(text, &string, MAX_STRINGS)))
-				Oops_trace_line(text, start, &ss_format);
-			if ((start = Oops_code(text, &string, MAX_STRINGS))) {
-				Oops_decode(start, eip, &ss_format,
-					&string, MAX_STRINGS);
-				Oops_format(&ss_format);
-				ss_free(&ss_format);
+				if ((start = Oops_eip(text,
+					&string, MAX_STRINGS)))
+					Oops_set_eip(start, &eip, &ss_format);
+				if ((start = Oops_ra(text,
+					&string, MAX_STRINGS)))
+					Oops_set_ra(start, &ss_format);
+				if ((start = Oops_trace(text,
+					&string, MAX_STRINGS)))
+					Oops_trace_line(text, start,
+						&ss_format);
+				if ((start = Oops_code(text,
+					&string, MAX_STRINGS))) {
+					Oops_decode(start, eip, &ss_format,
+						&string, MAX_STRINGS,
+						code_bytes);
+					Oops_format(&ss_format);
+					ss_free(&ss_format);
+					if (one_shot)
+						return(0);
+				}
 			}
 			/* More than 5 (arbitrary) lines which were not printed
 			 * and there is some saved data, assume we missed the
@@ -1041,6 +1173,8 @@ void Oops_read(int filecount, char * const *filename)
 				++warnings;
 				Oops_format(&ss_format);
 				ss_free(&ss_format);
+				if (one_shot)
+					return(0);
 			}
 		}
 		if (ss_format.used) {
@@ -1050,6 +1184,8 @@ void Oops_read(int filecount, char * const *filename)
 			++warnings;
 			Oops_format(&ss_format);
 			ss_free(&ss_format);
+			if (one_shot)
+				return(0);
 		}
 	} while (filecount != 0);
 
@@ -1058,4 +1194,7 @@ void Oops_read(int filecount, char * const *filename)
 		string[i] = NULL;
 	}
 	free(line);
+	if (one_shot)
+		return(3);	/* one shot mode, end of input, no data */
+	return(0);
 }

@@ -103,6 +103,13 @@ static int sb_dsp_get_byte(sb_devc * devc)
 	return 0xffff;
 }
 
+inline void ess_extended (sb_devc * devc)
+{
+	/* Enable extended mode */
+
+	sb_dsp_command(devc, 0xc6);
+}
+
 int ess_write(sb_devc * devc, unsigned char reg, unsigned char data)
 {
 	/* Write a byte to an extended mode register of ES1688 */
@@ -225,8 +232,7 @@ int sb_dsp_reset(sb_devc * devc)
 		DDB(printk("sb: No response to RESET\n"));
 		return 0;	/* Sorry */
 	}
-	if (devc->model == MDL_ESS)
-		sb_dsp_command(devc, 0xc6);	/* Enable extended mode */
+	if (devc->model == MDL_ESS) ess_extended (devc);
 
 	DEB(printk("sb_dsp_reset() OK\n"));
 	return 1;
@@ -491,6 +497,8 @@ static void relocate_ess1688(sb_devc * devc)
  * fiddling with the bits in certain mixer registers. ess_probe is supposed
  * to help.
  */
+static unsigned int ess_identify (sb_devc * devc);
+
 static int ess_probe (sb_devc * devc, int reg, int xorval)
 {
 	int  val1, val2, val3;
@@ -554,18 +562,40 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 
 	if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
 	{
-		char *chip = "ES688";
+		char *chip    = NULL;
 
-		if ((ess_minor & 0x0f) >= 8) {
+		if ((ess_minor & 0x0f) < 8) {
+			chip = "ES688";
+		};
+		if (chip == NULL) {
+			int type, dummy;
+
+			type = ess_identify (devc);
+
+			switch (type) {
+			case 0x1868:
+				chip = "ES1868";
+				devc->submodel = SUBMDL_ES1868;
+				break;
+			case 0x1869:
+				chip = "ES1869";
+				devc->submodel = SUBMDL_ES1869;
+				break;
+			case 0x1878:
+				chip = "ES1878";
+				devc->submodel = SUBMDL_ES1878;
+				break;
+			};
+		};
+		if (chip == NULL) {
 			if (  !ess_probe (devc, 0x64, (1 << 3))
 			    && ess_probe (devc, 0x70, 0x7f)) {
 				chip = "ES188x";
 				devc->submodel = SUBMDL_ES188X;
-			} else {
-				chip = "ES1688";
 			};
-		} else {
-			chip = "ES688";
+		};
+		if (chip == NULL) {
+			chip = "ES1688";
 		};
 
 		sprintf(name,"ESS %s AudioDrive (rev %d)",
@@ -750,7 +780,7 @@ int sb_dsp_detect(struct address_info *hw_config)
 		return 0;
 	}
 	memcpy((char *) detected_devc, (char *) devc, sizeof(sb_devc));
-	MDB(printk("SB %d.%d detected OK (%x)\n", devc->major, devc->minor, hw_config->io_base));
+	MDB(printk(KERN_INFO "SB %d.%d detected OK (%x)\n", devc->major, devc->minor, hw_config->io_base));
 	return 1;
 }
 
@@ -1048,7 +1078,8 @@ void sb_setmixer(sb_devc * devc, unsigned int port, unsigned int value)
 
 	save_flags(flags);
 	cli();
-	if (devc->model == MDL_ESS && port >= 0xa0 && port <= 0xbf) {
+	if (devc->model == MDL_ESS && port >= 0xa0) {
+		/* ess_extended (devc); */
 		ess_write (devc, port, value);
 	} else {
 		outb(((unsigned char) (port & 0xff)), MIXER_ADDR);
@@ -1071,6 +1102,25 @@ unsigned int sb_getmixer(sb_devc * devc, unsigned int port)
 
 	udelay(20);
 	val = inb(MIXER_DATA);
+	udelay(20);
+	restore_flags(flags);
+
+	return val;
+}
+
+static unsigned int ess_identify (sb_devc * devc)
+{
+	unsigned int val;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	outb(((unsigned char) (0x40 & 0xff)), MIXER_ADDR);
+
+	udelay(20);
+	val  = inb(MIXER_DATA) << 8;
+	udelay(20);
+	val |= inb(MIXER_DATA);
 	udelay(20);
 	restore_flags(flags);
 

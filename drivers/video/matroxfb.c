@@ -2,9 +2,9 @@
  *
  * Hardware accelerated Matrox Millennium I, II, Mystique and G200
  *
- * (c) 1998 Petr Vandrovec <vandrove@vc.cvut.cz>
+ * (c) 1998,1999 Petr Vandrovec <vandrove@vc.cvut.cz>
  *
- * Version: 1.8 1998/12/11
+ * Version: 1.9 1999/01/04
  *
  * MTRR stuff: 1998 Tom Rini <tmrini@ntplx.net>
  *
@@ -4841,7 +4841,7 @@ static int nopan = 0;			/* "matrox:nopan" */
 static int no_pci_retry = 0;		/* "matrox:nopciretry" */
 static int novga = 0;			/* "matrox:novga" */
 static int nobios = 0;			/* "matrox:nobios" */
-static int noinit = 0;			/* "matrox:noinit" */
+static int noinit = 1;			/* "matrox:noinit" */
 static int inverse = 0;			/* "matrox:inverse" */
 static int hwcursor = 1;		/* "matrox:nohwcursor" */
 static int blink = 1;			/* "matrox:noblink" */

@@ -642,37 +642,47 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	page_map = mem_map + MAP_NR(old_page);
 	
 	/*
-	 * Do we need to copy?
+	 * We can avoid the copy if:
+	 * - we're the only user (count == 1)
+	 * - the only other user is the swap cache,
+	 *   and the only swap cache user is itself,
+	 *   in which case we can remove the page
+	 *   from the swap cache.
 	 */
-	if (is_page_shared(page_map)) {
+	switch (atomic_read(&page_map->count)) {
+	case 2:
+		if (!PageSwapCache(page_map))
+			break;
+		if (swap_count(page_map->offset) != 1)
+			break;
+		delete_from_swap_cache(page_map);
+		/* FallThrough */
+	case 1:
+		/* We can release the kernel lock now.. */
 		unlock_kernel();
-		if (!new_page)
-			return 0;
 
-		if (PageReserved(mem_map + MAP_NR(old_page)))
-			++vma->vm_mm->rss;
-		copy_cow_page(old_page,new_page);
-		flush_page_to_ram(old_page);
-		flush_page_to_ram(new_page);
 		flush_cache_page(vma, address);
-		set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
-		free_page(old_page);
+		set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
 		flush_tlb_page(vma, address);
+end_wp_page:
+		if (new_page)
+			free_page(new_page);
 		return 1;
 	}
-
-	if (PageSwapCache(page_map))
-		delete_from_swap_cache(page_map);
-
-	/* We can release the kernel lock now.. */
+		
 	unlock_kernel();
+	if (!new_page)
+		return 0;
 
+	if (PageReserved(mem_map + MAP_NR(old_page)))
+		++vma->vm_mm->rss;
+	copy_cow_page(old_page,new_page);
+	flush_page_to_ram(old_page);
+	flush_page_to_ram(new_page);
 	flush_cache_page(vma, address);
-	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
+	set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
+	free_page(old_page);
 	flush_tlb_page(vma, address);
-end_wp_page:
-	if (new_page)
-		free_page(new_page);
 	return 1;
 
 bad_wp_page:

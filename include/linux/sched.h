@@ -458,6 +458,8 @@ extern unsigned long prof_shift;
 
 extern void FASTCALL(__wake_up(struct wait_queue ** p, unsigned int mode));
 extern void FASTCALL(sleep_on(struct wait_queue ** p));
+extern long FASTCALL(sleep_on_timeout(struct wait_queue ** p,
+				      signed long timeout));
 extern void FASTCALL(interruptible_sleep_on(struct wait_queue ** p));
 extern long FASTCALL(interruptible_sleep_on_timeout(struct wait_queue ** p,
 						    signed long timeout));

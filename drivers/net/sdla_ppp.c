@@ -698,6 +698,7 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 		} else {
 			++ppp_priv_area->if_send_bfr_passed_to_adptr;
 			++card->wandev.stats.tx_packets;
+			card->wandev.stats.tx_bytes += skb->len;
 		}
 	}
 tx_done:
@@ -1202,6 +1203,7 @@ static void rx_intr(sdla_t * card)
 				skb->mac.raw = skb->data;
 				netif_rx(skb);
 				++card->wandev.stats.rx_packets;
+ 				card->wandev.stats.rx_bytes += skb->len;
 				++ppp_priv_area->rx_intr_bfr_passed_to_stack;
 			}
 		} else {

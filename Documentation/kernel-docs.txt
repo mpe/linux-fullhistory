@@ -28,7 +28,7 @@
    
    PLEASE, if you know any paper not listed here or write a new document,
    send me an e-mail, and I'll include a reference to it here. Any
-   corrections, ideas or comments are also wellcomed.
+   corrections, ideas or comments are also welcomed.
    
    The papers that follow are listed in no particular order. All are
    catalogued with the following fields: the document's "Title", the

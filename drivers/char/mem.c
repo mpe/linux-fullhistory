@@ -138,26 +138,49 @@ static ssize_t write_mem(struct file * file, const char * buf,
 	return do_write_mem(file, __va(p), p, buf, count, ppos);
 }
 
+/*
+ * This should probably be per-architecture in <asm/pgtable.h>
+ */
+static inline unsigned long pgprot_noncached(unsigned long prot)
+{
+#if defined(__i386__)
+	if (boot_cpu_data.x86 > 3)
+		prot |= _PAGE_PCD;
+#elif defined(__powerpc__)
+	prot |= _PAGE_NO_CACHE | _PAGE_GUARDED;
+#elif defined(__mc68000__)
+	if (CPU_IS_020_OR_030)
+		prot |= _PAGE_NOCACHE030;
+	/* Use no-cache mode, serialized */
+	if (CPU_IS_040_OR_060)
+		prot = (prot & _CACHEMASK040) | _PAGE_NOCACHE_S;
+#elif defined(__mips__)
+	prot = (prot & ~_CACHE_MASK) | _CACHE_UNCACHED;
+#endif
+
+	return prot;
+}
+
 static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 {
 	unsigned long offset = vma->vm_offset;
 
 	if (offset & ~PAGE_MASK)
 		return -ENXIO;
-#if defined(__i386__)
+
 	/*
-	 * hmm.. This disables high-memory caching, as the XFree86 team
-	 * wondered about that at one time.
-	 * The surround logic should disable caching for the high device
-	 * addresses anyway, but right now this seems still needed.
+	 * Accessing memory above the top the kernel knows about or
+	 * through a file pointer that was marked O_SYNC will be
+	 * done non-cached.
+	 *
+	 * Set VM_IO, as this is likely a non-cached access to an
+	 * I/O area, and we don't want to include that in a core
+	 * file.
 	 */
-	if (boot_cpu_data.x86 > 3 && offset >= __pa(high_memory))
-		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
-#endif
-#ifdef __powerpc__
-	if (offset >= __pa(high_memory))
-		pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
-#endif
+	if (offset >= __pa(high_memory) || (file->f_flags & O_SYNC)) {
+		pgprot_val(vma->vm_page_prot) = pgprot_noncached(pgprot_val(vma->vm_page_prot));
+		vma->vm_flags |= VM_IO;
+	}
 	if (remap_page_range(vma->vm_start, offset, vma->vm_end-vma->vm_start,
 			     vma->vm_page_prot))
 		return -EAGAIN;

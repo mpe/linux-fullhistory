@@ -53,11 +53,14 @@ struct fb_info_chips {
 	struct {
 		__u8 red, green, blue;
 	} palette[256];
+	unsigned long frame_buffer_phys;
 	__u8 *frame_buffer;
-	__u8 *blitter_regs;
+	unsigned long blitter_regs_phys;
+	__u32 *blitter_regs;
+	unsigned long blitter_data_phys;
+	__u8 *blitter_data;
+	unsigned long io_base_phys;
 	__u8 *io_base;
-	unsigned long chips_base_phys;
-	unsigned long chips_io_phys;
 	struct fb_info_chips *next;
 #ifdef CONFIG_PMAC_PBOOK
 	unsigned char *save_framebuffer;
@@ -214,27 +217,28 @@ static int chips_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 	if (con == currcon)		/* current console? */
 		return fb_get_cmap(cmap, kspc, chipsfb_getcolreg, info);
 	if (fb_display[con].cmap.len)	/* non default colormap? */
-		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc? 0: 2);
-	else
-		fb_copy_cmap(fb_default_cmap(256), cmap, kspc? 0: 2);
+		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
+	else {
+		int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+		fb_copy_cmap(fb_default_cmap(size), cmap, kspc ? 0 : 2);
+	}
 	return 0;
 }
 
 static int chips_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			 struct fb_info *info)
 {
-	struct display *disp = &fb_display[con];
 	int err;
 
-	if (disp->cmap.len == 0) {
-		err = fb_alloc_cmap(&disp->cmap, 256, 0);
-		if (err)
+	if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
+		int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+		if ((err = fb_alloc_cmap(&fb_display[con].cmap, size, 0)))
 			return err;
 	}
-
-	if (con == currcon)
+	if (con == currcon)			/* current console? */
 		return fb_set_cmap(cmap, kspc, chipsfb_setcolreg, info);
-	fb_copy_cmap(cmap, &disp->cmap, kspc==0);
+	else
+		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
 }
 
@@ -244,24 +248,21 @@ static int chips_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	return -EINVAL;
 }
 
-static int chipsfb_switch(int con, struct fb_info *info)
+static int chipsfbcon_switch(int con, struct fb_info *info)
 {
 	struct fb_info_chips *p = (struct fb_info_chips *) info;
-	struct display* old_disp = &fb_display[currcon];
-	struct display* new_disp = &fb_display[con];
-	int	bit_depth;
+	int new_bpp, old_bpp;
 
+	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&old_disp->cmap, 1, chipsfb_getcolreg, info);
+		fb_get_cmap(&fb_display[currcon].cmap, 1, chipsfb_getcolreg, info);
 
-	bit_depth = new_disp->var.bits_per_pixel;
-	if (old_disp->var.bits_per_pixel != bit_depth)
-	{
-	  currcon = con;
-	  chips_set_bitdepth(p, new_disp, con, bit_depth);
-	}
-	else
-	  currcon = con;
+	new_bpp = fb_display[con].var.bits_per_pixel;
+	old_bpp = fb_display[currcon].var.bits_per_pixel;
+	currcon = con;
+
+	if (new_bpp != old_bpp)
+		chips_set_bitdepth(p, &fb_display[con], con, new_bpp);
 	
 	do_install_cmap(con, info);
 	return 0;
@@ -277,9 +278,10 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 	struct fb_info_chips *p = (struct fb_info_chips *) info;
 	int i;
 
-	if (blank > 1) {
+	// used to disable backlight only for blank > 1, but it seems
+	// useful at blank = 1 too (saves battery, extends backlight life)
+	if (blank) {
 		pmu_enable_backlight(0);
-	} else if (blank) {
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c8, i);
 			udelay(1);
@@ -311,10 +313,8 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			     u_int transp, struct fb_info *info)
 {
 	struct fb_info_chips *p = (struct fb_info_chips *) info;
-	int hr;
 
-	hr = (p->fix.visual != FB_VISUAL_PSEUDOCOLOR)? (regno << 3): regno;
-	if (hr > 255)
+	if (regno > 255)
 		return 1;
 	red >>= 8;
 	green >>= 8;
@@ -322,18 +322,18 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	p->palette[regno].red = red;
 	p->palette[regno].green = green;
 	p->palette[regno].blue = blue;
-	out_8(p->io_base + 0x3c8, hr);
+	out_8(p->io_base + 0x3c8, regno);
 	udelay(1);
 	out_8(p->io_base + 0x3c9, red);
 	out_8(p->io_base + 0x3c9, green);
 	out_8(p->io_base + 0x3c9, blue);
 
 #ifdef FBCON_HAS_CFB16
-	if (regno < 16)
-		p->fbcon_cfb16_cmap[regno] = (red << 10) | (green << 5) | blue;
+	if (regno < 16)	p->fbcon_cfb16_cmap[regno] =
+		((red & 0xf8) << 7) | ((green & 0xf8) << 2) | ((blue & 0xf8) >> 3);
 #endif
 
-    return 0;
+	return 0;
 }
 
 static void do_install_cmap(int con, struct fb_info *info)
@@ -356,14 +356,14 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 	
 	if (bpp == 16) {
 		if (con == currcon) {
-			write_cr(0x13, 200);		// 16 bit display width (decimal)
-			write_xr(0x81, 0x14);		// 15 bit (TrueColor) color mode
-			write_xr(0x82, 0x00);		// disable palettes
+			write_cr(0x13, 200);		// Set line length (doublewords)
+			write_xr(0x81, 0x14);		// 15 bit (555) color mode
+			write_xr(0x82, 0x00);		// Disable palettes
 			write_xr(0x20, 0x10);		// 16 bit blitter mode
 		}
 
 		fix->line_length = 800*2;
-		fix->visual = FB_VISUAL_DIRECTCOLOR;
+		fix->visual = FB_VISUAL_TRUECOLOR;
 
 		var->red.offset = 10;
 		var->green.offset = 5;
@@ -378,7 +378,7 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 #endif
 	} else if (bpp == 8) {
 		if (con == currcon) {
-			write_cr(0x13, 100);		// 8 bit display width (decimal)
+			write_cr(0x13, 100);		// Set line length (doublewords)
 			write_xr(0x81, 0x12);		// 8 bit color mode
 			write_xr(0x82, 0x08);		// Graphics gamma enable
 			write_xr(0x20, 0x00);		// 8 bit blitter mode
@@ -402,7 +402,7 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 	disp->visual = fix->visual;
 	disp->var = *var;
 
-#ifdef CONFIG_PMAC_PBOOK
+#if (defined(CONFIG_PMAC_PBOOK) || defined(CONFIG_FB_COMPAT_XPMAC))
 	display_info.depth = bpp;
 	display_info.pitch = fix->line_length;
 #endif
@@ -549,9 +549,17 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 	int i;
 
 	strcpy(p->fix.id, "C&T 65550");
-	p->fix.smem_start = (char *) p->chips_base_phys;
-	p->fix.smem_len = 800 * 600;
-	p->fix.mmio_start = (char *) p->chips_io_phys;
+	p->fix.smem_start = (char *) p->frame_buffer_phys;
+
+// FIXME: Assumes 1MB frame buffer, but 65550 supports 1MB or 2MB.
+// * "3500" PowerBook G3 (the original PB G3) has 2MB.
+// * 2400 has 1MB composed of 2 Mitsubishi M5M4V4265CTP DRAM chips.
+//   Motherboard actually supports 2MB -- there are two blank locations
+//   for a second pair of DRAMs.  (Thanks, Apple!)
+// * 3400 has 1MB (I think).  Don't know if it's expandable.
+// -- Tim Seufert
+	p->fix.smem_len = 0x100000;	// 1MB
+	p->fix.mmio_start = (char *) p->io_base_phys;
 	p->fix.type = FB_TYPE_PACKED_PIXELS;
 	p->fix.visual = FB_VISUAL_PSEUDOCOLOR;
 	p->fix.line_length = 800;
@@ -574,7 +582,7 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 	p->disp.cmap.green = NULL;
 	p->disp.cmap.blue = NULL;
 	p->disp.cmap.transp = NULL;
-	p->disp.screen_base = (char *) p->frame_buffer;
+	p->disp.screen_base = p->frame_buffer;
 	p->disp.visual = p->fix.visual;
 	p->disp.type = p->fix.type;
 	p->disp.type_aux = p->fix.type_aux;
@@ -589,7 +597,7 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 	p->info.disp = &p->disp;
 	p->info.fontname[0] = 0;
 	p->info.changevar = NULL;
-	p->info.switch_con = &chipsfb_switch;
+	p->info.switch_con = &chipsfbcon_switch;
 	p->info.updatevar = &chipsfb_updatevar;
 	p->info.blank = &chipsfb_blank;
 	p->info.flags = FBINFO_FLAG_DEFAULT;
@@ -606,7 +614,8 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 		return;
 	}
 
-	printk("fb%d: Chips 65550 frame buffer\n", GET_FB_IDX(p->info.node));
+	printk("fb%d: Chips 65550 frame buffer (%dK RAM detected)\n",
+		GET_FB_IDX(p->info.node), p->fix.smem_len / 1024);
 
 	chips_hw_init(p);
 
@@ -619,10 +628,10 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 		display_info.mode = VMODE_800_600_60;
 		strncpy(display_info.name, "chips65550",
 			sizeof(display_info.name));
-		display_info.fb_address = p->chips_base_phys + 0x800000;
-		display_info.cmap_adr_address = p->chips_io_phys + 0x3c8;
-		display_info.cmap_data_address = p->chips_io_phys + 0x3c9;
-		display_info.disp_reg_address = p->chips_base_phys + 0xc00000;
+		display_info.fb_address = p->frame_buffer_phys;
+		display_info.cmap_adr_address = p->io_base_phys + 0x3c8;
+		display_info.cmap_data_address = p->io_base_phys + 0x3c9;
+		display_info.disp_reg_address = p->blitter_regs_phys;
 		console_fb_info = &p->info;
 	}
 #endif /* CONFIG_FB_COMPAT_XPMAC */
@@ -661,17 +670,23 @@ __initfunc(void chips_of_init(struct device_node *dp))
 		return;
 	memset(p, 0, sizeof(*p));
 	addr = dp->addrs[0].address;
-	p->chips_base_phys = addr;
-	p->frame_buffer = __ioremap(addr+0x800000, 0x100000, _PAGE_NO_CACHE);
-	p->blitter_regs = ioremap(addr + 0xC00000, 0x1000);
+#ifdef __BIG_ENDIAN
+	addr += 0x800000;	// Use big-endian aperture
+#endif
+	p->frame_buffer_phys = addr;
+	p->frame_buffer = __ioremap(addr, 0x200000, _PAGE_NO_CACHE);
+	p->blitter_regs_phys = addr + 0x400000;
+	p->blitter_regs = ioremap(addr + 0x400000, 0x1000);
+	p->blitter_data_phys = addr + 0x410000;
+	p->blitter_data = ioremap(addr + 0x410000, 0x10000);
 
 	if (pci_device_loc(dp, &bus, &devfn) == 0) {
 		pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
 		cmd |= 3;	/* enable memory and IO space */
 		pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
-		p->io_base = (unsigned char *) pci_io_base(bus);
+		p->io_base = (__u8 *) pci_io_base(bus);
 		/* XXX really want the physical address here */
-		p->chips_io_phys = (unsigned long) pci_io_base(bus);
+		p->io_base_phys = (unsigned long) pci_io_base(bus);
 	}
 
 	/* Clear the entire framebuffer */

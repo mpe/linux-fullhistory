@@ -23,7 +23,7 @@
 #include <asm/uaccess.h>
 
 static int qnx4_readlink(struct dentry *, char *, int);
-static struct dentry *qnx4_follow_link(struct dentry *, struct dentry *);
+static struct dentry *qnx4_follow_link(struct dentry *, struct dentry *, unsigned int follow);
 
 /*
  * symlinks can't do much...
@@ -50,7 +50,7 @@ struct inode_operations qnx4_symlink_inode_operations =
 };
 
 static struct dentry *qnx4_follow_link(struct dentry *dentry,
-				       struct dentry *base)
+				       struct dentry *base, unsigned int follow)
 {
 #if 0
 	struct inode *inode = dentry->d_inode;

@@ -4,7 +4,7 @@ Documentation for the OPL3-SA2, SA3, and SAx driver (opl3sa2.o)
 Scott Murray, scottm@interlog.com
 December, 1998
 
-NOTE: All trademarked terms mentioned below are properties of their
+NOTE: All trade-marked terms mentioned below are properties of their
       respective owners.
 
 This driver is for PnP soundcards based on the following Yamaha audio
@@ -14,10 +14,10 @@ YMF711 aka OPL3-SA2
 YMF715 aka OPL3-SA3
 YMF719 aka OPL3-SAx (?)
 
-I'm a little fuzzy on what is classified a SAx, as I've seen the label
-used to refer to the whole 7xx family and as a specific identifier for
-the 719 on my no-name soundcard.  To make matters worse, there seem to
-be several reversions of the 715 chipset.
+I'm a little fuzzy on what exactly is classified a SAx, as I've seen
+the label used to refer to the whole 7xx family and as a specific
+identifier for the 719 on my no-name soundcard.  To make matters
+worse, there seem to be several revisions of the 715 chipset.
 
 Anyways, all of these chipsets implement the following devices:
 
@@ -35,18 +35,20 @@ Being PnP cards, some configuration is required.  There are two ways
 of doing this.  The most common is to use the isapnptools package to
 initialize the card, and use the kernel module form of the sound
 subsystem and sound drivers.  Alternatively, some BIOS's allow manual
-configuration of installed PnP devices in the BIOS menus, which should
+configuration of installed PnP devices in a BIOS menu, which should
 allow using the non-modular sound drivers, i.e. built into the kernel.
 
 I personally use isapnp and modules, and do not have access to a PnP
 BIOS machine to test.  If you have such a beast, try building both the
-MSS driver and this driver into the kernel (appropiately configured,
-of course) and let me know if it works.  If it does not, then email me
-if you are willing to experiment in an effort to make it work.
+MSS driver and this driver into the kernel (appropriately configured,
+of course).  I have received reports of this working, so it should be
+possible for most people with PnP BIOS.  If it does not work for you,
+then email me if you are willing to experiment in an effort to make it
+work.
 
 If you are using isapnp, follow the directions in its documentation to
-produce a configuration file.  Here is the relevant excerpt for my SAx
-card from my isapnp.conf:
+produce a configuration file.  Here is the relevant excerpt I use for
+my SAx card from my isapnp.conf:
 
 (CONFIGURE YMH0800/-1 (LD 0
 
@@ -80,11 +82,11 @@ insmod ad1848
 insmod opl3sa2 io=0x370 mss_io=0x530 mpu_io=0x330 irq=7 dma=0 dma2=3
 insmod opl3 io=0x388
 
-Remeber that the opl3sa2 module's io argument is for it's own control
+Remember that the opl3sa2 module's io argument is for it's own control
 port, which handles the card's master mixer for volume (on all cards),
-and bass and treble (on SA3 and SAx).
+and bass and treble (on SA3 and SAx cards).
 
-If all goes well an you see no error messages, you should be able to
+If all goes well and you see no error messages, you should be able to
 start using the sound capabilities of your system.  If you get an
 error message while trying to insert the opl3sa2 module, then make
 sure that the values of the various arguments match what you specified
@@ -100,12 +102,28 @@ chipset than I've encountered so far.  Look for a line in the log file
 that says "opl3sa2.c: chipset version = <some number>".  If you want
 me to add support for your card, send me the number from this line and
 any information you have on the make and chipset of your sound card,
-and I may be able to work up something.  If you do not see these
-messages, and any of the other messages present in the log are not
-helpful, email me some details and I'll try my best to help.
+and I should be able to work up a permanent fix.
 
-To set up automatic module loading with kmod, the kernel module loader,
-I currently use the following section in my conf.modules file:
+A temporary solution is to force the driver to act as either a SA2 or
+SA3.  If you use the modular driver, this can be done with the "force"
+option.  Using "force=2" makes the driver treat your card as a SA2,
+and "force=3" makes it treat your card as a SA3.  Note that the driver
+does not really differentiate internally between the SA3 and SAx, so
+"force=3" is actually suitable for an SAx card.
+
+If you build the driver into the kernel, a similar option is
+available, "Chipset".  Setting it to 2 or 3 will yield the same result
+as the "force" option does for the module.  I recommend trying
+auto-probing first ("Chipset" equal to the default of -1) before
+forcing compatibility with a specific chipset.
+
+If you do not see the chipset version message, and none of the other
+messages present in the system log are helpful, email me some details
+and I'll try my best to help.
+
+Lastly, if you're using modules and want to set up automatic module
+loading with kmod, the kernel module loader, here is the section I
+currently use in my conf.modules file:
 
 # Sound
 alias char-major-14 opl3sa2

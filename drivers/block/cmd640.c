@@ -5,10 +5,10 @@
  */
 
 /*
- *  Original author:	abramov@cecmow.enet.dec.com (Igor Abramov)
+ *  Original authors:	abramov@cecmow.enet.dec.com (Igor Abramov)
+ *  			mlord@pobox.com (Mark Lord)
  *
- *  Maintained by:	mlord@pobox.com (Mark Lord)
- *			with fanatical support from a legion of hackers!
+ *  See linux/MAINTAINERS for address of current maintainer.
  *
  *  This file provides support for the advanced features and bugs
  *  of IDE interfaces using the CMD Technologies 0640 IDE interface chip.

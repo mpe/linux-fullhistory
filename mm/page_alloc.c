@@ -245,6 +245,14 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		}
 
 		/*
+		 * If this is a recursive call, we'd better
+		 * do our best to just allocate things without
+		 * further thought.
+		 */
+		if (current->flags & PF_MEMALLOC)
+			goto ok_to_allocate;
+
+		/*
 		 * Avoid going back-and-forth between allocating
 		 * memory and trying to free it. If we get into
 		 * a bad memory situation, we're better off trying
@@ -271,8 +279,14 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		 * memory.
 		 */
 		current->trashing_memory = 1;
-		if (!try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX) && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
-			goto nopage;
+		{
+			int freed;
+			current->flags |= PF_MEMALLOC;
+			freed = try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX);
+			current->flags &= ~PF_MEMALLOC;
+			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+				goto nopage;
+		}
 	}
 ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.39 1998/10/03 09:38:23 davem Exp $
+ *	$Id: af_inet6.c,v 1.41 1999/01/02 16:51:50 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -502,7 +502,7 @@ __initfunc(void inet6_proto_init(struct net_proto *pro))
 	__this_module.can_unload = &ipv6_unload;
 #endif
 
-	printk(KERN_INFO "IPv6 v0.2 for NET3.037\n");
+	printk(KERN_INFO "IPv6 v0.8 for NET4.0\n");
 
 	if (sizeof(struct inet6_skb_parm) > sizeof(dummy_skb->cb))
 	{

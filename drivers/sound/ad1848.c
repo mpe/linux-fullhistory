@@ -1944,10 +1944,11 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 			if (devc->irq > 0) /* There is no point in freeing irq, if it wasn't allocated */
 				free_irq(devc->irq, (void *)devc->dev_no);
 
-			sound_free_dma(audio_devs[dev]->dmap_out->dma);
+			sound_free_dma(dma_playback);
 
-			if (audio_devs[dev]->dmap_in->dma != audio_devs[dev]->dmap_out->dma)
-				sound_free_dma(audio_devs[dev]->dmap_in->dma);
+			if (dma_playback != dma_capture)
+				sound_free_dma(dma_capture);
+
 		}
 		mixer = audio_devs[devc->dev_no]->mixer_dev;
 		if(mixer>=0)
