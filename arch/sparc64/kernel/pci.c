@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.17 2000/09/05 06:49:44 anton Exp $
+/* $Id: pci.c,v 1.18 2000/10/03 11:31:42 anton Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)

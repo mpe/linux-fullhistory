@@ -680,32 +680,22 @@ end_os_mca_restore:
 .proc ia64_monarch_init_handler       
 ia64_monarch_init_handler:
 
-#if defined(SAL_MPINIT_WORKAROUND)
+#if defined(CONFIG_SMP) && defined(SAL_MPINIT_WORKAROUND)
 	//
 	// work around SAL bug that sends all processors to monarch entry
 	//
-	.global bootstrap_processor
-
-	movl	r21=24
-	movl	r20=16
 	mov	r17=cr.lid
-	movl	r18=bootstrap_processor
+	movl	r18=__cpu_physical_id
 	;;
-	dep	r18=0,r18,61,3		// convert bsp to physical address
+	dep	r18=0,r18,61,3		// convert to physical address
 	;;
-	shr	r19=r17,r20
-	shr	r22=r17,r21
+	shr.u	r17=r17,16
 	ld4	r18=[r18]		// get the BSP ID
 	;;
-	and	r19=0xf, r19
-	and	r22=0xf, r22
+	dep	r17=0,r17,16,48
 	;;
-	shl	r19=r19,8		// get them in the right order
-	;;
-	or	r22=r22,r19		// combine EID and LID
-	;;
-	cmp.eq	p6,p7=r22,r18		// Am I the BSP ?
-(p7)	br.cond.spnt slave_init_spin_me
+	cmp4.ne	p6,p0=r17,r18		// Am I the BSP ?
+(p6)	br.cond.spnt slave_init_spin_me
 	;;
 #endif
 

@@ -536,8 +536,7 @@ void enable_irq(unsigned int irq)
 		desc->depth--;
 		break;
 	case 0:
-		printk("enable_irq() unbalanced from %p\n",
-		       __builtin_return_address(0));
+		printk("enable_irq() unbalanced from %p\n", (void *) __builtin_return_address(0));
 	}
 	spin_unlock_irqrestore(&desc->lock, flags);
 }

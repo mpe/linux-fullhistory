@@ -5,9 +5,11 @@
  * PPPoE --- PPP over Ethernet (RFC 2516)
  *
  *
- * Version:	0.5.0
+ * Version:	0.5.1
  *
  * Author:	Michal Ostrowski <mostrows@styx.uwaterloo.ca>
+ *
+ * 051000 :	Initialization cleanup
  *
  * License:
  *		This program is free software; you can redistribute it and/or
@@ -142,11 +144,7 @@ struct net_proto_family pppox_proto_family = {
 
 extern int pppoe_init (void);
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init pppox_proto_init(struct net_proto *pro)
-#endif
+int __init pppox_init(void)
 {
 	int err = 0;
 
@@ -160,13 +158,10 @@ int __init pppox_proto_init(struct net_proto *pro)
 	return err;
 }
 
-#ifdef MODULE
-
-MODULE_PARM(debug, "i");
-
-void cleanup_module(void)
+void __exit pppox_exit(void)
 {
 	sock_unregister(PF_PPPOX);
 }
 
-#endif
+module_init(pppox_init);
+module_exit(pppox_exit);

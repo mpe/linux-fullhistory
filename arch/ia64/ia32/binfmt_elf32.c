@@ -52,7 +52,7 @@ put_shared_page(struct task_struct * tsk, struct page *page, unsigned long addre
 	pte_t * pte;
 
 	if (page_count(page) != 1)
-		printk("mem_map disagrees with %p at %08lx\n", page, address);
+		printk("mem_map disagrees with %p at %08lx\n", (void *) page, address);
 	pgd = pgd_offset(tsk->mm, address);
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd) {
@@ -120,6 +120,8 @@ void ia64_elf32_init(struct pt_regs *regs)
 		: "r" ((ulong)IA32_FCR_DEFAULT));
 	__asm__("mov ar.fir = r0");
 	__asm__("mov ar.fdr = r0");
+	__asm__("mov %0=ar.k0 ;;" : "=r" (current->thread.old_iob));
+	__asm__("mov ar.k0=%0 ;;" :: "r"(IA32_IOBASE));
 	/* TSS */
 	__asm__("mov ar.k1 = %0"
 		: /* no outputs */

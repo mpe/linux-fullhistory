@@ -3354,7 +3354,6 @@ static void mgsl_wait_until_sent(struct tty_struct *tty, int timeout)
 		}
 	}
       
-	set_current_state(TASK_RUNNING);
 exit:
 	if (debug_level >= DEBUG_LEVEL_INFO)
 		printk("%s(%d):mgsl_wait_until_sent(%s) exit\n",

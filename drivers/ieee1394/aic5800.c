@@ -1,4 +1,6 @@
 /*
+ * +++ THIS DRIVER IS ORPHANED AND UNSUPPORTED +++
+ *
  * aic5800.c - Adaptec AIC-5800 PCI-IEEE1394 chip driver
  * Copyright (C)1999 Emanuel Pirker <epirker@edu.uni-klu.ac.at>
  *

@@ -246,13 +246,8 @@ int __init el1_probe(struct net_device *dev)
 		return -ENXIO;
 
 	for (i = 0; netcard_portlist[i]; i++)
-	{
-		int ioaddr = netcard_portlist[i];
-		if (check_region(ioaddr, EL1_IO_EXTENT))
-			continue;
-		if (el1_probe1(dev, ioaddr) == 0)
+		if (el1_probe1(dev, netcard_portlist[i]) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }

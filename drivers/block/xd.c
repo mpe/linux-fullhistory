@@ -518,7 +518,7 @@ static u_char xd_setup_dma (u_char mode,u_char *buffer,u_int count)
 	
 	if (nodma)
 		return (PIO_MODE);
-	if (((u_int) buffer & 0xFFFF0000) != (((u_int) buffer + count) & 0xFFFF0000)) {
+	if (((unsigned long) buffer & 0xFFFF0000) != (((unsigned long) buffer + count) & 0xFFFF0000)) {
 #ifdef DEBUG_OTHER
 		printk("xd_setup_dma: using PIO, transfer overlaps 64k boundary\n");
 #endif /* DEBUG_OTHER */
@@ -529,7 +529,7 @@ static u_char xd_setup_dma (u_char mode,u_char *buffer,u_int count)
 	disable_dma(xd_dma);
 	clear_dma_ff(xd_dma);
 	set_dma_mode(xd_dma,mode);
-	set_dma_addr(xd_dma,(u_int) buffer);
+	set_dma_addr(xd_dma, (unsigned long) buffer);
 	set_dma_count(xd_dma,count);
 	
 	release_dma_lock(f);

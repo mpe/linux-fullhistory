@@ -147,11 +147,12 @@ restore_sigcontext (struct sigcontext *sc, struct sigscratch *scr)
 	ia64_put_nat_bits(&scr->pt, &scr->sw, nat);	/* restore the original scratch NaT bits */
 #endif
 
-	if (flags & IA64_SC_FLAG_FPH_VALID) {
-		struct task_struct *fpu_owner = ia64_get_fpu_owner();
+	if ((flags & IA64_SC_FLAG_FPH_VALID) != 0) {
+		struct ia64_psr *psr = ia64_psr(&scr->pt);
 
 		__copy_from_user(current->thread.fph, &sc->sc_fr[32], 96*16);
-		if (fpu_owner == current) {
+		if (!psr->dfh) {
+			psr->mfh = 0;
 			__ia64_load_fpu(current->thread.fph);
 		}
 	}
@@ -235,9 +236,12 @@ ia64_rt_sigreturn (struct sigscratch *scr)
 		goto give_sigsegv;
 
 	sigdelsetmask(&set, ~_BLOCKABLE);
+
 	spin_lock_irq(&current->sigmask_lock);
-	current->blocked = set;
-	recalc_sigpending(current);
+	{
+		current->blocked = set;
+		recalc_sigpending(current);
+	}
 	spin_unlock_irq(&current->sigmask_lock);
 
 	if (restore_sigcontext(sc, scr))
@@ -274,7 +278,6 @@ ia64_rt_sigreturn (struct sigscratch *scr)
 static long
 setup_sigcontext (struct sigcontext *sc, sigset_t *mask, struct sigscratch *scr)
 {
-	struct task_struct *fpu_owner = ia64_get_fpu_owner();
 	unsigned long flags = 0, ifs, nat;
 	long err;
 
@@ -286,11 +289,9 @@ setup_sigcontext (struct sigcontext *sc, sigset_t *mask, struct sigscratch *scr)
 		/* if cr_ifs isn't valid, we got here through a syscall */
 		flags |= IA64_SC_FLAG_IN_SYSCALL;
 	}
-	if ((fpu_owner == current) || (current->thread.flags & IA64_THREAD_FPH_VALID)) {
+	ia64_flush_fph(current);
+	if ((current->thread.flags & IA64_THREAD_FPH_VALID)) {
 		flags |= IA64_SC_FLAG_FPH_VALID;
-		if (fpu_owner == current) {
-			__ia64_save_fpu(current->thread.fph);
-		}
 		__copy_to_user(&sc->sc_fr[32], current->thread.fph, 96*16);
 	}
 
@@ -425,9 +426,11 @@ handle_signal (unsigned long sig, struct k_sigaction *ka, siginfo_t *info, sigse
 
 	if (!(ka->sa.sa_flags & SA_NODEFER)) {
 		spin_lock_irq(&current->sigmask_lock);
-		sigorsets(&current->blocked, &current->blocked, &ka->sa.sa_mask);
-		sigaddset(&current->blocked, sig);
-		recalc_sigpending(current);
+		{
+			sigorsets(&current->blocked, &current->blocked, &ka->sa.sa_mask);
+			sigaddset(&current->blocked, sig);
+			recalc_sigpending(current);
+		}
 		spin_unlock_irq(&current->sigmask_lock);
 	}
 	return 1;

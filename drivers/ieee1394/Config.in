@@ -14,7 +14,8 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	    bool '  Support for non-IEEE1394 local ports' CONFIG_IEEE1394_PCILYNX_PORTS
 	fi
 
-	dep_tristate 'Adaptec AIC-5800 (AHA-89xx) support' CONFIG_IEEE1394_AIC5800 $CONFIG_IEEE1394
+#	this driver is unsupported now:
+#	dep_tristate 'Adaptec AIC-5800 (AHA-89xx) support' CONFIG_IEEE1394_AIC5800 $CONFIG_IEEE1394
 
 	dep_tristate 'OHCI (Open Host Controller Interface) support' CONFIG_IEEE1394_OHCI1394 $CONFIG_IEEE1394
 	dep_tristate 'Video1394 support' CONFIG_IEEE1394_VIDEO1394 $CONFIG_IEEE1394_OHCI1394

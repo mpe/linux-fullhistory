@@ -17,6 +17,8 @@
  *		unsigned long dbr[8];
  *		unsigned long rsvd2[504];
  *		unsigned long ibr[8];
+ *		unsigned long rsvd3[504];
+ *		unsigned long pmd[4];
  *	}
  */
 
@@ -157,6 +159,7 @@
 #define PT_B4			0x07f0
 #define PT_B5			0x07f8
 
+#define PT_AR_EC		0x0800
 #define PT_AR_LC		0x0808
 
 /* pt_regs */
@@ -209,5 +212,6 @@
 
 #define PT_DBR			0x2000	/* data breakpoint registers */
 #define PT_IBR			0x3000	/* instruction breakpoint registers */
+#define PT_PMD			0x4000	/* performance monitoring counters */
 
 #endif /* _ASM_IA64_PTRACE_OFFSETS_H */

@@ -60,7 +60,7 @@ typedef struct {
 #define LSAPIC_PERFORMANCE_RESTRICTED (1<<1)
 #define LSAPIC_PRESENT                (1<<2)
 
-typedef struct {
+typedef struct acpi_entry_lsapic {
 	u8 type;
 	u8 length;
 	u16 acpi_processor_id;

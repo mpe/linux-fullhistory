@@ -6,6 +6,8 @@
  * 
  * Lots of stuff stolen from arch/alpha/kernel/smp.c
  *
+ *  00/09/11 David Mosberger <davidm@hpl.hp.com> Do loops_per_sec calibration on each CPU.
+ *  00/08/23 Asit Mallick <asit.k.mallick@intel.com> fixed logical processor id
  *  00/03/31 Rohit Seth <rohit.seth@intel.com>	Fixes for Bootstrap Processor & cpu_online_map
  *			now gets done here (instead of setup.c)
  *  99/10/05 davidm	Update to bring it in sync with new command-line processing scheme.
@@ -27,6 +29,7 @@
 #include <asm/bitops.h>
 #include <asm/current.h>
 #include <asm/delay.h>
+#include <asm/efi.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -39,27 +42,31 @@
 #include <asm/system.h>
 #include <asm/unistd.h>
 
+extern void __init calibrate_delay(void);
 extern int cpu_idle(void * unused);
-extern void _start(void);
 extern void machine_halt(void);
+extern void start_ap(void);
 
 extern int cpu_now_booting;			     /* Used by head.S to find idle task */
 extern volatile unsigned long cpu_online_map;	     /* Bitmap of available cpu's */
 extern struct cpuinfo_ia64 cpu_data[NR_CPUS];	     /* Duh... */
 
+struct smp_boot_data smp_boot_data __initdata;
+
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
-struct smp_boot_data smp __initdata = { 0, };
-char no_int_routing __initdata = 0;
+char __initdata no_int_routing;
 
 unsigned char smp_int_redirect;			/* are INT and IPI redirectable by the chipset? */
-volatile int __cpu_number_map[NR_CPUS] = { -1, };    /* SAPIC ID -> Logical ID */
-volatile int __cpu_logical_map[NR_CPUS] = { -1, };   /* logical ID -> SAPIC ID */
+volatile int __cpu_physical_id[NR_CPUS] = { -1, };    /* Logical ID -> SAPIC ID */
 int smp_num_cpus = 1;		
-int bootstrap_processor = -1;			     /* SAPIC ID of BSP */
-int smp_threads_ready = 0;			     /* Set when the idlers are all forked */
-cycles_t cacheflush_time = 0;
+volatile int smp_threads_ready;			     /* Set when the idlers are all forked */
+cycles_t cacheflush_time;
 unsigned long ap_wakeup_vector = -1;		     /* External Int to use to wakeup AP's */
+
+static volatile unsigned long cpu_callin_map;
+static volatile int smp_commenced;
+
 static int max_cpus = -1;			     /* Command line */
 static unsigned long ipi_op[NR_CPUS];
 struct smp_call_struct {
@@ -135,6 +142,7 @@ halt_processor(void)
 static inline int
 pointer_lock(void *lock, void *data, int retry)
 {
+	volatile long *ptr = lock;
  again:
 	if (cmpxchg_acq((void **) lock, 0, data) == 0)
 		return 0;
@@ -142,7 +150,7 @@ pointer_lock(void *lock, void *data, int retry)
 	if (!retry)
 		return -EBUSY;
 
-	while (*(void **) lock)
+	while (*ptr)
 		;
 
 	goto again;
@@ -275,12 +283,10 @@ static inline void
 send_IPI_allbutself(int op)
 {
 	int i;
-	int cpu_id = 0;
 	
 	for (i = 0; i < smp_num_cpus; i++) {
-		cpu_id = __cpu_logical_map[i];
-		if (cpu_id != smp_processor_id())
-			send_IPI_single(cpu_id, op);
+		if (i != smp_processor_id())
+			send_IPI_single(i, op);
 	}
 }
 
@@ -290,7 +296,7 @@ send_IPI_all(int op)
 	int i;
 
 	for (i = 0; i < smp_num_cpus; i++)
-		send_IPI_single(__cpu_logical_map[i], op);
+		send_IPI_single(i, op);
 }
 
 static inline void
@@ -335,7 +341,7 @@ int
 smp_call_function_single (int cpuid, void (*func) (void *info), void *info, int retry, int wait)
 {
 	struct smp_call_struct data;
-	long timeout;
+	unsigned long timeout;
 	int cpus = 1;
 
 	if (cpuid == smp_processor_id()) {
@@ -387,7 +393,7 @@ int
 smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 {
 	struct smp_call_struct data;
-	long timeout;
+	unsigned long timeout;
 	int cpus = smp_num_cpus - 1;
 
 	if (cpus == 0)
@@ -453,72 +459,8 @@ smp_do_timer(struct pt_regs *regs)
 
         if (--data->prof_counter <= 0) {
 		data->prof_counter = data->prof_multiplier;
-		/*
-		 * update_process_times() expects us to have done irq_enter().
-		 * Besides, if we don't timer interrupts ignore the global
-		 * interrupt lock, which is the WrongThing (tm) to do.
-		 */
-		irq_enter(cpu, 0);
 		update_process_times(user);
-		irq_exit(cpu, 0);
 	}
-}
-
-static inline void __init
-smp_calibrate_delay(int cpuid)
-{
-	struct cpuinfo_ia64 *c = &cpu_data[cpuid];
-#if 0
-	unsigned long old = loops_per_sec;
-	extern void calibrate_delay(void);
-	
-	loops_per_sec = 0;
-	calibrate_delay();
-	c->loops_per_sec = loops_per_sec;
-	loops_per_sec = old;
-#else
-	c->loops_per_sec = loops_per_sec;
-#endif
-}
-
-/* 
- * SAL shoves the AP's here when we start them.  Physical mode, no kernel TR, 
- * no RRs set, better than even chance that psr is bogus.  Fix all that and 
- * call _start.  In effect, pretend to be lilo.
- *
- * Stolen from lilo_start.c.  Thanks David! 
- */
-void
-start_ap(void)
-{
-	unsigned long flags;
-
-	/*
-	 * Install a translation register that identity maps the
-	 * kernel's 256MB page(s).
-	 */
-	ia64_clear_ic(flags);
-	ia64_set_rr(          0, (0x1000 << 8) | (_PAGE_SIZE_1M << 2));
-	ia64_set_rr(PAGE_OFFSET, (ia64_rid(0, PAGE_OFFSET) << 8) | (_PAGE_SIZE_256M << 2));
-	ia64_srlz_d();
-	ia64_itr(0x3, 1, PAGE_OFFSET,
-		 pte_val(mk_pte_phys(0, __pgprot(__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RWX))),
-		 _PAGE_SIZE_256M);
-	ia64_srlz_i();
-
-	flags = (IA64_PSR_IT | IA64_PSR_IC | IA64_PSR_DT | IA64_PSR_RT | IA64_PSR_DFH | 
-		 IA64_PSR_BN);
-	
-	asm volatile ("movl r8 = 1f\n"
-		      ";;\n"
-		      "mov cr.ipsr=%0\n"
-		      "mov cr.iip=r8\n" 
-		      "mov cr.ifs=r0\n"
-		      ";;\n"
-		      "rfi;;"
-		      "1:\n"
-		      "movl r1 = __gp" :: "r"(flags) : "r8");
-	_start();
 }
 
 
@@ -526,7 +468,7 @@ start_ap(void)
  * AP's start using C here.
  */
 void __init
-smp_callin(void) 
+smp_callin (void) 
 {
 	extern void ia64_rid_init(void);
 	extern void ia64_init_itm(void);
@@ -534,12 +476,17 @@ smp_callin(void)
 #ifdef CONFIG_PERFMON
 	extern void perfmon_init_percpu(void);
 #endif
+	int cpu = smp_processor_id();
+
+	if (test_and_set_bit(cpu, &cpu_online_map)) {
+		printk("CPU#%d already initialized!\n", cpu);
+		machine_halt();
+	}  
 
 	efi_map_pal_code();
-
 	cpu_init();
 
-	smp_setup_percpu_timer(smp_processor_id());
+	smp_setup_percpu_timer(cpu);
 
 	/* setup the CPU local timer tick */
 	ia64_init_itm();
@@ -552,16 +499,16 @@ smp_callin(void)
 	ia64_set_lrr0(0, 1);	
 	ia64_set_lrr1(0, 1);	
 
-	if (test_and_set_bit(smp_processor_id(), &cpu_online_map)) {
-		printk("CPU#%d already initialized!\n", smp_processor_id());
-		machine_halt();
-	}  
-	while (!smp_threads_ready) 
-		mb();
-
 	local_irq_enable();		/* Interrupts have been off until now */
-	smp_calibrate_delay(smp_processor_id());
-	printk("SMP: CPU %d starting idle loop\n", smp_processor_id());
+
+	calibrate_delay();
+	my_cpu_data.loops_per_sec = loops_per_sec;
+
+	/* allow the master to continue */
+	set_bit(cpu, &cpu_callin_map);
+
+	/* finally, wait for the BP to finish initialization: */
+	while (!smp_commenced);
 
 	cpu_idle(NULL);
 }
@@ -583,14 +530,13 @@ fork_by_hand(void)
 }
 
 /*
- * Bring one cpu online.
- *
- * NB: cpuid is the CPU BUS-LOCAL ID, not the entire SAPIC ID.  See asm/smp.h.
+ * Bring one cpu online.  Return 0 if this fails for any reason.
  */
 static int __init
-smp_boot_one_cpu(int cpuid, int cpunum)
+smp_boot_one_cpu(int cpu)
 {
 	struct task_struct *idle;
+	int cpu_phys_id = cpu_physical_id(cpu);
 	long timeout;
 
 	/* 
@@ -603,50 +549,37 @@ smp_boot_one_cpu(int cpuid, int cpunum)
 	 * Sheesh . . .
 	 */
 	if (fork_by_hand() < 0) 
-		panic("failed fork for CPU %d", cpuid);
+		panic("failed fork for CPU 0x%x", cpu_phys_id);
 	/*
 	 * We remove it from the pidhash and the runqueue
 	 * once we got the process:
 	 */
 	idle = init_task.prev_task;
 	if (!idle)
-		panic("No idle process for CPU %d", cpuid);
-	init_tasks[cpunum] = idle;
+		panic("No idle process for CPU 0x%x", cpu_phys_id);
+	init_tasks[cpu] = idle;
 	del_from_runqueue(idle);
         unhash_process(idle);
 
 	/* Schedule the first task manually.  */
-	idle->processor = cpuid;
+	idle->processor = cpu;
 	idle->has_cpu = 1;
 
 	/* Let _start know what logical CPU we're booting (offset into init_tasks[] */
-	cpu_now_booting = cpunum;
-	
-	/* Kick the AP in the butt */
-	ipi_send(cpuid, ap_wakeup_vector, IA64_IPI_DM_INT, 0);
-	ia64_srlz_i();
-	mb();
+	cpu_now_booting = cpu;
 
-	/* 
-	 * OK, wait a bit for that CPU to finish staggering about.  smp_callin() will
-	 * call cpu_init() which will set a bit for this AP.  When that bit flips, the AP
-	 * is waiting for smp_threads_ready to be 1 and we can move on.
-	 */
+	/* Kick the AP in the butt */
+	ipi_send(cpu, ap_wakeup_vector, IA64_IPI_DM_INT, 0);
+
+	/* wait up to 10s for the AP to start  */
 	for (timeout = 0; timeout < 100000; timeout++) {
-		if (test_bit(cpuid, &cpu_online_map))
-			goto alive;
+		if (test_bit(cpu, &cpu_callin_map))
+			return 1;
 		udelay(100);
-		barrier();
 	}
 
-	printk(KERN_ERR "SMP: Processor %d is stuck.\n", cpuid);
+	printk(KERN_ERR "SMP: Processor 0x%x is stuck.\n", cpu_phys_id);
 	return 0;
-
-alive:
-	/* Remember the AP data */
-	__cpu_number_map[cpuid] = cpunum;
-	__cpu_logical_map[cpunum] = cpuid;
-	return 1;
 }
 
 
@@ -663,21 +596,20 @@ smp_boot_cpus(void)
 	unsigned long bogosum;
 
 	/* Take care of some initial bookkeeping.  */
-	memset(&__cpu_number_map, -1, sizeof(__cpu_number_map));
-	memset(&__cpu_logical_map, -1, sizeof(__cpu_logical_map));
+	memset(&__cpu_physical_id, -1, sizeof(__cpu_physical_id));
 	memset(&ipi_op, 0, sizeof(ipi_op));
 
-	/* Setup BSP mappings */
-	__cpu_number_map[bootstrap_processor] = 0;
-	__cpu_logical_map[0] = bootstrap_processor;
+	/* Setup BP mappings */
+	__cpu_physical_id[0] = hard_smp_processor_id();
 
-	smp_calibrate_delay(smp_processor_id());
+	/* on the BP, the kernel already called calibrate_delay_loop() in init/main.c */
+	my_cpu_data.loops_per_sec = loops_per_sec;
 #if 0
 	smp_tune_scheduling();
 #endif
- 	smp_setup_percpu_timer(bootstrap_processor);
+ 	smp_setup_percpu_timer(0);
 
-	if (test_and_set_bit(bootstrap_processor, &cpu_online_map)) {
+	if (test_and_set_bit(0, &cpu_online_map)) {
 		printk("CPU#%d already initialized!\n", smp_processor_id());
 		machine_halt();
 	}  
@@ -692,16 +624,18 @@ smp_boot_cpus(void)
 	if (max_cpus != -1) 
 		printk("Limiting CPUs to %d\n", max_cpus);
 
-	if (smp.cpu_count > 1) {
+	if (smp_boot_data.cpu_count > 1) {
 		printk(KERN_INFO "SMP: starting up secondaries.\n");
 
-		for (i = 0; i < NR_CPUS; i++) {
-			if (smp.cpu_map[i] == -1 || 
-			    smp.cpu_map[i] == bootstrap_processor)
+		for (i = 0; i < smp_boot_data.cpu_count; i++) {
+			/* skip performance restricted and bootstrap cpu: */
+			if (smp_boot_data.cpu_phys_id[i] == -1
+			    || smp_boot_data.cpu_phys_id[i] == hard_smp_processor_id())
 				continue;
 
-			if (smp_boot_one_cpu(smp.cpu_map[i], cpu_count) == 0)
-				continue;
+			cpu_physical_id(cpu_count) = smp_boot_data.cpu_phys_id[i];
+			if (!smp_boot_one_cpu(cpu_count))
+				continue;	/* failed */
 
 			cpu_count++; /* Count good CPUs only... */
 			/* 
@@ -731,20 +665,12 @@ smp_boot_cpus(void)
 }
 
 /* 
- * Called from main.c by each AP.
+ * Called when the BP is just about to fire off init.
  */
 void __init 
 smp_commence(void)
 {
-	mb();
-}
-
-/*
- * Not used; part of the i386 bringup
- */
-void __init 
-initialize_secondary(void)
-{
+	smp_commenced = 1;
 }
 
 int __init
@@ -759,9 +685,7 @@ setup_profiling_timer(unsigned int multiplier)
  *
  * Setup of the IPI irq handler is done in irq.c:init_IRQ_SMP().
  *
- * So this just gets the BSP SAPIC ID and print's it out.  Dull, huh?
- *
- * Not anymore.  This also registers the AP OS_MC_REDVEZ address with SAL.
+ * This also registers the AP OS_MC_REDVEZ address with SAL.
  */
 void __init
 init_smp_config(void)
@@ -771,9 +695,6 @@ init_smp_config(void)
 		unsigned long gp;
 	} *ap_startup;
 	long sal_ret;
-
-	/* Grab the BSP ID */
-	bootstrap_processor = hard_smp_processor_id();
 
 	/* Tell SAL where to drop the AP's.  */
 	ap_startup = (struct fptr *) start_ap;

@@ -3,9 +3,9 @@
 
 /*
  * This file contains the functions and defines necessary to modify and use
- * the ia-64 page table tree.
+ * the IA-64 page table tree.
  *
- * This hopefully works with any (fixed) ia-64 page-size, as defined
+ * This hopefully works with any (fixed) IA-64 page-size, as defined
  * in <asm/page.h> (currently 8192).
  *
  * Copyright (C) 1998-2000 Hewlett-Packard Co
@@ -18,12 +18,6 @@
 #include <asm/types.h>
 
 #define IA64_MAX_PHYS_BITS	50	/* max. number of physical address bits (architected) */
-
-/* Is ADDR a valid kernel address? */
-#define kern_addr_valid(addr)	((addr) >= TASK_SIZE)
-
-/* Is ADDR a valid physical address? */
-#define phys_addr_valid(addr)	(((addr) & my_cpu_data.unimpl_pa_mask) == 0)
 
 /*
  * First, define the various bits in a PTE.  Note that the PTE format
@@ -111,6 +105,7 @@
 
 #include <asm/bitops.h>
 #include <asm/mmu_context.h>
+#include <asm/processor.h>
 #include <asm/system.h>
 
 /*
@@ -166,7 +161,7 @@
  * Given a pointer to an mem_map[] entry, return the kernel virtual
  * address corresponding to that page.
  */
-#define page_address(page)	((void *) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT)))
+#define page_address(page)	((page)->virtual)
 
 /*
  * Now for some cache flushing routines.  This is the kind of stuff
@@ -189,6 +184,28 @@ do {								\
 	if ((vma)->vm_flags & PROT_EXEC)			\
 		ia64_flush_icache_page((unsigned long) page_address(pg));	\
 } while (0)
+
+/* Quick test to see if ADDR is a (potentially) valid physical address. */
+static __inline__ long
+ia64_phys_addr_valid (unsigned long addr)
+{
+	return (addr & (my_cpu_data.unimpl_pa_mask)) == 0;
+}
+
+/*
+ * kern_addr_valid(ADDR) tests if ADDR is pointing to valid kernel
+ * memory.  For the return value to be meaningful, ADDR must be >=
+ * PAGE_OFFSET.  This operation can be relatively expensive (e.g.,
+ * require a hash-, or multi-level tree-lookup or something of that
+ * sort) but it guarantees to return TRUE only if accessing the page
+ * at that address does not cause an error.  Note that there may be
+ * addresses for which kern_addr_valid() returns FALSE even though an
+ * access would not cause an error (e.g., this is typically true for
+ * memory mapped I/O regions.
+ *
+ * XXX Need to implement this for IA-64.
+ */
+#define kern_addr_valid(addr)	(1)
 
 /*
  * Now come the defines and routines to manage and access the three-level
@@ -248,14 +265,14 @@ extern pmd_t *ia64_bad_pagetable (void);
 
 #define pmd_set(pmdp, ptep) 		(pmd_val(*(pmdp)) = __pa(ptep))
 #define pmd_none(pmd)			(!pmd_val(pmd))
-#define pmd_bad(pmd)			(!phys_addr_valid(pmd_val(pmd)))
+#define pmd_bad(pmd)			(!ia64_phys_addr_valid(pmd_val(pmd)))
 #define pmd_present(pmd)		(pmd_val(pmd) != 0UL)
 #define pmd_clear(pmdp)			(pmd_val(*(pmdp)) = 0UL)
 #define pmd_page(pmd)			((unsigned long) __va(pmd_val(pmd) & _PFN_MASK))
 
 #define pgd_set(pgdp, pmdp)		(pgd_val(*(pgdp)) = __pa(pmdp))
 #define pgd_none(pgd)			(!pgd_val(pgd))
-#define pgd_bad(pgd)			(!phys_addr_valid(pgd_val(pgd)))
+#define pgd_bad(pgd)			(!ia64_phys_addr_valid(pgd_val(pgd)))
 #define pgd_present(pgd)		(pgd_val(pgd) != 0UL)
 #define pgd_clear(pgdp)			(pgd_val(*(pgdp)) = 0UL)
 #define pgd_page(pgd)			((unsigned long) __va(pgd_val(pgd) & _PFN_MASK))
@@ -301,7 +318,7 @@ extern pmd_t *ia64_bad_pagetable (void);
 /*
  * Return the region index for virtual address ADDRESS.
  */
-extern __inline__ unsigned long
+static __inline__ unsigned long
 rgn_index (unsigned long address)
 {
 	ia64_va a;
@@ -313,7 +330,7 @@ rgn_index (unsigned long address)
 /*
  * Return the region offset for virtual address ADDRESS.
  */
-extern __inline__ unsigned long
+static __inline__ unsigned long
 rgn_offset (unsigned long address)
 {
 	ia64_va a;
@@ -325,7 +342,7 @@ rgn_offset (unsigned long address)
 #define RGN_SIZE	(1UL << 61)
 #define RGN_KERNEL	7
 
-extern __inline__ unsigned long
+static __inline__ unsigned long
 pgd_index (unsigned long address)
 {
 	unsigned long region = address >> 61;
@@ -336,7 +353,7 @@ pgd_index (unsigned long address)
 
 /* The offset in the 1-level directory is given by the 3 region bits
    (61..63) and the seven level-1 bits (33-39).  */
-extern __inline__ pgd_t*
+static __inline__ pgd_t*
 pgd_offset (struct mm_struct *mm, unsigned long address)
 {
 	return mm->pgd + pgd_index(address);
@@ -409,9 +426,6 @@ do {												\
 #define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
-#define module_map	vmalloc
-#define module_unmap	vfree
-
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)
 
@@ -421,7 +435,7 @@ do {												\
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
  */
-extern unsigned long empty_zero_page[1024];
+extern unsigned long empty_zero_page[PAGE_SIZE/sizeof(unsigned long)];
 #define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
 # endif /* !__ASSEMBLY__ */

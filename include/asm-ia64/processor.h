@@ -253,9 +253,9 @@ struct cpuinfo_ia64 {
 #define my_cpu_data		cpu_data[smp_processor_id()]
 
 #ifdef CONFIG_SMP
-# define loops_per_sec()	my_cpu_data.loops_per_sec
+# define ia64_loops_per_sec()	my_cpu_data.loops_per_sec
 #else
-# define loops_per_sec()	loops_per_sec
+# define ia64_loops_per_sec()	loops_per_sec
 #endif
 
 extern struct cpuinfo_ia64 cpu_data[NR_CPUS];
@@ -305,10 +305,11 @@ struct thread_struct {
 	__u64 csd;			/* IA32 code selector descriptor */
 	__u64 ssd;			/* IA32 stack selector descriptor */
 	__u64 tssd;			/* IA32 TSS descriptor */
+	__u64 old_iob;			/* old IOBase value */
 	union {
 		__u64 sigmask;		/* aligned mask for sigsuspend scall */
 	} un;
-# define INIT_THREAD_IA32	, 0, 0, 0x17800000037fULL, 0, 0, 0, 0, 0, {0}
+# define INIT_THREAD_IA32	, 0, 0, 0x17800000037fULL, 0, 0, 0, 0, 0, 0, {0}
 #else
 # define INIT_THREAD_IA32
 #endif /* CONFIG_IA32_SUPPORT */
@@ -334,6 +335,8 @@ struct thread_struct {
 
 #define start_thread(regs,new_ip,new_sp) do {					\
 	set_fs(USER_DS);							\
+	ia64_psr(regs)->dfh = 1;	/* disable fph */			\
+	ia64_psr(regs)->mfh = 0;	/* clear mfh */				\
 	ia64_psr(regs)->cpl = 3;	/* set user mode */			\
 	ia64_psr(regs)->ri = 0;		/* clear return slot number */		\
 	ia64_psr(regs)->is = 0;		/* IA-64 instruction set */		\
@@ -390,6 +393,8 @@ extern unsigned long get_wchan (struct task_struct *p);
 /* Return stack pointer of blocked task TSK.  */
 #define KSTK_ESP(tsk)  ((tsk)->thread.ksp)
 
+#ifndef CONFIG_SMP
+
 static inline struct task_struct *
 ia64_get_fpu_owner (void)
 {
@@ -403,6 +408,8 @@ ia64_set_fpu_owner (struct task_struct *t)
 {
 	__asm__ __volatile__ ("mov ar.k5=%0" :: "r"(t));
 }
+
+#endif /* !CONFIG_SMP */
 
 extern void __ia64_init_fpu (void);
 extern void __ia64_save_fpu (struct ia64_fpreg *fph);
@@ -447,31 +454,31 @@ ia64_load_fpu (struct ia64_fpreg *fph) {
 	ia64_fph_disable();
 }
 
-extern inline void
+static inline void
 ia64_fc (void *addr)
 {
 	__asm__ __volatile__ ("fc %0" :: "r"(addr) : "memory");
 }
 
-extern inline void
+static inline void
 ia64_sync_i (void)
 {
 	__asm__ __volatile__ (";; sync.i" ::: "memory");
 }
 
-extern inline void
+static inline void
 ia64_srlz_i (void)
 {
 	__asm__ __volatile__ (";; srlz.i ;;" ::: "memory");
 }
 
-extern inline void
+static inline void
 ia64_srlz_d (void)
 {
 	__asm__ __volatile__ (";; srlz.d" ::: "memory");
 }
 
-extern inline __u64
+static inline __u64
 ia64_get_rr (__u64 reg_bits)
 {
 	__u64 r;
@@ -479,13 +486,13 @@ ia64_get_rr (__u64 reg_bits)
 	return r;
 }
 
-extern inline void
+static inline void
 ia64_set_rr (__u64 reg_bits, __u64 rr_val)
 {
 	__asm__ __volatile__ ("mov rr[%0]=%1" :: "r"(reg_bits), "r"(rr_val) : "memory");
 }
 
-extern inline __u64
+static inline __u64
 ia64_get_dcr (void)
 {
 	__u64 r;
@@ -493,14 +500,14 @@ ia64_get_dcr (void)
 	return r;
 }
 
-extern inline void
+static inline void
 ia64_set_dcr (__u64 val)
 {
 	__asm__ __volatile__ ("mov cr.dcr=%0;;" :: "r"(val) : "memory");
 	ia64_srlz_d();
 }
 
-extern inline __u64
+static inline __u64
 ia64_get_lid (void)
 {
 	__u64 r;
@@ -508,7 +515,7 @@ ia64_get_lid (void)
 	return r;
 }
 
-extern inline void
+static inline void
 ia64_invala (void)
 {
 	__asm__ __volatile__ ("invala" ::: "memory");
@@ -526,7 +533,7 @@ ia64_invala (void)
  * Insert a translation into an instruction and/or data translation
  * register.
  */
-extern inline void
+static inline void
 ia64_itr (__u64 target_mask, __u64 tr_num,
 	  __u64 vmaddr, __u64 pte,
 	  __u64 log_page_size)
@@ -545,7 +552,7 @@ ia64_itr (__u64 target_mask, __u64 tr_num,
  * Insert a translation into the instruction and/or data translation
  * cache.
  */
-extern inline void
+static inline void
 ia64_itc (__u64 target_mask, __u64 vmaddr, __u64 pte,
 	  __u64 log_page_size)
 {
@@ -562,7 +569,7 @@ ia64_itc (__u64 target_mask, __u64 vmaddr, __u64 pte,
  * Purge a range of addresses from instruction and/or data translation
  * register(s).
  */
-extern inline void
+static inline void
 ia64_ptr (__u64 target_mask, __u64 vmaddr, __u64 log_size)
 {
 	if (target_mask & 0x1)
@@ -572,21 +579,21 @@ ia64_ptr (__u64 target_mask, __u64 vmaddr, __u64 log_size)
 }
 
 /* Set the interrupt vector address.  The address must be suitably aligned (32KB).  */
-extern inline void
+static inline void
 ia64_set_iva (void *ivt_addr)
 {
 	__asm__ __volatile__ ("mov cr.iva=%0;; srlz.i;;" :: "r"(ivt_addr) : "memory");
 }
 
 /* Set the page table address and control bits.  */
-extern inline void
+static inline void
 ia64_set_pta (__u64 pta)
 {
 	/* Note: srlz.i implies srlz.d */
 	__asm__ __volatile__ ("mov cr.pta=%0;; srlz.i;;" :: "r"(pta) : "memory");
 }
 
-extern inline __u64
+static inline __u64
 ia64_get_cpuid (__u64 regnum)
 {
 	__u64 r;
@@ -595,13 +602,13 @@ ia64_get_cpuid (__u64 regnum)
 	return r;
 }
 
-extern inline void
+static inline void
 ia64_eoi (void)
 {
 	__asm__ ("mov cr.eoi=r0;; srlz.d;;" ::: "memory");
 }
 
-extern __inline__ void
+static inline void
 ia64_set_lrr0 (__u8 vector, __u8 masked)
 {
 	if (masked > 1)
@@ -612,7 +619,7 @@ ia64_set_lrr0 (__u8 vector, __u8 masked)
 }
 
 
-extern __inline__ void
+static inline void
 ia64_set_lrr1 (__u8 vector, __u8 masked)
 {
 	if (masked > 1)
@@ -622,13 +629,13 @@ ia64_set_lrr1 (__u8 vector, __u8 masked)
 			      :: "r"((masked << 16) | vector) : "memory");
 }
 
-extern __inline__ void
+static inline void
 ia64_set_pmv (__u64 val)
 {
 	__asm__ __volatile__ ("mov cr.pmv=%0" :: "r"(val) : "memory");
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_pmc (__u64 regnum)
 {
 	__u64 retval;
@@ -637,13 +644,13 @@ ia64_get_pmc (__u64 regnum)
 	return retval;
 }
 
-extern __inline__ void
+static inline void
 ia64_set_pmc (__u64 regnum, __u64 value)
 {
 	__asm__ __volatile__ ("mov pmc[%0]=%1" :: "r"(regnum), "r"(value));
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_pmd (__u64 regnum)
 {
 	__u64 retval;
@@ -652,7 +659,7 @@ ia64_get_pmd (__u64 regnum)
 	return retval;
 }
 
-extern __inline__ void
+static inline void
 ia64_set_pmd (__u64 regnum, __u64 value)
 {
 	__asm__ __volatile__ ("mov pmd[%0]=%1" :: "r"(regnum), "r"(value));
@@ -662,7 +669,7 @@ ia64_set_pmd (__u64 regnum, __u64 value)
  * Given the address to which a spill occurred, return the unat bit
  * number that corresponds to this address.
  */
-extern inline __u64
+static inline __u64
 ia64_unat_pos (void *spill_addr)
 {
 	return ((__u64) spill_addr >> 3) & 0x3f;
@@ -672,7 +679,7 @@ ia64_unat_pos (void *spill_addr)
  * Set the NaT bit of an integer register which was spilled at address
  * SPILL_ADDR.  UNAT is the mask to be updated.
  */
-extern inline void
+static inline void
 ia64_set_unat (__u64 *unat, void *spill_addr, unsigned long nat)
 {
 	__u64 bit = ia64_unat_pos(spill_addr);
@@ -685,7 +692,7 @@ ia64_set_unat (__u64 *unat, void *spill_addr, unsigned long nat)
  * Return saved PC of a blocked thread.
  * Note that the only way T can block is through a call to schedule() -> switch_to().
  */
-extern inline unsigned long
+static inline unsigned long
 thread_saved_pc (struct thread_struct *t)
 {
 	struct unw_frame_info info;
@@ -720,7 +727,7 @@ thread_saved_pc (struct thread_struct *t)
 /*
  * Set the correctable machine check vector register
  */
-extern __inline__ void
+static inline void
 ia64_set_cmcv (__u64 val)
 {
 	__asm__ __volatile__ ("mov cr.cmcv=%0" :: "r"(val) : "memory");
@@ -729,7 +736,7 @@ ia64_set_cmcv (__u64 val)
 /*
  * Read the correctable machine check vector register
  */
-extern __inline__ __u64
+static inline __u64
 ia64_get_cmcv (void)
 {
 	__u64 val;
@@ -738,7 +745,7 @@ ia64_get_cmcv (void)
 	return val;
 }
 
-extern inline __u64
+static inline __u64
 ia64_get_ivr (void)
 {
 	__u64 r;
@@ -746,13 +753,13 @@ ia64_get_ivr (void)
 	return r;
 }
 
-extern inline void
+static inline void
 ia64_set_tpr (__u64 val)
 {
 	__asm__ __volatile__ ("mov cr.tpr=%0" :: "r"(val));
 }
 
-extern inline __u64
+static inline __u64
 ia64_get_tpr (void)
 {
 	__u64 r;
@@ -760,71 +767,75 @@ ia64_get_tpr (void)
 	return r;
 }
 
-extern __inline__ void
+static inline void
 ia64_set_irr0 (__u64 val)
 {
 	__asm__ __volatile__("mov cr.irr0=%0;;" :: "r"(val) : "memory");
 	ia64_srlz_d();
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_irr0 (void)
 {
 	__u64 val;
 
-	__asm__ ("mov %0=cr.irr0" : "=r"(val));
+	/* this is volatile because irr may change unbeknownst to gcc... */
+	__asm__ __volatile__("mov %0=cr.irr0" : "=r"(val));
 	return val;
 }
 
-extern __inline__ void
+static inline void
 ia64_set_irr1 (__u64 val)
 {
 	__asm__ __volatile__("mov cr.irr1=%0;;" :: "r"(val) : "memory");
 	ia64_srlz_d();
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_irr1 (void)
 {
 	__u64 val;
 
-	__asm__ ("mov %0=cr.irr1" : "=r"(val));
+	/* this is volatile because irr may change unbeknownst to gcc... */
+	__asm__ __volatile__("mov %0=cr.irr1" : "=r"(val));
 	return val;
 }
 
-extern __inline__ void
+static inline void
 ia64_set_irr2 (__u64 val)
 {
 	__asm__ __volatile__("mov cr.irr2=%0;;" :: "r"(val) : "memory");
 	ia64_srlz_d();
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_irr2 (void)
 {
 	__u64 val;
 
-	__asm__ ("mov %0=cr.irr2" : "=r"(val));
+	/* this is volatile because irr may change unbeknownst to gcc... */
+	__asm__ __volatile__("mov %0=cr.irr2" : "=r"(val));
 	return val;
 }
 
-extern __inline__ void
+static inline void
 ia64_set_irr3 (__u64 val)
 {
 	__asm__ __volatile__("mov cr.irr3=%0;;" :: "r"(val) : "memory");
 	ia64_srlz_d();
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_irr3 (void)
 {
 	__u64 val;
 
-	__asm__ ("mov %0=cr.irr3" : "=r"(val));
+	/* this is volatile because irr may change unbeknownst to gcc... */
+	__asm__ __volatile__("mov %0=cr.irr3" : "=r"(val));
 	return val;
 }
 
-extern __inline__ __u64
+static inline __u64
 ia64_get_gp(void)
 {
 	__u64 val;
@@ -852,7 +863,7 @@ ia64_get_gp(void)
 
 #define ia64_rotl(w,n)	ia64_rotr((w),(64)-(n))
 
-extern __inline__ __u64
+static inline __u64
 ia64_thash (__u64 addr)
 {
 	__u64 result;

@@ -18,13 +18,13 @@
 
 #include <asm/processor.h>
 
-extern __inline__ void
+static __inline__ void
 ia64_set_itm (unsigned long val)
 {
 	__asm__ __volatile__("mov cr.itm=%0;; srlz.d;;" :: "r"(val) : "memory");
 }
 
-extern __inline__ unsigned long
+static __inline__ unsigned long
 ia64_get_itm (void)
 {
 	unsigned long result;
@@ -33,7 +33,7 @@ ia64_get_itm (void)
 	return result;
 }
 
-extern __inline__ void
+static __inline__ void
 ia64_set_itv (unsigned char vector, unsigned char masked)
 {
 	if (masked > 1)
@@ -43,13 +43,13 @@ ia64_set_itv (unsigned char vector, unsigned char masked)
 			     :: "r"((masked << 16) | vector) : "memory");
 }
 
-extern __inline__ void
+static __inline__ void
 ia64_set_itc (unsigned long val)
 {
 	__asm__ __volatile__("mov ar.itc=%0;; srlz.d;;" :: "r"(val) : "memory");
 }
 
-extern __inline__ unsigned long
+static __inline__ unsigned long
 ia64_get_itc (void)
 {
 	unsigned long result;
@@ -58,7 +58,7 @@ ia64_get_itc (void)
 	return result;
 }
 
-extern __inline__ void
+static __inline__ void
 __delay (unsigned long loops)
 {
         unsigned long saved_ar_lc;
@@ -72,7 +72,7 @@ __delay (unsigned long loops)
 	__asm__ __volatile__("mov ar.lc=%0" :: "r"(saved_ar_lc));
 }
 
-extern __inline__ void
+static __inline__ void
 udelay (unsigned long usecs)
 {
 #ifdef CONFIG_IA64_SOFTSDV_HACKS

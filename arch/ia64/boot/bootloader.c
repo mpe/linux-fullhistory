@@ -68,14 +68,15 @@ cons_write (const char *buf)
 void
 enter_virtual_mode (unsigned long new_psr)
 {
+	long tmp;
+
+	asm volatile ("movl %0=1f" : "=r"(tmp));
 	asm volatile ("mov cr.ipsr=%0" :: "r"(new_psr));
-	asm volatile ("mov cr.iip=%0" :: "r"(&&target));
+	asm volatile ("mov cr.iip=%0" :: "r"(tmp));
 	asm volatile ("mov cr.ifs=r0");
-	asm volatile ("rfi;;");		/* must be last insn in an insn group */
-
-  target:
+	asm volatile ("rfi;;");
+	asm volatile ("1:");
 }
-
 
 #define MAX_ARGS 32
 
@@ -96,7 +97,7 @@ _start (void)
 	char *kpath, *args;
 	long arglen = 0;
 
-	asm volatile ("movl gp=__gp" ::: "memory");
+	asm volatile ("movl gp=__gp;;" ::: "memory");
 	asm volatile ("mov sp=%0" :: "r"(stack) : "memory");
 	asm volatile ("bsw.1;;");
 #ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC

@@ -33,6 +33,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/netlink.h>
+#include <net/divert.h>
 
 #define	NEXT_DEV	NULL
 
@@ -136,14 +137,28 @@ static int __init probe_list(struct net_device *dev, struct devprobe *plist)
 {
 	struct devprobe *p = plist;
 	unsigned long base_addr = dev->base_addr;
+#ifdef CONFIG_NET_DIVERT
+	int ret;
+#endif /* CONFIG_NET_DIVERT */
 
 	while (p->probe != NULL) {
-		if (base_addr && p->probe(dev) == 0)	/* probe given addr */
+		if (base_addr && p->probe(dev) == 0) {	/* probe given addr */
+#ifdef CONFIG_NET_DIVERT
+			ret = alloc_divert_blk(dev);
+			if (ret)
+				return ret;
+#endif /* CONFIG_NET_DIVERT */
 			return 0;
-		else if (p->status == 0) {		/* has autoprobe failed yet? */
+		} else if (p->status == 0) {		/* has autoprobe failed yet? */
 			p->status = p->probe(dev);	/* no, try autoprobe */
-			if (p->status == 0)
+			if (p->status == 0) {
+#ifdef CONFIG_NET_DIVERT
+				ret = alloc_divert_blk(dev);
+				if (ret)
+					return ret;
+#endif /* CONFIG_NET_DIVERT */
 				return 0;
+			}
 		}
 		p++;
 	}

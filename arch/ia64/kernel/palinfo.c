@@ -10,13 +10,12 @@
  * Copyright (C) 2000 Stephane Eranian <eranian@hpl.hp.com>
  * 
  * 05/26/2000	S.Eranian	initial release
+ * 08/21/2000	S.Eranian	updated to July 2000 PAL specs
  *
  * ISSUES:
- *	- because of some PAL bugs, some calls return invalid results or
- *	  are empty for now.
- *	- remove hack to avoid problem with <= 256M RAM for itr.
+ *	- as of 2.2.9/2.2.12, the following values are still wrong
+ *		PAL_VM_SUMMARY: key & rid sizes
  */
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -111,7 +110,7 @@ static const char *rse_hints[]={
 #define RSE_HINTS_COUNT (sizeof(rse_hints)/sizeof(const char *))
 
 /*
- * The current revision of the Volume 2 of 
+ * The current revision of the Volume 2 (July 2000) of 
  * IA-64 Architecture Software Developer's Manual is wrong.
  * Table 4-10 has invalid information concerning the ma field:
  * Correct table is:
@@ -131,38 +130,6 @@ static const char *mem_attrib[]={
 	"Write Coalescing (WC)",	/* 110 */
 	"NaTPage"			/* 111 */
 };
-
-
-
-/*
- * Allocate a buffer suitable for calling PAL code in Virtual mode
- *
- * The documentation (PAL2.6) allows DTLB misses on the buffer. So 
- * using the TC is enough, no need to pin the entry.
- *
- * We allocate a kernel-sized page (at least 4KB). This is enough to
- * hold any possible reply.
- */
-static inline void *
-get_palcall_buffer(void)
-{
-	void *tmp;
-
-	tmp = (void *)__get_free_page(GFP_KERNEL);
-	if (tmp == 0) {
-		printk(KERN_ERR __FUNCTION__" : can't get a buffer page\n"); 
-	} 
-	return tmp;
-}
-
-/*
- * Free a palcall buffer allocated with the previous call
- */
-static inline void
-free_palcall_buffer(void *addr)
-{
-	__free_page(addr);
-}
 
 /*
  * Take a 64bit vector and produces a string such that
@@ -243,17 +210,12 @@ power_info(char *page)
 {
 	s64 status;
 	char *p = page;
-	pal_power_mgmt_info_u_t *halt_info;
+	u64 halt_info_buffer[8];
+	pal_power_mgmt_info_u_t *halt_info =(pal_power_mgmt_info_u_t *)halt_info_buffer;
 	int i;
 
-	halt_info = get_palcall_buffer();
-	if (halt_info == 0) return 0;
-
 	status = ia64_pal_halt_info(halt_info);
-	if (status != 0) {
-		free_palcall_buffer(halt_info);
-		return 0;
-	}
+	if (status != 0) return 0;
 
 	for (i=0; i < 8 ; i++ ) {
 		if (halt_info[i].pal_power_mgmt_info_s.im == 1) {
@@ -270,9 +232,6 @@ power_info(char *page)
 			p += sprintf(p,"Power level %d: not implemented\n",i);
 		}
 	}
-
-	free_palcall_buffer(halt_info);
-
 	return p - page;
 }
 
@@ -502,7 +461,7 @@ register_info(char *page)
 			"RSE load/store hints             : %ld (%s)\n",
 			phys_stacked,
 			hints.ph_data, 
-		     	hints.ph_data < RSE_HINTS_COUNT ? rse_hints[hints.ph_data]: "(??)");
+		     	hints.ph_data < RSE_HINTS_COUNT ? rse_hints[hints.ph_data]: "(\?\?)");
 
 	if (ia64_pal_debug_info(&iregs, &dregs)) return 0;
 
@@ -569,7 +528,9 @@ static const char *bus_features[]={
 	"Enable Half Transfer",
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, 
+	"Enable Cache Line Repl. Exclusive", 
+	"Enable Cache Line Repl. Shared", 
 	"Disable Transaction Queuing",
 	"Disable Reponse Error Checking",
 	"Disable Bus Error Checking",
@@ -673,16 +634,10 @@ static int
 perfmon_info(char *page)
 {
 	char *p = page;
-	u64 *pm_buffer;
+	u64 pm_buffer[16];
 	pal_perf_mon_info_u_t pm_info;
 
-	pm_buffer = (u64 *)get_palcall_buffer();
-	if (pm_buffer == 0) return 0;
-
-	if (ia64_pal_perf_mon_info(pm_buffer, &pm_info) != 0) {
-		free_palcall_buffer(pm_buffer);
-		return 0;
-	}
+	if (ia64_pal_perf_mon_info(pm_buffer, &pm_info) != 0) return 0;
 
 #ifdef IA64_PAL_PERF_MON_INFO_BUG
 	/*
@@ -718,8 +673,6 @@ perfmon_info(char *page)
 	p = bitregister_process(p, pm_buffer+12, 256);
 
 	p += sprintf(p, "\n");
-
-	free_palcall_buffer(pm_buffer);
 
 	return p - page;
 }

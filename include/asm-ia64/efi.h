@@ -219,7 +219,7 @@ extern struct efi {
 	efi_reset_system_t *reset_system;
 } efi;
 
-extern inline int
+static inline int
 efi_guidcmp (efi_guid_t left, efi_guid_t right)
 {
 	return memcmp(&left, &right, sizeof (efi_guid_t));

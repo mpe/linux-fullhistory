@@ -1,3 +1,4 @@
+
 /*
  * ac97_codec.c: Generic AC97 mixer/modem module
  *
@@ -58,7 +59,8 @@ static struct {
 	char *name;
 	int  (*init)  (struct ac97_codec *codec);
 } ac97_codec_ids[] = {
-	{0x414B4D00, "Asahi Kasei AK4540"     , NULL},
+	{0x414B4D00, "Asahi Kasei AK4540 rev 0", NULL},
+	{0x414B4D01, "Asahi Kasei AK4540 rev 1", NULL},
 	{0x41445340, "Analog Devices AD1881"  , NULL},
 	{0x41445360, "Analog Devices AD1885"  , enable_eapd},
 	{0x43525900, "Cirrus Logic CS4297"    , NULL},
@@ -622,8 +624,8 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	}
 	if (codec->name == NULL)
 		codec->name = "Unknown";
-	printk(KERN_INFO "ac97_codec: AC97 %s codec, vendor id1: 0x%04x, "
-	       "id2: 0x%04x (%s)\n", audio ? "Audio" : (modem ? "Modem" : ""),
+	printk(KERN_INFO "ac97_codec: AC97 %s codec, id: 0x%04x:"
+	       "0x%04x (%s)\n", audio ? "Audio" : (modem ? "Modem" : ""),
 	       id1, id2, codec->name);
 
 	return ac97_init_mixer(codec);

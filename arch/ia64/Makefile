@@ -14,12 +14,17 @@ AWK := awk
 export AWK
 
 LINKFLAGS = -static -T arch/$(ARCH)/vmlinux.lds
-AFLAGS += -Wa,-x
+AFLAGS += -Wa,-x 
+AFLAGS_KERNEL := -mconstant-gp
 EXTRA	=
 
 CFLAGS := $(CFLAGS) -pipe $(EXTRA) -Wa,-x -ffixed-r13 -mfixed-range=f10-f15,f32-f127 \
 	  -funwind-tables
 CFLAGS_KERNEL := -mconstant-gp
+
+ifeq ($(CONFIG_ITANIUM_ASTEP_SPECIFIC),y)
+	CFLAGS += -ma-step
+endif
 
 ifdef CONFIG_IA64_GENERIC
 	CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\
@@ -41,11 +46,18 @@ ifdef CONFIG_IA64_HP_SIM
                                 $(CORE_FILES)
 endif
 
-ifdef CONFIG_IA64_SGI_SN1_SIM
+ifdef CONFIG_IA64_SGI_SN1
+CFLAGS := $(CFLAGS) -DSN -I. -DBRINGUP -DDIRECT_L1_CONSOLE \
+		-DNUMA_BASE -DSIMULATED_KLGRAPH -DNUMA_MIGR_CONTROL  \
+		-DLITTLE_ENDIAN -DREAL_HARDWARE -DLANGUAGE_C=1 	     \
+		-D_LANGUAGE_C=1
         SUBDIRS         :=      arch/$(ARCH)/sn/sn1	\
 				arch/$(ARCH)/sn		\
+				arch/$(ARCH)/sn/io	\
+				arch/$(ARCH)/sn/fprom	\
 				$(SUBDIRS)
         CORE_FILES      :=      arch/$(ARCH)/sn/sn.a	\
+				arch/$(ARCH)/sn/io/sgiio.o\
 				$(CORE_FILES)
 endif
 

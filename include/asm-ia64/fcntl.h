@@ -3,8 +3,8 @@
 /*
  * This is mostly compatible with Linux/x86.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 /*
@@ -77,6 +77,10 @@ struct flock {
 	off_t l_len;
 	pid_t l_pid;
 };
+
+#ifdef __KERNEL__
+# define flock64	flock
+#endif
 
 #define F_LINUX_SPECIFIC_BASE	1024
 #endif /* _ASM_IA64_FCNTL_H */

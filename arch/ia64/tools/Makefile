@@ -46,4 +46,4 @@ print_offsets.s: print_offsets.c
 
 endif
 
-.PHONY: all modules
+.PHONY: all modules modules_install

@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_ioctl.c,v 1.2 2000/02/21 15:51:34 davem Exp $
+ *	$Id: br_ioctl.c,v 1.3 2000/10/05 01:58:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -138,7 +138,7 @@ static int br_ioctl_device(struct net_bridge *br,
 		p.hold_timer_value = br_timer_get_residue(&pt->hold_timer);
 
 		if (copy_to_user((void *)arg0, &p, sizeof(p)))
-			return -EINVAL;
+			return -EFAULT;
 
 		return 0;
 	}

@@ -36,6 +36,7 @@
 #include <asm/system.h>
 #include <asm/efi.h>
 #include <asm/mca.h>
+#include <asm/smp.h>
 
 #ifdef CONFIG_BLK_DEV_RAM
 # include <linux/blk.h>
@@ -43,7 +44,7 @@
 
 extern char _end;
 
-/* cpu_data[bootstrap_processor] is data for the bootstrap processor: */
+/* cpu_data[0] is data for the bootstrap processor: */
 struct cpuinfo_ia64 cpu_data[NR_CPUS];
 
 unsigned long ia64_cycles_per_usec;
@@ -55,6 +56,8 @@ int cpu_now_booting = 0;
 #ifdef CONFIG_SMP
 volatile unsigned long cpu_online_map;
 #endif
+
+unsigned long ia64_iobase;	/* virtual address for I/O accesses */
 
 #define COMMAND_LINE_SIZE	512
 
@@ -111,6 +114,7 @@ free_available_memory (unsigned long start, unsigned long end, void *arg)
 void __init
 setup_arch (char **cmdline_p)
 {
+	extern unsigned long ia64_iobase;
 	unsigned long max_pfn, bootmap_start, bootmap_size;
 
 	unw_init();
@@ -157,7 +161,7 @@ setup_arch (char **cmdline_p)
 		if (initrd_start >= PAGE_OFFSET)
 			printk("Warning: boot loader passed virtual address "
 			       "for initrd, please upgrade the loader\n");
-		} else
+		else
 #endif
 			/* 
 			 * The loader ONLY passes physical addresses
@@ -215,9 +219,16 @@ setup_arch (char **cmdline_p)
 	ia64_sal_init(efi.sal_systab);
 
 #ifdef CONFIG_SMP
-	bootstrap_processor = hard_smp_processor_id();
-	current->processor = bootstrap_processor;
+	current->processor = 0;
+	cpu_physical_id(0) = hard_smp_processor_id();
 #endif
+	/*
+	 *  Set `iobase' to the appropriate address in region 6
+	 *    (uncached access range)
+	 */
+	__asm__ ("mov %0=ar.k0;;" : "=r"(ia64_iobase));
+	ia64_iobase = __IA64_UNCACHED_OFFSET | (ia64_iobase & ~PAGE_OFFSET);
+
 	cpu_init();	/* initialize the bootstrap CPU */
 
 #ifdef CONFIG_IA64_GENERIC
@@ -259,6 +270,11 @@ setup_arch (char **cmdline_p)
 int
 get_cpuinfo (char *buffer)
 {
+#ifdef CONFIG_SMP
+#	define lps	c->loops_per_sec
+#else
+#	define lps	loops_per_sec
+#endif
 	char family[32], model[32], features[128], *cp, *p = buffer;
 	struct cpuinfo_ia64 *c;
 	unsigned long mask;
@@ -309,7 +325,7 @@ get_cpuinfo (char *buffer)
 			     features,
 			     c->ppn, c->number, c->proc_freq / 1000000, c->proc_freq % 1000000,
 			     c->itc_freq / 1000000, c->itc_freq % 1000000,
-			     loops_per_sec() / 500000, (loops_per_sec() / 5000) % 100);
+			     lps / 500000, (lps / 5000) % 100);
         }
 	return p - buffer;
 }
@@ -371,8 +387,8 @@ identify_cpu (struct cpuinfo_ia64 *c)
 #endif
 		phys_addr_size = vm1.pal_vm_info_1_s.phys_add_size;
 	}
-	printk("processor implements %lu virtual and %lu physical address bits\n",
-	       impl_va_msb + 1, phys_addr_size);
+	printk("CPU %d: %lu virtual and %lu physical address bits\n",
+	       smp_processor_id(), impl_va_msb + 1, phys_addr_size);
 	c->unimpl_va_mask = ~((7L<<61) | ((1L << (impl_va_msb + 1)) - 1));
 	c->unimpl_pa_mask = ~((1L<<63) | ((1L << phys_addr_size) - 1));
 
@@ -405,9 +421,12 @@ cpu_init (void)
 	 * do NOT defer TLB misses, page-not-present, access bit, or
 	 * debug faults but kernel code should not rely on any
 	 * particular setting of these bits.
-	 */
 	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX | IA64_DCR_PP);
+	 */
+	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX );
+#ifndef CONFIG_SMP
 	ia64_set_fpu_owner(0);		/* initialize ar.k5 */
+#endif
 
 	atomic_inc(&init_mm.mm_count);
 	current->active_mm = &init_mm;

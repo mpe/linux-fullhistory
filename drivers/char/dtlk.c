@@ -392,7 +392,6 @@ static void dtlk_delay(int ms)
 {
 	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout((ms * HZ + 1000 - HZ) / 1000);
-	current->state = TASK_RUNNING;
 }
 
 static int dtlk_readable(void)

@@ -1,4 +1,3 @@
-#include <linux/module.h>
 #include <linux/types.h>
 
 #include <asm/io.h>
@@ -49,6 +48,3 @@ __ia64_memset_c_io (unsigned long dst, unsigned long c, long count)
 	}
 }
 
-EXPORT_SYMBOL(__ia64_memcpy_fromio);
-EXPORT_SYMBOL(__ia64_memcpy_toio);
-EXPORT_SYMBOL(__ia64_memset_c_io);

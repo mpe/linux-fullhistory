@@ -27,7 +27,7 @@ choice 'IA-64 system type'					\
 	"generic		CONFIG_IA64_GENERIC		\
 	 DIG-compliant		CONFIG_IA64_DIG			\
 	 HP-simulator		CONFIG_IA64_HP_SIM		\
-	 SN1-simulator		CONFIG_IA64_SGI_SN1_SIM" generic
+	 SGI-SN1		CONFIG_IA64_SGI_SN1" generic
 
 choice 'Kernel page size'						\
 	"4KB			CONFIG_IA64_PAGE_SIZE_4KB		\
@@ -51,11 +51,30 @@ if [ "$CONFIG_IA64_DIG" = "y" ]; then
 	bool '  Enable SoftSDV hacks' CONFIG_IA64_SOFTSDV_HACKS
 	bool '  Enable AzusA hacks' CONFIG_IA64_AZUSA_HACKS
 	bool '  Enable IA-64 Machine Check Abort' CONFIG_IA64_MCA
+	bool '  Force socket buffers below 4GB?' CONFIG_SKB_BELOW_4GB
+
+	bool '  ACPI kernel configuration manager (EXPERIMENTAL)' CONFIG_ACPI_KERNEL_CONFIG
+	if [ "$CONFIG_ACPI_KERNEL_CONFIG" = "y" ]; then
+	  define_bool CONFIG_PM y
+	  define_bool CONFIG_ACPI y
+	  define_bool CONFIG_ACPI_INTERPRETER y
+	fi
 fi
 
-if [ "$CONFIG_IA64_SGI_SN1_SIM" = "y" ]; then
-	define_bool CONFIG_NUMA y
-	define_bool CONFIG_IA64_SOFTSDV_HACKS y
+if [ "$CONFIG_IA64_SGI_SN1" = "y" ]; then
+	bool '  Enable use of global TLB purge instruction (ptc.g)' CONFIG_ITANIUM_PTCG
+	bool '  Enable Itanium B-step specific code' CONFIG_ITANIUM_BSTEP_SPECIFIC
+	if [ "$CONFIG_ITANIUM_BSTEP_SPECIFIC" = "y" ]; then
+	  bool '    Enable Itanium B0-step specific code' CONFIG_ITANIUM_B0_SPECIFIC
+	fi
+	bool '  Enable SGI Medusa Simulator Support' CONFIG_IA64_SGI_SN1_SIM n
+        bool '  Enable SGI hack for version 1.0 syngery bugs' CONFIG_IA64_SGI_SYNERGY_1_0_HACKS n
+	define_bool CONFIG_DEVFS_DEBUG y
+	define_bool CONFIG_DEVFS_FS y
+	define_bool CONFIG_IA64_BRL_EMU y
+	define_bool CONFIG_IA64_MCA y
+	define_bool CONFIG_IA64_SGI_IO y
+	define_bool CONFIG_ITANIUM y
 fi
 
 define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /proc/kcore.
@@ -161,6 +180,10 @@ endmenu
 
 fi # !HP_SIM
 
+#
+# input before char - char/joystick depends on it. As does USB.
+#
+source drivers/input/Config.in
 source drivers/char/Config.in
 
 #source drivers/misc/Config.in
@@ -192,7 +215,6 @@ fi
 endmenu
 
 source drivers/usb/Config.in
-source drivers/input/Config.in
 
 fi # !HP_SIM
 
@@ -226,5 +248,6 @@ bool 'Turn on compare-and-exchange bug checking (slow!)' CONFIG_IA64_DEBUG_CMPXC
 bool 'Turn on irq debug checks (slow!)' CONFIG_IA64_DEBUG_IRQ
 bool 'Print possible IA64 hazards to console' CONFIG_IA64_PRINT_HAZARDS
 bool 'Enable new unwind support' CONFIG_IA64_NEW_UNWIND
+bool 'Disable VHPT' CONFIG_DISABLE_VHPT
 
 endmenu

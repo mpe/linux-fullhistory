@@ -263,10 +263,7 @@ int __init cs89x0_probe(struct net_device *dev)
 		return -ENXIO;
 
 	for (i = 0; netcard_portlist[i]; i++) {
-		int ioaddr = netcard_portlist[i];
-		if (check_region(ioaddr, NETCARD_IO_EXTENT))
-			continue;
-		if (cs89x0_probe1(dev, ioaddr) == 0)
+		if (cs89x0_probe1(dev, netcard_portlist[i]) == 0)
 			return 0;
 	}
 	printk(KERN_WARNING "cs89x0: no cs8900 or cs8920 detected.  Be sure to disable PnP with SETUP\n");
@@ -363,8 +360,7 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	/* Initialize the device structure. */
 	if (dev->priv == NULL) {
 		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-		if (dev->priv == 0)
-		{
+		if (dev->priv == 0) {
 			retval = -ENOMEM;
 			goto out;
 		}
@@ -372,8 +368,7 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 		memset(lp, 0, sizeof(*lp));
 		spin_lock_init(&lp->lock);
 #if !defined(MODULE) && (ALLOW_DMA != 0)
-		if (g_cs89x0_dma)
-		{
+		if (g_cs89x0_dma) {
 			lp->use_dma = 1;
 			lp->dma = g_cs89x0_dma;
 			lp->dmasize = 16;	/* Could make this an option... */
@@ -382,22 +377,29 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
         }
 	lp = (struct net_local *)dev->priv;
 
+	/* Grab the region so we can find another board if autoIRQ fails. */
+	if (!request_region(ioaddr, NETCARD_IO_EXTENT, "cs89x0")) {
+		retval = -ENODEV;
+		goto out1;
+	}
+
 	/* if they give us an odd I/O address, then do ONE write to
            the address port, to get it back to address zero, where we
            expect to find the EISA signature word. An IO with a base of 0x3
 	   will skip the test for the ADD_PORT. */
 	if (ioaddr & 1) {
 	        if ((ioaddr & 2) != 2)
-	        	if ((inw((ioaddr & ~3)+ ADD_PORT) & ADD_MASK) != ADD_SIG)
-		        	return -ENODEV;
+	        	if ((inw((ioaddr & ~3)+ ADD_PORT) & ADD_MASK) != ADD_SIG) {
+		        	retval = -ENODEV;
+				goto out2;
+			}
 		ioaddr &= ~3;
 		outw(PP_ChipID, ioaddr + ADD_PORT);
 	}
 
-        if (inw(ioaddr + DATA_PORT) != CHIP_EISA_ID_SIG)
-  	{
+        if (inw(ioaddr + DATA_PORT) != CHIP_EISA_ID_SIG) {
   		retval = -ENODEV;
-  		goto out1;
+  		goto out2;
 	}
 
 	/* Fill in the 'dev' fields. */
@@ -574,8 +576,7 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	printk(" IRQ %d", dev->irq);
 
 #if ALLOW_DMA
-	if (lp->use_dma)
-	{
+	if (lp->use_dma) {
 		get_dma_channel(dev);
 		printk(", DMA %d", dev->dma);
 	}
@@ -591,14 +592,6 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	{
 		printk("%s%02x", i ? ":" : "", dev->dev_addr[i]);
 	}
-
-	/* Grab the region so we can find another board if autoIRQ fails. */
-
-	/*
-	 * FIXME: we should check this, but really the isapnp stuff should have given
-	 * us a free region.  Sort this out when the isapnp is sorted out
-	 */
-	request_region(ioaddr, NETCARD_IO_EXTENT,"cs89x0");
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
@@ -616,6 +609,8 @@ cs89x0_probe1(struct net_device *dev, int ioaddr)
 	if (net_debug)
 		printk("cs89x0_probe1() successful\n");
 	return 0;
+out2:
+	release_region(ioaddr, NETCARD_IO_EXTENT);
 out1:
 	kfree(dev->priv);
 	dev->priv = 0;
@@ -672,22 +667,17 @@ set_dma_cfg(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
-	if (lp->use_dma)
-	{
-		if ((lp->isa_config & ANY_ISA_DMA) == 0)
-		{
+	if (lp->use_dma) {
+		if ((lp->isa_config & ANY_ISA_DMA) == 0) {
 			if (net_debug > 3)
 				printk("set_dma_cfg(): no DMA\n");
 			return;
 		}
-		if (lp->isa_config & ISA_RxDMA)
-		{
+		if (lp->isa_config & ISA_RxDMA) {
 			lp->curr_rx_cfg |= RX_DMA_ONLY;
 			if (net_debug > 3)
 				printk("set_dma_cfg(): RX_DMA_ONLY\n");
-		}
-		else
-		{
+		} else {
 			lp->curr_rx_cfg |= AUTO_RX_DMA;	/* not that we support it... */
 			if (net_debug > 3)
 				printk("set_dma_cfg(): AUTO_RX_DMA\n");
@@ -710,8 +700,7 @@ dma_busctl(struct net_device *dev)
 {
 	int retval = 0;
 	struct net_local *lp = (struct net_local *)dev->priv;
-	if (lp->use_dma)
-	{
+	if (lp->use_dma) {
 		if (lp->isa_config & ANY_ISA_DMA)
 			retval |= RESET_RX_DMA; /* Reset the DMA pointer */
 		if (lp->isa_config & DMA_BURST)
@@ -734,8 +723,7 @@ dma_rx(struct net_device *dev)
 	status = bp[0] + (bp[1]<<8);
 	length = bp[2] + (bp[3]<<8);
 	bp += 4;
-	if (net_debug > 5)
-	{
+	if (net_debug > 5) {
 		printk(	"%s: receiving DMA packet at %lx, status %x, length %x\n",
 			dev->name, (unsigned long)bp, status, length);
 	}
@@ -773,8 +761,7 @@ skip_this_frame:
 	if (bp >= lp->end_dma_buff) bp -= lp->dmasize*1024;
 	lp->rx_dma_ptr = bp;
 
-	if (net_debug > 3)
-	{
+	if (net_debug > 3) {
 		printk(	"%s: received %d byte DMA packet of type %x\n",
 			dev->name, length,
 			(skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
@@ -1080,8 +1067,7 @@ net_open(struct net_device *dev)
 	}
 
 #if ALLOW_DMA
-	if (lp->use_dma)
-	{
+	if (lp->use_dma) {
 		if (lp->isa_config & ANY_ISA_DMA) {
 			unsigned long flags;
 			lp->dma_buff = (unsigned char *)__get_dma_pages(GFP_KERNEL,
@@ -1091,8 +1077,7 @@ net_open(struct net_device *dev)
 				printk(KERN_ERR "%s: cannot get %dK memory for DMA\n", dev->name, lp->dmasize);
 				goto release_irq;
 			}
-			if (net_debug > 1)
-			{
+			if (net_debug > 1) {
 				printk(	"%s: dma %lx %lx\n",
 					dev->name,
 					(unsigned long)lp->dma_buff,
@@ -1268,8 +1253,7 @@ static int net_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
-	if (net_debug > 3)
-	{
+	if (net_debug > 3) {
 		printk("%s: sent %d byte packet of type %x\n",
 			dev->name, skb->len,
 			(skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
@@ -1287,8 +1271,7 @@ static int net_send_packet(struct sk_buff *skb, struct net_device *dev)
 	writeword(dev, TX_LEN_PORT, skb->len);
 
 	/* Test to see if the chip has allocated memory for the packet */
-	if ((readreg(dev, PP_BusST) & READY_FOR_TX_NOW) == 0)
-	{
+	if ((readreg(dev, PP_BusST) & READY_FOR_TX_NOW) == 0) {
 		/*
 		 * Gasp!  It hasn't.  But that shouldn't happen since
 		 * we're waiting for TxOk, so return 1 and requeue this packet.
@@ -1351,8 +1334,7 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 					TX_LOST_CRS |
 					TX_SQE_ERROR |
 					TX_LATE_COL |
-					TX_16_COL)) != TX_OK)
-			{
+					TX_16_COL)) != TX_OK) {
 				if ((status & TX_OK) == 0) lp->stats.tx_errors++;
 				if (status & TX_LOST_CRS) lp->stats.tx_carrier_errors++;
 				if (status & TX_SQE_ERROR) lp->stats.tx_heartbeat_errors++;
@@ -1454,8 +1436,7 @@ net_rx(struct net_device *dev)
 	if (length & 1)
 		skb->data[length-1] = inw(ioaddr + RX_FRAME_PORT);
 
-	if (net_debug > 3)
-	{
+	if (net_debug > 3) {
 		printk(	"%s: received %d byte packet of type %x\n",
 			dev->name, length,
 			(skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
@@ -1471,8 +1452,7 @@ net_rx(struct net_device *dev)
 #if ALLOW_DMA
 static void release_dma_buff(struct net_local *lp)
 {
-	if (lp->dma_buff)
-	{
+	if (lp->dma_buff) {
 		free_pages((unsigned long)(lp->dma_buff), (lp->dmasize * 1024) / PAGE_SIZE);
 		lp->dma_buff = 0;
 	}
@@ -1557,8 +1537,7 @@ static int set_mac_address(struct net_device *dev, void *addr)
 
 	if (netif_running(dev))
 		return -EBUSY;
-	if (net_debug)
-	{
+	if (net_debug) {
 		printk("%s: Setting MAC address to ", dev->name);
 		for (i = 0; i < 6; i++)
 			printk(" %2.2x", dev->dev_addr[i] = ((unsigned char *)addr)[i]);
@@ -1649,8 +1628,7 @@ init_module(void)
 
         dev_cs89x0.init = cs89x0_probe;
         dev_cs89x0.priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-	if (dev_cs89x0.priv == 0)
-	{
+	if (dev_cs89x0.priv == 0) {
 		printk(KERN_ERR "cs89x0.c: Out of memory.\n");
 		return -ENOMEM;
 	}
@@ -1658,8 +1636,7 @@ init_module(void)
 	lp = (struct net_local *)dev_cs89x0.priv;
 
 #if ALLOW_DMA
-	if (use_dma)
-	{
+	if (use_dma) {
 		lp->use_dma = use_dma;
 		lp->dma = dma;
 		lp->dmasize = dmasize;
@@ -1681,7 +1658,7 @@ init_module(void)
         if (duplex==-1)
 		lp->auto_neg_cnf = AUTO_NEG_ENABLE;
 
-        if (io == 0)  {
+        if (io == 0) {
                 printk(KERN_ERR "cs89x0.c: Module autoprobing not allowed.\n");
                 printk(KERN_ERR "cs89x0.c: Append io=0xNNN\n");
                 return -EPERM;

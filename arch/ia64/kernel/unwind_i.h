@@ -115,21 +115,21 @@ struct unw_state_record {
 enum unw_nat_type {
 	UNW_NAT_NONE,		/* NaT not represented */
 	UNW_NAT_VAL,		/* NaT represented by NaT value (fp reg) */
-	UNW_NAT_PRI_UNAT,	/* NaT value is in unat word at offset OFF  */
-	UNW_NAT_SCRATCH,	/* NaT value is in scratch.pri_unat */
-	UNW_NAT_STACKED		/* NaT is in rnat */
+	UNW_NAT_MEMSTK,		/* NaT value is in unat word at offset OFF  */
+	UNW_NAT_REGSTK		/* NaT is in rnat */
 };
 
 enum unw_insn_opcode {
 	UNW_INSN_ADD,			/* s[dst] += val */
+	UNW_INSN_ADD_PSP,		/* s[dst] = (s.psp + val) */
+	UNW_INSN_ADD_SP,		/* s[dst] = (s.sp + val) */
 	UNW_INSN_MOVE,			/* s[dst] = s[val] */
 	UNW_INSN_MOVE2,			/* s[dst] = s[val]; s[dst+1] = s[val+1] */
 	UNW_INSN_MOVE_STACKED,		/* s[dst] = ia64_rse_skip(*s.bsp, val) */
-	UNW_INSN_LOAD_PSPREL,		/* s[dst] = *(*s.psp + 8*val) */
-	UNW_INSN_LOAD_SPREL,		/* s[dst] = *(*s.sp + 8*val) */
-	UNW_INSN_SETNAT_PRI_UNAT,	/* s[dst+1].nat.type = PRI_UNAT;
+	UNW_INSN_SETNAT_MEMSTK,		/* s[dst+1].nat.type = MEMSTK;
 					   s[dst+1].nat.off = *s.pri_unat - s[dst] */
-	UNW_INSN_SETNAT_TYPE		/* s[dst+1].nat.type = val */
+	UNW_INSN_SETNAT_TYPE,		/* s[dst+1].nat.type = val */
+	UNW_INSN_LOAD			/* s[dst] = *s[val] */
 };
 
 struct unw_insn {

@@ -28,9 +28,6 @@
 #ifdef CONFIG_I2C
 extern int i2c_init_all(void);
 #endif
-#ifdef CONFIG_SPARCAUDIO
-extern int sparcaudio_init(void);
-#endif
 #ifdef CONFIG_ISDN
 int isdn_init(void);
 #endif

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.164 2000/09/14 10:42:47 davem Exp $
+/* $Id: sys_sparc32.c,v 1.165 2000/10/10 04:47:31 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2893,7 +2893,7 @@ sys32_rt_sigaction(int sig, struct sigaction32 *act, struct sigaction32 *oact,
 /*
  * count32() counts the number of arguments/envelopes
  */
-static int count32(u32 * argv)
+static int count32(u32 * argv, int max)
 {
 	int i = 0;
 
@@ -2902,9 +2902,13 @@ static int count32(u32 * argv)
 			u32 p; int error;
 
 			error = get_user(p,argv);
-			if (error) return error;
-			if (!p) break;
-			argv++; i++;
+			if (error)
+				return error;
+			if (!p)
+				break;
+			argv++;
+			if (++i > max)
+				return -E2BIG;
 		}
 	}
 	return i;
@@ -3001,12 +3005,12 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.sh_bang = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
-	if ((bprm.argc = count32(argv)) < 0) {
+	if ((bprm.argc = count32(argv, bprm.p / sizeof(u32))) < 0) {
 		allow_write_access(file);
 		fput(file);
 		return bprm.argc;
 	}
-	if ((bprm.envc = count32(envp)) < 0) {
+	if ((bprm.envc = count32(envp, bprm.p / sizeof(u32))) < 0) {
 		allow_write_access(file);
 		fput(file);
 		return bprm.envc;

@@ -294,7 +294,8 @@ copy_thread (int nr, unsigned long clone_flags,
 	 * call behavior where scratch registers are preserved across
 	 * system calls (unless used by the system call itself).
 	 */
-#	define THREAD_FLAGS_TO_CLEAR	(IA64_THREAD_FPH_VALID | IA64_THREAD_DBG_VALID)
+#	define THREAD_FLAGS_TO_CLEAR	(IA64_THREAD_FPH_VALID | IA64_THREAD_DBG_VALID \
+					 | IA64_THREAD_PM_VALID)
 #	define THREAD_FLAGS_TO_SET	0
 	p->thread.flags = ((current->thread.flags & ~THREAD_FLAGS_TO_CLEAR)
 			   | THREAD_FLAGS_TO_SET);
@@ -333,6 +334,17 @@ do_copy_regs (struct unw_frame_info *info, void *arg)
 		if (ia64_peek(pt, current, addr, &val) == 0)
 			access_process_vm(current, addr, &val, sizeof(val), 1);
 
+	/*
+	 * coredump format:
+	 *	r0-r31
+	 *	NaT bits (for r0-r31; bit N == 1 iff rN is a NaT)
+	 *	predicate registers (p0-p63)
+	 *	b0-b7
+	 *	ip cfm user-mask
+	 *	ar.rsc ar.bsp ar.bspstore ar.rnat
+	 *	ar.ccv ar.unat ar.fpsr ar.pfs ar.lc ar.ec
+	 */
+
 	/* r0 is zero */
 	for (i = 1, mask = (1UL << i); i < 32; ++i) {
 		unw_get_gr(info, i, &dst[i], &nat);
@@ -370,7 +382,6 @@ do_copy_regs (struct unw_frame_info *info, void *arg)
 void
 do_dump_fpu (struct unw_frame_info *info, void *arg)
 {
-	struct task_struct *fpu_owner = ia64_get_fpu_owner();
 	elf_fpreg_t *dst = arg;
 	int i;
 
@@ -384,10 +395,9 @@ do_dump_fpu (struct unw_frame_info *info, void *arg)
 	for (i = 2; i < 32; ++i)
 		unw_get_fr(info, i, dst + i);
 
-	if ((fpu_owner == current) || (current->thread.flags & IA64_THREAD_FPH_VALID)) {
-		ia64_sync_fph(current);
+	ia64_flush_fph(current);
+	if ((current->thread.flags & IA64_THREAD_FPH_VALID) != 0)
 		memcpy(dst + 32, current->thread.fph, 96*16);
-	}
 }
 
 #endif /* CONFIG_IA64_NEW_UNWIND */
@@ -463,7 +473,6 @@ dump_fpu (struct pt_regs *pt, elf_fpregset_t dst)
 	unw_init_running(do_dump_fpu, dst);
 #else
 	struct switch_stack *sw = ((struct switch_stack *) pt) - 1;
-	struct task_struct *fpu_owner = ia64_get_fpu_owner();
 
 	memset(dst, 0, sizeof (dst));	/* don't leak any "random" bits */
 
@@ -472,12 +481,9 @@ dump_fpu (struct pt_regs *pt, elf_fpregset_t dst)
 	dst[8] = pt->f8; dst[9] = pt->f9;
 	memcpy(dst + 10, &sw->f10, 22*16);	/* f10-f31 are contiguous */
 
-	if ((fpu_owner == current) || (current->thread.flags & IA64_THREAD_FPH_VALID)) {
-		if (fpu_owner == current) {
-			__ia64_save_fpu(current->thread.fph);
-		}
+	ia64_flush_fph(current);
+	if ((current->thread.flags & IA64_THREAD_FPH_VALID) != 0)
 		memcpy(dst + 32, current->thread.fph, 96*16);
-	}
 #endif
 	return 1;	/* f0-f31 are always valid so we always return 1 */
 }
@@ -501,14 +507,14 @@ pid_t
 kernel_thread (int (*fn)(void *), void *arg, unsigned long flags)
 {
 	struct task_struct *parent = current;
-	int result;
+	int result, tid;
 
-	clone(flags | CLONE_VM, 0);
+	tid = clone(flags | CLONE_VM, 0);
 	if (parent != current) {
 		result = (*fn)(arg);
 		_exit(result);
 	}
-	return 0;		/* parent: just return */
+	return tid;
 }
 
 /*
@@ -520,9 +526,10 @@ flush_thread (void)
 	/* drop floating-point and debug-register state if it exists: */
 	current->thread.flags &= ~(IA64_THREAD_FPH_VALID | IA64_THREAD_DBG_VALID);
 
-	if (ia64_get_fpu_owner() == current) {
+#ifndef CONFIG_SMP
+	if (ia64_get_fpu_owner() == current)
 		ia64_set_fpu_owner(0);
-	}
+#endif
 }
 
 /*
@@ -532,9 +539,28 @@ flush_thread (void)
 void
 exit_thread (void)
 {
-	if (ia64_get_fpu_owner() == current) {
+#ifndef CONFIG_SMP
+	if (ia64_get_fpu_owner() == current)
 		ia64_set_fpu_owner(0);
+#endif
+#ifdef CONFIG_PERFMON
+       /* stop monitoring */
+	if ((current->thread.flags & IA64_THREAD_PM_VALID) != 0) {
+		/*
+		 * we cannot rely on switch_to() to save the PMU
+		 * context for the last time. There is a possible race
+		 * condition in SMP mode between the child and the
+		 * parent.  by explicitly saving the PMU context here
+		 * we garantee no race.  this call we also stop
+		 * monitoring
+		 */
+		ia64_save_pm_regs(&current->thread);
+		/*
+		 * make sure that switch_to() will not save context again
+		 */
+		current->thread.flags &= ~IA64_THREAD_PM_VALID;
 	}
+#endif
 }
 
 unsigned long

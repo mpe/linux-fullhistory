@@ -216,12 +216,41 @@ efi_map_pal_code (void)
 			       md->phys_addr);
 			continue;
 		}
-		mask  = ~((1 << _PAGE_SIZE_4M)-1);	/* XXX should be dynamic? */
+		/*
+		 * We must use the same page size as the one used
+		 * for the kernel region when we map the PAL code.
+		 * This way, we avoid overlapping TRs if code is 
+		 * executed nearby. The Alt I-TLB installs 256MB
+		 * page sizes as defined for region 7.
+		 *
+		 * XXX Fixme: should be dynamic here (for page size)
+		 */
+		mask  = ~((1 << _PAGE_SIZE_256M)-1);
 		vaddr = PAGE_OFFSET + md->phys_addr;
 
-	  	printk(__FUNCTION__": mapping PAL code [0x%lx-0x%lx) into [0x%lx-0x%lx)\n",
-		       md->phys_addr, md->phys_addr + (md->num_pages << 12),
-		       vaddr & mask, (vaddr & mask) + 4*1024*1024);
+		/*
+		 * We must check that the PAL mapping won't overlap
+		 * with the kernel mapping on ITR1. 
+		 *
+		 * PAL code is guaranteed to be aligned on a power of 2
+		 * between 4k and 256KB.
+		 * Also from the documentation, it seems like there is an
+		 * implicit guarantee that you will need only ONE ITR to
+		 * map it. This implies that the PAL code is always aligned
+		 * on its size, i.e., the closest matching page size supported
+		 * by the TLB. Therefore PAL code is guaranteed never to cross
+		 * a 256MB unless it is bigger than 256MB (very unlikely!).
+		 * So for now the following test is enough to determine whether
+		 * or not we need a dedicated ITR for the PAL code.
+		 */
+		if ((vaddr & mask) == (PAGE_OFFSET & mask)) {
+			printk(__FUNCTION__ " : no need to install ITR for PAL Code\n");
+			continue;
+		}
+
+	  	printk("CPU %d: mapping PAL code [0x%lx-0x%lx) into [0x%lx-0x%lx)\n",
+		       smp_processor_id(), md->phys_addr, md->phys_addr + (md->num_pages << 12),
+		       vaddr & mask, (vaddr & mask) + 256*1024*1024);
 
 		/*
 		 * Cannot write to CRx with PSR.ic=1
@@ -232,12 +261,11 @@ efi_map_pal_code (void)
 		 * ITR0/DTR0: used for kernel code/data
 		 * ITR1/DTR1: used by HP simulator
 		 * ITR2/DTR2: map PAL code
-		 * ITR3/DTR3: used to map PAL calls buffer
 		 */
 		ia64_itr(0x1, 2, vaddr & mask,
 			 pte_val(mk_pte_phys(md->phys_addr,
 					     __pgprot(__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RX))),
-			 _PAGE_SIZE_4M);
+			 _PAGE_SIZE_256M);
 		local_irq_restore(flags);
 		ia64_srlz_i ();
 	}
@@ -348,6 +376,16 @@ efi_init (void)
 #endif
 
 	efi_map_pal_code();
+
+#ifndef CONFIG_IA64_SOFTSDV_HACKS
+	/*
+	 * (Some) SoftSDVs seem to have a problem with this call.
+	 * Since it's mostly a performance optimization, just don't do
+	 * it for now...  --davidm 99/12/6
+	 */
+	efi_enter_virtual_mode();
+#endif
+
 }
 
 void

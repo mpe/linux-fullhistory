@@ -12,6 +12,10 @@
 #ifdef CONFIG_SYSCTL
 
 extern int netdev_max_backlog;
+extern int no_cong_thresh;
+extern int no_cong;
+extern int lo_cong;
+extern int mod_cong;
 extern int netdev_fastroute;
 extern int net_msg_cost;
 extern int net_msg_burst;
@@ -24,6 +28,10 @@ extern __u32 sysctl_rmem_default;
 extern int sysctl_core_destroy_delay;
 extern int sysctl_optmem_max;
 extern int sysctl_hot_list_len;
+
+#ifdef CONFIG_NET_DIVERT
+extern char sysctl_divert_version[];
+#endif /* CONFIG_NET_DIVERT */
 
 ctl_table core_table[] = {
 #ifdef CONFIG_NET
@@ -42,6 +50,18 @@ ctl_table core_table[] = {
 	{NET_CORE_MAX_BACKLOG, "netdev_max_backlog",
 	 &netdev_max_backlog, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
+	{NET_CORE_NO_CONG_THRESH, "no_cong_thresh",
+	 &no_cong, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_CORE_NO_CONG, "no_cong",
+	 &no_cong, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_CORE_LO_CONG, "lo_cong",
+	 &lo_cong, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_CORE_MOD_CONG, "mod_cong",
+	 &mod_cong, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
 #ifdef CONFIG_NET_FASTROUTE
 	{NET_CORE_FASTROUTE, "netdev_fastroute",
 	 &netdev_fastroute, sizeof(int), 0644, NULL,
@@ -59,6 +79,11 @@ ctl_table core_table[] = {
 	{NET_CORE_HOT_LIST_LENGTH, "hot_list_length",
 	 &sysctl_hot_list_len, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
+#ifdef CONFIG_NET_DIVERT
+	{NET_CORE_DIVERT_VERSION, "divert_version",
+	 (void *)sysctl_divert_version, 32, 0444, NULL,
+	 &proc_dostring},
+#endif /* CONFIG_NET_DIVERT */
 #endif /* CONFIG_NET */
 	{ 0 }
 };

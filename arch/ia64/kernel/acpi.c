@@ -24,18 +24,17 @@
 #include <asm/iosapic.h>
 #include <asm/machvec.h>
 #include <asm/page.h>
+#ifdef CONFIG_ACPI_KERNEL_CONFIG
+# include <asm/acpikcfg.h>
+#endif
 
 #undef ACPI_DEBUG		/* Guess what this does? */
 
-#ifdef CONFIG_SMP
-extern struct smp_boot_data smp;
-#endif
-
 /* These are ugly but will be reclaimed by the kernel */
-int __initdata available_cpus = 0;	
-int __initdata total_cpus = 0;
+int __initdata available_cpus;
+int __initdata total_cpus;
 
-void (*pm_idle) (void);
+void (*pm_idle)(void);
 
 /*
  * Identify usable CPU's and remember them for SMP bringup later.
@@ -60,18 +59,16 @@ acpi_lsapic(char *p)
 		add = 0;
 	}
 	
+#ifdef CONFIG_SMP
+	smp_boot_data.cpu_phys_id[total_cpus] = -1;
+#endif
 	if (add) {
 		printk("Available.\n");
 		available_cpus++;
 #ifdef CONFIG_SMP
-# if LARGE_CPU_ID_OK
-		smp.cpu_map[total_cpus] = (lsapic->id << 8) | lsapic->eid;
-# else
-		smp.cpu_map[total_cpus] = lsapic->id;
-# endif
-#endif
+		smp_boot_data.cpu_phys_id[total_cpus] = (lsapic->id << 8) | lsapic->eid;
+#endif /* CONFIG_SMP */
 	}
-	
 	total_cpus++;
 }
 
@@ -139,13 +136,12 @@ acpi_legacy_irq(char *p)
 		break;
 	}
 
-#if 1/*def ACPI_DEBUG*/
+# ifdef ACPI_DEBUG
 	printk("Legacy ISA IRQ %x -> IA64 Vector %x IOSAPIC Pin %x Active %s %s Trigger\n", 
 	       legacy->isa_irq, vector, iosapic_pin(vector), 
 	       ((iosapic_polarity(vector) == IO_SAPIC_POL_LOW) ? "Low" : "High"),
 	       ((iosapic_trigger(vector) == IO_SAPIC_LEVEL) ? "Level" : "Edge"));
-#endif /* ACPI_DEBUG */
-
+# endif /* ACPI_DEBUG */
 #endif /* CONFIG_IA64_IRQ_ACPI */
 }
 
@@ -172,10 +168,6 @@ acpi_parse_msapic(acpi_sapic_t *msapic)
 	/* Base address of IPI Message Block */
 	ipi_base_addr = (unsigned long) ioremap(msapic->interrupt_block, 0);
 
-#ifdef CONFIG_SMP
-	memset(&smp, -1, sizeof(smp));
-#endif
-	
 	p = (char *) (msapic + 1);
 	end = p + (msapic->header.length - sizeof(acpi_sapic_t));
 
@@ -248,6 +240,10 @@ acpi_parse(acpi_rsdp_t *rsdp)
 	printk("ACPI: %.6s %.8s %d.%d\n", rsdt->header.oem_id, rsdt->header.oem_table_id, 
 	       rsdt->header.oem_revision >> 16, rsdt->header.oem_revision & 0xffff);
 	
+#ifdef CONFIG_ACPI_KERNEL_CONFIG
+	acpi_cf_init(rsdp);
+#endif
+
 	tables = (rsdt->header.length - sizeof(acpi_desc_table_hdr_t)) / 8;
 	for (i = 0; i < tables; i++) {
 		hdrp = (acpi_desc_table_hdr_t *) __va(rsdt->entry_ptrs[i]);
@@ -259,12 +255,16 @@ acpi_parse(acpi_rsdp_t *rsdp)
 		acpi_parse_msapic((acpi_sapic_t *) hdrp);
 	}
 
+#ifdef CONFIG_ACPI_KERNEL_CONFIG
+       acpi_cf_terminate();
+#endif
+
 #ifdef CONFIG_SMP
 	if (available_cpus == 0) {
 		printk("ACPI: Found 0 CPUS; assuming 1\n");
 		available_cpus = 1; /* We've got at least one of these, no? */
 	}
-	smp.cpu_count = available_cpus;
+	smp_boot_data.cpu_count = available_cpus;
 #endif
 	return 1;
 }
@@ -278,7 +278,7 @@ acpi_get_sysname (void)
 #else
 # if defined (CONFIG_IA64_HP_SIM)
 	return "hpsim";
-# elif defined (CONFIG_IA64_SGI_SN1_SIM)
+# elif defined (CONFIG_IA64_SGI_SN1)
 	return "sn1";
 # elif defined (CONFIG_IA64_DIG)
 	return "dig";
@@ -286,4 +286,4 @@ acpi_get_sysname (void)
 #	error Unknown platform.  Fix acpi.c.
 # endif
 #endif
-}        
+}

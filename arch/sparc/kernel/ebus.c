@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.10 2000/06/20 01:10:00 anton Exp $
+/* $Id: ebus.c,v 1.11 2000/10/10 01:07:38 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -26,9 +26,6 @@ struct linux_ebus *ebus_chain = 0;
 
 #ifdef CONFIG_SUN_OPENPROMIO
 extern int openprom_init(void);
-#endif
-#ifdef CONFIG_SPARCAUDIO
-extern int sparcaudio_init(void);
 #endif
 #ifdef CONFIG_SUN_AUXIO
 extern void auxio_probe(void);
@@ -374,9 +371,6 @@ void __init ebus_init(void)
 	openprom_init();
 #endif
 
-#ifdef CONFIG_SPARCAUDIO
-	sparcaudio_init();
-#endif
 #ifdef CONFIG_SUN_BPP
 	bpp_init();
 #endif

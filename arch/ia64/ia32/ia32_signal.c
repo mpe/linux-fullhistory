@@ -278,7 +278,7 @@ setup_frame_ia32(int sig, struct k_sigaction *ka, sigset_t *set,
 
        err |= setup_sigcontext_ia32(&frame->sc, &frame->fpstate, regs, set->sig[0]);
 
-       if (_NSIG_WORDS > 1) {
+       if (_IA32_NSIG_WORDS > 1) {
                err |= __copy_to_user(frame->extramask, &set->sig[1],
                                      sizeof(frame->extramask));
        }
@@ -310,7 +310,7 @@ setup_frame_ia32(int sig, struct k_sigaction *ka, sigset_t *set,
 
 #if 0
        printk("SIG deliver (%s:%d): sig=%d sp=%p pc=%lx ra=%x\n",
-               current->comm, current->pid, sig, frame, regs->cr_iip, frame->pretcode);
+               current->comm, current->pid, sig, (void *) frame, regs->cr_iip, frame->pretcode);
 #endif
 
        return 1;
@@ -380,7 +380,7 @@ setup_rt_frame_ia32(int sig, struct k_sigaction *ka, siginfo_t *info,
 
 #if 0
        printk("SIG deliver (%s:%d): sp=%p pc=%lx ra=%x\n",
-               current->comm, current->pid, frame, regs->cr_iip, frame->pretcode);
+               current->comm, current->pid, (void *) frame, regs->cr_iip, frame->pretcode);
 #endif
 
        return 1;

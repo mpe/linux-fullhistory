@@ -1,4 +1,4 @@
-/* $Id: audio.c,v 1.54 2000/07/13 08:06:40 davem Exp $
+/* $Id: audio.c,v 1.55 2000/10/10 01:07:39 davem Exp $
  * drivers/sbus/audio/audio.c
  *
  * Copyright 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
@@ -2192,33 +2192,13 @@ int unregister_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
 	return 0;
 }
 
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100
-static struct symbol_table sparcaudio_syms = {
-#include <linux/symtab_begin.h>
-	X(register_sparcaudio_driver),
-	X(unregister_sparcaudio_driver),
-	X(sparcaudio_output_done),
-	X(sparcaudio_input_done),
-#include <linux/symtab_end.h>
-};
-#else
 EXPORT_SYMBOL(register_sparcaudio_driver);
 EXPORT_SYMBOL(unregister_sparcaudio_driver);
 EXPORT_SYMBOL(sparcaudio_output_done);
 EXPORT_SYMBOL(sparcaudio_input_done);
-#endif
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init sparcaudio_init(void)
-#endif
+static int __init sparcaudio_init(void)
 {
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100
-	/* Export symbols for use by the low-level drivers. */
-	register_symtab(&sparcaudio_syms);
-#endif
-
 	/* Register our character device driver with the VFS. */
 	if (devfs_register_chrdev(SOUND_MAJOR, "sparcaudio", &sparcaudio_fops))
 		return -EIO;
@@ -2241,13 +2221,14 @@ int __init sparcaudio_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit sparcaudio_exit(void)
 {
 	devfs_unregister_chrdev(SOUND_MAJOR, "sparcaudio");
 	devfs_unregister (devfs_handle);
 }
-#endif
+
+module_init(sparcaudio_init)
+module_exit(sparcaudio_exit)
 
 /*
  * Code from Linux Streams, Copyright 1995 by

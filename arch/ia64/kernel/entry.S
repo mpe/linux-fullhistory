@@ -120,6 +120,9 @@ GLOBAL_ENTRY(ia64_switch_to)
 	mov r13=in0		// set "current" pointer
 	;;
 	DO_LOAD_SWITCH_STACK( )
+#ifdef CONFIG_SMP
+	sync.i			// ensure "fc"s done by this CPU are visible on other CPUs
+#endif
 	br.ret.sptk.few rp
 END(ia64_switch_to)
 
@@ -1088,7 +1091,7 @@ sys_call_table:
 	data8 sys_setpriority
 	data8 sys_statfs
 	data8 sys_fstatfs
-	data8 sys_ioperm			// 1105
+	data8 ia64_ni_syscall
 	data8 sys_semget
 	data8 sys_semop
 	data8 sys_semctl

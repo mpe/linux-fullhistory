@@ -111,7 +111,7 @@ GLOBAL_ENTRY(_start)
 	 * be implemented more efficiently (for example, __switch_to()
 	 * always sets the psr.dfh bit of the task it is switching to).
 	 */
-	addl r12=IA64_STK_OFFSET-IA64_PT_REGS_SIZE,r2
+	addl r12=IA64_STK_OFFSET-IA64_PT_REGS_SIZE-16,r2
 	addl r2=IA64_RBS_OFFSET,r2	// initialize the RSE
 	mov ar.rsc=r0		// place RSE in enforced lazy mode
 	;;

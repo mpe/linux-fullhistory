@@ -34,6 +34,7 @@ default_handler (void)
 }
 
 ia64_sal_handler ia64_sal = (ia64_sal_handler) default_handler;
+ia64_sal_desc_ptc_t *ia64_ptc_domain_info;
 
 const char *
 ia64_sal_strerror (long status)
@@ -125,6 +126,10 @@ ia64_sal_init (struct ia64_sal_systab *systab)
 #endif
 			ia64_pal_handler_init(__va(ep->pal_proc));
 			ia64_sal_handler_init(__va(ep->sal_proc), __va(ep->gp));
+			break;
+
+		      case SAL_DESC_PTC:
+			ia64_ptc_domain_info = (ia64_sal_desc_ptc_t *)p;
 			break;
 
 		      case SAL_DESC_AP_WAKEUP:

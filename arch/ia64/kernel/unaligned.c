@@ -278,9 +278,9 @@ set_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long val, int nat)
 	bspstore = (unsigned long *)regs->ar_bspstore;
 
 	DPRINT(("rse_slot_num=0x%lx\n",ia64_rse_slot_num((unsigned long *)sw->ar_bspstore)));
-	DPRINT(("kbs=%p nlocals=%ld\n", kbs, nlocals));
+	DPRINT(("kbs=%p nlocals=%ld\n", (void *) kbs, nlocals));
 	DPRINT(("bspstore next rnat slot %p\n",
-		ia64_rse_rnat_addr((unsigned long *)sw->ar_bspstore)));
+		(void *) ia64_rse_rnat_addr((unsigned long *)sw->ar_bspstore)));
 	DPRINT(("on_kbs=%ld rnats=%ld\n",
 		on_kbs, ((sw->ar_bspstore-(unsigned long)kbs)>>3) - on_kbs));
 
@@ -292,7 +292,7 @@ set_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long val, int nat)
 	addr    = slot = ia64_rse_skip_regs(bsp, r1 - 32);
 
 	DPRINT(("ubs_end=%p bsp=%p addr=%p slot=0x%lx\n",
-		ubs_end, bsp, addr, ia64_rse_slot_num(addr)));
+		(void *) ubs_end, (void *) bsp, (void *) addr, ia64_rse_slot_num(addr)));
 
 	ia64_poke(regs, current, (unsigned long)addr, val);
 
@@ -303,7 +303,7 @@ set_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long val, int nat)
 
 	ia64_peek(regs, current, (unsigned long)addr, &rnats);
 	DPRINT(("rnat @%p = 0x%lx nat=%d rnatval=%lx\n",
-		addr, rnats, nat, rnats &ia64_rse_slot_num(slot)));
+		(void *) addr, rnats, nat, rnats &ia64_rse_slot_num(slot)));
 	
 	if (nat) {
 		rnats |= __IA64_UL(1) << ia64_rse_slot_num(slot);
@@ -312,7 +312,7 @@ set_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long val, int nat)
 	}
 	ia64_poke(regs, current, (unsigned long)addr, rnats);
 
-	DPRINT(("rnat changed to @%p = 0x%lx\n", addr, rnats));
+	DPRINT(("rnat changed to @%p = 0x%lx\n", (void *) addr, rnats));
 }
 
 
@@ -373,7 +373,7 @@ get_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long *val, int *nat
 	addr    = slot = ia64_rse_skip_regs(bsp, r1 - 32);
 
 	DPRINT(("ubs_end=%p bsp=%p addr=%p slot=0x%lx\n",
-		ubs_end, bsp, addr, ia64_rse_slot_num(addr)));
+		(void *) ubs_end, (void *) bsp, (void *) addr, ia64_rse_slot_num(addr)));
 	
 	ia64_peek(regs, current, (unsigned long)addr, val);
 
@@ -383,7 +383,7 @@ get_rse_reg(struct pt_regs *regs, unsigned long r1, unsigned long *val, int *nat
 	addr = ia64_rse_rnat_addr(addr);
 
 	ia64_peek(regs, current, (unsigned long)addr, &rnats);
-	DPRINT(("rnat @%p = 0x%lx\n", addr, rnats));
+	DPRINT(("rnat @%p = 0x%lx\n", (void *) addr, rnats));
 	
 	if (nat)
 		*nat = rnats >> ia64_rse_slot_num(slot) & 0x1;
@@ -437,13 +437,13 @@ setreg(unsigned long regnum, unsigned long val, int nat, struct pt_regs *regs)
 	 * UNAT bit_pos = GR[r3]{8:3} form EAS-2.4
 	 */
 	bitmask   = __IA64_UL(1) << (addr >> 3 & 0x3f);
-	DPRINT(("*0x%lx=0x%lx NaT=%d prev_unat @%p=%lx\n", addr, val, nat, unat, *unat));
+	DPRINT(("*0x%lx=0x%lx NaT=%d prev_unat @%p=%lx\n", addr, val, nat, (void *) unat, *unat));
 	if (nat) {
 		*unat |= bitmask;
 	} else {
 		*unat &= ~bitmask;
 	}
-	DPRINT(("*0x%lx=0x%lx NaT=%d new unat: %p=%lx\n", addr, val, nat, unat,*unat));
+	DPRINT(("*0x%lx=0x%lx NaT=%d new unat: %p=%lx\n", addr, val, nat, (void *) unat,*unat));
 }
 
 #define IA64_FPH_OFFS(r) (r - IA64_FIRST_ROTATING_FR)
@@ -455,16 +455,15 @@ setfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 	unsigned long addr;
 
 	/*
-	 * From EAS-2.5: FPDisableFault has higher priority than 
-	 * Unaligned Fault. Thus, when we get here, we know the partition is 
-	 * enabled.
+	 * From EAS-2.5: FPDisableFault has higher priority than Unaligned
+	 * Fault. Thus, when we get here, we know the partition is enabled.
+	 * To update f32-f127, there are three choices:
 	 *
-	 * The registers [32-127] are ususally saved in the tss. When get here,
-	 * they are NECESSARILY live because they are only saved explicitely.
-	 * We have 3 ways of updating the values: force a save of the range
-	 * in tss, use a gigantic switch/case statement or generate code on the
-	 * fly to store to the right register.
-	 * For now, we are using the (slow) save/restore way.
+	 *	(1) save f32-f127 to thread.fph and update the values there
+	 *	(2) use a gigantic switch statement to directly access the registers
+	 *	(3) generate code on the fly to update the desired register
+	 *
+	 * For now, we are using approach (1).
 	 */
  	if (regnum >= IA64_FIRST_ROTATING_FR) {
 		ia64_sync_fph(current);
@@ -491,7 +490,6 @@ setfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 		 * let's do it for safety.
 	 	 */
 		regs->cr_ipsr |= IA64_PSR_MFL;
-
 	}
 }
 
@@ -522,12 +520,12 @@ getfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 	 * Unaligned Fault. Thus, when we get here, we know the partition is 
 	 * enabled.
 	 *
-	 * When regnum > 31, the register is still live and
-	 * we need to force a save to the tss to get access to it.
-	 * See discussion in setfpreg() for reasons and other ways of doing this.
+	 * When regnum > 31, the register is still live and we need to force a save
+	 * to current->thread.fph to get access to it.  See discussion in setfpreg()
+	 * for reasons and other ways of doing this.
 	 */
  	if (regnum >= IA64_FIRST_ROTATING_FR) {
-		ia64_sync_fph(current);
+		ia64_flush_fph(current);
 		*fpval = current->thread.fph[IA64_FPH_OFFS(regnum)];
 	} else {
 		/*
@@ -1084,9 +1082,9 @@ emulate_load_floatpair(unsigned long ifa, load_store_t *ld, struct pt_regs *regs
 		/*
 		 * XXX fixme
 		 *
-		 * A possible optimization would be to drop fpr_final
-		 * and directly use the storage from the saved context i.e.,
-		 * the actual final destination (pt_regs, switch_stack or tss).
+		 * A possible optimization would be to drop fpr_final and directly
+		 * use the storage from the saved context i.e., the actual final
+		 * destination (pt_regs, switch_stack or thread structure).
 		 */
 		setfpreg(ld->r1, &fpr_final[0], regs);
 		setfpreg(ld->imm, &fpr_final[1], regs);
@@ -1212,9 +1210,9 @@ emulate_load_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 		/*
 		 * XXX fixme
 		 *
-		 * A possible optimization would be to drop fpr_final
-		 * and directly use the storage from the saved context i.e.,
-		 * the actual final destination (pt_regs, switch_stack or tss).
+		 * A possible optimization would be to drop fpr_final and directly
+		 * use the storage from the saved context i.e., the actual final
+		 * destination (pt_regs, switch_stack or thread structure).
 		 */
 		setfpreg(ld->r1, &fpr_final, regs);
 	}
@@ -1223,9 +1221,7 @@ emulate_load_float(unsigned long ifa, load_store_t *ld, struct pt_regs *regs)
 	 * check for updates on any loads
 	 */
 	if (ld->op == 0x7 || ld->m)
-		emulate_load_updates(ld->op == 0x7 ? UPD_IMMEDIATE: UPD_REG, 
-				ld, regs, ifa);
-
+		emulate_load_updates(ld->op == 0x7 ? UPD_IMMEDIATE: UPD_REG, ld, regs, ifa);
 
 	/*
 	 * invalidate ALAT entry in case of advanced floating point loads

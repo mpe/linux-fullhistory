@@ -75,11 +75,11 @@ nargs(unsigned int arg, char **ap)
 	n = 0;
 	do {
 		err = get_user(addr, (int *)A(arg));
-		if (IS_ERR(err))
+		if (err)
 			return err;
 		if (ap) {		/* no access_ok needed, we allocated */
 			err = __put_user((char *)A(addr), ap++);
-			if (IS_ERR(err))
+			if (err)
 				return err;
 		}
 		arg += sizeof(unsigned int);
@@ -102,13 +102,14 @@ int stack)
 {
 	struct pt_regs *regs = (struct pt_regs *)&stack;
 	char **av, **ae;
-	int na, ne, r, len;
+	int na, ne, len;
+	long r;
 
 	na = nargs(argv, NULL);
-	if (IS_ERR(na))
+	if (na < 0)
 		return(na);
 	ne = nargs(envp, NULL);
-	if (IS_ERR(ne))
+	if (ne < 0)
 		return(ne);
 	len = (na + ne + 2) * sizeof(*av);
 	/*
@@ -130,19 +131,19 @@ int stack)
 		return (long)av;
 	ae = av + na + 1;
 	r = __put_user(0, (av + na));
-	if (IS_ERR(r))
+	if (r)
 		goto out;
 	r = __put_user(0, (ae + ne));
-	if (IS_ERR(r))
+	if (r)
 		goto out;
 	r = nargs(argv, av);
-	if (IS_ERR(r))
+	if (r < 0)
 		goto out;
 	r = nargs(envp, ae);
-	if (IS_ERR(r))
+	if (r < 0)
 		goto out;
 	r = sys_execve(filename, av, ae, regs);
-	if (IS_ERR(r))
+	if (r < 0)
 out:
 		sys_munmap((unsigned long) av, len);
 	return(r);
@@ -297,7 +298,7 @@ ia32_do_mmap (struct file *file, unsigned int addr, unsigned int len, unsigned i
  		error = do_mmap(file, addr, len, prot, flags, poff);
   		up(&current->mm->mmap_sem);
 
- 		if (!IS_ERR(error))
+ 		if (!IS_ERR((void *) error))
  			error += offset - poff;
  	} else {
   		down(&current->mm->mmap_sem);
@@ -788,7 +789,8 @@ out:
 }
 
 static int
-fillonedir32 (void * __buf, const char * name, int namlen, off_t offset, ino_t ino)
+fillonedir32 (void * __buf, const char * name, int namlen, off_t offset, ino_t ino,
+	      unsigned int d_type)
 {
 	struct readdir32_callback * buf = (struct readdir32_callback *) __buf;
 	struct old_linux32_dirent * dirent;
@@ -2543,6 +2545,78 @@ sys32_ni_syscall(int dummy0, int dummy1, int dummy2, int dummy3,
 	printk("IA32 syscall #%d issued, maybe we should implement it\n",
 		(int)regs->r1);
 	return(sys_ni_syscall());
+}
+
+/*
+ *  The IA64 maps 4 I/O ports for each 4K page
+ */
+#define IOLEN	((65536 / 4) * 4096)
+
+asmlinkage long
+sys_iopl (int level, long arg1, long arg2, long arg3)
+{
+	extern unsigned long ia64_iobase;
+	int fd;
+	struct file * file;
+	unsigned int old;
+	unsigned long addr;
+	mm_segment_t old_fs = get_fs ();
+
+	if (level != 3)
+		return(-EINVAL);
+	/* Trying to gain more privileges? */
+	__asm__ __volatile__("mov %0=ar.eflag ;;" : "=r"(old));
+	if (level > ((old >> 12) & 3)) {
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+	}
+	set_fs(KERNEL_DS);
+	fd = sys_open("/dev/mem", O_SYNC | O_RDWR, 0);
+	set_fs(old_fs);
+	if (fd < 0)
+		return fd;
+	file = fget(fd);
+	if (file == NULL) {
+		sys_close(fd);
+		return(-EFAULT);
+	}
+
+	down(&current->mm->mmap_sem);
+	lock_kernel();
+
+	addr = do_mmap_pgoff(file, IA32_IOBASE,
+			IOLEN, PROT_READ|PROT_WRITE, MAP_SHARED,
+			(ia64_iobase & ~PAGE_OFFSET) >> PAGE_SHIFT);
+
+	unlock_kernel();
+	up(&current->mm->mmap_sem);
+
+	if (addr >= 0) {
+		__asm__ __volatile__("mov ar.k0=%0 ;;" :: "r"(addr));
+		old = (old & ~0x3000) | (level << 12);
+		__asm__ __volatile__("mov ar.eflag=%0 ;;" :: "r"(old));
+	}
+
+	fput(file);
+	sys_close(fd);
+	return 0;
+}
+
+asmlinkage long
+sys_ioperm (unsigned long from, unsigned long num, int on)
+{
+
+	/*
+	 *  Since IA64 doesn't have permission bits we'd have to go to
+	 *    a lot of trouble to simulate them in software.  There's
+	 *    no point, only trusted programs can make this call so we'll
+	 *    just turn it into an iopl call and let the process have
+	 *    access to all I/O ports.
+	 *
+	 * XXX proper ioperm() support should be emulated by
+	 *	manipulating the page protections...
+	 */
+	return(sys_iopl(3, 0, 0, 0));
 }
 
 #ifdef	NOTYET  /* UNTESTED FOR IA64 FROM HERE DOWN */

@@ -334,7 +334,7 @@ static int sun3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
      *  Setup: parse used options
      */
 
-__initfunc(void sun3fb_setup(char *options))
+void __init sun3fb_setup(char *options)
 {
 	char *p;
 	
@@ -521,7 +521,7 @@ void sun3fb_palette(int enter)
     /*
      *  Initialisation
      */
-__initfunc(static void sun3fb_init_fb(int fbtype, unsigned long addr))
+static void __init sun3fb_init_fb(int fbtype, unsigned long addr)
 {
 	static struct linux_sbus_device sdb;
 	struct fb_fix_screeninfo *fix;
@@ -648,7 +648,7 @@ sizechange:
 }
 
 
-__initfunc(int sun3fb_init(void))
+int __init sun3fb_init(void)
 {
 	extern int con_is_present(void);
 	unsigned long addr;

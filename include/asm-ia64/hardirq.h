@@ -39,8 +39,8 @@ typedef struct {
 # define hardirq_trylock(cpu)		(local_irq_count(cpu) == 0)
 # define hardirq_endlock(cpu)		do { } while (0)
 
-# define irq_enter(cpu, irq)		(++local_irq_count(cpu))
-# define irq_exit(cpu, irq)		(--local_irq_count(cpu))
+# define irq_enter(cpu, irq)		(local_irq_count(cpu)++)
+# define irq_exit(cpu, irq)		(local_irq_count(cpu)--)
 
 # define synchronize_irq()		barrier()
 #else
@@ -72,7 +72,7 @@ static inline void release_irqlock(int cpu)
 
 static inline void irq_enter(int cpu, int irq)
 {
-	++local_irq_count(cpu);
+	local_irq_count(cpu)++;
 
 	while (test_bit(0,&global_irq_lock)) {
 		/* nothing */;
@@ -81,7 +81,7 @@ static inline void irq_enter(int cpu, int irq)
 
 static inline void irq_exit(int cpu, int irq)
 {
-	--local_irq_count(cpu);
+	local_irq_count(cpu)--;
 }
 
 static inline int hardirq_trylock(int cpu)

@@ -39,7 +39,7 @@ struct semaphore {
 #define DECLARE_MUTEX(name)		__DECLARE_SEMAPHORE_GENERIC(name, 1)
 #define DECLARE_MUTEX_LOCKED(name)	__DECLARE_SEMAPHORE_GENERIC(name, 0)
 
-extern inline void
+static inline void
 sema_init (struct semaphore *sem, int val)
 {
 	*sem = (struct semaphore) __SEMAPHORE_INITIALIZER(*sem, val);
@@ -68,7 +68,7 @@ extern spinlock_t semaphore_wake_lock;
  * Atomically decrement the semaphore's count.  If it goes negative,
  * block the calling thread in the TASK_UNINTERRUPTIBLE state.
  */
-extern inline void
+static inline void
 down (struct semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
@@ -82,7 +82,7 @@ down (struct semaphore *sem)
  * Atomically decrement the semaphore's count.  If it goes negative,
  * block the calling thread in the TASK_INTERRUPTIBLE state.
  */
-extern inline int
+static inline int
 down_interruptible (struct semaphore * sem)
 {
 	int ret = 0;
@@ -95,7 +95,7 @@ down_interruptible (struct semaphore * sem)
 	return ret;
 }
 
-extern inline int
+static inline int
 down_trylock (struct semaphore *sem)
 {
 	int ret = 0;
@@ -108,7 +108,7 @@ down_trylock (struct semaphore *sem)
 	return ret;
 }
 
-extern inline void
+static inline void
 up (struct semaphore * sem)
 {
 #if WAITQUEUE_DEBUG
@@ -181,7 +181,7 @@ extern void __down_read_failed (struct rw_semaphore *sem, long count);
 extern void __down_write_failed (struct rw_semaphore *sem, long count);
 extern void __rwsem_wake (struct rw_semaphore *sem, long count);
 
-extern inline void
+static inline void
 init_rwsem (struct rw_semaphore *sem)
 {
 	sem->count = RW_LOCK_BIAS;
@@ -196,7 +196,7 @@ init_rwsem (struct rw_semaphore *sem)
 #endif
 }
 
-extern inline void
+static inline void
 down_read (struct rw_semaphore *sem)
 {
 	long count;
@@ -218,7 +218,7 @@ down_read (struct rw_semaphore *sem)
 #endif
 }
 
-extern inline void
+static inline void
 down_write (struct rw_semaphore *sem)
 {
 	long old_count, new_count;
@@ -252,7 +252,7 @@ down_write (struct rw_semaphore *sem)
  * case is when there was a writer waiting, and we've
  * bumped the count to 0: we must wake the writer up.
  */
-extern inline void
+static inline void
 __up_read (struct rw_semaphore *sem)
 {
 	long count;
@@ -271,7 +271,7 @@ __up_read (struct rw_semaphore *sem)
  * Releasing the writer is easy -- just release it and
  * wake up any sleepers.
  */
-extern inline void
+static inline void
 __up_write (struct rw_semaphore *sem)
 {
 	long old_count, new_count;
@@ -290,7 +290,7 @@ __up_write (struct rw_semaphore *sem)
 		__rwsem_wake(sem, new_count);
 }
 
-extern inline void
+static inline void
 up_read (struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
@@ -303,7 +303,7 @@ up_read (struct rw_semaphore *sem)
 	__up_read(sem);
 }
 
-extern inline void
+static inline void
 up_write (struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG

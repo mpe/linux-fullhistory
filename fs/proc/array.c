@@ -575,7 +575,7 @@ ssize_t proc_pid_read_maps (struct task_struct *task, struct file * file, char *
 		goto getlen_out;
 
 	/* Check whether the mmaps could change if we sleep */
-	volatile_task = (task != current || atomic_read(&mm->mm_users) > 1);
+	volatile_task = (task != current || atomic_read(&mm->mm_users) > 2);
 
 	/* decode f_pos */
 	lineno = *ppos >> MAPS_LINE_SHIFT;

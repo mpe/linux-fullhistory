@@ -215,7 +215,7 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	printk("RR: RE (%x)\n", inode->i_ino);
 #endif
 	if (buffer) kfree(buffer);
-	return -1;
+	return 0;
       default:
 	break;
       }

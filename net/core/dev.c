@@ -59,6 +59,8 @@
  *	Paul Rusty Russell	:	SIOCSIFNAME
  *              Pekka Riikonen  :	Netdev boot-time settings code
  *              Andrew Morton   :       Make unregister_netdevice wait indefinitely on dev->refcnt
+ * 		J Hadi Salim	:	- Backlog queue sampling
+ *				        - netif_rx() feedback	
  */
 
 #include <asm/uaccess.h>
@@ -85,6 +87,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/if_bridge.h>
+#include <net/divert.h>
 #include <net/dst.h>
 #include <net/pkt_sched.h>
 #include <net/profile.h>
@@ -96,6 +99,18 @@
 #ifdef CONFIG_PLIP
 extern int plip_init(void);
 #endif
+
+/* This define, if set, will randomly drop a packet when congestion
+ * is more than moderate.  It helps fairness in the multi-interface
+ * case when one of them is a hog, but it kills performance for the
+ * single interface case so it is off now by default.
+ */
+#undef RAND_LIE
+
+/* Setting this will sample the queue lengths and thus congestion
+ * via a timer instead of as each packet is received.
+ */
+#undef OFFLINE_SAMPLE
 
 NET_PROFILE_DEFINE(dev_queue_xmit)
 NET_PROFILE_DEFINE(softnet_process)
@@ -132,6 +147,11 @@ const char *if_port_text[] = {
 
 static struct packet_type *ptype_base[16];		/* 16 way hashed list */
 static struct packet_type *ptype_all = NULL;		/* Taps */
+
+#ifdef OFFLINE_SAMPLE
+static void sample_queue(unsigned long dummy);
+static struct timer_list samp_timer = { function: sample_queue };
+#endif
 
 /*
  *	Our notifier list
@@ -933,12 +953,20 @@ int dev_queue_xmit(struct sk_buff *skb)
   =======================================================================*/
 
 int netdev_max_backlog = 300;
+/* These numbers are selected based on intuition and some
+ * experimentatiom, if you have more scientific way of doing this
+ * please go ahead and fix things.
+ */
+int no_cong_thresh = 10;
+int no_cong = 20;
+int lo_cong = 100;
+int mod_cong = 290;
 
 struct netif_rx_stats netdev_rx_stat[NR_CPUS];
 
 
 #ifdef CONFIG_NET_HW_FLOWCONTROL
-static atomic_t netdev_dropping = ATOMIC_INIT(0);
+atomic_t netdev_dropping = ATOMIC_INIT(0);
 static unsigned long netdev_fc_mask = 1;
 unsigned long netdev_fc_xoff = 0;
 spinlock_t netdev_fc_lock = SPIN_LOCK_UNLOCKED;
@@ -996,6 +1024,56 @@ static void netdev_wakeup(void)
 }
 #endif
 
+static void get_sample_stats(int cpu)
+{
+#ifdef RAND_LIE
+	unsigned long rd;
+	int rq;
+#endif
+	int blog = softnet_data[cpu].input_pkt_queue.qlen;
+	int avg_blog = softnet_data[cpu].avg_blog;
+
+	avg_blog = (avg_blog >> 1)+ (blog >> 1);
+
+	if (avg_blog > mod_cong) {
+		/* Above moderate congestion levels. */
+		softnet_data[cpu].cng_level = NET_RX_CN_HIGH;
+#ifdef RAND_LIE
+		rd = net_random();
+		rq = rd % netdev_max_backlog;
+		if (rq < avg_blog) /* unlucky bastard */
+			softnet_data[cpu].cng_level = NET_RX_DROP;
+#endif
+	} else if (avg_blog > lo_cong) {
+		softnet_data[cpu].cng_level = NET_RX_CN_MOD;
+#ifdef RAND_LIE
+		rd = net_random();
+		rq = rd % netdev_max_backlog;
+			if (rq < avg_blog) /* unlucky bastard */
+				softnet_data[cpu].cng_level = NET_RX_CN_HIGH;
+#endif
+	} else if (avg_blog > no_cong) 
+		softnet_data[cpu].cng_level = NET_RX_CN_LOW;
+	else  /* no congestion */
+		softnet_data[cpu].cng_level = NET_RX_SUCCESS;
+
+	softnet_data[cpu].avg_blog = avg_blog;
+}
+
+#ifdef OFFLINE_SAMPLE
+static void sample_queue(unsigned long dummy)
+{
+/* 10 ms 0r 1ms -- i dont care -- JHS */
+	int next_tick = 1;
+	int cpu = smp_processor_id();
+
+	get_sample_stats(cpu);
+	next_tick += jiffies;
+	mod_timer(&samp_timer, next_tick);
+}
+#endif
+
+
 /**
  *	netif_rx	-	post buffer to the network code
  *	@skb: buffer to post
@@ -1004,9 +1082,18 @@ static void netdev_wakeup(void)
  *	the upper (protocol) levels to process.  It always succeeds. The buffer
  *	may be dropped during processing for congestion control or by the 
  *	protocol layers.
+ *      
+ *	return values:
+ *	NET_RX_SUCCESS	(no congestion)           
+ *	NET_RX_CN_LOW     (low congestion) 
+ *	NET_RX_CN_MOD     (moderate congestion)
+ *	NET_RX_CN_HIGH    (high congestion) 
+ *	NET_RX_DROP    (packet was dropped)
+ *      
+ *      
  */
 
-void netif_rx(struct sk_buff *skb)
+int netif_rx(struct sk_buff *skb)
 {
 	int this_cpu = smp_processor_id();
 	struct softnet_data *queue;
@@ -1036,7 +1123,10 @@ enqueue:
 			__skb_queue_tail(&queue->input_pkt_queue,skb);
 			__cpu_raise_softirq(this_cpu, NET_RX_SOFTIRQ);
 			local_irq_restore(flags);
-			return;
+#ifndef OFFLINE_SAMPLE
+			get_sample_stats(this_cpu);
+#endif
+			return softnet_data[this_cpu].cng_level;
 		}
 
 		if (queue->throttle) {
@@ -1062,6 +1152,7 @@ drop:
 	local_irq_restore(flags);
 
 	kfree_skb(skb);
+	return NET_RX_DROP;
 }
 
 /* Deliver skb to an old protocol, which is not threaded well
@@ -1189,6 +1280,16 @@ static void __inline__ handle_bridge(struct sk_buff *skb,
 }
 
 
+#ifdef CONFIG_NET_DIVERT
+static inline void handle_diverter(struct sk_buff *skb)
+{
+	/* if diversion is supported on device, then divert */
+	if (skb->dev->divert && skb->dev->divert->divert)
+		divert_frame(skb);
+}
+#endif   /* CONFIG_NET_DIVERT */
+
+
 static void net_rx_action(struct softirq_action *h)
 {
 	int this_cpu = smp_processor_id();
@@ -1239,6 +1340,12 @@ static void net_rx_action(struct softirq_action *h)
 				}
 			}
 
+#ifdef CONFIG_NET_DIVERT
+			if (skb->dev->divert && skb->dev->divert->divert)
+				handle_diverter(skb);
+#endif /* CONFIG_NET_DIVERT */
+
+			
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 			if (skb->dev->br_port != NULL &&
 			    br_handle_frame_hook != NULL) {
@@ -1275,6 +1382,17 @@ static void net_rx_action(struct softirq_action *h)
 
 		if (bugdet-- < 0 || jiffies - start_time > 1)
 			goto softnet_break;
+
+#ifdef CONFIG_NET_HW_FLOWCONTROL
+	if (queue->throttle && queue->input_pkt_queue.qlen < no_cong_thresh ) {
+		if (atomic_dec_and_test(&netdev_dropping)) {
+			queue->throttle = 0;
+			netdev_wakeup();
+			goto softnet_break;
+		}
+	}
+#endif
+
 	}
 	br_read_unlock(BR_NETPROTO_LOCK);
 
@@ -2148,6 +2266,9 @@ static int dev_boot_phase = 1;
 int register_netdevice(struct net_device *dev)
 {
 	struct net_device *d, **dp;
+#ifdef CONFIG_NET_DIVERT
+	int ret;
+#endif
 
 	spin_lock_init(&dev->queue_lock);
 	spin_lock_init(&dev->xmit_lock);
@@ -2182,6 +2303,12 @@ int register_netdevice(struct net_device *dev)
 		dev_hold(dev);
 		write_unlock_bh(&dev_base_lock);
 
+#ifdef CONFIG_NET_DIVERT
+		ret = alloc_divert_blk(dev);
+		if (ret)
+			return ret;
+#endif /* CONFIG_NET_DIVERT */
+		
 		/*
 		 *	Default initial state at registry is that the
 		 *	device is present.
@@ -2231,6 +2358,12 @@ int register_netdevice(struct net_device *dev)
 	dev->deadbeaf = 0;
 	write_unlock_bh(&dev_base_lock);
 
+#ifdef CONFIG_NET_DIVERT
+	ret = alloc_divert_blk(dev);
+	if (ret)
+		return ret;
+#endif /* CONFIG_NET_DIVERT */
+	
 	/* Notify protocols, that a new device appeared. */
 	notifier_call_chain(&netdev_chain, NETDEV_REGISTER, dev);
 
@@ -2325,6 +2458,10 @@ int unregister_netdevice(struct net_device *dev)
 	/* Notifier chain MUST detach us from master device. */
 	BUG_TRAP(dev->master==NULL);
 
+#ifdef CONFIG_NET_DIVERT
+	free_divert_blk(dev);
+#endif
+
 	if (dev->new_style) {
 #ifdef NET_REFCNT_DEBUG
 		if (atomic_read(&dev->refcnt) != 1)
@@ -2397,6 +2534,9 @@ int unregister_netdevice(struct net_device *dev)
 
 extern void net_device_init(void);
 extern void ip_auto_config(void);
+#ifdef CONFIG_NET_DIVERT
+extern void dv_init(void);
+#endif /* CONFIG_NET_DIVERT */
 
 int __init net_dev_init(void)
 {
@@ -2407,6 +2547,10 @@ int __init net_dev_init(void)
 	pktsched_init();
 #endif
 
+#ifdef CONFIG_NET_DIVERT
+	dv_init();
+#endif /* CONFIG_NET_DIVERT */
+	
 	/*
 	 *	Initialise the packet receive queues.
 	 */
@@ -2417,6 +2561,8 @@ int __init net_dev_init(void)
 		queue = &softnet_data[i];
 		skb_queue_head_init(&queue->input_pkt_queue);
 		queue->throttle = 0;
+		queue->cng_level = 0;
+		queue->avg_blog = 10; /* arbitrary non-zero */
 		queue->completion_queue = NULL;
 	}
 	
@@ -2425,6 +2571,12 @@ int __init net_dev_init(void)
 	NET_PROFILE_REGISTER(dev_queue_xmit);
 	NET_PROFILE_REGISTER(softnet_process);
 #endif
+
+#ifdef OFFLINE_SAMPLE
+	samp_timer.expires = jiffies + (10 * HZ);
+	add_timer(&samp_timer);
+#endif
+
 	/*
 	 *	Add the devices.
 	 *	If the call to dev->init fails, the dev is removed

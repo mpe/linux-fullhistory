@@ -130,6 +130,19 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	__asm__("movl %%cr2,%0":"=r" (address));
 
 	tsk = current;
+
+	/*
+	 * We fault-in kernel-space virtual memory on-demand. The
+	 * 'reference' page table is init_mm.pgd.
+	 *
+	 * NOTE! We MUST NOT take any locks for this case. We may
+	 * be in an interrupt or a critical region, and should
+	 * only copy the information from the master page table,
+	 * nothing more.
+	 */
+	if (address >= TASK_SIZE)
+		goto vmalloc_fault;
+
 	mm = tsk->mm;
 	info.si_code = SEGV_MAPERR;
 
@@ -223,6 +236,7 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
+bad_area_nosemaphore:
 	/* User mode accesses just cause a SIGSEGV */
 	if (error_code & 4) {
 		tsk->thread.cr2 = address;
@@ -318,4 +332,34 @@ do_sigbus:
 	/* Kernel mode? Handle exceptions or die */
 	if (!(error_code & 4))
 		goto no_context;
+	return;
+
+vmalloc_fault:
+	{
+		/*
+		 * Synchronize this task's top level page-table
+		 * with the 'reference' page table.
+		 */
+		int offset = __pgd_offset(address);
+		pgd_t *pgd, *pgd_k;
+		pmd_t *pmd, *pmd_k;
+
+		pgd = tsk->active_mm->pgd + offset;
+		pgd_k = init_mm.pgd + offset;
+
+		if (!pgd_present(*pgd)) {
+			if (!pgd_present(*pgd_k))
+				goto bad_area_nosemaphore;
+			set_pgd(pgd, *pgd_k);
+			return;
+		}
+
+		pmd = pmd_offset(pgd, address);
+		pmd_k = pmd_offset(pgd_k, address);
+
+		if (pmd_present(*pmd) || !pmd_present(*pmd_k))
+			goto bad_area_nosemaphore;
+		set_pmd(pmd, *pmd_k);
+		return;
+	}
 }

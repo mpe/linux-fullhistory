@@ -20,7 +20,7 @@
 
 #define MB	(1024*1024UL)
 
-#define NUM_MEM_DESCS	3
+#define NUM_MEM_DESCS	2
 
 static char fw_mem[(  sizeof(efi_system_table_t)
 		    + sizeof(efi_runtime_services_t)
@@ -453,6 +453,12 @@ sys_fw_init (const char *args, int arglen)
 	md->num_pages = (1*MB) >> 12;	/* 1MB (in 4KB pages) */
 	md->attribute = EFI_MEMORY_WB;
 
+#if 0
+	/*
+	 * XXX bootmem is broken for now... (remember to NUM_MEM_DESCS
+	 * if you re-enable this!)
+	 */
+
 	/* descriptor for high memory (>4GB): */
 	md = &efi_memmap[2];
 	md->type = EFI_CONVENTIONAL_MEMORY;
@@ -461,6 +467,7 @@ sys_fw_init (const char *args, int arglen)
 	md->virt_addr = 0;
 	md->num_pages = (32*MB) >> 12;	/* 32MB (in 4KB pages) */
 	md->attribute = EFI_MEMORY_WB;
+#endif
 
 	bp = id(ZERO_PAGE_ADDR);
 	bp->efi_systab = __pa(&fw_mem);

@@ -4,6 +4,8 @@
  * Copyright (C) 1998-2000 Hewlett-Packard Co
  * Copyright (C) 1998, 1999 Stephane Eranian <eranian@hpl.hp.com>
  * Copyright (C) 1998-2000 David Mosberger <davidm@hpl.hp.com>
+ *
+ * 00/08/23 Asit Mallick <asit.k.mallick@intel.com> TLB handling for SMP
  */
 /*
  * This file defines the interrupt vector table used by the CPU.
@@ -134,32 +136,51 @@ ia64_ivt:
 (p7)	cmp.eq p6,p7=r17,r0			// was L1 entry NULL?
 	dep r17=r18,r17,3,(PAGE_SHIFT-3)	// compute address of L2 page table entry
 	;;
-(p7)	ld8 r17=[r17]				// fetch the L2 entry (may be 0)
+(p7)	ld8 r20=[r17]				// fetch the L2 entry (may be 0)
 	shr.u r19=r16,PAGE_SHIFT		// shift L3 index into position
 	;;
-(p7)	cmp.eq.or.andcm p6,p7=r17,r0		// was L2 entry NULL?
-	dep r17=r19,r17,3,(PAGE_SHIFT-3)	// compute address of L3 page table entry
+(p7)	cmp.eq.or.andcm p6,p7=r20,r0		// was L2 entry NULL?
+	dep r21=r19,r20,3,(PAGE_SHIFT-3)	// compute address of L3 page table entry
 	;;
-(p7)	ld8 r18=[r17]				// read the L3 PTE
+(p7)	ld8 r18=[r21]				// read the L3 PTE
 	mov r19=cr.isr				// cr.isr bit 0 tells us if this is an insn miss
 	;;
 (p7)	tbit.z p6,p7=r18,0			// page present bit cleared?
-	mov r21=cr.iha				// get the VHPT address that caused the TLB miss
+	mov r22=cr.iha				// get the VHPT address that caused the TLB miss
 	;;					// avoid RAW on p7
 (p7)	tbit.nz.unc p10,p11=r19,32		// is it an instruction TLB miss?
-	dep r17=0,r17,0,PAGE_SHIFT		// clear low bits to get page address
+	dep r23=0,r20,0,PAGE_SHIFT		// clear low bits to get page address
 	;;
 (p10)	itc.i r18				// insert the instruction TLB entry
 (p11)	itc.d r18				// insert the data TLB entry
 (p6)	br.spnt.few page_fault			// handle bad address/page not present (page fault)
-	mov cr.ifa=r21
+	mov cr.ifa=r22
 
 	// Now compute and insert the TLB entry for the virtual page table.
 	// We never execute in a page table page so there is no need to set
 	// the exception deferral bit.
-	adds r16=__DIRTY_BITS_NO_ED|_PAGE_PL_0|_PAGE_AR_RW,r17
+	adds r24=__DIRTY_BITS_NO_ED|_PAGE_PL_0|_PAGE_AR_RW,r23
 	;;
-(p7)	itc.d r16
+(p7)	itc.d r24
+	;;
+#ifdef CONFIG_SMP
+	//
+	// Re-check L2 and L3 pagetable.  If they changed, we may have received
+	// a ptc.g between reading the pagetable and the "itc".  If so,
+	// flush the entry we inserted and retry.
+	//
+	ld8 r25=[r21]				// read L3 PTE again
+	ld8 r26=[r17]				// read L2 entry again
+	;;
+	cmp.ne p6,p7=r26,r20			// did L2 entry change
+	mov r27=PAGE_SHIFT<<2
+	;;
+(p6)	ptc.l r22,r27				// purge PTE page translation
+(p7)	cmp.ne.or.andcm p6,p7=r25,r18		// did L3 PTE change
+	;;
+(p6)	ptc.l r16,r27				// purge translation
+#endif
+
 	mov pr=r31,-1				// restore predicate registers
 	rfi
 
@@ -175,22 +196,32 @@ ia64_ivt:
 	 * The speculative access will fail if there is no TLB entry
 	 * for the L3 page table page we're trying to access.
 	 */
-	mov r16=cr.iha				// get virtual address of L3 PTE
+	mov r16=cr.ifa				// get virtual address
+	mov r19=cr.iha				// get virtual address of L3 PTE
 	;;
-	ld8.s r16=[r16]				// try to read L3 PTE
+	ld8.s r17=[r19]				// try to read L3 PTE
 	mov r31=pr				// save predicates
 	;;
-	tnat.nz p6,p0=r16			// did read succeed?
+	tnat.nz p6,p0=r17			// did read succeed?
 (p6)	br.cond.spnt.many 1f
 	;;
-	itc.i r16
+	itc.i r17
 	;;
+#ifdef CONFIG_SMP
+	ld8.s r18=[r19]				// try to read L3 PTE again and see if same
+	mov r20=PAGE_SHIFT<<2			// setup page size for purge
+	;;
+	cmp.eq p6,p7=r17,r18
+	;;
+(p7)	ptc.l r16,r20
+#endif
 	mov pr=r31,-1
 	rfi
 
-1:	mov r16=cr.ifa				// get address that caused the TLB miss
-	;;
-	rsm psr.dt				// use physical addressing for data
+#ifdef CONFIG_DISABLE_VHPT
+itlb_fault:
+#endif
+1:	rsm psr.dt				// use physical addressing for data
 	mov r19=ar.k7				// get page table base address
 	shl r21=r16,3				// shift bit 60 into sign bit
 	shr.u r17=r16,61			// get the region number into r17
@@ -228,6 +259,15 @@ ia64_ivt:
 (p7)	itc.i r18				// insert the instruction TLB entry
 (p6)	br.spnt.few page_fault			// handle bad address/page not present (page fault)
 	;;
+#ifdef CONFIG_SMP
+	ld8 r19=[r17]				// re-read the PTE and check if same
+	;;
+	cmp.eq p6,p7=r18,r19
+	mov r20=PAGE_SHIFT<<2
+	;;
+(p7)	ptc.l r16,r20				// PTE changed purge translation
+#endif
+
 	mov pr=r31,-1				// restore predicate registers
 	rfi
 
@@ -243,22 +283,32 @@ ia64_ivt:
 	 * The speculative access will fail if there is no TLB entry
 	 * for the L3 page table page we're trying to access.
 	 */
-	mov r16=cr.iha				// get virtual address of L3 PTE
+	mov r16=cr.ifa				// get virtual address
+	mov r19=cr.iha				// get virtual address of L3 PTE
 	;;
-	ld8.s r16=[r16]				// try to read L3 PTE
+	ld8.s r17=[r19]				// try to read L3 PTE
 	mov r31=pr				// save predicates
 	;;
-	tnat.nz p6,p0=r16			// did read succeed?
+	tnat.nz p6,p0=r17			// did read succeed?
 (p6)	br.cond.spnt.many 1f
 	;;
-	itc.d r16
+	itc.d r17
 	;;
+#ifdef CONFIG_SMP
+	ld8.s r18=[r19]				// try to read L3 PTE again and see if same
+	mov r20=PAGE_SHIFT<<2			// setup page size for purge
+	;;
+	cmp.eq p6,p7=r17,r18
+	;;
+(p7)	ptc.l r16,r20
+#endif
 	mov pr=r31,-1
 	rfi
 
-1:	mov r16=cr.ifa				// get address that caused the TLB miss
-	;;
-	rsm psr.dt				// use physical addressing for data
+#ifdef CONFIG_DISABLE_VHPT
+dtlb_fault:
+#endif
+1:	rsm psr.dt				// use physical addressing for data
 	mov r19=ar.k7				// get page table base address
 	shl r21=r16,3				// shift bit 60 into sign bit
 	shr.u r17=r16,61			// get the region number into r17
@@ -296,6 +346,14 @@ ia64_ivt:
 (p7)	itc.d r18				// insert the instruction TLB entry
 (p6)	br.spnt.few page_fault			// handle bad address/page not present (page fault)
 	;;
+#ifdef CONFIG_SMP
+	ld8 r19=[r17]				// re-read the PTE and check if same
+	;;
+	cmp.eq p6,p7=r18,r19
+	mov r20=PAGE_SHIFT<<2
+	;;
+(p7)	ptc.l r16,r20				// PTE changed purge translation
+#endif
 	mov pr=r31,-1				// restore predicate registers
 	rfi
 
@@ -303,6 +361,16 @@ ia64_ivt:
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x0c00 Entry 3 (size 64 bundles) Alt ITLB (19)
 	mov r16=cr.ifa		// get address that caused the TLB miss
+#ifdef CONFIG_DISABLE_VHPT
+	mov r31=pr
+	;;
+	shr.u r21=r16,61			// get the region number into r21
+	;;
+	cmp.gt p6,p0=6,r21			// user mode 
+(p6)	br.cond.dptk.many itlb_fault
+	;;
+	mov pr=r31,-1
+#endif
 	movl r17=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RX
 	;;
 	shr.u r18=r16,57	// move address bit 61 to bit 4
@@ -323,8 +391,14 @@ ia64_ivt:
 	movl r17=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RW
 	mov r20=cr.isr
 	mov r21=cr.ipsr
-	mov r19=pr
+	mov r31=pr
 	;;
+#ifdef CONFIG_DISABLE_VHPT
+	shr.u r22=r16,61			// get the region number into r21
+	;;
+	cmp.gt p8,p0=6,r22			// user mode
+(p8)	br.cond.dptk.many dtlb_fault
+#endif
 	tbit.nz p6,p7=r20,IA64_ISR_SP_BIT	// is speculation bit on?
 	shr.u r18=r16,57	// move address bit 61 to bit 4
 	dep r16=0,r16,IA64_MAX_PHYS_BITS,(64-IA64_MAX_PHYS_BITS) // clear ed & reserved bits
@@ -337,7 +411,7 @@ ia64_ivt:
 (p6)	mov cr.ipsr=r21
 	;;
 (p7)	itc.d r16		// insert the TLB entry
-	mov pr=r19,-1
+	mov pr=r31,-1
 	rfi
 
 	;;
@@ -452,6 +526,7 @@ page_fault:
 	// a nested TLB miss hit where we look up the physical address of the L3 PTE
 	// and then continue at label 1 below.
 	//
+#ifndef CONFIG_SMP
 	mov r16=cr.ifa				// get the address that caused the fault
 	movl r30=1f				// load continuation point in case of nested fault
 	;;
@@ -465,6 +540,36 @@ page_fault:
 	;;
 	st8 [r17]=r18				// store back updated PTE
 	itc.d r18				// install updated PTE
+#else
+	mov r16=cr.ifa				// get the address that caused the fault
+	movl r30=1f				// load continuation point in case of nested fault
+	;;
+	thash r17=r16				// compute virtual address of L3 PTE
+	mov r28=ar.ccv				// save ar.ccv
+	mov r29=b0				// save b0 in case of nested fault
+	mov r27=pr
+	;;
+1:	ld8 r18=[r17]
+	;;					// avoid RAW on r18
+	mov ar.ccv=r18				// set compare value for cmpxchg
+	or r25=_PAGE_D,r18			// set the dirty bit
+	;;
+	cmpxchg8.acq r26=[r17],r25,ar.ccv
+	mov r24=PAGE_SHIFT<<2
+	;;
+	cmp.eq p6,p7=r26,r18
+	;;
+(p6)	itc.d r25				// install updated PTE
+	;;
+	ld8 r18=[r17]				// read PTE again
+	;;
+	cmp.eq p6,p7=r18,r25			// is it same as the newly installed
+	;;
+(p7)	ptc.l r16,r24
+	mov b0=r29				// restore b0
+	mov ar.ccv=r28
+	mov pr=r27,-1
+#endif
 	rfi
 
 	.align 1024
@@ -486,6 +591,8 @@ page_fault:
 (p6)	mov r16=r18				// if so, use cr.iip instead of cr.ifa
 	mov pr=r31,-1
 #endif /* CONFIG_ITANIUM */
+
+#ifndef CONFIG_SMP
 	movl r30=1f				// load continuation point in case of nested fault
 	;;
 	thash r17=r16				// compute virtual address of L3 PTE
@@ -515,12 +622,58 @@ page_fault:
 	;;
 	st8 [r17]=r18				// store back updated PTE
 	itc.i r18				// install updated PTE
+#else
+	movl r30=1f				// load continuation point in case of nested fault
+	;;
+	thash r17=r16				// compute virtual address of L3 PTE
+	mov r28=ar.ccv				// save ar.ccv
+	mov r29=b0				// save b0 in case of nested fault)
+	mov r27=pr
+	;;
+1:	ld8 r18=[r17]
+#if defined(CONFIG_IA32_SUPPORT) && \
+    (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_B0_SPECIFIC))
+	//
+	// Erratum 85 (Access bit fault could be reported before page not present fault)
+	//   If the PTE is indicates the page is not present, then just turn this into a
+	//   page fault.
+	//
+	;;
+	tbit.nz p6,p0=r18,0			// page present bit set?
+(p6)	br.cond.sptk 1f
+	;;					// avoid WAW on p6
+	mov pr=r27,-1
+	br.cond.sptk page_fault			// page wasn't present
+1:	
+#else
+	;;					// avoid RAW on r18
+#endif
+	mov ar.ccv=r18				// set compare value for cmpxchg
+	or r25=_PAGE_A,r18			// set the accessed bit
+	;;
+	cmpxchg8.acq r26=[r17],r25,ar.ccv
+	mov r24=PAGE_SHIFT<<2
+	;;
+	cmp.eq p6,p7=r26,r18
+	;;
+(p6)	itc.i r25				// install updated PTE
+	;;
+	ld8 r18=[r17]				// read PTE again
+	;;
+	cmp.eq p6,p7=r18,r25			// is it same as the newly installed
+	;;
+(p7)	ptc.l r16,r24
+	mov b0=r29				// restore b0
+	mov ar.ccv=r28
+	mov pr=r27,-1
+#endif
 	rfi
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x2800 Entry 10 (size 64 bundles) Data Access-bit (15,55)
 	// Like Entry 8, except for data access
+#ifndef CONFIG_SMP
 	mov r16=cr.ifa				// get the address that caused the fault
 	movl r30=1f				// load continuation point in case of nested fault
 	;;
@@ -534,6 +687,36 @@ page_fault:
 	;;
 	st8 [r17]=r18				// store back updated PTE
 	itc.d r18				// install updated PTE
+#else
+	mov r16=cr.ifa				// get the address that caused the fault
+	movl r30=1f				// load continuation point in case of nested fault
+	;;
+	thash r17=r16				// compute virtual address of L3 PTE
+	mov r28=ar.ccv				// save ar.ccv
+	mov r29=b0				// save b0 in case of nested fault
+	mov r27=pr
+	;;
+1:	ld8 r18=[r17]
+	;;					// avoid RAW on r18
+	mov ar.ccv=r18				// set compare value for cmpxchg
+	or r25=_PAGE_A,r18			// set the dirty bit
+	;;
+	cmpxchg8.acq r26=[r17],r25,ar.ccv
+	mov r24=PAGE_SHIFT<<2
+	;;
+	cmp.eq p6,p7=r26,r18
+	;;
+(p6)	itc.d r25				// install updated PTE
+	;;
+	ld8 r18=[r17]				// read PTE again
+	;;
+	cmp.eq p6,p7=r18,r25			// is it same as the newly installed
+	;;
+(p7)	ptc.l r16,r24
+	mov b0=r29				// restore b0
+	mov ar.ccv=r28
+	mov pr=r27,-1
+#endif
 	rfi
 
 	.align 1024

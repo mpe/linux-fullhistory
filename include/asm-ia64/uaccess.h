@@ -61,7 +61,7 @@
 #define __access_ok(addr,size,segment)	(((unsigned long) (addr)) <= (segment).seg)
 #define access_ok(type,addr,size)	__access_ok((addr),(size),get_fs())
 
-extern inline int
+static inline int
 verify_area (int type, const void *addr, unsigned long size)
 {
 	return access_ok(type,addr,size) ? 0 : -EFAULT;
@@ -126,7 +126,7 @@ struct __large_struct { unsigned long buf[100]; };
 #define __m(x) (*(struct __large_struct *)(x))
 
 #define __get_user_64(addr)								\
-	__asm__ ("\n1:\tld8 %0=%2\t// %0 and %1 get overwritten by exception handler\n"	\
+	__asm__ ("\n1:\tld8 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -136,7 +136,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "m"(__m(addr)), "1"(__gu_err));
 
 #define __get_user_32(addr)								\
-	__asm__ ("\n1:\tld4 %0=%2\t// %0 and %1 get overwritten by exception handler\n"	\
+	__asm__ ("\n1:\tld4 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -146,7 +146,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "m"(__m(addr)), "1"(__gu_err));
 
 #define __get_user_16(addr)								\
-	__asm__ ("\n1:\tld2 %0=%2\t// %0 and %1 get overwritten by exception handler\n"	\
+	__asm__ ("\n1:\tld2 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -156,7 +156,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "m"(__m(addr)), "1"(__gu_err));
 
 #define __get_user_8(addr)								\
-	__asm__ ("\n1:\tld1 %0=%2\t// %0 and %1 get overwritten by exception handler\n"	\
+	__asm__ ("\n1:\tld1 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -205,7 +205,7 @@ extern void __put_user_unknown (void);
  */
 #define __put_user_64(x,addr)								\
 	__asm__ __volatile__ (								\
-		 "\n1:\tst8 %1=%r2\t// %0 gets overwritten by exception handler\n"	\
+		 "\n1:\tst8 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -216,7 +216,7 @@ extern void __put_user_unknown (void);
 
 #define __put_user_32(x,addr)								\
 	__asm__ __volatile__ (								\
-		 "\n1:\tst4 %1=%r2\t// %0 gets overwritten by exception handler\n"	\
+		 "\n1:\tst4 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -227,7 +227,7 @@ extern void __put_user_unknown (void);
 
 #define __put_user_16(x,addr)								\
 	__asm__ __volatile__ (								\
-		 "\n1:\tst2 %1=%r2\t// %0 gets overwritten by exception handler\n"	\
+		 "\n1:\tst2 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\
@@ -238,7 +238,7 @@ extern void __put_user_unknown (void);
 
 #define __put_user_8(x,addr)								\
 	__asm__ __volatile__ (								\
-		 "\n1:\tst1 %1=%r2\t// %0 gets overwritten by exception handler\n"	\
+		 "\n1:\tst1 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
 		 "2:\n"									\
 		 "\t.section __ex_table,\"a\"\n"					\
 		 "\t\tdata4 @gprel(1b)\n"						\

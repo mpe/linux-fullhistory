@@ -3,9 +3,9 @@
 #
 
 .S.s:
-	$(CPP) $(AFLAGS) -o $*.s $<
+	$(CPP) $(AFLAGS) $(AFLAGS_KERNEL) -o $*.s $<
 .S.o:
-	$(CC) $(AFLAGS) -c -o $*.o $<
+	$(CC) $(AFLAGS) $(AFLAGS_KERNEL) -c -o $*.o $<
 
 all: ia32.o
 

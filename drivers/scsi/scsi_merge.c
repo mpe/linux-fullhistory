@@ -869,7 +869,7 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	 * Next, walk the list, and fill in the addresses and sizes of
 	 * each segment.
 	 */
-	memset(sgpnt, 0, SCpnt->use_sg * sizeof(struct scatterlist));
+	memset(sgpnt, 0, SCpnt->sglist_len);
 	SCpnt->request_buffer = (char *) sgpnt;
 	SCpnt->request_bufflen = 0;
 	bhprev = NULL;

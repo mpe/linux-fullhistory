@@ -15,7 +15,7 @@
  * Yeah, simulating stuff is slow, so let us catch some breath between
  * timer interrupts...
  */
-# define HZ 20
+# define HZ	  32
 #else
 # define HZ	1024
 #endif

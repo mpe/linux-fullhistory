@@ -120,10 +120,10 @@ callback with appropriate information.
 Example for ids parameter initialization:
 
 static struct isapnp_device_id device_ids[] __devinitdata = {
-	{ ISAPNP_DEVICE_SINGLE('E','S','S', 0x0968, 'E','S','S', 0x0968), }
+	{ ISAPNP_DEVICE_SINGLE('E','S','S', 0x0968, 'E','S','S', 0x0968), },
 	{ ISAPNP_DEVICE_SINGLE_END, }
 };
-MODULE_DEVICE_TABLE(isapnp, &device_ids);
+MODULE_DEVICE_TABLE(isapnp, device_ids);
 
 
 ISA PnP configuration

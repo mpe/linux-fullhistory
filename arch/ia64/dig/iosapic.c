@@ -31,6 +31,10 @@
 #include <asm/ptrace.h>
 #include <asm/system.h>
 
+#ifdef	CONFIG_ACPI_KERNEL_CONFIG
+# include <asm/acpikcfg.h>
+#endif
+
 #undef DEBUG_IRQ_ROUTING
 
 static spinlock_t iosapic_lock = SPIN_LOCK_UNLOCKED;
@@ -228,7 +232,7 @@ iosapic_init (unsigned long address, int irqbase)
 {
 	struct hw_interrupt_type *irq_type;
 	struct pci_vector_struct *vectors;
-	int i, irq;
+	int i, irq, num_pci_vectors;
 
 	if (irqbase == 0)
 		/* 
@@ -255,9 +259,14 @@ iosapic_init (unsigned long address, int irqbase)
 	 * Map the PCI Interrupt data into the ACPI IOSAPIC data using
 	 * the info that the bootstrap loader passed to us.
 	 */
+# ifdef CONFIG_ACPI_KERNEL_CONFIG
+	acpi_cf_get_pci_vectors(&vectors, &num_pci_vectors);
+# else
 	ia64_boot_param.pci_vectors = (__u64) __va(ia64_boot_param.pci_vectors);
 	vectors = (struct pci_vector_struct *) ia64_boot_param.pci_vectors;
-	for (i = 0; i < ia64_boot_param.num_pci_vectors; i++) {
+	num_pci_vectors = ia64_boot_param.num_pci_vectors;
+# endif
+	for (i = 0; i < num_pci_vectors; i++) {
 		irq = vectors[i].irq;
 		if (irq < 16)
 			irq = isa_irq_to_vector(irq);
@@ -277,11 +286,11 @@ iosapic_init (unsigned long address, int irqbase)
 		iosapic_trigger(irq)  = IO_SAPIC_LEVEL;
 		iosapic_polarity(irq) = IO_SAPIC_POL_LOW;
 
-#ifdef DEBUG_IRQ_ROUTING
+# ifdef DEBUG_IRQ_ROUTING
 		printk("PCI: BUS %d Slot %x Pin %x IRQ %02x --> Vector %02x IOSAPIC Pin %d\n", 
 		       vectors[i].bus, vectors[i].pci_id>>16, vectors[i].pin, vectors[i].irq, 
 		       irq, iosapic_pin(irq));
-#endif
+# endif
 	}
 #endif /* CONFIG_IA64_SOFTSDV_HACKS */
 
@@ -377,7 +386,7 @@ dig_register_iosapic (acpi_entry_iosapic_t *iosapic)
 	unsigned int ver, v;
 	int l, max_pin;
 
-	ver = iosapic_version(iosapic->address);
+	ver = iosapic_version((unsigned long) ioremap(iosapic->address, 0));
 	max_pin = (ver >> 16) & 0xff;
 	
 	printk("IOSAPIC Version %x.%x: address 0x%lx IRQs 0x%x - 0x%x\n", 

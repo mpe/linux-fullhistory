@@ -5,7 +5,7 @@
  * PPPoE --- PPP over Ethernet (RFC 2516)
  *
  *
- * Version:    0.6.2
+ * Version:    0.6.3
  *
  * 030700 :     Fixed connect logic to allow for disconnect.
  * 270700 :	Fixed potential SMP problems; we must protect against 
@@ -17,6 +17,8 @@
  *		Module reference count is decremented in the right spot now,
  *		guards against sock_put not actually freeing the sk 
  *		in pppoe_release.
+ *
+ * 051000 :	Initialization cleanup
  *
  * Author:	Michal Ostrowski <mostrows@styx.uwaterloo.ca>
  * Contributors:
@@ -1025,7 +1027,7 @@ int __init pppoe_init(void)
  	int err = register_pppox_proto(PX_PROTO_OE, &pppoe_proto);
 
 	if (err == 0) {
-		printk(KERN_INFO "Registered PPPoE v0.5\n");
+		printk(KERN_INFO "Registered PPPoE v0.6.3\n");
 
 		dev_add_pack(&pppoes_ptype);
 		register_netdevice_notifier(&pppoe_notifier);
@@ -1034,15 +1036,7 @@ int __init pppoe_init(void)
 	return err;
 }
 
-
-#ifdef MODULE
-MODULE_PARM(debug, "i");
-int init_module(void)
-{
-	return pppoe_init();
-}
-
-void cleanup_module(void)
+void __exit pppoe_exit(void)
 {
 	unregister_pppox_proto(PX_PROTO_OE);
 	dev_remove_pack(&pppoes_ptype);
@@ -1050,11 +1044,5 @@ void cleanup_module(void)
 	proc_net_remove("pppoe");
 }
 
-#else
-
-int pppoe_proto_init(struct net_proto *np)
-{
-	return pppoe_init();
-}
-
-#endif
+module_init(pppoe_init);
+module_exit(pppoe_exit);

@@ -147,7 +147,7 @@ sys_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, l
 	struct pt_regs *regs = (struct pt_regs *) &stack;
 
 	addr = do_mmap2(addr, len, prot, flags, fd, pgoff);
-	if (!IS_ERR(addr))
+	if (!IS_ERR((void *) addr))
 		regs->r8 = 0;	/* ensure large addresses are not mistaken as failures... */
 	return addr;
 }
@@ -162,23 +162,9 @@ sys_mmap (unsigned long addr, unsigned long len, int prot, int flags,
 		return -EINVAL;
 
 	addr = do_mmap2(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
-	if (!IS_ERR(addr))
+	if (!IS_ERR((void *) addr))
 		regs->r8 = 0;	/* ensure large addresses are not mistaken as failures... */
 	return addr;
-}
-
-asmlinkage long
-sys_ioperm (unsigned long from, unsigned long num, int on)
-{
-        printk(KERN_ERR "sys_ioperm(from=%lx, num=%lx, on=%d)\n", from, num, on);
-        return -EIO;
-}
-
-asmlinkage long
-sys_iopl (int level, long arg1, long arg2, long arg3)
-{
-        printk(KERN_ERR "sys_iopl(level=%d)!\n", level);
-        return -ENOSYS;
 }
 
 asmlinkage long
@@ -204,7 +190,7 @@ ia64_create_module (const char *name_user, size_t size, long arg2, long arg3,
 	unsigned long   addr;
 
 	addr = sys_create_module (name_user, size);
-	if (!IS_ERR(addr))
+	if (!IS_ERR((void *) addr))
 		regs->r8 = 0;	/* ensure large addresses are not mistaken as failures... */
 	return addr;
 }

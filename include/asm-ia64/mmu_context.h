@@ -57,7 +57,7 @@ enter_lazy_tlb (struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 {
 }
 
-extern inline unsigned long
+static inline unsigned long
 ia64_rid (unsigned long context, unsigned long region_addr)
 {
 # ifdef CONFIG_IA64_TLB_CHECKS_REGION_NUMBER
@@ -67,7 +67,7 @@ ia64_rid (unsigned long context, unsigned long region_addr)
 # endif
 }
 
-extern inline void
+static inline void
 get_new_mmu_context (struct mm_struct *mm)
 {
 	spin_lock(&ia64_ctx.lock);
@@ -80,7 +80,7 @@ get_new_mmu_context (struct mm_struct *mm)
 
 }
 
-extern inline void
+static inline void
 get_mmu_context (struct mm_struct *mm)
 {
 	/* check if our ASN is of an older generation and thus invalid: */
@@ -88,20 +88,20 @@ get_mmu_context (struct mm_struct *mm)
 		get_new_mmu_context(mm);
 }
 
-extern inline int
+static inline int
 init_new_context (struct task_struct *p, struct mm_struct *mm)
 {
 	mm->context = 0;
 	return 0;
 }
 
-extern inline void
+static inline void
 destroy_context (struct mm_struct *mm)
 {
 	/* Nothing to do.  */
 }
 
-extern inline void
+static inline void
 reload_context (struct mm_struct *mm)
 {
 	unsigned long rid;

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.213 2000/09/18 05:59:48 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.216 2000/10/10 03:58:56 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -75,37 +75,13 @@ static struct socket *tcp_socket=&tcp_inode.u.socket_i;
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb);
 
-/* This is for sockets with full identity only.  Sockets here will always
- * be without wildcards and will have the following invariant:
- *          TCP_ESTABLISHED <= sk->state < TCP_CLOSE
- *
- * First half of the table is for sockets not in TIME_WAIT, second half
- * is for TIME_WAIT sockets only.
- */
-struct tcp_ehash_bucket *tcp_ehash;
-
-/* Ok, let's try this, I give up, we do need a local binding
- * TCP hash as well as the others for fast bind/connect.
- */
-struct tcp_bind_hashbucket *tcp_bhash;
-
-int tcp_bhash_size;
-int tcp_ehash_size;
-
-/* All sockets in TCP_LISTEN state will be in here.  This is the only table
- * where wildcard'd TCP sockets can exist.  Hash function here is just local
- * port number.
- */
-struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
-char __tcp_clean_cacheline_pad[(SMP_CACHE_BYTES -
-				(((sizeof(void *) * (TCP_LHTABLE_SIZE + 2)) +
-				  (sizeof(int) * 2)) % SMP_CACHE_BYTES))] = { 0, };
-
-rwlock_t tcp_lhash_lock = RW_LOCK_UNLOCKED;
-atomic_t tcp_lhash_users = ATOMIC_INIT(0);
-DECLARE_WAIT_QUEUE_HEAD(tcp_lhash_wait);
-
-spinlock_t tcp_portalloc_lock = SPIN_LOCK_UNLOCKED;
+struct tcp_hashinfo __cacheline_aligned tcp_hashinfo = {
+	__tcp_lhash_lock:     RW_LOCK_UNLOCKED,
+	__tcp_lhash_users:    ATOMIC_INIT(0),
+	__tcp_lhash_wait:
+	  __WAIT_QUEUE_HEAD_INITIALIZER(tcp_hashinfo.__tcp_lhash_wait),
+	__tcp_portalloc_lock: SPIN_LOCK_UNLOCKED
+};
 
 /*
  * This array holds the first and last local port number.

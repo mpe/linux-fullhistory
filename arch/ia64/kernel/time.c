@@ -183,7 +183,7 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 #ifdef CONFIG_SMP
 		smp_do_timer(regs);
-		if (smp_processor_id() == bootstrap_processor)
+		if (smp_processor_id() == 0)
 			do_timer(regs);
 #else
 		do_timer(regs);
@@ -303,7 +303,7 @@ ia64_init_itm (void)
 
         itc_freq = (platform_base_freq*itc_ratio.num)/itc_ratio.den;
         itm.delta = itc_freq / HZ;
-        printk("timer: CPU %d base freq=%lu.%03luMHz, ITC ratio=%lu/%lu, ITC freq=%lu.%03luMHz\n",
+        printk("CPU %d: base freq=%lu.%03luMHz, ITC ratio=%lu/%lu, ITC freq=%lu.%03luMHz\n",
 	       smp_processor_id(),
 	       platform_base_freq / 1000000, (platform_base_freq / 1000) % 1000,
                itc_ratio.num, itc_ratio.den, itc_freq / 1000000, (itc_freq / 1000) % 1000);

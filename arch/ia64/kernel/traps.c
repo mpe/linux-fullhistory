@@ -192,38 +192,45 @@ ia64_ni_syscall (unsigned long arg0, unsigned long arg1, unsigned long arg2, uns
 }
 
 /*
- * disabled_fp_fault() is called when a user-level process attempts to
- * access one of the registers f32..f127 while it doesn't own the
+ * disabled_fph_fault() is called when a user-level process attempts
+ * to access one of the registers f32..f127 when it doesn't own the
  * fp-high register partition.  When this happens, we save the current
  * fph partition in the task_struct of the fpu-owner (if necessary)
  * and then load the fp-high partition of the current task (if
- * necessary).
+ * necessary).  Note that the kernel has access to fph by the time we
+ * get here, as the IVT's "Diabled FP-Register" handler takes care of
+ * clearing psr.dfh.
  */
 static inline void
 disabled_fph_fault (struct pt_regs *regs)
 {
-	struct task_struct *fpu_owner = ia64_get_fpu_owner();
+	struct ia64_psr *psr = ia64_psr(regs);
 
-	/* first, clear psr.dfh and psr.mfh: */
-	regs->cr_ipsr &= ~(IA64_PSR_DFH | IA64_PSR_MFH);
-	if (fpu_owner != current) {
+	/* first, grant user-level access to fph partition: */
+	psr->dfh = 0;
+#ifndef CONFIG_SMP
+	{
+		struct task_struct *fpu_owner = ia64_get_fpu_owner();
+
+		if (fpu_owner == current)
+			return;
+
+		if (fpu_owner)
+			ia64_flush_fph(fpu_owner);
+
 		ia64_set_fpu_owner(current);
-
-		if (fpu_owner && ia64_psr(ia64_task_regs(fpu_owner))->mfh) {
-			ia64_psr(ia64_task_regs(fpu_owner))->mfh = 0;
-			fpu_owner->thread.flags |= IA64_THREAD_FPH_VALID;
-			__ia64_save_fpu(fpu_owner->thread.fph);
-		}
-		if ((current->thread.flags & IA64_THREAD_FPH_VALID) != 0) {
-			__ia64_load_fpu(current->thread.fph);
-		} else {
-			__ia64_init_fpu();
-			/*
-			 * Set mfh because the state in thread.fph does not match
-			 * the state in the fph partition.
-			 */
-			ia64_psr(regs)->mfh = 1;
-		}
+	}
+#endif /* !CONFIG_SMP */
+	if ((current->thread.flags & IA64_THREAD_FPH_VALID) != 0) {
+		__ia64_load_fpu(current->thread.fph);
+		psr->mfh = 0;
+	} else {
+		__ia64_init_fpu();
+		/*
+		 * Set mfh because the state in thread.fph does not match the state in
+		 * the fph partition.
+		 */
+		psr->mfh = 1;
 	}
 }
 
@@ -247,20 +254,21 @@ fp_emulate (int fp_fault, void *bundle, long *ipsr, long *fpsr, long *isr, long 
 	 * kernel, so set those bits in the mask and set the low volatile
 	 * pointer to point to these registers.
 	 */
-	fp_state.bitmask_low64 = 0xffc0;  /* bit6..bit15 */
 #ifndef FPSWA_BUG
-	fp_state.fp_state_low_volatile = &regs->f6;
+	fp_state.bitmask_low64 = 0x3c0;  /* bit 6..9 */
+	fp_state.fp_state_low_volatile = (fp_state_low_volatile_t *) &regs->f6;
 #else
+	fp_state.bitmask_low64 = 0xffc0;  /* bit6..bit15 */
 	f6_15[0] = regs->f6;
 	f6_15[1] = regs->f7;
 	f6_15[2] = regs->f8;
 	f6_15[3] = regs->f9;
- 	__asm__ ("stf.spill %0=f10" : "=m"(f6_15[4]));
- 	__asm__ ("stf.spill %0=f11" : "=m"(f6_15[5]));
- 	__asm__ ("stf.spill %0=f12" : "=m"(f6_15[6]));
- 	__asm__ ("stf.spill %0=f13" : "=m"(f6_15[7]));
- 	__asm__ ("stf.spill %0=f14" : "=m"(f6_15[8]));
- 	__asm__ ("stf.spill %0=f15" : "=m"(f6_15[9]));
+ 	__asm__ ("stf.spill %0=f10%P0" : "=m"(f6_15[4]));
+ 	__asm__ ("stf.spill %0=f11%P0" : "=m"(f6_15[5]));
+ 	__asm__ ("stf.spill %0=f12%P0" : "=m"(f6_15[6]));
+ 	__asm__ ("stf.spill %0=f13%P0" : "=m"(f6_15[7]));
+ 	__asm__ ("stf.spill %0=f14%P0" : "=m"(f6_15[8]));
+ 	__asm__ ("stf.spill %0=f15%P0" : "=m"(f6_15[9]));
 	fp_state.fp_state_low_volatile = (fp_state_low_volatile_t *) f6_15;
 #endif
         /*
@@ -279,12 +287,12 @@ fp_emulate (int fp_fault, void *bundle, long *ipsr, long *fpsr, long *isr, long 
 					(unsigned long *) isr, (unsigned long *) pr,
 					(unsigned long *) ifs, &fp_state);
 #ifdef FPSWA_BUG
- 	__asm__ ("ldf.fill f10=%0" :: "m"(f6_15[4]));
- 	__asm__ ("ldf.fill f11=%0" :: "m"(f6_15[5]));
- 	__asm__ ("ldf.fill f12=%0" :: "m"(f6_15[6]));
- 	__asm__ ("ldf.fill f13=%0" :: "m"(f6_15[7]));
- 	__asm__ ("ldf.fill f14=%0" :: "m"(f6_15[8]));
- 	__asm__ ("ldf.fill f15=%0" :: "m"(f6_15[9]));
+ 	__asm__ ("ldf.fill f10=%0%P0" :: "m"(f6_15[4]));
+ 	__asm__ ("ldf.fill f11=%0%P0" :: "m"(f6_15[5]));
+ 	__asm__ ("ldf.fill f12=%0%P0" :: "m"(f6_15[6]));
+ 	__asm__ ("ldf.fill f13=%0%P0" :: "m"(f6_15[7]));
+ 	__asm__ ("ldf.fill f14=%0%P0" :: "m"(f6_15[8]));
+ 	__asm__ ("ldf.fill f15=%0%P0" :: "m"(f6_15[9]));
 	regs->f6 = f6_15[0];
 	regs->f7 = f6_15[1];
 	regs->f8 = f6_15[2];

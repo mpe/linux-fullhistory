@@ -357,6 +357,7 @@ ia64_rid_init (void)
 		panic("mm/init: overlap between virtually mapped linear page table and "
 		      "mapped kernel space!");
 	pta = POW2(61) - POW2(impl_va_msb);
+#ifndef CONFIG_DISABLE_VHPT
 	/*
 	 * Set the (virtually mapped linear) page table address.  Bit
 	 * 8 selects between the short and long format, bits 2-7 the
@@ -364,6 +365,9 @@ ia64_rid_init (void)
 	 * enabled.
 	 */
 	ia64_set_pta(pta | (0<<8) | ((3*(PAGE_SHIFT-3)+3)<<2) | 1);
+#else
+	ia64_set_pta(pta | (0<<8) | ((3*(PAGE_SHIFT-3)+3)<<2) | 0);
+#endif
 }
 
 /*
@@ -444,15 +448,6 @@ mem_init (void)
 
 	/* install the gate page in the global page table: */
 	put_gate_page(virt_to_page(__start_gate_section), GATE_ADDR);
-
-#ifndef CONFIG_IA64_SOFTSDV_HACKS
-	/*
-	 * (Some) SoftSDVs seem to have a problem with this call.
-	 * Since it's mostly a performance optimization, just don't do
-	 * it for now...  --davidm 99/12/6
-	 */
-	efi_enter_virtual_mode();
-#endif
 
 #ifdef CONFIG_IA32_SUPPORT
 	ia32_gdt_init();

@@ -102,14 +102,12 @@ typedef unsigned long pgprot_t;
 #ifdef CONFIG_IA64_GENERIC
 # include <asm/machvec.h>
 # define virt_to_page(kaddr)   (mem_map + platform_map_nr(kaddr))
-#elif defined (CONFIG_IA64_SN_SN1_SIM)
+#elif defined (CONFIG_IA64_SN_SN1)
 # define virt_to_page(kaddr)   (mem_map + MAP_NR_SN1(kaddr))
 #else
 # define virt_to_page(kaddr)   (mem_map + MAP_NR_DENSE(kaddr))
 #endif
 #define VALID_PAGE(page)       ((page - mem_map) < max_mapnr)
-
-# endif /* __KERNEL__ */
 
 typedef union ia64_va {
 	struct {
@@ -138,7 +136,7 @@ typedef union ia64_va {
 #define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
 #define PAGE_BUG(page) do { BUG(); } while (0)
 
-extern __inline__ int
+static __inline__ int
 get_order (unsigned long size)
 {
 	double d = size - 1;
@@ -151,6 +149,7 @@ get_order (unsigned long size)
 	return order;
 }
 
+# endif /* __KERNEL__ */
 #endif /* !ASSEMBLY */
 
 #define PAGE_OFFSET		0xe000000000000000

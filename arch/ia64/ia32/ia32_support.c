@@ -42,6 +42,7 @@ ia32_save_state (struct thread_struct *thread)
 	thread->csd = csd;
 	thread->ssd = ssd;
 	thread->tssd = tssd;
+	asm ("mov ar.k0=%0 ;;" :: "r"(thread->old_iob));
 }
 
 void
@@ -68,6 +69,8 @@ ia32_load_state (struct thread_struct *thread)
 		      "mov ar.k1=%7"
 		      :: "r"(eflag), "r"(fsr), "r"(fcr), "r"(fir), "r"(fdr),
 		         "r"(csd), "r"(ssd), "r"(tssd));
+	asm ("mov %0=ar.k0 ;;" : "=r"(thread->old_iob));
+	asm ("mov ar.k0=%0 ;;" :: "r"(IA32_IOBASE));
 }
 
 /*

@@ -42,20 +42,8 @@ struct tcp_ehash_bucket {
 	struct sock	*chain;
 } __attribute__((__aligned__(8)));
 
-extern int tcp_ehash_size;
-extern struct tcp_ehash_bucket *tcp_ehash;
-
 /* This is for listening sockets, thus all sockets which possess wildcards. */
 #define TCP_LHTABLE_SIZE	32	/* Yes, really, this is all you need. */
-
-/* tcp_ipv4.c: These need to be shared by v4 and v6 because the lookup
- *             and hashing code needs to work with different AF's yet
- *             the port space is shared.
- */
-extern struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
-extern rwlock_t tcp_lhash_lock;
-extern atomic_t tcp_lhash_users;
-extern wait_queue_head_t tcp_lhash_wait;
 
 /* There are a few simple rules, which allow for local port reuse by
  * an application.  In essence:
@@ -101,9 +89,53 @@ struct tcp_bind_hashbucket {
 	struct tcp_bind_bucket	*chain;
 };
 
-extern struct tcp_bind_hashbucket *tcp_bhash;
-extern int tcp_bhash_size;
-extern spinlock_t tcp_portalloc_lock;
+extern struct tcp_hashinfo {
+	/* This is for sockets with full identity only.  Sockets here will
+	 * always be without wildcards and will have the following invariant:
+	 *
+	 *          TCP_ESTABLISHED <= sk->state < TCP_CLOSE
+	 *
+	 * First half of the table is for sockets not in TIME_WAIT, second half
+	 * is for TIME_WAIT sockets only.
+	 */
+	struct tcp_ehash_bucket *__tcp_ehash;
+
+	/* Ok, let's try this, I give up, we do need a local binding
+	 * TCP hash as well as the others for fast bind/connect.
+	 */
+	struct tcp_bind_hashbucket *__tcp_bhash;
+
+	int __tcp_bhash_size;
+	int __tcp_ehash_size;
+
+	/* All sockets in TCP_LISTEN state will be in here.  This is the only
+	 * table where wildcard'd TCP sockets can exist.  Hash function here
+	 * is just local port number.
+	 */
+	struct sock *__tcp_listening_hash[TCP_LHTABLE_SIZE];
+
+	/* All the above members are written once at bootup and
+	 * never written again _or_ are predominantly read-access.
+	 *
+	 * Now align to a new cache line as all the following members
+	 * are often dirty.
+	 */
+	rwlock_t __tcp_lhash_lock
+		__attribute__((__aligned__(SMP_CACHE_BYTES)));
+	atomic_t __tcp_lhash_users;
+	wait_queue_head_t __tcp_lhash_wait;
+	spinlock_t __tcp_portalloc_lock;
+} tcp_hashinfo;
+
+#define tcp_ehash	(tcp_hashinfo.__tcp_ehash)
+#define tcp_bhash	(tcp_hashinfo.__tcp_bhash)
+#define tcp_ehash_size	(tcp_hashinfo.__tcp_ehash_size)
+#define tcp_bhash_size	(tcp_hashinfo.__tcp_bhash_size)
+#define tcp_listening_hash (tcp_hashinfo.__tcp_listening_hash)
+#define tcp_lhash_lock	(tcp_hashinfo.__tcp_lhash_lock)
+#define tcp_lhash_users	(tcp_hashinfo.__tcp_lhash_users)
+#define tcp_lhash_wait	(tcp_hashinfo.__tcp_lhash_wait)
+#define tcp_portalloc_lock (tcp_hashinfo.__tcp_portalloc_lock)
 
 extern kmem_cache_t *tcp_bucket_cachep;
 extern struct tcp_bind_bucket *tcp_bucket_create(struct tcp_bind_hashbucket *head,

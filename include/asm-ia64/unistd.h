@@ -93,7 +93,7 @@
 #define __NR_setpriority		1102
 #define __NR_statfs			1103
 #define __NR_fstatfs			1104
-#define __NR_ioperm			1105
+/* unused; used to be __NR_ioperm */
 #define __NR_semget			1106
 #define __NR_semop			1107
 #define __NR_semctl			1108

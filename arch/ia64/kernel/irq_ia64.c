@@ -39,7 +39,8 @@
 spinlock_t ivr_read_lock;
 #endif
 
-unsigned long ipi_base_addr = IPI_DEFAULT_BASE_ADDR;	/* default base addr of IPI table */
+/* default base addr of IPI table */
+unsigned long ipi_base_addr = (__IA64_UNCACHED_OFFSET | IPI_DEFAULT_BASE_ADDR);	
 
 /*
  * Legacy IRQ to IA-64 vector translation table.  Any vector not in
@@ -220,13 +221,23 @@ ipi_send (int cpu, int vector, int delivery_mode, int redirect)
 {
 	unsigned long ipi_addr;
 	unsigned long ipi_data;
+	unsigned long phys_cpu_id;
 #ifdef CONFIG_ITANIUM_A1_SPECIFIC
 	unsigned long flags;
 #endif
-#	define EID	0
+
+#ifdef CONFIG_SMP
+	phys_cpu_id = cpu_physical_id(cpu);
+#else
+	phys_cpu_id = (ia64_get_lid() >> 16) & 0xffff;
+#endif
+
+	/*
+	 * cpu number is in 8bit ID and 8bit EID
+	 */
 
 	ipi_data = (delivery_mode << 8) | (vector & 0xff);
-	ipi_addr = ipi_base_addr | ((cpu << 8 | EID) << 4) | ((redirect & 1)  << 3);
+	ipi_addr = ipi_base_addr | (phys_cpu_id << 4) | ((redirect & 1)  << 3);
 
 #ifdef CONFIG_ITANIUM_A1_SPECIFIC
 	spin_lock_irqsave(&ivr_read_lock, flags);

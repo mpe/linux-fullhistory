@@ -43,10 +43,6 @@ u64				ia64_mca_stackframe[32];
 u64				ia64_mca_bspstore[1024];
 u64				ia64_init_stack[INIT_TASK_SIZE] __attribute__((aligned(16)));
 
-#if defined(SAL_MPINIT_WORKAROUND) && !defined(CONFIG_SMP)
-int bootstrap_processor = -1;
-#endif
-
 static void			ia64_mca_cmc_vector_setup(int 		enable, 
 							  int_vector_t 	cmc_vector);
 static void			ia64_mca_wakeup_ipi_wait(void);
@@ -223,12 +219,6 @@ ia64_mca_init(void)
 
 	IA64_MCA_DEBUG("ia64_mca_init : begin\n");
 
-#if defined(SAL_MPINIT_WORKAROUND) && !defined(CONFIG_SMP)
-	/* XXX -- workaround for SAL bug for running on MP system, but UP kernel */
-
-	bootstrap_processor = hard_smp_processor_id();
-#endif
-
 	/* Clear the Rendez checkin flag for all cpus */
 	for(i = 0 ; i < IA64_MAXCPUS; i++)
 		ia64_mc_info.imi_rendez_checkin[i] = IA64_MCA_RENDEZ_CHECKIN_NOTDONE;
@@ -265,8 +255,11 @@ ia64_mca_init(void)
 	IA64_MCA_DEBUG("ia64_mca_init : correctable mca vector setup done\n");
 
 	ia64_mc_info.imi_mca_handler 		= __pa(ia64_os_mca_dispatch);
-	ia64_mc_info.imi_mca_handler_size	= 
-		__pa(ia64_os_mca_dispatch_end) - __pa(ia64_os_mca_dispatch);
+	/*
+	 * XXX - disable SAL checksum by setting size to 0; should be
+	 *	__pa(ia64_os_mca_dispatch_end) - __pa(ia64_os_mca_dispatch);
+	 */
+	ia64_mc_info.imi_mca_handler_size	= 0; 
 	/* Register the os mca handler with SAL */
 	if (ia64_sal_set_vectors(SAL_VECTOR_OS_MCA,
 				 ia64_mc_info.imi_mca_handler,
@@ -278,10 +271,14 @@ ia64_mca_init(void)
 
 	IA64_MCA_DEBUG("ia64_mca_init : registered os mca handler with SAL\n");
 
+	/* 
+	 * XXX - disable SAL checksum by setting size to 0, should be
+	 * IA64_INIT_HANDLER_SIZE 
+	 */
 	ia64_mc_info.imi_monarch_init_handler 		= __pa(mon_init_ptr->fp);
-	ia64_mc_info.imi_monarch_init_handler_size	= IA64_INIT_HANDLER_SIZE;
+	ia64_mc_info.imi_monarch_init_handler_size	= 0;
 	ia64_mc_info.imi_slave_init_handler 		= __pa(slave_init_ptr->fp);
-	ia64_mc_info.imi_slave_init_handler_size	= IA64_INIT_HANDLER_SIZE;
+	ia64_mc_info.imi_slave_init_handler_size	= 0;
 
 	IA64_MCA_DEBUG("ia64_mca_init : os init handler at %lx\n",ia64_mc_info.imi_monarch_init_handler);
 
@@ -386,7 +383,7 @@ ia64_mca_wakeup_all(void)
 	int cpu;
 
 	/* Clear the Rendez checkin flag for all cpus */
-	for(cpu = 0 ; cpu < IA64_MAXCPUS; cpu++)
+	for(cpu = 0 ; cpu < smp_num_cpus; cpu++)
 		if (ia64_mc_info.imi_rendez_checkin[cpu] == IA64_MCA_RENDEZ_CHECKIN_DONE)
 			ia64_mca_wakeup(cpu);
 
@@ -404,11 +401,14 @@ ia64_mca_wakeup_all(void)
 void
 ia64_mca_rendez_int_handler(int rendez_irq, void *arg, struct pt_regs *ptregs)
 {
-	int flags;
+	int flags, cpu = 0;
 	/* Mask all interrupts */
         save_and_cli(flags);
 
-	ia64_mc_info.imi_rendez_checkin[ia64_get_cpuid(0)] = IA64_MCA_RENDEZ_CHECKIN_DONE;
+#ifdef CONFIG_SMP
+	cpu = cpu_logical_id(hard_smp_processor_id());
+#endif
+	ia64_mc_info.imi_rendez_checkin[cpu] = IA64_MCA_RENDEZ_CHECKIN_DONE;
 	/* Register with the SAL monarch that the slave has
 	 * reached SAL
 	 */

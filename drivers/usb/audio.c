@@ -879,6 +879,7 @@ static void usbin_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbin_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbin_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -943,6 +944,7 @@ static void usbin_sync_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbin_sync_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbin_sync_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -1233,6 +1235,7 @@ static void usbout_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbout_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbout_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -1304,6 +1307,7 @@ static void usbout_sync_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbout_sync_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbout_sync_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&

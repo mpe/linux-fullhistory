@@ -17,6 +17,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/spinlock.h>
 
 #include <asm/pal.h>
 #include <asm/system.h>
@@ -158,12 +159,22 @@ struct ia64_sal_desc_tr {
 	char reserved2[8];
 };
 
-struct ia64_sal_desc_ptc {
+typedef struct ia64_sal_desc_ptc {
 	char type;
 	char reserved1[3];
 	unsigned int num_domains;	/* # of coherence domains */
-	long domain_info;	/* physical address of domain info table */
-};
+	s64  domain_info;		/* physical address of domain info table */
+} ia64_sal_desc_ptc_t;
+
+typedef struct ia64_sal_ptc_domain_info {
+	unsigned long proc_count;	/* number of processors in domain */
+	long proc_list;			/* physical address of LID array */
+} ia64_sal_ptc_domain_info_t;
+
+typedef struct ia64_sal_ptc_domain_proc_entry {
+	unsigned char id;		/* id of processor */
+	unsigned char eid;		/* eid of processor */
+} ia64_sal_ptc_domain_proc_entry_t;
 
 #define IA64_SAL_AP_EXTERNAL_INT 0
 
@@ -175,6 +186,7 @@ struct ia64_sal_desc_ap_wakeup {
 };
 
 extern ia64_sal_handler ia64_sal;
+extern struct ia64_sal_desc_ptc *ia64_ptc_domain_info;
 
 extern const char *ia64_sal_strerror (long status);
 extern void ia64_sal_init (struct ia64_sal_systab *sal_systab);
@@ -387,7 +399,7 @@ typedef struct psilog
  * Now define a couple of inline functions for improved type checking
  * and convenience.
  */
-extern inline long
+static inline long
 ia64_sal_freq_base (unsigned long which, unsigned long *ticks_per_second,
 		    unsigned long *drift_info)
 {
@@ -400,7 +412,7 @@ ia64_sal_freq_base (unsigned long which, unsigned long *ticks_per_second,
 }
 
 /* Flush all the processor and platform level instruction and/or data caches */
-extern inline s64
+static inline s64
 ia64_sal_cache_flush (u64 cache_type)
 {
 	struct ia64_sal_retval isrv;
@@ -411,7 +423,7 @@ ia64_sal_cache_flush (u64 cache_type)
 
 	
 /* Initialize all the processor and platform level instruction and data caches */
-extern inline s64
+static inline s64
 ia64_sal_cache_init (void)
 {
 	struct ia64_sal_retval isrv;
@@ -422,7 +434,7 @@ ia64_sal_cache_init (void)
 /* Clear the processor and platform information logged by SAL with respect to the 
  * machine state at the time of MCA's, INITs or CMCs 
  */
-extern inline s64
+static inline s64
 ia64_sal_clear_state_info (u64 sal_info_type, u64 sal_info_sub_type)
 {
 	struct ia64_sal_retval isrv;
@@ -434,7 +446,7 @@ ia64_sal_clear_state_info (u64 sal_info_type, u64 sal_info_sub_type)
 /* Get the processor and platform information logged by SAL with respect to the machine
  * state at the time of the MCAs, INITs or CMCs.
  */
-extern inline u64
+static inline u64
 ia64_sal_get_state_info (u64 sal_info_type, u64 sal_info_sub_type, u64 *sal_info)
 {
 	struct ia64_sal_retval isrv;
@@ -446,7 +458,7 @@ ia64_sal_get_state_info (u64 sal_info_type, u64 sal_info_sub_type, u64 *sal_info
 /* Get the maximum size of the information logged by SAL with respect to the machine 
  * state at the time of MCAs, INITs or CMCs
  */
-extern inline u64
+static inline u64
 ia64_sal_get_state_info_size (u64 sal_info_type, u64 sal_info_sub_type)
 {
 	struct ia64_sal_retval isrv;
@@ -459,7 +471,7 @@ ia64_sal_get_state_info_size (u64 sal_info_type, u64 sal_info_sub_type)
 /* Causes the processor to go into a spin loop within SAL where SAL awaits a wakeup
  * from the monarch processor.
  */
-extern inline s64
+static inline s64
 ia64_sal_mc_rendez (void)
 {
 	struct ia64_sal_retval isrv;
@@ -471,7 +483,7 @@ ia64_sal_mc_rendez (void)
  * the machine check rendezvous sequence as well as the mechanism to wake up the 
  * non-monarch processor at the end of machine check processing.
  */
-extern inline s64
+static inline s64
 ia64_sal_mc_set_params (u64 param_type, u64 i_or_m, u64 i_or_m_val, u64 timeout)
 {
 	struct ia64_sal_retval isrv;
@@ -480,7 +492,7 @@ ia64_sal_mc_set_params (u64 param_type, u64 i_or_m, u64 i_or_m_val, u64 timeout)
 }
 
 /* Read from PCI configuration space */
-extern inline s64
+static inline s64
 ia64_sal_pci_config_read (u64 pci_config_addr, u64 size, u64 *value)
 {
 	struct ia64_sal_retval isrv;
@@ -503,7 +515,7 @@ ia64_sal_pci_config_read (u64 pci_config_addr, u64 size, u64 *value)
 }
 
 /* Write to PCI configuration space */
-extern inline s64
+static inline s64
 ia64_sal_pci_config_write (u64 pci_config_addr, u64 size, u64 value)
 {
 	struct ia64_sal_retval isrv;
@@ -527,7 +539,7 @@ ia64_sal_pci_config_write (u64 pci_config_addr, u64 size, u64 value)
  * Register physical addresses of locations needed by SAL when SAL
  * procedures are invoked in virtual mode.
  */
-extern inline s64
+static inline s64
 ia64_sal_register_physical_addr (u64 phys_entry, u64 phys_addr)
 {
 	struct ia64_sal_retval isrv;
@@ -539,7 +551,7 @@ ia64_sal_register_physical_addr (u64 phys_entry, u64 phys_addr)
  * or entry points where SAL will pass control for the specified event. These event
  * handlers are for the bott rendezvous, MCAs and INIT scenarios.
  */
-extern inline s64
+static inline s64
 ia64_sal_set_vectors (u64 vector_type,
 		      u64 handler_addr1, u64 gp1, u64 handler_len1,
 		      u64 handler_addr2, u64 gp2, u64 handler_len2)
@@ -552,7 +564,7 @@ ia64_sal_set_vectors (u64 vector_type,
 	return isrv.status;
 }		
 /* Update the contents of PAL block in the non-volatile storage device */
-extern inline s64
+static inline s64
 ia64_sal_update_pal (u64 param_buf, u64 scratch_buf, u64 scratch_buf_size,
 		     u64 *error_code, u64 *scratch_buf_size_needed)
 {

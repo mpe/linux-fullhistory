@@ -101,10 +101,6 @@ extern void rif_init(struct net_proto *);
 #endif
 
 
-#ifdef CONFIG_PPPOE
-#include <linux/if_pppox.h>
-#endif
-
 /*
  *	Protocol Table
  */
@@ -181,9 +177,6 @@ struct net_proto protocols[] = {
 
 #ifdef CONFIG_IRDA
   { "IrDA",     irda_proto_init },                     /* IrDA protocols */
-#endif
-#ifdef CONFIG_PPPOE
-  { "PPPoX",	pppox_proto_init },			/* PPP over Ethernet */
 #endif
   { NULL,	NULL		}			/* End marker			*/
 };

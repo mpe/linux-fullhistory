@@ -219,6 +219,7 @@ struct switch_stack {
   extern void show_regs (struct pt_regs *);
   extern long ia64_peek (struct pt_regs *, struct task_struct *, unsigned long addr, long *val);
   extern long ia64_poke (struct pt_regs *, struct task_struct *, unsigned long addr, long val);
+  extern void ia64_flush_fph (struct task_struct *t);
   extern void ia64_sync_fph (struct task_struct *t);
 
 #ifdef CONFIG_IA64_NEW_UNWIND

@@ -93,6 +93,12 @@ extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg
 			   unsigned long arg3, unsigned long arg4, unsigned long arg5)
 { smp_cross_call(func, arg1, arg2, arg3, arg4, arg5); }
 
+extern __inline__ int smp_call_function(void (*func)(void *info), void *info, int nonatomic, int wait)
+{
+	xc1((smpfunc_t)func, (unsigned long)info);
+	return 0;
+}
+
 extern __volatile__ int __cpu_number_map[NR_CPUS];
 extern __volatile__ int __cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];

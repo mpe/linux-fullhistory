@@ -284,6 +284,12 @@ Here is the new interface:
 	user space shared/writable mappings of this page potentially
 	exist, this routine is called.
 
+	NOTE: This routine need only be called for page cache pages
+	      which can potentially ever be mapped into the address
+	      space of a user process.  So for example, VFS layer code
+	      handling vfs symlinks in the page cache need not call
+	      this interface at all.
+
 	The phrase "kernel writes to a page cache page" means,
 	specifically, that the kernel executes store instructions
 	that dirty data in that page at the page->virtual mapping

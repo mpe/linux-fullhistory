@@ -376,7 +376,8 @@ ia64_peek (struct pt_regs *regs, struct task_struct *child, unsigned long addr, 
 				ret = 0;
 			} else {
 				if  ((unsigned long) laddr >= (unsigned long) high_memory) {
-					printk("yikes: trying to access long at %p\n", laddr);
+					printk("yikes: trying to access long at %p\n",
+					       (void *) laddr);
 					return -EIO;
 				}
 				ret = *laddr;
@@ -543,21 +544,48 @@ sync_thread_rbs (struct task_struct *child, struct mm_struct *mm, int make_writa
 }
 
 /*
- * Ensure the state in child->thread.fph is up-to-date.
+ * Write f32-f127 back to task->thread.fph if it has been modified.
+ */
+inline void
+ia64_flush_fph (struct task_struct *task)
+{
+	struct ia64_psr *psr = ia64_psr(ia64_task_regs(task));
+#ifdef CONFIG_SMP
+	struct task_struct *fpu_owner = current;
+#else
+	struct task_struct *fpu_owner = ia64_get_fpu_owner();
+#endif
+
+	if (task == fpu_owner && psr->mfh) {
+		psr->mfh = 0;
+		ia64_save_fpu(&task->thread.fph[0]);
+		task->thread.flags |= IA64_THREAD_FPH_VALID;
+	}
+}
+
+/*
+ * Sync the fph state of the task so that it can be manipulated
+ * through thread.fph.  If necessary, f32-f127 are written back to
+ * thread.fph or, if the fph state hasn't been used before, thread.fph
+ * is cleared to zeroes.  Also, access to f32-f127 is disabled to
+ * ensure that the task picks up the state from thread.fph when it
+ * executes again.
  */
 void
-ia64_sync_fph (struct task_struct *child)
+ia64_sync_fph (struct task_struct *task)
 {
-	if (ia64_psr(ia64_task_regs(child))->mfh && ia64_get_fpu_owner() == child) {
-		ia64_psr(ia64_task_regs(child))->mfh = 0;
+	struct ia64_psr *psr = ia64_psr(ia64_task_regs(task));
+
+	ia64_flush_fph(task);
+	if (!(task->thread.flags & IA64_THREAD_FPH_VALID)) {
+		task->thread.flags |= IA64_THREAD_FPH_VALID;
+		memset(&task->thread.fph, 0, sizeof(task->thread.fph));
+	}
+#ifndef CONFIG_SMP
+	if (ia64_get_fpu_owner() == task)
 		ia64_set_fpu_owner(0);
-		ia64_save_fpu(&child->thread.fph[0]);
-		child->thread.flags |= IA64_THREAD_FPH_VALID;
-	}
-	if (!(child->thread.flags & IA64_THREAD_FPH_VALID)) {
-		memset(&child->thread.fph, 0, sizeof(child->thread.fph));
-		child->thread.flags |= IA64_THREAD_FPH_VALID;
-	}
+#endif
+	psr->dfh = 1;
 }
 
 #ifdef CONFIG_IA64_NEW_UNWIND
@@ -589,6 +617,7 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 	struct switch_stack *sw;
 	struct unw_frame_info info;
 	struct pt_regs *pt;
+	unsigned long pmd_tmp;
 
 	pt = ia64_task_regs(child);
 	sw = (struct switch_stack *) (child->thread.ksp + 16);
@@ -600,7 +629,10 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 
 	if (addr < PT_F127 + 16) {
 		/* accessing fph */
-		ia64_sync_fph(child);
+		if (write_access)
+			ia64_sync_fph(child);
+		else
+			ia64_flush_fph(child);
 		ptr = (unsigned long *) ((unsigned long) &child->thread.fph + addr);
 	} else if (addr >= PT_F10 && addr < PT_F15 + 16) {
 		/* scratch registers untouched by kernel (saved in switch_stack) */
@@ -655,6 +687,9 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 
 		      case PT_B1: case PT_B2: case PT_B3: case PT_B4: case PT_B5:
 			return unw_access_br(&info, (addr - PT_B1)/8 + 1, data, write_access);
+
+		      case PT_AR_EC:
+			return unw_access_ar(&info, UNW_AR_EC, data, write_access);
 
 		      case PT_AR_LC:
 			return unw_access_ar(&info, UNW_AR_LC, data, write_access);
@@ -759,7 +794,11 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 				addr);
 			return -1;
 		}
-	} else {
+	} else 
+#ifdef CONFIG_PERFMON
+		if (addr < PT_PMD) 
+#endif
+		{
 		/* access debug registers */
 
 		if (!(child->thread.flags & IA64_THREAD_DBG_VALID)) {
@@ -782,6 +821,32 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 
 		ptr += regnum;
 	}
+#ifdef CONFIG_PERFMON
+	else {
+		/*
+		 * XXX: will eventually move back to perfmonctl()
+		 */
+		unsigned long pmd = (addr - PT_PMD) >> 3;
+		extern unsigned long perf_ovfl_val;
+
+		/* we just use ptrace to read */
+		if (write_access) return -1;
+
+		if (pmd > 3) {
+			printk("ptrace: rejecting access to PMD[%ld] address 0x%lx\n", pmd, addr);
+			return -1;
+		}
+
+		/* 
+		 * We always need to mask upper 32bits of pmd because value is random
+		 */
+		pmd_tmp = child->thread.pmod[pmd]+(child->thread.pmd[pmd]& perf_ovfl_val);
+
+		/*printk(__FUNCTION__" child=%d reading pmd[%ld]=%lx\n", child->pid, pmd, pmd_tmp);*/
+
+		ptr = &pmd_tmp;
+	}
+#endif
 	if (write_access)
 		*ptr = *data;
 	else
@@ -794,8 +859,9 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 static int
 access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data, int write_access)
 {
-	unsigned long *ptr, *rbs, *bspstore, ndirty, regnum;
+	unsigned long *ptr = NULL, *rbs, *bspstore, ndirty, regnum;
 	struct switch_stack *sw;
+	unsigned long pmd_tmp;
 	struct pt_regs *pt;
 
 	if ((addr & 0x7) != 0)
@@ -803,7 +869,10 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 
 	if (addr < PT_F127+16) {
 		/* accessing fph */
-		ia64_sync_fph(child);
+		if (write_access)
+			ia64_sync_fph(child);
+		else
+			ia64_flush_fph(child);
 		ptr = (unsigned long *) ((unsigned long) &child->thread.fph + addr);
 	} else if (addr < PT_F9+16) {
 		/* accessing switch_stack or pt_regs: */
@@ -864,6 +933,14 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 				*data = (pt->cr_ipsr & IPSR_READ_MASK);
 			return 0;
 
+		      case PT_AR_EC:
+			if (write_access)
+				sw->ar_pfs = (((*data & 0x3f) << 52)
+					      | (sw->ar_pfs & ~(0x3fUL << 52)));
+			else
+				*data = (sw->ar_pfs >> 52) & 0x3f;
+			break;
+
 		      case PT_R1: case PT_R2: case PT_R3:
 		      case PT_R4: case PT_R5: case PT_R6: case PT_R7:
 		      case PT_R8: case PT_R9: case PT_R10: case PT_R11:
@@ -900,7 +977,12 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 			/* disallow accessing anything else... */
 			return -1;
 		}
-	} else {
+	} else 
+#ifdef CONFIG_PERFMON
+		if (addr < PT_PMD) 
+#endif
+		{
+
 		/* access debug registers */
 
 		if (!(child->thread.flags & IA64_THREAD_DBG_VALID)) {
@@ -921,6 +1003,33 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 
 		ptr += regnum;
 	}
+#ifdef CONFIG_PERFMON
+	else {
+		/*
+		 * XXX: will eventually move back to perfmonctl()
+		 */
+		unsigned long pmd = (addr - PT_PMD) >> 3;
+		extern unsigned long perf_ovfl_val;
+
+		/* we just use ptrace to read */
+		if (write_access) return -1;
+
+		if (pmd > 3) {
+			printk("ptrace: rejecting access to PMD[%ld] address 0x%lx\n", pmd, addr);
+			return -1;
+		}
+
+		/* 
+		 * We always need to mask upper 32bits of pmd because value is random
+		 */
+		pmd_tmp = child->thread.pmod[pmd]+(child->thread.pmd[pmd]& perf_ovfl_val);
+
+		/*printk(__FUNCTION__" child=%d reading pmd[%ld]=%lx\n", child->pid, pmd, pmd_tmp);*/
+
+		ptr = &pmd_tmp;
+	}
+#endif
+
 	if (write_access)
 		*ptr = *data;
 	else
@@ -996,10 +1105,12 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 	ret = -ESRCH;
 	if (!(child->ptrace & PT_PTRACED))
 		goto out_tsk;
+
 	if (child->state != TASK_STOPPED) {
-		if (request != PTRACE_KILL)
+		if (request != PTRACE_KILL && request != PTRACE_PEEKUSR)
 			goto out_tsk;
 	}
+
 	if (child->p_pptr != current)
 		goto out_tsk;
 

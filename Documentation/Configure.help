@@ -4584,6 +4584,30 @@ CONFIG_LLC
   This is a Logical Link Layer protocol used for X.25 connections over
   Ethernet, using ordinary Ethernet cards. 
 
+
+Frame Diverter (EXPERIMENTAL)
+CONFIG_NET_DIVERT
+  The Frame Diverter allows you to divert packets from the
+  network, that are not aimed at the interface receiving it (in 
+  promisc. mode). Typically, a Linux box setup as an ethernet bridge
+  with the Frames Diverter on, can do some *really* transparent www 
+  caching using a Squid proxy for example.
+
+  This is very usefull when you don't want to change your router's
+  config (or if you simply don't have access to it).
+
+  The other possible usages of diverting Ethernet Frames are numberous:
+   - reroute smtp traffic to another interface
+   - traffic-shape certain network streams
+   - transparently proxy smtp connections
+   - etc...
+
+  For more informations, please refer to:
+    http://www.freshmeat.net/projects/etherdivert
+    http://perso.wanadoo.fr/magpie/EtherDivert.html
+
+  If unsure, say N
+
 802.1d Ethernet Bridging
 CONFIG_BRIDGE
   If you say Y here, then your Linux box will be able to act as an
@@ -8137,6 +8161,11 @@ CONFIG_NE2K_PCI
   say Y and read the Ethernet-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto .
 
+  This driver also works for the following NE2000 clone cards:
+    RealTek RTL-8029  Winbond 89C940  Compex RL2000  KTI ET32P2
+    NetVin NV5000SC   Via 86C926      SureCom NE34   Winbond
+    Holtek HT80232    Holtek HT80229
+
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called ne2k-pci.o. If you want to compile it as a
@@ -8199,6 +8228,8 @@ CONFIG_RTL8129
   the RTL8129 chip. If you have one of those, say Y and
   read the Ethernet-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto .
+
+  Note: the 8029 is a NE2000 PCI clone, you can use the NE2K-PCI driver.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -9982,12 +10013,13 @@ CONFIG_USB_OHCI
   The module will be called usb-ohci.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt.
 
-USB Human Interface Device (HID) support
+USB Human Interface Device (full HID) support
 CONFIG_USB_HID
-  Say Y here if you want to connect keyboards, mice, joysticks,
-  graphic tablets, or any other HID based devices to your
-  computer via USB. More information is available:
-  Documentation/usb/input.txt.
+  Say Y here if you want full HID support to connect keyboards,
+  mice, joysticks, graphic tablets, or any other HID based devices
+  to your computer via USB. You can't use this driver and the
+  HIDBP (Boot Protocol) keyboard and mouse drivers at the same time.
+  More information is available: Documentation/usb/input.txt.
 
   If unsure, say Y.
 
@@ -9996,11 +10028,11 @@ CONFIG_USB_HID
   The module will be called hid.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB HIDBP Keyboard support
+USB HIDBP Keyboard (basic) support
 CONFIG_USB_KBD
   Say Y here if you don't want to use the generic HID driver for your
   USB keyboard and prefer to use the keyboard in its limited Boot
-  Protocol mode. This driver is much smaller than the HID one.
+  Protocol mode instead. This driver is much smaller than the HID one.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -10009,11 +10041,11 @@ CONFIG_USB_KBD
 
   If unsure, say N.
 
-USB HIDBP Mouse support
+USB HIDBP Mouse (basic) support
 CONFIG_USB_MOUSE
   Say Y here if you don't want to use the generic HID driver for your
   USB mouse and prefer to use the mouse in its limited Boot Protocol
-  mode. This driver is much smaller than the HID one.
+  mode instead. This driver is much smaller than the HID one.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -16688,6 +16720,119 @@ CONFIG_DISPLAY7SEG
   If you do not have a CompactPCI model CP1400 or CP1500, or
   another UltraSPARC-IIi-cEngine boardset with a 7-segment display,
   you should say N to this option. 
+
+IA-64 system type
+CONFIG_IA64_GENERIC
+  This selects the system type of your hardware.  A "generic" kernel
+  will run on any supported IA-64 system.  However, if you configure
+  a kernel for your specific system, it will be faster and smaller.
+
+  To find out what type of IA-64 system you have, you may want to
+  check the IA-64 Linux web site at http://www.linux-ia64.org/.
+  As of the time of this writing, most hardware is DIG compliant,
+  so the "DIG-compliant" option is usually the right choice.
+
+  HP-simulator   For the HP simulator (http://software.hp.com/ia64linux/).
+  SN1-simulator  For the SGI SN1 simulator.
+  DIG-compliant  For DIG ("Developer's Interface Guide") compliant system.
+
+  If you don't know what to do, choose "generic".
+
+Kernel page size
+CONFIG_IA64_PAGE_SIZE_4KB
+
+  This lets you select the page size of the kernel.  For best IA-64
+  performance, a page size of 8KB or 16KB is recommended.  For best
+  IA-32 compatibility, a page size of 4KB should be selected (the vast
+  majority of IA-32 binaries work perfectly fine with a larger page
+  size).  For Itanium systems, do NOT chose a page size larger than
+  16KB.
+
+  4KB                For best IA-32 compatibility
+  8KB                For best IA-64 performance
+  16KB               For best IA-64 performance
+  64KB               Not for Itanium.
+
+  If you don't know what to do, choose 8KB.
+
+Enable Itanium A-step specific code
+CONFIG_ITANIUM_ASTEP_SPECIFIC
+  Select this option to build a kernel for an Itanium prototype system
+  with an A-step CPU.  You have an A-step CPU if the "revision" field in
+  /proc/cpuinfo is 0.
+
+Enable Itanium A1-step specific code
+CONFIG_ITANIUM_A1_SPECIFIC
+  Select this option to build a kernel for an Itanium prototype system
+  with an A1-step CPU.  If you don't know whether you have an A1-step CPU,
+  you probably don't and you can answer "no" here.
+
+Enable Itanium B-step specific code
+CONFIG_ITANIUM_BSTEP_SPECIFIC
+  Select this option to build a kernel for an Itanium prototype system
+  with a B-step CPU.  You have a B-step CPU if the "revision" field in
+  /proc/cpuinfo has a value in the range from 1 to 4.
+
+Enable Itanium B0-step specific code
+CONFIG_ITANIUM_B0_SPECIFIC
+  Select this option to bild a kernel for an Itanium prototype system
+  with a B0-step CPU.  You have a B0-step CPU if the "revision" field in
+  /proc/cpuinfo is 1.
+
+Force interrupt redirection
+CONFIG_IA64_HAVE_IRQREDIR
+  Select this option if you know that your system has the ability to
+  redirect interrupts to different CPUs.  Select N here if you're
+  unsure.
+
+Enable use of global TLB purge instruction (ptc.g)
+CONFIG_ITANIUM_PTCG
+  Say Y here if you want the kernel to use the IA-64 "ptc.g"
+  instruction to flush the TLB on all CPUs.  Select N here if
+  you're unsure.
+
+Enable SoftSDV hacks
+CONFIG_IA64_SOFTSDV_HACKS
+  Say Y here to enable hacks to make the kernel work on the Intel
+  SoftSDV simulator.  Select N here if you're unsure.
+
+Enable AzusA hacks
+CONFIG_IA64_AZUSA_HACKS
+  Say Y here to enable hacks to make the kernel work on the NEC
+  AzusA platform.  Select N here if you're unsure.
+
+Force socket buffers below 4GB?
+CONFIG_SKB_BELOW_4GB
+  Most of today's network interface cards (NICs) support DMA to
+  the low 32 bits of the address space only.  On machines with
+  more then 4GB of memory, this can cause the system to slow
+  down if there is no I/O TLB hardware.  Turning this option on
+  avoids the slow-down by forcing socket buffers to be allocated
+  from memory below 4GB.  The downside is that your system could
+  run out of memory below 4GB before all memory has been used up.
+  If you're unsure how to answer this question, answer Y.
+
+Enable IA-64 Machine Check Abort
+CONFIG_IA64_MCA
+  Say Y here to enable machine check support for IA-64.  If you're
+  unsure, answer Y.
+
+Performance monitor support
+CONFIG_PERFMON
+  Selects whether support for the IA-64 performance monitor hardware
+  is included in the kernel.  This makes some kernel data-structures a
+  little bigger and slows down execution a bit, but it is still
+  usually a good idea to turn this on.  If you're unsure, say N.
+
+/proc/pal support
+CONFIG_IA64_PALINFO
+  If you say Y here, you are able to get PAL (Processor Abstraction
+  Layer) information in /proc/pal.  This contains useful information
+  about the processors in your systems, such as cache and TLB sizes
+  and the PAL firmware version in use.
+
+  To use this option, you have to check that the "/proc file system
+  support" (CONFIG_PROC_FS) is enabled, too.
 
 #
 # A couple of things I keep forgetting:

@@ -317,13 +317,9 @@ int __init el16_probe(struct net_device *dev)
 	else if (base_addr != 0)
 		return -ENXIO;		/* Don't probe at all. */
 
-	for (i = 0; netcard_portlist[i]; i++) {
-		int ioaddr = netcard_portlist[i];
-		if (check_region(ioaddr, EL16_IO_EXTENT))
-			continue;
-		if (el16_probe1(dev, ioaddr) == 0)
+	for (i = 0; netcard_portlist[i]; i++)
+		if (el16_probe1(dev, netcard_portlist[i]) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
@@ -331,7 +327,7 @@ int __init el16_probe(struct net_device *dev)
 static int __init el16_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned char init_ID_done = 0, version_printed = 0;
-	int i, irq, irqval;
+	int i, irq, irqval, retval;
 	struct net_local *lp;
 
 	if (init_ID_done == 0) {
@@ -348,15 +344,21 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 		init_ID_done = 1;
 	}
 
-	if (inb(ioaddr) == '*' && inb(ioaddr+1) == '3'
-		&& inb(ioaddr+2) == 'C' && inb(ioaddr+3) == 'O')
-		;
-	else
+	if (!request_region(ioaddr, EL16_IO_EXTENT, "3c507"))
 		return -ENODEV;
+
+	if ((inb(ioaddr) != '*') || (inb(ioaddr + 1) != '3') || 
+	    (inb(ioaddr + 2) != 'C') || (inb(ioaddr + 3) != 'O')) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Allocate a new 'dev' if needed. */
 	if (dev == NULL)
-		dev = init_etherdev(0, 0);
+		if (!(dev = init_etherdev(0, 0))) {
+			retval = -ENOMEM;
+			goto out;
+		}
 
 	if (net_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -371,11 +373,11 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 	irqval = request_irq(irq, &el16_interrupt, 0, "3c507", dev);
 	if (irqval) {
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
-		return -EAGAIN;
+		retval = -EAGAIN;
+		goto out;
 	}
 
 	/* We've committed to using the board, and can start filling in *dev. */
-	request_region(ioaddr, EL16_IO_EXTENT, "3c507");
 	dev->base_addr = ioaddr;
 
 	outb(0x01, ioaddr + MISC_CTRL);
@@ -419,8 +421,10 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 
 	/* Initialize the device structure. */
 	lp = dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-	if (dev->priv == NULL)
-		return -ENOMEM;
+	if (dev->priv == NULL) {
+		retval = -ENOMEM;
+		goto out;
+	}
 	memset(dev->priv, 0, sizeof(struct net_local));
 	spin_lock_init(&lp->lock);
 
@@ -436,6 +440,9 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 	dev->flags&=~IFF_MULTICAST;	/* Multicast doesn't work */
 
 	return 0;
+out:
+	release_region(ioaddr, EL16_IO_EXTENT);
+	return retval;
 }
 
 static int el16_open(struct net_device *dev)

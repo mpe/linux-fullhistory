@@ -28,6 +28,7 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
+#include <net/divert.h>
 
 #include <asm/atomic.h>
 #include <asm/cache.h>
@@ -46,6 +47,13 @@
 #define NET_XMIT_BYPASS		4	/* packet does not leave via dequeue;
 					   (TC use only - dev_queue_xmit
 					   returns this as NET_XMIT_SUCCESS) */
+
+/* Backlog congestion levels */
+#define NET_RX_SUCCESS		0   /* keep 'em coming, baby */
+#define NET_RX_CN_LOW		1   /* storm alert, just in case */
+#define NET_RX_CN_MOD		2   /* Storm on its way! */
+#define NET_RX_CN_HIGH		5   /* The storm is here */
+#define NET_RX_DROP		-1  /* packet dropped */
 
 #define net_xmit_errno(e)	((e) != NET_XMIT_CN ? -ENOBUFS : 0)
 
@@ -382,6 +390,10 @@ struct net_device
 	rwlock_t		fastpath_lock;
 	struct dst_entry	*fastpath[NETDEV_FASTROUTE_HMASK+1];
 #endif
+#ifdef CONFIG_NET_DIVERT
+	/* this will get initialized at each interface type init routine */
+	struct divert_blk	*divert;
+#endif /* CONFIG_NET_DIVERT */
 };
 
 
@@ -440,6 +452,8 @@ static inline int unregister_gifconf(unsigned int family)
 struct softnet_data
 {
 	int			throttle;
+	int			cng_level;
+	int			avg_blog;
 	struct sk_buff_head	input_pkt_queue;
 	struct net_device	*output_queue;
 	struct sk_buff		*completion_queue;
@@ -526,7 +540,7 @@ static inline void dev_kfree_skb_any(struct sk_buff *skb)
 
 extern void		net_call_rx_atomic(void (*fn)(void));
 #define HAVE_NETIF_RX 1
-extern void		netif_rx(struct sk_buff *skb);
+extern int		netif_rx(struct sk_buff *skb);
 extern int		dev_ioctl(unsigned int cmd, void *);
 extern int		dev_change_flags(struct net_device *, unsigned);
 extern void		dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev);
@@ -628,6 +642,7 @@ extern int		netdev_register_fc(struct net_device *dev, void (*stimul)(struct net
 extern void		netdev_unregister_fc(int bit);
 extern int		netdev_max_backlog;
 extern unsigned long	netdev_fc_xoff;
+extern atomic_t netdev_dropping;
 extern int		netdev_set_master(struct net_device *dev, struct net_device *master);
 #ifdef CONFIG_NET_FASTROUTE
 extern int		netdev_fastroute;

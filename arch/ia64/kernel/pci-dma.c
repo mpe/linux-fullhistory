@@ -97,7 +97,8 @@ setup_swiotlb (void)
 	io_tlb_index = 0;
 	io_tlb_orig_addr = alloc_bootmem(io_tlb_nslabs * sizeof(char *));
 
-	printk("Placing software IO TLB between 0x%p - 0x%p\n", io_tlb_start, io_tlb_end);
+	printk("Placing software IO TLB between 0x%p - 0x%p\n",
+	       (void *) io_tlb_start, (void *) io_tlb_end);
 }
 
 /*
@@ -394,7 +395,7 @@ pci_dma_sync_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nelems, int 
  * Once the device is given the dma address, the device owns this memory
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
-extern inline dma_addr_t
+dma_addr_t
 pci_map_single (struct pci_dev *hwdev, void *ptr, size_t size, int direction)
 {
         if (direction == PCI_DMA_NONE)
@@ -410,7 +411,7 @@ pci_map_single (struct pci_dev *hwdev, void *ptr, size_t size, int direction)
  * After this call, reads by the cpu to the buffer are guarenteed to see
  * whatever the device wrote there.
  */
-extern inline void
+void
 pci_unmap_single (struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int direction)
 {
         if (direction == PCI_DMA_NONE)
@@ -433,7 +434,7 @@ pci_unmap_single (struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int d
  * Device ownership issues as mentioned above for pci_map_single are
  * the same here.
  */
-extern inline int
+int
 pci_map_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
         if (direction == PCI_DMA_NONE)
@@ -446,7 +447,7 @@ pci_map_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direct
  * Again, cpu read rules concerning calls here are the same as for
  * pci_unmap_single() above.
  */
-extern inline void
+void
 pci_unmap_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
         if (direction == PCI_DMA_NONE)
@@ -463,7 +464,7 @@ pci_unmap_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int dire
  * next point you give the PCI dma address back to the card, the
  * device again owns the buffer.
  */
-extern inline void
+void
 pci_dma_sync_single (struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, int direction)
 {
         if (direction == PCI_DMA_NONE)
@@ -478,7 +479,7 @@ pci_dma_sync_single (struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, 
  * The same as pci_dma_sync_single but for a scatter-gather list,
  * same rules and usage.
  */
-extern inline void
+void
 pci_dma_sync_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nelems, int direction)
 {
         if (direction == PCI_DMA_NONE)

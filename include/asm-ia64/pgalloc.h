@@ -32,7 +32,7 @@
 #define pte_quicklist		(my_cpu_data.pte_quick)
 #define pgtable_cache_size	(my_cpu_data.pgtable_cache_sz)
 
-extern __inline__ pgd_t*
+static __inline__ pgd_t*
 get_pgd_slow (void)
 {
 	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
@@ -41,7 +41,7 @@ get_pgd_slow (void)
 	return ret;
 }
 
-extern __inline__ pgd_t*
+static __inline__ pgd_t*
 get_pgd_fast (void)
 {
 	unsigned long *ret = pgd_quicklist;
@@ -54,7 +54,7 @@ get_pgd_fast (void)
 	return (pgd_t *)ret;
 }
 
-extern __inline__ pgd_t*
+static __inline__ pgd_t*
 pgd_alloc (void)
 {
 	pgd_t *pgd;
@@ -65,7 +65,7 @@ pgd_alloc (void)
 	return pgd;
 }
 
-extern __inline__ void
+static __inline__ void
 free_pgd_fast (pgd_t *pgd)
 {
 	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
@@ -73,7 +73,7 @@ free_pgd_fast (pgd_t *pgd)
 	++pgtable_cache_size;
 }
 
-extern __inline__ pmd_t *
+static __inline__ pmd_t *
 get_pmd_slow (void)
 {
 	pmd_t *pmd = (pmd_t *) __get_free_page(GFP_KERNEL);
@@ -83,7 +83,7 @@ get_pmd_slow (void)
 	return pmd;
 }
 
-extern __inline__ pmd_t *
+static __inline__ pmd_t *
 get_pmd_fast (void)
 {
 	unsigned long *ret = (unsigned long *)pmd_quicklist;
@@ -96,7 +96,7 @@ get_pmd_fast (void)
 	return (pmd_t *)ret;
 }
 
-extern __inline__ void
+static __inline__ void
 free_pmd_fast (pmd_t *pmd)
 {
 	*(unsigned long *)pmd = (unsigned long) pmd_quicklist;
@@ -104,7 +104,7 @@ free_pmd_fast (pmd_t *pmd)
 	++pgtable_cache_size;
 }
 
-extern __inline__ void
+static __inline__ void
 free_pmd_slow (pmd_t *pmd)
 {
 	free_page((unsigned long)pmd);
@@ -112,7 +112,7 @@ free_pmd_slow (pmd_t *pmd)
 
 extern pte_t *get_pte_slow (pmd_t *pmd, unsigned long address_preadjusted);
 
-extern __inline__ pte_t *
+static __inline__ pte_t *
 get_pte_fast (void)
 {
 	unsigned long *ret = (unsigned long *)pte_quicklist;
@@ -125,7 +125,7 @@ get_pte_fast (void)
 	return (pte_t *)ret;
 }
 
-extern __inline__ void
+static __inline__ void
 free_pte_fast (pte_t *pte)
 {
 	*(unsigned long *)pte = (unsigned long) pte_quicklist;
@@ -142,7 +142,7 @@ free_pte_fast (pte_t *pte)
 extern void __handle_bad_pgd (pgd_t *pgd);
 extern void __handle_bad_pmd (pmd_t *pmd);
 
-extern __inline__ pte_t*
+static __inline__ pte_t*
 pte_alloc (pmd_t *pmd, unsigned long vmaddr)
 {
 	unsigned long offset;
@@ -163,7 +163,7 @@ pte_alloc (pmd_t *pmd, unsigned long vmaddr)
 	return (pte_t *) pmd_page(*pmd) + offset;
 }
 
-extern __inline__ pmd_t*
+static __inline__ pmd_t*
 pmd_alloc (pgd_t *pgd, unsigned long vmaddr)
 {
 	unsigned long offset;
@@ -228,7 +228,7 @@ extern spinlock_t ptcg_lock;
 /*
  * Flush a specified user mapping
  */
-extern __inline__ void
+static __inline__ void
 flush_tlb_mm (struct mm_struct *mm)
 {
 	if (mm) {

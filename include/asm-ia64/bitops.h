@@ -20,7 +20,7 @@
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
  */
 
-extern __inline__ void
+static __inline__ void
 set_bit (int nr, volatile void *addr)
 {
 	__u32 bit, old, new;
@@ -36,7 +36,12 @@ set_bit (int nr, volatile void *addr)
 	} while (cmpxchg_acq(m, old, new) != old);
 }
 
-extern __inline__ void
+/*
+ * clear_bit() doesn't provide any barrier for the compiler.
+ */
+#define smp_mb__before_clear_bit()	smp_mb()
+#define smp_mb__after_clear_bit()	smp_mb()
+static __inline__ void
 clear_bit (int nr, volatile void *addr)
 {
 	__u32 mask, old, new;
@@ -52,7 +57,7 @@ clear_bit (int nr, volatile void *addr)
 	} while (cmpxchg_acq(m, old, new) != old);
 }
 
-extern __inline__ void
+static __inline__ void
 change_bit (int nr, volatile void *addr)
 {
 	__u32 bit, old, new;
@@ -68,7 +73,7 @@ change_bit (int nr, volatile void *addr)
 	} while (cmpxchg_acq(m, old, new) != old);
 }
 
-extern __inline__ int
+static __inline__ int
 test_and_set_bit (int nr, volatile void *addr)
 {
 	__u32 bit, old, new;
@@ -85,7 +90,7 @@ test_and_set_bit (int nr, volatile void *addr)
 	return (old & bit) != 0;
 }
 
-extern __inline__ int
+static __inline__ int
 test_and_clear_bit (int nr, volatile void *addr)
 {
 	__u32 mask, old, new;
@@ -102,7 +107,7 @@ test_and_clear_bit (int nr, volatile void *addr)
 	return (old & ~mask) != 0;
 }
 
-extern __inline__ int
+static __inline__ int
 test_and_change_bit (int nr, volatile void *addr)
 {
 	__u32 bit, old, new;
@@ -119,7 +124,7 @@ test_and_change_bit (int nr, volatile void *addr)
 	return (old & bit) != 0;
 }
 
-extern __inline__ int
+static __inline__ int
 test_bit (int nr, volatile void *addr)
 {
 	return 1 & (((const volatile __u32 *) addr)[nr >> 5] >> (nr & 31));
@@ -129,7 +134,7 @@ test_bit (int nr, volatile void *addr)
  * ffz = Find First Zero in word. Undefined if no zero exists,
  * so code should check against ~0UL first..
  */
-extern inline unsigned long
+static inline unsigned long
 ffz (unsigned long x)
 {
 	unsigned long result;
@@ -164,7 +169,7 @@ ia64_fls (unsigned long x)
  * hweightN: returns the hamming weight (i.e. the number
  * of bits set) of a N-bit word
  */
-extern __inline__ unsigned long
+static __inline__ unsigned long
 hweight64 (unsigned long x)
 {
 	unsigned long result;
@@ -181,7 +186,7 @@ hweight64 (unsigned long x)
 /*
  * Find next zero bit in a bitmap reasonably efficiently..
  */
-extern inline int
+static inline int
 find_next_zero_bit (void *addr, unsigned long size, unsigned long offset)
 {
 	unsigned long *p = ((unsigned long *) addr) + (offset >> 6);

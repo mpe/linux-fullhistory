@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.174 2000/09/18 05:59:48 davem Exp $
+ * Version:	$Id: tcp.c,v 1.176 2000/10/06 22:45:41 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1026,7 +1026,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 
 			skb = NULL;
 			if (tcp_memory_free(sk))
-				skb = tcp_alloc_skb(sk, tmp, GFP_KERNEL);
+				skb = tcp_alloc_skb(sk, tmp, sk->allocation);
 			if (skb == NULL) {
 				/* If we didn't get any memory, we need to sleep. */
 				set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);

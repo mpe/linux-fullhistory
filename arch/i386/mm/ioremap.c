@@ -78,7 +78,6 @@ static int remap_area_pages(unsigned long address, unsigned long phys_addr,
 		if (remap_area_pmd(pmd, address, end - address,
 					 phys_addr + address, flags))
 			return -ENOMEM;
-		set_pgdir(address, *dir);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	} while (address && (address < end));

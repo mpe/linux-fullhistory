@@ -25,24 +25,41 @@
 
 #define smp_processor_id()	(current->processor)
 
-struct smp_boot_data {
+extern struct smp_boot_data {
 	int cpu_count;
-	int cpu_map[NR_CPUS];
-};
+	int cpu_phys_id[NR_CPUS];
+} smp_boot_data __initdata;
 
 extern unsigned long cpu_present_map;
 extern unsigned long cpu_online_map;
 extern unsigned long ipi_base_addr;
 extern int bootstrap_processor;
-extern volatile int __cpu_number_map[NR_CPUS];
-extern volatile int __cpu_logical_map[NR_CPUS];
+extern volatile int __cpu_physical_id[NR_CPUS];
 extern unsigned char smp_int_redirect;
 extern char no_int_routing;
-
-#define cpu_number_map(i)	__cpu_number_map[i]
-#define cpu_logical_map(i)	__cpu_logical_map[i]
+extern int smp_num_cpus;
+  
+#define cpu_physical_id(i)	__cpu_physical_id[i]
+#define cpu_number_map(i)	(i)
+#define cpu_logical_map(i)	(i)
 
 extern unsigned long ap_wakeup_vector;
+
+/*
+ * Function to map hard smp processor id to logical id.  Slow, so
+ * don't use this in performance-critical code.
+ */
+static inline int
+cpu_logical_id (int cpuid)
+{
+	int i;
+
+	for (i=0; i<smp_num_cpus; i++) {
+		if (cpu_physical_id(i) == cpuid)
+			break;
+	}
+	return i;
+}
 
 /*
  * XTP control functions:
@@ -51,28 +68,28 @@ extern unsigned long ap_wakeup_vector;
  *    max_xtp   :  never deliver interrupts to this CPU.
  */
 
-extern __inline void 
+static inline void 
 min_xtp(void)
 {
 	if (smp_int_redirect & SMP_IRQ_REDIRECTION)
 		writeb(0x00, ipi_base_addr | XTP_OFFSET); /* XTP to min */
 }
 
-extern __inline void
+static inline void
 normal_xtp(void)
 {
 	if (smp_int_redirect & SMP_IRQ_REDIRECTION)
 		writeb(0x08, ipi_base_addr | XTP_OFFSET); /* XTP normal */
 }
 
-extern __inline void
+static inline void
 max_xtp(void) 
 {
 	if (smp_int_redirect & SMP_IRQ_REDIRECTION)
 		writeb(0x0f, ipi_base_addr | XTP_OFFSET); /* Set XTP to max */
 }
 
-extern __inline__ unsigned int 
+static inline unsigned int 
 hard_smp_processor_id(void)
 {
 	struct {
@@ -84,13 +101,7 @@ hard_smp_processor_id(void)
 
 	__asm__ ("mov %0=cr.lid" : "=r" (lid));
 
-#ifdef LARGE_CPU_ID_OK
-	return lid.eid << 8 | lid.id;
-#else
-	if (((lid.id << 8) | lid.eid) > NR_CPUS)
-		printk("WARNING: SMP ID %d > NR_CPUS\n", (lid.id << 8) | lid.eid);
-	return lid.id;
-#endif
+	return lid.id << 8 | lid.eid;
 }
 
 #define NO_PROC_ID		(-1)

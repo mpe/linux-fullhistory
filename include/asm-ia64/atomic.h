@@ -17,13 +17,6 @@
 #include <asm/system.h>
 
 /*
- * Make sure gcc doesn't try to be clever and move things around
- * on us. We need to use _exactly_ the address the user gave us,
- * not some alias that contains the same information.
- */
-#define __atomic_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
-
-/*
  * On IA-64, counter must always be volatile to ensure that that the
  * memory accesses are ordered.
  */

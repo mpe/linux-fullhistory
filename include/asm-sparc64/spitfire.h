@@ -1,4 +1,4 @@
-/* $Id: spitfire.h,v 1.9 1998/04/28 08:23:33 davem Exp $
+/* $Id: spitfire.h,v 1.10 2000/10/06 13:10:29 anton Exp $
  * spitfire.h: SpitFire/BlackBird/Cheetah inline MMU operations.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -117,6 +117,7 @@ extern __inline__ void spitfire_put_dcache_tag(unsigned long addr, unsigned long
 	__asm__ __volatile__("stxa	%0, [%1] %2"
 			     : /* No outputs */
 			     : "r" (tag), "r" (addr), "i" (ASI_DCACHE_TAG));
+	membar("#Sync");
 }
 
 /* The instruction cache lines are flushed with this, but note that

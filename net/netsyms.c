@@ -30,6 +30,9 @@
 #include <net/scm.h>
 #include <linux/if_bridge.h>
 #include <linux/random.h>
+#ifdef CONFIG_NET_DIVERT
+#include <net/divert.h>
+#endif /* CONFIG_NET_DIVERT */
 
 #ifdef CONFIG_NET
 extern __u32 sysctl_wmem_max;
@@ -207,6 +210,12 @@ EXPORT_SYMBOL(br_ioctl_hook);
 #endif
 #endif
 
+#ifdef CONFIG_NET_DIVERT
+EXPORT_SYMBOL(alloc_divert_blk);
+EXPORT_SYMBOL(free_divert_blk);
+EXPORT_SYMBOL(divert_ioctl);
+#endif /* CONFIG_NET_DIVERT */
+
 #ifdef CONFIG_INET
 /* Internet layer registration */
 EXPORT_SYMBOL(inetdev_lock);
@@ -276,16 +285,8 @@ EXPORT_SYMBOL(inet_sock_destruct);
 EXPORT_SYMBOL(inet_sock_release);
 
 /* Socket demultiplexing. */
-EXPORT_SYMBOL(tcp_ehash);
-EXPORT_SYMBOL(tcp_ehash_size);
-EXPORT_SYMBOL(tcp_listening_hash);
-EXPORT_SYMBOL(tcp_lhash_lock);
-EXPORT_SYMBOL(tcp_lhash_users);
-EXPORT_SYMBOL(tcp_lhash_wait);
+EXPORT_SYMBOL(tcp_hashinfo);
 EXPORT_SYMBOL(tcp_listen_wlock);
-EXPORT_SYMBOL(tcp_bhash);
-EXPORT_SYMBOL(tcp_bhash_size);
-EXPORT_SYMBOL(tcp_portalloc_lock);
 EXPORT_SYMBOL(udp_hash);
 EXPORT_SYMBOL(udp_hash_lock);
 
@@ -490,6 +491,7 @@ EXPORT_SYMBOL(dev_load);
 EXPORT_SYMBOL(dev_ioctl);
 EXPORT_SYMBOL(dev_queue_xmit);
 #ifdef CONFIG_NET_HW_FLOWCONTROL
+EXPORT_SYMBOL(netdev_dropping);
 EXPORT_SYMBOL(netdev_register_fc);
 EXPORT_SYMBOL(netdev_unregister_fc);
 EXPORT_SYMBOL(netdev_fc_xoff);

@@ -1,6 +1,6 @@
-        Linux kernel release 2.3.xx for the IA-64 Platform
+        Linux kernel release 2.4.xx for the IA-64 Platform
 
-   These are the release notes for Linux version 2.3 for IA-64
+   These are the release notes for Linux version 2.4 for IA-64
    platform.  This document provides information specific to IA-64
    ONLY, to get additional information about the Linux kernel also
    read the original Linux README provided with the kernel.
@@ -31,46 +31,13 @@ COMPILING the kernel:
  
 IA-64 SPECIFICS
 
- - Security related issues:
- 
-    o mmap needs to check whether mapping would overlap with the
-      address-space hole in a region or whether the mapping would be
-      across regions.  In both cases, mmap should fail.
- 
-    o ptrace is a huge security hole right now as it does not reject
-      writing to security sensitive bits (such as the PSR!).
- 
  - General issues:
  
-    o Kernel modules aren't supported yet.
- 
-    o For non-RT signals, siginfo isn't passed through from the kernel
-      to the point where the signal is actually delivered.  Also, we
-      should make sure the siginfo data is compliant with the UNIX
-      ABI.
- 
     o Hardly any performance tuning has been done. Obvious targets
-      include the library routines (memcpy, IP checksum, etc.). Less
+      include the library routines (IP checksum, etc.). Less
       obvious targets include making sure we don't flush the TLB
-      needlessly, etc. Also, the TLB handlers should probably try to
-      do a speculative load from the virtually mapped linear page
-      table and only if that fails fall back on walking the page table
-      tree.
+      needlessly, etc.
 	  
-    o Discontiguous large memory support; memory above 4GB will be
-      discontiguous since the 4GB-64MB is reserved for firmware and I/O
-      space.
- 
-    o Correct mapping for PAL runtime code; PAL code needs to be
-      mapped by a TR.
-
-    o Make current IRQ/IOSAPIC handling closer to IA32 such as,
-      disable/enable interrupts, use of INPROGRESS flag etc.
- 
-    o clone system call implementation; needs to setup proper backing
-      store
- 
     o SMP locks cleanup/optimization
 	
-    o IA32 support.  Currently experimental.  It mostly works but
-      there are problems with some dynamically loaded programs.
+    o IA32 support.  Currently experimental.  It mostly works.

@@ -67,17 +67,7 @@ extern void ipi_send (int cpu, int vector, int delivery_mode, int redirect);
 static inline void
 hw_resend_irq (struct hw_interrupt_type *h, unsigned int vector)
 {
-	int my_cpu_id;
-
-#ifdef CONFIG_SMP
-	my_cpu_id = smp_processor_id();
-#else
-	__u64 lid;
-
-	__asm__ ("mov %0=cr.lid" : "=r"(lid));
-	my_cpu_id = (lid >> 24) & 0xff;		/* extract id (ignore eid) */
-#endif
-	ipi_send(my_cpu_id, vector, IA64_IPI_DM_INT, 0);
+	ipi_send(smp_processor_id(), vector, IA64_IPI_DM_INT, 0);
 }
 
 #endif /* _ASM_IA64_HW_IRQ_H */

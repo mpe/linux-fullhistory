@@ -52,36 +52,38 @@ struct unw_frame_info {
 	unsigned int flags;
 	short hint;
 	short prev_script;
-	unsigned long bsp;
-	unsigned long sp;		/* stack pointer */
-	unsigned long psp;		/* previous sp */
-	unsigned long ip;		/* instruction pointer */
-	unsigned long pr_val;		/* current predicates */
-	unsigned long *cfm;
+
+	/* current frame info: */
+	unsigned long bsp;		/* backing store pointer value */
+	unsigned long sp;		/* stack pointer value */
+	unsigned long psp;		/* previous sp value */
+	unsigned long ip;		/* instruction pointer value */
+	unsigned long pr;		/* current predicate values */
+	unsigned long *cfm_loc;		/* cfm save location (or NULL) */
 
 	struct task_struct *task;
 	struct switch_stack *sw;
 
 	/* preserved state: */
-	unsigned long *pbsp;		/* previous bsp */
-	unsigned long *bspstore;
-	unsigned long *pfs;
-	unsigned long *rnat;
-	unsigned long *rp;
-	unsigned long *pri_unat;
-	unsigned long *unat;
-	unsigned long *pr;
-	unsigned long *lc;
-	unsigned long *fpsr;
+	unsigned long *bsp_loc;		/* previous bsp save location */
+	unsigned long *bspstore_loc;
+	unsigned long *pfs_loc;
+	unsigned long *rnat_loc;
+	unsigned long *rp_loc;
+	unsigned long *pri_unat_loc;
+	unsigned long *unat_loc;
+	unsigned long *pr_loc;
+	unsigned long *lc_loc;
+	unsigned long *fpsr_loc;
 	struct unw_ireg {
 		unsigned long *loc;
 		struct unw_ireg_nat {
-			int type : 3;		/* enum unw_nat_type */
-			signed int off;		/* NaT word is at loc+nat.off */
+			long type : 3;			/* enum unw_nat_type */
+			signed long off : 61;		/* NaT word is at loc+nat.off */
 		} nat;
 	} r4, r5, r6, r7;
-	unsigned long *b1, *b2, *b3, *b4, *b5;
-	struct ia64_fpreg *f2, *f3, *f4, *f5, *fr[16];
+	unsigned long *b1_loc, *b2_loc, *b3_loc, *b4_loc, *b5_loc;
+	struct ia64_fpreg *f2_loc, *f3_loc, *f4_loc, *f5_loc, *fr_loc[16];
 };
 
 /*
@@ -140,19 +142,56 @@ extern int unw_unwind (struct unw_frame_info *info);
  */
 extern int unw_unwind_to_user (struct unw_frame_info *info);
 
-#define unw_get_ip(info,vp)	({*(vp) = (info)->ip; 0;})
-#define unw_get_sp(info,vp)	({*(vp) = (unsigned long) (info)->sp; 0;})
-#define unw_get_psp(info,vp)	({*(vp) = (unsigned long) (info)->psp; 0;})
-#define unw_get_bsp(info,vp)	({*(vp) = (unsigned long) (info)->bsp; 0;})
-#define unw_get_cfm(info,vp)	({*(vp) = *(info)->cfm; 0;})
-#define unw_set_cfm(info,val)	({*(info)->cfm = (val); 0;})
+#define unw_is_intr_frame(info)	(((info)->flags & UNW_FLAG_INTERRUPT_FRAME) != 0)
+
+static inline unsigned long
+unw_get_ip (struct unw_frame_info *info, unsigned long *valp)
+{
+	*valp = (info)->ip;
+	return 0;
+}
+
+static inline unsigned long
+unw_get_sp (struct unw_frame_info *info, unsigned long *valp)
+{
+	*valp = (info)->sp;
+	return 0;
+}
+
+static inline unsigned long
+unw_get_psp (struct unw_frame_info *info, unsigned long *valp)
+{
+	*valp = (info)->psp;
+	return 0;
+}
+
+static inline unsigned long
+unw_get_bsp (struct unw_frame_info *info, unsigned long *valp)
+{
+	*valp = (info)->bsp;
+	return 0;
+}
+
+static inline unsigned long
+unw_get_cfm (struct unw_frame_info *info, unsigned long *valp)
+{
+	*valp = *(info)->cfm_loc;
+	return 0;
+}
+
+static inline unsigned long
+unw_set_cfm (struct unw_frame_info *info, unsigned long val)
+{
+	*(info)->cfm_loc = val;
+	return 0;
+}
 
 static inline int
 unw_get_rp (struct unw_frame_info *info, unsigned long *val)
 {
-	if (!info->rp)
+	if (!info->rp_loc)
 		return -1;
-	*val = *info->rp;
+	*val = *info->rp_loc;
 	return 0;
 }
 
