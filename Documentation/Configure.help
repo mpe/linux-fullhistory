@@ -419,6 +419,33 @@ CONFIG_MD_STRIPED
   here and read Documentation/modules.txt. The module will be called
   raid0.o. If unsure, say Y.
 
+RAID-1 (mirroring) mode
+CONFIG_MD_MIRRORING
+  A RAID-1 set consists of several disk drives which are exact copies
+  of each other. In the event of a mirror failure, the RAID driver
+  will continue to use the operational mirrors in the set, providing
+  an error free MD device to the higher levels of the kernel. In
+  a set with N drives, the available space is the capacity of a single
+  drive, and the set protects against a failure of (N - 1) drives.
+  raidtools, a set of user-space tools which create and maintain
+  RAID1/4/5 sets, is available at:
+  ftp://ftp.kernel.org/pub/linux/daemons/raid
+  http://luthien.nuclecu.unam.mx/~miguel/raid
+
+RAID-4/RAID-5 mode
+CONFIG_MD_RAID5
+  A RAID-5 set of N drives with a capacity of C MB per drive provides
+  the capacity of C * (N - 1) drives, and protects against a failure
+  of a single drive. For a given sector (row) number, (N - 1) drives
+  contain data sectors, and one drive contains the parity protection.
+  For a RAID-4 set, the parity blocks are present on a single drive,
+  while a RAID-5 set distributes the parity accross the drives in one
+  of the available parity distribution methods.
+  raidtools, a set of user-space tools which create and maintain
+  RAID1/4/5 sets, is available at:
+  ftp://ftp.kernel.org/pub/linux/daemons/raid
+  http://luthien.nuclecu.unam.mx/~miguel/raid
+
 Support for Deskstation RPC44 
 CONFIG_DESKSTATION_RPC44
   This is a machine with a R4400 100 MHz CPU. To compile a Linux
@@ -2301,6 +2328,15 @@ CONFIG_SCSI_AM53C974
   and removed from the running kernel whenever you want), say M here
   and read Documentation/modules.txt. The module will be called
   AM53C974.o.
+
+GDT SCSI Disk Array Controller support
+CONFIG_SCSI_GDTH
+  This is a driver for all SCSI Disk Array Controllers (EISA/ISA/PCI) 
+  manufactured by ICP vortex. It is documented in the kernel source in
+  drivers/scsi/gdth.c and drivers/scsi/gdth.h. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile 
+  it as a module, say M here and read Documentation/modules.txt. 	
 
 IOMEGA Parallel Port ZIP drive SCSI support
 CONFIG_SCSI_PPA
@@ -5219,6 +5255,26 @@ CONFIG_JOYSTICK
   removed from the running kernel whenever you want). The module will
   be called joystick.o. If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
+
+Radio support
+CONFIG_MISC_RADIO
+  If you have a radio card (you will probably know if you do!), then
+  you will want to say "y" here and make a character device file 
+  (usually /dev/radio) with major number 10 and minor 129 using mknod
+  ("man mknod").  And then, don't forget to pick up some useful tools
+  to use said device (you _might_ find something at ftp.lmh.ox.ac.uk:
+  /users/weejock/linux/radio/, but I haven't written anything too
+  useful yet...)
+
+AIMSlab RadioTrack card
+CONFIG_RADIO_RTRACK
+  Choose "y" here if you have one of these, and then fill in the port
+  address below.
+
+RadioTrack i/o port
+CONFIG_RADIO_RTRACK_PORT
+  Enter either 0x30f or 0x20f here.  The card default is 0x30f, if you
+  haven't changed the jumper setting on the card.
 
 ARC console time
 CONFIG_RTC_ARC

@@ -281,6 +281,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MISC_RADIO),y)
+L_OBJS += radio.o
+  ifeq ($(CONFIG_RADIO_RTRACK),y)
+  L_OBJS += rtrack.o
+  endif
+endif
+
 ifeq ($(CONFIG_QIC02_TAPE),y)
 L_OBJS += tpqic02.o
 else

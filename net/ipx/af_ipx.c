@@ -221,7 +221,7 @@ static void ipx_destroy_socket(struct sock *sk)
  * IPX interface is defined by a physical device and a frame type.
  */
 
-static ipx_route * ipxrtr_lookup(unsigned long);
+static ipx_route * ipxrtr_lookup(__u32);
 
 static void ipxitf_clear_primary_net(void)
 {
@@ -242,11 +242,11 @@ static ipx_interface *ipxitf_find_using_phys(struct device *dev, unsigned short 
 	return i;
 }
 
-static ipx_interface *ipxitf_find_using_net(unsigned long net)
+static ipx_interface *ipxitf_find_using_net(__u32 net)
 {
 	ipx_interface	*i;
 
-	if (net == 0L)
+	if (!net)
 		return ipx_primary_net;
 
 	for (i=ipx_interfaces; i && (i->if_netnum!=net); i=i->if_next)
@@ -699,7 +699,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	return 0;
 }
 
-static int ipxrtr_add_route(unsigned long, ipx_interface *, unsigned char *);
+static int ipxrtr_add_route(__u32, ipx_interface *, unsigned char *);
 
 static int ipxitf_add_local_route(ipx_interface *intrfc)
 {
@@ -726,9 +726,9 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	}
 
 	/* See if we should update our network number */
-	if ((intrfc->if_netnum == 0L) &&
-		(ipx->ipx_source.net == ipx->ipx_dest.net) &&
-		(ipx->ipx_source.net != 0L))
+	if ( !intrfc->if_netnum &&  /* net number of intrfc not known yet (== 0) */
+		(ipx->ipx_source.net == ipx->ipx_dest.net) && /* intra-net packet */
+		ipx->ipx_source.net)  /* source net number of packet != 0 */
 	{
 		/* NB: NetWare servers lie about their hop count so we
 		 * dropped the test based on it.  This is the best way
@@ -742,7 +742,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		else
 		{
 			printk(KERN_WARNING "IPX: Network number collision %lx\n        %s %s and %s %s\n",
-				htonl(ipx->ipx_source.net),
+				(long unsigned int) htonl(ipx->ipx_source.net),
 				ipx_device_name(i),
 				ipx_frame_name(i->if_dlink_type),
 				ipx_device_name(intrfc),
@@ -756,12 +756,12 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		int i;
         	ipx_interface *ifcs;
 		struct sk_buff *skb2;
-  		long *l;
+  		__u32 *l;
 		char *c;
 		
 		c = (char *) skb->data;
 		c += sizeof( struct ipxhdr );
-		l = (long *) c;
+		l = (__u32 *) c;
 
 		i = 0;
 		/* 
@@ -780,7 +780,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 			for ( ifcs = ipx_interfaces; ifcs != NULL ; ifcs = ifcs->if_next) 
 			{
 				/* That aren't in the list */
-				l = (long *) c;
+				l = (__u32 *) c;
 				for( i = 0 ; i <= ipx->ipx_tctrl ; i++ )
 					if( ifcs->if_netnum == *l++ )
 						break;
@@ -804,9 +804,9 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	}
 #endif
 
-	if (ipx->ipx_dest.net == 0L)
+	if (!ipx->ipx_dest.net)
 		ipx->ipx_dest.net = intrfc->if_netnum;
-	if (ipx->ipx_source.net == 0L)
+	if (!ipx->ipx_source.net)
 		ipx->ipx_source.net = intrfc->if_netnum;
 
 	if (intrfc->if_netnum != ipx->ipx_dest.net)
@@ -873,7 +873,7 @@ static int ipxitf_create_internal(ipx_interface_definition *idef)
 		return -EEXIST;
 
 	/* Must have a valid network number */
-	if (idef->ipx_network == 0L)
+	if (!idef->ipx_network)
 		return -EADDRNOTAVAIL;
 	if (ipxitf_find_using_net(idef->ipx_network) != NULL)
 		return -EADDRINUSE;
@@ -927,7 +927,7 @@ static int ipxitf_create(ipx_interface_definition *idef)
 	if ((idef->ipx_special == IPX_PRIMARY) && (ipx_primary_net != NULL))
 		return -EEXIST;
 
-	if ((idef->ipx_network != 0L) &&
+	if (idef->ipx_network &&
 		(ipxitf_find_using_net(idef->ipx_network) != NULL))
 		return -EADDRINUSE;
 
@@ -1001,7 +1001,7 @@ static int ipxitf_create(ipx_interface_definition *idef)
 	}
 
 	/* If the network number is known, add a route */
-	if (intrfc->if_netnum == 0L)
+	if (!intrfc->if_netnum)
 		return 0;
 
 	return ipxitf_add_local_route(intrfc);
@@ -1075,7 +1075,7 @@ static ipx_interface *ipxitf_auto_create(struct device *dev,
 	if (intrfc!=NULL) 
 	{
 		intrfc->if_dev=dev;
-		intrfc->if_netnum=0L;
+		intrfc->if_netnum=0;
 		intrfc->if_dlink_type = dlink_type;
 		intrfc->if_dlink = datalink;
 		intrfc->if_sklist = NULL;
@@ -1178,7 +1178,7 @@ static int ipxitf_ioctl(unsigned int cmd, void *arg)
 *														    *
 \*******************************************************************************************************************/
 
-static ipx_route *ipxrtr_lookup(unsigned long net)
+static ipx_route *ipxrtr_lookup(__u32 net)
 {
 	ipx_route *r;
 
@@ -1188,7 +1188,7 @@ static ipx_route *ipxrtr_lookup(unsigned long net)
 	return r;
 }
 
-static int ipxrtr_add_route(unsigned long network, ipx_interface *intrfc, unsigned char *node)
+static int ipxrtr_add_route(__u32 network, ipx_interface *intrfc, unsigned char *node)
 {
 	ipx_route	*rt;
 
@@ -1340,7 +1340,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 	int err;
 
 	/* Find the appropriate interface on which to send packet */
-	if ((usipx->sipx_network == 0L) && (ipx_primary_net != NULL))
+	if (!usipx->sipx_network && (ipx_primary_net != NULL))
 	{
 		usipx->sipx_network = ipx_primary_net->if_netnum;
 		intrfc = ipx_primary_net;
@@ -1519,7 +1519,7 @@ static int ipx_interface_get_info(char *buffer, char **start, off_t offset,
 	len += sprintf (buffer,"%-11s%-15s%-9s%-11s%s\n", "Network",
 		"Node_Address", "Primary", "Device", "Frame_Type");
 	for (i = ipx_interfaces; i != NULL; i = i->if_next) {
-		len += sprintf(buffer+len, "%08lX   ", ntohl(i->if_netnum));
+		len += sprintf(buffer+len, "%08lX   ", (long unsigned int)ntohl(i->if_netnum));
 		len += sprintf (buffer+len,"%02X%02X%02X%02X%02X%02X   ",
 				i->if_node[0], i->if_node[1], i->if_node[2],
 				i->if_node[3], i->if_node[4], i->if_node[5]);
@@ -1572,7 +1572,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 #ifdef CONFIG_IPX_INTERN
 			len += sprintf(buffer+len,
 				       "%08lX:%02X%02X%02X%02X%02X%02X:%04X  ",
-				 htonl(s->protinfo.af_ipx.intrfc->if_netnum),
+                                       (long unsigned int) htonl(s->protinfo.af_ipx.intrfc->if_netnum),
 				       s->protinfo.af_ipx.node[0],
 				       s->protinfo.af_ipx.node[1],
 				       s->protinfo.af_ipx.node[2],
@@ -1590,7 +1590,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 			} else {
 				len += sprintf (buffer+len,
 					"%08lX:%02X%02X%02X%02X%02X%02X:%04X  ",
-					htonl(s->protinfo.af_ipx.dest_addr.net),
+					(long unsigned int) htonl(s->protinfo.af_ipx.dest_addr.net),
 					s->protinfo.af_ipx.dest_addr.node[0],
 					s->protinfo.af_ipx.dest_addr.node[1],
 					s->protinfo.af_ipx.dest_addr.node[2],
@@ -1639,10 +1639,10 @@ static int ipx_rt_get_info(char *buffer, char **start, off_t offset,
 			"Network", "Router_Net", "Router_Node");
 	for (rt = ipx_routes; rt != NULL; rt = rt->ir_next)
 	{
-		len += sprintf (buffer+len,"%08lX   ", ntohl(rt->ir_net));
+		len += sprintf (buffer+len,"%08lX   ", (long unsigned int) ntohl(rt->ir_net));
 		if (rt->ir_routed) {
 			len += sprintf (buffer+len,"%08lX     %02X%02X%02X%02X%02X%02X\n",
-				ntohl(rt->ir_intrfc->if_netnum),
+				(long unsigned int) ntohl(rt->ir_intrfc->if_netnum),
 				rt->ir_router_node[0], rt->ir_router_node[1],
 				rt->ir_router_node[2], rt->ir_router_node[3],
 				rt->ir_router_node[4], rt->ir_router_node[5]);
@@ -1906,7 +1906,7 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		int ret;
 
 		uaddr.sipx_port = 0;
-		uaddr.sipx_network = 0L;
+		uaddr.sipx_network = 0;
 #ifdef CONFIG_IPX_INTERN
 		memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc->if_node,
 		       IPX_NODE_LEN);
@@ -1966,7 +1966,7 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 #endif
 
 		} else {
-			sipx.sipx_network = 0L;
+			sipx.sipx_network = 0;
 			memset(sipx.sipx_node, '\0', IPX_NODE_LEN);
 		}
 		sipx.sipx_port = sk->protinfo.af_ipx.port;
@@ -2022,8 +2022,8 @@ void dump_data(char *str,unsigned char *d, int len)
 
 void dump_addr(char *str,ipx_address *p)
 {
-	printk(KERN_DEBUG"%s: %08X:%02X%02X%02X%02X%02X%02X:%04X\n",
-		str,ntohl(p->net),p->node[0],p->node[1],p->node[2],
+	printk(KERN_DEBUG"%s: %08lX:%02X%02X%02X%02X%02X%02X:%04X\n",
+		str,(long unsigned int)ntohl(p->net),p->node[0],p->node[1],p->node[2],
 		p->node[3],p->node[4],p->node[5],ntohs(p->sock));
 }
 

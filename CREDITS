@@ -643,12 +643,13 @@ S: CV5 8BZ
 S: United Kingdom
 
 N: Ron Holt
-E: ron@novell.com
+E: ron@caldera.com
+W: http://www.holt.org/
 D: Kernel development
-D: Contributed to kernel Wabi/Wine support
-S: Novell, Inc.
-S: 1700 South 122 East, Mailstop CP-1
-S: Provo, Utah 84606
+D: Minor kernel modifications to support Wabi and Wine
+S: Caldera, Inc.
+S: 240 West Center St.
+S: Orem, Utah 84059-1920
 S: USA
 
 N: Rob W. W. Hooft
@@ -867,6 +868,12 @@ D: Co-ordinator of DOSEMU releases
 S: Am Muehlenweg 38
 S: D53424 Remagen
 S: Germany
+
+N: Achim Leubner
+E: achim@vortex.de
+D: GDT SCSI Disk Array Controller driver
+S: ICP vortex Computersysteme GmbH
+S: Flein, Germany
 
 N: Phil Lewis
 E: beans@bucket.ualr.edu

@@ -31,9 +31,13 @@
 
 #define NFS_MAX_AGE 10*HZ	/* max age for dentry validation */
 
+#ifndef shrink_dcache_parent
+#define shrink_dcache_parent(dentry) shrink_dcache_sb((dentry)->d_sb)
+#endif
+
 /* needed by smbfs as well ... move to dcache? */
 extern void nfs_renew_times(struct dentry *);
-extern void nfs_invalidate_dircache_sb(struct super_block *);
+
 #define NFS_PARANOIA 1
 
 /*
@@ -626,7 +630,7 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	error = -EBUSY;
 	if (dentry->d_count > 1) {
 		/* Attempt to shrink child dentries ... */
-		shrink_dcache_sb(dentry->d_sb); /* Arghhh */
+		shrink_dcache_parent(dentry);
 		if (dentry->d_count > 1)
 			goto out;
 	}
@@ -811,6 +815,14 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 	}
 	error = nfs_proc_remove(NFS_SERVER(dir),
 					NFS_FH(dir), dentry->d_name.name);
+#ifdef NFS_PARANOIA
+if (dentry->d_count > 1)
+printk("nfs_safe_remove: %s/%s busy after delete?? d_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
+if (inode && inode->i_count > 1)
+printk("nfs_safe_remove: %s/%s inode busy?? i_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
+#endif
 	if (!error) {
 		nfs_invalidate_dircache(dir);
 		if (inode && inode->i_nlink)
@@ -1005,7 +1017,7 @@ old_dentry->d_parent->d_name.name, old_dentry->d_name.name);
 	 * Moving a directory ... prune child dentries if needed.
 	 */
 	else if (old_dentry->d_count > 1)
-		shrink_dcache_sb(old_dentry->d_sb); /* Arghhh */
+		shrink_dcache_parent(old_dentry);
 
 	/*
 	 * Now check the use counts ... we can't safely do the

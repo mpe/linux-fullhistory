@@ -164,7 +164,6 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Touched	4	/* 1 if the buffer has been touched (aging) */
 #define BH_Has_aged	5	/* 1 if the buffer has been aged (aging) */
 #define BH_Protected	6	/* 1 if the buffer is protected */
-#define BH_FreeOnIO	7	/* 1 to discard the buffer_head after IO */
 
 /*
  * Try to keep the most commonly used fields in single cache lines (16
@@ -202,7 +201,17 @@ struct buffer_head {
 	struct buffer_head ** b_pprev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */
 	struct buffer_head * b_reqnext;		/* request queue */
+
+	/*
+	 * I/O completion
+	 */
+	void (*b_end_io)(struct buffer_head *bh, int uptodate);
+	void *b_dev_id;
 };
+
+typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
+void init_buffer(struct buffer_head *bh, kdev_t dev, int block,
+		 bh_end_io_t *handler, void *dev_id);
 
 static inline int buffer_uptodate(struct buffer_head * bh)
 {
@@ -756,6 +765,7 @@ extern struct file * get_empty_filp(void);
 extern int close_fp(struct file *);
 extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
+extern struct buffer_head *efind_buffer(kdev_t dev, int block, int size);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
 extern void ll_rw_page(int, kdev_t, unsigned long, char *);
 extern void ll_rw_swap_file(int, kdev_t, unsigned int *, int, char *);

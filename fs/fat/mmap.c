@@ -21,11 +21,7 @@
 #include <linux/malloc.h>
 #include <linux/msdos_fs.h>
 
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
 #include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#endif
 #include <asm/system.h>
 
 /*

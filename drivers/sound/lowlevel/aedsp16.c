@@ -250,7 +250,7 @@
 #undef	AEDSP16_INFO  1		/* Define this to enable info code      */
 
 #if defined(AEDSP16_DEBUG)
-# define DBG(x) printk x
+# define DBG(x)  printk x
 # if defined(AEDSP16_DEBUG_MORE)
 #  define DBG1(x) printk x
 # else

@@ -53,6 +53,8 @@ bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR
   tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
+  tristate '   RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
+  tristate '   RAID-4/RAID-5 mode' CONFIG_MD_RAID5
 fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then

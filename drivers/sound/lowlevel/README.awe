@@ -1,6 +1,6 @@
 ================================================================
 	AWE32 Sound Driver for Linux / FreeBSD
-		version 0.3.1; Jan. 11, 1997
+		version 0.4.2; Sep. 1, 1997
 ================================================================
 
 * GENERAL NOTES
@@ -8,25 +8,14 @@
 This is a sound driver extension for SoundBlaster AWE32 and other
 compatible cards (AWE32-PnP, SB32, SB32-PnP, AWE64 & etc) to enable
 the wave synth operations.  The driver is provided for both Linux
-1.2.x and 2.[01].x kernels, and also FreeBSD.  Consult the
-installation document for installation on the original sound driver
-package.
+1.2.x and 2.[01].x kernels, and also FreeBSD on Intel x86 and DEC
+Alpha systems.   See INSTALL.awe (or INSTALL.fbsd) document for
+installation of the driver package.
 
 This driver was written by Takashi Iwai (iwai@dragon.mm.t.u-tokyo.ac.jp)  
 who also maintains the code.  Please forward any questions, bug fixes
 and suggestions directly to Iwai (_NOT_ to Linus Torvalds or Hannu
 Savolainen).
-
-
-* CAUTION
-
-- On ver.0.3.1, some zero size array entries are removed from
-awe_voice.h to avoid compile error in some non-ANSI compilers.
-Due to this fix, the size of awe_voice_rec structure is changed from
-older versions.  Use a constant AWE_VOICE_REC_SIZE instead of
-sizeof(awe_voice_rec).
-You can still have a compatibility by defining AWE_COMPAT_030=1, but
-this feature will be omitted in the future release.
 
 
 * NOTE TO LINUX USERS
@@ -35,30 +24,74 @@ To enable this driver on linux-2.[01].x kernels, you need turn on both
 "lowlevel drivers support" and "AWE32 synth support" options in sound
 menu when configure your linux kernel and modules.  For more details,
 see the installation document in the original driver package
-(awedrv-0.x.x.tar.gz) available at the web page:
+(awedrv-0.4.2.tar.gz) available at the web page:
 	http://bahamut.mm.t.u-tokyo.ac.jp/~iwai/awedrv/
 
 If you're using PnP cards, the card must be initialized before loading
 the sound driver.  There're several options to do this:
     - Initialize the card via ISA PnP tools, and load the sound module.
     - Initialize the card on DOS, and load linux by loadlin.exe
-    - Use PnP driver (for Linux-2.0.x)
+    - Use PnP driver (for Linux-2.x.x)
 See the FAQ list on the URL above.
+
+
+* USING THE DRIVER
+
+The GM and GS sounds include multiple instrument layers.
+The current version supports this type of sounds with a special
+extension, but it uses a non-standard way of sequencer calls.  Then,
+so far, only drvmidi and playmidi can play the multiple instruments
+and stereo sounds properly.
+
+To load SoundFont files, sfxload utility is required.
+All AWE32 driver and utilities can be downloaded from:
+	http://bahamut.mm.t.u-tokyo.ac.jp/~iwai/awedrv/
+
+The sfxload is included in the package awesfx-0.4.2.tgz. Binary
+packages are available there, too.  See the instruction in each
+package for installation.
+
+Sfxload reads a SoundFont file and transfers it to the sound driver.
+Note that new sfxload no longer requires -i option.
+
+	% sfxload synthgm.sbk
+
+You can tune up the sound via some new options, -A, -a and -d.
+
+	% sfxload -A2 synthgm.sbk
+
+See the manual of sfxload for more details.
+
+Now you can hear midi musics by supported midi players (drvmidi or
+playmidi-2.5).
+
+	% drvmidi foo.mid
+
+If you have only 512kb on the sound card, I recommend to use dynamic
+sample loading via -L option of drvmidi.  2MB GM/GS soundfont file is
+available in most midi files.
+
+	% sfxload synthgm
+	% drvmidi -L 2mbgmgs foo.mid
+
+Enjoy.
 
 
 * COMPILE FLAGS
 
 Compile conditions are defined in awe_config.h.
 
+[Compatibility Conditions]
+The following flags are defined automatically when using installation
+shell script.
+
 - AWE_OBSOLETE_VOXWARE		(default: not defined)
     indicates the system is VoxWare-3.0.x (with linux 1.2.x or
-    FreeBSD) if defined.  This option will be set automatically when
-    you use installation script.
+    FreeBSD) if defined.
 
 - AWE_NEW_KERNEL_INTERFACE	(default: not defined)
     indicates the system is OSSLite on Linux 2.1.6 or later if
-    defined.  This option will be set automatically when you use
-    installation script.
+    defined.
 
 - HAS_LOWLEVEL_H		(default: not defined)
     indicates the system has "lowlevel.h" in the sound/lowlevel
@@ -68,27 +101,32 @@ Compile conditions are defined in awe_config.h.
     indicates the sound driver has no patch manager function (for
     OSS-3.707 (in Linux-2.1.13) or newer). 
 
+- AWE_OSS38			(default: not defined)
+    indicates the sound driver has an additional parameter in
+    operation table (for OSS-3.8b5 in Linux-2.1.25 or newer).
+
+
+[Hardware Conditions]
+You don't have to define the following two values.
+Define them only when the driver couldn't detect the card properly.
+
 - AWE_DEFAULT_BASE_ADDR		(default: not defined)
     specifies the base port address of your AWE32 card.
-    Define this only when the driver couldn't detect your card
-    properly. 
 
 - AWE_DEFAULT_MEM_SIZE		(default: not defined)
-    specifies the memory size of your AWE32 card by kilo bytes.
-    Define this only when the driver couldn't detect memory size
-    properly. 
+    specifies the memory size of your AWE32 card in kilo bytes.
     
-- AWE_MAX_SAMPLES		(default: 400)
-    specifies the maximum number of wave samples.
-    The default size is set for the original GM and GS presets from
-    CreativeLab.  If you have a large set of samples (eg 2MB & 8MB GM
-    presets), increase this value to appropriate size. 
 
-- AWE_MAX_INFOS			(default: 900)
-    specifies the maximum number of instruments.
-    The default size is set for the original GM and GS presets from
-    CreativeLab.  If you have a large set of samples (eg 2MB & 8MB GM
-    presets), increase this value to appropriate size. 
+[Sample Table Size]
+From ver.0.4.0, sample tables are allocated dynamically (except
+Linux-1.2.x system), so you need NOT to touch these parameters.
+Linux-1.2.x users may need to increase these values to apropriate size 
+if larger DRAM is equipped with the soundcard.
+
+- AWE_MAX_SF_LISTS, AWE_MAX_SAMPLES, AWE_MAX_INFOS
+
+
+[Other Conditions]
 
 - AWE_ALWAYS_INIT_FM		(default: not defined)
     indicates the AWE driver always initialize FM passthrough even
@@ -99,21 +137,23 @@ Compile conditions are defined in awe_config.h.
 - AWE_DEBUG_ON			(default: defined)
     turns on debuggin messages if defined.
 
-- AWE_CHECKSUM_DATA		(default: defined)
-    verifies check sum of sample data with the transferred data if
-    defined. 
-
-- AWE_CHECKSUM_MEMORY		(default: defined)
-    Verifies check sum of sample data with the written data on DRAM.
-
 - AWE_HAS_GUS_COMPATIBILITY	(default: defined)
     Enables GUS compatibility mode if defined, reading GUS patches and 
     GUS control commands.  Define this option to use GMOD or other
     GUS module players.
 
-- AWE_ACCEPT_ALL_SOUNDS_CONTROL	(default: not defined)
+- AWE_ACCEPT_ALL_SOUNDS_CONTROL	(default: defined)
     Enables MIDI control #120 and #123 as "all notes off" and "all
     sounds off" events, respectively.
+
+- CONFIG_AWE32_MIXER		(default: defined)
+    Adds a mixer device for AWE32 bass/treble equalizer control.
+    You can access this device using /dev/mixer?? (usually mixer01).
+
+- AWE_LOOKUP_MIDI_PRIORIITY	(default: defined)
+    Allocates voices according to MIDI channel priority.
+    Drum channels have the highest priorit, followed by #1, #2, and
+    so on.
 
 - DEF_FM_CHORUS_DEPTH		(default: 0x10)
     The default strength to be sent to the chorus effect engine.
@@ -124,43 +164,12 @@ Compile conditions are defined in awe_config.h.
     From 0 to 0xff.  Larger numbers may often cause weird sounds.
 
 
-* USING THE DRIVER
-
-To load SoundFont files, sfxload utility is required.
-All AWE32 driver and utilities can be downloaded from:
-	http://bahamut.mm.t.u-tokyo.ac.jp/~iwai/awedrv/
-
-The GM and GS sounds include multiple instrument layers.  The older
-driver couldn't handle multiple instruments.  The current version
-supports this type of sounds with a special extension, but so far only 
-drvmidi and playmidi can play the multiple instruments and stereo
-sounds.
-
-To play drvmidi, load the SoundFont file directly uing sfxload utility.
-
-	% sfxload -i synthgm.sf2
-
-To use other sequencers like musserver, some sounds may become
-inaudible unless converting to SFX file.  Follow the instruction in
-awesfx package to make patched GM and GS presets.  Then, load the SFX
-file on driver by sfxload utility.
-
-	% sfxload -i gm.sfx
-
-Now you can hear midi musics by supported midi players
-(awemidi-0.1.x.tar.gz or patch file to playmidi-2.3).
-
-	% drvmidi foo.mid
-
-Enjoy.
-
-
 * ACKNOWLEDGMENTS
 
 Thanks to Witold Jachimczyk (witek@xfactor.wpi.edu) for many advices
 to programming of AWE32.  Many codes are brought from his AWE32-native 
 MOD player, ALMP.
-The port of awedrv0.1.6 to FreeBSD is done by Randall Hopper
+The port of awedrv to FreeBSD is done by Randall Hopper
 (rhh@ct.picker.com).
 I also thank linux-awe-ml members for their efforts
 to reboot their system many times :-)
@@ -168,9 +177,9 @@ to reboot their system many times :-)
 
 * BUGS & TODO'S
 
+- Can't detect DRAM size on some card
 - More smart patch management
 - More smart DRAM memory control
-- Dynamic buffer allocation
 - etc, etc, etc.
 
 

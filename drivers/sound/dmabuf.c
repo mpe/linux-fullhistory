@@ -94,6 +94,8 @@ open_dmap (int dev, int mode, struct dma_buffparms *dmap, int chan)
   dmap->max_byte_counter = 8000 * 60 * 60;
   dmap->applic_profile = APF_NORMAL;
   dmap->needs_reorg = 1;
+  dmap->audio_callback = NULL;
+  dmap->callback_parm = 0;
 
 
   if (dmap->dma_mode & DMODE_OUTPUT)
@@ -267,7 +269,7 @@ dma_reset_output (int dev)
   tmout =
     (dmap->fragment_size * HZ) / dmap->data_rate;
 
-  tmout += HZ / 10;		/* Some safety distance */
+  tmout += HZ / 5;		/* Some safety distance */
 
   if (tmout < (HZ / 2))
     tmout = HZ / 2;
@@ -277,7 +279,7 @@ dma_reset_output (int dev)
   audio_devs[dev]->dmap_out->flags |= DMA_SYNCING;
 
   audio_devs[dev]->dmap_out->underrun_count = 0;
-  if (!signal_pending(current)
+  if (!(current->signal & ~current->blocked)
       && audio_devs[dev]->dmap_out->qlen
       && audio_devs[dev]->dmap_out->underrun_count == 0)
     {
@@ -400,7 +402,7 @@ DMAbuf_sync (int dev)
       tmout =
 	(dmap->fragment_size * HZ) / dmap->data_rate;
 
-      tmout += HZ / 10;		/* Some safety distance */
+      tmout += HZ / 5;		/* Some safety distance */
 
       if (tmout < (HZ / 2))
 	tmout = HZ / 2;
@@ -416,7 +418,7 @@ DMAbuf_sync (int dev)
       audio_devs[dev]->dmap_out->flags |= DMA_SYNCING;
 
       audio_devs[dev]->dmap_out->underrun_count = 0;
-      while (!signal_pending(current)
+      while (!(current->signal & ~current->blocked)
 	     && n++ <= audio_devs[dev]->dmap_out->nbufs
 	     && audio_devs[dev]->dmap_out->qlen
 	     && audio_devs[dev]->dmap_out->underrun_count == 0)
@@ -456,7 +458,7 @@ DMAbuf_sync (int dev)
       cli ();
       if (audio_devs[dev]->d->local_qlen)	/* Device has hidden buffers */
 	{
-	  while (!signal_pending(current)
+	  while (!((current->signal & ~current->blocked))
 		 && audio_devs[dev]->d->local_qlen (dev))
 	    {
 
@@ -496,7 +498,7 @@ DMAbuf_release (int dev, int mode)
 
   if (audio_devs[dev]->open_mode & OPEN_WRITE)
     if (!(audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED))
-      if (!signal_pending(current)
+      if (!((current->signal & ~current->blocked))
 	  && (audio_devs[dev]->dmap_out->dma_mode == DMODE_OUTPUT))
 	{
 	  DMAbuf_sync (dev);
@@ -592,6 +594,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
   if (audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED)
     {
       printk ("Sound: Can't read from mmapped device (1)\n");
+      restore_flags (flags);
       return -EINVAL;
     }
   else
@@ -627,7 +630,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
 	    tmout =
 	      (dmap->fragment_size * HZ) / dmap->data_rate;
 
-	    tmout += HZ / 10;	/* Some safety distance */
+	    tmout += HZ / 5;	/* Some safety distance */
 
 	    if (tmout < (HZ / 2))
 	      tmout = HZ / 2;
@@ -747,7 +750,7 @@ DMAbuf_get_buffer_pointer (int dev, struct dma_buffparms *dmap, int direction)
       enable_dma (dmap->dma);
     }
   restore_flags (flags);
-  /* printk ("%04x ", pos); */
+  /* printk( "%04x ",  pos); */
 
   return pos;
 }
@@ -802,8 +805,8 @@ DMAbuf_space_in_queue (int dev)
    */
 
   max = dmap->max_fragments;
-  if (max > dmap->nbufs)
-     max = dmap->nbufs;
+  if (max > lim)
+    max = lim;
   len = dmap->qlen;
 
   if (audio_devs[dev]->d->local_qlen)
@@ -815,6 +818,8 @@ DMAbuf_space_in_queue (int dev)
 				 */
       len += tmp;
     }
+  if (dmap->byte_counter % dmap->fragment_size)		/* There is a partial fragment */
+    len = len + 1;
 
   if (len >= max)
     return 0;
@@ -848,7 +853,7 @@ output_sleep (int dev, int dontblock)
       tmout =
 	(dmap->fragment_size * HZ) / dmap->data_rate;
 
-      tmout += HZ / 10;		/* Some safety distance */
+      tmout += HZ / 5;		/* Some safety distance */
 
       if (tmout < (HZ / 2))
 	tmout = HZ / 2;
@@ -856,7 +861,7 @@ output_sleep (int dev, int dontblock)
 	tmout = 20 * HZ;
     }
 
-  if (signal_pending(current))
+  if ((current->signal & ~current->blocked))
     return -EIO;
 
 
@@ -882,7 +887,7 @@ output_sleep (int dev, int dontblock)
       ;
       dma_reset_output (dev);
     }
-  else if (signal_pending(current))
+  else if ((current->signal & ~current->blocked))
     {
       err = -EINTR;
     }
@@ -895,11 +900,14 @@ find_output_space (int dev, char **buf, int *size)
 {
   struct dma_buffparms *dmap = audio_devs[dev]->dmap_out;
   unsigned long   flags;
-  unsigned long   offs, active_offs;
-  long            len;
+  unsigned long   active_offs;
+  long            len, offs;
   int             maxfrags;
+  int             occupied_bytes = (dmap->user_counter % dmap->fragment_size);
 
-  if (!(maxfrags = DMAbuf_space_in_queue (dev)))
+  *buf = dmap->raw_buf;
+
+  if (!(maxfrags = DMAbuf_space_in_queue (dev)) && !occupied_bytes)
     {
       return 0;
     }
@@ -918,12 +926,20 @@ find_output_space (int dev, char **buf, int *size)
 #endif
 
   offs = (dmap->user_counter % dmap->bytes_in_use) & ~3;
+  if (offs < 0 || offs >= dmap->bytes_in_use)
+    {
+      printk ("OSS: Got unexpected offs %ld. Giving up.\n", offs);
+      printk ("Counter = %ld, bytes=%d\n", dmap->user_counter, dmap->bytes_in_use);
+      return 0;
+    }
   *buf = dmap->raw_buf + offs;
 
   len = active_offs + dmap->bytes_in_use - dmap->user_counter;	/* Number of unused bytes in buffer */
 
   if ((offs + len) > dmap->bytes_in_use)
-    len = dmap->bytes_in_use - offs;
+    {
+      len = dmap->bytes_in_use - offs;
+    }
 
   if (len < 0)
     {
@@ -931,8 +947,10 @@ find_output_space (int dev, char **buf, int *size)
       return 0;
     }
 
-  if (len > maxfrags * dmap->fragment_size)
-    len = maxfrags * dmap->fragment_size;
+  if (len > ((maxfrags * dmap->fragment_size) - occupied_bytes))
+    {
+      len = (maxfrags * dmap->fragment_size) - occupied_bytes;
+    }
 
   *size = len & ~3;
 
@@ -967,7 +985,7 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
   save_flags (flags);
   cli ();
 
-  while (!find_output_space (dev, buf, size))
+  while (find_output_space (dev, buf, size) <= 0)
     {
       if ((err = output_sleep (dev, dontblock)) < 0)
 	{
@@ -1063,8 +1081,7 @@ DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode)
   if (dmap->raw_buf == NULL)
     {
       printk ("sound: DMA buffer(1) == NULL\n");
-      printk ("Device %d, chn=%s\n", dev,
-	      (dmap == audio_devs[dev]->dmap_out) ? "out" : "in");
+      printk ("Device %d, chn=%s\n", dev, (dmap == audio_devs[dev]->dmap_out) ? "out" : "in");
       return 0;
     }
 
@@ -1096,8 +1113,7 @@ local_start_dma (int dev, unsigned long physaddr, int count, int dma_mode)
   if (dmap->raw_buf == NULL)
     {
       printk ("sound: DMA buffer(2) == NULL\n");
-      printk ("Device %d, chn=%s\n", dev,
-	      (dmap == audio_devs[dev]->dmap_out) ? "out" : "in");
+      printk ("Device %d, chn=%s\n", dev, (dmap == audio_devs[dev]->dmap_out) ? "out" : "in");
       return 0;
     }
 
@@ -1119,6 +1135,9 @@ static void
 finish_output_interrupt (int dev, struct dma_buffparms *dmap)
 {
   unsigned long   flags;
+
+  if (dmap->audio_callback != NULL)
+    dmap->audio_callback (dev, dmap->callback_parm);
 
   save_flags (flags);
   cli ();
@@ -1308,7 +1327,7 @@ do_inputintr (int dev)
     }
   else if (dmap->qlen >= (dmap->nbufs - 1))
     {
-      /* printk ("Sound: Recording overrun\n"); */
+      printk ("Sound: Recording overrun\n");
       dmap->underrun_count++;
 
       /* Just throw away the oldest fragment but keep the engine running */
@@ -1576,5 +1595,16 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, poll_table * wait)
   return 0;
 }
 
+void
+DMAbuf_deinit(int dev)
+{
+/* This routine is called when driver is being unloaded */
+#ifdef RUNTIME_DMA_ALLOC
+  sound_free_dmap (dev, audio_devs[dev]->dmap_out, audio_devs[dev]->dmap_out->dma);
+
+  if (audio_devs[dev]->flags & DMA_DUPLEX)
+     sound_free_dmap (dev, audio_devs[dev]->dmap_in, audio_devs[dev]->dmap_in->dma);
+#endif
+}
 
 #endif

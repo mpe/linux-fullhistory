@@ -17,7 +17,7 @@
 #include "sound_config.h"
 #include "sb.h"
 
-#if defined(CONFIG_TRIX)
+#ifdef CONFIG_TRIX
 
 #ifdef INCLUDE_TRIX_BOOT
 #include "trix_boot.h"
@@ -188,13 +188,13 @@ probe_trix_wss (struct address_info *hw_config)
 
   if (hw_config->dma == 0 && inb (hw_config->io_base + 3) & 0x80)
     {
-      printk ("AudioTrix: Can't use DMA0 with a 8 bit card\n");
+      printk ("AudioTrix: Can't use DMA0 with a 8 bit card slot\n");
       return 0;
     }
 
   if (hw_config->irq > 7 && hw_config->irq != 9 && inb (hw_config->io_base + 3) & 0x80)
     {
-      printk ("AudioTrix: Can't use IRQ%d with a 8 bit card\n", hw_config->irq);
+      printk ("AudioTrix: Can't use IRQ%d with a 8 bit card slot\n", hw_config->irq);
       return 0;
     }
 

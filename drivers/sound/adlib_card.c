@@ -16,7 +16,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_YM3812)
+#ifdef CONFIG_YM3812
 
 void
 attach_adlib_card (struct address_info *hw_config)
@@ -32,8 +32,7 @@ probe_adlib (struct address_info *hw_config)
 
   if (check_region (hw_config->io_base, 4))
     {
-      DDB (printk ("opl3.c: I/O port %x already in use\n",
-		   hw_config->io_base));
+      DDB (printk ("opl3.c: I/O port %x already in use\n", hw_config->io_base));
       return 0;
     }
 

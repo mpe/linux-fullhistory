@@ -1,22 +1,21 @@
-OSS Lite version 3.8 release notes
+OSS/Free version 3.8 release notes
 ----------------------------------
 
 Most up to date information about this driver is available from 
-http://www.4front-tech.com/ossfree or http://personal.eunet.fi/pp/voxware
-(European mirror).
+http://www.4front-tech.com/ossfree.
 
 
 
 Please read the SOUND-HOWTO (available from sunsite.unc.edu and other Linux FTP 
 sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
-is available from the web page (see below).
+is available from the web page (see above).
 
 Please check http://www.4front-tech.com/pguide for more info about programming
-with OSS.
+with OSS API.
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 2.1.36 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 2.1.57 OR LATER.
    ====================================================
 
 Packages "snd-util-3.8.tar.gz" and "snd-data-0.1.tar.Z"
@@ -77,6 +76,18 @@ contributors. (I could have forgotten some names.)
 
 There are probably many other names missing. If you have sent me some
 patches and your name is not in the above list, please inform me.
+
+Sending your contributions or patches
+-------------------------------------
+
+First of all it's highly recommended to contact me before sending anything
+or before even starting to do any work. Tell me what you suggest to be
+changed or what you have planned to do. Also ensure you are using the
+very latest (development) version of OSS/Free since the change may already be
+implemented there. In general it's major waste of time to try to improve
+several months old version. Information about the latest version can be found
+from http://www.4front-tech.com/ossfree. In general there is no point in
+sending me patches relative to production kernels.
 
 Sponsors etc.
 -------------
@@ -166,7 +177,7 @@ Best regards,
 Hannu
 
 Hannu Savolainen
-hannu@voxware.pp.fi, hannu@4front-tech.com	
+hannu@4front-tech.com	
 (Please check http://www.4front-tech.com/ossfree before mailing me).
 
 Snail mail:	Hannu Savolainen

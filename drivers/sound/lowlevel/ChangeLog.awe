@@ -1,3 +1,69 @@
+ver.0.4.2
+	- Use indirect voice allocation mode; used as default mode
+	- Add preset mapping
+	- Free buffers when resetting samples
+	- Set default preset/bank/drumset as variable
+	- Fix a bug in exclusive note-off
+	- Add channel reset control macro
+	- Change modwheel sensitivity as variable
+	- Add lock option in open_patch
+	- Add channel priority mode macro, and disable it as default
+	- Add unset effect macro
+	- Add user defined chorus/reverb modes
+
+ver.0.4.1	development versions
+
+ver.0.4.0c
+	- Fix kernel oops when setting AWE_FX_ATTEN
+
+ver.0.4.0b
+	- Do not kill_note in start_note when velocity is zero
+
+ver.0.4.0a
+	- Fix a bug in channel pressure effects
+
+ver.0.4.0
+	- Support dynamic buffer allocation
+	- Add functions to open/close/unload a patch
+	- Change from pointer to integer index in voice/sample lists
+	- Support for Linux/Alpha-AXP
+	- Fix for FreeBSD
+	- Add sostenuto control
+	- Add midi channel priority
+	- Fix a bug in all notes off control
+	- Use AWE_DEFAULT_MEMSIZE always if defined
+	- Fix a bug in awe_reset causes seg fault when no DRAM onboard
+	- Use awe_mem_start variable instead of constant
+
+ver.0.3.3c
+	- Fix IOCTL_TO_USER for OSS-3.8 (on Linux-2.1.25)
+	- Fix i/o macros for mixer controls
+
+ver.0.3.3b
+	- Fix version number in awe_version.h
+	- Fix a small bug in noteoff/relese all
+
+ver.0.3.3a
+	- Fix all notes/sounds off
+	- Add layer effect control
+	- Add misc mode controls; realtime pan, version number, etc.
+	- Move gus bank control in misc mode control
+	- Modify awe_operations for OSS3.8b5
+	- Fix installation script
+
+ver.0.3.3
+	- Add bass/treble control in Emu8000 chip
+	- Add mixer device
+	- Fix sustain on to value 127
+
+ver.0.3.2
+	- Refuse linux-2.0.0 at installation
+	- Move awe_voice.h to /usr/include/linux
+
+ver.0.3.1b (not released)
+	- Rewrite chorus/reverb mode change functions
+	- Rewrite awe_detect & awe_check_dram routines
+
 ver.0.3.1a
 	- Fix a bug to reset voice counter in awe_reset
 	- Fix voice balance on GUS mode

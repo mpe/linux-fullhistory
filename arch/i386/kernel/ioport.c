@@ -75,17 +75,15 @@ unsigned int *stack;
  * code.
  */
 
-asmlinkage int sys_iopl(long ebx,long ecx,long edx,
-	     long esi, long edi, long ebp, long eax, long ds,
-	     long es, long orig_eax, long eip, long cs,
-	     long eflags, long esp, long ss)
+asmlinkage int sys_iopl(unsigned long unused)
 {
-	unsigned int level = ebx;
+	struct pt_regs * regs = (struct pt_regs *) &unused;
+	unsigned int level = regs->ebx;
 
 	if (level > 3)
 		return -EINVAL;
 	if (!suser())
 		return -EPERM;
-	*(&eflags) = (eflags & 0xffffcfff) | (level << 12);
+	regs->eflags = (regs->eflags & 0xffffcfff) | (level << 12);
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Revision: 2.0 $$Date: 1997/06/30 10:30:00 $
+/* $Revision: 2.1 $$Date: 1997/10/24 16:03:00 $
  * linux/include/linux/cyclades.h
  *
  * This file is maintained by Marcio Saito <marcio@cyclades.com> and
@@ -6,6 +6,12 @@
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
+ *Revision 2.1	1997/10/24 16:03:00  ivan
+ *added rflow (which allows enabling the CD1400 special flow control 
+ *feature) and rtsdtr_inv (which allows DTR/RTS pin inversion) to 
+ *cyclades_port structure;
+ *added Alpha support
+ *
  *Revision 2.0  1997/06/30 10:30:00  ivan
  *added some new doorbell command constants related to IOCTLW and
  *UART error signaling
@@ -51,6 +57,11 @@ struct cyclades_monitor {
 #define CYSETTIMEOUT            0x435907
 #define CYGETDEFTIMEOUT         0x435908
 #define CYSETDEFTIMEOUT         0x435909
+#define CYSETRFLOW		0x43590a
+#define CYRESETRFLOW		0x43590b
+#define CYSETRTSDTR_INV		0x43590c
+#define CYRESETRTSDTR_INV	0x43590d
+#define CYZPOLLCYCLE		0x43590e
 
 /*************** CYCLOM-Z ADDITIONS ***************/
 
@@ -60,6 +71,8 @@ struct cyclades_monitor {
 #define CZ_BOOT_DATA    (CZIOC|0xfc)
 #define CZ_BOOT_END     (CZIOC|0xfd)
 #define CZ_TEST         (CZIOC|0xfe)
+
+#define CZ_DEF_POLL	(HZ/25)
 
 #define MAX_BOARD       4       /* Max number of boards */
 #define MAX_PORT        128     /* Max number of ports per board */
@@ -85,7 +98,12 @@ struct CYZ_BOOT_CTRL {
  *	architectures and compilers.
  */
 
+#if defined(__alpha__)
+typedef unsigned long	ucdouble;	/* 64 bits, unsigned */
+typedef unsigned int	uclong;		/* 32 bits, unsigned */
+#else
 typedef unsigned long	uclong;		/* 32 bits, unsigned */
+#endif
 typedef unsigned short	ucshort;	/* 16 bits, unsigned */
 typedef unsigned char	ucchar;		/* 8 bits, unsigned */
 
@@ -96,7 +114,7 @@ typedef unsigned char	ucchar;		/* 8 bits, unsigned */
 #define	DP_WINDOW_SIZE		(0x00080000)	/* window size 512 Kb */
 #define	ZE_DP_WINDOW_SIZE	(0x00100000)	/* window size 1 Mb (Ze and
 						  8Zo V.2 */
-#define	CTRL_WINDOW_SIZE	(0x00000100)	/* runtime regs 256 bytes */
+#define	CTRL_WINDOW_SIZE	(0x00000080)	/* runtime regs 128 bytes */
 
 /*
  *	CUSTOM_REG - Cyclom-Z/PCI Custom Registers Set. The driver
@@ -194,6 +212,12 @@ struct RUNTIME_9060 {
 #define ID_ADDRESS	0x00000180L	/* signature/pointer address */
 #define	ZFIRM_ID	0x5557465AL	/* ZFIRM/U signature */
 #define	ZFIRM_HLT	0x59505B5CL	/* ZFIRM needs external power supply */
+#define	ZFIRM_RST	0x56040674L	/* RST signal (due to FW reset) */
+
+#define	ZF_TINACT_DEF	1000		/* default inactivity timeout 
+					   (1000 ms) */
+#define	ZF_TINACT	ZF_TINACT_DEF
+
 struct	FIRM_ID {
 	uclong	signature;		/* ZFIRM/U signature */
 	uclong	zfwctrl_addr;		/* pointer to ZFW_CTRL structure */
@@ -334,7 +358,9 @@ struct CH_CTRL {
 	uclong	rs_status;	/* RS-232 inputs */
 	uclong	flow_xon;	/* xon char */
 	uclong	flow_xoff;	/* xoff char */
-	uclong	filler[3];	/* filler to align structures */
+	uclong	hw_overflow;	/* hw overflow counter */
+	uclong	sw_overflow;	/* sw overflow counter */
+	uclong	comm_error;	/* frame/parity error counter */
 };
 
 
@@ -378,11 +404,11 @@ struct BOARD_CTRL {
 
 	/* host to FW commands */
 	uclong	hcmd_channel;	/* channel number */
-	uclong	*hcmd_param;	/* pointer to parameters */
+	uclong	hcmd_param;	/* pointer to parameters */
 
 	/* FW to Host commands */
 	uclong	fwcmd_channel;	/* channel number */
-	uclong	*fwcmd_param;	/* pointer to parameters */
+	uclong	fwcmd_param;	/* pointer to parameters */
 
 	/* filler so the structures are aligned */
 	uclong	filler[7];
@@ -404,7 +430,21 @@ struct ZFW_CTRL {
 
 
 
+
 #ifdef __KERNEL__
+
+/***************************************
+ * Memory access functions/macros      *
+ * (required to support Alpha systems) *
+ ***************************************/
+
+#define cy_writeb(port,val)     {writeb((ucchar)(val),(ulong)(port)); mb();}
+#define cy_writew(port,val)     {writew((ushort)(val),(ulong)(port)); mb();}
+#define cy_writel(port,val)     {writel((uclong)(val),(ulong)(port)); mb();}
+
+#define cy_readb(port)  readb(port)
+#define cy_readw(port)  readw(port)
+#define cy_readl(port)  readl(port)
 
 /* Per card data structure */
 
@@ -415,6 +455,7 @@ struct cyclades_card {
     int num_chips;	/* 0 if card absent, 1 if Z/PCI, else Y */
     int first_line;	/* minor number of first channel on card */
     int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
+    int	inact_ctrl;	/* FW Inactivity control - 0 disabled, 1 enabled */
 };
 
 struct cyclades_chip {
@@ -443,6 +484,8 @@ struct cyclades_port {
 	int                     cor1,cor2,cor3,cor4,cor5;
 	int                     tbpr,tco,rbpr,rco;
 	int			baud;
+	int			rflow;
+	int			rtsdtr_inv;
 	int			ignore_status_mask;
 	int			close_delay;
 	int			IER; 	/* Interrupt Enable Register */
@@ -482,10 +525,14 @@ struct cyclades_port {
 
 
 
-#define CyMaxChipsPerCard 8
+#define CyMAX_CHIPS_PER_CARD	8
+#define CyMAX_CHAR_FIFO		12
+#define CyPORTS_PER_CHIP	4
+
+#define	CyISA_Ywin	0x2000
 
 #define CyPCI_Ywin 	0x4000
-#define CyPCI_Zctl 	0x100
+#define CyPCI_Zctl 	CTRL_WINDOW_SIZE
 #define CyPCI_Zwin 	0x80000
 #define CyPCI_Ze_win 	(2 * CyPCI_Zwin)
 
@@ -530,6 +577,9 @@ struct cyclades_port {
 #define CyPPR 		(0x7E*2)
 #define      CyCLOCK_20_1MS	(0x27)
 #define      CyCLOCK_25_1MS	(0x31)
+#define      CyCLOCK_25_5MS	(0xf4)
+#define      CyCLOCK_60_1MS	(0x75)
+#define      CyCLOCK_60_2MS	(0xea)
 
 /* Virtual Registers */
 
@@ -652,12 +702,7 @@ struct cyclades_port {
 #define CyTBPR		(0x72*2)
 #define CyTCOR		(0x76*2)
 
-/* max number of chars in the FIFO */
-
-#define CyMAX_CHAR_FIFO	12
-
 /***************************************************************************/
 
 #endif /* __KERNEL__ */
 #endif /* _LINUX_CYCLADES_H */
-

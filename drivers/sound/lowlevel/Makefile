@@ -15,6 +15,13 @@ OBJS := $(OBJS) aedsp16.o
 endif
 endif
 
+ifndef TOPDIR
+TOPDIR=/usr/src/linux
+endif
+
+.c.o:
+	$(CC) $(CFLAGS) -c $<
+
 lowlevel.o:	$(OBJS)
 	$(LD) -r -o lowlevel.o $(OBJS)
 
@@ -35,10 +42,16 @@ clean:
 dep:
 	$(CPP) -M $(CFLAGS) -I. *.c > .depend
 
-ifdef HOSTCC
-include $(TOPDIR)/Rules.make
-else
+ifndef HOSTCC
+#
+#	Running outside the kernel build.
+#
+CC	= gcc
+HOSTCC	= gcc
+CFLAGS	= -O2 -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -m486
 USE_DEPEND=y
+else
+include $(TOPDIR)/Rules.make
 endif
 
 ifdef USE_DEPEND

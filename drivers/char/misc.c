@@ -76,6 +76,7 @@ extern void pcwatchdog_init(void);
 extern int rtc_init(void);
 extern int dsp56k_init(void);
 extern int nvram_init(void);
+extern int radio_init(void);
 extern void hfmodem_init(void);
 
 #ifdef CONFIG_PROC_FS
@@ -256,6 +257,9 @@ __initfunc(int misc_init(void))
 #endif
 #ifdef CONFIG_NVRAM
 	nvram_init();
+#endif
+#ifdef CONFIG_MISC_RADIO
+	radio_init();
 #endif
 #ifdef CONFIG_HFMODEM
 	hfmodem_init();

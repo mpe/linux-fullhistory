@@ -7,7 +7,7 @@
 #include <linux/config.h>
 #include "sound_config.h"
 
-#if defined(CONFIG_PAS)
+#ifdef CONFIG_PAS
 
 static unsigned char dma_bits[] =
 {4, 1, 2, 3, 0, 5, 6, 7};
@@ -23,13 +23,13 @@ static unsigned char sb_dma_bits[] =
  * be relative to the given base -register
  */
 
-int             translate_code;
+int             translate_code = 0;
 static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 static int      pas_sb_base = 0;
 
 
-char            pas_model;
+char            pas_model = 0;
 static char    *pas_model_names[] =
 {"", "Pro AudioSpectrum+", "CDPC", "Pro AudioSpectrum 16", "Pro AudioSpectrum 16D"};
 
@@ -227,12 +227,10 @@ config_pas_hw (struct address_info *hw_config)
 	pas_sb_base = sb_config->io_base;
 
 	if (!sb_dma_bits[sb_config->dma])
-	  printk ("\n\nPAS16 Warning: Invalid SB DMA %d\n\n",
-		  sb_config->dma);
+	  printk ("\n\nPAS16 Warning: Invalid SB DMA %d\n\n", sb_config->dma);
 
 	if (!sb_irq_bits[sb_config->irq])
-	  printk ("\n\nPAS16 Warning: Invalid SB IRQ %d\n\n",
-		  sb_config->irq);
+	  printk ("\n\nPAS16 Warning: Invalid SB IRQ %d\n\n", sb_config->irq);
 
 	irq_dma = sb_dma_bits[sb_config->dma] |
 	  sb_irq_bits[sb_config->irq];

@@ -25,7 +25,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_CS4232)
+#ifdef CONFIG_CS4232
 
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */

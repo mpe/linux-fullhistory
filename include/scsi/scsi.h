@@ -180,6 +180,8 @@
 /* Used to obtain the host number of a device. */
 #define SCSI_IOCTL_PROBE_HOST 0x5385
 
+/* Used to get the bus number for a device */
+#define SCSI_IOCTL_GET_BUS_NUMBER 0x5386
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

@@ -2,6 +2,7 @@
  *  file.c
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
  *
  */
 
@@ -29,82 +30,113 @@ static int ncp_fsync(struct file *file, struct dentry *dentry)
 	return 0;
 }
 
-int ncp_make_open(struct inode *i, int right)
+/*
+ * Open a file with the specified read/write mode.
+ */
+int ncp_make_open(struct inode *inode, int right)
 {
-	struct nw_file_info *finfo;
+	int error, result;
+	int access;
+	struct nw_file_info finfo;
 
-	if (i == NULL) {
-		printk("ncp_make_open: got NULL inode\n");
-		return -EINVAL;
+	error = -EINVAL;
+	if (!inode) {
+		printk(KERN_ERR "ncp_make_open: got NULL inode\n");
+		goto out;
 	}
-	finfo = NCP_FINFO(i);
 
-	DPRINTK("ncp_make_open: dirent->opened = %d\n", finfo->opened);
-
-	lock_super(i->i_sb);
-	if (finfo->opened == 0) {
-		finfo->access = -1;
+	DPRINTK(KERN_DEBUG "ncp_make_open: opened=%d, volume # %u, dir entry # %u\n",
+		NCP_FINFO(inode)->opened, 
+		NCP_FINFO(inode)->volNumber, 
+		NCP_FINFO(inode)->dirEntNum);
+	error = -EACCES;
+	lock_super(inode->i_sb);
+	if (!NCP_FINFO(inode)->opened) {
+		finfo.i.dirEntNum = NCP_FINFO(inode)->dirEntNum;
+		finfo.i.volNumber = NCP_FINFO(inode)->volNumber;
 		/* tries max. rights */
-		if (ncp_open_create_file_or_subdir(NCP_SERVER(i),
-						   NULL, NULL,
-						   OC_MODE_OPEN, 0,
-						   AR_READ | AR_WRITE,
-						   finfo) == 0) {
-			finfo->access = O_RDWR;
-		} else if (ncp_open_create_file_or_subdir(NCP_SERVER(i),
-							  NULL, NULL,
-							  OC_MODE_OPEN, 0,
-							  AR_READ,
-							  finfo) == 0) {
-			finfo->access = O_RDONLY;
+		finfo.access = O_RDWR;
+		result = ncp_open_create_file_or_subdir(NCP_SERVER(inode),
+					NULL, NULL, OC_MODE_OPEN,
+					0, AR_READ | AR_WRITE, &finfo);
+		if (!result)
+			goto update;
+		finfo.access = O_RDONLY;
+		result = ncp_open_create_file_or_subdir(NCP_SERVER(inode),
+					NULL, NULL, OC_MODE_OPEN,
+					0, AR_READ, &finfo);
+		if (!result) {
+#ifdef NCPFS_PARANOIA
+printk(KERN_DEBUG "ncp_make_open: failed, result=%d\n", result);
+#endif
+			goto out_unlock;
 		}
+		/*
+		 * Update the inode information.
+		 */
+	update:
+		ncp_update_inode(inode, &finfo);
 	}
-	unlock_super(i->i_sb);
 
-	if (((right == O_RDONLY) && ((finfo->access == O_RDONLY)
-				     || (finfo->access == O_RDWR)))
-	    || ((right == O_WRONLY) && ((finfo->access == O_WRONLY)
-					|| (finfo->access == O_RDWR)))
-	    || ((right == O_RDWR) && (finfo->access == O_RDWR)))
-		return 0;
+	access = NCP_FINFO(inode)->access;
+#ifdef NCPFS_PARANOIA
+printk(KERN_DEBUG "ncp_make_open: file open, access=%x\n", access);
+#endif
+	if (((right == O_RDONLY) && ((access == O_RDONLY)
+				     || (access == O_RDWR)))
+	    || ((right == O_WRONLY) && ((access == O_WRONLY)
+					|| (access == O_RDWR)))
+	    || ((right == O_RDWR) && (access == O_RDWR)))
+		error = 0;
 
-	return -EACCES;
+out_unlock:
+	unlock_super(inode->i_sb);
+out:
+	return error;
 }
 
-static long ncp_file_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t
+ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
-	int bufsize, already_read;
+	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	size_t already_read = 0;
 	off_t pos;
-	int errno;
+	int bufsize, error;
 
-	DPRINTK("ncp_file_read: enter %s\n", NCP_ISTRUCT(inode)->entryName);
+	DPRINTK(KERN_DEBUG "ncp_file_read: enter %s/%s\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 
+	error = -EINVAL;
 	if (inode == NULL) {
-		DPRINTK("ncp_file_read: inode = NULL\n");
-		return -EINVAL;
+		DPRINTK(KERN_DEBUG "ncp_file_read: inode = NULL\n");
+		goto out;
 	}
-	if (!ncp_conn_valid(NCP_SERVER(inode))) {
-		return -EIO;
-	}
+	error = -EIO;
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+		goto out;
+	error = -EINVAL;
 	if (!S_ISREG(inode->i_mode)) {
-		DPRINTK("ncp_file_read: read from non-file, mode %07o\n",
+		DPRINTK(KERN_DEBUG "ncp_file_read: read from non-file, mode %07o\n",
 			inode->i_mode);
-		return -EINVAL;
+		goto out;
 	}
-	pos = file->f_pos;
 
+	pos = file->f_pos;
 	if (pos + count > inode->i_size) {
 		count = inode->i_size - pos;
 	}
-	if (count <= 0) {
-		return 0;
-	}
-	if ((errno = ncp_make_open(inode, O_RDONLY)) != 0) {
-		return errno;
-	}
-	bufsize = NCP_SERVER(inode)->buffer_size;
+	error = 0;
+	if (!count)	/* size_t is never < 0 */
+		goto out;
 
-	already_read = 0;
+	error = ncp_make_open(inode, O_RDONLY);
+	if (error) {
+		printk(KERN_ERR "ncp_file_read: open failed, error=%d\n", error);
+		goto out;
+	}
+
+	bufsize = NCP_SERVER(inode)->buffer_size;
 
 	/* First read in as much as possible for each bufsize. */
 	while (already_read < count) {
@@ -112,9 +144,12 @@ static long ncp_file_read(struct inode *inode, struct file *file, char *buf, uns
 		int to_read = min(bufsize - (pos % bufsize),
 				  count - already_read);
 
-		if (ncp_read(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,
-			     pos, to_read, buf, &read_this_time) != 0) {
-			return -EIO;	/* This is not exact, i know.. */
+		error = ncp_read(NCP_SERVER(inode),
+			 	NCP_FINFO(inode)->file_handle,
+				pos, to_read, buf, &read_this_time);
+		if (error) {
+			error = -EIO;	/* This is not exact, i know.. */
+			goto out;
 		}
 		pos += read_this_time;
 		buf += read_this_time;
@@ -130,38 +165,43 @@ static long ncp_file_read(struct inode *inode, struct file *file, char *buf, uns
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 	}
-	mark_inode_dirty(inode);
 	
-	DPRINTK("ncp_file_read: exit %s\n", NCP_ISTRUCT(inode)->entryName);
-
-	return already_read;
+	DPRINTK(KERN_DEBUG "ncp_file_read: exit %s/%s\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
+out:
+	return already_read ? already_read : error;
 }
 
-static long ncp_file_write(struct inode *inode, struct file *file, const char *buf,
-			   unsigned long count)
+static ssize_t
+ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	int bufsize, already_written;
+	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	size_t already_written = 0;
 	off_t pos;
-	int errno;
+	int bufsize, errno;
 
+	DPRINTK(KERN_DEBUG "ncp_file_write: enter %s/%s\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (inode == NULL) {
-		DPRINTK("ncp_file_write: inode = NULL\n");
+		DPRINTK(KERN_DEBUG "ncp_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
-	if (!ncp_conn_valid(NCP_SERVER(inode))) {
-		return -EIO;
-	}
+	errno = -EIO;
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+		goto out;
 	if (!S_ISREG(inode->i_mode)) {
-		DPRINTK("ncp_file_write: write to non-file, mode %07o\n",
+		DPRINTK(KERN_DEBUG "ncp_file_write: write to non-file, mode %07o\n",
 			inode->i_mode);
 		return -EINVAL;
 	}
-	DPRINTK("ncp_file_write: enter %s\n", NCP_ISTRUCT(inode)->entryName);
 
-	if (count <= 0) {
-		return 0;
-	}
-	if ((errno = ncp_make_open(inode, O_RDWR)) != 0) {
+	errno = 0;
+	if (!count)
+		goto out;
+	errno = ncp_make_open(inode, O_RDWR);
+	if (errno) {
+		printk(KERN_ERR "ncp_file_write: open failed, error=%d\n", errno);
 		return errno;
 	}
 	pos = file->f_pos;
@@ -192,17 +232,17 @@ static long ncp_file_write(struct inode *inode, struct file *file, const char *b
 	}
 
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	mark_inode_dirty(inode);
 	
 	file->f_pos = pos;
 
 	if (pos > inode->i_size) {
 		inode->i_size = pos;
-		ncp_invalid_dir_cache(NCP_INOP(inode)->dir->inode);
+		ncp_invalid_dir_cache(dentry->d_parent->d_inode);
 	}
-	DPRINTK("ncp_file_write: exit %s\n", NCP_ISTRUCT(inode)->entryName);
-
-	return already_written;
+	DPRINTK(KERN_DEBUG "ncp_file_write: exit %s/%s\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
+out:
+	return already_written ? already_written : errno;
 }
 
 static struct file_operations ncp_file_operations =

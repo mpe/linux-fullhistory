@@ -17,6 +17,7 @@
  *	Added defines for the Sound Galaxy NX Pro mixer.
  * 
  */
+#ifdef CONFIG_SBDSP
 
 #define SBPRO_RECORDING_DEVICES	(SOUND_MASK_LINE | SOUND_MASK_MIC | SOUND_MASK_CD)
 
@@ -282,4 +283,5 @@ static char     smw_mix_regs[] =	/* Left mixer registers */
 #define SRC__CD          3	/* Select CD recording source */
 #define SRC__LINE        7	/* Use Line-in for recording source */
 
+#endif
 #endif

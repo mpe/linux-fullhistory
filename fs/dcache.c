@@ -97,12 +97,14 @@ repeat:
 			goto out;
 	}
 
-	if (!list_empty(&dentry->d_lru))
+	if (!list_empty(&dentry->d_lru)) {
 		dentry_stat.nr_unused--;
-	list_del(&dentry->d_lru);
+		list_del(&dentry->d_lru);
+	}
 	if (list_empty(&dentry->d_hash)) {
 		struct inode *inode = dentry->d_inode;
 		struct dentry * parent;
+		list_del(&dentry->d_child);
 		if (inode) {
 			dentry->d_inode = NULL;
 			iput(inode);
@@ -247,6 +249,7 @@ static inline void prune_one_dentry(struct dentry * dentry)
 	struct dentry * parent;
 
 	list_del(&dentry->d_hash);
+	list_del(&dentry->d_child);
 	if (dentry->d_inode) {
 		struct inode * inode = dentry->d_inode;
 
@@ -338,6 +341,69 @@ repeat:
 }
 
 /*
+ * Search the dentry child list for the specified parent,
+ * and move any unused dentries to the end of the unused
+ * list for prune_dcache(). We descend to the next level
+ * whenever the d_subdirs list is non-empty and continue
+ * searching.
+ */
+static int select_parent(struct dentry * parent)
+{
+	struct dentry *this_parent = parent;
+	struct list_head *next;
+	int found = 0;
+
+repeat:
+	next = this_parent->d_subdirs.next;
+resume:
+	while (next != &this_parent->d_subdirs) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
+		if (!dentry->d_count) {
+			list_del(&dentry->d_lru);
+			list_add(&dentry->d_lru, dentry_unused.prev);
+			found++;
+		}
+		/*
+		 * Descend a level if the d_subdirs list is non-empty.
+		 */
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+#ifdef DCACHE_DEBUG
+printk("select_parent: descending to %s/%s, found=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, found);
+#endif
+			goto repeat;
+		}
+	}
+	/*
+	 * All done at this level ... ascend and resume the search.
+	 */
+	if (this_parent != parent) {
+		next = this_parent->d_child.next; 
+		this_parent = this_parent->d_parent;
+#ifdef DCACHE_DEBUG
+printk("select_parent: ascending to %s/%s, found=%d\n",
+this_parent->d_parent->d_name.name, this_parent->d_name.name, found);
+#endif
+		goto resume;
+	}
+	return found;
+}
+
+/*
+ * Prune the dcache to remove unused children of the parent dentry.
+ */
+void shrink_dcache_parent(struct dentry * parent)
+{
+	int found;
+
+	while ((found = select_parent(parent)) != 0)
+		prune_dcache(found);
+}
+
+/*
  * This is called from do_try_to_free_page() to indicate
  * that we should reduce the dcache and inode cache memory.
  */
@@ -415,11 +481,15 @@ printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
 	if (parent) {
 		dentry->d_parent = dget(parent);
 		dentry->d_sb = parent->d_sb;
-	}
+		list_add(&dentry->d_child, &parent->d_subdirs);
+	} else
+		INIT_LIST_HEAD(&dentry->d_child);
+		
 	dentry->d_mounts = dentry;
 	dentry->d_covers = dentry;
 	INIT_LIST_HEAD(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_lru);
+	INIT_LIST_HEAD(&dentry->d_subdirs);
 
 	dentry->d_name.name = str;
 	dentry->d_name.len = name->len;
@@ -608,11 +678,16 @@ void d_move(struct dentry * dentry, struct dentry * target)
 	list_del(&target->d_hash);
 	INIT_LIST_HEAD(&target->d_hash);
 
+	list_del(&dentry->d_child);
+	list_del(&target->d_child);
+
 	/* Switch the parents and the names.. */
 	switch(dentry->d_parent, target->d_parent);
 	switch(dentry->d_name.name, target->d_name.name);
 	switch(dentry->d_name.len, target->d_name.len);
 	switch(dentry->d_name.hash, target->d_name.hash);
+	list_add(&target->d_child, &target->d_parent->d_subdirs);
+	list_add(&dentry->d_child, &dentry->d_parent->d_subdirs);
 }
 
 /*

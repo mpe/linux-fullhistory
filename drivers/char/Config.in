@@ -109,4 +109,11 @@ if [ "$CONFIG_PPC" = "y" ]; then
 fi
 tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'PC joystick support' CONFIG_JOYSTICK
+bool 'Radio Device Support' CONFIG_MISC_RADIO
+if [ "$CONFIG_MISC_RADIO" != "n" ]; then
+  bool '  AIMSlab RadioTrack (aka RadioReveal) support' CONFIG_RADIO_RTRACK
+  if [ "$CONFIG_RADIO_RTRACK" != "n" ]; then
+    hex '    RadioTrack i/o port (0x20f or 0x30f)' CONFIG_RADIO_RTRACK_PORT 0x20f
+  fi
+fi
 endmenu

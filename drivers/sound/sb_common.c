@@ -15,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP)
+#ifdef CONFIG_SBDSP
 
 #ifndef CONFIG_AUDIO
 #error You will need to configure the sound driver with CONFIG_AUDIO option.
@@ -51,6 +51,7 @@ static unsigned char *smw_ucode = NULL;
 static int      smw_ucodeLen = 0;
 
 #endif
+
 
 int
 sb_dsp_command (sb_devc * devc, unsigned char val)
@@ -170,7 +171,7 @@ sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 	break;
 
       default:
-	/* printk ("Sound Blaster: Unexpected interrupt\n"); */
+	/* printk( "Sound Blaster: Unexpected interrupt\n"); */
 	;
       }
 /*
@@ -184,12 +185,13 @@ sbintr (int irq, void *dev_id, struct pt_regs *dummy)
     status = inb (DSP_DATA_AVL16);
 }
 
+
 int
 sb_dsp_reset (sb_devc * devc)
 {
   int             loopc;
 
-  DDB (printk ("Entered sb_dsp_reset()\n"));
+  DEB (printk ("Entered sb_dsp_reset()\n"));
 
   if (devc->model == MDL_ESS)
     outb ((3), DSP_RESET);	/* Reset FIFO too */
@@ -213,7 +215,7 @@ sb_dsp_reset (sb_devc * devc)
   if (devc->model == MDL_ESS)
     sb_dsp_command (devc, 0xc6);	/* Enable extended mode */
 
-  DDB (printk ("sb_dsp_reset() OK\n"));
+  DEB (printk ("sb_dsp_reset() OK\n"));
   return 1;
 }
 
@@ -435,6 +437,66 @@ init_Jazz16 (sb_devc * devc, struct address_info *hw_config)
   return 1;
 }
 
+static void
+relocate_ess1688 (sb_devc * devc)
+{
+  unsigned char   bits;
+
+  switch (devc->base)
+    {
+    case 0x220:
+      bits = 0x04;
+      break;
+    case 0x230:
+      bits = 0x05;
+      break;
+    case 0x240:
+      bits = 0x06;
+      break;
+    case 0x250:
+      bits = 0x07;
+      break;
+    default:
+      return;			/* Wrong port */
+    }
+
+  DDB (printk ("Doing ESS1688 address selection\n"));
+
+/*
+ * ES1688 supports two alternative ways for software address config.
+ * First try the so called Read-Sequence-Key method.
+ */
+
+  /* Reset the sequence logic */
+  inb (0x229);
+  inb (0x229);
+  inb (0x229);
+
+  /* Perform the read sequence */
+  inb (0x22b);
+  inb (0x229);
+  inb (0x22b);
+  inb (0x229);
+  inb (0x229);
+  inb (0x22b);
+  inb (0x229);
+
+  /* Select the base address by reading from it. Then probe using the port. */
+  inb (devc->base);
+  if (sb_dsp_reset (devc))	/* Bingo */
+    return;
+
+#if 0				/* This causes system lockups (Nokia 386/25 at least) */
+/*
+ * The last resort is the system control register method.
+ */
+
+  outb ((0x00), 0xfb);		/* 0xFB is the unlock register */
+  outb ((0x00), 0xe0);		/* Select index 0 */
+  outb ((bits), 0xe1);		/* Write the config bits */
+  outb ((0x00), 0xf9);		/* 0xFB is the lock register */
+#endif
+}
 
 static int
 ess_init (sb_devc * devc, struct address_info *hw_config)
@@ -608,6 +670,8 @@ sb_dsp_detect (struct address_info *hw_config)
     if (devc->major == 0 || (devc->major == 3 && devc->minor == 1))
       relocate_Jazz16 (devc, hw_config);
 
+  if (devc->major == 0 && (devc->type == MDL_ESS || devc->type == 0))
+    relocate_ess1688 (devc);
 
   if (!sb_dsp_reset (devc))
     {
@@ -654,8 +718,7 @@ sb_dsp_detect (struct address_info *hw_config)
 
   memcpy ((char *) detected_devc, (char *) devc, sizeof (sb_devc));
 
-  DDB (printk ("SB %d.%d detected OK (%x)\n", devc->major, devc->minor,
-	       hw_config->io_base));
+  DDB (printk ("SB %d.%d detected OK (%x)\n", devc->major, devc->minor, hw_config->io_base));
   return 1;
 }
 
@@ -663,7 +726,6 @@ void
 sb_dsp_init (struct address_info *hw_config)
 {
   sb_devc        *devc;
-  int             n;
   char            name[100];
   extern int      sb_be_quiet;
 
@@ -678,6 +740,7 @@ sb_dsp_init (struct address_info *hw_config)
       DDB (printk ("No detected device\n"));
       return;
     }
+
 
   devc = detected_devc;
   detected_devc = NULL;
@@ -727,7 +790,7 @@ sb_dsp_init (struct address_info *hw_config)
 	      }
 	}
 
-#ifdef __SMP__
+#if defined(__SMP__) || defined(__FreeBSD__)
       /* Skip IRQ detection if SMP (doesn't work) */
       devc->irq_ok = 1;
 #else
@@ -735,6 +798,8 @@ sb_dsp_init (struct address_info *hw_config)
 	devc->irq_ok = 1;
       else
 	{
+	  int             n;
+
 	  for (n = 0; n < 3 && devc->irq_ok == 0; n++)
 	    if (sb_dsp_command (devc, 0xf2))	/* Cause interrupt immediately */
 	      {
@@ -822,16 +887,16 @@ sb_dsp_init (struct address_info *hw_config)
  * properly.
  */
   if (devc->model <= MDL_SBPRO)
-    if (devc->major == 3 && devc->minor != 1)	/* "True" SB Pro should have v3.1. */
+    if (devc->major == 3 && devc->minor != 1)	/* "True" SB Pro should have v3.1 (rare ones may have 3.2). */
       {
-	printk ("This soundcard doesn't seem to be fully Sound Blaster Pro compatible.\n");
-	printk ("Almost certainly there is another way to configure OSS so that\n");
+	printk ("This soundcard may not be fully Sound Blaster Pro compatible.\n");
+	printk ("In many cases there is another way to configure OSS so that\n");
 	printk ("it works properly with OSS (for example in 16 bit mode).\n");
+	printk ("Please ignore this message if you _really_ have a SB Pro.\n");
       }
     else if (!sb_be_quiet && devc->model == MDL_SBPRO)
       {
-	printk ("SB DSP version is just %d.%d which means that your card is\n",
-		devc->major, devc->minor);
+	printk ("SB DSP version is just %d.%d which means that your card is\n", devc->major, devc->minor);
 	printk ("several years old (8 bit only device)\n");
 	printk ("or alternatively the sound driver is incorrectly configured.\n");
       }
@@ -899,6 +964,7 @@ sb_dsp_unload (struct address_info *hw_config)
     }
   else
     release_region (hw_config->io_base, 16);
+
 }
 
 /*
@@ -1010,8 +1076,7 @@ smw_midi_init (sb_devc * devc, struct address_info *hw_config)
 
   if (smw_getmem (devc, mp_base, 0) != 0x00 || smw_getmem (devc, mp_base, 1) != 0xff)
     {
-      DDB (printk ("\nSM Wave: No microcontroller RAM detected (%02x, %02x)\n",
-	     smw_getmem (devc, mp_base, 0), smw_getmem (devc, mp_base, 1)));
+      DDB (printk ("\nSM Wave: No microcontroller RAM detected (%02x, %02x)\n", smw_getmem (devc, mp_base, 0), smw_getmem (devc, mp_base, 1)));
       return 0;			/* No RAM */
     }
 
@@ -1250,8 +1315,10 @@ probe_sbmpu (struct address_info *hw_config)
 	}
       hw_config->name = "Sound Blaster 16";
       hw_config->irq = -devc->irq;
+#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
       if (devc->minor > 12)	/* What is Vibra's version??? */
 	sb16_set_mpu_port (devc, hw_config);
+#endif
       break;
 
     case MDL_ESS:

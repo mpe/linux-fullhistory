@@ -21,8 +21,9 @@
 
 #include "../fat/msbuffer.h"
 
+#define MSDOS_PARANOIA 1	
+/* #define MSDOS_DEBUG 1 */	
 #define PRINTK(x)
-
 
 /* MS-DOS "device special files" */
 
@@ -256,7 +257,7 @@ int msdos_lookup(struct inode *dir,struct dentry *dentry)
 
 	dentry->d_op = &msdos_dentry_operations;
 
-	if(!dir) {
+	if(!dir) { /* N.B. This test is bogus -- should never happen */
 		d_add(dentry, NULL);
 		return 0;
 	}
@@ -283,7 +284,7 @@ int msdos_lookup(struct inode *dir,struct dentry *dentry)
 	}
 	if (MSDOS_I(inode)->i_busy) { /* mkdir in progress */
 		iput(inode);
-		d_add(dentry, NULL);
+		d_add(dentry, NULL); /* N.B. Do we really want a negative? */
 		return 0;
 	}
 	PRINTK (("msdos_lookup 6\n"));
@@ -292,8 +293,7 @@ int msdos_lookup(struct inode *dir,struct dentry *dentry)
 		iput(inode);
 		if (!(inode = iget(next->i_sb,next->i_ino))) {
 			fat_fs_panic(dir->i_sb,"msdos_lookup: Can't happen");
-			d_add(dentry, NULL);
-			return -ENOENT;
+			return -ENOENT; /* N.B. Maybe ENOMEM is better? */
 		}
 	}
 	PRINTK (("msdos_lookup 7\n"));
@@ -382,7 +382,8 @@ int msdos_create(struct inode *dir,struct dentry *dentry,int mode)
 	res = msdos_create_entry(dir,msdos_name,S_ISDIR(mode),is_hid,
 				 &inode);
 	fat_unlock_creation();
-	d_instantiate(dentry, inode);
+	if (!res)
+		d_instantiate(dentry, inode);
 	return res;
 }
 
@@ -409,61 +410,77 @@ static void dump_fat(struct super_block *sb,int start)
 /***** See if directory is empty */
 static int msdos_empty(struct inode *dir)
 {
-	struct super_block *sb = dir->i_sb;
 	loff_t pos;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
+	int result = 0;
 
-	if (dir->i_count > 1)
-		return -EBUSY;
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;
 		bh = NULL;
-		while (fat_get_entry(dir,&pos,&bh,&de) > -1)
-			if (!IS_FREE(de->name) && strncmp(de->name,MSDOS_DOT,
-			    MSDOS_NAME) && strncmp(de->name,MSDOS_DOTDOT,
-			    MSDOS_NAME)) {
-				fat_brelse(sb, bh);
-				return -ENOTEMPTY;
+		while (fat_get_entry(dir,&pos,&bh,&de) > -1) {
+			if (!IS_FREE(de->name) && 
+			    strncmp(de->name,MSDOS_DOT   , MSDOS_NAME) &&
+			    strncmp(de->name,MSDOS_DOTDOT, MSDOS_NAME)) {
+				result = -ENOTEMPTY;
+				break;
 			}
+		}
 		if (bh)
-			fat_brelse(sb, bh);
+			fat_brelse(dir->i_sb, bh);
 	}
-	return 0;
+	return result;
 }
 
 /***** Remove a directory */
-int msdos_rmdir(struct inode *dir,struct dentry *dentry)
+int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 {
+	struct inode *inode = dentry->d_inode;
 	struct super_block *sb = dir->i_sb;
 	int res,ino;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
-	struct inode *inode;
 
 	bh = NULL;
-	inode = NULL;
-	res = -EPERM;
-	if ((res = msdos_find(dir,dentry->d_name.name,dentry->d_name.len,
-			      &bh,&de,&ino)) < 0)
+	res = msdos_find(dir, dentry->d_name.name, dentry->d_name.len,
+				&bh, &de, &ino);
+	if (res < 0)
 		goto rmdir_done;
-	inode = dentry->d_inode;
 	res = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode)) goto rmdir_done;
-	res = -EBUSY;
+	if (!S_ISDIR(inode->i_mode))
+		goto rmdir_done;
 	if (dir->i_dev != inode->i_dev || dir == inode)
-	  goto rmdir_done;
+		printk("msdos_rmdir: impossible condition\n");
+	/*
+	 * Prune any child dentries, then verify that
+	 * the directory is empty and not in use.
+	 */
+	shrink_dcache_parent(dentry);
 	res = msdos_empty(inode);
 	if (res)
 		goto rmdir_done;
+	res = -EBUSY;
+	if (dentry->d_count > 1) {
+#ifdef MSDOS_DEBUG
+printk("rename_diff_dir: %s/%s busy, d_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
+#endif
+		goto rmdir_done;
+	}
+
 	inode->i_nlink = 0;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_nlink--;
 	mark_inode_dirty(inode);
 	mark_inode_dirty(dir);
+	/*
+	 * Do the d_delete before any blocking operations.
+	 * We must make a negative dentry, as the FAT code
+	 * apparently relies on the inode being iput().
+	 */
+	d_delete(dentry);
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
-	d_delete(dentry);
 	res = 0;
 rmdir_done:
 	fat_brelse(sb, bh);
@@ -489,18 +506,18 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 	fat_lock_creation();
 	if (fat_scan(dir,msdos_name,&bh,&de,&ino,SCAN_ANY) >= 0) {
 		fat_unlock_creation();
+		/* N.B. does this need to be released on the other path? */
 		fat_brelse(sb, bh);
 		return -EEXIST;
  	}
-	if ((res = msdos_create_entry(dir,msdos_name,1,is_hid,
-				      &inode)) < 0) {
-		fat_unlock_creation();
-		return res;
-	}
+	res = msdos_create_entry(dir,msdos_name,1,is_hid, &inode);
+	if (res < 0)
+		goto out_unlock;
 	dir->i_nlink++;
 	inode->i_nlink = 2; /* no need to mark them dirty */
 	MSDOS_I(inode)->i_busy = 1; /* prevent lookups */
-	if ((res = fat_add_cluster(inode)) < 0) goto mkdir_error;
+	if ((res = fat_add_cluster(inode)) < 0)
+		goto mkdir_error;
 	if ((res = msdos_create_entry(inode,MSDOS_DOT,1,0,&dot)) < 0)
 		goto mkdir_error;
 	dot->i_size = inode->i_size; /* doesn't grow in the 2nd create_entry */
@@ -524,6 +541,7 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 mkdir_error:
 	if (msdos_rmdir(dir,dentry) < 0)
 		fat_fs_panic(dir->i_sb,"rmdir in mkdir failed");
+out_unlock:
 	fat_unlock_creation();
 	return res;
 }
@@ -535,25 +553,20 @@ static int msdos_unlinkx(
 	int nospc)	/* Flag special file ? */
 {
 	struct super_block *sb = dir->i_sb;
+	struct inode *inode = dentry->d_inode;
 	int res,ino;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
-	struct inode *inode;
 
 	bh = NULL;
-	inode = NULL;
 	if ((res = msdos_find(dir,dentry->d_name.name,dentry->d_name.len,
 			      &bh,&de,&ino)) < 0)
 		goto unlink_done;
-	inode = dentry->d_inode;
-	if (!S_ISREG(inode->i_mode) && nospc){
-		res = -EPERM;
+	res = -EPERM;
+	if (!S_ISREG(inode->i_mode) && nospc)
 		goto unlink_done;
-	}
-	if (IS_IMMUTABLE(inode)){
-		res = -EPERM;
+	if (IS_IMMUTABLE(inode))
 		goto unlink_done;
-	}
 	inode->i_nlink = 0;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	MSDOS_I(inode)->i_busy = 1;
@@ -562,6 +575,7 @@ static int msdos_unlinkx(
 	de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, bh, 1);
 	d_delete(dentry);	/* This also frees the inode */
+	res = 0;
 unlink_done:
 	fat_brelse(sb, bh);
 	return res;
@@ -707,7 +721,10 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		: (free_de->attr&~ATTR_HIDDEN);
 	if (!(free_inode = iget(new_dir->i_sb,free_ino))) {
 		free_de->name[0] = DELETED_FLAG;
-/*  Don't mark free_bh as dirty. Both states are supposed to be equivalent. */
+		/*
+		 * Don't mark free_bh as dirty. Both states 
+		 * are supposed to be equivalent.
+		 */
 		fat_brelse(sb, free_bh);
 		if (exists)
 			fat_brelse(sb, new_bh);
@@ -718,19 +735,53 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		mark_inode_dirty(new_dir);
 	}
 	msdos_read_inode(free_inode);
+	/*
+	 * Check whether there's already a linked inode ...
+	 */
+	if (MSDOS_I(old_inode)->i_linked) {
+		struct inode *linked = MSDOS_I(old_inode)->i_linked;
+#ifdef MSDOS_PARANOIA
+printk("rename_diff_dir: inode %ld already has link %ld, freeing it\n",
+old_inode->i_ino, linked->i_ino);
+#endif
+		MSDOS_I(old_inode)->i_linked = NULL;
+		MSDOS_I(linked)->i_oldlink = NULL;
+		iput(linked);
+	}
 	MSDOS_I(old_inode)->i_busy = 1;
 	MSDOS_I(old_inode)->i_linked = free_inode;
 	MSDOS_I(free_inode)->i_oldlink = old_inode;
+#ifdef MSDOS_DEBUG
+printk("rename_diff_dir: inode %ld added as link of %ld\n",
+free_inode->i_ino, old_inode->i_ino);
+#endif
 	fat_cache_inval_inode(old_inode);
 	mark_inode_dirty(old_inode);
 	old_de->name[0] = DELETED_FLAG;
 	fat_mark_buffer_dirty(sb, old_bh, 1);
 	fat_mark_buffer_dirty(sb, free_bh, 1);
 	if (exists) {
+		/*
+		 * Check whether there's already a depend inode ...
+		 */
+		if (MSDOS_I(new_inode)->i_depend) {
+			struct inode *depend = MSDOS_I(new_inode)->i_depend;
+#ifdef MSDOS_PARANOIA
+printk("rename_diff_dir: inode %ld already has depend %ld, freeing it\n",
+new_inode->i_ino, depend->i_ino);
+#endif
+			MSDOS_I(new_inode)->i_depend = NULL;
+			MSDOS_I(depend)->i_old = NULL;
+			iput(depend);
+		}
 		MSDOS_I(new_inode)->i_depend = free_inode;
 		MSDOS_I(free_inode)->i_old = new_inode;
 		/* Two references now exist to free_inode so increase count */
 		free_inode->i_count++;
+#ifdef MSDOS_DEBUG
+printk("rename_diff_dir: inode %ld added as depend of %ld\n",
+free_inode->i_ino, new_inode->i_ino);
+#endif
 		/* free_inode is put after putting new_inode and old_inode */
 		fat_brelse(sb, new_bh);
 	}

@@ -200,25 +200,21 @@ else
   endif
 endif
 
-#ifeq ($(CONFIG_MD_RAID1),y)
-#L_OBJS += raid1.o
-#else
-#  ifeq ($(CONFIG_MD_SUPPORT_RAID1),y)
-#    ifeq ($(CONFIG_MD_RAID1),m)
-#    M_OBJS += raid1.o
-#    endif
-#  endif
-#endif
-#
-#ifeq ($(CONFIG_MD_RAID5),y)
-#L_OBJS += raid5.o
-#else
-#  ifeq ($(CONFIG_MD_SUPPORT_RAID5),y)
-#    ifeq ($(CONFIG_MD_RAID5),m)
-#    M_OBJS += raid5.o
-#    endif
-#  endif
-#endif
+ifeq ($(CONFIG_MD_MIRRORING),y)
+L_OBJS += raid1.o
+else
+  ifeq ($(CONFIG_MD_MIRRORING),m)
+  M_OBJS += raid1.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_RAID5),y)
+L_OBJS += raid5.o
+else
+  ifeq ($(CONFIG_MD_RAID5),m)
+  M_OBJS += raid5.o
+  endif
+endif
 
 endif
 

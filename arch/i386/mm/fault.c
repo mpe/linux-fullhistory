@@ -74,6 +74,25 @@ bad_area:
 	return 0;
 }
 
+asmlinkage void divide_error(void);
+asmlinkage void debug(void);
+asmlinkage void nmi(void);
+asmlinkage void int3(void);
+asmlinkage void overflow(void);
+asmlinkage void bounds(void);
+asmlinkage void invalid_op(void);
+
+asmlinkage void do_divide_error (struct pt_regs *, unsigned long);
+asmlinkage void do_debug (struct pt_regs *, unsigned long);
+asmlinkage void do_nmi (struct pt_regs *, unsigned long);
+asmlinkage void do_int3 (struct pt_regs *, unsigned long);
+asmlinkage void do_overflow (struct pt_regs *, unsigned long);
+asmlinkage void do_bounds (struct pt_regs *, unsigned long);
+asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
+
+extern int * idt2;
+extern int pentium_f00f_bug;
+
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -170,6 +189,46 @@ bad_area:
 		goto out;
 	}
 
+	printk("<%p/%p>\n", idt2, (void *)address);
+	/*
+	 * Pentium F0 0F C7 C8 bug workaround:
+	 */
+	if ( pentium_f00f_bug && (address >= (unsigned long)idt2) &&
+			(address < (unsigned long)idt2+256*8) ) {
+
+		void (*handler) (void);
+		int nr = (address-(unsigned long)idt2)/8;
+		unsigned long low, high;
+
+		low = idt[nr].a;
+		high = idt[nr].b;
+
+		handler = (void (*) (void)) ((low&0x0000ffff) | (high&0xffff0000));
+		printk("<handler %p... ", handler);
+		unlock_kernel();
+
+		if (handler==divide_error)
+			do_divide_error(regs,error_code);
+		else if (handler==debug)
+			do_debug(regs,error_code);
+		else if (handler==nmi)
+			do_nmi(regs,error_code);
+		else if (handler==int3)
+			do_int3(regs,error_code);
+		else if (handler==overflow)
+			do_overflow(regs,error_code);
+		else if (handler==bounds)
+			do_bounds(regs,error_code);
+		else if (handler==invalid_op)
+			do_invalid_op(regs,error_code);
+		else {
+			printk("INVALID HANDLER!\n");
+			for (;;) __cli();
+		}
+		printk("... done>\n");
+		goto out;
+	}
+
 	/* Are we prepared to handle this kernel fault?  */
 	if ((fixup = search_exception_table(regs->eip)) != 0) {
 		printk(KERN_DEBUG "%s: Exception at [<%lx>] cr2=%lx (fixup: %lx)\n",
@@ -193,6 +252,7 @@ bad_area:
 		flush_tlb();
 		goto out;
 	}
+
 	if (address < PAGE_SIZE)
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
 	else

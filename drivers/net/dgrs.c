@@ -176,7 +176,7 @@ int	dgrs_spantree = -1;
 int	dgrs_hashexpire = -1;
 uchar	dgrs_ipaddr[4] = { 0xff, 0xff, 0xff, 0xff};
 uchar	dgrs_iptrap[4] = { 0xff, 0xff, 0xff, 0xff};
-long	dgrs_ipxnet = -1;
+__u32	dgrs_ipxnet = -1;
 int	dgrs_nicmode = 0;
 
 /*
@@ -1507,7 +1507,7 @@ static int	hashexpire = -1;
 static int	spantree = -1;
 static int	ipaddr[4] = { -1 };
 static int	iptrap[4] = { -1 };
-static long	ipxnet = -1;
+static __u32	ipxnet = -1;
 static int	nicmode = -1;
 
 MODULE_PARM(debug, "i");

@@ -184,7 +184,6 @@ EXPORT_SYMBOL(__bforget);
 EXPORT_SYMBOL(ll_rw_block);
 EXPORT_SYMBOL(__wait_on_buffer);
 EXPORT_SYMBOL(mark_buffer_uptodate);
-EXPORT_SYMBOL(unlock_buffer);
 EXPORT_SYMBOL(add_blkdev_randomness);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
@@ -232,6 +231,10 @@ EXPORT_SYMBOL(blkdev_release);
 EXPORT_SYMBOL(gendisk_head);
 EXPORT_SYMBOL(resetup_one_dev);
 EXPORT_SYMBOL(unplug_device);
+EXPORT_SYMBOL(make_request);
+EXPORT_SYMBOL(tq_disk);
+EXPORT_SYMBOL(efind_buffer);
+EXPORT_SYMBOL(init_buffer);
 
 /* tty routines */
 EXPORT_SYMBOL(tty_hangup);

@@ -15,13 +15,13 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_GUSHW)
+#ifdef CONFIG_GUSHW
 
 #include "gus_hw.h"
 
 void            gusintr (int irq, void *dev_id, struct pt_regs *dummy);
 
-int             gus_base, gus_irq, gus_dma;
+int             gus_base = 0, gus_irq = 0, gus_dma = 0;
 extern int      gus_wave_volume;
 extern int      gus_pcm_volume;
 extern int      have_gus_max;
@@ -171,7 +171,7 @@ gusintr (int irq, void *dev_id, struct pt_regs *dummy)
 /*
  * Some extra code for the 16 bit sampling option
  */
-#if defined(CONFIG_GUS16)
+#ifdef CONFIG_GUS16
 
 int
 probe_gus_db16 (struct address_info *hw_config)

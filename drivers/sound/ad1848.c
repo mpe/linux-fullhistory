@@ -28,7 +28,7 @@
 #define DEB1(x)
 #include "sound_config.h"
 
-#if defined(CONFIG_AD1848)
+#ifdef CONFIG_AD1848
 
 #include "ad1848_mixer.h"
 
@@ -49,7 +49,7 @@ typedef struct
     int             audio_mode;
     int             open_mode;
     int             intr_active;
-    char           *chip_name;
+    char           *chip_name, *name;
     int             model;
 #define MD_1848		1
 #define MD_4231		2
@@ -1423,7 +1423,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   devc->MCE_bit = 0x40;
   devc->irq = 0;
   devc->open_mode = 0;
-  devc->chip_name = "AD1848";
+  devc->chip_name = devc->name = "AD1848";
   devc->model = MD_1848;	/* AD1848 or CS4248 */
   devc->levels = NULL;
   devc->c930_password_port = 0;
@@ -1438,6 +1438,11 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
      *
      * If the I/O address is unused, it typically returns 0xff.
    */
+
+  if (inb (devc->base) == 0xff)
+    {
+      DDB (printk ("ad1848_detect: The base I/O address appears to be dead\n"));
+    }
 
 /*
  * Wait for the device to stop initialization
@@ -1459,8 +1464,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 
   if ((inb (devc->base) & 0x80) != 0x00)	/* Not a AD1848 */
     {
-      DDB (printk ("ad1848 detect error - step A (%02x)\n",
-		   (int) inb (devc->base)));
+      DDB (printk ("ad1848 detect error - step A (%02x)\n", (int) inb (devc->base)));
       return 0;
     }
 
@@ -1480,7 +1484,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
     else
       {
 	DDB (printk ("ad1848 detect error - step B (%x/%x)\n", tmp1, tmp2));
-	/* return 0; */
+	return 0;
       }
 
   DDB (printk ("ad1848_detect() - step C\n"));
@@ -1493,7 +1497,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
     else
       {
 	DDB (printk ("ad1848 detect error - step C (%x/%x)\n", tmp1, tmp2));
-	/* return 0; */
+	return 0;
       }
 
   /*
@@ -1618,8 +1622,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 		id = ad_read (devc, 25) & 0xe7;
 	      if (id == 0x80)	/* Device still busy??? */
 		id = ad_read (devc, 25) & 0xe7;
-	      DDB (printk ("ad1848_detect() - step J (%02x/%02x)\n", id,
-			   ad_read (devc, 25)));
+	      DDB (printk ("ad1848_detect() - step J (%02x/%02x)\n", id, ad_read (devc, 25)));
 
 	      switch (id)
 		{
@@ -1687,9 +1690,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
 		  break;
 
 		default:	/* Assume CS4231 or OPTi 82C930 */
-		  DDB (printk ("ad1848: I25 = %02x/%02x\n",
-			       ad_read (devc, 25),
-			       ad_read (devc, 25) & 0xe7));
+		  DDB (printk ("ad1848: I25 = %02x/%02x\n", ad_read (devc, 25), ad_read (devc, 25) & 0xe7));
 		  if (optiC930)
 		    {
 		      devc->chip_name = "82C930";
@@ -1741,8 +1742,6 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 
   ad1848_port_info *portc = NULL;
 
-  request_region (devc->base, 4, devc->chip_name);
-
   devc->irq = (irq > 0) ? irq : 0;
   devc->open_mode = 0;
   devc->timer_ticks = 0;
@@ -1750,6 +1749,8 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
   devc->dma2 = dma_capture;
   devc->audio_flags = DMA_AUTOMODE;
   devc->playback_dev = devc->record_dev = 0;
+  if (name != NULL)
+    devc->name = name;
 
   if (name != NULL && name[0] != 0)
     sprintf (dev_name,
@@ -1757,6 +1758,8 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
   else
     sprintf (dev_name,
 	     "Generic audio codec (%s)", devc->chip_name);
+
+  request_region (devc->base, 4, devc->name);
 
   conf_printf2 (dev_name,
 		devc->base, devc->irq, dma_playback, dma_capture);
@@ -1801,7 +1804,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
     {
       irq2dev[irq] = devc->dev_no = my_dev;
       if (snd_set_irq_handler (devc->irq, adintr,
-			       "SoundPort",
+			       devc->name,
 			       NULL) < 0)
 	{
 	  printk ("ad1848: IRQ in use\n");
@@ -1843,11 +1846,11 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 
   if (!share_dma)
     {
-      if (sound_alloc_dma (dma_playback, "Sound System"))
+      if (sound_alloc_dma (dma_playback, devc->name))
 	printk ("ad1848.c: Can't allocate DMA%d\n", dma_playback);
 
       if (dma_capture != dma_playback)
-	if (sound_alloc_dma (dma_capture, "Sound System (capture)"))
+	if (sound_alloc_dma (dma_capture, devc->name))
 	  printk ("ad1848.c: Can't allocate DMA%d\n", dma_capture);
     }
 
@@ -1944,8 +1947,7 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
 	}
     }
   else
-    printk ("ad1848: Can't find device to be unloaded. Base=%x\n",
-	    io_base);
+    printk ("ad1848: Can't find device to be unloaded. Base=%x\n", io_base);
 }
 
 void
@@ -1973,7 +1975,7 @@ adintr (int irq, void *dev_id, struct pt_regs *dummy)
 
       if (irq > 15)
 	{
-	  /* printk ("ad1848.c: Bogus interrupt %d\n", irq); */
+	  /* printk("ad1848.c: Bogus interrupt %d\n", irq); */
 	  return;
 	}
 
@@ -2149,8 +2151,7 @@ init_deskpro (struct address_info *hw_config)
       tmp |= 0x03;
       break;
     default:
-      DDB (printk ("init_deskpro: Invalid MSS port %x\n",
-		   hw_config->io_base));
+      DDB (printk ("init_deskpro: Invalid MSS port %x\n", hw_config->io_base));
       return 0;
     }
   outb ((tmp & ~0x04), 0xc44);	/* Write to bank=0 */
@@ -2325,8 +2326,7 @@ probe_ms_sound (struct address_info *hw_config)
     {
       int             ret;
 
-      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n",
-		   hw_config->io_base, (int) inb (hw_config->io_base + 3)));
+      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n", hw_config->io_base, (int) inb (hw_config->io_base + 3)));
       DDB (printk ("Trying to detect codec anyway but IRQ/DMA may not work\n"));
       if (!(ret = ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp)))
 	return 0;

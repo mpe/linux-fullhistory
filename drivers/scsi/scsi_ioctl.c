@@ -341,6 +341,11 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 		    &((Scsi_Idlun *) arg)->dev_id);
         put_user(dev->host->unique_id, &((Scsi_Idlun *) arg)->host_unique_id);
 	return 0;
+    case SCSI_IOCTL_GET_BUS_NUMBER:
+        result = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
+        if (result) return result;
+        put_user( dev->host->host_no, (int *) arg);
+	return 0;
     case SCSI_IOCTL_TAGGED_ENABLE:
 	if(!suser())  return -EACCES;
 	if(!dev->tagged_supported) return -EINVAL;

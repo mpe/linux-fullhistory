@@ -33,7 +33,7 @@
  * Use ioctl(fd, OSS_GETVERSION, &int) to get the version number of
  * the currently active driver.
  */
-#define SOUND_VERSION	0x030800
+#define SOUND_VERSION	0x030802
 #define OPEN_SOUND_SYSTEM
 
 /* In Linux we need to be prepared for cross compiling */
@@ -127,7 +127,7 @@
 #define SNDCTL_SEQ_GETOUTCOUNT		_SIOR ('Q', 4, int)
 #define SNDCTL_SEQ_GETINCOUNT		_SIOR ('Q', 5, int)
 #define SNDCTL_SEQ_PERCMODE		_SIOW ('Q', 6, int)
-#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Obsolete. Don't use. */
+#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Obsolete. Don't use!!!!!! */
 #define SNDCTL_SEQ_TESTMIDI		_SIOW ('Q', 8, int)
 #define SNDCTL_SEQ_RESETSAMPLES		_SIOW ('Q', 9, int)
 #define SNDCTL_SEQ_NRSYNTHS		_SIOR ('Q',10, int)
@@ -697,7 +697,7 @@ typedef struct copr_msg {
  * the devices supported by the particular mixer.
  */
 
-#define SOUND_MIXER_NRDEVICES	17
+#define SOUND_MIXER_NRDEVICES	25
 #define SOUND_MIXER_VOLUME	0
 #define SOUND_MIXER_BASS	1
 #define SOUND_MIXER_TREBLE	2
@@ -721,6 +721,14 @@ typedef struct copr_msg {
 #define SOUND_MIXER_LINE1	14	/* Input source 1  (aux1) */
 #define SOUND_MIXER_LINE2	15	/* Input source 2  (aux2) */
 #define SOUND_MIXER_LINE3	16	/* Input source 3  (line) */
+#define SOUND_MIXER_DIGITAL1	17	/* Digital (input) 1 */
+#define SOUND_MIXER_DIGITAL2	18	/* Digital (input) 2 */
+#define SOUND_MIXER_DIGITAL3	19	/* Digital (input) 3 */
+#define SOUND_MIXER_PHONEIN	20	/* Phone input */
+#define SOUND_MIXER_PHONEOUT	21	/* Phone output */
+#define SOUND_MIXER_VIDEO	22	/* Video/TV (audio) in */
+#define SOUND_MIXER_RADIO	23	/* Radio in */
+#define SOUND_MIXER_MONITOR	24	/* Monitor (usually mic) volume */
 
 /* Some on/off settings (SOUND_SPECIAL_MIN - SOUND_SPECIAL_MAX) */
 /* Not counted to SOUND_MIXER_NRDEVICES, but use the same number space */
@@ -741,11 +749,13 @@ typedef struct copr_msg {
 
 #define SOUND_DEVICE_LABELS	{"Vol  ", "Bass ", "Trebl", "Synth", "Pcm  ", "Spkr ", "Line ", \
 				 "Mic  ", "CD   ", "Mix  ", "Pcm2 ", "Rec  ", "IGain", "OGain", \
-				 "Line1", "Line2", "Line3"}
+				 "Line1", "Line2", "Line3", "Digital1", "Digital2", "Digital3", \
+				 "PhoneIn", "PhoneOut", "Video", "Radio", "Monitor"}
 
 #define SOUND_DEVICE_NAMES	{"vol", "bass", "treble", "synth", "pcm", "speaker", "line", \
 				 "mic", "cd", "mix", "pcm2", "rec", "igain", "ogain", \
-				 "line1", "line2", "line3"}
+				 "line1", "line2", "line3", "dig1", "dig2", "dig3", \
+				 "phin", "phout", "video", "radio", "monitor"}
 
 /*	Device bitmask identifiers	*/
 
@@ -775,6 +785,14 @@ typedef struct copr_msg {
 #define SOUND_MASK_LINE1	(1 << SOUND_MIXER_LINE1)
 #define SOUND_MASK_LINE2	(1 << SOUND_MIXER_LINE2)
 #define SOUND_MASK_LINE3	(1 << SOUND_MIXER_LINE3)
+#define SOUND_MASK_DIGITAL1	(1 << SOUND_MIXER_DIGITAL1)
+#define SOUND_MASK_DIGITAL2	(1 << SOUND_MIXER_DIGITAL2)
+#define SOUND_MASK_DIGITAL3	(1 << SOUND_MIXER_DIGITAL3)
+#define SOUND_MASK_PHONEIN	(1 << SOUND_MIXER_PHONEIN)
+#define SOUND_MASK_PHONEOUT	(1 << SOUND_MIXER_PHONEOUT)
+#define SOUND_MASK_RADIO	(1 << SOUND_MIXER_RADIO)
+#define SOUND_MASK_VIDEO	(1 << SOUND_MIXER_VIDEO)
+#define SOUND_MASK_MONITOR	(1 << SOUND_MIXER_MONITOR)
 
 /* Obsolete macros */
 #define SOUND_MASK_MUTE		(1 << SOUND_MIXER_MUTE)

@@ -18,7 +18,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 
 #define _MIDI_SYNTH_C_
 
@@ -89,7 +89,7 @@ do_midi_msg (int synthno, unsigned char *msg, int mlen)
       break;
 
     default:
-      /* printk ("MPU: Unknown midi channel message %02x\n", msg[0]); */
+      /* printk( "MPU: Unknown midi channel message %02x\n",  msg[0]); */
       ;
     }
 }
@@ -231,8 +231,7 @@ midi_synth_input (int orig_dev, unsigned char data)
       break;			/* MST_SYSEX */
 
     default:
-      printk ("MIDI%d: Unexpected state %d (%02x)\n", orig_dev, inc->m_state,
-	      (int) data);
+      printk ("MIDI%d: Unexpected state %d (%02x)\n", orig_dev, inc->m_state, (int) data);
       inc->m_state = MST_INIT;
     }
 }
@@ -523,8 +522,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
 
   if (count < sysex.len)
     {
-      printk ("MIDI Warning: Sysex record too short (%d<%d)\n",
-	      count, (int) sysex.len);
+      printk ("MIDI Warning: Sysex record too short (%d<%d)\n", count, (int) sysex.len);
       sysex.len = count;
     }
 
@@ -533,7 +531,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
 
   sysex_sleep_flag.opts = WK_NONE;
 
-  for (i = 0; i < left && !signal_pending(current); i++)
+  for (i = 0; i < left && !(current->signal & ~current->blocked); i++)
     {
       unsigned char   data;
 
@@ -554,7 +552,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
 	}
 
       while (!midi_devs[orig_dev]->outputc (orig_dev, (unsigned char) (data & 0xff)) &&
-	     !signal_pending(current))
+	     !(current->signal & ~current->blocked))
 
 	{
 	  unsigned long   tlimit;

@@ -15,6 +15,7 @@ MOD_LIST_NAME := SCSI_MODULES
 SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
 AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
+GDTH = #-DDEBUG_GDTH=2 -D__SERIAL__ -D__COM2__ -DGDTH_STATISTICS
 
 .SUFFIXES:
 .SUFFIXES: .c .o .h .a
@@ -89,6 +90,30 @@ else
   ifeq ($(CONFIG_SCSI_ADVANSYS),m)
   M_OBJS += advansys.o
   endif
+endif
+
+ifeq ($(CONFIG_SCSI_PCI2000),y)
+L_OBJS += pci2000.o
+else
+    ifeq ($(CONFIG_SCSI_PCI2000),m)
+    M_OBJS += pci2000.o
+    endif
+endif
+
+ifeq ($(CONFIG_SCSI_PCI2220I),y)
+L_OBJS += pci2220i.o
+else
+    ifeq ($(CONFIG_SCSI_PCI2220I),m)
+    M_OBJS += pci2220i.o
+    endif
+endif
+
+ifeq ($(CONFIG_SCSI_PSI240I),y)
+L_OBJS += psi240i.o
+else
+    ifeq ($(CONFIG_SCSI_PSI240I),m)
+    M_OBJS += psi240i.o
+    endif
 endif
 
 ifeq ($(CONFIG_A4000T_SCSI),y)
@@ -285,6 +310,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_GDTH),y)
+L_OBJS += gdth.o
+else
+  ifeq ($(CONFIG_SCSI_GDTH),m)
+  M_OBJS += gdth.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_DEBUG),y)
 L_OBJS += scsi_debug.o
 else
@@ -432,6 +465,9 @@ BusLogic.o: BusLogic.c FlashPoint.c
 
 aha152x.o: aha152x.c
 	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 
+
+gdth.o: gdth.c gdth.h gdth_proc.c gdth_proc.h
+	$(CC) $(CFLAGS) $(GDTH) -c gdth.c 
 
 aic7xxx.o: aic7xxx.c aic7xxx_seq.h aic7xxx_reg.h
 	$(CC) $(CFLAGS) -c -o $@ aic7xxx.c

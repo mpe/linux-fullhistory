@@ -42,6 +42,7 @@ char x86_model = 0;		/* set by kernel/head.S */
 char x86_mask = 0;		/* set by kernel/head.S */
 int x86_capability = 0;		/* set by kernel/head.S */
 int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
+int pentium_f00f_bug = 0;	/* set if Pentium(TM) with F00F bug */
 int have_cpuid = 0;             /* set if CPUID instruction works */
 
 char x86_vendor_id[13] = "unknown";
@@ -359,6 +360,7 @@ int get_cpuinfo(char * buffer)
                                        "fdiv_bug\t: %s\n"
                                        "hlt_bug\t\t: %s\n"
 				       "sep_bug\t\t: %s\n"
+				       "pentium_f00f_bug\t\t: %s\n"
                                        "fpu\t\t: %s\n"
                                        "fpu_exception\t: %s\n"
                                        "cpuid\t\t: %s\n"
@@ -367,6 +369,7 @@ int get_cpuinfo(char * buffer)
                                        CD(fdiv_bug) ? "yes" : "no",
                                        CD(hlt_works_ok) ? "no" : "yes",
 				       sep_bug ? "yes" : "no",
+				       pentium_f00f_bug ? "yes" : "no",
                                        CD(hard_math) ? "yes" : "no",
                                        (CD(hard_math) && ignore_irq13)
                                          ? "yes" : "no",

@@ -195,9 +195,6 @@ init_status (void)
   put_status (" ");
   put_status (system_utsname.machine);
   put_status ("\n");
-#ifdef MODULE
-  put_status ("Driver loaded as a module\n");
-#endif
 
 
   if (!put_status ("Config options: "))
@@ -511,7 +508,10 @@ sound_open_sw (int dev, struct fileinfo *file)
 	return -EBUSY;
       status_busy = 1;
       if ((status_buf = (char *) vmalloc (4000)) == NULL)
-	return -EIO;
+	{
+	  status_busy = 0;
+	  return -EIO;
+	}
       status_len = status_ptr = 0;
       init_status ();
       break;
@@ -605,12 +605,15 @@ static int
 get_mixer_info (int dev, caddr_t arg)
 {
   mixer_info      info;
+  int             i;
 
   if (dev < 0 || dev >= num_mixers)
     return -ENXIO;
 
   strcpy (info.id, mixer_devs[dev]->id);
-  strcpy (info.name, mixer_devs[dev]->name);
+  for (i = 0; i < 32 && mixer_devs[dev]->name; i++)
+    info.name[i] = mixer_devs[dev]->name[i];
+  info.name[i] = 0;
   info.modify_counter = mixer_devs[dev]->modify_counter;
 
   memcpy ((&((char *) arg)[0]), (char *) &info, sizeof (info));
@@ -621,12 +624,15 @@ static int
 get_old_mixer_info (int dev, caddr_t arg)
 {
   _old_mixer_info info;
+  int             i;
 
   if (dev < 0 || dev >= num_mixers)
     return -ENXIO;
 
   strcpy (info.id, mixer_devs[dev]->id);
-  strcpy (info.name, mixer_devs[dev]->name);
+  for (i = 0; i < 32 && mixer_devs[dev]->name; i++)
+    info.name[i] = mixer_devs[dev]->name[i];
+  info.name[i] = 0;
 
   memcpy ((&((char *) arg)[0]), (char *) &info, sizeof (info));
   return 0;

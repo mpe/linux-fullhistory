@@ -16,6 +16,7 @@
 #define _DEV_TABLE_C_
 #include "sound_config.h"
 int             sb_be_quiet = 0;
+int             softoss_dev = 0;
 
 int             sound_started = 0;
 
@@ -154,6 +155,9 @@ sound_unload_drivers (void)
 	  }
       }
 
+  	for (i=0;i<num_audiodevs;i++)
+      	   DMAbuf_deinit(i);
+
   if (trace_init)
     printk ("Sound unload complete\n");
 }
@@ -162,8 +166,6 @@ void
 sound_unload_driver (int type)
 {
   int             i, drv = -1, n = num_sound_cards;
-
-  unsigned long   flags;
 
 
   DEB (printk ("unload driver %d: ", type));
@@ -185,11 +187,6 @@ sound_unload_driver (int type)
 	  }
       }
   DEB (printk ("\n"));
-
-  save_flags (flags);
-  cli ();
-
-  restore_flags (flags);
 }
 
 
@@ -302,8 +299,7 @@ sndtable_init_card (int unit, struct address_info *hw_config)
 	return 1;
       }
 
-  DEB (printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n",
-	       unit, num_sound_cards));
+  DEB (printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n", unit, num_sound_cards));
   return 0;
 }
 

@@ -5,7 +5,13 @@ This document describes configuring soundcards with freeware version of
 Open Sound Systems (OSS/Free). Information about the commercial version
 (OSS/Linux) and it's configuration is available from 
 http://www.4front-tech.com/linux.html. Information presented here is
-not valid for OSS/Linux.
+not valid for OSS/Linux. 
+
+If you are unsure about how to configure OSS/Free
+you can download the free evaluation version of OSS/Linux from the above
+address. There is a chance that it can autodetect your soundcard. In this case
+you can use the information included in soundon.log when configuring OSS/Free.
+
 
 IMPORTANT!	This document covers only cards that were "known" when
 		this driver version was released. Please look at
@@ -25,7 +31,7 @@ IMPORTANT!	This document covers only cards that were "known" when
 		method to use. After you have used the "new" method once
 		it will always be used when you use any of the config
 		programs. To return back to the "old" method you should
-		reinstall the kernel sources.
+		execute "cp Config.std Config.in" in linux/drivers/sound.
 
 		The /etc/soundconf file (forget it if you don't know what
 		this file does) contains settings that are used only by
@@ -33,14 +39,13 @@ IMPORTANT!	This document covers only cards that were "known" when
 		are stored there (they really are _NOT_ stored
 		there). Don't try to edit /etc/soundconf or any other
 		kernel or sound driver config files manually. The _only_
-		proper ways to change the settings are make config,
-		make menuconfig or make xconfig.
+		proper ways to change the settings are make config or
+		make menuconfig (the "old" method).
 
 		When using make xconfig and/or make menuconfig, you should
 		carefully check each sound configuration option (particularly
 		"Support for /dev/dsp and /dev/audio"). The default values
 		offered by these programs are not necessarily valid.
-
 
 
 THE BIGGEST MISTAKES YOU CAN DO
@@ -211,7 +216,8 @@ Sound Blasters
 		is compatible just with SB Pro but there is also a non-SB-
 		compatible 16 bit mode. Usually it's MSS/WSS but it could also
 		be a proprietary one like MV Jazz16 or ESS ES688. OPTi
-		MAD16 chips are very common in so called "SB 16 bit cards".
+		MAD16 chips are very common in so called "SB 16 bit cards"
+		(try with the MAD16 driver).
 
 	======================================================================
 	"Supposed to be SB compatible" cards.
@@ -292,9 +298,66 @@ Yamaha FM synthesizers (OPL2, OPL3 (not OPL3-SA) and OPL4)
 	----------------------------------------------------------------
 	NOTE! OPL3-SA is different chip than the ordinary OPL3. In addition
 	to the FM synth this chip has also digital audio (WSS) and
-	MIDI (MPU401) capabilities. OPL3-SA is not supported by OSS/Free.
-	Support for it is included in OSS/Linux v3.8 and later.
+	MIDI (MPU401) capabilities. Support for OPL3-SA is described below.
 	----------------------------------------------------------------
+
+Yamaha OPL3-SA1
+
+	Yamaha OPL3-SA1 (YMF701) is an audio controller chip used on some
+	(Intel) motherboards and on cheap soundcards. It should not be
+	confused with the original OPL3 chip (YMF278) which is entirely
+        different chip. OPL3-SA1 has support for MSS, MPU401 and SB Pro
+	(not used in OSS/Free) in addition to the OPL3 FM synth.
+
+	There are also chips called OPL3-SA2, OPL3-SA3, ..., OPL3SA-N. They
+	are PnP chips and will not work with the OPL3-SA1 driver. You should 
+	use the standard MSS, MPU401 and OPL3 options with thses chips and to
+	activate the card using isapnptools.
+
+4Front Technologies SoftOSS
+
+	SoftOSS is a software based wave table emulation which works with
+	any 16 bit stereo soundcard. Due to it's nature a fast CPU is
+	required (P133 is minumum). Althoug SoftOSS doesn _not_ use MMX
+	instructions it has proven out that recent processors (which appear
+	to have MMX) perform significantly better with SoftOSS than earlier
+	ones. For example a P166MMX beats a PPro200. SoftOSS should not be used
+	on 486 or 386 machines.
+
+	The amount of CPU load caused by SoftOSS can be controlled by 
+	selecting the SOFTOSS_RATE and SOFTOSS_VOICES parameters properly
+	(they will be prompted by make config). It's recommended to set
+	SOFTOSS_VOICES to 32. If you have a P166MMX or faster (PPro200 is
+	not faster) you can set SOFTOSS_RATE to 44100 (kHz). However with
+	slower systems it recommended to use sampling rates around 22050
+	or even 16000 kHz. Selecting too high values for these parameters
+        may hang your system when playing MIDI files with hight degree of
+	polyphony (number of concurrently playing notes). It's also possible to
+	decrease SOFTOSS_VOICES. This makes it possible to use higher sampling
+	rates. However using fewer voices decreases playback quality more than
+	decreasing the sampling rate.
+
+	SoftOSS keeps the samples loaded on system's RAM so large RAM is
+	required. SoftOSS should never be used on machines with less than 16M
+	of RAM since this is potentially dangerous (you may accidently run out
+	of memory which probably crashes the machine). 
+
+	SoftOSS implements the wave table API originally designed for GUS. For
+	this reason all applications designed for GUS should work (at least
+	after minor modifications). For example gmod/xgmod and playmidi -g are
+	known to work.
+
+	To work SoftOSS will require GUS compatible
+	patch files to be installed on the system (in /dos/ultrasnd/midi). You
+	can use the public domain MIDIA patchset available from several ftp
+	sites.
+
+        *********************************************************************
+	IMPORTANT NOTICE! The original patch set distributed with Gravis 
+	Ultrasound card is not in public domain (even it's available from
+	some ftp sites). You should contact Voice Crystal (www.voicecrystal.com)
+	if you like to use these patches with SoftOSS included in OSS/Free.
+        *********************************************************************
 
 PSS based cards (AD1848 + ADSP-2115 + Echo ESC614 ASIC)
 	Analog Devices and Echo Speech have together defined a soundcard
@@ -327,7 +390,7 @@ Ensoniq SoundScape and compatibles
 	VIVO90 cards are not compatible with Soundscapes so the Soundscape driver
 	will not work with them. You may want to use OSS/Linux with these cards.
 
-MAD16 and Mozart based cards
+OPTi MAD16 and Mozart based cards
 	The Mozart (OAK OTI-601), MAD16 (OPTi 82C928), MAD16 Pro (OPTi 82C929),
 	OPTi 82C924/82C925 (in _non_ PnP mode) and OPTi 82C930 interface
 	chips are used in many different soundcards, including some
@@ -644,8 +707,12 @@ different operating systems.
 Sound Blasters (the original ones by Creative)
 ---------------------------------------------
 
+NOTE! Check if you have a PnP Sound Blaster (cards sold after summer 1995
+      are almost certainly PnP ones). With PnP cards you should use isapnptools
+      to activate them (see above).
+
 It's possible to configure these cards to use different I/O, IRQ and
-DMA settings. Since the available settings have changed between various
+DMA settings. Since the possible/default settings have changed between various
 models, you have to consult manual of your card for the proper ones. It's
 a good idea to use the same values than with DOS/Windows. With SB and SB Pro
 it's the only choice. SB16 has software selectable IRQ and DMA channels but
@@ -661,6 +728,15 @@ The SB16 needs two DMA channels. A 8 bit one (1 or 3) is required for
 it's possible to use just one (8 bit) DMA channel by answering the 8 bit
 one when the configuration program asks for the 16 bit one. This may work
 in some systems but is likely to cause terrible noise on some other systems.
+
+It's possible to use two SB16/32/64 at the same time. To do this you should
+first configure OSS/Free for one card. Then edit local.h manually and define
+SB2_BASE, SB2_IRQ, SB2_DMA and SB2_DMA2 for the second one. You can't get
+the OPL3, MIDI and EMU8000 devices of the second card to work. If you are
+going to use two PnP Sound Blasters, ensure that they are of different model
+and have different PnP ID's. There is no way to get two cards with the same
+card ID and serial number to work. The easiest way to check this is trying 
+if isapnptools can see both cards or just one.
 
 NOTE!	Don't enable the SM Games option (asked by the configuration program)
 	if you are not 101% sure that your card is a Logitech Soundman Games
@@ -1185,12 +1261,10 @@ as free copies of soundcards, SDKs and operating systems.
 If you have any corrections and/or comments, please contact me.
 
 Hannu Savolainen
-hannu@voxware.pp.fi
+hannu@4front-tech.com
 
 Personal home page:	   http://personal.eunet.fi/pp/voxware/hannu.html
 www home page of OSS/Free: http://www.4front-tech.com/ossfree
-  European/Finnish mirror: http://personal.eunet.fi/pp/voxware
 
 www home page of commercial OSS
 (Open Sound System) drivers: http://www.4front-tech.com/oss.html
-

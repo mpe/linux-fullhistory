@@ -12,6 +12,7 @@
 
 
 #include "local.h"
+
 #include "os.h"
 #include "soundvers.h"
 
@@ -145,6 +146,7 @@ struct channel_info {
 #define WK_SIGNAL	0x04
 #define WK_SLEEP	0x08
 #define WK_SELECT	0x10
+#define WK_ABORT	0x20
 
 #define OPEN_READ	PCM_ENABLE_INPUT
 #define OPEN_WRITE	PCM_ENABLE_OUTPUT

@@ -17,6 +17,8 @@
 #include "sound_config.h"
 
 #ifdef CONFIG_SEQUENCER
+#include "softoss.h"
+int             (*softsynthp) (int cmd, int parm1, int parm2, unsigned long parm3) = NULL;
 
 #include "midi_ctrl.h"
 
@@ -57,8 +59,8 @@ static int      midi_opened[MAX_MIDI_DEV] =
 static int      midi_written[MAX_MIDI_DEV] =
 {0};
 
-unsigned long   prev_input_time = 0;
-int             prev_event_time;
+static unsigned long prev_input_time = 0;
+static int      prev_event_time;
 
 #include "tuning.h"
 
@@ -200,7 +202,10 @@ sequencer_midi_input (int dev, unsigned char data)
   if (data == 0xfe)		/* Ignore active sensing */
     return;
 
-  tstamp = jiffies - seq_time;
+  if (softsynthp != NULL)
+    tstamp = softsynthp (SSYN_GETTIME, 0, 0, 0);
+  else
+    tstamp = jiffies - seq_time;
 
   if (tstamp != prev_input_time)
     {
@@ -225,6 +230,8 @@ seq_input_event (unsigned char *event_rec, int len)
 
   if (seq_mode == SEQ_2)
     this_time = tmr->get_time (tmr_no);
+  else if (softsynthp != NULL)
+    this_time = softsynthp (SSYN_GETTIME, 0, 0, 0);
   else
     this_time = jiffies - seq_time;
 
@@ -732,7 +739,10 @@ seq_timing_event (unsigned char *event_rec)
 	  prev_event_time = time;
 
 	  seq_playing = 1;
-	  request_sound_timer (time);
+	  if (softsynthp != NULL)
+	    softsynthp (SSYN_REQUEST, time, 0, 0);
+	  else
+	    request_sound_timer (time);
 
 	  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
 	    {
@@ -755,7 +765,13 @@ seq_timing_event (unsigned char *event_rec)
       break;
 
     case TMR_START:
-      seq_time = jiffies;
+      if (softsynthp != NULL)
+	{
+	  softsynthp (SSYN_START, 0, 0, 0);
+	  seq_time = 0;
+	}
+      else
+	seq_time = jiffies;
       prev_input_time = 0;
       prev_event_time = 0;
       break;
@@ -868,7 +884,10 @@ play_event (unsigned char *q)
 	  time = *delay;
 	  prev_event_time = time;
 
-	  request_sound_timer (time);
+	  if (softsynthp != NULL)
+	    softsynthp (SSYN_REQUEST, time, 0, 0);
+	  else
+	    request_sound_timer (time);
 
 	  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
 	    {
@@ -902,9 +921,14 @@ play_event (unsigned char *q)
     case SEQ_SYNCTIMER:	/*
 				 * Reset timer
 				 */
-      seq_time = jiffies;
+      if (softsynthp != NULL)
+	seq_time = 0;
+      else
+	seq_time = jiffies;
       prev_input_time = 0;
       prev_event_time = 0;
+      if (softsynthp != NULL)
+	softsynthp (SSYN_START, 0, 0, 0);
       break;
 
     case SEQ_MIDIPUTC:		/*
@@ -926,7 +950,10 @@ play_event (unsigned char *q)
 	       */
 
 	      seq_playing = 1;
-	      request_sound_timer (-1);
+	      if (softsynthp != NULL)
+		softsynthp (SSYN_REQUEST, -1, 0, 0);
+	      else
+		request_sound_timer (-1);
 	      return 2;
 	    }
 	  else
@@ -1186,10 +1213,15 @@ sequencer_open (int dev, struct fileinfo *file)
 	}
     }
 
-  seq_time = jiffies;
+  if (softsynthp != NULL)
+    seq_time = 0;
+  else
+    seq_time = jiffies;
 
   prev_input_time = 0;
   prev_event_time = 0;
+  if (softsynthp != NULL)
+    softsynthp (SSYN_START, 0, 0, 0);
 
   if (seq_mode == SEQ_1 && (mode == OPEN_READ || mode == OPEN_READWRITE))
     {				/*
@@ -1227,7 +1259,7 @@ seq_drain_midi_queues (void)
 
   n = 1;
 
-  while (!signal_pending(current) && n)
+  while (!(current->signal & ~current->blocked) && n)
     {
       n = 0;
 
@@ -1279,7 +1311,7 @@ sequencer_release (int dev, struct fileinfo *file)
 
   if (mode != OPEN_READ && !(file->flags & (O_NONBLOCK) ?
 			     1 : 0))
-    while (!signal_pending(current) && qlen > 0)
+    while (!(current->signal & ~current->blocked) && qlen > 0)
       {
 	seq_sync ();
 
@@ -1344,7 +1376,7 @@ seq_sync (void)
 {
   unsigned long   flags;
 
-  if (qlen && !seq_playing && !signal_pending(current))
+  if (qlen && !seq_playing && !(current->signal & ~current->blocked))
     seq_startplay ();
 
   save_flags (flags);
@@ -1429,7 +1461,10 @@ seq_reset (void)
   int             chn;
   unsigned long   flags;
 
-  sound_stop_timer ();
+  if (softsynthp != NULL)
+    softsynthp (SSYN_STOP, 0, 0, 0);
+  else
+    sound_stop_timer ();
 
   seq_time = jiffies;
   prev_input_time = 0;
@@ -1493,7 +1528,7 @@ seq_reset (void)
   cli ();
   if ((seq_sleep_flag.opts & WK_SLEEP))
     {
-      /*      printk ("Sequencer Warning: Unexpected sleeping process - Waking up\n"); */
+      /*      printk( "Sequencer Warning: Unexpected sleeping process - Waking up\n"); */
       {
 	seq_sleep_flag.opts = WK_WAKEUP;
 	wake_up (&seq_sleeper);
@@ -1572,7 +1607,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 
       if (mode == OPEN_READ)
 	return 0;
-      while (qlen > 0 && !signal_pending(current))
+      while (qlen > 0 && !(current->signal & ~current->blocked))
 	seq_sync ();
       if (qlen)
 	return -EINTR;
@@ -1624,7 +1659,10 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       if (seq_mode == SEQ_2)
 	return tmr->ioctl (tmr_no, cmd, arg);
 
-      return (*(int *) arg = jiffies - seq_time);
+      if (softsynthp != NULL)
+	return (*(int *) arg = softsynthp (SSYN_GETTIME, 0, 0, 0));
+      else
+	return (*(int *) arg = jiffies - seq_time);
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
@@ -1740,6 +1778,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 
 	memcpy ((char *) &inf, (char *) synth_devs[dev]->info, sizeof (inf));
 	strcpy (inf.name, synth_devs[dev]->id);
+	inf.device = dev;
 	memcpy ((&((char *) arg)[0]), (char *) &inf, sizeof (inf));
 	return 0;
       }
@@ -1773,6 +1812,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	if (dev < 0 || dev >= max_mididev)
 	  return -ENXIO;
 
+	midi_devs[dev]->info.device = dev;
 	pp = (char *) &midi_devs[dev]->info;
 	memcpy ((&((char *) arg)[0]), pp, sizeof (inf));
 	return 0;

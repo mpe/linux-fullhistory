@@ -33,6 +33,7 @@
 #include <linux/lockd/bind.h>
 #include <linux/lockd/xdr.h>
 #include <linux/init.h>
+#include <linux/nls.h>
 
 extern void device_setup(void);
 extern void binfmt_setup(void);

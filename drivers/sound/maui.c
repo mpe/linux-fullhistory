@@ -18,7 +18,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_MAUI)
+#ifdef CONFIG_MAUI
 
 static int      maui_base = 0x330;
 
@@ -95,8 +95,8 @@ maui_wait (int mask)
 	      maui_sleep_flag.opts |= WK_TIMEOUT;
 	  }
 	maui_sleep_flag.opts &= ~WK_SLEEP;
-      }
-      if (signal_pending(current))
+      };
+      if ((current->signal & ~current->blocked))
 	{
 	  return 0;
 	}
@@ -321,8 +321,7 @@ maui_load_patch (int dev, int format, const char *addr,
 
   if (count < header.len)
     {
-      printk ("Maui warning: Host command record too short (%d<%d)\n",
-	      count, (int) header.len);
+      printk ("Maui warning: Host command record too short (%d<%d)\n", count, (int) header.len);
       header.len = count;
     }
 

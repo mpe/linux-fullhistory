@@ -41,6 +41,7 @@ void audio_init_devices (void);
 
 int audio_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 void reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording);
+int dma_ioctl (int dev, unsigned int cmd, caddr_t arg);
 
 /*
  *	System calls for the /dev/sequencer
@@ -83,7 +84,7 @@ void MIDIbuf_init(void);
  */
 
 /*	From soundcard.c	*/
-#ifndef __bsdi__
+#if !defined(__bsdi__) && !defined(__NjetBSD__)
 void tenmicrosec(int *osp);
 #endif
 void request_sound_timer (int count);

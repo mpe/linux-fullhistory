@@ -1,6 +1,6 @@
 #define BLOCKMOVE
 static char rcsid[] =
-"$Revision: 1.36.4.33 $$Date: 1997/06/27 19:00:00 $";
+"$Revision: 2.1 $$Date: 1997/11/01 17:42:41 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -8,8 +8,9 @@ static char rcsid[] =
  * This file contains the driver for the Cyclades Cyclom-Y multiport
  * serial boards.
  *
- * Maintained by Marcio Saito (marcio@cyclades.com) and
- * Randolph Bentson (bentson@grieg.seaslug.org)
+ * Maintained by Ivan Passos (ivan@cyclades.com),
+ * Marcio Saito (marcio@cyclades.com) and 
+ * Randolph Bentson (bentson@grieg.seaslug.org).
  *
  * For Technical support and installation problems, please send e-mail
  * to support@cyclades.com.
@@ -29,6 +30,18 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.1  1997/11/01 17:42:41 ivan
+ * Changes in the driver to support Alpha systems (except 8Zo V_1);
+ * BREAK fix for the Cyclades-Z boards;
+ * driver inactivity control by FW implemented;
+ * introduction of flag that allows driver to take advantage of 
+ * a special CD1400 feature related to HW flow control;
+ * added support for the CD1400  rev. J (Cyclom-Y boards);
+ * introduction of ioctls to:
+ *  - control the rtsdtr_inv flag (Cyclom-Y);
+ *  - control the rflow flag (Cyclom-Y);
+ *  - adjust the polling interval (Cyclades-Z);
+ *
  * Revision 1.36.4.33  1997/06/27 19:00:00  ivan
  * Fixes related to kernel version conditional 
  * compilation.
@@ -435,7 +448,6 @@ static char rcsid[] =
    constant in the definition below. No other change is necessary to
    support more boards/ports. */
 
-//#define NR_PORTS        64
 #define NR_PORTS        128
 
 #define ZE_V1_NPORTS	64
@@ -463,18 +475,24 @@ static char rcsid[] =
 
 #define cy_min(a,b) (((a)<(b))?(a):(b))
 
+#if 0
+/******** 
+ * For the next two macros, it is assumed that the buffer size is a 
+ * power of 2 
+ ********/
+
 #define CHARS_IN_BUF(buf_ctrl) \
-    ((buf_ctrl->rx_put - \
-      buf_ctrl->rx_get + \
-      buf_ctrl->rx_bufsize) % \
-		  buf_ctrl->rx_bufsize)
+    ((cy_readl(&buf_ctrl->rx_put) - \
+      cy_readl(&buf_ctrl->rx_get) + \
+      cy_readl(&buf_ctrl->rx_bufsize)) & \
+		  (cy_readl(&buf_ctrl->rx_bufsize) - 1))
 
 #define SPACE_IN_BUF(buf_ctrl) \
-    ((buf_ctrl->tx_get - \
-      buf_ctrl->tx_put + \
-      buf_ctrl->tx_bufsize - 1) % \
-		  buf_ctrl->tx_bufsize)
-
+    ((cy_readl(&buf_ctrl->tx_get) - \
+      cy_readl(&buf_ctrl->tx_put) + \
+      cy_readl(&buf_ctrl->tx_bufsize) - 1) & \
+		  (cy_readl(&buf_ctrl->tx_bufsize) - 1))
+#endif
 
 #include <linux/module.h>
 
@@ -540,13 +558,14 @@ static unsigned long cy_get_user(unsigned long *addr)
 #define IS_CYC_Z(card) ((card).num_chips == 1)
 
 #define Z_FPGA_CHECK(card) \
-    ((((struct RUNTIME_9060 *)((card).ctl_addr))->init_ctrl&(1<<17))!=0)
+    ((cy_readl(&((struct RUNTIME_9060 *) \
+		 ((card).ctl_addr))->init_ctrl) & (1<<17)) != 0)
 
-#define ISZLOADED(card)	(((ZO_V1==((struct RUNTIME_9060 *) \
-			((card).ctl_addr))->mail_box_0) || \
+#define ISZLOADED(card)	(((ZO_V1==cy_readl(&((struct RUNTIME_9060 *) \
+			((card).ctl_addr))->mail_box_0)) || \
 			Z_FPGA_CHECK(card)) && \
-			(ZFIRM_ID==((struct FIRM_ID *) \
-			((card).base_addr+ID_ADDRESS))->signature))
+			(ZFIRM_ID==cy_readl(&((struct FIRM_ID *) \
+			((card).base_addr+ID_ADDRESS))->signature)))
 
 #define WAKEUP_CHARS (SERIAL_XMIT_SIZE-256)
 
@@ -563,7 +582,7 @@ struct tty_driver cy_serial_driver, cy_callout_driver;
 static volatile int cy_irq_triggered;
 static volatile int cy_triggered;
 static int cy_wild_int_mask;
-static unsigned char *intr_base_addr;
+static volatile ucchar *intr_base_addr;
 
 
 /* This is the address lookup table. The driver will probe for
@@ -632,26 +651,55 @@ static struct semaphore tmp_buf_sem = MUTEX;
  *      0,     1,     2,     3,     4,     5,     6,     7,     8,     9,
  *     10,    11,    12,    13,    14,    15,    16,    17,    18,    19,
  *                                               HI            VHI
+ *     20
  */
 static int baud_table[] = {
        0,    50,    75,   110,   134,   150,   200,   300,   600,  1200,
     1800,  2400,  4800,  9600, 19200, 38400, 57600, 76800,115200,150000,
-    0};
+  230400,     0};
 
-static char baud_co[] = {  /* 25 MHz clock option table */
+static char baud_co_25[] = {  /* 25 MHz clock option table */
     /* value =>    00    01   02    03    04 */
     /* divide by    8    32   128   512  2048 */
     0x00,  0x04,  0x04,  0x04,  0x04,  0x04,  0x03,  0x03,  0x03,  0x02,
     0x02,  0x02,  0x01,  0x01,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00};
 
-static char baud_bpr[] = {  /* 25 MHz baud rate period table */
+static char baud_bpr_25[] = {  /* 25 MHz baud rate period table */
     0x00,  0xf5,  0xa3,  0x6f,  0x5c,  0x51,  0xf5,  0xa3,  0x51,  0xa3,
     0x6d,  0x51,  0xa3,  0x51,  0xa3,  0x51,  0x36,  0x29,  0x1b,  0x15};
 
+static char baud_co_60[] = {  /* 60 MHz clock option table (CD1400 J) */
+    /* value =>    00    01   02    03    04 */
+    /* divide by    8    32   128   512  2048 */
+    0x00,  0x00,  0x00,  0x04,  0x04,  0x04,  0x04,  0x04,  0x03,  0x03,
+    0x03,  0x02,  0x02,  0x01,  0x01,  0x00,  0x00,  0x00,  0x00,  0x00,
+    0x00};
+
+static char baud_bpr_60[] = {  /* 60 MHz baud rate period table (CD1400 J) */
+    0x00,  0x82,  0x21,  0xff,  0xdb,  0xc3,  0x92,  0x62,  0xc3,  0x62,
+    0x41,  0xc3,  0x62,  0xc3,  0x62,  0xc3,  0x82,  0x62,  0x41,  0x32,
+    0x21};
+
 static char baud_cor3[] = {  /* receive threshold */
     0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,
-    0x0a,  0x0a,  0x0a,  0x09,  0x09,  0x08,  0x08,  0x08,  0x08,  0x07};
+    0x0a,  0x0a,  0x0a,  0x09,  0x09,  0x08,  0x08,  0x08,  0x08,  0x07,
+    0x07};
 
+/*
+ * The Cyclades driver implements HW flow control as any serial driver.
+ * The cyclades_port structure member rflow and the vector rflow_thr 
+ * allows us to take advantage of a special feature in the CD1400 to avoid 
+ * data loss even when the system interrupt latency is too high. These flags 
+ * are to be used only with very special applications. Setting these flags 
+ * requires the use of a special cable (DTR and RTS reversed). In the new 
+ * CD1400-based boards (rev. 6.00 or later), there is no need for special 
+ * cables.
+ */
+
+static char rflow_thr[] = {  /* rflow threshold */
+    0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,
+    0x00,  0x00,  0x00,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,  0x0a,
+    0x0a};
 
 /*  The Cyclom-Ye has placed the sequential chips in non-sequential
  *  address order.  This look-up table overcomes that problem.
@@ -689,6 +737,8 @@ static void cyz_poll(unsigned long);
 static void show_status(int);
 #endif
 
+/* The Cyclades-Z polling cycle is defined by this variable */
+static long cyz_polling_cycle = CZ_DEF_POLL;
 
 static int cyz_timeron = 0;
 static struct timer_list
@@ -696,13 +746,12 @@ cyz_timerlist = {
     NULL, NULL, 0, 0, cyz_poll
 };
 
-
 /**************************************************
 error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long));
-memcpy_tofs  (to, from, count);
+copy_to_user  (to, from, count);
 ***************************************************************
 error = verify_area(VERIFY_READ,  (void *) arg, sizeof(unsigned long *));
-memcpy_fromfs(to, from, count);
+copy_from_user(to, from, count);
 **************************************************/
 
 
@@ -873,7 +922,7 @@ do_softint(void *private_)
    didn't finish within the time limit.
  */
 static int
-cyy_issue_cmd(u_char *base_addr, u_char cmd, int index)
+cyy_issue_cmd(volatile ucchar *base_addr, u_char cmd, int index)
 {
   unsigned long flags;
   volatile int  i;
@@ -881,7 +930,7 @@ cyy_issue_cmd(u_char *base_addr, u_char cmd, int index)
     save_flags(flags); cli();
         /* Check to see that the previous command has completed */
         for(i = 0 ; i < 100 ; i++){
-            if (base_addr[CyCCR<<index] == 0){
+            if (cy_readb(base_addr+(CyCCR<<index)) == 0){
                 break;
             }
             udelay(10L);
@@ -894,7 +943,7 @@ cyy_issue_cmd(u_char *base_addr, u_char cmd, int index)
         }
 
         /* Issue the new command */
-        base_addr[CyCCR<<index] = cmd;
+        cy_writeb((u_long)base_addr+(CyCCR<<index), cmd);
     restore_flags(flags);
     return(0);
 } /* cyy_issue_cmd */
@@ -932,8 +981,9 @@ free_all_interrupts(int irq_lines)
   int i;
     
     for (i = 0; i < 16; i++) {
-        if (irq_lines & (1 << i))
+        if (irq_lines & (1 << i)) {
             free_irq(i,NULL);
+	}
     }
 } /* free_all_interrupts */
 
@@ -959,13 +1009,13 @@ check_wild_interrupts(void)
          * Delay for 0.1 seconds -- we use a busy loop since this may 
          * occur during the bootup sequence
          */
-        timeout = jiffies+10;
+        timeout = jiffies+(HZ/10);
         while (timeout >= jiffies)
             ;
         
         cy_triggered = 0;       /* Reset after letting things settle */
 
-        timeout = jiffies+10;
+        timeout = jiffies+(HZ/10);
         while (timeout >= jiffies)
                 ;
         
@@ -986,11 +1036,11 @@ check_wild_interrupts(void)
  * fool-proof, but it works a large part of the time.
  */
 static int
-get_auto_irq(unsigned char *address)
+get_auto_irq(volatile ucchar *address)
 {
-  unsigned long timeout;
-  unsigned char *base_addr;
-  int           index;
+  unsigned long   	timeout;
+  volatile ucchar 	*base_addr;
+  int           	index;
 
     index = 0;  /* IRQ probing is only for ISA */
     base_addr = address;
@@ -1001,13 +1051,14 @@ get_auto_irq(unsigned char *address)
      */
     cy_irq_triggered = 0;
     cli();
-        base_addr[CyCAR<<index] = 0;
+        cy_writeb((u_long)base_addr+(CyCAR<<index), 0);
         cyy_issue_cmd(base_addr,CyCHAN_CTL|CyENB_XMTR,index);
-        base_addr[CySRER<<index] |= CyTxMpty;
+        cy_writeb((u_long)base_addr+(CySRER<<index), 
+             cy_readb(base_addr+(CySRER<<index)) | CyTxMpty);
         probe_ready = 1;
     sti();
     
-    timeout = jiffies+2;
+    timeout = jiffies+(HZ/50);
     while (timeout >= jiffies) {
         if (cy_irq_triggered)
             break;
@@ -1021,7 +1072,7 @@ get_auto_irq(unsigned char *address)
  * faked out by random interrupts
  */
 static int
-do_auto_irq(unsigned char *address)
+do_auto_irq(volatile ucchar *address)
 {
   int                   irq_lines = 0;
   int                   irq_try_1 = 0, irq_try_2 = 0;
@@ -1065,27 +1116,28 @@ cy_probe(int irq, void *dev_id, struct pt_regs *regs)
   int index = 0;        /* probing interrupts is only for ISA */
 
     if (!probe_ready) {
-        *(intr_base_addr + (Cy_ClrIntr<<index)) = 0;
+        cy_writeb((u_long)intr_base_addr+(Cy_ClrIntr<<index), 0);
         return;
     }
 
     cy_irq_triggered = irq;
     cy_triggered |= 1 << irq;
 
-        if(intr_base_addr[CySVRR<<index] != 0) {
-            save_xir = (u_char) intr_base_addr[CyTIR<<index];
-            save_car = intr_base_addr[CyCAR<<index];
+        if(cy_readb(intr_base_addr+(CySVRR<<index)) != 0) {
+            save_xir = (u_char) cy_readb(intr_base_addr+(CyTIR<<index));
+            save_car = cy_readb(intr_base_addr+(CyCAR<<index));
             if ((save_xir & 0x3) != 0){
                 SP("channel ");
                 CP8(save_xir);
                 SP(" requesting unexpected interrupt\n");
             }
-            intr_base_addr[CyCAR<<index] = (save_xir & 0x3);
-            intr_base_addr[CySRER<<index] &= ~CyTxMpty;
-            intr_base_addr[CyTIR<<index] = (save_xir & 0x3f);
-            intr_base_addr[CyCAR<<index] = (save_car);
+            cy_writeb((u_long)intr_base_addr+(CyCAR<<index), (save_xir & 0x3));
+            cy_writeb((u_long)intr_base_addr+(CySRER<<index),
+                cy_readb(intr_base_addr+(CySRER<<index)) & ~CyTxMpty);
+            cy_writeb((u_long)intr_base_addr+(CyTIR<<index), (save_xir & 0x3f));
+            cy_writeb((u_long)intr_base_addr+(CyCAR<<index), (save_car));
         }
-        *(intr_base_addr + (Cy_ClrIntr<<index)) = 0;
+        cy_writeb((u_long)intr_base_addr+(Cy_ClrIntr<<index), 0);
 	                          /* Cy_ClrIntr is 0x1800 */
     return;
 } /* cy_probe */
@@ -1105,7 +1157,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
   int chip;
   int save_xir, channel, save_car;
   char data;
-  int char_count;
+  volatile int char_count;
   int outch;
   int i,j,index;
   int too_many;
@@ -1114,11 +1166,15 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
   int mdm_status;
 
     if((cinfo = IRQ_cards[irq]) == 0){
+#ifdef CY_DEBUG_INTERRUPTS
+printk("cy_interrupt: spurious interrupt %d\n\r", irq);
+#endif
         return; /* spurious interrupt */
     }
 
     card_base_addr = (unsigned char *)cinfo->base_addr;
     index = cinfo->bus_index;
+
 
     /* This loop checks all chips in the card.  Make a note whenever
        _any_ chip had some work to do, as this is considered an
@@ -1131,7 +1187,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
             base_addr = (unsigned char *)
 		       (cinfo->base_addr + (cy_chip_offset[chip]<<index));
             too_many = 0;
-            while ( (status = base_addr[CySVRR<<index]) != 0x00) {
+            while ( (status = cy_readb(base_addr+(CySVRR<<index))) != 0x00) {
                 had_work++;
                 /* The purpose of the following test is to ensure that
                    no chip can monopolize the driver.  This forces the
@@ -1142,31 +1198,34 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                     break;
                 }
                 if (status & CySRReceive) { /* reception interrupt */
+#ifdef CY_DEBUG_INTERRUPTS
+printk("cy_interrupt: rcvd intr, chip %d\n\r", chip);
+#endif
                     /* determine the channel & change to that context */
-                    save_xir = (u_char) base_addr[CyRIR<<index];
+                    save_xir = (u_char) cy_readb(base_addr+(CyRIR<<index));
                     channel = (u_short ) (save_xir & CyIRChannel);
                     i = channel + chip * 4 + cinfo->first_line;
                     info = &cy_port[i];
                     info->last_active = jiffies;
-                    save_car = base_addr[CyCAR<<index];
-                    base_addr[CyCAR<<index] = save_xir;
+                    save_car = cy_readb(base_addr+(CyCAR<<index));
+                    cy_writeb((u_long)base_addr+(CyCAR<<index), save_xir);
 
                     /* if there is nowhere to put the data, discard it */
                     if(info->tty == 0){
-                        j = (base_addr[CyRIVR<<index] & CyIVRMask);
+                        j = (cy_readb(base_addr+(CyRIVR<<index)) & CyIVRMask);
                         if ( j == CyIVRRxEx ) { /* exception */
-                            data = base_addr[CyRDSR<<index];
+                            data = cy_readb(base_addr+(CyRDSR<<index));
                         } else { /* normal character reception */
-                            char_count = base_addr[CyRDCR<<index];
+                            char_count = cy_readb(base_addr+(CyRDCR<<index));
                             while(char_count--){
-                                data = base_addr[CyRDSR<<index];
+                                data = cy_readb(base_addr+(CyRDSR<<index));
                             }
                         }
                     }else{ /* there is an open port for this data */
                         tty = info->tty;
-                        j = (base_addr[CyRIVR<<index] & CyIVRMask);
+                        j = (cy_readb(base_addr+(CyRIVR<<index)) & CyIVRMask);
                         if ( j == CyIVRRxEx ) { /* exception */
-                            data = base_addr[CyRDSR<<index];
+                            data = cy_readb(base_addr+(CyRDSR<<index));
                             if(data & info->ignore_status_mask){
                                 continue;
                             }
@@ -1177,7 +1236,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                                         *tty->flip.flag_buf_ptr++ =
 							    TTY_BREAK;
                                         *tty->flip.char_buf_ptr++ =
-						base_addr[CyRDSR<<index];
+					  cy_readb(base_addr+(CyRDSR<<index));
                                         if (info->flags & ASYNC_SAK){
                                             do_SAK(tty);
                                         }
@@ -1185,12 +1244,12 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                                         *tty->flip.flag_buf_ptr++ =
 							    TTY_FRAME;
                                         *tty->flip.char_buf_ptr++ =
-						base_addr[CyRDSR<<index];
+					  cy_readb(base_addr+(CyRDSR<<index));
                                     }else if(data & CyPARITY){
                                         *tty->flip.flag_buf_ptr++ =
 							    TTY_PARITY;
                                         *tty->flip.char_buf_ptr++ =
-						base_addr[CyRDSR<<index];
+					  cy_readb(base_addr+(CyRDSR<<index));
                                     }else if(data & CyOVERRUN){
                                         *tty->flip.flag_buf_ptr++ =
 							    TTY_OVERRUN;
@@ -1204,8 +1263,8 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                                             tty->flip.count++;
                                             *tty->flip.flag_buf_ptr++ =
 							     TTY_NORMAL;
-                                            *tty->flip.char_buf_ptr++ =
-						base_addr[CyRDSR<<index];
+                                           *tty->flip.char_buf_ptr++ =
+					    cy_readb(base_addr+(CyRDSR<<index));
                                         }
                                     /* These two conditions may imply */
                                     /* a normal read should be done. */
@@ -1226,7 +1285,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                             }
                         } else { /* normal character reception */
                             /* load # chars available from the chip */
-                            char_count = base_addr[CyRDCR<<index];
+                            char_count = cy_readb(base_addr+(CyRDCR<<index));
 
 #ifdef CYCLOM_ENABLE_MONITORING
                             ++info->mon.int_count;
@@ -1240,7 +1299,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                                         break;
                                 }
                                 tty->flip.count++;
-                                data = base_addr[CyRDSR<<index];
+                                data = cy_readb(base_addr+(CyRDSR<<index));
                                 *tty->flip.flag_buf_ptr++ = TTY_NORMAL;
                                 *tty->flip.char_buf_ptr++ = data;
 #ifdef CYCLOM_16Y_HACK
@@ -1251,8 +1310,8 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                         queue_task(&tty->flip.tqueue, &tq_timer);
                     }
                     /* end of service */
-                    base_addr[CyRIR<<index] = (save_xir & 0x3f);
-                    base_addr[CyCAR<<index] = (save_car);
+                    cy_writeb((u_long)base_addr+(CyRIR<<index), (save_xir & 0x3f));
+                    cy_writeb((u_long)base_addr+(CyCAR<<index), (save_car));
                 }
 
 
@@ -1260,23 +1319,28 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                     /* Since we only get here when the transmit buffer
                        is empty, we know we can always stuff a dozen
                        characters. */
+#ifdef CY_DEBUG_INTERRUPTS
+printk("cy_interrupt: xmit intr, chip %d\n\r", chip);
+#endif
 
                     /* determine the channel & change to that context */
-                    save_xir = (u_char) base_addr[CyTIR<<index];
+                    save_xir = (u_char) cy_readb(base_addr+(CyTIR<<index));
                     channel = (u_short ) (save_xir & CyIRChannel);
                     i = channel + chip * 4 + cinfo->first_line;
-                    save_car = base_addr[CyCAR<<index];
-                    base_addr[CyCAR<<index] = save_xir;
+                    save_car = cy_readb(base_addr+(CyCAR<<index));
+                    cy_writeb((u_long)base_addr+(CyCAR<<index), save_xir);
 
                     /* validate the port# (as configured and open) */
                     if( (i < 0) || (NR_PORTS <= i) ){
-                        base_addr[CySRER<<index] &= ~CyTxMpty;
+                        cy_writeb((u_long)base_addr+(CySRER<<index),
+                             cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
                         goto txend;
                     }
                     info = &cy_port[i];
                     info->last_active = jiffies;
                     if(info->tty == 0){
-                        base_addr[CySRER<<index] &= ~CyTxMpty;
+                        cy_writeb((u_long)base_addr+(CySRER<<index),
+                             cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
                         goto txdone;
                     }
 
@@ -1286,7 +1350,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
                     if(info->x_char) { /* send special char */
                         outch = info->x_char;
-                        base_addr[CyTDR<<index] = outch;
+                        cy_writeb((u_long)base_addr+(CyTDR<<index), outch);
                         char_count--;
                         info->x_char = 0;
                     }
@@ -1300,29 +1364,44 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			    PPR runs at 200 Hz, so the delay is
 			    duration * 200/HZ, and thus a break can
 			    run from 1/100 sec to about 5/4 sec.
+			    For CD1400 J or later, replace the 200 Hz
+			    by 500 Hz.
                          */
-                        base_addr[CyTDR<<index] = 0; /* start break */
-                        base_addr[CyTDR<<index] = 0x81;
-                        base_addr[CyTDR<<index] = 0; /* delay a bit */
-                        base_addr[CyTDR<<index] = 0x82;
-                        base_addr[CyTDR<<index] = info->x_break*200/HZ;
-                        base_addr[CyTDR<<index] = 0; /* finish break */
-                        base_addr[CyTDR<<index] = 0x83;
+			/* start break */
+                        cy_writeb((u_long)base_addr + (CyTDR<<index), 0); 
+                        cy_writeb((u_long)base_addr + (CyTDR<<index), 0x81);
+			/* delay a bit */
+                        cy_writeb((u_long)base_addr + (CyTDR<<index), 0); 
+                        cy_writeb((u_long)base_addr + (CyTDR<<index), 0x82);
+                        if (cy_readb(base_addr + (CyGFRCR<<index)) >= 0x48 ) {
+			    /* It is a CD1400 rev. J or later */
+                            cy_writeb((u_long)base_addr + (CyTDR<<index), 
+				      info->x_break*500/HZ);
+			} else {
+                            cy_writeb((u_long)base_addr + (CyTDR<<index), 
+				      info->x_break*200/HZ);
+			}
+			/* finish break */
+                        cy_writeb((u_long)base_addr + (CyTDR<<index), 0); 
+                        cy_writeb((u_long)base_addr + (CyTDR<<index), 0x83);
                         char_count -= 7;
                         info->x_break = 0;
                     }
 
                     while (char_count-- > 0){
                         if (!info->xmit_cnt){
-                            base_addr[CySRER<<index] &= ~CyTxMpty;
+                            cy_writeb((u_long)base_addr+(CySRER<<index),
+                               cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
                             goto txdone;
                         }
                         if (info->xmit_buf == 0){
-                            base_addr[CySRER<<index] &= ~CyTxMpty;
+                            cy_writeb((u_long)base_addr+(CySRER<<index),
+                               cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
                             goto txdone;
                         }
                         if (info->tty->stopped || info->tty->hw_stopped){
-                            base_addr[CySRER<<index] &= ~CyTxMpty;
+                            cy_writeb((u_long)base_addr+(CySRER<<index),
+                               cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
                             goto txdone;
                         }
                         /* Because the Embedded Transmit Commands have
@@ -1340,15 +1419,16 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                         if( outch ){
                             info->xmit_cnt--;
                             info->xmit_tail = (info->xmit_tail + 1)
-                                                      & (PAGE_SIZE - 1);
-                            base_addr[CyTDR<<index] = outch;
+                                                      & (SERIAL_XMIT_SIZE - 1);
+                            cy_writeb((u_long)base_addr+(CyTDR<<index), outch);
                         }else{
                             if(char_count > 1){
                                 info->xmit_cnt--;
                                 info->xmit_tail = (info->xmit_tail + 1)
-						      & (PAGE_SIZE - 1);
-                                base_addr[CyTDR<<index] = outch;
-                                base_addr[CyTDR<<index] = 0;
+						      & (SERIAL_XMIT_SIZE - 1);
+                                cy_writeb((u_long)base_addr+(CyTDR<<index), 
+					  outch);
+                                cy_writeb((u_long)base_addr+(CyTDR<<index), 0);
                                 char_count--;
                             }else{
                             }
@@ -1362,23 +1442,24 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
         txend:
                     /* end of service */
-                    base_addr[CyTIR<<index] = (save_xir & 0x3f);
-                    base_addr[CyCAR<<index] = (save_car);
+                    cy_writeb((u_long)base_addr+(CyTIR<<index), 
+			      (save_xir & 0x3f));
+                    cy_writeb((u_long)base_addr+(CyCAR<<index), (save_car));
                 }
 
                 if (status & CySRModem) {        /* modem interrupt */
 
                     /* determine the channel & change to that context */
-                    save_xir = (u_char) base_addr[CyMIR<<index];
+                    save_xir = (u_char) cy_readb(base_addr+(CyMIR<<index));
                     channel = (u_short ) (save_xir & CyIRChannel);
                     info = &cy_port[channel + chip * 4
 		                           + cinfo->first_line];
                     info->last_active = jiffies;
-                    save_car = base_addr[CyCAR<<index];
-                    base_addr[CyCAR<<index] = save_xir;
+                    save_car = cy_readb(base_addr+(CyCAR<<index));
+                    cy_writeb((u_long)base_addr+(CyCAR<<index), save_xir);
 
-                    mdm_change = base_addr[CyMISR<<index];
-                    mdm_status = base_addr[CyMSVR1<<index];
+                    mdm_change = cy_readb(base_addr+(CyMISR<<index));
+                    mdm_status = cy_readb(base_addr+(CyMSVR1<<index));
 
                     if(info->tty == 0){/* no place for data, ignore it*/
                         ;
@@ -1403,7 +1484,9 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                                     /* cy_start isn't used
 				         because... !!! */
                                     info->tty->hw_stopped = 0;
-                                    base_addr[CySRER<<index] |= CyTxMpty;
+                                  cy_writeb((u_long)base_addr+(CySRER<<index),
+                                       cy_readb(base_addr+(CySRER<<index)) | 
+                                       CyTxMpty);
                                     cy_sched_event(info,
 				        Cy_EVENT_WRITE_WAKEUP);
                                 }
@@ -1412,8 +1495,9 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                                     /* cy_stop isn't used
 				         because ... !!! */
                                     info->tty->hw_stopped = 1;
-                                    base_addr[CySRER<<index] &=
-				                            ~CyTxMpty;
+                                  cy_writeb((u_long)base_addr+(CySRER<<index),
+                                       cy_readb(base_addr+(CySRER<<index)) & 
+                                       ~CyTxMpty);
                                 }
                             }
                         }
@@ -1423,15 +1507,16 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                         }
                     }
                     /* end of service */
-                    base_addr[CyMIR<<index] = (save_xir & 0x3f);
-                    base_addr[CyCAR<<index] = save_car;
+                    cy_writeb((u_long)base_addr+(CyMIR<<index), 
+			      (save_xir & 0x3f));
+                    cy_writeb((u_long)base_addr+(CyCAR<<index), save_car);
                 }
             }          /* end while status != 0 */
         }            /* end loop for chips... */
     } while(had_work);
 
    /* clear interrupts */
-   *(card_base_addr + (Cy_ClrIntr<<index)) = 0;
+   cy_writeb((u_long)card_base_addr + (Cy_ClrIntr<<index), 0);
                                 /* Cy_ClrIntr is 0x1800 */
 
 } /* cyy_interrupt */
@@ -1444,7 +1529,7 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static int
 cyz_fetch_msg( struct cyclades_card *cinfo,
-	    u_long *channel, u_char *cmd, u_long **param)
+	    uclong *channel, ucchar *cmd, uclong *param)
 {
   struct FIRM_ID *firm_id;
   struct ZFW_CTRL *zfw_ctrl;
@@ -1456,17 +1541,17 @@ cyz_fetch_msg( struct cyclades_card *cinfo,
 	return (-1);
     }
     zfw_ctrl = (struct ZFW_CTRL *)
-		    (cinfo->base_addr + firm_id->zfwctrl_addr);
+	       (cinfo->base_addr + cy_readl(&firm_id->zfwctrl_addr));
     board_ctrl = &zfw_ctrl->board_ctrl;
 
-    loc_doorbell = ((struct RUNTIME_9060 *)
-                     (cinfo->ctl_addr))->loc_doorbell;
+    loc_doorbell = cy_readl(&((struct RUNTIME_9060 *)
+                     (cinfo->ctl_addr))->loc_doorbell);
     if (loc_doorbell){
 	*cmd = (char)(0xff & loc_doorbell);
-	*channel = board_ctrl->fwcmd_channel;
-	*param = board_ctrl->fwcmd_param;
-	((struct RUNTIME_9060 *)
-	     (cinfo->ctl_addr))->loc_doorbell = 0xffffffff;
+	*channel = cy_readl(&board_ctrl->fwcmd_channel);
+	*param = (uclong)cy_readl(&board_ctrl->fwcmd_param);
+	cy_writel(&((struct RUNTIME_9060 *)(cinfo->ctl_addr))->loc_doorbell, 
+                 0xffffffff);
 	return 1;
     }
     return 0;
@@ -1475,12 +1560,12 @@ cyz_fetch_msg( struct cyclades_card *cinfo,
 
 static int
 cyz_issue_cmd( struct cyclades_card *cinfo,
-	    u_long channel, u_char cmd, u_long *param)
+	    uclong channel, ucchar cmd, uclong param)
 {
   struct FIRM_ID *firm_id;
   struct ZFW_CTRL *zfw_ctrl;
   struct BOARD_CTRL *board_ctrl;
-  volatile unsigned long *pci_doorbell;
+  volatile uclong *pci_doorbell;
   int index;
 
     firm_id = (struct FIRM_ID *)(cinfo->base_addr + ID_ADDRESS);
@@ -1488,21 +1573,21 @@ cyz_issue_cmd( struct cyclades_card *cinfo,
 	return (-1);
     }
     zfw_ctrl = (struct ZFW_CTRL *)
-		    (cinfo->base_addr + firm_id->zfwctrl_addr);
+	       (cinfo->base_addr + cy_readl(&firm_id->zfwctrl_addr));
     board_ctrl = &zfw_ctrl->board_ctrl;
 
     index = 0;
-    pci_doorbell = &((struct RUNTIME_9060 *)
-                     (cinfo->ctl_addr))->pci_doorbell;
-    while( (*pci_doorbell & 0xff) != 0){
+    pci_doorbell = (uclong *)(&((struct RUNTIME_9060 *)
+                               (cinfo->ctl_addr))->pci_doorbell);
+    while( (cy_readl(pci_doorbell) & 0xff) != 0){
         if (index++ == 1000){
             return(-1);
         }
 	udelay(50L);
     }
-    board_ctrl->hcmd_channel = channel;
-    board_ctrl->hcmd_param = param;
-    *pci_doorbell = (long)cmd;
+    cy_writel((u_long)&board_ctrl->hcmd_channel, channel);
+    cy_writel((u_long)&board_ctrl->hcmd_param , param);
+    cy_writel((u_long)pci_doorbell, (long)cmd);
 
     return(0);
 } /* cyz_issue_cmd */
@@ -1521,11 +1606,11 @@ cyz_update_channel( struct cyclades_card *cinfo,
     if (!ISZLOADED(*cinfo)){
 	return (-1);
     }
-    zfw_ctrl =
-	(struct ZFW_CTRL *)(cinfo->base_addr + firm_id->zfwctrl_addr);
+    zfw_ctrl = (struct ZFW_CTRL *)
+	       (cinfo->base_addr + cy_readl(&firm_id->zfwctrl_addr));
     ch_ctrl = zfw_ctrl->ch_ctrl;
 
-    ch_ctrl[channel].op_mode = (long)mode;
+    cy_writel(&ch_ctrl[channel].op_mode, (uclong)mode);
 
     return cyz_issue_cmd(cinfo, channel, cmd, 0L);
 
@@ -1542,42 +1627,53 @@ cyz_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static void
 cyz_poll(unsigned long arg)
 {
-  struct FIRM_ID *firm_id;
-  struct ZFW_CTRL *zfw_ctrl;
-  struct BOARD_CTRL *board_ctrl;
-  struct CH_CTRL *ch_ctrl;
-  struct BUF_CTRL *buf_ctrl;
+  static volatile struct FIRM_ID *firm_id;
+  static volatile struct ZFW_CTRL *zfw_ctrl;
+  static volatile struct BOARD_CTRL *board_ctrl;
+  static volatile struct CH_CTRL *ch_ctrl;
+  static volatile struct BUF_CTRL *buf_ctrl;
   struct cyclades_card *cinfo;
   struct cyclades_port *info;
   struct tty_struct *tty;
   int card, port;
-  int char_count, small_count;
+  int char_count;
+#ifdef BLOCKMOVE
+  int small_count;
+#endif
   char data;
-  u_long channel;
-  u_char cmd;
-  u_long *param;
-  u_long hw_ver, fw_ver;
+  uclong channel;
+  ucchar cmd;
+  uclong param;
+  uclong hw_ver, fw_ver;
+  volatile uclong tx_put, tx_get, tx_bufsize;
+  volatile uclong rx_put, rx_get, rx_bufsize;
 
-    cyz_timerlist.expires = jiffies + 100;
-
+    cyz_timerlist.expires = jiffies + (HZ);
     for (card = 0 ; card < NR_CARDS ; card++){
 	cinfo = &cy_card[card];
 	if (!IS_CYC_Z(*cinfo)) continue;
 
-	firm_id = (struct FIRM_ID *)
-		    (cinfo->base_addr + ID_ADDRESS);
-        if (!ISZLOADED(*cinfo)){
+
+	firm_id = (struct FIRM_ID *)(cinfo->base_addr + ID_ADDRESS);
+        if (!ISZLOADED(*cinfo)) {
+	    cinfo->inact_ctrl = 0;
 	    continue;
 	}
 
-	zfw_ctrl =
-	    (struct ZFW_CTRL *)
-	    (cinfo->base_addr + firm_id->zfwctrl_addr);
-	board_ctrl = &zfw_ctrl->board_ctrl;
-	fw_ver = board_ctrl->fw_version;
-	hw_ver = ((struct RUNTIME_9060 *)(cinfo->ctl_addr))->mail_box_0;
+	zfw_ctrl = (struct ZFW_CTRL *)
+	           (cinfo->base_addr + cy_readl(&firm_id->zfwctrl_addr));
+	board_ctrl = &(zfw_ctrl->board_ctrl);
+	fw_ver = cy_readl(&board_ctrl->fw_version);
+	hw_ver = cy_readl(&((struct RUNTIME_9060 *)
+                            (cinfo->ctl_addr))->mail_box_0);
 
-	while( cyz_fetch_msg( cinfo, &channel, &cmd, &param) == 1){
+	/* Enables the firmware inactivity control */
+	if ((fw_ver > 0x00000310L) && (!cinfo->inact_ctrl)) {
+	    param = cyz_issue_cmd( &cy_card[card], 0L, C_CM_TINACT, 0L);
+	    cinfo->inact_ctrl = 1;
+	}
+
+	while(cyz_fetch_msg(cinfo, &channel, &cmd, &param) == 1){
 	    char_count = 0;
 	    info = &cy_port[ channel + cinfo->first_line ];
             if((tty = info->tty) == 0) continue;
@@ -1606,9 +1702,9 @@ cyz_poll(unsigned long arg)
 	        break;
 	    case C_CM_MDCD:
 		if (info->flags & ASYNC_CHECK_CD){
-		    if (((hw_ver != 0 || fw_ver > 241)
-			? ((u_long)param)
-			: ch_ctrl[channel].rs_status) & C_RS_DCD) {
+		    if ((fw_ver > 241 ? 
+                          ((u_long)param) : 
+                          cy_readl(&ch_ctrl[channel].rs_status)) & C_RS_DCD) {
 			/* SP("Open Wakeup\n"); */
 			cy_sched_event(info,
 			    Cy_EVENT_OPEN_WAKEUP);
@@ -1625,7 +1721,7 @@ cyz_poll(unsigned long arg)
 	    case C_CM_MCTS:
 		if (info->flags & ASYNC_CTS_FLOW) {
 		    if(info->tty->hw_stopped){
-			if( ch_ctrl[channel].rs_status & C_RS_DCD){
+			if( cy_readl(&ch_ctrl[channel].rs_status) & C_RS_DCD){
 			    /* cy_start isn't used because... 
 			       HW flow is handled by the board */
 			    /* SP("Write Wakeup\n"); */
@@ -1633,7 +1729,7 @@ cyz_poll(unsigned long arg)
 				Cy_EVENT_WRITE_WAKEUP);
 			}
 		    }else{
-			if(!(ch_ctrl[channel].rs_status & C_RS_CTS)){
+			if(!(cy_readl(&ch_ctrl[channel].rs_status) & C_RS_CTS)){
 			    /* cy_stop isn't used because 
 			       HW flow is handled by the board */
 			    /* SP("Write stop\n"); */
@@ -1653,14 +1749,25 @@ cyz_poll(unsigned long arg)
 		queue_task(&tty->flip.tqueue, &tq_timer);
 	    }
 	}
-
-	for (port = 0; port < board_ctrl->n_channel; port++){
+	for (port = 0; port < cy_readl(&board_ctrl->n_channel); port++){
 	    info = &cy_port[ port + cinfo->first_line ];
             tty = info->tty;
 	    ch_ctrl = &(zfw_ctrl->ch_ctrl[port]);
 	    buf_ctrl = &(zfw_ctrl->buf_ctrl[port]);
 
-	    if ((char_count = CHARS_IN_BUF(buf_ctrl))){
+/* Removed due to compilation problems in Alpha systems */
+//	    if ((char_count = CHARS_IN_BUF(buf_ctrl))){
+
+	    rx_get = cy_readl(&buf_ctrl->rx_get);
+	    rx_put = cy_readl(&buf_ctrl->rx_put);
+	    rx_bufsize = cy_readl(&buf_ctrl->rx_bufsize);
+	    if (rx_put >= rx_get)
+	    	char_count = rx_put - rx_get;
+	    else
+	    	char_count = rx_put - rx_get + rx_bufsize;
+
+	    if ( char_count ){
+
 		info->last_active = jiffies;
 		info->jiffies[1] = jiffies;
 
@@ -1673,9 +1780,7 @@ cyz_poll(unsigned long arg)
 #endif
 		if( tty == 0){
 		    /* flush received characters */
-		    buf_ctrl->rx_get =
-		        (buf_ctrl->rx_get + char_count)
-			    % buf_ctrl->rx_bufsize;
+		    rx_get = (rx_get + char_count) & (rx_bufsize - 1);
 		    /* SP("-"); */
 		    info->rflush_count++;
 		}else{
@@ -1684,22 +1789,22 @@ cyz_poll(unsigned long arg)
 		   for performance, but because of buffer boundaries, there
 		   may be several steps to the operation */
 		    while(0 < (small_count
-			= cy_min( (buf_ctrl->rx_bufsize - buf_ctrl->rx_get),
-			    cy_min( (TTY_FLIPBUF_SIZE - tty->flip.count),
-				char_count)))){
-			memcpy(tty->flip.char_buf_ptr,
-			       (char *)(cinfo->base_addr
-				   + buf_ctrl->rx_bufaddr
-				   + buf_ctrl->rx_get),
-			       small_count);
+			= cy_min((rx_bufsize - rx_get),
+			         cy_min((TTY_FLIPBUF_SIZE - tty->flip.count),
+				        char_count)))){
+
+			memcpy_fromio(tty->flip.char_buf_ptr,
+			              (char *)(cinfo->base_addr
+				       + cy_readl(&buf_ctrl->rx_bufaddr)
+				       + rx_get),
+			              small_count);
+
 			tty->flip.char_buf_ptr += small_count;
 			memset(tty->flip.flag_buf_ptr,
 			       TTY_NORMAL,
 			       small_count);
 			tty->flip.flag_buf_ptr += small_count;
-			buf_ctrl->rx_get =
-			    (buf_ctrl->rx_get + small_count)
-				% buf_ctrl->rx_bufsize;
+			rx_get = (rx_get + small_count) & (rx_bufsize - 1);
 			char_count -= small_count;
 			tty->flip.count += small_count;
 		    }
@@ -1708,13 +1813,9 @@ cyz_poll(unsigned long arg)
 			if (tty->flip.count >= TTY_FLIPBUF_SIZE){
 				break;
 			}
-			data = *(char *) (cinfo->base_addr +
-			                  buf_ctrl->rx_bufaddr +
-			                  buf_ctrl->rx_get);
-			buf_ctrl->rx_get =
-			    (buf_ctrl->rx_get + 1)
-				% buf_ctrl->rx_bufsize;
-
+			data = cy_readb(cinfo->base_addr +
+			           cy_readl(&buf_ctrl->rx_bufaddr) + rx_get);
+			rx_get = (rx_get + 1) & (rx_bufsize - 1);
 			tty->flip.count++;
 			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 			*tty->flip.char_buf_ptr++ = data;
@@ -1722,22 +1823,33 @@ cyz_poll(unsigned long arg)
 #endif
 		    queue_task(&tty->flip.tqueue, &tq_timer);
 		}
+		/* Update rx_get */
+		cy_writel(&buf_ctrl->rx_get, rx_get);
 	    }
 
-	    if ((char_count = SPACE_IN_BUF(buf_ctrl))){
-		if( tty == 0){
+/* Removed due to compilation problems in Alpha systems */
+//	    if ((char_count = SPACE_IN_BUF(buf_ctrl))){
+
+	    tx_get = cy_readl(&buf_ctrl->tx_get);
+	    tx_put = cy_readl(&buf_ctrl->tx_put);
+	    tx_bufsize = cy_readl(&buf_ctrl->tx_bufsize);
+	    if (tx_put >= tx_get)
+	    	char_count = tx_get - tx_put - 1 + tx_bufsize;
+	    else
+	    	char_count = tx_get - tx_put - 1;
+
+	    if ( char_count ){
+
+		if( tty == 0 ){
 		    goto ztxdone;
 		}
 
 		if(info->x_char) { /* send special char */
 		    data = info->x_char;
 
-		    *(char *) (cinfo->base_addr +
-		               buf_ctrl->tx_bufaddr + 
-		               buf_ctrl->tx_put) = data;
-		    buf_ctrl->tx_put =
-			(buf_ctrl->tx_put + 1)
-			    % buf_ctrl->tx_bufsize;
+		    cy_writeb((cinfo->base_addr +
+		              cy_readl(&buf_ctrl->tx_bufaddr) + tx_put), data);
+		    tx_put = (tx_put + 1) & (tx_bufsize - 1);
 		    info->x_char = 0;
 		    char_count--;
 		    info->last_active = jiffies;
@@ -1751,21 +1863,20 @@ cyz_poll(unsigned long arg)
 		}
 #ifdef BLOCKMOVE
 		while(0 < (small_count
-		    = cy_min( (buf_ctrl->tx_bufsize - buf_ctrl->tx_put),
-			cy_min ( (PAGE_SIZE - info->xmit_tail),
-			  cy_min( info->xmit_cnt, char_count))))){
-		    memcpy((char *)(cinfo->base_addr
-			       + buf_ctrl->tx_bufaddr
-			       + buf_ctrl->tx_put),
-			   &info->xmit_buf[info->xmit_tail],
-			   small_count);
-		    buf_ctrl->tx_put =
-			(buf_ctrl->tx_put + small_count)
-			    % buf_ctrl->tx_bufsize;
+		    = cy_min((tx_bufsize - tx_put),
+			     cy_min ((SERIAL_XMIT_SIZE - info->xmit_tail),
+			             cy_min(info->xmit_cnt, char_count))))){
+
+		    memcpy_toio((char *)(cinfo->base_addr
+			         + cy_readl(&buf_ctrl->tx_bufaddr) + tx_put),
+			        &info->xmit_buf[info->xmit_tail],
+			        small_count);
+
+		    tx_put = (tx_put + small_count) & (tx_bufsize - 1);
 		    char_count -= small_count;
 		    info->xmit_cnt -= small_count;
 		    info->xmit_tail =
-			(info->xmit_tail + small_count) & (PAGE_SIZE - 1);
+		       (info->xmit_tail + small_count) & (SERIAL_XMIT_SIZE - 1);
 		    info->last_active = jiffies;
 		    info->jiffies[2] = jiffies;
 		}
@@ -1774,28 +1885,33 @@ cyz_poll(unsigned long arg)
 		    data = info->xmit_buf[info->xmit_tail];
 		    info->xmit_cnt--;
 		    info->xmit_tail =
-			(info->xmit_tail + 1) & (PAGE_SIZE - 1);
+			(info->xmit_tail + 1) & (SERIAL_XMIT_SIZE - 1);
 
-		    *(char *) (cinfo->base_addr +
-		               buf_ctrl->tx_bufaddr +
-		               buf_ctrl->tx_put) = data;
-		    buf_ctrl->tx_put =
-		        (buf_ctrl->tx_put + 1)
-			    % buf_ctrl->tx_bufsize;
+		    cy_writeb(cinfo->base_addr +
+		              cy_readl(&buf_ctrl->tx_bufaddr) + tx_put, 
+			      data);
+		    tx_put = (tx_put + 1) & (tx_bufsize - 1);
 		    char_count--;
 		    info->last_active = jiffies;
 		    info->jiffies[2] = jiffies;
 		}
+
 #endif
 	    ztxdone:
 		if (info->xmit_cnt < WAKEUP_CHARS) {
 		    cy_sched_event(info, Cy_EVENT_WRITE_WAKEUP);
 		}
+		/* Update tx_put */
+		cy_writel(&buf_ctrl->tx_put, tx_put);
 	    }
 	}
-
 	/* poll every 40 ms */
-	cyz_timerlist.expires = jiffies + 4;
+	cyz_timerlist.expires = jiffies + cyz_polling_cycle;
+
+	/* refresh inactivity counter */
+	if (cinfo->inact_ctrl) {
+		cy_writel(&board_ctrl->inactivity, (uclong) ZF_TINACT);
+	}
     }
     add_timer(&cyz_timerlist);
 
@@ -1851,26 +1967,27 @@ startup(struct cyclades_port * info)
 #endif
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = (u_char)channel;
+	    cy_writeb((ulong)base_addr+(CyCAR<<index), (u_char)channel);
 
-	    base_addr[CyRTPR<<index] = (info->default_timeout
+	    cy_writeb((ulong)base_addr+(CyRTPR<<index), (info->default_timeout
 				 ? info->default_timeout
-				 : 0x02); /* 10ms rx timeout */
+				 : 0x02)); /* 10ms rx timeout */
 
 	    cyy_issue_cmd(base_addr,CyCHAN_CTL|CyENB_RCVR|CyENB_XMTR,index);
 
-	    base_addr[CyCAR<<index] =
-			 (u_char)channel; /* !!! Is this needed? */
-	    base_addr[CyMSVR1<<index] = CyRTS;
-	    base_addr[CyMSVR2<<index] = CyDTR;
+	    cy_writeb((ulong)base_addr+(CyCAR<<index), (u_char)channel);
+	    cy_writeb((ulong)base_addr+(CyMSVR1<<index), CyRTS);
+	    cy_writeb((ulong)base_addr+(CyMSVR2<<index), CyDTR);
 
 #ifdef SERIAL_DEBUG_DTR
 	    printk("cyc:startup raising DTR\n");
 	    printk("     status: 0x%x, 0x%x\n",
-		   base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+		   cy_readb(base_addr+(CyMSVR1<<index)), 
+                   cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 
-	    base_addr[CySRER<<index] |= CyRxData;
+	    cy_writeb((u_long)base_addr+(CySRER<<index),
+               cy_readb(base_addr+(CySRER<<index)) | CyRxData);
 	    info->flags |= ASYNC_INITIALIZED;
 
 	    if (info->tty){
@@ -1894,7 +2011,7 @@ startup(struct cyclades_port * info)
 
 	zfw_ctrl =
 	    (struct ZFW_CTRL *)
-		(cy_card[card].base_addr + firm_id->zfwctrl_addr);
+		(cy_card[card].base_addr + cy_readl(&firm_id->zfwctrl_addr));
 	board_ctrl = &zfw_ctrl->board_ctrl;
 	ch_ctrl = zfw_ctrl->ch_ctrl;
 
@@ -1903,8 +2020,8 @@ startup(struct cyclades_port * info)
 	     card, channel, (long)base_addr);/**/
 #endif
 
-	ch_ctrl[channel].op_mode = C_CH_ENABLE;
-	ch_ctrl[channel].intr_enable = C_IN_MDCD|C_IN_MCTS;
+	cy_writel(&ch_ctrl[channel].op_mode, C_CH_ENABLE);
+	cy_writel(&ch_ctrl[channel].intr_enable, C_IN_MDCD|C_IN_MCTS);
 	retval = cyz_issue_cmd( &cy_card[card],
 	    channel, C_CM_IOCTL, 0L);	/* was C_CM_RESET */
 	if (retval != 0){
@@ -1913,8 +2030,8 @@ startup(struct cyclades_port * info)
 
 	/* set timeout !!! */
 	/* set RTS and DTR !!! */
-	ch_ctrl[channel].rs_control |=
-		    C_RS_RTS | C_RS_DTR ;
+	cy_writel(&ch_ctrl[channel].rs_control,
+             cy_readl(&ch_ctrl[channel].rs_control) | C_RS_RTS | C_RS_DTR) ;
 	retval = cyz_issue_cmd(&cy_card[info->card],
 	    channel, C_CM_IOCTLM, 0L);
 	if (retval != 0){
@@ -1959,8 +2076,9 @@ start_xmit( struct cyclades_port *info )
 		       + (cy_chip_offset[chip]<<index));
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = channel;
-	    base_addr[CySRER<<index] |= CyTxMpty;
+	    cy_writeb((u_long)base_addr+(CyCAR<<index), channel);
+	    cy_writeb((u_long)base_addr+(CySRER<<index), 
+               cy_readb(base_addr+(CySRER<<index)) | CyTxMpty);
 	restore_flags(flags);
     } else {
 	/* Don't have to do anything at this time */
@@ -2012,14 +2130,15 @@ shutdown(struct cyclades_port * info)
 		free_page((unsigned long) temp);
 	    }
 
-	    base_addr[CyCAR<<index] = (u_char)channel;
+	    cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
 	    if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
-		base_addr[CyMSVR1<<index] = ~CyRTS;
-		base_addr[CyMSVR2<<index] = ~CyDTR;
+		cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+		cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc shutdown dropping DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
-		    base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+		    cy_readb(base_addr+(CyMSVR1<<index)), 
+                    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 	    }
 	    cyy_issue_cmd(base_addr,CyCHAN_CTL|CyDIS_RCVR,index);
@@ -2051,9 +2170,10 @@ shutdown(struct cyclades_port * info)
 
 	zfw_ctrl =
 	    (struct ZFW_CTRL *)
-		(cy_card[card].base_addr + firm_id->zfwctrl_addr);
-	board_ctrl = &zfw_ctrl->board_ctrl;
+		(cy_card[card].base_addr + cy_readl(&firm_id->zfwctrl_addr));
+	board_ctrl = &(zfw_ctrl->board_ctrl);
 	ch_ctrl = zfw_ctrl->ch_ctrl;
+
 
 	save_flags(flags); cli();
 	    if (info->xmit_buf){
@@ -2063,8 +2183,9 @@ shutdown(struct cyclades_port * info)
 		free_page((unsigned long) temp);
 	    }
 	    if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
-		ch_ctrl[channel].rs_control &=
-			    ~(C_RS_RTS | C_RS_DTR );
+		cy_writel((u_long)&ch_ctrl[channel].rs_control,
+                   (uclong)(cy_readl(&ch_ctrl[channel].rs_control) & 
+                   ~(C_RS_RTS | C_RS_DTR)));
 		retval = cyz_issue_cmd(&cy_card[info->card],
 			channel, C_CM_IOCTLM, 0L);
 		if (retval != 0){
@@ -2187,13 +2308,14 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	while (1) {
 	    save_flags(flags); cli();
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE)){
-		    base_addr[CyCAR<<index] = (u_char)channel;
-		    base_addr[CyMSVR1<<index] = CyRTS;
-		    base_addr[CyMSVR2<<index] = CyDTR;
+		    cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+		    cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+		    cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
 #ifdef SERIAL_DEBUG_DTR
 		    printk("cyc:block_til_ready raising DTR\n");
 		    printk("     status: 0x%x, 0x%x\n",
-			base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+			cy_readb(base_addr+(CyMSVR1<<index)), 
+                        cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 		}
 	    restore_flags(flags);
@@ -2208,16 +2330,16 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 		break;
 	    }
 	    save_flags(flags); cli();
-		base_addr[CyCAR<<index] = (u_char)channel;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE)
 		&& !(info->flags & ASYNC_CLOSING)
 		&& (C_CLOCAL(tty)
-		    || (base_addr[CyMSVR1<<index] & CyDCD))) {
+		    || (cy_readb(base_addr+(CyMSVR1<<index)) & CyDCD))) {
 			restore_flags(flags);
 			break;
 		}
 	    restore_flags(flags);
-	    if (signal_pending(current)) {
+	    if (current->signal & ~current->blocked) {
 		retval = -ERESTARTSYS;
 		break;
 	    }
@@ -2243,13 +2365,13 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 
 	zfw_ctrl =
 	    (struct ZFW_CTRL *)
-		(base_addr + firm_id->zfwctrl_addr);
+		(base_addr + cy_readl(&firm_id->zfwctrl_addr));
 	board_ctrl = &zfw_ctrl->board_ctrl;
 	ch_ctrl = zfw_ctrl->ch_ctrl;
 
 	while (1) {
-	    ch_ctrl[channel].rs_control |=
-			C_RS_RTS | C_RS_DTR ;
+	    cy_writel(&ch_ctrl[channel].rs_control,
+               cy_readl(&ch_ctrl[channel].rs_control) | C_RS_RTS | C_RS_DTR);
 	    retval = cyz_issue_cmd(&cy_card[info->card],
 		    channel, C_CM_IOCTLM, 0L);
 	    if (retval != 0){
@@ -2272,10 +2394,10 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	    if (!(info->flags & ASYNC_CALLOUT_ACTIVE)
 	    && !(info->flags & ASYNC_CLOSING)
 	    && (C_CLOCAL(tty)
-	      || (ch_ctrl[channel].rs_status & C_RS_DCD))) {
+	      || (cy_readl(&ch_ctrl[channel].rs_status) & C_RS_DCD))) {
 		break;
 	    }
-	    if (signal_pending(current)) {
+	    if (current->signal & ~current->blocked) {
 		retval = -ERESTARTSYS;
 		break;
 	    }
@@ -2332,11 +2454,11 @@ cy_open(struct tty_struct *tty, struct file * filp)
     */
     if (IS_CYC_Z(cy_card[info->card])) {
         if (!ISZLOADED(cy_card[info->card])) {
-	    if (((ZE_V1 ==((struct RUNTIME_9060 *)
-		((cy_card[info->card]).ctl_addr))->mail_box_0) &&
+	    if (((ZE_V1 ==cy_readl(&((struct RUNTIME_9060 *)
+		((cy_card[info->card]).ctl_addr))->mail_box_0)) &&
 		Z_FPGA_CHECK(cy_card[info->card])) &&
-		(ZFIRM_HLT==((struct FIRM_ID *)
-		((cy_card[info->card]).base_addr+ID_ADDRESS))->signature))
+		(ZFIRM_HLT==cy_readl(&((struct FIRM_ID *)
+		((cy_card[info->card]).base_addr+ID_ADDRESS))->signature)))
 	    {
 		printk ("Cyclades-Z Error: you need an external power supply for this number of ports.\n\rFirmware halted.\r\n");
 	    } else {
@@ -2403,6 +2525,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #ifdef SERIAL_DEBUG_OPEN
     printk(" cyc:cy_open done\n");/**/
 #endif
+
     return 0;
 } /* cy_open */
 
@@ -2603,13 +2726,13 @@ cy_put_char(struct tty_struct *tty, unsigned char ch)
         return;
 
     save_flags(flags); cli();
-        if (info->xmit_cnt >= PAGE_SIZE - 1) {
+        if (info->xmit_cnt >= SERIAL_XMIT_SIZE - 1) {
             restore_flags(flags);
             return;
         }
 
         info->xmit_buf[info->xmit_head++] = ch;
-        info->xmit_head &= PAGE_SIZE - 1;
+        info->xmit_head &= SERIAL_XMIT_SIZE - 1;
         info->xmit_cnt++;
     restore_flags(flags);
 #if 0
@@ -2652,8 +2775,9 @@ cy_flush_chars(struct tty_struct *tty)
 		       + (cy_chip_offset[chip]<<index));
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = channel;
-	    base_addr[CySRER<<index] |= CyTxMpty;
+	    cy_writeb((u_long)base_addr+(CyCAR<<index), channel);
+	    cy_writeb((u_long)base_addr+(CySRER<<index),
+               cy_readb(base_addr+(CySRER<<index)) | CyTxMpty);
 	restore_flags(flags);
     } else {
 	/* Since polling is already in place,
@@ -2680,7 +2804,7 @@ cy_write_room(struct tty_struct *tty)
 
     if (serial_paranoia_check(info, tty->device, "cy_write_room"))
         return 0;
-    ret = PAGE_SIZE - info->xmit_cnt - 1;
+    ret = SERIAL_XMIT_SIZE - info->xmit_cnt - 1;
     if (ret < 0)
         ret = 0;
     return ret;
@@ -2724,6 +2848,7 @@ set_line_char(struct cyclades_port * info)
   unsigned cflag;
   int   i;
 
+
     if (!info->tty || !info->tty->termios){
         return;
     }
@@ -2736,6 +2861,9 @@ set_line_char(struct cyclades_port * info)
     channel = (info->line) - (cy_card[card].first_line);
 
     if (!IS_CYC_Z(cy_card[card])) {
+
+	index = cy_card[card].bus_index;
+
 	/* baud rate */
 	i = cflag & CBAUD;
      
@@ -2744,6 +2872,11 @@ set_line_char(struct cyclades_port * info)
 		i = 16;
 	    else if(i == B115200) 
 		i = 18;
+	    else if(i == B230400 && 
+                 cy_readb(cy_card[card].base_addr+(CyGFRCR<<index)) >= 0x48) {
+		/* It is a CD1400 rev. J or later */
+		i = 20;
+	    }
 #ifdef B76800
 	    else if(i == B76800) 
 		i = 17;
@@ -2753,15 +2886,35 @@ set_line_char(struct cyclades_port * info)
 	}
 
 	if (i == 15) {
-		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
-			i += 1;
-		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
-			i += 3;
+	    if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
+		i += 1;
+	    if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
+		i += 3;
+       	    if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST){
+                switch(info->baud) {
+		    case 57600:
+			i += 1; break;
+		    case 115200:
+			i += 3; break;
+		    case 230400:
+			i += 5; break;
+		    default:
+			break;
+	        }
+            }
 	}
-	info->tbpr = baud_bpr[i]; /* Tx BPR */
-	info->tco = baud_co[i]; /* Tx CO */
-	info->rbpr = baud_bpr[i]; /* Rx BPR */
-	info->rco = baud_co[i]; /* Rx CO */
+        if(cy_readb(cy_card[card].base_addr+(CyGFRCR<<index)) >= 0x48) {
+	    /* It is a CD1400 rev. J or later */
+	    info->tbpr = baud_bpr_60[i]; /* Tx BPR */
+	    info->tco = baud_co_60[i]; /* Tx CO */
+	    info->rbpr = baud_bpr_60[i]; /* Rx BPR */
+	    info->rco = baud_co_60[i]; /* Rx CO */
+	} else {
+	    info->tbpr = baud_bpr_25[i]; /* Tx BPR */
+	    info->tco = baud_co_25[i]; /* Tx CO */
+	    info->rbpr = baud_bpr_25[i]; /* Rx BPR */
+	    info->rco = baud_co_25[i]; /* Rx CO */
+	}
 	if (baud_table[i] == 134) {
 	    info->timeout = (info->xmit_fifo_size*HZ*30/269) + 2;
 	    /* get it right for 134.5 baud */
@@ -2834,70 +2987,94 @@ set_line_char(struct cyclades_port * info)
 
 	chip = channel>>2;
 	channel &= 0x03;
-	index = cy_card[card].bus_index;
 	base_addr = (unsigned char*)
 		       (cy_card[card].base_addr
 		       + (cy_chip_offset[chip]<<index));
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = (u_char)channel;
+	    cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
 
 	   /* tx and rx baud rate */
 
-	    base_addr[CyTCOR<<index] = info->tco;
-	    base_addr[CyTBPR<<index] = info->tbpr;
-	    base_addr[CyRCOR<<index] = info->rco;
-	    base_addr[CyRBPR<<index] = info->rbpr;
+	    cy_writeb((u_long)base_addr+(CyTCOR<<index), info->tco);
+	    cy_writeb((u_long)base_addr+(CyTBPR<<index), info->tbpr);
+	    cy_writeb((u_long)base_addr+(CyRCOR<<index), info->rco);
+	    cy_writeb((u_long)base_addr+(CyRBPR<<index), info->rbpr);
 
 	    /* set line characteristics  according configuration */
 
-	    base_addr[CySCHR1<<index] = START_CHAR(info->tty);
-	    base_addr[CySCHR2<<index] = STOP_CHAR(info->tty);
-	    base_addr[CyCOR1<<index] = info->cor1;
-	    base_addr[CyCOR2<<index] = info->cor2;
-	    base_addr[CyCOR3<<index] = info->cor3;
-	    base_addr[CyCOR4<<index] = info->cor4;
-	    base_addr[CyCOR5<<index] = info->cor5;
+	    cy_writeb((u_long)base_addr+(CySCHR1<<index), 
+		      START_CHAR(info->tty));
+	    cy_writeb((u_long)base_addr+(CySCHR2<<index), 
+		      STOP_CHAR(info->tty));
+	    cy_writeb((u_long)base_addr+(CyCOR1<<index), info->cor1);
+	    cy_writeb((u_long)base_addr+(CyCOR2<<index), info->cor2);
+	    cy_writeb((u_long)base_addr+(CyCOR3<<index), info->cor3);
+	    cy_writeb((u_long)base_addr+(CyCOR4<<index), info->cor4);
+	    cy_writeb((u_long)base_addr+(CyCOR5<<index), info->cor5);
 
 	    cyy_issue_cmd(base_addr,
 		     CyCOR_CHANGE|CyCOR1ch|CyCOR2ch|CyCOR3ch,index);
 
-	    base_addr[CyCAR<<index] =
-				(u_char)channel; /* !!! Is this needed? */
-
-	    base_addr[CyRTPR<<index] = (info->default_timeout
-					 ? info->default_timeout
-					 : 0x02); /* 10ms rx timeout */
+	    cy_writeb((u_long)base_addr+(CyCAR<<index), 
+		      (u_char)channel); /* !!! Is this needed? */
+	    cy_writeb((u_long)base_addr+(CyRTPR<<index), (info->default_timeout
+					         ? info->default_timeout
+					         : 0x02)); /* 10ms rx timeout */
 
 	    if (C_CLOCAL(info->tty)) {
-		base_addr[CySRER<<index] |= CyMdmCh; /* without modem intr */
+		/* without modem intr */
+		cy_writeb((u_long)base_addr+(CySRER<<index),
+                   cy_readb(base_addr+(CySRER<<index)) | CyMdmCh); 
 					/* act on 1->0 modem transitions */
-		base_addr[CyMCOR1<<index] = CyCTS;
+                if ((cflag & CRTSCTS) && info->rflow) {
+                        cy_writeb((u_long)base_addr+(CyMCOR1<<index), 
+                                  (CyCTS|rflow_thr[i]));
+                } else {
+                        cy_writeb((u_long)base_addr+(CyMCOR1<<index), CyCTS);
+                }
 					/* act on 0->1 modem transitions */
-		base_addr[CyMCOR2<<index] = CyCTS;
+		cy_writeb((u_long)base_addr+(CyMCOR2<<index), CyCTS);
 	    } else {
-		base_addr[CySRER<<index] |= CyMdmCh; /* with modem intr */
+		/* without modem intr */
+		cy_writeb((u_long)base_addr+(CySRER<<index),
+                   cy_readb(base_addr+(CySRER<<index)) | CyMdmCh); 
 					/* act on 1->0 modem transitions */
-		base_addr[CyMCOR1<<index] = CyDSR|CyCTS|CyRI|CyDCD;
+                if ((cflag & CRTSCTS) && info->rflow) {
+			cy_writeb((u_long)base_addr+(CyMCOR1<<index), 
+        	                  (CyDSR|CyCTS|CyRI|CyDCD|rflow_thr[i]));
+                } else {
+			cy_writeb((u_long)base_addr+(CyMCOR1<<index), 
+                                  CyDSR|CyCTS|CyRI|CyDCD);
+                }
 					/* act on 0->1 modem transitions */
-		base_addr[CyMCOR2<<index] = CyDSR|CyCTS|CyRI|CyDCD;
+		cy_writeb((u_long)base_addr+(CyMCOR2<<index), 
+			  CyDSR|CyCTS|CyRI|CyDCD);
 	    }
 
 	    if(i == 0){ /* baud rate is zero, turn off line */
-		base_addr[CyMSVR2<<index] = ~CyDTR;
+	        if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+		} else {
+                        cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
+		}
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc:set_line_char dropping DTR\n");
 		printk("     status: 0x%x,
-		    0x%x\n", base_addr[CyMSVR1<<index],
-		    base_addr[CyMSVR2<<index]);
+		    0x%x\n", cy_readb(base_addr+(CyMSVR1<<index)),
+		    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 	    }else{
-		base_addr[CyMSVR2<<index] = CyDTR;
+                if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+                } else {
+			cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
+                }
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc:set_line_char raising DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
-		    base_addr[CyMSVR1<<index],
-		    base_addr[CyMSVR2<<index]);
+		    cy_readb(base_addr+(CyMSVR1<<index)),
+		    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 	    }
 
@@ -2920,82 +3097,84 @@ set_line_char(struct cyclades_port * info)
 	    return;
 	}
 
-	zfw_ctrl =
-            (struct ZFW_CTRL *)
-                (cy_card[card].base_addr + firm_id->zfwctrl_addr);
+	zfw_ctrl = (struct ZFW_CTRL *)
+                (cy_card[card].base_addr + cy_readl(&firm_id->zfwctrl_addr));
 	board_ctrl = &zfw_ctrl->board_ctrl;
-	ch_ctrl = &zfw_ctrl->ch_ctrl[channel];
+	ch_ctrl = &(zfw_ctrl->ch_ctrl[channel]);
 	buf_ctrl = &zfw_ctrl->buf_ctrl[channel];
 
 	/* baud rate */
 	switch(i = cflag & CBAUD){
 	/*
-        case B0: ch_ctrl->comm_baud = 0; break;
+        case B0: cy_writel(&ch_ctrl->comm_baud , 0); break;
 	*/
-        case B50: ch_ctrl->comm_baud = 50; break;
-        case B75: ch_ctrl->comm_baud = 75; break;
-        case B110: ch_ctrl->comm_baud = 110; break;
-        case B134: ch_ctrl->comm_baud = 134; break;
-        case B150: ch_ctrl->comm_baud = 150; break;
-        case B200: ch_ctrl->comm_baud = 200; break;
-        case B300: ch_ctrl->comm_baud = 300; break;
-        case B600: ch_ctrl->comm_baud = 600; break;
-        case B1200: ch_ctrl->comm_baud = 1200; break;
-        case B1800: ch_ctrl->comm_baud = 1800; break;
-        case B2400: ch_ctrl->comm_baud = 2400; break;
-        case B4800: ch_ctrl->comm_baud = 4800; break;
-        case B9600: ch_ctrl->comm_baud = 9600; break;
-        case B19200: ch_ctrl->comm_baud = 19200; break;
+        case B50: cy_writel(&ch_ctrl->comm_baud , 50); break;
+        case B75: cy_writel(&ch_ctrl->comm_baud , 75); break;
+        case B110: cy_writel(&ch_ctrl->comm_baud , 110); break;
+        case B134: cy_writel(&ch_ctrl->comm_baud , 134); break;
+        case B150: cy_writel(&ch_ctrl->comm_baud , 150); break;
+        case B200: cy_writel(&ch_ctrl->comm_baud , 200); break;
+        case B300: cy_writel(&ch_ctrl->comm_baud , 300); break;
+        case B600: cy_writel(&ch_ctrl->comm_baud , 600); break;
+        case B1200: cy_writel(&ch_ctrl->comm_baud , 1200); break;
+        case B1800: cy_writel(&ch_ctrl->comm_baud , 1800); break;
+        case B2400: cy_writel(&ch_ctrl->comm_baud , 2400); break;
+        case B4800: cy_writel(&ch_ctrl->comm_baud , 4800); break;
+        case B9600: cy_writel(&ch_ctrl->comm_baud , 9600); break;
+        case B19200: cy_writel(&ch_ctrl->comm_baud , 19200); break;
         case B38400:
             if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI){
-                ch_ctrl->comm_baud = 57600;
+                cy_writel(&ch_ctrl->comm_baud , 57600);
             }else if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI){
-                ch_ctrl->comm_baud = 115200;
+                cy_writel(&ch_ctrl->comm_baud , 115200);
+            }else if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST){
+                cy_writel(&ch_ctrl->comm_baud , info->baud);
             }else{
-                ch_ctrl->comm_baud = 38400;
+                cy_writel(&ch_ctrl->comm_baud , 38400);
             }
             break;
-        case B57600: ch_ctrl->comm_baud = 57600; break;
+        case B57600: cy_writel(&ch_ctrl->comm_baud , 57600); break;
 #ifdef B76800
-        case B76800: ch_ctrl->comm_baud = 76800; break;
+        case B76800: cy_writel(&ch_ctrl->comm_baud , 76800); break;
 #endif
-        case B115200: ch_ctrl->comm_baud = 115200; break;
-        case B230400: ch_ctrl->comm_baud = 230400; break;
-        case B460800: ch_ctrl->comm_baud = 460800; break;
+        case B115200: cy_writel(&ch_ctrl->comm_baud , 115200); break;
+        case B230400: cy_writel(&ch_ctrl->comm_baud , 230400); break;
+        case B460800: cy_writel(&ch_ctrl->comm_baud , 460800); break;
 	}
-        if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST){
-                ch_ctrl->comm_baud = info->baud;
-        }
 
 	/* byte size and parity */
 	switch(cflag & CSIZE){
-	case CS5: ch_ctrl->comm_data_l = C_DL_CS5; break;
-	case CS6: ch_ctrl->comm_data_l = C_DL_CS6; break;
-	case CS7: ch_ctrl->comm_data_l = C_DL_CS7; break;
-	case CS8: ch_ctrl->comm_data_l = C_DL_CS8; break;
+	case CS5: cy_writel(&ch_ctrl->comm_data_l , C_DL_CS5); break;
+	case CS6: cy_writel(&ch_ctrl->comm_data_l , C_DL_CS6); break;
+	case CS7: cy_writel(&ch_ctrl->comm_data_l , C_DL_CS7); break;
+	case CS8: cy_writel(&ch_ctrl->comm_data_l , C_DL_CS8); break;
 	}
 	if(cflag & CSTOPB){
-	    ch_ctrl->comm_data_l |= C_DL_2STOP;
+	    cy_writel(&ch_ctrl->comm_data_l,
+               cy_readl(&ch_ctrl->comm_data_l) | C_DL_2STOP);
 	}else{
-	    ch_ctrl->comm_data_l |= C_DL_1STOP;
+	    cy_writel(&ch_ctrl->comm_data_l,
+               cy_readl(&ch_ctrl->comm_data_l) | C_DL_1STOP);
 	}
 	if (cflag & PARENB){
 	    if (cflag & PARODD){
-		ch_ctrl->comm_parity = C_PR_ODD;
+		cy_writel(&ch_ctrl->comm_parity , C_PR_ODD);
 	    }else{
-		ch_ctrl->comm_parity = C_PR_EVEN;
+		cy_writel(&ch_ctrl->comm_parity , C_PR_EVEN);
 	    }
 	}else{
-	    ch_ctrl->comm_parity = C_PR_NONE;
+	    cy_writel(&ch_ctrl->comm_parity , C_PR_NONE);
 	}
 
 	/* CTS flow control flag */
 	if (cflag & CRTSCTS){
 	    info->flags |= ASYNC_CTS_FLOW;
-	    ch_ctrl->hw_flow |= C_RS_CTS | C_RS_RTS;
+	    cy_writel(&ch_ctrl->hw_flow,
+               cy_readl(&ch_ctrl->hw_flow) | C_RS_CTS | C_RS_RTS);
 	}else{
 	    info->flags &= ~ASYNC_CTS_FLOW;
-	    ch_ctrl->hw_flow &= ~(C_RS_CTS | C_RS_RTS);
+	    cy_writel(&ch_ctrl->hw_flow,
+               cy_readl(&ch_ctrl->hw_flow) & ~(C_RS_CTS | C_RS_RTS));
 	}
 
 	retval = cyz_issue_cmd( &cy_card[card], channel, C_CM_IOCTL, 0L);
@@ -3012,12 +3191,14 @@ set_line_char(struct cyclades_port * info)
 	}
 
 	if(i == 0){ /* baud rate is zero, turn off line */
-	    ch_ctrl->rs_control &= ~C_RS_DTR;
+	    cy_writel(&ch_ctrl->rs_control,
+               cy_readl(&ch_ctrl->rs_control) & ~C_RS_DTR);
 #ifdef SERIAL_DEBUG_DTR
 	    printk("cyc:set_line_char dropping Z DTR\n");
 #endif
 	}else{
-	    ch_ctrl->rs_control |= C_RS_DTR;
+	    cy_writel(&ch_ctrl->rs_control,
+               cy_readl(&ch_ctrl->rs_control) | C_RS_DTR);
 #ifdef SERIAL_DEBUG_DTR
 	    printk("cyc:set_line_char raising Z DTR\n");
 #endif
@@ -3028,6 +3209,7 @@ set_line_char(struct cyclades_port * info)
 	    printk("cyc:set_line_char retval at %d was %x\n",
 	        __LINE__, retval);
 	}
+	cy_readl(&ch_ctrl->comm_baud);
 
 	if (info->tty){
 	    clear_bit(TTY_IO_ERROR, &info->tty->flags);
@@ -3131,9 +3313,9 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
 		       + (cy_chip_offset[chip]<<index));
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = (u_char)channel;
-	    status = base_addr[CyMSVR1<<index];
-	    status |= base_addr[CyMSVR2<<index];
+	    cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+	    status = cy_readb(base_addr+(CyMSVR1<<index));
+	    status |= cy_readb(base_addr+(CyMSVR2<<index));
 	restore_flags(flags);
 
 	result =  ((status  & CyRTS) ? TIOCM_RTS : 0)
@@ -3152,12 +3334,11 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
 	firm_id = (struct FIRM_ID *)
 		    (cy_card[card].base_addr + ID_ADDRESS);
         if (ISZLOADED(cy_card[card])) {
-	    zfw_ctrl =
-		(struct ZFW_CTRL *)
-		(cy_card[card].base_addr + firm_id->zfwctrl_addr);
+	    zfw_ctrl = (struct ZFW_CTRL *)
+		(cy_card[card].base_addr + cy_readl(&firm_id->zfwctrl_addr));
 	    board_ctrl = &zfw_ctrl->board_ctrl;
 	    ch_ctrl = zfw_ctrl->ch_ctrl;
-	    lstatus = ch_ctrl[channel].rs_status;
+	    lstatus = cy_readl(&ch_ctrl[channel].rs_status);
 	    result =  ((lstatus  & C_RS_RTS) ? TIOCM_RTS : 0)
 		    | ((lstatus  & C_RS_DTR) ? TIOCM_DTR : 0)
 	            | ((lstatus  & C_RS_DCD) ? TIOCM_CAR : 0)
@@ -3203,18 +3384,27 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	case TIOCMBIS:
 	    if (arg & TIOCM_RTS){
 		save_flags(flags); cli();
-		    base_addr[CyCAR<<index] = (u_char)channel;
-		    base_addr[CyMSVR1<<index] = CyRTS;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+		    cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
+                } else {
+		    cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+                }
 		restore_flags(flags);
 	    }
 	    if (arg & TIOCM_DTR){
 		save_flags(flags); cli();
-		base_addr[CyCAR<<index] = (u_char)channel;
-		base_addr[CyMSVR2<<index] = CyDTR;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+		    cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+                } else {
+		    cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
+                }
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc:set_modem_info raising DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
-		    base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+		    cy_readb(base_addr+(CyMSVR1<<index)), 
+                    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 		restore_flags(flags);
 	    }
@@ -3222,18 +3412,28 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	case TIOCMBIC:
 	    if (arg & TIOCM_RTS){
 		save_flags(flags); cli();
-		    base_addr[CyCAR<<index] = (u_char)channel;
-		    base_addr[CyMSVR1<<index] = ~CyRTS;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), 
+                          (u_char)channel);
+                if (info->rtsdtr_inv) {
+		    	cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
+                } else {
+		    	cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+                }
 		restore_flags(flags);
 	    }
 	    if (arg & TIOCM_DTR){
 		save_flags(flags); cli();
-		base_addr[CyCAR<<index] = (u_char)channel;
-		base_addr[CyMSVR2<<index] = ~CyDTR;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+                } else {
+			cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
+                }
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc:set_modem_info dropping DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
-		    base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+		    cy_readb(base_addr+(CyMSVR1<<index)), 
+                    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 		restore_flags(flags);
 	    }
@@ -3241,33 +3441,52 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	case TIOCMSET:
 	    if (arg & TIOCM_RTS){
 		save_flags(flags); cli();
-		    base_addr[CyCAR<<index] = (u_char)channel;
-		    base_addr[CyMSVR1<<index] = CyRTS;
+	        cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
+                } else {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+                }
 		restore_flags(flags);
 	    }else{
 		save_flags(flags); cli();
-		    base_addr[CyCAR<<index] = (u_char)channel;
-		    base_addr[CyMSVR1<<index] = ~CyRTS;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
+                } else {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+                }
 		restore_flags(flags);
 	    }
 	    if (arg & TIOCM_DTR){
 		save_flags(flags); cli();
-		base_addr[CyCAR<<index] = (u_char)channel;
-		base_addr[CyMSVR2<<index] = CyDTR;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+                } else {
+			cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
+                }
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc:set_modem_info raising DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
-		    base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+		    cy_readb(base_addr+(CyMSVR1<<index)), 
+                    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 		restore_flags(flags);
 	    }else{
 		save_flags(flags); cli();
-		base_addr[CyCAR<<index] = (u_char)channel;
-		base_addr[CyMSVR2<<index] = ~CyDTR;
+		cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+                if (info->rtsdtr_inv) {
+			cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+                } else {
+			cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
+                }
+
 #ifdef SERIAL_DEBUG_DTR
 		printk("cyc:set_modem_info dropping DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
-		    base_addr[CyMSVR1<<index], base_addr[CyMSVR2<<index]);
+		    cy_readb(base_addr+(CyMSVR1<<index)), 
+                    cy_readb(base_addr+(CyMSVR2<<index)));
 #endif
 		restore_flags(flags);
 	    }
@@ -3281,19 +3500,20 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 	firm_id = (struct FIRM_ID *)
 		    (cy_card[card].base_addr + ID_ADDRESS);
         if (ISZLOADED(cy_card[card])) {
-	    zfw_ctrl =
-		(struct ZFW_CTRL *)
-		(cy_card[card].base_addr + firm_id->zfwctrl_addr);
+	    zfw_ctrl = (struct ZFW_CTRL *)
+		(cy_card[card].base_addr + cy_readl(&firm_id->zfwctrl_addr));
 	    board_ctrl = &zfw_ctrl->board_ctrl;
 	    ch_ctrl = zfw_ctrl->ch_ctrl;
 
 	    switch (cmd) {
 	    case TIOCMBIS:
 		if (arg & TIOCM_RTS){
-		    ch_ctrl[channel].rs_control |= C_RS_RTS;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) | C_RS_RTS);
 		}
 		if (arg & TIOCM_DTR){
-		    ch_ctrl[channel].rs_control |= C_RS_DTR;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) | C_RS_DTR);
 #ifdef SERIAL_DEBUG_DTR
 		    printk("cyc:set_modem_info raising Z DTR\n");
 #endif
@@ -3301,10 +3521,12 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 		break;
 	    case TIOCMBIC:
 		if (arg & TIOCM_RTS){
-		    ch_ctrl[channel].rs_control &= ~C_RS_RTS;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) & ~C_RS_RTS);
 		}
 		if (arg & TIOCM_DTR){
-		    ch_ctrl[channel].rs_control &= ~C_RS_DTR;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) & ~C_RS_DTR);
 #ifdef SERIAL_DEBUG_DTR
 		    printk("cyc:set_modem_info clearing Z DTR\n");
 #endif
@@ -3312,17 +3534,21 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
 		break;
 	    case TIOCMSET:
 		if (arg & TIOCM_RTS){
-		    ch_ctrl[channel].rs_control |= C_RS_RTS;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) | C_RS_RTS);
 		}else{
-		    ch_ctrl[channel].rs_control &= ~C_RS_RTS;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) & ~C_RS_RTS);
 		}
 		if (arg & TIOCM_DTR){
-		    ch_ctrl[channel].rs_control |= C_RS_DTR;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) | C_RS_DTR);
 #ifdef SERIAL_DEBUG_DTR
 		    printk("cyc:set_modem_info raising Z DTR\n");
 #endif
 		}else{
-		    ch_ctrl[channel].rs_control &= ~C_RS_DTR;
+		    cy_writel(&ch_ctrl[channel].rs_control,
+                       cy_readl(&ch_ctrl[channel].rs_control) & ~C_RS_DTR);
 #ifdef SERIAL_DEBUG_DTR
 		    printk("cyc:set_modem_info clearing Z DTR\n");
 #endif
@@ -3362,8 +3588,8 @@ send_break( struct cyclades_port * info, int duration)
 	   A better implementation will use C_CM_SET_BREAK
 	   and C_CM_CLR_BREAK with the appropriate delay.
 	 */
-#if 0
-this appears to wedge the output data stream
+#if 1
+// this appears to wedge the output data stream
 int retval;
         retval = cyz_issue_cmd(&cy_card[info->card],
 		(info->line) - (cy_card[info->card].first_line),
@@ -3408,7 +3634,7 @@ set_threshold(struct cyclades_port * info, unsigned long value)
 
 	info->cor3 &= ~CyREC_FIFO;
 	info->cor3 |= value & CyREC_FIFO;
-	base_addr[CyCOR3<<index] = info->cor3;
+	cy_writeb((u_long)base_addr+(CyCOR3<<index), info->cor3);
 	cyy_issue_cmd(base_addr,CyCOR_CHANGE|CyCOR3ch,index);
     } else {
 	// Nothing to do!
@@ -3434,7 +3660,7 @@ get_threshold(struct cyclades_port * info, unsigned long *value)
 		       (cy_card[card].base_addr
 		       + (cy_chip_offset[chip]<<index));
 
-	tmp = base_addr[CyCOR3<<index] & CyREC_FIFO;
+	tmp = cy_readb(base_addr+(CyCOR3<<index)) & CyREC_FIFO;
 	cy_put_user(tmp,value);
     } else {
 	// Nothing to do!
@@ -3475,7 +3701,7 @@ set_timeout(struct cyclades_port * info, unsigned long value)
 		       (cy_card[card].base_addr
 		       + (cy_chip_offset[chip]<<index));
 
-	base_addr[CyRTPR<<index] = value & 0xff;
+	cy_writeb((u_long)base_addr+(CyRTPR<<index), value & 0xff);
     } else {
 	// Nothing to do!
     }
@@ -3500,7 +3726,7 @@ get_timeout(struct cyclades_port * info, unsigned long *value)
 		       (cy_card[card].base_addr
 		       + (cy_chip_offset[chip]<<index));
 
-	tmp = base_addr[CyRTPR<<index];
+	tmp = cy_readb(base_addr+(CyRTPR<<index));
 	cy_put_user(tmp,value);
     } else {
 	// Nothing to do!
@@ -3523,7 +3749,6 @@ get_default_timeout(struct cyclades_port * info, unsigned long *value)
     cy_put_user(info->default_timeout,value);
     return 0;
 }/* get_default_timeout */
-
 
 /*
  * This routine allows the tty driver to implement device-
@@ -3601,6 +3826,26 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
         case CYSETDEFTIMEOUT:
             ret_val = set_default_timeout(info, (unsigned long)arg);
             break;
+	case CYSETRFLOW:
+    	    info->rflow = 1;
+	    ret_val = 0;
+	    break;
+	case CYRESETRFLOW:
+    	    info->rflow = 0;
+	    ret_val = 0;
+	    break;
+	case CYSETRTSDTR_INV:
+    	    info->rtsdtr_inv = 1;
+	    ret_val = 0;
+	    break;
+	case CYRESETRTSDTR_INV:
+    	    info->rtsdtr_inv = 0;
+	    ret_val = 0;
+	    break;
+	case CYZPOLLCYCLE:
+            cyz_polling_cycle = (HZ * arg) / 1000;
+	    ret_val = 0;
+	    break;
         case TCSBRK:    /* SVID version: non-zero arg --> no break */
             ret_val = tty_check_change(tty);
             if (ret_val)
@@ -3745,7 +3990,7 @@ cy_throttle(struct tty_struct * tty)
 #ifdef SERIAL_DEBUG_THROTTLE
   char buf[64];
         
-    printk("cyc:throttle %s: %d....ttyC%d\n", _tty_name(tty, buf),
+    printk("cyc:throttle %s: %d....ttyC%d\n", tty_name(tty, buf),
            tty->ldisc.chars_in_buffer(tty), info->line);
 #endif
 
@@ -3769,8 +4014,12 @@ cy_throttle(struct tty_struct * tty)
 		       + (cy_chip_offset[chip]<<index));
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = (u_char)channel;
-	    base_addr[CyMSVR1<<index] = ~CyRTS;
+	cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+	if (info->rtsdtr_inv) {
+		cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
+	} else {
+		cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
+	}
 	restore_flags(flags);
     } else {
 	// Nothing to do!
@@ -3796,7 +4045,7 @@ cy_unthrottle(struct tty_struct * tty)
 #ifdef SERIAL_DEBUG_THROTTLE
   char buf[64];
         
-    printk("cyc:throttle %s: %d....ttyC%d\n", _tty_name(tty, buf),
+    printk("cyc:throttle %s: %d....ttyC%d\n", tty_name(tty, buf),
            tty->ldisc.chars_in_buffer(tty), info->line);
 #endif
 
@@ -3820,8 +4069,12 @@ cy_unthrottle(struct tty_struct * tty)
 		       + (cy_chip_offset[chip]<<index));
 
 	save_flags(flags); cli();
-	    base_addr[CyCAR<<index] = (u_char)channel;
-	    base_addr[CyMSVR1<<index] = CyRTS;
+	cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
+	if (info->rtsdtr_inv) {
+		cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
+	} else {
+		cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
+	}
 	restore_flags(flags);
     }else{
 	// Nothing to do!
@@ -3861,9 +4114,10 @@ cy_stop(struct tty_struct *tty)
                            + (cy_chip_offset[chip]<<index));
 
         save_flags(flags); cli();
-            base_addr[CyCAR<<index] =
-	        (u_char)(channel & 0x0003); /* index channel */
-            base_addr[CySRER<<index] &= ~CyTxMpty;
+            cy_writeb((u_long)base_addr+(CyCAR<<index),
+	       (u_char)(channel & 0x0003)); /* index channel */
+            cy_writeb((u_long)base_addr+(CySRER<<index), 
+               cy_readb(base_addr+(CySRER<<index)) & ~CyTxMpty);
         restore_flags(flags);
     } else {
 	// Nothing to do!
@@ -3900,8 +4154,10 @@ cy_start(struct tty_struct *tty)
 		       + (cy_chip_offset[chip]<<index));
 
         save_flags(flags); cli();
-            base_addr[CyCAR<<index] = (u_char)(channel & 0x0003);
-            base_addr[CySRER<<index] |= CyTxMpty;
+            cy_writeb((u_long)base_addr+(CyCAR<<index),
+	       (u_char)(channel & 0x0003)); /* index channel */
+            cy_writeb((u_long)base_addr+(CySRER<<index), 
+               cy_readb(base_addr+(CySRER<<index)) | CyTxMpty);
         restore_flags(flags);
     } else {
 	// Nothing to do!
@@ -3968,24 +4224,25 @@ cy_flush_buffer(struct tty_struct *tty)
  * ---------------------------------------------------------------------
  */
 
-
 /* initialize chips on Cyclom-Y card -- return number of valid
    chips (which is number of ports/4) */
-__initfunc(static int
-cyy_init_card(unsigned char *true_base_addr,int index))
+__initfunc(static unsigned short
+cyy_init_card(volatile ucchar *true_base_addr,int index))
 {
   unsigned int chip_number;
-  unsigned char* base_addr;
+  volatile ucchar* base_addr;
 
-    true_base_addr[Cy_HwReset<<index] = 0; /* Cy_HwReset is 0x1400 */
-    true_base_addr[Cy_ClrIntr<<index] = 0; /* Cy_ClrIntr is 0x1800 */
+    cy_writeb((u_long)true_base_addr+(Cy_HwReset<<index), 0); 
+						/* Cy_HwReset is 0x1400 */
+    cy_writeb((u_long)true_base_addr+(Cy_ClrIntr<<index), 0); 
+						/* Cy_ClrIntr is 0x1800 */
     udelay(500L);
 
-    for(chip_number=0; chip_number<CyMaxChipsPerCard; chip_number++){
+    for(chip_number=0; chip_number<CyMAX_CHIPS_PER_CARD; chip_number++){
         base_addr = true_base_addr
 	               + (cy_chip_offset[chip_number]<<index);
         udelay(1000L);
-        if(base_addr[CyCCR<<index] != 0x00){
+        if(cy_readb(base_addr+(CyCCR<<index)) != 0x00){
             /*************
             printk(" chip #%d at %#6lx is never idle (CCR != 0)\n",
                chip_number, (unsigned long)base_addr);
@@ -3993,7 +4250,7 @@ cyy_init_card(unsigned char *true_base_addr,int index))
             return chip_number;
         }
 
-        base_addr[CyGFRCR<<index] = 0;
+        cy_writeb((u_long)base_addr+(CyGFRCR<<index), 0);
         udelay(10L);
 
         /* The Cyclom-16Y does not decode address bit 9 and therefore
@@ -4003,16 +4260,16 @@ cyy_init_card(unsigned char *true_base_addr,int index))
            and this must be a Cyclom-16Y, not a Cyclom-32Ye.
         */
         if (chip_number == 4
-        && *(true_base_addr
+        && cy_readb(true_base_addr
 	    + (cy_chip_offset[0]<<index)
 	    + (CyGFRCR<<index)) == 0){
             return chip_number;
         }
 
-        base_addr[CyCCR<<index] = CyCHIP_RESET;
+        cy_writeb((u_long)base_addr+(CyCCR<<index), CyCHIP_RESET);
         udelay(1000L);
 
-        if(base_addr[CyGFRCR<<index] == 0x00){
+        if(cy_readb(base_addr+(CyGFRCR<<index)) == 0x00){
             /*
             printk(" chip #%d at %#6lx is not responding ",
                chip_number, (unsigned long)base_addr);
@@ -4020,7 +4277,7 @@ cyy_init_card(unsigned char *true_base_addr,int index))
             */
             return chip_number;
         }
-        if((0xf0 & base_addr[CyGFRCR<<index]) != 0x40){
+        if((0xf0 & (cy_readb(base_addr+(CyGFRCR<<index)))) != 0x40){
             /*
             printk(" chip #%d at %#6lx is not valid (GFRCR == %#2x)\n",
                chip_number, (unsigned long)base_addr,
@@ -4028,10 +4285,16 @@ cyy_init_card(unsigned char *true_base_addr,int index))
             */
             return chip_number;
         }
-        base_addr[CyGCR<<index] = CyCH0_SERIAL;
-        base_addr[CyPPR<<index] = 244;
-	                       /* better value than CyCLOCK_25_1MS * 5
-					  to run clock at 200 Hz */
+        cy_writeb((u_long)base_addr+(CyGCR<<index), CyCH0_SERIAL);
+        if (cy_readb(base_addr+(CyGFRCR<<index)) >= 0x48){
+	    /* It is a CD1400 rev. J or later */
+	    /* Impossible to reach 5ms with this chip. 
+	       Changed to 2ms instead (f = 500 Hz). */
+	    cy_writeb((u_long)base_addr+(CyPPR<<index), CyCLOCK_60_2MS);
+	} else {
+	    /* f = 200 Hz */
+	    cy_writeb((u_long)base_addr+(CyPPR<<index), CyCLOCK_25_5MS);
+	}
 
         /*
         printk(" chip #%d at %#6lx is rev 0x%2x\n",
@@ -4039,10 +4302,8 @@ cyy_init_card(unsigned char *true_base_addr,int index))
 	       base_addr[CyGFRCR<<index]);
         */
     }
-
     return chip_number;
 } /* cyy_init_card */
-
 
 /*
  * ---------------------------------------------------------------------
@@ -4053,9 +4314,9 @@ cyy_init_card(unsigned char *true_base_addr,int index))
 __initfunc(static int
 cy_detect_isa(void))
 {
-  unsigned int          cy_isa_irq,nboard;
-  unsigned char         *cy_isa_address;
-  unsigned short        i,j,cy_isa_nchan;
+  unsigned short	cy_isa_irq,nboard;
+  volatile ucchar	*cy_isa_address;
+  unsigned short	i,j,cy_isa_nchan;
 
         nboard = 0;
 
@@ -4067,10 +4328,13 @@ cy_detect_isa(void))
                 }
 
                 /* probe for CD1400... */
-#if (LINUX_VERSION_CODE >= 0x020100)
-		cy_isa_address = ioremap((unsigned int)cy_isa_address,0x2000);
+
+#if !defined(__alpha__) && (LINUX_VERSION_CODE >= 0x020100)
+		cy_isa_address = ioremap((unsigned int)cy_isa_address,
+                                                       CyISA_Ywin);
 #endif
-                cy_isa_nchan = 4 * cyy_init_card(cy_isa_address,0);
+                cy_isa_nchan = CyPORTS_PER_CHIP * 
+                     cyy_init_card(cy_isa_address,0);
                 if (cy_isa_nchan == 0) {
                         continue;
                 }
@@ -4078,15 +4342,15 @@ cy_detect_isa(void))
                 /* find out the board's irq by probing */
                 cy_isa_irq = do_auto_irq(cy_isa_address);
                 if (cy_isa_irq == 0) {
-                        printk("Cyclom-Y/ISA found at 0x%x ",
-                                (unsigned int) cy_isa_address);
+                        printk("Cyclom-Y/ISA found at 0x%lx ",
+                                (unsigned long) cy_isa_address);
                         printk("but the IRQ could not be detected.\n");
                         continue;
                 }
 
                 if((cy_next_channel+cy_isa_nchan) > NR_PORTS) {
-                        printk("Cyclom-Y/ISA found at 0x%x ",
-                                (unsigned int) cy_isa_address);
+                        printk("Cyclom-Y/ISA found at 0x%lx ",
+                                (unsigned long) cy_isa_address);
                         printk("but no more channels are available.\n");
                         printk("Change NR_PORTS in cyclades.c and recompile kernel.\n");
                         return(nboard);
@@ -4096,8 +4360,8 @@ cy_detect_isa(void))
                         if (cy_card[j].base_addr == 0)  break;
                 }
                 if (j == NR_CARDS) {    /* no more cy_cards available */
-                        printk("Cyclom-Y/ISA found at 0x%x ",
-                                (unsigned int) cy_isa_address);
+                        printk("Cyclom-Y/ISA found at 0x%lx ",
+                                (unsigned long) cy_isa_address);
                         printk("but no more cards can be used .\n");
                         printk("Change NR_CARDS in cyclades.c and recompile kernel.\n");
                         return(nboard);
@@ -4107,15 +4371,15 @@ cy_detect_isa(void))
                 if(request_irq(cy_isa_irq, cyy_interrupt,
 				   SA_INTERRUPT, "cyclomY", NULL))
                 {
-                        printk("Cyclom-Y/ISA found at 0x%x ",
-                                (unsigned int) cy_isa_address);
+                        printk("Cyclom-Y/ISA found at 0x%lx ",
+                                (unsigned long) cy_isa_address);
                         printk("but could not allocate IRQ#%d.\n",
                                 cy_isa_irq);
                         return(nboard);
                 }
 
                 /* set cy_card */
-                cy_card[j].base_addr = (int) cy_isa_address;
+                cy_card[j].base_addr = (u_long) cy_isa_address;
                 cy_card[j].ctl_addr = 0;
                 cy_card[j].irq = (int) cy_isa_irq;
                 cy_card[j].bus_index = 0;
@@ -4125,10 +4389,10 @@ cy_detect_isa(void))
                 nboard++;
                         
                 /* print message */
-                printk("Cyclom-Y/ISA #%d: 0x%x-0x%x, IRQ%d, ",
-                        j+1, (unsigned int) cy_isa_address,
-                        (unsigned int)(cy_isa_address + 0x1fff),
-			cy_isa_irq);
+                printk("Cyclom-Y/ISA #%d: 0x%lx-0x%lx, IRQ%d, ",
+                    j+1, (unsigned long) cy_isa_address,
+                    (unsigned long)(cy_isa_address + (CyISA_Ywin - 1)),
+		    cy_isa_irq);
                 printk("%d channels starting from port %d.\n",
                         cy_isa_nchan, cy_next_channel);
                 cy_next_channel += cy_isa_nchan;
@@ -4150,11 +4414,11 @@ cy_detect_pci(void))
   unsigned char         cyy_bus, cyy_dev_fn, cyy_rev_id;
   unsigned long         pci_intr_ctrl;
   unsigned char         cy_pci_irq;
-  unsigned int          cy_pci_addr0, cy_pci_addr1, cy_pci_addr2;
+  uclong                cy_pci_addr0, cy_pci_addr1, cy_pci_addr2;
   unsigned short        i,j,cy_pci_nchan;
   unsigned short        device_id,dev_index = 0,board_index = 0;
-  unsigned long         mailbox;
-  unsigned int          Ze_addr0[NR_CARDS], Ze_addr2[NR_CARDS], ZeIndex = 0;
+  uclong		mailbox;
+  uclong		Ze_addr0[NR_CARDS], Ze_addr2[NR_CARDS], ZeIndex = 0;
 
         if(pcibios_present() == 0) {    /* PCI bus not present */
                 return(0);
@@ -4181,13 +4445,17 @@ cy_detect_pci(void))
                 pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
                                  PCI_INTERRUPT_LINE, &cy_pci_irq);
                 pcibios_read_config_dword(cyy_bus, cyy_dev_fn,
-                                  PCI_BASE_ADDRESS_0, &cy_pci_addr0);
+                                  PCI_BASE_ADDRESS_0, 
+				  (unsigned int *) &cy_pci_addr0);
                 pcibios_read_config_dword(cyy_bus, cyy_dev_fn,
-                                  PCI_BASE_ADDRESS_1, &cy_pci_addr1);
+                                  PCI_BASE_ADDRESS_1, 
+				  (unsigned int *) &cy_pci_addr1);
                 pcibios_read_config_dword(cyy_bus, cyy_dev_fn,
-                                  PCI_BASE_ADDRESS_2, &cy_pci_addr2);
+                                  PCI_BASE_ADDRESS_2, 
+				  (unsigned int *) &cy_pci_addr2);
                 pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
                                   PCI_REVISION_ID, &cyy_rev_id);
+
     if ((device_id == PCI_DEVICE_ID_CYCLOM_Y_Lo)
 	   || (device_id == PCI_DEVICE_ID_CYCLOM_Y_Hi)){
 #ifdef CY_PCI_DEBUG
@@ -4195,34 +4463,48 @@ cy_detect_pci(void))
 		cyy_bus, cyy_dev_fn);
             printk("rev_id=%d) IRQ%d\n",
 		cyy_rev_id, (int)cy_pci_irq);
-            printk("Cyclom-Y/PCI:found  winaddr=0x%x ioaddr=0x%x\n",
-		cy_pci_addr2, cy_pci_addr1);
+            printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
+		(ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
 #endif
                 cy_pci_addr1  &= 0xfffffffc;
                 cy_pci_addr2  &= 0xfffffff0;
 
-#if (LINUX_VERSION_CODE < 0x020100)
+#if defined(__alpha__)
+                if (device_id  == PCI_DEVICE_ID_CYCLOM_Y_Lo) { /* below 1M? */
+		    printk("Cyclom-Y/PCI (bus=0x0%x, pci_id=0x%x, ",
+		        cyy_bus, cyy_dev_fn);
+		    printk("rev_id=%d) IRQ%d\n",
+		        cyy_rev_id, (int)cy_pci_irq);
+                    printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
+		        (ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
+	            printk("Cyclom-Y/PCI not supported for low addresses in "
+                           "Alpha systems.\n");
+		    i--;
+	            continue;
+                }
+#else
+#if (LINUX_VERSION_CODE < 0x020100) 
                 if ((ulong)cy_pci_addr2 >= 0x100000)  /* above 1M? */
 #endif
-		    cy_pci_addr2 =
-			(unsigned int) ioremap(cy_pci_addr2,CyPCI_Ywin);
+                    cy_pci_addr2 = (ulong) ioremap(cy_pci_addr2, CyPCI_Ywin);
+#endif
 
 #ifdef CY_PCI_DEBUG
-            printk("Cyclom-Y/PCI: relocate winaddr=0x%x ioaddr=0x%x\n",
-		cy_pci_addr2, cy_pci_addr1);
+            printk("Cyclom-Y/PCI: relocate winaddr=0x%lx ioaddr=0x%lx\n",
+		(u_long)cy_pci_addr2, (u_long)cy_pci_addr1);
 #endif
-                cy_pci_nchan = 4 * cyy_init_card((unsigned char *)
-                                                cy_pci_addr2,1);
+                cy_pci_nchan = (unsigned short)(CyPORTS_PER_CHIP * 
+                       cyy_init_card((volatile ucchar *)cy_pci_addr2, 1));
                 if(cy_pci_nchan == 0) {
                         printk("Cyclom-Y PCI host card with ");
-                        printk("no Serial-Modules at 0x%x.\n",
-			    (unsigned int) cy_pci_addr2);
+                        printk("no Serial-Modules at 0x%lx.\n",
+			    (ulong) cy_pci_addr2);
                         i--;
                         continue;
                 }
                 if((cy_next_channel+cy_pci_nchan) > NR_PORTS) {
-                        printk("Cyclom-Y/PCI found at 0x%x ",
-			    (unsigned int) cy_pci_addr2);
+                        printk("Cyclom-Y/PCI found at 0x%lx ",
+			    (ulong) cy_pci_addr2);
                         printk("but no channels are available.\n");
                         printk("Change NR_PORTS in cyclades.c and recompile kernel.\n");
                         return(i);
@@ -4232,8 +4514,8 @@ cy_detect_pci(void))
                         if (cy_card[j].base_addr == 0)  break;
                 }
                 if (j == NR_CARDS) {    /* no more cy_cards available */
-                        printk("Cyclom-Y/PCI found at 0x%x ",
-			    (unsigned int) cy_pci_addr2);
+                        printk("Cyclom-Y/PCI found at 0x%lx ",
+			    (ulong) cy_pci_addr2);
                         printk("but no more cards can be used.\n");
                         printk("Change NR_CARDS in cyclades.c and recompile kernel.\n");
                         return(i);
@@ -4243,15 +4525,15 @@ cy_detect_pci(void))
                 if(request_irq(cy_pci_irq, cyy_interrupt,
 		        SA_INTERRUPT, "cyclomY", NULL))
                 {
-                        printk("Cyclom-Y/PCI found at 0x%x ",
-			    (unsigned int) cy_pci_addr2);
+                        printk("Cyclom-Y/PCI found at 0x%lx ",
+			    (ulong) cy_pci_addr2);
                         printk("but could not allocate IRQ%d.\n",
 			    cy_pci_irq);
                         return(i);
                 }
 
                 /* set cy_card */
-                cy_card[j].base_addr = (int) cy_pci_addr2;
+                cy_card[j].base_addr = (ulong)cy_pci_addr2;
                 cy_card[j].ctl_addr = 0;
                 cy_card[j].irq = (int) cy_pci_irq;
                 cy_card[j].bus_index = 1;
@@ -4266,9 +4548,11 @@ cy_detect_pci(void))
 				| inw(cy_pci_addr1+0x6a)<<16);
 
                 /* print message */
-                printk("Cyclom-Y/PCI #%d: 0x%x-0x%x, IRQ%d, ",
-		    j+1, cy_pci_addr2, (cy_pci_addr2 + CyPCI_Ywin - 1),
-		    (int)cy_pci_irq);
+                printk("Cyclom-Y/PCI #%d: 0x%lx-0x%lx, IRQ%d, ",
+		       j+1, 
+		       (ulong)cy_pci_addr2, 
+		       (ulong)(cy_pci_addr2 + CyPCI_Ywin - 1),
+		       (int)cy_pci_irq);
                 printk("%d channels starting from port %d.\n",
 		    cy_pci_nchan, cy_next_channel);
 
@@ -4279,8 +4563,8 @@ cy_detect_pci(void))
 		    cyy_bus, cyy_dev_fn);
 		printk("rev_id=%d) IRQ%d\n",
 		    cyy_rev_id, (int)cy_pci_irq);
-		printk("Cyclades-Z/PCI: found winaddr=0x%x ctladdr=0x%x\n",
-		    cy_pci_addr2, cy_pci_addr0);
+		printk("Cyclades-Z/PCI: found winaddr=0x%lx ctladdr=0x%lx\n",
+		    (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 	    printk("Cyclades-Z/PCI not supported for low addresses\n");
 	    break;
     }else if (device_id == PCI_DEVICE_ID_CYCLOM_Z_Hi){
@@ -4289,25 +4573,29 @@ cy_detect_pci(void))
 		cyy_bus, cyy_dev_fn);
             printk("rev_id=%d) IRQ%d\n",
 		cyy_rev_id, (int)cy_pci_irq);
-            printk("Cyclades-Z/PCI: found winaddr=0x%x ctladdr=0x%x\n",
-                cy_pci_addr2, cy_pci_addr0);
+            printk("Cyclades-Z/PCI: found winaddr=0x%lx ctladdr=0x%lx\n",
+                (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 #endif
                 cy_pci_addr0 &= 0xfffffff0;
+#if !defined(__alpha__)
                 cy_pci_addr0 = (unsigned int) ioremap(
                                cy_pci_addr0 & PAGE_MASK,
                                PAGE_ALIGN(CyPCI_Zctl))
                                + (cy_pci_addr0 & (PAGE_SIZE-1));
-
-		mailbox = ((struct RUNTIME_9060 *) cy_pci_addr0)->mail_box_0;
+#endif
+		mailbox = (uclong)cy_readl(&((struct RUNTIME_9060 *) 
+			   cy_pci_addr0)->mail_box_0);
                 cy_pci_addr2 &= 0xfffffff0;
 		if (mailbox == ZE_V1) {
+#if !defined(__alpha__)
                	    cy_pci_addr2 = (unsigned int) ioremap(
 	            	cy_pci_addr2 & PAGE_MASK,
 	            	PAGE_ALIGN(CyPCI_Ze_win))
 	            	+ (cy_pci_addr2 & (PAGE_SIZE-1));
+#endif
 		    if (ZeIndex == NR_CARDS) {
-			printk("Cyclades-Z/PCI found at 0x%x ",
-				(unsigned int) cy_pci_addr2);
+			printk("Cyclades-Ze/PCI found at 0x%lx ",
+				(ulong)cy_pci_addr2);
 			printk("but no more cards can be used.\n");
                         printk("Change NR_CARDS in cyclades.c and recompile kernel.\n");
 		    } else {
@@ -4318,24 +4606,28 @@ cy_detect_pci(void))
 		    i--;
 		    continue;
 		} else {
+#if !defined(__alpha__)
                     cy_pci_addr2 = (unsigned int) ioremap(
 			cy_pci_addr2 & PAGE_MASK,
 			PAGE_ALIGN(CyPCI_Zwin))
 			+ (cy_pci_addr2 & (PAGE_SIZE-1));
+#endif
 		}
 
 #ifdef CY_PCI_DEBUG
-            printk("Cyclades-Z/PCI: relocate winaddr=0x%x ctladdr=0x%x\n",
-                cy_pci_addr2, cy_pci_addr0);
+            printk("Cyclades-Z/PCI: relocate winaddr=0x%lx ctladdr=0x%lx\n",
+                (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 	    if (mailbox == ZO_V1) {
-		((struct RUNTIME_9060 *)(cy_pci_addr0))
-					    ->loc_addr_base = WIN_CREG;
+		cy_writel(&((struct RUNTIME_9060 *)
+			  (cy_pci_addr0))->loc_addr_base, WIN_CREG);
 		PAUSE
-		printk("Cyclades-Z/PCI: FPGA id %lx, ver %lx\n",
-		    0xff & ((struct CUSTOM_REG *)(cy_pci_addr2))->fpga_id,
-		    0xff & ((struct CUSTOM_REG *)(cy_pci_addr2))->fpga_version);
-		((struct RUNTIME_9060 *)(cy_pci_addr0))
-						->loc_addr_base = WIN_RAM;
+		printk("Cyclades-8Zo/PCI: FPGA id %lx, ver %lx\n",
+		       (ulong)(0xff & cy_readl(&((struct CUSTOM_REG *)
+		        (cy_pci_addr2))->fpga_id)),
+		       (ulong)(0xff & cy_readl(&((struct CUSTOM_REG *)
+		        (cy_pci_addr2))->fpga_version)));
+		cy_writel(&((struct RUNTIME_9060 *)
+			  (cy_pci_addr0))->loc_addr_base, WIN_RAM);
 	    } else {
 		printk("Cyclades-Z/PCI: New Cyclades-Z board.  FPGA not loaded\n");
 	    }
@@ -4345,8 +4637,8 @@ cy_detect_pci(void))
 	       until it has been properly initialized.
 	     */
 		PAUSE
-		if (mailbox == ZO_V1)
-		    *(unsigned long *)(cy_pci_addr2+ID_ADDRESS) = 0L;
+		if ((mailbox == ZO_V1) || (mailbox == ZO_V2))
+		    cy_writel((ulong)(cy_pci_addr2+ID_ADDRESS), 0L);
 
                 /* This must be a Cyclades-8Zo/PCI.  The extendable
                    version will have a different device_id and will
@@ -4354,8 +4646,8 @@ cy_detect_pci(void))
                 cy_pci_nchan = 8;
 
                 if((cy_next_channel+cy_pci_nchan) > NR_PORTS) {
-                        printk("Cyclades-Z/PCI found at 0x%x ",
-			    (unsigned int) cy_pci_addr2);
+                        printk("Cyclades-8Zo/PCI found at 0x%lx ",
+			    (ulong)cy_pci_addr2);
                         printk("but no channels are available.\n");
                         printk("Change NR_PORTS in cyclades.c and recompile kernel.\n");
                         return(i);
@@ -4366,8 +4658,8 @@ cy_detect_pci(void))
                         if (cy_card[j].base_addr == 0)  break;
                 }
                 if (j == NR_CARDS) {    /* no more cy_cards available */
-		    printk("Cyclades-Z/PCI found at 0x%x ",
-			(unsigned int) cy_pci_addr2);
+		    printk("Cyclades-8Zo/PCI found at 0x%lx ",
+			(ulong)cy_pci_addr2);
 		    printk("but no more cards can be used.\n");
                     printk("Change NR_CARDS in cyclades.c and recompile kernel.\n");
 		    return(i);
@@ -4380,11 +4672,12 @@ cy_detect_pci(void))
 		    {
 			printk("Could not allocate IRQ%d ",
 			    cy_pci_irq);
-			printk("for Cyclades-Z/PCI at 0x%x.\n",
-			    (unsigned int) cy_pci_addr2);
+			printk("for Cyclades-8Zo/PCI at 0x%lx.\n",
+			    (ulong)cy_pci_addr2);
 			return(i);
 		    }
 		}
+
 
                 /* set cy_card */
                 cy_card[j].base_addr = cy_pci_addr2;
@@ -4398,14 +4691,14 @@ cy_detect_pci(void))
                 /* print message */
 		/* don't report IRQ if board is no IRQ */
 		if( (cy_pci_irq < 15) && (cy_pci_irq > 1) ) {
-		    printk("Cyclades-Z/PCI #%d: 0x%x-0x%x, IRQ%d, ",
-			j+1,cy_pci_addr2,
-			(cy_pci_addr2 + CyPCI_Zwin - 1),
+		    printk("Cyclades-8Zo/PCI #%d: 0x%lx-0x%lx, IRQ%d, ",
+			j+1,(ulong)cy_pci_addr2,
+			(ulong)(cy_pci_addr2 + CyPCI_Zwin - 1),
 			(int)cy_pci_irq);
 		}else{
-		    printk("Cyclades-Z/PCI #%d: 0x%x-0x%x, ",
-			j+1,cy_pci_addr2,
-			(cy_pci_addr2 + CyPCI_Zwin - 1));
+		    printk("Cyclades-8Zo/PCI #%d: 0x%lx-0x%lx, ",
+			j+1,(ulong)cy_pci_addr2,
+			(ulong)(cy_pci_addr2 + CyPCI_Zwin - 1));
 		}
                 printk("%d channels starting from port %d.\n",
 		    cy_pci_nchan,cy_next_channel);
@@ -4421,10 +4714,11 @@ cy_detect_pci(void))
 		Ze_addr2[j] = Ze_addr2[j+1];
 	    }
 	    ZeIndex--;
-	    mailbox = ((struct RUNTIME_9060 *) cy_pci_addr0)->mail_box_0;
+		mailbox = (uclong)cy_readl(&((struct RUNTIME_9060 *) 
+					   cy_pci_addr0)->mail_box_0);
 #ifdef CY_PCI_DEBUG
-            printk("Cyclades-Z/PCI: relocate winaddr=0x%x ctladdr=0x%x\n",
-                cy_pci_addr2, cy_pci_addr0);
+            printk("Cyclades-Z/PCI: relocate winaddr=0x%lx ctladdr=0x%lx\n",
+                (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 	    printk("Cyclades-Z/PCI: New Cyclades-Z board.  FPGA not loaded\n");
 #endif
 	    /* The following clears the firmware id word.  This ensures
@@ -4436,8 +4730,8 @@ cy_detect_pci(void))
                 cy_pci_nchan = ZE_V1_NPORTS;
 
                 if((cy_next_channel+cy_pci_nchan) > NR_PORTS) {
-                        printk("Cyclades-Z/PCI found at 0x%x ",
-			    (unsigned int) cy_pci_addr2);
+                        printk("Cyclades-Ze/PCI found at 0x%lx ",
+			    (ulong)cy_pci_addr2);
                         printk("but no channels are available.\n");
                         printk("Change NR_PORTS in cyclades.c and recompile kernel.\n");
                         return(i);
@@ -4448,8 +4742,8 @@ cy_detect_pci(void))
                         if (cy_card[j].base_addr == 0)  break;
                 }
                 if (j == NR_CARDS) {    /* no more cy_cards available */
-		    printk("Cyclades-Z/PCI found at 0x%x ",
-			(unsigned int) cy_pci_addr2);
+		    printk("Cyclades-Ze/PCI found at 0x%lx ",
+			(ulong)cy_pci_addr2);
 		    printk("but no more cards can be used.\n");
                     printk("Change NR_CARDS in cyclades.c and recompile kernel.\n");
 		    return(i);
@@ -4462,8 +4756,8 @@ cy_detect_pci(void))
 		    {
 			printk("Could not allocate IRQ%d ",
 			    cy_pci_irq);
-			printk("for Cyclades-Z/PCI at 0x%x.\n",
-			    (unsigned int) cy_pci_addr2);
+			printk("for Cyclades-Ze/PCI at 0x%lx.\n",
+			    (ulong) cy_pci_addr2);
 			return(i);
 		    }
 		}
@@ -4480,21 +4774,21 @@ cy_detect_pci(void))
                 /* print message */
 		/* don't report IRQ if board is no IRQ */
 		if( (cy_pci_irq < 15) && (cy_pci_irq > 1) ) {
-		    printk("Cyclades-Z/PCI #%d: 0x%x-0x%x, IRQ%d, ",
-			j+1,cy_pci_addr2,
-			(cy_pci_addr2 + CyPCI_Ze_win - 1),
+		    printk("Cyclades-Ze/PCI #%d: 0x%lx-0x%lx, IRQ%d, ",
+			j+1,(ulong)cy_pci_addr2,
+			(ulong)(cy_pci_addr2 + CyPCI_Ze_win - 1),
 			(int)cy_pci_irq);
 		}else{
-		    printk("Cyclades-Z/PCI #%d: 0x%x-0x%x, ",
-			j+1,cy_pci_addr2,
-			(cy_pci_addr2 + CyPCI_Ze_win - 1));
+		    printk("Cyclades-Ze/PCI #%d: 0x%lx-0x%lx, ",
+			j+1,(ulong)cy_pci_addr2,
+			(ulong)(cy_pci_addr2 + CyPCI_Ze_win - 1));
 		}
                 printk("%d channels starting from port %d.\n",
 		    cy_pci_nchan,cy_next_channel);
                 cy_next_channel += cy_pci_nchan;
         }
 	if (ZeIndex != 0) {
-	    printk("Cyclades-Z/PCI found at 0x%x ",
+	    printk("Cyclades-Ze/PCI found at 0x%x ",
 		(unsigned int) Ze_addr2[0]);
 	    printk("but no more cards can be used.\n");
             printk("Change NR_CARDS in cyclades.c and recompile kernel.\n");
@@ -4520,7 +4814,7 @@ show_version(void)
     tmp = strrchr(rcsdate, ' '); *tmp = '\0';
     printk("Cyclom driver %s %s\n",
         rcsvers, rcsdate);
-    printk("\tbuilt %s %s\n",
+    printk("        built %s %s\n",
 	__DATE__, __TIME__);
 } /* show_version */
 
@@ -4549,7 +4843,7 @@ cy_init(void))
   struct cyclades_port  *info;
   struct cyclades_card *cinfo;
   int number_z_boards = 0;
-  int board,port,i;
+  int board,port,i,index;
   unsigned long mailbox;
   int nports;
 
@@ -4623,7 +4917,7 @@ cy_init(void))
 
     /* look for isa boards */
     cy_isa_nboard = cy_detect_isa();
-
+    
     /* look for pci boards */
     cy_pci_nboard = cy_detect_pci();
 
@@ -4649,10 +4943,10 @@ cy_init(void))
     /* initialize per-port data structures for each valid board found */
     for (board = 0 ; board < cy_nboard ; board++) {
             cinfo = &cy_card[board];
-            if (cinfo->num_chips == 1){ /* Cyclades-8Zo/PCI */
+            if (cinfo->num_chips == 1){ /* Cyclades-Z */
 		number_z_boards++;
-		mailbox = ((struct RUNTIME_9060 *)
-			cy_card[board].ctl_addr)->mail_box_0;
+		mailbox = cy_readl(&((struct RUNTIME_9060 *)
+			     cy_card[board].ctl_addr)->mail_box_0);
 		nports = (mailbox == ZE_V1) ? ZE_V1_NPORTS : 8;
                 for (port = cinfo->first_line ;
                      port < cinfo->first_line + nports;
@@ -4680,7 +4974,7 @@ cy_init(void))
                     info->event = 0;
                     info->count = 0;
 #ifdef SERIAL_DEBUG_COUNT
-        printk("cyc:cy_init(1) setting Z count to 0\n");
+//        printk("cyc:cy_init(1) setting Z count to 0\n");
 #endif
                     info->blocked_open = 0;
                     info->default_threshold = 0;
@@ -4705,6 +4999,7 @@ cy_init(void))
                 }
                 continue;
             }else{ /* Cyclom-Y of some kind*/
+                index = cinfo->bus_index;
                 for (port = cinfo->first_line ;
                      port < cinfo->first_line + 4*cinfo->num_chips ;
                      port++)
@@ -4722,16 +5017,28 @@ cy_init(void))
                     info->cor3 = 0x08; /* _very_ small rcv threshold */
                     info->cor4 = 0;
                     info->cor5 = 0;
-                    info->tbpr = baud_bpr[13]; /* Tx BPR */
-                    info->tco = baud_co[13]; /* Tx CO */
-                    info->rbpr = baud_bpr[13]; /* Rx BPR */
-                    info->rco = baud_co[13]; /* Rx CO */
                     info->close_delay = 0;
+                    if (cy_readb(cinfo->base_addr+(CyGFRCR<<index)) >= 0x48) {
+                        /* It is a CD1400 rev. J or later */
+                        info->tbpr = baud_bpr_60[13]; /* Tx BPR */
+                        info->tco = baud_co_60[13]; /* Tx CO */
+                        info->rbpr = baud_bpr_60[13]; /* Rx BPR */
+                        info->rco = baud_co_60[13]; /* Rx CO */
+                        info->rflow = 0;
+                        info->rtsdtr_inv = 1;
+                    } else {
+                        info->tbpr = baud_bpr_25[13]; /* Tx BPR */
+                        info->tco = baud_co_25[13]; /* Tx CO */
+                        info->rbpr = baud_bpr_25[13]; /* Rx BPR */
+                        info->rco = baud_co_25[13]; /* Rx CO */
+                        info->rflow = 0;
+                        info->rtsdtr_inv = 0;
+                    }
                     info->x_char = 0;
                     info->event = 0;
                     info->count = 0;
 #ifdef SERIAL_DEBUG_COUNT
-        printk("cyc:cy_init(2) setting Y count to 0\n");
+//        printk("cyc:cy_init(2) setting Y count to 0\n");
 #endif
                     info->blocked_open = 0;
                     info->default_threshold = 0;
@@ -4874,54 +5181,54 @@ show_status(int line_num)
 
 /* Global Registers */
 
-        printk(" CyGFRCR %x\n", base_addr[CyGFRCR<<index]);
-        printk(" CyCAR %x\n", base_addr[CyCAR<<index]);
-        printk(" CyGCR %x\n", base_addr[CyGCR<<index]);
-        printk(" CySVRR %x\n", base_addr[CySVRR<<index]);
-        printk(" CyRICR %x\n", base_addr[CyRICR<<index]);
-        printk(" CyTICR %x\n", base_addr[CyTICR<<index]);
-        printk(" CyMICR %x\n", base_addr[CyMICR<<index]);
-        printk(" CyRIR %x\n", base_addr[CyRIR<<index]);
-        printk(" CyTIR %x\n", base_addr[CyTIR<<index]);
-        printk(" CyMIR %x\n", base_addr[CyMIR<<index]);
-        printk(" CyPPR %x\n", base_addr[CyPPR<<index]);
+        printk(" CyGFRCR %x\n", cy_readb(base_addr + CyGFRCR<<index));
+        printk(" CyCAR %x\n", cy_readb(base_addr + CyCAR<<index));
+        printk(" CyGCR %x\n", cy_readb(base_addr + CyGCR<<index));
+        printk(" CySVRR %x\n", cy_readb(base_addr + CySVRR<<index));
+        printk(" CyRICR %x\n", cy_readb(base_addr + CyRICR<<index));
+        printk(" CyTICR %x\n", cy_readb(base_addr + CyTICR<<index));
+        printk(" CyMICR %x\n", cy_readb(base_addr + CyMICR<<index));
+        printk(" CyRIR %x\n", cy_readb(base_addr + CyRIR<<index));
+        printk(" CyTIR %x\n", cy_readb(base_addr + CyTIR<<index));
+        printk(" CyMIR %x\n", cy_readb(base_addr + CyMIR<<index));
+        printk(" CyPPR %x\n", cy_readb(base_addr + CyPPR<<index));
 
-        base_addr[CyCAR<<index] = (u_char)channel;
+        cy_writeb(base_addr + CyCAR<<index, (u_char)channel);
 
 /* Virtual Registers */
 
-        printk(" CyRIVR %x\n", base_addr[CyRIVR<<index]);
-        printk(" CyTIVR %x\n", base_addr[CyTIVR<<index]);
-        printk(" CyMIVR %x\n", base_addr[CyMIVR<<index]);
-        printk(" CyMISR %x\n", base_addr[CyMISR<<index]);
+        printk(" CyRIVR %x\n", cy_readb(base_addr + CyRIVR<<index));
+        printk(" CyTIVR %x\n", cy_readb(base_addr + CyTIVR<<index));
+        printk(" CyMIVR %x\n", cy_readb(base_addr + CyMIVR<<index));
+        printk(" CyMISR %x\n", cy_readb(base_addr + CyMISR<<index));
 
 /* Channel Registers */
 
-        printk(" CyCCR %x\n", base_addr[CyCCR<<index]);
-        printk(" CySRER %x\n", base_addr[CySRER<<index]);
-        printk(" CyCOR1 %x\n", base_addr[CyCOR1<<index]);
-        printk(" CyCOR2 %x\n", base_addr[CyCOR2<<index]);
-        printk(" CyCOR3 %x\n", base_addr[CyCOR3<<index]);
-        printk(" CyCOR4 %x\n", base_addr[CyCOR4<<index]);
-        printk(" CyCOR5 %x\n", base_addr[CyCOR5<<index]);
-        printk(" CyCCSR %x\n", base_addr[CyCCSR<<index]);
-        printk(" CyRDCR %x\n", base_addr[CyRDCR<<index]);
-        printk(" CySCHR1 %x\n", base_addr[CySCHR1<<index]);
-        printk(" CySCHR2 %x\n", base_addr[CySCHR2<<index]);
-        printk(" CySCHR3 %x\n", base_addr[CySCHR3<<index]);
-        printk(" CySCHR4 %x\n", base_addr[CySCHR4<<index]);
-        printk(" CySCRL %x\n", base_addr[CySCRL<<index]);
-        printk(" CySCRH %x\n", base_addr[CySCRH<<index]);
-        printk(" CyLNC %x\n", base_addr[CyLNC<<index]);
-        printk(" CyMCOR1 %x\n", base_addr[CyMCOR1<<index]);
-        printk(" CyMCOR2 %x\n", base_addr[CyMCOR2<<index]);
-        printk(" CyRTPR %x\n", base_addr[CyRTPR<<index]);
-        printk(" CyMSVR1 %x\n", base_addr[CyMSVR1<<index]);
-        printk(" CyMSVR2 %x\n", base_addr[CyMSVR2<<index]);
-        printk(" CyRBPR %x\n", base_addr[CyRBPR<<index]);
-        printk(" CyRCOR %x\n", base_addr[CyRCOR<<index]);
-        printk(" CyTBPR %x\n", base_addr[CyTBPR<<index]);
-        printk(" CyTCOR %x\n", base_addr[CyTCOR<<index]);
+        printk(" CyCCR %x\n", cy_readb(base_addr + CyCCR<<index));
+        printk(" CySRER %x\n", cy_readb(base_addr + CySRER<<index));
+        printk(" CyCOR1 %x\n", cy_readb(base_addr + CyCOR1<<index));
+        printk(" CyCOR2 %x\n", cy_readb(base_addr + CyCOR2<<index));
+        printk(" CyCOR3 %x\n", cy_readb(base_addr + CyCOR3<<index));
+        printk(" CyCOR4 %x\n", cy_readb(base_addr + CyCOR4<<index));
+        printk(" CyCOR5 %x\n", cy_readb(base_addr + CyCOR5<<index));
+        printk(" CyCCSR %x\n", cy_readb(base_addr + CyCCSR<<index));
+        printk(" CyRDCR %x\n", cy_readb(base_addr + CyRDCR<<index));
+        printk(" CySCHR1 %x\n", cy_readb(base_addr + CySCHR1<<index));
+        printk(" CySCHR2 %x\n", cy_readb(base_addr + CySCHR2<<index));
+        printk(" CySCHR3 %x\n", cy_readb(base_addr + CySCHR3<<index));
+        printk(" CySCHR4 %x\n", cy_readb(base_addr + CySCHR4<<index));
+        printk(" CySCRL %x\n", cy_readb(base_addr + CySCRL<<index));
+        printk(" CySCRH %x\n", cy_readb(base_addr + CySCRH<<index));
+        printk(" CyLNC %x\n", cy_readb(base_addr + CyLNC<<index));
+        printk(" CyMCOR1 %x\n", cy_readb(base_addr + CyMCOR1<<index));
+        printk(" CyMCOR2 %x\n", cy_readb(base_addr + CyMCOR2<<index));
+        printk(" CyRTPR %x\n", cy_readb(base_addr + CyRTPR<<index));
+        printk(" CyMSVR1 %x\n", cy_readb(base_addr + CyMSVR1<<index));
+        printk(" CyMSVR2 %x\n", cy_readb(base_addr + CyMSVR2<<index));
+        printk(" CyRBPR %x\n", cy_readb(base_addr + CyRBPR<<index));
+        printk(" CyRCOR %x\n", cy_readb(base_addr + CyRCOR<<index));
+        printk(" CyTBPR %x\n", cy_readb(base_addr + CyTBPR<<index));
+        printk(" CyTCOR %x\n", cy_readb(base_addr + CyTCOR<<index));
 
     restore_flags(flags);
 } /* show_status */

@@ -15,7 +15,8 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_PSS) && defined(CONFIG_AUDIO)
+#ifdef CONFIG_PSS
+#ifdef CONFIG_AUDIO
 
 /*
  * PSS registers.
@@ -123,7 +124,7 @@ probe_pss (struct address_info *hw_config)
   id = inw (REG (PSS_ID));
   if ((id >> 8) != 'E')
     {
-      /* printk ("No PSS signature detected at 0x%x (0x%x)\n", devc->base, id); */
+      /* printk( "No PSS signature detected at 0x%x (0x%x)\n",  devc->base,  id); */
       return 0;
     }
 
@@ -285,8 +286,7 @@ pss_download_boot (pss_confdata * devc, unsigned char *block, int size, int flag
 	    break;
 	  else
 	    {
-	      printk ("\nPSS: Download timeout problems, byte %d=%d\n",
-		      count, size);
+	      printk ("\nPSS: Download timeout problems, byte %d=%d\n", count, size);
 	      return 0;
 	    }
 	}
@@ -323,7 +323,7 @@ pss_download_boot (pss_confdata * devc, unsigned char *block, int size, int flag
 	return 0;
 
       val = inw (REG (PSS_DATA));
-      /* printk("<PSS: microcode version %d.%d loaded>", val/16, val % 16); */
+      /* printk( "<PSS: microcode version %d.%d loaded>",  val/16,  val % 16); */
     }
 
   return 1;
@@ -518,7 +518,7 @@ download_boot_block (void *dev_info, copr_buffer * buf)
 static int
 pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 {
-  /* printk("PSS coproc ioctl %x %x %d\n", cmd, arg, local); */
+  /* printk( "PSS coproc ioctl %x %x %d\n",  cmd,  arg,  local); */
 
   switch (cmd)
     {
@@ -890,4 +890,5 @@ unload_pss_mss (struct address_info *hw_config)
   unload_ms_sound (hw_config);
 }
 
+#endif
 #endif

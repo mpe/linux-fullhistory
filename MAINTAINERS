@@ -204,6 +204,13 @@ M:	mike@i-Connect.Net
 L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+GDT SCSI DISK ARRAY CONTROLLER DRIVER
+P:	Achim Leubner
+M:	achim@vortex.de
+L:	linux-scsi@vger.rutgers.edu
+W:	http://www.icp-vortex.com/
+S:	Supported
+
 FILE LOCKING (flock() and fcntl()/lockf())
 P:	Andy Walker
 M:	andy@lysaker.kvaerner.no

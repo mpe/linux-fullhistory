@@ -16,7 +16,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_MIDI)
+#ifdef CONFIG_MIDI
 
 /*
  * Don't make MAX_QUEUE_SIZE larger than 4000
@@ -93,7 +93,7 @@ drain_midi_queue (int dev)
    */
 
   if (midi_devs[dev]->buffer_status != NULL)
-    while (!signal_pending(current) &&
+    while (!(current->signal & ~current->blocked) &&
 	   midi_devs[dev]->buffer_status (dev))
 
       {
@@ -289,7 +289,7 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 						   * devices
 						 */
 
-      while (!signal_pending(current) &&
+      while (!(current->signal & ~current->blocked) &&
 	     DATA_AVAIL (midi_out_buf[dev]))
 
 	{
@@ -370,8 +370,8 @@ MIDIbuf_write (int dev, struct fileinfo *file, const char *buf, int count)
 		  midi_sleep_flag[dev].opts |= WK_TIMEOUT;
 	      }
 	    midi_sleep_flag[dev].opts &= ~WK_SLEEP;
-	  }
-	  if (signal_pending(current))
+	  };
+	  if ((current->signal & ~current->blocked))
 	    {
 	      restore_flags (flags);
 	      return -EINTR;
@@ -430,7 +430,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, char *buf, int count)
 	  }
 	input_sleep_flag[dev].opts &= ~WK_SLEEP;
       };
-      if (signal_pending(current))
+      if ((current->signal & ~current->blocked))
 	c = -EINTR;		/*
 				   * The user is getting restless
 				 */

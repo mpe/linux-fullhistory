@@ -56,31 +56,34 @@ static char     dma_alloc_map[8] =
 
 
 
-static long
-sound_read (struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t
+sound_read (struct file *file, char *buf, size_t count, loff_t *ppos)
 {
   int             dev;
+  struct inode *inode = file->f_dentry->d_inode;
 
   dev = MINOR (inode->i_rdev);
 
   files[dev].flags = file->f_flags;
 
-  return sound_read_sw (dev, &files[dev], buf, count);
+  return (ssize_t)sound_read_sw (dev, &files[dev], buf, count);
 }
 
-static long
-sound_write (struct inode *inode, struct file *file, const char *buf, unsigned long count)
+static ssize_t
+sound_write (struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
   int             dev;
+  struct inode *inode = file->f_dentry->d_inode;
 
   dev = MINOR (inode->i_rdev);
 
   files[dev].flags = file->f_flags;
 
-  return sound_write_sw (dev, &files[dev], buf, count);
+  return (ssize_t)sound_write_sw (dev, &files[dev], buf, count);
 }
 
-static long long sound_lseek (struct file *file, long long offset, int orig)
+static long long
+sound_lseek (struct file *file, long long offset, int orig)
 {
   return -EPERM;
 }
@@ -316,8 +319,7 @@ sound_mmap (struct file *file, struct vm_area_struct *vma)
 
   if (size != dmap->bytes_in_use)
     {
-      printk ("Sound: mmap() size = %ld. Should be %d\n",
-	      size, dmap->bytes_in_use);
+      printk ("Sound: mmap() size = %ld. Should be %d\n", size, dmap->bytes_in_use);
     }
 
   if (remap_page_range (vma->vm_start, virt_to_phys (dmap->raw_buf),
@@ -325,7 +327,7 @@ sound_mmap (struct file *file, struct vm_area_struct *vma)
 			vma->vm_page_prot))
     return -EAGAIN;
 
-  vma->vm_dentry = dget(file->f_dentry);
+  vma->vm_dentry = file->f_dentry;
 
   dmap->mapping_flags |= DMA_MAP_MAPPED;
 
@@ -571,7 +573,7 @@ sound_free_dma (int chn)
 {
   if (dma_alloc_map[chn] == DMA_MAP_UNAVAIL)
     {
-      /* printk ("sound_free_dma: Bad access to DMA channel %d\n", chn); */
+      /* printk( "sound_free_dma: Bad access to DMA channel %d\n",  chn); */
       return;
     }
   free_dma (chn);
@@ -707,8 +709,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
       end_addr = start_addr + dmap->buffsize - 1;
 
       if (debugmem)
-	printk ("sound: start 0x%lx, end 0x%lx\n",
-		(long) start_addr, (long) end_addr);
+	printk ("sound: start 0x%lx, end 0x%lx\n", (long) start_addr, (long) end_addr);
 
       /* now check if it fits into the same dma-pagesize */
 
@@ -716,10 +717,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 	  != ((long) end_addr & ~(dma_pagesize - 1))
 	  || end_addr >= (char *) (MAX_DMA_ADDRESS))
 	{
-	  printk (
-		   "sound: Got invalid address 0x%lx for %db DMA-buffer\n",
-		   (long) start_addr,
-		   dmap->buffsize);
+	  printk ("sound: Got invalid address 0x%lx for %db DMA-buffer\n", (long) start_addr, dmap->buffsize);
 	  return -EFAULT;
 	}
     }
@@ -771,7 +769,7 @@ sound_start_dma (int dev, struct dma_buffparms *dmap, int chan,
 {
   unsigned long   flags;
 
-  /* printk("Start DMA%d %d, %d\n", chan, (int)(physaddr-dmap->raw_buf_phys), count); */
+  /* printk( "Start DMA%d %d, %d\n",  chan,  (int)(physaddr-dmap->raw_buf_phys),  count); */
   if (autoinit)
     dma_mode |= DMA_AUTOINIT;
   save_flags (flags);

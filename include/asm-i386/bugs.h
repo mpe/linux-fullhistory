@@ -166,6 +166,32 @@ __initfunc(static void check_amd_k6(void))
 	}
 }
 
+/*
+ * All current models of Pentium and Pentium with MMX technology CPUs
+ * have the F0 0F bug, which lets nonpriviledged users lock up the system:
+ */
+
+extern int pentium_f00f_bug;
+
+__initfunc(static void check_pentium_f00f(void))
+{
+	/*
+	 * Pentium and Pentium MMX
+	 */
+	printk("checking for F00F bug ...");
+	if(x86==5 && !memcmp(x86_vendor_id, "GenuineIntel", 12))
+	{
+		extern void trap_init_f00f_bug(void);
+
+		printk(KERN_INFO "\nIntel Pentium/[MMX] F0 0F bug detected - turning on workaround.\n");
+		pentium_f00f_bug = 1;
+		trap_init_f00f_bug();
+	} else {
+		printk(KERN_INFO " no F0 0F bug in this CPU, great!\n");
+		pentium_f00f_bug = 0;
+	}
+}
+
 __initfunc(static void check_bugs(void))
 {
 	check_tlb();
@@ -173,5 +199,6 @@ __initfunc(static void check_bugs(void))
 	check_hlt();
 	check_popad();
 	check_amd_k6();
+	check_pentium_f00f();
 	system_utsname.machine[1] = '0' + x86;
 }

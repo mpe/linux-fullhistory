@@ -628,7 +628,7 @@ struct sound_queue {
 static struct sound_queue sq;
 
 #define sq_block_address(i)	(sq.buffers[i])
-#define SIGNAL_RECEIVED	(signal_pending(current))
+#define SIGNAL_RECEIVED	(current->signal & ~current->blocked)
 #define NON_BLOCKING(open_mode)	(open_mode & O_NONBLOCK)
 #define ONE_SECOND	HZ	/* in jiffies (100ths of a second) */
 #define NO_TIME_LIMIT	0xffffffff
@@ -668,9 +668,10 @@ static long state_read(char *dest, unsigned long count);
 
 
 static int sound_open(struct inode *inode, struct file *file);
-static int sound_fsync(struct file *filp, struct dentry *dentry);
+static int sound_fsync(struct inode *inode, struct file *filp);
 static void sound_release(struct inode *inode, struct file *file);
-static long long sound_lseek(struct file *file, long long offset, int orig);
+static long long sound_lseek(struct inode *inode, struct file *file,
+			     long long offset, int orig);
 static long sound_read(struct inode *inode, struct file *file, char *buf,
 		       unsigned long count);
 static long sound_write(struct inode *inode, struct file *file,
@@ -3070,9 +3071,9 @@ static int sound_open(struct inode *inode, struct file *file)
 }
 
 
-static int sound_fsync(struct file *filp, struct dentry *dentry)
+static int sound_fsync(struct inode *inode, struct file *filp)
 {
-    int dev = MINOR(dentry->d_inode->i_rdev) & 0x0f;
+    int dev = MINOR(inode->i_rdev) & 0x0f;
 
     switch (dev) {
 	case SND_DEV_STATUS:
@@ -3115,7 +3116,8 @@ static void sound_release(struct inode *inode, struct file *file)
 }
 
 
-static long long sound_lseek(struct file *file, long long offset, int orig)
+static long long sound_lseek(struct inode *inode, struct file *file,
+			     long long offset, int orig)
 {
     return -ESPIPE;
 }
@@ -3184,25 +3186,25 @@ static int sound_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		    return(0);
 		case SNDCTL_DSP_POST:
 		case SNDCTL_DSP_SYNC:
-		    return(sound_fsync(file, file->f_dentry));
+		    return(sound_fsync(inode, file));
 
 		/* ++TeSche: before changing any of these it's probably wise to
 		 * wait until sound playing has settled down
 		 */
 		case SNDCTL_DSP_SPEED:
-		    sound_fsync(file, file->f_dentry);
+		    sound_fsync(inode, file);
 		    IOCTL_IN(arg, data);
 		    return(IOCTL_OUT(arg, sound_set_speed(data)));
 		case SNDCTL_DSP_STEREO:
-		    sound_fsync(file, file->f_dentry);
+		    sound_fsync(inode, file);
 		    IOCTL_IN(arg, data);
 		    return(IOCTL_OUT(arg, sound_set_stereo(data)));
 		case SOUND_PCM_WRITE_CHANNELS:
-		    sound_fsync(file, file->f_dentry);
+		    sound_fsync(inode, file);
 		    IOCTL_IN(arg, data);
 		    return(IOCTL_OUT(arg, sound_set_stereo(data-1)+1));
 		case SNDCTL_DSP_SETFMT:
-		    sound_fsync(file, file->f_dentry);
+		    sound_fsync(inode, file);
 		    IOCTL_IN(arg, data);
 		    return(IOCTL_OUT(arg, sound_set_format(data)));
 		case SNDCTL_DSP_GETFMTS:

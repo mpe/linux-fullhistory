@@ -15,7 +15,8 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_PAS) && defined(CONFIG_MIDI)
+#ifdef CONFIG_PAS
+#ifdef CONFIG_MIDI
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
@@ -53,7 +54,10 @@ pas_midi_open (int dev, int mode,
   cli ();
 
   if ((err = pas_set_intr (0x10)) < 0)
-    return err;
+    {
+      restore_flags (flags);
+      return err;
+    }
 
   /*
    * Enable input available and output FIFO empty interrupts
@@ -286,4 +290,5 @@ pas_midi_interrupt (void)
   pas_write (stat, 0x1B88);	/* Acknowledge interrupts */
 }
 
+#endif
 #endif

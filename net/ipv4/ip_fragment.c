@@ -14,6 +14,7 @@
  *		Alan Cox	:	Split from ip.c , see ip_input.c for history.
  *		David S. Miller :	Begin massive cleanup...
  *		Andi Kleen	:	Add sysctls.
+ *		xxxx		:	Overlapfrag bug.
  */
 
 #include <linux/types.h>
@@ -339,7 +340,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	/* Copy the data portions of all fragments into the new buffer. */
 	fp = qp->fragments;
 	while(fp) {
-		if(count+fp->len > skb->len) {
+		if (fp->len < 0 || count+fp->len > skb->len) {
 			NETDEBUG(printk(KERN_ERR "Invalid fragment list: "
 					"Fragment over size.\n"));
 			ip_free(qp);

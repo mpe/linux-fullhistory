@@ -15,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP)
+#ifdef CONFIG_SBDSP
 
 #include "sb_mixer.h"
 #include "sb.h"
@@ -34,8 +34,9 @@ sb_audio_open (int dev, int mode)
 
   if (devc->caps & SB_NO_RECORDING && mode & OPEN_READ)
     {
-      printk ("SB: Recording is not possible with this device\n");
-      return -EPERM;
+      printk ("Notice: Recording is not possible with /dev/dsp%d\n", dev);
+      if (mode == OPEN_READ)
+	return -EPERM;
     }
 
   save_flags (flags);
@@ -50,6 +51,7 @@ sb_audio_open (int dev, int mode)
     {
       if (sound_open_dma (devc->dma16, "Sound Blaster 16 bit"))
 	{
+	  restore_flags (flags);
 	  return -EBUSY;
 	}
     }
@@ -542,8 +544,12 @@ sbpro_audio_set_channels (int dev, short channels)
     if (channels != devc->channels)
       {
 	devc->channels = channels;
-	if (devc->model == MDL_SBPRO)
-	  sbpro_audio_set_speed (dev, devc->speed);
+	if (devc->model == MDL_SBPRO && devc->channels == 2)
+	  {
+	    if (devc->speed > 22050)
+	      printk ("OSS: Application error. Wrong ioctl call order.\n");
+	    sbpro_audio_set_speed (dev, devc->speed);
+	  }
       }
   return devc->channels;
 }

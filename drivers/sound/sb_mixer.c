@@ -16,7 +16,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP)
+#ifdef CONFIG_SBDSP
 #define __SB_MIXER_C__
 
 #include "sb.h"
@@ -36,19 +36,7 @@ sb_mixer_set_stereo (sb_devc * devc, int mode)
 static int
 detect_mixer (sb_devc * devc)
 {
-  /*
-   * Detect the mixer by changing parameters of two volume channels. If the
-   * values read back match with the values written, the mixer is there (is
-   * it?)
-   */
-  sb_setmixer (devc, FM_VOL, 0xff);
-  sb_setmixer (devc, VOC_VOL, 0x33);
-
-  if (sb_getmixer (devc, FM_VOL) != 0xff)
-    return 0;
-  if (sb_getmixer (devc, VOC_VOL) != 0x33)
-    return 0;
-
+  /* Just trust the mixer is there */
   return 1;
 }
 
@@ -406,6 +394,7 @@ sb_mixer_init (sb_devc * devc)
   switch (devc->model)
     {
     case MDL_SBPRO:
+    case MDL_AZTECH:
     case MDL_JAZZ:
       devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
       devc->supported_devices = SBPRO_MIXER_DEVICES;

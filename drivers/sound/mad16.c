@@ -60,7 +60,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_MAD16)
+#ifdef CONFIG_MAD16
 
 #include "sb.h"
 
@@ -297,8 +297,7 @@ wss_init (struct address_info *hw_config)
   if ((inb (hw_config->io_base + 3) & 0x3f) != 0x04 &&
       (inb (hw_config->io_base + 3) & 0x3f) != 0x00)
     {
-      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n",
-		   hw_config->io_base, inb (hw_config->io_base + 3)));
+      DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n", hw_config->io_base, inb (hw_config->io_base + 3)));
       return 0;
     }
 

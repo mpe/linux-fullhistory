@@ -3,7 +3,7 @@
  *
  * Access routines and definitions for the low level driver for the 
  * AWE32/Sound Blaster 32 wave table synth.
- *   version 0.3.1; Jan. 21, 1997
+ *   version 0.4.2; Sep. 1, 1997
  *
  * Copyright (C) 1996,1997 Takashi Iwai
  *
@@ -89,10 +89,12 @@
 #define AWE_NORMAL_VOICES	30	/*30&31 are reserved for DRAM refresh*/
 
 #define AWE_MAX_CHANNELS	32	/* max midi channels (must >= voices) */
+#define AWE_MAX_LAYERS	AWE_MAX_VOICES	/* maximum number of multiple layers */
 
 #define AWE_DRAM_OFFSET		0x200000
 #define AWE_MAX_DRAM_SIZE	(28 * 1024)	/* 28 MB is max onboard memory */
 
 #define AWE_DEFAULT_ATTENUATION	32	/* 12dB below */
+#define AWE_DEFAULT_MOD_SENSE	18
 
 #endif

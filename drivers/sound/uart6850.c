@@ -16,7 +16,8 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)
+#ifdef CONFIG_UART6850
+#ifdef CONFIG_MIDI
 
 static int      uart6850_base = 0x330;
 
@@ -331,4 +332,5 @@ unload_uart6850 (struct address_info *hw_config)
   snd_release_irq (hw_config->irq);
 }
 
+#endif
 #endif

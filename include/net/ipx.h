@@ -18,9 +18,9 @@
 
 typedef struct
 {
-	unsigned long net;
-	unsigned char  node[IPX_NODE_LEN]; 
-	unsigned short sock;
+	__u32   net;
+	__u8    node[IPX_NODE_LEN]; 
+	__u16   sock;
 } ipx_address;
 
 #define ipx_broadcast_node	"\377\377\377\377\377\377"
@@ -28,11 +28,11 @@ typedef struct
 
 struct ipxhdr
 {
-	unsigned short	ipx_checksum __attribute__ ((packed));
+	__u16           ipx_checksum __attribute__ ((packed));
 #define IPX_NO_CHECKSUM	0xFFFF
-	unsigned short  ipx_pktsize __attribute__ ((packed));
-	unsigned char   ipx_tctrl;
-	unsigned char   ipx_type;
+	__u16           ipx_pktsize __attribute__ ((packed));
+	__u8            ipx_tctrl;
+	__u8            ipx_type;
 #define IPX_TYPE_UNKNOWN	0x00
 #define IPX_TYPE_RIP		0x01	/* may also be 0 */
 #define IPX_TYPE_SAP		0x04	/* may also be 0 */
@@ -49,7 +49,7 @@ extern void ipxrtr_device_down(struct device *dev);
 
 typedef struct ipx_interface {
 	/* IPX address */
-	unsigned long	if_netnum;
+	__u32           if_netnum;
 	unsigned char	if_node[IPX_NODE_LEN];
 
 	/* physical device info */
@@ -70,7 +70,7 @@ typedef struct ipx_interface {
 }	ipx_interface;
 
 typedef struct ipx_route {
-	unsigned long ir_net;
+	__u32         ir_net;
 	ipx_interface *ir_intrfc;
 	unsigned char ir_routed;
 	unsigned char ir_router_node[IPX_NODE_LEN];

@@ -89,3 +89,11 @@ ifdef CONFIG_UART401
 	OBJS := $(OBJS)  uart401.o
 endif
 
+ifdef CONFIG_OPL3SA1
+	OBJS := $(OBJS)  opl3sa.o
+endif
+
+ifdef CONFIG_SOFTOSS
+	OBJS := $(OBJS)  softoss.o softoss_rs.o
+endif
+

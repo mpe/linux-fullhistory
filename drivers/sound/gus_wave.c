@@ -19,7 +19,7 @@
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
 
-#if defined(CONFIG_GUSHW)
+#ifdef CONFIG_GUSHW
 
 #define GUS_BANK_SIZE (((iw_mode) ? 256*1024*1024 : 256*1024))
 
@@ -73,7 +73,6 @@ extern int      gus_pnp_flag;
 static int      gus_dma2 = -1;
 static int      dual_dma_mode = 0;
 static long     gus_mem_size = 0;
-static long     gus_rom_size = 0;
 static long     free_mem_ptr = 0;
 static int      gus_busy = 0;
 static int      gus_no_dma = 0;
@@ -681,6 +680,7 @@ gus_voice_fade (int voice)
   if (voices[voice].mode & WAVE_ENVELOPES)
     {
       start_release (voice, flags);
+      restore_flags (flags);
       return;
     }
 
@@ -692,6 +692,7 @@ gus_voice_fade (int voice)
       gus_voice_off ();
       gus_rampoff ();
       gus_voice_init (voice);
+      restore_flags (flags);
       return;
     }
 
@@ -1026,9 +1027,7 @@ pnp_mem_init (void)
 
   for (bank = 0; bank < 4; bank++)
     {
-      DDB (printk ("  Bank %d, mem=%dk (limit %dk)\n",
-		   bank, bank_sizes[bank] / 1024,
-		   mem_decode[bits][bank] / 1024));
+      DDB (printk ("  Bank %d, mem=%dk (limit %dk)\n", bank, bank_sizes[bank] / 1024, mem_decode[bits][bank] / 1024));
 
       if (bank_sizes[bank] > mem_decode[bits][bank])
 	total += mem_decode[bits][bank];
@@ -1180,8 +1179,7 @@ guswave_set_instr (int dev, int voice, int instr_no)
 
   if (sample_ptrs[sample_no] == -1)	/* Sample not loaded */
     {
-      printk ("GUS: Sample #%d not loaded for patch %d (voice %d)\n",
-	      sample_no, instr_no, voice);
+      printk ("GUS: Sample #%d not loaded for patch %d (voice %d)\n", sample_no, instr_no, voice);
       return -EINVAL;
     }
 
@@ -1724,7 +1722,7 @@ guswave_open (int dev, int mode)
 
   if ((err = DMAbuf_open_dma (gus_devnum)) < 0)
     {
-      /* printk ("GUS: Loading samples without DMA\n"); */
+      /* printk( "GUS: Loading samples without DMA\n"); */
       gus_no_dma = 1;		/* Upload samples using PIO */
     }
   else
@@ -1808,8 +1806,7 @@ guswave_load_patch (int dev, int format, const char *addr,
 
   if (count < patch.len)
     {
-      printk ("GUS Warning: Patch record too short (%d<%d)\n",
-	      count, (int) patch.len);
+      printk ("GUS Warning: Patch record too short (%d<%d)\n", count, (int) patch.len);
       patch.len = count;
     }
 
@@ -2335,7 +2332,7 @@ gus_audio_open (int dev, int mode)
 
   if (gus_pnp_flag && mode & OPEN_READ)
     {
-      printk ("Sound: This audio device doesn't have recording capability\n");
+      printk ("GUS: Audio device #%d is playback only.\n", dev);
       return -EIO;
     }
   gus_initialize ();
@@ -3473,6 +3470,7 @@ do_volume_irq (int voice)
 
     default:;
     }
+  restore_flags (flags);
 }
 
 void

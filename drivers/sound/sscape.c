@@ -15,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SSCAPEHW)
+#ifdef CONFIG_SSCAPEHW
 
 #include "coproc.h"
 
@@ -213,15 +213,6 @@ host_read (struct sscape_info *devc)
   return data;
 }
 
-static int
-host_command1 (struct sscape_info *devc, int cmd)
-{
-  unsigned char   buf[10];
-
-  buf[0] = (unsigned char) (cmd & 0xff);
-
-  return host_write (devc, buf, 1);
-}
 
 static int
 host_command2 (struct sscape_info *devc, int cmd, int parm1)
@@ -254,7 +245,7 @@ set_mt32 (struct sscape_info *devc, int value)
 		 value ? 1 : 0);
   if (host_read (devc) != CMD_ACK)
     {
-      /* printk ("SNDSCAPE: Setting MT32 mode failed\n"); */
+      /* printk( "SNDSCAPE: Setting MT32 mode failed\n"); */
     }
   host_close (devc);
 }
@@ -266,7 +257,7 @@ set_control (struct sscape_info *devc, int ctrl, int value)
   host_command3 (devc, CMD_SET_CONTROL, ctrl, value);
   if (host_read (devc) != CMD_ACK)
     {
-      /* printk ("SNDSCAPE: Setting control (%d) failed\n", ctrl); */
+      /* printk( "SNDSCAPE: Setting control (%d) failed\n",  ctrl); */
     }
   host_close (devc);
 }

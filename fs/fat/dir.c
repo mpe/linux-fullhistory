@@ -97,7 +97,7 @@ uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
 	return (op - ascii);
 }
 
-
+#if 0
 static void dump_de(struct msdos_dir_entry *de)
 {
 	int i;
@@ -109,7 +109,7 @@ static void dump_de(struct msdos_dir_entry *de)
 	}
 	printk("]\n");
 }
-
+#endif
 int fat_readdirx(
 	struct inode *inode,
 	struct file *filp,

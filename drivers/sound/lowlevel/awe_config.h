@@ -2,9 +2,9 @@
  * sound/awe_config.h
  *
  * Configuration of AWE32 sound driver
- *   version 0.2.99e; Dec. 10, 1997
+ *   version 0.4.2; Sep. 1, 1997
  *
- * Copyright (C) 1996,1997 Takashi Iwai
+ * Copyright (C) 1996 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,25 +33,20 @@
  */
 #undef AWE_OBSOLETE_VOXWARE
 
-#ifdef __FreeBSD__
-#  define AWE_OBSOLETE_VOXWARE
-#endif
-
-/* if you're using OSS-Lite on Linux 2.1.6 or later, define the
- * following line.
- */
-#define AWE_NEW_KERNEL_INTERFACE
-
 /* if you have lowlevel.h in the lowlevel directory (OSS-Lite), define
  * the following line.
  */
-#define HAS_LOWLEVEL_H
+#undef HAS_LOWLEVEL_H
 
 /* if your system doesn't support patch manager (OSS 3.7 or newer),
  * define the following line.
  */
 #define AWE_NO_PATCHMGR
  
+/* if your system has an additional parameter (OSS 3.8b5 or newer),
+ * define this.
+ */
+#define AWE_OSS38
 
 /*----------------------------------------------------------------
  * AWE32 card configuration:
@@ -64,13 +59,20 @@
 
 
 /*----------------------------------------------------------------
- * maximum size of sample table:
- * the followings are for ROM GM and 512k GS samples.  if your have
- * additional DRAM and SoundFonts, increase these values.
+ * maximum size of soundfont list table:
+ * you usually don't need to touch this value.
+ *----------------------------------------------------------------*/
+
+#define AWE_MAX_SF_LISTS 16
+
+
+/*----------------------------------------------------------------
+ * chunk size of sample and voice tables:
+ * you usually don't need to touch these values.
  *----------------------------------------------------------------*/
 
 #define AWE_MAX_SAMPLES 400
-#define AWE_MAX_INFOS 1500
+#define AWE_MAX_INFOS 800
 
 
 /*----------------------------------------------------------------
@@ -87,29 +89,22 @@
  *----------------------------------------------------------------*/
 
 /* initialize FM passthrough even without extended RAM */
-#undef AWE_ALWAYS_INIT_FM
+#define AWE_ALWAYS_INIT_FM
 
 /* debug on */
 #define AWE_DEBUG_ON
-
-/* verify checksum for uploading samples */
-#define AWE_CHECKSUM_DATA
-#define AWE_CHECKSUM_MEMORY
 
 /* GUS compatible mode */
 #define AWE_HAS_GUS_COMPATIBILITY
 
 /* accept all notes/sounds off controls */
-#undef AWE_ACCEPT_ALL_SOUNDS_CONTROL
+#define AWE_ACCEPT_ALL_SOUNDS_CONTROL
 
+/* add mixer control of emu8000 equalizer */
+#define CONFIG_AWE32_MIXER
 
-#ifdef linux
-/* i tested this only on my linux */
-#define INLINE  __inline__
-#else
-#define INLINE /**/
-#endif
-
+/* look up voices according to MIDI channel priority */
+#define AWE_LOOKUP_MIDI_PRIORITY
 
 /*----------------------------------------------------------------*/
 

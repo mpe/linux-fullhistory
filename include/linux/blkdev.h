@@ -55,14 +55,19 @@ extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern struct wait_queue * wait_for_request;
 extern void resetup_one_dev(struct gendisk *dev, int drive);
 extern void unplug_device(void * data);
+extern void make_request(int major,int rw, struct buffer_head * bh);
 
 /* md needs this function to remap requests */
 extern int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size);
+extern int md_make_request (int minor, int rw, struct buffer_head * bh);
+extern int md_error (kdev_t mddev, kdev_t rdev);
 
 extern int * blk_size[MAX_BLKDEV];
 
 extern int * blksize_size[MAX_BLKDEV];
 
 extern int * hardsect_size[MAX_BLKDEV];
+
+extern int * max_readahead[MAX_BLKDEV];
 
 #endif

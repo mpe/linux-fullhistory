@@ -15,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP)
+#ifdef CONFIG_SBDSP
 
 #include "sb_mixer.h"
 #include "sb.h"
@@ -33,8 +33,7 @@ probe_sb (struct address_info *hw_config)
 {
   if (check_region (hw_config->io_base, 16))
     {
-      printk ("\n\nsb_dsp.c: I/O port %x already in use\n\n",
-	      hw_config->io_base);
+      printk ("\n\nsb_dsp.c: I/O port %x already in use\n\n", hw_config->io_base);
       return 0;
     }
 

@@ -227,11 +227,11 @@ static long long nvram_llseek(struct file *file,loff_t offset, int origin )
 	return( (offset >= 0) ? (file->f_pos = offset) : -EINVAL );
 }
 
-static long nvram_read( struct inode * inode, struct file * file,
-						char * buf, unsigned long count )
+static ssize_t nvram_read( struct file * file,
+						char * buf, size_t count, loff_t *ppos )
 {
 	unsigned long flags;
-	unsigned i = file->f_pos;
+	unsigned i = *ppos;
 	char *tmp = buf;
 
 	save_flags(flags);
@@ -244,17 +244,16 @@ static long nvram_read( struct inode * inode, struct file * file,
 
 	for( ; count-- > 0 && i < NVRAM_BYTES; ++i, ++tmp )
 		put_user( nvram_read_int(i), tmp );
-	file->f_pos = i;
+	*ppos = i;
 
 	restore_flags(flags);
 	return( tmp - buf );
 }
 
-static long nvram_write( struct inode * inode, struct file * file,
-						 const char * buf, unsigned long count )
+static ssize_t nvram_write( struct file * file, const char * buf, size_t count, loff_t *ppos )
 {
 	unsigned long flags;
-	unsigned i = file->f_pos;
+	unsigned i = *ppos;
 	const char *tmp = buf;
 	char c;
 
@@ -271,7 +270,7 @@ static long nvram_write( struct inode * inode, struct file * file,
 		nvram_write_int( c, i );
 	}
 	nvram_set_checksum_int();
-	file->f_pos = i;
+	*ppos = i;
 
 	restore_flags(flags);
 	return( tmp - buf );

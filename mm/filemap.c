@@ -24,6 +24,7 @@
 #include <linux/swap.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/blkdev.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -445,12 +446,20 @@ static void profile_readahead(int async, struct file *filp)
 #define MIN_READAHEAD PageAlignSize(4096*3)
 #endif
 
+static inline int get_max_readahead(struct inode * inode)
+{
+	if (!inode->i_dev || !max_readahead[MAJOR(inode->i_dev)])
+		return MAX_READAHEAD;
+	return max_readahead[MAJOR(inode->i_dev)][MINOR(inode->i_dev)];
+}
+
 static inline unsigned long generic_file_readahead(int reada_ok, struct file * filp, struct inode * inode,
 	unsigned long ppos, struct page * page,
 	unsigned long page_cache)
 {
 	unsigned long max_ahead, ahead;
 	unsigned long raend;
+	int max_readahead = get_max_readahead(inode);
 
 	raend = filp->f_raend & PAGE_MASK;
 	max_ahead = 0;
@@ -534,8 +543,8 @@ static inline unsigned long generic_file_readahead(int reada_ok, struct file * f
 
 		filp->f_ramax += filp->f_ramax;
 
-		if (filp->f_ramax > MAX_READAHEAD)
-			filp->f_ramax = MAX_READAHEAD;
+		if (filp->f_ramax > max_readahead)
+			filp->f_ramax = max_readahead;
 
 #ifdef PROFILE_READAHEAD
 		profile_readahead((reada_ok == 2), filp);
@@ -562,6 +571,7 @@ ssize_t generic_file_read(struct file * filp, char * buf,
 	ssize_t error, read;
 	size_t pos, pgpos, page_cache;
 	int reada_ok;
+	int max_readahead = get_max_readahead(inode);
 
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return -EFAULT;
@@ -608,8 +618,8 @@ ssize_t generic_file_read(struct file * filp, char * buf,
 
 		if (reada_ok && filp->f_ramax < MIN_READAHEAD)
 				filp->f_ramax = MIN_READAHEAD;
-		if (filp->f_ramax > MAX_READAHEAD)
-			filp->f_ramax = MAX_READAHEAD;
+		if (filp->f_ramax > max_readahead)
+			filp->f_ramax = max_readahead;
 	}
 
 	for (;;) {

@@ -2,25 +2,27 @@
  *  ioctl.c
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
  *
  */
 
 #include <asm/uaccess.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/ncp_fs.h>
 #include <linux/ioctl.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+
 #include <linux/ncp.h>
+#include <linux/ncp_fs.h>
 
 int ncp_ioctl(struct inode *inode, struct file *filp,
 	      unsigned int cmd, unsigned long arg)
 {
+	struct ncp_server *server = NCP_SERVER(inode);
 	int result;
 	struct ncp_ioctl_request request;
 	struct ncp_fs_info info;
-	struct ncp_server *server = NCP_SERVER(inode);
 
 	switch (cmd) {
 	case NCP_IOC_NCPREQUEST:
@@ -56,7 +58,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 		ncp_request(server, request.function);
 
-		DPRINTK("ncp_ioctl: copy %d bytes\n",
+		DPRINTK(KERN_DEBUG "ncp_ioctl: copy %d bytes\n",
 			server->reply_size);
 		copy_to_user(request.data, server->packet, server->reply_size);
 
@@ -82,19 +84,18 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 					  sizeof(info))) != 0) {
 			return result;
 		}
-		copy_from_user(&info, (struct ncp_fs_info *) arg,
-			       sizeof(info));
+		copy_from_user(&info, (struct ncp_fs_info *) arg, sizeof(info));
 
 		if (info.version != NCP_GET_FS_INFO_VERSION) {
-			DPRINTK("info.version invalid: %d\n", info.version);
+			DPRINTK(KERN_DEBUG "info.version invalid: %d\n", info.version);
 			return -EINVAL;
 		}
 		/* TODO: info.addr = server->m.serv_addr; */
-		info.mounted_uid = server->m.mounted_uid;
-		info.connection = server->connection;
-		info.buffer_size = server->buffer_size;
-		info.volume_number = NCP_ISTRUCT(inode)->volNumber;
-		info.directory_id = NCP_ISTRUCT(inode)->DosDirNum;
+		info.mounted_uid	= server->m.mounted_uid;
+		info.connection		= server->connection;
+		info.buffer_size	= server->buffer_size;
+		info.volume_number	= NCP_FINFO(inode)->volNumber;
+		info.directory_id	= NCP_FINFO(inode)->DosDirNum;
 
 		copy_to_user((struct ncp_fs_info *) arg, &info, sizeof(info));
 		return 0;

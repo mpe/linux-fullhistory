@@ -1,5 +1,12 @@
-Changelog for version 3.8
+Changelog for version 3.8o
 --------------------------
+
+Since 3.8h
+- Included support for OPL3-SA1 and SoftOSS
+
+Since 3.8
+- Fixed SNDCTL_DSP_GETOSPACE
+- Compatibility fixes for Linux 2.1.47
 
 Since 3.8-beta21
 - Fixed all known bugs (I think).

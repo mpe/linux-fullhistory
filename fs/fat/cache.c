@@ -188,7 +188,8 @@ printk("cache add: <%s,%d> %d (%d)\n", kdevname(inode->i_dev),
 		    && walk->ino == inode->i_ino
 		    && walk->file_cluster == f_clu) {
 			if (walk->disk_cluster != d_clu) {
-				printk("FAT cache corruption");
+				printk("FAT cache corruption inode=%ld\n",
+					inode->i_ino);
 				fat_cache_inval_inode(inode);
 				return;
 			}

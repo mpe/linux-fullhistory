@@ -159,8 +159,8 @@ static int open_mouse(struct inode * inode, struct file * file)
  * writes are disallowed
  */
 
-static long write_mouse(struct inode * inode, struct file * file,
-	const char * buffer, unsigned long count)
+static ssize_t write_mouse(struct file * file,
+	const char * buffer, size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }
@@ -169,8 +169,8 @@ static long write_mouse(struct inode * inode, struct file * file,
  * read mouse data.  Currently never blocks.
  */
 
-static long read_mouse(struct inode * inode, struct file * file,
-	char * buffer, unsigned long count)
+static ssize_t read_mouse(struct file * file,
+	char * buffer, size_t count, loff_t *ppos)
 {
 	int r;
 	int dx;

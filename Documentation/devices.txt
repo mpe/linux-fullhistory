@@ -1,38 +1,27 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		   Last revised: September 11, 1997
+		    Last revised: November 9, 1997
 
-This list is the successor to Rick Miller's Linux Device List, which
-he stopped maintaining when he got busy with other things in 1993.  It
-is a registry of allocated major device numbers, as well as the
-recommended /dev directory nodes for these devices.
+This list is the Linux Device List, the official registry of allocated
+device numbers and /dev directory nodes for the Linux operating
+system.
 
 The latest version of this list is included with the Linux kernel
 sources in LaTeX and ASCII form.  It is also available separately from
 ftp://ftp.kernel.org/pub/linux/docs/device-list/.  In case of
-discrepancy, the LaTeX version is authoritative.
+discrepancy between the text and LaTeX versions, the LaTeX version is
+authoritative.
 
 This document is included by reference into the Linux Filesystem
 Standard (FSSTND).  The FSSTND is available from
 ftp://tsx-11.mit.edu/pub/linux/docs/linux-standards/fsstnd/.
 
-To have a major number allocated, or a minor number in situations
-where that applies (e.g. busmice), please contact me with the
-appropriate device information.  I *very* much appreciate if you send
-me a device description in the same format as the ones already in this
-file.  Also, if you have additional information regarding any of the
-devices listed below, or if I have made a mistake, I would greatly
-appreciate a note.
-
-NOTE: When sending me mail, *please* include the word "device" in the
-subject so your mail won't accidentally get buried!
-
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
-platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
+platform only.	Allocations marked (68k/Atari) apply to Linux/68k on
 the Atari platform only.
 
-This document is in the public domain.  The author requests, however,
+This document is in the public domain.	The author requests, however,
 that semantically altered versions are not distributed without
 permission of the author, assuming the author can be contacted without
 an unreasonable effort.
@@ -44,11 +33,34 @@ I do not have any information about these devices beyond what appears
 on this list.  Any such information requests will be deleted without
 reply.
 
-  0 		Unnamed devices (e.g. non-device mounts)
+     **** PLEASE READ THIS BEFORE SUBMITTING A DEVICE ENTRY ****
+
+To have a major number allocated, or a minor number in situations
+where that applies (e.g. busmice), please contact me with the
+appropriate device information.	 Also, if you have additional
+information regarding any of the devices listed below, or if I have
+made a mistake, I would greatly appreciate a note.
+
+I do, however, make two requests about the nature of your report.
+This is necessary for me to be able to keep this list up to date and
+correct in a timely manner.  First of all, *please* include the word
+"device" in the subject so your mail won't accidentally get buried!  I
+receive hundreds of email messages a day, so mail sent with other
+subjects may very well get lost in the avalanche.
+
+Second, please include a description of the device *in the same format
+as this list*.	The reason for this is that it is the only way I have
+found to ensure I have all the requisite information to publish your
+device and avoid conflicts.
+
+Your cooperation is appreciated.
+
+
+  0		Unnamed devices (e.g. non-device mounts)
 		  0 = reserved as null device number
 
   1 char	Memory devices
-    		  1 = /dev/mem		Physical memory access
+		  1 = /dev/mem		Physical memory access
 		  2 = /dev/kmem		Kernel virtual memory access
 		  3 = /dev/null		Null device
 		  4 = /dev/port		I/O port access
@@ -97,7 +109,7 @@ reply.
 		  8 = /dev/fd?h1200	5.25" 1200K in a 1200K drive(1)
 		 40 = /dev/fd?h1440	5.25" 1440K in a 1200K drive(1)
 		 56 = /dev/fd?h1476	5.25" 1476K in a 1200K drive
-	  	 72 = /dev/fd?h1494	5.25" 1494K in a 1200K drive
+		 72 = /dev/fd?h1494	5.25" 1494K in a 1200K drive
 		 92 = /dev/fd?h1600	5.25" 1600K in a 1200K drive(1)
 
 		 12 = /dev/fd?u360	3.5"   360K Double Density
@@ -128,7 +140,7 @@ reply.
 		NOTE: The letter in the device name (d, q, h or u)
 		signifies the type of drive: 5.25" Double Density (d),
 		5.25" Quad Density (q), 5.25" High Density (h) or 3.5"
-		(any model, u).  The use of the capital letters D, H
+		(any model, u).	 The use of the capital letters D, H
 		and E for the 3.5" models have been deprecated, since
 		the drive type is insignificant for these devices.
 
@@ -139,7 +151,7 @@ reply.
 		256 = /dev/ttyef	256th PTY slave
 
     block	First MFM, RLL and IDE hard disk/CD-ROM interface
-    		  0 = /dev/hda		Master: whole disk (or CD-ROM)
+		  0 = /dev/hda		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdb		Slave: whole disk (or CD-ROM)
 		
 		For partitions, add to the whole disk device number:
@@ -155,7 +167,7 @@ reply.
 		appropriate to their respective architectures.
 		
   4 char	TTY devices
-    		  0 = /dev/tty0		Current virtual console
+		  0 = /dev/tty0		Current virtual console
 
 		  1 = /dev/tty1		First virtual console
 		      ...
@@ -178,7 +190,7 @@ reply.
 		devices.
 
   5 char	Alternate TTY devices
-    		  0 = /dev/tty		Current TTY device
+		  0 = /dev/tty		Current TTY device
 		  1			Reserved for console device
 		 64 = /dev/cua0		Callout device corresponding to ttyS0
 		      ...
@@ -188,7 +200,7 @@ reply.
 		/dev/console in a future version of Linux.
 
   6 char	Parallel printer devices
-    		  0 = /dev/lp0		First parallel printer (0x3bc)
+		  0 = /dev/lp0		First parallel printer (0x3bc)
 		  1 = /dev/lp1		Second parallel printer (0x378)
 		  2 = /dev/lp2		Third parallel printer (0x278)
 
@@ -197,7 +209,7 @@ reply.
 		/dev/lp1.
 
   7 char	Virtual console capture devices
-    		  0 = /dev/vcs		Current vc text contents
+		  0 = /dev/vcs		Current vc text contents
 		  1 = /dev/vcs1		tty1 text contents
 		      ...
 		 63 = /dev/vcs63	tty63 text contents
@@ -214,14 +226,14 @@ reply.
 		      ...
 
 		The loopback devices are used to mount filesystems not
-		associated with block devices.  The binding to the
+		associated with block devices.	The binding to the
 		loopback devices is handled by mount(8) or losetup(8).
 
   8 block	SCSI disk devices
-    		  0 = /dev/sda		First SCSI disk whole disk
+		  0 = /dev/sda		First SCSI disk whole disk
 		 16 = /dev/sdb		Second SCSI disk whole disk
 		 32 = /dev/sdc		Third SCSI disk whole disk
-  		      ...
+		      ...
 		240 = /dev/sdp		Sixteenth SCSI disk whole disk
 
 		Partitions are handled in the same way as for IDE
@@ -229,16 +241,16 @@ reply.
 		partitions is 15.
 
   9 char	SCSI tape devices
-    		  0 = /dev/st0		First SCSI tape, mode 0
+		  0 = /dev/st0		First SCSI tape, mode 0
 		  1 = /dev/st1		Second SCSI tape, mode 0
 		      ...
-    		 32 = /dev/st0l		First SCSI tape, mode 1
+		 32 = /dev/st0l		First SCSI tape, mode 1
 		 33 = /dev/st1l		Second SCSI tape, mode 1
 		      ...
-    		 64 = /dev/st0m		First SCSI tape, mode 2
+		 64 = /dev/st0m		First SCSI tape, mode 2
 		 65 = /dev/st1m		Second SCSI tape, mode 2
 		      ...
-    		 96 = /dev/st0a		First SCSI tape, mode 3
+		 96 = /dev/st0a		First SCSI tape, mode 3
 		 97 = /dev/st1a		Second SCSI tape, mode 3
 		      ...
 		128 = /dev/nst0		First SCSI tape, mode 0, no rewind
@@ -310,7 +322,7 @@ reply.
 		The raw keyboard device is used on Linux/SPARC only.
 
     block	SCSI CD-ROM devices
-    		  0 = /dev/sr0		First SCSI CD-ROM
+		  0 = /dev/sr0		First SCSI CD-ROM
 		  1 = /dev/sr1		Second SCSI CD-ROM
 		      ...
 
@@ -438,7 +450,7 @@ reply.
 		  1 = /dev/ttyD1	Second Digiboard port
 		      ...
     block	Second IDE hard disk/CD-ROM interface
-    		  0 = /dev/hdc		Master: whole disk (or CD-ROM)
+		  0 = /dev/hdc		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdd		Slave: whole disk (or CD-ROM)
 		
 		Partitions are handled the same way as for the first
@@ -538,7 +550,7 @@ reply.
 		  0 = /dev/fb0		First frame buffer
 		  1 = /dev/fb0autodetect
 		 24 = /dev/fb0user0
-	              ...
+		      ...
 		 31 = /dev/fb0user7
 		 32 = /dev/fb1		Second frame buffer
 		 33 = /dev/fb1autodetect
@@ -547,7 +559,7 @@ reply.
 		 63 = /dev/fb1user7
 
 		The universal frame buffer device is currently only
-		supported on Linux/68k and Linux/SPARC.  The plain
+		supported on Linux/68k and Linux/SPARC.	 The plain
 		device accesses the frame buffer at current resolution
 		(Linux/68k calls this device "current",
 		e.g. /dev/fb0current); the "autodetect" one at bootup
@@ -614,7 +626,7 @@ reply.
 		  1 = /dev/cux1		Callout device corresponding to ttyX1
 		      ...
     block	Third IDE hard disk/CD-ROM interface
-    		  0 = /dev/hde		Master: whole disk (or CD-ROM)
+		  0 = /dev/hde		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdf		Slave: whole disk (or CD-ROM)
 
 		Partitions are handled the same way as for the first
@@ -632,7 +644,7 @@ reply.
 		on.
 
     block	Fourth IDE hard disk/CD-ROM interface
-    		  0 = /dev/hdg		Master: whole disk (or CD-ROM)
+		  0 = /dev/hdg		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdh		Slave: whole disk (or CD-ROM)
 		
 		Partitions are handled the same way as for the first
@@ -643,10 +655,10 @@ reply.
 		  1 = /dev/midi1	Second MIDI port, kernel timed
 		  2 = /dev/midi2	Third MIDI port, kernel timed
 		  3 = /dev/midi3	Fourth MIDI port, kernel timed
-	         64 = /dev/rmidi0	First MIDI port, untimed
-	         65 = /dev/rmidi1	Second MIDI port, untimed
-	         66 = /dev/rmidi2	Third MIDI port, untimed
-	         67 = /dev/rmidi3	Fourth MIDI port, untimed
+		 64 = /dev/rmidi0	First MIDI port, untimed
+		 65 = /dev/rmidi1	Second MIDI port, untimed
+		 66 = /dev/rmidi2	Third MIDI port, untimed
+		 67 = /dev/rmidi3	Fourth MIDI port, untimed
 		128 = /dev/smpte0	First MIDI port, SMPTE timed
 		129 = /dev/smpte1	Second MIDI port, SMPTE timed
 		130 = /dev/smpte2	Third MIDI port, SMPTE timed
@@ -809,8 +821,8 @@ reply.
 
  53 char	BDM interface for remote debugging MC683xx microcontrollers
 		  0 = /dev/pd_bdm0	PD BDM interface on lp0
-          	  1 = /dev/pd_bdm1	PD BDM interface on lp1
-          	  2 = /dev/pd_bdm2	PD BDM interface on lp2
+		  1 = /dev/pd_bdm1	PD BDM interface on lp1
+		  2 = /dev/pd_bdm2	PD BDM interface on lp2
 		  4 = /dev/icd_bdm0	ICD BDM interface on lp0
 		  5 = /dev/icd_bdm1	ICD BDM interface on lp1
 		  6 = /dev/icd_bdm2	ICD BDM interface on lp2
@@ -1014,18 +1026,18 @@ reply.
 		      ...
 
 		The driver and documentation may be obtained from
-                http://www.proximity.com.au/~brian/winradio/
+		http://www.proximity.com.au/~brian/winradio/
 
  83 char	Teletext/videotext interfaces
-                  0 = /dev/vtx          Teletext decoder
-                 16 = /dev/vttuner      TV tuner on teletext interface
+		  0 = /dev/vtx		Teletext decoder
+		 16 = /dev/vttuner	TV tuner on teletext interface
 
-                Devices for the driver contained in the VideoteXt package.
-                More information on http://home.pages.de/~videotext/
+		Devices for the driver contained in the VideoteXt package.
+		More information on http://home.pages.de/~videotext/
 
  84 char	Ikon 1011[57] Versatec Greensheet Interface
-                  0 = /dev/ihcp0        First Greensheet port
-                  1 = /dev/ihcp1        Second Greensheet port
+		  0 = /dev/ihcp0	First Greensheet port
+		  1 = /dev/ihcp1	Second Greensheet port
 
  85 char	Linux/SGI shared memory input queue
 		  0 = /dev/shmiq	Master shared input queue
@@ -1060,7 +1072,33 @@ reply.
 		 30 = /dev/mtd15	16th MTD (rw)
 		 31 = /dev/mtdr15	16th MTD (ro)
 
- 91-119		UNALLOCATED
+ 91 char	CAN-Bus devices
+		  0 = /dev/can0		First CAN-Bus controller
+		  1 = /dev/can1		Second CAN-Bus controller
+		    ...
+
+ 92 char	Reserved for ith Kommunikationstechnik MIC ISDN card
+
+ 93 char	IBM Smart Capture Card frame grabber
+		  0 = /dev/iscc0	First Smart Capture Card
+		  1 = /dev/iscc1	Second Smart Capture Card
+		    ...
+		128 = /dev/isccctl0	First Smart Capture Card control
+		129 = /dev/isccctl1	Second Smart Capture Card control
+		    ...
+
+ 94 char	miroVIDEO DC10/30 capture/playback device
+		  0 = /dev/dcxx0	First capture card
+		  1 = /dev/dcxx1	Second capture card
+		    ...
+
+ 95 char	IP filter
+		  0 = /dev/ipl		Filter control device/log file
+		  1 = /dev/ipnat	NAT control device/log file
+		  2 = /dev/ipstate	State information log file
+		  3 = /dev/ipauth	Authentication control device/log file
+
+ 96-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 

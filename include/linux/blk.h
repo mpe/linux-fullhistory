@@ -461,8 +461,7 @@ static void end_request(int uptodate) {
 	if ((bh = req->bh) != NULL) {
 		req->bh = bh->b_reqnext;
 		bh->b_reqnext = NULL;
-		mark_buffer_uptodate(bh, uptodate);
-		unlock_buffer(bh);
+		bh->b_end_io(bh, uptodate);
 		if ((bh = req->bh) != NULL) {
 			req->current_nr_sectors = bh->b_size >> 9;
 			if (req->nr_sectors < req->current_nr_sectors) {

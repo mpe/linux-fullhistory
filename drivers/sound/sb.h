@@ -1,3 +1,4 @@
+#ifdef CONFIG_SBDSP
 #define DSP_RESET	(devc->base + 0x6)
 #define DSP_READ	(devc->base + 0xA)
 #define DSP_WRITE	(devc->base + 0xC)
@@ -124,3 +125,4 @@ void sb_audio_init (sb_devc *devc, char *name);
 void sb_midi_interrupt (sb_devc *devc);
 int ess_write (sb_devc *devc, unsigned char reg, unsigned char data);
 int ess_read (sb_devc *devc, unsigned char reg);
+#endif

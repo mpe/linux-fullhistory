@@ -57,10 +57,13 @@ struct dentry {
 	struct dentry * d_covers;
 	struct list_head d_hash;	/* lookup hash list */
 	struct list_head d_lru;		/* d_count = 0 LRU list */
+	struct list_head d_child;	/* child of parent list */
+	struct list_head d_subdirs;	/* our children */
 	struct qstr d_name;
 	unsigned long d_time;		/* used by d_revalidate */
 	struct dentry_operations  *d_op;
 	struct super_block * d_sb;	/* The root of the dentry tree */
+	unsigned long d_reftime;	/* last time referenced */
 };
 
 struct dentry_operations {
@@ -115,6 +118,7 @@ extern void d_delete(struct dentry *);
 extern struct dentry * d_alloc(struct dentry * parent, const struct qstr *name);
 extern void prune_dcache(int);
 extern void shrink_dcache_sb(struct super_block *);
+extern void shrink_dcache_parent(struct dentry *);
 extern int d_invalidate(struct dentry *);
 
 #define shrink_dcache() prune_dcache(0)

@@ -7,8 +7,8 @@
 
 struct sockaddr_ipx
 {
-	sa_family_t	 sipx_family;
-	__u16		 sipx_port;
+	sa_family_t	sipx_family;
+	__u16		sipx_port;
 	__u32		sipx_network;
 	unsigned char 	sipx_node[IPX_NODE_LEN];
 	__u8		sipx_type;
@@ -26,14 +26,14 @@ struct sockaddr_ipx
 
 typedef struct ipx_route_definition
 {
-	unsigned long ipx_network;
-	unsigned long ipx_router_network;
+	__u32         ipx_network;
+	__u32         ipx_router_network;
 	unsigned char ipx_router_node[IPX_NODE_LEN];
 }	ipx_route_definition;
 
 typedef struct ipx_interface_definition
 {
-	unsigned long ipx_network;
+	__u32         ipx_network;
 	unsigned char ipx_device[16];
 	unsigned char ipx_dlink_type;
 #define IPX_FRAME_NONE		0
@@ -61,8 +61,8 @@ typedef struct ipx_config_data
 
 struct ipx_route_def
 {
-	unsigned long ipx_network;
-	unsigned long ipx_router_network;
+	__u32         ipx_network;
+	__u32         ipx_router_network;
 #define IPX_ROUTE_NO_ROUTER	0
 	unsigned char ipx_router_node[IPX_NODE_LEN];
 	unsigned char ipx_device[16];

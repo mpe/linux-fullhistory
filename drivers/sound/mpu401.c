@@ -55,7 +55,7 @@ struct mpu_config
 
 #define MBUF_MAX	10
 #define BUFTEST(dc) if (dc->m_ptr >= MBUF_MAX || dc->m_ptr < 0) \
-	{printk("MPU: Invalid buffer pointer %d/%d, s=%d\n", dc->m_ptr, dc->m_left, dc->m_state);dc->m_ptr--;}
+	{printk( "MPU: Invalid buffer pointer %d/%d, s=%d\n",  dc->m_ptr,  dc->m_left,  dc->m_state);dc->m_ptr--;}
     int             m_busy;
     unsigned char   m_buf[MBUF_MAX];
     int             m_ptr;
@@ -213,7 +213,7 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 	default:
 	  if (midic <= 0xef)
 	    {
-	      /* printk("mpu time: %d ", midic); */
+	      /* printk( "mpu time: %d ",  midic); */
 	      devc->m_state = ST_TIMED;
 	    }
 	  else
@@ -229,7 +229,7 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 
 	if (msg < 8)		/* Data byte */
 	  {
-	    /* printk("midi msg (running status) "); */
+	    /* printk( "midi msg (running status) "); */
 	    msg = ((int) (devc->last_status & 0xf0) >> 4);
 	    msg -= 8;
 	    devc->m_left = len_tab[msg] - 1;
@@ -252,15 +252,15 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 	    switch (midic)
 	      {
 	      case 0xf8:
-		/* printk("NOP "); */
+		/* printk( "NOP "); */
 		break;
 
 	      case 0xf9:
-		/* printk("meas end "); */
+		/* printk( "meas end "); */
 		break;
 
 	      case 0xfc:
-		/* printk("data end "); */
+		/* printk( "data end "); */
 		break;
 
 	      default:
@@ -270,7 +270,7 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 	else
 	  {
 	    devc->last_status = midic;
-	    /* printk ("midi msg "); */
+	    /* printk( "midi msg "); */
 	    msg -= 8;
 	    devc->m_left = len_tab[msg];
 
@@ -309,7 +309,7 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 	  break;
 
 	case 0xf6:
-	  /* printk("tune_request\n"); */
+	  /* printk( "tune_request\n"); */
 	  devc->m_state = ST_INIT;
 
 	  /*
@@ -342,7 +342,7 @@ mpu_input_scanner (struct mpu_config *devc, unsigned char midic)
 	  break;
 
 	case 0xff:
-	  /* printk("midi hard reset"); */
+	  /* printk( "midi hard reset"); */
 	  devc->m_state = ST_INIT;
 	  break;
 
@@ -659,7 +659,7 @@ retry:
   if (!ok)
     {
       restore_flags (flags);
-      /*       printk ("MPU: No ACK to command (0x%x)\n", (int) cmd->cmd); */
+      /*       printk( "MPU: No ACK to command (0x%x)\n",  (int) cmd->cmd); */
       return -EIO;
     }
 
@@ -693,7 +693,7 @@ retry:
 	if (!ok)
 	  {
 	    restore_flags (flags);
-	    /* printk ("MPU: No response(%d) to command (0x%x)\n", i, (int) cmd->cmd);  */
+	    /* printk( "MPU: No response(%d) to command (0x%x)\n",  i,  (int) cmd->cmd);  */
 	    return -EIO;
 	  }
       }
@@ -1274,8 +1274,7 @@ probe_mpu401 (struct address_info *hw_config)
 
   if (check_region (hw_config->io_base, 2))
     {
-      printk ("\n\nmpu401.c: I/O port %x already in use\n\n",
-	      hw_config->io_base);
+      printk ("\n\nmpu401.c: I/O port %x already in use\n\n", hw_config->io_base);
       return 0;
     }
 

@@ -133,12 +133,11 @@ extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 /*
  * linux/fs/nfs/inode.c
  */
-extern struct super_block *nfs_read_super(struct super_block *sb, 
-					  void *data,int);
+extern struct super_block *nfs_read_super(struct super_block *, void *, int);
 extern int init_nfs_fs(void);
-extern struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
-			       struct nfs_fattr *fattr);
-extern int nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr);
+extern struct inode *nfs_fhget(struct super_block *, struct nfs_fh *,
+			       struct nfs_fattr *);
+extern int nfs_refresh_inode(struct inode *, struct nfs_fattr *);
 extern int nfs_revalidate(struct inode *);
 extern int _nfs_revalidate_inode(struct nfs_server *, struct inode *);
 
@@ -151,20 +150,14 @@ extern struct inode_operations nfs_file_inode_operations;
  * linux/fs/nfs/dir.c
  */
 extern struct inode_operations nfs_dir_inode_operations;
-extern void nfs_sillyrename_cleanup(struct inode *);
 extern void nfs_free_dircache(void);
 extern void nfs_invalidate_dircache(struct inode *);
+extern void nfs_invalidate_dircache_sb(struct super_block *);
 
 /*
  * linux/fs/nfs/symlink.c
  */
 extern struct inode_operations nfs_symlink_inode_operations;
-
-/*
- * linux/fs/nfs/mmap.c
- */
-extern int nfs_mmap(struct inode *inode, struct file *file,
-			struct vm_area_struct * vma);
 
 /*
  * linux/fs/nfs/locks.c

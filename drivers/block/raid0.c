@@ -250,6 +250,7 @@ static int raid0_status (char *page, int minor, struct md_dev *mddev)
 		 data->strip_zone[j].size);
   }
 #endif
+  sz+=sprintf (page+sz, " %dk chunks", 1<<FACTOR_SHIFT(FACTOR(mddev)));
   return sz;
 }
 
@@ -258,11 +259,17 @@ static struct md_personality raid0_personality=
 {
   "raid0",
   raid0_map,
+  NULL,				/* no special make_request */
+  NULL,				/* no special end_request */
   raid0_run,
   raid0_stop,
   raid0_status,
   NULL,				/* no ioctls */
-  0
+  0,
+  NULL,				/* no error_handler */
+  NULL,				/* hot_add_disk */
+  NULL,				/* hot_remove_disk */
+  NULL				/* mark_spare */
 };
 
 

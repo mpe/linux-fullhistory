@@ -117,6 +117,7 @@ extern void generic_NCR5380_setup(char *str, int *intr);
 extern void generic_NCR53C400_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
+extern void gdth_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
 extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
@@ -404,6 +405,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_AHA1542
 	{ "aha1542=", aha1542_setup},
+#endif
+#ifdef CONFIG_SCSI_GDTH
+	{ "gdth=", gdth_setup},
 #endif
 #ifdef CONFIG_SCSI_AIC7XXX
 	{ "aic7xxx=", aic7xxx_setup},

@@ -15,7 +15,8 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SBDSP) && defined(CONFIG_MIDI)
+#ifdef CONFIG_SBDSP
+#ifdef CONFIG_MIDI
 
 #include "sb.h"
 #undef SB_TEST_IRQ
@@ -231,4 +232,5 @@ sb_dsp_midi_init (sb_devc * devc)
   sequencer_init ();
 }
 
+#endif
 #endif

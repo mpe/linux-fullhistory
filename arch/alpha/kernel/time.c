@@ -50,8 +50,6 @@ static int set_rtc_mmss(unsigned long);
  */
 #define FIX_SHIFT	48
 
-static unsigned long round_ticks;
-
 /* lump static variables together for more efficient access: */
 static struct {
 	__u32		last_time;		/* cycle counter last time it got invoked */
@@ -81,7 +79,12 @@ void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 	now = rpcc();
 	delta = now - state.last_time;
 	state.last_time = now;
-	nticks = ((delta * state.scaled_ticks_per_cycle+round_ticks) >> FIX_SHIFT);
+	if(hwrpb->cycle_freq) {
+		nticks = (delta * state.scaled_ticks_per_cycle) >> (FIX_SHIFT-1);
+		nticks = (nticks+1) >> 1;
+    }
+	else nticks=1; /* No way to estimate lost ticks if we don't know
+					  the cycle frequency. */
 	for (i = 0; i < nticks; ++i) {
 		do_timer(regs);
 	}
@@ -147,14 +150,15 @@ void time_init(void)
 	/* read RTC exactly on falling edge of update flag */
 	/* Wait for rise.... (may take up to 1 second) */
 	
-	while(!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP));
+	do {} while(!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP));
 	
-    /* Wait for fall.... */
+/* Jay Estabook <jestabro@amt.tay1.dec.com>:
+ * Wait for the Update Done Interrupt bit (0x10) in reg C (12) to be set,
+ * which (hopefully) indicates that the update is really done.
+ */
 	
-	while(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
+	do {} while(!CMOS_READ(RTC_REG_C) & RTC_UIP);
 	
-    __delay(1000000);
-	  
 	sec = CMOS_READ(RTC_SECONDS);
 	min = CMOS_READ(RTC_MINUTES);
 	hour = CMOS_READ(RTC_HOURS);
@@ -189,8 +193,8 @@ void time_init(void)
 		__you_loose();
 	}
 	state.last_time = rpcc();
+	if(hwrpb->cycle_freq)
 	state.scaled_ticks_per_cycle = ((unsigned long) HZ << FIX_SHIFT) / hwrpb->cycle_freq;
-	round_ticks=(unsigned long) 1 << (FIX_SHIFT-1);
 	state.last_rtc_update = 0;
 
 #ifdef CONFIG_RTC 

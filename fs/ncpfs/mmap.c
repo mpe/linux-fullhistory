@@ -2,6 +2,7 @@
  *  mmap.c
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
  *
  */
 
@@ -32,13 +33,14 @@ static inline int min(int a, int b)
 static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
 				     unsigned long address, int no_share)
 {
-	struct inode *inode = area->vm_dentry->d_inode;
+	struct dentry *dentry = area->vm_dentry;
+	struct inode *inode = dentry->d_inode;
 	unsigned long page;
 	unsigned int clear;
 	unsigned long tmp;
 	int bufsize;
 	int pos;
-	unsigned long fs;
+	mm_segment_t fs;
 
 	page = __get_free_page(GFP_KERNEL);
 	if (!page)
@@ -120,7 +122,7 @@ int ncp_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	
-	DPRINTK("ncp_mmap: called\n");
+	DPRINTK(KERN_DEBUG "ncp_mmap: called\n");
 
 	if (!ncp_conn_valid(NCP_SERVER(inode))) {
 		return -EIO;
@@ -132,7 +134,6 @@ int ncp_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EACCES;
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
-		mark_inode_dirty(inode);
 	}
 
 	vma->vm_dentry = dget(file->f_dentry);

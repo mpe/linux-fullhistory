@@ -15,7 +15,6 @@
 #ifndef _DEV_TABLE_H_
 #define _DEV_TABLE_H_
 
-#include <linux/config.h>
 
 /*
  * Sound card numbers 27 to 999. (1 to 26 are defined in soundcard.h)
@@ -23,6 +22,23 @@
  */
 #define SNDCARD_DESKPROXL		27	/* Compaq Deskpro XL */
 #define SNDCARD_SBPNP			29
+#define SNDCARD_OPL3SA1			38
+#define SNDCARD_OPL3SA1_SB		39
+#define SNDCARD_OPL3SA1_MPU		40
+#define SNDCARD_SOFTOSS			36
+
+void attach_opl3sa_wss (struct address_info *hw_config);
+int probe_opl3sa_wss (struct address_info *hw_config);
+void attach_opl3sa_sb (struct address_info *hw_config);
+int probe_opl3sa_sb (struct address_info *hw_config);
+void attach_opl3sa_mpu (struct address_info *hw_config);
+int probe_opl3sa_mpu (struct address_info *hw_config);
+void unload_opl3sa_wss(struct address_info *hw_info);
+void unload_opl3sa_sb(struct address_info *hw_info);
+void unload_opl3sa_mpu(struct address_info *hw_info);
+void attach_softsyn_card (struct address_info *hw_config);
+int probe_softsyn (struct address_info *hw_config);
+void unload_softsyn (struct address_info *hw_config);
 
 /*
  *	NOTE! 	NOTE!	NOTE!	NOTE!
@@ -125,6 +141,10 @@ struct dma_buffparms {
 	OS_DMA_PARMS
 #endif
 	int     applic_profile;	/* Application profile (APF_*) */
+	/* Interrupt callback stuff */
+	void (*audio_callback) (int dev, int parm);
+	int callback_parm;
+
 	int	 buf_flags[MAX_SUB_BUFFERS];
 #define		 BUFF_EOF		0x00000001 /* Increment eof count */
 #define		 BUFF_DIRTY		0x00000002 /* Buffer written */
@@ -381,12 +401,23 @@ struct sound_timer_operations {
 		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
 		{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
 #endif
+
+#ifdef CONFIG_OPL3SA1
+	{"OPL3SA", 0, SNDCARD_OPL3SA1, "Yamaha OPL3-SA",	attach_opl3sa_wss, probe_opl3sa_wss, unload_opl3sa_wss}, 
+/*	{"OPL3SASB", 0, SNDCARD_OPL3SA1_SB, "OPL3-SA (SB mode)",	attach_opl3sa_sb, probe_opl3sa_sb, unload_opl3sa_sb}, */
+	{"OPL3SAMPU", 0, SNDCARD_OPL3SA1_MPU, "OPL3-SA MIDI",	attach_opl3sa_mpu, probe_opl3sa_mpu, unload_opl3sa_mpu},
+#endif
+
 #ifdef CONFIG_TRIX
 		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTrix AudioTrix Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
 
+#ifdef CONFIG_SOFTOSS
+		{"SOFTSYN", 0, SNDCARD_SOFTOSS,	"SoftOSS Virtual Wave Table", 
+		attach_softsyn_card, probe_softsyn, unload_softsyn},
+#endif
 
 
 
@@ -427,6 +458,18 @@ struct sound_timer_operations {
 	     {SNDCARD_TRXPRO_MPU, {TRIX_MPU_BASE, TRIX_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #	endif
 #endif
+
+#ifdef CONFIG_OPL3SA1
+	     {SNDCARD_OPL3SA1, {OPL3SA1_BASE, OPL3SA1_IRQ, OPL3SA1_DMA, OPL3SA1_DMA2}, SND_DEFAULT_ENABLE},
+#	ifdef OPL3SA1_MPU_BASE
+	     {SNDCARD_OPL3SA1_MPU, {OPL3SA1_MPU_BASE, OPL3SA1_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
+#	endif
+#endif
+
+#ifdef CONFIG_SOFTOSS
+	     {SNDCARD_SOFTOSS, {0, 0, -1, -1}, SND_DEFAULT_ENABLE},
+#endif
+
 #ifdef CONFIG_SSCAPE
 	     {SNDCARD_SSCAPE, {SSCAPE_BASE, SSCAPE_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
 	     {SNDCARD_SSCAPE_MSS, {SSCAPE_MSS_BASE, SSCAPE_MSS_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},

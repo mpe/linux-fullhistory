@@ -15,7 +15,8 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
+#ifdef CONFIG_UART401
+#ifdef CONFIG_MIDI
 
 typedef struct uart401_devc
   {
@@ -233,7 +234,7 @@ enter_uart_mode (uart401_devc * devc)
 
   save_flags (flags);
   cli ();
-  for (timeout = 30000; timeout < 0 && !output_ready (devc); timeout--);
+  for (timeout = 30000; timeout > 0 && !output_ready (devc); timeout--);
 
   devc->input_byte = 0;
   uart401_cmd (devc, UART_MODE_ON);
@@ -288,7 +289,7 @@ attach_uart401 (struct address_info *hw_config)
     return;
 
   if (!devc->share_irq)
-    if (snd_set_irq_handler (devc->irq, uart401intr, "uart401", devc->osp) < 0)
+    if (snd_set_irq_handler (devc->irq, uart401intr, "MPU-401 UART", devc->osp) < 0)
       {
 	printk ("uart401: Failed to allocate IRQ%d\n", devc->irq);
 	devc->share_irq = 1;
@@ -297,7 +298,7 @@ attach_uart401 (struct address_info *hw_config)
   irq2devc[devc->irq] = devc;
   devc->my_dev = num_midis;
 
-  request_region (hw_config->io_base, 4, "SB MIDI");
+  request_region (hw_config->io_base, 4, "MPU-401 UART");
   enter_uart_mode (devc);
 
   if (num_midis >= MAX_MIDI_DEV)
@@ -363,7 +364,7 @@ reset_uart401 (uart401_devc * devc)
 
   for (n = 0; n < 2 && !ok; n++)
     {
-      for (timeout = 30000; timeout < 0 && !output_ready (devc); timeout--);
+      for (timeout = 30000; timeout > 0 && !output_ready (devc); timeout--);
 
       devc->input_byte = 0;
       uart401_cmd (devc, MPU_RESET);
@@ -385,7 +386,7 @@ reset_uart401 (uart401_devc * devc)
 
   if (ok)
     {
-      DDB (printk ("Reset UART401 OK\n"));
+      DEB (printk ("Reset UART401 OK\n"));
     }
   else
     DDB (printk ("Reset UART401 failed - No hardware detected.\n"));
@@ -442,7 +443,9 @@ unload_uart401 (struct address_info *hw_config)
   int             irq = hw_config->irq;
 
   if (irq < 0)
-    irq *= -1;
+    {
+      irq *= -1;
+    }
 
   if (irq < 1 || irq > 15)
     return;
@@ -459,4 +462,5 @@ unload_uart401 (struct address_info *hw_config)
 }
 
 
+#endif
 #endif

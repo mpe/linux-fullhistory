@@ -553,6 +553,11 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 	return next;
 }
 
+struct buffer_head *efind_buffer(kdev_t dev, int block, int size)
+{
+	return find_buffer(dev, block, size);
+}
+
 /*
  * Why like this, I hear you say... The reason is race-conditions.
  * As we don't lock buffers (unless we are reading them, that is),
@@ -817,6 +822,24 @@ printk("refill_freelist: waking bdflush\n");
 	goto repeat;
 }
 
+void init_buffer(struct buffer_head *bh, kdev_t dev, int block,
+		 bh_end_io_t *handler, void *dev_id)
+{
+	bh->b_count = 1;
+	bh->b_list = BUF_CLEAN;
+	bh->b_flushtime = 0;
+	bh->b_dev = dev;
+	bh->b_blocknr = block;
+	bh->b_end_io = handler;
+	bh->b_dev_id = dev_id;
+}
+
+static void end_buffer_io_sync(struct buffer_head *bh, int uptodate)
+{
+	mark_buffer_uptodate(bh, uptodate);
+	unlock_buffer(bh);
+}
+
 /*
  * Ok, this is getblk, and it isn't very clear, again to hinder
  * race-conditions. Most of the code is seldom used, (ie repeating),
@@ -854,13 +877,9 @@ get_free:
 	/* OK, FINALLY we know that this buffer is the only one of its kind,
 	 * and that it's unused (b_count=0), unlocked, and clean.
 	 */
-	bh->b_count=1;
-	bh->b_list	= BUF_CLEAN;
+	init_buffer(bh, dev, block, end_buffer_io_sync, NULL);
 	bh->b_lru_time	= jiffies;
-	bh->b_flushtime=0;
 	bh->b_state=(1<<BH_Touched);
-	bh->b_dev=dev;
-	bh->b_blocknr=block;
 	insert_into_queues(bh);
 	return bh;
 
@@ -1254,16 +1273,73 @@ static inline void free_async_buffers (struct buffer_head * bh)
 
 	tmp = bh;
 	do {
-		if (!test_bit(BH_FreeOnIO, &tmp->b_state)) {
-			printk ("Whoops: unlock_buffer: "
-				"async IO mismatch on page.\n");
-			return;
-		}
 		tmp->b_next_free = xchg(&reuse_list, NULL);
 		reuse_list = tmp;
-		clear_bit(BH_FreeOnIO, &tmp->b_state);
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
+}
+
+static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
+{
+	unsigned long flags;
+	struct buffer_head *tmp;
+	struct page *page;
+
+	mark_buffer_uptodate(bh, uptodate);
+	unlock_buffer(bh);
+
+	/* This is a temporary buffer used for page I/O. */
+	page = mem_map + MAP_NR(bh->b_data);
+	if (!PageLocked(page))
+		goto not_locked;
+	if (bh->b_count != 1)
+		goto bad_count;
+
+	if (!test_bit(BH_Uptodate, &bh->b_state))
+		set_bit(PG_error, &page->flags);
+
+	/*
+	 * Be _very_ careful from here on. Bad things can happen if
+	 * two buffer heads end IO at almost the same time and both
+	 * decide that the page is now completely done.
+	 *
+	 * Async buffer_heads are here only as labels for IO, and get
+	 * thrown away once the IO for this page is complete.  IO is
+	 * deemed complete once all buffers have been visited
+	 * (b_count==0) and are now unlocked. We must make sure that
+	 * only the _last_ buffer that decrements its count is the one
+	 * that free's the page..
+	 */
+	save_flags(flags);
+	cli();
+	bh->b_count--;
+	tmp = bh;
+	do {
+		if (tmp->b_count)
+			goto still_busy;
+		tmp = tmp->b_this_page;
+	} while (tmp != bh);
+
+	/* OK, the async IO on this page is complete. */
+	free_async_buffers(bh);
+	restore_flags(flags);
+	clear_bit(PG_locked, &page->flags);
+	wake_up(&page->wait);
+	after_unlock_page(page);
+	wake_up(&buffer_wait);
+	return;
+
+still_busy:
+	restore_flags(flags);
+	return;
+
+not_locked:
+	printk ("Whoops: end_buffer_io_async: async io complete on unlocked page\n");
+	return;
+
+bad_count:
+	printk ("Whoops: end_buffer_io_async: b_count != 1 on async io.\n");
+	return;
 }
 
 /*
@@ -1298,12 +1374,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 		struct buffer_head * tmp;
 		block = *(b++);
 
-		set_bit(BH_FreeOnIO, &next->b_state);
-		next->b_list = BUF_CLEAN;
-		next->b_dev = dev;
-		next->b_blocknr = block;
-		next->b_count = 1;
-		next->b_flushtime = 0;
+		init_buffer(next, dev, block, end_buffer_io_async, NULL);
 		set_bit(BH_Uptodate, &next->b_state);
 
 		/*
@@ -1380,74 +1451,6 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
 		return;
 	}
 	clear_bit(BH_Uptodate, &bh->b_state);
-}
-
-/*
- * This is called by end_request() when I/O has completed.
- */
-void unlock_buffer(struct buffer_head * bh)
-{
-	unsigned long flags;
-	struct buffer_head *tmp;
-	struct page *page;
-
-	clear_bit(BH_Lock, &bh->b_state);
-	wake_up(&bh->b_wait);
-
-	if (!test_bit(BH_FreeOnIO, &bh->b_state))
-		return;
-	/* This is a temporary buffer used for page I/O. */
-	page = mem_map + MAP_NR(bh->b_data);
-	if (!PageLocked(page))
-		goto not_locked;
-	if (bh->b_count != 1)
-		goto bad_count;
-
-	if (!test_bit(BH_Uptodate, &bh->b_state))
-		set_bit(PG_error, &page->flags);
-
-	/*
-	 * Be _very_ careful from here on. Bad things can happen if
-	 * two buffer heads end IO at almost the same time and both
-	 * decide that the page is now completely done.
-	 *
-	 * Async buffer_heads are here only as labels for IO, and get
-	 * thrown away once the IO for this page is complete.  IO is
-	 * deemed complete once all buffers have been visited
-	 * (b_count==0) and are now unlocked. We must make sure that
-	 * only the _last_ buffer that decrements its count is the one
-	 * that free's the page..
-	 */
-	save_flags(flags);
-	cli();
-	bh->b_count--;
-	tmp = bh;
-	do {
-		if (tmp->b_count)
-			goto still_busy;
-		tmp = tmp->b_this_page;
-	} while (tmp != bh);
-
-	/* OK, the async IO on this page is complete. */
-	free_async_buffers(bh);
-	restore_flags(flags);
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
-	after_unlock_page(page);
-	wake_up(&buffer_wait);
-	return;
-
-still_busy:
-	restore_flags(flags);
-	return;
-
-not_locked:
-	printk ("Whoops: unlock_buffer: async io complete on unlocked page\n");
-	return;
-
-bad_count:
-	printk ("Whoops: unlock_buffer: b_count != 1 on async io.\n");
-	return;
 }
 
 /*
@@ -1755,7 +1758,7 @@ asmlinkage int sync_old_buffers(void)
 	if (ncount) printk("sync_old_buffers: %d dirty buffers not on dirty list\n", ncount);
 	printk("Wrote %d/%d buffers\n", nwritten, ndirty);
 #endif
-	
+	run_task_queue(&tq_disk);
 	return 0;
 }
 
@@ -1916,7 +1919,7 @@ int bdflush(void * unused)
 		 * dirty buffers, then make the next write to a
 		 * loop device to be a blocking write.
 		 * This lets us block--which we _must_ do! */
-		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0) {
+		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0 && wrta_cmd != WRITE) {
 			wrta_cmd = WRITE;
 			continue;
 		}
@@ -1925,7 +1928,7 @@ int bdflush(void * unused)
 		
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
-		if(nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
+		if(ndirty == 0 || nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
 			current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);
 		}

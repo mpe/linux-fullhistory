@@ -1,3 +1,4 @@
+BUILDCODE=o
 # Makefile for the Linux sound card driver
 #
 # Note 2! The CFLAGS definitions are now inherited from the
@@ -155,6 +156,7 @@ mkscript: setup
 
 clrconf:
 	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h maui_boot.h .defines
+	rm Config.in;cp Config.std Config.in
 
 configure: configure.c
 	$(HOSTCC) -o configure configure.c
@@ -162,6 +164,7 @@ configure: configure.c
 
 dep:
 	$(CPP) -M $(CFLAGS) -I. *.c > .depend
+	cd lowlevel;make dep
 
 setup:
 	@echo Compiling Sound Driver v $(VERSION) for Linux

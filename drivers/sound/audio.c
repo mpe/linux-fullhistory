@@ -30,7 +30,7 @@ static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in nonblocking mode */
 #define		AM_NONE		0
 #define		AM_WRITE	OPEN_WRITE
 #define 	AM_READ		OPEN_READ
-static int      dma_ioctl (int dev, unsigned int cmd, caddr_t arg);
+int      dma_ioctl (int dev, unsigned int cmd, caddr_t arg);
 
 
 static int      local_format[MAX_AUDIO_DEV], audio_format[MAX_AUDIO_DEV];
@@ -59,7 +59,7 @@ set_format (int dev, int fmt)
   else
     return local_format[dev];
 
-  return audio_format[dev];
+  return local_format[dev];
 }
 
 int
@@ -247,12 +247,16 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 	{
 	  if ((dma_buf + l) >
 	      (audio_devs[dev]->dmap_out->raw_buf + audio_devs[dev]->dmap_out->buffsize))
-	    printk ("audio: Buffer error 3 (%lx,%d), (%lx, %d)\n",
-		    (long) dma_buf, l,
-		    (long) audio_devs[dev]->dmap_out->raw_buf,
-		    (int) audio_devs[dev]->dmap_out->buffsize);
+	    {
+	      printk ("audio: Buffer error 3 (%lx,%d), (%lx, %d)\n", (long) dma_buf, l, (long) audio_devs[dev]->dmap_out->raw_buf, (int) audio_devs[dev]->dmap_out->buffsize);
+	      return -EDOM;
+	    }
+
 	  if (dma_buf < audio_devs[dev]->dmap_out->raw_buf)
-	    printk ("audio: Buffer error 13\n");
+	    {
+	      printk ("audio: Buffer error 13 (%lx<%lx)\n", (long) dma_buf, (long) audio_devs[dev]->dmap_out->raw_buf);
+	      return -EDOM;
+	    }
 	  copy_from_user (dma_buf, &(buf)[p], l);
 	}
       else
@@ -352,7 +356,7 @@ audio_ioctl (int dev, struct fileinfo *file_must_not_be_used,
 {
   int             val;
 
-  /* printk("audio_ioctl(%x, %x)\n", (int)cmd, (int)arg); */
+  /* printk( "audio_ioctl(%x, %x)\n",  (int)cmd,  (int)arg); */
 
   dev = dev >> 4;
 
@@ -484,8 +488,7 @@ audio_ioctl (int dev, struct fileinfo *file_must_not_be_used,
 	  n = *(int *) arg;
 	  if (n > 1)
 	    {
-	      printk ("sound: SNDCTL_DSP_STEREO called with invalid argument %d\n",
-		      n);
+	      printk ("sound: SNDCTL_DSP_STEREO called with invalid argument %d\n", n);
 	      return -EINVAL;
 	    }
 
@@ -550,13 +553,9 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
   unsigned        i, n;
   unsigned        sr, nc, sz, bsz;
 
-  if (!dmap->needs_reorg)
-    return;
-
   sr = dsp_dev->d->set_speed (dev, 0);
   nc = dsp_dev->d->set_channels (dev, 0);
   sz = dsp_dev->d->set_bits (dev, 0);
-  dmap->needs_reorg = 0;
 
   if (sz == 8)
     dmap->neutral_byte = NEUTRAL8;
@@ -565,8 +564,7 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
 
   if (sr < 1 || nc < 1 || sz < 1)
     {
-      printk ("Warning: Invalid PCM parameters[%d] sr=%d, nc=%d, sz=%d\n",
-	      dev, sr, nc, sz);
+      printk ("Warning: Invalid PCM parameters[%d] sr=%d, nc=%d, sz=%d\n", dev, sr, nc, sz);
       sr = DSP_DEFAULT_SPEED;
       nc = 1;
       sz = 8;
@@ -576,6 +574,10 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
 
   sz /= 8;			/* #bits -> #bytes */
   dmap->data_rate = sz;
+
+  if (!dmap->needs_reorg)
+    return;
+  dmap->needs_reorg = 0;
 
   if (dmap->fragment_size == 0)
     {				/* Compute the fragment size using the default algorithm */
@@ -752,7 +754,7 @@ dma_set_fragment (int dev, struct dma_buffparms *dmap, caddr_t arg, int fact)
     return 0;
 }
 
-static int
+int
 dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
 
@@ -841,6 +843,11 @@ dma_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
 	if (cmd == SNDCTL_DSP_GETISPACE && dmap->qlen)
 	  info->bytes -= dmap->counts[dmap->qhead];
+	else
+	  {
+	    info->fragments = info->bytes / dmap->fragment_size;
+	    info->bytes -= dmap->user_counter % dmap->fragment_size;
+	  }
       }
       return 0;
 

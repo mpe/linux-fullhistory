@@ -2,7 +2,7 @@
  * sound/awe_wave.c
  *
  * The low level driver for the AWE32/Sound Blaster 32 wave table synth.
- *   version 0.3.1b; Jan. 21, 1997
+ *   version 0.4.2; Sep. 1, 1997
  *
  * Copyright (C) 1996,1997 Takashi Iwai
  *
@@ -21,7 +21,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define AWEDRV_VERSION		"0.3.1b"
 #ifdef __FreeBSD__
 #  include <i386/isa/sound/awe_config.h>
 #else
@@ -34,12 +33,16 @@
 
 #ifdef __FreeBSD__
 #  include <i386/isa/sound/awe_hw.h>
+#  include <i386/isa/sound/awe_version.h>
 #  include <i386/isa/sound/awe_voice.h>
 #else
 #  include "awe_hw.h"
+#  include "awe_version.h"
 #  include <linux/awe_voice.h>
 #endif
 
+#ifdef AWE_HAS_GUS_COMPATIBILITY
+/* include finetune table */
 #ifdef AWE_OBSOLETE_VOXWARE
 #  ifdef __FreeBSD__
 #    define SEQUENCER_C
@@ -56,6 +59,8 @@
 #elif defined(__FreeBSD__)
 #  include <machine/ultrasound.h>
 #endif
+
+#endif /* AWE_HAS_GUS_COMPATIBILITY */
 
 
 /*----------------------------------------------------------------
@@ -77,33 +82,71 @@ static int debug_mode = 0;
  * bank and voice record
  *----------------------------------------------------------------*/
 
+/* soundfont record */
+typedef struct _sf_list {
+	unsigned short sf_id;
+	unsigned short type;
+	int num_info;		/* current info table index */
+	int num_sample;		/* current sample table index */
+	int mem_ptr;		/* current word byte pointer */
+	int infos;
+	int samples;
+	/*char name[AWE_PATCH_NAME_LEN];*/
+} sf_list;
+
 /* bank record */
 typedef struct _awe_voice_list {
+	int next;	/* index list */
 	unsigned char bank, instr;
+	char type, disabled;
 	awe_voice_info v;
-	struct _awe_voice_list *next_instr;
-	struct _awe_voice_list *next_bank;
+	int next_instr;	/* preset table list */
+	int next_bank;	/* preset table list */
 } awe_voice_list;
 
+#define V_ST_NORMAL	0
+#define V_ST_MAPPED	1
+
+typedef struct _awe_sample_list {
+	int next;	/* sf list */
+	awe_sample_info v;
+} awe_sample_list;
+
 /* sample and information table */
-static awe_sample_info *samples;
-static awe_voice_list *infos;
+static int current_sf_id = 0;
+static int locked_sf_id = 0;
+static int max_sfs;
+static sf_list *sflists = NULL;
+
+#define awe_free_mem_ptr() (current_sf_id <= 0 ? 0 : sflists[current_sf_id-1].mem_ptr)
+#define awe_free_info() (current_sf_id <= 0 ? 0 : sflists[current_sf_id-1].num_info)
+#define awe_free_sample() (current_sf_id <= 0 ? 0 : sflists[current_sf_id-1].num_sample)
+
+static int max_samples;
+static awe_sample_list *samples = NULL;
+
+static int max_infos;
+static awe_voice_list *infos = NULL;
+
 
 #define AWE_MAX_PRESETS		256
+#define AWE_DEFAULT_PRESET	0
 #define AWE_DEFAULT_BANK	0
+#define AWE_DEFAULT_DRUM	0
 #define AWE_DRUM_BANK		128
 
+#define MAX_LAYERS	AWE_MAX_VOICES
+
 /* preset table index */
-static awe_voice_list *preset_table[AWE_MAX_PRESETS];
+static int preset_table[AWE_MAX_PRESETS];
 
 /*----------------------------------------------------------------
  * voice table
  *----------------------------------------------------------------*/
 
 /* effects table */
-#define AWE_FX_NBYTES	((AWE_FX_END+7)/8)
 typedef	struct FX_Rec { /* channel effects */
-	unsigned char flags[AWE_FX_NBYTES];
+	unsigned char flags[AWE_FX_END];
 	short val[AWE_FX_END];
 } FX_Rec;
 
@@ -117,28 +160,35 @@ typedef struct _awe_chan_info {
 	int panning;		/* panning (0-127) */
 	int main_vol;		/* channel volume (0-127) */
 	int expression_vol;	/* midi expression (0-127) */
-	awe_voice_list *vrec;	/* instrument list */
-	awe_voice_list *def_vrec; /* default instrument list */
+	int chan_press;		/* channel pressure */
+	int vrec;		/* instrument list */
+	int def_vrec;		/* default instrument list */
 	FX_Rec fx;		/* effects */
+	FX_Rec fx_layer[MAX_LAYERS]; /* layer effects */
 	int sustained;		/* sustain status in MIDI */
 } awe_chan_info;
 
 /* voice parameters */
 typedef struct _voice_info {
 	int state;
-#define AWE_ST_OFF		0	/* no sound */
-#define AWE_ST_ON		1	/* playing */
-#define AWE_ST_STANDBY		2	/* stand by for playing */
-#define AWE_ST_SUSTAINED	3	/* sustained */
-#define AWE_ST_MARK		4	/* marked for allocation */
+#define AWE_ST_OFF		(1<<0)	/* no sound */
+#define AWE_ST_ON		(1<<1)	/* playing */
+#define AWE_ST_STANDBY		(1<<2)	/* stand by for playing */
+#define AWE_ST_SUSTAINED	(1<<3)	/* sustained */
+#define AWE_ST_MARK		(1<<4)	/* marked for allocation */
+#define AWE_ST_DRAM		(1<<5)	/* DRAM read/write */
+#define AWE_ST_FM		(1<<6)	/* reserved for FM */
+#define AWE_ST_RELEASED		(1<<7)	/* released */
 
 	int ch;			/* midi channel */
 	int key;		/* internal key for search */
+	int layer;		/* layer number (for channel mode only) */
 	int time;		/* allocated time */
 	awe_chan_info	*cinfo;	/* channel info */
 
 	int note;		/* midi key (0-127) */
 	int velocity;		/* midi velocity (0-127) */
+	int sostenuto;		/* sostenuto on/off */
 	awe_voice_info *sample;	/* assigned voice */
 
 	/* EMU8000 parameters */
@@ -148,58 +198,80 @@ typedef struct _voice_info {
 } voice_info;
 
 /* voice information */
-static voice_info voices[AWE_MAX_VOICES];
+static voice_info *voices;
 
-#define IS_NO_SOUND(v)	(voices[v].state == AWE_ST_OFF || voices[v].state == AWE_ST_STANDBY)
+#define IS_NO_SOUND(v)	(voices[v].state & (AWE_ST_OFF|AWE_ST_RELEASED|AWE_ST_STANDBY|AWE_ST_SUSTAINED))
 #define IS_NO_EFFECT(v)	(voices[v].state != AWE_ST_ON)
-#define IS_PLAYING(v)	(!IS_NO_SOUND(v))
+#define IS_PLAYING(v)	(voices[v].state & (AWE_ST_ON|AWE_ST_SUSTAINED|AWE_ST_RELEASED))
 
 
 /* MIDI channel effects information (for hw control) */
-#if AWE_MAX_CHANNELS < AWE_MAX_VOICES
-static awe_chan_info channels[AWE_MAX_VOICES];
-#else
-static awe_chan_info channels[AWE_MAX_CHANNELS];
-#endif
+static awe_chan_info *channels;
 
 
 /*----------------------------------------------------------------
  * global variables
  *----------------------------------------------------------------*/
 
+#ifndef AWE_DEFAULT_BASE_ADDR
+#define AWE_DEFAULT_BASE_ADDR	0	/* autodetect */
+#endif
+
+#ifndef AWE_DEFAULT_MEM_SIZE
+#define AWE_DEFAULT_MEM_SIZE	0	/* autodetect */
+#endif
+
 /* awe32 base address (overwritten at initialization) */
-static int awe_base = 0;
-/* memory byte size (overwritten at initialization) */
-static long awe_mem_size = 0;
+static int awe_base = AWE_DEFAULT_BASE_ADDR;
+/* memory byte size */
+static int awe_mem_size = AWE_DEFAULT_MEM_SIZE;
+/* DRAM start offset */
+static int awe_mem_start = AWE_DRAM_OFFSET;
 
 /* maximum channels for playing */
 static int awe_max_voices = AWE_MAX_VOICES;
 
-static long free_mem_ptr = 0;		/* free word byte size */
-static int free_info = 0;		/* free info tables */
-static int last_info = 0;		/* last loaded info index */
-static int free_sample = 0;		/* free sample tables */
-static int last_sample = 0;		/* last loaded sample index */
-static int loaded_once = 0;		/* samples are loaded after init? */
-static unsigned short current_sf_id = 0;	/* internal id */
+static int patch_opened = 0;		/* sample already loaded? */
 
-static int reverb_mode = 0;		/* reverb mode */
-static int chorus_mode = 0;		/* chorus mode */
-static unsigned short init_atten = AWE_DEFAULT_ATTENUATION; /* 12dB below */
+static int reverb_mode = 3;		/* reverb mode */
+static int chorus_mode = 5;		/* chorus mode */
+static short init_atten = AWE_DEFAULT_ATTENUATION; /* 12dB below */
 
 static int awe_present = FALSE;		/* awe device present? */
 static int awe_busy = FALSE;		/* awe device opened? */
 
-#define DEFAULT_DRUM_FLAGS	(1 << 9)
+#define DEFAULT_DRUM_FLAGS	((1 << 9) | (1 << 25))
 #define IS_DRUM_CHANNEL(c)	(drum_flags & (1 << (c)))
-static unsigned long drum_flags = DEFAULT_DRUM_FLAGS; /* channel flags */
+static unsigned int drum_flags = DEFAULT_DRUM_FLAGS; /* channel flags */
 
-static int awe_channel_mode = 0;		/* channel control mode */
+static int playing_mode = AWE_PLAY_INDIRECT;
+#define SINGLE_LAYER_MODE()	(playing_mode == AWE_PLAY_INDIRECT || playing_mode == AWE_PLAY_DIRECT)
+#define MULTI_LAYER_MODE()	(playing_mode == AWE_PLAY_MULTI || playing_mode == AWE_PLAY_MULTI2)
 
-static int current_alloc_time = 0;		/* voice allocation time */
+static int current_alloc_time = 0;	/* voice allocation index for channel mode */
 
-static int awe_gus_bank = AWE_DEFAULT_BANK;	/* GUS default bank number */
-static int awe_exclusive_sound = TRUE;		/* exclusive sound on */
+static struct MiscModeDef {
+	int value;
+	int init_each_time;
+} misc_modes_default[AWE_MD_END] = {
+	{0,0}, {0,0}, /* <-- not used */
+	{AWE_VERSION_NUMBER, FALSE},
+	{TRUE, TRUE}, /* exclusive */
+	{TRUE, TRUE}, /* realpan */
+	{AWE_DEFAULT_BANK, TRUE}, /* gusbank */
+	{FALSE, TRUE}, /* keep effect */
+	{AWE_DEFAULT_ATTENUATION, FALSE}, /* zero_atten */
+	{FALSE, TRUE}, /* chn_prior */
+	{AWE_DEFAULT_MOD_SENSE, TRUE}, /* modwheel sense */
+	{AWE_DEFAULT_PRESET, TRUE}, /* def_preset */
+	{AWE_DEFAULT_BANK, TRUE}, /* def_bank */
+	{AWE_DEFAULT_DRUM, TRUE}, /* def_drum */
+};
+
+static int misc_modes[AWE_MD_END];
+
+static int awe_bass_level = 5;
+static int awe_treble_level = 9;
 
 
 static struct synth_info awe_info = {
@@ -230,15 +302,16 @@ static void awe_release_region(void);
 static void awe_reset_samples(void);
 /* emu8000 chip i/o access */
 static void awe_poke(unsigned short cmd, unsigned short port, unsigned short data);
-static void awe_poke_dw(unsigned short cmd, unsigned short port, unsigned long data);
+static void awe_poke_dw(unsigned short cmd, unsigned short port, unsigned int data);
 static unsigned short awe_peek(unsigned short cmd, unsigned short port);
-static unsigned long awe_peek_dw(unsigned short cmd, unsigned short port);
+static unsigned int awe_peek_dw(unsigned short cmd, unsigned short port);
 static void awe_wait(unsigned short delay);
 
 /* initialize emu8000 chip */
 static void awe_initialize(void);
 
 /* set voice parameters */
+static void awe_init_misc_modes(int init_all);
 static void awe_init_voice_info(awe_voice_info *vp);
 static void awe_init_voice_parm(awe_voice_parm *pp);
 #ifdef AWE_HAS_GUS_COMPATIBILITY
@@ -255,7 +328,8 @@ static int calc_parm_search(int msec, short *table);
 static void awe_note_on(int voice);
 static void awe_note_off(int voice);
 static void awe_terminate(int voice);
-static void awe_exclusive_off(int voice, int exclass);
+static void awe_exclusive_off(int voice);
+static void awe_note_off_all(int do_sustain);
 
 /* calculate voice parameters */
 typedef void (*fx_affect_func)(int voice, int forced);
@@ -267,13 +341,12 @@ static void awe_set_pan(int voice, int forced);
 static void awe_fx_fmmod(int voice, int forced);
 static void awe_fx_tremfrq(int voice, int forced);
 static void awe_fx_fm2frq2(int voice, int forced);
-static void awe_fx_cutoff(int voice, int forced);
 static void awe_calc_pitch(int voice);
 #ifdef AWE_HAS_GUS_COMPATIBILITY
 static void awe_calc_pitch_from_freq(int voice, int freq);
 #endif
 static void awe_calc_volume(int voice);
-static void awe_voice_init(int voice);
+static void awe_voice_init(int voice, int keep_ch_info);
 
 /* sequencer interface */
 static int awe_open(int dev, int mode);
@@ -304,25 +377,35 @@ static void awe_hw_gus_control(int dev, int cmd, unsigned char *event);
 #endif
 static void awe_hw_awe_control(int dev, int cmd, unsigned char *event);
 static void awe_voice_change(int voice, fx_affect_func func);
+static void awe_sostenuto_on(int voice, int forced);
 static void awe_sustain_off(int voice, int forced);
 
 /* voice search */
-static awe_voice_list *awe_search_instr(int bank, int preset);
-static int awe_search_multi_voices(awe_voice_list *rec, int note, int velocity, awe_voice_info **vlist);
-static void awe_alloc_multi_voices(int ch, int note, int velocity);
+static int awe_search_instr(int bank, int preset);
+static int awe_search_multi_voices(int rec, int note, int velocity, awe_voice_info **vlist);
+static void awe_alloc_multi_voices(int ch, int note, int velocity, int key);
 static void awe_alloc_one_voice(int voice, int note, int velocity);
 static int awe_clear_voice(void);
 
 /* load / remove patches */
-static void awe_check_loaded(void);
-static int awe_load_info(awe_patch_info *patch, const char *addr);
-static int awe_load_data(awe_patch_info *patch, const char *addr);
+static int awe_open_patch(awe_patch_info *patch, const char *addr, int count);
+static int awe_close_patch(awe_patch_info *patch, const char *addr, int count);
+static int awe_unload_patch(awe_patch_info *patch, const char *addr, int count);
+static int awe_load_info(awe_patch_info *patch, const char *addr, int count);
+static int awe_load_data(awe_patch_info *patch, const char *addr, int count);
+static int awe_replace_data(awe_patch_info *patch, const char *addr, int count);
+static int awe_load_map(awe_patch_info *patch, const char *addr, int count);
 #ifdef AWE_HAS_GUS_COMPATIBILITY
 static int awe_load_guspatch(const char *addr, int offs, int size, int pmgr_flag);
 #endif
-static int awe_write_wave_data(const char *addr, long offset, int size);
-static awe_voice_list *awe_get_removed_list(awe_voice_list *curp);
-static void awe_remove_samples(void);
+static int check_patch_opened(int type, char *name);
+static int awe_write_wave_data(const char *addr, int offset, awe_sample_info *sp, int channels);
+static void add_sf_info(int rec);
+static void add_sf_sample(int rec);
+static void purge_old_list(int rec, int next);
+static void add_info_list(int rec);
+static void awe_remove_samples(int sf_id);
+static void rebuild_preset_list(void);
 static short awe_set_sample(awe_voice_info *vp);
 
 /* lowlevel functions */
@@ -333,89 +416,28 @@ static void awe_send_array(unsigned short *data);
 static void awe_tweak_voice(int voice);
 static void awe_tweak(void);
 static void awe_init_fm(void);
-static int awe_open_dram_for_write(int offset);
-static int awe_open_dram_for_read(int offset);
+static int awe_open_dram_for_write(int offset, int channels);
 static void awe_open_dram_for_check(void);
 static void awe_close_dram(void);
-static void awe_close_dram_for_read(void);
 static void awe_write_dram(unsigned short c);
 static int awe_detect_base(int addr);
 static int awe_detect(void);
 static int awe_check_dram(void);
+static int awe_load_chorus_fx(awe_patch_info *patch, const char *addr, int count);
 static void awe_set_chorus_mode(int mode);
+static int awe_load_reverb_fx(awe_patch_info *patch, const char *addr, int count);
 static void awe_set_reverb_mode(int mode);
-
-#ifdef AWE_OBSOLETE_VOXWARE
-
-#define awe_check_port()	0	/* always false */
-#define awe_request_region()	/* nothing */
-#define awe_release_region()	/* nothing */
-
-#else /* AWE_OBSOLETE_VOXWARE */
-
-/* the following macros are osbolete */
-
-#define PERMANENT_MALLOC(type,var,size,memptr) \
-	var = (type)(sound_mem_blocks[sound_nblocks++] = vmalloc(size))
-#define RET_ERROR(err)			-err
-
-#endif /* AWE_OBSOLETE_VOXWARE */
-
-
-/* macros for Linux and FreeBSD compatibility */
-
-#undef OUTW
-#undef COPY_FROM_USER
-#undef GET_BYTE_FROM_USER
-#undef GET_SHORT_FROM_USER
-#undef IOCTL_TO_USER
-  
-#ifdef linux
-#  define NO_DATA_ERR                 ENODATA
-#  define OUTW(data, addr)            outw(data, addr)
-
-#ifdef AWE_NEW_KERNEL_INTERFACE
-#  define COPY_FROM_USER(target, source, offs, count) \
-              copy_from_user( ((caddr_t)(target)),(source)+(offs),(count) )
-#  define GET_BYTE_FROM_USER(target, addr, offs)      \
-		get_user(target, (unsigned char*)&((addr)[offs]))
-#  define GET_SHORT_FROM_USER(target, addr, offs)     \
-		get_user(target, (unsigned short*)&((addr)[offs]))
-#  define IOCTL_TO_USER(target, offs, source, count)  \
-              copy_to_user  ( ((caddr_t)(target)),(source)+(offs),(count) )
-#else /* AWE_NEW_KERNEL_INTERFACE */
-#  define COPY_FROM_USER(target, source, offs, count) \
-              memcpy_fromfs( ((caddr_t)(target)),(source)+(offs),(count) )
-#  define GET_BYTE_FROM_USER(target, addr, offs)      \
-              *((char  *)&(target)) = get_fs_byte( (addr)+(offs) )
-#  define GET_SHORT_FROM_USER(target, addr, offs)     \
-              *((short *)&(target)) = get_fs_word( (addr)+(offs) )
-#  define IOCTL_TO_USER(target, offs, source, count)  \
-              memcpy_tofs  ( ((caddr_t)(target)),(source)+(offs),(count) )
-#endif /* AWE_NEW_KERNEL_INTERFACE */
-
-#  define BZERO(target,len)                           \
-              memset( (caddr_t)target, '\0', len )
-#  define MEMCPY(dst,src,len) \
-              memcpy((caddr_t)dst, (caddr_t)src, len)
-
-#elif defined(__FreeBSD__)
-#  define NO_DATA_ERR                 EINVAL
-#  define OUTW(data, addr)            outw(addr, data)
-#  define COPY_FROM_USER(target, source, offs, count) \
-              uiomove( ((caddr_t)(target)),(count),((struct uio *)(source)) )
-#  define GET_BYTE_FROM_USER(target, addr, offs)      \
-              uiomove( ((char*)&(target)), 1, ((struct uio *)(addr)) )
-#  define GET_SHORT_FROM_USER(target, addr, offs)     \
-              uiomove( ((char*)&(target)), 2, ((struct uio *)(addr)) )
-#  define IOCTL_TO_USER(target, offs, source, count)  \
-              memcpy( &((target)[offs]), (source), (count) )
-#  define BZERO(target,len)                           \
-              bzero( (caddr_t)target, len )
-#  define MEMCPY(dst,src,len) \
-              bcopy((caddr_t)src, (caddr_t)dst, len)
+static void awe_equalizer(int bass, int treble);
+#ifdef CONFIG_AWE32_MIXER
+static int awe_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg);
 #endif
 
+/* define macros for compatibility */
+#ifdef __FreeBSD__
+#  include <i386/isa/sound/awe_compat.h>
+#else
+#  include "awe_compat.h"
+#endif
 
 /*----------------------------------------------------------------
  * synth operation table
@@ -423,7 +445,9 @@ static void awe_set_reverb_mode(int mode);
 
 static struct synth_operations awe_operations =
 {
-	"EMU8K",
+#ifdef AWE_OSS38
+	"Emu8000",
+#endif
 	&awe_info,
 	0,
 	SYNTH_TYPE_SAMPLE,
@@ -449,6 +473,15 @@ static struct synth_operations awe_operations =
 	awe_setup_voice
 };
 
+#ifdef CONFIG_AWE32_MIXER
+static struct mixer_operations awe_mixer_operations = {
+#ifndef __FreeBSD__
+	"AWE32",
+#endif
+	"AWE32 Equalizer",
+	awe_mixer_ioctl,
+};
+#endif
 
 
 /*================================================================
@@ -456,10 +489,13 @@ static struct synth_operations awe_operations =
  *================================================================*/
 
 #ifdef AWE_OBSOLETE_VOXWARE
-long attach_awe_obsolete(long mem_start, struct address_info *hw_config)
+#define ATTACH_DECL	static
 #else
-int attach_awe(void)
+#define ATTACH_DECL	/**/
 #endif
+
+ATTACH_DECL
+int attach_awe(void)
 {
 	/* check presence of AWE32 card */
 	if (! awe_detect()) {
@@ -473,15 +509,28 @@ int attach_awe(void)
 		return 0;
 	}
 
-	/* allocate sample tables */
-	PERMANENT_MALLOC(awe_sample_info *, samples,
-			 AWE_MAX_SAMPLES * AWE_SAMPLE_INFO_SIZE, mem_start);
-	PERMANENT_MALLOC(awe_voice_list *, infos,
-			 AWE_MAX_INFOS * sizeof(awe_voice_list), mem_start);
-	if (samples == NULL || infos == NULL) {
+	/* set buffers to NULL */
+	voices = NULL;
+	channels = NULL;
+	sflists = NULL;
+	samples = NULL;
+	infos = NULL;
+
+	/* voice & channel info */
+	voices = (voice_info*)my_malloc(AWE_MAX_VOICES * sizeof(voice_info));
+	channels = (awe_chan_info*)my_malloc(AWE_MAX_CHANNELS * sizeof(awe_chan_info));
+
+	if (voices == NULL || channels == NULL) {
+		my_free(voices);
+		my_free(channels);
 		printk("AWE32: can't allocate sample tables\n");
 		return 0;
 	}
+
+	/* allocate sample tables */
+	INIT_TABLE(sflists, max_sfs, AWE_MAX_SF_LISTS, sf_list);
+	INIT_TABLE(samples, max_samples, AWE_MAX_SAMPLES, awe_sample_list);
+	INIT_TABLE(infos, max_infos, AWE_MAX_INFOS, awe_voice_list);
 
 	if (num_synths >= MAX_SYNTH_DEV)
 		printk("AWE32 Error: too many synthesizers\n");
@@ -490,6 +539,12 @@ int attach_awe(void)
 		voice_alloc->max_voice = awe_max_voices;
 		synth_devs[num_synths++] = &awe_operations;
 	}
+
+#ifdef CONFIG_AWE32_MIXER
+	if (num_mixers < MAX_MIXER_DEV) {
+		mixer_devs[num_mixers++] = &awe_mixer_operations;
+	}
+#endif
 
 	/* reserve I/O ports for awedrv */
 	awe_request_region();
@@ -500,15 +555,16 @@ int attach_awe(void)
 	/* intialize AWE32 hardware */
 	awe_initialize();
 
-#ifndef __FreeBSD__
-	printk("AWE32 Sound Driver v%s (DRAM %dk)\n",
-	       AWEDRV_VERSION, (int)awe_mem_size/1024);
-#else
-	DEBUG(0,printk("AWE32 Sound Driver v%s (DRAM %dk)\n",
-                   AWEDRV_VERSION, (int)awe_mem_size/1024));
+	sprintf(awe_info.name, "AWE32-%s (RAM%dk)",
+		AWEDRV_VERSION, awe_mem_size/1024);
+#ifdef __FreeBSD__
+	printk("awe0: <SoundBlaster EMU8000 MIDI (RAM%dk)>", awe_mem_size/1024);
+#elif defined(AWE_DEBUG_ON)
+	printk("%s\n", awe_info.name);
 #endif
-	sprintf(awe_info.name, "AWE32 Driver v%s (DRAM %dk)",
-		AWEDRV_VERSION, (int)awe_mem_size/1024);
+
+	/* set default values */
+	awe_init_misc_modes(TRUE);
 
 	/* set reverb & chorus modes */
 	awe_set_reverb_mode(reverb_mode);
@@ -516,24 +572,57 @@ int attach_awe(void)
 
 	awe_present = TRUE;
 
-#ifdef AWE_OBSOLETE_VOXWARE
-	return mem_start;
-#else
 	return 1;
-#endif
 }
 
 
+#ifdef AWE_DYNAMIC_BUFFER
+static void free_tables(void)
+{
+	my_free(sflists);
+	sflists = NULL; max_sfs = 0;
+	my_free(samples);
+	samples = NULL; max_samples = 0;
+	my_free(infos);
+	infos = NULL; max_infos = 0;
+}
+#else
+#define free_buffers() /**/
+#endif
+
+
+ATTACH_DECL
 void unload_awe(void)
 {
 	if (awe_present) {
 		awe_reset_samples();
 		awe_release_region();
+		my_free(voices);
+		my_free(channels);
+		free_tables();
+		awe_present = FALSE;
 	}
 }
 
 
+/*----------------------------------------------------------------
+ * old type interface
+ *----------------------------------------------------------------*/
+
 #ifdef AWE_OBSOLETE_VOXWARE
+
+#ifdef __FreeBSD__
+long attach_awe_obsolete(long mem_start, struct address_info *hw_config)
+#else
+int attach_awe_obsolete(int mem_start, struct address_info *hw_config)
+#endif
+{
+	my_malloc_init(mem_start);
+	if (! attach_awe())
+		return 0;
+	return my_malloc_memptr();
+}
+
 int probe_awe_obsolete(struct address_info *hw_config)
 {
 	return 1;
@@ -541,6 +630,7 @@ int probe_awe_obsolete(struct address_info *hw_config)
 }
 
 #endif
+
 
 /*================================================================
  * clear sample tables 
@@ -552,15 +642,14 @@ awe_reset_samples(void)
 	int i;
 
 	/* free all bank tables */
-	for (i = 0; i < AWE_MAX_PRESETS; i++) {
-		preset_table[i] = NULL;
-	}
+	for (i = 0; i < AWE_MAX_PRESETS; i++)
+		preset_table[i] = -1;
 
-	free_mem_ptr = 0;
-	last_sample = free_sample = 0;
-	last_info = free_info = 0;
+	free_tables();
+
 	current_sf_id = 0;
-	loaded_once = 0;
+	locked_sf_id = 0;
+	patch_opened = 0;
 }
 
 
@@ -584,7 +673,7 @@ awe_poke(unsigned short cmd, unsigned short port, unsigned short data)
 
 /* write 32bit data */
 INLINE static void
-awe_poke_dw(unsigned short cmd, unsigned short port, unsigned long data)
+awe_poke_dw(unsigned short cmd, unsigned short port, unsigned int data)
 {
 	awe_set_cmd(cmd);
 	OUTW(data, awe_port(port));		/* write lower 16 bits */
@@ -602,10 +691,10 @@ awe_peek(unsigned short cmd, unsigned short port)
 }
 
 /* read 32bit data */
-INLINE static unsigned long
+INLINE static unsigned int
 awe_peek_dw(unsigned short cmd, unsigned short port)
 {
-	unsigned long k1, k2;
+	unsigned int k1, k2;
 	awe_set_cmd(cmd);
 	k1 = inw(awe_port(port));
 	k2 = inw(awe_port(port)+2);
@@ -634,6 +723,13 @@ awe_wait(unsigned short delay)
 	for (; (unsigned short)inw(port) < target; counter++)
 		if (counter > 65536)
 			break;
+}
+
+/* write a word data */
+INLINE static void
+awe_write_dram(unsigned short c)
+{
+	awe_poke(AWE_SMLD, c);
 }
 
 
@@ -706,6 +802,9 @@ awe_initialize(void)
 
 	/* enable audio */
 	awe_poke(AWE_HWCF3, 0x0004);
+
+	/* set equalizer */
+	awe_equalizer(5, 9);
 }
 
 
@@ -717,7 +816,7 @@ awe_initialize(void)
 static void
 awe_init_voice_info(awe_voice_info *vp)
 {
-	vp->sf_id = 0;
+	vp->sf_id = 0; /* normal mode */
 	vp->sample = 0;
 	vp->rate_offset = 0;
 
@@ -792,10 +891,10 @@ static int
 freq_to_note(int mHz)
 {
 	/* abscents = log(mHz/8176) / log(2) * 1200 */
-	unsigned long max_val = (unsigned long)0xffffffff / 10000;
+	unsigned int max_val = (unsigned int)0xffffffff / 10000;
 	int i, times;
-	unsigned long base;
-	unsigned long freq;
+	unsigned int base;
+	unsigned int freq;
 	int note, tune;
 
 	if (mHz == 0)
@@ -913,7 +1012,7 @@ calc_parm_delay(int msec)
 static int
 calc_parm_hold(int msec)
 {
-	int val = 0x7f - (unsigned char)(msec / 92);
+	int val = (0x7f * 92 - msec) / 92;
 	if (val < 1) val = 1;
 	if (val > 127) val = 127;
 	return val;
@@ -956,45 +1055,72 @@ calc_parm_search(int msec, short *table)
 
 /* set an effect value */
 #define FX_SET(rec,type,value) \
-	((rec)->flags[(type)/8] |= (1 << ((type) % 8)), \
-	 (rec)->val[type] = (value))
+	((rec)->flags[type] = 1, (rec)->val[type] = (value))
+#define FX_ADD(rec,type,value) \
+	((rec)->flags[type] = 2, (rec)->val[type] = (value))
+#define FX_UNSET(rec,type) \
+	((rec)->flags[type] = 0, (rec)->val[type] = 0)
 
 /* check the effect value is set */
-#define FX_ON(rec,type)	((rec)->flags[(type)/8] & (1<<((type)%8)))
+#define FX_ON(rec,type)	((rec)->flags[type])
 
-/* get byte effect value */
-#define FX_BYTE(rec,type,value) \
-	(unsigned char)(FX_ON(rec,type) ? (rec)->val[type] : (value))
+static unsigned char
+FX_BYTE(FX_Rec *rec, FX_Rec *lay, int type, unsigned char value)
+{
+	int effect = 0;
+	int on = 0;
+	if (lay && (on = FX_ON(lay, type)) != 0)
+		effect = lay->val[type];
+	if (!on && (on = FX_ON(rec, type)) != 0)
+		effect = rec->val[type];
+	if (on == 1)
+		return (unsigned char)effect;
+	else if (on == 2)
+		return (unsigned char)(effect + (int)value);
+	return value;
+}
+
 /* get word effect value */
-#define FX_WORD(rec,type,value) \
-	(unsigned short)(FX_ON(rec,type) ? (rec)->val[type] : (value))
+static unsigned short
+FX_WORD(FX_Rec *rec, FX_Rec *lay, int type, unsigned short value)
+{
+	int effect = 0;
+	int on = 0;
+	if (lay && (on = FX_ON(lay, type)) != 0)
+		effect = lay->val[type];
+	if (!on && (on = FX_ON(rec, type)) != 0)
+		effect = rec->val[type];
+	if (on == 1)
+		return (unsigned short)effect;
+	else if (on == 2)
+		return (unsigned short)(effect + (int)value);
+	return value;
+}
 
 /* get word (upper=type1/lower=type2) effect value */
 static unsigned short
-FX_COMB(FX_Rec *rec, int type1, int type2, unsigned short value)
+FX_COMB(FX_Rec *rec, FX_Rec *lay, int type1, int type2, unsigned short value)
 {
 	unsigned short tmp;
-	if (FX_ON(rec, type1))
-		tmp = (unsigned short)(rec->val[type1]) << 8;
-	else
-		tmp = value & 0xff00;
-	if (FX_ON(rec, type2))
-		tmp |= (unsigned short)(rec->val[type2]) & 0xff;
-	else
-		tmp |= value & 0xff;
+	tmp = FX_BYTE(rec, lay, type1, (unsigned char)(value >> 8));
+	tmp <<= 8;
+	tmp |= FX_BYTE(rec, lay, type2, (unsigned char)(value & 0xff));
 	return tmp;
 }
 
 /* address offset */
-static long
-FX_OFFSET(FX_Rec *rec, int lo, int hi, int mode)
+static int
+FX_OFFSET(FX_Rec *rec, FX_Rec *lay, int lo, int hi, int mode)
 {
-	long addr = 0;
-	if (FX_ON(rec, hi)) {
+	int addr = 0;
+	if (lay && FX_ON(lay, hi))
+		addr = (short)lay->val[hi];
+	else if (FX_ON(rec, hi))
 		addr = (short)rec->val[hi];
-		addr = addr << 15;
-	}
-	if (FX_ON(rec, lo))
+	addr = addr << 15;
+	if (lay && FX_ON(lay, lo))
+		addr += (short)lay->val[lo];
+	else if (FX_ON(rec, lo))
 		addr += (short)rec->val[lo];
 	if (!(mode & AWE_SAMPLE_8BITS))
 		addr /= 2;
@@ -1009,10 +1135,13 @@ FX_OFFSET(FX_Rec *rec, int lo, int hi, int mode)
 static void
 awe_note_on(int voice)
 {
-	unsigned long temp;
-	long addr;
+	unsigned int temp;
+	int addr;
 	awe_voice_info *vp;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
 
 	/* A voice sample must assigned before calling */
 	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
@@ -1027,17 +1156,17 @@ awe_note_on(int voice)
 
 	/* modulation & volume envelope */
 	awe_poke(AWE_ENVVAL(voice),
-		 FX_WORD(fx, AWE_FX_ENV1_DELAY, vp->parm.moddelay));
+		 FX_WORD(fx, fx_lay, AWE_FX_ENV1_DELAY, vp->parm.moddelay));
 	awe_poke(AWE_ATKHLD(voice),
-		 FX_COMB(fx, AWE_FX_ENV1_HOLD, AWE_FX_ENV1_ATTACK,
+		 FX_COMB(fx, fx_lay, AWE_FX_ENV1_HOLD, AWE_FX_ENV1_ATTACK,
 			 vp->parm.modatkhld));
 	awe_poke(AWE_DCYSUS(voice),
-		 FX_COMB(fx, AWE_FX_ENV1_SUSTAIN, AWE_FX_ENV1_DECAY,
+		 FX_COMB(fx, fx_lay, AWE_FX_ENV1_SUSTAIN, AWE_FX_ENV1_DECAY,
 			  vp->parm.moddcysus));
 	awe_poke(AWE_ENVVOL(voice),
-		 FX_WORD(fx, AWE_FX_ENV2_DELAY, vp->parm.voldelay));
+		 FX_WORD(fx, fx_lay, AWE_FX_ENV2_DELAY, vp->parm.voldelay));
 	awe_poke(AWE_ATKHLDV(voice),
-		 FX_COMB(fx, AWE_FX_ENV2_HOLD, AWE_FX_ENV2_ATTACK,
+		 FX_COMB(fx, fx_lay, AWE_FX_ENV2_HOLD, AWE_FX_ENV2_ATTACK,
 			 vp->parm.volatkhld));
 	/* decay/sustain parameter for volume envelope must be set at last */
 
@@ -1049,14 +1178,14 @@ awe_note_on(int voice)
 
 	/* modulation envelope heights */
 	awe_poke(AWE_PEFE(voice),
-		 FX_COMB(fx, AWE_FX_ENV1_PITCH, AWE_FX_ENV1_CUTOFF,
+		 FX_COMB(fx, fx_lay, AWE_FX_ENV1_PITCH, AWE_FX_ENV1_CUTOFF,
 			 vp->parm.pefe));
 
 	/* lfo1/2 delay */
 	awe_poke(AWE_LFO1VAL(voice),
-		 FX_WORD(fx, AWE_FX_LFO1_DELAY, vp->parm.lfo1delay));
+		 FX_WORD(fx, fx_lay, AWE_FX_LFO1_DELAY, vp->parm.lfo1delay));
 	awe_poke(AWE_LFO2VAL(voice),
-		 FX_WORD(fx, AWE_FX_LFO2_DELAY, vp->parm.lfo2delay));
+		 FX_WORD(fx, fx_lay, AWE_FX_LFO2_DELAY, vp->parm.lfo2delay));
 
 	/* lfo1 pitch & cutoff shift */
 	awe_fx_fmmod(voice, TRUE);
@@ -1065,27 +1194,25 @@ awe_note_on(int voice)
 	/* lfo2 pitch & freq */
 	awe_fx_fm2frq2(voice, TRUE);
 	/* pan & loop start */
-	 awe_set_pan(voice, 1);
+	awe_set_pan(voice, TRUE);
 
 	/* chorus & loop end (chorus 8bit, MSB) */
 	addr = vp->loopend - 1;
-	addr += FX_OFFSET(fx, AWE_FX_LOOP_END,
+	addr += FX_OFFSET(fx, fx_lay, AWE_FX_LOOP_END,
 			  AWE_FX_COARSE_LOOP_END, vp->mode);
-	temp = FX_BYTE(fx, AWE_FX_CHORUS, vp->parm.chorus);
-	temp = (temp <<24) | (unsigned long)addr;
+	temp = FX_BYTE(fx, fx_lay, AWE_FX_CHORUS, vp->parm.chorus);
+	temp = (temp <<24) | (unsigned int)addr;
 	awe_poke_dw(AWE_CSL(voice), temp);
-	DEBUG(4,printk("AWE32: [-- loopend=%x/%x]\n",
-		       (int)vp->loopend, (int)addr));
+	DEBUG(4,printk("AWE32: [-- loopend=%x/%x]\n", vp->loopend, addr));
 
 	/* Q & current address (Q 4bit value, MSB) */
 	addr = vp->start - 1;
-	addr += FX_OFFSET(fx, AWE_FX_SAMPLE_START,
+	addr += FX_OFFSET(fx, fx_lay, AWE_FX_SAMPLE_START,
 			  AWE_FX_COARSE_SAMPLE_START, vp->mode);
-	temp = FX_BYTE(fx, AWE_FX_FILTERQ, vp->parm.filterQ);
-	temp = (temp<<28) | (unsigned long)addr;
+	temp = FX_BYTE(fx, fx_lay, AWE_FX_FILTERQ, vp->parm.filterQ);
+	temp = (temp<<28) | (unsigned int)addr;
 	awe_poke_dw(AWE_CCCA(voice), temp);
-	DEBUG(4,printk("AWE32: [-- startaddr=%x/%x]\n",
-		       (int)vp->start, (int)addr));
+	DEBUG(4,printk("AWE32: [-- startaddr=%x/%x]\n", vp->start, addr));
 
 	/* reset volume */
 	awe_poke_dw(AWE_VTFT(voice), 0x0000FFFF);
@@ -1093,13 +1220,15 @@ awe_note_on(int voice)
 
 	/* turn on envelope */
 	awe_poke(AWE_DCYSUSV(voice),
-		 FX_COMB(fx, AWE_FX_ENV2_SUSTAIN, AWE_FX_ENV2_DECAY,
+		 FX_COMB(fx, fx_lay, AWE_FX_ENV2_SUSTAIN, AWE_FX_ENV2_DECAY,
 			  vp->parm.voldcysus));
-	/* set chorus */
-	temp = FX_BYTE(fx, AWE_FX_REVERB, vp->parm.reverb);
+	/* set reverb */
+	temp = FX_BYTE(fx, fx_lay, AWE_FX_REVERB, vp->parm.reverb);
 	temp = (awe_peek_dw(AWE_PTRX(voice)) & 0xffff0000) | (temp<<8);
 	awe_poke_dw(AWE_PTRX(voice), temp);
 	awe_poke_dw(AWE_CPF(voice), 0x40000000);
+
+	voices[voice].state = AWE_ST_ON;
 }
 
 
@@ -1110,24 +1239,22 @@ awe_note_off(int voice)
 	awe_voice_info *vp;
 	unsigned short tmp;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
+
 	if ((vp = voices[voice].sample) == NULL) {
-		awe_voice_init(voice);
+		voices[voice].state = AWE_ST_OFF;
 		return;
 	}
 
-	if (FX_ON(fx, AWE_FX_ENV1_RELEASE))
-		tmp = 0x8000 | fx->val[AWE_FX_ENV1_RELEASE];
-	else
-		tmp = vp->parm.modrelease;
+	tmp = 0x8000 | FX_BYTE(fx, fx_lay, AWE_FX_ENV1_RELEASE,
+			       (unsigned char)vp->parm.modrelease);
 	awe_poke(AWE_DCYSUS(voice), tmp);
-	if (FX_ON(fx, AWE_FX_ENV2_RELEASE))
-		tmp = 0x8000 | fx->val[AWE_FX_ENV2_RELEASE];
-	else
-		tmp = vp->parm.volrelease;
+	tmp = 0x8000 | FX_BYTE(fx, fx_lay, AWE_FX_ENV2_RELEASE,
+			       (unsigned char)vp->parm.volrelease);
 	awe_poke(AWE_DCYSUSV(voice), tmp);
-	voices[voice].state = AWE_ST_OFF;
-
-	awe_voice_init(voice);
+	awe_voice_init(voice, TRUE);
 }
 
 /* force to terminate the voice (no releasing echo) */
@@ -1136,26 +1263,27 @@ awe_terminate(int voice)
 {
 	awe_poke(AWE_DCYSUSV(voice), 0x807F);
 	awe_tweak_voice(voice);
-	awe_voice_init(voice);
+	awe_voice_init(voice, FALSE);
 }
-
 
 /* turn off other voices with the same exclusive class (for drums) */
 static void
-awe_exclusive_off(int voice, int exclass)
+awe_exclusive_off(int voice)
 {
-	int i;
+	int i, exclass;
 
-	if (exclass == 0) /* not exclusive */
+	if (voices[voice].sample == NULL)
 		return;
+	if ((exclass = voices[voice].sample->exclusiveClass) == 0)
+		return;	/* not exclusive */
 
 	/* turn off voices with the same class */
 	for (i = 0; i < awe_max_voices; i++) {
-		if (i != voice && IS_PLAYING(voice) &&
-		    voices[i].sample &&
+		if (i != voice && IS_PLAYING(i) &&
+		    voices[i].sample && voices[i].ch == voices[voice].ch &&
 		    voices[i].sample->exclusiveClass == exclass) {
 			DEBUG(4,printk("AWE32: [exoff(%d)]\n", i));
-			awe_note_off(i);
+			awe_terminate(i);
 		}
 	}
 }
@@ -1182,20 +1310,25 @@ awe_set_voice_pitch(int voice, int forced)
 	awe_set_pitch(voice, forced);
 }
 
-/* change volume */
+/* change volume & cutoff */
 static void
 awe_set_volume(int voice, int forced)
 {
 	awe_voice_info *vp;
 	unsigned short tmp2;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
 
 	if (IS_NO_EFFECT(voice) && !forced) return;
 	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
 		return;
 
-	tmp2 = FX_BYTE(fx, AWE_FX_CUTOFF, vp->parm.cutoff);
-	tmp2 = (tmp2 << 8) | voices[voice].avol;
+	tmp2 = FX_BYTE(fx, fx_lay, AWE_FX_CUTOFF, vp->parm.cutoff);
+	tmp2 = (tmp2 << 8);
+	tmp2 |= FX_BYTE(fx, fx_lay, AWE_FX_ATTEN,
+			(unsigned char)voices[voice].avol);
 	awe_poke(AWE_IFATN(voice), tmp2);
 }
 
@@ -1212,10 +1345,13 @@ awe_set_voice_vol(int voice, int forced)
 static void
 awe_set_pan(int voice, int forced)
 {
-	unsigned long temp;
-	long addr;
+	unsigned int temp;
+	int addr;
 	awe_voice_info *vp;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
 
 	if (IS_NO_EFFECT(voice) && !forced) return;
 	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
@@ -1239,13 +1375,12 @@ awe_set_pan(int voice, int forced)
 	}
 	if (forced || temp != voices[voice].apan) {
 		addr = vp->loopstart - 1;
-		addr += FX_OFFSET(fx, AWE_FX_LOOP_START,
+		addr += FX_OFFSET(fx, fx_lay, AWE_FX_LOOP_START,
 				  AWE_FX_COARSE_LOOP_START, vp->mode);
-		temp = (temp<<24) | (unsigned long)addr;
+		temp = (temp<<24) | (unsigned int)addr;
 		awe_poke_dw(AWE_PSST(voice), temp);
 		voices[voice].apan = temp;
-		DEBUG(4,printk("AWE32: [-- loopstart=%x/%x]\n",
-			       (int)vp->loopstart, (int)addr));
+		DEBUG(4,printk("AWE32: [-- loopstart=%x/%x]\n", vp->loopstart, addr));
 	}
 }
 
@@ -1255,11 +1390,15 @@ awe_fx_fmmod(int voice, int forced)
 {
 	awe_voice_info *vp;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
+
 	if (IS_NO_EFFECT(voice) && !forced) return;
 	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
 		return;
 	awe_poke(AWE_FMMOD(voice),
-		 FX_COMB(fx, AWE_FX_LFO1_PITCH, AWE_FX_LFO1_CUTOFF,
+		 FX_COMB(fx, fx_lay, AWE_FX_LFO1_PITCH, AWE_FX_LFO1_CUTOFF,
 			 vp->parm.fmmod));
 }
 
@@ -1269,11 +1408,15 @@ awe_fx_tremfrq(int voice, int forced)
 {
 	awe_voice_info *vp;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
+
 	if (IS_NO_EFFECT(voice) && !forced) return;
 	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
 		return;
 	awe_poke(AWE_TREMFRQ(voice),
-		 FX_COMB(fx, AWE_FX_LFO1_VOLUME, AWE_FX_LFO1_FREQ,
+		 FX_COMB(fx, fx_lay, AWE_FX_LFO1_VOLUME, AWE_FX_LFO1_FREQ,
 			 vp->parm.tremfrq));
 }
 
@@ -1283,27 +1426,16 @@ awe_fx_fm2frq2(int voice, int forced)
 {
 	awe_voice_info *vp;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
+
 	if (IS_NO_EFFECT(voice) && !forced) return;
 	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
 		return;
 	awe_poke(AWE_FM2FRQ2(voice),
-		 FX_COMB(fx, AWE_FX_LFO2_PITCH, AWE_FX_LFO2_FREQ,
+		 FX_COMB(fx, fx_lay, AWE_FX_LFO2_PITCH, AWE_FX_LFO2_FREQ,
 			 vp->parm.fm2frq2));
-}
-
-/* set total cutoff  & current pitch */
-static void
-awe_fx_cutoff(int voice, int forced)
-{
-	unsigned short tmp2;
-	awe_voice_info *vp;
-	FX_Rec *fx = &voices[voice].cinfo->fx;
-	if (IS_NO_EFFECT(voice)) return;
-	if ((vp = voices[voice].sample) == NULL || vp->index < 0)
-		return;
-	tmp2 = FX_BYTE(fx, AWE_FX_CUTOFF, vp->parm.cutoff);
-	tmp2 = (tmp2 << 8) | voices[voice].avol;
-	awe_poke(AWE_IFATN(voice), tmp2);
 }
 
 
@@ -1326,6 +1458,7 @@ awe_calc_pitch(int voice)
 	if ((ap = vp->sample) == NULL)
 			return;
 	if (ap->index < 0) {
+		DEBUG(3,printk("AWE32: set sample (%d)\n", ap->sample));
 		if (awe_set_sample(ap) < 0)
 			return;
 	}
@@ -1350,10 +1483,10 @@ awe_calc_pitch(int voice)
 	DEBUG(4,printk("AWE32: p-> scale* ofs=%d\n", offset));
 
 	/* add initial pitch correction */
-	if (FX_ON(&cp->fx, AWE_FX_INIT_PITCH)) {
-		DEBUG(3,printk("AWE32: fx_pitch(%d) %d\n", voice, cp->fx.val[AWE_FX_INIT_PITCH]));
+	if (FX_ON(&cp->fx_layer[vp->layer], AWE_FX_INIT_PITCH))
+		offset += cp->fx_layer[vp->layer].val[AWE_FX_INIT_PITCH];
+	else if (FX_ON(&cp->fx, AWE_FX_INIT_PITCH))
 		offset += cp->fx.val[AWE_FX_INIT_PITCH];
-	}
 
 	/* 0xe000: root pitch */
 	vp->apitch = 0xe000 + ap->rate_offset + offset;
@@ -1373,20 +1506,27 @@ awe_calc_pitch_from_freq(int voice, int freq)
 	voice_info *vp = &voices[voice];
 	awe_voice_info *ap;
 	FX_Rec *fx = &voices[voice].cinfo->fx;
+	FX_Rec *fx_lay = NULL;
 	int offset;
 	int note;
+
+	if (voices[voice].layer < MAX_LAYERS)
+		fx_lay = &voices[voice].cinfo->fx_layer[voices[voice].layer];
 
 	/* search voice information */
 	if ((ap = vp->sample) == NULL)
 		return;
 	if (ap->index < 0) {
+		DEBUG(3,printk("AWE32: set sample (%d)\n", ap->sample));
 		if (awe_set_sample(ap) < 0)
 			return;
 	}
 	note = freq_to_note(freq);
 	offset = (note - ap->root * 100 + ap->tune) * 4096 / 1200;
 	offset = (offset * ap->scaleTuning) / 100;
-	if (FX_ON(fx, AWE_FX_INIT_PITCH))
+	if (fx_lay && FX_ON(fx_lay, AWE_FX_INIT_PITCH))
+		offset += fx_lay->val[AWE_FX_INIT_PITCH];
+	else if (FX_ON(fx, AWE_FX_INIT_PITCH))
 		offset += fx->val[AWE_FX_INIT_PITCH];
 	vp->apitch = 0xe000 + ap->rate_offset + offset;
 	if (vp->apitch > 0xffff)
@@ -1430,6 +1570,7 @@ awe_calc_volume(int voice)
 
 	ap = vp->sample;
 	if (ap->index < 0) {
+		DEBUG(3,printk("AWE32: set sample (%d)\n", ap->sample));
 		if (awe_set_sample(ap) < 0)
 			return;
 	}
@@ -1437,6 +1578,7 @@ awe_calc_volume(int voice)
 	/* 0 - 127 */
 	vol = (vp->velocity * cp->main_vol * cp->expression_vol) / (127*127);
 	vol = vol * ap->amplitude / 127;
+
 	if (vol < 0) vol = 0;
 	if (vol > 127) vol = 127;
 
@@ -1450,56 +1592,121 @@ awe_calc_volume(int voice)
 }
 
 
+/* set sostenuto on */
+static void awe_sostenuto_on(int voice, int forced)
+{
+	if (IS_NO_EFFECT(voice) && !forced) return;
+	voices[voice].sostenuto = 127;
+}
+
+
+/* drop sustain */
+static void awe_sustain_off(int voice, int forced)
+{
+	if (voices[voice].state == AWE_ST_SUSTAINED)
+		awe_note_off(voice);
+}
+
+
 /*================================================================
  * synth operation routines
  *================================================================*/
 
 #define AWE_VOICE_KEY(v)	(0x8000 | (v))
 #define AWE_CHAN_KEY(c,n)	(((c) << 8) | ((n) + 1))
+#define KEY_CHAN_MATCH(key,c)	(((key) >> 8) == (c))
 
 /* initialize the voice */
 static void
-awe_voice_init(int voice)
+awe_voice_init(int voice, int keep_ch_info)
 {
-	voices[voice].note = -1;
-	voices[voice].velocity = 0;
-	voices[voice].sample = NULL;
-	voices[voice].state = AWE_ST_OFF;
-	voices[voice].cinfo = &channels[voice];
-	voices[voice].ch = -1;
-	voices[voice].key = AWE_VOICE_KEY(voice);
-	voices[voice].time = current_alloc_time;
+	voice_info *vp = &voices[voice];
+	vp->note = -1;
+	vp->velocity = 0;
+	vp->sostenuto = 0;
+	if (playing_mode == AWE_PLAY_DIRECT)
+		vp->key = AWE_VOICE_KEY(voice);
+	else
+		vp->key = 0;
+	vp->time = current_alloc_time;
+
+	/* keep channel info for terminating release echo if necessary */
+	if (keep_ch_info)
+		vp->state = AWE_ST_RELEASED;
+	else {
+		vp->sample = NULL;
+		vp->cinfo = &channels[voice];
+		vp->ch = voice;
+		vp->state = AWE_ST_OFF;
+	}
+
+	/* emu8000 parameters */
+	vp->apitch = 0;
+	vp->avol = 255;
+	vp->apan = -1;
 
 	/* clear voice mapping */
 	voice_alloc->map[voice] = 0;
 
-	/* emu8000 parameters */
-	voices[voice].apitch = 0;
-	voices[voice].avol = 255;
-	voices[voice].apan = -1;
-
 	/* clear effects */
-	if (! awe_channel_mode)
-		BZERO(&voices[voice].cinfo->fx, sizeof(FX_Rec));
+	if (SINGLE_LAYER_MODE() && !misc_modes[AWE_MD_KEEP_EFFECT]) {
+		BZERO(&vp->cinfo->fx, sizeof(vp->cinfo->fx));
+		BZERO(&vp->cinfo->fx_layer, sizeof(vp->cinfo->fx_layer));
+	}
+
+	/*awe_tweak_voice(voice);*/
 }
 
 /* initialize channel info */
-static void awe_channel_init(int ch)
+static void awe_channel_init(int ch, int init_all)
 {
-	channels[ch].panning = 0; /* zero center */
-	channels[ch].bender = 0; /* zero tune skew */
-	channels[ch].bender_range = 200; /* sense * 100 */
-	channels[ch].main_vol = 127;
-	channels[ch].expression_vol = 127;
-	if (awe_channel_mode && IS_DRUM_CHANNEL(ch))
-		channels[ch].bank = AWE_DRUM_BANK;
-	else
-		channels[ch].bank = AWE_DEFAULT_BANK;
-	channels[ch].instr = 0;
-	channels[ch].vrec = NULL;
-	channels[ch].def_vrec = NULL;
-	channels[ch].sustained = 0;
-	BZERO(&channels[ch].fx, sizeof(FX_Rec));
+	awe_chan_info *cp = &channels[ch];
+	if (init_all) {
+		cp->panning = 0; /* zero center */
+		cp->bender_range = 200; /* sense * 100 */
+		cp->main_vol = 127;
+		if (MULTI_LAYER_MODE() && IS_DRUM_CHANNEL(ch)) {
+			cp->instr = misc_modes[AWE_MD_DEF_DRUM];
+			cp->bank = AWE_DRUM_BANK;
+		} else {
+			cp->instr = misc_modes[AWE_MD_DEF_PRESET];
+			cp->bank = misc_modes[AWE_MD_DEF_BANK];
+		}
+		cp->vrec = -1;
+		cp->def_vrec = -1;
+	}
+
+	cp->bender = 0; /* zero tune skew */
+	cp->expression_vol = 127;
+	cp->chan_press = 0;
+	cp->sustained = 0;
+
+	if (! misc_modes[AWE_MD_KEEP_EFFECT]) {
+		BZERO(&cp->fx, sizeof(cp->fx));
+		BZERO(&cp->fx_layer, sizeof(cp->fx_layer));
+	}
+}
+
+
+/* change the voice parameters; voice = channel */
+static void awe_voice_change(int voice, fx_affect_func func)
+{
+	int i; 
+	switch (playing_mode) {
+	case AWE_PLAY_DIRECT:
+		func(voice, FALSE);
+		break;
+	case AWE_PLAY_INDIRECT:
+		for (i = 0; i < awe_max_voices; i++)
+			if (voices[i].key == AWE_VOICE_KEY(voice))
+				func(i, FALSE);
+		break;
+	default:
+		for (i = 0; i < awe_max_voices; i++)
+			if (KEY_CHAN_MATCH(voices[i].key, voice))
+				func(i, FALSE);
+		break;
+	}
 }
 
 
@@ -1520,14 +1727,13 @@ awe_open(int dev, int mode)
 	awe_reset(dev);
 
 	/* clear sample position flag */
-	loaded_once = 0;
+	patch_opened = 0;
 
 	/* set default mode */
-	init_atten = AWE_DEFAULT_ATTENUATION; /* 12dB below */
-	awe_gus_bank = AWE_DEFAULT_BANK;
+	awe_init_misc_modes(FALSE);
+	init_atten = misc_modes[AWE_MD_ZERO_ATTEN];
 	drum_flags = DEFAULT_DRUM_FLAGS;
-	awe_exclusive_sound = TRUE;
-	awe_channel_mode = 0;
+	playing_mode = AWE_PLAY_INDIRECT;
 
 	return 0;
 }
@@ -1544,6 +1750,19 @@ awe_close(int dev)
 }
 
 
+/* set miscellaneous mode parameters
+ */
+static void
+awe_init_misc_modes(int init_all)
+{
+	int i;
+	for (i = 0; i < AWE_MD_END; i++) {
+		if (init_all || misc_modes_default[i].init_each_time)
+			misc_modes[i] = misc_modes_default[i].value;
+	}
+}
+
+
 /* sequencer I/O control:
  */
 static int
@@ -1551,7 +1770,10 @@ awe_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
 	switch (cmd) {
 	case SNDCTL_SYNTH_INFO:
-		awe_info.nr_voices = awe_max_voices;
+		if (playing_mode == AWE_PLAY_DIRECT)
+			awe_info.nr_voices = awe_max_voices;
+		else
+			awe_info.nr_voices = AWE_MAX_CHANNELS;
 		IOCTL_TO_USER((char*)arg, 0, &awe_info, sizeof(awe_info));
 		return 0;
 		break;
@@ -1568,15 +1790,45 @@ awe_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		break;
 
 	case SNDCTL_SYNTH_MEMAVL:
-		DEBUG(0,printk("AWE32: [ioctl memavl = %d]\n", (int)free_mem_ptr));
-		return awe_mem_size - free_mem_ptr*2;
+		return awe_mem_size - awe_free_mem_ptr() * 2;
 
 	default:
-		ERRMSG(printk("AWE32: unsupported ioctl %d\n", cmd));
+		printk("AWE32: unsupported ioctl %d\n", cmd);
 		return RET_ERROR(EINVAL);
 	}
 }
 
+
+static int voice_in_range(int voice)
+{
+	if (playing_mode == AWE_PLAY_DIRECT) {
+		if (voice < 0 || voice >= awe_max_voices)
+			return FALSE;
+	} else {
+		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
+			return FALSE;
+	}
+	return TRUE;
+}
+
+static void release_voice(int voice, int do_sustain)
+{
+	if (IS_NO_SOUND(voice))
+		return;
+	if (do_sustain && (voices[voice].cinfo->sustained == 127 ||
+			    voices[voice].sostenuto == 127))
+		voices[voice].state = AWE_ST_SUSTAINED;
+	else
+		awe_note_off(voice);
+}
+
+/* release all notes */
+static void awe_note_off_all(int do_sustain)
+{
+	int i;
+	for (i = 0; i < awe_max_voices; i++)
+		release_voice(i, do_sustain);
+}
 
 /* kill a voice:
  *   not terminate, just release the voice.
@@ -1584,45 +1836,57 @@ awe_ioctl(int dev, unsigned int cmd, caddr_t arg)
 static int
 awe_kill_note(int dev, int voice, int note, int velocity)
 {
-	int i, key, besttime;
+	int i, v2, key;
 
 	DEBUG(2,printk("AWE32: [off(%d) nt=%d vl=%d]\n", voice, note, velocity));
-	if (awe_channel_mode) {
-		if (awe_channel_mode == 2) { /* get channel */
-			int v2 = voice_alloc->map[voice] >> 8;
-			voice_alloc->map[voice] = 0;
-			voice = v2;
-		}
+	if (! voice_in_range(voice))
+		return RET_ERROR(EINVAL);
+
+	switch (playing_mode) {
+	case AWE_PLAY_DIRECT:
+	case AWE_PLAY_INDIRECT:
+		key = AWE_VOICE_KEY(voice);
+		break;
+
+	case AWE_PLAY_MULTI2:
+		v2 = voice_alloc->map[voice] >> 8;
+		voice_alloc->map[voice] = 0;
+		voice = v2;
 		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
 			return RET_ERROR(EINVAL);
-		if (channels[voice].instr > 128)
-			note = channels[voice].instr - 128;
+		/* continue to below */
+	default:
 		key = AWE_CHAN_KEY(voice, note);
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-			return RET_ERROR(EINVAL);
-		key = AWE_VOICE_KEY(voice);
+		break;
 	}
 
-	besttime = current_alloc_time + 1;
 	for (i = 0; i < awe_max_voices; i++) {
-		if (voices[i].key == key) {
-			if (voices[i].time < besttime)
-				besttime = voices[i].time;
-		}
-	}
-	for (i = 0; i < awe_max_voices; i++) {
-		if (voices[i].key == key &&
-		    (!awe_exclusive_sound || voices[i].time == besttime)) {
-			if (voices[i].cinfo->sustained)
-				voices[i].state = AWE_ST_SUSTAINED;
-			else
-				awe_note_off(i);
-		}
+		if (voices[i].key == key)
+			release_voice(i, TRUE);
 	}
 	return 0;
 }
 
+
+static void start_or_volume_change(int voice, int velocity)
+{
+	voices[voice].velocity = velocity;
+	awe_calc_volume(voice);
+	if (voices[voice].state == AWE_ST_STANDBY)
+		awe_note_on(voice);
+	else if (voices[voice].state == AWE_ST_ON)
+		awe_set_volume(voice, FALSE);
+}
+
+static void set_and_start_voice(int voice, int state)
+{
+	/* calculate pitch & volume parameters */
+	voices[voice].state = state;
+	awe_calc_pitch(voice);
+	awe_calc_volume(voice);
+	if (state == AWE_ST_ON)
+		awe_note_on(voice);
+}
 
 /* start a voice:
  *   if note is 255, identical with aftertouch function.
@@ -1634,107 +1898,87 @@ awe_start_note(int dev, int voice, int note, int velocity)
 	int i, key, state, volonly;
 
 	DEBUG(2,printk("AWE32: [on(%d) nt=%d vl=%d]\n", voice, note, velocity));
-	volonly = 0;
-	if (awe_channel_mode) {
-		if (awe_channel_mode == 2) /* get channel */
-			voice = voice_alloc->map[voice] >> 8;
-		else if (voice & 0x80) { /* channel volume mode */
-			voice &= ~0x80;
-			volonly = 2;
-		}
-		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return RET_ERROR(EINVAL);
-		if (channels[voice].instr > 128)
-			note = channels[voice].instr - 128;
-		if (note >= 128) { /* key volume mode */
-			note -= 128;
-			volonly = 1;
-		}
-		key = AWE_CHAN_KEY(voice, note);
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-		      return RET_ERROR(EINVAL);
-		if (voices[voice].cinfo->instr > 128)
-			note = voices[voice].cinfo->instr - 128;
+	if (! voice_in_range(voice))
+		return RET_ERROR(EINVAL);
+	    
+	if (velocity == 0)
+		state = AWE_ST_STANDBY; /* stand by for playing */
+	else
+		state = AWE_ST_ON;	/* really play */
+	volonly = FALSE;
+
+	switch (playing_mode) {
+	case AWE_PLAY_DIRECT:
+	case AWE_PLAY_INDIRECT:
 		key = AWE_VOICE_KEY(voice);
 		if (note == 255)
-			volonly = 1;
+			volonly = TRUE;
+		break;
+
+	case AWE_PLAY_MULTI2:
+		voice = voice_alloc->map[voice] >> 8;
+		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
+			return RET_ERROR(EINVAL);
+		/* continue to below */
+	default:
+		if (note >= 128) { /* key volume mode */
+			note -= 128;
+			volonly = TRUE;
+		}
+		key = AWE_CHAN_KEY(voice, note);
+		break;
 	}
 
 	/* dynamic volume change */
 	if (volonly) {
 		for (i = 0; i < awe_max_voices; i++) {
-			if ((volonly == 2 && voices[i].ch == voice) ||
-			    voices[i].key == key) {
-				voices[i].velocity = velocity;
-				if (velocity == 0) /* for GUS compatibility */
-					return awe_kill_note(dev, voice, note, velocity);
-				awe_calc_volume(i);
-				state = voices[i].state;
-				voices[i].state = AWE_ST_ON;
-				if (state == AWE_ST_STANDBY)
-					awe_note_on(i);
-				else
-					awe_set_volume(i, FALSE);
-			}
+			if (voices[i].key == key)
+				start_or_volume_change(i, velocity);
 		}
 		return 0;
 	}
 
-	/* stop the sound if still playing */
-	if (awe_exclusive_sound) {
-		for (i = 0; i < awe_max_voices; i++)
-			if (voices[i].key == key &&
-			    voices[i].state != AWE_ST_OFF)
-				awe_note_off(i);
-	}
-
-	/* allocate voices */
-	if (awe_channel_mode)
-		awe_alloc_multi_voices(voice, note, velocity);
-	else
-		awe_alloc_one_voice(voice, note, velocity);
-
-	/* turn off other voices (for drums) */
-	for (i = 0; i < awe_max_voices; i++)
-		if (voices[i].key == key && voices[i].sample)
-			awe_exclusive_off(i, voices[i].sample->exclusiveClass);
-
-	if (velocity == 0)
-		state = AWE_ST_STANDBY; /* stand by for playing */
-	else
-		state = AWE_ST_ON;	/* really play */
-
-	/* set up pitch and volume parameters */
+	/* if the same note still playing, stop it */
 	for (i = 0; i < awe_max_voices; i++)
 		if (voices[i].key == key) {
-			/* calculate pitch & volume parameters */
-			voices[i].state = state;
-			voices[i].note = note;
-			voices[i].velocity = velocity;
-			awe_calc_pitch(i);
-			awe_calc_volume(i);
-			if (state == AWE_ST_ON)
-				awe_note_on(i);
+			if (voices[i].state == AWE_ST_ON)
+				awe_note_off(i);
+			else if (voices[i].state == AWE_ST_STANDBY)
+				awe_voice_init(i, FALSE);
 		}
+
+	/* allocate voices */
+	if (playing_mode == AWE_PLAY_DIRECT)
+		awe_alloc_one_voice(voice, note, velocity);
+	else
+		awe_alloc_multi_voices(voice, note, velocity, key);
+
+	/* turn off other voices exlusively (for drums) */
+	for (i = 0; i < awe_max_voices; i++)
+		if (voices[i].key == key)
+			awe_exclusive_off(i);
+
+	/* set up pitch and volume parameters */
+	for (i = 0; i < awe_max_voices; i++) {
+		if (voices[i].key == key && voices[i].state == AWE_ST_OFF)
+			set_and_start_voice(i, state);
+	}
 
 	return 0;
 }
 
 
 /* search instrument from preset table with the specified bank */
-static awe_voice_list *
+static int
 awe_search_instr(int bank, int preset)
 {
-	awe_voice_list *p;
-	int maxc;
+	int i;
 
-	for (maxc = AWE_MAX_INFOS, p = preset_table[preset];
-	     p && maxc; p = p->next_bank, maxc--) {
-		if (p->bank == bank)
-			return p;
+	for (i = preset_table[preset]; i >= 0; i = infos[i].next_bank) {
+		if (infos[i].bank == bank)
+			return i;
 	}
-	return NULL;
+	return -1;
 }
 
 
@@ -1742,53 +1986,45 @@ awe_search_instr(int bank, int preset)
 static int
 awe_set_instr_2(int dev, int voice, int instr_no)
 {
-	if (awe_channel_mode == 2)
+	if (playing_mode == AWE_PLAY_MULTI2) {
 		voice = voice_alloc->map[voice] >> 8;
+		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
+			return RET_ERROR(EINVAL);
+	}
 	return awe_set_instr(dev, voice, instr_no);
 }
 
-/* assign the instrument to a voice */
+/* assign the instrument to a channel; voice is the channel number */
 static int
 awe_set_instr(int dev, int voice, int instr_no)
 {
 	awe_chan_info *cinfo;
 	int def_bank;
 
-	if (awe_channel_mode) {
-		/* skip the percussion instr in SEQ2 mode */
-		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return RET_ERROR(EINVAL);
-		cinfo = &channels[voice];
-		if (IS_DRUM_CHANNEL(voice))
-			def_bank = AWE_DRUM_BANK;
-		else
-			def_bank = cinfo->bank;
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-			return RET_ERROR(EINVAL);
-		cinfo = voices[voice].cinfo;
-		def_bank = cinfo->bank;
-	}
+	if (! voice_in_range(voice))
+		return RET_ERROR(EINVAL);
 
 	if (instr_no < 0 || instr_no >= AWE_MAX_PRESETS)
 		return RET_ERROR(EINVAL);
 
-	cinfo->vrec = NULL;
-	cinfo->def_vrec = NULL;
-	if (instr_no > 128) {
-		cinfo->vrec = awe_search_instr(128, cinfo->bank);
-		if (cinfo->bank != 0)
-			cinfo->def_vrec = awe_search_instr(128, 0);
-	} else {
-		cinfo->vrec = awe_search_instr(def_bank, instr_no);
-		if (def_bank == AWE_DRUM_BANK)
-			cinfo->def_vrec = awe_search_instr(def_bank, 0);
-		else
-			cinfo->def_vrec = awe_search_instr(AWE_DEFAULT_BANK, instr_no);
+	cinfo = &channels[voice];
+	def_bank = cinfo->bank;
+
+	if (MULTI_LAYER_MODE()) {
+		if (IS_DRUM_CHANNEL(voice))
+			def_bank = AWE_DRUM_BANK;
 	}
-	if (cinfo->vrec == NULL && cinfo->def_vrec == NULL) {
+
+	cinfo->vrec = -1;
+	cinfo->def_vrec = -1;
+	cinfo->vrec = awe_search_instr(def_bank, instr_no);
+	if (def_bank == AWE_DRUM_BANK)
+		cinfo->def_vrec = awe_search_instr(def_bank, misc_modes[AWE_MD_DEF_DRUM]);
+	else
+		cinfo->def_vrec = awe_search_instr(misc_modes[AWE_MD_DEF_BANK], instr_no);
+
+	if (cinfo->vrec < 0 && cinfo->def_vrec < 0) {
 		DEBUG(1,printk("AWE32 Warning: can't find instrument %d\n", instr_no));
-		return 0;
 	}
 
 	cinfo->instr = instr_no;
@@ -1804,10 +2040,10 @@ awe_reset(int dev)
 	int i;
 	current_alloc_time = 0;
 	/* don't turn off voice 31 and 32.  they are used also for FM voices */
-	for (i = 0; i < AWE_NORMAL_VOICES; i++)
+	for (i = 0; i < awe_max_voices; i++)
 		awe_terminate(i);
 	for (i = 0; i < AWE_MAX_CHANNELS; i++)
-		awe_channel_init(i);
+		awe_channel_init(i, TRUE);
 	for (i = 0; i < 16; i++) {
 		awe_operations.chn_info[i].controllers[CTL_MAIN_VOLUME] = 127;
 		awe_operations.chn_info[i].controllers[CTL_EXPRESSION] = 127;
@@ -1839,55 +2075,38 @@ awe_hw_control(int dev, unsigned char *event)
 static void
 awe_hw_gus_control(int dev, int cmd, unsigned char *event)
 {
-	int voice;
+	int voice, i, key;
 	unsigned short p1;
 	short p2;
 	int plong;
 
+	if (MULTI_LAYER_MODE())
+		return;
+	if (cmd == _GUS_NUMVOICES)
+		return;
+
 	voice = event[3];
+	if (! voice_in_range(voice))
+		return;
+
 	p1 = *(unsigned short *) &event[4];
 	p2 = *(short *) &event[6];
 	plong = *(int*) &event[4];
 
 	switch (cmd) {
-	case _GUS_NUMVOICES:
-		if (p1 >= awe_max_voices)
-			DEBUG(0,printk("AWE32: num_voices: voices out of range %d\n", p1));
-		break;
 	case _GUS_VOICESAMPLE:
-		if (voice < awe_max_voices)
-			awe_set_instr(dev, voice, p1);
-		break;
-
-	case _GUS_VOICEON:
-		if (voice < awe_max_voices)
-			awe_note_on(voice);
-		break;
-		
-	case _GUS_VOICEOFF:
-		if (voice < awe_max_voices)
-			awe_note_off(voice);
-		break;
-		
-	case _GUS_VOICEMODE:
-		/* not supported */
-		break;
+		awe_set_instr(dev, voice, p1);
+		return;
 
 	case _GUS_VOICEBALA:
 		/* 0 to 15 --> -128 to 127 */
-		if (voice < awe_max_voices)
-			awe_panning(dev, voice, ((int)p1 << 4) - 128);
-		break;
+		awe_panning(dev, voice, ((int)p1 << 4) - 128);
+		return;
 
-	case _GUS_VOICEFREQ:
-		if (voice < awe_max_voices)
-			awe_calc_pitch_from_freq(voice, plong);
-		break;
-		
 	case _GUS_VOICEVOL:
 	case _GUS_VOICEVOL2:
 		/* not supported yet */
-		break;
+		return;
 
 	case _GUS_RAMPRANGE:
 	case _GUS_RAMPRATE:
@@ -1895,19 +2114,40 @@ awe_hw_gus_control(int dev, int cmd, unsigned char *event)
 	case _GUS_RAMPON:
 	case _GUS_RAMPOFF:
 		/* volume ramping not supported */
-		break;
+		return;
 
 	case _GUS_VOLUME_SCALE:
-		break;
+		return;
 
 	case _GUS_VOICE_POS:
-		if (voice < awe_max_voices) {
-			FX_SET(&voices[voice].cinfo->fx, AWE_FX_SAMPLE_START,
-			       (short)(plong & 0x7fff));
-			FX_SET(&voices[voice].cinfo->fx, AWE_FX_COARSE_SAMPLE_START,
-			       (plong >> 15) & 0xffff);
+		FX_SET(&channels[voice].fx, AWE_FX_SAMPLE_START,
+		       (short)(plong & 0x7fff));
+		FX_SET(&channels[voice].fx, AWE_FX_COARSE_SAMPLE_START,
+		       (plong >> 15) & 0xffff);
+		return;
+	}
+
+	key = AWE_VOICE_KEY(voice);
+	for (i = 0; i < awe_max_voices; i++) {
+		if (voices[i].key == key) {
+			switch (cmd) {
+			case _GUS_VOICEON:
+				awe_note_on(i);
+				break;
+
+			case _GUS_VOICEOFF:
+			awe_terminate(i);
+				break;
+
+			case _GUS_VOICEFADE:
+				awe_note_off(i);
+				break;
+	
+			case _GUS_VOICEFREQ:
+			awe_calc_pitch_from_freq(i, plong);
+				break;
+			}
 		}
-		break;
 	}
 }
 
@@ -1926,9 +2166,11 @@ static fx_affect_func fx_realtime[] = {
 	/* lfo2: delay, freq, pitch */
 	NULL, awe_fx_fm2frq2, awe_fx_fm2frq2,
 	/* global: initpitch, chorus, reverb, cutoff, filterQ */
-	awe_set_voice_pitch, NULL, NULL, awe_fx_cutoff, NULL,
+	awe_set_voice_pitch, NULL, NULL, awe_set_volume, NULL,
 	/* sample: start, loopstart, loopend */
-	NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL,
+	/* global: attenuation */
+	awe_set_volume,
 };
 
 
@@ -1939,24 +2181,23 @@ awe_hw_awe_control(int dev, int cmd, unsigned char *event)
 	int voice;
 	unsigned short p1;
 	short p2;
-	int chn;
 	awe_chan_info *cinfo;
+	FX_Rec *fx;
 	int i;
 
-	chn = event[1];
 	voice = event[3];
-	p1 = *(unsigned short *) &event[4];
-	p2 = *(short *) &event[6];
-	
-	if (awe_channel_mode) {
+	if (! voice_in_range(voice))
+		return;
+
+	if (playing_mode == AWE_PLAY_MULTI2) {
+		voice = voice_alloc->map[voice] >> 8;
 		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
 			return;
-		cinfo = &channels[voice];
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-			return;
-		cinfo = voices[voice].cinfo;
 	}
+
+	p1 = *(unsigned short *) &event[4];
+	p2 = *(short *) &event[6];
+	cinfo = &channels[voice];
 
 	switch (cmd) {
 	case _AWE_DEBUG_MODE:
@@ -1964,24 +2205,17 @@ awe_hw_awe_control(int dev, int cmd, unsigned char *event)
 		printk("AWE32: debug mode = %d\n", debug_mode);
 		break;
 	case _AWE_REVERB_MODE:
-		if (p1 <= 7) {
-			reverb_mode = p1;
-			DEBUG(0,printk("AWE32: reverb mode %d\n", reverb_mode));
-			awe_set_reverb_mode(reverb_mode);
-		}
+		awe_set_reverb_mode(p1);
 		break;
 
 	case _AWE_CHORUS_MODE:
-		if (p1 <= 7) {
-			chorus_mode = p1;
-			DEBUG(0,printk("AWE32: chorus mode %d\n", chorus_mode));
-			awe_set_chorus_mode(chorus_mode);
-		}
+		awe_set_chorus_mode(p1);
 		break;
 		      
 	case _AWE_REMOVE_LAST_SAMPLES:
 		DEBUG(0,printk("AWE32: remove last samples\n"));
-		awe_remove_samples();
+		if (locked_sf_id > 0)
+			awe_remove_samples(locked_sf_id);
 		break;
 
 	case _AWE_INITIALIZE_CHIP:
@@ -1989,19 +2223,37 @@ awe_hw_awe_control(int dev, int cmd, unsigned char *event)
 		break;
 
 	case _AWE_SEND_EFFECT:
+		fx = &cinfo->fx;
+		i = 0; /* set */
+		if (p1 >= 0x100) {
+			int layer = (p1 >> 8);
+			if (layer >= 0 && layer < MAX_LAYERS)
+				fx = &cinfo->fx_layer[layer];
+			p1 &= 0xff;
+		}
+		if (p1 & 0x40) i = 2; /* clear */
+		if (p1 & 0x80) i = 1; /* add */
+		p1 &= 0x3f;
 		if (p1 < AWE_FX_END) {
-			FX_SET(&cinfo->fx, p1, p2);
 			DEBUG(0,printk("AWE32: effects (%d) %d %d\n", voice, p1, cinfo->fx.val[p1]));
-			FX_SET(&cinfo->fx, p1, p2);
-			if (fx_realtime[p1]) {
+			if (i == 0)
+				FX_SET(fx, p1, p2);
+			else if (i == 1)
+				FX_ADD(fx, p1, p2);
+			else
+				FX_UNSET(fx, p1);
+			if (i != 2 && fx_realtime[p1]) {
 				DEBUG(0,printk("AWE32: fx_realtime (%d)\n", voice));
 				awe_voice_change(voice, fx_realtime[p1]);
 			}
 		}
 		break;
 
+	case _AWE_RESET_CHANNEL:
+		awe_channel_init(voice, !p1);
+		break;
+		
 	case _AWE_TERMINATE_ALL:
-		DEBUG(0,printk("AWE32: terminate all\n"));
 		awe_reset(0);
 		break;
 
@@ -2009,67 +2261,263 @@ awe_hw_awe_control(int dev, int cmd, unsigned char *event)
 		awe_voice_change(voice, (fx_affect_func)awe_terminate);
 		break;
 
+	case _AWE_RELEASE_ALL:
+		awe_note_off_all(FALSE);
+		break;
 	case _AWE_NOTEOFF_ALL:
-		for (i = 0; i < awe_max_voices; i++)
-			awe_note_off(i);
+		awe_note_off_all(TRUE);
 		break;
 
 	case _AWE_INITIAL_VOLUME:
 		DEBUG(0,printk("AWE32: init attenuation %d\n", p1));
-		init_atten = p1;
+		if (p2 == 0) /* absolute value */
+			init_atten = (short)p1;
+		else /* relative value */
+			init_atten = misc_modes[AWE_MD_ZERO_ATTEN] + (short)p1;
+		if (init_atten < 0) init_atten = 0;
 		for (i = 0; i < awe_max_voices; i++)
 			awe_set_voice_vol(i, FALSE);
 		break;
 
-	case _AWE_SET_GUS_BANK:
-		DEBUG(0,printk("AWE32: set gus bank %d\n", p1));
-		awe_gus_bank = p1;
+	case _AWE_CHN_PRESSURE:
+		cinfo->chan_press = p1;
+		p1 = p1 * misc_modes[AWE_MD_MOD_SENSE] / 1200;
+		FX_ADD(&cinfo->fx, AWE_FX_LFO1_PITCH, p1);
+		awe_voice_change(voice, awe_fx_fmmod);
+		FX_ADD(&cinfo->fx, AWE_FX_LFO2_PITCH, p1);
+		awe_voice_change(voice, awe_fx_fm2frq2);
 		break;
-		
-	 /* v0.3 stuffs */
+
 	case _AWE_CHANNEL_MODE:
 		DEBUG(0,printk("AWE32: channel mode = %d\n", p1));
-		awe_channel_mode = p1;
+		playing_mode = p1;
 		awe_reset(0);
 		break;
 
 	case _AWE_DRUM_CHANNELS:
 		DEBUG(0,printk("AWE32: drum flags = %x\n", p1));
-		drum_flags = p1;
+		drum_flags = *(unsigned int*)&event[4];
 		break;
 
-	case _AWE_EXCLUSIVE_SOUND:
-		DEBUG(0,printk("AWE32: exclusive mode = %d\n", p1));
-		awe_exclusive_sound = p1;
+	case _AWE_MISC_MODE:
+		DEBUG(0,printk("AWE32: misc mode = %d %d\n", p1, p2));
+		if (p1 > AWE_MD_VERSION && p1 < AWE_MD_END)
+			misc_modes[p1] = p2;
 		break;
 
-	case _AWE_GET_CURRENT_MODE:
-		{
-			awe_mode_rec tmprec;
-			tmprec.base_addr = awe_base;
-			tmprec.mem_size = awe_mem_size / 2;
-			tmprec.max_voices = awe_max_voices;
-			tmprec.max_infos = AWE_MAX_INFOS;
-			tmprec.max_samples = AWE_MAX_SAMPLES;
-			tmprec.current_sf_id = current_sf_id;
-			tmprec.free_mem = free_mem_ptr;
-			tmprec.free_info = free_info;
-			tmprec.free_sample = free_sample;
-			tmprec.reverb_mode = reverb_mode;
-			tmprec.chorus_mode = chorus_mode;
-			tmprec.init_atten = init_atten;
-			tmprec.channel_mode = awe_channel_mode;
-			tmprec.gus_bank = awe_gus_bank;
-			tmprec.exclusive_sound = awe_exclusive_sound;
-			tmprec.drum_flags = drum_flags;
-			tmprec.debug_mode = debug_mode;
-			IOCTL_TO_USER(*(awe_mode_rec**)&event[4], 0, &tmprec, sizeof(tmprec));
-			break;
-		}
+	case _AWE_EQUALIZER:
+		awe_equalizer((int)p1, (int)p2);
+		break;
+
 	default:
 		DEBUG(0,printk("AWE32: hw control cmd=%d voice=%d\n", cmd, voice));
 		break;
 	}
+}
+
+
+/* voice pressure change */
+static void
+awe_aftertouch(int dev, int voice, int pressure)
+{
+	int note;
+
+	DEBUG(2,printk("AWE32: [after(%d) %d]\n", voice, pressure));
+	if (! voice_in_range(voice))
+		return;
+
+	switch (playing_mode) {
+	case AWE_PLAY_DIRECT:
+	case AWE_PLAY_INDIRECT:
+		awe_start_note(dev, voice, 255, pressure);
+		break;
+	case AWE_PLAY_MULTI2:
+		note = (voice_alloc->map[voice] & 0xff) - 1;
+		awe_start_note(dev, voice, note + 0x80, pressure);
+		break;
+	}
+}
+
+
+/* voice control change */
+static void
+awe_controller(int dev, int voice, int ctrl_num, int value)
+{
+	int i;
+	awe_chan_info *cinfo;
+
+	if (! voice_in_range(voice))
+		return;
+
+	if (playing_mode == AWE_PLAY_MULTI2) {
+		voice = voice_alloc->map[voice] >> 8;
+		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
+			return;
+	}
+
+	cinfo = &channels[voice];
+
+	switch (ctrl_num) {
+	case CTL_BANK_SELECT: /* MIDI control #0 */
+		DEBUG(2,printk("AWE32: [bank(%d) %d]\n", voice, value));
+		cinfo->bank = value;
+		awe_set_instr(dev, voice, cinfo->instr);
+		break;
+
+	case CTL_MODWHEEL: /* MIDI control #1 */
+		DEBUG(2,printk("AWE32: [modwheel(%d) %d]\n", voice, value));
+		i = value * misc_modes[AWE_MD_MOD_SENSE] / 1200;
+		FX_ADD(&cinfo->fx, AWE_FX_LFO1_PITCH, i);
+		awe_voice_change(voice, awe_fx_fmmod);
+		FX_ADD(&cinfo->fx, AWE_FX_LFO2_PITCH, i);
+		awe_voice_change(voice, awe_fx_fm2frq2);
+		break;
+
+	case CTRL_PITCH_BENDER: /* SEQ1 V2 contorl */
+		DEBUG(2,printk("AWE32: [bend(%d) %d]\n", voice, value));
+		/* zero centered */
+		cinfo->bender = value;
+		awe_voice_change(voice, awe_set_voice_pitch);
+		break;
+
+	case CTRL_PITCH_BENDER_RANGE: /* SEQ1 V2 control */
+		DEBUG(2,printk("AWE32: [range(%d) %d]\n", voice, value));
+		/* value = sense x 100 */
+		cinfo->bender_range = value;
+		/* no audible pitch change yet.. */
+		break;
+
+	case CTL_EXPRESSION: /* MIDI control #11 */
+		if (SINGLE_LAYER_MODE())
+			value /= 128;
+	case CTRL_EXPRESSION: /* SEQ1 V2 control */
+		DEBUG(2,printk("AWE32: [expr(%d) %d]\n", voice, value));
+		/* 0 - 127 */
+		cinfo->expression_vol = value;
+		awe_voice_change(voice, awe_set_voice_vol);
+		break;
+
+	case CTL_PAN:	/* MIDI control #10 */
+		DEBUG(2,printk("AWE32: [pan(%d) %d]\n", voice, value));
+		/* (0-127) -> signed 8bit */
+		cinfo->panning = value * 2 - 128;
+		if (misc_modes[AWE_MD_REALTIME_PAN])
+			awe_voice_change(voice, awe_set_pan);
+		break;
+
+	case CTL_MAIN_VOLUME:	/* MIDI control #7 */
+		if (SINGLE_LAYER_MODE())
+			value = (value * 100) / 16383;
+	case CTRL_MAIN_VOLUME:	/* SEQ1 V2 control */
+		DEBUG(2,printk("AWE32: [mainvol(%d) %d]\n", voice, value));
+		/* 0 - 127 */
+		cinfo->main_vol = value;
+		awe_voice_change(voice, awe_set_voice_vol);
+		break;
+
+	case CTL_EXT_EFF_DEPTH: /* reverb effects: 0-127 */
+		DEBUG(2,printk("AWE32: [reverb(%d) %d]\n", voice, value));
+		FX_SET(&cinfo->fx, AWE_FX_REVERB, value * 2);
+		break;
+
+	case CTL_CHORUS_DEPTH: /* chorus effects: 0-127 */
+		DEBUG(2,printk("AWE32: [chorus(%d) %d]\n", voice, value));
+		FX_SET(&cinfo->fx, AWE_FX_CHORUS, value * 2);
+		break;
+
+#ifdef AWE_ACCEPT_ALL_SOUNDS_CONTROLL
+	case 120:  /* all sounds off */
+		awe_note_off_all(FALSE);
+		break;
+	case 123:  /* all notes off */
+		awe_note_off_all(TRUE);
+		break;
+#endif
+
+	case CTL_SUSTAIN: /* MIDI control #64 */
+		cinfo->sustained = value;
+		if (value != 127)
+			awe_voice_change(voice, awe_sustain_off);
+		break;
+
+	case CTL_SOSTENUTO: /* MIDI control #66 */
+		if (value == 127)
+			awe_voice_change(voice, awe_sostenuto_on);
+		else
+			awe_voice_change(voice, awe_sustain_off);
+		break;
+
+	default:
+		DEBUG(0,printk("AWE32: [control(%d) ctrl=%d val=%d]\n",
+			   voice, ctrl_num, value));
+		break;
+	}
+}
+
+
+/* voice pan change (value = -128 - 127) */
+static void
+awe_panning(int dev, int voice, int value)
+{
+	awe_chan_info *cinfo;
+
+	if (! voice_in_range(voice))
+		return;
+
+	if (playing_mode == AWE_PLAY_MULTI2) {
+		voice = voice_alloc->map[voice] >> 8;
+		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
+			return;
+	}
+
+	cinfo = &channels[voice];
+	cinfo->panning = value;
+	DEBUG(2,printk("AWE32: [pan(%d) %d]\n", voice, cinfo->panning));
+	if (misc_modes[AWE_MD_REALTIME_PAN])
+		awe_voice_change(voice, awe_set_pan);
+}
+
+
+/* volume mode change */
+static void
+awe_volume_method(int dev, int mode)
+{
+	/* not impremented */
+	DEBUG(0,printk("AWE32: [volmethod mode=%d]\n", mode));
+}
+
+
+#ifndef AWE_NO_PATCHMGR
+/* patch manager */
+static int
+awe_patchmgr(int dev, struct patmgr_info *rec)
+{
+	printk("AWE32 Warning: patch manager control not supported\n");
+	return 0;
+}
+#endif
+
+
+/* pitch wheel change: 0-16384 */
+static void
+awe_bender(int dev, int voice, int value)
+{
+	awe_chan_info *cinfo;
+
+	if (! voice_in_range(voice))
+		return;
+
+	if (playing_mode == AWE_PLAY_MULTI2) {
+		voice = voice_alloc->map[voice] >> 8;
+		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
+			return;
+	}
+
+	/* convert to zero centered value */
+	cinfo = &channels[voice];
+	cinfo->bender = value - 8192;
+	DEBUG(2,printk("AWE32: [bend(%d) %d]\n", voice, cinfo->bender));
+	awe_voice_change(voice, awe_set_voice_pitch);
 }
 
 
@@ -2094,12 +2542,12 @@ awe_load_patch(int dev, int format, const char *addr,
 		/* no system exclusive message supported yet */
 		return 0;
 	} else if (format != AWE_PATCH) {
-		FATALERR(printk("AWE32 Error: Invalid patch format (key) 0x%x\n", format));
+		printk("AWE32 Error: Invalid patch format (key) 0x%x\n", format);
 		return RET_ERROR(EINVAL);
 	}
 	
 	if (count < AWE_PATCH_INFO_SIZE) {
-		FATALERR(printk("AWE32 Error: Patch header too short\n"));
+		printk("AWE32 Error: Patch header too short\n");
 		return RET_ERROR(EINVAL);
 	}
 	COPY_FROM_USER(((char*)&patch) + offs, addr, offs, 
@@ -2107,27 +2555,43 @@ awe_load_patch(int dev, int format, const char *addr,
 
 	count -= AWE_PATCH_INFO_SIZE;
 	if (count < patch.len) {
-		FATALERR(printk("AWE32 Warning: Patch record too short (%d<%d)\n",
-		       count, (int)patch.len));
-		patch.len = count;
+		printk("AWE32: sample: Patch record too short (%d<%d)\n",
+		       count, patch.len);
+		return RET_ERROR(EINVAL);
 	}
 	
 	switch (patch.type) {
 	case AWE_LOAD_INFO:
-		rc = awe_load_info(&patch, addr);
+		rc = awe_load_info(&patch, addr, count);
 		break;
-
 	case AWE_LOAD_DATA:
-		rc = awe_load_data(&patch, addr);
-		/*
-		if (!pmgr_flag && rc == 0)
-			pmgr_inform(dev, PM_E_PATCH_LOADED, instr, free_sample, 0, 0);
-		*/
+		rc = awe_load_data(&patch, addr, count);
+		break;
+	case AWE_OPEN_PATCH:
+		rc = awe_open_patch(&patch, addr, count);
+		break;
+	case AWE_CLOSE_PATCH:
+		rc = awe_close_patch(&patch, addr, count);
+		break;
+	case AWE_UNLOAD_PATCH:
+		rc = awe_unload_patch(&patch, addr, count);
+		break;
+	case AWE_REPLACE_DATA:
+		rc = awe_replace_data(&patch, addr, count);
+		break;
+	case AWE_MAP_PRESET:
+		rc = awe_load_map(&patch, addr, count);
+		break;
+	case AWE_LOAD_CHORUS_FX:
+		rc = awe_load_chorus_fx(&patch, addr, count);
+		break;
+	case AWE_LOAD_REVERB_FX:
+		rc = awe_load_reverb_fx(&patch, addr, count);
 		break;
 
 	default:
-		FATALERR(printk("AWE32 Error: unknown patch format type %d\n",
-		       patch.type));
+		printk("AWE32 Error: unknown patch format type %d\n",
+		       patch.type);
 		rc = RET_ERROR(EINVAL);
 	}
 
@@ -2135,140 +2599,384 @@ awe_load_patch(int dev, int format, const char *addr,
 }
 
 
-/* load voice information data */
+/* create an sflist record */
 static int
-awe_load_info(awe_patch_info *patch, const char *addr)
+awe_create_sf(int type, char *name)
 {
-	awe_voice_list *rec, *curp;
-	long offset;
-	short i, nvoices;
-	unsigned char bank, instr;
-	int total_size;
+	sf_list *rec;
 
-	if (patch->len < AWE_VOICE_REC_SIZE) {
-		FATALERR(printk("AWE32 Error: invalid patch info length\n"));
-		return RET_ERROR(EINVAL);
+	/* terminate sounds */
+	awe_reset(0);
+	if (current_sf_id >= max_sfs) {
+		int newsize = max_sfs + AWE_MAX_SF_LISTS;
+		sf_list *newlist = my_realloc(sflists, sizeof(sf_list)*max_sfs,
+					      sizeof(sf_list)*newsize);
+		if (newlist == NULL)
+			return 1;
+		sflists = newlist;
+		max_sfs = newsize;
 	}
+	rec = &sflists[current_sf_id];
+	rec->sf_id = current_sf_id + 1;
+	rec->type = type;
+	if (current_sf_id == 0 || (type & AWE_PAT_LOCKED) != 0)
+		locked_sf_id = current_sf_id + 1;
+	/*
+	if (name)
+		MEMCPY(rec->name, name, AWE_PATCH_NAME_LEN);
+	else
+		BZERO(rec->name, AWE_PATCH_NAME_LEN);
+	 */
+	rec->num_info = awe_free_info();
+	rec->num_sample = awe_free_sample();
+	rec->mem_ptr = awe_free_mem_ptr();
+	rec->infos = -1;
+	rec->samples = -1;
 
-	offset = AWE_PATCH_INFO_SIZE;
-	GET_BYTE_FROM_USER(bank, addr, offset); offset++;
-	GET_BYTE_FROM_USER(instr, addr, offset); offset++;
-	GET_SHORT_FROM_USER(nvoices, addr, offset); offset+=2;
+	current_sf_id++;
+	return 0;
+}
 
-	if (nvoices <= 0 || nvoices >= 100) {
-		FATALERR(printk("AWE32 Error: Illegal voice number %d\n", nvoices));
-		return RET_ERROR(EINVAL);
-	}
-	if (free_info + nvoices > AWE_MAX_INFOS) {
-		ERRMSG(printk("AWE32 Error: Too many voice informations\n"));
+
+/* open patch; create sf list and set opened flag */
+static int
+awe_open_patch(awe_patch_info *patch, const char *addr, int count)
+{
+	awe_open_parm parm;
+	COPY_FROM_USER(&parm, addr, AWE_PATCH_INFO_SIZE, sizeof(parm));
+	if (awe_create_sf(parm.type, parm.name)) {
+		printk("AWE32: can't open: failed to alloc new list\n");
 		return RET_ERROR(ENOSPC);
 	}
+	patch_opened = TRUE;
+	return current_sf_id;
+}
 
-	total_size = AWE_VOICE_REC_SIZE + AWE_VOICE_INFO_SIZE * nvoices;
-	if (patch->len < total_size) {
-		ERRMSG(printk("AWE32 Error: patch length(%d) is smaller than nvoices(%d)\n",
-		       (int)patch->len, nvoices));
-		return RET_ERROR(EINVAL);
+/* check if the patch is already opened */
+static int
+check_patch_opened(int type, char *name)
+{
+	if (! patch_opened) {
+		if (awe_create_sf(type, name)) {
+			printk("AWE32: failed to alloc new list\n");
+			return RET_ERROR(ENOSPC);
+		}
+		patch_opened = TRUE;
+		return current_sf_id;
 	}
+	return current_sf_id;
+}
 
-	curp = awe_search_instr(bank, instr);
-	for (i = 0; i < nvoices; i++) {
-		rec = &infos[free_info + i];
-
-		rec->bank = bank;
-		rec->instr = instr;
-		if (i < nvoices - 1)
-			rec->next_instr = rec + 1;
-		else
-			rec->next_instr = curp;
-		rec->next_bank = NULL;
-
-		/* copy awe_voice_info parameters */
-		COPY_FROM_USER(&rec->v, addr, offset, AWE_VOICE_INFO_SIZE);
-		offset += AWE_VOICE_INFO_SIZE;
-		rec->v.sf_id = current_sf_id;
-		if (rec->v.mode & AWE_MODE_INIT_PARM)
-			awe_init_voice_parm(&rec->v.parm);
-		awe_set_sample(&rec->v);
+/* close the patch; if no voice is loaded, remove the patch */
+static int
+awe_close_patch(awe_patch_info *patch, const char *addr, int count)
+{
+	if (patch_opened && current_sf_id > 0) {
+		/* if no voice is loaded, release the current patch */
+		if (sflists[current_sf_id-1].infos == -1)
+			awe_remove_samples(current_sf_id - 1);
 	}
+	patch_opened = 0;
+	return 0;
+}
 
-	/* prepend to top of the list */
-	infos[free_info].next_bank = preset_table[instr];
-	preset_table[instr] = &infos[free_info];
-	free_info += nvoices;
+
+/* remove the latest patch */
+static int
+awe_unload_patch(awe_patch_info *patch, const char *addr, int count)
+{
+	if (current_sf_id > 0)
+		awe_remove_samples(current_sf_id - 1);
+	return 0;
+}
+
+/* allocate voice info list records */
+static int alloc_new_info(int nvoices)
+{
+	int newsize, free_info;
+	awe_voice_list *newlist;
+	free_info = awe_free_info();
+	if (free_info + nvoices >= max_infos) {
+		do {
+			newsize = max_infos + AWE_MAX_INFOS;
+		} while (free_info + nvoices >= newsize);
+		newlist = my_realloc(infos, sizeof(awe_voice_list)*max_infos,
+				     sizeof(awe_voice_list)*newsize);
+		if (newlist == NULL) {
+			printk("AWE32: can't alloc info table\n");
+			return RET_ERROR(ENOSPC);
+		}
+		infos = newlist;
+		max_infos = newsize;
+	}
+	return 0;
+}
+
+/* allocate sample info list records */
+static int alloc_new_sample(void)
+{
+	int newsize, free_sample;
+	awe_sample_list *newlist;
+	free_sample = awe_free_sample();
+	if (free_sample >= max_samples) {
+		newsize = max_samples + AWE_MAX_SAMPLES;
+		newlist = my_realloc(samples,
+				     sizeof(awe_sample_list)*max_samples,
+				     sizeof(awe_sample_list)*newsize);
+		if (newlist == NULL) {
+			printk("AWE32: can't alloc sample table\n");
+			return RET_ERROR(ENOSPC);
+		}
+		samples = newlist;
+		max_samples = newsize;
+	}
+	return 0;
+}
+
+/* load voice map */
+static int
+awe_load_map(awe_patch_info *patch, const char *addr, int count)
+{
+	awe_voice_map map;
+	awe_voice_list *rec;
+	int free_info;
+
+	if (check_patch_opened(AWE_PAT_TYPE_MAP, NULL) < 0)
+		return RET_ERROR(ENOSPC);
+	if (alloc_new_info(1) < 0)
+		return RET_ERROR(ENOSPC);
+
+	COPY_FROM_USER(&map, addr, AWE_PATCH_INFO_SIZE, sizeof(map));
+	
+	free_info = awe_free_info();
+	rec = &infos[free_info];
+	rec->bank = map.map_bank;
+	rec->instr = map.map_instr;
+	rec->type = V_ST_MAPPED;
+	rec->disabled = FALSE;
+	awe_init_voice_info(&rec->v);
+	if (map.map_key >= 0) {
+		rec->v.low = map.map_key;
+		rec->v.high = map.map_key;
+	}
+	rec->v.start = map.src_instr;
+	rec->v.end = map.src_bank;
+	rec->v.fixkey = map.src_key;
+	rec->v.sf_id = current_sf_id;
+	add_info_list(free_info);
+	add_sf_info(free_info);
 
 	return 0;
 }
 
+/* load voice information data */
+static int
+awe_load_info(awe_patch_info *patch, const char *addr, int count)
+{
+	int offset;
+	awe_voice_rec_hdr hdr;
+	int i;
+	int total_size;
+
+	if (count < AWE_VOICE_REC_SIZE) {
+		printk("AWE32 Error: invalid patch info length\n");
+		return RET_ERROR(EINVAL);
+	}
+
+	offset = AWE_PATCH_INFO_SIZE;
+	COPY_FROM_USER((char*)&hdr, addr, offset, AWE_VOICE_REC_SIZE);
+	offset += AWE_VOICE_REC_SIZE;
+
+	if (hdr.nvoices <= 0 || hdr.nvoices >= 100) {
+		printk("AWE32 Error: Illegal voice number %d\n", hdr.nvoices);
+		return RET_ERROR(EINVAL);
+	}
+	total_size = AWE_VOICE_REC_SIZE + AWE_VOICE_INFO_SIZE * hdr.nvoices;
+	if (count < total_size) {
+		printk("AWE32 Error: patch length(%d) is smaller than nvoices(%d)\n",
+		       count, hdr.nvoices);
+		return RET_ERROR(EINVAL);
+	}
+
+	if (check_patch_opened(AWE_PAT_TYPE_MISC, NULL) < 0)
+		return RET_ERROR(ENOSPC);
+
+#if 0 /* it looks like not so useful.. */
+	/* check if the same preset already exists in the info list */
+	for (i = sflists[current_sf_id-1].infos; i >= 0; i = infos[i].next) {
+		if (infos[i].disabled) continue;
+		if (infos[i].bank == hdr.bank && infos[i].instr == hdr.instr) {
+			/* in exclusive mode, do skip loading this */
+			if (hdr.write_mode == AWE_WR_EXCLUSIVE)
+				return 0;
+			/* in replace mode, disable the old data */
+			else if (hdr.write_mode == AWE_WR_REPLACE)
+				infos[i].disabled = TRUE;
+		}
+	}
+	if (hdr.write_mode == AWE_WR_REPLACE)
+		rebuild_preset_list();
+#endif
+
+	if (alloc_new_info(hdr.nvoices) < 0)
+		return RET_ERROR(ENOSPC);
+
+	for (i = 0; i < hdr.nvoices; i++) {
+		int rec = awe_free_info();
+
+		infos[rec].bank = hdr.bank;
+		infos[rec].instr = hdr.instr;
+		infos[rec].type = V_ST_NORMAL;
+		infos[rec].disabled = FALSE;
+
+		/* copy awe_voice_info parameters */
+		COPY_FROM_USER(&infos[rec].v, addr, offset, AWE_VOICE_INFO_SIZE);
+		offset += AWE_VOICE_INFO_SIZE;
+		infos[rec].v.sf_id = current_sf_id;
+		if (infos[rec].v.mode & AWE_MODE_INIT_PARM)
+			awe_init_voice_parm(&infos[rec].v.parm);
+		awe_set_sample(&infos[rec].v);
+		add_info_list(rec);
+		add_sf_info(rec);
+	}
+
+	return 0;
+}
 
 /* load wave sample data */
 static int
-awe_load_data(awe_patch_info *patch, const char *addr)
+awe_load_data(awe_patch_info *patch, const char *addr, int count)
 {
-	long offset;
-	int size;
-	int rc;
+	int offset, size;
+	int rc, free_sample;
+	awe_sample_info *rec;
 
-	if (free_sample >= AWE_MAX_SAMPLES) {
-		ERRMSG(printk("AWE32 Error: Sample table full\n"));
+	if (check_patch_opened(AWE_PAT_TYPE_MISC, NULL) < 0)
 		return RET_ERROR(ENOSPC);
-	}
 
-	size = (patch->len - AWE_SAMPLE_INFO_SIZE) / 2;
+	if (alloc_new_sample() < 0)
+		return RET_ERROR(ENOSPC);
+
+	free_sample = awe_free_sample();
+	rec = &samples[free_sample].v;
+
+	size = (count - AWE_SAMPLE_INFO_SIZE) / 2;
 	offset = AWE_PATCH_INFO_SIZE;
-	COPY_FROM_USER(&samples[free_sample], addr, offset,
-		       AWE_SAMPLE_INFO_SIZE);
+	COPY_FROM_USER(rec, addr, offset, AWE_SAMPLE_INFO_SIZE);
 	offset += AWE_SAMPLE_INFO_SIZE;
-	if (size != samples[free_sample].size) {
-		ERRMSG(printk("AWE32 Warning: sample size differed (%d != %d)\n",
-		       (int)samples[free_sample].size, (int)size));
-		samples[free_sample].size = size;
+	if (size != rec->size) {
+		printk("AWE32: load: sample size differed (%d != %d)\n",
+		       rec->size, size);
+		return RET_ERROR(EINVAL);
 	}
-	if (samples[free_sample].size > 0)
-		if ((rc = awe_write_wave_data(addr, offset, size)) != 0)
+	if (rec->size > 0)
+		if ((rc = awe_write_wave_data(addr, offset, rec, -1)) != 0)
 			return rc;
 
-	awe_check_loaded();
-	samples[free_sample].sf_id = current_sf_id;
+	rec->sf_id = current_sf_id;
 
-	free_sample++;
+	add_sf_sample(free_sample);
+
 	return 0;
 }
 
-/* check the other samples are already loaded */
-static void
-awe_check_loaded(void)
+
+/* replace wave sample data */
+static int
+awe_replace_data(awe_patch_info *patch, const char *addr, int count)
 {
-	if (!loaded_once) {
-		/* it's the first time */
-		if (current_sf_id == 1) {
-			last_sample = free_sample;
-			last_info = free_info;
-		}
-		current_sf_id++;
-		loaded_once = 1;
+	int offset;
+	int size;
+	int rc, i;
+	int channels;
+	awe_sample_info cursmp;
+	int save_mem_ptr;
+
+	if (! patch_opened) {
+		printk("AWE32: replace: patch not opened\n");
+		return RET_ERROR(EINVAL);
 	}
+
+	size = (count - AWE_SAMPLE_INFO_SIZE) / 2;
+	offset = AWE_PATCH_INFO_SIZE;
+	COPY_FROM_USER(&cursmp, addr, offset, AWE_SAMPLE_INFO_SIZE);
+	offset += AWE_SAMPLE_INFO_SIZE;
+	if (cursmp.size == 0 || size != cursmp.size) {
+		printk("AWE32: replace: illegal sample size (%d!=%d)\n",
+		       cursmp.size, size);
+		return RET_ERROR(EINVAL);
+	}
+	channels = patch->optarg;
+	if (channels <= 0 || channels > AWE_NORMAL_VOICES) {
+		printk("AWE32: replace: illegal channels %d\n", channels);
+		return RET_ERROR(EINVAL);
+	}
+
+	for (i = sflists[current_sf_id-1].samples;
+	     i >= 0; i = samples[i].next) {
+		if (samples[i].v.sample == cursmp.sample)
+			break;
+	}
+	if (i < 0) {
+		printk("AWE32: replace: cannot find existing sample data %d\n",
+		       cursmp.sample);
+		return RET_ERROR(EINVAL);
+	}
+		
+	if (samples[i].v.size != cursmp.size) {
+		printk("AWE32: replace: exiting size differed (%d!=%d)\n",
+		       samples[i].v.size, cursmp.size);
+		return RET_ERROR(EINVAL);
+	}
+
+	save_mem_ptr = awe_free_mem_ptr();
+	sflists[current_sf_id-1].mem_ptr = samples[i].v.start - awe_mem_start;
+	MEMCPY(&samples[i].v, &cursmp, sizeof(cursmp));
+	if ((rc = awe_write_wave_data(addr, offset, &samples[i].v, channels)) != 0)
+		return rc;
+	sflists[current_sf_id-1].mem_ptr = save_mem_ptr;
+	samples[i].v.sf_id = current_sf_id;
+
+	return 0;
 }
 
 
 /*----------------------------------------------------------------*/
 
 static const char *readbuf_addr;
-static long readbuf_offs;
+static int readbuf_offs;
 static int readbuf_flags;
+#ifdef __FreeBSD__
+static unsigned short *readbuf_loop;
+static int readbuf_loopstart, readbuf_loopend;
+#endif
 
 /* initialize read buffer */
-static void
-awe_init_readbuf(const char *addr, long offset, int size, int mode_flags)
+static int
+readbuf_init(const char *addr, int offset, awe_sample_info *sp)
 {
+#ifdef __FreeBSD__
+	readbuf_loop = NULL;
+	readbuf_loopstart = sp->loopstart;
+	readbuf_loopend = sp->loopend;
+	if (sp->mode_flags & (AWE_SAMPLE_BIDIR_LOOP|AWE_SAMPLE_REVERSE_LOOP)) {
+		int looplen = sp->loopend - sp->loopstart;
+		readbuf_loop = my_malloc(looplen * 2);
+		if (readbuf_loop == NULL) {
+			printk("AWE32: can't malloc temp buffer\n");
+			return RET_ERROR(ENOSPC);
+		}
+	}
+#endif
 	readbuf_addr = addr;
 	readbuf_offs = offset;
-	readbuf_flags = mode_flags;
+	readbuf_flags = sp->mode_flags;
+	return 0;
 }
 
 /* read directly from user buffer */
 static unsigned short
-awe_read_word(int pos)
+readbuf_word(int pos)
 {
 	unsigned short c;
 	/* read from user buffer */
@@ -2281,10 +2989,43 @@ awe_read_word(int pos)
 	}
 	if (readbuf_flags & AWE_SAMPLE_UNSIGNED)
 		c ^= 0x8000; /* unsigned -> signed */
+#ifdef __FreeBSD__
+	/* write on cache for reverse loop */
+	if (readbuf_flags & (AWE_SAMPLE_BIDIR_LOOP|AWE_SAMPLE_REVERSE_LOOP)) {
+		if (pos >= readbuf_loopstart && pos < readbuf_loopend)
+			readbuf_loop[pos - readbuf_loopstart] = c;
+	}
+#endif
 	return c;
 }
 
+#ifdef __FreeBSD__
+/* read from cache */
+static unsigned short
+readbuf_word_cache(int pos)
+{
+	if (pos >= readbuf_loopstart && pos < readbuf_loopend)
+		return readbuf_loop[pos - readbuf_loopstart];
+	return 0;
+}
 
+static void
+readbuf_end(void)
+{
+	if (readbuf_loop) {
+		my_free(readbuf_loop);
+	}
+	readbuf_loop = NULL;
+}
+
+#else
+
+#define readbuf_word_cache	readbuf_word
+#define readbuf_end()		/**/
+
+#endif
+
+/*----------------------------------------------------------------*/
 
 #define BLANK_LOOP_START	8
 #define BLANK_LOOP_END		40
@@ -2292,28 +3033,26 @@ awe_read_word(int pos)
 
 /* loading onto memory */
 static int 
-awe_write_wave_data(const char *addr, long offset, int size)
+awe_write_wave_data(const char *addr, int offset, awe_sample_info *sp, int channels)
 {
-	awe_sample_info *sp = &samples[free_sample];
-	int i, truesize;
+	int i, truesize, dram_offset;
 	int rc;
-	unsigned long csum1, csum2;
 
 	/* be sure loop points start < end */
 	if (sp->loopstart > sp->loopend) {
-		long tmp = sp->loopstart;
+		int tmp = sp->loopstart;
 		sp->loopstart = sp->loopend;
 		sp->loopend = tmp;
 	}
 
 	/* compute true data size to be loaded */
-	truesize = size;
+	truesize = sp->size;
 	if (sp->mode_flags & AWE_SAMPLE_BIDIR_LOOP)
 		truesize += sp->loopend - sp->loopstart;
 	if (sp->mode_flags & AWE_SAMPLE_NO_BLANK)
 		truesize += BLANK_LOOP_SIZE;
-	if (size > 0 && free_mem_ptr + truesize >= awe_mem_size/2) {
-		ERRMSG(printk("AWE32 Error: Sample memory full\n"));
+	if (awe_free_mem_ptr() + truesize >= awe_mem_size/2) {
+		printk("AWE32 Error: Sample memory full\n");
 		return RET_ERROR(ENOSPC);
 	}
 
@@ -2321,32 +3060,36 @@ awe_write_wave_data(const char *addr, long offset, int size)
 	sp->end -= sp->start;
 	sp->loopstart -= sp->start;
 	sp->loopend -= sp->start;
-	sp->size = truesize;
 
-	sp->start = free_mem_ptr + AWE_DRAM_OFFSET;
-	sp->end += free_mem_ptr + AWE_DRAM_OFFSET;
-	sp->loopstart += free_mem_ptr + AWE_DRAM_OFFSET;
-	sp->loopend += free_mem_ptr + AWE_DRAM_OFFSET;
+	dram_offset = awe_free_mem_ptr() + awe_mem_start;
+	sp->start = dram_offset;
+	sp->end += dram_offset;
+	sp->loopstart += dram_offset;
+	sp->loopend += dram_offset;
 
-	if ((rc = awe_open_dram_for_write(free_mem_ptr)) != 0) {
+	/* set the total size (store onto obsolete checksum value) */
+	if (sp->size == 0)
+		sp->checksum = 0;
+	else
+		sp->checksum = truesize;
+
+	if ((rc = awe_open_dram_for_write(dram_offset, channels)) != 0)
 		return rc;
-	}
 
-	awe_init_readbuf(addr, offset, size, sp->mode_flags);
-	csum1 = 0;
-	for (i = 0; i < size; i++) {
+	if (readbuf_init(addr, offset, sp) < 0)
+		return RET_ERROR(ENOSPC);
+
+	for (i = 0; i < sp->size; i++) {
 		unsigned short c;
-		c = awe_read_word(i);
-		csum1 += c;
+		c = readbuf_word(i);
 		awe_write_dram(c);
 		if (i == sp->loopend &&
 		    (sp->mode_flags & (AWE_SAMPLE_BIDIR_LOOP|AWE_SAMPLE_REVERSE_LOOP))) {
 			int looplen = sp->loopend - sp->loopstart;
 			/* copy reverse loop */
 			int k;
-			for (k = 0; k < looplen; k++) {
-				/* non-buffered data */
-				c = awe_read_word(i - k);
+			for (k = 1; k <= looplen; k++) {
+				c = readbuf_word_cache(i - k);
 				awe_write_dram(c);
 			}
 			if (sp->mode_flags & AWE_SAMPLE_BIDIR_LOOP) {
@@ -2357,6 +3100,7 @@ awe_write_wave_data(const char *addr, long offset, int size)
 			}
 		}
 	}
+	readbuf_end();
 
 	/* if no blank loop is attached in the sample, add it */
 	if (sp->mode_flags & AWE_SAMPLE_NO_BLANK) {
@@ -2366,40 +3110,14 @@ awe_write_wave_data(const char *addr, long offset, int size)
 			sp->loopstart = sp->end + BLANK_LOOP_START;
 			sp->loopend = sp->end + BLANK_LOOP_END;
 		}
-		sp->size += BLANK_LOOP_SIZE;
 	}
 
+	sflists[current_sf_id-1].mem_ptr += truesize;
 	awe_close_dram();
-	if (sp->checksum_flag) {
-#ifdef AWE_CHECKSUM_DATA
-		if (sp->checksum_flag != 2 && csum1 != sp->checksum) {
-			ERRMSG(printk("AWE32: [%d] checksum mismatch on data %x:%x\n",
-			       free_sample, (int)sp->checksum, (int)csum1));
-			return RET_ERROR(NO_DATA_ERR);
-		}
-#endif /* AWE_CHECKSUM_DATA */
-#ifdef AWE_CHECKSUM_MEMORY
-		if (awe_open_dram_for_read(free_mem_ptr) == 0) {
-			csum2 = 0;
-			for (i = 0; i < size; i++) {
-				unsigned short c;
-				c = awe_peek(AWE_SMLD);
-				csum2 += c;
-			}
-			awe_close_dram_for_read();
-			if (csum1 != csum2) {
-				ERRMSG(printk("AWE32: [%d] checksum mismatch on DRAM %x:%x\n",
-					      free_sample, (int)csum1, (int)csum2));
-				return RET_ERROR(NO_DATA_ERR);
-			}
-		}
-#endif /* AWE_CHECKSUM_MEMORY */
-	}
-	free_mem_ptr += sp->size;
 
-	/* re-initialize FM passthrough */
+	/* initialize FM */
 	awe_init_fm();
-	awe_tweak();
+	/*awe_tweak();*/
 
 	return 0;
 }
@@ -2435,91 +3153,89 @@ static int
 awe_load_guspatch(const char *addr, int offs, int size, int pmgr_flag)
 {
 	struct patch_info patch;
-	awe_voice_list *rec, *curp;
-	long sizeof_patch;
-	int note;
+	awe_voice_info *rec;
+	awe_sample_info *smp;
+	int sizeof_patch;
+	int note, free_sample, free_info;
 	int rc;
 
-	sizeof_patch = (long)&patch.data[0] - (long)&patch; /* header size */
-	if (free_sample >= AWE_MAX_SAMPLES) {
-		ERRMSG(printk("AWE32 Error: Sample table full\n"));
-		return RET_ERROR(ENOSPC);
-	}
-	if (free_info >= AWE_MAX_INFOS) {
-		ERRMSG(printk("AWE32 Error: Too many voice informations\n"));
-		return RET_ERROR(ENOSPC);
-	}
+	sizeof_patch = (int)((long)&patch.data[0] - (long)&patch); /* header size */
 	if (size < sizeof_patch) {
-		ERRMSG(printk("AWE32 Error: Patch header too short\n"));
+		printk("AWE32 Error: Patch header too short\n");
 		return RET_ERROR(EINVAL);
 	}
 	COPY_FROM_USER(((char*)&patch) + offs, addr, offs, sizeof_patch - offs);
 	size -= sizeof_patch;
 	if (size < patch.len) {
-		FATALERR(printk("AWE32 Warning: Patch record too short (%d<%d)\n",
-		       size, (int)patch.len));
-		patch.len = size;
+		printk("AWE32 Warning: Patch record too short (%d<%d)\n",
+		       size, patch.len);
+		return RET_ERROR(EINVAL);
 	}
+	if (check_patch_opened(AWE_PAT_TYPE_GUS, NULL) < 0)
+		return RET_ERROR(ENOSPC);
+	if (alloc_new_sample() < 0)
+		return RET_ERROR(ENOSPC);
+	if (alloc_new_info(1))
+		return RET_ERROR(ENOSPC);
 
-	samples[free_sample].sf_id = 0;
-	samples[free_sample].sample = free_sample;
-	samples[free_sample].start = 0;
-	samples[free_sample].end = patch.len;
-	samples[free_sample].loopstart = patch.loop_start;
-	samples[free_sample].loopend = patch.loop_end + 1;
-	samples[free_sample].size = patch.len;
+	free_sample = awe_free_sample();
+	smp = &samples[free_sample].v;
+
+	smp->sample = free_sample;
+	smp->start = 0;
+	smp->end = patch.len;
+	smp->loopstart = patch.loop_start;
+	smp->loopend = patch.loop_end;
+	smp->size = patch.len;
 
 	/* set up mode flags */
-	samples[free_sample].mode_flags = 0;
+	smp->mode_flags = 0;
 	if (!(patch.mode & WAVE_16_BITS))
-		samples[free_sample].mode_flags |= AWE_SAMPLE_8BITS;
+		smp->mode_flags |= AWE_SAMPLE_8BITS;
 	if (patch.mode & WAVE_UNSIGNED)
-		samples[free_sample].mode_flags |= AWE_SAMPLE_UNSIGNED;
-	samples[free_sample].mode_flags |= AWE_SAMPLE_NO_BLANK;
+		smp->mode_flags |= AWE_SAMPLE_UNSIGNED;
+	smp->mode_flags |= AWE_SAMPLE_NO_BLANK;
 	if (!(patch.mode & (WAVE_LOOPING|WAVE_BIDIR_LOOP|WAVE_LOOP_BACK)))
-		samples[free_sample].mode_flags |= AWE_SAMPLE_SINGLESHOT;
+		smp->mode_flags |= AWE_SAMPLE_SINGLESHOT;
 	if (patch.mode & WAVE_BIDIR_LOOP)
-		samples[free_sample].mode_flags |= AWE_SAMPLE_BIDIR_LOOP;
+		smp->mode_flags |= AWE_SAMPLE_BIDIR_LOOP;
 	if (patch.mode & WAVE_LOOP_BACK)
-		samples[free_sample].mode_flags |= AWE_SAMPLE_REVERSE_LOOP;
+		smp->mode_flags |= AWE_SAMPLE_REVERSE_LOOP;
 
-	DEBUG(0,printk("AWE32: [sample %d mode %x]\n", patch.instr_no,
-		       samples[free_sample].mode_flags));
+	DEBUG(0,printk("AWE32: [sample %d mode %x]\n", patch.instr_no, smp->mode_flags));
 	if (patch.mode & WAVE_16_BITS) {
 		/* convert to word offsets */
-		samples[free_sample].size /= 2;
-		samples[free_sample].end /= 2;
-		samples[free_sample].loopstart /= 2;
-		samples[free_sample].loopend /= 2;
+		smp->size /= 2;
+		smp->end /= 2;
+		smp->loopstart /= 2;
+		smp->loopend /= 2;
 	}
-	samples[free_sample].checksum_flag = 0;
-	samples[free_sample].checksum = 0;
+	smp->checksum_flag = 0;
+	smp->checksum = 0;
 
-	if ((rc = awe_write_wave_data(addr, sizeof_patch,
-				      samples[free_sample].size)) != 0)
+	if ((rc = awe_write_wave_data(addr, sizeof_patch, smp, -1)) != 0)
 		return rc;
 
-	awe_check_loaded();
-	samples[free_sample].sf_id = current_sf_id;
-	free_sample++;
+	smp->sf_id = current_sf_id;
+	add_sf_sample(free_sample);
 
 	/* set up voice info */
-	rec = &infos[free_info];
-	awe_init_voice_info(&rec->v);
-	rec->v.sf_id = current_sf_id;
-	rec->v.sample = free_sample - 1; /* the last sample */
-	rec->v.rate_offset = calc_rate_offset(patch.base_freq);
+	free_info = awe_free_info();
+	rec = &infos[free_info].v;
+	awe_init_voice_info(rec);
+	rec->sample = free_sample; /* the last sample */
+	rec->rate_offset = calc_rate_offset(patch.base_freq);
 	note = freq_to_note(patch.base_note);
-	rec->v.root = note / 100;
-	rec->v.tune = -(note % 100);
-	rec->v.low = freq_to_note(patch.low_note) / 100;
-	rec->v.high = freq_to_note(patch.high_note) / 100;
+	rec->root = note / 100;
+	rec->tune = -(note % 100);
+	rec->low = freq_to_note(patch.low_note) / 100;
+	rec->high = freq_to_note(patch.high_note) / 100;
 	DEBUG(1,printk("AWE32: [gus base offset=%d, note=%d, range=%d-%d(%d-%d)]\n",
-		       rec->v.rate_offset, note,
-		       rec->v.low, rec->v.high,
+		       rec->rate_offset, note,
+		       rec->low, rec->high,
 	      patch.low_note, patch.high_note));
 	/* panning position; -128 - 127 => 0-127 */
-	rec->v.pan = (patch.panning + 128) / 2;
+	rec->pan = (patch.panning + 128) / 2;
 
 	/* detuning is ignored */
 	/* 6points volume envelope */
@@ -2542,129 +3258,187 @@ awe_load_guspatch(const char *addr, int offs, int size, int pmgr_flag)
 		release += calc_gus_envelope_time
 			(patch.env_rate[5], patch.env_offset[4],
 			 patch.env_offset[5]);
-		rec->v.parm.volatkhld = (calc_parm_attack(attack) << 8) |
+		rec->parm.volatkhld = (calc_parm_attack(attack) << 8) |
 			calc_parm_hold(hold);
-		rec->v.parm.voldcysus = (calc_gus_sustain(patch.env_offset[2]) << 8) |
+		rec->parm.voldcysus = (calc_gus_sustain(patch.env_offset[2]) << 8) |
 			calc_parm_decay(decay);
-		rec->v.parm.volrelease = 0x8000 | calc_parm_decay(release);
+		rec->parm.volrelease = 0x8000 | calc_parm_decay(release);
 		DEBUG(2,printk("AWE32: [gusenv atk=%d, hld=%d, dcy=%d, rel=%d]\n", attack, hold, decay, release));
-		rec->v.attenuation = calc_gus_attenuation(patch.env_offset[0]);
+		rec->attenuation = calc_gus_attenuation(patch.env_offset[0]);
 	}
 
 	/* tremolo effect */
 	if (patch.mode & WAVE_TREMOLO) {
 		int rate = (patch.tremolo_rate * 1000 / 38) / 42;
-		rec->v.parm.tremfrq = ((patch.tremolo_depth / 2) << 8) | rate;
+		rec->parm.tremfrq = ((patch.tremolo_depth / 2) << 8) | rate;
 		DEBUG(2,printk("AWE32: [gusenv tremolo rate=%d, dep=%d, tremfrq=%x]\n",
 			       patch.tremolo_rate, patch.tremolo_depth,
-			       rec->v.parm.tremfrq));
+			       rec->parm.tremfrq));
 	}
 	/* vibrato effect */
 	if (patch.mode & WAVE_VIBRATO) {
 		int rate = (patch.vibrato_rate * 1000 / 38) / 42;
-		rec->v.parm.fm2frq2 = ((patch.vibrato_depth / 6) << 8) | rate;
+		rec->parm.fm2frq2 = ((patch.vibrato_depth / 6) << 8) | rate;
 		DEBUG(2,printk("AWE32: [gusenv vibrato rate=%d, dep=%d, tremfrq=%x]\n",
 			       patch.tremolo_rate, patch.tremolo_depth,
-			       rec->v.parm.tremfrq));
+			       rec->parm.tremfrq));
 	}
 	
 	/* scale_freq, scale_factor, volume, and fractions not implemented */
 
-	/* set the voice index */
-	awe_set_sample(&rec->v);
+	/* append to the tail of the list */
+	infos[free_info].bank = misc_modes[AWE_MD_GUS_BANK];
+	infos[free_info].instr = patch.instr_no;
+	infos[free_info].disabled = FALSE;
+	infos[free_info].type = V_ST_NORMAL;
+	infos[free_info].v.sf_id = current_sf_id;
 
-	/* prepend to top of the list */
-	curp = awe_search_instr(awe_gus_bank, patch.instr_no);
-	rec->bank = awe_gus_bank;
-	rec->instr = patch.instr_no;
-	rec->next_instr = curp;
-	rec->next_bank = preset_table[rec->instr];
-	preset_table[rec->instr] = rec;
-	free_info++;
+	add_info_list(free_info);
+	add_sf_info(free_info);
+
+	/* set the voice index */
+	awe_set_sample(rec);
 
 	return 0;
 }
 
 #endif  /* AWE_HAS_GUS_COMPATIBILITY */
 
-/*----------------------------------------------------------------*/
+/*----------------------------------------------------------------
+ * sample and voice list handlers
+ *----------------------------------------------------------------*/
 
-/* remove samples with different sf_id from instrument list */
-static awe_voice_list *
-awe_get_removed_list(awe_voice_list *curp)
+/* append this to the sf list */
+static void add_sf_info(int rec)
 {
-	awe_voice_list *lastp, **prevp;
-	int maxc;
-	lastp = curp;
-	prevp = &lastp;
-	for (maxc = AWE_MAX_INFOS;
-	     curp && maxc; curp = curp->next_instr, maxc--) {
-		if (curp->v.sf_id != 1)
-			*prevp = curp->next_instr;
-		else
-			prevp = &curp->next_instr;
+	int sf_id = infos[rec].v.sf_id;
+	if (sf_id == 0) return;
+	sf_id--;
+	if (sflists[sf_id].infos < 0)
+		sflists[sf_id].infos = rec;
+	else {
+		int i, prev;
+		prev = sflists[sf_id].infos;
+		while ((i = infos[prev].next) >= 0)
+			prev = i;
+		infos[prev].next = rec;
 	}
-	return lastp;
+	infos[rec].next = -1;
+	sflists[sf_id].num_info++;
 }
 
-
-/* remove last loaded samples */
-static void
-awe_remove_samples(void)
+/* prepend this sample to sf list */
+static void add_sf_sample(int rec)
 {
-	awe_voice_list **prevp, *p, *nextp;
-	int maxc;
-	int i;
+	int sf_id = samples[rec].v.sf_id;
+	if (sf_id == 0) return;
+	sf_id--;
+	samples[rec].next = sflists[sf_id].samples;
+	sflists[sf_id].samples = rec;
+	sflists[sf_id].num_sample++;
+}
 
-	/* no sample is loaded yet */
-	if (last_sample == free_sample && last_info == free_info)
-		return;
-
-	/* only the primary samples are loaded */
-	if (current_sf_id <= 1)
-		return;
-
-	/* remove the records from preset table */
-	for (i = 0; i < AWE_MAX_PRESETS; i++) {
-		prevp = &preset_table[i];
-		for (maxc = AWE_MAX_INFOS, p = preset_table[i];
-		     p && maxc; p = nextp, maxc--) {
-			nextp = p->next_bank;
-			p = awe_get_removed_list(p);
-			if (p == NULL)
-				*prevp = nextp;
-			else {
-				*prevp = p;
-				prevp = &p->next_bank;
-			}
+/* purge the old records which don't belong with the same file id */
+static void purge_old_list(int rec, int next)
+{
+	infos[rec].next_instr = next;
+	if (infos[rec].bank == AWE_DRUM_BANK) {
+		/* remove samples with the same note range */
+		int cur, *prevp = &infos[rec].next_instr;
+		int low = infos[rec].v.low;
+		int high = infos[rec].v.high;
+		for (cur = next; cur >= 0; cur = infos[cur].next_instr) {
+			if (infos[cur].v.low == low &&
+			    infos[cur].v.high == high &&
+			    infos[cur].v.sf_id != infos[rec].v.sf_id)
+				*prevp = infos[cur].next_instr;
+			prevp = &infos[cur].next_instr;
 		}
+	} else {
+		if (infos[next].v.sf_id != infos[rec].v.sf_id)
+			infos[rec].next_instr = -1;
 	}
-
-	for (i = last_sample; i < free_sample; i++)
-		free_mem_ptr -= samples[i].size;
-
-	free_sample = last_sample;
-	free_info = last_info;
-	current_sf_id = 1;
-	loaded_once = 0;
 }
 
+/* prepend to top of the preset table */
+static void add_info_list(int rec)
+{
+	int *prevp, cur;
+	int instr = infos[rec].instr;
+	int bank = infos[rec].bank;
+
+	if (infos[rec].disabled)
+		return;
+
+	prevp = &preset_table[instr];
+	cur = *prevp;
+	while (cur >= 0) {
+		/* search the first record with the same bank number */
+		if (infos[cur].bank == bank) {
+			/* replace the list with the new record */
+			infos[rec].next_bank = infos[cur].next_bank;
+			*prevp = rec;
+			purge_old_list(rec, cur);
+			return;
+		}
+		prevp = &infos[cur].next_bank;
+		cur = infos[cur].next_bank;
+	}
+
+	/* this is the first bank record.. just add this */
+	infos[rec].next_instr = -1;
+	infos[rec].next_bank = preset_table[instr];
+	preset_table[instr] = rec;
+}
+
+/* remove samples later than the specified sf_id */
+static void
+awe_remove_samples(int sf_id)
+{
+	if (sf_id <= 0) {
+		awe_reset_samples();
+		return;
+	}
+	/* already removed? */
+	if (current_sf_id <= sf_id)
+		return;
+
+	current_sf_id = sf_id;
+	if (locked_sf_id > sf_id)
+		locked_sf_id = sf_id;
+
+	rebuild_preset_list();
+}
+
+/* rebuild preset search list */
+static void rebuild_preset_list(void)
+{
+	int i, j;
+
+	for (i = 0; i < AWE_MAX_PRESETS; i++)
+		preset_table[i] = -1;
+
+	for (i = 0; i < current_sf_id; i++) {
+		for (j = sflists[i].infos; j >= 0; j = infos[j].next)
+			add_info_list(j);
+	}
+}
 
 /* search the specified sample */
 static short
 awe_set_sample(awe_voice_info *vp)
 {
 	int i;
-	for (i = 0; i < free_sample; i++) {
-		if (samples[i].sf_id == vp->sf_id &&
-		    samples[i].sample == vp->sample) {
+	vp->index = -1;
+	for (i = sflists[vp->sf_id-1].samples; i >= 0; i = samples[i].next) {
+		if (samples[i].v.sample == vp->sample) {
 			/* set the actual sample offsets */
-			vp->start += samples[i].start;
-			vp->end += samples[i].end;
-			vp->loopstart += samples[i].loopstart;
-			vp->loopend += samples[i].loopend;
+			vp->start += samples[i].v.start;
+			vp->end += samples[i].v.end;
+			vp->loopstart += samples[i].v.loopstart;
+			vp->loopend += samples[i].v.loopend;
 			/* copy mode flags */
-			vp->mode = samples[i].mode_flags;
+			vp->mode = samples[i].v.mode_flags;
 			/* set index */
 			vp->index = i;
 			return i;
@@ -2674,235 +3448,25 @@ awe_set_sample(awe_voice_info *vp)
 }
 
 
-/* voice pressure change */
-static void
-awe_aftertouch(int dev, int voice, int pressure)
-{
-	DEBUG(2,printk("AWE32: [after(%d) %d]\n", voice, pressure));
-	if (awe_channel_mode == 2) {
-		int note = (voice_alloc->map[voice] & 0xff) - 1;
-		awe_start_note(dev, voice, note + 0x80, pressure);
+/*----------------------------------------------------------------
+ * voice allocation
+ *----------------------------------------------------------------*/
 
-	} else if (awe_channel_mode == 0) {
-		if (voice < 0 || voice >= awe_max_voices)
-			return;
-		voices[voice].velocity = pressure;
-		awe_set_voice_vol(voice, FALSE);
-	}
-}
-
-
-/* voice control change */
-static void
-awe_controller(int dev, int voice, int ctrl_num, int value)
-{
-	awe_chan_info *cinfo;
-
-	if (awe_channel_mode) {
-		if (awe_channel_mode == 2) /* get channel */
-			voice = voice_alloc->map[voice] >> 8;
-		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return;
-		cinfo = &channels[voice];
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-			return;
-		cinfo = voices[voice].cinfo;
-	}
-
-	switch (ctrl_num) {
-	case CTL_BANK_SELECT: /* SEQ1 control */
-		DEBUG(2,printk("AWE32: [bank(%d) %d]\n", voice, value));
-		cinfo->bank = value;
-		awe_set_instr(dev, voice, cinfo->instr);
-		break;
-
-	case CTRL_PITCH_BENDER: /* SEQ1 V2 contorl */
-		DEBUG(2,printk("AWE32: [bend(%d) %d]\n", voice, value));
-		/* zero centered */
-		cinfo->bender = value;
-		awe_voice_change(voice, awe_set_voice_pitch);
-		break;
-
-	case CTRL_PITCH_BENDER_RANGE: /* SEQ1 V2 control */
-		DEBUG(2,printk("AWE32: [range(%d) %d]\n", voice, value));
-		/* value = sense x 100 */
-		cinfo->bender_range = value;
-		/* no audible pitch change yet.. */
-		break;
-
-	case CTL_EXPRESSION: /* SEQ1 control */
-		if (!awe_channel_mode)
-			value /= 128;
-	case CTRL_EXPRESSION: /* SEQ1 V2 control */
-		DEBUG(2,printk("AWE32: [expr(%d) %d]\n", voice, value));
-		/* 0 - 127 */
-		cinfo->expression_vol = value;
-		awe_voice_change(voice, awe_set_voice_vol);
-		break;
-
-	case CTL_PAN:	/* SEQ1 control */
-		DEBUG(2,printk("AWE32: [pan(%d) %d]\n", voice, value));
-		/* (0-127) -> signed 8bit */
-		cinfo->panning = value * 2 - 128;
-		awe_voice_change(voice, awe_set_pan);
-		break;
-
-	case CTL_MAIN_VOLUME:	/* SEQ1 control */
-		if (!awe_channel_mode)
-			value = (value * 100) / 16383;
-	case CTRL_MAIN_VOLUME:	/* SEQ1 V2 control */
-		DEBUG(2,printk("AWE32: [mainvol(%d) %d]\n", voice, value));
-		/* 0 - 127 */
-		cinfo->main_vol = value;
-		awe_voice_change(voice, awe_set_voice_vol);
-		break;
-
-	case CTL_EXT_EFF_DEPTH: /* reverb effects: 0-127 */
-		DEBUG(2,printk("AWE32: [reverb(%d) %d]\n", voice, value));
-		FX_SET(&cinfo->fx, AWE_FX_REVERB, value * 2);
-		break;
-
-	case CTL_CHORUS_DEPTH: /* chorus effects: 0-127 */
-		DEBUG(2,printk("AWE32: [chorus(%d) %d]\n", voice, value));
-		FX_SET(&cinfo->fx, AWE_FX_CHORUS, value * 2);
-		break;
-
-#ifdef AWE_ACCEPT_ALL_SOUNDS_CONTROLL
-	case 120:  /* all sounds off */
-		{int i; for (i = 0; i < AWE_NORMAL_VOICES; i++)
-			awe_terminate(i);
-		}
-		/*awe_reset(0);*/
-		break;
-	case 123:  /* all notes off */
-		{int i;
-		for (i = 0; i < awe_max_voices; i++)
-			awe_note_off(i);
-		}
-		break;
-#endif
-
-	case CTL_SUSTAIN: /* sustain the channel */
-		cinfo->sustained = value;
-		if (value == 0)
-			awe_voice_change(voice, awe_sustain_off);
-		break;
-
-	default:
-		DEBUG(0,printk("AWE32: [control(%d) ctrl=%d val=%d]\n",
-			   voice, ctrl_num, value));
-		break;
-	}
-}
-
-
-
-/* change the voice parameters */
-static void awe_voice_change(int voice, fx_affect_func func)
-{
-	int i; 
-	if (! awe_channel_mode) {
-		func(voice, FALSE);
-		return;
-	}
-
-	for (i = 0; i < awe_max_voices; i++)
-		if (voices[i].ch == voice)
-			func(i, FALSE);
-}
-
-
-/* drop sustain */
-static void awe_sustain_off(int voice, int forced)
-{
-	if (voices[voice].state == AWE_ST_SUSTAINED)
-		awe_note_off(voice);
-}
-
-
-/* voice pan change (value = -128 - 127) */
-static void
-awe_panning(int dev, int voice, int value)
-{
-	awe_chan_info *cinfo;
-	if (awe_channel_mode) {
-		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return;
-		cinfo = &channels[voice];
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-			return;
-		cinfo = voices[voice].cinfo;
-	}
-
-	cinfo->panning = value;
-	DEBUG(2,printk("AWE32: [pan(%d) %d]\n", voice, cinfo->panning));
-	awe_voice_change(voice, awe_set_pan);
-}
-
-
-/* volume mode change */
-static void
-awe_volume_method(int dev, int mode)
-{
-	/* not impremented */
-	DEBUG(0,printk("AWE32: [volmethod mode=%d]\n", mode));
-}
-
-
-#ifndef AWE_NO_PATCHMGR
-/* patch manager */
+/* look for all voices associated with the specified note & velocity */
 static int
-awe_patchmgr(int dev, struct patmgr_info *rec)
+awe_search_multi_voices(int rec, int note, int velocity, awe_voice_info **vlist)
 {
-	FATALERR(printk("AWE32 Warning: patch manager control not supported\n"));
-	return 0;
-}
-#endif
-
-
-/* pitch wheel change: 0-16384 */
-static void
-awe_bender(int dev, int voice, int value)
-{
-	awe_chan_info *cinfo;
-	if (awe_channel_mode) {
-		if (awe_channel_mode == 2)
-			voice = voice_alloc->map[voice] >> 8;
-		if (voice < 0 || voice >= AWE_MAX_CHANNELS)
-			return;
-		cinfo = &channels[voice];
-	} else {
-		if (voice < 0 || voice >= awe_max_voices)
-			return;
-		cinfo = voices[voice].cinfo;
-	}
-	/* convert to zero centered value */
-	cinfo->bender = value - 8192;
-	DEBUG(2,printk("AWE32: [bend(%d) %d]\n", voice, cinfo->bender));
-	awe_voice_change(voice, awe_set_voice_pitch);
-}
-
-/* calculate the number of voices for this note & velocity */
-static int
-awe_search_multi_voices(awe_voice_list *rec, int note, int velocity, awe_voice_info **vlist)
-{
-	int maxc;
 	int nvoices;
-	unsigned short sf_id;
 
-	sf_id = current_sf_id;
 	nvoices = 0;
-	for (maxc = AWE_MAX_INFOS;
-	     rec && maxc; rec = rec->next_instr, maxc--) {
-		if (rec->v.low <= note && note <= rec->v.high &&
-		    velocity >= rec->v.vellow && velocity <= rec->v.velhigh) {
-			if (nvoices == 0)
-				sf_id = rec->v.sf_id;
-			else if (rec->v.sf_id != sf_id)
-				continue;
-			vlist[nvoices] = &rec->v;
+	for (; rec >= 0; rec = infos[rec].next_instr) {
+		if (note >= infos[rec].v.low &&
+		    note <= infos[rec].v.high &&
+		    velocity >= infos[rec].v.vellow &&
+		    velocity <= infos[rec].v.velhigh) {
+			vlist[nvoices] = &infos[rec].v;
+			if (infos[rec].type == V_ST_MAPPED) /* mapper */
+				return -1;
 			nvoices++;
 			if (nvoices >= AWE_MAX_VOICES)
 				break;
@@ -2911,112 +3475,178 @@ awe_search_multi_voices(awe_voice_list *rec, int note, int velocity, awe_voice_i
 	return nvoices;	
 }
 
+/* store the voice list from the specified note and velocity.
+   if the preset is mapped, seek for the destination preset, and rewrite
+   the note number if necessary.
+   */
+static int
+really_alloc_voices(int vrec, int def_vrec, int *note, int velocity, awe_voice_info **vlist, int level)
+{
+	int nvoices;
+
+	nvoices = awe_search_multi_voices(vrec, *note, velocity, vlist);
+	if (nvoices == 0)
+		nvoices = awe_search_multi_voices(def_vrec, *note, velocity, vlist);
+	if (nvoices < 0) { /* mapping */
+		int preset = vlist[0]->start;
+		int bank = vlist[0]->end;
+		int key = vlist[0]->fixkey;
+		if (level > 5) {
+			printk("AWE32: too deep mapping level\n");
+			return 0;
+		}
+		vrec = awe_search_instr(bank, preset);
+		if (bank == AWE_DRUM_BANK)
+			def_vrec = awe_search_instr(bank, 0);
+		else
+			def_vrec = awe_search_instr(0, preset);
+		if (key >= 0)
+			*note = key;
+		return really_alloc_voices(vrec, def_vrec, note, velocity, vlist, level+1);
+	}
+
+	return nvoices;
+}
+
 /* allocate voices corresponding note and velocity; supports multiple insts. */
 static void
-awe_alloc_multi_voices(int ch, int note, int velocity)
+awe_alloc_multi_voices(int ch, int note, int velocity, int key)
 {
 	int i, v, nvoices;
 	awe_voice_info *vlist[AWE_MAX_VOICES];
 
-	if (channels[ch].vrec == NULL && channels[ch].def_vrec == NULL)
+	if (channels[ch].vrec < 0 && channels[ch].def_vrec < 0)
 		awe_set_instr(0, ch, channels[ch].instr);
 
-	nvoices = awe_search_multi_voices(channels[ch].vrec, note, velocity, vlist);
-	if (nvoices == 0)
-		nvoices = awe_search_multi_voices(channels[ch].def_vrec, note, velocity, vlist);
+	/* check the possible voices; note may be changeable if mapped */
+	nvoices = really_alloc_voices(channels[ch].vrec, channels[ch].def_vrec,
+				      &note, velocity, vlist, 0);
 
-	/* allocate the voices */
+	/* set the voices */
 	current_alloc_time++;
 	for (i = 0; i < nvoices; i++) {
 		v = awe_clear_voice();
-		voices[v].key = AWE_CHAN_KEY(ch, note);
+		voices[v].key = key;
 		voices[v].ch = ch;
+		voices[v].note = note;
+		voices[v].velocity = velocity;
 		voices[v].time = current_alloc_time;
 		voices[v].cinfo = &channels[ch];
 		voices[v].sample = vlist[i];
 		voices[v].state = AWE_ST_MARK;
+		voices[v].layer = nvoices - i - 1;  /* in reverse order */
 	}
 
 	/* clear the mark in allocated voices */
-	for (i = 0; i < awe_max_voices; i++)
+	for (i = 0; i < awe_max_voices; i++) {
 		if (voices[i].state == AWE_ST_MARK)
 			voices[i].state = AWE_ST_OFF;
+			
+	}
 }
 
 
-/* search an empty voice; used internally */
+/* search the best voice from the specified status condition */
 static int
-awe_clear_voice(void)
+search_best_voice(int condition)
 {
 	int i, time, best;
-
-	/* looking for the oldest empty voice */
 	best = -1;
-	time = 0x7fffffff;
+	time = current_alloc_time + 1;
 	for (i = 0; i < awe_max_voices; i++) {
-		if (voices[i].state == AWE_ST_OFF && voices[i].time < time) {
+		if ((voices[i].state & condition) &&
+		    (best < 0 || voices[i].time < time)) {
 			best = i;
 			time = voices[i].time;
 		}
 	}
+	/* clear voice */
 	if (best >= 0)
-		return best;
+		awe_terminate(best);
 
-	/* looking for the oldest sustained voice */
-	time = 0x7fffffff;
-	for (i = 0; i < awe_max_voices; i++) {
-		if (voices[i].state == AWE_ST_SUSTAINED &&
-		    voices[i].time < time) {
-			best = i;
-			time = voices[i].time;
-		}
-	}
-	if (best >= 0) {
-		awe_note_off(best);
-		return best;
-	}
-
-	/* looking for the oldest voice not marked */
-	time = 0x7fffffff;
-	best = 0;
-	for (i = 0; i < awe_max_voices; i++) {
-		if (voices[i].state != AWE_ST_MARK && voices[i].time < time) {
-			best = i;
-			time = voices[i].time;
-		}
-	}
-	/*awe_terminate(best);*/
-	awe_note_off(best);
 	return best;
 }
 
+/* search an empty voice.
+   if no empty voice is found, at least terminate a voice
+   */
+static int
+awe_clear_voice(void)
+{
+	int best;
 
-/* allocate a voice corresponding note and velocity; single instrument */
+	/* looking for the oldest empty voice */
+	if ((best = search_best_voice(AWE_ST_OFF)) >= 0)
+		return best;
+	if ((best = search_best_voice(AWE_ST_RELEASED)) >= 0)
+		return best;
+	/* looking for the oldest sustained voice */
+	if ((best = search_best_voice(AWE_ST_SUSTAINED)) >= 0)
+		return best;
+
+#ifdef AWE_LOOKUP_MIDI_PRIORITY
+	if (MULTI_LAYER_MODE() && misc_modes[AWE_MD_CHN_PRIOR]) {
+		int ch = -1;
+		int time = current_alloc_time + 1;
+		int i;
+		/* looking for the voices from high channel (except drum ch) */
+		for (i = 0; i < awe_max_voices; i++) {
+			if (IS_DRUM_CHANNEL(voices[i].ch)) continue;
+			if (voices[i].ch < ch) continue;
+			if (voices[i].state != AWE_ST_MARK &&
+			    (voices[i].ch > ch || voices[i].time < time)) {
+				best = i;
+				time = voices[i].time;
+				ch = voices[i].ch;
+			}
+		}
+	}
+#endif
+	if (best < 0)
+		best = search_best_voice(~AWE_ST_MARK);
+
+	if (best >= 0)
+		return best;
+
+	return 0;
+}
+
+
+/* search sample for the specified note & velocity and set it on the voice;
+ * note that voice is the voice index (not channel index)
+ */
 static void
 awe_alloc_one_voice(int voice, int note, int velocity)
 {
-	int nvoices;
+	int ch, nvoices;
 	awe_voice_info *vlist[AWE_MAX_VOICES];
 
-	if (voices[voice].cinfo->vrec == NULL && voices[voice].cinfo->def_vrec == NULL)
-		awe_set_instr(0, voice, voices[voice].cinfo->instr);
+	ch = voices[voice].ch;
+	if (channels[ch].vrec < 0 && channels[ch].def_vrec < 0)
+		awe_set_instr(0, ch, channels[ch].instr);
 
-	nvoices = awe_search_multi_voices(voices[voice].cinfo->vrec, note, velocity, vlist);
-	if (nvoices == 0)
-		nvoices = awe_search_multi_voices(voices[voice].cinfo->def_vrec, note, velocity, vlist);
-
+	nvoices = really_alloc_voices(voices[voice].cinfo->vrec,
+				      voices[voice].cinfo->def_vrec,
+				      &note, velocity, vlist, 0);
 	if (nvoices > 0) {
 		voices[voice].time = ++current_alloc_time;
 		voices[voice].sample = vlist[0]; /* use the first one */
+		voices[voice].layer = 0;
+		voices[voice].note = note;
+		voices[voice].velocity = velocity;
 	}
 }
 
+
+/*----------------------------------------------------------------
+ * sequencer2 functions
+ *----------------------------------------------------------------*/
 
 /* search an empty voice; used by sequencer2 */
 static int
 awe_alloc(int dev, int chn, int note, struct voice_alloc_info *alloc)
 {
-	awe_channel_mode = 2;
+	playing_mode = AWE_PLAY_MULTI2;
 	return awe_clear_voice();
 }
 
@@ -3051,6 +3681,75 @@ awe_setup_voice(int dev, int voice, int chn)
 	}
 	awe_set_instr(dev, chn, info->pgm_num);
 }
+
+
+#ifdef CONFIG_AWE32_MIXER
+/*================================================================
+ * AWE32 mixer device control
+ *================================================================*/
+
+static int
+awe_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
+{
+	int i, level;
+
+	if (((cmd >> 8) & 0xff) != 'M')
+		return RET_ERROR(EINVAL);
+
+	level = (int)IOCTL_IN(arg);
+	level = ((level & 0xff) + (level >> 8)) / 2;
+	DEBUG(0,printk("AWEMix: cmd=%x val=%d\n", cmd & 0xff, level));
+
+	if (IO_WRITE_CHECK(cmd)) {
+		switch (cmd & 0xff) {
+		case SOUND_MIXER_BASS:
+			awe_bass_level = level * 12 / 100;
+			if (awe_bass_level >= 12)
+				awe_bass_level = 11;
+			awe_equalizer(awe_bass_level, awe_treble_level);
+			break;
+		case SOUND_MIXER_TREBLE:
+			awe_treble_level = level * 12 / 100;
+			if (awe_treble_level >= 12)
+				awe_treble_level = 11;
+			awe_equalizer(awe_bass_level, awe_treble_level);
+			break;
+		case SOUND_MIXER_VOLUME:
+			level = level * 127 / 100;
+			if (level >= 128) level = 127;
+			init_atten = vol_table[level];
+			for (i = 0; i < awe_max_voices; i++)
+				awe_set_voice_vol(i, FALSE);
+			break;
+		}
+	}
+	switch (cmd & 0xff) {
+	case SOUND_MIXER_BASS:
+		level = awe_bass_level * 100 / 24;
+		level = (level << 8) | level;
+		break;
+	case SOUND_MIXER_TREBLE:
+		level = awe_treble_level * 100 / 24;
+		level = (level << 8) | level;
+		break;
+	case SOUND_MIXER_VOLUME:
+		for (i = 127; i > 0; i--) {
+			if (init_atten <= vol_table[i])
+				break;
+		}
+		level = i * 100 / 127;
+		level = (level << 8) | level;
+		break;
+	case SOUND_MIXER_DEVMASK:
+		level = SOUND_MASK_BASS|SOUND_MASK_TREBLE|SOUND_MASK_VOLUME;
+		break;
+	default:
+		level = 0;
+		break;
+	}
+	return IOCTL_OUT(arg, level);
+}
+#endif /* CONFIG_AWE32_MIXER */
 
 
 /*================================================================
@@ -3299,12 +3998,15 @@ awe_init_fm(void)
 	awe_poke_dw(AWE_CSL(31), 0x00FFFFF8 |
 		    (DEF_FM_CHORUS_DEPTH << 24));
 	awe_poke_dw(AWE_PTRX(31), (DEF_FM_REVERB_DEPTH << 8));
-	awe_poke_dw(AWE_CPF(31), 0);
+	awe_poke_dw(AWE_CPF(31), 0x8000);
 	awe_poke_dw(AWE_CCCA(31), 0x00FFFFF3);
 
 	/* skew volume & cutoff */
 	awe_poke_dw(AWE_VTFT(30), 0x8000FFFF);
 	awe_poke_dw(AWE_VTFT(31), 0x8000FFFF);
+
+	voices[30].state = AWE_ST_FM;
+	voices[31].state = AWE_ST_FM;
 
 	/* change maximum channels to 30 */
 	awe_max_voices = AWE_NORMAL_VOICES;
@@ -3318,20 +4020,32 @@ awe_init_fm(void)
 
 /* open DRAM write accessing mode */
 static int
-awe_open_dram_for_write(int offset)
+awe_open_dram_for_write(int offset, int channels)
 {
+	int vidx[AWE_NORMAL_VOICES];
 	int i;
 
+	if (channels < 0 || channels >= AWE_NORMAL_VOICES) {
+		channels = AWE_NORMAL_VOICES;
+		for (i = 0; i < AWE_NORMAL_VOICES; i++)
+			vidx[i] = i;
+	} else {
+		for (i = 0; i < channels; i++)
+			vidx[i] = awe_clear_voice();
+	}
+
 	/* use all channels for DMA transfer */
-	for (i = 0; i < AWE_NORMAL_VOICES; i++) {
-		awe_poke(AWE_DCYSUSV(i), 0x80);
-		awe_poke_dw(AWE_VTFT(i), 0);
-		awe_poke_dw(AWE_CVCF(i), 0);
-		awe_poke_dw(AWE_PTRX(i), 0x40000000);
-		awe_poke_dw(AWE_CPF(i), 0x40000000);
-		awe_poke_dw(AWE_PSST(i), 0);
-		awe_poke_dw(AWE_CSL(i), 0);
-		awe_poke_dw(AWE_CCCA(i), 0x06000000);
+	for (i = 0; i < channels; i++) {
+		if (vidx[i] < 0) continue;
+		awe_poke(AWE_DCYSUSV(vidx[i]), 0x80);
+		awe_poke_dw(AWE_VTFT(vidx[i]), 0);
+		awe_poke_dw(AWE_CVCF(vidx[i]), 0);
+		awe_poke_dw(AWE_PTRX(vidx[i]), 0x40000000);
+		awe_poke_dw(AWE_CPF(vidx[i]), 0x40000000);
+		awe_poke_dw(AWE_PSST(vidx[i]), 0);
+		awe_poke_dw(AWE_CSL(vidx[i]), 0);
+		awe_poke_dw(AWE_CCCA(vidx[i]), 0x06000000);
+		voices[vidx[i]].state = AWE_ST_DRAM;
 	}
 	/* point channels 31 & 32 to ROM samples for DRAM refresh */
 	awe_poke_dw(AWE_VTFT(30), 0);
@@ -3342,16 +4056,20 @@ awe_open_dram_for_write(int offset)
 	awe_poke_dw(AWE_PSST(31), 0x1d8);
 	awe_poke_dw(AWE_CSL(31), 0x1e0);
 	awe_poke_dw(AWE_CCCA(31), 0x1d8);
+	voices[30].state = AWE_ST_FM;
+	voices[31].state = AWE_ST_FM;
 
 	/* if full bit is on, not ready to write on */
 	if (awe_peek_dw(AWE_SMALW) & 0x80000000) {
-		for (i = 0; i < AWE_NORMAL_VOICES; i++)
-			awe_poke_dw(AWE_CCCA(i), 0);
+		for (i = 0; i < channels; i++) {
+			awe_poke_dw(AWE_CCCA(vidx[i]), 0);
+			voices[i].state = AWE_ST_OFF;
+		}
 		return RET_ERROR(ENOSPC);
 	}
 
 	/* set address to write */
-	awe_poke_dw(AWE_SMALW, offset + AWE_DRAM_OFFSET);
+	awe_poke_dw(AWE_SMALW, offset);
 
 	return 0;
 }
@@ -3373,6 +4091,7 @@ awe_open_dram_for_check(void)
 			awe_poke_dw(AWE_CCCA(i), 0x06000000);
 		else	   /* DMA read */
 			awe_poke_dw(AWE_CCCA(i), 0x04000000);
+		voices[i].state = AWE_ST_DRAM;
 	}
 }
 
@@ -3390,79 +4109,14 @@ awe_close_dram(void)
 	}
 
 	for (i = 0; i < AWE_NORMAL_VOICES; i++) {
-		awe_poke_dw(AWE_CCCA(i), 0);
-		awe_poke(AWE_DCYSUSV(i), 0x807F);
-	}
-}
-
-
-#ifdef AWE_CHECKSUM_MEMORY
-/* open DRAM read accessing mode */
-static int
-awe_open_dram_for_read(int offset)
-{
-	int i;
-
-	/* use all channels for DMA transfer */
-	for (i = 0; i < AWE_NORMAL_VOICES; i++) {
-		awe_poke(AWE_DCYSUSV(i), 0x80);
-		awe_poke_dw(AWE_VTFT(i), 0);
-		awe_poke_dw(AWE_CVCF(i), 0);
-		awe_poke_dw(AWE_PTRX(i), 0x40000000);
-		awe_poke_dw(AWE_CPF(i), 0x40000000);
-		awe_poke_dw(AWE_PSST(i), 0);
-		awe_poke_dw(AWE_CSL(i), 0);
-		awe_poke_dw(AWE_CCCA(i), 0x04000000);
-	}
-	/* point channels 31 & 32 to ROM samples for DRAM refresh */
-	awe_poke_dw(AWE_VTFT(30), 0);
-	awe_poke_dw(AWE_PSST(30), 0x1d8);
-	awe_poke_dw(AWE_CSL(30), 0x1e0);
-	awe_poke_dw(AWE_CCCA(30), 0x1d8);
-	awe_poke_dw(AWE_VTFT(31), 0);
-	awe_poke_dw(AWE_PSST(31), 0x1d8);
-	awe_poke_dw(AWE_CSL(31), 0x1e0);
-	awe_poke_dw(AWE_CCCA(31), 0x1d8);
-
-	/* if empty flag is on, not ready to read */
-	if (awe_peek_dw(AWE_SMALR) & 0x80000000) {
-		for (i = 0; i < AWE_NORMAL_VOICES; i++)
+		if (voices[i].state == AWE_ST_DRAM) {
 			awe_poke_dw(AWE_CCCA(i), 0);
-		return RET_ERROR(ENOSPC);
-	}
-
-	/* set address to read */
-	awe_poke_dw(AWE_SMALR, offset + AWE_DRAM_OFFSET);
-	/* drop stale data */
-	awe_peek(AWE_SMLD);
-	return 0;
-}
-
-/* close dram access for read */
-static void
-awe_close_dram_for_read(void)
-{
-	int i;
-	/* wait until FULL bit in SMAxW register be false */
-	for (i = 0; i < 10000; i++) {
-		if (!(awe_peek_dw(AWE_SMALR) & 0x80000000))
-			break;
-		awe_wait(10);
-	}
-	for (i = 0; i < AWE_NORMAL_VOICES; i++) {
-		awe_poke_dw(AWE_CCCA(i), 0);
-		awe_poke(AWE_DCYSUSV(i), 0x807F);
+			awe_poke(AWE_DCYSUSV(i), 0x807F);
+			voices[i].state = AWE_ST_OFF;
+		}
 	}
 }
-#endif /* AWE_CHECKSUM_MEMORY */
 
-
-/* write a word data */
-static void
-awe_write_dram(unsigned short c)
-{
-	awe_poke(AWE_SMLD, c);
-}
 
 /*================================================================
  * detect presence of AWE32 and check memory size
@@ -3488,18 +4142,14 @@ static int
 awe_detect(void)
 {
 	int base;
-#ifdef AWE_DEFAULT_BASE_ADDR
-	if (awe_detect_base(AWE_DEFAULT_BASE_ADDR))
-		return 1;
-#endif
 	if (awe_base == 0) {
 		for (base = 0x620; base <= 0x680; base += 0x20)
 			if (awe_detect_base(base))
 				return 1;
+		DEBUG(0,printk("AWE32 not found\n"));
+		return 0;
 	}
-	FATALERR(printk("AWE32 not found\n"));
-	awe_base = 0;
-	return 0;
+	return 1;
 }
 
 
@@ -3515,14 +4165,20 @@ awe_detect(void)
 static int
 awe_check_dram(void)
 {
+	if (awe_mem_size > 0) {
+		awe_mem_size *= 1024; /* convert to Kbytes */
+		return awe_mem_size;
+	}
+
 	awe_open_dram_for_check();
+
+	awe_mem_size = 0;
 
 	/* set up unique two id numbers */
 	awe_poke_dw(AWE_SMALW, AWE_DRAM_OFFSET);
 	awe_poke(AWE_SMLD, UNIQUE_ID1);
 	awe_poke(AWE_SMLD, UNIQUE_ID2);
 
-	awe_mem_size = 0;
 	while (awe_mem_size < AWE_MAX_DRAM_SIZE) {
 		awe_wait(2);
 		/* read a data on the DRAM start address */
@@ -3540,14 +4196,17 @@ awe_check_dram(void)
 		 */
 		awe_poke_dw(AWE_SMALW, AWE_DRAM_OFFSET + awe_mem_size*512L);
 		awe_poke(AWE_SMLD, UNIQUE_ID3);
+		awe_wait(2);
+		/* read a data on the just written DRAM address */
+		awe_poke_dw(AWE_SMALR, AWE_DRAM_OFFSET + awe_mem_size*512L);
+		awe_peek(AWE_SMLD); /* discard stale data  */
+		if (awe_peek(AWE_SMLD) != UNIQUE_ID3)
+			break;
 	}
 	awe_close_dram();
 
-	DEBUG(0,printk("AWE32: %d Kbytes memory detected\n", (int)awe_mem_size));
-#ifdef AWE_DEFAULT_MEM_SIZE
-	if (awe_mem_size == 0)
-		awe_mem_size = AWE_DEFAULT_MEM_SIZE;
-#endif
+	DEBUG(0,printk("AWE32: %d Kbytes memory detected\n", awe_mem_size));
+
 	/* convert to Kbytes */
 	awe_mem_size *= 1024;
 	return awe_mem_size;
@@ -3559,26 +4218,49 @@ awe_check_dram(void)
  *================================================================*/
 
 /* 5 parameters for each chorus mode; 3 x 16bit, 2 x 32bit */
-static unsigned short chorus_parm[8][5] = {
-	{0xE600, 0x03F6, 0xBC2C ,0x0000, 0x006D}, /* chorus 1 */
-	{0xE608, 0x031A, 0xBC6E, 0x0000, 0x017C}, /* chorus 2 */
-	{0xE610, 0x031A, 0xBC84, 0x0000, 0x0083}, /* chorus 3 */
-	{0xE620, 0x0269, 0xBC6E, 0x0000, 0x017C}, /* chorus 4 */
-	{0xE680, 0x04D3, 0xBCA6, 0x0000, 0x005B}, /* feedback */
-	{0xE6E0, 0x044E, 0xBC37, 0x0000, 0x0026}, /* flanger */
-	{0xE600, 0x0B06, 0xBC00, 0xE000, 0x0083}, /* short delay */
-	{0xE6C0, 0x0B06, 0xBC00, 0xE000, 0x0083}, /* short delay + feedback */
+static char chorus_defined[AWE_CHORUS_NUMBERS];
+static awe_chorus_fx_rec chorus_parm[AWE_CHORUS_NUMBERS] = {
+	{0xE600, 0x03F6, 0xBC2C ,0x00000000, 0x0000006D}, /* chorus 1 */
+	{0xE608, 0x031A, 0xBC6E, 0x00000000, 0x0000017C}, /* chorus 2 */
+	{0xE610, 0x031A, 0xBC84, 0x00000000, 0x00000083}, /* chorus 3 */
+	{0xE620, 0x0269, 0xBC6E, 0x00000000, 0x0000017C}, /* chorus 4 */
+	{0xE680, 0x04D3, 0xBCA6, 0x00000000, 0x0000005B}, /* feedback */
+	{0xE6E0, 0x044E, 0xBC37, 0x00000000, 0x00000026}, /* flanger */
+	{0xE600, 0x0B06, 0xBC00, 0x0000E000, 0x00000083}, /* short delay */
+	{0xE6C0, 0x0B06, 0xBC00, 0x0000E000, 0x00000083}, /* short delay + feedback */
 };
 
-static void awe_set_chorus_mode(int effect)
+static int
+awe_load_chorus_fx(awe_patch_info *patch, const char *addr, int count)
 {
-	awe_poke(AWE_INIT3(9), chorus_parm[effect][0]);
-	awe_poke(AWE_INIT3(12), chorus_parm[effect][1]);
-	awe_poke(AWE_INIT4(3), chorus_parm[effect][2]);
-	awe_poke_dw(AWE_HWCF4, (unsigned long)chorus_parm[effect][3]);
-	awe_poke_dw(AWE_HWCF5, (unsigned long)chorus_parm[effect][4]);
+	if (patch->optarg < AWE_CHORUS_PREDEFINED || patch->optarg >= AWE_CHORUS_NUMBERS) {
+		printk("AWE32 Error: illegal chorus mode %d for uploading\n", patch->optarg);
+		return RET_ERROR(EINVAL);
+	}
+	if (count < sizeof(awe_chorus_fx_rec)) {
+		printk("AWE32 Error: too short chorus fx parameters\n");
+		return RET_ERROR(EINVAL);
+	}
+	COPY_FROM_USER(&chorus_parm[patch->optarg], addr, AWE_PATCH_INFO_SIZE,
+		       sizeof(awe_chorus_fx_rec));
+	chorus_defined[patch->optarg] = TRUE;
+	return 0;
+}
+
+static void
+awe_set_chorus_mode(int effect)
+{
+	if (effect < 0 || effect >= AWE_CHORUS_NUMBERS ||
+	    (effect >= AWE_CHORUS_PREDEFINED && !chorus_defined[effect]))
+		return;
+	awe_poke(AWE_INIT3(9), chorus_parm[effect].feedback);
+	awe_poke(AWE_INIT3(12), chorus_parm[effect].delay_offset);
+	awe_poke(AWE_INIT4(3), chorus_parm[effect].lfo_depth);
+	awe_poke_dw(AWE_HWCF4, chorus_parm[effect].delay);
+	awe_poke_dw(AWE_HWCF5, chorus_parm[effect].lfo_freq);
 	awe_poke_dw(AWE_HWCF6, 0x8000);
 	awe_poke_dw(AWE_HWCF7, 0x0000);
+	chorus_mode = effect;
 }
 
 /*----------------------------------------------------------------*/
@@ -3586,55 +4268,56 @@ static void awe_set_chorus_mode(int effect)
 /* reverb mode settings; write the following 28 data of 16 bit length
  *   on the corresponding ports in the reverb_cmds array
  */
-static unsigned short reverb_parm[8][28] = {
-{  /* room 1 */
+static char reverb_defined[AWE_CHORUS_NUMBERS];
+static awe_reverb_fx_rec reverb_parm[AWE_REVERB_NUMBERS] = {
+{{  /* room 1 */
 	0xB488, 0xA450, 0x9550, 0x84B5, 0x383A, 0x3EB5, 0x72F4,
 	0x72A4, 0x7254, 0x7204, 0x7204, 0x7204, 0x4416, 0x4516,
 	0xA490, 0xA590, 0x842A, 0x852A, 0x842A, 0x852A, 0x8429,
 	0x8529, 0x8429, 0x8529, 0x8428, 0x8528, 0x8428, 0x8528,
-},
-{  /* room 2 */
+}},
+{{  /* room 2 */
 	0xB488, 0xA458, 0x9558, 0x84B5, 0x383A, 0x3EB5, 0x7284,
 	0x7254, 0x7224, 0x7224, 0x7254, 0x7284, 0x4448, 0x4548,
 	0xA440, 0xA540, 0x842A, 0x852A, 0x842A, 0x852A, 0x8429,
 	0x8529, 0x8429, 0x8529, 0x8428, 0x8528, 0x8428, 0x8528,
-},
-{  /* room 3 */
+}},
+{{  /* room 3 */
 	0xB488, 0xA460, 0x9560, 0x84B5, 0x383A, 0x3EB5, 0x7284,
 	0x7254, 0x7224, 0x7224, 0x7254, 0x7284, 0x4416, 0x4516,
 	0xA490, 0xA590, 0x842C, 0x852C, 0x842C, 0x852C, 0x842B,
 	0x852B, 0x842B, 0x852B, 0x842A, 0x852A, 0x842A, 0x852A,
-},
-{  /* hall 1 */
+}},
+{{  /* hall 1 */
 	0xB488, 0xA470, 0x9570, 0x84B5, 0x383A, 0x3EB5, 0x7284,
 	0x7254, 0x7224, 0x7224, 0x7254, 0x7284, 0x4448, 0x4548,
 	0xA440, 0xA540, 0x842B, 0x852B, 0x842B, 0x852B, 0x842A,
 	0x852A, 0x842A, 0x852A, 0x8429, 0x8529, 0x8429, 0x8529,
-},
-{  /* hall 2 */
+}},
+{{  /* hall 2 */
 	0xB488, 0xA470, 0x9570, 0x84B5, 0x383A, 0x3EB5, 0x7254,
 	0x7234, 0x7224, 0x7254, 0x7264, 0x7294, 0x44C3, 0x45C3,
 	0xA404, 0xA504, 0x842A, 0x852A, 0x842A, 0x852A, 0x8429,
 	0x8529, 0x8429, 0x8529, 0x8428, 0x8528, 0x8428, 0x8528,
-},
-{  /* plate */
+}},
+{{  /* plate */
 	0xB4FF, 0xA470, 0x9570, 0x84B5, 0x383A, 0x3EB5, 0x7234,
 	0x7234, 0x7234, 0x7234, 0x7234, 0x7234, 0x4448, 0x4548,
 	0xA440, 0xA540, 0x842A, 0x852A, 0x842A, 0x852A, 0x8429,
 	0x8529, 0x8429, 0x8529, 0x8428, 0x8528, 0x8428, 0x8528,
-},
-{  /* delay */
+}},
+{{  /* delay */
 	0xB4FF, 0xA470, 0x9500, 0x84B5, 0x333A, 0x39B5, 0x7204,
 	0x7204, 0x7204, 0x7204, 0x7204, 0x72F4, 0x4400, 0x4500,
 	0xA4FF, 0xA5FF, 0x8420, 0x8520, 0x8420, 0x8520, 0x8420,
 	0x8520, 0x8420, 0x8520, 0x8420, 0x8520, 0x8420, 0x8520,
-},
-{  /* panning delay */
+}},
+{{  /* panning delay */
 	0xB4FF, 0xA490, 0x9590, 0x8474, 0x333A, 0x39B5, 0x7204,
 	0x7204, 0x7204, 0x7204, 0x7204, 0x72F4, 0x4400, 0x4500,
 	0xA4FF, 0xA5FF, 0x8420, 0x8520, 0x8420, 0x8520, 0x8420,
 	0x8520, 0x8420, 0x8520, 0x8420, 0x8520, 0x8420, 0x8520,
-},
+}},
 };
 
 static struct ReverbCmdPair {
@@ -3649,13 +4332,97 @@ static struct ReverbCmdPair {
   {AWE_INIT2(0x09)}, {AWE_INIT2(0x0B)}, {AWE_INIT2(0x11)}, {AWE_INIT2(0x13)},
 };
 
+static int
+awe_load_reverb_fx(awe_patch_info *patch, const char *addr, int count)
+{
+	if (patch->optarg < AWE_REVERB_PREDEFINED || patch->optarg >= AWE_REVERB_NUMBERS) {
+		printk("AWE32 Error: illegal reverb mode %d for uploading\n", patch->optarg);
+		return RET_ERROR(EINVAL);
+	}
+	if (count < sizeof(awe_reverb_fx_rec)) {
+		printk("AWE32 Error: too short reverb fx parameters\n");
+		return RET_ERROR(EINVAL);
+	}
+	COPY_FROM_USER(&reverb_parm[patch->optarg], addr, AWE_PATCH_INFO_SIZE,
+		       sizeof(awe_reverb_fx_rec));
+	reverb_defined[patch->optarg] = TRUE;
+	return 0;
+}
 
-static void awe_set_reverb_mode(int effect)
+static void
+awe_set_reverb_mode(int effect)
 {
 	int i;
+	if (effect < 0 || effect >= AWE_REVERB_NUMBERS ||
+	    (effect >= AWE_REVERB_PREDEFINED && !reverb_defined[effect]))
+		return;
 	for (i = 0; i < 28; i++)
 		awe_poke(reverb_cmds[i].cmd, reverb_cmds[i].port,
-			 reverb_parm[effect][i]);
+			 reverb_parm[effect].parms[i]);
+	reverb_mode = effect;
 }
+
+/*================================================================
+ * treble/bass equalizer control
+ *================================================================*/
+
+static unsigned short bass_parm[12][3] = {
+	{0xD26A, 0xD36A, 0x0000}, /* -12 dB */
+	{0xD25B, 0xD35B, 0x0000}, /*  -8 */
+	{0xD24C, 0xD34C, 0x0000}, /*  -6 */
+	{0xD23D, 0xD33D, 0x0000}, /*  -4 */
+	{0xD21F, 0xD31F, 0x0000}, /*  -2 */
+	{0xC208, 0xC308, 0x0001}, /*   0 (HW default) */
+	{0xC219, 0xC319, 0x0001}, /*  +2 */
+	{0xC22A, 0xC32A, 0x0001}, /*  +4 */
+	{0xC24C, 0xC34C, 0x0001}, /*  +6 */
+	{0xC26E, 0xC36E, 0x0001}, /*  +8 */
+	{0xC248, 0xC348, 0x0002}, /* +10 */
+	{0xC26A, 0xC36A, 0x0002}, /* +12 dB */
+};
+
+static unsigned short treble_parm[12][9] = {
+	{0x821E, 0xC26A, 0x031E, 0xC36A, 0x021E, 0xD208, 0x831E, 0xD308, 0x0001}, /* -12 dB */
+	{0x821E, 0xC25B, 0x031E, 0xC35B, 0x021E, 0xD208, 0x831E, 0xD308, 0x0001},
+	{0x821E, 0xC24C, 0x031E, 0xC34C, 0x021E, 0xD208, 0x831E, 0xD308, 0x0001},
+	{0x821E, 0xC23D, 0x031E, 0xC33D, 0x021E, 0xD208, 0x831E, 0xD308, 0x0001},
+	{0x821E, 0xC21F, 0x031E, 0xC31F, 0x021E, 0xD208, 0x831E, 0xD308, 0x0001},
+	{0x821E, 0xD208, 0x031E, 0xD308, 0x021E, 0xD208, 0x831E, 0xD308, 0x0002},
+	{0x821E, 0xD208, 0x031E, 0xD308, 0x021D, 0xD219, 0x831D, 0xD319, 0x0002},
+	{0x821E, 0xD208, 0x031E, 0xD308, 0x021C, 0xD22A, 0x831C, 0xD32A, 0x0002},
+	{0x821E, 0xD208, 0x031E, 0xD308, 0x021A, 0xD24C, 0x831A, 0xD34C, 0x0002},
+	{0x821E, 0xD208, 0x031E, 0xD308, 0x0219, 0xD26E, 0x8319, 0xD36E, 0x0002}, /* +8 (HW default) */
+	{0x821D, 0xD219, 0x031D, 0xD319, 0x0219, 0xD26E, 0x8319, 0xD36E, 0x0002},
+	{0x821C, 0xD22A, 0x031C, 0xD32A, 0x0219, 0xD26E, 0x8319, 0xD36E, 0x0002}, /* +12 dB */
+};
+
+
+/*
+ * set Emu8000 digital equalizer; from 0 to 11 [-12dB - 12dB]
+ */
+static void
+awe_equalizer(int bass, int treble)
+{
+	unsigned short w;
+
+	if (bass < 0 || bass > 11 || treble < 0 || treble > 11)
+		return;
+	awe_bass_level = bass;
+	awe_treble_level = treble;
+	awe_poke(AWE_INIT4(0x01), bass_parm[bass][0]);
+	awe_poke(AWE_INIT4(0x11), bass_parm[bass][1]);
+	awe_poke(AWE_INIT3(0x11), treble_parm[treble][0]);
+	awe_poke(AWE_INIT3(0x13), treble_parm[treble][1]);
+	awe_poke(AWE_INIT3(0x1B), treble_parm[treble][2]);
+	awe_poke(AWE_INIT4(0x07), treble_parm[treble][3]);
+	awe_poke(AWE_INIT4(0x0B), treble_parm[treble][4]);
+	awe_poke(AWE_INIT4(0x0D), treble_parm[treble][5]);
+	awe_poke(AWE_INIT4(0x17), treble_parm[treble][6]);
+	awe_poke(AWE_INIT4(0x19), treble_parm[treble][7]);
+	w = bass_parm[bass][2] + treble_parm[treble][8];
+	awe_poke(AWE_INIT4(0x15), (unsigned short)(w + 0x0262));
+	awe_poke(AWE_INIT4(0x1D), (unsigned short)(w + 0x8362));
+}
+
 
 #endif /* CONFIG_AWE32_SYNTH */

@@ -470,6 +470,7 @@ struct signature {
    { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
    { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
    { "Adaptec AHA-2920 PCI-SCSI Card",                     42, 31,  3, -1, 1 },
+   { "IBM F1 P264/32",                                      5, 14,  3, -1, 1 },
 				/* This next signature may not be a 3.5 bios */
    { "Future Domain Corp. V2.0108/18/93",                   5, 33,  3,  5, 0 },
    { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },

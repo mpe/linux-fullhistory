@@ -22,7 +22,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_YM3812)
+#ifdef CONFIG_YM3812
 
 #include "opl3.h"
 
@@ -111,8 +111,8 @@ opl3_ioctl (int dev,
       {
 	struct sbi_instrument ins;
 
+	printk ("Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
 	memcpy ((char *) &ins, (&((char *) arg)[0]), sizeof (ins));
-	printk("Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	  {
@@ -519,9 +519,7 @@ opl3_start_note (int dev, int voice, int note, int volume)
 
   if (instr->channel < 0)
     {
-      printk (
-	       "OPL3: Initializing voice %d with undefined instrument\n",
-	       voice);
+      printk ("OPL3: Initializing voice %d with undefined instrument\n", voice);
       return 0;
     }
 

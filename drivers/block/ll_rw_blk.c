@@ -82,6 +82,11 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
  */
 int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 
+/*
+ * The following tunes the read-ahead algorithm in mm/filemap.c
+ */
+int * max_readahead[MAX_BLKDEV] = { NULL, NULL, };
+
 static inline struct request **get_queue(kdev_t dev)
 {
 	int major = MAJOR(dev);
@@ -295,7 +300,27 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	sti();
 }
 
-static void make_request(int major,int rw, struct buffer_head * bh)
+#define MAX_SECTORS 244
+
+static inline void attempt_merge (struct request *req)
+{
+	struct request *next = req->next;
+
+	if (!next)
+		return;
+	if (req->sector + req->nr_sectors != next->sector)
+		return;
+	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors >= MAX_SECTORS)
+		return;
+	req->bhtail->b_reqnext = next->bh;
+	req->bhtail = next->bhtail;
+	req->nr_sectors += next->nr_sectors;
+	next->rq_status = RQ_INACTIVE;
+	req->next = next->next;
+	wake_up (&wait_for_request);
+}
+
+void make_request(int major,int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
@@ -313,7 +338,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 	if (blk_size[major])
 		if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
-			bh->b_state &= (1 << BH_Lock) | (1 << BH_FreeOnIO);
+			bh->b_state &= (1 << BH_Lock);
                         /* This may well happen - the kernel calls bread()
                            without checking the size of the device, e.g.,
                            when mounting a device. */
@@ -323,8 +348,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
                                kdevname(bh->b_rdev), rw,
                                (sector + count)>>1,
                                blk_size[major][MINOR(bh->b_rdev)]);
-			unlock_buffer(bh);
-			return;
+			goto end_io;
 		}
 
 	rw_ahead = 0;	/* normal case; gets changed below for READA/WRITEA */
@@ -333,10 +357,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			rw_ahead = 1;
 			rw = READ;	/* drop into READ */
 		case READ:
-			if (buffer_uptodate(bh)) {
-				unlock_buffer(bh); /* Hmmph! Already have it */
-				return;
-			}
+			if (buffer_uptodate(bh)) /* Hmmph! Already have it */
+				goto end_io;
 			kstat.pgpgin++;
 			max_req = NR_REQUEST;	/* reads take precedence */
 			break;
@@ -344,10 +366,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			rw_ahead = 1;
 			rw = WRITE;	/* drop into WRITE */
 		case WRITE:
-			if (!buffer_dirty(bh)) {
-				unlock_buffer(bh); /* Hmmph! Nothing to write */
-				return;
-			}
+			if (!buffer_dirty(bh))   /* Hmmph! Nothing to write */
+				goto end_io;
 			/* We don't allow the write-requests to fill up the
 			 * queue completely:  we want some room for reads,
 			 * as they take precedence. The last third of the
@@ -359,8 +379,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		default:
 			printk(KERN_ERR "make_request: bad block dev cmd,"
                                " must be R/W/RA/WA\n");
-			unlock_buffer(bh);
-			return;
+			goto end_io;
 	}
 
 /* look for a free request. */
@@ -409,7 +428,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 			if (req->cmd != rw)
 				continue;
-			if (req->nr_sectors >= 244)
+			if (req->nr_sectors >= MAX_SECTORS)
 				continue;
 			if (req->rq_dev != bh->b_rdev)
 				continue;
@@ -417,6 +436,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			if (req->sector + req->nr_sectors == sector) {
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
+			    	req->nr_sectors += count;
+				/* Can we now merge this req with the next? */
+				attempt_merge(req);
 			/* or to the beginning? */
 			} else if (req->sector - count == sector) {
 			    	bh->b_reqnext = req->bh;
@@ -424,10 +446,10 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			    	req->buffer = bh->b_data;
 			    	req->current_nr_sectors = count;
 			    	req->sector = sector;
+			    	req->nr_sectors += count;
 			} else
 				continue;
 
-		    	req->nr_sectors += count;
 			mark_buffer_clean(bh);
 		    	sti();
 		    	return;
@@ -440,10 +462,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 /* if no request available: if rw_ahead, forget it; otherwise try again blocking.. */
 	if (!req) {
-		if (rw_ahead) {
-			unlock_buffer(bh);
-			return;
-		}
+		if (rw_ahead)
+			goto end_io;
 		req = __get_request_wait(max_req, bh->b_rdev);
 	}
 
@@ -459,6 +479,10 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	req->bhtail = bh;
 	req->next = NULL;
 	add_request(major+blk_dev,req);
+	return;
+
+end_io:
+	bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 }
 
 /* This function can be used to request a number of buffers from a block
@@ -530,6 +554,12 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
+#ifdef CONFIG_BLK_DEV_MD
+			if (MAJOR(bh[i]->b_dev) == MD_MAJOR) {
+				md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
+				continue;
+			}
+#endif
 			make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
 		}
 	}
@@ -654,6 +684,7 @@ __initfunc(int blk_dev_init(void))
 		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
+	memset(max_readahead, 0, sizeof(max_readahead));
 #ifdef CONFIG_AMIGA_Z2RAM
 	z2_init();
 #endif

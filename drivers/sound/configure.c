@@ -45,18 +45,20 @@
 #define OPT_MAD16	12
 #define OPT_CS4232	13
 #define OPT_MAUI	14
-#define OPT_SPNP		15
+#define OPT_SPNP	15
+#define OPT_OPL3SA1	16
+#define OPT_SOFTOSS	17
 
-#define OPT_HIGHLEVEL   16	/* This must be same than the next one */
-#define OPT_UNUSED1	16
-#define OPT_UNUSED2	17
-#define OPT_AEDSP16     18
-#define OPT_UNUSED3	19
-#define OPT_UNUSED4	20
-#define OPT_UNUSED5	21
-#define OPT_YM3812_AUTO	22
-#define OPT_YM3812	23
-#define OPT_LAST	23	/* Last defined OPT number */
+#define OPT_HIGHLEVEL   18	/* This must be same than the next one */
+#define OPT_UNUSED1	18
+#define OPT_UNUSED2	19
+#define OPT_AEDSP16     20
+#define OPT_UNUSED3	21
+#define OPT_UNUSED4	22
+#define OPT_UNUSED5	23
+#define OPT_YM3812_AUTO	24
+#define OPT_YM3812	25
+#define OPT_LAST	25	/* Last defined OPT number */
 
 #define DUMMY_OPTS (B(OPT_YM3812_AUTO))
 
@@ -64,16 +66,17 @@
 		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)| \
 		  B(OPT_MSS)|B(OPT_SSCAPE)|B(OPT_UART6850)|B(OPT_TRIX)| \
 		  B(OPT_MAD16)|B(OPT_CS4232)|B(OPT_MAUI)|B(OPT_ADLIB)| \
-		  B(OPT_SPNP))
+		  B(OPT_SPNP)|B(OPT_OPL3SA1)|B(OPT_SOFTOSS))
 #define MPU_DEVS (B(OPT_PSS)|\
 		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI)|B(OPT_SSCAPE))
-#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_SPNP))
+#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_SPNP)|\
+		  B(OPT_OPL3SA1))
 #define NON_AUDIO_CARDS (B(OPT_ADLIB)|B(OPT_MPU401)|B(OPT_UART6850)|B(OPT_MAUI))
 #define AUDIO_CARDS (ANY_DEVS & ~NON_AUDIO_CARDS)
 #define MIDI_CARDS (ANY_DEVS & ~(B(OPT_ADLIB)|B(OPT_MSS)))
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
-		     B(OPT_SPNP))
+		     B(OPT_SPNP)|B(OPT_OPL3SA1))
 #define SBDSP_DEVS (B(OPT_SB)|B(OPT_SPNP)|B(OPT_MAD16)|B(OPT_TRIX))
 #define SEQUENCER_DEVS 0x7fffffff
 /*
@@ -131,6 +134,8 @@ hw_entry        hw_table[] =
   {0, 0, "CS4232", 1, 0, 0},
   {0, 0, "MAUI", 1, 0, 0},
   {0, 0, "SPNP", 1, 0, 0},
+  {0, 0, "OPL3SA1", 1, 0, 0},
+  {0, 0, "SOFTOSS", 1, 0, 0},
 
   {B (OPT_SB), B (OPT_PAS), "UNUSED1", 1, 0, 1},
   {B (OPT_SB) | B (OPT_UNUSED1), B (OPT_PAS), "UNUSED2", 1, 0, 1},
@@ -156,10 +161,12 @@ char           *questions[] =
   "Microsoft Sound System support",
   "Ensoniq SoundScape support",
   "MediaTrix AudioTrix Pro support",
-  "Support for MAD16 and/or Mozart based cards",
+  "Support for OPTi MAD16 and/or Mozart based cards",
   "Support for Crystal CS4232 based (PnP) cards",
   "Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers",
   "Support for PnP sound cards (_EXPERIMENTAL_)",
+  "Yamaha OPL3-SA1 audio controller",
+  "SoftOSS software wave table engine",
 
   "*** Unused option 1 ***",
   "*** Unused option 2 ***",
@@ -236,6 +243,11 @@ char           *help[] =
 
   "Use this option to enable experimental support for cards that\n"
   "use the Plug and Play protocol.\n",
+
+  "Use this option with Yamaha OPL3-SA1 (YMF701) chip.\n",
+
+  "SoftOSS is a virtual wave table engine by 4Front Technologies. It can\n"
+  "be used together with any 16 bit stereo soundcard.\n"
 
   "Enable this option if your card is a Sound Blaster Pro or\n"
   "Sound Blaster 16. It also works with many Sound Blaster Pro clones.\n",
@@ -1044,61 +1056,98 @@ ask_parameters (void)
 
   if (dump_only)
     show_comment (B (OPT_TRIX),
-    "ERROR! You have to use old sound configuration method with AudioTrix.");
+    "ERROR! You have to use old sound configuration method with OPL3-SA1.");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_BASE",
-		  "AudioTrix audio I/O base",
+		  "OPL3-SA1 audio I/O base",
 		  FMT_HEX,
 		  0x530,
 		  "530, 604, E80 or F40");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_IRQ",
-		  "AudioTrix audio IRQ",
+		  "OPL3-SA1 audio IRQ",
 		  FMT_INT,
 		  11,
 		  "7, 9, 10 or 11");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_DMA",
-		  "AudioTrix audio DMA",
+		  "OPL3-SA1 audio DMA",
 		  FMT_INT,
 		  0,
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_DMA2",
-		  "AudioTrix second (duplex) DMA",
+		  "OPL3-SA1 second (duplex) DMA",
 		  FMT_INT,
 		  3,
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_MPU_BASE",
-		  "AudioTrix MIDI I/O base",
+		  "OPL3-SA1 MIDI I/O base",
 		  FMT_HEX,
 		  0x330,
 		  "330, 370, 3B0 or 3F0");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_MPU_IRQ",
-		  "AudioTrix MIDI IRQ",
+		  "OPL3-SA1 MIDI IRQ",
 		  FMT_INT,
 		  9,
 		  "3, 4, 5, 7 or 9");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_SB_BASE",
-		  "AudioTrix SB I/O base",
+		  "OPL3-SA1 SB I/O base",
 		  FMT_HEX,
 		  0x220,
 		  "220, 210, 230, 240, 250, 260 or 270");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_SB_IRQ",
-		  "AudioTrix SB IRQ",
+		  "OPL3-SA1 SB IRQ",
 		  FMT_INT,
 		  7,
 		  "3, 4, 5 or 7");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_SB_DMA",
-		  "AudioTrix SB DMA",
+		  "OPL3-SA1 SB DMA",
 		  FMT_INT,
 		  1,
 		  "1 or 3");
+
+
+  ask_int_choice (B (OPT_OPL3SA1), "OPL3SA1_BASE",
+		  "OPL3-SA1 audio I/O base",
+		  FMT_HEX,
+		  0x530,
+		  "530, 604, E80 or F40");
+
+  ask_int_choice (B (OPT_OPL3SA1), "OPL3SA1_IRQ",
+		  "OPL3-SA1 audio IRQ",
+		  FMT_INT,
+		  11,
+		  "7, 9, 10 or 11");
+
+  ask_int_choice (B (OPT_OPL3SA1), "OPL3SA1_DMA",
+		  "OPL3-SA1 audio DMA",
+		  FMT_INT,
+		  0,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_OPL3SA1), "OPL3SA1_DMA2",
+		  "OPL3-SA1 second (duplex) DMA",
+		  FMT_INT,
+		  3,
+		  "0, 1 or 3");
+
+  ask_int_choice (B (OPT_OPL3SA1), "OPL3SA1_MPU_BASE",
+		  "OPL3-SA1 MIDI I/O base",
+		  FMT_HEX,
+		  0x330,
+		  "330, 370, 3B0 or 3F0");
+
+  ask_int_choice (B (OPT_OPL3SA1), "OPL3SA1_MPU_IRQ",
+		  "OPL3-SA1 MIDI IRQ",
+		  FMT_INT,
+		  9,
+		  "3, 4, 5, 7 or 9");
 
   ask_int_choice (B (OPT_CS4232), "CS4232_BASE",
 		  "CS4232 audio I/O base",
@@ -1171,6 +1220,16 @@ ask_parameters (void)
 		  FMT_INT,
 		  9,
 		  "5, 7, 9 or 10");
+  ask_int_choice (B (OPT_SOFTOSS), "SOFTOSS_RATE",
+		  "Sampling rate for SoftOSS",
+		  FMT_INT,
+		  22050,
+		  "8000 to 48000");
+  ask_int_choice (B (OPT_SOFTOSS), "SOFTOSS_VOICES",
+		  "Max # of concurrent voices for SoftOSS",
+		  FMT_INT,
+		  32,
+		  "4 to 32");
 }
 
 void

@@ -47,6 +47,9 @@ VERSION INFO:
 			     	compatibility.
 			     Better ioctl names. Kept binary compatibility.
 			     Removed 'save_busy'. Just set busy to 1.
+11/03/97  Brian Gerst 0.9.1: Fixed bug which caused driver to always time out 
+                             but never report a timeout (broken while loop).
+                             Fixed js_read for new VFS code.
 */
 
 #include <linux/module.h>
@@ -227,20 +230,21 @@ static int js_release (struct inode *inode, struct file *file)
  *	one shots to clear.
  */
 
-static long js_read (struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t js_read (struct file *file, char *buf, 
+		     size_t count, loff_t *ppos)
 {
 	int j, chk, jsmask;
 	int t0, t_x0, t_y0, t_x1, t_y1;
-	unsigned int minor, minor2;
+	unsigned int minor;
 	int buttons;
-
+	struct inode *inode=file->f_dentry->d_inode;
+	
 	if (count != JS_RETURN)
 		return -EINVAL;
-	minor = MINOR (inode->i_rdev);
+	minor = MINOR (inode->i_rdev); 
 	inode->i_atime = CURRENT_TIME;
 	if (jiffies >= js_data[minor].js_expiretime) 
 	{
-		minor2 = minor << 1;
 		j = js_data[minor].js_timeout;
 		for (; (js_exist & inb (JS_PORT)) && j; j--);
 		if (j == 0)
@@ -262,8 +266,8 @@ static long js_read (struct inode *inode, struct file *file, char *buf, unsigned
 		/*get init timestamp*/
 		t_x0 = t_y0 = t_x1 = t_y1 = t0 = get_timer0 ();
 		/*wait for an axis' bit to clear or timeout*/
-		while (j-- && (chk = (inb (JS_PORT) & js_exist ) | jsmask)) 
-		{
+		do {
+			chk = (inb (JS_PORT) & js_exist) | jsmask;
 			if (!(chk & JS_X_0)) {
 				t_x0 = get_timer0();
 				jsmask |= JS_X_0;
@@ -280,7 +284,7 @@ static long js_read (struct inode *inode, struct file *file, char *buf, unsigned
 				t_y1 = get_timer0();
 				jsmask |= JS_Y_1;
 			}
-		}
+		} while (--j && jsmask != js_exist);
 		sti();					/* allow interrupts */
 
 		js_read_semaphore = 0;	/* allow other reads to progress */
