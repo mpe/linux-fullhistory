@@ -32,7 +32,6 @@ void (*mach_kbd_reset_setup) (char *, int) __initdata = 0;
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
-#include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>

@@ -58,7 +58,7 @@ else
 endif
 
 ifeq ($(CONFIG_BLK_DEV_SD),y)
-L_OBJS += sd.o sd_ioctl.o
+L_OBJS += sd.o
 else
   ifeq ($(CONFIG_BLK_DEV_SD),m)
   M_OBJS += sd_mod.o
@@ -729,5 +729,5 @@ scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 sr_mod.o: sr.o sr_ioctl.o sr_vendor.o
 	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o sr_vendor.o
 
-sd_mod.o: sd.o sd_ioctl.o
-	$(LD) $(LD_RFLAG) -r -o $@ sd.o sd_ioctl.o
+sd_mod.o: sd.o
+	$(LD) $(LD_RFLAG) -r -o $@ sd.o

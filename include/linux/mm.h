@@ -286,7 +286,6 @@ extern mem_map_t * mem_map;
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
  */
-extern struct page * __get_pages(int gfp_mask, unsigned long order);
 #define __get_free_page(gfp_mask) __get_free_pages((gfp_mask),0)
 #define __get_dma_pages(gfp_mask, order) __get_free_pages((gfp_mask) | GFP_DMA,(order))
 extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long gfp_order));
@@ -335,7 +334,7 @@ extern int pgt_cache_water[2];
 extern int check_pgt_cache(void);
 
 extern void paging_init(void);
-extern void free_area_init(unsigned long);
+extern void free_area_init(unsigned int * zones_size);
 extern void mem_init(void);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);

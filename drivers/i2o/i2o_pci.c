@@ -5,11 +5,11 @@
  *	(C) Copyright 1999   Red Hat Software
  *	
  *	Written by Alan Cox, Building Number Three Ltd
- *	Modified by Deepak Saxena <deepak@plexity.net>
+ * 	Modified by Deepak Saxena <deepak@plexity.net>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
- *	as published by the Free Software Foundation; either version
+ * 	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
  *	TODO:
@@ -120,7 +120,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 
 	if(c==NULL)
 	{
-		printk(KERN_ERR "i2o_pci: insufficient memory to add controller.\n");
+		printk(KERN_ERR "i2o: Insufficient memory to add controller.\n");
 		return -ENOMEM;
 	}
 	memset(c, 0, sizeof(*c));
@@ -137,7 +137,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	
 	if(i==6)
 	{
-		printk(KERN_ERR "i2o_pci: I2O controller has no memory regions defined.\n");
+		printk(KERN_ERR "i2o: I2O controller has no memory regions defined.\n");
 		kfree(c);
 		return -EINVAL;
 	}
@@ -145,11 +145,11 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	size = dev->resource[i].end-dev->resource[i].start+1;	
 	/* Map the I2O controller */
 	
-	printk(KERN_INFO "PCI I2O controller at 0x%08X size=%d\n", memptr, size);
+	printk(KERN_INFO "i2o: PCI I2O controller at 0x%08X size=%d\n", memptr, size);
 	mem = ioremap(memptr, size);
 	if(mem==NULL)
 	{
-		printk(KERN_ERR "i2o_pci: Unable to map controller.\n");
+		printk(KERN_ERR "i2o: Unable to map controller.\n");
 		kfree(c);
 		return -EINVAL;
 	}
@@ -189,7 +189,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	
 	if(i<0)
 	{
-		printk(KERN_ERR "i2o: unable to install controller.\n");
+		printk(KERN_ERR "i2o: Unable to install controller.\n");
 		kfree(c);
 		iounmap(mem);
 		return i;
@@ -216,7 +216,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 		}
 	}
 
-	printk(KERN_INFO "Installed iop%d at IRQ%d\n", c->unit, dev->irq);
+	printk(KERN_INFO "%s: Installed at IRQ%d\n", c->name, dev->irq);
 	I2O_IRQ_WRITE32(c,0x0);
 	c->enabled = 1;
 	return 0;	
@@ -227,7 +227,7 @@ int __init i2o_pci_scan(void)
 	struct pci_dev *dev;
 	int count=0;
 	
-	printk(KERN_INFO "Checking for PCI I2O controllers...\n");
+	printk(KERN_INFO "i2o: Checking for PCI I2O controllers...\n");
 	
 	for(dev=pci_devices; dev!=NULL; dev=dev->next)
 	{
@@ -235,17 +235,17 @@ int __init i2o_pci_scan(void)
 			continue;
 		if((dev->class&0xFF)>1)
 		{
-			printk(KERN_INFO "I2O controller found but does not support I2O 1.5 (skipping).\n");
+			printk(KERN_INFO "i2o: I2O Controller found but does not support I2O 1.5 (skipping).\n");
 			continue;
 		}
-		printk(KERN_INFO "I2O controller on bus %d at %d.\n",
+		printk(KERN_INFO "i2o: I2O controller on bus %d at %d.\n",
 			dev->bus->number, dev->devfn);
 		pci_set_master(dev);
 		if(i2o_pci_install(dev)==0)
 			count++;
 	}
 	if(count)
-		printk(KERN_INFO "%d I2O controller%s found and installed.\n", count,
+		printk(KERN_INFO "i2o: %d I2O controller%s found and installed.\n", count,
 			count==1?"":"s");
 	return count?count:-ENODEV;
 }
@@ -270,7 +270,7 @@ static void i2o_pci_activate(i2o_controller * c)
 		if(i2o_activate_controller(c))
 #endif /* MODULE */
 		{
-			printk("I2O: Failed to initialize iop%d\n", c->unit);
+			printk("%s: Failed to initialize.\n", c->name);
 #ifdef MODULE
 			core->unlock(c);
 			core->delete(c);

@@ -225,14 +225,16 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 			page = bprm->page[i];
 			new = 0;
 			if (!page) {
+				unsigned long pageaddr;
 				/*
 				 * Cannot yet use highmem page because
 				 * we cannot sleep with a kmap held.
 				 */
-				page = __get_pages(GFP_USER, 0);
-				bprm->page[i] = page;
-				if (!page)
+				pageaddr = __get_free_page(GFP_USER);
+				if (!pageaddr)
 					return -ENOMEM;
+				page = mem_map + MAP_NR(pageaddr);
+				bprm->page[i] = page;
 				new = 1;
 			}
 			kaddr = (char *)kmap(page, KM_WRITE);

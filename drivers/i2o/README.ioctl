@@ -208,18 +208,16 @@ VIII. Downloading Software
 
    DESCRIPTION
 
-   This function downloads the software pointed by sw->buf to the
-   iop identified by sw->iop. The DownloadFlags, SwID, SwType and SwSize 
-   fields of the ExecSwDownload message are filled in with the values of 
-   sw->flags, sw->sw_id, sw->sw_type and *(sw->swlen).
+   This function downloads a software fragment pointed by sw->buf
+   to the iop identified by sw->iop. The DownloadFlags, SwID, SwType
+   and SwSize fields of the ExecSwDownload message are filled in with
+   the values of sw->flags, sw->sw_id, sw->sw_type and *(sw->swlen).
 
-   Once the ioctl() is called and software transfer begins, the 
-   user can read the value *(sw->maxfrag) and *(sw->curfrag) to
-   determine the status of the software transfer. As the IOP
-   is very slow when it comes to SW transfers, this can be
-   used by a separate thread to report status to the user. The
-   user _should not_ write to this memory location until the ioctl()
-   has returned.
+   The fragments _must_ be sent in order and be 8K in size. The last
+   fragment _may_ be shorter, however. The kernel will compute its
+   size based on information in the sw->swlen field.
+
+   Please note that SW transfers can take a long time.
 
    RETURNS
 
@@ -234,7 +232,7 @@ VIII. Downloading Software
 IX. Uploading Software
    
    SYNOPSIS 
- 
+
    ioctl(fd, I2OSWUL, struct i2o_sw_xfer *sw);
 
       struct i2o_sw_xfer
@@ -251,19 +249,17 @@ IX. Uploading Software
 
    DESCRIPTION
 
-   This function uploads software from the IOP identified by sw->iop
-   and places it in the buffer pointed to by sw->buf. The length of the
-   buffer is given in *(sw->swlen). The UploadFlags, SwID and SwType
-   fields of the ExecSwUpload message are filled in 
-   with the values of sw->flags, sw->sw_id and sw->sw_type. 
+   This function uploads a software fragment from the IOP identified
+   by sw->iop, sw->sw_type, sw->sw_id and optionally sw->swlen fields.
+   The UploadFlags, SwID, SwType and SwSize fields of the ExecSwUpload
+   message are filled in with the values of sw->flags, sw->sw_id,
+   sw->sw_type and *(sw->swlen).
 
-   Once the ioctl() is called and software transfer begins, the 
-   user can read the value *(sw->maxfrag) and *(sw->curfrag) to
-   determine the status of the software transfer.  As the IOP
-   is very slow when it comes to SW transfers, this can be
-   used by a separate thread to report status to the user. The
-   user _should not_ write to this memory location until the ioctl()
-   has returned.
+   The fragments _must_ be requested in order and be 8K in size. The
+   user is responsible for allocating memory pointed by sw->buf. The
+   last fragment _may_ be shorter.
+
+   Please note that SW transfers can take a long time.
 
    RETURNS
 

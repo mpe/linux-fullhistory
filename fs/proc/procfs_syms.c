@@ -18,6 +18,8 @@ EXPORT_SYMBOL(proc_get_inode);
 EXPORT_SYMBOL(proc_dir_inode_operations);
 EXPORT_SYMBOL(proc_net);
 EXPORT_SYMBOL(proc_bus);
+EXPORT_SYMBOL(proc_lookup);
+EXPORT_SYMBOL(proc_readdir);
 
 #if defined(CONFIG_SUN_OPENPROMFS_MODULE)
 EXPORT_SYMBOL(proc_openprom_register);

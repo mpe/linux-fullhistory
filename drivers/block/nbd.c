@@ -35,6 +35,7 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/ioctl.h>
+#include <net/sock.h>
 
 #include <asm/segment.h>
 #include <asm/uaccess.h>
@@ -105,6 +106,7 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 
 
 	do {
+		sock->sk->allocation = GFP_ATOMIC;
 		iov.iov_base = buf;
 		iov.iov_len = size;
 		msg.msg_name = NULL;

@@ -14,9 +14,9 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
+#include <linux/swap.h>
 
 unsigned long highmem_mapnr;
-unsigned long nr_free_highpages = 0;
 
 struct page * prepare_highmem_swapout(struct page * page)
 {
@@ -52,7 +52,7 @@ struct page * replace_with_highmem(struct page * page)
 	struct page *highpage;
 	unsigned long vaddr;
 
-	if (PageHighMem(page) || !nr_free_highpages)
+	if (PageHighMem(page) || !nr_free_highpages())
 		return page;
 
 	highpage = get_free_highpage(GFP_ATOMIC|__GFP_HIGHMEM);

@@ -107,16 +107,12 @@
 #include "atari_scsi.h"
 #endif
 
-#ifdef CONFIG_MAC_SCSI_OLD
+#if defined(CONFIG_MAC_SCSI) || defined(CONFIG_MAC_SCSI_OLD)
 #include "mac_scsi.h"
 #endif
 
 #ifdef CONFIG_SUN3_SCSI
 #include "sun3_scsi.h"
-#endif
-
-#ifdef CONFIG_MAC_SCSI
-#include "mac_scsi.h"
 #endif
 
 #ifdef CONFIG_SCSI_MAC_ESP

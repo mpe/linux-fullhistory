@@ -32,7 +32,6 @@
 #include <linux/string.h>
 #include <linux/random.h>
 #include <linux/init.h>
-#include <linux/module.h>
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>

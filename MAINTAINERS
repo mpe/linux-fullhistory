@@ -522,10 +522,10 @@ M:	eis@baty.hanse.de
 L:	linux-x25@vger.rutgers.edu
 S:	Maintained
 
-LINUX FOR POWERPC (PREP)
+LINUX FOR POWERPC
 P:	Cort Dougan
-M:	cort@cs.nmt.edu
-W:	http://linuxppc.cs.nmt.edu/
+M:	cort@ppc.kernel.org
+W:	http://www.ppc.kernel.org/
 S:	Maintained
 
 LINUX FOR POWER MACINTOSH

@@ -36,21 +36,25 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include <linux/hdreg.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 
 #include <linux/smp.h>
 
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
 #define MAJOR_NR SCSI_DISK0_MAJOR
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
 #include <scsi/scsi_ioctl.h>
 #include "constants.h"
+#include <scsi/scsicam.h>	/* must follow "hosts.h" */
 
 #include <linux/genhd.h>
 
@@ -87,8 +91,6 @@ static int *sd_sizes;
 static int *sd_blocksizes;
 static int *sd_hardsizes;	/* Hardware sector size */
 
-extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
-
 static int check_scsidisk_media_change(kdev_t);
 static int fop_revalidate_scsidisk(kdev_t);
 
@@ -101,6 +103,83 @@ static void sd_finish(void);
 static int sd_attach(Scsi_Device *);
 static int sd_detect(Scsi_Device *);
 static void sd_detach(Scsi_Device *);
+
+static int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg)
+{
+    kdev_t dev = inode->i_rdev;
+    int error;
+    struct Scsi_Host * host;
+    Scsi_Device * SDev;
+    int diskinfo[4];
+    struct hd_geometry *loc = (struct hd_geometry *) arg;
+    
+    SDev = rscsi_disks[DEVICE_NR(dev)].device;
+    /*
+     * If we are in the middle of error recovery, don't let anyone
+     * else try and use this device.  Also, if error recovery fails, it
+     * may try and take the device offline, in which case all further
+     * access to the device is prohibited.
+     */
+    if( !scsi_block_when_processing_errors(SDev) )
+      {
+        return -ENODEV;
+      }
+
+    switch (cmd) {
+    case HDIO_GETGEO:   /* Return BIOS disk parameters */
+	if (!loc)  return -EINVAL;
+	error = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
+	if (error)
+	    return error;
+	host = rscsi_disks[DEVICE_NR(dev)].device->host;
+
+/* default to most commonly used values */
+
+        diskinfo[0] = 0x40;
+        diskinfo[1] = 0x20;
+        diskinfo[2] = rscsi_disks[DEVICE_NR(dev)].capacity >> 11;
+
+/* override with calculated, extended default, or driver values */
+
+	if(host->hostt->bios_param != NULL)
+	    host->hostt->bios_param(&rscsi_disks[DEVICE_NR(dev)],
+				    dev,
+				    &diskinfo[0]);
+        else scsicam_bios_param(&rscsi_disks[DEVICE_NR(dev)],
+				dev, &diskinfo[0]);
+
+	put_user(diskinfo[0], &loc->heads);
+	put_user(diskinfo[1], &loc->sectors);
+	put_user(diskinfo[2], &loc->cylinders);
+	put_user(sd[SD_PARTITION(inode->i_rdev)].start_sect, &loc->start);
+	return 0;
+    case BLKGETSIZE:   /* Return device size */
+	if (!arg)  return -EINVAL;
+	error = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
+	if (error)
+	    return error;
+	put_user(sd[SD_PARTITION(inode->i_rdev)].nr_sects,
+		 (long *) arg);
+	return 0;
+
+    case BLKROSET:
+    case BLKROGET:
+    case BLKRASET:
+    case BLKRAGET:
+    case BLKFLSBUF:
+    case BLKSSZGET:
+    case BLKPG:
+	return blk_ioctl(inode->i_rdev, cmd, arg);
+
+    case BLKRRPART: /* Re-read partition tables */
+        if (!capable(CAP_SYS_ADMIN))
+                return -EACCES;
+	return revalidate_scsidisk(dev, 1);
+
+    default:
+	return scsi_ioctl(rscsi_disks[DEVICE_NR(dev)].device , cmd, (void *) arg);
+    }
+}
 
 static void sd_devname(unsigned int disknum, char *buffer)
 {

@@ -13,7 +13,6 @@
  * 0.99.14 version by Jon Tombs <jon@gtex02.us.es>,
  * Heavily modified by Bjorn Ekwall <bj0rn@blox.se> May 1994 (C)
  * Rewritten by Richard Henderson <rth@tamu.edu> Dec 1996
- * Use rw spinlock instead of global kernel lock for module_list, by TA <tigran@sco.com>
  *
  * This source is covered by the GNU GPL, the same as all kernel sources.
  */
@@ -53,8 +52,6 @@ static void put_mod_name(char *buf);
 static struct module *find_module(const char *name);
 static void free_module(struct module *, int tag_freed);
 
-rwlock_t modlist_lock = RW_LOCK_UNLOCKED;
-
 
 /* needed for /proc/kcore, here because kernel_module is static (TA) */
 unsigned long get_kcore_size(void)
@@ -65,13 +62,13 @@ unsigned long get_kcore_size(void)
 	if (module_list == &kernel_module)
 		return ((unsigned long)high_memory - PAGE_OFFSET + PAGE_SIZE);
 
-	read_lock(&modlist_lock);
+	lock_kernel();
 	for (m=module_list; m; m=m->next) {
 		try = (unsigned long)m + m->size;
 		if (try > size)
 			size = try;
 	}
-	read_unlock(&modlist_lock);
+	unlock_kernel();
 	return (size - PAGE_OFFSET + PAGE_SIZE);
 }
 
@@ -133,7 +130,7 @@ sys_create_module(const char *name_user, size_t size)
 	long namelen, error;
 	struct module *mod;
 
-	write_lock(&modlist_lock);
+	lock_kernel();
 	if (!capable(CAP_SYS_MODULE)) {
 		error = -EPERM;
 		goto err0;
@@ -171,7 +168,7 @@ sys_create_module(const char *name_user, size_t size)
 err1:
 	put_mod_name(name);
 err0:
-	write_unlock(&modlist_lock);
+	unlock_kernel();
 	return error;
 }
 
@@ -188,7 +185,7 @@ sys_init_module(const char *name_user, struct module *mod_user)
 	unsigned long mod_user_size;
 	struct module_ref *dep;
 
-	write_lock(&modlist_lock);
+	lock_kernel();
 	if (!capable(CAP_SYS_MODULE))
 		goto err0;
 	if ((namelen = get_mod_name(name_user, &name)) < 0) {
@@ -367,7 +364,7 @@ err2:
 err1:
 	put_mod_name(name);
 err0:
-	write_unlock(&modlist_lock);
+	unlock_kernel();
 	return error;
 }
 
@@ -379,7 +376,7 @@ sys_delete_module(const char *name_user)
 	long error = -EPERM;
 	int something_changed;
 
-	write_lock(&modlist_lock);
+	lock_kernel();
 	if (!capable(CAP_SYS_MODULE))
 		goto out;
 
@@ -432,7 +429,7 @@ restart:
 		mod->flags &= ~MOD_JUST_FREED;
 	error = 0;
 out:
-	write_unlock(&modlist_lock);
+	unlock_kernel();
 	return error;
 }
 
@@ -446,21 +443,17 @@ qm_modules(char *buf, size_t bufsize, size_t *ret)
 
 	nmod = space = 0;
 
-	read_lock(&modlist_lock);
 	for (mod=module_list; mod != &kernel_module; mod=mod->next, ++nmod) {
 		len = strlen(mod->name)+1;
 		if (len > bufsize)
 			goto calc_space_needed;
-		if (copy_to_user(buf, mod->name, len)) {
-			read_unlock(&modlist_lock);
+		if (copy_to_user(buf, mod->name, len))
 			return -EFAULT;
-		}
 		buf += len;
 		bufsize -= len;
 		space += len;
 	}
 
-	read_unlock(&modlist_lock);
 	if (put_user(nmod, ret))
 		return -EFAULT;
 	else
@@ -471,7 +464,6 @@ calc_space_needed:
 	while ((mod = mod->next) != &kernel_module)
 		space += strlen(mod->name)+1;
 
-	read_unlock(&modlist_lock);
 	if (put_user(space, ret))
 		return -EFAULT;
 	else
@@ -658,7 +650,7 @@ sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 	struct module *mod;
 	int err;
 
-	read_lock(&modlist_lock);
+	lock_kernel();
 	if (name_user == NULL)
 		mod = &kernel_module;
 	else {
@@ -704,7 +696,7 @@ sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
 		break;
 	}
 out:
-	read_unlock(&modlist_lock);
+	unlock_kernel();
 	return err;
 }
 
@@ -723,7 +715,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	int i;
 	struct kernel_sym ksym;
 
-	read_lock(&modlist_lock);
+	lock_kernel();
 	for (mod = module_list, i = 0; mod; mod = mod->next) {
 		/* include the count for the module name! */
 		i += mod->nsyms + 1;
@@ -766,13 +758,12 @@ sys_get_kernel_syms(struct kernel_sym *table)
 		}
 	}
 out:
-	read_unlock(&modlist_lock);
+	unlock_kernel();
 	return i;
 }
 
 /*
  * Look for a module by name, ignoring modules marked for deletion.
- * Callers must hold modlist_lock at least in read mode.
  */
 
 static struct module *
@@ -792,7 +783,6 @@ find_module(const char *name)
 
 /*
  * Free the given module.
- * Callers must hold modlist_lock in exclusive (write) mode.
  */
 
 static void
@@ -849,7 +839,6 @@ int get_module_list(char *p)
 	char tmpstr[64];
 	struct module_ref *ref;
 
-	read_lock(&modlist_lock);
 	for (mod = module_list; mod != &kernel_module; mod = mod->next) {
 		long len;
 		const char *q;
@@ -915,7 +904,6 @@ int get_module_list(char *p)
 	}
 
 fini:
-	read_unlock(&modlist_lock);
 	return PAGE_SIZE - left;
 }
 
@@ -932,7 +920,6 @@ get_ksyms_list(char *buf, char **start, off_t offset, int length)
 	off_t pos   = 0;
 	off_t begin = 0;
 
-	read_lock(&modlist_lock);
 	for (mod = module_list; mod; mod = mod->next) {
 		unsigned i;
 		struct module_symbol *sym;
@@ -967,7 +954,6 @@ leave_the_loop:
 	len -= (offset - begin);
 	if (len > length)
 		len = length;
-	read_unlock(&modlist_lock);
 	return len;
 }
 
@@ -984,7 +970,6 @@ get_module_symbol(char *modname, char *symname)
 	struct module_symbol *sym;
 	int i;
 
-	read_lock(&modlist_lock);
 	for (mp = module_list; mp; mp = mp->next) {
 		if (((modname == NULL) || (strcmp(mp->name, modname) == 0)) &&
 			(mp->flags & (MOD_RUNNING | MOD_DELETED)) == MOD_RUNNING &&
@@ -993,13 +978,11 @@ get_module_symbol(char *modname, char *symname)
 				i > 0; --i, ++sym) {
 
 				if (strcmp(sym->name, symname) == 0) {
-					read_unlock(&modlist_lock);
 					return sym->value;
 				}
 			}
 		}
 	}
-	read_unlock(&modlist_lock);
 	return 0;
 }
 

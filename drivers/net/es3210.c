@@ -344,7 +344,7 @@ static void es_block_input(struct net_device *dev, int count, struct sk_buff *sk
 		isa_memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
 	} else {
 		/* Packet is in one chunk. */
-		isa_eth_io_copy_and_csum(skb, xfer_start, count, 0);
+		isa_eth_io_copy_and_sum(skb, xfer_start, count, 0);
 	}
 }
 

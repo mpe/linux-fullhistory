@@ -2932,7 +2932,6 @@ put_mod_name(char *buf)
 	free_page((unsigned long)buf);
 }
 
-/* caller must hold modlist_lock at least in read mode */
 static __inline__ struct module *find_module(const char *name)
 {
 	struct module *mod;
@@ -3162,7 +3161,7 @@ asmlinkage int sys32_query_module(char *name_user, int which, char *buf, __kerne
 	struct module *mod;
 	int err;
 
-	read_lock(&modlist_lock);
+	lock_kernel();
 	if (name_user == 0) {
 		/* This finds "kernel_module" which is not exported. */
 		for(mod = module_list; mod->next != NULL; mod = mod->next)
@@ -3212,7 +3211,7 @@ asmlinkage int sys32_query_module(char *name_user, int which, char *buf, __kerne
 		break;
 	}
 out:
-	read_unlock(&modlist_lock);
+	unlock_kernel();
 	return err;
 }
 

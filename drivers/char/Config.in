@@ -167,6 +167,9 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
 	 dep_tristate '  SGI Vino Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_VINO $CONFIG_VIDEO_DEV
       fi
    fi
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      dep_tristate '  Stradis 4:2:2 MPEG-2 video driver  (EXPERIMENTAL)' CONFIG_VIDEO_STRADIS $CONFIG_VIDEO_DEV
+   fi
    dep_tristate '  TerraTec ActiveRadio ISA Standalone' CONFIG_RADIO_TERRATEC $CONFIG_VIDEO_DEV
    if [ "$CONFIG_RADIO_TERRATEC" = "y" ]; then
       hex '    Terratec i/o port (normally 0x590)' CONFIG_RADIO_TERRATEC_PORT 590

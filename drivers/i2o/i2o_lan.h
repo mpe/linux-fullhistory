@@ -18,7 +18,7 @@
 /* Tunable parameters first */
 
 #define I2O_BUCKET_COUNT 	256
-#define I2O_BUCKET_THRESH	16
+#define I2O_BUCKET_THRESH	8
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030
@@ -108,5 +108,11 @@ struct i2o_bucket_descriptor {
 	u32 context; 			/* FIXME: 64bit support */
 	struct i2o_packet_info packet_info[1];
 };
+
+/* Event Indicator Mask Flags for LAN OSM */
+
+#define I2O_LAN_EVT_LINK_DOWN		0x01
+#define I2O_LAN_EVT_LINK_UP		0x02
+#define I2O_LAN_EVT_MEDIA_CHANGE 	0x04
  
 #endif /* _I2O_LAN_H */

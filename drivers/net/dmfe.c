@@ -59,6 +59,7 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 #include <linux/version.h>
 
 #include <linux/delay.h>

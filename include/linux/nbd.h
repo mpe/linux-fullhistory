@@ -1,3 +1,9 @@
+/*
+ * 1999 Copyright (C) Pavel Machek, pavel@ucw.cz. This code is GPL.
+ * 1999/11/04 Copyright (C) 1999 VMware, Inc. (Regis "HPReg" Duchesne)
+ *            Made nbd_end_request() use the io_request_lock
+ */
+
 #ifndef LINUX_NBD_H
 #define LINUX_NBD_H
 
@@ -27,12 +33,19 @@ extern int requests_out;
 static void 
 nbd_end_request(struct request *req)
 {
+	unsigned long flags;
+
 #ifdef PARANOIA
 	requests_out++;
 #endif
+	spin_lock_irqsave(&io_request_lock, flags);
 	if (end_that_request_first( req, !req->errors, "nbd" ))
-		return;
+		goto out;
 	end_that_request_last( req );
+
+out:
+	spin_unlock_irqrestore(&io_request_lock, flags);
+	return;
 }
 
 #define MAX_NBD 128

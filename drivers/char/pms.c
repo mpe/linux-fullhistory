@@ -624,7 +624,7 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 {
 	int y;
 	int dw = 2*dev->width;
-	char *src = (char *)bus_to_virt(mem_base);
+	u32 src = mem_base;
 
 	char tmp[dw+32]; /* using a temp buffer is faster than direct  */
 	int cnt = 0;
@@ -639,8 +639,14 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
   
 	for (y = 0; y < dev->height; y++ ) 
 	{
-		*src = 0;  /* synchronisiert neue Zeile */
-		memcpy(tmp, src, dw+32); /* discard 16 word   */
+		isa_writeb(0, src);  /* synchronisiert neue Zeile */
+		
+		/*
+		 *	This is in truth a fifo, be very careful as if you
+		 *	forgot this odd things will occur 8)
+		 */
+		 
+		isa_memcpy_fromio(tmp, src, dw+32); /* discard 16 word   */
 		cnt -= dev->height;
 		while (cnt <= 0) 
 		{ 

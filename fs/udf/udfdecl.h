@@ -6,7 +6,6 @@
 #ifdef __KERNEL__
 
 #include <linux/types.h>
-#include <linux/udf_udf.h>
 #include <linux/udf_fs.h>
 #include <linux/config.h>
 
@@ -18,16 +17,14 @@
 #error "The UDF Module Current Requires Kernel Version 2.3.7 or greater"
 #endif
 
+#include <linux/fs.h>
 /* if we're not defined, we must be compiling outside of the kernel tree */
 #if !defined(CONFIG_UDF_FS) && !defined(CONFIG_UDF_FS_MODULE)
 /* ... so override config */
 #define CONFIG_UDF_FS_MODULE
-#include <linux/fs.h>
 /* explicitly include udf_fs_sb.h and udf_fs_i.h */
 #include <linux/udf_fs_sb.h>
 #include <linux/udf_fs_i.h>
-#else
-#include <linux/fs.h> /* also gets udf_fs_i.h and udf_fs_sb.h */
 #endif
 
 struct dentry;
@@ -113,10 +110,10 @@ extern int udf_sync_file(struct file *, struct dentry *);
 #else
 
 #include <sys/types.h>
-#include <linux/udf_udf.h>
 
 #endif /* __KERNEL__ */
 
+#include <linux/udf_udf.h>
 #include "udfend.h"
 
 /* structures */

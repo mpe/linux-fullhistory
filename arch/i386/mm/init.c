@@ -422,11 +422,16 @@ void __init paging_init(void)
 #ifdef CONFIG_HIGHMEM
 	kmap_init(); /* run after fixmap_init */
 #endif
-#ifdef CONFIG_HIGHMEM
-	free_area_init(highend_pfn);
-#else
-	free_area_init(max_low_pfn);
-#endif
+	{
+		unsigned int zones_size[3];
+
+		zones_size[0] = virt_to_phys((char *)MAX_DMA_ADDRESS)
+					 >> PAGE_SHIFT;
+		zones_size[1] = max_low_pfn - zones_size[0];
+		zones_size[2] = highend_pfn - zones_size[0] - zones_size[1];
+
+		free_area_init(zones_size);
+	}
 	return;
 }
 
@@ -541,7 +546,7 @@ void __init mem_init(void)
 	totalram_pages += totalhigh_pages;
 #endif
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init, %ldk highmem)\n",
-		(unsigned long) nr_free_pages << (PAGE_SHIFT-10),
+		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
 		max_mapnr << (PAGE_SHIFT-10),
 		codepages << (PAGE_SHIFT-10),
 		reservedpages << (PAGE_SHIFT-10),
@@ -587,10 +592,10 @@ void si_meminfo(struct sysinfo *val)
 {
 	val->totalram = totalram_pages;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages;
+	val->freeram = nr_free_pages();
 	val->bufferram = atomic_read(&buffermem_pages);
 	val->totalhigh = totalhigh_pages;
-	val->freehigh = nr_free_highpages;
+	val->freehigh = nr_free_highpages();
 	val->mem_unit = PAGE_SIZE;
 	return;
 }

@@ -411,9 +411,9 @@ enter_rtas:
 	addis	r7,r7,-KERNELBASE@h
 	lis	r8,rtas_entry@ha
 	lwz	r8,rtas_entry@l(r8)
-	addis	r5,r8,-KERNELBASE@h
 	mfmsr	r9
 	stw	r9,8(r1)
+	li	r0,0
 	ori	r0,r0,MSR_EE|MSR_SE|MSR_BE
 	andc	r0,r9,r0
 	andi.	r9,r9,MSR_ME|MSR_RI

@@ -11,7 +11,11 @@
  *         - Added software download ioctl (still testing)
  *	Modified 09/10/1999 by Auvo Häkkinen
  *	   - Changes to i2o_cfg_reply(), ioctl_parms()
- *	   - Added ioct_validate() (not yet tested)
+ *	   - Added ioct_validate()
+ *	Modified 09/30/1999 by Taneli Vähäkangas
+ *	   - Fixed ioctl_swdl()
+ *	Modified 10/04/1999 by Taneli Vähäkangas
+ *	   - Changed ioctl_swdl(), implemented ioctl_swul() and ioctl_swdel()
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -32,8 +36,6 @@
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
-
-#include "i2o_proc.h"
 
 static int i2o_cfg_token = 0;
 static int i2o_cfg_context = -1;
@@ -196,7 +198,7 @@ int ioctl_gethrt(unsigned long arg)
 	struct i2o_controller *c;
 	struct i2o_cmd_hrtlct *cmd = (struct i2o_cmd_hrtlct*)arg;
 	struct i2o_cmd_hrtlct kcmd;
-	pi2o_hrt hrt;
+	i2o_hrt *hrt;
 	int len;
 	u32 reslen;
 	int ret = 0;
@@ -214,7 +216,7 @@ int ioctl_gethrt(unsigned long arg)
 	if(!c)
 		return -ENXIO;
 		
-	hrt = (pi2o_hrt)c->hrt;
+	hrt = (i2o_hrt *)c->hrt;
 
 	i2o_unlock_controller(c);
 
@@ -235,7 +237,7 @@ int ioctl_getlct(unsigned long arg)
 	struct i2o_controller *c;
 	struct i2o_cmd_hrtlct *cmd = (struct i2o_cmd_hrtlct*)arg;
 	struct i2o_cmd_hrtlct kcmd;
-	pi2o_lct lct;
+	i2o_lct *lct;
 	int len;
 	int ret = 0;
 	u32 reslen;
@@ -253,7 +255,7 @@ int ioctl_getlct(unsigned long arg)
 	if(!c)
 		return -ENXIO;
 
-	lct = (pi2o_lct)c->lct;
+	lct = (i2o_lct *)c->lct;
 	i2o_unlock_controller(c);
 
 	len = (unsigned int)lct->table_size << 2;
@@ -317,14 +319,14 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 		return -ENOMEM;
 	}
 
-        len = i2o_issue_params(i2o_cmd, c, kcmd.tid,
-        			ops, kcmd.oplen, res, 65536);
+        len = i2o_issue_params(i2o_cmd, c, kcmd.tid, 
+       			ops, kcmd.oplen, res, sizeof(res));
         i2o_unlock_controller(c);
 	kfree(ops);
         
-	if (len) {
+	if (len < 0) {
 		kfree(res);
-		return len; /* -DetailedStatus || -ETIMEDOUT */
+		return len; /* -DetailedStatus */
 	}
 
 	put_user(len, kcmd.reslen);
@@ -414,7 +416,7 @@ int ioctl_html(unsigned long arg)
 	}
 
 	token = i2o_post_wait(c, msg, 9*4, 10);
-	if(token)
+	if(token != I2O_POST_WAIT_OK)
 	{
 		i2o_unlock_controller(c);
 		kfree(res);
@@ -437,139 +439,175 @@ int ioctl_html(unsigned long arg)
 
 	return ret;
 }
-
+ 
 int ioctl_swdl(unsigned long arg)
 {
 	struct i2o_sw_xfer kxfer;
 	struct i2o_sw_xfer *pxfer = (struct i2o_sw_xfer *)arg;
-	unsigned char maxfrag = 0, curfrag = 0;
-	unsigned char buffer[8192];
+	unsigned char maxfrag = 0, curfrag = 1;
+	unsigned char *buffer;
 	u32 msg[9];
-	unsigned int token = 0, diff = 0, swlen = 0, swxfer = 0;
+	unsigned int status = 0, swlen = 0, fragsize = 8192;
 	struct i2o_controller *c;
-	int foo = 0;
 
-	printk("*** foo%d ***\n", foo++);
 	if(copy_from_user(&kxfer, pxfer, sizeof(struct i2o_sw_xfer)))
-	{
-		printk( "i2o_config: can't copy i2o_sw cmd @ %p\n", pxfer);
 		return -EFAULT;
-	}
-	printk("*** foo%d ***\n", foo++);
 
-	printk("Attempting to copy swlen from %p\n", kxfer.swlen);
 	if(get_user(swlen, kxfer.swlen) < 0)
-	{
-		printk( "i2o_config: can't copy swlen\n");
 		return -EFAULT;
-	}
-	printk("*** foo%d ***\n", foo++);
 
-	maxfrag = swlen >> 13;	// Transfer in 8k fragments
-
-	printk("Attempting to write maxfrag @ %p\n", kxfer.maxfrag);
-	if(put_user(maxfrag, kxfer.maxfrag) < 0)
-	{
-		printk( "i2o_config: can't write maxfrag\n");
+	if(get_user(maxfrag, kxfer.maxfrag) < 0)
 		return -EFAULT;
-	}
-	printk("*** foo%d ***\n", foo++);
 
-	printk("Attempting to write curfrag @ %p\n", kxfer.curfrag);
-	if(put_user(curfrag, kxfer.curfrag) < 0)
-	{
-		printk( "i2o_config: can't write curfrag\n");
+	if(get_user(curfrag, kxfer.curfrag) < 0)
 		return -EFAULT;
-	}
-	printk("*** foo%d ***\n", foo++);
 
-	if(!kxfer.buf)
-	{
-		printk( "i2o_config: NULL software buffer\n");
+	if(curfrag==maxfrag) fragsize = swlen-(maxfrag-1)*8192;
+
+	if(!kxfer.buf || !access_ok(VERIFY_READ, kxfer.buf, fragsize))
 		return -EFAULT;
-	}
-	printk("*** foo%d ***\n", foo++);
 	
-	// access_ok doesn't check for NULL...
-	if(!access_ok(VERIFY_READ, kxfer.buf, swlen))
-	{
-                printk( "i2o_config: Cannot read sw buffer\n");
-                return -EFAULT;
-	}
-	printk("*** foo%d ***\n", foo++);
-
 	c = i2o_find_controller(kxfer.iop);
 	if(!c)
 		return -ENXIO;
-	printk("*** foo%d ***\n", foo++);
+
+	buffer=kmalloc(fragsize, GFP_KERNEL);
+	if (buffer==NULL)
+	{
+		i2o_unlock_controller(c);
+		return -ENOMEM;
+	}
+	__copy_from_user(buffer, kxfer.buf, fragsize);
 
 	msg[0]= NINE_WORD_MSG_SIZE | SGL_OFFSET_7;
 	msg[1]= I2O_CMD_SW_DOWNLOAD<<24 | HOST_TID<<12 | ADAPTER_TID;
 	msg[2]= (u32)cfg_handler.context;
 	msg[3]= 0;
-	msg[4]= ((u32)kxfer.flags)<<24|((u32)kxfer.sw_type)<<16|((u32)maxfrag)<<8|((u32)curfrag);
+	msg[4]= (((u32)kxfer.flags)<<24) | (((u32)kxfer.sw_type)<<16) |
+		(((u32)maxfrag)<<8) | (((u32)curfrag));
 	msg[5]= swlen;
 	msg[6]= kxfer.sw_id;
-	msg[7]= (0xD0000000 | 8192);
+	msg[7]= (0xD0000000 | fragsize);
 	msg[8]= virt_to_phys(buffer);
 
-	printk("*** foo%d ***\n", foo++);
+//	printk("i2o_config: swdl frag %d/%d (size %d)\n", curfrag, maxfrag, fragsize);
+	status = i2o_post_wait(c, msg, sizeof(msg), 60);
 
-	//
-	// Loop through all fragments but last and transfer them...
-	// We already checked memory, so from now we assume it's all good
-	//
-	for(curfrag = 0; curfrag < maxfrag-1; curfrag++)
+	i2o_unlock_controller(c);
+	kfree(buffer);
+	
+	if (status != I2O_POST_WAIT_OK)
 	{
-		printk("Transfering fragment %d\n", curfrag);
-
-		msg[4] |= (u32)curfrag;
-
-		__copy_from_user(buffer, kxfer.buf, 8192);
-		swxfer += 8192;
-
-		// Yes...that's one minute, but the spec states that
-		// transfers take a long time, and I've seen just how
-		// long they can take.
-		token = i2o_post_wait(c, msg, sizeof(msg), 60);
-		if (token)	// Something very wrong
-		{
-			i2o_unlock_controller(c);
-			printk("Timeout downloading software");
-			return -ETIMEDOUT;
-		}
-
-		__put_user(curfrag, kxfer.curfrag);
-	}
-
-	// Last frag is special case since it's not exactly 8K
-	diff = swlen - swxfer;
-	msg[4] |= (u32)maxfrag;
-	msg[7] = (0xD0000000 | diff);
-	__copy_from_user(buffer, kxfer.buf, 8192);
-	token = i2o_post_wait(c, msg, sizeof(msg), 60);
-	if(token)	// Something very wrong
-	{
-		i2o_unlock_controller(c);
-		printk("Timeout downloading software");
+		// it fails if you try and send frags out of order
+		// and for some yet unknown reasons too
+		printk("i2o_config: swdl failed, DetailedStatus = %d\n", status);
 		return -ETIMEDOUT;
 	}
-	__put_user(curfrag, kxfer.curfrag);
-	i2o_unlock_controller(c);
 
 	return 0;
 }
 
-/* To be written */
 int ioctl_swul(unsigned long arg)
 {
-	return -EINVAL;
+	struct i2o_sw_xfer kxfer;
+	struct i2o_sw_xfer *pxfer = (struct i2o_sw_xfer *)arg;
+	unsigned char maxfrag = 0, curfrag = 1;
+	unsigned char *buffer;
+	u32 msg[9];
+	unsigned int status = 0, swlen = 0, fragsize = 8192;
+	struct i2o_controller *c;
+	
+	if(copy_from_user(&kxfer, pxfer, sizeof(struct i2o_sw_xfer)))
+		return -EFAULT;
+		
+	if(get_user(swlen, kxfer.swlen) < 0)
+		return -EFAULT;
+		
+	if(get_user(maxfrag, kxfer.maxfrag) < 0)
+		return -EFAULT;
+		
+	if(get_user(curfrag, kxfer.curfrag) < 0)
+		return -EFAULT;
+	
+	if(curfrag==maxfrag) fragsize = swlen-(maxfrag-1)*8192;
+	
+	if(!kxfer.buf || !access_ok(VERIFY_WRITE, kxfer.buf, fragsize))
+		return -EFAULT;
+		
+	c = i2o_find_controller(kxfer.iop);
+	if(!c)
+		return -ENXIO;
+		
+	buffer=kmalloc(fragsize, GFP_KERNEL);
+	if (buffer==NULL)
+	{
+		i2o_unlock_controller(c);
+		return -ENOMEM;
+	}
+	
+	msg[0]= NINE_WORD_MSG_SIZE | SGL_OFFSET_7;
+	msg[1]= I2O_CMD_SW_UPLOAD<<24 | HOST_TID<<12 | ADAPTER_TID;
+	msg[2]= (u32)cfg_handler.context;
+	msg[3]= 0;
+	msg[4]= (u32)kxfer.flags<<24|(u32)kxfer.sw_type<<16|(u32)maxfrag<<8|(u32)curfrag;
+	msg[5]= swlen;
+	msg[6]= kxfer.sw_id;
+	msg[7]= (0xD0000000 | fragsize);
+	msg[8]= virt_to_bus(buffer);
+	
+//	printk("i2o_config: swul frag %d/%d (size %d)\n", curfrag, maxfrag, fragsize);
+	status = i2o_post_wait(c, msg, sizeof(msg), 60);
+	i2o_unlock_controller(c);
+	
+	if (status != I2O_POST_WAIT_OK)
+	{
+		kfree(buffer);
+		printk("i2o_config: swul failed, DetailedStatus = %d\n", status);
+		return -ETIMEDOUT;
+	}
+	
+	__copy_to_user(kxfer.buf, buffer, fragsize);
+	kfree(buffer);
+	
+	return 0;
 }
 
-/* To be written */
 int ioctl_swdel(unsigned long arg)
 {
-	return -EINVAL;
+	struct i2o_controller *c;
+	struct i2o_sw_xfer kxfer, *pxfer = (struct i2o_sw_xfer *)arg;
+	u32 msg[7];
+	unsigned int swlen;
+	int token;
+	
+	if (copy_from_user(&kxfer, pxfer, sizeof(struct i2o_sw_xfer)))
+		return -EFAULT;
+		
+	if (get_user(swlen, kxfer.swlen) < 0)
+		return -EFAULT;
+		
+	c = i2o_find_controller(kxfer.iop);
+	if (!c)
+		return -ENXIO;
+
+	msg[0] = SEVEN_WORD_MSG_SIZE | SGL_OFFSET_0;
+	msg[1] = I2O_CMD_SW_REMOVE<<24 | HOST_TID<<12 | ADAPTER_TID;
+	msg[2] = (u32)i2o_cfg_context;
+	msg[3] = 0;
+	msg[4] = (u32)kxfer.flags<<24 | (u32)kxfer.sw_type<<16;
+	msg[5] = swlen;
+	msg[6] = kxfer.sw_id;
+
+	token = i2o_post_wait(c, msg, sizeof(msg), 10);
+	i2o_unlock_controller(c);
+	
+	if (token != I2O_POST_WAIT_OK)
+	{
+		printk("i2o_config: swdel failed, DetailedStatus = %d\n", token);
+		return -ETIMEDOUT;
+	}
+	
+	return 0;
 }
 
 int ioctl_validate(unsigned long arg)
@@ -591,7 +629,7 @@ int ioctl_validate(unsigned long arg)
         token = i2o_post_wait(c, msg, sizeof(msg), 10);
         i2o_unlock_controller(c);
 
-        if (token)
+        if (token != I2O_POST_WAIT_OK)
         {
                 printk("Can't validate configuration, ErrorStatus = %d\n",
                 	token);
@@ -644,7 +682,7 @@ int init_module(void)
 int __init i2o_config_init(void)
 #endif
 {
-	printk(KERN_INFO "i2o configuration manager v 0.02\n");
+	printk(KERN_INFO "i2o configuration manager v 0.03\n");
 	
 	if((page_buf = kmalloc(4096, GFP_KERNEL))==NULL)
 	{

@@ -585,8 +585,8 @@ void __init ll_puts(const char *s)
  */
 extern void scheduling_functions_start_here(void);
 extern void scheduling_functions_end_here(void);
-#define first_sched	((unsigned long) scheduling_functions_start_here)
-#define last_sched	((unsigned long) scheduling_functions_end_here)
+#define first_sched    ((unsigned long) scheduling_functions_start_here)
+#define last_sched     ((unsigned long) scheduling_functions_end_here)
 
 unsigned long get_wchan(struct task_struct *p)
 {

@@ -781,7 +781,7 @@ static void hardware_send_packet(struct net_device *dev, void *buf, short length
 	isa_memcpy_toio(write_ptr+2, buf, length);
 
 	/* Set the old command link pointing to this send packet. */
-	isa_isa_writew(tx_block,dev->mem_start + lp->tx_cmd_link);
+	isa_writew(tx_block,dev->mem_start + lp->tx_cmd_link);
 	lp->tx_cmd_link = tx_block + 20;
 
 	/* Set the next free tx region. */

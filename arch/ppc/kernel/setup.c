@@ -389,12 +389,10 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	if ( have_of )
 	{
-#ifdef CONFIG_MACH_SPECIFIC
 		/* prom_init has already been called from __start */
 		if (boot_infos)
 			relocate_nodes();
 		finish_device_tree();
-#endif /* CONFIG_MACH_SPECIFIC	*/
 		/*
 		 * If we were booted via quik, r3 points to the physical
 		 * address of the command-line parameters.
@@ -450,7 +448,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	int_control.int_cli = __no_use_cli;
 	int_control.int_save_flags = __no_use_save_flags;
 	int_control.int_restore_flags = __no_use_restore_flags;
-	
+
 	switch (_machine)
 	{
 	case _MACH_Pmac:

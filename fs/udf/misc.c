@@ -24,10 +24,9 @@
  *  04/19/99 blf  partial support for reading/writing specific EA's
  */
 
+#include "udfdecl.h"
 
 #if defined(__linux__) && defined(__KERNEL__)
-
-#include "udfdecl.h"
 
 #include "udf_sb.h"
 #include "udf_i.h"
@@ -38,7 +37,6 @@
 
 #else
 
-#include "udfdecl.h"
 #include <sys/types.h>
 #include <stdio.h>
 #include <unistd.h>

@@ -450,6 +450,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIDEO_STRADIS),y)
+O_OBJS += vino.o
+else
+  ifeq ($(CONFIG_VIDEO_STRADIS),m)
+  M_OBJS += stradis.o
+  endif
+endif
+
 ifeq ($(CONFIG_RADIO_AZTECH),y)
 O_OBJS += radio-aztech.o
 else

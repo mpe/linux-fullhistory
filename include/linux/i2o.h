@@ -100,40 +100,40 @@ typedef struct _i2o_pci_bus {
 	u8 reserved;
 	u16 PciVendorID;
 	u16 PciDeviceID;
-} i2o_pci_bus, *pi2o_pci_bus;
+} i2o_pci_bus;
 
 typedef struct _i2o_local_bus {
 	u16 LbBaseIOPort;
 	u16 reserved;
 	u32 LbBaseMemoryAddress;
-} i2o_local_bus, *pi2o_local_bus;
+} i2o_local_bus;
 
 typedef struct _i2o_isa_bus {
 	u16 IsaBaseIOPort;
 	u8 CSN;
 	u8 reserved;
 	u32 IsaBaseMemoryAddress;
-} i2o_isa_bus, *pi2o_isa_bus;
+} i2o_isa_bus;
 
 typedef struct _i2o_eisa_bus_info {
 	u16 EisaBaseIOPort;
 	u8 reserved;
 	u8 EisaSlotNumber;
 	u32 EisaBaseMemoryAddress;
-} i2o_eisa_bus, *pi2o_eisa_bus;
+} i2o_eisa_bus;
 
 typedef struct _i2o_mca_bus {
 	u16 McaBaseIOPort;
 	u8 reserved;
 	u8 McaSlotNumber;
 	u32 McaBaseMemoryAddress;
-} i2o_mca_bus, *pi2o_mca_bus;
+} i2o_mca_bus;
 
 typedef struct _i2o_other_bus {
 	u16 BaseIOPort;
 	u16 reserved;
 	u32 BaseMemoryAddress;
-} i2o_other_bus, *pi2o_other_bus;
+} i2o_other_bus;
 
 typedef struct _i2o_hrt_entry {
 	u32 adapter_id;
@@ -149,7 +149,7 @@ typedef struct _i2o_hrt_entry {
 		i2o_mca_bus mca_bus;
 		i2o_other_bus other_bus;
 	} bus;
-} i2o_hrt_entry, *pi2o_hrt_entry;
+} i2o_hrt_entry;
 
 typedef struct _i2o_hrt {
 	u16 num_entries;
@@ -157,7 +157,7 @@ typedef struct _i2o_hrt {
 	u8 hrt_version;
 	u32 change_ind;
 	i2o_hrt_entry hrt_entry[1];
-} i2o_hrt, *pi2o_hrt;
+} i2o_hrt;
 
 typedef struct _i2o_lct_entry {
 	u32 entry_size:16;
@@ -174,7 +174,7 @@ typedef struct _i2o_lct_entry {
 	u32 bios_info:8;
 	u8 identity_tag[8];
 	u32 event_capabilities;
-} i2o_lct_entry, *pi2o_lct_entry;
+} i2o_lct_entry;
 
 typedef struct _i2o_lct {
 	u32 table_size:16;
@@ -183,7 +183,7 @@ typedef struct _i2o_lct {
 	u32 iop_flags;
 	u32 current_change_ind;
 	i2o_lct_entry lct_entry[1];
-} i2o_lct, *pi2o_lct;
+} i2o_lct;
 
 typedef struct _i2o_status_block {
 	u16 org_id;
@@ -199,6 +199,7 @@ typedef struct _i2o_status_block {
 	u8 init_code;	
 	u8 reserved2;
 	u32 max_inbound_frames;
+	u32 cur_inbound_frames;
 	u32 max_outbound_frames;
 	char product_id[24];	
 	u32 expected_lct_size;
@@ -211,9 +212,38 @@ typedef struct _i2o_status_block {
 	u32 current_io_base;
 	u32 reserved3:24;
 	u32 cmd_status:8;
-} i2o_status_block, *pi2o_status_block;
+} i2o_status_block;
  
+/* Event indicator mask flags */
+#define I2O_EVT_IND_STATE_CHANGE		0x80000000
+#define I2O_EVT_IND_GENERAL_WARNING		0x40000000
+#define I2O_EVT_IND_CONFIGURATION_FLAG		0x20000000
+#define I2O_EVT_IND_LOCK_RELEASE		0x10000000
+#define I2O_EVT_IND_CAPABILITY_CHANGE		0x08000000
+#define I2O_EVT_IND_DEVICE_RESET		0x04000000
+#define I2O_EVT_IND_EVT_MASK_MODIFIED		0x02000000
+#define I2O_EVT_IND_FIELD_MODIFIED		0x01000000
+#define I2O_EVT_IND_VENDOR_EVT			0x00800000
+#define I2O_EVT_IND_DEVICE_STATE		0x00400000
 
+/* Event data for generic events */
+#define I2O_EVT_STATE_CHANGE_NORMAL		0x00
+#define I2O_EVT_STATE_CHANGE_SUSPENDED		0x01
+#define I2O_EVT_STATE_CHANGE_RESTART		0x02
+#define I2O_EVT_STATE_CHANGE_NA_RECOVER		0x03
+#define I2O_EVT_STATE_CHANGE_NA_NO_RECOVER	0x04
+#define I2O_EVT_STATE_CHANGE_QUIESCE_REQUEST	0x05
+#define I2O_EVT_STATE_CHANGE_FAILED		0x10
+#define I2O_EVT_STATE_CHANGE_FAULTED		0x11
+
+#define I2O_EVT_GEN_WARNING_NORMAL		0x00
+#define I2O_EVT_GEN_WARNING_ERROR_THRESHOLD	0x01
+#define I2O_EVT_GEN_WARNING_MEDIA_FAULT		0x02
+
+#define I2O_EVT_CAPABILITY_OTHER		0x01
+#define I2O_EVT_CAPABILITY_CHANGED		0x02
+
+#define I2O_EVT_SENSOR_STATE_CHANGED		0x01
 
 #ifdef __KERNEL__   /* ioctl stuff only thing exported to users */
 
@@ -246,7 +276,7 @@ struct i2o_message
  
 struct i2o_device
 {
-	pi2o_lct_entry lct_data;/* Device LCT information */
+	i2o_lct_entry *lct_data;/* Device LCT information */
 	u32 flags;		
 	int i2oversion;		/* I2O version supported. Actually there
 				 * should be high and low version */
@@ -286,7 +316,7 @@ struct i2o_controller
 	char name[16];
 	int unit;
 	int type;
-	int enabled;				/* Bus level enable */
+	int enabled;
 
 #define I2O_TYPE_PCI		0x01		/* PCI I2O controller */	
 
@@ -298,9 +328,9 @@ struct i2o_controller
 	volatile u32 *reply_port;
 	volatile u32 *irq_mask;			/* Interrupt port */
 
-	pi2o_status_block status_block;		/* IOP status block */
-	pi2o_lct lct;
-	pi2o_hrt hrt;
+	i2o_status_block *status_block;		/* IOP status block */
+	i2o_lct *lct;
+	i2o_hrt *hrt;
 
 	u32 mem_offset;				/* MFA offset */
 	u32 mem_phys;				/* MFA physical */
@@ -464,22 +494,22 @@ extern int i2o_release_device(struct i2o_device *, struct i2o_handler *, u32);
 
 extern int i2o_post_this(struct i2o_controller *, u32 *, int);
 extern int i2o_post_wait(struct i2o_controller *, u32 *, int, int);
-extern int i2o_issue_claim(struct i2o_controller *, int, int, int, int *, u32);
 extern int i2o_issue_params(int, struct i2o_controller *, int, void *,
 			    int, void *, int); 
 
-extern int i2o_query_scalar(struct i2o_controller *, int, int, int, 
-			void *, int);
-extern int i2o_set_scalar(struct i2o_controller *, int, int, int, 
-			void *, int);
+extern int i2o_query_scalar(struct i2o_controller *, int, int, int, void *, int);
+extern int i2o_set_scalar(struct i2o_controller *, int, int, int, void *, int);
 
-extern int i2o_query_table(int, struct i2o_controller *, int, int, int, 
-			void *, int, void *, int);
+extern int i2o_query_table(int, struct i2o_controller *, int, int, int, void *,
+			   int, void *, int);
 extern int i2o_clear_table(struct i2o_controller *, int, int); 
-extern int i2o_row_add_table(struct i2o_controller *, int, int, int,
-			void *, int);
-extern int i2o_row_delete_table(struct i2o_controller *, int, int, int,
-			void *, int);
+extern int i2o_row_add_table(struct i2o_controller *, int, int, int, void *,
+			     int);
+extern int i2o_row_delete_table(struct i2o_controller *, int, int, int, void *,
+				int);
+
+extern int i2o_event_register(struct i2o_controller *, int, int, u32); 
+extern int i2o_event_ack(struct i2o_controller *, int, int, u32, void *, int);
 
 extern void i2o_run_queue(struct i2o_controller *);
 extern void i2o_report_status(const char *, const char *, u32 *);
@@ -615,7 +645,7 @@ extern const char *i2o_get_class_name(int);
 #define I2O_CMD_UTIL_PARAMS_GET		0x06
 #define I2O_CMD_UTIL_PARAMS_SET		0x05
 #define I2O_CMD_UTIL_EVT_REGISTER	0x13
-#define I2O_CMD_UTIL_ACK		0x14
+#define I2O_CMD_UTIL_EVT_ACK		0x14
 #define I2O_CMD_UTIL_CONFIG_DIALOG	0x10
 #define I2O_CMD_UTIL_DEVICE_RESERVE	0x0D
 #define I2O_CMD_UTIL_DEVICE_RELEASE	0x0F

@@ -587,7 +587,7 @@ int i2o_scsi_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 		m = I2O_POST_READ32(c);
 	}
 	while(m==0xFFFFFFFF);
-	msg = c->mem_offset + m;
+	msg = (u32 *)(c->mem_offset + m);
 	
 	/*
 	 *	Put together a scsi execscb message

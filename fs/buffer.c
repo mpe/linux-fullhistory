@@ -823,7 +823,7 @@ static int balance_dirty_state(kdev_t dev)
 	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
 
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
-	tot = nr_lru_pages + nr_free_pages - nr_free_highpages;
+	tot = nr_free_buffer_pages();
 	hard_dirty_limit = tot * bdf_prm.b_un.nfract / 100;
 	soft_dirty_limit = hard_dirty_limit >> 1;
 

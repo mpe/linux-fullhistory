@@ -33,7 +33,6 @@ static const char *version =
 #include <linux/malloc.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
-#include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>

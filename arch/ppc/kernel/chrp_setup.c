@@ -34,7 +34,6 @@
 #include <linux/openpic.h>
 #include <linux/version.h>
 #include <linux/adb.h>
-#include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
 
@@ -576,9 +575,10 @@ void __init
 	ppc_md.calibrate_decr = chrp_calibrate_decr;
 
 #ifdef CONFIG_VT
-#ifdef CONFIG_MAC_KEYBOAD
+#ifdef CONFIG_MAC_KEYBOARD
 	if (adb_driver == NULL)
 	{
+#endif /* CONFIG_MAC_KEYBOAD */
 		ppc_md.kbd_setkeycode    = pckbd_setkeycode;
 		ppc_md.kbd_getkeycode    = pckbd_getkeycode;
 		ppc_md.kbd_translate     = pckbd_translate;
@@ -588,7 +588,8 @@ void __init
 #ifdef CONFIG_MAGIC_SYSRQ
 		ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
 		SYSRQ_KEY = 0x54;
-#endif		
+#endif /* CONFIG_MAGIC_SYSRQ */
+#ifdef CONFIG_MAC_KEYBOARD
 	}
 	else
 	{
@@ -601,24 +602,13 @@ void __init
 #ifdef CONFIG_MAGIC_SYSRQ
 		ppc_md.ppc_kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
 		SYSRQ_KEY = 0x69;
-#endif		
+#endif /* CONFIG_MAGIC_SYSRQ */
 	}
-#else
-	ppc_md.kbd_setkeycode    = pckbd_setkeycode;
-	ppc_md.kbd_getkeycode    = pckbd_getkeycode;
-	ppc_md.kbd_translate     = pckbd_translate;
-	ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
-	ppc_md.kbd_leds          = pckbd_leds;
-	ppc_md.kbd_init_hw       = pckbd_init_hw;
-#ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-	SYSRQ_KEY = 0x54;
-#endif
+#endif /* CONFIG_MAC_KEYBOARD */
+#endif /* CONFIG_VT */
 	if ( rtas_data )
 		ppc_md.progress = chrp_progress;
-#endif
-#endif
-
+	
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
         ppc_ide_md.insw = chrp_ide_insw;
         ppc_ide_md.outsw = chrp_ide_outsw;

@@ -37,7 +37,7 @@ endif
 
 ifeq ($(CONFIG_USB_UHCI),m)
       M_OBJS += usb-uhci.o
-    MIX_OBJS += uhci.o uhci-debug.o
+      MI_OBJS += uhci.o uhci-debug.o
 endif
 
 ifeq ($(CONFIG_USB_OHCI),y)
@@ -45,7 +45,7 @@ ifeq ($(CONFIG_USB_OHCI),y)
 endif
 ifeq ($(CONFIG_USB_OHCI),m)
       M_OBJS += usb-ohci.o
-      MIX_OBJS += ohci.o ohci-debug.o
+      MI_OBJS += ohci.o ohci-debug.o
 endif
 
 ifeq ($(CONFIG_USB_OHCI_HCD),y)
@@ -53,7 +53,7 @@ ifeq ($(CONFIG_USB_OHCI_HCD),y)
 endif
 ifeq ($(CONFIG_USB_OHCI_HCD),m)
       M_OBJS += usb-ohci-hcd.o
-      MIX_OBJS += ohci-hcd.o ohci-root-hub.o
+      MI_OBJS += ohci-hcd.o ohci-root-hub.o
 endif
 
 ifeq ($(CONFIG_USB_MOUSE),y)
@@ -61,7 +61,7 @@ ifeq ($(CONFIG_USB_MOUSE),y)
 endif
 ifeq ($(CONFIG_USB_MOUSE),m)
   M_OBJS += mouse.o	
-  MIX_OBJS += mouse.o
+  MI_OBJS += mouse.o
 endif
 
 ifeq ($(CONFIG_USB_HP_SCANNER),y)
@@ -69,7 +69,7 @@ ifeq ($(CONFIG_USB_HP_SCANNER),y)
 endif
 ifeq ($(CONFIG_USB_HP_SCANNER),m)
   M_OBJS  +=hp_scanner.o
-  MIX_OBJS +=hp_scanner.o
+  MI_OBJS +=hp_scanner.o
 endif
 
 ifeq ($(CONFIG_USB_HUB),y)
@@ -77,7 +77,7 @@ ifeq ($(CONFIG_USB_HUB),y)
 endif
 ifeq ($(CONFIG_USB_HUB),m)
   M_OBJS += hub.o
-  MIX_OBJS += hub.o	
+  MI_OBJS += hub.o	
 endif
 
 ifeq ($(CONFIG_USB_ACM),y)
@@ -85,7 +85,7 @@ ifeq ($(CONFIG_USB_ACM),y)
 endif
 ifeq ($(CONFIG_USB_ACM),m)
   M_OBJS += acm.o
-  MIX_OBJS += acm.o
+  MI_OBJS += acm.o
 endif
 
 ifeq ($(CONFIG_USB_PRINTER),y)
@@ -94,7 +94,7 @@ endif
 
 ifeq ($(CONFIG_USB_PRINTER),m)
   M_OBJS += printer.o
-  MIX_OBJS += printer.o  
+  MI_OBJS += printer.o  
 endif
 
 ifeq ($(CONFIG_USB_SERIAL),y)
@@ -103,7 +103,7 @@ endif
 
 ifeq ($(CONFIG_USB_SERIAL),m)
   M_OBJS += usb-serial.o
-  MIX_OBJS += usb-serial.o  
+  MI_OBJS += usb-serial.o  
 endif
 
 ifneq ($(CONFIG_ADB_KEYBOARD),y)
@@ -118,7 +118,7 @@ endif
 
 ifeq ($(CONFIG_USB_KBD),m)
   M_OBJS += usb-keyboard.o
-  MIX_OBJS += keyboard.o $(KEYMAP).o
+  MI_OBJS += keyboard.o $(KEYMAP).o
 endif
 
 ifeq ($(CONFIG_USB_AUDIO),y)
@@ -127,7 +127,7 @@ endif
 
 ifeq ($(CONFIG_USB_AUDIO),m)
   M_OBJS += audio.o
-  MIX_OBJS += audio.o
+  MI_OBJS += audio.o
 endif
 
 ifeq ($(CONFIG_USB_CPIA),y)
@@ -136,7 +136,7 @@ endif
 
 ifeq ($(CONFIG_USB_CPIA),m)
   M_OBJS += cpia.o
-  MIX_OBJS += cpia.o
+  MI_OBJS += cpia.o
 endif
 
 ifeq ($(CONFIG_USB_DC2XX),y)
@@ -144,7 +144,7 @@ ifeq ($(CONFIG_USB_DC2XX),y)
 endif
 ifeq ($(CONFIG_USB_DC2XX),m)
   M_OBJS += dc2xx.o
-  MIX_OBJS += dc2xx.o
+  MI_OBJS += dc2xx.o
 endif
 
 ifeq ($(CONFIG_USB_SCSI),y)
@@ -156,9 +156,9 @@ endif
 
 ifeq ($(CONFIG_USB_SCSI),m)
   M_OBJS += usb-scsi.o
-  MIX_OBJS += usb_scsi.o
+  MI_OBJS += usb_scsi.o
   ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
-    MIX_OBJS += usb_scsi_debug.o
+    MI_OBJS += usb_scsi_debug.o
   endif
 endif
 
@@ -168,7 +168,7 @@ endif
 
 ifeq ($(CONFIG_USB_EZUSB),m)
   M_OBJS += ezusb.o
-  MIX_OBJS += ezusb.o
+  MI_OBJS += ezusb.o
 endif
 
 ifeq ($(CONFIG_USB_USS720),y)
@@ -177,7 +177,7 @@ endif
 
 ifeq ($(CONFIG_USB_USS720),m)
   M_OBJS += uss720.o
-  MIX_OBJS += uss720.o
+  MI_OBJS += uss720.o
 endif
 
 include $(TOPDIR)/Rules.make

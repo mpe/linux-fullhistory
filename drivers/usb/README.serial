@@ -3,14 +3,23 @@ Serial devices. It should also work for the Etek converter, but I do
 not know the vendor id, and device id of that device (if anyone does, 
 please let me know.)
 
-The driver can handle enumerating the device, and sending and receiving
-data from the converter. However, since I do not have a spec for this
-device, and the raw dumps from the Win98 driver are confusing, no control
-signals are handled, and the data will most likely come through on a baud
-rate that you are not expecting.
+If your device is not compatible with the above models, you can try
+out the "generic" interface. This interface does not provide any type
+of control messages sent to the device, and does not support any kind
+of device flow control. All that is required of your device is that
+it has at least one bulk in endpoint, or one bulk out endpoint.
+To enable the driver to recognize your device, build the driver as
+a module and load it by the following invocation:
+	insmod usb-serial.o vendor=0x#### product=0x####
+where the #### is replaced with the hex representation of your device's
+vendor id and product id.
 
-But I am working on figuring the control settings out. This release is to
-let others try it out, and give some feedback.
+The driver can handle enumerating the device, and sending and receiving
+data from the converter. However, since I do not have a spec for the Belkin,
+Peracom, and eTek devices, and the raw dumps from the Win98 driver are 
+confusing, and eTek keeps giving me the run around, no control signals are 
+currently handled, and the data will most likely come through on a baud
+rate that you are not expecting.
 
 The major number that the driver uses is 240 (in the local/experimental
 range.) It will stay there until some agreements are reached on how to

@@ -61,7 +61,9 @@ struct swap_info_struct {
 };
 
 extern int nr_swap_pages;
-extern int nr_free_pages;
+FASTCALL(unsigned int nr_free_pages(void));
+FASTCALL(unsigned int nr_free_buffer_pages(void));
+FASTCALL(unsigned int nr_free_highpages(void));
 extern int nr_lru_pages;
 extern struct list_head lru_cache;
 extern atomic_t nr_async_pages;

@@ -2683,7 +2683,7 @@ static int __init init_ray_cs(void)
     DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
 #ifdef CONFIG_PROC_FS    
     /* [proc-namespace][fixme] It shouldn't be under root, damnit! */
-    create_proc_info_entry("ray_cs", 0, proc_root, ray_cs_proc_read);
+    create_proc_info_entry("ray_cs", 0, &proc_root, ray_cs_proc_read);
 #endif    
     if (translate != 0) translate = 1;
     return 0;
@@ -2714,7 +2714,7 @@ static void __exit exit_ray_cs(void)
         ray_detach(dev_list);
     }
 #ifdef CONFIG_PROC_FS    
-    remove_proc_entry("ray_cs", proc_root);
+    remove_proc_entry("ray_cs", &proc_root);
 #endif   
 } /* exit_ray_cs */
 

@@ -35,7 +35,6 @@
 # include "xf86.h"
 # include "xf86drm.h"
 # include "xf86_OSlib.h"
-# include "xf86drm.h"
 #else
 # include <unistd.h>
 # include <signal.h>

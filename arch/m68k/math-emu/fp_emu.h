@@ -38,9 +38,10 @@
 #ifndef _FP_EMU_H
 #define _FP_EMU_H
 
-#ifndef __ASSEMBLY__
-
+#include "../kernel/m68k_defs.h"
 #include <asm/math-emu.h>
+
+#ifndef __ASSEMBLY__
 
 #define IS_INF(a) ((a)->exp == 0x7fff)
 #define IS_ZERO(a) ((a)->mant.m64 == 0)
@@ -113,9 +114,6 @@ extern const struct fp_ext fp_Inf;
 })
 
 #else /* __ASSEMBLY__ */
-
-#include "../kernel/m68k_defs.h"
-#include <asm/math-emu.h>
 
 /*
  * set, reset or clear a bit in the fp status register

@@ -16,7 +16,8 @@
 #include <linux/elf.h>
 #include <linux/elfcore.h>
 #include <linux/module.h>
-#include <linux/proc_fs.h>
+#include <linux/smp_lock.h>
+
 #include <asm/uaccess.h>
 
 #ifdef CONFIG_KCORE_AOUT
@@ -211,7 +212,7 @@ static void elf_kcore_store_hdr(char *bufp)
 #ifdef CONFIG_MODULES
 	{
 		struct module *m;
-		read_lock(&modlist_lock);
+		lock_kernel();	
 		for (m=module_list; m; m=m->next) {
 			dhdr = (struct elf_phdr *) bufp;
 			bufp += sizeof(struct elf_phdr);
@@ -227,7 +228,7 @@ static void elf_kcore_store_hdr(char *bufp)
 			dhdr->p_align	= 0;
 			elf->e_phnum++;
 		}
-		read_unlock(&modlist_lock);
+		lock_kernel();	
 	}
 #endif
 

@@ -13,18 +13,18 @@ extern struct page *highmem_start_page;
 
 /* declarations for linux/mm/highmem.c */
 extern unsigned long highmem_mapnr;
-extern unsigned long nr_free_highpages;
+FASTCALL(unsigned int nr_free_highpages(void));
 
 extern struct page * prepare_highmem_swapout(struct page *);
 extern struct page * replace_with_highmem(struct page *);
 
 #else /* CONFIG_HIGHMEM */
 
+extern inline unsigned int nr_free_highpages(void) { return 0; }
 #define prepare_highmem_swapout(page) page
 #define replace_with_highmem(page) page
 #define kmap(page, type) page_address(page)
 #define kunmap(vaddr, type) do { } while (0)
-#define nr_free_highpages 0UL
 
 #endif /* CONFIG_HIGHMEM */
 

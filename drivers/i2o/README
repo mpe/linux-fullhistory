@@ -9,13 +9,13 @@
 
 AUTHORS (so far)
 
-Alan Cox, 	Building Number Three Ltd.
+Alan Cox, Building Number Three Ltd.
 	Core code, SCSI and Block OSMs
 
-Steve Ralston,	LSI Logic Corp.
+Steve Ralston, LSI Logic Corp.
 	Debugging SCSI and Block OSM
 
-Deepak Saxena,	Intel Corp.
+Deepak Saxena, Intel Corp.
 	/proc interface, bug fixes
 	Ioctl interfaces for control
 	Debugging LAN OSM
@@ -23,17 +23,20 @@ Deepak Saxena,	Intel Corp.
 Philip Rumpf
 	Fixed assorted dumb SMP locking bugs
 
-Juha Sievanen,  University of Helsinki Finland
+Juha Sievanen, University of Helsinki Finland
 	LAN OSM code
 	/proc interface to LAN class
 	Bug fixes
 	Core code extensions
 
-Auvo Häkkinen,  University of Helsinki Finland
+Auvo Häkkinen, University of Helsinki Finland
 	LAN OSM code
 	/Proc interface to LAN class
 	Bug fixes
 	Core code extensions
+
+Taneli Vähäkangas, University of Helsinki Finland
+	Fixes to i2o_config
 
 CREDITS
 
@@ -75,6 +78,7 @@ o	Long term message flow control
 o	PCI IOP's without interrupts are not supported yet
 o	Push FAIL handling into the core
 o	DDM control interfaces for module load etc
+o	Event handling
 
 Block:
 o	Real error handler
@@ -87,7 +91,8 @@ SCSI:
 o	Find the right way to associate drives/luns/busses
 
 Lan:	Batch mode sends
-	Fix the "killing interrupt handler" in i2o_set_multicast_list
+	Performance tuning
+	Event handling
 
 Tape:
 o	Anyone seen anything implementing this ?

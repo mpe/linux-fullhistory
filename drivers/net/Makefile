@@ -3,8 +3,20 @@
 # Makefile for the Linux network (ethercard) device drivers.
 #
 
+O_OBJS          :=
+M_OBJS          :=
+MX_OBJS         :=
+
+# Object file lists.
+
+obj-y           :=
+obj-m           :=
+obj-n           :=
+obj-            :=
+
 SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
+MOD_SUB_DIRS :=
+MOD_IN_SUB_DIRS :=
 ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan
 
 L_TARGET := net.a
@@ -12,18 +24,11 @@ L_OBJS   := auto_irq.o
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
-# Need these to keep track of whether the 7990 (LANCE), 8390, PPP and SLHC 
-# modules should really go in the kernel or a module.
-CONFIG_8390_BUILTIN :=
-CONFIG_8390_MODULE  :=
-CONFIG_SLHC_BUILTIN :=
-CONFIG_SLHC_MODULE  :=
-CONFIG_PPPDEF_BUILTIN :=
-CONFIG_PPPDEF_MODULE  :=
-CONFIG_7990_BUILTIN :=
-CONFIG_7990_MODULE :=
-CONFIG_82596_BUILTIN :=
-CONFIG_82596_MODULE :=
+# All of the (potential) objects that export symbols.
+# This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
+
+export-objs     :=	8390.o arcnet.o arlan.o ppp_async.o \
+			ppp_generic.o slhc.o
 
 ifeq ($(CONFIG_PCMCIA),y)
   SUB_DIRS += pcmcia
@@ -31,1037 +36,6 @@ ifeq ($(CONFIG_PCMCIA),y)
 else
   ifeq ($(CONFIG_PCMCIA),m)
     MOD_IN_SUB_DIRS += pcmcia
-  endif
-endif
-
-ifeq ($(CONFIG_ISDN),y)
-  ifeq ($(CONFIG_ISDN_PPP),y)
-    CONFIG_SLHC_BUILTIN = y
-    CONFIG_PPPDEF_BUILTIN = y
-  endif
-else
-  ifeq ($(CONFIG_ISDN),m)
-    ifeq ($(CONFIG_ISDN_PPP),y)
-      CONFIG_SLHC_MODULE = y
-      CONFIG_PPPDEF_MODULE = y
-    endif
-  endif
-endif
-
-ifeq ($(CONFIG_NET),y)
-L_OBJS += Space.o setup.o net_init.o loopback.o
-endif
-
-ifeq ($(CONFIG_SEEQ8005),y)
-L_OBJS += seeq8005.o
-endif
-
-ifeq ($(CONFIG_ETHERTAP),y)
-L_OBJS += ethertap.o
-else
-  ifeq ($(CONFIG_ETHERTAP),m)
-  M_OBJS += ethertap.o
-  endif
-endif
-
-ifeq ($(CONFIG_NET_SB1000),y)
-L_OBJS += sb1000.o
-else
-  ifeq ($(CONFIG_NET_SB1000),m)
-  M_OBJS += sb1000.o
-  endif
-endif
-
-ifeq ($(CONFIG_DAYNAPORT), y)
-L_OBJS += daynaport.o
-CONFIG_8390_BUILTIN = y
-endif
-
-ifeq ($(CONFIG_APNE),y)
-L_OBJS += apne.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_APNE),m)
-  M_OBJS += apne.o
-  CONFIG_8390_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_PCMCIA_PCNET),y)
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_PCMCIA_PCNET),m)
-  CONFIG_8390_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_SHAPER),y)
-L_OBJS += shaper.o
-else
-  ifeq ($(CONFIG_SHAPER),m)
-  M_OBJS += shaper.o
-  endif
-endif
-
-ifeq ($(CONFIG_SK_G16),y)
-L_OBJS += sk_g16.o
-endif
-
-ifeq ($(CONFIG_HP100),y)
-L_OBJS += hp100.o
-else
-  ifeq ($(CONFIG_HP100),m)
-  M_OBJS += hp100.o
-  endif
-endif
-
-ifeq ($(CONFIG_SMC9194),y)
-L_OBJS += smc9194.o
-else
-  ifeq ($(CONFIG_SMC9194),m)
-  M_OBJS += smc9194.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARM_AM79C961A),y)
-L_OBJS += am79c961a.o
-else
-  ifeq ($(CONFIG_ARM_AM79C961A),m)
-  M_OBJS += am79c961a.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARM_ETHERH),y)
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ARM_ETHERH),m)
-  CONFIG_8390_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_WD80x3),y)
-L_OBJS += wd.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_WD80x3),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += wd.o
-  endif
-endif
-
-ifeq ($(CONFIG_EL2),y)
-L_OBJS += 3c503.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_EL2),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += 3c503.o
-  endif
-endif
-
-ifeq ($(CONFIG_NE2K_PCI),y)
-L_OBJS += ne2k-pci.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_NE2K_PCI),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += ne2k-pci.o
-  endif
-endif
-
-ifeq ($(CONFIG_NE2000),y)
-L_OBJS += ne.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_NE2000),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += ne.o
-  endif
-endif
-
-ifeq ($(CONFIG_NE2_MCA),y)
-L_OBJS += ne2.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_NE2_MCA),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += ne2.o
-  endif
-endif
-
-ifeq ($(CONFIG_HPLAN),y)
-L_OBJS += hp.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_HPLAN),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += hp.o
-  endif
-endif
-
-ifeq ($(CONFIG_HPLAN_PLUS),y)
-L_OBJS += hp-plus.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_HPLAN_PLUS),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += hp-plus.o
-  endif
-endif
-
-ifeq ($(CONFIG_ULTRA),y)
-L_OBJS += smc-ultra.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ULTRA),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += smc-ultra.o
-  endif
-endif
-
-ifeq ($(CONFIG_ULTRAMCA),y)
-L_OBJS += smc-mca.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ULTRAMCA),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += smc-mca.o
-  endif
-endif
-
-ifeq ($(CONFIG_ULTRA32),y)
-L_OBJS += smc-ultra32.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ULTRA32),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += smc-ultra32.o
-  endif
-endif
-
-ifeq ($(CONFIG_E2100),y)
-L_OBJS += e2100.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_E2100),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += e2100.o
-  endif
-endif
-
-ifeq ($(CONFIG_ES3210),y)
-L_OBJS += es3210.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ES3210),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += es3210.o
-  endif
-endif
-
-ifeq ($(CONFIG_LNE390),y)
-L_OBJS += lne390.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_LNE390),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += lne390.o
-  endif
-endif
-
-ifeq ($(CONFIG_NE3210),y)
-L_OBJS += ne3210.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_NE3210),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += ne3210.o
-  endif
-endif
-
-ifeq ($(CONFIG_PLIP),y)
-L_OBJS += plip.o
-else
-  ifeq ($(CONFIG_PLIP),m)
-  M_OBJS += plip.o
-  endif
-endif
-
-# bsd_comp.o is *always* a module, for some documented reason
-# (licensing).
-ifeq ($(CONFIG_PPP),y)
-LX_OBJS += ppp_generic.o
-CONFIG_SLHC_BUILTIN = y
-  ifeq ($(CONFIG_PPP_ASYNC),y)
-  LX_OBJS += ppp_async.o
-  else
-    ifeq ($(CONFIG_PPP_ASYNC),m)
-    MX_OBJS += ppp_async.o
-    endif
-  endif
-  ifeq ($(CONFIG_PPP_SYNC_TTY),y)
-  LX_OBJS += ppp_synctty.o
-  else
-    ifeq ($(CONFIG_PPP_SYNC_TTY),m)
-    MX_OBJS += ppp_synctty.o
-    endif
-  endif
-  ifeq ($(CONFIG_PPP_DEFLATE),y)
-  CONFIG_PPPDEF_BUILTIN = y
-  else
-    ifeq ($(CONFIG_PPP_DEFLATE),m)
-    CONFIG_PPPDEF_MODULE = y
-    endif
-  endif
-  ifeq ($(CONFIG_PPP_BSDCOMP),m)
-  M_OBJS += bsd_comp.o
-  endif
-else
-  ifeq ($(CONFIG_PPP),m)
-  MX_OBJS += ppp_generic.o
-  CONFIG_SLHC_MODULE = y
-    ifeq ($(CONFIG_PPP_ASYNC),m)
-    MX_OBJS += ppp_async.o
-    endif
-    ifeq ($(CONFIG_PPP_SYNC_TTY),m)
-    MX_OBJS += ppp_synctty.o
-    endif
-    ifeq ($(CONFIG_PPP_DEFLATE),m)
-    CONFIG_PPPDEF_MODULE = y
-    endif
-    ifeq ($(CONFIG_PPP_BSDCOMP),m)
-    M_OBJS += bsd_comp.o
-    endif
-  endif
-endif
-
-ifeq ($(CONFIG_SLIP),y)
-L_OBJS += slip.o
-  ifeq ($(CONFIG_SLIP_COMPRESSED),y)
-  CONFIG_SLHC_BUILTIN = y
-  endif
-else
-  ifeq ($(CONFIG_SLIP),m)
-    ifeq ($(CONFIG_SLIP_COMPRESSED),y)
-    CONFIG_SLHC_MODULE = y
-  endif
-  M_OBJS += slip.o
-  endif
-endif
-
-ifeq ($(CONFIG_STRIP),y)
-L_OBJS += strip.o
-else
-  ifeq ($(CONFIG_STRIP),m)
-  M_OBJS += strip.o
-  endif
-endif
-
-ifeq ($(CONFIG_DE650),y)
-ETDRV_OBJS := $(L_OBJS) de650.o
-CONFIG_8390_BUILTIN = y
-endif
-
-ifeq ($(CONFIG_3C589),y)
-L_OBJS += 3c589.o
-endif
-
-ifeq ($(CONFIG_DUMMY),y)
-L_OBJS += dummy.o
-else
-  ifeq ($(CONFIG_DUMMY),m)
-  M_OBJS += dummy.o
-  endif
-endif
-
-ifeq ($(CONFIG_DE600),y)
-L_OBJS += de600.o
-else
-  ifeq ($(CONFIG_DE600),m)
-  M_OBJS += de600.o
-  endif
-endif
-
-ifeq ($(CONFIG_DE620),y)
-L_OBJS += de620.o
-else
-  ifeq ($(CONFIG_DE620),m)
-  M_OBJS += de620.o
-  endif
-endif
-
-ifeq ($(CONFIG_AT1500),y)
-L_OBJS += lance.o
-endif
-
-ifeq ($(CONFIG_LANCE),y)
-L_OBJS += lance.o
-else
-  ifeq ($(CONFIG_LANCE),m)
-  M_OBJS += lance.o
-  endif
-endif
-
-ifeq ($(CONFIG_SUN3LANCE),y)
-L_OBJS += sun3lance.o
-endif
-
-ifeq ($(CONFIG_PCNET32),y)
-L_OBJS += pcnet32.o
-else
-  ifeq ($(CONFIG_PCNET32),m)
-  M_OBJS += pcnet32.o
-  endif
-endif
-
-ifeq ($(CONFIG_DEFXX),y)
-L_OBJS += defxx.o
-endif
-
-ifeq ($(CONFIG_SUNLANCE),y)
-L_OBJS += sunlance.o
-else
-  ifeq ($(CONFIG_SUNLANCE),m)
-  M_OBJS += sunlance.o
-  endif
-endif
-
-ifeq ($(CONFIG_SGISEEQ), y)
-L_OBJS += sgiseeq.o
-endif
-
-ifeq ($(CONFIG_HAPPYMEAL),y)
-L_OBJS += sunhme.o
-else
-  ifeq ($(CONFIG_HAPPYMEAL),m)
-  M_OBJS += sunhme.o
-  endif
-endif
-
-ifeq ($(CONFIG_SUNQE),y)
-L_OBJS += sunqe.o
-else
-  ifeq ($(CONFIG_SUNQE),m)
-  M_OBJS += sunqe.o
-  endif
-endif
-
-ifeq ($(CONFIG_SUNBMAC),y)
-L_OBJS += sunbmac.o
-else
-  ifeq ($(CONFIG_SUNBMAC),m)
-  M_OBJS += sunbmac.o
-  endif
-endif
-
-ifeq ($(CONFIG_SUNBMAC),y)
-L_OBJS += sunbmac.o
-else
-  ifeq ($(CONFIG_SUNBMAC),m)
-  M_OBJS += sunbmac.o
-  endif
-endif
-
-ifeq ($(CONFIG_MYRI_SBUS),y)
-L_OBJS += myri_sbus.o
-else
-  ifeq ($(CONFIG_MYRI_SBUS),m)
-  M_OBJS += myri_sbus.o
-  endif
-endif
-
-ifeq ($(CONFIG_AT1700),y)
-L_OBJS += at1700.o
-else
-  ifeq ($(CONFIG_AT1700),m)
-  M_OBJS += at1700.o
-  endif
-endif
-
-ifeq ($(CONFIG_FMV18X),y)
-L_OBJS += fmv18x.o
-else
-  ifeq ($(CONFIG_FMV18X),m)
-  M_OBJS += fmv18x.o
-  endif
-endif
-
-ifeq ($(CONFIG_EL1),y)
-L_OBJS += 3c501.o
-else
-  ifeq ($(CONFIG_EL1),m)
-  M_OBJS += 3c501.o
-  endif
-endif
-
-ifeq ($(CONFIG_EL16),y)
-L_OBJS += 3c507.o
-else
-  ifeq ($(CONFIG_EL16),m)
-  M_OBJS += 3c507.o
-  endif
-endif
-
-ifeq ($(CONFIG_ELMC),y)
-L_OBJS += 3c523.o
-else
-  ifeq ($(CONFIG_ELMC),m)
-  M_OBJS += 3c523.o
-  endif
-endif
-
-ifeq ($(CONFIG_SKMC),y)
-L_OBJS += sk_mca.o
-else
-  ifeq ($(CONFIG_SKMC),m)
-  M_OBJS += sk_mca.o
-  endif
-endif
-
-ifeq ($(CONFIG_ELMC_II),y)
-L_OBJS += 3c527.o
-else
-  ifeq ($(CONFIG_ELMC_II),m)
-  M_OBJS += 3c527.o
-  endif
-endif
-
-ifeq ($(CONFIG_EL3),y)
-L_OBJS += 3c509.o
-else
-  ifeq ($(CONFIG_EL3),m)
-  M_OBJS += 3c509.o
-  endif
-endif
-
-ifeq ($(CONFIG_3C515),y)
-L_OBJS += 3c515.o
-else
-  ifeq ($(CONFIG_3C515),m)
-  M_OBJS += 3c515.o
-  endif
-endif
-
-ifeq ($(CONFIG_VORTEX),y)
-L_OBJS += 3c59x.o
-else
-  ifeq ($(CONFIG_VORTEX),m)
-  M_OBJS += 3c59x.o
-  endif
-endif
-
-ifeq ($(CONFIG_EEXPRESS),y)
-L_OBJS += eexpress.o
-else
-  ifeq ($(CONFIG_EEXPRESS),m)
-  M_OBJS += eexpress.o
-  endif
-endif
-
-ifeq ($(CONFIG_EEXPRESS_PRO),y)
-L_OBJS += eepro.o
-else
-  ifeq ($(CONFIG_EEXPRESS_PRO),m)
-  M_OBJS += eepro.o
-  endif
-endif
-
-ifeq ($(CONFIG_EEXPRESS_PRO100),y)
-L_OBJS += eepro100.o
-else
-  ifeq ($(CONFIG_EEXPRESS_PRO100),m)
-  M_OBJS += eepro100.o
-  endif
-endif
-
-ifeq ($(CONFIG_RTL8139),y)
-L_OBJS += rtl8139.o
-else
-  ifeq ($(CONFIG_RTL8139),m)
-  M_OBJS += rtl8139.o
-  endif
-endif
-
-ifeq ($(CONFIG_SIS900),y)
-L_OBJS += sis900.o
-else
-  ifeq ($(CONFIG_SIS900),m)
-  M_OBJS += sis900.o
-  endif
-endif
-
-ifeq ($(CONFIG_DM9102),y) 
-L_OBJS += dmfe.o
-else
-  ifeq ($(CONFIG_DM9102),m)
-  M_OBJS += dmfe.o
-  endif
-endif
-
-
-ifeq ($(CONFIG_YELLOWFIN),y)
-L_OBJS += yellowfin.o
-else
-  ifeq ($(CONFIG_YELLOWFIN),m)
-  M_OBJS += yellowfin.o
-  endif
-endif
-
-ifeq ($(CONFIG_ACENIC),y)
-L_OBJS += acenic.o
-else
-  ifeq ($(CONFIG_ACENIC),m)
-  M_OBJS += acenic.o
-  endif
-endif
-
-ifeq ($(CONFIG_WAVELAN),y)
-L_OBJS += wavelan.o
-else
-  ifeq ($(CONFIG_WAVELAN),m)
-  M_OBJS += wavelan.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARLAN),y)
-LX_OBJS += arlan.o arlan-proc.o
-else
-  ifeq ($(CONFIG_ARLAN),m)
-  MX_OBJS += arlan.o arlan-proc.o
-  endif
-endif
-
-ifeq ($(CONFIG_TLAN),y)
-L_OBJS += tlan.o
-else
-  ifeq ($(CONFIG_TLAN),m)
-  M_OBJS += tlan.o
-  endif
-endif
-
-ifeq ($(CONFIG_VIA_RHINE),y)
-L_OBJS += via-rhine.o
-else
-  ifeq ($(CONFIG_VIA_RHINE),m)
-  M_OBJS += via-rhine.o
-  endif
-endif
-
-ifeq ($(CONFIG_ZNET),y)
-L_OBJS += znet.o
-endif
-
-ifeq ($(CONFIG_DEPCA),y)
-L_OBJS += depca.o
-else
-  ifeq ($(CONFIG_DEPCA),m)
-  M_OBJS += depca.o
-  endif
-endif
-
-ifeq ($(CONFIG_EWRK3),y)
-L_OBJS += ewrk3.o
-else
-  ifeq ($(CONFIG_EWRK3),m)
-  M_OBJS += ewrk3.o
-  endif
-endif
-
-ifeq ($(CONFIG_ATP),y)
-L_OBJS += atp.o
-endif
-
-ifeq ($(CONFIG_DE4X5),y)
-L_OBJS += de4x5.o
-else
-  ifeq ($(CONFIG_DE4X5),m)
-  M_OBJS += de4x5.o
-  endif
-endif
-
-ifeq ($(CONFIG_NI5010),y)
-L_OBJS += ni5010.o
-else
-  ifeq ($(CONFIG_NI5010),m)
-  M_OBJS += ni5010.o
-  endif
-endif
-
-ifeq ($(CONFIG_NI52),y)
-L_OBJS += ni52.o
-else
-  ifeq ($(CONFIG_NI52),m)
-  M_OBJS += ni52.o
-  endif
-endif
-
-ifeq ($(CONFIG_NI65),y)
-L_OBJS += ni65.o
-else
-  ifeq ($(CONFIG_NI65),m)
-  M_OBJS += ni65.o
-  endif
-endif
-
-ifeq ($(CONFIG_ELPLUS),y)
-L_OBJS += 3c505.o
-else
-  ifeq ($(CONFIG_ELPLUS),m)
-  M_OBJS += 3c505.o
-  endif
-endif
-
-ifeq ($(CONFIG_AC3200),y)
-L_OBJS += ac3200.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_AC3200),m)
-  CONFIG_8390_MODULE = y
-  M_OBJS += ac3200.o
-  endif
-endif
-
-ifeq ($(CONFIG_APRICOT),y)
-CONFIG_82596_BUILTIN = y
-else
-  ifeq ($(CONFIG_APRICOT),m)
-  CONFIG_82596_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_MVME16x_NET),y)
-CONFIG_82596_BUILTIN = y
-else
-  ifeq ($(CONFIG_MVME16x_NET),m)
-  CONFIG_82596_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_BVME6000_NET),y)
-CONFIG_82596_BUILTIN = y
-else
-  ifeq ($(CONFIG_BVME6000_NET),m)
-  CONFIG_82596_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_DEC_ELCP),y)
-L_OBJS += tulip.o
-else
-  ifeq ($(CONFIG_DEC_ELCP),m)
-  M_OBJS += tulip.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARCNET),y)
-LX_OBJS += arcnet.o
-else
-  ifeq ($(CONFIG_ARCNET),m)
-  MX_OBJS += arcnet.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARCNET_COM90xx),y)
-L_OBJS += com90xx.o
-else
-  ifeq ($(CONFIG_ARCNET_COM90xx),m)
-  M_OBJS += com90xx.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARCNET_COM90xxIO),y)
-L_OBJS += com90io.o
-else
-  ifeq ($(CONFIG_ARCNET_COM90xxIO),m)
-  M_OBJS += com90io.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARCNET_RIM_I),y)
-L_OBJS += arc-rimi.o
-else
-  ifeq ($(CONFIG_ARCNET_RIM_I),m)
-  M_OBJS += arc-rimi.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARCNET_COM20020),y)
-L_OBJS += com20020.o
-else
-  ifeq ($(CONFIG_ARCNET_COM20020),m)
-  M_OBJS += com20020.o
-  endif
-endif
-
-ifeq ($(CONFIG_ETH16I),y)
-L_OBJS += eth16i.o
-else
-  ifeq ($(CONFIG_ETH16I),m)
-  M_OBJS += eth16i.o
-  endif
-endif
-
-ifeq ($(CONFIG_EPIC100),y)
-L_OBJS += epic100.o
-else
-  ifeq ($(CONFIG_EPIC100),m)
-  M_OBJS += epic100.o
-  endif
-endif
-
-# If anything built-in uses slhc, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-ifdef CONFIG_SLHC_BUILTIN
-LX_OBJS += slhc.o
-else
-  ifdef CONFIG_SLHC_MODULE
-  MX_OBJS += slhc.o
-  endif
-endif
-
-# if anything built-in uses ppp_deflate, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-ifdef CONFIG_PPPDEF_BUILTIN
-L_OBJS += ppp_deflate.o
-else
-  ifdef CONFIG_PPPDEF_MODULE
-  M_OBJS += ppp_deflate.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARIADNE2),y)
-L_OBJS += ariadne2.o
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ARIADNE2),m)
-  M_OBJS += ariadne2.o
-  CONFIG_8390_MODULE = y
-  endif
-endif
-
-# If anything built-in uses the 8390, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-ifdef CONFIG_8390_BUILTIN
-L_OBJS += 8390.o
-else
-  ifdef CONFIG_8390_MODULE
-  MX_OBJS += 8390.o
-  endif
-endif
-
-ifeq ($(CONFIG_HPLANCE),y)
-L_OBJS += hplance.o
-CONFIG_7990_BUILTIN = y
-else
-  ifeq ($(CONFIG_HPLANCE),m)
-  CONFIG_7990_MODULE = y
-  M_OBJS += hplance.o
-  endif
-endif
-
-ifeq ($(CONFIG_MVME147_NET),y)
-L_OBJS += mvme147.o
-CONFIG_7990_BUILTIN = y
-else
-  ifeq ($(CONFIG_MVME147_NET),m)
-  CONFIG_7990_MODULE = y
-  M_OBJS += mvme147.o
-  endif
-endif
-
-# If we need generic LANCE support, either in the kernel or as a module,
-# build it in the appropriate way.
-ifdef CONFIG_7990_BUILTIN
-L_OBJS += 7990.o
-else
-  ifdef CONFIG_7990_MODULE
-  M_OBJS += 7990.o
-  endif
-endif
-
-# If anything built-in uses the 82596, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-ifdef CONFIG_82596_BUILTIN
-L_OBJS += 82596.o
-else
-  ifdef CONFIG_82596_MODULE
-  M_OBJS += 82596.o
-  endif
-endif
-
-ifeq ($(CONFIG_EQUALIZER),y)
-L_OBJS += eql.o
-else
-  ifeq ($(CONFIG_EQUALIZER),m)
-  M_OBJS += eql.o
-  endif
-endif
-
-ifeq ($(CONFIG_MIPS_JAZZ_SONIC),y)
-L_OBJS += jazzsonic.o
-else
-  ifeq ($(CONFIG_MIPS_JAZZ_SONIC),m)
-  M_OBJS += jazzsonic.o
-  endif
-endif
-
-ifeq ($(CONFIG_BAGETLANCE),y)
-L_OBJS += bagetlance.o
-else
-  ifeq ($(CONFIG_BAGETLANCE),m)
-  M_OBJS += bagetlance.o
-  endif
-endif
-
-ifeq ($(CONFIG_DECLANCE),y)
-L_OBJS += declance.o
-else
-  ifeq ($(CONFIG_DECLANCE),m)
-  M_OBJS += declance.o
-  endif
-endif
-
-ifeq ($(CONFIG_ATARILANCE),y)
-L_OBJS += atarilance.o
-else
-  ifeq ($(CONFIG_ATARILANCE),m)
-  M_OBJS += atarilance.o
-  endif
-endif
-
-ifeq ($(CONFIG_ATARI_BIONET),y)
-L_OBJS += atari_bionet.o
-else
-  ifeq ($(CONFIG_ATARI_BIONET),m)
-  M_OBJS += atari_bionet.o
-  endif
-endif
-
-ifeq ($(CONFIG_ATARI_PAMSNET),y)
-L_OBJS += atari_pamsnet.o
-else
-  ifeq ($(CONFIG_ATARI_PAMSNET),m)
-  M_OBJS += atari_pamsnet.o
-  endif
-endif
-
-ifeq ($(CONFIG_A2065),y)
-L_OBJS += a2065.o
-else
-  ifeq ($(CONFIG_A2065),m)
-  M_OBJS += a2065.o
-  endif
-endif
-
-ifeq ($(CONFIG_HYDRA),y)
-L_OBJS += hydra.o
-else
-  ifeq ($(CONFIG_HYDRA),m)
-  M_OBJS += hydra.o
-  endif
-endif
-
-ifeq ($(CONFIG_ARIADNE),y)
-L_OBJS += ariadne.o
-else
-  ifeq ($(CONFIG_ARIADNE),m)
-  M_OBJS += ariadne.o
-  endif
-endif
-
-ifeq ($(CONFIG_DGRS),y)
-L_OBJS += dgrs.o
-else
-  ifeq ($(CONFIG_DGRS),m)
-  M_OBJS += dgrs.o
-  endif
-endif
-
-ifeq ($(CONFIG_CS89x0),y)
-L_OBJS += cs89x0.o
-else
-  ifeq ($(CONFIG_CS89x0),m)
-  M_OBJS += cs89x0.o
-  endif
-endif
-
-ifeq ($(CONFIG_LTPC),y)
-L_OBJS += ltpc.o
-else
-  ifeq ($(CONFIG_LTPC),m)
-  M_OBJS += ltpc.o
-  endif
-endif
-
-ifeq ($(CONFIG_COPS),y)
-L_OBJS += cops.o
-else
-  ifeq ($(CONFIG_COPS),m)
-  M_OBJS += cops.o
-  endif
-endif
-
-ifeq ($(CONFIG_IPDDP),y)
-L_OBJS += ipddp.o
-else
-  ifeq ($(CONFIG_IPDDP),m)
-  M_OBJS += ipddp.o
-  endif
-endif
-
-ifeq ($(CONFIG_RCPCI),y)
-L_OBJS += rcpci.o
-else
-  ifeq ($(CONFIG_RCPCI),m)
-  M_OBJS += rcpci.o
-  endif
-endif
-
-ifeq ($(CONFIG_MACE),y)
-L_OBJS += mace.o
-else
-  ifeq ($(CONFIG_MACE),m)
-  M_OBJS += mace.o
-  endif
-endif
-
-ifeq ($(CONFIG_MACSONIC),y)
-L_OBJS += macsonic.o
-endif
-
-ifeq ($(CONFIG_BMAC),y)
-L_OBJS += bmac.o
-else
-  ifeq ($(CONFIG_BMAC),m)
-  M_OBJS += bmac.o
-  endif
-endif
-
-ifeq ($(CONFIG_NCR885E),y)
-L_OBJS += ncr885e.o
-else
-  ifeq ($(CONFIG_NCR885E),m)
-  M_OBJS += ncr885e.o
-  endif
-endif
-
-ifeq ($(CONFIG_ADAPTEC_STARFIRE),y)
-L_OBJS += starfire.o
-else
-  ifeq ($(CONFIG_ADAPTEC_STARFIRE),m)
-  M_OBJS += starfire.o
-  endif
-endif
-
-#
-# HIPPI adapters
-#
-
-ifeq ($(CONFIG_ROADRUNNER),y)
-L_OBJS += rrunner.o
-else
-  ifeq ($(CONFIG_ROADRUNNER),m)
-  M_OBJS += rrunner.o
   endif
 endif
 
@@ -1101,6 +75,197 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ISDN),y)
+  ifeq ($(CONFIG_ISDN_PPP),y)
+    obj-y += slhc.o ppp_deflate.o
+  endif
+else
+  ifeq ($(CONFIG_ISDN),m)
+    ifeq ($(CONFIG_ISDN_PPP),y)
+      obj-m += slhc.o ppp_deflate.o
+    endif
+  endif
+endif
+
+obj-$(CONFIG_NET) += Space.o setup.o net_init.o loopback.o
+obj-$(CONFIG_SEEQ8005) += seeq8005.o
+obj-$(CONFIG_ETHERTAP) += ethertap.o
+obj-$(CONFIG_NET_SB1000) += sb1000.o
+obj-$(CONFIG_DAYNAPORT) += daynaport.o 8390.o
+obj-$(CONFIG_APNE) += apne.o 8390.o
+obj-$(CONFIG_PCMCIA_PCNET) += 8390.o
+obj-$(CONFIG_SHAPER) += shaper.o
+obj-$(CONFIG_SK_G16) += sk_g16.o
+obj-$(CONFIG_HP100) += hp100.o
+obj-$(CONFIG_SMC9194) += smc9194.o
+obj-$(CONFIG_ARM_AM79C961A) += am79c961a.o
+obj-$(CONFIG_ARM_ETHERH) += 8390.o
+obj-$(CONFIG_WD80x3) += wd.o 8390.o
+obj-$(CONFIG_EL2) += 3c503.o 8390.o
+obj-$(CONFIG_NE2K_PCI) += ne2k-pci.o 8390.o
+obj-$(CONFIG_NE2000) += ne.o 8390.o
+obj-$(CONFIG_NE2_MCA) += ne2.o 8390.o
+obj-$(CONFIG_HPLAN) += hp.o 8390.o
+obj-$(CONFIG_HPLAN_PLUS) += hp-plus.o 8390.o
+obj-$(CONFIG_ULTRA) += smc-ultra.o 8390.o
+obj-$(CONFIG_ULTRAMCA) += smc-mca.o 8390.o
+obj-$(CONFIG_ULTRA32) += smc-ultra32.o 8390.o
+obj-$(CONFIG_E2100) += e2100.o 8390.o
+obj-$(CONFIG_ES3210) += es3210.o 8390.o
+obj-$(CONFIG_LNE390) += lne390.o 8390.o
+obj-$(CONFIG_NE3210) += ne3210.o 8390.o
+obj-$(CONFIG_PLIP) += plip.o
+
+# bsd_comp.o is *always* a module, for some documented reason
+# (licensing).
+ifeq ($(CONFIG_PPP),y)
+  obj-y += ppp_generic.o slhc.o
+  obj-$(CONFIG_PPP_ASYNC) += ppp_async.o
+  obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
+  obj-$(CONFIG_PPP_DEFLATE) += ppp_deflate.o
+  ifeq ($(CONFIG_PPP_BSDCOMP),m)
+    obj-m += bsd_comp.o
+  endif
+else
+  ifeq ($(CONFIG_PPP),m)
+    obj-m += ppp_generic.o slhc.o
+    obj-$(CONFIG_PPP_ASYNC) += ppp_async.o
+    obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
+    obj-$(CONFIG_PPP_DEFLATE) += ppp_deflate.o
+    ifeq ($(CONFIG_PPP_BSDCOMP),m)
+      obj-m += bsd_comp.o
+    endif
+  endif
+endif
+
+obj-$(CONFIG_SLIP) += slip.o
+ifeq ($(CONFIG_SLIP),y)
+  obj-$(CONFIG_SLIP_COMPRESSED) += slhc.o
+else
+  ifeq ($(CONFIG_SLIP),m)
+    obj-$(CONFIG_SLIP_COMPRESSED) += slhc.o
+  endif
+endif
+
+obj-$(CONFIG_STRIP) += strip.o
+obj-$(CONFIG_DE650) += de650.o 8390.o
+obj-$(CONFIG_3C589) += 3c589.o
+obj-$(CONFIG_DUMMY) += dummy.o
+obj-$(CONFIG_DE600) += de600.o
+obj-$(CONFIG_DE620) += de620.o
+obj-$(CONFIG_AT1500) += lance.o
+obj-$(CONFIG_LANCE) += lance.o
+obj-$(CONFIG_SUN3LANCE) += sun3lance.o
+obj-$(CONFIG_PCNET32) += pcnet32.o
+obj-$(CONFIG_DEFXX) += defxx.o
+obj-$(CONFIG_SUNLANCE) += sunlance.o
+obj-$(CONFIG_SGISEEQ) += sgiseeq.o
+obj-$(CONFIG_HAPPYMEAL) += sunhme.o
+obj-$(CONFIG_SUNQE) += sunqe.o
+obj-$(CONFIG_SUNBMAC) += sunbmac.o
+obj-$(CONFIG_SUNBMAC) += sunbmac.o
+obj-$(CONFIG_MYRI_SBUS) += myri_sbus.o
+obj-$(CONFIG_AT1700) += at1700.o
+obj-$(CONFIG_FMV18X) += fmv18x.o
+obj-$(CONFIG_EL1) += 3c501.o
+obj-$(CONFIG_EL16) += 3c507.o
+obj-$(CONFIG_ELMC) += 3c523.o
+obj-$(CONFIG_SKMC) += sk_mca.o
+obj-$(CONFIG_ELMC_II) += 3c527.o
+obj-$(CONFIG_EL3) += 3c509.o
+obj-$(CONFIG_3C515) += 3c515.o
+obj-$(CONFIG_VORTEX) += 3c59x.o
+obj-$(CONFIG_EEXPRESS) += eexpress.o
+obj-$(CONFIG_EEXPRESS_PRO) += eepro.o
+obj-$(CONFIG_EEXPRESS_PRO100) += eepro100.o
+obj-$(CONFIG_RTL8139) += rtl8139.o
+obj-$(CONFIG_SIS900) += sis900.o
+obj-$(CONFIG_DM9102) += dmfe.o
+obj-$(CONFIG_YELLOWFIN) += yellowfin.o
+obj-$(CONFIG_ACENIC) += acenic.o
+obj-$(CONFIG_WAVELAN) += wavelan.o
+obj-$(CONFIG_ARLAN) += arlan.o arlan-proc.o
+obj-$(CONFIG_TLAN) += tlan.o
+obj-$(CONFIG_VIA_RHINE) += via-rhine.o
+obj-$(CONFIG_ZNET) += znet.o
+obj-$(CONFIG_DEPCA) += depca.o
+obj-$(CONFIG_EWRK3) += ewrk3.o
+obj-$(CONFIG_ATP) += atp.o
+obj-$(CONFIG_DE4X5) += de4x5.o
+obj-$(CONFIG_NI5010) += ni5010.o
+obj-$(CONFIG_NI52) += ni52.o
+obj-$(CONFIG_NI65) += ni65.o
+obj-$(CONFIG_ELPLUS) += 3c505.o
+obj-$(CONFIG_AC3200) += ac3200.o 8390.o
+obj-$(CONFIG_APRICOT) += 82596.o
+obj-$(CONFIG_MVME16x_NET) += 82596.o
+obj-$(CONFIG_BVME6000_NET) += 82596.o
+obj-$(CONFIG_DEC_ELCP) += tulip.o
+obj-$(CONFIG_ARCNET) += arcnet.o
+obj-$(CONFIG_ARCNET_COM90xx) += com90xx.o
+obj-$(CONFIG_ARCNET_COM90xxIO) += com90io.o
+obj-$(CONFIG_ARCNET_RIM_I) += arc-rimi.o
+obj-$(CONFIG_ARCNET_COM20020) += com20020.o
+obj-$(CONFIG_ETH16I) += eth16i.o
+obj-$(CONFIG_EPIC100) += epic100.o
+obj-$(CONFIG_ARIADNE2) += ariadne2.o 8390.o
+obj-$(CONFIG_HPLANCE) += hplance.o 7990.o
+obj-$(CONFIG_MVME147_NET) += mvme147.o 7990.o
+obj-$(CONFIG_EQUALIZER) += eql.o
+obj-$(CONFIG_MIPS_JAZZ_SONIC) += jazzsonic.o
+obj-$(CONFIG_BAGETLANCE) += bagetlance.o
+obj-$(CONFIG_DECLANCE) += declance.o
+obj-$(CONFIG_ATARILANCE) += atarilance.o
+obj-$(CONFIG_ATARI_BIONET) += atari_bionet.o
+obj-$(CONFIG_ATARI_PAMSNET) += atari_pamsnet.o
+obj-$(CONFIG_A2065) += a2065.o
+obj-$(CONFIG_HYDRA) += hydra.o
+obj-$(CONFIG_ARIADNE) += ariadne.o
+obj-$(CONFIG_DGRS) += dgrs.o
+obj-$(CONFIG_CS89x0) += cs89x0.o
+obj-$(CONFIG_LTPC) += ltpc.o
+obj-$(CONFIG_COPS) += cops.o
+obj-$(CONFIG_IPDDP) += ipddp.o
+obj-$(CONFIG_RCPCI) += rcpci.o
+obj-$(CONFIG_MACE) += mace.o
+obj-$(CONFIG_MACSONIC) += macsonic.o
+obj-$(CONFIG_BMAC) += bmac.o
+obj-$(CONFIG_NCR885E) += ncr885e.o
+obj-$(CONFIG_ADAPTEC_STARFIRE) += starfire.o
+
+#
+# HIPPI adapters
+#
+
+obj-$(CONFIG_ROADRUNNER) += rrunner.o
+
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
+
+multi-y         := $(filter $(list-multi), $(obj-y))
+multi-m         := $(filter $(list-multi), $(obj-m))
+int-y           := $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m           := $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
+
+# Files that are both resident and modular: remove from modular.
+
+obj-m           := $(filter-out $(obj-y), $(obj-m))
+int-m           := $(filter-out $(int-y), $(int-m))
+
+# Take multi-part drivers out of obj-y and put components in.
+
+obj-y           := $(filter-out $(list-multi), $(obj-y)) $(int-y)
+
+# Translate to Rules.make lists.
+
+O_OBJS          := $(filter-out $(export-objs), $(obj-y))
+OX_OBJS         := $(filter     $(export-objs), $(obj-y))
+M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
+
+L_OBJS += $(O_OBJS)
+L_OBJS += $(OX_OBJS)
+
 include $(TOPDIR)/Rules.make
 
 clean:
@@ -1108,3 +273,4 @@ clean:
 
 rcpci.o: rcpci45.o rclanmtl.o
 	$(LD) -r -o rcpci.o rcpci45.o rclanmtl.o
+
