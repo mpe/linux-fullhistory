@@ -116,7 +116,6 @@ EXPORT_SYMBOL(kmem_cache_free);
 EXPORT_SYMBOL(kmalloc);
 EXPORT_SYMBOL(kfree);
 EXPORT_SYMBOL(kfree_s);
-EXPORT_SYMBOL(vmalloc);
 EXPORT_SYMBOL(vfree);
 EXPORT_SYMBOL(__vmalloc);
 EXPORT_SYMBOL(mem_map);

@@ -55,6 +55,9 @@
  *
  * write support Daniel Pirkl <daniel.pirkl@email.cz> 1998
  * 
+ * HP/UX hfs filesystem support added by
+ * Martin K. Petersen <mkp@mkp.net>, August 1999
+ *
  */
 
 
@@ -279,6 +282,8 @@ static int ufs_parse_options (char * options, unsigned * mount_options)
 				ufs_set_opt (*mount_options, UFSTYPE_OPENSTEP);
 			else if (!strcmp (value, "sunx86"))
 				ufs_set_opt (*mount_options, UFSTYPE_SUNx86);
+			else if (!strcmp (value, "hp"))
+				ufs_set_opt (*mount_options, UFSTYPE_HP);
 			else {
 				printk ("UFS-fs: Invalid type option: %s\n", value);
 				return 0;
@@ -473,7 +478,7 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	if (!(sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE)) {
 		printk("You didn't specify the type of your ufs filesystem\n\n"
 		"mount -t ufs -o ufstype="
-		"sun|sunx86|44bsd|old|nextstep|netxstep-cd|openstep ...\n\n"
+		"sun|sunx86|44bsd|old|hp|nextstep|netxstep-cd|openstep ...\n\n"
 		">>>WARNING<<< Wrong ufstype may corrupt your filesystem, "
 		"default is ufstype=old\n");
 		ufs_set_opt (sb->u.ufs_sb.s_mount_opt, UFSTYPE_OLD);
@@ -573,6 +578,19 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		}
 		break;
 	
+	case UFS_MOUNT_UFSTYPE_HP:
+		UFSD(("ufstype=hp\n"))
+		uspi->s_fsize = block_size = 1024;
+		uspi->s_fmask = ~(1024 - 1);
+		uspi->s_fshift = 10;
+		uspi->s_sbsize = super_block_size = 2048;
+		uspi->s_sbbase = 0;
+		flags |= UFS_DE_OLD | UFS_UID_OLD | UFS_ST_OLD | UFS_CG_OLD;
+		if (!(sb->s_flags & MS_RDONLY)) {
+			printk(KERN_INFO "ufstype=hp is supported read-only\n");
+			sb->s_flags |= MS_RDONLY;
+ 		}
+ 		break;
 	default:
 		printk("unknown ufstype\n");
 		goto failed;
@@ -598,18 +616,30 @@ again:
 #if defined(__LITTLE_ENDIAN) || defined(__BIG_ENDIAN) /* sane bytesex */
 	switch (usb3->fs_magic) {
 		case UFS_MAGIC:
+	        case UFS_MAGIC_LFN:
+	        case UFS_MAGIC_FEA:
+	        case UFS_MAGIC_4GB:
 			swab = UFS_NATIVE_ENDIAN;
 			goto magic_found;
 		case UFS_CIGAM:
+	        case UFS_CIGAM_LFN:
+	        case UFS_CIGAM_FEA:
+	        case UFS_CIGAM_4GB:
 			swab = UFS_SWABBED_ENDIAN;
 			goto magic_found;
 	}
 #else /* bytesex perversion */
 	switch (le32_to_cpup(&usb3->fs_magic)) {
 		case UFS_MAGIC:
+		case UFS_MAGIC_LFN:
+	        case UFS_MAGIC_FEA:
+	        case UFS_MAGIC_4GB:
 			swab = UFS_LITTLE_ENDIAN;
 			goto magic_found;
 		case UFS_CIGAM:
+		case UFS_CIGAM_LFN:
+	        case UFS_CIGAM_FEA:
+	        case UFS_CIGAM_4GB:
 			swab = UFS_BIG_ENDIAN;
 			goto magic_found;
 	}

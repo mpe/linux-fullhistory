@@ -824,7 +824,7 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat)
 		if (drive->media == ide_disk) {
 			printk(" { ");
 			if (err & ABRT_ERR)	printk("DriveStatusError ");
-			if (err & ICRC_ERR)	printk((err & ABRT_ERR) ? "BadCRC " : "BadSector ");
+			if (err & ICRC_ERR)	printk("%s", (err & ABRT_ERR) ? "BadCRC " : "BadSector ");
 			if (err & ECC_ERR)	printk("UncorrectableError ");
 			if (err & ID_ERR)	printk("SectorIdNotFound ");
 			if (err & TRK0_ERR)	printk("TrackZeroNotFound ");
@@ -1896,8 +1896,10 @@ void hwif_unregister (ide_hwif_t *hwif)
 jump_eight:
 	if (hwif->io_ports[IDE_CONTROL_OFFSET])
 		ide_release_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
+#if defined(CONFIG_AMIGA) || defined(CONFIG_MAC)
 	if (hwif->io_ports[IDE_IRQ_OFFSET])
 		ide_release_region(hwif->io_ports[IDE_IRQ_OFFSET], 1);
+#endif /* (CONFIG_AMIGA) || (CONFIG_MAC) */
 }
 
 void ide_unregister (unsigned int index)
@@ -2006,12 +2008,12 @@ void ide_unregister (unsigned int index)
 	else
 		hwgroup->hwif = HWIF(hwgroup->drive);
 
-#ifdef CONFIG_BLK_DEV_IDEDMA
+#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
 	if (hwif->dma_base) {
 		(void) ide_release_dma(hwif);
 		hwif->dma_base = 0;
 	}
-#endif /* CONFIG_BLK_DEV_IDEDMA */
+#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
 
 	/*
 	 * Remove us from the kernel's knowledge
@@ -2087,9 +2089,11 @@ void ide_setup_ports (	hw_regs_t *hw,
 				case IDE_CONTROL_OFFSET:
 					hw->io_ports[i] = ctrl;
 					break;
+#if defined(CONFIG_AMIGA) || defined(CONFIG_MAC)
 				case IDE_IRQ_OFFSET:
 					hw->io_ports[i] = intr;
 					break;
+#endif /* (CONFIG_AMIGA) || (CONFIG_MAC) */
 				default:
 					hw->io_ports[i] = 0;
 					break;
@@ -2552,8 +2556,6 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				if ((HWIF(drive)->speedproc) != NULL)
 					HWIF(drive)->speedproc(drive, xfer_rate);
 				ide_driveid_update(drive);
-			} else {
-				printk("%s: \n", drive->name);
 			}
 		abort:
 			if (copy_to_user((void *)arg, argbuf, argsize))
@@ -3617,10 +3619,10 @@ void cleanup_module (void)
 
 	for (index = 0; index < MAX_HWIFS; ++index) {
 		ide_unregister(index);
-#ifdef CONFIG_BLK_DEV_IDEDMA
+#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
 		if (ide_hwifs[index].dma_base)
 			(void) ide_release_dma(&ide_hwifs[index]);
-#endif /* CONFIG_BLK_DEV_IDEDMA */
+#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
 	}
 
 #ifdef CONFIG_PROC_FS

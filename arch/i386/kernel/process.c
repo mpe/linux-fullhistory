@@ -2,6 +2,8 @@
  *  linux/arch/i386/kernel/process.c
  *
  *  Copyright (C) 1995  Linus Torvalds
+ *  Pentium III code by Ingo Molnar with changes and support for 
+ *  OS exception support by Goutham Rao
  */
 
 /*
@@ -468,6 +470,94 @@ void copy_segments(struct task_struct *p, struct mm_struct *new_mm)
 	new_mm->segments = ldt;
 	return;
 }
+
+#ifdef CONFIG_X86_FX
+
+int i387_hard_to_user ( struct _fpstate * user,
+			struct i387_hard_struct * hard)
+{
+	int	i, err = 0;
+	short	*tmp, *tmp2;
+	long 	*ltmp1, *ltmp2;
+
+	err |= put_user(hard->cwd, &user->cw);
+	err |= put_user(hard->swd, &user->sw);
+	err |= put_user(fputag_KNIto387(hard->twd), &user->tag);
+	err |= put_user(hard->fip, &user->ipoff);
+	err |= put_user(hard->fcs, &user->cssel);
+	err |= put_user(hard->fdp, &user->dataoff);
+	err |= put_user(hard->fds, &user->datasel);
+	err |= put_user(hard->mxcsr, &user->mxcsr);
+
+	tmp = (short *)&user->_st;
+	tmp2 = (short *)&hard->st_space;
+
+	/*
+	 * Transform the two layouts:
+	 * (we do not mix 32-bit access with 16-bit access because
+	 * thats suboptimal on PPros)
+	 */
+	for (i = 0; i < 8; i++) 
+	{
+		err |= put_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= put_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= put_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= put_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= put_user(*tmp2, tmp); tmp++; tmp2 += 3;
+	}
+
+	ltmp1 = (unsigned long *)&(user->_xmm[0]);
+	ltmp2 = (unsigned long *)&(hard->xmm_space[0]);
+	for(i = 0; i < 88; i++)
+	{
+		err |= put_user(*ltmp2, ltmp1);
+		ltmp1++; ltmp2++;
+	}
+
+	return err;
+}
+
+int i387_user_to_hard (struct i387_hard_struct * hard,
+		       struct _fpstate * user)
+{
+	int 	i, err = 0;
+	short 	*tmp, *tmp2;
+	long 	*ltmp1, *ltmp2;
+
+	err |= get_user(hard->cwd, &user->cw);
+	err |= get_user(hard->swd, &user->sw);
+	err |= get_user(hard->twd, &user->tag);
+	hard->twd = fputag_387toKNI(hard->twd);
+	err |= get_user(hard->fip, &user->ipoff);
+	err |= get_user(hard->fcs, &user->cssel);
+	err |= get_user(hard->fdp, &user->dataoff);
+	err |= get_user(hard->fds, &user->datasel);
+	err |= get_user(hard->mxcsr, &user->mxcsr);
+
+	tmp2 = (short *)&hard->st_space;
+	tmp = (short *)&user->_st;
+
+	for (i = 0; i < 8; i++) 
+	{
+		err |= get_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= get_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= get_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= get_user(*tmp2, tmp); tmp++; tmp2++;
+		err |= get_user(*tmp2, tmp); tmp++; tmp2 += 3;
+	}
+
+	ltmp1 = (unsigned long *)(&user->_xmm[0]);
+	ltmp2 = (unsigned long *)(&hard->xmm_space[0]);
+	for(i = 0; i < (88); i++)
+	{
+		err |= get_user(*ltmp2, ltmp1);
+		ltmp2++; ltmp1++;
+	}
+
+	return err;
+}
+
+#endif
 
 /*
  * Save a segment.

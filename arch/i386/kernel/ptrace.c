@@ -1,5 +1,6 @@
 /* ptrace.c */
 /* By Ross Biro 1/23/92 */
+/* FXSAVE/FXRSTOR support by Ingo Molnar and modifications by Goutham Rao */
 /* edited by Linus Torvalds */
 
 #include <linux/config.h> /* for CONFIG_MATH_EMULATION */
@@ -398,14 +399,14 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = 0;
 		if ( !child->used_math ) {
 			/* Simulate an empty FPU. */
-			child->thread.i387.hard.cwd = 0xffff037f;
-			child->thread.i387.hard.swd = 0xffff0000;
-			child->thread.i387.hard.twd = 0xffffffff;
-		}
+			i387_set_cwd(child->thread.i387.hard, 0x037f);
+			i387_set_swd(child->thread.i387.hard, 0x0000);
+			i387_set_twd(child->thread.i387.hard, 0xffff);
+	}
 #ifdef CONFIG_MATH_EMULATION
 		if ( boot_cpu_data.hard_math ) {
 #endif
-			__copy_to_user((void *)data, &child->thread.i387.hard, sizeof(struct user_i387_struct));
+			i387_hard_to_user((struct _fpstate *)data, &child->thread.i387.hard);
 #ifdef CONFIG_MATH_EMULATION
 		} else {
 			save_i387_soft(&child->thread.i387.soft, (struct _fpstate *)data);
@@ -423,7 +424,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 #ifdef CONFIG_MATH_EMULATION
 		if ( boot_cpu_data.hard_math ) {
 #endif
-			__copy_from_user(&child->thread.i387.hard, (void *)data, sizeof(struct user_i387_struct));
+			i387_user_to_hard(&child->thread.i387.hard,(struct _fpstate *)data);
 #ifdef CONFIG_MATH_EMULATION
 		} else {
 			restore_i387_soft(&child->thread.i387.soft, (struct _fpstate *)data);

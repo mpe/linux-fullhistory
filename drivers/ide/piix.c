@@ -86,7 +86,7 @@ static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 	u32 bibma = bmide_dev->resource[4].start;
         u16 reg40 = 0, psitre = 0, reg42 = 0, ssitre = 0;
 	u8  c0 = 0, c1 = 0;
-	u8  reg44 = 0, reg48 = 0, reg4a = 0, reg4b = 0, reg54 = 0;
+	u8  reg44 = 0, reg48 = 0, reg4a = 0, reg4b = 0, reg54 = 0, reg55 = 0;
 
 	pci_read_config_word(bmide_dev, 0x40, &reg40);
 	pci_read_config_word(bmide_dev, 0x42, &reg42);
@@ -95,6 +95,7 @@ static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 	pci_read_config_byte(bmide_dev, 0x4a, &reg4a);
 	pci_read_config_byte(bmide_dev, 0x4b, &reg4b);
 	pci_read_config_byte(bmide_dev, 0x54, &reg54);
+	pci_read_config_byte(bmide_dev, 0x55, &reg55);
 
 	psitre = (reg40 & 0x4000) ? 1 : 0;
 	ssitre = (reg42 & 0x4000) ? 1 : 0;
@@ -264,13 +265,15 @@ static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	byte maslave		= hwif->channel ? 0x42 : 0x40;
-	int a_speed		= 2 << (drive->dn * 4);
+	int a_speed		= 3 << (drive->dn * 4);
 	int u_flag		= 1 << drive->dn;
-	int v_flag		= 0x10 << drive->dn;
+	int v_flag		= 0x01 << drive->dn;
+	int w_flag		= 0x10 << drive->dn;
 	int u_speed		= 0;
 	int err			= 0;
 	int			sitre;
 	short			reg4042, reg44, reg48, reg4a, reg54;
+	byte			reg55;
 
 	pci_read_config_word(dev, maslave, &reg4042);
 	sitre = (reg4042 & 0x4000) ? 1 : 0;
@@ -278,6 +281,7 @@ static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 	pci_read_config_word(dev, 0x48, &reg48);
 	pci_read_config_word(dev, 0x4a, &reg4a);
 	pci_read_config_word(dev, 0x54, &reg54);
+	pci_read_config_byte(dev, 0x55, &reg55);
 
 	switch(speed) {
 		case XFER_UDMA_4:
@@ -294,6 +298,7 @@ static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 	if (speed >= XFER_UDMA_0) {
 		if (!(reg48 & u_flag))
 			pci_write_config_word(dev, 0x48, reg48|u_flag);
+		pci_write_config_byte(dev, 0x55, (byte) reg55 & ~w_flag);
 		if (!(reg4a & u_speed)) {
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
 			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
@@ -313,6 +318,8 @@ static int piix_tune_chipset (ide_drive_t *drive, byte speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
 		if (reg54 & v_flag)
 			pci_write_config_word(dev, 0x54, reg54 & ~v_flag);
+		if (reg55 & w_flag)
+			pci_write_config_byte(dev, 0x55, (byte) reg55 & ~w_flag);
 	}
 
 	piix_tune_drive(drive, piix_dma_2_pio(speed));
@@ -404,10 +411,11 @@ unsigned int __init pci_init_piix (struct pci_dev *dev, const char *name)
 unsigned int __init ata66_piix (ide_hwif_t *hwif)
 {
 	byte reg54h = 0, reg55h = 0, ata66 = 0;
-	byte mask = hwif->channel ? 0x0c : 0x03;
+	byte mask = hwif->channel ? 0xc0 : 0x30;
 
 	pci_read_config_byte(hwif->pci_dev, 0x54, &reg54h);
 	pci_read_config_byte(hwif->pci_dev, 0x55, &reg55h);
+
 	ata66 = (reg54h & mask) ? 1 : 0;
 
 	return ata66;
@@ -415,8 +423,10 @@ unsigned int __init ata66_piix (ide_hwif_t *hwif)
 
 void __init ide_init_piix (ide_hwif_t *hwif)
 {
+#ifndef CONFIG_IA64
 	if (!hwif->irq)
 		hwif->irq = hwif->channel ? 15 : 14;
+#endif /* CONFIG_IA64 */
 
 	hwif->tuneproc = &piix_tune_drive;
 	hwif->drives[0].autotune = 1;

@@ -23,6 +23,7 @@ choice 'Processor family' \
 	 586/K5/5x86/6x86/6x86MX	CONFIG_M586	\
 	 Pentium/TSC		CONFIG_M586TSC	\
 	 PPro/P-II/P-III	CONFIG_M686 \
+	 Pentium-III		CONFIG_M686FX \
 	 K6/II/III		CONFIG_MK6 \
 	 Athlon                 CONFIG_MK7" PPro
 #
@@ -60,6 +61,14 @@ if [ "$CONFIG_M686" = "y" ]; then
    define_bool CONFIG_X86_PGE y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
+if [ "$CONFIG_M686FX" = "y" ]; then
+   define_int  CONFIG_X86_L1_CACHE_BYTES 32
+   define_bool CONFIG_X86_TSC y
+   define_bool CONFIG_X86_GOOD_APIC y
+   define_bool CONFIG_X86_PGE y
+   define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
+   define_bool CONFIG_X86_FX y
+fi
 if [ "$CONFIG_MK6" = "y" ]; then
    define_int  CONFIG_X86_L1_CACHE_BYTES 32
    define_bool CONFIG_X86_ALIGNMENT_16 y
@@ -89,7 +98,9 @@ if [ "$CONFIG_HIGHMEM64G" = "y" ]; then
    define_bool CONFIG_X86_PAE y
 fi
 
-bool 'Math emulation' CONFIG_MATH_EMULATION
+if [ "$CONFIG_X86_FX" != "y" ]; then
+   bool 'Math emulation' CONFIG_MATH_EMULATION
+fi
 bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 bool 'Symmetric multi-processing support' CONFIG_SMP
 if [ "$CONFIG_SMP" != "y" ]; then

@@ -68,7 +68,7 @@
  * Spinlock
  */
 spinlock_t nfs_wreq_lock = SPIN_LOCK_UNLOCKED;
-static unsigned int	nfs_nr_requests = 0;
+static atomic_t	nfs_nr_requests = ATOMIC_INIT(0);
 
 /*
  * Local structures
@@ -490,9 +490,9 @@ struct nfs_page *nfs_create_request(struct file *file, struct page *page,
 	 */
 	do {
 		/* If we're over the global soft limit, wake up all requests */
-		if (nfs_nr_requests >= MAX_REQUEST_SOFT) {
+		if (atomic_read(&nfs_nr_requests) >= MAX_REQUEST_SOFT) {
 			dprintk("NFS:      hit soft limit (%d requests)\n",
-				nfs_nr_requests);
+				atomic_read(&nfs_nr_requests));
 			if (!cache->task)
 				nfs_reqlist_init(NFS_SERVER(inode));
 			nfs_wake_flushd();
@@ -500,7 +500,7 @@ struct nfs_page *nfs_create_request(struct file *file, struct page *page,
 
 		/* If we haven't reached the local hard limit yet,
 		 * try to allocate the request struct */
-		if (cache->nr_requests < MAX_REQUEST_HARD) {
+		if (atomic_read(&cache->nr_requests) < MAX_REQUEST_HARD) {
 			req = nfs_page_alloc();
 			if (req != NULL)
 				break;
@@ -508,7 +508,7 @@ struct nfs_page *nfs_create_request(struct file *file, struct page *page,
 
 		/* We're over the hard limit. Wait for better times */
 		dprintk("NFS:      create_request sleeping (total %d pid %d)\n",
-			cache->nr_requests, current->pid);
+			atomic_read(&cache->nr_requests), current->pid);
 
 		timeout = 1 * HZ;
 		if (NFS_SERVER(inode)->flags & NFS_MOUNT_INTR) {
@@ -520,7 +520,7 @@ struct nfs_page *nfs_create_request(struct file *file, struct page *page,
 			sleep_on_timeout(&cache->request_wait, timeout);
 
 		dprintk("NFS:      create_request waking up (tot %d pid %d)\n",
-			cache->nr_requests, current->pid);
+			atomic_read(&cache->nr_requests), current->pid);
 	} while (!req);
 	if (!req)
 		return NULL;
@@ -539,8 +539,8 @@ struct nfs_page *nfs_create_request(struct file *file, struct page *page,
 	req->wb_count   = 1;
 
 	/* register request's existence */
-	cache->nr_requests++;
-	nfs_nr_requests++;
+	atomic_inc(&cache->nr_requests);
+	atomic_inc(&nfs_nr_requests);
 	return req;
 }
 
@@ -580,9 +580,15 @@ nfs_release_request(struct nfs_page *req)
 	page_cache_release(page);
 	nfs_page_free(req);
 	/* wake up anyone waiting to allocate a request */
-	cache->nr_requests--;
-	nfs_nr_requests--;
+	atomic_dec(&cache->nr_requests);
+	atomic_dec(&nfs_nr_requests);
 	wake_up(&cache->request_wait);
+#ifdef NFS_PARANOIA
+	if (atomic_read(&cache->nr_requests) < 0)
+		BUG();
+	if (atomic_read(&nfs_nr_requests) < 0)
+		BUG();
+#endif
 }
 
 /*
@@ -931,7 +937,7 @@ nfs_strategy(struct inode *inode)
 		if (dirty >= wpages)
 			nfs_flush_file(inode, NULL, 0, 0, 0);
 		if (inode->u.nfs_i.ncommit > NFS_STRATEGY_PAGES * wpages &&
-		    nfs_nr_requests > MAX_REQUEST_SOFT)
+		    atomic_read(&nfs_nr_requests) > MAX_REQUEST_SOFT)
 			nfs_commit_file(inode, NULL, 0, 0, 0);
 	}
 #else

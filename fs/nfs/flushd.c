@@ -136,6 +136,7 @@ int nfs_reqlist_alloc(struct nfs_server *server)
 		return -ENOMEM;
 
 	memset(cache, 0, sizeof(*cache));
+	atomic_set(&cache->nr_requests, 0);
 	init_waitqueue_head(&cache->request_wait);
 	server->rw_requests = cache;
 
@@ -280,7 +281,7 @@ nfs_flushd(struct rpc_task *task)
 	cache->runat = jiffies + task->tk_timeout;
 
 	spin_lock(&nfs_flushd_lock);
-	if (!cache->nr_requests && !cache->inodes) {
+	if (!atomic_read(&cache->nr_requests) && !cache->inodes) {
 		cache->task = NULL;
 		task->tk_action = NULL;
 	} else

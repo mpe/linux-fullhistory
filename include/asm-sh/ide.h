@@ -17,7 +17,7 @@
 #include <linux/config.h>
 
 #ifndef MAX_HWIFS
-#define MAX_HWIFS	1
+#define MAX_HWIFS	1	/* XXX: For my board -- gniibe */
 #endif
 
 #define ide__sti()	__sti()
@@ -25,8 +25,8 @@
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
 	switch (base) {
-		case 0x01f0: return 14;
-		case 0x0170: return 15;
+		case 0xba0001f0: return 14;
+		case 0xba000170: return 14;
 		default:
 			return 0;
 	}
@@ -36,9 +36,9 @@ static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
 	switch (index) {
 		case 0:	
-			return 0x01f0;
+			return 0xba0001f0;
 		case 1:	
-			return 0x0170;
+			return 0xba000170;
 		default:
 			return 0;
 	}
@@ -60,6 +60,7 @@ static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port,
 	}
 	if (irq != NULL)
 		*irq = 0;
+	hw->io_ports[IDE_IRQ_OFFSET] = 0;
 }
 
 static __inline__ void ide_init_default_hwifs(void)
@@ -69,7 +70,6 @@ static __inline__ void ide_init_default_hwifs(void)
 	int index;
 
 	for(index = 0; index < MAX_HWIFS; index++) {
-		memset(&hw, 0, sizeof(hw_regs_t));
 		ide_init_hwif_ports(&hw, ide_default_io_base(index), 0, NULL);
 		hw.irq = ide_default_irq(ide_default_io_base(index));
 		ide_register_hw(&hw, NULL);

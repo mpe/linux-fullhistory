@@ -6,8 +6,8 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o 352x288 mode
- o force_rgb parameter for apps that expect RGB instead of BGR
+ o 384x288 and 448x336 modes
+ o better /proc/video support
 
 INTRODUCTION:
 
@@ -179,7 +179,7 @@ MODULE PARAMETERS:
         your colors look VERY wrong, you may want to change this.
 
 WORKING FEATURES:
- o Color streaming/capture at 640x480, 352x288, and 320x240
+ o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, and 320x240
  o YUV420 color
  o Monochrome
  o Setting/getting of saturation, contrast and brightness (no hue yet; only

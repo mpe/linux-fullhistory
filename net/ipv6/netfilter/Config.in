@@ -31,12 +31,12 @@ if [ "$CONFIG_IP6_NF_IPTABLES" != "n" ]; then
 # The targets
   dep_tristate '  Packet filtering' CONFIG_IP6_NF_FILTER $CONFIG_IP6_NF_IPTABLES 
 
-  if [ "$CONFIG_IP6_NF_FILTER" != "n" ]; then
+#  if [ "$CONFIG_IP6_NF_FILTER" != "n" ]; then
 #    dep_tristate '    REJECT target support' CONFIG_IP6_NF_TARGET_REJECT $CONFIG_IP6_NF_FILTER
 #    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #      dep_tristate '    MIRROR target support (EXPERIMENTAL)' CONFIG_IP6_NF_TARGET_MIRROR $CONFIG_IP6_NF_FILTER
 #    fi
-  fi
+#  fi
 
   dep_tristate '  Packet mangling' CONFIG_IP6_NF_MANGLE $CONFIG_IP6_NF_IPTABLES 
   if [ "$CONFIG_IP6_NF_MANGLE" != "n" ]; then

@@ -778,6 +778,8 @@ static void hd_geninit(void)
 #endif
 
 	for (drive=0 ; drive < NR_HD ; drive++) {
+		hd[drive<<6].nr_sects = hd_info[drive].head *
+			hd_info[drive].sect * hd_info[drive].cyl;
 		printk ("hd%c: %ldMB, CHS=%d/%d/%d\n", drive+'a',
 			hd[drive<<6].nr_sects / 2048, hd_info[drive].cyl,
 			hd_info[drive].head, hd_info[drive].sect);
@@ -890,3 +892,4 @@ static int parse_hd_setup (char *line) {
 	return 0;
 }
 __setup("hd=", parse_hd_setup);
+

@@ -2455,9 +2455,8 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_OGAIN, 0x4040 }
 };
 
-#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
-				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
-#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+#define RSRCISIOREGION(dev,num) (pci_resource_start((dev), (num)) != 0 && \
+				 pci_resource_flags((dev), (num)) & IORESOURCE_IO)
 
 static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
@@ -2488,7 +2487,7 @@ static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_devic
 	spin_lock_init(&s->lock);
 	s->magic = ES1370_MAGIC;
 	s->dev = pcidev;
-	s->io = RSRCADDRESS(pcidev, 0);
+	s->io = pci_resource_start(pcidev, 0);
 	s->irq = pcidev->irq;
 	if (!request_region(s->io, ES1370_EXTENT, "es1370")) {
 		printk(KERN_ERR "es1370: io ports %#lx-%#lx in use\n", s->io, s->io+ES1370_EXTENT-1);
@@ -2616,12 +2615,7 @@ static int __init init_es1370(void)
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
 	printk(KERN_INFO "es1370: version v0.33 time " __TIME__ " " __DATE__ "\n");
-	if (!pci_register_driver(&es1370_driver)) {
-		pci_unregister_driver(&es1370_driver);
-		return -ENODEV;
-	}
-        return 0;
-
+	return pci_module_init(&es1370_driver);
 }
 
 static void __exit cleanup_es1370(void)

@@ -81,13 +81,11 @@ check_asm: dummy
 	@echo -e "#  error Please issue 'make check_asm' in linux top-level directory first\n# endif\n#endif\n" >> asm_offsets.h
 	@echo -e "#ifndef CONFIG_SMP\n" >> asm_offsets.h
 	@echo "#include <linux/config.h>" > tmp.c
-	@echo "#undef __SMP__" >> tmp.c
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
 	$(CPP) $(CPPFLAGS) tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
 	@echo "#include <linux/config.h>" >> check_asm.c
-	@echo "#undef __SMP__" >> check_asm.c
 	@echo "#undef CONFIG_SMP" >> check_asm.c
 	@echo "#include <linux/sched.h>" >> check_asm.c
 	@echo 'struct task_struct _task;' >> check_asm.c
@@ -128,7 +126,7 @@ check_asm: dummy
 	$(SH) ./check_asm.sh thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
 	@rm -f tmp.[ci]
-	#$(CC) -D__SMP__ -o check_asm check_asm.c
+	#$(CC) -o check_asm check_asm.c
 	# <hack> Until we can do this natively, a hack has to take place
 	$(CC) $(CPPFLAGS) $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
 	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
@@ -153,7 +151,7 @@ check_asm: dummy
 	$(SH) ./check_asm.sh thread tmp.i check_asm.c
 	@echo 'return 0; }' >> check_asm.c
 	@rm -f tmp.[ci]
-	#$(CC) -D__SMP__ -DSPIN_LOCK_DEBUG -o check_asm check_asm.c
+	#$(CC) -DSPIN_LOCK_DEBUG -o check_asm check_asm.c
 	# <hack> Until we can do this natively, a hack has to take place
 	$(CC) $(CPPFLAGS) -DSPIN_LOCK_DEBUG $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
 	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s

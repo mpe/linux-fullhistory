@@ -68,6 +68,7 @@
  *                       Integrated (aka redid 8-)) APM support patch by Zach Brown
  *    07.02.2000   0.13  Use pci_alloc_consistent and pci_register_driver
  *    19.02.2000   0.14  Use pci_dma_supported to determine if recording should be disabled
+ *    13.03.2000   0.15  Reintroduce initialization of a couple of PCI config space registers
  */
 
 /*****************************************************************************/
@@ -2130,6 +2131,14 @@ static int setup_solo1(struct solo1_state *s)
 	mm_segment_t fs;
 	int i, val;
 
+	/* initialize DDMA base address */
+	printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
+	pci_write_config_word(pcidev, 0x60, (s->ddmabase & (~0xf)) | 1);
+	/* set DMA policy to DDMA, IRQ emulation off (CLKRUN disabled for now) */
+	pci_write_config_dword(pcidev, 0x50, 0);
+	/* disable legacy audio address decode */
+	pci_write_config_word(pcidev, 0x40, 0x907f);
+
 	/* initialize the chips */
 	if (!reset_ctrl(s)) {
 		printk(KERN_ERR "esssolo1: cannot reset controller\n");
@@ -2190,9 +2199,8 @@ static int solo1_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
 }
 
 
-#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
-				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
-#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+#define RSRCISIOREGION(dev,num) (pci_resource_start((dev), (num)) != 0 && \
+				 (pci_resource_flags((dev), (num)) & IORESOURCE_IO))
 
 static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
@@ -2229,12 +2237,12 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 	spin_lock_init(&s->lock);
 	s->magic = SOLO1_MAGIC;
 	s->dev = pcidev;
-	s->iobase = RSRCADDRESS(pcidev, 0);
-	s->sbbase = RSRCADDRESS(pcidev, 1);
-	s->vcbase = RSRCADDRESS(pcidev, 2);
+	s->iobase = pci_resource_start(pcidev, 0);
+	s->sbbase = pci_resource_start(pcidev, 1);
+	s->vcbase = pci_resource_start(pcidev, 2);
 	s->ddmabase = s->vcbase + DDMABASE_OFFSET;
-	s->mpubase = RSRCADDRESS(pcidev, 3);
-	s->gpbase = RSRCADDRESS(pcidev, 4);
+	s->mpubase = pci_resource_start(pcidev, 3);
+	s->gpbase = pci_resource_start(pcidev, 4);
 	s->irq = pcidev->irq;
 	if (!request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1")) {
 		printk(KERN_ERR "solo1: io ports in use\n");
@@ -2252,13 +2260,12 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 		printk(KERN_ERR "solo1: io ports in use\n");
 		goto err_region4;
 	}
-	if (pci_enable_device(pcidev))
-		goto err_irq;
 	if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
 		printk(KERN_ERR "solo1: irq %u in use\n", s->irq);
 		goto err_irq;
 	}
-	printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
+ 	if (pci_enable_device(pcidev))
+		goto err_irq;
 	printk(KERN_INFO "solo1: joystick port at %#lx\n", s->gpbase+1);
 	/* register devices */
 	if ((s->dev_audio = register_sound_dsp(&solo1_audio_fops, -1)) < 0)
@@ -2352,7 +2359,7 @@ static int __init init_solo1(void)
 {
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.14 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.15 time " __TIME__ " " __DATE__ "\n");
 	if (!pci_register_driver(&solo1_driver)) {
 		pci_unregister_driver(&solo1_driver);
                 return -ENODEV;

@@ -4,6 +4,7 @@
 
 
 #ifdef __KERNEL__
+#include <asm/atomic.h>
 #include <linux/nfs_fs_sb.h>
 
 /*
@@ -43,7 +44,7 @@ extern void		nfs_wake_flushd(void);
  * This is the per-mount writeback cache.
  */
 struct nfs_reqlist {
-	unsigned int		nr_requests;
+	atomic_t		nr_requests;
 	unsigned long		runat;
 	wait_queue_head_t	request_wait;
 

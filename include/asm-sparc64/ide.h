@@ -46,6 +46,7 @@ static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port,
 	}
 	if (irq != NULL)
 		*irq = 0;
+	hw->io_ports[IDE_IRQ_OFFSET] = 0;
 }
 
 /*
@@ -59,7 +60,6 @@ static __inline__ void ide_init_default_hwifs(void)
 	int index;
 
 	for (index = 0; index < MAX_HWIFS; index++) {
-		memset(&hw, 0, sizeof(hw_regs_t));
 		ide_init_hwif_ports(&hw, ide_default_io_base(index), 0, NULL);
 		hw.irq = ide_default_irq(ide_default_io_base(index));
 		ide_register_hw(&hw, NULL);

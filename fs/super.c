@@ -1167,7 +1167,8 @@ static int copy_mount_options (const void *data, unsigned long *where)
 {
 	int i;
 	unsigned long page;
-
+	unsigned long size;
+	
 	*where = 0;
 	if (!data)
 		return 0;
@@ -1179,13 +1180,18 @@ static int copy_mount_options (const void *data, unsigned long *where)
 	 * gave us is valid.  Just in case, we'll zero
 	 * the remainder of the page.
 	 */
-	i = copy_from_user((void *)page, data, PAGE_SIZE);
-	if (i == PAGE_SIZE) {
+	/* copy_from_user cannot cross TASK_SIZE ! */
+	size = TASK_SIZE - (unsigned long)data;
+	if (size > PAGE_SIZE)
+		size = PAGE_SIZE;
+
+	i = size - copy_from_user((void *)page, data, size);
+	if (!i) {
 		free_page(page); 
 		return -EFAULT;
 	}
-	if (i)
-		memset((char *)page + PAGE_SIZE - i, 0, i);
+	if (i != PAGE_SIZE)
+		memset((char *)page + i, 0, PAGE_SIZE - i);
 	*where = page;
 	return 0;
 }

@@ -36,8 +36,8 @@ struct user_i387_struct {
 	long	twd;
 	long	fip;
 	long	fcs;
-	long	foo;
-	long	fos;
+	long	fdp;
+	long	fds;
 	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
 };
 

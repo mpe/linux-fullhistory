@@ -2428,9 +2428,8 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_PCM, 0x4040 }
 };
 
-#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
-				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
-#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+#define RSRCISIOREGION(dev,num) (pci_resource_start((dev), (num)) != 0 && \
+				 (pci_resource_flags((dev), (num)) & IORESOURCE_IO))
 
 static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
@@ -2484,13 +2483,13 @@ static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id
 	spin_lock_init(&s->lock);
 	s->magic = SV_MAGIC;
 	s->dev = pcidev;
-	s->iosb = RSRCADDRESS(pcidev, RESOURCE_SB);
-	s->ioenh = RSRCADDRESS(pcidev, RESOURCE_ENH);
-	s->iosynth = RSRCADDRESS(pcidev, RESOURCE_SYNTH);
-	s->iomidi = RSRCADDRESS(pcidev, RESOURCE_MIDI);
-	s->iogame = RSRCADDRESS(pcidev, RESOURCE_GAME);
-	s->iodmaa = RSRCADDRESS(pcidev, RESOURCE_DDMA);
-	s->iodmac = RSRCADDRESS(pcidev, RESOURCE_DDMA) + SV_EXTENT_DMA;
+	s->iosb = pci_resource_start(pcidev, RESOURCE_SB);
+	s->ioenh = pci_resource_start(pcidev, RESOURCE_ENH);
+	s->iosynth = pci_resource_start(pcidev, RESOURCE_SYNTH);
+	s->iomidi = pci_resource_start(pcidev, RESOURCE_MIDI);
+	s->iogame = pci_resource_start(pcidev, RESOURCE_GAME);
+	s->iodmaa = pci_resource_start(pcidev, RESOURCE_DDMA);
+	s->iodmac = pci_resource_start(pcidev, RESOURCE_DDMA) + SV_EXTENT_DMA;
 	pci_write_config_dword(pcidev, 0x40, s->iodmaa | 9);  /* enable and use extended mode */
 	pci_write_config_dword(pcidev, 0x48, s->iodmac | 9);  /* enable */
 	printk(KERN_DEBUG "sv: io ports: %#lx %#lx %#lx %#lx %#lx %#x %#x\n",
@@ -2655,11 +2654,7 @@ static int __init init_sonicvibes(void)
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
 #endif
-	if (!pci_register_driver(&sv_driver)) {
-		pci_unregister_driver(&sv_driver);
-                return -ENODEV;
-	}
-        return 0;
+	return pci_module_init(&sv_driver);
 }
 
 static void __exit cleanup_sonicvibes(void)

@@ -243,7 +243,7 @@ static const struct {
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
 
-#define DISPLAY_VIA_TIMINGS
+#undef DISPLAY_VIA_TIMINGS
 
 #if defined(DISPLAY_VIA_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
@@ -657,6 +657,7 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 	struct pci_dev *dev	= hwif->pci_dev;
 	struct chipset_bus_clock_list_entry * temp_table = NULL;
 
+	byte unit		= (drive->select.b.unit & 0x01) ? 1 : 0;
 	byte ata2_pci		= 0x00;
 	byte ata3_pci		= 0x00;
 	byte timing		= 0x00;
@@ -677,7 +678,9 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 			return -1;
 	}
 
-	if ((via82cxxx_table == via82cxxx_type_four) && (speed <= XFER_UDMA_2)) {
+	if ((via82cxxx_table == via82cxxx_type_four) &&
+	    (!(hwif->udma_four)) &&
+	    (speed <= XFER_UDMA_2)) {
 		temp_table = via82cxxx_type_three;
 	} else {
 		temp_table = via82cxxx_table;
@@ -689,6 +692,8 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 
 	pci_read_config_byte(dev, ata3_pci, &ultra);
 	ultra = pci_bus_clock_list_ultra(speed, bus_speed, temp_table);
+	if ((unit) && (hwif->udma_four))
+		ultra |= 0x04;
 	pci_write_config_byte(dev, ata3_pci, ultra);
 
 	if (!drive->init_speed)

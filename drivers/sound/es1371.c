@@ -100,6 +100,8 @@
  *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
  *    07.02.2000   0.24  Use pci_alloc_consistent and pci_register_driver
  *    07.02.2000   0.25  Use ac97_codec
+ *    01.03.2000   0.26  SPDIF patch by Mikael Bouillot <mikael.bouillot@bigfoot.com>
+ *                       Use pci_module_init
  */
 
 /*****************************************************************************/
@@ -205,6 +207,7 @@
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
+#define CTRL_RECEN_B    0x08000000  /* 1 = don't mix analog in to digital out */
 #define CTRL_SPDIFEN_B  0x04000000
 #define CTRL_JOY_SHIFT  24
 #define CTRL_JOY_MASK   3
@@ -344,22 +347,6 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 #define SCTRL_P1FMT       0x00000003  /* format mask */
 #define SCTRL_SH_P1FMT    0
 
-/* codec constants */
-
-#define CODEC_ID_DEDICATEDMIC    0x001
-#define CODEC_ID_MODEMCODEC      0x002
-#define CODEC_ID_BASSTREBLE      0x004
-#define CODEC_ID_SIMULATEDSTEREO 0x008
-#define CODEC_ID_HEADPHONEOUT    0x010
-#define CODEC_ID_LOUDNESS        0x020
-#define CODEC_ID_18BITDAC        0x040
-#define CODEC_ID_20BITDAC        0x080
-#define CODEC_ID_18BITADC        0x100
-#define CODEC_ID_20BITADC        0x200
-
-#define CODEC_ID_SESHIFT    10
-#define CODEC_ID_SEMASK     0x1f
-
 
 /* misc stuff */
 #define POLL_COUNT   0x1000
@@ -404,6 +391,9 @@ struct es1371_state {
 	u16 vendor;
 	u16 device;
         u8 rev; /* the chip revision */
+
+	/* options */
+	int spdif_volume; /* S/PDIF output is enabled if != -1 */
 
 #ifdef ES1371_DEBUG
         /* debug /proc entry */
@@ -1135,6 +1125,67 @@ static loff_t es1371_llseek(struct file *file, loff_t offset, int origin)
 
 /* --------------------------------------------------------------------- */
 
+/* Conversion table for S/PDIF PCM volume emulation through the SRC */
+/* dB-linear table of DAC vol values; -0dB to -46.5dB with mute */
+static const unsigned short DACVolTable[101] =
+{
+	0x1000, 0x0f2a, 0x0e60, 0x0da0, 0x0cea, 0x0c3e, 0x0b9a, 0x0aff,
+	0x0a6d, 0x09e1, 0x095e, 0x08e1, 0x086a, 0x07fa, 0x078f, 0x072a,
+	0x06cb, 0x0670, 0x061a, 0x05c9, 0x057b, 0x0532, 0x04ed, 0x04ab,
+	0x046d, 0x0432, 0x03fa, 0x03c5, 0x0392, 0x0363, 0x0335, 0x030b,
+	0x02e2, 0x02bc, 0x0297, 0x0275, 0x0254, 0x0235, 0x0217, 0x01fb,
+	0x01e1, 0x01c8, 0x01b0, 0x0199, 0x0184, 0x0170, 0x015d, 0x014b,
+	0x0139, 0x0129, 0x0119, 0x010b, 0x00fd, 0x00f0, 0x00e3, 0x00d7,
+	0x00cc, 0x00c1, 0x00b7, 0x00ae, 0x00a5, 0x009c, 0x0094, 0x008c,
+	0x0085, 0x007e, 0x0077, 0x0071, 0x006b, 0x0066, 0x0060, 0x005b,
+	0x0057, 0x0052, 0x004e, 0x004a, 0x0046, 0x0042, 0x003f, 0x003c,
+	0x0038, 0x0036, 0x0033, 0x0030, 0x002e, 0x002b, 0x0029, 0x0027,
+	0x0025, 0x0023, 0x0021, 0x001f, 0x001e, 0x001c, 0x001b, 0x0019,
+	0x0018, 0x0017, 0x0016, 0x0014, 0x0000
+};
+
+/*
+ * when we are in S/PDIF mode, we want to disable any analog output so
+ * we filter the mixer ioctls 
+ */
+static int mixdev_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned long arg)
+{
+	struct es1371_state *s = (struct es1371_state *)codec->private_data;
+	int val;
+	unsigned long flags;
+	unsigned int left, right;
+
+	VALIDATE_STATE(s);
+	/* filter mixer ioctls to catch PCM and MASTER volume when in S/PDIF mode */
+	if (s->spdif_volume == -1)
+		return codec->mixer_ioctl(codec, cmd, arg);
+	switch (cmd) {
+	case SOUND_MIXER_WRITE_VOLUME:
+		return 0;
+
+	case SOUND_MIXER_WRITE_PCM:   /* use SRC for PCM volume */
+		get_user_ret(val, (int *)arg, -EFAULT);
+		right = ((val >> 8)  & 0xff);
+		left = (val  & 0xff);
+		if (right > 100)
+			right = 100;
+		if (left > 100)
+			left = 100;
+		s->spdif_volume = (right << 8) | left;
+		spin_lock_irqsave(&s->lock, flags);
+		src_write(s, SRCREG_VOL_DAC2, DACVolTable[100 - left]);
+		src_write(s, SRCREG_VOL_DAC2+1, DACVolTable[100 - right]);
+		spin_unlock_irqrestore(&s->lock, flags);
+		return 0;
+	
+	case SOUND_MIXER_READ_PCM:
+		return put_user(s->spdif_volume, (int *)arg);
+	}
+	return codec->mixer_ioctl(codec, cmd, arg);
+}
+
+/* --------------------------------------------------------------------- */
+
 /*
  * AC97 Mixer Register to Connections mapping of the Concert 97 board
  *
@@ -1180,8 +1231,10 @@ static int es1371_release_mixdev(struct inode *inode, struct file *file)
 
 static int es1371_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct ac97_codec *codec = &((struct es1371_state *)file->private_data)->codec;
-	return codec->mixer_ioctl(codec, cmd, arg);
+	struct es1371_state *s = (struct es1371_state *)file->private_data;
+	struct ac97_codec *codec = &s->codec;
+
+	return mixdev_ioctl(codec, cmd, arg);
 }
 
 static /*const*/ struct file_operations es1371_mixer_fops = {
@@ -1778,7 +1831,7 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
                 return -EINVAL;
 		
 	}
-	return s->codec.mixer_ioctl(&s->codec, cmd, arg);
+	return mixdev_ioctl(&s->codec, cmd, arg);
 }
 
 static int es1371_open(struct inode *inode, struct file *file)
@@ -2181,7 +2234,7 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
                 return -EINVAL;
 		
 	}
-	return s->codec.mixer_ioctl(&s->codec, cmd, arg);
+	return mixdev_ioctl(&s->codec, cmd, arg);
 }
 
 static int es1371_open_dac(struct inode *inode, struct file *file)
@@ -2581,6 +2634,7 @@ static int proc_es1371_dump (char *buf, char **start, off_t fpos, int length, in
 
 static int joystick[NR_DEVICE] = { 0, };
 static int spdif[NR_DEVICE] = { 0, };
+static int nomix[NR_DEVICE] = { 0, };
 
 static unsigned int devindex = 0;
 
@@ -2588,6 +2642,8 @@ MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(joystick, "sets address and enables joystick interface (still need separate driver)");
 MODULE_PARM(spdif, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(spdif, "if 1 the output is in S/PDIF digital mode");
+MODULE_PARM(nomix, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(nomix, "if 1 no analog audio is mixed to the digital output");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("ES1371 AudioPCI97 Driver");
@@ -2613,9 +2669,8 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_IGAIN, 0x4040 }
 };
 
-#define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
-				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
-#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+#define RSRCISIOREGION(dev,num) (pci_resource_start((dev), (num)) != 0 && \
+				 (pci_resource_flags((dev), (num)) & IORESOURCE_IO))
 
 static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_device_id *pciid)
 {
@@ -2649,7 +2704,7 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	spin_lock_init(&s->lock);
 	s->magic = ES1371_MAGIC;
 	s->dev = pcidev;
-	s->io = RSRCADDRESS(pcidev, 0);
+	s->io = pci_resource_start(pcidev, 0);
 	s->irq = pcidev->irq;
 	s->vendor = pcidev->vendor;
 	s->device = pcidev->device;
@@ -2688,6 +2743,10 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	
 	/* initialize codec registers */
 	s->ctrl = 0;
+	if (pcidev->subsystem_vendor == 0x107b && pcidev->subsystem_device == 0x2150) {
+		s->ctrl |= CTRL_GPIO_OUT0;
+		printk(KERN_INFO PFX "Running On Gateway 2000 Solo 2510 - Amp On \n");
+	}	
 	if ((joystick[devindex] & ~0x18) == 0x200) {
 		if (check_region(joystick[devindex], JOY_EXTENT))
 			printk(KERN_ERR PFX "joystick address 0x%x already in use\n", joystick[devindex]);
@@ -2697,12 +2756,16 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	}
 	s->sctrl = 0;
 	cssr = 0;
+	s->spdif_volume = -1;
 	/* check to see if s/pdif mode is being requested */
 	if (spdif[devindex]) {
 		if (s->rev >= 4) {
 			printk(KERN_INFO PFX "enabling S/PDIF output\n");
+			s->spdif_volume = 0;
 			cssr |= STAT_EN_SPDIF;
 			s->ctrl |= CTRL_SPDIFEN_B;
+			if (nomix[devindex]) /* don't mix analog inputs to s/pdif output */
+				s->ctrl |= CTRL_RECEN_B;
 		} else {
 			printk(KERN_ERR PFX "revision %d does not support S/PDIF\n", s->rev);
 		}
@@ -2742,10 +2805,16 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	val = SOUND_MASK_LINE;
-	s->codec.mixer_ioctl(&s->codec, SOUND_MIXER_WRITE_RECSRC, (unsigned long)&val);
+	mixdev_ioctl(&s->codec, SOUND_MIXER_WRITE_RECSRC, (unsigned long)&val);
 	for (i = 0; i < sizeof(initvol)/sizeof(initvol[0]); i++) {
 		val = initvol[i].vol;
-		s->codec.mixer_ioctl(&s->codec, initvol[i].mixch, (unsigned long)&val);
+		mixdev_ioctl(&s->codec, initvol[i].mixch, (unsigned long)&val);
+	}
+	/* mute master and PCM when in S/PDIF mode */
+	if (s->spdif_volume != -1) {
+		val = 0x0000;
+		s->codec.mixer_ioctl(&s->codec, SOUND_MIXER_WRITE_VOLUME, (unsigned long)&val);
+		s->codec.mixer_ioctl(&s->codec, SOUND_MIXER_WRITE_PCM, (unsigned long)&val);
 	}
 	set_fs(fs);
 	/* turn on S/PDIF output driver if requested */
@@ -2820,12 +2889,8 @@ static int __init init_es1371(void)
 {
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.25 time " __TIME__ " " __DATE__ "\n");
-	if (!pci_register_driver(&es1371_driver)) {
-		pci_unregister_driver(&es1371_driver);
-		return -ENODEV;
-	}
-	return 0;
+	printk(KERN_INFO PFX "version v0.26 time " __TIME__ " " __DATE__ "\n");
+	return pci_module_init(&es1371_driver);
 }
 
 static void __exit cleanup_es1371(void)

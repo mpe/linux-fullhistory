@@ -12,6 +12,7 @@
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/types.h>
+#include <asm/sigcontext.h>
 #include <linux/config.h>
 #include <linux/threads.h>
 
@@ -90,13 +91,15 @@ struct cpuinfo_x86 {
 #define X86_FEATURE_22		0x00400000
 #define X86_FEATURE_MMX		0x00800000	/* multimedia extensions */
 #define X86_FEATURE_FXSR	0x01000000	/* FXSAVE and FXRSTOR instructions (fast save and restore of FPU context), and CR4.OSFXSR (OS uses these instructions) available */
-#define X86_FEATURE_25		0x02000000
+#define X86_FEATURE_XMM         0x02000000      /* Intel MMX2 instruction set */
 #define X86_FEATURE_26		0x04000000
 #define X86_FEATURE_27		0x08000000
 #define X86_FEATURE_28		0x10000000
 #define X86_FEATURE_29		0x20000000
 #define X86_FEATURE_30		0x40000000
 #define X86_FEATURE_AMD3D	0x80000000
+#define X86_CR4_OSFXSR		0x0200 		/* fast FPU save/restore */
+#define X86_CR4_OSXMMEXCPT	0x0400 		/* KNI (MMX2) unmasked exception 16 */
 
 extern struct cpuinfo_x86 boot_cpu_data;
 extern struct tss_struct init_tss[NR_CPUS];
@@ -240,6 +243,22 @@ extern unsigned int mca_pentium_flag;
 #define IO_BITMAP_OFFSET offsetof(struct tss_struct,io_bitmap)
 #define INVALID_IO_BITMAP_OFFSET 0x8000
 
+#ifndef CONFIG_X86_FX
+
+#define i387_save_hard(x) \
+	__asm__("fnsave %0\n\tfwait": :"m" (x))
+#define i387_restore_hard(x) \
+	__asm__("frstor %0": :"m" (x))
+
+#define i387_hard_to_user(uaddr, x) \
+	__copy_to_user((uaddr), (x), sizeof(struct i387_hard_struct))
+#define i387_user_to_hard(x, uaddr) \
+	__copy_from_user((x), (uaddr), sizeof(struct i387_hard_struct))
+
+#define i387_set_cwd(x,v) do { (x).cwd = 0xffff0000 | (v); } while (0)
+#define i387_set_swd(x,v) do { (x).swd = 0xffff0000 | (v); } while (0)
+#define i387_set_twd(x,v) do { (x).twd = 0xffff0000 | (v); } while (0)
+
 struct i387_hard_struct {
 	long	cwd;
 	long	swd;
@@ -251,6 +270,69 @@ struct i387_hard_struct {
 	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
 	long	status;		/* software status information */
 };
+
+#else
+
+/*
+ * has to be 128-bit aligned
+ */
+struct i387_hard_struct {
+	unsigned short	cwd;
+	unsigned short	swd;
+	unsigned short	twd;
+	unsigned short	fopcode;
+	unsigned int	fip;
+	unsigned short	fcs;
+	unsigned short	__reserved_01;
+	unsigned int	fdp;
+	unsigned short	fds;
+	unsigned short	__reserved_02;
+	unsigned int	mxcsr;
+	unsigned int	__reserved_03;
+	unsigned int	st_space[32]; /* 8*16 bytes for each FP/MMX-reg = 128 bytes */
+	unsigned int	xmm_space[22*4]; /* 22 cachelines for MMX2 registers */
+	unsigned long	status;
+} __attribute__ ((aligned (16)));
+
+/*
+ * tag word conversion (thanks to Gabriel Paubert for noticing the
+ * subtle format difference and implementing these functions)
+ *
+ * there are several erratas wrt. the tag word in the i387, thus
+ * any software relying on it's value is questionable, but we
+ * definitely want to be as close as possible.
+ */
+static inline unsigned short fputag_KNIto387(unsigned char tb) {
+	unsigned short tw = tb;
+	tw = ((tw<<4) | tw) &0x0f0f; /* zzzz7654zzzz3210 */
+	tw = ((tw<<2) | tw) &0x3333; /* zz76zz54zz32zz10 */
+	tw = ((tw<<1) | tw) &0x5555; /* z7z6z5z4z3z2z1z0 */
+	return ~(tw*3);
+}
+
+static inline unsigned char fputag_387toKNI(unsigned short tw) {
+	tw = ~tw;
+	tw = (tw | (tw>>1)) & 0x5555; /* z7z6z5z4z3z2z1z0 */
+	tw = (tw | (tw>>1)) & 0x3333; /* zz76zz54zz32zz10 */
+	tw = (tw | (tw>>3)) & 0x0f0f; /* zzzz7654zzzz3210 */
+	return (tw|(tw>>4)) & 0x00ff; /* zzzzzzzz76543210 */
+}
+
+#define i387_set_cwd(x,v) do { (x).cwd = (short)(v); } while (0)
+#define i387_set_swd(x,v) do { (x).swd = (short)(v); } while (0)
+#define i387_set_twd(x,v) do { (x).twd = fputag_387toKNI(v); } while (0)
+
+#define i387_save_hard(x) \
+ { __asm__ __volatile__(".byte 0x0f, 0xae, 0x06": :"S" (&(x))); } while (0)
+
+#define i387_restore_hard(x) \
+do { __asm__ __volatile__(".byte 0x0f, 0xae, 0x4f, 0x00": :"D" (&(x))); } while(0)
+
+extern int i387_hard_to_user ( struct _fpstate * user,
+			      struct i387_hard_struct * hard);
+extern int i387_user_to_hard (struct i387_hard_struct * hard,
+			      struct _fpstate * user);
+#endif
 
 struct i387_soft_struct {
 	long	cwd;
@@ -387,7 +469,7 @@ extern void forget_segments(void);
  * FPU lazy state save handling..
  */
 #define save_fpu(tsk) do { \
-	asm volatile("fnsave %0\n\tfwait":"=m" (tsk->thread.i387)); \
+        i387_save_hard(tsk->thread.i387); \
 	tsk->flags &= ~PF_USEDFPU; \
 	stts(); \
 } while (0)

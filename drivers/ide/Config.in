@@ -41,7 +41,6 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 	    bool '    Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
 	    dep_bool '      Use PCI DMA by default when available' CONFIG_IDEDMA_PCI_AUTO $CONFIG_BLK_DEV_IDEDMA_PCI
 	    define_bool CONFIG_BLK_DEV_IDEDMA $CONFIG_BLK_DEV_IDEDMA_PCI
-	    define_bool CONFIG_IDEDMA_PCI_EXPERIMENTAL $CONFIG_EXPERIMENTAL
 	    dep_bool '      ATA Work(s) In Progress (EXPERIMENTAL)' CONFIG_IDEDMA_PCI_WIP $CONFIG_BLK_DEV_IDEDMA_PCI $CONFIG_EXPERIMENTAL
 	    dep_bool '      Good-Bad DMA Model-Firmware (WIP)' CONFIG_IDEDMA_NEW_DRIVE_LISTINGS $CONFIG_IDEDMA_PCI_WIP
 	    dep_bool '    AEC62XX chipset support' CONFIG_BLK_DEV_AEC62XX $CONFIG_BLK_DEV_IDEDMA_PCI
@@ -82,12 +81,14 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 	 dep_bool '      PowerMac IDE DMA support' CONFIG_BLK_DEV_IDEDMA_PMAC $CONFIG_BLK_DEV_IDE_PMAC
 	 dep_bool '        Use DMA by default' CONFIG_IDEDMA_PMAC_AUTO $CONFIG_BLK_DEV_IDEDMA_PMAC
 	 define_bool CONFIG_BLK_DEV_IDEDMA $CONFIG_BLK_DEV_IDEDMA_PMAC
+	 define_bool CONFIG_BLK_DEV_IDEDMA_PCI $CONFIG_BLK_DEV_IDEDMA_PMAC
       fi
       if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
 	 dep_bool '    ICS IDE interface support' CONFIG_BLK_DEV_IDE_ICSIDE $CONFIG_ARCH_ACORN
 	 dep_bool '      ICS DMA support' CONFIG_BLK_DEV_IDEDMA_ICS $CONFIG_BLK_DEV_IDE_ICSIDE
 	 dep_bool '        Use ICS DMA by default' CONFIG_IDEDMA_ICS_AUTO $CONFIG_BLK_DEV_IDEDMA_ICS
 	 define_bool CONFIG_BLK_DEV_IDEDMA $CONFIG_BLK_DEV_IDEDMA_ICS
+	 define_bool CONFIG_BLK_DEV_IDEDMA_PCI $CONFIG_BLK_DEV_IDEDMA_ICS
 	 dep_bool '    RapIDE interface support' CONFIG_BLK_DEV_IDE_RAPIDE $CONFIG_ARCH_ACORN
       fi
       if [ "$CONFIG_AMIGA" = "y" ]; then

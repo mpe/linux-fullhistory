@@ -3912,8 +3912,12 @@ static int idetape_get_logical_blk (ide_drive_t *drive, int logical_blk_num, int
 #endif
 				clear_bit(IDETAPE_PIPELINE_ERROR, &tape->flags);
 				position = idetape_read_position(drive);
-				printk(KERN_INFO "ide-tape: %s: blank block detected, positioning tape to block %d\n", tape->name, position + 60);
-				idetape_position_tape(drive, position + 60, 0, 1);
+				if (position >= 2980 && position < 3000)
+					position = 3000;
+				else
+					position += 60;
+				printk(KERN_INFO "ide-tape: %s: blank block detected, positioning tape to block %d\n", tape->name, position);
+				idetape_position_tape(drive, position, 0, 1);
 				cnt += 40;
 				continue;
 			} else

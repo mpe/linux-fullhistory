@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.84 2000/05/09 17:40:14 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.85 2000/05/23 02:14:25 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -83,6 +83,7 @@ extern int (*handle_mathemu)(struct pt_regs *, struct fpustate *);
 extern long sparc32_open(const char * filename, int flags, int mode);
 extern int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned int, unsigned int, unsigned long, struct file *));
 extern int unregister_ioctl32_conversion(unsigned int cmd);
+extern int io_remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot, int space);
                 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -222,6 +223,9 @@ EXPORT_SYMBOL(pci_dma_supported);
 /* IOCTL32 emulation hooks. */
 EXPORT_SYMBOL(register_ioctl32_conversion);
 EXPORT_SYMBOL(unregister_ioctl32_conversion);
+
+/* I/O device mmaping on Sparc64. */
+EXPORT_SYMBOL(io_remap_page_range);
 
 /* Solaris/SunOS binary compatibility */
 EXPORT_SYMBOL(_sigpause_common);

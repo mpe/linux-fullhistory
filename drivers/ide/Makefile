@@ -97,7 +97,7 @@ ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
 IDE_OBJS += icside.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
+ifeq ($(CONFIG_BLK_DEV_IDEDMA_PCI),y)
 IDE_OBJS += ide-dma.o
 endif
 

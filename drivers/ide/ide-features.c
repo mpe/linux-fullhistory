@@ -12,6 +12,7 @@
  *  May be copied or modified under the terms of the GNU General Public License
  */
 
+#include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/types.h>
@@ -257,11 +258,12 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 {
 	ide_hwif_t *hwif = HWIF(drive);
 	int	i, error = 1;
-	byte unit = (drive->select.b.unit & 0x01);
 	byte stat;
 
+#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+	byte unit = (drive->select.b.unit & 0x01);
 	outb(inb(hwif->dma_base+2) & ~(1<<(5+unit)), hwif->dma_base+2);
-
+#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
 	/*
 	 * Don't use ide_wait_cmd here - it will
 	 * attempt to set_geometry and recalibrate,
@@ -324,11 +326,13 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	drive->id->dma_mword &= ~0x0F00;
 	drive->id->dma_1word &= ~0x0F00;
 
+#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
 	if (speed > XFER_PIO_4) {
 		outb(inb(hwif->dma_base+2)|(1<<(5+unit)), hwif->dma_base+2);
 	} else {
 		outb(inb(hwif->dma_base+2) & ~(1<<(5+unit)), hwif->dma_base+2);
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
 
 	switch(speed) {
 		case XFER_UDMA_7:   drive->id->dma_ultra |= 0x8080; break;

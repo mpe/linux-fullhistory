@@ -7,6 +7,22 @@
  *
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
+ *
+ * 5/24/00 Removed optional (and unnecessary) locking of the driver while
+ * the device remains plugged in. Corrected race conditions in ibmcam_open
+ * and ibmcam_probe() routines using this as a guideline:
+ *
+ * (2) The big kernel lock is automatically released when a process sleeps
+ *   in the kernel and is automatically reacquired on reschedule if the
+ *   process had the lock originally.  Any code that can be compiled as
+ *   a module and is entered with the big kernel lock held *MUST*
+ *   increment the use count to activate the indirect module protection
+ *   before doing anything that might sleep.
+ *
+ *   In practice, this means that all routines that live in modules and
+ *   are invoked under the big kernel lock should do MOD_INC_USE_COUNT
+ *   as their very first action.  And all failure paths from that
+ *   routine must do MOD_DEC_USE_COUNT before returning.
  */
 
 #include <linux/kernel.h>
@@ -25,21 +41,6 @@
 #include <asm/io.h>
 
 #include "ibmcam.h"
-
-/*
- * IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED: This symbol controls
- * the locking of the driver. If non-zero, the driver counts the
- * probe() call as usage and increments module usage counter; this
- * effectively prevents removal of the module (with rmmod) until the
- * device is unplugged (then disconnect() callback reduces the module
- * usage counter back, and module can be removed).
- *
- * This behavior may be useful if you prefer to lock the driver in
- * memory until device is unplugged. However you can't reload the
- * driver if you want to alter some parameters - you'd need to unplug
- * the camera first. Therefore, I recommend setting 0.
- */
-#define IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED	0
 
 #define	ENABLE_HEXDUMP	0	/* Enable if you need it */
 static int debug = 0;
@@ -2346,6 +2347,7 @@ static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
  *          camera is also initialized here (once per connect), at
  *          expense of V4L client (it waits on open() call).
  * 1/27/00  Used IBMCAM_NUMSBUF as number of URB buffers.
+ * 5/24/00  Corrected to prevent race condition (MOD_xxx_USE_COUNT).
  */
 static int ibmcam_open(struct video_device *dev, int flags)
 {
@@ -2353,6 +2355,7 @@ static int ibmcam_open(struct video_device *dev, int flags)
 	const int sb_size = FRAMES_PER_DESC * ibmcam->iso_packet_len;
 	int i, err = 0;
 
+	MOD_INC_USE_COUNT;
 	down(&ibmcam->lock);
 
 	if (ibmcam->user)
@@ -2425,14 +2428,13 @@ static int ibmcam_open(struct video_device *dev, int flags)
 				else
 					err = -EBUSY;
 			}
-			if (!err) {
+			if (!err)
 				ibmcam->user++;
-				MOD_INC_USE_COUNT;
-			}
 		}
 	}
-
 	up(&ibmcam->lock);
+	if (err)
+		MOD_DEC_USE_COUNT;
 	return err;
 }
 
@@ -2446,6 +2448,7 @@ static int ibmcam_open(struct video_device *dev, int flags)
  * History:
  * 1/22/00  Moved scratch buffer deallocation here.
  * 1/27/00  Used IBMCAM_NUMSBUF as number of URB buffers.
+ * 5/24/00  Moved MOD_DEC_USE_COUNT outside of code that can sleep.
  */
 static void ibmcam_close(struct video_device *dev)
 {
@@ -2462,13 +2465,13 @@ static void ibmcam_close(struct video_device *dev)
 		kfree(ibmcam->sbuf[i].data);
 
 	ibmcam->user--;
-	MOD_DEC_USE_COUNT;
 
 	if (ibmcam->remove_pending) {
 		printk(KERN_INFO "ibmcam_close: Final disconnect.\n");
 		usb_ibmcam_release(ibmcam);
 	}
 	up(&ibmcam->lock);
+	MOD_DEC_USE_COUNT;
 }
 
 static int ibmcam_init_done(struct video_device *dev)
@@ -2891,7 +2894,7 @@ static void usb_ibmcam_configure_video(struct usb_ibmcam *ibmcam)
 }
 
 /*
- * usb_ibmcam_release()
+ * ibmcam_find_struct()
  *
  * This code searches the array of preallocated (static) structures
  * and returns index of the first one that isn't in use. Returns -1
@@ -2929,6 +2932,7 @@ static int ibmcam_find_struct(void)
  * History:
  * 1/22/00  Moved camera init code to ibmcam_open()
  * 1/27/00  Changed to use static structures, added locking.
+ * 5/24/00  Corrected to prevent race condition (MOD_xxx_USE_COUNT).
  */
 static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 {
@@ -2994,10 +2998,14 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 		RESTRICT_TO_RANGE(videosize, VIDEOSIZE_176x144, VIDEOSIZE_352x240);
 	}
 
+	/* Code below may sleep, need to lock module while we are here */
+	MOD_INC_USE_COUNT;
+
 	devnum = ibmcam_find_struct();
 	if (devnum == -1) {
 		printk(KERN_INFO "IBM USB camera driver: Too many devices!\n");
-		return NULL;
+		ibmcam = NULL; /* Do not free, it's preallocated */
+		goto probe_done;
 	}
 	ibmcam = &cams[devnum];
 
@@ -3017,17 +3025,14 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 	usb_ibmcam_configure_video(ibmcam);
 	up (&ibmcam->lock);
 
-#if IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED
-	MOD_INC_USE_COUNT;
-#endif
-
 	if (video_register_device(&ibmcam->vdev, VFL_TYPE_GRABBER) == -1) {
 		printk(KERN_ERR "video_register_device failed\n");
-		return NULL;
+		ibmcam = NULL; /* Do not free, it's preallocated */
 	}
 	if (debug > 1)
 		printk(KERN_DEBUG "video_register_device() successful\n");
-
+probe_done:
+	MOD_DEC_USE_COUNT;
 	return ibmcam;
 }
 
@@ -3055,16 +3060,25 @@ static void usb_ibmcam_release(struct usb_ibmcam *ibmcam)
  * structure (pointed by 'ptr') and after that driver should be removable
  * with no ill consequences.
  *
- * TODO: This code behaves badly on surprise removal!
+ * This code handles surprise removal. The ibmcam->user is a counter which
+ * increments on open() and decrements on close(). If we see here that
+ * this counter is not 0 then we have a client who still has us opened.
+ * We set ibmcam->remove_pending flag as early as possible, and after that
+ * all access to the camera will gracefully fail. These failures should
+ * prompt client to (eventually) close the video device, and then - in
+ * ibmcam_close() - we decrement ibmcam->ibmcam_used and usage counter.
  *
  * History:
  * 1/22/00  Added polling of MOD_IN_USE to delay removal until all users gone.
  * 1/27/00  Reworked to allow pending disconnects; see ibmcam_close()
+ * 5/24/00  Corrected to prevent race condition (MOD_xxx_USE_COUNT).
  */
 static void usb_ibmcam_disconnect(struct usb_device *dev, void *ptr)
 {
 	static const char proc[] = "usb_ibmcam_disconnect";
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *) ptr;
+
+	MOD_INC_USE_COUNT;
 
 	if (debug > 0)
 		printk(KERN_DEBUG "%s(%p,%p.)\n", proc, dev, ptr);
@@ -3077,16 +3091,14 @@ static void usb_ibmcam_disconnect(struct usb_device *dev, void *ptr)
 
 	ibmcam->dev = NULL;    	    /* USB device is no more */
 
-#if IBMCAM_LOCKS_DRIVER_WHILE_DEVICE_IS_PLUGGED
-	MOD_DEC_USE_COUNT;
-#endif
 	if (ibmcam->user)
 		printk(KERN_INFO "%s: In use, disconnect pending.\n", proc);
 	else
 		usb_ibmcam_release(ibmcam);
 	up(&ibmcam->lock);
-
 	printk(KERN_INFO "IBM USB camera disconnected.\n");
+
+	MOD_DEC_USE_COUNT;
 }
 
 static struct usb_driver ibmcam_driver = {

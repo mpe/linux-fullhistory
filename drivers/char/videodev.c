@@ -11,7 +11,8 @@
  *
  * Author:	Alan Cox, <alan@redhat.com>
  *
- * Fixes:
+ * Fixes:	20000516  Claudio Matsuoka <claudio@conectiva.com>
+ *		- Added procfs support
  */
 
 #include <linux/config.h>
@@ -39,6 +40,27 @@
  */
  
 static struct video_device *video_device[VIDEO_NUM_DEVICES];
+
+
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)
+
+#include <linux/proc_fs.h>
+
+struct videodev_proc_data {
+	struct list_head proc_list;
+	char name[16];
+	struct video_device *vdev;
+	struct proc_dir_entry *proc_entry;
+	struct video_capability vcap;
+};
+
+static struct proc_dir_entry *video_dev_proc_entry = NULL;
+struct proc_dir_entry *video_proc_entry = NULL;
+EXPORT_SYMBOL(video_proc_entry);
+LIST_HEAD(videodev_proc_list);
+
+#endif /* CONFIG_PROC_FS && CONFIG_VIDEO_PROC_FS */
+
 
 #ifdef CONFIG_VIDEO_BT848
 extern int i2c_tuner_init(struct video_init *);
@@ -215,6 +237,152 @@ int video_mmap(struct file *file, struct vm_area_struct *vma)
 	return -EINVAL;
 }
 
+/*
+ *	/proc support
+ */
+
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)
+
+/* Hmm... i'd like to see video_capability information here, but
+ * how can I access it (without changing the other drivers? -claudio
+ */
+static int videodev_proc_read(char *page, char **start, off_t off,
+			       int count, int *eof, void *data)
+{
+	char *out = page;
+	struct video_device *vfd = data;
+	struct videodev_proc_data *d;
+	struct list_head *tmp;
+	int len;
+	char c = ' ';
+
+	list_for_each (tmp, &videodev_proc_list) {
+		d = list_entry(tmp, struct videodev_proc_data, proc_list);
+		if (vfd == d->vdev)
+			break;
+	}
+
+	/* Sanity check */
+	if (tmp == &videodev_proc_list)
+		goto skip;
+		
+#define PRINT_VID_TYPE(x) do { if (vfd->type & x) \
+	out += sprintf (out, "%c%s", c, #x); c='|';} while (0)
+
+	out += sprintf (out, "name            : %s\n", vfd->name);
+	out += sprintf (out, "type            :");
+		PRINT_VID_TYPE(VID_TYPE_CAPTURE);
+		PRINT_VID_TYPE(VID_TYPE_TUNER);
+		PRINT_VID_TYPE(VID_TYPE_TELETEXT);
+		PRINT_VID_TYPE(VID_TYPE_OVERLAY);
+		PRINT_VID_TYPE(VID_TYPE_CHROMAKEY);
+		PRINT_VID_TYPE(VID_TYPE_CLIPPING);
+		PRINT_VID_TYPE(VID_TYPE_FRAMERAM);
+		PRINT_VID_TYPE(VID_TYPE_SCALES);
+		PRINT_VID_TYPE(VID_TYPE_MONOCHROME);
+		PRINT_VID_TYPE(VID_TYPE_SUBCAPTURE);
+		PRINT_VID_TYPE(VID_TYPE_MPEG_DECODER);
+		PRINT_VID_TYPE(VID_TYPE_MPEG_ENCODER);
+		PRINT_VID_TYPE(VID_TYPE_MJPEG_DECODER);
+		PRINT_VID_TYPE(VID_TYPE_MJPEG_ENCODER);
+	out += sprintf (out, "\n");
+	out += sprintf (out, "hardware        : 0x%x\n", vfd->hardware);
+#if 0
+	out += sprintf (out, "channels        : %d\n", d->vcap.channels);
+	out += sprintf (out, "audios          : %d\n", d->vcap.audios);
+	out += sprintf (out, "maxwidth        : %d\n", d->vcap.maxwidth);
+	out += sprintf (out, "maxheight       : %d\n", d->vcap.maxheight);
+	out += sprintf (out, "minwidth        : %d\n", d->vcap.minwidth);
+	out += sprintf (out, "minheight       : %d\n", d->vcap.minheight);
+#endif
+
+skip:
+	len = out - page;
+	len -= off;
+	if (len < count) {
+		*eof = 1;
+		if (len <= 0)
+			return 0;
+	} else
+		len = count;
+
+	*start = page + off;
+
+	return len;
+}
+
+static void videodev_proc_create(void)
+{
+	video_proc_entry = create_proc_entry("video", S_IFDIR, &proc_root);
+
+	if (video_proc_entry == NULL) {
+		printk("video_dev: unable to initialise /proc/video\n");
+		return;
+	}
+
+	video_proc_entry->owner = THIS_MODULE;
+	video_dev_proc_entry = create_proc_entry("dev", S_IFDIR, video_proc_entry);
+
+	if (video_dev_proc_entry == NULL) {
+		printk("video_dev: unable to initialise /proc/video/dev\n");
+		return;
+	}
+
+	video_dev_proc_entry->owner = THIS_MODULE;
+}
+
+static void videodev_proc_destroy(void)
+{
+	if (video_dev_proc_entry != NULL)
+		remove_proc_entry("dev", video_proc_entry);
+
+	if (video_proc_entry != NULL)
+		remove_proc_entry("video", &proc_root);
+}
+
+static void videodev_proc_create_dev (struct video_device *vfd, char *name)
+{
+	struct videodev_proc_data *d;
+	struct proc_dir_entry *p;
+
+	if (video_dev_proc_entry == NULL)
+		return;
+
+	d = kmalloc (sizeof (struct videodev_proc_data), GFP_KERNEL);
+	if (!d)
+		return;
+
+	p = create_proc_entry(name, S_IFREG|S_IRUGO|S_IWUSR, video_dev_proc_entry);
+	p->data = vfd;
+	p->read_proc = videodev_proc_read;
+
+	d->proc_entry = p;
+	d->vdev = vfd;
+	strcpy (d->name, name);
+
+	/* How can I get capability information ? */
+
+	list_add (&d->proc_list, &videodev_proc_list);
+}
+
+static void videodev_proc_destroy_dev (struct video_device *vfd)
+{
+	struct list_head *tmp;
+	struct videodev_proc_data *d;
+
+	list_for_each (tmp, &videodev_proc_list) {
+		d = list_entry(tmp, struct videodev_proc_data, proc_list);
+		if (vfd == d->vdev) {
+			remove_proc_entry(d->name, video_dev_proc_entry);
+			list_del (&d->proc_list);
+			kfree (d);
+			break;
+		}
+	}
+}
+
+#endif /* CONFIG_VIDEO_PROC_FS */
+
 extern struct file_operations video_fops;
 
 /**
@@ -306,6 +474,13 @@ int video_register_device(struct video_device *vfd, int type)
 					    VIDEO_MAJOR, vfd->minor,
 					    S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
 					    &video_fops, NULL);
+
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)
+			sprintf (name, "%s%d", name_base, i - base);
+			videodev_proc_create_dev (vfd, name);
+#endif
+			
+
 			return 0;
 		}
 	}
@@ -324,6 +499,11 @@ void video_unregister_device(struct video_device *vfd)
 {
 	if(video_device[vfd->minor]!=vfd)
 		panic("vfd: bad unregister");
+
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)
+	videodev_proc_destroy_dev (vfd);
+#endif
+
 	devfs_unregister (vfd->devfs_handle);
 	video_device[vfd->minor]=NULL;
 	MOD_DEC_USE_COUNT;
@@ -361,6 +541,10 @@ int __init videodev_init(void)
 	 *	Init kernel installed video drivers
 	 */
 	 	
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)
+	videodev_proc_create ();
+#endif
+	
 	while(vfli->init!=NULL)
 	{
 		vfli->init(vfli);
@@ -377,6 +561,10 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+#if defined(CONFIG_PROC_FS) && defined(CONFIG_VIDEO_PROC_FS)
+	videodev_proc_destroy ();
+#endif
+	
 	devfs_unregister_chrdev(VIDEO_MAJOR, "video_capture");
 }
 

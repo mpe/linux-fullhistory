@@ -1,4 +1,4 @@
-/*  $Id: modutil.c,v 1.4 1998/07/26 06:29:08 davem Exp $
+/*  $Id: modutil.c,v 1.5 2000/05/23 23:09:08 davem Exp $
  *  arch/sparc64/mm/modutil.c
  *
  *  Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -58,7 +58,7 @@ void * module_map (unsigned long size)
 	area->next = *p;
 	*p = area;
 
-	if (vmalloc_area_pages(VMALLOC_VMADDR(addr), size)) {
+	if (vmalloc_area_pages(VMALLOC_VMADDR(addr), size, GFP_KERNEL)) {
 		vfree(addr);
 		return NULL;
 	}

@@ -2,6 +2,7 @@
  *  linux/arch/i386/traps.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  FXSAVE/FXRSTOR support by Ingo Molnar, OS exception support by Goutham Rao
  */
 
 /*
@@ -120,6 +121,7 @@ asmlinkage void coprocessor_error(void);
 asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
 asmlinkage void spurious_interrupt_bug(void);
+asmlinkage void xmm_fault(void);
 
 int kstack_depth_to_print = 24;
 
@@ -273,21 +275,7 @@ DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
 DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
-/* I don't have documents for this but it does seem to cover the cache
-   flush from user space exception some people get. */
-DO_ERROR(19, SIGSEGV, "cache flush denied", cache_flush_denied, current)
-
-asmlinkage void cache_flush_denied(struct pt_regs * regs, long error_code)
-{
-	if (regs->eflags & VM_MASK) {
-		handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
-		return;
-	}
-	die_if_kernel("cache flush denied",regs,error_code);
-	current->thread.error_code = error_code;
-	current->thread.trap_no = 19;
-	force_sig(SIGSEGV, current);
-}
+DO_VM86_ERROR(19, SIGFPE, "XMM fault", xmm_fault, current)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
@@ -586,7 +574,7 @@ asmlinkage void math_state_restore(struct pt_regs regs)
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
 
 	if(current->used_math)
-		__asm__("frstor %0": :"m" (current->thread.i387));
+		i387_restore_hard(current->thread.i387);
 	else
 	{
 		/*
@@ -829,6 +817,8 @@ void __init trap_init(void)
 	set_trap_gate(15,&spurious_interrupt_bug);
 	set_trap_gate(16,&coprocessor_error);
 	set_trap_gate(17,&alignment_check);
+	set_trap_gate(19,&xmm_fault);
+
 	set_system_gate(SYSCALL_VECTOR,&system_call);
 
 	/*

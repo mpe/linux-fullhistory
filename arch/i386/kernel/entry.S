@@ -413,6 +413,11 @@ ENTRY(spurious_interrupt_bug)
 	pushl $ SYMBOL_NAME(do_spurious_interrupt_bug)
 	jmp error_code
 
+ENTRY(xmm_fault)
+	pushl $0
+	pushl $ SYMBOL_NAME(do_xmm_fault)
+	jmp error_code
+
 .data
 ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* 0  -  old "setup()" system call*/

@@ -425,10 +425,10 @@ static int hwif_check_regions (ide_hwif_t *hwif)
 
 	if (hwif->io_ports[IDE_CONTROL_OFFSET])
 		region_errors += ide_check_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
-
+#if defined(CONFIG_AMIGA) || defined(CONFIG_MAC)
 	if (hwif->io_ports[IDE_IRQ_OFFSET])
 		region_errors += ide_check_region(hwif->io_ports[IDE_IRQ_OFFSET], 1);
-
+#endif /* (CONFIG_AMIGA) || (CONFIG_MAC) */
 	/*
 	 * If any errors are return, we drop the hwif interface.
 	 */
@@ -437,8 +437,8 @@ static int hwif_check_regions (ide_hwif_t *hwif)
 
 static void hwif_register (ide_hwif_t *hwif)
 {
-	if ((hwif->io_ports[IDE_DATA_OFFSET] | 7) ==
-	    (hwif->io_ports[IDE_STATUS_OFFSET])) {
+	if (((unsigned long)hwif->io_ports[IDE_DATA_OFFSET] | 7) ==
+	    ((unsigned long)hwif->io_ports[IDE_STATUS_OFFSET])) {
 		ide_request_region(hwif->io_ports[IDE_DATA_OFFSET], 8, hwif->name);
 		hwif->straight8 = 1;
 		goto jump_straight8;
@@ -464,8 +464,10 @@ static void hwif_register (ide_hwif_t *hwif)
 jump_straight8:
 	if (hwif->io_ports[IDE_CONTROL_OFFSET])
 		ide_request_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1, hwif->name);
+#if defined(CONFIG_AMIGA) || defined(CONFIG_MAC)
 	if (hwif->io_ports[IDE_IRQ_OFFSET])
 		ide_request_region(hwif->io_ports[IDE_IRQ_OFFSET], 1, hwif->name);
+#endif /* (CONFIG_AMIGA) || (CONFIG_MAC) */
 }
 
 /*

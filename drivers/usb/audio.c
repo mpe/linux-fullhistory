@@ -52,14 +52,17 @@
  *		decent headphones!
  *		"Let's make things better" -> but please Philips start with your
  *		own stuff!!!!
- * 1999-11-02:  It takes the Philips boxes several seconds to acquire synchronisation
+ * 1999-11-02:  Thomas Sailer
+ *		It takes the Philips boxes several seconds to acquire synchronisation
  *		that means they won't play short sounds. Should probably maintain
  *		the ISO datastream even if there's nothing to play.
  *		Fix counting the total_bytes counter, RealPlayer G2 depends on it.
- * 1999-12-20:  Fix bad bug in conversion to per interface probing.
+ * 1999-12-20:  Thomas Sailer
+ *		Fix bad bug in conversion to per interface probing.
  *		disconnect was called multiple times for the audio device,
  *		leading to a premature freeing of the audio structures
- * 2000-05-13:  I don't remember who changed the find_format routine,
+ * 2000-05-13:  Thomas Sailer
+ *		I don't remember who changed the find_format routine,
  *              but the change was completely broken for the Dallas
  *              chip. Anyway taking sampling rate into account in find_format
  *              is bad and should not be done unless there are devices with
@@ -72,8 +75,20 @@
  *                  for the Dallas chip.
  *              Also fix a rather long standing problem with applications that
  *              use "small" writes producing no sound at all.
- * 2000-05-15:  My fears came true, the Philips camera indeed has pretty stupid
+ * 2000-05-15:  Thomas Sailer
+ *		My fears came true, the Philips camera indeed has pretty stupid
  *              audio descriptors.
+ * 2000-05-17:  Thomas Sailer
+ *		Nemsoft spotted my stupid last minute change, thanks
+ * 2000-05-19:  Thomas Sailer
+ *		Fixed FEATURE_UNIT thinkos found thanks to the KC Technology
+ *              Xtend device. Basically the driver treated FEATURE_UNIT's sourced
+ *              by mono terminals as stereo.
+ * 2000-05-20:  Thomas Sailer
+ *		SELECTOR support (and thus selecting record channels from the mixer).
+ *              Somewhat peculiar due to OSS interface limitations. Only works
+ *              for channels where a "slider" is already in front of it (i.e.
+ *              a MIXER unit or a FEATURE unit with volume capability).
  *
  */
 
@@ -211,6 +226,7 @@ struct mixerchannel {
 	__u16 value;
 	__u16 osschannel;  /* number of the OSS channel */
 	__s16 minval, maxval;
+	__u16 slctunitid;
 	__u8 unitid;
 	__u8 selector;
 	__u8 chnum;
@@ -988,7 +1004,7 @@ static int usbin_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
-	if (u->dma.count <= 0 && !u->dma.mapped)
+	if (u->dma.count >= u->dma.dmasize && !u->dma.mapped)
 		return 0;
 	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
@@ -1719,7 +1735,7 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
 				    (ch->selector << 8) | ch->chnum, ms->iface | (ch->unitid << 8), data, 2, HZ) < 0)
 			goto err;
-		if (ch->chnum == 0)
+		if (!(ch->flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)))
 			return 0;
 		data[0] = v2;
 		data[1] = v2 >> 8;
@@ -1735,7 +1751,7 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
 				    (ch->selector << 8) | ch->chnum, ms->iface | (ch->unitid << 8), data, 1, HZ) < 0)
 			goto err;
-		if (ch->chnum == 0)
+		if (!(ch->flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)))
 			return 0;
 		data[0] = v2 >> 8;
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
@@ -1752,6 +1768,89 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
 	printk(KERN_ERR "usbaudio: mixer request device %u if %u unit %u ch %u selector %u failed\n", 
 		dev->devnum, ms->iface, ch->unitid, ch->chnum, ch->selector);
 	return -1;
+}
+
+static int get_rec_src(struct usb_mixerdev *ms)
+{
+	struct usb_device *dev = ms->state->usbdev;
+	unsigned int mask = 0, retmask = 0;
+	unsigned int i, j;
+	unsigned char buf;
+	int err = 0;
+
+	for (i = 0; i < ms->numch; i++) {
+		if (!ms->ch[i].slctunitid || (mask & (1 << i)))
+			continue;
+		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
+				    0, ms->iface | (ms->ch[i].slctunitid << 8), &buf, 1, HZ) < 0) {
+			err = -EIO;
+			printk(KERN_ERR "usbaudio: selector read request device %u if %u unit %u failed\n", 
+			       dev->devnum, ms->iface, ms->ch[i].slctunitid & 0xff);
+			continue;
+		}
+		for (j = i; j < ms->numch; i++) {
+			if ((ms->ch[i].slctunitid ^ ms->ch[j].slctunitid) & 0xff)
+				continue;
+			mask |= 1 << j;
+			if (buf == (ms->ch[j].slctunitid >> 8))
+				retmask |= 1 << ms->ch[j].osschannel;
+		}
+	}
+	if (err)
+		return -EIO;
+	return retmask;
+}
+
+static int set_rec_src(struct usb_mixerdev *ms, int srcmask)
+{
+	struct usb_device *dev = ms->state->usbdev;
+	unsigned int mask = 0, smask, bmask;
+	unsigned int i, j;
+	unsigned char buf;
+	int err = 0;
+
+	for (i = 0; i < ms->numch; i++) {
+		if (!ms->ch[i].slctunitid || (mask & (1 << i)))
+			continue;
+		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
+				    0, ms->iface | (ms->ch[i].slctunitid << 8), &buf, 1, HZ) < 0) {
+			err = -EIO;
+			printk(KERN_ERR "usbaudio: selector read request device %u if %u unit %u failed\n", 
+			       dev->devnum, ms->iface, ms->ch[i].slctunitid & 0xff);
+			continue;
+		}
+		/* first generate smask */
+		smask = bmask = 0;
+		for (j = i; j < ms->numch; i++) {
+			if ((ms->ch[i].slctunitid ^ ms->ch[j].slctunitid) & 0xff)
+				continue;
+			smask |= 1 << ms->ch[j].osschannel;
+			if (buf == (ms->ch[j].slctunitid >> 8))
+				bmask |= 1 << ms->ch[j].osschannel;
+			mask |= 1 << j;
+		}
+		/* check for multiple set sources */
+		j = hweight32(srcmask & smask);
+		if (j == 0)
+			continue;
+		if (j > 1)
+			srcmask &= ~bmask;
+		for (j = i; j < ms->numch; i++) {
+			if ((ms->ch[i].slctunitid ^ ms->ch[j].slctunitid) & 0xff)
+				continue;
+			if (!(srcmask & (1 << ms->ch[j].osschannel)))
+				continue;
+			buf = ms->ch[j].slctunitid >> 8;
+			if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
+				    0, ms->iface | (ms->ch[j].slctunitid << 8), &buf, 1, HZ) < 0) {
+				err = -EIO;
+				printk(KERN_ERR "usbaudio: selector write request device %u if %u unit %u failed\n", 
+				       dev->devnum, ms->iface, ms->ch[j].slctunitid & 0xff);
+				continue;
+			}
+		}
+	}
+	return err ? -EIO : 0;
 }
 
 /* --------------------------------------------------------------------- */
@@ -1886,8 +1985,10 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 	if (_IOC_DIR(cmd) == _IOC_READ) {
 		switch (_IOC_NR(cmd)) {
 		case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
-			/* don't know how to handle this yet */
-			return put_user(0, (int *)arg);
+			val = get_rec_src(ms);
+			if (val < 0)
+				return val;
+			return put_user(val, (int *)arg);
 
 		case SOUND_MIXER_DEVMASK: /* Arg contains a bit for each supported device */
 			for (val = i = 0; i < ms->numch; i++)
@@ -1895,9 +1996,11 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 			return put_user(val, (int *)arg);
 
 		case SOUND_MIXER_RECMASK: /* Arg contains a bit for each supported recording source */
-			/* don't know how to handle this yet */
-			return put_user(0, (int *)arg);
-                        
+			for (val = i = 0; i < ms->numch; i++)
+				if (ms->ch[i].slctunitid)
+					val |= 1 << ms->ch[i].osschannel;
+			return put_user(val, (int *)arg);
+
 		case SOUND_MIXER_STEREODEVS: /* Mixer channels supporting stereo */
 			for (val = i = 0; i < ms->numch; i++)
 				if (ms->ch[i].flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT))
@@ -1905,7 +2008,7 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 			return put_user(val, (int *)arg);
 			
 		case SOUND_MIXER_CAPS:
-			return put_user(0, (int *)arg);
+			return put_user(SOUND_CAP_EXCL_INPUT, (int *)arg);
 
 		default:
 			i = _IOC_NR(cmd);
@@ -1925,8 +2028,7 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 	switch (_IOC_NR(cmd)) {
 	case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 		get_user_ret(val, (int *)arg, -EFAULT);
-		/* set recording source: val */
-		return 0;
+		return set_rec_src(ms, val);
 
 	default:
 		i = _IOC_NR(cmd);
@@ -2852,7 +2954,7 @@ static unsigned int getvolchannel(struct consmixstate *state)
 {
 	unsigned int u;
 
-	if ((state->termtype & 0xff00) == 0x0000 && !(state->mixchmask & SOUND_MASK_VOLUME))
+	if ((state->termtype & 0xff00) == 0x0000 && (state->mixchmask & SOUND_MASK_VOLUME))
 		return SOUND_MIXER_VOLUME;
 	if ((state->termtype & 0xff00) == 0x0100) {
 		if (state->mixchmask & SOUND_MASK_PCM)
@@ -2862,8 +2964,6 @@ static unsigned int getvolchannel(struct consmixstate *state)
 	}
 	if ((state->termtype & 0xff00) == 0x0200 && (state->mixchmask & SOUND_MASK_MIC))
 		return SOUND_MIXER_MIC;
-	if ((state->termtype & 0xff00) == 0x0300 && (state->mixchmask & SOUND_MASK_SPEAKER))
-		return SOUND_MIXER_SPEAKER;
 	if ((state->termtype & 0xff00) == 0x0300 && (state->mixchmask & SOUND_MASK_SPEAKER))
 		return SOUND_MIXER_SPEAKER;
 	if ((state->termtype & 0xff00) == 0x0500) {
@@ -2950,7 +3050,7 @@ static void prepmixch(struct consmixstate *state)
 		if (v3 > 100)
 			v3 = 100;
 		ch->value = v3;
-		if (ch->chnum != 0) {
+		if (ch->flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)) {
 			if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
 					    (ch->selector << 8) | (ch->chnum + 1), state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 				goto err;
@@ -2986,7 +3086,7 @@ static void prepmixch(struct consmixstate *state)
 		if (v3 > 100)
 			v3 = 100;
 		ch->value = v3;
-		if (ch->chnum != 0) {
+		if (ch->flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)) {
 			if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
 					    (ch->selector << 8) | (ch->chnum + 1), state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 0)
 				goto err;
@@ -3095,15 +3195,24 @@ static void usb_audio_mixerunit(struct consmixstate *state, unsigned char *mixer
 
 static void usb_audio_selectorunit(struct consmixstate *state, unsigned char *selector)
 {
-	unsigned int chnum, i;
+	unsigned int chnum, i, mixch;
+	struct mixerchannel *mch;
 
 	if (!selector[4]) {
 		printk(KERN_ERR "usbaudio: unit %u invalid SELECTOR_UNIT descriptor\n", selector[3]);
 		return;
 	}
+	mixch = state->nrmixch;
 	usb_audio_recurseunit(state, selector[5]);
+	if (state->nrmixch != mixch) {
+		mch = &state->mixch[state->nrmixch-1];
+		mch->slctunitid = selector[5] | (1 << 8);
+	} else {
+		printk(KERN_INFO "usbaudio: selector unit %u: ignoring channel 1\n", selector[3]);
+	}
 	chnum = state->nrchannels;
 	for (i = 1; i < selector[4]; i++) {
+		mixch = state->nrmixch;
 		usb_audio_recurseunit(state, selector[5+i]);
 		if (chnum != state->nrchannels) {
 			printk(KERN_ERR "usbaudio: selector unit %u: input pins with varying channel numbers\n", selector[3]);
@@ -3111,6 +3220,12 @@ static void usb_audio_selectorunit(struct consmixstate *state, unsigned char *se
 			state->chconfig = 0;
 			state->nrchannels = 0;
 			return;
+		}
+		if (state->nrmixch != mixch) {
+			mch = &state->mixch[state->nrmixch-1];
+			mch->slctunitid = selector[5] | ((i + 1) << 8);
+		} else {
+			printk(KERN_INFO "usbaudio: selector unit %u: ignoring channel %u\n", selector[3], i+1);
 		}
 	}
 	state->termtype = 0;
@@ -3167,7 +3282,7 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
 			ch->unitid = ftr[3];
 			ch->selector = VOLUME_CONTROL;
 			ch->chnum = 1;
-			ch->flags = MIXFLG_STEREOIN | MIXFLG_STEREOOUT;
+			ch->flags = (state->nrchannels > 1) ? (MIXFLG_STEREOIN | MIXFLG_STEREOOUT) : 0;
 			prepmixch(state);
 		}
 	} else if (mchftr & 2) {
@@ -3187,7 +3302,7 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
 			ch->unitid = ftr[3];
 			ch->selector = BASS_CONTROL;
 			ch->chnum = 1;
-			ch->flags = MIXFLG_STEREOIN | MIXFLG_STEREOOUT;
+			ch->flags = (state->nrchannels > 1) ? (MIXFLG_STEREOIN | MIXFLG_STEREOOUT) : 0;
 			prepmixch(state);
 		}
 	} else if (mchftr & 4) {
@@ -3207,7 +3322,7 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
 			ch->unitid = ftr[3];
 			ch->selector = TREBLE_CONTROL;
 			ch->chnum = 1;
-			ch->flags = MIXFLG_STEREOIN | MIXFLG_STEREOOUT;
+			ch->flags = (state->nrchannels > 1) ? (MIXFLG_STEREOIN | MIXFLG_STEREOOUT) : 0;
 			prepmixch(state);
 		}
 	} else if (mchftr & 16) {
@@ -3239,7 +3354,7 @@ static void usb_audio_recurseunit(struct consmixstate *state, unsigned char unit
 	unsigned int i, j;
 
 	if (test_and_set_bit(unitid, &state->unitbitmap)) {
-		printk(KERN_ERR "usbaudio: mixer path recursion detected, unit %d!\n", unitid);
+		printk(KERN_INFO "usbaudio: mixer path revisits unit %d\n", unitid);
 		return;
 	}
 	p1 = find_audiocontrol_unit(state->buffer, state->buflen, NULL, unitid, state->ctrlif);

@@ -157,6 +157,7 @@ comment 'Video For Linux'
 
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
+   bool '  V4L information in proc filesystem' CONFIG_VIDEO_PROC_FS Y
    dep_tristate '  I2C on parallel port' CONFIG_I2C_PARPORT $CONFIG_PARPORT $CONFIG_I2C
    comment 'Radio Adapters'
    dep_tristate '  ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV

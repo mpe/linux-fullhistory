@@ -24,6 +24,12 @@ db2ps db2pdf:
 $(TOPDIR)/scripts/docproc:
 	$(MAKE) -C $(TOPDIR)/scripts docproc
 
+kernel-hacking.sgml: kernel-hacking.tmpl
+	$(TOPDIR)/scripts/docgen <$< >$@
+
+kernel-locking.sgml: kernel-locking.tmpl
+	$(TOPDIR)/scripts/docgen <$< >$@
+
 wanbook.sgml: wanbook.tmpl
 	$(TOPDIR)/scripts/docgen $(TOPDIR)/drivers/net/wan/syncppp.c \
 		<wanbook.tmpl >wanbook.sgml

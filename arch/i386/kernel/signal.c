@@ -4,6 +4,8 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  1997-11-28  Modified for POSIX.1b signals by Richard Henderson
+ *  Pentium III support by Ingo Molnar, modifications and OS Exception support
+ *              by Goutham Rao
  */
 
 #include <linux/config.h>
@@ -155,7 +157,7 @@ static inline int restore_i387_hard(struct _fpstate *buf)
 {
 	struct task_struct *tsk = current;
 	clear_fpu(tsk);
-	return __copy_from_user(&tsk->thread.i387.hard, buf, sizeof(*buf));
+	return i387_user_to_hard(&tsk->thread.i387.hard, buf);
 }
 
 static inline int restore_i387(struct _fpstate *buf)
@@ -309,7 +311,7 @@ static inline int save_i387_hard(struct _fpstate * buf)
 
 	unlazy_fpu(tsk);
 	tsk->thread.i387.hard.status = tsk->thread.i387.hard.swd;
-	if (__copy_to_user(buf, &tsk->thread.i387.hard, sizeof(*buf)))
+	if (i387_hard_to_user(buf, &tsk->thread.i387.hard))
 		return -1;
 	return 1;
 }

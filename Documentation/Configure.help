@@ -14830,6 +14830,14 @@ CONFIG_VIDEO_DEV
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
+Video For Linux /proc file system information
+CONFIG_VIDEO_PROC_FS
+  If you say Y here, you are able to access video device information
+  in /proc/video.
+
+  To use this option, you have to check, that the "/proc file system
+  support" (CONFIG_PROC_FS) is enabled too.
+
 AIMSlab RadioTrack (aka RadioReveal) support
 CONFIG_RADIO_RTRACK
   Choose Y here if you have one of these FM radio cards, and then fill

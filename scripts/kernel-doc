@@ -316,7 +316,7 @@ sub output_sgml {
     my $count;
     my $id;
 
-    $id = $args{'module'}."-".$args{'function'};
+    $id = "API-".$args{'function'};
     $id =~ s/[^A-Za-z0-9]/-/g;
 
     print "<refentry>\n";
