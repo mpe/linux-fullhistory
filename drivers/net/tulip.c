@@ -2717,7 +2717,8 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	if (!request_region (ioaddr, tulip_tbl[chip_idx].io_size, dev->name))
 		goto err_out_free_netdev;
 
-	pci_enable_device (pdev);
+	pci_enable_device(pdev);
+	pci_set_master(pdev);
 
 	tp = dev->priv;
 	memset(tp, 0, sizeof(*tp));
