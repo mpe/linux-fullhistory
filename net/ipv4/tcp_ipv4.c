@@ -894,11 +894,11 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 	memset(&arg, 0, sizeof arg); 
 	arg.iov[0].iov_base = (unsigned char *)&rth; 
 	arg.iov[0].iov_len  = sizeof rth;
-	arg.csum = csum_tcpudp_magic(skb->nh.iph->daddr, 
-				skb->nh.iph->saddr, /*XXX*/
-				sizeof(struct tcphdr),
-				IPPROTO_TCP,
-				0); 
+	arg.csum = csum_tcpudp_nofold(skb->nh.iph->daddr, 
+				      skb->nh.iph->saddr, /*XXX*/
+				      sizeof(struct tcphdr),
+				      IPPROTO_TCP,
+				      0); 
 	arg.n_iov = 1;
 	arg.csumoffset = offsetof(struct tcphdr, check) / sizeof(u16); 
 

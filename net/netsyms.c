@@ -17,6 +17,7 @@
 #include <net/neighbour.h>
 #include <net/snmp.h>
 
+#ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
 #include <linux/fddidevice.h>
@@ -34,7 +35,6 @@
 #include <linux/mroute.h>
 #include <linux/igmp.h>
 
-#ifdef CONFIG_INET
 extern struct net_proto_family inet_family_ops;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
@@ -421,14 +421,12 @@ EXPORT_SYMBOL(ip_acct_output);
 EXPORT_SYMBOL(dev_base);
 EXPORT_SYMBOL(dev_close);
 EXPORT_SYMBOL(dev_mc_add);
+EXPORT_SYMBOL(arp_find);
 EXPORT_SYMBOL(n_tty_ioctl);
 EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
-#ifdef CONFIG_INET
-EXPORT_SYMBOL(arp_find);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
-#endif
 EXPORT_SYMBOL(dev_mc_delete);
 
 EXPORT_SYMBOL(if_port_text);
@@ -444,14 +442,13 @@ EXPORT_SYMBOL(dlci_ioctl_hook);
 #endif
 
 /* Packet scheduler modules want these. */
-#ifdef CONFIG_NET_SCHED
 EXPORT_SYMBOL(qdisc_destroy);
 EXPORT_SYMBOL(qdisc_reset);
 EXPORT_SYMBOL(qdisc_restart);
 EXPORT_SYMBOL(qdisc_head);
 EXPORT_SYMBOL(qdisc_create_dflt);
-EXPORT_SYMBOL(pfifo_qdisc_ops);
 EXPORT_SYMBOL(noop_qdisc);
+#ifdef CONFIG_NET_SCHED
 EXPORT_SYMBOL(register_qdisc);
 EXPORT_SYMBOL(unregister_qdisc);
 EXPORT_SYMBOL(qdisc_get_rtab);

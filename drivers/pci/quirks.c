@@ -19,6 +19,8 @@
 
 #undef DEBUG
 
+#ifdef CONFIG_PCI_OPTIMIZE
+
 /*
  *	The PCI Bridge Optimization -- Some BIOS'es are too lazy
  *	and are unable to turn on several features which can burst
@@ -103,20 +105,68 @@ __initfunc(static void quirk_bridge(struct pci_dev *dev, int pos))
 	}
 }
 
+#endif
+
+
+/* Deal with broken BIOS'es that neglect to enable passive release,
+   which can cause problems in combination with the 82441FX/PPro MTRRs */
+__initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
+{
+	struct pci_dev *piix3;
+	unsigned char dlc;
+
+	/* We have to make sure a particular bit is set in the PIIX3
+	   ISA bridge, so we have to go out and find it. */
+	for (piix3 = pci_devices; ; piix3 = piix3->next) {
+		if (!piix3)
+			return;
+
+		if (piix3->vendor == PCI_VENDOR_ID_INTEL
+		    && piix3->device == PCI_DEVICE_ID_INTEL_82371SB_0)
+			break;
+	}	
+
+	pcibios_read_config_byte(piix3->bus->number, piix3->devfn, 0x82, &dlc);
+
+	if (!(dlc & 1<<1)) {
+		printk("PIIX3: Enabling Passive Release\n");
+		dlc |= 1<<1;
+		pcibios_write_config_byte(piix3->bus->number, piix3->devfn, 
+					  0x82, dlc);
+	}
+}
+
+
+typedef void (*quirk_handler)(struct pci_dev *, int);
+
 /*
- * Table of quirk handler functions
+ * Mpping from quirk handler functions to names.
  */
 
-#define Q_BRIDGE 0
-
-struct quirk_type {
-	void (*handler)(struct pci_dev *, int);
+struct quirk_name {
+	quirk_handler handler;
 	char *name;
 };
 
-static struct quirk_type quirk_types[] __initdata = {
+static struct quirk_name quirk_names[] __initdata = {
+#ifdef CONFIG_PCI_OPTIMIZE
 	{ quirk_bridge,		"Bridge optimization" },
+#endif
+	{ quirk_passive_release, "Passive release enable" },
 };
+
+
+static inline char *get_quirk_name(quirk_handler handler)
+{
+	int i;
+
+	for (i = 0; i < sizeof(quirk_names)/sizeof(quirk_names[0]); i++)
+		if (handler == quirk_names[i].handler)
+			return quirk_names[i].name;
+
+	return NULL;
+}
+  
 
 /*
  * Mapping from PCI vendor/device ID pairs to quirk function types and arguments
@@ -124,14 +174,18 @@ static struct quirk_type quirk_types[] __initdata = {
 
 struct quirk_info {
 	unsigned short vendor, device;
-	unsigned short quirk, arg;
+	quirk_handler handler;
+	unsigned short arg;
 };
 
 static struct quirk_info quirk_list[] __initdata = {
-	{ PCI_VENDOR_ID_DEC,	PCI_DEVICE_ID_DEC_BRD,		Q_BRIDGE,	0x00 },
-	{ PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8891A,	Q_BRIDGE,	0x01 },
-	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82424,	Q_BRIDGE,	0x00 },
-	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82434,	Q_BRIDGE,	0x00 }
+#ifdef CONFIG_PCI_OPTIMIZE
+	{ PCI_VENDOR_ID_DEC,	PCI_DEVICE_ID_DEC_BRD,		quirk_bridge,	0x00 },
+	{ PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8891A,	quirk_bridge,	0x01 },
+	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82424,	quirk_bridge,	0x00 },
+	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82434,	quirk_bridge,	0x00 },
+#endif
+	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82441,	quirk_passive_release,	0x00 },
 };
 
 __initfunc(void pci_quirks_init(void))
@@ -146,11 +200,10 @@ __initfunc(void pci_quirks_init(void))
 		for(i=0; i<sizeof(quirk_list)/sizeof(quirk_list[0]); i++) {
 			struct quirk_info *q = quirk_list + i;
 			if (q->vendor == d->vendor && q->device == d->device) {
-				struct quirk_type *t = quirk_types + q->quirk;
 				printk("PCI: %02x:%02x [%04x/%04x]: %s (%02x)\n",
 				       d->bus->number, d->devfn, d->vendor, d->device,
-				       t->name, q->arg);
-				t->handler(d, q->arg);
+				       get_quirk_name(q->handler), q->arg);
+				q->handler(d, q->arg);
 			}
 		}
 	}

@@ -240,6 +240,7 @@ BUILD_IRQ(23)
 BUILD_SMP_INTERRUPT(reschedule_interrupt)
 BUILD_SMP_INTERRUPT(invalidate_interrupt)
 BUILD_SMP_INTERRUPT(stop_cpu_interrupt)
+BUILD_SMP_INTERRUPT(mtrr_interrupt)
 
 /*
  * every pentium local APIC has two 'local interrupts', with a
@@ -1105,6 +1106,9 @@ __initfunc(void init_IRQ(void))
 
 	/* self generated IPI for local APIC timer */
 	set_intr_gate(0x41, apic_timer_interrupt);
+
+	/* IPI for MTRR control */
+	set_intr_gate(0x50, mtrr_interrupt);
 
 #endif	
 	request_region(0x20,0x20,"pic1");

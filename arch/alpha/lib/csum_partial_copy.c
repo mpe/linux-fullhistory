@@ -365,6 +365,12 @@ csum_partial_copy_from_user(const char *src, char *dst, int len,
 }
 
 unsigned int
+csum_partial_copy_nocheck(const char *src, char *dst, int len, unsigned int sum)
+{
+	return do_csum_partial_copy_from_user(src, dst, len, sum, NULL);
+}
+
+unsigned int
 csum_partial_copy (const char *src, char *dst, int len, unsigned int sum)
 {
 	unsigned int ret;

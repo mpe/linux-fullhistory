@@ -568,6 +568,7 @@ N: Richard E. Gooch
 E: rgooch@atnf.csiro.au
 D: parent process death signal to children
 D: prctl() syscall
+D: /proc/mtrr support to manipulate MTRRs on Pentium Pro's
 S: CSIRO Australia Telescope National Facility
 S: P.O. Box 76, Epping
 S: N.S.W., 2121

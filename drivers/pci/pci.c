@@ -319,7 +319,7 @@ __initfunc(void pci_init(void))
 	/* give BIOS a chance to apply platform specific fixes: */
 	pcibios_fixup();
 
-#ifdef CONFIG_PCI_OPTIMIZE
+#ifdef CONFIG_PCI_QUIRKS
 	pci_quirks_init();
 #endif
 

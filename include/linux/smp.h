@@ -47,7 +47,8 @@ extern volatile int smp_msg_id;
 #define MSG_STOP_CPU		0x0002	/* Sent to shut down slave CPU's
 					 * when rebooting
 					 */
-#define MSG_RESCHEDULE		0x0003	/* Reschedule request from master CPU */
+#define MSG_RESCHEDULE		0x0003	/* Reschedule request from master CPU*/
+#define MSG_MTRR_CHANGE         0x0004  /* Change MTRR */
 
 #else
 

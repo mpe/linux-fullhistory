@@ -1,0 +1,225 @@
+MTRR (Memory Type Range Register) control
+17 Dec 1997
+Richard Gooch
+<rgooch@atnf.csiro.au>
+
+  On Intel Pentium Pro systems the Memory Type Range Registers (MTRRs)
+  may be used to control processor access to memory ranges. This is
+  most useful when you have a video (VGA) card on the PCI
+  bus. Enabling write-combining allows PCI write transfers to be
+  combined into a larger transfer before bursting over the PCI
+  bus. This can increase performance of image write operations 2.5
+  times or more.
+
+  The CONFIG_MTRR option creates a /proc/mtrr file which may be used
+  to manipulate your MTRRs. Typically the X server should use
+  this. This should have a reasonably generic interface so that
+  similar control registers on other processors can be easily
+  supported.
+
+
+There are two interfaces to /proc/mtrr: one is an ASCII interface
+which allows you to read and write. The other is an ioctl()
+interface. The ASCII interface is meant for administration. The
+ioctl() interface is meant for C programmes (i.e. the X server). The
+interfaces are described below, with sample commands and C code.
+
+===============================================================================
+Reading MTRRs from the shell:
+
+% cat /proc/mtrr
+reg00: base=0x00000000 (   0MB), size= 128MB: write-back, count=1
+reg01: base=0x08000000 ( 128MB), size=  64MB: write-back, count=1
+reg05: base=0x80000000 (2048MB), size=   4MB: write-combining, count=1
+===============================================================================
+Creating MTRRs from the shell:
+% echo "base=0x80000000 size=0x400000 type=write-combining" >! /proc/mtrr
+===============================================================================
+Removing MTRRs from the shell:
+% echo "disable=5" >! /proc/mtrr
+===============================================================================
+Reading MTRRs from a C programme using ioctl()'s:
+
+/*  mtrr-show.c
+
+    Source file for mtrr-show (example programme to show MTRRs using ioctl()'s)
+
+    Copyright (C) 1997  Richard Gooch
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+    Richard Gooch may be reached by email at  rgooch@atnf.csiro.au
+    The postal address is:
+      Richard Gooch, c/o ATNF, P. O. Box 76, Epping, N.S.W., 2121, Australia.
+*/
+
+/*
+    This programme will use an ioctl() on /proc/mtrr to show the current MTRR
+    settings. This is an alternative to reading /proc/mtrr.
+
+
+    Written by      Richard Gooch   17-DEC-1997
+
+    Last updated by Richard Gooch   17-DEC-1997
+
+
+*/
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#define MTRR_NEED_STRINGS
+#include <linux/mtrr.h>
+
+#define TRUE 1
+#define FALSE 0
+#define ERRSTRING strerror (errno)
+
+
+int main ()
+{
+    int fd;
+    struct mtrr_gentry gentry;
+
+    if ( ( fd = open ("/proc/mtrr", O_RDONLY, 0) ) == -1 )
+    {
+	if (errno == ENOENT)
+	{
+	    fputs ("/proc/mtrr not found: not supported or you don't have a PPro?\n",
+		   stderr);
+	    exit (1);
+	}
+	fprintf (stderr, "Error opening /proc/mtrr\t%s\n", ERRSTRING);
+	exit (2);
+    }
+    for (gentry.regnum = 0; ioctl (fd, MTRRIOC_GET_ENTRY, &gentry) == 0;
+	 ++gentry.regnum)
+    {
+	if (gentry.size < 1)
+	{
+	    fprintf (stderr, "Register: %u disabled\n", gentry.regnum);
+	    continue;
+	}
+	fprintf (stderr, "Register: %u base: 0x%lx size: 0x%lx type: %s\n",
+		 gentry.regnum, gentry.base, gentry.size,
+		 mtrr_strings[gentry.type]);
+    }
+    if (errno == EINVAL) exit (0);
+    fprintf (stderr, "Error doing ioctl(2) on /dev/mtrr\t%s\n", ERRSTRING);
+    exit (3);
+}   /*  End Function main  */
+===============================================================================
+Creating MTRRs from a C programme using ioctl()'s:
+
+/*  mtrr-add.c
+
+    Source file for mtrr-add (example programme to add an MTRRs using ioctl())
+
+    Copyright (C) 1997  Richard Gooch
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+    Richard Gooch may be reached by email at  rgooch@atnf.csiro.au
+    The postal address is:
+      Richard Gooch, c/o ATNF, P. O. Box 76, Epping, N.S.W., 2121, Australia.
+*/
+
+/*
+    This programme will use an ioctl() on /proc/mtrr to add an entry. The first
+    available mtrr is used. This is an alternative to writing /proc/mtrr.
+
+
+    Written by      Richard Gooch   17-DEC-1997
+
+    Last updated by Richard Gooch   17-DEC-1997
+
+
+*/
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#define MTRR_NEED_STRINGS
+#include <linux/mtrr.h>
+
+#define TRUE 1
+#define FALSE 0
+#define ERRSTRING strerror (errno)
+
+
+int main (int argc, char **argv)
+{
+    int fd;
+    struct mtrr_sentry sentry;
+
+    if (argc != 4)
+    {
+	fprintf (stderr, "Usage:\tmtrr-add base size type\n");
+	exit (1);
+    }
+    sentry.base = strtoul (argv[1], NULL, 0);
+    sentry.size = strtoul (argv[2], NULL, 0);
+    for (sentry.type = 0; sentry.type < MTRR_NUM_TYPES; ++sentry.type)
+    {
+	if (strcmp (argv[3], mtrr_strings[sentry.type]) == 0) break;
+    }
+    if (sentry.type >= MTRR_NUM_TYPES)
+    {
+	fprintf (stderr, "Illegal type: \"%s\"\n", argv[3]);
+	exit (2);
+    }
+    if ( ( fd = open ("/proc/mtrr", O_WRONLY, 0) ) == -1 )
+    {
+	if (errno == ENOENT)
+	{
+	    fputs ("/proc/mtrr not found: not supported or you don't have a PPro?\n",
+		   stderr);
+	    exit (3);
+	}
+	fprintf (stderr, "Error opening /proc/mtrr\t%s\n", ERRSTRING);
+	exit (4);
+    }
+    if (ioctl (fd, MTRRIOC_ADD_ENTRY, &sentry) == -1)
+    {
+	fprintf (stderr, "Error doing ioctl(2) on /dev/mtrr\t%s\n", ERRSTRING);
+	exit (5);
+    }
+    fprintf (stderr, "Sleeping for 5 seconds so you can see the new entry\n");
+    sleep (5);
+    close (fd);
+    fputs ("I've just closed /proc/mtrr so now the new entry should be gone\n",
+	   stderr);
+}   /*  End Function main  */
+===============================================================================

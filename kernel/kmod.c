@@ -41,17 +41,13 @@ use_init_file_context(void) {
 	current->fs = task_init->fs;
 	current->fs->count++;
 
-	/* don't use the user's files, use init's files instead */
-	exit_files(current);	/* current->files->count--; */
-	current->files = task_init->files;
-	current->files->count++;
-
 	unlock_kernel();
 }
 
 static int exec_modprobe(void * module_name)
 {
 	char *argv[] = { modprobe_path, "-s", "-k", (char*)module_name, NULL};
+	int i;
 
 	use_init_file_context();
 
@@ -65,6 +61,10 @@ static int exec_modprobe(void * module_name)
 	flush_signals(current);
 	flush_signal_handlers(current);
 	spin_unlock_irq(&current->sigmask_lock);
+
+	for (i = 0; i < current->files->max_fds; i++ ) {
+	    if (current->files->fd[i]) close(i);
+	}
 
 	set_fs(KERNEL_DS);	/* Allow execve args to be in kernel space. */
 	current->uid = current->euid = 0;
@@ -87,7 +87,7 @@ int request_module(const char * module_name)
 	int waitpid_result;
 
 	pid = kernel_thread(exec_modprobe, (void*) module_name,
-			    CLONE_FS | CLONE_FILES | SIGCHLD);
+			    CLONE_FS | SIGCHLD);
 	if (pid < 0) {
 		printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);
 		return pid;

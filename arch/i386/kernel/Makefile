@@ -21,6 +21,7 @@ O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o \
             ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o
 OX_OBJS  := i386_ksyms.o
+MX_OBJS  :=
 
 ifdef CONFIG_PCI
 O_OBJS += bios32.o
@@ -28,6 +29,14 @@ endif
 
 ifdef CONFIG_MCA
 O_OBJS += mca.o
+endif
+
+ifeq ($(CONFIG_MTRR),y)
+OX_OBJS += mtrr.o
+else
+  ifeq ($(CONFIG_MTRR),m)
+  MX_OBJS += mtrr.o
+  endif
 endif
 
 

@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.10 1997/08/09 18:09:03 jj Exp $ */
+/* $Id: checksum.h,v 1.11 1998/04/17 02:37:22 davem Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -116,31 +116,6 @@ extern __inline__ unsigned short ip_fast_csum(__const__ unsigned char *iph,
 	return sum;
 }
 
-/* computes the checksum of the TCP/UDP pseudo-header
- * returns a 16-bit checksum, already complemented
- */
-extern __inline__ unsigned short csum_tcpudp_magic(unsigned long saddr,
-						   unsigned long daddr,
-						   unsigned int len,
-						   unsigned short proto,
-						   unsigned int sum)
-{
-	__asm__ __volatile__("
-	addcc		%1, %0, %0
-	addccc		%2, %0, %0
-	addccc		%3, %0, %0
-	addc		%0, %%g0, %0
-	sll		%0, 16, %1
-	addcc		%1, %0, %0
-	srl		%0, 16, %0
-	addc		%0, %%g0, %0
-	xnor		%%g0, %0, %0
-"	: "=r" (sum), "=r" (saddr)
-	: "r" (daddr), "r" ((proto<<16)+len), "0" (sum), "1" (saddr)
-	: "cc");
-	return (sum & 0xffff);
-}
-
 /* Fold a partial checksum without adding pseudo headers. */
 extern __inline__ unsigned short csum_fold(unsigned int sum)
 {
@@ -155,6 +130,36 @@ extern __inline__ unsigned short csum_fold(unsigned int sum)
 	: "0" (sum), "1" (sum<<16)
 	: "cc");
 	return (sum & 0xffff);
+}
+
+extern __inline__ unsigned long csum_tcpudp_nofold(unsigned long saddr,
+						   unsigned long daddr,
+						   unsigned int len,
+						   unsigned short proto,
+						   unsigned int sum)
+{
+	__asm__ __volatile__("
+	addcc		%1, %0, %0
+	addccc		%2, %0, %0
+	addccc		%3, %0, %0
+	addc		%0, %%g0, %0
+"	: "=r" (sum), "=r" (saddr)
+	: "r" (daddr), "r" ((proto<<16)+len), "0" (sum), "1" (saddr)
+	: "cc");
+	return sum;
+}
+
+/*
+ * computes the checksum of the TCP/UDP pseudo-header
+ * returns a 16-bit checksum, already complemented
+ */
+static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
+						   unsigned long daddr,
+						   unsigned short len,
+						   unsigned short proto,
+						   unsigned int sum) 
+{
+	return csum_fold(csum_tcpudp_nofold(saddr,daddr,len,proto,sum));
 }
 
 #define _HAVE_ARCH_IPV6_CSUM

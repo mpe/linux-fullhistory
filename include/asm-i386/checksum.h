@@ -1,6 +1,7 @@
 #ifndef _I386_CHECKSUM_H
 #define _I386_CHECKSUM_H
 
+
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)
@@ -44,6 +45,12 @@ unsigned int csum_partial_copy_from_user ( const char *src, char *dst,
 	return csum_partial_copy_generic ( src, dst, len, sum, err_ptr, dst_err_ptr);
 }
 
+#if 0
+
+/* Not used at the moment. It is difficult to imagine for what purpose
+   it can be used :-) Please, do not forget to verify_area before it --ANK
+ */
+
 /*
  * This combination is currently not used, but possible:
  */
@@ -56,6 +63,7 @@ unsigned int csum_partial_copy_to_user ( const char *src, char *dst,
 
 	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, err_ptr);
 }
+#endif
 
 /*
  * These are the old (and unsafe) way of doing checksums, a warning message will be
@@ -121,16 +129,12 @@ static inline unsigned int csum_fold(unsigned int sum)
 	return (~sum) >> 16;
 }
  
-/*
- * computes the checksum of the TCP/UDP pseudo-header
- * returns a 16-bit checksum, already complemented
- */
-
-static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
+static inline unsigned long csum_tcpudp_nofold(unsigned long saddr,
 						   unsigned long daddr,
 						   unsigned short len,
 						   unsigned short proto,
-						   unsigned int sum) {
+						   unsigned int sum) 
+{
     __asm__("
 	addl %1, %0
 	adcl %2, %0
@@ -139,8 +143,22 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
 	"
 	: "=r" (sum)
 	: "g" (daddr), "g"(saddr), "g"((ntohs(len)<<16)+proto*256), "0"(sum));
-	return csum_fold(sum);
+    return sum;
 }
+
+/*
+ * computes the checksum of the TCP/UDP pseudo-header
+ * returns a 16-bit checksum, already complemented
+ */
+static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
+						   unsigned long daddr,
+						   unsigned short len,
+						   unsigned short proto,
+						   unsigned int sum) 
+{
+	return csum_fold(csum_tcpudp_nofold(saddr,daddr,len,proto,sum));
+}
+
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly
  * in icmp.c

@@ -28,7 +28,7 @@ L_OBJS   += oldproc.o
 endif
 endif
 
-ifdef CONFIG_PCI_OPTIMIZE
+ifdef CONFIG_PCI_QUIRKS
 L_OBJS   += quirks.o
 endif
 

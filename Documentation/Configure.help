@@ -1031,6 +1031,12 @@ CONFIG_PCI_DIRECT
   works. If both PCI BIOS and direct PCI access are enabled, the use
   of BIOS is preferred. If unsure, say Y.
 
+PCI quirks
+CONFIG_PCI_QUIRKS
+  If you have a broken BIOS, it may fail to set up the PCI bus in a
+  correct or optimal fashion. If your BIOS is fine you can say N here
+  for a very slightly smaller kernel. If unsure, say Y.
+
 PCI bridge optimization (experimental)
 CONFIG_PCI_OPTIMIZE
   This can improve access times for some hardware devices if you have
@@ -6435,6 +6441,28 @@ CONFIG_FT_FDC_MAX_RATE
   it need not try to run the tape drive at the highest available
   speed. If unsure, leave this disabled, i.e. leave it at 2000
   bits/sec.
+
+MTRR control and configuration
+CONFIG_MTRR
+  On Intel Pentium Pro systems the Memory Type Range Registers (MTRRs)
+  may be used to control processor access to memory ranges. This is
+  most useful when you have a video (VGA) card on the PCI
+  bus. Enabling write-combining allows PCI write transfers to be
+  combined into a larger transfer before bursting over the PCI
+  bus. This can increase performance of image write operations 2.5
+  times or more.
+  This option creates a /proc/mtrr file which may be used to manipulate
+  your MTRRs. Typically the X server should use this. This should have
+  a reasonably generic interface so that similar control registers on
+  other processors can be easily supported.
+  This option also fixes a problem with buggy SMP BIOSes which only
+  set the MTRRs for the boot CPU and not the secondary CPUs. This can
+  lead to all sorts of problems.
+  In general you should compile this into the kernel, rather than as a
+  loadable module, because the BIOS fix needs to be done early in the
+  boot sequence. If you compile this as a module, the BIOS fix will be
+  delayed until when you load the module. You do this at your own risk.
+  See Documentation/mtrr.txt for more information.
 
 Main CPU frequency, only for DEC alpha machine
 CONFIG_FT_ALPHA_CLOCK

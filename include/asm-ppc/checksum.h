@@ -34,6 +34,9 @@ extern unsigned int csum_partial_copy_generic(const char *src, char *dst,
 #define csum_partial_copy_from_user(src, dst, len, sum, errp)	\
 	csum_partial_copy_generic((src), (dst), (len), (sum), (errp), 0)
 
+/* FIXME: this needs to be written to really do no check -- Cort */
+#define csum_partial_copy_nocheck(src, dst, len, sum)	\
+	csum_partial_copy_generic((src), (dst), (len), (sum), 0, 0)     
 /*
  * Old versions which ignore errors.
  */
@@ -67,6 +70,27 @@ static inline unsigned int csum_fold(unsigned int sum)
 static inline unsigned short ip_compute_csum(unsigned char * buff, int len)
 {
 	return csum_fold(csum_partial(buff, len, 0));
+}
+
+/*
+ * FIXME: I swiped this one from the sparc and made minor modifications.
+ * It may not be correct.  -- Cort
+ */
+static inline unsigned long csum_tcpudp_nofold(unsigned long saddr,
+						   unsigned long daddr,
+						   unsigned short len,
+						   unsigned short proto,
+						   unsigned int sum) 
+{
+    __asm__("
+	add %0,%0,%1
+	add %0,%0,%2
+	add %0,%0,%0
+	addi %0,%0,0
+	"
+	: "=r" (sum)
+	: "r" (daddr), "r"(saddr), "r"((ntohs(len)<<16)+proto*256), "0"(sum));
+    return sum;
 }
 
 /*

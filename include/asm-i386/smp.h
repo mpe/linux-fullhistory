@@ -168,6 +168,7 @@ extern void smp_reschedule_irq(int cpl, struct pt_regs *regs);
 extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
 extern void smp_local_timer_interrupt(struct pt_regs * regs);
+extern void (*mtrr_hook) (void);
 extern void setup_APIC_clock (void);
 extern volatile int __cpu_logical_map[NR_CPUS];
 extern inline int cpu_logical_map(int cpu)

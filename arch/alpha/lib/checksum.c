@@ -37,6 +37,27 @@ unsigned short int csum_tcpudp_magic(unsigned long saddr,
 		((unsigned long) proto << 8));
 }
 
+unsigned int csum_tcpudp_nofold(unsigned long saddr,
+				   unsigned long daddr,
+				   unsigned short len,
+				   unsigned short proto,
+				   unsigned int sum)
+{
+	unsigned long result;
+
+	result = (saddr + daddr + sum +
+		  ((unsigned long) ntohs(len) << 16) +
+		  ((unsigned long) proto << 8));
+
+	/* Fold down to 32-bits so we don't loose in the typedef-less 
+	   network stack.  */
+	/* 64 to 33 */
+	result = (result & 0xffffffff) + (result >> 32);
+	/* 33 to 32 */
+	result = (result & 0xffffffff) + (result >> 32);
+	return result;
+}
+
 /*
  * Do a 64-bit checksum on an arbitrary memory area..
  *

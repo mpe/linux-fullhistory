@@ -87,8 +87,8 @@ static inline unsigned int csum_fold(unsigned int sum)
  * returns a 16-bit checksum, already complemented
  */
 
-static inline unsigned short int
-csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
+static inline unsigned int
+csum_tcpudp_nofold(unsigned long saddr, unsigned long daddr, unsigned short len,
 		  unsigned short proto, unsigned int sum)
 {
 	__asm__ ("addl  %1,%0\n\t"
@@ -99,7 +99,14 @@ csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
 		 : "=&d" (sum), "=&d" (saddr)
 		 : "0" (daddr), "1" (saddr), "d" (len + proto),
 		   "d"(sum));
-	return csum_fold(sum);
+	return sum;
+}
+
+static inline unsigned short int
+csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
+		  unsigned short proto, unsigned int sum)
+{
+	return csum_fold(csum_tcpudp_nofold(saddr,daddr,len,proto,sum));
 }
 
 /*

@@ -48,7 +48,10 @@ else
   define_bool CONFIG_PCI y
 fi
 if [ "$CONFIG_PREP" = "y" ]; then
-  bool 'PCI bridge optimization' CONFIG_PCI_OPTIMIZE
+  bool 'PCI quirks' CONFIG_PCI_QUIRKS
+  if [ "$CONFIG_PCI_QUIRKS" = "y" ]; then
+    bool '   PCI bridge optimization' CONFIG_PCI_OPTIMIZE
+  fi
 fi
 bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 bool 'Networking support' CONFIG_NET

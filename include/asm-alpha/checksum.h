@@ -18,6 +18,10 @@ extern unsigned short int csum_tcpudp_magic(unsigned long saddr,
 					   unsigned short proto,
 					   unsigned int sum);
 
+unsigned int csum_tcpudp_nofold(unsigned long saddr, unsigned long daddr,
+				unsigned short len, unsigned short proto,
+				unsigned int sum);
+
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)
@@ -54,6 +58,9 @@ unsigned int csum_partial_copy(const char *src, char *dst, int len, unsigned int
  * but continues and zeros the rest of the buffer.
  */
 unsigned int csum_partial_copy_from_user(const char *src, char *dst, int len, unsigned int sum, int *errp);
+
+unsigned int csum_partial_copy_nocheck(const char *src, char *dst, int len, unsigned int sum);
+
 
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly
