@@ -43,6 +43,9 @@ int mii_ethtool_gset(struct mii_if_info *mii, struct ethtool_cmd *ecmd)
 	    (SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full |
 	     SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full |
 	     SUPPORTED_Autoneg | SUPPORTED_TP | SUPPORTED_MII);
+	if (mii->supports_gmii)
+		ecmd->supported |= SUPPORTED_1000baseT_Half |
+			SUPPORTED_1000baseT_Full;
 
 	/* only supports twisted-pair */
 	ecmd->port = PORT_MII;
@@ -100,7 +103,7 @@ int mii_ethtool_gset(struct mii_if_info *mii, struct ethtool_cmd *ecmd)
 	} else {
 		ecmd->autoneg = AUTONEG_DISABLE;
 
-		ecmd->speed = ((bmcr2 & BMCR_SPEED1000 && 
+		ecmd->speed = ((bmcr & BMCR_SPEED1000 && 
 				(bmcr & BMCR_SPEED100) == 0) ? SPEED_1000 :
 			       (bmcr & BMCR_SPEED100) ? SPEED_100 : SPEED_10);
 		ecmd->duplex = (bmcr & BMCR_FULLDPLX) ? DUPLEX_FULL : DUPLEX_HALF;
@@ -163,9 +166,9 @@ int mii_ethtool_sset(struct mii_if_info *mii, struct ethtool_cmd *ecmd)
 			tmp |= ADVERTISE_100FULL;
 		if (mii->supports_gmii) {
 			if (ecmd->advertising & ADVERTISED_1000baseT_Half)
-				advert2 |= ADVERTISE_1000HALF;
+				tmp2 |= ADVERTISE_1000HALF;
 			if (ecmd->advertising & ADVERTISED_1000baseT_Full)
-				advert2 |= ADVERTISE_1000FULL;
+				tmp2 |= ADVERTISE_1000FULL;
 		}
 		if (advert != tmp) {
 			mii->mdio_write(dev, mii->phy_id, MII_ADVERTISE, tmp);

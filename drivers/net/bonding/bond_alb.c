@@ -54,6 +54,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_bonding.h>
 #include <linux/if_vlan.h>
+#include <linux/in.h>
 #include <net/ipx.h>
 #include <net/arp.h>
 #include <asm/byteorder.h>
@@ -1300,7 +1301,8 @@ int bond_alb_xmit(struct sk_buff *skb, struct net_device *bond_dev)
 	switch (ntohs(skb->protocol)) {
 	case ETH_P_IP:
 		if ((memcmp(eth_data->h_dest, mac_bcast, ETH_ALEN) == 0) ||
-		    (skb->nh.iph->daddr == ip_bcast)) {
+		    (skb->nh.iph->daddr == ip_bcast) ||
+		    (skb->nh.iph->protocol == IPPROTO_IGMP)) {
 			do_tx_balance = 0;
 			break;
 		}
