@@ -703,6 +703,7 @@ static int var_to_display(struct display *disp,
 	disp->green = var->green;
 	disp->blue = var->blue;
 	disp->transp = var->transp;
+	disp->rotate = var->rotate;
 	disp->mode = fb_match_mode(var, &info->modelist);
 	if (disp->mode == NULL)
 		/* This should not happen */
@@ -726,6 +727,7 @@ static void display_to_var(struct fb_var_screeninfo *var,
 	var->green = disp->green;
 	var->blue = disp->blue;
 	var->transp = disp->transp;
+	var->rotate = disp->rotate;
 }
 
 static const char *fbcon_startup(void)

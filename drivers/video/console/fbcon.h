@@ -41,6 +41,7 @@ struct display {
     u32 grayscale;
     u32 nonstd;
     u32 accel_flags;
+    u32 rotate;
     struct fb_bitfield red;
     struct fb_bitfield green;
     struct fb_bitfield blue;
