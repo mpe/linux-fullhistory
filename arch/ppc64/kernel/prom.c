@@ -52,6 +52,7 @@
 #include <asm/btext.h>
 #include <asm/sections.h>
 #include <asm/machdep.h>
+#include <asm/pSeries_reconfig.h>
 
 #ifdef DEBUG
 #define DBG(fmt...) udbg_printf(fmt)
@@ -1635,15 +1636,6 @@ out:
  */
 void of_attach_node(struct device_node *np)
 {
-	int err;
-
-	/* This use of finish_node will be moved to a notifier so
-	 * the error code can be used.
-	 */
-	err = finish_node(np, NULL, of_finish_dynamic_node, 0, 0, 0);
-	if (err < 0)
-		return;
-
 	write_lock(&devtree_lock);
 	np->sibling = np->parent->child;
 	np->allnext = allnodes;
@@ -1689,6 +1681,36 @@ void of_detach_node(const struct device_node *np)
 
 	write_unlock(&devtree_lock);
 }
+
+static int prom_reconfig_notifier(struct notifier_block *nb, unsigned long action, void *node)
+{
+	int err;
+
+	switch (action) {
+	case PSERIES_RECONFIG_ADD:
+		err = finish_node(node, NULL, of_finish_dynamic_node, 0, 0, 0);
+		if (err < 0) {
+			printk(KERN_ERR "finish_node returned %d\n", err);
+			err = NOTIFY_BAD;
+		}
+		break;
+	default:
+		err = NOTIFY_DONE;
+		break;
+	}
+	return err;
+}
+
+static struct notifier_block prom_reconfig_nb = {
+	.notifier_call prom_reconfig_notifier,
+	.priority = 10, /* This one needs to run first */
+};
+
+static int __init prom_reconfig_setup(void)
+{
+	return pSeries_reconfig_notifier_register(&prom_reconfig_nb);
+}
+__initcall(prom_reconfig_setup);
 
 /*
  * Find a property with a given name for a given node
