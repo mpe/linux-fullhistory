@@ -448,7 +448,7 @@ repeat:
 			mode |= S_ISGID;
 	} else
 		inode->i_gid = current->fsgid;
-	mark_inode_dirty(inode);
+
 	inode->i_ino = j;
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = 0;
@@ -468,6 +468,7 @@ repeat:
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
 		inode->i_flags |= MS_SYNCHRONOUS;
 	insert_inode_hash(inode);
+	mark_inode_dirty(inode);
 	inc_inode_version (inode, gdp, mode);
 
 	unlock_super (sb);

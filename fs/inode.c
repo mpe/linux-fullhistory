@@ -62,7 +62,16 @@ struct {
 int max_inodes = NR_INODE;
 
 /*
- * Put the inode on the super block's dirty list
+ * Put the inode on the super block's dirty list.
+ *
+ * CAREFUL! We mark it dirty unconditionally, but
+ * move it onto the dirty list only if it is hashed.
+ * If it was not hashed, it will never be added to
+ * the dirty list even if it is later hashed, as it
+ * will have been marked dirty already.
+ *
+ * In short, make sure you hash any inodes _before_
+ * you start marking them dirty..
  */
 void __mark_inode_dirty(struct inode *inode)
 {

@@ -908,7 +908,6 @@ affs_new_inode(const struct inode *dir)
 	inode->i_dev     = sb->s_dev;
 	inode->i_uid     = current->fsuid;
 	inode->i_gid     = current->fsgid;
-	mark_inode_dirty(inode);
 	inode->i_ino     = block;
 	inode->i_op      = NULL;
 	inode->i_blocks  = 0;
@@ -928,6 +927,7 @@ affs_new_inode(const struct inode *dir)
 	inode->u.affs_i.i_lastblock    = -1;
 
 	insert_inode_hash(inode);
+	mark_inode_dirty(inode);
 
 	return inode;
 }

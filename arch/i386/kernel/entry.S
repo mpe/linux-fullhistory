@@ -373,7 +373,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_mknod)
 	.long SYMBOL_NAME(sys_chmod)		/* 15 */
 	.long SYMBOL_NAME(sys_chown)
-	.long 0							/* old break syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old break syscall holder */
 	.long SYMBOL_NAME(sys_stat)
 	.long SYMBOL_NAME(sys_lseek)
 	.long SYMBOL_NAME(sys_getpid)		/* 20 */
@@ -387,11 +387,11 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_fstat)
 	.long SYMBOL_NAME(sys_pause)
 	.long SYMBOL_NAME(sys_utime)		/* 30 */
-	.long 0							/* old stty syscall holder */
-	.long 0							/* old gtty syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old stty syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old gtty syscall holder */
 	.long SYMBOL_NAME(sys_access)
 	.long SYMBOL_NAME(sys_nice)
-	.long 0					/* 35 */	/* old ftime syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* 35 */		/* old ftime syscall holder */
 	.long SYMBOL_NAME(sys_sync)
 	.long SYMBOL_NAME(sys_kill)
 	.long SYMBOL_NAME(sys_rename)
@@ -400,7 +400,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_dup)
 	.long SYMBOL_NAME(sys_pipe)
 	.long SYMBOL_NAME(sys_times)
-	.long 0							/* old prof syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old prof syscall holder */
 	.long SYMBOL_NAME(sys_brk)		/* 45 */
 	.long SYMBOL_NAME(sys_setgid)
 	.long SYMBOL_NAME(sys_getgid)
@@ -408,13 +408,13 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_geteuid)
 	.long SYMBOL_NAME(sys_getegid)		/* 50 */
 	.long SYMBOL_NAME(sys_acct)
-	.long 0							/* old phys syscall holder */
-	.long 0							/* old lock syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old phys syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old lock syscall holder */
 	.long SYMBOL_NAME(sys_ioctl)
 	.long SYMBOL_NAME(sys_fcntl)		/* 55 */
-	.long 0							/* old mpx syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old mpx syscall holder */
 	.long SYMBOL_NAME(sys_setpgid)
-	.long 0							/* old ulimit syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old ulimit syscall holder */
 	.long SYMBOL_NAME(sys_olduname)
 	.long SYMBOL_NAME(sys_umask)		/* 60 */
 	.long SYMBOL_NAME(sys_chroot)
@@ -454,7 +454,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_fchown)		/* 95 */
 	.long SYMBOL_NAME(sys_getpriority)
 	.long SYMBOL_NAME(sys_setpriority)
-	.long 0							/* old profil syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old profil syscall holder */
 	.long SYMBOL_NAME(sys_statfs)
 	.long SYMBOL_NAME(sys_fstatfs)		/* 100 */
 	.long SYMBOL_NAME(sys_ioperm)
