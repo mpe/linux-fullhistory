@@ -140,9 +140,11 @@ static int __devinit snd_card_emu10k1_probe(struct pci_dev *pci,
 		return err;
 	}
 	/* This stores the periods table. */
-	if(snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, snd_dma_pci_data(pci), 1024, &emu->p16v_buffer) < 0) {
-		snd_p16v_free(emu);
-		return -ENOMEM;
+	if (emu->audigy && emu->revision == 4) { /* P16V */	
+		if(snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, snd_dma_pci_data(pci), 1024, &emu->p16v_buffer) < 0) {
+			snd_p16v_free(emu);
+			return -ENOMEM;
+		}
 	}
 
 	if ((err = snd_emu10k1_mixer(emu)) < 0) {

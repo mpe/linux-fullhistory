@@ -600,7 +600,8 @@ static int snd_emu10k1_free(emu10k1_t *emu)
 	if (emu->port)
 		pci_release_regions(emu->pci);
 	pci_disable_device(emu->pci);
-	snd_p16v_free(emu);
+	if (emu->audigy && emu->revision == 4) /* P16V */	
+		snd_p16v_free(emu);
 	kfree(emu);
 	return 0;
 }

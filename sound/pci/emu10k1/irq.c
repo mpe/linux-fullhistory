@@ -170,19 +170,20 @@ irqreturn_t snd_emu10k1_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 		outl(orig_status, emu->port + IPR); /* ack all */
 	}
-	while ((status2 = inl(emu->port + IPR2)) != 0) {
-		u32 mask = INTE2_PLAYBACK_CH_0_LOOP;  /* Full Loop */
-		emu10k1_voice_t *pvoice = &(emu->p16v_voices[0]);
-		orig_status2 = status2;
-		if(status2 & mask) {
-			if(pvoice->use) {
-				snd_pcm_period_elapsed(pvoice->epcm->substream);
-			} else { 
-				snd_printk(KERN_ERR "p16v: status: 0x%08x, mask=0x%08x, pvoice=%p, use=%d\n", status2, mask, pvoice, pvoice->use);
+	if (emu->audigy && emu->revision == 4) { /* P16V */	
+		while ((status2 = inl(emu->port + IPR2)) != 0) {
+			u32 mask = INTE2_PLAYBACK_CH_0_LOOP;  /* Full Loop */
+			emu10k1_voice_t *pvoice = &(emu->p16v_voices[0]);
+			orig_status2 = status2;
+			if(status2 & mask) {
+				if(pvoice->use) {
+					snd_pcm_period_elapsed(pvoice->epcm->substream);
+				} else { 
+					snd_printk(KERN_ERR "p16v: status: 0x%08x, mask=0x%08x, pvoice=%p, use=%d\n", status2, mask, pvoice, pvoice->use);
+				}
 			}
+			outl(orig_status2, emu->port + IPR2); /* ack all */
 		}
-		outl(orig_status2, emu->port + IPR2); /* ack all */
 	}
-
 	return IRQ_RETVAL(handled);
 }
