@@ -890,6 +890,9 @@ scsi_tape_flush(struct file * filp)
     kdev_t devt = inode->i_rdev;
     int dev;
 
+    if (filp->f_count > 1)
+	return 0;
+
     dev = TAPE_NR(devt);
     STp = &(scsi_tapes[dev]);
     STm = &(STp->modes[STp->current_mode]);

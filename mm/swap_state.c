@@ -143,6 +143,50 @@ bad_unused:
 	goto out;
 }
 
+int swap_count(unsigned long entry)
+{
+	struct swap_info_struct * p;
+	unsigned long offset, type;
+	int retval = 0;
+
+	if (!entry)
+		goto bad_entry;
+	type = SWP_TYPE(entry);
+	if (type & SHM_SWP_TYPE)
+		goto out;
+	if (type >= nr_swapfiles)
+		goto bad_file;
+	p = type + swap_info;
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max)
+		goto bad_offset;
+	if (!p->swap_map[offset])
+		goto bad_unused;
+	retval = p->swap_map[offset];
+#ifdef DEBUG_SWAP
+	printk("DebugVM: swap_count(entry %08lx, count %d)\n",
+	       entry, retval);
+#endif
+out:
+	return retval;
+
+bad_entry:
+	printk(KERN_ERR "swap_count: null entry!\n");
+	goto out;
+bad_file:
+	printk(KERN_ERR
+	       "swap_count: entry %08lx, nonexistent swap file!\n", entry);
+	goto out;
+bad_offset:
+	printk(KERN_ERR
+	       "swap_count: entry %08lx, offset exceeds max!\n", entry);
+	goto out;
+bad_unused:
+	printk(KERN_ERR
+	       "swap_count at %8p: entry %08lx, unused page!\n", 
+	       __builtin_return_address(0), entry);
+	goto out;
+}
 
 static inline void remove_from_swap_cache(struct page *page)
 {
@@ -155,6 +199,7 @@ static inline void remove_from_swap_cache(struct page *page)
 		printk ("VM: Removing swap cache page with wrong inode hash "
 			"on page %08lx\n", page_address(page));
 	}
+#if 0
 	/*
 	 * This is a legal case, but warn about it.
 	 */
@@ -163,6 +208,7 @@ static inline void remove_from_swap_cache(struct page *page)
 			"VM: Removing page cache on unshared page %08lx\n", 
 			page_address(page));
 	}
+#endif
 
 #ifdef DEBUG_SWAP
 	printk("DebugVM: remove_from_swap_cache(%08lx count %d)\n",

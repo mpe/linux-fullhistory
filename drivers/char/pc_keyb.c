@@ -611,20 +611,18 @@ static char * __init initialize_kbd(void)
 
 void __init pckbd_init_hw(void)
 {
-	disable_irq(KEYBOARD_IRQ);
+	/* Get the keyboard controller registers (incomplete decode) */
+	request_region(0x60, 16, "keyboard");
 
 	/* Flush any pending input. */
 	kbd_clear_input();
 
 	if (kbd_startup_reset) {
 		char *msg = initialize_kbd();
-		if (msg) {
+		if (msg)
 			printk(KERN_WARNING "initialize_kbd: %s\n", msg);
-			aux_device_present = 0;
-			return;
-		}
 	}
 
+	/* Ok, finally allocate the IRQ, and off we go.. */
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard", NULL);
-	request_region(0x60, 16, "keyboard");
 }

@@ -163,9 +163,11 @@ void __free_page(struct page *page)
 		free_pages_ok(page->map_nr, 0);
 		return;
 	}
+#if 0
 	if (PageSwapCache(page) && atomic_read(&page->count) == 1)
 		printk(KERN_WARNING "VM: Releasing swap cache page at %p",
 			__builtin_return_address(0));
+#endif
 }
 
 void free_pages(unsigned long addr, unsigned long order)
@@ -182,10 +184,12 @@ void free_pages(unsigned long addr, unsigned long order)
 			free_pages_ok(map_nr, order);
 			return;
 		}
+#if 0
 		if (PageSwapCache(map) && atomic_read(&map->count) == 1)
 			printk(KERN_WARNING 
 				"VM: Releasing swap cache pages at %p",
 				__builtin_return_address(0));
+#endif
 	}
 }
 

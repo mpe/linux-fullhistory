@@ -664,10 +664,8 @@ static void do_8259A_IRQ(unsigned int irq, struct pt_regs * regs)
 	spin_unlock(&irq_controller_lock);
 
 	/* Exit early if we had no action or it was disabled */
-	if (!action) {
-printk("Unhandled irq %d (%x)\n", irq, desc->status);
+	if (!action)
 		return;
-	}
 
 	handle_IRQ_event(irq, regs, action);
 

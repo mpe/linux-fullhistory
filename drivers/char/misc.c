@@ -31,8 +31,8 @@
  	Cyrus Durgin <cider@speakeasy.org>
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
+#include <linux/config.h>
 
 #include <linux/fs.h>
 #include <linux/errno.h>
@@ -64,10 +64,10 @@ static struct miscdevice misc_list = { 0, "head", NULL, &misc_list, &misc_list }
 #define DYNAMIC_MINORS 64 /* like dynamic majors */
 static unsigned char misc_minors[DYNAMIC_MINORS / 8];
 
-#ifndef MODULE
 extern int adbdev_init(void);
 extern int bus_mouse_init(void);
 extern int psaux_init(void);
+extern int qpmouse_init(void);
 extern int ms_bus_mouse_init(void);
 extern int atixl_busmouse_init(void);
 extern int amiga_mouse_init(void);
@@ -101,7 +101,6 @@ static int misc_read_proc(char *buf, char **start, off_t offset,
 }
 
 #endif /* PROC_FS */
-#endif /* !MODULE */
 
 static int misc_open(struct inode * inode, struct file * file)
 {
@@ -157,7 +156,6 @@ int misc_register(struct miscdevice * misc)
 	}
 	if (misc->minor < DYNAMIC_MINORS)
 		misc_minors[misc->minor >> 3] |= 1 << (misc->minor & 7);
-	MOD_INC_USE_COUNT;
 	misc->next = &misc_list;
 	misc->prev = misc_list.prev;
 	misc->prev->next = misc;
@@ -170,7 +168,6 @@ int misc_deregister(struct miscdevice * misc)
 	int i = misc->minor;
 	if (!misc->next || !misc->prev)
 		return -EINVAL;
-	MOD_DEC_USE_COUNT;
 	misc->prev->next = misc->next;
 	misc->next->prev = misc->prev;
 	misc->next = NULL;
@@ -181,27 +178,15 @@ int misc_deregister(struct miscdevice * misc)
 	return 0;
 }
 
-#ifdef MODULE
-
-#define misc_init init_module
-
-void cleanup_module(void)
-{
-	unregister_chrdev(MISC_MAJOR, "misc");
-}
-
-#endif
-
 EXPORT_SYMBOL(misc_register);
 EXPORT_SYMBOL(misc_deregister);
 
-#if defined(CONFIG_PROC_FS) && !defined(MODULE)
+#if defined(CONFIG_PROC_FS)
 static struct proc_dir_entry *proc_misc;	
 #endif
 
-__initfunc(int misc_init(void))
+int __init misc_init(void)
 {
-#ifndef MODULE
 #ifdef CONFIG_PROC_FS
 	proc_misc = create_proc_entry("misc", 0, 0);
 	if (proc_misc)
@@ -212,6 +197,9 @@ __initfunc(int misc_init(void))
 #endif
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
+#endif
+#if defined CONFIG_82C710_MOUSE
+	qpmouse_init();		/* This must be before psaux_init */
 #endif
 #if defined CONFIG_PSMOUSE
 	psaux_init();
@@ -285,7 +273,6 @@ __initfunc(int misc_init(void))
 #ifdef CONFIG_PMAC_PBOOK
 	pmu_device_init();
 #endif
-#endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
 		printk("unable to get major %d for misc devices\n",
 		       MISC_MAJOR);

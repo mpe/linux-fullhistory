@@ -549,15 +549,7 @@ __initfunc(int chr_dev_init(void))
 #ifdef CONFIG_PRINTER
 	lp_init();
 #endif
-#if defined (CONFIG_BUSMOUSE) || defined(CONFIG_UMISC) || \
-    defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
-    defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG) || \
-    defined (CONFIG_AMIGAMOUSE) || defined (CONFIG_ATARIMOUSE) || \
-    defined (CONFIG_MACMOUSE) || defined (CONFIG_PCWATCHDOG) || \
-    defined (CONFIG_APM) || defined (CONFIG_RTC) || \
-    defined (CONFIG_SUN_MOUSE) || defined (CONFIG_NVRAM)
 	misc_init();
-#endif
 #ifdef CONFIG_SOUND
 	soundcore_init();
 #ifdef CONFIG_SOUND_OSS	

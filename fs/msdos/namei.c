@@ -806,8 +806,13 @@ new_dentry->d_count);
 	if (S_ISDIR(old_inode->i_mode)) {
 		error = fat_scan(old_inode, MSDOS_DOTDOT, &dotdot_bh,
 				&dotdot_de, &dotdot_ino, SCAN_ANY);
-		if (error < 0)
+		if (error < 0) {
+			printk(KERN_WARNING
+				"MSDOS: %s/%s, get dotdot failed, ret=%d\n",
+				old_dentry->d_parent->d_name.name,
+				old_dentry->d_name.name, error);
 			goto rename_done;
+		}
 		error = -EIO;
 		dotdot_inode = iget(sb, dotdot_ino);
 		if (!dotdot_inode)
@@ -832,7 +837,6 @@ new_dentry->d_count);
 	if (!list_empty(&free_inode->i_dentry))
 		printk("msdos_rename_diff: free inode has aliases??\n");
 	msdos_read_inode(free_inode);
-	fat_mark_buffer_dirty(sb, free_bh, 1);
 
 	/*
 	 * Make sure the old dentry isn't busy,
@@ -854,6 +858,7 @@ old_dentry->d_count);
 	d_delete(old_dentry);
 
 	free_inode->i_mode   = old_inode->i_mode;
+	free_inode->i_nlink  = old_inode->i_nlink;
 	free_inode->i_size   = old_inode->i_size;
 	free_inode->i_blocks = old_inode->i_blocks;
 	free_inode->i_mtime  = old_inode->i_mtime;
@@ -875,6 +880,7 @@ old_dentry->d_count);
 	 */
 	d_instantiate(old_dentry, free_inode);
 
+	fat_mark_buffer_dirty(sb, free_bh, 1);
 	fat_cache_inval_inode(old_inode);
 	mark_inode_dirty(old_inode);
 	old_de->name[0] = DELETED_FLAG;

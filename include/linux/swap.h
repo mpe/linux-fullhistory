@@ -89,6 +89,7 @@ extern int swap_duplicate(unsigned long);
 extern int swap_check_entry(unsigned long);
 extern struct page * read_swap_cache_async(unsigned long, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
+extern int FASTCALL(swap_count(unsigned long));
 /*
  * Make these inline later once they are working properly.
  */
@@ -146,14 +147,20 @@ extern inline unsigned long in_swap_cache(struct page *page)
  */
 static inline int is_page_shared(struct page *page)
 {
-	int count = atomic_read(&page->count);
+	unsigned int count;
 	if (PageReserved(page))
 		return 1;
-	if (page->inode == &swapper_inode)
-		count--;
+	count = atomic_read(&page->count);
+	if (PageSwapCache(page))
+	{
+		/* PARANOID */
+		if (page->inode != &swapper_inode)
+			panic("swap cache page has wrong inode\n");
+		count += swap_count(page->offset) - 2;
+	}
 	if (PageFreeAfter(page))
 		count--;
-	return (count > 1);
+	return  count > 1;
 }
 
 #endif /* __KERNEL__*/

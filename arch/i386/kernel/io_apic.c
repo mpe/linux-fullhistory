@@ -291,6 +291,43 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 }
 
 /*
+ * ISA Edge/Level control register, ELCR
+ */
+static int __init ISA_ELCR(unsigned int irq)
+{
+	if (irq < 16) {
+		unsigned int port = 0x4d0 + (irq >> 3);
+		return (inb(port) >> (irq & 7)) & 1;
+	}
+	printk("Broken MPtable reports ISA irq %d\n", irq);
+	return 0;
+}	
+
+/*
+ * ISA interrupts can be:
+ *  - level triggered, active low (ELCR = 1)
+ *  - edge triggered, active high (ELCR = 0)
+ *  - edge triggered, active low (magic irq 8)
+ */
+static int __init default_ISA_trigger(int idx)
+{
+	unsigned int irq = mp_irqs[idx].mpc_dstirq;
+
+	if (irq == 8)
+		return 0;
+	return ISA_ELCR(irq);
+}
+
+static int __init default_ISA_polarity(int idx)
+{
+	unsigned int irq = mp_irqs[idx].mpc_dstirq;
+
+	if (irq == 8)
+		return 1;
+	return ISA_ELCR(irq);
+}
+
+/*
  * There are broken mptables which register ISA+high-active+level IRQs,
  * these are illegal and are converted here to ISA+high-active+edge
  * IRQ sources. Careful, ISA+low-active+level is another broken entry
@@ -314,7 +351,7 @@ static int __init MPBIOS_polarity(int idx)
 			{
 				case MP_BUS_ISA: /* ISA pin */
 				{
-					polarity = 0;
+					polarity = default_ISA_polarity(idx);
 					break;
 				}
 				case MP_BUS_PCI: /* PCI pin */
@@ -371,16 +408,9 @@ static int __init MPBIOS_trigger(int idx)
 		{
 			switch (mp_bus_id_to_type[bus])
 			{
-				case MP_BUS_ISA: {
-					/* ISA pin, read the Edge/Level control register */
-					unsigned int irq = mp_irqs[idx].mpc_dstirq;
-					if (irq < 16) {
-						unsigned int port = 0x4d0 + (irq >> 3);
-						trigger = (inb(port) >> (irq & 7)) & 1;
-						break;
-					}
-					printk("Broken MPtable reports ISA irq %d\n", irq);
-					trigger = 1;
+				case MP_BUS_ISA:
+				{
+					trigger = default_ISA_trigger(idx);
 					break;
 				}
 				case MP_BUS_PCI: /* PCI pin, level */
@@ -556,7 +586,7 @@ void __init setup_IO_APIC_irqs(void)
 		entry.delivery_mode = dest_LowestPrio;
 		entry.dest_mode = 1;			/* logical delivery */
 		entry.mask = 0;				/* enable IRQ */
-		entry.dest.logical.logical_dest = 0xff;	/* all CPUs */
+		entry.dest.logical.logical_dest = 0;	/* but no route */
 
 		idx = find_irq_entry(pin,mp_INT);
 		if (idx == -1) {
@@ -571,6 +601,12 @@ void __init setup_IO_APIC_irqs(void)
 		entry.trigger = irq_trigger(idx);
 		entry.polarity = irq_polarity(idx);
 
+		if (irq_trigger(idx)) {
+			entry.trigger = 1;
+			entry.mask = 1;
+			entry.dest.logical.logical_dest = 0xff;
+		}
+
 		irq = pin_2_irq(idx,pin);
 		irq_2_pin[irq] = pin;
 
@@ -584,35 +620,12 @@ void __init setup_IO_APIC_irqs(void)
 		if (trigger_flag_broken (idx))
 			printk("broken BIOS, changing pin %d to edge\n", pin);
 
-		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
 		io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
+		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
 	}
 
 	if (!first_notcon)
 		printk(" not connected.\n");
-}
-
-void __init setup_IO_APIC_irq_ISA_default(unsigned int irq)
-{
-	struct IO_APIC_route_entry entry;
-
-	/*
-	 * add it to the IO-APIC irq-routing table:
-	 */
-	memset(&entry,0,sizeof(entry));
-
-	entry.delivery_mode = dest_LowestPrio;		/* lowest prio */
-	entry.dest_mode = 1;				/* logical delivery */
-	entry.mask = 0;					/* unmask IRQ now */
-	entry.dest.logical.logical_dest = 0xff;		/* all CPUs */
-
-	entry.vector = assign_irq_vector(irq);
-
-	entry.polarity = 0;
-	entry.trigger = 0;
-
-	io_apic_write(0x10+2*irq, *(((int *)&entry)+0));
-	io_apic_write(0x11+2*irq, *(((int *)&entry)+1));
 }
 
 /*
@@ -630,7 +643,7 @@ void __init setup_ExtINT_pin(unsigned int pin)
 	entry.delivery_mode = dest_ExtINT;
 	entry.dest_mode = 1;				/* logical delivery */
 	entry.mask = 0;					/* unmask IRQ now */
-	entry.dest.logical.logical_dest = 0x01;		/* all CPUs */
+	entry.dest.logical.logical_dest = 0x01;		/* logical CPU #0 */
 
 	entry.vector = 0;				/* it's ignored */
 
@@ -1016,10 +1029,8 @@ static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	/*
 	 * If there is no IRQ handler or it was disabled, exit early.
 	 */
-	if (!action) {
-printk("Unhandled edge irq %d (%x %p)\n", irq, status, desc->action);
+	if (!action)
 		return;
-	}
 
 	/*
 	 * Edge triggered interrupts need to remember
@@ -1070,10 +1081,8 @@ static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
 	spin_unlock(&irq_controller_lock);
 
 	/* Exit early if we had no action or it was disabled */
-	if (!action) {
-printk("Unhandled level irq %d (%x)\n", irq, status);
+	if (!action)
 		return;
-	}
 
 	handle_IRQ_event(irq, regs, action);
 
@@ -1152,8 +1161,9 @@ static inline void check_timer(void)
 
 	pin1 = find_timer_pin(mp_INT);
 	pin2 = find_timer_pin(mp_ExtINT);
-
+	enable_IO_APIC_irq(0);
 	if (!timer_irq_works()) {
+
 		if (pin1 != -1)
 			printk("..MP-BIOS bug: 8254 timer not connected to IO-APIC\n");
 		printk("...trying to set up timer as ExtINT... ");

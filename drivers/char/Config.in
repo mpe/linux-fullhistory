@@ -57,14 +57,8 @@ if [ "$CONFIG_MOUSE" = "y" ]; then
 	tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
 	tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
 	tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
-	if [ "$CONFIG_PSMOUSE" != "n" ]; then
-	  bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
-	fi
+	tristate 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
 	tristate 'PC110 digitizer pad support' CONFIG_PC110_PAD
-fi
-
-if [ "$CONFIG_MODULES" = "y" ]; then
-	bool 'Support for user misc device modules' CONFIG_UMISC
 fi
 
 tristate 'QIC-02 tape support' CONFIG_QIC02_TAPE
