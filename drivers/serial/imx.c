@@ -22,6 +22,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
+ * [29-Mar-2005] Mike Lee
+ * Added hardware handshake
  */
 #include <linux/config.h>
 
@@ -427,6 +429,11 @@ imx_set_termios(struct uart_port *port, struct termios *termios,
 		ucr2 = UCR2_WS | UCR2_SRST | UCR2_IRTS;
 	else
 		ucr2 = UCR2_SRST | UCR2_IRTS;
+
+	if (termios->c_cflag & CRTSCTS) {
+		ucr2 &= ~UCR2_IRTS;
+		ucr2 |= UCR2_CTSC;
+	}
 
 	if (termios->c_cflag & CSTOPB)
 		ucr2 |= UCR2_STPB;
