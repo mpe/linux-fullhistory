@@ -55,10 +55,10 @@ static unsigned int bt878_verbose = 1;
 static unsigned int bt878_debug;
 
 module_param_named(verbose, bt878_verbose, int, 0444);
-MODULE_PARM_DESC(bt878_verbose,
+MODULE_PARM_DESC(verbose,
 		 "verbose startup messages, default is 1 (yes)");
 module_param_named(debug, bt878_debug, int, 0644);
-MODULE_PARM_DESC(bt878_debug, "Turn on/off debugging (default:off).");
+MODULE_PARM_DESC(debug, "Turn on/off debugging (default:off).");
 
 int bt878_num;
 struct bt878 bt878[BT878_MAX];

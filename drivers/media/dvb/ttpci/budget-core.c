@@ -41,7 +41,7 @@
 
 int budget_debug;
 module_param_named(debug, budget_debug, int, 0644);
-MODULE_PARM_DESC(budget_debug, "Turn on/off budget debugging (default:off).");
+MODULE_PARM_DESC(debug, "Turn on/off budget debugging (default:off).");
 
 /****************************************************************************
  * TT budget / WinTV Nova
