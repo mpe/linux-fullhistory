@@ -611,6 +611,8 @@ static u32 query_amp_caps(struct hda_codec *codec, hda_nid_t nid, int direction)
 	if (! info)
 		return 0;
 	if (! (info->status & INFO_AMP_CAPS)) {
+		if (!(snd_hda_param_read(codec, nid, AC_PAR_AUDIO_WIDGET_CAP) & AC_WCAP_AMP_OVRD))
+			nid = codec->afg;
 		info->amp_caps = snd_hda_param_read(codec, nid, direction == HDA_OUTPUT ?
 						    AC_PAR_AMP_OUT_CAP : AC_PAR_AMP_IN_CAP);
 		info->status |= INFO_AMP_CAPS;
