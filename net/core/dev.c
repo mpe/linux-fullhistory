@@ -1305,7 +1305,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
  
 void dev_init(void)
 {
-	struct device *dev, *dev2;
+	struct device *dev, **dp;
 
 	/*
 	 *	Add the devices.
@@ -1313,24 +1313,25 @@ void dev_init(void)
 	 *	from the chain disconnecting the device until the
 	 *	next reboot.
 	 */
-	 
-	dev2 = NULL;
-	for (dev = dev_base; dev != NULL; dev=dev->next) 
+
+	dp = &dev_base;
+	while ((dev = *dp) != NULL)
 	{
+		int i;
+		for (i = 0; i < DEV_NUMBUFFS; i++)  {
+			skb_queue_head_init(dev->buffs + i);
+		}
+
 		if (dev->init && dev->init(dev)) 
 		{
 			/*
 			 *	It failed to come up. Unhook it.
 			 */
-			 
-			if (dev2 == NULL) 
-				dev_base = dev->next;
-			else 
-				dev2->next = dev->next;
+			*dp = dev->next;
 		} 
 		else
 		{
-			dev2 = dev;
+			dp = &dev->next;
 		}
 	}
 	proc_net_register(&(struct proc_dir_entry) {
@@ -1339,6 +1340,5 @@ void dev_init(void)
 		0, &proc_net_inode_operations,
 		dev_get_info
 	});
-
 }
 

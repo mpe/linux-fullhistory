@@ -17,11 +17,10 @@
 
 /******************************************************************************
  * IDE driver configuration options (play with these as desired):
+ * 
+ * REALLY_SLOW_IO can be defined in ide.c and ide-cd.c, if necessary
  */
-#undef REALLY_SLOW_IO			/* most systems can safely undef this */
-#include <asm/io.h>
-
-#undef 	REALLY_FAST_IO			/* define if ide ports are perfect */
+#define REALLY_FAST_IO			/* define if ide ports are perfect */
 #define INITIAL_MULT_COUNT	0	/* off=0; on=2,4,8,16,32, etc.. */
 
 #ifndef DISK_RECOVERY_TIME		/* off=0; on=access_delay_time */
@@ -81,14 +80,25 @@ typedef unsigned char	byte;	/* used everywhere */
 #define HWIF(drive)		((ide_hwif_t *)drive->hwif)
 #define HWGROUP(drive)		((ide_hwgroup_t *)(HWIF(drive)->hwgroup))
 
-#define IDE_DATA_REG		(HWIF(drive)->io_base)
-#define IDE_ERROR_REG		(HWIF(drive)->io_base+1)
-#define IDE_NSECTOR_REG		(HWIF(drive)->io_base+2)
-#define IDE_SECTOR_REG		(HWIF(drive)->io_base+3)
-#define IDE_LCYL_REG		(HWIF(drive)->io_base+4)
-#define IDE_HCYL_REG		(HWIF(drive)->io_base+5)
-#define IDE_SELECT_REG		(HWIF(drive)->io_base+6)
-#define IDE_STATUS_REG		(HWIF(drive)->io_base+7)
+#define IDE_DATA_OFFSET		(0)
+#define IDE_ERROR_OFFSET	(1)
+#define IDE_NSECTOR_OFFSET	(2)
+#define IDE_SECTOR_OFFSET	(3)
+#define IDE_LCYL_OFFSET		(4)
+#define IDE_HCYL_OFFSET		(5)
+#define IDE_SELECT_OFFSET	(6)
+#define IDE_STATUS_OFFSET	(7)
+#define IDE_FEATURE_OFFSET	IDE_ERROR_OFFSET
+#define IDE_COMMAND_OFFSET	IDE_STATUS_OFFSET
+
+#define IDE_DATA_REG		(HWIF(drive)->io_base+IDE_DATA_OFFSET)
+#define IDE_ERROR_REG		(HWIF(drive)->io_base+IDE_ERROR_OFFSET)
+#define IDE_NSECTOR_REG		(HWIF(drive)->io_base+IDE_NSECTOR_OFFSET)
+#define IDE_SECTOR_REG		(HWIF(drive)->io_base+IDE_SECTOR_OFFSET)
+#define IDE_LCYL_REG		(HWIF(drive)->io_base+IDE_LCYL_OFFSET)
+#define IDE_HCYL_REG		(HWIF(drive)->io_base+IDE_HCYL_OFFSET)
+#define IDE_SELECT_REG		(HWIF(drive)->io_base+IDE_SELECT_OFFSET)
+#define IDE_STATUS_REG		(HWIF(drive)->io_base+IDE_STATUS_OFFSET)
 #define IDE_CONTROL_REG		(HWIF(drive)->ctl_port)
 #define IDE_FEATURE_REG		IDE_ERROR_REG
 #define IDE_COMMAND_REG		IDE_STATUS_REG
@@ -413,6 +423,17 @@ int ide_do_reset (ide_drive_t *);
  * All allocations are longword aligned.
  */
 void *ide_alloc (unsigned long bytecount, unsigned long within_area);
+
+/*
+ * This function issues a specific IDE drive command onto the
+ * tail of the request queue, and waits for it to be completed.
+ * If arg is NULL, it goes through all the motions,
+ * but without actually sending a command to the drive.
+ *
+ * The value of arg is passed to the internal handler as rq->buffer.
+ */
+int ide_do_drive_cmd(int rdev, char *args);
+
 
 #ifdef CONFIG_BLK_DEV_IDECD
 /*

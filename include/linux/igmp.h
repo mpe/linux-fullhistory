@@ -25,7 +25,7 @@
 struct igmphdr
 {
 	unsigned char type;
-	unsigned char unused;
+	unsigned char code;
 	unsigned short csum;
 	unsigned long group;
 };
@@ -37,7 +37,7 @@ struct igmphdr
 struct igmp_header
 {
 	unsigned char type;
-	unsigned char unused;
+	unsigned char code;
 	unsigned short csum;
 	unsigned long group;
 };

@@ -110,6 +110,8 @@ struct mcd_Toc {
 	struct msf	diskTime;
 };
 
+#if 0
 #ifndef I_WAS_HERE
 #error Please edit this file first.
+#endif
 #endif

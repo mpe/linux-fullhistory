@@ -46,6 +46,9 @@ NEW!		- should work for for EZ-Drive disks as well (not verified)
 NEW!	- ide-cd.c now compiles separate from ide.c
 NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
 NEW!		- for details, see comments at top of triton.c
+NEW!    - ide-cd.c now supports door locking and auto-loading.
+NEW!            Also preliminary support for multisession and direct
+NEW!            reads of audio data.
 
 For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
 
@@ -160,6 +163,31 @@ interface (/dev/hda) and an IDE cdrom drive on the secondary interface
 	ln -sf /dev/hdc /dev/cdrom
 	mkdir /cd
 	mount /dev/cdrom /cd -t iso9660 -o ro
+
+If, after doing all of the above, mount doesn't work and you see
+errors from the driver (with dmesg) complaining about `status=0xff',
+this means that the hardware is not responding to the driver's attempts
+to read it.  One of the following is probably the problem:
+
+  - Your hardware is broken.
+
+  - You are using the wrong address for the device, or you have the
+    drive jumpered wrong.  Review the configuration instructions above.
+
+  - Your IDE controller requires some nonstandard initialization sequence
+    before it will work properly.  If this is the case, there will often
+    be a separate MS-DOS driver just for the controller.  IDE interfaces
+    on sound cards usually fall into this category.  Such configurations
+    can often be made to work by first booting MS-DOS, loading the
+    appropriate drivers, and then warm-booting linux (without powering
+    off).  This can be automated using loadlin in the MS-DOS autoexec.
+
+If you always get timeout errors, interrupts from the drive are probably
+not making it to the host.  Check how you have the hardware jumpered
+and make sure it matches what the driver expects (see the configuration
+instructions above).  If you have a PCI system, also check the BIOS
+setup; i've had one report of a system which was shipped with IRQ 15
+disabled by the BIOS.
 
 The kernel is able to execute binaries directly off of the cdrom,
 provided it is mounted with the default block size of 1024 (as above).

@@ -173,6 +173,8 @@
 #define MCDX_E		1			/* unspec error */
 #define MCDX_EOM	2			/* end of media */
 
+#if 0
 #ifndef I_WAS_HERE
 #error Please edit this file first.
+#endif
 #endif

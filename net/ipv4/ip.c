@@ -1819,7 +1819,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph->tot_len = ntohs(skb->len-(((unsigned char *)iph)-skb->data));
 
 #ifdef CONFIG_IP_FIREWALL
-	if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy, 0) != 1)
+	if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy, 0) < 1)
 		/* just don't send this packet */
 		return;
 #endif	

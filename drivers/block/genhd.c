@@ -3,20 +3,17 @@
  *  linux/kernel/hd.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
- */
-
-/*
+ *
+ *
  *  Thanks to Branko Lankester, lankeste@fwi.uva.nl, who found a bug
  *  in the early extended-partition checks and added DM partitions
- */
-
-/*
+ *
  *  Support for DiskManager v6.0x added by Mark Lord (mlord@bnr.ca)
  *  with information provided by OnTrack.  This now works for linux fdisk
  *  and LILO, as well as loadlin and bootln.  Note that disks other than
  *  /dev/hda *must* have a "DOS" type 0x51 partition in the first slot (hda1).
- * 
- *  Added support for "missing/deleted" extended partitions - mlord@bnr.ca
+ *
+ *  More flexible handling of extended partitions - aeb, 950831
  */
 
 #include <linux/config.h>
@@ -82,14 +79,15 @@ static void extended_partition(struct gendisk *hd, int dev)
 {
 	struct buffer_head *bh;
 	struct partition *p;
-	unsigned long first_sector, this_sector;
+	unsigned long first_sector, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
+	int i;
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
 	this_sector = first_sector;
 
 	while (1) {
-		if ((current_minor & mask) >= (4 + hd->max_p))
+		if ((current_minor & mask) >= hd->max_p)
 			return;
 		if (!(bh = bread(dev,0,1024)))
 			return;
@@ -100,29 +98,56 @@ static void extended_partition(struct gendisk *hd, int dev)
 		bh->b_dirt = 0;
 		bh->b_uptodate = 0;
 		bh->b_req = 0;
+
 		if (*(unsigned short *) (bh->b_data+510) != 0xAA55)
 			goto done;
+
 		p = (struct partition *) (0x1BE + bh->b_data);
+
+		this_size = hd->part[MINOR(dev)].nr_sects;
+
 		/*
-		 * Process the first entry, which should be the real
+		 * Usually, the first entry is the real data partition,
+		 * the 2nd entry is the next extended partition, or empty,
+		 * and the 3rd and 4th entries are unused.
+		 * However, DRDOS sometimes has the extended partition as
+		 * the first entry (when the data partition is empty),
+		 * and OS/2 seems to use all four entries.
+		 */
+
+		/* 
+		 * First process the data partition(s)
+		 */
+		for (i=0; i<4; i++, p++) {
+		    if (!p->nr_sects || p->sys_ind == EXTENDED_PARTITION)
+		      continue;
+
+		    if (p->start_sect + p->nr_sects > this_size)
+		      continue;
+
+		    add_partition(hd, current_minor, this_sector+p->start_sect, p->nr_sects);
+		    current_minor++;
+		    if ((current_minor & mask) >= hd->max_p)
+		      goto done;
+		}
+		/*
+		 * Next, process the (first) extended partition, if present.
+		 * (So far, there seems to be no reason to make
+		 *  extended_partition()  recursive and allow a tree
+		 *  of extended partitions.)
+		 * It should be a link to the next logical partition.
+		 * Create a minor for this just long enough to get the next
+		 * partition table.  The minor will be reused for the next
 		 * data partition.
 		 */
-		if (p->sys_ind == EXTENDED_PARTITION)
-			goto done;	/* shouldn't happen */
-		if (p->sys_ind && p->nr_sects)
-			add_partition(hd, current_minor, this_sector+p->start_sect, p->nr_sects);
-		current_minor++;
-		p++;
-		/*
-		 * Process the second entry, which should be a link
-		 * to the next logical partition.  Create a minor
-		 * for this just long enough to get the next partition
-		 * table.  The minor will be reused for the real
-		 * data partition.
-		 */
-		if (p->sys_ind != EXTENDED_PARTITION ||
-		    !(hd->part[current_minor].nr_sects = p->nr_sects))
-			goto done;  /* no more logicals in this partition */
+		p -= 4;
+		for (i=0; i<4; i++, p++)
+		  if(p->nr_sects && p->sys_ind == EXTENDED_PARTITION)
+		    break;
+		if (i == 4)
+		  goto done;	 /* nothing left to do */
+
+		hd->part[current_minor].nr_sects = p->nr_sects;
 		hd->part[current_minor].start_sect = first_sector + p->start_sect;
 		this_sector = first_sector + p->start_sect;
 		dev = ((hd->major) << 8) | current_minor;
@@ -211,6 +236,9 @@ read_mbr:
 			printk(" <");
 			extended_partition(hd, (hd->major << 8) | minor);
 			printk(" >");
+			/* prevent someone doing mkfs or mkswap on
+			   an extended partition */
+			hd->part[minor].nr_sects = 0;
 		}
 	}
 	/*

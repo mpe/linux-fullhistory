@@ -194,6 +194,29 @@ static int build_dmatable (ide_drive_t *drive)
 	return 1;	/* let the PIO routines handle this weirdness */
 }
 
+static int config_drive_for_dma (ide_drive_t *drive)
+{
+	const char **list;
+
+	struct hd_driveid *id = drive->id;
+	if (id && (id->capability & 1)) {
+		/* Enable DMA on any drive that supports mword2 DMA */
+		if ((id->field_valid & 2) && (id->dma_mword & 0x404) == 0x404) {
+			drive->using_dma = 1;
+			return 0;		/* DMA enabled */
+		}
+		/* Consult the list of known "good" drives */
+		list = good_dma_drives;
+		while (*list) {
+			if (!strcmp(*list++,id->model)) {
+				drive->using_dma = 1;
+				return 0;	/* DMA enabled */
+			}
+		}
+	}
+	return 1;	/* DMA not enabled */
+}
+
 /*
  * triton_dmaproc() initiates/aborts DMA read/write operations on a drive.
  *
@@ -207,40 +230,31 @@ static int build_dmatable (ide_drive_t *drive)
  */
 static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
-	const char **list;
 	unsigned long dma_base = HWIF(drive)->dma_base;
+	unsigned int reading = (1 << 3);
 
-	if (func == ide_dma_abort) {
-		outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
-		return 0;
-	}
-	if (func == ide_dma_check) {
-		struct hd_driveid *id = drive->id;
-		if (id && (id->capability & 1)) {
-			/* Enable DMA on any drive that supports mword2 DMA */
-			if ((id->field_valid & 2) && (id->dma_mword & 0x404) == 0x404) {
-				drive->using_dma = 1;
-				return 0;		/* DMA enabled */
-			}
-			/* Consult the list of known "good" drives */
-			list = good_dma_drives;
-			while (*list) {
-				if (!strcmp(*list++,id->model)) {
-					drive->using_dma = 1;
-					return 0;	/* DMA enabled */
-				}
-			}
-		}
-		return 1;	/* DMA not enabled */
+	switch (func) {
+		case ide_dma_abort:
+			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
+			return 0;
+		case ide_dma_check:
+			return config_drive_for_dma (drive);
+		case ide_dma_write:
+			reading = 0;
+		case ide_dma_read:
+			break;
+		default:
+			printk("triton_dmaproc: unsupported func: %d\n", func);
+			return 1;
 	}
 	if (build_dmatable (drive))
 		return 1;
 	outl(virt_to_bus (HWIF(drive)->dmatable), dma_base + 4); /* PRD table */
-	outb((!func) << 3, dma_base);			/* specify r/w */
+	outb(reading, dma_base);			/* specify r/w */
 	outb(0x26, dma_base+2);				/* clear status bits */
 	ide_set_handler (drive, &dma_intr);		/* issue cmd to drive */
-	OUT_BYTE(func ? WIN_WRITEDMA : WIN_READDMA, IDE_COMMAND_REG);
-	outb(inb(dma_base)|1, dma_base);			/* begin DMA */
+	OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
+	outb(inb(dma_base)|1, dma_base);		/* begin DMA */
 	return 0;
 }
 
@@ -326,8 +340,8 @@ void ide_init_triton (byte bus, byte fn)
 			base = bmiba + 8;
 		} else
 			continue;
-		printk("    %s: BusMaster DMA at 0x%04x-0x%04x", hwif->name, base, base+5);
-		if (check_region(base, 6)) {
+		printk("    %s: BusMaster DMA at 0x%04x-0x%04x", hwif->name, base, base+7);
+		if (check_region(base, 8)) {
 			printk(" -- ERROR, PORTS ALREADY IN USE");
 		} else {
 			unsigned long *table;

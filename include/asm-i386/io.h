@@ -121,10 +121,11 @@ __IN(b,"")
 #undef RETURN_TYPE
 #define RETURN_TYPE unsigned short
 /* __IN(w,"w","0" (0)) */
-__IN(w,)
+__IN(w,"")
 #undef RETURN_TYPE
 #define RETURN_TYPE unsigned int
 __IN(l,"")
+#undef RETURN_TYPE
 
 __OUT(b,"b",char)
 __OUT(w,"w",short)

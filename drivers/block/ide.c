@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.11  Aug 29, 1995
+ *  linux/drivers/block/ide.c	Version 5.12  Sep 1, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -130,14 +130,23 @@
  *			added automatic PCI CMD640 detection/support
  *			added option for VLB CMD640 support
  *			tweaked probe to find cdrom on hdb with disks on hda,hdc
+ *  Version 5.12	some performance tuning
+ *			added message to alert user to bad /dev/hd[cd] entries
+ *			OOOPS!  fixed bug in atapi reset
+ *			driver now forces "serialize" again for all cmd640 chips
+ *			noticed REALLY_SLOW_IO had no effect, moved it to ide.c
+ *			made do_drive_cmd() into public ide_do_drive_cmd()
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
- *	- improved CMD support:  probably handing this off to someone else
+ *	- add ioctls to get/set interface timings on cmd640, ht6560b, triton
  *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
+ *	- improved CMD support:  probably handing this off to someone else
  *	- find someone to work on IDE *tape drive* support
  */
+
+#undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
 #include <linux/config.h>
 #include <linux/types.h>
@@ -156,6 +165,7 @@
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/segment.h>
+#include <asm/io.h>
 
 #ifdef CONFIG_PCI
 #include <linux/bios32.h>
@@ -239,7 +249,7 @@ static void init_ide_data (void)
 		/* fill in any non-zero initial values */
 		hwif->noprobe	= (h > 1);
 		hwif->io_base	= default_io_base[h];
-		hwif->ctl_port	= hwif->io_base ? hwif->io_base + 0x206 : 0x000;
+		hwif->ctl_port	= hwif->io_base ? hwif->io_base+0x206 : 0x000;
 #ifdef CONFIG_BLK_DEV_HD
 		if (hwif->io_base == HD_DATA)
 			hwif->noprobe = 1; /* may be overriden by ide_setup() */
@@ -268,7 +278,6 @@ static void init_ide_data (void)
 	}
 }
 
-#ifdef __i386__
 #define VLB_SYNC 1
 /*
  * Some localbus EIDE interfaces require a special access sequence
@@ -278,34 +287,32 @@ static void init_ide_data (void)
  * to ensure that the reads all happen together.
  */
 static inline void do_vlb_sync (unsigned short port) {
-	unsigned int _v;
-	__asm__ __volatile__	(
-		"inb %w1,%b0\n\t"
-		"inb %w1,%b0\n\t"
-		"inb %w1,%b0"
-		: "=&a" (_v)		/* outputs */
-		: "d" (port)	);	/* inputs */
+	(void) inb (port);
+	(void) inb (port);
+	(void) inb (port);
 }
-#endif	/* __i386__ */
 
 /*
  * This is used for most PIO data transfers *from* the IDE interface
  */
 void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 {
+	unsigned short io_base  = HWIF(drive)->io_base;
+	unsigned short data_reg = io_base+IDE_DATA_OFFSET;
+
 	if (drive->vlb_32bit) {
 #ifdef VLB_SYNC
 		if (drive->vlb_sync) {
 			cli();
-			do_vlb_sync(IDE_NSECTOR_REG);
-			insl(IDE_DATA_REG, buffer, wcount);
+			do_vlb_sync(io_base+IDE_NSECTOR_OFFSET);
+			insl(data_reg, buffer, wcount);
 			if (drive->unmask)
 				sti();
 		} else
 #endif /* VLB_SYNC */
-			insl(IDE_DATA_REG, buffer, wcount);
+			insl(data_reg, buffer, wcount);
 	} else
-		insw(IDE_DATA_REG, buffer, wcount<<1);
+		insw(data_reg, buffer, wcount<<1);
 }
 
 /*
@@ -313,19 +320,22 @@ void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
  */
 void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 {
+	unsigned short io_base  = HWIF(drive)->io_base;
+	unsigned short data_reg = io_base+IDE_DATA_OFFSET;
+
 	if (drive->vlb_32bit) {
 #ifdef VLB_SYNC
 		if (drive->vlb_sync) {
 			cli();
-			do_vlb_sync(IDE_NSECTOR_REG);
-			outsl(IDE_DATA_REG, buffer, wcount);
+			do_vlb_sync(io_base+IDE_NSECTOR_OFFSET);
+			outsl(data_reg, buffer, wcount);
 			if (drive->unmask)
 				sti();
 		} else
 #endif /* VLB_SYNC */
-			outsl(IDE_DATA_REG, buffer, wcount);
+			outsl(data_reg, buffer, wcount);
 	} else
-		outsw(IDE_DATA_REG, buffer, wcount<<1);
+		outsw(data_reg, buffer, wcount<<1);
 }
 
 #if SUPPORT_HT6560B
@@ -677,8 +687,8 @@ int ide_do_reset (ide_drive_t *drive)
 			if (!drive->keep_settings)
 				drive->unmask = 0;
 			OUT_BYTE (drive->select.all, IDE_SELECT_REG);
+			udelay (20);
 			OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
-			udelay (10);
 			hwgroup->reset_timeout = jiffies + WAIT_WORSTCASE;
 			start_reset_timer (hwif); /* begin periodic polling */
 			restore_flags (flags);
@@ -851,12 +861,10 @@ int ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	err = ide_dump_status(drive, msg, stat);
 	if ((rq = HWGROUP(drive)->rq) == NULL || drive == NULL)
 		return 0;
-#ifdef IDE_DRIVE_CMD
 	if (rq->cmd == IDE_DRIVE_CMD) {	/* never retry an explicit DRIVE_CMD */
 		end_drive_cmd(drive, stat, err);
 		return 0;
 	}
-#endif	/* IDE_DRIVE_CMD */
 	if (stat & BUSY_STAT) {		/* other bits are useless when BUSY */
 		rq->errors |= ERROR_RESET;
 	} else {
@@ -1105,7 +1113,6 @@ static void recal_intr (ide_drive_t *drive)
 	IDE_DO_REQUEST;
 }
 
-#ifdef IDE_DRIVE_CMD
 /*
  * drive_cmd_intr() is invoked on completion of a special DRIVE_CMD.
  */
@@ -1120,7 +1127,6 @@ static void drive_cmd_intr (ide_drive_t *drive)
 		return;
 	IDE_DO_REQUEST;
 }
-#endif	/* IDE_DRIVE_CMD */
 
 /*
  * do_special() is used to issue WIN_SPECIFY, WIN_RESTORE, and WIN_SETMULT
@@ -1175,26 +1181,28 @@ static inline void do_special (ide_drive_t *drive)
 int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeout)
 {
 	byte stat;
-
-	udelay(1);	/* spec allows drive 400ns to assert "BUSY" */
-	if (GET_STAT() & BUSY_STAT) {
-		unsigned long flags;
-		save_flags(flags);
-		sti();
-		timeout += jiffies;
-		while (GET_STAT() & BUSY_STAT) {
-			if (jiffies > timeout) {
-				restore_flags(flags);
-				(void) ide_error(drive, "status timeout", GET_STAT());
-				return 1;
-			}
-		}
-		restore_flags(flags);
-		udelay(1);	/* spec allows 400ns for status to stabilize */
+	unsigned long flags;
+test:
+	udelay(1);	/* spec allows drive 400ns to change "BUSY" */
+	if (OK_STAT((stat = GET_STAT()), good, bad))
+		return 0;	/* fast exit for most frequent case */
+	if (!(stat & BUSY_STAT)) {
+		(void) ide_error(drive, "status error", stat);
+		return 1;
 	}
-	if (OK_STAT(stat=GET_STAT(), good, bad))
-		return 0;
-	(void) ide_error(drive, "status error", stat);
+
+	save_flags(flags);
+	sti();
+	timeout += jiffies;
+	do {
+		if (!((stat = GET_STAT()) & BUSY_STAT)) {
+			restore_flags(flags);
+			goto test;
+		}
+	} while (jiffies <= timeout);
+
+	restore_flags(flags);
+	(void) ide_error(drive, "status timeout", GET_STAT());
 	return 1;
 }
 
@@ -1205,28 +1213,30 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
  */
 static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
+	unsigned short io_base = HWIF(drive)->io_base;
+
 	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
-	OUT_BYTE(rq->nr_sectors,IDE_NSECTOR_REG);
+	OUT_BYTE(rq->nr_sectors,io_base+IDE_NSECTOR_OFFSET);
 	if (drive->select.b.lba) {
 #ifdef DEBUG
 		printk("%s: %sing: LBAsect=%ld, sectors=%ld, buffer=0x%08lx\n",
 			drive->name, (rq->cmd==READ)?"read":"writ", 
 			block, rq->nr_sectors, (unsigned long) rq->buffer);
 #endif
-		OUT_BYTE(block,IDE_SECTOR_REG);
-		OUT_BYTE(block>>=8,IDE_LCYL_REG);
-		OUT_BYTE(block>>=8,IDE_HCYL_REG);
-		OUT_BYTE(((block>>8)&0x0f)|drive->select.all,IDE_SELECT_REG);
+		OUT_BYTE(block,io_base+IDE_SECTOR_OFFSET);
+		OUT_BYTE(block>>=8,io_base+IDE_LCYL_OFFSET);
+		OUT_BYTE(block>>=8,io_base+IDE_HCYL_OFFSET);
+		OUT_BYTE(((block>>8)&0x0f)|drive->select.all,io_base+IDE_SELECT_OFFSET);
 	} else {
 		unsigned int sect,head,cyl,track;
 		track = block / drive->sect;
 		sect  = block % drive->sect + 1;
-		OUT_BYTE(sect,IDE_SECTOR_REG);
+		OUT_BYTE(sect,io_base+IDE_SECTOR_OFFSET);
 		head  = track % drive->head;
 		cyl   = track / drive->head;
-		OUT_BYTE(cyl,IDE_LCYL_REG);
-		OUT_BYTE(cyl>>8,IDE_HCYL_REG);
-		OUT_BYTE(head|drive->select.all,IDE_SELECT_REG);
+		OUT_BYTE(cyl,io_base+IDE_LCYL_OFFSET);
+		OUT_BYTE(cyl>>8,io_base+IDE_HCYL_OFFSET);
+		OUT_BYTE(head|drive->select.all,io_base+IDE_SELECT_OFFSET);
 #ifdef DEBUG
 		printk("%s: %sing: CHS=%d/%d/%d, sectors=%ld, buffer=0x%08lx\n",
 			drive->name, (rq->cmd==READ)?"read":"writ", cyl,
@@ -1239,7 +1249,7 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 			return;
 #endif /* CONFIG_BLK_DEV_TRITON */
 		ide_set_handler(drive, &read_intr);
-		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, IDE_COMMAND_REG);
+		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, io_base+IDE_COMMAND_OFFSET);
 		return;
 	}
 	if (rq->cmd == WRITE) {
@@ -1247,7 +1257,7 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_write, drive)))
 			return;
 #endif /* CONFIG_BLK_DEV_TRITON */
-		OUT_BYTE(drive->mult_count ? WIN_MULTWRITE : WIN_WRITE, IDE_COMMAND_REG);
+		OUT_BYTE(drive->mult_count ? WIN_MULTWRITE : WIN_WRITE, io_base+IDE_COMMAND_OFFSET);
 		if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 			printk("%s: no DRQ after issuing %s\n", drive->name,
 				drive->mult_count ? "MULTWRITE" : "WRITE");
@@ -1265,13 +1275,12 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 		}
 		return;
 	}
-#ifdef IDE_DRIVE_CMD
 	if (rq->cmd == IDE_DRIVE_CMD) {
 		byte *args = rq->buffer;
 		if (args) {
 			printk("%s: DRIVE_CMD cmd=0x%02x sc=0x%02x fr=0x%02x\n",
 			 drive->name, args[0], args[1], args[2]);
-			OUT_BYTE(args[2],IDE_FEATURE_REG);
+			OUT_BYTE(args[2],io_base+IDE_FEATURE_OFFSET);
 			ide_cmd(drive, args[0], args[1], &drive_cmd_intr);
 			return;
 		} else {
@@ -1286,7 +1295,6 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 			return;
 		}
 	}
-#endif	/* IDE_DRIVE_CMD */
 	printk("%s: bad command: %d\n", drive->name, rq->cmd);
 	ide_end_request(0, HWGROUP(drive));
 }
@@ -1574,6 +1582,10 @@ static ide_drive_t *get_info_ptr (int i_rdev)
 				ide_drive_t *drive = &hwif->drives[unit];
 				if (drive->present)
 					return drive;
+			} else if (major == IDE0_MAJOR && unit < 4) {
+				printk("ide: probable bad entry for /dev/hd%c%d\n",
+				 'a' + unit, MINOR(i_rdev) & PARTN_MASK);
+				printk("ide: to fix it, run:  /usr/src/linux/drivers/block/MAKEDEV.ide\n");
 			}
 			break;
 		}
@@ -1581,14 +1593,13 @@ static ide_drive_t *get_info_ptr (int i_rdev)
 	return NULL;
 }
 
-#ifdef IDE_DRIVE_CMD
 /*
  * This function issues a specific IDE drive command onto the
  * tail of the request queue, and waits for it to be completed.
  * If arg is NULL, it goes through all the motions,
  * but without actually sending a command to the drive.
  */
-static int do_drive_cmd(int rdev, char *args)
+int ide_do_drive_cmd(int rdev, char *args)
 {
 	unsigned long flags;
 	unsigned int major = MAJOR(rdev);
@@ -1626,7 +1637,6 @@ static int do_drive_cmd(int rdev, char *args)
 	restore_flags(flags);
 	return rq.errors ? -EIO : 0;		/* return -EIO if errors */
 }
-#endif	/* IDE_DRIVE_CMD */
 
 static int ide_open(struct inode * inode, struct file * filp)
 {
@@ -1646,13 +1656,9 @@ static int ide_open(struct inode * inode, struct file * filp)
 		return ide_cdrom_open (inode, filp, drive);
 #endif	/* CONFIG_BLK_DEV_IDECD */
 	if (drive->removeable) {
-		check_disk_change(inode->i_rdev);
-#ifdef IDE_DRIVE_CMD
-		{
 		byte door_lock[] = {WIN_DOORLOCK,0,0,0};
-		do_drive_cmd(inode->i_rdev, door_lock);
-		}
-#endif /* IDE_DRIVE_CMD */
+		check_disk_change(inode->i_rdev);
+		ide_do_drive_cmd(inode->i_rdev, door_lock);
 	}
 	return 0;
 }
@@ -1674,13 +1680,9 @@ static void ide_release(struct inode * inode, struct file * file)
 		else
 #endif	/* CONFIG_BLK_DEV_IDECD */
 		if (drive->removeable) {
-			invalidate_buffers(inode->i_rdev);
-#ifdef IDE_DRIVE_CMD
-			{
 			byte door_unlock[] = {WIN_DOORUNLOCK,0,0,0};
-			do_drive_cmd(inode->i_rdev, door_unlock);
-			}
-#endif /* IDE_DRIVE_CMD */
+			invalidate_buffers(inode->i_rdev);
+			ide_do_drive_cmd(inode->i_rdev, door_unlock);
 		}
 	}
 }
@@ -1876,10 +1878,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			drive->mult_req = arg;
 			drive->special.b.set_multmode = 1;
 			restore_flags(flags);
-#ifndef IDE_DRIVE_CMD
-			return 0;
-#else
-			do_drive_cmd (inode->i_rdev, NULL);
+			ide_do_drive_cmd (inode->i_rdev, NULL);
 			return (drive->mult_count == arg) ? 0 : -EIO;
 
 		case HDIO_DRIVE_CMD:
@@ -1887,20 +1886,19 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			unsigned long args;
 
 			if (NULL == (long *) arg)
-				err = do_drive_cmd(inode->i_rdev,NULL);
+				err = ide_do_drive_cmd(inode->i_rdev,NULL);
 			else {
 				if (!(err = verify_area(VERIFY_READ,(long *)arg,sizeof(long))))
 				{
 					args = get_user((long *)arg);
 					if (!(err = verify_area(VERIFY_WRITE,(long *)arg,sizeof(long)))) {
-						err = do_drive_cmd(inode->i_rdev,(char *)&args);
+						err = ide_do_drive_cmd(inode->i_rdev,(char *)&args);
 						put_user(args,(long *)arg);
 					}
 				}
 			}
 			return err;
 		}
-#endif /* IDE_DRIVE_CMD */
 
 		RO_IOCTLS(inode->i_rdev, arg);
 
@@ -2398,7 +2396,8 @@ void init_cmd640_vlb (void)
 	byte reg;
 	unsigned short port = 0x178;
 
- 	printk("ide: buggy CMD640 interface: ");
+	single_threaded = 1;
+ 	printk("ide: buggy CMD640 interface: serialized, ");
 	reg = read_cmd640_vlb(port, 0x50);
 	if (reg == 0xff || (reg & 0x90) != 0x90) {
 #if TRY_CMD640_VLB_AT_0x78
@@ -2406,9 +2405,8 @@ void init_cmd640_vlb (void)
 		if (reg == 0xff || (reg & 0x90) != 0x90)
 #endif
 		{
-			single_threaded = 1;
 			disallow_unmask = 1;
-			printk("(probe failed) serialized, disabled unmasking\n");
+			printk("(probe failed) disabled unmasking\n");
 			return;
 		}
 	}
@@ -2578,8 +2576,14 @@ void ide_setup (char *s)
 #if SUPPORT_HT6560B
 			case -4: /* "ht6560b" */
 				if (hw > 1) goto bad_hwif;
-				ide_hwifs[0].select = 0x1c;
-				ide_hwifs[1].select = 0x1d;
+				/*
+				 * Using 0x1c and 0x1d apparently selects a
+				 * faster interface speed than 0x3c and 0x3d.
+				 *
+				 * Need to add an ioctl to select between them.
+				 */
+				ide_hwifs[0].select = 0x3c;
+				ide_hwifs[1].select = 0x3d;
 				goto do_serialize;
 #endif /* SUPPORT_HT6560B */
 #if SUPPORT_DTC2278
@@ -2752,7 +2756,7 @@ static int init_irq (ide_hwif_t *hwif)
 	restore_flags(flags);	/* safe now that hwif->hwgroup is set up */
 
 	printk("%s at 0x%03x-0x%03x,0x%03x on irq %d", hwif->name,
-		hwif->io_base, hwif->io_base + 7, hwif->ctl_port, hwif->irq);
+		hwif->io_base, hwif->io_base+7, hwif->ctl_port, hwif->irq);
 	if (hwgroup->hwif != hwif) {
 		char *name = hwgroup->hwif->name;
 		if (hwgroup->hwif->irq == hwif->irq)
@@ -2818,12 +2822,13 @@ void init_cmd640 (byte bus, byte fn)
 	int rc;
 	unsigned char reg;
 
+	single_threaded = 1;
 	printk("ide: buggy CMD640 interface: ");
 	if ((rc = pcibios_read_config_byte(bus, fn, 0x51, &reg))
 	 || (rc =  pcibios_write_config_byte(bus, fn, 0x51, reg | 0xc8)))
 		buggy_interface_fallback (rc);
 	else
-		printk("disabled read-ahead, enabled secondary\n");
+		printk("serialized, disabled read-ahead, enabled secondary\n");
 }
 #endif /* SUPPORT_CMD640 */
 
@@ -2840,8 +2845,6 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 	byte fn, bus;
 	int rc;
 
-	if (!pcibios_present())
-		return;
 	save_flags(flags);
 	cli();
 	for (index = 0; !pcibios_find_device (vendor, device, index, &bus, &fn); ++index) {
@@ -2892,7 +2895,8 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 	/*
 	 * Find/initialize PCI IDE interfaces
 	 */
-	ide_init_pci ();
+	if (pcibios_present())
+		ide_init_pci ();
 #endif /* CONFIG_PCI */
 
 	/*

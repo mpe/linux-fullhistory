@@ -319,10 +319,14 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 	for (port = lance_portlist; *port; port++) {
 		int ioaddr = *port;
 
-		if (   check_region(ioaddr, LANCE_TOTAL_SIZE) == 0
-			&& inb(ioaddr + 14) == 0x57
-			&& inb(ioaddr + 15) == 0x57) {
-			mem_start = lance_probe1(ioaddr, mem_start);
+		if ( check_region(ioaddr, LANCE_TOTAL_SIZE) == 0) {
+			/* Detect "normal" 0x57 0x57 and the NI6510EB 0x52 0x44
+			   signatures w/ minimal I/O reads */
+			char offset15, offset14 = inb(ioaddr + 14);
+			
+			if ((offset14 == 0x52 || offset14 == 0x57) &&
+				((offset15 = inb(ioaddr + 15)) == 0x57 || offset15 == 0x44))
+				mem_start = lance_probe1(ioaddr, mem_start);
 		}
 	}
 

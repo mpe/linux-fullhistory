@@ -245,8 +245,6 @@ endif
 
 ifdef CONFIG_ARCNET
 L_OBJS += arcnet.o
-else
-M_OBJS += arcnet.o
 endif
 
 ifdef CONFIG_PI

@@ -49,6 +49,16 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 		goto bad_area;
 	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
 		goto bad_area;
+	if (error_code & 4) {
+		/*
+		 * accessing the stack below %esp is always a bug.
+		 * The "+ 32" is there due to some instructions (like
+		 * pusha) doing pre-decrement on the stack and that
+		 * doesn't show up until later..
+		 */
+		if (address + 32 < regs->esp)
+			goto bad_area;
+	}
 	vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
 	vma->vm_start = (address & PAGE_MASK);
 /*

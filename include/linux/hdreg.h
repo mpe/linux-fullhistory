@@ -1,8 +1,6 @@
 #ifndef _LINUX_HDREG_H
 #define _LINUX_HDREG_H
 
-#include <linux/config.h>
-
 /*
  * This file contains some defines for the AT-hd-controller.
  * Various sources.  
@@ -154,14 +152,19 @@ struct hd_driveid {
 	/* unsigned short reservedyy[96];*/	/* reserved (words 160-255) */
 };
 
+#ifdef __KERNEL__
 /*
  * These routines are used for kernel command line parameters from main.c:
  */
+#include <linux/config.h>
+
 #ifdef CONFIG_BLK_DEV_HD
 void hd_setup(char *, int *);
 #endif	/* CONFIG_BLK_DEV_HD */
 #ifdef CONFIG_BLK_DEV_IDE
 void ide_setup(char *);
 #endif	/* CONFIG_BLK_DEV_IDE */
+
+#endif  /* __KERNEL__ */
 
 #endif	/* _LINUX_HDREG_H */
