@@ -2,7 +2,7 @@
 # USB device configuration
 #
 mainmenu_option next_comment
-comment 'Support for USB'
+comment 'USB support'
 
 tristate 'Support for USB' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
@@ -15,7 +15,7 @@ comment 'USB Controllers'
 
 comment 'Miscellaneous USB options'
    if [ "$CONFIG_PROC_FS" != "n" ]; then
-      bool '  Preliminary /proc/bus/usb support' CONFIG_USB_PROC
+      bool '  /proc/bus/usb support' CONFIG_USB_PROC
    fi
    dep_tristate '  EZUSB Firmware downloader' CONFIG_USB_EZUSB $CONFIG_USB
 

@@ -139,7 +139,7 @@ static int acm_irq(int state, void *__buffer, int count, void *dev_id)
 {
 	unsigned char *data;
 	struct acm_state *acm = (struct acm_state *)dev_id;
-        devrequest *dr;
+	devrequest *dr;
 
 	info("ACM_USB_IRQ\n");
 
@@ -153,13 +153,13 @@ static int acm_irq(int state, void *__buffer, int count, void *dev_id)
 	if (!acm->active)
 		return 1;
 
-        dr = __buffer;
+	dr = __buffer;
 	data = __buffer;
 	data += sizeof(dr);
  
 #if 0
-        printk("reqtype: %02X\n",dr->requesttype);
-        printk("request: %02X\n",dr->request);
+	printk("reqtype: %02X\n",dr->requesttype);
+	printk("request: %02X\n",dr->request);
 	printk("wValue: %02X\n",dr->value);
 	printk("wIndex: %02X\n",dr->index);
 	printk("wLength: %02X\n",dr->length);
@@ -414,7 +414,7 @@ static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 	/* Only use CDC */
 	if (dev->descriptor.bDeviceClass != 2 ||
 	    dev->descriptor.bDeviceSubClass != 0 ||
-            dev->descriptor.bDeviceProtocol != 0)
+	    dev->descriptor.bDeviceProtocol != 0)
 		return NULL;
 
 #define IFCLASS(if) ((if->bInterfaceClass << 24) | (if->bInterfaceSubClass << 16) | (if->bInterfaceProtocol << 8) | (if->bNumEndpoints))

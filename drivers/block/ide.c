@@ -2805,7 +2805,6 @@ int __init ide_setup (char *s)
 				drive->scsi = 1;
 				goto done;
 #else
-#warning ide scsi-emulation selected but no SCSI-subsystem in kernel
 				drive->scsi = 0;
 				goto bad_option;
 #endif /* defined(CONFIG_BLK_DEV_IDESCSI) && defined(CONFIG_SCSI) */

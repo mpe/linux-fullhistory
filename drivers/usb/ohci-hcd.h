@@ -30,7 +30,7 @@ static int cc_to_error[16] = {
 	/* BufferOver */               USB_ST_BUFFEROVERRUN,
 	/* BuffUnder  */               USB_ST_BUFFERUNDERRUN,
 	/* Not Access */               USB_ST_NORESPONSE,
-	/* Not Access */               USB_ST_NORESPONSE
+	/* Not Access */               USB_ST_NORESPONSE 
 };
 
 #else  /* error codes */
@@ -75,7 +75,7 @@ typedef struct ed {
 	__u32 hwHeadP;
 	__u32 hwNextED;
 
-	struct ed *ed_prev;  
+	struct ed * ed_prev;  
 	__u8 int_period;
 	__u8 int_branch;
 	__u8 int_load; 
@@ -85,7 +85,7 @@ typedef struct ed {
 	__u16 last_iso;
     struct ed * ed_rm_list;
    
-} ed_t, * ped_t;
+} ed_t;
 
  
 /* TD info field */
@@ -124,7 +124,7 @@ typedef struct ed {
 #define TD_NOTACCESSED     0x0F
 
 
-#define MAXPSW 8
+#define MAXPSW 1
 
 typedef struct td { 
 	__u32 hwINFO;
@@ -135,10 +135,10 @@ typedef struct td {
 
   	__u8 type;
   	__u8 index;
-  	struct ed *ed;
-  	struct td *next_dl_td;
-  	purb_t urb;
-} td_t, * ptd_t;
+  	struct ed * ed;
+  	struct td * next_dl_td;
+  	urb_t * urb;
+} td_t;
 
 
 /* TD types */
@@ -321,14 +321,14 @@ struct virt_root_hub {
 /* urb */
 typedef struct 
 {
-	ped_t ed;
+	ed_t * ed;
 	__u16 length;	// number of tds associated with this request
 	__u16 td_cnt;	// number of tds already serviced
 	int   state;
 	void * wait;
-	ptd_t td[0];	// list pointer to all corresponding TDs associated with this request
+	td_t * td[0];	// list pointer to all corresponding TDs associated with this request
 
-} urb_priv_t, *purb_priv_t;
+} urb_priv_t;
 #define URB_DEL 1
 
 /*
@@ -343,24 +343,24 @@ typedef struct ohci {
 	struct ohci_hcca hcca;					/* hcca */                
 
 	int irq;
-	struct ohci_regs *regs;					/* OHCI controller's memory */	
+	struct ohci_regs * regs;					/* OHCI controller's memory */	
     struct list_head ohci_hcd_list;         /* list of all ohci_hcd */           
 
-	struct ohci *next; 		// chain of uhci device contexts
+	struct ohci * next; 		// chain of uhci device contexts
 	struct list_head urb_list; 	// list of all pending urbs
 	spinlock_t urb_list_lock; 	// lock to keep consistency 
   
 	int ohci_int_load[32];                  /* load of the 32 Interrupt Chains (for load ballancing)*/     
-	ped_t ed_rm_list[2];     /* lists of all endpoints to be removed */
-	ped_t ed_bulktail;       /* last endpoint of bulk list */
-	ped_t ed_controltail;    /* last endpoint of control list */
- 	ped_t ed_isotail;        /* last endpoint of iso list */
+	ed_t * ed_rm_list[2];     /* lists of all endpoints to be removed */
+	ed_t * ed_bulktail;       /* last endpoint of bulk list */
+	ed_t * ed_controltail;    /* last endpoint of control list */
+ 	ed_t * ed_isotail;        /* last endpoint of iso list */
 	int intrstatus;
 	__u32 hc_control;						/* copy of the hc control reg */  
-	struct usb_bus *bus;    
+	struct usb_bus * bus;    
 	struct usb_device * dev[128];
 	struct virt_root_hub rh;
-} ohci_t, * pohci_t;
+} ohci_t;
 
 
 #define NUM_TDS	0		/* num of preallocated transfer descriptors */
@@ -377,17 +377,17 @@ struct ohci_device {
 
 /* hcd */
 /* endpoint */
-static int ep_link(pohci_t ohci, ped_t ed);
-static int ep_unlink(pohci_t ohci, ped_t ed);
-static ped_t ep_add_ed(struct usb_device * usb_dev, unsigned int pipe, int interval, int load);
-static void ep_rm_ed(struct usb_device * usb_dev, ped_t ed);
+static int ep_link(ohci_t * ohci, ed_t * ed);
+static int ep_unlink(ohci_t * ohci, ed_t * ed);
+static ed_t * ep_add_ed(struct usb_device * usb_dev, unsigned int pipe, int interval, int load);
+static void ep_rm_ed(struct usb_device * usb_dev, ed_t * ed);
 /* td */
-static void td_fill(unsigned int info, void * data, int len, purb_t purb, int type, int index);
-static void td_submit_urb(purb_t purb);
+static void td_fill(unsigned int info, void * data, int len, urb_t * urb, int type, int index);
+static void td_submit_urb(urb_t * urb);
 /* root hub */
-static int rh_submit_urb(purb_t purb);
-static int rh_unlink_urb(purb_t purb);
-static int rh_init_int_timer(purb_t purb);
+static int rh_submit_urb(urb_t * urb);
+static int rh_unlink_urb(urb_t * urb);
+static int rh_init_int_timer(urb_t * urb);
 
 #ifdef DEBUG
 #define OHCI_FREE(x) kfree(x); printk("OHCI FREE: %d: %4x\n", -- __ohci_free_cnt, (unsigned int) x)

@@ -1,4 +1,4 @@
-//$Id: firmware.c,v 1.4 1999/12/13 14:15:28 fliegl Exp $
+//$Id: firmware.h,v 1.1 1999/12/17 08:55:05 fliegl Exp $
 static INTEL_HEX_RECORD firmware[] = {
 {  2,
    0x0,

@@ -14,6 +14,8 @@
  * Think of this as a "USB library" rather than anything else.
  * It should be considered a slave, with no callbacks. Callbacks
  * are evil.
+ *
+ * $Id: usb.c,v 1.37 1999/12/17 10:48:08 fliegl Exp $
  */
 
 #ifndef EXPORT_SYMTAB
@@ -87,7 +89,7 @@ int usb_register(struct usb_driver *new_driver)
 	while (tmp != &usb_bus_list) {
 		struct usb_bus *bus = list_entry(tmp,struct usb_bus, bus_list);
 
-	        tmp = tmp->next;
+		tmp = tmp->next;
 		usb_check_support(bus->root_hub);
 	}
 	return 0;
@@ -110,21 +112,21 @@ static void usb_drivers_purge(struct usb_driver *driver,struct usb_device *dev)
 		if (dev->children[i])
 			usb_drivers_purge(driver, dev->children[i]);
 
-        if (!dev->actconfig)
-                return;
-                        
-        for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
-                struct usb_interface *interface = &dev->actconfig->interface[i];
+	if (!dev->actconfig)
+		return;
+			
+	for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
+		struct usb_interface *interface = &dev->actconfig->interface[i];
 		
-	        if (interface->driver == driver) {
-                        driver->disconnect(dev, interface->private_data);
+		if (interface->driver == driver) {
+			driver->disconnect(dev, interface->private_data);
 			usb_driver_release_interface(driver, interface);
-		        /*
-		         * This will go through the list looking for another
-		         * driver that can handle the device
-		         */
-                        usb_find_interface_driver(dev, i);
-                }
+			/*
+			 * This will go through the list looking for another
+			 * driver that can handle the device
+			 */
+			usb_find_interface_driver(dev, i);
+		}
 	}
 }
 
@@ -167,12 +169,12 @@ static long calc_bus_time (int low_speed, int input_dir, int isoc, int bytecount
 	if (low_speed)		/* no isoc. here */
 	{
 		if (input_dir)
-                {
-		        tmp = (67667L * (31L + 10L * BitTime (bytecount))) / 1000L;
+		{
+			tmp = (67667L * (31L + 10L * BitTime (bytecount))) / 1000L;
 			return (64060L + (2 * BW_HUB_LS_SETUP) + BW_HOST_DELAY + tmp);
 		}
 		else
-                {
+		{
 			tmp = (66700L * (31L + 10L * BitTime (bytecount))) / 1000L;
 			return (64107L + (2 * BW_HUB_LS_SETUP) + BW_HOST_DELAY + tmp);
 		}
@@ -318,13 +320,13 @@ static void usb_check_support(struct usb_device *dev)
 		if (dev->children[i])
 			usb_check_support(dev->children[i]);
 
-        if (!dev->actconfig)
-                return;
+	if (!dev->actconfig)
+		return;
 
 	/* now we check this device */
-        if (dev->devnum > 0)
-                for (i = 0; i < dev->actconfig->bNumInterfaces; i++)
-                        usb_find_interface_driver(dev, i);
+	if (dev->devnum > 0)
+		for (i = 0; i < dev->actconfig->bNumInterfaces; i++)
+			usb_find_interface_driver(dev, i);
 }
 
 
@@ -386,7 +388,7 @@ void usb_driver_release_interface(struct usb_driver *driver, struct usb_interfac
 static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 {
 	struct list_head *tmp = usb_driver_list.next;
-        struct usb_interface *interface;
+	struct usb_interface *interface;
 	
 	if ((!dev) || (ifnum >= dev->actconfig->bNumInterfaces)) {
 		printk(KERN_ERR "usb-core: bad find_interface_driver params\n");
@@ -395,22 +397,22 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 
 	interface = dev->actconfig->interface + ifnum;
 
-        if (usb_interface_claimed(interface))
-                return -1;
+	if (usb_interface_claimed(interface))
+		return -1;
 
-        while (tmp != &usb_driver_list) {
+	while (tmp != &usb_driver_list) {
 		void *private;
-                struct usb_driver *driver = list_entry(tmp, struct usb_driver,
-		  			               driver_list);
-                        
-                tmp = tmp->next;
-                if (!(private = driver->probe(dev, ifnum)))
-                        continue;
+		struct usb_driver *driver = list_entry(tmp, struct usb_driver,
+		  				       driver_list);
+			
+		tmp = tmp->next;
+		if (!(private = driver->probe(dev, ifnum)))
+			continue;
 		usb_driver_claim_interface(driver, interface, private);
 
-                return 0;
-        }
-        
+		return 0;
+	}
+	
 	return -1;
 }
 
@@ -422,7 +424,7 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 static void usb_find_drivers(struct usb_device *dev)
 {
 	unsigned ifnum;
-        unsigned rejected = 0;
+	unsigned rejected = 0;
 
 	for (ifnum = 0; ifnum < dev->actconfig->bNumInterfaces; ifnum++) {
 		/* if this interface hasn't already been claimed */
@@ -692,8 +694,7 @@ int usb_terminate_bulk(struct usb_device *dev, void *first)
 	if (!urb) // none found? there is nothing to remove!
 		return -ENODEV;
   
-	if (urb->status!= -EINPROGRESS)
-		usb_unlink_urb(urb);
+	usb_unlink_urb(urb);
 	kfree(urb->context);
 	kfree(urb);
 	return USB_ST_NOERROR;
@@ -737,7 +738,9 @@ int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq ha
 	unsigned int maxsze = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
 
 	*handle = NULL;
-	printk("irq: dev:%p pipe:%08X handler:%p period:%d dev_id:%p max:%d\n", dev, pipe, handler, period, dev_id, maxsze);
+	
+	//printk("irq: dev:%p pipe:%08X handler:%p period:%d dev_id:%p max:%d\n", dev, pipe, handler, period, dev_id, maxsze);
+	
 	/* Check host controller's bandwidth for this int. request. */
 	bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
 			usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
@@ -849,7 +852,7 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 	else
 		memcpy(endpoint, buffer, USB_DT_ENDPOINT_SIZE);
 	
-        le16_to_cpus(&endpoint->wMaxPacketSize);
+	le16_to_cpus(&endpoint->wMaxPacketSize);
 
 	buffer += header->bLength;
 	size -= header->bLength;
@@ -896,6 +899,7 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 	}
 
 	endpoint->extra = kmalloc(len, GFP_KERNEL);
+
 	if (!endpoint->extra) {
 		printk(KERN_ERR "Couldn't allocate memory for endpoint extra descriptors\n");
 		endpoint->extralen = 0;
@@ -920,6 +924,7 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface *int
 	interface->max_altsetting = USB_ALTSETTINGALLOC;
 
 	interface->altsetting = kmalloc(sizeof(struct usb_interface_descriptor) * interface->max_altsetting, GFP_KERNEL);
+	
 	if (!interface->altsetting) {
 		printk(KERN_ERR "couldn't kmalloc interface->altsetting\n");
 		return -1;
@@ -998,6 +1003,7 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface *int
 			ifp->extralen = 0;
 		} else {
 			ifp->extra = kmalloc(len, GFP_KERNEL);
+
 			if (!ifp->extra) {
 				printk(KERN_ERR "couldn't allocate memory for interface extra descriptors\n");
 				ifp->extralen = 0;
@@ -1119,7 +1125,7 @@ int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor
 
 void usb_destroy_configuration(struct usb_device *dev)
 {
-	int c, i, j;
+	int c, i, j, k;
 	
 	if (!dev->config)
 		return;
@@ -1128,23 +1134,34 @@ void usb_destroy_configuration(struct usb_device *dev)
 		struct usb_config_descriptor *cf = &dev->config[c];
 
 		if (!cf->interface)
-		        break;
+			break;
 
 		for (i = 0; i < cf->bNumInterfaces; i++) {
 			struct usb_interface *ifp =
 				&cf->interface[i];
-
+				
 			if (!ifp->altsetting)
-			        break;
+				break;
 
 			for (j = 0; j < ifp->num_altsetting; j++) {
 				struct usb_interface_descriptor *as =
 					&ifp->altsetting[j];
+					
+				if(as->extra) {
+					kfree(as->extra);
+				}
 
 				if (!as->endpoint)
 					break;
+					
+				for(k = 0; k < as->bNumEndpoints; k++) {
+					if(as->endpoint[k].extra) {
+						kfree(as->endpoint[k].extra);
+					}
+				}	
 				kfree(as->endpoint);
 			}
+
 			kfree(ifp->altsetting);
 		}
 		kfree(cf->interface);
@@ -1179,16 +1196,16 @@ void usb_disconnect(struct usb_device **pdev)
 
 	printk("usbcore: USB disconnect on device %d\n", dev->devnum);
 
-        if (dev->actconfig) {
-                for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
-                        struct usb_interface *interface = &dev->actconfig->interface[i];
+	if (dev->actconfig) {
+		for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
+			struct usb_interface *interface = &dev->actconfig->interface[i];
 			struct usb_driver *driver = interface->driver;
-		        if (driver) {
-			        driver->disconnect(dev, interface->private_data);
+			if (driver) {
+				driver->disconnect(dev, interface->private_data);
 				usb_driver_release_interface(driver, interface);
-                        }
-                }
-        }
+			}
+		}
+	}
 
 	/* Free up all the children.. */
 	for (i = 0; i < USB_MAXCHILDREN; i++) {
@@ -1594,6 +1611,7 @@ int usb_new_device(struct usb_device *dev)
 	dev->devnum = addr;
 
 	err = usb_set_address(dev);
+	
 	if (err < 0) {
 		printk(KERN_ERR "usbcore: USB device not accepting new address (error=%d)\n", err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
@@ -1612,6 +1630,7 @@ int usb_new_device(struct usb_device *dev)
 	}
 
 	err=usb_get_configuration(dev);
+	
 	if (err < 0) {
 		printk(KERN_ERR "usbcore: unable to get configuration (error=%d)\n", err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
@@ -1631,12 +1650,12 @@ int usb_new_device(struct usb_device *dev)
 	usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
 	usb_show_string(dev, "Product", dev->descriptor.iProduct);
 	usb_show_string(dev, "SerialNumber", dev->descriptor.iSerialNumber);
-	
+
 	/* now that the basic setup is over, add a /proc/bus/usb entry */
 	proc_usb_add_device(dev);
 
 	/* find drivers willing to handle this device */
-        usb_find_drivers(dev);
+	usb_find_drivers(dev);
 
 	return 0;
 }
@@ -1655,16 +1674,16 @@ static int usb_open(struct inode * inode, struct file * file)
 }
 
 static struct file_operations usb_fops = {
-        NULL,		/* seek */
+	NULL,		/* seek */
 	NULL,		/* read */
 	NULL,		/* write */
 	NULL,		/* readdir */
 	NULL,		/* poll */
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
-        usb_open,
+	usb_open,
 	NULL,		/* flush */
-        NULL		/* release */
+	NULL		/* release */
 };
 
 void usb_major_init(void)

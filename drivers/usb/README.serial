@@ -1,6 +1,6 @@
 This serial driver currently only works with the Belkin and Peracom USB 
 Serial devices. It should also work for the Etek converter, but I do 
-not know the vendor id, and device id of that device (if anyone does, 
+not know the vendor id and device id of that device (if anyone does, 
 please let me know.)
 
 If your device is not compatible with the above models, you can try
@@ -19,17 +19,15 @@ data from the converter. However, since I do not have a spec for the Belkin,
 Peracom, and eTek devices, and the raw dumps from the Win98 driver are 
 confusing, and eTek keeps giving me the run around, no control signals are 
 currently handled, and the data will most likely come through on a baud
-rate that you are not expecting.
+rate that you are not expecting. So if you have these devices, do not 
+expect the correct data to show up at either end. 
 
-The major number that the driver uses is 240 (in the local/experimental
-range.) It will stay there until some agreements are reached on how to
-handle the configuration problem that USB provides.
-
-To use the driver, create the following nodes:
-mknod /dev/ttyUSB0 c 240 0
-mknod /dev/ttyUSB1 c 240 1
-mknod /dev/ttyUSB2 c 240 2
-mknod /dev/ttyUSB3 c 240 3
+The major number that the driver uses is 188 so to use the driver, create
+the following nodes:
+mknod /dev/ttyUSB0 c 188 0
+mknod /dev/ttyUSB1 c 188 1
+mknod /dev/ttyUSB2 c 188 2
+mknod /dev/ttyUSB3 c 188 3
 
 then plug in a device and use your friendly terminal program to see what
 happens.

@@ -137,7 +137,7 @@ struct usb_device;
 
 struct cpia_sbuf {
 	char *data;
-	struct usb_isoc_desc *isodesc;
+	urb_t *urb;
 };
 
 enum {
@@ -178,6 +178,8 @@ struct usb_cpia {
 
 	/* Device structure */
 	struct usb_device *dev;
+
+	unsigned char iface;
 
 	struct semaphore lock;
 	int user;		/* user count for exclusive use */

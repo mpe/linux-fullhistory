@@ -14,6 +14,13 @@
  *
  * See README.serial for more information on using this driver.
  * 
+ * version 0.2.2 (12/16/99) gkh
+ *	Changed major number to the new allocated number. We're legal now!
+ *
+ * version 0.2.1 (12/14/99) gkh
+ *	Fixed bug that happens when device node is opened when there isn't a
+ *	device attached to it. Thanks to marek@webdesign.no for noticing this.
+ *
  * version 0.2.0 (11/10/99) gkh
  *	Split up internals to make it easier to add different types of serial 
  *	converters to the code.
@@ -83,7 +90,7 @@ MODULE_PARM_DESC(product, "User specified USB idProduct");
 #define PERACOM_SERIAL_CONVERTER	0x0001
 
 
-#define SERIAL_MAJOR	240
+#define SERIAL_MAJOR	188	/* Nice legal number now */
 
 #define NUM_PORTS	4	/* Have to pick a number for now. Need to look */
 				/* into dynamically creating them at insertion time. */
@@ -640,7 +647,7 @@ static int etek_serial_open (struct tty_struct *tty, struct file *filp)
 
 	/* Need to do device specific setup here (control lines, baud rate, etc.) */
 	/* FIXME!!! */
-				                  
+
 	return (0);
 }
 
@@ -715,7 +722,7 @@ static void etek_serial_put_char (struct tty_struct *tty, unsigned char ch)
 	serial->bulk_out_transfer = usb_request_bulk (serial->dev, serial->bulk_out_pipe, serial_write_irq, serial->bulk_out_buffer, 1, serial);
 
 	return;
-}                   
+}
 
 
 static int etek_write_room (struct tty_struct *tty) 
@@ -798,7 +805,7 @@ static int generic_serial_open (struct tty_struct *tty, struct file *filp)
 		serial->bulk_in_inuse = 1;
 		serial->bulk_in_transfer = usb_request_bulk (serial->dev, serial->bulk_in_pipe, serial_read_irq, serial->bulk_in_buffer, serial->bulk_in_size, serial);
 	}
-				                  
+
 	return (0);
 }
 
@@ -877,7 +884,7 @@ static void generic_serial_put_char (struct tty_struct *tty, unsigned char ch)
 	}
 
 	return;
-}                   
+}
 
 
 static int generic_write_room (struct tty_struct *tty) 

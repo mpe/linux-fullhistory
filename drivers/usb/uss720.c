@@ -4,7 +4,7 @@
  *	uss720.c  --  USS720 USB Parport Cable.
  *
  *	Copyright (C) 1999
- *          Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	    Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -25,10 +25,10 @@
  *  History:
  *   0.1  04.08.99  Created
  *   0.2  07.08.99  Some fixes mainly suggested by Tim Waugh
- *                  Interrupt handling currently disabled because
- *                  usb_request_irq crashes somewhere within ohci.c
- *                  for no apparent reason (that is for me, anyway)
- *                  ECP currently untested
+ *		    Interrupt handling currently disabled because
+ *		    usb_request_irq crashes somewhere within ohci.c
+ *		    for no apparent reason (that is for me, anyway)
+ *		    ECP currently untested
  *   0.3  10.08.99  fixing merge errors
  *   0.4  13.08.99  Added Vendor/Product ID of Brad Hard's cable
  *   0.5  20.09.99  usb_control_msg wrapper used
@@ -50,7 +50,7 @@ struct parport_uss720_private {
 	struct usb_device *usbdev;
 	void *irqhandle;
 	unsigned int irqpipe;
-        unsigned char reg[7];  /* USB registers */
+	unsigned char reg[7];  /* USB registers */
 };
 
 /* --------------------------------------------------------------------- */
@@ -62,17 +62,17 @@ static int get_1284_register(struct parport *pp, unsigned char reg, unsigned cha
 	static const unsigned char regindex[9] = {
 		4, 0, 1, 5, 5, 0, 2, 3, 6
 	};
-        int ret;
+	int ret;
 
 	if (!usbdev)
 		return -1;
-        ret = usb_control_msg(usbdev, usb_rcvctrlpipe(usbdev,0), 3, 0xc0, ((unsigned int)reg) << 8, 0, priv->reg, 7, HZ);
-        if (ret) {
-                printk(KERN_DEBUG "uss720: get_1284_register(%d) failed, status 0x%x\n",
+	ret = usb_control_msg(usbdev, usb_rcvctrlpipe(usbdev,0), 3, 0xc0, ((unsigned int)reg) << 8, 0, priv->reg, 7, HZ);
+	if (ret) {
+		printk(KERN_DEBUG "uss720: get_1284_register(%d) failed, status 0x%x\n",
 		       (unsigned int)reg, ret);
-        } else {
+	} else {
 #if 0
-                printk(KERN_DEBUG "uss720: get_1284_register(%d) return %02x %02x %02x %02x %02x %02x %02x\n",
+		printk(KERN_DEBUG "uss720: get_1284_register(%d) return %02x %02x %02x %02x %02x %02x %02x\n",
 		       (unsigned int)reg, (unsigned int)priv->reg[0], (unsigned int)priv->reg[1],
 		       (unsigned int)priv->reg[2], (unsigned int)priv->reg[3], (unsigned int)priv->reg[4],
 		       (unsigned int)priv->reg[5], (unsigned int)priv->reg[6]);
@@ -90,20 +90,20 @@ static int set_1284_register(struct parport *pp, unsigned char reg, unsigned cha
 {
 	struct parport_uss720_private *priv = pp->private_data;
 	struct usb_device *usbdev = priv->usbdev;
-        int ret;
+	int ret;
 
 	if (!usbdev)
 		return -1;
-        ret = usb_control_msg(usbdev, usb_sndctrlpipe(usbdev,0), 4, 0x40, (((unsigned int)reg) << 8) | val, 0, NULL, 0, HZ);
-        if (ret) {
-                printk(KERN_DEBUG "uss720: set_1284_register(%u,0x%02x) failed, status 0x%x\n", 
+	ret = usb_control_msg(usbdev, usb_sndctrlpipe(usbdev,0), 4, 0x40, (((unsigned int)reg) << 8) | val, 0, NULL, 0, HZ);
+	if (ret) {
+		printk(KERN_DEBUG "uss720: set_1284_register(%u,0x%02x) failed, status 0x%x\n", 
 		       (unsigned int)reg, (unsigned int)val, ret);
-        } else {
+	} else {
 #if 0
-                printk(KERN_DEBUG "uss720: set_1284_register(%u,0x%02x)\n", 
+		printk(KERN_DEBUG "uss720: set_1284_register(%u,0x%02x)\n", 
 		       (unsigned int)reg, (unsigned int)val);
 #endif
-        }
+	}
 	return ret;
 }
 
@@ -540,28 +540,28 @@ static struct parport_operations parport_uss720_ops =
 
 static void * uss720_probe(struct usb_device *usbdev, unsigned int ifnum)
 {
-        struct usb_interface_descriptor *interface;
-        struct usb_endpoint_descriptor *endpoint;
+	struct usb_interface_descriptor *interface;
+	struct usb_endpoint_descriptor *endpoint;
 	struct parport_uss720_private *priv;
 	struct parport *pp;
-        int i;
+	int i;
 
-        printk(KERN_DEBUG "uss720: probe: vendor id 0x%x, device id 0x%x\n",
-               usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
+	printk(KERN_DEBUG "uss720: probe: vendor id 0x%x, device id 0x%x\n",
+	       usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
 
-        if ((usbdev->descriptor.idVendor != 0x047e || usbdev->descriptor.idProduct != 0x1001) &&
+	if ((usbdev->descriptor.idVendor != 0x047e || usbdev->descriptor.idProduct != 0x1001) &&
 	    (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001) &&
 	    (usbdev->descriptor.idVendor != 0x0729 || usbdev->descriptor.idProduct != 0x1284))
-                return NULL;
+		return NULL;
 
-        /* our known interfaces have 3 alternate settings */
-        if (usbdev->actconfig->interface[ifnum].num_altsetting != 3)
-                return NULL;
+	/* our known interfaces have 3 alternate settings */
+	if (usbdev->actconfig->interface[ifnum].num_altsetting != 3)
+		return NULL;
 
-        i = usb_set_interface(usbdev, ifnum, 2);
-        printk(KERN_DEBUG "uss720: set inteface result %d\n", i);
+	i = usb_set_interface(usbdev, ifnum, 2);
+	printk(KERN_DEBUG "uss720: set inteface result %d\n", i);
 
-        interface = &usbdev->actconfig->interface[ifnum].altsetting[2];
+	interface = &usbdev->actconfig->interface[ifnum].altsetting[2];
 
 	/*
 	 * Allocate parport interface 
@@ -579,16 +579,16 @@ static void * uss720_probe(struct usb_device *usbdev, unsigned int ifnum)
 	priv->usbdev = usbdev;
 	pp->modes = PARPORT_MODE_PCSPP | PARPORT_MODE_TRISTATE | PARPORT_MODE_EPP | PARPORT_MODE_ECP | PARPORT_MODE_COMPAT;
 
-        /* set the USS720 control register to manual mode, no ECP compression, enable all ints */
-        set_1284_register(pp, 7, 0x00);
+	/* set the USS720 control register to manual mode, no ECP compression, enable all ints */
+	set_1284_register(pp, 7, 0x00);
 	set_1284_register(pp, 6, 0x30);  /* PS/2 mode */
 	set_1284_register(pp, 2, 0x0c);
-        /* debugging */
-        get_1284_register(pp, 0, NULL);
-        printk("uss720: reg: %02x %02x %02x %02x %02x %02x %02x\n",
-               priv->reg[0], priv->reg[1], priv->reg[2], priv->reg[3], priv->reg[4], priv->reg[5], priv->reg[6]);
+	/* debugging */
+	get_1284_register(pp, 0, NULL);
+	printk("uss720: reg: %02x %02x %02x %02x %02x %02x %02x\n",
+	       priv->reg[0], priv->reg[1], priv->reg[2], priv->reg[3], priv->reg[4], priv->reg[5], priv->reg[6]);
 
-        endpoint = &interface->endpoint[2];
+	endpoint = &interface->endpoint[2];
 	printk(KERN_DEBUG "uss720: epaddr %d interval %d\n", endpoint->bEndpointAddress, endpoint->bInterval);
 #if 0
 	priv->irqpipe = usb_rcvctrlpipe(usbdev, endpoint->bEndpointAddress);
@@ -600,11 +600,11 @@ static void * uss720_probe(struct usb_device *usbdev, unsigned int ifnum)
 		goto probe_abort_port;
 	}
 #endif
-        parport_proc_register(pp);
-        parport_announce_port(pp);
+	parport_proc_register(pp);
+	parport_announce_port(pp);
 
 	MOD_INC_USE_COUNT;
-        return pp;
+	return pp;
 
 probe_abort_port:
 	parport_unregister_port(pp);
@@ -619,7 +619,7 @@ static void uss720_disconnect(struct usb_device *usbdev, void *ptr)
 	struct parport_uss720_private *priv = pp->private_data;
 
 	usb_release_irq(usbdev, priv->irqhandle, priv->irqpipe);
-        priv->usbdev = NULL;
+	priv->usbdev = NULL;
 	parport_proc_unregister(pp);
 	parport_unregister_port(pp);
 	kfree(priv);
@@ -627,10 +627,10 @@ static void uss720_disconnect(struct usb_device *usbdev, void *ptr)
 }
 
 static struct usb_driver uss720_driver = {
-        "uss720",
-        uss720_probe,
-        uss720_disconnect,
-        { NULL, NULL }
+	"uss720",
+	uss720_probe,
+	uss720_disconnect,
+	{ NULL, NULL }
 };
 
 /* --------------------------------------------------------------------- */
@@ -643,7 +643,7 @@ static int __init uss720_init(void)
 	if (usb_register(&uss720_driver) < 0)
 		return -1;
 
-        printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.4 registered.\n"
+	printk(KERN_INFO "uss720: USB<->IEEE1284 cable driver v0.4 registered.\n"
 	       KERN_INFO "uss720: (C) 1999 by Thomas Sailer, <sailer@ife.ee.ethz.ch>\n");
 	return 0;
 }

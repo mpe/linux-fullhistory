@@ -1,7 +1,6 @@
 /*
  * $Id: uhci-debug.c,v 1.12 1999/12/13 15:24:42 fliegl Exp $
  */
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <asm/io.h>

@@ -121,8 +121,10 @@ static int usb_hub_configure(struct usb_hub *hub)
 	if (!bitmap)
 		return -1;
 
-	if (usb_get_hub_descriptor(dev, bitmap, header->bLength) < 0)
+	if (usb_get_hub_descriptor(dev, bitmap, header->bLength) < 0) {
+		kfree(bitmap);
 		return -1;
+	}
 
 	descriptor = (struct usb_hub_descriptor *)bitmap;
 
@@ -321,10 +323,10 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 		/* We're done now, we already disconnected the device */
 		return;
 	}
-	wait_ms(500);	
+	wait_ms(400);	
 	/* Reset the port */
 	usb_set_port_feature(hub, port + 1, USB_PORT_FEAT_RESET);
-	wait_ms(500);	
+	wait_ms(100);	
 	/* Allocate a new device struct for it */
 	usb = usb_alloc_dev(hub, hub->bus);
 	if (!usb) {

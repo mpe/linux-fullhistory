@@ -2,10 +2,10 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: uhci.h,v 1.28 1999/12/14 18:38:26 fliegl Exp $
+   $Id: uhci.h,v 1.30 1999/12/15 17:57:25 fliegl Exp $
  */
-
-#define MODSTR "uhci: "
+#define MODNAME "usb-uhci"
+#define MODSTR MODNAME": "
 #define VERSTR "version v0.9 time " __TIME__ " " __DATE__
 
 /* Command register */
@@ -145,7 +145,6 @@ typedef struct {
 	int short_control_packet;
 } urb_priv_t, *purb_priv_t;
 
-#ifdef VROOTHUB
 struct virt_root_hub {
 	int devnum;		/* Address of Root Hub endpoint */
 	void *urb;
@@ -157,17 +156,12 @@ struct virt_root_hub {
 	struct timer_list rh_int_timer;
 };
 
-#endif
-
 typedef struct uhci {
 	int irq;
 	unsigned int io_addr;
 	unsigned int io_size;
 	unsigned int maxports;
 
-	int control_pid;
-	int control_running;
-	int control_continue;
 	int apm_state;
 
 	struct uhci *next;	// chain of uhci device contexts
@@ -188,9 +182,7 @@ typedef struct uhci {
 	uhci_desc_t *chain_end;
 	spinlock_t qh_lock;
 	spinlock_t td_lock;
-#ifdef VROOTHUB
 	struct virt_root_hub rh;	//private data of the virtual root hub
-#endif
 } uhci_t, *puhci_t;
 
 
@@ -201,7 +193,6 @@ typedef struct uhci {
 /* ------------------------------------------------------------------------------------ 
    Virtual Root HUB 
    ------------------------------------------------------------------------------------ */
-#ifdef VROOTHUB
 /* destination of request */
 #define RH_INTERFACE               0x01
 #define RH_ENDPOINT                0x02
@@ -257,8 +248,5 @@ typedef struct uhci {
 #define RH_NACK                    0x00
 
 #define min(a,b) (((a)<(b))?(a):(b))
-static int rh_submit_urb (purb_t purb);
-static int rh_unlink_urb (purb_t purb);
-#endif /* VROOTHUB */
 
 #endif

@@ -36,7 +36,6 @@
 
 /*****************************************************************************/
 #include <linux/version.h>
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/socket.h>
 #include <linux/miscdevice.h>
@@ -96,34 +95,34 @@ static void free_async(struct async *as)
 
 extern inline unsigned int ld2(unsigned int x)
 {
-        unsigned int r = 0;
-        
-        if (x >= 0x10000) {
-                x >>= 16;
-                r += 16;
-        }
-        if (x >= 0x100) {
-                x >>= 8;
-                r += 8;
-        }
-        if (x >= 0x10) {
-                x >>= 4;
-                r += 4;
-        }
-        if (x >= 4) {
-                x >>= 2;
-                r += 2;
-        }
-        if (x >= 2)
-                r++;
-        return r;
+	unsigned int r = 0;
+	
+	if (x >= 0x10000) {
+		x >>= 16;
+		r += 16;
+	}
+	if (x >= 0x100) {
+		x >>= 8;
+		r += 8;
+	}
+	if (x >= 0x10) {
+		x >>= 4;
+		r += 4;
+	}
+	if (x >= 4) {
+		x >>= 2;
+		r += 2;
+	}
+	if (x >= 2)
+		r++;
+	return r;
 }
 
 #if 0
 /* why doesn't this work properly on i386? */
 extern inline unsigned int ld2(unsigned int x)
 {
-        unsigned int r;
+	unsigned int r;
 
 	__asm__("bsrl %1,%0" : "=r" (r) : "g" (x));
 	return r;
@@ -723,7 +722,7 @@ static int ezusb_asynccompl(struct async *as, void *arg)
 static int ezusb_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct ezusb *ez = (struct ezusb *)file->private_data;
-        DECLARE_WAITQUEUE(wait, current);
+	DECLARE_WAITQUEUE(wait, current);
 	struct usb_proc_ctrltransfer pctrl;
 	struct usb_proc_bulktransfer pbulk;
 	struct usb_proc_old_ctrltransfer opctrl;
@@ -976,13 +975,13 @@ static struct file_operations ezusb_fops = {
 static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 {
 	struct ezusb *ez = &ezusb[0];
-        struct usb_interface_descriptor *interface;
-        struct usb_endpoint_descriptor *endpoint;
+	struct usb_interface_descriptor *interface;
+	struct usb_endpoint_descriptor *endpoint;
 
 #undef KERN_DEBUG
 #define KERN_DEBUG ""
-        printk(KERN_DEBUG "ezusb: probe: vendor id 0x%x, device id 0x%x\n",
-               usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
+	printk(KERN_DEBUG "ezusb: probe: vendor id 0x%x, device id 0x%x\n",
+	       usbdev->descriptor.idVendor, usbdev->descriptor.idProduct);
 
 	/* the 1234:5678 is just a self assigned test ID */
 	if ((usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x2131) 
@@ -992,16 +991,16 @@ static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 	    (usbdev->descriptor.idVendor != 0x1234 || usbdev->descriptor.idProduct != 0x5678)
 	   #endif 
 	    )
-                return NULL;
+		return NULL;
 
-        /* We don't handle multiple configurations */
-        if (usbdev->descriptor.bNumConfigurations != 1)
-                return NULL;
+	/* We don't handle multiple configurations */
+	if (usbdev->descriptor.bNumConfigurations != 1)
+		return NULL;
 
 #if 0
-        /* We don't handle multiple interfaces */
+	/* We don't handle multiple interfaces */
 	if (usbdev->config[0].bNumInterfaces != 1)
-                return NULL;
+		return NULL;
 #endif
 
 	down(&ez->mutex);
@@ -1023,7 +1022,7 @@ static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 	}
 	up(&ez->mutex);
 	MOD_INC_USE_COUNT;
-        return ez;
+	return ez;
 
  err:
 	up(&ez->mutex);
@@ -1044,10 +1043,10 @@ static void ezusb_disconnect(struct usb_device *usbdev, void *ptr)
 }
 
 static struct usb_driver ezusb_driver = {
-        "ezusb",
-        ezusb_probe,
-        ezusb_disconnect,
-        { NULL, NULL },
+	"ezusb",
+	ezusb_probe,
+	ezusb_disconnect,
+	{ NULL, NULL },
 	&ezusb_fops,
 	192
 };
@@ -1069,7 +1068,7 @@ int ezusb_init(void)
 	}
 	/* register misc device */
 	usb_register(&ezusb_driver);
-        printk(KERN_INFO "ezusb: Anchorchip firmware download driver registered\n");
+	printk(KERN_INFO "ezusb: Anchorchip firmware download driver registered\n");
 	return 0;
 }
 

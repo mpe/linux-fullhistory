@@ -164,9 +164,7 @@ static int release_mouse(struct inode * inode, struct file * file)
 		mouse->suspended = 0;
 		/* stop polling the mouse while its not in use */
 		usb_unlink_urb(mouse->urb);
-	    	/* never keep a reference to a released IRQ! */
-		mouse->irq_handle = NULL;
-	}
+       	}
 
 	return 0;
 }
@@ -248,6 +246,8 @@ static ssize_t read_mouse(struct file * file, char * buffer, size_t count, loff_
 	static int state = 0;
 	struct mouse_state *mouse = &static_mouse_state;
 
+	if (!mouse->present)
+		return 0;
 	/*
 	 * FIXME - Other mouse drivers handle blocking and nonblocking reads
 	 * differently here...
@@ -417,8 +417,6 @@ static void mouse_disconnect(struct usb_device *dev, void *priv)
 	  usb_unlink_urb(mouse->urb);
 	}
 
-	mouse->irq_handle = NULL;
-
 	/* this might need work */
 	mouse->present = 0;
 	printk("Mouse disconnected\n");
@@ -438,13 +436,14 @@ int usb_mouse_init(void)
 	struct mouse_state *mouse = &static_mouse_state;
 
 	mouse->present = mouse->active = mouse->suspended = 0;
-	mouse->irq_handle = NULL;
 	mouse->buffer=kmalloc(64,GFP_KERNEL);
+
 	if (!mouse->buffer)
 	  return -ENOMEM;
 	mouse->urb=usb_alloc_urb(0);
 	if (!mouse->urb)
 	  printk(KERN_DEBUG MODSTR"URB allocation failed\n");
+
 	init_waitqueue_head(&mouse->wait);
 	mouse->fasync = NULL;
 
@@ -461,10 +460,8 @@ void usb_mouse_cleanup(void)
 
 	/* stop the usb interrupt transfer */
 	if (mouse->present) {
-	  usb_unlink_urb(mouse->urb);
-		/* never keep a reference to a released IRQ! */
-		mouse->irq_handle = NULL;
-	}
+		usb_unlink_urb(mouse->urb);
+       	}
 	kfree(mouse->urb);
 	kfree(mouse->buffer);
 	/* this, too, probably needs work */

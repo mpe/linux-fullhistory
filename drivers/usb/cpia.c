@@ -201,12 +201,14 @@ static int usb_cpia_set_sensor_fps(struct usb_device *dev, int sensorbaserate, i
 		(sensorbaserate << 8) + sensorclkdivisor, 0, NULL, 0, HZ);
 }
 
+#ifdef NOTUSED
 static int usb_cpia_grab_frame(struct usb_device *dev, int streamstartline)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
 		USB_REQ_CPIA_GRAB_FRAME, USB_TYPE_VENDOR | USB_RECIP_DEVICE,
 		streamstartline << 8, 0, NULL, 0, HZ);
 }
+#endif
 
 static int usb_cpia_upload_frame(struct usb_device *dev, int forceupload)
 {
@@ -514,23 +516,24 @@ out:
 /*
  * Make all of the blocks of data contiguous
  */
-static int cpia_compress_isochronous(struct usb_cpia *cpia, struct usb_isoc_desc *isodesc)
+static int cpia_compress_isochronous(struct usb_cpia *cpia, urb_t *urb)
 {
 	unsigned char *cdata, *data;
 	int i, totlen = 0;
 
-	cdata = isodesc->data;
 	data = cpia->scratch + cpia->scratchlen;
-	for (i = 0; i < isodesc->frame_count; i++) {
-		int n = isodesc->frames[i].frame_length;
-		int st = isodesc->frames[i].frame_status;
+	for (i = 0; i < urb->number_of_packets; i++) {
+		int n = urb->iso_frame_desc[i].actual_length;
+		int st = urb->iso_frame_desc[i].status;
+		
+		cdata = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
 
 		if (st && debug >= 1)
 			printk(KERN_DEBUG "cpia data error: [%d] len=%d, status=%X\n",
 				i, n, st);
 
 		if ((cpia->scratchlen + n) > SCRATCH_BUF_SIZE) {
-			printk(KERN_DEBUG "cpia: scratch buf overflow!\n");
+			printk(KERN_DEBUG "cpia: scratch buf overflow!scr_len: %d, n: %d\n",cpia->scratchlen, n );
 			return totlen;
 		}
 
@@ -540,30 +543,33 @@ static int cpia_compress_isochronous(struct usb_cpia *cpia, struct usb_isoc_desc
 			totlen += n;
 			cpia->scratchlen += n;
 		}
-		cdata += isodesc->frame_size;
 	}
 
 	return totlen;
 }
 
-static int cpia_isoc_irq(int status, void *__buffer, int len, void *isocdesc)
+static void cpia_isoc_irq(struct urb *urb)
 {
-	void *dev_id = ((struct usb_isoc_desc *)isocdesc)->context;
-	struct usb_cpia *cpia = (struct usb_cpia *)dev_id;
+	int len;
+	struct usb_cpia *cpia = urb->context;
 	struct cpia_sbuf *sbuf;
 	int i;
+
+#if 0
+printk("cpia_isoc_irq: %p status %d, errcount = %d, length = %d\n", urb, urb->status, urb->error_count, urb->actual_length);
+#endif
 
 	if (!cpia->streaming) {
 		if (debug >= 1)
 			printk(KERN_DEBUG "cpia: oops, not streaming, but interrupt\n");
-		return 0;
+		return;
 	}
 	
 	sbuf = &cpia->sbuf[cpia->cursbuf];
-	usb_kill_isoc(sbuf->isodesc);
+	// usb_kill_isoc(sbuf->isodesc);
 
 	/* Copy the data received into our scratch buffer */
-	len = cpia_compress_isochronous(cpia, sbuf->isodesc);
+	len = cpia_compress_isochronous(cpia, urb);
 
 	/* If we don't have a frame we're current working on, complain */
 	if (cpia->scratchlen) {
@@ -574,22 +580,23 @@ static int cpia_isoc_irq(int status, void *__buffer, int len, void *isocdesc)
 			cpia_parse_data(cpia);
 	}
 
-	for (i = 0; i < FRAMES_PER_DESC; i++)
-		sbuf->isodesc->frames[i].frame_length = FRAME_SIZE_PER_DESC;
-
+	for (i = 0; i < FRAMES_PER_DESC; i++) {
+		sbuf->urb->iso_frame_desc[i].status = 0;
+		sbuf->urb->iso_frame_desc[i].actual_length = 0;
+	}
 	/* Move to the next sbuf */
 	cpia->cursbuf = (cpia->cursbuf + 1) % CPIA_NUMSBUF;
 
 	/* Reschedule this block of Isochronous desc */
-	usb_run_isoc(sbuf->isodesc, cpia->sbuf[cpia->cursbuf].isodesc);
+	// usb_run_isoc(sbuf->isodesc, cpia->sbuf[cpia->cursbuf].isodesc);
 
-	return -1;
+	return;
 }
 
 static int cpia_init_isoc(struct usb_cpia *cpia)
 {
 	struct usb_device *dev = cpia->dev;
-	struct usb_isoc_desc *id;
+	urb_t *urb;
 	int fx, err;
 
 	cpia->compress = 0;
@@ -598,57 +605,63 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 	cpia->scratchlen = 0;
 
 	/* Alternate interface 3 is is the biggest frame size */
-	if (usb_set_interface(cpia->dev, 1, 3) < 0) {
+	if (usb_set_interface(cpia->dev, cpia->iface, 3) < 0) {
 		printk(KERN_ERR "usb_set_interface error\n");
 		return -EBUSY;
 	}
 
 	/* We double buffer the Iso lists */
-	err = usb_init_isoc(dev, usb_rcvisocpipe(dev, 1), FRAMES_PER_DESC,
-		cpia, &cpia->sbuf[0].isodesc);
-	if (err) {
+//	err = usb_init_isoc(dev, usb_rcvisocpipe(dev, 1), FRAMES_PER_DESC, cpia, &cpia->sbuf[0].isodesc);
+	urb = usb_alloc_urb(FRAMES_PER_DESC);
+	
+	if (!urb) {
 		printk(KERN_ERR "cpia_init_isoc: usb_init_isoc ret %d\n",
-			err);
+			0);
 		return -ENOMEM;
 	}
-
-	err = usb_init_isoc(dev, usb_rcvisocpipe(dev, 1), FRAMES_PER_DESC,
-		cpia, &cpia->sbuf[1].isodesc);
-	if (err) {
+	cpia->sbuf[0].urb = urb;
+	urb->dev = dev;
+	urb->context = cpia;
+	urb->pipe = usb_rcvisocpipe(dev, 1);
+	urb->transfer_flags = USB_ISO_ASAP;
+	urb->transfer_buffer = cpia->sbuf[0].data;
+ 	urb->complete = cpia_isoc_irq;
+ 	urb->number_of_packets = FRAMES_PER_DESC;
+ 	urb->transfer_buffer_length = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
+ 	for (fx = 0; fx < FRAMES_PER_DESC; fx++) {
+ 		urb->iso_frame_desc[fx].offset = FRAME_SIZE_PER_DESC * fx;
+		urb->iso_frame_desc[fx].length = FRAME_SIZE_PER_DESC;
+	}
+	urb = usb_alloc_urb(FRAMES_PER_DESC);
+	if (!urb) {
 		printk(KERN_ERR "cpia_init_isoc: usb_init_isoc ret %d\n",
-			err);
-		usb_free_isoc (cpia->sbuf[0].isodesc);
+			0);
 		return -ENOMEM;
 	}
+	cpia->sbuf[1].urb = urb;
+	urb->dev = dev;
+	urb->context = cpia;
+	urb->pipe = usb_rcvisocpipe(dev, 1);
+	urb->transfer_flags = USB_ISO_ASAP;
+	urb->transfer_buffer = cpia->sbuf[1].data;
+ 	urb->complete = cpia_isoc_irq;
+ 	urb->number_of_packets = FRAMES_PER_DESC;
+ 	urb->transfer_buffer_length = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
+ 	for (fx = 0; fx < FRAMES_PER_DESC; fx++) {
+ 		urb->iso_frame_desc[fx].offset = FRAME_SIZE_PER_DESC * fx;
+		urb->iso_frame_desc[fx].length = FRAME_SIZE_PER_DESC;
+	}
 
-	/* Set the Isoc. desc. parameters. */
-	/* First for desc. [0] */
-	id = cpia->sbuf[0].isodesc;
-	id->start_type = START_ASAP;
-	id->callback_frames = 10;	/* on every 10th frame */
-	id->callback_fn = cpia_isoc_irq;
-	id->data = cpia->sbuf[0].data;
-	id->buf_size = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
-	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
-		id->frames[fx].frame_length = FRAME_SIZE_PER_DESC;
-
-	/* and for desc. [1] */
-	id = cpia->sbuf[1].isodesc;
-	id->start_type = 0;             /* will follow the first desc. */
-	id->callback_frames = 10;	/* on every 10th frame */
-	id->callback_fn = cpia_isoc_irq;
-	id->data = cpia->sbuf[1].data;
-	id->buf_size = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
-	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
-		id->frames[fx].frame_length = FRAME_SIZE_PER_DESC;
-
-	err = usb_run_isoc(cpia->sbuf[0].isodesc, NULL);
+	cpia->sbuf[1].urb->next = cpia->sbuf[0].urb;
+	cpia->sbuf[0].urb->next = cpia->sbuf[1].urb;
+	
+	err = usb_submit_urb(cpia->sbuf[0].urb);
 	if (err)
-		printk(KERN_ERR "cpia_init_isoc: usb_run_isoc ret %d\n",
+		printk(KERN_ERR "cpia_init_isoc: usb_run_isoc(0) ret %d\n",
 			err);
-	err = usb_run_isoc(cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
+	err = usb_submit_urb(cpia->sbuf[1].urb);
 	if (err)
-		printk(KERN_ERR "cpia_init_isoc: usb_run_isoc ret %d\n",
+		printk(KERN_ERR "cpia_init_isoc: usb_run_isoc(1) ret %d\n",
 			err);
 
 	cpia->streaming = 1;
@@ -668,20 +681,20 @@ static void cpia_stop_isoc(struct usb_cpia *cpia)
 	}
 
 	/* Set packet size to 0 */
-	if (usb_set_interface(cpia->dev, 1, 0) < 0) {
+	if (usb_set_interface(cpia->dev, cpia->iface, 0) < 0) {
 		printk(KERN_ERR "usb_set_interface error\n");
 		return /* -EINVAL */;
 	}
 
 	/* Unschedule all of the iso td's */
-	usb_kill_isoc(cpia->sbuf[1].isodesc);
-	usb_kill_isoc(cpia->sbuf[0].isodesc);
+	usb_unlink_urb(cpia->sbuf[1].urb);
+	usb_unlink_urb(cpia->sbuf[0].urb);
 
 	cpia->streaming = 0;
 
 	/* Delete them all */
-	usb_free_isoc(cpia->sbuf[1].isodesc);
-	usb_free_isoc(cpia->sbuf[0].isodesc);
+	usb_free_urb(cpia->sbuf[1].urb);
+	usb_free_urb(cpia->sbuf[0].urb);
 }
 
 static int cpia_new_frame(struct usb_cpia *cpia, int framenum)
@@ -1197,12 +1210,8 @@ static int usb_cpia_configure(struct usb_cpia *cpia)
 	struct usb_device *dev = cpia->dev;
 	unsigned char version[4];
 
-	/* claim interface 1 */
-	usb_driver_claim_interface(&cpia_driver,
-		&dev->actconfig->interface[1], cpia);
-
-	/* Set altsetting 0 on interface 1 */
-	if (usb_set_interface(dev, 1, 0) < 0) {
+	/* Set altsetting 0 */
+	if (usb_set_interface(dev, cpia->iface, 0) < 0) {
 		printk(KERN_ERR "usb_set_interface error\n");
 		return -EBUSY;
 	}
@@ -1273,7 +1282,7 @@ static int usb_cpia_configure(struct usb_cpia *cpia)
 error:
 	video_unregister_device(&cpia->vdev);
 	usb_driver_release_interface(&cpia_driver,
-		&dev->actconfig->interface[1]);
+		&dev->actconfig->interface[0]);
 
 	kfree(cpia);
 
@@ -1314,6 +1323,7 @@ static void * cpia_probe(struct usb_device *dev, unsigned int ifnum)
 	memset(cpia, 0, sizeof(*cpia));
 
 	cpia->dev = dev;
+	cpia->iface = interface->bInterfaceNumber;
 
 	if (!usb_cpia_configure(cpia)) {
 	    cpia->user=0; 
@@ -1329,7 +1339,7 @@ static void cpia_disconnect(struct usb_device *dev, void *ptr)
 	video_unregister_device(&cpia->vdev);
 
 	usb_driver_release_interface(&cpia_driver,
-		&cpia->dev->actconfig->interface[1]);
+		&cpia->dev->actconfig->interface[0]);
 
 	/* Free the memory */
 	kfree(cpia);

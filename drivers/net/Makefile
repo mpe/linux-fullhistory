@@ -50,8 +50,7 @@ endif
 
 ifeq ($(CONFIG_SK98LIN),y)
 SUB_DIRS += sk98lin
-MOD_IN_SUB_DIRS += sk98lin
-L_OBJS += sk98lin/sk98lin.o
+obj-y += sk98lin/sk98lin.o
 else
   ifeq ($(CONFIG_SK98LIN),m)
   MOD_IN_SUB_DIRS += sk98lin
