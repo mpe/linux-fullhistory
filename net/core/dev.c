@@ -1613,7 +1613,9 @@ extern void sdla_setup(void);
 extern void dlci_setup(void);
 extern int pt_init(void);
 extern int sm_init(void);
-extern int baycom_init(void);
+extern int baycom_ser_fdx_init(void);
+extern int baycom_ser_hdx_init(void);
+extern int baycom_par_init(void);
 extern int lapbeth_init(void);
 extern void arcnet_init(void);
 
@@ -1681,8 +1683,14 @@ __initfunc(int net_dev_init(void))
 #if defined(CONFIG_SDLA)
 	sdla_setup();
 #endif
-#if defined(CONFIG_BAYCOM)
-	baycom_init();
+#if defined(CONFIG_BAYCOM_PAR)
+	baycom_par_init();
+#endif
+#if defined(CONFIG_BAYCOM_SER_FDX)
+	baycom_ser_fdx_init();
+#endif
+#if defined(CONFIG_BAYCOM_SER_HDX)
+	baycom_ser_hdx_init();
 #endif
 #if defined(CONFIG_SOUNDMODEM)
 	sm_init();

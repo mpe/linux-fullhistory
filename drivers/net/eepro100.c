@@ -61,6 +61,7 @@ static int max_interrupt_work = 20;
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/delay.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>

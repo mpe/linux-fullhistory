@@ -459,18 +459,10 @@ static inline int make_private_signals(void)
  * so that a new one can be started
  */
 
-static inline void flush_old_signals(struct signal_struct *sig)
+static inline void flush_old_signals(struct task_struct *t)
 {
-	int i;
-	struct sigaction * sa = sig->action;
-
-	for (i=32 ; i != 0 ; i--) {
-		sa->sa_mask = 0;
-		sa->sa_flags = 0;
-		if (sa->sa_handler != SIG_IGN)
-			sa->sa_handler = NULL;
-		sa++;
-	}
+	flush_signals(t);
+	flush_signal_handlers(t);
 }
 
 static inline void flush_old_files(struct files_struct * files)
@@ -531,7 +523,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	    permission(bprm->dentry->d_inode,MAY_READ))
 		current->dumpable = 0;
 
-	flush_old_signals(current->sig);
+	flush_old_signals(current);
 	flush_old_files(current->files);
 
 	return 0;

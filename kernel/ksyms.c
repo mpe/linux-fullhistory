@@ -331,9 +331,6 @@ EXPORT_SYMBOL(do_gettimeofday);
 EXPORT_SYMBOL(loops_per_sec);
 EXPORT_SYMBOL(need_resched);
 EXPORT_SYMBOL(kstat);
-EXPORT_SYMBOL(kill_proc);
-EXPORT_SYMBOL(kill_pg);
-EXPORT_SYMBOL(kill_sl);
 
 /* misc */
 EXPORT_SYMBOL(panic);
@@ -352,9 +349,6 @@ EXPORT_SYMBOL(unregister_reboot_notifier);
 EXPORT_SYMBOL(_ctype);
 EXPORT_SYMBOL(secure_tcp_sequence_number);
 EXPORT_SYMBOL(get_random_bytes);
-
-/* Signal interfaces */
-EXPORT_SYMBOL(send_sig);
 
 /* Program loader interfaces */
 EXPORT_SYMBOL(setup_arg_pages);

@@ -725,7 +725,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		extern int spawnpid, spawnsig;
 		if (!perm)
 		  return -EPERM;
-		if (arg < 1 || arg > NSIG || arg == SIGKILL)
+		if (arg < 1 || arg > _NSIG || arg == SIGKILL)
 		  return -EINVAL;
 		spawnpid = current->pid;
 		spawnsig = arg;

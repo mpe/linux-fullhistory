@@ -178,6 +178,13 @@
 #define __NR_setresgid		170
 #define __NR_getresgid		171
 #define __NR_prctl              172
+#define __NR_rt_sigreturn	173
+#define __NR_rt_sigaction	174
+#define __NR_rt_sigprocmask	175
+#define __NR_rt_sigpending	176
+#define __NR_rt_sigtimedwait	177
+#define __NR_rt_sigqueueinfo	178
+#define __NR_rt_sigsuspend	179
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

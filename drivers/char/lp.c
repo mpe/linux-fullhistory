@@ -64,6 +64,11 @@ static char *dev_name = "lp";
 #undef LP_DEBUG
 #undef LP_READ_DEBUG
 
+/* Magic numbers */
+#define AUTO -3
+#define OFF -2
+#define UNSPEC -1
+
 static inline void lp_parport_release (int minor)
 {
 	parport_release (lp_table[minor].dev);
@@ -123,7 +128,7 @@ static inline int lp_char(char lpchar, int minor, int use_polling)
 	do {
 		status = r_str(minor);
 		count++;
-		if (need_resched)
+		if (resched_needed())
 			lp_schedule (minor);
 	} while (((use_polling && !LP_READY(minor, status)) || 
 		 (!use_polling && !(status & LP_PBUSY))) &&
@@ -163,9 +168,7 @@ static inline int lp_char(char lpchar, int minor, int use_polling)
 
 static void lp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct parport *pb = (struct parport *) dev_id;
-	struct pardevice *pd = pb->cad;
-	struct lp_struct *lp_dev = (struct lp_struct *) pd->private;
+	struct lp_struct *lp_dev = (struct lp_struct *) dev_id;
 
 	if (waitqueue_active (&lp_dev->lp_wait_q))
 		wake_up(&lp_dev->lp_wait_q);
@@ -272,11 +275,11 @@ static inline int lp_write_buf(unsigned int minor, const char *buf, int count)
 	return total_bytes_written;
 }
 
-static ssize_t lp_write(struct file * file, const char * buf, size_t count, loff_t *ppos)
+static ssize_t lp_write(struct file * file, const char * buf,
+		        size_t count, loff_t *ppos)
 {
-	struct inode *inode = file->f_dentry->d_inode;
-	unsigned int minor = MINOR(inode->i_rdev);
-	int retv;
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
+	ssize_t retv;
 
 	if (jiffies-lp_table[minor].lastcall > LP_TIME(minor))
 		lp_table[minor].runchars = 0;
@@ -288,7 +291,7 @@ static ssize_t lp_write(struct file * file, const char * buf, size_t count, loff
  	 */
  	lp_parport_claim (minor);
 
- 	retv = lp_write_buf(minor, buf, count);
+	retv = lp_write_buf(minor, buf, count);
  
  	lp_parport_release (minor);
  	return retv;
@@ -315,15 +318,15 @@ static void lp_select_in_high(int minor) {
 }
 
 /* Status readback confirming to ieee1284 */
-static ssize_t lp_read(struct file * file, char * buf, size_t count, loff_t *ppos)
+static ssize_t lp_read(struct file * file, char * buf,
+		       size_t count, loff_t *ppos)
 {
-	struct inode *inode = file->f_dentry->d_inode;
 	unsigned char z=0, Byte=0, status;
 	char *temp;
-	int retval;
+	ssize_t retval;
 	unsigned int counter=0;
 	unsigned int i;
-	unsigned int minor=MINOR(inode->i_rdev);
+	unsigned int minor=MINOR(file->f_dentry->d_inode->i_rdev);
 	
  	/* Claim Parport or sleep until it becomes available
  	 * (see lp_wakeup() for details)
@@ -353,7 +356,7 @@ static ssize_t lp_read(struct file * file, char * buf, size_t count, loff_t *ppo
 			status=(r_str(minor) & 0x40);
 			udelay(50);
 			counter++;
-			if (need_resched)
+			if (resched_needed())
 				schedule ();
 		} while ( (status == 0x40) && (counter < 20) );
 		if ( counter == 20 ) { /* Timeout */
@@ -372,7 +375,7 @@ static ssize_t lp_read(struct file * file, char * buf, size_t count, loff_t *ppo
 			status=(r_str(minor) & 0x40);
 			udelay(20);
 			counter++;
-			if (need_resched)
+			if (resched_needed())
 				schedule ();
 		} while ( (status == 0) && (counter < 20) );
 		if (counter == 20) { /* Timeout */
@@ -568,7 +571,7 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
-static int parport[LP_NO] = { -1, };
+static int parport[LP_NO] = { UNSPEC, };
 
 #ifdef MODULE
 #define lp_init init_module
@@ -589,11 +592,11 @@ void lp_setup(char *str, int *ints)
 			printk(KERN_INFO "lp: too many ports, %s ignored.\n",
 			       str);
 	} else if (!strcmp(str, "auto")) {
-		parport[0] = -3;
+		parport[0] = AUTO;
 	} else {
 		if (ints[0] == 0 || ints[1] == 0) {
 			/* disable driver on "lp=" or "lp=0" */
-			parport[0] = -2;
+			parport[0] = OFF;
 		} else {
 			printk(KERN_WARNING "warning: 'lp=0x%x' is deprecated, ignored\n", ints[1]);
 		}
@@ -619,7 +622,7 @@ void lp_wakeup(void *ref)
 static int inline lp_searchfor(int list[], int a)
 {
 	int i;
-	for (i = 0; i < LP_NO && list[i] != -1; i++) {
+	for (i = 0; i < LP_NO && list[i] != UNSPEC; i++) {
 		if (list[i] == a) return 1;
 	}
 	return 0;
@@ -630,15 +633,16 @@ int lp_init(void)
 	int count = 0;
 	struct parport *pb;
   
-	if (parport[0] == -2) return 0;
+	if (parport[0] == OFF) return 0;
 
 	pb = parport_enumerate();
 
 	while (pb) {
 		/* We only understand PC-style ports. */
 		if (pb->modes & PARPORT_MODE_PCSPP) {
-			if (parport[0] == -1 || lp_searchfor(parport, count) ||
-			    (parport[0] == -3 &&
+			if (parport[0] == UNSPEC ||
+			    lp_searchfor(parport, count) ||
+			    (parport[0] == AUTO &&
 			     pb->probe_info.class == PARPORT_CLASS_PRINTER)) {
 				lp_table[count].dev =
 				  parport_register_device(pb, dev_name, 
@@ -646,6 +650,10 @@ int lp_init(void)
 						lp_interrupt, PARPORT_DEV_TRAN,
 						(void *) &lp_table[count]);
 				lp_table[count].flags |= LP_EXIST;
+				init_waitqueue (&lp_table[count].lp_wait_q);
+				lp_parport_claim (count);
+				lp_reset (count);
+				lp_parport_release (count);
 				printk(KERN_INFO "lp%d: using %s (%s).\n", 
 				       count, pb->name, (pb->irq == PARPORT_IRQ_NONE)?"polling":"interrupt-driven");
 			}

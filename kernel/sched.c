@@ -85,8 +85,6 @@ unsigned int * prof_buffer = NULL;
 unsigned long prof_len = 0;
 unsigned long prof_shift = 0;
 
-#define _S(nr) (1<<((nr)-1))
-
 extern void mem_use(void);
 
 unsigned long volatile jiffies=0;
@@ -1419,28 +1417,6 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	return 0;
 }
 
-/*
- * change timeval to jiffies, trying to avoid the 
- * most obvious overflows..
- */
-static unsigned long timespectojiffies(struct timespec *value)
-{
-	unsigned long sec = (unsigned) value->tv_sec;
-	long nsec = value->tv_nsec;
-
-	if (sec > (LONG_MAX / HZ))
-		return LONG_MAX;
-	nsec += 1000000000L / HZ - 1;
-	nsec /= 1000000000L / HZ;
-	return HZ * sec + nsec;
-}
-
-static void jiffiestotimespec(unsigned long jiffies, struct timespec *value)
-{
-	value->tv_nsec = (jiffies % HZ) * (1000000000L / HZ);
-	value->tv_sec = jiffies / HZ;
-}
-
 asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 {
 	struct timespec t;
@@ -1466,7 +1442,7 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		return 0;
 	}
 
-	expire = timespectojiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
+	expire = timespec_to_jiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
 
 	current->timeout = expire;
 	current->state = TASK_INTERRUPTIBLE;
@@ -1474,8 +1450,8 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 
 	if (expire > jiffies) {
 		if (rmtp) {
-			jiffiestotimespec(expire - jiffies -
-					  (expire > jiffies + 1), &t);
+			jiffies_to_timespec(expire - jiffies -
+					    (expire > jiffies + 1), &t);
 			if (copy_to_user(rmtp, &t, sizeof(struct timespec)))
 				return -EFAULT;
 		}
@@ -1524,6 +1500,19 @@ static void show_task(int nr,struct task_struct * p)
 		printk(" %5d\n", p->p_osptr->pid);
 	else
 		printk("\n");
+
+	{
+		extern char * render_sigset_t(sigset_t *set, char *buffer);
+		struct signal_queue *q;
+		char s[sizeof(sigset_t)*2+1], b[sizeof(sigset_t)*2+1]; 
+
+		render_sigset_t(&p->signal, s);
+		render_sigset_t(&p->blocked, b);
+		printk("\tsig: %d %s %s :", signal_pending(p), s, b);
+		for (q = p->sigqueue; q ; q = q->next)
+			printk(" %d", q->info.si_signo);
+		printk(" X\n");
+	}
 }
 
 void show_state(void)

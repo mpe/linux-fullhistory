@@ -837,7 +837,7 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	}
 	p->size = (p->modes & (PARPORT_MODE_PCEPP 
 			       | PARPORT_MODE_PCECPEPP))?8:3;
-	printk(KERN_INFO "%s: PC-style at 0x%x", p->name, p->base);
+	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);
 	if (p->irq == PARPORT_IRQ_AUTO) {
 		p->irq = PARPORT_IRQ_NONE;
 		parport_irq_probe(p);
@@ -868,6 +868,10 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	/* Done probing.  Now put the port into a sensible start-up state. */
 	pc_write_control(p, 0xc);
 	pc_write_data(p, 0);
+
+	if (parport_probe_hook)
+		(*parport_probe_hook)(p);
+
 	return 1;
 }
 

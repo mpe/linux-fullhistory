@@ -52,6 +52,8 @@ extern void wrusp(unsigned long);
 extern unsigned long rdusp(void);
 extern unsigned long rdmces (void);
 extern void wrmces (unsigned long);
+extern unsigned long whami(void);
+extern void wripir(unsigned long);
 
 #define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
 
@@ -119,11 +121,13 @@ do { \
 #define __cli()			setipl(7)
 #define __sti()			setipl(0)
 #define __save_flags(flags)	do { (flags) = getipl(); } while (0)
+#define __save_and_cli(flags)	do { (flags) = swpipl(7); } while (0)
 #define __restore_flags(flags)	setipl(flags)
 
 #define cli()			setipl(7)
 #define sti()			setipl(0)
 #define save_flags(flags)	do { (flags) = getipl(); } while (0)
+#define save_and_cli(flags)	do { (flags) = swpipl(7); } while (0)
 #define restore_flags(flags)	setipl(flags)
 
 /*

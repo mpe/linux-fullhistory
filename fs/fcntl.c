@@ -178,7 +178,7 @@ static void send_sigio(int pid, uid_t uid, uid_t euid)
 		    (euid ^ p->suid) && (euid ^ p->uid) &&
 		    (uid ^ p->suid) && (uid ^ p->uid))
 			continue;
-		p->signal |= 1 << (SIGIO-1);
+		send_sig(SIGIO, p, 1);
 		if (p->state == TASK_INTERRUPTIBLE && signal_pending(p))
 			wake_up_process(p);
 	}

@@ -102,6 +102,7 @@ static const char *version =
 #include <asm/dma.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -652,8 +653,8 @@ eepro_open(struct device *dev)
 
 	outb(SEL_RESET_CMD, ioaddr);
 	/* We are supposed to wait for 2 us after a SEL_RESET */
-	SLOW_DOWN_IO;
-	SLOW_DOWN_IO;
+	
+	udelay(2);
 
 	lp->tx_start = lp->tx_end = XMT_LOWER_LIMIT << 8; /* or = RCV_RAM */
 	lp->tx_last = 0;
@@ -695,8 +696,7 @@ eepro_send_packet(struct sk_buff *skb, struct device *dev)
 		/* Try to restart the adaptor. */
 		outb(SEL_RESET_CMD, ioaddr);
 		/* We are supposed to wait for 2 us after a SEL_RESET */
-		SLOW_DOWN_IO;
-		SLOW_DOWN_IO;
+		udelay(2);
 
 		/* Do I also need to flush the transmit buffers here? YES? */
 		lp->tx_start = lp->tx_end = rcv_ram;
@@ -824,9 +824,9 @@ eepro_close(struct device *dev)
 	/* Update the statistics here. What statistics? */
 
 	/* We are supposed to wait for 200 us after a RESET */
-	SLOW_DOWN_IO;
-	SLOW_DOWN_IO; /* May not be enough? */
 
+	udelay(200);
+	
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -933,8 +933,7 @@ set_multicast_list(struct device *dev)
 
 		/* Acknowledge that the MC setup is done */
 		do { /* We should be doing this in the eepro_interrupt()! */
-			SLOW_DOWN_IO;
-			SLOW_DOWN_IO;
+			udelay(2);
 			if (inb(ioaddr + STATUS_REG) & 0x08)
 			{
 				i = inb(ioaddr);
@@ -962,7 +961,7 @@ set_multicast_list(struct device *dev)
 /* IMPORTANT - the 82595 will be set to Bank 0 after the eeprom is read */
 
 /* The delay between EEPROM clock transitions. */
-#define eeprom_delay()	{ int _i = 40; while (--_i > 0) { __SLOW_DOWN_IO; }}
+#define eeprom_delay()	{ udelay(40); }
 #define EE_READ_CMD (6 << 6)
 
 int

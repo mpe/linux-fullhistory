@@ -438,8 +438,13 @@ int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno
 	}
 	if (trapno !=1)
 		return 1; /* we let this handle by the calling routine */
-	if (current->flags & PF_PTRACED)
-		current->blocked &= ~(1 << (SIGTRAP-1));
+	if (current->flags & PF_PTRACED) {
+		unsigned long flags;
+		spin_lock_irqsave(&current->sigmask_lock, flags);
+		sigdelset(&current->blocked, SIGTRAP);
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
+	}
 	send_sig(SIGTRAP, current, 1);
 	current->tss.trap_no = trapno;
 	current->tss.error_code = error_code;

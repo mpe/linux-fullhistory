@@ -1,3 +1,33 @@
+*NEWSFLASH*
+This kernel release needs a minor bug fix for pppd to run properly with
+the new routing code.  When your pppd doesn't work apply the following 
+patch to pppd-2.2.0f or install updated RPMs.
+
+Updated RPMs for libc5 machines (build on RedHat 4.0):
+ftp://ftp.firstfloor.org/pub/ak/ppp-2.2.0f-4.src.rpm
+ftp://ftp.firstfloor.org/pub/ak/ppp-2.2.0f-4.i386.rpm
+
+Patch:
+
+--- ppp-2.2.0f/pppd/sys-linux.c-o	Wed Sep 17 00:23:01 1997
++++ ppp-2.2.0f/pppd/sys-linux.c	Wed Sep 17 00:23:11 1997
+@@ -927,8 +927,11 @@
+ 
+     if (ioctl(sockfd, SIOCADDRT, &rt) < 0)
+       {
++/* The new linux routing code doesn't like routes on down devices. */
++#if 0
+         syslog (LOG_ERR, "ioctl(SIOCADDRT) device route: %m");
+         return (0);
++#endif
+       }
+     return 1;
+   }
+
+
+-Andi Kleen
+--------------------------------------------------------------------
+
 The PPP support for this kernel requires the 2.2.0 version of the
 pppd daemon. You will find the current version of the daemon on
 sunsite.unc.edu in the /pub/Linux/system/Network/serial directory.

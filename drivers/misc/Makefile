@@ -30,6 +30,13 @@ ifeq ($(CONFIG_PARPORT),y)
       M_OBJS += parport_pc.o
     endif
   endif
+  ifeq ($(CONFIG_PARPORT_AX),y)
+    LX_OBJS += parport_ax.o
+  else
+    ifeq ($(CONFIG_PARPORT_AX),m)
+      M_OBJS += parport_ax.o
+    endif
+  endif
   LX_OBJS += parport_init.o
 else
   ifeq ($(CONFIG_PARPORT),m)
@@ -42,6 +49,9 @@ else
   endif
   ifeq ($(CONFIG_PARPORT_PC),m)
     MX_OBJS += parport_pc.o
+  endif
+  ifeq ($(CONFIG_PARPORT_AX),m)
+    MX_OBJS += parport_ax.o
   endif
 endif
 

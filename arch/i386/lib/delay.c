@@ -9,7 +9,7 @@
  */
 
 #include <linux/sched.h>
-#include <asm/delay.h>
+#include <linux/delay.h>
 
 #ifdef __SMP__
 #include <asm/smp.h>

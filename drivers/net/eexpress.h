@@ -37,7 +37,7 @@
 #define ASIC_RST      0x40
 #define i586_RST      0x80
 
-#define eeprom_delay() { int _i = 40; while (--_i>0) { __SLOW_DOWN_IO; }}
+#define eeprom_delay() { udelay(40); }
 
 /*
  * i82586 Memory Configuration

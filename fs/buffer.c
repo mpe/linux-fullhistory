@@ -1944,7 +1944,10 @@ int bdflush(void * unused)
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
 		if(ndirty == 0 || nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
-			current->signal = 0;
+			spin_lock_irq(&current->sigmask_lock);
+			flush_signals(current);
+			spin_unlock_irq(&current->sigmask_lock);
+
 			interruptible_sleep_on(&bdflush_wait);
 		}
 	}

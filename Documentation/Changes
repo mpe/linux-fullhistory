@@ -190,6 +190,19 @@ parallel port may no longer be where you expect it; for example, LPT1
 /dev/lp0 with the new Plug-and-Play driver.  If printing breaks with
 the new driver, try checking your lpd configuration.
 
+pppd
+====
+This kernel version needs a minor bugfix to pppd. See 
+Documentation/networking/ppp.txt for more information.
+
+Syncookies
+==========
+When you build your kernel with Syncookie support (CONFIG_SYN_COOKIES)
+the syncookie code still defaults to off (unlike the 2.0.30+ behaviour).
+You have to explicitely enable it by add a line like
+echo 1 >/proc/sys/net/ipv4/tcp_syncookies 
+to one of your startup scripts (e.g. /etc/rc.d/rc.local on a redhat system)
+
 Bash
 ====
 

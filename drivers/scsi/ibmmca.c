@@ -199,11 +199,10 @@
    5) Magneto-Optical drives and medium-changers are also recognized, now.
       Therefore, we have a completely gapfree recognition of all SCSI-
       device-types, that are known by Linux up to kernel 2.1.31.
-   6) The flag SCSI_IBMMCA_DEV_RESET has been inserted. If it is set within
-      the configuration, each connected SCSI-device will get a reset command
-      during boottime. This can be necessary for some special SCSI-devices.
-      This flag should be included in Config.in.
-      (See also the new Config.in file.)
+   6) The flag CONFIG_SCSI_IBMMCA_DEV_RESET has been inserted. If it is set
+      within the configuration, each connected SCSI-device will get a reset
+      command during boottime. This can be necessary for some special
+      SCSI-devices.  (See also the new Config.in file.)
    Probable next improvement: bad disk handler.
    - Michael Lang
  
@@ -1164,7 +1163,7 @@ static void check_devices (struct Scsi_Host *shpnt)
 		if (device_exists (shpnt, ldn, &ld[ldn].block_length,
 				   &ld[ldn].device_type))
 		  {
-#ifdef SCSI_IBMMCA_DEV_RESET
+#ifdef CONFIG_SCSI_IBMMCA_DEV_RESET
 		    int ticks;
 		    printk("(resetting)");
 		    ticks = IM_RESET_DELAY*HZ;

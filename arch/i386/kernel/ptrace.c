@@ -492,7 +492,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data > NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
@@ -530,7 +530,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data > NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~PF_TRACESYS;
 			tmp = get_stack_long(child, EFL_OFFSET) | TRAP_FLAG;
@@ -546,7 +546,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data > NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
@@ -585,9 +585,7 @@ asmlinkage void syscall_trace(void)
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
 	if (current->exit_code) {
-		spin_lock_irq(&current->sigmask_lock);
-		current->signal |= (1 << (current->exit_code - 1));
-		spin_unlock_irq(&current->sigmask_lock);
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
 	}
-	current->exit_code = 0;
 }

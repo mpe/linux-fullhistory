@@ -10,7 +10,7 @@
 #define rti	.long PAL_rti
 #define SIGCHLD	20
 
-#define NR_SYSCALLS 352
+#define NR_SYSCALLS 360
 #define osf_vfork sys_fork
 
 /*
@@ -32,13 +32,12 @@
 #define TASK_STATE	0
 #define TASK_COUNTER	8
 #define TASK_PRIORITY	16
-#define TASK_SIGNAL	24
-#define TASK_BLOCKED	32
-#define TASK_FLAGS	40
+#define TASK_FLAGS	24
 
 /*
  * task flags (must match include/linux/sched.h):
  */
+#define PF_SIGPENDING	0x00000008
 #define	PF_PTRACED	0x00000010
 
 /*
@@ -509,7 +508,7 @@ entSys:
 	lda	$4,NR_SYSCALLS($31)
 	stq	$16,SP_OFF+24($30)
 	lda	$5,sys_call_table
-	lda	$27,do_entSys
+	lda	$27,alpha_ni_syscall
 	cmpult	$0,$4,$4
 	ldq	$3,TASK_FLAGS($8)
 	stq	$17,SP_OFF+32($30)
@@ -519,7 +518,7 @@ entSys:
 	bne     $3,strace
 	beq	$4,1f
 	ldq	$27,0($5)
-1:	jsr	$26,($27),do_entSys
+1:	jsr	$26,($27),alpha_ni_syscall
 	ldgp	$29,0($26)
 	blt	$0,syscall_error	/* the call failed */
 	stq	$0,0($30)
@@ -544,11 +543,10 @@ ret_from_reschedule:
 	lda	$4,init_task_union
 	bne	$2,reschedule
 	xor	$4,$8,$4
+	ldq	$5,TASK_FLAGS($8)
 	beq	$4,restore_all
-	ldq	$4,TASK_SIGNAL($8)
-	ldq	$16,TASK_BLOCKED($8)
-	bic	$4,$16,$4
-	bne	$4,signal_return
+	and	$5,PF_SIGPENDING,$5
+	bne	$5,signal_return
 restore_all:
 	RESTORE_ALL
 	rti
@@ -574,12 +572,12 @@ strace:
 	/* get the system call pointer.. */
 	lda	$1,NR_SYSCALLS($31)
 	lda	$2,sys_call_table
-	lda	$27,do_entSys
+	lda	$27,alpha_ni_syscall
 	cmpult	$0,$1,$1
 	s8addq	$0,$2,$2
 	beq	$1,1f
 	ldq	$27,0($2)
-1:	jsr	$26,($27),do_entSys
+1:	jsr	$26,($27),alpha_ni_syscall
 	ldgp	$29,0($26)
 
 	/* check return.. */
@@ -656,6 +654,7 @@ signal_return:
 	bis	$30,$30,$17
 	br	$1,do_switch_stack
 	bis	$30,$30,$18
+	bis	$31,$31,$16
 	jsr	$26,do_signal
 	lda	$30,SWITCH_STACK_SIZE($30)
 	br	$31,restore_all
@@ -686,6 +685,17 @@ sys_sigreturn:
 .end sys_sigreturn
 
 .align 3
+.ent sys_rt_sigreturn
+sys_rt_sigreturn:
+	bis	$30,$30,$17
+	lda	$30,-SWITCH_STACK_SIZE($30)
+	bis	$30,$30,$18
+	jsr	$26,do_rt_sigreturn
+	br	$1,undo_switch_stack
+	br	$31,ret_from_sys_call
+.end sys_rt_sigreturn
+
+.align 3
 .ent sys_sigsuspend
 sys_sigsuspend:
 	bis	$30,$30,$17
@@ -696,80 +706,383 @@ sys_sigsuspend:
 	br	$31,ret_from_sys_call
 .end sys_sigsuspend
 
+.align 3
+.ent sys_rt_sigsuspend
+sys_rt_sigsuspend:
+	bis	$30,$30,$18
+	br	$1,do_switch_stack
+	bis	$30,$30,$19
+	jsr	$26,do_rt_sigsuspend
+	lda	$30,SWITCH_STACK_SIZE($30)
+	br	$31,ret_from_sys_call
+.end sys_rt_sigsuspend
+
+	.data
 	.align 3
 	.globl sys_call_table
 sys_call_table:
-/*0*/	.quad do_entSys, sys_exit, sys_fork, sys_read, sys_write
-	.quad do_entSys, sys_close, sys_wait4, do_entSys, sys_link
-	.quad sys_unlink, do_entSys, sys_chdir, sys_fchdir, sys_mknod
-	.quad sys_chmod, sys_chown, osf_brk, do_entSys, sys_lseek
-	.quad sys_getxpid, osf_mount, osf_umount, sys_setuid, sys_getxuid
-	.quad do_entSys, sys_ptrace, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, sys_access, do_entSys
-	.quad do_entSys, sys_sync, sys_kill, do_entSys, sys_setpgid
-	.quad do_entSys, sys_dup, sys_pipe, osf_set_program_attributes, do_entSys
-	.quad sys_open, do_entSys, sys_getxgid, osf_sigprocmask, do_entSys
-/*50*/	.quad do_entSys, sys_acct, sys_sigpending, do_entSys, sys_ioctl
-	.quad do_entSys, do_entSys, sys_symlink, sys_readlink, sys_execve
-	.quad sys_umask, sys_chroot, do_entSys, sys_getpgrp, sys_getpagesize
-	.quad do_entSys, osf_vfork, sys_newstat, sys_newlstat, do_entSys
-	.quad do_entSys, osf_mmap, do_entSys, sys_munmap, sys_mprotect
-	.quad sys_madvise, sys_vhangup, do_entSys, do_entSys, sys_getgroups
+	.quad alpha_ni_syscall			/* 0 */
+	.quad sys_exit
+	.quad sys_fork
+	.quad sys_read
+	.quad sys_write
+	.quad alpha_ni_syscall			/* 5 */
+	.quad sys_close
+	.quad sys_wait4
+	.quad alpha_ni_syscall
+	.quad sys_link
+	.quad sys_unlink			/* 10 */
+	.quad alpha_ni_syscall
+	.quad sys_chdir
+	.quad sys_fchdir
+	.quad sys_mknod
+	.quad sys_chmod				/* 15 */
+	.quad sys_chown
+	.quad osf_brk
+	.quad alpha_ni_syscall
+	.quad sys_lseek
+	.quad sys_getxpid			/* 20 */
+	.quad osf_mount
+	.quad osf_umount
+	.quad sys_setuid
+	.quad sys_getxuid
+	.quad alpha_ni_syscall			/* 25 */
+	.quad sys_ptrace
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 30 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad sys_access
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 35 */
+	.quad sys_sync
+	.quad sys_kill
+	.quad alpha_ni_syscall
+	.quad sys_setpgid
+	.quad alpha_ni_syscall			/* 40 */
+	.quad sys_dup
+	.quad sys_pipe
+	.quad osf_set_program_attributes
+	.quad alpha_ni_syscall
+	.quad sys_open				/* 45 */
+	.quad alpha_ni_syscall
+	.quad sys_getxgid
+	.quad osf_sigprocmask
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 50 */
+	.quad sys_acct
+	.quad osf_sigpending
+	.quad alpha_ni_syscall
+	.quad sys_ioctl
+	.quad alpha_ni_syscall			/* 55 */
+	.quad alpha_ni_syscall
+	.quad sys_symlink
+	.quad sys_readlink
+	.quad sys_execve
+	.quad sys_umask				/* 60 */
+	.quad sys_chroot
+	.quad alpha_ni_syscall
+	.quad sys_getpgrp
+	.quad sys_getpagesize
+	.quad alpha_ni_syscall			/* 65 */
+	.quad osf_vfork
+	.quad sys_newstat
+	.quad sys_newlstat
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 70 */
+	.quad osf_mmap
+	.quad alpha_ni_syscall
+	.quad sys_munmap
+	.quad sys_mprotect
+	.quad sys_madvise			/* 75 */
+	.quad sys_vhangup
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad sys_getgroups
 	/* map BSD's setpgrp to sys_setpgid for binary compatibility: */
-	.quad sys_setgroups, do_entSys, sys_setpgid, sys_setitimer, do_entSys
-	.quad do_entSys, sys_getitimer, sys_gethostname, sys_sethostname, sys_getdtablesize
-	.quad sys_dup2, sys_newfstat, sys_fcntl, sys_select, sys_poll
-	.quad sys_fsync, sys_setpriority, sys_socket, sys_connect, sys_accept
-/*100*/	.quad osf_getpriority, sys_send, sys_recv, sys_sigreturn, sys_bind
-	.quad sys_setsockopt, sys_listen, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, sys_sigsuspend, do_entSys, sys_recvmsg, sys_sendmsg
-	.quad do_entSys, sys_gettimeofday, sys_getrusage, sys_getsockopt, do_entSys
-	.quad sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
-	.quad sys_recvfrom, sys_setreuid, sys_setregid, sys_rename, sys_truncate
-	.quad sys_ftruncate, sys_flock, sys_setgid, sys_sendto, sys_shutdown
-	.quad sys_socketpair, sys_mkdir, sys_rmdir, sys_utimes, do_entSys
-	.quad do_entSys, sys_getpeername, do_entSys, do_entSys, sys_getrlimit
-	.quad sys_setrlimit, do_entSys, sys_setsid, sys_quotactl, do_entSys
-/*150*/	.quad sys_getsockname, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, sys_sigaction, do_entSys, do_entSys, osf_getdirentries
-	.quad osf_statfs, osf_fstatfs, do_entSys, do_entSys, do_entSys
-	.quad osf_getdomainname, sys_setdomainname, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, osf_swapon
-/*200*/	.quad sys_msgctl, sys_msgget, sys_msgrcv, sys_msgsnd, sys_semctl
-	.quad sys_semget, sys_semop, osf_utsname, do_entSys, osf_shmat
-	.quad sys_shmctl, sys_shmdt, sys_shmget, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, sys_msync, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, sys_getpgid, sys_getsid
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, osf_sysinfo, do_entSys, do_entSys, osf_proplist_syscall
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-/*250*/	.quad do_entSys, osf_usleep_thread, do_entSys, do_entSys, sys_sysfs
-	.quad do_entSys, osf_getsysinfo, osf_setsysinfo, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad sys_setgroups			/* 80 */
+	.quad alpha_ni_syscall
+	.quad sys_setpgid
+	.quad sys_setitimer
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 85 */
+	.quad sys_getitimer
+	.quad sys_gethostname
+	.quad sys_sethostname
+	.quad sys_getdtablesize
+	.quad sys_dup2				/* 90 */
+	.quad sys_newfstat
+	.quad sys_fcntl
+	.quad sys_select
+	.quad sys_poll
+	.quad sys_fsync				/* 95 */
+	.quad sys_setpriority
+	.quad sys_socket
+	.quad sys_connect
+	.quad sys_accept
+	.quad osf_getpriority			/* 100 */
+	.quad sys_send
+	.quad sys_recv
+	.quad sys_sigreturn
+	.quad sys_bind
+	.quad sys_setsockopt			/* 105 */
+	.quad sys_listen
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 110 */
+	.quad sys_sigsuspend
+	.quad alpha_ni_syscall
+	.quad sys_recvmsg
+	.quad sys_sendmsg
+	.quad alpha_ni_syscall			/* 115 */
+	.quad sys_gettimeofday
+	.quad sys_getrusage
+	.quad sys_getsockopt
+	.quad alpha_ni_syscall
+	.quad sys_readv				/* 120 */
+	.quad sys_writev
+	.quad sys_settimeofday
+	.quad sys_fchown
+	.quad sys_fchmod
+	.quad sys_recvfrom			/* 125 */
+	.quad sys_setreuid
+	.quad sys_setregid
+	.quad sys_rename
+	.quad sys_truncate
+	.quad sys_ftruncate			/* 130 */
+	.quad sys_flock
+	.quad sys_setgid
+	.quad sys_sendto
+	.quad sys_shutdown
+	.quad sys_socketpair			/* 135 */
+	.quad sys_mkdir
+	.quad sys_rmdir
+	.quad sys_utimes
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 140 */
+	.quad sys_getpeername
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad sys_getrlimit
+	.quad sys_setrlimit			/* 145 */
+	.quad alpha_ni_syscall
+	.quad sys_setsid
+	.quad sys_quotactl
+	.quad alpha_ni_syscall
+	.quad sys_getsockname			/* 150 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 155 */
+	.quad osf_sigaction
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad osf_getdirentries
+	.quad osf_statfs			/* 160 */
+	.quad osf_fstatfs
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad osf_getdomainname			/* 165 */
+	.quad sys_setdomainname
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 170 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 175 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 180 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 185 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 190 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 195 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad osf_swapon
+	.quad sys_msgctl			/* 200 */
+	.quad sys_msgget
+	.quad sys_msgrcv
+	.quad sys_msgsnd
+	.quad sys_semctl
+	.quad sys_semget			/* 205 */
+	.quad sys_semop
+	.quad osf_utsname
+	.quad alpha_ni_syscall
+	.quad osf_shmat
+	.quad sys_shmctl			/* 210 */
+	.quad sys_shmdt
+	.quad sys_shmget
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 215 */
+	.quad alpha_ni_syscall
+	.quad sys_msync
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 220 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 225 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 230 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad sys_getpgid
+	.quad sys_getsid
+	.quad alpha_ni_syscall			/* 235 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 240 */
+	.quad osf_sysinfo
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad osf_proplist_syscall
+	.quad alpha_ni_syscall			/* 245 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 250 */
+	.quad osf_usleep_thread
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad sys_sysfs
+	.quad alpha_ni_syscall			/* 255 */
+	.quad osf_getsysinfo
+	.quad osf_setsysinfo
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 260 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 265 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 270 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 275 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 280 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 285 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 290 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 295 */
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
 /* linux-specific system calls start at 300 */
-/*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
-	.quad sys_getdents, alpha_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
-	.quad sys_syslog, sys_reboot, sys_clone, sys_uselib, sys_mlock
-	.quad sys_munlock, sys_mlockall, sys_munlockall, sys_sysinfo, sys_sysctl
-	.quad sys_idle, sys_umount, sys_swapon, sys_times, sys_personality
-	.quad sys_setfsuid, sys_setfsgid, sys_ustat, sys_statfs, sys_fstatfs
-	.quad sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler, sys_sched_yield
-	.quad sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, do_entSys /* sys_afs_syscall */, sys_newuname
-	.quad sys_nanosleep, sys_mremap, sys_nfsservctl, sys_setresuid, sys_getresuid
-	.quad sys_pciconfig_read, sys_pciconfig_write, sys_query_module
-	.quad sys_prctl, sys_pread, sys_pwrite
-	.quad do_entSys, do_entSys
+	.quad sys_bdflush			/* 300 */
+	.quad sys_sethae
+	.quad sys_mount
+	.quad sys_adjtimex
+	.quad sys_swapoff
+	.quad sys_getdents			/* 305 */
+	.quad alpha_create_module
+	.quad sys_init_module
+	.quad sys_delete_module
+	.quad sys_get_kernel_syms
+	.quad sys_syslog			/* 310 */
+	.quad sys_reboot
+	.quad sys_clone
+	.quad sys_uselib
+	.quad sys_mlock
+	.quad sys_munlock			/* 315 */
+	.quad sys_mlockall
+	.quad sys_munlockall
+	.quad sys_sysinfo
+	.quad sys_sysctl
+	.quad sys_idle				/* 320 */
+	.quad sys_umount
+	.quad sys_swapon
+	.quad sys_times
+	.quad sys_personality
+	.quad sys_setfsuid			/* 325 */
+	.quad sys_setfsgid
+	.quad sys_ustat
+	.quad sys_statfs
+	.quad sys_fstatfs
+	.quad sys_sched_setparam		/* 330 */
+	.quad sys_sched_getparam
+	.quad sys_sched_setscheduler
+	.quad sys_sched_getscheduler
+	.quad sys_sched_yield
+	.quad sys_sched_get_priority_max	/* 335 */
+	.quad sys_sched_get_priority_min
+	.quad sys_sched_rr_get_interval
+	.quad alpha_ni_syscall /* sys_afs_syscall */
+	.quad sys_newuname
+	.quad sys_nanosleep			/* 340 */
+	.quad sys_mremap
+	.quad sys_nfsservctl
+	.quad sys_setresuid
+	.quad sys_getresuid
+	.quad sys_pciconfig_read		/* 345 */
+	.quad sys_pciconfig_write
+	.quad sys_query_module
+	.quad sys_prctl
+	.quad sys_pread
+	.quad sys_pwrite			/* 350 */
+	.quad sys_rt_sigreturn
+	.quad sys_rt_sigaction
+	.quad sys_rt_sigprocmask
+	.quad sys_rt_sigpending
+	.quad sys_rt_sigtimedwait		/* 355 */
+	.quad sys_rt_sigqueueinfo
+	.quad sys_rt_sigsuspend
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall
+	.quad alpha_ni_syscall			/* 360 */

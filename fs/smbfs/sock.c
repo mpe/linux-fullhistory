@@ -26,8 +26,6 @@
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 
-#define _S(nr) (1<<((nr)-1))
-
 static int
 _recvfrom(struct socket *socket, unsigned char *ubuf, int size,
 	  unsigned flags)
@@ -599,8 +597,8 @@ out_error:
 int
 smb_request(struct smb_sb_info *server)
 {
-	unsigned long old_mask;
-	unsigned long fs;
+	unsigned long fs, flags, sigpipe;
+	sigset_t old_set;
 	int len, result;
 	unsigned char *buffer;
 
@@ -619,8 +617,13 @@ smb_request(struct smb_sb_info *server)
 	len = smb_len(buffer) + 4;
 	pr_debug("smb_request: len = %d cmd = 0x%X\n", len, buffer[8]);
 
-	old_mask = current->blocked;
-	current->blocked |= ~(_S(SIGKILL) | _S(SIGSTOP));
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	sigpipe = sigismember(&current->signal, SIGPIPE);
+	old_set = current->blocked;
+	siginitsetinv(&current->blocked, sigmask(SIGKILL)|sigmask(SIGSTOP));
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	fs = get_fs();
 	set_fs(get_ds());
 
@@ -629,9 +632,15 @@ smb_request(struct smb_sb_info *server)
 	{
 		result = smb_receive(server);
 	}
+
 	/* read/write errors are handled by errno */
-	current->signal &= ~_S(SIGPIPE);
-	current->blocked = old_mask;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	if (result == -EPIPE && !sigpipe)
+		sigdelset(&current->signal, SIGPIPE);
+	current->blocked = old_set;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	set_fs(fs);
 
 	if (result >= 0)
@@ -758,8 +767,8 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		   int *lrdata, unsigned char **rdata,
 		   int *lrparam, unsigned char **rparam)
 {
-	unsigned long old_mask;
-	unsigned long fs;
+	sigset_t old_set;
+	unsigned long fs, flags, sigpipe;
 	int result;
 
 	pr_debug("smb_trans2_request: com=%d, ld=%d, lp=%d\n",
@@ -778,8 +787,13 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 	if ((result = smb_dont_catch_keepalive(server)) != 0)
 		goto bad_conn;
 
-	old_mask = current->blocked;
-	current->blocked |= ~(_S(SIGKILL) | _S(SIGSTOP));
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	sigpipe = sigismember(&current->signal, SIGPIPE);
+	old_set = current->blocked;
+	siginitsetinv(&current->blocked, sigmask(SIGKILL)|sigmask(SIGSTOP));
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	fs = get_fs();
 	set_fs(get_ds());
 
@@ -790,9 +804,15 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		result = smb_receive_trans2(server,
 					    lrdata, rdata, lrparam, rparam);
 	}
+
 	/* read/write errors are handled by errno */
-	current->signal &= ~_S(SIGPIPE);
-	current->blocked = old_mask;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	if (result == -EPIPE && !sigpipe)
+		sigdelset(&current->signal, SIGPIPE);
+	current->blocked = old_set;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	set_fs(fs);
 
 	if (result >= 0)

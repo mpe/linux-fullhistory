@@ -17,13 +17,15 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/kerneld.h>
 
 #ifndef MODULE
-static int io[PARPORT_MAX+1] __initdata = { 0, };
-static int irq[PARPORT_MAX] __initdata = { PARPORT_IRQ_NONE, };
-static int dma[PARPORT_MAX] __initdata = { PARPORT_DMA_NONE, };
+static int io[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
+static int irq[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_IRQ_NONE };
+static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_NONE };
 
 extern int parport_pc_init(int *io, int *irq, int *dma);
+extern int parport_ax_init(void);
 
 static int parport_setup_ptr __initdata = 0;
 
@@ -68,10 +70,18 @@ __initfunc(int parport_init(void))
 {
 	struct parport *pb;
 
-	if (io[0] == PARPORT_DISABLE) return 1;
+	if (io[0] == PARPORT_DISABLE) 
+		return 1;
+
+#ifdef CONFIG_PNP_PARPORT
+	parport_probe_hook = &parport_probe_one;
+#endif
 	parport_proc_init();
 #ifdef CONFIG_PARPORT_PC
 	parport_pc_init(io, irq, dma);
+#endif
+#ifdef CONFIG_PARPORT_AX
+	parport_ax_init();
 #endif
 	return 0;
 }
@@ -91,6 +101,7 @@ EXPORT_SYMBOL(parport_ieee1284_nibble_mode_ok);
 EXPORT_SYMBOL(parport_wait_peripheral);
 EXPORT_SYMBOL(parport_proc_register);
 EXPORT_SYMBOL(parport_proc_unregister);
+EXPORT_SYMBOL(parport_probe_hook);
 
 void inc_parport_count(void)
 {

@@ -1,7 +1,7 @@
 /*
  * The Linux BAYCOM driver for the Baycom serial 1200 baud modem
  * and the parallel 9600 baud modem
- * (C) 1996 by Thomas Sailer, HB9JNX
+ * (C) 1997 by Thomas Sailer, HB9JNX/AE4WA
  */
 
 #ifndef _BAYCOM_H

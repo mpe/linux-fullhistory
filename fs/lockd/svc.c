@@ -37,8 +37,7 @@
 
 #define NLMDBG_FACILITY		NLMDBG_SVC
 #define LOCKD_BUFSIZE		(1024 + NLMSSVC_XDRSIZE)
-#define BLOCKABLE_SIGS		(~(_S(SIGKILL) | _S(SIGSTOP)))
-#define _S(sig)			(1 << ((sig) - 1))
+#define BLOCKABLE_SIGS		(~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
 extern struct svc_program	nlmsvc_program;
 struct nlmsvc_binding *		nlmsvc_ops = NULL;
@@ -65,7 +64,6 @@ static void
 lockd(struct svc_rqst *rqstp)
 {
 	struct svc_serv	*serv = rqstp->rq_server;
-	sigset_t	oldsigmask;
 	int		err = 0;
 
 	/* Lock module and set up kernel thread */
@@ -118,8 +116,11 @@ lockd(struct svc_rqst *rqstp)
 	 */
 	while ((nlmsvc_users || !signalled()) && nlmsvc_pid == current->pid)
 	{
-		if (signalled())
-			current->signal = 0;
+		if (signalled()) {
+			spin_lock_irq(&current->sigmask_lock);
+			flush_signals(current);
+			spin_unlock_irq(&current->sigmask_lock);
+		}
 
 		/*
 		 * Retry any blocked locks that have been notified by
@@ -162,10 +163,17 @@ lockd(struct svc_rqst *rqstp)
 		}
 
 		/* Process request with all signals blocked.  */
-		oldsigmask = current->blocked;
-		current->blocked = BLOCKABLE_SIGS;
+		spin_lock_irq(&current->sigmask_lock);
+		siginitsetinv(&current->blocked, ~BLOCKABLE_SIGS);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
+		
 		svc_process(serv, rqstp);
-		current->blocked = oldsigmask;
+
+		spin_lock_irq(&current->sigmask_lock);
+		sigemptyset(&current->blocked);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
 
 		/* Unlock export hash tables */
 		if (nlmsvc_ops)

@@ -184,7 +184,7 @@ enum {TX_OFF, TX_ON};	/* command for scc_key_trx() */
 #define RXINT		0x04
 #define SPINT		0x06
 
-#ifdef SCC_DELAY
+#ifdef CONFIG_SCC_DELAY
 #define Inb(port)	inb_p(port)
 #define Outb(port, val)	outb_p(val, port)
 #else

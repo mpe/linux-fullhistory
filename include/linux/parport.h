@@ -1,4 +1,4 @@
-/* $Id: parport.h,v 1.2.6.3.2.2 1997/04/18 15:03:53 phil Exp $ */
+/* $Id: parport.h,v 1.3 1997/10/19 18:02:00 phil Exp $ */
 
 #ifndef _PARPORT_H_
 #define _PARPORT_H_
@@ -160,7 +160,7 @@ struct parport_dir {
 
 /* A parallel port */
 struct parport {
-	unsigned int base;	/* base address */
+	unsigned long base;	/* base address */
 	unsigned int size;	/* IO extent */
 	char *name;
 	int irq;		/* interrupt (or -1 for none) */
@@ -266,11 +266,11 @@ extern int parport_proc_cleanup(void);
 extern int parport_proc_register(struct parport *pp);
 extern int parport_proc_unregister(struct parport *pp);
 
-/* Prototypes from parport_ksyms.c */
 extern void dec_parport_count(void);
 extern void inc_parport_count(void);
 
 extern int parport_probe(struct parport *port, char *buffer, int len);
 extern void parport_probe_one(struct parport *port);
+extern void (*parport_probe_hook)(struct parport *port);
 
 #endif /* _PARPORT_H_ */

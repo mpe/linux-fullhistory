@@ -3,7 +3,7 @@
 
 struct sigcontext {
 	/*
-	 * what should we have here? I'd probably better use the same
+	 * What should we have here? I'd probably better use the same
 	 * stack layout as OSF/1, just in case we ever want to try
 	 * running their binaries.. 
 	 *
@@ -28,7 +28,15 @@ struct sigcontext {
 	 unsigned long	sc_fp_trap_pc;
 	 unsigned long	sc_fp_trigger_sum;
 	 unsigned long	sc_fp_trigger_inst;
-	 unsigned long	sc_retcode[2];
+};
+
+struct ucontext {
+	unsigned long	  uc_flags;
+	struct ucontext  *uc_link;
+	old_sigset_t	  uc_osf_sigmask;
+	stack_t		  uc_stack;
+	struct sigcontext uc_mcontext;
+	sigset_t	  uc_sigmask;	/* mask last for extensibility */
 };
 
 #endif

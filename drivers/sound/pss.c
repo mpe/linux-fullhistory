@@ -116,17 +116,15 @@ probe_pss(struct address_info *hw_config)
 		if (devc->base != 0x230 && devc->base != 0x250)		/* Some cards use these */
 			return 0;
 
-	if (check_region(devc->base, 16))
-	  {
-		  printk("PSS: I/O port conflict\n");
-		  return 0;
-	  }
+	if (check_region(devc->base, 16)) { 
+		printk(KERN_ERR "PSS: I/O port conflict\n");
+		return 0;
+	}
 	id = inw(REG(PSS_ID));
-	if ((id >> 8) != 'E')
-	  {
-		  /* printk( "No PSS signature detected at 0x%x (0x%x)\n",  devc->base,  id); */
-		  return 0;
-	  }
+	if ((id >> 8) != 'E') {
+		printk(KERN_ERR "No PSS signature detected at 0x%x (0x%x)\n",  devc->base,  id); 
+		return 0;
+	}
 	return 1;
 }
 
@@ -855,14 +853,28 @@ unload_pss_mss(struct address_info *hw_config)
 
 #ifdef MODULE
 
-int             io = -1;
-int             irq = -1;
-int             dma = -1;
+int pss_io = 0x220;
 
-int             pssmpu, pssmss;
-struct address_info cfg;
+int mss_io = 0x530;
+int mss_irq = 11;
+int mss_dma = 1;
+
+int mpu_io = 0x330;
+int mpu_irq = -1;
+
+struct address_info cfgpss = { 0 /* pss_io */, 0, -1, -1 };
+struct address_info cfgmpu = { 0 /* mpu_io */, 0 /* mpu_irq */, 0, -1 };
+struct address_info cfgmss = { 0 /* mss_io */, 0 /* mss_irq */, 0 /* mss_dma */, -1 };
+
+MODULE_PARM(pss_io, "i");
+MODULE_PARM(mss_io, "i");
+MODULE_PARM(mss_irq, "i");
+MODULE_PARM(mss_dma, "i");
+MODULE_PARM(mpu_io, "i");
+MODULE_PARM(mpu_irq, "i");
 
 static int      fw_load = 0;
+static int      pssmpu = 0, pssmss = 0;
 
 /*
  *    Load a PSS sound card module
@@ -871,34 +883,39 @@ static int      fw_load = 0;
 int 
 init_module(void)
 {
-	if (io == -1 || irq == -1 || dma == -1)
-	  {
+#if 0
+	if (pss_io == -1 || irq == -1 || dma == -1) {
 		  printk("pss: dma, irq and io must be set.\n");
 		  return -EINVAL;
-	  }
-	cfg.io_base = io;
-	cfg.irq = irq;
+	}
+#endif
+	cfgpss.io_base = pss_io;
 
-	if (!pss_synth)
-	  {
-		  fw_load = 1;
-		  pss_synthLen = mod_firmware_load("/etc/sound/pss_synth", (void *) &pss_synth);
-	  }
-	if (probe_pss(&cfg))
+	cfgmss.io_base = mss_io;
+	cfgmss.irq = mss_irq;
+	cfgmss.dma = mss_dma;
+
+	cfgmpu.io_base = mpu_io;
+	cfgmpu.irq = mpu_irq;
+
+	if (!pss_synth) {
+		fw_load = 1;
+		pss_synthLen = mod_firmware_load("/etc/sound/pss_synth", (void *) &pss_synth);
+	}
+	if (!probe_pss(&cfgpss))
 		return -ENODEV;
+	attach_pss(&cfgpss);
 	/*
 	 *    Attach stuff
 	 */
-	if (probe_pss_mpu(&cfg))
-	  {
-		  pssmpu = 1;
-		  attach_pss_mpu(&cfg);
-	  }
-	if (probe_pss_mss(&cfg))
-	  {
-		  pssmss = 1;
-		  attach_pss_mss(&cfg);
-	  }
+	if (probe_pss_mpu(&cfgmpu)) {
+		pssmpu = 1;
+		attach_pss_mpu(&cfgmpu);
+	}
+	if (probe_pss_mss(&cfgmss)) {
+		pssmss = 1;
+		attach_pss_mss(&cfgmss);
+	}
 	SOUND_LOCK;
 	return 0;
 }
@@ -909,10 +926,10 @@ cleanup_module(void)
 	if (fw_load && pss_synth)
 		kfree(pss_synth);
 	if (pssmss)
-		unload_pss_mss(&cfg);
+		unload_pss_mss(&cfgmss);
 	if (pssmpu)
-		unload_pss_mpu(&cfg);
-	unload_pss(&cfg);
+		unload_pss_mpu(&cfgmpu);
+	unload_pss(&cfgpss);
 	SOUND_LOCK_END;
 }
 #endif

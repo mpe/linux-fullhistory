@@ -35,9 +35,9 @@
 
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 #define NFSD_BUFSIZE		(1024 + NFSSVC_MAXBLKSIZE)
-#define BLOCKABLE_SIGS		(~(_S(SIGKILL) | _S(SIGSTOP)))
-#define SHUTDOWN_SIGS		(_S(SIGKILL)|_S(SIGINT)|_S(SIGTERM))
-#define _S(sig)			(1 << ((sig) - 1))
+
+#define BLOCKABLE_SIGS	(~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
+#define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
 
 extern struct svc_program	nfsd_program;
 static void			nfsd(struct svc_rqst *rqstp);
@@ -96,7 +96,6 @@ static void
 nfsd(struct svc_rqst *rqstp)
 {
 	struct svc_serv	*serv = rqstp->rq_server;
-	sigset_t	oldsigmask;
 	int		oldumask, err;
 
 	lock_kernel();
@@ -108,7 +107,7 @@ nfsd(struct svc_rqst *rqstp)
 	sprintf(current->comm, "nfsd");
 
 	oldumask = current->fs->umask;		/* Set umask to 0.  */
-	current->blocked |= ~SHUTDOWN_SIGS;
+	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
 	current->fs->umask = 0;
 	nfssvc_boot = xtime;			/* record boot time */
 	lockd_up();				/* start lockd */
@@ -142,10 +141,17 @@ nfsd(struct svc_rqst *rqstp)
 			serv->sv_stats->rpcbadclnt++;
 		} else {
 			/* Process request with all signals blocked.  */
-			oldsigmask = current->blocked;
-			current->blocked = BLOCKABLE_SIGS;
+			spin_lock_irq(&current->sigmask_lock);
+			siginitsetinv(&current->blocked, ~BLOCKABLE_SIGS);
+			recalc_sigpending(current);
+			spin_unlock_irq(&current->sigmask_lock);
+			
 			svc_process(serv, rqstp);
-			current->blocked = oldsigmask;
+
+			spin_lock_irq(&current->sigmask_lock);
+			siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
+			recalc_sigpending(current);
+			spin_unlock_irq(&current->sigmask_lock);
 		}
 
 		/* Unlock export hash tables */
@@ -157,8 +163,9 @@ nfsd(struct svc_rqst *rqstp)
 	} else {
 		unsigned int	signo;
 
-		for (signo = 0; signo < 32; signo++)
-			if (current->signal & current->blocked & (1<<signo))
+		for (signo = 1; signo <= _NSIG; signo++)
+			if (sigismember(&current->signal, signo) &&
+			    !sigismember(&current->signal, signo))
 				break;
 		printk(KERN_WARNING "nfsd: terminating on signal %d\n", signo);
 	}

@@ -157,9 +157,15 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
     tristate 'Gracilis PackeTwin driver for AX.25' CONFIG_PT
     tristate 'Ottawa PI and PI2 driver for AX.25' CONFIG_PI
     tristate 'Z8530 SCC driver for AX.25' CONFIG_SCC
+    if [ "$CONFIG_SCC" != "n" ]; then
+      bool '  additional delay for PA0HZP OptoSCC compatible boards' CONFIG_SCC_DELAY
+      bool '  support for TRX that feedback the tx signal to rx' CONFIG_SCC_TRXECHO
+    fi
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
+    tristate 'BAYCOM ser12 fullduplex driver for AX.25' CONFIG_BAYCOM_SER_FDX
+    tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX
+    tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR
     tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
     if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
       bool 'Soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC

@@ -39,8 +39,8 @@ static const char *version =
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  **************************************************************/
-/* Add another "; SLOW_DOWN_IO" here if your adapter won't work OK: */
-#define DE600_SLOW_DOWN SLOW_DOWN_IO; SLOW_DOWN_IO; SLOW_DOWN_IO
+/* Add more time here if your adapter won't work OK: */
+#define DE600_SLOW_DOWN udelay(delay_time)
 
  /*
  * If you still have trouble reading/writing to the adapter,
@@ -104,6 +104,7 @@ static const char *version =
 #include <asm/system.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>
@@ -112,6 +113,9 @@ static const char *version =
 
 static unsigned int de600_debug = DE600_DEBUG;
 MODULE_PARM(de600_debug, "i");
+
+static unsigned int delay_time = 10;
+MODULE_PARM(delay_time, "i");
 
 #ifdef FAKE_SMALL_MAX
 static unsigned long de600_rspace(struct sock *sk);

@@ -4,14 +4,18 @@ full package from:
 Internet:
 =========
 
-1. db0bm.automation.fh-aachen.de/incoming/dl1bke/z8530drv-utils-3.0.tar.gz
+1. ftp://db0bm.automation.fh-aachen.de/incoming/z8530drv/z8530drv-utils-3.0.tar.gz
 
-2. ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-utils-3.0.tar.gz
+2. ftp://ftp.pspt.fi/pub/ham/linux/ax25/z8530drv-utils-3.0.tar.gz
+
+3. ftp://ftp.ucsd.edu/hamradio/packet/tcpip/incoming/z8530drv-utils-3.0.tar.gz
    If you can't find it there, try .../tcpip/linux/z8530drv-utils-3.0.tar.gz
 
-and various mirrors (i.e. nic.switch.ch)
-
 Please note that the information in this document may be hopelessly outdated.
+A new version of the documentation, along with links to other important
+Linux Kernel AX.25 documentation and programs, is available on
+http://www.rat.de/jr
+
 -----------------------------------------------------------------------------
 
 
@@ -19,7 +23,7 @@ Please note that the information in this document may be hopelessly outdated.
 
    ********************************************************************
 
-        (c) 1993,1996 by Joerg Reuter DL1BKE <jreuter@lykos.oche.de>
+        (c) 1993,1997 by Joerg Reuter DL1BKE <jreuter@poboxes.com>
 
         portions (c) 1993 Guido ten Dolle PE1NNZ
 
@@ -134,7 +138,7 @@ just change
 
 to a higher value.
 
-Example for the BayCom USCC:
+Example for the BAYCOM USCC:
 ----------------------------
 
 chip    1
@@ -228,7 +232,7 @@ will print a skeleton z8530drv.conf for the OptoSCC to stdout.
 
 gencfg 2 0x300 2 4 5 -4 0 7 4915200 0x10
 
-does the same for the BayCom USCC card. I my opinion it is much easier
+does the same for the BAYCOM USCC card. I my opinion it is much easier
 to edit scc_config.h... 
 
 
@@ -332,7 +336,7 @@ You can now axattach a pseudo-TTY:
 
 and start your NOS and attach /dev/ptys0 there. The problem is that
 NOS is reachable only via digipeating through the kernel AX.25
-(disasterous on a DAMA controlled channel). To solve this problem,
+(disastrous on a DAMA controlled channel). To solve this problem,
 configure "rxecho" to echo the incoming frames from "9k6" to "axlink"
 and outgoing frames from "axlink" to "9k6" and start:
 
@@ -605,8 +609,9 @@ instead to the data port, but this won't work with the ESCC chips.
 
 A very common problem is that the PTT locks until the maxkeyup timer
 expires, although interrupts and clock source are correct. In most
-cases #define SCC_DELAY solves the problems. For more hints read
-the (pseudo) FAQ and the documentation coming with z8530drv-utils.
+cases compiling the driver with CONFIG_SCC_DELAY (set with
+make config) solves the problems. For more hints read the (pseudo) FAQ 
+and the documentation coming with z8530drv-utils.
 
 I got reports that the driver has problems on some 386-based systems.
 (i.e. Amstrad) Those systems have a bogus AT bus timing which will
@@ -624,7 +629,7 @@ Delayed processing of received data: This depends on
 
 - a high load of the machine --- running X, Xmorph, XV and Povray,
   while compiling the kernel... hmm ... even with 32 MB RAM ...  ;-)
-  Or running a named for the whole .ampr.org. domain on an 8 MB
+  Or running a named for the whole .ampr.org domain on an 8 MB
   box...
 
 - using information from rxecho or kissbridge.
@@ -651,4 +656,5 @@ in the Linux standard distribution and their support.
 
 Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
 		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
-		Internet: jreuter@lykos.oche.de
+		Internet: jreuter@poboxes.com
+		WWW     : http://www.rat.de/jr/

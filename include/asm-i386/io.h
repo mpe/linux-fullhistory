@@ -36,9 +36,9 @@
 #endif
 
 #ifdef REALLY_SLOW_IO
-#define SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO
+#define __FULL_SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO
 #else
-#define SLOW_DOWN_IO __SLOW_DOWN_IO
+#define __FULL_SLOW_DOWN_IO __SLOW_DOWN_IO
 #endif
 
 /*
@@ -52,7 +52,7 @@ __asm__ __volatile__ ("out" #s " %" s1 "0,%" s2 "1"
 
 #define __OUT(s,s1,x) \
 __OUT1(s,x) __OUT2(s,s1,"w") : : "a" (value), "Nd" (port)); } \
-__OUT1(s##_p,x) __OUT2(s,s1,"w") SLOW_DOWN_IO : : "a" (value), "Nd" (port));} \
+__OUT1(s##_p,x) __OUT2(s,s1,"w") __FULL_SLOW_DOWN_IO : : "a" (value), "Nd" (port));} \
 
 #define __IN1(s) \
 extern inline RETURN_TYPE in##s(unsigned short port) { RETURN_TYPE _v;
@@ -62,7 +62,7 @@ __asm__ __volatile__ ("in" #s " %" s2 "1,%" s1 "0"
 
 #define __IN(s,s1,i...) \
 __IN1(s) __IN2(s,s1,"w") : "=a" (_v) : "Nd" (port) ,##i ); return _v; } \
-__IN1(s##_p) __IN2(s,s1,"w") SLOW_DOWN_IO : "=a" (_v) : "Nd" (port) ,##i ); return _v; } \
+__IN1(s##_p) __IN2(s,s1,"w") __FULL_SLOW_DOWN_IO : "=a" (_v) : "Nd" (port) ,##i ); return _v; } \
 
 #define __INS(s) \
 extern inline void ins##s(unsigned short port, void * addr, unsigned long count) \

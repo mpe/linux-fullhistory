@@ -42,30 +42,34 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 
 static int autofs_write(struct file *file, const void *addr, int bytes)
 {
-	unsigned long fs;
-	unsigned long old_signal;
+	unsigned long fs, sigpipe, flags;
 	const char *data = (const char *)addr;
-	int written = 0;
+	ssize_t wr = 0;
 
 	/** WARNING: this is not safe for writing more than PIPE_BUF bytes! **/
+
+	sigpipe = sigismember(&current->signal, SIGPIPE);
 
 	/* Save pointer to user space and point back to kernel space */
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	old_signal = current->signal;
-
-	while ( bytes && (written = file->f_op->write(file,data,bytes,&file->f_pos)) > 0 ) {
-		data += written;
-		bytes -= written;
+	while (bytes &&
+	       (wr = file->f_op->write(file,data,bytes,&file->f_pos)) > 0) {
+		data += wr;
+		bytes -= wr;
 	}
 
-	if ( written == -EPIPE && !(old_signal & (1 << (SIGPIPE-1))) ) {
-		/* Keep the currently executing process from receiving a
-		   SIGPIPE unless it was already supposed to get one */
-		current->signal &= ~(1 << (SIGPIPE-1));
-	}
 	set_fs(fs);
+
+	/* Keep the currently executing process from receiving a
+	   SIGPIPE unless it was already supposed to get one */
+	if (wr == -EPIPE && !sigpipe) {
+		spin_lock_irqsave(&current->sigmask_lock, flags);
+		sigdelset(&current->signal, SIGPIPE);
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
+	}
 
 	return (bytes > 0);
 }

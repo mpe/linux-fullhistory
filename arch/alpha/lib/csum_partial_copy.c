@@ -8,7 +8,7 @@
  */
 
 #include <linux/types.h>
-#include <asm/string.h>
+#include <linux/string.h>
 #include <asm/uaccess.h>
 
 

@@ -169,7 +169,8 @@ int
 svc_register(struct svc_serv *serv, int proto, unsigned short port)
 {
 	struct svc_program	*progp;
-	unsigned long		oldsigs = 0;
+	unsigned long		flags;
+	sigset_t		old_set;
 	int			i, error = 0, dummy;
 
 	progp = serv->sv_program;
@@ -177,9 +178,17 @@ svc_register(struct svc_serv *serv, int proto, unsigned short port)
 	dprintk("RPC: svc_register(%s, %s, %d)\n",
 		progp->pg_name, proto == IPPROTO_UDP? "udp" : "tcp", port);
 
+	/* FIXME: What had been going on before was saving and restoring 
+	   current->signal.  This as opposed to blocking signals?  Do we
+	   still need them to wake up out of schedule?  In any case it 
+	   isn't playing nice and a better way should be found.  */
+
 	if (!port) {
-		oldsigs = current->signal;
-		current->signal = 0;
+		spin_lock_irqsave(&current->sigmask_lock, flags);
+		old_set = current->blocked;
+		sigfillset(&current->blocked);
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
 	}
 
 	for (i = 0; i < progp->pg_nvers; i++) {
@@ -193,7 +202,14 @@ svc_register(struct svc_serv *serv, int proto, unsigned short port)
 			break;
 		}
 	}
-	current->signal |= oldsigs;
+
+	if (!port) {
+		spin_lock_irqsave(&current->sigmask_lock, flags);
+		current->blocked = old_set;
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
+	}
+
 	return error;
 }
 

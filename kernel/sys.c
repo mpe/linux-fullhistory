@@ -19,7 +19,6 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/fcntl.h>
-#include <linux/acct.h>
 #include <linux/tty.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -160,8 +159,6 @@ asmlinkage int sys_getpriority(int which, int who)
 }
 
 
-extern asmlinkage int sys_kill(int, int);
-
 /*
  * Reboot system call: for obvious reasons only root may call it,
  * and even root needs to set up some magic numbers in the registers
@@ -169,7 +166,6 @@ extern asmlinkage int sys_kill(int, int);
  * You can also set the meaning of the ctrl-alt-del-key here.
  *
  * reboot doesn't sync: do that yourself before calling this.
- *
  */
 asmlinkage int sys_reboot(int magic1, int magic2, int cmd, void * arg)
 {
@@ -322,127 +318,6 @@ asmlinkage int sys_setgid(gid_t gid)
 	return 0;
 }
   
-static char acct_active = 0;
-static struct file acct_file;
-
-int acct_process(long exitcode)
-{
-   struct acct ac;
-   unsigned long fs;
-
-   if (acct_active) {
-      strncpy(ac.ac_comm, current->comm, ACCT_COMM);
-      ac.ac_comm[ACCT_COMM-1] = '\0';
-      ac.ac_utime = current->times.tms_utime;
-      ac.ac_stime = current->times.tms_stime;
-      ac.ac_btime = CT_TO_SECS(current->start_time) + (xtime.tv_sec - (jiffies / HZ));
-      ac.ac_etime = CURRENT_TIME - ac.ac_btime;
-      ac.ac_uid   = current->uid;
-      ac.ac_gid   = current->gid;
-      ac.ac_tty   = (current)->tty == NULL ? -1 :
-	  kdev_t_to_nr(current->tty->device);
-      ac.ac_flag  = 0;
-      if (current->flags & PF_FORKNOEXEC)
-         ac.ac_flag |= AFORK;
-      if (current->flags & PF_SUPERPRIV)
-         ac.ac_flag |= ASU;
-      if (current->flags & PF_DUMPCORE)
-         ac.ac_flag |= ACORE;
-      if (current->flags & PF_SIGNALED)
-         ac.ac_flag |= AXSIG;
-      ac.ac_minflt = current->min_flt;
-      ac.ac_majflt = current->maj_flt;
-      ac.ac_exitcode = exitcode;
-
-      /* Kernel segment override */
-      fs = get_fs();
-      set_fs(KERNEL_DS);
-
-      acct_file.f_op->write(&acct_file, (char *)&ac, sizeof(struct acct),
-			    &acct_file.f_pos);
-      set_fs(fs);
-   }
-   return 0;
-}
-
-asmlinkage int sys_acct(const char *name)
-{
-	int error = -EPERM;
-
-	lock_kernel();
-	if (!suser())
-		goto out;
-
-	if (name == (char *)0) {
-		if (acct_active) {
-			if (acct_file.f_op->release)
-				acct_file.f_op->release(acct_file.f_dentry->d_inode, &acct_file);
-
-			if (acct_file.f_dentry != NULL)
-				dput(acct_file.f_dentry);
-
-			acct_active = 0;
-		}
-		error = 0;
-	} else {
-		error = -EBUSY;
-		if (!acct_active) {
-			struct dentry *dentry;
-			struct inode *inode;
-			char *tmp;
-
-			tmp = getname(name);
-			error = PTR_ERR(tmp);
-			if (IS_ERR(tmp))
-				goto out;
-
-			dentry = open_namei(tmp, O_RDWR, 0600);
-			putname(tmp);
-
-			error = PTR_ERR(dentry);
-			if (IS_ERR(dentry))
-				goto out;
-			inode = dentry->d_inode;
-
-			error = -EACCES;
-			if (!S_ISREG(inode->i_mode)) {
-				dput(dentry);
-				goto out;
-			}
-
-			error = -EIO;
-			if (!inode->i_op || !inode->i_op->default_file_ops || 
-			    !inode->i_op->default_file_ops->write) {
-				dput(dentry);
-				goto out;
-			}
-
-			acct_file.f_mode = 3;
-			acct_file.f_flags = 0;
-			acct_file.f_count = 1;
-			acct_file.f_dentry = dentry;
-			acct_file.f_pos = inode->i_size;
-			acct_file.f_reada = 0;
-			acct_file.f_op = inode->i_op->default_file_ops;
-
-			if(acct_file.f_op->open) {
-				error = acct_file.f_op->open(inode, &acct_file);
-				if (error) {
-					dput(dentry);
-					goto out;
-				}
-			}
-
-			acct_active = 1;
-			error = 0;
-		}
-	}
-out:
-	unlock_kernel();
-	return error;
-}
-
-
 /*
  * Unprivileged users may change the real uid to the effective uid
  * or vice versa.  (BSD-style)

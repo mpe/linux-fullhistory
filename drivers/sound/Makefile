@@ -109,10 +109,10 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ADLIB),y)
+ifeq ($(CONFIG_MSS),y)
 LX_OBJS += ad1848.o
 else
-  ifeq ($(CONFIG_ADLIB),m)
+  ifeq ($(CONFIG_MSS),m)
   MX_OBJS += ad1848.o
   endif
 endif

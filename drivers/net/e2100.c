@@ -150,7 +150,7 @@ __initfunc(int e21_probe1(struct device *dev, int ioaddr))
 
 	/* Verify by making certain that there is a 8390 at there. */
 	outb(E8390_NODMA + E8390_STOP, ioaddr);
-	SLOW_DOWN_IO;
+	udelay(1);	/* we want to delay one I/O cycle - which is 2MHz */
 	status = inb(ioaddr);
 	if (status != 0x21 && status != 0x23)
 		return ENODEV;

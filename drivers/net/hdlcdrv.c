@@ -143,9 +143,9 @@ extern __inline__ void dev_init_buffers(struct device *dev)
  * io regions, irqs and dma channels
  */
 
-static char ax25_bcast[7] =
+static char ax25_bcast[AX25_ADDR_LEN] =
 {'Q' << 1, 'S' << 1, 'T' << 1, ' ' << 1, ' ' << 1, ' ' << 1, '0' << 1};
-static char ax25_test[7] =
+static char ax25_nocall[AX25_ADDR_LEN] =
 {'L' << 1, 'I' << 1, 'N' << 1, 'U' << 1, 'X' << 1, ' ' << 1, '1' << 1};
 
 /* --------------------------------------------------------------------- */
@@ -890,11 +890,11 @@ static int hdlcdrv_probe(struct device *dev)
 	dev->set_mac_address = hdlcdrv_set_mac_address;
 	
 	dev->type = ARPHRD_AX25;           /* AF_AX25 device */
-	dev->hard_header_len = 73;         /* We do digipeaters now */
-	dev->mtu = 1500;                   /* eth_mtu is the default */
-	dev->addr_len = 7;                 /* sizeof an ax.25 address */
-	memcpy(dev->broadcast, ax25_bcast, 7);
-	memcpy(dev->dev_addr, ax25_test, 7);
+	dev->hard_header_len = AX25_MAX_HEADER_LEN + AX25_BPQ_HEADER_LEN;
+	dev->mtu = AX25_DEF_PACLEN;        /* eth_mtu is the default */
+	dev->addr_len = AX25_ADDR_LEN;     /* sizeof an ax.25 address */
+	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);
+	memcpy(dev->dev_addr, ax25_nocall, AX25_ADDR_LEN);
 
 	/* New style flags */
 	dev->flags = 0;

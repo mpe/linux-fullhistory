@@ -19,6 +19,7 @@ extern unsigned long event;
 #include <linux/smp.h>
 #include <linux/tty.h>
 #include <linux/sem.h>
+#include <linux/signal.h>
 
 /*
  * cloning flags:
@@ -165,14 +166,14 @@ struct mm_struct {
 
 struct signal_struct {
 	atomic_t		count;
-	struct sigaction	action[32];
+	struct k_sigaction	action[_NSIG];
 	spinlock_t		siglock;
 };
 
 
 #define INIT_SIGNALS { \
 		ATOMIC_INIT(1), \
-		{ {0,}, }, \
+		{ {{0,}}, }, \
 		SPIN_LOCK_UNLOCKED }
 
 struct task_struct {
@@ -180,8 +181,6 @@ struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	long counter;
 	long priority;
-	unsigned long signal;
-	unsigned long blocked;	/* bitmap of masked signals */
 	unsigned long flags;	/* per process flags, defined below */
 	int errno;
 	long debugreg[8];  /* Hardware debugging registers */
@@ -196,11 +195,10 @@ struct task_struct {
 	unsigned long personality;
 	int dumpable:1;
 	int did_exec:1;
-	/* shouldn't this be pid_t? */
-	int pid;
-	int pgrp;
-	int tty_old_pgrp;
-	int session;
+	pid_t pid;
+	pid_t pgrp;
+	pid_t tty_old_pgrp;
+	pid_t session;
 	/* boolean value for session group leader */
 	int leader;
 	int ngroups;
@@ -220,8 +218,8 @@ struct task_struct {
 	struct task_struct **tarray_ptr;
 
 	struct wait_queue *wait_chldexit;	/* for wait4() */
-	unsigned short uid,euid,suid,fsuid;
-	unsigned short gid,egid,sgid,fsgid;
+	uid_t uid,euid,suid,fsuid;
+	gid_t gid,egid,sgid,fsgid;
 	unsigned long timeout, policy, rt_priority;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
@@ -257,6 +255,8 @@ struct task_struct {
 	struct mm_struct *mm;
 /* signal handlers */
 	struct signal_struct *sig;
+	sigset_t signal, blocked;
+	struct signal_queue *sigqueue, **sigqueue_tail;
 /* SMP state */
 	int has_cpu;
 	int processor;
@@ -271,17 +271,17 @@ struct task_struct {
  */
 #define PF_ALIGNWARN	0x00000001	/* Print alignment warning msgs */
 					/* Not implemented yet, only for 486*/
-#define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
+#define PF_STARTING	0x00000002	/* being created */
+#define PF_EXITING	0x00000004	/* getting shut down */
+#define PF_SIGPENDING	0x00000008	/* at least on unblocked sig ready */
+#define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called */
 #define PF_TRACESYS	0x00000020	/* tracing system calls */
 #define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
 #define PF_SUPERPRIV	0x00000100	/* used super-user privileges */
 #define PF_DUMPCORE	0x00000200	/* dumped core */
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 
-#define PF_STARTING	0x00000002	/* being created */
-#define PF_EXITING	0x00000004	/* getting shut down */
-
-#define PF_USEDFPU	0x00100000	/* Process used the FPU this quantum (SMP only) */
+#define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k) */
 #define PF_ONSIGSTK	0x00400000	/* works on signal stack (m68k only) */
 
@@ -308,7 +308,7 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,DEF_PRIORITY,DEF_PRIORITY,0,0,0,0, \
+/* state etc */	{ 0,DEF_PRIORITY,DEF_PRIORITY,0,0, \
 /* debugregs */ { 0, },            \
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \
@@ -336,7 +336,7 @@ struct task_struct {
 /* fs */	&init_fs, \
 /* files */	&init_files, \
 /* mm */	&init_mm, \
-/* signals */	&init_signals, \
+/* signals */	&init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, \
 /* SMP */	0,0,0,0, \
 /* locks */	INIT_LOCKS \
 }
@@ -445,15 +445,67 @@ extern void FASTCALL(wake_up(struct wait_queue ** p));
 extern void FASTCALL(wake_up_interruptible(struct wait_queue ** p));
 extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
-extern void notify_parent(struct task_struct * tsk, int signal);
-extern void force_sig(unsigned long sig,struct task_struct * p);
-extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);
+
+extern void flush_signals(struct task_struct *);
+extern void flush_signal_handlers(struct task_struct *);
+extern int dequeue_signal(sigset_t *block, siginfo_t *);
+extern int send_sig_info(int, struct siginfo *info, struct task_struct *);
+extern int force_sig_info(int, struct siginfo *info, struct task_struct *);
+extern int kill_pg_info(int, struct siginfo *info, pid_t);
+extern int kill_sl_info(int, struct siginfo *info, pid_t);
+extern int kill_proc_info(int, struct siginfo *info, pid_t);
+extern int kill_something_info(int, struct siginfo *info, int);
+extern void notify_parent(struct task_struct * tsk, int);
+extern void force_sig(int sig, struct task_struct * p);
+extern int send_sig(int sig, struct task_struct * p, int priv);
+extern int kill_pg(pid_t, int, int);
+extern int kill_sl(pid_t, int, int);
+extern int kill_proc(pid_t, int, int);
+extern int do_sigaction(int sig, const struct k_sigaction *act,
+			struct k_sigaction *oact);
 
 extern inline int signal_pending(struct task_struct *p)
 {
-	return (p->signal &~ p->blocked) != 0;
+	return (p->flags & PF_SIGPENDING) != 0;
 }
+
+/* Reevaluate whether the task has signals pending delivery.
+   This is required every time the blocked sigset_t changes.
+   All callers should have t->sigmask_lock.  */
+
+static inline void recalc_sigpending(struct task_struct *t)
+{
+	unsigned long ready, nflags;
+	long i;
+
+	switch (_NSIG_WORDS) {
+	default:
+		for (i = _NSIG_WORDS, ready = 0; --i >= 0 ;)
+			ready |= t->signal.sig[i] &~ t->blocked.sig[i];
+		break;
+
+	case 4: ready  = t->signal.sig[3] &~ t->blocked.sig[3];
+		ready |= t->signal.sig[2] &~ t->blocked.sig[2];
+		ready |= t->signal.sig[1] &~ t->blocked.sig[1];
+		ready |= t->signal.sig[0] &~ t->blocked.sig[0];
+		break;
+
+	case 2: ready  = t->signal.sig[1] &~ t->blocked.sig[1];
+		ready |= t->signal.sig[0] &~ t->blocked.sig[0];
+		break;
+
+	case 1: ready  = t->signal.sig[0] &~ t->blocked.sig[0];
+	}
+
+	/* Poor gcc has trouble with conditional moves... */
+	nflags = t->flags &~ PF_SIGPENDING;
+	if (ready)
+		nflags = t->flags | PF_SIGPENDING;
+
+	t->flags = nflags;
+}
+
 
 extern int request_irq(unsigned int irq,
 		       void (*handler)(int, void *, struct pt_regs *),

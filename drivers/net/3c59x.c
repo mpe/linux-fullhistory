@@ -38,6 +38,8 @@ static char *version = "3c59x.c:v0.25 5/17/96 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/interrupt.h>
 #include <linux/init.h>
 
+#include <linux/delay.h>
+
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
 #include <linux/bios32.h>
@@ -498,7 +500,7 @@ __initfunc(static int vortex_probe1(struct device *dev))
 		outw(EEPROM_Read + PhysAddr01 + i, ioaddr + Wn0EepromCmd);
 		/* Pause for at least 162 us. for the read to take place. */
 		for (timer = 162*4 + 400; timer >= 0; timer--) {
-			SLOW_DOWN_IO;
+			udelay(1);
 			if ((inw(ioaddr + Wn0EepromCmd) & 0x8000) == 0)
 				break;
 		}

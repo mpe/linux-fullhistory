@@ -136,8 +136,6 @@ struct hfmodem_state hfmodem_state[NR_DEVICE];
 #define LPT_CONTROL(iobase) (iobase+2)
 #define LPT_IRQ_ENABLE      0x10
 
-#define LPT_EXTENT 3
-
 #define MIDI_DATA(iobase)     (iobase)
 #define MIDI_STATUS(iobase)   (iobase+1)
 #define MIDI_READ_FULL 0x80   /* attention: negative logic!! */
@@ -150,33 +148,37 @@ struct hfmodem_state hfmodem_state[NR_DEVICE];
 #define SP_MIDI 4
 
 /* ---------------------------------------------------------------------- */
-/*
- * returns 0 if ok and != 0 on error;
- * the same behaviour as par96_check_lpt in baycom.c
- */
 
-__initfunc(static int check_lpt(unsigned int iobase))
+static int parptt_preempt(void *handle)
 {
-        unsigned char b1,b2;
-        int i;
+	/* we cannot relinquish the port in the middle of an operation */
+	return 1;
+}
 
-        if (iobase <= 0 || iobase > 0x1000-LPT_EXTENT)
-                return 0;
-        if (check_region(iobase, LPT_EXTENT))
-                return 0;
-        b1 = inb(LPT_DATA(iobase));
-        b2 = inb(LPT_CONTROL(iobase));
-        outb(0xaa, LPT_DATA(iobase));
-        i = inb(LPT_DATA(iobase)) == 0xaa;
-        outb(0x55, LPT_DATA(iobase));
-        i &= inb(LPT_DATA(iobase)) == 0x55;
-        outb(0x0a, LPT_CONTROL(iobase));
-        i &= (inb(LPT_CONTROL(iobase)) & 0xf) == 0x0a;
-        outb(0x05, LPT_CONTROL(iobase));
-        i &= (inb(LPT_CONTROL(iobase)) & 0xf) == 0x05;
-        outb(b1, LPT_DATA(iobase));
-        outb(b2, LPT_CONTROL(iobase));
-        return !i;
+/* --------------------------------------------------------------------- */
+
+static void parptt_wakeup(void *handle)
+{
+        struct hfmodem_state *dev = (struct hfmodem_state *)handle;
+
+	printk(KERN_DEBUG "%s: parptt: why am I being woken up?\n", hfmodem_drvname);
+	if (!parport_claim(dev->ptt_out.pardev))
+		printk(KERN_DEBUG "%s: parptt: I'm broken.\n", hfmodem_drvname);
+}
+
+/* --------------------------------------------------------------------- */
+__initfunc(static int check_lpt(struct hfmodem_state *dev, unsigned int iobase))
+{
+	struct parport *pp = parport_enumerate();
+
+	while (pp && pp->base != iobase)
+		pp = pp->next;
+	if (!pp)
+		return 0;
+	if (!(dev->ptt_out.pardev = parport_register_device(pp, hfmodem_drvname, parptt_preempt, parptt_wakeup, 
+							    NULL, PARPORT_DEV_LURK, dev)))
+		return 0;
+	return 1;
 }
 
 /* --------------------------------------------------------------------- */
@@ -272,8 +274,7 @@ __initfunc(static void output_check(struct hfmodem_state *dev))
 {
         enum uart u = c_uart_unknown;
 
-        if (dev->ptt_out.seriobase > 0 && dev->ptt_out.seriobase <= 0x1000-SER_EXTENT &&
-            ((u = check_uart(dev->ptt_out.seriobase))) != c_uart_unknown)
+        if (((u = check_uart(dev->ptt_out.seriobase))) != c_uart_unknown)
 		printk(KERN_INFO "%s: PTT output: uart found at address 0x%x type %s\n",
 		       hfmodem_drvname, dev->ptt_out.seriobase, uart_str[u]);
 	else {
@@ -282,8 +283,7 @@ __initfunc(static void output_check(struct hfmodem_state *dev))
 			       hfmodem_drvname, dev->ptt_out.seriobase);
 		dev->ptt_out.seriobase = 0;
 	}
-        if (dev->ptt_out.pariobase > 0 && dev->ptt_out.pariobase <= 0x1000-LPT_EXTENT &&
-            !check_lpt(dev->ptt_out.pariobase)) 
+        if (check_lpt(dev, dev->ptt_out.pariobase)) 
 		printk(KERN_INFO "%s: PTT output: parallel port found at address 0x%x\n",
 		       hfmodem_drvname, dev->ptt_out.pariobase);
 	else {
@@ -291,6 +291,7 @@ __initfunc(static void output_check(struct hfmodem_state *dev))
 			printk(KERN_WARNING "%s: PTT output: no parallel port found at address 0x%x\n",
 			       hfmodem_drvname, dev->ptt_out.pariobase);
 		dev->ptt_out.pariobase = 0;
+		dev->ptt_out.pardev = NULL;
 	}
 	if (dev->ptt_out.midiiobase > 0 && dev->ptt_out.midiiobase <= 0x1000-MIDI_EXTENT &&
             check_midi(dev->ptt_out.midiiobase))
@@ -324,12 +325,11 @@ static void output_open(struct hfmodem_state *dev)
 			       hfmodem_drvname, dev->ptt_out.seriobase);
 	}
         if (dev->ptt_out.pariobase > 0) {
-		if (!check_region(dev->ptt_out.pariobase, LPT_EXTENT)) {
-			request_region(dev->ptt_out.pariobase, LPT_EXTENT, "hfmodem par ptt");
-			dev->ptt_out.flags |= SP_PAR;
-		} else
+		if (parport_claim(dev->ptt_out.pardev)) 
 			printk(KERN_WARNING "%s: PTT output: parallel port at 0x%x busy\n",
 			       hfmodem_drvname, dev->ptt_out.pariobase);
+		else 
+			dev->ptt_out.flags |= SP_PAR;
 	}
         if (dev->ptt_out.midiiobase > 0) {
 		if (!check_region(dev->ptt_out.midiiobase, MIDI_EXTENT)) {
@@ -361,7 +361,7 @@ static void output_close(struct hfmodem_state *dev)
         if (dev->ptt_out.flags & SP_SER)
                 release_region(dev->ptt_out.seriobase, SER_EXTENT);
         if (dev->ptt_out.flags & SP_PAR)
-                release_region(dev->ptt_out.pariobase, LPT_EXTENT);
+		parport_release(dev->ptt_out.pardev);
         if (dev->ptt_out.flags & SP_MIDI)
                 release_region(dev->ptt_out.midiiobase, MIDI_EXTENT);
         dev->ptt_out.flags = 0;
@@ -671,6 +671,10 @@ __initfunc(int init_module(void))
 
 void cleanup_module(void)
 {
+	struct hfmodem_state *dev = &hfmodem_state[0];
+
+	if (dev->ptt_out.pariobase > 0)
+		parport_unregister_device(dev->ptt_out.pardev);
 	misc_deregister(&hfmodem_device);
 }
 
@@ -733,4 +737,3 @@ __initfunc(void hfmodem_init(void))
 
 /* --------------------------------------------------------------------- */
 #endif /* MODULE */
-

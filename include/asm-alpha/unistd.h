@@ -156,7 +156,7 @@
 #define __NR_osf_pid_block	153	/* not implemented */
 #define __NR_osf_pid_unblock	154	/* not implemented */
 
-#define __NR_sigaction		156
+#define __NR_osf_sigaction	156
 #define __NR_osf_sigwaitprim	157	/* not implemented */
 #define __NR_osf_nfssvc		158	/* not implemented */
 #define __NR_osf_getdirentries	159
@@ -288,6 +288,14 @@
 #define __NR_prctl			348
 #define __NR_pread			349
 #define __NR_pwrite			350
+#define __NR_rt_sigreturn		351
+#define __NR_rt_sigaction		352
+#define __NR_rt_sigprocmask		353
+#define __NR_rt_sigpending		354
+#define __NR_rt_sigtimedwait		355
+#define __NR_rt_sigqueueinfo		356
+#define __NR_rt_sigsuspend		357
+
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

@@ -1,4 +1,4 @@
-#define RCS_ID "$Id: scc.c,v 1.69 1997/04/06 19:22:45 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.71 1997/11/29 19:59:20 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
 #define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
@@ -89,6 +89,7 @@
    970108	- Fixed the remaining problems.
    970402	- Hopefully fixed the problems with the new *_timer()
    		  routines, added calibration code.
+   971012	- made SCC_DELAY a CONFIG option, added CONFIG_SCC_TRXECHO
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -113,14 +114,14 @@
    vy 73,
    Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
 		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
-		Internet: jreuter@lykos.oche.de  
+		Internet: jreuter@poboxes.com
+		www     : http://www.rat.de/jr
 */
 
 /* ----------------------------------------------------------------------- */
 
-#undef  SCC_DELAY 	/* perhaps your ISA bus is a *bit* too fast? */
-#undef  SCC_LDELAY 1	/* slow it even a bit more down */
-#undef  DONT_CHECK	/* don't look if the SCCs you specified are available */
+#undef  SCC_LDELAY	1	/* slow it even a bit more down */
+#undef  DONT_CHECK		/* don't look if the SCCs you specified are available */
 
 #define MAXSCC          4       /* number of max. supported chips */
 #define BUFSIZE         384     /* must not exceed 4096 */
@@ -224,7 +225,7 @@ static unsigned char Driver_Initialized = 0;
 static int Nchips = 0;
 static io_port Vector_Latch = 0;
 
-MODULE_AUTHOR("Joerg Reuter <jreuter@lykos.oche.de>");
+MODULE_AUTHOR("Joerg Reuter <jreuter@poboxes.com>");
 MODULE_DESCRIPTION("Network Device Driver for Z8530 based HDLC cards for Amateur Packet Radio");
 MODULE_SUPPORTED_DEVICE("scc");
 
@@ -936,8 +937,10 @@ static void scc_key_trx(struct scc_channel *scc, char tx)
 	{				/* force simplex operation */
 		if (tx)
 		{
+#ifdef CONFIG_SCC_TRXECHO
 			cl(scc, R3, RxENABLE|ENT_HM);	/* switch off receiver */
 			cl(scc, R15, DCDIE);		/* No DCD changes, please */
+#endif
 			set_brg(scc, time_const);	/* reprogram baudrate generator */
 
 			/* DPLL -> Rx clk, BRG -> Tx CLK, TRxC mode output, TRxC = BRG */
@@ -951,29 +954,34 @@ static void scc_key_trx(struct scc_channel *scc, char tx)
 			
 			/* DPLL -> Rx clk, DPLL -> Tx CLK, TRxC mode output, TRxC = DPLL */
 			wr(scc, R11, RCDPLL|TCDPLL|TRxCOI|TRxCDP);
-			
+#ifdef CONFIG_SCC_TRXECHO
 			or(scc,R3,RxENABLE|ENT_HM);
 			or(scc,R15, DCDIE);
+#endif
 		}
 	} else {
 		if (tx)
 		{
+#ifdef CONFIG_SCC_TRXECHO
 			if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
 			{
 				cl(scc, R3, RxENABLE);
 				cl(scc, R15, DCDIE);
 			}
+#endif
 				
 				
 			or(scc,R5,RTS|TxENAB);		/* enable tx */
 		} else {
 			cl(scc,R5,RTS|TxENAB);		/* disable tx */
-			
+
+#ifdef CONFIG_SCC_TRXECHO
 			if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
 			{
 				or(scc, R3, RxENABLE|ENT_HM);
 				or(scc, R15, DCDIE);
 			}
+#endif
 		}
 	}
 
@@ -2198,7 +2206,7 @@ int init_module(void)
 	result = scc_init();
 
 	if (result == 0)
-		printk(KERN_INFO "Copyright 1993,1997 Joerg Reuter DL1BKE (jreuter@lykos.tng.oche.de)\n");
+		printk(KERN_INFO "Copyright 1993,1997 Joerg Reuter DL1BKE (jreuter@poboxes.com)\n");
 		
 	return result;
 }

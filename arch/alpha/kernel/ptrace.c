@@ -574,7 +574,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 					(return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
 			ret = -EIO;
-			if ((unsigned long) data > NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
@@ -606,7 +606,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 
 		case PTRACE_SINGLESTEP: {  /* execute single instruction. */
 			ret = -EIO;
-			if ((unsigned long) data > NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->debugreg[4] = -1;	/* mark single-stepping */
 			child->flags &= ~PF_TRACESYS;
@@ -619,7 +619,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
 			ret = -EIO;
-			if ((unsigned long) data > NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
@@ -627,7 +627,7 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
-        /* make sure single-step breakpoint is gone. */
+			/* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
 			ret = 0;
 			goto out;
@@ -644,22 +644,20 @@ out:
 
 asmlinkage void syscall_trace(void)
 {
-	lock_kernel();
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
-		goto out;
+		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	notify_parent(current, SIGCHLD);
 	schedule();
 	/*
-	 * this isn't the same as continuing with a signal, but it will do
+	 * This isn't the same as continuing with a signal, but it will do
 	 * for normal use.  strace only continues with a signal if the
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
-	if (current->exit_code)
-		current->signal |= (1 << (current->exit_code - 1));
-	current->exit_code = 0;
-out:
-	unlock_kernel();
+	if (current->exit_code) {
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
+	}
 }

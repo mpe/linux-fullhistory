@@ -412,7 +412,19 @@ if (copy_from_user(to,from,n)) \
 	return retval; \
 })
 
-extern void __clear_user(void);
+extern void __do_clear_user(void);
+
+#define __clear_user(to,n)						\
+({									\
+	register void * __cl_to __asm__("$6") = (to);			\
+	register long __cl_len __asm__("$0") = (n);			\
+	__asm__ __volatile__(						\
+		"jsr $28,(%2),__do_clear_user"				\
+		: "=r"(__cl_len), "=r"(__cl_to)				\
+		: "r"(__do_clear_user), "0"(__cl_len), "1"(__cl_to)	\
+		: "$1","$2","$3","$4","$5","$28","memory");		\
+	__cl_len;							\
+})
 
 #define clear_user(to,n)						\
 ({									\
@@ -420,14 +432,13 @@ extern void __clear_user(void);
 	register long __cl_len __asm__("$0") = (n);			\
 	if (__access_ok(((long)__cl_to),__cl_len,__access_mask)) {	\
 		__asm__ __volatile__(					\
-			"jsr $28,(%2),__clear_user"			\
+			"jsr $28,(%2),__do_clear_user"			\
 			: "=r"(__cl_len), "=r"(__cl_to)			\
-			: "r"(__clear_user), "0"(__cl_len), "1"(__cl_to)\
+			: "r"(__do_clear_user), "0"(__cl_len), "1"(__cl_to)\
 			: "$1","$2","$3","$4","$5","$28","memory");	\
 	}								\
 	__cl_len;							\
 })
-
 
 /* Returns: -EFAULT if exception before terminator, N if the entire
    buffer filled, else strlen.  */

@@ -426,7 +426,7 @@ int kswapd(void *unused)
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "kswapd");
-	current->blocked = ~0UL;
+	sigfillset(&current->blocked);
 	
 	/*
 	 *	As a kernel thread we want to tamper with system buffers
@@ -447,7 +447,7 @@ int kswapd(void *unused)
 		int fail;
 
 		kswapd_awake = 0;
-		current->signal = 0;
+		flush_signals(current);
 		run_task_queue(&tq_disk);
 		interruptible_sleep_on(&kswapd_wait);
 		kswapd_awake = 1;

@@ -85,7 +85,7 @@ fi
 if [ "$CONFIG_MCA" = "y" ]; then
    dep_tristate 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA $CONFIG_SCSI
    if [ "$CONFIG_SCSI_IBMMCA" != "n" ]; then
-      bool '  reset SCSI-devices while booting' SCSI_IBMMCA_DEV_RESET
+      bool '  reset SCSI-devices while booting' CONFIG_SCSI_IBMMCA_DEV_RESET
    fi
 fi
 if [ "$CONFIG_PARPORT" != "n" ]; then

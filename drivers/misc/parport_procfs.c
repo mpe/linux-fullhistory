@@ -125,7 +125,7 @@ static int hardware_read_proc(char *page, char **start, off_t off,
 	struct parport *pp = (struct parport *)data;
 	int len=0;
 	
-	len += sprintf(page+len, "base:\t0x%x\n",pp->base);
+	len += sprintf(page+len, "base:\t0x%lx\n",pp->base);
 	if (pp->irq == PARPORT_IRQ_NONE)
 		len += sprintf(page+len, "irq:\tnone\n");
 	else

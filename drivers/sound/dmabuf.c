@@ -1539,10 +1539,11 @@ DMAbuf_deinit(int dev)
 {
 /* This routine is called when driver is being unloaded */
 #ifdef RUNTIME_DMA_ALLOC
-	sound_free_dmap (dev, audio_devs[dev]->dmap_out, 
-			 audio_devs[dev]->dmap_out->dma);
+	if (audio_devs[dev])
+		sound_free_dmap (dev, audio_devs[dev]->dmap_out, 
+				 audio_devs[dev]->dmap_out->dma);
 
-	if (audio_devs[dev]->flags & DMA_DUPLEX)
+	if (audio_devs[dev] && audio_devs[dev]->flags & DMA_DUPLEX)
 		sound_free_dmap (dev, audio_devs[dev]->dmap_in, 
 				 audio_devs[dev]->dmap_in->dma);
 #endif

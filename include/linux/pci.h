@@ -43,8 +43,8 @@
 
 
 
-#ifndef PCI_H
-#define PCI_H
+#ifndef LINUX_PCI_H
+#define LINUX_PCI_H
 
 /*
  * Under PCI, each device has 256 bytes of configuration address space,
@@ -802,6 +802,7 @@
 #define PCI_DEVICE_ID_ARK_STINGARK	0xa099
 #define PCI_DEVICE_ID_ARK_2000MT	0xa0a1
 
+#ifdef __KERNEL__
 /*
  * The PCI interface treats multi-function devices as independent
  * devices.  The slot/function address of each device is encoded
@@ -892,5 +893,5 @@ extern const char *pci_strvendor (unsigned int vendor);
 extern const char *pci_strdev (unsigned int vendor, unsigned int device);
 
 extern int get_pci_list (char *buf);
-
-#endif /* PCI_H */
+#endif /* __KERNEL__ */
+#endif /* LINUX_PCI_H */

@@ -23,8 +23,6 @@
 static int			rpc_task_id = 0;
 #endif
 
-#define _S(signo)		(1 << ((signo)-1))
-
 /*
  * We give RPC the same get_free_pages priority as NFS
  */
@@ -410,9 +408,7 @@ __rpc_execute(struct rpc_task *task)
 		 * break the loop here, but go around once more.
 		 */
 		if (0 && !RPC_IS_ASYNC(task) && signalled()) {
-			dprintk("RPC: %4d got signal (map %08lx)\n",
-				task->tk_pid,
-				current->signal & ~current->blocked);
+			dprintk("RPC: %4d got signal\n", task->tk_pid);
 			rpc_exit(task, -ERESTARTSYS);
 		}
 	}
@@ -746,7 +742,7 @@ rpciod(void *ptr)
 
 	exit_files(current);
 	exit_mm(current);
-	current->blocked |= ~_S(SIGKILL);
+	siginitsetinv(&current->blocked, sigmask(SIGKILL));
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "rpciod");
@@ -754,13 +750,13 @@ rpciod(void *ptr)
 	dprintk("RPC: rpciod starting (pid %d)\n", rpciod_pid);
 	while (rpciod_users) {
 		if (signalled()) {
-			if (current->signal & _S(SIGKILL)) {
+			if (sigismember(&current->signal, SIGKILL)) {
 				rpciod_killall();
 			} else {
 				printk("rpciod: ignoring signal (%d users)\n",
 					rpciod_users);
 			}
-			current->signal &= current->blocked;
+			flush_signals(current);
 		}
 		__rpc_schedule();
 
@@ -795,17 +791,32 @@ rpciod(void *ptr)
 static void
 rpciod_killall(void)
 {
-	while (all_tasks) {
-		unsigned long	oldsig = current->signal;
+	unsigned long flags;
+	sigset_t old_set;
 
-		current->signal = 0;
+	/* FIXME: What had been going on before was saving and restoring 
+	   current->signal.  This as opposed to blocking signals?  Do we
+	   still need them to wake up out of schedule?  In any case it 
+	   isn't playing nice and a better way should be found.  */
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	old_set = current->blocked;
+	sigfillset(&current->blocked);
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
+	while (all_tasks) {
 		rpc_killall_tasks(NULL);
 		__rpc_schedule();
 		current->timeout = jiffies + HZ / 100;
 		need_resched = 1;
 		schedule();
-		current->signal = oldsig;
 	}
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	current->blocked = old_set;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 }
 
 /*
@@ -846,7 +857,7 @@ out:
 void
 rpciod_down(void)
 {
-	unsigned long oldflags;
+	unsigned long flags;
 
 	MOD_INC_USE_COUNT;
 	down(&rpciod_sema);
@@ -867,8 +878,7 @@ rpciod_down(void)
 	 * Usually rpciod will exit very quickly, so we
 	 * wait briefly before checking the process id.
 	 */
-	oldflags = current->signal;
-	current->signal = 0;
+	current->flags &= ~PF_SIGPENDING;
 	current->state = TASK_INTERRUPTIBLE;
 	current->timeout = jiffies + 1;
 	schedule();
@@ -884,7 +894,9 @@ rpciod_down(void)
 		}
 		interruptible_sleep_on(&rpciod_killer);
 	}
-	current->signal = oldflags;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 out:
 	up(&rpciod_sema);
 	MOD_DEC_USE_COUNT;

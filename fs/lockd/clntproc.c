@@ -90,7 +90,8 @@ nlmclnt_proc(struct inode *inode, int cmd, struct file_lock *fl)
 	struct nfs_server	*nfssrv = NFS_SERVER(inode);
 	struct nlm_host		*host;
 	struct nlm_rqst		reqst, *call = &reqst;
-	unsigned long		oldmask;
+	sigset_t		oldset;
+	unsigned long		flags;
 	int			status;
 
 	/* Always use NLM version 1 over UDP for now... */
@@ -114,16 +115,21 @@ nlmclnt_proc(struct inode *inode, int cmd, struct file_lock *fl)
 	}
 
 	/* Keep the old signal mask */
-	oldmask = current->blocked;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	oldset = current->blocked;
 
 	/* If we're cleaning up locks because the process is exiting,
 	 * perform the RPC call asynchronously. */
 	if (cmd == F_SETLK && fl->fl_type == F_UNLCK
-	 && (current->flags & PF_EXITING)) {
-		current->blocked = ~0UL;	/* Mask all signals */
+	    && (current->flags & PF_EXITING)) {
+		sigfillset(&current->blocked);	/* Mask all signals */
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 		call = nlmclnt_alloc_call();
 		call->a_flags = RPC_TASK_ASYNC;
 	} else {
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
 		call->a_flags = 0;
 	}
 	call->a_host = host;
@@ -145,7 +151,10 @@ nlmclnt_proc(struct inode *inode, int cmd, struct file_lock *fl)
 	if (status < 0 && (call->a_flags & RPC_TASK_ASYNC))
 		rpc_free(call);
 
-	current->blocked = oldmask;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	current->blocked = oldset;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 
 done:
 	dprintk("lockd: clnt proc returns %d\n", status);
@@ -454,11 +463,16 @@ int
 nlmclnt_cancel(struct nlm_host *host, struct file_lock *fl)
 {
 	struct nlm_rqst	*req;
-	unsigned long	oldmask = current->blocked;
+	unsigned long	flags;
+	sigset_t	oldset;
 	int		status;
 
 	/* Block all signals while setting up call */
-	current->blocked = ~0UL;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	oldset = current->blocked;
+	sigfillset(&current->blocked);
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 
 	do {
 		req = (struct nlm_rqst *) rpc_allocate(RPC_TASK_ASYNC,
@@ -474,7 +488,11 @@ nlmclnt_cancel(struct nlm_host *host, struct file_lock *fl)
 	if (status < 0)
 		rpc_free(req);
 
-	current->blocked = oldmask;
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	current->blocked = oldset;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	return status;
 }
 

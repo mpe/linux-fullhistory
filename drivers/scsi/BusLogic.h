@@ -1526,15 +1526,11 @@ void BusLogic_StartMailboxCommand(BusLogic_HostAdapter_T *HostAdapter)
 
 static inline void BusLogic_Delay(int Seconds)
 {
+  int Milliseconds = 1000 * Seconds;
   unsigned long ProcessorFlags;
   save_flags(ProcessorFlags);
   sti();
-  while (--Seconds >= 0) {
-  	int i = 1000;
-  	do {
-	  	udelay(1000);
-	} while (--i);
-  }
+  while (--Milliseconds >= 0) udelay(1000);
   restore_flags(ProcessorFlags);
 }
 

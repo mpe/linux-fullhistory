@@ -60,8 +60,6 @@ static void	call_reconnect(struct rpc_task *task);
 static u32 *	call_header(struct rpc_task *task);
 static u32 *	call_verify(struct rpc_task *task);
 
-#define _S(nr)	(1 << ((nr) - 1))
-
 /*
  * Create an RPC client
  * FIXME: This should also take a flags argument (as in task->tk_flags).
@@ -197,19 +195,24 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 				int flags, rpc_action func, void *data)
 {
 	struct rpc_task	my_task, *task = &my_task;
-	unsigned long	oldmask, sigallow = _S(SIGKILL);
+	unsigned long	sigallow = sigmask(SIGKILL);
+	sigset_t	oldset;
+	unsigned long	irqflags;
 	int		async, status;
 
 	/* Turn off various signals */
 	if (clnt->cl_intr) {
-		struct sigaction *action = current->sig->action;
-		if (action[SIGINT-1].sa_handler == SIG_DFL)
-			sigallow |= _S(SIGINT);
-		if (action[SIGQUIT-1].sa_handler == SIG_DFL)
-			sigallow |= _S(SIGQUIT);
+		struct k_sigaction *action = current->sig->action;
+		if (action[SIGINT-1].sa.sa_handler == SIG_DFL)
+			sigallow |= sigmask(SIGINT);
+		if (action[SIGQUIT-1].sa.sa_handler == SIG_DFL)
+			sigallow |= sigmask(SIGQUIT);
 	}
-	oldmask = current->blocked;
-	current->blocked |= ~sigallow;
+	spin_lock_irqsave(&current->sigmask_lock, irqflags);
+	oldset = current->blocked;
+	siginitsetinv(&current->blocked, sigallow & ~oldset.sig[0]);
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
 
 	/* Create/initialize a new RPC task */
 	if ((async = (flags & RPC_TASK_ASYNC)) != 0) {
@@ -238,7 +241,11 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 	}
 
 out:
-	current->blocked = oldmask;
+	spin_lock_irqsave(&current->sigmask_lock, irqflags);
+	current->blocked = oldset;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
+
 	return status;
 }
 

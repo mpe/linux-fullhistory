@@ -2781,18 +2781,51 @@ CONFIG_SCC
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called scc.o.
 
-BAYCOM ser12 and par96 driver for AX.25
-CONFIG_BAYCOM
-  This is an experimental driver for Baycom style simple amateur radio
-  modems that connect to either a serial interface or a parallel
-  interface. The driver supports the ser12 and par96 designs. To
-  configure the driver, use the sethdlc utility available in the
-  standard ax25 utilities package. For information on the modems, see
+BAYCOM picpar and par96 driver for AX.25
+CONFIG_BAYCOM_PAR
+  This is a driver for Baycom style simple amateur radio
+  modems that connect to a parallel interface. The driver 
+  supports the picpar and par96 designs. To configure the
+  driver, use the sethdlc utility available in the standard
+  ax25 utilities package. For information on the modems, see
   http://www.baycom.de and Documentation/networking/baycom.txt. If you
   want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. This is
-  recommended. The module will be called baycom.o.
+  recommended. The module will be called baycom_par.o.
+
+BAYCOM ser12 full duplex driver for AX.25
+CONFIG_BAYCOM_SER_FDX
+  This is one of two drivers for Baycom style simple amateur radio
+  modems that connect to a serial interface. The driver supports
+  the ser12 design in full duplex mode. In addition, it allows the
+  baudrate to be set between 300 and 4800 baud (however not all modems
+  support all baudrates). This is the preferred driver. baycom_ser_hdx.o
+  is the old driver and still provided in case this driver does not work
+  with your serial interface chip. To configure the driver, use the
+  sethdlc utility available in the standard ax25 utilities package. 
+  For information on the modems, see http://www.baycom.de and
+  Documentation/networking/baycom.txt. If you want to compile
+  this driver as a module ( = code which can be inserted in 
+  and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is
+  recommended. The module will be called baycom_ser_fdx.o.
+
+BAYCOM ser12 half duplex driver for AX.25
+CONFIG_BAYCOM_SER_HDX
+  This is one of two drivers for Baycom style simple amateur radio
+  modems that connect to a serial interface. The driver supports
+  the ser12 design in full duplex mode. This is the old driver. 
+  It is still provided in case your serial interface chip does
+  not work with the full duplex driver. This driver is depreciated.
+  To configure the driver, use the sethdlc utility available
+  in the standard ax25 utilities package. For information
+  on the modems, see http://www.baycom.de and
+  Documentation/networking/baycom.txt. If you want to compile
+  this driver as a module ( = code which can be inserted in 
+  and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is
+  recommended. The module will be called baycom_ser_hdx.o.
 
 Soundcard modem driver for AX.25
 CONFIG_SOUNDMODEM
@@ -5917,9 +5950,9 @@ CONFIG_MAGIC_SYSRQ
   flush the disks, reboot the system immediately or dump some status
   information). This is accomplished by pressing various keys while
   holding SysRq (Alt+PrintScreen). As you are expected to be a kernel
-  hacker to use this, the simple rule about learning what do the keys
+  hacker to use this, the simple rule about learning what the keys
   mean is "Use the source, Luke!" -- read drivers/char/sysrq.c.  
-  Don't say Y unless you really know what does this hack do.
+  Don't say Y unless you really know what this hack does.
 
 ISDN subsystem
 CONFIG_ISDN

@@ -100,6 +100,7 @@ struct hfmodem_ioctl_sample_params {
 /* --------------------------------------------------------------------- */
 #ifdef __KERNEL__
 
+#include <linux/parport.h>
 
 #define DMA_MODE_AUTOINIT      0x10
 
@@ -133,6 +134,7 @@ struct hfmodem_state {
 		unsigned int pariobase;
 		unsigned int midiiobase;
 		unsigned int flags;
+		struct pardevice *pardev;
 	} ptt_out;
 
 	struct {

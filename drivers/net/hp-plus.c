@@ -31,6 +31,7 @@ static const char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -266,7 +267,7 @@ hpp_open(struct device *dev)
 	/* Reset the 8390 and HP chip. */
 	option_reg = inw(ioaddr + HPP_OPTION);
 	outw(option_reg & ~(NICReset + ChipReset), ioaddr + HPP_OPTION);
-	SLOW_DOWN_IO; SLOW_DOWN_IO;
+	udelay(5);
 	/* Unreset the board and enable interrupts. */
 	outw(option_reg | (EnableIRQ + NICReset + ChipReset), ioaddr + HPP_OPTION);
 
@@ -307,12 +308,11 @@ hpp_reset_8390(struct device *dev)
 
 	outw(option_reg & ~(NICReset + ChipReset), ioaddr + HPP_OPTION);
 	/* Pause a few cycles for the hardware reset to take place. */
-	SLOW_DOWN_IO;
-	SLOW_DOWN_IO;
+	udelay(5);
 	ei_status.txing = 0;
 	outw(option_reg | (EnableIRQ + NICReset + ChipReset), ioaddr + HPP_OPTION);
 
-	SLOW_DOWN_IO; SLOW_DOWN_IO;
+	udelay(5);
 
 
 	if ((inb_p(ioaddr+NIC_OFFSET+EN0_ISR) & ENISR_RESET) == 0)

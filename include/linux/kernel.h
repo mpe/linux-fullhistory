@@ -50,10 +50,6 @@ extern int vsprintf(char *buf, const char *, va_list);
 
 extern int session_of_pgrp(int pgrp);
 
-extern int kill_proc(int pid, int sig, int priv);
-extern int kill_pg(int pgrp, int sig, int priv);
-extern int kill_sl(int sess, int sig, int priv);
-
 asmlinkage int printk(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 

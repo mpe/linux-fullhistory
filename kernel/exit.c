@@ -20,112 +20,16 @@
 #include <linux/smp_lock.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/acct.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 
 extern void sem_exit (void);
-extern void acct_process (long exitcode);
 extern void kerneld_exit(void);
 
 int getrusage(struct task_struct *, int, struct rusage *);
-
-static inline void generate(unsigned long sig, struct task_struct * p)
-{
-	unsigned flags;
-	unsigned long mask = 1 << (sig-1);
-	struct sigaction * sa = sig + p->sig->action - 1;
-
-	/*
-	 * Optimize away the signal, if it's a signal that can
-	 * be handled immediately (ie non-blocked and untraced)
-	 * and that is ignored (either explicitly or by default)
-	 */
-	spin_lock_irqsave(&p->sig->siglock, flags);
-	if (!(mask & p->blocked) && !(p->flags & PF_PTRACED)) {
-		/* don't bother with ignored signals (but SIGCHLD is special) */
-		if (sa->sa_handler == SIG_IGN && sig != SIGCHLD)
-			goto out;
-		/* some signals are ignored by default.. (but SIGCONT already did its deed) */
-		if ((sa->sa_handler == SIG_DFL) &&
-		    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH || sig == SIGURG))
-			goto out;
-	}
-	spin_lock(&p->sigmask_lock);
-	p->signal |= mask;
-	spin_unlock(&p->sigmask_lock);
-	if (p->state == TASK_INTERRUPTIBLE && signal_pending(p))
-		wake_up_process(p);
-out:
-	spin_unlock_irqrestore(&p->sig->siglock, flags);
-}
-
-/*
- * Force a signal that the process can't ignore: if necessary
- * we unblock the signal and change any SIG_IGN to SIG_DFL.
- */
-void force_sig(unsigned long sig, struct task_struct * p)
-{
-	sig--;
-	if (p->sig) {
-		unsigned flags;
-		unsigned long mask = 1UL << sig;
-		struct sigaction *sa = p->sig->action + sig;
-
-		spin_lock_irqsave(&p->sig->siglock, flags);
-
-		spin_lock(&p->sigmask_lock);
-		p->signal |= mask;
-		p->blocked &= ~mask;
-		spin_unlock(&p->sigmask_lock);
-
-		if (sa->sa_handler == SIG_IGN)
-			sa->sa_handler = SIG_DFL;
-		if (p->state == TASK_INTERRUPTIBLE)
-			wake_up_process(p);
-
-		spin_unlock_irqrestore(&p->sig->siglock, flags);
-	}
-}
-
-int send_sig(unsigned long sig,struct task_struct * p,int priv)
-{
-	if (!p || sig > 32)
-		return -EINVAL;
-	if (!priv && ((sig != SIGCONT) || (current->session != p->session)) &&
-	    (current->euid ^ p->suid) && (current->euid ^ p->uid) &&
-	    (current->uid ^ p->suid) && (current->uid ^ p->uid) &&
-	    !suser())
-		return -EPERM;
-
-	if (sig && p->sig) {
-		unsigned flags;
-		spin_lock_irqsave(&p->sigmask_lock, flags);
-		if ((sig == SIGKILL) || (sig == SIGCONT)) {
-			if (p->state == TASK_STOPPED)
-				wake_up_process(p);
-			p->exit_code = 0;
-			p->signal &= ~( (1<<(SIGSTOP-1)) | (1<<(SIGTSTP-1)) |
-					(1<<(SIGTTIN-1)) | (1<<(SIGTTOU-1)) );
-		}
-		if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU)
-			p->signal &= ~(1<<(SIGCONT-1));
-		spin_unlock_irqrestore(&p->sigmask_lock, flags);
-
-		/* Actually generate the signal */
-		generate(sig,p);
-	}
-	return 0;
-}
-
-void notify_parent(struct task_struct * tsk, int signal)
-{
-	struct task_struct * parent = tsk->p_pptr;
-
-	send_sig(signal, parent, 1);
-	wake_up_interruptible(&parent->wait_chldexit);
-}
 
 static void release(struct task_struct * p)
 {
@@ -176,118 +80,6 @@ int session_of_pgrp(int pgrp)
 	}
 	read_unlock(&tasklist_lock);
 	return fallback;
-}
-
-/*
- * kill_pg() sends a signal to a process group: this is what the tty
- * control characters do (^C, ^Z etc)
- */
-int kill_pg(int pgrp, int sig, int priv)
-{
-	int retval;
-
-	retval = -EINVAL;
-	if (sig >= 0 && sig <= 32 && pgrp > 0) {
-		struct task_struct *p;
-		int found = 0;
-
-		retval = -ESRCH;
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pgrp == pgrp) {
-				int err = send_sig(sig,p,priv);
-				if (err != 0)
-					retval = err;
-				else
-					found++;
-			}
-		}
-		read_unlock(&tasklist_lock);
-		if (found)
-			retval = 0;
-	}
-	return retval;
-}
-
-/*
- * kill_sl() sends a signal to the session leader: this is used
- * to send SIGHUP to the controlling process of a terminal when
- * the connection is lost.
- */
-int kill_sl(int sess, int sig, int priv)
-{
-	int retval;
-
-	retval = -EINVAL;
-	if (sig >= 0 && sig <= 32 && sess > 0) {
-		struct task_struct *p;
-		int found = 0;
-
-		retval = -ESRCH;
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->leader && p->session == sess) {
-				int err = send_sig(sig,p,priv);
-
-				if (err)
-					retval = err;
-				else
-					found++;
-			}
-		}
-		read_unlock(&tasklist_lock);
-		if (found)
-			retval = 0;
-	}
-	return retval;
-}
-
-int kill_proc(int pid, int sig, int priv)
-{
-	int retval;
-
-	retval = -EINVAL;
-	if (sig >= 0 && sig <= 32) {
-		struct task_struct *p = find_task_by_pid(pid);
-		
-		if(p)
-			retval = send_sig(sig, p, priv);
-		else
-			retval = -ESRCH;
-	}
-	return retval;
-}
-
-/*
- * POSIX specifies that kill(-1,sig) is unspecified, but what we have
- * is probably wrong.  Should make it like BSD or SYSV.
- */
-asmlinkage int sys_kill(int pid,int sig)
-{
-	if (!pid)
-		return kill_pg(current->pgrp,sig,0);
-
-	if (pid == -1) {
-		int retval = 0, count = 0;
-		struct task_struct * p;
-
-		read_lock(&tasklist_lock);
-		for_each_task(p) {
-			if (p->pid > 1 && p != current) {
-				int err;
-				++count;
-				if ((err = send_sig(sig,p,0)) != -EPERM)
-					retval = err;
-			}
-		}
-		read_unlock(&tasklist_lock);
-		return count ? retval : -ESRCH;
-	}
-	if (pid < 0)
-		return kill_pg(-pid,sig,0);
-
-	/* Normal kill */
-	return kill_proc(pid,sig,0);
 }
 
 /*
@@ -398,7 +190,7 @@ static inline void __exit_files(struct task_struct *tsk)
 
 void exit_files(struct task_struct *tsk)
 {
-  __exit_files(tsk);
+	__exit_files(tsk);
 }
 
 static inline void __exit_fs(struct task_struct *tsk)
@@ -417,7 +209,7 @@ static inline void __exit_fs(struct task_struct *tsk)
 
 void exit_fs(struct task_struct *tsk)
 {
-  __exit_fs(tsk);
+	__exit_fs(tsk);
 }
 
 static inline void __exit_sighand(struct task_struct *tsk)
@@ -429,6 +221,8 @@ static inline void __exit_sighand(struct task_struct *tsk)
 		if (atomic_dec_and_test(&sig->count))
 			kfree(sig);
 	}
+
+	flush_signals(tsk);
 }
 
 void exit_sighand(struct task_struct *tsk)
@@ -527,9 +321,11 @@ NORET_TYPE void do_exit(long code)
 {
 	if (in_interrupt())
 		printk("Aiee, killing interrupt handler\n");
+	if (current == task[0])
+		panic("Attempted to kill the idle task!");
 fake_volatile:
-	acct_process(code);
 	current->flags |= PF_EXITING;
+	acct_process(code);
 	del_timer(&current->real_timer);
 	sem_exit();
 	kerneld_exit();

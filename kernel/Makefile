@@ -12,11 +12,13 @@
 
 O_TARGET := kernel.o
 O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \
-	module.o exit.o signal.o itimer.o info.o time.o softirq.o \
-	resource.o sysctl.o
+	    module.o exit.o itimer.o info.o time.o softirq.o resource.o \
+	    sysctl.o acct.o
+
+OX_OBJS  += signal.o
 
 ifeq ($(CONFIG_MODULES),y)
-OX_OBJS = ksyms.o
+OX_OBJS  += ksyms.o
 endif
 
 include $(TOPDIR)/Rules.make

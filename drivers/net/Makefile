@@ -73,13 +73,6 @@ ifeq ($(CONFIG_SK_G16),y)
 L_OBJS += sk_g16.o
 endif
 
-ifeq ($(CONFIG_NET_IPIP),y)
-L_OBJS += tunnel.o
-else
-  ifeq ($(CONFIG_NET_IPIP),m)
-  M_OBJS += tunnel.o
-  endif
-endif
 
 ifeq ($(CONFIG_HP100),y)
 L_OBJS += hp100.o
@@ -735,13 +728,33 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BAYCOM),y)
-L_OBJS += baycom.o
+ifeq ($(CONFIG_BAYCOM_SER_FDX),y)
+L_OBJS += baycom_ser_fdx.o
 CONFIG_HDLCDRV_BUILTIN = y
 else
-  ifeq ($(CONFIG_BAYCOM),m)
+  ifeq ($(CONFIG_BAYCOM_SER_FDX),m)
   CONFIG_HDLCDRV_MODULE = y
-  M_OBJS += baycom.o
+  M_OBJS += baycom_ser_fdx.o
+  endif
+endif
+
+ifeq ($(CONFIG_BAYCOM_SER_HDX),y)
+L_OBJS += baycom_ser_hdx.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_BAYCOM_SER_HDX),m)
+  CONFIG_HDLCDRV_MODULE = y
+  M_OBJS += baycom_ser_hdx.o
+  endif
+endif
+
+ifeq ($(CONFIG_BAYCOM_PAR),y)
+L_OBJS += baycom_par.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_BAYCOM_PAR),m)
+  CONFIG_HDLCDRV_MODULE = y
+  M_OBJS += baycom_par.o
   endif
 endif
 

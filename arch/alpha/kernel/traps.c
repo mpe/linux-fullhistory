@@ -12,6 +12,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
+#include <linux/delay.h>
 
 #include <asm/gentrap.h>
 #include <asm/uaccess.h>
@@ -20,45 +21,41 @@
 #include <asm/smp_lock.h>
 
 
-void die_if_kernel(char * str, struct pt_regs * regs, long err,
-		   unsigned long *r9_15)
+static void dik_show_regs(struct pt_regs *regs, unsigned long *r9_15)
 {
-	long i;
-	unsigned long ra;
-	unsigned int * pc;
-	unsigned long * sp;
-
-	if (regs->ps & 8)
-		return;
-	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
-	sp = (unsigned long *) (regs+1);
-	__get_user(ra, (unsigned long *)sp);
-	printk("pc = [<%016lx>] ps = %04lx\n", regs->pc, regs->ps);
-	printk("rp = [<%016lx>] ra = [<%016lx>]\n", regs->r26, ra);
-	printk("r0 = %016lx  r1 = %016lx\n", regs->r0, regs->r1);
-	printk("r2 = %016lx  r3 = %016lx\n", regs->r2, regs->r3);
-	printk("r4 = %016lx  r5 = %016lx\n", regs->r4, regs->r5);
-	printk("r6 = %016lx  r7 = %016lx\n", regs->r6, regs->r7);
+	printk("pc = [<%016lx>]  ra = [<%016lx>]  ps = %04lx\n",
+	       regs->pc, regs->r26, regs->ps);
+	printk("r0 = %016lx  r1 = %016lx  r2 = %016lx\n",
+	       regs->r0, regs->r1, regs->r2);
+	printk("r3 = %016lx  r4 = %016lx  r5 = %016lx\n",
+ 	       regs->r3, regs->r4, regs->r5);
+	printk("r6 = %016lx  r7 = %016lx  r8 = %016lx\n",
+	       regs->r6, regs->r7, regs->r8);
 
 	if (r9_15) {
-		printk("r8 = %016lx  r9 = %016lx\n", regs->r8, r9_15[9]);
-		printk("r10= %016lx  r11= %016lx\n", r9_15[10], r9_15[11]);
-		printk("r12= %016lx  r13= %016lx\n", r9_15[12], r9_15[13]);
-		printk("r14= %016lx  r15= %016lx\n", r9_15[14], r9_15[15]);
-	} else {
-		printk("r8 = %016lx\n", regs->r8);
+		printk("r9 = %016lx  r10= %016lx  r11= %016lx\n",
+		       r9_15[9], r9_15[10], r9_15[11]);
+		printk("r12= %016lx  r13= %016lx  r14= %016lx\n",
+		       r9_15[12], r9_15[13], r9_15[14]);
+		printk("r15= %016lx\n", r9_15[15]);
 	}
 
-	printk("r16= %016lx  r17= %016lx\n", regs->r16, regs->r17);
-	printk("r18= %016lx  r19= %016lx\n", regs->r18, regs->r19);
-	printk("r20= %016lx  r21= %016lx\n", regs->r20, regs->r21);
-	printk("r22= %016lx  r23= %016lx\n", regs->r22, regs->r23);
-	printk("r24= %016lx  r25= %016lx\n", regs->r24, regs->r25);
-	printk("r27= %016lx  r28= %016lx\n", regs->r27, regs->r28);
-	printk("gp = %016lx  sp = %p\n", regs->gp, sp);
+	printk("r16= %016lx  r17= %016lx  r18= %016lx\n",
+	       regs->r16, regs->r17, regs->r18);
+	printk("r19= %016lx  r20= %016lx  r21= %016lx\n",
+ 	       regs->r19, regs->r20, regs->r21);
+ 	printk("r22= %016lx  r23= %016lx  r24= %016lx\n",
+	       regs->r22, regs->r23, regs->r24);
+	printk("r25= %016lx  r27= %016lx  r28= %016lx\n",
+	       regs->r25, regs->r27, regs->r28);
+	printk("gp = %016lx  sp = %p\n", regs->gp, regs+1);
+}
+
+static void dik_show_code(unsigned int *pc)
+{
+	long i;
 
 	printk("Code:");
-	pc = (unsigned int *) regs->pc;
 	for (i = -3; i < 6; i++) {
 		unsigned int insn;
 		if (__get_user(insn, pc+i))
@@ -66,6 +63,11 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 		printk("%c%08x%c",i?' ':'<',insn,i?' ':'>');
 	}
 	printk("\n");
+}
+
+static void dik_show_trace(unsigned long *sp)
+{
+	long i = 0;
 	printk("Trace:");
 	while (0x1ff8 & (unsigned long) sp) {
 		extern unsigned long _stext, _etext;
@@ -76,9 +78,30 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err,
 		if (tmp >= (unsigned long) &_etext)
 			continue;
 		printk(" [<%lx>]", tmp);
+		if (++i > 40) {
+			printk(" ...");
+			break;
+		}
 	}
 	printk("\n");
-		    
+}
+
+void die_if_kernel(char * str, struct pt_regs *regs, long err,
+		   unsigned long *r9_15)
+{
+	if (regs->ps & 8)
+		return;
+	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
+	dik_show_regs(regs, r9_15);
+	dik_show_code((unsigned int *)regs->pc);
+	dik_show_trace((unsigned long *)(regs+1));
+
+	if (current->tss.flags & (1UL << 63)) {
+		printk("die_if_kernel recursion detected.\n");
+		sti();
+		while (1);
+	}
+	current->tss.flags |= (1UL << 63);
 	do_exit(SIGSEGV);
 }
 
@@ -397,8 +420,6 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	printk("Bad unaligned kernel access at %016lx: %p %lx %ld\n",
 		pc, va, opcode, reg);
 	do_exit(SIGSEGV);
-	unlock_kernel();
-	return;
 
 got_exception:
 	/* Ok, we caught the exception, but we don't want it.  Is there
@@ -416,13 +437,48 @@ got_exception:
 		return;
 	}
 
-	/* Yikes!  No one to forward the exception to.  */
+	/*
+	 * Yikes!  No one to forward the exception to.
+	 * Since the registers are in a weird format, dump them ourselves.
+ 	 */
 	lock_kernel();
-	printk("%s: unhandled unaligned exception at pc=%lx ra=%lx"
-	       " (bad address = %p)\n", current->comm,
-	       pc, una_reg(26), va);
+
+	printk("%s(%d): unhandled unaligned exception\n",
+	       current->comm, current->pid);
+
+	printk("pc = [<%016lx>]  ra = [<%016lx>]  ps = %04lx\n",
+	       pc, una_reg(26), regs.ps);
+	printk("r0 = %016lx  r1 = %016lx  r2 = %016lx\n",
+	       una_reg(0), una_reg(1), una_reg(2));
+	printk("r3 = %016lx  r4 = %016lx  r5 = %016lx\n",
+ 	       una_reg(3), una_reg(4), una_reg(5));
+	printk("r6 = %016lx  r7 = %016lx  r8 = %016lx\n",
+	       una_reg(6), una_reg(7), una_reg(8));
+	printk("r9 = %016lx  r10= %016lx  r11= %016lx\n",
+	       una_reg(9), una_reg(10), una_reg(11));
+	printk("r12= %016lx  r13= %016lx  r14= %016lx\n",
+	       una_reg(12), una_reg(13), una_reg(14));
+	printk("r15= %016lx\n", una_reg(15));
+	printk("r16= %016lx  r17= %016lx  r18= %016lx\n",
+	       una_reg(16), una_reg(17), una_reg(18));
+	printk("r19= %016lx  r20= %016lx  r21= %016lx\n",
+ 	       una_reg(19), una_reg(20), una_reg(21));
+ 	printk("r22= %016lx  r23= %016lx  r24= %016lx\n",
+	       una_reg(22), una_reg(23), una_reg(24));
+	printk("r25= %016lx  r27= %016lx  r28= %016lx\n",
+	       una_reg(25), una_reg(27), una_reg(28));
+	printk("gp = %016lx  sp = %p\n", regs.gp, &regs+1);
+
+	dik_show_code((unsigned int *)pc);
+	dik_show_trace((unsigned long *)(&regs+1));
+
+	if (current->tss.flags & (1UL << 63)) {
+		printk("die_if_kernel recursion detected.\n");
+		sti();
+		while (1);
+	}
+	current->tss.flags |= (1UL << 63);
 	do_exit(SIGSEGV);
-	unlock_kernel();
 }
 
 /*
@@ -800,26 +856,17 @@ give_sigbus:
 }
 
 /*
- * DEC means people to use the "retsys" instruction for return from
- * a system call, but they are clearly misguided about this. We use
- * "rti" in all cases, and fill in the stack with the return values.
- * That should make signal handling etc much cleaner.
- *
- * Even more horribly, DEC doesn't allow system calls from kernel mode.
- * "Security" features letting the user do something the kernel can't
- * are a thinko. DEC palcode is strange. The PAL-code designers probably
- * got terminally tainted by VMS at some point.
+ * Unimplemented system calls.
  */
-asmlinkage long do_entSys(unsigned long a0, unsigned long a1, unsigned long a2,
-			  unsigned long a3, unsigned long a4, unsigned long a5,
-			  struct pt_regs regs)
+asmlinkage long alpha_ni_syscall(unsigned long a0, unsigned long a1,
+				 unsigned long a2, unsigned long a3,
+				 unsigned long a4, unsigned long a5,
+				 struct pt_regs regs)
 {
-	lock_kernel();
 	/* Only report OSF system calls.  */
 	if (regs.r0 != 112 && regs.r0 < 300)
 		printk("<sc %ld(%lx,%lx,%lx)>", regs.r0, a0, a1, a2);
-	unlock_kernel();
-	return -1;
+	return -ENOSYS;
 }
 
 extern asmlinkage void entMM(void);

@@ -75,8 +75,6 @@ static int _send(struct socket *sock, const void *buff, int len)
 
 #define NCP_SLACK_SPACE 1024
 
-#define _S(nr) (1<<((nr)-1))
-
 static int do_ncp_rpc_call(struct ncp_server *server, int size)
 {
 	struct file *file;
@@ -93,7 +91,8 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 	int major_timeout_seen;
 	int acknowledge_seen;
 	int n;
-	unsigned long old_mask;
+	sigset_t old_set;
+	unsigned long mask, flags;
 
 	/* We have to check the result, so store the complete header */
 	struct ncp_request_header request =
@@ -115,17 +114,25 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 	retrans = server->m.retry_count;
 	major_timeout_seen = 0;
 	acknowledge_seen = 0;
-	old_mask = current->blocked;
-	current->blocked |= ~(_S(SIGKILL)
-#if 0
-			      | _S(SIGSTOP)
-#endif
-			      | ((server->m.flags & NCP_MOUNT_INTR)
-	       ? ((current->sig->action[SIGINT - 1].sa_handler == SIG_DFL
-		   ? _S(SIGINT) : 0)
-	       | (current->sig->action[SIGQUIT - 1].sa_handler == SIG_DFL
-		  ? _S(SIGQUIT) : 0))
-				 : 0));
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
+	old_set = current->blocked;
+	mask = sigmask(SIGKILL) | sigmask(SIGSTOP);
+	if (server->m.flags & NCP_MOUNT_INTR) {
+		/* FIXME: This doesn't seem right at all.  So, like,
+		   we can't handle SIGINT and get whatever to stop?
+		   What if we've blocked it ourselves?  What about
+		   alarms?  Why, in fact, are we mucking with the
+		   sigmask at all? -- r~ */
+		if (current->sig->action[SIGINT - 1].sa_handler == SIG_DFL)
+			mask |= sigmask(SIGINT);
+		if (current->sig->action[SIGQUIT - 1].sa_handler == SIG_DFL)
+			mask |= sigmask(SIGQUIT);
+	}
+	siginitmaskinv(&current->blocked, mask);
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+
 	fs = get_fs();
 	set_fs(get_ds());
 	for (n = 0, timeout = init_timeout;; n++, timeout <<= 1) {
@@ -269,7 +276,12 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 		printk(KERN_ERR "NCP: result=%d\n", result);
 		result = -EIO;
 	}
+
+	spin_lock_irqsave(&current->sigmask_lock, flags);
 	current->blocked = old_mask;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, flags);
+	
 	set_fs(fs);
 	return result;
 }

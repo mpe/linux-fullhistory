@@ -129,7 +129,7 @@ out:
 		return;
 	}
 
-	printk("Negative d_count (%d) for %s/%s\n",
+	printk(KERN_CRIT "Negative d_count (%d) for %s/%s\n",
 		count,
 		dentry->d_parent->d_name.name,
 		dentry->d_name.name);
@@ -378,7 +378,7 @@ resume:
 		if (!list_empty(&dentry->d_subdirs)) {
 			this_parent = dentry;
 #ifdef DCACHE_DEBUG
-printk("select_parent: descending to %s/%s, found=%d\n",
+printk(KERN_DEBUG "select_parent: descending to %s/%s, found=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, found);
 #endif
 			goto repeat;
@@ -391,7 +391,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, found);
 		next = this_parent->d_child.next; 
 		this_parent = this_parent->d_parent;
 #ifdef DCACHE_DEBUG
-printk("select_parent: ascending to %s/%s, found=%d\n",
+printk(KERN_DEBUG "select_parent: ascending to %s/%s, found=%d\n",
 this_parent->d_parent->d_name.name, this_parent->d_name.name, found);
 #endif
 		goto resume;
@@ -439,7 +439,7 @@ void check_dcache_memory()
 				goal = 50;
 			count = select_dcache(32, goal);
 #ifdef DCACHE_DEBUG
-printk("check_dcache_memory: goal=%d, count=%d\n", goal, count);
+printk(KERN_DEBUG "check_dcache_memory: goal=%d, count=%d\n", goal, count);
 #endif
 			if (count) {
 				prune_dcache(count);
@@ -678,7 +678,7 @@ void d_add(struct dentry * entry, struct inode * inode)
 void d_move(struct dentry * dentry, struct dentry * target)
 {
 	if (!dentry->d_inode)
-		printk("VFS: moving negative dcache entry\n");
+		printk(KERN_WARNING "VFS: moving negative dcache entry\n");
 
 	/* Move the dentry to the target hash queue */
 	list_del(&dentry->d_hash);

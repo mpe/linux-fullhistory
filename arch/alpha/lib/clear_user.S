@@ -37,8 +37,8 @@
 	.set noreorder
 	.align 4
 
-	.globl __clear_user
-	.ent __clear_user
+	.globl __do_clear_user
+	.ent __do_clear_user
 	.frame	$30, 0, $28
 	.prologue 0
 
@@ -79,7 +79,7 @@ $tail:
 	EX( stq_u $5, 0($6) )	# e0    :
 	ret	$31, ($28), 1	# .. e1 :
 
-__clear_user:
+__do_clear_user:
 	and	$6, 7, $4	# e0    : find dest misalignment
 	beq	$0, $zerolength # .. e1 :
 	addq	$0, $4, $1	# e0    : bias counter
@@ -110,4 +110,4 @@ $zerolength:
 $exception:
 	ret	$31, ($28), 1	# .. e1 :
 
-	.end __clear_user
+	.end __do_clear_user

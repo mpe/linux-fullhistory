@@ -539,7 +539,7 @@ __initfunc(int chr_dev_init(void))
 	 *	Some joysticks only appear when the soundcard they are
 	 *	connected too is confgured. Keep the sound/joystick ordering.
 	 */
-	joystick_init();
+	js_init();
 #endif	
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();

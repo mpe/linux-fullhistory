@@ -1,10 +1,23 @@
 #ifndef _ASMAXP_SIGNAL_H
 #define _ASMAXP_SIGNAL_H
 
-typedef unsigned long sigset_t;		/* at least 32 bits */
+#include <linux/types.h>
 
-#define _NSIG             32
-#define NSIG		_NSIG
+/* Avoid too many header ordering problems.  */
+struct siginfo;
+
+/* Digital Unix defines 64 signals.  Most things should be clean enough
+   to redefine this at will, if care is taken to make libc match.  */
+
+#define _NSIG		64
+#define _NSIG_BPW	64
+#define _NSIG_WORDS	(_NSIG / _NSIG_BPW)
+
+typedef unsigned long old_sigset_t;		/* at least 32 bits */
+
+typedef struct {
+	unsigned long sig[_NSIG_WORDS];
+} sigset_t;
 
 /*
  * Linux/AXP has different signal numbers that Linux/i386: I'm trying
@@ -46,23 +59,36 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
 #define SIGPWR	SIGINFO
 #define SIGIOT	SIGABRT
 
+/* These should not be considered constants from userland.  */
+#define SIGRTMIN	32
+#define SIGRTMAX	(_NSIG-1)
+
 /*
- * sa_flags values: SA_STACK is not currently supported, but will allow the
- * usage of signal stacks by using the (now obsolete) sa_restorer field in
- * the sigaction structure as a stack pointer. This is now possible due to
- * the changes in signal handling. LBT 010493.
+ * SA_FLAGS values:
+ *
+ * SA_ONSTACK is not currently supported, but will allow sigaltstack(2).
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
- * SA_SHIRQ flag is for shared interrupt support on PCI and EISA.
+ * SA_NOCLDSTOP flag to turn off SIGCHLD when children stop.
+ * SA_RESETHAND clears the handler when the signal is delivered.
+ * SA_NOCLDWAIT flag on SIGCHLD to inhibit zombies.
+ * SA_NODEFER prevents the current signal from being masked in the handler.
+ *
+ * SA_ONESHOT and SA_NOMASK are the historical Linux names for the Single
+ * Unix names RESETHAND and NODEFER respectively.
  */
-#define SA_NOCLDSTOP	0x00000004
 
-#define SA_STACK	0x00000001
+#define SA_ONSTACK	0x00000001
 #define SA_RESTART	0x00000002
-#define SA_INTERRUPT	0x20000000
-#define SA_NOMASK	0x00000008
-#define SA_ONESHOT	0x00000010
-#define SA_SHIRQ	0x00000020
+#define SA_NOCLDSTOP	0x00000004
+#define SA_NODEFER	0x00000008
+#define SA_RESETHAND	0x00000010
+#define SA_NOCLDWAIT	0x00000020 /* not supported yet */
+#define SA_SIGINFO	0x00000040
+
+#define SA_ONESHOT	SA_RESETHAND
+#define SA_NOMASK	SA_NODEFER
+#define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
 
 #ifdef __KERNEL__
 /*
@@ -70,11 +96,12 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
  * irq handling routines.
  *
  * SA_INTERRUPT is also used by the irq handling routines.
+ * SA_SHIRQ is for shared interrupt support on PCI and EISA.
  */
-#define SA_PROBE SA_ONESHOT
-#define SA_SAMPLE_RANDOM SA_RESTART
+#define SA_PROBE		SA_ONESHOT
+#define SA_SAMPLE_RANDOM	SA_RESTART
+#define SA_SHIRQ		0x40000000
 #endif
-
 
 #define SIG_BLOCK          1	/* for blocking signals */
 #define SIG_UNBLOCK        2	/* for unblocking signals */
@@ -87,11 +114,28 @@ typedef void (*__sighandler_t)(int);
 #define SIG_IGN	((__sighandler_t)1)	/* ignore signal */
 #define SIG_ERR	((__sighandler_t)-1)	/* error return from signal */
 
+struct osf_sigaction {
+	__sighandler_t	sa_handler;
+	old_sigset_t	sa_mask;
+	int		sa_flags;
+};
+
 struct sigaction {
 	__sighandler_t	sa_handler;
-	sigset_t	sa_mask;
-	unsigned int	sa_flags;
+	unsigned long	sa_flags;
+	sigset_t	sa_mask;	/* mask last for extensibility */
 };
+
+struct k_sigaction {
+	struct sigaction sa;
+	void (*ka_restorer)(void);
+};
+
+typedef struct sigaltstack {
+	void *ss_sp;
+	int ss_flags;
+	size_t ss_size;
+} stack_t;
 
 #ifdef __KERNEL__
 #include <asm/sigcontext.h>

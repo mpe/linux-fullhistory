@@ -48,6 +48,7 @@
 #include <linux/swap.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/signal.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -643,37 +644,58 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 	return buffer;
 }
 
+char * render_sigset_t(sigset_t *set, char *buffer)
+{
+	int i = _NSIG, x;
+	do {
+		i -= 4, x = 0;
+		if (sigismember(set, i+1)) x |= 1;
+		if (sigismember(set, i+2)) x |= 2;
+		if (sigismember(set, i+3)) x |= 4;
+		if (sigismember(set, i+4)) x |= 8;
+		*buffer++ = (x < 10 ? '0' : 'a' - 10) + x;
+	} while (i >= 4);
+	*buffer = 0;
+	return buffer;
+}
+
+static void collect_sigign_sigcatch(struct task_struct *p, sigset_t *ign,
+				    sigset_t *catch)
+{
+	struct k_sigaction *k;
+	int i;
+
+	sigemptyset(ign);
+	sigemptyset(catch);
+
+	if (p->sig) {
+		k = p->sig->action;
+		for (i = 1; i <= _NSIG; ++i, ++k) {
+			if (k->sa.sa_handler == SIG_IGN)
+				sigaddset(ign, i);
+			else if (k->sa.sa_handler != SIG_DFL)
+				sigaddset(catch, i);
+		}
+	}
+}
+
 static inline char * task_sig(struct task_struct *p, char *buffer)
 {
-	buffer += sprintf(buffer,
-		"SigPnd:\t%08lx\n"
-		"SigBlk:\t%08lx\n",
-		p->signal, p->blocked);
-	if (p->sig) {
-		struct sigaction * action = p->sig->action;
-		unsigned long sig_ign = 0, sig_caught = 0;
-		unsigned long bit = 1;
-		int i;
+	sigset_t ign, catch;
 
-		for (i = 0; i < 32; i++) {
-			switch((unsigned long) action->sa_handler) {
-				case 0:
-					break;
-				case 1:
-					sig_ign |= bit;
-					break;
-				default:
-					sig_caught |= bit;
-			}
-			bit <<= 1;
-			action++;
-		}
+	buffer += sprintf(buffer, "SigPnd:\t");
+	buffer = render_sigset_t(&p->signal, buffer);
+	buffer += sprintf(buffer, "SigBlk:\t");
+	buffer = render_sigset_t(&p->blocked, buffer);
+	*buffer++ = '\n';
 
-		buffer += sprintf(buffer,
-			"SigIgn:\t%08lx\n"
-			"SigCgt:\t%08lx\n",
-			sig_ign, sig_caught);
-	}
+	collect_sigign_sigcatch(p, &ign, &catch);
+	buffer += sprintf(buffer, "SigIgn:\t");
+	buffer = render_sigset_t(&ign, buffer);
+	buffer += sprintf(buffer, "SigCat:\t");
+	buffer = render_sigset_t(&catch, buffer);
+	*buffer++ = '\n';
+
 	return buffer;
 }
 
@@ -694,10 +716,14 @@ static int get_status(int pid, char * buffer)
 static int get_stat(int pid, char * buffer)
 {
 	struct task_struct *tsk = find_task_by_pid(pid);
-	unsigned long sigignore=0, sigcatch=0, wchan;
-	unsigned long vsize, eip, esp;
+	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
-	int i,tty_pgrp;
+	int tty_pgrp;
+	sigset_t sigign, sigcatch;
+	char signal_str[sizeof(sigset_t)*2+1];
+	char blocked_str[sizeof(sigset_t)*2+1];
+	char sigign_str[sizeof(sigset_t)*2+1];
+	char sigcatch_str[sizeof(sigset_t)*2+1];
 	char state;
 
 	if (!tsk)
@@ -716,22 +742,15 @@ static int get_stat(int pid, char * buffer)
 		eip = KSTK_EIP(tsk);
 		esp = KSTK_ESP(tsk);
 	}
+
 	wchan = get_wchan(tsk);
-	if (tsk->sig) {
-		unsigned long bit = 1;
-		for(i=0; i<32; ++i) {
-			switch((unsigned long) tsk->sig->action[i].sa_handler) {
-				case 0:
-					break;
-				case 1:
-					sigignore |= bit;
-					break;
-				default:
-					sigcatch |= bit;
-			}
-			bit <<= 1;
-		}
-	}
+
+	collect_sigign_sigcatch(tsk, &sigign, &sigcatch);
+	render_sigset_t(&tsk->signal, signal_str);
+	render_sigset_t(&tsk->blocked, blocked_str);
+	render_sigset_t(&sigign, sigign_str);
+	render_sigset_t(&sigcatch, sigcatch_str);
+
 	if (tsk->tty)
 		tty_pgrp = tsk->tty->pgrp;
 	else
@@ -746,7 +765,7 @@ static int get_stat(int pid, char * buffer)
 
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
-%lu %lu %lu %lu %lu %lu %lu %lu\n",
+%lu %s %s %s %s %lu %lu %lu\n",
 		pid,
 		tsk->comm,
 		state,
@@ -777,10 +796,10 @@ static int get_stat(int pid, char * buffer)
 		tsk->mm ? tsk->mm->start_stack : 0,
 		esp,
 		eip,
-		tsk->signal,
-		tsk->blocked,
-		sigignore,
-		sigcatch,
+		signal_str,
+		blocked_str,
+		sigign_str,
+		sigcatch_str,
 		wchan,
 		tsk->nswap,
 		tsk->cnswap);
