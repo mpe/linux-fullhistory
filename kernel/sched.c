@@ -882,12 +882,10 @@ void do_timer(struct pt_regs * regs)
 			continue;
 		mark_bh(TIMER_BH);
 	}
-	cli();
 	if (timer_head.next->expires <= jiffies)
 		mark_bh(TIMER_BH);
 	if (tq_timer != &tq_last)
 		mark_bh(TQUEUE_BH);
-	sti();
 }
 
 #ifndef __alpha__

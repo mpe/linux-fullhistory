@@ -28,10 +28,10 @@
  */
 
 /*
- *  ==FILEVERSION 3==
+ *  ==FILEVERSION 960302==
  *
  *  NOTE TO MAINTAINERS:
- *     If you modify this file at all, increment the number above.
+ *     If you modify this file at all, please set the above date.
  *     ppp-comp.h is shipped with a PPP distribution as well as with the kernel;
  *     if everyone increases the FILEVERSION number above, then scripts
  *     can do the right thing when deciding whether to install a new ppp-comp.h

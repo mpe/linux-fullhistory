@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.3.4 $$Date: 1995/11/13 20:45:10 $";
+"$Revision: 1.36.3.5 $$Date: 1996/03/07 15:20:17 $";
 /*
  *  linux/drivers/char/cyclades.c
  *
@@ -24,6 +24,12 @@ static char rcsid[] =
  *   int cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
+ * Revision 1.36.3.5  1996/03/07 15:20:17  bentson
+ * Some global changes to interrupt handling spilled into
+ * this driver--mostly unused arguments in system function
+ * calls.  Also added change by Marcio Saito which should
+ * reduce lost interrupts at startup by fast processors.
+ *
  * Revision 1.36.3.4  1995/11/13  20:45:10  bentson
  * Changes by Corey Minyard <minyard@wf-rch.cirr.com> distributed
  * in 1.3.41 kernel to remove a possible race condition, extend
@@ -627,8 +633,8 @@ cy_probe(int irq, void *dev_id, struct pt_regs *regs)
 	    intr_base_addr[CySRER<<index] &= ~CyTxMpty;
 	    intr_base_addr[CyTIR<<index] = (save_xir & 0x3f);
 	    intr_base_addr[CyCAR<<index] = (save_car);
-	    *(intr_base_addr + (Cy_ClrIntr<<index)) = 0; /* Cy_ClrIntr is 0x1800 */
 	}
+	*(intr_base_addr + (Cy_ClrIntr<<index)) = 0; /* Cy_ClrIntr is 0x1800 */
     return;
 } /* cy_probe */
 

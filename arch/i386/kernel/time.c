@@ -20,12 +20,11 @@
 
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
 #include <linux/config.h>
-
-#define TIMER_IRQ 0
 
 /* Cycle counter value at the previous timer interrupt.. */
 static unsigned long long last_timer_cc = 0;

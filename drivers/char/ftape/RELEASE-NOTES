@@ -1,0 +1,552 @@
+===== Release notes for ftape-2.07, 04/03/96 =====
+
+
+- ftape updated to compile against 1.3.70.
+- Iomega 700 and Wangtek 3200 recognised.
+
+
+===== Release notes for ftape-2.06b, 13/02/96 =====
+
+Another simple bugfix version.
+
+- Jumbo 700 recognised.
+- Typo in vendors.h fixed.
+
+
+===== Release notes for ftape-2.06a, 10/02/96 =====
+
+This release is a simple bugfix version.
+
+- Linux/SMP: ftape *should* work, if you remember to add the symbol __SMP__
+  to the Makefile (you know what I'm talking about, if you're playing with
+  Linux/SMP :).
+- FC-10/20: Only accepts IRQs 3-7, or 9.  If IRQ 9, properly tell the card
+  to use IRQ 2.  Thanks to Greg Crider (gcrider@iclnet.org) for finding and
+  locating this bug and testing the patch.
+- Insight drive recognised correctly again.
+- Motor-on wakeup version of the Iomega 250 drive added
+
+
+===== Release notes for ftape-2.06, 28/01/96 =====
+
+Special thanks go to Neal Friedman and Steven Sorbom for their
+help in producing and testing this release.
+
+I have continued to clean up the code, with an eye towards inclusion
+of ftape in Linus' official kernel (In fact, as I type this, I am
+running on a kernel with ftape support statically linked).  I have
+test-compiled ftape against my 1.2.13 tree without problems.
+Hopefully, everything should be OK for the v1.2.x people.
+
+WARNING! Alan Cox has mailed me that ftape does *NOT* work with
+Linux/SMP.  If you try to run ftape under Linux/SMP, it will cause a
+kernel deadlock (which is worse than a panic).
+
+- QIC-3020/TR-3: 1Mbps support works.  Neal is capable of reading and
+  writing data to a tape.  ftape will automatically detect the type of
+  tape (e.g. TR-3 vs QIC-80) and move the fdc in and out of
+  "perpendicular mode" as neccesarry.
+- 2Mbps support is disabled by default, since it is not fully
+  debugged.  If you are adventurous, remove -DFDC_82078SL in the
+  Makefile and see what happens :-)
+- fdc detection: silly bugs removed (Only 2Mbps fdcs were affected)
+  and added detection of the National Semiconductors PC8744 fdc chip
+  (used in the PC873xx "super-IO" chips).
+- Removed warning about incompatible types when compiling with Linux
+  1.2.x.
+- README.PCI updated with info about the DELL Dimension XPS P90.
+- Connor TST3200R added to detected drives.
+- `swapout' utility added to distribution.  It will dirty 5Meg of
+  memory, trying to swap out other programs.  Just say `make swapout'
+  to build it.  ftape will do this automatically Real Soon Now (ie:
+  when I have found out which kernel memory alloc function to call).
+
+
+===== Release notes for ftape-2.05, 08/01/96 =====
+
+- For v1.2.x Kernels, you must apply the patch linux-1.2/ksyms.patch to
+  the kernel and rebuild it (it adds the __get_dma_pages symbol to
+  ksyms.c).
+- Included new asm-i386/io.h file from v1.3.x kernel series, to enable
+  gcc v.2.7.[12] to compile v1.2.x kernels (linux-1.2/io.h).
+- Module versions: If you wish to compile ftape as a versioned module,
+  you must first compile your kernel with CONFIG_MODVERSIONS=y.
+  Otherwise, you will get complaints that <linux/modversions.h> does not
+  exist (if that happens, a `touch modversions.h' will help you out).
+- CLK_48MHZ: new define in the Makefile (default: non-zero).  If you have
+  a tape controller card that uses the i82078(-1) chip, but cannot get
+  it to work with ftape, try set it to 0 (and please report this).
+- QIC-3010/3020: Complete support is still missing, but will hopefully
+  come soon.  Steven Sorbom has kindly provided me with hints about
+  this.  Writing of QIC-3020 tapes definitely does NOT work (do not try
+  it! - the drive will not be in "perpendicular mode" and this will ruin
+  the formatting info on the tape).
+- ftape_num_buffers is out of fashion: use NR_BUFFERS instead (and
+  recompile if you want to change it :-).
+
+
+===== Release notes for ftape-2.04, 01/01/96 =====
+
+This version by Kai Harrekilde-Petersen <khp@pip.dknet.dk>
+
+- ALERT! Support for Kernels earlier then v1.1.85 is about to go away.
+  I intend to clean up some of the code (getting rid of an annoyingly
+  large numbers of #ifdef mostly), which means that support for
+  pre-1.1.85 kernels must go as well.
+- NR_FTAPE_BUFFERS is gone; You can instead select the number of dma
+  buffers by saying `insmod ftape.o ftape_num_buffer=<n>' instead.
+- Configure script gone.  ftape will now automagically determine your
+  kernel version by /usr/include/linux/version.h instead.
+- CONFIG_MODVERSIONS now work.  All combinations of versioned /
+  unversioned kernel and ftape module works (at least with my 1.3.52
+  kernel).
+- If you have problems with inserting ftape into an old (1.2.x)
+  kernel (e.g. insmod says "1.2.8 does not match 1.2.8), recompile
+  your modules utilities with your new compiler.
+- Reveal TB1400 drive added to vendors.h
+- Support for the i82078-1 (2Mbps) chip is coming along.  The
+  biggest problem is that I don't have such a card, which makes
+  testing / debugging somewhat problematic.  The second biggest
+  problem is that I do not have the QIC-3010/3020 standards either.
+  Status right now is that the chip is detected, and it should be
+  possible to put it into 2Mbps mode.  However, I do not know what
+  "extras" are needed to complete the support.  Although putting the
+  i82078 into 1Mbps mode ought to work out of the box, it doesn't
+  (right now, ftape complains about id am errors).
+
+
+===== Release notes for ftape-2.04beta5, 29/12/95 =====
+
+Bas offline linux-tape
+----------------------
+For reasons only known to the majordomo mail list processor, Bas was
+kicked off the linux-tape list sometime during the summer.  Being
+overworked at his for-pay job, he didn't notice it much.  Instead I
+(Kai, khp@pip.dknet.dk) has worked on ftape to produce the 2.04(beta)
+version.
+
+zftape
+------
+Note that there exists a much improved version of ftape, written by
+Claus-Justus Heine <claus@willi.math.rwth-aachen.de> which is named
+zftape, which conforms to the QIC-80 specs on how to mark backups, and
+is capable of doing automatic compression.  However, zftape makes
+substantial changes to ftape, and I (Kai) have therefore declined to
+integrate zftape into ftape.  Hopefully, this will happen soon.
+
+CONFIG_QIC117 removed from the kernel
+-------------------------------------
+The biggest change of all is that ftape now will allocate its dma
+buffers when it is inserted.  The means that the CONFIG_QIC117 option
+has disappeared from the Linux kernel as of v1.3.34.  If you have an
+earlier kernel, simply answer 'no' to the question will do the trick
+(if you get complains about __get_free_pages() missing, contact the
+linux-tape mailing list).
+
+Note that ftape-2.04beta will work equally well on kernels with and
+without `ftape support'.  The only catch is, that you will waste
+around 96-128Kb of precious DMA'able memory on a box that has ftape
+support compiled in.
+
+Now for the real changes:
+
+- FC-20 can now use DMA channels 1, 2, and 3. Thanks to Daniel
+  Cohen, catman@wpi.edu.
+- ftape no longer requires a (gigantic) 96Kb buffer to be statically
+  allocated by the kernel.
+- Added new Iomega drive (8882) to vendors.h
+- -fno-strength-reduce added to Makefile, since GCC is broken.
+- i82078-1 (2Mbps) FDC support started.
+
+
+===== Release notes for ftape-2.03b, 27/05/95 =====
+
+- Prevented verify_area to return error if called with zero length.
+- Fixed a bug in flush_buffers that caused too much padding to be
+  written when a final segment had bad sectors.
+- Increased maximum fast-seek overshoot value from 5 to 10 segments.
+- Breaking loop after 5 retries when positioning fails.
+- Fixed wrong calculation of tape length for QIC-3010 and QIC-3020
+  tapes (densities were swapped).
+- Fixed wrong calculation of overshoot on seek_forward: Wrong sign
+  of error.
+- Suppress (false) error message due to new tape loaded.
+- Added two new CMS drives (11c3 and 11c5) to vendors.h.
+
+
+===== Release notes for ftape-2.03a, 09/05/95 =====
+
+- Fixed display of old error (even if already cleared) in ftape_open.
+- Improved tape length detection, ioctls would fail for 425 ft tapes.
+  Until the tape length is calculated with data from the header
+  segment, we'll use worst-case values.
+- Clear eof_mark after rewinding ioctls.
+- Fixed wrong version message (2.03 had 2.02g id).
+- Fixed bug that caused the fdc to be reset very frequently.
+  This shouldn't affect normal operation but the timing of the
+  report routines has changed again and that may cause problems.
+  We'll just have to find out....
+- Implemented correct write precompensation setting for QIC-3010/3020.
+- Cleaned up fdc_interrupt_wait routine. Hope it still works :-)
+- Finally removed (already disabled) special eof mark handling for
+  gnu tar.
+- Changed order of get_dma_residue and disable_dma in fdc-isr.c
+  because the current order would fail on at least one system.
+  We're back to the original order again, hope (and expect) this
+  doesn't break any other system.
+
+
+===== Release notes for ftape-2.03, 07/05/95 =====
+
+(Changes refer to the first ftape-2.02 release)
+
+Support for wide and extended length tapes
+------------------------------------------
+The Conner TSM 420 and 850 drives are reported to be working.
+I haven't received any reports about other brands; the TSM 420
+and 850 seem to be the most widely used wide drives.
+Extended length tapes (425 ft) with normal QIC-80 drives
+are operating too (At least I've had no reports stating otherwise).
+_Not_ yet completely supported (although they may work) are
+QIC-3020 drives and 2 Mbps floppy disk controllers won't work at
+the highest speed.
+If someone is kind enough to send me one of these, I'll include
+support for it too ;-)
+
+Easier configuration
+--------------------
+Problems due to wrong settings in the Makefile are prevented
+by using a configuration script that sets the necessary (kernel
+version dependent) compile time options.
+This kernel version is now determined from the sources found
+at /usr/src/linux, or if not found, the old way using
+/proc/version.
+Versioned modules will be used automatically when supported
+by- and configured in- the kernel.
+Note that the current modules code (1.1.87) is still broken
+and _needs_ the fix included in the insmod directory.
+Please don't send me any more Oops reports caused by insmod :-(
+
+Reduced module size
+-------------------
+The standard module size is much reduced and some compile time
+options can even reduce it further. (I don't recommend this
+for normal use but it can be handy for rescue diskettes)
+
+Option:           Approx. module size:
+
+<standard>             150 Kb
+NO_TRACE               125 Kb
+NO_TRACE_AT_ALL         67 Kb
+
+
+Much improved driver interruption
+---------------------------------
+Most possible loops have been broken and signal detection
+has been improved.
+In most cases the driver can be aborted by ^C (SIGINT) and
+SIGKILL (kill -9) will generate be a sure kill.
+(Note that aborting a tape operation may damage the last
+data written to tape)
+
+Improved error recovery
+-----------------------
+Ftape now returns an error (ENODATA) to the application if
+a segment proves to be unrecoverable and then skips the
+bad segment.
+This causes most applications to continue to work (tar
+and afio) loosing only a small amount (up to 29 Kb) of data.
+Retried read operations will now be done slighly off-track
+to improve the chance of success. Serious head off-track
+errors will be detected.
+
+FC-10 and FC-20 controllers
+---------------------------
+Ftape now supports both the old CMS FC-10 and the newer FC-20
+controllers.
+Because the operation of these cards is still undocumented,
+thus far they will only work with the default settings (See
+Makefile). Any feed-back on how to use them with other settings
+will be welcome !
+Compilation will fail if one changes the settings to illegal
+values.
+
+Kernels and compilers
+---------------------
+Ftape is currently being developped using the 2.5.8 compiler.
+The older 2.4.5 probably works too (Set option in Makefile!).
+I have no experience with any later compilers nor Elf support.
+Any information on this is welcome.
+The latest kernel I have tested ftape with is 1.2.6.
+
+Compression
+-----------
+An impressive collection of changes for ftape including
+on-the-fly compression is still lying on my desk.
+If 2.03 proves to be reliable I might start integrating these
+but as usual, I'm short in time :-(
+
+Formatting
+----------
+There is still no way to format tapes under Linux. As far as
+I know all attempts to write such a program have died now.
+Since formatted tapes are rather common now, I think all we
+need is a utility that writes a worst case pattern and verifies
+that with the drive put in verify mode, reducing margins.
+Any takers ?
+
+Furthermore
+-----------
+Cleaned up messages.
+Prepared to support multiple tape drives on one fdc.
+Thanks to all the people who sent bug reports and helped me
+improve the driver. Without trying to be complete I'll mention
+Gary Anderson (without his accurate reports and unreliable
+hardware there wouldn't be a 2.03), Stefan Kneifel (FC-20),
+Robert Broughton (FC-20, you were almost there ;-), Bjorn
+Ekwall (for the versioned modules and buggy insmod ;-), Peter
+Fox, Christopher Oliver, Ralph Whittaker and not the least
+Linus Torvalds (for Linux and keeping me busy because of
+changes to the kernel ;-)
+Thanks to anyone I forgot, for the bug reports, the ftape
+bashing and the mental support...
+
+
+That's it for now. Have Fun,
+
+Bas.
+
+
+===== Release notes for ftape-2.02g, 06/05/95 =====
+
+- Added extra test to break read-id loop with signal.
+- Changed rewind code to handle negative overshoot for drives
+  that take very long to start or stop.
+- Let use of get/set i/o-regions depend on kernel version.
+- Changed code to use a more general test for conditional
+  compilations depending on kernel version.
+- Improved micro-step functionality to go off-track only
+  while reading (id & data).
+- Added failure on tape-not-referenced bit in ftape_command.
+- Added FOREVER option to read-wait routine.
+- Changed read-id to use shorter timeout causing smaller
+  rewinds on timeout.
+- Made kernel-interface functions static.
+
+
+===== Release notes for ftape-2.02f, 03/05/95 =====
+
+- Added support for dual tape drives on my system, extended Configure
+  script to detect host 'dodo'.
+- Log media defect in history if ecc failed and no data was returned.
+- Fixed Configure script that was failing for kernel versions with
+  double digit version or revision numbers.
+
+
+===== Release notes for ftape-2.02e, 01/05/95 =====
+
+- Fixed reposition loop at logical eot (failing read_id).
+- Fixed 34 segment offset when rewinding.
+- Added fast seek capability for more than 255 segments.
+- Fixed wrong busy result from ftape_command causing reverse
+  seek to fail.
+- Added breakout from infinite rewind loop (if something fails).
+
+
+===== Release notes for ftape-2.02d, 30/04/95 =====
+
+- Improved abortion on signals: Interrupt will make a gracefull
+  exit, Kill will be less nice and should be used if everything
+  else fails.
+- Included check for tape-head off track.
+- Implemented exit from tape-start loop.
+- Added kernel io-port registration.
+- Implemented skip of failing segment (ENODATA) on ecc failure.
+  This allows afio and tar to continue when the tape is damaged.
+- Made distinction between drive names with different codes.
+
+
+===== Release notes for ftape-2.02c, 22/04/95 =====
+
+- Fixed too tight command queueing after tape stop/pause command
+  issued from within interrupt service routine (Showed as timeout
+  on Acknowledge errors during retries on some systems)
+- Tried to fix timeouts when using 425 ft tape because the extended
+  length doesn't seem to be detected by the hardware.
+  We now use the format code from the header segment so adjust the
+  timing after reading the header segment.
+- Fixed some messages stating 'unexpected something...' being not
+  unexpected anymore.
+- Started preparations for merge of dynamic buffer allocation and
+  compression code.
+- Changed some debug messages to include relevant segment information
+  at level 4.
+- Included early bail-out when drive offline, preventing a lot of
+  false messages.
+- Moved ftape_parameter_xxx() offsets into function instead of in calls.
+- Removed 'weird, drive busy but no data' error when caused by
+  an error during a read-id.
+- Improved 'timeout on acknowledge' diagnostics.
+- Moved MODULE option into Configure.
+- Reduced code size when no tracing at all was set (Claus Heine).
+- No longer log error code 0 (no error) as an error.
+
+
+===== Release notes for ftape-2.02b, 09/04/95 =====
+
+- Relaxed timing for status operation and displaying
+  abnormal results. Hopefully this shows what's going
+  wrong with the Conner TSM850R drives.
+- Created script for configuration, using version number
+  of kernel source if available, otherwise /proc/version.
+- Fixed conditionals in kernel-interface.c.
+- Removed unavoidable TRACE output.
+
+
+===== Release notes for ftape-2.02a, 01/04/95 =====
+
+- Implemented `new-style' (versioned) modules support for new
+  kernels.
+- Reduced size of module by moving static data to bss.
+- Now using version number of kernel source instead of running
+  kernel for kernel versions >= 1.1.82
+- Added feedback on drive speeds to vendor information.
+- Included fixed insmod sources to distribution (Let's hope
+  the modules distribution get fixed soon :-/).
+
+Note that I haven't yet implemented any of the code extension I
+received. I hope to find some time to do this soon.
+
+
+===== Release notes for ftape-2.02, 15/01/95 =====
+
+
+- Fixed failing repositioning when overshoot was incremented.
+- Fixed rate selection: Because of a deficiency in the QIC-117
+  specification one cannot distinguish between a not implemented
+  and a failing command. Therefor we now try to find out if the
+  drive does support this command before usage.
+- Fixed error retry using wrong offset in fdc-isr.
+- Improved retry code to retry only once on a single no-data
+  error in a segment.
+- Validate sector number extracted from eof mark because an
+  invalid file mark (due to ???) could cause kernel panic.
+- Split ftape-io.c into ftape-io.c and ftape-ctl.c files.
+- Corrected too high media error count after writing to
+  a bad tape.
+- Added #include <asm/segment.h> again because old kernel versions
+  need it.
+- Fixed fdc not being disabled when open failed because no tape
+  drive was found.
+- Fixed problem with soft error in sector 32 (shift operator with
+  shiftcount 32 is not defined).
+
+
+===== Release notes for ftape-2.01, 08/01/95 =====
+
+
+- Removed TESTING setting from distributed Makefile.
+- Fixed `mt asf' failure: Rewind was deferred to close which
+  overruled the fsf ioctl.
+- Prevented non-interruptible commands being interrupted.
+- Added missing timeout.pause setting.
+- Maximum tape speed read from drive type information table.
+  If the information is not in the table (0) the drive will
+  determine the speed itself and put a message in the logfile.
+  This information should then be added to the table in the
+  vendors.h file (and reported to me).
+- Added call to ftape_init_drive after soft reset for those
+  (antique) drives that don't do an implicit seek_load_point
+  after a reset or power up.
+- Don't try to set data rate if reset failed.
+- Prevent update of seek variables when starting from the
+  beginning or the end of the tape.
+- Fixed wrong adjustment of overshoot in seek_forward().
+- Added sync to Makefile (again).
+- Added code to diagnose timer problems (calibr.c).
+- Replaced time differences by timediff calls.
+- Removed reference to do_floppy from object for recent kernels.
+- Fixed wrong display of 'failing dma controller' message.
+- Removed various no longer used #include statements.
+- Added max. tape speed value to vendor-struct.
+- Changed ftape-command to check pre-conditions and wait
+  if needed.
+- Further updated qic117.h to rev G.
+- Combined command name table and restrictions table to one.
+  Extended this table with some new fields.
+- Increased timeout on Ack timer value and included code to
+  report out of spec behaviour.
+- Increased rewind timeout margin to calculated + 20%.
+- Improved data rate selection so it won't fail on some
+  older (pre standard) drives.
+- Changed initialisation code so drive will be rewound if the
+  driver is reloaded and the tape is not at bot.
+- Moved some of the flush operations from close to the ioctls.
+- Added exit code value to failing verify area message.
+- Loop until tape halted in smart-stop.
+- Fast seek handled specially if located at bot or eot.
+- Being more conservative on overshoot value.
+
+
+===== Release notes for ftape-2.00, 31/12/94 =====
+
+  The Install-guide is completely rewritten and now also includes
+some information on how to use the driver. If you're either new
+to ftape or new to Unix tape devices make sure to read it !
+
+  If you own a pci system and experience problems with the
+ftape driver make sure to read the README.PCI file. It contains
+some hints on how to fix your hardware.
+
+  For anybody who hasn't noticed: The version number of the
+driver has been incremented (The latest released version has
+been version 1.14d).
+  This has been done for two major reasons:
+
+  o  A new (better) error recovery scheme is implemented.
+  o  Support for new drive types has been added.
+
+  All these improvements/changes will probably include a couple
+of new (and old?) bugs. If you encounter any problems that you think
+I'm not yet aware of, feel free to send a report to <bas@vimec.nl>.
+  I recommend keeping a version of ftape-1.14d available, just
+in case ;-)
+
+  This version should work with all kernel versions from 1.0.9 up
+to 1.1.72 (and probably earlier and later versions too).
+
+
+Major new features:
+
+- Better handling of tapes with defects: When a sector repeatedly
+  (SOFT_RETRIES in ftape.h) cannot be written to or read from it is
+  marked as an hard error and gets skipped.
+  The error correction code can handle up to three of these hard
+  errors provided there are no other errors in that segment (32 Kb).
+  
+- Allows writing to tapes with defects (although the risc of loosing
+  data increases !)
+  Look for the media-defects entry printed with the statistics when
+  the tape is closed. A non-zero value here shows a bad tape.
+  [the actual count is wrong (too high), this is a known bug].
+
+- Use of backup header segment if first one is failing.
+
+- Support for extended length tapes with QIC-80: both 425 and 1100 ft.
+  0.25 inch tapes are now recognized and handled.
+
+- Support for new QIC-80 drives with 8 mm `wide' tapes (e.g. Conner
+  TSM 420).
+
+- Support for new QIC-3010 and QIC-3020 drives (experimental) with
+  both 0.25 inch and 8 mm tapes.
+
+Some minor features were added, a couple of small bugs were fixed and
+probably some new ones introduced ;-).
+
+[lseek() didn't make it into this version]
+
+Have fun,
+
+Bas.
+----

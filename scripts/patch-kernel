@@ -35,9 +35,11 @@ do
         break
     fi
 
-    echo "Applying $patch..."
+    echo -n "Applying $patch... "
     if (gunzip -dc $patchdir/$patch | grep -v '^\\' | patch -p1 -s -E -d $sourcedir)
     then
+	echo "done"
+    else
         echo "Patch failed.  Clean up yourself."
         break
     fi

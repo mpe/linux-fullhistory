@@ -45,6 +45,12 @@
 #define NFS_FH(inode)			(&(inode)->u.nfs_i.fhandle)
 #define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
 #define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
+#define NFS_CACHEINV(inode) \
+do { \
+	NFS_READTIME(inode) = jiffies - 1000000; \
+	NFS_OLDMTIME(inode) = 0; \
+} while (0)
+
 
 #ifdef __KERNEL__
 

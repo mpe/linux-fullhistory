@@ -59,12 +59,17 @@ S: Status
 	Obsolete:	Ex code. Something tagged obsolete generally means
 			its been replaced by a better system and you should
 			be using that.
-
 3C501 NETWORK DRIVER
 P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
+
+APM DRIVER
+P:      Rik Faith
+M:      faith@cs.unc.edu
+L:      linux-laptop@vger.rutgers.edu
+S:      Maintained
 
 APPLETALK NETWORK LAYER
 P:	Alan Cox & University Of Michigan
@@ -76,6 +81,18 @@ AX.25 NETWORK LAYER
 P:	Jon Naylor
 M:	jsn@cs.nott.ac.uk
 L:	linux-hams@vger.rutges.edu
+S:	Maintained
+
+FUTURE DOMAIN TMC-16x0 SCSI DRIVER (16-bit)
+P:      Rik Faith
+M:      faith@cs.unc.edu
+L:      linux-scsi@vger.rutgers.edu
+S:      Odd fixes (e.g., new signatures)
+
+FTAPE/QIC-117:
+P:	Kai Harrekilde-Petersen
+M:	khp@pip.dknet.dk [from 960401: khp@dolphinics.no]
+L:	linux-tape@vger.rutgers.edu
 S:	Maintained
 
 IPX NETWORK LAYER
@@ -90,6 +107,12 @@ M:	fritz@wuemaus.franken.de
 L:	isdn4linux@hub-wue.franken.de
 S:	Maintained
 
+MODULE SUPPORT [GENERAL], KERNELD
+P:	Bjorn Ekwall
+M:	bj0rn@blox.se
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 NETROM NETWORK LAYER
 P:	Jon Naylor
 M:	jsn@cs.nott.ac.uk
@@ -101,6 +124,12 @@ P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-net@vger.rutgers.edu
 S:	Odd Fixes <-> Maintained subject to workloads
+
+PPP PROTOCOL DRIVERS AND COMPRESSORS
+P:	Al Longyear
+M:	longyear@netcom.com, Cc: longyear@sii.com
+L:	linux-ppp@vger.rutgers.edu
+S:	Maintained
 
 SMP:
 P:	Alan Cox

@@ -31,7 +31,7 @@ struct msghdr
  */
  
 #define msg_control	msg_accrights	
-#define msg_controllen	msg_accrightslen;	
+#define msg_controllen	msg_accrightslen
 
 /* Control Messages */
 

@@ -413,7 +413,7 @@ int           init_module(void);
 void          cleanup_module(void);
 static int    autoprobed = 1, loading_module = 1;
 # else
-static u_char de1xx_irq[] = {2,3,4,5,7,0};
+static u_char de1xx_irq[] = {2,3,4,5,7,9,0};
 static u_char de2xx_irq[] = {5,9,10,11,15,0};
 static u_char de422_irq[] = {5,9,10,11,0};
 static u_char *depca_irq;
@@ -1648,19 +1648,19 @@ static void depca_dbg_open(struct device *dev)
     printk("\nDescriptor buffers:\nRX: ");
     for (i=0;i<lp->rxRingMask;i++){
       if (i < 3) {
-	printk("0x%8.8x  ", (u32) readl(&lp->rx_ring[i].base));
+	printk("0x%8.8x  ", readl(&lp->rx_ring[i].base));
       }
     }
-    printk("...0x%8.8x\n", (u32) readl(&lp->rx_ring[i].base));
+    printk("...0x%8.8x\n", readl(&lp->rx_ring[i].base));
     printk("TX: ");
     for (i=0;i<lp->txRingMask;i++){
       if (i < 3) {
-	printk("0x%8.8x  ", (u32) readl(&lp->tx_ring[i].base));
+	printk("0x%8.8x  ", readl(&lp->tx_ring[i].base));
       }
     }
-    printk("...0x%8.8x\n", (u32) readl(&lp->tx_ring[i].base));
+    printk("...0x%8.8x\n", readl(&lp->tx_ring[i].base));
     printk("Initialisation block at 0x%8.8lx\n",lp->sh_mem);
-    printk("\tmode: 0x%4.4x\n", (u16) readw(&p->mode));
+    printk("\tmode: 0x%4.4x\n",readw(&p->mode));
     printk("\tphysical address: ");
     for (i=0;i<ETH_ALEN-1;i++){
       printk("%2.2x:",(u_char)readb(&p->phys_addr[i]));
@@ -1671,8 +1671,8 @@ static void depca_dbg_open(struct device *dev)
       printk("%2.2x:",(u_char)readb(&p->mcast_table[i]));
     }
     printk("%2.2x\n",(u_char)readb(&p->mcast_table[i]));
-    printk("\trx_ring at: 0x%8.8x\n", (u32) readl(&p->rx_ring));
-    printk("\ttx_ring at: 0x%8.8x\n", (u32) readl(&p->tx_ring));
+    printk("\trx_ring at: 0x%8.8x\n",readl(&p->rx_ring));
+    printk("\ttx_ring at: 0x%8.8x\n",readl(&p->tx_ring));
     printk("dma_buffs: 0x%8.8lx\n",lp->dma_buffs);
     printk("Ring size:\nRX: %d  Log2(rxRingMask): 0x%8.8x\n", 
 	   (int)lp->rxRingMask + 1, 
@@ -1880,7 +1880,6 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  release_region(thisDepca.base_addr, DEPCA_TOTAL_SIZE);
   if (thisDepca.priv) {
     kfree(thisDepca.priv);
     thisDepca.priv = NULL;
@@ -1888,6 +1887,7 @@ cleanup_module(void)
   thisDepca.irq=0;
 
   unregister_netdev(&thisDepca);
+  release_region(thisDepca.base_addr, DEPCA_TOTAL_SIZE);
 }
 #endif /* MODULE */
 

@@ -208,6 +208,7 @@ static void scsi_dump_status(void);
 #define BLIST_BORKEN    0x04
 #define BLIST_KEY       0x08
 #define BLIST_SINGLELUN 0x10
+#define BLIST_NOTQ	0x20
 
 struct dev_info{
     const char * vendor;
@@ -235,6 +236,7 @@ static struct dev_info device_list[] =
 {"MAXTOR","XT-4170S","B5A", BLIST_NOLUN},       /* Locks-up sometimes when LUN>0 polled. */
 {"MAXTOR","XT-8760S","B7B", BLIST_NOLUN},       /* guess what? */
 {"MEDIAVIS","RENO CD-ROMX2A","2.03",BLIST_NOLUN},/*Responds to all lun */
+{"MICROP", "4110", "*", BLIST_NOTQ},		/* Buggy Tagged Queuing */
 {"NEC","CD-ROM DRIVE:841","1.0", BLIST_NOLUN},  /* Locks-up when LUN>0 polled. */
 {"RODIME","RO3000S","2.33", BLIST_NOLUN},       /* Locks up if polled for lun != 0 */
 {"SEAGATE", "ST157N", "\004|j", BLIST_NOLUN},   /* causes failed REQUEST SENSE on lun 1 
@@ -682,17 +684,6 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     SDpnt->scsi_level++;
 
   /*
-   * Set the tagged_queue flag for SCSI-II devices that purport to support
-   * tagged queuing in the INQUIRY data.
-   */
-  SDpnt->tagged_queue = 0;
-  if ((SDpnt->scsi_level >= SCSI_2) &&
-      (scsi_result[7] & 2)) {
-    SDpnt->tagged_supported = 1;
-    SDpnt->current_tag = 0;
-  }
-
-  /*
    * Accommodate drivers that want to sleep when they should be in a polling
    * loop.
    */
@@ -702,6 +693,18 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
    * Get any flags for this device.
    */
   bflags = get_device_flags (scsi_result);
+
+  /*
+   * Set the tagged_queue flag for SCSI-II devices that purport to support
+   * tagged queuing in the INQUIRY data.
+   */
+  SDpnt->tagged_queue = 0;
+  if ((SDpnt->scsi_level >= SCSI_2) &&
+      (scsi_result[7] & 2) &&
+      !(bflags & BLIST_NOTQ)) {
+    SDpnt->tagged_supported = 1;
+    SDpnt->current_tag = 0;
+  }
 
   /*
    * Some revisions of the Texel CD ROM drives have handshaking problems when

@@ -14,6 +14,8 @@
 
 #define NR_IRQS 16
 
+#define TIMER_IRQ 0
+
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 
@@ -237,6 +239,32 @@ SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
 	LEAVE_KERNEL \
 	RESTORE_MOST);
 	
+ 
+#define BUILD_TIMER_IRQ(chip,nr,mask) \
+asmlinkage void IRQ_NAME(nr); \
+asmlinkage void FAST_IRQ_NAME(nr); \
+asmlinkage void BAD_IRQ_NAME(nr); \
+__asm__( \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
+SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
+SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
+	"pushl $-"#nr"-2\n\t" \
+	SAVE_ALL \
+	ENTER_KERNEL \
+	ACK_##chip(mask) \
+	"incl "SYMBOL_NAME_STR(intr_count)"\n\t"\
+	"movl %esp,%ebx\n\t" \
+	"pushl %ebx\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
+	"addl $8,%esp\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	"jmp ret_from_sys_call\n");
+
 	
 /*
  *	Message pass must be a fast IRQ..
@@ -341,6 +369,29 @@ SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
 	SAVE_MOST \
 	ACK_##chip(mask) \
 	RESTORE_MOST);
+	
+#define BUILD_TIMER_IRQ(chip,nr,mask) \
+asmlinkage void IRQ_NAME(nr); \
+asmlinkage void FAST_IRQ_NAME(nr); \
+asmlinkage void BAD_IRQ_NAME(nr); \
+__asm__( \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
+SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
+SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
+	"pushl $-"#nr"-2\n\t" \
+	SAVE_ALL \
+	ACK_##chip(mask) \
+	"incl "SYMBOL_NAME_STR(intr_count)"\n\t"\
+	"movl %esp,%ebx\n\t" \
+	"pushl %ebx\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
+	"addl $8,%esp\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	"jmp ret_from_sys_call\n");
 
 #endif
 #endif

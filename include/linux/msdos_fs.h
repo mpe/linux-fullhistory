@@ -158,6 +158,9 @@ struct slot_info {
 
 #ifdef __KERNEL__
 
+typedef int (*fat_filldir_t)(filldir_t filldir, void *, const char *,
+			     int, int, off_t, off_t, int, ino_t);
+
 struct fat_cache {
 	kdev_t device; /* device number. 0 means unused. */
 	int ino; /* inode number. */
@@ -207,6 +210,9 @@ extern void fat_write_inode(struct inode *inode);
 
 /* dir.c */
 extern struct file_operations fat_dir_operations;
+extern int fat_readdirx(struct inode *inode, struct file *filp, void *dirent,
+			fat_filldir_t fat_filldir, filldir_t filldir,
+			int shortnames, int longnames, int both);
 extern int fat_readdir(struct inode *inode, struct file *filp,
 		       void *dirent, filldir_t);
 extern int fat_dir_ioctl(struct inode * inode, struct file * filp,

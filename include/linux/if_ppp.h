@@ -21,10 +21,10 @@
  */
 
 /*
- *  ==FILEVERSION 5==
+ *  ==FILEVERSION 960109==
  *
  *  NOTE TO MAINTAINERS:
- *     If you modify this file at all, increment the number above.
+ *     If you modify this file at all, please set the above date.
  *     if_ppp.h is shipped with a PPP distribution as well as with the kernel;
  *     if everyone increases the FILEVERSION number above, then scripts
  *     can do the right thing when deciding whether to install a new if_ppp.h
@@ -98,8 +98,8 @@ struct npioctl {
 
 /* Structure describing a CCP configuration option, for PPPIOCSCOMPRESS */
 struct ppp_option_data {
-	u_char	*ptr;
-	u_int	length;
+	__u8	*ptr;
+	__u32	length;
 	int	transmit;
 };
 

@@ -25,8 +25,13 @@ struct msdos_sb_info {
 	char dotsOK;
 	char showexec; /* 1 = only set x bit for com/exe/bat */
 	char sys_immutable; /* system files are immutable */
-	int vfat; /* 0=no vfat long filename support, 1=vfat support */
 	int umsdos; /* 1 if mounted by umsdos, 0 if not */
+
+	/* vfat specific flags follow */
+	int vfat; /* 0=no vfat long filename support, 1=vfat support */
+	char unicode_xlate; /* create escape sequences for unhandled Unicode */
+	char posix; /* Allow names like makefile and Makefile to coexist */
+	char numtail; /* Does first alias have a numeric '~1' type tail? */
 };
 
 #endif

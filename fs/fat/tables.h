@@ -5,8 +5,17 @@ struct unicode_value {
 
 extern unsigned char fat_a2alias[];		/* Ascii to alias name conversion table */
 extern struct unicode_value fat_a2uni[];	/* Ascii to Unicode conversion table */
-
 extern unsigned char *fat_uni2asc_pg[];
+
+/*
+ * Since Linux can't deal with Unicode in filenames, these provide
+ * a method to encode the Unicode names in a manner that the vfat
+ * filesystem can them decode back to Unicode.  This conversion
+ * only occurs when the filesystem was mounted with the 'uni_xlate' mount
+ * option.
+ */
+extern unsigned char fat_uni2code[];
+extern unsigned char fat_code2uni[];
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

@@ -1039,6 +1039,13 @@ CONFIG_SCSI_CONSTANTS
   understand if you enable this; it will enlarge your kernel by about
   12KB. If in doubt, say Y.
 
+Automatic Disk Geometery Translation 
+CONFIG_SCSI_AUTO_BIOSP
+  When this is set to Y, Linux will examine the parition table to
+  determine the mapping used under the other operating systems (e.g.
+  DOS), and set these parameters to the determined values, or if the
+  disk has no valid partition table, to an optimal value.
+
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
   This is a driver for all SCSI host adaptors manufactured by
@@ -1524,6 +1531,21 @@ CONFIG_WD80x3
 SMC Ultra support
 CONFIG_ULTRA
   If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt. If you plan to use
+  more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+SMC 9194 Support
+CONFIG_SMC9194
+  This has support for the SMC9xxx based Ethernet cards.  Choose this option
+  if you have a DELL laptop with the docking station, or another SMC9192/9194
+  based chipset.  Say Y if you want it compiled into the kernel, and read  
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
   available as a module ( = code which can be inserted in and removed
@@ -2626,22 +2648,19 @@ CONFIG_QIC02_DYNCONF
   program via anonymous ftp which is able to configure this driver
   during runtime. If you want this, say Y.
 
-QIC-117 tape support
+Ftape (QIC-80/Travan) support
 CONFIG_FTAPE
-  This option is obsolete as of Linux v1.3.34. If you would like to
-  use a tape drive that uses the floppy disk controller, like QIC-40,
-  QIC-80, QIC-117, QIC-3010 (examples: Colorado Jumbo or Conner
-  Tape-Stor), you want to read the Ftape-HOWTO, available via ftp
-  (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Then
-  get the ftape distribution v2.04 or higher from
-  sunsite.unc.edu:/pub/Linux/kernel/tapes/. Tape drives that attach to
-  the parallel port, like the Colorado Tracker, are not yet supported
-  by Linux.
-
-number of ftape buffers
-NR_FTAPE_BUFFERS 3
-  This option is obsolete since Linux v1.3.34. Upgrade your ftape
-  distribution to v2.04.
+  If you have a tape drive that is connected to your floppy
+  controller, say Y here. Some tape drives (like the Iomega Ditto
+  3200) come with a high speed controller of its own.  These drives
+  (and their companion controller) is also supported. If you have a
+  special controller (such as the CMS FC-10, FC-20, Iomega Mach-II, or
+  Ditto Dash), you must configure it by editing the file
+  drivers/char/ftape/Makefile.  This driver is also available as a
+  runtime loadable module ( = code which can be inserted in and
+  removed from the running kernel whenever you want). If you want to
+  compile it as a module, say M here and read
+  Documentation/modules.txt.
 
 Zilog serial support
 CONFIG_SUN_ZS

@@ -34,13 +34,31 @@
         - removed redundant information display
         - some code reworking
 
+   Chagnes by Steve Kipisz (bungy@ibm.net or kipisz@vnet.ibm.com)
+                           (January 18 1996):
+        - swapped WWOR and WWCR in ibmtr.h
+        - moved some init code from tok_probe into trdev_init.  The
+          PCMCIA code can call trdev_init to complete initializing
+          the driver.
+	- added -DPCMCIA to support PCMCIA
+	- detecting PCMCIA Card Removal in interrupt handler.  if
+	  ISRP is FF, then a PCMCIA card has been removed
+
    Warnings !!!!!!!!!!!!!!
       This driver is only partially sanitized for support of multiple
       adapters.  It will almost definately fail if more than one
       active adapter is identified.
 */
 	
+#ifdef PCMCIA
+#define MODULE
+#endif
+
 #include <linux/module.h>
+
+#ifdef PCMCIA
+#undef MODULE
+#endif
 
 #define NO_AUTODETECT 1
 #undef NO_AUTODETECT
@@ -86,6 +104,7 @@ static char mcchannelid[]={0x04, 0x0d, 0x04, 0x01,
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/interrupt.h>
+#include <linux/delay.h>
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 #include <stddef.h>
@@ -133,8 +152,9 @@ static short TokBaseAddrs[]={MMIOStartLocP, /* Addr-s to scan */
 int tok_probe(struct device *dev);
 unsigned char get_sram_size(struct tok_info *adapt_info);
 
-static void tok_init_card(unsigned long dev_addr);
-static void tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static int  tok_init_card(struct device *dev);
+int trdev_init(struct device *dev);
+void tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 static void initial_tok_int(struct device *dev);
 
@@ -506,14 +526,8 @@ int tok_probe(struct device *dev)
 
   dev->base_addr=PIOaddr; /* set the value for device */
 
-  dev->open=tok_open;
-  dev->stop=tok_close;
-  dev->hard_start_xmit=tok_send_packet;
-  dev->get_stats = NULL;
-  dev->get_stats = tok_get_stats;
-  dev->set_multicast_list = NULL;
-  tr_setup(dev);
-  tok_init_card((unsigned long)dev);
+  trdev_init(dev);
+  tok_init_card(dev);
 
   return 0;  /* Return 0 to indicate we have found a Token Ring card. */
 }
@@ -541,12 +555,32 @@ unsigned char get_sram_size(struct tok_info *adapt_info) {
               (adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2)+4);
 }
 
+
+int trdev_init(struct device *dev)
+{
+  struct tok_info *ti=(struct tok_info *)dev->priv;
+
+  ti->open_status=CLOSED;
+
+  dev->init=tok_init_card;
+  dev->open=tok_open;
+  dev->stop=tok_close;
+  dev->hard_start_xmit=tok_send_packet;
+  dev->get_stats = NULL;
+  dev->get_stats = tok_get_stats;
+  dev->set_multicast_list = NULL;
+  tr_setup(dev);
+
+  return 0;
+}
+
+
 static int tok_open(struct device *dev) {
 
    struct tok_info *ti=(struct tok_info *)dev->priv;
 
    if(ti->open_status==CLOSED) {
-      tok_init_card((unsigned long)dev);
+      tok_init_card(dev);
    }
 
 	if(ti->open_status==IN_PROGRESS) {
@@ -590,7 +624,7 @@ static int tok_close(struct device *dev) {
 	return 0;
 }
 
-static void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
+void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
 
 	unsigned char status;
@@ -621,9 +655,27 @@ static void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	
 	status=*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_ODD);
 
+#ifdef PCMCIA
+	/* Check if the PCMCIA card was pulled. */
+	if (status == 0xFF)
+	{
+	   DPRINTK("PCMCIA card removed.\n");
+	   dev->interrupt = 0;
+	   return;
+	}
+
+	/* Check ISRP EVEN too. */
+	if ( *(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
+	{
+	   DPRINTK("PCMCIA card removed.\n");
+	   dev->interrupt = 0;
+	   return;
+	}
+#endif
+
 	if(status & ADAP_CHK_INT) {
 		int i;
-		unsigned char *check_reason=ti->mmio + ntohs(*(unsigned short *)(ti->mmio + ACA_OFFSET + ACA_RW +WWCR_EVEN));
+                unsigned char *check_reason=ti->sram + ntohs(*(unsigned short *)(ti->mmio + ACA_OFFSET + ACA_RW +WWCR_EVEN));
 
 		DPRINTK("adapter check interrupt\n");
 
@@ -941,12 +993,10 @@ static void initial_tok_int(struct device *dev) {
 
 }
 
-static void tok_init_card(unsigned long dev_addr) {
+static int tok_init_card(struct device *dev) {
 
    struct tok_info *ti;
 	short PIOaddr;
-	int i;
-	struct  device *dev=(struct device *)dev_addr;
         PIOaddr = dev->base_addr;
         ti=(struct tok_info *) dev->priv;
 
@@ -968,7 +1018,7 @@ static void tok_init_card(unsigned long dev_addr) {
 	DPRINTK("resetting card\n");
 #endif
 	outb(0,PIOaddr+ADAPTRESET);
-	for(i=jiffies+5;jiffies<=i;); /* wait 50ms */
+        udelay(50000);
 	outb(0,PIOaddr+ADAPTRESETREL);
 #ifndef TR_NEWFORMAT
 	DPRINTK("card reset\n");
@@ -977,7 +1027,7 @@ static void tok_init_card(unsigned long dev_addr) {
         ti->open_status=IN_PROGRESS;
 
 	*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN)=INT_ENABLE;
-
+        return 0;
 }
 
 static void open_sap(unsigned char type,struct device *dev) {

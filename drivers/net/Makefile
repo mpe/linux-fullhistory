@@ -63,6 +63,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SMC9194),y)
+L_OBJS += smc9194.o
+else
+  ifeq ($(CONFIG_SMC9194),m)
+  M_OBJS += smc9194.o
+  endif
+endif
+
+
 ifeq ($(CONFIG_WD80x3),y)
 L_OBJS += wd.o
 CONFIG_8390_BUILTIN = y

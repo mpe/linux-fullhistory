@@ -19,11 +19,15 @@
  *    Documentation
  * January 1996, Rik Faith (faith@cs.unc.edu):
  *    Make /proc/apm easy to format (bump driver version)
+ * March 1996, Rik Faith (faith@cs.unc.edu):
+ *    Prohibit APM BIOS calls unless apm_enabled.
+ *    (Thanks to Ulrich Windl <Ulrich.Windl@rz.uni-regensburg.de>)
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
  *    0.7: changed /proc/apm format, Linux 1.3.58
  *    0.8: fixed gcc 2.7.[12] compilation problems, Linux 1.3.59
+ *    0.9: only call bios if bios is present, Linux 1.3.72
  *
  * Reference:
  *
@@ -307,7 +311,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "0.8";/* no spaces */
+static char			driver_version[] = "0.9";/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -403,6 +407,7 @@ static int apm_set_power_state(u_short state)
 }
 
 #ifdef CONFIG_APM_DISPLAY_BLANK
+/* Called by apm_display_blank and apm_display_unblank when apm_enabled. */
 static int apm_set_display_power_state(u_short state)
 {
 	u_short	error;
@@ -415,6 +420,7 @@ static int apm_set_display_power_state(u_short state)
 #endif
 
 #ifdef CONFIG_APM_DO_ENABLE
+/* Called by apm_setup if apm_enabled will be true. */
 static int apm_enable_power_management(void)
 {
 	u_short	error;
@@ -460,12 +466,13 @@ static void apm_error(char *str, int err)
 		printk("apm_bios: %s: unknown error code %#2.2x\n", str, err);
 }
 
+/* Called from console driver -- must make sure apm_enabled. */
 int apm_display_blank(void)
 {
 #ifdef CONFIG_APM_DISPLAY_BLANK
 	int	error;
 
-	if (apm_bios_info.version == 0)
+	if (!apm_enabled || apm_bios_info.version == 0)
 		return 0;
 	error = apm_set_display_power_state(APM_STATE_STANDBY);
 	if (error == APM_SUCCESS)
@@ -475,12 +482,13 @@ int apm_display_blank(void)
 	return 0;
 }
 
+/* Called from console driver -- must make sure apm_enabled. */
 int apm_display_unblank(void)
 {
 #ifdef CONFIG_APM_DISPLAY_BLANK
 	int error;
 
-	if (apm_bios_info.version == 0)
+	if (!apm_enabled || apm_bios_info.version == 0)
 		return 0;
 	error = apm_set_display_power_state(APM_STATE_READY);
 	if (error == APM_SUCCESS)
@@ -715,6 +723,7 @@ static void do_apm_timer(unsigned long unused)
 	add_timer(&apm_timer);
 }
 
+/* Called from sys_idle, must make sure apm_enabled. */
 int apm_do_idle(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
@@ -734,16 +743,17 @@ int apm_do_idle(void)
 #endif
 }
 
+/* Called from sys_idle, must make sure apm_enabled. */
 void apm_do_busy(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
 	unsigned short	error;
 
+	if (!apm_enabled)
+		return;
+	
 #ifndef ALWAYS_CALL_BUSY
 	if (!clock_slowed)
-		return;
-#else
-	if (!apm_enabled)
 		return;
 #endif
 

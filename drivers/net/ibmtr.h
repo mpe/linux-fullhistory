@@ -60,10 +60,10 @@
 /* 00 for 8k, 01 for 16k, 10 for 32k, 11 for 64k  */
 #define WRBR_EVEN       0x02    /* Write region base registers - even and odd */
 #define WRBR_ODD        0x03
-#define WWCR_EVEN       0x04    /* Write window close registers - even and odd */
-#define WWCR_ODD        0x05
-#define WWOR_EVEN       0x06    /* Write window open registers - even and odd */
-#define WWOR_ODD        0x07
+#define WWOR_EVEN       0x04    /* Write window open registers - even and odd */
+#define WWOR_ODD        0x05
+#define WWCR_EVEN       0x06    /* Write window close registers - even and odd */
+#define WWCR_ODD        0x07
 
 /* Interrupt status registers - PC system  - even and odd */
 #define ISRP_EVEN       0x08

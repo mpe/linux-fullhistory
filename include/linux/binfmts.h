@@ -40,7 +40,6 @@ struct linux_binfmt {
 
 extern int register_binfmt(struct linux_binfmt *);
 extern int unregister_binfmt(struct linux_binfmt *);
-extern struct linux_binfmt * get_binfmt_list(void);
 
 extern int read_exec(struct inode *inode, unsigned long offset,
 	char * addr, unsigned long count, int to_kmem);

@@ -524,7 +524,7 @@ static void ide_geninit (struct gendisk *gd)
  */
 static void init_gendisk (ide_hwif_t *hwif)
 {
-	struct gendisk *gd;
+	struct gendisk *gd, **gdp;
 	unsigned int unit, units, minors;
 	int *bs;
 
@@ -556,8 +556,9 @@ static void init_gendisk (ide_hwif_t *hwif)
 	gd->init	= ide_geninit;		/* initialization function */
 	gd->real_devices= hwif;			/* ptr to internal data */
 
-	gd->next = gendisk_head;		/* link new major into list */
-	hwif->gd = gendisk_head = gd;
+	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next)) ;
+	gd->next = NULL;			/* link to tail of list */
+	hwif->gd = *gdp = gd;
 }
 
 static void do_reset1 (ide_drive_t *, int);		/* needed below */
@@ -2168,6 +2169,15 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			drive->removeable = 1;
 	}
 
+	/* SunDisk drives: treat as non-removeable, force one unit */
+	if (id->model[0] == 'S' && id->model[1] == 'u') {
+		drive->removeable = 0;
+		if (drive->select.all & (1<<4)) {
+		    drive->present = 0;
+		    return;
+		}
+	}
+	
 	drive->media = ide_disk;
 	/* Extract geometry if we did not already have one for the drive */
 	if (!drive->present) {
@@ -3004,6 +3014,63 @@ static void probe_for_hwifs (void)
 #endif
 }
 
+static int hwif_init (int h)
+{
+	ide_hwif_t *hwif = &ide_hwifs[h];
+	void (*rfn)(void);
+	
+	if (hwif->noprobe)
+		return 0;
+	else {
+		if (hwif->io_base == HD_DATA)
+			probe_cmos_for_drives (hwif);
+		probe_hwif (hwif);
+		if (!hwif->present)
+			return 0;
+	}
+	if (!hwif->irq) {
+		if (!(hwif->irq = default_irqs[h])) {
+			printk("%s: DISABLED, NO IRQ\n", hwif->name);
+			return (hwif->present = 0);
+		}
+	}
+#ifdef CONFIG_BLK_DEV_HD
+	if (hwif->irq == HD_IRQ && hwif->io_base != HD_DATA) {
+		printk("%s: CANNOT SHARE IRQ WITH OLD HARDDISK DRIVER (hd.c)\n", hwif->name);
+		return (hwif->present = 0);
+	}
+#endif /* CONFIG_BLK_DEV_HD */
+	
+	hwif->present = 0; /* we set it back to 1 if all is ok below */
+	switch (hwif->major) {
+	case IDE0_MAJOR: rfn = &do_ide0_request; break;
+#if MAX_HWIFS > 1
+	case IDE1_MAJOR: rfn = &do_ide1_request; break;
+#endif
+#if MAX_HWIFS > 2
+	case IDE2_MAJOR: rfn = &do_ide2_request; break;
+#endif
+#if MAX_HWIFS > 3
+	case IDE3_MAJOR: rfn = &do_ide3_request; break;
+#endif
+	default:
+		printk("%s: request_fn NOT DEFINED\n", hwif->name);
+		return (hwif->present = 0);
+	}
+	if (register_blkdev (hwif->major, hwif->name, &ide_fops)) {
+		printk("%s: UNABLE TO GET MAJOR NUMBER %d\n", hwif->name, hwif->major);
+	} else if (init_irq (hwif)) {
+		printk("%s: UNABLE TO GET IRQ %d\n", hwif->name, hwif->irq);
+		(void) unregister_blkdev (hwif->major, hwif->name);
+	} else {
+		init_gendisk(hwif);
+		blk_dev[hwif->major].request_fn = rfn;
+		read_ahead[hwif->major] = 8;	/* (4kB) */
+		hwif->present = 1;	/* success */
+	}
+	return hwif->present;
+}
+
 /*
  * This is gets invoked once during initialization, to set *everything* up
  */
@@ -3020,70 +3087,71 @@ int ide_init (void)
 	/*
 	 * Probe for drives in the usual way.. CMOS/BIOS, then poke at ports
 	 */
-	for (h = 0; h < MAX_HWIFS; ++h) {
-		ide_hwif_t *hwif = &ide_hwifs[h];
-		if (!hwif->noprobe) {
-			if (hwif->io_base == HD_DATA)
-				probe_cmos_for_drives (hwif);
-			probe_hwif (hwif);
-		}
-		if (hwif->present) {
-			if (!hwif->irq) {
-				if (!(hwif->irq = default_irqs[h])) {
-					printk("%s: DISABLED, NO IRQ\n", hwif->name);
-					hwif->present = 0;
-					continue;
-				}
-			}
-#ifdef CONFIG_BLK_DEV_HD
-			if (hwif->irq == HD_IRQ && hwif->io_base != HD_DATA) {
-				printk("%s: CANNOT SHARE IRQ WITH OLD HARDDISK DRIVER (hd.c)\n", hwif->name);
-				hwif->present = 0;
-			}
-#endif /* CONFIG_BLK_DEV_HD */
-		}
-	}
-
-	/*
-	 * Now we try to set up irqs and major devices for what was found
-	 */
-	for (h = MAX_HWIFS-1; h >= 0; --h) {
-		void (*rfn)(void);
-		ide_hwif_t *hwif = &ide_hwifs[h];
-		if (!hwif->present)
-			continue;
-		hwif->present = 0; /* we set it back to 1 if all is ok below */
-		switch (hwif->major) {
-			case IDE0_MAJOR: rfn = &do_ide0_request; break;
-#if MAX_HWIFS > 1
-			case IDE1_MAJOR: rfn = &do_ide1_request; break;
-#endif
-#if MAX_HWIFS > 2
-			case IDE2_MAJOR: rfn = &do_ide2_request; break;
-#endif
-#if MAX_HWIFS > 3
-			case IDE3_MAJOR: rfn = &do_ide3_request; break;
-#endif
-			default:
-				printk("%s: request_fn NOT DEFINED\n", hwif->name);
-				continue;
-		}
-		if (register_blkdev (hwif->major, hwif->name, &ide_fops)) {
-			printk("%s: UNABLE TO GET MAJOR NUMBER %d\n", hwif->name, hwif->major);
-		} else if (init_irq (hwif)) {
-			printk("%s: UNABLE TO GET IRQ %d\n", hwif->name, hwif->irq);
-			(void) unregister_blkdev (hwif->major, hwif->name);
-		} else {
-			init_gendisk(hwif);
-			blk_dev[hwif->major].request_fn = rfn;
-			read_ahead[hwif->major] = 8;	/* (4kB) */
-			hwif->present = 1;	/* success */
-		}
-	}
+	for (h = 0; h < MAX_HWIFS; ++h)
+		hwif_init(h);
 
 #ifdef CONFIG_BLK_DEV_IDETAPE
 	idetape_register_chrdev();	/* Register character device interface to the ide tape */
 #endif /* CONFIG_BLK_DEV_IDETAPE */
 	
 	return 0;
+}
+
+int ide_register(int io_base, int ctl_port, int irq)
+{
+	int h, i;
+	ide_hwif_t *hwif;
+	for (h = 0; h < MAX_HWIFS; ++h) {
+		hwif = &ide_hwifs[h];
+		if (hwif->present == 0) break;
+	}
+	hwif->io_base = io_base;
+	hwif->ctl_port = ctl_port;
+	hwif->irq = irq;
+	hwif->noprobe = 0;
+	if (hwif_init(h) != 0) {
+		hwif->gd->real_devices = hwif->drives[0].name;
+		for (i = 0; i < hwif->gd->nr_real; i++)
+			revalidate_disk(MKDEV(hwif->major, i<<PARTN_BITS));
+		return h;
+	}
+	else
+		return -1;
+}
+
+void ide_unregister(int h)
+{
+	struct gendisk *prev_gd, *gd;
+	ide_hwif_t *hwif;
+
+	if ((h < 0) || (h >= MAX_HWIFS))
+		return;
+	hwif = &ide_hwifs[h];
+	if (hwif->present) {
+		hwif->present = 0;
+		/* This assumes that there is only one group member */
+		free_irq(hwif->irq, NULL);
+		kfree(hwif->hwgroup);
+		irq_to_hwgroup[hwif->irq] = NULL;
+		unregister_blkdev(hwif->major, hwif->name);
+		kfree(blksize_size[hwif->major]);
+		blk_dev[hwif->major].request_fn = NULL;
+		blksize_size[hwif->major] = NULL;
+		gd = gendisk_head; prev_gd = NULL;
+		while (gd && (gd != hwif->gd)) {
+			prev_gd = gd;
+			gd = gd->next;
+		}
+		if (gd != hwif->gd)
+			printk("gd not in disk chain!\n");
+		else {
+			if (prev_gd != NULL)
+				prev_gd->next = gd->next;
+			else
+				gendisk_head = gd->next;
+			kfree(gd->sizes);
+			kfree(gd->part);
+			kfree(gd);
+		}
+	}
 }

@@ -30,8 +30,11 @@ static void
 print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey)
 {
     int i, j;
+    char menu_item[menu_width+1];
 
-    j = first_alpha(item);
+    strncpy(menu_item, item, menu_width);
+    menu_item[menu_width] = 0;
+    j = first_alpha(menu_item);
 
     /* Clear 'residue' of last item */
     wattrset (win, menubox_attr);
@@ -39,10 +42,10 @@ print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey
     for (i = 0; i < menu_width; i++)
 	waddch (win, ' ');
     wattrset (win, selected ? item_selected_attr : item_attr);
-    mvwaddstr (win, choice, item_x, (char *)item);
+    mvwaddstr (win, choice, item_x, menu_item);
     if (hotkey) {
     	wattrset (win, selected ? tag_key_selected_attr : tag_key_attr);
-    	mvwaddch(win, choice, item_x+j, item[j]);
+    	mvwaddch(win, choice, item_x+j, menu_item[j]);
     }
 }
 
@@ -169,7 +172,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
      */
     item_x = 0;
     for (i = 0; i < item_no; i++) {
-	item_x = MAX (item_x, strlen (items[i * 2 + 1]) + 2);
+	item_x = MAX (item_x, MIN(menu_width, strlen (items[i * 2 + 1]) + 2));
 	if (strcmp(current, items[i*2]) == 0) choice = i;
     }
 
@@ -301,7 +304,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 	case '\n':
 	    delwin (dialog);
 	    if (button == 2) 
-            	fprintf(stderr, "\"%s\" \"%s\"", 
+            	fprintf(stderr, "%s \"%s\"", 
 			items[(scroll + choice) * 2],
 			items[(scroll + choice) * 2 + 1] +
 			first_alpha(items[(scroll + choice) * 2 + 1]));

@@ -106,11 +106,6 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 	}
 	return -EINVAL;
 }
-
-struct linux_binfmt * get_binfmt_list()
-{
-	return formats;
-}
 #endif	/* CONFIG_MODULES */
 
 int open_inode(struct inode * inode, int mode)
@@ -535,7 +530,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	}
 #endif
 	for (try=0; try<2; try++) {
-		for (fmt = get_binfmt_list() ; fmt ; fmt = fmt->next) {
+		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
 			if (!fn)
 				continue;

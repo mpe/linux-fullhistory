@@ -25,6 +25,7 @@
 #define DE4X5_APROM  iobase+(0x048 << lp->bus)  /* Ethernet Address PROM */
 #define DE4X5_BROM   iobase+(0x048 << lp->bus)  /* Boot ROM Register */
 #define DE4X5_SROM   iobase+(0x048 << lp->bus)  /* Serial ROM Register */
+#define DE4X5_MII    iobase+(0x048 << lp->bus)  /* MII Interface Register */
 #define DE4X5_DDR    iobase+(0x050 << lp->bus)  /* Data Diagnostic Register */
 #define DE4X5_FDR    iobase+(0x058 << lp->bus)  /* Full Duplex Register */
 #define DE4X5_GPT    iobase+(0x058 << lp->bus)  /* General Purpose Timer Reg.*/
@@ -359,8 +360,18 @@
 #define BROM_DT   0x000000ff       /* Data Byte */
 
 /*
-** DC21041 Serial/Ethernet Address ROM (DE4X5_SROM)
+** DC21041 Serial/Ethernet Address ROM (DE4X5_SROM, DE4X5_MII)
 */
+#define MII_MDI   0x00080000       /* MII Management Data In */
+#define MII_MDO   0x00060000       /* MII Management Mode/Data Out */
+#define MII_MRD   0x00040000       /* MII Management Define Read Mode */
+#define MII_MWR   0x00000000       /* MII Management Define Write Mode */
+#define MII_MDT   0x00020000       /* MII Management Data Out */
+#define MII_MDC   0x00010000       /* MII Management Clock */
+#define MII_RD    0x00004000       /* Read from MII */
+#define MII_WR    0x00002000       /* Write to MII */
+#define MII_SEL   0x00000800       /* Select MII when RESET */
+
 #define SROM_MODE 0x00008000       /* MODE_1: 0,  MODE_0: 1  (read only) */
 #define SROM_RD   0x00004000       /* Read from Boot ROM */
 #define SROM_WR   0x00002000       /* Write to Boot ROM */
@@ -373,6 +384,89 @@
 #define DT_IN     0x00000004       /* Serial Data In */
 #define DT_CLK    0x00000002       /* Serial ROM Clock */
 #define DT_CS     0x00000001       /* Serial ROM Chip Select */
+
+#define MII_PREAMBLE 0xffffffff    /* MII Management Preamble */
+#define MII_TEST     0xaaaaaaaa    /* MII Test Signal */
+#define MII_STRD     0x06          /* Start of Frame+Op Code: use low nibble */
+#define MII_STWR     0x0a          /* Start of Frame+Op Code: use low nibble */
+
+#define MII_CR       0x00          /* MII Management Control Register */
+#define MII_SR       0x01          /* MII Management Status Register */
+#define MII_ID0      0x02          /* PHY Identifier Register 0 */
+#define MII_ID1      0x03          /* PHY Identifier Register 1 */
+#define MII_ANA      0x04          /* Auto Negotiation Advertisement */
+#define MII_ANLPA    0x05          /* Auto Negotiation Link Partner Ability */
+#define MII_ANE      0x06          /* Auto Negotiation Expansion */
+#define MII_ANP      0x07          /* Auto Negotiation Next Page TX */
+
+#define DE4X5_MAX_MII 32           /* Maximum address of MII PHY devices */
+
+/*
+** MII Management Control Register
+*/
+#define MII_CR_RST  0x8000         /* RESET the PHY chip */
+#define MII_CR_LPBK 0x4000         /* Loopback enable */
+#define MII_CR_SPD  0x2000         /* 0: 10Mb/s; 1: 100Mb/s */
+#define MII_CR_10   0x0000         /* Set 10Mb/s */
+#define MII_CR_100  0x2000         /* Set 100Mb/s */
+#define MII_CR_ASSE 0x1000         /* Auto Speed Select Enable */
+#define MII_CR_PD   0x0800         /* Power Down */
+#define MII_CR_ISOL 0x0400         /* Isolate Mode */
+#define MII_CR_RAN  0x0200         /* Restart Auto Negotiation */
+#define MII_CR_FDM  0x0100         /* Full Duplex Mode */
+#define MII_CR_CTE  0x0080         /* Collision Test Enable */
+
+/*
+** MII Management Status Register
+*/
+#define MII_SR_T4C  0x8000         /* 100BASE-T4 capable */
+#define MII_SR_TXFD 0x4000         /* 100BASE-TX Full Duplex capable */
+#define MII_SR_TXHD 0x2000         /* 100BASE-TX Half Duplex capable */
+#define MII_SR_TFD  0x1000         /* 10BASE-T Full Duplex capable */
+#define MII_SR_THD  0x0800         /* 10BASE-T Half Duplex capable */
+#define MII_SR_ASSC 0x0020         /* Auto Speed Selection Complete*/
+#define MII_SR_RFD  0x0010         /* Remote Fault Detected */
+#define MII_SR_ANC  0x0008         /* Auto Negotiation capable */
+#define MII_SR_LKS  0x0004         /* Link Status */
+#define MII_SR_JABD 0x0002         /* Jabber Detect */
+#define MII_SR_XC   0x0001         /* Extended Capabilities */
+
+/*
+** MII Management Auto Negotiation Advertisement Register
+*/
+#define MII_ANA_TAF  0x03e0        /* Technology Ability Field */
+#define MII_ANA_T4AM 0x0400        /* T4 Technology Ability Mask */
+#define MII_ANA_TXAM 0x0180        /* TX Technology Ability Mask */
+#define MII_ANA_FDAM 0x0140        /* Full Duplex Technology Ability Mask */
+#define MII_ANA_HDAM 0x02a0        /* Half Duplex Technology Ability Mask */
+#define MII_ANA_100M 0x0380        /* 100Mb Technology Ability Mask */
+#define MII_ANA_10M  0x0060        /* 10Mb Technology Ability Mask */
+#define MII_ANA_CSMA 0x0001        /* CSMA-CD Capable */
+
+/*
+** MII Management Auto Negotiation Remote End Register
+*/
+#define MII_ANLPA_NP   0x8000      /* Next Page (Enable) */
+#define MII_ANLPA_ACK  0x4000      /* Remote Acknowledge */
+#define MII_ANLPA_RF   0x2000      /* Remote Fault */
+#define MII_ANLPA_TAF  0x03e0      /* Technology Ability Field */
+#define MII_ANLPA_T4AM 0x0400      /* T4 Technology Ability Mask */
+#define MII_ANLPA_TXAM 0x0180      /* TX Technology Ability Mask */
+#define MII_ANLPA_FDAM 0x0140      /* Full Duplex Technology Ability Mask */
+#define MII_ANLPA_HDAM 0x02a0      /* Half Duplex Technology Ability Mask */
+#define MII_ANLPA_100M 0x0380      /* 100Mb Technology Ability Mask */
+#define MII_ANLPA_10M  0x0060      /* 10Mb Technology Ability Mask */
+#define MII_ANLPA_CSMA 0x0001      /* CSMA-CD Capable */
+
+/*
+** SROM Media Definitions (ABG SROM Section)
+*/
+#define MEDIA_NWAY     0x0080      /* Nway (Auto Negotiation) on PHY */
+#define MEDIA_MII      0x0040      /* MII Present on the adapter */
+#define MEDIA_FIBRE    0x0008      /* Fibre Media present */
+#define MEDIA_AUI      0x0004      /* AUI Media present */
+#define MEDIA_TP       0x0002      /* TP Media present */
+#define MEDIA_BNC      0x0001      /* BNC Media present */
 
 /*
 ** DC21040 Full Duplex Register (DE4X5_FDR)
@@ -392,11 +486,12 @@
 #define GEP_LNP  0x00000080        /* Link Pass               (input) */
 #define GEP_SLNK 0x00000040        /* SYM LINK                (input) */
 #define GEP_SDET 0x00000020        /* Signal Detect           (input) */
+#define GEP_HRST 0x00000010        /* Hard RESET (to PHY)     (output) */
 #define GEP_FDXD 0x00000008        /* Full Duplex Disable     (output) */
 #define GEP_PHYL 0x00000004        /* PHY Loopback            (output) */
 #define GEP_FLED 0x00000002        /* Force Activity LED on   (output) */
 #define GEP_MODE 0x00000001        /* 0: 10Mb/s,  1: 100Mb/s           */
-#define GEP_INIT 0x0000010f        /* Setup inputs (0) and outputs (1) */
+#define GEP_INIT 0x0000011f        /* Setup inputs (0) and outputs (1) */
 
 
 /*
@@ -556,21 +651,32 @@
 /*
 ** Media / mode state machine definitions
 */
-#define NC         0x0000          /* No Connection */
-#define TP         0x0001          /* 10Base-T */
-#define TP_NW      0x0002          /* 10Base-T with Nway */
-#define BNC        0x0004          /* Thinwire */
-#define AUI        0x0008          /* Thickwire */
-#define BNC_AUI    0x0010          /* BNC/AUI on DC21040 indistinguishable */
-#define ANS        0x0020          /* Intermediate AutoNegotiation State */
-#define EXT_SIA    0x0400	    /* external SIA (as on DEC MULTIA) */
+#define NC              0x0000     /* No Connection */
+#define TP              0x0001     /* 10Base-T */
+#define TP_NW           0x0002     /* 10Base-T with Nway */
+#define BNC             0x0004     /* Thinwire */
+#define AUI             0x0008     /* Thickwire */
+#define BNC_AUI         0x0010     /* BNC/AUI on DC21040 indistinguishable */
+#define ANS             0x0020     /* Intermediate AutoNegotiation State */
+#define ANS_1           0x0021     /* Intermediate AutoNegotiation State */
 
-#define _10Mb      0x0040          /* 10Mb/s Ethernet */
-#define _100Mb     0x0080          /* 100Mb/s Ethernet */
-#define SYM_WAIT   0x0100          /* Wait for SYM_LINK */
-#define INIT       0x0200          /* Initial state */
+#define _10Mb           0x0040     /* 10Mb/s Ethernet */
+#define _100Mb          0x0080     /* 100Mb/s Ethernet */
+#define SPD_DET         0x0100     /* Parallel speed detection */
+#define INIT            0x0200     /* Initial state */
+#define EXT_SIA         0x0400     /* External SIA for motherboard chip */
+#define ANS_SUSPECT     0x0802     /* Suspect the ANS (TP) port is down */
+#define TP_SUSPECT      0x0803     /* Suspect the TP port is down */
+#define BNC_AUI_SUSPECT 0x0804     /* Suspect the BNC or AUI port is down */
+#define EXT_SIA_SUSPECT 0x0805     /* Suspect the EXT SIA port is down */
+#define BNC_SUSPECT     0x0806     /* Suspect the BNC port is down */
+#define AUI_SUSPECT     0x0807     /* Suspect the AUI port is down */
+#define _10Mb_SUSPECT   0x0808     /* Suspect 10Mb/s is down */
+#define _100Mb_SUSPECT  0x0809     /* Suspect 100Mb/s is down */
+#define LINK_RESET      0x080a     /* Reset the PHY and re-init auto sense */
 
-#define AUTO       0x4000          /* Auto sense the media or speed */
+#define AUTO            0x4000     /* Auto sense the media or speed */
+#define TIMER_CB        0x80000000 /* Timer callback detection */
 
 /*
 ** Miscellaneous
@@ -587,11 +693,18 @@
 #define POLL_DEMAND          1
 
 #define LOST_MEDIA_THRESHOLD 3
+#define LOST_MEDIA           (lp->lostMedia > LOST_MEDIA_THRESHOLD)
 
 #define MASK_INTERRUPTS      1
 #define UNMASK_INTERRUPTS    0
 
 #define DE4X5_STRLEN         8
+
+#define DE4X5_INIT           0     /* Initialisation time */
+#define DE4X5_RUN            1     /* Run time */
+
+#define DE4X5_SAVE_STATE     0
+#define DE4X5_RESTORE_STATE  1
 
 /*
 ** Address Filtering Modes
@@ -609,9 +722,56 @@
 */
 #define NO                   0
 #define FALSE                0
+#define CLOSED               0
 
-#define YES                  !0
-#define TRUE                 !0
+#define YES                  ~0
+#define TRUE                 ~0
+#define OPEN                 ~0
+
+/*
+** IEEE OUIs for various PHY vendor/chip combos - Reg 2 values only. Since
+** the vendors seem split 50-50 on how to calculate the OUI register values
+** anyway, just reading Reg2 seems reasonable for now [see de4x5_get_oui()].
+*/
+#define NATIONAL_TX 0x2000
+#define BROADCOM_T4 0x03e0
+#define SEEQ_T4     0x0016
+#define CYPRESS_T4  0x0014
+
+/*
+** Speed Selection stuff
+*/
+#define SET_10Mb {\
+  if (lp->phy[lp->active].id) {\
+    mii_wr(MII_CR_10|MII_CR_ASSE,MII_CR,lp->phy[lp->active].addr,DE4X5_MII);\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR);\
+    omr |= (de4x5_full_duplex ? OMR_FD : 0) | OMR_TTM;\
+    outl(omr, DE4X5_OMR);\
+    outl(0, DE4X5_GEP);\
+  } else {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));\
+    omr |= (de4x5_full_duplex ? OMR_FD : 0);\
+    outl(omr | OMR_TTM, DE4X5_OMR);\
+    outl((de4x5_full_duplex ? 0 : GEP_FDXD), DE4X5_GEP);\
+  }\
+}
+
+#define SET_100Mb {\
+  if (lp->phy[lp->active].id) {\
+    mii_wr(MII_CR_100|MII_CR_ASSE, MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR);\
+    sr = mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII);\
+    if (!(sr & MII_ANA_T4AM) && de4x5_full_duplex) omr |= OMR_FD;\
+    outl(omr, DE4X5_OMR);\
+    outl(((!(sr & MII_ANA_T4AM) && de4x5_full_duplex) ? 0:GEP_FDXD)|GEP_MODE,\
+	                                                          DE4X5_GEP);\
+  } else {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR));\
+    omr |= (de4x5_full_duplex ? OMR_FD : 0);\
+    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
+    outl((de4x5_full_duplex ? 0 : GEP_FDXD) | GEP_MODE, DE4X5_GEP);\
+  }\
+}
 
 /*
 ** Include the IOCTL stuff

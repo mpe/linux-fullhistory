@@ -55,6 +55,7 @@ struct __sysctl_args {
 #define KERN_MAXFILE	12
 #define KERN_MAXID	13
 #define KERN_SECURELVL	14	/* int: system security level */
+#define KERN_PANIC	15	/* int: panic timeout */
 
 /* CTL_VM names: */
 #define VM_SWAPCTL	1	/* struct: Set vm swapping control */

@@ -89,6 +89,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( MATROX,		MATROX_MIL     ,"Millenium"),
 	DEVICE( MATROX,		MATROX_MGA_IMP,	"MGA Impression"),
 	DEVICE( CT,		CT_65545,	"65545"),
+	DEVICE( CT,		CT_65548,	"65548"),
 	DEVICE( FD,		FD_36C70,	"TMC-18C30"),
 	DEVICE( SI,		SI_6201,	"6201"),
 	DEVICE( SI,		SI_6202,	"6202"),
@@ -100,6 +101,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( SI,		SI_5513,		"85C5513"),
 	DEVICE( HP,		HP_J2585A,	"J2585A"),
 	DEVICE( PCTECH,		PCTECH_RZ1000,  "RZ1000 (buggy)"),
+	DEVICE( PCTECH,		PCTECH_RZ1001,  "RZ1000"),
 	DEVICE( DPT,		DPT,		"SmartCache/Raid"),
 	DEVICE( OPTI,		OPTI_92C178,	"92C178"),
 	DEVICE( OPTI,		OPTI_82C557,	"82C557"),
@@ -169,6 +171,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( PLX,		PLX_9060,	"PCI9060 i960 bridge"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROMOTIO, "Promotion-6410"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
+	DEVICE( VMIC,		VMIC_VME,	"VMIVME-7587"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
 	DEVICE( ZEITNET,	ZEITNET_1225,	"1225"),
@@ -204,6 +207,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82371_1,	"82371 Triton PIIX"),
 	DEVICE( INTEL,		INTEL_P6,	"Orion P6"),
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
+	DEVICE( ADAPTEC,	ADAPTEC_7855,	"AIC-7855"),
 	DEVICE( ADAPTEC,	ADAPTEC_7870,	"AIC-7870"),
 	DEVICE( ADAPTEC,	ADAPTEC_7871,	"AIC-7871"),
 	DEVICE( ADAPTEC,	ADAPTEC_7872,	"AIC-7872"),
@@ -428,6 +432,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_AI:		return "Acer Incorporated";
 	      case PCI_VENDOR_ID_MATROX:	return "Matrox";
 	      case PCI_VENDOR_ID_CT:		return "Chips & Technologies";
+	      case PCI_VENDOR_ID_MIRO:		return "Miro";
 	      case PCI_VENDOR_ID_FD:		return "Future Domain";
 	      case PCI_VENDOR_ID_SI:		return "Silicon Integrated Systems";
 	      case PCI_VENDOR_ID_HP:		return "Hewlett Packard";
@@ -468,7 +473,9 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_IMAGINGTECH:	return "Imaging Technology";
 	      case PCI_VENDOR_ID_PLX:		return "PLX";
 	      case PCI_VENDOR_ID_ALLIANCE:	return "Alliance";
+	      case PCI_VENDOR_ID_VMIC:		return "VMIC";
 	      case PCI_VENDOR_ID_MUTECH:	return "Mutech";
+	      case PCI_VENDOR_ID_TOSHIBA:	return "Toshiba";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
 	      case PCI_VENDOR_ID_SPECIALIX:	return "Specialix";
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";

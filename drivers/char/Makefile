@@ -9,6 +9,10 @@
 # parent makes..
 #
 
+SUB_DIRS     := 
+MOD_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS) ftape
+
 #
 # This file contains the font map for the default (hardware) font
 #
@@ -114,6 +118,15 @@ endif
 
 ifdef CONFIG_QIC02_TAPE
 L_OBJS += tpqic02.o 
+endif
+
+ifeq ($(CONFIG_FTAPE),y)
+SUB_DIRS += ftape
+L_OBJS += ftape/ftape.o
+else
+  ifeq ($(CONFIG_FTAPE),m)
+  MOD_SUB_DIRS += ftape
+  endif
 endif
 
 ifdef CONFIG_APM

@@ -31,6 +31,12 @@ if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
     comment 'ftp://titus.cfw.com/pub/Linux/util/'
 fi
 fi
+
+tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE
+if [ "$CONFIG_FTAPE" != "n" ]; then
+  comment 'Set IObase/IRQ/DMA for ftape in ./drivers/char/ftape/Makefile'
+fi
+
 bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" = "y" ]; then
   bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND

@@ -26,7 +26,7 @@
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
  */
-static int C_A_D = 1;
+int C_A_D = 1;
 
 extern void adjust_clock(void);
 

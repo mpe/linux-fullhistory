@@ -1,6 +1,6 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Thu Oct 12 15:59:37 1995 by r.faith@ieee.org
+ * Revised: Thu Feb  8 08:21:33 1996 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
@@ -192,8 +192,16 @@
 
  **************************************************************************/
 
+#ifdef PCMCIA
+#define MODULE
+#endif
+
 #ifdef MODULE
 #include <linux/module.h>
+#endif
+
+#ifdef PCMCIA
+#undef MODULE
 #endif
 
 #include <linux/sched.h>
@@ -346,7 +354,8 @@ static void *addresses[] = {
    (void *)0xca000,
    (void *)0xce000,
    (void *)0xde000,
-   (void *)0xd0000,		/* Extra addresses for PCI boards */
+   (void *)0xcc000,		/* Extra addresses for PCI boards */
+   (void *)0xd0000,
    (void *)0xe0000,
 };
 #define ADDRESS_COUNT (sizeof( addresses ) / sizeof( unsigned ))
@@ -402,6 +411,7 @@ struct signature {
    { "IBM F1 P2 BIOS v1.0104/29/93",                        5, 28,  3, -1, 0 },
    { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
    { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
+   { "Adaptec AHA-2920 PCI-SCSI Card",                     42, 31,  3,  0, 1 },
 				/* This next signature may not be a 3.5 bios */
    { "Future Domain Corp. V2.0108/18/93",                   5, 33,  3,  5, 0 },
    { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },

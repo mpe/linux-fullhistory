@@ -62,12 +62,12 @@ function extract_help () {
 
      if [ -z "$text" ]
      then
-	  echo "There is no help available for kernel option."
+	  echo "There is no help available for this kernel option."
      else
 	  echo "$text"
      fi
   else
-	 echo "There is no help available for kernel option."
+	 echo "There is no help available for this kernel option."
   fi
 }
 
@@ -75,8 +75,14 @@ function extract_help () {
 # Activate a help dialog.
 #
 function help () {
-	extract_help $1 >help.out
-	$DIALOG --backtitle "$backtitle" --title "$2" --textbox help.out 20 75
+	if extract_help $1 >help.out
+	then
+		$DIALOG	--backtitle "$backtitle" --title "$2"\
+			--textbox help.out 20 75
+	else
+		$DIALOG	--backtitle "$backtitle" \
+			--textbox help.out 20 75
+	fi
 	rm help.out
 }
 
@@ -669,16 +675,16 @@ save_configuration () {
 
 	function dep_tristate () {
 		eval x=\${$2:-n}
-		if eval [ "_$3" != "_m" ]
+
+		if eval [ "_$3" = "_m" ]
 		then
-			tristate "$1" "$2"
-		else
 			if [ "$x" = "y" ]
 			then
 				x="m"
 			fi
-			define_bool "$2" "$x"
 		fi
+
+		define_bool "$2" "$x"
 	}
 
 	function int () {
@@ -694,6 +700,8 @@ save_configuration () {
 	}
 
 	function define_bool () {
+		eval $1="$2"
+
    		case "$2" in
          	y)
                 	echo "$1=y" 		>>$CONFIG

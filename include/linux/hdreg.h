@@ -164,6 +164,8 @@ void hd_setup(char *, int *);
 #endif	/* CONFIG_BLK_DEV_HD */
 #ifdef CONFIG_BLK_DEV_IDE
 void ide_setup(char *);
+int ide_register(int io_port, int ctl_port, int irq);
+void ide_unregister(int h);
 #endif	/* CONFIG_BLK_DEV_IDE */
 
 #endif  /* __KERNEL__ */

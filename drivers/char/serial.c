@@ -76,6 +76,8 @@ static int serial_refcount;
 #define RS_STROBE_TIME (10*HZ)
 #define RS_ISR_PASS_LIMIT 256
 
+#define IRQ_T(info) ((info->flags & ASYNC_SHARE_IRQ) ? SA_SHIRQ : SA_INTERRUPT)
+
 #define _INLINE_ inline
   
 /*
@@ -962,7 +964,8 @@ static int startup(struct async_struct * info)
 		} else 
 			handler = rs_interrupt_single;
 
-		retval = request_irq(info->irq, handler, SA_INTERRUPT, "serial", NULL);
+		retval = request_irq(info->irq, handler, IRQ_T(info),
+				     "serial", NULL);
 		if (retval) {
 			restore_flags(flags);
 			if (suser()) {
@@ -1090,7 +1093,8 @@ static void shutdown(struct async_struct * info)
 			  !IRQ_ports[info->irq]->next_port)) {
 		if (IRQ_ports[info->irq]) {
 			free_irq(info->irq, NULL);
-			retval = request_irq(info->irq, rs_interrupt_single, SA_INTERRUPT, "serial", NULL);
+			retval = request_irq(info->irq, rs_interrupt_single,
+					     IRQ_T(info), "serial", NULL);
 			
 			if (retval)
 				printk("serial shutdown: request_irq: error %d"
@@ -1852,7 +1856,7 @@ static int set_multiport_struct(struct async_struct * info,
 		else
 			handler = rs_interrupt;
 
-		retval = request_irq(info->irq, handler, SA_INTERRUPT,
+		retval = request_irq(info->irq, handler, IRQ_T(info),
 				     "serial", NULL);
 		if (retval) {
 			printk("Couldn't reallocate serial interrupt "
@@ -2823,6 +2827,7 @@ int register_serial(struct serial_struct *req)
 	}
 	info->irq = req->irq;
 	info->port = req->port;
+	info->flags = req->flags;
 	autoconfig(info);
 	if (info->type == PORT_UNKNOWN) {
 		restore_flags(flags);

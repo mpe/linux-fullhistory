@@ -49,12 +49,13 @@ static struct super_operations nfs_sops = {
 /*
  * The "read_inode" function doesn't actually do anything:
  * the real data is filled in later in nfs_fhget. Here we
- * just mark the cache times invalid.
+ * just mark the cache times invalid, and zero out i_mode
+ * (the latter makes "nfs_refresh_inode" do the right thing)
  */
 static void nfs_read_inode(struct inode * inode)
 {
-	NFS_READTIME(inode) = jiffies - 1000000;
-	NFS_OLDMTIME(inode) = 0;
+	inode->i_mode = 0;
+	NFS_CACHEINV(inode);
 }
 
 static void nfs_put_inode(struct inode * inode)

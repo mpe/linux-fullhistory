@@ -70,7 +70,7 @@
     0) have a copy of the loadable modules code installed on your system.
     1) copy ewrk3.c from the  /linux/drivers/net directory to your favourite
     temporary directory.
-    2) edit the  source code near  line 1880 to reflect  the I/O address and
+    2) edit the  source code near  line 1898 to reflect  the I/O address and
     IRQ you're using.
     3) compile  ewrk3.c, but include -DMODULE in  the command line to ensure
     that the correct bits are compiled (see end of source code).
@@ -130,7 +130,8 @@
                           Added verify_area() calls in depca_ioctl() from
                           suggestion by <heiko@colossus.escape.de>.
 			  Add new multicasting code.
-      0.41    20-Jan-96   Fix IRQ set up problem reported by <???>.
+      0.41    20-Jan-96   Fix IRQ set up problem reported by 
+                          <kenneth@bbs.sas.ntu.ac.sg>.
 
     =========================================================================
 */
@@ -393,7 +394,7 @@ ewrk3_hw_init(struct device *dev, u_long iobase)
   icr &= 0x70;
   outb(icr, EWRK3_ICR);                           /* Disable all the IRQs */
 
-  if (nicsr == CSR_TXD|CSR_RXD) {
+  if (nicsr == (CSR_TXD|CSR_RXD)) {
 
     /* Check that the EEPROM is alive and well and not living on Pluto... */
     for (chksum=0, i=0; i<EEPROM_MAX; i+=2) {
@@ -1166,7 +1167,7 @@ ewrk3_get_stats(struct device *dev)
 }
 
 /*
-** Set or clear the multicast filter for this adaptor.
+** Set or clear the multicast filter for this adapter.
 */
 static void
 set_multicast_list(struct device *dev)

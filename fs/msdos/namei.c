@@ -202,6 +202,14 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		if (!(*result = iget(dir->i_sb,ino))) return -EACCES;
 		return 0;
 	}
+#if 0
+	if (dcache_lookup(dir, name, len, (unsigned long *) &ino)) {
+		iput(dir);
+		if (!(*result = iget(dir->i_sb, ino)))
+			return -EACCES;
+		return 0;
+	}
+#endif
 	PRINTK (("msdos_lookup 3\n"));
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) {
 		iput(dir);
@@ -245,7 +253,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 
 
 /***** Creates a directory entry (name is already formatted). */
-static int msdos_create_entry(struct inode *dir, const char *name,
+static int msdos_create_entry(struct inode *dir, const char *name,int len,
     int is_dir, int is_hid, struct inode **result)
 {
 	struct super_block *sb = dir->i_sb;
@@ -279,6 +287,7 @@ static int msdos_create_entry(struct inode *dir, const char *name,
 	(*result)->i_mtime = (*result)->i_atime = (*result)->i_ctime =
 	    CURRENT_TIME;
 	(*result)->i_dirt = 1;
+	dcache_add(dir, name, len, ino);
 	return 0;
 }
 
@@ -316,7 +325,8 @@ int msdos_create(struct inode *dir,const char *name,int len,int mode,
 		iput(dir);
 		return is_hid ? -EINVAL : -EEXIST;
  	}
-	res = msdos_create_entry(dir,msdos_name,S_ISDIR(mode),is_hid,result);
+	res = msdos_create_entry(dir,msdos_name,len,S_ISDIR(mode),is_hid,
+				 result);
 	fat_unlock_creation();
 	iput(dir);
 	return res;
@@ -430,7 +440,8 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 		iput(dir);
 		return -EEXIST;
  	}
-	if ((res = msdos_create_entry(dir,msdos_name,1,is_hid,&inode)) < 0) {
+	if ((res = msdos_create_entry(dir,msdos_name,len,1,is_hid,
+				      &inode)) < 0) {
 		fat_unlock_creation();
 		iput(dir);
 		return res;
@@ -439,14 +450,14 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 	inode->i_nlink = 2; /* no need to mark them dirty */
 	MSDOS_I(inode)->i_busy = 1; /* prevent lookups */
 	if ((res = fat_add_cluster(inode)) < 0) goto mkdir_error;
-	if ((res = msdos_create_entry(inode,MSDOS_DOT,1,0,&dot)) < 0)
+	if ((res = msdos_create_entry(inode,MSDOS_DOT,1,1,0,&dot)) < 0)
 		goto mkdir_error;
 	dot->i_size = inode->i_size; /* doesn't grow in the 2nd create_entry */
 	MSDOS_I(dot)->i_start = MSDOS_I(inode)->i_start;
 	dot->i_nlink = inode->i_nlink;
 	dot->i_dirt = 1;
 	iput(dot);
-	if ((res = msdos_create_entry(inode,MSDOS_DOTDOT,1,0,&dot)) < 0)
+	if ((res = msdos_create_entry(inode,MSDOS_DOTDOT,2,1,0,&dot)) < 0)
 		goto mkdir_error;
 	fat_unlock_creation();
 	dot->i_size = dir->i_size;
@@ -521,8 +532,9 @@ int msdos_unlink_umsdos(struct inode *dir,const char *name,int len)
 }
 
 /***** Rename within a directory */
-static int rename_same_dir(struct inode *old_dir,char *old_name,
-    struct inode *new_dir,char *new_name,struct buffer_head *old_bh,
+static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
+    struct inode *new_dir,char *new_name,int new_len,
+    struct buffer_head *old_bh,
     struct msdos_dir_entry *old_de,int old_ino,int is_hid)
 {
 	struct super_block *sb = old_dir->i_sb;
@@ -564,6 +576,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
 		new_inode->i_dirt = 1;
 		new_de->name[0] = DELETED_FLAG;
 		mark_buffer_dirty(new_bh, 1);
+		dcache_add(new_dir, new_name, new_len, new_ino);
 		iput(new_inode);
 		brelse(new_bh);
 	}
@@ -585,8 +598,9 @@ set_hid:
 }
 
 /***** Rename across directories - a nonphysical move */
-static int rename_diff_dir(struct inode *old_dir,char *old_name,
-    struct inode *new_dir,char *new_name,struct buffer_head *old_bh,
+static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
+    struct inode *new_dir,char *new_name,int new_len,
+    struct buffer_head *old_bh,
     struct msdos_dir_entry *old_de,int old_ino,int is_hid)
 {
 	struct super_block *sb = old_dir->i_sb;
@@ -686,6 +700,7 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 		MSDOS_I(free_inode)->i_old = new_inode;
 		/* free_inode is put when putting new_inode */
 		iput(new_inode);
+		dcache_add(new_dir, new_name, new_len, new_ino);
 		brelse(new_bh);
 	}
 	if (S_ISDIR(old_inode->i_mode)) {
@@ -737,10 +752,10 @@ int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 	    &old_ino,old_hid?SCAN_HID:SCAN_NOTHID)) < 0) goto rename_done;
 	fat_lock_creation();
 	if (old_dir == new_dir)
-		error = rename_same_dir(old_dir,old_msdos_name,new_dir,
-		    new_msdos_name,old_bh,old_de,old_ino,is_hid);
-	else error = rename_diff_dir(old_dir,old_msdos_name,new_dir,
-		    new_msdos_name,old_bh,old_de,old_ino,is_hid);
+		error = rename_same_dir(old_dir,old_msdos_name,old_len,new_dir,
+		    new_msdos_name,new_len,old_bh,old_de,old_ino,is_hid);
+	else error = rename_diff_dir(old_dir,old_msdos_name,old_len,new_dir,
+		    new_msdos_name,new_len,old_bh,old_de,old_ino,is_hid);
 	fat_unlock_creation();
 	brelse(old_bh);
 rename_done:

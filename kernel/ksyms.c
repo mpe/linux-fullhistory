@@ -41,6 +41,7 @@
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/sysctl.h>
+#include <linux/hdreg.h>
 #include <linux/skbuff.h>
 #include <linux/genhd.h>
 #include <linux/swap.h>
@@ -246,7 +247,6 @@ struct symbol_table symbol_table = {
 	/* executable format registration */
 	X(register_binfmt),
 	X(unregister_binfmt),
-	X(get_binfmt_list),
 	X(search_binary_handler),
 	X(prepare_binprm),
 
@@ -268,6 +268,7 @@ struct symbol_table symbol_table = {
 	X(probe_irq_off),
 	X(bh_active),
 	X(bh_mask),
+	X(bh_mask_count),
 	X(bh_base),
 	X(add_timer),
 	X(del_timer),
@@ -467,6 +468,11 @@ struct symbol_table symbol_table = {
 	X(tr_type_trans),
 #endif
 
+#ifdef CONFIG_BLK_DEV_IDE
+	X(ide_register),
+	X(ide_unregister),
+#endif
+ 	
 	/* bimfm_aout */
 	X(get_write_access),
 	X(put_write_access),

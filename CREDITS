@@ -180,6 +180,13 @@ S: 48287 Sawleaf
 S: Fremont, California 94539
 S: USA
 
+N: Gordon Chaffee
+E: chaffee@plateau.cs.berkeley.edu
+D: vfat filesystem
+S: 3674 Oakwood Terrace #201
+S: Fremont, CA 94536
+S: USA
+
 N: Raymond Chen
 E: raymondc@microsoft.com
 D: Author of Configure script
@@ -234,6 +241,15 @@ D: packages testing, nit-picking & fixing. Enjoying BugFree (TM) kernels.
 S: Zuidsingel 10A
 S: 2312 SB  Leiden
 S: The Netherlands
+
+N: David Davies
+E: davies@wanton.lkg.dec.com
+S: Digital Equipment Corporation
+S: 550 King Street
+S: Littleton, MA 01460
+S: U.S.A.
+D: Network driver author - depca, ewrk3 and de4x5
+D: Wrote shared interrupt support
 
 N: Wayne Davison
 E: davison@borland.com
@@ -378,10 +394,19 @@ N: Philip Gladstone
 E: philipg@onsett.com
 D: Kernel / timekeeping stuff
 
+N: Miquel van Smoorenburg
+E: miquels@cistron.nl
+D: Kernel and net hacker. Sysvinit, minicom. doing Debian stuff.
+S: Cistron Internet Services
+S: PO-Box 297
+S: 2400 AG, Alphen aan den Rijn
+S: The Netherlands
+
 N: Danny ter Haar
 E: dth@cistron.nl
 D: /proc/procinfo, reboot on panic , kernel pre-patch tester ;)
-S: PObox 297
+S: Cistron Internet Services
+S: PO-Box 297
 S: 2400 AG, Alphen aan den Rijn
 S: The Netherlands
 

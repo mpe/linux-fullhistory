@@ -153,8 +153,9 @@ static int nfs_readpage(struct inode * inode, struct page * page)
 static int nfs_file_write(struct inode *inode, struct file *file, const char *buf,
 			  int count)
 {
-	int result, hunk, i, n, pos;
+	int result, written, wsize;
 	struct nfs_fattr fattr;
+	unsigned long pos;
 
 	if (!inode) {
 		printk("nfs_file_write: inode = NULL\n");
@@ -171,24 +172,29 @@ static int nfs_file_write(struct inode *inode, struct file *file, const char *bu
 	pos = file->f_pos;
 	if (file->f_flags & O_APPEND)
 		pos = inode->i_size;
-	n = NFS_SERVER(inode)->wsize;
-	for (i = 0; i < count; i += n) {
-		hunk = count - i;
-		if (hunk >= n)
-			hunk = n;
+	wsize = NFS_SERVER(inode)->wsize;
+	result = 0;
+	written = 0;
+	while (written < count) {
+		int hunk = count - written;
+		if (hunk >= wsize)
+			hunk = wsize;
 		result = nfs_proc_write(inode,
 			pos, hunk, buf, &fattr);
 		if (result < 0)
-			return result;
+			break;
 		pos += hunk;
 		buf += hunk;
-		if (hunk < n) {
-			i += hunk;
+		written += hunk;
+		if (hunk < wsize)
 			break;
-		}
 	}
+	if (!written)
+		return result;
 	file->f_pos = pos;
+	if (pos > inode->i_size)
+		inode->i_size = pos;
 	nfs_refresh_inode(inode, &fattr);
-	return i;
+	return written;
 }
 

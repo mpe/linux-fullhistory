@@ -100,13 +100,13 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 			else return 0;
 		}
 		else if (!strcmp(this_char,"dots")) {
-		  *dotsOK = 1;
+			*dotsOK = 1;
 		}
 		else if (!strcmp(this_char,"nodots")) {
-		  *dotsOK = 0;
+			*dotsOK = 0;
 		}
 		else if (!strcmp(this_char,"showexec")) {
-		  *showexec = 1;
+			*showexec = 1;
 		}
 		else if (!strcmp(this_char,"dotsOK") && value) {
 			if (!strcmp(value,"yes")) *dotsOK = 1;
@@ -162,7 +162,6 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 				return 0;
 			*sys_immutable = 1;
 		}
-		else return 1;
 	}
 	return 1;
 }
@@ -385,6 +384,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	MSDOS_I(inode)->i_binary = 1;
 	inode->i_uid = MSDOS_SB(inode->i_sb)->fs_uid;
 	inode->i_gid = MSDOS_SB(inode->i_sb)->fs_gid;
+	inode->i_version = ++event;
 	if (inode->i_ino == MSDOS_ROOT_INO) {
 		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(inode->i_sb)->fs_umask) |
 		    S_IFDIR;

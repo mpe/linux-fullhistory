@@ -79,6 +79,7 @@ struct serial_struct {
 #define ASYNC_CLOSING		0x08000000 /* Serial port is closing */
 #define ASYNC_CTS_FLOW		0x04000000 /* Do CTS flow control */
 #define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
+#define ASYNC_SHARE_IRQ		0x01000000 /* for multifunction cards */
 
 /*
  * Multiport serial configuration structure --- external structure

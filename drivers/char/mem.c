@@ -13,6 +13,7 @@
 #include <linux/tty.h>
 #include <linux/mouse.h>
 #include <linux/tpqic02.h>
+#include <linux/ftape.h>
 #include <linux/malloc.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
@@ -386,7 +387,7 @@ int chr_dev_init(void)
 #ifdef CONFIG_PRINTER
 	lp_init();
 #endif
-#if defined (CONFIG_BUSMOUSE) || defined (CONFIG_82C710_MOUSE) || \
+#if defined (CONFIG_BUSMOUSE) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG)
 	mouse_init();
@@ -399,6 +400,9 @@ int chr_dev_init(void)
 #endif
 #if CONFIG_ISDN
 	isdn_init();
+#endif
+#ifdef CONFIG_FTAPE
+	ftape_init();
 #endif
 	return 0;
 }

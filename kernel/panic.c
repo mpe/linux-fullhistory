@@ -16,13 +16,15 @@
 
 asmlinkage void sys_sync(void);	/* it's really int */
 extern void hard_reset_now(void);
+extern void do_unblank_screen(void);
+extern int C_A_D;
 
-static int timeout = -1;
+int panic_timeout = 0;
 
 void panic_setup(char *str, int *ints)
 {
 	if (ints[0] == 1)
-		timeout = ints[1];
+		panic_timeout = ints[1];
 }
 
 NORET_TYPE void panic(const char * fmt, ...)
@@ -39,14 +41,17 @@ NORET_TYPE void panic(const char * fmt, ...)
 		printk(KERN_EMERG "In swapper task - not syncing\n");
 	else
 		sys_sync();
-	if (timeout >= 0)
+
+	do_unblank_screen();
+
+	if (panic_timeout > 0)
 	{
 		/*
 	 	 * Delay timeout seconds before rebooting the machine. 
 		 * We can't use the "normal" timers since we just paniced..
 	 	 */
-		printk(KERN_EMERG "Rebooting in %d seconds..",timeout);
-		for(i = 0; i < (timeout*1000); i++)
+		printk(KERN_EMERG "Rebooting in %d seconds..",panic_timeout);
+		for(i = 0; i < (panic_timeout*1000); i++)
 			udelay(1000);
 		hard_reset_now();
 	}

@@ -1,4 +1,4 @@
-The PPP support for this kernel requires the 2.2.0a version of the
+The PPP support for this kernel requires the 2.2.0 version of the
 pppd daemon. You will find the current version of the daemon on
 sunsite.unc.edu in the /pub/Linux/system/Network/serial directory.
 

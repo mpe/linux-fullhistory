@@ -21,6 +21,10 @@
 #include <linux/utsname.h>
 #include <linux/swapctl.h>
 
+/* External variables not in a header file. */
+extern int panic_timeout;
+
+
 static ctl_table root_table[];
 static struct ctl_table_header root_table_header = 
 	{root_table, DNODE_SINGLE(&root_table_header)};
@@ -116,6 +120,8 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dointvec},
 	{KERN_SECURELVL, "securelevel", &securelevel, sizeof(int),
 	 0444, NULL, &proc_dointvec, (ctl_handler *)&do_securelevel_strategy},
+	{KERN_PANIC, "panic", &panic_timeout, sizeof(int),
+	 0644, NULL, &proc_dointvec},
 	{0}
 };
 

@@ -617,6 +617,10 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	inode->i_nlink = fattr->nlink;
 	inode->i_uid = fattr->uid;
 	inode->i_gid = fattr->gid;
+
+	/* Size changed from outside: invalidate caches on next read */
+	if (inode->i_size != fattr->size)
+		NFS_CACHEINV(inode);
 	inode->i_size = fattr->size;
 	inode->i_blksize = fattr->blocksize;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))

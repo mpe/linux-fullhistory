@@ -33,7 +33,6 @@
 #include <asm/smp.h>
 
 #define CR0_NE 32
-#define TIMER_IRQ 0                     /* Keep this in sync with time.c */
 
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
@@ -96,8 +95,16 @@ void enable_irq(unsigned int irq_nr)
  * atomic. The specific handler is chosen depending on the SA_INTERRUPT
  * flag when installing a handler. Finally, one "bad interrupt" handler, that
  * is used when no handler is present.
+ *
+ * The timer interrupt is handled specially to insure that the jiffies
+ * variable is updated at all times.  Specifically, the timer interrupt is
+ * just like the complete handlers except that it is invoked with interrupts
+ * disabled and should never re-enable them.  If other interrupts were
+ * allowed to be processed while the timer interrupt is active, then the
+ * other interrupts would have to avoid using the jiffies variable for delay
+ * and interval timing operations to avoid hanging the system.
  */
-BUILD_IRQ(FIRST,0,0x01)
+BUILD_TIMER_IRQ(FIRST,0,0x01)
 BUILD_IRQ(FIRST,1,0x02)
 BUILD_IRQ(FIRST,2,0x04)
 BUILD_IRQ(FIRST,3,0x08)
