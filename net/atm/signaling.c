@@ -33,6 +33,7 @@
 struct atm_vcc *sigd = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(sigd_sleep);
 
+extern spinlock_t atm_dev_lock;
 
 static void sigd_put_skb(struct sk_buff *skb)
 {
@@ -219,7 +220,10 @@ static void sigd_close(struct atm_vcc *vcc)
 		printk(KERN_ERR "sigd_close: closing with requests pending\n");
 	while ((skb = skb_dequeue(&vcc->recvq))) kfree_skb(skb);
 	purge_vccs(nodev_vccs);
+
+	spin_lock (&atm_dev_lock);
 	for (dev = atm_devs; dev; dev = dev->next) purge_vccs(dev->vccs);
+	spin_unlock (&atm_dev_lock);
 }
 
 

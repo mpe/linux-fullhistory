@@ -664,26 +664,46 @@ sub output_intro {
 
 ##
 # takes a function prototype and spits out all the details
-# stored in the global arrays/hsahes.
+# stored in the global arrays/hashes.
 sub dump_function {
     my $prototype = shift @_;
 
-    $prototype =~ s/^static+ //;
-    $prototype =~ s/^extern+ //;
-    $prototype =~ s/^inline+ //;
-    $prototype =~ s/^__inline__+ //;
-    $prototype =~ s/^#define+ //; #ak added
+    $prototype =~ s/^static +//;
+    $prototype =~ s/^extern +//;
+    $prototype =~ s/^inline +//;
+    $prototype =~ s/^__inline__ +//;
+    $prototype =~ s/^#define +//; #ak added
+
+    # Yes, this truly is vile.  We are looking for:
+    # 1. Return type (may be nothing if we're looking at a macro)
+    # 2. Function name
+    # 3. Function parameters.
+    #
+    # All the while we have to watch out for function pointer parameters
+    # (which IIRC is what the two sections are for), C types (these
+    # regexps don't even start to express all the possibilities), and
+    # so on.
+    #
+    # If you mess with these regexps, it's a good idea to check that
+    # the following functions' documentation still comes out right:
+    # - parport_register_device (function pointer parameters)
+    # - atomic_set (macro)
+    # - pci_match_device (long return type)
 
     if ($prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
 	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
 	$prototype =~ m/^(\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
 	$prototype =~ m/^(\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
 	$prototype =~ m/^(\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\(]*)\)/ ||
 	$prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
 	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
 	$prototype =~ m/^(\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
 	$prototype =~ m/^(\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
-	$prototype =~ m/^(\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/)  {
+	$prototype =~ m/^(\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/)  {
 	$return_type = $1;
 	$function_name = $2;
 	$args = $3;
@@ -728,13 +748,13 @@ sub dump_function {
 		$param="...";
 		$parameters{"..."} = "variable arguments";
 	    }
-	    if ($type eq "")
+	    elsif ($type eq "" && $param eq "")
 	    {
 		$type="";
 		$param="void";
 		$parameters{void} = "no arguments";
 	    }
-            if ($parameters{$param} eq "") {
+            if ($type ne "" && $parameters{$param} eq "") {
 	        $parameters{$param} = "-- undescribed --";
 	        print STDERR "Warning($file:$lineno): Function parameter '$param' not described in '$function_name'\n";
 	    }

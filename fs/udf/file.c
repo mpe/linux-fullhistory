@@ -45,7 +45,7 @@
 
 static int udf_adinicb_readpage(struct file *file, struct page * page)
 {
-	struct inode *inode = (struct inode *)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 
 	struct buffer_head *bh;
 	int block;
@@ -69,7 +69,7 @@ static int udf_adinicb_readpage(struct file *file, struct page * page)
 
 static int udf_adinicb_writepage(struct page *page)
 {
-	struct inode *inode = (struct inode *)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 
 	struct buffer_head *bh;
 	int block;
@@ -97,7 +97,7 @@ static int udf_adinicb_prepare_write(struct file *file, struct page *page, unsig
 
 static int udf_adinicb_commit_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
-	struct inode *inode = (struct inode *)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 
 	struct buffer_head *bh;
 	int block;

@@ -24,41 +24,28 @@ isdn-objs-$(CONFIG_ISDN_WITH_ABC)	+= isdn_dwabc.o
 
 isdn-objs				+= $(isdn-objs-y)
 
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
-
-# Object files in subdirectories
-
-subdir-$(CONFIG_ISDN_DIVERSION)		+= divert
-subdir-$(CONFIG_ISDN_DRV_HISAX)		+= hisax
-subobj-$(CONFIG_ISDN_DRV_HISAX)		+= hisax/hisax_drv.o
-subdir-$(CONFIG_ISDN_DRV_ICN)		+= icn
-subobj-$(CONFIG_ISDN_DRV_ICN)		+= icn/icn_drv.o
-subdir-$(CONFIG_ISDN_DRV_PCBIT)		+= pcbit
-subobj-$(CONFIG_ISDN_DRV_PCBIT)		+= pcbit/pcbit_drv.o
-subdir-$(CONFIG_ISDN_DRV_SC)		+= sc
-subobj-$(CONFIG_ISDN_DRV_SC)		+= sc/sc_drv.o
-subdir-$(CONFIG_ISDN_CAPI)		+= avmb1
-subobj-$(CONFIG_ISDN_CAPI)		+= avmb1/avmb1.o
-subdir-$(CONFIG_ISDN_DRV_LOOP)		+= isdnloop
-subobj-$(CONFIG_ISDN_DRV_LOOP)		+= isdnloop/isdnloop_drv.o
-subdir-$(CONFIG_ISDN_DRV_ACT2000)	+= act2000
-subobj-$(CONFIG_ISDN_DRV_ACT2000)	+= act2000/act2000_drv.o
-subdir-$(CONFIG_ISDN_DRV_EICON)		+= eicon
-subobj-$(CONFIG_ISDN_DRV_EICON)		+= eicon/eicon_drv.o
-subdir-$(CONFIG_HYSDN)			+= hysdn
-subobj-$(CONFIG_HYSDN)			+= hysdn/hysdn_drv.o
-
-obj-y					+= $(subobj-y)
+# Ordering constraints: isdn.o first, rest doesn't matter
 
 # Each configuration option enables a list of files.
 
 obj-$(CONFIG_ISDN)			+= isdn.o
 obj-$(CONFIG_ISDN_PPP_BSDCOMP)		+= isdn_bsdcomp.o
+
+# Object files in subdirectories
+
+mod-subdirs				:= avmb1 eicon
+subdir-$(CONFIG_ISDN_DIVERSION)		+= divert
+subdir-$(CONFIG_ISDN_DRV_HISAX)		+= hisax
+subdir-$(CONFIG_ISDN_DRV_ICN)		+= icn
+subdir-$(CONFIG_ISDN_DRV_PCBIT)		+= pcbit
+subdir-$(CONFIG_ISDN_DRV_SC)		+= sc
+subdir-$(CONFIG_ISDN_CAPI)		+= avmb1
+subdir-$(CONFIG_ISDN_DRV_LOOP)		+= isdnloop
+subdir-$(CONFIG_ISDN_DRV_ACT2000)	+= act2000
+subdir-$(CONFIG_ISDN_DRV_EICON)		+= eicon
+subdir-$(CONFIG_HYSDN)			+= hysdn
+
+obj-y += $(addsuffix /vmlinux-obj.o, $(subdir-y))
 
 # The global Rules.make.
 

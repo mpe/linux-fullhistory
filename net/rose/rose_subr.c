@@ -15,8 +15,6 @@
  *	ROSE 003	Jonathan(G4KLX)	Added use count to neighbours.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -528,5 +526,3 @@ void rose_disconnect(struct sock *sk, int reason, int cause, int diagnostic)
 
 	sk->dead  = 1;
 }
-
-#endif

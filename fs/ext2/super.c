@@ -95,6 +95,31 @@ void ext2_warning (struct super_block * sb, const char * function,
 		bdevname(sb->s_dev), function, error_buf);
 }
 
+void ext2_update_dynamic_rev(struct super_block *sb)
+{
+	struct ext2_super_block *es = EXT2_SB(sb)->s_es;
+
+	if (le32_to_cpu(es->s_rev_level) > EXT2_GOOD_OLD_REV)
+		return;
+
+	ext2_warning(sb, __FUNCTION__,
+		     "updating to rev %d because of new feature flag, "
+		     "running e2fsck is recommended",
+		     EXT2_DYNAMIC_REV);
+
+	es->s_first_ino = cpu_to_le32(EXT2_GOOD_OLD_FIRST_INO);
+	es->s_inode_size = cpu_to_le16(EXT2_GOOD_OLD_INODE_SIZE);
+	es->s_rev_level = cpu_to_le32(EXT2_DYNAMIC_REV);
+	/* leave es->s_feature_*compat flags alone */
+	/* es->s_uuid will be set by e2fsck if empty */
+
+	/*
+	 * The rest of the superblock fields should be zero, and if not it
+	 * means they are likely already in use, so leave them alone.  We
+	 * can leave it up to e2fsck to clean up any inconsistencies there.
+	 */
+}
+
 void ext2_put_super (struct super_block * sb)
 {
 	int db_count;
@@ -104,7 +129,7 @@ void ext2_put_super (struct super_block * sb)
 		sb->u.ext2_sb.s_es->s_state = le16_to_cpu(sb->u.ext2_sb.s_mount_state);
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh);
 	}
-	db_count = sb->u.ext2_sb.s_db_per_group;
+	db_count = EXT2_SB(sb)->s_gdb_count;
 	for (i = 0; i < db_count; i++)
 		if (sb->u.ext2_sb.s_group_desc[i])
 			brelse (sb->u.ext2_sb.s_group_desc[i]);
@@ -261,9 +286,9 @@ static int ext2_setup_super (struct super_block * sb,
 {
 	int res = 0;
 	if (le32_to_cpu(es->s_rev_level) > EXT2_MAX_SUPP_REV) {
-			printk ("EXT2-fs warning: revision level too high, "
-				"forcing read/only mode\n");
-			res = MS_RDONLY;
+		printk ("EXT2-fs warning: revision level too high, "
+			"forcing read-only mode\n");
+		res = MS_RDONLY;
 	}
 	if (read_only)
 		return res;
@@ -423,22 +448,32 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			brelse(bh);
 		return NULL;
 	}
-	if (le32_to_cpu(es->s_rev_level) > EXT2_GOOD_OLD_REV) {
-		if (le32_to_cpu(es->s_feature_incompat) & ~EXT2_FEATURE_INCOMPAT_SUPP) {
-			printk("EXT2-fs: %s: couldn't mount because of "
-			       "unsupported optional features.\n",
-			       bdevname(dev));
-			goto failed_mount;
-		}
-		if (!(sb->s_flags & MS_RDONLY) &&
-		    (le32_to_cpu(es->s_feature_ro_compat) & ~EXT2_FEATURE_RO_COMPAT_SUPP)) {
-			printk("EXT2-fs: %s: couldn't mount RDWR because of "
-			       "unsupported optional features.\n",
-			       bdevname(dev));
-			goto failed_mount;
-		}
+	if (le32_to_cpu(es->s_rev_level) == EXT2_GOOD_OLD_REV &&
+	    (EXT2_HAS_COMPAT_FEATURE(sb, ~0U) ||
+	     EXT2_HAS_RO_COMPAT_FEATURE(sb, ~0U) ||
+	     EXT2_HAS_INCOMPAT_FEATURE(sb, ~0U)))
+		printk("EXT2-fs warning: feature flags set on rev 0 fs, "
+		       "running e2fsck is recommended\n");
+	/*
+	 * Check feature flags regardless of the revision level, since we
+	 * previously didn't change the revision level when setting the flags,
+	 * so there is a chance incompat flags are set on a rev 0 filesystem.
+	 */
+	if ((i = EXT2_HAS_INCOMPAT_FEATURE(sb, ~EXT2_FEATURE_INCOMPAT_SUPP))) {
+		printk("EXT2-fs: %s: couldn't mount because of "
+		       "unsupported optional features (%x).\n",
+		       bdevname(dev), i);
+		goto failed_mount;
 	}
-	sb->s_blocksize_bits = le32_to_cpu(sb->u.ext2_sb.s_es->s_log_block_size) + 10;
+	if (!(sb->s_flags & MS_RDONLY) &&
+	    (i = EXT2_HAS_RO_COMPAT_FEATURE(sb, ~EXT2_FEATURE_RO_COMPAT_SUPP))){
+		printk("EXT2-fs: %s: couldn't mount RDWR because of "
+		       "unsupported optional features (%x).\n",
+		       bdevname(dev), i);
+		goto failed_mount;
+	}
+	sb->s_blocksize_bits =
+		le32_to_cpu(EXT2_SB(sb)->s_es->s_log_block_size) + 10;
 	sb->s_blocksize = 1 << sb->s_blocksize_bits;
 	if (sb->s_blocksize != BLOCK_SIZE &&
 	    (sb->s_blocksize == 1024 || sb->s_blocksize == 2048 ||
@@ -484,9 +519,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			goto failed_mount;
 		}
 	}
-	sb->u.ext2_sb.s_feature_compat = le32_to_cpu(es->s_feature_compat);
-	sb->u.ext2_sb.s_feature_incompat = le32_to_cpu(es->s_feature_incompat);
-	sb->u.ext2_sb.s_feature_ro_compat = le32_to_cpu(es->s_feature_ro_compat);
 	sb->u.ext2_sb.s_frag_size = EXT2_MIN_FRAG_SIZE <<
 				   le32_to_cpu(es->s_log_frag_size);
 	if (sb->u.ext2_sb.s_frag_size)
@@ -590,7 +622,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	}
 	sb->u.ext2_sb.s_loaded_inode_bitmaps = 0;
 	sb->u.ext2_sb.s_loaded_block_bitmaps = 0;
-	sb->u.ext2_sb.s_db_per_group = db_count;
+	sb->u.ext2_sb.s_gdb_count = db_count;
 	/*
 	 * set up enough so that it can read an inode
 	 */
@@ -683,6 +715,14 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 		ext2_commit_super (sb, es);
 	}
 	else {
+		int ret;
+		if ((ret = EXT2_HAS_RO_COMPAT_FEATURE(sb,
+					       ~EXT2_FEATURE_RO_COMPAT_SUPP))) {
+			printk("EXT2-fs: %s: couldn't remount RDWR because of "
+			       "unsupported optional features (%x).\n",
+			       bdevname(sb->s_dev), ret);
+			return -EROFS;
+		}
 		/*
 		 * Mounting a RDONLY partition read-write, so reread and
 		 * store the current valid flag.  (It may have been changed
@@ -698,7 +738,7 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 int ext2_statfs (struct super_block * sb, struct statfs * buf)
 {
 	unsigned long overhead;
-	int	ngroups, i;
+	int i;
 
 	if (test_opt (sb, MINIX_DF))
 		overhead = 0;
@@ -715,19 +755,12 @@ int ext2_statfs (struct super_block * sb, struct statfs * buf)
 
 		/*
 		 * Add the overhead attributed to the superblock and
-		 * block group descriptors.  If this is sparse
-		 * superblocks is turned on, then not all groups have
-		 * this.
+		 * block group descriptors.  If the sparse superblocks
+		 * feature is turned on, then not all groups have this.
 		 */
-		if (sb->u.ext2_sb.s_feature_ro_compat &
-		    EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) {
-			ngroups = 0;
-			for (i=0 ; i < sb->u.ext2_sb.s_groups_count; i++)
-				if (ext2_group_sparse(i))
-					ngroups++;
-		} else
-			ngroups = sb->u.ext2_sb.s_groups_count;
-		overhead += ngroups * (1 + sb->u.ext2_sb.s_db_per_group);
+		for (i = 0; i < EXT2_SB(sb)->s_groups_count; i++)
+			overhead += ext2_bg_has_super(sb, i) +
+				ext2_bg_num_gdb(sb, i);
 
 		/*
 		 * Every block group has an inode bitmap, a block

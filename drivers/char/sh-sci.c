@@ -839,7 +839,7 @@ static int sci_open(struct tty_struct * tty, struct file * filp)
 		MOD_INC_USE_COUNT;
 	}
 
-	retval = block_til_ready(port, filp);
+	retval = gs_block_til_ready(port, filp);
 
 	if (retval) {
 		MOD_DEC_USE_COUNT;

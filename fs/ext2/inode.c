@@ -1190,13 +1190,17 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		raw_inode->i_size_high = cpu_to_le32(inode->i_size >> 32);
 		if (raw_inode->i_size_high) {
 			struct super_block *sb = inode->i_sb;
-			struct ext2_super_block *es = sb->u.ext2_sb.s_es;
-			if (!(es->s_feature_ro_compat & cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
+			if (!EXT2_HAS_RO_COMPAT_FEATURE(sb,
+					EXT2_FEATURE_RO_COMPAT_LARGE_FILE) ||
+			    EXT2_SB(sb)->s_es->s_rev_level ==
+					cpu_to_le32(EXT2_GOOD_OLD_REV)) {
 			       /* If this is the first large file
 				* created, add a flag to the superblock.
 				*/
 				lock_kernel();
-				es->s_feature_ro_compat |= cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
+				ext2_update_dynamic_rev(sb);
+				EXT2_SET_RO_COMPAT_FEATURE(sb,
+					EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
 				unlock_kernel();
 				ext2_write_super(sb);
 			}

@@ -2,23 +2,12 @@
 
 # The target object and module list name.
 
-O_TARGET	:= act2000_drv.o
-
-# Objects that export symbols.
-
-export-objs	:=
+O_TARGET	:= vmlinux-obj.o
 
 # Multipart objects.
 
 list-multi	:= act2000.o
 act2000-objs	:= module.o capi.o act2000_isa.o
-
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
 
 # Each configuration option enables a list of files.
 

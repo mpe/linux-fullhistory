@@ -23,7 +23,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c.h,v 1.40 2000/07/19 19:55:45 frodo Exp $ */
+/* $Id: i2c.h,v 1.42 2000/09/06 20:14:06 frodo Exp $ */
 
 #ifndef I2C_H
 #define I2C_H
@@ -120,6 +120,9 @@ extern s32 i2c_smbus_read_block_data(struct i2c_client * client,
 extern s32 i2c_smbus_write_block_data(struct i2c_client * client,
                                       u8 command, u8 length,
                                       u8 *values);
+extern s32 i2c_smbus_write_i2c_block_data(struct i2c_client * client,
+                                          u8 command, u8 length,
+                                          u8 *values);
 
 
 /*
@@ -436,12 +439,13 @@ union i2c_smbus_data {
 
 /* SMBus transaction types (size parameter in the above functions) 
    Note: these no longer correspond to the (arbitrary) PIIX4 internal codes! */
-#define I2C_SMBUS_QUICK		0
-#define I2C_SMBUS_BYTE		1
-#define I2C_SMBUS_BYTE_DATA	2 
-#define I2C_SMBUS_WORD_DATA	3
-#define I2C_SMBUS_PROC_CALL	4
-#define I2C_SMBUS_BLOCK_DATA	5
+#define I2C_SMBUS_QUICK		    0
+#define I2C_SMBUS_BYTE		    1
+#define I2C_SMBUS_BYTE_DATA	    2 
+#define I2C_SMBUS_WORD_DATA	    3
+#define I2C_SMBUS_PROC_CALL	    4
+#define I2C_SMBUS_BLOCK_DATA	    5
+#define I2C_SMBUS_I2C_BLOCK_DATA    6
 
 
 /* ----- commands for the ioctl like i2c_command call:

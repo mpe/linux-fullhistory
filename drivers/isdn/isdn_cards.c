@@ -34,7 +34,7 @@ extern void HiSax_init(void);
 extern void pcbit_init(void);
 #endif
 
-#ifdef CONFIG_ISDN_DRV_EICON
+#if defined(CONFIG_ISDN_DRV_EICON_OLD) || defined(CONFIG_ISDN_DRV_EICON_DIVAS)
 extern void eicon_init(void);
 #endif
 
@@ -57,7 +57,7 @@ isdn_cards_init(void)
 #if CONFIG_ISDN_DRV_ACT2000
 	act2000_init();
 #endif
-#if CONFIG_ISDN_DRV_EICON
+#if defined(CONFIG_ISDN_DRV_EICON_OLD) || defined(CONFIG_ISDN_DRV_EICON_DIVAS)
 	eicon_init();
 #endif
 }

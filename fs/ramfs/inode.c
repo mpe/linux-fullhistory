@@ -98,7 +98,7 @@ static int ramfs_prepare_write(struct file *file, struct page *page, unsigned of
 
 static int ramfs_commit_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	loff_t pos = ((loff_t)page->index << PAGE_CACHE_SHIFT) + to;
 
 	kunmap(page);

@@ -4,27 +4,16 @@
 
 # The target object and module list name.
 
-O_TARGET	:=
-
-# Objects that export symbols.
-
-export-objs	:=
+O_TARGET	:= vmlinux-obj.o
 
 # Multipart objects.
 
 list-multi		:= dss1_divert.o
 dss1_divert-objs	:= isdn_divert.o divert_procfs.o divert_init.o
 
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
-
 # Each configuration option enables a list of files.
 
-obj-m	+= dss1_divert.o
+obj-$(CONFIG_ISDN_DIVERSION)	+= dss1_divert.o
 
 include $(TOPDIR)/Rules.make
 

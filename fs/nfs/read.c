@@ -479,7 +479,7 @@ nfs_readpage(struct file *file, struct page *page)
 		struct address_space *mapping = page->mapping;
 		if (!mapping)
 			BUG();
-		inode = (struct inode *)mapping->host;
+		inode = mapping->host;
 	} else
 		inode = file->f_dentry->d_inode;
 	if (!inode)

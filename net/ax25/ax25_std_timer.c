@@ -22,8 +22,6 @@
  *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -170,5 +168,3 @@ void ax25_std_t1timer_expiry(ax25_cb *ax25)
 	ax25_calculate_t1(ax25);
 	ax25_start_t1timer(ax25);
 }
-
-#endif

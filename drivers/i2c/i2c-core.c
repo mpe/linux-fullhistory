@@ -20,7 +20,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi>.
    All SMBus-related things are written by Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-core.c,v 1.56 2000/07/09 15:13:05 frodo Exp $ */
+/* $Id: i2c-core.c,v 1.58 2000/10/29 22:57:38 frodo Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -105,7 +105,7 @@ static struct inode_operations i2cproc_inode_operations = {
 };
 #endif
 
-static int i2cproc_initialized;
+static int i2cproc_initialized = 0;
 
 #else /* undef CONFIG_PROC_FS */
 
@@ -1109,6 +1109,21 @@ extern s32 i2c_smbus_write_block_data(struct i2c_client * client,
 	                      I2C_SMBUS_BLOCK_DATA,&data);
 }
 
+extern s32 i2c_smbus_write_i2c_block_data(struct i2c_client * client,
+                                          u8 command, u8 length, u8 *values)
+{
+	union i2c_smbus_data data;
+	int i;
+	if (length > 32)
+		length = 32;
+	for (i = 1; i <= length; i++)
+		data.block[i] = values[i-1];
+	data.block[0] = length;
+	return i2c_smbus_xfer(client->adapter,client->addr,client->flags,
+	                      I2C_SMBUS_WRITE,command,
+	                      I2C_SMBUS_I2C_BLOCK_DATA,&data);
+}
+
 /* Simulate a SMBus command using the i2c protocol 
    No checking of parameters is done!  */
 static s32 i2c_smbus_xfer_emulated(struct i2c_adapter * adapter, u16 addr, 
@@ -1120,8 +1135,8 @@ static s32 i2c_smbus_xfer_emulated(struct i2c_adapter * adapter, u16 addr,
 	  need to use only one message; when reading, we need two. We initialize
 	  most things with sane defaults, to keep the code below somewhat
 	  simpler. */
-	unsigned char msgbuf0[33];
-	unsigned char msgbuf1[33];
+	unsigned char msgbuf0[34];
+	unsigned char msgbuf1[34];
 	int num = read_write == I2C_SMBUS_READ?2:1;
 	struct i2c_msg msg[2] = { { addr, flags, 1, msgbuf0 }, 
 	                          { addr, flags | I2C_M_RD, 0, msgbuf1 }
@@ -1173,15 +1188,15 @@ static s32 i2c_smbus_xfer_emulated(struct i2c_adapter * adapter, u16 addr,
 			       "I2C emulation!\n");
 		return -1;
 		} else {
-			msg[1].len = data->block[0] + 1;
-			if (msg[1].len > 32) {
+			msg[0].len = data->block[0] + 2;
+			if (msg[0].len > 34) {
 				printk("i2c-core.o: smbus_access called with "
 				       "invalid block write size (%d)\n",
-				       msg[1].len);
+				       msg[0].len);
 				return -1;
 			}
-			for (i = 1; i <= msg[1].len; i++)
-				msgbuf0[i] = data->block[i];
+			for (i = 1; i <= msg[0].len; i++)
+				msgbuf0[i] = data->block[i-1];
 		}
 		break;
 	default:

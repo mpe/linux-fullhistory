@@ -339,7 +339,12 @@ extern int  ax25_uid_get_info(char *, char **, off_t, int);
 extern void ax25_uid_free(void);
 
 /* sysctl_net_ax25.c */
+#ifdef CONFIG_SYSCTL
 extern void ax25_register_sysctl(void);
 extern void ax25_unregister_sysctl(void);
+#else
+extern inline void ax25_register_sysctl(void) {};
+extern inline void ax25_unregister_sysctl(void) {};
+#endif /* CONFIG_SYSCTL */
 
 #endif

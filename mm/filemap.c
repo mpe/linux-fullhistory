@@ -71,7 +71,7 @@ static void add_page_to_hash_queue(struct page * page, struct page **p)
 
 static inline void add_page_to_inode_queue(struct address_space *mapping, struct page * page)
 {
-	struct list_head *head = &mapping->pages;
+	struct list_head *head = &mapping->clean_pages;
 
 	mapping->nrpages++;
 	list_add(&page->list, head);
@@ -131,6 +131,21 @@ static inline int sync_page(struct page *page)
 	return 0;
 }
 
+/*
+ * Add a page to the dirty page list.
+ */
+void __set_page_dirty(struct page *page)
+{
+	struct address_space *mapping = page->mapping;
+
+	spin_lock(&pagecache_lock);
+	list_del(&page->list);
+	list_add(&page->list, &mapping->dirty_pages);
+	spin_unlock(&pagecache_lock);
+
+	mark_inode_dirty_pages(mapping->host);
+}
+
 /**
  * invalidate_inode_pages - Invalidate all the unlocked pages of one inode
  * @inode: the inode which pages we want to invalidate
@@ -144,7 +159,7 @@ void invalidate_inode_pages(struct inode * inode)
 	struct list_head *head, *curr;
 	struct page * page;
 
-	head = &inode->i_mapping->pages;
+	head = &inode->i_mapping->clean_pages;
 
 	spin_lock(&pagecache_lock);
 	spin_lock(&pagemap_lru_lock);
@@ -204,26 +219,12 @@ static inline void truncate_complete_page(struct page *page)
 	page_cache_release(page);
 }
 
-/**
- * truncate_inode_pages - truncate *all* the pages from an offset
- * @mapping: mapping to truncate
- * @lstart: offset from with to truncate
- *
- * Truncate the page cache at a set offset, removing the pages
- * that are beyond that offset (and zeroing out partial pages).
- * If any page is locked we wait for it to become unlocked.
- */
-void truncate_inode_pages(struct address_space * mapping, loff_t lstart)
+void truncate_list_pages(struct list_head *head, unsigned long start, unsigned partial)
 {
-	struct list_head *head, *curr;
+	struct list_head *curr;
 	struct page * page;
-	unsigned partial = lstart & (PAGE_CACHE_SIZE - 1);
-	unsigned long start;
-
-	start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 
 repeat:
-	head = &mapping->pages;
 	spin_lock(&pagecache_lock);
 	curr = head->next;
 	while (curr != head) {
@@ -265,6 +266,26 @@ repeat:
 		}
 	}
 	spin_unlock(&pagecache_lock);
+}
+
+
+/**
+ * truncate_inode_pages - truncate *all* the pages from an offset
+ * @mapping: mapping to truncate
+ * @lstart: offset from with to truncate
+ *
+ * Truncate the page cache at a set offset, removing the pages
+ * that are beyond that offset (and zeroing out partial pages).
+ * If any page is locked we wait for it to become unlocked.
+ */
+void truncate_inode_pages(struct address_space * mapping, loff_t lstart) 
+{
+	unsigned long start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	unsigned partial = lstart & (PAGE_CACHE_SIZE - 1);
+
+	truncate_list_pages(&mapping->clean_pages, start, partial);
+	truncate_list_pages(&mapping->dirty_pages, start, partial);
+	truncate_list_pages(&mapping->locked_pages, start, partial);
 }
 
 static inline struct page * __find_page_nolock(struct address_space *mapping, unsigned long offset, struct page *page)
@@ -328,13 +349,11 @@ static int waitfor_one_page(struct page *page)
 	return error;
 }
 
-static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigned long end, int (*fn)(struct page *))
+static int do_buffer_fdatasync(struct list_head *head, unsigned long start, unsigned long end, int (*fn)(struct page *))
 {
-	struct list_head *head, *curr;
+	struct list_head *curr;
 	struct page *page;
 	int retval = 0;
-
-	head = &inode->i_mapping->pages;
 
 	spin_lock(&pagecache_lock);
 	curr = head->next;
@@ -374,9 +393,87 @@ int generic_buffer_fdatasync(struct inode *inode, unsigned long start_idx, unsig
 {
 	int retval;
 
-	retval = do_buffer_fdatasync(inode, start_idx, end_idx, writeout_one_page);
-	retval |= do_buffer_fdatasync(inode, start_idx, end_idx, waitfor_one_page);
+	/* writeout dirty buffers on pages from both clean and dirty lists */
+	retval = do_buffer_fdatasync(&inode->i_mapping->dirty_pages, start_idx, end_idx, writeout_one_page);
+	retval |= do_buffer_fdatasync(&inode->i_mapping->clean_pages, start_idx, end_idx, writeout_one_page);
+	retval |= do_buffer_fdatasync(&inode->i_mapping->locked_pages, start_idx, end_idx, writeout_one_page);
+
+	/* now wait for locked buffers on pages from both clean and dirty lists */
+	retval |= do_buffer_fdatasync(&inode->i_mapping->dirty_pages, start_idx, end_idx, writeout_one_page);
+	retval |= do_buffer_fdatasync(&inode->i_mapping->clean_pages, start_idx, end_idx, waitfor_one_page);
+	retval |= do_buffer_fdatasync(&inode->i_mapping->locked_pages, start_idx, end_idx, waitfor_one_page);
+
 	return retval;
+}
+
+/**
+ *      filemap_fdatasync - walk the list of dirty pages of the given address space
+ *     	and writepage() all of them.
+ * 
+ *      @mapping: address space structure to write
+ *
+ */
+void filemap_fdatasync(struct address_space * mapping)
+{
+	int (*writepage)(struct page *) = mapping->a_ops->writepage;
+
+	spin_lock(&pagecache_lock);
+
+        while (!list_empty(&mapping->dirty_pages)) {
+		struct page *page = list_entry(mapping->dirty_pages.next, struct page, list);
+
+		list_del(&page->list);
+		list_add(&page->list, &mapping->locked_pages);
+
+		if (!PageDirty(page))
+			continue;
+
+		page_cache_get(page);
+		spin_unlock(&pagecache_lock);
+
+		lock_page(page);
+
+		if (PageDirty(page)) {
+			ClearPageDirty(page);
+			writepage(page);
+		} else
+			UnlockPage(page);
+
+		page_cache_release(page);
+		spin_lock(&pagecache_lock);
+	}
+	spin_unlock(&pagecache_lock);
+}
+
+/**
+ *      filemap_fdatawait - walk the list of locked pages of the given address space
+ *     	and wait for all of them.
+ * 
+ *      @mapping: address space structure to wait for
+ *
+ */
+void filemap_fdatawait(struct address_space * mapping)
+{
+	spin_lock(&pagecache_lock);
+
+        while (!list_empty(&mapping->locked_pages)) {
+		struct page *page = list_entry(mapping->locked_pages.next, struct page, list);
+
+		list_del(&page->list);
+		list_add(&page->list, &mapping->clean_pages);
+
+		if (!PageLocked(page))
+			continue;
+
+		page_cache_get(page);
+		spin_unlock(&pagecache_lock);
+
+		___wait_on_page(page);
+
+		page_cache_release(page);
+		spin_lock(&pagecache_lock);
+	}
+	spin_unlock(&pagecache_lock);
 }
 
 /*
@@ -1485,60 +1582,19 @@ page_not_uptodate:
 	return NULL;
 }
 
-/*
- * If a task terminates while we're swapping the page, the vma and
- * and file could be released: try_to_swap_out has done a get_file.
- * vma/file is guaranteed to exist in the unmap/sync cases because
- * mmap_sem is held.
- *
- * The "mapping" test takes care of somebody having truncated the
- * page and thus made this write-page a no-op..
- */
-static int filemap_write_page(struct page * page, int wait)
-{
-	struct address_space * mapping = page->mapping;
-	int error = 0;
-
-	if (mapping && mapping->a_ops->writepage) {
-		ClearPageDirty(page);
-		error = mapping->a_ops->writepage(page);
-	}
-	return error;
-}
-
-
 /* Called with mm->page_table_lock held to protect against other
  * threads/the swapper from ripping pte's out from under us.
  */
 static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	unsigned long address, unsigned int flags)
 {
-	pte_t pte;
-	struct page *page;
-	int error;
+	pte_t pte = *ptep;
 
-	pte = *ptep;
-
-	if (!pte_present(pte))
-		goto out;
-	if (!ptep_test_and_clear_dirty(ptep))
-		goto out;
-
-	flush_page_to_ram(pte_page(pte));
-	flush_cache_page(vma, address);
-	flush_tlb_page(vma, address);
-	page = pte_page(pte);
-	page_cache_get(page);
-	spin_unlock(&vma->vm_mm->page_table_lock);
-
-	lock_page(page);
-	error = filemap_write_page(page, 1);
-	page_cache_free(page);
-
-	spin_lock(&vma->vm_mm->page_table_lock);
-	return error;
-
-out:
+	if (pte_present(pte) && ptep_test_and_clear_dirty(ptep)) {
+		struct page *page = pte_page(pte);
+		flush_tlb_page(vma, address);
+		set_page_dirty(page);
+	}
 	return 0;
 }
 
@@ -1685,9 +1741,12 @@ static int msync_interval(struct vm_area_struct * vma,
 		if (!error && (flags & MS_SYNC)) {
 			struct file * file = vma->vm_file;
 			if (file && file->f_op && file->f_op->fsync) {
-				down(&file->f_dentry->d_inode->i_sem);
+				struct inode * inode = file->f_dentry->d_inode;
+				down(&inode->i_sem);
+				filemap_fdatasync(inode->i_mapping);
 				error = file->f_op->fsync(file, file->f_dentry, 1);
-				up(&file->f_dentry->d_inode->i_sem);
+				filemap_fdatawait(inode->i_mapping);
+				up(&inode->i_sem);
 			}
 		}
 		return error;

@@ -259,22 +259,22 @@ nomem:
 /*
  * Return indicates whether a page was freed so caller can adjust rss
  */
-static inline int free_pte(pte_t page)
+static inline int free_pte(pte_t pte)
 {
-	if (pte_present(page)) {
-		struct page *ptpage = pte_page(page);
-		if ((!VALID_PAGE(ptpage)) || PageReserved(ptpage))
+	if (pte_present(pte)) {
+		struct page *page = pte_page(pte);
+		if ((!VALID_PAGE(page)) || PageReserved(page))
 			return 0;
 		/* 
 		 * free_page() used to be able to clear swap cache
 		 * entries.  We may now have to do it manually.  
 		 */
-		if (pte_dirty(page))
-			SetPageDirty(ptpage);
-		free_page_and_swap_cache(ptpage);
+		if (pte_dirty(pte) && page->mapping)
+			set_page_dirty(page);
+		free_page_and_swap_cache(page);
 		return 1;
 	}
-	swap_free(pte_to_swp_entry(page));
+	swap_free(pte_to_swp_entry(pte));
 	return 0;
 }
 

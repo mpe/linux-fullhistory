@@ -15,8 +15,6 @@
  *					Implemented idle timer.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -207,5 +205,3 @@ static void rose_idletimer_expiry(unsigned long param)
 
 	sk->dead = 1;
 }
-
-#endif

@@ -2489,14 +2489,19 @@ static unsigned int cs4281_poll(struct file *file,
 		CS_DBGOUT(CS_FUNCTION | CS_WAVE_WRITE | CS_WAVE_READ, 4,
 			  printk(KERN_INFO
 				 "cs4281: cs4281_poll() wait on FMODE_WRITE\n"));
+		if (!s->dma_dac.ready && prog_dmabuf_dac(s))
+			return 0;
 		poll_wait(file, &s->dma_dac.wait, wait);
 	}
 	if (file->f_mode & FMODE_READ) {
 		CS_DBGOUT(CS_FUNCTION | CS_WAVE_WRITE | CS_WAVE_READ, 4,
 			  printk(KERN_INFO
 				 "cs4281: cs4281_poll() wait on FMODE_READ\n"));
+		if (!s->dma_adc.ready && prog_dmabuf_adc(s))
+			return 0;
 		poll_wait(file, &s->dma_adc.wait, wait);
 	}
+
 	spin_lock_irqsave(&s->lock, flags);
 	cs4281_update_ptr(s);
 	if (file->f_mode & FMODE_WRITE) {
@@ -2516,8 +2521,8 @@ static unsigned int cs4281_poll(struct file *file,
 	} else if (file->f_mode & FMODE_READ) {
 		if (s->dma_adc.mapped) {
 			if (s->dma_adc.count >=
-			    (signed) s->dma_adc.fragsize) mask |=
-				    POLLIN | POLLRDNORM;
+			    (signed) s->dma_adc.fragsize)
+				mask |= POLLIN | POLLRDNORM;
 		} else {
 			if (s->dma_adc.count > 0)
 				mask |= POLLIN | POLLRDNORM;
@@ -2836,8 +2841,7 @@ static int cs4281_ioctl(struct inode *inode, struct file *file,
 	case SNDCTL_DSP_GETOSPACE:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		if (!(s->ena & FMODE_WRITE)
-		    && (val = prog_dmabuf_dac(s)) != 0)
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)))
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		cs4281_update_ptr(s);
@@ -2865,8 +2869,8 @@ static int cs4281_ioctl(struct inode *inode, struct file *file,
 	case SNDCTL_DSP_GETISPACE:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		if (!(s->ena & FMODE_READ)
-		    && (val = prog_dmabuf_adc(s)) != 0) return val;
+		if (!s->dma_dac.ready && (val = prog_dmabuf_dac(s)))
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		cs4281_update_ptr(s);
 		if (s->conversion) {
@@ -2893,6 +2897,8 @@ static int cs4281_ioctl(struct inode *inode, struct file *file,
 	case SNDCTL_DSP_GETODELAY:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)))
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		cs4281_update_ptr(s);
 		val = s->dma_dac.count;
@@ -2902,6 +2908,8 @@ static int cs4281_ioctl(struct inode *inode, struct file *file,
 	case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (val = prog_dmabuf_dac(s)))
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		cs4281_update_ptr(s);
 		cinfo.bytes = s->dma_adc.total_bytes;
@@ -2933,6 +2941,8 @@ static int cs4281_ioctl(struct inode *inode, struct file *file,
 	case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)))
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		cs4281_update_ptr(s);
 		cinfo.bytes = s->dma_dac.total_bytes;

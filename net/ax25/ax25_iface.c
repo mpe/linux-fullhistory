@@ -14,7 +14,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -40,18 +39,18 @@ static struct protocol_struct {
 	struct protocol_struct *next;
 	unsigned int pid;
 	int (*func)(struct sk_buff *, ax25_cb *);
-} *protocol_list = NULL;
+} *protocol_list;
 
 static struct linkfail_struct {
 	struct linkfail_struct *next;
 	void (*func)(ax25_cb *, int);
-} *linkfail_list = NULL;
+} *linkfail_list;
 
 static struct listen_struct {
 	struct listen_struct *next;
 	ax25_address  callsign;
 	struct net_device *dev;
-} *listen_list = NULL;
+} *listen_list;
 
 int ax25_protocol_register(unsigned int pid, int (*func)(struct sk_buff *, ax25_cb *))
 {
@@ -267,4 +266,3 @@ int ax25_protocol_is_registered(unsigned int pid)
 	return 0;
 }
 
-#endif

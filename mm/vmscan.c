@@ -91,7 +91,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if (PageSwapCache(page)) {
 		entry.val = page->index;
 		if (pte_dirty(pte))
-			SetPageDirty(page);
+			set_page_dirty(page);
 set_swap_pte:
 		swap_duplicate(entry);
 		set_pte(page_table, swp_entry_to_pte(entry));
@@ -128,9 +128,8 @@ out_failed:
 	 * entry for it, or we should write it back
 	 * to its own backing store.
 	 */
-	flush_cache_page(vma, address);
 	if (page->mapping) {
-		SetPageDirty(page);
+		set_page_dirty(page);
 		goto drop_pte;
 	}
 
@@ -146,7 +145,7 @@ out_failed:
 
 	/* Add it to the swap cache and mark it dirty */
 	add_to_swap_cache(page, entry);
-	SetPageDirty(page);
+	set_page_dirty(page);
 	goto set_swap_pte;
 
 out_unlock_restore:
@@ -579,7 +578,7 @@ dirty_page_rescan:
 			if (result != 1)
 				continue;
 			/* writepage refused to do anything */
-			SetPageDirty(page);
+			set_page_dirty(page);
 			goto page_active;
 		}
 

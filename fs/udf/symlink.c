@@ -79,7 +79,7 @@ static void udf_pc_to_char(char *from, int fromlen, char *to)
 
 static int udf_symlink_filler(struct file *file, struct page *page)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	struct buffer_head *bh = NULL;
 	char *symlink;
 	int err = -EIO;

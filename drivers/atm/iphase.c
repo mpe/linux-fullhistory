@@ -3143,7 +3143,8 @@ static const struct atmdev_ops ops = {
 	phy_put:	ia_phy_put,  
 	phy_get:	ia_phy_get,  
 	change_qos:	ia_change_qos,  
-        proc_read:	ia_proc_read
+	proc_read:	ia_proc_read,
+	owner:		THIS_MODULE,
 };  
 	  
   
@@ -3219,7 +3220,6 @@ int init_module(void)
 		printk(KERN_ERR DEV_LABEL ": no adapter found\n");  
 		return -ENXIO;  
 	}  
-	// MOD_INC_USE_COUNT; 
    	ia_timer.expires = jiffies + 3*HZ;
    	add_timer(&ia_timer); 
    
@@ -3235,7 +3235,6 @@ void cleanup_module(void)
         int i, j= 0;
  
 	IF_EVENT(printk(">ia cleanup_module\n");)  
-        // MOD_DEC_USE_COUNT;
 	if (MOD_IN_USE)  
 		printk("ia: module in use\n");  
         del_timer(&ia_timer);

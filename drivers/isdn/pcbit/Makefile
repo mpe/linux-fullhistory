@@ -2,23 +2,12 @@
 
 # The target object and module list name.
 
-O_TARGET	:= pcbit_drv.o
-
-# Objects that export symbols.
-
-export-objs	:=
+O_TARGET	:= vmlinux-obj.o
 
 # Multipart objects.
 
 list-multi	:= pcbit.o
 pcbit-objs	:= module.o edss1.o drv.o layer2.o capi.o callbacks.o
-
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
 
 # Each configuration option enables a list of files.
 

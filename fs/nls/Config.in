@@ -2,10 +2,17 @@
 # Native language support configuration
 #
 
+# smb wants NLS
+if [ "$CONFIG_SMB_FS" = "m" -o "$CONFIG_SMB_FS" = "y" ]; then
+  define_bool CONFIG_SMB_NLS y
+else
+  define_bool CONFIG_SMB_NLS n
+fi
+
 # msdos and Joliet want NLS
 if [ "$CONFIG_JOLIET" = "y" -o "$CONFIG_FAT_FS" != "n" \
 	-o "$CONFIG_NTFS_FS" != "n" -o "$CONFIG_NCPFS_NLS" = "y" \
-	-o "$CONFIG_SMB_FS" != "n" ]; then
+	-o "$CONFIG_SMB_NLS" = "y" ]; then
   define_bool CONFIG_NLS y
 else
   define_bool CONFIG_NLS n

@@ -1250,7 +1250,7 @@ typedef struct {
 	unsigned char fskz;
 	unsigned char fskphase;
 	unsigned char fskcnt;
-	unsigned pstn_cid_recieved;
+	unsigned pstn_cid_received;
 	PHONE_CID cid;
 	PHONE_CID cid_send;
 	unsigned long pstn_ring_start;

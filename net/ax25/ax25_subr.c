@@ -33,8 +33,6 @@
  *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -324,5 +322,3 @@ void ax25_disconnect(ax25_cb *ax25, int reason)
 		ax25->sk->dead      = 1;
 	}
 }
-
-#endif

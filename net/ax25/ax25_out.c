@@ -35,7 +35,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -408,4 +407,3 @@ int ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
 	return 0;
 }
 
-#endif

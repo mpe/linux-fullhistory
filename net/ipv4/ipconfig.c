@@ -783,7 +783,7 @@ static int __init ic_dynamic(void)
 		printk(".");
 		jiff = jiffies + timeout;
 		while (jiffies < jiff && !ic_got_reply)
-			;
+			barrier();
 		if (ic_got_reply) {
 			printk(" OK\n");
 			break;

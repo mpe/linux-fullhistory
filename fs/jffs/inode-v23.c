@@ -697,7 +697,7 @@ jffs_readpage(struct file *file, struct page *page)
 	void *buf;
 	unsigned long read_len;
 	int result = -EIO;
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	struct jffs_file *f = (struct jffs_file *)inode->u.generic_ip;
 	struct jffs_control *c = (struct jffs_control *)inode->i_sb->u.generic_sbp;
 	int r;

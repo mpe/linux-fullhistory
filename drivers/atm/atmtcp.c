@@ -110,7 +110,7 @@ static int atmtcp_recv_control(const struct atmtcp_control *msg)
 
 static void atmtcp_v_dev_close(struct atm_dev *dev)
 {
-	MOD_DEC_USE_COUNT;
+	/* Nothing.... Isn't this simple :-)  -- REW */
 }
 
 
@@ -298,7 +298,8 @@ static struct atmdev_ops atmtcp_v_dev_ops = {
 	close:		atmtcp_v_close,
 	ioctl:		atmtcp_v_ioctl,
 	send:		atmtcp_v_send,
-	proc_read:	atmtcp_v_proc
+	proc_read:	atmtcp_v_proc,
+	owner:		THIS_MODULE
 };
 
 
@@ -331,18 +332,13 @@ static int atmtcp_create(int itf,int persist,struct atm_dev **result)
 	struct atmtcp_dev_data *dev_data;
 	struct atm_dev *dev;
 
-	MOD_INC_USE_COUNT;
-
 	dev_data = kmalloc(sizeof(*dev_data),GFP_KERNEL);
-	if (!dev_data) {
-		MOD_DEC_USE_COUNT;
+	if (!dev_data)
 		return -ENOMEM;
-	}
 
 	dev = atm_dev_register(DEV_LABEL,&atmtcp_v_dev_ops,itf,NULL);
 	if (!dev) {
 		kfree(dev_data);
-		MOD_DEC_USE_COUNT;
 		return itf == -1 ? -ENOMEM : -EBUSY;
 	}
 	dev->ci_range.vpi_bits = MAX_VPI_BITS;

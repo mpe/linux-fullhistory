@@ -40,9 +40,7 @@
 #include <linux/netdevice.h>
 #include <linux/major.h>
 #include <linux/init.h>
-
-#include <linux/timer.h>
-
+#include <linux/rtnetlink.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
@@ -56,12 +54,7 @@
 #include <linux/tcp.h>
 #endif
 
-#ifdef MODULE
-#define AX25_VERSION    "AX25-MODULAR-NET3.019-NEWTTY"
-#define	min(a,b)	(a < b ? a : b)
-#else
-#define	AX25_VERSION	"AX25-NET3.019-NEWTTY"
-#endif
+static const char banner[] __initdata = KERN_INFO "mkiss: AX.25 Multikiss, Hans Albas PE1AYX\n";
 
 #define NR_MKISS 4
 #define MKISS_SERIAL_TYPE_NORMAL 1
@@ -77,21 +70,13 @@ typedef struct ax25_ctrl {
 	struct net_device  dev;	/* the device			*/
 } ax25_ctrl_t;
 
-static ax25_ctrl_t **ax25_ctrls = NULL;
+static ax25_ctrl_t **ax25_ctrls;
 
 int ax25_maxdev = AX25_MAXDEV;		/* Can be overridden with insmod! */
 
 static struct tty_ldisc	ax_ldisc;
-static struct tty_driver mkiss_driver;
-static int mkiss_refcount;
-static struct tty_struct *mkiss_table[NR_MKISS];
-static struct termios *mkiss_termios[NR_MKISS];
-static struct termios *mkiss_termios_locked[NR_MKISS];
-struct mkiss_channel MKISS_Info[NR_MKISS];
 
 static int ax25_init(struct net_device *);
-static int mkiss_init(void);
-static int mkiss_write(struct tty_struct *, int, const unsigned char *, int);
 static int kiss_esc(unsigned char *, unsigned char *, int);
 static int kiss_esc_crc(unsigned char *, unsigned char *, unsigned short, int);
 static void kiss_unesc(struct ax_disp *, unsigned char);
@@ -135,8 +120,7 @@ static const unsigned short Crc_flex_table[] = {
 
 /*---------------------------------------------------------------------------*/
 
-static unsigned short 
-calc_crc_flex(unsigned char *cp, int size)
+static unsigned short calc_crc_flex(unsigned char *cp, int size)
 {
     unsigned short crc = 0xffff;
     
@@ -148,8 +132,7 @@ calc_crc_flex(unsigned char *cp, int size)
 
 /*---------------------------------------------------------------------------*/
 
-static int 
-check_crc_flex(unsigned char *cp, int size)
+static int check_crc_flex(unsigned char *cp, int size)
 {
   unsigned short crc = 0xffff;
 
@@ -172,9 +155,6 @@ static inline struct ax_disp *ax_alloc(void)
 {
 	ax25_ctrl_t *axp;
 	int i;
-
-	if (ax25_ctrls == NULL)		/* Master array missing ! */
-		return NULL;
 
 	for (i = 0; i < ax25_maxdev; i++) {
 		axp = ax25_ctrls[i];
@@ -217,7 +197,7 @@ static inline struct ax_disp *ax_alloc(void)
 			/* (Re-)Set the INUSE bit.   Very Important! */
 			set_bit(AXF_INUSE, &axp->ctrl.flags);
 			axp->ctrl.dev = &axp->dev;
-			axp->dev.priv = (void *)&axp->ctrl;
+			axp->dev.priv = (void *) &axp->ctrl;
 
 			return &axp->ctrl;
 		} else {
@@ -315,14 +295,14 @@ static void ax_changedmtu(struct ax_disp *ax)
 }
 
 
-/* Set the "sending" flag.  This must be atomic, hence the ASM. */
+/* Set the "sending" flag.  This must be atomic. */
 static inline void ax_lock(struct ax_disp *ax)
 {
 	netif_stop_queue(ax->dev);
 }
 
 
-/* Clear the "sending" flag.  This must be atomic, hence the ASM. */
+/* Clear the "sending" flag.  This must be atomic. */
 static inline void ax_unlock(struct ax_disp *ax)
 {
 	netif_start_queue(ax->dev);
@@ -392,7 +372,7 @@ static void ax_encaps(struct ax_disp *ax, unsigned char *icp, int len)
 	if (mkiss->magic  != MKISS_DRIVER_MAGIC) {
 	        switch (ax->crcmode) {
 		         unsigned short crc;
-			 
+
 		case CRC_MODE_FLEX:
 		         *p |= 0x20;
 		         crc = calc_crc_flex(p, len);
@@ -427,7 +407,7 @@ static void ax_encaps(struct ax_disp *ax, unsigned char *icp, int len)
 static void ax25_write_wakeup(struct tty_struct *tty)
 {
 	int actual;
-	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
+	struct ax_disp *ax = (struct ax_disp *) tty->disc_data;
 	struct mkiss_channel *mkiss;
 
 	/* First make sure we're connected. */
@@ -441,7 +421,7 @@ static void ax25_write_wakeup(struct tty_struct *tty)
 
 		if (ax->mkiss != NULL) {
 			mkiss= ax->mkiss->tty->driver_data;
-	        	if (mkiss->magic  == MKISS_DRIVER_MAGIC)
+			if (mkiss->magic  == MKISS_DRIVER_MAGIC)
 				ax_unlock(ax->mkiss);
 	        }
 
@@ -457,7 +437,7 @@ static void ax25_write_wakeup(struct tty_struct *tty)
 /* Encapsulate an AX.25 packet and kick it into a TTY queue. */
 static int ax_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct ax_disp *ax = (struct ax_disp*)dev->priv;
+	struct ax_disp *ax = (struct ax_disp *) dev->priv;
 	struct mkiss_channel *mkiss = ax->tty->driver_data;
 	struct ax_disp *tmp_ax;
 
@@ -543,7 +523,7 @@ static int ax_rebuild_header(struct sk_buff *skb)
 /* Open the low-level part of the AX25 channel. Easy! */
 static int ax_open(struct net_device *dev)
 {
-	struct ax_disp *ax = (struct ax_disp*)dev->priv;
+	struct ax_disp *ax = (struct ax_disp *) dev->priv;
 	unsigned long len;
 
 	if (ax->tty == NULL)
@@ -554,7 +534,6 @@ static int ax_open(struct net_device *dev)
 	 *
 	 * rbuff	Receive buffer.
 	 * xbuff	Transmit buffer.
-	 * cbuff        Temporary compression buffer.
 	 */
 	len = dev->mtu * 2;
 
@@ -582,9 +561,6 @@ static int ax_open(struct net_device *dev)
 	netif_start_queue(dev);
 	return 0;
 
-	/* Cleanup */
-	kfree(ax->xbuff);
-
 noxbuff:
 	kfree(ax->rbuff);
 
@@ -596,7 +572,7 @@ norbuff:
 /* Close the low-level part of the AX25 channel. Easy! */
 static int ax_close(struct net_device *dev)
 {
-	struct ax_disp *ax = (struct ax_disp*)dev->priv;
+	struct ax_disp *ax = (struct ax_disp *) dev->priv;
 
 	if (ax->tty == NULL)
 		return -EBUSY;
@@ -621,7 +597,7 @@ static int ax25_receive_room(struct tty_struct *tty)
  */
 static void ax25_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int count)
 {
-	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
+	struct ax_disp *ax = (struct ax_disp *) tty->disc_data;
 
 	if (ax == NULL || ax->magic != AX25_MAGIC || !netif_running(ax->dev))
 		return;
@@ -648,7 +624,7 @@ static void ax25_receive_buf(struct tty_struct *tty, const unsigned char *cp, ch
 
 static int ax25_open(struct tty_struct *tty)
 {
-	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
+	struct ax_disp *ax = (struct ax_disp *) tty->disc_data;
 	struct ax_disp *tmp_ax;
 	struct mkiss_channel *mkiss;
 	int err, cnt;
@@ -679,7 +655,7 @@ static int ax25_open(struct tty_struct *tty)
 	if ((err = ax_open(ax->dev)))
 		return err;
 
-	mkiss= ax->tty->driver_data;
+	mkiss = ax->tty->driver_data;
 
 	if (mkiss->magic  == MKISS_DRIVER_MAGIC) {
 		for (cnt = 1; cnt < ax25_maxdev; cnt++) {
@@ -708,24 +684,19 @@ static int ax25_open(struct tty_struct *tty)
 
 static void ax25_close(struct tty_struct *tty)
 {
-	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
-	int mkiss ;
+	struct ax_disp *ax = (struct ax_disp *) tty->disc_data;
 
 	/* First make sure we're connected. */
 	if (ax == NULL || ax->magic != AX25_MAGIC)
 		return;
-
-	mkiss = ax->mode;
 
 	dev_close(ax->dev);
 
 	tty->disc_data = 0;
 	ax->tty        = NULL;
 
-	/* VSV = very important to remove timers */
 	ax_free(ax);
 	unregister_netdev(ax->dev);
-
 	MOD_DEC_USE_COUNT;
 }
 
@@ -733,7 +704,7 @@ static void ax25_close(struct tty_struct *tty)
 static struct net_device_stats *ax_get_stats(struct net_device *dev)
 {
 	static struct net_device_stats stats;
-	struct ax_disp *ax = (struct ax_disp*)dev->priv;
+	struct ax_disp *ax = (struct ax_disp *) dev->priv;
 
 	memset(&stats, 0, sizeof(struct net_device_stats));
 
@@ -753,7 +724,7 @@ static struct net_device_stats *ax_get_stats(struct net_device *dev)
  *			   STANDARD ENCAPSULATION	        	 *
  ************************************************************************/
 
-int kiss_esc(unsigned char *s, unsigned char *d, int len)
+static int kiss_esc(unsigned char *s, unsigned char *d, int len)
 {
 	unsigned char *ptr = d;
 	unsigned char c;
@@ -866,7 +837,7 @@ static void kiss_unesc(struct ax_disp *ax, unsigned char s)
 }
 
 
-int ax_set_mac_address(struct net_device *dev, void *addr)
+static int ax_set_mac_address(struct net_device *dev, void *addr)
 {
 	if (copy_from_user(dev->dev_addr, addr, AX25_ADDR_LEN))
 		return -EFAULT;
@@ -886,7 +857,7 @@ static int ax_set_dev_mac_address(struct net_device *dev, void *addr)
 /* Perform I/O control on an active ax25 channel. */
 static int ax25_disp_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 {
-	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
+	struct ax_disp *ax = (struct ax_disp *) tty->disc_data;
 	unsigned int tmp;
 
 	/* First make sure we're connected. */
@@ -900,12 +871,12 @@ static int ax25_disp_ioctl(struct tty_struct *tty, void *file, int cmd, void *ar
 			return 0;
 
 		case SIOCGIFENCAP:
-			put_user(4, (int *)arg);
-			return 0;
+			return put_user(4, (int *)arg);
 
 		case SIOCSIFENCAP:
-			get_user(tmp, (int *)arg);
-	 		ax->mode = tmp;
+			if (get_user(tmp, (int *)arg))
+				return -EFAULT;
+			ax->mode = tmp;
 			ax->dev->addr_len        = AX25_ADDR_LEN;	  /* sizeof an AX.25 addr */
 			ax->dev->hard_header_len = AX25_KISS_HEADER_LEN + AX25_MAX_HEADER_LEN + 3;
 			ax->dev->type            = ARPHRD_AX25;
@@ -921,59 +892,19 @@ static int ax25_disp_ioctl(struct tty_struct *tty, void *file, int cmd, void *ar
 
 static int ax_open_dev(struct net_device *dev)
 {
-	struct ax_disp *ax = (struct ax_disp*)dev->priv;
+	struct ax_disp *ax = (struct ax_disp *) dev->priv;
 
-	if (ax->tty==NULL)
+	if (ax->tty == NULL)
 		return -ENODEV;
 
 	return 0;
 }
 
-/* Initialize AX25 control device -- register AX25 line discipline */
-int __init mkiss_init_ctrl_dev(void)
-{
-	int status;
-
-	if (ax25_maxdev < 4) ax25_maxdev = 4; /* Sanity */
-
-	if ((ax25_ctrls = kmalloc(sizeof(void*) * ax25_maxdev, GFP_KERNEL)) == NULL) {
-		printk(KERN_ERR "mkiss: Can't allocate ax25_ctrls[] array !  No mkiss available\n");
-		return -ENOMEM;
-	}
-
-	/* Clear the pointer array, we allocate devices when we need them */
-	memset(ax25_ctrls, 0, sizeof(void*) * ax25_maxdev); /* Pointers */
-
-	/* Fill in our line protocol discipline, and register it */
-	memset(&ax_ldisc, 0, sizeof(ax_ldisc));
-	ax_ldisc.magic  = TTY_LDISC_MAGIC;
-	ax_ldisc.name   = "mkiss";
-	ax_ldisc.flags  = 0;
-	ax_ldisc.open   = ax25_open;
-	ax_ldisc.close  = ax25_close;
-	ax_ldisc.read   = NULL;
-	ax_ldisc.write  = NULL;
-	ax_ldisc.ioctl  = (int (*)(struct tty_struct *, struct file *, unsigned int, unsigned long))ax25_disp_ioctl;
-	ax_ldisc.poll   = NULL;
-
-	ax_ldisc.receive_buf  = ax25_receive_buf;
-	ax_ldisc.receive_room = ax25_receive_room;
-	ax_ldisc.write_wakeup = ax25_write_wakeup;
-
-	if ((status = tty_register_ldisc(N_AX25, &ax_ldisc)) != 0)
-		printk(KERN_ERR "mkiss: can't register line discipline (err = %d)\n", status);
-
-	mkiss_init();
-
-	return status;
-}
-
 
 /* Initialize the driver.  Called by network startup. */
-
 static int ax25_init(struct net_device *dev)
 {
-	struct ax_disp *ax = (struct ax_disp*)dev->priv;
+	struct ax_disp *ax = (struct ax_disp *) dev->priv;
 
 	static char ax25_bcast[AX25_ADDR_LEN] =
 		{'Q'<<1,'S'<<1,'T'<<1,' '<<1,' '<<1,' '<<1,'0'<<1};
@@ -994,21 +925,16 @@ static int ax25_init(struct net_device *dev)
 	dev->open            = ax_open_dev;
 	dev->stop            = ax_close;
 	dev->get_stats	     = ax_get_stats;
-#ifdef HAVE_SET_MAC_ADDR
 	dev->set_mac_address = ax_set_dev_mac_address;
-#endif
 	dev->hard_header_len = 0;
 	dev->addr_len        = 0;
 	dev->type            = ARPHRD_AX25;
 	dev->tx_queue_len    = 10;
+	dev->hard_header     = ax_header;
+	dev->rebuild_header  = ax_rebuild_header;
 
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);
 	memcpy(dev->dev_addr,  ax25_test,  AX25_ADDR_LEN);
-
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
-	dev->hard_header     = ax_header;
-	dev->rebuild_header  = ax_rebuild_header;
-#endif
 
 	dev_init_buffers(dev);
 
@@ -1018,219 +944,74 @@ static int ax25_init(struct net_device *dev)
 	return 0;
 }
 
-static int mkiss_open(struct tty_struct *tty, struct file *filp)
-{
-	struct mkiss_channel *mkiss;
-	int chan;
-
-	chan = MINOR(tty->device) - tty->driver.minor_start;
-
-	if (chan < 0 || chan >= NR_MKISS)
-		return -ENODEV;
-
-	mkiss = &MKISS_Info[chan];
-
-	mkiss->magic =  MKISS_DRIVER_MAGIC;
-	mkiss->init  = 1;
-	mkiss->tty   = tty;
-
-	tty->driver_data = mkiss;
-
-	tty->termios->c_iflag  = IGNBRK | IGNPAR;
-	tty->termios->c_cflag  = B9600 | CS8 | CLOCAL;
-	tty->termios->c_cflag &= ~CBAUD;
-
-	return 0;
-}
-
-static void mkiss_close(struct tty_struct *tty, struct file * filp)
-{
-	struct mkiss_channel *mkiss = tty->driver_data;
-
-	if (mkiss == NULL || mkiss->magic != MKISS_DRIVER_MAGIC)
-                return;
-
-	mkiss->tty   = NULL;
-	mkiss->init  = 0;
-	tty->stopped = 0;
-}
-
-static int mkiss_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
-{
-	return 0;
-}
-
-static int mkiss_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg)
-{
-	/* Ignore serial ioctl's */
-	switch (cmd) {
-		case TCSBRK:
-		case TIOCMGET:
-		case TIOCMBIS:
-		case TIOCMBIC:
-		case TIOCMSET:
-		case TCSETS:
-		case TCSETSF:		/* should flush first, but... */
-		case TCSETSW:		/* should wait until flush, but... */
-			return 0;
-		default:
-			return -ENOIOCTLCMD;
-	}
-}
-
-
-static void mkiss_dummy(struct tty_struct *tty)
-{
-	struct mkiss_channel *mkiss = tty->driver_data;
-
-	if (tty == NULL)
-		return;
-
-	if (mkiss == NULL)
-		return;
-}
-
-static void mkiss_dummy2(struct tty_struct *tty, unsigned char ch)
-{
-	struct mkiss_channel *mkiss = tty->driver_data;
-
-	if (tty == NULL)
-		return;
-
-	if (mkiss == NULL)
-		return;
-}
-
-
-static int mkiss_write_room(struct tty_struct * tty)
-{
-	struct mkiss_channel *mkiss = tty->driver_data;
-
-	if (tty == NULL)
-		return 0;
-
-	if (mkiss == NULL)
-		return 0;
-
-	return 65536;  /* We can handle an infinite amount of data. :-) */
-}
-
-
-static int mkiss_chars_in_buffer(struct tty_struct *tty)
-{
-	struct mkiss_channel *mkiss = tty->driver_data;
-
-	if (tty == NULL)
-		return 0;
-
-	if (mkiss == NULL)
-		return 0;
-
-	return 0;
-}
-
-
-static void mkiss_set_termios(struct tty_struct *tty, struct termios *old_termios)
-{
-	/* we don't do termios */
-}
 
 /* ******************************************************************** */
-/* * 			Init MKISS driver 			      * */
+/* *			Init MKISS driver			      * */
 /* ******************************************************************** */
 
-static int __init mkiss_init(void)
+static int __init mkiss_init_driver(void)
 {
-	memset(&mkiss_driver, 0, sizeof(struct tty_driver));
+	int status;
 
-	mkiss_driver.magic       = MKISS_DRIVER_MAGIC;
-	mkiss_driver.name        = "mkiss";
-	mkiss_driver.major       = MKISS_MAJOR;
-	mkiss_driver.minor_start = 0;
-	mkiss_driver.num         = NR_MKISS;
-	mkiss_driver.type        = TTY_DRIVER_TYPE_SERIAL;
-	mkiss_driver.subtype     = MKISS_SERIAL_TYPE_NORMAL;	/* not needed */
+	printk(banner);
 
-	mkiss_driver.init_termios         = tty_std_termios;
-	mkiss_driver.init_termios.c_iflag = IGNBRK | IGNPAR;
-	mkiss_driver.init_termios.c_cflag = B9600 | CS8 | CLOCAL;
+	if (ax25_maxdev < 4)
+	  ax25_maxdev = 4; /* Sanity */
 
-	mkiss_driver.flags           = TTY_DRIVER_REAL_RAW;
-	mkiss_driver.refcount        = &mkiss_refcount;
-	mkiss_driver.table           = mkiss_table;
-	mkiss_driver.termios         = (struct termios **)mkiss_termios;
-	mkiss_driver.termios_locked  = (struct termios **)mkiss_termios_locked;
-
-	mkiss_driver.ioctl           = mkiss_ioctl;
-	mkiss_driver.open            = mkiss_open;
-	mkiss_driver.close           = mkiss_close;
-	mkiss_driver.write           = mkiss_write;
-	mkiss_driver.write_room      = mkiss_write_room;
-	mkiss_driver.chars_in_buffer = mkiss_chars_in_buffer;
-	mkiss_driver.set_termios     = mkiss_set_termios;
-
-	/* some unused functions */
-	mkiss_driver.flush_buffer = mkiss_dummy;
-	mkiss_driver.throttle     = mkiss_dummy;
-	mkiss_driver.unthrottle   = mkiss_dummy;
-	mkiss_driver.stop         = mkiss_dummy;
-	mkiss_driver.start        = mkiss_dummy;
-	mkiss_driver.hangup       = mkiss_dummy;
-	mkiss_driver.flush_chars  = mkiss_dummy;
-	mkiss_driver.put_char     = mkiss_dummy2;
-
-	if (tty_register_driver(&mkiss_driver)) {
-		printk(KERN_ERR "mkiss: couldn't register Mkiss device\n");
-		return -EIO;
+	if ((ax25_ctrls = kmalloc(sizeof(void *) * ax25_maxdev, GFP_KERNEL)) == NULL) {
+		printk(KERN_ERR "mkiss: Can't allocate ax25_ctrls[] array!\n");
+		return -ENOMEM;
 	}
 
-	printk(KERN_INFO "AX.25 Multikiss device enabled\n");
+	/* Clear the pointer array, we allocate devices when we need them */
+	memset(ax25_ctrls, 0, sizeof(void*) * ax25_maxdev); /* Pointers */
 
-	return 0;
+	/* Fill in our line protocol discipline, and register it */
+	ax_ldisc.magic		= TTY_LDISC_MAGIC;
+	ax_ldisc.name		= "mkiss";
+	ax_ldisc.open		= ax25_open;
+	ax_ldisc.close		= ax25_close;
+	ax_ldisc.ioctl		= (int (*)(struct tty_struct *, struct file *,
+					unsigned int, unsigned long))ax25_disp_ioctl;
+	ax_ldisc.receive_buf	= ax25_receive_buf;
+	ax_ldisc.receive_room	= ax25_receive_room;
+	ax_ldisc.write_wakeup	= ax25_write_wakeup;
+
+	if ((status = tty_register_ldisc(N_AX25, &ax_ldisc)) != 0) {
+		printk(KERN_ERR "mkiss: can't register line discipline (err = %d)\n", status);
+		kfree(ax25_ctrls);
+	}
+	return status;
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-MODULE_PARM(ax25_maxdev, "i");
-MODULE_PARM_DESC(ax25_maxdev, "number of MKISS devices");
-
-MODULE_AUTHOR("Hans Albas PE1AYX <hans@esrac.ele.tue.nl>");
-MODULE_DESCRIPTION("KISS driver for AX.25 over TTYs");
-
-int init_module(void)
-{
-	return mkiss_init_ctrl_dev();
-}
-
-void cleanup_module(void)
+static void __exit mkiss_exit_driver(void)
 {
 	int i;
 
-	if (ax25_ctrls != NULL) {
-		for (i = 0; i < ax25_maxdev; i++) {
-			if (ax25_ctrls[i]) {
-				/*
-				 * VSV = if dev->start==0, then device
-				 * unregistred while close proc.
-				 */
-				if (netif_running(&ax25_ctrls[i]->dev))
-					unregister_netdev(&(ax25_ctrls[i]->dev));
-
-				kfree(ax25_ctrls[i]);
-				ax25_ctrls[i] = NULL;
-			}
+	for (i = 0; i < ax25_maxdev; i++) {
+		if (ax25_ctrls[i]) {
+			/*
+			* VSV = if dev->start==0, then device
+			* unregistered while close proc.
+			*/
+			if (netif_running(&ax25_ctrls[i]->dev))
+				unregister_netdev(&ax25_ctrls[i]->dev);
+			kfree(ax25_ctrls[i]);
 		}
-
-		kfree(ax25_ctrls);
-		ax25_ctrls = NULL;
 	}
+
+	kfree(ax25_ctrls);
+	ax25_ctrls = NULL;
 
 	if ((i = tty_register_ldisc(N_AX25, NULL)))
 		printk(KERN_ERR "mkiss: can't unregister line discipline (err = %d)\n", i);
-
-	if (tty_unregister_driver(&mkiss_driver))	/* remove devive */
-		printk(KERN_ERR "mkiss: can't unregister MKISS device\n");
 }
 
-#endif /* MODULE */
+MODULE_AUTHOR("Hans Albas PE1AYX <hans@esrac.ele.tue.nl>");
+MODULE_DESCRIPTION("KISS driver for AX.25 over TTYs");
+MODULE_PARM(ax25_maxdev, "i");
+MODULE_PARM_DESC(ax25_maxdev, "number of MKISS devices");
+
+module_init(mkiss_init_driver);
+module_exit(mkiss_exit_driver);
+

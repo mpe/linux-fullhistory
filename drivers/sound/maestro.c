@@ -2394,18 +2394,17 @@ static unsigned int ess_poll(struct file *file, struct poll_table_struct *wait)
 	struct ess_state *s = (struct ess_state *)file->private_data;
 	unsigned long flags;
 	unsigned int mask = 0;
-	int ret;
 
 	VALIDATE_STATE(s);
 
 /* In 0.14 prog_dmabuf always returns success anyway ... */
 	if (file->f_mode & FMODE_WRITE) {
-		if (!s->dma_dac.ready && (ret = prog_dmabuf(s, 0))) 
-			return POLLERR;
+		if (!s->dma_dac.ready && prog_dmabuf(s, 0)) 
+			return 0;
 	}
 	if (file->f_mode & FMODE_READ) {
-	  	if (!s->dma_adc.ready && (ret = prog_dmabuf(s, 1)))
-			return POLLERR;
+	  	if (!s->dma_adc.ready && prog_dmabuf(s, 1))
+			return 0;
 	}
 
 	if (file->f_mode & FMODE_WRITE)
@@ -2655,8 +2654,8 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 	case SNDCTL_DSP_GETOSPACE:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		if (!(s->enable & DAC_RUNNING) && (val = prog_dmabuf(s, 0)) != 0)
-			return val;
+		if (!s->dma_dac.ready && (ret = prog_dmabuf(s, 0)))
+			return ret;
 		spin_lock_irqsave(&s->lock, flags);
 		ess_update_ptr(s);
 		abinfo.fragsize = s->dma_dac.fragsize;
@@ -2669,8 +2668,8 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 	case SNDCTL_DSP_GETISPACE:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		if (!(s->enable & ADC_RUNNING) && (val = prog_dmabuf(s, 1)) != 0)
-			return val;
+		if (!s->dma_adc.ready && (ret =  prog_dmabuf(s, 1)))
+			return ret;
 		spin_lock_irqsave(&s->lock, flags);
 		ess_update_ptr(s);
 		abinfo.fragsize = s->dma_adc.fragsize;
@@ -2687,6 +2686,8 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
         case SNDCTL_DSP_GETODELAY:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (ret = prog_dmabuf(s, 0)))
+			return ret;
 		spin_lock_irqsave(&s->lock, flags);
 		ess_update_ptr(s);
                 val = s->dma_dac.count;
@@ -2696,6 +2697,8 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
+		if (!s->dma_adc.ready && (ret =  prog_dmabuf(s, 1)))
+			return ret;
 		spin_lock_irqsave(&s->lock, flags);
 		ess_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
@@ -2709,6 +2712,8 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
         case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (ret = prog_dmabuf(s, 0)))
+			return ret;
 		spin_lock_irqsave(&s->lock, flags);
 		ess_update_ptr(s);
                 cinfo.bytes = s->dma_dac.total_bytes;

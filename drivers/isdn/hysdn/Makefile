@@ -2,11 +2,7 @@
 
 # The target object and module list name.
 
-O_TARGET	:= hysdn_drv.o
-
-# Objects that export symbols.
-
-export-objs	:=
+O_TARGET	:= vmlinux-obj.o
 
 # Multipart objects.
 
@@ -19,13 +15,6 @@ hysdn-objs	:= hysdn_procconf.o hysdn_proclog.o boardergo.o hysdn_boot.o \
 hysdn-objs-$(CONFIG_HYSDN_CAPI) += hycapi.o
 
 hysdn-objs 	+= $(hysdn-objs-y)
-
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
 
 # Each configuration option enables a list of files.
 

@@ -20,7 +20,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
 
-/* $Id: i2c-id.h,v 1.16 2000/04/03 18:57:42 frodo Exp $ */
+/* $Id: i2c-id.h,v 1.25 2000/10/12 07:27:29 simon Exp $ */
 
 #ifndef I2C_ID_H
 #define I2C_ID_H
@@ -71,6 +71,20 @@
 #define I2C_DRIVERID_PCF8583	25	/* real time clock		*/
 #define I2C_DRIVERID_SAB3036	26	/* SAB3036 tuner		*/
 #define I2C_DRIVERID_TDA7432	27	/* Stereo sound processor	*/
+#define I2C_DRIVERID_TVMIXER    28      /* Mixer driver for tv cards    */
+#define I2C_DRIVERID_TVAUDIO    29      /* Generic TV sound driver      */
+#define I2C_DRIVERID_DPL3518    30      /* Dolby decoder chip           */
+#define I2C_DRIVERID_TDA9873    31      /* TV sound decoder chip        */
+#define I2C_DRIVERID_TDA9875    32      /* TV sound decoder chip        */
+#define I2C_DRIVERID_PIC16C54_PV9 33    /* Audio mux/ir receiver        */
+
+#define I2C_DRIVERID_SBATT      34     /* Smart Battery Device		*/
+#define I2C_DRIVERID_SBS        35     /* SB System Manager		*/
+#define I2C_DRIVERID_VES1893	36     /* VLSI DVB-S decoder		*/
+#define I2C_DRIVERID_VES1820	37     /* VLSI DVB-C decoder		*/
+#define I2C_DRIVERID_SAA7113	38     /* video decoder			*/
+#define I2C_DRIVERID_TDA8444	39     /* octuple 6-bit DAC             */
+
 
 #define I2C_DRIVERID_EXP0	0xF0	/* experimental use id's	*/
 #define I2C_DRIVERID_EXP1	0xF1
@@ -94,6 +108,11 @@
 #define I2C_ALGO_SMBUS	0x040000
 #define I2C_ALGO_ISA 	0x050000	/* lm_sensors ISA pseudo-adapter */
 #define I2C_ALGO_SAA7146 0x060000	/* SAA 7146 video decoder bus	*/
+#define I2C_ALGO_ACB 	0x070000	/* ACCESS.bus algorithm         */
+
+#define I2C_ALGO_EC     0x100000        /* ACPI embedded controller     */
+
+#define I2C_ALGO_MPC8XX 0x110000	/* MPC8xx PowerPC I2C algorithm */
 
 #define I2C_ALGO_EXP	0x800000	/* experimental			*/
 
@@ -128,6 +147,12 @@
 #define I2C_HW_P_ISA	0x01	/* generic ISA Bus inteface card	*/
 #define I2C_HW_P_ELEK	0x02	/* Elektor ISA Bus inteface card	*/
 
+/* --- ACPI Embedded controller algorithms                              */
+#define I2C_HW_ACPI_EC          0x00
+
+/* --- MPC8xx PowerPC adapters						*/
+#define I2C_HW_MPC8XX_EPON 0x00	/* Eponymous MPC8xx I2C adapter 	*/
+
 /* --- SMBus only adapters						*/
 #define I2C_HW_SMBUS_PIIX4	0x00
 #define I2C_HW_SMBUS_ALI15X3	0x01
@@ -136,6 +161,7 @@
 #define I2C_HW_SMBUS_I801	0x04
 #define I2C_HW_SMBUS_AMD756	0x05
 #define I2C_HW_SMBUS_SIS5595	0x06
+#define I2C_HW_SMBUS_ALI1535	0x07
 
 /* --- ISA pseudo-adapter						*/
 #define I2C_HW_ISA 0x00

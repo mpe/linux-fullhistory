@@ -17,7 +17,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -39,8 +38,9 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
-ax25_dev *ax25_dev_list = NULL;
+ax25_dev *ax25_dev_list;
 
 ax25_dev *ax25_dev_ax25dev(struct net_device *dev)
 {
@@ -78,9 +78,7 @@ void ax25_dev_device_up(struct net_device *dev)
 		return;
 	}
 
-#ifdef CONFIG_SYSCTL
 	ax25_unregister_sysctl();
-#endif
 
 	memset(ax25_dev, 0x00, sizeof(*ax25_dev));
 
@@ -107,9 +105,7 @@ void ax25_dev_device_up(struct net_device *dev)
 	ax25_dev_list  = ax25_dev;
 	restore_flags(flags);
 
-#ifdef CONFIG_SYSCTL
 	ax25_register_sysctl();
-#endif
 }
 
 void ax25_dev_device_down(struct net_device *dev)
@@ -120,9 +116,7 @@ void ax25_dev_device_down(struct net_device *dev)
 	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
 		return;
 
-#ifdef CONFIG_SYSCTL
 	ax25_unregister_sysctl();
-#endif
 
 	save_flags(flags); cli();
 
@@ -141,9 +135,7 @@ void ax25_dev_device_down(struct net_device *dev)
 		ax25_dev_list = s->next;
 		restore_flags(flags);
 		kfree(ax25_dev);
-#ifdef CONFIG_SYSCTL
 		ax25_register_sysctl();
-#endif
 		return;
 	}
 
@@ -152,9 +144,7 @@ void ax25_dev_device_down(struct net_device *dev)
 			s->next = ax25_dev->next;
 			restore_flags(flags);
 			kfree(ax25_dev);
-#ifdef CONFIG_SYSCTL
 			ax25_register_sysctl();
-#endif
 			return;
 		}
 
@@ -162,9 +152,7 @@ void ax25_dev_device_down(struct net_device *dev)
 	}
 
 	restore_flags(flags);
-#ifdef CONFIG_SYSCTL
 	ax25_register_sysctl();
-#endif
 }
 
 int ax25_fwd_ioctl(unsigned int cmd, struct ax25_fwd_struct *fwd)
@@ -209,12 +197,10 @@ struct net_device *ax25_fwd_dev(struct net_device *dev)
 	return ax25_dev->forward;
 }
 
-#ifdef MODULE
-
 /*
  *	Free all memory associated with device structures.
  */
-void ax25_dev_free(void)
+void __exit ax25_dev_free(void)
 {
 	ax25_dev *s, *ax25_dev = ax25_dev_list;
 
@@ -225,7 +211,3 @@ void ax25_dev_free(void)
 		kfree(s);
 	}
 }
-
-#endif
-
-#endif

@@ -44,6 +44,9 @@ choice 'Processor family' \
 #
 # Define implied options from the CPU selection here
 #
+
+unset CONFIG_X86_FXSR
+
 if [ "$CONFIG_M386" = "y" ]; then
    define_bool CONFIG_X86_CMPXCHG n
    define_int  CONFIG_X86_L1_CACHE_SHIFT 4
@@ -136,7 +139,6 @@ if [ "$CONFIG_MWINCHIP3D" = "y" ]; then
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
-   define_bool CONFIG_X86_USE_3DNOW y
 fi
 tristate 'Toshiba Laptop support' CONFIG_TOSHIBA
 
@@ -162,15 +164,15 @@ fi
 bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 bool 'Symmetric multi-processing support' CONFIG_SMP
 if [ "$CONFIG_SMP" != "y" ]; then
-    bool 'APIC and IO-APIC support on uniprocessors' CONFIG_X86_UP_IOAPIC
-    if [ "$CONFIG_X86_UP_IOAPIC" = "y" ]; then
-       define_bool CONFIG_X86_IO_APIC y
-       define_bool CONFIG_X86_LOCAL_APIC y
-    fi
+   bool 'APIC and IO-APIC support on uniprocessors' CONFIG_X86_UP_IOAPIC
+   if [ "$CONFIG_X86_UP_IOAPIC" = "y" ]; then
+      define_bool CONFIG_X86_IO_APIC y
+      define_bool CONFIG_X86_LOCAL_APIC y
+   fi
 fi
 
 if [ "$CONFIG_SMP" = "y" -a "$CONFIG_X86_CMPXCHG" = "y" ]; then
-    define_bool CONFIG_HAVE_DEC_LOCK y
+   define_bool CONFIG_HAVE_DEC_LOCK y
 fi
 endmenu
 
@@ -274,10 +276,10 @@ comment 'ATA/IDE/MFM/RLL support'
 tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
 
 if [ "$CONFIG_IDE" != "n" ]; then
-  source drivers/ide/Config.in
+   source drivers/ide/Config.in
 else
-  define_bool CONFIG_BLK_DEV_IDE_MODES n
-  define_bool CONFIG_BLK_DEV_HD n
+   define_bool CONFIG_BLK_DEV_IDE_MODES n
+   define_bool CONFIG_BLK_DEV_HD n
 fi
 endmenu
 

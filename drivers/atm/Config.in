@@ -22,6 +22,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
 	 bool '    Enable 2W RX bursts (optional)' CONFIG_ATM_ENI_BURST_RX_2W
       fi
    fi
+   tristate 'Fujitsu FireStream (FS50/FS155) ' CONFIG_ATM_FIRESTREAM
    tristate 'ZeitNet ZN1221/ZN1225' CONFIG_ATM_ZATM
    if [ "$CONFIG_ATM_ZATM" != "n" ]; then
       bool '  Enable extended debugging' CONFIG_ATM_ZATM_DEBUG

@@ -41,8 +41,6 @@
  *			Arnaldo C. Melo s/suser/capable/
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -64,8 +62,9 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
-static ax25_route *ax25_route_list = NULL;
+static ax25_route *ax25_route_list;
 
 static ax25_route *ax25_find_route(ax25_address *, struct net_device *);
 
@@ -434,12 +433,10 @@ struct sk_buff *ax25_rt_build_path(struct sk_buff *skb, ax25_address *src, ax25_
 	return skb;
 }
 
-#ifdef MODULE
-
 /*
  *	Free all memory associated with routing structures.
  */
-void ax25_rt_free(void)
+void __exit ax25_rt_free(void)
 {
 	ax25_route *s, *ax25_rt = ax25_route_list;
 
@@ -453,7 +450,3 @@ void ax25_rt_free(void)
 		kfree(s);
 	}
 }
-
-#endif
-
-#endif

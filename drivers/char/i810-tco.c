@@ -55,6 +55,7 @@
 #define TIMER_MARGIN	50	/* steps of 0.6sec, 2<n<64. Default is 30 seconds */
 
 static unsigned int ACPIBASE;
+static spinlock_t tco_lock;	/* Guards the hardware */
 
 static int i810_margin = TIMER_MARGIN;	/* steps of 0.6sec */
 
@@ -79,10 +80,13 @@ static int tco_timer_start (void)
 {
 	unsigned char val;
 
+	spin_lock(&tco_lock);
 	val = inb (TCO1_CNT + 1);
 	val &= 0xf7;
 	outb (val, TCO1_CNT + 1);
 	val = inb (TCO1_CNT + 1);
+	spin_unlock(&tco_lock);
+	
 	if (val & 0x08)
 		return -1;
 	return 0;
@@ -95,10 +99,13 @@ static int tco_timer_stop (void)
 {
 	unsigned char val;
 
+	spin_lock(&tco_lock);
 	val = inb (TCO1_CNT + 1);
 	val |= 0x08;
 	outb (val, TCO1_CNT + 1);
 	val = inb (TCO1_CNT + 1);
+	spin_unlock(&tco_lock);
+	
 	if ((val & 0x08) == 0)
 		return -1;
 	return 0;
@@ -115,12 +122,15 @@ static int tco_timer_settimer (unsigned char tmrval)
 	/* "Values of 0h-3h are ignored and should not be attempted" */
 	if (tmrval > 0x3f || tmrval < 0x03)
 		return -1;
-
+	
+	spin_lock(&tco_lock);
 	val = inb (TCO1_TMR);
 	val &= 0xc0;
 	val |= tmrval;
 	outb (val, TCO1_TMR);
 	val = inb (TCO1_TMR);
+	spin_unlock(&tco_lock);
+	
 	if ((val & 0x3f) != tmrval)
 		return -1;
 
@@ -128,11 +138,15 @@ static int tco_timer_settimer (unsigned char tmrval)
 }
 
 /*
- * Reload (trigger) the timer
+ * Reload (trigger) the timer. Lock is needed so we dont reload it during
+ * a reprogramming event
  */
+ 
 static void tco_timer_reload (void)
 {
+	spin_lock(&tco_lock);
 	outb (0x01, TCO1_RLD);
+	spin_unlock(&tco_lock);
 }
 
 /*
@@ -285,6 +299,7 @@ static struct miscdevice i810tco_miscdev = {
 
 static int __init watchdog_init (void)
 {
+	spin_lock_init(&tco_lock);
 	if (!i810tco_getdevice () || i810tco_pci == NULL)
 		return -ENODEV;
 	if (!request_region (TCOBASE, 0x10, "i810 TCO")) {

@@ -15,8 +15,6 @@
  *	NET/ROM 007	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -297,5 +295,3 @@ void nr_disconnect(struct sock *sk, int reason)
 
 	sk->dead = 1;
 }
-
-#endif

@@ -268,7 +268,8 @@ static struct atmdev_ops atm_ops =
    send:	ns_send,
    phy_put:	ns_phy_put,
    phy_get:	ns_phy_get,
-   proc_read:	ns_proc_read
+   proc_read:	ns_proc_read,
+   owner:	THIS_MODULE,
 };
 static struct timer_list ns_timer;
 static char *mac[NS_MAX_CARDS];
@@ -1633,7 +1634,6 @@ static int ns_open(struct atm_vcc *vcc, short vpi, int vci)
    }
    
    set_bit(ATM_VF_READY,&vcc->flags);
-   MOD_INC_USE_COUNT;
    return 0;
 }
 
@@ -1762,7 +1762,6 @@ static void ns_close(struct atm_vcc *vcc)
    vcc->dev_data = NULL;
    clear_bit(ATM_VF_PARTIAL,&vcc->flags);
    clear_bit(ATM_VF_ADDR,&vcc->flags);
-   MOD_DEC_USE_COUNT;
 
 #ifdef RX_DEBUG
    {

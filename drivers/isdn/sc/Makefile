@@ -2,24 +2,13 @@
 
 # The target object and module list name.
 
-O_TARGET	:= sc_drv.o
-
-# Objects that export symbols.
-
-export-objs	:=
+O_TARGET	:= vmlinux-obj.o
 
 # Multipart objects.
 
 list-multi	:= sc.o
 sc-objs		:= shmem.o init.o debug.o packet.o command.o event.o \
 		   ioctl.o interrupt.o message.o timer.o	
-
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
 
 # Each configuration option enables a list of files.
 

@@ -29,10 +29,9 @@ static struct address_space_operations swap_aops = {
 };
 
 struct address_space swapper_space = {
-	{				/* pages	*/
-		&swapper_space.pages,	/*        .next */
-		&swapper_space.pages	/*	  .prev */
-	},
+	LIST_HEAD_INIT(swapper_space.clean_pages),
+	LIST_HEAD_INIT(swapper_space.dirty_pages),
+	LIST_HEAD_INIT(swapper_space.locked_pages),
 	0,				/* nrpages	*/
 	&swap_aops,
 };

@@ -1823,8 +1823,7 @@ static void doevent(int crd)
  */
 static void pcxxdelay(int msec)
 {
-	while(msec-- > 0)
-		__delay(loops_per_sec/1000);
+	mdelay(mseconds);
 }
 
 

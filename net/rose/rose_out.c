@@ -15,8 +15,6 @@
  *					Removed M bit processing.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -130,5 +128,3 @@ void rose_enquiry_response(struct sock *sk)
 
 	rose_stop_timer(sk);
 }
-
-#endif

@@ -948,6 +948,14 @@ S: University of California, Riverside
 S: Riverside, California 92521-0304
 S: USA
 
+N: Hans Grobler
+E: grobh@sun.ac.za
+D: Various AX.25/ROSE/NETROM + hamradio driver patches
+S: Department of Electronic Engineering
+S: University of Stellenbosch
+S: Stellenbosch, Western Cape
+S: South Africa
+
 N: Grant Guenther
 E: grant@torque.net
 W: http://www.torque.net/linux-pp.html

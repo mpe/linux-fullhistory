@@ -349,7 +349,7 @@ static int affs_readpage(struct file *file, struct page *page)
 static int affs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,affs_get_block,
-		&((struct inode*)page->mapping->host)->u.affs_i.mmu_private);
+		&page->mapping->host->u.affs_i.mmu_private);
 }
 static int _affs_bmap(struct address_space *mapping, long block)
 {

@@ -263,7 +263,7 @@ nfs_writepage(struct page *page)
 
 	if (!mapping)
 		BUG();
-	inode = (struct inode *)mapping->host;
+	inode = mapping->host;
 	if (!inode)
 		BUG();
 	end_index = inode->i_size >> PAGE_CACHE_SHIFT;

@@ -289,10 +289,11 @@ loader_ok:
 # a whole bunch of different types, and allows memory holes and
 # everything.  We scan through this memory map and build a list
 # of the first 32 memory areas, which we return at [E820MAP].
-#
+# This is documented at http://www.teleport.com/~acpi/acpihtml/topic245.htm
+
+#define SMAP  0x534d4150
 
 meme820:
-	movl	$0x534d4150, %edx		# ascii `SMAP'
 	xorl	%ebx, %ebx			# continuation counter
 	movw	$E820MAP, %di			# point into the whitelist
 						# so we can have the bios
@@ -300,13 +301,14 @@ meme820:
 
 jmpe820:
 	movl	$0x0000e820, %eax		# e820, upper word zeroed
+	movl	$SMAP, %edx			# ascii 'SMAP'
 	movl	$20, %ecx			# size of the e820rec
 	pushw	%ds				# data record.
 	popw	%es
 	int	$0x15				# make the call
 	jc	bail820				# fall to e801 if it fails
 
-	cmpl	$0x534d4150, %eax		# check the return is `SMAP'
+	cmpl	$SMAP, %eax			# check the return is `SMAP'
 	jne	bail820				# fall to e801 if it fails
 
 #	cmpl	$1, 16(%di)			# is this usable memory?

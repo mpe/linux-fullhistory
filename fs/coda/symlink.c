@@ -24,7 +24,7 @@
 
 static int coda_symlink_filler(struct file *file, struct page *page)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	int error;
 	struct coda_inode_info *cnp;
 	unsigned int len = PAGE_SIZE;

@@ -35,7 +35,7 @@ struct ext2_sb_info {
 	unsigned long s_blocks_per_group;/* Number of blocks in a group */
 	unsigned long s_inodes_per_group;/* Number of inodes in a group */
 	unsigned long s_itb_per_group;	/* Number of inode table blocks per group */
-	unsigned long s_db_per_group;	/* Number of descriptor blocks per group */
+	unsigned long s_gdb_count;	/* Number of group descriptor blocks */
 	unsigned long s_desc_per_block;	/* Number of group descriptors per block */
 	unsigned long s_groups_count;	/* Number of groups in the fs */
 	struct buffer_head * s_sbh;	/* Buffer containing the super block */
@@ -56,9 +56,6 @@ struct ext2_sb_info {
 	int s_desc_per_block_bits;
 	int s_inode_size;
 	int s_first_ino;
-	int s_feature_compat;
-	int s_feature_incompat;
-	int s_feature_ro_compat;
 };
 
 #endif	/* _LINUX_EXT2_FS_SB */

@@ -22,8 +22,6 @@
  *			Joerg(DL1BKE)	ax25->n2count never got reset
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25_DAMA_SLAVE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -312,4 +310,3 @@ int ax25_ds_frame_in(ax25_cb *ax25, struct sk_buff *skb, int type)
 	return queued;
 }
 
-#endif

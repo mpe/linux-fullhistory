@@ -22,8 +22,6 @@
  *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25_DAMA_SLAVE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -217,4 +215,3 @@ void ax25_dama_off(ax25_cb *ax25)
 	ax25_dev_dama_off(ax25->ax25_dev);
 }
 
-#endif

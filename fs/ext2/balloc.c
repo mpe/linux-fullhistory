@@ -663,7 +663,7 @@ static inline int block_in_use (unsigned long block,
 			 EXT2_BLOCKS_PER_GROUP(sb), map);
 }
 
-static int test_root(int a, int b)
+static inline int test_root(int a, int b)
 {
 	if (a == 0)
 		return 1;
@@ -682,24 +682,55 @@ int ext2_group_sparse(int group)
 		test_root(group, 7));
 }
 
+/**
+ *	ext2_bg_has_super - number of blocks used by the superblock in group
+ *	@sb: superblock for filesystem
+ *	@group: group number to check
+ *
+ *	Return the number of blocks used by the superblock (primary or backup)
+ *	in this group.  Currently this will be only 0 or 1.
+ */
+int ext2_bg_has_super(struct super_block *sb, int group)
+{
+	if (EXT2_HAS_RO_COMPAT_FEATURE(sb,EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER)&&
+	    !ext2_group_sparse(group))
+		return 0;
+	return 1;
+}
+
+/**
+ *	ext2_bg_num_gdb - number of blocks used by the group table in group
+ *	@sb: superblock for filesystem
+ *	@group: group number to check
+ *
+ *	Return the number of blocks used by the group descriptor table
+ *	(primary or backup) in this group.  In the future there may be a
+ *	different number of descriptor blocks in each group.
+ */
+unsigned long ext2_bg_num_gdb(struct super_block *sb, int group)
+{
+	if (EXT2_HAS_RO_COMPAT_FEATURE(sb,EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER)&&
+	    !ext2_group_sparse(group))
+		return 0;
+	return EXT2_SB(sb)->s_gdb_count;
+}
+
 #ifdef CONFIG_EXT2_CHECK
 /* Called at mount-time, super-block is locked */
 void ext2_check_blocks_bitmap (struct super_block * sb)
 {
 	struct buffer_head * bh;
 	struct ext2_super_block * es;
-	unsigned long desc_count, bitmap_count, x;
+	unsigned long desc_count, bitmap_count, x, j;
 	unsigned long desc_blocks;
 	int bitmap_nr;
 	struct ext2_group_desc * gdp;
-	int i, j;
+	int i;
 
 	es = sb->u.ext2_sb.s_es;
 	desc_count = 0;
 	bitmap_count = 0;
 	gdp = NULL;
-	desc_blocks = (sb->u.ext2_sb.s_groups_count + EXT2_DESC_PER_BLOCK(sb) - 1) /
-		      EXT2_DESC_PER_BLOCK(sb);
 	for (i = 0; i < sb->u.ext2_sb.s_groups_count; i++) {
 		gdp = ext2_get_group_desc (sb, i, NULL);
 		if (!gdp)
@@ -708,24 +739,19 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 		bitmap_nr = load_block_bitmap (sb, i);
 		if (bitmap_nr < 0)
 			continue;
-		
-		bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 
-		if (!(sb->u.ext2_sb.s_feature_ro_compat &
-		     EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) ||
-		    ext2_group_sparse(i)) {
-			if (!ext2_test_bit (0, bh->b_data))
-				ext2_error (sb, "ext2_check_blocks_bitmap",
-					    "Superblock in group %d "
-					    "is marked free", i);
+		bh = EXT2_SB(sb)->s_block_bitmap[bitmap_nr];
 
-			for (j = 0; j < desc_blocks; j++)
-				if (!ext2_test_bit (j + 1, bh->b_data))
-					ext2_error (sb,
-					    "ext2_check_blocks_bitmap",
-					    "Descriptor block #%d in group "
-					    "%d is marked free", j, i);
-		}
+		if (ext2_bg_has_super(sb, i) && !ext2_test_bit(0, bh->b_data))
+			ext2_error(sb, __FUNCTION__,
+				   "Superblock in group %d is marked free", i);
+
+		desc_blocks = ext2_bg_num_gdb(sb, i);
+		for (j = 0; j < desc_blocks; j++)
+			if (!ext2_test_bit(j + 1, bh->b_data))
+				ext2_error(sb, __FUNCTION__,
+					   "Descriptor block #%ld in group "
+					   "%d is marked free", j, i);
 
 		if (!block_in_use (le32_to_cpu(gdp->bg_block_bitmap), sb, bh->b_data))
 			ext2_error (sb, "ext2_check_blocks_bitmap",

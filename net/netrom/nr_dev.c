@@ -19,7 +19,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/proc_fs.h>
@@ -236,5 +235,3 @@ int nr_init(struct net_device *dev)
 
 	return 0;
 };
-
-#endif

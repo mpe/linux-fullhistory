@@ -13,8 +13,6 @@
  *	AX.25 036	Jonathan(G4KLX)	Split from af_ax25.c.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -48,7 +46,7 @@
  *	Callsign/UID mapper. This is in kernel space for security on multi-amateur machines.
  */
 
-static ax25_uid_assoc *ax25_uid_list = NULL;
+static ax25_uid_assoc *ax25_uid_list;
 
 int ax25_uid_policy = 0;
 
@@ -164,12 +162,10 @@ int ax25_uid_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
-#ifdef MODULE
-
 /*
  *	Free all memory associated with UID/Callsign structures.
  */
-void ax25_uid_free(void)
+void __exit ax25_uid_free(void)
 {
 	ax25_uid_assoc *s, *ax25_uid = ax25_uid_list;
 
@@ -180,7 +176,3 @@ void ax25_uid_free(void)
 		kfree(s);
 	}
 }
-
-#endif
-
-#endif

@@ -1407,8 +1407,6 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
     struct fore200e*     fore200e = FORE200E_DEV(vcc->dev);
     struct fore200e_vcc* fore200e_vcc;
     
-    MOD_INC_USE_COUNT;
-
     /* find a free VPI/VCI */
     fore200e_walk_vccs(vcc, &vpi, &vci);
 
@@ -1416,10 +1414,8 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
     vcc->vci = vci;
 
     /* ressource checking only? */
-    if (vci == ATM_VCI_UNSPEC || vpi == ATM_VPI_UNSPEC) {
-    	MOD_DEC_USE_COUNT;
+    if (vci == ATM_VCI_UNSPEC || vpi == ATM_VPI_UNSPEC)
 	return 0;
-    }
 
     set_bit(ATM_VF_ADDR, &vcc->flags);
     vcc->itf    = vcc->dev->number;
@@ -1437,7 +1433,6 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
 	down(&fore200e->rate_sf);
 	if (fore200e->available_cell_rate < vcc->qos.txtp.max_pcr) {
 	    up(&fore200e->rate_sf);
-    	    MOD_DEC_USE_COUNT;
 	    return -EAGAIN;
 	}
 	/* reserving the pseudo-CBR bandwidth at this point grants us
@@ -1454,7 +1449,6 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
 	down(&fore200e->rate_sf);
 	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr;
 	up(&fore200e->rate_sf);
-    	MOD_DEC_USE_COUNT;
 	return -ENOMEM;
     }
 
@@ -1465,7 +1459,6 @@ fore200e_open(struct atm_vcc *vcc, short vpi, int vci)
 	down(&fore200e->rate_sf);
 	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr;
 	up(&fore200e->rate_sf);
-    	MOD_DEC_USE_COUNT;
 	return -EBUSY;
     }
     
@@ -1498,10 +1491,6 @@ fore200e_close(struct atm_vcc* vcc)
     
     fore200e_activate_vcin(fore200e, 0, vcc, 0);
     
-#ifdef MODULE
-    MOD_DEC_USE_COUNT;
-#endif
-	
     kfree(FORE200E_VCC(vcc));
 	
     if ((vcc->qos.txtp.traffic_class == ATM_CBR) && (vcc->qos.txtp.max_pcr > 0)) {
@@ -2599,8 +2588,6 @@ fore200e_detect(void)
 
     printk(FORE200E "FORE Systems 200E-series driver - version " FORE200E_VERSION "\n");
 
-    MOD_INC_USE_COUNT;
-
     /* for each configured bus interface */
     for (link = 0, bus = fore200e_bus; bus->model_name; bus++) {
 
@@ -2625,9 +2612,6 @@ fore200e_detect(void)
 	    fore200e_boards = fore200e;
 	}
     }
-
-    if (link <= 0)
-	MOD_DEC_USE_COUNT;
 
     return link;
 }
@@ -2943,21 +2927,15 @@ module_exit(fore200e_module_cleanup);
 
 static const struct atmdev_ops fore200e_ops =
 {
-    NULL, /* fore200e_dev_close   */
-    fore200e_open,
-    fore200e_close,
-    fore200e_ioctl,
-    fore200e_getsockopt,
-    fore200e_setsockopt,
-    fore200e_send,
-    NULL, /* fore200e_sg_send,    */
-    NULL, /* fore200e_send_oam,   */
-    NULL, /* fore200e_phy_put,    */
-    NULL, /* fore200e_phy_get,    */
-    NULL, /* fore200e_feedback,   */
-    fore200e_change_qos,
-    NULL, /* fore200e_free_rx_skb */
-    fore200e_proc_read
+	open:         fore200e_open,
+	close:        fore200e_close,
+	ioctl:        fore200e_ioctl,
+	getsockopt:   fore200e_getsockopt,
+	setsockopt:   fore200e_setsockopt,
+	send:         fore200e_send,
+	change_qos:   fore200e_change_qos,
+	proc_read:    fore200e_proc_read,
+	owner:        THIS_MODULE,
 };
 
 

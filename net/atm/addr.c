@@ -42,7 +42,7 @@ static int identical(struct sockaddr_atmsvc *a,struct sockaddr_atmsvc *b)
  */
 
 static DECLARE_MUTEX(local_lock);
-
+extern  spinlock_t atm_dev_lock;
 
 static void notify_sigd(struct atm_dev *dev)
 {
@@ -58,12 +58,14 @@ void reset_addr(struct atm_dev *dev)
 	struct atm_dev_addr *this;
 
 	down(&local_lock);
+	spin_lock (&atm_dev_lock);		
 	while (dev->local) {
 		this = dev->local;
 		dev->local = this->next;
 		kfree(this);
 	}
 	up(&local_lock);
+	spin_unlock (&atm_dev_lock);
 	notify_sigd(dev);
 }
 

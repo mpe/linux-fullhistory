@@ -231,7 +231,7 @@ static int hfs_readpage(struct file *file, struct page *page)
 static int hfs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,hfs_get_block,
-		&((struct inode*)page->mapping->host)->u.hfs_i.mmu_private);
+		&page->mapping->host->u.hfs_i.mmu_private);
 }
 static int hfs_bmap(struct address_space *mapping, long block)
 {

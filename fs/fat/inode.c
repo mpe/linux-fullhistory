@@ -746,7 +746,7 @@ static int fat_readpage(struct file *file, struct page *page)
 static int fat_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,fat_get_block,
-		&MSDOS_I((struct inode*)page->mapping->host)->mmu_private);
+		&MSDOS_I(page->mapping->host)->mmu_private);
 }
 static int _fat_bmap(struct address_space *mapping, long block)
 {

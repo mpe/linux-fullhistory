@@ -15,7 +15,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/proc_fs.h>
@@ -205,5 +204,3 @@ int rose_init(struct net_device *dev)
 
 	return 0;
 };
-
-#endif

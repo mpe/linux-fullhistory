@@ -21,8 +21,6 @@
  *			Tomi(OH2BNS)	Routing quality and link failure changes.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -48,12 +46,13 @@
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 #include <linux/netfilter.h>
+#include <linux/init.h>
 #include <net/netrom.h>
 
 static unsigned int nr_neigh_no = 1;
 
-static struct nr_node  *nr_node_list  = NULL;
-static struct nr_neigh *nr_neigh_list = NULL;
+static struct nr_node  *nr_node_list;
+static struct nr_neigh *nr_neigh_list;
 
 static void nr_remove_neigh(struct nr_neigh *);
 
@@ -850,12 +849,10 @@ int nr_neigh_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 } 
 
-#ifdef MODULE
-
 /*
  *	Free all memory associated with the nodes and routes lists.
  */
-void nr_rt_free(void)
+void __exit nr_rt_free(void)
 {
 	struct nr_neigh *s, *nr_neigh = nr_neigh_list;
 	struct nr_node  *t, *nr_node  = nr_node_list;
@@ -874,7 +871,3 @@ void nr_rt_free(void)
 		nr_remove_neigh(s);
 	}
 }
-
-#endif
-
-#endif

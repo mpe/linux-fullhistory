@@ -15,6 +15,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/shm.h>
 #include <linux/init.h>

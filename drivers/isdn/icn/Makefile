@@ -2,18 +2,7 @@
 
 # The target object and module list name.
 
-O_TARGET	:= icn_drv.o
-
-# Objects that export symbols.
-
-export-objs	:=
-
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
+O_TARGET	:= vmlinux-obj.o
 
 # Each configuration option enables a list of files.
 

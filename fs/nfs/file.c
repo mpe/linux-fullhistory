@@ -161,7 +161,7 @@ static int nfs_commit_write(struct file *file, struct page *page, unsigned offse
 {
 	long status;
 	loff_t pos = ((loff_t)page->index<<PAGE_CACHE_SHIFT) + to;
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 
 	kunmap(page);
 	lock_kernel();
@@ -188,7 +188,7 @@ static int nfs_sync_page(struct page *page)
 	mapping = page->mapping;
 	if (!mapping)
 		return 0;
-	inode = (struct inode *)mapping->host;
+	inode = mapping->host;
 	if (!inode)
 		return 0;
 

@@ -278,7 +278,16 @@ asmlinkage void smp_invalidate_interrupt (void)
 	unsigned long cpu = smp_processor_id();
 
 	if (!test_bit(cpu, &flush_cpumask))
-		BUG();
+		return;
+		/* 
+		 * This was a BUG() but until someone can quote me the
+		 * line from the intel manual that guarantees an IPI to
+		 * multiple CPUs is retried _only_ on the erroring CPUs
+		 * its staying as a return
+		 *
+		 * BUG();
+		 */
+		 
 	if (flush_mm == cpu_tlbstate[cpu].active_mm) {
 		if (cpu_tlbstate[cpu].state == TLBSTATE_OK) {
 			if (flush_va == FLUSH_ALL)

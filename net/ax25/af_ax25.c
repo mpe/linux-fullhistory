@@ -105,7 +105,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -140,7 +139,7 @@
 
 
 
-ax25_cb *volatile ax25_list = NULL;
+ax25_cb *volatile ax25_list;
 
 static struct proto_ops ax25_proto_ops;
 
@@ -1853,15 +1852,11 @@ static int __init ax25_init(void)
 	ax25_packet_type.type = htons(ETH_P_AX25);
 	dev_add_pack(&ax25_packet_type);
 	register_netdevice_notifier(&ax25_dev_notifier);
-#ifdef CONFIG_SYSCTL
 	ax25_register_sysctl();
-#endif
 
-#ifdef CONFIG_PROC_FS
 	proc_net_create("ax25_route", 0, ax25_rt_get_info);
 	proc_net_create("ax25", 0, ax25_get_info);
 	proc_net_create("ax25_calls", 0, ax25_uid_get_info);
-#endif
 
 	printk(KERN_INFO "NET4: G4KLX/GW4PTS AX.25 for Linux. Version 0.37 for Linux NET4.0\n");
 	return 0;
@@ -1869,24 +1864,19 @@ static int __init ax25_init(void)
 module_init(ax25_init);
 
 
-#ifdef MODULE
 MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
 MODULE_DESCRIPTION("The amateur radio AX.25 link layer protocol");
 
 static void __exit ax25_exit(void)
 {
-#ifdef CONFIG_PROC_FS
 	proc_net_remove("ax25_route");
 	proc_net_remove("ax25");
 	proc_net_remove("ax25_calls");
-#endif
 	ax25_rt_free();
 	ax25_uid_free();
 	ax25_dev_free();
 
-#ifdef CONFIG_SYSCTL
 	ax25_unregister_sysctl();
-#endif
 	unregister_netdevice_notifier(&ax25_dev_notifier);
 
 	ax25_packet_type.type = htons(ETH_P_AX25);
@@ -1895,6 +1885,3 @@ static void __exit ax25_exit(void)
 	sock_unregister(PF_AX25);
 }
 module_exit(ax25_exit);
-#endif /* MODULE */
-
-#endif

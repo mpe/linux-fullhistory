@@ -2491,15 +2491,10 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
     return -EINVAL;
   }
   
-  // prevent module unload while sleeping (kmalloc)
-  // doing this any earlier would complicate more error return paths
-  MOD_INC_USE_COUNT;
-  
   // get space for our vcc stuff and copy parameters into it
   vccp = kmalloc (sizeof(hrz_vcc), GFP_KERNEL);
   if (!vccp) {
     PRINTK (KERN_ERR, "out of memory!");
-    MOD_DEC_USE_COUNT;
     return -ENOMEM;
   }
   *vccp = vcc;
@@ -2531,7 +2526,6 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   if (error) {
     PRINTD (DBG_QOS|DBG_VCC, "insufficient cell rate resources");
     kfree (vccp);
-    MOD_DEC_USE_COUNT;
     return error;
   }
   
@@ -2550,7 +2544,6 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
       error = hrz_open_rx (dev, channel);
     if (error) {
       kfree (vccp);
-      MOD_DEC_USE_COUNT;
       return error;
     }
     // this link allows RX frames through
@@ -2620,7 +2613,6 @@ static void hrz_close (struct atm_vcc * atm_vcc) {
   kfree (vcc);
   // say the VPI/VCI is free again
   clear_bit(ATM_VF_ADDR,&atm_vcc->flags);
-  MOD_DEC_USE_COUNT;
 }
 
 #if 0
@@ -2751,7 +2743,8 @@ static const struct atmdev_ops hrz_ops = {
   close:	hrz_close,
   send:		hrz_send,
   sg_send:	hrz_sg_send,
-  proc_read:	hrz_proc_read
+  proc_read:	hrz_proc_read,
+  owner:	THIS_MODULE,
 };
 
 static int __init hrz_probe (void) {

@@ -124,7 +124,7 @@ And, yes, there _are_ man-pages for all this...
 
 To use modprobe successfully, you generally place the following
 command in your /etc/rc.d/rc.S script.  (Read more about this in the
-"rc.hints" file in the module utilities package, "modules-x.y.z.tar.gz".)
+"rc.hints" file in the module utilities package, "modutils-x.y.z.tar.gz".)
 
 	/sbin/depmod -a
 

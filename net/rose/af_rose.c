@@ -25,7 +25,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/errno.h>
@@ -1448,7 +1447,7 @@ static int __init rose_proto_init(void)
 
 	sock_register(&rose_family_ops);
 	register_netdevice_notifier(&rose_dev_notifier);
-	printk(KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.62 for AX25.037 Linux 2.1\n");
+	printk(KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.62 for AX25.037 Linux 2.4\n");
 
 	ax25_protocol_register(AX25_P_ROSE, rose_route_frame);
 	ax25_linkfail_register(rose_link_failed);
@@ -1460,17 +1459,14 @@ static int __init rose_proto_init(void)
 
 	rose_add_loopback_neigh();
 
-#ifdef CONFIG_PROC_FS
 	proc_net_create("rose", 0, rose_get_info);
 	proc_net_create("rose_neigh", 0, rose_neigh_get_info);
 	proc_net_create("rose_nodes", 0, rose_nodes_get_info);
 	proc_net_create("rose_routes", 0, rose_routes_get_info);
-#endif
 	return 0;
 }
 module_init(rose_proto_init);
 
-#ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
 MODULE_PARM(rose_ndevs, "i");
@@ -1483,12 +1479,10 @@ static void __exit rose_exit(void)
 {
 	int i;
 
-#ifdef CONFIG_PROC_FS
 	proc_net_remove("rose");
 	proc_net_remove("rose_neigh");
 	proc_net_remove("rose_nodes");
 	proc_net_remove("rose_routes");
-#endif
 	rose_loopback_clear();
 
 	rose_rt_free();
@@ -1518,7 +1512,4 @@ static void __exit rose_exit(void)
 	kfree(dev_rose);
 }
 module_exit(rose_exit);
-#endif /* MODULE */
 
-
-#endif

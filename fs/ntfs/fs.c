@@ -601,7 +601,7 @@ static int ntfs_readpage(struct file *file, struct page *page)
 static int ntfs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,ntfs_get_block,
-		&((struct inode*)page->mapping->host)->u.ntfs_i.mmu_private);
+		&page->mapping->host->u.ntfs_i.mmu_private);
 }
 static int _ntfs_bmap(struct address_space *mapping, long block)
 {

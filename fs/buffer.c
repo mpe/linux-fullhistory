@@ -369,7 +369,9 @@ asmlinkage long sys_fsync(unsigned int fd)
 
 	/* We need to protect against concurrent writers.. */
 	down(&inode->i_sem);
+	filemap_fdatasync(inode->i_mapping);
 	err = file->f_op->fsync(file, dentry, 0);
+	filemap_fdatawait(inode->i_mapping);
 	up(&inode->i_sem);
 
 out_putf:
@@ -398,7 +400,9 @@ asmlinkage long sys_fdatasync(unsigned int fd)
 		goto out_putf;
 
 	down(&inode->i_sem);
+	filemap_fdatasync(inode->i_mapping);
 	err = file->f_op->fsync(file, dentry, 1);
+	filemap_fdatawait(inode->i_mapping);
 	up(&inode->i_sem);
 
 out_putf:
@@ -1662,7 +1666,7 @@ static int __block_commit_write(struct inode *inode, struct page *page,
  */
 int block_read_full_page(struct page *page, get_block_t *get_block)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	unsigned long iblock, lblock;
 	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];
 	unsigned int blocksize, blocks;
@@ -1740,7 +1744,7 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 int cont_prepare_write(struct page *page, unsigned offset, unsigned to, get_block_t *get_block, unsigned long *bytes)
 {
 	struct address_space *mapping = page->mapping;
-	struct inode *inode = (struct inode*)mapping->host;
+	struct inode *inode = mapping->host;
 	struct page *new_page;
 	unsigned long pgpos;
 	long status;
@@ -1821,7 +1825,7 @@ out:
 int block_prepare_write(struct page *page, unsigned from, unsigned to,
 			get_block_t *get_block)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	int err = __block_prepare_write(inode, page, from, to, get_block);
 	if (err) {
 		ClearPageUptodate(page);
@@ -1833,7 +1837,7 @@ int block_prepare_write(struct page *page, unsigned from, unsigned to,
 int generic_commit_write(struct file *file, struct page *page,
 		unsigned from, unsigned to)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	loff_t pos = ((loff_t)page->index << PAGE_CACHE_SHIFT) + to;
 	__block_commit_write(inode,page,from,to);
 	kunmap(page);
@@ -1849,7 +1853,7 @@ int block_truncate_page(struct address_space *mapping, loff_t from, get_block_t 
 	unsigned long index = from >> PAGE_CACHE_SHIFT;
 	unsigned offset = from & (PAGE_CACHE_SIZE-1);
 	unsigned blocksize, iblock, length, pos;
-	struct inode *inode = (struct inode *)mapping->host;
+	struct inode *inode = mapping->host;
 	struct page *page;
 	struct buffer_head *bh;
 	int err;
@@ -1921,7 +1925,7 @@ out:
 
 int block_write_full_page(struct page *page, get_block_t *get_block)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 	unsigned offset;
 	int err;
@@ -1956,7 +1960,7 @@ done:
 int generic_block_bmap(struct address_space *mapping, long block, get_block_t *get_block)
 {
 	struct buffer_head tmp;
-	struct inode *inode = (struct inode*)mapping->host;
+	struct inode *inode = mapping->host;
 	tmp.b_state = 0;
 	tmp.b_blocknr = 0;
 	get_block(inode, block, &tmp, 0);

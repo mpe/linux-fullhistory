@@ -306,7 +306,7 @@ static struct dentry * cramfs_lookup(struct inode *dir, struct dentry *dentry)
 
 static int cramfs_readpage(struct file *file, struct page * page)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	u32 maxblock, bytes_filled;
 
 	maxblock = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;

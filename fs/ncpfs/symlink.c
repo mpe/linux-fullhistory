@@ -45,7 +45,7 @@ int ncp_create_new(struct inode *dir, struct dentry *dentry,
 
 static int ncp_symlink_readpage(struct file *file, struct page *page)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	int error, length, len, cnt;
 	char *link;
 	char *buf = kmap(page);

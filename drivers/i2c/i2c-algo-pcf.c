@@ -24,7 +24,7 @@
    Frodo Looijaard <frodol@dds.nl> ,and also from Martin Bailey
    <mbailey@littlefeet-inc.com> */
 
-/* $Id: i2c-algo-pcf.c,v 1.24 2000/07/09 15:16:16 frodo Exp $ */
+/* $Id: i2c-algo-pcf.c,v 1.25 2000/11/10 13:43:32 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -323,7 +323,7 @@ static int pcf_readbytes(struct i2c_adapter *i2c_adap, char *buf, int count)
 	int rdcount=0, i, status, timeout, dummy=1;
 	struct i2c_algo_pcf_data *adap = i2c_adap->algo_data;
     
-	for (i=0; i<count-1; ++i) {
+	for (i=0; i<count; ++i) {
 		buf[rdcount] = i2c_inb(adap);
 		if (dummy) {
 			dummy = 0;

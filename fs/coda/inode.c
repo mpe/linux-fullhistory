@@ -231,7 +231,7 @@ static void coda_clear_inode(struct inode *inode)
 		goto out;
 
 	if ( inode->i_mapping != &inode->i_data ) {
-		open_inode = (struct inode *)inode->i_mapping->host;
+		open_inode = inode->i_mapping->host;
                 CDEBUG(D_SUPER, "DELINO cached file: ino %ld count %d.\n",  
 			open_inode->i_ino,  atomic_read(&open_inode->i_count));
 		inode->i_mapping = &inode->i_data;

@@ -20,8 +20,6 @@
  *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -102,5 +100,3 @@ void ax25_std_timeout_response(ax25_cb *ax25)
 
 	ax25->condition &= ~AX25_COND_ACK_PENDING;
 }
-
-#endif

@@ -161,7 +161,7 @@ smb_writepage(struct page *page)
 
 	if (!mapping)
 		BUG();
-	inode = (struct inode *)mapping->host;
+	inode = mapping->host;
 	if (!inode)
 		BUG();
 

@@ -105,7 +105,7 @@ static inline unsigned long do_fast_gettimeoffset(void)
 
 	__asm__("mull %2"
 		:"=a" (eax), "=d" (edx)
-		:"g" (fast_gettimeoffset_quotient),
+		:"rm" (fast_gettimeoffset_quotient),
 		 "0" (eax));
 
 	/* our adjusted time offset in microseconds */

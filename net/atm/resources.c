@@ -25,6 +25,7 @@
 struct atm_dev *atm_devs = NULL;
 static struct atm_dev *last_dev = NULL;
 struct atm_vcc *nodev_vccs = NULL;
+extern spinlock_t atm_dev_lock;
 
 
 static struct atm_dev *alloc_atm_dev(const char *type)
@@ -48,11 +49,15 @@ static struct atm_dev *alloc_atm_dev(const char *type)
 
 static void free_atm_dev(struct atm_dev *dev)
 {
+	spin_lock (&atm_dev_lock);
+	
 	if (dev->prev) dev->prev->next = dev->next;
 	else atm_devs = dev->next;
 	if (dev->next) dev->next->prev = dev->prev;
 	else last_dev = dev->prev;
 	kfree(dev);
+	
+	spin_unlock (&atm_dev_lock);
 }
 
 
@@ -100,10 +105,12 @@ struct atm_dev *atm_dev_register(const char *type,const struct atmdev_ops *ops,
 		if (atm_proc_dev_register(dev) < 0) {
 			printk(KERN_ERR "atm_dev_register: "
 			    "atm_proc_dev_register failed for dev %s\n",type);
+			spin_unlock (&atm_dev_lock);		
 			free_atm_dev(dev);
 			return NULL;
 		}
 #endif
+	spin_unlock (&atm_dev_lock);		
 	return dev;
 }
 

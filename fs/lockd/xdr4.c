@@ -167,13 +167,14 @@ nlm4_encode_lock(u32 *p, struct nlm_lock *lock)
 	 || (fl->fl_end > NLM4_OFFSET_MAX && fl->fl_end != OFFSET_MAX))
 		return NULL;
 
+	*p++ = htonl(fl->fl_pid);
+
 	start = loff_t_to_s64(fl->fl_start);
 	if (fl->fl_end == OFFSET_MAX)
 		len = 0;
 	else
 		len = loff_t_to_s64(fl->fl_end - fl->fl_start + 1);
 
-	*p++ = htonl(fl->fl_pid);
 	p = xdr_encode_hyper(p, start);
 	p = xdr_encode_hyper(p, len);
 

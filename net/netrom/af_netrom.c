@@ -34,7 +34,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -82,7 +81,7 @@ int sysctl_netrom_link_fails_count                = NR_DEFAULT_FAILS;
 
 static unsigned short circuit = 0x101;
 
-static struct sock *volatile nr_list = NULL;
+static struct sock *volatile nr_list;
 
 static struct proto_ops nr_proto_ops;
 
@@ -1280,7 +1279,7 @@ static int __init nr_proto_init(void)
 
 	sock_register(&nr_family_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.7 for AX25.037 Linux 2.1\n");
+	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.7 for AX25.037 Linux 2.4\n");
 
 	ax25_protocol_register(AX25_P_NETROM, nr_route_frame);
 	ax25_linkfail_register(nr_link_failed);
@@ -1291,18 +1290,15 @@ static int __init nr_proto_init(void)
 
 	nr_loopback_init();
 
-#ifdef CONFIG_PROC_FS
 	proc_net_create("nr", 0, nr_get_info);
 	proc_net_create("nr_neigh", 0, nr_neigh_get_info);
 	proc_net_create("nr_nodes", 0, nr_nodes_get_info);
-#endif	
 	return 0;
 }
 
 module_init(nr_proto_init);
 
 
-#ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
 MODULE_PARM(nr_ndevs, "i");
@@ -1311,15 +1307,13 @@ MODULE_PARM_DESC(nr_ndevs, "number of NET/ROM devices");
 MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
 MODULE_DESCRIPTION("The amateur radio NET/ROM network and transport layer protocol");
 
-static void nr_exit(void)
+static void __exit nr_exit(void)
 {
 	int i;
 
-#ifdef CONFIG_PROC_FS
 	proc_net_remove("nr");
 	proc_net_remove("nr_neigh");
 	proc_net_remove("nr_nodes");
-#endif
 	nr_loopback_clear();
 
 	nr_rt_free();
@@ -1346,8 +1340,3 @@ static void nr_exit(void)
 	kfree(dev_nr);
 }
 module_exit(nr_exit);
-#endif /* MODULE */
-
-
-
-#endif

@@ -416,12 +416,10 @@ void unregister_ss_entry(struct pccard_operations * ss_entry)
 {
     int i;
 
-    for (i = 0; i < sockets; i++) {
+    for (i = sockets-1; i >= 0; i-- ) {
 	socket_info_t *socket = socket_table[i];
 	if (socket->ss_entry == ss_entry)
-	    pcmcia_unregister_socket (socket);
-	else
-	    i++;
+		pcmcia_unregister_socket (socket);
     }
 } /* unregister_ss_entry */
 

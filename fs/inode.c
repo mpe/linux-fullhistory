@@ -100,7 +100,9 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
 		memset(inode, 0, sizeof(*inode));
 		init_waitqueue_head(&inode->i_wait);
 		INIT_LIST_HEAD(&inode->i_hash);
-		INIT_LIST_HEAD(&inode->i_data.pages);
+		INIT_LIST_HEAD(&inode->i_data.clean_pages);
+		INIT_LIST_HEAD(&inode->i_data.dirty_pages);
+		INIT_LIST_HEAD(&inode->i_data.locked_pages);
 		INIT_LIST_HEAD(&inode->i_dentry);
 		INIT_LIST_HEAD(&inode->i_dirty_buffers);
 		sema_init(&inode->i_sem, 1);
@@ -198,16 +200,25 @@ static inline void sync_one(struct inode *inode, int sync)
 		iput(inode);
 		spin_lock(&inode_lock);
 	} else {
+		unsigned dirty;
+
 		list_del(&inode->i_list);
 		list_add(&inode->i_list, atomic_read(&inode->i_count)
 							? &inode_in_use
 							: &inode_unused);
 		/* Set I_LOCK, reset I_DIRTY */
+		dirty = inode->i_state & I_DIRTY;
 		inode->i_state |= I_LOCK;
 		inode->i_state &= ~I_DIRTY;
 		spin_unlock(&inode_lock);
 
-		write_inode(inode, sync);
+		filemap_fdatasync(inode->i_mapping);
+
+		/* Don't write the inode if only I_DIRTY_PAGES was set */
+		if (dirty & (I_DIRTY_SYNC | I_DIRTY_DATASYNC))
+			write_inode(inode, sync);
+
+		filemap_fdatawait(inode->i_mapping);
 
 		spin_lock(&inode_lock);
 		inode->i_state &= ~I_LOCK;
@@ -595,7 +606,7 @@ static void clean_inode(struct inode *inode)
 	inode->i_pipe = NULL;
 	inode->i_bdev = NULL;
 	inode->i_data.a_ops = &empty_aops;
-	inode->i_data.host = (void*)inode;
+	inode->i_data.host = inode;
 	inode->i_mapping = &inode->i_data;
 }
 

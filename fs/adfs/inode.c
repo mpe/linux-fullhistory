@@ -66,7 +66,7 @@ static int adfs_readpage(struct file *file, struct page *page)
 static int adfs_prepare_write(struct file *file, struct page *page, unsigned int from, unsigned int to)
 {
 	return cont_prepare_write(page, from, to, adfs_get_block,
-		&((struct inode *)page->mapping->host)->u.adfs_i.mmu_private);
+		&page->mapping->host->u.adfs_i.mmu_private);
 }
 
 static int _adfs_bmap(struct address_space *mapping, long block)

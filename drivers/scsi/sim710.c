@@ -1449,7 +1449,7 @@ sim710_detect(Scsi_Host_Template * tpnt)
 
     for(indx = 0; indx < no_of_boards; indx++) {
         unsigned long page = __get_free_pages(GFP_ATOMIC, order);
-        if(page == NULL)
+        if(page == 0UL)
         {
         	printk(KERN_WARNING "sim710: out of memory registering board %d.\n", indx);
         	break;

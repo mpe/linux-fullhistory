@@ -363,10 +363,12 @@ struct address_space_operations {
 };
 
 struct address_space {
-	struct list_head	pages;		/* list of pages */
-	unsigned long		nrpages;	/* number of pages */
+	struct list_head	clean_pages;	/* list of clean pages */
+	struct list_head	dirty_pages;	/* list of dirty pages */
+	struct list_head	locked_pages;	/* list of locked pages */
+	unsigned long		nrpages;	/* number of total pages */
 	struct address_space_operations *a_ops;	/* methods */
-	void			*host;		/* owner: inode, block_device */
+	struct inode		*host;		/* owner: inode, block_device */
 	struct vm_area_struct	*i_mmap;	/* list of private mappings */
 	struct vm_area_struct	*i_mmap_shared; /* list of shared mappings */
 	spinlock_t		i_shared_lock;  /* and spinlock protecting it */
@@ -461,11 +463,12 @@ struct inode {
 /* Inode state bits.. */
 #define I_DIRTY_SYNC		1 /* Not dirty enough for O_DATASYNC */
 #define I_DIRTY_DATASYNC	2 /* Data-related inode changes pending */
-#define I_LOCK			4
-#define I_FREEING		8
-#define I_CLEAR			16
+#define I_DIRTY_PAGES		4 /* Data-related inode changes pending */
+#define I_LOCK			8
+#define I_FREEING		16
+#define I_CLEAR			32
 
-#define I_DIRTY (I_DIRTY_SYNC | I_DIRTY_DATASYNC)
+#define I_DIRTY (I_DIRTY_SYNC | I_DIRTY_DATASYNC | I_DIRTY_PAGES)
 
 extern void __mark_inode_dirty(struct inode *, int);
 static inline void mark_inode_dirty(struct inode *inode)
@@ -478,6 +481,12 @@ static inline void mark_inode_dirty_sync(struct inode *inode)
 {
 	if (!(inode->i_state & I_DIRTY_SYNC))
 		__mark_inode_dirty(inode, I_DIRTY_SYNC);
+}
+
+static inline void mark_inode_dirty_pages(struct inode *inode)
+{
+	if (inode && !(inode->i_state & I_DIRTY_PAGES))
+		__mark_inode_dirty(inode, I_DIRTY_PAGES);
 }
 
 struct fown_struct {
@@ -1064,6 +1073,8 @@ extern int fsync_dev(kdev_t);
 extern int fsync_inode_buffers(struct inode *);
 extern int osync_inode_buffers(struct inode *);
 extern int inode_has_buffers(struct inode *);
+extern void filemap_fdatasync(struct address_space *);
+extern void filemap_fdatawait(struct address_space *);
 extern void sync_supers(kdev_t);
 extern int bmap(struct inode *, int);
 extern int notify_change(struct dentry *, struct iattr *);

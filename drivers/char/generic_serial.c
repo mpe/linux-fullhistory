@@ -35,7 +35,6 @@ static DECLARE_MUTEX(tmp_buf_sem);
 
 static int gs_debug;
 
-
 #ifdef DEBUG
 #define gs_dprintk(f, str...) if (gs_debug & f) printk (str)
 #else
@@ -583,7 +582,7 @@ void gs_do_softint(void *private_)
 }
 
 
-int block_til_ready(void *port_, struct file * filp)
+int gs_block_til_ready(void *port_, struct file * filp)
 {
 	struct gs_port *port = port_;
 	DECLARE_WAITQUEUE(wait, current);
@@ -600,7 +599,7 @@ int block_til_ready(void *port_, struct file * filp)
 
 	if (!tty) return 0;
 
-	gs_dprintk (GS_DEBUG_BTR, "Entering block_till_ready.\n"); 
+	gs_dprintk (GS_DEBUG_BTR, "Entering gs_block_till_ready.\n"); 
 	/*
 	 * If the device is in the middle of being closed, then block
 	 * until it's done, and then try again.
@@ -1070,7 +1069,7 @@ EXPORT_SYMBOL(gs_stop);
 EXPORT_SYMBOL(gs_start);
 EXPORT_SYMBOL(gs_hangup);
 EXPORT_SYMBOL(gs_do_softint);
-EXPORT_SYMBOL(block_til_ready);
+EXPORT_SYMBOL(gs_block_til_ready);
 EXPORT_SYMBOL(gs_close);
 EXPORT_SYMBOL(gs_set_termios);
 EXPORT_SYMBOL(gs_init_port);

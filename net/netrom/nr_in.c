@@ -24,8 +24,6 @@
  *	NET/ROM 007	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -304,5 +302,3 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	return queued;
 }
-
-#endif

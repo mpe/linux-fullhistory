@@ -2,7 +2,7 @@
 
 # The target object and module list name.
 
-O_TARGET	:= avmb1.o
+O_TARGET	:= vmlinux-obj.o
 
 # Objects that export symbols.
 
@@ -13,12 +13,7 @@ export-objs	:= kcapi.o capiutil.o b1dma.o b1pcmcia.o b1.o capifs.o
 list-multi	:= kernelcapi.o
 kernelcapi-objs	:= kcapi.o
 
-# Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
+# Ordering constraints: kernelcapi.o first
 
 # Each configuration option enables a list of files.
 

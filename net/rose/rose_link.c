@@ -14,8 +14,6 @@
  *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -322,5 +320,3 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 		}
 	}
 }
-
-#endif

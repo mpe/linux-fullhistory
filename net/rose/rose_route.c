@@ -19,8 +19,6 @@
  *					Added use count to neighbours.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -47,15 +45,16 @@
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 #include <linux/netfilter.h>
+#include <linux/init.h>
 #include <net/rose.h>
 
 static unsigned int rose_neigh_no = 1;
 
-static struct rose_node  *rose_node_list  = NULL;
-static struct rose_neigh *rose_neigh_list = NULL;
-static struct rose_route *rose_route_list = NULL;
+static struct rose_node  *rose_node_list;
+static struct rose_neigh *rose_neigh_list;
+static struct rose_route *rose_route_list;
 
-struct rose_neigh *rose_loopback_neigh = NULL;
+struct rose_neigh *rose_loopback_neigh;
 
 static void rose_remove_neigh(struct rose_neigh *);
 
@@ -1126,12 +1125,10 @@ int rose_routes_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 } 
 
-#ifdef MODULE
-
 /*
  *	Release all memory associated with ROSE routing structures.
  */
-void rose_rt_free(void)
+void __exit rose_rt_free(void)
 {
 	struct rose_neigh *s, *rose_neigh = rose_neigh_list;
 	struct rose_node  *t, *rose_node  = rose_node_list;
@@ -1158,7 +1155,3 @@ void rose_rt_free(void)
 		rose_remove_route(u);
 	}
 }
-
-#endif
-
-#endif

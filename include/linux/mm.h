@@ -175,7 +175,6 @@ typedef struct page {
 #define PG_arch_1		30
 #define PG_reserved		31
 
-
 /* Make it prettier to test the above... */
 #define Page_Uptodate(page)	test_bit(PG_uptodate, &(page)->flags)
 #define SetPageUptodate(page)	set_bit(PG_uptodate, &(page)->flags)
@@ -186,6 +185,15 @@ typedef struct page {
 #define PageLocked(page)	test_bit(PG_locked, &(page)->flags)
 #define LockPage(page)		set_bit(PG_locked, &(page)->flags)
 #define TryLockPage(page)	test_and_set_bit(PG_locked, &(page)->flags)
+
+extern void __set_page_dirty(struct page *);
+
+static inline void set_page_dirty(struct page * page)
+{
+	if (!test_and_set_bit(PG_dirty, &page->flags))
+		__set_page_dirty(page);
+}
+
 /*
  * The first mb is necessary to safely close the critical section opened by the
  * TryLockPage(), the second mb is necessary to enforce ordering between

@@ -25,7 +25,6 @@
 #include <linux/file.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
-#include <linux/init.h>
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <asm/smplock.h>
@@ -201,7 +200,7 @@ static int shmem_writepage(struct page * page)
 	struct shmem_inode_info *info;
 	swp_entry_t *entry, swap;
 
-	info = &((struct inode *)page->mapping->host)->u.shmem_i;
+	info = &page->mapping->host->u.shmem_i;
 	if (info->locked)
 		return 1;
 	swap = __get_swap_page(2);
@@ -227,7 +226,7 @@ static int shmem_writepage(struct page * page)
 	/* Add it to the swap cache */
 	add_to_swap_cache(page, swap);
 	page_cache_release(page);
-	SetPageDirty(page);
+	set_page_dirty(page);
 	info->swapped++;
 out:
 	spin_unlock(&info->lock);
@@ -770,12 +769,12 @@ out:
 	spin_unlock (&info->lock);
 	return 0;
 found:
-	add_to_page_cache (page, inode->i_mapping, offset + idx);
-	SetPageDirty (page);
-	SetPageUptodate (page);
-	UnlockPage (page);
+	add_to_page_cache(page, inode->i_mapping, offset + idx);
+	set_page_dirty(page);
+	SetPageUptodate(page);
+	UnlockPage(page);
 	info->swapped--;
-	spin_unlock (&info->lock);
+	spin_unlock(&info->lock);
 	return 1;
 }
 

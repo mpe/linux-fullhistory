@@ -281,7 +281,7 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
      */
     spin_lock_irqsave (&io_request_lock, flags);
 
-	DEB(printk ("\npci2000 recieved interrupt "));
+	DEB(printk ("\npci2000 received interrupt "));
 	for ( z = 0; z < NumAdapters;  z++ )										// scan for interrupt to process
 		{
 		if ( PsiHost[z]->irq == (UCHAR)(irq & 0xFF) )

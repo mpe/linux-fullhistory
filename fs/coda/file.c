@@ -29,7 +29,7 @@ static ssize_t
 coda_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 {
 	struct inode *inode = file->f_dentry->d_inode;
-	struct inode *container = (struct inode*)inode->i_mapping->host;
+	struct inode *container = inode->i_mapping->host;
 	ssize_t n;
 
         down(&container->i_sem);
@@ -60,7 +60,7 @@ int coda_fsync(struct file *coda_file, struct dentry *coda_dentry, int datasync)
                 return -1; 
         }
 
-	cont_dentry.d_inode = (struct inode *)inode->i_mapping->host;
+	cont_dentry.d_inode = inode->i_mapping->host;
   
 	down(&cont_dentry.d_inode->i_sem);
 	result = file_fsync(NULL, &cont_dentry, datasync);

@@ -19,8 +19,6 @@
  *	AX.25 036	Jonathan(G4KLX)	Split from ax25_subr.c.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -303,4 +301,3 @@ void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 	}
 }
 
-#endif

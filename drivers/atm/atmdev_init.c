@@ -54,7 +54,7 @@ int __init atmdev_init(void)
 	devs += ia_detect();
 #endif
 #ifdef CONFIG_ATM_FORE200E
-        devs += fore200e_detect();
+	devs += fore200e_detect();
 #endif
 	return devs;
 }

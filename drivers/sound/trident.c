@@ -1595,10 +1595,17 @@ static unsigned int trident_poll(struct file *file, struct poll_table_struct *wa
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(state);
-	if (file->f_mode & FMODE_WRITE)
+
+	if (file->f_mode & FMODE_WRITE) {
+		if (!dmabuf->ready && prog_dmabuf(state, 0))
+			return 0;
 		poll_wait(file, &dmabuf->wait, wait);
-	if (file->f_mode & FMODE_READ)
+	}
+	if (file->f_mode & FMODE_READ) {
+		if (!dmabuf->ready && prog_dmabuf(state, 1))
+			return 0;
 		poll_wait(file, &dmabuf->wait, wait);
+	}
 
 	spin_lock_irqsave(&state->card->lock, flags);
 	trident_update_ptr(state);
@@ -1866,7 +1873,7 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_GETOSPACE:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		if (!dmabuf->enable && (val = prog_dmabuf(state, 0)) != 0)
+		if (!dmabuf->ready && (val = prog_dmabuf(state, 0)) != 0)
 			return val;
 		spin_lock_irqsave(&state->card->lock, flags);
 		trident_update_ptr(state);
@@ -1880,7 +1887,7 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_GETISPACE:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		if (!dmabuf->enable && (val = prog_dmabuf(state, 1)) != 0)
+		if (!dmabuf->ready && (val = prog_dmabuf(state, 1)) != 0)
 			return val;
 		spin_lock_irqsave(&state->card->lock, flags);
 		trident_update_ptr(state);
@@ -1931,6 +1938,8 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
+		if (!dmabuf->ready && (val = prog_dmabuf(state, 1)) != 0)
+			return val;
 		spin_lock_irqsave(&state->card->lock, flags);
 		trident_update_ptr(state);
 		cinfo.bytes = dmabuf->total_bytes;
@@ -1944,6 +1953,8 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!dmabuf->ready && (val = prog_dmabuf(state, 0)) != 0)
+			return val;
 		spin_lock_irqsave(&state->card->lock, flags);
 		trident_update_ptr(state);
 		cinfo.bytes = dmabuf->total_bytes;
@@ -1960,6 +1971,8 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case SNDCTL_DSP_GETODELAY:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!dmabuf->ready && (val = prog_dmabuf(state, 0)) != 0)
+			return val;
 		spin_lock_irqsave(&state->card->lock, flags);
 		trident_update_ptr(state);
 		val = dmabuf->count;

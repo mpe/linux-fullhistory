@@ -426,7 +426,7 @@ static int qnx4_readpage(struct file *file, struct page *page)
 static int qnx4_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,qnx4_get_block,
-		&((struct inode*)page->mapping->host)->u.qnx4_i.mmu_private);
+		&page->mapping->host->u.qnx4_i.mmu_private);
 }
 static int qnx4_bmap(struct address_space *mapping, long block)
 {

@@ -9,25 +9,42 @@ the mixer registers.  For this reason the ALS code is integrated
 as part of the Sound Blaster 16 driver (adding only 800 bytes to the
 SB16 driver).
 
-To use an ALS sound card under Linux, enable the following options in the
-sound configuration section of the kernel config:
+To use an ALS sound card under Linux, enable the following options as
+modules in the sound configuration section of the kernel config:
   - 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support
   - FM synthesizer (YM3812/OPL-3) support 
+  - standalone MPU401 support may be required for some cards; for the
+    ALS-007, when using isapnptools, it is required
 Since the ALS-007/100/200 are PnP cards, ISAPnP support should probably be
-compiled in.
+compiled in.  If kernel level PnP support is not included, isapnptools will
+be required to configure the card before the sound modules are loaded.
 
-Alternatively, if you decide not to use kernel level ISAPnP, you can use the
-user mode isapnptools to wake up the sound card, as in 2.2.X. Set the "I/O 
-base for SB", "Sound Blaster IRQ" and "Sound Blaster DMA" (8 bit -
-either 0, 1 or 3) to the values used in your particular installation (they
-should match the values used to configure the card using isapnp).  The
-ALS-007 does NOT implement 16 bit DMA, so the "Sound Blaster 16 bit DMA"
-should be set to -1.  If you wish to use the external MPU-401 interface on
-the card, "MPU401 I/O base of SB16" and "SB MPU401 IRQ" should be set to
-the appropriate values for your installation.  (Note that the ALS-007
-requires a separate IRQ for the MPU-401, so don't specify -1 here).  (Note
-that the base port of the internal FM synth is fixed at 0x388 on the ALS007; 
-in any case the FM synth location cannot be set in the kernel configuration).
+When using kernel level ISAPnP, the kernel should correctly identify and
+configure all resources required by the card when the "sb" module is
+inserted.  Note that the ALS-007 does not have a 16 bit DMA channel and that
+the MPU401 interface on this card uses a different interrupt to the audio
+section.  This should all be correctly configured by the kernel; if problems
+with the MPU401 interface surface, try using the standalone MPU401 module,
+passing "0" as the "sb" module's "mpu_io" module parameter to prevent the
+soundblaster driver attempting to register the MPU401 itself.  The onboard
+synth device can be accessed using the "opl3" module.
+
+If isapnptools is used to wake up the sound card (as in 2.2.x), the settings
+of the card's resources should be passed to the kernel modules ("sb", "opl3"
+and "mpu401") using the module parameters.  When configuring an ALS-007, be
+sure to specify different IRQs for the audio and MPU401 sections - this card
+requires they be different.  For "sb", "io", "irq" and "dma" should be set
+to the same values used to configure the audio section of the card with
+isapnp.  "dma16" should be explicitly set to "-1" for an ALS-007 since this
+card does not have a 16 bit dma channel; if not specified the kernel will
+default to using channel 5 anyway which will cause audio not to work. 
+"mpu_io" should be set to 0.  The "io" parameter of the "opl3" module should
+also agree with the setting used by isapnp.  To get the MPU401 interface
+working on an ALS-007 card, the "mpu401" module will be required since this
+card uses separate IRQs for the audio and MPU401 sections and there is no
+parameter available to pass a different IRQ to the "sb" driver (whose
+inbuilt MPU401 driver would otherwise be fine).  Insert the mpu401 module
+passing appropriate values using the "io" and "irq" parameters.
 
 The resulting sound driver will provide the following capabilities:
   - 8 and 16 bit audio playback
@@ -45,3 +62,5 @@ jwoithe@physics.adelaide.edu.au
 
 Modified 2000-02-26 by Dave Forrest, drf5n@virginia.edu to add ALS100/ALS200
 Modified 2000-04-10 by Paul Laufer, pelaufer@csupomona.edu to add ISAPnP info.
+Modified 2000-11-19 by Jonathan Woithe, jwoithe@physics.adelaide.edu.au
+ - updated information for kernel 2.4.x.

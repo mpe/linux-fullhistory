@@ -66,6 +66,7 @@
 
 #define	_LVM_KERNEL_H_VERSION	"LVM 0.9 (13/11/2000)"
 
+#include <linux/config.h>
 #include <linux/version.h>
 #include <endian.h>
 

@@ -15,14 +15,13 @@
  *
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/timer.h>
 #include <net/ax25.h>
 #include <linux/skbuff.h>
 #include <net/netrom.h>
+#include <linux/init.h>
 
 static struct sk_buff_head loopback_queue;
 static struct timer_list loopback_timer;
@@ -91,9 +90,7 @@ static void nr_loopback_timer(unsigned long param)
 	}
 }
 
-#ifdef MODULE
-
-void nr_loopback_clear(void)
+void __exit nr_loopback_clear(void)
 {
 	struct sk_buff *skb;
 
@@ -102,7 +99,3 @@ void nr_loopback_clear(void)
 	while ((skb = skb_dequeue(&loopback_queue)) != NULL)
 		kfree_skb(skb);
 }
-
-#endif
-
-#endif

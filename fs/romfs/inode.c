@@ -395,7 +395,7 @@ out:	return ERR_PTR(res);
 static int
 romfs_readpage(struct file *file, struct page * page)
 {
-	struct inode *inode = (struct inode*)page->mapping->host;
+	struct inode *inode = page->mapping->host;
 	unsigned long offset, avail, readlen;
 	void *buf;
 	int result = -EIO;

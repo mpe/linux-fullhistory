@@ -15,8 +15,6 @@
  *					Implemented idle timer.
  */
 
-#include <linux/config.h>
-#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -245,5 +243,3 @@ static void nr_t1timer_expiry(unsigned long param)
 
 	nr_start_t1timer(sk);
 }
-
-#endif

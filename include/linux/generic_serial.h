@@ -92,7 +92,7 @@ void gs_stop(struct tty_struct *tty);
 void gs_start(struct tty_struct *tty);
 void gs_hangup(struct tty_struct *tty);
 void gs_do_softint(void *private_);
-int  block_til_ready(void *port, struct file *filp);
+int  gs_block_til_ready(void *port, struct file *filp);
 void gs_close(struct tty_struct *tty, struct file *filp);
 void gs_set_termios (struct tty_struct * tty, 
                      struct termios * old_termios);

@@ -1604,7 +1604,7 @@ int aha152x_device_reset(Scsi_Cmnd * SCpnt)
 
 	init_timer(&timer);
 	timer.data     = (unsigned long) &sem;
-	timer.expires  = jiffies + 10000;   /* 10s */
+	timer.expires  = jiffies + 10 * HZ;   /* 10s */
 	timer.function = (void (*)(unsigned long)) timer_expired;
 	add_timer(&timer);
 
@@ -2579,7 +2579,7 @@ static void datai_run(struct Scsi_Host *shpnt)
 		if(TESTHI(DMASTAT, DFIFOFULL)) {
 			fifodata = 128;
 		} else {
-			the_time=jiffies + 100;
+			the_time=jiffies + HZ;
 			while(TESTLO(SSTAT2, SEMPTY) && time_before(jiffies,the_time))
 				barrier();
 

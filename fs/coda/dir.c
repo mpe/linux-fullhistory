@@ -525,7 +525,7 @@ int coda_readdir(struct file *file, void *dirent,  filldir_t filldir)
                 return -EIO;
         }
 
-	container = (struct inode *)inode->i_mapping->host;
+	container = inode->i_mapping->host;
 
 	coda_prepare_fakefile(inode, file, container, &open_file, &open_dentry);
 
@@ -614,7 +614,7 @@ int coda_open(struct inode *i, struct file *f)
 	f->private_data = cred;
 
 	if ( i->i_mapping != &i->i_data ) {
-		old_container = (struct inode *)i->i_mapping->host;
+		old_container = i->i_mapping->host;
 		i->i_mapping = &i->i_data;
 		iput(old_container);
 	}
@@ -649,7 +649,7 @@ int coda_release(struct inode *i, struct file *f)
 	cred = (struct coda_cred *)f->private_data;
 
 	if (i->i_mapping != &i->i_data)
-		container = (struct inode *)i->i_mapping->host;
+		container = i->i_mapping->host;
 
         cii = ITOC(i);
         CDEBUG(D_FILE, "RELEASE coda (ino %ld, ct %d, cc %d) cache (ino %ld, ct %d)\n",
@@ -922,7 +922,7 @@ ok:
 
 return_bad_inode:
 	if ( inode->i_mapping != &inode->i_data ) {
-		container = (struct inode *)inode->i_mapping->host;
+		container = inode->i_mapping->host;
 		inode->i_mapping = &inode->i_data;
 		iput(container);
 	}

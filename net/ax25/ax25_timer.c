@@ -26,7 +26,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -255,5 +254,3 @@ static void ax25_idletimer_expiry(unsigned long param)
 #endif
 	}
 }
-
-#endif
