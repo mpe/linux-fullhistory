@@ -1274,8 +1274,8 @@ static ssize_t store_event_char(struct device *dev, const char *valbuf,
 	return count;
 }
 
-static DEVICE_ATTR(latency_timer, S_IWUGO | S_IRUGO, show_latency_timer, store_latency_timer);
-static DEVICE_ATTR(event_char, S_IWUGO, NULL, store_event_char);
+static DEVICE_ATTR(latency_timer, S_IWUSR | S_IRUGO, show_latency_timer, store_latency_timer);
+static DEVICE_ATTR(event_char, S_IWUSR, NULL, store_event_char);
 
 static void create_sysfs_attrs(struct usb_serial *serial)
 {	
