@@ -375,6 +375,10 @@ unsigned long pyxis_init(unsigned long mem_start, unsigned long mem_end)
 	mb() ;
 	pyxis_err = *(vuip)PYXIS_ERR ;
 
+#ifdef CONFIG_ALPHA_RUFFIAN
+	printk("pyxis_init: Skipping window register rewrites --"
+	       " trust DeskStation firmware!\n");
+#else
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, windows 1,2 and 3 are disabled.  In the future, we may
@@ -390,6 +394,7 @@ unsigned long pyxis_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)PYXIS_W2_BASE = 0x0 ;
 	*(vuip)PYXIS_W3_BASE = 0x0 ;
 	mb();
+#endif
 
 	/*
 	 * check ASN in HWRPB for validity, report if bad
@@ -510,3 +515,42 @@ void pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 	}
 #endif
 }
+
+#if defined(CONFIG_ALPHA_RUFFIAN)
+/* Note: This is only used by MILO, AFAIK... */
+/*
+ * The DeskStation Ruffian motherboard firmware does not place
+ * the memory size in the PALimpure area.  Therefore, we use
+ * the Bank Configuration Registers in PYXIS to obtain the size.
+ */
+unsigned long pyxis_get_bank_size(unsigned long offset)
+{
+	unsigned long bank_addr, bank, ret = 0;
+  
+	/* Valid offsets are: 0x800, 0x840 and 0x880
+	   since Ruffian only uses three banks.  */
+	bank_addr = (unsigned long)PYXIS_MCR + offset;
+	bank = *(vulp)bank_addr;
+    
+	/* Check BANK_ENABLE */
+	if (bank & 0x01) {
+		static unsigned long size[] = {
+			0x40000000UL, /* 0x00,   1G */ 
+			0x20000000UL, /* 0x02, 512M */
+			0x10000000UL, /* 0x04, 256M */
+			0x08000000UL, /* 0x06, 128M */
+			0x04000000UL, /* 0x08,  64M */
+			0x02000000UL, /* 0x0a,  32M */
+			0x01000000UL, /* 0x0c,  16M */
+			0x00800000UL, /* 0x0e,   8M */
+			0x80000000UL, /* 0x10,   2G */
+		};
+
+		bank = (bank & 0x1e) >> 1;
+		if (bank < sizeof(size)/sizeof(*size))
+			ret = size[bank];
+	}
+
+	return ret;
+}
+#endif /* CONFIG_ALPHA_RUFFIAN */

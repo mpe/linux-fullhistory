@@ -105,7 +105,7 @@ struct inode_operations fat_file_inode_operations_1024 = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* readpage */
+	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	fat_truncate,		/* truncate */

@@ -36,7 +36,6 @@
  * $Log: cumana_NCR5380.c,v $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/signal.h>
 #include <linux/sched.h>

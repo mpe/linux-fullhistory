@@ -101,11 +101,12 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
 	unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
 	unsigned int block, offset;
-	int inode_number;
+	int inode_number = 0;	/* Quiet GCC */
 	struct buffer_head *bh;
 	int len;
 	int map;
-	int high_sierra = 0;
+	int high_sierra;
+	int first_de = 1;
 	char *p = NULL;		/* Quiet GCC */
 	struct iso_directory_record *de;
 
@@ -114,6 +115,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
  
 	offset = filp->f_pos & (bufsize - 1);
 	block = isofs_bmap(inode, filp->f_pos >> bufbits);
+	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
 
 	if (!block)
 		return 0;
@@ -129,7 +131,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	        printk("inode->i_size = %x\n",inode->i_size);
 #endif
 		de = (struct iso_directory_record *) (bh->b_data + offset);
-		inode_number = (block << bufbits) + (offset & (bufsize - 1));
+		if(first_de) inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
 		de_len = *(unsigned char *) de;
 #ifdef DEBUG
@@ -177,6 +179,13 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			break;
 		}
 
+		if(de->flags[-high_sierra] & 0x80) {
+			first_de = 0;
+			filp->f_pos += de_len;
+			continue;
+		}
+		first_de = 1;
+
 		/* Handle the case of the '.' directory */
 		if (de->name_len[0] == 1 && de->name[0] == 0) {
 			if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino) < 0)
@@ -200,7 +209,6 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		   is no Rock Ridge NM field. */
 		if (inode->i_sb->u.isofs_sb.s_unhide == 'n') {
 			/* Do not report hidden or associated files */
-			high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
 			if (de->flags[-high_sierra] & 5) {
 				filp->f_pos += de_len;
 				continue;

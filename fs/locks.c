@@ -111,6 +111,7 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
+#include <linux/file.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -289,15 +290,21 @@ asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
 	int error;
 
 	lock_kernel();
-	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		error = -EBADF;
-	else if (!flock_make_lock(filp, &file_lock, cmd))
-		error = -EINVAL;
-	else if ((file_lock.fl_type != F_UNLCK) && !(filp->f_mode & 3))
-		error = -EBADF;
-	else
-		error = flock_lock_file(filp, &file_lock,
-					(cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
+	error = -EBADF;
+	filp = fget(fd);
+	if (!filp)
+		goto out;
+	error = -EINVAL;
+	if (!flock_make_lock(filp, &file_lock, cmd))
+		goto out_putf;
+	error = -EBADF;
+	if ((file_lock.fl_type != F_UNLCK) && !(filp->f_mode & 3))
+		goto out_putf;
+	error = flock_lock_file(filp, &file_lock,
+				(cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
+out_putf:
+	fput(filp);
+out:
 	unlock_kernel();
 	return (error);
 }
@@ -307,36 +314,34 @@ asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
  */
 int fcntl_getlk(unsigned int fd, struct flock *l)
 {
-	struct flock flock;
 	struct file *filp;
-	struct dentry *dentry;
-	struct inode *inode;
 	struct file_lock *fl,file_lock;
+	struct flock flock;
 	int error;
 
-	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		return -EBADF;
+	error = -EFAULT;
 	if (copy_from_user(&flock, l, sizeof(flock)))
-		return -EFAULT;
-
+		goto out;
+	error = -EINVAL;
 	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
-		return -EINVAL;
+		goto out;
 
-	dentry = filp->f_dentry;
-	if (!dentry)
-		return -EINVAL;
+	error = -EBADF;
+	filp = fget(fd);
+	if (!filp)
+		goto out;
 
-	inode = dentry->d_inode;
-	if (!inode)
-		return -EINVAL;
+	error = -EINVAL;
+	if (!filp->f_dentry || !filp->f_dentry->d_inode)
+		goto out_putf;
 
 	if (!posix_make_lock(filp, &file_lock, &flock))
-		return -EINVAL;
+		goto out_putf;
 
 	if (filp->f_op->lock) {
 		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
-			return error;
+			goto out_putf;
 		fl = &file_lock;
 	} else {
 		fl = posix_test_lock(filp, &file_lock);
@@ -351,8 +356,14 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		flock.l_whence = 0;
 		flock.l_type = fl->fl_type;
 	}
+	error = -EFAULT;
+	if (!copy_to_user(l, &flock, sizeof(flock)))
+		error = 0;
   
-	return (copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0);
+out_putf:
+	fput(filp);
+out:
+	return error;
 }
 
 /* Apply the lock described by l to an open file descriptor.
@@ -367,22 +378,26 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	struct inode *inode;
 	int error;
 
-	/* Get arguments and validate them ...
-	 */
-
-	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
-		return -EBADF;
-
-	if (!(dentry = filp->f_dentry))
-		return -EINVAL;
-
-	if (!(inode = dentry->d_inode))
-		return -EINVAL;
 	/*
 	 * This might block, so we do it before checking the inode.
 	 */
+	error = -EFAULT;
 	if (copy_from_user(&flock, l, sizeof(flock)))
-		return (-EFAULT);
+		goto out;
+
+	/* Get arguments and validate them ...
+	 */
+
+	error = -EBADF;
+	filp = fget(fd);
+	if (!filp)
+		goto out;
+
+	error = -EINVAL;
+	if (!(dentry = filp->f_dentry))
+		goto out_putf;
+	if (!(inode = dentry->d_inode))
+		goto out_putf;
 
 	/* Don't allow mandatory locks on files that may be memory mapped
 	 * and shared.
@@ -391,23 +406,26 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID &&
 	    inode->i_mmap) {
 		struct vm_area_struct *vma = inode->i_mmap;
+		error = -EAGAIN;
 		do {
 			if (vma->vm_flags & VM_MAYSHARE)
-				return (-EAGAIN);
+				goto out_putf;
 		} while ((vma = vma->vm_next_share) != NULL);
 	}
 
+	error = -EINVAL;
 	if (!posix_make_lock(filp, &file_lock, &flock))
-		return (-EINVAL);
+		goto out_putf;
 	
+	error = -EBADF;
 	switch (flock.l_type) {
 	case F_RDLCK:
 		if (!(filp->f_mode & FMODE_READ))
-			return (-EBADF);
+			goto out_putf;
 		break;
 	case F_WRLCK:
 		if (!(filp->f_mode & FMODE_WRITE))
-			return (-EBADF);
+			goto out_putf;
 		break;
 	case F_UNLCK:
 		break;
@@ -425,20 +443,25 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	}
 }
 		if (!(filp->f_mode & 3))
-			return (-EBADF);
+			goto out_putf;
 		break;
 #endif
 	default:
-		return (-EINVAL);
+		error = -EINVAL;
+		goto out_putf;
 	}
 
 	if (filp->f_op->lock != NULL) {
 		error = filp->f_op->lock(filp, cmd, &file_lock);
 		if (error < 0)
-			return (error);
+			goto out_putf;
 	}
+	error = posix_lock_file(filp, &file_lock, cmd == F_SETLKW);
 
-	return (posix_lock_file(filp, &file_lock, cmd == F_SETLKW));
+out_putf:
+	fput(filp);
+out:
+	return error;
 }
 
 /*

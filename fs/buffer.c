@@ -1321,14 +1321,13 @@ no_grow:
 /* Run the hooks that have to be done when a page I/O has completed. */
 static inline void after_unlock_page (struct page * page)
 {
-	if (test_and_clear_bit(PG_decr_after, &page->flags))
+	if (test_and_clear_bit(PG_decr_after, &page->flags)) {
 		atomic_dec(&nr_async_pages);
-	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags)) {
-		/*
-		 * We're doing a swap, so check that this page is
-		 * swap-cached and do the necessary cleanup. 
-		 */
-		swap_after_unlock_page(page->offset);
+#ifdef DEBUG_SWAP
+		printk ("DebugVM: Finished IO on page %p, nr_async_pages %d\n",
+			(char *) page_address(page), 
+			atomic_read(&nr_async_pages));
+#endif
 	}
 	if (test_and_clear_bit(PG_free_after, &page->flags))
 		__free_page(page);

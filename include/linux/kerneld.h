@@ -48,8 +48,10 @@ struct kerneld_msg {
 };
 
 #ifdef __KERNEL__
+#include <linux/string.h>
+
 extern int kerneld_send(int msgtype, int ret_size, int msgsz,
-		const char *text, const char *ret_val);
+			const char *text, const char *ret_val);
 
 /*
  * Request that a module should be loaded.
@@ -59,8 +61,8 @@ extern int kerneld_send(int msgtype, int ret_size, int msgsz,
 static inline int request_module(const char *name)
 {
 	return kerneld_send(KERNELD_REQUEST_MODULE,
-			0 | KERNELD_WAIT,
-			strlen(name), name, NULL);
+			    0 | KERNELD_WAIT,
+			    strlen(name), name, NULL);
 }
 
 /*
@@ -70,8 +72,8 @@ static inline int request_module(const char *name)
 static inline int release_module(const char *name, int waitflag)
 {
 	return kerneld_send(KERNELD_RELEASE_MODULE,
-			0 | (waitflag?KERNELD_WAIT:KERNELD_NOWAIT),
-			strlen(name), name, NULL);
+			    0 | (waitflag?KERNELD_WAIT:KERNELD_NOWAIT),
+			    strlen(name), name, NULL);
 }
 
 /*
@@ -81,8 +83,8 @@ static inline int release_module(const char *name, int waitflag)
 static inline int delayed_release_module(const char *name)
 {
 	return kerneld_send(KERNELD_DELAYED_RELEASE_MODULE,
-			0 | KERNELD_NOWAIT,
-			strlen(name), name, NULL);
+			    0 | KERNELD_NOWAIT,
+			    strlen(name), name, NULL);
 }
 
 /*
@@ -94,8 +96,8 @@ static inline int delayed_release_module(const char *name)
 static inline int cancel_release_module(const char *name)
 {
 	return kerneld_send(KERNELD_CANCEL_RELEASE_MODULE,
-			0 | KERNELD_NOWAIT,
-			strlen(name), name, NULL);
+			    0 | KERNELD_NOWAIT,
+			    strlen(name), name, NULL);
 }
 
 /*
@@ -104,8 +106,8 @@ static inline int cancel_release_module(const char *name)
 static inline int ksystem(const char *cmd, int waitflag)
 {
 	return kerneld_send(KERNELD_SYSTEM,
-			0 | (waitflag?KERNELD_WAIT:KERNELD_NOWAIT),
-			strlen(cmd), cmd, NULL);
+			    0 | (waitflag?KERNELD_WAIT:KERNELD_NOWAIT),
+			    strlen(cmd), cmd, NULL);
 }
 
 /*
@@ -114,18 +116,19 @@ static inline int ksystem(const char *cmd, int waitflag)
 static inline int kerneld_route(const char *ip_route)
 {
 	return kerneld_send(KERNELD_REQUEST_ROUTE,
-			0 | KERNELD_WAIT,
-			strlen(ip_route), ip_route, NULL);
+			    0 | KERNELD_WAIT,
+			    strlen(ip_route), ip_route, NULL);
 }
 
 /*
  * Handle an external screen blanker
  */
-static inline int kerneld_blanker(int on_off) /* 0 => "off", else "on" */
+static inline int kerneld_blanker(int on_off)
 {
+	char *s = on_off ? "on" : "off";
 	return kerneld_send(KERNELD_BLANKER,
-			0 | (on_off?KERNELD_NOWAIT:KERNELD_WAIT),
-			strlen(on_off?"on":"off"), on_off?"on":"off", NULL);
+			    0 | (on_off ? KERNELD_NOWAIT : KERNELD_WAIT),
+			    strlen(s), s, NULL);
 }
 
 #endif /* __KERNEL__ */

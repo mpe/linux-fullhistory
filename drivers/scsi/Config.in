@@ -123,7 +123,7 @@ dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
 # The actual configuration in any kernel release could change at any time as I hack it to
 # simulate various conditions that I am testing.
 #
-if [ "`whoami`" = "eric" ]; then
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 fi
 if [ "$CONFIG_PPC" = "y" ]; then

@@ -471,7 +471,7 @@ static void do_sr_request (void)
  	    {
 		spin_unlock_irqrestore(&io_request_lock, flags);
 		scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
-		/* scsi_ioctl may allow CURRENT to change, so start over. *
+		/* scsi_ioctl may allow CURRENT to change, so start over. */
 		SDev->was_reset = 0;
 		continue;
  	    }

@@ -47,4 +47,12 @@ extern inline void put_filp(struct file *file)
 	}
 }
 
+/*
+ * Install a file pointer in the files structure.
+ */
+extern inline void fd_install(unsigned long fd, struct file *file)
+{
+	current->files->fd[fd] = file;
+}
+
 #endif

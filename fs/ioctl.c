@@ -13,6 +13,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/fcntl.h> /* for f_flags values */
+#include <linux/file.h>
 
 #include <asm/uaccess.h>
 
@@ -52,7 +53,8 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	int on, error = -EBADF;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
+	filp = fget(fd);
+	if (!filp)
 		goto out;
 	error = 0;
 	switch (cmd) {
@@ -90,13 +92,16 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			break;
 
 		default:
-			if (filp->f_dentry && filp->f_dentry->d_inode && S_ISREG(filp->f_dentry->d_inode->i_mode))
+			error = -ENOTTY;
+			if (!filp->f_dentry || !filp->f_dentry->d_inode)
+				error = -ENOENT;
+			else if (S_ISREG(filp->f_dentry->d_inode->i_mode))
 				error = file_ioctl(filp, cmd, arg);
 			else if (filp->f_op && filp->f_op->ioctl)
 				error = filp->f_op->ioctl(filp->f_dentry->d_inode, filp, cmd, arg);
-			else
-				error = -ENOTTY;
 	}
+	fput(filp);
+
 out:
 	unlock_kernel();
 	return error;

@@ -162,10 +162,12 @@ int shrink_mmap(int priority, int gfp_mask)
 				if (test_and_clear_bit(PG_referenced, &page->flags))
 					break;
 
-				/* is it a page cache page? */
+				/* is it a swap-cache or page-cache page? */
 				if (page->inode) {
-					if (page->inode == &swapper_inode)
-						panic ("Shrinking a swap cache page");
+					if (PageSwapCache(page)) {
+						delete_from_swap_cache(page);
+						return 1;
+					}
 					remove_page_from_hash_queue(page);
 					remove_page_from_inode_queue(page);
 					__free_page(page);

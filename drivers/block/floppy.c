@@ -148,7 +148,7 @@ static int allowed_drive_mask = 0x33;
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-static int can_use_virtual_dma=0;
+static int can_use_virtual_dma=2;
 /* =======
  * can use virtual DMA:
  * 0 = use of virtual DMA disallowed by config
@@ -2083,7 +2083,7 @@ static void format_interrupt(void)
 
 #define CODE2SIZE (ssize = ((1 << SIZECODE) + 3) >> 2)
 #define FM_MODE(x,y) ((y) & ~(((x)->rate & 0x80) >>1))
-#define CT(x) ((x) | 0x40)
+#define CT(x) ((x) | 0xc0)
 static void setup_format_params(int track)
 {
 	struct fparm {
@@ -2465,6 +2465,32 @@ static inline int check_dma_crossing(char *start,
 }
 #endif
 
+/* work around a bug in pseudo DMA
+ * (on some FDCs) pseudo DMA does not stop when the CPU stops
+ * sending data.  Hence we need a different way to signal the
+ * transfer length:  We use SECT_PER_TRACK.  Unfortunately, this
+ * does not work with MT, hence we can only transfer one head at
+ * a time
+ */
+static int virtualdmabug_workaround() {
+	int hard_sectors, end_sector;
+	if(CT(COMMAND) == FD_WRITE) {
+		COMMAND &= ~0x80; /* switch off multiple track mode */
+	   
+		hard_sectors = raw_cmd->length >> (7 + SIZECODE);
+		end_sector = SECTOR + hard_sectors - 1;
+#ifdef FLOPPY_SANITY_CHECK
+		if(end_sector > SECT_PER_TRACK) {
+			printk("too many sectors %d > %d\n", 
+				   end_sector, SECT_PER_TRACK);
+			return 0;
+		}
+#endif
+		SECT_PER_TRACK = end_sector; /* make sure SECT_PER_TRACK points
+									  * to end of transfer */
+	}
+}
+
 /*
  * Formulate a read/write request.
  * this routine decides where to load the data (directly to buffer, or to
@@ -2541,11 +2567,17 @@ static int make_raw_rw_request(void)
 	CODE2SIZE;
 	SECT_PER_TRACK = _floppy->sect << 2 >> SIZECODE;
 	SECTOR = ((sector_t % _floppy->sect) << 2 >> SIZECODE) + 1;
+
+	/* tracksize describes the size which can be filled up with sectors
+	 * of size ssize.
+	 */
 	tracksize = _floppy->sect - _floppy->sect % ssize;
 	if (tracksize < _floppy->sect){
 		SECT_PER_TRACK ++;
 		if (tracksize <= sector_t % _floppy->sect)
 			SECTOR--;
+
+		/* if we are beyond tracksize, fill up using smaller sectors */
 		while (tracksize <= sector_t % _floppy->sect){
 			while(tracksize + ssize > _floppy->sect){
 				SIZECODE--;
@@ -2555,8 +2587,12 @@ static int make_raw_rw_request(void)
 			tracksize += ssize;
 		}
 		max_sector = HEAD * _floppy->sect + tracksize;
-	} else if (!TRACK && !HEAD && !(_floppy->rate & FD_2M) && probing)
+	} else if (!TRACK && !HEAD && !(_floppy->rate & FD_2M) && probing) {
 		max_sector = _floppy->sect;
+	} else if (!HEAD && CT(COMMAND) == FD_WRITE) {
+		/* for virtual DMA bug workaround */
+		max_sector = _floppy->sect;
+	}
 
 	aligned_sector_t = sector_t - (sector_t % _floppy->sect) % ssize;
 	max_size = CURRENT->nr_sectors;
@@ -2625,6 +2661,8 @@ static int make_raw_rw_request(void)
 /*			check_dma_crossing(raw_cmd->kernel_data, 
 					   raw_cmd->length, 
 					   "end of make_raw_request [1]");*/
+
+			virtualdmabug_workaround();
 			return 2;
 		}
 	}
@@ -2730,6 +2768,8 @@ static int make_raw_rw_request(void)
 		return 0;
 	}
 #endif
+
+	virtualdmabug_workaround();
 	return 2;
 }
 

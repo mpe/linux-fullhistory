@@ -7,7 +7,7 @@
  *  kswapd added: 7.1.96  sct
  *  Removed kswapd_ctl limits, and swap out as many pages as needed
  *  to bring the system back to free_pages_high: 2.4.97, Rik van Riel.
- *  Version: $Id: vmscan.c,v 1.23 1997/04/12 04:31:05 davem Exp $
+ *  Version: $Id: vmscan.c,v 1.5 1998/02/23 22:14:28 sct Exp $
  */
 
 #include <linux/mm.h>
@@ -80,73 +80,158 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	    || PageLocked(page_map)
 	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page_map)))
 		return 0;
-	/* Deal with page aging.  Pages age from being unused; they
-	 * rejuvenate on being accessed.  Only swap old pages (age==0
-	 * is oldest).
+
+	/* 
+	 * Deal with page aging.  There are several special cases to
+	 * consider:
+	 * 
+	 * Page has been accessed, but is swap cached.  If the page is
+	 * getting sufficiently "interesting" --- its age is getting
+	 * high --- then if we are sufficiently short of free swap
+	 * pages, then delete the swap cache.  We can only do this if
+	 * the swap page's reference count is one: ie. there are no
+	 * other references to it beyond the swap cache (as there must
+	 * still be pte's pointing to it if count > 1).
+	 * 
+	 * If the page has NOT been touched, and its age reaches zero,
+	 * then we are swapping it out:
 	 *
-	 * This test will no longer work once swap cached pages can be
-	 * shared!  
-	 */
-	if ((pte_dirty(pte) && delete_from_swap_cache(page_map)) 
-	    || pte_young(pte))  {
+	 *   If there is already a swap cache page for this page, then
+	 *   another process has already allocated swap space, so just
+	 *   dereference the physical page and copy in the swap entry
+	 *   from the swap cache.  
+	 * 
+	 * Note, we rely on all pages read in from swap either having
+	 * the swap cache flag set, OR being marked writable in the pte,
+	 * but NEVER BOTH.  (It IS legal to be neither cached nor dirty,
+	 * however.)
+	 *
+	 * -- Stephen Tweedie 1998 */
+
+	if (pte_write(pte)) {
+		/* 
+		 * We _will_ allow dirty cached mappings later on, once
+		 * MAP_SHARED|MAP_ANONYMOUS is working, but for now
+		 * catch this as a bug.
+		 */
+		if (is_page_shared(page_map)) {
+			printk ("VM: Found a shared writable dirty page!\n");
+			return 0;
+		}
+		if (PageSwapCache(page_map)) {
+			printk ("VM: Found a writable swap-cached page!\n");
+			return 0;
+		}
+	}
+	
+	if (pte_young(pte)) {
 		set_pte(page_table, pte_mkold(pte));
 		touch_page(page_map);
+		/* 
+		 * We should test here to see if we want to recover any
+		 * swap cache page here.  We do this if the page seeing
+		 * enough activity, AND we are sufficiently low on swap
+		 *
+		 * We need to track both the number of available swap
+		 * pages and the total number present before we can do
+		 * this...  
+		 */
 		return 0;
 	}
+
 	age_page(page_map);
 	if (page_map->age)
 		return 0;
+
 	if (pte_dirty(pte)) {
-		if (PageSwapCache(page_map))
-			panic ("Can't still be swap cached!!!");
 		if (vma->vm_ops && vma->vm_ops->swapout) {
 			pid_t pid = tsk->pid;
 			vma->vm_mm->rss--;
 			if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
 				kill_proc(pid, SIGBUS, 1);
 		} else {
-			if (!(entry = get_swap_page()))
-				return 0;
+			/*
+			 * This is a dirty, swappable page.  First of all,
+			 * get a suitable swap entry for it, and make sure
+			 * we have the swap cache set up to associate the
+			 * page with that swap entry.
+			 */
+			if (PageSwapCache(page_map)) {
+				entry = page_map->offset;
+			} else {
+				entry = get_swap_page();
+				if (!entry)
+					return 0; /* No swap space left */
+			}
+			
 			vma->vm_mm->rss--;
+			tsk->nswap++;
 			flush_cache_page(vma, address);
 			set_pte(page_table, __pte(entry));
 			flush_tlb_page(vma, address);
-			tsk->nswap++;
+			swap_duplicate(entry);
+
+			/* Now to write back the page.  We have two
+			 * cases: if the page is already part of the
+			 * swap cache, then it is already on disk.  Just
+			 * free the page and return (we release the swap
+			 * cache on the last accessor too).
+			 *
+			 * If we have made a new swap entry, then we
+			 * start the write out to disk.  If the page is
+			 * shared, however, we still need to keep the
+			 * copy in memory, so we add it to the swap
+			 * cache. */
+			if (PageSwapCache(page_map)) {
+				free_page_and_swap_cache(page);
+				return (atomic_read(&page_map->count) == 0);
+			}
+			add_to_swap_cache(page_map, entry);
+			/* We checked we were unlocked way up above, and we
+			   have been careful not to stall until here */
+			set_bit(PG_locked, &page_map->flags);
+			/* OK, do a physical write to swap.  */
 			rw_swap_page(WRITE, entry, (char *) page, (gfp_mask & __GFP_WAIT));
 		}
-		/* 
-		 * For now, this is safe, because the test above makes
-		 * sure that this page is currently not swap-cached.  
-		 */
-		if (PageSwapCache(page_map))
-			panic ("Page became cached after IO");
-		free_page(page);
+		/* Now we can free the current physical page.  We also
+		 * free up the swap cache if this is the last use of the
+		 * page.  Note that there is a race here: the page may
+		 * still be shared COW by another process, but that
+		 * process may exit while we are writing out the page
+		 * asynchronously.  That's no problem, shrink_mmap() can
+		 * correctly clean up the occassional unshared page
+		 * which gets left behind in the swap cache. */
+		free_page_and_swap_cache(page);
 		return 1;	/* we slept: the process may not exist any more */
 	}
-	/* 
-	 * Eventually, find_in_swap_cache will be able to return true
-	 * even for pages shared with other processes.  
-	 */
-        if ((entry = find_in_swap_cache(page_map)))  {
-		if (atomic_read(&page_map->count) != 1) {
-			set_pte(page_table, pte_mkdirty(pte));
-			printk("Aiee.. duplicated cached swap-cache entry\n");
-			return 0;
-		}
+
+	/* The page was _not_ dirty, but still has a zero age.  It must
+	 * already be uptodate on disk.  If it is in the swap cache,
+	 * then we can just unlink the page now.  Remove the swap cache
+	 * too if this is the last user.  */
+        if ((entry = in_swap_cache(page_map)))  {
 		vma->vm_mm->rss--;
 		flush_cache_page(vma, address);
 		set_pte(page_table, __pte(entry));
 		flush_tlb_page(vma, address);
-		free_page(page);
-		return 1;
+		swap_duplicate(entry);
+		free_page_and_swap_cache(page);
+		return (atomic_read(&page_map->count) == 0);
 	} 
+	/* 
+	 * A clean page to be discarded?  Must be mmap()ed from
+	 * somewhere.  Unlink the pte, and tell the filemap code to
+	 * discard any cached backing page if this is the last user.
+	 */
+	if (PageSwapCache(page_map)) {
+		printk ("VM: How can this page _still_ be cached?");
+		return 0;
+	}
 	vma->vm_mm->rss--;
 	flush_cache_page(vma, address);
 	pte_clear(page_table);
 	flush_tlb_page(vma, address);
 	entry = page_unuse(page);
-	if (PageSwapCache(page_map))
-		panic ("How can this page _still_ be cached?");
 	free_page(page);
 	return entry;
 }
@@ -424,7 +509,7 @@ int try_to_free_page(int gfp_mask)
 void kswapd_setup(void)
 {
        int i;
-       char *revision="$Revision: 1.23 $", *s, *e;
+       char *revision="$Revision: 1.5 $", *s, *e;
 
        if ((s = strchr(revision, ':')) &&
            (e = strchr(s, '$')))
@@ -441,6 +526,7 @@ void kswapd_setup(void)
  */
 int kswapd(void *unused)
 {
+	struct wait_queue wait = { current, NULL };
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "kswapd");
@@ -460,14 +546,15 @@ int kswapd(void *unused)
 				    priorities.  */
 
 	init_swap_timer();
-	
+	add_wait_queue(&kswapd_wait, &wait);
 	while (1) {
-		int fail;
+		int async;
 
 		kswapd_awake = 0;
 		flush_signals(current);
 		run_task_queue(&tq_disk);
-		interruptible_sleep_on(&kswapd_wait);
+		schedule();
+		current->state = TASK_INTERRUPTIBLE;
 		kswapd_awake = 1;
 		swapstats.wakeups++;
 		/* Do the background pageout: 
@@ -477,27 +564,30 @@ int kswapd(void *unused)
 		 * If we've had too many consecutive failures,
 		 * go back to sleep to let other tasks run.
 		 */
-		for (fail = 0; fail++ < MAX_SWAP_FAIL;) {
-			int pages, gfp_mask;
+		async = 1;
+		for (;;) {
+			int gfp_mask;
 
-			pages = nr_free_pages;
-			if (nr_free_pages >= min_free_pages)
-				pages += atomic_read(&nr_async_pages);
-			if (pages >= free_pages_high)
+			if (free_memory_available())
 				break;
 			gfp_mask = __GFP_IO;
-			if (pages < free_pages_low)
+			if (!async)
 				gfp_mask |= __GFP_WAIT;
-			if (try_to_free_page(gfp_mask))
-				fail = 0;
+			async = try_to_free_page(gfp_mask);
+			if (!(gfp_mask & __GFP_WAIT) || async)
+				continue;
+
+			/*
+			 * Not good. We failed to free a page even though
+			 * we were synchronous. Complain and give up..
+			 */
+			printk("kswapd: failed to free page\n");
+			break;
 		}
-		/*
-		 * Report failure if we couldn't reach the minimum goal.
-		 */
-		if (nr_free_pages < min_free_pages)
-			printk("kswapd: failed, got %d of %d\n",
-				nr_free_pages, min_free_pages);
 	}
+	/* As if we could ever get here - maybe we want to make this killable */
+	remove_wait_queue(&kswapd_wait, &wait);
+	return 0;
 }
 
 /* 

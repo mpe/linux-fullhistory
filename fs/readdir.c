@@ -4,12 +4,13 @@
  *  Copyright (C) 1995  Linus Torvalds
  */
 
+#include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
+#include <linux/file.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -65,27 +66,24 @@ asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 
 	lock_kernel();
 	error = -EBADF;
-	if (fd >= NR_OPEN)
-		goto out;
-
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if (!file)
 		goto out;
 
 	dentry = file->f_dentry;
 	if (!dentry)
-		goto out;
+		goto out_putf;
 
 	inode = dentry->d_inode;
 	if (!inode)
-		goto out;
+		goto out_putf;
 
 	buf.count = 0;
 	buf.dirent = dirent;
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
 	/*
 	 * Get the inode's semaphore to prevent changes
@@ -95,8 +93,11 @@ asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 	error = file->f_op->readdir(file, &buf, fillonedir);
 	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
+		goto out_putf;
 	error = buf.count;
+
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return error;
@@ -155,20 +156,17 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 
 	lock_kernel();
 	error = -EBADF;
-	if (fd >= NR_OPEN)
-		goto out;
-
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if (!file)
 		goto out;
 
 	dentry = file->f_dentry;
 	if (!dentry)
-		goto out;
+		goto out_putf;
 
 	inode = dentry->d_inode;
 	if (!inode)
-		goto out;
+		goto out_putf;
 
 	buf.current_dir = (struct linux_dirent *) dirent;
 	buf.previous = NULL;
@@ -177,7 +175,7 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
 	/*
 	 * Get the inode's semaphore to prevent changes
@@ -187,13 +185,16 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 	error = file->f_op->readdir(file, &buf, filldir);
 	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
-	lastdirent = buf.previous;
+		goto out_putf;
 	error = buf.error;
+	lastdirent = buf.previous;
 	if (lastdirent) {
 		put_user(file->f_pos, &lastdirent->d_off);
 		error = count - buf.count;
 	}
+
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return error;

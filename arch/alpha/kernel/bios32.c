@@ -27,6 +27,8 @@
 #include <linux/kernel.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
+#include <asm/dma.h>
 
 #if 0
 # define DBG_DEVS(args)		printk args
@@ -98,8 +100,11 @@ asmlinkage int sys_pciconfig_write()
 extern struct hwrpb_struct *hwrpb;
 
 /* Forward declarations for some extra fixup routines for specific hardware. */
-#ifdef CONFIG_ALPHA_PC164
-static int SMCInit(void);
+#if defined(CONFIG_ALPHA_PC164) || defined(CONFIG_ALPHA_LX164)
+extern int SMC93x_Init(void);
+#endif
+#ifdef CONFIG_ALPHA_SX164
+extern int SMC669_Init(void);
 #endif
 #ifdef CONFIG_ALPHA_MIATA
 static int es1888_init(void);
@@ -174,13 +179,22 @@ static void disable_dev(struct pci_dev *dev)
 	struct pci_bus *bus;
 	unsigned short cmd;
 
-#if defined(CONFIG_ALPHA_EISA)
+#ifdef CONFIG_ALPHA_EISA
 	/*
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
 	 *       itself as a bridge... :-(
 	 */
-	if (dev->vendor == 0x8086 && dev->device == 0x0482) {
+	if (dev->vendor == PCI_VENDOR_ID_INTEL &&
+	    dev->device == PCI_DEVICE_ID_INTEL_82375) {
 		DBG_DEVS(("disable_dev: ignoring PCEB...\n"));
+		return;
+	}
+#endif
+#ifdef CONFIG_ALPHA_SX164
+	if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
+	    /* FIXME: We want a symbolic device name here.  */
+	    dev->device == 0xc693) {
+		DBG_DEVS(("disable_dev: ignoring CYPRESS bridge...\n"));
 		return;
 	}
 #endif
@@ -206,6 +220,7 @@ static void layout_dev(struct pci_dev *dev)
 	unsigned int base, mask, size, reg;
 	unsigned int alignto;
 
+#ifdef CONFIG_ALPHA_EISA
 	/*
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
 	 *       itself as a bridge... :-(
@@ -215,6 +230,14 @@ static void layout_dev(struct pci_dev *dev)
 		DBG_DEVS(("layout_dev: ignoring PCEB...\n"));
 		return;
 	}
+#endif
+#ifdef CONFIG_ALPHA_SX164
+	if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
+	    dev->device == 0xc693) {
+		DBG_DEVS(("layout_dev: ignoring CYPRESS bridge...\n"));
+		return;
+	}
+#endif
 
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
@@ -729,6 +752,46 @@ common_fixup(long min_idsel, long max_idsel, long irqs_per_slot,
 							   0x0000000);
 			}
 		}
+#ifdef CONFIG_ALPHA_SX164
+		/* If it the CYPRESS PCI-ISA bridge, disable IDE
+		   interrupt routing through PCI (ie do through PIC).  */
+		else if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
+			 dev->device == 0xc693 &&
+			 PCI_FUNC(dev->devfn) == 0) {
+			pcibios_write_config_word(dev->bus->number,
+						  dev->devfn, 0x04, 0x0007);
+
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x40, 0x80);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x41, 0x80);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x42, 0x80);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x43, 0x80);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x44, 0x27);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x45, 0xe0);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x48, 0xf0);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x49, 0x40);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x4a, 0x00);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x4b, 0x80);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x4c, 0x80);
+			pcibios_write_config_byte(dev->bus->number,
+						  dev->devfn, 0x4d, 0x70);
+
+			outb(0, DMA1_RESET_REG);
+			outb(0, DMA2_RESET_REG);
+			outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
+			outb(0, DMA2_MASK_REG);
+		}
+#endif /* SX164 */
 	}
 	if (ide_base) {
 		enable_ide(ide_base);
@@ -750,7 +813,7 @@ common_fixup(long min_idsel, long max_idsel, long irqs_per_slot,
  */
 static inline void eb66p_fixup(void)
 {
-	static char irq_tab[5][5] = {
+	static char irq_tab[5][5] __initdata = {
 		{16+0, 16+0, 16+5,  16+9, 16+13},  /* IdSel 6,  slot 0, J25 */
 		{16+1, 16+1, 16+6, 16+10, 16+14},  /* IdSel 7,  slot 1, J26 */
 		{  -1,   -1,   -1,    -1,    -1},  /* IdSel 8,  SIO         */
@@ -762,7 +825,7 @@ static inline void eb66p_fixup(void)
 
 
 /*
- * The PC164 has 19 PCI interrupts, four from each of the four PCI
+ * The PC164/LX164 has 19 PCI interrupts, four from each of the four PCI
  * slots, the SIO, PCI/IDE, and USB.
  * 
  * Each of the interrupts can be individually masked. This is
@@ -803,10 +866,10 @@ static inline void eb66p_fixup(void)
  * 
  */
 
-#ifdef CONFIG_ALPHA_PC164
+#if defined(CONFIG_ALPHA_PC164) || defined(CONFIG_ALPHA_LX164)
 static inline void alphapc164_fixup(void)
 {
-	static char irq_tab[7][5] = {
+	static char irq_tab[7][5] __initdata = {
 		/*INT   INTA  INTB   INTC   INTD */
 		{ 16+2, 16+2, 16+9,  16+13, 16+17}, /* IdSel  5, slot 2, J20 */
 		{ 16+0, 16+0, 16+7,  16+11, 16+15}, /* IdSel  6, slot 0, J29 */
@@ -818,7 +881,7 @@ static inline void alphapc164_fixup(void)
 	};
 
 	common_fixup(5, 11, 5, irq_tab, 0);
-	SMCInit();
+	SMC93x_Init();
 }
 #endif
 
@@ -837,7 +900,7 @@ static inline void alphapc164_fixup(void)
  */
 static inline void cabriolet_fixup(void)
 {
-	static char irq_tab[5][5] = {
+	static char irq_tab[5][5] __initdata = {
 		{ 16+2, 16+2, 16+7, 16+11, 16+15}, /* IdSel 5,  slot 2, J21 */
 		{ 16+0, 16+0, 16+5,  16+9, 16+13}, /* IdSel 6,  slot 0, J19 */
 		{ 16+1, 16+1, 16+6, 16+10, 16+14}, /* IdSel 7,  slot 1, J20 */
@@ -893,7 +956,7 @@ static inline void cabriolet_fixup(void)
  */
 static inline void eb66_and_eb64p_fixup(void)
 {
-	static char irq_tab[5][5] = {
+	static char irq_tab[5][5] __initdata = {
 		{16+7, 16+7, 16+7, 16+7,  16+7},  /* IdSel 5,  slot ?, ?? */
 		{16+0, 16+0, 16+2, 16+4,  16+9},  /* IdSel 6,  slot ?, ?? */
 		{16+1, 16+1, 16+3, 16+8, 16+10},  /* IdSel 7,  slot ?, ?? */
@@ -942,7 +1005,7 @@ static inline void eb66_and_eb64p_fixup(void)
  */
 static inline void mikasa_fixup(void)
 {
-	static char irq_tab[8][5] = {
+	static char irq_tab[8][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{16+12, 16+12, 16+12, 16+12, 16+12},	/* IdSel 17,  SCSI */
 		{   -1,    -1,    -1,    -1,    -1},	/* IdSel 18,  PCEB */
@@ -1013,7 +1076,7 @@ static inline void mikasa_fixup(void)
  */
 static inline void noritake_fixup(void)
 {
-	static char irq_tab[13][5] = {
+	static char irq_tab[13][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 18,  PCEB */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 19,  PPB  */
@@ -1077,7 +1140,7 @@ static inline void noritake_fixup(void)
  */
 static inline void alcor_fixup(void)
 {
-	static char irq_tab[6][5] = {
+	static char irq_tab[6][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 18,  slot 0 */
 		{16+16, 16+16, 16+17, 16+18, 16+19},	/* IdSel 19,  slot 3 */
@@ -1132,7 +1195,7 @@ static inline void alcor_fixup(void)
  */
 static inline void xlt_fixup(void)
 {
-	static char irq_tab[7][5] = {
+	static char irq_tab[7][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{16+13, 16+13, 16+13, 16+13, 16+13},	/* IdSel 17,  TULIP  */
 		{ 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 18,  slot 0 */
@@ -1194,13 +1257,16 @@ static inline void xlt_fixup(void)
  * above for PCI interrupts.  The IRQ relates to which bit the interrupt
  * comes in on.  This makes interrupt processing much easier.
  */
-/* NOTE: the IRQ assignments below are arbitrary, but need to be consistent
-   with the values in the sable_irq_to_mask[] and sable_mask_to_irq[] tables
-   in irq.c
+/*
+ * NOTE: the IRQ assignments below are arbitrary, but need to be consistent
+ * with the values in the sable_irq_to_mask[] and sable_mask_to_irq[] tables
+ * in irq.c
  */
+
+#ifdef CONFIG_ALPHA_SABLE
 static inline void sable_fixup(void)
 {
-        static char irq_tab[9][5] = {
+        static char irq_tab[9][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{ 32+0,  32+0,  32+0,  32+0,  32+0},  /* IdSel 0,  TULIP  */
 		{ 32+1,  32+1,  32+1,  32+1,  32+1},  /* IdSel 1,  SCSI   */
@@ -1214,6 +1280,7 @@ static inline void sable_fixup(void)
         };
         common_fixup(0, 8, 5, irq_tab, 0);
 }
+#endif
 
 /*
  * Fixup configuration for MIATA (EV56+PYXIS)
@@ -1282,7 +1349,7 @@ static inline void sable_fixup(void)
 #ifdef CONFIG_ALPHA_MIATA
 static inline void miata_fixup(void)
 {
-        static char irq_tab[18][5] = {
+        static char irq_tab[18][5] __initdata = {
 		/*INT    INTA   INTB   INTC   INTD */
 		{16+ 8, 16+ 8, 16+ 8, 16+ 8, 16+ 8},  /* IdSel 14,  DC21142  */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 15,  EIDE   */
@@ -1307,6 +1374,64 @@ static inline void miata_fixup(void)
         };
 	common_fixup(3, 20, 5, irq_tab, 0);
 	es1888_init();
+}
+#endif
+
+/*
+ * Fixup configuration for SX164 (PCA56+PYXIS)
+ *
+ * Summary @ PYXIS_INT_REQ:
+ * Bit      Meaning
+ * 0        RSVD
+ * 1        NMI
+ * 2        Halt/Reset switch
+ * 3        MBZ
+ * 4        RAZ
+ * 5        RAZ
+ * 6        Interval timer (RTC)
+ * 7        PCI-ISA Bridge
+ * 8        Interrupt Line A from slot 3
+ * 9        Interrupt Line A from slot 2
+ *10        Interrupt Line A from slot 1
+ *11        Interrupt Line A from slot 0
+ *12        Interrupt Line B from slot 3
+ *13        Interrupt Line B from slot 2
+ *14        Interrupt Line B from slot 1
+ *15        Interrupt line B from slot 0
+ *16        Interrupt Line C from slot 3
+
+ *17        Interrupt Line C from slot 2
+ *18        Interrupt Line C from slot 1
+ *19        Interrupt Line C from slot 0
+ *20        Interrupt Line D from slot 3
+ *21        Interrupt Line D from slot 2
+ *22        Interrupt Line D from slot 1
+ *23        Interrupt Line D from slot 0
+ *
+ * IdSel       
+ *   5  32 bit PCI option slot 2
+ *   6  64 bit PCI option slot 0
+ *   7  64 bit PCI option slot 1
+ *   8  Cypress I/O
+ *   9  32 bit PCI option slot 3
+ * 
+ */
+
+#ifdef CONFIG_ALPHA_SX164
+static inline void sx164_fixup(void)
+{
+	static char irq_tab[5][5] __initdata = {
+		/*INT    INTA   INTB   INTC   INTD */
+		{ 16+ 9, 16+ 9, 16+13, 16+17, 16+21}, /* IdSel 5 slot 2 J17 */
+		{ 16+11, 16+11, 16+15, 16+19, 16+23}, /* IdSel 6 slot 0 J19 */
+		{ 16+10, 16+10, 16+14, 16+18, 16+22}, /* IdSel 7 slot 1 J18 */
+		{    -1,    -1,    -1,	  -1,    -1}, /* IdSel 8 SIO        */
+		{ 16+ 8, 16+ 8, 16+12, 16+16, 16+20}  /* IdSel 9 slot 3 J15 */
+	};
+
+	common_fixup(5, 9, 5, irq_tab, 0);
+
+	SMC669_Init();
 }
 #endif
 
@@ -1336,7 +1461,7 @@ static inline void sio_fixup(void)
 	 * that they use the default INTA line, if they are interrupt
 	 * driven at all).
 	 */
-	static const char pirq_tab[][5] = {
+	static const char pirq_tab[][5] __initdata = {
 #ifdef CONFIG_ALPHA_P2K
 		{ 0,  0, -1, -1, -1}, /* idsel  6 (53c810) */
 		{-1, -1, -1, -1, -1}, /* idsel  7 (SIO: PCI/ISA bridge) */
@@ -1560,9 +1685,10 @@ static inline void sio_fixup(void)
 extern void tga_console_init(void);
 #endif /* CONFIG_TGA_CONSOLE */
 
-unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
+unsigned long __init
+pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 {
-#if PCI_MODIFY
+#if PCI_MODIFY && !defined(CONFIG_ALPHA_RUFFIAN)
 	/*
 	 * Scan the tree, allocating PCI memory and I/O space.
 	 */
@@ -1577,7 +1703,7 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	sio_fixup();
 #elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB164)
 	cabriolet_fixup();
-#elif defined(CONFIG_ALPHA_PC164)
+#elif defined(CONFIG_ALPHA_PC164) || defined(CONFIG_ALPHA_LX164)
 	alphapc164_fixup();
 #elif defined(CONFIG_ALPHA_EB66P)
 	eb66p_fixup();
@@ -1597,6 +1723,10 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	miata_fixup();
 #elif defined(CONFIG_ALPHA_NORITAKE)
 	noritake_fixup();
+#elif defined(CONFIG_ALPHA_SX164)
+	sx164_fixup();
+#elif defined(CONFIG_ALPHA_RUFFIAN)
+	/* no fixup needed */
 #else
 # error "You must tell me what kind of platform you want."
 #endif
@@ -1702,251 +1832,12 @@ asmlinkage int sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 }
 
 
-#ifdef CONFIG_ALPHA_PC164
-/* device "activate" register contents */
-#define DEVICE_ON		1
-#define DEVICE_OFF		0
-
-/* configuration on/off keys */
-#define CONFIG_ON_KEY		0x55
-#define CONFIG_OFF_KEY		0xaa
-
-/* configuration space device definitions */
-#define FDC			0
-#define IDE1			1
-#define IDE2			2
-#define PARP			3
-#define SER1			4
-#define SER2			5
-#define RTCL			6
-#define KYBD			7
-#define AUXIO			8
-
-/* Chip register offsets from base */
-#define CONFIG_CONTROL		0x02
-#define INDEX_ADDRESS		0x03
-#define LOGICAL_DEVICE_NUMBER	0x07
-#define DEVICE_ID		0x20
-#define DEVICE_REV		0x21
-#define POWER_CONTROL		0x22
-#define POWER_MGMT		0x23
-#define OSC			0x24
-
-#define ACTIVATE		0x30
-#define ADDR_HI			0x60
-#define ADDR_LO			0x61
-#define INTERRUPT_SEL		0x70
-#define INTERRUPT_SEL_2		0x72 /* KYBD/MOUS only */
-#define DMA_CHANNEL_SEL		0x74 /* FDC/PARP only */
-
-#define FDD_MODE_REGISTER	0x90
-#define FDD_OPTION_REGISTER	0x91
-
-/* values that we read back that are expected ... */
-#define VALID_DEVICE_ID		2
-
-/* default device addresses */
-#define KYBD_INTERRUPT		1
-#define MOUS_INTERRUPT		12
-#define COM2_BASE		0x2f8
-#define COM2_INTERRUPT		3
-#define COM1_BASE		0x3f8
-#define COM1_INTERRUPT		4
-#define PARP_BASE		0x3bc
-#define PARP_INTERRUPT		7
-
-#define SMC_DEBUG 0
-
-static unsigned long SMCConfigState(unsigned long baseAddr)
-{
-	unsigned char devId;
-	unsigned char devRev;
-
-	unsigned long configPort;
-	unsigned long indexPort;
-	unsigned long dataPort;
-
-	configPort = indexPort = baseAddr;
-	dataPort = configPort + 1;
-
-	outb(CONFIG_ON_KEY, configPort);
-	outb(CONFIG_ON_KEY, configPort);
-	outb(DEVICE_ID, indexPort);
-	devId = inb(dataPort);
-	if ( devId == VALID_DEVICE_ID ) {
-		outb(DEVICE_REV, indexPort);
-		devRev = inb(dataPort);
-	}
-	else {
-		baseAddr = 0;
-	}
-	return baseAddr;
-}
-
-static void SMCRunState(unsigned long baseAddr)
-{
-	outb(CONFIG_OFF_KEY, baseAddr);
-}
-
-static unsigned long SMCDetectUltraIO(void)
-{
-	unsigned long baseAddr;
-
-	baseAddr = 0x3F0;
-	if ( ( baseAddr = SMCConfigState( baseAddr ) ) == 0x3F0 ) {
-		return( baseAddr );
-	}
-	baseAddr = 0x370;
-	if ( ( baseAddr = SMCConfigState( baseAddr ) ) == 0x370 ) {
-		return( baseAddr );
-	}
-	return( ( unsigned long )0 );
-}
-
-static void SMCEnableDevice(unsigned long baseAddr,
-			    unsigned long device,
-			    unsigned long portaddr,
-			    unsigned long interrupt)
-{
-	unsigned long indexPort;
-	unsigned long dataPort;
-
-	indexPort = baseAddr;
-	dataPort = baseAddr + 1;
-
-	outb(LOGICAL_DEVICE_NUMBER, indexPort);
-	outb(device, dataPort);
-
-	outb(ADDR_LO, indexPort);
-	outb(( portaddr & 0xFF ), dataPort);
-
-	outb(ADDR_HI, indexPort);
-	outb((portaddr >> 8) & 0xFF, dataPort);
-
-	outb(INTERRUPT_SEL, indexPort);
-	outb(interrupt, dataPort);
-
-	outb(ACTIVATE, indexPort);
-	outb(DEVICE_ON, dataPort);
-}
-
-static void SMCEnableKYBD(unsigned long baseAddr)
-{
-	unsigned long indexPort;
-	unsigned long dataPort;
-
-	indexPort = baseAddr;
-	dataPort = baseAddr + 1;
-
-	outb(LOGICAL_DEVICE_NUMBER, indexPort);
-	outb(KYBD, dataPort);
-
-	outb(INTERRUPT_SEL, indexPort); /* Primary interrupt select */
-	outb(KYBD_INTERRUPT, dataPort);
-
-	outb(INTERRUPT_SEL_2, indexPort); /* Secondary interrupt select */
-	outb(MOUS_INTERRUPT, dataPort);
-
-	outb(ACTIVATE, indexPort);
-	outb(DEVICE_ON, dataPort);
-}
-
-static void SMCEnableFDC(unsigned long baseAddr)
-{
-	unsigned long indexPort;
-	unsigned long dataPort;
-
-	unsigned char oldValue;
-
-	indexPort = baseAddr;
-	dataPort = baseAddr + 1;
-
-	outb(LOGICAL_DEVICE_NUMBER, indexPort);
-	outb(FDC, dataPort);
-
-	outb(FDD_MODE_REGISTER, indexPort);
-	oldValue = inb(dataPort);
-
-	oldValue |= 0x0E;                   /* Enable burst mode */
-	outb(oldValue, dataPort);
-
-	outb(INTERRUPT_SEL, indexPort);	    /* Primary interrupt select */
-	outb(0x06, dataPort );
-
-	outb(DMA_CHANNEL_SEL, indexPort);   /* DMA channel select */
-	outb(0x02, dataPort);
-
-	outb(ACTIVATE, indexPort);
-	outb(DEVICE_ON, dataPort);
-}
-
-#if SMC_DEBUG
-static void SMCReportDeviceStatus(unsigned long baseAddr)
-{
-	unsigned long indexPort;
-	unsigned long dataPort;
-	unsigned char currentControl;
-
-	indexPort = baseAddr;
-	dataPort = baseAddr + 1;
-
-	outb(POWER_CONTROL, indexPort);
-	currentControl = inb(dataPort);
-
-	printk(currentControl & (1 << FDC)
-	       ? "\t+FDC Enabled\n" : "\t-FDC Disabled\n");
-	printk(currentControl & (1 << IDE1)
-	       ? "\t+IDE1 Enabled\n" : "\t-IDE1 Disabled\n");
-	printk(currentControl & (1 << IDE2)
-	       ? "\t+IDE2 Enabled\n" : "\t-IDE2 Disabled\n");
-	printk(currentControl & (1 << PARP)
-	       ? "\t+PARP Enabled\n" : "\t-PARP Disabled\n");
-	printk(currentControl & (1 << SER1)
-	       ? "\t+SER1 Enabled\n" : "\t-SER1 Disabled\n");
-	printk(currentControl & (1 << SER2)
-	       ? "\t+SER2 Enabled\n" : "\t-SER2 Disabled\n");
-
-	printk( "\n" );
-}
-#endif
-
-static int SMCInit(void)
-{
-	unsigned long SMCUltraBase;
-
-	if ((SMCUltraBase = SMCDetectUltraIO()) != 0UL) {
-		printk("SMC FDC37C93X Ultra I/O Controller found @ 0x%lx\n",
-		       SMCUltraBase);
-#if SMC_DEBUG
-		SMCReportDeviceStatus(SMCUltraBase);
-#endif
-		SMCEnableDevice(SMCUltraBase, SER1, COM1_BASE, COM1_INTERRUPT);
-		SMCEnableDevice(SMCUltraBase, SER2, COM2_BASE, COM2_INTERRUPT);
-		SMCEnableDevice(SMCUltraBase, PARP, PARP_BASE, PARP_INTERRUPT);
-		/* On PC164, IDE on the SMC is not enabled;
-		   CMD646 (PCI) on MB */
-		SMCEnableKYBD(SMCUltraBase);
-		SMCEnableFDC(SMCUltraBase);
-#if SMC_DEBUG
-		SMCReportDeviceStatus(SMCUltraBase);
-#endif
-		SMCRunState(SMCUltraBase);
-		return 1;
-	}
-	else {
-#if SMC_DEBUG
-		printk("No SMC FDC37C93X Ultra I/O Controller found\n");
-#endif
-		return 0;
-	}
-}
-#endif /* CONFIG_ALPHA_PC164 */
-
 #ifdef CONFIG_ALPHA_MIATA
 /*
  * Init the built-in ES1888 sound chip (SB16 compatible)
  */
-static int es1888_init(void)
+static int __init
+es1888_init(void)
 {
 	/* Sequence of IO reads to init the audio controller */
 	inb(0x0229);

@@ -46,6 +46,8 @@ choice 'Alpha system type' \
 	 EB64+		CONFIG_ALPHA_EB64P		\
 	 EB164		CONFIG_ALPHA_EB164		\
 	 PC164		CONFIG_ALPHA_PC164		\
+	 LX164		CONFIG_ALPHA_LX164		\
+	 SX164		CONFIG_ALPHA_SX164		\
 	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
 	 Mikasa		CONFIG_ALPHA_MIKASA		\
@@ -54,6 +56,7 @@ choice 'Alpha system type' \
 	 Miata		CONFIG_ALPHA_MIATA		\
 	 Sable		CONFIG_ALPHA_SABLE		\
 	 AlphaBook1	CONFIG_ALPHA_BOOK1		\
+	 Ruffian	CONFIG_ALPHA_RUFFIAN		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
 
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]
@@ -102,7 +105,8 @@ then
 	define_bool CONFIG_ALPHA_EV4 y
 	define_bool CONFIG_ALPHA_T2 y
 fi
-if [ "$CONFIG_ALPHA_MIATA" = "y" ]
+if [ "$CONFIG_ALPHA_MIATA" = "y" -o "$CONFIG_ALPHA_LX164" = "y" \
+	-o "$CONFIG_ALPHA_SX164" = "y" -o "$CONFIG_ALPHA_RUFFIAN" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
@@ -122,7 +126,8 @@ if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" \
 	-o "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_ALCOR" = "y" \
 	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_MIATA" = "y" \
-	-o "$CONFIG_ALPHA_NORITAKE" = "y" -o "$CONFIG_ALPHA_PC164" = "y" ]
+	-o "$CONFIG_ALPHA_NORITAKE" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
+	-o "$CONFIG_ALPHA_LX164" = "y" -o "$CONFIG_ALPHA_SX164" = "y" ]
 then
 	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
 fi

@@ -1841,10 +1841,12 @@ S: 2612 XV Delft
 S: The Netherlands
 
 N: David Woodhouse
-E: dwmw2@cam.ac.uk
+E: Dave@imladris.demon.co.uk
 D: Extensive ARCnet rewrite
 D: ARCnet COM20020, COM90xx IO-MAP drivers
 D: SO_BINDTODEVICE in 2.1.x (from Elliot Poger's code in 2.0.31)
+D: Contributed to NCPFS rewrite for 2.1.x dcache
+D: Alpha platforms: SX164, LX164 and Ruffian ported to 2.1.x
 S: Robinson College, Grange Road
 S: Cambridge. CB3 9AN
 S: England

@@ -33,31 +33,6 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 	return copy_to_user(ptr, address, size) ? -EFAULT : size;
 }
 
-static inline int limits_ok(struct modify_ldt_ldt_s *ldt_info)
-{
-	unsigned long base, limit;
-	/* linear address of first and last accessible byte */
-	unsigned long first, last;
-
-	base = ldt_info->base_addr;
-	limit = ldt_info->limit;
-	if (ldt_info->limit_in_pages)
-		limit = limit * PAGE_SIZE + PAGE_SIZE - 1;
-
-	first = base;
-	last = limit + base;
-
-	/* segment grows down? */
-	if (ldt_info->contents == 1) {
-		/* data segment grows down */
-		first = base+limit+1;
-		last = base+65535;
-		if (ldt_info->seg_32bit)
-			last = base-1;
-	}
-	return (last >= first && last < TASK_SIZE);
-}
-
 static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 {
 	struct modify_ldt_ldt_s ldt_info;
@@ -71,9 +46,6 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		return -EFAULT; 	
 
 	if ((ldt_info.contents == 3 && (oldmode || ldt_info.seg_not_present == 0)) || ldt_info.entry_number >= LDT_ENTRIES)
-		return -EINVAL;
-
-	if (!limits_ok(&ldt_info) && (oldmode || ldt_info.seg_not_present == 0))
 		return -EINVAL;
 
 	if (!current->ldt) {

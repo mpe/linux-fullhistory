@@ -4,13 +4,14 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/fs.h>
-#include <linux/sched.h>
+#include <linux/file.h>
 #include <linux/kernel.h>
-#include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -220,12 +221,14 @@ asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 	int err = -EBADF;
 
 	lock_kernel();
-	if (fd < NR_OPEN && (f = current->files->fd[fd]) != NULL) {
+	f = fget(fd);
+	if (f) {
 		struct dentry * dentry = f->f_dentry;
 
 		err = do_revalidate(dentry);
 		if (!err)
 			err = cp_old_stat(dentry->d_inode, statbuf);
+		fput(f);
 	}
 	unlock_kernel();
 	return err;
@@ -239,12 +242,14 @@ asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 	int err = -EBADF;
 
 	lock_kernel();
-	if (fd < NR_OPEN && (f = current->files->fd[fd]) != NULL) {
+	f = fget(fd);
+	if (f) {
 		struct dentry * dentry = f->f_dentry;
 
 		err = do_revalidate(dentry);
 		if (!err)
 			err = cp_new_stat(dentry->d_inode, statbuf);
+		fput(f);
 	}
 	unlock_kernel();
 	return err;

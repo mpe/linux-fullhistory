@@ -15,6 +15,8 @@
 #define EV45_CPU                6       /* EV4.5 (21064/xxx)    */
 #define EV56_CPU		7	/* EV5.6 (21164)	*/
 #define EV6_CPU			8	/* EV6 (21164)		*/
+#define PCA56_CPU		9	/* PCA56 (21164PC)	*/
+#define PCA57_CPU		10	/* PCA57 (??)		*/
 
 /*
  * DEC system types for Alpha systems.  Found in HWRPB.
@@ -39,8 +41,26 @@
 #define ST_DEC_EB64P		 20	/* EB64+ systype	*/
 #define ST_DEC_EB66P		-19	/* EB66 systype		*/
 #define ST_DEC_EBPC64		-20	/* Cabriolet (AlphaPC64) systype */
+#define ST_DEC_BURNS		 21	/* Laptop systype	*/
+#define ST_DEC_RAWHIDE		 22	/* Rawhide systype	*/
+#define ST_DEC_K2		 23	/* K2 systype		*/
+#define ST_DEC_LYNX		 24	/* Lynx systype		*/
+#define ST_DEC_XL		 25	/* Alpha XL systype	*/
 #define ST_DEC_EB164		 26	/* EB164 systype	*/
+#define ST_DEC_NORITAKE		 27	/* Noritake systype	*/
+#define ST_DEC_CORTEX		 28	/* Cortex systype	*/
 #define ST_DEC_MIATA		 30	/* MIATA systype        */
+#define ST_DEC_XXM		 31	/* XXM systype		*/
+#define ST_DEC_TAKARA		 32	/* Takara systype	*/
+#define ST_DEC_YUKON		 33	/* Yukon systype	*/
+#define ST_DEC_TSUNAMI		 34	/* Tsunami systype	*/
+#define ST_DEC_WILDFIRE		 35	/* Wildfire systype	*/
+#define ST_DEC_CUSCO		 36	/* CUSCO systype	*/
+
+/* UNOFFICIAL!!! */
+#define ST_UNOFFICIAL_BIAS	100
+#define ST_DTI_RUFFIAN		101	/* RUFFIAN systype	*/
+
 
 struct pcb_struct {
 	unsigned long ksp;

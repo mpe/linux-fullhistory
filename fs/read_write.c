@@ -62,14 +62,18 @@ asmlinkage off_t sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 
 	lock_kernel();
 	retval = -EBADF;
-	if (fd >= NR_OPEN ||
-	    !(file = current->files->fd[fd]) ||
-	    !(dentry = file->f_dentry) ||
-	    !(inode = dentry->d_inode))
+	file = fget(fd);
+	if (!file)
 		goto bad;
+	/* N.B. Shouldn't this be ENOENT?? */
+	if (!(dentry = file->f_dentry) ||
+	    !(inode = dentry->d_inode))
+		goto out_putf;
 	retval = -EINVAL;
 	if (origin <= 2)
 		retval = llseek(file, offset, origin);
+out_putf:
+	fput(file);
 bad:
 	unlock_kernel();
 	return retval;
@@ -88,24 +92,28 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 
 	lock_kernel();
 	retval = -EBADF;
-	if (fd >= NR_OPEN ||
-	    !(file = current->files->fd[fd]) ||
-	    !(dentry = file->f_dentry) ||
-	    !(inode = dentry->d_inode))
+	file = fget(fd);
+	if (!file)
 		goto bad;
+	/* N.B. Shouldn't this be ENOENT?? */
+	if (!(dentry = file->f_dentry) ||
+	    !(inode = dentry->d_inode))
+		goto out_putf;
 	retval = -EINVAL;
 	if (origin > 2)
-		goto bad;
+		goto out_putf;
 
 	offset = llseek(file, ((loff_t) offset_high << 32) | offset_low,
 			origin);
 
 	retval = (int)offset & INT_MAX;
 	if (offset >= 0) {
-		retval = copy_to_user(result, &offset, sizeof(offset));
-		if (retval)
-			retval = -EFAULT;
+		retval = -EFAULT;
+		if (!copy_to_user(result, &offset, sizeof(offset)))
+			retval = 0;
 	}
+out_putf:
+	fput(file);
 bad:
 	unlock_kernel();
 	return retval;
@@ -201,9 +209,10 @@ static ssize_t do_readv_writev(int type, struct file *file,
 	if (count > UIO_MAXIOV)
 		goto out_nofree;
 	if (count > UIO_FASTIOV) {
-		iov = kmalloc(count*sizeof(struct iovec), GFP_KERNEL);
 		ret = -ENOMEM;
-		if (!iov) goto out_nofree;
+		iov = kmalloc(count*sizeof(struct iovec), GFP_KERNEL);
+		if (!iov)
+			goto out_nofree;
 	}
 	ret = -EFAULT;
 	if (copy_from_user(iov, vector, count*sizeof(*vector)))
@@ -280,11 +289,10 @@ asmlinkage ssize_t sys_readv(unsigned long fd, const struct iovec * vector,
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (!(file->f_mode & FMODE_READ))
-		goto out;
-	ret = do_readv_writev(VERIFY_WRITE, file, vector, count);
-out:
+	if (file->f_mode & FMODE_READ)
+		ret = do_readv_writev(VERIFY_WRITE, file, vector, count);
 	fput(file);
+
 bad_file:
 	unlock_kernel();
 	return ret;
@@ -302,15 +310,13 @@ asmlinkage ssize_t sys_writev(unsigned long fd, const struct iovec * vector,
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (!(file->f_mode & FMODE_WRITE))
-		goto out;
-
-	down(&file->f_dentry->d_inode->i_sem);
-	ret = do_readv_writev(VERIFY_READ, file, vector, count);
-	up(&file->f_dentry->d_inode->i_sem);
-
-out:
+	if (file->f_mode & FMODE_WRITE) {
+		down(&file->f_dentry->d_inode->i_sem);
+		ret = do_readv_writev(VERIFY_READ, file, vector, count);
+		up(&file->f_dentry->d_inode->i_sem);
+	}
 	fput(file);
+
 bad_file:
 	unlock_kernel();
 	return ret;

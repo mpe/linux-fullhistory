@@ -638,14 +638,20 @@ struct file_system_type {
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
 
+/* fs/open.c */
+
 asmlinkage int sys_open(const char *, int, int);
 asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
-
-extern void kill_fasync(struct fasync_struct *fa, int sig);
+extern int do_truncate(struct dentry *, unsigned long);
+extern int get_unused_fd(void);
+extern void put_unused_fd(unsigned int);
+extern int __fput(struct file *);
+extern int close_fp(struct file *);
 
 extern char * getname(const char * filename);
 extern void putname(char * name);
-extern int do_truncate(struct dentry *, unsigned long);
+
+extern void kill_fasync(struct fasync_struct *fa, int sig);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int major, const char * name);
 extern int blkdev_open(struct inode * inode, struct file * filp);
@@ -755,32 +761,6 @@ extern struct dentry * __namei(const char *, int);
 #define namei(pathname)		__namei(pathname, 1)
 #define lnamei(pathname)	__namei(pathname, 0)
 
-#include <asm/semaphore.h>
-
-/* Intended for short locks of the global data structures in inode.c.
- * Could be replaced with spinlocks completely, since there is
- * no blocking during manipulation of the static data; however the
- * lock in invalidate_inodes() may last relatively long.
- */
-extern struct semaphore vfs_sem;
-extern inline void vfs_lock(void)
-{
-#if 0
-#ifdef __SMP__
-	down(&vfs_sem);
-#endif
-#endif
-}
-
-extern inline void vfs_unlock(void)
-{
-#if 0
-#ifdef __SMP__
-	up(&vfs_sem);
-#endif
-#endif
-}
-
 extern void iput(struct inode *);
 extern struct inode * iget(struct super_block *, unsigned long);
 extern void clear_inode(struct inode *);
@@ -788,10 +768,7 @@ extern struct inode * get_empty_inode(void);
 
 extern void insert_inode_hash(struct inode *);
 extern void remove_inode_hash(struct inode *);
-extern int get_unused_fd(void);
-extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);
-extern int close_fp(struct file *);
 extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
 extern struct buffer_head * find_buffer(kdev_t dev, int block, int size);

@@ -701,19 +701,22 @@ void iput(struct inode *inode)
 				list_add(&inode->i_list, inode_in_use.prev);
 			}
 #ifdef INODE_PARANOIA
+if (inode->i_flock)
+printk(KERN_ERR "iput: inode %s/%ld still has locks!\n",
+kdevname(inode->i_dev), inode->i_ino);
 if (!list_empty(&inode->i_dentry))
-printk("iput: device %s inode %ld still has aliases!\n",
+printk(KERN_ERR "iput: device %s inode %ld still has aliases!\n",
 kdevname(inode->i_dev), inode->i_ino);
 if (inode->i_count)
-printk("iput: device %s inode %ld count changed, count=%d\n",
+printk(KERN_ERR "iput: device %s inode %ld count changed, count=%d\n",
 kdevname(inode->i_dev), inode->i_ino, inode->i_count);
 if (atomic_read(&inode->i_sem.count) != 1)
-printk("iput: Aieee, semaphore in use device %s, count=%d\n",
+printk(KERN_ERR "iput: Aieee, semaphore in use device %s, count=%d\n",
 kdevname(inode->i_dev), atomic_read(&inode->i_sem.count));
 #endif
 		}
-		if (inode->i_count > (1<<15)) {
-			printk("iput: device %s inode %ld count wrapped\n",
+		if (inode->i_count > (1<<31)) {
+			printk(KERN_ERR "iput: inode %s/%ld count wrapped\n",
 				kdevname(inode->i_dev), inode->i_ino);
 		}
 		spin_unlock(&inode_lock);

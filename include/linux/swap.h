@@ -9,6 +9,8 @@
 
 #ifdef __KERNEL__
 
+#undef DEBUG_SWAP
+
 #include <asm/atomic.h>
 
 #define SWP_USED	1
@@ -21,7 +23,6 @@ struct swap_info_struct {
 	kdev_t swap_device;
 	struct dentry * swap_file;
 	unsigned char * swap_map;
-	unsigned char * swap_lockmap;
 	unsigned int lowest_bit;
 	unsigned int highest_bit;
 	unsigned int cluster_next;
@@ -53,11 +54,7 @@ extern int try_to_free_page(int);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, unsigned long, char *, int);
-#define read_swap_page(nr,buf) \
-	rw_swap_page(READ,(nr),(buf),1)
-#define write_swap_page(nr,buf) \
-	rw_swap_page(WRITE,(nr),(buf),1)
-extern void swap_after_unlock_page (unsigned long entry);
+extern void rw_swap_page_nocache(int, unsigned long, char *);
 
 /* linux/mm/page_alloc.c */
 extern void swap_in(struct task_struct *, struct vm_area_struct *,
@@ -68,6 +65,8 @@ extern void swap_in(struct task_struct *, struct vm_area_struct *,
 extern void show_swap_cache_info(void);
 extern int add_to_swap_cache(struct page *, unsigned long);
 extern void swap_duplicate(unsigned long);
+extern struct page * read_swap_cache_async(unsigned long, int);
+#define read_swap_cache(entry) read_swap_cache_async(entry, 1);
 
 /* linux/mm/swapfile.c */
 extern unsigned int nr_swapfiles;
@@ -107,12 +106,18 @@ extern inline unsigned long in_swap_cache(struct page *page)
 
 /*
  * Work out if there are any other processes sharing this page, ignoring
- * any page reference coming from the page or swap cache.  
+ * any page reference coming from the swap cache, or from outstanding
+ * swap IO on this page.  (The page cache _does_ count as another valid
+ * reference to the page, however.)
  */
 static inline int is_page_shared(struct page *page)
 {
 	int count = atomic_read(&page->count);
-	if (page->inode)
+	if (PageReserved(page))
+		return 1;
+	if (page->inode == &swapper_inode)
+		count--;
+	if (PageFreeAfter(page))
 		count--;
 	return (count > 1);
 }

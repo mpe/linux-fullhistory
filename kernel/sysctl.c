@@ -523,9 +523,7 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 			proc_unregister(root, de->low_ino);
 			table->de = NULL;
 			kfree(de);
-		} else
-			printk("unregister_proc_table: %s not empty!\n",
-				table->procname);
+		} 
 	}
 }
 

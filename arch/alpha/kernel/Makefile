@@ -35,6 +35,13 @@ endif
 ifdef CONFIG_ALPHA_T2
 O_OBJS   += t2.o
 endif
+ifneq ($(CONFIG_ALPHA_PC164)$(CONFIG_ALPHA_LX164),nn)
+O_OBJS   += smc37c93x.o
+endif
+ifdef CONFIG_ALPHA_SX164
+O_OBJS   += smc37c669.o
+endif
+
 
 all: kernel.o head.o
 

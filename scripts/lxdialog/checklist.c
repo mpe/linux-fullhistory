@@ -188,9 +188,16 @@ dialog_checklist (const char *title, const char *prompt, int height, int width,
     check_x = (list_width - check_x) / 2;
     item_x = check_x + 4;
 
+    if (choice >= list_height) {
+	scroll = choice - list_height + 1;
+	choice -= scroll;
+    }
+
     /* Print the list */
-    for (i = 0; i < max_choice; i++)
-	print_item (list, items[i * 3 + 1], status[i], i, i == choice);
+    for (i = 0; i < max_choice; i++) {
+	print_item (list, items[(scroll+i) * 3 + 1],
+		    status[i+scroll], i, i == choice);
+    }
 
     wnoutrefresh (list);
 

@@ -29,7 +29,6 @@
 
 #define SW fd_routine[use_virtual_dma&1]
 #define CSW fd_routine[can_use_virtual_dma & 1]
-#define NCSW fd_routine[(can_use_virtual_dma >> 1)& 1]
 
 
 #define fd_inb(port)			inb_p(port)
@@ -39,9 +38,6 @@
 #define fd_free_dma()           CSW._free_dma(FLOPPY_DMA)
 #define fd_enable_irq()         enable_irq(FLOPPY_IRQ)
 #define fd_disable_irq()        disable_irq(FLOPPY_IRQ)
-#define fd_request_irq()        NCSW._request_irq(FLOPPY_IRQ, floppy_interrupt,\
-						 SA_INTERRUPT|SA_SAMPLE_RANDOM,\
-						 "floppy", NULL)
 #define fd_free_irq()		free_irq(FLOPPY_IRQ, NULL)
 #define fd_get_dma_residue()    SW._get_dma_residue(FLOPPY_DMA)
 #define fd_dma_mem_alloc(size)	SW._dma_mem_alloc(size)
@@ -180,14 +176,15 @@ static int vdma_get_dma_residue(unsigned int dummy)
 }
 
 
-static int vdma_request_irq(unsigned int irq,
-			    void (*handler)(int, void *, struct pt_regs *),
-			    unsigned long flags, 
-			    const char *device,
-			    void *dev_id)
+static int fd_request_irq(void)
 {
-	return request_irq(irq, floppy_hardint,SA_INTERRUPT,device, 
-			   dev_id);
+	if(can_use_virtual_dma)
+		return request_irq(FLOPPY_IRQ, floppy_hardint,SA_INTERRUPT,
+						   "floppy", NULL);
+	else
+		return request_irq(FLOPPY_IRQ, floppy_interrupt,
+						   SA_INTERRUPT|SA_SAMPLE_RANDOM,
+						   "floppy", NULL);	
 
 }
 
@@ -265,11 +262,6 @@ struct fd_routine_l {
 	int (*_request_dma)(unsigned int dmanr, const char * device_id);
 	void (*_free_dma)(unsigned int dmanr);
 	int (*_get_dma_residue)(unsigned int dummy);
-	int (*_request_irq)(unsigned int irq,
-			   void (*handler)(int, void *, struct pt_regs *),
-			   unsigned long flags, 
-			   const char *device,
-			   void *dev_id);
 	unsigned long (*_dma_mem_alloc) (unsigned long size);
 	int (*_dma_setup)(char *addr, unsigned long size, int mode, int io);
 } fd_routine[] = {
@@ -277,7 +269,6 @@ struct fd_routine_l {
 		request_dma,
 		free_dma,
 		get_dma_residue,
-		request_irq,
 		dma_mem_alloc,
 		hard_dma_setup
 	},
@@ -285,7 +276,6 @@ struct fd_routine_l {
 		vdma_request_dma,
 		vdma_nop,
 		vdma_get_dma_residue,
-		vdma_request_irq,
 		vdma_mem_alloc,
 		vdma_dma_setup
 	}

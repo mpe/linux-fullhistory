@@ -142,6 +142,8 @@ struct rtc_time {
 #define RTC_SET_TIME	_IOW('p', 0x0a, struct rtc_time) /* Set RTC time    */
 #define RTC_IRQP_READ	_IOR('p', 0x0b, unsigned long)	 /* Read IRQ rate   */
 #define RTC_IRQP_SET	_IOW('p', 0x0c, unsigned long)	 /* Set IRQ rate    */
+#define RTC_EPOCH_READ	_IOR('p', 0x0d, unsigned long)	 /* Read epoch      */
+#define RTC_EPOCH_SET	_IOW('p', 0x0e, unsigned long)	 /* Set epoch       */
 
 
 #endif /* _MC146818RTC_H */

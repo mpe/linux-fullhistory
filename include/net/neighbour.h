@@ -249,12 +249,12 @@ extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *
 	return 0;
 }
 
-extern __inline__ int neigh_table_lock(struct neigh_table *tbl)
+extern __inline__ void neigh_table_lock(struct neigh_table *tbl)
 {
 	atomic_inc(&tbl->lock);
 }
 
-extern __inline__ int neigh_table_unlock(struct neigh_table *tbl)
+extern __inline__ void neigh_table_unlock(struct neigh_table *tbl)
 {
 	atomic_dec(&tbl->lock);
 }

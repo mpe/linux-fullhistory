@@ -107,11 +107,13 @@ static void init_pit (void)
     outb(LATCH >> 8, 0x40); /* MSB */
     request_region(0x40, 0x20, "timer"); /* reserve pit */
 #else
+#ifndef CONFIG_ALPHA_RUFFIAN
     outb(0x36, 0x43);	/* counter 0: system timer */
     outb(0x00, 0x40);
     outb(0x00, 0x40);
-    request_region(0x70, 0x10, "timer"); /* reserve rtc */
 #endif
+    request_region(0x70, 0x10, "timer"); /* reserve rtc */
+#endif /* RTC */
 
     outb(0xb6, 0x43);	/* counter 2: speaker */
     outb(0x31, 0x42);
@@ -186,38 +188,115 @@ void setup_arch(char **cmdline_p,
 #endif
 }
 
+
+#define N(a) (sizeof(a)/sizeof(a[0]))
+
+
+static void
+get_sysnames(long type, long variation,
+	     char **type_name, char **variation_name)
+{
+	static char *sys_unknown = "Unknown";
+	static char *systype_names[] = {
+		"0",
+		"ADU", "Cobra", "Ruby", "Flamingo", "Mannequin", "Jensen",
+		"Pelican", "Morgan", "Sable", "Medulla", "Noname",
+		"Turbolaser", "Avanti", "Mustang", "Alcor", "Tradewind",
+		"Mikasa", "EB64", "EB66", "EB64+", "AlphaBook1",
+		"Rawhide", "K2", "Lynx", "XL", "EB164", "Noritake",
+		"Cortex", "29", "Miata", "XXM", "Takara", "Yukon",
+		"Tsunami", "Wildfire", "CUSCO"
+	};
+
+	static char *unofficial_names[] = {"100", "Ruffian"};
+
+	static char * eb164_names[] = {"EB164", "PC164", "LX164", "SX164"};
+	static int eb164_indices[] = {0,0,0,1,1,1,1,1,2,2,2,2,3,3,3,3};
+
+	static char * alcor_names[] = {"Alcor", "Maverick", "Bret"};
+	static int alcor_indices[] = {0,0,0,1,1,1,0,0,0,0,0,0,2,2,2,2,2,2};
+
+	static char * eb64p_names[] = {"EB64+", "Cabriolet", "AlphaPCI64"};
+	static int eb64p_indices[] = {0,0,1.2};
+
+	static char * eb66_names[] = {"EB66", "EB66+"};
+	static int eb66_indices[] = {0,0,1};
+
+	long member;
+
+	/* Restore real CABRIO and EB66+ family names, ie EB64+ and EB66 */
+	if (type < 0)
+		type = -type;
+
+	/* If not in the tables, make it UNKNOWN,
+	   else set type name to family */
+	if (type < N(systype_names)) {
+		*type_name = systype_names[type];
+	} else if ((type > ST_UNOFFICIAL_BIAS) &&
+		   (type - ST_UNOFFICIAL_BIAS) < N(unofficial_names)) {
+		*type_name = unofficial_names[type - ST_UNOFFICIAL_BIAS];
+	} else {
+		*type_name = sys_unknown;
+		*variation_name = sys_unknown;
+		return;
+	}
+
+	/* Set variation to "0"; if variation is zero, done */
+	*variation_name = systype_names[0];
+	if (variation == 0) {
+		return;
+	}
+
+	member = (variation >> 10) & 0x3f; /* member ID is a bit-field */
+
+	switch (type) {
+	case ST_DEC_EB164:
+		if (member < N(eb164_indices))
+			*variation_name = eb164_names[eb164_indices[member]];
+		break;
+	case ST_DEC_ALCOR:
+		if (member < N(alcor_indices))
+			*variation_name = alcor_names[alcor_indices[member]];
+		break;
+	case ST_DEC_EB64P:
+		if (member < N(eb64p_indices))
+			*variation_name = eb64p_names[eb64p_indices[member]];
+		break;
+	case ST_DEC_EB66:
+		if (member < N(eb66_indices))
+			*variation_name = eb66_names[eb66_indices[member]];
+		break;
+	}
+}
+
 /*
  * BUFFER is PAGE_SIZE bytes long.
  */
 int get_cpuinfo(char *buffer)
 {
-	const char *cpu_name[] = {
-		"EV3", "EV4", "Unknown 1", "LCA4", "EV5", "EV45", "EV56",
-		"EV6", "PCA56"
+	static char *cpu_names[] = {
+		"EV3", "EV4", "Unknown", "LCA4", "EV5", "EV45", "EV56",
+		"EV6", "PCA56", "PCA57"
 	};
-#	define SYSTYPE_NAME_BIAS	20
-	const char *systype_name[] = {
-		"Cabriolet", "EB66P", "-18", "-17", "-16", "-15",
-		"-14", "-13", "-12", "-11", "-10", "-9", "-8",
-		"-7", "-6", "-5", "-4", "-3", "-2", "-1", "0",
-		"ADU", "Cobra", "Ruby", "Flamingo", "5", "Jensen",
-		"Pelican", "8", "Sable", "AXPvme", "Noname",
-		"Turbolaser", "Avanti", "Mustang", "Alcor", "16",
-		"Mikasa", "18", "EB66", "EB64+", "AlphaBook1",
-		"Rawhide", "Lego", "Lynx", "25", "EB164", "Noritake",
-		"Cortex", "29", "Miata", "31", "Takara", "Yukon"
-	};
-	struct percpu_struct *cpu;
-	unsigned int cpu_index;
-	long sysname_index;
+
 	extern struct unaligned_stat {
 		unsigned long count, va, pc;
 	} unaligned[2];
-#	define N(a)	(sizeof(a)/sizeof(a[0]))
+
+	struct percpu_struct *cpu;
+	unsigned int cpu_index;
+	char *cpu_name;
+	char *systype_name;
+	char *sysvariation_name;
 
 	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
 	cpu_index = (unsigned) (cpu->type - 1);
-	sysname_index = hwrpb->sys_type + SYSTYPE_NAME_BIAS;
+	cpu_name = "Unknown";
+	if (cpu_index < N(cpu_names))
+		cpu_name = cpu_names[cpu_index];
+
+	get_sysnames(hwrpb->sys_type, hwrpb->sys_variation,
+		     &systype_name, &sysvariation_name);
 
 	return sprintf(buffer,
 		       "cpu\t\t\t: Alpha\n"
@@ -226,7 +305,7 @@ int get_cpuinfo(char *buffer)
 		       "cpu revision\t\t: %ld\n"
 		       "cpu serial number\t: %s\n"
 		       "system type\t\t: %s\n"
-		       "system variation\t: %ld\n"
+		       "system variation\t: %s\n"
 		       "system revision\t\t: %ld\n"
 		       "system serial number\t: %s\n"
 		       "cycle frequency [Hz]\t: %lu\n"
@@ -238,12 +317,9 @@ int get_cpuinfo(char *buffer)
 		       "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
 		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n",
 
-		       (cpu_index < N(cpu_name)
-			? cpu_name[cpu_index] : "Unknown"),
-		       cpu->variation, cpu->revision, (char*)cpu->serial_no,
-		       (sysname_index < N(systype_name)
-			? systype_name[sysname_index] : "Unknown"),
-		       hwrpb->sys_variation, hwrpb->sys_revision,
+		       cpu_name, cpu->variation, cpu->revision,
+		       (char*)cpu->serial_no,
+		       systype_name, sysvariation_name, hwrpb->sys_revision,
 		       (char*)hwrpb->ssn,
 		       hwrpb->cycle_freq,
 		       hwrpb->intr_freq / 4096,
@@ -254,5 +330,4 @@ int get_cpuinfo(char *buffer)
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
 		       unaligned[1].count, unaligned[1].pc, unaligned[1].va);
-#       undef N
 }

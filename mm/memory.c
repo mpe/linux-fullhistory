@@ -267,8 +267,10 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 				}
 				if (cow)
 					pte = pte_wrprotect(pte);
+#if 0	/* No longer needed with the new swap cache code */
 				if (delete_from_swap_cache(&mem_map[page_nr]))
 					pte = pte_mkdirty(pte);
+#endif
 				set_pte(dst_pte, pte_mkold(pte));
 				set_pte(src_pte, pte);
 				atomic_inc(&mem_map[page_nr].count);
@@ -616,8 +618,11 @@ static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long old_page, new_page;
 	struct page * page_map;
 	
-	new_page = __get_free_page(GFP_KERNEL);
 	pte = *page_table;
+	new_page = __get_free_page(GFP_KERNEL);
+	/* Did someone else copy this page for us while we slept? */
+	if (pte_val(*page_table) != pte_val(pte))
+		goto end_wp_page;
 	if (!pte_present(pte))
 		goto end_wp_page;
 	if (pte_write(pte))
@@ -626,15 +631,12 @@ static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (MAP_NR(old_page) >= max_mapnr)
 		goto bad_wp_page;
 	tsk->min_flt++;
-
 	page_map = mem_map + MAP_NR(old_page);
-	if (PageSwapCache(page_map))
-		delete_from_swap_cache(page_map);
 	
 	/*
 	 * Do we need to copy?
 	 */
-	if (atomic_read(&mem_map[MAP_NR(old_page)].count) != 1) {
+	if (is_page_shared(page_map)) {
 		if (new_page) {
 			if (PageReserved(mem_map + MAP_NR(old_page)))
 				++vma->vm_mm->rss;
@@ -654,6 +656,8 @@ static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		oom(tsk);
 		return;
 	}
+	if (PageSwapCache(page_map))
+		delete_from_swap_cache(page_map);
 	flush_cache_page(vma, address);
 	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
 	flush_tlb_page(vma, address);

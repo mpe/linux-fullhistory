@@ -6,6 +6,7 @@
  *  Swap reorganised 29.12.95, 
  *  Asynchronous swapping added 30.12.95. Stephen Tweedie
  *  Removed race in async swapping. 14.4.1996. Bruno Haible
+ *  Add swap of shared pages through the page cache. 20.2.1998. Stephen Tweedie
  */
 
 #include <linux/mm.h>
@@ -27,25 +28,35 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
-static struct wait_queue * lock_queue = NULL;
-
 /*
  * Reads or writes a swap page.
  * wait=1: start I/O and wait for completion. wait=0: start asynchronous I/O.
+ * All IO to swap files (as opposed to swap partitions) is done
+ * synchronously.
  *
- * Important prevention of race condition: The first thing we do is set a lock
- * on this swap page, which lasts until I/O completes. This way a
- * write_swap_page(entry) immediately followed by a read_swap_page(entry)
- * on the same entry will first complete the write_swap_page(). Fortunately,
- * not more than one write_swap_page() request can be pending per entry. So
- * all races the caller must catch are: multiple read_swap_page() requests
- * on the same entry.
+ * Important prevention of race condition: the caller *must* atomically 
+ * create a unique swap cache entry for this swap page before calling
+ * rw_swap_page, and must lock that page.  By ensuring that there is a
+ * single page of memory reserved for the swap entry, the normal VM page
+ * lock on that page also doubles as a lock on swap entries.  Having only
+ * one lock to deal with per swap entry (rather than locking swap and memory
+ * independently) also makes it easier to make certain swapping operations
+ * atomic, which is particularly important when we are trying to ensure 
+ * that shared pages stay shared while being swapped.
  */
+
 void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
 	struct page *page = mem_map + MAP_NR(buf);
+
+#ifdef DEBUG_SWAP
+	printk ("DebugVM: %s_swap_page entry %08lx, page %p (count %d), %s\n",
+		(rw == READ) ? "read" : "write", 
+		entry, buf, atomic_read(&page->count),
+		wait ? "wait" : "nowait");
+#endif
 
 	if (page->inode && page->inode != &swapper_inode)
 		panic ("Tried to swap a non-swapper page");
@@ -61,31 +72,28 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		return;
 	}
 	if (p->swap_map && !p->swap_map[offset]) {
-		printk("Hmm.. Trying to use unallocated swap (%08lx)\n", entry);
+		printk("Hmm.. Trying to %s unallocated swap (%08lx)\n", 
+		       (rw == READ) ? "read" : "write", 
+		       entry);
 		return;
 	}
 	if (!(p->flags & SWP_USED)) {
 		printk("Trying to swap to unused swap-device\n");
 		return;
 	}
-	/*
-	 * For now, this is not legal!
-	 */
-	if (PageSwapCache(page))
-		panic ("Trying to swap a swap-cache page!");
 
-	/* Make sure we are the only process doing I/O with this swap page. */
-	while (test_and_set_bit(offset,p->swap_lockmap)) {
-		run_task_queue(&tq_disk);
-		sleep_on(&lock_queue);
+	if (!PageLocked(page)) {
+		printk("VM: swap page is unlocked\n");
+		return;
 	}
-
-	if (rw == READ)
+	
+	if (rw == READ) {
+		clear_bit(PG_uptodate, &page->flags);
 		kstat.pswpin++;
-	else
+	} else
 		kstat.pswpout++;
+
 	atomic_inc(&page->count);
-	wait_on_page(page);
 	/* 
 	 * Make sure that we have a swap cache association for this
 	 * page.  We need this to find which swap page to unlock once
@@ -94,17 +102,19 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	 * as if it were: we are not allowed to manipulate the inode
 	 * hashing for locked pages.
 	 */
-	if (PageSwapCache(page)) {
-		if (page->offset != entry)
-			panic ("swap entry mismatch");
-	} else 
-		page->offset = entry;
+	if (!PageSwapCache(page)) {
+		printk("VM: swap page is not in swap cache\n");
+		return;
+	}
+	if (page->offset != entry) {
+		printk ("swap entry mismatch");
+		return;
+	}
 
 	if (p->swap_device) {
 		if (!wait) {
 			set_bit(PG_free_after, &page->flags);
 			set_bit(PG_decr_after, &page->flags);
-			set_bit(PG_swap_unlock_after, &page->flags);
 			atomic_inc(&nr_async_pages);
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);
@@ -155,37 +165,48 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 				}
 		}
 		ll_rw_swap_file(rw,swapf->i_dev, zones, i,buf);
+		/* Unlike ll_rw_page, ll_rw_swap_file won't unlock the
+		   page for us. */
+		clear_bit(PG_locked, &page->flags);
+		wake_up(&page->wait);
 	} else
 		printk("rw_swap_page: no swap file or device\n");
 
 	atomic_dec(&page->count);
-	if (offset && !test_and_clear_bit(offset,p->swap_lockmap))
-		printk("rw_swap_page: lock already cleared\n");
-	wake_up(&lock_queue);
+#ifdef DEBUG_SWAP
+	printk ("DebugVM: %s_swap_page finished on page %p (count %d)\n",
+		(rw == READ) ? "read" : "write", 
+		buf, atomic_read(&page->count));
+#endif
 }
 
-
-/* This is run when asynchronous page I/O has completed. */
-void swap_after_unlock_page (unsigned long entry)
+/*
+ * Setting up a new swap file needs a simple wrapper just to read the 
+ * swap signature.  SysV shared memory also needs a simple wrapper.
+ */
+void rw_swap_page_nocache(int rw, unsigned long entry, char *buffer)
 {
-	unsigned long type, offset;
-	struct swap_info_struct * p;
-
-	type = SWP_TYPE(entry);
-	if (type >= nr_swapfiles) {
-		printk("swap_after_unlock_page: bad swap-device\n");
+	struct page *page;
+	
+	page = mem_map + MAP_NR((unsigned long) buffer);
+	wait_on_page(page);
+	set_bit(PG_locked, &page->flags);
+	if (test_and_set_bit(PG_swap_cache, &page->flags)) {
+		printk ("VM: read_swap_page: page already in swap cache!\n");
 		return;
 	}
-	p = &swap_info[type];
-	offset = SWP_OFFSET(entry);
-	if (offset >= p->max) {
-		printk("swap_after_unlock_page: weirdness\n");
+	if (page->inode) {
+		printk ("VM: read_swap_page: page already in page cache!\n");
 		return;
 	}
-	if (!test_and_clear_bit(offset,p->swap_lockmap))
-		printk("swap_after_unlock_page: lock already cleared\n");
-	wake_up(&lock_queue);
+	page->inode = &swapper_inode;
+	page->offset = entry;
+	rw_swap_page(rw, entry, buffer, 1);
+	page->inode = 0;
+	clear_bit(PG_swap_cache, &page->flags);
 }
+
+
 
 /*
  * Swap partitions are now read via brw_page.  ll_rw_page is an
@@ -211,7 +232,7 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long offset, char * buffer)
 			panic("ll_rw_page: bad block dev cmd, must be R/W");
 	}
 	page = mem_map + MAP_NR(buffer);
-	if (test_and_set_bit(PG_locked, &page->flags))
-		panic ("ll_rw_page: page already locked");
+	if (!PageLocked(page))
+		panic ("ll_rw_page: page not already locked");
 	brw_page(rw, page, dev, &block, PAGE_SIZE, 0);
 }

@@ -116,7 +116,6 @@
  *     16/11/96 - Fiddled and frigged for 2.0.18
  */
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/fcntl.h>
