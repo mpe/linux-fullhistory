@@ -46,6 +46,14 @@ static inline int scatterwalk_across_pages(struct scatter_walk *walk,
 	return nbytes > walk->len_this_page;
 }
 
+static inline void scatterwalk_advance(struct scatter_walk *walk,
+				       unsigned int nbytes)
+{
+	walk->offset += nbytes;
+	walk->len_this_page -= nbytes;
+	walk->len_this_segment -= nbytes;
+}
+
 void scatterwalk_start(struct scatter_walk *walk, struct scatterlist *sg);
 int scatterwalk_copychunks(void *buf, struct scatter_walk *walk, size_t nbytes, int out);
 void scatterwalk_map(struct scatter_walk *walk, int out);

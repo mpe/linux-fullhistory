@@ -17,6 +17,7 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <asm/scatterlist.h>
 #include "internal.h"
 #include "scatterwalk.h"
@@ -43,10 +44,13 @@ static inline void *prepare_src(struct scatter_walk *walk, int bsize,
 				void *tmp, int in_place)
 {
 	void *src = walk->data;
+	int n = bsize;
 
-	if (unlikely(scatterwalk_across_pages(walk, bsize)))
+	if (unlikely(scatterwalk_across_pages(walk, bsize))) {
 		src = tmp;
-	scatterwalk_copychunks(src, walk, bsize, 0);
+		n = scatterwalk_copychunks(src, walk, bsize, 0);
+	}
+	scatterwalk_advance(walk, n);
 	return src;
 }
 
@@ -68,7 +72,13 @@ static inline void complete_src(struct scatter_walk *walk, int bsize,
 static inline void complete_dst(struct scatter_walk *walk, int bsize,
 				void *dst, int in_place)
 {
-	scatterwalk_copychunks(dst, walk, bsize, 1);
+	int n = bsize;
+
+	if (unlikely(scatterwalk_across_pages(walk, bsize)))
+		n = scatterwalk_copychunks(dst, walk, bsize, 1);
+	else if (in_place)
+		memcpy(walk->data, dst, bsize);
+	scatterwalk_advance(walk, n);
 }
 
 /* 

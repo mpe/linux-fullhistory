@@ -93,22 +93,16 @@ void scatterwalk_done(struct scatter_walk *walk, int out, int more)
 int scatterwalk_copychunks(void *buf, struct scatter_walk *walk,
 			   size_t nbytes, int out)
 {
-	if (buf != walk->data) {
-		while (nbytes > walk->len_this_page) {
-			memcpy_dir(buf, walk->data, walk->len_this_page, out);
-			buf += walk->len_this_page;
-			nbytes -= walk->len_this_page;
+	do {
+		memcpy_dir(buf, walk->data, walk->len_this_page, out);
+		buf += walk->len_this_page;
+		nbytes -= walk->len_this_page;
 
-			crypto_kunmap(walk->data, out);
-			scatterwalk_pagedone(walk, out, 1);
-			scatterwalk_map(walk, out);
-		}
+		crypto_kunmap(walk->data, out);
+		scatterwalk_pagedone(walk, out, 1);
+		scatterwalk_map(walk, out);
+	} while (nbytes > walk->len_this_page);
 
-		memcpy_dir(buf, walk->data, nbytes, out);
-	}
-
-	walk->offset += nbytes;
-	walk->len_this_page -= nbytes;
-	walk->len_this_segment -= nbytes;
-	return 0;
+	memcpy_dir(buf, walk->data, nbytes, out);
+	return nbytes;
 }
