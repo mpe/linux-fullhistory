@@ -632,12 +632,12 @@ repeat:
 	      printk("Use sg, count %d %x %d\n", SCpnt->use_sg, count, dma_free_sectors);
 	      printk("maxsg = %x, counted = %d this_count = %d\n", max_sg, counted, this_count);
 	      while(bh){
-		printk("[%8.8x %x] ", bh->b_data, bh->b_size);
+		printk("[%p %lx] ", bh->b_data, bh->b_size);
 		bh = bh->b_reqnext;
 	      };
 	      if(SCpnt->use_sg < 16)
 		for(count=0; count<SCpnt->use_sg; count++)
-		  printk("{%d:%8.8x %8.8x %d}  ", count,
+		  printk("{%d:%p %p %d}  ", count,
 			 sgpnt[count].address,
 			 sgpnt[count].alt_address,
 			 sgpnt[count].length);

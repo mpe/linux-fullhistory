@@ -28,14 +28,10 @@ static char *version = "3c509.c:pl15k 3/5/94 becker@super.org\n";
 #include <asm/bitops.h>
 #include <asm/io.h>
 
-#include "dev.h"
-#include "eth.h"
-#include "skbuff.h"
-#include "arp.h"
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
-#ifndef HAVE_ALLOC_SKB
-#define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#endif
 
 
 #ifdef EL3_DEBUG
@@ -95,20 +91,17 @@ int el3_probe(struct device *dev)
 	/* First check for a board on the EISA bus. */
 	if (EISA_bus) {
 		for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
-			/* Check the standard EISA ID register for an encoded '3Com'. */
-			if (inw(ioaddr + 0xC80) != 0x6d50)
+			if (inw(ioaddr) != 0x6d50)
 				continue;
-
-			/* Change the register set to the configuration window 0. */
-			outw(0x0800, ioaddr + 0xC80 + EL3_CMD);
 
 			irq = inw(ioaddr + 8) >> 12;
 			if_port = inw(ioaddr + 6)>>14;
 			for (i = 0; i < 3; i++)
 				phys_addr[i] = htons(read_eeprom(ioaddr, i));
 
-			/* Restore the "Product ID" to the EEPROM read register. */
-			read_eeprom(ioaddr, 3);
+			/* Restore the "Manufacturer ID" to the EEPROM read register. */
+			/* The manual says to restore "Product ID" (reg. 3). !???! */
+			read_eeprom(ioaddr, 7);
 
 			/* Was the EISA code an add-on hack?  Nahhhhh... */
 			goto found;
@@ -219,31 +212,7 @@ int el3_probe(struct device *dev)
 #endif
 
 	/* Fill in the generic fields of the device structure. */
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		dev->buffs[i] = NULL;
-
-	dev->hard_header	= eth_header;
-	dev->add_arp		= eth_add_arp;
-	dev->queue_xmit		= dev_queue_xmit;
-	dev->rebuild_header = eth_rebuild_header;
-	dev->type_trans		= eth_type_trans;
-
-	dev->type			= ARPHRD_ETHER;
-	dev->hard_header_len = ETH_HLEN;
-	dev->mtu			= 1500; /* eth_mtu */
-	dev->addr_len		= ETH_ALEN;
-	for (i = 0; i < ETH_ALEN; i++) {
-		dev->broadcast[i]=0xff;
-	}
-
-	/* New-style flags. */
-	dev->flags			= IFF_BROADCAST;
-	dev->family			= AF_INET;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr		= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= sizeof(unsigned long);
-
+	ether_setup(dev);
 	return 0;
 }
 
@@ -368,14 +337,6 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	/* Fill in the ethernet header. */
-	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
-		skb->dev = dev;
-		arp_queue (skb);
-		return 0;
-	}
-	skb->arp=1;
-
 	if (skb->len <= 0)
 		return 0;
 
@@ -480,7 +441,7 @@ el3_interrupt(int reg_ptr)
 		if (++i > 10) {
 			printk("%s: Infinite loop in interrupt, status %4.4x.\n",
 				   dev->name, status);
-			/* Clear all interrupts we have handled. */
+			/* Clear all interrupts we have handled */
 			outw(0x68FF, ioaddr + EL3_CMD);
 			break;
 		}
@@ -568,16 +529,13 @@ el3_rx(struct device *dev)
 		if ( (! (rx_status & 0x4000))
 			|| ! (rx_status & 0x1000)) { /* Dribble bits are OK. */
 			short pkt_len = rx_status & 0x7ff;
-			int sksize = sizeof(struct sk_buff) + pkt_len + 3;
 			struct sk_buff *skb;
 
-			skb = alloc_skb(sksize, GFP_ATOMIC);
+			skb = alloc_skb(pkt_len+3, GFP_ATOMIC);
 			if (el3_debug > 4)
-				printk("	   Receiving packet size %d status %4.4x.\n",
+				printk("Receiving packet size %d status %4.4x.\n",
 					   pkt_len, rx_status);
 			if (skb != NULL) {
-				skb->mem_len = sksize;
-				skb->mem_addr = skb;
 				skb->len = pkt_len;
 				skb->dev = dev;
 
@@ -606,12 +564,12 @@ el3_rx(struct device *dev)
 					continue;
 				} else {
 					printk("%s: receive buffers full.\n", dev->name);
-					kfree_s(skb, sksize);
+					kfree_s(skb, FREE_READ);
 				}
 #endif
 			} else if (el3_debug)
 				printk("%s: Couldn't allocate a sk_buff of size %d.\n",
-					   dev->name, sksize);
+					   dev->name, pkt_len);
 		}
 		lp->stats.rx_dropped++;
 		outw(0x4000, ioaddr + EL3_CMD); /* Rx discard */

@@ -26,7 +26,7 @@ static char *version =
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include "dev.h"
+#include <linux/netdevice.h>
 #include "8390.h"
 
 #define NE_BASE	 (dev->base_addr)

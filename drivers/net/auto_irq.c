@@ -35,7 +35,7 @@ static char *version="auto_irq.c:v0.02 1993 Donald Becker (becker@super.org)";
 #include <linux/sched.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include "dev.h"
+#include <linux/netdevice.h>
 /*#include <asm/system.h>*/
 
 struct device *irq2dev_map[16] = {0, 0, /* ... zeroed */};

@@ -32,15 +32,10 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
-#include "inet.h"
-#include "dev.h"
-#include "eth.h"
-#include "ip.h"
-#include "protocol.h"
-#include "tcp.h"
-#include "skbuff.h"
-#include "sock.h"
-#include "arp.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
 
 static int
@@ -55,17 +50,23 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   cli();
   if (dev->tbusy != 0) {
 	sti();
+	printk("loopback error: called by %08lx\n",
+		((unsigned long *)&skb)[-1]);
 	stats->tx_errors++;
 	return(1);
   }
   dev->tbusy = 1;
   sti();
 
+  start_bh_atomic();
   done = dev_rint(skb->data, skb->len, 0, dev);
   if (skb->free) kfree_skb(skb, FREE_WRITE);
+  end_bh_atomic();
 
   while (done != 1) {
+  	start_bh_atomic();
 	done = dev_rint(NULL, 0, 0, dev);
+	end_bh_atomic();
   }
   stats->tx_packets++;
 
@@ -99,13 +100,14 @@ get_stats(struct device *dev)
 int
 loopback_init(struct device *dev)
 {
+  int i;
+
   dev->mtu		= 2000;			/* MTU			*/
   dev->tbusy		= 0;
   dev->hard_start_xmit	= loopback_xmit;
   dev->open		= NULL;
 #if 1
   dev->hard_header	= eth_header;
-  dev->add_arp		= NULL;
   dev->hard_header_len	= ETH_HLEN;		/* 14			*/
   dev->addr_len		= ETH_ALEN;		/* 6			*/
   dev->type		= ARPHRD_ETHER;		/* 0x0001		*/
@@ -113,14 +115,12 @@ loopback_init(struct device *dev)
   dev->rebuild_header	= eth_rebuild_header;
 #else
   dev->hard_header_length = 0;
-  dev->add_arp		= NULL;
   dev->addr_len		= 0;
   dev->type		= 0;			/* loopback_type (0)	*/
   dev->hard_header	= NULL;
   dev->type_trans	= NULL;
   dev->rebuild_header	= NULL;
 #endif
-  dev->queue_xmit	= dev_queue_xmit;
 
   /* New-style flags. */
   dev->flags		= IFF_LOOPBACK;
@@ -132,6 +132,10 @@ loopback_init(struct device *dev)
   dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
   memset(dev->priv, 0, sizeof(struct enet_statistics));
   dev->get_stats = get_stats;
+
+  /* Fill in the generic fields of the device structure. */
+  for (i = 0; i < DEV_NUMBUFFS; i++)
+	skb_queue_head_init(&dev->buffs[i]);
   
   return(0);
 };

@@ -9,6 +9,7 @@
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -21,6 +22,9 @@
 
 #include <linux/ip.h>
 
+#ifndef _SNMP_H
+#include "snmp.h"
+#endif
 
 #include "sock.h"	/* struct sock */
 
@@ -61,7 +65,7 @@ struct ipq	 {
 
 extern int		backoff(int n);
 
-extern void		ip_print(struct iphdr *ip);
+extern void		ip_print(const struct iphdr *ip);
 extern int		ip_ioctl(struct sock *sk, int cmd,
 				 unsigned long arg);
 extern void		ip_route_check(unsigned long daddr);
@@ -81,5 +85,7 @@ extern void		ip_retransmit(struct sock *sk, int all);
 extern void		ip_do_retransmit(struct sock *sk, int all);
 extern int 		ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen);
 extern int 		ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
+extern void		ip_init(void);
 
+extern struct ip_mib	ip_statistics;
 #endif	/* _IP_H */

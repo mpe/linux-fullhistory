@@ -76,22 +76,12 @@ static unsigned int d_link_debug = D_LINK_DEBUG;
 #include <asm/system.h>
 #include <errno.h>
 
-#include "inet.h"
-#include "dev.h"
-#include "eth.h"
-#include "ip.h"
-#include "route.h"
-#include "protocol.h"
-#include "tcp.h"
-#include "skbuff.h"
-#include "sock.h"
-#include "arp.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
 #define netstats enet_statistics
-
-#ifndef HAVE_ALLOC_SKB
-#define alloc_skb(size,pri)	(struct sk_buff *)kmalloc(size,pri)
-#endif
 
 /**************************************************
  *                                                *
@@ -334,7 +324,10 @@ d_link_open(struct device *dev)
 	 *
 	 * This fix is better than changing in tcp.h IMHO
 	 */
+#if 0	 
 	tcp_prot.rspace = d_link_rspace; /* was: sock_rspace */
+#endif
+
 
 	return 0;
 }
@@ -355,8 +348,9 @@ d_link_close(struct device *dev)
 	free_irq(D_LINK_IRQ);
 	irq2dev_map[D_LINK_IRQ] = NULL;
 	dev->start = 0;
+#if 0
 	tcp_prot.rspace = sock_rspace; /* see comment above! */
-
+#endif
 	return 0;
 }
 
@@ -398,15 +392,6 @@ d_link_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev_tint(dev);
 		return 0;
 	}
-
-	/* For ethernet, fill in the header (hardware addresses) with an arp. */
-	if (!skb->arp)
-		if(dev->rebuild_header(skb->data, dev)) {
-			skb->dev = dev;
-			arp_queue (skb);
-			return 0;
-		}
-	skb->arp = 1;
 
 	if (free_tx_pages <= 0) {	/* Do timeouts, to avoid hangs. */
 		tickssofar = jiffies - dev->trans_start;
@@ -559,7 +544,6 @@ d_link_rx_intr(struct device *dev)
 	int		i;
 	int		read_from;
 	int		size;
-	int		sksize;
 	register unsigned char	*buffer;
 
 	cli();
@@ -577,19 +561,16 @@ d_link_rx_intr(struct device *dev)
 	if ((size < 32)  ||  (size > 1535))
 		printk("%s: Bogus packet size %d.\n", dev->name, size);
 
-	sksize = sizeof(struct sk_buff) + size;
-	skb = alloc_skb(sksize, GFP_ATOMIC);
+	skb = alloc_skb(size, GFP_ATOMIC);
 	sti();
 	if (skb == NULL) {
 		printk("%s: Couldn't allocate a sk_buff of size %d.\n",
-			dev->name, sksize);
+			dev->name, size);
 		return;
 	}
 	/* else */
 
 	skb->lock = 0;
-	skb->mem_len = sksize;
-	skb->mem_addr = skb;
 	/* 'skb->data' points to the start of sk_buff data area. */
 	buffer = skb->data;
 
@@ -663,35 +644,14 @@ d_link_init(struct device *dev)
 	/* Initialize the device structure. */
 	dev->priv = kmalloc(sizeof(struct netstats), GFP_KERNEL);
 	memset(dev->priv, 0, sizeof(struct netstats));
-
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		dev->buffs[i] = NULL;
-
 	dev->get_stats = get_stats;
-	dev->hard_header = eth_header;
-	dev->add_arp = eth_add_arp;
-	dev->queue_xmit = dev_queue_xmit;
-	dev->rebuild_header = eth_rebuild_header;
-	dev->type_trans = eth_type_trans;
 
 	dev->open = d_link_open;
 	dev->stop = d_link_close;
 	dev->hard_start_xmit = &d_link_start_xmit;
 
-	/* These are ethernet specific. */
-	dev->type = ARPHRD_ETHER;
-	dev->hard_header_len = ETH_HLEN;
-	dev->mtu = 1500; /* eth_mtu */
-	dev->addr_len	= ETH_ALEN;
-
-	/* New-style flags. */
-	dev->flags = IFF_BROADCAST;
-	dev->family = AF_INET;
-	dev->pa_addr = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask = 0;
-	dev->pa_alen = sizeof(unsigned long);
-
+	ether_setup(dev);
+	
 	select_prn();
 	return 0;
 }

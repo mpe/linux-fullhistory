@@ -22,44 +22,6 @@
 #include <linux/types.h>		/* for "caddr_t" et al		*/
 #include <linux/socket.h>		/* for "struct sockaddr" et al	*/
 
-
-/* Structure defining a queue for a network interface. */
-#ifdef not_yet_in_linux
-struct ifnet {
-  char		*if_name;		/* name, e.g. ``en'' or ``lo''	*/
-  short		if_unit;		/* sub-unit for device driver	*/
-  short		if_mtu;			/* maximum transmission unit	*/
-  short		if_flags;		/* up/down, broadcast, etc.	*/
-  short		if_timer;		/* time 'til if_watchdog called	*/
-  int		if_metric;		/* routing metric (not used)	*/
-  struct	ifaddr *if_addrlist;	/* linked list of addrs per if	*/
-  struct	ifqueue {
-	struct mbuf	*ifq_head;
-	struct mbuf	*ifq_tail;
-	int		ifq_len;
-	int		ifq_maxlen;
-	int		ifq_drops;
-  } if_snd;				/* output queue			*/
-
-  /* Procedure handles. */
-  int		(*if_init)();		/* init routine			*/
-  int		(*if_output)();		/* output routine		*/
-  int		(*if_ioctl)();		/* ioctl routine		*/
-  int		(*if_reset)();		/* bus reset routine		*/
-  int		(*if_watchdog)();	/* timer routine		*/
-
-  /* Generic interface statistics. */
-  int		if_ipackets;		/* packets recv'd on interface	*/
-  int		if_ierrors;		/* input errors on interface	*/
-  int		if_opackets;		/* packets sent on interface	*/
-  int		if_oerrors;		/* output errors on interface	*/
-  int		if_collisions;		/* collisions on CSMA i'faces	*/
-
-  /* Linked list: pointer to next interface. */
-  struct ifnet	*if_next;
-};
-#endif
-
 /* Standard interface flags. */
 #define	IFF_UP		0x1		/* interface is up		*/
 #define	IFF_BROADCAST	0x2		/* broadcast address valid	*/
@@ -106,7 +68,7 @@ struct ifreq {
 	union
 	{
 		char	ifrn_name[IFNAMSIZ];		/* if name, e.g. "en0" */
-		char	ifrn_hwaddr[IFHWADDRLEN];
+		char	ifrn_hwaddr[IFHWADDRLEN];	/* Obsolete */
 	} ifr_ifrn;
 	
 	union {
@@ -114,6 +76,7 @@ struct ifreq {
 		struct	sockaddr ifru_dstaddr;
 		struct	sockaddr ifru_broadaddr;
 		struct	sockaddr ifru_netmask;
+		struct  sockaddr ifru_hwaddr;
 		short	ifru_flags;
 		int	ifru_metric;
 		int	ifru_mtu;
@@ -122,7 +85,8 @@ struct ifreq {
 };
 
 #define ifr_name	ifr_ifrn.ifrn_name	/* interface name 	*/
-#define ifr_hwaddr	ifr_ifrn.ifrn_hwaddr	/* interface hardware   */
+#define old_ifr_hwaddr	ifr_ifrn.ifrn_hwaddr	/* interface hardware   */
+#define ifr_hwaddr	ifr_ifru.ifru_hwaddr	/* MAC address 		*/
 #define	ifr_addr	ifr_ifru.ifru_addr	/* address		*/
 #define	ifr_dstaddr	ifr_ifru.ifru_dstaddr	/* other end of p-p lnk	*/
 #define	ifr_broadaddr	ifr_ifru.ifru_broadaddr	/* broadcast address	*/

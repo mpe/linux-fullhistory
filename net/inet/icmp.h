@@ -22,6 +22,8 @@
 
 
 extern struct icmp_err icmp_err_convert[];
+extern struct icmp_mib icmp_statistics;
+
 
 extern void	icmp_send(struct sk_buff *skb_in,  int type, int code,
 			  struct device *dev);

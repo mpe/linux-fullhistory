@@ -37,21 +37,15 @@ static char *version =
 #include <asm/io.h>
 #include <errno.h>
 
-#include "dev.h"
-#include "eth.h"
-#include "skbuff.h"
-#include "arp.h"
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
 #ifndef HAVE_AUTOIRQ
 /* From auto_irq.c, should be in a *.h file. */
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 extern struct device *irq2dev_map[16];
-#endif
-
-#ifndef HAVE_ALLOC_SKB
-#define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#define kfree_skbmem(addr, size) kfree_s(addr,size);
 #endif
 
 
@@ -64,9 +58,7 @@ static void el_receive(struct device *dev);
 static void el_reset(struct device *dev);
 static int  el1_close(struct device *dev);
 static struct enet_statistics *el1_get_stats(struct device *dev);
-#ifdef HAVE_MULTICAST
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-#endif
 
 #define EL_NAME "EtherLink 3c501"
 
@@ -202,35 +194,9 @@ el1_probe(struct device *dev)
     dev->hard_start_xmit = &el_start_xmit;
     dev->stop = &el1_close;
     dev->get_stats = &el1_get_stats;
-#ifdef HAVE_MULTICAST
     dev->set_multicast_list = &set_multicast_list;
-#endif
-
-    /* Fill in the generic field of the device structure. */
-    for (i = 0; i < DEV_NUMBUFFS; i++)
-	dev->buffs[i] = NULL;
-
-    dev->hard_header	= eth_header;
-    dev->add_arp	= eth_add_arp;
-    dev->queue_xmit	= dev_queue_xmit;
-    dev->rebuild_header	= eth_rebuild_header;
-    dev->type_trans	= eth_type_trans;
-
-    dev->type		= ARPHRD_ETHER;
-    dev->hard_header_len = ETH_HLEN;
-    dev->mtu		= 1500; /* eth_mtu */
-    dev->addr_len	= ETH_ALEN;
-    for (i = 0; i < ETH_ALEN; i++) {
-	dev->broadcast[i]=0xff;
-    }
-
-    /* New-style flags. */
-    dev->flags		= IFF_BROADCAST;
-    dev->family		= AF_INET;
-    dev->pa_addr	= 0;
-    dev->pa_brdaddr	= 0;
-    dev->pa_mask	= 0;
-    dev->pa_alen	= sizeof(unsigned long);
+    /* Setup the generic properties */
+    ether_setup(dev);
 
     return 0;
 }
@@ -290,14 +256,6 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev_tint(dev);
 	return 0;
     }
-
-    /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
-	skb->dev = dev;
-	arp_queue (skb);
-	return 0;
-    }
-    skb->arp=1;
 
     if (skb->len <= 0)
 	return 0;
@@ -431,7 +389,7 @@ el_interrupt(int reg_ptr)
 static void
 el_receive(struct device *dev)
 {
-    int sksize, pkt_len;
+    int pkt_len;
     struct sk_buff *skb;
 
     pkt_len = inw(RX_LOW);
@@ -447,31 +405,19 @@ el_receive(struct device *dev)
     }
     outb(AX_SYS, AX_CMD);
 
-    sksize = sizeof(struct sk_buff) + pkt_len;
-    skb = alloc_skb(sksize, GFP_ATOMIC);
+    skb = alloc_skb(pkt_len, GFP_ATOMIC);
     outw(0x00, GP_LOW);
     if (skb == NULL) {
 	printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 	el_status.stats.rx_dropped++;
 	return;
     } else {
-	skb->mem_len = sksize;
-	skb->mem_addr = skb;
 	skb->len = pkt_len;
 	skb->dev = dev;
 
 	insb(DATAPORT, skb->data, pkt_len);
 
-#ifdef HAVE_NETIF_RX
-	    netif_rx(skb);
-#else
-	    skb->lock = 0;
-	    if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-		kfree_skbmem(skb, sksize);
-		lp->stats.rx_dropped++;
-		break;
-	    }
-#endif
+	netif_rx(skb);
 	el_status.stats.rx_packets++;
     }
     return;
@@ -526,7 +472,6 @@ el1_get_stats(struct device *dev)
     return &el_status.stats;
 }
 
-#ifdef HAVE_MULTICAST
 /* Set or clear the multicast filter for this adaptor.
    num_addrs == -1	Promiscuous mode, receive all packets
    num_addrs == 0	Normal mode, clear multicast list
@@ -547,7 +492,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	inb(RX_STATUS);
     }
 }
-#endif
 
 /*
  * Local variables:

@@ -35,44 +35,53 @@
 
 
 /* Called from PROCfs. */
-int unix_get_info(char *buffer)
+int unix_get_info(char *buffer, char **start, off_t offset, int length)
 {
-  char *pos;
-  int i;
+  	off_t pos=0;
+  	off_t begin=0;
+  	int len=0;
+  	int i;
 
-  pos = buffer;
-  pos += sprintf(pos, "Num RefCount Protocol Flags    Type St Path\n");
+  	len += sprintf(buffer, "Num RefCount Protocol Flags    Type St Path\n");
 
-  for(i = 0; i < NSOCKETS; i++) {
-	if (unix_datas[i].refcnt>0) {
-		pos += sprintf(pos, "%2d: %08X %08X %08lX %04X %02X", i,
-			unix_datas[i].refcnt,
-			unix_datas[i].protocol,
-			unix_datas[i].socket->flags,
-			unix_datas[i].socket->type,
-			unix_datas[i].socket->state
-		);
+  	for(i = 0; i < NSOCKETS; i++) 
+  	{
+		if (unix_datas[i].refcnt>0) 
+		{
+			len += sprintf(buffer+len, "%2d: %08X %08X %08lX %04X %02X", i,
+				unix_datas[i].refcnt,
+				unix_datas[i].protocol,
+				unix_datas[i].socket->flags,
+				unix_datas[i].socket->type,
+				unix_datas[i].socket->state
+			);
 
-		/* If socket is bound to a filename, we'll print it. */
-		if(unix_datas[i].sockaddr_len>0) {
-			pos += sprintf(pos, " %s\n",
+			/* If socket is bound to a filename, we'll print it. */
+			if(unix_datas[i].sockaddr_len>0) 
+			{
+				len += sprintf(buffer+len, " %s\n",
 				unix_datas[i].sockaddr_un.sun_path);
-		} else { /* just add a newline */
-			*pos='\n';
-			pos++;
-			*pos='\0';
-		}
-
-		/*
-		 * Check whether buffer _may_ overflow in the next loop.
-		 * Since sockets may have very very long paths, we make
-		 * PATH_MAX+80 the minimum space left for a new line.
-		 */
-		if (pos > buffer+PAGE_SIZE-80-PATH_MAX) {
-			printk("UNIX: netinfo: oops, too many sockets.\n");
-			return(pos - buffer);
+			} 
+			else 
+			{ /* just add a newline */
+				buffer[len++]='\n';
+				buffer[len++]='\0';
+			}
+			
+			pos=begin+len;
+			if(pos<offset)
+			{
+				len=0;
+				begin=pos;
+			}
+			if(pos>offset+length)
+				break;
 		}
 	}
-  }
-  return(pos - buffer);
+	
+	*start=buffer+(offset-begin);
+	len-=(offset-begin);
+	if(len>length)
+		len=length;
+	return len;
 }

@@ -25,7 +25,7 @@ static char *version =
 #include <asm/io.h>
 #include <asm/system.h>
 
-#include "dev.h"
+#include <linux/netdevice.h>
 #include "8390.h"
 
 /* Compatibility definitions for earlier kernel versions. */

@@ -29,12 +29,12 @@
 #include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/in.h>
-#include "inet.h"
-#include "dev.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
 #include "ip.h"
 #include "protocol.h"
 #include "tcp.h"
-#include "skbuff.h"
+#include <linux/skbuff.h>
 #include "sock.h"
 #include "icmp.h"
 #include "udp.h"

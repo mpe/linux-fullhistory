@@ -26,7 +26,7 @@ static char *version =
 #include <asm/io.h>
 #include <asm/system.h>
 
-#include "dev.h"
+#include <linux/netdevice.h>
 
 #include "8390.h"
 #include "3c503.h"

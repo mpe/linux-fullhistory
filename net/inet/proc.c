@@ -36,13 +36,13 @@
 #include <linux/un.h>
 #include <linux/in.h>
 #include <linux/param.h>
-#include "inet.h"
-#include "dev.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
 #include "ip.h"
 #include "protocol.h"
 #include "tcp.h"
 #include "udp.h"
-#include "skbuff.h"
+#include <linux/skbuff.h>
 #include "sock.h"
 #include "raw.h"
 
@@ -54,18 +54,21 @@
  *  happens, get__netinfo returns only part of the available infos.
  */
 static int
-get__netinfo(struct proto *pro, char *buffer, int format)
+get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t offset, int length)
 {
   struct sock **s_array;
   struct sock *sp;
-  char *pos=buffer;
   int i;
   int timer_active;
   unsigned long  dest, src;
   unsigned short destp, srcp;
+  int len=0;
+  off_t pos=0;
+  off_t begin=0;
+  
 
   s_array = pro->sock_array;
-  pos+=sprintf(pos, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when uid\n");
+  len+=sprintf(buffer, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when uid\n");
 /*
  *	This was very pretty but didn't work when a socket is destroyed at the wrong moment
  *	(eg a syn recv socket getting a reset), or a memory timer destroy. Instead of playing
@@ -86,7 +89,7 @@ get__netinfo(struct proto *pro, char *buffer, int format)
 		timer_active = del_timer(&sp->timer);
 		if (!timer_active)
 			sp->timer.expires = 0;
-		pos+=sprintf(pos, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d\n",
+		len+=sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d\n",
 			i, src, srcp, dest, destp, sp->state, 
 			format==0?sp->write_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
 			format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
@@ -94,40 +97,47 @@ get__netinfo(struct proto *pro, char *buffer, int format)
 			SOCK_INODE(sp->socket)->i_uid);
 		if (timer_active)
 			add_timer(&sp->timer);
-		/* Is place in buffer too rare? then abort. */
-		if (pos > buffer+PAGE_SIZE-90) {
-			printk("oops, too many %s sockets for netinfo.\n",
-					pro->name);
-			return(strlen(buffer));
-		}
-
 		/*
 		 * All sockets with (port mod SOCK_ARRAY_SIZE) = i
 		 * are kept in sock_array[i], so we must follow the
 		 * 'next' link to get them all.
 		 */
 		sp = sp->next;
+		pos=begin+len;
+		if(pos<offset)
+		{
+			len=0;
+			begin=pos;
+		}
+		if(pos>offset+length)
+			break;
 	}
 	sti();	/* We only turn interrupts back on for a moment, but because the interrupt queues anything built up
 		   before this will clear before we jump back and cli, so its not as bad as it looks */
+	if(pos>offset+length)
+		break;
   }
-  return(strlen(buffer));
+  *start=buffer+(offset-begin);
+  len-=(offset-begin);
+  if(len>length)
+  	len=length;
+  return len;
 } 
 
 
-int tcp_get_info(char *buffer)
+int tcp_get_info(char *buffer, char **start, off_t offset, int length)
 {
-  return get__netinfo(&tcp_prot, buffer,0);
+  return get__netinfo(&tcp_prot, buffer,0, start, offset, length);
 }
 
 
-int udp_get_info(char *buffer)
+int udp_get_info(char *buffer, char **start, off_t offset, int length)
 {
-  return get__netinfo(&udp_prot, buffer,1);
+  return get__netinfo(&udp_prot, buffer,1, start, offset, length);
 }
 
 
-int raw_get_info(char *buffer)
+int raw_get_info(char *buffer, char **start, off_t offset, int length)
 {
-  return get__netinfo(&raw_prot, buffer,1);
+  return get__netinfo(&raw_prot, buffer,1, start, offset, length);
 }

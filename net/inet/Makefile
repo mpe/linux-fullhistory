@@ -15,10 +15,21 @@
 	$(CC) $(CFLAGS) -S -o $*.s $<
 
 
-OBJS	= sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
+OBJS	= sock.o utils.o route.o proc.o timer.o protocol.o \
 	  eth.o packet.o arp.o dev.o ip.o raw.o icmp.o tcp.o udp.o \
-	  datagram.o skbuff.o
-#	  ipx.o ax25.o ax25_in.o ax25_out.o ax25_subr.o ax25_timer.o
+	  datagram.o skbuff.o devinet.o
+
+ifdef CONFIG_AX25
+
+OBJS	:= $(OBJS) ax25.o ax25_in.o ax25_out.o ax25_subr.o ax25_timer.o
+
+endif
+
+ifdef CONFIG_IPX
+
+OBJS	:= $(OBJS) ipx.o
+
+endif
 
 ifdef CONFIG_INET
 

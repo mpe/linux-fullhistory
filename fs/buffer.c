@@ -193,10 +193,9 @@ static int sync_buffers(dev_t dev, int wait)
 			 /* If an unlocked buffer is not uptodate, there has
 			     been an IO error. Skip it. */
 			 if (wait && bh->b_req && !bh->b_lock &&
-			     !bh->b_dirt && !bh->b_uptodate)
-			  {
+			     !bh->b_dirt && !bh->b_uptodate) {
 				  err = 1;
-				  printk("Weird - unlocked, clean and not uptodate buffer on %d list %d\n", nlist);
+				  printk("Weird - unlocked, clean and not uptodate buffer on list %d\n", nlist);
 				  continue;
 			  }
 			 /* Don't write clean buffers.  Don't write ANY buffers
@@ -208,7 +207,7 @@ static int sync_buffers(dev_t dev, int wait)
 			 ll_rw_block(WRITE, 1, &bh);
 
 			 if(nlist != BUF_DIRTY) { 
-				 printk("[%d %x %d] ", nlist, bh->b_dev, bh->b_blocknr);
+				 printk("[%d %x %ld] ", nlist, bh->b_dev, bh->b_blocknr);
 				 ncount++;
 			 };
 			 bh->b_count--;
@@ -596,7 +595,8 @@ void refill_freelist(int size)
 	 to request some blocks in a filesystem that we know that we will
 	 be needing ahead of time. */
 
-	if(nr_free[isize] > 100) return 0;
+	if (nr_free[isize] > 100)
+		return;
 
 	/* If there are too many dirty buffers, we wake up the update process
 	   now so as to ensure that there are still clean buffers available

@@ -7,7 +7,7 @@
 # are difficult for users to deal with.
 include CONFIG
 
-NETDRV_OBJS := net.a(Space.o) net.a(auto_irq.o) net.a(net_init.o)
+NETDRV_OBJS := net.a(Space.o) net.a(auto_irq.o) net.a(net_init.o) net.a(loopback.o)
 CFLAGS := $(CFLAGS) -I../../net/inet
 CPP := $(CPP) -I../../net/inet
 

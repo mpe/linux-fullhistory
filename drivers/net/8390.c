@@ -47,14 +47,9 @@ static char *version =
 #include <linux/in.h>
 #include <linux/interrupt.h>
 
-#include "dev.h"
-#include "eth.h"
-#include "ip.h"
-#include "protocol.h"
-#include "tcp.h"
-#include "skbuff.h"
-#include "sock.h"
-#include "arp.h"
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
 #include "8390.h"
 
@@ -153,8 +148,8 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 		else {
 			/* The 8390 probably hasn't gotten on the cable yet. */
 			printk(KERN_DEBUG "%s: Possible network cable problem?\n", dev->name);
-			if (ei_local->stat.tx_packets == 0)
-				ei_local->interface_num ^= 1;   /* Try a different xcvr.  */
+			if(ei_local->stat.tx_packets==0)
+				ei_local->interface_num ^= 1; 	/* Try a different xcvr.  */
 		}
 		/* Try to restart the card.  Perhaps the user has fixed something. */
 		ei_reset_8390(dev);
@@ -169,13 +164,6 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev_tint(dev);
 		return 0;
     }
-    /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
-		skb->dev = dev;
-		arp_queue (skb);
-		return 0;
-    }
-    skb->arp=1;
     
     length = skb->len;
     if (skb->len <= 0)
@@ -449,19 +437,16 @@ static void ei_receive(struct device *dev)
 					   rx_frame.next);
 			ei_local->stat.rx_errors++;
 		} else if ((rx_frame.status & 0x0F) == ENRSR_RXOK) {
-			int sksize = sizeof(struct sk_buff) + pkt_len;
 			struct sk_buff *skb;
 			
-			skb = alloc_skb(sksize, GFP_ATOMIC);
+			skb = alloc_skb(pkt_len, GFP_ATOMIC);
 			if (skb == NULL) {
 				if (ei_debug > 1)
 					printk("%s: Couldn't allocate a sk_buff of size %d.\n",
-						   dev->name, sksize);
+						   dev->name, pkt_len);
 				ei_local->stat.rx_dropped++;
 				break;
 			} else {
-				skb->mem_len = sksize;
-				skb->mem_addr = skb;
 				skb->len = pkt_len;
 				skb->dev = dev;
 				
@@ -580,8 +565,6 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 /* Initialize the rest of the 8390 device structure. */
 int ethdev_init(struct device *dev)
 {
-    int i;
-    
     if (ei_debug > 1)
 		printk(version);
     
@@ -605,32 +588,9 @@ int ethdev_init(struct device *dev)
 #ifdef HAVE_MULTICAST
     dev->set_multicast_list = &set_multicast_list;
 #endif
-    
-    for (i = 0; i < DEV_NUMBUFFS; i++)
-		dev->buffs[i] = NULL;
-    
-    dev->hard_header	= eth_header;
-    dev->add_arp		= eth_add_arp;
-    dev->queue_xmit		= dev_queue_xmit;
-    dev->rebuild_header	= eth_rebuild_header;
-    dev->type_trans		= eth_type_trans;
-    
-    dev->type		= ARPHRD_ETHER;
-    dev->hard_header_len = ETH_HLEN;
-    dev->mtu		= 1500; /* eth_mtu */
-    dev->addr_len	= ETH_ALEN;
-    for (i = 0; i < ETH_ALEN; i++) {
-		dev->broadcast[i]=0xff;
-    }
-    
-    /* New-style flags. */
-    dev->flags		= IFF_BROADCAST;
-    dev->family		= AF_INET;
-    dev->pa_addr	= 0;
-    dev->pa_brdaddr	= 0;
-    dev->pa_mask	= 0;
-    dev->pa_alen	= sizeof(unsigned long);
-    
+
+    ether_setup(dev);
+        
     return 0;
 }
 

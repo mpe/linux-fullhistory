@@ -36,8 +36,15 @@
  *			allow zero or one slots
  *			separate routines
  *			status display
+ *
+ *
+ *	This module is a difficult issue. Its clearly inet code but its also clearly
+ *	driver code belonging close to PPP and SLIP
  */
 
+#include <linux/config.h>
+#ifdef CONFIG_INET
+/* Entire module is for IP only */
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -47,15 +54,14 @@
 #include <linux/termios.h>
 #include <linux/in.h>
 #include <linux/fcntl.h>
-#include "inet.h"
-#include "dev.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
 #include "ip.h"
 #include "protocol.h"
 #include "icmp.h"
 #include "tcp.h"
-#include "skbuff.h"
+#include <linux/skbuff.h>
 #include "sock.h"
-#include "arp.h"
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <asm/system.h>
@@ -723,3 +729,4 @@ void slhc_o_status(struct slcompress *comp)
 	}
 }
 
+#endif /* CONFIG_INET */

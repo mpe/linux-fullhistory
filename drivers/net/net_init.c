@@ -24,8 +24,8 @@
 #include <linux/malloc.h>
 #include <linux/if_ether.h>
 #include <linux/string.h>
-#include "dev.h"
-#include "eth.h"
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -38,25 +38,13 @@
 
    Given that almost all of these functions are handled in the current
    socket-based scheme, putting ethercard devices in /dev/ seems pointless.
+   
+   [Removed all support for /dev network devices. When someone adds streams then
+    by magic we get them, but otherwise they are un-needed and a space waste]
 */
 
 /* The next device number/name to assign: "eth0", "eth1", etc. */
 static int next_ethdev_number = 0;
-
-#ifdef NET_MAJOR_NUM
-static struct file_operations netcard_fops = {
-	NULL,		/* lseek */
-	NULL,		/* read */
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* select */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	NULL,		/* open */
-	NULL,		/* release */
-	NULL		/* fsync */
-};
-#endif
 
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end);
 
@@ -68,12 +56,6 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end);
 
 unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
 {
-
-#ifdef NET_MAJOR_NUM
-	if (register_chrdev(NET_MAJOR_NUM, "network",&netcard_fops))
-		printk("WARNING: Unable to get major %d for the network devices.\n",
-			   NET_MAJOR_NUM);
-#endif
 
 #if defined(CONFIG_LANCE)			/* Note this is _not_ CONFIG_AT1500. */
 	mem_start = lance_init(mem_start, mem_end);
@@ -117,11 +99,9 @@ struct device *init_etherdev(struct device *dev, int sizeof_private,
 		sprintf(dev->name, "eth%d", next_ethdev_number++);
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)
-		dev->buffs[i] = NULL;
+		skb_queue_head_init(&dev->buffs[i]);
 	
 	dev->hard_header	= eth_header;
-	dev->add_arp		= eth_add_arp;
-	dev->queue_xmit		= dev_queue_xmit;
 	dev->rebuild_header	= eth_rebuild_header;
 	dev->type_trans		= eth_type_trans;
 	
@@ -151,6 +131,36 @@ struct device *init_etherdev(struct device *dev, int sizeof_private,
 	}
 	return dev;
 }
+
+void ether_setup(struct device *dev)
+{
+	int i;
+	/* Fill in the fields of the device structure with ethernet-generic values.
+	   This should be in a common file instead of per-driver.  */
+	for (i = 0; i < DEV_NUMBUFFS; i++)
+		skb_queue_head_init(&dev->buffs[i]);
+
+	dev->hard_header	= eth_header;
+	dev->rebuild_header = eth_rebuild_header;
+	dev->type_trans = eth_type_trans;
+
+	dev->type		= ARPHRD_ETHER;
+	dev->hard_header_len = ETH_HLEN;
+	dev->mtu		= 1500; /* eth_mtu */
+	dev->addr_len	= ETH_ALEN;
+	for (i = 0; i < ETH_ALEN; i++) {
+		dev->broadcast[i]=0xff;
+	}
+
+	/* New-style flags. */
+	dev->flags		= IFF_BROADCAST;
+	dev->family		= AF_INET;
+	dev->pa_addr	= 0;
+	dev->pa_brdaddr = 0;
+	dev->pa_mask	= 0;
+	dev->pa_alen	= sizeof(unsigned long);
+}
+
 
 
 /*

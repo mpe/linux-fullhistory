@@ -17,6 +17,14 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ *
+ *	This module is effectively the top level interface to the BSD socket
+ *	paradigm. Because it is very simple it works well for Unix domain sockets,
+ *	but requires a whole layer of substructure for the other protocols.
+ *
+ *	In addition it lacks an effective kernel -> kernel interface to go with
+ *	the user one.
  */
 
 #include <linux/config.h>

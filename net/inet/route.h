@@ -37,11 +37,11 @@ struct rtable {
 };
 
 
-extern void		rt_flush(struct device *dev);
-extern void		rt_add(short flags, unsigned long addr, unsigned long mask,
+extern void		ip_rt_flush(struct device *dev);
+extern void		ip_rt_add(short flags, unsigned long addr, unsigned long mask,
 			       unsigned long gw, struct device *dev);
-extern struct rtable	*rt_route(unsigned long daddr, struct options *opt);
-extern int		rt_get_info(char * buffer);
-extern int		rt_ioctl(unsigned int cmd, void *arg);
+extern struct rtable	*ip_rt_route(unsigned long daddr, struct options *opt, unsigned long *src_addr);
+extern int		rt_get_info(char * buffer, char **start, off_t offset, int length);
+extern int		ip_rt_ioctl(unsigned int cmd, void *arg);
 
 #endif	/* _ROUTE_H */

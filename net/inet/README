@@ -1,44 +1,92 @@
 
-NET2Debugged 1.24 README
-------------------------
+This is snapshot 010
 
-Major Changes
+Notes:
+ARP
+	As of snapshot 006, ARP should compile and work correctly
+	for any protocol that has the right build_header support.
 
-o	PLIP driver sort of works
-o	UDP and RAW have been partially rewritten for speed
-o	Internals heavily cleaned up, and memory monitoring of network
-	memory is now done. (On shift-scroll-lock)
-o	ARP should now not generate garbage
-o	Using MSG_PEEK can't cause race conditions and crashes
-o	Support for bootp clients.
-o	Supports RFC931 TAP authd
-o	NFS problems with certain types of network configuration are
-	fixed.
-o	Doesn't forward packets for other subnet (can cause packet storms)
-o	TCP won't ack rst frames causing packet storms (especially with
-	Lan workplace for DOS).
-o	Numerous fixes for solidity
-o	Verify_area used properly.
-o	MSG_PEEK is faster again
-o	Minor TCP fixes. Hopefully no more TCP lockups (ha!)
-o	Donald's promiscuous mode. Go forth and write protocol analysers...
--------------------------------------------------------------------------
-NOTE:
-	Drivers for this stack set must be using alloc_skb() not just
-kmalloc. If you get millions of 'non sk_buff...' errors please check the
-driver you are using. All Donald's drivers know about this. If you have
-a problem driver replace all cases of
-	
-	.. =(struct sk_buff *)kmalloc(sizeof(struct sk_buff)+...
+AX25	
+	This is an ALPHA release. It will not be a standard part
+	of the real release module. Please read the copyrights on
+	the AX.25 code carefully. When AX.25 is finished it will
+	be part of a seperatly available amateur radio add on. Also
+	please rememeber this is ALPHA code. It works well for a lot
+	of people but I know for a fact it is currently buggy.
 
-With
-	..=alloc_skb(sizeof(struct sk_buff)+...
+IPX
+	The IPX module in here is fairly complete, and certainly
+	usable for things. The IPX user code isn't yet very useful
+	(nobody has written a RIP/SAP daemon!).
 
-And if it uses kfree_s on the packet change that to use kfree_skbmem().
-
--------------------------------------------------------------------------
-Bug fixes and improvements for this section of the code should be mailed to
-iiitac@pyr.swan.ac.uk.
+NetROM
+	I'm slowly doing bits of this code, but its not even fit
+	to include here.
 
 
-Alan
+Status:
+
+Done:
+	Replaced ARP with Florian la Roche's ARP.
+	Replaced/improved sk_buff handlers (again from Florian)
+	Removed surplus DDI code.
+	Reformatted most modules.
+	Fixed ICMP handling bugs (ICMP error to ICMP error).
+	Fixed fragmentation bugs (both memory and mtu).
+	Moved some includes.
+	Drivers now build correctly with no IP layer.
+	Merged Linus 1.0.1 diffs and my patches 1-3.
+	Further fixups on clean driver build.
+	Loopback driver now lives where it belongs.
+	UDP verified against specification (passes).
+	IP verified against specification (two errors: Incorrect forwarding and
+		no mandatory option handling).
+	ARP verified against specification (passes: recommendation that ARP
+		rejects MAC broadcast/multicast addresses - this needs
+		driver changes doing).
+	All surplus skb->sk assignment and skb->mem_len skb->mem_addr removed.
+	eth.h became linux/etherdevice.h.
+	alloc_skb nows adds the sizeof(struct sk_buff) itself.
+	Now relative to Linux 1.0.4.
+	All IP wakeups are now callbacks.
+	IPX and AX.25 callbacks now use wake_up_interruptible correctly.
+	ICMP,IP and UDP collect snmp statistics.
+	Removed the 4K limit from the /proc/net/* files.
+	Routing bugs.
+	Cleaned up skb duplication.
+	IPX /proc from Mark Evans.
+	Driver packet ordering now enforced.
+	AX.25 unused SSID bits now set.
+
+In Progress:
+	Module by module validation against specifications.
+	TCP delayed ACK	 [RFC1122 requires this].
+	Byte-order fixes.
+	Core code restructure to enable a working non IP build
+	Trying to fix /proc to do >4K correctly, as well as dynamic addition
+ 		of /proc/ and /proc/net/ objects (for module protocol layers).
+	Adding the extra NET2E driver ioctl() support.
+	SNMP MIB statistic capture - finish TCP and add device layer when 
+		Donald is ready.
+	Donald Beckers latest driver mods.
+	Adding the ICMP_TIMESTAMP support patch.
+	Routing bugs.
+	Packet level time stamping.
+	Merging in support for the I^2IT 'TICK' time synchronisation chip.
+	Crynwyr compliant PLIP driver.
+
+To Do:
+	Merge in sk_buff data handling module.
+	Socket family/protocol seperation.
+	Additional BSD options (SO_LOWAT etc).
+	IP option handling, especially on ip forwards.
+	AX.25 /proc support.
+	SNMP /proc support.
+	TCP MSS/Window and route metrics in the routing table.
+	TCP mtu discovery support.
+	NetROM.
+	TCP closing side state machine bug fixes.
+	NetBEUI (Lan Manager) [ie IEE802.3/IEE802.2/NetBIOS].
+	Make drivers record type and addressing category(Multicast/Broadcast..)
+	Speed it up.
+	Unix domain cleanup/rewrite.

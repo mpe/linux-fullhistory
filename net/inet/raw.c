@@ -40,12 +40,14 @@
 #include <linux/fcntl.h>
 #include <linux/socket.h>
 #include <linux/in.h>
-#include "inet.h"
-#include "dev.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
 #include "ip.h"
 #include "protocol.h"
+#if 0
 #include "tcp.h"
-#include "skbuff.h"
+#endif
+#include <linux/skbuff.h>
 #include "sock.h"
 #include "icmp.h"
 #include "udp.h"
@@ -101,13 +103,18 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	   "         len=%d, saddr=%X, redo=%d, protocol=%X)\n",
 	   skb, dev, opt, daddr, len, saddr, redo, protocol));
 
-  if (skb == NULL) return(0);
-  if (protocol == NULL) {
+  if (skb == NULL)
+  	return(0);
+  	
+  if (protocol == NULL) 
+  {
 	kfree_skb(skb, FREE_READ);
 	return(0);
   }
+  
   sk = (struct sock *) protocol->data;
-  if (sk == NULL) {
+  if (sk == NULL) 
+  {
 	kfree_skb(skb, FREE_READ);
 	return(0);
   }
@@ -122,12 +129,14 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
   /* Charge it too the socket. */
   if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) {
-	skb->sk = NULL;
+	ip_statistics.IpInDiscards++;
+	skb->sk=NULL;
 	kfree_skb(skb, FREE_READ);
 	return(0);
   }
   sk->rmem_alloc += skb->mem_len;
-  skb_queue_tail(&sk->rqueue,skb);
+  ip_statistics.IpInDelivers++;
+  skb_queue_tail(&sk->receive_queue,skb);
   sk->data_ready(sk,skb->len);
   release_sock(sk);
   return(0);
@@ -173,7 +182,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   }
   if (sin.sin_port == 0) sin.sin_port = sk->protocol;
   
-  if (sk->broadcast == 0 && chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+  if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
   	return -EACCES;
 
   sk->inuse = 1;
@@ -188,7 +197,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   	}
   	
 	skb = sk->prot->wmalloc(sk,
-			len+sizeof(*skb) + sk->prot->max_header,
+			len + sk->prot->max_header,
 			0, GFP_KERNEL);
 	if (skb == NULL) {
 		int tmp;
@@ -210,12 +219,9 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
 		sti();
 	}
   }
-  skb->mem_addr = skb;
-  skb->mem_len = len + sizeof(*skb) +sk->prot->max_header;
   skb->sk = sk;
 
-  skb->free = 1; /* these two should be unecessary. */
-  skb->arp = 0;
+  skb->free = 1;
 
   tmp = sk->prot->build_header(skb, sk->saddr, 
 			       sin.sin_addr.s_addr, &dev,
@@ -244,6 +250,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   }
 
   skb->len = tmp + len;
+  
   sk->prot->queue_xmit(sk, dev, skb, 1);
   release_sock(sk);
   return(len);
@@ -345,6 +352,7 @@ raw_recvfrom(struct sock *sk, unsigned char *to, int len,
   copied = min(len, skb->len);
   
   skb_copy_datagram(skb, 0, to, copied);
+  sk->stamp=skb->stamp;
 
   /* Copy the address. */
   if (sin) {

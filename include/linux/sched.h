@@ -23,6 +23,12 @@ extern int wp_works_ok;
 
 extern unsigned long intr_count;
 
+#define start_bh_atomic() \
+__asm__ __volatile__("incl _intr_count")
+
+#define end_bh_atomic() \
+__asm__ __volatile__("decl _intr_count")
+
 /*
  * Bus types (default is ISA, but people can check others with these..)
  * MCA_bus hardcoded to 0 for now.

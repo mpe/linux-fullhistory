@@ -23,7 +23,7 @@ static char *version =
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include "dev.h"
+#include <linux/netdevice.h>
 #include "8390.h"
 
 #ifndef HAVE_PORTRESERVE

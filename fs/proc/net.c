@@ -15,6 +15,8 @@
  *            quite a bit, modularized the code.
  * fvk 4/'93  waltje@uwalt.nl.mugnet.org (Fred N. van Kempen)
  *	      Renamed "route_get_info()" to "rt_get_info()" for consistency.
+ * Alan Cox (gw4pts@gw4pts.ampr.org) 4/94
+ *	      Dusted off the code and added IPX. Fixed the 4K limit.
  *
  *  proc net directory handling functions
  */
@@ -36,16 +38,19 @@ static int proc_lookupnet(struct inode *,const char *,int,struct inode **);
 
 /* the get_*_info() functions are in the net code, and are configured
    in via the standard mechanism... */
-extern int unix_get_info(char *);
+extern int unix_get_info(char *, char **, off_t, int);
 #ifdef CONFIG_INET
-extern int tcp_get_info(char *);
-extern int udp_get_info(char *);
-extern int raw_get_info(char *);
-extern int arp_get_info(char *);
-extern int dev_get_info(char *);
-extern int rt_get_info(char *);
+extern int tcp_get_info(char *, char **, off_t, int);
+extern int udp_get_info(char *, char **, off_t, int);
+extern int raw_get_info(char *, char **, off_t, int);
+extern int arp_get_info(char *, char **, off_t, int);
+extern int dev_get_info(char *, char **, off_t, int);
+extern int rt_get_info(char *, char **, off_t, int);
 #endif /* CONFIG_INET */
-
+#ifdef CONFIG_IPX
+extern int ipx_get_info(char *, char **, off_t, int);
+extern int ipx_rt_get_info(char *, char **, off_t, int);
+#endif /* CONFIG_IPX */
 
 static struct file_operations proc_net_operations = {
 	NULL,			/* lseek - default */
@@ -93,6 +98,10 @@ static struct proc_dir_entry net_dir[] = {
 	{ 133,3,"tcp" },
 	{ 134,3,"udp" }
 #endif	/* CONFIG_INET */
+#ifdef CONFIG_IPX
+	,{ 135,9,"ipx_route" },
+	{ 136,3,"ipx" }
+#endif /* CONFIG_IPX */
 };
 
 #define NR_NET_DIRENTRY ((sizeof (net_dir))/(sizeof (net_dir[0])))
@@ -154,57 +163,86 @@ static int proc_readnetdir(struct inode * inode, struct file * filp,
 }
 
 
+#define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
+
 static int proc_readnet(struct inode * inode, struct file * file,
 			char * buf, int count)
 {
 	char * page;
 	int length;
-	int end;
 	unsigned int ino;
+	int bytes=count;
+	int thistime;
+	int copied=0;
+	char *start;
 
 	if (count < 0)
 		return -EINVAL;
 	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	ino = inode->i_ino;
-	switch (ino) {
-		case 128:
-			length = unix_get_info(page);
-			break;
+
+	while(bytes>0)
+	{
+		thistime=bytes;
+		if(bytes>PROC_BLOCK_SIZE)
+			thistime=PROC_BLOCK_SIZE;
+
+		switch (ino) 
+		{
+			case 128:
+				length = unix_get_info(page,&start,file->f_pos,thistime);
+				break;
 #ifdef CONFIG_INET
-		case 129:
-			length = arp_get_info(page);
-			break;
-		case 130:
-			length = rt_get_info(page);
-			break;
-		case 131:
-			length = dev_get_info(page);
-			break;
-		case 132:
-			length = raw_get_info(page);
-			break;
-		case 133:
-			length = tcp_get_info(page);
-			break;
-		case 134:
-			length = udp_get_info(page);
-			break;
+			case 129:
+				length = arp_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 130:
+				length = rt_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 131:
+				length = dev_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 132:
+				length = raw_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 133:
+				length = tcp_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 134:
+				length = udp_get_info(page,&start,file->f_pos,thistime);
+				break;
 #endif /* CONFIG_INET */
-		default:
-			free_page((unsigned long) page);
-			return -EBADF;
+#ifdef CONFIG_IPX
+			case 135:
+				length = ipx_rt_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case 136:
+				length = ipx_get_info(page,&start,file->f_pos,thistime);
+				break;
+#endif /* CONFIG_IPX */
+			default:
+				free_page((unsigned long) page);
+				return -EBADF;
+		}
+		
+		/*
+ 		 *	We have been given a non page aligned block of
+		 *	the data we asked for + a bit. We have been given
+ 		 *	the start pointer and we know the length.. 
+		 */
+
+		/*
+ 		 *	Copy the bytes
+		 */
+		memcpy_tofs(buf+copied, start, length);
+		file->f_pos+=length;	/* Move down the file */
+		bytes-=length;
+		copied+=length;
+		if(length<thistime)
+			break;	/* End of file */
 	}
-	if (file->f_pos >= length) {
-		free_page((unsigned long) page);
-		return 0;
-	}
-	if (count + file->f_pos > length)
-		count = length - file->f_pos;
-	end = count + file->f_pos;
-	memcpy_tofs(buf, page + file->f_pos, count);
 	free_page((unsigned long) page);
-	file->f_pos = end;
-	return count;
+	return copied;
 
 }

@@ -34,7 +34,7 @@
 #include <linux/ip.h>		/* struct options */
 #include <linux/tcp.h>		/* struct tcphdr */
 
-#include "skbuff.h"		/* struct sk_buff */
+#include <linux/skbuff.h>	/* struct sk_buff */
 #include "protocol.h"		/* struct inet_protocol */
 #ifdef CONFIG_AX25
 #include "ax25.h"
@@ -89,15 +89,14 @@ struct sock {
   int				proc;
   struct sock			*next;
   struct sock			*pair;
-  struct sk_buff		*volatile send_tail;
-  struct sk_buff		*volatile send_head;
-  struct sk_buff		*volatile back_log;
+  struct sk_buff		* volatile send_head;
+  struct sk_buff		* volatile send_tail;
+  struct sk_buff_head		back_log;
   struct sk_buff		*partial;
   struct timer_list		partial_timer;
   long				retransmits;
-  struct sk_buff		*volatile wback,
-				*volatile wfront,
-				*volatile rqueue;
+  struct sk_buff_head		write_queue,
+				receive_queue;
   struct proto			*prot;
   struct wait_queue		**sleep;
   unsigned long			daddr;
@@ -158,6 +157,7 @@ struct sock {
   /* This part is used for the timeout functions (timer.c). */
   int				timeout;	/* What are we waiting for? */
   struct timer_list		timer;
+  struct timeval		stamp;
 
   /* identd */
   struct socket			*socket;

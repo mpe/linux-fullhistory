@@ -19,6 +19,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/types.h>
@@ -31,117 +32,136 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <stdarg.h>
-#include "inet.h"
-#include "dev.h"
-#include "eth.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "ip.h"
 #include "protocol.h"
 #include "tcp.h"
-#include "skbuff.h"
-#include "arp.h"
+#include <linux/skbuff.h>
 
 
-/* Display an IP address in readable format. */
+/*
+ *	Display an IP address in readable format. 
+ */
+ 
 char *in_ntoa(unsigned long in)
 {
-  static char buff[18];
-  register char *p;
+	static char buff[18];
+	char *p;
 
-  p = (char *) &in;
-  sprintf(buff, "%d.%d.%d.%d",
-	(p[0] & 255), (p[1] & 255), (p[2] & 255), (p[3] & 255));
-  return(buff);
+	p = (char *) &in;
+	sprintf(buff, "%d.%d.%d.%d",
+		(p[0] & 255), (p[1] & 255), (p[2] & 255), (p[3] & 255));
+	return(buff);
 }
 
 
-/* Convert an ASCII string to binary IP. */
-unsigned long
-in_aton(char *str)
+/*
+ *	Convert an ASCII string to binary IP. 
+ */
+ 
+unsigned long in_aton(char *str)
 {
-  unsigned long l;
-  unsigned int val;
-  int i;
+	unsigned long l;
+	unsigned int val;
+	int i;
 
-  l = 0;
-  for (i = 0; i < 4; i++) {
-	l <<= 8;
-	if (*str != '\0') {
-		val = 0;
-		while (*str != '\0' && *str != '.') {
-			val *= 10;
-			val += *str - '0';
-			str++;
+	l = 0;
+	for (i = 0; i < 4; i++) 
+	{
+		l <<= 8;
+		if (*str != '\0') 
+		{
+			val = 0;
+			while (*str != '\0' && *str != '.') 
+			{
+				val *= 10;
+				val += *str - '0';
+				str++;
+			}
+			l |= val;
+			if (*str != '\0') 
+				str++;
 		}
-		l |= val;
-		if (*str != '\0') str++;
 	}
-  }
-  return(htonl(l));
+	return(htonl(l));
 }
 
 
-void
-dprintf(int level, char *fmt, ...)
+/*
+ *	Debugging print out
+ */
+ 
+void dprintf(int level, char *fmt, ...)
 {
-  va_list args;
-  char *buff;
-  extern int vsprintf(char * buf, const char * fmt, va_list args);
+	va_list args;
+	char *buff;
+	extern int vsprintf(char * buf, const char * fmt, va_list args);
 
-  if (level != inet_debug) return;
+	if (level != inet_debug) 
+		return;
 
-  buff = (char *) kmalloc(256, GFP_ATOMIC);
-  if (buff != NULL) {
-	va_start(args, fmt);
-	vsprintf(buff, fmt, args);
-	va_end(args);
-	printk(buff);
-	kfree(buff);
-  }
+	buff = (char *) kmalloc(256, GFP_ATOMIC);
+	if (buff != NULL) 
+	{
+		va_start(args, fmt);
+		vsprintf(buff, fmt, args);
+		va_end(args);
+		printk(buff);
+		kfree(buff);
+  	}
+  	else
+		printk("Debugging output lost: No free memory.\n");  	
 }
 
-
-int
-dbg_ioctl(void *arg, int level)
+/*
+ *	Debugging ioctl() requests
+ */
+ 
+int dbg_ioctl(void *arg, int level)
 {
-  int val;
-  int err;
+	int val;
+	int err;
   
-  if (!suser()) return(-EPERM);
-  err=verify_area(VERIFY_READ, (void *)arg, sizeof(int));
-  if(err)
-  	return err;
-  val = get_fs_long((int *)arg);
-  switch(val) {
-	case 0:	/* OFF */
-		inet_debug = DBG_OFF;
-		break;
-	case 1:	/* ON, INET */
-		inet_debug = level;
-		break;
+	if (!suser()) 
+		return(-EPERM);
+	err=verify_area(VERIFY_READ, (void *)arg, sizeof(int));
+	if(err)
+  		return err;
+	val = get_fs_long((int *)arg);
+	switch(val) 
+	{
+		case 0:	/* OFF */
+			inet_debug = DBG_OFF;
+			break;
+		case 1:	/* ON, INET */
+			inet_debug = level;
+			break;
 
-	case DBG_RT:		/* modules */
-	case DBG_DEV:
-	case DBG_ETH:
-	case DBG_PROTO:
-	case DBG_TMR:
-	case DBG_PKT:
-	case DBG_RAW:
-
-	case DBG_LOOPB:		/* drivers */
-	case DBG_SLIP:
-
-	case DBG_ARP:		/* protocols */
-	case DBG_IP:
-	case DBG_ICMP:
-	case DBG_TCP:
-	case DBG_UDP:
-
-		inet_debug = val;
-		break;
-
-	default:
-		return(-EINVAL);
-  }
-
-  return(0);
+		case DBG_RT:		/* modules */
+		case DBG_DEV:
+		case DBG_ETH:
+		case DBG_PROTO:
+		case DBG_TMR:
+		case DBG_PKT:
+		case DBG_RAW:
+	
+		case DBG_LOOPB:		/* drivers */
+		case DBG_SLIP:
+	
+		case DBG_ARP:		/* protocols */
+		case DBG_IP:
+		case DBG_ICMP:
+		case DBG_TCP:
+		case DBG_UDP:
+	
+			inet_debug = val;
+			break;
+	
+		default:
+			return(-EINVAL);
+	}
+	
+	return(0);
 }

@@ -29,19 +29,13 @@ static char *version = "lance.c:v0.14g 12/21/93 becker@super.org\n";
 #include <asm/io.h>
 #include <asm/dma.h>
 
-#include "dev.h"
-#include "eth.h"
-#include "skbuff.h"
-#include "arp.h"
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(addr, size)	0
 #define snarf_region(addr, size)	do ; while(0)
-#endif
-
-#ifndef HAVE_ALLOC_SKB
-#define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#define kfree_skbmem(buff, size) kfree_s(buff,size)
 #endif
 
 struct device *init_etherdev(struct device *dev, int sizeof_private,
@@ -359,9 +353,7 @@ unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
     dev->hard_start_xmit = &lance_start_xmit;
     dev->stop = &lance_close;
     dev->get_stats = &lance_get_stats;
-#ifdef HAVE_MULTICAST
     dev->set_multicast_list = &set_multicast_list;
-#endif
 
     return mem_start;
 }
@@ -510,14 +502,6 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev_tint(dev);
 	return 0;
     }
-
-    /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
-	skb->dev = dev;
-	arp_queue (skb);
-	return 0;
-    }
-    skb->arp=1;
 
     if (skb->len <= 0)
 	return 0;
@@ -720,32 +704,20 @@ lance_rx(struct device *dev)
 	} else {
 	    /* Malloc up new buffer, compatible with net-2e. */
 	    short pkt_len = lp->rx_ring[entry].msg_length;
-	    int sksize = sizeof(struct sk_buff) + pkt_len;
 	    struct sk_buff *skb;
 
-	    skb = alloc_skb(sksize, GFP_ATOMIC);
+	    skb = alloc_skb(pkt_len, GFP_ATOMIC);
 	    if (skb == NULL) {
 		printk("%s: Memory squeeze, deferring packet.\n", dev->name);
 		lp->stats.rx_dropped++;	/* Really, deferred. */
 		break;
 	    }
-	    skb->mem_len = sksize;
-	    skb->mem_addr = skb;
 	    skb->len = pkt_len;
 	    skb->dev = dev;
 	    memcpy(skb->data,
 		   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 		   pkt_len);
-#ifdef HAVE_NETIF_RX
 	    netif_rx(skb);
-#else
-	    skb->lock = 0;
-	    if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-		kfree_skbmem(skb, sksize);
-		lp->stats.rx_dropped++;
-		break;
-	    }
-#endif
 	    lp->stats.rx_packets++;
 	}
 
@@ -808,7 +780,6 @@ lance_get_stats(struct device *dev)
     return &lp->stats;
 }
 
-#ifdef HAVE_MULTICAST
 /* Set or clear the multicast filter for this adaptor.
    num_addrs == -1	Promiscuous mode, receive all packets
    num_addrs == 0	Normal mode, clear multicast list
@@ -842,7 +813,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
     outw(0, ioaddr+LANCE_ADDR);
     outw(0x0142, ioaddr+LANCE_DATA); /* Resume normal operation. */
 }
-#endif
 
 #ifdef HAVE_DEVLIST
 static unsigned int lance_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};

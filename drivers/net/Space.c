@@ -26,7 +26,7 @@
  */
 #include <linux/config.h>
 #include <linux/ddi.h>
-#include "dev.h"
+#include <linux/netdevice.h>
 
 #define LOOPBACK			/* always present, right?	*/
 

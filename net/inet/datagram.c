@@ -1,5 +1,5 @@
 /*
- *	SUCS	NET2 Debugged.
+ *	SUCS NET3:
  *
  *	Generic datagram handling routines. These are generic for all protocols. Possibly a generic IP version on top
  *	of these would make sense. Not tonight however 8-).
@@ -14,6 +14,11 @@
  *		Alan Cox	:	Added support for SOCK_SEQPACKET. IPX can no longer use the SO_TYPE hack but
  *					AX.25 now works right, and SPX is feasible.
  *		Alan Cox	:	Fixed write select of non IP protocol crash.
+ *		Florian  La Roche:	Changed for my new skbuff handling.
+ *
+ *	Note:
+ *		A lot of this will change when the protocol/socket seperation
+ *	occurs. Using this will make things reasonably clean.
  */
 
 #include <linux/config.h>
@@ -26,15 +31,14 @@
 #include <linux/in.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include "inet.h"
-#include "dev.h"
+#include <linux/inet.h>
+#include <linux/netdevice.h>
 #include "ip.h"
 #include "protocol.h"
-#include "arp.h"
 #include "route.h"
 #include "tcp.h"
 #include "udp.h"
-#include "skbuff.h"
+#include <linux/skbuff.h>
 #include "sock.h"
 
 
@@ -53,7 +57,7 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 	/* Socket is inuse - so the timer doesn't attack it */
 restart:
 	sk->inuse = 1;
-	while(sk->rqueue == NULL)	/* No data */
+	while(skb_peek(&sk->receive_queue) == NULL)	/* No data */
 	{
 		/* If we are shutdown then no more data is going to appear. We are done */
 		if (sk->shutdown & RCV_SHUTDOWN)
@@ -91,7 +95,7 @@ restart:
 		/* Interrupts off so that no packet arrives before we begin sleeping.
 		   Otherwise we might miss our wake up */
 		cli();
-		if (sk->rqueue == NULL)
+		if (skb_peek(&sk->receive_queue) == NULL)
 		{
 			interruptible_sleep_on(sk->sleep);
 			/* Signals may need a restart of the syscall */
@@ -115,10 +119,10 @@ restart:
 		sti();
 	  }
 	  /* Again only user level code calls this function, so nothing interrupt level
-	     will suddenely eat the rqueue */
+	     will suddenely eat the receive_queue */
 	  if (!(flags & MSG_PEEK))
 	  {
-		skb=skb_dequeue(&sk->rqueue);
+		skb=skb_dequeue(&sk->receive_queue);
 		if(skb!=NULL)
 			skb->users++;
 		else
@@ -127,7 +131,7 @@ restart:
 	  else
 	  {
 		cli();
-		skb=skb_peek(&sk->rqueue);
+		skb=skb_peek(&sk->receive_queue);
 		if(skb!=NULL)
 			skb->users++;
 		sti();
@@ -150,7 +154,7 @@ void skb_free_datagram(struct sk_buff *skb)
 		return;
 	}
 	/* See if it needs destroying */
-	if(skb->list == NULL)	/* Been dequeued by someone - ie its read */
+	if(!skb->next && !skb->prev)	/* Been dequeued by someone - ie its read */
 		kfree_skb(skb,FREE_READ);
 	restore_flags(flags);
 }
@@ -178,7 +182,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 				/* Connection closed: Wake up */
 				return(1);
 			}
-			if (sk->rqueue != NULL || sk->err != 0)
+			if (skb_peek(&sk->receive_queue) != NULL || sk->err != 0)
 			{	/* This appears to be consistent
 				   with other stacks */
 				return(1);

@@ -65,7 +65,7 @@ fi
 #bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
 bool 'NE2000/NE1000 support' CONFIG_NE2000 n
-bool 'WD80E3 support' CONFIG_WD80x3 y
+bool 'WD80*3 support' CONFIG_WD80x3 y
 bool 'SMC Ultra support' CONFIG_ULTRA n
 bool '3c501 support' CONFIG_EL1 n
 bool '3c503 support' CONFIG_EL2 n

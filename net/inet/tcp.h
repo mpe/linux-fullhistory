@@ -20,10 +20,10 @@
 
 #include <linux/tcp.h>
 
-#define MAX_SYN_SIZE	44 + sizeof (struct sk_buff) + MAX_HEADER
-#define MAX_FIN_SIZE	40 + sizeof (struct sk_buff) + MAX_HEADER
-#define MAX_ACK_SIZE	40 + sizeof (struct sk_buff) + MAX_HEADER
-#define MAX_RESET_SIZE	40 + sizeof (struct sk_buff) + MAX_HEADER
+#define MAX_SYN_SIZE	44 + MAX_HEADER
+#define MAX_FIN_SIZE	40 + MAX_HEADER
+#define MAX_ACK_SIZE	40 + MAX_HEADER
+#define MAX_RESET_SIZE	40 + MAX_HEADER
 #define MAX_WINDOW	8192
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
@@ -64,7 +64,6 @@
 #define TCP_NO_CHECK	0	/* turn to one if you want the default
 				 * to be no checksum			*/
 
-#define TCP_WRITE_QUEUE_MAGIC 0xa5f23477
 
 /*
  *	TCP option

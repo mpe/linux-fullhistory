@@ -7,6 +7,14 @@
  * Version:	@(#)ddi.c	1.0.5	04/22/93
  *
  * Author:	Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
+ *
+ *
+ *	For the moment I'm classifying DDI as 'dead'. However if/when Fred
+ *	produces a masterpiece of design DDI may get resurrected. With the
+ *	current kernel as modules work by Peter MacDonald they might be
+ *	redundant anyway. Thus I've removed all but the protocol initialise.
+ *
+ *	We will end up with protocol initialisers and socket family initialisers.
  */
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -28,36 +36,7 @@
 #endif
 
 
-extern struct ddi_device	devices[];	/* device driver map	*/
 extern struct ddi_proto		protocols[];	/* network protocols	*/
-
-
-/*
- * This function gets called with an ASCII string representing the
- * ID of some DDI driver.  We loop through the DDI Devices table
- * and return the address of the control block that has a matching
- * "name" field.  It is used by upper-level layers that want to
- * dynamically bind some UNIX-domain "/dev/XXXX" file name to a
- * DDI device driver.  The "iflink(8)" program is an example of
- * this behaviour.
- */
-struct ddi_device *
-ddi_map(const char *id)
-{
-  register struct ddi_device *dev;
-
-  PRINTK (("DDI: MAP: looking for \"%s\": ", id));
-  dev = devices;
-  while (dev->title != NULL) {
-	if (strncmp(dev->name, id, DDI_MAXNAME) == 0) {
-		PRINTK (("OK at 0x%X\n", dev));
-		return(dev);
-	}
-	dev++;
-  }
-  PRINTK (("NOT FOUND\n"));
-  return(NULL);
-}
 
 
 /*
@@ -68,24 +47,16 @@ ddi_map(const char *id)
 void
 ddi_init(void)
 {
-  struct ddi_proto *pro;
-  struct ddi_device *dev;
+	struct ddi_proto *pro;
 
-  PRINTK (("DDI: Starting up!\n"));
+	PRINTK (("DDI: Starting up!\n"));
 
-  /* First off, kick all configured protocols. */
-  pro = protocols;
-  while (pro->name != NULL) {
-	(*pro->init)(pro);
-	pro++;
-  }
-  
-  /* Done.  Now kick all configured device drivers. */
-  dev = devices;
-  while (dev->title != NULL) {
-	(*dev->init)(dev);
-	dev++;
-  }
-
-  /* We're all done... */
+	/* Kick all configured protocols. */
+	pro = protocols;
+	while (pro->name != NULL) 
+	{
+		(*pro->init)(pro);
+		pro++;
+	}
+	/* We're all done... */
 }

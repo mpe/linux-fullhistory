@@ -1,45 +1,49 @@
-/* Plip.c: A parallel port "network" driver for linux. */
 /*
-    Written 1993 by Donald Becker and TANABE Hiroyasu.
-    This code is distributed under the GPL.
-    
-    The current author is reached as hiro@sanpo.t.u-tokyo.ac.jp .
-    For more information do 'whois -h whois.nic.ad.jp HT043JP'
+ *	 Plip.c: A parallel port "network" driver for linux. 
+ */
 
-    The original author may be reached as becker@super.org or
-    C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
-
-    This is parallel port packet pusher.  It's actually more general
-    than the "IP" in its name suggests -- but 'plip' is just such a
-    great name!
-
-    This driver was first developed by D. Becker, when he was inspired by
-    Russ Nelson's parallel port packet driver.  He also did the update
-    to 0.99.10.
-
-    It was further developed by Tommy Thorn (tthorn@daimi.aau.dk).
-
-    Recent versions were debugged and maintained by TANABE Hiroyasu.
-
-    Updated for 0.99pl12 by Donald Becker.
-    
-    Changes even more Alan Cox <iiitac@pyr.swan.ac.uk>
-    Fixed: sets skb->arp=1, always claims success like ethernet, doesn't
-    free skb and then claim fail. Incorrect brackets causing reset problem
-    Attempting to make it work (works for me - email me if it does work)
-    
-    Bugs:
-    	Should be timer oriented state machine. 
-    	Should never use jiffies for timeouts.
-    	Protocol is buggy when broadcasts occur (Must ask Russ Nelson)
-    	Can hang forever on collisions (tough - you fix it!).
-    	I get 15K/second NFS throughput (about 20-25K second IP).
-    	Change the protocol back.
-    	
-*/
+/*
+ *	Developement History:
+ *
+ *	Original version and the name 'PLIP' from Donald Becker  <becker@super.org>
+ *		inspired by Russ Nelson's parallel port packet driver.
+ *	Further development by Tommy Thorn <thorn@daimi.aau.dk>
+ *	Some changes by Tanabe Hiroyasu <hiro@sanpo.t.u-tokyo.ac.jp>
+ *	Upgraded for PL12 by Donald Becker
+ *	Minor hacks by Alan Cox <gw4pts@gw4pts.ampr.org> to get it working
+ *		more reliably (Ha!)
+ *     Changes even more Peter Bauer (100136.3530@compuserve.com)
+ *     Protocol changed back to original plip as in crynwr's packet-drivers.
+ *     Tested this against ncsa-telnet 2.3 and pcip_pkt using plip.com (which
+ *     contains "version	equ	0" and ";History:562,1" in the firts 2
+ *    source-lines						28-Mar-94
+ *	
+ *	
+ *
+ *  This is parallel port packet pusher.  It's actually more general
+ *  than the "IP" in its name suggests -- but 'plip' is just such a
+ *  great name!
+ * 
+ *    
+ *   Bugs: Please read this: The PLIP driver is a nasty hack and like all nasty hacks 
+ *	   has some 'features'.
+ *
+ *	Can lock machines solid if one end goes down or crashes, or due to cable faults.
+ *	Can lock both machines solid on a broadcast collision.
+ *	Some laptops don't have all the wires we use.
+ *	Doesn't match the original Russ Nelson protocol so won't talk to Amiga or PC drivers.
+ *	Waits far too long with interrupts off [X is unbearable, forget action games, xntp is a joke]
+ *	Doesn't work on some fast 486DX machines
+ *
+ *	If it works be thankful, if not fix it!
+ *
+ *  Info:
+ *     	I <Alan> got 15K/second NFS throughput (about 20-25K second IP). I also got some ethernet cards
+ *	so don't ask me for help. This code needs a real major rewrite. Any volunteers ?
+ */
 
 static char *version =
-    "Net2Debugged PLIP 1.01 (from plip.c:v0.15 for 0.99pl12+, 8/11/93)\n";
+    "NET3 PLIP.010 (from plip.c:v0.15 for 0.99pl12+, 8/11/93)\n";
 
 #include <linux/config.h>
 
@@ -87,14 +91,9 @@ make one yourself.  The wiring is:
 #include <netinet/in.h>
 #include <errno.h>
 
-#include "dev.h"
-#include "eth.h"
-#include "ip.h"
-#include "protocol.h"
-#include "tcp.h"
-#include "skbuff.h"
-#include "sock.h"
-#include "arp.h"
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 
 #ifdef PRINTK
 #undef PRINTK
@@ -138,8 +137,8 @@ static int plip_open(struct device *dev);
 static int plip_close(struct device *dev);
 static int plip_tx_packet(struct sk_buff *skb, struct device *dev);
 static int plip_header (unsigned char *buff, struct device *dev,
-		 unsigned short type, unsigned long h_dest,
-		 unsigned long h_source, unsigned len);
+		 unsigned short type, void *dest,
+		 void *source, unsigned len, struct sk_buff *skb);
 
 /* variables used internally. */
 #define INITIALTIMEOUTFACTOR 4
@@ -151,10 +150,6 @@ static void plip_device_clear(struct device *dev);
 static void plip_receiver_error(struct device *dev);
 static void plip_set_physicaladdr(struct device *dev, unsigned long ipaddr);
 static int plip_addrcmp(struct ethhdr *eth);
-static int plip_send_enethdr(struct device *dev, struct ethhdr *eth);
-static int plip_rebuild_enethdr(struct device *dev, struct ethhdr *eth,
-				unsigned char h_dest, unsigned char h_source,
-				unsigned short type);
 static void cold_sleep(int tics);
 static void plip_interrupt(int reg_ptr); /* Dispatch from interrupts. */
 static int plip_receive_packet(struct device *dev);
@@ -189,10 +184,9 @@ plip_init(struct device *dev)
     memset(dev->priv, 0, sizeof(struct netstats));
 
     for (i = 0; i < DEV_NUMBUFFS; i++)
-	dev->buffs[i] = NULL;
+	skb_queue_head_init(&dev->buffs[i]);
+
     dev->hard_header = &plip_header;
-    dev->add_arp = eth_add_arp;
-    dev->queue_xmit = dev_queue_xmit;
     dev->rebuild_header = eth_rebuild_header;
     dev->type_trans = eth_type_trans;
 
@@ -283,15 +277,6 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	return 0;
     }
 
-    /* Pretend we are an ethernet and fill in the header.  This could use
-       a simplified routine someday. */
-    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
-	skb->dev = dev;
-	arp_queue (skb);
-	return 0;
-    }
-    skb->arp=1;
-
     dev->trans_start = jiffies;
     ret_val = plip_send_packet(dev, skb->data, skb->len);
     if (skb->free)
@@ -303,14 +288,14 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 
 static int
 plip_header (unsigned char *buff, struct device *dev,
-	     unsigned short type, unsigned long h_dest,
-	     unsigned long h_source, unsigned len)
+	     unsigned short type, void *daddr	     	     ,
+	     void *saddr, unsigned len, struct sk_buff *skb)
 {
     if (dev->dev_addr[0] == 0) {
 	/* set physical address */
-	plip_set_physicaladdr(dev, h_source);
+	plip_set_physicaladdr(dev, dev->pa_addr);
     }
-    return eth_header(buff, dev, type, h_dest, h_source, len);
+    return eth_header(buff, dev, type, daddr, saddr, len, skb);
 }
 
 static void
@@ -351,7 +336,7 @@ static int
     } while ( (val & 0x80) );
     val = inb(dev->base_addr + PAR_STATUS);
     low_nibble = (val >> 3) & 0x0f;
-    outb(0x11, dev->base_addr + PAR_DATA);
+    outb(0x10, dev->base_addr + PAR_DATA);
     timeout = jiffies + timeoutfactor * 2;
     do {
 	oldval = val;
@@ -365,7 +350,7 @@ static int
     val = inb(dev->base_addr + PAR_STATUS);
     PRINTK2(("%02x %s ", low_nibble | ((val << 1) & 0xf0),
 	       error ? "t":""));
-    outb(0x01, dev->base_addr + PAR_DATA);
+    outb(0x00, dev->base_addr + PAR_DATA);
     if (error) {
 	/* timeout error */
 	double_timeoutfactor();
@@ -418,7 +403,6 @@ static void
 static int
 plip_receive_packet(struct device *dev)
 {
-    int plip_type;
     unsigned length;
     int checksum = 0;
     struct sk_buff *skb;
@@ -431,34 +415,16 @@ plip_receive_packet(struct device *dev)
 
     {
 	/* get header octet and length of packet */
-	plip_type = get_byte(dev);
-	if (plip_type < 0) return 1; /* probably wrong interrupt */
-	length = get_byte(dev) << 8;
-	length |= get_byte(dev);
-	switch ( plip_type ) {
-	  case PLIP_HEADER_TYPE1:
-	    {
-		int i;
-		unsigned char *eth_p = (unsigned char*)&eth;
-		for ( i = 0; i < sizeof(eth); i++, eth_p++) {
-		    *eth_p = get_byte(dev);
-		}
-	    }
-	    break;
-	  case PLIP_HEADER_TYPE2:
-	    {
-		unsigned char h_dest, h_source;
-		unsigned short type;
-		h_dest = get_byte(dev);
-		h_source = get_byte(dev);
-		type = get_byte(dev) << 8;
-		type |= get_byte(dev);
-		plip_rebuild_enethdr(dev, &eth, h_dest, h_source, type);
-	    }
-	    break;
-	  default:
-	    PRINTK(("%s: wrong header octet\n", dev->name));
-	}
+        
+	length = get_byte(dev);
+	length |= get_byte(dev) << 8;
+        {
+	 int i;
+	 unsigned char *eth_p = (unsigned char*)&eth;
+	 for ( i = 0; i < sizeof(eth); i++, eth_p++) {
+	     *eth_p = get_byte(dev);
+	 }
+        }
 	PRINTK2(("length = %d\n", length));
 	if (length > dev->mtu || length < 8) {
 	    PRINTK2(("%s: bogus packet size %d.\n", dev->name, length));
@@ -469,17 +435,13 @@ plip_receive_packet(struct device *dev)
 	/* get skb area from kernel and 
 	 * set appropriate values to skb
 	 */
-	int sksize;
-	sksize = sizeof(struct sk_buff) + length;
-	skb = alloc_skb(sksize, GFP_ATOMIC);
+	skb = alloc_skb(length, GFP_ATOMIC);
 	if (skb == NULL) {
 	    PRINTK(("%s: Couldn't allocate a sk_buff of size %d.\n",
-		    dev->name, sksize));
+		    dev->name,length));
 	    return 1;
 	}
 	skb->lock = 0;
-	skb->mem_len = sksize;
-	skb->mem_addr = skb;
     }
     {
 	/* phase of receiving the data */
@@ -531,13 +493,10 @@ static int send_byte(struct device *dev, unsigned char val)
 {
     int timeout;
     int error = 0;
-    if (!(inb(dev->base_addr+PAR_STATUS) & 0x08)) {
-	PRINTK(("remote end become unready while sending\n"));
-	return -1;
-    }
     PRINTK2((" S%02x", val));
-    outb(val, dev->base_addr); /* this makes data bits more stable */
-    outb(0x10 | val, dev->base_addr);
+    outb((val & 0xf), dev->base_addr); /* this makes data bits more stable */
+                                       /* (especially the &0xf :-> PB )    */
+    outb(0x10 | (val & 0xf), dev->base_addr);
     timeout = jiffies + timeoutfactor;
     while( inb(dev->base_addr+PAR_STATUS) & 0x80 )
 	if ( timeout < jiffies ) {
@@ -626,7 +585,6 @@ static int
 plip_send_packet(struct device *dev, unsigned char *buf, int length)
 {
     int error = 0;
-    int plip_type;
     struct netstats *localstats;
 
     PRINTK2(("%s: plip_send_packet(%d) %02x %02x %02x %02x %02x...",
@@ -663,44 +621,22 @@ plip_send_packet(struct device *dev, unsigned char *buf, int length)
     if (plip_send_start(dev, (struct ethhdr *)buf) < 0)
 	return 1;
 
-    /* select plip type */
     {
-	/* Use stripped ethernet header if each first 5 octet of eth
-	 * address is same.
+	/* send packet's length 
+	   the byte order has changed now and then. Today it's sent as in 
+           the original crynwr-plip ...
+           Gruss PB
 	 */
-	int i;
-	struct ethhdr *eth = (struct ethhdr *)buf;
-
-	plip_type = PLIP_HEADER_TYPE2;	
-	for ( i = 0; i < ETH_ALEN - 1; i++)
-	    if (eth->h_dest[i] != eth->h_source[i])
-		plip_type = PLIP_HEADER_TYPE1;
-    }
-
-    send_byte(dev, plip_type); /* send header octet */
-
-    {
-	/* send packet's length */
-	/*
-	 * in original plip (before v0.1), it was sent with little endian.
-	 * but in internet, network byteorder is big endian,
-	 * so changed to use big endian.
-	 * maybe using 'ntos()' is better.
-	 */
-	send_byte(dev, length >> 8); send_byte(dev, length);
+	send_byte(dev, length); 
+        send_byte(dev, length >> 8);
     }
     {
 	/* phase of sending data */
 	int i;
 	int checksum = 0;
 
-	if (plip_type == PLIP_HEADER_TYPE2) {
-	    plip_send_enethdr(dev, (struct ethhdr*)buf);
-	}
 	for ( i = 0; i < sizeof(struct ethhdr); i++ ) {
-	    if (plip_type == PLIP_HEADER_TYPE1) {
-		send_byte(dev, *buf);
-	    }
+            send_byte(dev, *buf);
 	    checksum += *buf++;
 	}
 
@@ -772,29 +708,6 @@ plip_addrcmp(struct ethhdr *eth)
     PRINTK2(("h_dest = %08x%04x h_source = %08x%04x\n",
 	    *(long*)&eth->h_dest[2],*(short*)&eth->h_dest[0],
 	    *(long*)&eth->h_source[2],*(short*)&eth->h_source[0]));
-    return 0;
-}
-
-static int
-plip_send_enethdr(struct device *dev, struct ethhdr *eth)
-{
-    send_byte(dev, eth->h_dest[ETH_ALEN-1]);
-    send_byte(dev, eth->h_source[ETH_ALEN-1]);
-    send_byte(dev, eth->h_proto >> 8);
-    send_byte(dev, eth->h_proto);
-    return 0;
-}
-
-static int
-plip_rebuild_enethdr(struct device *dev, struct ethhdr *eth,
-		     unsigned char dest, unsigned char source,
-		     unsigned short type)
-{
-    eth->h_proto = type;
-    memcpy(eth->h_dest, dev->dev_addr, ETH_ALEN-1);
-    eth->h_dest[ETH_ALEN-1] = dest;
-    memcpy(eth->h_source, dev->dev_addr, ETH_ALEN-1);
-    eth->h_source[ETH_ALEN-1] = source;
     return 0;
 }
 

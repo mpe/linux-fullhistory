@@ -147,11 +147,10 @@ static char *version = "depca.c:v0.35 3/8/94 davies@wanton.lkg.dec.com\n";
 #include <asm/io.h>
 #include <asm/dma.h>
 
-#include "dev.h"
+#include <linux/netdevice.h>
 #include "iow.h"                    /* left in for pl13/14 compatibility... */
-#include "eth.h"
-#include "skbuff.h"
-#include "arp.h"
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 #include "depca.h"
 
 #ifdef DEPCA_DEBUG
@@ -215,11 +214,6 @@ static short mem_chkd = 0;               /* holds which base addrs have been */
 #define CRC_POLYNOMIAL 0x04c11db7       /* Ethernet CRC polynomial */
 #endif /* CRC_POLYNOMIAL */
 #endif /* HAVE_MULTICAST */
-
-#ifndef HAVE_ALLOC_SKB
-#define alloc_skb(size, priority) (struct sk_buff *) kmalloc(size,priority)
-#define kfree_skbmem(buff, size) kfree_s(buff,size)
-#endif  /* HAVE_ALLOC_SKB */
 
 /*
 ** The DEPCA Rx and Tx ring descriptors. 
@@ -1066,17 +1060,14 @@ depca_rx(struct device *dev)
 	    if (status & R_BUFF) lp->stats.rx_fifo_errors++;
 	} else {	  /* Malloc up new buffer, compatible  with net-2e. */
 	    short pkt_len = lp->rx_ring[entry].msg_length;
-	    int sksize = sizeof(struct sk_buff) + pkt_len;
 	    struct sk_buff *skb;
 
-	    skb = alloc_skb(sksize, GFP_ATOMIC);
+	    skb = alloc_skb(pkt_len, GFP_ATOMIC);
 	    if (skb == NULL) {
 		printk("%s: Memory squeeze, deferring packet.\n", dev->name);
 		lp->stats.rx_dropped++;	/* Really, deferred. */
 		break;
 	    }
-	    skb->mem_len = sksize;
-	    skb->mem_addr = skb;
 	    skb->len = pkt_len;
 	    skb->dev = dev;
 	    memcpy(skb->data,
@@ -1086,16 +1077,7 @@ depca_rx(struct device *dev)
 	    ** Notify the upper protocol layers that there is another 
 	    ** packet to handle
 	    */
-#ifdef HAVE_NETIF_RX
 	    netif_rx(skb);
-#else
-	    skb->lock = 0;
-	    if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
-		kfree_skbmem(skb, sksize);
-		lp->stats.rx_dropped++;
-		break;
-	    }
-#endif
 	    lp->stats.rx_packets++;
 	}
 
