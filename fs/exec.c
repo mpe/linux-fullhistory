@@ -445,9 +445,9 @@ fail_nomem:
 
 /*
  * This function makes sure the current process has its own signal table,
- * so that flush_old_signals can later reset the signals without disturbing
- * other processes.  (Other processes might share the signal table via
- * the CLONE_SIGHAND option to clone().)
+ * so that flush_signal_handlers can later reset the handlers without
+ * disturbing other processes.  (Other processes might share the signal
+ * table via the CLONE_SIGHAND option to clone().)
  */
  
 static inline int make_private_signals(void)
@@ -485,13 +485,6 @@ static inline void release_old_signals(struct signal_struct * oldsig)
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
  */
-static inline void flush_old_signals(struct task_struct *t)
-{
-#if 0
-	flush_signals(t);
-#endif
-	flush_signal_handlers(t);
-}
 
 static inline void flush_old_files(struct files_struct * files)
 {
@@ -554,7 +547,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	    permission(bprm->dentry->d_inode,MAY_READ))
 		current->dumpable = 0;
 
-	flush_old_signals(current);
+	flush_signal_handlers(current);
 	flush_old_files(current->files);
 
 	return 0;

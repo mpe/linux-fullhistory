@@ -1136,7 +1136,7 @@ osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 	unsigned long timeout;
 	int ret;
 
-	timeout = ~0UL;
+	timeout = MAX_SCHEDULE_TIMEOUT;
 	if (tvp) {
 		time_t sec, usec;
 
@@ -1147,8 +1147,6 @@ osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 
 		timeout = (usec + 1000000/HZ - 1) / (1000000/HZ);
 		timeout += sec * HZ;
-		if (timeout)
-			timeout += jiffies + 1;
 	}
 
 	ret = -ENOMEM;
@@ -1168,7 +1166,7 @@ osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 	zero_fd_set(n, fds->res_out);
 	zero_fd_set(n, fds->res_ex);
 
-	ret = do_select(n, fds, timeout);
+	ret = do_select(n, fds, &timeout);
 
 	/* OSF does not copy back the remaining time.  */
 

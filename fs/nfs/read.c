@@ -230,6 +230,17 @@ nfs_readpage(struct file *file, struct page *page)
 	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
 		page, PAGE_SIZE, page->offset);
 	set_bit(PG_locked, &page->flags);
+
+	/*
+	 * Try to flush any pending writes to the file..
+	 *
+	 * NOTE! Because we own the page lock, there cannot
+	 * be any new pending writes generated at this point.
+	 */
+	error = nfs_flush_pages(inode, 0, 0, 0);
+	if (error)
+		return error;
+
 	atomic_inc(&page->count);
 	if (!IS_SWAPFILE(inode) && !PageError(page) &&
 	    NFS_SERVER(inode)->rsize >= PAGE_SIZE)

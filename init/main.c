@@ -11,16 +11,11 @@
 
 #define __KERNEL_SYSCALLS__
 
-#include <linux/types.h>
+#include <linux/sched.h>
 #include <linux/fcntl.h>
 #include <linux/config.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/tty.h>
 #include <linux/unistd.h>
 #include <linux/string.h>
-#include <linux/timer.h>
-#include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
@@ -34,7 +29,6 @@
 #include <linux/init.h>
 #include <linux/smp_lock.h>
 
-#include <asm/system.h>
 #include <asm/io.h>
 #include <asm/bugs.h>
 

@@ -993,7 +993,7 @@ struct inode_operations msdos_dir_inode_operations = {
 	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	fat_bmap,		/* bmap */
+	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,                   /* smap */

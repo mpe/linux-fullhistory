@@ -1846,7 +1846,7 @@ struct inode_operations vfat_dir_inode_operations = {
 	NULL,			/* followlink */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	fat_bmap,		/* bmap */
+	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */
 };

@@ -11,32 +11,24 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/fs.h>
+#include <linux/sched.h>
 #include <linux/blkdev.h>
 #include <linux/cdrom.h>
-#include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
-#include <linux/ptrace.h>
 #include <linux/sys.h>
 #include <linux/utsname.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
-#include <linux/timer.h>
-#include <linux/binfmts.h>
-#include <linux/personality.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
-#include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/locks.h>
 #include <linux/string.h>
 #include <linux/delay.h>
-#include <linux/sem.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/random.h>
@@ -51,9 +43,6 @@
 #include <linux/ctype.h>
 #include <linux/file.h>
 #include <linux/console.h>
-#include <linux/time.h>
-
-#include <asm/spinlock.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -62,9 +51,6 @@
 #include <linux/kmod.h>
 #endif
 #include <asm/irq.h>
-#ifdef __SMP__
-#include <linux/smp.h>
-#endif
 
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(kdev_t dev,int flag);

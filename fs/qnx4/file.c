@@ -180,11 +180,7 @@ static struct file_operations qnx4_file_operations =
 struct inode_operations qnx4_file_inode_operations =
 {
 	&qnx4_file_operations,	/* default file operations */
-#ifdef CONFIG_QNX4FS_RW
-	qnx4_create,		/* create */
-#else
-	NULL,
-#endif
+	NULL,			/* create? It's not a directory */
 	NULL,			/* lookup */
 	NULL,			/* link */
 	NULL,			/* unlink */

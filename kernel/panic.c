@@ -10,10 +10,8 @@
  */
 #include <stdarg.h>
 
-#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
-#include <linux/smp.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/sysrq.h>

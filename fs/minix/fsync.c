@@ -144,7 +144,7 @@ static int V1_sync_dindirect(struct inode *inode, unsigned short *diblock,
 	return err;
 }
 
-int V1_minix_sync_file(struct inode * inode, struct file * file)
+static int V1_minix_sync_file(struct inode * inode, struct file * file)
 {
 	int wait, err = 0;
 	
@@ -305,7 +305,7 @@ static int V2_sync_tindirect(struct inode *inode, unsigned long *tiblock,
 	return err;
 }
 
-int V2_minix_sync_file(struct inode * inode, struct file * file)
+static int V2_minix_sync_file(struct inode * inode, struct file * file)
 {
 	int wait, err = 0;
 	

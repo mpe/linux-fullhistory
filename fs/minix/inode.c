@@ -40,7 +40,7 @@ static void minix_commit_super (struct super_block * sb,
 	sb->s_dirt = 0;
 }
 
-void minix_write_super (struct super_block * sb)
+static void minix_write_super (struct super_block * sb)
 {
 	struct minix_super_block * ms;
 
@@ -55,7 +55,7 @@ void minix_write_super (struct super_block * sb)
 }
 
 
-void minix_put_super(struct super_block *sb)
+static void minix_put_super(struct super_block *sb)
 {
 	int i;
 
@@ -86,7 +86,7 @@ static struct super_operations minix_sops = {
 	minix_remount
 };
 
-int minix_remount (struct super_block * sb, int * flags, char * data)
+static int minix_remount (struct super_block * sb, int * flags, char * data)
 {
 	struct minix_super_block * ms;
 
@@ -162,7 +162,7 @@ static const char * minix_checkroot(struct super_block *s, struct inode *dir)
 	return errmsg;
 }
 
-struct super_block *minix_read_super(struct super_block *s, void *data,
+static struct super_block *minix_read_super(struct super_block *s, void *data,
 				     int silent)
 {
 	struct buffer_head *bh;
@@ -326,7 +326,7 @@ out_bad_sb:
 	return NULL;
 }
 
-int minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static int minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
@@ -830,7 +830,7 @@ static void V2_minix_read_inode(struct inode * inode)
 /*
  * The global function to read an inode.
  */
-void minix_read_inode(struct inode * inode)
+static void minix_read_inode(struct inode * inode)
 {
 	if (INODE_VERSION(inode) == MINIX_V1)
 		V1_minix_read_inode(inode);
@@ -916,7 +916,7 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 	return bh;
 }
 
-struct buffer_head *minix_update_inode(struct inode *inode)
+static struct buffer_head *minix_update_inode(struct inode *inode)
 {
 	if (INODE_VERSION(inode) == MINIX_V1)
 		return V1_minix_update_inode(inode);
@@ -924,7 +924,7 @@ struct buffer_head *minix_update_inode(struct inode *inode)
 		return V2_minix_update_inode(inode);
 }
 
-void minix_write_inode(struct inode * inode)
+static void minix_write_inode(struct inode * inode)
 {
 	struct buffer_head *bh;
 

@@ -176,7 +176,7 @@ repeat:
 	return retry;
 }
 
-void V1_minix_truncate(struct inode * inode)
+static void V1_minix_truncate(struct inode * inode)
 {
 	int retry;
 

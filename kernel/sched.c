@@ -16,25 +16,18 @@
  * current-task
  */
 
-#include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/timer.h>
-#include <linux/kernel.h>
 #include <linux/kernel_stat.h>
 #include <linux/fdreg.h>
 #include <linux/errno.h>
-#include <linux/time.h>
-#include <linux/ptrace.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/tqueue.h>
 #include <linux/resource.h>
 #include <linux/mm.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 
-#include <asm/system.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>

@@ -7,16 +7,12 @@
 #include <linux/config.h>
 #include <linux/wait.h>
 #include <linux/errno.h>
-#include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/kernel.h>
 #include <linux/resource.h>
 #include <linux/mm.h>
-#include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/module.h>
 #include <linux/slab.h>

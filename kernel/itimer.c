@@ -6,13 +6,10 @@
 
 /* These are all the functions necessary to implement itimers */
 
-#include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
-#include <linux/time.h>
 #include <linux/mm.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>

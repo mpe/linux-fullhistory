@@ -22,10 +22,8 @@
 #include <linux/ctype.h>
 #include <linux/utsname.h>
 #include <linux/swapctl.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
-#include <linux/fs.h>
 
 #include <asm/bitops.h>
 #include <asm/uaccess.h>

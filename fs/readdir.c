@@ -6,12 +6,9 @@
 
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/file.h>
-#include <linux/kernel.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>

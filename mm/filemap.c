@@ -1567,7 +1567,8 @@ generic_file_write(struct file *file, const char *buf,
 			bytes = count;
 
 		hash = page_hash(inode, pgpos);
-		if (!(page = __find_page(inode, pgpos, *hash))) {
+		page = __find_page(inode, pgpos, *hash);
+		if (!page) {
 			if (!page_cache) {
 				page_cache = __get_free_page(GFP_USER);
 				if (page_cache)
@@ -1580,21 +1581,25 @@ generic_file_write(struct file *file, const char *buf,
 			page_cache = 0;
 		}
 
+		/* Get exclusive IO access to the page.. */
 		wait_on_page(page);
 		set_bit(PG_locked, &page->flags);
 
+		/*
+		 * Do the real work.. If the writer ends up delaying the write,
+		 * the writer needs to increment the page use counts until he
+		 * is done with the page.
+		 */
 		bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
-		if (!bytes) {
-			status = -EFAULT;
-			clear_bit(PG_locked, &page->flags);
-			wake_up(&page->wait);
-			__free_page(page);
-			break;
-		}
+		status = -EFAULT;
+		if (bytes)
+			status = inode->i_op->updatepage(file, page, offset, bytes, sync);
 
-		status = inode->i_op->updatepage(file, page, offset, bytes, sync);
-
+		/* Mark it unlocked again and drop the page.. */
+		clear_bit(PG_locked, &page->flags);
+		wake_up(&page->wait);
 		__free_page(page);
+
 		if (status < 0)
 			break;
 

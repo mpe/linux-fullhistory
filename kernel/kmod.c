@@ -12,10 +12,8 @@
 #define __KERNEL_SYSCALLS__
 
 #include <linux/sched.h>
-#include <linux/types.h>
 #include <linux/unistd.h>
 #include <linux/smp_lock.h>
-#include <linux/signal.h>
 
 #include <asm/uaccess.h>
 

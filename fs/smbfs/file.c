@@ -195,40 +195,15 @@ smb_writepage(struct file *file, struct page *page)
 }
 
 static int
-smb_updatepage(struct file *file, struct page *page, const char *buffer,
-	       unsigned long offset, unsigned int count, int sync)
+smb_updatepage(struct file *file, struct page *page, unsigned long offset, unsigned int count, int sync)
 {
 	struct dentry *dentry = file->f_dentry;
-	unsigned long page_addr = page_address(page);
-	int result;
 
 	pr_debug("SMBFS: smb_updatepage(%s/%s %d@%ld, sync=%d)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 	 	count, page->offset+offset, sync);
 
-#ifdef SMBFS_PARANOIA
-	if (test_bit(PG_locked, &page->flags))
-		printk("smb_updatepage: page already locked!\n");
-#endif
-	set_bit(PG_locked, &page->flags);
-	atomic_inc(&page->count);
-
-	if (copy_from_user((char *) page_addr + offset, buffer, count))
-		goto bad_fault;
-	result = smb_writepage_sync(dentry, page, offset, count);
-out:
-	free_page(page_addr);
-	return result;
-
-bad_fault:
-#ifdef SMBFS_PARANOIA
-printk("smb_updatepage: fault at addr=%lu, offset=%lu, buffer=%p\n", 
-page_addr, offset, buffer);
-#endif
-	result = -EFAULT;
-	clear_bit(PG_uptodate, &page->flags);
-	smb_unlock_page(page);
-	goto out;
+	return smb_writepage_sync(dentry, page, offset, count);
 }
 
 static ssize_t

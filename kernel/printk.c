@@ -16,16 +16,12 @@
 
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/tty.h>
 #include <linux/tty_driver.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/console.h>
 #include <linux/init.h>
 
-#include <asm/system.h>
 #include <asm/uaccess.h>
 
 #define LOG_BUF_LEN	(16384)

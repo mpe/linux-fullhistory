@@ -8,14 +8,10 @@
 
 #include <linux/module.h>
 #include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/wait.h>
-#include <linux/ptrace.h>
 #include <linux/unistd.h>
 #include <linux/mm.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
 #include <linux/init.h>
@@ -333,10 +329,10 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		if (nr_queued_signals < max_queued_signals) {
 			q = (struct signal_queue *)
 			    kmem_cache_alloc(signal_queue_cachep, GFP_KERNEL);
-			nr_queued_signals++;
 		}
 		
 		if (q) {
+			nr_queued_signals++;
 			q->next = NULL;
 			*t->sigqueue_tail = q;
 			t->sigqueue_tail = &q->next;

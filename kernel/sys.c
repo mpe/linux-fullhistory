@@ -6,20 +6,13 @@
 
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/times.h>
 #include <linux/utsname.h>
-#include <linux/param.h>
 #include <linux/resource.h>
-#include <linux/signal.h>
 #include <linux/string.h>
-#include <linux/ptrace.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/fcntl.h>
-#include <linux/tty.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>

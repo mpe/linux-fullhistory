@@ -220,7 +220,7 @@ struct inode_operations ufs_dir_inode_operations = {
 	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	ufs_bmap,		/* bmap */
+	NULL,			/* bmap */
 	NULL,			/* truncate */
 	ufs_permission,		/* permission */
 	NULL,			/* smap */

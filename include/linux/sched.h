@@ -20,7 +20,6 @@ extern unsigned long event;
 #include <linux/tty.h>
 #include <linux/sem.h>
 #include <linux/signal.h>
-#include <linux/capability.h>
 #include <linux/securebits.h>
 
 /*
@@ -65,11 +64,9 @@ extern int nr_running, nr_tasks;
 extern int last_pid;
 
 #include <linux/fs.h>
-#include <linux/signal.h>
 #include <linux/time.h>
 #include <linux/param.h>
 #include <linux/resource.h>
-#include <linux/ptrace.h>
 #include <linux/timer.h>
 
 #include <asm/processor.h>

@@ -331,10 +331,16 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 		goto out;
 	}
 	for ( ; tmp->next ; tmp = tmp->next) {
-		if ((IN_ORDER(tmp,req) ||
-		    !IN_ORDER(tmp,tmp->next)) &&
-		    IN_ORDER(req,tmp->next))
-			break;
+		const int after_current = IN_ORDER(tmp,req);
+		const int before_next = IN_ORDER(req,tmp->next);
+
+		if (!IN_ORDER(tmp,tmp->next)) {
+			if (after_current || before_next)
+				break;
+		} else {
+			if (after_current && before_next)
+				break;
+		}
 	}
 	req->next = tmp->next;
 	tmp->next = req;

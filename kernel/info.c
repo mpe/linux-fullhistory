@@ -9,10 +9,8 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/unistd.h>
-#include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
-#include <linux/smp.h>
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
