@@ -107,7 +107,7 @@
  *		Alan Cox	:	Spurious resets on shutdown.
  *		Alan Cox	:	Giant 15 minute/60 second timer error
  *		Alan Cox	:	Small whoops in selecting before an accept.
- *		Alan Cox	:	Kept the state trace facility since its
+ *		Alan Cox	:	Kept the state trace facility since it's
  *					handy for debugging.
  *		Alan Cox	:	More reset handler fixes.
  *		Alan Cox	:	Started rewriting the code based on the RFC's
@@ -272,7 +272,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	if(sk->debug)
 		printk("TCP sk=%p, State %s -> %s\n",sk, statename[sk->state],statename[state]);
 #endif	
-	/* This is a hack but it doesn't occur often and its going to
+	/* This is a hack but it doesn't occur often and it's going to
 	   be a real        to fix nicely */
 	   
 	if(state==TCP_ESTABLISHED && sk->state==TCP_SYN_RECV)
@@ -1138,7 +1138,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	 
 	if (size == sizeof(struct tcphdr)) 
 	{
-		/* If its got a syn or fin its notionally included in the size..*/
+		/* If it's got a syn or fin it's notionally included in the size..*/
 		if(!th->syn && !th->fin) 
 		{
 			printk("tcp_send_skb: attempt to queue a bogon.\n");
@@ -1312,7 +1312,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 	{
 		/* 
 		 *	Force it to send an ack. We don't have to do this
-		 *	(ACK is unreliable) but its much better use of 
+		 *	(ACK is unreliable) but it's much better use of 
 		 *	bandwidth on slow links to send a spare ack than
 		 *	resend packets. 
 		 */
@@ -1612,7 +1612,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		if (copy < sk->mss && !(flags & MSG_OOB)) 
 		{
 			/*
-			 *	We will release the socket incase we sleep here. 
+			 *	We will release the socket in case we sleep here. 
 			 */
 			release_sock(sk);
 			/*
@@ -1626,7 +1626,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		else 
 		{
 			/*
-			 *	We will release the socket incase we sleep here. 
+			 *	We will release the socket in case we sleep here. 
 			 */
 			release_sock(sk);
 			skb = prot->wmalloc(sk, copy + prot->max_header , 0, GFP_KERNEL);
@@ -2413,7 +2413,7 @@ void tcp_shutdown(struct sock *sk, int how)
 		return;
 	 
 	/*
-	 *	If we've already sent a FIN, or its a closed state
+	 *	If we've already sent a FIN, or it's a closed state
 	 */
 	 
 	if (sk->state == TCP_FIN_WAIT1 ||
@@ -3355,7 +3355,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 			
 		/*
 		 *	If our packet is before the ack sequence we can
-		 *	discard it as its confirmed to have arrived the other end.
+		 *	discard it as it's confirmed to have arrived the other end.
 		 */
 		 
 		if (before(sk->send_head->h.seq, ack+1)) 
@@ -3837,13 +3837,13 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 		 *	cope with it.
 		 */
 
-		if(skb->len)	/* We don't care if its just an ack or
+		if(skb->len)	/* We don't care if it's just an ack or
 				   a keepalive/window probe */
 		{
 			new_seq= th->seq + skb->len + th->syn;	/* Right edge of _data_ part of frame */
 			
 			/* Do this the way 4.4BSD treats it. Not what I'd
-			   regard as the meaning of the spec but its what BSD
+			   regard as the meaning of the spec but it's what BSD
 			   does and clearly they know everything 8) */
 
 			/*
@@ -4537,7 +4537,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	sk = get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
 
 	/*
-	 *	If this socket has got a reset its to all intents and purposes 
+	 *	If this socket has got a reset it's to all intents and purposes 
   	 *	really dead. Count closed sockets as dead.
   	 *
   	 *	Note: BSD appears to have a bug here. A 'closed' TCP in BSD
@@ -4698,7 +4698,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			/* Crossed SYN or previous junk segment */
 			if(th->ack)
 			{
-				/* We got an ack, but its not a good ack */
+				/* We got an ack, but it's not a good ack */
 				if(!tcp_ack(sk,th,saddr,len))
 				{
 					/* Reset the ack - its an ack from a 
@@ -4721,7 +4721,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					return 0;
 				}
 				/*
-				 *	Ok.. its good. Set up sequence numbers and
+				 *	Ok.. it's good. Set up sequence numbers and
 				 *	move to established.
 				 */
 				syn_ok=1;	/* Don't reset this connection for the syn */

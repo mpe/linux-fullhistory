@@ -181,7 +181,7 @@ unsigned long ip_my_addr(void)
 /*
  *	Find an interface that can handle addresses for a certain address. 
  *
- *	This needs optimising, since its relatively trivial to collapse
+ *	This needs optimising, since it's relatively trivial to collapse
  *	the two loops into one.
  */
  

@@ -199,6 +199,9 @@ struct task_struct {
 #define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
 #define PF_TRACESYS	0x00000020	/* tracing system calls */
 
+#define PF_STARTING	0x00000100	/* being created */
+#define PF_EXITING	0x00000200	/* getting shut down */
+
 /*
  * cloning flags:
  */

@@ -340,12 +340,13 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 	if (pte_dirty(pte)) {
 		if (mem_map[MAP_NR(page)] != 1)
 			return 0;
-		vma->vm_task->mm->rss--;
-		if (vma->vm_ops && vma->vm_ops->swapout)
+		if (vma->vm_ops && vma->vm_ops->swapout) {
+			vma->vm_task->mm->rss--;
 			vma->vm_ops->swapout(vma, address-vma->vm_start, page_table);
-		else {
+		} else {
 			if (!(entry = get_swap_page()))
 				return 0;
+			vma->vm_task->mm->rss--;
 			pte_val(*page_table) = entry;
 			invalidate();
 			write_swap_page(entry, (char *) page);

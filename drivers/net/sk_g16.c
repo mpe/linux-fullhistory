@@ -721,7 +721,7 @@ int SK_probe(struct device *dev, short ioaddr)
 
 	outb(SK_ROM_RAM_OFF, SK_POS2);     /* Boot_ROM + RAM off */  
 
-        /* We found a Boot_ROM and its gone. Set RAM address on
+        /* We found a Boot_ROM and it's gone. Set RAM address on
          * Boot_ROM address. 
          */ 
 

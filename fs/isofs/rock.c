@@ -305,7 +305,18 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	{ int high, low;
 	  high = isonum_733(rr->u.PN.dev_high);
 	  low = isonum_733(rr->u.PN.dev_low);
-	  inode->i_rdev = ((high << 8) | (low & 0xff)) & 0xffff;
+	  /*
+	   * The Rock Ridge standard specifies that if sizeof(dev_t) <=4,
+	   * then the high field is unused, and the device number is completely
+	   * stored in the low field.  Some writers may ignore this subtlety,
+	   * and as a result we test to see if the entire device number is
+	   * stored in the low field, and use that.
+	   */
+	  if(MINOR(low) != low && high == 0) {
+	    inode->i_rdev = low;
+	  } else {
+	    inode->i_rdev = MKDEV(high, low);
+	  }
 	};
 	break;
       case SIG('T','F'):

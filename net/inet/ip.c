@@ -1133,7 +1133,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 
 	if(mtu<8)
 	{
-		/* It's wrong but its better than nothing */
+		/* It's wrong but it's better than nothing */
 		icmp_send(skb,ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED,dev->mtu, dev);
 		ip_statistics.IpFragFails++;
 		return;
@@ -1145,7 +1145,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 
 	/*
 	 *	The initial offset is 0 for a complete frame. When
-	 *	fragmenting fragments its wherever this one starts.
+	 *	fragmenting fragments it's wherever this one starts.
 	 */
 
 	if (is_frag & 2)
@@ -1434,7 +1434,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 			
 			/*
 			 *	Map service types to priority. We lie about
-			 *	throughput being low priority, but its a good
+			 *	throughput being low priority, but it's a good
 			 *	choice to help improve general usage.
 			 */
 			if(iph->tos & IPTOS_LOWDELAY)

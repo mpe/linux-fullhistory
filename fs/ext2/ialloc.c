@@ -358,7 +358,7 @@ repeat:
 	else 
 	{
 		/*
-		 * Try to place the inode in it's parent directory
+		 * Try to place the inode in its parent directory
 		 */
 		i = dir->u.ext2_i.i_block_group;
 		tmp = get_group_desc (sb, i, &bh2);

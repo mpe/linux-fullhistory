@@ -1209,7 +1209,7 @@ clocks2ticks (unsigned long clocks)
   /*
  * The MPU-401 supports just a limited set of possible timebase values.
  * Since the applications require more choices, the driver has to
- * program the HW to do it's best and to convert between the HW and
+ * program the HW to do its best and to convert between the HW and
  * actual timebases.
  */
 

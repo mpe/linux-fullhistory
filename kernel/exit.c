@@ -380,6 +380,7 @@ NORET_TYPE void do_exit(long code)
 		intr_count = 0;
 	}
 fake_volatile:
+	current->flags |= PF_EXITING;
 	sem_exit();
 	exit_mmap(current);
 	free_page_tables(current);

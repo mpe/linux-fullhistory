@@ -82,7 +82,7 @@
 /* This is the sync transfer divisor, XTALFREQ/X will be the maximum
    achievable data rate (assuming the rest of the system is capable
    and set properly) */
-#define SYNCXFRPD 4
+#define SYNCXFRPD 5
 /*(XTALFREQ/5)*/
 
 /*****/
@@ -99,10 +99,18 @@
 	the assertion delay, also in 1/2 clocks (FASTCLK is ignored here). */
 
 /*----------------------------------------------------------------*/
-#if defined(MODULE) || defined(PCMCIA)
+#ifdef PCMCIA
+#define MODULE
+#endif 
+
+#if defined(MODULE)
 #include <linux/config.h>
 #include <linux/module.h>
 #endif
+
+#ifdef PCMCIA
+#undef MODULE
+#endif 
 
 #include "../block/blk.h"	/* to get disk capacity */
 #include <linux/kernel.h>

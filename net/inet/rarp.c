@@ -152,7 +152,7 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char *sha,*tha;            /* s for "source", t for "target" */
   
 /*
- *	If this test doesn't pass, its not IP, or we should ignore it anyway
+ *	If this test doesn't pass, it's not IP, or we should ignore it anyway
  */
 
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd) 

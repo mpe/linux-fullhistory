@@ -127,7 +127,7 @@ less, depending on how much it needs time to do other things. The maximum
 delay between writing a byte and the time when it finally plays is
 at most 3 times the 'fragment_time'. 
 
-The delay depends on how much time the program needs to do it's 
+The delay depends on how much time the program needs to do its 
 computations for the next sample (updating screen etc). If it's about
 80% of the 'fragment_time' the game will run almost without delays. If it 
 uses more time, there is a risk that the audio buffer gets empty.

@@ -428,7 +428,7 @@ int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	bufflen = 0;
 
     /*
-     * What it looks like.  Boy did I get tired of reading it's output.
+     * What it looks like.  Boy did I get tired of reading its output.
      */
     if (*cmd == READ_10 || *cmd == WRITE_10) {
 	i = xscsi2int((cmd+1));

@@ -259,7 +259,7 @@ struct hpfs_dirent {
   unsigned char locality;		/* 0=unk 1=seq 2=random 3=both */
   unsigned char namelen, name[1];	/* file name */
   /* dnode_secno down;	  btree down pointer, if present,
-     			  follows name on next word boundary, or maybe it's
+     			  follows name on next word boundary, or maybe it
 			  precedes next dirent, which is on a word boundary. */
 };
 

@@ -1,7 +1,7 @@
 /* psr.h: This file holds the macros for masking off various parts of
           the processor status register on the Sparc. This is valid
 	  for Version 8. On the V9 this is renamed to the PSTATE
-	  register and it's members are accessed as fields like
+	  register and its members are accessed as fields like
 	  PSTATE.PRIV for the current CPU privilege level.
 
    Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)

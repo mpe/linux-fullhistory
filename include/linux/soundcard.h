@@ -348,7 +348,7 @@ struct patmgr_info {	/* Note! size must be < 4k since kmalloc() is used */
  *
  * This driver uses just the numbers 0 to 31 to store both
  * the LSB and MSB. The controller value is a unsigned short
- * and it's valid range is between 0 and 16383 (0x0000 to 0x3fff).
+ * and its valid range is between 0 and 16383 (0x0000 to 0x3fff).
  * The driver sends the controller value using two messages when
  * necessary.
  */

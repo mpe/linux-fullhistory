@@ -740,7 +740,7 @@ DMAbuf_outputintr (int dev, int event_type)
  *	    buffer.
  *	1 = DMA transfer done. Device doesn't have local buffer or it's
  *	    empty now.
- *	2 = No DMA transfer but the device has now more space in it's local
+ *	2 = No DMA transfer but the device has now more space in its local
  *	    buffer.
  */
 

@@ -44,7 +44,7 @@
  *			Use ip_fast_csum from ip.h
  *
  *
- *	This module is a difficult issue. Its clearly inet code but its also clearly
+ *	This module is a difficult issue. It's clearly inet code but it's also clearly
  *	driver code belonging close to PPP and SLIP
  */
 

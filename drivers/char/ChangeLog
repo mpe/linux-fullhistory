@@ -277,7 +277,7 @@ Fri Sep 16 08:13:25 1994  Theodore Y. Ts'o  (tytso@rt-11)
 		until after block_til_ready has returned successfully.
 		Modify block_til_ready to check the normal_termios
 		structure directly, so it doesn't rely on termios being
-		set before its called.
+		set before it's called.
 
 Thu Sep 15 23:34:01 1994  Theodore Y. Ts'o  (tytso@rt-11)
 

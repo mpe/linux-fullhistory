@@ -29,7 +29,7 @@
     	transmit a packet. A third command mode exists when you are setting
     	things up.
     	
-    3]	If its transmitting its not receiving and vice versa. In fact the 
+    3]	If it's transmitting it's not receiving and vice versa. In fact the 
     	time to get the board back into useful state after an operation is
     	quite large.
     	

@@ -664,7 +664,7 @@ is_sun4c:					! OK, this is a sun4c, yippie
  */
 
 /* paul@sfe.com.au */
-/* V3 doesnt have printf.. And I dont really feel like doing the formatting
+/* V3 doesn't have printf.. And I don't really feel like doing the formatting
  * myself.. So we miss out on some messages (for now).
  */
 		ld	[%g7 + 0x4], %o0
@@ -808,7 +808,7 @@ rest_of_boot:
 		WRITE_PAUSE			! see above
 
 /* I keep the timer interrupt on so that BogoMIPS works and the prom
- * keeps updating it's "jiffies" counter. 100HZ clock on sparcstations.
+ * keeps updating its "jiffies" counter. 100HZ clock on sparcstations.
  */	
 
 /* If gas wasn't so dumb, I could use or'd macros in this next

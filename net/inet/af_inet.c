@@ -270,7 +270,7 @@ void destroy_sock(struct sock *sk)
 
   	sk->inuse = 1;			/* just to be safe. */
 
-  	/* Incase it's sleeping somewhere. */
+  	/* In case it's sleeping somewhere. */
   	if (!sk->dead) 
   		sk->write_space(sk);
 
@@ -778,9 +778,12 @@ static int inet_release(struct socket *sock, struct socket *peer)
 	 * If linger is set, we don't return until the close
 	 * is complete.  Other wise we return immediately. The
 	 * actually closing is done the same either way.
+	 *
+	 * If the close is due to the process exiting, we never
+	 * linger..
 	 */
 
-	if (sk->linger == 0) 
+	if (sk->linger == 0 || (current->flags & PF_EXITING))
 	{
 		sk->prot->close(sk,0);
 		sk->dead = 1;
@@ -1019,7 +1022,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	/*
 	 * We've been passed an extra socket.
 	 * We need to free it up because the tcp module creates
-	 * it's own when it accepts one.
+	 * its own when it accepts one.
 	 */
 	if (newsock->data)
 	{

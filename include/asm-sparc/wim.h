@@ -22,7 +22,7 @@
    'rett' instruction. Privileged software is responsible for
    updating this on trap fills/spills etc. Therefore if a 'save'
    instruction is executed and it causes the Current Window
-   Pointer to equal a register window which has it's bit set in
+   Pointer to equal a register window which has its bit set in
    %wim we get a 'overflow' trap, a restore into such a register
    invokes a window 'spill' trap.
 */

@@ -295,8 +295,8 @@ ABSOLUTE msg_buf = 0
 ABSOLUTE reselected_identify = 0
 ABSOLUTE reselected_tag = 0
 
-; Request sense command pointer, its a 6 byte command, should
-; be constant for all commands since we allays want 16 bytes of 
+; Request sense command pointer, it's a 6 byte command, should
+; be constant for all commands since we always want 16 bytes of 
 ; sense and we don't need to change any fields as we did under 
 ; SCSI-I when we actually cared about the LUN field.
 ;EXTERNAL NCR53c7xx_sense		; Request sense command
@@ -314,7 +314,7 @@ ABSOLUTE reselected_tag = 0
 ;
 ; MODIFIES : SCRATCH, reconnect_dsa_head
 ; 
-; EXITS : allays passes control to schedule
+; EXITS : always passes control to schedule
 
 ENTRY dsa_schedule
 dsa_schedule:

@@ -115,7 +115,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				break;
 		}
 		sti();	/* We only turn interrupts back on for a moment, but because the interrupt queues anything built up
-			   before this will clear before we jump back and cli, so its not as bad as it looks */
+			   before this will clear before we jump back and cli, so it's not as bad as it looks */
 		if(pos>offset+length)
 			break;
 	}

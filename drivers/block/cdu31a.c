@@ -1384,7 +1384,7 @@ do_cdu31a_request(void)
 cdu31a_request_startover:
       /*
        * The beginning here is stolen from the hard disk driver.  I hope
-       * its right.
+       * it's right.
        */
       if (!(CURRENT) || CURRENT->dev < 0)
       {
@@ -2570,7 +2570,7 @@ respinup_on_open:
          it.  It seems to mean the drive has already done the operation. */
       if ((res_size < 2) || ((res_reg[0] != 0) && (res_reg[1] != 0)))
       {
-         /* If the drive is already playing, its ok.  */
+         /* If the drive is already playing, it's ok.  */
          if ((res_reg[1] == SONY_AUDIO_PLAYING_ERR) || (res_reg[1] == 0))
          {
             goto drive_spinning;
@@ -2725,7 +2725,7 @@ get_drive_configuration(unsigned short base_io,
    if (read_status_register() != 0xff)
    {
       /*
-       * Reset the drive and wait for attention from it (to say its reset).
+       * Reset the drive and wait for attention from it (to say it's reset).
        * If you don't wait, the next operation will probably fail.
        */
       reset_drive();

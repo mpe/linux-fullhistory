@@ -392,8 +392,8 @@ struct scatterlist {
    code does not need to do anything special to keep the commands alive. */
 #define SCSI_RESET_SUCCESS 2
 
-/* We called for an reset of this bus, and we should get an interrupt 
-   when this succeeds.  Each command should get it's own status
+/* We called for a reset of this bus, and we should get an interrupt 
+   when this succeeds.  Each command should get its own status
    passed up to scsi_done, but this has not happened yet. */
 #define SCSI_RESET_PENDING 3
 

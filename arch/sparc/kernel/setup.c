@@ -53,7 +53,7 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 
 /* Lame prom console routines, gets registered below. Thanks for the
  * tip Linus.  First comes the V0 prom routine, then the V3 version
- * writen by Paul Hatchman (paul@sfe.com.au).
+ * written by Paul Hatchman (paul@sfe.com.au).
  */
 
 void sparc_console_print(const char * p)
@@ -89,7 +89,7 @@ void sparc_console_print_v3 (const char *p)
 
 
 /* This routine will in the future do all the nasty prom stuff
- * to probe for the mmu type and it's parameters, etc. This will
+ * to probe for the mmu type and its parameters, etc. This will
  * also be where SMP things happen plus the Sparc specific memory
  * physical memory probe as on the alpha.
  */

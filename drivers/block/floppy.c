@@ -2325,6 +2325,7 @@ static int make_raw_rw_request(void)
 	/* claim buffer track if needed */
 	if (buffer_track != raw_cmd.track ||  /* bad track */
 	    buffer_drive !=current_drive || /* bad drive */
+	    sector_t > buffer_max ||
 	    sector_t < buffer_min ||
 	    ((CT(COMMAND) == FD_READ ||
 	      (aligned_sector_t == sector_t && CURRENT->nr_sectors >= ssize ))&&

@@ -161,7 +161,7 @@ void nfs_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(0, &buf->f_files);
 	put_fs_long(0, &buf->f_ffree);
 	/* We should really try to interrogate the remote server to find
-	   it's maximum name length here */
+	   its maximum name length here */
 	put_fs_long(NAME_MAX, &buf->f_namelen);
 }
 

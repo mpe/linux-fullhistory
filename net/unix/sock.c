@@ -330,7 +330,7 @@ static int unix_proto_create(struct socket *sock, int protocol)
 	upd->protocol = protocol;
 	upd->socket = sock;
 	UN_DATA(sock) = upd;
-	upd->refcnt = 1;	/* Now its complete - bgm */
+	upd->refcnt = 1;	/* Now it's complete - bgm */
 	return(0);
 }
 
@@ -430,7 +430,7 @@ static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 			i=-EADDRINUSE;
 		return(i);
 	}
-	upd->sockaddr_len = sockaddr_len;	/* now its legal */
+	upd->sockaddr_len = sockaddr_len;	/* now it's legal */
 	
 	return(0);
 }

@@ -417,7 +417,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	}
 
 	/*
-	 *	Transmission failed, put skb back into a list. Once on the list its safe and
+	 *	Transmission failed, put skb back into a list. Once on the list it's safe and
 	 *	no longer device locked (it can be freed safely from the device queue)
 	 */
 	cli();

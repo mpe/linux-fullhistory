@@ -233,7 +233,7 @@ ABSOLUTE msg_buf = 0
 ABSOLUTE reselected_identify = 0
 ABSOLUTE reselected_tag = 0
 
-; Request sense command pointer, its a 6 byte command, should
+; Request sense command pointer, it's a 6 byte command, should
 ; be constant for all commands since we always want 16 bytes of 
 ; sense and we don't need to change any fields as we did under 
 ; SCSI-I when we actually cared about the LUN field.
@@ -830,7 +830,7 @@ reselected_not_end:
     ; XXX the ALU is only eight bits wide, and the assembler
     ; wont do the dirt work for us.  As long as dsa_check_reselect
     ; is negative, we need to sign extend with 1 bits to the full
-    ; 32 bit width os the address.
+    ; 32 bit width of the address.
     ;
     ; A potential work around would be to have a known alignment 
     ; of the DSA structure such that the base address plus 

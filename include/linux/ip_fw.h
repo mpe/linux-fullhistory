@@ -8,9 +8,9 @@
  *	Ported from BSD to Linux,
  *		Alan Cox 22/Nov/1994.
  *	Merged and included the FreeBSD-Current changes at Ugen's request
- *	(but hey its a lot cleaner now). Ugen would prefer in some ways
+ *	(but hey it's a lot cleaner now). Ugen would prefer in some ways
  *	we waited for his final product but since Linux 1.2.0 is about to
- *	appear its not practical - Read: It works, its not clean but please
+ *	appear it's not practical - Read: It works, it's not clean but please
  *	don't consider it to be his standard of finished work.
  *		Alan.
  *

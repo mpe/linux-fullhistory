@@ -742,7 +742,7 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 		case ICMP_ADDRESSREPLY:
 			/*
 			 *	We ought to set our netmask on receiving this, but 
-			 *	experience shows its a waste of effort.
+			 *	experience shows it's a waste of effort.
 			 */
 			icmp_statistics.IcmpInAddrMaskReps++;
 			kfree_skb(skb1, FREE_READ);

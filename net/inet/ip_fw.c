@@ -11,9 +11,9 @@
  *	Zeroing /proc and other additions
  *		Jos Vos 4/Feb/1995.
  *	Merged and included the FreeBSD-Current changes at Ugen's request
- *	(but hey its a lot cleaner now). Ugen would prefer in some ways
+ *	(but hey it's a lot cleaner now). Ugen would prefer in some ways
  *	we waited for his final product but since Linux 1.2.0 is about to
- *	appear its not practical - Read: It works, its not clean but please
+ *	appear it's not practical - Read: It works, it's not clean but please
  *	don't consider it to be his standard of finished work.
  *		Alan Cox 12/Feb/1995
  *
@@ -193,7 +193,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			dprintf1("TCP ");
 			src_port=ntohs(tcp->source);
 			dst_port=ntohs(tcp->dest);
-			if(tcp->syn)
+			if(tcp->syn && !tcp->ack)
 				notcpsyn=0; /* We *DO* have SYN, value FALSE */
 			prt=IP_FW_F_TCP;
 			break;
@@ -930,38 +930,23 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 
 #ifdef CONFIG_IP_ACCT
 
-int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,0);
-}
-
-int ip_acct0_procinfo(char *buffer, char **start, off_t offset, int length)
-{
-	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,1);
+	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,reset);
 }
 
 #endif
 
 #ifdef CONFIG_IP_FIREWALL
 
-int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,0);
+	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,reset);
 }
 
-int ip_fw_blk0_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,1);
-}
-
-int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length)
-{
-	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,0);
-}
-
-int ip_fw_fwd0_procinfo(char *buffer, char **start, off_t offset, int length)
-{
-	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,1);
+	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,reset);
 }
 
 #endif

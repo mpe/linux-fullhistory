@@ -58,7 +58,7 @@ Up to 4 drives per interface card, and up to 4 interface cards are supported.
 All supported drive families can be mixed, but the CR-521 drives are 
 hard-wired to drive ID 0. The drives have to use different drive IDs, and each
 drive has to get a unique minor number (0...3), corresponding indirectly to 
-it's drive ID.
+its drive ID.
 The drive IDs may be selected freely from 0 to 3 - they do not have to be in
 consecutive order.
 
@@ -132,7 +132,7 @@ To install:
           The "no-sound" board from OmniCd needs the "SBPRO 1" setup.
           All other "no-sound" boards need the "SBPRO 0" setup.
           The Spea Media FX sound card needs "SBPRO 2".
-          sbpcd.c holds some examples in it's auto-probe list.
+          sbpcd.c holds some examples in its auto-probe list.
           If you configure "SBPRO" wrong, the playing of audio CDs will work,
           but you will not be able to mount a data CD.
       a2. Tell the address of your CDROM_PORT (not of the sound port).
@@ -165,7 +165,7 @@ To install:
 
    The driver no longer uses the "AT bus style" device numbering; the SCSI
    scheme is used now; that means, the "first found" drive gets MINOR 0
-   (regardless to it's jumpered ID), the "next found" (at the same cable)
+   (regardless to its jumpered ID), the "next found" (at the same cable)
    gets MINOR 1, ...
    
    For a second interface board, you have to make nodes like

@@ -159,7 +159,7 @@ pss_setaddr (int addr, int configAddr)
 /*_____ pss_checkint
          This function tests an interrupt number to see if
 	 it is available. It takes the interrupt button
-	 as it's argument and returns TRUE if the interrupt
+	 as its argument and returns TRUE if the interrupt
 	 is ok.
 */
 static int

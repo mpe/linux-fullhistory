@@ -406,7 +406,7 @@ static int sock_select(struct inode *inode, struct file *file, int sel_type, sel
 	}
 
 	/*
-	 *	We can't return errors to select, so its either yes or no. 
+	 *	We can't return errors to select, so it's either yes or no. 
 	 */
 
 	if (sock->ops && sock->ops->select)
@@ -719,7 +719,7 @@ static int sock_socketpair(int family, int type, int protocol, unsigned long uso
 
 
 /*
- *	Bind a name to a socket. Nothing much to do here since its
+ *	Bind a name to a socket. Nothing much to do here since it's
  *	the protocol's responsibility to handle the local address.
  *
  *	We move the socket address to kernel space before we call

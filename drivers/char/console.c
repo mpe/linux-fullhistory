@@ -1005,6 +1005,7 @@ void invert_screen(int currcons, int offset, int count, int viewed)
 			unsigned short old = scr_readw(p);
 			scr_writew(old ^ (((old & 0x0700) == 0x0100)
 					  ? 0x7000 : 0x7700), p);
+			p++;
 		}
 }
 

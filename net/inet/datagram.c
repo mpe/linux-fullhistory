@@ -155,7 +155,7 @@ void skb_free_datagram(struct sk_buff *skb)
 		return;
 	}
 	/* See if it needs destroying */
-	if(!skb->next && !skb->prev)	/* Been dequeued by someone - ie its read */
+	if(!skb->next && !skb->prev)	/* Been dequeued by someone - ie it's read */
 		kfree_skb(skb,FREE_READ);
 	restore_flags(flags);
 }

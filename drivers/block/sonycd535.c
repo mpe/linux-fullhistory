@@ -715,7 +715,7 @@ spin_up_drive(Byte status[2])
 	if (do_sony_cmd(&cmd, 1, status, NULL, 0, 0) != 0)
 		return TIME_OUT;
 	if ((status[0] & SONY535_STATUS1_NOT_SPINNING) == 0)
-		return 0;	/* its already spinning */
+		return 0;	/* it's already spinning */
 
 	/* otherwise, give the spin-up command */
 	cmd = SONY535_SPIN_UP;
@@ -818,7 +818,7 @@ do_cdu535_request(void)
 	while (1) {
 		/*
 		 * The beginning here is stolen from the hard disk driver.  I hope
-		 * its right.
+		 * it's right.
 		 */
 		if (!(CURRENT) || CURRENT->dev < 0) {
 			return;

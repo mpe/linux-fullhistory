@@ -238,6 +238,8 @@ struct pci_class_type {
 #define PCI_DEVICE_ID_INTEL_82375	0x0482
 #define PCI_DEVICE_ID_INTEL_82434	0x04a3
 #define PCI_DEVICE_ID_INTEL_82430	0x0486
+#define PCI_DEVICE_ID_INTEL_82437	0x122d
+#define PCI_DEVICE_ID_INTEL_82371	0x122e
 
 #define PCI_VENDOR_ID_SMC		0x1042
 #define PCI_DEVICE_ID_SMC_37C665	0x1000
@@ -267,6 +269,7 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_AL		0x10b9
 #define PCI_DEVICE_ID_AL_M1449		0x1449
 #define PCI_DEVICE_ID_AL_M1451		0x1451
+#define PCI_DEVICE_ID_AL_M4803		0x5215
 
 #define PCI_VENDOR_ID_TSENG		0x100c
 #define PCI_DEVICE_ID_TSENG_W32P_2	0x3202
@@ -326,13 +329,19 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_HER		0xedd8
 #define PCI_DEVICE_ID_HER_STING		0xa091
 
+#define PCI_VENDOR_ID_ATRONICS		0x907f
+#define PCI_DEVICE_ID_ATRONICS_2015	0x2015
+
+#define PCI_VENDOR_ID_CT		0x102c
+#define PCI_DEVICE_ID_CT_65545		0x00d8
+
 struct pci_vendor_type {
 	unsigned short vendor_id;
 	char *vendor_name;
 };
 
 
-#define PCI_VENDOR_NUM 34
+#define PCI_VENDOR_NUM 36
 #define PCI_VENDOR_TYPE { \
 	{PCI_VENDOR_ID_NCR,		"NCR"}, \
 	{PCI_VENDOR_ID_ADAPTEC,		"Adaptec"}, \
@@ -367,7 +376,9 @@ struct pci_vendor_type {
 	{PCI_VENDOR_ID_IMS,		"IMS"}, \
 	{PCI_VENDOR_ID_ZEINET,		"ZeiNet"}, \
 	{PCI_VENDOR_ID_EF,		"Efficient Networks"}, \
-	{PCI_VENDOR_ID_HER,		"Hercules"} \
+	{PCI_VENDOR_ID_HER,		"Hercules"}, \
+	{PCI_VENDOR_ID_ATRONICS,	"Atronics"}, \
+	{PCI_VENDOR_ID_CT,		"Chips & Technologies"} \
 }
 
 
@@ -386,7 +397,7 @@ struct pci_device_type {
 	char *device_name;
 };
 
-#define PCI_DEVICE_NUM 66
+#define PCI_DEVICE_NUM 71
 #define PCI_DEVICE_TYPE { \
 	{0xff,	PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C810,	"53c810"}, \
 	{0xff,	PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C815,	"53c815"}, \
@@ -417,6 +428,8 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82375,	"82375EB"}, \
 	{0x00,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82434,	"82434LX Mercury/Neptune"}, \
 	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82430,	"82430ZX Aries"}, \
+	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82437,	"82437FX Triton"}, \
+	{0xff,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371,	"82371FB"}, \
 	{0xff,	PCI_VENDOR_ID_SMC,	PCI_DEVICE_ID_SMC_37C665,	"FDC 37C665"}, \
 	{0xff,	PCI_VENDOR_ID_ATI,	PCI_DEVICE_ID_ATI_M32,		"Mach 32"}, \
 	{0xff,	PCI_VENDOR_ID_ATI,	PCI_DEVICE_ID_ATI_M64,		"Mach 64"}, \
@@ -430,6 +443,7 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_AI,	PCI_DEVICE_ID_AI_M1435,		"M1435"}, \
 	{0xff,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1449,		"M1449"}, \
 	{0xff,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1451,		"M1451"}, \
+	{0xff,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M4803,		"MS4803"}, \
 	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_2,	"ET4000W32P"}, \
 	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_b,	"ET4000W32P rev B"}, \
 	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_c,	"ET4000W32P rev C"}, \
@@ -453,7 +467,9 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_IMS,	PCI_DEVICE_ID_IMS_8849,		"8849"}, \
 	{0xff,	PCI_VENDOR_ID_ZEINET,	PCI_DEVICE_ID_ZEINET_1221,	"1221"}, \
 	{0xff,	PCI_VENDOR_ID_EF,	PCI_DEVICE_ID_EF_ATM,		"155P-MF1"}, \
-	{0xff,	PCI_VENDOR_ID_HER,	PCI_DEVICE_ID_HER_STING,	"Stingray"} \
+	{0xff,	PCI_VENDOR_ID_HER,	PCI_DEVICE_ID_HER_STING,	"Stingray"}, \
+	{0xff,	PCI_VENDOR_ID_ATRONICS,	PCI_DEVICE_ID_ATRONICS_2015,	"IDE-2015PL"}, \
+	{0xff,	PCI_VENDOR_ID_CT,	PCI_DEVICE_ID_CT_65545,		"65545"} \
 }
 
 /* An item of this structure has the following meaning	*/

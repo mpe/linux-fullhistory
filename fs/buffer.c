@@ -714,7 +714,7 @@ repeat:
 	bh = free_list[isize];
 	remove_from_free_list(bh);
 
-/* OK, FINALLY we know that this buffer is the only one of it's kind, */
+/* OK, FINALLY we know that this buffer is the only one of its kind, */
 /* and that it's unused (b_count=0), unlocked (b_lock=0), and clean */
 	bh->b_count=1;
 	bh->b_dirt=0;

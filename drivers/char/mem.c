@@ -19,6 +19,7 @@
 
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 
 #ifdef CONFIG_SOUND
 extern long soundcard_init(long mem_start);
@@ -88,15 +89,15 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 {
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
-#if 0 && defined(__i386__)
+#if defined(__i386__)
 	/*
-	 * hmm.. This disables high-memory caching, as the XFree86 team wondered
-	 * about that at one time. It doesn't seem to make a difference, though:
-	 * the surround logic should disable caching for the high device addresses
-	 * anyway.
+	 * hmm.. This disables high-memory caching, as the XFree86 team
+	 * wondered about that at one time.
+	 * The surround logic should disable caching for the high device
+	 * addresses anyway, but right now this seems still needed.
 	 */
 	if (x86 > 3 && vma->vm_offset >= high_memory)
-		vma->vm_page_prot |= PAGE_PCD;
+		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
 #endif
 	if (remap_page_range(vma->vm_start, vma->vm_offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
