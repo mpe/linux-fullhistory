@@ -532,26 +532,19 @@ static struct super_operations romfs_ops = {
 
 static DECLARE_FSTYPE_DEV(romfs_fs_type, "romfs", romfs_read_super);
 
-int __init init_romfs_fs(void)
+static int __init init_romfs_fs(void)
 {
 	return register_filesystem(&romfs_fs_type);
 }
 
-#ifdef MODULE
+static void __exit exit_romfs_fs(void)
+{
+	unregister_filesystem(&romfs_fs_type);
+}
 
 /* Yes, works even as a module... :) */
 
 EXPORT_NO_SYMBOLS;
 
-int
-init_module(void)
-{
-	return init_romfs_fs();
-}
-
-void
-cleanup_module(void)
-{
-	unregister_filesystem(&romfs_fs_type);
-}
-#endif
+module_init(init_romfs_fs)
+module_exit(exit_romfs_fs)

@@ -425,8 +425,7 @@ fake_volatile:
 	tsk->exit_code = code;
 	exit_notify();
 	task_unlock(tsk);
-	if (tsk->exec_domain && tsk->exec_domain->module)
-		__MOD_DEC_USE_COUNT(tsk->exec_domain->module);
+	put_exec_domain(tsk->exec_domain);
 	if (tsk->binfmt && tsk->binfmt->module)
 		__MOD_DEC_USE_COUNT(tsk->binfmt->module);
 	schedule();

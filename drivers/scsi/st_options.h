@@ -3,16 +3,11 @@
 
    Copyright 1995-2000 Kai Makisara.
 
-   Last modified: Sat Jan  1 18:34:38 2000 by makisara@kai.makisara.local
+   Last modified: Sat Mar 11 10:32:00 2000 by makisara@kai.makisara.local
 */
 
 #ifndef _ST_OPTIONS_H
 #define _ST_OPTIONS_H
-
-/* The minimum limit for the number of SCSI tape devices is determined by
-   ST_MAX_TAPES. If the number of tape devices and the "slack" defined by
-   ST_EXTRA_DEVS exceeds ST_MAX_TAPES, the large number is used. */
-#define ST_MAX_TAPES 4
 
 /* The driver does not wait for some operations to finish before returning
    to the user program if ST_NOWAIT is non-zero. This helps if the SCSI
@@ -47,7 +42,7 @@
    driver initialisation. The number is also constrained by the number
    of drives detected. If more buffers are needed, they are allocated
    at run time and freed after use. */
-#define ST_MAX_BUFFERS (2 + ST_EXTRA_DEVS)
+#define ST_MAX_BUFFERS 4
 
 /* Maximum number of scatter/gather segments */
 #define ST_MAX_SG      16

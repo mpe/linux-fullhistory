@@ -322,16 +322,15 @@ out:
 
 static DECLARE_FSTYPE_DEV( bfs_fs_type, "bfs", bfs_read_super);
 
-#ifdef MODULE
-#define init_bfs_fs init_module
-
-void cleanup_module(void)
-{
-	unregister_filesystem(&bfs_fs_type);
-}
-#endif
-
-int __init init_bfs_fs(void)
+static int __init init_bfs_fs(void)
 {
 	return register_filesystem(&bfs_fs_type);
 }
+
+static void __exit exit_bfs_fs(void)
+{
+	unregister_filesystem(&bfs_fs_type);
+}
+
+module_init(init_bfs_fs)
+module_exit(exit_bfs_fs)

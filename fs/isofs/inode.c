@@ -1436,22 +1436,17 @@ void leak_check_brelse(struct buffer_head * bh){
 
 static DECLARE_FSTYPE_DEV(iso9660_fs_type, "iso9660", isofs_read_super);
 
-int __init init_iso9660_fs(void)
+static int __init init_iso9660_fs(void)
 {
         return register_filesystem(&iso9660_fs_type);
 }
 
-#ifdef MODULE
+static void __exit exit_iso9660_fs(void)
+{
+        unregister_filesystem(&iso9660_fs_type);
+}
+
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	return init_iso9660_fs();
-}
-
-void cleanup_module(void)
-{
-	unregister_filesystem(&iso9660_fs_type);
-}
-
-#endif
+module_init(init_iso9660_fs)
+module_exit(exit_iso9660_fs)

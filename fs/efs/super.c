@@ -17,26 +17,22 @@ static DECLARE_FSTYPE_DEV(efs_fs_type, "efs", efs_read_super);
 
 static struct super_operations efs_superblock_operations = {
 	read_inode:	efs_read_inode,
-	put_super:	efs_put_super,
 	statfs:		efs_statfs,
 };
 
-int __init init_efs_fs(void) {
+static int __init init_efs_fs(void) {
+	printk("EFS: "EFS_VERSION" - http://aeschi.ch.eu.org/efs/\n");
 	return register_filesystem(&efs_fs_type);
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module(void) {
-	printk("EFS: "EFS_VERSION" - http://aeschi.ch.eu.org/efs/\n");
-	return init_efs_fs();
-}
-
-void cleanup_module(void) {
+static void __exit exit_efs_fs(void) {
 	unregister_filesystem(&efs_fs_type);
 }
-#endif
+
+EXPORT_NO_SYMBOLS;
+
+module_init(init_efs_fs)
+module_exit(exit_efs_fs)
 
 static efs_block_t efs_validate_vh(struct volume_header *vh) {
 	int		i;
@@ -207,9 +203,6 @@ struct super_block *efs_read_super(struct super_block *s, void *d, int silent) {
 out_no_fs_ul:
 out_no_fs:
 	return(NULL);
-}
-
-void efs_put_super(struct super_block *s) {
 }
 
 int efs_statfs(struct super_block *s, struct statfs *buf) {

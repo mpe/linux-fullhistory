@@ -921,13 +921,7 @@ ntfs_read_super_dec:
  */
 static DECLARE_FSTYPE_DEV(ntfs_fs_type, "ntfs", ntfs_read_super);
 
-/* When this code is not compiled as a module, this is the main entry point,
- * called by do_sys_setup() in fs/filesystems.c
- *
- * NOTE : __init is a macro used to remove this function from memory
- * once initialization is done
- */
-int __init init_ntfs_fs(void)
+static int __init init_ntfs_fs(void)
 {
 	/* Comment this if you trust klogd. There are reasons not to trust it
 	 */
@@ -942,44 +936,21 @@ int __init init_ntfs_fs(void)
 	return register_filesystem(&ntfs_fs_type);
 }
 
-#ifdef MODULE
-/* A module is a piece of code which can be inserted in and removed
- * from the running kernel whenever you want using lsmod, or on demand using
- * kmod
- */
-
-/* No function of this module is needed by another module */
-EXPORT_NO_SYMBOLS;
-/* Only used for documentation purposes at the moment,
- * see include/linux/module.h
- */
-MODULE_AUTHOR("Martin von Löwis");
-MODULE_DESCRIPTION("NTFS driver");
-/* no MODULE_SUPPORTED_DEVICE() */
-/* Load-time parameter */
-MODULE_PARM(ntdebug, "i");
-MODULE_PARM_DESC(ntdebug, "Debug level");
-
-/* When this code is compiled as a module, if you use mount -t ntfs when no
- * ntfs filesystem is registered (see /proc/filesystems), get_fs_type() in
- * fs/super.c asks kmod to load the module named ntfs in memory.
- *
- * Therefore, this function is the main entry point in this case
- */
-int init_module(void)
-{
-	return init_ntfs_fs();
-}
-
-/* Called by kmod just before the kernel removes the module from memory */
-void cleanup_module(void)
+static __exit void exit_ntfs_fs(void)
 {
 	SYSCTL(0);
 	ntfs_debug(DEBUG_OTHER, "unregistering %s\n",ntfs_fs_type.name);
 	unregister_filesystem(&ntfs_fs_type);
 }
-#endif
 
+EXPORT_NO_SYMBOLS;
+MODULE_AUTHOR("Martin von Löwis");
+MODULE_DESCRIPTION("NTFS driver");
+MODULE_PARM(ntdebug, "i");
+MODULE_PARM_DESC(ntdebug, "Debug level");
+
+module_init(init_ntfs_fs)
+module_exit(exit_ntfs_fs)
 /*
  * Local variables:
  *  c-file-style: "linux"

@@ -228,7 +228,6 @@ struct super_block *ncp_read_super(struct super_block *, void *, int);
 struct inode *ncp_iget(struct super_block *, struct ncp_entry_info *);
 void ncp_update_inode(struct inode *, struct ncp_entry_info *);
 void ncp_update_inode2(struct inode *, struct ncp_entry_info *);
-extern int init_ncp_fs(void);
 
 /* linux/fs/ncpfs/dir.c */
 extern struct inode_operations ncp_dir_inode_operations;

@@ -29,7 +29,6 @@
 
 #define VERSION "0.72"
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>

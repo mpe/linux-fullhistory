@@ -7,6 +7,7 @@
 #define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
 #include <linux/version.h>
 #include <linux/module.h>
+#include <linux/init.h>
 
 #include <linux/mm.h>
 #include <linux/msdos_fs.h>
@@ -54,8 +55,10 @@ EXPORT_SYMBOL(fat_add_entries);
 EXPORT_SYMBOL(fat_dir_empty);
 EXPORT_SYMBOL(fat_truncate);
 
-int init_fat_fs(void)
+static int __init init_fat_fs(void)
 {
 	fat_hash_init();
 	return 0;
 }
+
+module_init(init_fat_fs)

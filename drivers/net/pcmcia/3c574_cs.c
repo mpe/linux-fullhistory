@@ -920,8 +920,6 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		  "status %4.4x.\n", dev->name, (long)skb->len,
 		  inw(ioaddr + EL3_STATUS));
 
-	netif_stop_queue (dev);
-	
 	outw(skb->len, ioaddr + TX_FIFO);
 	outw(0, ioaddr + TX_FIFO);
 	outsl(ioaddr + TX_FIFO, skb->data, (skb->len+3)>>2);
@@ -929,13 +927,13 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	dev->trans_start = jiffies;
 
 	/* TxFree appears only in Window 1, not offset 0x1c. */
-	if (inw(ioaddr + TxFree) > 1536) {
-		netif_start_queue (dev);
-	} else
+	if (inw(ioaddr + TxFree) <= 1536) {
+		netif_stop_queue (dev);
 		/* Interrupt us when the FIFO has room for max-sized packet. 
 		   The threshold is in units of dwords. */
 		outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
-
+	}
+	
 	dev_kfree_skb (skb);
 	pop_tx_status(dev);
 
@@ -976,8 +974,6 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			/* There's room in the FIFO for a full-sized packet. */
 			outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
 			netif_wake_queue (dev);
-		} else {
-			netif_stop_queue (dev);
 		}
 
 		if (status & TxComplete)

@@ -185,7 +185,6 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	char *iname_addr = iname;
 	int retval;
 
-	MOD_INC_USE_COUNT;
 	retval = -ENOEXEC;
 	if (!enabled)
 		goto _ret;
@@ -224,7 +223,6 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	if (retval >= 0)
 		retval = search_binary_handler(bprm, regs);
 _ret:
-	MOD_DEC_USE_COUNT;
 	return retval;
 }
 

@@ -15,12 +15,14 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
+/* CHECKME: this stuff looks rather bogus */
 asmlinkage int
 do_solaris_syscall (struct pt_regs *regs)
 {
 	int ret;
 
 	lock_kernel();
+	put_exec_domain(current->exec_domain);
 	current->personality = PER_SVR4;
 	current->exec_domain = lookup_exec_domain(PER_SVR4);
 

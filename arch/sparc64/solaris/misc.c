@@ -721,11 +721,8 @@ asmlinkage void solaris_register(void)
 {
 	lock_kernel();
 	current->personality = PER_SVR4;
-	if (current->exec_domain && current->exec_domain->module)
-		__MOD_DEC_USE_COUNT(current->exec_domain->module);
+	put_exec_domain(current->exec_domain);
 	current->exec_domain = lookup_exec_domain(current->personality);
-	if (current->exec_domain && current->exec_domain->module)
-		__MOD_INC_USE_COUNT(current->exec_domain->module);
 	unlock_kernel();
 }
 

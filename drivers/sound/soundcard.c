@@ -74,7 +74,12 @@ caddr_t         sound_mem_blocks[1024];
 int             sound_nblocks = 0;
 
 /* Persistent DMA buffers */
-int		sound_dmap_flag = 0;
+#ifdef CONFIG_SOUND_DMAP
+int             sound_dmap_flag = 1;
+#else
+int             sound_dmap_flag = 0;
+#endif
+
 static int      soundcard_configured = 0;
 static char     dma_alloc_map[MAX_DMA_CHANNELS] = {0};
 
@@ -91,8 +96,6 @@ unsigned long seq_time = 0;	/* Time for /dev/sequencer */
  */
 static mixer_vol_table mixer_vols[MAX_MIXER_DEV];
 static int num_mixer_volumes = 0;
-
-int traceinit = 0;
 
 int *load_mixer_volumes(char *name, int *levels, int present)
 {
@@ -637,11 +640,6 @@ soundcard_init(void)
 
 	soundcard_configured = 1;
 
-#if defined(CONFIG_LOWLEVEL_SOUND) && !defined(MODULE)
-        sound_preinit_lowlevel_drivers();
-	sound_init_lowlevel_drivers();
-#endif
-
 	audio_init_devices();
 
 	soundcard_register_devfs(1); /* register after we know # of devices */
@@ -663,38 +661,15 @@ static int      sound[20] = {
 static int dmabuf = 0;
 static int dmabug = 0;
 
-MODULE_PARM(traceinit, "i");
 MODULE_PARM(dmabuf, "i");
 MODULE_PARM(dmabug, "i");
 
 int init_module(void)
 {
 	int             err;
-#if FIXED_FOR_2_4_0
-	int             ints[21];
-	int             i;
-#endif
 
-#ifdef HAS_BRIDGE_BUGGY_FUNC
 	if(dmabug)
 		isa_dma_bridge_buggy = dmabug;
-#else
-	if(dmabug)
-		printk(KERN_ERR "sound: rebuild with PCI_QUIRKS enabled to configure this.\n");
-#endif
-		
-#if FIXED_FOR_2_4_0
-	/*
-	 * "sound=" command line handling by Harald Milz.
-	 */
-	i = 0;
-	while (i < 20 && sound[i])
-		ints[i + 1] = sound[i++];
-	ints[0] = i;
-
-	if (i)
-		sound_setup("sound=", ints);
-#endif
 
 	err = create_special_devices();
 	if (err)
@@ -730,13 +705,6 @@ void cleanup_module(void)
 
 	sound_stop_timer();
 
-#ifdef CONFIG_LOWLEVEL_SOUND
-	{
-		extern void     sound_unload_lowlevel_drivers(void);
-
-		sound_unload_lowlevel_drivers();
-	}
-#endif
 	sequencer_unload();
 
 	for (i = 0; i < MAX_DMA_CHANNELS; i++)
@@ -855,8 +823,9 @@ void sound_stop_timer(void)
 
 void conf_printf(char *name, struct address_info *hw_config)
 {
-	if (!traceinit)
-		return;
+#ifndef CONFIG_SOUND_TRACEINIT
+	return;
+#else
 	printk("<%s> at 0x%03x", name, hw_config->io_base);
 
 	if (hw_config->irq)
@@ -870,12 +839,13 @@ void conf_printf(char *name, struct address_info *hw_config)
 	}
 	printk("\n");
 }
+#endif
 
 void conf_printf2(char *name, int base, int irq, int dma, int dma2)
 {
-	if (!traceinit)
-		return;
-
+#ifndef CONFIG_SOUND_TRACEINIT
+	return;
+#else
 	printk("<%s> at 0x%03x", name, base);
 
 	if (irq)
@@ -889,6 +859,7 @@ void conf_printf2(char *name, int base, int irq, int dma, int dma2)
 	}
 	printk("\n");
 }
+#endif
 
 /*
  *	Module and lock management

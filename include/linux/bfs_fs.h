@@ -78,9 +78,6 @@ struct bfs_super_block {
 
 #ifdef __KERNEL__
 
-/* inode.c */
-extern int init_bfs_fs(void);
-
 /* file.c */
 extern struct inode_operations bfs_file_inops;
 extern struct file_operations bfs_file_operations;

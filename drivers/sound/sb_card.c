@@ -399,7 +399,6 @@ static struct pci_dev *sb_init_diamond(struct pci_bus *bus, struct pci_dev *card
 	/*  @X@0001:mpu
 	 */
 
-#ifdef CONFIG_MIDI
 	if((mpu_dev = isapnp_find_dev(bus,
 				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
 	{
@@ -413,7 +412,6 @@ static struct pci_dev *sb_init_diamond(struct pci_bus *bus, struct pci_dev *card
 	}
 	else
 		printk(KERN_ERR "sb: DT0197H panic: mpu not found\n");
-#endif
 
 
 	/*  @P@:Gameport

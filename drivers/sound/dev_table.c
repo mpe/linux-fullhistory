@@ -17,8 +17,6 @@
 #include "sound_config.h"
 
 int softoss_dev = 0;
-int sound_started = 0;
-int sndtable_get_cardcount(void);
 
 int sound_install_audiodrv(int vers, char *name, struct audio_driver *driver,
 			int driver_size, int flags, unsigned int format_mask,

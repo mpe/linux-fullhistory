@@ -3,6 +3,7 @@
  *
  * Architecture specifics
  */
+#include <linux/config.h>
 #include <linux/tty.h>
 #include <linux/init.h>
 

@@ -536,16 +536,7 @@ int smb_current_vmalloced;
 
 static DECLARE_FSTYPE( smb_fs_type, "smbfs", smb_read_super, 0);
 
-int __init init_smb_fs(void)
-{
-	return register_filesystem(&smb_fs_type);
-}
-
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int
-init_module(void)
+static int __init init_smb_fs(void)
 {
 	pr_debug("smbfs: init_module called\n");
 
@@ -558,8 +549,7 @@ init_module(void)
 	return init_smb_fs();
 }
 
-void
-cleanup_module(void)
+static void __exit exit_smb_fs(void)
 {
 	pr_debug("smbfs: cleanup_module called\n");
 	unregister_filesystem(&smb_fs_type);
@@ -570,4 +560,7 @@ cleanup_module(void)
 #endif
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_smb_fs)
+module_exit(exit_smb_fs)

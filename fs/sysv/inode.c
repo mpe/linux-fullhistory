@@ -1188,22 +1188,17 @@ int sysv_sync_inode(struct inode * inode)
 
 static DECLARE_FSTYPE_DEV(sysv_fs_type, "sysv", sysv_read_super);
 
-int __init init_sysv_fs(void)
+static int __init init_sysv_fs(void)
 {
 	return register_filesystem(&sysv_fs_type);
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module(void)
-{
-	return init_sysv_fs();
-}
-
-void cleanup_module(void)
+static void __exit exit_sysv_fs(void)
 {
 	unregister_filesystem(&sysv_fs_type);
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_sysv_fs)
+module_exit(exit_sysv_fs)

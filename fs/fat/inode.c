@@ -920,19 +920,3 @@ int fat_notify_change(struct dentry * dentry, struct iattr * attr)
 	    ~MSDOS_SB(sb)->options.fs_umask;
 	return 0;
 }
-
-
-#ifdef MODULE
-int init_module(void)
-{
-	return init_fat_fs();
-}
-
-
-void cleanup_module(void)
-{
-	/* Nothing to be done, really! */
-	return;
-}
-#endif
-

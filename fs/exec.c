@@ -33,6 +33,9 @@
 #include <linux/init.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
+#include <linux/spinlock.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
@@ -43,6 +46,7 @@
 #endif
 
 static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
+static spinlock_t binfmt_lock = SPIN_LOCK_UNLOCKED;
 
 int register_binfmt(struct linux_binfmt * fmt)
 {
@@ -52,13 +56,17 @@ int register_binfmt(struct linux_binfmt * fmt)
 		return -EINVAL;
 	if (fmt->next)
 		return -EBUSY;
+	spin_lock(&binfmt_lock);
 	while (*tmp) {
-		if (fmt == *tmp)
+		if (fmt == *tmp) {
+			spin_unlock(&binfmt_lock);
 			return -EBUSY;
+		}
 		tmp = &(*tmp)->next;
 	}
 	fmt->next = formats;
 	formats = fmt;
+	spin_unlock(&binfmt_lock);
 	return 0;	
 }
 
@@ -66,14 +74,23 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 {
 	struct linux_binfmt ** tmp = &formats;
 
+	spin_lock(&binfmt_lock);
 	while (*tmp) {
 		if (fmt == *tmp) {
 			*tmp = fmt->next;
+			spin_unlock(&binfmt_lock);
 			return 0;
 		}
 		tmp = &(*tmp)->next;
 	}
+	spin_unlock(&binfmt_lock);
 	return -EINVAL;
+}
+
+static inline void put_binfmt(struct linux_binfmt * fmt)
+{
+	if (fmt->module)
+		__MOD_DEC_USE_COUNT(fmt->module);
 }
 
 /* N.B. Error returns must be < 0 */
@@ -146,15 +163,22 @@ asmlinkage long sys_uselib(const char * library)
 	file = fget(fd);
 	retval = -ENOEXEC;
 	if (file && file->f_dentry && file->f_op && file->f_op->read) {
+		spin_lock(&binfmt_lock);
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(int) = fmt->load_shlib;
 			if (!fn)
 				continue;
+			if (!try_inc_mod_count(fmt->module))
+				continue;
+			spin_unlock(&binfmt_lock);
 			/* N.B. Should use file instead of fd */
 			retval = fn(fd);
+			spin_lock(&binfmt_lock);
+			put_binfmt(fmt);
 			if (retval != -ENOEXEC)
 				break;
 		}
+		spin_unlock(&binfmt_lock);
 	}
 	fput(file);
 	sys_close(fd);
@@ -767,12 +791,17 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	}
 #endif
 	for (try=0; try<2; try++) {
+		spin_lock(&binfmt_lock);
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
 			if (!fn)
 				continue;
+			if (!try_inc_mod_count(fmt->module))
+				continue;
+			spin_unlock(&binfmt_lock);
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
+				put_binfmt(fmt);
 				if (bprm->dentry) {
 					lock_kernel();
 					dput(bprm->dentry);
@@ -782,11 +811,16 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 				current->did_exec = 1;
 				return retval;
 			}
+			spin_lock(&binfmt_lock);
+			put_binfmt(fmt);
 			if (retval != -ENOEXEC)
 				break;
-			if (!bprm->dentry) /* We don't have the dentry anymore */
+			if (!bprm->dentry) {
+				spin_unlock(&binfmt_lock);
 				return retval;
+			}
 		}
+		spin_unlock(&binfmt_lock);
 		if (retval != -ENOEXEC) {
 			break;
 #ifdef CONFIG_KMOD

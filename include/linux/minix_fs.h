@@ -100,7 +100,6 @@ extern struct buffer_head * minix_getblk(struct inode *, int, int);
 extern struct buffer_head * minix_bread(struct inode *, int, int);
 
 extern void minix_truncate(struct inode *);
-extern int init_minix_fs(void);
 extern int minix_sync_inode(struct inode *);
 extern int minix_sync_file(struct file *, struct dentry *);
 

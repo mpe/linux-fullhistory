@@ -43,8 +43,6 @@
  *	NOTE! 	NOTE!	NOTE!	NOTE!
  */
 
-extern int sound_started;
-
 struct driver_info 
 {
 	char *driver_id;
@@ -350,11 +348,14 @@ struct sound_timer_operations
 
 #ifdef _DEV_TABLE_C_   
 
-struct audio_operations *audio_devs[MAX_AUDIO_DEV] = {NULL}; int num_audiodevs = 0;
-struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL}; int num_mixers = 0;
-struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
-struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL}; int num_midis = 0;
-
+struct audio_operations *audio_devs[MAX_AUDIO_DEV] = {NULL};
+int num_audiodevs = 0;
+struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL};
+int num_mixers = 0;
+struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL};
+int num_synths = 0;
+struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL};
+int num_midis = 0;
 #ifndef EXCLUDE_TIMERS
 extern struct sound_timer_operations default_sound_timer;
 struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = {
@@ -370,18 +371,17 @@ int num_sound_timers = 0;
 
 
 #else
-extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; extern int num_audiodevs;
-extern struct mixer_operations * mixer_devs[MAX_MIXER_DEV]; extern int num_mixers;
-extern struct synth_operations * synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV]; extern int num_synths;
-extern struct midi_operations * midi_devs[MAX_MIDI_DEV]; extern int num_midis;
-extern struct sound_timer_operations * sound_timer_devs[MAX_TIMER_DEV]; extern int num_sound_timers;
+extern struct audio_operations *audio_devs[MAX_AUDIO_DEV];
+extern int num_audiodevs;
+extern struct mixer_operations *mixer_devs[MAX_MIXER_DEV];
+extern int num_mixers;
+extern struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV];
+extern int num_synths;
+extern struct midi_operations *midi_devs[MAX_MIDI_DEV];
+extern int num_midis;
+extern struct sound_timer_operations * sound_timer_devs[MAX_TIMER_DEV];
+extern int num_sound_timers;
 #endif	/* _DEV_TABLE_C_ */
-void setup_cards(void);
-int sndtable_get_cardcount (void);
-void sound_chconf(int card_type, int ioaddr, int irq, int dma);
-int snd_find_driver(int type);
-void sound_unload_driver(int type);
-int sndtable_identify_card(char *name);
 
 extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
 int sndtable_probe (int unit, struct address_info *hw_config);

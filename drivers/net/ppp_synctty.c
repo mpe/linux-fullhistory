@@ -439,7 +439,7 @@ ppp_sync_ioctl(struct tty_struct *tty, struct file *file,
 			break;
 		ap->chan.private = ap;
 		ap->chan.ops = &sync_ops;
-		err = ppp_register_channel(&ap->chan, val);
+		err = ppp_register_channel(&ap->chan);
 		if (err != 0)
 			break;
 		ap->connected = 1;

@@ -698,15 +698,7 @@ int ncp_current_malloced;
 
 static DECLARE_FSTYPE(ncp_fs_type, "ncpfs", ncp_read_super, 0);
 
-int __init init_ncp_fs(void)
-{
-	return register_filesystem(&ncp_fs_type);
-}
-
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module(void)
+static int __init init_ncp_fs(void)
 {
 	DPRINTK("ncpfs: init_module called\n");
 
@@ -717,7 +709,7 @@ int init_module(void)
 	return init_ncp_fs();
 }
 
-void cleanup_module(void)
+static void __exit exit_ncp_fs(void)
 {
 	DPRINTK("ncpfs: cleanup_module called\n");
 	unregister_filesystem(&ncp_fs_type);
@@ -727,4 +719,7 @@ void cleanup_module(void)
 #endif
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_ncp_fs)
+module_exit(exit_ncp_fs)

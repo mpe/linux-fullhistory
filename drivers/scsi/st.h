@@ -47,6 +47,7 @@ typedef struct {
 #define ST_NBR_MODES (1 << ST_NBR_MODE_BITS)
 #define ST_MODE_SHIFT (7 - ST_NBR_MODE_BITS)
 #define ST_MODE_MASK ((ST_NBR_MODES - 1) << ST_MODE_SHIFT)
+#define ST_MAX_TAPES (1 << ST_MODE_SHIFT)
 
 /* The status related to each partition */
 typedef struct {
@@ -64,7 +65,6 @@ typedef struct {
 /* The tape drive descriptor */
 typedef struct {
 	kdev_t devt;
-	unsigned capacity;
 	Scsi_Device *device;
 	struct semaphore sem;
 	ST_buffer *buffer;
@@ -79,6 +79,7 @@ typedef struct {
 	unsigned char restr_dma;
 	unsigned char scsi2_logical;
 	unsigned char default_drvbuffer;	/* 0xff = don't touch, value 3 bits */
+	int tape_type;
 	int write_threshold;
 	int timeout;		/* timeout for normal commands */
 	int long_timeout;	/* timeout for commands known to take long time */
@@ -105,13 +106,14 @@ typedef struct {
 	unsigned char drv_buffer;
 	unsigned char density;
 	unsigned char door_locked;
-	unsigned char rew_at_close;
+	unsigned char autorew_dev;   /* auto-rewind device */
+	unsigned char rew_at_close;  /* rewind necessary at close */
 	unsigned char inited;
 	int block_size;
 	int min_block;
 	int max_block;
-	int recover_count;
-	struct mtget *mt_status;
+	int recover_count;     /* From tape opening */
+	int recover_reg;       /* From last status call */
 
 #if DEBUG
 	unsigned char write_pending;
@@ -122,7 +124,6 @@ typedef struct {
 #endif
 } Scsi_Tape;
 
-extern Scsi_Tape *scsi_tapes;
 
 /* Values of eof */
 #define	ST_NOEOF	0

@@ -1267,22 +1267,17 @@ int minix_sync_inode(struct inode * inode)
 
 static DECLARE_FSTYPE_DEV(minix_fs_type,"minix",minix_read_super);
 
-int __init init_minix_fs(void)
+static int __init init_minix_fs(void)
 {
         return register_filesystem(&minix_fs_type);
 }
 
-#ifdef MODULE
+static void __exit exit_minix_fs(void)
+{
+        unregister_filesystem(&minix_fs_type);
+}
+
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	return init_minix_fs();
-}
-
-void cleanup_module(void)
-{
-	unregister_filesystem(&minix_fs_type);
-}
-
-#endif
+module_init(init_minix_fs)
+module_exit(exit_minix_fs)

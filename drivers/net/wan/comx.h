@@ -25,6 +25,7 @@
  *	tx_carrier_errors	modem line status changes
  *	tx_fifo_errors		tx underrun (locomx)
  */
+#include <linux/config.h>
 
 struct comx_protocol {
 	char	*name;

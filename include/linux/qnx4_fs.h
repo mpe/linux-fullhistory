@@ -104,7 +104,6 @@ extern unsigned long qnx4_block_map(struct inode *inode, long iblock);
 extern struct buffer_head *qnx4_getblk(struct inode *, int, int);
 extern struct buffer_head *qnx4_bread(struct inode *, int, int);
 
-extern int init_qnx4_fs(void);
 extern int qnx4_create(struct inode *dir, struct dentry *dentry, int mode);
 extern struct inode_operations qnx4_file_inode_operations;
 extern struct inode_operations qnx4_dir_inode_operations;

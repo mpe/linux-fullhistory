@@ -98,7 +98,6 @@ extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 
 extern struct super_block *proc_super_blocks;
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
-extern int init_proc_fs(void);
 extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_entry *);
 
 extern int proc_match(int, const char *,struct proc_dir_entry *);

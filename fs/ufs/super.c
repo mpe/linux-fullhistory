@@ -951,22 +951,17 @@ static struct super_operations ufs_super_ops = {
 
 static DECLARE_FSTYPE_DEV(ufs_fs_type, "ufs", ufs_read_super);
 
-int __init init_ufs_fs(void)
+static int __init init_ufs_fs(void)
 {
 	return register_filesystem(&ufs_fs_type);
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module(void)
-{
-	return init_ufs_fs();
-}
-
-void cleanup_module(void)
+static void __exit exit_ufs_fs(void)
 {
 	unregister_filesystem(&ufs_fs_type);
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_ufs_fs)
+module_exit(exit_ufs_fs)

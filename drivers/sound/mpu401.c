@@ -1726,25 +1726,24 @@ int init_mpu401(void)
 {
 	/* Can be loaded either for module use or to provide functions
 	   to others */
-	cfg.irq = irq;
-	cfg.io_base = io;
-	
-	if (cfg.io_base != -1 && cfg.irq != -1) {
-		printk(KERN_WARNING "mpu401: need io and irq !");
-		return -ENODEV;
+	if (io != -1 && irq != -1) {
+	        cfg.irq = irq;
+		cfg.io_base = io;
+		if (probe_mpu401(&cfg) == 0)
+			return -ENODEV;
+		attach_mpu401(&cfg);
 	}
 	
-	if (probe_mpu401(&cfg) == 0)
-		return -ENODEV;
-	attach_mpu401(&cfg);
-
 	SOUND_LOCK;
 	return 0;
 }
 
 void cleanup_mpu401(void)
 {
-	unload_mpu401(&cfg);
+	if (io != -1 && irq != -1) {
+		/* Check for use by, for example, sscape driver */
+		unload_mpu401(&cfg);
+	}
 	SOUND_LOCK_END;
 }
 

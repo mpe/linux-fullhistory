@@ -272,14 +272,6 @@ extern ssize_t fat_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t fat_file_write(struct file *, const char *, size_t, loff_t *);
 extern void fat_truncate(struct inode *inode);
 
-/* vfat.c */
-extern int init_vfat_fs(void);
-
-
-/* msdosfs_syms.c */
-extern int init_msdos_fs(void);
-extern struct file_system_type msdos_fs_type;
-
 /* msdos.c */
 extern struct super_block *msdos_read_super(struct super_block *sb,void *data, int silent);
 
@@ -294,7 +286,6 @@ extern int msdos_rename(struct inode *old_dir,struct dentry *old_dentry,
 			struct inode *new_dir,struct dentry *new_dentry);
 
 /* nls.c */
-extern int init_fat_nls(void);
 extern struct fat_nls_table *fat_load_nls(int codepage);
 
 /* tables.c */

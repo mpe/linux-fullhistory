@@ -36,7 +36,6 @@
 
 /* Handle mangled (versioned) external symbols */
 
-#include <linux/config.h>   /* retrieve the CONFIG_* macros */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/list.h>

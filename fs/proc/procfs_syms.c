@@ -22,7 +22,15 @@ EXPORT_SYMBOL(proc_root_driver);
 
 static DECLARE_FSTYPE(proc_fs_type, "proc", proc_read_super, 0);
 
-int __init init_proc_fs(void)
+static int __init init_proc_fs(void)
 {
-	return register_filesystem(&proc_fs_type) == 0;
+	return register_filesystem(&proc_fs_type);
 }
+
+static void __exit exit_proc_fs(void)
+{
+	unregister_filesystem(&proc_fs_type);
+}
+
+module_init(init_proc_fs)
+module_exit(exit_proc_fs)

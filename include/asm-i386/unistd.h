@@ -222,6 +222,7 @@
 #define __NR_setfsuid32		215
 #define __NR_setfsgid32		216
 #define __NR_pivot_root		217
+#define __NR_mincore		218
 
 /* user-visible error numbers are in the range -1 - -124: see <asm-i386/errno.h> */
 

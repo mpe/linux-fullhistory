@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sat Aug  7 13:52:16 1999 by makisara@kai.makisara.local
+Last modified: Sat Mar 11 10:34:44 2000 by makisara@kai.makisara.local
 
 
 BASICS
@@ -134,11 +134,7 @@ A small number of buffers are allocated at driver initialisation. The
 maximum number of these buffers is defined by ST_MAX_BUFFERS. The
 maximum can be changed with kernel or module startup options. One
 buffer is allocated for each drive detected when the driver is
-initialized up to the maximum. The minimum number of allocated buffers
-is ST_EXTRA_DEVS (in hosts.h) (unless this number exceeds the defined
-maximum). This ensures some functionality also for the drives found
-after tape driver initialization (a SCSI adapter driver is loaded as a
-module). The default for ST_EXTRA_DEVS is two.
+initialized up to the maximum.
 
 The driver tries to allocate new buffers at run-time if
 necessary. These buffers are freed after use. If the maximum number of

@@ -260,7 +260,6 @@ static int coda_psdev_open(struct inode * inode, struct file * file)
 	}
 	
 	vcp->vc_inuse++;
-	MOD_INC_USE_COUNT;
 
 	if ( file->f_flags == O_RDWR ) {
 		vcp->vc_pid = current->pid;
@@ -290,7 +289,6 @@ static int coda_psdev_release(struct inode * inode, struct file * file)
 	}
 
 	vcp->vc_inuse--;
-	MOD_DEC_USE_COUNT;
 	CDEBUG(D_PSDEV, "inuse: %d, vc_pid %d, caller %d\n",
 	       vcp->vc_inuse, vcp->vc_pid, current->pid);
 

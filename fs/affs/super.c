@@ -672,24 +672,17 @@ affs_statfs(struct super_block *sb, struct statfs *buf)
 
 static DECLARE_FSTYPE_DEV(affs_fs_type, "affs", affs_read_super);
 
-int __init init_affs_fs(void)
+static int __init init_affs_fs(void)
 {
 	return register_filesystem(&affs_fs_type);
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int
-init_module(void)
-{
-	return register_filesystem(&affs_fs_type);
-}
-
-void
-cleanup_module(void)
+static void __exit exit_affs_fs(void)
 {
 	unregister_filesystem(&affs_fs_type);
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_affs_fs)
+module_exit(exit_affs_fs)

@@ -127,61 +127,21 @@ struct udf_options
 	uid_t uid;
 };
 
-#if defined(MODULE)
-	
-/*
- * cleanup_module
- *
- * PURPOSE
- *	Unregister the UDF filesystem type.
- *
- * DESCRIPTION
- *	Clean-up before the module is unloaded.
- *	This routine only applies when compiled as a module.
- *
- * HISTORY
- *	July 1, 1997 - Andrew E. Mileski
- *	Written, tested, and released.
- */
-int
-cleanup_module(void)
-{
-	printk(KERN_NOTICE "udf: unregistering filesystem\n");
-	return unregister_filesystem(&udf_fstype);
-}
 
-/*
- * init_module / init_udf_fs
- *
- * PURPOSE
- *	Register the UDF filesystem type.
- *
- * HISTORY
- *	July 1, 1997 - Andrew E. Mileski
- *	Written, tested, and released.
- */
-int init_module(void)
-#else /* if !defined(MODULE) */
-int __init init_udf_fs(void)
-#endif
+static int __init init_udf_fs(void)
 {
 	printk(KERN_NOTICE "udf: registering filesystem\n");
-	{
-		struct super_block sb;
-		int size;
-
-		size = sizeof(struct super_block) +
-			(long)&sb.u - (long)&sb;
-		if ( size < sizeof(struct udf_sb_info) )
-		{
-			printk(KERN_ERR "udf: Danger! Kernel was compiled without enough room for udf_sb_info\n");
-			printk(KERN_ERR "udf: Kernel has room for %u bytes, udf needs %lu\n",
-				size, (unsigned long)sizeof(struct udf_sb_info));
-			return 0;
-		}
-	}
 	return register_filesystem(&udf_fstype);
 }
+
+static void __exit exit_udf_fs(void)
+{
+	printk(KERN_NOTICE "udf: unregistering filesystem\n");
+	unregister_filesystem(&udf_fstype);
+}
+
+module_init(init_udf_fs)
+module_exit(exit_udf_fs)
 
 /*
  * udf_parse_options

@@ -78,8 +78,7 @@ if (file->f_op->llseek) { \
  * dumping of the process results in another error..
  */
 
-static inline int
-do_aout_core_dump(long signr, struct pt_regs * regs, struct file *file)
+static int aout_core_dump(long signr, struct pt_regs * regs, struct file *file)
 {
 	mm_segment_t fs;
 	int has_dumped = 0;
@@ -183,17 +182,6 @@ end_coredump:
 	return has_dumped;
 }
 
-static int
-aout_core_dump(long signr, struct pt_regs * regs, struct file *file)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_aout_core_dump(signr, regs, file);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
 /*
  * create_aout_tables() parses the env- and arg-strings in new user
  * memory and creates the pointer tables from them, and puts their
@@ -261,7 +249,7 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
  * libraries.  There is no binary dependent code anywhere else.
  */
 
-static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
 	struct file * file;
@@ -398,14 +386,11 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		}
 	}
 beyond_if:
-	if (current->exec_domain && current->exec_domain->module)
-		__MOD_DEC_USE_COUNT(current->exec_domain->module);
+	put_exec_domain(current->exec_domain);
 	if (current->binfmt && current->binfmt->module)
 		__MOD_DEC_USE_COUNT(current->binfmt->module);
 	current->exec_domain = lookup_exec_domain(current->personality);
 	current->binfmt = &aout_format;
-	if (current->exec_domain && current->exec_domain->module)
-		__MOD_INC_USE_COUNT(current->exec_domain->module);
 	if (current->binfmt && current->binfmt->module)
 		__MOD_INC_USE_COUNT(current->binfmt->module);
 
@@ -429,20 +414,7 @@ beyond_if:
 	return 0;
 }
 
-
-static int
-load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_aout_binary(bprm, regs);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
-static inline int
-do_load_aout_library(int fd)
+static int load_aout_library(int fd)
 {
         struct file * file;
 	struct inode * inode;
@@ -529,18 +501,6 @@ out:
 	return retval;
 }
 
-static int
-load_aout_library(int fd)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_aout_library(fd);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
-
 static int __init init_aout_binfmt(void)
 {
 	return register_binfmt(&aout_format);
@@ -555,4 +515,3 @@ EXPORT_NO_SYMBOLS;
 
 module_init(init_aout_binfmt);
 module_exit(exit_aout_binfmt);
-

@@ -31,7 +31,6 @@
 
 #define VERSION "0.13"
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>
@@ -44,7 +43,6 @@
 #include <asm/dma.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
-#include <linux/netdevice.h>
 
 #include "comx.h"
 #include "z85230.h"

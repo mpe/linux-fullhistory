@@ -54,6 +54,8 @@ extern struct exec_domain default_exec_domain;
 extern struct exec_domain *lookup_exec_domain(unsigned long personality);
 extern int register_exec_domain(struct exec_domain *it);
 extern int unregister_exec_domain(struct exec_domain *it);
+#define put_exec_domain(it) \
+	if (it && it->module) __MOD_DEC_USE_COUNT(it->module);
 asmlinkage long sys_personality(unsigned long personality);
 
 #endif /* _PERSONALITY_H */

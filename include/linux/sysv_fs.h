@@ -377,7 +377,6 @@ extern unsigned long sysv_count_free_blocks(struct super_block *sb);
 extern struct buffer_head * sysv_file_bread(struct inode *, int, int);
 
 extern void sysv_truncate(struct inode *);
-extern int init_sysv_fs(void);
 extern void sysv_write_inode(struct inode *);
 extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct file *, struct dentry *);

@@ -546,7 +546,6 @@ extern struct file_system_type ufs_fs_type;
 extern void ufs_warning (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
 extern void ufs_error (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
 extern void ufs_panic (struct super_block *, const char *, const char *, ...) __attribute__ ((format (printf, 3, 4)));
-extern int init_ufs_fs(void);
 extern void ufs_write_super (struct super_block *);
 
 /* symlink.c */

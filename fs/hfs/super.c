@@ -472,38 +472,19 @@ bail3:
 	return NULL;	
 }
 
-int __init init_hfs_fs(void)
+static int __init init_hfs_fs(void)
 {
         hfs_cat_init();
 	return register_filesystem(&hfs_fs);
 }
 
-#ifdef MODULE
-int init_module(void) {
-	int error;
-
-#if defined(DEBUG_SIZES) || defined(DEBUG_ALL)
-	hfs_warn("HFS inode: %d bytes available\n",
-		 sizeof(struct ext2_inode_info)-sizeof(struct hfs_inode_info));
-	hfs_warn("HFS super_block: %d bytes available\n",
-		 sizeof(struct ext2_sb_info)-sizeof(struct hfs_sb_info));
-	if ((sizeof(struct hfs_inode_info)>sizeof(struct ext2_inode_info)) ||
-	    (sizeof(struct hfs_sb_info)>sizeof(struct ext2_sb_info))) {
-		return -ENOMEM; /* well sort of */
-	}
-#endif
-	error = init_hfs_fs();
-	if (!error) {
-		/* register_symtab(NULL); */
-	}
-	return error;
-}
-
-void cleanup_module(void) {
+static void __exit exit_hfs_fs(void) {
 	hfs_cat_free();
 	unregister_filesystem(&hfs_fs);
 }
-#endif
+
+module_init(init_hfs_fs)
+module_exit(exit_hfs_fs)
 
 #if defined(DEBUG_ALL) || defined(DEBUG_MEM)
 long int hfs_alloc = 0;

@@ -7,6 +7,8 @@
  *
  * History:
  *
+ * - Revision 0.1.5 (13 Mar 2000): spinlocks instead of saveflags();cli();etc
+ *                                 minor fixes
  * - Revision 0.1.4 (24 Jan 2000): fixed a bug in hga_card_detect() for 
  *                                  HGA-only systems
  * - Revision 0.1.3 (22 Jan 2000): modified for the new fb_info structure
@@ -27,6 +29,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
+#include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/tty.h>
@@ -53,7 +56,7 @@
 #define DPRINTK(args...)
 #endif
 
-#if 1
+#if 0
 #define CHKINFO(ret) if (info != &fb_info) { printk(KERN_DEBUG __FILE__": This should never happen, line:%d \n", __LINE__); return ret; }
 #else
 #define CHKINFO(ret)
@@ -96,6 +99,10 @@ static char *hga_type_name;
 #define HGA_CONFIG_COL132	0x08
 #define HGA_GFX_MODE_EN		0x01
 #define HGA_GFX_PAGE_EN		0x02
+
+/* Global locks */
+
+spinlock_t hga_reg_lock = SPIN_LOCK_UNLOCKED;
 
 /* Framebuffer driver structures */
 
@@ -158,55 +165,46 @@ static int nologo = 0;
 
 static void write_hga_b(unsigned int val, unsigned char reg)
 {
-	unsigned long flags;
-
-	save_flags(flags); cli();
-
 	outb_p(reg, HGA_INDEX_PORT); 
 	outb_p(val, HGA_VALUE_PORT);
-
-	restore_flags(flags);
 }
 
 static void write_hga_w(unsigned int val, unsigned char reg)
 {
-	unsigned long flags;
-
-	save_flags(flags); cli();
-
 	outb_p(reg,   HGA_INDEX_PORT); outb_p(val >> 8,   HGA_VALUE_PORT);
 	outb_p(reg+1, HGA_INDEX_PORT); outb_p(val & 0xff, HGA_VALUE_PORT);
-
-	restore_flags(flags);
 }
 
 static int test_hga_b(unsigned char val, unsigned char reg)
 {
-	unsigned long flags;
-
-	save_flags(flags); cli();
-
 	outb_p(reg, HGA_INDEX_PORT); 
 	outb  (val, HGA_VALUE_PORT);
-
 	udelay(20); val = (inb_p(HGA_VALUE_PORT) == val);
-
-	restore_flags(flags);
-
 	return val;
 }
 
 static void hga_clear_screen(void)
 {
+	unsigned char fillchar = 0xbf; /* magic */
+	unsigned long flags;
+
+	spin_lock_irqsave(&hga_reg_lock, flags);
 	if (hga_mode == HGA_TXT)
-		memset((char *)hga_vram_base, ' ', hga_vram_len);
+		fillchar = ' ';
 	else if (hga_mode == HGA_GFX)
-		memset((char *)hga_vram_base, 0, hga_vram_len);
+		fillchar = 0x00;
+	spin_unlock_irqrestore(&hga_reg_lock, flags);
+	if (fillchar != 0xbf)
+		memset((char *)hga_vram_base, fillchar, hga_vram_len);
 }
 
 
+#ifdef MODULE
 static void hga_txt_mode(void)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&hga_reg_lock, flags);
 	outb_p(HGA_MODE_VIDEO_EN | HGA_MODE_BLINK_EN, HGA_MODE_PORT);
 	outb_p(0x00, HGA_GFX_PORT);
 	outb_p(0x00, HGA_STATUS_PORT);
@@ -230,10 +228,15 @@ static void hga_txt_mode(void)
 	write_hga_w(0x0000, 0x0e);	/* cursor location */
 
 	hga_mode = HGA_TXT;
+	spin_unlock_irqrestore(&hga_reg_lock, flags);
 }
+#endif /* MODULE */
 
 static void hga_gfx_mode(void)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&hga_reg_lock, flags);
 	outb_p(0x00, HGA_STATUS_PORT);
 	outb_p(HGA_GFX_MODE_EN, HGA_GFX_PORT);
 	outb_p(HGA_MODE_VIDEO_EN | HGA_MODE_GRAPHICS, HGA_MODE_PORT);
@@ -257,6 +260,7 @@ static void hga_gfx_mode(void)
 	write_hga_w(0x0000, 0x0e);	/* cursor location */
 
 	hga_mode = HGA_GFX;
+	spin_unlock_irqrestore(&hga_reg_lock, flags);
 }
 
 #ifdef MODULE
@@ -274,12 +278,29 @@ static void hga_show_logo(void)
 static void hga_pan(unsigned int xoffset, unsigned int yoffset)
 {
 	unsigned int base;
+	unsigned long flags;
+	
 	base = (yoffset / 8) * 90 + xoffset;
+	spin_lock_irqsave(&hga_reg_lock, flags);
 	write_hga_w(base, 0x0c);	/* start address */
+	spin_unlock_irqrestore(&hga_reg_lock, flags);
 	DPRINTK("hga_pan: base:%d\n", base);
 }
 
-static int hga_card_detect(void)
+static void hga_blank(int blank_mode)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&hga_reg_lock, flags);
+	if (blank_mode) {
+		outb_p(0x00, HGA_MODE_PORT);	/* disable video */
+	} else {
+		outb_p(HGA_MODE_VIDEO_EN | HGA_MODE_GRAPHICS, HGA_MODE_PORT);
+	}
+	spin_unlock_irqrestore(&hga_reg_lock, flags);
+}
+
+static int __init hga_card_detect(void)
 {
 	int count=0;
 	u16 *p, p_save;
@@ -288,11 +309,6 @@ static int hga_card_detect(void)
 	hga_vram_base = VGA_MAP_MEM(0xb0000);
 	hga_vram_len  = 0x08000;
 
-	if (!request_mem_region(hga_vram_base, hga_vram_len, "hgafb")) {
-		printk(KERN_ERR "hgafb: cannot reserve video memory at 0x%lX\n",
-				hga_vram_base);
-		return 0;
-	}
 	if (request_region(0x3b0, 12, "hgafb"))
 		release_io_ports = 1;
 	if (request_region(0x3bf, 1, "hgafb"))
@@ -598,11 +614,7 @@ static void hgafbcon_blank(int blank_mode, struct fb_info *info)
 	CHKINFO( );
 	DPRINTK("hga_blank: blank_mode:%d, info:%x, fb_info:%x\n", blank_mode, (unsigned)info, (unsigned)&fb_info);
 
-	if (blank_mode) {
-		outb_p(0x00, HGA_MODE_PORT);	/* disable video */
-	} else {
-		outb_p(HGA_MODE_VIDEO_EN | HGA_MODE_GRAPHICS, HGA_MODE_PORT);
-	}
+	hga_blank(blank_mode);
 }
 
 
@@ -642,7 +654,12 @@ int __init hgafb_init(void)
 	disp.line_length = hga_fix.line_length;
 	disp.can_soft_blank = 1;
 	disp.inverse = 0;
+#ifdef FBCON_HAS_HGA
 	disp.dispsw = &fbcon_hga;
+#else
+#warning HGAFB will not work as a console!
+	disp.dispsw = &fbcon_dummy;
+#endif
 	disp.dispsw_data = NULL;
 
 	disp.scrollmode = SCROLL_YREDRAW;
@@ -723,7 +740,6 @@ static void hgafb_cleanup(struct fb_info *info)
 	unregister_framebuffer(info);
 	if (release_io_ports) release_region(0x3b0, 12);
 	if (release_io_port) release_region(0x3bf, 1);
-	release_mem_region(hga_vram_base, hga_vram_len);
 }
 #endif /* MODULE */
 

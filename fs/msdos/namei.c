@@ -599,28 +599,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data, int sile
 
 	MSDOS_SB(sb)->options.isvfat = 0;
 	res = fat_read_super(sb, data, silent, &msdos_dir_inode_operations);
-	if (res == NULL)
-		goto out_fail;
-	sb->s_root->d_op = &msdos_dentry_operations;
+	if (res)
+		sb->s_root->d_op = &msdos_dentry_operations;
 	return res;
-
-out_fail:
-	return NULL;
 }
-
-
-
-#ifdef MODULE
-int init_module(void)
-{
-	return init_msdos_fs();
-}
-
-
-void cleanup_module(void)
-{
-	unregister_filesystem(&msdos_fs_type);
-}
-
-#endif
-

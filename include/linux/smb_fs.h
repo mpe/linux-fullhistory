@@ -120,7 +120,6 @@ int  smb_revalidate_inode(struct dentry *);
 int  smb_notify_change(struct dentry *, struct iattr *);
 unsigned long smb_invent_inos(unsigned long);
 struct inode *smb_iget(struct super_block *, struct smb_fattr *);
-extern int init_smb_fs(void);
 
 /* linux/fs/smbfs/proc.c */
 __u32 smb_len(unsigned char *);

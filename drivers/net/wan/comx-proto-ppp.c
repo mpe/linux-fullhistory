@@ -33,7 +33,6 @@
 
 #define VERSION "0.23"
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>

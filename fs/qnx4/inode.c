@@ -491,23 +491,18 @@ static void qnx4_read_inode(struct inode *inode)
 
 static DECLARE_FSTYPE_DEV(qnx4_fs_type, "qnx4", qnx4_read_super);
 
-int __init init_qnx4_fs(void)
+static int __init init_qnx4_fs(void)
 {
 	printk("QNX4 filesystem 0.2.2 registered.\n");
 	return register_filesystem(&qnx4_fs_type);
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module(void)
-{
-	return init_qnx4_fs();
-}
-
-void cleanup_module(void)
+static void __exit exit_qnx4_fs(void)
 {
 	unregister_filesystem(&qnx4_fs_type);
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_qnx4_fs)
+module_exit(exit_qnx4_fs)

@@ -44,7 +44,6 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/delay.h>
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>

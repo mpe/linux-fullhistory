@@ -186,7 +186,6 @@ int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 extern struct dentry *isofs_lookup(struct inode *, struct dentry *);
 extern int isofs_get_block(struct inode *, long, struct buffer_head *, int);
 extern int isofs_bmap(struct inode *, int);
-extern int init_iso9660_fs(void);
 extern int isofs_lookup_grandparent(struct inode *, int);
 
 extern struct inode_operations isofs_dir_inode_operations;

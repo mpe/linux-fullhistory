@@ -1292,16 +1292,3 @@ struct super_block *vfat_read_super(struct super_block *sb,void *data,
 
 	return res;
 }
-
-#ifdef MODULE
-int init_module(void)
-{
-	return init_vfat_fs();
-}
-
-void cleanup_module(void)
-{
-	unregister_filesystem(&vfat_fs_type);
-}
-
-#endif /* ifdef MODULE */

@@ -49,10 +49,7 @@ extern struct inode_operations efs_dir_inode_operations;
 extern struct file_operations efs_dir_operations;
 extern struct address_space_operations efs_symlink_aops;
 
-extern int init_module(void);
-extern void cleanup_module(void);
 extern struct super_block *efs_read_super(struct super_block *, void *, int);
-extern void efs_put_super(struct super_block *);
 extern int efs_statfs(struct super_block *, struct statfs *);
 
 extern void efs_read_inode(struct inode *);
@@ -61,7 +58,4 @@ extern efs_block_t efs_map_block(struct inode *, efs_block_t);
 extern struct dentry *efs_lookup(struct inode *, struct dentry *);
 extern int efs_bmap(struct inode *, int);
 
-extern int init_efs_fs(void);
-
 #endif /* __EFS_FS_H__ */
-

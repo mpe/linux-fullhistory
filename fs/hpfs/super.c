@@ -9,6 +9,7 @@
 #include <linux/string.h>
 #include "hpfs_fn.h"
 #include <linux/module.h>
+#include <linux/init.h>
 
 /* Mark the filesystem dirty, so that chkdsk checks it when os/2 booted */
 
@@ -557,26 +558,17 @@ bail0:
 
 DECLARE_FSTYPE_DEV(hpfs_fs_type, "hpfs", hpfs_read_super);
 
-int init_hpfs_fs(void)
+static int __init init_hpfs_fs(void)
 {
 	return register_filesystem(&hpfs_fs_type);
 }
 
-#ifdef MODULE
-
-/*int register_symtab_from(struct symbol_table *, long *);*/
-
-int init_module(void)
-{
-	/*int status;
-	if (!(status = init_hpfs_fs())) register_symtab(NULL);
-	return status;*/
-	return init_hpfs_fs();
-}
-
-void cleanup_module(void)
+static void __exit exit_hpfs_fs(void)
 {
 	unregister_filesystem(&hpfs_fs_type);
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_hpfs_fs)
+module_exit(exit_hpfs_fs)

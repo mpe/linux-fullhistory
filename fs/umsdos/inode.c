@@ -435,22 +435,17 @@ out_noroot:
 
 static DECLARE_FSTYPE_DEV(umsdos_fs_type, "umsdos", UMSDOS_read_super);
 
-int __init init_umsdos_fs (void)
+static int __init init_umsdos_fs (void)
 {
 	return register_filesystem (&umsdos_fs_type);
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-int init_module (void)
-{
-	return init_umsdos_fs ();
-}
-
-void cleanup_module (void)
+static void __exit exit_umsdos_fs (void)
 {
 	unregister_filesystem (&umsdos_fs_type);
 }
 
-#endif
+EXPORT_NO_SYMBOLS;
+
+module_init(init_umsdos_fs)
+module_exit(exit_umsdos_fs)
