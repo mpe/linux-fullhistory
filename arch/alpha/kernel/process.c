@@ -30,12 +30,6 @@
 #include <linux/reboot.h>
 #include <linux/console.h>
 
-#if 0
-#ifdef CONFIG_RTC
-#include <linux/mc146818rtc.h>
-#endif
-#endif
-
 #include <asm/reg.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -140,13 +134,6 @@ common_shutdown(int mode, char *restart_cmd)
 		take_over_console(&dummy_con, 0, MAX_NR_CONSOLES-1, 1);
 #endif
 	}
-
-#if 0
-#ifdef CONFIG_RTC
-	/* Reset rtc to defaults.  */
-	rtc_kill_pit();
-#endif
-#endif
 
 	if (alpha_mv.kill_arch)
 		alpha_mv.kill_arch(mode);

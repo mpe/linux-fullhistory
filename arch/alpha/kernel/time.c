@@ -42,7 +42,7 @@
 #include <linux/timex.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 
 extern rwlock_t xtime_lock;
 extern volatile unsigned long lost_ticks;	/* kernel/sched.c */
@@ -163,57 +163,8 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-#if 0
-/*
- * Initialize Programmable Interval Timers with standard values.  Some
- * drivers depend on them being initialized (e.g., joystick driver).
- */
-
-#ifdef CONFIG_RTC
 void
-rtc_init_pit(void)
-{
-	unsigned char control;
-
-	/* Turn off RTC interrupts before /dev/rtc is initialized */
-	control = CMOS_READ(RTC_CONTROL);
-	control &= ~(RTC_PIE | RTC_AIE | RTC_UIE);
-	CMOS_WRITE(control, RTC_CONTROL);
-	(void) CMOS_READ(RTC_INTR_FLAGS);
-
-	/* Setup interval timer.  */
-	outb(0x34, 0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
-	outb(LATCH & 0xff, 0x40);	/* LSB */
-	outb(LATCH >> 8, 0x40);		/* MSB */
-
-	outb(0xb6, 0x43);	/* pit counter 2: speaker */
-	outb(0x31, 0x42);
-	outb(0x13, 0x42);
-}
-
-void
-rtc_kill_pit(void)
-{
-	unsigned char control;
-
-	cli();
-
-	/* Reset periodic interrupt frequency.  */
-	CMOS_WRITE(0x26, RTC_FREQ_SELECT);
-
-	/* Turn on periodic interrupts.  */
-	control = CMOS_READ(RTC_CONTROL);
-	control |= RTC_PIE;
-	CMOS_WRITE(control, RTC_CONTROL);	
-	CMOS_READ(RTC_INTR_FLAGS);
-
-	sti();
-}
-#endif
-#endif
-
-void
-common_init_pit (void)
+common_init_rtc(struct irqaction *action)
 {
 	unsigned char x;
 
@@ -241,20 +192,22 @@ common_init_pit (void)
 	outb(0xb6, 0x43);	/* pit counter 2: speaker */
 	outb(0x31, 0x42);
 	outb(0x13, 0x42);
+
+	setup_irq(RTC_IRQ, action);
 }
 
 void
 time_init(void)
 {
+	static struct irqaction timer_irqaction = {
+		handler:	timer_interrupt,
+		flags:		SA_INTERRUPT,
+		name:		"timer",
+	};
+
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
 	unsigned long cycle_freq, one_percent;
 	long diff;
-	static struct irqaction timer_irqaction  = { timer_interrupt,
-						     SA_INTERRUPT, 0, "timer",
-						     NULL, NULL};
-
-	/* Startup the timer source. */
-	alpha_mv.init_pit();
 
 	/*
 	 * The Linux interpretation of the CMOS clock register contents:
@@ -339,8 +292,8 @@ time_init(void)
 	state.last_rtc_update = 0;
 	state.partial_tick = 0L;
 
-	/* setup timer */ 
-	setup_irq(TIMER_IRQ, &timer_irqaction);
+	/* Startup the timer source. */
+	alpha_mv.init_rtc(&timer_irqaction);
 }
 
 /*

@@ -11,6 +11,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/in.h>
 #include <linux/fs.h>
 #include <linux/utsname.h>

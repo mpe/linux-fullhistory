@@ -23,6 +23,7 @@
 #include <asm/system.h>
 
 #include "proto.h"
+#include "irq_impl.h"
 #include "pci_impl.h"
 
 
@@ -286,6 +287,108 @@ struct pci_ops pyxis_pci_ops =
 	write_dword:	pyxis_write_config_dword
 };
 
+/* Note mask bit is true for ENABLED irqs.  */
+static unsigned long cached_irq_mask;
+
+static inline void
+pyxis_update_irq_hw(unsigned long mask)
+{
+	*(vulp)PYXIS_INT_MASK = mask;
+	mb();
+	*(vulp)PYXIS_INT_MASK;
+}
+
+static inline void
+pyxis_enable_irq(unsigned int irq)
+{
+	pyxis_update_irq_hw(cached_irq_mask |= 1UL << (irq - 16));
+}
+
+static inline void
+pyxis_disable_irq(unsigned int irq)
+{
+	pyxis_update_irq_hw(cached_irq_mask &= ~(1UL << (irq - 16)));
+}
+
+static unsigned int
+pyxis_startup_irq(unsigned int irq)
+{
+	pyxis_enable_irq(irq);
+	return 0;
+}
+
+static void
+pyxis_mask_and_ack_irq(unsigned int irq)
+{
+	unsigned long bit = 1UL << (irq - 16);
+	unsigned long mask = cached_irq_mask &= ~bit;
+
+	/* Disable the interrupt.  */
+	*(vulp)PYXIS_INT_MASK = mask;
+	wmb();
+	/* Ack PYXIS PCI interrupt.  */
+	*(vulp)PYXIS_INT_REQ = bit;
+	mb();
+	/* Re-read to force both writes.  */
+	*(vulp)PYXIS_INT_MASK;
+}
+
+static struct hw_interrupt_type pyxis_irq_type = {
+	typename:	"PYXIS",
+	startup:	pyxis_startup_irq,
+	shutdown:	pyxis_disable_irq,
+	enable:		pyxis_enable_irq,
+	disable:	pyxis_disable_irq,
+	ack:		pyxis_mask_and_ack_irq,
+	end:		pyxis_enable_irq,
+};
+
+void 
+pyxis_device_interrupt(unsigned long vector, struct pt_regs *regs)
+{
+	unsigned long pld;
+	unsigned int i;
+
+	/* Read the interrupt summary register of PYXIS */
+	pld = *(vulp)PYXIS_INT_REQ;
+	pld &= cached_irq_mask;
+
+	/*
+	 * Now for every possible bit set, work through them and call
+	 * the appropriate interrupt handler.
+	 */
+	while (pld) {
+		i = ffz(~pld);
+		pld &= pld - 1; /* clear least bit set */
+		if (i == 7)
+			isa_device_interrupt(vector, regs);
+		else
+			handle_irq(16+i, regs);
+	}
+}
+
+void __init
+init_pyxis_irqs(unsigned long ignore_mask)
+{
+	long i;
+
+	*(vulp)PYXIS_INT_MASK = 0;		/* disable all */
+	*(vulp)PYXIS_INT_REQ  = -1;		/* flush all */
+	mb();
+
+	/* Send -INTA pulses to clear any pending interrupts ...*/
+	*(vuip) PYXIS_IACK_SC;
+
+	for (i = 16; i < 48; ++i) {
+		if ((ignore_mask >> i) & 1)
+			continue;
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &pyxis_irq_type;
+	}
+
+	setup_irq(16+7, &isa_cascade_irqaction);
+}
+
 void
 pyxis_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
 {
@@ -342,7 +445,7 @@ pyxis_broken_pci_tbi(struct pci_controler *hose,
 	__restore_flags(flags);
 }
 
-static void
+static void __init
 pyxis_enable_broken_tbi(struct pci_iommu_arena *arena)
 {
 	void *page;

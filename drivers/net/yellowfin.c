@@ -1377,7 +1377,12 @@ static int __init yellowfin_init (void)
 {
 	if (debug)					/* Emit version even if no cards detected. */
 		printk(KERN_INFO "%s", version);
-	return pci_register_driver (&yellowfin_driver) > 0 ? 0 : -ENODEV;
+
+	if (pci_register_driver (&yellowfin_driver) > 0)
+		return 0;
+
+	pci_unregister_driver (&yellowfin_driver);
+	return -ENODEV;
 }
 
 

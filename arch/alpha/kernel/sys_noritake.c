@@ -29,24 +29,50 @@
 #include <asm/core_cia.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
+/* Note mask bit is true for ENABLED irqs.  */
+static int cached_irq_mask;
 
-static void 
-noritake_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+static inline void
+noritake_update_irq_hw(int irq, int mask)
 {
-	if (irq <= 15)
-		if (irq <= 7)
-			outb(mask, 0x21);	/* ISA PIC1 */
-		else
-			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else if (irq <= 31)
-		outw(~(mask >> 16), 0x54a);
-	else
-		outw(~(mask >> 32), 0x54c);
+	int port = 0x54a;
+	if (irq >= 16) mask >>= 16;
+	if (irq >= 16) port = 0x54c;
+	outw(mask, port);
 }
+
+static inline void
+noritake_enable_irq(unsigned int irq)
+{
+	noritake_update_irq_hw(irq, cached_irq_mask |= 1 << (irq - 16));
+}
+
+static inline void
+noritake_disable_irq(unsigned int irq)
+{
+	noritake_update_irq_hw(irq, cached_irq_mask &= ~(1 << (irq - 16)));
+}
+
+static unsigned int
+noritake_startup_irq(unsigned int irq)
+{
+	noritake_enable_irq(irq);
+	return 0;
+}
+
+static struct hw_interrupt_type noritake_irq_type = {
+	typename:	"NORITAKE",
+	startup:	noritake_startup_irq,
+	shutdown:	noritake_disable_irq,
+	enable:		noritake_enable_irq,
+	disable:	noritake_disable_irq,
+	ack:		noritake_disable_irq,
+	end:		noritake_enable_irq,
+};
 
 static void 
 noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
@@ -55,10 +81,10 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	unsigned int i;
 
 	/* Read the interrupt summary registers of NORITAKE */
-	pld = ((unsigned long) inw(0x54c) << 32) |
-		((unsigned long) inw(0x54a) << 16) |
-		((unsigned long) inb(0xa0)  <<  8) |
-		((unsigned long) inb(0x20));
+	pld = (((unsigned long) inw(0x54c) << 32)
+	       | ((unsigned long) inw(0x54a) << 16)
+	       | ((unsigned long) inb(0xa0) << 8)
+	       | inb(0x20));
 
 	/*
 	 * Now for every possible bit set, work through them and call
@@ -70,7 +96,7 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		if (i < 16) {
 			isa_device_interrupt(vector, regs);
 		} else {
-			handle_irq(i, i, regs);
+			handle_irq(i, regs);
 		}
 	}
 }
@@ -78,36 +104,44 @@ noritake_device_interrupt(unsigned long vector, struct pt_regs *regs)
 static void 
 noritake_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
+	int irq;
 
-	ack = irq = (vector - 0x800) >> 4;
+	irq = (vector - 0x800) >> 4;
 
 	/*
 	 * I really hate to do this, too, but the NORITAKE SRM console also
-	 *  reports PCI vectors *lower* than I expected from the bit numbers
-	 *  in the documentation.
+	 * reports PCI vectors *lower* than I expected from the bit numbers
+	 * in the documentation.
 	 * But I really don't want to change the fixup code for allocation
-	 *  of IRQs, nor the alpha_irq_mask maintenance stuff, both of which
-	 *  look nice and clean now.
+	 * of IRQs, nor the alpha_irq_mask maintenance stuff, both of which
+	 * look nice and clean now.
 	 * So, here's this additional grotty hack... :-(
 	 */
 	if (irq >= 16)
-		ack = irq = irq + 1;
+		irq = irq + 1;
 
-	handle_irq(irq, ack, regs);
+	handle_irq(irq, regs);
 }
 
 static void __init
 noritake_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
+	long i;
 
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = noritake_srm_device_interrupt;
 
-	outw(~(alpha_irq_mask >> 16), 0x54a); /* note invert */
-	outw(~(alpha_irq_mask >> 32), 0x54c); /* note invert */
-	enable_irq(2);			/* enable cascade */
+	outw(0, 0x54a);
+	outw(0, 0x54c);
+
+	for (i = 16; i < 48; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &noritake_irq_type;
+	}
+
+	init_i8259a_irqs();
+	init_rtc_irq();
+	common_init_isa_dma();
 }
 
 
@@ -245,14 +279,11 @@ struct alpha_machine_vector noritake_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
-	irq_probe_mask:		_PROBE_MASK(48),
-	update_irq_hw:		noritake_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	noritake_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		noritake_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		noritake_map_irq,
@@ -274,14 +305,11 @@ struct alpha_machine_vector noritake_primo_mv __initmv = {
 	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
-	irq_probe_mask:		_PROBE_MASK(48),
-	update_irq_hw:		noritake_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	noritake_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		noritake_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	pci_map_irq:		noritake_map_irq,
 	pci_swizzle:		noritake_swizzle,

@@ -3079,7 +3079,11 @@ static struct pci_driver tulip_driver = {
 
 static int __init tulip_init (void)
 {
-	return pci_register_driver (&tulip_driver) > 0 ? 0 : -ENODEV;
+	if (pci_register_driver (&tulip_driver) > 0)
+		return 0;
+
+	pci_unregister_driver (&tulip_driver);
+	return -ENODEV;
 }
 
 

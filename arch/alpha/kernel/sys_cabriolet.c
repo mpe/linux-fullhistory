@@ -16,8 +16,6 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
-#include <linux/irq.h>
-#include <linux/interrupt.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -33,98 +31,49 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-static void enable_cabriolet_irq(unsigned int irq);
-static void disable_cabriolet_irq(unsigned int irq);
+/* Note mask bit is true for DISABLED irqs.  */
+static unsigned long cached_irq_mask = ~0UL;
 
-static void enable_cabriolet_srm_irq(unsigned int irq);
-static void disable_cabriolet_srm_irq(unsigned int irq);
+static inline void
+cabriolet_update_irq_hw(unsigned int irq, unsigned long mask)
+{
+	int ofs = (irq - 16) / 8;
+	outb(mask >> (16 + ofs*3), 0x804 + ofs);
+}
 
-#define end_cabriolet_irq		enable_cabriolet_irq
-#define shutdown_cabriolet_irq		disable_cabriolet_irq
-#define mask_and_ack_cabriolet_irq	disable_cabriolet_irq
+static inline void
+cabriolet_enable_irq(unsigned int irq)
+{
+	cabriolet_update_irq_hw(irq, cached_irq_mask &= ~(1UL << irq));
+}
 
-#define end_cabriolet_srm_irq		enable_cabriolet_srm_irq
-#define shutdown_cabriolet_srm_irq	disable_cabriolet_srm_irq
-#define mask_and_ack_cabriolet_srm_irq	disable_cabriolet_srm_irq
-
-static unsigned int
-startup_cabriolet_irq(unsigned int irq)
-{ 
-	enable_cabriolet_irq(irq);
-	return 0; /* never anything pending */
+static void
+cabriolet_disable_irq(unsigned int irq)
+{
+	cabriolet_update_irq_hw(irq, cached_irq_mask |= 1UL << irq);
 }
 
 static unsigned int
-startup_cabriolet_srm_irq(unsigned int irq)
+cabriolet_startup_irq(unsigned int irq)
 { 
-	enable_cabriolet_srm_irq(irq);
+	cabriolet_enable_irq(irq);
 	return 0; /* never anything pending */
 }
 
 static struct hw_interrupt_type cabriolet_irq_type = {
-	"CABRIOLET",
-	startup_cabriolet_irq,
-	shutdown_cabriolet_irq,
-	enable_cabriolet_irq,
-	disable_cabriolet_irq,
-	mask_and_ack_cabriolet_irq,
-	end_cabriolet_irq,
+	typename:	"CABRIOLET",
+	startup:	cabriolet_startup_irq,
+	shutdown:	cabriolet_disable_irq,
+	enable:		cabriolet_enable_irq,
+	disable:	cabriolet_disable_irq,
+	ack:		cabriolet_disable_irq,
+	end:		cabriolet_enable_irq,
 };
-
-static struct hw_interrupt_type cabriolet_srm_irq_type = {
-	"CABRIOLET-SRM",
-	startup_cabriolet_srm_irq,
-	shutdown_cabriolet_srm_irq,
-	enable_cabriolet_srm_irq,
-	disable_cabriolet_srm_irq,
-	mask_and_ack_cabriolet_srm_irq,
-	end_cabriolet_srm_irq,
-};
-
-static unsigned long cached_irq_mask = ~0UL;
-
-static inline void
-cabriolet_flush_irq_mask(unsigned long mask)
-{
-	outl(mask >> 16, 0x804);
-}
-
-static void
-enable_cabriolet_irq(unsigned int irq)
-{
-	cached_irq_mask &= ~(1UL << irq);
-	cabriolet_flush_irq_mask(cached_irq_mask);
-}
-
-static void
-disable_cabriolet_irq(unsigned int irq)
-{
-	cached_irq_mask |= 1UL << irq;
-	cabriolet_flush_irq_mask(cached_irq_mask);
-}
-
-
-
-/* Under SRM console, we must use the CSERVE PALcode routine to manage
-   the interrupt mask for us.  Otherwise, the kernel/HW get out of
-   sync with what the PALcode thinks it needs to deliver/ignore.  */
-
-static void
-enable_cabriolet_srm_irq(unsigned int irq)
-{
-	cserve_ena(irq - 16);
-}
-
-static void
-disable_cabriolet_srm_irq(unsigned int irq)
-{
-	cserve_dis(irq - 16);
-}
-
 
 static void 
 cabriolet_device_interrupt(unsigned long v, struct pt_regs *r)
@@ -151,41 +100,30 @@ cabriolet_device_interrupt(unsigned long v, struct pt_regs *r)
 }
 
 static void __init
-init_TSUNAMI_irqs(struct hw_interrupt_type * ops)
-{
-	int i;
-
-	for (i = 0; i < NR_IRQS; i++) {
-		if (i == RTC_IRQ)
-			continue;
-		if (i < 16)
-			continue;
-		if (i >= 35)
-			break;
-		irq_desc[i].status = IRQ_DISABLED;
-		irq_desc[i].handler = ops;
-	}
-}
-
-static void __init
 cabriolet_init_irq(void)
 {
-	static struct irqaction cascade = { no_action, 0, 0, "sio-cascade", NULL, NULL};
+	init_i8259a_irqs();
+	init_rtc_irq();
 
-	STANDARD_INIT_IRQ_PROLOG;
-
-	init_ISA_irqs();
-	init_RTC_irq();
 	if (alpha_using_srm) {
 		alpha_mv.device_interrupt = srm_device_interrupt;
-		init_TSUNAMI_irqs(&cabriolet_srm_irq_type);
+		init_srm_irqs(35, 0);
 	}
 	else {
-		init_TSUNAMI_irqs(&cabriolet_irq_type);
-		cabriolet_flush_irq_mask(~0UL);
+		long i;
+
+		outb(0xff, 0x804);
+		outb(0xff, 0x805);
+		outb(0xff, 0x806);
+
+		for (i = 16; i < 35; ++i) {
+			irq_desc[i].status = IRQ_DISABLED;
+			irq_desc[i].handler = &cabriolet_irq_type;
+		}
 	}
 
-	setup_irq(16 + 4, &cascade);	/* enable SIO cascade */
+	common_init_isa_dma();
+	setup_irq(16+4, &isa_cascade_irqaction);
 }
 
 
@@ -344,7 +282,7 @@ struct alpha_machine_vector cabriolet_mv __initmv = {
 
 	init_arch:		apecs_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		cabriolet_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		cabriolet_map_irq,
@@ -370,7 +308,7 @@ struct alpha_machine_vector eb164_mv __initmv = {
 
 	init_arch:		cia_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		cabriolet_init_pci,
 	pci_map_irq:		cabriolet_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -395,7 +333,7 @@ struct alpha_machine_vector eb66p_mv __initmv = {
 
 	init_arch:		lca_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		cabriolet_init_pci,
 	pci_map_irq:		eb66p_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -420,7 +358,7 @@ struct alpha_machine_vector lx164_mv __initmv = {
 
 	init_arch:		pyxis_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		alphapc164_init_pci,
 	pci_map_irq:		alphapc164_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -445,7 +383,7 @@ struct alpha_machine_vector pc164_mv __initmv = {
 
 	init_arch:		cia_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		alphapc164_init_pci,
 	pci_map_irq:		alphapc164_map_irq,
 	pci_swizzle:		common_swizzle,

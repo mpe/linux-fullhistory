@@ -25,52 +25,76 @@
 #include <asm/core_mcpcia.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
+
+
+/*
+ * HACK ALERT! only the boot cpu is used for interrupts.
+ */
+
+
+/* Note mask bit is true for ENABLED irqs.  */
 
 static unsigned int hose_irq_masks[4] = {
 	0xff0000, 0xfe0000, 0xff0000, 0xff0000
 };
+static unsigned int cached_irq_masks[4];
 
-
-/* Note that `mask' initially contains only the low 64 bits.  */
-
-static void
-rawhide_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+static inline void
+rawhide_update_irq_hw(int hose, int mask)
 {
-	unsigned int saddle, hose, new_irq;
-
-	if (irq < 16) {
-		if (irq < 8)
-			outb(mask, 0x21);		/* ISA PIC1 */
-		else
-			outb(mask >> 8, 0xA1);		/* ISA PIC2 */
-		return;
-	}
-
-	saddle = (irq > 63);
-	mask = _alpha_irq_masks[saddle];
-
-	if (saddle == 0) {
-		/* Saddle 0 includes EISA interrupts.  */
-		mask >>= 16;
-		new_irq = irq - 16;
-	} else {
-		new_irq = irq - 64;
-	}
-
-	hose = saddle << 1;
-	if (new_irq >= 24) {
-		mask >>= 24;
-		hose += 1;
-	}
-
-	*(vuip)MCPCIA_INT_MASK0(hose) =
-		(~mask & 0x00ffffff) | hose_irq_masks[hose];
+	*(vuip)MCPCIA_INT_MASK0(MCPCIA_HOSE2MID(hose)) = mask;
 	mb();
-	*(vuip)MCPCIA_INT_MASK0(hose);
+	*(vuip)MCPCIA_INT_MASK0(MCPCIA_HOSE2MID(hose));
 }
+
+static void 
+rawhide_enable_irq(unsigned int irq)
+{
+	unsigned int mask, hose;
+
+	irq -= 16;
+	hose = irq / 24;
+	irq -= hose * 24;
+
+	mask = cached_irq_masks[hose] |= 1 << irq;
+	mask |= hose_irq_masks[hose];
+	rawhide_update_irq_hw(hose, mask);
+}
+
+static void 
+rawhide_disable_irq(unsigned int irq)
+{
+	unsigned int mask, hose;
+
+	irq -= 16;
+	hose = irq / 24;
+	irq -= hose * 24;
+
+	mask = cached_irq_masks[hose] &= ~(1 << irq);
+	mask |= hose_irq_masks[hose];
+	rawhide_update_irq_hw(hose, mask);
+}
+
+
+static unsigned int
+rawhide_startup_irq(unsigned int irq)
+{
+	rawhide_enable_irq(irq);
+	return 0;
+}
+
+static struct hw_interrupt_type rawhide_irq_type = {
+	typename:	"RAWHIDE",
+	startup:	rawhide_startup_irq,
+	shutdown:	rawhide_disable_irq,
+	enable:		rawhide_enable_irq,
+	disable:	rawhide_disable_irq,
+	ack:		rawhide_disable_irq,
+	end:		rawhide_enable_irq,
+};
 
 static void 
 rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
@@ -97,28 +121,30 @@ rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	/* Adjust by which hose it is from.  */
 	irq -= ((irq + 16) >> 2) & 0x38;
 
-	handle_irq(irq, irq, regs);
+	handle_irq(irq, regs);
 }
 
 static void __init
 rawhide_init_irq(void)
 {
 	struct pci_controler *hose;
+	long i;
 
 	mcpcia_init_hoses();
 
-	STANDARD_INIT_IRQ_PROLOG;
-
-	/* HACK ALERT! Routing is only to CPU #0.  */
 	for (hose = hose_head; hose; hose = hose->next) {
 		int h = hose->index;
-
-		*(vuip)MCPCIA_INT_MASK0(h) = hose_irq_masks[h];
-		mb();
-		*(vuip)MCPCIA_INT_MASK0(h);
+		rawhide_update_irq_hw(h, hose_irq_masks[h]);
 	}
 
-	enable_irq(2);
+	for (i = 16; i < 128; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &rawhide_irq_type;
+	}
+
+	init_i8259a_irqs();
+	init_rtc_irq();
+	common_init_isa_dma();
 }
 
 /*
@@ -191,14 +217,11 @@ struct alpha_machine_vector rawhide_mv __initmv = {
 	min_mem_address:	MCPCIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		128,
-	irq_probe_mask:		_PROBE_MASK(128),
-	update_irq_hw:		rawhide_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	rawhide_srm_device_interrupt,
 
 	init_arch:		mcpcia_init_arch,
 	init_irq:		rawhide_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		rawhide_map_irq,

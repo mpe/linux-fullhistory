@@ -1860,6 +1860,8 @@ static int __init rtl8139_init_module (void)
 		printk (KERN_INFO RTL8139_DRIVER_NAME
 			" loaded (%d device%s registered)\n",
 			rc, rc > 1 ? "s" : "");
+	} else {
+		pci_unregister_driver (&rtl8139_pci_driver);
 	}
 
 	DPRINTK ("EXIT\n");

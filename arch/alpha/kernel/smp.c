@@ -33,6 +33,7 @@
 #include <asm/unistd.h>
 
 #include "proto.h"
+#include "irq_impl.h"
 
 
 #define DEBUG_SMP 0
@@ -626,7 +627,7 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 		/* We need to make like a normal interrupt -- otherwise
 		   timer interrupts ignore the global interrupt lock,
 		   which would be a Bad Thing.  */
-		irq_enter(cpu, TIMER_IRQ);
+		irq_enter(cpu, RTC_IRQ);
 
 		update_one_process(current, 1, user, !user, cpu);
 		if (current->pid) {
@@ -650,7 +651,7 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 		}
 
 		data->prof_counter = data->prof_multiplier;
-		irq_exit(cpu, TIMER_IRQ);
+		irq_exit(cpu, RTC_IRQ);
 	}
 }
 
@@ -871,7 +872,7 @@ smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 }
 
 static void
-ipi_imb(void)
+ipi_imb(void *ignored)
 {
 	imb();
 }

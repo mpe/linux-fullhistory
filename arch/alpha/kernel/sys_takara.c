@@ -25,30 +25,56 @@
 #include <asm/core_cia.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-static void 
-takara_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
-{
-	unsigned int regaddr;
+/* Note mask bit is true for DISABLED irqs.  */
+static unsigned long cached_irq_mask[2] = { -1, -1 };
 
-	if (irq <= 15) {
-		if (irq <= 7)
-			outb(mask, 0x21);	/* ISA PIC1 */
-		else
-			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	} else {
-		if (irq > 63)
-			mask = _alpha_irq_masks[1] << 16;
-		else
-			mask = mask >> ((irq - 16) & 0x30);
-		regaddr = 0x510 + (((irq - 16) >> 2) & 0x0c);
-		outl(mask & 0xffff0000UL, regaddr);
-	}
+static inline void
+takara_update_irq_hw(unsigned long irq, unsigned long mask)
+{
+	int regaddr;
+
+	mask = (irq >= 64 ? mask << 16 : mask >> ((irq - 16) & 0x30));
+	regaddr = 0x510 + (((irq - 16) >> 2) & 0x0c);
+	outl(mask & 0xffff0000UL, regaddr);
 }
+
+static inline void
+takara_enable_irq(unsigned int irq)
+{
+	unsigned long mask;
+	mask = (cached_irq_mask[irq >= 64] &= ~(1UL << (irq & 63)));
+	takara_update_irq_hw(irq, mask);
+}
+
+static void
+takara_disable_irq(unsigned int irq)
+{
+	unsigned long mask;
+	mask = (cached_irq_mask[irq >= 64] |= 1UL << (irq & 63));
+	takara_update_irq_hw(irq, mask);
+}
+
+static unsigned int
+takara_startup_irq(unsigned int irq)
+{
+	takara_enable_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static struct hw_interrupt_type takara_irq_type = {
+	typename:	"TAKARA",
+	startup:	takara_startup_irq,
+	shutdown:	takara_disable_irq,
+	enable:		takara_enable_irq,
+	disable:	takara_disable_irq,
+	ack:		takara_disable_irq,
+	end:		takara_enable_irq,
+};
 
 static void
 takara_device_interrupt(unsigned long vector, struct pt_regs *regs)
@@ -78,10 +104,10 @@ takara_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		 * despatch an interrupt if it's set.
 		 */
 
-		if (intstatus & 8) handle_irq(16+3, 16+3, regs);
-		if (intstatus & 4) handle_irq(16+2, 16+2, regs);
-		if (intstatus & 2) handle_irq(16+1, 16+1, regs);
-		if (intstatus & 1) handle_irq(16+0, 16+0, regs);
+		if (intstatus & 8) handle_irq(16+3, regs);
+		if (intstatus & 4) handle_irq(16+2, regs);
+		if (intstatus & 2) handle_irq(16+1, regs);
+		if (intstatus & 1) handle_irq(16+0, regs);
 	} else {
 		isa_device_interrupt (vector, regs);
 	}
@@ -91,13 +117,16 @@ static void
 takara_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 	int irq = (vector - 0x800) >> 4;
-	handle_irq(irq, irq, regs);
+	handle_irq(irq, regs);
 }
 
 static void __init
 takara_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
+	long i;
+
+	init_i8259a_irqs();
+	init_rtc_irq();
 
 	if (alpha_using_srm) {
 		alpha_mv.device_interrupt = takara_srm_device_interrupt;
@@ -113,8 +142,17 @@ takara_init_irq(void)
 		outl(ctlreg, 0x500);
 	}
 
-	enable_irq(2);
+	for (i = 16; i < 128; i += 16)
+		takara_update_irq_hw(i, -1);
+
+	for (i = 16; i < 128; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &takara_irq_type;
+	}
+
+	common_init_isa_dma();
 }
+
 
 /*
  * The Takara has PCI devices 1, 2, and 3 configured to slots 20,
@@ -235,14 +273,11 @@ struct alpha_machine_vector takara_mv __initmv = {
 	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		128,
-	irq_probe_mask:		_PROBE_MASK(48),
-	update_irq_hw:		takara_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	takara_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		takara_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		takara_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		takara_map_irq,

@@ -10,6 +10,7 @@ struct pt_regs;
 struct task_struct;
 struct pci_dev;
 struct pci_controler;
+struct irqaction;
 
 /* core_apecs.c */
 extern struct pci_ops apecs_pci_ops;
@@ -46,6 +47,8 @@ extern void mcpcia_pci_tbi(struct pci_controler *, dma_addr_t, dma_addr_t);
 
 /* core_polaris.c */
 extern struct pci_ops polaris_pci_ops;
+extern int polaris_read_config_dword(struct pci_dev *, int, u32 *);
+extern int polaris_write_config_dword(struct pci_dev *, int, u32);
 extern void polaris_init_arch(void);
 extern void polaris_machine_check(u64, u64, struct pt_regs *);
 #define polaris_pci_tbi ((void *)0)
@@ -84,9 +87,7 @@ extern int smp_boot_cpuid;
 
 /* time.c */
 extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
-extern void rtc_init_pit(void);
-extern void rtc_kill_pit(void);
-extern void common_init_pit(void);
+extern void common_init_rtc(struct irqaction *);
 extern unsigned long est_cycle_freq;
 
 /* smc37c93x.c */
@@ -101,7 +102,7 @@ extern void es1888_init(void);
 /* ns87312.c */
 extern void ns87312_enable_ide(long ide_base);
 
-/* fpregs.c */
+/* ../lib/fpreg.c */
 extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
 extern unsigned long alpha_read_fp_reg (unsigned long reg);
 
@@ -134,7 +135,7 @@ extern void die_if_kernel(char *, struct pt_regs *, long, unsigned long *);
 /* ../mm/init.c */
 void srm_paging_stop(void);
 
-/* irq.h */
+/* irq.c */
 
 #ifdef __SMP__
 #define mcheck_expected(cpu)	(cpu_data[cpu].mcheck_expected)

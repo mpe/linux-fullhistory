@@ -1848,6 +1848,7 @@ static int __init eepro100_init_module(void)
 	cards_found = pci_register_driver (&eepro100_driver);
 	if (cards_found <= 0) {
 		printk(KERN_INFO PFX "No cards found, driver not installed.\n");
+		pci_unregister_driver (&eepro100_driver);
 		return -ENODEV;
 	}
 

@@ -45,12 +45,6 @@
 
 #define MCPCIA_MAX_HOSES 4
 
-/* Dodge has PCI0 and PCI1 at MID 4 and 5 respectively.  Durango adds
-   PCI2 and PCI3 at MID 6 and 7 respectively.  */
-
-#define hose2mid(h)	((h) + 4)
-
-
 /*
  * Given a bus, device, and function number, compute resulting
  * configuration space address and setup the MCPCIA_HAXR2 register
@@ -98,7 +92,7 @@ conf_read(unsigned long addr, unsigned char type1,
 	  struct pci_controler *hose)
 {
 	unsigned long flags;
-	unsigned long mid = hose2mid(hose->index);
+	unsigned long mid = MCPCIA_HOSE2MID(hose->index);
 	unsigned int stat0, value, temp, cpu;
 
 	cpu = smp_processor_id();
@@ -146,7 +140,7 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1,
 	   struct pci_controler *hose)
 {
 	unsigned long flags;
-	unsigned long mid = hose2mid(hose->index);
+	unsigned long mid = MCPCIA_HOSE2MID(hose->index);
 	unsigned int stat0, temp, cpu;
 
 	cpu = smp_processor_id();
@@ -297,7 +291,7 @@ void
 mcpcia_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
 {
 	wmb();
-	BUG();
+	*(vuip)MCPCIA_SG_TBIA(MCPCIA_HOSE2MID(hose->index)) = 0;
 	mb();
 }
 
@@ -305,7 +299,7 @@ static int __init
 mcpcia_probe_hose(int h)
 {
 	int cpu = smp_processor_id();
-	int mid = hose2mid(h);
+	int mid = MCPCIA_HOSE2MID(h);
 	unsigned int pci_rev;
 
 	/* Gotta be REAL careful.  If hose is absent, we get an mcheck.  */
@@ -340,7 +334,7 @@ mcpcia_new_hose(int h)
 {
 	struct pci_controler *hose;
 	struct resource *io, *mem, *hae_mem;
-	int mid = hose2mid(h);
+	int mid = MCPCIA_HOSE2MID(h);
 
 	hose = alloc_pci_controler();
 	io = alloc_resource();
@@ -387,7 +381,7 @@ mcpcia_pci_clr_err(int mid)
 static void __init
 mcpcia_startup_hose(struct pci_controler *hose)
 {
-	int mid = hose2mid(hose->index);
+	int mid = MCPCIA_HOSE2MID(hose->index);
 	unsigned int tmp;
 
 	mcpcia_pci_clr_err(mid);
@@ -578,7 +572,7 @@ mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 		   error was on?  */	
 		struct pci_controler *hose;
 		for (hose = hose_head; hose; hose = hose->next)
-			mcpcia_pci_clr_err(hose2mid(hose->index));
+			mcpcia_pci_clr_err(MCPCIA_HOSE2MID(hose->index));
 		break;
 	    }
 	case 1:

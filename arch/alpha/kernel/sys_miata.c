@@ -25,71 +25,17 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
 static void 
-miata_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
-{
-	if (irq >= 16) {
-		/* Make CERTAIN none of the bogus ints get enabled... */
-		*(vulp)PYXIS_INT_MASK =
-			~((long)mask >> 16) & ~0x400000000000063bUL;
-		mb();
-		/* ... and read it back to make sure it got written.  */
-		*(vulp)PYXIS_INT_MASK;
-	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
-}
-
-static void 
-miata_device_interrupt(unsigned long vector, struct pt_regs *regs)
-{
-	unsigned long pld, tmp;
-	unsigned int i;
-
-	/* Read the interrupt summary register of PYXIS */
-	pld = *(vulp)PYXIS_INT_REQ;
-
-	/*
-	 * For now, AND off any bits we are not interested in:
-	 *   HALT (2), timer (6), ISA Bridge (7), 21142/3 (8)
-	 * then all the PCI slots/INTXs (12-31).
-	 */
-	/* Maybe HALT should only be used for SRM console boots? */
-	pld &= 0x00000000fffff9c4UL;
-
-	/*
-	 * Now for every possible bit set, work through them and call
-	 * the appropriate interrupt handler.
-	 */
-	while (pld) {
-		i = ffz(~pld);
-		pld &= pld - 1; /* clear least bit set */
-		if (i == 7) {
-			isa_device_interrupt(vector, regs);
-		} else if (i == 6) {
-			continue;
-		} else {
-			/* if not timer int */
-			handle_irq(16 + i, 16 + i, regs);
-		}
-		*(vulp)PYXIS_INT_REQ = 1UL << i; mb();
-		tmp = *(vulp)PYXIS_INT_REQ;
-	}
-}
-
-static void 
 miata_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
+	int irq;
 
-	ack = irq = (vector - 0x800) >> 4;
+	irq = (vector - 0x800) >> 4;
 
 	/*
 	 * I really hate to do this, but the MIATA SRM console ignores the
@@ -106,34 +52,36 @@ miata_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	 * So, here's this grotty hack... :-(
 	 */
 	if (irq >= 16)
-		ack = irq = irq + 8;
+		irq = irq + 8;
 
-	handle_irq(irq, ack, regs);
+	handle_irq(irq, regs);
 }
 
 static void __init
 miata_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
-
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = miata_srm_device_interrupt;
 
-	/* Note invert on MASK bits.  */
-	*(vulp)PYXIS_INT_MASK =
-	  ~((long)alpha_irq_mask >> 16) & ~0x400000000000063bUL; mb();
 #if 0
 	/* These break on MiataGL so we'll try not to do it at all.  */
 	*(vulp)PYXIS_INT_HILO = 0x000000B2UL; mb();	/* ISA/NMI HI */
 	*(vulp)PYXIS_RT_COUNT = 0UL; mb();		/* clear count */
 #endif
-	/* Clear upper timer.  */
-	*(vulp)PYXIS_INT_REQ  = 0x4000000000000180UL; mb();
 
-	enable_irq(16 + 2);	/* enable HALT switch - SRM only? */
-	enable_irq(16 + 6);     /* enable timer */
-	enable_irq(16 + 7);     /* enable ISA PIC cascade */
-	enable_irq(2);		/* enable cascade */
+	init_i8259a_irqs();
+	init_rtc_irq();
+
+	/* Not interested in the bogus interrupts (3,10), Fan Fault (0),
+           NMI (1), or EIDE (9).
+
+	   We also disable the risers (4,5), since we don't know how to
+	   route the interrupts behind the bridge.  */
+	init_pyxis_irqs(0x63b0000);
+
+	common_init_isa_dma();
+	setup_irq(16+2, &halt_switch_irqaction);	/* SRM only? */
+	setup_irq(16+6, &timer_cascade_irqaction);
 }
 
 
@@ -300,14 +248,11 @@ struct alpha_machine_vector miata_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
-	irq_probe_mask:		_PROBE_MASK(48),
-	update_irq_hw:		miata_update_irq_hw,
-	ack_irq:		common_ack_irq,
-	device_interrupt:	miata_device_interrupt,
+	device_interrupt:	pyxis_device_interrupt,
 
 	init_arch:		pyxis_init_arch,
 	init_irq:		miata_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		miata_init_pci,
 	kill_arch:		miata_kill_arch,
 	pci_map_irq:		miata_map_irq,

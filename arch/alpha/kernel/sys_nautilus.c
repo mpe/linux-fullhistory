@@ -45,34 +45,17 @@
 #include <asm/hwrpb.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
-#define dev2hose(d) (bus2hose[(d)->bus->number]->pci_hose_index)
-
-static void
-nautilus_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
-{
-	/* The timer is connected to PIC interrupt line also on Nautilus.
-	   The timer interrupt handler enables the PIC line, so in order
-	   not to get multiple timer interrupt sources, we mask it out
-	   at all times.  */
-
-	mask |= 0x100;
-	if (irq >= 8)
-		outb(mask >> 8, 0xA1);
-	else
-		outb(mask, 0x21);
-}
 
 static void __init
 nautilus_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
-
-	enable_irq(2);			/* enable cascade */
-	disable_irq(8);
+	init_i8259a_irqs();
+	init_rtc_irq();
+	common_init_isa_dma();
 }
 
 static int __init
@@ -534,14 +517,11 @@ struct alpha_machine_vector nautilus_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
-	irq_probe_mask:		(_PROBE_MASK(16) & ~0x101UL),
-	update_irq_hw:		nautilus_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		irongate_init_arch,
 	init_irq:		nautilus_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		nautilus_kill_arch,
 	pci_map_irq:		nautilus_map_irq,

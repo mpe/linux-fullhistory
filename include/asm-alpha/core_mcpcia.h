@@ -74,6 +74,10 @@
 
 #define MCPCIA_MID(m)		((unsigned long)(m) << 33)
 
+/* Dodge has PCI0 and PCI1 at MID 4 and 5 respectively. 
+   Durango adds PCI2 and PCI3 at MID 6 and 7 respectively.  */
+#define MCPCIA_HOSE2MID(h)	((h) + 4)
+
 #define MCPCIA_MEM_MASK 0x07ffffff /* SPARSE Mem region mask is 27 bits */
 
 /*

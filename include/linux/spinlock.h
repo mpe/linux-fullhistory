@@ -41,9 +41,9 @@
 /*
  * Your basic spinlocks, allowing only a single CPU anywhere
  *
- * Gcc-2.7.x has a nasty bug with empty initializers.
+ * Most gcc versions have a nasty bug with empty initializers.
  */
-#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+#if (__GNUC__ > 2)
   typedef struct { } spinlock_t;
   #define SPIN_LOCK_UNLOCKED (spinlock_t) { }
 #else
@@ -104,9 +104,9 @@ typedef struct {
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  *
- * Gcc-2.7.x has a nasty bug with empty initializers.
+ * Most gcc versions have a nasty bug with empty initializers.
  */
-#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+#if (__GNUC__ > 2)
   typedef struct { } rwlock_t;
   #define RW_LOCK_UNLOCKED (rwlock_t) { }
 #else

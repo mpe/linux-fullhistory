@@ -107,7 +107,7 @@ polaris_read_config_word(struct pci_dev *dev, int where, u16 *value)
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static int
+int
 polaris_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
 	unsigned long pci_addr;
@@ -150,7 +150,7 @@ polaris_write_config_word(struct pci_dev *dev, int where, u16 value)
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static int 
+int 
 polaris_write_config_dword(struct pci_dev *dev, int where, u32 value)
 {
 	unsigned long pci_addr;

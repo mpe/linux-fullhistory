@@ -28,18 +28,9 @@
 #include <asm/pgtable.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "machvec_impl.h"
 
-
-static void
-jensen_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
-{
-	if (irq >= 8)
-		outb(mask >> 8, 0xA1);
-	else
-		outb(mask, 0x21);
-}
 
 /*
  * Jensen is special: the vector is 0x8X0 for EISA interrupt X, and
@@ -66,51 +57,71 @@ jensen_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
  */
 
 static void
-handle_nmi(struct pt_regs * regs)
+jensen_local_ack(unsigned int irq)
 {
-	printk("Whee.. NMI received. Probable hardware error\n");
-	printk("61=%02x, 461=%02x\n", inb(0x61), inb(0x461));
+	/* irq1 is supposed to be the keyboard, silly Jensen.  */
+	if (irq == 7)
+		i8259a_mask_and_ack_irq(1);
 }
+
+static struct hw_interrupt_type jensen_local_irq_type = {
+	typename:	"LOCAL",
+	startup:	i8259a_startup_irq,
+	shutdown:	i8259a_disable_irq,
+	enable:		i8259a_enable_irq,
+	disable:	i8259a_disable_irq,
+	ack:		jensen_local_ack,
+	end:		i8259a_enable_irq,
+};
 
 static void 
 jensen_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
-
-	ack = irq = (vector - 0x800) >> 4;
+	int irq;
 
 	switch (vector) {
-	case 0x660: handle_nmi(regs); return;
+	case 0x660:
+		printk("Whee.. NMI received. Probable hardware error\n");
+		printk("61=%02x, 461=%02x\n", inb(0x61), inb(0x461));
+		return;
 
 	/* local device interrupts: */
-	case 0x900: irq = 4, ack = -1; break;		/* com1 -> irq 4 */
-	case 0x920: irq = 3, ack = -1; break;		/* com2 -> irq 3 */
-	case 0x980: irq = 1, ack = -1; break;		/* kbd -> irq 1 */
-	case 0x990: irq = 9, ack = -1; break;		/* mouse -> irq 9 */
+	case 0x900: irq = 4; break;		/* com1 -> irq 4 */
+	case 0x920: irq = 3; break;		/* com2 -> irq 3 */
+	case 0x980: irq = 1; break;		/* kbd -> irq 1 */
+	case 0x990: irq = 9; break;		/* mouse -> irq 9 */
+
 	default:
 		if (vector > 0x900) {
 			printk("Unknown local interrupt %lx\n", vector);
+			return;
 		}
 
-		/* irq1 is supposed to be the keyboard, silly Jensen
-		   (is this really needed??) */
+		irq = (vector - 0x800) >> 4;
 		if (irq == 1)
 			irq = 7;
 		break;
 	}
 
-	handle_irq(irq, ack, regs);
+	handle_irq(irq, regs);
 }
 
-static void
+static void __init
 jensen_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
+	init_i8259a_irqs();
+	init_rtc_irq();
 
-	enable_irq(2);			/* enable cascade */
+	irq_desc[1].handler = &jensen_local_irq_type;
+	irq_desc[4].handler = &jensen_local_irq_type;
+	irq_desc[3].handler = &jensen_local_irq_type;
+	irq_desc[7].handler = &jensen_local_irq_type;
+	irq_desc[9].handler = &jensen_local_irq_type;
+
+	common_init_isa_dma();
 }
 
-static void
+static void __init
 jensen_init_arch(void)
 {
 	__direct_map_base = 0;
@@ -140,14 +151,11 @@ struct alpha_machine_vector jensen_mv __initmv = {
 	rtc_port: 0x170,
 
 	nr_irqs:		16,
-	irq_probe_mask:		_PROBE_MASK(16),
-	update_irq_hw:		jensen_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	jensen_device_interrupt,
 
 	init_arch:		jensen_init_arch,
 	init_irq:		jensen_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		NULL,
 	kill_arch:		NULL,
 };

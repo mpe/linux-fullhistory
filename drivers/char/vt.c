@@ -106,12 +106,13 @@ _kd_mksound(unsigned int hz, unsigned int ticks)
 {
 	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
 						 kd_nosound };
-
 	unsigned int count = 0;
+	unsigned long flags;
 
 	if (hz > 20 && hz < 32767)
 		count = 1193180 / hz;
 	
+	save_flags(flags);
 	cli();
 	del_timer(&sound_timer);
 	if (count) {
@@ -129,7 +130,7 @@ _kd_mksound(unsigned int hz, unsigned int ticks)
 		}
 	} else
 		kd_nosound(0);
-	sti();
+	restore_flags(flags);
 	return;
 }
 

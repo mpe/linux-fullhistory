@@ -2608,8 +2608,10 @@ static int __init init_es1370(void)
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
 	printk(KERN_INFO "es1370: version v0.33 time " __TIME__ " " __DATE__ "\n");
-	if (!pci_register_driver(&es1370_driver))
+	if (!pci_register_driver(&es1370_driver)) {
+		pci_unregister_driver(&es1370_driver);
 		return -ENODEV;
+	}
         return 0;
 
 }

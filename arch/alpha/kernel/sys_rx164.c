@@ -26,121 +26,103 @@
 #include <asm/core_polaris.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-static void
-rx164_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+/* Note mask bit is true for ENABLED irqs.  */
+static unsigned long cached_irq_mask;
+
+/* Bus 0, Device 0.  Nothing else matters, since we invoke the
+   POLARIS routines directly.  */
+static struct pci_dev rx164_system;
+
+static inline void
+rx164_update_irq_hw(unsigned long mask)
 {
-	if (irq >= 16) {
-		unsigned int temp;
-		pcibios_write_config_dword(0, 0, 0x74, ~mask >> 16);
-		pcibios_read_config_dword(0, 0, 0x74, &temp);
-	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+	unsigned int temp;
+	polaris_write_config_dword(&rx164_system, 0x74, mask);
+	polaris_read_config_dword(&rx164_system, 0x74, &temp);
 }
 
-#if 0
-static void
-rx164_srm_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+static inline void
+rx164_enable_irq(unsigned int irq)
 {
-	if (irq >= 16) {
-		if (unmask_p)
-			cserve_ena(irq - 16);
-		else
-			cserve_dis(irq - 16);
-	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+	rx164_update_irq_hw(cached_irq_mask |= 1UL << (irq - 16));
 }
-#endif
 
 static void
-rx164_isa_device_interrupt(unsigned long vector, struct pt_regs * regs)
+rx164_disable_irq(unsigned int irq)
 {
-        unsigned long pic;
-
-        /*
-         * It seems to me that the probability of two or more *device*
-         * interrupts occurring at almost exactly the same time is
-         * pretty low.  So why pay the price of checking for
-         * additional interrupts here if the common case can be
-         * handled so much easier?
-         */
-        /* 
-         *  The first read of the PIC gives you *all* interrupting lines.
-         *  Therefore, read the mask register and and out those lines
-         *  not enabled.  Note that some documentation has 21 and a1 
-         *  write only.  This is not true.
-         */
-        pic = inb(0x20) | (inb(0xA0) << 8);     /* read isr */
-        pic &= ~alpha_irq_mask;                 /* apply mask */
-        pic &= 0xFFFB;                          /* mask out cascade & hibits */
-
-        while (pic) {
-                int j = ffz(~pic);
-                pic &= pic - 1;
-                handle_irq(j, j, regs);
-        }
+	rx164_update_irq_hw(cached_irq_mask &= ~(1UL << (irq - 16)));
 }
+
+static unsigned int
+rx164_startup_irq(unsigned int irq)
+{
+	rx164_enable_irq(irq);
+	return 0;
+}
+
+static struct hw_interrupt_type rx164_irq_type = {
+	typename:	"RX164",
+	startup:	rx164_startup_irq,
+	shutdown:	rx164_disable_irq,
+	enable:		rx164_enable_irq,
+	disable:	rx164_disable_irq,
+	ack:		rx164_disable_irq,
+	end:		rx164_enable_irq,
+};
 
 static void 
 rx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
 {
+	unsigned int temp;
 	unsigned long pld;
-	int i;
+	long i;
 
-        /* Read the interrupt summary register.  On Polaris,
-         * this is the DIRR register in PCI config space (offset 0x84)
-         */
-        pld = 0;
-        pcibios_read_config_dword(0, 0, 0x84, (unsigned int *)&pld);
+	/* Read the interrupt summary register.  On Polaris, this is
+	   the DIRR register in PCI config space (offset 0x84).  */
+	polaris_read_config_dword(&rx164_system, 0x84, &temp);
+	pld = temp;
 
-#if 0
-        printk("PLD 0x%lx\n", pld);
-#endif
-
-        if (pld & 0xffffffff00000000UL)
-		pld &= 0x00000000ffffffffUL;
-
-        /*
-         * Now for every possible bit set, work through them and call
-         * the appropriate interrupt handler.
-         */
-        while (pld) {
-                i = ffz(~pld);
-                pld &= pld - 1; /* clear least bit set */
-                if (i == 20) {
-                        rx164_isa_device_interrupt(vector, regs);
-                } else {
-                        handle_irq(16+i, 16+i, regs);
-                }
-        }
+	/*
+	 * Now for every possible bit set, work through them and call
+	 * the appropriate interrupt handler.
+	 */
+	while (pld) {
+		i = ffz(~pld);
+		pld &= pld - 1; /* clear least bit set */
+		if (i == 20) {
+			isa_no_iack_sc_device_interrupt(vector, regs);
+		} else {
+			handle_irq(16+i, regs);
+		}
+	}
 }
 
-static void
+static void __init
 rx164_init_irq(void)
 {
-	unsigned int temp;
+	long i;
 
-        STANDARD_INIT_IRQ_PROLOG;
+	rx164_update_irq_hw(0);
+	for (i = 16; i < 40; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &rx164_irq_type;
+	}
 
-        pcibios_write_config_dword(0, 0, 0x74, (~alpha_irq_mask >> 16));
-        pcibios_read_config_dword(0, 0, 0x74, &temp);
+	init_i8259a_irqs();
+	init_rtc_irq();
+	common_init_isa_dma();
 
-        enable_irq(16 + 20);    /* enable ISA interrupts */
-	enable_irq(2);		/* enable cascade */
+	setup_irq(16+20, &isa_cascade_irqaction);
 }
 
 
-/* The RX164 changed its interrupt routing between pass1 and pass2...
+/*
+ * The RX164 changed its interrupt routing between pass1 and pass2...
  *
  * PASS1:
  *
@@ -176,29 +158,29 @@ static int __init
 rx164_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 #if 0
-        char irq_tab_pass1[6][5] = {
-          /*INT   INTA  INTB  INTC   INTD */
-          { 16+3, 16+3, 16+8, 16+13, 16+18},      /* IdSel 5,  slot 2 */
-          { 16+5, 16+5, 16+10, 16+15, 16+20},     /* IdSel 6,  slot 0 */
-          { 16+4, 16+4, 16+9, 16+14, 16+19},      /* IdSel 7,  slot 1 */
-          { -1,     -1,    -1,    -1,   -1},      /* IdSel 8, PCI/ISA bridge */
-          { 16+2, 16+2, 16+7, 16+12, 16+17},      /* IdSel 9,  slot 3 */
-          { 16+1, 16+1, 16+6, 16+11, 16+16},      /* IdSel 10, slot 4 */
-        };
+	static char irq_tab_pass1[6][5] __initlocaldata = {
+	  /*INT   INTA  INTB  INTC   INTD */
+	  { 16+3, 16+3, 16+8, 16+13, 16+18},      /* IdSel 5,  slot 2 */
+	  { 16+5, 16+5, 16+10, 16+15, 16+20},     /* IdSel 6,  slot 0 */
+	  { 16+4, 16+4, 16+9, 16+14, 16+19},      /* IdSel 7,  slot 1 */
+	  { -1,     -1,    -1,    -1,   -1},      /* IdSel 8, PCI/ISA bridge */
+	  { 16+2, 16+2, 16+7, 16+12, 16+17},      /* IdSel 9,  slot 3 */
+	  { 16+1, 16+1, 16+6, 16+11, 16+16},      /* IdSel 10, slot 4 */
+	};
 #else
-        char irq_tab[6][5] = {
-          /*INT   INTA  INTB  INTC   INTD */
-          { 16+0, 16+0, 16+6, 16+11, 16+16},      /* IdSel 5,  slot 0 */
-          { 16+1, 16+1, 16+7, 16+12, 16+17},      /* IdSel 6,  slot 1 */
-          { -1,     -1,    -1,    -1,   -1},      /* IdSel 7, PCI/ISA bridge */
-          { 16+2, 16+2, 16+8, 16+13, 16+18},      /* IdSel 8,  slot 2 */
-          { 16+3, 16+3, 16+9, 16+14, 16+19},      /* IdSel 9,  slot 3 */
-          { 16+4, 16+4, 16+10, 16+15, 16+5},      /* IdSel 10, PCI-PCI */
-        };
+	static char irq_tab[6][5] __initlocaldata = {
+	  /*INT   INTA  INTB  INTC   INTD */
+	  { 16+0, 16+0, 16+6, 16+11, 16+16},      /* IdSel 5,  slot 0 */
+	  { 16+1, 16+1, 16+7, 16+12, 16+17},      /* IdSel 6,  slot 1 */
+	  { -1,     -1,    -1,    -1,   -1},      /* IdSel 7, PCI/ISA bridge */
+	  { 16+2, 16+2, 16+8, 16+13, 16+18},      /* IdSel 8,  slot 2 */
+	  { 16+3, 16+3, 16+9, 16+14, 16+19},      /* IdSel 9,  slot 3 */
+	  { 16+4, 16+4, 16+10, 16+15, 16+5},      /* IdSel 10, PCI-PCI */
+	};
 #endif
 	const long min_idsel = 5, max_idsel = 10, irqs_per_slot = 5;
 
-        /* JRP - Need to figure out how to distinguish pass1 from pass2,
+	/* JRP - Need to figure out how to distinguish pass1 from pass2,
 	   and use the correct table.  */
 	return COMMON_TABLE_LOOKUP;
 }
@@ -220,14 +202,11 @@ struct alpha_machine_vector rx164_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
-	irq_probe_mask:		_PROBE_MASK(40),
-	update_irq_hw:		rx164_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	rx164_device_interrupt,
 
 	init_arch:		polaris_init_arch,
 	init_irq:		rx164_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		rx164_map_irq,

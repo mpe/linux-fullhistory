@@ -14,8 +14,6 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
-#include <linux/irq.h>
-#include <linux/interrupt.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -28,153 +26,33 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-/* Note invert on MASK bits. */
-static unsigned long cached_irq_mask;
-
-static inline void
-sx164_change_irq_mask(unsigned long mask)
-{
-	*(vulp)PYXIS_INT_MASK = mask;
-	mb();
-	*(vulp)PYXIS_INT_MASK;
-}
-
-static inline void
-sx164_enable_irq(unsigned int irq)
-{
-	sx164_change_irq_mask(cached_irq_mask |= 1UL << (irq - 16));
-}
-
-static void
-sx164_disable_irq(unsigned int irq)
-{
-	sx164_change_irq_mask(cached_irq_mask &= ~(1UL << (irq - 16)));
-}
-
-static unsigned int
-sx164_startup_irq(unsigned int irq)
-{
-	sx164_enable_irq(irq);
-	return 0;
-}
-
-static inline void
-sx164_srm_enable_irq(unsigned int irq)
-{
-	cserve_ena(irq - 16);
-}
-
-static void
-sx164_srm_disable_irq(unsigned int irq)
-{
-	cserve_dis(irq - 16);
-}
-
-static unsigned int
-sx164_srm_startup_irq(unsigned int irq)
-{
-	sx164_srm_enable_irq(irq);
-	return 0;
-}
-
-static struct hw_interrupt_type sx164_irq_type = {
-	typename:	"SX164",
-	startup:	sx164_startup_irq,
-	shutdown:	sx164_disable_irq,
-	enable:		sx164_enable_irq,
-	disable:	sx164_disable_irq,
-	ack:		sx164_disable_irq,
-	end:		sx164_enable_irq,
-};
-
-static struct hw_interrupt_type sx164_srm_irq_type = {
-	typename:	"SX164-SRM",
-	startup:	sx164_srm_startup_irq,
-	shutdown:	sx164_srm_disable_irq,
-	enable:		sx164_srm_enable_irq,
-	disable:	sx164_srm_disable_irq,
-	ack:		sx164_srm_disable_irq,
-	end:		sx164_srm_enable_irq,
-};
-
-static void 
-sx164_device_interrupt(unsigned long vector, struct pt_regs *regs)
-{
-	unsigned long pld;
-	unsigned int i;
-
-	/* Read the interrupt summary register of PYXIS */
-	pld = *(vulp)PYXIS_INT_REQ;
-
-	/*
-	 * For now, AND off any bits we are not interested in:
-	 *  HALT (2), timer (6), ISA Bridge (7)
-	 * then all the PCI slots/INTXs (8-23)
-	 */
-	/* Maybe HALT should only be used for SRM console boots? */
-	pld &= 0x0000000000ffffc0UL;
-
-	/*
-	 * Now for every possible bit set, work through them and call
-	 * the appropriate interrupt handler.
-	 */
-	while (pld) {
-		i = ffz(~pld);
-		pld &= pld - 1; /* clear least bit set */
-		if (i == 7) {
-			isa_device_interrupt(vector, regs);
-		} else if (i == 6) {
-			continue;
-		} else {
-			/* if not timer int */
-			handle_irq(16 + i, regs);
-		}
-
-		*(vulp)PYXIS_INT_REQ = 1UL << i;
-		mb();
-		*(vulp)PYXIS_INT_REQ;
-	}
-}
-
-static void
+static void __init
 sx164_init_irq(void)
 {
-	static struct irqaction timer = { no_action, 0, 0, "sx164-timer", NULL, NULL};
-	static struct irqaction cascade = { no_action, 0, 0, "sx164-isa-cascade", NULL, NULL};
-	struct hw_interrupt_type *ops;
-	long i;
-
 	outb(0, DMA1_RESET_REG);
 	outb(0, DMA2_RESET_REG);
 	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
 	outb(0, DMA2_MASK_REG);
 
-	init_ISA_irqs();
-	init_RTC_irq();
-
-	if (alpha_using_srm) {
+	if (alpha_using_srm)
 		alpha_mv.device_interrupt = srm_device_interrupt;
-		ops = &sx164_srm_irq_type;
-	}
-	else {
-		sx164_change_irq_mask(0);
-		ops = &sx164_irq_type;
-	}
 
-	for (i = 16; i < 40; ++i) {
-		/* Make CERTAIN none of the bogus ints get enabled.  */
-		if ((0x3b0000 >> i) & 1)
-			continue;
-		irq_desc[i].status = IRQ_DISABLED;
-		irq_desc[i].handler = ops;
-	}
+	init_i8259a_irqs();
+	init_rtc_irq();
 
-	setup_irq(16 + 6, &timer);	/* enable timer */
-	setup_irq(16 + 7, &cascade);	/* enable ISA PIC cascade */
+	/* Not interested in the bogus interrupts (0,3,4,5,40-47),
+	   NMI (1), or HALT (2).  */
+	if (alpha_using_srm)
+		init_srm_irqs(40, 0x3f0000);
+	else
+		init_pyxis_irqs(0xff00003f0000);
+
+	setup_irq(16+6, &timer_cascade_irqaction);
 }
 
 /*
@@ -213,7 +91,6 @@ sx164_init_irq(void)
  *   7  64 bit PCI option slot 1
  *   8  Cypress I/O
  *   9  32 bit PCI option slot 3
- * 
  */
 
 static int __init
@@ -254,12 +131,12 @@ struct alpha_machine_vector sx164_mv __initmv = {
 	min_io_address:		DEFAULT_IO_BASE,
 	min_mem_address:	DEFAULT_MEM_BASE,
 
-	nr_irqs:		40,
-	device_interrupt:	sx164_device_interrupt,
+	nr_irqs:		48,
+	device_interrupt:	pyxis_device_interrupt,
 
 	init_arch:		pyxis_init_arch,
 	init_irq:		sx164_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		sx164_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		sx164_map_irq,

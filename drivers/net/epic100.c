@@ -1285,6 +1285,7 @@ static int __init epic100_init (void)
 	if (pci_register_driver (&epic100_driver) > 0)
 		return 0;
 	
+	pci_unregister_driver (&epic100_driver);
 	return -ENODEV;
 }
 

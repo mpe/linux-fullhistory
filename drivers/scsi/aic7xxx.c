@@ -719,6 +719,11 @@ struct seeprom_config {
 #define aic7xxx_position(cmd)        ((cmd)->SCp.have_data_in)
 
 /*
+ * The stored DMA mapping for single-buffer data transfers.
+ */
+#define aic7xxx_mapping(cmd)	     ((cmd)->SCp.phase)
+
+/*
  * So we can keep track of our host structs
  */
 static struct aic7xxx_host *first_aic7xxx = NULL;
@@ -2902,9 +2907,16 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
     pci_unmap_sg(p->pdev, sg, cmd->use_sg, scsi_to_pci_dma_dir(cmd->sc_data_direction));
   }
   else if (cmd->request_bufflen)
-    pci_unmap_single(p->pdev, le32_to_cpu(scb->sg_list[0].address),
-		     le32_to_cpu(scb->sg_list[0].length),
+    pci_unmap_single(p->pdev, aic7xxx_mapping(cmd),
+		     cmd->request_bufflen,
                      scsi_to_pci_dma_dir(cmd->sc_data_direction));
+  if (scb->flags & SCB_SENSE)
+  {
+    pci_unmap_single(p->pdev,
+                     le32_to_cpu(scb->sg_list[0].address),
+                     sizeof(cmd->sense_buffer),
+                     PCI_DMA_FROMDEVICE);
+  }
   if (scb->flags & SCB_RECOVERY_SCB)
   {
     p->flags &= ~AHC_ABORT_PENDING;
@@ -4889,7 +4901,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
 		scb->sg_list[0].address =
                         cpu_to_le32(pci_map_single(p->pdev, sense_buffer,
                                                    sizeof(cmd->sense_buffer),
-                                                   scsi_to_pci_dma_dir(cmd->sc_data_direction)));
+                                                   PCI_DMA_FROMDEVICE));
                 hscb->data_pointer = scb->sg_list[0].address;
 
                 scb->flags |= SCB_SENSE;
@@ -10986,6 +10998,7 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
       unsigned int address = pci_map_single(p->pdev, cmd->request_buffer,
 					    cmd->request_bufflen,
                                             scsi_to_pci_dma_dir(cmd->sc_data_direction));
+      aic7xxx_mapping(cmd) = address;
       scb->sg_list[0].address = cpu_to_le32(address);
       scb->sg_list[0].length = cpu_to_le32(cmd->request_bufflen);
       scb->sg_count = 1;

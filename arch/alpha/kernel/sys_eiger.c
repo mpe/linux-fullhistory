@@ -29,7 +29,7 @@
 #include <asm/hwrpb.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
@@ -38,28 +38,53 @@
  * HACK ALERT! only the boot cpu is used for interrupts.
  */
 
-static void
-eiger_update_irq_hw(unsigned long irq, unsigned long unused, int unmask_p)
+/* Note that this interrupt code is identical to TAKARA.  */
+
+/* Note mask bit is true for DISABLED irqs.  */
+static unsigned long cached_irq_mask[2] = { -1, -1 };
+
+static inline void
+eiger_update_irq_hw(unsigned long irq, unsigned long mask)
 {
-	unsigned int regaddr;
-	unsigned long mask;
+	int regaddr;
 
-	if (irq <= 15) {
-		if (irq <= 7)
-			outb(alpha_irq_mask, 0x21);		/* ISA PIC1 */
-		else
-			outb(alpha_irq_mask >> 8, 0xA1);	/* ISA PIC2 */
-	} else {
-		if (irq > 63)
-			mask = _alpha_irq_masks[1] << 16;
-		else
-			mask = _alpha_irq_masks[0] >> ((irq - 16) & 0x30);
-
-		regaddr = 0x510 + (((irq - 16) >> 2) & 0x0c);
-
-		outl(mask & 0xffff0000UL, regaddr);
-	}
+	mask = (irq >= 64 ? mask << 16 : mask >> ((irq - 16) & 0x30));
+	regaddr = 0x510 + (((irq - 16) >> 2) & 0x0c);
+	outl(mask & 0xffff0000UL, regaddr);
 }
+
+static inline void
+eiger_enable_irq(unsigned int irq)
+{
+	unsigned long mask;
+	mask = (cached_irq_mask[irq >= 64] &= ~(1UL << (irq & 63)));
+	eiger_update_irq_hw(irq, mask);
+}
+
+static void
+eiger_disable_irq(unsigned int irq)
+{
+	unsigned long mask;
+	mask = (cached_irq_mask[irq >= 64] |= 1UL << (irq & 63));
+	eiger_update_irq_hw(irq, mask);
+}
+
+static unsigned int
+eiger_startup_irq(unsigned int irq)
+{
+	eiger_enable_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static struct hw_interrupt_type eiger_irq_type = {
+	typename:	"EIGER",
+	startup:	eiger_startup_irq,
+	shutdown:	eiger_disable_irq,
+	enable:		eiger_enable_irq,
+	disable:	eiger_disable_irq,
+	ack:		eiger_disable_irq,
+	end:		eiger_enable_irq,
+};
 
 static void
 eiger_device_interrupt(unsigned long vector, struct pt_regs * regs)
@@ -89,25 +114,27 @@ eiger_device_interrupt(unsigned long vector, struct pt_regs * regs)
 		 * despatch an interrupt if it's set.
 		 */
 
-		if (intstatus & 8) handle_irq(16+3, 16+3, regs);
-		if (intstatus & 4) handle_irq(16+2, 16+2, regs);
-		if (intstatus & 2) handle_irq(16+1, 16+1, regs);
-		if (intstatus & 1) handle_irq(16+0, 16+0, regs);
+		if (intstatus & 8) handle_irq(16+3, regs);
+		if (intstatus & 4) handle_irq(16+2, regs);
+		if (intstatus & 2) handle_irq(16+1, regs);
+		if (intstatus & 1) handle_irq(16+0, regs);
 	} else {
-		isa_device_interrupt (vector, regs);
+		isa_device_interrupt(vector, regs);
 	}
 }
 
 static void
 eiger_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-   int irq = (vector - 0x800) >> 4;
-   handle_irq(irq, irq, regs);
+	int irq = (vector - 0x800) >> 4;
+	handle_irq(irq, regs);
 }
 
 static void __init
 eiger_init_irq(void)
 {
+	long i;
+
 	outb(0, DMA1_RESET_REG);
 	outb(0, DMA2_RESET_REG);
 	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
@@ -116,9 +143,16 @@ eiger_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = eiger_srm_device_interrupt;
 
-	eiger_update_irq_hw(16, alpha_irq_mask, 0);
+	for (i = 16; i < 128; i += 16)
+		eiger_update_irq_hw(i, -1);
 
-	enable_irq(2);
+	init_i8259a_irqs();
+	init_rtc_irq();
+
+	for (i = 16; i < 128; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &eiger_irq_type;
+	}
 }
 
 static int __init
@@ -199,14 +233,11 @@ struct alpha_machine_vector eiger_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		128,
-	irq_probe_mask:		TSUNAMI_PROBE_MASK,
-	update_irq_hw:		eiger_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	eiger_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		eiger_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		eiger_map_irq,

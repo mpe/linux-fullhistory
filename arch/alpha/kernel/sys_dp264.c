@@ -15,7 +15,6 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
-#include <linux/irq.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -29,69 +28,17 @@
 #include <asm/hwrpb.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-/*
- * HACK ALERT! only the boot cpu is used for interrupts.
- */
-
-static void enable_tsunami_irq(unsigned int irq);
-static void disable_tsunami_irq(unsigned int irq);
-static void enable_clipper_irq(unsigned int irq);
-static void disable_clipper_irq(unsigned int irq);
-
-#define end_tsunami_irq		enable_tsunami_irq
-#define shutdown_tsunami_irq	disable_tsunami_irq
-#define mask_and_ack_tsunami_irq	disable_tsunami_irq
-
-#define end_clipper_irq		enable_clipper_irq
-#define shutdown_clipper_irq	disable_clipper_irq
-#define mask_and_ack_clipper_irq	disable_clipper_irq
-
-
-static unsigned int
-startup_tsunami_irq(unsigned int irq)
-{ 
-	enable_tsunami_irq(irq);
-	return 0; /* never anything pending */
-}
-
-static unsigned int
-startup_clipper_irq(unsigned int irq)
-{ 
-	enable_clipper_irq(irq);
-	return 0; /* never anything pending */
-}
-
-static struct hw_interrupt_type tsunami_irq_type = {
-	"TSUNAMI",
-	startup_tsunami_irq,
-	shutdown_tsunami_irq,
-	enable_tsunami_irq,
-	disable_tsunami_irq,
-	mask_and_ack_tsunami_irq,
-	end_tsunami_irq
-};
-
-static struct hw_interrupt_type clipper_irq_type = {
-	"CLIPPER",
-	startup_clipper_irq,
-	shutdown_clipper_irq,
-	enable_clipper_irq,
-	disable_clipper_irq,
-	mask_and_ack_clipper_irq,
-	end_clipper_irq
-};
-
 static unsigned long cached_irq_mask;
+
 
 #define TSUNAMI_SET_IRQ_MASK(cpu, value)	\
 do {						\
 	volatile unsigned long *csr;		\
-						\
 	csr = &TSUNAMI_cchip->dim##cpu##.csr;	\
 	*csr = (value);				\
 	mb();					\
@@ -101,8 +48,7 @@ do {						\
 static inline void
 do_flush_irq_mask(unsigned long value)
 {
-	switch (TSUNAMI_bootcpu)
-	{
+	switch (TSUNAMI_bootcpu) {
 	case 0:
 		TSUNAMI_SET_IRQ_MASK(0, value);
 		break;
@@ -150,20 +96,6 @@ dp264_flush_irq_mask(unsigned long mask)
 }
 
 static void
-enable_tsunami_irq(unsigned int irq)
-{
-	cached_irq_mask |= 1UL << irq;
-	dp264_flush_irq_mask(cached_irq_mask);
-}
-
-static void
-disable_tsunami_irq(unsigned int irq)
-{
-	cached_irq_mask &= ~(1UL << irq);
-	dp264_flush_irq_mask(cached_irq_mask);
-}
-
-static void
 clipper_flush_irq_mask(unsigned long mask)
 {
 	unsigned long value;
@@ -177,19 +109,67 @@ clipper_flush_irq_mask(unsigned long mask)
 	do_flush_irq_mask(value);
 }
 
+static inline void
+dp264_enable_irq(unsigned int irq)
+{
+	cached_irq_mask |= 1UL << irq;
+	dp264_flush_irq_mask(cached_irq_mask);
+}
+
 static void
-enable_clipper_irq(unsigned int irq)
+dp264_disable_irq(unsigned int irq)
+{
+	cached_irq_mask &= ~(1UL << irq);
+	dp264_flush_irq_mask(cached_irq_mask);
+}
+
+static unsigned int
+dp264_startup_irq(unsigned int irq)
+{ 
+	dp264_enable_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static inline void
+clipper_enable_irq(unsigned int irq)
 {
 	cached_irq_mask |= 1UL << irq;
 	clipper_flush_irq_mask(cached_irq_mask);
 }
 
 static void
-disable_clipper_irq(unsigned int irq)
+clipper_disable_irq(unsigned int irq)
 {
 	cached_irq_mask &= ~(1UL << irq);
 	clipper_flush_irq_mask(cached_irq_mask);
 }
+
+static unsigned int
+clipper_startup_irq(unsigned int irq)
+{ 
+	clipper_enable_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static struct hw_interrupt_type dp264_irq_type = {
+	typename:	"DP264",
+	startup:	dp264_startup_irq,
+	shutdown:	dp264_disable_irq,
+	enable:		dp264_enable_irq,
+	disable:	dp264_disable_irq,
+	ack:		dp264_disable_irq,
+	end:		dp264_enable_irq,
+};
+
+static struct hw_interrupt_type clipper_irq_type = {
+	typename:	"CLIPPER",
+	startup:	clipper_startup_irq,
+	shutdown:	clipper_disable_irq,
+	enable:		clipper_enable_irq,
+	disable:	clipper_disable_irq,
+	ack:		clipper_disable_irq,
+	end:		clipper_enable_irq,
+};
 
 static void
 dp264_device_interrupt(unsigned long vector, struct pt_regs * regs)
@@ -269,18 +249,12 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 }
 
 static void __init
-init_TSUNAMI_irqs(struct hw_interrupt_type * ops)
+init_tsunami_irqs(struct hw_interrupt_type * ops)
 {
-	int i;
+	long i;
 
-	for (i = 0; i < NR_IRQS; i++) {
-		if (i == RTC_IRQ)
-			continue;
-		if (i < 16)
-			continue;
-		/* only irqs between 16 and 47 are tsunami irqs */
-		if (i >= 48)
-			break;
+	/* Only irqs between 16 and 47 are tsunami irqs.  */
+	for (i = 16; i < 48; ++i) {
 		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 		irq_desc[i].handler = ops;
 	}
@@ -297,11 +271,11 @@ dp264_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
 
-	init_ISA_irqs();
-	init_RTC_irq();
-	init_TSUNAMI_irqs(&tsunami_irq_type);
-
 	dp264_flush_irq_mask(0UL);
+
+	init_i8259a_irqs();
+	init_rtc_irq();
+	init_tsunami_irqs(&dp264_irq_type);
 }
 
 static void __init
@@ -315,11 +289,11 @@ clipper_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = clipper_srm_device_interrupt;
 
-	init_ISA_irqs();
-	init_RTC_irq();
-	init_TSUNAMI_irqs(&clipper_irq_type);
-
 	clipper_flush_irq_mask(0UL);
+
+	init_i8259a_irqs();
+	init_rtc_irq();
+	init_tsunami_irqs(&clipper_irq_type);
 }
 
 
@@ -554,7 +528,7 @@ struct alpha_machine_vector dp264_mv __initmv = {
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		dp264_init_pci,
 	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		dp264_map_irq,
@@ -578,7 +552,7 @@ struct alpha_machine_vector monet_mv __initmv = {
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		monet_init_pci,
 	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		monet_map_irq,
@@ -601,7 +575,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		webbrick_map_irq,
@@ -624,7 +598,7 @@ struct alpha_machine_vector clipper_mv __initmv = {
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		clipper_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		clipper_map_irq,

@@ -1027,7 +1027,6 @@ int __init bpp_init(void)
 	for (idx = 0; idx < BPP_NO; idx += 1) {
 		instances[idx].opened = 0;
 		probeLptPort(idx);
-		sprintf(devname, "%s%i", dev_name, idx);
 	}
 	devfs_handle = devfs_mk_dir (NULL, "bpp", 3, NULL);
 	devfs_register_series (devfs_handle, "%u", BPP_NO, DEVFS_FL_DEFAULT,

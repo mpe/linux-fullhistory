@@ -16,7 +16,7 @@
 #define EV56_CPU		7	/* EV5.6 (21164)	*/
 #define EV6_CPU			8	/* EV6 (21164)		*/
 #define PCA56_CPU		9	/* PCA56 (21164PC)	*/
-#define PCA57_CPU		10	/* PCA57 (21164??)	*/
+#define PCA57_CPU		10	/* PCA57 (notyet)	*/
 
 /*
  * DEC system types for Alpha systems.  Found in HWRPB.
@@ -62,8 +62,8 @@
 #define ST_DTI_RUFFIAN		101	/* RUFFIAN systype	*/
 
 /* Alpha Processor, Inc. systems */
-#define ST_API_BIAS		200			/* Offset for API systems */
-#define ST_API_NAUTILUS		(ST_API_BIAS + 1)	/* Nautilus systype */
+#define ST_API_BIAS		200
+#define ST_API_NAUTILUS		201	/* UP1000 systype	*/
 
 struct pcb_struct {
 	unsigned long ksp;

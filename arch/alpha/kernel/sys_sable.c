@@ -26,7 +26,7 @@
 #include <asm/core_t2.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
@@ -38,15 +38,43 @@
  *	 0-7  (char at 536)
  *	 8-15 (char at 53a)
  *	16-23 (char at 53c)
+ *
+ * Summary Registers (536/53a/53c):
+ *
+ * Bit      Meaning               Kernel IRQ
+ *------------------------------------------
+ * 0        PCI slot 0			34
+ * 1        NCR810 (builtin)		33
+ * 2        TULIP (builtin)		32
+ * 3        mouse			12
+ * 4        PCI slot 1			35
+ * 5        PCI slot 2			36
+ * 6        keyboard			1
+ * 7        floppy			6
+ * 8        COM2			3
+ * 9        parallel port		7
+ *10        EISA irq 3			-
+ *11        EISA irq 4			-
+ *12        EISA irq 5			5
+ *13        EISA irq 6			-
+ *14        EISA irq 7			-
+ *15        COM1			4
+ *16        EISA irq 9			9
+ *17        EISA irq 10			10
+ *18        EISA irq 11			11
+ *19        EISA irq 12			-
+ *20        EISA irq 13			-
+ *21        EISA irq 14			14
+ *22        NC				15
+ *23        IIC				-
  */
-
-/* Note that the vector reported by the SRM PALcode corresponds to the
-   interrupt mask bits, but we have to manage via more normal IRQs.  */
 
 static struct 
 {
 	char irq_to_mask[40];
 	char mask_to_irq[40];
+
+	/* Note mask bit is true for DISABLED irqs.  */
 	unsigned long shadow_mask;
 } sable_irq_swizzle = {
 	{
@@ -54,60 +82,102 @@ static struct
 		-1, 16, 17, 18,  3, -1, 21, 22,	/* pseudo PIC  8-15 */
 		-1, -1, -1, -1, -1, -1, -1, -1,	/* pseudo EISA 0-7  */
 		-1, -1, -1, -1, -1, -1, -1, -1,	/* pseudo EISA 8-15 */
-		2,  1,  0,  4,  5, -1, -1, -1,	/* pseudo PCI */
+		 2,  1,  0,  4,  5, -1, -1, -1,	/* pseudo PCI */
 	},
 	{
 		34, 33, 32, 12, 35, 36,  1,  6,	/* mask 0-7  */
-		3,  7, -1, -1,  5, -1, -1,  4,	/* mask 8-15  */
-		9, 10, 11, -1, -1, 14, 15, -1,	/* mask 16-23  */
+		 3,  7, -1, -1,  5, -1, -1,  4,	/* mask 8-15  */
+		 9, 10, 11, -1, -1, 14, 15, -1,	/* mask 16-23  */
 	},
-	0
+	-1
 };
 
+static inline void
+sable_update_irq_hw(unsigned long bit, unsigned long mask)
+{
+	int port = 0x536;
 
-static void 
-sable_update_irq_hw(unsigned long irq, unsigned long unused_mask, int unmask_p)
+	if (bit >= 16) {
+		port = 0x53d;
+		mask >>= 16;
+	} else if (bit >= 8) {
+		port = 0x53b;
+		mask >>= 8;
+	}
+
+	outb(mask, port);
+}
+
+static inline void
+sable_ack_irq_hw(unsigned long bit)
+{
+	int port, val1, val2;
+
+	if (bit >= 16) {
+		port = 0x53c;
+		val1 = 0xE0 | (bit - 16);
+		val2 = 0xE0 | 4;
+	} else if (bit >= 8) {
+		port = 0x53a;
+		val1 = 0xE0 | (bit - 8);
+		val2 = 0xE0 | 2;
+	} else {
+		port = 0x536;
+		val1 = 0xE0 | (bit - 0);
+		val2 = 0xE0 | 1;
+	}
+
+	outb(val1, port);	/* ack the slave */
+	outb(val2, 0x534);	/* ack the master */
+}
+
+static inline void
+sable_enable_irq(unsigned int irq)
 {
 	unsigned long bit, mask;
 
-	/* The "irq" argument is really the irq, but we need it to
-	   be the mask bit number.  Convert it now.  */
-
-	irq = sable_irq_swizzle.irq_to_mask[irq];
-	bit = 1UL << irq;
-	mask = sable_irq_swizzle.shadow_mask | bit;
-	if (unmask_p)
-		mask &= ~bit;
-	sable_irq_swizzle.shadow_mask = mask;
-
-	/* The "irq" argument is now really the mask bit number.  */
-	if (irq <= 7)
-		outb(mask, 0x537);
-	else if (irq <= 15)
-		outb(mask >> 8, 0x53b);
-	else
-		outb(mask >> 16, 0x53d);
+	bit = sable_irq_swizzle.irq_to_mask[irq];
+	mask = sable_irq_swizzle.shadow_mask &= ~(1UL << bit);
+	sable_update_irq_hw(bit, mask);
 }
 
 static void
-sable_ack_irq(unsigned long irq)
+sable_disable_irq(unsigned int irq)
 {
-	/* Note that the "irq" here is really the mask bit number */
-	switch (irq) {
-	case 0 ... 7:
-		outb(0xE0 | (irq - 0), 0x536);
-		outb(0xE0 | 1, 0x534); /* slave 0 */
-		break;
-	case 8 ... 15:
-		outb(0xE0 | (irq - 8), 0x53a);
-		outb(0xE0 | 3, 0x534); /* slave 1 */
-		break;
-	case 16 ... 24:
-		outb(0xE0 | (irq - 16), 0x53c);
-		outb(0xE0 | 4, 0x534); /* slave 2 */
-		break;
-	}
+	unsigned long bit, mask;
+
+	bit = sable_irq_swizzle.irq_to_mask[irq];
+	mask = sable_irq_swizzle.shadow_mask |= 1UL << bit;
+	sable_update_irq_hw(bit, mask);
 }
+
+static unsigned int
+sable_startup_irq(unsigned int irq)
+{
+	sable_enable_irq(irq);
+	return 0;
+}
+
+static void
+sable_mask_and_ack_irq(unsigned int irq)
+{
+	unsigned long bit, mask;
+
+	bit = sable_irq_swizzle.irq_to_mask[irq];
+	mask = sable_irq_swizzle.shadow_mask |= 1UL << bit;
+	sable_update_irq_hw(bit, mask);
+	sable_ack_irq_hw(bit);
+}
+
+static struct hw_interrupt_type sable_irq_type = {
+	typename:	"SABLE",
+	startup:	sable_startup_irq,
+	shutdown:	sable_disable_irq,
+	enable:		sable_enable_irq,
+	disable:	sable_disable_irq,
+	ack:		sable_mask_and_ack_irq,
+	end:		sable_enable_irq,
+};
 
 static void 
 sable_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
@@ -116,63 +186,35 @@ sable_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	   to the interrupt mask bits, but we have to manage via more
 	   normal IRQs.  */
 
-	int irq, ack;
+	int bit, irq;
 
-	ack = irq = (vector - 0x800) >> 4;
-
-	irq = sable_irq_swizzle.mask_to_irq[(ack)];
-#if 0
-	if (irq == 5 || irq == 9 || irq == 10 || irq == 11 ||
-	    irq == 14 || irq == 15)
-		printk("srm_device_interrupt: vector=0x%lx  ack=0x%x"
-		       "  irq=0x%x\n", vector, ack, irq);
-#endif
-
-	handle_irq(irq, ack, regs);
+	bit = (vector - 0x800) >> 4;
+	irq = sable_irq_swizzle.mask_to_irq[bit];
+	handle_irq(irq, regs);
 }
 
 static void __init
 sable_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
+	long i;
 
-	outb(alpha_irq_mask      , 0x537);	/* slave 0 */
-	outb(alpha_irq_mask >>  8, 0x53b);	/* slave 1 */
-	outb(alpha_irq_mask >> 16, 0x53d);	/* slave 2 */
-	outb(0x44, 0x535);		/* enable cascades in master */
+	outb(-1, 0x537);	/* slave 0 */
+	outb(-1, 0x53b);	/* slave 1 */
+	outb(-1, 0x53d);	/* slave 2 */
+	outb(0x44, 0x535);	/* enable cascades in master */
+
+	for (i = 0; i < 40; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &sable_irq_type;
+	}
+	
+	init_rtc_irq();
+	common_init_isa_dma();
 }
 
 
 /*
  * PCI Fixup configuration for ALPHA SABLE (2100) - 2100A is different ??
- *
- * Summary Registers (536/53a/53c):
- * Bit      Meaning
- *-----------------
- * 0        PCI slot 0
- * 1        NCR810 (builtin)
- * 2        TULIP (builtin)
- * 3        mouse
- * 4        PCI slot 1
- * 5        PCI slot 2
- * 6        keyboard
- * 7        floppy
- * 8        COM2
- * 9        parallel port
- *10        EISA irq 3
- *11        EISA irq 4
- *12        EISA irq 5
- *13        EISA irq 6
- *14        EISA irq 7
- *15        COM1
- *16        EISA irq 9
- *17        EISA irq 10
- *18        EISA irq 11
- *19        EISA irq 12
- *20        EISA irq 13
- *21        EISA irq 14
- *22        NC
- *23        IIC
  *
  * The device to slot mapping looks like:
  *
@@ -239,14 +281,11 @@ struct alpha_machine_vector sable_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
-	irq_probe_mask:		_PROBE_MASK(40),
-	update_irq_hw:		sable_update_irq_hw,
-	ack_irq:		sable_ack_irq,
 	device_interrupt:	sable_srm_device_interrupt,
 
 	init_arch:		t2_init_arch,
 	init_irq:		sable_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		sable_map_irq,
@@ -274,14 +313,11 @@ struct alpha_machine_vector sable_gamma_mv __initmv = {
 	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
-	irq_probe_mask:		_PROBE_MASK(40),
-	update_irq_hw:		sable_update_irq_hw,
-	ack_irq:		sable_ack_irq,
 	device_interrupt:	sable_srm_device_interrupt,
 
 	init_arch:		t2_init_arch,
 	init_irq:		sable_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	pci_map_irq:		sable_map_irq,
 	pci_swizzle:		common_swizzle,

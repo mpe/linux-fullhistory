@@ -30,28 +30,20 @@
 #include <asm/core_lca.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
-static void
-sio_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
-{
-	if (irq >= 8)
-		outb(mask >> 8, 0xA1);
-	else
-		outb(mask, 0x21);
-}
 
 static void __init
 sio_init_irq(void)
 {
-	STANDARD_INIT_IRQ_PROLOG;
-
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = srm_device_interrupt;
-		
-	enable_irq(2);			/* enable cascade */
+
+	init_i8259a_irqs();
+	init_rtc_irq();
+	common_init_isa_dma();
 }
 
 static inline void __init
@@ -270,14 +262,11 @@ struct alpha_machine_vector alphabook1_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
-	irq_probe_mask:		_PROBE_MASK(16),
-	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		alphabook1_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		alphabook1_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		noname_map_irq,
@@ -304,14 +293,11 @@ struct alpha_machine_vector avanti_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
-	irq_probe_mask:		_PROBE_MASK(16),
-	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		noname_init_pci,
 	pci_map_irq:		noname_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -336,14 +322,11 @@ struct alpha_machine_vector noname_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
-	irq_probe_mask:		_PROBE_MASK(16),
-	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	srm_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		noname_init_pci,
 	pci_map_irq:		noname_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -377,14 +360,11 @@ struct alpha_machine_vector p2k_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
-	irq_probe_mask:		P2K_PROBE_MASK,
-	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	srm_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		noname_init_pci,
 	pci_map_irq:		p2k_map_irq,
 	pci_swizzle:		common_swizzle,
@@ -409,14 +389,11 @@ struct alpha_machine_vector xl_mv __initmv = {
 	min_mem_address:	XL_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
-	irq_probe_mask:		_PROBE_MASK(16),
-	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		noname_init_pci,
 	pci_map_irq:		noname_map_irq,
 	pci_swizzle:		common_swizzle,

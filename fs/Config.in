@@ -106,7 +106,7 @@ if [ "$CONFIG_INET" = "y" ]; then
 	 define_tristate CONFIG_LOCKD n
       fi
    fi
-   if [ "$CONFIG_NFSD_V3" == "y" ]; then
+   if [ "$CONFIG_NFSD_V3" = "y" ]; then
      define_bool CONFIG_LOCKD_V4 y
    fi
    tristate 'SMB file system support (to mount WfW shares etc.)' CONFIG_SMB_FS

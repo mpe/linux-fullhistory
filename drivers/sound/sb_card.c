@@ -17,8 +17,13 @@
  * 06-01-2000 Refined and bugfixed ISA PnP support, added
  *  CMI 8330 support - Alessandro Zummo <azummo@ita.flashnet.it>
  *
- *
  * 04-02-2000 Added Soundblaster AWE 64 PnP support, isapnpjump
+ *  Alessandro Zummo <azummo@ita.flashnet.it>
+ *
+ * 11-02-2000 Added Soundblaster AWE 32 PnP support, refined PnP code
+ *  Alessandro Zummo <azummo@ita.flashnet.it>
+ *
+ * 13-02-2000 Hopefully fixed awe/sb16 related bugs, code cleanup.
  *  Alessandro Zummo <azummo@ita.flashnet.it>
  *
  */
@@ -134,7 +139,8 @@ static struct address_info config_mpu;
 
 struct pci_dev 	*sb_dev 	= NULL, 
 				*wss_dev 	= NULL, 
-				*jp_dev 	= NULL, 
+				*jp_dev 	= NULL,
+/*				*ide_dev	= NULL, */
 				*mpu_dev 	= NULL, 
 				*wt_dev 	= NULL;
 /*
@@ -156,9 +162,10 @@ int support 	= 0;		/* Set support to load this as a support module */
 int sm_games	= 0;		/* Mixer - see sb_mixer.c */
 int acer 	= 0;		/* Do acer notebook init */
 
-#ifdef CONFIG_ISAPNP
+#if defined CONFIGISAPNP || defined CONFIG_ISAPNP_MODULE
 int isapnp 		= 1;
 int isapnpjump 		= 0;
+int nosbwave	= 0;		/* This option will be removed when the new awe_wave driver will be in the kernel tree */
 #else
 int isapnp 		= 0;
 #endif
@@ -179,11 +186,13 @@ MODULE_PARM(sm_games, 	"i");
 MODULE_PARM(esstype, 	"i");
 MODULE_PARM(acer, 	"i");
 
-#ifdef CONFIG_ISAPNP
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 MODULE_PARM(isapnp, 	"i");
 MODULE_PARM(isapnpjump, "i");
+MODULE_PARM(nosbwave,	"i");
 MODULE_PARM_DESC(isapnp,	"When set to 0, Plug & Play support will be disabled");
 MODULE_PARM_DESC(isapnpjump, 	"Jumps to a specific slot in the driver's PnP table. Use the source, Luke.");
+MODULE_PARM_DESC(nosbwave,		"Disable SB AWE 32/64 Wavetable initialization. Use this option with the new awe_wave driver.");
 #endif
 
 MODULE_PARM_DESC(io, 		"Soundblaster i/o base address (0x220,0x240,0x260,0x280)");
@@ -202,79 +211,86 @@ MODULE_PARM_DESC(acer,		"Set this to detect cards in some ACER notebooks");
 
 void *smw_free = NULL;
 
-#ifdef CONFIG_ISAPNP
+#if defined CONFIGISAPNP || defined CONFIG_ISAPNP_MODULE
 
 /* That's useful. */
 
-static int check_base(char *devname, char *resname, struct resource *res)
+#define show_base(devname, resname, resptr) printk(KERN_INFO "sb: %s %s base located at %#lx\n", devname, resname, (resptr)->start)
+
+static struct pci_dev *activate_dev(char *devname, char *resname, struct pci_dev *dev)
 {
-	if (check_region(res->start, res->end - res->start))
+	int err;
+
+	if(dev->active)
 	{
-		printk(KERN_ERR "sb: %s %s error, i/o at %#lx already in use\n", devname, resname, res->start);
-		return 0;
+		printk(KERN_INFO "sb: %s %s already in use\n", devname, resname);
+		return(NULL);
 	}
 
-	printk(KERN_INFO "sb: %s %s base located at %#lx\n", devname, resname, res->start);
-	return 1;
-}
+	if((err = dev->activate(dev)) < 0)
+	{
+		printk(KERN_ERR "sb: %s %s config failed (out of resources?)[%d]\n", devname, resname, err);
 
+		dev->deactivate(dev);
+
+		return(NULL);
+	}
+	return(dev);
+}
 
 /* Card's specific initialization functions
  */
 
-static struct pci_dev *sb_init_generic(struct pci_bus *card, struct address_info *hw_config, struct address_info *mpu_config)
+static struct pci_dev *sb_init_generic(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
 {
-	if((sb_dev = isapnp_find_dev(card,
-				card->vendor,
-				card->device,
-				NULL)))
+	if((sb_dev = isapnp_find_dev(bus, card->vendor, card->device, NULL)))
 	{
 		sb_dev->prepare(sb_dev);
-		sb_dev->activate(sb_dev);
 
-		if (!sb_dev->resource[0].start)
-			return(NULL);
-
-		hw_config->io_base 	= sb_dev->resource[0].start;
-		hw_config->irq 		= sb_dev->irq_resource[0].start;
-		hw_config->dma 		= sb_dev->dma_resource[0].start;
-		hw_config->dma2 	= sb_dev->dma_resource[1].start;
-		mpu_config->io_base     = sb_dev->resource[1].start;
+		if((sb_dev = activate_dev("Soundblaster", "sb", sb_dev)))
+		{
+			hw_config->io_base 	= sb_dev->resource[0].start;
+			hw_config->irq 		= sb_dev->irq_resource[0].start;
+			hw_config->dma 		= sb_dev->dma_resource[0].start;
+			hw_config->dma2 	= sb_dev->dma_resource[1].start;
+			mpu_config->io_base = sb_dev->resource[1].start;
+		}
 	}
 	return(sb_dev);
 }
 
-static struct pci_dev *sb_init_ess(struct pci_bus *card, struct address_info *hw_config, struct address_info *mpu_config)
+static struct pci_dev *sb_init_ess(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
 {
-	if((sb_dev = isapnp_find_dev(card,
-				card->vendor,
-				card->device,
-				NULL)))
+	if((sb_dev = isapnp_find_dev(bus, card->vendor, card->device, NULL)))
 	{
 		sb_dev->prepare(sb_dev);
-		sb_dev->activate(sb_dev);
 
-		if (!sb_dev->resource[0].start)
-			return(NULL);
-
-		hw_config->io_base 	= sb_dev->resource[0].start;
-		hw_config->irq 		= sb_dev->irq_resource[0].start;
-		hw_config->dma 		= sb_dev->dma_resource[0].start;
-		hw_config->dma2 	= sb_dev->dma_resource[1].start;
-		mpu_config->io_base     = sb_dev->resource[2].start;
+		if((sb_dev = activate_dev("ESS", "sb", sb_dev)))
+		{
+			hw_config->io_base 	= sb_dev->resource[0].start;
+			hw_config->irq 		= sb_dev->irq_resource[0].start;
+			hw_config->dma 		= sb_dev->dma_resource[0].start;
+			hw_config->dma2 	= sb_dev->dma_resource[1].start;
+			mpu_config->io_base = sb_dev->resource[2].start;
+		}
 	}
 	return(sb_dev);
 }
 
-static struct pci_dev *sb_init_cmi(struct pci_bus *card, struct address_info *hw_config, struct address_info *mpu_config)
+static struct pci_dev *sb_init_cmi(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
 {
-	/* What a stupid chip... where did they get all those @@@ ?*/
+	/* 
+	 *  The CMI8330/C3D is a very 'stupid' chip... where did they get al those @@@ ?
+	 *  It's ISAPnP section is badly designed and has many flaws, i'll do my best
+	 *  to workaround them. I strongly suggest you to buy a real soundcard.
+	 *  The CMI8330 on my motherboard has also the bad habit to activate 
+	 *  the rear channel of my amplifier instead of the front one.
+	 */
 
-	printk(KERN_INFO "sb: CMI8330 detected\n");
+	/*  @X@0001:Soundblaster.
+	 */
 
-	/* Soundblaster compatible logical device. */
-
-	if((sb_dev = isapnp_find_dev(card,
+	if((sb_dev = isapnp_find_dev(bus,
 				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
 	{
 #ifdef CMI8330_DMA0BAD
@@ -283,11 +299,11 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *card, struct address_info *hw
 		sb_dev->prepare(sb_dev);
 		
 		/*  This device doesn't work with DMA 0, so we must allocate
-			it to prevent PnP routines to assign it to the card.
-
-			I know i could have inlined the following lines, but it's cleaner
-			this way.
-		*/
+		 *	it to prevent PnP routines to assign it to the card.
+		 *
+		 *	I know i could have inlined the following lines, but it's cleaner
+		 *  this way.
+		 */
 	
 #ifdef CMI8330_DMA0BAD
 		if(sb_dev->dma_resource[0].start == 0)
@@ -300,69 +316,72 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *card, struct address_info *hw
 		}
 #endif
 
-		if(sb_dev->activate(sb_dev) >= 0)
+		if((sb_dev = activate_dev("CMI8330", "sb", sb_dev)))
 		{
 			hw_config->io_base 	= sb_dev->resource[0].start;
 			hw_config->irq 		= sb_dev->irq_resource[0].start;
 			hw_config->dma 		= sb_dev->dma_resource[0].start;
 			hw_config->dma2 	= sb_dev->dma_resource[1].start;
 
-			check_base("CMI8330", "sb", &sb_dev->resource[0]);
+			show_base("CMI8330", "sb", &sb_dev->resource[0]);
 		}
-		else
-			printk(KERN_ERR "sb: CMI8330 sb config failed (out of resources?)\n");
 
 #ifdef CMI8330_DMA0BAD
 		if(dmahack)
 			free_dma(0);
 #endif
+
+		if(!sb_dev) return(NULL);
+
 	}
 	else
-		printk(KERN_ERR "sb: CMI8330 panic! sb base not found\n");
+		printk(KERN_ERR "sb: CMI8330 panic: sb base not found\n");
 
-	if((mpu_dev = isapnp_find_dev(card,
+	/*  @H@0001:mpu
+	 */
+
+#ifdef CONFIG_MIDI
+	if((mpu_dev = isapnp_find_dev(bus,
 				ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001), NULL)))
 	{
 		mpu_dev->prepare(mpu_dev);
 
-		/* This disables the interrupt on this resource. Do we need it ? */
+		/*  This disables the interrupt on this resource. Do we need it ?
+		 */
 
 		mpu_dev->irq_resource[0].flags = 0;
 
-		if(mpu_dev->activate(mpu_dev) >= 0)
+		if((mpu_dev = activate_dev("CMI8330", "mpu", mpu_dev)))
 		{
-			if( check_base("CMI8330", "mpu", &mpu_dev->resource[0]) ) 
-				mpu_config->io_base = mpu_dev->resource[0].start;
+			show_base("CMI8330", "mpu", &mpu_dev->resource[0]);
+			mpu_config->io_base = mpu_dev->resource[0].start;
 		}
-		else
-			printk(KERN_ERR "sb: CMI8330 mpu config failed (out of resources?)\n");
 	}
 	else
-		printk(KERN_ERR "sb: CMI8330 panic! mpu not found\n");
+		printk(KERN_ERR "sb: CMI8330 panic: mpu not found\n");
+#endif
 
 
-	/* Gameport. */
+	/*  @P@:Gameport
+	 */
 
-	if((jp_dev = isapnp_find_dev(card,
+	if((jp_dev = isapnp_find_dev(bus,
 				ISAPNP_VENDOR('@','P','@'), ISAPNP_FUNCTION(0x0001), NULL)))
 	{
 		jp_dev->prepare(jp_dev);
 		
-		if(jp_dev->activate(jp_dev) >= 0)
-		{
-			check_base("CMI8330", "gameport", &jp_dev->resource[0]);
-		}
-		else
-			printk(KERN_ERR "sb: CMI8330 gameport config failed (out of resources?)\n");
+
+		if((jp_dev = activate_dev("CMI8330", "gameport", jp_dev)))
+			show_base("CMI8330", "gameport", &jp_dev->resource[0]);
 	}
 	else
-		printk(KERN_ERR "sb: CMI8330 panic! gameport not found\n");
+		printk(KERN_ERR "sb: CMI8330 panic: gameport not found\n");
 
-
-	/* OPL3 support */
+	/*  @@@0001:OPL3 
+	 */
 
 #if defined(CONFIG_SOUND_YM3812) || defined(CONFIG_SOUND_YM3812_MODULE)
-	if((wss_dev = isapnp_find_dev(card,
+	if((wss_dev = isapnp_find_dev(bus,
 				ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001), NULL)))
 	{
 		wss_dev->prepare(wss_dev);
@@ -372,15 +391,11 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *card, struct address_info *hw
 		wss_dev->irq_resource[0].flags = 0;
 		wss_dev->dma_resource[0].flags = 0;
 
-		if(wss_dev->activate(wss_dev) >= 0)
-		{
-			check_base("CMI8330", "opl3", &wss_dev->resource[1]);
-		}
-		else
-			printk(KERN_ERR "sb: CMI8330 opl3 config failed (out of resources?)\n");
+		if((wss_dev = activate_dev("CMI8330", "opl3", wss_dev)))
+			show_base("CMI8330", "opl3", &wss_dev->resource[1]);
 	}
 	else
-		printk(KERN_ERR "sb: CMI8330 panic! opl3 not found\n");
+		printk(KERN_ERR "sb: CMI8330 panic: opl3 not found\n");
 #endif
 
 	printk(KERN_INFO "sb: CMI8330 mail reports to Alessandro Zummo <azummo@ita.flashnet.it>\n");
@@ -388,18 +403,25 @@ static struct pci_dev *sb_init_cmi(struct pci_bus *card, struct address_info *hw
 	return(sb_dev);
 }
 
-static struct pci_dev *sb_init_awe64(struct pci_bus *card, struct address_info *hw_config, struct address_info *mpu_config)
+/* Specific support for awe will be dropped when:
+ * a) The new awe_wawe driver with PnP support will be introduced in the kernel
+ * b) The joystick driver will support PnP
+ */
+
+static struct pci_dev *sb_init_awe(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
 {
-	printk(KERN_INFO "sb: SoundBlaster AWE 64 detected\n");
+	/*  CTL0042:Audio SB64
+	 *  CTL0031:Audio SB32
+	 *  CTL0045:Audio SB64
+	 */
 
-	/* CTL0042:Audio. */
-
-	if((sb_dev = isapnp_find_dev(card,
-				ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), NULL)))
+	if(	(sb_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), NULL)) || 
+		(sb_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), NULL)) ||
+		(sb_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), NULL))	)
 	{
 		sb_dev->prepare(sb_dev);
 		
-		if(sb_dev->activate(sb_dev) >= 0)
+		if((sb_dev = activate_dev("AWE", "sb", sb_dev)))
 		{
 			hw_config->io_base 	= sb_dev->resource[0].start;
 			hw_config->irq 		= sb_dev->irq_resource[0].start;
@@ -408,87 +430,144 @@ static struct pci_dev *sb_init_awe64(struct pci_bus *card, struct address_info *
 
 			mpu_config->io_base	= sb_dev->resource[1].start;
 
-			check_base("AWE64", "sb", 	&sb_dev->resource[0]);
-			check_base("AWE64", "mpu", 	&sb_dev->resource[1]);
-			check_base("AWE64", "opl3",	&sb_dev->resource[2]);
+			show_base("AWE", "sb", 		&sb_dev->resource[0]);
+			show_base("AWE", "mpu", 	&sb_dev->resource[1]);
+			show_base("AWE", "opl3",	&sb_dev->resource[2]);
 		}
 		else
-			printk(KERN_ERR "sb: AWE64 sb config failed (out of resources?)\n");
+			return(NULL);
 	}
 	else
-		printk(KERN_ERR "sb: AWE64 panic! sb base not found\n");
+		printk(KERN_ERR "sb: AWE panic: sb base not found\n");
 
 
-	/* CTL7002:Game */
+	/*  CTL7002:Game SB64
+	 *  CTL7001:Game SB32
+	 */
 
-	if((jp_dev = isapnp_find_dev(card,
-				ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x7002), NULL)))
+	if( (jp_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x7002), NULL)) ||
+		(jp_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x7001), NULL)) )
 	{
 		jp_dev->prepare(jp_dev);
 		
-		if(jp_dev->activate(jp_dev) >= 0)
-		{
-			check_base("AWE64", "gameport", &jp_dev->resource[0]);
-		}
-		else
-			printk(KERN_ERR "sb: AWE64 gameport config failed (out of resources?)\n");
+		if((jp_dev = activate_dev("AWE", "gameport", jp_dev)))
+			show_base("AWE", "gameport", &jp_dev->resource[0]);
 	}
 	else
-		printk(KERN_ERR "sb: AWE64 panic! gameport not found\n");
+		printk(KERN_ERR "sb: AWE panic: gameport not found\n");
 
 
-	/* CTL0022:WaveTable */
+	/*  CTL0022:WaveTable SB64
+	 *  CTL0021:WaveTable SB32
+	 */
 
-	if((wt_dev = isapnp_find_dev(card,
-				ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0022), NULL)))
+	if( nosbwave == 0 &&
+	   	( (wt_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0023), NULL)) ||
+		  (wt_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0022), NULL)) ||
+		  (wt_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0021), NULL)) ))
 	{
 		wt_dev->prepare(wt_dev);
 		
-		if(wt_dev->activate(wt_dev) >= 0)
+		if((wt_dev = activate_dev("AWE", "wavetable", wt_dev)))
 		{
-			check_base("AWE64", "wavetable", &wt_dev->resource[0]);
-			check_base("AWE64", "wavetable", &wt_dev->resource[1]);
-			check_base("AWE64", "wavetable", &wt_dev->resource[2]);
+			show_base("AWE", "wavetable", &wt_dev->resource[0]);
+			show_base("AWE", "wavetable", &wt_dev->resource[1]);
+			show_base("AWE", "wavetable", &wt_dev->resource[2]);
 		}
-		else
-			printk(KERN_ERR "sb: AWE64 wavetable config failed (out of resources?)\n");
 	}
 	else
-		printk(KERN_ERR "sb: AWE64 panic! wavetable not found\n");
+		printk(KERN_ERR "sb: AWE panic: wavetable not found\n");
 
-	printk(KERN_INFO "sb: AWE64 mail reports to Alessandro Zummo <azummo@ita.flashnet.it>\n");
+
+	/*  CTL2011:IDE SB32/64
+	 */
+
+/* No reasons to enable this... or not? */
+/*
+	if( (ide_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x2011), NULL)) )
+	{
+		ide_dev->prepare(ide_dev);
+		
+		if((ide_dev = activate_dev("AWE", "IDE", ide_dev)))
+		{
+			show_base("AWE", "IDE 1", &ide_dev->resource[0]);
+			show_base("AWE", "IDE 2", &ide_dev->resource[1]);
+		}
+	}
+	else
+		printk(KERN_ERR "sb: AWE panic: IDE not found\n");
+*/
+
+	printk(KERN_INFO "sb: AWE mail reports to Alessandro Zummo <azummo@ita.flashnet.it>\n");
 
 	return(sb_dev);
 }
 
+#define SBF_DEV	0x01
 
-static struct { unsigned short vendor, function; struct pci_dev * (*initfunc)(struct pci_bus *, struct address_info *, struct address_info *); char *name; }
+
+static struct { unsigned short vendor, function, flags; struct pci_dev * (*initfunc)(struct pci_bus *, struct pci_dev *, struct address_info *, struct address_info *); char *name; }
 isapnp_sb_list[] __initdata = {
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), &sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x009D), &sb_init_awe64,	"Sound Blaster AWE 64" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), &sb_init_ess,		"ESS 1868" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), &sb_init_ess,		"ESS 1868" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), &sb_init_ess,		"ESS 1869" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), &sb_init_ess,		"ESS 1878" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), &sb_init_ess,		"ESS 1879" },
-	{ISAPNP_VENDOR('C','M','I'), ISAPNP_FUNCTION(0x0001), &sb_init_cmi, 	"CMI 8330 SoundPRO" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), SBF_DEV, &sb_init_generic,	"Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), SBF_DEV, &sb_init_generic,	"Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041), SBF_DEV, &sb_init_generic,	"Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), SBF_DEV, &sb_init_generic,	"Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043), SBF_DEV, &sb_init_generic,	"Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), SBF_DEV, &sb_init_generic,	"Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044), 0,	   &sb_init_awe,		"Sound Blaster 32" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0039), 0,	   &sb_init_awe,		"Sound Blaster AWE 32" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x009D), 0,	   &sb_init_awe,		"Sound Blaster AWE 64" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x00C5), 0,	   &sb_init_awe,		"Sound Blaster AWE 64" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x00E4), 0,	   &sb_init_awe,		"Sound Blaster AWE 64" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), SBF_DEV, &sb_init_ess,		"ESS 1868" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), SBF_DEV, &sb_init_ess,		"ESS 1868" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), SBF_DEV, &sb_init_ess,		"ESS 1869" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), SBF_DEV, &sb_init_ess,		"ESS 1878" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), SBF_DEV, &sb_init_ess,		"ESS 1879" },
+	{ISAPNP_VENDOR('C','M','I'), ISAPNP_FUNCTION(0x0001), 0,	   &sb_init_cmi,		"CMI 8330 SoundPRO" },
     {0}
 };
 
+static int __init sb_init_isapnp(struct address_info *hw_config, struct address_info *mpu_config, struct pci_bus *bus, struct pci_dev *card, int slot)
+{
+	struct pci_dev *idev = NULL;
+
+    /* You missed the init func? That's bad. */
+	if(isapnp_sb_list[slot].initfunc)
+	{
+		char *busname = bus->name[0] ? bus->name : isapnp_sb_list[slot].name;
+
+		printk(KERN_INFO "sb: %s detected\n", busname); 
+
+		/* Initialize this baby. */
+
+		if((idev = isapnp_sb_list[slot].initfunc(bus, card, hw_config, mpu_config)))
+		{
+			/* We got it. */
+
+			printk(KERN_NOTICE "sb: ISAPnP reports '%s' at i/o %#x, irq %d, dma %d, %d\n",
+			       busname,
+			       hw_config->io_base, hw_config->irq, hw_config->dma,
+			       hw_config->dma2);
+			return 1;
+		}
+		else
+			printk(KERN_INFO "sb: Failed to initialize %s\n", busname);
+	}
+	else
+		printk(KERN_ERR "sb: Bad entry in sb_card.c PnP table\n");
+
+	return 0;
+}
+
 /* Actually this routine will detect and configure only the first card with successful
-   initalization. isapnpjump could be used to jump to a specific entry.
+   initialization. isapnpjump could be used to jump to a specific entry.
    Please always add entries at the end of the array.
    Should this be fixed? - azummo
 */
 
-static int __init sb_probe_isapnp(struct address_info *hw_config, struct address_info *mpu_config) {
-
+static int __init sb_probe_isapnp(struct address_info *hw_config, struct address_info *mpu_config) 
+{
 	int i;
 
 	/* Count entries in isapnp_sb_list */
@@ -502,34 +581,43 @@ static int __init sb_probe_isapnp(struct address_info *hw_config, struct address
 	}
 	
 	for (i = isapnpjump; isapnp_sb_list[i].vendor != 0; i++) {
-		struct pci_bus *card = NULL;
-			
-		while ((card = isapnp_find_card(
-					       isapnp_sb_list[i].vendor,
-					       isapnp_sb_list[i].function,
-					       card))) {
 
-       			/* You missed the init func? That's bad. */
-
-			if(isapnp_sb_list[i].initfunc)
-			{
-				struct pci_dev *idev = NULL;
-
-				/* Initialize this baby. */
-
-				if((idev = isapnp_sb_list[i].initfunc(card, hw_config, mpu_config)))
-				{
-					/* We got it. */
-
-					printk(KERN_INFO "sb: ISAPnP reports %s at i/o %#x, irq %d, dma %d, %d\n",
-					       isapnp_sb_list[i].name,
-					       hw_config->io_base, hw_config->irq, hw_config->dma,
-					       hw_config->dma2);
+		if(!(isapnp_sb_list[i].flags & SBF_DEV))
+		{
+			struct pci_bus *bus = NULL;
+				
+			while ((bus = isapnp_find_card(
+						       isapnp_sb_list[i].vendor,
+						       isapnp_sb_list[i].function,
+						       bus))) {
+	
+				if(sb_init_isapnp(hw_config, mpu_config, bus, NULL, i))
 					return 0;
-				}
 			}
 		}
 	}
+
+	/*  No cards found. I'll try now to search inside every card for a logical device
+	 *  that matches any entry marked with SBF_DEV in the table.
+	 */
+
+	for (i = isapnpjump; isapnp_sb_list[i].vendor != 0; i++) {
+
+		if(isapnp_sb_list[i].flags & SBF_DEV)
+		{
+			struct pci_dev *card = NULL;
+
+			while ((card = isapnp_find_dev(NULL,
+						       isapnp_sb_list[i].vendor,
+						       isapnp_sb_list[i].function,
+						       card))) {
+
+				if(sb_init_isapnp(hw_config, mpu_config, card->bus, card, i))
+					return 0;
+			}
+		}
+	}
+
 	return -ENODEV;
 }
 #endif
@@ -544,18 +632,15 @@ int init_module(void)
 			able to disable PNP support for this single driver!
 		*/
 
-#ifdef CONFIG_ISAPNP			
-		if (isapnp)
+#if defined CONFIGISAPNP || defined CONFIG_ISAPNP_MODULE			
+		if(isapnp && (sb_probe_isapnp(&config, &config_mpu) < 0) )
 		{
-			if(sb_probe_isapnp(&config, &config_mpu) < 0 )
-			{
-				printk(KERN_ERR "sb_card: No ISAPnP cards found\n");
-				return -EINVAL;
-			}
+			printk(KERN_NOTICE "sb_card: No ISAPnP cards found, trying standard ones...\n");
+			isapnp = 0;
 		}
-		else
+#endif
+		if(isapnp == 0)
 		{
-#endif		
 			if (io == -1 || dma == -1 || irq == -1)
 			{
 				printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
@@ -566,11 +651,8 @@ int init_module(void)
 			config.irq 		= irq;
 			config.dma 		= dma;
 			config.dma2 	= dma16;
-#ifdef CONFIG_ISAPNP
 		}
-#endif
 
-		/* If this is not before the #ifdef line, there's a reason... */
 		config.card_subtype = type;
 
 		if (!probe_sb(&config))
@@ -604,6 +686,7 @@ void cleanup_module(void)
 	if(sb_dev)	sb_dev->deactivate(sb_dev);
 	if(jp_dev)	jp_dev->deactivate(jp_dev);
 	if(wt_dev)	wt_dev->deactivate(wt_dev);
+/*	if(ide_dev)	wt_dev->deactivate(ide_dev); */
 	if(mpu_dev)	mpu_dev->deactivate(mpu_dev);
 	if(wss_dev)	wss_dev->deactivate(wss_dev);
 }

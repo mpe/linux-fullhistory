@@ -28,24 +28,48 @@
 #include <asm/core_lca.h>
 
 #include "proto.h"
-#include <asm/hw_irq.h>
+#include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
 
-static void
-eb64p_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+/* Note mask bit is true for DISABLED irqs.  */
+static unsigned int cached_irq_mask = -1;
+
+static inline void
+eb64p_update_irq_hw(unsigned int irq, unsigned long mask)
 {
-	if (irq >= 16)
-		if (irq >= 24)
-			outb(mask >> 24, 0x27);
-		else
-			outb(mask >> 16, 0x26);
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);
-	else
-		outb(mask, 0x21);
+	outb(mask >> (irq >= 24 ? 24 : 16), (irq >= 24 ? 0x27 : 0x26));
 }
+
+static inline void
+eb64p_enable_irq(unsigned int irq)
+{
+	eb64p_update_irq_hw(irq, cached_irq_mask &= ~(1 << irq));
+}
+
+static inline void
+eb64p_disable_irq(unsigned int irq)
+{
+	eb64p_update_irq_hw(irq, cached_irq_mask |= 1 << irq);
+}
+
+static unsigned int
+eb64p_startup_irq(unsigned int irq)
+{
+	eb64p_enable_irq(irq);
+	return 0; /* never anything pending */
+}
+
+static struct hw_interrupt_type eb64p_irq_type = {
+	typename:	"EB64P",
+	startup:	eb64p_startup_irq,
+	shutdown:	eb64p_disable_irq,
+	enable:		eb64p_enable_irq,
+	disable:	eb64p_disable_irq,
+	ack:		eb64p_disable_irq,
+	end:		eb64p_enable_irq,
+};
 
 static void 
 eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
@@ -55,6 +79,7 @@ eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
 
 	/* Read the interrupt summary registers */
 	pld = inb(0x26) | (inb(0x27) << 8);
+
 	/*
 	 * Now, for every possible bit set, work through
 	 * them and call the appropriate interrupt handler.
@@ -66,7 +91,7 @@ eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		if (i == 5) {
 			isa_device_interrupt(vector, regs);
 		} else {
-			handle_irq(16 + i, 16 + i, regs);
+			handle_irq(16 + i, regs);
 		}
 	}
 }
@@ -74,6 +99,8 @@ eb64p_device_interrupt(unsigned long vector, struct pt_regs *regs)
 static void __init
 eb64p_init_irq(void)
 {
+	long i;
+
 #ifdef CONFIG_ALPHA_GENERIC
 	/*
 	 * CABRIO SRM may not set variation correctly, so here we test
@@ -82,21 +109,25 @@ eb64p_init_irq(void)
 	 */
 	if (inw(0x806) != 0xffff) {
 		extern struct alpha_machine_vector cabriolet_mv;
-#if 1
-		printk("eb64p_init_irq: resetting for CABRIO\n");
-#endif
 		alpha_mv = cabriolet_mv;
 		alpha_mv.init_irq();
 		return;
 	}
 #endif /* GENERIC */
 
-	STANDARD_INIT_IRQ_PROLOG;
+	outb(0xff, 0x26);
+	outb(0xff, 0x27);
 
-	outb(alpha_irq_mask >> 16, 0x26);
-	outb(alpha_irq_mask >> 24, 0x27);
-	enable_irq(16 + 5);		/* enable SIO cascade */
-	enable_irq(2);			/* enable cascade */
+	init_i8259a_irqs();
+	init_rtc_irq();
+
+	for (i = 16; i < 32; ++i) {
+		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].handler = &eb64p_irq_type;
+	}		
+
+	common_init_isa_dma();
+	setup_irq(16+5, &isa_cascade_irqaction);
 }
 
 /*
@@ -112,7 +143,7 @@ eb64p_init_irq(void)
  * 3        Interrupt Line B from slot 1
  * 4        Interrupt Line C from slot 0
  * 5        Interrupt line from the two ISA PICs
- * 6        Tulip (slot 
+ * 6        Tulip
  * 7        NCR SCSI
  *
  * Summary @ 0x27
@@ -174,14 +205,11 @@ struct alpha_machine_vector eb64p_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		32,
-	irq_probe_mask:		_PROBE_MASK(32),
-	update_irq_hw:		eb64p_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	eb64p_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		eb64p_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	kill_arch:		NULL,
 	pci_map_irq:		eb64p_map_irq,
@@ -203,14 +231,11 @@ struct alpha_machine_vector eb66_mv __initmv = {
 	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		32,
-	irq_probe_mask:		_PROBE_MASK(32),
-	update_irq_hw:		eb64p_update_irq_hw,
-	ack_irq:		common_ack_irq,
 	device_interrupt:	eb64p_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		eb64p_init_irq,
-	init_pit:		common_init_pit,
+	init_rtc:		common_init_rtc,
 	init_pci:		common_init_pci,
 	pci_map_irq:		eb64p_map_irq,
 	pci_swizzle:		common_swizzle,

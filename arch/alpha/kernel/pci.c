@@ -109,7 +109,7 @@ struct pci_fixup pcibios_fixups[] __initdata = {
 void
 pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
-	struct pci_dev * dev = data;
+	struct pci_dev *dev = data;
 	unsigned long alignto;
 	unsigned long start = res->start;
 

@@ -2648,8 +2648,10 @@ static int __init init_sonicvibes(void)
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
 #endif
-	if (!pci_register_driver(&sv_driver))
+	if (!pci_register_driver(&sv_driver)) {
+		pci_unregister_driver(&sv_driver);
                 return -ENODEV;
+	}
         return 0;
 }
 

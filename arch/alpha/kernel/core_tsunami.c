@@ -224,7 +224,7 @@ tsunami_pci_tbi(struct pci_controler *hose, dma_addr_t start, dma_addr_t end)
 }
 
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
-static long
+static long __init
 tsunami_probe_read(volatile unsigned long *vaddr)
 {
 	long dont_care, probe_result;
@@ -246,7 +246,7 @@ tsunami_probe_read(volatile unsigned long *vaddr)
 	return probe_result;
 }
 
-static long
+static long __init
 tsunami_probe_write(volatile unsigned long *vaddr)
 {
 	long true_contents, probe_result = 1;

@@ -202,6 +202,10 @@ ifeq ($(CONFIG_FC4),y)
 DRIVERS := $(DRIVERS) drivers/fc4/fc4.a
 endif
 
+ifdef CONFIG_PPC
+DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
+endif
+
 ifdef CONFIG_MAC
 DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
 endif
