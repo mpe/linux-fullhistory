@@ -1199,6 +1199,30 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 	return NULL;
 }
 
+/*
+ * FIXME! We should probably save away more than just the type
+ * in the DMA resource fields..
+ */
+static unsigned int isapnp_dma_resource_flags(struct isapnp_dma *dma)
+{
+	return dma->type | IORESOURCE_DMA | IORESOURCE_AUTO;
+}
+
+static unsigned int isapnp_mem_resource_flags(struct isapnp_mem *mem)
+{
+	return mem->type | IORESOURCE_MEM | IORESOURCE_AUTO;
+}
+
+static unsigned int isapnp_irq_resource_flags(struct isapnp_irq *irq)
+{
+	return irq->flags | IORESOURCE_IRQ | IORESOURCE_AUTO;
+}
+
+static unsigned int isapnp_port_resource_flags(struct isapnp_port *port)
+{
+	return port->flags | IORESOURCE_IO | IORESOURCE_AUTO;
+}
+
 static int isapnp_config_prepare(struct pci_dev *dev)
 {
 	struct isapnp_resources *res, *resa;
@@ -1216,47 +1240,41 @@ static int isapnp_config_prepare(struct pci_dev *dev)
 		return -EINVAL;
 	if (dev->active || dev->ro)
 		return -EBUSY;
-	dev->irq = dev->irq2 = DEVICE_IRQ_NOTSET;
-	dev->irq_flags = dev->irq2_flags = 0;
+	for (idx = 0; idx < DEVICE_COUNT_IRQ; idx++) {
+		dev->irq_resource[idx].name = NULL;
+		dev->irq_resource[idx].start = 0;
+		dev->irq_resource[idx].end = 0;
+		dev->irq_resource[idx].flags = 0;
+	}
 	for (idx = 0; idx < DEVICE_COUNT_DMA; idx++) {
-		dev->dma[idx] = DEVICE_DMA_NOTSET;
-		dev->dma_type[idx] = DEVICE_DMA_TYPE_8AND16BIT;
-		dev->dma_flags[idx] = 0;
-		dev->dma_speed[idx] = DEVICE_DMA_SPEED_COMPATIBLE;
+		dev->dma_resource[idx].name = NULL;
+		dev->dma_resource[idx].start = 0;
+		dev->dma_resource[idx].end = 0;
+		dev->dma_resource[idx].flags = 0;
 	}
 	for (idx = 0; idx < DEVICE_COUNT_RESOURCE; idx++) {
 		dev->resource[idx].name = NULL;
-		dev->resource[idx].start = DEVICE_IO_NOTSET;
+		dev->resource[idx].start = 0;
 		dev->resource[idx].end = 0;
-		dev->resource[idx].fixed = 0;
-		dev->resource[idx].bits = 12;
-		dev->resource[idx].hw_flags = 0;
-		dev->resource[idx].type = DEVICE_IO_TYPE_8AND16BIT;
+		dev->resource[idx].flags = 0;
 	}
 	port_count = irq_count = dma_count = mem_count = 0;
 	for (res = (struct isapnp_resources *)dev->sysdata; res; res = res->next) {
 		port_count1 = irq_count1 = dma_count1 = mem_count1 = 0;
 		for (resa = res; resa; resa = resa->alt) {
 			for (port = resa->port, idx = 0; port; port = port->next, idx++) {
-				if (dev->resource[port_count + idx].start == DEVICE_IO_NOTSET) {
-					dev->resource[port_count + idx].start = DEVICE_IO_AUTO;
+				if (dev->resource[port_count + idx].flags == 0) {
+					dev->resource[port_count + idx].flags = isapnp_port_resource_flags(port);
 					dev->resource[port_count + idx].end = port->size;
-					dev->resource[port_count + idx].bits = port->flags & ISAPNP_PORT_FLAG_16BITADDR ? 16 : 12;
-					dev->resource[port_count + idx].fixed = port->flags & ISAPNP_PORT_FLAG_FIXED ? 1 : 0;
 				}
 			}
 			if (port_count1 < idx)
 				port_count1 = idx;
 			for (irq = resa->irq, idx = 0; irq; irq = irq->next, idx++) {
-				if (irq_count + idx == 0) {
-					if (dev->irq == DEVICE_IRQ_NOTSET) {
-						dev->irq = DEVICE_IRQ_AUTO;
-						dev->irq_flags = irq->flags;
-					}
-				} else if (irq_count + idx == 1) {
-					if (dev->irq2 == DEVICE_IRQ_NOTSET) {
-						dev->irq2 = DEVICE_IRQ_AUTO;
-						dev->irq2_flags = irq->flags;
+				int count = irq_count + idx;
+				if (count < DEVICE_COUNT_IRQ) {
+					if (dev->irq_resource[count].flags == 0) {
+						dev->irq_resource[count].flags = isapnp_irq_resource_flags(irq);
 					}
 				}
 				
@@ -1264,22 +1282,14 @@ static int isapnp_config_prepare(struct pci_dev *dev)
 			if (irq_count1 < idx)
 				irq_count1 = idx;
 			for (dma = resa->dma, idx = 0; dma; dma = dma->next, idx++)
-				if (dev->dma[idx] == DEVICE_DMA_NOTSET) {
-					dev->dma[idx] = DEVICE_DMA_AUTO;
-					dev->dma_type[idx] = dma->type;
-					dev->dma_flags[idx] = dma->flags;
-					dev->dma_speed[idx] = dma->speed;
+				if (dev->dma_resource[idx].flags == 0) {
+					dev->dma_resource[idx].flags = isapnp_dma_resource_flags(dma);
 				}
 			if (dma_count1 < idx)
 				dma_count1 = idx;
 			for (mem = resa->mem, idx = 0; mem; mem = mem->next, idx++)
-				if (dev->resource[mem_count + idx + 8].start == DEVICE_IO_AUTO) {
-					dev->resource[mem_count + idx].start = DEVICE_IO_AUTO;
-					dev->resource[mem_count + idx].end = mem->size;
-					dev->resource[mem_count + idx].bits = 24;
-					dev->resource[mem_count + idx].fixed = 0;
-					dev->resource[mem_count + idx].hw_flags = mem->flags;
-					dev->resource[mem_count + idx].type = mem->type;
+				if (dev->resource[mem_count + idx + 8].flags == 0) {
+					dev->resource[mem_count + idx].flags = isapnp_mem_resource_flags(mem);
 				}
 			if (mem_count1 < idx)
 				mem_count1 = idx;
@@ -1315,7 +1325,7 @@ static int isapnp_alternative_switch(struct isapnp_cfgtmp *cfg,
 		return -EINVAL;
 	/* process port settings */
 	for (tmp = 0; tmp < 8; tmp++) {
-		if (cfg->request->resource[tmp].start != DEVICE_IO_AUTO)
+		if (!(cfg->request->resource[tmp].flags & IORESOURCE_AUTO))
 			continue;		/* don't touch */
 		port = cfg->port[tmp];
 		if (!port) {
@@ -1331,21 +1341,17 @@ static int isapnp_alternative_switch(struct isapnp_cfgtmp *cfg,
 				for (tmp1 = tmp; tmp1 > 0 && port; tmp1--)
 					port = port->next;
 				cfg->port[tmp] = port;
-				cfg->result.resource[tmp].start = DEVICE_IO_AUTO;
 				if (!port)
 					return -ENOENT;
+				cfg->result.resource[tmp].flags = isapnp_port_resource_flags(port);
 			}
 		}
 	}
 	/* process irq settings */
 	for (tmp = 0; tmp < 2; tmp++) {
-		if (tmp == 0) {
-			if (cfg->request->irq != DEVICE_IRQ_AUTO)
-				continue;		/* don't touch */
-		} else {
-			if (cfg->request->irq2 != DEVICE_IRQ_AUTO)
-				continue;		/* don't touch */
-		}
+		if (!(cfg->request->irq_resource[tmp].flags & IORESOURCE_AUTO))
+			continue;		/* don't touch */
+
 		irq = cfg->irq[tmp];
 		if (!irq) {
 			cfg->irq[tmp] = irq = isapnp_find_irq(cfg->request, tmp);
@@ -1360,20 +1366,17 @@ static int isapnp_alternative_switch(struct isapnp_cfgtmp *cfg,
 				for (tmp1 = tmp; tmp1 > 0 && irq; tmp1--)
 					irq = irq->next;
 				cfg->irq[tmp] = irq;
-				if (tmp == 0) {
-					cfg->result.irq = DEVICE_IRQ_AUTO;
-				} else {
-					cfg->result.irq2 = DEVICE_IRQ_AUTO;
-				}
 				if (!irq)
 					return -ENOENT;
+				cfg->result.irq_resource[tmp].flags = isapnp_irq_resource_flags(irq);
 			}
 		}
 	}
 	/* process dma settings */
 	for (tmp = 0; tmp < 2; tmp++) {
-		if (cfg->request->dma[tmp] != DEVICE_DMA_AUTO)
+		if (!(cfg->request->dma_resource[tmp].flags & IORESOURCE_AUTO))
 			continue;		/* don't touch */
+
 		dma = cfg->dma[tmp];
 		if (!dma) {
 			cfg->dma[tmp] = dma = isapnp_find_dma(cfg->request, tmp);
@@ -1388,15 +1391,15 @@ static int isapnp_alternative_switch(struct isapnp_cfgtmp *cfg,
 				for (tmp1 = tmp; tmp1 > 0 && dma; tmp1--)
 					dma = dma->next;
 				cfg->dma[tmp] = dma;
-				cfg->result.dma[tmp] = DEVICE_DMA_AUTO;
 				if (!dma)
 					return -ENOENT;
+				cfg->result.dma_resource[tmp].flags = isapnp_dma_resource_flags(dma);
 			}
 		}
 	}
 	/* process memory settings */
 	for (tmp = 0; tmp < 4; tmp++) {
-		if (cfg->request->resource[tmp + 8].start != DEVICE_IO_AUTO)
+		if (!(cfg->request->resource[tmp + 8].flags & IORESOURCE_AUTO))
 			continue;		/* don't touch */
 		mem = cfg->mem[tmp];
 		if (!mem) {
@@ -1412,9 +1415,9 @@ static int isapnp_alternative_switch(struct isapnp_cfgtmp *cfg,
 				for (tmp1 = tmp; tmp1 > 0 && mem; tmp1--)
 					mem = mem->next;
 				cfg->mem[tmp] = mem;
-				cfg->result.resource[tmp + 8].start = DEVICE_IO_AUTO;
 				if (!mem)
 					return -ENOENT;
+				cfg->result.resource[tmp + 8].flags = isapnp_mem_resource_flags(mem);
 			}
 		}
 	}
@@ -1440,7 +1443,7 @@ static int isapnp_check_port(struct isapnp_cfgtmp *cfg, int port, int size, int 
 	for (dev = isapnp_devices; dev; dev = dev->next) {
 		if (dev->active) {
 			for (tmp = 0; tmp < 8; tmp++) {
-				if (dev->resource[tmp].start != DEVICE_IO_NOTSET) {
+				if (dev->resource[tmp].flags) {
 					rport = dev->resource[tmp].start;
 					rsize = (dev->resource[tmp].end - rport) + 1;
 					if (port >= rport && port < rport + rsize)
@@ -1452,18 +1455,20 @@ static int isapnp_check_port(struct isapnp_cfgtmp *cfg, int port, int size, int 
 		}
 	}
 	for (i = 0; i < 8; i++) {
+		unsigned int flags;
 		if (i == idx)
 			continue;
-		tmp = cfg->request->resource[i].start;
-		if (tmp == DEVICE_IO_NOTSET)
+		flags = cfg->request->resource[i].flags;
+		if (!flags)
 			continue;
-		if (tmp == DEVICE_IO_AUTO) {		/* auto */
+		tmp = cfg->request->resource[i].start;
+		if (flags & IORESOURCE_AUTO) {		/* auto */
 			xport = cfg->port[i];
 			if (!xport)
 				return 1;
-			tmp = cfg->result.resource[i].start;
-			if (tmp == DEVICE_IO_AUTO)
+			if (cfg->result.resource[i].flags & IORESOURCE_AUTO)
 				continue;
+			tmp = cfg->result.resource[i].start;
 			if (tmp + xport->size >= port && tmp <= port + xport->size)
 				return 1;
 			continue;
@@ -1487,14 +1492,14 @@ static int isapnp_valid_port(struct isapnp_cfgtmp *cfg, int idx)
 
 	if (!cfg || idx < 0 || idx > 7)
 		return -EINVAL;
-	if (cfg->result.resource[idx].start != DEVICE_IO_AUTO) /* don't touch */
+	if (!(cfg->result.resource[idx].flags & IORESOURCE_AUTO)) /* don't touch */
 		return 0;
       __again:
       	port = cfg->port[idx];
       	if (!port)
       		return -EINVAL;
       	value = &cfg->result.resource[idx].start;
-	if (*value == DEVICE_IO_AUTO) {
+	if (cfg->result.resource[idx].flags & IORESOURCE_AUTO) {
 		if (!isapnp_check_port(cfg, *value = port->min, port->size, idx))
 			return 0;
 	}
@@ -1529,24 +1534,23 @@ static int isapnp_check_interrupt(struct isapnp_cfgtmp *cfg, int irq, int idx)
 	}
 	for (dev = isapnp_devices; dev; dev = dev->next) {
 		if (dev->active) {
-			if (dev->irq == irq || dev->irq2 == irq)
+			if (dev->irq_resource[0].start == irq ||
+			    dev->irq_resource[1].start == irq)
 				return 1;
 		}
 	}
 	if (request_irq(irq, isapnp_test_handler, SA_INTERRUPT, "isapnp", NULL))
 		return 1;
 	free_irq(irq, NULL);
-	if (idx != 0) {
-		if (cfg->result.irq != DEVICE_IRQ_AUTO &&
-		    cfg->result.irq != DEVICE_IRQ_NOTSET)
-			if (cfg->result.irq == irq)
-				return 1;
-	}
-	if (idx != 1) {
-		if (cfg->result.irq2 != DEVICE_IRQ_AUTO &&
-		    cfg->result.irq2 != DEVICE_IRQ_NOTSET)
-			if (cfg->result.irq2 == irq)
-				return 1;
+	for (i = 0; i < DEVICE_COUNT_IRQ; i++) {
+		if (i == idx)
+			continue;
+		if (!cfg->result.irq_resource[i].flags)
+			continue;
+		if (cfg->result.irq_resource[i].flags & IORESOURCE_AUTO)
+			continue;
+		if (cfg->result.irq_resource[i].start == irq)
+			return 1;
 	}
 	return 0;
 }
@@ -1558,28 +1562,19 @@ static int isapnp_valid_irq(struct isapnp_cfgtmp *cfg, int idx)
 		5, 10, 11, 12, 9, 14, 15, 7, 3, 4, 13, 0, 1, 6, 8, 2
 	};
 	int err, i;
-	unsigned int *value;
+	unsigned long *value;
 	struct isapnp_irq *irq;
 
 	if (!cfg || idx < 0 || idx > 1)
 		return -EINVAL;
-	if (idx == 0) {
-		if (cfg->result.irq != DEVICE_IRQ_AUTO) /* don't touch */
-			return 0;
-	} else {
-		if (cfg->result.irq2 != DEVICE_IRQ_AUTO) /* don't touch */
-			return 0;
-	}
+	if (!(cfg->result.irq_resource[idx].flags & IORESOURCE_AUTO))
+		return 0;
       __again:
       	irq = cfg->irq[idx];
       	if (!irq)
       		return -EINVAL;
-      	if (idx == 0) {
-	      	value = &cfg->result.irq;
-	} else {
-		value = &cfg->result.irq2;
-	}
-	if (*value == DEVICE_IRQ_AUTO) {
+      	value = &cfg->result.irq_resource[idx].start;
+	if (cfg->result.irq_resource[idx].flags & IORESOURCE_AUTO) {
 		for (i = 0; i < 16 && !(irq->map & (1<<xtab[i])); i++);
 		if (i >= 16)
 			return -ENOENT;
@@ -1616,7 +1611,7 @@ static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
 	}
 	for (dev = isapnp_devices; dev; dev = dev->next) {
 		if (dev->active) {
-			if (dev->dma[0] == dma || dev->dma[1] == dma)
+			if (dev->dma_resource[0].start == dma || dev->dma_resource[1].start == dma)
 				return 1;
 		}
 	}
@@ -1626,10 +1621,10 @@ static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
 	for (i = 0; i < 2; i++) {
 		if (i == idx)
 			continue;
-		if (cfg->result.dma[i] == DEVICE_DMA_NOTSET ||
-		    cfg->result.dma[i] == DEVICE_DMA_AUTO)
+		if (!cfg->result.dma_resource[i].flags ||
+		    (cfg->result.dma_resource[i].flags & IORESOURCE_AUTO))
 			continue;
-		if (cfg->result.dma[i] == dma)
+		if (cfg->result.dma_resource[i].start == dma)
 			return 1;
 	}
 	return 0;
@@ -1638,19 +1633,19 @@ static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
 static int isapnp_valid_dma(struct isapnp_cfgtmp *cfg, int idx)
 {
 	int err, i;
-	unsigned char *value;
+	unsigned long *value;
 	struct isapnp_dma *dma;
 
 	if (!cfg || idx < 0 || idx > 1)
 		return -EINVAL;
-	if (cfg->result.dma[idx] != DEVICE_DMA_AUTO)	/* don't touch */
+	if (!(cfg->result.dma_resource[idx].flags & IORESOURCE_AUTO))	/* don't touch */
 		return 0;
       __again:
       	dma = cfg->dma[idx];
       	if (!dma)
       		return -EINVAL;
-      	value = &cfg->result.dma[idx];
-	if (*value == DEVICE_DMA_AUTO) {
+      	value = &cfg->result.dma_resource[idx].start;
+	if (cfg->result.dma_resource[idx].flags & IORESOURCE_AUTO) {
 		for (i = 0; i < 8 && !(dma->map & (1<<i)); i++);
 		if (i >= 8)
 			return -ENOENT;
@@ -1693,7 +1688,7 @@ static int isapnp_check_mem(struct isapnp_cfgtmp *cfg, unsigned int addr, unsign
 	for (dev = isapnp_devices; dev; dev = dev->next) {
 		if (dev->active) {
 			for (tmp = 0; tmp < 4; tmp++) {
-				if (dev->resource[tmp].start != DEVICE_IO_NOTSET) {
+				if (dev->resource[tmp].flags) {
 					raddr = dev->resource[tmp + 8].start;
 					rsize = (dev->resource[tmp + 8].end - raddr) + 1;
 					if (addr >= raddr && addr < raddr + rsize)
@@ -1705,17 +1700,17 @@ static int isapnp_check_mem(struct isapnp_cfgtmp *cfg, unsigned int addr, unsign
 		}
 	}
 	for (i = 0; i < 4; i++) {
+		unsigned int flags = cfg->request->resource[i + 8].flags;
 		if (i == idx)
 			continue;
-		tmp = cfg->request->resource[i + 8].start;
-		if (tmp == DEVICE_IO_NOTSET)
+		if (!flags)
 			continue;
-		if (tmp == DEVICE_IO_AUTO) {		/* auto */
+		tmp = cfg->result.resource[i + 8].start;
+		if (flags & IORESOURCE_AUTO) {		/* auto */
 			xmem = cfg->mem[i];
 			if (!xmem)
 				return 1;
-			tmp = cfg->result.resource[i + 8].start;
-			if (tmp == DEVICE_IO_AUTO)
+			if (cfg->result.resource[i + 8].flags & IORESOURCE_AUTO)
 				continue;
 			if (tmp + xmem->size >= addr && tmp <= addr + xmem->size)
 				return 1;
@@ -1735,19 +1730,21 @@ static int isapnp_check_mem(struct isapnp_cfgtmp *cfg, unsigned int addr, unsign
 static int isapnp_valid_mem(struct isapnp_cfgtmp *cfg, int idx)
 {
 	int err;
+	unsigned int flags;
 	unsigned long *value;
 	struct isapnp_mem *mem;
 
 	if (!cfg || idx < 0 || idx > 3)
 		return -EINVAL;
-	if (cfg->result.resource[idx + 8].start != DEVICE_IO_AUTO) /* don't touch */
+	flags = cfg->result.resource[idx + 8].flags;
+	if (flags && (flags & IORESOURCE_AUTO)) /* don't touch */
 		return 0;
       __again:
       	mem = cfg->mem[idx];
       	if (!mem)
       		return -EINVAL;
       	value = &cfg->result.resource[idx].start;
-	if (*value == DEVICE_IO_AUTO) {
+	if (flags & IORESOURCE_AUTO) {
 		*value = mem->min;
 		if (!isapnp_check_mem(cfg, *value, mem->size, idx))
 			return 0;
@@ -1771,17 +1768,16 @@ static int isapnp_check_valid(struct isapnp_cfgtmp *cfg)
 	int tmp;
 	
 	for (tmp = 0; tmp < 8; tmp++)
-		if (cfg->result.resource[tmp].start == DEVICE_IO_AUTO)
+		if (cfg->result.resource[tmp].flags & IORESOURCE_AUTO)
 			return -EAGAIN;
-	if (cfg->result.irq == DEVICE_IRQ_AUTO)
-		return -EAGAIN;
-	if (cfg->result.irq2 == DEVICE_IRQ_AUTO)
-		return -EAGAIN;
 	for (tmp = 0; tmp < 2; tmp++)
-		if (cfg->result.dma[tmp] == DEVICE_DMA_AUTO)
+		if (cfg->result.irq_resource[tmp].flags & IORESOURCE_AUTO)
+			return -EAGAIN;
+	for (tmp = 0; tmp < 2; tmp++)
+		if (cfg->result.dma_resource[tmp].flags & IORESOURCE_AUTO)
 			return -EAGAIN;
 	for (tmp = 0; tmp < 4; tmp++)
-		if (cfg->result.resource[tmp + 1].start == DEVICE_IO_AUTO)
+		if (cfg->result.resource[tmp + 8].flags & IORESOURCE_AUTO)
 			return -EAGAIN;
 	return 0;
 }
@@ -1800,19 +1796,19 @@ static int isapnp_config_activate(struct pci_dev *dev)
 	memcpy(&cfg.result, dev, sizeof(struct pci_dev));
 	/* check if all values are set, otherwise try auto-configuration */
 	for (tmp = fauto = 0; !fauto && tmp < 8; tmp++) {
-		if (dev->resource[tmp].start == DEVICE_IO_AUTO)
+		if (dev->resource[tmp].flags & IORESOURCE_AUTO)
 			fauto++;
 	}
-	if (dev->irq == DEVICE_IRQ_AUTO)
-		fauto++;
-	if (dev->irq2 == DEVICE_IRQ_AUTO)
-		fauto++;
 	for (tmp = 0; !fauto && tmp < 2; tmp++) {
-		if (dev->dma[tmp] == DEVICE_DMA_AUTO)
+		if (dev->irq_resource[tmp].flags & IORESOURCE_AUTO)
+			fauto++;
+	}
+	for (tmp = 0; !fauto && tmp < 2; tmp++) {
+		if (dev->dma_resource[tmp].flags & IORESOURCE_AUTO)
 			fauto++;
 	}
 	for (tmp = 0; !fauto && tmp < 4; tmp++) {
-		if (dev->resource[tmp + 8].start == DEVICE_IO_AUTO)
+		if (dev->resource[tmp + 8].flags & IORESOURCE_AUTO)
 			fauto++;
 	}
 	if (!fauto)
@@ -1823,19 +1819,16 @@ static int isapnp_config_activate(struct pci_dev *dev)
 	/* find first valid configuration */
 	fauto = 0;
 	do {
-		for (tmp = 0; tmp < 8 && cfg.result.resource[tmp].start != DEVICE_IO_NOTSET; tmp++)
+		for (tmp = 0; tmp < 8 && cfg.result.resource[tmp].flags ; tmp++)
 			if ((err = isapnp_valid_port(&cfg, tmp))<0)
 				return err;
-		if (cfg.result.irq != DEVICE_IRQ_NOTSET)
+		for (tmp = 0; tmp < 2 && cfg.result.irq_resource[tmp].flags ; tmp++)
 			if ((err = isapnp_valid_irq(&cfg, 0))<0)
 				return err;
-		if (cfg.result.irq2 != DEVICE_IRQ_NOTSET)
-			if ((err = isapnp_valid_irq(&cfg, 1))<0)
-				return err;
-		for (tmp = 0; tmp < 2 && tmp < cfg.result.dma[tmp] != DEVICE_DMA_NOTSET; tmp++)
+		for (tmp = 0; tmp < 2 && cfg.result.dma_resource[tmp].flags; tmp++)
 			if ((err = isapnp_valid_dma(&cfg, tmp))<0)
 				return err;
-		for (tmp = 0; tmp < 4 && tmp < cfg.result.resource[tmp + 8].start != DEVICE_IO_NOTSET; tmp++)
+		for (tmp = 0; tmp < 4 && cfg.result.resource[tmp + 8].flags; tmp++)
 			if ((err = isapnp_valid_mem(&cfg, tmp))<0)
 				return err;
 	} while (isapnp_check_valid(&cfg)<0 && fauto++ < 20);
@@ -1845,31 +1838,24 @@ static int isapnp_config_activate(struct pci_dev *dev)
       	/* we have valid configuration, try configure hardware */
       	isapnp_cfg_begin(dev->bus->number, dev->devfn);
 	dev->active = 1;
-	dev->irq = cfg.result.irq;
-	dev->irq2 = cfg.result.irq2;
-	dev->dma[0] = cfg.result.dma[0];
-	dev->dma[1] = cfg.result.dma[1];
+	dev->irq_resource[0] = cfg.result.irq_resource[0];
+	dev->irq_resource[1] = cfg.result.irq_resource[1];
+	dev->dma_resource[0] = cfg.result.dma_resource[0];
+	dev->dma_resource[1] = cfg.result.dma_resource[1];
 	for (tmp = 0; tmp < 12; tmp++) {
-		dev->resource[tmp].start = cfg.result.resource[tmp].start;
-		if (cfg.result.resource[tmp].start != DEVICE_IO_NOTSET &&
-		    cfg.result.resource[tmp].end != DEVICE_IO_AUTO)
-			dev->resource[tmp].end += cfg.result.resource[tmp].start;
+		dev->resource[tmp] = cfg.result.resource[tmp];
 	}	
-	for (tmp = 0; tmp < 8 && dev->resource[tmp].start != DEVICE_IO_NOTSET; tmp++)
+	for (tmp = 0; tmp < 8 && dev->resource[tmp].flags; tmp++)
 		isapnp_write_word(ISAPNP_CFG_PORT+(tmp<<1), dev->resource[tmp].start);
-	if (dev->irq != DEVICE_IRQ_NOTSET) {
-		if (dev->irq == 2)
-			dev->irq = 9;
-		isapnp_write_byte(ISAPNP_CFG_IRQ+(0<<1), dev->irq);
+	for (tmp = 0; tmp < 2 && dev->irq_resource[tmp].flags; tmp++) {
+		int irq = dev->irq_resource[tmp].start;
+		if (irq == 2)
+			irq = 9;
+		isapnp_write_byte(ISAPNP_CFG_IRQ+(tmp<<1), irq);
 	}
-	if (dev->irq2 != DEVICE_IRQ_NOTSET) {
-		if (dev->irq2 == 2)
-			dev->irq2 = 9;
-		isapnp_write_byte(ISAPNP_CFG_IRQ+(1<<1), dev->irq2);
-	}
-	for (tmp = 0; tmp < 2 && dev->dma[tmp] != DEVICE_DMA_NOTSET; tmp++)
-		isapnp_write_byte(ISAPNP_CFG_DMA+tmp, dev->dma[tmp]);
-	for (tmp = 0; tmp < 4 && dev->resource[tmp].start != DEVICE_IO_NOTSET; tmp++)
+	for (tmp = 0; tmp < 2 && dev->dma_resource[tmp].flags; tmp++)
+		isapnp_write_byte(ISAPNP_CFG_DMA+tmp, dev->dma_resource[tmp].start);
+	for (tmp = 0; tmp < 4 && dev->resource[tmp+8].flags; tmp++)
 		isapnp_write_word(ISAPNP_CFG_MEM+(tmp<<2), (dev->resource[tmp + 8].start >> 8) & 0xffff);
 	isapnp_activate(dev->devfn);
 	isapnp_cfg_end();
@@ -1882,7 +1868,7 @@ static int isapnp_config_deactivate(struct pci_dev *dev)
 		return -EINVAL;
       	isapnp_cfg_begin(dev->bus->number, dev->devfn);
 	isapnp_deactivate(dev->devfn);
-	dev->activate = 0;
+	dev->active = 0;
 	isapnp_cfg_end();
 	return 0;
 }
@@ -1971,7 +1957,7 @@ static void isapnp_free_device(struct pci_dev *dev)
 	struct pci_dev *next;
 
 	while (dev) {
-		next = dev->next;
+		next = dev->sibling;
 		isapnp_free_resources((struct isapnp_resources *)dev->sysdata, 0);
 		kfree(dev);
 		dev = next;

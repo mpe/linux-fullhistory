@@ -8,19 +8,6 @@
 #ifndef _LINUX_IOPORT_H
 #define _LINUX_IOPORT_H
 
-#define DEVICE_IO_NOTSET	(~0)
-#define DEVICE_IO_AUTO		((~0)-1)
-
-#define DEVICE_IO_FLAG_WRITEABLE	(1<<0)
-#define DEVICE_IO_FLAG_CACHEABLE	(1<<1)
-#define DEVICE_IO_FLAG_RANGELENGTH	(1<<2)
-#define DEVICE_IO_FLAG_SHADOWABLE	(1<<4)
-#define DEVICE_IO_FLAG_EXPANSIONROM	(1<<5)
-
-#define DEVICE_IO_TYPE_8BIT		0
-#define DEVICE_IO_TYPE_16BIT		1
-#define DEVICE_IO_TYPE_8AND16BIT	2
-
 /*
  * Resources are tree-like, allowing
  * nesting etc..
@@ -29,22 +16,29 @@ struct resource {
 	const char *name;
 	unsigned long start, end;
 	unsigned long flags;
-	unsigned char bits;		/* decoded bits */
-	unsigned char fixed;		/* fixed range */
-	unsigned short hw_flags;	/* hardware flags */
-	unsigned short type;		/* region type */
 	struct resource *parent, *sibling, *child;
 };
 
 /*
- * PCI-like IO resources have these defined flags.
- * The low four bits come directly from the PCI specs,
- * the rest are extended sw flags..
+ * IO resources have these defined flags.
  */
-#define IORESOURCE_IOPORT	0x01	/* 0 - memory mapped, 1 - IO ports */
-#define IORESOURCE_MEMTYPE_MASK	0x06	/* PCI-specific mapping info */
-#define IORESOURCE_PREFETCH	0x08	/* No side effects */
-#define IORESOURCE_BUSY		0x10	/* Driver uses this resource */
+#define IORESOURCE_BITS		0x000000ff	/* Bus-specific bits */
+
+#define IORESOURCE_IO		0x00000100	/* Resource type */
+#define IORESOURCE_MEM		0x00000200
+#define IORESOURCE_IRQ		0x00000400
+#define IORESOURCE_DMA		0x00000800
+
+#define IORESOURCE_PREFETCH	0x00001000	/* No side effects */
+#define IORESOURCE_READONLY	0x00002000
+#define IORESOURCE_CACHEABLE	0x00004000
+#define IORESOURCE_RANGELENGTH	0x00008000
+#define IORESOURCE_SHADOWABLE	0x00010000
+
+#define IORESOURCE_UNSET	0x00020000
+#define IORESOURCE_AUTO		0x00040000
+
+#define IORESOURCE_BUSY		0x80000000	/* Driver has marked this resource busy */
 
 /* PC/ISA/whatever - the normal PC address spaces: IO and memory */
 extern struct resource ioport_resource;

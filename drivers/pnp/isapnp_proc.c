@@ -380,21 +380,21 @@ static void isapnp_print_mem(isapnp_info_buffer_t *buffer, char *space, struct i
 
 	isapnp_printf(buffer, "%sMemory 0x%x-0x%x, align 0x%x, size 0x%x",
 			space, mem->min, mem->max, mem->align, mem->size);
-	if (mem->flags & DEVICE_IO_FLAG_WRITEABLE)
+	if (mem->flags & ISAPNP_FLAG_WRITEABLE)
 		isapnp_printf(buffer, ", writeable");
-	if (mem->flags & DEVICE_IO_FLAG_CACHEABLE)
+	if (mem->flags & ISAPNP_FLAG_CACHEABLE)
 		isapnp_printf(buffer, ", cacheable");
-	if (mem->flags & DEVICE_IO_FLAG_RANGELENGTH)
+	if (mem->flags & ISAPNP_FLAG_RANGELENGTH)
 		isapnp_printf(buffer, ", range-length");
-	if (mem->flags & DEVICE_IO_FLAG_SHADOWABLE)
+	if (mem->flags & ISAPNP_FLAG_SHADOWABLE)
 		isapnp_printf(buffer, ", shadowable");
-	if (mem->flags & DEVICE_IO_FLAG_EXPANSIONROM)
+	if (mem->flags & ISAPNP_FLAG_EXPANSIONROM)
 		isapnp_printf(buffer, ", expansion ROM");
 	switch (mem->type) {
-	case DEVICE_IO_TYPE_8BIT:
+	case ISAPNP_TYPE_8BIT:
 		s = "8-bit";
 		break;
-	case DEVICE_IO_TYPE_8AND16BIT:
+	case ISAPNP_TYPE_8AND16BIT:
 		s = "8-bit&16-bit";
 		break;
 	default:
@@ -734,9 +734,9 @@ static int isapnp_set_port(char *line)
 		return 1;
 	}
 	isapnp_write_word(ISAPNP_CFG_PORT + (idx << 1), port);
-	if (isapnp_info_device->resource[idx].start == DEVICE_IO_NOTSET)
+	if (isapnp_info_device->resource[idx].start == ISAPNP_NOTSET)
 		return 0;
-	if (isapnp_info_device->resource[idx].start == DEVICE_IO_AUTO) {
+	if (isapnp_info_device->resource[idx].start == ISAPNP_AUTO) {
 		isapnp_info_device->resource[idx].start = port;
 		isapnp_info_device->resource[idx].end += port - 1;
 	} else {
@@ -745,6 +745,12 @@ static int isapnp_set_port(char *line)
 		isapnp_info_device->resource[idx].end += port;
 	}
 	return 0;
+}
+
+static void isapnp_set_irqresource(struct resource *res, int irq)
+{
+	res->start = res->end = irq;
+	res->flags = IORESOURCE_IRQ;
 }
  
 static int isapnp_set_irq(char *line)
@@ -767,16 +773,14 @@ static int isapnp_set_irq(char *line)
 		return 1;
 	}
 	isapnp_write_byte(ISAPNP_CFG_IRQ + (idx << 1), irq);
-	if (idx == 0) {
-		 if (isapnp_info_device->irq == DEVICE_IRQ_NOTSET)
-		 	return 0;
-		 isapnp_info_device->irq = irq;
-	} else {
-		 if (isapnp_info_device->irq2 == DEVICE_IRQ_NOTSET)
-		 	return 0;
-		 isapnp_info_device->irq2 = irq;	
-	}
+	isapnp_set_irqresource(isapnp_info_device->irq_resource + idx, irq);
 	return 0;
+}
+ 
+static void isapnp_set_dmaresource(struct resource *res, int dma)
+{
+	res->start = res->end = dma;
+	res->flags = IORESOURCE_DMA;
 }
  
 static int isapnp_set_dma(char *line)
@@ -797,9 +801,7 @@ static int isapnp_set_dma(char *line)
 		return 1;
 	}
 	isapnp_write_byte(ISAPNP_CFG_DMA + idx, dma);
-	if (isapnp_info_device->dma[idx] == DEVICE_DMA_NOTSET)
-		return 0;
-	isapnp_info_device->dma[idx] = dma;
+	isapnp_set_dmaresource(isapnp_info_device->dma_resource + idx, dma);
 	return 0;
 }
  
@@ -819,9 +821,9 @@ static int isapnp_set_mem(char *line)
 	}
 	mem >>= 8;
 	isapnp_write_word(ISAPNP_CFG_MEM + (idx<<2), mem & 0xffff);
-	if (isapnp_info_device->resource[idx + 8].start == DEVICE_IO_NOTSET)
+	if (isapnp_info_device->resource[idx + 8].start == ISAPNP_NOTSET)
 		return 0;
-	if (isapnp_info_device->resource[idx + 8].start == DEVICE_IO_AUTO) {
+	if (isapnp_info_device->resource[idx + 8].start == ISAPNP_AUTO) {
 		isapnp_info_device->resource[idx + 8].start = mem & ~0x00ffff00;
 		isapnp_info_device->resource[idx + 8].end += (mem & ~0x00ffff00) - 1;
 	} else {

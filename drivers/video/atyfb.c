@@ -1951,11 +1951,11 @@ static int encode_fix(struct fb_fix_screeninfo *fix,
 	fix->mmio_len = 0x400;
 	fix->accel = FB_ACCEL_ATI_MACH64CT;
     } else if (Gx == VT_CHIP_ID || Gx == VU_CHIP_ID || Gx == VV_CHIP_ID) {
-	fix->mmio_start = info->ati_regbase_phys-0x400);
+	fix->mmio_start = info->ati_regbase_phys-0x400;
 	fix->mmio_len = 0x800;
 	fix->accel = FB_ACCEL_ATI_MACH64VT;
     } else {
-	fix->mmio_start = info->ati_regbase_phys-0x400);
+	fix->mmio_start = info->ati_regbase_phys-0x400;
 	fix->mmio_len = 0x800;
 	fix->accel = FB_ACCEL_ATI_MACH64GT;
     }

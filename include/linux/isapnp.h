@@ -24,6 +24,19 @@
 
 #include <linux/config.h>
 
+#define ISAPNP_NOTSET	(~0)
+#define ISAPNP_AUTO		((~0)-1)
+
+#define ISAPNP_FLAG_WRITEABLE	(1<<0)
+#define ISAPNP_FLAG_CACHEABLE	(1<<1)
+#define ISAPNP_FLAG_RANGELENGTH	(1<<2)
+#define ISAPNP_FLAG_SHADOWABLE	(1<<4)
+#define ISAPNP_FLAG_EXPANSIONROM	(1<<5)
+
+#define ISAPNP_TYPE_8BIT		0
+#define ISAPNP_TYPE_16BIT		1
+#define ISAPNP_TYPE_8AND16BIT	2
+
 /*
  *  Configuration registers (TODO: change by specification)
  */ 

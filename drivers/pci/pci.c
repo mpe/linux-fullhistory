@@ -141,6 +141,21 @@ pci_set_master(struct pci_dev *dev)
 	}
 }
 
+/*
+ * Translate the low bits of the PCI base
+ * to the resource type
+ */
+static inline unsigned int pci_resource_flags(unsigned int flags)
+{
+	if (flags & PCI_BASE_ADDRESS_SPACE_IO)
+		return IORESOURCE_IO | flags;
+
+	if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH)
+		return IORESOURCE_MEM | IORESOURCE_PREFETCH;
+
+	return IORESOURCE_MEM;
+}
+
 void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany)
 {
 	unsigned int reg;
@@ -168,16 +183,16 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany)
 			continue;
 
 		res->start = l & mask;
-		res->flags = l & ~mask;
+		l &= ~mask;
+		res->flags = l | pci_resource_flags(l);
 
 		size = 1;
 		do {
 			size <<= 1;
 		} while (!(size & newval));
 
-		/* 64-bit memory? */
-		if ((l & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
-		    == (PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64)) {
+		/* 64-bit decode? */
+		if ((l & (PCI_BASE_ADDRESS_MEM_TYPE_MASK | PCI_BASE_ADDRESS_SPACE)) == PCI_BASE_ADDRESS_MEM_TYPE_64) {
 		    	unsigned int high;
 			reg++;
 			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &high);
