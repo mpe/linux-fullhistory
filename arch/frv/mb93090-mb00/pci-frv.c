@@ -31,7 +31,7 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 	if (resource < 6) {
 		reg = PCI_BASE_ADDRESS_0 + 4*resource;
 	} else if (resource == PCI_ROM_RESOURCE) {
-		res->flags |= PCI_ROM_ADDRESS_ENABLE;
+		res->flags |= IORESOURCE_ROM_ENABLE;
 		new |= PCI_ROM_ADDRESS_ENABLE;
 		reg = dev->rom_base_reg;
 	} else {
@@ -170,11 +170,11 @@ static void __init pcibios_allocate_resources(int pass)
 		}
 		if (!pass) {
 			r = &dev->resource[PCI_ROM_RESOURCE];
-			if (r->flags & PCI_ROM_ADDRESS_ENABLE) {
+			if (r->flags & IORESOURCE_ROM_ENABLE) {
 				/* Turn the ROM off, leave the resource region, but keep it unregistered. */
 				u32 reg;
 				DBG("PCI: Switching off ROM of %s\n", pci_name(dev));
-				r->flags &= ~PCI_ROM_ADDRESS_ENABLE;
+				r->flags &= ~IORESOURCE_ROM_ENABLE;
 				pci_read_config_dword(dev, dev->rom_base_reg, &reg);
 				pci_write_config_dword(dev, dev->rom_base_reg, reg & ~PCI_ROM_ADDRESS_ENABLE);
 			}
