@@ -871,6 +871,7 @@ retry:
 			goto out_unlock_isem;
 		xfs_rwlock(bdp, locktype);
 		pos = xip->i_d.di_size;
+		ret = 0;
 		goto retry;
 	}
 

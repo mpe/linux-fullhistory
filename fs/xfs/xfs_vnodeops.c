@@ -248,7 +248,7 @@ xfs_getattr(
 	/*
 	 * Convert di_flags to xflags.
 	 */
-	vap->va_xflags = xfs_dic2xflags(&ip->i_d, ARCH_NOCONVERT);
+	vap->va_xflags = xfs_ip2xflags(ip);
 
 	/*
 	 * Exit for inode revalidate.  See if any of the rest of
