@@ -637,7 +637,6 @@ void __init setup_arch(char **cmdline_p)
 	highstart_pfn = highend_pfn = max_pfn;
 	if (max_pfn > MAXMEM_PFN) {
 		highstart_pfn = MAXMEM_PFN;
-		highend_pfn = max_pfn;
 		printk(KERN_NOTICE "%ldMB HIGHMEM available.\n",
 			pages_to_mb(highend_pfn - highstart_pfn));
 	}

@@ -14,7 +14,7 @@
 #include <linux/file.h>
 
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 /* description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected

@@ -522,7 +522,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if (!page)
 		goto read_really;
 
-	ctl.cache = cache = (union ncp_dir_cache *) page_address(page);
+	ctl.cache = cache = (union ncp_dir_cache *) kmap(page);
 	ctl.head  = cache->head;
 
 	if (!Page_Uptodate(page) || !ctl.head.eof)
@@ -550,10 +550,10 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			ctl.page = ncp_get_cache_page(inode, ctl.ofs, 1);
 			if (!ctl.page)
 				goto invalid_cache;
+			ctl.cache = (union ncp_dir_cache *)
+					kmap(ctl.page);
 			if (!Page_Uptodate(ctl.page))
 				goto invalid_cache;
-			ctl.cache = (union ncp_dir_cache *)
-					page_address(ctl.page);
 		}
 		while (ctl.idx < NCP_DIRCACHE_SIZE) {
 			struct dentry *dent;
@@ -575,6 +575,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 				goto finished;
 		}
 		if (ctl.page) {
+			kunmap(ctl.page);
 			SetPageUptodate(ctl.page);
 			UnlockPage(ctl.page);
 			page_cache_release(ctl.page);
@@ -585,6 +586,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	}
 invalid_cache:
 	if (ctl.page) {
+		kunmap(ctl.page);
 		UnlockPage(ctl.page);
 		page_cache_release(ctl.page);
 		ctl.page = NULL;
@@ -614,12 +616,14 @@ read_really:
 	ctl.head.eof = ctl.valid;
 finished:
 	if (page) {
+		kunmap(page);
 		cache->head = ctl.head;
 		SetPageUptodate(page);
 		UnlockPage(page);
 		page_cache_release(page);
 	}
 	if (ctl.page) {
+		kunmap(ctl.page);
 		SetPageUptodate(ctl.page);
 		UnlockPage(ctl.page);
 		page_cache_release(ctl.page);
@@ -680,6 +684,7 @@ ncp_fill_cache(struct file *filp, void *dirent, filldir_t filldir,
 
 	if (ctl.idx >= NCP_DIRCACHE_SIZE) {
 		if (ctl.page) {
+			kunmap(ctl.page);
 			SetPageUptodate(ctl.page);
 			UnlockPage(ctl.page);
 			page_cache_release(ctl.page);
@@ -690,7 +695,7 @@ ncp_fill_cache(struct file *filp, void *dirent, filldir_t filldir,
 		ctl.page  = ncp_get_cache_page(inode, ctl.ofs, 0);
 		if (ctl.page)
 			ctl.cache = (union ncp_dir_cache *)
-					page_address(ctl.page);
+					kmap(ctl.page);
 	}
 	if (ctl.cache) {
 		ctl.cache->dentry[ctl.idx] = newdent;

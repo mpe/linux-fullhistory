@@ -42,19 +42,4 @@ extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 	return (pmd_t *) dir;
 }
 
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	return (pmd_t *)0;
-}
-
-extern __inline__ void free_pmd_fast(pmd_t *pmd) { }
-extern __inline__ void free_pmd_slow(pmd_t *pmd) { }
-
-extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
-{
-	if (!pgd)
-		BUG();
-	return (pmd_t *) pgd;
-}
-
 #endif /* _I386_PGTABLE_2LEVEL_H */

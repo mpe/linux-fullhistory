@@ -3,6 +3,7 @@
 
 #include <asm/pgtable.h>
 #include <asm/dma.h>
+#include <linux/init.h>
 
 /*
  *  simple boot-time physical memory area allocator.

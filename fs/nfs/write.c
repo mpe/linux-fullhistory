@@ -99,7 +99,7 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		count, page->index, offset);
 
-	buffer = (u8 *) page_address(page) + offset;
+	buffer = (u8 *) kmap(page) + offset;
 	offset += page->index << PAGE_CACHE_SHIFT;
 
 	do {
@@ -132,6 +132,7 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 	} while (count);
 
 io_error:
+	kunmap(page);
 	/* Note: we don't refresh if the call failed (fattr invalid) */
 	if (refresh && result >= 0) {
 		/* See comments in nfs_wback_result */
@@ -314,6 +315,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 	wreq->wb_bytes  = bytes;
 	wreq->wb_count	= 2;		/* One for the IO, one for us */
 
+	kmap(page);
 	append_write_request(&NFS_WRITEBACK(inode), wreq);
 
 	if (nr_write_requests++ > NFS_WRITEBACK_MAX*3/4)
@@ -687,6 +689,7 @@ nfs_wback_result(struct rpc_task *task)
 	if (WB_INVALIDATE(req))
 		ClearPageUptodate(page);
 
+	kunmap(page);
 	__free_page(page);
 	remove_write_request(&NFS_WRITEBACK(inode), req);
 	nr_write_requests--;

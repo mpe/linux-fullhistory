@@ -37,7 +37,20 @@ extern pte_t *pkmap_page_table;
 
 extern void kmap_init(void) __init;
 
+/*
+ * Right now we initialize only a single pte table. It can be extended
+ * easily, subsequent pte tables have to be allocated in one physical
+ * chunk of RAM.
+ */
 #define PKMAP_BASE (0xff000000UL)
+#ifdef CONFIG_X86_PAE
+#define LAST_PKMAP 512
+#else
+#define LAST_PKMAP 1024
+#endif
+#define LAST_PKMAP_MASK (LAST_PKMAP-1)
+#define PKMAP_NR(virt)  ((virt-PKMAP_BASE) >> PAGE_SHIFT)
+#define PKMAP_ADDR(nr)  (PKMAP_BASE + ((nr) << PAGE_SHIFT))
 
 extern unsigned long FASTCALL(kmap_high(struct page *page));
 extern void FASTCALL(kunmap_high(struct page *page));

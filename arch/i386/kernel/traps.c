@@ -35,6 +35,7 @@
 #include <asm/desc.h>
 
 #include <asm/smp.h>
+#include <asm/pgalloc.h>
 
 #ifdef CONFIG_X86_VISWS_APIC
 #include <asm/fixmap.h>

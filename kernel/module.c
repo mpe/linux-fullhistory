@@ -4,7 +4,7 @@
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/smp_lock.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <linux/init.h>
 
 /*

@@ -12,14 +12,14 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
 fi
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
-tristate 'Apple Macintosh filesystem support (EXPERIMENTAL)' CONFIG_HFS_FS
-# msdos filesystems
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   tristate 'Apple Macintosh filesystem support (EXPERIMENTAL)' CONFIG_HFS_FS
    tristate 'BFS filesystem (read only) support (EXPERIMENTAL)' CONFIG_BFS_FS
    if [ "$CONFIG_BFS_FS" != "n" ]; then
       bool '  BFS filesystem write support (DANGEROUS)' CONFIG_BFS_FS_WRITE
    fi
 fi
+# msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS
 dep_tristate '  MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
 dep_tristate '  UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS

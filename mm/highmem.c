@@ -70,9 +70,9 @@ struct page * replace_with_highmem(struct page * page)
 		return page;
 	}
 
-	vaddr = kmap(page);
+	vaddr = kmap(highpage);
 	copy_page((void *)vaddr, (void *)page_address(page));
-	kunmap(page);
+	kunmap(highpage);
 
 	/* Preserve the caching of the swap_entry. */
 	highpage->index = page->index;
@@ -86,20 +86,6 @@ struct page * replace_with_highmem(struct page * page)
 
 	return highpage;
 }
-
-/*
- * Right now we initialize only a single pte table. It can be extended
- * easily, subsequent pte tables have to be allocated in one physical
- * chunk of RAM.
- */
-#ifdef CONFIG_X86_PAE
-#define LAST_PKMAP 2048
-#else
-#define LAST_PKMAP 4096
-#endif
-#define LAST_PKMAP_MASK (LAST_PKMAP-1)
-#define PKMAP_NR(virt)	((virt-PKMAP_BASE) >> PAGE_SHIFT)
-#define PKMAP_ADDR(nr)	(PKMAP_BASE + ((nr) << PAGE_SHIFT))
 
 /*
  * Virtual_count is not a pure "count".
@@ -135,7 +121,7 @@ static void flush_all_zero_pkmaps(void)
 		pkmap_count[i] = 0;
 		pte = pkmap_page_table[i];
 		if (pte_none(pte))
-			continue;
+			BUG();
 		pte_clear(pkmap_page_table+i);
 		page = pte_page(pte);
 		page->virtual = 0;
@@ -167,30 +153,27 @@ static unsigned long map_new_virtual(struct page *page)
 			current->state = TASK_UNINTERRUPTIBLE;
 			add_wait_queue(&pkmap_map_wait, &wait);
 			spin_unlock(&kmap_lock);
-			// it's not quite possible to saturate the
-			// pkmap pool right now.
-			BUG();
 			schedule();
 			remove_wait_queue(&pkmap_map_wait, &wait);
 			spin_lock(&kmap_lock);
+
+			/* Somebody else might have mapped it while we slept */
+			if (page->virtual)
+				return page->virtual;
+
+			/* Re-start */
+			count = LAST_PKMAP;
 		}
-
-		/* Somebody else might have mapped it while we slept */
-		if (page->virtual)
-			return page->virtual;
-
-		/* Re-start */
-		count = LAST_PKMAP;
 	}
 	vaddr = PKMAP_ADDR(last_pkmap_nr);
 	pkmap_page_table[last_pkmap_nr] = mk_pte(page, kmap_prot);
-
 	/*
 	 * Subtle! For some reason if we dont do this TLB flush then
 	 * we get data corruption and weird behavior in dbench runs.
 	 * But invlpg this should not be necessery ... Any ideas?
 	 */
 	__flush_tlb_one(vaddr);
+
 	pkmap_count[last_pkmap_nr] = 1;
 	page->virtual = vaddr;
 
@@ -201,8 +184,6 @@ unsigned long kmap_high(struct page *page)
 {
 	unsigned long vaddr;
 
-	if (!PageHighMem(page))
-		BUG();
 	/*
 	 * For highmem pages, we can't trust "virtual" until
 	 * after we have the lock.

@@ -27,19 +27,6 @@ extern pgd_t swapper_pg_dir[1024];
 #define flush_page_to_ram(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
 
-/*
- * TLB flushing:
- *
- *  - flush_tlb() flushes the current mm struct TLBs
- *  - flush_tlb_all() flushes all processes TLBs
- *  - flush_tlb_mm(mm) flushes the specified mm context TLB's
- *  - flush_tlb_page(vma, vmaddr) flushes one page
- *  - flush_tlb_range(mm, start, end) flushes a range of pages
- *
- * ..but the i386 has somewhat limited tlb flushing capabilities,
- * and page-granular flushes are available only on i486 and up.
- */
-
 #define __flush_tlb() \
 do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
@@ -49,64 +36,8 @@ do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
 #define __flush_tlb_one(addr) \
 __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 #endif
- 
-#ifndef __SMP__
 
-#define flush_tlb() __flush_tlb()
-#define flush_tlb_all() __flush_tlb()
-#define local_flush_tlb() __flush_tlb()
-
-static inline void flush_tlb_mm(struct mm_struct *mm)
-{
-	if (mm == current->active_mm)
-		__flush_tlb();
-}
-
-static inline void flush_tlb_page(struct vm_area_struct *vma,
-	unsigned long addr)
-{
-	if (vma->vm_mm == current->active_mm)
-		__flush_tlb_one(addr);
-}
-
-static inline void flush_tlb_range(struct mm_struct *mm,
-	unsigned long start, unsigned long end)
-{
-	if (mm == current->active_mm)
-		__flush_tlb();
-}
-
-#else
-
-/*
- * We aren't very clever about this yet -  SMP could certainly
- * avoid some global flushes..
- */
-
-#include <asm/smp.h>
-
-#define local_flush_tlb() \
-	__flush_tlb()
-
-extern void flush_tlb_all(void);
-extern void flush_tlb_current_task(void);
-extern void flush_tlb_mm(struct mm_struct *);
-extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
-
-#define flush_tlb()	flush_tlb_current_task()
-
-static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, unsigned long end)
-{
-	flush_tlb_mm(mm);
-}
-
-#endif
 #endif /* !__ASSEMBLY__ */
-
-#define pgd_quicklist (current_cpu_data.pgd_quick)
-#define pmd_quicklist (current_cpu_data.pmd_quick)
-#define pte_quicklist (current_cpu_data.pte_quick)
-#define pgtable_cache_size (current_cpu_data.pgtable_cache_sz)
 
 /*
  * The Linux x86 paging architecture is 'compile-time dual-mode', it
@@ -247,7 +178,8 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
  * Permanent address of a page. Obviously must never be
  * called on a highmem page.
  */
-#define page_address(page) ({ if (PageHighMem(page)) BUG(); PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT); })
+#define page_address(page) ({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define __page_address(page) ({ if (PageHighMem(page)) BUG(); PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT); })
 #define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))
 #define pte_page(x) (mem_map+pte_pagenr(x))
 
@@ -277,14 +209,14 @@ extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pt
  * and a page entry and page directory to the page they refer to.
  */
 
-extern inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
-{
-	pte_t __pte;
-
-	pte_val(__pte) = (page-mem_map)*(unsigned long long)PAGE_SIZE +
-				pgprot_val(pgprot);
-	return __pte;
-}
+#define mk_pte(page,pgprot) \
+({									\
+	pte_t __pte;							\
+									\
+	pte_val(__pte) = ((page)-mem_map)*(unsigned long long)PAGE_SIZE + \
+				pgprot_val(pgprot);			\
+	__pte;								\
+})
 
 /* This takes a physical page address that is used by the remapping functions */
 #define mk_pte_phys(physpage, pgprot) \
@@ -317,182 +249,10 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 			__pte_offset(address))
 
 /*
- * Allocate and free page tables. The xxx_kernel() versions are
- * used to allocate a kernel page table - this turns on ASN bits
- * if any.
- */
-
-extern __inline__ pgd_t *get_pgd_slow(void)
-{
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
-
-	if (ret) {
-#if 0
-		/*
-		 * On PAE allocating a whole page is overkill - we will
-		 * either embedd this in mm_struct, or do a SLAB cache.
-		 */
-		memcpy(ret, swapper_pg_dir, PTRS_PER_PGD * sizeof(pgd_t));
-#endif
-#if CONFIG_X86_PAE
-		int i;
-		for (i = 0; i < USER_PTRS_PER_PGD; i++)
-			__pgd_clear(ret + i);
-#else
-		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-#endif
-		memcpy(ret + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
-	}
-	return ret;
-}
-
-extern __inline__ pgd_t *get_pgd_fast(void)
-{
-	unsigned long *ret;
-
-	if ((ret = pgd_quicklist) != NULL) {
-		pgd_quicklist = (unsigned long *)(*ret);
-		ret[0] = 0;
-		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pgd_slow();
-	return (pgd_t *)ret;
-}
-
-extern __inline__ void free_pgd_fast(pgd_t *pgd)
-{
-	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
-	pgd_quicklist = (unsigned long *) pgd;
-	pgtable_cache_size++;
-}
-
-extern __inline__ void free_pgd_slow(pgd_t *pgd)
-{
-	free_page((unsigned long)pgd);
-}
-
-extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
-extern pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long address_preadjusted);
-
-extern __inline__ pte_t *get_pte_fast(void)
-{
-	unsigned long *ret;
-
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
-		pgtable_cache_size--;
-	}
-	return (pte_t *)ret;
-}
-
-extern __inline__ void free_pte_fast(pte_t *pte)
-{
-	*(unsigned long *)pte = (unsigned long) pte_quicklist;
-	pte_quicklist = (unsigned long *) pte;
-	pgtable_cache_size++;
-}
-
-extern __inline__ void free_pte_slow(pte_t *pte)
-{
-	free_page((unsigned long)pte);
-}
-
-#define pte_free_kernel(pte)    free_pte_slow(pte)
-#define pte_free(pte)	   free_pte_slow(pte)
-#define pgd_free(pgd)	   free_pgd_slow(pgd)
-#define pgd_alloc()	     get_pgd_fast()
-
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
-{
-	if (!pmd)
-		BUG();
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_pte_fast();
-		
-		if (!page)
-			return get_pte_kernel_slow(pmd, address);
-		pmd_val(*pmd) = _KERNPG_TABLE + __pa(page);
-		return page + address;
-	}
-	if (pmd_bad(*pmd)) {
-		__handle_bad_pmd_kernel(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
-
-extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-
-	if (pmd_none(*pmd))
-		goto getnew;
-	if (pmd_bad(*pmd))
-		goto fix;
-	return (pte_t *)pmd_page(*pmd) + address;
-getnew:
-{
-	unsigned long page = (unsigned long) get_pte_fast();
-	
-	if (!page)
-		return get_pte_slow(pmd, address);
-	pmd_val(*pmd) = _PAGE_TABLE + __pa(page);
-	return (pte_t *)page + address;
-}
-fix:
-	__handle_bad_pmd(pmd);
-	return NULL;
-}
-
-/*
- * allocating and freeing a pmd is trivial: the 1-entry pmd is
- * inside the pgd, so has no extra memory associated with it.
- * (In the PAE case we free the page.)
- */
-#define pmd_free(pmd)	   free_pmd_slow(pmd)
-
-#define pmd_free_kernel		pmd_free
-#define pmd_alloc_kernel	pmd_alloc
-
-extern int do_check_pgt_cache(int, int);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-	pgd_t *pgd;
-#ifdef __SMP__
-	int i;
-#endif	
-
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-#ifndef __SMP__
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
-#else
-	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our callee, so we can
-	   modify pgd caches of other CPUs as well. -jj */
-	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-			pgd[address >> PGDIR_SHIFT] = entry;
-#endif
-}
-
-/*
  * The i386 doesn't have any external MMU info: the kernel page
  * tables contain all the necessary information.
  */
-extern inline void update_mmu_cache(struct vm_area_struct * vma,
-	unsigned long address, pte_t pte)
-{
-}
+#define update_mmu_cache(vma,address,pte) do { } while (0)
 
 /* Encode and de-code a swap entry */
 #define SWP_TYPE(x)			(((x).val >> 1) & 0x3f)

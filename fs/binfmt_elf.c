@@ -31,7 +31,7 @@
 #include <linux/init.h>
 
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 #include <linux/config.h>
 

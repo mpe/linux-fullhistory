@@ -346,8 +346,9 @@ repeat:
 		goto repeat;
 	}
 
+	kmap(page);
 	rd_args.fh = NFS_FH(dentry);
-	rd_res.buffer = (char *)page_address(page_cache);
+	rd_res.buffer = (char *)page_address(page);
 	rd_res.bufsiz = PAGE_CACHE_SIZE;
 	rd_res.cookie = *cookiep;
 	do {
@@ -365,6 +366,8 @@ repeat:
 		goto error;
 
 	SetPageUptodate(page);
+unmap_out:
+	kunmap(page);
 unlock_out:
 	UnlockPage(page);
 out:
@@ -372,7 +375,7 @@ out:
 
 error:
 	SetPageError(page);
-	goto unlock_out;
+	goto unmap_out;
 }
 
 /* Seek up to dirent assosciated with the passed in cookie,
@@ -438,8 +441,10 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if (!Page_Uptodate(page))
 		goto dirent_read_error;
 success:
+	kmap(page);
 	filp->f_pos = nfs_do_filldir((__u32 *) page_address(page),
 				     filp->f_pos, dirent, filldir);
+	kunmap(page);
 	page_cache_release(page);
 	return 0;
 

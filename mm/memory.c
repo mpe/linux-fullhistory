@@ -39,14 +39,14 @@
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/swap.h>
-#include <linux/pagemap.h>
 #include <linux/smp_lock.h>
 #include <linux/swapctl.h>
 #include <linux/iobuf.h>
-#include <linux/highmem.h>
-
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
+#include <linux/highmem.h>
+#include <linux/pagemap.h>
+
 
 unsigned long max_mapnr = 0;
 unsigned long num_physpages = 0;

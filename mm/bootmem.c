@@ -178,11 +178,11 @@ found:
 			last_offset = offset+size;
 			ret = phys_to_virt(last_pos*PAGE_SIZE + offset);
 		} else {
-			size -= remaining_size;
-			areasize = (size+PAGE_SIZE-1)/PAGE_SIZE;
+			remaining_size = size - remaining_size;
+			areasize = (remaining_size+PAGE_SIZE-1)/PAGE_SIZE;
 			ret = phys_to_virt(last_pos*PAGE_SIZE + offset);
 			last_pos = start+areasize-1;
-			last_offset = size;
+			last_offset = remaining_size;
 		}
  		last_offset &= ~PAGE_MASK;
 	} else {
@@ -196,7 +196,7 @@ found:
 	for (i = start; i < start+areasize; i++)
 		if (test_and_set_bit(i, bootmem_map))
 			BUG();
-
+	memset(ret, 0, size);
 	return ret;
 }
 

@@ -80,6 +80,8 @@ repeat:
 		goto repeat;
 	}
 
+	kmap(page);
+
 	/* We place the length at the beginning of the page,
 	 * in host byte order, followed by the string.  The
 	 * XDR response verification will NULL terminate it.
@@ -91,6 +93,7 @@ repeat:
 		goto error;
 	SetPageUptodate(page);
 unlock_out:
+	kunmap(page);
 	UnlockPage(page);
 out:
 	return page;
@@ -113,11 +116,12 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 	if (!Page_Uptodate(page))
 		goto readlink_read_error;
 success:
-	p = (u32 *) page_address(page);
+	p = (u32 *) kmap(page);
 	len = *p++;
 	if (len > buflen)
 		len = buflen;
 	copy_to_user(buffer, p, len);
+	kunmap(page);
 	page_cache_release(page);
 	return len;
 
@@ -148,8 +152,9 @@ nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 	if (!Page_Uptodate(page))
 		goto followlink_read_error;
 success:
-	p = (u32 *) page_address(page);
+	p = (u32 *) kmap(page);
 	result = lookup_dentry((char *) (p + 1), base, follow);
+	kunmap(page);
 	page_cache_release(page);
 	return result;
 

@@ -71,13 +71,19 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 {
 	struct nfs_rreq	rqst;
 	unsigned long	offset = page->index << PAGE_CACHE_SHIFT;
-	char		*buffer = (char *) page_address(page);
+	char		*buffer;
 	int		rsize = NFS_SERVER(inode)->rsize;
 	int		result, refresh = 0;
 	int		count = PAGE_SIZE;
 	int		flags = IS_SWAPFILE(inode)? NFS_RPC_SWAPFLAGS : 0;
 
 	dprintk("NFS: nfs_readpage_sync(%p)\n", page);
+
+	/*
+	 * This works now because the socket layer never tries to DMA
+	 * into this buffer directly.
+	 */
+	buffer = (char *) kmap(page);	
 
 	do {
 		if (count < rsize)
@@ -116,6 +122,7 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 	result = 0;
 
 io_error:
+	kunmap(page);
 	UnlockPage(page);
 	/* Note: we don't refresh if the call returned error */
 	if (refresh && result >= 0)
@@ -152,6 +159,7 @@ nfs_readpage_result(struct rpc_task *task)
 		fail++;
 		dprintk("NFS: %d successful reads, %d failures\n", succ, fail);
 	}
+	kunmap(page);
 	UnlockPage(page);
 	free_page(address);
 
@@ -163,7 +171,7 @@ static inline int
 nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 			struct page *page)
 {
-	unsigned long address = page_address(page);
+	unsigned long address;
 	struct nfs_rreq	*req;
 	int		result = -1, flags;
 
@@ -177,6 +185,7 @@ nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 	if (!req)
 		goto out_defer;
 
+	address = kmap(page);	
 	/* Initialize request */
 	/* N.B. Will the dentry remain valid for life of request? */
 	nfs_readreq_setup(req, NFS_FH(dentry), page->index << PAGE_CACHE_SHIFT,
@@ -200,6 +209,7 @@ out_defer:
 	goto out;
 out_free:
 	dprintk("NFS: failed to enqueue async READ request.\n");
+	kunmap(page);
 	kfree(req);
 	goto out;
 }
@@ -254,7 +264,7 @@ nfs_readpage(struct file *file, struct page *page)
 out_error:
 	UnlockPage(page);
 out_free:
-	free_page(page_address(page));
+	__free_page(page);
 out:
 	unlock_kernel();
 	return error;

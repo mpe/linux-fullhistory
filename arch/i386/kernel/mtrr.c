@@ -1818,6 +1818,7 @@ int __init mtrr_init(void)
 #  ifdef CONFIG_PROC_FS
     proc_root_mtrr = create_proc_entry("mtrr", S_IWUSR|S_IRUGO, &proc_root);
     proc_root_mtrr->ops = &proc_mtrr_inode_operations;
+#endif    
     init_table ();
     return 0;
 }   /*  End Function mtrr_init  */

@@ -35,7 +35,7 @@
 #include <linux/highmem.h>
 
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/mmu_context.h>
 
 #ifdef CONFIG_KMOD

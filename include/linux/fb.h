@@ -408,17 +408,18 @@ extern int fbgen_switch(int con, struct fb_info *info);
 extern void fbgen_blank(int blank, struct fb_info *info);
 
 
-/* drivers/char/fbmem.c */
+/* drivers/video/fbmem.c */
 extern int register_framebuffer(struct fb_info *fb_info);
 extern int unregister_framebuffer(const struct fb_info *fb_info);
-extern int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
-			       const struct fb_info *fb_info);
-extern int fbmon_dpms(const struct fb_info *fb_info);
-
 
 extern int num_registered_fb;
 extern struct fb_info *registered_fb[FB_MAX];
 extern char con2fb_map[MAX_NR_CONSOLES];
+
+/* drivers/video/fbmon.c */
+extern int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
+			       const struct fb_info *fb_info);
+extern int fbmon_dpms(const struct fb_info *fb_info);
 
 /* drivers/video/fbcon.c */
 extern struct display fb_display[MAX_NR_CONSOLES];

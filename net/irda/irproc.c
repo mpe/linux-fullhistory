@@ -41,7 +41,7 @@ extern int discovery_proc_read(char *buf, char **start, off_t offset, int len);
 
 struct irda_entry {
 	char *name;
-	int (*fn)(char*, char**, off_t, int, int);
+	int (*fn)(char*, char**, off_t, int);
 };
 
 struct proc_dir_entry *proc_irda;

@@ -9,6 +9,7 @@
 #include <linux/vmalloc.h>
 
 #include <asm/uaccess.h>
+#include <asm/pgalloc.h>
 
 struct vm_struct * vmlist = NULL;
 

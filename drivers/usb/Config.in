@@ -1,14 +1,10 @@
 #
 # USB device configuration
 #
-# NOTE NOTE NOTE! This is still considered extremely experimental.
-# Right now hubs, mice and keyboards work - at least with UHCI.
-# But that may be more a lucky coincidence than anything else..
-#
 mainmenu_option next_comment
-comment 'USB drivers - not for the faint of heart'
+comment 'Support for USB'
 
-tristate 'Support for USB (EXPERIMENTAL!)' CONFIG_USB
+tristate 'Support for USB' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
 comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4 and others) support' CONFIG_USB_UHCI \

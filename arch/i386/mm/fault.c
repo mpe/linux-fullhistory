@@ -19,7 +19,7 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/hardirq.h>
 
 extern void die(const char *,struct pt_regs *,long);

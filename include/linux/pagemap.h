@@ -13,6 +13,7 @@
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <linux/highmem.h>
 
 /*
  * The page cache can done in larger chunks than

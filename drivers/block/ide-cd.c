@@ -130,7 +130,7 @@
  * 3.15  July 2, 1996 -- Added support for Sanyo 3 CD changers
  *                        from Ben Galliart <bgallia@luc.edu> with 
  *                        special help from Jeff Lightfoot 
- *                        <jeffml@netcom.com>
+ *                        <jeffml@pobox.com>
  * 3.15a July 9, 1996 -- Improved Sanyo 3 CD changer identification
  * 3.16  Jul 28, 1996 -- Fix from Gadi to reduce kernel stack usage for ioctl.
  * 3.17  Sep 17, 1996 -- Tweak audio reads for some drives.

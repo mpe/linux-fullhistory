@@ -8,6 +8,7 @@
 #include <linux/init.h>
 #include <linux/netlink.h>
 
+extern int plip_init(void);
 extern int mkiss_init_ctrl_dev(void);
 extern int ppp_init(void);
 extern int slip_init_ctrl_dev(void);

@@ -14,7 +14,7 @@
 #include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/io.h>
 
 /*

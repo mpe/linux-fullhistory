@@ -201,8 +201,8 @@ struct buffer_head * udf_expand_adinicb(struct inode *inode, int *block, int isd
 		if (isdir)
 		{
 			struct udf_fileident_bh sfibh, dfibh;
-			int f_pos = UDF_I_EXT0OFFS(inode) >> 2;
-			int size = (UDF_I_EXT0OFFS(inode) + inode->i_size) >> 2;
+			loff_t f_pos = UDF_I_EXT0OFFS(inode) >> 2;
+			loff_t size = (UDF_I_EXT0OFFS(inode) + inode->i_size) >> 2;
 			struct FileIdentDesc cfi, *sfi, *dfi;
 
 			sfibh.soffset = sfibh.eoffset = (f_pos & ((inode->i_sb->s_blocksize - 1) >> 2)) << 2;

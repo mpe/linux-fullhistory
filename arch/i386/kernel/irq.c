@@ -37,7 +37,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/delay.h>
 #include <asm/desc.h>
 #include <asm/irq.h>

@@ -20,7 +20,7 @@
 #include <linux/highmem.h>
 #include <linux/file.h>
 
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 /*
  * The swap-out functions return 1 if they successfully
@@ -505,7 +505,6 @@ int kswapd(void *unused)
 			   allocations (not GFP_HIGHMEM ones). */
 			if (nr_free_buffer_pages() >= freepages.high)
 				break;
-
 			if (!do_try_to_free_pages(GFP_KSWAPD))
 				break;
 			run_task_queue(&tq_disk);

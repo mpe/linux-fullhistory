@@ -25,6 +25,8 @@
  *
  */
 
+#include "udfdecl.h"
+
 #if defined(__linux__) && defined(__KERNEL__)
 #include <linux/version.h>
 #include "udf_i.h"
@@ -35,8 +37,6 @@
 #include <linux/malloc.h>
 #include <linux/udf_fs.h>
 #endif
-
-#include "udfdecl.h"
 
 static inline int udf_match(int len, const char * const name, struct qstr *qs)
 {
@@ -333,10 +333,10 @@ udf_add_entry(struct inode *dir, struct dentry *dentry,
 	struct ustr unifilename;
 	char name[UDF_NAME_LEN], fname[UDF_NAME_LEN];
 	int namelen;
-	int f_pos;
+	loff_t f_pos;
 	int flen;
 	char *nameptr;
-	int size = (UDF_I_EXT0OFFS(dir) + dir->i_size) >> 2;
+	loff_t size = (UDF_I_EXT0OFFS(dir) + dir->i_size) >> 2;
 	int nfidlen;
 	Uint8 lfi;
 	Uint16 liu;
@@ -825,8 +825,8 @@ static int empty_dir(struct inode *dir)
 {
 	struct FileIdentDesc *fi, cfi;
 	struct udf_fileident_bh fibh;
-	int f_pos;
-	int size = (UDF_I_EXT0OFFS(dir) + dir->i_size) >> 2;
+	loff_t f_pos;
+	loff_t size = (UDF_I_EXT0OFFS(dir) + dir->i_size) >> 2;
 	int block;
 	lb_addr bloc, eloc;
 	Uint32 extoffset, elen, offset;

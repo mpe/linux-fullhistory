@@ -44,6 +44,7 @@
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h>
 #include <asm/mtrr.h>
+#include <asm/pgalloc.h>
 
 /* Set if we find a B stepping CPU			*/
 static int smp_b_stepping = 0;
@@ -649,10 +650,11 @@ void __init smp_alloc_memory(void)
 
 void __init smp_store_cpu_info(int id)
 {
-	struct cpuinfo_x86 *c=&cpu_data[id];
+	struct cpuinfo_x86 *c = cpu_data + id;
 
 	*c = boot_cpu_data;
 	c->pte_quick = 0;
+	c->pmd_quick = 0;
 	c->pgd_quick = 0;
 	c->pgtable_cache_sz = 0;
 	identify_cpu(c);
@@ -719,7 +721,7 @@ void __init setup_local_APIC(void)
 	 * Enable APIC
 	 */
  	value |= (1<<8);
-#if 0
+#if 1
 	/* Enable focus processor (bit==0) */
  	value &= ~(1<<9);
 #else
@@ -821,8 +823,7 @@ void __init init_smp_mappings(void)
 		 * could use the real zero-page, but it's safer
 		 * this way if some buggy code writes to this page ...
 		 */
-		apic_phys = (unsigned long)alloc_bootmem_pages(PAGE_SIZE);
-		memset((void *)apic_phys, 0, PAGE_SIZE);
+		apic_phys = (unsigned long) alloc_bootmem_pages(PAGE_SIZE);
 		apic_phys = __pa(apic_phys);
 	}
 	set_fixmap(FIX_APIC_BASE, apic_phys);
@@ -837,8 +838,7 @@ void __init init_smp_mappings(void)
 			if (smp_found_config) {
 				ioapic_phys = mp_ioapics[i].mpc_apicaddr;
 			} else {
-				ioapic_phys = (unsigned long)alloc_bootmem_pages(PAGE_SIZE);
-				memset((void *)ioapic_phys, 0, PAGE_SIZE);
+				ioapic_phys = (unsigned long) alloc_bootmem_pages(PAGE_SIZE);
 				ioapic_phys = __pa(ioapic_phys);
 			}
 			set_fixmap(idx,ioapic_phys);

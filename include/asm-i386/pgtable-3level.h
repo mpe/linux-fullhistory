@@ -27,11 +27,11 @@
 #define PTRS_PER_PTE	512
 
 #define pte_ERROR(e) \
-	printk("%s:%d: bad pte %016Lx.\n", __FILE__, __LINE__, pte_val(e))
+	printk("%s:%d: bad pte %p(%016Lx).\n", __FILE__, __LINE__, &(e), pte_val(e))
 #define pmd_ERROR(e) \
-	printk("%s:%d: bad pmd %016Lx.\n", __FILE__, __LINE__, pmd_val(e))
+	printk("%s:%d: bad pmd %p(%016Lx).\n", __FILE__, __LINE__, &(e), pmd_val(e))
 #define pgd_ERROR(e) \
-	printk("%s:%d: bad pgd %016Lx.\n", __FILE__, __LINE__, pgd_val(e))
+	printk("%s:%d: bad pgd %p(%016Lx).\n", __FILE__, __LINE__, &(e), pgd_val(e))
 
 /*
  * Subtle, in PAE mode we cannot have zeroes in the top level
@@ -63,62 +63,5 @@ extern inline void pgd_clear (pgd_t * pgd)
 /* Find an entry in the second-level page table.. */
 #define pmd_offset(dir, address) ((pmd_t *) pgd_page(*(dir)) + \
 			__pmd_offset(address))
-
-extern __inline__ pmd_t *get_pmd_slow(void)
-{
-	pmd_t *ret = (pmd_t *)__get_free_page(GFP_KERNEL);
-
-	if (ret)
-		memset(ret, 0, PAGE_SIZE);
-	return ret;
-}
-
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	unsigned long *ret;
-
-	if ((ret = pmd_quicklist) != NULL) {
-		pmd_quicklist = (unsigned long *)(*ret);
-		ret[0] = 0;
-		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pmd_slow();
-	return (pmd_t *)ret;
-}
-
-extern __inline__ void free_pmd_fast(pmd_t *pmd)
-{
-	*(unsigned long *)pmd = (unsigned long) pmd_quicklist;
-	pmd_quicklist = (unsigned long *) pmd;
-	pgtable_cache_size++;
-}
-
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
-{
-	free_page((unsigned long)pmd);
-}
-
-extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
-{
-	if (!pgd)
-		BUG();
-	address = (address >> PMD_SHIFT) & (PTRS_PER_PMD - 1);
-	if (pgd_none(*pgd)) {
-		pmd_t *page = get_pmd_fast();
-
-		if (!page)
-			page = get_pmd_slow();
-		if (page) {
-			if (pgd_none(*pgd)) {
-				pgd_val(*pgd) = 1 + __pa(page);
-				__flush_tlb();
-				return page + address;
-			} else
-				free_pmd_fast(page);
-		} else
-			return NULL;
-	}
-	return (pmd_t *)pgd_page(*pgd) + address;
-}
 
 #endif /* _I386_PGTABLE_3LEVEL_H */

@@ -43,10 +43,11 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	int bufsize;
 	int pos;
 
-	page = alloc_page(GFP_KERNEL);
+	page = alloc_page(GFP_HIGHMEM); /* ncpfs has nothing against GFP_HIGHMEM
+	           as long as recvmsg and memset works on it */
 	if (!page)
 		return page;
-	pg_addr = page_address(page);
+	pg_addr = kmap(page);
 	address &= PAGE_MASK;
 	pos = address - area->vm_start + (area->vm_pgoff << PAGE_SHIFT);
 
@@ -87,6 +88,7 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	if (already_read < PAGE_SIZE)
 		memset((char*)(pg_addr + already_read), 0, 
 		       PAGE_SIZE - already_read);
+	kunmap(page);
 	return page;
 }
 

@@ -21,7 +21,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 #ifdef CONFIG_SOUND
 void soundcore_init(void);

@@ -277,10 +277,6 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 		 			return 1; /* halt enum */
 				}
 			}
-			else
-			{
-				udf_debug("size=%d, nf_pos=%d, liu=%d, lfi=%d\n", size, nf_pos, liu, lfi);
-			}
 		}
 	} /* end while */
 

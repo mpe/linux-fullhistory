@@ -30,6 +30,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/dma.h>
 #include <asm/fixmap.h>
 #include <asm/e820.h>
@@ -285,7 +286,6 @@ static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t 
 #if CONFIG_X86_PAE
 		if (pgd_none(*pgd)) {
 			pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-			memset((void*)pmd, 0, PAGE_SIZE);
 			pgd_val(*pgd) = __pa(pmd) + 0x1;
 			if (pmd != pmd_offset(pgd, start))
 				BUG();
@@ -297,7 +297,6 @@ static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t 
 		for (; (j < PTRS_PER_PMD) && start; pmd++, j++) {
 			if (pmd_none(*pmd)) {
 				pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-				memset((void*)pte, 0, PAGE_SIZE);
 				pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
 				if (pte != pte_offset(pmd, 0))
 					BUG();
@@ -327,7 +326,6 @@ static void __init pagetable_init(void)
 		vaddr = i*PGDIR_SIZE;
 #if CONFIG_X86_PAE
 		pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-		memset((void*)pmd, 0, PAGE_SIZE);
 		pgd_val(*pgd) = __pa(pmd) + 0x1;
 #else
 		pmd = (pmd_t *)pgd;
@@ -352,7 +350,6 @@ static void __init pagetable_init(void)
 			}
 
 			pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-			memset((void*)pte, 0, PAGE_SIZE);
 			pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
 
 			if (pte != pte_offset(pmd, 0))
@@ -412,7 +409,11 @@ void __init zap_low_mappings (void)
 	 * that case).
 	 */
 	for (i = 0; i < USER_PTRS_PER_PGD; i++)
+#if CONFIG_X86_PAE
+		pgd_clear(swapper_pg_dir+i);
+#else
 		pgd_val(swapper_pg_dir[i]) = 0;
+#endif
 	flush_tlb_all();
 }
 
@@ -448,13 +449,23 @@ void __init paging_init(void)
 	kmap_init();
 #endif
 	{
-		unsigned int zones_size[3];
+		unsigned int zones_size[MAX_NR_ZONES] = {0, 0, 0};
+		unsigned int max_dma, high, low;
+		unsigned int align = (1 << (MAX_ORDER-1))-1;
 
-		zones_size[0] = virt_to_phys((char *)MAX_DMA_ADDRESS)
-					 >> PAGE_SHIFT;
-		zones_size[1] = max_low_pfn - zones_size[0];
-		zones_size[2] = highend_pfn - zones_size[0] - zones_size[1];
+		max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
+		low = (max_low_pfn + align) & ~align;
+		high = (highend_pfn + align) & ~align;
 
+		if (low < max_dma)
+			zones_size[ZONE_DMA] = low;
+		else {
+			zones_size[ZONE_DMA] = max_dma;
+			zones_size[ZONE_NORMAL] = low - max_dma;
+#ifdef CONFIG_HIGHMEM
+			zones_size[ZONE_HIGHMEM] = high - low;
+#endif
+		}
 		free_area_init(zones_size);
 	}
 	return;
@@ -533,15 +544,13 @@ static inline int page_is_ram (unsigned long pagenr)
 
 void __init mem_init(void)
 {
-	int codepages = 0;
-	int reservedpages = 0;
-	int datapages = 0;
-	int initpages = 0;
-#ifdef CONFIG_HIGHMEM
+	int codesize, reservedpages, datasize, initsize;
 	int tmp;
 
 	if (!mem_map)
 		BUG();
+
+#ifdef CONFIG_HIGHMEM
 	highmem_start_page = mem_map + highstart_pfn;
 	/* cache the highmem_mapnr */
 	highmem_mapnr = highstart_pfn;
@@ -557,6 +566,13 @@ void __init mem_init(void)
 	/* this will put all low memory onto the freelists */
 	totalram_pages += free_all_bootmem();
 
+	reservedpages = 0;
+	for (tmp = 0; tmp < max_low_pfn; tmp++)
+		/*
+		 * Only count reserved RAM pages
+		 */
+		if (page_is_ram(tmp) && PageReserved(mem_map+tmp))
+			reservedpages++;
 #ifdef CONFIG_HIGHMEM
 	for (tmp = highstart_pfn; tmp < highend_pfn; tmp++) {
 		struct page *page = mem_map + tmp;
@@ -573,19 +589,23 @@ void __init mem_init(void)
 	}
 	totalram_pages += totalhigh_pages;
 #endif
+	codesize =  (unsigned long) &_etext - (unsigned long) &_text;
+	datasize =  (unsigned long) &_edata - (unsigned long) &_etext;
+	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
+
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init, %ldk highmem)\n",
 		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
 		max_mapnr << (PAGE_SHIFT-10),
-		codepages << (PAGE_SHIFT-10),
+		codesize >> 10,
 		reservedpages << (PAGE_SHIFT-10),
-		datapages << (PAGE_SHIFT-10),
-		initpages << (PAGE_SHIFT-10),
+		datasize >> 10,
+		initsize >> 10,
 		(unsigned long) (totalhigh_pages << (PAGE_SHIFT-10))
 	       );
 
 #if CONFIG_X86_PAE
 	if (!cpu_has_pae)
-		panic("cannot execute a PAE-enabled kernel on a PAE-incapable CPU!");
+		panic("cannot execute a PAE-enabled kernel on a PAE-less CPU!");
 #endif
 	if (boot_cpu_data.wp_works_ok < 0)
 		test_wp_bit();

@@ -197,21 +197,21 @@ int __init wanrouter_proc_init (void)
 	if (!proc_router)
 		goto fail;
 
-	p = proc_create_proc_entry("config",0,proc_router);
+	p = create_proc_entry("config",0,proc_router);
 	if (!p)
 		goto fail_config;
 	p->ops = &router_inode;
-	p->info = config_get_info;
-	p = proc_create_proc_entry("status",0,proc_router);
+	p->get_info = config_get_info;
+	p = create_proc_entry("status",0,proc_router);
 	if (!p)
 		goto fail_stat;
 	p->ops = &router_inode;
-	p->info = status_get_info;
+	p->get_info = status_get_info;
 	return 0;
 fail_stat:
 	remove_proc_entry("config", proc_router);
 fail_config:
-	remove_proc_entry(proc_net, ROUTER_NAME);
+	remove_proc_entry(ROUTER_NAME, proc_net);
 fail:
 	return -ENOMEM;
 }

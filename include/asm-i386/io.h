@@ -103,7 +103,6 @@ __OUTS(l)
 
 #ifdef __KERNEL__
 
-#include <asm/page.h>
 #include <linux/vmalloc.h>
 
 /*

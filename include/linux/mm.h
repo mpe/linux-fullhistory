@@ -16,6 +16,7 @@ extern void * high_memory;
 extern int page_cluster;
 
 #include <asm/page.h>
+#include <asm/pgtable.h>
 #include <asm/atomic.h>
 
 /*
@@ -118,6 +119,8 @@ typedef struct {
 	unsigned long val;
 } swp_entry_t;
 
+struct zone_struct;
+
 /*
  * Try to keep the most commonly accessed fields in single cache lines
  * here (16 bytes or greater).  This ordering should be particularly
@@ -127,7 +130,6 @@ typedef struct {
  * is used for linear searches (eg. clock algorithm scans). 
  */
 typedef struct page {
-	/* these must be first (free area handling) */
 	struct list_head list;
 	struct address_space *mapping;
 	unsigned long index;
@@ -139,6 +141,7 @@ typedef struct page {
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
 	unsigned long virtual; /* nonzero if kmapped */
+	struct zone_struct *zone;
 } mem_map_t;
 
 #define get_page(p)		atomic_inc(&(p)->count)
@@ -283,19 +286,113 @@ typedef struct page {
 extern mem_map_t * mem_map;
 
 /*
- * This is timing-critical - most of the time in getting a new page
- * goes to clearing the page. If you want a page without the clearing
- * overhead, just use __get_free_page() directly..
- *
- * We have two allocation namespaces - the *get*page*() variants
- * return virtual kernel addresses to the allocated page(s), the
- * alloc_page*() variants return 'struct page *'.
+ * Free memory management - zoned buddy allocator.
  */
-#define __get_free_page(gfp_mask) __get_free_pages((gfp_mask),0)
-#define __get_dma_pages(gfp_mask, order) __get_free_pages((gfp_mask) | GFP_DMA,(order))
-extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long order));
-extern struct page * FASTCALL(alloc_pages(int gfp_mask, unsigned long order));
-#define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
+
+#if CONFIG_AP1000
+/* the AP+ needs to allocate 8MB contiguous, aligned chunks of ram
+   for the ring buffers */
+#define MAX_ORDER 12
+#else
+#define MAX_ORDER 10
+#endif
+
+typedef struct free_area_struct {
+	struct list_head free_list;
+	unsigned int * map;
+} free_area_t;
+
+typedef struct zone_struct {
+	/*
+	 * Commonly accessed fields:
+	 */
+	spinlock_t lock;
+	unsigned long offset;
+	unsigned long free_pages;
+	int low_on_memory;
+	unsigned long pages_low, pages_high;
+
+	/*
+	 * free areas of different sizes
+	 */
+	free_area_t free_area[MAX_ORDER];
+
+	/*
+	 * rarely used fields:
+	 */
+	char * name;
+	unsigned long size;
+} zone_t;
+
+#define ZONE_DMA		0
+#define ZONE_NORMAL		1
+#define ZONE_HIGHMEM		2
+
+/*
+ * NUMA architectures will have more:
+ */
+#define MAX_NR_ZONES		3
+
+/*
+ * One allocation request operates on a zonelist. A zonelist
+ * is a list of zones, the first one is the 'goal' of the
+ * allocation, the other zones are fallback zones, in decreasing
+ * priority. On NUMA we want to fall back on other CPU's zones
+ * as well.
+ *
+ * Right now a zonelist takes up less than a cacheline. We never
+ * modify it apart from boot-up, and only a few indices are used,
+ * so despite the zonelist table being relatively big, the cache
+ * footprint of this construct is very small.
+ */
+typedef struct zonelist_struct {
+	zone_t * zones [MAX_NR_ZONES+1]; // NULL delimited
+	int gfp_mask;
+} zonelist_t;
+
+#define NR_GFPINDEX		0x100
+
+extern zonelist_t zonelists [NR_GFPINDEX];
+
+/*
+ * There is only one page-allocator function, and two main namespaces to
+ * it. The alloc_page*() variants return 'struct page *' and as such
+ * can allocate highmem pages, the *get*page*() variants return
+ * virtual kernel addresses to the allocated page(s).
+ */
+extern struct page * FASTCALL(__alloc_pages(zonelist_t *zonelist, unsigned long order));
+
+extern inline struct page * alloc_pages(int gfp_mask, unsigned long order)
+{
+	/*  temporary check. */
+	if (zonelists[gfp_mask].gfp_mask != (gfp_mask))
+		BUG();
+	/*
+	 * Gets optimized away by the compiler.
+	 */
+	if (order >= MAX_ORDER)
+		return NULL;
+	return __alloc_pages(zonelists+(gfp_mask), order);
+}
+
+#define alloc_page(gfp_mask) \
+		alloc_pages(gfp_mask, 0)
+
+extern inline unsigned long __get_free_pages (int gfp_mask, unsigned long order)
+{
+	struct page * page;
+
+	page = alloc_pages(gfp_mask, order);
+	if (!page)
+		return 0;
+	return __page_address(page);
+}
+
+#define __get_free_page(gfp_mask) \
+		__get_free_pages((gfp_mask),0)
+
+#define __get_dma_pages(gfp_mask, order) \
+		__get_free_pages((gfp_mask) | GFP_DMA,(order))
 
 extern inline unsigned long get_zeroed_page(int gfp_mask)
 {
@@ -312,11 +409,29 @@ extern inline unsigned long get_zeroed_page(int gfp_mask)
  */
 #define get_free_page get_zeroed_page
 
-/* memory.c & swap.c*/
+/*
+ * There is only one 'core' page-freeing function.
+ */
+extern void FASTCALL(__free_pages_ok(struct page * page, unsigned long order));
+
+extern inline void __free_pages(struct page *page, unsigned long order)
+{
+	if (!put_page_testzero(page))
+		return;
+	__free_pages_ok(page, order);
+}
+
+#define __free_page(page) __free_pages(page, 0)
+
+extern inline void free_pages(unsigned long addr, unsigned long order)
+{
+	unsigned long map_nr = MAP_NR(addr);
+
+	if (map_nr < max_mapnr)
+		__free_pages(mem_map + map_nr, order);
+}
 
 #define free_page(addr) free_pages((addr),0)
-extern int FASTCALL(free_pages(unsigned long addr, unsigned long order));
-extern int FASTCALL(__free_page(struct page *));
 
 extern void show_free_areas(void);
 extern struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
@@ -398,7 +513,7 @@ extern void put_cached_page(unsigned long);
 #define GFP_DMA		__GFP_DMA
 
 /* Flag - indicates that the buffer can be taken from high memory which is not
-   directly addressable by the kernel */
+   permanently mapped by the kernel */
 
 #define GFP_HIGHMEM	__GFP_HIGHMEM
 
@@ -446,7 +561,6 @@ extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned 
 #define vmlist_access_unlock(mm)	spin_unlock(&mm->page_table_lock)
 #define vmlist_modify_lock(mm)		vmlist_access_lock(mm)
 #define vmlist_modify_unlock(mm)	vmlist_access_unlock(mm)
-
 
 #endif /* __KERNEL__ */
 

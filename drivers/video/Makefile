@@ -1,553 +1,119 @@
-#
-# Makefile for the kernel video drivers.
-#
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definitions are now inherited from the
-# parent makes..
-#
+# Makefile for the Linux video drivers.
+# 5 Aug 1999, James Simmons, <mailto:jsimmons@edgeglobal.com>
+# Rewritten to use lists instead of if-statements.
 
-L_TARGET := video.a
-L_OBJS   :=
-M_OBJS   :=
-LX_OBJS  :=
-MX_OBJS  :=
-MOD_LIST_NAME := VIDEO_MODULES
+SUB_DIRS        :=
+MOD_SUB_DIRS    :=
+MOD_IN_SUB_DIRS :=
+ALL_SUB_DIRS    :=
 
-CONFIG_FBGEN_BUILTIN :=
-CONFIG_FBGEN_MODULE :=
+# All of the (potential) objects that export symbols.
+# This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-# Frame Buffer Console
+export-objs    :=  fbmem.o fbcmap.o fbcon.o fbcon-afb.o fbcon-ilbm.o fbcon-vga.o fbcon-iplan2p2.o fbcon-iplan2p4.o fbcon-iplan2p8.o fbcon-vga-planes.o fbcon-cfb16.o fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o fbcon-cfb8.o fbcon-mac.o fbcon-mfb.o fbcon-vga.o
 
-ifeq ($(CONFIG_FB),y)
-  # Nasty trick to make sure all wanted stuff is linked in
-  O_TARGET = fbdev.o
-  L_OBJS += fbdev.o
-endif
+# Object file lists.
+obj-y          :=
+obj-m          :=
+obj-n          :=
+obj-           :=
 
-ifeq ($(CONFIG_DUMMY_CONSOLE),y)
-  L_OBJS += dummycon.o
-endif
+# Each configuration option enables a list of files.
 
-ifeq ($(CONFIG_PROM_CONSOLE),y)
-  L_OBJS += promcon.o promcon_tbl.o
-endif
+obj-$(CONFIG_DUMMY_CONSOLE)       += dummycon.o
+obj-$(CONFIG_SGI_NEWPORT_CONSOLE) += newport_con.o vga_font.o
+obj-$(CONFIG_PROM_CONSOLE)        += promcon.o promcon_tbl.o
+obj-$(CONFIG_VGA_CONSOLE)         += vgacon.o
+obj-$(CONFIG_MDA_CONSOLE)         += mdacon.o
 
-ifeq ($(CONFIG_FB),y)
-  L_OBJS += fonts.o
-  OX_OBJS += fbcon.o fbcmap.o fbmem.o modedb.o
-  ifeq ($(CONFIG_FONT_8x8),y)
-    L_OBJS += font_8x8.o
-  endif
-  ifeq ($(CONFIG_FONT_8x16),y)
-    L_OBJS += font_8x16.o
-  endif
-  ifeq ($(CONFIG_FONT_SUN8x16),y)
-    L_OBJS += font_sun8x16.o
-  endif
-  ifeq ($(CONFIG_FONT_SUN12x22),y)
-    L_OBJS += font_sun12x22.o
-  endif
-  ifeq ($(CONFIG_FONT_6x11),y)
-    L_OBJS += font_6x11.o
-  endif
-  ifeq ($(CONFIG_FONT_ACORN_8x8),y)
-    L_OBJS += font_acorn_8x8.o
-  endif
-  ifeq ($(CONFIG_FONT_PEARL_8x8),y)
-    L_OBJS += font_pearl_8x8.o
-  endif
-endif
+obj-$(CONFIG_FONT_SUN8x16)        += font_sun8x16.o
+obj-$(CONFIG_FONT_SUN12x22)       += font_sun12x22.o
+obj-$(CONFIG_FONT_8x8)            += font_8x8.o
+obj-$(CONFIG_FONT_8x16)           += font_8x16.o
+obj-$(CONFIG_FONT_6x11)           += font_6x11.o
+obj-$(CONFIG_FONT_PEARL_8x8)      += font_pearl_8x8.o
+obj-$(CONFIG_FONT_ACORN_8x8)      += font_acorn_8x8.o
 
-# Frame Buffer Devices
+obj-$(CONFIG_FB)                  += fbmem.o fbcmap.o modedb.o fbcon.o fonts.o fbmon.o 
 
-ifeq ($(CONFIG_FB_ACORN),y)
-L_OBJS += acornfb.o
-else
-  ifeq ($(CONFIG_FB_ACORN),m)
-  M_OBJS += acornfb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_AMIGA),y)
-L_OBJS += amifb.o
-else
-  ifeq ($(CONFIG_FB_AMIGA),m)
-  M_OBJS += amifb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_PM2),y)
-L_OBJS += pm2fb.o
-CONFIG_FBGEN_BUILTIN = y
-else
-  ifeq ($(CONFIG_FB_PM2),m)
-  M_OBJS += pm2fb.o
-  CONFIG_FBGEN_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_FB_APOLLO),y)
-L_OBJS += dnfb.o
-endif
-
-ifeq ($(CONFIG_FB_Q40),y)
-L_OBJS += q40fb.o
-endif
-
-ifeq ($(CONFIG_FB_ATARI),y)
-L_OBJS += atafb.o
-else
-  ifeq ($(CONFIG_FB_ATARI),m)
-  M_OBJS += atafb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_ATY),y)
-L_OBJS += atyfb.o
-else
-  ifeq ($(CONFIG_FB_ATY),m)
-  M_OBJS += atyfb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_ATY128),y)
-L_OBJS += aty128fb.o
-endif
-
-ifeq ($(CONFIG_FB_IGA),y)
-L_OBJS += igafb.o
-endif
-
-ifeq ($(CONFIG_FB_CONTROL),y)
-L_OBJS += controlfb.o
-endif
-
-ifeq ($(CONFIG_FB_PLATINUM),y)
-L_OBJS += platinumfb.o
-endif
-
-ifeq ($(CONFIG_FB_VALKYRIE),y)
-L_OBJS += valkyriefb.o
-endif
-
-ifeq ($(CONFIG_FB_CT65550),y)
-L_OBJS += chipsfb.o
-endif
-
-ifeq ($(CONFIG_FB_CYBER),y)
-L_OBJS += cyberfb.o
-else
-  ifeq ($(CONFIG_FB_CYBER),m)
-  M_OBJS += cyberfb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_CYBER2000),y)
-L_OBJS += cyber2000fb.o
-else
-  ifeq ($(CONFIG_FB_CYBER2000),m)
-  M_OBJS += cyber2000fb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_SGIVW),y)
-LX_OBJS += sgivwfb.o
-else
-  ifeq ($(CONFIG_FB_SGIVW),m)
-  MX_OBJS += sgivwfb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_RIVA),y)
-L_OBJS += rivafb.o riva_hw.o
-endif
-
-ifeq ($(CONFIG_FB_3DFX),y)
-L_OBJS += tdfxfb.o
-endif
-
-ifeq ($(CONFIG_FB_MAC),y)
-L_OBJS += macfb.o
-endif
-
-ifeq ($(CONFIG_FB_HP300),y)
-L_OBJS += hpfb.o
-endif
-
-ifeq ($(CONFIG_FB_OF),y)
-L_OBJS += offb.o macmodes.o
-endif
-
-ifeq ($(CONFIG_FB_IMSTT),y)
-L_OBJS += imsttfb.o
-endif
-
-ifeq ($(CONFIG_FB_RETINAZ3),y)
-L_OBJS += retz3fb.o
-else
-  ifeq ($(CONFIG_FB_RETINAZ3),m)
-  M_OBJS += retz3fb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_CLGEN),y)
-L_OBJS += clgenfb.o
-CONFIG_FBGEN_BUILTIN = y
-else
-  ifeq ($(CONFIG_FB_CLGEN),m)
-  M_OBJS += clgenfb.o
-  CONFIG_FBGEN_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_FB_S3TRIO),y)
-L_OBJS += S3triofb.o
-else
-  ifeq ($(CONFIG_FB_S3TRIO),m)
-  M_OBJS += S3triofb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_TGA),y)
-L_OBJS += tgafb.o
-CONFIG_FBGEN_BUILTIN = y
-else
-  ifeq ($(CONFIG_FB_TGA),m)
-  M_OBJS += tgafb.o
-  CONFIG_FBGEN_MODULE = y
-  endif
-endif
-
-ifeq ($(CONFIG_FB_VESA),y)
-L_OBJS += vesafb.o
-endif
-
-ifeq ($(CONFIG_FB_VGA16),y)
-L_OBJS += vga16fb.o
-else
-  ifeq ($(CONFIG_FB_VGA16),m)
-  M_OBJS += vga16fb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_VIRGE),y)
-L_OBJS += virgefb.o
-else
-  ifeq ($(CONFIG_FB_VIRGE),m)
-  M_OBJS += virgefb.o
-  endif
-endif
-
-ifdef CONFIG_FB_G364
-L_OBJS := $(L_OBJS) g364fb.o
-endif
-
-ifdef CONFIG_FB_FM2
-L_OBJS := $(L_OBJS) fm2fb.o
-endif
-
-ifeq ($(CONFIG_FB_SBUS),y)
-L_OBJS += sbusfb.o
-  ifeq ($(CONFIG_FB_CREATOR),y)
-    L_OBJS += creatorfb.o
-  else
-    ifeq ($(CONFIG_FB_CREATOR),m)
-    M_OBJS += creatorfb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_CGSIX),y)
-    L_OBJS += cgsixfb.o
-  else
-    ifeq ($(CONFIG_FB_CGSIX),m)
-    M_OBJS += cgsixfb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_BWTWO),y)
-    L_OBJS += bwtwofb.o
-  else
-    ifeq ($(CONFIG_FB_BWTWO),m)
-    M_OBJS += bwtwofb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_CGTHREE),y)
-    L_OBJS += cgthreefb.o
-  else
-    ifeq ($(CONFIG_FB_CGTHREE),m)
-    M_OBJS += cgthreefb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_TCX),y)
-    L_OBJS += tcxfb.o
-  else
-    ifeq ($(CONFIG_FB_TCX),m)
-    M_OBJS += tcxfb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_CGFOURTEEN),y)
-    L_OBJS += cgfourteenfb.o
-  else
-    ifeq ($(CONFIG_FB_CGFOURTEEN),m)
-    M_OBJS += cgfourteenfb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_P9100),y)
-    L_OBJS += p9100fb.o
-  else
-    ifeq ($(CONFIG_FB_P9100),m)
-    M_OBJS += p9100fb.o
-    endif
-  endif
-  ifeq ($(CONFIG_FB_LEO),y)
-    L_OBJS += leofb.o
-  else
-    ifeq ($(CONFIG_FB_LEO),m)
-    M_OBJS += leofb.o
-    endif
-  endif
-else
-  ifeq ($(CONFIG_FB_SBUS),m)
-  M_OBJS += sbusfb.o
-    ifeq ($(CONFIG_FB_CREATOR),y)
-      M_OBJS += creatorfb.o
-    else
-      ifeq ($(CONFIG_FB_CREATOR),m)
-      M_OBJS += creatorfb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_CGSIX),y)
-      M_OBJS += cgsixfb.o
-    else
-      ifeq ($(CONFIG_FB_CGSIX),m)
-      M_OBJS += cgsixfb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_BWTWO),y)
-      M_OBJS += bwtwofb.o
-    else
-      ifeq ($(CONFIG_FB_BWTWO),m)
-      M_OBJS += bwtwofb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_CGTHREE),y)
-      M_OBJS += cgthreefb.o
-    else
-      ifeq ($(CONFIG_FB_CGTHREE),m)
-      M_OBJS += cgthreefb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_TCX),y)
-      M_OBJS += tcxfb.o
-    else
-      ifeq ($(CONFIG_FB_TCX),m)
-      M_OBJS += tcxfb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_CGFOURTEEN),y)
-      M_OBJS += cgfourteenfb.o
-    else
-      ifeq ($(CONFIG_FB_CGFOURTEEN),m)
-      M_OBJS += cgfourteenfb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_P9100),y)
-      M_OBJS += p9100fb.o
-    else
-      ifeq ($(CONFIG_FB_P9100),m)
-      M_OBJS += p9100fb.o
-      endif
-    endif
-    ifeq ($(CONFIG_FB_LEO),y)
-      M_OBJS += leofb.o
-    else
-      ifeq ($(CONFIG_FB_LEO),m)
-      M_OBJS += leofb.o
-      endif
-    endif
-  endif
-endif
-
-ifeq ($(CONFIG_FB_VIRTUAL),y)
-L_OBJS += vfb.o
-else
-  ifeq ($(CONFIG_FB_VIRTUAL),m)
-  M_OBJS += vfb.o
-  endif
-endif
-
-ifdef CONFIG_FBGEN_BUILTIN
-OX_OBJS += fbgen.o
-else
-  ifdef CONFIG_FBGEN_MODULE
-  MX_OBJS += fbgen.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_MATROX),y)
-L_OBJS += matroxfb.o
-else
-  ifeq ($(CONFIG_FB_MATROX),m)
-  M_OBJS += matroxfb.o
-  endif
-endif
+obj-$(CONFIG_FB_ACORN)            += acornfb.o
+obj-$(CONFIG_FB_AMIGA)            += amifb.o
+obj-$(CONFIG_FB_PM2)              += pm2fb.o fbgen.o
+obj-$(CONFIG_FB_APOLLO)           += dnfb.o
+obj-$(CONFIG_FB_Q40)              += q40fb.o
+obj-$(CONFIG_FB_ATARI)            += atafb.o
+obj-$(CONFIG_FB_ATY)              += atyfb.o
+obj-$(CONFIG_FB_ATY128)           += aty128fb.o
+obj-$(CONFIG_FB_IGA)              += igafb.o
+obj-$(CONFIG_FB_CONTROL)          += controlfb.o
+obj-$(CONFIG_FB_PLATINUM)         += platinumfb.o
+obj-$(CONFIG_FB_VALKYRIE)         += valkyriefb.o
+obj-$(CONFIG_FB_CT65550)          += chipsfb.o
+obj-$(CONFIG_FB_CYBER)            += cyberfb.o
+obj-$(CONFIG_FB_CYBER2000)        += cyber2000fb.o
+obj-$(CONFIG_FB_SGIVW)            += sgivwfb.o
+obj-$(CONFIG_FB_RIVA)             += rivafb.o riva_hw.o
+obj-$(CONFIG_FB_3DFX)             += tdfxfb.o
+obj-$(CONFIG_FB_MAC)              += macfb.o
+obj-$(CONFIG_FB_HP300)            += hpfb.o
+obj-$(CONFIG_FB_OF)               += offb.o macmodes.o
+obj-$(CONFIG_FB_IMSTT)            += imsttfb.o
+obj-$(CONFIG_FB_RETINAZ3)         += retz3fb.o
+obj-$(CONFIG_FB_CLGEN)            += clgenfb.o fbgen.o
+obj-$(CONFIG_FB_S3TRIO)           += S3triofb.o
+obj-$(CONFIG_FB_TGA)              += tgafb.o fbgen.o
+obj-$(CONFIG_FB_VESA)             += vesafb.o 
+obj-$(CONFIG_FB_VGA16)            += vga16fb.o fbcon-vga-planes.o
+obj-$(CONFIG_FB_VIRGE)            += virgefb.o
+obj-$(CONFIG_FB_G364)             += g364fb.o
+obj-$(CONFIG_FB_FM2)              += fm2fb.o
+obj-$(CONFIG_FB_CREATOR)          += creatorfb.o sbusfb.o
+obj-$(CONFIG_FB_CGSIX)            += cgsixfb.o sbusfb.o
+obj-$(CONFIG_FB_BWTWO)            += bwtwofb.o sbusfb.o
+obj-$(CONFIG_FB_CGTHREE)          += cgthreefb.o sbusfb.o
+obj-$(CONFIG_FB_TCX)              += tcxfb.o sbusfb.o
+obj-$(CONFIG_FB_CGFOURTEEN)       += cgfourteenfb.o sbusfb.o
+obj-$(CONFIG_FB_P9100)            += p9100fb.o sbusfb.o
+obj-$(CONFIG_FB_LEO)              += leofb.o sbusfb.o
+obj-$(CONFIG_FB_MATROX)           += matroxfb.o
+obj-$(CONFIG_FB_VIRTUAL)          += vfb.o  
 
 # Generic Low Level Drivers
 
-ifeq ($(CONFIG_FBCON_AFB),y)
-OX_OBJS += fbcon-afb.o
-else
-  ifeq ($(CONFIG_FBCON_AFB),m)
-  MX_OBJS += fbcon-afb.o
-  endif
-endif
+obj-$(CONFIG_FBCON_AFB)           += fbcon-afb.o
+obj-$(CONFIG_FBCON_CFB2)          += fbcon-cfb2.o
+obj-$(CONFIG_FBCON_CFB4)          += fbcon-cfb4.o
+obj-$(CONFIG_FBCON_CFB8)          += fbcon-cfb8.o
+obj-$(CONFIG_FBCON_CFB16)         += fbcon-cfb16.o
+obj-$(CONFIG_FBCON_CFB24)         += fbcon-cfb24.o
+obj-$(CONFIG_FBCON_CFB32)         += fbcon-cfb32.o
+obj-$(CONFIG_FBCON_ILBM)          += fbcon-ilbm.o
+obj-$(CONFIG_FBCON_IPLAN2P2)      += fbcon-iplan2p2.o
+obj-$(CONFIG_FBCON_IPLAN2P4)      += fbcon-iplan2p4.o
+obj-$(CONFIG_FBCON_IPLAN2P8)      += fbcon-iplan2p8.o
+obj-$(CONFIG_FBCON_IPLAN2P16)     += fbcon-iplan2p16.o
+obj-$(CONFIG_FBCON_MAC)           += fbcon-mac.o
+obj-$(CONFIG_FBCON_MFB)           += fbcon-mfb.o
+obj-$(CONFIG_FBCON_VGA)           += fbcon-vga.o
 
-ifeq ($(CONFIG_FBCON_CFB2),y)
-OX_OBJS += fbcon-cfb2.o
-else
-  ifeq ($(CONFIG_FBCON_CFB2),m)
-  MX_OBJS += fbcon-cfb2.o
-  endif
-endif
+# Files that are both resident and modular: remove from modular.
 
-ifeq ($(CONFIG_FBCON_CFB4),y)
-OX_OBJS += fbcon-cfb4.o
-else
-  ifeq ($(CONFIG_FBCON_CFB4),m)
-  MX_OBJS += fbcon-cfb4.o
-  endif
-endif
+obj-m          := $(filter-out $(obj-y), $(obj-m))
 
-ifeq ($(CONFIG_FBCON_CFB8),y)
-OX_OBJS += fbcon-cfb8.o
-else
-  ifeq ($(CONFIG_FBCON_CFB8),m)
-  MX_OBJS += fbcon-cfb8.o
-  endif
-endif
+# Take multi-part drivers out of obj-y and put components in.
 
-ifeq ($(CONFIG_FBCON_CFB16),y)
-OX_OBJS += fbcon-cfb16.o
-else
-  ifeq ($(CONFIG_FBCON_CFB16),m)
-  MX_OBJS += fbcon-cfb16.o
-  endif
-endif
+obj-y          := $(filter-out $(list-multi), $(obj-y))
 
-ifeq ($(CONFIG_FBCON_CFB24),y)
-OX_OBJS += fbcon-cfb24.o
-else
-  ifeq ($(CONFIG_FBCON_CFB24),m)
-  MX_OBJS += fbcon-cfb24.o
-  endif
-endif
+# Translate to Rules.make lists.
 
-ifeq ($(CONFIG_FBCON_CFB32),y)
-OX_OBJS += fbcon-cfb32.o
-else
-  ifeq ($(CONFIG_FBCON_CFB32),m)
-  MX_OBJS += fbcon-cfb32.o
-  endif
-endif
+L_TARGET       := video.a
+# This is a nice idea but needs depmod altering
+#MOD_LIST_NAME := VIDEO_MODULES
 
-ifeq ($(CONFIG_FBCON_ILBM),y)
-OX_OBJS += fbcon-ilbm.o
-else
-  ifeq ($(CONFIG_FBCON_ILBM),m)
-  MX_OBJS += fbcon-ilbm.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_IPLAN2P2),y)
-OX_OBJS += fbcon-iplan2p2.o
-else
-  ifeq ($(CONFIG_FBCON_IPLAN2P2),m)
-  MX_OBJS += fbcon-iplan2p2.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_IPLAN2P4),y)
-OX_OBJS += fbcon-iplan2p4.o
-else
-  ifeq ($(CONFIG_FBCON_IPLAN2P4),m)
-  MX_OBJS += fbcon-iplan2p4.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_IPLAN2P8),y)
-OX_OBJS += fbcon-iplan2p8.o
-else
-  ifeq ($(CONFIG_FBCON_IPLAN2P8),m)
-  MX_OBJS += fbcon-iplan2p8.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_IPLAN2P16),y)
-OX_OBJS += fbcon-iplan2p16.o
-else
-  ifeq ($(CONFIG_FBCON_IPLAN2P16),m)
-  MX_OBJS += fbcon-iplan2p16.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_MAC),y)
-OX_OBJS += fbcon-mac.o
-else
-  ifeq ($(CONFIG_FBCON_MAC),m)
-  MX_OBJS += fbcon-mac.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_MFB),y)
-OX_OBJS += fbcon-mfb.o
-else
-  ifeq ($(CONFIG_FBCON_MFB),m)
-  MX_OBJS += fbcon-mfb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_VGA_PLANES),y)
-OX_OBJS += fbcon-vga-planes.o
-else
-  ifeq ($(CONFIG_FBCON_VGA_PLANES),m)
-  MX_OBJS += fbcon-vga-planes.o
-  endif
-endif
-
-ifeq ($(CONFIG_FBCON_VGA),y)
-OX_OBJS += fbcon-vga.o
-else
-  ifeq ($(CONFIG_FBCON_VGA),m)
-  MX_OBJS += fbcon-vga.o
-  endif
-endif
-
-# VGA Text Console
-
-ifdef CONFIG_VGA_CONSOLE
-L_OBJS += vgacon.o
-endif
-
-# MDA Text Console
-
-ifeq ($(CONFIG_MDA_CONSOLE),y)
-L_OBJS += mdacon.o
-else
-  ifeq ($(CONFIG_MDA_CONSOLE),m)
-  M_OBJS += mdacon.o
-  endif
-endif
-
-# Newport Text Console
-
-ifeq ($(CONFIG_SGI_NEWPORT_CONSOLE),y)
-L_OBJS += newport_con.o vga_font.o
-else
-  ifeq ($(CONFIG_SGI_NEWPORT_CONSOLE),m)
-  M_OBJS += newport_con.o vga_font.o
-  endif
-endif
+L_OBJS         := $(sort $(filter-out $(export-objs), $(obj-y)))
+LX_OBJS                := $(sort $(filter     $(export-objs), $(obj-y)))
+M_OBJS         := $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS                := $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 

@@ -18,6 +18,7 @@
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h>
 #include <asm/mtrr.h>
+#include <asm/pgalloc.h>
 
 /*
  *	Some notes on processor bugs:

@@ -1043,20 +1043,12 @@ static int __kmem_cache_shrink(kmem_cache_t *cachep)
 int
 kmem_cache_shrink(kmem_cache_t *cachep)
 {
-	if (!cachep) {
-		printk(KERN_ERR "kmem_shrink: NULL ptr\n");
-		return 2;
-	}
-	if (in_interrupt()) {
-		printk(KERN_ERR "kmem_shrink: Called during int - %s\n", cachep->c_name);
-		return 2;
-	}
-
-	if (!is_chained_kmem_cache(cachep)) {
-		printk(KERN_ERR "kmem_shrink: Invalid cache addr %p\n",
-		       cachep);
-		return 2;
-	}
+	if (!cachep)
+		BUG();
+	if (in_interrupt())
+		BUG();
+	if (!is_chained_kmem_cache(cachep))
+		BUG();
 
 	return __kmem_cache_shrink(cachep);
 }

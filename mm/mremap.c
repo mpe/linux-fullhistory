@@ -11,7 +11,7 @@
 #include <linux/swap.h>
 
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 
 extern int vm_enough_memory(long pages);
 

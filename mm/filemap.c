@@ -23,7 +23,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/uaccess.h>
 
 #include <linux/highmem.h>
