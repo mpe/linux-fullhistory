@@ -154,6 +154,7 @@ struct buffer_head {
 #include <linux/iso_fs_i.h>
 #include <linux/nfs_fs_i.h>
 #include <linux/xia_fs_i.h>
+#include <linux/sysv_fs_i.h>
 
 struct inode {
 	dev_t		i_dev;
@@ -196,6 +197,7 @@ struct inode {
 		struct iso_inode_info isofs_i;
 		struct nfs_inode_info nfs_i;
 		struct xiafs_inode_info xiafs_i;
+		struct sysv_inode_info sysv_i;
 	} u;
 };
 
@@ -230,6 +232,7 @@ struct file_lock {
 #include <linux/iso_fs_sb.h>
 #include <linux/nfs_fs_sb.h>
 #include <linux/xia_fs_sb.h>
+#include <linux/sysv_fs_sb.h>
 
 struct super_block {
 	dev_t s_dev;
@@ -254,6 +257,7 @@ struct super_block {
 		struct isofs_sb_info isofs_sb;
 		struct nfs_sb_info nfs_sb;
 		struct xiafs_sb_info xiafs_sb;
+		struct sysv_sb_info sysv_sb;
 	} u;
 };
 

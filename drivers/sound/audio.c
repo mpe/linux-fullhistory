@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/audio.c
+ * sound/audio.c
  * 
  * Device file manager for /dev/audio
  * 

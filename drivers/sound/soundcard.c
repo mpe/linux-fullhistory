@@ -34,16 +34,8 @@
 
 #include <linux/major.h>
 
-struct sbc_device
-{
-  int             usecount;
-};
-
-static struct sbc_device sbc_devices[SND_NDEVS];
 extern long     seq_time;
 
-static int      in_use = 0;	/* Total # of open device files (excluding
-				 * minor 0) */
 static int      soundcards_installed = 0;	/* Number of installed
 						 * soundcards */
 static int      soundcard_configured = 0;
@@ -53,147 +45,6 @@ static struct fileinfo files[SND_NDEVS];
 extern char    *snd_raw_buf[MAX_DSP_DEV][DSP_BUFFCOUNT];
 extern unsigned long snd_raw_buf_phys[MAX_DSP_DEV][DSP_BUFFCOUNT];
 extern int      snd_raw_count[MAX_DSP_DEV];
-
-/*
- * /dev/sndstatus -device
- */
-static char    *status_buf = NULL;
-static int      status_len, status_ptr;
-static int      status_busy = 0;
-
-static int
-put_status (char *s)
-{
-  int             l = strlen (s);
-
-  if (status_len + l >= 4000)
-    return 0;
-
-  memcpy (&status_buf[status_len], s, l);
-  status_len += l;
-
-  return 1;
-}
-
-static void
-init_status (void)
-{
-  /*
-   * Write the status information to the status_buf and update status_len.
-   * There is a limit of 4000 bytes for the data.
-   */
-
-  char            tmp_buf[256];	/* Line buffer */
-  int             i;
-
-  status_ptr = 0;
-
-  put_status ("Sound Driver:" SOUND_VERSION_STRING
-	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY "@"
-	      SOUND_CONFIG_HOST "." SOUND_CONFIG_DOMAIN ")"
-	      "\n");
-
-  sprintf (tmp_buf, "Config options: 0x%08x\n\n", SELECTED_SOUND_OPTIONS);
-  if (!put_status (tmp_buf))
-    return;
-
-  sprintf (tmp_buf, "Major number: %d\n", SOUND_MAJOR);
-  if (!put_status (tmp_buf))
-    return;
-
-  if (!put_status ("HW config: \n"))
-    return;
-
-  for (i = 0; i < (num_sound_drivers - 1); i++)
-    {
-      if (!supported_drivers[i].enabled) 
-      if (!put_status ("("))
-	return;
-
-      sprintf (tmp_buf, "Type %02x: %s",
-	       supported_drivers[i].card_type,
-	       supported_drivers[i].name);
-      if (!put_status (tmp_buf))
-	return;
-
-      sprintf (tmp_buf, " at 0x%03x irq %d drq %d",
-	       supported_drivers[i].config.io_base,
-	       supported_drivers[i].config.irq,
-	       supported_drivers[i].config.dma);
-      if (!put_status (tmp_buf))
-	return;
-
-      if (!supported_drivers[i].enabled) 
-      if (!put_status (")"))
-	return;
-
-      if (!put_status ("\n"))
-	return;
-    }
-
-  if (!put_status ("\nPCM devices:\n"))
-    return;
-
-  for (i = 0; i < num_dspdevs; i++)
-    {
-      sprintf (tmp_buf, "%02d: %s\n", i, dsp_devs[i]->name);
-      if (!put_status (tmp_buf))
-	return;
-    }
-
-  if (!put_status ("\nSynth devices:\n"))
-    return;
-
-  for (i = 0; i < num_synths; i++)
-    {
-      sprintf (tmp_buf, "%02d: %s\n", i, synth_devs[i]->info->name);
-      if (!put_status (tmp_buf))
-	return;
-    }
-
-  if (!put_status ("\nMidi devices:\n"))
-    return;
-
-  for (i = 0; i < num_midis; i++)
-    {
-      sprintf (tmp_buf, "%02d: %s\n", i, midi_devs[i]->info.name);
-      if (!put_status (tmp_buf))
-	return;
-    }
-
-  if (num_mixers)
-    {
-      if (!put_status ("\nMixer(s) installed\n"))
-	return;
-    }
-  else
-    {
-      if (!put_status ("\nNo mixers installed\n"))
-	return;
-    }
-}
-
-static int
-read_status (char *buf, int count)
-{
-  /*
-   * Return at most 'count' bytes from the status_buf.
-   */
-  int             l, c;
-
-  l = count;
-  c = status_len - status_ptr;
-
-  if (l > c)
-    l = c;
-  if (l <= 0)
-    return 0;
-
-  memcpy_tofs (buf, &status_buf[status_ptr], l);
-  status_ptr += l;
-
-  return l;
-}
 
 int
 snd_ioctl_return (int *addr, int value)
@@ -213,34 +64,7 @@ sound_read (struct inode *inode, struct file *file, char *buf, int count)
   dev = inode->i_rdev;
   dev = MINOR (dev);
 
-  DEB (printk ("sound_read(dev=%d, count=%d)\n", dev, count));
-
-  switch (dev & 0x0f)
-    {
-    case SND_DEV_STATUS:
-      return read_status (buf, count);
-      break;
-
-    case SND_DEV_DSP:
-    case SND_DEV_DSP16:
-    case SND_DEV_AUDIO:
-      return audio_read (dev, &files[dev], buf, count);
-      break;
-
-    case SND_DEV_SEQ:
-      return sequencer_read (dev, &files[dev], buf, count);
-      break;
-
-#ifndef EXCLUDE_MPU401
-    case SND_DEV_MIDIN:
-      return MIDIbuf_read (dev, &files[dev], buf, count);
-#endif
-
-    default:
-      printk ("Sound: Undefined minor device %d\n", dev);
-    }
-
-  return RET_ERROR (EPERM);
+  return sound_read_sw (dev, &files[dev], buf, count);
 }
 
 static int
@@ -251,26 +75,7 @@ sound_write (struct inode *inode, struct file *file, char *buf, int count)
   dev = inode->i_rdev;
   dev = MINOR (dev);
 
-  DEB (printk ("sound_write(dev=%d, count=%d)\n", dev, count));
-
-  switch (dev & 0x0f)
-    {
-
-    case SND_DEV_SEQ:
-      return sequencer_write (dev, &files[dev], buf, count);
-      break;
-
-    case SND_DEV_DSP:
-    case SND_DEV_DSP16:
-    case SND_DEV_AUDIO:
-      return audio_write (dev, &files[dev], buf, count);
-      break;
-
-    default:
-      return RET_ERROR (EPERM);
-    }
-
-  return count;
+  return sound_write_sw (dev, &files[dev], buf, count);
 }
 
 static int
@@ -282,18 +87,10 @@ sound_lseek (struct inode *inode, struct file *file, off_t offset, int orig)
 static int
 sound_open (struct inode *inode, struct file *file)
 {
-  int             dev, retval;
+  int             dev;
 
   dev = inode->i_rdev;
   dev = MINOR (dev);
-
-  DEB (printk ("sound_open(dev=%d) : usecount=%d\n", dev, sbc_devices[dev].usecount));
-
-  if ((dev >= SND_NDEVS) || (dev < 0))
-    {
-      printk ("Invalid minor device %d\n", dev);
-      return RET_ERROR (ENODEV);
-    }
 
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
     {
@@ -310,55 +107,7 @@ sound_open (struct inode *inode, struct file *file)
   if ((file->f_flags & O_ACCMODE) == O_WRONLY)
     files[dev].mode = OPEN_WRITE;
 
-  switch (dev & 0x0f)
-    {
-    case SND_DEV_STATUS:
-      if (status_busy)
-	return RET_ERROR (EBUSY);
-      status_busy = 1;
-      if ((status_buf = (char *) KERNEL_MALLOC (4000)) == NULL)
-	return RET_ERROR (EIO);
-      status_len = status_ptr = 0;
-      init_status ();
-      break;
-
-    case SND_DEV_CTL:
-      if (!soundcards_installed)
-	if (soundcard_configured)
-	  {
-	    printk ("Soundcard not installed\n");
-	    return RET_ERROR (ENODEV);
-	  }
-      break;
-
-    case SND_DEV_SEQ:
-      if ((retval = sequencer_open (dev, &files[dev])) < 0)
-	return retval;
-      break;
-
-#ifndef EXCLUDE_MPU401
-    case SND_DEV_MIDIN:
-      if ((retval = MIDIbuf_open (dev, &files[dev])) < 0)
-	return retval;
-      break;
-#endif
-
-    case SND_DEV_DSP:
-    case SND_DEV_DSP16:
-    case SND_DEV_AUDIO:
-      if ((retval = audio_open (dev, &files[dev])) < 0)
-	return retval;
-      break;
-
-    default:
-      printk ("Invalid minor device %d\n", dev);
-      return RET_ERROR (ENODEV);
-    }
-
-  sbc_devices[dev].usecount++;
-  in_use++;
-
-  return 0;
+  return sound_open_sw (dev, &files[dev]);
 }
 
 static void
@@ -369,42 +118,7 @@ sound_release (struct inode *inode, struct file *file)
   dev = inode->i_rdev;
   dev = MINOR (dev);
 
-  DEB (printk ("sound_release(dev=%d)\n", dev));
-
-  switch (dev & 0x0f)
-    {
-    case SND_DEV_STATUS:
-      if (status_buf)
-	KERNEL_FREE (status_buf);
-      status_buf = NULL;
-      status_busy = 0;
-      break;
-
-    case SND_DEV_CTL:
-      break;
-
-    case SND_DEV_SEQ:
-      sequencer_release (dev, &files[dev]);
-      break;
-
-#ifndef EXCLUDE_MPU401
-    case SND_DEV_MIDIN:
-      MIDIbuf_release (dev, &files[dev]);
-      break;
-#endif
-
-    case SND_DEV_DSP:
-    case SND_DEV_DSP16:
-    case SND_DEV_AUDIO:
-      audio_release (dev, &files[dev]);
-      break;
-
-    default:
-      printk ("Sound error: Releasing unknown device 0x%02x\n", dev);
-    }
-
-  sbc_devices[dev].usecount--;
-  in_use--;
+  sound_release_sw (dev, &files[dev]);
 }
 
 static int
@@ -416,44 +130,7 @@ sound_ioctl (struct inode *inode, struct file *file,
   dev = inode->i_rdev;
   dev = MINOR (dev);
 
-  DEB (printk ("sound_ioctl(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
-
-  switch (dev & 0x0f)
-    {
-
-    case SND_DEV_CTL:
-
-      if (!num_mixers)
-	return RET_ERROR (ENODEV);
-
-      if (dev >= num_mixers)
-	return RET_ERROR (ENODEV);
-
-      return mixer_devs[dev]->ioctl (dev, cmd, arg);
-      break;
-
-    case SND_DEV_SEQ:
-      return sequencer_ioctl (dev, &files[dev], cmd, arg);
-      break;
-
-    case SND_DEV_DSP:
-    case SND_DEV_DSP16:
-    case SND_DEV_AUDIO:
-      return audio_ioctl (dev, &files[dev], cmd, arg);
-      break;
-
-#ifndef EXCLUDE_MPU401
-    case SND_DEV_MIDIN:
-      return MIDIbuf_ioctl (dev, &files[dev], cmd, arg);
-      break;
-#endif
-
-    default:
-      return RET_ERROR (EPERM);
-      break;
-    }
-
-  return RET_ERROR (EPERM);
+  return sound_ioctl_sw (dev, &files[dev], cmd, arg);
 }
 
 static int
@@ -495,8 +172,6 @@ static struct file_operations sound_fops =
 long
 soundcard_init (long mem_start)
 {
-  int             i;
-
   register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
 
   soundcard_configured = 1;
@@ -520,11 +195,6 @@ soundcard_init (long mem_start)
 
   if (num_midis + num_synths)
     mem_start = sequencer_init (mem_start);
-
-  for (i = 0; i < SND_NDEVS; i++)
-    {
-      sbc_devices[i].usecount = 0;
-    }
 
   return mem_start;
 }

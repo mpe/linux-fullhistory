@@ -41,7 +41,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/dma.h>
-#include <linux/kd.h>
+#include <sys/kd.h>
 #include <linux/wait.h>
 #include <linux/malloc.h>
 #include <linux/soundcard.h>
@@ -62,15 +62,6 @@ typedef char snd_rw_buf;
 #define PUT_WORD_TO_USER(addr, offs, data)	put_fs_long(data, (long*)&((addr)[offs]))
 #define IOCTL_IN(arg)			get_fs_long((long *)(arg))
 #define IOCTL_OUT(arg, ret)		snd_ioctl_return((int *)arg, ret)
-
-/*
-#define DEFINE_WAIT_QUEUE(name, flag) static struct wait_queue *name = NULL; static int flag = 0
-#define DEFINE_WAIT_QUEUES(name, flag) static struct wait_queue *name = {NULL}; static int flag = {0}
-#define PROCESS_ABORTING(wqueue, flags)	(current->signal & ~current->blocked)
-#define REQUEST_TIMEOUT(nticks, wqueue)	current->timeout = jiffies + (nticks);
-#define INTERRUPTIBLE_SLEEP_ON(q, f)	\
-	{f = 1;interruptible_sleep_on(&q);f=0;}
-*/
 
 struct snd_wait {
 	  int mode; int aborting;
@@ -98,7 +89,7 @@ struct snd_wait {
 	   } \
 	  f.mode &= ~WK_SLEEP; \
 	}
-#define SOMEONE_WAITING(f) (f.mode & WK_SLEEP)
+#define SOMEONE_WAITING(q, f) (f.mode & WK_SLEEP)
 #define WAKE_UP(q, f)			{f.mode = WK_WAKEUP;wake_up(&q);}
 
 #define ALLOC_DMA_CHN(chn)		request_dma(chn)
@@ -127,6 +118,19 @@ struct snd_wait {
 */
 #define KERNEL_MALLOC(nbytes)	kmalloc(nbytes, GFP_KERNEL)
 #define KERNEL_FREE(addr)	kfree(addr)
+
+/*
+ * The macro PERMANENT_MALLOC(typecast, mem_ptr, size, linux_ptr)
+ * returns size bytes of
+ * (kernel virtual) memory which will never get freed by the driver.
+ * This macro is called only during boot. The linux_ptr is a linux specific
+ * parameter which should be ignored in other operating systems.
+ * The mem_ptr is a pointer variable where the macro assigns pointer to the
+ * memory area. The type is the type of the mem_ptr.
+ */
+#define PERMANENT_MALLOC(typecast, mem_ptr, size, linux_ptr) \
+  {mem_ptr = (typecast)linux_ptr; \
+   linux_ptr += (size);}
 
 /*
  * The macro DEFINE_TIMER defines variables for the ACTIVATE_TIMER if

@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/mpu401.c
+ * sound/mpu401.c
  * 
  * The low level driver for Roland MPU-401 compatible Midi cards.
  * 

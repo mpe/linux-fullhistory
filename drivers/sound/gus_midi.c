@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/gus2_midi.c
+ * sound/gus2_midi.c
  * 
  * The low level driver for the GUS Midi Interface.
  * 

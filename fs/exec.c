@@ -261,7 +261,7 @@ asmlinkage int sys_uselib(const char * library)
  * memory and creates the pointer tables from them, and puts their
  * addresses on the "stack", returning the new stack pointer value.
  */
-unsigned long * create_tables(char * p,int argc,int envc)
+unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
 {
 	unsigned long *argv,*envp;
 	unsigned long * sp;
@@ -285,8 +285,10 @@ unsigned long * create_tables(char * p,int argc,int envc)
 	envp = sp;
 	sp -= argc+1;
 	argv = sp;
-	put_fs_long((unsigned long)envp,--sp);
-	put_fs_long((unsigned long)argv,--sp);
+	if (!ibcs) {
+		put_fs_long((unsigned long)envp,--sp);
+		put_fs_long((unsigned long)argv,--sp);
+	}
 	put_fs_long((unsigned long)argc,--sp);
 	current->arg_start = (unsigned long) p;
 	while (argc-->0) {
@@ -723,15 +725,26 @@ extern int load_aout_binary(struct linux_binprm *,
 			    struct pt_regs * regs);
 extern int load_aout_library(int fd);
 
+#ifdef CONFIG_BINFMT_ELF
 extern int load_elf_binary(struct linux_binprm *,
 			    struct pt_regs * regs);
 extern int load_elf_library(int fd);
+#endif
+
+#ifdef CONFIG_BINFMT_COFF
+extern int load_coff_binary(struct linux_binprm *,
+			    struct pt_regs * regs);
+extern int load_coff_library(int fd);
+#endif
 
 /* Here are the actual binaries that will be accepted  */
 struct linux_binfmt formats[] = {
 	{load_aout_binary, load_aout_library},
 #ifdef CONFIG_BINFMT_ELF
 	{load_elf_binary, load_elf_library},
+#endif
+#ifdef CONFIG_BINFMT_COFF
+	{load_coff_binary, load_coff_library},
 #endif
 	{NULL, NULL}
 };
@@ -828,7 +841,7 @@ beyond_if:
 	
 	p += change_ldt(ex.a_text,bprm->page);
 	p -= MAX_ARG_PAGES*PAGE_SIZE;
-	p = (unsigned long) create_tables((char *)p,bprm->argc,bprm->envc);
+	p = (unsigned long) create_tables((char *)p,bprm->argc,bprm->envc,0);
 	current->start_stack = p;
 	regs->eip = ex.a_entry;		/* eip, magic happens :-) */
 	regs->esp = p;			/* stack pointer */

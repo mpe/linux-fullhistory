@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/patmgr.c
+ * sound/patmgr.c
  * 
  * The patch maneger interface for the /dev/sequencer
  * 
@@ -73,7 +73,7 @@ pmgr_release (int dev)
       mbox[dev]->key = PM_ERROR;
       mbox[dev]->parm1 = RET_ERROR (EIO);
 
-      if (SOMEONE_WAITING (appl_wait_flag))
+      if (SOMEONE_WAITING (appl_proc, appl_wait_flag))
 	WAKE_UP (appl_proc, appl_wait_flag);
     }
 
@@ -161,7 +161,7 @@ pmgr_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       COPY_FROM_USER (&((char *) mbox[dev])[4], buf, 4, count - 4);
       msg_direction[dev] = S_TO_A;
 
-      if (SOMEONE_WAITING (appl_wait_flag))
+      if (SOMEONE_WAITING (appl_proc, appl_wait_flag))
 	{
 	  WAKE_UP (appl_proc, appl_wait_flag);
 	}
@@ -188,7 +188,7 @@ pmgr_access (int dev, struct patmgr_info *rec)
       mbox[dev] = rec;
       msg_direction[dev] = A_TO_S;
 
-      if (SOMEONE_WAITING (server_wait_flag[dev]))
+      if (SOMEONE_WAITING (server_procs[dev], server_wait_flag[dev]))
 	{
 	  WAKE_UP (server_procs[dev], server_wait_flag[dev]);
 	}
@@ -242,7 +242,7 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
       mbox[dev]->parm3 = p3;
       msg_direction[dev] = A_TO_S;
 
-      if (SOMEONE_WAITING (server_wait_flag[dev]))
+      if (SOMEONE_WAITING (server_procs[dev], server_wait_flag[dev]))
 	{
 	  WAKE_UP (server_procs[dev], server_wait_flag[dev]);
 	}

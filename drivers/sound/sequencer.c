@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/sequencer.c
+ * sound/sequencer.c
  * 
  * The sequencer personality manager.
  * 
@@ -51,8 +51,10 @@ long            seq_time = 0;	/* Reference point for the timer */
 #include "tuning.h"
 
 #define EV_SZ	8
-static unsigned char queue[SEQ_MAX_QUEUE][EV_SZ];
-static unsigned char iqueue[SEQ_MAX_QUEUE][4];
+#define IEV_SZ	4
+static unsigned char *queue = NULL;	/* SEQ_MAX_QUEUE * EV_SZ bytes */
+static unsigned char *iqueue = NULL;	/* SEQ_MAX_QUEUE * IEV_SZ bytes */
+
 static volatile int qhead = 0, qtail = 0, qlen = 0;
 static volatile int iqhead = 0, iqtail = 0, iqlen = 0;
 static volatile int seq_playing = 0;
@@ -91,7 +93,7 @@ sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	    return count - c;
 	}
 
-      COPY_TO_USER (buf, p, &iqueue[iqhead][0], 4);
+      COPY_TO_USER (buf, p, &iqueue[iqhead * IEV_SZ], IEV_SZ);
       p += 4;
       c -= 4;
 
@@ -116,12 +118,12 @@ copy_to_input (unsigned char *event)
   if (iqlen >= (SEQ_MAX_QUEUE - 1))
     return;			/* Overflow */
 
-  memcpy (iqueue[iqtail], event, 4);
+  memcpy (&iqueue[iqtail * IEV_SZ], event, IEV_SZ);
   iqlen++;
   iqtail = (iqtail + 1) % SEQ_MAX_QUEUE;
 
   DISABLE_INTR (flags);
-  if (SOMEONE_WAITING (midi_sleep_flag))
+  if (SOMEONE_WAITING (midi_sleeper, midi_sleep_flag))
     {
       WAKE_UP (midi_sleeper, midi_sleep_flag);
     }
@@ -268,7 +270,7 @@ seq_queue (unsigned char *note)
     if (!seq_playing)
       seq_startplay ();		/* Give chance to drain the queue */
 
-  if (qlen >= SEQ_MAX_QUEUE && !SOMEONE_WAITING (seq_sleep_flag))
+  if (qlen >= SEQ_MAX_QUEUE && !SOMEONE_WAITING (seq_sleeper, seq_sleep_flag))
     {
       /* Sleep until there is enough space on the queue */
       DO_SLEEP (seq_sleeper, seq_sleep_flag, 0);
@@ -277,7 +279,7 @@ seq_queue (unsigned char *note)
   if (qlen >= SEQ_MAX_QUEUE)
     return 0;			/* To be sure */
 
-  memcpy (&queue[qtail][0], note, EV_SZ);
+  memcpy (&queue[qtail * EV_SZ], note, EV_SZ);
 
   qtail = (qtail + 1) % SEQ_MAX_QUEUE;
   qlen++;
@@ -344,7 +346,7 @@ seq_startplay (void)
       qhead = ((this_one = qhead) + 1) % SEQ_MAX_QUEUE;
       qlen--;
 
-      q = &queue[this_one][0];
+      q = &queue[this_one*EV_SZ];
 
       switch (q[0])
 	{
@@ -380,7 +382,7 @@ seq_startplay (void)
 		  unsigned long   flags;
 
 		  DISABLE_INTR (flags);
-		  if (SOMEONE_WAITING (seq_sleep_flag))
+		  if (SOMEONE_WAITING (seq_sleeper, seq_sleep_flag))
 		    {
 		      WAKE_UP (seq_sleeper, seq_sleep_flag);
 		    }
@@ -450,7 +452,7 @@ seq_startplay (void)
       unsigned long   flags;
 
       DISABLE_INTR (flags);
-      if (SOMEONE_WAITING (seq_sleep_flag))
+      if (SOMEONE_WAITING (seq_sleeper, seq_sleep_flag))
 	{
 	  WAKE_UP (seq_sleeper, seq_sleep_flag);
 	}
@@ -630,7 +632,7 @@ seq_sync (void)
   if (qlen && !seq_playing && !PROCESS_ABORTING (seq_sleeper, seq_sleep_flag))
     seq_startplay ();
 
-  if (qlen && !SOMEONE_WAITING (seq_sleep_flag))	/* Queue not empty */
+  if (qlen && !SOMEONE_WAITING (seq_sleeper, seq_sleep_flag))	/* Queue not empty */
     {
       DO_SLEEP (seq_sleeper, seq_sleep_flag, 0);
     }
@@ -684,7 +686,8 @@ seq_reset (void)
       {
 	for (chn = 0; chn < 16; chn++)
 	  {
-	    midi_outc (i, 0xb0 + chn);	/* Channel message */
+	    midi_outc (i, 
+		(unsigned char)(0xb0 + (chn & 0xff))); /* Channel msg */
 	    midi_outc (i, 0x7b);/* All notes off */
 	    midi_outc (i, 0);	/* Dummy parameter */
 	  }
@@ -697,7 +700,7 @@ seq_reset (void)
 
   seq_playing = 0;
 
-  if (SOMEONE_WAITING (seq_sleep_flag))
+  if (SOMEONE_WAITING (seq_sleeper, seq_sleep_flag))
     printk ("Sequencer Warning: Unexpected sleeping process\n");
 
 }
@@ -1090,6 +1093,8 @@ sequencer_init (long mem_start)
 {
 
   sequencer_ok = 1;
+  PERMANENT_MALLOC(unsigned char*, queue, SEQ_MAX_QUEUE*EV_SZ, mem_start);
+  PERMANENT_MALLOC(unsigned char*, iqueue, SEQ_MAX_QUEUE*IEV_SZ, mem_start);
   return mem_start;
 }
 

@@ -14,7 +14,7 @@
 */
 
 static char *version =
-    "smc-ultra.c:v0.04 11/30/93 Donald Becker (becker@super.org)\n";
+    "smc-ultra.c:v0.05 12/21/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -59,7 +59,7 @@ static int ultra_close_card(struct device *dev);
 
 int ultra_probe(struct device *dev)
 {
-    int *port, ports[] = {0x200, 0x220, 0x240, 0x280, 0x300, 0x380, 0};
+    int *port, ports[] = {0x200, 0x220, 0x240, 0x280, 0x300, 0x340, 0x380, 0};
     unsigned short ioaddr = dev->base_addr;
 
     if (ioaddr > 0x1ff)
@@ -70,7 +70,7 @@ int ultra_probe(struct device *dev)
     for (port = &ports[0]; *port; port++) {
 	if (check_region(*port, 32))
 	    continue;
-	if ((inb(*port + 7) & 0xF0) == 0x20     /* Check chip ID nibble. */
+	if ((inb(*port + 7) & 0xF0) == 0x20	/* Check chip ID nibble. */
 	    && ultraprobe1(*port, dev) == 0)
 	    return 0;
     }
@@ -84,12 +84,13 @@ int ultraprobe1(int ioaddr, struct device *dev)
   unsigned char *station_addr = dev->dev_addr;
   int checksum = 0;
   char *model_name;
-  int num_pages;
   unsigned char eeprom_irq = 0;
+  /* Values from various config regs. */
+  unsigned char num_pages, irqreg, addr, reg4 = inb(ioaddr + 4) & 0x7f;
 
 
   /* Select the station address register set. */
-  outb(0x7f & inb(ioaddr + 4), ioaddr + 4);
+  outb(reg4, ioaddr + 4);
 
   for (i = 0; i < 8; i++)
       checksum += inb(ioaddr + 8 + i);
@@ -100,14 +101,23 @@ int ultraprobe1(int ioaddr, struct device *dev)
   for (i = 0; i < 6; i++)
       printk(" %2.2X", station_addr[i] = inb(ioaddr + 8 + i));
 
-  /* Switch from the station address to the alternate register set. */
-  outb(0x80 | inb(ioaddr + 4), ioaddr + 4);
+  /* Switch from the station address to the alternate register set and
+     read the useful registers there. */
+  outb(0x80 | reg4, ioaddr + 4);
+
+  /* Enabled FINE16 mode to avoid BIOS ROM width mismatches during reboot. */
+  outb(0x80 | inb(ioaddr + 0x0c), ioaddr + 0x0c);
+  irqreg = inb(ioaddr + 0xd);
+  addr = inb(ioaddr + 0xb);
+
+  /* Switch back to the station address register set so that the MS-DOS driver
+     can find the card after a warm boot. */
+  outb(reg4, ioaddr + 4);
 
   model_name = "SMC Ultra";
 
   if (dev->irq < 2) {
       unsigned char irqmap[] = {0, 9, 3, 5, 7, 10, 11, 15};
-      int irqreg = inb(ioaddr + 0xd);
       int irq;
 
       /* The IRQ bits are split. */
@@ -129,7 +139,6 @@ int ultraprobe1(int ioaddr, struct device *dev)
   dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;
 
   { 
-      int addr = inb(ioaddr + 0xb);
       int addr_tbl[4] = {0x0C0000, 0x0D0000, 0xFC0000, 0xFD0000};
       short num_pages_tbl[4] = {0x20, 0x40, 0x80, 0xff};
 
@@ -172,8 +181,6 @@ ultra_open(struct device *dev)
   if (irqaction(dev->irq, &ei_sigaction))
       return -EAGAIN;
 
-  /* Enabled FINE16 mode. */
-  outb(0x80 | inb(ioaddr + 0x0c), ioaddr + 0x0c);
   outb(ULTRA_MEMENB, ioaddr);	/* Enable memory, 16 bit mode. */
   outb(0x80, ioaddr + 5);
   outb(0x01, ioaddr + 6);	/* Enable interrupts and memory. */

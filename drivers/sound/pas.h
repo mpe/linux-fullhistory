@@ -132,6 +132,7 @@
 #define PAS_PLUS	1
 #define PAS_CDPC	2
 #define PAS_16		3
+#define PAS_16D		4
 
 #ifdef DEFINE_TRANSLATIONS
 	char I_C_2_PCM_DMA_translate[] = 		/* R W  PCM		PCM DMA channel value translations		*/

@@ -866,23 +866,25 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		mpnt->vm_ops->nopage(error_code, mpnt, address);
 		return;
 	}
-	++tsk->min_flt;
-	get_empty_page(tsk,address);
 	if (tsk != current)
-		return;
+		goto ok_no_page;
 	if (address >= tsk->end_data && address < tsk->brk)
-		return;
+		goto ok_no_page;
 	if (mpnt && mpnt == tsk->stk_vma &&
 	    address - tmp > mpnt->vm_start - address &&
 	    tsk->rlim[RLIMIT_STACK].rlim_cur > mpnt->vm_end - address) {
 		mpnt->vm_start = address;
-		return;
+		goto ok_no_page;
 	}
 	tsk->tss.cr2 = address;
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 14;
 	send_sig(SIGSEGV,tsk,1);
-	return;
+	if (error_code & 4)	/* user level access? */
+		return;
+ok_no_page:
+	++tsk->min_flt;
+	get_empty_page(tsk,address);
 }
 
 /*
@@ -913,15 +915,14 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 			do_no_page(error_code, address, current, user_esp);
 		return;
 	}
-	if (error_code & PAGE_RW) {
-		if (!wp_works_ok) {
-			wp_works_ok = 1;
-			pg0[0] = PAGE_SHARED;
-			printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
-			return;
-		}
-		printk("Unable to handle kernel paging WP error");
-	} else if (address < PAGE_SIZE) {
+	address -= TASK_SIZE;
+	if (wp_works_ok < 0 && address == 0 && (error_code & PAGE_PRESENT)) {
+		wp_works_ok = 1;
+		pg0[0] = PAGE_SHARED;
+		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
+		return;
+	}
+	if (address < PAGE_SIZE) {
 		printk("Unable to handle kernel NULL pointer dereference");
 		pg0[0] = PAGE_SHARED;
 	} else
@@ -1114,11 +1115,14 @@ void mem_init(unsigned long start_low_mem,
 		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));
 /* test if the WP bit is honoured in supervisor mode */
+	wp_works_ok = -1;
 	pg0[0] = PAGE_READONLY;
 	invalidate();
 	__asm__ __volatile__("movb 0,%%al ; movb %%al,0": : :"ax", "memory");
 	pg0[0] = 0;
 	invalidate();
+	if (wp_works_ok < 0)
+		wp_works_ok = 0;
 	return;
 }
 

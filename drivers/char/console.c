@@ -1468,6 +1468,37 @@ static void get_scrmem(int currcons)
 
 static void set_scrmem(int currcons)
 {
+#ifdef CONFIG_HGA
+  /* This works with XFree86 1.2, 1.3 and 2.0
+     This code could be extended and made more generally useful if we could
+     determine the actual video mode. It appears that this should be
+     possible on a genuine Hercules card, but I (WM) haven't been able to
+     read from any of the required registers on my clone card.
+     */
+	/* This code should work with Hercules and MDA cards. */
+	if (video_type == VIDEO_TYPE_MDA)
+	  {
+	    if (vcmode == KD_TEXT)
+	      {
+		/* Ensure that the card is in text mode. */
+		int	i;
+		static char herc_txt_tbl[12] = {
+		  0x61,0x50,0x52,0x0f,0x19,6,0x19,0x19,2,0x0d,0x0b,0x0c };
+		outb_p(0, 0x3bf);  /* Back to power-on defaults */
+		outb_p(0, 0x3b8);  /* Blank the screen, select page 0, etc */
+		for ( i = 0 ; i < 12 ; i++ )
+		  {
+		    outb_p(i, 0x3b4);
+		    outb_p(herc_txt_tbl[i], 0x3b5);
+		  }
+	      }
+#define HGA_BLINKER_ON 0x20
+#define HGA_SCREEN_ON  8
+	    /* Make sure that the hardware is not blanked */
+	    outb_p(HGA_BLINKER_ON | HGA_SCREEN_ON, 0x3b8);
+	  }
+#endif CONFIG_HGA
+
 	video_mem_start = video_mem_base;
 	video_mem_end = video_mem_term;
 	origin	= video_mem_start;

@@ -1,7 +1,7 @@
 #define _PAS2_CARD_C_
 #define SND_SA_INTERRUPT
 /*
- * linux/kernel/chr_drv/sound/pas2_card.c
+ * sound/pas2_card.c
  * 
  * Detection routine for the Pro Audio Spectrum cards.
  * 
@@ -218,7 +218,7 @@ config_pas_hw (struct address_info *hw_config)
 								 * selects filter rate
 								 * of 17.897 kHz */
 
-  if (pas_model == PAS_16)
+  if (pas_model == PAS_16 || pas_model == PAS_16D)
     pas_write (8, PRESCALE_DIVIDER);
   else
     pas_write (0, PRESCALE_DIVIDER);

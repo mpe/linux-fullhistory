@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/config.h>
 
 #include <linux/sched.h>
 #include <asm/dma.h>
@@ -50,8 +51,13 @@ static unsigned int bases[]={0x330, 0x334};
 #define DMA_MASK_REG	0xd4
 #define	CASCADE		0xc0
 
+#define BIOS_TRANSLATION_1632 0  /* Used by some old 1542A boards */
+#define BIOS_TRANSLATION_6432 1 /* Default case these days */
+#define BIOS_TRANSLATION_25563 2 /* Big disk case */
+
 struct aha1542_hostdata{
 	/* This will effectively start both of them at the first mailbox */
+        int bios_translation;   /* Mapping bios uses - for compatibility */
 	int aha1542_last_mbi_used;
 	int aha1542_last_mbo_used;
 	Scsi_Cmnd * SCint[AHA1542_MAILBOXES];
@@ -174,6 +180,10 @@ static int makecode(unsigned hosterr, unsigned scsierr)
 static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
 {
     int i;
+    unchar inquiry_cmd[] = {CMD_INQUIRY };
+    unchar inquiry_result[4];
+    unchar *cmdp;
+    int len;
     volatile int debug = 0;
     
     /* Quick and dirty test for presence of the card. */
@@ -195,27 +205,22 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     debug = 2;
     /* Shouldn't have generated any interrupts during reset */
     if (inb(INTRFLAGS(bse))&INTRMASK) goto fail;
-    setup_mailboxes(bse, shpnt);
-    
+
+
+    /* Perform a host adapter inquiry instead so we do not need to set
+       up the mailboxes ahead of time */
+
+    aha1542_out(bse, inquiry_cmd, 1);
+
     debug = 3;
-    /* Test the basic ECHO command */
-    outb(CMD_ECHO, DATA(bse));
-    
-    debug = 4;
-    /* Wait for CDF=0. If any of the others are set, it's bad */
-    WAIT(STATUS(bse), STATMASK, 0, STST|DIAGF|INVDCMD|DF|CDF);
-    
-    debug = 5;
-    /* The meaning of life */
-    outb(42, DATA(bse));
-    
-    debug = 6;
-    /* Expect only DF, that is, data ready */
-    WAIT(STATUS(bse), STATMASK, DF, STST|DIAGF|CDF|INVDCMD);
-    
-    debug = 7;
-    /* Is the answer correct? */
-    if (inb(DATA(bse)) != 42) goto fail;
+    len = 4;
+    cmdp = &inquiry_result[0];
+
+    while (len--)
+      {
+	  WAIT(STATUS(bse), DF, DF, 0);
+	  *cmdp++ = inb(DATA(bse));
+      }
     
     debug = 8;
     /* Reading port should reset DF */
@@ -298,10 +303,7 @@ static void aha1542_intr_handle(int foo)
 	sti();
 	/* Hmm, no mail.  Must have read it the last time around */
 	if (number_serviced) return;
-	/* Virtually all of the time, this turns out to be the problem */
-	printk("aha1542.c: Unsupported BIOS options enabled."
-		"  Please turn off.\n");
-/*	printk("aha1542.c: interrupt received, but no mail.\n"); */
+	printk("aha1542.c: interrupt received, but no mail.\n");
 	return;
       };
 
@@ -656,8 +658,41 @@ static int aha1542_getconfig(int base_io, unsigned char * irq_level, unsigned ch
   return 0;
 }
 
+/* This function should only be called for 1542C boards - we can detect
+   the special firmware settings and unlock the board */
+
+static int aha1542_mbenable(int base)
+{
+  static unchar mbenable_cmd[3];
+  static unchar mbenable_result[2];
+  int retval;
+  
+  retval = BIOS_TRANSLATION_6432;
+
+  mbenable_cmd[0]=CMD_EXTBIOS;
+  aha1542_out(base,mbenable_cmd,1);
+  aha1542_in(base,mbenable_result,2);
+  WAIT(INTRFLAGS(base),INTRMASK,HACC,0);
+  aha1542_intr_reset(base);
+  
+  if (mbenable_result[0] & 0x08) {
+     mbenable_cmd[0]=CMD_MBENABLE;
+     mbenable_cmd[1]=0;
+     mbenable_cmd[2]=mbenable_result[1];
+     if(mbenable_result[1] & 1) retval = BIOS_TRANSLATION_25563;
+     aha1542_out(base,mbenable_cmd,3);
+     WAIT(INTRFLAGS(base),INTRMASK,HACC,0);
+  };
+  while(0) {
+fail:
+    printk("aha1542_mbenable: Mailbox init failed\n");
+  }
+aha1542_intr_reset(base);
+return retval;
+}
+
 /* Query the board to find out if it is a 1542 or a 1740, or whatever. */
-static int aha1542_query(int base_io)
+static int aha1542_query(int base_io, int * transl)
 {
   unchar inquiry_cmd[] = {CMD_INQUIRY };
   unchar inquiry_result[4];
@@ -675,6 +710,8 @@ static int aha1542_query(int base_io)
   }
   aha1542_intr_reset(base_io);
 
+  *transl = BIOS_TRANSLATION_6432; /* Default case */
+
 /* For an AHA1740 series board, we ignore the board since there is a
    hardware bug which can lead to wrong blocks being returned if the board
    is operating in the 1542 emulation mode.  Since there is an extended mode
@@ -685,8 +722,12 @@ static int aha1542_query(int base_io)
     printk("aha1542.c: Emulation mode not supported for AHA 174N hardware.\n");
     return 1;
   };
+  if (inquiry_result[0] == 0x44) { /* Detect 1542C  */
+    *transl = aha1542_mbenable(base_io);
+  };
   return 0;
 }
+
 
 /* return non-zero on detection */
 int aha1542_detect(int hostnum)
@@ -694,6 +735,7 @@ int aha1542_detect(int hostnum)
     unsigned char dma_chan;
     unsigned char irq_level;
     unsigned int base_io;
+    int trans;
     struct Scsi_Host * shpnt = NULL;
     int count = 0;
     int indx;
@@ -727,7 +769,7 @@ int aha1542_detect(int hostnum)
 		    }
 		    aha1542_intr_reset(base_io);
 	    }
-		    if(aha1542_query(base_io))  goto unregister;
+		    if(aha1542_query(base_io, &trans))  goto unregister;
 		    
 		    if (aha1542_getconfig(base_io, &irq_level, &dma_chan) == -1)  goto unregister;
 		    
@@ -764,6 +806,9 @@ int aha1542_detect(int hostnum)
 		    shpnt->io_port = base_io;
 		    shpnt->dma_channel = dma_chan;
 		    shpnt->irq = irq_level;
+		    HOSTDATA(shpnt)->bios_translation  = trans;
+		    if(trans == 2) 
+		      printk("aha1542.c: Using extended bios translation\n");
 		    HOSTDATA(shpnt)->aha1542_last_mbi_used  = (2*AHA1542_MAILBOXES - 1);
 		    HOSTDATA(shpnt)->aha1542_last_mbo_used  = (AHA1542_MAILBOXES - 1);
 		    memset(HOSTDATA(shpnt)->SCint, 0, sizeof(HOSTDATA(shpnt)->SCint));
@@ -847,11 +892,30 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
     return 0;
 }
 
+#ifdef CONFIG_BLK_DEV_SD
+#include "sd.h"
+#endif
+
 int aha1542_biosparam(int size, int dev, int * ip)
 {
-  ip[0] = 64;
-  ip[1] = 32;
-  ip[2] = size >> 11;
+  int translation_algorithm;
+#ifdef CONFIG_BLK_DEV_SD
+  Scsi_Device *disk;
+
+  disk = rscsi_disks[MINOR(dev) >> 4].device;
+  translation_algorithm = HOSTDATA(disk->host)->bios_translation;
+  /* Should this be > 1024, or >= 1024?  Enquiring minds want to know. */
+  if((size>>11) > 1024 && translation_algorithm == 2) {
+    /* Please verify that this is the same as what DOS returns */
+    ip[0] = 255;
+    ip[1] = 63;
+    ip[2] = size /255/63;
+  } else {
+    ip[0] = 64;
+    ip[1] = 32;
+    ip[2] = size >> 11;
+  };
 /*  if (ip[2] >= 1024) ip[2] = 1024; */
+#endif
   return 0;
 }

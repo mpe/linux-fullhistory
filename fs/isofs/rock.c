@@ -388,8 +388,10 @@ char * get_rock_ridge_symlink(struct inode * inode)
   rpnt = 0;
   
   block = inode->i_ino >> bufbits;
-  if (!(bh=bread(inode->i_dev,block, bufsize)))
-    panic("unable to read i-node block");
+  if (!(bh=bread(inode->i_dev,block, bufsize))) {
+    printk("unable to read i-node block");
+    return NULL;
+  };
   
   pnt = ((unsigned char *) bh->b_data) + (inode->i_ino & (bufsize - 1));
   
@@ -399,8 +401,11 @@ char * get_rock_ridge_symlink(struct inode * inode)
     cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
     memcpy(cpnt, bh->b_data, bufsize);
     brelse(bh);
-    if (!(bh = bread(inode->i_dev,++block, bufsize)))
-      panic("unable to read i-node block");
+    if (!(bh = bread(inode->i_dev,++block, bufsize))) {
+      kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+      printk("unable to read i-node block");
+      return NULL;
+    };
     memcpy((char *)cpnt+bufsize, bh->b_data, bufsize);
     pnt = ((unsigned char *) cpnt) + (inode->i_ino & (bufsize - 1));
     raw_inode = ((struct iso_directory_record *) pnt);

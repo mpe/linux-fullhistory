@@ -85,6 +85,10 @@ If your card has nonstandard I/O address or IRQ number, change defines
 #define SB16_DMA	6
 #endif
 
+#ifndef SB16MIDI_BASE
+#define SB16MIDI_BASE	0x300
+#endif
+
 #ifndef PAS_BASE
 #define PAS_BASE	0x388
 #endif

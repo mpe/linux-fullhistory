@@ -16,6 +16,7 @@ bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 * Program binary formats
 *
 bool 'Elf executables' CONFIG_BINFMT_ELF y
+bool 'COFF executables' CONFIG_BINFMT_COFF y
 *
 * SCSI support
 *
@@ -98,6 +99,7 @@ bool '/proc filesystem support' CONFIG_PROC_FS y
 bool 'NFS filesystem support' CONFIG_NFS_FS y
 bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
 bool 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
+bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
 *
 *  character devices
 *

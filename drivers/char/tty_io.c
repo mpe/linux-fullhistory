@@ -224,36 +224,24 @@ static struct file_operations hung_up_tty_fops = {
 	hung_up_tty_write,
 	NULL,		/* hung_up_tty_readdir */
 	hung_up_tty_select,
-	tty_ioctl,
-	NULL,		/* hung_up_tty_mmap */
-	tty_open,
-	tty_release
-};
-
-static struct file_operations vhung_up_tty_fops = {
-	tty_lseek,
-	hung_up_tty_read,
-	hung_up_tty_write,
-	NULL,		/* hung_up_tty_readdir */
-	hung_up_tty_select,
 	hung_up_tty_ioctl,
 	NULL,		/* hung_up_tty_mmap */
-	tty_open,
-	tty_release
+	NULL,		/* hung_up_tty_open */
+	tty_release	/* hung_up_tty_release */
 };
 
 void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 {
 	int i;
 	struct file * filp;
-	struct task_struct **p;
+	struct task_struct *p;
 	int dev;
 
 	if (!tty)
 		return;
 	dev = 0x0400 + tty->line;
 	for (filp = first_file, i=0; i<nr_files; i++, filp = filp->f_next) {
-		if (!filp->f_count)
+	if (!filp->f_count)
 			continue;
 		if (filp->f_rdev != dev)
 			continue;
@@ -263,38 +251,71 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 			continue;
 		filp->f_op = fops;
 	}
+	flush_input(tty);
+	flush_output(tty);
 	wake_up_interruptible(&tty->secondary.proc_list);
-	wake_up_interruptible(&tty->read_q.proc_list);
-	wake_up_interruptible(&tty->write_q.proc_list);
 	if (tty->session > 0)
 		kill_sl(tty->session,SIGHUP,1);
 	tty->session = 0;
 	tty->pgrp = -1;
- 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if ((*p) && (*p)->tty == tty->line)
-			(*p)->tty = -1;
+ 	for_each_task(p) {
+		if (p->tty == tty->line)
+			p->tty = -1;
 	}
+	if (tty->hangup)
+		(tty->hangup)(tty);
 }
 
 void tty_hangup(struct tty_struct * tty)
 {
+#ifdef TTY_DEBUG_HANGUP
+	printk("tty%d hangup...\n", tty->line);
+#endif
 	do_tty_hangup(tty, &hung_up_tty_fops);
 }
 
 void tty_vhangup(struct tty_struct * tty)
 {
-	do_tty_hangup(tty, &vhung_up_tty_fops);
-}
-
-void tty_unhangup(struct file *filp)
-{
-	filp->f_op = &tty_fops;
+#ifdef TTY_DEBUG_HANGUP
+	printk("tty%d vhangup...\n", tty->line);
+#endif
+	do_tty_hangup(tty, &hung_up_tty_fops);
 }
 
 int tty_hung_up_p(struct file * filp)
 {
-	return ((filp->f_op == &hung_up_tty_fops) ||
-		(filp->f_op == &vhung_up_tty_fops));
+	return (filp->f_op == &hung_up_tty_fops);
+}
+
+/*
+ * This function is typically called only by the session leader, when
+ * it wants to dissassociate itself from its controlling tty.
+ *
+ * It performs the following functions:
+ * 	(1)  Sends a SIGHUP to the foreground process group
+ * 	(2)  Clears the tty from being controlling the session
+ * 	(3)  Clears the controlling tty for all processes in the
+ * 		session group.
+ */
+void disassociate_ctty(int priv)
+{
+	struct tty_struct *tty;
+	struct task_struct *p;
+
+	if (current->tty >= 0) {
+		tty = tty_table[current->tty];
+		if (tty) {
+			if (tty->pgrp > 0)
+				kill_pg(tty->pgrp, SIGHUP, priv);
+			tty->session = 0;
+			tty->pgrp = -1;
+		} else
+			printk("disassociate_ctty: ctty is NULL?!?");
+	}
+
+	for_each_task(p)
+	  	if (p->session == current->session)
+			p->tty = -1;
 }
 
 /*
@@ -514,7 +535,7 @@ void copy_to_cooked(struct tty_struct * tty)
 			break;
 		}
 		if (special_flag) {
-			tty->char_error = c & 3;
+			tty->char_error = c & 7;
 			continue;
 		}
 		if (tty->char_error) {
@@ -529,7 +550,12 @@ void copy_to_cooked(struct tty_struct * tty)
 				put_tty_queue('\0', &tty->secondary);
 				continue;
 			}
-			/* If not a break, then a parity or frame error */
+			if (tty->char_error == TTY_OVERRUN) {
+				tty->char_error = 0;
+				printk("tty%d: input overrun\n", tty->line);
+				continue;
+			}
+			/* Must be a parity or frame error */
 			tty->char_error = 0;
 			if (I_IGNPAR(tty)) {
 				continue;
@@ -1204,6 +1230,9 @@ static void release_dev(int dev, struct file * filp)
 		printk("release_dev: tty_termios[%d] was NULL\n", dev);
 		return;
 	}
+#ifdef TTY_DEBUG_HANGUP
+	printk("release_dev of tty%d (tty count=%d)...", dev, tty->count);
+#endif
 	if (IS_A_PTY(dev)) {
 		o_tty = tty_table[PTY_OTHER(dev)];
 		o_tp = tty_termios[PTY_OTHER(dev)];
@@ -1237,6 +1266,10 @@ static void release_dev(int dev, struct file * filp)
 	}
 	if (tty->count)
 		return;
+	
+#ifdef TTY_DEBUG_HANGUP
+	printk("freeing tty structure...");
+#endif
 
 	/*
 	 * Make sure there aren't any processes that still think this
@@ -1247,9 +1280,15 @@ static void release_dev(int dev, struct file * filp)
 		(*p)->tty = -1;
 	}
 
+	/*
+	 * Shutdown the current line discipline, and reset it to
+	 * N_TTY.
+	 */
 	if (ldiscs[tty->disc].close != NULL)
 		ldiscs[tty->disc].close(tty);
-
+	tty->disc = N_TTY;
+	tty->termios->c_line = N_TTY;
+	
 	if (o_tty) {
 		if (o_tty->count)
 			return;
@@ -1298,7 +1337,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 			major = TTY_MAJOR;
 			minor = current->tty;
 		}
-		noctty = 1;
+		/* noctty = 1; */
 	} else if (major == TTY_MAJOR) {
 		if (!minor) {
 			minor = fg_console + 1;
@@ -1317,6 +1356,11 @@ static int tty_open(struct inode * inode, struct file * filp)
 	if (retval)
 		return retval;
 	tty = tty_table[minor];
+#ifdef TTY_DEBUG_HANGUP
+	printk("opening tty%d...", tty->line);
+#endif
+	if (test_bit(TTY_EXCLUSIVE, &tty->flags) && !suser())
+		return -EBUSY;
 
 	/* clean up the packet stuff. */
 	/*
@@ -1337,6 +1381,10 @@ static int tty_open(struct inode * inode, struct file * filp)
 		retval = -ENODEV;
 	}
 	if (retval) {
+#ifdef TTY_DEBUG_HANGUP
+		printk("error %d in opening tty%d...", retval, tty->line);
+#endif
+
 		release_dev(minor, filp);
 		return retval;
 	}
@@ -1453,6 +1501,9 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
  */
 void do_SAK( struct tty_struct *tty)
 {
+#ifdef TTY_SOFT_SAK
+	tty_hangup(tty);
+#else
 	struct task_struct **p;
 	int line = tty->line;
 	int session = tty->session;
@@ -1478,6 +1529,7 @@ void do_SAK( struct tty_struct *tty)
 			}
 		}
 	}
+#endif
 }
 
 /*

@@ -19,6 +19,7 @@
 #include <linux/fcntl.h>
 
 #include <asm/io.h>
+#include <asm/bitops.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 
@@ -493,19 +494,42 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				return -EINVAL;
 			return 0;
 		case TIOCEXCL:
-			return -EINVAL; /* not implemented */
+			set_bit(TTY_EXCLUSIVE, &tty->flags);
+			return 0;
 		case TIOCNXCL:
-			return -EINVAL; /* not implemented */
+			clear_bit(TTY_EXCLUSIVE, &tty->flags);
+			return 0;
 		case TIOCSCTTY:
-			if ((current->leader && current->tty < 0 &&
-			     tty->session == 0) ||
-			    (arg == 1 && suser())) {
-				current->tty = dev;
-				tty->session = current->session;
-				tty->pgrp = current->pgrp;
+			if (current->leader &&
+			    (current->session == tty->session))
 				return 0;
+			/*
+			 * The process must be a session leader and
+			 * not have a controlling tty already.
+			 */
+			if (!current->leader || (current->tty >= 0))
+				return -EPERM;
+			if (tty->session > 0) {
+				/*
+				 * This tty is already the controlling
+				 * tty for another session group!
+				 */
+				if ((arg == 1) && suser()) {
+					/*
+					 * Steal it away
+					 */
+					struct task_struct *p;
+
+					for_each_task(p)
+						if (p->tty == dev)
+							p->tty = -1;
+				} else
+					return -EPERM;
 			}
-			return -EPERM;
+			current->tty = dev;
+			tty->session = current->session;
+			tty->pgrp = current->pgrp;
+			return 0;
 		case TIOCGPGRP:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,4);
 			if (!retval)
@@ -540,7 +564,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 					(unsigned long *) arg);
 			return 0;
 		case TIOCSTI:
-			return -EINVAL; /* not implemented */
+			put_tty_queue(get_fs_byte((char *) arg), &tty->read_q);
+			return 0;
 		case TIOCGWINSZ:
 			return get_window_size(tty,(struct winsize *) arg);
 		case TIOCSWINSZ:
@@ -595,13 +620,9 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCNOTTY:
 			if (MINOR(file->f_rdev) != current->tty)
 				return -EINVAL;
+			if (current->leader)
+				disassociate_ctty(0);
 			current->tty = -1;
-			if (current->leader) {
-				if (tty->pgrp > 0)
-					kill_pg(tty->pgrp, SIGHUP, 0);
-				tty->pgrp = -1;
-				tty->session = 0;
-			}
 			return 0;
 		case TIOCGETD:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,4);

@@ -452,24 +452,8 @@ fake_volatile:
 			kill_pg(p->pgrp,SIGCONT,1);
 		}
 	}
-	if (current->leader) {
-		struct task_struct *p;
-		struct tty_struct *tty;
-
-		if (current->tty >= 0) {
-			tty = TTY_TABLE(current->tty);
-			if (tty) {
-				if (tty->pgrp > 0)
-					kill_pg(tty->pgrp, SIGHUP, 1);
-				tty->pgrp = -1;
-				tty->session = 0;
-			}
-		}
-		for_each_task(p) {
-			if (p->session == current->session)
-				p->tty = -1;
-		}
-	}
+	if (current->leader)
+		disassociate_ctty(1);
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 #ifdef DEBUG_PROC_TREE

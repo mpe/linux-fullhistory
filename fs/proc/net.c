@@ -36,8 +36,8 @@ static int proc_lookupnet(struct inode *,const char *,int,struct inode **);
 
 /* the get_*_info() functions are in the net code, and are configured
    in via the standard mechanism... */
-#ifdef CONFIG_INET
 extern int unix_get_info(char *);
+#ifdef CONFIG_INET
 extern int tcp_get_info(char *);
 extern int udp_get_info(char *);
 extern int raw_get_info(char *);
@@ -83,10 +83,10 @@ struct inode_operations proc_net_inode_operations = {
 
 static struct proc_dir_entry net_dir[] = {
 	{ 1,2,".." },
-	{ 8,1,"." }
+	{ 8,1,"." },
+	{ 128,4,"unix" }
 #ifdef CONFIG_INET
-	,{ 128,4,"unix" },
-	{ 129,3,"arp" },
+	,{ 129,3,"arp" },
 	{ 130,5,"route" },
 	{ 131,3,"dev" },
 	{ 132,3,"raw" },

@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/pas2_midi.c
+ * sound/pas2_midi.c
  * 
  * The low level driver for the PAS Midi Interface.
  * 
@@ -283,7 +283,7 @@ pas_midi_interrupt (void)
 
   if (stat & M_S_OUTPUT_OVERRUN)
     {
-      printk ("MIDI output overrun %02x,%02x,%d \n", pas_read (MIDI_FIFO_STATUS), stat, ofifo_bytes);
+      printk ("MIDI output overrun %x,%x,%d \n", pas_read (MIDI_FIFO_STATUS), stat, ofifo_bytes);
       ofifo_bytes = 100;
     }
 

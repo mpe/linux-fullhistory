@@ -1,9 +1,28 @@
-Changelog for version 2.2b
+Changelog for version 2.3
 -------------------------
 
+Since 2.2b
+- Full SB16 DSP support. 8/16 bit, mono/stereo
+- The SCO and FreeBSD versions should be in sync now. There are some
+  problems with SB16 and GUS in the freebsd versions.
+  The DMA buffer allocation of the SCO version has been polished but
+  there could still be some problems. At least it hogs memory.
+  The DMA channel
+  configuration method used in the sco/System is a hack.
+- Support for the MPU emulation of the SB16.
+- Some big arrays are now allocated boot time. This makes the bss segment
+  smaller which makes it possible to use the full driver with
+  NetBSD. These arrays are not allocated if no suitable soundcard is available.
+- Fixed a bug in the compute_and_set_volume in gus_wave.c
+- Fixed the too fast mono playback problem of SB Pro and PAS16.
+
 Since 2.2
+- Stereo recording for SB Pro. Somehow it was missing and nobody
+  had noticed it earlier.
 - Minor polishing.
 - Interpreting of boot time arguments (sound=) for Linux.
+- Breakup of sb_dsp.c. Parts of the code has been moved to
+  sb_mixer.c and sb_midi.c
 
 Since 2.1
 - Preliminary support for SB16. 

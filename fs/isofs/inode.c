@@ -331,8 +331,10 @@ void isofs_read_inode(struct inode * inode)
 	int i;
 
 	block = inode->i_ino >> ISOFS_BUFFER_BITS(inode);
-	if (!(bh=bread(inode->i_dev,block, bufsize)))
-		panic("unable to read i-node block");
+	if (!(bh=bread(inode->i_dev,block, bufsize))) {
+	  printk("unable to read i-node block");
+	  goto fail;
+	};
 	
 	pnt = ((unsigned char *) bh->b_data
 	       + (inode->i_ino & (bufsize - 1)));
@@ -343,8 +345,11 @@ void isofs_read_inode(struct inode * inode)
 		cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
 		memcpy(cpnt, bh->b_data, bufsize);
 		brelse(bh);
-		if (!(bh = bread(inode->i_dev,++block, bufsize)))
-			panic("unable to read i-node block");
+		if (!(bh = bread(inode->i_dev,++block, bufsize))) {
+		        kfree_s (cpnt, 1 << ISOFS_BLOCK_BITS);
+			printk("unable to read i-node block");
+			goto fail;
+		      };
 		memcpy((char *)cpnt + bufsize, bh->b_data, bufsize);
 		pnt = ((unsigned char *) cpnt
 		       + (inode->i_ino & (bufsize - 1)));
@@ -391,10 +396,6 @@ void isofs_read_inode(struct inode * inode)
 	  inode->i_size &= 0x00ffffff;
 	};
 	
-	if (isonum_723 (raw_inode->volume_sequence_number) != 1) {
-		printk("Multi volume CD somehow got mounted.\n");
-	};
-
 	if (raw_inode->interleave[0]) {
 		printk("Interleaved files not (yet) supported.\n");
 		inode->i_size = 0;
@@ -467,18 +468,35 @@ void isofs_read_inode(struct inode * inode)
 	};
 	
 	inode->i_op = NULL;
-	if (S_ISREG(inode->i_mode))
-		inode->i_op = &isofs_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
-		inode->i_op = &isofs_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &isofs_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
+	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' && 
+	    isonum_723 (raw_inode->volume_sequence_number) != 1) {
+		printk("Multi volume CD somehow got mounted.\n");
+	} else {
+	  if (S_ISREG(inode->i_mode))
+	    inode->i_op = &isofs_file_inode_operations;
+	  else if (S_ISDIR(inode->i_mode))
+	    inode->i_op = &isofs_dir_inode_operations;
+	  else if (S_ISLNK(inode->i_mode))
+	    inode->i_op = &isofs_symlink_inode_operations;
+	  else if (S_ISCHR(inode->i_mode))
+	    inode->i_op = &chrdev_inode_operations;
+	  else if (S_ISBLK(inode->i_mode))
+	    inode->i_op = &blkdev_inode_operations;
+	  else if (S_ISFIFO(inode->i_mode))
+	    init_fifo(inode);
+	}
+	return;
+      fail:
+	/* With a data error we return this information */
+	inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
+	inode->u.isofs_i.i_first_extent = 0;
+	inode->u.isofs_i.i_backlink = 0xffffffff;
+	inode->i_size = 0;
+	inode->i_nlink = 1;
+	inode->i_uid = inode->i_gid = 0;
+	inode->i_mode = S_IFREG;  /*Regular file, noone gets to read*/
+	inode->i_op = NULL;
+	return;
 }
 
 /* There are times when we need to know the inode number of a parent of

@@ -35,6 +35,9 @@
 #ifdef CONFIG_HPFS_FS
 #include <linux/hpfs_fs.h>
 #endif
+#ifdef CONFIG_SYSV_FS
+#include <linux/sysv_fs.h>
+#endif
 
 struct file_system_type file_systems[] = {
 #ifdef CONFIG_MINIX_FS
@@ -60,6 +63,11 @@ struct file_system_type file_systems[] = {
 #endif
 #ifdef CONFIG_ISO9660_FS
 	{isofs_read_super,	"iso9660",	1},
+#endif
+#ifdef CONFIG_SYSV_FS
+	{sysv_read_super,	"xenix",	1},
+	{sysv_read_super,	"sysv",		1},
+	{sysv_read_super,	"coherent",	1},
 #endif
 #ifdef CONFIG_HPFS_FS
 	{hpfs_read_super,	"hpfs",		1},

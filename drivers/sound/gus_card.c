@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/gus_card.c
+ * sound/gus_card.c
  * 
  * Detection routine for the Gravis Ultrasound.
  * 
@@ -63,7 +63,7 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
     if (io_addr != hw_config->io_base)	/* Already tested */
       if (gus_wave_detect (io_addr))
 	{
-	  printk (" WARNING! GUS found at %03x, config was %03x ", io_addr, hw_config->io_base);
+	  printk (" WARNING! GUS found at %x, config was %x ", io_addr, hw_config->io_base);
 	  mem_start = gus_wave_init (mem_start, hw_config->irq, hw_config->dma);
 #ifndef EXCLUDE_MIDI
 	  mem_start = gus_midi_init (mem_start);

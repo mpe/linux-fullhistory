@@ -1,7 +1,7 @@
 #define _PAS2_MIXER_C_
 
 /*
- * linux/kernel/chr_drv/sound/pas2_mixer.c
+ * sound/pas2_mixer.c
  * 
  * Mixer routines for the Pro Audio Spectrum cards.
  * 

@@ -35,10 +35,10 @@ sched.o: sched.c
 	$(CC) $(CFLAGS) $(PROFILING) -fno-omit-frame-pointer -c $<
 
 ksyms.lst: ksyms.S ../include/linux/autoconf.h
-	$(CPP) $(CFLAGS) ksyms.S > ksyms.lst
+	$(CPP) $(CFLAGS) $< > $@
  
-ksyms.s: ksyms.lst ksyms.sh
-	sh ksyms.sh > ksyms.s
+ksyms.s: ksyms.sh ksyms.lst
+	sh $< > $@
 
 ksyms.o: ksyms.s
 

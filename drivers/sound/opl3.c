@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/opl3.c
+ * sound/opl3.c
  * 
  * A low level driver for Yamaha YM3812 and OPL-3 -chips
  * 
@@ -59,8 +59,7 @@ struct voice_info
 
 static struct voice_info voices[MAX_VOICE];
 
-typedef struct sbi_instrument instr_array[SBFM_MAXINSTR];
-static instr_array instrmap;
+static struct sbi_instrument *instrmap;
 static struct sbi_instrument *active_instrument[MAX_VOICE] =
 {NULL};
 
@@ -75,7 +74,7 @@ static int      fm_model = 0;	/* 0=no fm, 1=mono, 2=SB Pro 1, 3=SB Pro 2	 */
 
 static int      store_instr (int instr_no, struct sbi_instrument *instr);
 static void     freq_to_fnum (int freq, int *block, int *fnum);
-static void     opl3_command (int io_addr, const unsigned char addr, const unsigned char val);
+static void     opl3_command (int io_addr, unsigned int addr, unsigned int val);
 static int      opl3_kill_note (int dev, int voice, int velocity);
 static unsigned char connection_mask = 0x00;
 
@@ -273,7 +272,7 @@ store_instr (int instr_no, struct sbi_instrument *instr)
 {
 
   if (instr->key != FM_PATCH && (instr->key != OPL3_PATCH || !opl3_enabled))
-    printk ("FM warning: Invalid patch format field (key) 0x%04x\n", instr->key);
+    printk ("FM warning: Invalid patch format field (key) 0x%x\n", instr->key);
   memcpy ((char *) &(instrmap[instr_no]), (char *) instr, sizeof (*instr));
 
   return 0;
@@ -619,7 +618,7 @@ freq_to_fnum (int freq, int *block, int *fnum)
 }
 
 static void
-opl3_command (int io_addr, const unsigned char addr, const unsigned char val)
+opl3_command (int io_addr, unsigned int addr, unsigned int val)
 {
   int             i;
 
@@ -628,7 +627,7 @@ opl3_command (int io_addr, const unsigned char addr, const unsigned char val)
    * register. The OPL-3 survives with just two INBs
    */
 
-  OUTB (addr, io_addr);		/* Select register	 */
+  OUTB ((unsigned char)(addr & 0xff), io_addr);	/* Select register	 */
 
   if (!opl3_enabled)
     tenmicrosec ();
@@ -636,7 +635,7 @@ opl3_command (int io_addr, const unsigned char addr, const unsigned char val)
     for (i = 0; i < 2; i++)
       INB (io_addr);
 
-  OUTB (val, io_addr + 1);	/* Write to register	 */
+  OUTB ((unsigned char)(val & 0xff), io_addr + 1); /* Write to register	 */
 
   if (!opl3_enabled)
     {
@@ -894,6 +893,9 @@ long
 opl3_init (long mem_start)
 {
   int             i;
+
+  PERMANENT_MALLOC(struct sbi_instrument*, instrmap, 
+  		   SBFM_MAXINSTR*sizeof(*instrmap), mem_start);
 
   synth_devs[num_synths++] = &opl3_operations;
   fm_model = 0;

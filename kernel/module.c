@@ -97,7 +97,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	memcpy_fromfs((char *)mp->addr + sizeof (int), code, codesize);
 	memset((char *)mp->addr + sizeof (int) + codesize, 0,
 		mp->size * 4096 - (codesize + sizeof (int)));
-	printk( "  init enty @ 0x%08lx, cleanup entry @ 0x%08lx\n",
+	printk( "  init entry @ 0x%08lx, cleanup entry @ 0x%08lx\n",
 		(unsigned long) rt.init, (unsigned long) rt.cleanup);
 	mp->cleanup = rt.cleanup;
 	if ((*rt.init)() != 0)

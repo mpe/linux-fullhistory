@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/sound/dmabuf.c
+ * sound/dmabuf.c
  * 
  * The DMA buffer manager for digitized voice applications
  * 
@@ -103,8 +103,8 @@ reorganize_buffers (int dev)
    * This routine breaks the physical device buffers to logical ones.
    */
 
-  unsigned long   i, p, n;
-  unsigned long   sr, nc, sz, bsz;
+  unsigned i, p, n;
+  unsigned sr, nc, sz, bsz;
 
   sr = dsp_devs[dev]->ioctl (dev, SOUND_PCM_READ_RATE, 0, 1);
   nc = dsp_devs[dev]->ioctl (dev, SOUND_PCM_READ_CHANNELS, 0, 1);
@@ -112,8 +112,7 @@ reorganize_buffers (int dev)
 
   if (sr < 1 || nc < 1 || sz < 1)
     {
-      printk ("SOUND: Invalid PCM parameters[%d] sr=%lu, nc=%lu, sz=%lu\n",
-	dev, sr, nc, sz);
+      printk ("SOUND: Invalid PCM parameters[%d] sr=%d, nc=%d, sz=%d\n", dev, sr, nc, sz);
       sr = DSP_DEFAULT_SPEED;
       nc = 1;
       sz = 8;
@@ -210,6 +209,10 @@ DMAbuf_open (int dev, int mode)
       return RET_ERROR (ENXIO);
     }
 
+#ifdef USE_RUNTIME_DMAMEM
+  sound_dma_malloc(dev);
+#endif
+
   if (snd_raw_buf[dev][0] == NULL)
     return RET_ERROR (ENOSPC);	/* Memory allocation failed during boot */
 
@@ -300,6 +303,10 @@ DMAbuf_release (int dev, int mode)
       dma_sync (dev);
     }
 
+#ifdef USE_RUNTIME_DMAMEM
+  sound_dma_free(dev);
+#endif
+
   dsp_devs[dev]->reset (dev);
 
   dsp_devs[dev]->close (dev);
@@ -342,6 +349,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len)
       if (dev_needs_restart[dev])
       {
 	dma_reset(dev);
+	dev_needs_restart[dev] = 0;
       }
 
       if (!dev_active[dev])
@@ -606,9 +614,11 @@ DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode)
 		    chan);
 #else
 #if defined(ISC) || defined(SCO)
+#ifndef DMAMODE_AUTO
       printk ("sound: Invalid DMA mode for device %d\n", dev);
+#endif
       dma_param (chan, ((dma_mode == DMA_MODE_READ) ? DMA_Rdmode : DMA_Wrmode)
-#ifdef ISC
+#ifdef DMAMODE_AUTO
 		 | DMAMODE_AUTO
 #endif
 		 ,
@@ -703,7 +713,7 @@ DMAbuf_outputintr (int dev, int underrun_flag)
     }
 
   DISABLE_INTR (flags);
-  if (SOMEONE_WAITING (dev_sleep_flag[dev]))
+  if (SOMEONE_WAITING (dev_sleeper[dev], dev_sleep_flag[dev]))
     {
       WAKE_UP (dev_sleeper[dev], dev_sleep_flag[dev]);
     }
@@ -721,6 +731,7 @@ DMAbuf_inputintr (int dev)
     }
   else if (dev_qlen[dev] == (dev_nbufs[dev] - 1))
     {
+      printk("Sound: Recording overrun\n");
       dev_underrun[dev]++;
       dsp_devs[dev]->halt_xfer (dev);
       dev_active[dev] = 0;
@@ -738,7 +749,7 @@ DMAbuf_inputintr (int dev)
     }
 
   DISABLE_INTR (flags);
-  if (SOMEONE_WAITING (dev_sleep_flag[dev]))
+  if (SOMEONE_WAITING (dev_sleeper[dev], dev_sleep_flag[dev]))
     {
       WAKE_UP (dev_sleeper[dev], dev_sleep_flag[dev]);
     }

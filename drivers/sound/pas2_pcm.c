@@ -1,6 +1,6 @@
 #define _PAS2_PCM_C_
 /*
- * linux/kernel/chr_drv/sound/pas2_pcm.c
+ * sound/pas2_pcm.c
  * 
  * The low level driver for the Pro Audio Spectrum ADC/DAC.
  * 
@@ -148,6 +148,8 @@ pas_pcm_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
+      if (local)
+         return pcm_set_channels (arg);
       return IOCTL_OUT (arg, pcm_set_channels (IOCTL_IN (arg)));
       break;
 

@@ -392,8 +392,8 @@ rt_route(unsigned long daddr, struct options *opt)
 		rt->rt_use++;
 		return(rt);
 	}
-	if (type==IS_BROADCAST && (rt->rt_dev->flags & IFF_BROADCAST) &&
-	    ip_addr_match(rt->rt_dev->pa_brdaddr, daddr)) {
+	if ((rt->rt_dev->flags & IFF_BROADCAST) &&
+	     rt->rt_dev->pa_brdaddr == daddr) {
 		DPRINTF((DBG_RT, "%s (BCAST %s)\n",
 			rt->rt_dev->name, in_ntoa(rt->rt_dev->pa_brdaddr)));
 		rt->rt_use++;

@@ -362,7 +362,7 @@ static void scan_scsis (void)
 			  break;
 			case TYPE_DISK:
 			case TYPE_MOD:
-			  printk("Detected scsi disk sd%d at scsi%d, id %d, lun %d\n", MAX_SD,
+			  printk("Detected scsi disk sd%c at scsi%d, id %d, lun %d\n", 'a'+MAX_SD,
 				 shpnt->host_no , dev, lun); 
 			  if(NR_SD != -1) ++MAX_SD;
 			  break;

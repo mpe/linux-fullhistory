@@ -182,9 +182,15 @@ struct generic_midi_operations {
 			{SBC_BASE, SBC_IRQ, SBC_DMA}, SND_DEFAULT_ENABLE},
 #endif
 
-#if !defined(EXCLUDE_SB) && !defined(EXCLUDE_SB16) && !defined(EXCLUDE_AUDIO)
+#if !defined(EXCLUDE_SB) && !defined(EXCLUDE_SB16)
+#ifndef EXCLUDE_AUDIO
 		{SNDCARD_SB16,	"SoundBlaster16",	sb16_dsp_init, sb16_dsp_detect,
 			{SBC_BASE, SBC_IRQ, SB16_DMA}, SND_DEFAULT_ENABLE},
+#endif
+#ifndef EXCLUDE_MIDI
+		{SNDCARD_SB16MIDI,"SB16 MPU-401",	attach_sb16midi, probe_sb16midi,
+			{SB16MIDI_BASE, SBC_IRQ, 0}, SND_DEFAULT_ENABLE},
+#endif
 #endif
 
 #ifndef EXCLUDE_YM3812
@@ -229,6 +235,7 @@ long sndtable_init(long mem_start);
 int sndtable_get_cardcount (void);
 long CMIDI_init(long mem_start); /* */
 struct address_info *sound_getconf(int card_type);
+void sound_chconf(int card_type, int ioaddr, int irq, int dma);
 #endif
 
 #endif

@@ -21,8 +21,6 @@ _schedule
 #
 # The next labels are needed for ftape driver.
 #
-  _ftape_big_buffer
-  _xtime
-  _do_floppy
-  _tick
+_ftape_big_buffer
+_do_floppy
 #endif

@@ -2,9 +2,6 @@
 /*
     Copyright (C) 1992,1993  Donald Becker
 
-    This is alpha test code.  No redistribution is permitted.
-
-    If this code is distributed, it will carry the following:
     Copyright 1993 United States Government as represented by the
     Director, National Security Agency.  This software may be used and
     distributed according to the terms of the GNU Public License,

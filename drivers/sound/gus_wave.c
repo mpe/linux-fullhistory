@@ -1,6 +1,5 @@
-
 /*
- * linux/kernel/chr_drv/sound/gus_wave.c
+ * sound/gus_wave.c
  * 
  * Driver for the Gravis UltraSound wave table synth.
  * 
@@ -36,7 +35,7 @@
 
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_GUS)
 
-#define MAX_SAMPLE	256
+#define MAX_SAMPLE	128
 #define MAX_PATCH	256
 
 struct voice_info
@@ -144,7 +143,7 @@ static int      freq_div_table[] =
   19293				/* 32 */
 };
 
-static struct patch_info samples[MAX_SAMPLE + 1];
+static struct   patch_info *samples;
 static long     sample_ptrs[MAX_SAMPLE + 1];
 static int      sample_map[32];
 static int      free_sample;
@@ -231,14 +230,14 @@ gus_peek (long addr)
 }
 
 void
-gus_write8 (int reg, unsigned char data)
+gus_write8 (int reg, unsigned int data)
 {
   unsigned long   flags;
 
   DISABLE_INTR (flags);
 
   OUTB (reg, u_Command);
-  OUTB (data, u_DataHi);
+  OUTB ((unsigned char)(data & 0xff), u_DataHi);
 
   RESTORE_INTR (flags);
 }
@@ -272,7 +271,7 @@ gus_look8 (int reg)
 }
 
 void
-gus_write16 (int reg, unsigned short data)
+gus_write16 (int reg, unsigned int data)
 {
   unsigned long   flags;
 
@@ -280,8 +279,8 @@ gus_write16 (int reg, unsigned short data)
 
   OUTB (reg, u_Command);
 
-  OUTB (data & 0xff, u_DataLo);
-  OUTB ((data >> 8) & 0xff, u_DataHi);
+  OUTB ((unsigned char)(data & 0xff), u_DataLo);
+  OUTB ((unsigned char)((data >> 8) & 0xff), u_DataHi);
 
   RESTORE_INTR (flags);
 }
@@ -348,11 +347,11 @@ gus_select_max_voices (int nvoices)
 }
 
 static void
-gus_voice_on (unsigned char mode)
+gus_voice_on (unsigned int mode)
 {
-  gus_write8 (0x00, mode & 0xfc);
+  gus_write8 (0x00, (unsigned char)(mode & 0xfc));
   gus_delay ();
-  gus_write8 (0x00, mode & 0xfc);
+  gus_write8 (0x00, (unsigned char)(mode & 0xfc));
 }
 
 static void
@@ -362,8 +361,9 @@ gus_voice_off (void)
 }
 
 static void
-gus_voice_mode (unsigned char mode)
+gus_voice_mode (unsigned int m)
 {
+  unsigned char mode = (unsigned char)(m & 0xff);
   gus_write8 (0x00, (gus_read8 (0x00) & 0x03) | (mode & 0xfc));	/* Don't start or stop
 								 * voice */
   gus_delay ();
@@ -383,42 +383,46 @@ gus_voice_freq (unsigned long freq)
 }
 
 static void
-gus_voice_volume (unsigned short vol)
+gus_voice_volume (unsigned int vol)
 {
   gus_write8 (0x0d, 0x03);	/* Stop ramp before setting volume */
-  gus_write16 (0x09, vol << 4);
+  gus_write16 (0x09, (unsigned short)(vol << 4));
 }
 
 static void
-gus_voice_balance (unsigned char balance)
+gus_voice_balance (unsigned int balance)
 {
-  gus_write8 (0x0c, balance);
+  gus_write8 (0x0c, (unsigned char)(balance & 0xff));
 }
 
 static void
-gus_ramp_range (unsigned short low, unsigned short high)
+gus_ramp_range (unsigned int low, unsigned int high)
 {
-  gus_write8 (0x07, (low >> 4) & 0xff);
-  gus_write8 (0x08, (high >> 4) & 0xff);
+  gus_write8 (0x07, (unsigned char)((low >> 4) & 0xff));
+  gus_write8 (0x08, (unsigned char)((high >> 4) & 0xff));
 }
 
 static void
-gus_ramp_rate (unsigned char scale, unsigned char rate)
+gus_ramp_rate (unsigned int scale, unsigned int rate)
 {
-  gus_write8 (0x06, ((scale & 0x03) << 6) | (rate & 0x3f));
+  gus_write8 (0x06, (unsigned char)(((scale & 0x03) << 6) | (rate & 0x3f)));
 }
 
 static void
-gus_rampon (unsigned char mode)
+gus_rampon (unsigned int m)
 {
+  unsigned char mode = (unsigned char)(m & 0xff);
+
   gus_write8 (0x0d, mode & 0xfc);
   gus_delay ();
   gus_write8 (0x0d, mode & 0xfc);
 }
 
 static void
-gus_ramp_mode (unsigned char mode)
+gus_ramp_mode (unsigned int m)
 {
+  unsigned char mode = (unsigned char)(m & 0xff);
+
   gus_write8 (0x0d, (gus_read8 (0x0d) & 0x03) | (mode & 0xfc));	/* Don't start or stop
 								 * ramping */
   gus_delay ();
@@ -911,6 +915,14 @@ static void
 compute_and_set_volume (int voice, int volume, int ramp_time)
 {
   int             current, target, rate;
+  unsigned long flags;
+
+  DISABLE_INTR(flags);
+/*
+ * CAUTION! Interrupts disabled. Enable them before returning
+ */
+
+  gus_select_voice(voice);
 
   compute_volume (voice, volume);
   voices[voice].current_volume = voices[voice].initial_volume;
@@ -922,6 +934,7 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
     {
       gus_rampoff ();
       gus_voice_volume (target);
+      RESTORE_INTR(flags);
       return;
     }
 
@@ -935,6 +948,7 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
     {
       gus_rampoff ();
       gus_voice_volume (target);
+      RESTORE_INTR(flags);
       return;
     }
 
@@ -953,6 +967,7 @@ compute_and_set_volume (int voice, int volume, int ramp_time)
       gus_ramp_range (target, current);
       gus_rampon (0x40);	/* Ramp down, once, no irq */
     }
+    RESTORE_INTR(flags);
 }
 
 static void
@@ -1274,7 +1289,7 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
 
   if (format != GUS_PATCH)
     {
-      printk ("GUS Error: Invalid patch format (key) 0x%04x\n", format);
+      printk ("GUS Error: Invalid patch format (key) 0x%x\n", format);
       return RET_ERROR (EINVAL);
     }
 
@@ -1309,14 +1324,14 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
 
   if (count < patch.len)
     {
-      printk ("GUS Warning: Patch record too short (%d<%lu)\n",
-	      count, patch.len);
+      printk ("GUS Warning: Patch record too short (%d<%d)\n",
+	      count, (int)patch.len);
       patch.len = count;
     }
 
   if (patch.len <= 0 || patch.len > gus_mem_size)
     {
-      printk ("GUS: Invalid sample length %lu\n", patch.len);
+      printk ("GUS: Invalid sample length %d\n", (int)patch.len);
       return RET_ERROR (EINVAL);
     }
 
@@ -1346,7 +1361,7 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
        */
       if (patch.len >= GUS_BANK_SIZE)
 	{
-	  printk ("GUS: Sample (16 bit) too long %lu\n", patch.len);
+	  printk ("GUS: Sample (16 bit) too long %d\n", (int)patch.len);
 	  return RET_ERROR (ENOSPC);
 	}
 
@@ -2317,7 +2332,7 @@ static struct synth_operations guswave_operations =
 long
 gus_wave_init (long mem_start, int irq, int dma)
 {
-  printk (" <Gravis UltraSound %luk>", gus_mem_size / 1024);
+  printk (" <Gravis UltraSound %dk>", (int)gus_mem_size / 1024);
 
   if (irq < 0 || irq > 15)
     {
@@ -2338,6 +2353,9 @@ gus_wave_init (long mem_start, int irq, int dma)
     printk ("GUS Error: Too many synthesizers\n");
   else
     synth_devs[num_synths++] = &guswave_operations;
+
+  PERMANENT_MALLOC(struct patch_info*, samples,
+  		   (MAX_SAMPLE+1)*sizeof(*samples), mem_start);
 
   reset_sample_memory ();
 
@@ -2505,7 +2523,7 @@ guswave_dma_irq (void)
     switch (active_device)
       {
       case GUS_DEV_WAVE:
-	if (SOMEONE_WAITING (dram_sleep_flag))
+	if (SOMEONE_WAITING (dram_sleeper, dram_sleep_flag))
 	  WAKE_UP (dram_sleeper, dram_sleep_flag);
 	break;
 

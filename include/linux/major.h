@@ -39,9 +39,12 @@
  * 19 -                                               UNUSED
  * 20 -                                               UNUSED
  * 21 - scsi generic
- * 22 -                                               UNUSED
+ * 22 -                        (at2disk)
  * 23 -                        mitsumi cdrom
  * 24 -	                       sony535 cdrom
+ * 25 -
+ * 26 -
+ * 27 - qic117 tape
  */
 
 #define UNNAMED_MAJOR	0
@@ -68,6 +71,7 @@
 /* unused: 22 */
 #define MITSUMI_CDROM_MAJOR 23
 #define CDU535_CDROM_MAJOR 24
+#define QIC117_TAPE_MAJOR 27
 
 /*
  * Tests for SCSI devices.

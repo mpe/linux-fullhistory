@@ -101,7 +101,12 @@ int check_cdrom_media_change(int full_dev, int flag){
 	};
 
 	retval = scsi_CDs[target].device->changed;
-	if(!flag) scsi_CDs[target].device->changed = 0;
+	if(!flag) {
+	  scsi_CDs[target].device->changed = 0;
+	  /* If the disk changed, the capacity will now be different,
+	     so we force a re-read of this information */
+	  if (retval) scsi_CDs[target].needs_sector_size = 1;
+	};
 	return retval;
 }
 
@@ -654,6 +659,8 @@ static void get_sectorsize(int i){
     memset ((void *) &cmd[2], 0, 8);
     SCpnt->request.dev = 0xffff;  /* Mark as really busy */
     
+    memset(buffer, 0, 8);
+
     scsi_do_cmd (SCpnt,
 		 (void *) cmd, (void *) buffer,
 		 512, sr_init_done,  SR_TIMEOUT,
@@ -692,6 +699,7 @@ static void get_sectorsize(int i){
       printk ("scd%d : unsupported sector size %d.\n",
 	      i, scsi_CDs[i].sector_size);
       scsi_CDs[i].capacity = 0;
+      scsi_CDs[i].needs_sector_size = 1;
     };
     if(scsi_CDs[i].sector_size == 2048)
       scsi_CDs[i].capacity *= 4;

@@ -7,7 +7,7 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-SUBDIRS = minix ext ext2 msdos proc isofs nfs xiafs hpfs
+SUBDIRS = minix ext ext2 msdos proc isofs nfs xiafs hpfs sysv
 
 ifdef CONFIG_MINIX_FS
 FS_SUBDIRS := $(FS_SUBDIRS) minix
@@ -33,12 +33,18 @@ endif
 ifdef CONFIG_XIA_FS
 FS_SUBDIRS := $(FS_SUBDIRS) xiafs
 endif
+ifdef CONFIG_SYSV_FS
+FS_SUBDIRS := $(FS_SUBDIRS) sysv
+endif
 ifdef CONFIG_HPFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) hpfs
 endif
 
 ifdef CONFIG_BINFMT_ELF
 BINFMTS := $(BINFMTS) binfmt_elf.o
+endif
+ifdef CONFIG_BINFMT_COFF
+BINFMTS := $(BINFMTS) binfmt_coff.o
 endif
 
 .c.s:

@@ -49,26 +49,26 @@ static int mixer_caps;
 static mixer_tab *iomap;
 
 void
-sb_setmixer (unsigned char port, unsigned char value)
+sb_setmixer (unsigned int port, unsigned int value)
 {
   unsigned long flags;
 
   DISABLE_INTR(flags);
-  OUTB (port, MIXER_ADDR);	/* Select register */
+  OUTB ((unsigned char)(port & 0xff), MIXER_ADDR);	/* Select register */
   tenmicrosec ();
-  OUTB (value, MIXER_DATA);
+  OUTB ((unsigned char)(value & 0xff), MIXER_DATA);
   tenmicrosec ();
   RESTORE_INTR(flags);
 }
 
 int
-sb_getmixer (unsigned char port)
+sb_getmixer (unsigned int port)
 {
   int             val;
   unsigned long flags;
 
   DISABLE_INTR(flags);
-  OUTB (port, MIXER_ADDR);	/* Select register */
+  OUTB ((unsigned char)(port & 0xff), MIXER_ADDR);	/* Select register */
   tenmicrosec ();
   val = INB (MIXER_DATA);
   tenmicrosec ();
@@ -184,7 +184,7 @@ static int
 set_recmask(int mask)
 {
       int devmask, i;
-      unsigned char regimage;
+      unsigned char regimageL, regimageR;
 
       devmask = mask & supported_rec_devices;
 
@@ -236,12 +236,15 @@ set_recmask(int mask)
       case 4:
 	if (!devmask) devmask = SOUND_MASK_MIC;
 
-        regimage = 0;
+        regimageL = regimageR = 0;
 	for (i=0;i<SOUND_MIXER_NRDEVICES;i++)
 	  if ((1<<i) & devmask)
-	    regimage |= sb16_recmasks[i];
-	sb_setmixer(SB16_IMASK_L, regimage);
-	sb_setmixer(SB16_IMASK_R, regimage);
+	  {
+	    regimageL |= sb16_recmasks_L[i];
+	    regimageR |= sb16_recmasks_R[i];
+	  }
+	sb_setmixer(SB16_IMASK_L, regimageL);
+	sb_setmixer(SB16_IMASK_R, regimageR);
       break;
       }
 
@@ -277,7 +280,8 @@ sb_mixer_ioctl (int dev, unsigned int cmd, unsigned int arg)
 	      break;
 
 	    case SOUND_MIXER_STEREODEVS:
-	      return IOCTL_OUT (arg, supported_devices & ~SOUND_MASK_MIC);
+	      return IOCTL_OUT (arg, supported_devices & 
+	                              ~(SOUND_MASK_MIC|SOUND_MASK_SPEAKER));
 	      break;
 
 	    case SOUND_MIXER_RECMASK:

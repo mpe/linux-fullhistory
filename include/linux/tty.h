@@ -100,7 +100,7 @@ struct serial_struct {
 #define ASYNC_HUP_NOTIFY 0x0001 /* Notify blocked open on hangups */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
-#define ASYNC_TERMIOS_RESTORE 0x0008 /* Restore termios when dialin unblocks */
+#define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
 
 #define ASYNC_SPD_MASK	0x0030
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
@@ -122,6 +122,7 @@ struct serial_struct {
 #define ASYNC_CALLOUT_ACTIVE	0x40000000 /* Call out device is active */
 #define ASYNC_NORMAL_ACTIVE	0x20000000 /* Normal device is active */
 #define ASYNC_BOOT_AUTOCONF	0x10000000 /* Autoconfigure port on bootup */
+#define ASYNC_CLOSING		0x08000000 /* Serial port is closing */
 
 #define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
 #define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
@@ -214,8 +215,8 @@ struct tty_struct {
 	struct termios *termios;
 	int pgrp;
 	int session;
-	unsigned char stopped:1, packet:1, lnext:1;
-	unsigned char char_error:2;
+	unsigned char stopped:1, hw_stopped:1, packet:1, lnext:1;
+	unsigned char char_error:3;
 	unsigned char ctrl_status;
 	short line;
 	int disc;
@@ -232,6 +233,7 @@ struct tty_struct {
 	void (*set_termios)(struct tty_struct *tty, struct termios * old);
 	void (*stop)(struct tty_struct *tty);
 	void (*start)(struct tty_struct *tty);
+	void (*hangup)(struct tty_struct *tty);
 	struct tty_struct *link;
 	unsigned char *write_data_ptr;
 	int write_data_cnt;
@@ -312,6 +314,7 @@ struct tty_ldisc {
 #define TTY_RQ_THROTTLED 4
 #define TTY_IO_ERROR 5
 #define TTY_SLAVE_OPENED 6
+#define TTY_EXCLUSIVE 7
 
 /*
  * When a break, frame error, or parity error happens, these codes are
@@ -321,6 +324,7 @@ struct tty_ldisc {
 #define TTY_BREAK	1
 #define TTY_FRAME	2
 #define TTY_PARITY	3
+#define TTY_OVERRUN	4
 
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
 #define TTY_READ_FLUSH(tty) tty_read_flush((tty))
@@ -374,6 +378,7 @@ extern void tty_vhangup(struct tty_struct * tty);
 extern void tty_unhangup(struct file *filp);
 extern int tty_hung_up_p(struct file * filp);
 extern void do_SAK(struct tty_struct *tty);
+extern void disassociate_ctty(int priv);
 
 /* tty write functions */
 

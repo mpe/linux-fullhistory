@@ -37,7 +37,8 @@
   * hsavolai@cs.helsinki.fi
   */
 
-#define SOUND_VERSION	200
+#define SOUND_VERSION	203
+#define VOXWARE
 
 #include <sys/ioctl.h>
 
@@ -51,6 +52,7 @@
 #define SNDCARD_GUS	4
 #define SNDCARD_MPU401	5
 #define SNDCARD_SB16	6
+#define SNDCARD_SB16MIDI 7
 
 /***********************************
  * IOCTL Commands for /dev/sequencer
@@ -67,9 +69,9 @@
  */
 /* #define	IOCTYPE		(0xff<<8) */
 #define	IOCPARM_MASK	0x7f		/* parameters must be < 128 bytes */
-#define	IOC_VOID	0x20000000	/* no parameters */
-#define	IOC_OUT		0x40000000	/* copy out parameters */
-#define	IOC_IN		0x80000000	/* copy in parameters */
+#define	IOC_VOID	0x00000000	/* no parameters */
+#define	IOC_OUT		0x20000000	/* copy out parameters */
+#define	IOC_IN		0x40000000	/* copy in parameters */
 #define	IOC_INOUT	(IOC_IN|IOC_OUT)
 /* the 0x20000000 is so we can distinguish new ioctl's from old */
 #define	_IO(x,y)	((int)(IOC_VOID|(x<<8)|y))

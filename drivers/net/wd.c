@@ -30,8 +30,8 @@ static char *version =
 
 /* Compatibility definitions for earlier kernel versions. */
 #ifndef HAVE_PORTRESERVE
-#define check_region(ioaddr, size)              0
-#define snarf_region(ioaddr, size);             do ; while (0)
+#define check_region(ioaddr, size)		0
+#define snarf_region(ioaddr, size)		do ; while (0)
 #endif
 
 int wd_probe(struct device *dev);

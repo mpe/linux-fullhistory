@@ -1,7 +1,7 @@
 /*
  * sound/sb_dsp.c
  * 
- * The low level driver for the SoundBlaster DS chips.
+ * The low level driver for the SoundBlaster DSP chip.
  * 
  * Copyright by Hannu Savolainen 1993
  * 
@@ -101,7 +101,7 @@ sb_dsp_command (unsigned char val)
 	}
     }
 
-  printk ("SoundBlaster: DSP Command(%02x) Timeout.\n", val);
+  printk ("SoundBlaster: DSP Command(%x) Timeout.\n", val);
   printk ("IRQ conflict???\n");
   return 0;
 }
@@ -114,11 +114,15 @@ sbintr (int unit)
 #ifndef EXCLUDE_SBPRO
   if (sb16)
     {
-      unsigned char   src = sb_getmixer (IRQ_STAT);	/* Interrupt status register */
-
+      unsigned char   src = sb_getmixer (IRQ_STAT);	/* Interrupt source register */
 
 #ifndef EXCLUDE_SB16
-      if (src & 2) sb16_dsp_interrupt(unit);
+      if (src & 3) sb16_dsp_interrupt(unit);
+
+#ifndef EXCLUDE_MIDI
+      if (src & 4) sb16midiintr (unit);			/* MPU401 interrupt */
+#endif
+
 #endif
 
       if (!(src & 1))
@@ -150,7 +154,7 @@ sbintr (int unit)
       case IMODE_MIDI:
 	printk ("+");
 	data = INB (DSP_READ);
-	printk ("%02x", data);
+	printk ("%x", data);
 
 	break;
 
@@ -332,8 +336,8 @@ sb_dsp_output_block (int dev, unsigned long buf, int count,
       DISABLE_INTR (flags);
       if (sb_dsp_command (0x48))	/* High speed size */
 	{
-	  sb_dsp_command (count & 0xff);
-	  sb_dsp_command ((count >> 8) & 0xff);
+	  sb_dsp_command ((unsigned char)(count & 0xff));
+	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
 	  sb_dsp_command (0x91);	/* High speed 8 bit DAC */
 	}
       else
@@ -345,8 +349,8 @@ sb_dsp_output_block (int dev, unsigned long buf, int count,
       DISABLE_INTR (flags);
       if (sb_dsp_command (0x14))	/* 8-bit DAC (DMA) */
 	{
-	  sb_dsp_command (count & 0xff);
-	  sb_dsp_command ((count >> 8) & 0xff);
+	  sb_dsp_command ((unsigned char)(count & 0xff));
+	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
 	}
       else
 	printk ("SB Error: Unable to start DAC\n");
@@ -378,8 +382,8 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
       DISABLE_INTR (flags);
       if (sb_dsp_command (0x48))	/* High speed size */
 	{
-	  sb_dsp_command (count & 0xff);
-	  sb_dsp_command ((count >> 8) & 0xff);
+	  sb_dsp_command ((unsigned char)(count & 0xff));
+	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
 	  sb_dsp_command (0x99);	/* High speed 8 bit ADC */
 	}
       else
@@ -391,8 +395,8 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
       DISABLE_INTR (flags);
       if (sb_dsp_command (0x24))	/* 8-bit ADC (DMA) */
 	{
-	  sb_dsp_command (count & 0xff);
-	  sb_dsp_command ((count >> 8) & 0xff);
+	  sb_dsp_command ((unsigned char)(count & 0xff));
+	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
 	}
       else
 	printk ("SB Error: Unable to start ADC\n");
@@ -557,6 +561,8 @@ sb_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
+      if (local)
+         return dsp_set_stereo (arg - 1) + 1;
       return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg) - 1) + 1);
       break;
 
@@ -699,6 +705,9 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
   printk (" <%s>", sb_dsp_operations.name);
 
 #ifndef EXCLUDE_AUDIO
+#  if !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SBPRO)
+  if (!sb16)	/* There is a better driver for SB16	*/
+#  endif
   if (num_dspdevs < MAX_DSP_DEV)
     {
       dsp_devs[my_dev = num_dspdevs++] = &sb_dsp_operations;
@@ -712,8 +721,8 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 #endif
 
 #ifndef EXCLUDE_MIDI
-  if (!midi_disabled)		/* Midi don't work in the SB emulation mode
-				 * of PAS */
+  if (!midi_disabled && !sb16)	/* Midi don't work in the SB emulation mode
+				 * of PAS, SB16 has better midi interface */
 	sb_midi_init(major);
 #endif
 

@@ -31,7 +31,7 @@
 #define SBPRO_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_PCM | SOUND_MASK_LINE | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD | SOUND_MASK_VOLUME)
 
-#define SB16_RECORDING_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_SPEAKER | SOUND_MASK_LINE | SOUND_MASK_MIC | \
+#define SB16_RECORDING_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_LINE | SOUND_MASK_MIC | \
 					 SOUND_MASK_CD)
 
 #define SB16_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_PCM | SOUND_MASK_SPEAKER | SOUND_MASK_LINE | SOUND_MASK_MIC | \
@@ -80,7 +80,6 @@
 #define RIGHT_CHN	1
 
 struct mixer_def {
-	char name[20];
 	unsigned int regno: 8;
 	unsigned int bitoffs:4;
 	unsigned int nbits:4;
@@ -91,7 +90,7 @@ typedef struct mixer_def mixer_tab[32][2];
 typedef struct mixer_def mixer_ent;
 
 #define MIX_ENT(name, reg_l, bit_l, len_l, reg_r, bit_r, len_r)	\
-	{{#name,reg_l, bit_l, len_l}, {" ", reg_r, bit_r, len_r}}
+	{{reg_l, bit_l, len_l}, {reg_r, bit_r, len_r}}
 
 #ifdef __SB_MIXER_C__
 mixer_tab sbpro_mix = {
@@ -126,30 +125,46 @@ MIX_ENT(SOUND_MIXER_RECLEV,	0x3f, 7, 2, 0x40, 7, 2)
 
 static unsigned short levels[SOUND_MIXER_NRDEVICES] =
 {
-  0x4b4b,			/* Master Volume */
+  0x5a5a,			/* Master Volume */
   0x3232,			/* Bass */
   0x3232,			/* Treble */
   0x4b4b,			/* FM */
   0x4b4b,			/* PCM */
   0x4b4b,			/* PC Speaker */
   0x4b4b,			/* Ext Line */
-  0x3232,			/* Mic */
+  0x0000,			/* Mic */
   0x4b4b,			/* CD */
   0x4b4b,			/* Recording monitor */
   0x4b4b,			/* SB PCM */
   0x4b4b};			/* Recording level */
 
-static unsigned char sb16_recmasks[SOUND_MIXER_NRDEVICES] =
+static unsigned char sb16_recmasks_L[SOUND_MIXER_NRDEVICES] =
 {
 	0x00,	/* SOUND_MIXER_VOLUME	*/
 	0x00,	/* SOUND_MIXER_BASS	*/
 	0x00,	/* SOUND_MIXER_TREBLE	*/
-	0x60,	/* SOUND_MIXER_SYNTH	*/
+	0x40,	/* SOUND_MIXER_SYNTH	*/
 	0x00,	/* SOUND_MIXER_PCM	*/
 	0x00,	/* SOUND_MIXER_SPEAKER	*/
-	0x18,	/* SOUND_MIXER_LINE	*/
+	0x10,	/* SOUND_MIXER_LINE	*/
 	0x01,	/* SOUND_MIXER_MIC	*/
-	0x06,	/* SOUND_MIXER_CD	*/
+	0x04,	/* SOUND_MIXER_CD	*/
+	0x00,	/* SOUND_MIXER_IMIX	*/
+	0x00,	/* SOUND_MIXER_ALTPCM	*/
+	0x00	/* SOUND_MIXER_RECLEV	*/
+};
+
+static unsigned char sb16_recmasks_R[SOUND_MIXER_NRDEVICES] =
+{
+	0x00,	/* SOUND_MIXER_VOLUME	*/
+	0x00,	/* SOUND_MIXER_BASS	*/
+	0x00,	/* SOUND_MIXER_TREBLE	*/
+	0x20,	/* SOUND_MIXER_SYNTH	*/
+	0x00,	/* SOUND_MIXER_PCM	*/
+	0x00,	/* SOUND_MIXER_SPEAKER	*/
+	0x08,	/* SOUND_MIXER_LINE	*/
+	0x01,	/* SOUND_MIXER_MIC	*/
+	0x02,	/* SOUND_MIXER_CD	*/
 	0x00,	/* SOUND_MIXER_IMIX	*/
 	0x00,	/* SOUND_MIXER_ALTPCM	*/
 	0x00	/* SOUND_MIXER_RECLEV	*/

@@ -74,6 +74,9 @@
 #define CMD_RETSETUP	0x0d	/* Return Setup Data */
 #define CMD_ECHO	0x1f	/* ECHO Command Data */
 
+#define CMD_EXTBIOS     0x28    /* Return extend bios information only 1542C */
+#define CMD_MBENABLE    0x29    /* Set Mailbox Interface enable only 1542C */
+
 /* Mailbox Definition 5.2.1 and 5.2.2 */
 struct mailbox {
   unchar status;		/* Command/Status */

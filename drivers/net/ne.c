@@ -17,7 +17,7 @@
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
 static char *version =
-    "ne.c:v0.99-13s 11/17/93 Donald Becker (becker@super.org)\n";
+    "ne.c:v0.99-14g 12/21/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -104,7 +104,7 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
     int wordlength = 2;
     char *name;
     int start_page, stop_page;
-    int neX000, ctron, dlink;
+    int neX000, ctron, dlink, dfi;
     int reg0 = inb(ioaddr);
 
     if ( reg0 == 0xFF)
@@ -151,8 +151,8 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	    outb_p(program_seq[i].value, ioaddr + program_seq[i].offset);
     }
     for(i = 0; i < 32 /*sizeof(SA_prom)*/; i+=2) {
-	SA_prom[i] = inb_p(ioaddr + NE_DATAPORT);
-	SA_prom[i+1] = inb_p(ioaddr + NE_DATAPORT);
+	SA_prom[i] = inb(ioaddr + NE_DATAPORT);
+	SA_prom[i+1] = inb(ioaddr + NE_DATAPORT);
 	if (SA_prom[i] != SA_prom[i+1])
 	    wordlength = 1;
     }
@@ -179,12 +179,13 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
     }
 #endif
 
-    neX000 =  (SA_prom[14] == 0x57  &&  SA_prom[15] == 0x57);
+    neX000 = (SA_prom[14] == 0x57  &&  SA_prom[15] == 0x57);
     ctron =  (SA_prom[0] == 0x00 && SA_prom[1] == 0x00 && SA_prom[2] == 0x1d);
     dlink =  (SA_prom[0] == 0x00 && SA_prom[1] == 0xDE && SA_prom[2] == 0x01);
+    dfi   =  (SA_prom[0] == 'D' && SA_prom[1] == 'F' && SA_prom[2] == 'I');
 
     /* Set up the rest of the parameters. */
-    if (neX000 || dlink) {
+    if (neX000 || dlink || dfi) {
 	if (wordlength == 2) {
 	    name = dlink ? "DE200" : "NE2000";
 	    start_page = NESM_START_PG;
