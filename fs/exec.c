@@ -72,10 +72,6 @@ void __init binfmt_setup(void)
 	init_aout32_binfmt();
 #endif
 
-#ifdef CONFIG_BINFMT_JAVA
-	init_java_binfmt();
-#endif
-
 #ifdef CONFIG_BINFMT_EM86
 	init_em86_binfmt();
 #endif
@@ -804,7 +800,6 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.dentry = dentry;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
-	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count(argv)) < 0) {

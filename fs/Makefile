@@ -263,14 +263,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BINFMT_JAVA),y)
-BINFMTS += binfmt_java.o
-else
-  ifeq ($(CONFIG_BINFMT_JAVA),m)
-  M_OBJS += binfmt_java.o
-  endif
-endif
-
 ifeq ($(CONFIG_BINFMT_EM86),y)
 BINFMTS += binfmt_em86.o
 else

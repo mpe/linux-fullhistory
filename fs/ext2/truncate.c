@@ -141,7 +141,7 @@ static int check_block_empty(struct inode *inode, struct buffer_head *bh,
 		bforget(bh);
 		if (ind_bh)
 			mark_buffer_dirty(ind_bh, 1);
-		ext2_free_blocks (inode, tmp, 1);
+		ext2_free_blocks(inode, tmp, 1);
 		goto out;
 	}
 	retry = 1;
@@ -162,7 +162,6 @@ out:
 
 static int trunc_direct (struct inode * inode)
 {
-	struct buffer_head * bh;
 	int i, retry = 0;
 	unsigned long block_to_free = 0, free_count = 0;
 	int blocks = inode->i_sb->s_blocksize / 512;
@@ -175,19 +174,9 @@ static int trunc_direct (struct inode * inode)
 		if (!tmp)
 			continue;
 
-		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
-		if (bh) {
-			if (DATA_BUFFER_USED(bh)) {
-				retry = 1;
-				continue;
-			}
-			bh->b_count++;
-		}
-
 		*p = 0;
 		inode->i_blocks -= blocks;
 		mark_inode_dirty(inode);
-		bforget(bh);
 
 		/* accumulate blocks to free if they're contiguous */
 		if (free_count == 0)
@@ -206,8 +195,7 @@ static int trunc_direct (struct inode * inode)
 	return retry;
 }
 
-static int trunc_indirect (struct inode * inode, int offset, u32 * p,
-			struct buffer_head *dind_bh)
+static int trunc_indirect (struct inode * inode, int offset, u32 * p, struct buffer_head *dind_bh)
 {
 	struct buffer_head * ind_bh;
 	int i, tmp, retry = 0;
@@ -242,28 +230,15 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p,
 		indirect_block = 0;
 	for (i = indirect_block ; i < addr_per_block ; i++) {
 		u32 * ind = i + (u32 *) ind_bh->b_data;
-		struct buffer_head * bh;
 
 		wait_on_buffer(ind_bh);
 		tmp = le32_to_cpu(*ind);
 		if (!tmp)
 			continue;
-		/*
-		 * Use find_buffer so we don't block here.
-		 */
-		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
-		if (bh) {
-			if (DATA_BUFFER_USED(bh)) {
-				retry = 1;
-				continue;
-			}
-			bh->b_count++;
-		}
 
 		*ind = 0;
 		inode->i_blocks -= blocks;
 		mark_inode_dirty(inode);
-		bforget(bh);
 		mark_buffer_dirty(ind_bh, 1);
 
 		/* accumulate blocks to free if they're contiguous */

@@ -65,7 +65,6 @@ bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
-tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then

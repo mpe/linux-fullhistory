@@ -82,8 +82,6 @@ enum
 	KERN_PANIC=15,		/* int: panic timeout */
 	KERN_REALROOTDEV=16,	/* real root device to mount after initrd */
 
-	KERN_JAVA_INTERPRETER=19, /* path to Java(tm) interpreter */
-	KERN_JAVA_APPLETVIEWER=20, /* path to Java(tm) appletviewer */
 	KERN_SPARC_REBOOT=21,	/* reboot command on Sparc */
 	KERN_CTLALTDEL=22,	/* int: allow ctl-alt-del to reboot */
 	KERN_PRINTK=23,		/* struct: control printk logging parameters */

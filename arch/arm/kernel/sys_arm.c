@@ -72,6 +72,7 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 	struct file * file = NULL;
 	struct mmap_arg_struct a;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (copy_from_user(&a, arg, sizeof(a)))
 		goto out;
@@ -87,6 +88,7 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 		fput(file);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return error;
 }
 

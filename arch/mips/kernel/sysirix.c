@@ -1103,6 +1103,7 @@ asmlinkage unsigned long irix_mmap32(unsigned long addr, size_t len, int prot,
 	struct file *file = NULL;
 	unsigned long retval;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if(!(flags & MAP_ANONYMOUS)) {
 		if(!(file = fget(fd))) {
@@ -1130,6 +1131,7 @@ asmlinkage unsigned long irix_mmap32(unsigned long addr, size_t len, int prot,
 
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return retval;
 }
 

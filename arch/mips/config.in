@@ -76,10 +76,6 @@ fi
 define_bool CONFIG_BINFMT_AOUT n
 define_bool CONFIG_BINFMT_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
-  tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
-fi
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC

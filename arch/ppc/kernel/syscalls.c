@@ -201,12 +201,16 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 
 	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+		if (!(file = fget(fd)))
 			goto out;
 	}
 	
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	down(&current->mm->mmap_sem);
 	ret = do_mmap(file, addr, len, prot, flags, offset);
+	up(&current->mm->mmap_sem);
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return ret;

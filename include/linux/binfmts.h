@@ -21,7 +21,6 @@ struct linux_binprm{
 	unsigned long page[MAX_ARG_PAGES];
 	unsigned long p; /* current top of mem */
 	int sh_bang;
-	int java;		/* Java binary, prevent recursive invocation */
 	struct dentry * dentry;
 	int e_uid, e_gid;
 	kernel_cap_t cap_inheritable, cap_permitted, cap_effective;
@@ -55,7 +54,6 @@ extern int init_elf32_binfmt(void);
 extern int init_aout_binfmt(void);
 extern int init_aout32_binfmt(void);
 extern int init_script_binfmt(void);
-extern int init_java_binfmt(void);
 extern int init_em86_binfmt(void);
 extern int init_misc_binfmt(void);
 

@@ -444,7 +444,7 @@ repeat:
 		*err = 0;
 		*created = 1;
 	}
-	if (le32_to_cpu(*p)) {
+	if (*p) {
 		ext2_free_blocks (inode, tmp, 1);
 		brelse (result);
 		goto repeat;

@@ -1246,7 +1246,6 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 		 * two cases.
 		 */
 		if (bmap && !block) {
-			set_bit(BH_Uptodate, &bh->b_state);
 			memset(bh->b_data, 0, size);
 		}
 	}
@@ -1691,10 +1690,13 @@ int block_read_full_page(struct file * file, struct page * page)
 				nr++;
 			} else {
 				/*
-				 * filesystem 'hole' represents zero-contents:
+				 * filesystem 'hole' represents zero-contents.
+				 *
+				 * Don't mark the buffer up-to-date (that also implies
+				 * that it is ok on disk, which it isn't), but _do_
+				 * zero out the contents so that readers see the zeroes.
 				 */
 				memset(bh->b_data, 0, blocksize);
-				set_bit(BH_Uptodate, &bh->b_state);
 			}
 		}
 		iblock++;

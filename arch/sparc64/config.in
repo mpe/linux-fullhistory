@@ -62,10 +62,7 @@ if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
   tristate 'Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
   bool 'Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32
 fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
-  tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
-fi
+tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
 fi

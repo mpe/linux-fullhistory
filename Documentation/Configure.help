@@ -1705,44 +1705,6 @@ CONFIG_BINFMT_AOUT
   because some crucial programs on your system might still be in A.OUT
   format.
 
-Kernel support for JAVA binaries (obsolete)
-CONFIG_BINFMT_JAVA
-  JAVA(tm) is an object oriented programming language developed by
-  SUN; JAVA programs are compiled into "JAVA bytecode" binaries which
-  can then be interpreted by run time systems on many different
-  architectures and operating systems. These JAVA binaries are
-  becoming a universal executable format.
-
-  If you want to execute JAVA binaries, read the Java on Linux HOWTO,
-  available via FTP (user: anonymous) at
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. You will then need to
-  install the run time system contained in the Java Developers Kit
-  (JDK) as described in the HOWTO. This is completely independent of
-  the Linux kernel and you do NOT need to say Y here for this to work.
-
-  Saying Y here allows you to execute a JAVA bytecode binary just like
-  any other Linux program: by simply typing in its name. (You also
-  need to have the JDK installed for this to work). As more and more
-  Java programs become available, the use for this will gradually
-  increase. You can even execute HTML files containing JAVA applets
-  (little embedded JAVA binaries) if those files start with the string
-  "<!--applet-->". If you want to use this, say Y here and read
-  Documentation/java.txt.
-
-  If you disable this option it will reduce your kernel by about 4 KB.
-  This is not much and by itself does not warrant removing support.
-  However its removal is a good idea if you do not have the JDK
-  installed. You may answer M for module support and later load the
-  module when you install the JDK or find an interesting Java program
-  that you can't live without. The module will be called
-  binfmt_java.o.
-
-  The complete functionality of this Java support is also provided by
-  the more general option "Kernel support for MISC binaries",
-  below. This option is therefore considered obsolete and you should
-  say N here and Y to "Kernel support for MISC binaries" if you're 
-  interested in transparently executing Java programs.
-
 Kernel support for Linux/Intel ELF binaries
 CONFIG_BINFMT_EM86
   Say Y here if you want to be able to execute Linux/Intel ELF

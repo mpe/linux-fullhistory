@@ -34,7 +34,6 @@
 extern int panic_timeout;
 extern int console_loglevel, C_A_D;
 extern int bdf_prm[], bdflush_min[], bdflush_max[];
-extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
 extern int sysctl_overcommit_memory;
 extern int nr_queued_signals, max_queued_signals;
 
@@ -170,12 +169,6 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_BLK_DEV_INITRD
 	{KERN_REALROOTDEV, "real-root-dev", &real_root_dev, sizeof(int),
 	 0644, NULL, &proc_dointvec},
-#endif
-#ifdef CONFIG_BINFMT_JAVA
-	{KERN_JAVA_INTERPRETER, "java-interpreter", binfmt_java_interpreter,
-	 64, 0644, NULL, &proc_dostring, &sysctl_string },
-	{KERN_JAVA_APPLETVIEWER, "java-appletviewer", binfmt_java_appletviewer,
-	 64, 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
 #ifdef __sparc__
 	{KERN_SPARC_REBOOT, "reboot-cmd", reboot_command,

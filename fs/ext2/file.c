@@ -113,8 +113,11 @@ static int ext2_get_block(struct inode *inode, unsigned long block, struct buffe
 		unsigned long blocknr;
 
 		blocknr = ext2_getblk_block(inode, block, 1, &error, &created);
-		if (!blocknr)
+		if (!blocknr) {
+			if (!error)
+				error = -ENOSPC;
 			return error;
+		}
 
 		bh->b_dev = inode->i_dev;
 		bh->b_blocknr = blocknr;

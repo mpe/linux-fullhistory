@@ -83,6 +83,7 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
 		}
 	}
 
+	down(&current->mm->mmap_sem);
 	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
 		unsigned long attempt = get_unmapped_area(addr, len);
@@ -102,6 +103,7 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
 	if(!ret_type)
 		retval = ((retval < 0xf0000000) ? 0 : retval);
 out_putf:
+	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:
