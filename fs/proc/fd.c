@@ -75,7 +75,7 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 			*result = dir;
 			return 0;
 		}
-		if (!(*result = iget(sb,(pid << 16)+PROC_PID_INO))) {
+		if (!(*result = proc_get_inode(sb, (pid << 16)+PROC_PID_INO, &proc_pid))) {
 			iput(dir);
 			return -ENOENT;
 		}
@@ -109,7 +109,7 @@ static int proc_lookupfd(struct inode * dir,const char * name, int len,
 
 	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
 
-	if (!(*result = iget(sb,ino)))
+	if (!(*result = proc_get_inode(sb, ino, NULL)))
 		return -ENOENT;
 	return 0;
 }

@@ -44,8 +44,6 @@
 #define MAJOR_NR HD_MAJOR
 #include "blk.h"
 
-#define HD_IRQ 14
-
 static int revalidate_hddisk(int, int);
 
 #define	HD_DELAY	0
@@ -915,7 +913,7 @@ static void hd_release(struct inode * inode, struct file * file)
 
 }
 
-static void hd_geninit(void);
+static void hd_geninit(struct gendisk *);
 
 static struct gendisk hd_gendisk = {
 	MAJOR_NR,	/* Major number */	
@@ -952,7 +950,7 @@ static void hd_interrupt(int irq, struct pt_regs *regs)
  * We enable interrupts in some of the routines after making sure it's
  * safe.
  */
-static void hd_geninit(void)
+static void hd_geninit(struct gendisk *ignored)
 {
 	int i;
 

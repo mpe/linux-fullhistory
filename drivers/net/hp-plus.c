@@ -367,8 +367,12 @@ hpp_mem_block_output(struct device *dev, int count,
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_hp = {
-	"        " /*"hp"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, hp_plus_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, hp_plus_probe };
 
 int io = 0x200;
 int irq = 0;
@@ -376,11 +380,11 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("HP-plus: You should not use auto-probing with insmod!\n");
+		printk("HP-plus: You should not use auto-probing with insmod!\n");
 	dev_hp.base_addr = io;
 	dev_hp.irq       = irq;
 	if (register_netdev(&dev_hp) != 0) {
-		printk("hp: register_netdev() returned non-zero.\n");
+		printk("HP-plus: register_netdev() returned non-zero.\n");
 		return -EIO;
 	}
 	return 0;
@@ -390,10 +394,15 @@ void
 cleanup_module(void)
 {
 	if (MOD_IN_USE)
-		printk("hp: device busy, remove delayed\n");
+		printk("HP-plus: device busy, remove delayed\n");
 	else
 	{
+		int ioaddr = dev_hp.base_addr - NIC_OFFSET;
+
 		unregister_netdev(&dev_hp);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		release_region(ioaddr, HP_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

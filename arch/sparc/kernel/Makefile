@@ -7,10 +7,6 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.s.o:
-	$(AS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
 .S.s:
 	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
 .S.o:

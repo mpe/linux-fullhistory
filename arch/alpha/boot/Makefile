@@ -8,10 +8,6 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-.s.o:
-	$(AS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c -o $*.o $<
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
 .S.o:

@@ -9,11 +9,6 @@ VERSION		= `cat .version`
 TARGET_OS	= linux
 USRINCDIR	= /usr/include
 
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 OBJS   = soundcard.o audio.o dmabuf.o sb_dsp.o dev_table.o \
 	 opl3.o sequencer.o midibuf.o sb_card.o pas2_card.o adlib_card.o \
 	 pas2_pcm.o pas2_mixer.o pas2_midi.o gus_card.o gus_wave.o mpu401.o \

@@ -66,6 +66,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -1607,20 +1608,48 @@ void inet_proto_init(struct net_proto *pro)
 #endif
 
 #ifdef CONFIG_INET_RARP
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_RARP, 4, "rarp", rarp_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_RARP, 4, "rarp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		rarp_get_info
+	});
 	rarp_ioctl_hook = rarp_ioctl;
 #endif
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_RAW, 3, "raw", raw_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_SNMP, 4, "snmp", snmp_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_SOCKSTAT, 8, "sockstat", afinet_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_TCP, 3, "tcp", tcp_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_UDP, 3, "udp", udp_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_ROUTE, 5, "route", rt_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_RAW, 3, "raw",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		raw_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_SNMP, 4, "snmp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		snmp_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_SOCKSTAT, 8, "sockstat",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		afinet_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_TCP, 3, "tcp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		tcp_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_UDP, 3, "udp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		udp_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_ROUTE, 5, "route",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		rt_get_info
+	});
 }

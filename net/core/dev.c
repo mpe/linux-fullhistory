@@ -70,6 +70,7 @@
 #include <net/sock.h>
 #include <net/arp.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 /*
  *	The list of packet types we will receive (as opposed to discard)
@@ -1320,8 +1321,12 @@ void dev_init(void)
 			dev2 = dev;
 		}
 	}
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_DEV, 3, "dev", dev_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_DEV, 3, "dev",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		dev_get_info
+	});
 
 }
 

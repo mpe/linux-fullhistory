@@ -294,7 +294,7 @@ int con_get_trans_new(ushort * arg)
  * Usually, the mapping will be loaded simultaneously with the font.
  */
 
-#include "uni_hash_tbl.h"	/* Include hash tables & parameters */
+#include "uni_hash.tbl"		/* Include hash tables & parameters */
 
 int hashtable_contents_valid = 1;
 

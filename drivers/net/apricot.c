@@ -714,7 +714,7 @@ int apricot_probe(struct device *dev)
     if(memcmp(eth_addr,"\x00\x00\x49",3)!= 0)
     	return ENODEV;
 
-    request_region(ioaddr, APRICOT_TOTAL_SIZE,"apricot");
+    request_region(ioaddr, APRICOT_TOTAL_SIZE, "apricot");
 
     dev->base_addr = ioaddr;
     ether_setup(dev);
@@ -1014,8 +1014,9 @@ struct netdev_entry apricot_drv =
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_apricot = {
-  "        ", /* device name inserted by /linux/drivers/net/net_init.c */
+  devicename, /* device name inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x300, 10,
   0, 0, 0, NULL, apricot_probe };
@@ -1043,6 +1044,9 @@ cleanup_module(void)
     unregister_netdev(&dev_apricot);
     kfree_s((void *)dev_apricot.mem_start, sizeof(struct i596_private) + 0xf);
     dev_apricot.priv = NULL;
+
+    /* If we don't do this, we can't re-insmod it later. */
+    release_region(dev_apricot.base_addr, APRICOT_TOTAL_SIZE);
   }
 }
 #endif /* MODULE */

@@ -7,36 +7,24 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.S.s:
-	$(CPP) -traditional $< -o $*.s
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
-SUBDIRS	= block char net #streams
+SUB_DIRS     := block char net #streams
+MOD_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sound
 
 ifdef CONFIG_PCI
-SUBDIRS := $(SUBDIRS) pci
+SUB_DIRS += pci
 endif
 
 ifdef CONFIG_SCSI
-SUBDIRS := $(SUBDIRS) scsi
+SUB_DIRS += scsi
+MOD_SUB_DIRS += scsi
 endif
 
+# I think this should have an else clause for modules, but the original
+# makefile did not, so I am not adding it.
+# -jln 12 Aug 1995
 ifdef CONFIG_SOUND
-SUBDIRS := $(SUBDIRS) sound
+SUB_DIRS += sound
 endif
-
-all: driversubdirs
-
-driversubdirs: dummy
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
-
-modules: dummy
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
-
-dep:
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
 include $(TOPDIR)/Rules.make

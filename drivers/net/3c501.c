@@ -676,11 +676,12 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 }
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_3c501 = {
-	"        " /*"3c501"*/, 
-		0, 0, 0, 0,
-	 	0x280, 5,
-	 	0, 0, 0, NULL, el1_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0x280, 5,
+	0, 0, 0, NULL, el1_probe };
 
 int io=0x280;
 int irq=5;

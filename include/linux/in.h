@@ -108,6 +108,7 @@ struct sockaddr_in {
 
 /* Address to loopback in software to local host.  */
 #define	INADDR_LOOPBACK		0x7f000001	/* 127.0.0.1   */
+#define	IN_LOOPBACK(a)		((((long int) (a)) & 0xff000000) == 0x7f000000)
 
 /* Defines for Multicast INADDR */
 #define INADDR_UNSPEC_GROUP   	0xe0000000      /* 224.0.0.0   */

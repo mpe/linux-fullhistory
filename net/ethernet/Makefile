@@ -7,46 +7,23 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
+O_TARGET := ethernet.o
 
 OBJS	:= eth.o 
 
 ifdef CONFIG_IPX
-
 OBJ2	:= pe2.o
-
 endif
 
 ifdef CONFIG_ATALK
-
 OBJ2	:= pe2.o
-
 endif
-
-OBJS	:= $(OBJS) $(OBJ2)
 
 ifdef CONFIG_NET
-
-ethernet.o:	$(OBJS)
-		$(LD) -r -o ethernet.o $(OBJS)
-
-else
-
-ethernet.o:
-		$(AR) rcs ethernet.o
-
+O_OBJS	:= $(OBJS) $(OBJ2)
 endif
 
-dep:
-		$(CPP) -M *.c > .depend
+include $(TOPDIR)/Rules.make
 
 tar:
-		tar -cvf /dev/f1 .
-
-modules:
-
-include $(TOPDIR)/Rules.make
+	tar -cvf /dev/f1 .

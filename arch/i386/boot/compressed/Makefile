@@ -17,11 +17,6 @@ INPUT_DATA=input_data
 INPUT_LEN=input_len
 endif
 
-.s.o:
-	$(AS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 all: vmlinux
 
 vmlinux: piggy.o $(OBJECTS)

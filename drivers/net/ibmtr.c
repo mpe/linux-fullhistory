@@ -144,7 +144,8 @@ static void PrtChanID(char *pcid, short stride) {
      which references it.
  */
 
-int tok_probe(struct device *dev) {
+int tok_probe(struct device *dev)
+{
 
   unsigned char segment=0, intr=0, irq=0, i=0, j=0,
                 cardpresent=NOTOK,temp=0;
@@ -166,11 +167,12 @@ int tok_probe(struct device *dev) {
     PIOaddr=TokBaseAddrs[iAddr];  /* address to try           */
     TokBaseAddrs[iAddr] = 0;      /* (and marked already used */
     if (PIOaddr == 0) continue;   /* already tried this addr */
-    if ( check_region(PIOaddr,4) ) { /* Make sure PIO address not
-                                    already assigned elsewhere before
-                                    we muck with I/O addresses */
+    if ( check_region(PIOaddr,TR_IO_EXTENT) ) { /* Make sure PIO address not
+						   already assigned elsewhere
+						   before we muck with I/O
+						   addresses */
       if (ibmtr_debug_trace & TRC_INIT)
-                DPRINTK("check_region(%4hx,4) failed.\n",PIOaddr);
+	DPRINTK("check_region(%4hx,%d) failed.\n",PIOaddr, TR_IO_EXTENT);
       PIOaddr = 0; continue; /* clear to flag fail and try next */
     }
            /*  Query the adapter PIO base port which will return
@@ -247,12 +249,13 @@ int tok_probe(struct device *dev) {
   }
 
   /*?? Now, allocate some of the pl0 buffers for this driver.. */
-  /*?? Now, allocate some of the PIO PORTs for this driver.. */
-  request_region(PIOaddr,4,"ibmtr");  /* record PIOaddr range as busy */
 
   if (!badti)
     ti = (struct tok_info *)kmalloc(sizeof(struct tok_info), GFP_KERNEL);
-  else { ti = badti; badti = NULL; }/*?? dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL); */
+  else {
+    ti = badti; badti = NULL;
+  }/*?? dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL); */
+
   memset(ti,0,sizeof(struct tok_info));
 
   ti->mmio= t_mmio;
@@ -303,17 +306,17 @@ int tok_probe(struct device *dev) {
     printk(".\n");
   }
 
-	DPRINTK("hw address: ");
-	/* Get hw address of token ring card */
-	j=0;
-	for (i=0; i<0x18; i=i+2) {
-		temp = *(char *)((ulong)AIP + (ulong)i + ti->mmio) & 0x0f; /* Tech ref states must do this */
-		printk("%1X",ti->hw_address[j]=temp);
-		if(j&1)
-			dev->dev_addr[(j/2)]=ti->hw_address[j]+(ti->hw_address[j-1]<<4);
-		++j;
-	}
-	printk("\n");
+  DPRINTK("hw address: ");
+  /* Get hw address of token ring card */
+  j=0;
+  for (i=0; i<0x18; i=i+2) {
+    temp = *(char *)((ulong)AIP + (ulong)i + ti->mmio) & 0x0f; /* Tech ref states must do this */
+    printk("%1X",ti->hw_address[j]=temp);
+    if(j&1)
+      dev->dev_addr[(j/2)]=ti->hw_address[j]+(ti->hw_address[j-1]<<4);
+    ++j;
+  }
+  printk("\n");
 
   /* get Adapter type:  'F' = Adapter/A, 'E' = 16/4 Adapter II,...*/
   ti->adapter_type = *(char *)(ti->mmio + AIPADAPTYPE);
@@ -337,9 +340,9 @@ int tok_probe(struct device *dev) {
   /* Available DHB 16Mb size:  F=2048, E=4096, D=8192, C=16384, B=17960 */
   ti->dhb_size16mb = *(char *)(ti->mmio + AIP16MBDHB);
 
-	DPRINTK("atype=%x, drate=%x, trel=%x, asram=%dK, srp=%x, dhb(4mb=%x, 16mb=%x)\n",ti->adapter_type,
-		ti->data_rate, ti->token_release, ti->avail_shared_ram/2, ti->shared_ram_paging, ti->dhb_size4mb,
-		ti->dhb_size16mb);
+  DPRINTK("atype=%x, drate=%x, trel=%x, asram=%dK, srp=%x, dhb(4mb=%x, 16mb=%x)\n",ti->adapter_type,
+	  ti->data_rate, ti->token_release, ti->avail_shared_ram/2, ti->shared_ram_paging,
+	  ti->dhb_size4mb, ti->dhb_size16mb);
 
   /* We must figure out how much shared memory space this adapter
      will occupy so that if there are two adapters we can fit both
@@ -359,39 +362,45 @@ int tok_probe(struct device *dev) {
     unsigned char pg_size;
 #endif
 
-	DPRINTK("shared ram page size: %dK\n",ti->mapped_ram_size/2);
+    DPRINTK("shared ram page size: %dK\n",ti->mapped_ram_size/2);
 #ifdef ENABLE_PAGING
-	switch(ti->shared_ram_paging) {
-		case 0xf: break;
-		case 0xe: ti->page_mask=(ti->mapped_ram_size==32) ? 0xc0 : 0;
-			 pg_size=32;   /* 16KB page size */
-			 break;
-		case 0xd: ti->page_mask=(ti->mapped_ram_size==64) ? 0x80 : 0;
-			 pg_size=64;   /* 32KB page size */
-			 break;
-		case 0xc: ti->page_mask=(ti->mapped_ram_size==32) ? 0xc0 : 0;
-			 ti->page_mask=(ti->mapped_ram_size==64) ? 0x80 : 0;
-			 DPRINTK("Dual size shared RAM page (code=0xC), don't support it!\n");
-       /* nb/dwm: I did this because RRR (3,2) bits are documented as
-                R/O and I can't find how to select which page size */
-       /* Also, the above conditional statement sequence is invalid */
-       /*       as page_mask will always be set by the second stmt  */
-			 badti=ti;
-			 break;
-		default:  DPRINTK("Unknown shared ram paging info %01X\n",ti->shared_ram_paging);
-			 badti=ti;    /* bail out if bad code */
-			 break;
-	}
-	if(ti->page_mask) {
-		if(pg_size > ti->mapped_ram_size) {
-			DPRINTK("Page size (%d) > mapped ram window (%d), can't page.\n",
-			         pg_size, ti->mapped_ram_size);
-			ti->page_mask = 0;    /* reset paging */
-		} else {
-			ti->mapped_ram_size=ti->avail_shared_ram; /****** ?????????? *******/
-			DPRINTK("Shared RAM paging enabled. Page size : %uK\n",((ti->page_mask^ 0xff)+1)>>2);
-		}
-	}
+    switch(ti->shared_ram_paging) {
+      case 0xf:
+        break;
+      case 0xe:
+	ti->page_mask=(ti->mapped_ram_size==32) ? 0xc0 : 0;
+	pg_size=32;   /* 16KB page size */
+	break;
+      case 0xd:
+	ti->page_mask=(ti->mapped_ram_size==64) ? 0x80 : 0;
+	pg_size=64;   /* 32KB page size */
+	break;
+      case 0xc:
+	ti->page_mask=(ti->mapped_ram_size==32) ? 0xc0 : 0;
+	ti->page_mask=(ti->mapped_ram_size==64) ? 0x80 : 0;
+	DPRINTK("Dual size shared RAM page (code=0xC), don't support it!\n");
+	/* nb/dwm: I did this because RRR (3,2) bits are documented as
+	 * R/O and I can't find how to select which page size
+	 * Also, the above conditional statement sequence is invalid
+	 *       as page_mask will always be set by the second stmt
+	 */
+	badti=ti;
+	break;
+      default:
+	DPRINTK("Unknown shared ram paging info %01X\n",ti->shared_ram_paging);
+	badti=ti;    /* bail out if bad code */
+	break;
+    }
+    if(ti->page_mask) {
+      if(pg_size > ti->mapped_ram_size) {
+	DPRINTK("Page size (%d) > mapped ram window (%d), can't page.\n",
+		pg_size, ti->mapped_ram_size);
+	ti->page_mask = 0;    /* reset paging */
+      } else {
+	ti->mapped_ram_size=ti->avail_shared_ram; /****** ?????????? *******/
+	DPRINTK("Shared RAM paging enabled. Page size : %uK\n",((ti->page_mask^ 0xff)+1)>>2);
+      }
+    }
 #else
 #endif
   }
@@ -431,20 +440,24 @@ int tok_probe(struct device *dev) {
   }
   irq2dev_map[irq]=dev;
 
+  /*?? Now, allocate some of the PIO PORTs for this driver.. */
+  request_region(PIOaddr,TR_IO_EXTENT,"ibmtr");  /* record PIOaddr range
+						    as busy */
+
   DPRINTK("%s",version); /* As we have passed card identification,
                             let the world know we're here! */
   dev->base_addr=PIOaddr; /* set the value for device */
 
-	dev->open=tok_open;
-	dev->stop=tok_close;
-	dev->hard_start_xmit=tok_send_packet;
-	dev->get_stats = NULL;
-	dev->get_stats = tok_get_stats;
-	dev->set_multicast_list = NULL;
-	tr_setup(dev);
-	tok_init_card((unsigned long)dev);
+  dev->open=tok_open;
+  dev->stop=tok_close;
+  dev->hard_start_xmit=tok_send_packet;
+  dev->get_stats = NULL;
+  dev->get_stats = tok_get_stats;
+  dev->set_multicast_list = NULL;
+  tr_setup(dev);
+  tok_init_card((unsigned long)dev);
 
-	return 0;  /* Return 0 to indicate we have found a Token Ring card. */
+  return 0;  /* Return 0 to indicate we have found a Token Ring card. */
 }
 
 /* query the adapter for the size of shared RAM  */
@@ -1198,15 +1211,19 @@ static struct enet_statistics * tok_get_stats(struct device *dev) {
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_ibmtr = {
-	"        " /*"ibmtr"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, tok_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, tok_probe };
 
 int io = 0xa20;
 
 int init_module(void)
 {
 	if (io == 0)
-	  printk("ibmtr: You should not use auto-probing with insmod!\n");
+		printk("ibmtr: You should not use auto-probing with insmod!\n");
 	dev_ibmtr.base_addr = io;
 	dev_ibmtr.irq       = 0;
 	if (register_netdev(&dev_ibmtr) != 0) {
@@ -1224,6 +1241,11 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_ibmtr);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_ibmtr.irq);
+		irq2dev_map[dev_ibmtr.irq] = NULL;
+		release_region(dev_ibmtr.base_addr, TR_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

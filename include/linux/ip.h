@@ -34,10 +34,10 @@ struct timestamp {
 	__u8	len;
 	__u8	ptr;
 	union {
-#if defined(LITTLE_ENDIAN_BITFIELD)
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8	flags:4,
 		overflow:4;
-#elif defined(BIG_ENDIAN_BITFIELD)
+#elif defined(__BIG_ENDIAN_BITFIELD)
 	__u8	overflow:4,
 		flags:4;
 #else
@@ -72,10 +72,10 @@ struct options {
 
 
 struct iphdr {
-#if defined(LITTLE_ENDIAN_BITFIELD)
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8	ihl:4,
 		version:4;
-#elif defined (BIG_ENDIAN_BITFIELD)
+#elif defined (__BIG_ENDIAN_BITFIELD)
 	__u8	version:4,
   		ihl:4;
 #else

@@ -65,9 +65,6 @@ static const char *version =
 #include <linux/skbuff.h>
 #include <linux/malloc.h>
 
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
-
 
 /* use 0 for production, 1 for verification, 2..7 for debug */
 #ifndef NET_DEBUG
@@ -376,7 +373,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 	}
 	
 	/* We've committed to using the board, and can start filling in *dev. */
-	request_region(ioaddr, EL16_IO_EXTENT,"3c507");
+	request_region(ioaddr, EL16_IO_EXTENT, "3c507");
 	dev->base_addr = ioaddr;
 
 	outb(0x01, ioaddr + MISC_CTRL);
@@ -885,8 +882,13 @@ el16_rx(struct device *dev)
 }
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_3c507 = {
-	"        " /*"3c507"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el16_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, el16_probe
+};
 
 int io = 0x300;
 int irq = 0;
@@ -894,7 +896,7 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("3c507: You should not use auto-probing with insmod!\n");
+		printk("3c507: You should not use auto-probing with insmod!\n");
 	dev_3c507.base_addr = io;
 	dev_3c507.irq       = irq;
 	if (register_netdev(&dev_3c507) != 0) {
@@ -912,6 +914,10 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_3c507);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_3c507.irq);
+		release_region(dev_3c507.base_addr, EL16_IO_EXTENT);
 	}
 }
 #endif /* MODULE */
@@ -925,4 +931,3 @@ cleanup_module(void)
  *  c-indent-level: 4
  * End:
  */
-

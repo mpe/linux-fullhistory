@@ -4,11 +4,6 @@
 
 CFLAGS := $(CFLAGS) -ansi
 
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o
 
 lib.a: $(OBJS)

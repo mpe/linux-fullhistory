@@ -629,8 +629,12 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 }
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_at1700 = {
-	"        " /*"at1700"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, at1700_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, at1700_probe };
 
 int io = 0x260;
 int irq = 0;
@@ -638,7 +642,7 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("at1700: You should not use auto-probing with insmod!\n");
+		printk("at1700: You should not use auto-probing with insmod!\n");
 	dev_at1700.base_addr = io;
 	dev_at1700.irq       = irq;
 	if (register_netdev(&dev_at1700) != 0) {
@@ -656,6 +660,11 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_at1700);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_at1700.irq);
+		irq2dev_map[dev_at1700.irq] = NULL;
+		release_region(dev_at1700.base_addr, AT1700_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -36,8 +36,6 @@ static const char *version = "lance.c:v1.08 4/10/95 dplatt@3do.com\n";
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-struct device *init_etherdev(struct device *dev, int sizeof_private,
-							 unsigned long *mem_startp);
 static unsigned int lance_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
 unsigned long lance_probe1(int ioaddr, unsigned long mem_start);
 

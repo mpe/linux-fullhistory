@@ -7,25 +7,11 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS	=  util.o 
-SRCS	=  util.c
+O_TARGET := ipc.o
+O_OBJS   := util.o
 
 ifdef CONFIG_SYSVIPC
-OBJS	:= $(OBJS) msg.o sem.o shm.o 
-SRCS	:= $(SRCS) msg.c sem.c shm.c
+O_OBJS += msg.o sem.o shm.o
 endif
-
-ipc.o: $(OBJS) 
-	$(LD) -r -o ipc.o $(OBJS) 
-
-dep:
-	$(CPP) -M $(SRCS) > .depend
-
-modules:
 
 include $(TOPDIR)/Rules.make

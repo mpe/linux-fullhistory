@@ -104,7 +104,7 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 	struct buffer_head * bh, * tmp, * bha[16];
 	struct ext2_dir_entry * de;
 	struct super_block * sb;
-	int err, version;
+	int err;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
@@ -189,6 +189,8 @@ revalidate:
 				 * version stamp to detect whether or
 				 * not the directory has been modified
 				 * during the copy operation. */
+				unsigned long version;
+				dcache_add(inode, de->name, de->name_len, de->inode);
 				version = inode->i_version;
 				error = filldir(dirent, de->name, de->name_len, filp->f_pos, de->inode);
 				if (error)

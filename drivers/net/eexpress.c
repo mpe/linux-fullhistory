@@ -1,4 +1,3 @@
-
 /* eexpress.c: Intel EtherExpress device driver for Linux. */
 /*
 	Written 1993 by Donald Becker.
@@ -145,6 +144,8 @@ struct net_local {
 #define Config		13
 #define EEPROM_Ctrl		14
 #define ID_PORT		15
+
+#define EEXPRESS_IO_EXTENT 16
 
 /*	EEPROM_Ctrl bits. */
 
@@ -363,7 +364,7 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	}
 
 	/* We've committed to using the board, and can start filling in *dev. */
-	request_region(ioaddr, 16,"eexpress");
+	request_region(ioaddr, EEXPRESS_IO_EXTENT, "eexpress");
 	dev->base_addr = ioaddr;
 
 	for (i = 0; i < 6; i++) {
@@ -653,9 +654,6 @@ eexp_close(struct device *dev)
 	free_irq(dev->irq);
 
 	irq2dev_map[dev->irq] = 0;
-
-	/* release the ioport-region */
-	release_region(ioaddr, 16);
 
 	/* Update the statistics here. */
 
@@ -1002,8 +1000,12 @@ eexp_rx(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_eexpress = {
-	"        " /*"eexpress"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, express_probe };
 	
 
 int irq=0x300;
@@ -1013,7 +1015,7 @@ int
 init_module(void)
 {
 	if (io == 0)
-	  printk("eexpress: You should not use auto-probing with insmod!\n");
+		printk("eexpress: You should not use auto-probing with insmod!\n");
 	dev_eexpress.base_addr=io;
 	dev_eexpress.irq=irq;
 	if (register_netdev(&dev_eexpress) != 0)
@@ -1025,12 +1027,15 @@ void
 cleanup_module(void)
 {
 	if (MOD_IN_USE)
-		printk("express: device busy, remove delayed\n");
+		printk("eexpress: device busy, remove delayed\n");
 	else
 	{
 		unregister_netdev(&dev_eexpress);
 		kfree_s(dev_eexpress.priv,sizeof(struct net_local));
 		dev_eexpress.priv=NULL;
+
+		/* If we don't do this, we can't re-insmod it later. */
+		release_region(dev_eexpress.base_addr, EEXPRESS_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -42,6 +42,7 @@ static const char *version =
 #include <asm/io.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "8390.h"
 
 /* Some defines that people can play with if so inclined. */
@@ -56,10 +57,6 @@ static const char *version =
 /* #define CONFIG_NE_RW_BUGFIX */
 
 /* ---- No user-serviceable parts below ---- */
-
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-				    unsigned long *mem_startp);
-
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int netcard_portlist[] =
@@ -540,8 +537,12 @@ ne_block_output(struct device *dev, int count,
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_ne2000 = {
-	"        " /*"ne2000"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ne_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, ne_probe };
 
 int io = 0x300;
 int irq = 0;
@@ -565,6 +566,10 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_ne2000);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_ne2000.irq);
+		release_region(dev_ne2000.base_addr, NE_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -2,11 +2,6 @@
 # Makefile for alpha-specific library files..
 #
 
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
 	checksum.o strlen.o
 

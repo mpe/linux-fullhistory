@@ -6,12 +6,12 @@
 #undef htonl
 #undef htons
 
-#ifndef LITTLE_ENDIAN
-#define LITTLE_ENDIAN
+#ifndef __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN
 #endif
 
-#ifndef LITTLE_ENDIAN_BITFIELD
-#define LITTLE_ENDIAN_BITFIELD
+#ifndef __LITTLE_ENDIAN_BITFIELD
+#define __LITTLE_ENDIAN_BITFIELD
 #endif
 
 extern unsigned long int	ntohl(unsigned long int);

@@ -9,145 +9,109 @@
 # parent makefile.
 #
 
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 #
 # Note : at this point, these files are compiled on all systems. 
 # In the future, some of these should be built conditionally.
 #
 
-OBJS := ll_rw_blk.o ramdisk.o genhd.o 
-SRCS := ll_rw_blk.c ramdisk.c genhd.c 
-BLOCK_MODULE_OBJS =
+
+L_TARGET := block.a
+L_OBJS   := ll_rw_blk.o ramdisk.o genhd.o 
+M_OBJS   :=
+MOD_LIST_NAME := BLOCK_MODULES
 
 ifdef CONFIG_BLK_DEV_FD
-OBJS := $(OBJS) floppy.o
-SRCS := $(SRCS) floppy.c
+L_OBJS += floppy.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) floppy.o
+M_OBJS += floppy.o
 endif
 
 ifdef CONFIG_AZTCD
-OBJS := $(OBJS) aztcd.o
-SRCS := $(SRCS) aztcd.c
+L_OBJS += aztcd.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) aztcd.o
+M_OBJS += aztcd.o
 endif #CONFIG_AZTCD
 
 ifdef CONFIG_CDU31A
-OBJS := $(OBJS) cdu31a.o
-SRCS := $(SRCS) cdu31a.c
+L_OBJS += cdu31a.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) cdu31a.o
+M_OBJS += cdu31a.o
 endif #CONFIG_CDU31A
 
 ifdef CONFIG_MCD
-OBJS := $(OBJS) mcd.o
-SRCS := $(SRCS) mcd.c
+L_OBJS += mcd.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) mcd.o
+M_OBJS += mcd.o
 endif #CONFIG_MCD
 
 ifdef CONFIG_MCDX
-OBJS := $(OBJS) mcdx.o
-SRCS := $(SRCS) mcdx.c
+L_OBJS += mcdx.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) mcdx.o
+M_OBJS += mcdx.o
 endif #CONFIG_MCDX
 
 ifdef CONFIG_SBPCD
-OBJS := $(OBJS) sbpcd.o
-SRCS := $(SRCS) sbpcd.c
+L_OBJS += sbpcd.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sbpcd.o
+M_OBJS += sbpcd.o
 endif #CONFIG_SBPCD
 
 ifdef CONFIG_SBPCD2
-OBJS := $(OBJS) sbpcd2.o
-SRCS := $(SRCS) sbpcd2.c
+L_OBJS += sbpcd2.o
 endif #CONFIG_SBPCD2
 
 ifdef CONFIG_SBPCD3
-OBJS := $(OBJS) sbpcd3.o
-SRCS := $(SRCS) sbpcd3.c
+L_OBJS += sbpcd3.o
 endif #CONFIG_SBPCD3
 
 ifdef CONFIG_SBPCD4
-OBJS := $(OBJS) sbpcd4.o
-SRCS := $(SRCS) sbpcd4.c
+L_OBJS += sbpcd4.o
 endif #CONFIG_SBPCD4
 
 ifdef CONFIG_CDU535
-OBJS := $(OBJS) sonycd535.o
-SRCS := $(SRCS) sonycd535.c
+L_OBJS += sonycd535.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sonycd535.o
+M_OBJS += sonycd535.o
 endif #CONFIG_CDU535
 
 ifdef CONFIG_GSCD
-OBJS := $(OBJS) gscd.o
-SRCS := $(SRCS) gscd.c
+L_OBJS += gscd.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) gscd.o
+M_OBJS += gscd.o
 endif #CONFIG_GSCD
 
 ifdef CONFIG_CM206
-OBJS := $(OBJS) cm206.o
-SRCS := $(SRCS) cm206.c
+L_OBJS += cm206.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) cm206.o
+M_OBJS += cm206.o
 endif #CONFIG_CM206
 
 ifdef CONFIG_OPTCD
-OBJS := $(OBJS) optcd.o
-SRCS := $(SRCS) optcd.c
+L_OBJS += optcd.o
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) optcd.o
+M_OBJS += optcd.o
 endif #CONFIG_OPTCD
 
 ifdef CONFIG_SJCD
-OBJS := $(OBJS) sjcd.o
-SRCS := $(SRCS) sjcd.c
+L_OBJS += sjcd.o
 #else
-#BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sjcd.o
+#M_OBJS += sjcd.o
 endif #CONFIG_SJCD
 
 ifdef CONFIG_BLK_DEV_HD
-OBJS := $(OBJS) hd.o
-SRCS := $(SRCS) hd.c
+L_OBJS += hd.o
 endif
 
 ifdef CONFIG_BLK_DEV_IDE
-OBJS := ide.o $(OBJS)
-SRCS := ide.c $(SRCS)
+L_OBJS += ide.o
+endif
+
+ifdef CONFIG_BLK_DEV_IDECD
+L_OBJS += ide-cd.o
 endif
 
 ifdef CONFIG_BLK_DEV_XD
-OBJS := $(OBJS) xd.o
-SRCS := $(SRCS) xd.c
+L_OBJS += xd.o
 endif
-
-all: block.a
-
-block.a: $(OBJS)
-	rm -f block.a
-	$(AR) rcs block.a $(OBJS)
-	sync
-
-ifdef BLOCK_MODULE_OBJS
-dep:
-	$(CPP) -M $(SRCS) > .depend
-	$(CPP) -M -DMODULE $(BLOCK_MODULE_OBJS:.o=.c) >> .depend
-else
-dep:
-	$(CPP) -M $(SRCS) > .depend
-endif
-
-modules: $(BLOCK_MODULE_OBJS)
-	echo $(BLOCK_MODULE_OBJS) > ../../modules/BLOCK_MODULES
-	(cd ../../modules;for i in $(BLOCK_MODULE_OBJS); do ln -sf ../drivers/block/$$i .; done)
 
 include $(TOPDIR)/Rules.make

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 18
+SUBLEVEL = 19
 
 ARCH = i386
 
@@ -11,10 +11,11 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else echo sh; fi ; fi)
 TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 
+HPATH   = $(TOPDIR)/include
 AS	=as
 LD	=ld
-HOSTCC	=gcc -I$(TOPDIR)/include
-CC	=gcc -D__KERNEL__ -I$(TOPDIR)/include
+HOSTCC	=gcc -I$(HPATH)
+CC	=gcc -D__KERNEL__ -I$(HPATH)
 MAKE	=make
 CPP	=$(CC) -E
 AR	=ar
@@ -106,10 +107,6 @@ endif
 
 include arch/$(ARCH)/Makefile
 
-.s.o:
-	$(AS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c -o $*.o $<
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.s $<
 .S.o:
@@ -134,10 +131,10 @@ symlinks:
 	( cd include ; ln -sf asm-$(ARCH) asm)
 
 oldconfig: symlinks
-	$(CONFIG_SHELL) Configure -d arch/$(ARCH)/config.in
+	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
 
 config: symlinks
-	$(CONFIG_SHELL) Configure arch/$(ARCH)/config.in
+	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
 
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
@@ -152,22 +149,25 @@ newversion:
 	fi
 
 include/linux/version.h: $(CONFIGURATION) Makefile newversion
-	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > include/linux/version.h
+	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > .ver
 	@if [ -f .name ]; then \
 	   echo \#define UTS_VERSION \"\#`cat .version`-`cat .name` `date`\"; \
 	 else \
 	   echo \#define UTS_VERSION \"\#`cat .version` `date`\";  \
-	 fi >> include/linux/version.h 
-	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> include/linux/version.h
-	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> include/linux/version.h
-	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> include/linux/version.h
+	 fi >> .ver
+	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> .ver
+	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> .ver
+	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> .ver
 	@if [ -x /bin/dnsdomainname ]; then \
 	   echo \#define LINUX_COMPILE_DOMAIN \"`dnsdomainname`\"; \
-	 else \
+	 elif [ -x /bin/domainname ]; then \
 	   echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\"; \
-	 fi >> include/linux/version.h
-	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> include/linux/version.h
-	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> include/linux/version.h
+	 else \
+	   echo \#define LINUX_COMPILE_DOMAIN ; \
+	 fi >> .ver
+	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> .ver
+	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> .ver
+	if [ ! -f $@ ]; then mv .ver $@; fi
 
 init/version.o: init/version.c include/linux/version.h
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
@@ -236,10 +236,11 @@ mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h
 	rm -f drivers/scsi/aic7xxx_asm drivers/scsi/aic7xxx_seq.h
-	rm -f drivers/char/uni_hash_tbl.h drivers/char/conmakehash
+	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
+	rm -f .hdepend
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -f $(TOPDIR)/include/linux/modules/*
 
@@ -251,10 +252,11 @@ backup: mrproper
 	cd .. && tar cf - linux | gzip -9 > backup.gz
 	sync
 
-depend dep: archdep
+#depend dep: .hdepend
+depend dep: archdep .hdepend
 	touch include/linux/version.h
-	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .tmpdepend
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
+	awk -f scripts/depend.awk init/*.c > .tmpdepend
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
 	rm -f include/linux/version.h
 	mv .tmpdepend .depend
 ifdef CONFIG_MODVERSIONS
@@ -275,7 +277,8 @@ ifdef CONFIGURATION
 	@echo
 	exit 1
 
-dummy: ..$(CONFIGURATION)
+#dummy: ..$(CONFIGURATION)
+dummy:
 
 else
 
@@ -284,3 +287,12 @@ dummy:
 endif
 
 include Rules.make
+
+#
+# This generates dependencies for the .h files.
+#
+
+.hdepend: dummy
+	rm -f $@
+	awk -f scripts/depend.awk `find $(HPATH) -name \*.h -print` > .$@
+	mv .$@ $@

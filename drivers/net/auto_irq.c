@@ -28,7 +28,7 @@
 
 
 #ifdef version
-static char *version=
+static const char *version=
 "auto_irq.c:v1.11 Donald Becker (becker@cesdis.gsfc.nasa.gov)";
 #endif
 

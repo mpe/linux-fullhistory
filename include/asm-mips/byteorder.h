@@ -7,11 +7,11 @@
 #undef htons
 
 #ifdef MIPSEL
-#define LITTLE_ENDIAN
-#define LITTLE_ENDIAN_BITFIELD
+#define __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN_BITFIELD
 #elif MIPSEB
-#define BIG_ENDIAN
-#define BIG_ENDIAN_BITFIELD
+#define __BIG_ENDIAN
+#define __BIG_ENDIAN_BITFIELD
 #else
 #error "MIPS but neither MIPSEL nor MIPSEB?"
 #endif

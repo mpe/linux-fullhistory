@@ -193,6 +193,7 @@ static const char *version =
 #include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
+#include <linux/if_arp.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -2447,11 +2448,13 @@ unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device thiscard = {
-  "       ",/* if blank, device name inserted by /linux/drivers/net/net_init.c */
+  devicename, /* device name is inserted by linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0, 0,  /* I/O address, IRQ */
-  0, 0, 0, NULL, arcnet_probe };
+  0, 0, 0, NULL, arcnet_probe
+};
 	
 	
 int io=0x0;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */

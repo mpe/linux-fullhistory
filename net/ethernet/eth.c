@@ -239,23 +239,27 @@ void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int 
 {
 	struct ethhdr *eth;
 	struct iphdr *iph;
+	int ip_length;
 
 	IS_SKB(dest);
 	eth=(struct ethhdr *)dest->data;
-	memcpy(dest->data,src,34);	/* ethernet is always >= 60 */
-	length-=34;
 	if(eth->h_proto!=htons(ETH_P_IP))
 	{
-		memcpy(dest->data+34,src+34,length);
+		memcpy(dest->data,src,length);
 		return;
 	}
 	/*
 	 * We have to watch for padded packets. The csum doesn't include the
 	 * padding, and there is no point in copying the padding anyway.
+	 * We have to use the smaller of length and ip_length because it
+	 * can happen that ip_length > length.
 	 */
+	memcpy(dest->data,src,34);	/* ethernet is always >= 34 */
+	length -= 34;
 	iph=(struct iphdr*)(src+14);	/* 14 = Rx_addr+Tx_addr+type_field */
-	if (ntohs(iph->tot_len)-sizeof(struct iphdr) <= length)
-		length=ntohs(iph->tot_len)-sizeof(struct iphdr);
+	ip_length = ntohs(iph->tot_len) - sizeof(struct iphdr);
+	if (ip_length <= length)
+		length=ip_length;
 
 	dest->csum=csum_partial_copy(src+34,dest->data+34,length,base);
 	dest->ip_summed=1;

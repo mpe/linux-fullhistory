@@ -80,6 +80,15 @@ struct inode_operations proc_scsi_inode_operations = {
     NULL	    /* permission  */
 };
 
+struct proc_dir_entry proc_scsi = {
+	PROC_SCSI, 4, "scsi",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_scsi_inode_operations,
+	NULL, NULL,
+	NULL,
+	&proc_root, NULL
+};
+
 struct proc_dir_entry scsi_dir[PROC_SCSI_FILE - PROC_SCSI_SCSI + 3]; 
 struct proc_dir_entry scsi_hba_dir[(PROC_SCSI_LAST - PROC_SCSI_FILE) * 4]; 
 
@@ -158,7 +167,7 @@ static int proc_lookupscsi(struct inode * dir, const char * name, int len,
     for (; de->name ; de++) {
 	if (!proc_match(len, name, de))
 	    continue;
-	*result = iget(dir->i_sb, de->low_ino);
+	*result = proc_get_inode(dir->i_sb, de->low_ino, de);
 	iput(dir);
 	if (!*result)
 	    return(-ENOENT);

@@ -7,21 +7,9 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS=	ialloc.o balloc.o inode.o file.o dir.o symlink.o namei.o \
-	fsync.o truncate.o
-
-sysv.o: $(OBJS)
-	$(LD) -r -o sysv.o $(OBJS)
-
-modules: sysv.o
-	ln -sf ../fs/sysv/sysv.o $(TOPDIR)/modules
-
-dep:
-	$(CPP) -M *.c > .depend
+O_TARGET := sysv.o
+O_OBJS   := ialloc.o balloc.o inode.o file.o dir.o symlink.o namei.o \
+		fsync.o truncate.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -1129,8 +1129,12 @@ char kernel_version[] = UTS_RELEASE;
 
 static int hp100_port = -1;
 
+static char devicename[9] = { 0, };
 static struct device dev_hp100 = {
-  "        ", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, hp100_probe
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, hp100_probe
 };
 
 int init_module( void )

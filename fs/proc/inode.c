@@ -18,16 +18,15 @@
 #include <asm/segment.h>
 
 extern unsigned long prof_len;
-extern void proc_net_init(void);
 
-void proc_put_inode(struct inode *inode)
+static void proc_put_inode(struct inode *inode)
 {
 	if (inode->i_nlink)
 		return;
 	inode->i_size = 0;
 }
 
-void proc_put_super(struct super_block *sb)
+static void proc_put_super(struct super_block *sb)
 {
 	lock_super(sb);
 	sb->s_dev = 0;
@@ -75,23 +74,46 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 	return 1;
 }
 
+struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_entry * de)
+{
+	struct inode * inode = iget(s, ino);
+	if (inode) {
+		inode->u.generic_ip = (void *) de;
+		if (de) {
+			if (de->mode) {
+				inode->i_mode = de->mode;
+				inode->i_uid = de->uid;
+				inode->i_gid = de->gid;
+			}
+			if (de->size)
+				inode->i_size = de->size;
+			if (de->ops)
+				inode->i_op = de->ops;
+			if (de->nlink)
+				inode->i_nlink = de->nlink;
+			if (de->fill_inode)
+				de->fill_inode(inode);
+		}
+	}
+	return inode;
+}			
 
 struct super_block *proc_read_super(struct super_block *s,void *data, 
 				    int silent)
 {
+	proc_root_init();
 	lock_super(s);
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
 	s->s_magic = PROC_SUPER_MAGIC;
 	s->s_op = &proc_sops;
 	unlock_super(s);
-	if (!(s->s_mounted = iget(s,PROC_ROOT_INO))) {
+	if (!(s->s_mounted = proc_get_inode(s, PROC_ROOT_INO, &proc_root))) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
 		return NULL;
 	}
 	parse_options(data, &s->s_mounted->i_uid, &s->s_mounted->i_gid);
-	proc_net_init();
 	return s;
 }
 
@@ -139,31 +161,6 @@ void proc_read_inode(struct inode * inode)
 		for (i = 1 ; i < NR_TASKS ; i++)
 			if (task[i])
 				inode->i_nlink++;
-		inode->i_op = &proc_root_inode_operations;
-		return;
-	}
-
-/* #ifdef CONFIG_IP_ACCT */
-	/* this file may be opened R/W by root to reset the accounting */
-	if (ino == PROC_NET_IPACCT) {
-		inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
-		inode->i_op = &proc_net_inode_operations;
-		return;
-	}
-/* #endif */
-/* #ifdef CONFIG_IP_FIREWALL */
-	/* these files may be opened R/W by root to reset the counters */
-	if ((ino == PROC_NET_IPFWFWD) || (ino == PROC_NET_IPFWBLK)) {
-		inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
-		inode->i_op = &proc_net_inode_operations;
-		return;
-	}
-/* #endif */
-
-	/* other files within /proc/net */
-	if ((ino >= PROC_NET_UNIX) && (ino < PROC_NET_LAST)) {
-		inode->i_mode = S_IFREG | S_IRUGO;
-		inode->i_op = &proc_net_inode_operations;
 		return;
 	}
 
@@ -203,9 +200,7 @@ void proc_read_inode(struct inode * inode)
 				inode->i_op = &proc_kmsg_inode_operations;
 				break;
 			case PROC_NET:
-				inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 				inode->i_nlink = 2;
-				inode->i_op = &proc_netdir_inode_operations;
 				break;
 			case PROC_SCSI:
                                 inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
@@ -239,8 +234,6 @@ void proc_read_inode(struct inode * inode)
 	switch (ino) {
 		case PROC_PID_INO:
 			inode->i_nlink = 4;
-			inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
-			inode->i_op = &proc_base_inode_operations;
 			return;
 		case PROC_PID_MEM:
 			inode->i_op = &proc_mem_inode_operations;

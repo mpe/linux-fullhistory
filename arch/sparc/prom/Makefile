@@ -8,9 +8,6 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 OBJS  = bootstr.o devmap.o devops.o init.o memory.o misc.o mp.o \
         palloc.o ranges.o segment.o tree.o console.o printf.o
 

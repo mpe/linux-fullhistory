@@ -7,17 +7,8 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS=	hpfs_fs.o hpfs_caps.o
-
-hpfs.o: $(OBJS)
-	$(LD) -r -o hpfs.o $(OBJS)
-
-dep:
-	$(CPP) -M *.c > .depend
+O_TARGET := hpfs.o
+O_OBJS   := hpfs_fs.o hpfs_caps.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

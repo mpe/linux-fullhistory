@@ -158,7 +158,7 @@ extern int  ax25_uid_policy;
 extern ax25_address *ax25_findbyuid(uid_t);
 extern void ax25_queue_xmit(struct sk_buff *, struct device *, int);
 
-#include "ax25call.h"
+#include <net/ax25call.h>
 
 /* ax25_in.c */
 extern int  ax25_process_rx_frame(ax25_cb *, struct sk_buff *, int);

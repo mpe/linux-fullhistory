@@ -1855,8 +1855,9 @@ static char asc2hex(char value)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device thisEthwrk = {
-  "        ", /* device name inserted by /linux/drivers/net/net_init.c */
+  devicename, /* device name is inserted by linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x300, 5,  /* I/O address, IRQ */
   0, 0, 0, NULL, ewrk3_probe };

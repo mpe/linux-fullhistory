@@ -153,7 +153,7 @@ static u_char xd_detect (u_char *controller,u_char **address)
 
 /* xd_geninit: grab the IRQ and DMA channel, initialise the drives */
 /* and set up the "raw" device entries in the table */
-static void xd_geninit (void)
+static void xd_geninit (struct gendisk *ignored)
 {
 	u_char i,controller,*address;
 

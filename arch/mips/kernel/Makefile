@@ -7,15 +7,12 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.s.o:
-	$(AS) $(ASFLAGS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
 .S.s:
 	$(CPP) $(CFLAGS) -D__ASSEMBLY__ -traditional $< -o $*.s
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
+EXTRA_ASFLAGS = -mips3 -mcpu=r4000
 OBJS  = process.o signal.o entry.o traps.o irq.o ptrace.o cache.o resume.o \
 	ioport.o setup.o bios32.o tynedma.o
 
@@ -52,10 +49,5 @@ tlb.s:	tlb.S $(TOPDIR)/include/asm/regdef.h $(TOPDIR)/include/asm/mipsregs.h \
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)
 	sync
-
-dep:
-	$(CPP) -M *.c > .depend
-
-modules:
 
 include $(TOPDIR)/Rules.make

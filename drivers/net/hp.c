@@ -35,10 +35,8 @@ static const char *version =
 #include <asm/io.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "8390.h"
-
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int hppclan_portlist[] =
@@ -130,9 +128,6 @@ int hp_probe1(struct device *dev, int ioaddr)
 	if (dev == NULL)
 		dev = init_etherdev(0, sizeof(struct ei_device), 0);
 
-	/* Grab the region so we can find another board if something fails. */
-	request_region(ioaddr, HP_IO_EXTENT,"hp");
-
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
 
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
@@ -170,6 +165,9 @@ int hp_probe1(struct device *dev, int ioaddr)
 			return EBUSY;
 		}
 	}
+
+	/* Grab the region so we can find another board if something fails. */
+	request_region(ioaddr, HP_IO_EXTENT,"hp");
 
 	if (ei_debug > 1)
 		printk(version);
@@ -327,8 +325,12 @@ hp_init_card(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_hp = {
-	"        " /*"hp"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, hp_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, hp_probe };
 
 int io = 300;
 int irq = 0;
@@ -336,7 +338,7 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("hp: You should not use auto-probing with insmod!\n");
+		printk("hp: You should not use auto-probing with insmod!\n");
 	dev_hp.base_addr = io;
 	dev_hp.irq       = irq;
 	if (register_netdev(&dev_hp) != 0) {
@@ -353,7 +355,13 @@ cleanup_module(void)
 		printk("hp: device busy, remove delayed\n");
 	else
 	{
+		int ioaddr = dev_hp.base_addr - NIC_OFFSET;
+
 		unregister_netdev(&dev_hp);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_hp.irq);
+		release_region(ioaddr, HP_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -37,15 +37,15 @@
 #include <linux/config.h>
 
 #include <linux/skbuff.h>	/* struct sk_buff */
-#include "protocol.h"		/* struct inet_protocol */
+#include <net/protocol.h>		/* struct inet_protocol */
 #ifdef CONFIG_AX25
-#include "ax25.h"
+#include <net/ax25.h>
 #ifdef CONFIG_NETROM
-#include "netrom.h"
+#include <net/netrom.h>
 #endif
 #endif
 #ifdef CONFIG_IPX
-#include "ipx.h"
+#include <net/ipx.h>
 #endif
 #ifdef CONFIG_ATALK
 #include <linux/atalk.h>

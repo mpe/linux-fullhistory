@@ -1016,8 +1016,12 @@ void unix_proto_init(struct net_proto *pro)
 {
 	printk("NET3: Unix domain sockets 0.07 BETA for Linux NET3.030.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
-	proc_net_register(&(struct proc_dir_entry)
-			  { PROC_NET_UNIX,  4, "unix", unix_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_UNIX,  4, "unix",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		unix_get_info
+	});
 }
 /*
  * Local variables:

@@ -243,7 +243,7 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 					if (disk_index < 4)
 						kstat.dk_drive[disk_index]++;
 					break;
-		case HD_MAJOR:
+		case IDE0_MAJOR:	/* same as HD_MAJOR */
 		case XT_DISK_MAJOR:	disk_index = (MINOR(req->dev) & 0x0040) >> 6;
 					kstat.dk_drive[disk_index]++;
 					break;
@@ -305,6 +305,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		if (blk_size[major][MINOR(bh->b_dev)] < (sector + count)>>1) {
 			bh->b_dirt = bh->b_uptodate = 0;
 			bh->b_req = 0;
+			printk("attempt to access beyond end of device\n");
 			return;
 		}
 	/* Uhhuh.. Nasty dead-lock possible here.. */
@@ -334,7 +335,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	     || major == IDE1_MAJOR
 	     || major == FLOPPY_MAJOR
 	     || major == SCSI_DISK_MAJOR
-	     || major == SCSI_CDROM_MAJOR)
+	     || major == SCSI_CDROM_MAJOR
+	     || major == IDE2_MAJOR
+	     || major == IDE3_MAJOR)
 	    && (req = blk_dev[major].current_request))
 	{
 #ifdef CONFIG_BLK_DEV_HD
@@ -583,11 +586,11 @@ long blk_dev_init(long mem_start, long mem_end)
 		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
+#ifdef CONFIG_BLK_DEV_IDE
+	mem_start = ide_init(mem_start,mem_end); /* this MUST preceed hd_init */
+#endif
 #ifdef CONFIG_BLK_DEV_HD
 	mem_start = hd_init(mem_start,mem_end);
-#endif
-#ifdef CONFIG_BLK_DEV_IDE
-	mem_start = ide_init(mem_start,mem_end);
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	mem_start = xd_init(mem_start,mem_end);

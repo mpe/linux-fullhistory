@@ -33,9 +33,8 @@ static const char *version =
 #include <asm/system.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "8390.h"
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int wd_portlist[] =
@@ -397,8 +396,12 @@ wd_close_card(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_wd80x3 = {
-	"        " /*"wd80x3"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, wd_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, wd_probe };
 
 int io = 0x300;
 int irq = 0;
@@ -407,7 +410,7 @@ int mem = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("wd: You should not use auto-probing with insmod!\n");
+		printk("wd: You should not use auto-probing with insmod!\n");
 	dev_wd80x3.base_addr = io;
 	dev_wd80x3.irq       = irq;
 	dev_wd80x3.mem_start = mem;
@@ -425,10 +428,11 @@ cleanup_module(void)
 	{
 		int ioaddr = dev_wd80x3.base_addr - WD_NIC_OFFSET;
 
-    	free_irq(dev_wd80x3.irq);
-    	release_region(ioaddr, WD_IO_EXTENT);
-
 		unregister_netdev(&dev_wd80x3);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_wd80x3.irq);
+		release_region(ioaddr, WD_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -1969,12 +1969,24 @@ void ipx_proto_init(struct net_proto *pro)
 	
 	register_netdevice_notifier(&ipx_dev_notifier);
 
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPX, 3, "ipx", ipx_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPX_INTERFACE, 13, "ipx_interface", ipx_interface_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPX_ROUTE, 9, "ipx_route", ipx_rt_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPX, 3, "ipx",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ipx_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPX_INTERFACE, 13, "ipx_interface",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ipx_interface_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPX_ROUTE, 9, "ipx_route",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ipx_rt_get_info
+	});
 		
 	printk("Swansea University Computer Society IPX 0.31 for NET3.030\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");

@@ -27,10 +27,10 @@
 #include <linux/netdevice.h>
 
 #ifndef _SNMP_H
-#include "snmp.h"
+#include <net/snmp.h>
 #endif
 
-#include "sock.h"	/* struct sock */
+#include <net/sock.h>	/* struct sock */
 
 /* IP flags. */
 #define IP_CE		0x8000		/* Flag: "Congestion"		*/

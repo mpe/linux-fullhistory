@@ -135,22 +135,57 @@ struct proc_dir_entry {
 	unsigned short low_ino;
 	unsigned short namelen;
 	const char *name;
+	mode_t mode;
+	nlink_t nlink;
+	uid_t uid;
+	gid_t gid;
+	unsigned long size;
+	struct inode_operations * ops;
 	int (*get_info)(char *, char **, off_t, int, int);
 	void (*fill_inode)(struct inode *);
 	struct proc_dir_entry *next, *parent, *subdir;
 };
 
+extern struct proc_dir_entry proc_root;
+extern struct proc_dir_entry proc_net;
+extern struct proc_dir_entry proc_scsi;
+extern struct proc_dir_entry proc_pid;
+extern struct proc_dir_entry proc_pid_fd;
+
+extern void proc_root_init(void);
+extern void proc_base_init(void);
+extern void proc_net_init(void);
+
+extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
+extern int proc_unregister(struct proc_dir_entry *, int);
+
+static inline int proc_net_register(struct proc_dir_entry * x)
+{
+	return proc_register(&proc_net, x);
+}
+
+static inline int proc_net_unregister(int x)
+{
+	return proc_unregister(&proc_net, x);
+}
+
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
-extern void proc_put_inode(struct inode *);
-extern void proc_put_super(struct super_block *);
+extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_entry *);
 extern void proc_statfs(struct super_block *, struct statfs *, int);
 extern void proc_read_inode(struct inode *);
 extern void proc_write_inode(struct inode *);
 extern int proc_match(int, const char *, struct proc_dir_entry *);
-extern int proc_net_register(struct proc_dir_entry *);
-extern int proc_net_unregister(int);
 
-extern struct inode_operations proc_root_inode_operations;
+/*
+ * These are generic /proc routines that use the internal
+ * "struct proc_dir_entry" tree to traverse the filesystem.
+ *
+ * The /proc root directory has extended versions to take care
+ * of the /proc/<pid> subdirectories.
+ */
+extern int proc_readdir(struct inode *, struct file *, void *, filldir_t);
+extern int proc_lookup(struct inode *, const char *, int, struct inode **);
+
 extern struct inode_operations proc_base_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_netdir_inode_operations;

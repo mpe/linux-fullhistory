@@ -148,9 +148,4 @@ struct ifconf
 #define	ifc_buf	ifc_ifcu.ifcu_buf		/* buffer address	*/
 #define	ifc_req	ifc_ifcu.ifcu_req		/* array of structures	*/
 
-
-/* BSD UNIX expects to find these here, so here we go: */
-#include <linux/if_arp.h>
-#include <linux/route.h>
-
 #endif /* _LINUX_IF_H */

@@ -9,24 +9,7 @@
 # parent makefile.
 #
 
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
-OBJS := pci.o
-SRCS := pci.c
-
-all: pci.a
-
-pci.a: $(OBJS)
-	rm -f pci.a
-	$(AR) rcs pci.a $(OBJS)
-	sync
-
-dep:
-	$(CPP) -M $(SRCS) > .depend
-
-modules:
+L_OBJS   := pci.o
+L_TARGET := pci.a
 
 include $(TOPDIR)/Rules.make

@@ -332,12 +332,17 @@ static void (DEVICE_REQUEST)(void);
 #endif /* (MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER) */
 
 /* end_request() - SCSI devices have their own version */
+/*               - IDE drivers have their own copy too */
 
 #if ! SCSI_MAJOR(MAJOR_NR)
 
+#ifdef _IDE_CD_C	/* ide-cd.c uses copy from ide.c */
+void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
+#else
+
 #ifdef IDE_DRIVER
-static void end_request(byte uptodate, byte hwif) {
-	struct request *req = ide_cur_rq[HWIF];
+void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup) {
+	struct request *req = hwgroup->rq;
 #else
 static void end_request(int uptodate) {
 	struct request *req = CURRENT;
@@ -371,7 +376,7 @@ static void end_request(int uptodate) {
 		}
 	}
 #ifdef IDE_DRIVER
-	ide_cur_rq[HWIF] = NULL;
+	hwgroup->rq = NULL;
 #else
 	DEVICE_OFF(req->dev);
 	CURRENT = req->next;
@@ -381,6 +386,7 @@ static void end_request(int uptodate) {
 	req->dev = -1;
 	wake_up(&wait_for_request);
 }
+#endif /* ndef _IDE_CD_C */
 #endif /* ! SCSI_MAJOR(MAJOR_NR) */
 
 #endif /* defined(MAJOR_NR) || defined(IDE_DRIVER) */

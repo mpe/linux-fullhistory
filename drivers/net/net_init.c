@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/malloc.h>
 #include <linux/if_ether.h>
+#include <linux/if_arp.h>
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -114,8 +115,10 @@ init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
 							dev->priv = (void*) *mem_startp;
 							*mem_startp += sizeof_priv;
 						} else
-							dev->priv = kmalloc(sizeof_priv, GFP_KERNEL);
-						memset(dev->priv, 0, sizeof_priv);
+							dev->priv = sizeof_priv
+							  ? kmalloc(sizeof_priv, GFP_KERNEL)
+							  :	NULL;
+						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
 						goto found;
 					}
 			}

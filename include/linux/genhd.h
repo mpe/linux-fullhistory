@@ -18,6 +18,7 @@
 #define EXTENDED_PARTITION 5
 
 #define DM6_PARTITION		0x54	/* has DDO: use xlated geom & offset */
+#define EZD_PARTITION		0x55	/* EZ-DRIVE:  same as DM6 (we think) */
 #define DM6_AUX1PARTITION	0x51	/* no DDO:  use xlated geom */
 #define DM6_AUX3PARTITION	0x53	/* no DDO:  use xlated geom */
 	
@@ -47,9 +48,9 @@ struct gendisk {
 	int max_p;			/* maximum partitions per device */
 	int max_nr;			/* maximum number of real devices */
 
-	void (*init)(void);		/* Initialization called before we do our thing */
+	void (*init)(struct gendisk *);	/* Initialization called before we do our thing */
 	struct hd_struct *part;		/* partition table */
-	int *sizes;			/* size of device in blocks */
+	int *sizes;			/* device size in blocks, copied to blk_size[] */
 	int nr_real;			/* number of real devices */
 
 	void *real_devices;		/* internal use */

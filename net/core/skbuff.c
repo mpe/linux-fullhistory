@@ -379,14 +379,14 @@ unsigned char *skb_push(struct sk_buff *skb, int len)
 	return skb->data;
 }
 
-int skb_pull(struct sk_buff *skb, int len)
+unsigned char * skb_pull(struct sk_buff *skb, int len)
 {
 	IS_SKB(skb);
 	if(len>skb->len)
-		len=skb->len;
+		return 0;
 	skb->data+=len;
 	skb->len-=len;
-	return len;
+	return skb->data;
 }
 
 int skb_headroom(struct sk_buff *skb)

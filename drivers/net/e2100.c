@@ -151,9 +151,6 @@ int e21_probe1(struct device *dev, int ioaddr)
 	if (status != 0x21 && status != 0x23)
 		return ENODEV;
 
-	/* Grab the region so we can find a different board if IRQ select fails. */
-	request_region(ioaddr, E21_IO_EXTENT,"e2100");
-
 	/* Read the station address PROM.  */
 	for (i = 0; i < 6; i++)
 		station_addr[i] = inb(ioaddr + E21_SAPROM + i);
@@ -178,6 +175,9 @@ int e21_probe1(struct device *dev, int ioaddr)
 		}
 	} else if (dev->irq == 2)	/* Fixup luser bogosity: IRQ2 is really IRQ9 */
 		dev->irq = 9;
+
+	/* Grab the region so we can find a different board if IRQ select fails. */
+	request_region(ioaddr, E21_IO_EXTENT, "e2100");
 
 	/* The 8390 is at the base address. */
 	dev->base_addr = ioaddr;
@@ -356,8 +356,12 @@ struct netdev_entry e21_drv =
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_e2100 = {
-	"        " /*"e2100"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, e2100_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, e2100_probe };
 
 int io = 0x300;
 int irq = 0;
@@ -365,7 +369,7 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("e2100: You should not use auto-probing with insmod!\n");
+		printk("e2100: You should not use auto-probing with insmod!\n");
 	dev_e2100.base_addr = io;
 	dev_e2100.irq       = irq;
 	if (register_netdev(&dev_e2100) != 0) {
@@ -383,6 +387,9 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_e2100);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		release_region(dev_e2100.base_addr, E21_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

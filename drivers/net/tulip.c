@@ -745,8 +745,13 @@ set_mac_address(struct device *dev, void *addr)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_tulip = {
-	"        " /*"tulip"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, tulip_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, tulip_probe
+};
 
 int io = 0;
 int irq = 0;

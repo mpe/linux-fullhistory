@@ -7,109 +7,85 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-SUBDIRS = minix ext ext2 msdos proc isofs nfs xiafs umsdos hpfs sysv smbfs
+L_TARGET := filesystems.a
+L_OBJS    = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+O_TARGET := fs.o
+O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
+		super.o  block_dev.o stat.o exec.o pipe.o namei.o fcntl.o \
+		ioctl.o readdir.o select.o fifo.o locks.o filesystems.o \
+		dcache.o $(BINFMTS) 
+
+MOD_LIST_NAME := FS_MODULES
+ALL_SUB_DIRS = minix ext ext2 msdos proc isofs nfs xiafs umsdos hpfs sysv smbfs
 
 ifdef CONFIG_MINIX_FS
-FS_SUBDIRS := $(FS_SUBDIRS) minix
+SUB_DIRS += minix
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) minix
+MOD_SUB_DIRS += minix
 endif
 
 ifdef CONFIG_EXT_FS
-FS_SUBDIRS := $(FS_SUBDIRS) ext
+SUB_DIRS += ext
 endif
 
 ifdef CONFIG_EXT2_FS
-FS_SUBDIRS := $(FS_SUBDIRS) ext2
+SUB_DIRS += ext2
 endif
 
 ifdef CONFIG_MSDOS_FS
-FS_SUBDIRS := $(FS_SUBDIRS) msdos
+SUB_DIRS += msdos
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) msdos
+MOD_SUB_DIRS += msdos
 endif
 
 ifdef CONFIG_PROC_FS
-FS_SUBDIRS := $(FS_SUBDIRS) proc
+SUB_DIRS += proc
 endif
 
 ifdef CONFIG_ISO9660_FS
-FS_SUBDIRS := $(FS_SUBDIRS) isofs
+SUB_DIRS += isofs
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) isofs
+MOD_SUB_DIRS += isofs
 endif
 
 ifdef CONFIG_NFS_FS
-FS_SUBDIRS := $(FS_SUBDIRS) nfs
+SUB_DIRS += nfs
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) nfs
+MOD_SUB_DIRS += nfs
 endif
 
 ifdef CONFIG_XIA_FS
-FS_SUBDIRS := $(FS_SUBDIRS) xiafs
+SUB_DIRS += xiafs
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) xiafs
+MOD_SUB_DIRS += xiafs
 endif
 
 ifdef CONFIG_UMSDOS_FS
-FS_SUBDIRS := $(FS_SUBDIRS) umsdos
+SUB_DIRS += umsdos
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) umsdos
+MOD_SUB_DIRS += umsdos
 endif
 
 ifdef CONFIG_SYSV_FS
-FS_SUBDIRS := $(FS_SUBDIRS) sysv
+SUB_DIRS += sysv
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) sysv
+MOD_SUB_DIRS += sysv
 endif
 
 ifdef CONFIG_SMB_FS
-FS_SUBDIRS := $(FS_SUBDIRS) smbfs
+SUB_DIRS += smbfs
 else
-MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) smbfs
+MOD_SUB_DIRS += smbfs
 endif
 
 ifdef CONFIG_HPFS_FS
-FS_SUBDIRS := $(FS_SUBDIRS) hpfs
+SUB_DIRS += hpfs
 endif
 
 ifdef CONFIG_BINFMT_ELF
-BINFMTS := $(BINFMTS) binfmt_elf.o
+BINFMTS += binfmt_elf.o
 else
-MODULE_OBJS := $(MODULE_OBJS) binfmt_elf.o
+MOD_SUB_DIRS += binfmt_elf.o
 endif
-
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
-	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o readdir.o \
-	select.o fifo.o locks.o filesystems.o dcache.o $(BINFMTS)
-
-all: fs.o filesystems.a
-
-fs.o: $(OBJS)
-	$(LD) -r -o fs.o $(OBJS)
-
-filesystems.a: dummy
-	rm -f filesystems.a
-	set -e; for i in $(FS_SUBDIRS); do \
-	  test ! -d $$i || \
-	    { $(MAKE) -C $$i; $(AR) rcs filesystems.a $$i/$$i.o; }; done
-
-modules: $(MODULE_OBJS)
-	for i in $(MODULE_FS_SUBDIRS); do $(MAKE) -C $$i modules; done
-	cd ../modules;for i in $(MODULE_OBJS); do ln -sf ../fs/$$i .; done
-	cd ../modules;for i in $(MODULE_FS_SUBDIRS); \
-	do echo $$i.o; ln -sf ../fs/$$i/$$i.o .; done > ../modules/FS_MODULES
-
-depend dep:
-	$(CPP) -M *.c > .depend
-	set -e; for i in $(FS_SUBDIRS); do \
-	  test ! -d $$i || $(MAKE) -C $$i dep; done
-	set -e; for i in $(MODULE_FS_SUBDIRS); do \
-	  test ! -d $$i || $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE" dep; done
 
 include $(TOPDIR)/Rules.make

@@ -44,6 +44,15 @@ static const char *version =
 #define  AC_ENABLE		 0x01
 #define AC_CONFIG		0xC90	/* The configuration port. */
 
+#define AC_IO_EXTENT 0x10		/* IS THIS REALLY TRUE ??? */
+                                /* Actually accessed is:
+								 * AC_NIC_BASE (0-15)
+								 * AC_SA_PROM (0-5)
+								 * AC_ID_PORT (0-3)
+								 * AC_RESET_PORT
+								 * AC_CONFIG
+								 */
+
 /* Decoding of the configuration register. */
 static unsigned char config2irqmap[8] = {15, 12, 11, 10, 9, 7, 5, 3};
 static int addrmap[8] =
@@ -144,8 +153,10 @@ static int ac_probe1(int ioaddr, struct device *dev)
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200")) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
-		return 0;
+		return EAGAIN;
 	}
+
+	request_region(ioaddr, AC_IO_EXTENT, "ac3200");
 
 	dev->base_addr = ioaddr;
 
@@ -281,8 +292,12 @@ static int ac_close_card(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_ac3200 = {
-	"        " /*"ac3200"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ac3200_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, ac3200_probe };
 
 int io = 0;
 int irq = 0;
@@ -306,6 +321,10 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_ac3200);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		free_irq(dev_ac3200.irq);
+		release_region(dev_ac3200.base_addr, AC_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -87,6 +87,7 @@
 #endif
 #endif
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 
 /*
@@ -687,9 +688,10 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	memcpy(&tip,arp_ptr,4);
   
 /* 
- *	Check for bad requests for 127.0.0.1.  If this is one such, delete it.
+ *	Check for bad requests for 127.x.x.x and requests for multicast
+ *	addresses.  If this is one such, delete it.
  */
-	if(tip == INADDR_LOOPBACK)
+	if (IN_LOOPBACK(tip) || IN_MULTICAST(tip))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -1460,7 +1462,11 @@ void arp_init (void)
 	/* Register for device down reports */
 	register_netdevice_notifier(&arp_dev_notifier);
 
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_ARP,	3, "arp", arp_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_ARP, 3, "arp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		arp_get_info
+	});
 }
 

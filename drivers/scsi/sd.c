@@ -149,7 +149,7 @@ static void sd_release(struct inode * inode, struct file * file)
     }
 }
 
-static void sd_geninit(void);
+static void sd_geninit(struct gendisk *);
 
 static struct file_operations sd_fops = {
     NULL,                        /* lseek - default */
@@ -181,7 +181,7 @@ static struct gendisk sd_gendisk = {
     NULL                         /* next */
 };
 
-static void sd_geninit (void)
+static void sd_geninit (struct gendisk *ignored)
 {
     int i;
     

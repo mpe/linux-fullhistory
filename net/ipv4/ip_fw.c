@@ -1550,17 +1550,33 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 void ip_fw_init(void)
 {
 #ifdef CONFIG_IP_ACCT
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPACCT, 7, "ip_acct", ip_acct_procinfo });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPACCT, 7, "ip_acct",
+		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_acct_procinfo
+	});
 #endif
 #ifdef CONFIG_IP_FIREWALL
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPFWBLK, 8, "ip_block", ip_fw_blk_procinfo });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPFWFWD, 10, "ip_forward", ip_fw_fwd_procinfo });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPFWBLK, 8, "ip_block",
+		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_fw_blk_procinfo
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPFWFWD, 10, "ip_forward",
+		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_fw_fwd_procinfo
+	});
 #endif
 #ifdef CONFIG_IP_MASQUERADE
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPMSQHST, 13, "ip_masquerade", ip_msqhst_procinfo });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPMSQHST, 13, "ip_masquerade",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_msqhst_procinfo
+	});
 #endif
 }

@@ -2735,8 +2735,9 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device thisDE4X5 = {
-  "        ", /* device name inserted by /linux/drivers/net/net_init.c */
+  devicename, /* device name is inserted by linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x2000, 10, /* I/O address, IRQ */
   0, 0, 0, NULL, de4x5_probe };

@@ -199,8 +199,8 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 /*
  *	We shouldn't use this type conversion. Check later.
  */
-	struct arphdr *rarp = (struct arphdr *)skb_pull(skb,sizeof(struct arphdr));
-	unsigned char *rarp_ptr = skb->data;
+	struct arphdr *rarp = (struct arphdr *) skb->data;
+	unsigned char *rarp_ptr = skb_pull(skb,sizeof(struct arphdr));
 	struct rarp_table *entry;
 	long sip,tip;
 	unsigned char *sha,*tha;            /* s for "source", t for "target" */
@@ -545,8 +545,12 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 void
 rarp_init(void)
 {
-	proc_net_register(&(struct proc_dir_entry)
-		  { PROC_NET_RARP, 4, "rarp", rarp_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_RARP, 4, "rarp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		rarp_get_info
+	});
 	rarp_ioctl_hook = rarp_ioctl;
 }
 

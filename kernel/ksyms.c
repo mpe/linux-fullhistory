@@ -37,7 +37,6 @@
 #ifdef CONFIG_NET
 #include <linux/net.h>
 #include <linux/netdevice.h>
-#include <net/eth.h>
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
@@ -458,8 +457,8 @@ struct symbol_table symbol_table = {
 	X(msdos_write_inode),
 #endif
 #ifdef CONFIG_PROC_FS
-	X(proc_net_register),
-	X(proc_net_unregister),
+	X(proc_register),
+	X(proc_unregister),
 #endif
 	/********************************************************
 	 * Do not add anything below this line,

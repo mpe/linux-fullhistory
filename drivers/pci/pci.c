@@ -714,6 +714,7 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 
 		if (dev->class >> 8 == PCI_CLASS_BRIDGE_PCI) {
 			unsigned int buses;
+			unsigned short cr;
 
 			/*
 			 * Insert it into the tree of buses.
@@ -735,6 +736,8 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			 * Clear all status bits and turn off memory,
 			 * I/O and master enables.
 			 */
+			pcibios_read_config_word(bus->number, devfn,
+						  PCI_COMMAND, &cr);
 			pcibios_write_config_word(bus->number, devfn,
 						  PCI_COMMAND, 0x0000);
 			pcibios_write_config_word(bus->number, devfn,
@@ -763,6 +766,8 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			  | ((unsigned int)(child->subordinate) << 16);
 			pcibios_write_config_dword(bus->number, devfn, 0x18,
 						   buses);
+			pcibios_write_config_word(bus->number, devfn,
+						  PCI_COMMAND, cr);
 		}
 	}
 	/*

@@ -1392,13 +1392,21 @@ void nr_proto_init(struct net_proto *pro)
 	nr_default.tries      = NR_DEFAULT_N2;
 	nr_default.window     = NR_DEFAULT_WINDOW;
 
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_NR, 2, "nr", nr_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_NR_NEIGH, 8, "nr_neigh", nr_neigh_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_NR_NODES, 8, "nr_nodes", nr_nodes_get_info });
-
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_NR, 2, "nr",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		nr_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_NR_NEIGH, 8, "nr_neigh",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		nr_neigh_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_NR_NODES, 8, "nr_nodes",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		nr_nodes_get_info
+	});
 }
 
 #endif

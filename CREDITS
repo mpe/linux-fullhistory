@@ -708,7 +708,6 @@ S: Germany
 
 N: David C. Niemi
 E: niemidc@clark.net
-E: niemidc@slma.com
 D: FSSTND, The XFree86 Project
 D: DMA memory support, floppy driver
 S: 2364 Old Trail Drive
@@ -943,6 +942,10 @@ D: Playing with Streams, ISDN, and BSD networking code for Linux
 S: Schleiermacherstrasse 12
 S: 90491 Nuernberg
 S: Germany
+
+N: Dirk Verworner
+D: Co-author of german book ``Linux-Kernel-Programmierung''
+D: Co-founder of Berlin Linux User Group
 
 N: Patrick Volkerding
 E: volkerdi@ftp.cdrom.com

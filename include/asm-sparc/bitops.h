@@ -35,13 +35,13 @@
  *  31     24  23     16  15      8  7       0
  */
 
-/* #define LITTLE_ENDIAN_BITOPS */
+/* #define __LITTLE_ENDIAN_BITOPS */
 
 extern __inline__ unsigned int set_bit(unsigned int nr, void *vaddr)
 {
 
 
-#ifdef LITTLE_ENDIAN_BITOPS
+#ifdef __LITTLE_ENDIAN_BITOPS
 
 
         int retval;
@@ -101,7 +101,7 @@ extern __inline__ unsigned int set_bit(unsigned int nr, void *vaddr)
 
 extern __inline__ unsigned int clear_bit(unsigned int nr, void *vaddr)
 {
-#ifdef LITTLE_ENDIAN_BITOPS
+#ifdef __LITTLE_ENDIAN_BITOPS
 
 
         int retval;
@@ -162,7 +162,7 @@ extern __inline__ unsigned int clear_bit(unsigned int nr, void *vaddr)
 
 extern __inline__ unsigned int change_bit(unsigned int nr, void *vaddr)
 {
-#ifdef LITTLE_ENDIAN_BITOPS
+#ifdef __LITTLE_ENDIAN_BITOPS
 
 
         int retval;
@@ -225,7 +225,7 @@ extern __inline__ unsigned int change_bit(unsigned int nr, void *vaddr)
 
 extern __inline__ unsigned int test_bit(int nr, void *vaddr)
 {
-#ifdef LITTLE_ENDIAN_BITOPS
+#ifdef __LITTLE_ENDIAN_BITOPS
 
         unsigned char mask;
         unsigned char *addr = (unsigned char *)vaddr;
@@ -254,7 +254,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
 
   cnt = 0;
 
-#ifdef LITTLE_ENDIAN_BITOPS
+#ifdef __LITTLE_ENDIAN_BITOPS
 
   for(int byte_bit = 24; byte_bit >=0; byte_bit -= 8)
 	  for(int bit = 0; bit<8; bit++)
@@ -283,7 +283,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
 extern __inline__ unsigned long
 find_next_zero_bit(void *addr, unsigned long size, unsigned long offset)
 {
-#ifdef LITTLE_ENDIAN_BITOPS
+#ifdef __LITTLE_ENDIAN_BITOPS
 
 	/* FOO, needs to be written */
 

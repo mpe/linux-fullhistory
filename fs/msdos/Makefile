@@ -7,20 +7,8 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS=	buffer.o namei.o inode.o file.o dir.o misc.o fat.o mmap.o
-
-msdos.o: $(OBJS)
-	$(LD) -r -o msdos.o $(OBJS)
-
-modules: msdos.o
-	ln -sf ../fs/msdos/msdos.o $(TOPDIR)/modules
-
-dep:
-	$(CPP) -M *.c > .depend
+O_TARGET := msdos.o
+O_OBJS   := buffer.o namei.o inode.o file.o dir.o misc.o fat.o mmap.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -160,13 +160,7 @@ struct {
 #ifdef CONFIG_SCSI
 	{ "max_scsi_luns=", scsi_luns_setup },
 #endif
-#ifdef CONFIG_BLK_DEV_IDE
-	{ "hda=", hda_setup },
-	{ "hdb=", hdb_setup },
-	{ "hdc=", hdc_setup },
-	{ "hdd=", hdd_setup },
-	{ "hd=",  ide_setup },
-#elif defined(CONFIG_BLK_DEV_HD)
+#if defined(CONFIG_BLK_DEV_HD)
 	{ "hd=", hd_setup },
 #endif
 #ifdef CONFIG_CHR_DEV_ST
@@ -253,6 +247,13 @@ static int checksetup(char *line)
 	int i = 0;
 	int ints[11];
 
+#ifdef CONFIG_BLK_DEV_IDE
+	/* ide driver needs the basic string, rather than pre-processed values */
+	if (!strncmp(line,"ide",3) || (!strncmp(line,"hd",2) && line[2] != '=')) {
+		ide_setup(line);
+		return 1;
+	}
+#endif
 	while (bootsetups[i].str) {
 		int n = strlen(bootsetups[i].str);
 		if (!strncmp(line,bootsetups[i].str,n)) {

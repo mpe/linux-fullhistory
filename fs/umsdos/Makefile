@@ -7,30 +7,18 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
+O_TARGET := umsdos.o
+O_OBJS   := dir.o emd.o file.o inode.o ioctl.o mangle.o namei.o \
+		rdir.o symlink.o #check.o
+M_OBJS   := $(O_TARGET)
 
-OBJS=	dir.o emd.o file.o inode.o ioctl.o mangle.o namei.o\
-	rdir.o symlink.o #check.o
-
-umsdos.o: $(OBJS)
-	$(LD) -r -o umsdos.o $(OBJS)
-
-modules: umsdos.o
-	ln -sf ../fs/umsdos/umsdos.o $(TOPDIR)/modules
+include $(TOPDIR)/Rules.make
 
 clean:
 	rm -f core *.o *.a *.s
-
-dep:
-	$(CPP) -M *.c > .depend
 
 p:
 	proto *.c >/usr/include/linux/umsdos_fs.p
 
 doc:
 	nadoc -i -p umsdos.doc - /tmp/umsdos.mpg
-
-include $(TOPDIR)/Rules.make

@@ -404,7 +404,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 				printk(version);
 
 			/* Grab the region so we can find another board if autoIRQ fails. */
-			request_region(ioaddr, EEPRO_IO_EXTENT,"eepro");
+			request_region(ioaddr, EEPRO_IO_EXTENT, "eepro");
 
 			/* Initialize the device structure */
 			if (dev->priv == NULL)
@@ -755,9 +755,6 @@ eepro_close(struct device *dev)
 	free_irq(dev->irq);
 
 	irq2dev_map[dev->irq] = 0;
-
-	/* release the ioport-region */
-	release_region(ioaddr, 16);
 
 	/* Update the statistics here. What statistics? */
 
@@ -1133,8 +1130,12 @@ eepro_transmit_interrupt(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_eepro = {
-	"        " /*"eepro"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, eepro_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, eepro_probe };
 
 int io = 0x200;
 int irq = 0;
@@ -1143,7 +1144,7 @@ int
 init_module(void)
 {
 	if (io == 0)
-	  printk("eepro: You should not use auto-probing with insmod!\n");
+		printk("eepro: You should not use auto-probing with insmod!\n");
 	dev_eepro.base_addr = io;
 	dev_eepro.irq       = irq;
 
@@ -1162,6 +1163,9 @@ cleanup_module(void)
 		unregister_netdev(&dev_eepro);
 		kfree_s(dev_eepro.priv,sizeof(struct eepro_local));
 		dev_eepro.priv=NULL;
+
+		/* If we don't do this, we can't re-insmod it later. */
+		release_region(dev_eepro.base_addr, EEPRO_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

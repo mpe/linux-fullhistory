@@ -26,7 +26,7 @@ struct tcphdr {
 	__u16	dest;
 	__u32	seq;
 	__u32	ack_seq;
-#if defined(LITTLE_ENDIAN_BITFIELD)
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u16	res1:4,
 		doff:4,
 		fin:1,
@@ -36,7 +36,7 @@ struct tcphdr {
 		ack:1,
 		urg:1,
 		res2:2;
-#elif defined(BIG_ENDIAN_BITFIELD)
+#elif defined(__BIG_ENDIAN_BITFIELD)
 	__u16	doff:4,
 		res1:4,
 		res2:2,

@@ -584,7 +584,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	 *	Frame size ok ?
 	 */
 	 
-	if(skb_pull(skb,sizeof(*ea))<sizeof(*ea))
+	if(!skb_pull(skb,sizeof(*ea)))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;

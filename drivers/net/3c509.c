@@ -65,6 +65,8 @@ int el3_debug = 2;
 #define ID_PORT 0x100
 #define	 EEPROM_READ 0x80
 
+#define EL3_IO_EXTENT	16
+
 #define EL3WINDOW(win_num) outw(SelectWindow + (win_num), ioaddr + EL3_CMD)
 
 
@@ -232,7 +234,7 @@ int el3_probe(struct device *dev)
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->if_port = if_port;
-	request_region(dev->base_addr, 16,"3c509");
+	request_region(dev->base_addr, EL3_IO_EXTENT, "3c509");
 
 	{
 		const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
@@ -703,8 +705,12 @@ el3_close(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_3c509 = {
-	"        " /*"3c509"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el3_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, el3_probe };
 
 int io = 0;
 int irq = 0;
@@ -732,6 +738,8 @@ cleanup_module(void)
 		unregister_netdev(&dev_3c509);
 		kfree_s(dev_3c509.priv,sizeof(struct el3_private));
 		dev_3c509.priv=NULL;
+		/* If we don't do this, we can't re-insmod it later. */
+		release_region(dev_3c509.base_addr, EL3_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -13,14 +13,11 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
-static int proc_readbase(struct inode *, struct file *, void *, filldir_t);
-static int proc_lookupbase(struct inode *,const char *,int,struct inode **);
-
 static struct file_operations proc_base_operations = {
 	NULL,			/* lseek - default */
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
-	proc_readbase,		/* readdir */
+	proc_readdir,		/* readdir */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
@@ -32,10 +29,10 @@ static struct file_operations proc_base_operations = {
 /*
  * proc directories can do almost nothing..
  */
-struct inode_operations proc_base_inode_operations = {
+static struct inode_operations proc_base_inode_operations = {
 	&proc_base_operations,	/* default base directory file-ops */
 	NULL,			/* create */
-	proc_lookupbase,	/* lookup */
+	proc_lookup,		/* lookup */
 	NULL,			/* link */
 	NULL,			/* unlink */
 	NULL,			/* symlink */
@@ -50,105 +47,97 @@ struct inode_operations proc_base_inode_operations = {
 	NULL			/* permission */
 };
 
-static struct proc_dir_entry base_dir[] = {
-	{ PROC_PID_INO,		1, "." },
-	{ PROC_ROOT_INO,	2, ".." },
-	{ PROC_PID_MEM,		3, "mem" },
-	{ PROC_PID_CWD,		3, "cwd" },
-	{ PROC_PID_ROOT,	4, "root" },
-	{ PROC_PID_EXE,		3, "exe" },
-	{ PROC_PID_FD,		2, "fd" },
-	{ PROC_PID_ENVIRON,	7, "environ" },
-	{ PROC_PID_CMDLINE,	7, "cmdline" },
-	{ PROC_PID_STAT,	4, "stat" },
-	{ PROC_PID_STATM,	5, "statm" },
-	{ PROC_PID_MAPS,	4, "maps" }
+static void proc_pid_fill_inode(struct inode * inode)
+{
+	struct task_struct * p;
+	int pid = inode->i_ino >> 16;
+	int ino = inode->i_ino & 0xffff;
+
+	for_each_task(p) {
+		if (p->pid == pid) {
+			if (p->dumpable || ino == PROC_PID_INO) {
+				inode->i_uid = p->euid;
+				inode->i_gid = p->gid;
+			}
+			return;
+		}
+	}
+}
+
+/*
+ * This is really a pseudo-entry, and only links
+ * backwards to the parent with no link from the
+ * root directory to this. This way we can have just
+ * one entry for every /proc/<pid>/ directory.
+ */
+struct proc_dir_entry proc_pid = {
+	PROC_PID_INO, 5, "<pid>",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_base_inode_operations,
+	NULL, proc_pid_fill_inode,
+	NULL, &proc_root, NULL
 };
 
-#define NR_BASE_DIRENTRY ((sizeof (base_dir))/(sizeof (base_dir[0])))
-
-int proc_match(int len,const char * name,struct proc_dir_entry * de)
+void proc_base_init(void)
 {
-	if (!de || !de->low_ino)
-		return 0;
-	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
-	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
-		return 1;
-	if (de->namelen != len)
-		return 0;
-	return !memcmp(name, de->name, len);
-}
-
-static int proc_lookupbase(struct inode * dir,const char * name, int len,
-	struct inode ** result)
-{
-	struct proc_dir_entry * de = NULL;
-	unsigned int pid, ino;
-	int i;
-
-	*result = NULL;
-	if (!dir)
-		return -ENOENT;
-	if (!S_ISDIR(dir->i_mode)) {
-		iput(dir);
-		return -ENOENT;
-	}
-	ino = dir->i_ino;
-	pid = ino >> 16;
-	for (i = 0; i < NR_BASE_DIRENTRY; i++) {
-		if (!proc_match(len, name, base_dir+i))
-			continue;
-		de = base_dir+i;
-		break;
-	}
-	if (!de) {
-		iput(dir);
-		return -ENOENT;
-	}
-	if (de->low_ino == 1)
-		ino = 1;
-	else
-		ino = (pid << 16) + de->low_ino;
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == pid)
-			break;
-	if (!pid || i >= NR_TASKS) {
-		iput(dir);
-		return -ENOENT;
-	}
-	if (!(*result = iget(dir->i_sb,ino))) {
-		iput(dir);
-		return -ENOENT;
-	}
-	iput(dir);
-	(*result)->u.generic_ip = de;
-	return 0;
-}
-
-static int proc_readbase(struct inode * inode, struct file * filp,
-	void * dirent, filldir_t filldir)
-{
-	struct proc_dir_entry * de;
-	unsigned int pid, ino;
-	int i;
-
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
-	ino = inode->i_ino;
-	pid = ino >> 16;
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == pid)
-			break;
-	if (!pid || i >= NR_TASKS)
-		return 0;
-	while (((unsigned) filp->f_pos) < NR_BASE_DIRENTRY) {
-		de = base_dir + filp->f_pos;
-		ino = de->low_ino;
-		if (ino != 1)
-			ino |= (pid << 16);
-		if (filldir(dirent, de->name, de->namelen, filp->f_pos, ino) < 0)
-			break;
-		filp->f_pos++;
-	}
-	return 0;
-}
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_MEM, 3, "mem",
+		S_IFREG | S_IRUSR | S_IWUSR, 1, 0, 0,
+		0, &proc_mem_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_CWD, 3, "cwd",
+		S_IFLNK | S_IRWXU, 1, 0, 0,
+		0, &proc_link_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_ROOT, 4, "root",
+		S_IFLNK | S_IRWXU, 1, 0, 0,
+		0, &proc_link_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_EXE, 3, "exe",
+		S_IFLNK | S_IRWXU, 1, 0, 0,
+		0, &proc_link_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_FD, 2, "fd",
+		S_IFDIR | S_IRUSR | S_IXUSR, 1, 0, 0,
+		0, &proc_fd_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_ENVIRON, 7, "environ",
+		S_IFREG | S_IRUSR, 1, 0, 0,
+		0, &proc_array_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_CMDLINE, 7, "cmdline",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_array_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_STAT, 4, "stat",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_array_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_STATM, 5, "statm",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_array_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_MAPS, 4, "maps",
+		S_IFIFO | S_IRUGO, 1, 0, 0,
+		0, &proc_arraylong_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+};

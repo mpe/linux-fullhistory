@@ -40,12 +40,11 @@ static const char *version =
 #include <asm/system.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 
 #include "8390.h"
 #include "3c503.h"
 
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-				    unsigned long *mem_startp);
 
 int el2_probe(struct device *dev);
 int el2_pio_probe(struct device *dev);
@@ -486,7 +485,7 @@ int init_module(void)
 	el2pio_drv.irq       = irq;
 
 	if (io == 0)
-	  printk("3c503: You should not use auto-probing with insmod!\n");
+	    printk("3c503: You should not use auto-probing with insmod!\n");
 
 	rc2 = 0;
 	no_pio = 1;
@@ -507,11 +506,19 @@ cleanup_module(void)
 	if (MOD_IN_USE)
 		printk("3c503: device busy, remove delayed\n");
 	else {
+	    int ioaddr;
+
 	    if (no_pio) {
+		ioaddr = el2_drv.base_addr;
 		unregister_netdev(&el2_drv);
 	    } else {
+		ioaddr = el2pio_drv.base_addr;
 		unregister_netdev(&el2pio_drv);
 	    }
+
+	    /* If we don't do this, we can't re-insmod it later. */
+	    release_region(ioaddr, EL2_IO_EXTENT);
+
 	}
 }
 #endif /* MODULE */

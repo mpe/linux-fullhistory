@@ -7,18 +7,9 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS=	freelists.o truncate.o namei.o inode.o \
-	file.o dir.o symlink.o fsync.o
-
-ext.o: $(OBJS)
-	$(LD) -r -o ext.o $(OBJS)
-
-dep:
-	$(CPP) -M *.c > .depend
+O_TARGET := ext.o
+O_OBJS   := freelists.o truncate.o namei.o inode.o file.o dir.o \
+		symlink.o fsync.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -9,52 +9,40 @@
 # parent makes..
 #
 
-.s.o:
-	$(AS) -c -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
 #
 # This file contains the font map for the default (hardware) font
 #
 FONTMAPFILE = cp437.uni
 
-OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
+L_TARGET := char.a
+M_OBJS   :=
+L_OBJS   := tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o \
 	defkeymap.o consolemap.o vesa_blank.o selection.o
 
-SRCS  = tty_io.c n_tty.c console.c keyboard.c serial.c \
-	tty_ioctl.c pty.c vt.c mem.c vc_screen.c \
-	defkeymap.c consolemap.c vesa_blank.c selection.c
-
 ifdef CONFIG_CYCLADES
-OBJS := $(OBJS) cyclades.o
-SRCS := $(SRCS) cyclades.c
+L_OBJS += cyclades.o
 endif
 
 ifdef CONFIG_ATIXL_BUSMOUSE
 M = y
-OBJS := $(OBJS) atixlmouse.o
-SRCS := $(SRCS) atixlmouse.c
+L_OBJS += atixlmouse.o
 endif
 
 ifdef CONFIG_BUSMOUSE
 M = y
-OBJS := $(OBJS) busmouse.o
-SRCS := $(SRCS) busmouse.c
+L_OBJS += busmouse.o
 endif
 
 ifdef CONFIG_PRINTER
-OBJS := $(OBJS) lp.o
-SRCS := $(SRCS) lp.c
+L_OBJS += lp.o
 else
-MODULES := $(MODULES) lp.o
+M_OBJS += lp.o
 endif
 
 ifdef CONFIG_MS_BUSMOUSE
 M = y
-OBJS := $(OBJS) msbusmouse.o
-SRCS := $(SRCS) msbusmouse.c
+L_OBJS += msbusmouse.o
 endif
 
 ifdef CONFIG_82C710_MOUSE
@@ -63,56 +51,29 @@ endif
 
 ifdef CONFIG_PSMOUSE
 M = y
-OBJS := $(OBJS) psaux.o
-SRCS := $(SRCS) psaux.c
+L_OBJS += psaux.o
 endif
 
 ifdef CONFIG_QIC02_TAPE
-OBJS := $(OBJS) tpqic02.o 
-SRCS := $(SRCS) tpqic02.c
+L_OBJS += tpqic02.o 
 endif
 
 ifdef M
-OBJS := $(OBJS) mouse.o
-SRCS := $(SRCS) mouse.c
+L_OBJS += mouse.o
 endif
   
 ifdef CONFIG_SCC
-OBJS := $(OBJS) scc.o
-SRCS := $(SRCS) scc.c
-endif
- 
-
-all: uni_hash_tbl.h char.a
-
-char.a: $(OBJS)
-	$(AR) rcs char.a $(OBJS)
-	sync	
-
-ifdef MODULES
-
-modules: $(MODULES)
-	(cd ../../modules;for i in $(MODULES); do ln -sf ../drivers/char/$$i .; done)
-
-else
-
-modules:
-
+L_OBJS += scc.o
 endif
 
-ifdef MODULES
-dep: uni_hash_tbl.h
-	$(CPP) -M $(SRCS) > .depend
-	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
-else
-dep: uni_hash_tbl.h
-	$(CPP) -M $(SRCS) > .depend
-endif
+include $(TOPDIR)/Rules.make
+
+fastdep: uni_hash.tbl
+
+consolemap.o:
 
 conmakehash: conmakehash.c
 	$(HOSTCC) -o conmakehash conmakehash.c
 
-uni_hash_tbl.h: $(FONTMAPFILE) conmakehash
-	./conmakehash $(FONTMAPFILE) 641 283 6 > uni_hash_tbl.h
-
-include $(TOPDIR)/Rules.make
+uni_hash.tbl: $(FONTMAPFILE) conmakehash
+	./conmakehash $(FONTMAPFILE) 641 283 6 > uni_hash.tbl

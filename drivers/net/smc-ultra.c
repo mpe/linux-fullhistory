@@ -54,9 +54,8 @@ static const char *version =
 #include <asm/system.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "8390.h"
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int ultra_portlist[] =
@@ -325,8 +324,12 @@ ultra_close_card(struct device *dev)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_ultra = {
-	"        " /*"smc-ultra"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ultra_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, ultra_probe };
 
 int io = 0x200;
 int irq = 0;
@@ -334,7 +337,7 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("smc-ultra: You should not use auto-probing with insmod!\n");
+		printk("smc-ultra: You should not use auto-probing with insmod!\n");
 	dev_ultra.base_addr = io;
 	dev_ultra.irq       = irq;
 	if (register_netdev(&dev_ultra) != 0) {
@@ -351,7 +354,12 @@ cleanup_module(void)
 		printk("smc-ultra: device busy, remove delayed\n");
 	else
 	{
+		int ioaddr = dev_ultra.base_addr - ULTRA_NIC_OFFSET;
+
 		unregister_netdev(&dev_ultra);
+
+		/* If we don't do this, we can't re-insmod it later. */
+    	release_region(ioaddr, ULTRA_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

@@ -133,7 +133,7 @@ extern void			dev_kfree_skb(struct sk_buff *skb, int mode);
 extern int			skb_device_locked(struct sk_buff *skb);
 extern unsigned char *		skb_put(struct sk_buff *skb, int len);
 extern unsigned char *		skb_push(struct sk_buff *skb, int len);
-extern int			skb_pull(struct sk_buff *skb, int len);
+extern unsigned char *		skb_pull(struct sk_buff *skb, int len);
 extern int			skb_headroom(struct sk_buff *skb);
 extern int			skb_tailroom(struct sk_buff *skb);
 extern void			skb_reserve(struct sk_buff *skb, int len);
@@ -324,13 +324,13 @@ extern __inline__ unsigned char *skb_push(struct sk_buff *skb, int len)
 	return skb->data;
 }
 
-extern __inline__ int skb_pull(struct sk_buff *skb, int len)
+extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, int len)
 {
-	if(len>skb->len)
-		len=skb->len;
+	if(len > skb->len)
+		return NULL;
 	skb->data+=len;
 	skb->len-=len;
-	return len;
+	return skb->data;
 }
 
 extern __inline__ int skb_headroom(struct sk_buff *skb)

@@ -20,7 +20,7 @@
  *  0 - unnamed                unnamed                minor 0 = true nodev
  *  1 - /dev/mem               ramdisk
  *  2 -                        floppy
- *  3 -                        hd
+ *  3 -                        ide0 or hd
  *  4 - /dev/tty*
  *  5 - /dev/tty; /dev/cua*
  *  6 - lp
@@ -39,7 +39,7 @@
  * 19 - cyclades /dev/ttyC*
  * 20 - cyclades /dev/cub*     mitsumi (mcdx) cdrom
  * 21 - scsi generic
- * 22 -                        (at2disk)
+ * 22 -                        ide1
  * 23 -                        mitsumi cdrom
  * 24 -	                       sony535 cdrom
  * 25 -                        matsushita cdrom       minors 0..3
@@ -48,6 +48,8 @@
  * 28 -                        matsushita cdrom 4     minors 0..3
  * 29 -                        aztech/orchid/okano/wearnes cdrom
  * 32 -                        philips/lms cm206 cdrom
+ * 33 -                        ide2
+ * 34 -                        ide3
  */
 
 #define UNNAMED_MAJOR	0
@@ -87,6 +89,8 @@
 #define MATSUSHITA_CDROM4_MAJOR 28
 #define AZTECH_CDROM_MAJOR 29
 #define CM206_CDROM_MAJOR 32
+#define IDE2_MAJOR	33
+#define IDE3_MAJOR	34
 
 /*
  * Tests for SCSI devices.

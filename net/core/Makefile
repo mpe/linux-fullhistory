@@ -7,32 +7,13 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-
-OBJS	:= sock.o dev.o dev_mcast.o skbuff.o datagram.o iovec.o
+O_TARGET := core.o
 
 ifdef CONFIG_NET
-
-core.o:		$(OBJS)
-		$(LD) -r -o core.o $(OBJS)
-
-else
-
-core.o:
-		$(AR) rcs core.o
-
+O_OBJS	 := sock.o dev.o dev_mcast.o skbuff.o datagram.o iovec.o
 endif
 
-dep:
-		$(CPP) -M *.c > .depend
+include $(TOPDIR)/Rules.make
 
 tar:
 		tar -cvf /dev/f1 .
-
-modules:
-
-include $(TOPDIR)/Rules.make

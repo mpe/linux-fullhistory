@@ -7,24 +7,10 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-
-OBJS	:= af_unix.o
-
-
-unix.o:	$(OBJS)
-		$(LD) -r -o unix.o $(OBJS)
-
-dep:
-		$(CPP) -M *.c > .depend
-
-modules:
-tar:
-		tar -cvf /dev/f1 .
-
+O_TARGET := unix.o
+O_OBJS	 := af_unix.o
 
 include $(TOPDIR)/Rules.make
+
+tar:
+		tar -cvf /dev/f1 .

@@ -2031,12 +2031,24 @@ void ax25_proto_init(struct net_proto *pro)
 	dev_add_pack(&bpq_packet_type);
 	register_netdevice_notifier(&ax25_dev_notifier);
 			  
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AX25_ROUTE, 10, "ax25_route", ax25_rt_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AX25, 4, "ax25", ax25_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AX25_CALLS, 10, "ax25_calls", ax25_cs_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_AX25_ROUTE, 10, "ax25_route",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ax25_rt_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_AX25, 4, "ax25",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ax25_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_AX25_CALLS, 10, "ax25_calls",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ax25_cs_get_info
+	});
 
 	printk("GW4PTS/G4KLX AX.25 for Linux. Version 0.30 ALPHA for Linux NET3.030 (Linux 1.3.0)\n");
 }

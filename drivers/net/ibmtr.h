@@ -36,6 +36,8 @@
 #define MMIOStartLocP   0x0a20  /* Primary adapter's starting MMIO area */
 #define MMIOStartLocA   0x0a24  /* Alternate adapter's starting MMIO area */
 
+#define TR_IO_EXTENT	4	/* size of used IO range */
+
 #define GLOBAL_INT_ENABLE 0x02f0
 
 /* MMIO bits 0-4 select register */

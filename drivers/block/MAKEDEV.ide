@@ -1,0 +1,29 @@
+#!/bin/sh
+#
+# This script creates the proper /dev/ entries for IDE devices
+#
+makedev () {
+	rm -f /dev/$1
+	echo mknod /dev/$1 b $2 $3
+	     mknod /dev/$1 b $2 $3
+	chown root:disk /dev/$1
+	chmod 660 /dev/$1
+}
+
+makedevs () {
+	rm -f /dev/$1*
+	makedev $1 $2 $3
+	for part in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+	do
+		makedev $1$part $2 `expr $3 + $part`
+	done
+}
+
+makedevs hda  3 0
+makedevs hdb  3 64
+makedevs hdc 22 0
+makedevs hdd 22 64
+makedevs hde 33 0
+makedevs hdf 33 64
+makedevs hdg 34 0
+makedevs hdh 34 64

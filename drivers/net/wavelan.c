@@ -16,6 +16,7 @@
 #include	<linux/types.h>
 #include	<linux/fcntl.h>
 #include	<linux/interrupt.h>
+#include	<linux/stat.h>
 #include	<linux/ptrace.h>
 #include	<linux/ioport.h>
 #include	<linux/in.h>
@@ -838,9 +839,12 @@ wavelan_probe(device *dev)
 		{
 			if (wavelan_debug > 0)
 				printk("%s: <-wavelan_probe(): 0\n", dev->name);
-			proc_net_register(&(struct proc_dir_entry)
-					  { PROC_NET_WAVELAN, 7, "wavelan",
-					    wavelan_get_info });
+			proc_net_register(&(struct proc_dir_entry) {
+				PROC_NET_WAVELAN, 7, "wavelan",
+				S_IFREG | S_IRUGO, 1, 0, 0,
+				0, &proc_net_inode_operations,
+				wavelan_get_info
+			});
 
 			return 0;
 		}
@@ -2170,10 +2174,13 @@ wavelan_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 
 #if	defined(MODULE)
 char			kernel_version[]	= UTS_RELEASE;
+static char		devicename[9]		= { 0, };
 static struct device	dev_wavelan		=
 {
-	"       " /* "wavelan" */,
-	0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, wavelan_probe
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, wavelan_probe
 };
 
 int io = 0x390; /* Default from above.. */

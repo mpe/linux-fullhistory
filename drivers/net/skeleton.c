@@ -21,7 +21,7 @@
 
 */
 
-static char *version =
+static const char *version =
 	"skeleton.c:v1.51 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 /* Always include 'config.h' first in case the user wants to turn on
@@ -43,6 +43,14 @@ static char *version =
 	under the GPL.
 */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define  MOD_INC_USE_COUNT do {} while (0)
+#define  MOD_DEC_USE_COUNT do {} while (0)
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -62,8 +70,11 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
+
+/* The name of the card. Is used for messages and in the requests for
+ * io regions, irqs and dma channels
+ */
+static const char* cardname = "netcard";
 
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
@@ -119,7 +130,7 @@ extern void chipset_init(struct device *dev, int startp);
 /* Support for a alternate probe manager, which will eliminate the
    boilerplate below. */
 struct netdev_entry netcard_drv =
-{"netcard", netcard_probe1, NETCARD_IO_EXTENT, netcard_portlist};
+{cardname, netcard_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
 int
 netcard_probe(struct device *dev)
@@ -130,7 +141,7 @@ netcard_probe(struct device *dev)
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return netcard_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; netcard_portlist[i]; i++) {
 		int ioaddr = netcard_portlist[i];
@@ -140,7 +151,7 @@ netcard_probe(struct device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -153,23 +164,30 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 	static unsigned version_printed = 0;
 	int i;
 
-	/* For ethernet adaptors the first three octets of the station address contains
-	   the manufacturer's unique code.  That might be a good probe method.
-	   Ideally you would add additional checks.  */ 
+	/* For ethernet adaptors the first three octets of the station address 
+	   contains the manufacturer's unique code.  That might be a good probe
+	   method. Ideally you would add additional checks.  */ 
 	if (inb(ioaddr + 0) != SA_ADDR0
 		||	 inb(ioaddr + 1) != SA_ADDR1
 		||	 inb(ioaddr + 2) != SA_ADDR2) {
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local), 0);
+	if (dev == NULL) {
+		/* Don't allocate the private data here, it is done later
+		 * This makes it easier to free the memory when this driver
+		 * is used as a module.
+		 */
+		dev = init_etherdev(0, 0, 0);
+		if (dev == NULL)
+			return -ENOMEM;
+	}
 
 	if (net_debug  &&  version_printed++ == 0)
-		printk(version);
+		printk(KERN_DEBUG "%s", version);
 
-	printk("%s: %s found at %#3x, ", dev->name, "network card", ioaddr);
+	printk(KERN_INFO "%s: %s found at %#3x, ", dev->name, cardname, ioaddr);
 
 	/* Fill in the 'dev' fields. */
 	dev->base_addr = ioaddr;
@@ -194,26 +212,28 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 		dev->irq = autoirq_report(0);
 		if (net_debug >= 2)
 			printk(" autoirq is %d", dev->irq);
-  } else if (dev->irq == 2)
-	  /* Fixup for users that don't know that IRQ 2 is really IRQ 9,
-	 or don't know which one to set. */
-	  dev->irq = 9;
+	} else if (dev->irq == 2)
+		/* Fixup for users that don't know that IRQ 2 is really IRQ 9,
+		 * or don't know which one to set.
+		 */
+		dev->irq = 9;
 
-	{	 int irqval = request_irq(dev->irq, &net_interrupt, 0, "skeleton");
-		 if (irqval) {
-			 printk ("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
-					 dev->irq, irqval);
-			 return EAGAIN;
-		 }
-	 }
+	{
+		int irqval = request_irq(dev->irq, &net_interrupt, 0, cardname);
+		if (irqval) {
+			printk("%s: unable to get IRQ %d (irqval=%d).\n",
+				   dev->name, dev->irq, irqval);
+			return -EAGAIN;
+		}
+	}
 #endif	/* jumpered interrupt */
 #ifdef jumpered_dma
 	/* If we use a jumpered DMA channel, that should be probed for and
 	   allocated here as well.  See lance.c for an example. */
 	if (dev->dma == 0) {
-		if (request_dma(dev->dma, "netcard")) {
+		if (request_dma(dev->dma, cardname)) {
 			printk("DMA %d allocation failed.\n", dev->dma);
-			return EAGAIN;
+			return -EAGAIN;
 		} else
 			printk(", assigned DMA %d.\n", dev->dma);
 	} else {
@@ -231,28 +251,32 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 		new_dma_status ^= dma_status;
 		new_dma_status &= ~0x10;
 		for (i = 7; i > 0; i--)
-			if (test_bit(new_dma, &new_dma_status)) {
+			if (test_bit(i, &new_dma_status)) {
 				dev->dma = i;
 				break;
 			}
 		if (i <= 0) {
 			printk("DMA probe failed.\n");
-			return EAGAIN;
+			return -EAGAIN;
 		} 
-		if (request_dma(dev->dma, "netcard")) {
+		if (request_dma(dev->dma, cardname)) {
 			printk("probed DMA %d allocation failed.\n", dev->dma);
-			return EAGAIN;
+			return -EAGAIN;
 		}
 	}
 #endif	/* jumpered DMA */
 
-	/* Grab the region so we can find another board if autoIRQ fails. */
-	request_region(ioaddr, NETCARD_IO_EXTENT,"skeleton");
-
 	/* Initialize the device structure. */
-	if (dev->priv == NULL)
+	if (dev->priv == NULL) {
 		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+		if (dev->priv == NULL)
+			return -ENOMEM;
+	}
+
 	memset(dev->priv, 0, sizeof(struct net_local));
+
+	/* Grab the region so that no one else tries to probe our ioports. */
+	request_region(ioaddr, NETCARD_IO_EXTENT, cardname);
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
@@ -282,12 +306,12 @@ net_open(struct device *dev)
 
 	/* This is used if the interrupt line can turned off (shared).
 	   See 3c503.c for an example of selecting the IRQ at config-time. */
-	if (request_irq(dev->irq, &net_interrupt, 0, "skeleton")) {
+	if (request_irq(dev->irq, &net_interrupt, 0, cardname)) {
 		return -EAGAIN;
 	}
 
 	/* Always snarf the DMA channel after the IRQ, and clean up on failure. */
-	if (request_dma(dev->dma,"skeleton ethernet")) {
+	if (request_dma(dev->dma, cardname)) {
 		free_irq(dev->irq);
 		return -EAGAIN;
 	}
@@ -301,6 +325,9 @@ net_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
+
+	MOD_INC_USE_COUNT;
+
 	return 0;
 }
 
@@ -316,7 +343,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < 5)
 			return 1;
-		printk("%s: transmit timed out, %s?\n", dev->name,
+		printk(KERN_WARNING "%s: transmit timed out, %s?\n", dev->name,
 			   tx_done(dev) ? "IRQ conflict" : "network cable problem");
 		/* Try to restart the adaptor. */
 		chipset_init(dev, 1);
@@ -335,7 +362,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
 	if (set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
+		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
@@ -362,7 +389,7 @@ net_interrupt(int irq, struct pt_regs * regs)
 	int ioaddr, status, boguscount = 0;
 
 	if (dev == NULL) {
-		printk ("net_interrupt(): irq %d for unknown device.\n", irq);
+		printk(KERN_WARNING "%s: irq %d for unknown device.\n", cardname, irq);
 		return;
 	}
 	dev->interrupt = 1;
@@ -418,7 +445,8 @@ net_rx(struct device *dev)
 
 			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
-				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
+				printk(KERN_NOTICE "%s: Memory squeeze, dropping packet.\n",
+					   dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
@@ -467,6 +495,8 @@ net_close(struct device *dev)
 
 	/* Update the statistics here. */
 
+	MOD_DEC_USE_COUNT;
+
 	return 0;
 
 }
@@ -503,11 +533,70 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		outw(99, ioaddr);		/* Disable promiscuous mode, use normal mode */
 }
 
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
+static struct device this_device = {
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,  /* I/O address, IRQ */
+	0, 0, 0, NULL, netcard_probe };
+
+int io = 0x300;
+int irq = 0;
+int dma = 0;
+int mem = 0;
+
+int init_module(void)
+{
+	int result;
+
+	if (io == 0)
+		printk(KERN_WARNING "%s: You shouldn't use auto-probing with insmod!\n",
+			   cardname);
+
+	/* copy the parameters from insmod into the device structure */
+	this_device.base_addr = io;
+	this_device.irq       = irq;
+	this_device.dma       = dma;
+	this_device.mem_start = mem;
+
+	if ((result = register_netdev(&this_device)) != 0)
+		return result;
+
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+
+	unregister_netdev(&this_device);
+
+	/* If we don't do this, we can't re-insmod it later. */
+	/* Release irq/dma here, when you have jumpered versions and snarfed
+	 * them in net_probe1().
+	 */
+	/*
+	   free_irq(this_device.irq);
+	   free_dma(this_device.dma);
+	*/
+	release_region(this_device.base_addr, NETCARD_IO_EXTENT);
+
+	if (this_device.priv)
+		kfree_s(this_device.priv, sizeof(struct net_local));
+}
+
+#endif /* MODULE */
+
 /*
  * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c skeleton.c"
+ *  compile-command: "gcc -D__KERNEL__ -Wall -Wstrict-prototypes -Wwrite-strings -Wredundant-decls -O2 -m486 -c skeleton.c"
  *  version-control: t
  *  kept-new-versions: 5
  *  tab-width: 4
+ *  c-indent-level: 4
  * End:
  */

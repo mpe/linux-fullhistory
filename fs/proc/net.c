@@ -36,111 +36,48 @@
 #include <linux/config.h>
 #include <linux/mm.h>
 
-static struct proc_dir_entry *net_dir = NULL;
+static struct file_operations proc_netdir_operations = {
+	NULL,			/* lseek - default */
+	NULL,			/* read - bad */
+	NULL,			/* write - bad */
+	proc_readdir,		/* readdir */
+	NULL,			/* select - default */
+	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
+	NULL,			/* no special open code */
+	NULL,			/* no special release code */
+	NULL			/* can't fsync */
+};
 
-int proc_net_register(struct proc_dir_entry *dp)
-{
-	dp->next = net_dir;
-	net_dir = dp;
-	return 0;
-}
+/*
+ * proc directories can do almost nothing..
+ */
+static struct inode_operations proc_netdir_inode_operations = {
+	&proc_netdir_operations,	/* default net directory file-ops */
+	NULL,			/* create */
+	proc_lookup,		/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL			/* permission */
+};
 
-int proc_net_unregister(int ino)
-{
-	struct proc_dir_entry **p = &net_dir, *dp;
-
-	while ((dp = *p) != NULL) {
-		if (dp->low_ino == ino) {
-			*p = dp->next;
-			dp->next = NULL;
-			return 0;
-		}
-		p = &dp->next;
-	}
-	return -EINVAL;
-}	
-
-static int dir_get_info(char * a, char ** b, off_t d, int e, int f)
-{
-	return -EISDIR;
-}
-
-void proc_net_init(void)
-{
-	static struct proc_dir_entry
-	  nd_thisdir = { PROC_NET, 1, ".", dir_get_info },
-	  nd_rootdir = { PROC_ROOT_INO, 2, "..", dir_get_info };
-	static int already = 0;
-
-	if (already) return;
-	already = 1;
-
-	proc_net_register(&nd_thisdir);
-	proc_net_register(&nd_rootdir);
-}
-
-
-static int proc_lookupnet(struct inode * dir,const char * name, int len,
-			  struct inode ** result)
-{
-	struct proc_dir_entry *de;
-
-	*result = NULL;
-	if (!dir)
-		return -ENOENT;
-	if (!S_ISDIR(dir->i_mode)) {
-		iput(dir);
-		return -ENOENT;
-	}
-	for (de = net_dir ; de ; de = de->next) {
-		struct inode * inode;
-		if (!proc_match(len, name, de))
-			continue;
-		inode = iget(dir->i_sb, de->low_ino);
-		iput(dir);
-		if (!inode)
-			return -ENOENT;
-		inode->u.generic_ip = de;
-		if (de->fill_inode)
-			de->fill_inode(inode);
-		*result = inode;
-		return 0;
-	}
-	iput(dir);
-	return -ENOENT;
-}
-
-static int proc_readnetdir(struct inode * inode, struct file * filp,
-	void * dirent, filldir_t filldir)
-{
-	struct proc_dir_entry * de;
-	unsigned int ino;
-	int i;
-
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
-	ino = inode->i_ino;
-	de = net_dir;
-	i = filp->f_pos;
-	for (;;) {
-		if (!de)
-			return 0;
-		if (!i)
-			break;
-		de = de->next;
-		i--;
-	}
-
-	do {
-		if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino) < 0)
-			return 0;
-		filp->f_pos++;
-		de = de->next;
-	} while (de);
-
-	return 0;
-}
-
+struct proc_dir_entry proc_net = {
+	PROC_NET, 3, "net",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+	0, &proc_netdir_inode_operations,
+	NULL, NULL,
+	NULL,
+	NULL, NULL	
+};
 
 #define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
 
@@ -212,40 +149,6 @@ struct inode_operations proc_net_inode_operations = {
 	&proc_net_operations,	/* default net file-ops */
 	NULL,			/* create */
 	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* bmap */
-	NULL,			/* truncate */
-	NULL			/* permission */
-};
-
-static struct file_operations proc_netdir_operations = {
-	NULL,			/* lseek - default */
-	NULL,			/* read - bad */
-	NULL,			/* write - bad */
-	proc_readnetdir,	/* readdir */
-	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* no special release code */
-	NULL			/* can't fsync */
-};
-
-/*
- * proc directories can do almost nothing..
- */
-struct inode_operations proc_netdir_inode_operations = {
-	&proc_netdir_operations,	/* default net directory file-ops */
-	NULL,			/* create */
-	proc_lookupnet,		/* lookup */
 	NULL,			/* link */
 	NULL,			/* unlink */
 	NULL,			/* symlink */

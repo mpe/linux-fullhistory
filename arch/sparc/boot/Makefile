@@ -5,10 +5,6 @@
 OBJS	=bare.o init_me.o ../kernel/promops.o ../lib/lib.a
 BOOTLINKFLAGS = -N -Ttext 0x200000 -e _first_adr_in_text
 
-.s.o:
-	$(AS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c -o $*.o $<
 .S.s:
 	$(CC) -D__ASSEMBLY__ -D__KERNEL__ -ansi -E -o $*.o $<
 .S.o:

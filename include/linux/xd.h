@@ -107,7 +107,7 @@ typedef struct {
 void xd_setup (char *command,int *integers);
 static u_char xd_detect (u_char *controller,u_char **address);
 static u_char xd_initdrives (void (*init_drive)(u_char drive));
-static void xd_geninit (void);
+static void xd_geninit (struct gendisk *);
 
 static int xd_open (struct inode *inode,struct file *file);
 static void do_xd_request (void);

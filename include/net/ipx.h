@@ -12,7 +12,7 @@
 #define _NET_INET_IPX_H_
 
 #include <linux/skbuff.h>
-#include "datalink.h"
+#include <net/datalink.h>
 #include <linux/ipx.h>
 
 typedef struct
@@ -44,7 +44,7 @@ typedef struct ipx_packet
 
 typedef struct sock ipx_socket;
 
-#include "ipxcall.h"
+#include <net/ipxcall.h>
 extern int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt);
 extern void ipxrtr_device_down(struct device *dev);
 

@@ -15,7 +15,7 @@
 #
 
 AS		= mips-linux-as
-ASFLAGS		= -mips3 -mcpu=r4000
+#ASFLAGS		= -mips3 -mcpu=r4000
 LD		= mips-linux-ld
 LINKFLAGS	= -Ttext 0xa0000000
 #HOSTCC		= gcc

@@ -5,12 +5,14 @@
 
 /*
  * This file contains some defines for the AT-hd-controller.
- * Various sources. Check out some definitions (see comments with
- * a ques).
+ * Various sources.  
  */
 
+#define HD_IRQ 14		/* the standard disk interrupt */
+
+/* ide.c has it's own port definitions in "ide.h" */
+
 /* Hd controller regs. Ref: IBM AT Bios-listing */
-/* For a second IDE interface, xor all addresses with 0x80 */
 #define HD_DATA		0x1f0	/* _CTL when writing */
 #define HD_ERROR	0x1f1	/* see err-bits */
 #define HD_NSECTOR	0x1f2	/* nr of sectors to read/write */
@@ -25,6 +27,8 @@
 
 #define HD_CMD		0x3f6	/* used for resets */
 #define HD_ALTSTATUS	0x3f6	/* same as HD_STATUS but doesn't clear irq */
+
+/* remainder is shared between hd.c, ide.c, ide-cd.c, and the hdparm utility */
 
 /* Bits of HD_STATUS */
 #define ERR_STAT	0x01
@@ -45,9 +49,12 @@
 #define WIN_INIT		0x60
 #define WIN_SEEK 		0x70
 #define WIN_DIAGNOSE		0x90
-#define WIN_SPECIFY		0x91
+#define WIN_SPECIFY		0x91	/* set drive geometry translation */
 #define WIN_SETIDLE1		0xE3
 #define WIN_SETIDLE2		0x97
+
+#define WIN_DOORLOCK		0xde	/* lock door on removeable drives */
+#define WIN_DOORUNLOCK		0xdf	/* unlock door on removeable drives */
 
 #define WIN_PIDENTIFY		0xA1	/* identify ATA-PI device	*/
 #define WIN_MULTREAD		0xC4	/* read multiple sectors	*/
@@ -147,11 +154,7 @@ struct hd_driveid {
 void hd_setup(char *, int *);
 #endif	/* CONFIG_BLK_DEV_HD */
 #ifdef CONFIG_BLK_DEV_IDE
-void ide_setup(char *, int *);
-void hda_setup(char *, int *);
-void hdb_setup(char *, int *);
-void hdc_setup(char *, int *);
-void hdd_setup(char *, int *);
+void ide_setup(char *);
 #endif	/* CONFIG_BLK_DEV_IDE */
 
 #endif	/* _LINUX_HDREG_H */

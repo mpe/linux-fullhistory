@@ -1449,7 +1449,7 @@ elplus_probe (struct device *dev)
 	/*
 	 * and reserve the address region
 	 */
-	request_region(dev->base_addr,16,"3c505");
+	request_region(dev->base_addr, ELP_IO_EXTENT, "3c505");
 
 	/*
 	 * initialise the device
@@ -1459,8 +1459,12 @@ elplus_probe (struct device *dev)
 }
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device dev_3c505 = {
-	"        " /*"3c505"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elplus_probe };
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0, 0,
+	0, 0, 0, NULL, elplus_probe };
 
 int io = 0x300;
 int irq = 0;
@@ -1468,7 +1472,7 @@ int irq = 0;
 int init_module(void)
 {
 	if (io == 0)
-	  printk("3c505: You should not use auto-probing with insmod!\n");
+		printk("3c505: You should not use auto-probing with insmod!\n");
 	dev_3c505.base_addr = io;
 	dev_3c505.irq       = irq;
 	if (register_netdev(&dev_3c505) != 0) {
@@ -1486,6 +1490,9 @@ cleanup_module(void)
 	else
 	{
 		unregister_netdev(&dev_3c505);
+
+		/* If we don't do this, we can't re-insmod it later. */
+		release_region(dev_3c505.base_addr, ELP_IO_EXTENT);
 	}
 }
 #endif /* MODULE */

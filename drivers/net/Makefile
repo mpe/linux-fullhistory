@@ -7,341 +7,320 @@
 # are difficult for users to deal with.
 include CONFIG
 
-# Build MODULES by appending to this string for every driver below
-MODULES :=
-
-NETDRV_OBJS := Space.o auto_irq.o net_init.o loopback.o
-
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
-
-# The point of the makefile...
-all: net.a
-
-Space.o: Space.c ../../include/linux/autoconf.h
-	$(CC) $(CFLAGS) $(OPTS) -c $<
-
-net_init.o: ../../include/linux/autoconf.h
+L_TARGET := net.a
+L_OBJS   := Space.o auto_irq.o net_init.o loopback.o
+M_OBJS   :=
+MOD_LIST_NAME := NET_MODULES
 
 ifdef CONFIG_SEEQ8005
-NETDRV_OBJS := $(NETDRV_OBJS) seeq8005.o
+L_OBJS += seeq8005.o
 endif
 
 ifdef CONFIG_IBMTR
-NETDRV_OBJS := $(NETDRV_OBJS) ibmtr.o
+L_OBJS += ibmtr.o
 else
-MODULES := $(MODULES) ibmtr.o
+M_OBJS += ibmtr.o
 endif
 
 ifdef CONFIG_SK_G16
-NETDRV_OBJS := $(NETDRV_OBJS) sk_g16.o
+L_OBJS += sk_g16.o
 endif
 
 ifdef CONFIG_NET_IPIP
-NETDRV_OBJS := $(NETDRV_OBJS) tunnel.o
+L_OBJS += tunnel.o
 else
-MODULES := $(MODULES) tunnel.o
+M_OBJS += tunnel.o
 endif
 
 ifdef CONFIG_HP100
-NETDRV_OBJS := $(NETDRV_OBJS) hp100.o
+L_OBJS += hp100.o
 else
-MODULES := $(MODULES) hp100.o
+M_OBJS += hp100.o
 endif
 
 ifdef CONFIG_WD80x3
-NETDRV_OBJS := $(NETDRV_OBJS) wd.o
+L_OBJS += wd.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) wd.o
+M_OBJS += wd.o
 endif
-wd.o:	wd.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $<
 
 ifdef CONFIG_EL2
-NETDRV_OBJS := $(NETDRV_OBJS) 3c503.o
+L_OBJS += 3c503.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) 3c503.o
+M_OBJS += 3c503.o
 endif
-3c503.o:	3c503.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $<
 
 ifdef CONFIG_NE2000
-NETDRV_OBJS := $(NETDRV_OBJS) ne.o
+L_OBJS += ne.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) ne.o
+M_OBJS += ne.o
 endif
-ne.o:	ne.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c $<
 
 ifdef CONFIG_HPLAN
-NETDRV_OBJS := $(NETDRV_OBJS) hp.o
+L_OBJS += hp.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) hp.o
+M_OBJS += hp.o
 endif
-hp.o:	hp.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $<
 
 ifdef CONFIG_HPLAN_PLUS
-NETDRV_OBJS := $(NETDRV_OBJS) hp-plus.o
+L_OBJS += hp-plus.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) hp-plus.o
+M_OBJS += hp-plus.o
 endif
 
 ifdef CONFIG_ULTRA
-NETDRV_OBJS := $(NETDRV_OBJS) smc-ultra.o
+L_OBJS += smc-ultra.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) smc-ultra.o
+M_OBJS += smc-ultra.o
 endif
 
 ifdef CONFIG_E2100
-NETDRV_OBJS := $(NETDRV_OBJS) e2100.o
+L_OBJS += e2100.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) e2100.o
+M_OBJS += e2100.o
 endif
 
 ifdef CONFIG_PLIP
-NETDRV_OBJS := $(NETDRV_OBJS) plip.o
+L_OBJS += plip.o
 else
-MODULES := $(MODULES) plip.o
+M_OBJS += plip.o
 endif
-plip.o:	plip.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c $<
 
 ifdef CONFIG_PPP
-NETDRV_OBJS := $(NETDRV_OBJS) ppp.o
+L_OBJS += ppp.o
 CONFIG_SLHC = CONFIG_SLHC
 else
-MODULES := $(MODULES) ppp.o
+M_OBJS += ppp.o
 endif
 
 ifdef CONFIG_SLIP
-NETDRV_OBJS := $(NETDRV_OBJS) slip.o
+L_OBJS += slip.o
 CONFIG_SLHC = CONFIG_SLHC
 else
-MODULES := $(MODULES) slip.o
+M_OBJS += slip.o
 endif
-slip.o:	slip.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 ifdef CONFIG_DE650
-ETDRV_OBJS := $(NETDRV_OBJS) de650.o
+ETDRV_OBJS := $(L_OBJS) de650.o
 CONFIG_8390 = CONFIG_8390
 endif
 
 ifdef CONFIG_3C589
-NETDRV_OBJS := $(NETDRV_OBJS) 3c589.o
+L_OBJS += 3c589.o
 endif
 
 ifdef CONFIG_DUMMY
-NETDRV_OBJS := $(NETDRV_OBJS) dummy.o
+L_OBJS += dummy.o
 else
-MODULES := $(MODULES) dummy.o
+M_OBJS += dummy.o
 endif
-dummy.o: dummy.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 ifdef CONFIG_DE600
-NETDRV_OBJS := $(NETDRV_OBJS) de600.o
+L_OBJS += de600.o
 else
-MODULES := $(MODULES) de600.o
+M_OBJS += de600.o
 endif
-de600.o: de600.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE600_OPTS) -c $<
 	
 ifdef CONFIG_DE620
-NETDRV_OBJS := $(NETDRV_OBJS) de620.o
+L_OBJS += de620.o
 else
-MODULES := $(MODULES) de620.o
+M_OBJS += de620.o
 endif
-de620.o: de620.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE620_OPTS) -c $<
 	
 ifdef CONFIG_AT1500
-NETDRV_OBJS := $(NETDRV_OBJS) lance.o
+L_OBJS += lance.o
 endif
 
 ifdef CONFIG_LANCE
-NETDRV_OBJS := $(NETDRV_OBJS) lance.o
+L_OBJS += lance.o
 endif
 
 ifdef CONFIG_AT1700
-NETDRV_OBJS := $(NETDRV_OBJS) at1700.o
+L_OBJS += at1700.o
 else
-MODULES := $(MODULES) at1700.o
+M_OBJS += at1700.o
 endif
 
 ifdef CONFIG_EL1
-NETDRV_OBJS := $(NETDRV_OBJS) 3c501.o
+L_OBJS += 3c501.o
 else
-MODULES := $(MODULES) 3c501.o
+M_OBJS += 3c501.o
 endif
 
 ifdef CONFIG_EL16
-NETDRV_OBJS := $(NETDRV_OBJS) 3c507.o
+L_OBJS += 3c507.o
 else
-MODULES ;= $(MODULES 3c507.o
+M_OBJS += 3c507.o
 endif
 
 ifdef CONFIG_EL3
-NETDRV_OBJS := $(NETDRV_OBJS) 3c509.o
+L_OBJS += 3c509.o
 else
-MODULES := $(MODULES) 3c509.o
+M_OBJS += 3c509.o
 endif
 
 ifdef CONFIG_EEXPRESS
-NETDRV_OBJS := $(NETDRV_OBJS) eexpress.o
+L_OBJS += eexpress.o
 else
-MODULES := $(MODULES) eexpress.o
+M_OBJS += eexpress.o
 endif
 
 ifdef CONFIG_EEXPRESS_PRO
-NETDRV_OBJS := $(NETDRV_OBJS) eepro.o
+L_OBJS += eepro.o
 else
-MODULES := $(MODULES) eepro.o
+M_OBJS += eepro.o
 endif
 
 ifdef CONFIG_WAVELAN
-NETDRV_OBJS := $(NETDRV_OBJS) wavelan.o
+L_OBJS += wavelan.o
 else
-MODULES := $(MODULES) wavelan.o
+M_OBJS += wavelan.o
 endif
 
 ifdef CONFIG_ZNET
-NETDRV_OBJS := $(NETDRV_OBJS) znet.o
+L_OBJS += znet.o
 endif
 
 ifdef CONFIG_DEPCA
-NETDRV_OBJS := $(NETDRV_OBJS) depca.o
+L_OBJS += depca.o
 else
-MODULES := $(MODULES) depca.o
+M_OBJS += depca.o
 endif
-depca.o: depca.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPCA_OPTS) -c $<
 
 ifdef CONFIG_EWRK3
-NETDRV_OBJS := $(NETDRV_OBJS) ewrk3.o
+L_OBJS += ewrk3.o
 else
-MODULES := $(MODULES) ewrk3.o
+M_OBJS += ewrk3.o
 endif
-ewrk3.o: ewrk3.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EWRK3_OPTS) -c $<
 
 ifdef CONFIG_ATP
-NETDRV_OBJS := $(NETDRV_OBJS) atp.o
+L_OBJS += atp.o
 endif
 
 ifdef CONFIG_DE4X5
-NETDRV_OBJS := $(NETDRV_OBJS) de4x5.o
+L_OBJS += de4x5.o
 else
-MODULES := $(MODULES) de4x5.o
+M_OBJS += de4x5.o
 endif
-de4x5.o: de4x5.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4X5_OPTS) -c $<
 
 ifdef CONFIG_NI52
-NETDRV_OBJS := $(NETDRV_OBJS) ni52.o
+L_OBJS += ni52.o
 endif
 
 ifdef CONFIG_NI65
-NETDRV_OBJS := $(NETDRV_OBJS) ni65.o
+L_OBJS += ni65.o
 endif
 
 ifdef CONFIG_ELPLUS
-NETDRV_OBJS := $(NETDRV_OBJS) 3c505.o
+L_OBJS += 3c505.o
 else
-MODULES := $(MODULES) 3c505.o
+M_OBJS += 3c505.o
 endif
-3c505.o: 3c505.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(ELP_OPTS) -c $<
 
 ifdef CONFIG_AC3200
-NETDRV_OBJS := $(NETDRV_OBJS) ac3200.o
+L_OBJS += ac3200.o
 CONFIG_8390 = CONFIG_8390
 else
-MODULES := $(MODULES) ac3200.o
+M_OBJS += ac3200.o
 endif
 
 ifdef CONFIG_APRICOT
-NETDRV_OBJS := $(NETDRV_OBJS) apricot.o
+L_OBJS += apricot.o
 else
-MODULES := $(MODULES) apricot.o
+M_OBJS += apricot.o
 endif
 
 ifdef CONFIG_DEC_ELCP
-NETDRV_OBJS := $(NETDRV_OBJS) tulip.o
+L_OBJS += tulip.o
 else
-MODULES := $(MODULES) tulip.o
+M_OBJS += tulip.o
 endif
 
 ifdef CONFIG_ARCNET
-NETDRV_OBJS := $(NETDRV_OBJS) arcnet.o
+L_OBJS += arcnet.o
 else
-MODULES := $(MODULES) arcnet.o
+M_OBJS += arcnet.o
 endif
 
 ifdef CONFIG_PI
-NETDRV_OBJS := $(NETDRV_OBJS) pi2.o
+L_OBJS += pi2.o
 CONFIG_PI = CONFIG_PI
 endif
-pi2.o:  pi2.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(PI_OPTS) -c $<
 
 ifdef CONFIG_SLHC
-NETDRV_OBJS := $(NETDRV_OBJS) slhc.o
+L_OBJS += slhc.o
 else
-MODULES := slhc.o $(MODULES)
+M_OBJS += slhc.o
 endif
 
 ifdef CONFIG_8390
-NETDRV_OBJS := $(NETDRV_OBJS) 8390.o
+L_OBJS += 8390.o
 else
-MODULES := 8390.o $(MODULES)
+M_OBJS += 8390.o
 endif
-8390.o: 8390.c 8390.h CONFIG
 
 ifdef CONFIG_EQUALIZER
-NETDRV_OBJS := $(NETDRV_OBJS) eql.o
+L_OBJS += eql.o
 else
-MODULES := $(MODULES) eql.o
+M_OBJS += eql.o
 endif
 
-net.a: $(NETDRV_OBJS)
-	rm -f net.a
-	$(AR) rcs net.a $(NETDRV_OBJS)
+include $(TOPDIR)/Rules.make
 
 clean:
 	rm -f core *.o *.a *.s
 
-ifdef MODULES
-dep:
-	$(CPP) -M $(NETDRV_OBJS:.o=.c) > .depend
-	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
-else
-dep:
-	$(CPP) -M $(NETDRV_OBJS:.o=.c) > .depend
-endif
+wd.o:	wd.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $<
 
-tar:
+3c503.o:	3c503.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $<
 
-ifdef MODULES
+pi2.o:  pi2.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PI_OPTS) -c $<
 
-modules: $(MODULES)
-	echo $(MODULES) > ../../modules/NET_MODULES
-	cd ../../modules; \
-		for i in $(MODULES); do ln -sf ../drivers/net/$$i .; done
+3c505.o: 3c505.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(ELP_OPTS) -c $<
 
-else
+de4x5.o: de4x5.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4X5_OPTS) -c $<
 
-modules:
+ewrk3.o: ewrk3.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EWRK3_OPTS) -c $<
 
-endif
+depca.o: depca.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPCA_OPTS) -c $<
 
-include $(TOPDIR)/Rules.make
+Space.o: ../../include/linux/autoconf.h
+
+net_init.o: ../../include/linux/autoconf.h
+
+ne.o:	ne.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c $<
+
+hp.o:	hp.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $<
+
+plip.o:	plip.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c $<
+
+slip.o:	slip.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
+dummy.o: dummy.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
+de600.o: de600.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE600_OPTS) -c $<
+
+de620.o: de620.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE620_OPTS) -c $<
+
+8390.o: 8390.c 8390.h CONFIG

@@ -7,32 +7,10 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-SUBDIRS     := 802 ax25 core ethernet ipv4 ipx unix appletalk netrom
-
-SUBOBJS     := $(foreach f,$(SUBDIRS),$f/$f.o)
-
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS	=  socket.o protocols.o
-
-all:		network.a
-
-network.a:	subdirs $(OBJS)
-		rm -f $@
-		$(AR) rcs $@ $(OBJS) $(SUBOBJS)
-
-subdirs:	dummy
-		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
-
-dep:
-		$(CPP) -M *.c > .depend
-		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
-
-modules: dummy
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
-
+MOD_SUB_DIRS := ipv4
+ALL_SUB_DIRS := 802 ax25 core ethernet ipv4 ipx unix appletalk netrom
+SUB_DIRS     := $(ALL_SUB_DIRS)
+L_TARGET     := network.a
+L_OBJS	     :=  socket.o protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 
 include $(TOPDIR)/Rules.make

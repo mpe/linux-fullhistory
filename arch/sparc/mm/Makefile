@@ -7,19 +7,7 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.s.o:
-	$(AS) -o $*.o $<
-
-OBJS	= fault.o vac-flush.o init.o sun4c.o srmmu.o loadmmu.o
-
-mm.o: $(OBJS)
-	$(LD) -r -o mm.o $(OBJS)
-
-modules:
-
-dep:
-	$(CPP) -M *.c > .depend
+O_TARGET := mm.o
+O_OBJS   := fault.o vac-flush.o init.o sun4c.o srmmu.o loadmmu.o
 
 include $(TOPDIR)/Rules.make

@@ -1817,8 +1817,9 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char devicename[9] = { 0, };
 static struct device thisDepca = {
-  "        ",  /* device name inserted by /linux/drivers/net/net_init.c */
+  devicename, /* device name is inserted by linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x200, 7,   /* I/O address, IRQ */
   0, 0, 0, NULL, depca_probe };

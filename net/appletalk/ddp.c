@@ -1864,12 +1864,23 @@ void atalk_proto_init(struct net_proto *pro)
 	register_netdevice_notifier(&ddp_notifier);
 	aarp_proto_init();
 
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_ATALK, 9, "appletalk", atalk_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AT_ROUTE, 11,"atalk_route", atalk_rt_get_info });
-proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_ATIF, 11,"atalk_iface", atalk_if_get_info });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_ATALK, 9, "appletalk",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		atalk_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_AT_ROUTE, 11,"atalk_route",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		atalk_rt_get_info
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_ATIF, 11,"atalk_iface",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		atalk_if_get_info
+	});
 
 	printk("Appletalk BETA 0.11 for Linux NET3.030\n");
 }

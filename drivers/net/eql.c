@@ -126,6 +126,7 @@ static const char *version =
 
 #include <linux/netdevice.h>
 #include <linux/if.h>
+#include <linux/if_arp.h>
 #include <linux/timer.h>
 
 #include <linux/if_eql.h>

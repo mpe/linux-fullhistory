@@ -97,7 +97,7 @@ extern int  nr_get_info(char *, char **, off_t, int, int);
 extern int  nr_rx_ip(struct sk_buff *, struct device *);
 extern int  nr_init(struct device *);
 
-#include "nrcall.h"
+#include <net/nrcall.h>
 
 /* nr_in.c */
 extern int  nr_process_rx_frame(struct sock *, struct sk_buff *);

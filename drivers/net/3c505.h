@@ -13,6 +13,8 @@
 #define	PORT_DATA	0x04	/* read/write, 16-bit */
 #define	PORT_CONTROL	0x06	/* read/write, 8-bit */
 
+#define ELP_IO_EXTENT	0x10	/* size of used IO registers */
+
 /*
  * host control registers bits
  */

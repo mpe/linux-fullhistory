@@ -2820,8 +2820,12 @@ void ip_init(void)
 	ip_udp_init();*/
 
 #ifdef CONFIG_IP_MULTICAST
-	proc_net_register(&(struct proc_dir_entry)
-		  { PROC_NET_IGMP, 4, "igmp", ip_mc_procinfo });
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IGMP, 4, "igmp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_mc_procinfo
+	});
 #endif
 }
 

@@ -2,21 +2,17 @@
 #               Makefile for wm-FPU-emu
 #
 
+L_TARGET := math.a
+
 #DEBUG	= -DDEBUGGING
 DEBUG	=
 PARANOID = -DPARANOID
-CFLAGS	:= $(CFLAGS) $(PARANOID) $(DEBUG) -fno-builtin
-
-.c.o:
-	$(CC) $(CFLAGS) $(MATH_EMULATION) -c $<
+CFLAGS	:= $(CFLAGS) $(PARANOID) $(DEBUG) -fno-builtin $(MATH_EMULATION)
 
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(PARANOID) -c $<
 
-.s.o:
-	$(CC) -c $<
-
-OBJS =	fpu_entry.o div_small.o errors.o \
+L_OBJS =fpu_entry.o div_small.o errors.o \
 	fpu_arith.o fpu_aux.o fpu_etc.o fpu_trig.o \
 	load_store.o get_address.o \
 	poly_atan.o poly_l2.o poly_2xm1.o poly_sin.o poly_tan.o \
@@ -28,18 +24,7 @@ OBJS =	fpu_entry.o div_small.o errors.o \
 	div_Xsig.o polynom_Xsig.o round_Xsig.o \
 	shr_Xsig.o mul_Xsig.o
 
-math.a: $(OBJS)
-	rm -f math.a
-	$(AR) rcs math.a $(OBJS)
-	sync
-
-dep:
-	$(CPP) -M *.c > .depend
-	$(CPP) -D__ASSEMBLY__ -M *.S >> .depend
+include $(TOPDIR)/Rules.make
 
 proto:
 	cproto -e -DMAKING_PROTO *.c >fpu_proto.h
-
-modules:
-
-include $(TOPDIR)/Rules.make

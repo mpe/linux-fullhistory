@@ -2442,7 +2442,7 @@ static int do_auto_irq(struct async_struct * info)
 
 /*
  * This routine is called by rs_init() to initialize a specific serial
- * port.  It determines what type of UART ship this serial port is
+ * port.  It determines what type of UART chip this serial port is
  * using: 8250, 16450, 16550, 16550A.  The important question is
  * whether or not this UART is a 16550A or not, since this will
  * determine whether or not we can use its FIFO features or not.
