@@ -50,23 +50,17 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   cli();
   if (dev->tbusy != 0) {
 	sti();
-	printk("loopback error: called by %08lx\n",
-		((unsigned long *)&skb)[-1]);
 	stats->tx_errors++;
 	return(1);
   }
   dev->tbusy = 1;
   sti();
 
-  start_bh_atomic();
   done = dev_rint(skb->data, skb->len, 0, dev);
   if (skb->free) kfree_skb(skb, FREE_WRITE);
-  end_bh_atomic();
 
   while (done != 1) {
-  	start_bh_atomic();
 	done = dev_rint(NULL, 0, 0, dev);
-	end_bh_atomic();
   }
   stats->tx_packets++;
 

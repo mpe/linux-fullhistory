@@ -28,7 +28,6 @@
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
-#include <linux/string.h>
  *		2 of the License, or (at your option) any later version.
  */
 #include <linux/types.h>
@@ -39,6 +38,7 @@
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/string.h>
 #include "snmp.h"
 #include "ip.h"
 #include "route.h"
@@ -313,8 +313,10 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb)
  *	Handle ICMP_REDIRECT. 
  */
 
-static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev)
+static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
+	struct device *dev, unsigned long source)
 {
+	struct rtable *rt;
 	struct iphdr *iph;
 	unsigned long ip;
 
@@ -340,8 +342,16 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 #endif
 		case ICMP_REDIR_HOST:
 			/*
-			 *	Add better route to host
+			 *	Add better route to host.
+			 *	But first check that the redirect
+			 *	comes from the old gateway..
 			 */
+			rt = ip_rt_route(ip, NULL, NULL);
+			if (!rt)
+				break;
+			if (rt->rt_gateway != source)
+				break;
+			printk("redirect from %08lx\n", source);
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
 				ip, 0, icmph->un.gateway, dev);
 			break;
@@ -657,7 +667,7 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 			return(0);
 		case ICMP_REDIRECT:
 			icmp_statistics.IcmpInRedirects++;
-			icmp_redirect(icmph, skb1, dev);
+			icmp_redirect(icmph, skb1, dev, saddr);
 			return(0);
 		case ICMP_ECHO: 
 			icmp_statistics.IcmpInEchos++;

@@ -319,6 +319,7 @@ int dev_close(struct device *dev)
 
 void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
+	unsigned long flags;
 	int where = 0;		/* used to say if the packet should go	*/
 				/* at the front or the back of the	*/
 				/* queue.				*/
@@ -335,7 +336,6 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	IS_SKB(skb);
     
 	skb->dev = dev;
-	start_bh_atomic();
 
 	/*
 	 *	This just eliminates some race conditions, but not all... 
@@ -348,7 +348,6 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		 */
 		printk("dev_queue_xmit: worked around a missed interrupt\n");
 		dev->hard_start_xmit(NULL, dev);
-		end_bh_atomic();
 		return;
   	}
 
@@ -376,33 +375,27 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 */
 	 
 	if (!skb->arp && dev->rebuild_header(skb->data, dev, skb->raddr, skb)) {
-		end_bh_atomic();
 		return;
 	}
 
-	/*
-	 *	This is vitally important. We _MUST_ keep packets in order. While tcp/ip
-	 *	suffers only a slow down some IPX apps, and all the AX.25 code will break
-	 *	if it occurs out of order. 
-	 *
-	 *	This is commented out while I fix a few 'side effects'
-	 */
+	save_flags(flags);
+	cli();	
+	if (!where) {
+		skb_queue_tail(dev->buffs + pri,skb);
+		skb = skb_dequeue(dev->buffs + pri);
+	}
+	restore_flags(flags);
 
-	if ((where==1 || skb_peek(&dev->buffs[pri])==NULL) && dev->hard_start_xmit(skb, dev) == 0) 
-	{
-		end_bh_atomic();
+	if (dev->hard_start_xmit(skb, dev) == 0) {
 		return;
 	}
 
 	/*
 	 *	Transmission failed, put skb back into a list. 
 	 */
-
-	if(where)
-		skb_queue_head(&dev->buffs[pri],skb);
-	else
-		skb_queue_tail(&dev->buffs[pri],skb);
-	end_bh_atomic();
+	cli();
+	skb_queue_head(dev->buffs + pri,skb);
+	restore_flags(flags);
 }
 
 /*
