@@ -436,22 +436,6 @@ EXPORT_SYMBOL(arp_find);
 
 #endif  /* CONFIG_INET */
 
-#if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
-	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
-	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
-	defined(CONFIG_LNE390)	||	defined(CONFIG_NE3210)		|| \
-	defined(CONFIG_NE2K_PCI) ||	defined(CONFIG_APNE)		|| \
-	defined(CONFIG_DAYNAPORT)
-/* If 8390 NIC support is built in, we will need these. */
-EXPORT_SYMBOL(ei_open);
-EXPORT_SYMBOL(ei_close);
-EXPORT_SYMBOL(ei_interrupt);
-EXPORT_SYMBOL(ethdev_init);
-EXPORT_SYMBOL(NS8390_init);
-#endif
-
 #ifdef CONFIG_TR
 EXPORT_SYMBOL(tr_setup);
 EXPORT_SYMBOL(tr_type_trans);

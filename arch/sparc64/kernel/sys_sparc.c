@@ -111,7 +111,6 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 {
 	int err;
 
-	lock_kernel();
 	/* No need for backward compatibility. We can start fresh... */
 
 	if (call <= SEMCTL)
@@ -177,7 +176,6 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 	else
 		err = -EINVAL;
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -198,11 +196,9 @@ extern asmlinkage long sys_personality(unsigned long);
 asmlinkage int sparc64_personality(unsigned long personality)
 {
 	int ret;
-	lock_kernel();
 	if (current->personality == PER_LINUX32 && personality == PER_LINUX)
 		personality = PER_LINUX32;
 	ret = sys_personality(personality);
-	unlock_kernel();
 	if (ret == PER_LINUX32)
 		ret = PER_LINUX;
 	return ret;

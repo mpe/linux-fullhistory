@@ -49,6 +49,7 @@
 
 #ifdef CONFIG_BSD_PROCESS_ACCT
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/acct.h>
 #include <linux/smp_lock.h>
 #include <linux/file.h>

@@ -884,10 +884,14 @@ nfs_revalidate(struct dentry *dentry)
  */
 int nfs_open(struct inode *inode, struct file *filp)
 {
-	struct rpc_auth *auth = NFS_CLIENT(inode)->cl_auth;
-	struct rpc_cred *cred = rpcauth_lookupcred(auth, 0);
+	struct rpc_auth *auth;
+	struct rpc_cred *cred;
 
+	lock_kernel();
+	auth = NFS_CLIENT(inode)->cl_auth;
+	cred = rpcauth_lookupcred(auth, 0);
 	filp->private_data = cred;
+	unlock_kernel();
 	return 0;
 }
 

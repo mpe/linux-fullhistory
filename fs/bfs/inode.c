@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/locks.h>
 #include <linux/bfs_fs.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -97,10 +98,12 @@ static void bfs_write_inode(struct inode * inode, int unused)
 		return;
 	}
 
+	lock_kernel();
 	block = (ino - BFS_ROOT_INO)/BFS_INODES_PER_BLOCK + 1;
 	bh = bread(dev, block, BFS_BSIZE);
 	if (!bh) {
 		printf("Unable to read inode %s:%08lx\n", bdevname(dev), ino);
+		unlock_kernel();
 		return;
 	}
 
@@ -126,6 +129,7 @@ static void bfs_write_inode(struct inode * inode, int unused)
 
 	mark_buffer_dirty(bh, 0);
 	brelse(bh);
+	unlock_kernel();
 }
 
 static void bfs_delete_inode(struct inode * inode)
@@ -146,11 +150,13 @@ static void bfs_delete_inode(struct inode * inode)
 	
 	inode->i_size = 0;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	lock_kernel();
 	mark_inode_dirty(inode);
 	block = (ino - BFS_ROOT_INO)/BFS_INODES_PER_BLOCK + 1;
 	bh = bread(dev, block, BFS_BSIZE);
 	if (!bh) {
 		printf("Unable to read inode %s:%08lx\n", bdevname(dev), ino);
+		unlock_kernel();
 		return;
 	}
 	off = (ino - BFS_ROOT_INO)%BFS_INODES_PER_BLOCK;
@@ -173,6 +179,7 @@ static void bfs_delete_inode(struct inode * inode)
 		s->su_lf_eblk = inode->iu_sblock - 1;
 		mark_buffer_dirty(s->su_sbh, 1);
 	}
+	unlock_kernel();
 	clear_inode(inode);
 }
 

@@ -354,7 +354,8 @@ static kmem_cache_t cache_cache = {
 	flags:		SLAB_NO_REAP,
 	spinlock:	SPIN_LOCK_UNLOCKED,
 	colour_off:	L1_CACHE_BYTES,
-	name:		"kmem_cache"
+	name:		"kmem_cache",
+	next:		LIST_HEAD_INIT(cache_cache.next)
 };
 
 /* Guard access to the cache-chain. */

@@ -9,6 +9,11 @@
  *
  * based on work by Grant Guenther <grant@torque.net>
  *          and Philip Blundell
+ *
+ * The block comments above the functions in this file are
+ * licensed as part of the generated file
+ * Documentation/DocBook/parportbook.sgml under the GNU Free
+ * Documentation License.
  */
 
 #undef PARPORT_DEBUG_SHARING		/* undef for production */

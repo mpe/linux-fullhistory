@@ -281,9 +281,11 @@ static void
 smb_delete_inode(struct inode *ino)
 {
 	pr_debug("smb_delete_inode\n");
+	lock_kernel();
 	if (smb_close(ino))
 		printk("smb_delete_inode: could not close inode %ld\n",
 			ino->i_ino);
+	unlock_kernel();
 	clear_inode(ino);
 }
 

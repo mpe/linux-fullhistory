@@ -62,8 +62,8 @@ void ext2_delete_inode (struct inode * inode)
 	unlock_kernel();
 	return;
 no_delete:
-	clear_inode(inode);	/* We must guarantee clearing of inode... */
 	unlock_kernel();
+	clear_inode(inode);	/* We must guarantee clearing of inode... */
 }
 
 #define inode_bmap(inode, nr) (le32_to_cpu((inode)->u.ext2_i.i_data[(nr)]))

@@ -27,6 +27,7 @@
 #include <linux/locks.h>
 #include <linux/fat_cvf.h>
 #include <linux/malloc.h>
+#include <linux/smp_lock.h>
 
 #include "msbuffer.h"
 
@@ -153,17 +154,21 @@ out:
 
 void fat_delete_inode(struct inode *inode)
 {
+	lock_kernel();
 	inode->i_size = 0;
 	fat_truncate(inode);
+	unlock_kernel();
 	clear_inode(inode);
 }
 
 void fat_clear_inode(struct inode *inode)
 {
+	lock_kernel();
 	spin_lock(&fat_inode_lock);
 	fat_cache_inval_inode(inode);
 	list_del(&MSDOS_I(inode)->i_fat_hash);
 	spin_unlock(&fat_inode_lock);
+	unlock_kernel();
 }
 
 void fat_put_super(struct super_block *sb)
@@ -846,16 +851,20 @@ void fat_write_inode(struct inode *inode, int wait)
 
 retry:
 	i_pos = MSDOS_I(inode)->i_location;
-	if (inode->i_ino == MSDOS_ROOT_INO || !i_pos) return;
+	if (inode->i_ino == MSDOS_ROOT_INO || !i_pos) {
+		return;
+	}
 	if (!(bh = fat_bread(sb, i_pos >> MSDOS_DPB_BITS))) {
 		printk("dev = %s, ino = %d\n", kdevname(inode->i_dev), i_pos);
 		fat_fs_panic(sb, "msdos_write_inode: unable to read i-node block");
+		unlock_kernel();
 		return;
 	}
 	spin_lock(&fat_inode_lock);
 	if (i_pos != MSDOS_I(inode)->i_location) {
 		spin_unlock(&fat_inode_lock);
 		fat_brelse(sb, bh);
+		unlock_kernel();
 		goto retry;
 	}
 
@@ -885,6 +894,7 @@ retry:
 	spin_unlock(&fat_inode_lock);
 	fat_mark_buffer_dirty(sb, bh, 1);
 	fat_brelse(sb, bh);
+	unlock_kernel();
 }
 
 

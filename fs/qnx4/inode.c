@@ -23,6 +23,7 @@
 #include <linux/locks.h>
 #include <linux/init.h>
 #include <linux/highuid.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -62,9 +63,11 @@ int qnx4_sync_inode(struct inode *inode)
 static void qnx4_delete_inode(struct inode *inode)
 {
 	QNX4DEBUG(("qnx4: deleting inode [%lu]\n", (unsigned long) inode->i_ino));
+	lock_kernel();
 	inode->i_size = 0;
 	qnx4_truncate(inode);
 	qnx4_free_inode(inode);
+	unlock_kernel();
 }
 
 static void qnx4_write_super(struct super_block *sb)
@@ -91,9 +94,11 @@ static void qnx4_write_inode(struct inode *inode, int unused)
 	}
 	QNX4DEBUG(("qnx4: write inode 2.\n"));
 	block = ino / QNX4_INODES_PER_BLOCK;
+	lock_kernel();
 	if (!(bh = bread(inode->i_dev, block, QNX4_BLOCK_SIZE))) {
 		printk("qnx4: major problem: unable to read inode from dev "
 		       "%s\n", kdevname(inode->i_dev));
+		unlock_kernel();
 		return;
 	}
 	raw_inode = ((struct qnx4_inode_entry *) bh->b_data) +
@@ -109,6 +114,7 @@ static void qnx4_write_inode(struct inode *inode, int unused)
 	raw_inode->di_first_xtnt.xtnt_size = cpu_to_le32(inode->i_blocks);
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
+	unlock_kernel();
 }
 
 #endif

@@ -52,7 +52,6 @@ static struct super_block *shm_read_super(struct super_block *,void *, int);
 static void	      shm_put_super  (struct super_block *);
 static int	      shm_remount_fs (struct super_block *, int *, char *);
 static void	      shm_read_inode (struct inode *);
-static void	      shm_write_inode(struct inode *, int);
 static int	      shm_statfs   (struct super_block *, struct statfs *);
 static int	      shm_create   (struct inode *,struct dentry *,int);
 static struct dentry *shm_lookup   (struct inode *,struct dentry *);
@@ -147,7 +146,6 @@ static DECLARE_FSTYPE(shm_fs_type, "shm", shm_read_super, FS_SINGLE);
 
 static struct super_operations shm_sops = {
 	read_inode:	shm_read_inode,
-	write_inode:	shm_write_inode,
 	delete_inode:	shm_delete,
 	put_super:	shm_put_super,
 	statfs:		shm_statfs,
@@ -369,10 +367,6 @@ static int shm_statfs(struct super_block *sb, struct statfs *buf)
 	buf->f_ffree = shm_ctlmni - used_segs;
 	buf->f_namelen = SHM_NAME_LEN;
 	return 0;
-}
-
-static void shm_write_inode(struct inode * inode, int sync)
-{
 }
 
 static void shm_read_inode(struct inode * inode)
@@ -831,6 +825,7 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 	return err;
 }
 
+/* FIXME: maybe we need lock_kernel() here */
 static void shm_delete (struct inode *ino)
 {
 	int shmid = ino->i_ino;

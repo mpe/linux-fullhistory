@@ -747,7 +747,9 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 
 void ufs_write_inode (struct inode * inode, int wait)
 {
+	lock_kernel();
 	ufs_update_inode (inode, wait);
+	unlock_kernel();
 }
 
 int ufs_sync_inode (struct inode *inode)
@@ -755,18 +757,15 @@ int ufs_sync_inode (struct inode *inode)
 	return ufs_update_inode (inode, 1);
 }
 
-void ufs_put_inode (struct inode * inode)
-{
-	UFSD(("ENTER & EXIT\n"))
-}
-
 void ufs_delete_inode (struct inode * inode)
 {
 	/*inode->u.ufs_i.i_dtime = CURRENT_TIME;*/
+	lock_kernel();
 	mark_inode_dirty(inode);
 	ufs_update_inode(inode, IS_SYNC(inode));
 	inode->i_size = 0;
 	if (inode->i_blocks)
 		ufs_truncate (inode);
 	ufs_free_inode (inode);
+	unlock_kernel();
 }

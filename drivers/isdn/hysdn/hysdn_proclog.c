@@ -45,6 +45,7 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/pci.h>
+#include <linux/smp_lock.h>
 
 #include "hysdn_defs.h"
 
@@ -293,7 +294,7 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 	struct procdata *pd;
 	ulong flags;
 
-	MOD_INC_USE_COUNT;	/* lock module */
+	lock_kernel();
 	card = card_root;
 	while (card) {
 		pd = card->proclog;
@@ -302,7 +303,7 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 		card = card->next;	/* search next entry */
 	}
 	if (!card) {
-		MOD_DEC_USE_COUNT;	/* unlock module */
+		unlock_kernel();
 		return (-ENODEV);	/* device is unknown/invalid */
 	}
 	filep->private_data = card;	/* remember our own card */
@@ -321,9 +322,10 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 			(struct log_data **) filep->private_data = &(pd->log_head);
 		restore_flags(flags);
 	} else {		/* simultaneous read/write access forbidden ! */
-		MOD_DEC_USE_COUNT;	/* unlock module */
+		unlock_kernel();
 		return (-EPERM);	/* no permission this time */
 	}
+	unlock_kernel();
 	return (0);
 }				/* hysdn_log_open */
 
@@ -385,7 +387,6 @@ hysdn_log_close(struct inode *ino, struct file *filep)
 				}
 	}			/* read access */
 
-	MOD_DEC_USE_COUNT;
 	return (retval);
 }				/* hysdn_log_close */
 
@@ -451,8 +452,10 @@ hysdn_proclog_init(hysdn_card * card)
 	if ((pd = (struct procdata *) kmalloc(sizeof(struct procdata), GFP_KERNEL)) != NULL) {
 		memset(pd, 0, sizeof(struct procdata));
 		sprintf(pd->log_name, "%s%d", PROC_LOG_BASENAME, card->myid);
-		if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL)
+		if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL) {
 		        pd->log->proc_fops = &log_fops; 
+		        pd->log->owner = THIS_MODULE; 
+		}
 
 		init_waitqueue_head(&(pd->rd_queue));
 

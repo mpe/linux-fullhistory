@@ -100,7 +100,6 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 {
 	int version, err;
 
-	lock_kernel();
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
@@ -195,7 +194,6 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 	else
 		err = -EINVAL;
 out:
-	unlock_kernel();
 	return err;
 }
 

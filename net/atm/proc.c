@@ -559,6 +559,7 @@ int atm_proc_dev_register(struct atm_dev *dev)
 		goto fail0;
 	dev->proc_entry->data = dev;
 	dev->proc_entry->proc_fops = &proc_dev_atm_operations;
+	dev->proc_entry->owner = THIS_MODULE;
 	return 0;
 	kfree(dev->proc_entry);
 fail0:
@@ -579,7 +580,8 @@ void atm_proc_dev_deregister(struct atm_dev *dev)
     name = create_proc_entry(#name,0,atm_proc_root); \
     if (!name) goto cleanup; \
     name->data = atm_##name##_info; \
-    name->proc_fops = &proc_spec_atm_operations
+    name->proc_fops = &proc_spec_atm_operations; \
+    name->owner = THIS_MODULE
 
 
 int __init atm_proc_init(void)

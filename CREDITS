@@ -2601,7 +2601,7 @@ S: Germany
 
 N: Geert Uytterhoeven
 E: geert@linux-m68k.org
-W: http://www.cs.kuleuven.ac.be/~geert/
+W: http://home.tvd.be/cr26864/
 P: 1024/EC4A1EE1 8B 88 38 35 88 1E 95 A1  CD 9E AE DC 4B 4A 2F 41
 D: m68k/Amiga and PPC/CHRP Longtrail coordinator
 D: Frame buffer device and XF68_FBDev maintainer

@@ -27,6 +27,7 @@
 #include <linux/major.h>
 #include <linux/blkdev.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
@@ -202,8 +203,10 @@ affs_write_inode(struct inode *inode, int unused)
 
 	if (!inode->i_nlink)
 		return;
+	lock_kernel();
 	if (!(bh = bread(inode->i_dev,inode->i_ino,AFFS_I2BSIZE(inode)))) {
 		affs_error(inode->i_sb,"write_inode","Cannot read block %lu",inode->i_ino);
+		unlock_kernel();
 		return;
 	}
 	file_end = GET_END_PTR(struct file_end, bh->b_data,AFFS_I2BSIZE(inode));
@@ -231,6 +234,7 @@ affs_write_inode(struct inode *inode, int unused)
 	affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
 	mark_buffer_dirty(bh,1);
 	brelse(bh);
+	unlock_kernel();
 }
 
 int
@@ -269,6 +273,7 @@ affs_put_inode(struct inode *inode)
 	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",
 		inode->i_ino,inode->i_nlink);
 
+	lock_kernel();
 	affs_free_prealloc(inode);
 	if (atomic_read(&inode->i_count) == 1) {
 		unsigned long cache_page = (unsigned long) inode->u.affs_i.i_ec;
@@ -278,16 +283,19 @@ affs_put_inode(struct inode *inode)
 			free_page(cache_page);
 		}
 	}
+	unlock_kernel();
 }
 
 void
 affs_delete_inode(struct inode *inode)
 {
 	pr_debug("AFFS: delete_inode(ino=%lu, nlink=%u)\n",inode->i_ino,inode->i_nlink);
+	lock_kernel();
 	inode->i_size = 0;
 	if (S_ISREG(inode->i_mode) && !inode->u.affs_i.i_hlink)
 		affs_truncate(inode);
 	affs_free_block(inode->i_sb,inode->i_ino);
+	unlock_kernel();
 	clear_inode(inode);
 }
 

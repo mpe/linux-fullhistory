@@ -29,6 +29,7 @@
 #include <linux/nls.h>
 #include <linux/locks.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 /* Forward declarations */
 static struct inode_operations ntfs_dir_inode_operations;
@@ -711,13 +712,16 @@ static void ntfs_read_inode(struct inode* inode)
 static void 
 ntfs_write_inode (struct inode *ino, int unused)
 {
+	lock_kernel();
 	ntfs_debug (DEBUG_LINUX, "ntfs:write inode %x\n", ino->i_ino);
 	ntfs_update_inode (NTFS_LINO2NINO (ino));
+	unlock_kernel();
 }
 #endif
 
 static void _ntfs_clear_inode(struct inode *ino)
 {
+	lock_kernel();
 	ntfs_debug(DEBUG_OTHER, "ntfs_clear_inode %lx\n",ino->i_ino);
 #ifdef NTFS_IN_LINUX_KERNEL
 	if(ino->i_ino!=FILE_MFT)
@@ -730,6 +734,7 @@ static void _ntfs_clear_inode(struct inode *ino)
 		ino->u.generic_ip=0;
 	}
 #endif
+	unlock_kernel();
 	return;
 }
 

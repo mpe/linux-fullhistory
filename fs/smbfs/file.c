@@ -334,7 +334,9 @@ out:
 static int
 smb_file_open(struct inode *inode, struct file * file)
 {
+	lock_kernel();
 	inode->u.smbfs_i.openers++;
+	unlock_kernel();
 	return 0;
 }
 

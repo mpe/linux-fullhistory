@@ -100,14 +100,14 @@ static DECLARE_FSTYPE_DEV(udf_fstype, "udf", udf_read_super);
 
 /* Superblock operations */
 static struct super_operations udf_sb_ops = {
-	read_inode:			udf_read_inode,
+	read_inode:		udf_read_inode,
 	write_inode:		udf_write_inode,
-	put_inode:			udf_put_inode,
+	put_inode:		udf_put_inode,
 	delete_inode:		udf_delete_inode,
-	put_super:			udf_put_super,
+	put_super:		udf_put_super,
 	write_super:		udf_write_super,
-	statfs:				udf_statfs,
-	remount_fs:			udf_remount_fs,
+	statfs:			udf_statfs,
+	remount_fs:		udf_remount_fs,
 };
 
 struct udf_options

@@ -168,6 +168,7 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,48))
 		proc_entry->proc_fops = &i2cproc_operations;
+		proc_entry->owner = THIS_MODULE;
 #else
 		proc_entry->ops = &i2cproc_inode_operations;
 #endif

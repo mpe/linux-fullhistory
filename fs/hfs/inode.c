@@ -20,6 +20,7 @@
 #include <linux/hfs_fs_sb.h>
 #include <linux/hfs_fs_i.h>
 #include <linux/hfs_fs.h>
+#include <linux/smp_lock.h>
 
 /*================ Variable-like macros ================*/
 
@@ -79,6 +80,7 @@ void hfs_put_inode(struct inode * inode)
 {
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
+	lock_kernel();
 	hfs_cat_put(entry);
 	if (atomic_read(&inode->i_count) == 1) {
 	  struct hfs_hdr_layout *tmp = HFS_I(inode)->layout;
@@ -88,6 +90,7 @@ void hfs_put_inode(struct inode * inode)
 		HFS_DELETE(tmp);
 	  }
 	}
+	unlock_kernel();
 }
 
 /*

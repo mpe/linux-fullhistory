@@ -1683,9 +1683,7 @@ int filemap_sync(struct vm_area_struct * vma, unsigned long address,
  */
 static void filemap_unmap(struct vm_area_struct *vma, unsigned long start, size_t len)
 {
-	lock_kernel();
 	filemap_sync(vma, start, len, MS_ASYNC);
-	unlock_kernel();
 }
 
 /*
@@ -1741,14 +1739,17 @@ static int msync_interval(struct vm_area_struct * vma,
 {
 	if (vma->vm_file && vma->vm_ops && vma->vm_ops->sync) {
 		int error;
-		lock_kernel();
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
 		if (!error && (flags & MS_SYNC)) {
 			struct file * file = vma->vm_file;
-			if (file && file->f_op && file->f_op->fsync)
+			if (file && file->f_op && file->f_op->fsync) {
+				down(&file->f_dentry->d_inode->i_sem);
+				lock_kernel();
 				error = file->f_op->fsync(file, file->f_dentry, 1);
+				unlock_kernel();
+				up(&file->f_dentry->d_inode->i_sem);
+			}
 		}
-		unlock_kernel();
 		return error;
 	}
 	return 0;

@@ -141,7 +141,7 @@ static int
 smb_dir_open(struct inode *dir, struct file *file)
 {
 	struct dentry *dentry = file->f_dentry;
-	struct smb_sb_info *server = server_from_dentry(dentry);
+	struct smb_sb_info *server;
 	int error = 0;
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_dir_open: (%s/%s)\n", dentry->d_parent->d_name.name, 
@@ -151,6 +151,8 @@ file->f_dentry->d_name.name);
 	 * Directory timestamps in the core protocol aren't updated
 	 * when a file is added, so we give them a very short TTL.
 	 */
+	lock_kernel();
+	server = server_from_dentry(dentry);
 	if (server->opt.protocol < SMB_PROTOCOL_LANMAN2)
 	{
 		unsigned long age = jiffies - dir->u.smbfs_i.oldmtime;
@@ -160,6 +162,7 @@ file->f_dentry->d_name.name);
 
 	if (server->conn_pid)
 		error = smb_revalidate_inode(dentry);
+	unlock_kernel();
 	return error;
 }
 

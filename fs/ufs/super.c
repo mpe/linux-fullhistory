@@ -971,7 +971,6 @@ int ufs_statfs (struct super_block * sb, struct statfs * buf)
 static struct super_operations ufs_super_ops = {
 	read_inode:	ufs_read_inode,
 	write_inode:	ufs_write_inode,
-	put_inode:	ufs_put_inode,
 	delete_inode:	ufs_delete_inode,
 	put_super:	ufs_put_super,
 	write_super:	ufs_write_super,

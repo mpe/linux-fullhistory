@@ -8,6 +8,11 @@
  *
  * This file is responsible for IEEE 1284 negotiation, and for handing
  * read/write requests to low-level drivers.
+ *
+ * The block comments above the functions in this file are
+ * licensed as part of the generated file
+ * Documentation/DocBook/parportbook.sgml under the GNU Free
+ * Documentation License.
  */
 
 #include <linux/config.h>

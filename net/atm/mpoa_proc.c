@@ -324,6 +324,7 @@ int mpc_proc_init(void)
                 return -ENOMEM;
         }
 	p->proc_fops = &mpc_file_operations;
+	p->owner = THIS_MODULE;
 	return 0;
 }
 

@@ -229,7 +229,7 @@ static int __init ne_probe_pci(struct net_device *dev)
 
 	for (i = 0; pci_clone_list[i].vendor != 0; i++) {
 		struct pci_dev *pdev = NULL;
-		unsigned int pci_ioaddr;
+		unsigned int pci_ioaddr = 0;
 
 		while ((pdev = pci_find_device(pci_clone_list[i].vendor, pci_clone_list[i].dev_id, pdev))) {
 			if (pci_enable_device(pdev))

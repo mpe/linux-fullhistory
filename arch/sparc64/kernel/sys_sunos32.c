@@ -481,7 +481,6 @@ asmlinkage int sunos_fpathconf(int fd, int name)
 {
 	int ret;
 
-	lock_kernel();
 	switch(name) {
 	case _PCONF_LINK:
 		ret = LINK_MAX;
@@ -512,7 +511,6 @@ asmlinkage int sunos_fpathconf(int fd, int name)
 		ret = -EINVAL;
 		break;
 	}
-	unlock_kernel();
 	return ret;
 }
 
@@ -520,9 +518,7 @@ asmlinkage int sunos_pathconf(u32 u_path, int name)
 {
 	int ret;
 
-	lock_kernel();
 	ret = sunos_fpathconf(0, name); /* XXX cheese XXX */
-	unlock_kernel();
 	return ret;
 }
 
@@ -540,7 +536,6 @@ asmlinkage int sunos_select(int width, u32 inp, u32 outp, u32 exp, u32 tvp_x)
 	int ret;
 
 	/* SunOS binaries expect that select won't change the tvp contents */
-	lock_kernel();
 	ret = sys32_select (width, inp, outp, exp, tvp_x);
 	if (ret == -EINTR && tvp_x) {
 		struct timeval32 *tvp = (struct timeval32 *)A(tvp_x);
@@ -551,7 +546,6 @@ asmlinkage int sunos_select(int width, u32 inp, u32 outp, u32 exp, u32 tvp_x)
 		if (sec == 0 && usec == 0)
 			ret = 0;
 	}
-	unlock_kernel();
 	return ret;
 }
 
@@ -798,7 +792,6 @@ asmlinkage int sunos_setpgrp(pid_t pid, pid_t pgid)
 	int ret;
 
 	/* So stupid... */
-	lock_kernel();
 	if((!pid || pid == current->pid) &&
 	   !pgid) {
 		sys_setsid();
@@ -806,7 +799,6 @@ asmlinkage int sunos_setpgrp(pid_t pid, pid_t pgid)
 	} else {
 		ret = sys_setpgid(pid, pgid);
 	}
-	unlock_kernel();
 	return ret;
 }
 
@@ -818,10 +810,8 @@ asmlinkage int sunos_wait4(__kernel_pid_t32 pid, u32 stat_addr, int options, u32
 {
 	int ret;
 
-	lock_kernel();
 	ret = sys32_wait4((pid ? pid : ((__kernel_pid_t32)-1)),
 			  stat_addr, options, ru);
-	unlock_kernel();
 	return ret;
 }
 
@@ -838,9 +828,7 @@ asmlinkage int sunos_killpg(int pgrp, int sig)
 
 asmlinkage int sunos_audit(void)
 {
-	lock_kernel();
 	printk ("sys_audit\n");
-	unlock_kernel();
 	return -1;
 }
 
@@ -868,7 +856,6 @@ extern asmlinkage s32 sunos_sysconf (int name)
 {
 	s32 ret;
 
-	lock_kernel();
 	switch (name){
 	case _SC_ARG_MAX:
 		ret = ARG_MAX;
@@ -901,7 +888,6 @@ extern asmlinkage s32 sunos_sysconf (int name)
 		ret = -1;
 		break;
 	};
-	unlock_kernel();
 	return ret;
 }
 
@@ -910,7 +896,6 @@ asmlinkage int sunos_semsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 ptr)
 	union semun arg4;
 	int ret;
 
-	lock_kernel();
 	switch (op) {
 	case 0:
 		/* Most arguments match on a 1:1 basis but cmd doesn't */
@@ -946,7 +931,6 @@ asmlinkage int sunos_semsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 ptr)
 		ret = -EINVAL;
 		break;
 	};
-	unlock_kernel();
 	return ret;
 }
 
@@ -1048,7 +1032,6 @@ asmlinkage int sunos_msgsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 arg4)
 	u32 arg5;
 	int rval;
 
-	lock_kernel();
 	switch(op) {
 	case 0:
 		rval = sys_msgget((key_t)arg1, (int)arg2);
@@ -1102,7 +1085,6 @@ asmlinkage int sunos_msgsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 arg4)
 		rval = -EINVAL;
 		break;
 	}
-	unlock_kernel();
 	return rval;
 }
 
@@ -1162,7 +1144,6 @@ asmlinkage int sunos_shmsys(int op, u32 arg1, u32 arg2, u32 arg3)
 	mm_segment_t old_fs = get_fs();
 	int rval;
 
-	lock_kernel();
 	switch(op) {
 	case 0:
 		/* sys_shmat(): attach a shared memory area */
@@ -1194,7 +1175,6 @@ asmlinkage int sunos_shmsys(int op, u32 arg1, u32 arg2, u32 arg3)
 		rval = -EINVAL;
 		break;
 	};
-	unlock_kernel();
 	return rval;
 }
 
@@ -1217,9 +1197,12 @@ asmlinkage int sunos_open(u32 fname, int flags, int mode)
 static inline int check_nonblock(int ret, int fd)
 {
 	if (ret == -EAGAIN) {
-		struct file * file = fcheck(fd);
-		if (file && (file->f_flags & O_NDELAY))
-			ret = -SUNOS_EWOULDBLOCK;
+		struct file * file = fget(fd);
+		if (file) {
+			if (file->f_flags & O_NDELAY)
+				ret = -SUNOS_EWOULDBLOCK;
+			fput(file);
+		}
 	}
 	return ret;
 }
@@ -1236,9 +1219,7 @@ asmlinkage int sunos_read(unsigned int fd, u32 buf, u32 count)
 {
 	int ret;
 
-	lock_kernel();
 	ret = check_nonblock(sys_read(fd, (char *)A(buf), count), fd);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1246,9 +1227,7 @@ asmlinkage int sunos_readv(u32 fd, u32 vector, s32 count)
 {
 	int ret;
 
-	lock_kernel();
 	ret = check_nonblock(sys32_readv(fd, vector, count), fd);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1256,9 +1235,7 @@ asmlinkage int sunos_write(unsigned int fd, u32 buf, u32 count)
 {
 	int ret;
 
-	lock_kernel();
 	ret = check_nonblock(sys_write(fd, (char *)A(buf), count), fd);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1266,9 +1243,7 @@ asmlinkage int sunos_writev(u32 fd, u32 vector, s32 count)
 {
 	int ret;
 
-	lock_kernel();
 	ret = check_nonblock(sys32_writev(fd, vector, count), fd);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1276,9 +1251,7 @@ asmlinkage int sunos_recv(int fd, u32 ubuf, int size, unsigned flags)
 {
 	int ret;
 
-	lock_kernel();
 	ret = check_nonblock(sys_recv(fd, (void *)A(ubuf), size, flags), fd);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1286,9 +1259,7 @@ asmlinkage int sunos_send(int fd, u32 buff, int len, unsigned flags)
 {
 	int ret;
 
-	lock_kernel();
 	ret = check_nonblock(sys_send(fd, (void *)A(buff), len, flags), fd);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1299,7 +1270,6 @@ asmlinkage int sunos_socket(int family, int type, int protocol)
 {
 	int ret, one = 1;
 
-	lock_kernel();
 	ret = sys_socket(family, type, protocol);
 	if (ret < 0)
 		goto out;
@@ -1307,7 +1277,6 @@ asmlinkage int sunos_socket(int family, int type, int protocol)
 	sys_setsockopt(ret, SOL_SOCKET, SO_BSDCOMPAT,
 		       (char *)&one, sizeof(one));
 out:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1315,7 +1284,6 @@ asmlinkage int sunos_accept(int fd, u32 sa, u32 addrlen)
 {
 	int ret, one = 1;
 
-	lock_kernel();
 	while (1) {
 		ret = check_nonblock(sys_accept(fd, (struct sockaddr *)A(sa),
 						(int *)A(addrlen)), fd);
@@ -1328,7 +1296,6 @@ asmlinkage int sunos_accept(int fd, u32 sa, u32 addrlen)
 	sys_setsockopt(ret, SOL_SOCKET, SO_BSDCOMPAT,
 		       (char *)&one, sizeof(one));
 out:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1376,14 +1343,12 @@ asmlinkage int sunos_setsockopt(int fd, int level, int optname, u32 optval,
 	int tr_opt = optname;
 	int ret;
 
-	lock_kernel();
 	if (level == SOL_IP) {
 		/* Multicast socketopts (ttl, membership) */
 		if (tr_opt >=2 && tr_opt <= 6)
 			tr_opt += 30;
 	}
 	ret = sys_setsockopt(fd, level, tr_opt, (char *)A(optval), optlen);
-	unlock_kernel();
 	return ret;
 }
 
@@ -1393,13 +1358,11 @@ asmlinkage int sunos_getsockopt(int fd, int level, int optname,
 	int tr_opt = optname;
 	int ret;
 
-	lock_kernel();
 	if (level == SOL_IP) {
 		/* Multicast socketopts (ttl, membership) */
 		if (tr_opt >=2 && tr_opt <= 6)
 			tr_opt += 30;
 	}
 	ret = sys32_getsockopt(fd, level, tr_opt, optval, optlen);
-	unlock_kernel();
 	return ret;
 }

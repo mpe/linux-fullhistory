@@ -42,6 +42,7 @@ EXPORT_SYMBOL(fat_dir_ioctl);
 EXPORT_SYMBOL(fat_add_entries);
 EXPORT_SYMBOL(fat_dir_empty);
 EXPORT_SYMBOL(fat_truncate);
+EXPORT_SYMBOL(fat_brelse);
 
 static int __init init_fat_fs(void)
 {

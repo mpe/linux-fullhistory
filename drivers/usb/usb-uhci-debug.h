@@ -1,5 +1,5 @@
 #ifdef DEBUG
-static void uhci_show_qh (puhci_desc_t qh)
+static void __attribute__((__unused__)) uhci_show_qh (puhci_desc_t qh)
 {
 	if (qh->type != QH_TYPE) {
 		dbg("qh has not QH_TYPE");
@@ -75,7 +75,7 @@ static void uhci_show_td (puhci_desc_t td)
 		     (td->hw.td.link & UHCI_PTR_DEPTH ? "Depth first" : "Breadth first"));
 }
 #ifdef DEBUG
-static void uhci_show_td_queue (puhci_desc_t td)
+static void __attribute__((__unused__)) uhci_show_td_queue (puhci_desc_t td)
 {
 	//dbg("uhci_show_td_queue %p (%08lX):", td, virt_to_bus (td));
 	while (1) {
@@ -91,7 +91,7 @@ static void uhci_show_td_queue (puhci_desc_t td)
 	}
 }
 
-static void uhci_show_queue (puhci_desc_t qh)
+static void __attribute__((__unused__)) uhci_show_queue (puhci_desc_t qh)
 {
 	uhci_desc_t *start_qh=qh;
 
@@ -119,7 +119,7 @@ static void uhci_show_queue (puhci_desc_t qh)
 	}		
 }
 
-static void uhci_show_sc (int port, unsigned short status)
+static void __attribute__((__unused__)) uhci_show_sc (int port, unsigned short status)
 {
 	dbg("  stat%d     =     %04x   %s%s%s%s%s%s%s%s",
 	     port,

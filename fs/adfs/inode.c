@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/mm.h>
+#include <linux/smp_lock.h>
 
 #include "adfs.h"
 
@@ -354,6 +355,7 @@ void adfs_write_inode(struct inode *inode, int unused)
 	struct super_block *sb = inode->i_sb;
 	struct object_info obj;
 
+	lock_kernel();
 	obj.file_id	= inode->i_ino;
 	obj.name_len	= 0;
 	obj.parent_id	= inode->u.adfs_i.parent_id;
@@ -363,4 +365,5 @@ void adfs_write_inode(struct inode *inode, int unused)
 	obj.size	= inode->i_size;
 
 	adfs_dir_update(sb, &obj);
+	unlock_kernel();
 }

@@ -52,25 +52,19 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 
 int sys_iopl(int a1, int a2, int a3, int a4)
 {
-	lock_kernel();
 	printk(KERN_ERR "sys_iopl(%x, %x, %x, %x)!\n", a1, a2, a3, a4);
-	unlock_kernel();
 	return (-ENOSYS);
 }
 
 int sys_vm86(int a1, int a2, int a3, int a4)
 {
-	lock_kernel();
 	printk(KERN_ERR "sys_vm86(%x, %x, %x, %x)!\n", a1, a2, a3, a4);
-	unlock_kernel();
 	return (-ENOSYS);
 }
 
 int sys_modify_ldt(int a1, int a2, int a3, int a4)
 {
-	lock_kernel();
 	printk(KERN_ERR "sys_modify_ldt(%x, %x, %x, %x)!\n", a1, a2, a3, a4);
-	unlock_kernel();
 	return (-ENOSYS);
 }
 
@@ -84,7 +78,6 @@ sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 {
 	int version, ret;
 
-	lock_kernel();
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
@@ -171,7 +164,6 @@ sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 		break;
 	}
 
-	unlock_kernel();
 	return ret;
 }
 

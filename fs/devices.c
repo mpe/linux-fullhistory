@@ -18,6 +18,7 @@
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 #include <linux/module.h>
+#include <linux/smp_lock.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 
@@ -143,6 +144,7 @@ int chrdev_open(struct inode * inode, struct file * filp)
 {
 	int ret = -ENODEV;
 
+	lock_kernel();
 	filp->f_op = fops_get(get_chrfops(MAJOR(inode->i_rdev),
 				MINOR(inode->i_rdev)));
 	if (filp->f_op) {
@@ -150,6 +152,7 @@ int chrdev_open(struct inode * inode, struct file * filp)
 		if (filp->f_op->open != NULL)
 			ret = filp->f_op->open(inode,filp);
 	}
+	unlock_kernel();
 	return ret;
 }
 

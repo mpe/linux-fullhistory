@@ -1251,17 +1251,12 @@ static int nftl_release(struct inode *inode, struct file *fp)
 }
 #if LINUX_VERSION_CODE < 0x20326
 static struct file_operations nftl_fops = {
-        NULL,           /* lseek - default */
-        block_read,     /* read - block dev read */
-        block_write,    /* write - block dev write */
-        NULL,           /* readdir - not here! */
-        NULL,           /* select */
-        nftl_ioctl,     /* ioctl */
-        NULL,           /* mmap */
-        nftl_open,           /* open */
-        NULL,           /* flush */
-        nftl_release,           /* no special release code... */
-        block_fsync     /* fsync */
+        read:		block_read,
+        write:		block_write,
+        ioctl:		nftl_ioctl,
+        open:		nftl_open,
+        release:	nftl_release,
+        fsync:		block_fsync,
 };
 #else
 static struct block_device_operations nftl_fops = 

@@ -55,6 +55,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/poll.h>
+#include <linux/smp_lock.h>
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #else
@@ -175,7 +176,7 @@ isdn_divert_open(struct inode *ino, struct file *filep)
 {
 	int flags;
 
-	MOD_INC_USE_COUNT;
+	lock_kernel();
 	save_flags(flags);
 	cli();
 	if_used++;
@@ -185,6 +186,7 @@ isdn_divert_open(struct inode *ino, struct file *filep)
 		(struct divert_info **) filep->private_data = &divert_info_head;
 	restore_flags(flags);
 	/*  start_divert(); */
+	unlock_kernel();
 	return (0);
 }				/* isdn_divert_open */
 
@@ -212,7 +214,6 @@ isdn_divert_close(struct inode *ino, struct file *filep)
 			divert_info_head = divert_info_head->next;
 			kfree(inf);
 		}
-	MOD_DEC_USE_COUNT;
 	return (0);
 }				/* isdn_divert_close */
 
@@ -345,6 +346,7 @@ divert_dev_init(void)
 		return (-1);
 	}
 	isdn_divert_entry->proc_fops = &isdn_fops; 
+	isdn_divert_entry->owner = THIS_MODULE; 
 #endif	/* CONFIG_PROC_FS */
 
 	return (0);

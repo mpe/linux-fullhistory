@@ -391,7 +391,7 @@ ncp_dget_fpos(struct dentry *dentry, struct dentry *parent, unsigned long fpos)
 		dent = list_entry(next, struct dentry, d_child);
 		if ((unsigned long)dent->d_fsdata == fpos) {
 			if (dent->d_inode)
-				dget(dent);
+				dget_locked(dent);
 			else
 				dent = NULL;
 			spin_unlock(&dcache_lock);

@@ -1184,8 +1184,6 @@ asmlinkage long sys32_readv(int fd, struct iovec32 *vector, u32 count)
 	struct file *file;
 	long ret = -EBADF;
 
-	lock_kernel();
-
 	file = fget(fd);
 	if(!file)
 		goto bad_file;
@@ -1195,7 +1193,6 @@ asmlinkage long sys32_readv(int fd, struct iovec32 *vector, u32 count)
 	fput(file);
 
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1203,8 +1200,6 @@ asmlinkage long sys32_writev(int fd, struct iovec32 *vector, u32 count)
 {
 	struct file *file;
 	int ret = -EBADF;
-
-	lock_kernel();
 
 	file = fget(fd);
 	if(!file)
@@ -1214,7 +1209,6 @@ asmlinkage long sys32_writev(int fd, struct iovec32 *vector, u32 count)
 	fput(file);
 
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -4132,10 +4126,7 @@ asmlinkage long sparc32_open(const char * filename, int flags, int mode)
 	if (!IS_ERR(tmp)) {
 		fd = get_unused_fd();
 		if (fd >= 0) {
-			struct file * f;
-			lock_kernel();
-			f = filp_open(tmp, flags, mode);
-			unlock_kernel();
+			struct file * f = filp_open(tmp, flags, mode);
 			error = PTR_ERR(f);
 			if (IS_ERR(f))
 				goto out_error;

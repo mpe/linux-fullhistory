@@ -365,7 +365,7 @@ static int sock_map_fd(struct socket *sock)
 		file->f_vfsmnt = mntget(sock_mnt);
 
 		sock->file = file;
-		file->f_op = &socket_file_ops;
+		file->f_op = sock->inode->i_fop = &socket_file_ops;
 		file->f_mode = 3;
 		file->f_flags = O_RDWR;
 		file->f_pos = 0;

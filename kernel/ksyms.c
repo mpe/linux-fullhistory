@@ -56,7 +56,7 @@
 extern int console_loglevel;
 extern void set_device_ro(kdev_t dev,int flag);
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
-extern int (*do_nfsservctl)(int, void *, void *);
+extern long (*do_nfsservctl)(int, void *, void *);
 #endif
 
 extern void *sys_call_table;
@@ -151,6 +151,7 @@ EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(dcache_lock);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);
+EXPORT_SYMBOL(dget_locked);
 EXPORT_SYMBOL(d_validate);
 EXPORT_SYMBOL(d_rehash);
 EXPORT_SYMBOL(d_invalidate);	/* May be it will be better in dcache.h? */

@@ -645,9 +645,7 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	if (inode->i_sb)
 		file_move(f, &inode->i_sb->s_files);
 	if (f->f_op && f->f_op->open) {
-		lock_kernel();
 		error = f->f_op->open(inode,f);
-		unlock_kernel();
 		if (error)
 			goto cleanup_all;
 	}

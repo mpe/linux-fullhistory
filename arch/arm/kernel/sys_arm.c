@@ -230,7 +230,6 @@ asmlinkage int sys_execve(char *filenamei, char **argv, char **envp, struct pt_r
 	int error;
 	char * filename;
 
-	lock_kernel();
 	filename = getname(filenamei);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -238,7 +237,6 @@ asmlinkage int sys_execve(char *filenamei, char **argv, char **envp, struct pt_r
 	error = do_execve(filename, argv, envp, regs);
 	putname(filename);
 out:
-	unlock_kernel();
 	return error;
 }
 

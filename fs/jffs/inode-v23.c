@@ -1453,7 +1453,8 @@ static struct inode_operations jffs_file_inode_operations =
 
 static struct file_operations jffs_dir_operations =
 {
-	readdir: jffs_readdir,
+	read:		generic_read_dir,
+	readdir:	jffs_readdir,
 };
 
 static struct inode_operations jffs_dir_inode_operations =
@@ -1532,9 +1533,9 @@ jffs_delete_inode(struct inode *inode)
 	
 	inode->i_size = 0;
 
+	unlock_kernel();
 	clear_inode(inode);
 
-	unlock_kernel();
 }
 
 void

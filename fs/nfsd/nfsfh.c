@@ -155,7 +155,7 @@ static struct dentry *nfsd_iget(struct super_block *sb, unsigned long ino, __u32
 	for (lp = inode->i_dentry.next; lp != &inode->i_dentry ; lp=lp->next) {
 		result = list_entry(lp,struct dentry, d_alias);
 		if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
-			dget(result);
+			dget_locked(result);
 			spin_unlock(&dcache_lock);
 			iput(inode);
 			return result;
@@ -260,7 +260,7 @@ struct dentry *nfsd_findparent(struct dentry *child)
 				pdentry = list_entry(aliases->prev, struct dentry, d_alias);
 			if (pdentry == tdentry)
 				pdentry = NULL;
-			if (pdentry) dget(pdentry);
+			if (pdentry) dget_locked(pdentry);
 		}
 		spin_unlock(&dcache_lock);
 		if (pdentry == NULL) {
@@ -305,7 +305,7 @@ static struct dentry *splice(struct dentry *child, struct dentry *parent)
 	for (lp = child->d_inode->i_dentry.next; lp != &child->d_inode->i_dentry ; lp=lp->next) {
 		tmp = list_entry(lp,struct dentry, d_alias);
 		if (tmp->d_parent == parent) {
-			child = dget(tmp);
+			child = dget_locked(tmp);
 			spin_unlock(&dcache_lock);
 			goto out;
 		}

@@ -33,6 +33,7 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/pci.h>
+#include <linux/smp_lock.h>
 
 #include "hysdn_defs.h"
 
@@ -198,7 +199,7 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 	struct procdata *pd;
 	ulong flags;
 
-	MOD_INC_USE_COUNT;	/* lock module */
+	lock_kernel();
 	card = card_root;
 	while (card) {
 		pd = card->procfs;
@@ -207,7 +208,7 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 		card = card->next;	/* search next entry */
 	}
 	if (!card) {
-		MOD_DEC_USE_COUNT;	/* unlock module */
+		unlock_kernel();
 		return (-ENODEV);	/* device is unknown/invalid */
 	}
 	filep->private_data = card;	/* remember our own card */
@@ -215,7 +216,7 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 	if ((filep->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_WRITE) {
 		/* write only access -> boot pof data */
 		if (pof_boot_open(card)) {
-			MOD_DEC_USE_COUNT;	/* unlock module */
+			unlock_kernel();
 			return (-EPERM);	/* no permission this time */
 		}
 	} else if ((filep->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ) {
@@ -231,9 +232,10 @@ hysdn_log_open(struct inode *ino, struct file *filep)
 		restore_flags(flags);
 
 	} else {		/* simultaneous read/write access forbidden ! */
-		MOD_DEC_USE_COUNT;	/* unlock module */
+		unlock_kernel();
 		return (-EPERM);	/* no permission this time */
 	}
+	unlock_kernel();
 	return (0);
 }				/* hysdn_log_open */
 
@@ -295,7 +297,6 @@ hysdn_log_close(struct inode *ino, struct file *filep)
 				}
 	}			/* read access */
 
-	MOD_DEC_USE_COUNT;
 	return (retval);
 }				/* hysdn_log_close */
 
@@ -437,8 +438,10 @@ hysdn_procfs_init(void)
 			memset(pd, 0, sizeof(struct procdata));
 
 			sprintf(pd->log_name, "%s%d", PROC_LOG_BASENAME, card->myid);
-			if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL)
+			if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL) {
 				pd->log->proc_fops = &log_fops;	/* set new operations table */
+				pd->log->owner = THIS_MODULE;
+			}
 
 			init_waitqueue_head(&(pd->rd_queue));
 

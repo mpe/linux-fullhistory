@@ -11,6 +11,7 @@
 #include <linux/malloc.h>
 #include <linux/kmod.h>
 #include <linux/devfs_fs_kernel.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -611,6 +612,7 @@ int blkdev_open(struct inode * inode, struct file * filp)
 	int ret = -ENODEV;
 	struct block_device *bdev = inode->i_bdev;
 	down(&bdev->bd_sem);
+	lock_kernel();
 	if (!bdev->bd_op)
 		bdev->bd_op = get_blkfops(MAJOR(inode->i_rdev));
 	if (bdev->bd_op) {
@@ -622,6 +624,7 @@ int blkdev_open(struct inode * inode, struct file * filp)
 		else if (!atomic_read(&bdev->bd_openers))
 			bdev->bd_op = NULL;
 	}	
+	unlock_kernel();
 	up(&bdev->bd_sem);
 	return ret;
 }	

@@ -101,6 +101,7 @@ void ufs_free_inode (struct inode * inode)
 	is_directory = S_ISDIR(inode->i_mode);
 
 	DQUOT_FREE_INODE(sb, inode);
+	DQUOT_DROP(inode);
 
 	clear_inode (inode);
 

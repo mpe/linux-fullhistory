@@ -14,6 +14,10 @@
  * 13-03-1999: Get DeviceID from non-IEEE 1284.3 devices too.
  * 22-02-2000: Count devices that are actually detected.
  *
+ * The block comments above the functions in this file are
+ * licensed as part of the generated file
+ * Documentation/DocBook/parportbook.sgml under the GNU Free
+ * Documentation License.
  */
 
 #include <linux/parport.h>

@@ -1332,7 +1332,6 @@ void cleanup_module(void)
 
 	}
 	for (i = 0; i <= (sd_template.dev_max - 1) / SCSI_DISKS_PER_MAJOR; i++) {
-		blk_cleanup_queue(BLK_DEFAULT_QUEUE(SD_MAJOR(i)));
 		blk_size[SD_MAJOR(i)] = NULL;
 		hardsect_size[SD_MAJOR(i)] = NULL;
 		read_ahead[SD_MAJOR(i)] = 0;

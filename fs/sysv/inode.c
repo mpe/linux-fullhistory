@@ -61,9 +61,11 @@ void sysv_print_inode(struct inode * inode)
 
 static void sysv_delete_inode(struct inode *inode)
 {
+	lock_kernel();
 	inode->i_size = 0;
 	sysv_truncate(inode);
 	sysv_free_inode(inode);
+	unlock_kernel();
 }
 
 static void sysv_put_super(struct super_block *);
@@ -1156,8 +1158,10 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 void sysv_write_inode(struct inode * inode, int wait)
 {
 	struct buffer_head *bh;
+	lock_kernel();
 	bh = sysv_update_inode(inode);
 	brelse(bh);
+	unlock_kernel();
 }
 
 int sysv_sync_inode(struct inode * inode)

@@ -708,7 +708,6 @@ sys32_getdents (unsigned int fd, void * dirent, unsigned int count)
 	buf.count = count;
 	buf.error = 0;
 
-	lock_kernel();
 	error = vfs_readdir(file, filldir32, &buf);
 	if (error < 0)
 		goto out_putf;
@@ -720,7 +719,6 @@ sys32_getdents (unsigned int fd, void * dirent, unsigned int count)
 	}
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -759,12 +757,9 @@ sys32_readdir (unsigned int fd, void * dirent, unsigned int count)
 	buf.count = 0;
 	buf.dirent = dirent;
 
-	lock_kernel();
 	error = vfs_readdir(file, fillonedir32, &buf);
 	if (error >= 0)
 		error = buf.count;
-	unlock_kernel();
-
 	fput(file);
 out:
 	return error;
@@ -1028,7 +1023,6 @@ sys32_readv(int fd, struct iovec32 *vector, u32 count)
 	struct file *file;
 	long ret = -EBADF;
 
-	lock_kernel();
 	file = fget(fd);
 	if(!file)
 		goto bad_file;
@@ -1041,7 +1035,6 @@ sys32_readv(int fd, struct iovec32 *vector, u32 count)
 out:
 	fput(file);
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1051,7 +1044,6 @@ sys32_writev(int fd, struct iovec32 *vector, u32 count)
 	struct file *file;
 	int ret = -EBADF;
 
-	lock_kernel();
 	file = fget(fd);
 	if(!file)
 		goto bad_file;
@@ -1066,7 +1058,6 @@ sys32_writev(int fd, struct iovec32 *vector, u32 count)
 out:
 	fput(file);
 bad_file:
-	unlock_kernel();
 	return ret;
 }
 
@@ -1852,7 +1843,6 @@ sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u32 fifth)
 {
 	int version, err;
 
-	lock_kernel();
 	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
@@ -1904,7 +1894,6 @@ sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u32 fifth)
 		break;
 	}
 
-	unlock_kernel();
 	return err;
 }
 
@@ -3719,7 +3708,6 @@ sys32_sendmsg(int fd, struct msghdr32 *user_msg, unsigned user_flags)
 	}
 	kern_msg.msg_flags = user_flags;
 
-	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
 	if (sock != NULL) {
 		if (sock->file->f_flags & O_NONBLOCK)
@@ -3727,7 +3715,6 @@ sys32_sendmsg(int fd, struct msghdr32 *user_msg, unsigned user_flags)
 		err = sock_sendmsg(sock, &kern_msg, total_len);
 		sockfd_put(sock);
 	}
-	unlock_kernel();
 
 	/* N.B. Use kfree here, as kern_msg.msg_controllen might change? */
 	if(ctl_buf != ctl)
@@ -3767,7 +3754,6 @@ sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int user_flags)
 	cmsg_ptr = (unsigned long) kern_msg.msg_control;
 	kern_msg.msg_flags = 0;
 
-	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
 	if (sock != NULL) {
 		struct scm_cookie scm;
@@ -3775,6 +3761,7 @@ sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int user_flags)
 		if (sock->file->f_flags & O_NONBLOCK)
 			user_flags |= MSG_DONTWAIT;
 		memset(&scm, 0, sizeof(scm));
+		lock_kernel();
 		err = sock->ops->recvmsg(sock, &kern_msg, total_len,
 					 user_flags, &scm);
 		if(err >= 0) {
@@ -3805,9 +3792,9 @@ sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int user_flags)
 					scm_detach_fds32(&kern_msg, &scm);
 			}
 		}
+		unlock_kernel();
 		sockfd_put(sock);
 	}
-	unlock_kernel();
 
 	if(uaddr != NULL && err >= 0)
 		err = move_addr_to_user(addr, kern_msg.msg_namelen, uaddr,
@@ -4707,11 +4694,9 @@ asmlinkage long
 sys32_personality(unsigned long personality)
 {
 	int ret;
-	lock_kernel();
 	if (current->personality == PER_LINUX32 && personality == PER_LINUX)
 		personality = PER_LINUX32;
 	ret = sys_personality(personality);
-	unlock_kernel();
 	if (ret == PER_LINUX32)
 		ret = PER_LINUX;
 	return ret;

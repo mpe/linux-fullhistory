@@ -6,6 +6,8 @@
  *  inode VFS functions
  */
 
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include "hpfs_fn.h"
 
 static struct file_operations hpfs_file_ops =
@@ -313,6 +315,8 @@ void hpfs_write_if_changed(struct inode *inode)
 
 void hpfs_delete_inode(struct inode *inode)
 {
+	lock_kernel();
 	hpfs_remove_fnode(inode->i_sb, inode->i_ino);
+	unlock_kernel();
 	clear_inode(inode);
 }

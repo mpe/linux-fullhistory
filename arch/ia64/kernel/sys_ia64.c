@@ -180,27 +180,21 @@ sys_ioperm (unsigned long from, unsigned long num, int on)
 asmlinkage long
 sys_iopl (int level, long arg1, long arg2, long arg3)
 {
-        lock_kernel();
         printk(KERN_ERR "sys_iopl(level=%d)!\n", level);
-        unlock_kernel();
         return -ENOSYS;
 }
 
 asmlinkage long
 sys_vm86 (long arg0, long arg1, long arg2, long arg3)
 {
-        lock_kernel();
         printk(KERN_ERR "sys_vm86(%lx, %lx, %lx, %lx)!\n", arg0, arg1, arg2, arg3);
-        unlock_kernel();
         return -ENOSYS;
 }
 
 asmlinkage long
 sys_modify_ldt (long arg0, long arg1, long arg2, long arg3)
 {
-        lock_kernel();
         printk(KERN_ERR "sys_modify_ldt(%lx, %lx, %lx, %lx)!\n", arg0, arg1, arg2, arg3);
-        unlock_kernel();
         return -ENOSYS;
 }
 
@@ -296,7 +290,6 @@ ia64_oldstat (char *filename, struct ia64_oldstat *statbuf)
 	struct nameidata nd;
 	int error;
 
-	lock_kernel();
 	error = user_path_walk(filename, &nd);
 	if (!error) {
 		error = do_revalidate(nd.dentry);
@@ -304,7 +297,6 @@ ia64_oldstat (char *filename, struct ia64_oldstat *statbuf)
 		error = cp_ia64_old_stat(nd.dentry->d_inode, statbuf);
 		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -314,7 +306,6 @@ ia64_oldlstat (char *filename, struct ia64_oldstat *statbuf) {
 	struct nameidata nd;
 	int error;
 
-	lock_kernel();
 	error = user_path_walk_link(filename, &nd);
 	if (!error) {
 		error = do_revalidate(nd.dentry);
@@ -322,7 +313,6 @@ ia64_oldlstat (char *filename, struct ia64_oldstat *statbuf) {
 			error = cp_ia64_old_stat(nd.dentry->d_inode, statbuf);
 		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -332,7 +322,6 @@ ia64_oldfstat (unsigned int fd, struct ia64_oldstat *statbuf)
 	struct file * f;
 	int err = -EBADF;
 
-	lock_kernel();
 	f = fget(fd);
 	if (f) {
 		struct dentry * dentry = f->f_dentry;
@@ -342,7 +331,6 @@ ia64_oldfstat (unsigned int fd, struct ia64_oldstat *statbuf)
 			err = cp_ia64_old_stat(dentry->d_inode, statbuf);
 		fput(f);
 	}
-	unlock_kernel();
 	return err;
 }
  

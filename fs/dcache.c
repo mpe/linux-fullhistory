@@ -223,6 +223,24 @@ int d_invalidate(struct dentry * dentry)
 	return 0;
 }
 
+/* This should be called _only_ with dcache_lock held */
+
+static inline struct dentry * __dget_locked(struct dentry *dentry)
+{
+	atomic_inc(&dentry->d_count);
+	if (atomic_read(&dentry->d_count) == 1) {
+		dentry_stat.nr_unused--;
+		list_del(&dentry->d_lru);
+		INIT_LIST_HEAD(&dentry->d_lru);		/* make "list_empty()" work */
+	}
+	return dentry;
+}
+
+struct dentry * dget_locked(struct dentry *dentry)
+{
+	return __dget_locked(dentry);
+}
+
 /**
  * d_find_alias - grab a hashed alias of inode
  * @inode: inode in question
@@ -246,7 +264,7 @@ struct dentry * d_find_alias(struct inode *inode)
 		next = tmp->next;
 		alias = list_entry(tmp, struct dentry, d_alias);
 		if (!list_empty(&alias->d_hash)) {
-			dget(alias);
+			__dget_locked(alias);
 			spin_unlock(&dcache_lock);
 			return alias;
 		}
@@ -268,7 +286,7 @@ restart:
 	while ((tmp = tmp->next) != head) {
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
 		if (!atomic_read(&dentry->d_count)) {
-			dget(dentry);
+			__dget_locked(dentry);
 			spin_unlock(&dcache_lock);
 			d_drop(dentry);
 			dput(dentry);
@@ -706,12 +724,7 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 			if (memcmp(dentry->d_name.name, str, len))
 				continue;
 		}
-		atomic_inc(&dentry->d_count);
-		if (atomic_read(&dentry->d_count) == 1) {
-			dentry_stat.nr_unused--;
-			list_del(&dentry->d_lru);
-			INIT_LIST_HEAD(&dentry->d_lru);		/* make "list_empty()" work */
-		}
+		__dget_locked(dentry);
 		spin_unlock(&dcache_lock);
 		return dentry;
 	}
@@ -748,7 +761,7 @@ int d_validate(struct dentry *dentry, struct dentry *dparent,
 		lhp = base;
 		while ((lhp = lhp->next) != base) {
 			if (dentry == list_entry(lhp, struct dentry, d_hash)) {
-				dget(dentry);
+				__dget_locked(dentry);
 				goto out;
 			}
 		}
@@ -764,7 +777,7 @@ int d_validate(struct dentry *dentry, struct dentry *dparent,
 			if (!sb->s_dev)
 				continue;
 			if (sb->s_root == dentry) {
-				dget(dentry);
+				__dget_locked(dentry);
 				goto out;
 			}
 		}

@@ -1075,16 +1075,19 @@ static void free_dentries (struct devfs_entry *de)
 {
     struct dentry *dentry;
 
+    spin_lock(&dcache_lock);
     dentry = de->inode.dentry;
     if (dentry != NULL)
     {
-	dget (dentry);
+	dget_locked (dentry);
 	de->inode.dentry = NULL;
+	spin_unlock(&dcache_lock);
 	/*  Forcefully remove the inode  */
 	if (dentry->d_inode != NULL) dentry->d_inode->i_nlink = 0;
 	d_drop (dentry);
 	dput (dentry);
-    }
+    } else
+	spin_unlock(&dcache_lock);
 }   /*  End Function free_dentries  */
 
 
@@ -2303,10 +2306,12 @@ static void devfs_write_inode (struct inode *inode, int wait)
 
     if (inode->i_ino < FIRST_INODE) return;
     index = inode->i_ino - FIRST_INODE;
+    lock_kernel();
     if (index >= fs_info->num_inodes)
     {
 	printk ("%s: writing inode: %lu for which there is no entry!\n",
 		DEVFS_NAME, inode->i_ino);
+        unlock_kernel();
 	return;
     }
     de = fs_info->table[index];
@@ -2326,6 +2331,7 @@ static void devfs_write_inode (struct inode *inode, int wait)
     de->inode.atime = inode->i_atime;
     de->inode.mtime = inode->i_mtime;
     de->inode.ctime = inode->i_ctime;
+    unlock_kernel();
 }   /*  End Function devfs_write_inode  */
 
 static int devfs_notify_change (struct dentry *dentry, struct iattr *iattr)
@@ -2476,11 +2482,18 @@ static int devfs_open (struct inode *inode, struct file *file)
     struct devfs_entry *de;
     struct fs_info *fs_info = inode->i_sb->u.generic_sbp;
 
+    lock_kernel();
     de = get_devfs_entry_from_vfs_inode (inode);
-    if (de == NULL) return -ENODEV;
-    if ( S_ISDIR (de->mode) ) return 0;
+    err = -ENODEV;
+    if (de == NULL)
+	goto out;
+    err = 0;
+    if ( S_ISDIR (de->mode) )
+	goto out;
     df = &de->u.fcb;
-    if (!de->registered) return -ENODEV;
+    err = -ENODEV;
+    if (!de->registered)
+	goto out;
     file->private_data = de->info;
     if ( S_ISBLK (inode->i_mode) )
     {
@@ -2496,9 +2509,10 @@ static int devfs_open (struct inode *inode, struct file *file)
 	if ( S_ISCHR (inode->i_mode) ) err = chrdev_open (inode, file);
 	else err = -ENODEV;
     }
-    if (err < 0) return err;
+    if (err < 0) goto out;
     /*  Open was successful  */
-    if (df->open) return 0;
+    err = 0;
+    if (df->open) goto out;
     df->open = TRUE;  /*  This is the first open  */
     if (df->auto_owner)
     {
@@ -2513,7 +2527,9 @@ static int devfs_open (struct inode *inode, struct file *file)
     if (df->aopen_notify)
 	devfsd_notify_one (de, DEVFSD_NOTIFY_ASYNC_OPEN, inode->i_mode,
 			   current->euid, current->egid, fs_info);
-    return 0;
+out:
+    unlock_kernel();
+    return err;
 }   /*  End Function devfs_open  */
 
 static struct file_operations devfs_fops =

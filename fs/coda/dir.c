@@ -579,6 +579,7 @@ int coda_open(struct inode *i, struct file *f)
 	unsigned short coda_flags = coda_flags_to_cflags(flags);
 	struct coda_cred *cred;
 
+	lock_kernel();
         ENTRY;
 	coda_vfs_stat.open++;
 
@@ -589,6 +590,7 @@ int coda_open(struct inode *i, struct file *f)
 	if (error) {
 	        CDEBUG(D_FILE, "venus: dev %d, inode %ld, out->result %d\n",
 		       dev, (long)ino, error);
+		unlock_kernel();
 		return error;
 	}
 
@@ -600,6 +602,7 @@ int coda_open(struct inode *i, struct file *f)
 		printk("coda_open: coda_inode_grab error %d.", error);
 		if (cont_inode) 
 			iput(cont_inode);
+		unlock_kernel();
 		return error;
 	}
 
@@ -620,6 +623,7 @@ int coda_open(struct inode *i, struct file *f)
 	       cont_inode->i_ino, atomic_read(&cont_inode->i_count),
                cont_inode->i_op);
         EXIT;
+	unlock_kernel();
         return 0;
 }
 

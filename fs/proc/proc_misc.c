@@ -626,7 +626,6 @@ void __init proc_misc_init(void)
 		{"locks",	locks_read_proc},
 		{"mounts",	mounts_read_proc},
 		{"swaps",	swaps_read_proc},
-		{"slabinfo",	slabinfo_read_proc},
 		{"iomem",	memory_read_proc},
 		{"execdomains",	execdomains_read_proc},
 		{NULL,NULL}
