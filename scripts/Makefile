@@ -40,6 +40,6 @@ docproc: docproc.o
 	${HOSTCC} -o docproc docproc.o
 
 clean:
-	rm -f *~ kconfig.tk *.o tkparse mkdep split-include
+	rm -f *~ kconfig.tk *.o tkparse mkdep split-include docproc
 
 include $(TOPDIR)/Rules.make

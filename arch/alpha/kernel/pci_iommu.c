@@ -67,6 +67,10 @@ iommu_arena_new(struct pci_controler *hose, dma_addr_t base,
 	arena->size = window_size;
 	arena->next_entry = 0;
 
+	/* Align allocations to a multiple of a page size.  Not needed
+	   unless there are chip bugs.  */
+	arena->align_entry = 1;
+
 	return arena;
 }
 
@@ -74,28 +78,36 @@ long
 iommu_arena_alloc(struct pci_iommu_arena *arena, long n)
 {
 	unsigned long flags;
-	unsigned long *beg, *p, *end;
-	long i;
+	unsigned long *ptes;
+	long i, p, nent, mask;
 
 	spin_lock_irqsave(&arena->lock, flags);
 
 	/* Search forward for the first sequence of N empty ptes.  */
-	beg = arena->ptes;
-	end = beg + (arena->size >> PAGE_SHIFT);
-	p = beg + arena->next_entry;
+	ptes = arena->ptes;
+	nent = arena->size >> PAGE_SHIFT;
+	mask = arena->align_entry - 1;
+	p = (arena->next_entry + mask) & ~mask;
 	i = 0;
-	while (i < n && p < end)
-		i = (*p++ == 0 ? i + 1 : 0);
+	while (i < n && p+i < nent) {
+		if (ptes[p+i])
+			p = (p + i + 1 + mask) & ~mask, i = 0;
+		else
+			i = i + 1;
+	}
 
 	if (i < n) {
 		/* Reached the end.  Flush the TLB and restart the
 		   search from the beginning.  */
 		alpha_mv.mv_pci_tbi(arena->hose, 0, -1);
 
-		p = beg;
-		i = 0;
-		while (i < n && p < end)
-			i = (*p++ == 0 ? i + 1 : 0);
+		p = 0, i = 0;
+		while (i < n && p+i < nent) {
+			if (ptes[p+i])
+				p = (p + i + 1 + mask) & ~mask, i = 0;
+			else
+				i = i + 1;
+		}
 
 		if (i < n) {
 			spin_unlock_irqrestore(&arena->lock, flags);
@@ -107,13 +119,13 @@ iommu_arena_alloc(struct pci_iommu_arena *arena, long n)
 	   bit zero is the valid bit, so write ~1 into everything.
 	   The chip specific bits will fill this in with something
 	   kosher when we return.  */
-	for (p = p - n, i = 0; i < n; ++i)
-		p[i] = ~1UL;
+	for (i = 0; i < n; ++i)
+		ptes[p+i] = ~1UL;
 
-	arena->next_entry = p - beg + n;
+	arena->next_entry = p + n;
 	spin_unlock_irqrestore(&arena->lock, flags);
 
-	return p - beg;
+	return p;
 }
 
 static void
@@ -237,6 +249,12 @@ pci_unmap_single(struct pci_dev *pdev, dma_addr_t dma_addr, long size,
 
 	npages = calc_npages((dma_addr & ~PAGE_MASK) + size);
 	iommu_arena_free(arena, dma_ofs, npages);
+
+	/* If we're freeing ptes above the `next_entry' pointer, they
+	   may have snuck back into the TLB since the last wrap flush.
+	   We need to flush the TLB before reallocating these.  */
+	if (dma_ofs >= arena->next_entry)
+		alpha_mv.mv_pci_tbi(hose, dma_addr, dma_addr + size - 1);
 
 	DBGA("pci_unmap_single: sg [%x,%lx] np %ld from %p\n",
 	     dma_addr, size, npages, __builtin_return_address(0));
@@ -509,6 +527,7 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents,
 	struct pci_iommu_arena *arena;
 	struct scatterlist *end;
 	dma_addr_t max_dma;
+	dma_addr_t fbeg, fend;
 
 	if (direction == PCI_DMA_NONE)
 		BUG();
@@ -522,9 +541,11 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents,
 	if (!arena || arena->dma_base + arena->size > max_dma)
 		arena = hose->sg_isa;
 
+	fbeg = -1, fend = 0;
 	for (end = sg + nents; sg < end; ++sg) {
 		unsigned long addr, size;
 		long npages, ofs;
+		dma_addr_t tend;
 
 		addr = sg->dma_address;
 		size = sg->dma_length;
@@ -547,7 +568,17 @@ pci_unmap_sg(struct pci_dev *pdev, struct scatterlist *sg, int nents,
 		npages = calc_npages((addr & ~PAGE_MASK) + size);
 		ofs = (addr - arena->dma_base) >> PAGE_SHIFT;
 		iommu_arena_free(arena, ofs, npages);
+
+		tend = addr + size - 1;
+		if (fbeg > addr) fbeg = addr;
+		if (fend < tend) fend = tend;
 	}
+
+	/* If we're freeing ptes above the `next_entry' pointer, they
+	   may have snuck back into the TLB since the last wrap flush.
+	   We need to flush the TLB before reallocating these.  */
+	if ((fend - arena->dma_base) >> PAGE_SHIFT >= arena->next_entry)
+		alpha_mv.mv_pci_tbi(hose, fbeg, fend);
 
 	DBGA("pci_unmap_sg: %d entries\n", nents - (end - sg));
 }

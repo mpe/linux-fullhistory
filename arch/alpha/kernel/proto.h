@@ -20,7 +20,9 @@ extern void apecs_pci_tbi(struct pci_controler *, dma_addr_t, dma_addr_t);
 
 /* core_cia.c */
 extern struct pci_ops cia_pci_ops;
+extern void cia_init_pci(void);
 extern void cia_init_arch(void);
+extern void pyxis_init_arch(void);
 extern void cia_machine_check(u64, u64, struct pt_regs *);
 extern void cia_pci_tbi(struct pci_controler *, dma_addr_t, dma_addr_t);
 
@@ -51,12 +53,6 @@ extern int polaris_write_config_dword(struct pci_dev *, int, u32);
 extern void polaris_init_arch(void);
 extern void polaris_machine_check(u64, u64, struct pt_regs *);
 #define polaris_pci_tbi ((void *)0)
-
-/* core_pyxis.c */
-extern struct pci_ops pyxis_pci_ops;
-extern void pyxis_init_arch(void);
-extern void pyxis_machine_check(u64, u64, struct pt_regs *);
-extern void pyxis_pci_tbi(struct pci_controler *, dma_addr_t, dma_addr_t);
 
 /* core_t2.c */
 extern struct pci_ops t2_pci_ops;

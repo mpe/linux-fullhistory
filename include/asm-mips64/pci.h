@@ -7,6 +7,8 @@
 #ifndef _ASM_PCI_H
 #define _ASM_PCI_H
 
+#ifdef __KERNEL__
+
 /* Can be used to override the logic in pci_scan_bus for skipping
    already-configured bus numbers - to be used for buggy BIOSes
    or architectures with incomplete PCI setup by the loader */
@@ -16,7 +18,10 @@
 #define PCIBIOS_MIN_IO		0x1000
 #define PCIBIOS_MIN_MEM		0x10000000
 
-#ifdef __KERNEL__
+extern inline void pcibios_set_master(struct pci_dev *dev)
+{
+	/* No special bus mastering setup handling */
+}
 
 /*
  * Dynamic DMA mapping stuff.

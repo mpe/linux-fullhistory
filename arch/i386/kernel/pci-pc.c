@@ -1103,9 +1103,9 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 {
 	struct irq_info *q;
 	struct pci_dev *router;
-	int i, pirq, newirq;
+	int i, pirq, newirq, reg;
 	u32 rtrid, mask;
-	u8 x;
+	u8 x, y;
 	char *msg = NULL;
 
 	pin--;
@@ -1169,13 +1169,43 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 			DBG(" -> [PIIX] set to %02x\n", newirq);
 			pci_write_config_byte(router, pirq, newirq);
 			msg = "PIIX-NEW";
-		} else
-			DBG(" -> [PIIX] sink\n");
+		} else DBG(" -> [PIIX] sink\n");
 		break;
 	case ID(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533):
 		newirq = ali_set_irq(router, pirq-1, newirq);
 		if (newirq)
 			msg = "ALI";
+		break;
+	case ID(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C596):
+	case ID(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686):
+		reg = 0x55 + (pirq >> 1);
+		pci_read_config_byte(router, reg, &x);
+		y = (pirq & 1) ? (x >> 4) : (x & 0x0f);
+		if (y) {
+			DBG(" -> [VIA] %02x\n", y);
+			newirq = y;
+			msg = "VIA";
+		} else if (newirq) {
+			DBG(" -> [VIA] set to %02x\n", newirq);
+			x = (pirq & 1) ? ((x & 0x0f) | (newirq << 4)) : ((x & 0xf0) | newirq);
+			pci_write_config_byte(router, reg, y);
+			msg = "VIA-NEW";
+		} else DBG(" -> [VIA] sink\n");
+		break;
+	case ID(PCI_VENDOR_ID_OPTI, PCI_DEVICE_ID_OPTI_82C700):
+		reg = 0xb8 + (pirq >> 5);
+		pci_read_config_byte(router, reg, &x);
+		y = (pirq & 0x10) ? (x >> 4) : (x & 0x0f);
+		if (y) {
+			DBG(" -> [OPTI] %02x\n", y);
+			newirq = y;
+			msg = "OPTI";
+		} else if (newirq) {
+			DBG(" -> [OPTI] set to %02x\n", newirq);
+			x = (pirq & 0x10) ? ((x & 0x0f) | (newirq << 4)) : ((x & 0xf0) | newirq);
+			pci_write_config_byte(router, reg, y);
+			msg = "OPTI-NEW";
+		} else DBG(" -> [OPTI] sink\n");
 		break;
 	default:
 		DBG(" -> unknown router %04x/%04x\n", rt->rtr_vendor, rt->rtr_device);

@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.20 2000/01/21 11:38:42 jj Exp $
+/* $Id: unaligned.c,v 1.21 2000/03/15 08:50:16 anton Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -106,6 +106,26 @@ static inline unsigned long fetch_reg(unsigned int reg, struct pt_regs *regs)
 	return win->locals[reg - 16]; /* yes, I know what this does... */
 }
 
+static inline unsigned long safe_fetch_reg(unsigned int reg, struct pt_regs *regs)
+{
+	struct reg_window *win;
+	unsigned long ret;
+
+	if(reg < 16)
+		return (!reg ? 0 : regs->u_regs[reg]);
+
+	/* Ho hum, the slightly complicated case. */
+	win = (struct reg_window *) regs->u_regs[UREG_FP];
+
+	if ((unsigned long)win & 3)
+		return -1;
+
+	if (get_user(ret, &win->locals[reg - 16]))
+		return -1;
+
+	return ret;
+}
+
 static inline unsigned long *fetch_reg_addr(unsigned int reg, struct pt_regs *regs)
 {
 	struct reg_window *win;
@@ -129,6 +149,22 @@ static inline unsigned long compute_effective_address(struct pt_regs *regs,
 	} else {
 		maybe_flush_windows(rs1, rs2, rd);
 		return (fetch_reg(rs1, regs) + fetch_reg(rs2, regs));
+	}
+}
+
+static inline unsigned long safe_compute_effective_address(struct pt_regs *regs,
+							   unsigned int insn)
+{
+	unsigned int rs1 = (insn >> 14) & 0x1f;
+	unsigned int rs2 = insn & 0x1f;
+	unsigned int rd = (insn >> 25) & 0x1f;
+
+	if(insn & 0x2000) {
+		maybe_flush_windows(rs1, 0, rd);
+		return (safe_fetch_reg(rs1, regs) + sign_extend_imm13(insn));
+	} else {
+		maybe_flush_windows(rs1, rs2, rd);
+		return (safe_fetch_reg(rs1, regs) + safe_fetch_reg(rs2, regs));
 	}
 }
 
@@ -427,7 +463,7 @@ void user_mna_trap_fault(struct pt_regs *regs, unsigned int insn)
 	info.si_signo = SIGBUS;
 	info.si_errno = 0;
 	info.si_code = BUS_ADRALN;
-	info.si_addr = (void *)compute_effective_address(regs, insn);
+	info.si_addr = (void *)safe_compute_effective_address(regs, insn);
 	info.si_trapno = 0;
 	send_sig_info(SIGBUS, &info, current);
 }

@@ -417,18 +417,22 @@ unsigned int __init ata66_piix (ide_hwif_t *hwif)
 
 void __init ide_init_piix (ide_hwif_t *hwif)
 {
-	hwif->tuneproc = &piix_tune_drive;
-
-	if (hwif->dma_base) {
-#ifdef CONFIG_PIIX_TUNING
-		hwif->dmaproc = &piix_dmaproc;
-#endif /* CONFIG_PIIX_TUNING */
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
-	} else {
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
-	}
 	if (!hwif->irq)
 		hwif->irq = hwif->channel ? 15 : 14;
+
+	hwif->tuneproc = &piix_tune_drive;
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+
+	if (!hwif->dma_base)
+		return;
+
+#ifdef CONFIG_PIIX_TUNING
+	hwif->autodma = 1;
+	hwif->dmaproc = &piix_dmaproc;
+#else
+	if (hwif->autodma)
+		hwif->autodma = 0;
+
+#endif /* CONFIG_PIIX_TUNING */
 }

@@ -384,19 +384,14 @@ void
 pci_set_master(struct pci_dev *dev)
 {
 	u16 cmd;
-	u8 lat;
 
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (! (cmd & PCI_COMMAND_MASTER)) {
-		printk("PCI: Enabling bus mastering for device %s\n", dev->slot_name);
+		DBG("PCI: Enabling bus mastering for device %s\n", dev->slot_name);
 		cmd |= PCI_COMMAND_MASTER;
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
-	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
-	if (lat < 16) {
-		printk("PCI: Increasing latency timer of device %s to 64\n", dev->slot_name);
-		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
-	}
+	pcibios_set_master(dev);
 }
 
 /*

@@ -528,7 +528,7 @@ static unsigned long penguins_are_doing_time = 0;
 void smp_capture(void)
 {
 	if (smp_processors_ready) {
-		int result = atomic_add_return(1, &smp_capture_depth);
+		int result = __atomic_add(1, &smp_capture_depth);
 
 		membar("#StoreStore | #LoadStore");
 		if(result == 1) {
@@ -596,18 +596,21 @@ void smp_promstop_others(void)
 		smp_cross_call(&xcall_promstop, 0, 0, 0);
 }
 
-static inline void sparc64_do_profile(unsigned long pc, unsigned long g3)
+static inline void sparc64_do_profile(unsigned long pc, unsigned long o7)
 {
 	if (prof_buffer && current->pid) {
 		extern int _stext;
 		extern int rwlock_impl_begin, rwlock_impl_end;
 		extern int atomic_impl_begin, atomic_impl_end;
+		extern int __memcpy_begin, __memcpy_end;
 
-		if ((pc >= (unsigned long) &rwlock_impl_begin &&
+		if ((pc >= (unsigned long) &atomic_impl_begin &&
+		     pc < (unsigned long) &atomic_impl_end) ||
+		    (pc >= (unsigned long) &rwlock_impl_begin &&
 		     pc < (unsigned long) &rwlock_impl_end) ||
-		    (pc >= (unsigned long) &atomic_impl_begin &&
-		     pc < (unsigned long) &atomic_impl_end))
-			pc = g3;
+		    (pc >= (unsigned long) &__memcpy_begin &&
+		     pc < (unsigned long) &__memcpy_end))
+			pc = o7;
 
 		pc -= (unsigned long) &_stext;
 		pc >>= prof_shift;
@@ -646,7 +649,7 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 	clear_softint((1UL << 0));
 	do {
 		if(!user)
-			sparc64_do_profile(regs->tpc, regs->u_regs[UREG_G3]);
+			sparc64_do_profile(regs->tpc, regs->u_regs[UREG_RETPC]);
 		if(!--prof_counter(cpu))
 		{
 			if (cpu == boot_cpu_id) {

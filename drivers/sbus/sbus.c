@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.84 2000/03/15 01:51:16 davem Exp $
+/* $Id: sbus.c,v 1.86 2000/03/16 09:23:57 jj Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -304,6 +304,8 @@ static void __init sbus_fixup_all_regs(struct sbus_dev *first_sdev)
 	}
 }
 
+extern void register_proc_sparc_ioport(void);
+
 void __init sbus_init(void)
 {
 	int nd, this_sbus, sbus_devs, topnd, iommund;
@@ -311,7 +313,11 @@ void __init sbus_init(void)
 	struct sbus_bus *sbus;
 	struct sbus_dev *this_dev;
 	int num_sbus = 0;  /* How many did we find? */
-	
+
+#ifndef __sparc_v9__
+	register_proc_sparc_ioport();
+#endif
+
 #ifdef CONFIG_SUN4
 	return sun4_dvma_init();
 #endif

@@ -42,8 +42,10 @@ static int	nfsctl_export(struct nfsctl_export *data);
 static int	nfsctl_unexport(struct nfsctl_export *data);
 static int	nfsctl_getfh(struct nfsctl_fhparm *, __u8 *);
 static int	nfsctl_getfd(struct nfsctl_fdparm *, __u8 *);
+#ifdef notyet
 static int	nfsctl_getfs(struct nfsctl_fsparm *, struct knfsd_fh *);
-/* static int	nfsctl_ugidupdate(struct nfsctl_ugidmap *data); */
+static int	nfsctl_ugidupdate(struct nfsctl_ugidmap *data);
+#endif
 
 static int	initialized = 0;
 

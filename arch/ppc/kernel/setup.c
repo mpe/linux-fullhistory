@@ -756,7 +756,7 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->CurAPMvalues   = __le16_to_cpu(id->CurAPMvalues);
 	id->word92         = __le16_to_cpu(id->word92);
 	id->hw_config      = __le16_to_cpu(id->hw_config);
-	for (i=0; i<34; i++)
+	for (i=0; i<32; i++)
 		id->words94_125[i]  = __le16_to_cpu(id->words94_125[i]);
 	id->last_lun       = __le16_to_cpu(id->last_lun);
 	id->word127        = __le16_to_cpu(id->word127);

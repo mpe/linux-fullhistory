@@ -1,6 +1,8 @@
 #ifndef __SPARC_PCI_H
 #define __SPARC_PCI_H
 
+#ifdef __KERNEL__
+
 /* Can be used to override the logic in pci_scan_bus for skipping
  * already-configured bus numbers - to be used for buggy BIOSes
  * or architectures with incomplete PCI setup by the loader.
@@ -10,7 +12,10 @@
 #define PCIBIOS_MIN_IO		0UL
 #define PCIBIOS_MIN_MEM		0UL
 
-#ifdef __KERNEL__
+extern inline void pcibios_set_master(struct pci_dev *dev)
+{
+	/* No special bus mastering setup handling */
+}
 
 /* Dynamic DMA mapping stuff.
  */

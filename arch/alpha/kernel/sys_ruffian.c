@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998, 1999 Richard Henderson
+ *	Copyright (C) 1998, 1999, 2000 Richard Henderson
  *
  * Code supporting the RUFFIAN.
  */
@@ -23,7 +23,7 @@
 #include <asm/mmu_context.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
-#include <asm/core_pyxis.h>
+#include <asm/core_cia.h>
 
 #include "proto.h"
 #include "irq_impl.h"
@@ -149,8 +149,8 @@ struct alpha_machine_vector ruffian_mv __initmv = {
 	DO_EV5_MMU,
 	DO_DEFAULT_RTC,
 	DO_PYXIS_IO,
-	DO_PYXIS_BUS,
-	machine_check:		pyxis_machine_check,
+	DO_CIA_BUS,
+	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_RUFFIAN_MAX_DMA_ADDRESS,
 	min_io_address:		DEFAULT_IO_BASE,
 	min_mem_address:	DEFAULT_MEM_BASE,
@@ -161,7 +161,7 @@ struct alpha_machine_vector ruffian_mv __initmv = {
 	init_arch:		pyxis_init_arch,
 	init_irq:		ruffian_init_irq,
 	init_rtc:		ruffian_init_rtc,
-	init_pci:		common_init_pci,
+	init_pci:		cia_init_pci,
 	kill_arch:		ruffian_kill_arch,
 	pci_map_irq:		ruffian_map_irq,
 	pci_swizzle:		common_swizzle,

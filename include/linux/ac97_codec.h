@@ -39,6 +39,21 @@
 #define AC97_RESERVED_3A          0x003A       /* Reserved */
 
 /* range 0x3c-0x58 - MODEM */
+#define AC97_EXTENDED_MODEM_ID    0x003C
+#define AC97_EXTEND_MODEM_STAT    0x003E
+#define AC97_LINE1_RATE           0x0040
+#define AC97_LINE2_RATE           0x0042
+#define AC97_HANDSET_RATE         0x0044
+#define AC97_LINE1_LEVEL          0x0046
+#define AC97_LINE2_LEVEL          0x0048
+#define AC97_HANDSET_LEVEL        0x004A
+#define AC97_GPIO_CONFIG          0x004C
+#define AC97_GPIO_POLARITY        0x004E
+#define AC97_GPIO_STICKY          0x0050
+#define AC97_GPIO_WAKE_UP         0x0052
+#define AC97_GPIO_STATUS          0x0054
+#define AC97_MISC_MODEM_STAT      0x0056
+#define AC97_RESERVED_58          0x0058
 
 /* registers 0x005a - 0x007a are vendor reserved */
 
@@ -150,6 +165,9 @@ struct ac97_codec {
 
 	/* saved OSS mixer states */
 	unsigned int mixer_state[SOUND_MIXER_NRDEVICES];
+
+	/* Software Modem interface */
+	int  (*modem_ioctl)(struct ac97_codec *codec, unsigned int cmd, unsigned long arg);
 };
 
 extern int ac97_read_proc (char *page_out, char **start, off_t off,

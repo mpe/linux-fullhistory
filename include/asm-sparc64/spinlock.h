@@ -110,41 +110,15 @@ extern int _spin_trylock (spinlock_t *lock);
 typedef unsigned int rwlock_t;
 #define RW_LOCK_UNLOCKED	0
 
-#define read_lock(__rw_lck) \
-do {	register rwlock_t *__X asm("g1"); \
-	__asm__ __volatile__("sethi	%%hi(__read_lock), %%g3\n\t" \
-			     "jmpl	%%g3 + %%lo(__read_lock), %%g3\n\t" \
-			     " nop\n1:" \
-	: : "r" (__X = (__rw_lck)) \
-	  : "g3", "g5", "g7", "cc", "memory"); \
-} while(0)
+extern void __read_lock(rwlock_t *);
+extern void __read_unlock(rwlock_t *);
+extern void __write_lock(rwlock_t *);
+extern void __write_unlock(rwlock_t *);
 
-#define read_unlock(__rw_lck) \
-do {	register rwlock_t *__X asm("g1"); \
-	__asm__ __volatile__("sethi	%%hi(__read_unlock), %%g3\n\t" \
-			     "jmpl	%%g3 + %%lo(__read_unlock), %%g3\n\t" \
-			     " nop\n1:" \
-	: : "r" (__X = (__rw_lck)) \
-	  : "g3", "g5", "g7", "cc", "memory"); \
-} while(0)
-
-#define write_lock(__rw_lck) \
-do {	register rwlock_t *__X asm("g1"); \
-	__asm__ __volatile__("sethi	%%hi(__write_lock), %%g3\n\t" \
-			     "jmpl	%%g3 + %%lo(__write_lock), %%g3\n\t" \
-			     " nop\n1:" \
-	: : "r" (__X = (__rw_lck)) \
-	  : "g2", "g3", "g5", "g7", "cc", "memory"); \
-} while(0)
-
-#define write_unlock(__rw_lck) \
-do {	register rwlock_t *__X asm("g1"); \
-	__asm__ __volatile__("sethi	%%hi(__write_unlock), %%g3\n\t" \
-			     "jmpl	%%g3 + %%lo(__write_unlock), %%g3\n\t" \
-			     " nop\n1:" \
-	: : "r" (__X = (__rw_lck)) \
-	  : "g2", "g3", "g5", "g7", "cc", "memory"); \
-} while(0)
+#define read_lock(p)	__read_lock(p)
+#define read_unlock(p)	__read_unlock(p)
+#define write_lock(p)	__write_lock(p)
+#define write_unlock(p)	__write_unlock(p)
 
 #else /* !(SPIN_LOCK_DEBUG) */
 

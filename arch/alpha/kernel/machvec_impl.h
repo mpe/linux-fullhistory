@@ -77,15 +77,11 @@
 	mv_writew:		CAT(low,_writew),			\
 	mv_writel:		CAT(low,_writel),			\
 	mv_writeq:		CAT(low,_writeq),			\
-	mv_ioremap:		CAT(low,_ioremap),			\
-	mv_is_ioaddr:		CAT(low,_is_ioaddr)
+	mv_ioremap:		CAT(low,_ioremap)			\
 
 #define IO(UP,low)							\
 	IO_LITE(UP,low),						\
 	pci_ops:		&CAT(low,_pci_ops)
-
-/* Any assembler that can generate a GENERIC kernel can generate BWX
-   instructions.  So always use them for PYXIS I/O.  */
 
 #define DO_APECS_IO	IO(APECS,apecs)
 #define DO_CIA_IO	IO(CIA,cia)
@@ -93,11 +89,14 @@
 #define DO_LCA_IO	IO(LCA,lca)
 #define DO_MCPCIA_IO	IO(MCPCIA,mcpcia)
 #define DO_POLARIS_IO	IO(POLARIS,polaris)
-#define DO_PYXIS_IO	IO(PYXIS,pyxis)
 #define DO_T2_IO	IO(T2,t2)
 #define DO_TSUNAMI_IO	IO(TSUNAMI,tsunami)
 
+#define DO_PYXIS_IO	IO_LITE(CIA,cia_bwx), \
+			pci_ops: &CAT(cia,_pci_ops)
+
 #define BUS(which)					\
+	mv_is_ioaddr:	CAT(which,_is_ioaddr),		\
 	mv_pci_tbi:	CAT(which,_pci_tbi)
 
 #define DO_APECS_BUS	BUS(apecs)
@@ -105,7 +104,6 @@
 #define DO_IRONGATE_BUS	BUS(irongate)
 #define DO_LCA_BUS	BUS(lca)
 #define DO_MCPCIA_BUS	BUS(mcpcia)
-#define DO_PYXIS_BUS	BUS(pyxis)
 #define DO_POLARIS_BUS	BUS(polaris)
 #define DO_T2_BUS	BUS(t2)
 #define DO_TSUNAMI_BUS	BUS(tsunami)

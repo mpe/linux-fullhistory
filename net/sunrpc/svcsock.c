@@ -636,7 +636,7 @@ svc_tcp_recvfrom(struct svc_rqst *rqstp)
 		dprintk("svc: incomplete TCP record (%d of %d)\n",
 			len, svsk->sk_reclen);
 		svc_sock_received(svsk, ready);
-		len = -EAGAIN;	/* record not complete */
+		return -EAGAIN;	/* record not complete */
 	}
 
 	/* Frob argbuf */

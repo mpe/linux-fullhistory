@@ -29,6 +29,10 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.14 Mar 15 2000 Ollie Lho
+ *	5.1 channel output support with channel binding. What's the Matrix ?
+ *  v0.13.1 Mar 10 2000 Ollie Lho
+ *	few minor bugs on dual codec support, needs more testing
  *  v0.13 Mar 03 2000 Ollie Lho
  *	new pci_* for 2.4 kernel, back ported to 2.2
  *  v0.12 Feb 23 2000 Ollie Lho
@@ -62,14 +66,14 @@
  * 
  *  ToDo
  *	Clean up of low level channel register access code. (done)
- *        Fix the bug on dma buffer management in update_ptr, read/write, drain_dac (done)
- *	Dual AC97 codecs support (done partially, need channel binding to test)
+ *	Fix the bug on dma buffer management in update_ptr, read/write, drain_dac (done)
+ *	Dual AC97 codecs support (done)
  *	Recording support (done)
  *	Mmap support
- *	"Channel Binding" ioctl extension
- *	new pci device driver interface for 2.4 kernel
+ *	"Channel Binding" ioctl extension (done)
+ *	new pci device driver interface for 2.4 kernel (done)
  */
-      
+
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/string.h>
@@ -92,7 +96,7 @@
 
 #include "trident.h"
 
-#define DRIVER_VERSION "0.13"
+#define DRIVER_VERSION "0.14"
 
 /* magic numbers to protect our data structures */
 #define TRIDENT_CARD_MAGIC	0x5072696E /* "Prin" */
@@ -107,7 +111,13 @@
 #define NR_AC97		2
 
 /* minor number of /dev/dspW */
+#define SND_DEV_DSP8	3
+
+/* minor number of /dev/dspW */
 #define SND_DEV_DSP16	5 
+
+/* minor number of /dev/swmodem (temporary, experimental) */
+#define SND_DEV_SWMODEM	7
 
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
@@ -126,7 +136,7 @@ static char * card_names[] = {
 	"SiS 7018 PCI Audio"
 };
 
-static struct pci_device_id trident_pci_tbl [] __devinitdata = {
+static struct pci_device_id trident_pci_tbl [] __initdata = {
 	{PCI_VENDOR_ID_TRIDENT, PCI_DEVICE_ID_TRIDENT_4DWAVE_DX,
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, TRIDENT_4D_DX},
 	{PCI_VENDOR_ID_TRIDENT, PCI_DEVICE_ID_TRIDENT_4DWAVE_NX,
@@ -254,6 +264,19 @@ struct trident_card {
 	/* hardware resources */
 	unsigned long iobase;
 	u32 irq;
+};
+
+/* table to map from CHANNELMASK to channel attribute for SiS 7018 */
+static u16 mask2attr [] =
+{
+	PCM_LR, PCM_LR, SURR_LR, CENTER_LFE,
+	HSET, MIC, MODEM_LINE1, MODEM_LINE2,
+	I2S_LR, SPDIF_LR
+};
+/* table to map from channel attribute to CHANNELMASK for SiS 7018 */
+static int attr2mask [] = {
+	DSP_BIND_MODEM1, DSP_BIND_MODEM2, DSP_BIND_FRONT, DSP_BIND_HANDSET,
+	DSP_BIND_I2S, DSP_BIND_CENTER_LFE, DSP_BIND_SURR, DSP_BIND_SPDIF
 };
 
 static struct trident_card *devs = NULL;
@@ -596,11 +619,7 @@ static void trident_play_setup(struct trident_state *state)
 	channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
 	channel->eso -= 1;
 
-	if (state->card->pci_id == PCI_DEVICE_ID_SI_7018) {
-		/* FIXME: channel attributes are configured by ioctls, but it is not
-		   implemented so just set to ZERO for the moment */
-		channel->attribute = 0;
-	} else {
+	if (state->card->pci_id != PCI_DEVICE_ID_SI_7018) {
 		channel->attribute = 0;
 	}
 
@@ -660,12 +679,7 @@ static void trident_rec_setup(struct trident_state *state)
 	channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
 	channel->eso -= 1;
 
-	if (state->card->pci_id == PCI_DEVICE_ID_SI_7018) {
-		/* FIXME: channel attributes are configured by ioctls, but it is not
-		   implemented so just set to 0x8a80 for the moment, record from PCM L/R
-		   input and mono = (left + right + 1)/2*/
-		channel->attribute = 0x8A80;
-	} else {
+	if (state->card->pci_id != PCI_DEVICE_ID_SI_7018) {
 		channel->attribute = 0;
 	}
 
@@ -1577,7 +1591,8 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 		return 0;
 
 	case SNDCTL_DSP_GETCAPS:
-	    return put_user(DSP_CAP_REALTIME|DSP_CAP_TRIGGER|DSP_CAP_MMAP, (int *)arg);
+	    return put_user(DSP_CAP_REALTIME|DSP_CAP_TRIGGER|DSP_CAP_MMAP|DSP_CAP_BIND,
+			    (int *)arg);
 
 	case SNDCTL_DSP_GETTRIGGER:
 		val = 0;
@@ -1656,6 +1671,28 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 		return put_user((dmabuf->fmt & TRIDENT_FMT_16BIT) ?
 				AFMT_S16_LE : AFMT_U8, (int *)arg);
 
+	case SNDCTL_DSP_GETCHANNELMASK:
+		return put_user(DSP_BIND_FRONT|DSP_BIND_SURR|DSP_BIND_CENTER_LFE,
+				(int *)arg);
+
+	case SNDCTL_DSP_BIND_CHANNEL:
+		if (state->card->pci_id != PCI_DEVICE_ID_SI_7018)
+			return -EINVAL;
+
+		get_user_ret(val, (int *)arg, -EFAULT);
+		if (val == DSP_BIND_QUERY) {
+			val = dmabuf->channel->attribute | 0x3c00;
+			val = attr2mask[val >> 8];
+		} else {
+			dmabuf->ready = 0;
+			if (file->f_mode & FMODE_READ)
+				dmabuf->channel->attribute = (CHANNEL_REC|SRC_ENABLE);
+			if (file->f_mode & FMODE_WRITE)
+				dmabuf->channel->attribute = (CHANNEL_SPC_PB|SRC_ENABLE);
+			dmabuf->channel->attribute |= mask2attr[ffs(val)];
+		}
+		return put_user(val, (int *)arg);
+
 	case SNDCTL_DSP_MAPINBUF:
 	case SNDCTL_DSP_MAPOUTBUF:
 	case SNDCTL_DSP_SETSYNCRO:
@@ -1673,6 +1710,7 @@ static int trident_open(struct inode *inode, struct file *file)
 	int minor = MINOR(inode->i_rdev);
 	struct trident_card *card = devs;
 	struct trident_state *state = NULL;
+	struct dmabuf *dmabuf = NULL;
 
 	/* find an avaiable virtual channel (instance of /dev/dsp) */
 	while (card != NULL) {
@@ -1683,6 +1721,7 @@ static int trident_open(struct inode *inode, struct file *file)
 				if (state == NULL)
 					return -ENOMEM;
 				memset(state, 0, sizeof(struct trident_state));
+				dmabuf = &state->dmabuf;
 				goto found_virt;
 			}
 		}
@@ -1694,7 +1733,7 @@ static int trident_open(struct inode *inode, struct file *file)
 
  found_virt:
 	/* found a free virtual channel, allocate hardware channels */
-	if ((state->dmabuf.channel = trident_alloc_pcm_channel(card)) == NULL) {
+	if ((dmabuf->channel = trident_alloc_pcm_channel(card)) == NULL) {
 		kfree (card->states[i]);
 		card->states[i] = NULL;;
 		return -ENODEV;
@@ -1704,7 +1743,7 @@ static int trident_open(struct inode *inode, struct file *file)
 	state->virt = i;
 	state->card = card;
 	state->magic = TRIDENT_STATE_MAGIC;
-	init_waitqueue_head(&state->dmabuf.wait);
+	init_waitqueue_head(&dmabuf->wait);
 	init_MUTEX(&state->open_sem);
 	file->private_data = state;
 
@@ -1714,24 +1753,34 @@ static int trident_open(struct inode *inode, struct file *file)
 	   should be default to unsigned 8-bits, mono, with sample rate 8kHz and
 	   /dev/dspW will accept 16-bits sample */
 	if (file->f_mode & FMODE_WRITE) {
-		state->dmabuf.fmt &= ~TRIDENT_FMT_MASK;
-		if ((minor & 0xf) == SND_DEV_DSP16)
-			state->dmabuf.fmt |= TRIDENT_FMT_16BIT;
-		state->dmabuf.ossfragshift = 0;
-		state->dmabuf.ossmaxfrags  = 0;
-		state->dmabuf.subdivision  = 0;
+		dmabuf->fmt &= ~TRIDENT_FMT_MASK;
+		if ((minor & 0x0f) == SND_DEV_DSP16)
+			dmabuf->fmt |= TRIDENT_FMT_16BIT;
+		dmabuf->ossfragshift = 0;
+		dmabuf->ossmaxfrags  = 0;
+		dmabuf->subdivision  = 0;
+		if (card->pci_id == PCI_DEVICE_ID_SI_7018) {
+			/* set default channel attribute to normal playback */
+			dmabuf->channel->attribute = CHANNEL_PB;
+		}
 		trident_set_dac_rate(state, 8000);
 	}
 
 	if (file->f_mode & FMODE_READ) {
 		/* FIXME: Trident 4d can only record in singed 16-bits stereo, 48kHz sample,
 		   to be dealed with in trident_set_adc_rate() ?? */
-		state->dmabuf.fmt &= ~TRIDENT_FMT_MASK;
-		if ((minor & 0xf) == SND_DEV_DSP16)
-			state->dmabuf.fmt |= TRIDENT_FMT_16BIT;
-		state->dmabuf.ossfragshift = 0;
-		state->dmabuf.ossmaxfrags  = 0;
-		state->dmabuf.subdivision  = 0;
+		dmabuf->fmt &= ~TRIDENT_FMT_MASK;
+		if ((minor & 0x0f) == SND_DEV_DSP16)
+			dmabuf->fmt |= TRIDENT_FMT_16BIT;
+		dmabuf->ossfragshift = 0;
+		dmabuf->ossmaxfrags  = 0;
+		dmabuf->subdivision  = 0;
+		if (card->pci_id == PCI_DEVICE_ID_SI_7018) {
+			/* set default channel attribute to 0x8a80, record from
+			   PCM L/R FIFO and mono = (left + right + 1)/2*/
+			dmabuf->channel->attribute =
+				(CHANNEL_REC|PCM_LR|MONO_MIX);
+		}
 		trident_set_adc_rate(state, 8000);
 	}
 
@@ -1860,7 +1909,7 @@ static u16 trident_ac97_get(struct ac97_codec *codec, u8 reg)
 		address = SI_AC97_READ;
 		mask = SI_AC97_BUSY_READ | SI_AC97_AUDIO_BUSY;
 		if (codec->id)
-		    mask |= SI_AC97_SECONDARY;
+			mask |= SI_AC97_SECONDARY;
 		busy = SI_AC97_BUSY_READ;
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
@@ -1873,7 +1922,7 @@ static u16 trident_ac97_get(struct ac97_codec *codec, u8 reg)
 		else
 			address = NX_ACR2_AC97_R_PRIMARY;
 		mask = NX_AC97_BUSY_READ;
-		busy = 0x0c00;
+		busy = NX_AC97_BUSY_READ | NX_AC97_BUSY_DATA;
 		break;
 	}
 
@@ -1953,9 +2002,13 @@ static int __init trident_ac97_init(struct trident_card *card)
 	case PCI_DEVICE_ID_SI_7018:
 		/* disable AC97 GPIO interrupt */
 		outl(0x00, TRID_REG(card, SI_AC97_GPIO));
-		/* stop AC97 cold reset process */
-		outl(PCMOUT|SECONDARY_ID, TRID_REG(card, SI_SERIAL_INTF_CTRL));
-		ready_2nd = inl(TRID_REG(card, SI_SERIAL_INTF_CTRL)); 
+		/* when power up the AC link is in cold reset mode so stop it */
+		outl(PCMOUT|SURROUT|CENTEROUT|LFEOUT|SECONDARY_ID,
+		     TRID_REG(card, SI_SERIAL_INTF_CTRL));
+		/* it take a long time to recover from a cold reset (especially when you have
+		   more than one codec) */
+		udelay(2000);
+		ready_2nd = inl(TRID_REG(card, SI_SERIAL_INTF_CTRL));
 		ready_2nd &= SI_AC97_SECONDARY_READY;
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
@@ -1972,7 +2025,7 @@ static int __init trident_ac97_init(struct trident_card *card)
 
 	for (num_ac97 = 0; num_ac97 < NR_AC97; num_ac97++) {
 		if ((codec = kmalloc(sizeof(struct ac97_codec), GFP_KERNEL)) == NULL)
-			return -1;
+			return -ENOMEM;
 		memset(codec, 0, sizeof(struct ac97_codec));
 
 		/* initialize some basic codec information, other fields will be filled
@@ -2004,7 +2057,7 @@ static int __init trident_ac97_init(struct trident_card *card)
 
 /* install the driver, we do not allocate hardware channel nor DMA buffer now, they are defered 
    untill "ACCESS" time (in prog_dmabuf called by open/read/write/ioctl/mmap) */
-static int __devinit trident_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
+static int __init trident_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 {
 	unsigned long iobase;
 	struct trident_card *card;
@@ -2012,19 +2065,19 @@ static int __devinit trident_probe(struct pci_dev *pci_dev, const struct pci_dev
 	if (!pci_dma_supported(pci_dev, TRIDENT_DMA_MASK)) {
 		printk(KERN_ERR "trident: architecture does not support"
 		       " 30bit PCI busmaster DMA\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	iobase = pci_dev->resource[0].start;
 	if (check_region(iobase, 256)) {
 		printk(KERN_ERR "trident: can't allocate I/O space at 0x%4.4lx\n",
 		       iobase);
-		return -1;
+		return -ENODEV;
 	}
 
 	if ((card = kmalloc(sizeof(struct trident_card), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "trident: out of memory\n");
-		return -1;
+		return -ENOMEM;
 	}
 	memset(card, 0, sizeof(*card));
 
@@ -2054,7 +2107,7 @@ static int __devinit trident_probe(struct pci_dev *pci_dev, const struct pci_dev
 		printk(KERN_ERR "trident: unable to allocate irq %d\n", card->irq);
 		release_region(card->iobase, 256);
 		kfree(card);
-		return 0;
+		return -ENODEV;
 	}
 	/* register /dev/dsp */
 	if ((card->dev_audio = register_sound_dsp(&trident_audio_fops, -1)) < 0) {
@@ -2062,7 +2115,7 @@ static int __devinit trident_probe(struct pci_dev *pci_dev, const struct pci_dev
 		release_region(iobase, 256);
 		free_irq(card->irq, card);
 		kfree(card);
-		return -1;
+		return -ENODEV;
 	}
 	/* initilize AC97 codec and register /dev/mixer */
 	if (trident_ac97_init(card) <= 0) {
@@ -2070,7 +2123,7 @@ static int __devinit trident_probe(struct pci_dev *pci_dev, const struct pci_dev
 		release_region(iobase, 256);
 		free_irq(card->irq, card);
 		kfree(card);
-		return -1;
+		return -ENODEV;
 	}
 	outl(0x00, TRID_REG(card, T4D_MUSICVOL_WAVEVOL));
 
@@ -2083,7 +2136,7 @@ static int __devinit trident_probe(struct pci_dev *pci_dev, const struct pci_dev
 	return 0;
 }
 
-static void __devexit trident_remove(struct pci_dev *pci_dev)
+static void __exit trident_remove(struct pci_dev *pci_dev)
 {
 	int i;
 	struct trident_card *card = pci_dev->driver_data;
@@ -2120,15 +2173,22 @@ static struct pci_driver trident_pci_driver = {
 
 static int __init trident_init_module (void)
 {
+	if (!pci_present())   /* No PCI bus in this machine! */
+		return -ENODEV;
+
 	printk(KERN_INFO "Trident 4DWave/SiS 7018 PCI Audio, version "
 	       DRIVER_VERSION ", " __TIME__ " " __DATE__ "\n");
 
-	return pci_module_init (&trident_pci_driver);
+	if (!pci_register_driver(&trident_pci_driver)) {
+		pci_unregister_driver(&trident_pci_driver);
+                return -ENODEV;
+	}
+	return 0;
 }
 
 static void __exit trident_cleanup_module (void)
 {
-	pci_unregister_driver (&trident_pci_driver);
+	pci_unregister_driver(&trident_pci_driver);
 }
 
 module_init(trident_init_module);

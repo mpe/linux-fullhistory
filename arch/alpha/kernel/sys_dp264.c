@@ -36,32 +36,31 @@
 /* Note mask bit is true for ENABLED irqs.  */
 static unsigned long cached_irq_mask;
 /* dp264 boards handle at max four CPUs */
-static unsigned long cpu_irq_affinity[4];
+static unsigned long cpu_irq_affinity[4] = { ~0UL, ~0UL, ~0UL, ~0UL };
 
 spinlock_t dp264_irq_lock = SPIN_LOCK_UNLOCKED;
 
 static void
-tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
+tsunami_update_irq_hw(unsigned long mask)
 {
 	register tsunami_cchip *cchip = TSUNAMI_cchip;
+	unsigned long isa_enable = 1UL << 55;
 	register int bcpu = boot_cpuid;
 
 #ifdef CONFIG_SMP
 	register unsigned long cpm = cpu_present_mask;
 	volatile unsigned long *dim0, *dim1, *dim2, *dim3;
-	unsigned long mask0, mask1, mask2, mask3, maskB, dummy;
+	unsigned long mask0, mask1, mask2, mask3, dummy;
 
-	mask0 = mask1 = mask2 = mask3 = mask;
-	maskB = mask | isa_enable;
-	if (bcpu == 0) mask0 = maskB;
-	else if (bcpu == 1) mask1 = maskB;
-	else if (bcpu == 2) mask2 = maskB;
-	else if (bcpu == 3) mask3 = maskB;
+	mask0 = mask & cpu_irq_affinity[0];
+	mask1 = mask & cpu_irq_affinity[1];
+	mask2 = mask & cpu_irq_affinity[2];
+	mask3 = mask & cpu_irq_affinity[3];
 
-	mask0 &= cpu_irq_affinity[0];
-	mask1 &= cpu_irq_affinity[1];
-	mask2 &= cpu_irq_affinity[2];
-	mask3 &= cpu_irq_affinity[3];
+	if (bcpu == 0) mask0 |= isa_enable;
+	else if (bcpu == 1) mask1 |= isa_enable;
+	else if (bcpu == 2) mask2 |= isa_enable;
+	else mask3 |= isa_enable;
 
 	dim0 = &cchip->dim0.csr;
 	dim1 = &cchip->dim1.csr;
@@ -86,7 +85,7 @@ tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
 	if (bcpu == 0) dimB = &cchip->dim0.csr;
 	else if (bcpu == 1) dimB = &cchip->dim1.csr;
 	else if (bcpu == 2) dimB = &cchip->dim2.csr;
-	else if (bcpu == 3) dimB = &cchip->dim3.csr;
+	else dimB = &cchip->dim3.csr;
 
 	*dimB = mask | isa_enable;
 	mb();
@@ -94,24 +93,12 @@ tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
 #endif
 }
 
-static inline void
-dp264_update_irq_hw(unsigned long mask)
-{
-	tsunami_update_irq_hw(mask, (1UL << 55) | 0xffff);
-}
-
-static inline void
-clipper_update_irq_hw(unsigned long mask)
-{
-	tsunami_update_irq_hw(mask, 1UL << 55);
-}
-
 static void
 dp264_enable_irq(unsigned int irq)
 {
 	spin_lock(&dp264_irq_lock);
 	cached_irq_mask |= 1UL << irq;
-	dp264_update_irq_hw(cached_irq_mask);
+	tsunami_update_irq_hw(cached_irq_mask);
 	spin_unlock(&dp264_irq_lock);
 }
 
@@ -120,7 +107,7 @@ dp264_disable_irq(unsigned int irq)
 {
 	spin_lock(&dp264_irq_lock);
 	cached_irq_mask &= ~(1UL << irq);
-	dp264_update_irq_hw(cached_irq_mask);
+	tsunami_update_irq_hw(cached_irq_mask);
 	spin_unlock(&dp264_irq_lock);
 }
 
@@ -142,8 +129,8 @@ static void
 clipper_enable_irq(unsigned int irq)
 {
 	spin_lock(&dp264_irq_lock);
-	cached_irq_mask |= 1UL << irq;
-	clipper_update_irq_hw(cached_irq_mask);
+	cached_irq_mask |= 1UL << (irq - 16);
+	tsunami_update_irq_hw(cached_irq_mask);
 	spin_unlock(&dp264_irq_lock);
 }
 
@@ -151,8 +138,8 @@ static void
 clipper_disable_irq(unsigned int irq)
 {
 	spin_lock(&dp264_irq_lock);
-	cached_irq_mask &= ~(1UL << irq);
-	clipper_update_irq_hw(cached_irq_mask);
+	cached_irq_mask &= ~(1UL << (irq - 16));
+	tsunami_update_irq_hw(cached_irq_mask);
 	spin_unlock(&dp264_irq_lock);
 }
 
@@ -191,7 +178,7 @@ dp264_set_affinity(unsigned int irq, unsigned long affinity)
 { 
 	spin_lock(&dp264_irq_lock);
 	cpu_set_irq_affinity(irq, affinity);
-	dp264_update_irq_hw(cached_irq_mask);
+	tsunami_update_irq_hw(cached_irq_mask);
 	spin_unlock(&dp264_irq_lock);
 }
 
@@ -199,8 +186,8 @@ static void
 clipper_set_affinity(unsigned int irq, unsigned long affinity)
 { 
 	spin_lock(&dp264_irq_lock);
-	cpu_set_irq_affinity(irq, affinity);
-	clipper_update_irq_hw(cached_irq_mask);
+	cpu_set_irq_affinity(irq - 16, affinity);
+	tsunami_update_irq_hw(cached_irq_mask);
 	spin_unlock(&dp264_irq_lock);
 }
 
@@ -304,12 +291,10 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 }
 
 static void __init
-init_tsunami_irqs(struct hw_interrupt_type * ops)
+init_tsunami_irqs(struct hw_interrupt_type * ops, int imin, int imax)
 {
 	long i;
-
-	/* Only irqs between 16 and 47 are tsunami irqs.  */
-	for (i = 16; i < 48; ++i) {
+	for (i = imin; i <= imax; ++i) {
 		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 		irq_desc[i].handler = ops;
 	}
@@ -328,13 +313,10 @@ dp264_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
 
-	/* this is single threaded by design so no need of any smp lock */
-	for (cpu = 0; cpu < 4; cpu++)
-		cpu_irq_affinity[cpu] = ~0UL;
-	dp264_update_irq_hw(0UL);
+	tsunami_update_irq_hw(0);
 
 	init_i8259a_irqs();
-	init_tsunami_irqs(&dp264_irq_type);
+	init_tsunami_irqs(&dp264_irq_type, 16, 47);
 }
 
 static void __init
@@ -348,10 +330,10 @@ clipper_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = clipper_srm_device_interrupt;
 
-	clipper_update_irq_hw(0UL);
+	tsunami_update_irq_hw(0);
 
 	init_i8259a_irqs();
-	init_tsunami_irqs(&clipper_irq_type);
+	init_tsunami_irqs(&clipper_irq_type, 24, 63);
 }
 
 

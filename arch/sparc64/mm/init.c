@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.148 2000/03/07 07:08:31 anton Exp $
+/*  $Id: init.c,v 1.149 2000/03/15 14:42:58 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -47,6 +47,10 @@ unsigned long mmu_context_bmap[CTX_BMAP_SLOTS];
 
 /* References to section boundaries */
 extern char __init_begin, __init_end, _start, _end, etext, edata;
+
+/* Initial ramdisk setup */
+extern unsigned int sparc_ramdisk_image;
+extern unsigned int sparc_ramdisk_size;
 
 int do_check_pgt_cache(int low, int high)
 {
@@ -808,6 +812,7 @@ unsigned long __init bootmem_init(void)
 {
 	unsigned long bootmap_size, start_pfn, end_pfn;
 	unsigned long end_of_phys_memory = 0UL;
+	unsigned long bootmap_pfn;
 	int i;
 
 	/* XXX It is a bit ambiguous here, whether we should
@@ -855,15 +860,37 @@ unsigned long __init bootmem_init(void)
 
 	/* Now shift down to get the real physical page frame number. */
 	start_pfn >>= PAGE_SHIFT;
+	
+	bootmap_pfn = start_pfn;
 
 	end_pfn = end_of_phys_memory >> PAGE_SHIFT;
 
+#ifdef CONFIG_BLK_DEV_INITRD
+	/* Now have to check initial ramdisk, so that bootmap does not overwrite it */
+	if (sparc_ramdisk_image) {
+		if (sparc_ramdisk_image >= (unsigned long)&_end - 2 * PAGE_SIZE)
+			sparc_ramdisk_image -= KERNBASE;
+		initrd_start = sparc_ramdisk_image + phys_base;
+		initrd_end = initrd_start + sparc_ramdisk_size;
+		if (initrd_end > end_of_phys_memory) {
+			printk(KERN_CRIT "initrd extends beyond end of memory "
+		                 	 "(0x%016lx > 0x%016lx)\ndisabling initrd\n",
+			       initrd_end, end_of_phys_memory);
+			initrd_start = 0;
+		}
+		if (initrd_start) {
+			if (initrd_start >= (start_pfn << PAGE_SHIFT) &&
+			    initrd_start < (start_pfn << PAGE_SHIFT) + 2 * PAGE_SIZE)
+				bootmap_pfn = PAGE_ALIGN (initrd_end) >> PAGE_SHIFT;
+		}
+	}
+#endif	
 	/* Initialize the boot-time allocator. */
 #ifdef DEBUG_BOOTMEM
-	prom_printf("init_bootmem(spfn[%lx],epfn[%lx])\n",
-		    start_pfn, end_pfn);
+	prom_printf("init_bootmem(spfn[%lx],bpfn[%lx],epfn[%lx])\n",
+		    start_pfn, bootmap_pfn, end_pfn);
 #endif
-	bootmap_size = init_bootmem(start_pfn, end_pfn);
+	bootmap_size = init_bootmem(bootmap_pfn, end_pfn);
 
 	/* Now register the available physical memory with the
 	 * allocator.
@@ -878,15 +905,27 @@ unsigned long __init bootmem_init(void)
 			     sp_banks[i].num_bytes);
 	}
 
-	/* Reserve the kernel text/data/bss and the bootmem bitmap. */
+	/* Reserve the kernel text/data/bss, the bootmem bootmap and initrd. */
 #ifdef DEBUG_BOOTMEM
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start)
+		prom_printf("reserve_bootmem: base[%lx] size[%lx]\n",
+			    initrd_start, initrd_end - initrd_start);
+#endif		
 	prom_printf("reserve_bootmem: base[%lx] size[%lx]\n",
-		    phys_base,
-		    (((start_pfn << PAGE_SHIFT) +
-		      bootmap_size) - phys_base));
+		    phys_base, (start_pfn << PAGE_SHIFT) - phys_base);
+	prom_printf("reserve_bootmem: base[%lx] size[%lx]\n",
+		    (bootmap_pfn << PAGE_SHIFT), bootmap_size);
 #endif
-	reserve_bootmem(phys_base, (((start_pfn << PAGE_SHIFT) +
-				     bootmap_size) - phys_base));
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start) {
+		reserve_bootmem(initrd_start, initrd_end - initrd_start);
+		initrd_start += PAGE_OFFSET;
+		initrd_end += PAGE_OFFSET;
+	}
+#endif
+	reserve_bootmem(phys_base, (start_pfn << PAGE_SHIFT) - phys_base);
+	reserve_bootmem((bootmap_pfn << PAGE_SHIFT), bootmap_size);
 
 #ifdef DEBUG_BOOTMEM
 	prom_printf("init_bootmem: return end_pfn[%lx]\n", end_pfn);
@@ -1234,11 +1273,6 @@ void __init mem_init(void)
 		((unsigned long) &empty_zero_page);
 	last += PAGE_OFFSET + phys_base;
 	while (addr < last) {
-#ifdef CONFIG_BLK_DEV_INITRD
-// FIXME to use bootmem scheme...
-		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end)
-			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
-#endif	
 		set_bit(__pa(addr) >> 22, sparc64_valid_addr_bitmap);
 		addr += PAGE_SIZE;
 	}
@@ -1318,6 +1352,22 @@ void free_initmem (void)
 		num_physpages++;
 	}
 }
+
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	if (start < end)
+		printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+	for (; start < end; start += PAGE_SIZE) {
+		struct page *p = mem_map + MAP_NR(start);
+
+		ClearPageReserved(p);
+		set_page_count(p, 1);
+		__free_page(p);
+		num_physpages++;
+	}
+}
+#endif
 
 void si_meminfo(struct sysinfo *val)
 {

@@ -62,6 +62,7 @@
 
 #define DAC_RUNNING	0x01
 #define ADC_RUNNING	0x02
+
 /* Register Addresses */
 
 /* operational registers common to DX, NX, 7018 */
@@ -130,7 +131,7 @@ enum trident_dx_ac97_bits {
 enum trident_nx_ac97_bits {
 	/* ACR1-3 */
 	NX_AC97_BUSY_WRITE = 0x0800, NX_AC97_BUSY_READ = 0x0800,
-	NX_AC97_WRITE_SECONDARY = 0x0100,
+	NX_AC97_BUSY_DATA  = 0x0400, NX_AC97_WRITE_SECONDARY = 0x0100,
 	/* ACR0 */
 	NX_AC97_SECONDARY_READY = 0x0040, NX_AC97_SECONDARY_RECORD = 0x0020,
 	NX_AC97_SURROUND_OUTPUT = 0x0010,
@@ -148,7 +149,7 @@ enum serial_intf_ctrl_bits {
 	MICIN       = 0x00000400, LINE2IN     = 0x00000800,
 	HEAD_SET_IN = 0x00001000, GPIOIN      = 0x00002000,
 	/* 7018 spec says id = 01 but the demo board routed to 10 
-	   SECONDARY_ID= 0x00008000, */
+	   SECONDARY_ID= 0x00004000, */
 	SECONDARY_ID= 0x00004000,
 	PCMOUT      = 0x00010000, SURROUT     = 0x00020000,
 	CENTEROUT   = 0x00040000, LFEOUT      = 0x00080000,
@@ -173,10 +174,18 @@ enum channel_control_bits {
 };
 
 enum channel_attribute {
-	MODEM_LINE1, MODEM_LINE2, PCM_LR, HSET,
-	I2SLR, CENTER_LFE, SURR_LR, SPDIF_LR,
-	CHANNEL_PB     = 0x00000000, CHANNEL_SPC_PB = 0x40000000,
-	CHANNEL_REC    = 0x80000000, CHANNEL_REC_PB = 0xc0000000
+	/* playback/record select */
+	CHANNEL_PB     = 0x0000, CHANNEL_SPC_PB = 0x4000,
+	CHANNEL_REC    = 0x8000, CHANNEL_REC_PB = 0xc000,
+	/* playback destination/record source select */
+	MODEM_LINE1    = 0x0000, MODEM_LINE2    = 0x0400,
+	PCM_LR         = 0x0800, HSET           = 0x0c00,
+	I2S_LR         = 0x1000, CENTER_LFE     = 0x1400,
+	SURR_LR        = 0x1800, SPDIF_LR       = 0x1c00,
+	MIC            = 0x1400,
+	/* mist stuff */
+	MONO_LEFT      = 0x0000, MONO_RIGHT     = 0x0100,
+	MONO_MIX       = 0x0200, SRC_ENABLE     = 0x0080,
 };
 
 enum miscint_bits {
@@ -189,12 +198,6 @@ enum miscint_bits {
 	ST_TARGET_REACHED = 0x00008000, PB_24K_MODE   = 0x00010000, 
 	ST_IRQ_EN       = 0x00800000, ACGPIO_IRQ      = 0x01000000
 };
-
-#define AC97_SIGMATEL_DAC2INVERT	0x6E
-#define AC97_SIGMATEL_BIAS1	0x70
-#define AC97_SIGMATEL_BIAS2	0x72
-#define AC97_SIGMATEL_CIC1	0x76
-#define AC97_SIGMATEL_CIC2	0x78
 
 #define TRID_REG( trident, x ) ( (trident) -> iobase + (x) )
 

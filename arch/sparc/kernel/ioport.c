@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.35 2000/02/27 08:16:25 davem Exp $
+/* $Id: ioport.c,v 1.36 2000/03/16 08:22:53 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -745,6 +745,10 @@ void ioport_init(void)
 		halt();
 	};
 
+}
+
+void register_proc_sparc_ioport(void)
+{
 #ifdef CONFIG_PROC_FS
 	create_proc_read_entry("io_map",0,0,_sparc_io_get_info,&sparc_iomap);
 	create_proc_read_entry("dvma_map",0,0,_sparc_io_get_info,&_sparc_dvma);

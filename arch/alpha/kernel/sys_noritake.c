@@ -309,7 +309,7 @@ struct alpha_machine_vector noritake_primo_mv __initmv = {
 	init_arch:		cia_init_arch,
 	init_irq:		noritake_init_irq,
 	init_rtc:		common_init_rtc,
-	init_pci:		common_init_pci,
+	init_pci:		cia_init_pci,
 	pci_map_irq:		noritake_map_irq,
 	pci_swizzle:		noritake_swizzle,
 };

@@ -528,6 +528,7 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket, u32 isa_irq_mask)
 		cb_writel(socket, CB_SOCKET_EVENT, -1);
 	}
 	cb_writel(socket, CB_SOCKET_MASK, 0);
+	exca_writeb(socket, I365_CSCINT, 0);
 	
 	mask = probe_irq_mask(val) & 0xffff;
 

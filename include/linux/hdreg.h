@@ -193,6 +193,8 @@ struct hd_geometry {
 #define HDIO_SET_NICE		0x0329	/* set nice flags */
 #define HDIO_UNREGISTER_HWIF	0x032a  /* unregister interface */
 
+#define __NEW_HD_DRIVE_ID
+
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {
 	unsigned short	config;		/* lots of obsolete bit flags */
@@ -256,7 +258,7 @@ struct hd_driveid {
 	unsigned short	CurAPMvalues;	/* current APM values */
 	unsigned short	word92;		/* reserved (word 92) */
 	unsigned short	hw_config;	/* hardware config */
-	unsigned short  words94_125[33];/* reserved words 94-125 */
+	unsigned short  words94_125[31];/* reserved words 94-125 */
 	unsigned short	last_lun;	/* reserved (word 126) */
 	unsigned short	word127;	/* reserved (word 127) */
 	unsigned short	dlf;		/* device lock function

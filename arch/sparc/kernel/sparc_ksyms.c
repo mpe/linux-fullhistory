@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.95 2000/03/14 08:29:26 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.96 2000/03/16 09:12:49 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -68,6 +68,8 @@ extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
 extern int __ashldi3(int, int);
 extern int __lshrdi3(int, int);
+extern int __muldi3(int, int);
+extern int __divdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
@@ -273,6 +275,8 @@ EXPORT_SYMBOL_NOVERS(memmove);
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
 EXPORT_SYMBOL_NOVERS(__ashldi3);
 EXPORT_SYMBOL_NOVERS(__lshrdi3);
+EXPORT_SYMBOL_NOVERS(__muldi3);
+EXPORT_SYMBOL_NOVERS(__divdi3);
 
 EXPORT_SYMBOL_DOT(rem);
 EXPORT_SYMBOL_DOT(urem);

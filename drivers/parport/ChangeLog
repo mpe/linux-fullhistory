@@ -3,7 +3,7 @@
 	* parport_pc.c (cleanup_module): Don't call pci_unregister_driver
 	if we didn't call pci_register_driver first.
 
-2000-03-13    <twaugh@redhat.com>
+2000-03-13  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c (parport_pc_init): Moved from asm/parport.h.
 
@@ -24,12 +24,12 @@
 	(parport_pc_find_ports): New function.
 	(init_module): Make superio a config option, not a parameter.
 
-2000-03-10    <twaugh@redhat.com>
+2000-03-10  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c (decode_winbond): Use correct 83877ATF chip ID.
 	(decode_winbond): Fix typo.
 
-2000-03-09    <twaugh@redhat.com>
+2000-03-09  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c: Integrate SuperIO PCI probe with normal PCI card
 	probe, so that the MODULE_DEVICE_TABLE is complete.

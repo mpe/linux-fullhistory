@@ -323,3 +323,17 @@ int pcibios_enable_resources(struct pci_dev *dev)
 	}
 	return 0;
 }
+
+/*
+ *  If we set up a device for bus mastering, we need to check the latency
+ *  timer as certain crappy BIOSes forget to set it properly.
+ */
+void pcibios_set_master(struct pci_dev *dev)
+{
+	u8 lat;
+	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
+	if (lat < 16) {
+		printk("PCI: Increasing latency timer of device %s to 64\n", dev->slot_name);
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
+	}
+}

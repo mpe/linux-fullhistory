@@ -347,19 +347,19 @@ int msdos_partition(struct gendisk *hd, kdev_t dev,
 	unsigned char *data;
 	int mask = (1 << hd->minor_shift) - 1;
 	int sector_size = get_hardsect_size(dev) / 512;
-#ifdef CONFIG_BLK_DEV_IDE
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 	int tested_for_xlate = 0;
 
 read_mbr:
-#endif /* CONFIG_BLK_DEV_IDE */
+#endif /* (CONFIG_BLK_DEV_IDE) || (CONFIG_BLK_DEV_IDE_MODULE) */
 	if (!(bh = bread(dev,0,get_ptable_blocksize(dev)))) {
 		if (warn_no_part) printk(" unable to read partition table\n");
 		return -1;
 	}
 	data = bh->b_data;
-#ifdef CONFIG_BLK_DEV_IDE
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 check_table:
-#endif /* CONFIG_BLK_DEV_IDE */
+#endif /* (CONFIG_BLK_DEV_IDE) || (CONFIG_BLK_DEV_IDE_MODULE) */
 	/* Use bforget(), because we may have changed the disk geometry */
 	if (*(unsigned short *)  (0x1fe + data) != cpu_to_le16(MSDOS_LABEL_MAGIC)) {
 		bforget(bh);
@@ -367,7 +367,7 @@ check_table:
 	}
 	p = (struct partition *) (0x1be + data);
 
-#ifdef CONFIG_BLK_DEV_IDE
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
 	if (!tested_for_xlate++) {	/* Do this only once per disk */
 		/*
 		 * Look for various forms of IDE disk geometry translation
@@ -423,7 +423,7 @@ check_table:
 			(void) ide_xlate_1024(dev, 2, heads, " [PTBL]");
 		}
 	}
-#endif	/* CONFIG_BLK_DEV_IDE */
+#endif /* (CONFIG_BLK_DEV_IDE) || (CONFIG_BLK_DEV_IDE_MODULE) */
 
 	/* Look for partitions in two passes:
 	   First find the primary partitions, and the DOS-type extended partitions.

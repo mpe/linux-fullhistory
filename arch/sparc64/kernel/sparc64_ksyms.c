@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.76 2000/03/14 08:29:29 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.78 2000/03/15 15:02:30 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -207,6 +207,7 @@ EXPORT_SYMBOL(pci_map_sg);
 EXPORT_SYMBOL(pci_unmap_sg);
 EXPORT_SYMBOL(pci_dma_sync_single);
 EXPORT_SYMBOL(pci_dma_sync_sg);
+EXPORT_SYMBOL(pci_dma_supported);
 #endif
 
 /* Solaris/SunOS binary compatibility */

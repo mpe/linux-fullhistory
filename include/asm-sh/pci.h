@@ -1,13 +1,18 @@
 #ifndef __ASM_SH_PCI_H
 #define __ASM_SH_PCI_H
 
+#ifdef __KERNEL__
+
 /* Can be used to override the logic in pci_scan_bus for skipping
    already-configured bus numbers - to be used for buggy BIOSes
    or architectures with incomplete PCI setup by the loader */
 
 #define pcibios_assign_all_busses()	0
 
-#ifdef __KERNEL__
+extern inline void pcibios_set_master(struct pci_dev *dev)
+{
+	/* No special bus mastering setup handling */
+}
 
 /* Dynamic DMA mapping stuff.
  * SuperH has everything mapped statically like x86.

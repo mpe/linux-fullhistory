@@ -189,15 +189,6 @@ asmlinkage int osf_getpriority(int which, int who, int a2, int a3, int a4,
 	return prio;
 }
 
-
-/*
- * Heh. As documented by DEC..
- */
-asmlinkage unsigned long sys_madvise(void)
-{
-	return 0;
-}
-
 /*
  * No need to acquire the kernel lock, we're local..
  */
@@ -1373,9 +1364,4 @@ asmlinkage int sys_old_adjtimex(struct timex32 *txc_p)
 	  return -EFAULT;
 
 	return ret;
-}
-
-asmlinkage long osf_shmget (key_t key, int size, int flag)
-{
-	return sys_shmget (key, size, flag);
 }

@@ -39,6 +39,11 @@ struct pci_controler {
 #define PCIBIOS_MIN_IO		alpha_mv.min_io_address
 #define PCIBIOS_MIN_MEM		alpha_mv.min_mem_address
 
+extern inline void pcibios_set_master(struct pci_dev *dev)
+{
+	/* No special bus mastering setup handling */
+}
+
 /* IOMMU controls.  */
 
 /* Allocate and map kernel buffer using consistant mode DMA for PCI

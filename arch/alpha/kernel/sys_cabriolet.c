@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998, 1999 Richard Henderson
+ *	Copyright (C) 1998, 1999, 2000 Richard Henderson
  *
  * Code supporting the Cabriolet (AlphaPC64), EB66+, and EB164,
  * PC164 and LX164.
@@ -28,7 +28,6 @@
 #include <asm/core_apecs.h>
 #include <asm/core_cia.h>
 #include <asm/core_lca.h>
-#include <asm/core_pyxis.h>
 
 #include "proto.h"
 #include "irq_impl.h"
@@ -223,6 +222,12 @@ cabriolet_init_pci(void)
 	ns87312_enable_ide(0x398);
 }
 
+static inline void __init
+cia_cab_init_pci(void)
+{
+	cia_init_pci();
+	ns87312_enable_ide(0x398);
+}
 
 /*
  * The PC164 and LX164 have 19 PCI interrupts, four from each of the four
@@ -286,7 +291,7 @@ alphapc164_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 static inline void __init
 alphapc164_init_pci(void)
 {
-	common_init_pci();
+	cia_init_pci();
 	SMC93x_Init();
 }
 
@@ -339,7 +344,7 @@ struct alpha_machine_vector eb164_mv __initmv = {
 	init_arch:		cia_init_arch,
 	init_irq:		cabriolet_init_irq,
 	init_rtc:		common_init_rtc,
-	init_pci:		cabriolet_init_pci,
+	init_pci:		cia_cab_init_pci,
 	pci_map_irq:		cabriolet_map_irq,
 	pci_swizzle:		common_swizzle,
 };
@@ -377,8 +382,8 @@ struct alpha_machine_vector lx164_mv __initmv = {
 	DO_EV5_MMU,
 	DO_DEFAULT_RTC,
 	DO_PYXIS_IO,
-	DO_PYXIS_BUS,
-	machine_check:		pyxis_machine_check,
+	DO_CIA_BUS,
+	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 	min_io_address:		DEFAULT_IO_BASE,
 	min_mem_address:	DEFAULT_MEM_BASE,

@@ -1,5 +1,5 @@
 /*
- * ac97_codec.c: Generic AC97 mixer module
+ * ac97_codec.c: Generic AC97 mixer/modem module
  *
  * Derived from ac97 mixer in maestro and trident driver.
  *
@@ -20,6 +20,8 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * History
+ * v0.4 Mar 15 2000 Ollie Lho
+ *	dual codec support verified with 4 channel output
  * v0.3 Feb 22 2000 Ollie Lho
  *	bug fix for record mask setting
  * v0.2 Feb 10 2000 Ollie Lho
@@ -42,7 +44,9 @@ static void ac97_set_mixer(struct ac97_codec *codec, unsigned int oss_mixer, uns
 static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask);
 static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned long arg);
 
-static int sigmatel_init(struct ac97_codec * codec);
+static int ac97_init_mixer(struct ac97_codec *codec);
+
+static int sigmatel_init(struct ac97_codec *codec);
 
 #define arraysize(x)   (sizeof(x)/sizeof((x)[0]))
 
@@ -59,6 +63,8 @@ static struct {
 	{0x43525923, "Cirrus Logic CS4298"    , NULL},
 	{0x43525931, "Cirrus Logic CS4299"    , NULL},
 	{0x4e534331, "National Semiconductor LM4549" ,	NULL},
+	{0x53494c22, "Silicon Laboratory Si3036"     ,	NULL},
+	{0x53494c23, "Silicon Laboratory Si3038"     ,  NULL},
 	{0x83847600, "SigmaTel STAC????"      , NULL},
 	{0x83847604, "SigmaTel STAC9701/3/4/5", NULL},
 	{0x83847605, "SigmaTel STAC9704"      , NULL},
@@ -323,7 +329,6 @@ static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask)
 
 	/* else, write the first set in the mask as the
 	   output */	
-
 	val = ffs(mask); 
 	val = ac97_oss_rm[val-1];
 	val |= val << 8;  /* set both channels */
@@ -503,14 +508,22 @@ int ac97_read_proc (char *page, char **start, off_t off,
 
 int ac97_probe_codec(struct ac97_codec *codec)
 {
-	u16 id1, id2, cap;
+	u16 id1, id2;
+	u16 audio, modem;
 	int i;
 
 	/* probing AC97 codec, AC97 2.0 says that bit 15 of register 0x00 (reset) should 
 	   be read zero. Probing of AC97 in this way is not reliable, it is not even SAFE !! */
 	codec->codec_write(codec, AC97_RESET, 0L);
-	if ((cap = codec->codec_read(codec, AC97_RESET)) & 0x8000)
+	if ((audio = codec->codec_read(codec, AC97_RESET)) & 0x8000) {
+		printk(KERN_ERR "ac97_codec: %s ac97 codec not present\n",
+		       codec->id ? "Secondary" : "Primary");
 		return 0;
+	}
+
+	/* probe for Modem Codec */
+	codec->codec_write(codec, AC97_EXTENDED_MODEM_ID, 0L);
+	modem = codec->codec_read(codec, AC97_EXTENDED_MODEM_ID);
 
 	codec->name = NULL;
 	codec->codec_init = NULL;
@@ -526,8 +539,19 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	}
 	if (codec->name == NULL)
 		codec->name = "Unknown";
-	printk(KERN_INFO "ac97_codec: ac97 vendor id1: 0x%04x, id2: 0x%04x (%s)\n",
+	printk(KERN_INFO "ac97_codec: AC97 %s codec, vendor id1: 0x%04x, "
+	       "id2: 0x%04x (%s)\n", audio ? "Audio" : (modem ? "Modem" : ""),
 	       id1, id2, codec->name);
+
+	return ac97_init_mixer(codec);
+}
+
+static int ac97_init_mixer(struct ac97_codec *codec)
+{
+	u16 cap;
+	int i;
+
+	cap = codec->codec_read(codec, AC97_RESET);
 
 	/* mixer masks */
 	codec->supported_mixers = AC97_SUPPORTED_MASK;
@@ -548,7 +572,7 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	codec->codec_write(codec, AC97_MASTER_VOL_STEREO, 0L);
 	codec->codec_write(codec, AC97_PCMOUT_VOL, 0L);
 
-	/* codec specific initialization for 4-6 channel output */
+	/* codec specific initialization for 4-6 channel output or secondary codec stuff */
 	if (codec->id != 0 && codec->codec_init != NULL) {
 		codec->codec_init(codec);
 	}
@@ -566,11 +590,28 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	return 1;
 }
 
+static int ac97_init_modem(struct ac97_codec *codec)
+{
+	return 0;
+}
+
 static int sigmatel_init(struct ac97_codec * codec)
 {
 	codec->codec_write(codec, AC97_SURROUND_MASTER, 0L);
-	/* initialize SigmaTel STAC9721/23 */
-	codec->codec_write(codec, 0x74, 0x01);
+
+	/* initialize SigmaTel STAC9721/23 as secondary codec, decoding AC link
+	   sloc 3,4 = 0x01, slot 7,8 = 0x00, */
+	codec->codec_write(codec, 0x74, 0x00);
+
+	/* we don't have the crystal when we are on an AMR card, so use
+	   BIT_CLK as our clock source. Write the magic word ABBA and read
+	   back to enable register 0x78 */
+	codec->codec_write(codec, 0x76, 0xabba);
+	codec->codec_read(codec, 0x76);
+
+	/* sync all the clocks*/
+	codec->codec_write(codec, 0x78, 0x3802);
+
 	return 1;
 }
 

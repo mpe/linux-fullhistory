@@ -4,74 +4,48 @@
 #include <asm/smp.h>
 
 /*
- * Copyright (C) 1993 Linus Torvalds
+ * Copyright (C) 1993, 2000 Linus Torvalds
  *
  * Delay routines, using a pre-computed "loops_per_second" value.
  */
 
-/* We can make the delay loop inline, but we have to be very careful wrt
-   scheduling for ev6 machines, so that we keep a consistent number of
-   iterations for all invocations.  */
-
-extern __inline__ void
-__delay(unsigned long loops)
-{
-	__asm__ __volatile__(
-		".align 4\n"
-		"1:	subq %0,1,%0\n"
-		"	bge %0,1b\n"
-		"	nop"
-		: "=r" (loops) : "0"(loops));
-}
-
 /*
- * division by multiplication: you don't have to worry about
- * loss of precision.
+ * Use only for very small delays (< 1 msec). 
  *
- * Use only for very small delays ( < 1 msec).  Should probably use a
- * lookup table, really, as the multiplications take much too long with
- * short delays.  This is a "reasonable" implementation, though (and the
- * first constant multiplications gets optimized away if the delay is
- * a constant).
- *
- * Optimize small constants further by exposing the second multiplication
- * to the compiler.  In addition, mulq is 2 cycles faster than umulh.
+ * The active part of our cycle counter is only 32-bits wide, and
+ * we're treating the difference between two marks as signed.  On
+ * a 1GHz box, that's about 2 seconds.
  */
 
 extern __inline__ void
-__udelay(unsigned long usecs, unsigned long lps)
+__delay(int loops)
 {
-	/* compute (usecs * 2**64 / 10**6) * loops_per_sec / 2**64 */
-
-	usecs *= 0x000010c6f7a0b5edUL;		/* 2**64 / 1000000 */
-	__asm__("umulh %1,%2,%0" :"=r" (usecs) :"r" (usecs),"r" (lps));
-	__delay(usecs);
+	int tmp;
+	__asm__ __volatile__(
+		"	rpcc %0\n"
+		"	addl %1,%0,%1\n"
+		"1:	rpcc %0\n"
+		"	subl %1,%0,%0\n"
+		"	bgt %0,1b"
+		: "=&r" (tmp), "=r" (loops) : "1"(loops));
 }
 
 extern __inline__ void
-__small_const_udelay(unsigned long usecs, unsigned long lps)
+udelay(unsigned long usecs)
 {
-	/* compute (usecs * 2**32 / 10**6) * loops_per_sec / 2**32 */
+	unsigned long lps;
+
+#ifdef __SMP__
+	lps = cpu_data[smp_processor_id()].loops_per_sec;
+#else
+	lps = loops_per_sec;
+#endif
+
+	/* Compute (usecs * 2**32 / 10**6) * loops_per_sec / 2**32.  */
 
         usecs *= 0x10c6;                /* 2^32 / 10^6 */
 	usecs *= lps;
-	usecs >>= 32;
-	__delay(usecs);
+	__delay((long)usecs >> 32);
 }
-
-#ifdef __SMP__
-#define udelay(usecs)						\
-	(__builtin_constant_p(usecs) && usecs < 0x100000000UL	\
-	 ? __small_const_udelay(usecs,				\
-		cpu_data[smp_processor_id()].loops_per_sec)	\
-	 : __udelay(usecs,					\
-		cpu_data[smp_processor_id()].loops_per_sec))
-#else
-#define udelay(usecs)						\
-	(__builtin_constant_p(usecs) && usecs < 0x100000000UL	\
-	 ? __small_const_udelay(usecs, loops_per_sec)		\
-	 : __udelay(usecs, loops_per_sec))
-#endif
-
 
 #endif /* defined(__ALPHA_DELAY_H) */

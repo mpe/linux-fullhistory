@@ -210,6 +210,7 @@ void sound_unload_mixerdev(int dev)
 	{
 		mixer_devs[dev] = NULL;
 		unregister_sound_mixer(dev<<4);
+		num_mixers--;
 	}
 }
 

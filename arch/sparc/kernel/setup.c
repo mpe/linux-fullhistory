@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.115 2000/02/26 04:24:31 davem Exp $
+/*  $Id: setup.c,v 1.116 2000/03/15 23:26:22 anton Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -268,8 +268,6 @@ extern void sun_serial_setup(void);
 extern unsigned short root_flags;
 extern unsigned short root_dev;
 extern unsigned short ram_flags;
-extern unsigned sparc_ramdisk_image;
-extern unsigned sparc_ramdisk_size;
 #define RAMDISK_IMAGE_START_MASK	0x07FF
 #define RAMDISK_PROMPT_FLAG		0x8000
 #define RAMDISK_LOAD_FLAG		0x4000
@@ -382,42 +380,9 @@ void __init setup_arch(char **cmdline_p)
 	rd_prompt = ((ram_flags & RAMDISK_PROMPT_FLAG) != 0);
 	rd_doload = ((ram_flags & RAMDISK_LOAD_FLAG) != 0);	
 #endif
-#ifdef CONFIG_BLK_DEV_INITRD
-// FIXME needs to do the new bootmem alloc stuff
-	if (sparc_ramdisk_image) {
-		initrd_start = sparc_ramdisk_image;
-		if (initrd_start < KERNBASE) initrd_start += KERNBASE;
-		initrd_end = initrd_start + sparc_ramdisk_size;
-		if (initrd_end > *memory_end_p) {
-			printk(KERN_CRIT "initrd extends beyond end of memory "
-		                 	 "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-		       			 initrd_end,*memory_end_p);
-			initrd_start = 0;
-		}
-		if (initrd_start >= *memory_start_p && initrd_start < *memory_start_p + 2 * PAGE_SIZE) {
-			initrd_below_start_ok = 1;
-			*memory_start_p = PAGE_ALIGN (initrd_end);
-		} else if (initrd_start && sparc_ramdisk_image < KERNBASE) {
-			switch (sparc_cpu_model) {
-			case sun4m:
-			case sun4d:
-				initrd_start -= KERNBASE;
-				initrd_end -= KERNBASE;
-				break;
-			default:
-				break;
-			}
-		}
-	}
-#endif	
+
 	prom_setsync(prom_sync_me);
 
-#ifdef CONFIG_SUN_SERIAL
-#if 0
-	/* XXX We can't do this until the bootmem allocator is working. */
-	sun_serial_setup(); /* set this up ASAP */
-#endif
-#endif
 	{
 #if !CONFIG_SUN_SERIAL
 		serial_console = 0;

@@ -253,7 +253,6 @@ fail_iput:
 fail_free:
 	kfree(sbi);
 fail_unlock:
-fail_dec:
 	return NULL;
 }
 

@@ -166,8 +166,6 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/core_mcpcia.h>
 #elif defined(CONFIG_ALPHA_POLARIS)
 # include <asm/core_polaris.h>
-#elif defined(CONFIG_ALPHA_PYXIS)
-# include <asm/core_pyxis.h>
 #elif defined(CONFIG_ALPHA_T2)
 # include <asm/core_t2.h>
 #elif defined(CONFIG_ALPHA_TSUNAMI)

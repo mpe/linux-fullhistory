@@ -34,10 +34,6 @@
 #include "machvec_impl.h"
 
 
-/*
- * HACK ALERT! only the boot cpu is used for interrupts.
- */
-
 /* Note that this interrupt code is identical to TAKARA.  */
 
 /* Note mask bit is true for DISABLED irqs.  */

@@ -6,9 +6,6 @@
 #include <linux/sched.h>
 #include <linux/irq.h>
 
-#include <asm/machvec.h>
-#include <asm/dma.h>
-
 #include "proto.h"
 #include "irq_impl.h"
 

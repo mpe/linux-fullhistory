@@ -68,7 +68,7 @@
 #define UDIDETCR1	0x7B
 #define DTPR1		0x7C
 
-#undef DISPLAY_CMD64X_TIMINGS
+#define DISPLAY_CMD64X_TIMINGS
 
 #if defined(DISPLAY_CMD64X_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
@@ -116,22 +116,22 @@ static int cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
 
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
 	p += sprintf(p, "                %sabled                         %sabled\n",
-			(reg72&0x80) ? "dis" : " en", (reg7a&0x80) ? "dis" : " en");
+		(reg72&0x80) ? "dis" : " en", (reg7a&0x80) ? "dis" : " en");
 	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
 	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
-			(reg72&0x20) ? "yes" : "no ", (reg72&0x40) ? "yes" : "no ", (reg7a&0x20) ? "yes" : "no ", (reg7a&0x40) ? "yes" : "no " );
-	p += sprintf(p, "UDMA enabled:   %s              %s             %s               %s\n",
-			(reg73&0x01) ? "yes" : "no ", (reg73&0x02) ? "yes" : "no ", (reg7b&0x01) ? "yes" : "no ", (reg7b&0x02) ? "yes" : "no " );
-	p += sprintf(p, "UDMA enabled:   %s                %s               %s                 %s\n",
-			(reg73&0x15) ? "4" : (reg73&0x25) ? "3" : (reg73&0x11) ? "2" : (reg73&0x21) ? "1" : (reg73&0x31) ? "0" : "X",
-			(reg73&0x4A) ? "4" : (reg73&0x8A) ? "3" : (reg73&0x42) ? "2" : (reg73&0x82) ? "1" : (reg73&0xC2) ? "0" : "X",
-			(reg7b&0x15) ? "4" : (reg7b&0x25) ? "3" : (reg7b&0x11) ? "2" : (reg7b&0x21) ? "1" : (reg7b&0x31) ? "0" : "X",
-			(reg7b&0x4A) ? "4" : (reg7b&0x8A) ? "3" : (reg7b&0x42) ? "2" : (reg7b&0x82) ? "1" : (reg7b&0xC2) ? "0" : "X" );
-	p += sprintf(p, "DMA enabled:    %s                %s               %s                 %s\n",
-			(reg73&0x10) ? "2" : (reg73&0x20) ? "1" : (reg73&0x30) ? "0" : "X",
-			(reg73&0x40) ? "2" : (reg73&0x80) ? "1" : (reg73&0xC0) ? "0" : "X",
-			(reg7b&0x10) ? "2" : (reg7b&0x20) ? "1" : (reg7b&0x30) ? "0" : "X",
-			(reg7b&0x40) ? "2" : (reg7b&0x80) ? "1" : (reg7b&0xC0) ? "0" : "X" );
+		(reg72&0x20) ? "yes" : "no ", (reg72&0x40) ? "yes" : "no ", (reg7a&0x20) ? "yes" : "no ", (reg7a&0x40) ? "yes" : "no " );
+	p += sprintf(p, "DMA Mode:       %s(%s)          %s(%s)         %s(%s)           %s(%s)\n",
+		(reg72&0x20)?((reg73&0x01)?"UDMA":" DMA"):" PIO",
+		(reg72&0x20)?(((reg73&0x15)==0x15)?"4":((reg73&0x25)==0x25)?"3":((reg73&0x10)==0x10)?"2":((reg73&0x20)==0x20)?"1":((reg73&0x30)==0x30)?"0":"X"):"?",
+		(reg72&0x40)?((reg73&0x02)?"UDMA":" DMA"):" PIO",
+		(reg72&0x40)?(((reg73&0x4A)==0x4A)?"4":((reg73&0x8A)==0x8A)?"3":((reg73&0x40)==0x40)?"2":((reg73&0x80)==0x80)?"1":((reg73&0xC0)==0xC0)?"0":"X"):"?",
+		(reg7a&0x20)?((reg7b&0x01)?"UDMA":" DMA"):" PIO",
+		(reg7a&0x20)?(((reg7b&0x15)==0x15)?"4":((reg7b&0x25)==0x25)?"3":((reg7b&0x10)==0x10)?"2":((reg7b&0x20)==0x20)?"1":((reg7b&0x30)==0x30)?"0":"X"):"?",
+		(reg7a&0x40)?((reg7b&0x02)?"UDMA":" DMA"):" PIO",
+		(reg7a&0x40)?(((reg7b&0x4A)==0x4A)?"4":((reg7b&0x8A)==0x8A)?"3":((reg7b&0x40)==0x40)?"2":((reg7b&0x80)==0x80)?"1":((reg7b&0xC0)==0xC0)?"0":"X"):"?" );
+	p += sprintf(p, "PIO Mode:       %s                %s               %s                 %s\n",
+		"?", "?", "?", "?");
+
 	p += sprintf(p, "PIO\n");
 
 	SPLIT_BYTE(reg53, hi_byte, lo_byte);
@@ -668,9 +668,11 @@ unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 	(void) pci_write_config_byte(dev, DRWTIM3,  0x3f);
 
 #if defined(DISPLAY_CMD64X_TIMINGS) && defined(CONFIG_PROC_FS)
-	cmd64x_proc = 1;
-	bmide_dev = dev;
-	cmd64x_display_info = &cmd64x_get_info;
+	if (!cmd64x_proc) {
+		cmd64x_proc = 1;
+		bmide_dev = dev;
+		cmd64x_display_info = &cmd64x_get_info;
+	}
 #endif /* DISPLAY_CMD64X_TIMINGS && CONFIG_PROC_FS */
 
 	return 0;

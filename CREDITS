@@ -1368,6 +1368,11 @@ E: lam836@cs.cuhk.hk
 D: Author of the dialog utility, foundation
 D: for Menuconfig's lxdialog.
 
+N: Paul Laufer
+E: pelaufer@csupomona.edu
+D: Soundblaster driver fixes, ISAPnP quirk
+S: California, USA
+
 N: Tom Lees
 E: tom@lpsg.demon.co.uk
 W: http://www.lpsg.demon.co.uk/

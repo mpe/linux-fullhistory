@@ -1,12 +1,17 @@
 #ifndef ASMARM_PCI_H
 #define ASMARM_PCI_H
 
+#ifdef __KERNEL__
+
 #define pcibios_assign_all_busses()	0
 
 #define PCIBIOS_MIN_IO		0x8000
 #define PCIBIOS_MIN_MEM		0x40000000
 
-#ifdef __KERNEL__
+extern inline void pcibios_set_master(struct pci_dev *dev)
+{
+	/* No special bus mastering setup handling */
+}
 
 #include <asm/scatterlist.h>
 #include <asm/io.h>

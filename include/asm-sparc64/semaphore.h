@@ -90,7 +90,7 @@ extern __inline__ void down(struct semaphore * sem)
 		ba,pt	%%xcc, 2b
 		 restore %%l3, %%g0, %%g3
 		.previous\n"
-	: : "r" (__atomic_fool_gcc(sem)), "i" (__down)
+	: : "r" (sem), "i" (__down)
 	: "g5", "g7", "memory", "cc");
 }
 
@@ -126,7 +126,7 @@ extern __inline__ int down_interruptible(struct semaphore *sem)
 		 restore %%o0, %%g0, %0
 		.previous\n"
 	: "=r" (ret)
-	: "0" (ret), "r" (__atomic_fool_gcc(sem)), "i" (__down_interruptible)
+	: "0" (ret), "r" (sem), "i" (__down_interruptible)
 	: "g5", "g7", "memory", "cc");
 	return ret;
 }
@@ -162,7 +162,7 @@ extern inline int down_trylock(struct semaphore *sem)
 		 restore %%o0, %%g0, %0
 		.previous\n"
 	: "=r" (ret)
-	: "0" (ret), "r" (__atomic_fool_gcc(sem)), "i" (__down_trylock)
+	: "0" (ret), "r" (sem), "i" (__down_trylock)
 	: "g5", "g7", "memory", "cc");
 	return ret;
 }
@@ -196,7 +196,7 @@ extern __inline__ void up(struct semaphore * sem)
 		ba,pt	%%xcc, 2b
 		 restore %%l3, %%g0, %%g3
 		.previous\n"
-	: : "r" (__atomic_fool_gcc(sem)), "i" (__up)
+	: : "r" (sem), "i" (__up)
 	: "g5", "g7", "memory", "cc");
 }
 
@@ -309,7 +309,7 @@ extern inline void down_read(struct rw_semaphore *sem)
 		ba,pt	%%xcc, 2b
 		 restore %%l3, %%g0, %%g3
 		.previous\n"
-	: : "r" (__atomic_fool_gcc(sem)), "i" (__down_read_failed)
+	: : "r" (sem), "i" (__down_read_failed)
 	: "g5", "g7", "memory", "cc");
 #if WAITQUEUE_DEBUG
 	if (test_le_bit(1, &sem->granted))
@@ -348,7 +348,7 @@ extern inline void down_write(struct rw_semaphore *sem)
 		ba,pt	%%xcc, 2b
 		 restore %%l3, %%g0, %%g3
 		.previous\n"
-	: : "r" (__atomic_fool_gcc(sem)), "i" (__down_write_failed)
+	: : "r" (sem), "i" (__down_write_failed)
 	: "g5", "g7", "memory", "cc");
 #if WAITQUEUE_DEBUG
 	if (atomic_read(&sem->writers))
@@ -394,7 +394,7 @@ extern inline void __up_read(struct rw_semaphore *sem)
 		ba,pt	%%xcc, 2b
 		 restore %%l3, %%g0, %%g3
 		.previous\n"
-	: : "r" (__atomic_fool_gcc(sem)), "i" (__rwsem_wake)
+	: : "r" (sem), "i" (__rwsem_wake)
 	: "g5", "g7", "memory", "cc");
 }
 
@@ -430,7 +430,7 @@ extern inline void __up_write(struct rw_semaphore *sem)
 		ba,pt	%%xcc, 2b
 		 restore %%l3, %%g0, %%g3
 		.previous\n"
-	: : "r" (__atomic_fool_gcc(sem)), "i" (__rwsem_wake)
+	: : "r" (sem), "i" (__rwsem_wake)
 	: "g5", "g7", "memory", "cc");
 }
 

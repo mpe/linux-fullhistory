@@ -126,6 +126,7 @@ if [ "$CONFIG_ALPHA_MIATA" = "y" -o "$CONFIG_ALPHA_LX164" = "y" \
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
+	define_bool CONFIG_ALPHA_CIA y
 	define_bool CONFIG_ALPHA_PYXIS y
 fi
 if [ "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_EIGER" = "y" ]

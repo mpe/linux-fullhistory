@@ -115,7 +115,7 @@ struct file *OpenFileForSecurity(char *Filename)
 
 	
 		
-	filp = filp_open(Filename,00,O_RDONLY);
+	filp = filp_open(Filename, 0, O_RDONLY, NULL);
 	
 	
 	if ((IS_ERR(filp))||(filp==NULL)||(filp->f_dentry==NULL))

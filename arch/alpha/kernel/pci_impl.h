@@ -138,6 +138,7 @@ struct pci_iommu_arena
 	dma_addr_t dma_base;
 	unsigned int size;
 	unsigned int next_entry;
+	unsigned int align_entry;
 };
 
 

@@ -1,6 +1,8 @@
 #ifndef __i386_PCI_H
 #define __i386_PCI_H
 
+#ifdef __KERNEL__
+
 /* Can be used to override the logic in pci_scan_bus for skipping
    already-configured bus numbers - to be used for buggy BIOSes
    or architectures with incomplete PCI setup by the loader */
@@ -10,7 +12,7 @@
 #define PCIBIOS_MIN_IO		0x1000
 #define PCIBIOS_MIN_MEM		0x10000000
 
-#ifdef __KERNEL__
+void pcibios_set_master(struct pci_dev *dev);
 
 /* Dynamic DMA mapping stuff.
  * i386 has everything mapped statically.
@@ -164,4 +166,3 @@ extern inline int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
 #endif /* __KERNEL__ */
 
 #endif /* __i386_PCI_H */
-

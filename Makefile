@@ -380,7 +380,7 @@ mrproper: clean archmrproper
 	rm -rf include/config
 	rm -f .depend `find . -type f -name .depend -print`
 	rm -f core `find . -type f -size 0 -print`
-	rm -f .hdepend scripts/mkdep scripts/split-include
+	rm -f .hdepend scripts/mkdep scripts/split-include scripts/docproc
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
 

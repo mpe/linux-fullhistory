@@ -363,7 +363,7 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 
 	pchip->wsba[3].csr = 0x80000000 | 1;
 	pchip->wsm[3].csr  = (0x40000000 - 1) & 0xfff00000;
-	pchip->tba[3].csr  = 0;
+	pchip->tba[3].csr  = 0x40000000;
 
 	tsunami_pci_tbi(hose, 0, -1);
 }

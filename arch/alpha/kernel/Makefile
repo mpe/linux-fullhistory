@@ -18,7 +18,7 @@ O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o irq_alpha.o \
 OX_OBJS  := alpha_ksyms.o
 
 L_TARGET := rest.a
-L_OBJS	 := irq_i8259.o irq_srm.o \
+L_OBJS	 := irq_i8259.o irq_srm.o irq_pyxis.o \
 	    es1888.o smc37c669.o smc37c93x.o ns87312.o
 
 ifdef CONFIG_SMP
@@ -32,7 +32,7 @@ endif
 ifdef CONFIG_ALPHA_GENERIC
 
 O_OBJS	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
-	    core_polaris.o core_pyxis.o core_t2.o core_tsunami.o \
+	    core_polaris.o core_t2.o core_tsunami.o \
 	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o sys_eiger.o \
 	    sys_jensen.o sys_miata.o sys_mikasa.o sys_nautilus.o \
 	    sys_noritake.o sys_rawhide.o sys_ruffian.o sys_rx164.o \
@@ -55,9 +55,6 @@ O_OBJS   += core_lca.o
 endif
 ifdef CONFIG_ALPHA_MCPCIA
 O_OBJS   += core_mcpcia.o
-endif
-ifdef CONFIG_ALPHA_PYXIS
-O_OBJS   += core_pyxis.o
 endif
 ifdef CONFIG_ALPHA_T2
 O_OBJS   += core_t2.o

@@ -18,7 +18,7 @@ ALL_SUB_DIRS	:= $(SUB_DIRS)
 
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
 		    msnd.o opl3.o sb_common.o sequencer_syms.o \
-		    sound_core.o sound_syms.o uart401.o ad1816.o \
+		    sound_core.o sound_syms.o uart401.o	\
 		    nm256_audio.o ac97.o ac97_codec.o
 
 

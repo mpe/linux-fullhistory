@@ -311,6 +311,8 @@
 #define __NR_setresgid			371
 #define __NR_getresgid			372
 #define __NR_dipc			373
+#define __NR_pivot_root			374
+#define __NR_mincore			375
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

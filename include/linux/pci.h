@@ -293,8 +293,6 @@
 #define PCI_DMA_FROMDEVICE	2
 #define PCI_DMA_NONE		3
 
-#include <asm/pci.h>
-
 #define DEVICE_COUNT_COMPATIBLE	4
 #define DEVICE_COUNT_IRQ	2
 #define DEVICE_COUNT_DMA	2
@@ -542,6 +540,10 @@ void pci_remove_device(struct pci_dev *);
 struct pci_driver *pci_dev_driver(const struct pci_dev *);
 const struct pci_device_id *pci_match_device(const struct pci_device_id *ids, const struct pci_dev *dev);
 
+/* Include architecture-dependent settings and functions */
+
+#include <asm/pci.h>
+
 /*
  *  If the system does not have PCI, clearly these return errors.  Define
  *  these as simple inline functions to avoid hair in drivers.
@@ -580,6 +582,7 @@ extern inline int pci_module_init(struct pci_driver *drv) { return -ENODEV; }
 extern inline int pci_assign_resource(struct pci_dev *dev, int i) { return -EBUSY;}
 extern inline int pci_register_driver(struct pci_driver *drv) { return 0;}
 extern inline void pci_unregister_driver(struct pci_driver *drv) { }
+extern inline int scsi_to_pci_dma_dir(unsigned char scsi_dir) { return scsi_dir; }
 
 #else
 

@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.21 1999/07/30 09:35:35 davem Exp $
+/* $Id: VIScopy.S,v 1.22 2000/03/16 16:44:38 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -304,6 +304,9 @@
 		.type			bcopy,@function
 
 #ifdef __KERNEL__
+		.globl			__memcpy_begin
+__memcpy_begin:
+
 		.globl			__memcpy
 		.type			__memcpy,@function
 
@@ -1001,6 +1004,9 @@ fpu_retl:
 	FPU_RETL
 
 #ifdef __KERNEL__
+	.globl		__memcpy_end
+__memcpy_end:
+
 		.section	.fixup
 		.align		4
 VIScopyfixup_reto2:

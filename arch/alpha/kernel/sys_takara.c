@@ -258,7 +258,7 @@ takara_init_pci(void)
 	if (alpha_using_srm)
 		alpha_mv.pci_map_irq = takara_map_irq_srm;
 
-	common_init_pci();
+	cia_init_pci();
 	ns87312_enable_ide(0x26e);
 }
 

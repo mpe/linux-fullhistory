@@ -258,7 +258,7 @@ struct alpha_machine_vector mikasa_primo_mv __initmv = {
 	init_arch:		cia_init_arch,
 	init_irq:		mikasa_init_irq,
 	init_rtc:		common_init_rtc,
-	init_pci:		common_init_pci,
+	init_pci:		cia_init_pci,
 	pci_map_irq:		mikasa_map_irq,
 	pci_swizzle:		common_swizzle,
 };
