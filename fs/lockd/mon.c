@@ -163,7 +163,7 @@ xdr_encode_mon(struct rpc_rqst *rqstp, u32 *p, struct nsm_args *argp)
 	*p++ = htonl(argp->proc);
 
 	/* This is the private part. Needed only for SM_MON call */
-	if (rqstp->rq_task->tk_proc == SM_MON) {
+	if (rqstp->rq_task->tk_msg.rpc_proc == SM_MON) {
 		*p++ = argp->addr;
 		*p++ = 0;
 		*p++ = 0;

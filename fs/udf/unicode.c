@@ -177,7 +177,8 @@ int udf_CS0toUTF8(struct ustr *utf_o, struct ustr *ocu_i)
 		return 0;
 	}
 
-	for (i = 0; (i < ocu_len) && (utf_o->u_len < UDF_NAME_LEN) ;) {
+	for (i = 0; (i < ocu_len) && (utf_o->u_len <= (UDF_NAME_LEN-3)) ;)
+	{
 
 		/* Expand OSTA compressed Unicode to Unicode */
 		c = ocu[i++];

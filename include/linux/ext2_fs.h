@@ -306,10 +306,7 @@ struct ext2_inode {
 /*
  * Mount flags
  */
-#define EXT2_MOUNT_CHECK_NORMAL		0x0001	/* Do some more checks */
-#define EXT2_MOUNT_CHECK_STRICT		0x0002	/* Do again more checks */
-#define EXT2_MOUNT_CHECK		(EXT2_MOUNT_CHECK_NORMAL | \
-					 EXT2_MOUNT_CHECK_STRICT)
+#define EXT2_MOUNT_CHECK		0x0001	/* Do mount-time checks */
 #define EXT2_MOUNT_GRPID		0x0004	/* Create files with directory's group */
 #define EXT2_MOUNT_DEBUG		0x0008	/* Some debugging messages */
 #define EXT2_MOUNT_ERRORS_CONT		0x0010	/* Continue on errors */

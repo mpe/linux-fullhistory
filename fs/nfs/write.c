@@ -285,6 +285,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 	struct rpc_clnt	*clnt = NFS_CLIENT(inode);
 	struct nfs_wreq *wreq;
 	struct rpc_task	*task;
+	struct rpc_message msg;
 
 	dprintk("NFS:      create_write_request(%s/%s, %ld+%d)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
@@ -298,12 +299,15 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 
 	task = &wreq->wb_task;
 	rpc_init_task(task, clnt, nfs_wback_result, RPC_TASK_NFSWRITE);
-	task->tk_calldata = wreq;
-	task->tk_action = nfs_wback_begin;
-
-	rpcauth_lookupcred(task);	/* Obtain user creds */
+	msg.rpc_proc = NFSPROC_WRITE;
+	msg.rpc_argp = &wreq->wb_args;
+	msg.rpc_resp = &wreq->wb_fattr;
+	msg.rpc_cred = NULL;
+	rpc_call_setup(task, &msg, 0);
 	if (task->tk_status < 0)
 		goto out_req;
+
+	task->tk_calldata = wreq;
 
 	/* Put the task on inode's writeback request list. */
 	get_file(file);
@@ -360,6 +364,7 @@ schedule_write_request(struct nfs_wreq *req, int sync)
 					task->tk_pid);
 		/* Page is already locked */
 		rpc_clnt_sigmask(clnt, &oldmask);
+		nfs_wback_begin(task);
 		rpc_execute(task);
 		rpc_clnt_sigunmask(clnt, &oldmask);
 	} else {
@@ -367,7 +372,7 @@ schedule_write_request(struct nfs_wreq *req, int sync)
 					task->tk_pid);
 		task->tk_flags |= RPC_TASK_ASYNC;
 		task->tk_timeout = NFS_WRITEBACK_DELAY;
-		rpc_sleep_on(&write_queue, task, NULL, NULL);
+		rpc_sleep_on(&write_queue, task, nfs_wback_begin, NULL);
 	}
 
 	return sync;
@@ -640,8 +645,6 @@ nfs_wback_begin(struct rpc_task *task)
 	req->wb_args.offset = (page->index << PAGE_CACHE_SHIFT) + req->wb_offset;
 	req->wb_args.count  = req->wb_bytes;
 	req->wb_args.buffer = (void *) (page_address(page) + req->wb_offset);
-
-	rpc_call_setup(task, NFSPROC_WRITE, &req->wb_args, &req->wb_fattr, 0);
 
 	return;
 }

@@ -300,21 +300,20 @@ do_more:
 	if (!gdp)
 		goto error_return;
 
-	if (test_opt (sb, CHECK_STRICT) &&
-	    (in_range (le32_to_cpu(gdp->bg_block_bitmap), block, count) ||
-	     in_range (le32_to_cpu(gdp->bg_inode_bitmap), block, count) ||
-	     in_range (block, le32_to_cpu(gdp->bg_inode_table),
-		       sb->u.ext2_sb.s_itb_per_group) ||
-	     in_range (block + count - 1, le32_to_cpu(gdp->bg_inode_table),
-		       sb->u.ext2_sb.s_itb_per_group)))
-		ext2_panic (sb, "ext2_free_blocks",
+	if (in_range (le32_to_cpu(gdp->bg_block_bitmap), block, count) ||
+	    in_range (le32_to_cpu(gdp->bg_inode_bitmap), block, count) ||
+	    in_range (block, le32_to_cpu(gdp->bg_inode_table),
+		      sb->u.ext2_sb.s_itb_per_group) ||
+	    in_range (block + count - 1, le32_to_cpu(gdp->bg_inode_table),
+		      sb->u.ext2_sb.s_itb_per_group))
+		ext2_error (sb, "ext2_free_blocks",
 			    "Freeing blocks in system zones - "
 			    "Block = %lu, count = %lu",
 			    block, count);
 
 	for (i = 0; i < count; i++) {
 		if (!ext2_clear_bit (bit + i, bh->b_data))
-			ext2_warning (sb, "ext2_free_blocks",
+			ext2_error (sb, "ext2_free_blocks",
 				      "bit already cleared for block %lu", 
 				      block);
 		else {
@@ -527,11 +526,11 @@ got_block:
 
 	tmp = j + i * EXT2_BLOCKS_PER_GROUP(sb) + le32_to_cpu(es->s_first_data_block);
 
-	if (test_opt (sb, CHECK_STRICT) &&
-	    (tmp == le32_to_cpu(gdp->bg_block_bitmap) ||
-	     tmp == le32_to_cpu(gdp->bg_inode_bitmap) ||
-	     in_range (tmp, le32_to_cpu(gdp->bg_inode_table), sb->u.ext2_sb.s_itb_per_group)))
-		ext2_panic (sb, "ext2_new_block",
+	if (tmp == le32_to_cpu(gdp->bg_block_bitmap) ||
+	    tmp == le32_to_cpu(gdp->bg_inode_bitmap) ||
+	    in_range (tmp, le32_to_cpu(gdp->bg_inode_table),
+		      sb->u.ext2_sb.s_itb_per_group))
+		ext2_error (sb, "ext2_new_block",
 			    "Allocating block in system zone - "
 			    "block = %u", tmp);
 
@@ -679,6 +678,7 @@ int ext2_group_sparse(int group)
 		test_root(group, 7));
 }
 
+#ifdef CONFIG_EXT2_CHECK
 /* Called at mount-time, super-block is locked */
 void ext2_check_blocks_bitmap (struct super_block * sb)
 {
@@ -753,3 +753,4 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 			    "stored = %lu, counted = %lu",
 			    (unsigned long) le32_to_cpu(es->s_free_blocks_count), bitmap_count);
 }
+#endif

@@ -908,13 +908,10 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 		}
 		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI))
 		{
-			extern int sbmixnum;
-			
 			if (devc->irq > 0)
 				free_irq(devc->irq, devc);
 
-			sound_unload_mixerdev(devc->my_mixerdev);
-			sbmixnum--;
+			sb_mixer_unload(devc);
 			/* We don't have to do this bit any more the UART401 is its own
 				master  -- Krzysztof Halasa */
 			/* But we have to do it, if UART401 is not detected */

@@ -1,4 +1,4 @@
-/* netdrv_init.c: Initialization for network devices. */
+/* net_init.c: Initialization for network devices. */
 /*
 	Written 1993,1994,1995 by Donald Becker.
 
@@ -27,6 +27,8 @@
 	08/11/99 - Alan Cox: Got fed up of the mess in this file and cleaned it
 			up. We now share common code and have regularised name
 			allocation setups. Abolished the 16 card limits.
+	03/19/2000 - jgarzik and Urban Widmark: init_etherdev 32-byte align
+
 */
 
 #include <linux/config.h>
@@ -139,14 +141,22 @@ static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, c
 	return dev;
 }
 
-/* Fill in the fields of the device structure with ethernet-generic values.
-
-   If no device structure is passed, a new one is constructed, complete with
-   a SIZEOF_PRIVATE private data area.
-
-   If an empty string area is passed as dev->name, or a new structure is made,
-   a new name string is constructed.  The passed string area should be 8 bytes
-   long.
+/**
+ * init_etherdev - Register ethernet device
+ * @dev: An ethernet device structure to be filled in, or %NULL if a new
+ *	struct should be allocated.
+ * @sizeof_priv: Size of additional driver-private structure to be allocated
+ *	for this ethernet device
+ *
+ * Fill in the fields of the device structure with ethernet-generic values.
+ *
+ * If no device structure is passed, a new one is constructed, complete with
+ * a private data area of size @sizeof_priv.  A 32-byte (not bit)
+ * alignment is enforced for this private data area.
+ *
+ * If an empty string area is passed as dev->name, or a new structure is made,
+ * a new name string is constructed.  The passed string area should be 8 bytes
+ * long.
  */
 
 struct net_device *init_etherdev(struct net_device *dev, int sizeof_priv)

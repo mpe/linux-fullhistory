@@ -41,6 +41,7 @@ rpc_getport(struct rpc_task *task, struct rpc_clnt *clnt)
 {
 	struct rpc_portmap *map = &clnt->cl_pmap;
 	struct sockaddr_in *sap = &clnt->cl_xprt->addr;
+	struct rpc_message msg = { PMAP_GETPORT, map, &clnt->cl_port, NULL };
 	struct rpc_clnt	*pmap_clnt;
 	struct rpc_task	*child;
 
@@ -66,7 +67,7 @@ rpc_getport(struct rpc_task *task, struct rpc_clnt *clnt)
 		goto bailout;
 
 	/* Setup the call info struct */
-	rpc_call_setup(child, PMAP_GETPORT, map, &clnt->cl_port, 0);
+	rpc_call_setup(child, &msg, 0);
 
 	/* ... and run the child task */
 	rpc_run_child(task, child, pmap_getport_done);

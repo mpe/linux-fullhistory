@@ -60,6 +60,7 @@
 /*
  * Function prototypes (all other prototypes included in udfdecl.h)
  */
+extern int init_udf_fs(void);
 
 #endif /* __KERNEL__ */
 

@@ -236,7 +236,7 @@ void ext2_free_inode (struct inode * inode)
 
 	/* Ok, now we can actually update the inode bitmaps.. */
 	if (!ext2_clear_bit (bit, bh->b_data))
-		ext2_warning (sb, "ext2_free_inode",
+		ext2_error (sb, "ext2_free_inode",
 			      "bit already cleared for inode %lu", ino);
 	else {
 		gdp = ext2_get_group_desc (sb, block_group, &bh2);
@@ -401,7 +401,7 @@ repeat:
 				      EXT2_INODES_PER_GROUP(sb))) <
 	    EXT2_INODES_PER_GROUP(sb)) {
 		if (ext2_set_bit (j, bh->b_data)) {
-			ext2_warning (sb, "ext2_new_inode",
+			ext2_error (sb, "ext2_new_inode",
 				      "bit already set for inode %d", j);
 			goto repeat;
 		}
@@ -527,6 +527,7 @@ unsigned long ext2_count_free_inodes (struct super_block * sb)
 #endif
 }
 
+#ifdef CONFIG_EXT2_CHECK
 /* Called at mount-time, super-block is locked */
 void ext2_check_inodes_bitmap (struct super_block * sb)
 {
@@ -565,3 +566,4 @@ void ext2_check_inodes_bitmap (struct super_block * sb)
 			    (unsigned long) le32_to_cpu(es->s_free_inodes_count),
 			    bitmap_count);
 }
+#endif

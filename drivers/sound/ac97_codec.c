@@ -25,7 +25,7 @@
  * v0.3 Feb 22 2000 Ollie Lho
  *	bug fix for record mask setting
  * v0.2 Feb 10 2000 Ollie Lho
- *	add ac97_read_proc for /proc/driver/vnedor/ac97
+ *	add ac97_read_proc for /proc/driver/{vendor}/ac97
  * v0.1 Jan 14 2000 Ollie Lho <ollie@sis.com.tw> 
  *	Isolated from trident.c to support multiple ac97 codec
  */

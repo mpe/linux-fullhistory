@@ -398,6 +398,7 @@ mrproper: clean archmrproper
 	rm -f .hdepend scripts/mkdep scripts/split-include scripts/docproc
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
+	rm -f Documentation/DocBook/*.sgml
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \

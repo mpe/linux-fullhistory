@@ -85,14 +85,14 @@ found_middle:
 #define find_first_one_bit(addr, size)\
 	find_next_one_bit((addr), (size), 0)
 
-static int read_block_bitmap(struct super_block * sb, unsigned int block,
-	unsigned long bitmap_nr)
+static int read_block_bitmap(struct super_block * sb, Uint32 bitmap,
+	unsigned int block, unsigned long bitmap_nr)
 {
 	struct buffer_head *bh = NULL;
 	int retval = 0;
 	lb_addr loc;
 
-	loc.logicalBlockNum = UDF_SB_PARTMAPS(sb)[UDF_SB_PARTITION(sb)].s_uspace_bitmap;
+	loc.logicalBlockNum = bitmap;
 	loc.partitionReferenceNum = UDF_SB_PARTITION(sb);
 
 	bh = udf_tread(sb, udf_get_lb_pblock(sb, loc, block), sb->s_blocksize);
@@ -105,7 +105,8 @@ static int read_block_bitmap(struct super_block * sb, unsigned int block,
 	return retval;
 }
 
-static int __load_block_bitmap(struct super_block * sb, unsigned int block_group)
+static int __load_block_bitmap(struct super_block * sb, Uint32 bitmap,
+	unsigned int block_group)
 {
 	int i, j, retval = 0;
 	unsigned long block_bitmap_number;
@@ -125,7 +126,7 @@ static int __load_block_bitmap(struct super_block * sb, unsigned int block_group
 			if (UDF_SB_BLOCK_BITMAP_NUMBER(sb, block_group) == block_group)
 				return block_group;
 		}
-		retval = read_block_bitmap(sb, block_group, block_group);
+		retval = read_block_bitmap(sb, bitmap, block_group, block_group);
 		if (retval < 0)
 			return retval;
 		return block_group;
@@ -150,7 +151,7 @@ static int __load_block_bitmap(struct super_block * sb, unsigned int block_group
 		UDF_SB_BLOCK_BITMAP(sb, 0) = block_bitmap;
 
 		if (!block_bitmap)
-			retval = read_block_bitmap(sb, block_group, 0);
+			retval = read_block_bitmap(sb, bitmap, block_group, 0);
 	}
 	else
 	{
@@ -163,12 +164,12 @@ static int __load_block_bitmap(struct super_block * sb, unsigned int block_group
 			UDF_SB_BLOCK_BITMAP_NUMBER(sb, j) = UDF_SB_BLOCK_BITMAP_NUMBER(sb, j-1);
 			UDF_SB_BLOCK_BITMAP(sb, j) = UDF_SB_BLOCK_BITMAP(sb, j-1);
 		}
-		retval = read_block_bitmap(sb, block_group, 0);
+		retval = read_block_bitmap(sb, bitmap, block_group, 0);
 	}
 	return retval;
 }
 
-static inline int load_block_bitmap(struct super_block *sb,
+static inline int load_block_bitmap(struct super_block *sb, Uint32 bitmap,
 	unsigned int block_group)
 {
 	int slot;
@@ -189,7 +190,7 @@ static inline int load_block_bitmap(struct super_block *sb,
 	}
 	else
 	{
-		slot = __load_block_bitmap(sb, block_group);
+		slot = __load_block_bitmap(sb, bitmap, block_group);
 	}
 
 	if (slot < 0)
@@ -201,8 +202,8 @@ static inline int load_block_bitmap(struct super_block *sb,
 	return slot;
 }
 
-void udf_free_blocks(const struct inode * inode, lb_addr bloc, Uint32 offset,
-	Uint32 count)
+static void udf_bitmap_free_blocks(const struct inode * inode, Uint32 bitmap,
+	lb_addr bloc, Uint32 offset, Uint32 count)
 {
 	struct buffer_head * bh = NULL;
 	unsigned long block;
@@ -219,9 +220,6 @@ void udf_free_blocks(const struct inode * inode, lb_addr bloc, Uint32 offset,
 		udf_debug("nonexistent device");
 		return;
 	}
-
-	if (UDF_SB_PARTMAPS(sb)[bloc.partitionReferenceNum].s_uspace_bitmap == 0xFFFFFFFF)
-		return;
 
 	lock_super(sb);
 	if (bloc.logicalBlockNum < 0 ||
@@ -248,7 +246,7 @@ do_more:
 		overflow = bit + count - (sb->s_blocksize << 3);
 		count -= overflow;
 	}
-	bitmap_nr = load_block_bitmap(sb, block_group);
+	bitmap_nr = load_block_bitmap(sb, bitmap, block_group);
 	if (bitmap_nr < 0)
 		goto error_return;
 
@@ -285,8 +283,8 @@ error_return:
 	return;
 }
 
-int udf_prealloc_blocks(const struct inode * inode, Uint16 partition,
-	Uint32 first_block, Uint32 block_count)
+static int udf_bitmap_prealloc_blocks(const struct inode * inode, Uint32 bitmap,
+	Uint16 partition, Uint32 first_block, Uint32 block_count)
 {
 	int alloc_count = 0;
 	int bit, block, block_group, group_start;
@@ -312,7 +310,7 @@ repeat:
 	block_group = block >> (sb->s_blocksize_bits + 3);
 	group_start = block_group ? 0 : sizeof(struct SpaceBitmapDesc);
 
-	bitmap_nr = load_block_bitmap(sb, block_group);
+	bitmap_nr = load_block_bitmap(sb, bitmap, block_group);
 	if (bitmap_nr < 0)
 		goto out;
 	bh = UDF_SB_BLOCK_BITMAP(sb, bitmap_nr);
@@ -351,7 +349,8 @@ out:
 	return alloc_count;
 }
 
-int udf_new_block(const struct inode * inode, Uint16 partition, Uint32 goal, int *err)
+static int udf_bitmap_new_block(const struct inode * inode, Uint32 bitmap,
+	Uint16 partition, Uint32 goal, int *err)
 {
 	int tmp, newbit, bit=0, block, block_group, group_start;
 	int end_goal, nr_groups, bitmap_nr, i;
@@ -379,7 +378,7 @@ repeat:
 	block_group = block >> (sb->s_blocksize_bits + 3);
 	group_start = block_group ? 0 : sizeof(struct SpaceBitmapDesc);
 
-	bitmap_nr = load_block_bitmap(sb, block_group);
+	bitmap_nr = load_block_bitmap(sb, bitmap, block_group);
 	if (bitmap_nr < 0)
 		goto error_return;
 	bh = UDF_SB_BLOCK_BITMAP(sb, bitmap_nr);
@@ -419,7 +418,7 @@ repeat:
 			block_group = 0;
 		group_start = block_group ? 0 : sizeof(struct SpaceBitmapDesc);
 
-		bitmap_nr = load_block_bitmap(sb, block_group);
+		bitmap_nr = load_block_bitmap(sb, bitmap, block_group);
 		if (bitmap_nr < 0)
 			goto error_return;
 		bh = UDF_SB_BLOCK_BITMAP(sb, bitmap_nr);
@@ -497,3 +496,64 @@ error_return:
 	unlock_super(sb);
 	return 0;
 }
+
+inline void udf_free_blocks(const struct inode * inode, lb_addr bloc,
+    Uint32 offset, Uint32 count)
+{
+	if (UDF_SB_PARTFLAGS(inode->i_sb, bloc.partitionReferenceNum) & UDF_PART_FLAG_UNALLOC_BITMAP)
+	{
+		return udf_bitmap_free_blocks(inode,
+			UDF_SB_PARTMAPS(inode->i_sb)[bloc.partitionReferenceNum].s_uspace.bitmap,
+			bloc, offset, count);
+	}
+	else if (UDF_SB_PARTFLAGS(inode->i_sb, bloc.partitionReferenceNum) & UDF_PART_FLAG_FREED_BITMAP)
+	{
+		return udf_bitmap_free_blocks(inode,
+			UDF_SB_PARTMAPS(inode->i_sb)[bloc.partitionReferenceNum].s_fspace.bitmap,
+			bloc, offset, count);
+	}
+	else
+		return;
+}
+
+inline int udf_prealloc_blocks(const struct inode * inode, Uint16 partition,
+	Uint32 first_block, Uint32 block_count)
+{
+	if (UDF_SB_PARTFLAGS(inode->i_sb, partition) & UDF_PART_FLAG_UNALLOC_BITMAP)
+	{
+		return udf_bitmap_prealloc_blocks(inode,
+			UDF_SB_PARTMAPS(inode->i_sb)[partition].s_uspace.bitmap,
+			partition, first_block, block_count);
+	}
+	else if (UDF_SB_PARTFLAGS(inode->i_sb, partition) & UDF_PART_FLAG_FREED_BITMAP)
+	{
+		return udf_bitmap_prealloc_blocks(inode,
+			UDF_SB_PARTMAPS(inode->i_sb)[partition].s_fspace.bitmap,
+			partition, first_block, block_count);
+	}
+	else
+		return 0;
+}
+
+inline int udf_new_block(const struct inode * inode, Uint16 partition,
+	Uint32 goal, int *err)
+{
+	if (UDF_SB_PARTFLAGS(inode->i_sb, partition) & UDF_PART_FLAG_UNALLOC_BITMAP)
+	{
+		return udf_bitmap_new_block(inode,
+			UDF_SB_PARTMAPS(inode->i_sb)[partition].s_uspace.bitmap,
+			partition, goal, err);
+	}
+	else if (UDF_SB_PARTFLAGS(inode->i_sb, partition) & UDF_PART_FLAG_FREED_BITMAP)
+	{
+		return udf_bitmap_new_block(inode,
+			UDF_SB_PARTMAPS(inode->i_sb)[partition].s_fspace.bitmap,
+			partition, goal, err);
+	}
+	else
+	{
+		*err = -EIO;
+		return 0;
+	}
+}
+

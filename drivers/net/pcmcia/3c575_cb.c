@@ -12,10 +12,16 @@
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+	Linux Kernel Additions:
+	
+	LK1.1.2 (March 19, 2000)
+	* New PCI interface (jgarzik)
+
 */
 
 static char *version =
-"3c59x.c:v0.99L 5/28/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c575_cb.c:v0.99L+LK1.1.2  3/19/2000  Donald Becker and others  http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -64,6 +70,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
@@ -85,9 +92,6 @@ MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(max_interrupt_work, "i");
-MODULE_PARM(compaq_ioaddr, "i");
-MODULE_PARM(compaq_irq, "i");
-MODULE_PARM(compaq_device_id, "i");
 
 /* Operational parameter that usually are not changed. */
 
@@ -102,6 +106,10 @@ MODULE_PARM(compaq_device_id, "i");
    This only set with the original DP83840 on older 3c905 boards, so the extra
    code size of a per-interface flag is not worthwhile. */
 static char mii_preamble_required = 0;
+
+#define PFX "3c575_cb: "
+
+
 
 /*
 				Theory of Operation
@@ -186,76 +194,134 @@ enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
 	PCI_ADDR0=0x10<<0, PCI_ADDR1=0x10<<1, PCI_ADDR2=0x10<<2, PCI_ADDR3=0x10<<3,
 };
-struct pci_id_info {
-	const char *name;
-	u16	vendor_id, device_id, device_id_mask, flags;
-	int drv_flags, io_size;
-	struct net_device *(*probe1)(struct pci_dev *pdev, struct net_device *dev,
-				     long ioaddr, int irq, int chip_idx, int fnd_cnt);
-};
 
 enum { IS_VORTEX=1, IS_BOOMERANG=2, IS_CYCLONE=4,
 	   HAS_PWR_CTRL=0x10, HAS_MII=0x20, HAS_NWAY=0x40, HAS_CB_FNS=0x80, };
-static struct net_device *vortex_probe1(struct pci_dev *pdev,
-					struct net_device *dev, long ioaddr,
-					int irq, int dev_id, int card_idx);
-static struct pci_id_info pci_tbl[] = {
-	{"3c590 Vortex 10Mbps",			0x10B7, 0x5900, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
-	{"3c595 Vortex 100baseTx",		0x10B7, 0x5950, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
-	{"3c595 Vortex 100baseT4",		0x10B7, 0x5951, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
-	{"3c595 Vortex 100base-MII",	0x10B7, 0x5952, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
-	{"3Com Vortex",					0x10B7, 0x5900, 0xff00,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
-	{"3c900 Boomerang 10baseT",		0x10B7, 0x9000, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
-	{"3c900 Boomerang 10Mbps Combo", 0x10B7, 0x9001, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
-	{"3c900 Cyclone 10Mbps Combo", 0x10B7, 0x9005, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3c900B-FL Cyclone 10base-FL",	0x10B7, 0x900A, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3c905 Boomerang 100baseTx",	0x10B7, 0x9050, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
-	{"3c905 Boomerang 100baseT4",	0x10B7, 0x9051, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
-	{"3c905B Cyclone 100baseTx",	0x10B7, 0x9055, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, vortex_probe1},
-	{"3c905B Cyclone 10/100/BNC",	0x10B7, 0x9058, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, vortex_probe1},
-	{"3c905B-FX Cyclone 100baseFx",	0x10B7, 0x905A, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3c905C Tornado",	0x10B7, 0x9200, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3c980 Cyclone",	0x10B7, 0x9800, 0xfff0,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3cSOHO100-TX Hurricane",	0x10B7, 0x7646, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3c555 Laptop Hurricane",	0x10B7, 0x5055, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
-	{"3c575 Boomerang CardBus",		0x10B7, 0x5057, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
-	{"3CCFE575 Cyclone CardBus",	0x10B7, 0x5157, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS,
-	 128, vortex_probe1},
-	{"3CCFE575CT Cyclone CardBus",	0x10B7, 0x5257, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS,
-	 128, vortex_probe1},
-	{"3CCFE656 Cyclone CardBus",	0x10B7, 0x6560, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS,
-	 128, vortex_probe1},
-	{"3CCFEM656 Cyclone CardBus",	0x10B7, 0x6562, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS,
-	 128, vortex_probe1},
-	{"3c575 series CardBus (unknown version)", 0x10B7, 0x5057, 0xf0ff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
-	{"3Com Boomerang (unknown version)",	0x10B7, 0x9000, 0xff00,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
+
+
+enum vortex_chips {
+	CH_3C590 = 0,
+	CH_3C595_1,
+	CH_3C595_2,
+	CH_3C595_3,
+	CH_VORTEX,
+	CH_3C900_1,
+	CH_3C900_2,
+	CH_3C900_3,
+	CH_3C900B_FL,
+	CH_3C905_1,
+	CH_3C905_2,
+	CH_3C905B_1,
+	CH_3C905B_2,
+	CH_3C905B_FX,
+	CH_3C905C,
+	CH_3C980,
+	CH_3CSOHO100_TX,
+	CH_3C555,
+	CH_3C575_1,
+	CH_3CCFE575,
+	CH_3CCFE575CT,
+	CH_3CCFE656,
+	CH_3CCFEM656,
+	CH_3C575_2,
+	CH_BOOMERANG,
+};
+
+
+/* note: this array directly indexed by above enums, and MUST
+ * be kept in sync with both the enums above, and the PCI device
+ * table below
+ */
+static struct vortex_chip_info {
+	const char *name;
+	int flags;
+	int drv_flags;
+	int io_size;
+} vortex_info_tbl[] = {
+	{"3c590 Vortex 10Mbps",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, },
+	{"3c595 Vortex 100baseTx",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, },
+	{"3c595 Vortex 100baseT4",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, },
+	{"3c595 Vortex 100base-MII",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, },
+	{"3Com Vortex",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, },
+	{"3c900 Boomerang 10baseT",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, },
+	{"3c900 Boomerang 10Mbps Combo",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, },
+	{"3c900 Cyclone 10Mbps Combo",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3c900B-FL Cyclone 10base-FL",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3c905 Boomerang 100baseTx",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, },
+	{"3c905 Boomerang 100baseT4",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, },
+	{"3c905B Cyclone 100baseTx",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, },
+	{"3c905B Cyclone 10/100/BNC",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, },
+	{"3c905B-FX Cyclone 100baseFx",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3c905C Tornado",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3c980 Cyclone",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3cSOHO100-TX Hurricane",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3c555 Laptop Hurricane",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, },
+	{"3c575 Boomerang CardBus",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, },
+	{"3CCFE575 Cyclone CardBus",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS, 128, },
+	{"3CCFE575CT Cyclone CardBus",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS, 128, },
+	{"3CCFE656 Cyclone CardBus",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS, 128, },
+	{"3CCFEM656 Cyclone CardBus",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS, 128, },
+	{"3c575 series CardBus (unknown version)",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, },
+	{"3Com Boomerang (unknown version)",
+	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, },
+	{0,}, /* 0 terminated list. */
+};
+
+
+static struct pci_device_id vortex_pci_tbl[] __devinit = {
+	{ 0x10B7, 0x5900, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C590 },
+	{ 0x10B7, 0x5950, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C595_1 },
+	{ 0x10B7, 0x5951, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C595_2 },
+	{ 0x10B7, 0x5952, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C595_3 },
+	{ 0x10B7, 0x5900, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_VORTEX },
+	{ 0x10B7, 0x9000, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C900_1 },
+	{ 0x10B7, 0x9001, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C900_2 },
+	{ 0x10B7, 0x9005, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C900_3 },
+	{ 0x10B7, 0x900A, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C900B_FL },
+	{ 0x10B7, 0x9050, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C905_1 },
+	{ 0x10B7, 0x9051, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C905_2 },
+	{ 0x10B7, 0x9055, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C905B_1 },
+	{ 0x10B7, 0x9058, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C905B_2 },
+	{ 0x10B7, 0x905A, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C905B_FX },
+	{ 0x10B7, 0x9200, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C905C },
+	{ 0x10B7, 0x9800, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C980 },
+	{ 0x10B7, 0x7646, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3CSOHO100_TX },
+	{ 0x10B7, 0x5055, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C555 },
+	{ 0x10B7, 0x5057, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C575_1 },
+	{ 0x10B7, 0x5157, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3CCFE575 },
+	{ 0x10B7, 0x5257, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3CCFE575CT },
+	{ 0x10B7, 0x6560, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3CCFE656 },
+	{ 0x10B7, 0x6562, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3CCFEM656 },
+	{ 0x10B7, 0x5057, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_3C575_2 },
+	{ 0x10B7, 0x9000, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_BOOMERANG },
 	{0,},						/* 0 terminated list. */
 };
+MODULE_DEVICE_TABLE(pci, vortex_pci_tbl);
+
 
 /* Operational definitions.
    These are not used by other compilation units and thus are not
@@ -400,7 +466,7 @@ struct vortex_private {
 	/* The addresses of transmit- and receive-in-place skbuffs. */
 	struct sk_buff* rx_skbuff[RX_RING_SIZE];
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
-	struct net_device *next_module;
+	struct net_device *next_module;		/* NULL if PCI device */
 	void *priv_addr;
 	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
@@ -463,9 +529,8 @@ static struct media_table {
   { "Default",	 0,			0xFF, XCVR_10baseT, 10000},
 };
 
-#ifndef CARDBUS
-static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[]);
-#endif
+static int vortex_probe1(struct pci_dev *pdev, long ioaddr, int irq,
+				   int chip_idx, int card_idx);
 static void vortex_up(struct net_device *dev);
 static void vortex_down(struct net_device *dev);
 static int vortex_open(struct net_device *dev);
@@ -484,7 +549,6 @@ static struct net_device_stats *vortex_get_stats(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
 static int vortex_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static void vortex_tx_timeout(struct net_device *dev);
-static void acpi_wake(struct pci_dev *pdev);
 static void acpi_set_WOL(struct net_device *dev);
 
 /* This driver uses 'options' to pass the media type, full-duplex flag, etc. */
@@ -492,279 +556,180 @@ static void acpi_set_WOL(struct net_device *dev);
 #define MAX_UNITS 8
 static int options[MAX_UNITS] = { -1, -1, -1, -1, -1, -1, -1, -1,};
 static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
-/* A list of all installed Vortex devices, for removing the driver module. */
-static struct net_device *root_vortex_dev = NULL;
 
-#ifdef MODULE
-#ifndef CARDBUS
-/* Variables to work-around the Compaq PCI BIOS32 problem. */
-static int compaq_ioaddr = 0, compaq_irq = 0, compaq_device_id = 0x5900;
-#endif
 
-#ifdef CARDBUS
+/* A list of all installed Vortex EISA devices, for removing the driver module. */
+static struct net_device *root_vortex_eisa_dev = NULL;
 
-#include <pcmcia/driver_ops.h>
+static int vortex_cards_found = 0;
 
-static void vortex_reap(void)
+
+
+
+static void vortex_suspend (struct pci_dev *pdev)
 {
-	struct net_device **devp, **next;
-	printk(KERN_DEBUG "vortex_reap()\n");
-	for (devp = &root_vortex_dev; *devp; devp = next) {
-		struct vortex_private *vp = (*devp)->priv;
-		next = &vp->next_module;
-		if (vp->open || !vp->reap) continue;
-		unregister_netdev(*devp);
-		if (vp->cb_fn_base) iounmap(vp->cb_fn_base);
-		kfree(*devp);
-		kfree(vp->priv_addr);
-		*devp = *next; next = devp;
-	}
-}
+	struct net_device *dev = pdev->driver_data;
 
-static dev_node_t *vortex_attach(dev_locator_t *loc)
-{
-	u16 dev_id, vendor_id;
-	u32 io;
-	u8 irq;
-	struct net_device *dev;
-	int chip_idx;
-	struct pci_dev *pdev;
+	printk(KERN_DEBUG "vortex_suspend(%s)\n", dev->name);
 
-	vortex_reap();
-	if (loc->bus != LOC_PCI) return NULL;
-	pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
-	if (!pdev) return NULL;
-	io = pci_resource_start (pdev, 0);
-	irq = pdev->irq;
-	vendor_id = pdev->vendor;
-	dev_id = pdev->device;
-	printk(KERN_INFO "vortex_attach(bus %d, function %d, device %4.4x)\n",
-		   pdev->bus->number, pdev->devfn, dev_id);
-	if (io == 0 || irq == 0) {
-		printk(KERN_ERR "The 3Com CardBus Ethernet interface was not "
-			   "assigned an %s.\n" KERN_ERR "  It will not be activated.\n",
-			   io == 0 ? "I/O address" : "IRQ");
-		return NULL;
-	}
-	for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
-		if (vendor_id == pci_tbl[chip_idx].vendor_id
-			&& (dev_id & pci_tbl[chip_idx].device_id_mask) ==
-			pci_tbl[chip_idx].device_id)
-			break;
-	if (pci_tbl[chip_idx].vendor_id == 0) { 		/* Compiled out! */
-		printk(KERN_INFO "Unable to match chip type %4.4x %4.4x in "
-			   "vortex_attach().\n", vendor_id, dev_id);
-		return NULL;
-	}
-	dev = vortex_probe1(pdev, NULL, io, irq, chip_idx, MAX_UNITS+1);
-	if (dev) {
-		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
-		strcpy(node->dev_name, dev->name);
-		node->major = node->minor = 0;
-		node->next = NULL;
-		MOD_INC_USE_COUNT;
-		return node;
-	}
-	return NULL;
-}
-
-static void vortex_detach(dev_node_t *node)
-{
-	struct net_device *dev, *next;
-	printk(KERN_DEBUG "vortex_detach(%s)\n", node->dev_name);
-	for (dev = root_vortex_dev; dev; dev = next) {
-		next = ((struct vortex_private *)dev->priv)->next_module;
-		if (strcmp(dev->name, node->dev_name) == 0) break;
-	}
-	if (dev && dev->priv) {
-		struct vortex_private *vp = dev->priv;
-		if (vp->open) vortex_down(dev);
-		vp->reap = 1;
-		kfree(node);
-		MOD_DEC_USE_COUNT;
-	}
-}
-
-static void vortex_suspend(dev_node_t *node)
-{
-	struct net_device *dev, *next;
-	printk(KERN_DEBUG "vortex_suspend(%s)\n", node->dev_name);
-	for (dev = root_vortex_dev; dev; dev = next) {
-		next = ((struct vortex_private *)dev->priv)->next_module;
-		if (strcmp(dev->name, node->dev_name) == 0) break;
-	}
 	if (dev && dev->priv) {
 		struct vortex_private *vp = (struct vortex_private *)dev->priv;
-		if (vp->open) vortex_down(dev);
-	}
-}
-
-static void vortex_resume(dev_node_t *node)
-{
-	struct net_device *dev, *next;
-	printk(KERN_DEBUG "vortex_resume(%s)\n", node->dev_name);
-	for (dev = root_vortex_dev; dev; dev = next) {
-		next = ((struct vortex_private *)dev->priv)->next_module;
-		if (strcmp(dev->name, node->dev_name) == 0) break;
-	}
-	if (dev && dev->priv) {
-		struct vortex_private *vp = (struct vortex_private *)dev->priv;
-		if (vp->open) vortex_up(dev);
-	}
-}
-
-struct driver_operations vortex_ops = {
-	"3c575_cb", vortex_attach, vortex_suspend, vortex_resume, vortex_detach
-};
-
-#endif  /* Cardbus support */
-
-int init_module(void)
-{
-	if (vortex_debug)
-		printk(KERN_INFO "%s", version);
-#ifdef CARDBUS
-	register_driver(&vortex_ops);
-	return 0;
-#else
-	return vortex_scan(0, pci_tbl);
-#endif
-}
-
-#else
-int tc59x_probe(struct net_device *dev)
-{
-	static int did_version = -1;
-	if (++did_version <= 0)
-		printk(KERN_INFO "%s", version);
-	return vortex_scan(dev, pci_tbl);
-}
-#endif  /* not MODULE */
-
-#ifndef CARDBUS
-static int vortex_scan(struct net_device *dev, struct pci_id_info pci_tbl[])
-{
-	int cards_found = 0;
-
-	/* Allow an EISA-only driver. */
-				struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-				ioaddr = pdev->base_address[0] & ~3;
-				irq = pdev->irq;
-			}
-
-			if (ioaddr == 0) {
-				printk(KERN_WARNING "  A 3Com network adapter has been found, "
-					   "however it has not been assigned an I/O address.\n"
-					   "  You may need to power-cycle the machine for this "
-					   "device to work!\n");
-				continue;
-			}
-
-			/* Activate the card. */
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_COMMAND, &pci_command);
-			new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
-			if (pci_command != new_command) {
-				printk(KERN_INFO "  The PCI BIOS has not enabled the device "
-					   "at %d/%d. Updating PCI command %4.4x->%4.4x.\n",
-					   pci_bus, pci_device_fn, pci_command, new_command);
-				pcibios_write_config_word(pci_bus, pci_device_fn,
-										  PCI_COMMAND, new_command);
-			}
-
-			dev = vortex_probe1(pci_bus, pci_device_fn, dev, ioaddr, irq,
-								chip_idx, cards_found);
-
-			if (dev) {
-				/* Get and check the latency values.  On the 3c590 series
-				   the latency timer must be set to the maximum value to avoid
-				   data corruption that occurs when the timer expires during
-				   a transfer -- a bug in the Vortex chip only. */
-				u8 pci_latency;
-				u8 new_latency = (device & 0xff00) == 0x5900 ? 248 : 32;
-				
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_LATENCY_TIMER, &pci_latency);
-				if (pci_latency < new_latency) {
-					printk(KERN_INFO "%s: Overriding PCI latency"
-						   " timer (CFLT) setting of %d, new value is %d.\n",
-						   dev->name, pci_latency, new_latency);
-					pcibios_write_config_byte(pci_bus, pci_device_fn,
-											  PCI_LATENCY_TIMER, new_latency);
-				}
-				dev = 0;
-				cards_found++;
-			}
+		if (vp->open) {
+			netif_device_detach(dev);
+			vortex_down(dev);
 		}
 	}
+}
+
+
+static void vortex_resume (struct pci_dev *pdev)
+{
+	struct net_device *dev = pdev->driver_data;
+
+	printk(KERN_DEBUG "vortex_resume(%s)\n", dev->name);
+
+	if (dev && dev->priv) {
+		struct vortex_private *vp = (struct vortex_private *)dev->priv;
+		if (vp->open) {
+			vortex_up(dev);
+			netif_device_attach(dev);
+		}
+	}
+}
+
+
+/* returns count found (>= 0), or negative on error */
+static int __init vortex_eisa_init (void)
+{
+	long ioaddr;
+	int rc;
+	int orig_cards_found = vortex_cards_found;
 
 	/* Now check all slots of the EISA bus. */
-	if (EISA_bus) {
-		static long ioaddr = 0x1000;
-		for ( ; ioaddr < 0x9000; ioaddr += 0x1000) {
-			int device_id;
-			if (check_region(ioaddr, VORTEX_TOTAL_SIZE))
-				continue;
-			/* Check the standard EISA ID register for an encoded '3Com'. */
-			if (inw(ioaddr + 0xC80) != 0x6d50)
-				continue;
-			/* Check for a product that we support, 3c59{2,7} any rev. */
-			device_id = (inb(ioaddr + 0xC82)<<8) + inb(ioaddr + 0xC83);
-			if ((device_id & 0xFF00) != 0x5900)
-				continue;
-			vortex_probe1(0, 0, dev, ioaddr, inw(ioaddr + 0xC88) >> 12,
-						  4, cards_found);
-			dev = 0;
-			cards_found++;
+	if (!EISA_bus)
+		return 0;
+
+	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
+		int device_id;
+
+		if (request_region(ioaddr, VORTEX_TOTAL_SIZE, "vortex") == NULL)
+			continue;
+
+		/* Check the standard EISA ID register for an encoded '3Com'. */
+		if (inw(ioaddr + 0xC80) != 0x6d50) {
+			release_region (ioaddr, VORTEX_TOTAL_SIZE);
+			continue;
 		}
+
+		/* Check for a product that we support, 3c59{2,7} any rev. */
+		device_id = (inb(ioaddr + 0xC82)<<8) + inb(ioaddr + 0xC83);
+		if ((device_id & 0xFF00) != 0x5900) {
+			release_region (ioaddr, VORTEX_TOTAL_SIZE);
+			continue;
+		}
+
+		rc = vortex_probe1(NULL, ioaddr, inw(ioaddr + 0xC88) >> 12,
+				   4, /* XXX is 4 correct eisa idx? */
+				   vortex_cards_found);
+		if (rc == 0)
+			vortex_cards_found++;
+		else
+			release_region (ioaddr, VORTEX_TOTAL_SIZE);
 	}
 
-#ifdef MODULE
-	/* Special code to work-around the Compaq PCI BIOS32 problem. */
-	if (compaq_ioaddr) {
-		vortex_probe1(0, 0, dev, compaq_ioaddr, compaq_irq,
-					  compaq_device_id, cards_found++);
-		dev = 0;
-	}
-#endif
-
-	return cards_found ? 0 : -ENODEV;
+	return vortex_cards_found - orig_cards_found;
 }
-#endif  /* ! Cardbus */
 
-static struct net_device *vortex_probe1(struct pci_dev *pdev,
-					struct net_device *dev, long ioaddr,
-					int irq, int chip_idx, int card_idx)
+
+/* returns count (>= 0), or negative on error */
+static int __devinit vortex_init_one (struct pci_dev *pdev,
+				      const struct pci_device_id *ent)
+{
+	int rc;
+
+	rc = vortex_probe1 (pdev, pci_resource_start (pdev, 0), pdev->irq,
+			    ent->driver_data, vortex_cards_found);
+	if (rc == 0)
+		vortex_cards_found++;
+	
+	return rc;
+}
+
+
+/* NOTE: pdev can be NULL, for the case of an EISA driver */
+static int __devinit vortex_probe1(struct pci_dev *pdev,
+				   long ioaddr, int irq,
+				   int chip_idx, int card_idx)
 {
 	struct vortex_private *vp;
 	int option;
 	unsigned int eeprom[0x40], checksum = 0;		/* EEPROM contents */
 	int i;
+	struct net_device *dev;
+	static int printed_version = 0;
+	
+	if (!printed_version) {
+		printk (KERN_INFO "%s", version);
+		printed_version = 1;
+	}
 
-	dev = init_etherdev(dev, 0);
+	dev = init_etherdev(NULL, sizeof(*vp));
+	if (!dev) {
+		printk (KERN_ERR PFX "unable to allocate etherdev, aborting\n");
+		return -ENOMEM;
+	}
+	
+	printk(KERN_INFO "%s: 3Com %s %s at 0x%lx, ",
+	       dev->name,
+	       pdev ? "PCI" : "EISA",
+	       vortex_info_tbl[chip_idx].name,
+	       ioaddr);
 
-	printk(KERN_INFO "%s: 3Com %s at 0x%lx, ",
-		   dev->name, pci_tbl[chip_idx].name, ioaddr);
-
+	/* private struct aligned and zeroed by init_etherdev */
+	vp = dev->priv;
+	vp->priv_addr = vp;
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->mtu = mtu;
 
-	/* Make certain the descriptor lists are aligned. */
-	{
-		void *mem = kmalloc(sizeof(*vp) + 15, GFP_KERNEL);
-		vp =  (void *)(((long)mem + 15) & ~15);
-		memset(vp, 0, sizeof(*vp));
-		vp->priv_addr = mem;
+	/* module list only for EISA devices */
+	if (pdev == NULL) {
+		vp->next_module = root_vortex_eisa_dev;
+		root_vortex_eisa_dev = dev;
 	}
-	dev->priv = vp;
+	
+	/* PCI-only startup logic */
+	if (pdev) {
+		/* EISA resources already marked, so only PCI needs to do this here */
+		if (!request_region (ioaddr, vortex_info_tbl[chip_idx].io_size,
+				     dev->name)) {
+			printk (KERN_ERR "%s: Cannot reserve I/O resource 0x%x @ 0x%lx, aborting\n",
+				dev->name, vortex_info_tbl[chip_idx].io_size, ioaddr);
+			kfree (dev);
+			return -EBUSY;
+		}
 
-	vp->next_module = root_vortex_dev;
-	root_vortex_dev = dev;
+		/* wake up and enable device */		
+		if (pci_enable_device (pdev)) {
+			printk (KERN_ERR "%s: Cannot enable device, aborting\n", dev->name);
+			release_region (ioaddr, vortex_info_tbl[chip_idx].io_size);
+			kfree (dev);
+			return -EIO;
+		}
+
+		/* enable bus-mastering if necessary */		
+		if (vortex_info_tbl[chip_idx].flags & PCI_USES_MASTER)
+			pci_set_master (pdev);
+	}
 
 	vp->lock = SPIN_LOCK_UNLOCKED;
 	vp->chip_id = chip_idx;
 	vp->pdev = pdev;
+
+	/* if we are a PCI driver, we store info in pdev->driver_data
+	 * instead of a module list */	
+	if (pdev)
+		pdev->driver_data = dev;
 
 	/* The lower four bits are the media type. */
 	if (dev->mem_start)
@@ -793,7 +758,7 @@ static struct net_device *vortex_probe1(struct pci_dev *pdev,
 	EL3WINDOW(0);
 	for (i = 0; i < 0x40; i++) {
 		int timer;
-#ifdef CARDBUS
+#if 1 /* ifdef CARDBUS */
 		outw(0x230 + i, ioaddr + Wn0EepromCmd);
 #else
 		outw(EEPROM_Read + i, ioaddr + Wn0EepromCmd);
@@ -835,7 +800,7 @@ static struct net_device *vortex_probe1(struct pci_dev *pdev,
 			   dev->irq);
 #endif
 
-	if (pci_tbl[vp->chip_id].drv_flags & HAS_CB_FNS) {
+	if (pdev && vortex_info_tbl[vp->chip_id].drv_flags & HAS_CB_FNS) {
 		u32 fn_st_addr;			/* Cardbus function status space */
 		fn_st_addr = pci_resource_start (pdev, 2);
 		if (fn_st_addr)
@@ -922,9 +887,6 @@ static struct net_device *vortex_probe1(struct pci_dev *pdev,
 		vp->full_bus_master_rx = (vp->info2 & 1) ? 1 : 2;
 	}
 
-	/* We do a request_region() to register /proc/ioports info. */
-	request_region(ioaddr, pci_tbl[chip_idx].io_size, dev->name);
-
 	/* The 3c59x-specific entries in the device structure. */
 	dev->open = &vortex_open;
 	dev->hard_start_xmit = &vortex_start_xmit;
@@ -932,10 +894,10 @@ static struct net_device *vortex_probe1(struct pci_dev *pdev,
 	dev->get_stats = &vortex_get_stats;
 	dev->do_ioctl = &vortex_ioctl;
 	dev->set_multicast_list = &set_rx_mode;
-	dev->tx_timeout = vortex_tx_timeout;
+	dev->tx_timeout = &vortex_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
 
-	return dev;
+	return 0;
 }
 
 static void wait_for_completion(struct net_device *dev, int cmd)
@@ -956,11 +918,13 @@ vortex_up(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	union wn3_config config;
-	int i;
-	
-	/* Should be if(HAS_ACPI) */
-	acpi_wake(vp->pdev);
+	int i, device_id;
 
+	if (vp->pdev)
+		device_id = vp->pdev->device;
+	else
+		device_id = 0x5900; /* EISA */
+	
 	/* Before initializing select the active media port. */
 	EL3WINDOW(3);
 	config.i = inl(ioaddr + Wn3_Config);
@@ -972,7 +936,7 @@ vortex_up(struct net_device *dev)
 				   media_tbl[vp->media_override].name);
 		dev->if_port = vp->media_override;
 	} else if (vp->autoselect) {
-		if (pci_tbl[vp->chip_id].drv_flags & HAS_NWAY)
+		if (vortex_info_tbl[vp->chip_id].drv_flags & HAS_NWAY)
 			dev->if_port = XCVR_NWAY;
 		else {
 			/* Find first available media type, starting with 100baseTx. */
@@ -995,7 +959,7 @@ vortex_up(struct net_device *dev)
 
 	vp->full_duplex = vp->force_fd;
 	config.u.xcvr = dev->if_port;
-	if ( ! (pci_tbl[vp->chip_id].drv_flags & HAS_NWAY))
+	if ( ! (vortex_info_tbl[vp->chip_id].drv_flags & HAS_NWAY))
 		outl(config.i, ioaddr + Wn3_Config);
 
 	if (dev->if_port == XCVR_MII || dev->if_port == XCVR_NWAY) {
@@ -1045,12 +1009,11 @@ vortex_up(struct net_device *dev)
 	if (vp->cb_fn_base) {
 		u_short n = inw(ioaddr + Wn2_ResetOptions);
 		/* Inverted LED polarity */
-		if (pci_tbl[vp->chip_id].device_id != 0x5257)
+		if (device_id != 0x5257)
 			n |= 0x0010;
 		/* Inverted polarity of MII power bit */
-		if ((pci_tbl[vp->chip_id].device_id == 0x6560) ||
-			(pci_tbl[vp->chip_id].device_id == 0x6562) ||
-			(pci_tbl[vp->chip_id].device_id == 0x5257))
+		if ((device_id == 0x6560) || (device_id == 0x6562) ||
+			(device_id == 0x5257))
 			n |= 0x4000;
 		outw(n, ioaddr + Wn2_ResetOptions);
 	}
@@ -2088,66 +2051,107 @@ static void acpi_set_WOL(struct net_device *dev)
 	/* Change the power state to D3; RxEnable doesn't take effect. */
 	pci_write_config_word(vp->pdev, 0xe0, 0x8103);
 }
-/* Change from D3 (sleep) to D0 (active).
-   Problem: The Cyclone forgets all PCI config info during the transition! */
-static void acpi_wake(struct pci_dev *pdev)
-{
-	u32 base0, base1, romaddr;
-	u16 pci_command, pwr_command;
-	u8  pci_latency, pci_cacheline, irq;
 
-	pci_read_config_word(pdev, 0xe0, &pwr_command);
-	if ((pwr_command & 3) == 0)
+
+static void __devexit vortex_remove_one (struct pci_dev *pdev)
+{
+	struct net_device *dev = pdev->driver_data;
+	struct vortex_private *vp;
+
+	if (!dev)
 		return;
-	pci_read_config_word( pdev, PCI_COMMAND, &pci_command);
-	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &base0);
-	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_1, &base1);
-	pci_read_config_dword(pdev, PCI_ROM_ADDRESS, &romaddr);
-	pci_read_config_byte( pdev, PCI_LATENCY_TIMER, &pci_latency);
-	pci_read_config_byte( pdev, PCI_CACHE_LINE_SIZE, &pci_cacheline);
-	pci_read_config_byte( pdev, PCI_INTERRUPT_LINE, &irq);
 
-	pci_write_config_word( pdev, 0xe0, 0x0000);
-	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, base0);
-	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_1, base1);
-	pci_write_config_dword(pdev, PCI_ROM_ADDRESS, romaddr);
-	pci_write_config_byte( pdev, PCI_INTERRUPT_LINE, irq);
-	pci_write_config_byte( pdev, PCI_LATENCY_TIMER, pci_latency);
-	pci_write_config_byte( pdev, PCI_CACHE_LINE_SIZE, pci_cacheline);
-	pci_write_config_word( pdev, PCI_COMMAND, pci_command | 5);
-}
-
-#ifdef MODULE
-void cleanup_module(void)
-{
-	struct net_device *next_dev;
-
-#ifdef CARDBUS
-	unregister_driver(&vortex_ops);
-	vortex_reap();
-#endif
+	vp = (void *)(dev->priv);
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
-	while (root_vortex_dev) {
-		struct vortex_private *vp=(void *)(root_vortex_dev->priv);
-		next_dev = vp->next_module;
-		unregister_netdev(root_vortex_dev);
-		outw(TotalReset, root_vortex_dev->base_addr + EL3_CMD);
-		release_region(root_vortex_dev->base_addr,
-					   pci_tbl[vp->chip_id].io_size);
-		kfree(root_vortex_dev);
-		kfree(vp->priv_addr);
-		root_vortex_dev = next_dev;
+	unregister_netdev(dev);
+	outw(TotalReset, dev->base_addr + EL3_CMD);
+	release_region(dev->base_addr, vortex_info_tbl[vp->chip_id].io_size);
+	kfree(dev);
+}
+
+
+static struct pci_driver vortex_driver = {
+	name:		"3c575_cb",
+	probe:		vortex_init_one,
+	remove:		vortex_remove_one,
+	suspend:	vortex_suspend,
+	resume:		vortex_resume,
+	id_table:	vortex_pci_tbl,
+};
+
+
+static int vortex_have_pci = 0;
+static int vortex_have_eisa = 0;
+
+
+static int __init vortex_init (void)
+{
+	int rc;
+	
+	MOD_INC_USE_COUNT;
+	
+	rc = pci_module_init (&vortex_driver);
+	if (rc < 0)
+		goto out;
+	if (rc > 0)
+		vortex_have_pci = 1;
+
+	rc = vortex_eisa_init ();
+	if (rc < 0)
+		goto out;
+	if (rc > 0)
+		vortex_have_eisa = 1;
+
+out:
+	MOD_DEC_USE_COUNT;
+	return rc;
+}
+
+
+static void __exit vortex_eisa_cleanup (void)
+{
+	struct net_device *dev, *tmp;
+	struct vortex_private *vp;
+	long ioaddr;
+
+	dev = root_vortex_eisa_dev;
+
+	while (dev) {
+		vp = dev->priv;
+		ioaddr = dev->base_addr;
+
+		unregister_netdev (dev);
+		outw (TotalReset, ioaddr + EL3_CMD);
+		release_region (ioaddr, VORTEX_TOTAL_SIZE);
+
+		tmp = dev;
+		dev = vp->next_module;
+
+		kfree (tmp);
 	}
 }
 
-#endif  /* MODULE */
+
+static void __exit vortex_cleanup (void)
+{
+	if (vortex_have_pci)
+		pci_unregister_driver (&vortex_driver);
+	if (vortex_have_eisa)
+		vortex_eisa_cleanup ();
+}
+
+
+module_init(vortex_init);
+module_exit(vortex_cleanup);
+
+
 
 /*
  * Local variables:
- *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c"
- *  cardbus-compile-command: "gcc -DCARDBUS -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c -o 3c575_cb.o -I/usr/src/linux/pcmcia-cs-3.0.9/include/"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c575_cb.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
+ *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c575_cb.c"
+ *  cardbus-compile-command: "gcc -DCONFIG_HOTPLUG -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c575_cb.c -o 3c575_cb.o -I/usr/src/linux/pcmcia-cs-3.0.9/include/"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

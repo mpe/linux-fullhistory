@@ -5,7 +5,7 @@
 
 all: keyspan_pda_fw.h
 
-%.asm: %.s
+%.asm: %.S
 	gcc -x assembler-with-cpp -P -E -o $@ $<
 
 %.hex: %.asm

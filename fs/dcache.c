@@ -337,6 +337,44 @@ resume:
 }
 
 /*
+ * Search for at least 1 mount point in the dentry's subdirs.
+ * We descend to the next level whenever the d_subdirs
+ * list is non-empty and continue searching.
+ */
+int have_submounts(struct dentry *parent)
+{
+	struct dentry *this_parent = parent;
+	struct list_head *next;
+
+	if (parent->d_mounts != parent)
+		return 1;
+repeat:
+	next = this_parent->d_subdirs.next;
+resume:
+	while (next != &this_parent->d_subdirs) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
+		/* Have we found a mount point ? */
+		if (dentry->d_mounts != dentry)
+			return 1;
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+			goto repeat;
+		}
+	}
+	/*
+	 * All done at this level ... ascend and resume the search.
+	 */
+	if (this_parent != parent) {
+		next = this_parent->d_child.next; 
+		this_parent = this_parent->d_parent;
+		goto resume;
+	}
+	return 0; /* No mount points found in tree */
+}
+
+/*
  * Search the dentry child list for the specified parent,
  * and move any unused dentries to the end of the unused
  * list for prune_dcache(). We descend to the next level

@@ -18,6 +18,7 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
 
    if [ "$CONFIG_CARDBUS" = "y" ]; then
       dep_tristate '  3Com 3c575 CardBus support' CONFIG_PCMCIA_3C575 m
+      dep_tristate '  Xircom Tulip-like CardBus support' CONFIG_PCMCIA_XIRTULIP m
    fi
 
    bool 'Pcmcia Wireless LAN' CONFIG_NET_PCMCIA_RADIO

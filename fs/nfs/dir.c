@@ -599,6 +599,9 @@ out_bad:
 	d_drop(dentry);
 	if (!list_empty(&dentry->d_subdirs))
 		shrink_dcache_parent(dentry);
+	/* If we have submounts, don't unhash ! */
+	if (have_submounts(dentry))
+		goto out_valid;
 	/* Purge readdir caches. */
 	if (dentry->d_parent->d_inode) {
 		nfs_zap_caches(dentry->d_parent->d_inode);

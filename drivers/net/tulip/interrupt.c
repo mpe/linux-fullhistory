@@ -211,9 +211,12 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 				if (status < 0)
 					break;			/* It still has not been Txed */
+
 				/* Check for Rx filter setup frames. */
 				if (tp->tx_buffers[entry].skb == NULL) {
-					pci_unmap_single(tp->pdev,
+					/* test because dummy frames not mapped */
+					if (tp->tx_buffers[entry].mapping)
+						pci_unmap_single(tp->pdev,
 							 tp->tx_buffers[entry].mapping,
 							 sizeof(tp->setup_frame),
 							 PCI_DMA_TODEVICE);

@@ -246,7 +246,7 @@ int udf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		struct FileEntry *fe;
 
 		fe = (struct FileEntry *)bh->b_data;
-		eaicb = fe->extendedAttrICB;
+		eaicb = lela_to_cpu(fe->extendedAttrICB);
 		if (UDF_I_LENEATTR(inode))
 			ea = fe->extendedAttr;
 	}
@@ -255,7 +255,7 @@ int udf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		struct ExtendedFileEntry *efe;
 
 		efe = (struct ExtendedFileEntry *)bh->b_data;
-		eaicb = efe->extendedAttrICB;
+		eaicb = lela_to_cpu(efe->extendedAttrICB);
 		if (UDF_I_LENEATTR(inode))
 			ea = efe->extendedAttr;
 	}

@@ -171,6 +171,7 @@ static inline int
 nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 			struct page *page)
 {
+	struct rpc_message msg;
 	unsigned long address;
 	struct nfs_rreq	*req;
 	int		result = -1, flags;
@@ -195,8 +196,13 @@ nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 
 	/* Start the async call */
 	dprintk("NFS: executing async READ request.\n");
-	result = rpc_do_call(NFS_CLIENT(inode), NFSPROC_READ,
-				&req->ra_args, &req->ra_res, flags,
+
+	msg.rpc_proc = NFSPROC_READ;
+	msg.rpc_argp = &req->ra_args;
+	msg.rpc_resp = &req->ra_res;
+	msg.rpc_cred = NULL;
+
+	result = rpc_call_async(NFS_CLIENT(inode), &msg, flags,
 				nfs_readpage_result, req);
 	if (result < 0)
 		goto out_free;

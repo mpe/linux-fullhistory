@@ -55,9 +55,11 @@ if [ "$CONFIG_WAN" = "y" ]; then
 	      if [ "$CONFIG_VENDOR_SANGOMA" != "n" ]; then
 		 int '    Maximum number of cards' CONFIG_WANPIPE_CARDS 1
 		 bool '    WANPIPE Cisco HDLC support' CONFIG_WANPIPE_CHDLC
-		 bool '    WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
+		 if [ "$CONFIG_OBSOLETE" = "y" ]; then
+		    bool '    WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
+		    bool '    WANPIPE X.25 support' CONFIG_WANPIPE_X25
+		 fi
 		 bool '    WANPIPE PPP support' CONFIG_WANPIPE_PPP
-		 bool '    WANPIPE X.25 support' CONFIG_WANPIPE_X25
 	      fi
 	      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 		 dep_tristate '  Cyclom 2X(tm) cards (EXPERIMENTAL)' CONFIG_CYCLADES_SYNC $CONFIG_WAN_ROUTER_DRIVERS

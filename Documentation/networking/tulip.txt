@@ -125,7 +125,7 @@ them.  The MII transceiver status is polled using an kernel timer.
 
 
 Source tree tour
-----------------
+================
 The following is a list of files comprising the Tulip ethernet driver in
 drivers/net/tulip subdirectory.
 
@@ -138,6 +138,16 @@ timer.c		- Main driver timer, and misc h/w timers
 tulip.h		- Private driver header
 tulip_core.c	- Driver core (a.k.a. where "everything else" goes)
 
+
+
+Version history
+===============
+0.9.4.1:
+* Finish PCI DMA conversion (davem)
+* Do not netif_start_queue() at end of tulip_tx_timeout() (kuznet)
+* PCI DMA fix (kuznet)
+* eeprom.c code cleanup
+* Remove Xircom Tulip crud
 
 
 [EOF]

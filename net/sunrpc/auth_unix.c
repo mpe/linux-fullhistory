@@ -4,12 +4,9 @@
  * UNIX-style authentication; no AUTH_SHORT support
  *
  * Copyright (C) 1996, Olaf Kirch <okir@monad.swb.de>
- *
- * Modified May 1999 Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  */
 
 #include <linux/types.h>
-#include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/socket.h>
 #include <linux/in.h>
@@ -63,7 +60,7 @@ unx_destroy(struct rpc_auth *auth)
 }
 
 static struct rpc_cred *
-unx_create_cred(struct rpc_task *task)
+unx_create_cred(int flags)
 {
 	struct unx_cred	*cred;
 	int		i;
@@ -71,14 +68,12 @@ unx_create_cred(struct rpc_task *task)
 	dprintk("RPC:      allocating UNIX cred for uid %d gid %d\n",
 				current->uid, current->gid);
 
-	if (!(cred = (struct unx_cred *) rpc_malloc(task, sizeof(*cred)))) {
-		task->tk_status = -ENOMEM;
+	if (!(cred = (struct unx_cred *) rpc_allocate(flags, sizeof(*cred))))
 		return NULL;
-	}
 
 	cred->uc_count = 0;
 	cred->uc_flags = RPCAUTH_CRED_UPTODATE;
-	if (RPC_DO_ROOTOVERRIDE(task)) {
+	if (flags & RPC_TASK_ROOTCREDS) {
 		cred->uc_uid = cred->uc_fsuid = 0;
 		cred->uc_gid = cred->uc_fsgid = 0;
 		cred->uc_gids[0] = NOGROUP;
@@ -119,7 +114,7 @@ authunix_fake_cred(struct rpc_task *task, uid_t uid, gid_t gid)
 	cred->uc_fsgid = gid;
 	cred->uc_gids[0] = (gid_t) NOGROUP;
 
-	return task->tk_cred = (struct rpc_cred *) cred;
+	return task->tk_msg.rpc_cred = (struct rpc_cred *) cred;
 }
 
 static void
@@ -134,12 +129,12 @@ unx_destroy_cred(struct rpc_cred *cred)
  * request root creds (e.g. for NFS swapping).
  */
 static int
-unx_match(struct rpc_task * task, struct rpc_cred *rcred)
+unx_match(struct rpc_cred *rcred, int taskflags)
 {
 	struct unx_cred	*cred = (struct unx_cred *) rcred;
 	int		i;
 
-	if (!RPC_DO_ROOTOVERRIDE(task)) {
+	if (!(taskflags & RPC_TASK_ROOTCREDS)) {
 		int groups;
 
 		if (cred->uc_uid != current->uid
@@ -169,7 +164,7 @@ static u32 *
 unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 {
 	struct rpc_clnt	*clnt = task->tk_client;
-	struct unx_cred	*cred = (struct unx_cred *) task->tk_cred;
+	struct unx_cred	*cred = (struct unx_cred *) task->tk_msg.rpc_cred;
 	u32		*base, *hold;
 	int		i, n;
 
@@ -210,7 +205,7 @@ unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 static int
 unx_refresh(struct rpc_task *task)
 {
-	task->tk_cred->cr_flags |= RPCAUTH_CRED_UPTODATE;
+	task->tk_msg.rpc_cred->cr_flags |= RPCAUTH_CRED_UPTODATE;
 	return task->tk_status = -EACCES;
 }
 

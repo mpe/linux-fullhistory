@@ -1838,7 +1838,7 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 	void *ioaddr = tp->mmio_addr;
 	u32 mc_filter[2];	/* Multicast hash filter */
 	int i, rx_mode;
-	unsigned long flags;
+	unsigned long flags=0;
 
 	DPRINTK ("ENTER\n");
 

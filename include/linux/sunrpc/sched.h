@@ -21,6 +21,16 @@
 #undef  CONFIG_RPC_FASTSCHED
 
 /*
+ * This is the actual RPC procedure call info.
+ */
+struct rpc_message {
+	__u32			rpc_proc;	/* Procedure number */
+	void *			rpc_argp;	/* Arguments */
+	void *			rpc_resp;	/* Result */
+	struct rpc_cred *	rpc_cred;	/* Credentials */
+};
+
+/*
  * This is the RPC task struct
  */
 struct rpc_task {
@@ -33,17 +43,14 @@ struct rpc_task {
 	struct rpc_task *	tk_prev_task;	/* global list of tasks */
 	struct rpc_clnt *	tk_client;	/* RPC client */
 	struct rpc_rqst *	tk_rqstp;	/* RPC request */
-	struct rpc_cred *	tk_cred;	/* RPC credentials */
 	int			tk_status;	/* result of last operation */
 	struct rpc_wait_queue *	tk_rpcwait;	/* RPC wait queue we're on */
 
 	/*
 	 * RPC call state
 	 */
-	__u32			tk_proc;	/* procedure number */
+	struct rpc_message	tk_msg;		/* RPC call info */
 	__u32 *			tk_buffer;	/* XDR buffer */
-	void *			tk_argp;	/* argument storage */
-	void *			tk_resp;	/* result storage */
 	__u8			tk_garb_retry,
 				tk_cred_retry,
 				tk_suid_retry;
@@ -67,6 +74,10 @@ struct rpc_task {
 	wait_queue_head_t	tk_wait;	/* sync: sleep on this q */
 	unsigned long		tk_timeout;	/* timeout for rpc_sleep() */
 	unsigned short		tk_flags;	/* misc flags */
+	unsigned short		tk_lock;	/* Task lock counter */
+	unsigned int		tk_wakeup   : 1,/* Task waiting to wake up */
+				tk_sleeping : 1,/* Task is truly asleep */
+				tk_active   : 1;/* Task has been activated */
 #ifdef RPC_DEBUG
 	unsigned short		tk_pid;		/* debugging aid */
 #endif
@@ -100,6 +111,8 @@ typedef void			(*rpc_action)(struct rpc_task *);
 #define RPC_DO_CALLBACK(t)	((t)->tk_flags & RPC_TASK_CALLBACK)
 #define RPC_DO_ROOTOVERRIDE(t)	((t)->tk_flags & RPC_TASK_ROOTCREDS)
 #define RPC_ASSASSINATED(t)	((t)->tk_flags & RPC_TASK_KILLED)
+#define RPC_IS_SLEEPING(t)	((t)->tk_sleeping)
+#define RPC_IS_ACTIVATED(t)	((t)->tk_active)
 
 /*
  * RPC synchronization objects
@@ -126,29 +139,28 @@ void		rpc_init_task(struct rpc_task *, struct rpc_clnt *,
 					rpc_action exitfunc, int flags);
 void		rpc_release_task(struct rpc_task *);
 void		rpc_killall_tasks(struct rpc_clnt *);
-void		rpc_execute(struct rpc_task *);
+int		rpc_execute(struct rpc_task *);
 void		rpc_run_child(struct rpc_task *parent, struct rpc_task *child,
 					rpc_action action);
 int		rpc_add_wait_queue(struct rpc_wait_queue *, struct rpc_task *);
 void		rpc_remove_wait_queue(struct rpc_task *);
 void		rpc_sleep_on(struct rpc_wait_queue *, struct rpc_task *,
 					rpc_action action, rpc_action timer);
-void		rpc_cond_wait(struct rpc_wait_queue *, struct rpc_task *,
-					unsigned char *,
-					rpc_action action, rpc_action timer);
+void		rpc_sleep_locked(struct rpc_wait_queue *, struct rpc_task *,
+				 rpc_action action, rpc_action timer);
+void		rpc_add_timer(struct rpc_task *, rpc_action);
 void		rpc_wake_up_task(struct rpc_task *);
 void		rpc_wake_up(struct rpc_wait_queue *);
 struct rpc_task *rpc_wake_up_next(struct rpc_wait_queue *);
 void		rpc_wake_up_status(struct rpc_wait_queue *, int);
-void		rpc_add_timer(struct rpc_task *, rpc_action);
-void		rpc_del_timer(struct rpc_task *);
+int		rpc_lock_task(struct rpc_task *);
+void		rpc_unlock_task(struct rpc_task *);
 void		rpc_delay(struct rpc_task *, unsigned long);
 void *		rpc_allocate(unsigned int flags, unsigned int);
 void		rpc_free(void *);
 int		rpciod_up(void);
 void		rpciod_down(void);
 void		rpciod_wake_up(void);
-void		rpciod_tcp_dispatcher(void);
 #ifdef RPC_DEBUG
 void		rpc_show_tasks(void);
 #endif

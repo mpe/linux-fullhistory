@@ -58,7 +58,6 @@ enum chips {
 	COMET,
 	COMPEX9881,
 	I21145,
-	X3201_3,
 };
 
 
@@ -334,7 +333,14 @@ extern u8 t21040_csr13[];
 extern u16 t21041_csr13[];
 extern u16 t21041_csr14[];
 extern u16 t21041_csr15[];
-void tulip_outl_CSR6 (struct tulip_private *tp, u32 newcsr6);
+
+
+extern inline void tulip_outl_CSR6 (struct tulip_private *tp, u32 newcsr6)
+{
+	long ioaddr = tp->base_addr;
+
+	outl (newcsr6, ioaddr + CSR6);
+}
 
 
 #endif /* __NET_TULIP_H__ */

@@ -19,7 +19,7 @@
 
 */
 
-static const char version[] = "Linux Tulip driver version 0.9.4 (Feb 28, 2000)\n";
+static const char version[] = "Linux Tulip driver version 0.9.4.1 (Mar 18, 2000)\n";
 
 #include <linux/module.h>
 #include "tulip.h"
@@ -92,9 +92,6 @@ static int csr0 = 0x00A00000 | 0x4800;
 #define TX_TIMEOUT  (4*HZ)
 
 
-/* Kernel compatibility defines, some common to David Hind's PCMCIA package.
-   This is only in the support-all-kernels source code. */
-
 MODULE_AUTHOR("The Linux Kernel Team");
 MODULE_DESCRIPTION("Digital 21*4* Tulip ethernet driver");
 MODULE_PARM(tulip_debug, "i");
@@ -148,9 +145,6 @@ struct tulip_chip_table tulip_tbl[] = {
   { "Intel DS21145 Tulip", 128, 0x0801fbff,
 	HAS_MII | HAS_MEDIA_TABLE | ALWAYS_CHECK_MII | HAS_NWAY143,
 	t21142_timer },
-  { "Xircom tulip work-alike", 128, 0x0801fbff,
-	HAS_MII | HAS_MEDIA_TABLE | ALWAYS_CHECK_MII | HAS_ACPI | HAS_NWAY143,
-	t21142_timer },
   {0},
 };
 
@@ -169,10 +163,9 @@ static struct pci_device_id tulip_pci_tbl[] __devinitdata = {
 	{ 0x1317, 0x0981, PCI_ANY_ID, PCI_ANY_ID, 0, 0, COMET },
 	{ 0x11F6, 0x9881, PCI_ANY_ID, PCI_ANY_ID, 0, 0, COMPEX9881 },
 	{ 0x8086, 0x0039, PCI_ANY_ID, PCI_ANY_ID, 0, 0, I21145 },
-	{ 0x115d, 0x0003, PCI_ANY_ID, PCI_ANY_ID, 0, 0, X3201_3 },
 	{0},
 };
-MODULE_DEVICE_TABLE(pci,tulip_pci_tbl);
+MODULE_DEVICE_TABLE(pci, tulip_pci_tbl);
 
 
 /* A full-duplex map for media types. */
@@ -197,54 +190,6 @@ static struct net_device_stats *tulip_get_stats(struct net_device *dev);
 static int private_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static void set_rx_mode(struct net_device *dev);
 
-
-/* The Xircom cards are picky about when certain bits in CSR6 can be
-   manipulated.  Keith Owens <kaos@ocs.com.au>. */
-
-void tulip_outl_CSR6 (struct tulip_private *tp, u32 newcsr6)
-{
-	long ioaddr = tp->base_addr;
-	const int strict_bits = 0x0060e202;
-	int csr5, csr5_22_20, csr5_19_17, currcsr6, attempts = 200;
-
-	/* common path */
-	if (tp->chip_id != X3201_3) {
-		outl (newcsr6, ioaddr + CSR6);
-		return;
-	}
-
-	newcsr6 &= 0x726cfeca;	/* mask out the reserved CSR6 bits that always */
-	/* read 0 on the Xircom cards */
-	newcsr6 |= 0x320c0000;	/* or in the reserved bits that always read 1 */
-	currcsr6 = inl (ioaddr + CSR6);
-	if (((newcsr6 & strict_bits) == (currcsr6 & strict_bits)) ||
-	    ((currcsr6 & ~0x2002) == 0))
-		goto out_write;
-
-	/* make sure the transmitter and receiver are stopped first */
-	currcsr6 &= ~0x2002;
-	while (1) {
-		csr5 = inl (ioaddr + CSR5);
-		if (csr5 == 0xffffffff)
-			break;	/* cannot read csr5, card removed? */
-		csr5_22_20 = csr5 & 0x700000;
-		csr5_19_17 = csr5 & 0x0e0000;
-		if ((csr5_22_20 == 0 || csr5_22_20 == 0x600000) &&
-		    (csr5_19_17 == 0 || csr5_19_17 == 0x80000 || csr5_19_17 == 0xc0000))
-			break;	/* both are stopped or suspended */
-		if (!--attempts) {
-			printk (KERN_INFO "tulip.c: tulip_outl_CSR6 too many attempts,"
-				"csr5=0x%08x\n", csr5);
-			goto out_write;
-		}
-		outl (currcsr6, ioaddr + CSR6);
-		udelay (1);
-	}
-
-out_write:
-	/* now it is safe to change csr6 */
-	outl (newcsr6, ioaddr + CSR6);
-}
 
 
 static void tulip_up(struct net_device *dev)
@@ -561,7 +506,6 @@ static void tulip_tx_timeout(struct net_device *dev)
 
 out:
 	dev->trans_start = jiffies;
-	netif_start_queue (dev);
 	spin_unlock_irqrestore (&tp->lock, flags);
 }
 

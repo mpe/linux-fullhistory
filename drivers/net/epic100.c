@@ -1099,6 +1099,12 @@ static int __devinit epic100_init_one (struct pci_dev *pdev,
 	struct net_device *dev;
 	long ioaddr;
 	static int card_idx = -1;
+	static int printed_version = 0;
+	
+	if (!printed_version) {
+		printk (KERN_INFO "%s", version);
+		printed_version = 1;
+	}
 	
 	chip_idx = ent->driver_data;
 	
@@ -1280,13 +1286,7 @@ static struct pci_driver epic100_driver = {
 
 static int __init epic100_init (void)
 {
-	printk (KERN_INFO "%s", version);
-	
-	if (pci_register_driver (&epic100_driver) > 0)
-		return 0;
-	
-	pci_unregister_driver (&epic100_driver);
-	return -ENODEV;
+	return pci_module_init (&epic100_driver);
 }
 
 

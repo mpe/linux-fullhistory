@@ -740,3 +740,9 @@ int sb_mixer_init(sb_devc * devc)
 	sb_mixer_reset(devc);
 	return 1;
 }
+
+void sb_mixer_unload(sb_devc *devc)
+{
+	sound_unload_mixerdev(devc->my_mixerdev);
+	sbmixnum--;
+}

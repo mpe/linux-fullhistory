@@ -296,6 +296,7 @@ nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
 	struct rpc_clnt	*clnt;
 	struct nlm_args	*argp = &req->a_args;
 	struct nlm_res	*resp = &req->a_res;
+	struct rpc_message msg;
 	int		status;
 
 	dprintk("lockd: call procedure %s on %s (async)\n",
@@ -306,8 +307,11 @@ nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
 		return -ENOLCK;
 
         /* bootstrap and kick off the async RPC call */
-        status = rpc_do_call(clnt, proc, argp, resp, RPC_TASK_ASYNC,
-					callback, req);
+	msg.rpc_proc = proc;
+	msg.rpc_argp = argp;
+	msg.rpc_resp =resp;
+	msg.rpc_cred = NULL;	
+        status = rpc_call_async(clnt, &msg, RPC_TASK_ASYNC, callback, req);
 
 	/* If the async call is proceeding, increment host refcount */
         if (status >= 0 && (req->a_flags & RPC_TASK_ASYNC))

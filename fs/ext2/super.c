@@ -153,23 +153,14 @@ static int parse_options (char * options, unsigned long * sb_block,
 			set_opt (*mount_options, NO_UID32);
 		}
 		else if (!strcmp (this_char, "check")) {
-			if (!value || !*value)
-				set_opt (*mount_options, CHECK_NORMAL);
-			else if (!strcmp (value, "none")) {
-				clear_opt (*mount_options, CHECK_NORMAL);
-				clear_opt (*mount_options, CHECK_STRICT);
-			}
-			else if (!strcmp (value, "normal"))
-				set_opt (*mount_options, CHECK_NORMAL);
-			else if (!strcmp (value, "strict")) {
-				set_opt (*mount_options, CHECK_NORMAL);
-				set_opt (*mount_options, CHECK_STRICT);
-			}
-			else {
-				printk ("EXT2-fs: Invalid check option: %s\n",
-					value);
-				return 0;
-			}
+			if (!value || !*value || !strcmp (value, "none"))
+				clear_opt (*mount_options, CHECK);
+			else
+#ifdef CONFIG_EXT2_CHECK
+				set_opt (*mount_options, CHECK);
+#else
+				printk("EXT2 Check option not supported\n");
+#endif
 		}
 		else if (!strcmp (this_char, "debug"))
 			set_opt (*mount_options, DEBUG);
@@ -205,10 +196,6 @@ static int parse_options (char * options, unsigned long * sb_block,
 			set_opt (*mount_options, GRPID);
 		else if (!strcmp (this_char, "minixdf"))
 			set_opt (*mount_options, MINIX_DF);
-		else if (!strcmp (this_char, "nocheck")) {
-			clear_opt (*mount_options, CHECK_NORMAL);
-			clear_opt (*mount_options, CHECK_STRICT);
-		}
 		else if (!strcmp (this_char, "nogrpid") ||
 			 !strcmp (this_char, "sysvgroups"))
 			clear_opt (*mount_options, GRPID);
@@ -305,10 +292,12 @@ static void ext2_setup_super (struct super_block * sb,
 				EXT2_BLOCKS_PER_GROUP(sb),
 				EXT2_INODES_PER_GROUP(sb),
 				sb->u.ext2_sb.s_mount_opt);
+#ifdef CONFIG_EXT2_CHECK
 		if (test_opt (sb, CHECK)) {
 			ext2_check_blocks_bitmap (sb);
 			ext2_check_inodes_bitmap (sb);
 		}
+#endif
 	}
 #if 0 /* ibasket's still have unresolved bugs... -DaveM */
 
@@ -398,7 +387,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	  }
 
 	sb->u.ext2_sb.s_mount_opt = 0;
-	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
 	if (!parse_options ((char *) data, &sb_block, &resuid, &resgid,
 	    &sb->u.ext2_sb.s_mount_opt)) {
 		return NULL;
@@ -674,7 +662,6 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	/*
 	 * Allow the "check" option to be passed as a remount option.
 	 */
-	new_mount_opt = EXT2_MOUNT_CHECK_NORMAL;
 	if (!parse_options (data, &tmp, &resuid, &resgid,
 			    &new_mount_opt))
 		return -EINVAL;

@@ -151,6 +151,7 @@ int sb_dsp_detect (struct address_info *hw_config, int pci, int pciio);
 int sb_dsp_init (struct address_info *hw_config);
 void sb_dsp_unload(struct address_info *hw_config, int sbmpu);
 int sb_mixer_init(sb_devc *devc);
+void sb_mixer_unload(sb_devc *devc);
 void sb_mixer_set_stereo (sb_devc *devc, int mode);
 void smw_mixer_init(sb_devc *devc);
 void sb_dsp_midi_init (sb_devc *devc);

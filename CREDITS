@@ -891,6 +891,10 @@ S: Fichtenweg 3/511
 S: 72076 Tübingen
 S: Germany
 
+N: Justin Guyett
+E: jguyett@andrew.cmu.edu
+D: via-rhine net driver hacking
+
 N: Danny ter Haar
 E: dth@cistron.nl
 D: /proc/procinfo, reboot on panic , kernel pre-patch tester ;)
@@ -2608,6 +2612,10 @@ D: AFFS rewrite
 S: Eichenweg 16
 S: 73650 Winterbach
 S: Germany
+
+N: Urban Widmark
+E: urban@svenskatest.se
+D: via-rhine, misc net driver hacking
 
 N: Marco van Wieringen
 E: mvw@planets.elm.net

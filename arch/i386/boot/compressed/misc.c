@@ -145,7 +145,7 @@ static void gzip_release(void **ptr)
 	free_mem_ptr = (long) *ptr;
 }
  
-static void scroll()
+static void scroll(void)
 {
 	int i;
 
@@ -197,6 +197,7 @@ void* memset(void* s, int c, size_t n)
 	char *ss = (char*)s;
 
 	for (i=0;i<n;i++) ss[i] = c;
+	return s;
 }
 
 void* memcpy(void* __dest, __const void* __src,
@@ -206,13 +207,14 @@ void* memcpy(void* __dest, __const void* __src,
 	char *d = (char *)__dest, *s = (char *)__src;
 
 	for (i=0;i<__n;i++) d[i] = s[i];
+	return __dest;
 }
 
 /* ===========================================================================
  * Fill the input buffer. This is called only when the buffer is empty
  * and at least one byte is really needed.
  */
-static int fill_inbuf()
+static int fill_inbuf(void)
 {
 	if (insize != 0) {
 		error("ran out of input data\n");
@@ -228,7 +230,7 @@ static int fill_inbuf()
  * Write the output window window[0..outcnt-1] and update crc and bytes_out.
  * (Used for the decompressed data only.)
  */
-static void flush_window_low()
+static void flush_window_low(void)
 {
     ulg c = crc;         /* temporary variable */
     unsigned n;
@@ -246,7 +248,7 @@ static void flush_window_low()
     outcnt = 0;
 }
 
-static void flush_window_high()
+static void flush_window_high(void)
 {
     ulg c = crc;         /* temporary variable */
     unsigned n;
@@ -262,7 +264,7 @@ static void flush_window_high()
     outcnt = 0;
 }
 
-static void flush_window()
+static void flush_window(void)
 {
 	if (high_loaded) flush_window_high();
 	else flush_window_low();
@@ -286,7 +288,7 @@ struct {
 	short b;
 	} stack_start = { & user_stack [STACK_SIZE] , __KERNEL_DS };
 
-void setup_normal_output_buffer()
+void setup_normal_output_buffer(void)
 {
 #ifdef STANDARD_MEMORY_BIOS_CALL
 	if (EXT_MEM_K < 1024) error("Less than 2MB of memory.\n");

@@ -935,7 +935,7 @@ static int udf_symlink(struct inode * dir, struct dentry * dentry, const char * 
 	inode->i_data.a_ops = &udf_symlink_aops;
 	inode->i_op = &page_symlink_inode_operations;
 
-	if (UDF_I_ALLOCTYPE(inode) == ICB_FLAG_AD_IN_ICB)
+	if (UDF_I_ALLOCTYPE(inode) != ICB_FLAG_AD_IN_ICB)
 	{
 		struct buffer_head *bh = NULL;
 		lb_addr bloc, eloc;
@@ -964,7 +964,7 @@ static int udf_symlink(struct inode * dir, struct dentry * dentry, const char * 
 	bh = udf_tread(inode->i_sb, block, inode->i_sb->s_blocksize);
 	ea = bh->b_data + udf_ext0_offset(inode);
 
-	eoffset = inode->i_sb->s_blocksize - (ea - bh->b_data);
+	eoffset = inode->i_sb->s_blocksize - udf_ext0_offset(inode);
 	pc = (struct PathComponent *)ea;
 
 	if (*symname == '/')

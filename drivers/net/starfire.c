@@ -12,10 +12,16 @@
 
 	Support and updates available at
 	http://cesdis.gsfc.nasa.gov/linux/drivers/starfire.html
+	
+	LK1.1.1 (jgarzik):
+	- Use PCI driver interface
+	- Fix MOD_xxx races
+	- softnet fixups
+
 */
 
 static const char *versionA =
-"starfire.c:v0.12 5/28/99  Written by Donald Becker\n",
+"starfire.c:v0.12+LK1.1.1  3/19/2000  Written by Donald Becker and others\n",
 *versionB =" Undates and info at http://www.beowulf.org/linux/drivers.html\n";
 
 /* A few user-configurable values.   These may be modified when a driver
@@ -26,7 +32,6 @@ static int interrupt_mitigation = 0x0;
 
 static int debug = 1;			/* 1 normal messages, 0 quiet .. 7 verbose. */
 static int max_interrupt_work = 20;
-static int min_pci_latency = 64;
 static int mtu = 0;
 /* Maximum number of multicast addresses to filter (vs. rx-all-multicast).
    The Starfire has a 512 element hash table based on the Ethernet CRC.  */
@@ -62,6 +67,9 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 #define PKT_BUF_SZ		1536			/* Size of each temporary Rx buffer.*/
 
+#define PFX "starfire: "
+
+
 #if !defined(__OPTIMIZE__)  ||  !defined(__KERNEL__)
 #warning  You must compile this file with the correct options!
 #warning  See the last lines of the source file.
@@ -94,7 +102,6 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Adaptec Starfire Ethernet driver");
 MODULE_PARM(max_interrupt_work, "i");
-MODULE_PARM(min_pci_latency, "i");
 MODULE_PARM(mtu, "i");
 MODULE_PARM(debug, "i");
 MODULE_PARM(rx_copybreak, "i");
@@ -196,38 +203,33 @@ enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
 	PCI_ADDR0=0x10<<0, PCI_ADDR1=0x10<<1, PCI_ADDR2=0x10<<2, PCI_ADDR3=0x10<<3,
 };
-struct pci_id_info {
-	const char *name;
-	u16	vendor_id, device_id, device_id_mask, flags;
-	int io_size;
-	struct net_device *(*probe1)(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
-};
-
-static struct net_device *starfire_probe1(struct pci_dev *pdev, int pci_bus,
-										  int pci_devfn, long ioaddr,
-										  int irq, int chp_idx, int fnd_cnt);
 
 #if 0
 #define ADDR_64BITS 1			/* This chip uses 64 bit addresses. */
 #endif
 #define MEM_ADDR_SZ 0x80000		/* And maps in 0.5MB(!).  */
 
-static struct pci_id_info pci_tbl[] = {
-	{ "Adaptec Starfire 6915",
-	  0x9004, 0x6915, 0xffff, PCI_USES_MASTER, 128, starfire_probe1},
-	{0,},						/* 0 terminated list. */
+
+enum chipset {
+	CH_6915 = 0,
 };
 
 
-/* A chip capabilities table, matching the entries in pci_tbl[] above. */
+static struct pci_device_id starfire_pci_tbl[] __devinitdata = {
+	{ 0x9004, 0x6915, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_6915 },
+	{ 0, },
+};
+MODULE_DEVICE_TABLE(pci, starfire_pci_tbl);
+
+
+/* A chip capabilities table, matching the CH_xxx entries in xxx_pci_tbl[] above. */
 enum chip_capability_flags {CanHaveMII=1, };
-struct chip_info {
+static struct chip_info {
 	char *chip_name;
 	int io_size;
 	int flags;
-	void (*media_timer)(unsigned long data);
-} static skel_netdrv_tbl[] = {
-	{"Adaptec Starfire 6915", 128, CanHaveMII, 0, },
+} netdrv_tbl[] = {
+	{ "Adaptec Starfire 6915", 128, CanHaveMII },
 };
 
 
@@ -322,8 +324,6 @@ struct netdev_private {
 	struct starfire_tx_desc *tx_ring;
 	dma_addr_t rx_ring_dma;
 	dma_addr_t tx_ring_dma;
-	struct net_device *next_module;			/* Link for devices of this type. */
-	const char *product_name;
 	/* The addresses of rx/tx-in-place skbuffs. */
 	struct ring_info rx_info[RX_RING_SIZE];
 	struct ring_info tx_info[TX_RING_SIZE];
@@ -340,7 +340,6 @@ struct netdev_private {
 	/* Frequently used values: keep some adjacent for cache effect. */
 	int chip_id;
 	struct pci_dev *pdev;
-	unsigned char pci_bus, pci_devfn;
 	unsigned int cur_rx, dirty_rx;		/* Producer/consumer ring indices */
 	unsigned int cur_tx, dirty_tx;
 	unsigned int rx_buf_sz;				/* Based on MTU+slack. */
@@ -378,107 +377,62 @@ static struct net_device_stats *get_stats(struct net_device *dev);
 static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static int  netdev_close(struct net_device *dev);
 
-
 
-/* A list of our installed devices, for removing the driver module. */
-static struct net_device *root_net_dev = NULL;
-
-/* Ideally we would detect all network cards in slot order.  That would
-   be best done a central PCI probe dispatch, which wouldn't work
-   well when dynamically adding drivers.  So instead we detect just the
-   cards we know about in slot order. */
-
-static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
-{
-	int cards_found = 0;
-	int pci_index = 0;
-	unsigned char pci_bus, pci_device_fn;
-	struct net_device *dev;
-
-	for (;pci_index < 0xff; pci_index++) {
-		struct pci_dev *pdev;
-		u16 vendor, device, pci_command, new_command;
-		int chip_idx, irq;
-		long pciaddr;
-		long ioaddr;
-
-		if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8, pci_index,
-								&pci_bus, &pci_device_fn)
-			!= PCIBIOS_SUCCESSFUL)
-			break;
-		pdev = pci_find_slot (pci_bus, pci_device_fn);
-		if (!pdev) continue;
-		vendor = pdev->vendor;
-		device = pdev->device;
-
-		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
-			if (vendor == pci_tbl[chip_idx].vendor_id
-				&& (device & pci_tbl[chip_idx].device_id_mask) ==
-				pci_tbl[chip_idx].device_id)
-				break;
-		if (pci_tbl[chip_idx].vendor_id == 0)	/* Compiled out! */
-			continue;
-
-		pciaddr = pdev->resource[0].start;
-#if defined(ADDR_64BITS) && defined(__alpha__)
-		pciaddr |= ((long)pdev->base_address[1]) << 32;
-#endif
-		irq = pdev->irq;
-
-		if (debug > 2)
-			printk(KERN_INFO "Found %s at PCI address %#lx, IRQ %d.\n",
-				   pci_tbl[chip_idx].name, pciaddr, irq);
-
-		if ((pci_tbl[chip_idx].flags & PCI_USES_IO)) {
-			if (check_region(pciaddr, pci_tbl[chip_idx].io_size))
-				continue;
-			ioaddr = pciaddr;
-		} else if ((ioaddr = (long)ioremap(pciaddr&~0xf, MEM_ADDR_SZ)) == 0) {
-			printk(KERN_INFO "Failed to map PCI address %#lx.\n",
-				   pciaddr);
-			continue;
-		}
-
-		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
-		new_command = pci_command | (pci_tbl[chip_idx].flags & 7);
-		if (pci_command != new_command) {
-			printk(KERN_INFO "  The PCI BIOS has not enabled the"
-				   " device at %d/%d!  Updating PCI command %4.4x->%4.4x.\n",
-				   pci_bus, pci_device_fn, pci_command, new_command);
-			pci_write_config_word(pdev, PCI_COMMAND, new_command);
-		}
-
-		dev = pci_tbl[chip_idx].probe1(pdev, pci_bus, pci_device_fn, ioaddr,
-									   irq, chip_idx, cards_found);
-
-		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
-			u8 pci_latency;
-			pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
-			if (pci_latency < min_pci_latency) {
-				printk(KERN_INFO "  PCI latency timer (CFLT) is "
-					   "unreasonably low at %d.  Setting to %d clocks.\n",
-					   pci_latency, min_pci_latency);
-				pci_write_config_byte(pdev, PCI_LATENCY_TIMER, min_pci_latency);
-			}
-		}
-		cards_found++;
-	}
-
-	return cards_found ? 0 : -ENODEV;
-}
-
-static struct net_device *
-starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_id, int card_idx)
+static int __devinit starfire_init_one (struct pci_dev *pdev,
+					const struct pci_device_id *ent)
 {
 	struct netdev_private *np;
-	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
-	struct net_device *dev = init_etherdev(NULL, 0);
+	int i, irq, option, chip_id = ent->driver_data;
+	struct net_device *dev;
+	static int card_idx = 0;
+	static int printed_version = 0;
+	long ioaddr;
+	int io_size = netdrv_tbl[chip_id].io_size;
 
-	if (!dev)
-		return NULL;
+	ioaddr = pci_resource_start (pdev, 0);
+	if (!ioaddr || ((pci_resource_flags (pdev, 0) & IORESOURCE_MEM) == 0)) {
+		printk (KERN_ERR PFX "no PCI MEM resources, aborting\n");
+		return -ENODEV;
+	}
+	
+	dev = init_etherdev(NULL, sizeof(*np));
+	if (!dev) {
+		printk (KERN_ERR PFX "cannot alloc etherdev, aborting\n");
+		return -ENOMEM;
+	}
+	
+	irq = pdev->irq; 
+	
+	if (request_mem_region (ioaddr, io_size, dev->name) == NULL) {
+		printk (KERN_ERR PFX "resource 0x%x @ 0x%lx busy, aborting\n",
+			io_size, ioaddr);
+		goto err_out_free_netdev;
+	}
+	
+	if (pci_enable_device (pdev)) {
+		printk (KERN_ERR PFX "cannot enable PCI device, aborting\n");
+		goto err_out_free_res;
+	}
+	
+	ioaddr = (long) ioremap (ioaddr, io_size);
+	if (!ioaddr) {
+		printk (KERN_ERR PFX "cannot remap 0x%x @ 0x%lx, aborting\n",
+			io_size, ioaddr);
+		goto err_out_free_res;
+	}
 
-	printk(KERN_INFO "%s: %s at 0x%lx, ",
-		   dev->name, skel_netdrv_tbl[chip_id].chip_name, ioaddr);
+	pci_set_master (pdev);
+	
+	option = card_idx < MAX_UNITS ? options[card_idx] : 0;
+	card_idx++;
+	
+	if (!printed_version) {
+		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
+		printed_version = 1;
+	}
+
+	printk (KERN_INFO "%s: %s at 0x%lx, ",
+		dev->name, netdrv_tbl[chip_id].chip_name, ioaddr);
 
 	/* Serial EEPROM reads are hidden by the hardware. */
 	for (i = 0; i < 6; i++)
@@ -500,18 +454,13 @@ starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, i
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
-	/* Make certain the descriptor lists are aligned. */
-	np = (void *)(((long)kmalloc(sizeof(*np), GFP_KERNEL) + 15) & ~15);
-	memset(np, 0, sizeof(*np));
-	dev->priv = np;
-
-	np->next_module = root_net_dev;
-	root_net_dev = dev;
+	/* private struct aligned and zeroed by init_etherdev */
+	np = dev->priv;
 
 	np->pdev = pdev;
-	np->pci_bus = pci_bus;
-	np->pci_devfn = pci_devfn;
 	np->chip_id = chip_id;
+	
+	pdev->driver_data = dev;
 
 	if (dev->mem_start)
 		option = dev->mem_start;
@@ -533,7 +482,7 @@ starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, i
 	/* The chip-specific entries in the device structure. */
 	dev->open = &netdev_open;
 	dev->hard_start_xmit = &start_tx;
-	dev->tx_timeout = tx_timeout;
+	dev->tx_timeout = &tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
 	dev->stop = &netdev_close;
 	dev->get_stats = &get_stats;
@@ -543,7 +492,7 @@ starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, i
 	if (mtu)
 		dev->mtu = mtu;
 
-	if (skel_netdrv_tbl[np->chip_id].flags & CanHaveMII) {
+	if (netdrv_tbl[np->chip_id].flags & CanHaveMII) {
 		int phy, phy_idx = 0;
 		for (phy = 0; phy < 32 && phy_idx < 4; phy++) {
 			int mii_status = mdio_read(dev, phy, 1);
@@ -558,7 +507,14 @@ starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, i
 		np->mii_cnt = phy_idx;
 	}
 
-	return dev;
+	return 0;
+
+err_out_free_res:
+	release_mem_region (ioaddr, io_size);
+err_out_free_netdev:
+	unregister_netdev (dev);
+	kfree (dev);
+	return -ENODEV;
 }
 
 
@@ -590,10 +546,13 @@ static int netdev_open(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	int i;
 
+	MOD_INC_USE_COUNT;
 	/* Do we need to reset the chip??? */
 
-	if (request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev))
-		return -EAGAIN;
+	if (request_irq(dev->irq, &intr_handler, SA_SHIRQ, dev->name, dev)) {
+		MOD_DEC_USE_COUNT;
+		return -EBUSY;
+	}
 
 	/* Disable the Rx and Tx, and reset the chip. */
 	writel(0, ioaddr + GenCtrl);
@@ -624,10 +583,9 @@ static int netdev_open(struct net_device *dev)
 		if (np->rx_ring)
 			pci_free_consistent(np->pdev, PAGE_SIZE,
 								np->rx_ring, np->rx_ring_dma);
+		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
-
-	MOD_INC_USE_COUNT;
 
 	init_ring(dev);
 	/* Set the size of the Rx buffers. */
@@ -690,6 +648,8 @@ static int netdev_open(struct net_device *dev)
 
 	/* Enable the Rx and Tx units. */
 	writel(0x000F, ioaddr + GenCtrl);
+
+	netif_start_queue(dev);
 
 	if (debug > 2)
 		printk(KERN_DEBUG "%s: Done netdev_open().\n",
@@ -762,6 +722,7 @@ static void netdev_timer(unsigned long data)
 	add_timer(&np->timer);
 }
 
+
 static void tx_timeout(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
@@ -783,15 +744,16 @@ static void tx_timeout(struct net_device *dev)
 	}
 #endif
 
-  /* Perhaps we should reinitialize the hardware here. */
-  dev->if_port = 0;
-  /* Stop and restart the chip's Tx processes . */
+	/* Perhaps we should reinitialize the hardware here. */
+	dev->if_port = 0;
 
-  /* Trigger an immediate transmit demand. */
+	/* Stop and restart the chip's Tx processes . */
+	/* XXX todo */
 
-  netif_wake_queue(dev);
-  np->stats.tx_errors++;
-  return;
+	/* Trigger an immediate transmit demand. */
+	/* XXX todo */
+
+	np->stats.tx_errors++;
 }
 
 
@@ -849,8 +811,6 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	unsigned entry;
 
-	netif_stop_queue(dev);
-
 	/* Caution: the write order is important here, set the field
 	   with the "ownership" bits last. */
 
@@ -883,10 +843,10 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	/* Update the producer index. */
 	writel(++entry, dev->base_addr + TxProducerIdx);
 
-	if (np->cur_tx - np->dirty_tx >= TX_RING_SIZE - 1)
+	if (np->cur_tx - np->dirty_tx >= TX_RING_SIZE - 1) {
 		np->tx_full = 1;
-	if (! np->tx_full)
-		netif_start_queue(dev);
+		netif_stop_queue(dev);
+	}
 	dev->trans_start = jiffies;
 
 	if (debug > 4) {
@@ -1347,56 +1307,69 @@ static int netdev_close(struct net_device *dev)
 	return 0;
 }
 
-static int __init starfire_init_module (void)
+
+static void __devexit starfire_remove_one (struct pci_dev *pdev)
 {
-	if (debug)					/* Emit version even if no cards detected. */
-		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
-#ifdef CARDBUS
-	register_driver(&etherdev_ops);
-	return 0;
-#else
-	if (pci_etherdev_probe(pci_tbl)) {
-		printk(KERN_INFO " No Starfire adapters detected, driver not loaded.\n");
-		return -ENODEV;
+	struct net_device *dev = pdev->driver_data;
+	struct netdev_private *np;
+	
+	if (!dev) {
+		printk (KERN_WARNING "bug: removing starfire pci dev without driver\n");
+		return;
 	}
-	return 0;
-#endif
+
+	np = dev->priv;
+
+	unregister_netdev(dev);
+	iounmap((char *)dev->base_addr);
+
+	if (np->tx_done_q)
+		pci_free_consistent(np->pdev, PAGE_SIZE,
+				    np->tx_done_q, np->tx_done_q_dma);
+	if (np->rx_done_q)
+		pci_free_consistent(np->pdev, PAGE_SIZE,
+				    np->rx_done_q, np->rx_done_q_dma);
+	if (np->tx_ring)
+		pci_free_consistent(np->pdev, PAGE_SIZE,
+				    np->tx_ring, np->tx_ring_dma);
+	if (np->rx_ring)
+		pci_free_consistent(np->pdev, PAGE_SIZE,
+				    np->rx_ring, np->rx_ring_dma);
+
+	kfree(dev);
 }
 
-static void __exit starfire_cleanup_module (void)
+
+static struct pci_driver starfire_driver = {
+	name:		"starfire",
+	probe:		starfire_init_one,
+	remove:		starfire_remove_one,
+	id_table:	starfire_pci_tbl,
+};
+
+
+static int __init starfire_init (void)
 {
-	struct net_device *next_dev;
-
-#ifdef CARDBUS
-	unregister_driver(&etherdev_ops);
-#endif
-
-	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
-	while (root_net_dev) {
-		struct netdev_private *np =
-			(struct netdev_private *)root_net_dev->priv;
-		next_dev = np->next_module;
-		unregister_netdev(root_net_dev);
-		iounmap((char *)root_net_dev->base_addr);
-		if (np->tx_done_q)
-			pci_free_consistent(np->pdev, PAGE_SIZE,
-								np->tx_done_q, np->tx_done_q_dma);
-		if (np->rx_done_q)
-			pci_free_consistent(np->pdev, PAGE_SIZE,
-								np->rx_done_q, np->rx_done_q_dma);
-		if (np->tx_ring)
-			pci_free_consistent(np->pdev, PAGE_SIZE,
-								np->tx_ring, np->tx_ring_dma);
-		if (np->rx_ring)
-			pci_free_consistent(np->pdev, PAGE_SIZE,
-								np->rx_ring, np->rx_ring_dma);
-		kfree(root_net_dev);
-		root_net_dev = next_dev;
-	}
+	int rc;
+	
+	MOD_INC_USE_COUNT;
+	
+	rc = pci_module_init (&starfire_driver);
+	
+	MOD_DEC_USE_COUNT;
+	
+	return rc;
 }
 
-module_init(starfire_init_module);
-module_exit(starfire_cleanup_module);
+
+static void __exit starfire_cleanup (void)
+{
+	pci_unregister_driver (&starfire_driver);
+}
+
+
+module_init(starfire_init);
+module_exit(starfire_cleanup);
 
 
 /*

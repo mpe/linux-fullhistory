@@ -1,0 +1,248 @@
+***************
+*** 290,296 ****
+  rpc_call_setup(struct rpc_task *task, u32 proc,
+  				void *argp, void *resp, int flags)
+  {
+- 	task->tk_action = call_reserve;
+  	task->tk_proc   = proc;
+  	task->tk_argp   = argp;
+  	task->tk_resp   = resp;
+--- 291,297 ----
+  rpc_call_setup(struct rpc_task *task, u32 proc,
+  				void *argp, void *resp, int flags)
+  {
++ 	task->tk_action = call_bind;
+  	task->tk_proc   = proc;
+  	task->tk_argp   = argp;
+  	task->tk_resp   = resp;
+***************
+*** 312,322 ****
+  		rpc_release_task(task);
+  		return;
+  	}
+- 	task->tk_action = call_reserve;
+  	rpcproc_count(task->tk_client, task->tk_proc)++;
+  }
+  
+  /*
+   * 1.	Reserve an RPC call slot
+   */
+  static void
+--- 313,342 ----
+  		rpc_release_task(task);
+  		return;
+  	}
++ 	task->tk_action = call_bind;
+  	rpcproc_count(task->tk_client, task->tk_proc)++;
+  }
+  
+  /*
++  * 0.	Get the server port number if not yet set
++  */
++ static void
++ call_bind(struct rpc_task *task)
++ {
++ 	struct rpc_clnt	*clnt = task->tk_client;
++ 	struct rpc_xprt *xprt = clnt->cl_xprt;
++ 
++ 	if (xprt->stream && !xprt->connected)
++ 		task->tk_action = call_reconnect;
++ 	else
++ 		task->tk_action = call_reserve;
++ 	task->tk_status = 0;
++ 
++ 	if (!clnt->cl_port)
++ 		rpc_getport(task, clnt);
++ }
++ 
++ /*
+   * 1.	Reserve an RPC call slot
+   */
+  static void
+***************
+*** 324,345 ****
+  {
+  	struct rpc_clnt	*clnt = task->tk_client;
+  
+- 	if (task->tk_proc > clnt->cl_maxproc) {
+- 		printk(KERN_WARNING "%s (vers %d): bad procedure number %d\n",
+- 			clnt->cl_protname, clnt->cl_vers, task->tk_proc);
+  		rpc_exit(task, -EIO);
+  		return;
+  	}
+- 
+- 	dprintk("RPC: %4d call_reserve\n", task->tk_pid);
+  	if (!rpcauth_uptodatecred(task)) {
+  		task->tk_action = call_refresh;
+  		return;
+  	}
+- 
+- 	task->tk_status  = 0;
+  	task->tk_action  = call_reserveresult;
+  	task->tk_timeout = clnt->cl_timeout.to_resrvval;
+  	clnt->cl_stats->rpccnt++;
+  	xprt_reserve(task);
+  }
+--- 344,369 ----
+  {
+  	struct rpc_clnt	*clnt = task->tk_client;
+  
++ 	dprintk("RPC: %4d call_reserve\n", task->tk_pid);
++ 	if (!clnt->cl_port) {
++ 		printk(KERN_NOTICE "%s: couldn't bind to server %s - %s.\n",
++ 			clnt->cl_protname, clnt->cl_server,
++ 			clnt->cl_softrtry? "giving up" : "retrying");
++ 		if (!clnt->cl_softrtry) {
++ 			task->tk_action = call_bind;
++ 			rpc_delay(task, 5*HZ);
++ 			return;
++ 		}
+  		rpc_exit(task, -EIO);
+  		return;
+  	}
+  	if (!rpcauth_uptodatecred(task)) {
+  		task->tk_action = call_refresh;
+  		return;
+  	}
+  	task->tk_action  = call_reserveresult;
+  	task->tk_timeout = clnt->cl_timeout.to_resrvval;
++ 	task->tk_status  = 0;
+  	clnt->cl_stats->rpccnt++;
+  	xprt_reserve(task);
+  }
+***************
+*** 452,464 ****
+  	req->rq_rnr		 = 1;
+  	req->rq_damaged		 = 0;
+  
+  	/* Zero buffer so we have automatic zero-padding of opaque & string */
+  	memset(task->tk_buffer, 0, bufsiz);
+  
+  	/* Encode header and provided arguments */
+  	encode = rpcproc_encode(clnt, task->tk_proc);
+  	if (!(p = call_header(task))) {
+- 		printk(KERN_INFO "RPC: call_header failed, exit EIO\n");
+  		rpc_exit(task, -EIO);
+  	} else
+  	if (encode && (status = encode(req, p, task->tk_argp)) < 0) {
+--- 474,493 ----
+  	req->rq_rnr		 = 1;
+  	req->rq_damaged		 = 0;
+  
++ 	if (task->tk_proc > clnt->cl_maxproc) {
++ 		printk(KERN_WARNING "%s (vers %d): bad procedure number %d\n",
++ 			clnt->cl_protname, clnt->cl_vers, task->tk_proc);
++ 		rpc_exit(task, -EIO);
++ 		return;
++ 	}
++ 
+  	/* Zero buffer so we have automatic zero-padding of opaque & string */
+  	memset(task->tk_buffer, 0, bufsiz);
+  
+  	/* Encode header and provided arguments */
+  	encode = rpcproc_encode(clnt, task->tk_proc);
+  	if (!(p = call_header(task))) {
++ 		printk("RPC: call_header failed, exit EIO\n");
+  		rpc_exit(task, -EIO);
+  	} else
+  	if (encode && (status = encode(req, p, task->tk_argp)) < 0) {
+***************
+*** 469,527 ****
+  }
+  
+  /*
+-  * 4.	Get the server port number if not yet set
+   */
+  static void
+- call_bind(struct rpc_task *task)
+  {
+- 	struct rpc_clnt	*clnt = task->tk_client;
+- 	struct rpc_xprt *xprt = clnt->cl_xprt;
+  
+- 	task->tk_action = (xprt->connected) ? call_transmit : call_reconnect;
+- 
+- 	if (!clnt->cl_port) {
+- 		task->tk_action = call_reconnect;
+- 		task->tk_timeout = clnt->cl_timeout.to_maxval;
+- 		rpc_getport(task, clnt);
+- 	}
+  }
+  
+  /*
+-  * 4a.	Reconnect to the RPC server (TCP case)
+   */
+  static void
+- call_reconnect(struct rpc_task *task)
+  {
+- 	struct rpc_clnt *clnt = task->tk_client;
+  
+- 	dprintk("RPC: %4d call_reconnect status %d\n",
+- 				task->tk_pid, task->tk_status);
+  
+- 	task->tk_action = call_transmit;
+- 	if (task->tk_status < 0 || !clnt->cl_xprt->stream)
+- 		return;
+- 	clnt->cl_stats->netreconn++;
+- 	xprt_reconnect(task);
+- }
+  
+- /*
+-  * 5.	Transmit the RPC request, and wait for reply
+-  */
+- static void
+- call_transmit(struct rpc_task *task)
+- {
+- 	struct rpc_clnt	*clnt = task->tk_client;
+- 
+- 	dprintk("RPC: %4d call_transmit (status %d)\n", 
+- 				task->tk_pid, task->tk_status);
+- 
+- 	task->tk_action = call_status;
+- 	if (task->tk_status < 0)
+  		return;
+- 	xprt_transmit(task);
+- 	if (!rpcproc_decode(clnt, task->tk_proc)) {
+- 		task->tk_action = NULL;
+- 		rpc_wake_up_task(task);
+  	}
+  }
+  
+--- 498,535 ----
+  }
+  
+  /*
++  * 4.	Transmit the RPC request
+   */
+  static void
++ call_transmit(struct rpc_task *task)
+  {
++ 	dprintk("RPC: %4d call_transmit (status %d)\n", 
++ 				task->tk_pid, task->tk_status);
+  
++ 	task->tk_action = call_receive;
++ 	task->tk_status = 0;
++ 	xprt_transmit(task);
+  }
+  
+  /*
++  * 5.	Wait for the RPC reply
+   */
+  static void
++ call_receive(struct rpc_task *task)
+  {
++ 	dprintk("RPC: %4d call_receive (status %d)\n", 
++ 		task->tk_pid, task->tk_status);
+  
++ 	task->tk_action = call_status;
+  
++ 	/* Need to ensure cleanups are performed by xprt_receive_status() */
++ 	xprt_receive(task);
+  
++ 	/* If we have no decode function, this means we're performing
++ 	 * a void call (a la lockd message passing). */
++ 	if (!rpcproc_decode(task->tk_client, task->tk_proc)) {
++ 		task->tk_action = NULL;
+  		return;
+  	}
+  }
+  

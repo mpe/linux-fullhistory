@@ -19,8 +19,6 @@ obj-		:=
 # Things that need to export symbols
 export-objs	:= ray_cs.o
 
-CFLAGS_3c575_cb.o = -DCARDBUS -DMODULE
-
 # 16-bit client drivers
 obj-$(CONFIG_PCMCIA_3C589)	+= 3c589_cs.o
 obj-$(CONFIG_PCMCIA_3C574)	+= 3c574_cs.o
@@ -39,6 +37,7 @@ obj-$(CONFIG_AIRONET4500_CS)	+= aironet4500_cs.o
 
 # Cardbus client drivers
 obj-$(CONFIG_PCMCIA_3C575)	+= 3c575_cb.o
+obj-$(CONFIG_PCMCIA_XIRTULIP)	+= xircom_tulip_cb.o
 
 O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
 OX_OBJS		:= $(filter     $(export-objs), $(obj-y))

@@ -38,6 +38,7 @@ static void
 nul_destroy(struct rpc_auth *auth)
 {
 	dprintk("RPC: destroying NULL authenticator %p\n", auth);
+	rpcauth_free_credcache(auth);
 	rpc_free(auth);
 }
 
@@ -45,15 +46,12 @@ nul_destroy(struct rpc_auth *auth)
  * Create NULL creds for current process
  */
 static struct rpc_cred *
-nul_create_cred(struct rpc_task *task)
+nul_create_cred(int flags)
 {
 	struct rpc_cred	*cred;
 
-	if (!(cred = (struct rpc_cred *) rpc_malloc(task, sizeof(*cred)))) {
-		task->tk_status = -ENOMEM;
+	if (!(cred = (struct rpc_cred *) rpc_allocate(flags, sizeof(*cred))))
 		return NULL;
-	}
-
 	cred->cr_count = 0;
 	cred->cr_flags = RPCAUTH_CRED_UPTODATE;
 
@@ -73,7 +71,7 @@ nul_destroy_cred(struct rpc_cred *cred)
  * Match cred handle against current process
  */
 static int
-nul_match(struct rpc_task *task, struct rpc_cred *cred)
+nul_match(struct rpc_cred *cred, int taskflags)
 {
 	return 1;
 }

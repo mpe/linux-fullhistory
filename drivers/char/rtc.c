@@ -670,10 +670,10 @@ found:
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
 		BCD_TO_BIN(year);       /* This should never happen... */
 	
-	if (year > 10 && year < 44) {
+	if (year >= 20 && year < 48) {
 		epoch = 1980;
 		guess = "ARC console";
-	} else if (year < 96) {
+	} else if (year >= 48 && year < 100) {
 		epoch = 1952;
 		guess = "Digital UNIX";
 	}

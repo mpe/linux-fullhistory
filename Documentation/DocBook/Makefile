@@ -26,8 +26,9 @@ kernel-api.sgml: kernel-api.tmpl
 		$(TOPDIR)/arch/i386/kernel/mca.c \
 		$(TOPDIR)/arch/i386/kernel/mtrr.c \
 		$(TOPDIR)/drivers/char/misc.c \
-		$(TOPDIR)/drivers/char/serial.c \
 		$(TOPDIR)/drivers/char/videodev.c \
+		$(TOPDIR)/drivers/net/net_init.c \
+		$(TOPDIR)/drivers/char/serial.c \
 		$(TOPDIR)/drivers/sound/sound_core.c \
 		$(TOPDIR)/drivers/sound/sound_firmware.c \
 		$(TOPDIR)/drivers/net/wan/syncppp.c \

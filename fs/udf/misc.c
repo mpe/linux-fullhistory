@@ -90,7 +90,7 @@ udf_add_extendedattr(struct inode * inode, Uint32 size, Uint32 type,
 		struct FileEntry *fe;
 
 		fe = (struct FileEntry *)(*bh)->b_data;
-		eaicb = fe->extendedAttrICB;
+		eaicb = lela_to_cpu(fe->extendedAttrICB);
 		offset = sizeof(struct FileEntry);
 	}
 	else
@@ -98,7 +98,7 @@ udf_add_extendedattr(struct inode * inode, Uint32 size, Uint32 type,
 		struct ExtendedFileEntry *efe;
 
 		efe = (struct ExtendedFileEntry *)(*bh)->b_data;
-		eaicb = efe->extendedAttrICB;
+		eaicb = lela_to_cpu(efe->extendedAttrICB);
 		offset = sizeof(struct ExtendedFileEntry);
 	}
 
@@ -206,7 +206,7 @@ udf_get_extendedattr(struct inode * inode, Uint32 type, Uint8 subtype,
 		struct FileEntry *fe;
 
 		fe = (struct FileEntry *)(*bh)->b_data;
-		eaicb = fe->extendedAttrICB;
+		eaicb = lela_to_cpu(fe->extendedAttrICB);
 		if (UDF_I_LENEATTR(inode))
 			ea = fe->extendedAttr;
 	}
@@ -215,7 +215,7 @@ udf_get_extendedattr(struct inode * inode, Uint32 type, Uint8 subtype,
 		struct ExtendedFileEntry *efe;
 
 		efe = (struct ExtendedFileEntry *)(*bh)->b_data;
-		eaicb = efe->extendedAttrICB;
+		eaicb = lela_to_cpu(efe->extendedAttrICB);
 		if (UDF_I_LENEATTR(inode))
 			ea = efe->extendedAttr;
 	}

@@ -18,6 +18,11 @@
 #define UDF_FLAG_UNDELETE			6
 #define UDF_FLAG_UNHIDE				7
 #define UDF_FLAG_VARCONV			8
+
+#define UDF_PART_FLAG_UNALLOC_BITMAP		0x0001
+#define UDF_PART_FLAG_UNALLOC_TABLE			0x0002
+#define UDF_PART_FLAG_FREED_BITMAP			0x0004
+#define UDF_PART_FLAG_FREED_TABLE			0x0008
 	
 #define UDF_SB_FREE(X)\
 {\
@@ -52,6 +57,7 @@
 #define UDF_SB_TYPESPAR(X,Y)			( UDF_SB_PARTMAPS(X)[(Y)].s_type_specific.s_sparing )
 #define UDF_SB_TYPEVIRT(X,Y)			( UDF_SB_PARTMAPS(X)[(Y)].s_type_specific.s_virtual )
 #define UDF_SB_PARTFUNC(X,Y)			( UDF_SB_PARTMAPS(X)[(Y)].s_partition_func )
+#define UDF_SB_PARTFLAGS(X,Y)			( UDF_SB_PARTMAPS(X)[(Y)].s_partition_flags )
 
 #define UDF_SB_VOLIDENT(X)				( UDF_SB(X)->s_volident )
 #define UDF_SB_NUMPARTS(X)				( UDF_SB(X)->s_partitions )

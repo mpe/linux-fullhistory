@@ -41,7 +41,8 @@ EXPORT_SYMBOL(rpc_create_client);
 EXPORT_SYMBOL(rpc_destroy_client);
 EXPORT_SYMBOL(rpc_shutdown_client);
 EXPORT_SYMBOL(rpc_killall_tasks);
-EXPORT_SYMBOL(rpc_do_call);
+EXPORT_SYMBOL(rpc_call_sync);
+EXPORT_SYMBOL(rpc_call_async);
 EXPORT_SYMBOL(rpc_call_setup);
 EXPORT_SYMBOL(rpc_clnt_sigmask);
 EXPORT_SYMBOL(rpc_clnt_sigunmask);
@@ -60,6 +61,7 @@ EXPORT_SYMBOL(rpcauth_init_credcache);
 EXPORT_SYMBOL(rpcauth_free_credcache);
 EXPORT_SYMBOL(rpcauth_insert_credcache);
 EXPORT_SYMBOL(rpcauth_lookupcred);
+EXPORT_SYMBOL(rpcauth_bindcred);
 EXPORT_SYMBOL(rpcauth_matchcred);
 EXPORT_SYMBOL(rpcauth_releasecred);
 

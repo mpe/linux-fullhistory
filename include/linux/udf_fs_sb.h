@@ -49,7 +49,16 @@ struct udf_virtual_data
 
 struct udf_part_map
 {
-	__u32	s_uspace_bitmap;
+	union
+	{
+		__u32			bitmap;
+		struct inode	*table;
+	}		s_uspace;
+	union
+	{
+		__u32			bitmap;
+		struct inode	*table;
+	}		s_fspace;
 	__u32	s_partition_root;
 	__u32	s_partition_len;
 	__u16	s_partition_type;
@@ -61,6 +70,7 @@ struct udf_part_map
 	} s_type_specific;
 	__u32	(*s_partition_func)(struct super_block *, __u32, __u16, __u32);
 	__u16	s_volumeseqnum;
+	__u16	s_partition_flags;
 };
 
 #pragma pack()

@@ -106,7 +106,7 @@ struct ktm
 struct ustr
 {
 	Uint8 u_cmpID;
-	Uint8 u_name[UDF_NAME_LEN-1];
+	Uint8 u_name[UDF_NAME_LEN];
 	Uint8 u_len;
 	Uint8 padding;
 	unsigned long u_hash;
@@ -182,6 +182,8 @@ extern void udf_truncate(struct inode *);
 extern void udf_free_blocks(const struct inode *, lb_addr, Uint32, Uint32);
 extern int udf_prealloc_blocks(const struct inode *, Uint16, Uint32, Uint32);
 extern int udf_new_block(const struct inode *, Uint16, Uint32, int *);
+
+/* fsync.c */
 extern int udf_sync_file(struct file *, struct dentry *);
 
 /* directory.c */

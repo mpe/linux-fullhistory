@@ -551,6 +551,8 @@ const struct pci_device_id *pci_match_device(const struct pci_device_id *ids, co
 
 #ifndef CONFIG_PCI
 extern inline int pcibios_present(void) { return 0; }
+extern inline int pcibios_find_class (unsigned int class_code, unsigned short index, unsigned char *bus, unsigned char *dev_fn) 
+{ 	return PCIBIOS_DEVICE_NOT_FOUND; }
 
 #define _PCI_NOP(o,s,t) \
 	extern inline int pcibios_##o##_config_##s## (u8 bus, u8 dfn, u8 where, t val) \
@@ -583,6 +585,7 @@ extern inline int pci_assign_resource(struct pci_dev *dev, int i) { return -EBUS
 extern inline int pci_register_driver(struct pci_driver *drv) { return 0;}
 extern inline void pci_unregister_driver(struct pci_driver *drv) { }
 extern inline int scsi_to_pci_dma_dir(unsigned char scsi_dir) { return scsi_dir; }
+extern inline int pci_find_capability (struct pci_dev *dev, int cap) {return 0; }
 
 #else
 
