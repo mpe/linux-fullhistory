@@ -58,8 +58,6 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		printk("bread failed\n");
 		return NULL;
 	}
-/*	*((struct minix_super_block *) s) =
-		*((struct minix_super_block *) bh->b_data); */
 	ms = (struct minix_super_block *) bh->b_data;
 	s->s_ninodes = ms->s_ninodes;
 	s->s_nzones = ms->s_nzones;

@@ -30,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/segment.h>
+#include <sys/user.h>
 
 extern int sys_exit(int exit_code);
 extern int sys_close(int fd);
@@ -69,10 +70,14 @@ int core_dump(long signr, struct pt_regs * regs)
 	struct file file;
 	unsigned short fs;
 	int has_dumped = 0;
+	register int dump_start, dump_size;
+	struct user dump;
 
 	if (!current->dumpable)
 		return 0;
 	current->dumpable = 0;
+/* See if we have enough room to write the upage.  */
+	if(current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE/1024) return 0;
 	__asm__("mov %%fs,%0":"=r" (fs));
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode))
@@ -96,22 +101,52 @@ int core_dump(long signr, struct pt_regs * regs)
 	has_dumped = 1;
 /* write and seek example: from kernel space */
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
-	DUMP_WRITE("core-dump, regs=\n",17);
-	DUMP_SEEK(64);
-	DUMP_WRITE(regs,sizeof(*regs));
-	if (current->used_math) {
+	dump.u_tsize = current->end_code / PAGE_SIZE;
+	dump.u_dsize = (current->brk - current->end_code) / PAGE_SIZE;
+	dump.u_ssize =((current->start_stack +(PAGE_SIZE-1)) / PAGE_SIZE) -
+	  (regs->esp/ PAGE_SIZE);
+/* If the size of the dump file exceeds the rlimit, then see what would happen
+   if we wrote the stack, but not the data area.  */
+	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE/1024 >
+	    current->rlim[RLIMIT_CORE].rlim_cur)
+		dump.u_dsize = 0;
+/* Make sure we have enough room to write the stack and data areas. */
+	if ((dump.u_ssize+1) * PAGE_SIZE / 1024 >
+	    current->rlim[RLIMIT_CORE].rlim_cur)
+		dump.u_ssize = 0;
+       	dump.u_comm = 0;
+	dump.u_ar0 = (struct pt_regs *)(((int)(&dump.regs)) -((int)(&dump)));
+	dump.signal = signr;
+	dump.regs = *regs;
+	dump.start_code = 0;
+	dump.start_stack = regs->esp & ~(PAGE_SIZE - 1);
+/* Flag indicating the math stuff is valid. */
+	if (dump.u_fpvalid = current->used_math) {
 		if (last_task_used_math == current)
-			__asm__("clts ; fnsave %0"::"m" (current->tss.i387));
-		DUMP_SEEK(1024);
-		DUMP_WRITE("floating-point regs=\n",21);
-		DUMP_SEEK(1088);
-		DUMP_WRITE(&current->tss.i387,sizeof(current->tss.i387));
-	}
+			__asm__("clts ; fnsave %0"::"m" (dump.i387));
+		else
+			memcpy(&dump.i387,&current->tss.i387,sizeof(dump.i387));
+	};
+	DUMP_WRITE(&dump,sizeof(dump));
+	DUMP_SEEK(sizeof(dump));
+ /* Dump the task struct.  Not be used by gdb, but could be useful */
+	DUMP_WRITE(current,sizeof(*current));
+/* Now dump all of the user data.  Include malloced stuff as well */
+	DUMP_SEEK(PAGE_SIZE);
 /* now we start writing out the user space info */
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x17));
-/* the dummy dump-file contains the first block of user space... */
-	DUMP_SEEK(2048);
-	DUMP_WRITE(0,1024);
+/* Dump the data area */
+	if (dump.u_dsize != 0) {
+		dump_start = current->end_code;
+		dump_size = current->brk - current->end_code;
+		DUMP_WRITE(dump_start,dump_size);
+	};
+/* Now prepare to dump the stack area */
+	if (dump.u_ssize != 0) {
+		dump_start = regs->esp & ~(PAGE_SIZE - 1);
+		dump_size = dump.u_ssize * PAGE_SIZE;
+		DUMP_WRITE(dump_start,dump_size);
+	};
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);

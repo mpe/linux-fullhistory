@@ -16,7 +16,8 @@
 static unsigned long tvtojiffies(struct timeval *value)
 {
 	return((unsigned long )value->tv_sec * HZ +
-		(unsigned long )value->tv_usec / (1000000 / HZ));
+		(unsigned long )(value->tv_usec + (1000000 / HZ - 1)) /
+		(1000000 / HZ));
 }
 
 static void jiffiestotv(unsigned long jiffies, struct timeval *value)
@@ -100,8 +101,9 @@ int sys_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 	int k;
 
 	if (!value)
-		return -EFAULT;
-	memcpy_fromfs(&set_buffer, value, sizeof(set_buffer));
+		memset((char *) &set_buffer, 0, sizeof(set_buffer));
+	else
+		memcpy_fromfs(&set_buffer, value, sizeof(set_buffer));
 	k = _setitimer(which, &set_buffer, ovalue ? &get_buffer : 0);
 	if (k < 0 || !ovalue)
 		return k;

@@ -41,7 +41,7 @@ void buffer_init(long buffer_end);
 #define MAJOR(a) (((unsigned)(a))>>8)
 #define MINOR(a) ((a)&0xff)
 
-#define NR_OPEN 20
+#define NR_OPEN 32
 #define NR_INODE 128
 #define NR_FILE 64
 #define NR_SUPER 8
@@ -226,6 +226,7 @@ extern struct inode * _namei(const char * filename, struct inode * base,
 	int follow_links);
 extern int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode);
+extern int do_mknod(const char * filename, int mode, int dev);
 extern void iput(struct inode * inode);
 extern struct inode * iget(int dev,int nr);
 extern struct inode * get_empty_inode(void);

@@ -137,8 +137,7 @@ int do_signal(long signr,struct pt_regs * regs)
 #endif
 	if ((regs->orig_eax != -1) &&
 	    ((regs->eax == -ERESTARTSYS) || (regs->eax == -ERESTARTNOINTR))) {
-		if ((regs->eax == -ERESTARTSYS) && ((sa->sa_flags & SA_INTERRUPT) ||
-		    signr < SIGCONT || signr > SIGTTOU))
+		if ((regs->eax == -ERESTARTSYS) && ((sa->sa_flags & SA_INTERRUPT)))
 			regs->eax = -EINTR;
 		else {
 			regs->eax = regs->orig_eax;
@@ -168,9 +167,7 @@ int do_signal(long signr,struct pt_regs * regs)
 			current->exit_code = signr;
 			if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 
 					SA_NOCLDSTOP))
-			  send_sig(SIGCHLD, current->p_pptr, 1);
-/*				current->p_pptr->signal |= (1<<(SIGCHLD-1));*/
-			
+				send_sig(SIGCHLD, current->p_pptr, 1);			
 			return(1);  /* Reschedule another event */
 
 		case SIGQUIT:

@@ -233,7 +233,6 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	char fname[sizeof(((struct sockaddr_un *)0)->sun_path) + 1];
 	int i;
 	unsigned long old_fs;
-	unsigned short old_euid;
 
 	PRINTK("unix_proto_bind: socket 0x%x, len=%d\n", sock,
 	       sockaddr_len);
@@ -254,21 +253,11 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 		return -EINVAL;
 	}
 
-	/*
-	 *		W A R N I N G
-	 * this is a terrible hack. i want to create a socket in the
-	 * filesystem and get its inode. sys_mknod() can create one for
-	 * me, but it needs superuser privs and doesn't give me the inode.
-	 * we fake suser here and get the file created... ugh.
-	 */
 	memcpy(fname, upd->sockaddr_un.sun_path, sockaddr_len-UN_PATH_OFFSET);
 	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
 	old_fs = get_fs();
 	set_fs(get_ds());
-	old_euid = current->euid;
-	current->euid = 0;
-	i = sys_mknod(fname, S_IFSOCK, 0);
-	current->euid = old_euid;
+	i = do_mknod(fname, S_IFSOCK | 0777, 0);
 	if (i == 0)
 		i = open_namei(fname, 0, S_IFSOCK, &upd->inode);
 	set_fs(old_fs);

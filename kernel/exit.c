@@ -22,7 +22,7 @@ int send_sig(long sig,struct task_struct * p,int priv)
 	if (!p || (sig < 0) || (sig > 32))
 		return -EINVAL;
 	if (!priv && ((sig != SIGCONT) || (current->session != p->session)) &&
-	    (current->euid != p->euid) && !suser())
+	    (current->euid != p->euid) && (current->uid != p->uid) && !suser())
 		return -EPERM;
 	if (!sig)
 		return 0;
@@ -42,7 +42,7 @@ int send_sig(long sig,struct task_struct * p,int priv)
 		/* save the signal number for wait. */
 		p->exit_code = sig;
 
-		/* we have to make sure the parent is awake. */
+		/* we have to make sure the parent process is awake. */
 		if (p->p_pptr != NULL && p->p_pptr->state == TASK_INTERRUPTIBLE)
 			p->p_pptr->state = TASK_RUNNING;
 
@@ -66,13 +66,7 @@ void release(struct task_struct * p)
 	for (i=1 ; i<NR_TASKS ; i++)
 		if (task[i] == p) {
 			task[i] = NULL;
-			/* Update links */
-			if (p->p_osptr)
-				p->p_osptr->p_ysptr = p->p_ysptr;
-			if (p->p_ysptr)
-				p->p_ysptr->p_osptr = p->p_osptr;
-			else
-				p->p_pptr->p_cptr = p->p_osptr;
+			REMOVE_LINKS(p);
 			free_page((long) p);
 			return;
 		}
@@ -284,6 +278,15 @@ static int has_stopped_jobs(int pgrp)
 	return(0);
 }
 
+static void forget_original_parent(struct task_struct * father)
+{
+	struct task_struct ** p;
+
+	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
+		if (*p && (*p)->p_opptr == father)
+			(*p)->p_opptr = task[1];
+}
+
 volatile void do_exit(long code)
 {
 	struct task_struct *p;
@@ -294,6 +297,7 @@ volatile void do_exit(long code)
 	for (i=0 ; i<NR_OPEN ; i++)
 		if (current->filp[i])
 			sys_close(i);
+	forget_original_parent(current);
 	iput(current->pwd);
 	current->pwd = NULL;
 	iput(current->root);
@@ -332,18 +336,18 @@ volatile void do_exit(long code)
   	 * A.  Make init inherit all the child processes
 	 * B.  Check to see if any process groups have become orphaned
 	 *	as a result of our exiting, and if they have any stopped
-	 *	jons, send them a SIGUP and then a SIGCONT.  (POSIX 3.2.2.2)
+	 *	jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
 	 */
 	while (p = current->p_cptr) {
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
-	        p->flags &= ~PF_PTRACED;
+		p->flags &= ~PF_PTRACED;
 		p->p_pptr = task[1];
-		p->p_osptr = task[1]->p_cptr;
-		task[1]->p_cptr->p_ysptr = p;
-		task[1]->p_cptr = p;
+		p->p_osptr = p->p_pptr->p_cptr;
+		p->p_osptr->p_ysptr = p;
+		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
-			task[1]->signal |= (1<<(SIGCHLD-1));
+			p->p_pptr->signal |= (1<<(SIGCHLD-1));
 		/*
 		 * process group orphan check
 		 * Case ii: Our child is in a different pgrp 
@@ -396,7 +400,7 @@ int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 		verify_area(stat_addr,4);
 repeat:
 	flag=0;
-	for (p = current->p_cptr ; p ; p = p->p_osptr) {
+ 	for (p = current->p_cptr ; p ; p = p->p_osptr) {
 		if (pid>0) {
 			if (p->pid != pid)
 				continue;
@@ -426,7 +430,13 @@ repeat:
 				flag = p->pid;
 				if (stat_addr)
 					put_fs_long(p->exit_code, stat_addr);
-				release(p);
+				if (p->p_opptr != p->p_pptr) {
+					REMOVE_LINKS(p);
+					p->p_pptr = p->p_opptr;
+					SET_LINKS(p);
+					send_sig(SIGCHLD,p->p_pptr,1);
+				} else
+					release(p);
 #ifdef DEBUG_PROC_TREE
 				audit_ptree();
 #endif
@@ -451,5 +461,3 @@ repeat:
 	}
 	return -ECHILD;
 }
-
-

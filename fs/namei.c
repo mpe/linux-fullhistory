@@ -252,14 +252,12 @@ int open_namei(const char * pathname, int flag, int mode,
 	return 0;
 }
 
-int sys_mknod(const char * filename, int mode, int dev)
+int do_mknod(const char * filename, int mode, int dev)
 {
 	const char * basename;
 	int namelen;
 	struct inode * dir;
 	
-	if (!suser())
-		return -EPERM;
 	if (!(dir = dir_namei(filename,&namelen,&basename, NULL)))
 		return -ENOENT;
 	if (!namelen) {
@@ -275,6 +273,13 @@ int sys_mknod(const char * filename, int mode, int dev)
 		return -EPERM;
 	}
 	return dir->i_op->mknod(dir,basename,namelen,mode,dev);
+}
+
+int sys_mknod(const char * filename, int mode, int dev)
+{
+	if (suser())
+		return do_mknod(filename,mode,dev);
+	return -EPERM;
 }
 
 int sys_mkdir(const char * pathname, int mode)

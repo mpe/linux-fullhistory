@@ -49,11 +49,15 @@ static int pipe_write(struct inode * inode, struct file * filp, char * buf, int 
 {
 	int chars, size, written = 0;
 
+	if (inode->i_count != 2) { /* no readers */
+		send_sig(SIGPIPE,current,0);
+		return -EINTR;
+	}
 	while (count>0) {
 		while (!(size=(PAGE_SIZE-1)-PIPE_SIZE(*inode))) {
 			wake_up(& PIPE_READ_WAIT(*inode));
 			if (inode->i_count != 2) { /* no readers */
-				current->signal |= (1<<(SIGPIPE-1));
+				send_sig(SIGPIPE,current,0);
 				return written?written:-EINTR;
 			}
 			if (current->signal & ~current->blocked)

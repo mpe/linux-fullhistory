@@ -107,13 +107,11 @@ int sys_fork(long ebx,long ecx,long edx,
 	task[nr] = p;
 	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
 	p->state = TASK_UNINTERRUPTIBLE;
+	p->flags &= ~PF_PTRACED;
 	p->pid = last_pid;
-	p->p_pptr = current;
+	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
-	p->p_ysptr = NULL;
-	if (p->p_osptr = current->p_cptr)
-		p->p_osptr->p_ysptr = p;
-	current->p_cptr = p;
+	SET_LINKS(p);
 	p->counter = p->priority;
 	p->signal = 0;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
@@ -151,12 +149,7 @@ int sys_fork(long ebx,long ecx,long edx,
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	if (copy_mem(nr,p)) {
 		task[nr] = NULL;
-		if (p->p_pptr->p_cptr == p)
-			p->p_pptr->p_cptr = p->p_osptr;
-		if (p->p_osptr)
-			p->p_osptr->p_ysptr = p->p_ysptr;
-		if (p->p_ysptr)
-			p->p_ysptr->p_osptr = p->p_osptr;
+		REMOVE_LINKS(p);
 		free_page((long) p);
 		return -EAGAIN;
 	}

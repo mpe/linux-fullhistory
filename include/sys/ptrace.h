@@ -4,6 +4,21 @@
 #ifndef _SYS_PTRACE_H
 #define _SYS_PTRACE_H
 /* has the defines to get at the registers. */
+
+#define PTRACE_TRACEME		   0
+#define PTRACE_PEEKTEXT		   1
+#define PTRACE_PEEKDATA		   2
+#define PTRACE_PEEKUSR		   3
+#define PTRACE_POKETEXT		   4
+#define PTRACE_POKEDATA		   5
+#define PTRACE_POKEUSR		   6
+#define PTRACE_CONT		   7
+#define PTRACE_KILL		   8
+#define PTRACE_SINGLESTEP	   9
+
+#define PTRACE_ATTACH		0x10
+#define PTRACE_DETACH		0x11
+
 /* use ptrace (3 or 6, pid, PT_EXCL, data); to read or write
    the processes registers. */
 

@@ -154,6 +154,17 @@ static int write_port(struct inode * inode,struct file * file,char * buf, int co
 	return tmp-buf;
 }
 
+static int read_zero(struct inode *node,struct file *file,char *buf,int count)
+{
+	int left;
+
+	for (left = count; left > 0; left--) {
+		put_fs_byte(0,buf);
+		buf++;
+	}
+	return count;
+}
+
 /*
  * The memory devices use the full 32 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
@@ -192,6 +203,8 @@ static int mem_read(struct inode * inode, struct file * file, char * buf, int co
 			return 0;	/* /dev/null */
 		case 4:
 			return read_port(inode,file,buf,count);
+		case 5:
+			return read_zero(inode,file,buf,count);
 		default:
 			return -ENODEV;
 	}
@@ -210,6 +223,8 @@ static int mem_write(struct inode * inode, struct file * file, char * buf, int c
 			return count;	/* /dev/null */
 		case 4:
 			return write_port(inode,file,buf,count);
+		case 5:
+			return count; /* /dev/zero */
 		default:
 			return -ENODEV;
 	}
