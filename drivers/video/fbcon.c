@@ -1317,10 +1317,19 @@ static int fbcon_switch(struct vc_data *conp)
     struct fb_info *info = p->fb_info;
 
     if (softback_top) {
+    	int l = fbcon_softback_size / conp->vc_size_row;
 	if (softback_lines)
 	    fbcon_set_origin(conp);
         softback_top = softback_curr = softback_in = softback_buf;
         softback_lines = 0;
+
+	if (l > 5)
+	    softback_end = softback_buf + l * conp->vc_size_row;
+	else {
+	    /* Smaller scrollback makes no sense, and 0 would screw
+	       the operation totally */
+	    softback_top = 0;
+	}
     }
     if (logo_shown >= 0) {
     	struct vc_data *conp2 = vc_cons[logo_shown].d;
@@ -1620,9 +1629,6 @@ static inline int fbcon_set_font(int unit, struct console_font_op *op)
     int h = op->height;
     int size = h;
     int i, k;
-#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
-    int j;
-#endif
     u8 *new_data, *data = op->data, *p;
 
 #ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
@@ -1878,7 +1884,6 @@ static int fbcon_scrolldelta(struct vc_data *conp, int lines)
     		    	q -= conp->vc_size_row;
     		    	scr_memcpyw((u16 *)q, (u16 *)p, conp->vc_size_row);
     		    }
-    		    softback_lines -= i;
     		    softback_in = p;
     		    update_region(unit, conp->vc_origin, logo_lines * conp->vc_cols);
     		}

@@ -1558,7 +1558,6 @@ static int bttv_open(struct video_device *dev, int flags)
 static void bttv_close(struct video_device *dev)
 {
 	struct bttv *btv=(struct bttv *)dev;
-	unsigned long f;
 	
 	btv->user--;
 	audio(btv, AUDIO_INTERN);
@@ -1580,6 +1579,7 @@ static void bttv_close(struct video_device *dev)
 	 *	which is more than sufficient to be sure.
 	 */
 	 
+	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout(HZ/10);	/* Wait 1/10th of a second */
 	
 	/*

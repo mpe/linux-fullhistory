@@ -2080,7 +2080,7 @@ Auto-probe for parallel devices
 CONFIG_PNP_PARPORT
   Some IEEE-1284 conforming parallel-port devices can identify
   themselves when requested. Say Y to enable this feature, or M to
-  compile it as a module (parport_ieee1284.o). If in doubt, say N.
+  compile it as a module (parport_probe.o). If in doubt, say N.
 
 Enable loadable module support
 CONFIG_MODULES
@@ -2715,20 +2715,6 @@ CONFIG_TCP_NAGLE_OFF
   strongly recommend to say N here, thereby leaving NAGLE
   enabled. Those programs that would benefit from disabling this
   facility can do it on a per connection basis themselves.
-
-IP: Drop source routed frames
-CONFIG_IP_NOSR
-  Usually, the originator of an IP frame (packet) specifies only the
-  destination, and the hosts along the way do the routing, i.e. they
-  decide how to forward the frame. However, there is a feature of the
-  IP protocol that allows to specify the full route for a given frame
-  already at its origin. A frame with such a fully specified route is
-  called "source routed". The question now is whether we should honour
-  these route requests when such frames arrive, or if we should drop
-  all those frames instead. Honouring them can introduce security
-  problems (and is rarely a useful feature), and hence it is
-  recommended that you say Y here unless you really know what you're
-  doing.
 
 IP: Allow large windows (not recommended if <16 MB of memory)
 CONFIG_SKB_LARGE
@@ -4184,6 +4170,17 @@ CONFIG_SCSI_INITIO
   say M here and read Documentation/modules.txt. The module will be
   called initio.o
 
+Initio 91XXU(W) SCSI support
+CONFIG_SCSI_INITIO
+  This is support for the Initio 91XXU(W) SCSI host adapter.
+  Please read the SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called initio.o
+
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
   This is support for a SCSI host adapter. It is explained in section
@@ -4196,6 +4193,17 @@ CONFIG_SCSI_PAS16
   inserted in and removed from the running kernel whenever you want).
   The module will be called pas16.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+Initio INI-A100U2W SCSI support
+CONFIG_SCSI_INIA100
+  This is support for the Initio INI-A100U2W SCSI host adapter.
+  Please read the SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  If you want to compile this as a module ( = code which can be 
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called a100u2w.o
 
 PCI2000 support
 CONFIG_SCSI_PCI2000
@@ -4388,6 +4396,23 @@ CONFIG_SCSI_NCR53C406A
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called NCR53c406.o.
+
+Symbios Logic sym53c416 support
+CONFIG_SCSI_SYM53C416
+  This is support for the sym53c416 SCSI host adapter. This is the
+  SCSI adapter that comes with some hp scanners. This driver requires that
+  the sym53c416 is configured first using some sort of pnp configuration
+  program (e.g. isapnp) or by a PnP aware BIOS. If you are using isapnp then
+  you need to compile it as a module and then load it using insmod after
+  isapnp has run. The parameters of the configured card(s) should be passed
+  to the driver. The format is:
+
+    insmod sym53c416 sym53c416=<base>,<irq> [sym53c416_1=<base>,<irq>]
+
+  There is support for up to four adapters. If you want to compile this
+  driver as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
 
 Tekram DC390(T) and Am53/79C974 (PCscsi) SCSI support
 CONFIG_SCSI_DC390T
@@ -8914,6 +8939,20 @@ CONFIG_SOUND_OSS
   here (the module will be called sound.o) if you haven't found a
   driver for your sound card above, then pick your driver from the
   list below.
+
+Persistent DMA buffers
+CONFIG_SOUND_DMAP
+  Linux can often have problems allocating DMA buffers for ISA cards on
+  machines with more than 16MB of RAM. This is because ISA DMA buffers
+  must exist below the 16MB boundry and it is quite possible that we
+  can't find a large enough free block in this region after the machine
+  has been running for any amount of time. If you say Y here the DMA
+  buffers (64Kb) will be allocated at boot time and kept until the
+  shutdown. This option is only usefull if you say Y to OSS sound
+  modules. If you say M to OSS sound modules then you can just pass to
+  the sound.o module a "dmabuf=1" command-line argument.
+
+  Say Y unless you have 16MB or less RAM or a PCI sound card.
  
 Support for Aztech Sound Galaxy (non-PnP) cards
 CONFIG_SOUND_SGALAXY
@@ -10493,6 +10532,44 @@ SF16FMI I/O port (0x284 or 0x384)
 CONFIG_RADIO_SF16FMI_PORT
   Enter the I/O port of your SF16FMI radio card.
 
+Typhoon Radio
+CONFIG_RADIO_TYPHOON
+  Choose Y here if you have one of these FM radio cards, and then fill
+  in the port address and the frequency used for muting below.
+
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API. Information on 
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a 
+  program like lynx or netscape.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-typhoon.o
+
+Support for /proc/radio-typhoon
+CONFIG_RADIO_TYPHOON_PROC_FS
+  Say Y here if you want the typhoon radio card driver to write
+  status information (frequency, volume, muted, mute frequency,
+  base address) to /proc/radio-typhoon. The file can be viewed with
+  your favorite pager (i.e. use "more /proc/radio-typhoon" or "less
+  /proc/radio-typhoon" or simply "cat /proc/radio-typhoon").
+
+Typhoon I/O port (0x316 or 0x336)
+CONFIG_RADIO_TYPHOON_PORT
+  Enter the I/O port of your Typhoon or EcoRadio radio card.
+
+Typhoon frequency set when muting the device (kHz)
+CONFIG_RADIO_TYPHOON_MUTEFREQ
+  Enter the frequency used for muting the radio. The device is never
+  completely silent. If the volume is just turned down, you can still
+  hear silent voices and music. For that reason, the frequency of the
+  radio device is set to the frequency you can enter here whenever
+  the device is muted. There should be no local radio station at that
+  frequency.
+
 Zoltrix Radio
 CONFIG_RADIO_ZOLTRIX
   Choose Y here if you have one of these FM radio cards, and then fill
@@ -10738,24 +10815,10 @@ CONFIG_IRLAN
   Documentation/modules.txt. IrLAN emulates an Ethernet and makes it
   possible to put up a wireless LAN using infrared beams.
 
-IrLAN Client Protocol 
-CONFIG_IRLAN_CLIENT
-  Say Y here if you want to build support for the IrLAN client
-  protocol. If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The IrLAN client protocol can be used to
-  talk with infrared access points like the HP NetbeamIR, or the ESI
-  JetEye NET. You can also connect to another Linux machine running
-  the IrLAN server protocol for ad-hoc networking!
-
-IrLAN Server Protocol 
-CONFIG_IRLAN_SERVER
-  Say Y here if you want to build support for infrared LAN access. If
-  you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The IrLAN server protocol makes it
-  possible to set up a wireless LAN with a machine running the IrLAN
-  client protocol. Notice that the IrLAN server protocol currently
-  only emulates an access point and does not implement the ad-hoc
-  specification of IrLAN, but this will not be noticeable by the user.
+  The IrLAN protocol can be used to talk with infrared access points 
+  like the HP NetbeamIR, or the ESI JetEye NET. You can also connect 
+  to another Linux machine running the IrLAN protocol for ac-hoc 
+  networking!
 
 IrOBEX Protocol
 CONFIG_IROBEX
@@ -10867,6 +10930,15 @@ CONFIG_TEKRAM_DONGLE
   the normal 9-pin serial port connector, and can currently only be
   used by IrTTY. To activate support for Tekram dongles you will have
   to insert "irattach -d tekram" in the /etc/irda/drivers script.
+
+Greenwich GIrBIL dongle
+CONFIG_GIRBIL_DONGLE
+  Say Y here if you want to build support for the Greenwich GIrBIL
+  dongle. If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. The Greenwich dongle attaches to the
+  normal 9-pin serial port connector, and can currently only be used
+  by IrTTY. To activate support for Greenwich dongles you will have to
+  insert "irattach -d girbil" in the /etc/irda/drivers script.
 
 VME (Motorola and BVM) support
 CONFIG_VME

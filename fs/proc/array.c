@@ -1343,6 +1343,7 @@ static int process_unauthorized(int type, int pid)
 {
 	struct task_struct *p;
 	uid_t euid=0;	/* Save the euid keep the lock short */
+	int ok = 0;
 		
 	read_lock(&tasklist_lock);
 	
@@ -1352,9 +1353,11 @@ static int process_unauthorized(int type, int pid)
 	 */
 	
 	p = find_task_by_pid(pid);
-	if(p)
-	{
+	if (p) {
 		euid=p->euid;
+		ok = p->dumpable;
+		if(!cap_issubset(p->cap_permitted, current->cap_permitted))
+			ok=0;			
 		if(!p->mm)	/* Scooby scooby doo where are you ? */
 			p=NULL;
 	}
@@ -1374,7 +1377,7 @@ static int process_unauthorized(int type, int pid)
 		case PROC_PID_CPU:
 			return 0;	
 	}
-	if(capable(CAP_DAC_OVERRIDE) || current->fsuid == euid)
+	if(capable(CAP_DAC_OVERRIDE) || (current->fsuid == euid && ok))
 		return 0;
 	return 1;
 }

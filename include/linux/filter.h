@@ -26,8 +26,8 @@ struct sock_filter	/* Filter block */
 
 struct sock_fprog	/* Required for SO_ATTACH_FILTER. */
 {
-        unsigned int         	len;	/* Number of filter blocks */
-        struct sock_filter     *filter;
+	unsigned short		len;	/* Number of filter blocks */
+	struct sock_filter	*filter;
 };
 
 #ifdef __KERNEL__

@@ -17,6 +17,7 @@
  * 97-4-11 Making protocol independent of endianity etc.
  * 97-9-13 Cosmetic changes
  * 98-5-13 Attempt to make 64-bit-clean on 64-bit machines
+ * 99-1-11 Attempt to make 64-bit-clean on 32-bit machines <ankry@mif.pg.gda.pl>
  *
  * possible FIXME: make set_sock / set_blksize / set_size / do_it one syscall
  * why not: would need verify_area and friends, would share yet another 
@@ -45,8 +46,9 @@
 #define LO_MAGIC 0x68797548
 
 static int nbd_blksizes[MAX_NBD];
+static int nbd_blksize_bits[MAX_NBD];
 static int nbd_sizes[MAX_NBD];
-static int nbd_bytesizes[MAX_NBD];
+static u64 nbd_bytesizes[MAX_NBD];
 
 static struct nbd_device nbd_dev[MAX_NBD];
 
@@ -149,7 +151,7 @@ void nbd_send_req(struct socket *sock, struct request *req)
 	DEBUG("NBD: sending control, ");
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(req->cmd);
-	request.from = cpu_to_be64( (u64) req->sector * (u64) 512);
+	request.from = cpu_to_be64( (u64) req->sector << 9);
 	request.len = htonl(req->current_nr_sectors << 9);
 	memcpy(request.handle, &req, sizeof(req));
 
@@ -340,7 +342,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg)
 {
 	struct nbd_device *lo;
-	int dev, error;
+	int dev, error, temp;
 
 	/* Anyone capable of this syscall can do *real bad* things */
 
@@ -355,6 +357,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 	lo = &nbd_dev[dev];
 	switch (cmd) {
 	case NBD_CLEAR_SOCK:
+		nbd_clear_que(lo);
 		if (lo->head || lo->tail) {
 			printk(KERN_ERR "nbd: Some requests are in progress -> can not turn off.\n");
 			return -EBUSY;
@@ -380,14 +383,25 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		}
 		return error;
 	case NBD_SET_BLKSIZE:
-		if ((arg & 511) || (arg > PAGE_SIZE))
+		if ((arg & (arg-1)) || (arg < 512) || (arg > PAGE_SIZE))
 			return -EINVAL;
 		nbd_blksizes[dev] = arg;
-		nbd_sizes[dev] = arg/nbd_blksizes[dev];
+		temp = arg >> 9;
+		nbd_blksize_bits[dev] = 9;
+		while (temp > 1) {
+			nbd_blksize_bits[dev]++;
+			temp >>= 1;
+		}
+		nbd_sizes[dev] = nbd_bytesizes[dev] >> nbd_blksize_bits[dev];
+		nbd_bytesizes[dev] = nbd_sizes[dev] << nbd_blksize_bits[dev];
 		return 0;
 	case NBD_SET_SIZE:
-		nbd_bytesizes[dev] = arg;
-		nbd_sizes[dev] = arg/nbd_blksizes[dev];
+		nbd_sizes[dev] = arg >> nbd_blksize_bits[dev];
+		nbd_bytesizes[dev] = nbd_sizes[dev] << nbd_blksize_bits[dev];
+		return 0;
+	case NBD_SET_SIZE_BLOCKS:
+		nbd_sizes[dev] = arg;
+		nbd_bytesizes[dev] = arg << nbd_blksize_bits[dev];
 		return 0;
 	case NBD_DO_IT:
 		if (!lo->file)
@@ -404,7 +418,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		return 0;
 #endif
 	case BLKGETSIZE:
-		return put_user(nbd_bytesizes[dev]/512, (long *) arg);
+		return put_user(nbd_bytesizes[dev] << 9, (long *) arg);
 	}
 	return -EINVAL;
 }
@@ -420,6 +434,7 @@ static int nbd_release(struct inode *inode, struct file *file)
 	if (dev >= MAX_NBD)
 		return -ENODEV;
 	fsync_dev(inode->i_rdev);
+	invalidate_buffers(inode->i_rdev);
 	lo = &nbd_dev[dev];
 	if (lo->refcnt <= 0)
 		printk(KERN_ALERT "nbd_release: refcount(%d) <= 0\n", lo->refcnt);
@@ -478,8 +493,9 @@ int nbd_init(void)
 		nbd_dev[i].magic = LO_MAGIC;
 		nbd_dev[i].flags = 0;
 		nbd_blksizes[i] = 1024;
-		nbd_bytesizes[i] = 0x7fffffff;
-		nbd_sizes[i] = nbd_bytesizes[i]/nbd_blksizes[i];
+		nbd_blksize_bits[i] = 10;
+		nbd_bytesizes[i] = 0x7ffffc00; /* 2GB */
+		nbd_sizes[i] = nbd_bytesizes[i] >> nbd_blksize_bits[i];
 	}
 	return 0;
 }

@@ -543,70 +543,72 @@ static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0, "timer", NUL
  * device.
  */
 
+#define CALIBRATE_LATCH	(5 * LATCH)
+#define CALIBRATE_TIME	(5 * 1000020/HZ)
+
 __initfunc(static unsigned long calibrate_tsc(void))
 {
-       unsigned long retval;
+       /* Set the Gate high, disable speaker */
+	outb((inb(0x61) & ~0x02) | 0x01, 0x61);
 
-       __asm__( /* set the Gate high, program CTC channel 2 for mode 0
-		 * (interrupt on terminal count mode), binary count, 
-		 * load 5 * LATCH count, (LSB and MSB)
-		 * to begin countdown, read the TSC and busy wait.
-		 * BTW LATCH is calculated in timex.h from the HZ value
-		 */
+	/*
+	 * Now let's take care of CTC channel 2
+	 *
+	 * Set the Gate high, program CTC channel 2 for mode 0,
+	 * (interrupt on terminal count mode), binary count,
+	 * load 5 * LATCH count, (LSB and MSB) to begin countdown.
+	 */
+	outb(0xb0, 0x43);			/* binary, mode 0, LSB/MSB, Ch 2 */
+	outb(CALIBRATE_LATCH & 0xff, 0x42);	/* LSB of count */
+	outb(CALIBRATE_LATCH >> 8, 0x42);	/* MSB of count */
 
-	       /* Set the Gate high, disable speaker */
-	       "inb  $0x61, %%al\n\t" /* Read port */
-	       "andb $0xfd, %%al\n\t" /* Turn off speaker Data */
-	       "orb  $0x01, %%al\n\t" /* Set Gate high */
-	       "outb %%al, $0x61\n\t" /* Write port */
+	{
+		unsigned long startlow, starthigh;
+		unsigned long endlow, endhigh;
+		unsigned long count;
 
-	       /* Now let's take care of CTC channel 2 */
-	       "movb $0xb0, %%al\n\t" /* binary, mode 0, LSB/MSB, ch 2*/
-	       "outb %%al, $0x43\n\t" /* Write to CTC command port */
-	       "movl %1, %%eax\n\t"
-	       "outb %%al, $0x42\n\t" /* LSB of count */
-	       "shrl $8, %%eax\n\t"
-	       "outb %%al, $0x42\n\t" /* MSB of count */
+		__asm__ __volatile__("rdtsc":"=a" (startlow),"=d" (starthigh));
+		count = 0;
+		do {
+			count++;
+		} while ((inb(0x61) & 0x20) == 0);
+		__asm__ __volatile__("rdtsc":"=a" (endlow),"=d" (endhigh));
 
-               /* Read the TSC; counting has just started */
-               "rdtsc\n\t"
-               /* Move the value for safe-keeping. */
-               "movl %%eax, %%ebx\n\t"
-               "movl %%edx, %%ecx\n\t"
+		last_tsc_low = endlow;
 
-	       /* Busy wait. Only 50 ms wasted at boot time. */
-               "0: inb $0x61, %%al\n\t" /* Read Speaker Output Port */
-	       "testb $0x20, %%al\n\t" /* Check CTC channel 2 output (bit 5) */
-               "jz 0b\n\t"
+		/* Error: ECTCNEVERSET */
+		if (count <= 1)
+			goto bad_ctc;
 
-               /* And read the TSC.  5 jiffies (50.00077ms) have elapsed. */
-               "rdtsc\n\t"
+		/* 64-bit subtract - gcc just messes up with long longs */
+		__asm__("subl %2,%0\n\t"
+			"sbbl %3,%1"
+			:"=a" (endlow), "=d" (endhigh)
+			:"g" (startlow), "g" (starthigh),
+			 "0" (endlow), "1" (endhigh));
 
-               /* Great.  So far so good.  Store last TSC reading in
-                * last_tsc_low (only 32 lsb bits needed) */
-               "movl %%eax, last_tsc_low\n\t"
-               /* And now calculate the difference between the readings. */
-               "subl %%ebx, %%eax\n\t"
-               "sbbl %%ecx, %%edx\n\t" /* 64-bit subtract */
-	       /* but probably edx = 0 at this point (see below). */
-               /* Now we have 5 * (TSC counts per jiffy) in eax.  We want
-                * to calculate TSC->microsecond conversion factor. */
+		/* Error: ECPUTOOFAST */
+		if (endhigh)
+			goto bad_ctc;
 
-               /* Note that edx (high 32-bits of difference) will now be 
-                * zero iff CPU clock speed is less than 85 GHz.  Moore's
-                * law says that this is likely to be true for the next
-                * 12 years or so.  You will have to change this code to
-                * do a real 64-by-64 divide before that time's up. */
-               "movl %%eax, %%ecx\n\t"
-               "xorl %%eax, %%eax\n\t"
-               "movl %2, %%edx\n\t"
-               "divl %%ecx\n\t" /* eax= 2^32 / (1 * TSC counts per microsecond) */
-	       /* Return eax for the use of fast_gettimeoffset */
-               "movl %%eax, %0\n\t"
-               : "=r" (retval)
-               : "r" (5 * LATCH), "r" (5 * 1000020/HZ)
-               : /* we clobber: */ "ax", "bx", "cx", "dx", "cc", "memory");
-       return retval;
+		/* Error: ECPUTOOSLOW */
+		if (endlow <= CALIBRATE_TIME)
+			goto bad_ctc;
+
+		__asm__("divl %2"
+			:"=a" (endlow), "=d" (endhigh)
+			:"r" (endlow), "0" (0), "1" (CALIBRATE_TIME));
+
+		return endlow;
+	}
+
+	/*
+	 * The CTC wasn't reliable: we got a hit on the very first read,
+	 * or the CPU was so fast/slow that the quotient wouldn't fit in
+	 * 32 bits..
+	 */
+bad_ctc:
+	return 0;
 }
 
 __initfunc(void time_init(void))
@@ -642,23 +644,26 @@ __initfunc(void time_init(void))
  	dodgy_tsc();
  	
 	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
+		unsigned long tsc_quotient = calibrate_tsc();
+		if (tsc_quotient) {
+			fast_gettimeoffset_quotient = tsc_quotient;
+			use_tsc = 1;
 #ifndef do_gettimeoffset
-		do_gettimeoffset = do_fast_gettimeoffset;
+			do_gettimeoffset = do_fast_gettimeoffset;
 #endif
-		do_get_fast_time = do_gettimeofday;
-		use_tsc = 1;
-		fast_gettimeoffset_quotient = calibrate_tsc();
-		
-		/* report CPU clock rate in Hz.
-		 * The formula is (10^6 * 2^32) / (2^32 * 1 / (clocks/us)) =
-		 * clock/second. Our precision is about 100 ppm.
-		 */
-		{	unsigned long eax=0, edx=1000000;
-			__asm__("divl %2"
-	       		:"=a" (cpu_hz), "=d" (edx)
-               		:"r" (fast_gettimeoffset_quotient),
-                	"0" (eax), "1" (edx));
-			printk("Detected %ld Hz processor.\n", cpu_hz);
+			do_get_fast_time = do_gettimeofday;
+
+			/* report CPU clock rate in Hz.
+			 * The formula is (10^6 * 2^32) / (2^32 * 1 / (clocks/us)) =
+			 * clock/second. Our precision is about 100 ppm.
+			 */
+			{	unsigned long eax=0, edx=1000000;
+				__asm__("divl %2"
+		       		:"=a" (cpu_hz), "=d" (edx)
+        	       		:"r" (tsc_quotient),
+	                	"0" (eax), "1" (edx));
+				printk("Detected %ld Hz processor.\n", cpu_hz);
+			}
 		}
 	}
 

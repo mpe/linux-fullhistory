@@ -607,7 +607,7 @@ int do_munmap(unsigned long addr, size_t len)
 		return -EINVAL;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
-		return 0;
+		return -EINVAL;
 
 	/* Check if this memory area is ok - put it on the temporary
 	 * list if so..  The checks here are pretty simple --

@@ -875,8 +875,8 @@ static void __init pcibios_fixup_io_addr(struct pci_dev *dev, int idx)
 		printk("PCI: Unassigned I/O space for %02x:%02x\n", bus, devfn);
 		return;
 	}
-	if ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4 ||
-	    (dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
+	if (((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4) ||
+	     (dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
 		/*
 		 * In case the BIOS didn't assign an address 0--3 to an IDE
 		 * controller, we don't try to fix it as it means "use default

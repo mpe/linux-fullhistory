@@ -8,6 +8,7 @@
 #define NBD_CLEAR_SOCK	_IO( 0xab, 4 )
 #define NBD_CLEAR_QUE	_IO( 0xab, 5 )
 #define NBD_PRINT_DEBUG	_IO( 0xab, 6 )
+#define NBD_SET_SIZE_BLOCKS	_IO( 0xab, 7 )
 
 #ifdef MAJOR_NR
 
@@ -60,13 +61,21 @@ struct nbd_device {
 #define NBD_REPLY_MAGIC 0x67446698
 /* Do *not* use magics: 0x12560953 0x96744668. */
 
+/*
+ * This is packet used for communication between client and
+ * server. All data are in network byte order.
+ */
 struct nbd_request {
 	u32 magic;
 	u32 type;	/* == READ || == WRITE 	*/
 	char handle[8];
 	u64 from;
 	u32 len;
-};
+}
+#ifdef __GNUC__
+	__attribute__ ((packed))
+#endif
+;
 
 struct nbd_reply {
 	u32 magic;
