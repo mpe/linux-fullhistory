@@ -277,6 +277,13 @@ static inline int check_signature(unsigned long io_addr,
 out:
 	return retval;
 }
+
+/* Nothing to do */
+
+#define dma_cache_inv(_start,_size)		do { } while (0)
+#define dma_cache_wback(_start,_size)		do { } while (0)
+#define dma_cache_wback_inv(_start,_size)	do { } while (0)
+
 #endif /* __KERNEL__ */
 
 #endif

@@ -8,11 +8,11 @@
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
 #include <linux/pci.h>
+#include <linux/ide.h>
 
 #include <asm/io.h>
 #include <asm/dma.h>
 
-#include "ide.h"
 #include "ide_modes.h"
 
 void ide_init_sl82c105(ide_hwif_t *hwif)

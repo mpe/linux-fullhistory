@@ -289,9 +289,9 @@ CONFIG_BLK_DEV_NBD
 Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
 CONFIG_BLK_DEV_IDE
   If you say Y here, you will use the full-featured IDE driver to
-  control up to four IDE interfaces, each being able to serve a
-  "master" and a "slave" device, for a total of up to eight IDE
-  disk/cdrom/tape/floppy drives. People with SCSI-only systems
+  control up to eight IDE interfaces, each being able to serve a
+  "master" and a "slave" device, for a total of up to sixteen (16)
+  IDE disk/cdrom/tape/floppy drives.  People with SCSI-only systems
   can say N here.
 
   Useful information about large (>540 MB) IDE disks, multiple
@@ -370,6 +370,15 @@ CONFIG_BLK_DEV_IDEDISK
   root filesystem (the one containing the directory /) is located on
   the IDE disk. If unsure, say Y.
 
+Use multi-mode by default
+CONFIG_IDEDISK_MULTI_MODE
+  If you get this error, try to enable this option.
+
+  hda: set_multmode: status=0x51 { DriveReady SeekComplete Error }
+  hda: set_multmode: error=0x04 { DriveStatusError }
+
+  If in doubt, say N.
+
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
   If you have a CDROM drive using the ATAPI protocol, say Y. ATAPI is
@@ -395,6 +404,17 @@ CONFIG_BLK_DEV_IDECD
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called ide-cd.o.
+
+Include CD-Changer Reporting
+CONFIG_IDECD_SLOTS
+  If you have an IDE/ATAPI multi-slot cd-changer and you want
+  to report which slots have disk-present, say Y.  If you say Y
+  and there is not a multi-slot cdrom present, this code is skipped.
+
+  This could be the bases of multi-disk access based on multi-mounts.
+  This is still pie-in-the-sky.
+
+  If unsure, say N.
 
 Include IDE/ATAPI TAPE support
 CONFIG_BLK_DEV_IDETAPE
@@ -638,20 +658,109 @@ CONFIG_BLK_DEV_NS87415
 
   Please read the comments at the top of drivers/block/ns87415.c.
 
+CY82C693 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_CY82C693
+
+  This driver adds detection and support for the CY82C693 chipset
+  used on Digital's PC-Alpha 164SX boards.
+
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
+
+  Please read the comments at the top of drivers/block/cy82c693.c
+
 VIA82C586 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_VIA82C586
-  This adds initial timing settings for VIA (U)DMA onboard ide
-  controllers that are ATA3 compliant. May work with ATA4 systems, but
-  not tested to date.
+  This allows you to to configure your chipset for a better use while
+  running (U)DMA: it will allow you to enable efficiently the second
+  channel dma usage, as it is may not be set by BIOS. It allows you to
+  run a kernel command line at boot time in order to set fifo config.
+  If no command line is provided, it will try to set fifo configuration
+  at its best. It will allow you to get a proc/ide/via display
+  (while running a "cat") provided you enabled "proc" support and
+  set DISPLAY_APOLLO_TIMINGS in via82c586.c
 
-  If you say Y here, you also need to say Y to "Use DMA by default
-  when available", above.
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
 
   If unsure, say N.
 
 CMD646 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_CMD646
   Say Y here if you have an IDE controller like this.
+
+ALI M15x3 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_ALI15X3
+  This driver ensures (U)DMA support for ALI 1533, 1543 and 1543C
+  onboard chipsets.  It also tests for Simplex mode and enables
+  normal dual channel support.
+
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
+
+  Please read the comments at the top of drivers/block/alim15x3.c
+
+  If unsure, say N.
+
+PROMISE PDC20246 support (EXPERIMENTAL)
+CONFIG_BLK_DEV_PDC20246
+  This driver adds up to 4 more eide devices sharing a single interrupt.
+  This add-on card is a bootable PCI UDMA controller.
+  Since multiple cards can be installed and there are BIOS ROM problems
+  that happen if the BIOS revisions of all installed cards (three-max)
+  do not match.  Should you be unable to make new BIOS chips with a burner,
+  the driver attempts to dynamic tuning of the chipset at boot-time
+  for max-speed.  Ultra33 BIOS 1.25 or new required for more than one card.
+
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
+
+  Please read the comments at the top of drivers/block/pdc202xx.c
+
+  If unsure, say N.
+
+PROMISE PDC20262 support (EXPERIMENTAL)
+CONFIG_BLK_DEV_PDC20262
+  This driver adds up to 4 more eide devices sharing a single interrupt.
+  This add-on card is a bootable PCI UDMA ATA-66 controller.
+  The driver attempts to dynamic tuning of the chipset at boot-time
+  for max-speed.  Note tested limits are UDMA-2.
+  Ultra66 BIOS 1.11 or newer required.
+
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
+
+  Please read the comments at the top of drivers/block/pdc202xx.c
+
+  If unsure, say N.
+
+AEC6210 chipset support
+CONFIG_BLK_DEV_AEC6210
+  This driver adds up to 4 more eide devices sharing a single interrupt.
+  This add-on card is a bootable PCI UDMA controller.  In order to get this
+  card to initialize correctly in some cases, you should include this driver.
+
+  This prefers CONFIG_IDEDMA_AUTO to be enabled, regardless.
+
+  Please read the comments at the top of drivers/block/aec6210.c
+
+Intel PIIXn chipsets support (EXPERIMENTAL)
+CONFIG_BLK_DEV_PIIX
+  This driver adds PIO mode setting and tuning for all PIIX IDE
+  controllers by Intel.  Since the BIOS can sometimes improperly tune
+  PIO 0-4 mode settings, this allows dynamic tuning of the chipset
+  via the standard end-user tool 'hdparm'.
+
+  Please read the comments at the top of drivers/block/piix.c
+
+  If unsure, say N.
+
+HPT343 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_HPT343
+  This driver adds up to 4 more EIDE devices sharing a single
+  interrupt. The HPT343 chipset in its current form is a non-bootable
+  PCI UDMA controller. This driver requires dynamic tuning of the
+  chipset during the ide-probe at boot. It is reported to support DVD
+  II drives, by the manufacturer.
+
+  This requires CONFIG_IDEDMA_AUTO to be enabled.
+
+  Please read the comments at the top of drivers/block/hpt343.c
 
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
@@ -675,6 +784,68 @@ CONFIG_BLK_DEV_ALI14XX
   of the ALI M1439/1443/1445/1487/1489 chipsets, and permits faster
   I/O speeds to be set as well. See the files Documentation/ide.txt
   and drivers/block/ali14xx.c for more info.
+
+Amiga builtin Gayle IDE interface support
+CONFIG_BLK_DEV_GAYLE
+  This is the IDE driver for the builtin IDE interface on some Amiga
+  models.  It supports both the `A1200 style' (used in A600 and A1200)
+  and `A4000 style' (used in A4000 and A4000T) of the Gayle IDE interface.
+  Say Y if you have such an Amiga model and want to use IDE devices
+  (hard disks, CD-ROM drives, etc.) that are connected to the builtin
+  IDE interface.
+
+Falcon IDE interface support
+CONFIG_BLK_DEV_FALCON_IDE
+  This is the IDE driver for the builtin IDE interface on the Atari Falcon.
+  Say Y if you have a Falcon and want to use IDE devices (hard disks,
+  CD-ROM drives, etc.) that are connected to the builtin IDE interface.
+
+Amiga Buddha/Catweasel IDE interface support (EXPERIMENTAL)
+CONFIG_BLK_DEV_BUDDHA
+  This is the IDE driver for the IDE interfaces on the Buddha and
+  Catweasel expansion boards.  It supports up to two interfaces on the
+  Buddha and three on the Catweasel.
+  Say Y if you have a Buddha or Catweasel expansion board and want to
+  use IDE devices (hard disks, CD-ROM drives, etc.) that are connected
+  to one of its IDE interfaces.
+
+Amiga IDE Doubler support (EXPERIMENTAL)
+CONFIG_BLK_DEV_IDEDOUBLER
+  This driver provides support for the so called `IDE doublers' (made by
+  various manufacturers, e.g. Eyetech) that can be connected to the
+  builtin IDE interface of some Amiga models. Using such an IDE doubler,
+  you can connect up to four instead of two IDE devices on the Amiga's
+  builtin IDE interface.
+  Note that the normal Amiga Gayle IDE driver may not work correctly if
+  you have an IDE doubler and don't enable this driver!
+  Say Y if you have an IDE doubler.  The driver is enabled at kernel
+  runtime using the "ide=doubler" kernel boot parameter.
+
+ Support for PowerMac IDE devices (must also enable IDE)
+ CONFIG_BLK_DEV_IDE_PMAC
+   No help for CONFIG_BLK_DEV_IDE_PMAC
+
+ PowerMac IDE DMA support
+ CONFIG_BLK_DEV_IDEDMA_PMAC
+   No help for CONFIG_BLK_DEV_IDEDMA_PMAC
+
+ Use DMA by default
+ CONFIG_PMAC_IDEDMA_AUTO
+   No help for CONFIG_PMAC_IDEDMA_AUTO
+
+Macintosh Quadra/Powerbook IDE interface support
+CONFIG_BLK_DEV_MAC_IDE
+  This is the IDE driver for the builtin IDE interface on the some m68k
+  Macintosh models. It supports both the `Quadra style' (used in Quadra/
+  Centris 630 and Performa 588 models) and `Powerbook style' (used in the
+  Powerbook 150 and 190 models) IDE interface.
+  Say Y if you have such an Macintosh model and want to use IDE devices
+  (hard disks, CD-ROM drives, etc.) that are connected to the builtin
+  IDE interface.
+
+ RapIDE interface support
+ CONFIG_BLK_DEV_IDE_RAPIDE
+   No help for CONFIG_BLK_DEV_IDE_RAPIDE
 
 XT hard disk support
 CONFIG_BLK_DEV_XD

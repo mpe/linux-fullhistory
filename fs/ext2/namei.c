@@ -841,7 +841,8 @@ int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		if (le32_to_cpu(PARENT_INO(dir_bh->b_data)) != old_dir->i_ino)
 			goto end_rename;
 		retval = -EMLINK;
-		if (!new_inode && new_dir->i_nlink >= EXT2_LINK_MAX)
+		if (!new_inode && new_dir!=old_dir &&
+				new_dir->i_nlink >= EXT2_LINK_MAX)
 			goto end_rename;
 	}
 	if (!new_bh) {

@@ -26,9 +26,10 @@
 #include <linux/ioport.h>
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
-#include <asm/io.h>
 #include <linux/pci.h>
-#include "ide.h"
+#include <linux/ide.h>
+
+#include <asm/io.h>
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
 

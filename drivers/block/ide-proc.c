@@ -65,12 +65,21 @@
 #include <linux/mm.h>
 #include <linux/pci.h>
 #include <linux/ctype.h>
+#include <linux/ide.h>
+
 #include <asm/io.h>
-#include "ide.h"
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
+
+#ifdef CONFIG_BLK_DEV_VIA82C586
+int (*via_display_info)(char *, char **, off_t, int, int) = NULL;
+#endif /* CONFIG_BLK_DEV_VIA82C586 */
+
+#ifdef CONFIG_BLK_DEV_ALI15X3
+int (*ali_display_info)(char *, char **, off_t, int, int) = NULL;
+#endif /* CONFIG_BLK_DEV_ALI15X3 */
 
 static int ide_getxdigit(char c)
 {
@@ -682,6 +691,18 @@ void proc_ide_create(void)
 	ent = create_proc_entry("drivers", 0, root);
 	if (!ent) return;
 	ent->read_proc  = proc_ide_read_drivers;
+#ifdef CONFIG_BLK_DEV_VIA82C586
+	if (via_display_info) {
+		ent = create_proc_entry("via", 0, root);
+		ent->get_info = via_display_info;
+	}
+#endif /* CONFIG_BLK_DEV_VIA82C586 */
+#ifdef CONFIG_BLK_DEV_ALI15X3
+	if (ali_display_info) {
+		ent = create_proc_entry("ali", 0, root);
+		ent->get_info = ali_display_info;
+	}
+#endif /* CONFIG_BLK_DEV_ALI15X3 */
 }
 
 void proc_ide_destroy(void)
@@ -690,6 +711,14 @@ void proc_ide_destroy(void)
 	 * Mmmm.. does this free up all resources,
 	 * or do we need to do a more proper cleanup here ??
 	 */
+#ifdef CONFIG_BLK_DEV_VIA82C586
+	if (via_display_info)
+		remove_proc_entry("ide/via",0);
+#endif /* CONFIG_BLK_DEV_VIA82C586 */
+#ifdef CONFIG_BLK_DEV_ALI15X3
+	if (ali_display_info)
+		remove_proc_entry("ide/ali",0);
+#endif /* CONFIG_BLK_DEV_ALI15X3 */
 	remove_proc_entry("ide/drivers", 0);
 	remove_proc_entry("ide", 0);
 }

@@ -13,6 +13,7 @@
 #include <asm/processor.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
+#include <linux/ide.h>
 #include <asm/ide.h>
 #include <asm/atomic.h>
 #include <asm/bitops.h>

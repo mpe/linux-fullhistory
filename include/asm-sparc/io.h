@@ -162,4 +162,10 @@ static __inline__ void *sparc_dvma_malloc(int size, char *name, __u32 *dvmaaddr_
 #define virt_to_phys(x) __pa((unsigned long)(x))
 #define phys_to_virt(x) __va((unsigned long)(x))
 
+/* Nothing to do */
+
+#define dma_cache_inv(_start,_size)		do { } while (0)
+#define dma_cache_wback(_start,_size)		do { } while (0)
+#define dma_cache_wback_inv(_start,_size)	do { } while (0)
+
 #endif /* !(__SPARC_IO_H) */

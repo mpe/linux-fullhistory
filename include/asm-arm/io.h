@@ -189,10 +189,21 @@ __IO(l,"",long)
 #define inl_p(port) __inl_p((port))
 #endif
 
+/* Nothing to do */
+
+#ifndef dma_cache_inv
+#define dma_cache_inv(_start,_size)		do { } while (0)
+#endif
+#ifndef dma_cache_wback
+#define dma_cache_wback(_start,_size)		do { } while (0)
+#ifndef ARCH_READWRITE
+#ifndef dma_cache_wback_inv
+#define dma_cache_wback_inv(_start,_size)	do { } while (0)
 #endif
 
-#ifndef ARCH_READWRITE
+#endif /* __KERNEL__ */
 
+#endif /* __ASM_ARM_IO_H */
 /* for panic */
 #include <linux/kernel.h>
 

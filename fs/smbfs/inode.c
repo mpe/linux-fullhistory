@@ -36,6 +36,7 @@ static void smb_put_inode(struct inode *);
 static void smb_delete_inode(struct inode *);
 static void smb_put_super(struct super_block *);
 static int  smb_statfs(struct super_block *, struct statfs *, int);
+static void smb_set_inode_attr(struct inode *, struct smb_fattr *);
 
 static struct super_operations smb_sops =
 {
@@ -67,9 +68,7 @@ smb_invent_inos(unsigned long n)
 	return ino;
 }
 
-static struct smb_fattr *read_fattr = NULL;
-static DECLARE_MUTEX(read_semaphore);
-
+/* We are always generating a new inode here */
 struct inode *
 smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 {
@@ -77,11 +76,19 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 
 	pr_debug("smb_iget: %p\n", fattr);
 
-	down(&read_semaphore);
-	read_fattr = fattr;
-	result = iget(sb, fattr->f_ino);
-	read_fattr = NULL;
-	up(&read_semaphore);
+	result = get_empty_inode();
+	result->i_sb = sb;
+	result->i_dev = sb->s_dev;
+	result->i_ino = fattr->f_ino;
+	memset(&(result->u.smbfs_i), 0, sizeof(result->u.smbfs_i));
+	smb_set_inode_attr(result, fattr);
+	if (S_ISREG(result->i_mode))
+		result->i_op = &smb_file_inode_operations;
+	else if (S_ISDIR(result->i_mode))
+		result->i_op = &smb_dir_inode_operations;
+	else
+		result->i_op = NULL;
+	insert_inode_hash(result)
 	return result;
 }
 
@@ -147,24 +154,9 @@ smb_set_inode_attr(struct inode *inode, struct smb_fattr *fattr)
 static void
 smb_read_inode(struct inode *inode)
 {
-	pr_debug("smb_iget: %p\n", read_fattr);
-
-	if (!read_fattr || inode->i_ino != read_fattr->f_ino)
-	{
-		printk("smb_read_inode called from invalid point\n");
-		return;
-	}
-
-	inode->i_dev = inode->i_sb->s_dev;
-	memset(&(inode->u.smbfs_i), 0, sizeof(inode->u.smbfs_i));
-	smb_set_inode_attr(inode, read_fattr);
-
-	if (S_ISREG(inode->i_mode))
-		inode->i_op = &smb_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
-		inode->i_op = &smb_dir_inode_operations;
-	else
-		inode->i_op = NULL;
+	/* Now it can be called only by NFS */
+	printk("smb_read_inode called from invalid point\n");
+	return;
 }
 
 /*
@@ -608,8 +600,6 @@ init_module(void)
 	smb_current_kmalloced = 0;
 	smb_current_vmalloced = 0;
 #endif
-
-	init_MUTEX(&read_semaphore);
 
 	return init_smb_fs();
 }

@@ -46,9 +46,6 @@ static int adfs_find_entry (struct inode *dir, const char * const name, int name
 	unsigned long parent_object_id, dir_object_id;
 	int buffers, pos;
 
-	if (!S_ISDIR(dir->i_mode))
-		return 0;
-
 	sb = dir->i_sb;
 
 	if (adfs_inode_validate (dir)) {
@@ -56,9 +53,6 @@ static int adfs_find_entry (struct inode *dir, const char * const name, int name
 			    "invalid inode number: %lu", dir->i_ino);
 		return 0;
 	}
-
-	if (namelen > ADFS_NAME_LEN)
-		return 0;
 
 	if (!(buffers = adfs_dir_read (dir, bh))) {
 		adfs_error (sb, "adfs_find_entry", "unable to read directory");

@@ -953,16 +953,19 @@ static int do_remount(const char *dir,int flags,char *data)
 	if (!IS_ERR(dentry)) {
 		struct super_block * sb = dentry->d_inode->i_sb;
 
-		retval = -EINVAL;
-		if (dentry == sb->s_root) {
-			/*
-			 * Shrink the dcache and sync the device.
-			 */
-			shrink_dcache_sb(sb);
-			fsync_dev(sb->s_dev);
-			if (flags & MS_RDONLY)
-				acct_auto_close(sb->s_dev);
-			retval = do_remount_sb(sb, flags, data);
+		retval = -ENODEV;
+		if (sb) {
+			retval = -EINVAL;
+			if (dentry == sb->s_root) {
+				/*
+				 * Shrink the dcache and sync the device.
+				 */
+				shrink_dcache_sb(sb);
+				fsync_dev(sb->s_dev);
+				if (flags & MS_RDONLY)
+					acct_auto_close(sb->s_dev);
+				retval = do_remount_sb(sb, flags, data);
+			}
 		}
 		dput(dentry);
 	}

@@ -45,13 +45,6 @@
 #include <asm/macints.h>
 #endif
 
-
-typedef unsigned int   q40ide_ioreg_t;
-
-
-typedef unsigned char * ide_ioreg_t;
-
-
 #ifndef MAX_HWIFS
 #define MAX_HWIFS	4	/* same as the other archs */
 #endif
@@ -65,19 +58,39 @@ static __inline__ int ide_default_irq(ide_ioreg_t base)
 	else return 0;
 }
 
+int q40ide_default_io_base(int);
+
+static __inline__ ide_ioreg_t ide_default_io_base(int index)
+{
+	if (MACH_IS_Q40)
+		return q40ide_default_io_base(index);
+	else return 0;
+}
 
 /*
  *  Can we do this in a generic manner??
  */
-void q40_ide_init_hwif_ports (q40ide_ioreg_t *p, q40ide_ioreg_t base, int *irq);
+void q40_ide_init_hwif_ports (hw_regs_t *hw, q40ide_ioreg_t data_port, q40ide_ioreg_t ctrl_port, int *irq);
 
-static __inline__ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+/*
+ * Set up a hw structure for a specified data port, control port and IRQ.
+ * This should follow whatever the default interface uses.
+ */
+static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
 {
 #ifdef CONFIG_Q40
-    if (MACH_IS_Q40)
-      return q40_ide_init_hwif_ports((q40ide_ioreg_t *)p,(q40ide_ioreg_t)base,irq);
+	if (MACH_IS_Q40)
+		return q40_ide_init_hwif_ports(hw, (q40ide_ioreg_t) data_port, (q40ide_ioreg_t) ctrl_port, irq);
 #endif
-    printk("ide_init_hwif_ports: must not be called\n");
+	printk("ide_init_hwif_ports: must not be called\n");
+}
+
+/*
+ * This registers the standard ports for this architecture with the IDE
+ * driver.
+ */
+static __inline__ void ide_init_default_hwifs(void)
+{
 }
 
 typedef union {
@@ -487,7 +500,7 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
 #endif /* CONFIG_ATARI */
 }
 
-#define ide_ack_intr(hwif)	((hwif)->ack_intr ? (hwif)->ack_intr(hwif) : 1)
+#define ide_ack_intr(hwif)	((hwif)->hw.ack_intr ? (hwif)->hw.ack_intr(hwif) : 1)
 
 /*
  * On the Atari, we sometimes can't enable interrupts:

@@ -626,8 +626,7 @@ typedef struct modem_info {
   atemu                 emu;             /* AT-emulator data               */
   struct termios	normal_termios;  /* For saving termios structs     */
   struct termios	callout_termios;
-  struct wait_queue	*open_wait;
-  struct wait_queue	*close_wait;
+  wait_queue_head_t 	open_wait, close_wait;
 } modem_info;
 
 #define ISDN_MODEM_WINSIZE 8
@@ -683,8 +682,8 @@ struct ippp_struct {
   struct ippp_buf_queue rq[NUM_RCV_BUFFS]; /* packet queue for isdn_ppp_read() */
   struct ippp_buf_queue *first;  /* pointer to (current) first packet */
   struct ippp_buf_queue *last;   /* pointer to (current) last used packet in queue */
-  struct wait_queue *wq;
-  struct wait_queue *wq1;
+  wait_queue_head_t wq;
+  wait_queue_head_t wql;
   struct task_struct *tk;
   unsigned int mpppcfg;
   unsigned int pppcfg;
@@ -748,7 +747,7 @@ typedef struct {
   ulong               flags;            /* Flags                            */
   int                 channels;         /* Number of channels               */
   int                 reject_bus;       /* Flag: Reject rejected call on bus*/
-  struct wait_queue  *st_waitq;         /* Wait-Queue for status-read's     */
+  wait_queue_head_t   st_waitq;         /* Wait-Queue for status-read's     */
   int                 maxbufsize;       /* Maximum Buffersize supported     */
   unsigned long       pktcount;         /* Until now: unused                */
   int                 running;          /* Flag: Protocolcode running       */
@@ -761,8 +760,8 @@ typedef struct {
   unsigned long      DLEflag;           /* Flags: Insert DLE at next read   */
 #endif
   struct sk_buff_head *rpqueue;         /* Pointers to start of Rcv-Queue   */
-  struct wait_queue  **rcv_waitq;       /* Wait-Queues for B-Channel-Reads  */
-  struct wait_queue  **snd_waitq;       /* Wait-Queue for B-Channel-Send's  */
+  wait_queue_head_t  *rcv_waitq;  /* array of Wait-Queues for B-Channel-Reads  */
+  wait_queue_head_t  *snd_waitq;  /* array of Wait-Queue for B-Channel-Sends  */
   char               msn2eaz[10][ISDN_MSNLEN];  /* Mapping-Table MSN->EAZ   */
 } driver;
 
@@ -778,7 +777,7 @@ typedef struct isdn_devt {
 				               /*  see ISDN_TIMER_..defines  */
   int               global_flags;
   infostruct        *infochain;                /* List of open info-devs.    */
-  struct wait_queue *info_waitq;               /* Wait-Queue for isdninfo    */
+  wait_queue_head_t info_waitq;               /* Wait-Queue for isdninfo    */
   struct timer_list timer;		       /* Misc.-function Timer       */
   int               chanmap[ISDN_MAX_CHANNELS];/* Map minor->device-channel  */
   int               drvmap[ISDN_MAX_CHANNELS]; /* Map minor->driver-index    */

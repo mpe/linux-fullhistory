@@ -389,4 +389,8 @@ __OUTS(w,l,4)
 extern void (*dma_cache_wback_inv)(unsigned long start, unsigned long size);
 extern void (*dma_cache_inv)(unsigned long start, unsigned long size);
 
+/* Nothing to do */
+
+#define dma_cache_wback(_start,_size)		do { } while (0)
+
 #endif /* __ASM_MIPS_IO_H */

@@ -195,7 +195,7 @@ static inline void remove_inuse(struct dquot *dquot)
 
 static void __wait_on_dquot(struct dquot *dquot)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	add_wait_queue(&dquot->dq_wait, &wait);
 repeat:
@@ -429,6 +429,7 @@ static void grow_dquots(void)
 
 		nr_dquots++;
 		memset((caddr_t)dquot, 0, sizeof(struct dquot));
+		init_waitqueue_head(&dquot->dq_wait);
 		/* all dquots go on the inuse_list */
 		put_inuse(dquot);
 		put_dquot_head(dquot);

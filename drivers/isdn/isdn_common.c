@@ -741,7 +741,6 @@ isdn_status_callback(isdn_ctrl * c)
 				isdn_free_queue(&dev->drv[di]->rpqueue[i]);
 			kfree(dev->drv[di]->rpqueue);
 			kfree(dev->drv[di]->rcv_waitq);
-			kfree(dev->drv[di]->snd_waitq);
 			kfree(dev->drv[di]);
 			dev->drv[di] = NULL;
 			dev->drvid[di][0] = '\0';
@@ -785,7 +784,7 @@ isdn_getnum(char **p)
  * of the mapping (di,ch)<->minor, happen during the sleep? --he 
  */
 int
-isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, struct wait_queue **sleep)
+isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, wait_queue_head_t *sleep)
 {
 	int left;
 	int count;
@@ -2088,6 +2087,7 @@ register_isdn(isdn_if * i)
 		return 0;
 	}
 	memset((char *) d, 0, sizeof(driver));
+	init_waitqueue_head(&d->st_waitq); 
 	if (!(d->rcverr = (int *) kmalloc(sizeof(int) * n, GFP_KERNEL))) {
 		printk(KERN_WARNING "register_isdn: Could not alloc rcverr\n");
 		kfree(d);
@@ -2112,8 +2112,9 @@ register_isdn(isdn_if * i)
 	for (j = 0; j < n; j++) {
 		skb_queue_head_init(&d->rpqueue[j]);
 	}
-	if (!(d->rcv_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * n, GFP_KERNEL))) {
+	d->rcv_waitq = (wait_queue_head_t *)
+		kmalloc(sizeof(wait_queue_head_t) * 2 * n, GFP_KERNEL);
+	if (!d->rcv_waitq) { 
 		printk(KERN_WARNING "register_isdn: Could not alloc rcv_waitq\n");
 		kfree(d->rpqueue);
 		kfree(d->rcvcount);
@@ -2121,18 +2122,11 @@ register_isdn(isdn_if * i)
 		kfree(d);
 		return 0;
 	}
-	memset((char *) d->rcv_waitq, 0, sizeof(struct wait_queue *) * n);
-	if (!(d->snd_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * n, GFP_KERNEL))) {
-		printk(KERN_WARNING "register_isdn: Could not alloc snd_waitq\n");
-		kfree(d->rcv_waitq);
-		kfree(d->rpqueue);
-		kfree(d->rcvcount);
-		kfree(d->rcverr);
-		kfree(d);
-		return 0;
+	d->snd_waitq = d->rcv_waitq + n; 		
+	for (j = 0; j < n; j++) { 
+		init_waitqueue_head(&d->rcv_waitq[n]); 
+		init_waitqueue_head(&d->snd_waitq[n]); 
 	}
-	memset((char *) d->snd_waitq, 0, sizeof(struct wait_queue *) * n);
 	d->channels = n;
 	d->loaded = 1;
 	d->maxbufsize = i->maxbufsize;
@@ -2215,12 +2209,15 @@ isdn_init(void)
 	memset((char *) dev, 0, sizeof(isdn_dev));
 	init_timer(&dev->timer);
 	dev->timer.function = isdn_timer_funct;
-	dev->sem = MUTEX;
+	init_MUTEX(&dev->sem);
+	init_waitqueue_head(&dev->info_waitq); 
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		dev->drvmap[i] = -1;
 		dev->chanmap[i] = -1;
 		dev->m_idx[i] = -1;
 		strcpy(dev->num[i], "???");
+		init_waitqueue_head(&dev->mdm.info[i].open_wait);
+		init_waitqueue_head(&dev->mdm.info[i].close_wait);
 	}
 	if (register_chrdev(ISDN_MAJOR, "isdn", &isdn_fops)) {
 		printk(KERN_WARNING "isdn: Could not register control devices\n");

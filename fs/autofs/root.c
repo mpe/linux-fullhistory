@@ -72,9 +72,6 @@ static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 	struct inode * inode = filp->f_dentry->d_inode;
 	off_t onr, nr;
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -ENOTDIR;
-
 	sbi = autofs_sbi(inode->i_sb);
 	dirhash = &sbi->dirhash;
 	nr = filp->f_pos;

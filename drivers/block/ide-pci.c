@@ -1,5 +1,7 @@
 /*
- *  linux/drivers/block/ide-pci.c	Version 1.02  December 29, 1997
+ *  linux/drivers/block/ide-pci.c	Version 1.03  May 1, 1999
+ *
+ *  Copyright (c) 1998-1999  Andre Hedrick
  *
  *  Copyright (c) 1995-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -18,11 +20,10 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/ide.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
-
-#include "ide.h"
 
 #define DEVID_PIIXa	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_0})
 #define DEVID_PIIXb	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
@@ -30,14 +31,17 @@
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
+#define DEVID_PDC20262	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20262})
 #define DEVID_RZ1000	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_RZ1000})
 #define DEVID_RZ1001	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_RZ1001})
+#define DEVID_SAMURAI	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_SAMURAI_IDE})
 #define DEVID_CMD640	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_640})
+#define DEVID_CMD643	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_643})
 #define DEVID_CMD646	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_646})
 #define DEVID_SIS5513	((ide_pci_devid_t){PCI_VENDOR_ID_SI,      PCI_DEVICE_ID_SI_5513})
 #define DEVID_OPTI621	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C621})
 #define DEVID_OPTI621V	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C558})
-#define DEVID_OPTI621X	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    0xd568})  /* from datasheets */
+#define DEVID_OPTI621X	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C825})
 #define DEVID_TRM290	((ide_pci_devid_t){PCI_VENDOR_ID_TEKRAM,  PCI_DEVICE_ID_TEKRAM_DC290})
 #define DEVID_NS87410	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87410})
 #define DEVID_NS87415	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87415})
@@ -47,6 +51,10 @@
 #define DEVID_UM8886A	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886A})
 #define DEVID_UM8886BF	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886BF})
 #define DEVID_HPT343	((ide_pci_devid_t){PCI_VENDOR_ID_TTI,     PCI_DEVICE_ID_TTI_HPT343})
+#define DEVID_ALI15X3	((ide_pci_devid_t){PCI_VENDOR_ID_AL,      PCI_DEVICE_ID_AL_M5229})
+#define DEVID_CY82C693	((ide_pci_devid_t){PCI_VENDOR_ID_CONTAQ,  PCI_DEVICE_ID_CONTAQ_82C693})
+#define DEVID_HINT	((ide_pci_devid_t){0x3388,                0x8013})
+#define DEVID_CX5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
 
 #define IDE_IGNORE	((void *)-1)
 
@@ -98,10 +106,67 @@ extern void ide_init_rz1000(ide_hwif_t *);
 
 #ifdef CONFIG_BLK_DEV_VIA82C586
 extern void ide_init_via82c586(ide_hwif_t *);
+extern void ide_dmacapable_via82c586(ide_hwif_t *, unsigned long dmabase);
 #define	INIT_VIA82C586	&ide_init_via82c586
+#define	DMA_VIA82C586	&ide_dmacapable_via82c586
 #else
 #define	INIT_VIA82C586	NULL
+#define	DMA_VIA82C586	NULL
 #endif
+
+#ifdef CONFIG_BLK_DEV_ALI15X3
+extern unsigned int pci_init_ali15x3(struct pci_dev *, const char *);
+extern void ide_init_ali15x3(ide_hwif_t *);
+#define PCI_ALI15X3	&pci_init_ali15x3
+#define	INIT_ALI15X3	&ide_init_ali15x3
+#else
+#define PCI_ALI15X3	NULL
+#define	INIT_ALI15X3	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_CY82C693
+extern void ide_init_cy82c693(ide_hwif_t *);
+#define	INIT_CY82C693	&ide_init_cy82c693
+#else
+#define	INIT_CY82C693	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_PDC202XX
+extern unsigned int pci_init_pdc202xx(struct pci_dev *, const char *);
+extern void ide_init_pdc202xx(ide_hwif_t *);
+#define PCI_PDC202XX	&pci_init_pdc202xx
+#define	INIT_PDC202XX	&ide_init_pdc202xx
+#else
+#define PCI_PDC202XX	NULL
+#define	INIT_PDC202XX	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_PIIX
+extern void ide_init_piix(ide_hwif_t *);
+#define	INIT_PIIX	&ide_init_piix
+#else
+#define	INIT_PIIX	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_AEC6210
+extern unsigned int pci_init_aec6210(struct pci_dev *, const char *);
+#define PCI_AEC6210	&pci_init_aec6210
+#else
+#define PCI_AEC6210	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_HPT343
+extern unsigned int pci_init_hpt343(struct pci_dev *, const char *);
+extern void ide_init_hpt343(ide_hwif_t *);
+#define PCI_HPT343	&pci_init_hpt343
+#define	INIT_HPT343	&ide_init_hpt343
+#else
+#define PCI_HPT343	NULL
+#define	INIT_HPT343	NULL
+#endif
+
+#define INIT_SAMURAI	NULL
+#define INIT_CX5530	NULL
 
 typedef struct ide_pci_enablebit_s {
 	byte	reg;	/* byte pci reg holding the enable-bit */
@@ -112,36 +177,45 @@ typedef struct ide_pci_enablebit_s {
 typedef struct ide_pci_device_s {
 	ide_pci_devid_t		devid;
 	const char		*name;
+	unsigned int		(*init_chipset)(struct pci_dev *dev, const char *name);
 	void 			(*init_hwif)(ide_hwif_t *hwif);
+	void			(*dma_init)(ide_hwif_t *hwif, unsigned long dmabase);
 	ide_pci_enablebit_t	enablebits[2];
 	byte			bootable;
 	unsigned int		extra;
 } ide_pci_device_t;
 
 static ide_pci_device_t ide_pci_chipsets[] __initdata = {
-	{DEVID_PIIXa,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
-	{DEVID_PIIXb,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
-	{DEVID_PIIX3,	"PIIX3",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
-	{DEVID_PIIX4,	"PIIX4",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
-	{DEVID_VP_IDE,	"VP_IDE",	INIT_VIA82C586,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	ON_BOARD,	0 },
-	{DEVID_PDC20246,"PDC20246",	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	OFF_BOARD,	16 },
-	{DEVID_RZ1000,	"RZ1000",	INIT_RZ1000,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_RZ1001,	"RZ1001",	INIT_RZ1000,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_CMD640,	"CMD640",	IDE_IGNORE,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_NS87410,	"NS87410",	NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}}, 	ON_BOARD,	0 },
-	{DEVID_SIS5513,	"SIS5513",	NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}}, 	ON_BOARD,	0 },
-	{DEVID_CMD646,	"CMD646",	INIT_CMD646,	{{0x00,0x00,0x00}, {0x51,0x80,0x80}}, 	ON_BOARD,	0 },
-	{DEVID_HT6565,	"HT6565",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_OPTI621,	"OPTI621",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_OPTI621X,"OPTI621X",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_NS87415,	"NS87415",	INIT_NS87415,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_AEC6210,	"AEC6210",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	OFF_BOARD,	0 },
-	{DEVID_W82C105,	"W82C105",	INIT_W82C105,	{{0x40,0x01,0x01}, {0x40,0x10,0x10}}, 	ON_BOARD,	0 },
-	{DEVID_UM8886A,	"UM8886A",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
-	{DEVID_UM8886BF,"UM8886BF",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
-	{DEVID_HPT343,	"HPT343",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	NEVER_BOARD,	16 },
-	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
+	{DEVID_PIIXa,	"PIIX",		NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_PIIXb,	"PIIX",		NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_PIIX3,	"PIIX3",	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_PIIX4,	"PIIX4",	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_VP_IDE,	"VP_IDE",	NULL,		INIT_VIA82C586,	DMA_VIA82C586,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	ON_BOARD,	0 },
+	{DEVID_PDC20246,"PDC20246",	PCI_PDC202XX,	INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	OFF_BOARD,	16 },
+	{DEVID_PDC20262,"PDC20262",	PCI_PDC202XX,	INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}},	OFF_BOARD,	48 },
+	{DEVID_RZ1000,	"RZ1000",	NULL,		INIT_RZ1000,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_RZ1001,	"RZ1001",	NULL,		INIT_RZ1000,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_SAMURAI,	"SAMURAI",	NULL,		INIT_SAMURAI,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_CMD640,	"CMD640",	NULL,		IDE_IGNORE,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_NS87410,	"NS87410",	NULL,		NULL,		NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}}, 	ON_BOARD,	0 },
+	{DEVID_SIS5513,	"SIS5513",	NULL,		NULL,		NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}}, 	ON_BOARD,	0 },
+	{DEVID_CMD643,	"CMD643",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_CMD646,	"CMD646",	NULL,		INIT_CMD646,	NULL,		{{0x00,0x00,0x00}, {0x51,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_HT6565,	"HT6565",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_OPTI621,	"OPTI621",	NULL,		INIT_OPTI621,	NULL,		{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_OPTI621X,"OPTI621X",	NULL,		INIT_OPTI621,	NULL,		{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_TRM290,	"TRM290",	NULL,		INIT_TRM290,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_NS87415,	"NS87415",	NULL,		INIT_NS87415,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_AEC6210,	"AEC6210",	PCI_AEC6210,	NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	OFF_BOARD,	0 },
+	{DEVID_W82C105,	"W82C105",	NULL,		INIT_W82C105,	NULL,		{{0x40,0x01,0x01}, {0x40,0x10,0x10}}, 	ON_BOARD,	0 },
+	{DEVID_UM8886A,	"UM8886A",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_UM8886BF,"UM8886BF",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_HPT343,	"HPT343",	PCI_HPT343,	INIT_HPT343,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	NEVER_BOARD,	16 },
+	{DEVID_ALI15X3,	"ALI15X3",	PCI_ALI15X3,	INIT_ALI15X3,	NULL,		{{0x09,0x20,0x20}, {0x09,0x10,0x10}},	ON_BOARD,	0 },
+	{DEVID_CY82C693,"CY82C693",	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_CX5530,	"CX5530",	NULL,		INIT_CX5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
 /*
  * This allows offboard ide-pci cards the enable a BIOS, verify interrupt
@@ -151,27 +225,28 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const char *name))
 {
 	switch(dev->device) {
-		case PCI_DEVICE_ID_ARTOP_ATP850UF:
-		case PCI_DEVICE_ID_PROMISE_20246:
-			if (dev->rom_address) {
-				pci_write_config_byte(dev, PCI_ROM_ADDRESS,
-					dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
-				printk(KERN_INFO "%s: ROM enabled at 0x%08lx\n", name, dev->rom_address);
-			}
-			
-			if ((dev->class >> 8) == PCI_CLASS_STORAGE_RAID) {
-				unsigned char irq1 = 0, irq2 = 0;
-
-				pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq1);
-				pci_read_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, &irq2);	/* 0xbc */
-				if (irq1 != irq2) {
-					printk("%s: IRQ1 %d IRQ2 %d\n",
-						name, irq1, irq2);
-					pci_write_config_byte(dev, (PCI_INTERRUPT_LINE)|0x80, irq1);	/* 0xbc */
-				}
-			}
-			return dev->irq;
 		case PCI_DEVICE_ID_TTI_HPT343:
+			{
+				int i;
+				unsigned short pcicmd = 0;
+				unsigned long hpt343IoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+
+				pci_write_config_byte(dev, 0x80, 0x00);
+				dev->base_address[0] = (hpt343IoBase + 0x20);
+				dev->base_address[1] = (hpt343IoBase + 0x34);
+				dev->base_address[2] = (hpt343IoBase + 0x28);
+				dev->base_address[3] = (hpt343IoBase + 0x3c);
+				for(i=0; i<4; i++)
+					dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
+
+				pci_read_config_word(dev, PCI_COMMAND, &pcicmd);
+				pci_write_config_byte(dev, 0x80, 0x80);
+				if (!(pcicmd & PCI_COMMAND_MEMORY))
+					pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
+			}
+		case PCI_DEVICE_ID_PROMISE_20246:
+		case PCI_DEVICE_ID_PROMISE_20262:
+		case PCI_DEVICE_ID_ARTOP_ATP850UF:
 			return dev->irq;
 		default:
 			break;
@@ -269,7 +344,7 @@ __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *n
 	 */
 	for (reg = 0; reg < 4; reg++)
 		if (!dev->base_address[reg]) {
-			printk("%s: Missing I/O address #%d, please report to <mj@ucw.cz>\n", name, reg);
+			printk("%s: Missing I/O address #%d\n", name, reg);
 			return 1;
 		}
 	return 0;
@@ -325,7 +400,13 @@ check_if_enabled:
 	pciirq = dev->irq;
 	if ((dev->class & ~(0xfa)) != ((PCI_CLASS_STORAGE_IDE << 8) | 5)) {
 		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
-		pciirq = ide_special_settings(dev, d->name);
+		/*
+		 * This allows offboard ide-pci cards the enable a BIOS,
+		 * verify interrupt settings of split-mirror pci-config
+		 * space, place chipset into init-mode, and/or preserve
+		 * an interrupt if the card is not native ide support.
+		 */
+		pciirq = (d->init_chipset) ? d->init_chipset(dev, d->name) : ide_special_settings(dev, d->name);
 	} else if (tried_config) {
 		printk("%s: will probe irqs later\n", d->name);
 		pciirq = 0;
@@ -339,6 +420,19 @@ check_if_enabled:
 #else
 		printk("%s: 100%% native mode on irq %d\n", d->name, pciirq);
 #endif
+	}
+	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT343)) {
+		/*
+		 * Since there are two cards that report almost identically,
+		 * the only discernable difference is the values
+		 * reported in pcicmd.
+		 * Booting-BIOS card or HPT363 :: pcicmd == 0x07
+		 * Non-bootable card or HPT343 :: pcicmd == 0x05
+		 */
+		if (pcicmd & PCI_COMMAND_MEMORY) {
+			printk("%s: is IDE Express HPT363.\n", d->name);
+			d->bootable = OFF_BOARD;
+		}
 	}
 	/*
 	 * Set up the IDE ports
@@ -363,8 +457,8 @@ check_if_enabled:
 		if ((hwif = ide_match_hwif(base, d->bootable, d->name)) == NULL)
 			continue;	/* no room in ide_hwifs[] */
 		if (hwif->io_ports[IDE_DATA_OFFSET] != base) {
-			ide_init_hwif_ports(hwif->io_ports, base, NULL);
-			hwif->io_ports[IDE_CONTROL_OFFSET] = ctl + 2;
+			ide_init_hwif_ports(&hwif->hw, base, (ctl + 2), NULL);
+			memcpy(hwif->io_ports, hwif->hw.io_ports, sizeof(hwif->io_ports));
 			hwif->noprobe = !hwif->io_ports[IDE_DATA_OFFSET];
 		}
 		hwif->chipset = ide_pci;
@@ -382,8 +476,10 @@ check_if_enabled:
 			}
 		}
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886A) ||
-		    IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886BF))
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886BF)) {
 			hwif->irq = hwif->channel ? 15 : 14;
+			goto bypass_umc_dma;
+		}
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513))
@@ -391,8 +487,12 @@ check_if_enabled:
 		if (autodma)
 			hwif->autodma = 1;
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20262) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210) ||
+#ifdef CONFIG_BLK_DEV_HPT343
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT343) ||
+#endif
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {
@@ -406,12 +506,18 @@ check_if_enabled:
 					dma_base = 0;
 				}
 			}
-			if (dma_base)
-				ide_setup_dma(hwif, dma_base, 8);
-			else
+			if (dma_base) {
+				if (d->dma_init) {
+					d->dma_init(hwif, dma_base);
+				} else {
+					ide_setup_dma(hwif, dma_base, 8);
+				}
+			} else {
 				printk("%s: %s Bus-Master DMA disabled (BIOS)\n", hwif->name, d->name);
+			}
 		}
 #endif	/* CONFIG_BLK_DEV_IDEDMA */
+bypass_umc_dma:
 		if (d->init_hwif)  /* Call chipset-specific routine for each enabled hwif */
 			d->init_hwif(hwif);
 		mate = hwif;
@@ -441,6 +547,8 @@ __initfunc(void ide_scan_pcibus (void))
 			printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);
 		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(PCI_FUNC(dev->devfn) & 1))
 			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) && (!(PCI_FUNC(dev->devfn) & 1) || !((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)))
+			continue;	/* CY82C693 is more than only a IDE controller */
 		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
 			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
 				printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",

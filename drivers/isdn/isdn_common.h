@@ -90,7 +90,7 @@ extern char *isdn_map_eaz2msn(char *msn, int di);
 extern void isdn_timer_ctrl(int tf, int onoff);
 extern void isdn_unexclusive_channel(int di, int ch);
 extern int isdn_getnum(char **);
-extern int isdn_readbchan(int, int, u_char *, u_char *, int, struct wait_queue**);
+extern int isdn_readbchan(int, int, u_char *, u_char *, int, wait_queue_head_t *);
 extern int isdn_get_free_channel(int, int, int, int, int);
 extern int isdn_writebuf_skb_stub(int, int, int, struct sk_buff *);
 extern int register_isdn(isdn_if * i);

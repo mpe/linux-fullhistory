@@ -168,7 +168,7 @@ endmenu
 
 source drivers/char/Config.in
 
-# source drivers/usb/Config.in
+source drivers/usb/Config.in
 
 source fs/Config.in
 

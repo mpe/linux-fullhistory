@@ -338,6 +338,8 @@
 #include <linux/errno.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
+#include <linux/pci.h>
+#include <linux/ide.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -345,11 +347,6 @@
 #include <asm/io.h>
 #include <asm/unaligned.h>
 #include <asm/bitops.h>
-
-/*
- *	Main Linux ide driver include file
- */
-#include "ide.h"
 
 /*
  *	For general magnetic tape device compatibility.
@@ -401,6 +398,7 @@
 /*
  *	The following are used to debug the driver:
  *
+ *	Setting IDETAPE_INFO_LOG to 1 will log driver vender information.
  *	Setting IDETAPE_DEBUG_LOG to 1 will log driver flow control.
  *	Setting IDETAPE_DEBUG_BUGS to 1 will enable self-sanity checks in
  *	some places.
@@ -415,8 +413,14 @@
  *	is verified to be stable enough. This will make it much more
  *	esthetic.
  */
+#define IDETAPE_INFO_LOG		0
 #define IDETAPE_DEBUG_LOG		0
 #define IDETAPE_DEBUG_BUGS		1
+
+#if IDETAPE_DEBUG_LOG
+#undef IDETAPE_INFO_LOG
+#define IDETAPE_INFO_LOG		IDETAPE_DEBUG_LOG
+#endif
 
 /*
  *	After each failed packet command we issue a request sense command
@@ -1968,7 +1972,8 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 
-	OUT_BYTE (drive->ctl,IDE_CONTROL_REG);
+	if (IDE_CONTROL_REG)
+		OUT_BYTE (drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE (dma_ok ? 1:0,IDE_FEATURE_REG);			/* Use PIO/DMA */
 	OUT_BYTE (bcount.b.high,IDE_BCOUNTH_REG);
 	OUT_BYTE (bcount.b.low,IDE_BCOUNTL_REG);
@@ -3337,16 +3342,16 @@ static int idetape_chrdev_release (struct inode *inode, struct file *filp)
 static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 {
 	struct idetape_id_gcw gcw;
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_INFO_LOG
 	unsigned short mask,i;
-#endif /* IDETAPE_DEBUG_LOG */
+#endif /* IDETAPE_INFO_LOG */
 
 	if (!id)
 		return 0;
 
 	*((unsigned short *) &gcw) = id->config;
 
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_INFO_LOG
 	printk (KERN_INFO "Dumping ATAPI Identify Device tape parameters\n");
 	printk (KERN_INFO "Protocol Type: ");
 	switch (gcw.protocol) {
@@ -3434,7 +3439,7 @@ static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		
 	} else
 		printk (KERN_INFO "According to the device, fields 64-70 are not valid.\n");
-#endif /* IDETAPE_DEBUG_LOG */
+#endif /* IDETAPE_INFO_LOG */
 
 	/* Check that we can support this device */
 
@@ -3491,7 +3496,7 @@ static void idetape_get_mode_sense_results (ide_drive_t *drive)
 
 	tape->capabilities = *capabilities;		/* Save us a copy */
 	tape->tape_block_size = capabilities->blk512 ? 512:1024;
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_INFO_LOG
 	printk (KERN_INFO "Dumping the results of the MODE SENSE packet command\n");
 	printk (KERN_INFO "Mode Parameter Header:\n");
 	printk (KERN_INFO "Mode Data Length - %d\n",header->mode_data_length);
@@ -3519,7 +3524,7 @@ static void idetape_get_mode_sense_results (ide_drive_t *drive)
 	printk (KERN_INFO "Continuous transfer limits in blocks - %d\n",capabilities->ctl);
 	printk (KERN_INFO "Current speed in KBps - %d\n",capabilities->speed);	
 	printk (KERN_INFO "Buffer size - %d\n",capabilities->buffer_size*512);
-#endif /* IDETAPE_DEBUG_LOG */
+#endif /* IDETAPE_INFO_LOG */
 }
 
 static void idetape_add_settings(ide_drive_t *drive)
@@ -3561,7 +3566,18 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 
 	drive->driver_data = tape;
 	drive->ready_stat = 0;			/* An ATAPI device ignores DRDY */
-	drive->dsc_overlap = 1;
+#ifdef CONFIG_BLK_DEV_IDEPCI
+	/*
+	 *  These two ide-pci host adapters appear to need this disabled.
+	 */
+	if ((hwif->pci_dev->device == PCI_DEVICE_ID_ARTOP_ATP850UF) ||
+	    (hwif->pci_dev->device == PCI_DEVICE_ID_TTI_HPT343)) {
+		drive->dsc_overlap = 0;
+	} else
+#endif  /* CONFIG_BLK_DEV_IDEPCI */
+	{
+		drive->dsc_overlap = 1;
+	}
 	memset (tape, 0, sizeof (idetape_tape_t));
 	tape->drive = drive;
 	tape->minor = minor;

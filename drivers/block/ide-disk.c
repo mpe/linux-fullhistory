@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.08  Dec   10, 1998
+ *  linux/drivers/block/ide-disk.c	Version 1.09  April 23, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -25,11 +25,15 @@
  *			process of adding new ATA4 compliance.
  *			fixed problems in allowing fdisk to see
  *			the entire disk.
+ * Version 1.09		added increment of rq->sector in ide_multwrite
+ *			added UDMA 3/4 reporting
  */
 
-#define IDEDISK_VERSION	"1.08"
+#define IDEDISK_VERSION	"1.09"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
+
+#define _IDE_DISK_C		/* Tell linux/hdsmart.h it's really us */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -44,13 +48,12 @@
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/ide.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-
-#include "ide.h"
 
 static void idedisk_bswap_data (void *buffer, int wcount)
 {
@@ -99,6 +102,15 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	if ((id->lba_capacity >= 16514064) && (id->cyls == 0x3fff) &&
 	    (id->heads == 16) && (id->sectors == 63)) {
 		id->cyls = lba_sects / (16 * 63); /* correct cyls */
+		return 1;	/* lba_capacity is our only option */
+	}
+	/*
+	 * ... and at least one TLA VBC has POS instead of brain and can't
+	 * tell 16 from 15.
+	 */
+	if ((id->lba_capacity >= 15481935) && (id->cyls == 0x3fff) &&
+	    (id->heads == 15) && (id->sectors == 63)) {
+		id->cyls = lba_sects / (15 * 63); /* correct cyls */
 		return 1;	/* lba_capacity is our only option */
 	}
 	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
@@ -221,6 +233,9 @@ void ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 			drive->name, rq->sector, (unsigned long) rq->buffer,
 			nsect, rq->nr_sectors - nsect);
 #endif
+#ifdef CONFIG_BLK_DEV_PDC4030
+		rq->sector += nsect;
+#endif
 		if ((rq->nr_sectors -= nsect) <= 0)
 			break;
 		if ((rq->current_nr_sectors -= nsect) == 0) {
@@ -279,7 +294,11 @@ static void set_multmode_intr (ide_drive_t *drive)
 {
 	byte stat = GET_STAT();
 
+#if 0
+	if (OK_STAT(stat,READY_STAT,BAD_STAT) || drive->mult_req == 0) {
+#else
 	if (OK_STAT(stat,READY_STAT,BAD_STAT)) {
+#endif
 		drive->mult_count = drive->mult_req;
 	} else {
 		drive->mult_req = drive->mult_count = 0;
@@ -322,14 +341,21 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 	int use_pdc4030_io = 0;
 #endif /* CONFIG_BLK_DEV_PDC4030 */
 
-	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
+	if (IDE_CONTROL_REG)
+		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE(rq->nr_sectors,IDE_NSECTOR_REG);
 #ifdef CONFIG_BLK_DEV_PDC4030
+#ifdef CONFIG_BLK_DEV_PDC4030_TESTING
+	if (IS_PDC4030_DRIVE) {
+		use_pdc4030_io = 1;
+	}
+#else
 	if (IS_PDC4030_DRIVE) {
 		if (hwif->channel != 0 || rq->cmd == READ) {
 			use_pdc4030_io = 1;
 		}
 	}
+#endif /* CONFIG_BLK_DEV_PDC4030_TESTING */
 	if (drive->select.b.lba || use_pdc4030_io) {
 #else /* !CONFIG_BLK_DEV_PDC4030 */
 	if (drive->select.b.lba) {
@@ -760,9 +786,12 @@ static void idedisk_setup (ide_drive_t *drive)
 			drive->bios_cyl, drive->bios_head, drive->bios_sect);
 
 	if (drive->using_dma) {
-		if ((id->field_valid & 4) &&
-		    (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
-			printk(", UDMA");	/* UDMA BIOS-enabled! */
+		if  ((id->field_valid & 4) && (id->word93 & 0x2000) &&
+		     (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
+			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
+		} else if ((id->field_valid & 4) &&
+			   (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
+			printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
 		} else if (id->field_valid & 4) {
 			printk(", (U)DMA");	/* Can be BIOS-enabled! */
 		} else {
@@ -786,17 +815,17 @@ static void idedisk_setup (ide_drive_t *drive)
 
 	drive->mult_count = 0;
 	if (id->max_multsect) {
-#if 1	/* original, pre IDE-NFG, per request of AC */
+#ifdef CONFIG_IDEDISK_MULTI_MODE
+		id->multsect = ((id->max_multsect/2) > 1) ? id->max_multsect : 0;
+		id->multsect_valid = id->multsect ? 1 : 0;
+		drive->mult_req = id->multsect_valid ? id->max_multsect : INITIAL_MULT_COUNT;
+		drive->special.b.set_multmode = drive->mult_req ? 1 : 0;
+#else	/* original, pre IDE-NFG, per request of AC */
 		drive->mult_req = INITIAL_MULT_COUNT;
 		if (drive->mult_req > id->max_multsect)
 			drive->mult_req = id->max_multsect;
 		if (drive->mult_req || ((id->multsect_valid & 1) && id->multsect))
 			drive->special.b.set_multmode = 1;
-#else
-		id->multsect = ((id->max_multsect/2) > 1) ? id->max_multsect : 0;
-		id->multsect_valid = id->multsect ? 1 : 0;
-		drive->mult_req = id->multsect_valid ? id->max_multsect : INITIAL_MULT_COUNT;
-		drive->special.b.set_multmode = drive->mult_req ? 1 : 0;
 #endif
 	}
 	drive->no_io_32bit = id->dword_io ? 1 : 0;

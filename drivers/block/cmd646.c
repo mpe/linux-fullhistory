@@ -12,8 +12,10 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/hdreg.h>
+#include <linux/ide.h>
+
 #include <asm/io.h>
-#include "ide.h"
 
 static int cmd646_config_drive_for_dma(ide_drive_t *drive)
 {
@@ -43,14 +45,14 @@ static int cmd646_config_drive_for_dma(ide_drive_t *drive)
 }
 
 /* This is fun.  -DaveM */
-#define IDE_SETXFER		0x03
-#define IDE_SETFEATURE		0xef
-#define IDE_DMA2_ENABLE		0x22
-#define IDE_DMA1_ENABLE		0x21
-#define IDE_DMA0_ENABLE		0x20
-#define IDE_UDMA2_ENABLE	0x42
-#define IDE_UDMA1_ENABLE	0x41
-#define IDE_UDMA0_ENABLE	0x40
+#define IDE_SETXFER		SETFEATURES_XFER
+#define IDE_SETFEATURE		WIN_SETFEATURES
+#define IDE_DMA2_ENABLE		XFER_MW_DMA_2
+#define IDE_DMA1_ENABLE		XFER_MW_DMA_1
+#define IDE_DMA0_ENABLE		XFER_MW_DMA_0
+#define IDE_UDMA2_ENABLE	XFER_UDMA_2
+#define IDE_UDMA1_ENABLE	XFER_UDMA_1
+#define IDE_UDMA0_ENABLE	XFER_UDMA_0
 
 static __inline__ unsigned char dma2_bits_to_command(unsigned char bits)
 {
@@ -212,10 +214,36 @@ static int cmd646_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	return ide_dmaproc(func, drive);
 }
 
+/*
+ * ASUS P55T2P4D with CMD646 chipset revision 0x01 requires the old
+ * event order for DMA transfers.
+ */
+static int cmd646_1_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
+{
+	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long dma_base = hwif->dma_base;
+	byte dma_stat;
+
+	if (func == ide_dma_end) {
+		drive->waiting_for_dma = 0;
+		dma_stat = inb(dma_base+2);		/* get DMA status */
+		outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
+		outb(dma_stat|6, dma_base+2);	/* clear the INTR & ERROR bits */
+		return (dma_stat & 7) != 4;	/* verify good DMA status */
+	}
+
+	/* Other cases are done by generic IDE-DMA code. */
+	return cmd646_dmaproc(func, drive);
+}
+
 __initfunc(void ide_init_cmd646 (ide_hwif_t *hwif))
 {
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned char mrdmode;
+	unsigned int class_rev;
+
+	pci_read_config_dword(hwif->pci_dev, PCI_CLASS_REVISION, &class_rev);
+	class_rev &= 0xff;
 
 	hwif->chipset = ide_cmd646;
 
@@ -247,5 +275,9 @@ __initfunc(void ide_init_cmd646 (ide_hwif_t *hwif))
 	(void) pci_write_config_byte(dev, 0x58, 0x3f);
 	(void) pci_write_config_byte(dev, 0x5b, 0x3f);
 
-	hwif->dmaproc = &cmd646_dmaproc;
+	if (class_rev == 0x01) {
+		hwif->dmaproc = &cmd646_1_dmaproc;
+	} else {
+		hwif->dmaproc = &cmd646_dmaproc;
+	}
 }

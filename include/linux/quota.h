@@ -170,7 +170,7 @@ struct dquot {
 	struct list_head dq_free;	/* free list element */
 	struct dquot *dq_hash_next;	/* Pointer to next in dquot_hash */
 	struct dquot **dq_hash_pprev;	/* Pointer to previous in dquot_hash */
-	struct wait_queue *dq_wait;	/* Pointer to waitqueue */
+	wait_queue_head_t dq_wait;	/* Pointer to waitqueue */
 	int dq_count;			/* Reference count */
 
 	/* fields after this point are cleared when invalidating */

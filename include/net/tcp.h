@@ -728,7 +728,7 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
  */
 extern __inline__ __u32 tcp_recalc_ssthresh(struct tcp_opt *tp)
 {
-	__u32 snd_wnd_packets = tp->snd_wnd / tp->mss_cache;
+	__u32 snd_wnd_packets = tp->snd_wnd / max(tp->mss_cache, 1);
 
 	return max(min(snd_wnd_packets, tp->snd_cwnd) >> 1, 2);
 }

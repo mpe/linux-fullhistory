@@ -14,8 +14,6 @@
 
 #ifdef __KERNEL__
 
-typedef unsigned short ide_ioreg_t;
-
 #ifndef MAX_HWIFS
 #define MAX_HWIFS	6
 #endif
@@ -25,7 +23,7 @@ typedef unsigned short ide_ioreg_t;
 struct ide_ops {
 	int (*ide_default_irq)(ide_ioreg_t base);
 	ide_ioreg_t (*ide_default_io_base)(int index);
-	void (*ide_init_hwif_ports)(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+	void (*ide_init_hwif_ports)(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq);
 	int (*ide_request_irq)(unsigned int irq, void (*handler)(int, void *,
 	                       struct pt_regs *), unsigned long flags,
 	                       const char *device, void *dev_id);
@@ -48,10 +46,29 @@ static __inline__ ide_ioreg_t ide_default_io_base(int index)
 	return ide_ops->ide_default_io_base(index);
 }
 
-static __inline__ void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base,
-                                           int *irq)
+static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
 {
-	ide_ops->ide_init_hwif_ports(p, base, irq);
+	ide_ops->ide_init_hwif_ports(hw->io_ports, data_port, ctrl_port, &hw->irq);
+
+	hw->irq = ide_ops->ide_default_irq(data_port);
+}
+
+/*
+ * This registers the standard ports for this architecture with the IDE
+ * driver.
+ */
+static __inline__ void ide_init_default_hwifs(void)
+{
+#ifdef __DO_I_NEED_THIS
+	hw_regs_t hw;
+	int index;
+
+	for (index = 0; index < MAX_HWIFS; index++) {
+		ide_init_hwif_ports(&hw, ide_default_io_base(index), 0, 0);
+		hw.irq = ide_default_irq(ide_default_io_base(index));
+		ide_register_hw(&hw, NULL);
+	}
+#endif /* __DO_I_NEED_THIS */
 }
 
 typedef union {
@@ -96,26 +113,10 @@ static __inline__ void ide_release_region(ide_ioreg_t from,
 /*
  * The following are not needed for the non-m68k ports
  */
-static __inline__ int ide_ack_intr (ide_ioreg_t status_port,
-                                    ide_ioreg_t irq_port)
-{
-	return 1;
-}
-
-static __inline__ void ide_fix_driveid(struct hd_driveid *id)
-{
-}
-
-static __inline__ void ide_release_lock (int *ide_lock)
-{
-}
-
-static __inline__ void ide_get_lock (int *ide_lock,
-                                     void (*handler)(int, void *,
-                                                    struct pt_regs *),
-                                     void *data)
-{
-}
+#define ide_ack_intr(hwif)		(1)
+#define ide_fix_driveid(id)		do {} while (0)
+#define ide_release_lock(lock)		do {} while (0)
+#define ide_get_lock(lock, hdlr, data)	do {} while (0)
 
 #endif /* __KERNEL__ */
 

@@ -34,7 +34,7 @@ struct semaphore {
 	int waking;
 	wait_queue_head_t wait;
 #if WAITQUEUE_DEBUG
-	int __magic;
+	long __magic;
 #endif
 };
 

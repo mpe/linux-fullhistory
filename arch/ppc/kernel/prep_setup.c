@@ -39,6 +39,7 @@
 #include <asm/residual.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <linux/ide.h>
 #include <asm/ide.h>
 #include <asm/cache.h>
 #include <asm/dma.h>
@@ -691,14 +692,20 @@ prep_ide_fix_driveid(struct hd_driveid *id)
 }
 
 __initfunc(void
-prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
+prep_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq))
 {
-	ide_ioreg_t port = base;
-	int i = 8;
+	ide_ioreg_t reg = data_port;
+	int i;
 
-	while (i--)
-		*p++ = port++;
-	*p++ = base + 0x206;
+	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
+		hw->io_ports[i] = reg;
+		reg += 1;
+	}
+	if (ctrl_port) {
+		hw->io_ports[IDE_CONTROL_OFFSET] = ctrl_port;
+	} else {
+		hw->io_ports[IDE_CONTROL_OFFSET] =  hw->io_ports[IDE_DATA_OFFSET] + 0x206;
+	}
 	if (irq != NULL)
 		*irq = 0;
 }

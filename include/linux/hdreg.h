@@ -93,7 +93,43 @@
 #define SMART_STATUS		0xda
 #define SMART_AUTO_OFFLINE	0xdb
 
+/* WIN_SETFEATURES sub-commands */
+
+#define SETFEATURES_EN_WCACHE	0x02	/* Enable write cache */
+#define SETFEATURES_XFER	0x03	/* Set transfer mode */
+#	define XFER_UDMA_4	0x44	/* 0100|0100 */
+#	define XFER_UDMA_3	0x43	/* 0100|0011 */
+#	define XFER_UDMA_2	0x42	/* 0100|0010 */
+#	define XFER_UDMA_1	0x41	/* 0100|0001 */
+#	define XFER_UDMA_0	0x40	/* 0100|0000 */
+#	define XFER_MW_DMA_2	0x22	/* 0010|0010 */
+#	define XFER_MW_DMA_1	0x21	/* 0010|0001 */
+#	define XFER_MW_DMA_0	0x20	/* 0010|0000 */
+#	define XFER_SW_DMA_2	0x12	/* 0001|0010 */
+#	define XFER_SW_DMA_1	0x11	/* 0001|0001 */
+#	define XFER_SW_DMA_0	0x10	/* 0001|0000 */
+#	define XFER_PIO_4	0x0C	/* 0000|1100 */
+#	define XFER_PIO_3	0x0B	/* 0000|1011 */
+#	define XFER_PIO_2	0x0A	/* 0000|1010 */
+#	define XFER_PIO_1	0x09	/* 0000|1001 */
+#	define XFER_PIO_0	0x08	/* 0000|1000 */
+#	define XFER_PIO_SLOW	0x00	/* 0000|0000 */
+#define SETFEATURES_EN_APM	0x05	/* Enable advanced power management */
+#define SETFEATURES_DIS_MSN	0x31	/* Disable Media Status Notification */
+#define SETFEATURES_DIS_RLA	0x55	/* Disable read look-ahead feature */
+#define SETFEATURES_EN_RI	0x5D	/* Enable release interrupt */
+#define SETFEATURES_EN_SI	0x5E	/* Enable SERVICE interrupt */
+#define SETFEATURES_DIS_RPOD	0x66	/* Disable reverting to power on defaults */
+#define SETFEATURES_DIS_WCACHE	0x82	/* Disable write cache */
+#define SETFEATURES_DIS_APM	0x85	/* Disable advanced power management */
+#define SETFEATURES_EN_MSN	0x95	/* Enable Media Status Notification */
+#define SETFEATURES_EN_RLA	0xAA	/* Enable read look-ahead feature */
+#define SETFEATURES_EN_RPOD	0xCC	/* Enable reverting to power on defaults */
+#define SETFEATURES_DIS_RI	0xDD	/* Disable release interrupt */
+#define SETFEATURES_DIS_SI	0xDE	/* Disable SERVICE interrupt */
+
 /* WIN_SECURITY sub-commands */
+
 #define SECURITY_SET_PASSWORD		0xBA	/* 0xF1 */
 #define SECURITY_UNLOCK			0xBB	/* 0xF2 */
 #define SECURITY_ERASE_PREPARE		0xBC	/* 0xF3 */

@@ -54,11 +54,7 @@ struct mouse_state {
 	/* but we will also need a list of file pointers to identify it */
 };
 
-static struct mouse_state static_mouse_state = {
-	0, 0, 0, 0,
-	0, 0, 0,
-	__WAIT_QUEUE_HEAD_INITIALIZER(static_mouse_state.wait),
-};
+static struct mouse_state static_mouse_state;
 
 spinlock_t usb_mouse_lock = SPIN_LOCK_UNLOCKED;
 
@@ -281,7 +277,7 @@ int usb_mouse_init(void)
 	misc_register(&usb_mouse);
 
 	mouse->present = mouse->active = 0;
-	mouse->wait = NULL;
+	init_waitqueue_head(&mouse->wait);
 	mouse->fasync = NULL;
 
 	usb_register(&mouse_driver);

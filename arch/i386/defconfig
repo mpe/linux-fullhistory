@@ -73,7 +73,9 @@ CONFIG_BLK_DEV_IDE=y
 #
 # CONFIG_BLK_DEV_HD_IDE is not set
 CONFIG_BLK_DEV_IDEDISK=y
+# CONFIG_IDEDISK_MULTI_MODE is not set
 CONFIG_BLK_DEV_IDECD=y
+# CONFIG_IDECD_SLOTS is not set
 # CONFIG_BLK_DEV_IDETAPE is not set
 # CONFIG_BLK_DEV_IDEFLOPPY is not set
 # CONFIG_BLK_DEV_IDESCSI is not set
@@ -83,6 +85,7 @@ CONFIG_BLK_DEV_RZ1000=y
 CONFIG_BLK_DEV_IDEPCI=y
 CONFIG_BLK_DEV_IDEDMA=y
 # CONFIG_BLK_DEV_OFFBOARD is not set
+# CONFIG_BLK_DEV_AEC6210 is not set
 CONFIG_IDEDMA_AUTO=y
 # CONFIG_IDE_CHIPSETS is not set
 
@@ -96,6 +99,7 @@ CONFIG_IDEDMA_AUTO=y
 # CONFIG_BLK_DEV_XD is not set
 CONFIG_PARIDE_PARPORT=y
 # CONFIG_PARIDE is not set
+CONFIG_BLK_DEV_IDE_MODES=y
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -290,6 +294,17 @@ CONFIG_82C710_MOUSE=y
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
+
+#
+# USB drivers - not for the faint of heart
+#
+CONFIG_USB=y
+CONFIG_USB_UHCI=y
+# CONFIG_USB_OHCI is not set
+# CONFIG_USB_OHCI_HCD is not set
+CONFIG_USB_MOUSE=y
+CONFIG_USB_KBD=y
+# CONFIG_USB_AUDIO is not set
 
 #
 # Filesystems

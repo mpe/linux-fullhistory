@@ -1,0 +1,99 @@
+#!/bin/sh
+#
+#	Andre Hedrick <hedrick@astro.dyer.vanderbilt.edu>
+#
+#	The song goes, "I did it the hard way..........."
+#
+
+if [ ! -f /dev/hdm ]; then \
+	echo "Making IDE6 Primary Devices hdm's"; \
+	mknod /dev/hdm b 88 0; \
+	mknod /dev/hdm1 b 88 1; \
+	mknod /dev/hdm2 b 88 2; \
+	mknod /dev/hdm3 b 88 3; \
+	mknod /dev/hdm4 b 88 4; \
+	mknod /dev/hdm5 b 88 5; \
+	mknod /dev/hdm6 b 88 6; \
+	mknod /dev/hdm7 b 88 7; \
+	mknod /dev/hdm8 b 88 8; \
+	mknod /dev/hdm9 b 88 9; \
+	mknod /dev/hdm10 b 88 10; \
+	mknod /dev/hdm11 b 88 11; \
+	mknod /dev/hdm12 b 88 12; \
+	mknod /dev/hdm13 b 88 13; \
+	mknod /dev/hdm14 b 88 14; \
+	mknod /dev/hdm15 b 88 15; \
+	mknod /dev/hdm16 b 88 16; \
+	chown root.disk /dev/hdm*; \
+	chmod 660 /dev/hdm*; \
+fi
+
+if [ ! -f /dev/hdn ]; then \
+	echo "Making IDE6 Secondary Devices hdn's"; \
+	mknod /dev/hdn b 88 64; \
+	mknod /dev/hdn1 b 88 65; \
+	mknod /dev/hdn2 b 88 66; \
+	mknod /dev/hdn3 b 88 67; \
+	mknod /dev/hdn4 b 88 68; \
+	mknod /dev/hdn5 b 88 69; \
+	mknod /dev/hdn6 b 88 70; \
+	mknod /dev/hdn7 b 88 71; \
+	mknod /dev/hdn8 b 88 72; \
+	mknod /dev/hdn9 b 88 73; \
+	mknod /dev/hdn10 b 88 74; \
+	mknod /dev/hdn11 b 88 75; \
+	mknod /dev/hdn12 b 88 76; \
+	mknod /dev/hdn13 b 88 77; \
+	mknod /dev/hdn14 b 88 78; \
+	mknod /dev/hdn15 b 88 79; \
+	mknod /dev/hdn16 b 88 80; \
+	chown root.disk /dev/hdn*; \
+	chmod 660 /dev/hdn*; \
+fi
+
+if [ ! -f /dev/hdo ]; then \
+	echo "Making IDE7 Primary Devices hdo's"; \
+	mknod /dev/hdo b 89 0; \
+	mknod /dev/hdo1 b 89 1; \
+	mknod /dev/hdo2 b 89 2; \
+	mknod /dev/hdo3 b 89 3; \
+	mknod /dev/hdo4 b 89 4; \
+	mknod /dev/hdo5 b 89 5; \
+	mknod /dev/hdo6 b 89 6; \
+	mknod /dev/hdo7 b 89 7; \
+	mknod /dev/hdo8 b 89 8; \
+	mknod /dev/hdo9 b 89 9; \
+	mknod /dev/hdo10 b 89 10; \
+	mknod /dev/hdo11 b 89 11; \
+	mknod /dev/hdo12 b 89 12; \
+	mknod /dev/hdo13 b 89 13; \
+	mknod /dev/hdo14 b 89 14; \
+	mknod /dev/hdo15 b 89 15; \
+	mknod /dev/hdo16 b 89 16; \
+	chown root.disk /dev/hdo*; \
+	chmod 660 /dev/hdo*; \
+fi
+
+if [ ! -f /dev/hdp ]; then \
+	echo "Making IDE7 Secondary Devices hdp's"; \
+	mknod /dev/hdp b 89 64; \
+	mknod /dev/hdp1 b 89 65; \
+	mknod /dev/hdp2 b 89 66; \
+	mknod /dev/hdp3 b 89 67; \
+	mknod /dev/hdp4 b 89 68; \
+	mknod /dev/hdp5 b 89 69; \
+	mknod /dev/hdp6 b 89 70; \
+	mknod /dev/hdp7 b 89 71; \
+	mknod /dev/hdp8 b 89 72; \
+	mknod /dev/hdp9 b 89 73; \
+	mknod /dev/hdp10 b 89 74; \
+	mknod /dev/hdp11 b 89 75; \
+	mknod /dev/hdp12 b 89 76; \
+	mknod /dev/hdp13 b 89 77; \
+	mknod /dev/hdp14 b 89 78; \
+	mknod /dev/hdp15 b 89 79; \
+	mknod /dev/hdp16 b 89 80; \
+	chown root.disk /dev/hdp*; \
+	chmod 660 /dev/hdp*; \
+fi
+

@@ -18,6 +18,8 @@
  *			 by Andrea Arcangeli
  * Version 1.03		fix for (hwif->chipset == ide_4drives)
  * Version 1.04		fixed buggy treatments of known flash memory cards
+ *			fix for (hwif->chipset == ide_pdc4030)
+ *			added ide6/7
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -35,13 +37,13 @@
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/ide.h>
+
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-
-#include "ide.h"
 
 static inline void do_identify (ide_drive_t *drive, byte cmd)
 {
@@ -148,17 +150,6 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 }
 
 /*
- * Delay for *at least* 50ms.  As we don't know how much time is left
- * until the next tick occurs, we wait an extra tick to be safe.
- * This is used only during the probing/polling for drives at boot time.
- */
-static void delay_50ms (void)
-{
-	unsigned long timeout = jiffies + ((HZ + 19)/20) + 1;
-	while (0 < (signed long)(timeout - jiffies));
-}
-
-/*
  * try_to_identify() sends an ATA(PI) IDENTIFY request to a drive
  * and waits for a response.  It also monitors irqs while this is
  * happening, in hope of automatically determining which one is
@@ -176,20 +167,26 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	unsigned long irqs = 0;
 	byte s, a;
 
-	if (!HWIF(drive)->irq) {		/* already got an IRQ? */
-		probe_irq_off(probe_irq_on());	/* clear dangling irqs */
-		irqs = probe_irq_on();		/* start monitoring irqs */
-		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* enable device irq */
-	}
+	if (IDE_CONTROL_REG) {
+		if (!HWIF(drive)->irq) {		/* already got an IRQ? */
+			probe_irq_off(probe_irq_on());	/* clear dangling irqs */
+			irqs = probe_irq_on();		/* start monitoring irqs */
+			OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* enable device irq */
+		}
 
-	delay_50ms();				/* take a deep breath */
-	a = IN_BYTE(IDE_ALTSTATUS_REG);
-	s = IN_BYTE(IDE_STATUS_REG);
-	if ((a ^ s) & ~INDEX_STAT) {
-		printk("%s: probing with STATUS(0x%02x) instead of ALTSTATUS(0x%02x)\n", drive->name, s, a);
-		hd_status = IDE_STATUS_REG;	/* ancient Seagate drives, broken interfaces */
-	} else
-		hd_status = IDE_ALTSTATUS_REG;	/* use non-intrusive polling */
+		ide_delay_50ms();				/* take a deep breath */
+		a = IN_BYTE(IDE_ALTSTATUS_REG);
+		s = IN_BYTE(IDE_STATUS_REG);
+		if ((a ^ s) & ~INDEX_STAT) {
+			printk("%s: probing with STATUS(0x%02x) instead of ALTSTATUS(0x%02x)\n", drive->name, s, a);
+			hd_status = IDE_STATUS_REG;	/* ancient Seagate drives, broken interfaces */
+		} else {
+			hd_status = IDE_ALTSTATUS_REG;	/* use non-intrusive polling */
+		}
+	} else {
+		ide_delay_50ms();
+		hd_status = IDE_STATUS_REG;
+	}
 
 #if CONFIG_BLK_DEV_PDC4030
 	if (IS_PDC4030_DRIVE) {
@@ -210,10 +207,10 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 				(void) probe_irq_off(irqs);
 			return 1;	/* drive timed-out */
 		}
-		delay_50ms();		/* give drive a breather */
+		ide_delay_50ms();		/* give drive a breather */
 	} while (IN_BYTE(hd_status) & BUSY_STAT);
 
-	delay_50ms();		/* wait for IRQ and DRQ_STAT */
+	ide_delay_50ms();		/* wait for IRQ and DRQ_STAT */
 	if (OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
 		unsigned long flags;
 		__save_flags(flags);	/* local CPU only */
@@ -224,7 +221,7 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 		__restore_flags(flags);	/* local CPU only */
 	} else
 		rc = 2;			/* drive refused ID */
-	if (!HWIF(drive)->irq) {
+	if (IDE_CONTROL_REG && !HWIF(drive)->irq) {
 		irqs = probe_irq_off(irqs);	/* get our irq number */
 		if (irqs > 0) {
 			HWIF(drive)->irq = irqs; /* save it for later */
@@ -280,11 +277,11 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 		(cmd == WIN_IDENTIFY) ? "ATA" : "ATAPI");
 #endif
 	SELECT_DRIVE(hwif,drive);
-	delay_50ms();
+	ide_delay_50ms();
 	if (IN_BYTE(IDE_SELECT_REG) != drive->select.all && !drive->present) {
 		if (drive->select.b.unit != 0) {
 			SELECT_DRIVE(hwif,&hwif->drives[0]);	/* exit with drive0 selected */
-			delay_50ms();		/* allow BUSY_STAT to assert & clear */
+			ide_delay_50ms();		/* allow BUSY_STAT to assert & clear */
 		}
 		return 3;    /* no i/f present: mmm.. this should be a 4 -ml */
 	}
@@ -297,13 +294,13 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 		if (rc == 1 && cmd == WIN_PIDENTIFY && drive->autotune != 2) {
 			unsigned long timeout;
 			printk("%s: no response (status = 0x%02x), resetting drive\n", drive->name, GET_STAT());
-			delay_50ms();
+			ide_delay_50ms();
 			OUT_BYTE (drive->select.all, IDE_SELECT_REG);
-			delay_50ms();
+			ide_delay_50ms();
 			OUT_BYTE(WIN_SRST, IDE_COMMAND_REG);
 			timeout = jiffies;
 			while ((GET_STAT() & BUSY_STAT) && time_before(jiffies, timeout + WAIT_WORSTCASE))
-				delay_50ms();
+				ide_delay_50ms();
 			rc = try_to_identify(drive, cmd);
 		}
 		if (rc == 1)
@@ -314,7 +311,7 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 	}
 	if (drive->select.b.unit != 0) {
 		SELECT_DRIVE(hwif,&hwif->drives[0]);	/* exit with drive0 selected */
-		delay_50ms();
+		ide_delay_50ms();
 		(void) GET_STAT();		/* ensure drive irq is clear */
 	}
 	return rc;
@@ -407,15 +404,40 @@ static void probe_hwif (ide_hwif_t *hwif)
 	unsigned int unit;
 	unsigned long flags;
 
+	ide_ioreg_t ide_control_reg 	= hwif->io_ports[IDE_CONTROL_OFFSET];
+	ide_ioreg_t region_low 		= hwif->io_ports[IDE_DATA_OFFSET];
+	ide_ioreg_t region_high 	= region_low;
+	ide_ioreg_t region_request	= 8;
+	int i;
+
 	if (hwif->noprobe)
 		return;
 	if (hwif->io_ports[IDE_DATA_OFFSET] == HD_DATA)
 		probe_cmos_for_drives (hwif);
-	if ((hwif->chipset != ide_4drives || !hwif->mate->present)
+
+	/*
+	 * Calculate the region that this interface occupies,
+	 * handling interfaces where the registers may not be
+	 * ordered sanely.  We deal with the CONTROL register
+	 * separately.
+	 */
+	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
+		if (hwif->io_ports[i]) {
+			if (hwif->io_ports[i] < region_low)
+				region_low = hwif->io_ports[i];
+			if (hwif->io_ports[i] > region_high)
+				region_high = hwif->io_ports[i];
+		}
+	}
+	region_request = (region_high - region_low);
+	if (region_request == 0x0007)
+		region_request++;
+	if ((hwif->chipset != ide_4drives || !hwif->mate->present) &&
 #if CONFIG_BLK_DEV_PDC4030
-	 && (hwif->chipset != ide_pdc4030 || hwif->channel == 0)
+	    (hwif->chipset != ide_pdc4030 || hwif->channel == 0) &&
 #endif /* CONFIG_BLK_DEV_PDC4030 */
-	 && (ide_check_region(hwif->io_ports[IDE_DATA_OFFSET],8) || ide_check_region(hwif->io_ports[IDE_CONTROL_OFFSET],1)))
+	    (ide_check_region(region_low, region_request) ||
+	    (ide_control_reg && ide_check_region(ide_control_reg,1))))
 	{
 		int msgout = 0;
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
@@ -443,21 +465,22 @@ static void probe_hwif (ide_hwif_t *hwif)
 		if (drive->present && !hwif->present) {
 			hwif->present = 1;
 			if (hwif->chipset != ide_4drives || !hwif->mate->present) {
-				ide_request_region(hwif->io_ports[IDE_DATA_OFFSET],  8, hwif->name);
-				ide_request_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1, hwif->name);
+				ide_request_region(region_low, region_request, hwif->name);
+				if (ide_control_reg)
+					ide_request_region(ide_control_reg, 1, hwif->name);
 			}
 		}
 	}
-	if (hwif->reset) {
+	if (ide_control_reg && hwif->reset) {
 		unsigned long timeout = jiffies + WAIT_WORSTCASE;
 		byte stat;
 
 		printk("%s: reset\n", hwif->name);
-		OUT_BYTE(12, hwif->io_ports[IDE_CONTROL_OFFSET]);
+		OUT_BYTE(12, ide_control_reg);
 		udelay(10);
-		OUT_BYTE(8, hwif->io_ports[IDE_CONTROL_OFFSET]);
+		OUT_BYTE(8, ide_control_reg);
 		do {
-			delay_50ms();
+			ide_delay_50ms();
 			stat = IN_BYTE(hwif->io_ports[IDE_STATUS_OFFSET]);
 		} while ((stat & BUSY_STAT) && 0 < (signed long)(timeout - jiffies));
 
@@ -660,7 +683,11 @@ static void init_gendisk (ide_hwif_t *hwif)
 	max_readahead[hwif->major] = max_ra;
 	for (unit = 0; unit < minors; ++unit) {
 		*bs++ = BLOCK_SIZE;
+#ifdef CONFIG_BLK_DEV_PDC4030
+		*max_sect++ = ((hwif->chipset == ide_pdc4030) ? 127 : MAX_SECTORS);
+#else
 		*max_sect++ = MAX_SECTORS;
+#endif
 		*max_ra++ = MAX_READAHEAD;
 	}
 
@@ -693,7 +720,8 @@ static int hwif_init (ide_hwif_t *hwif)
 	if (!hwif->present)
 		return 0;
 	if (!hwif->irq) {
-		if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET]))) {
+		if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET])))
+		{
 			printk("%s: DISABLED, NO IRQ\n", hwif->name);
 			return (hwif->present = 0);
 		}
@@ -722,6 +750,12 @@ static int hwif_init (ide_hwif_t *hwif)
 #endif
 #if MAX_HWIFS > 5
 	case IDE5_MAJOR: rfn = &do_ide5_request; break;
+#endif
+#if MAX_HWIFS > 6
+	case IDE6_MAJOR: rfn = &do_ide6_request; break;
+#endif
+#if MAX_HWIFS > 7
+	case IDE7_MAJOR: rfn = &do_ide7_request; break;
 #endif
 	default:
 		printk("%s: request_fn NOT DEFINED\n", hwif->name);

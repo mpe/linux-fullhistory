@@ -45,8 +45,6 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 	struct minix_dir_entry *de;
 
 	*res_dir = NULL;
-	if (!dir->i_sb)
-		return NULL;
 	info = &dir->i_sb->u.minix_sb;
 	if (namelen > info->s_namelen) {
 #ifdef NO_TRUNCATE
@@ -161,8 +159,6 @@ static int minix_add_entry(struct inode * dir,
 
 	*res_buf = NULL;
 	*res_dir = NULL;
-	if (!dir || !dir->i_sb)
-		return -ENOENT;
 	info = &dir->i_sb->u.minix_sb;
 	if (namelen > info->s_namelen) {
 #ifdef NO_TRUNCATE
@@ -331,8 +327,6 @@ static int empty_dir(struct inode * inode)
 	struct minix_dir_entry * de;
 	struct minix_sb_info * info;
 
-	if (!inode || !inode->i_sb)
-		return 1;
 	info = &inode->i_sb->u.minix_sb;
 	block = 0;
 	bh = NULL;
@@ -431,26 +425,12 @@ int minix_unlink(struct inode * dir, struct dentry *dentry)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-repeat:
 	retval = -ENOENT;
-	inode = NULL;
+	inode = dentry->d_inode;
 	bh = minix_find_entry(dir, dentry->d_name.name,
 			      dentry->d_name.len, &de);
-	if (!bh)
+	if (!bh || de->inode != inode->i_ino)
 		goto end_unlink;
-	inode = dentry->d_inode;
-
-	retval = -EPERM;
-	if (de->inode != inode->i_ino) {
-		brelse(bh);
-		current->counter = 0;
-		schedule();
-		goto repeat;
-	}
-	if (de->inode != inode->i_ino) {
-		retval = -ENOENT;
-		goto end_unlink;
-	}
 	if (!inode->i_nlink) {
 		printk("Deleting nonexistent file (%s:%lu), %d\n",
 			kdevname(inode->i_dev),
@@ -551,12 +531,6 @@ int minix_link(struct dentry * old_dentry, struct inode * dir,
 (((struct minix_dir_entry *) ((buffer)+info->s_dirsize))->inode)
 
 /*
- * rename uses retrying to avoid race-conditions: at least they should be minimal.
- * it tries to allocate all the blocks, then sanity-checks, and if the sanity-
- * checks fail, it tries to restart itself again. Very practical - no changes
- * are done until we know everything works ok.. and then all the changes can be
- * done in one fell swoop when we have claimed all the buffers needed.
- *
  * Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
@@ -570,24 +544,15 @@ int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 	int retval;
 
 	info = &old_dir->i_sb->u.minix_sb;
-	goto start_up;
-try_again:
-	brelse(old_bh);
-	brelse(new_bh);
-	brelse(dir_bh);
-	current->counter = 0;
-	schedule();
-start_up:
-	old_inode = new_inode = NULL;
-	old_bh = new_bh = dir_bh = NULL;
+	new_bh = dir_bh = NULL;
+	old_inode = old_dentry->d_inode;
+	new_inode = new_dentry->d_inode;
 	old_bh = minix_find_entry(old_dir, old_dentry->d_name.name,
 				  old_dentry->d_name.len, &old_de);
 	retval = -ENOENT;
-	if (!old_bh)
+	if (!old_bh || old_de->inode != old_inode->i_ino)
 		goto end_rename;
-	old_inode = old_dentry->d_inode;
 	retval = -EPERM;
-	new_inode = new_dentry->d_inode;
 	new_bh = minix_find_entry(new_dir, new_dentry->d_name.name,
 				  new_dentry->d_name.len, &new_de);
 	if (new_bh) {
@@ -609,7 +574,8 @@ start_up:
 		if (PARENT_INO(dir_bh->b_data) != old_dir->i_ino)
 			goto end_rename;
 		retval = -EMLINK;
-		if (!new_inode && new_dir->i_nlink >= info->s_link_max)
+		if (!new_inode && new_dir != old_dir &&
+				new_dir->i_nlink >= info->s_link_max)
 			goto end_rename;
 	}
 	if (!new_bh) {
@@ -620,22 +586,15 @@ start_up:
 		if (retval)
 			goto end_rename;
 	}
-/* sanity checking before doing the rename - avoid races */
-	if (new_inode && (new_de->inode != new_inode->i_ino))
-		goto try_again;
-	if (new_de->inode && !new_inode)
-		goto try_again;
-	if (old_de->inode != old_inode->i_ino)
-		goto try_again;
 /* ok, that's it */
-	old_de->inode = 0;
 	new_de->inode = old_inode->i_ino;
+	old_de->inode = 0;
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
-	mark_inode_dirty(old_dir);
 	old_dir->i_version = ++event;
+	mark_inode_dirty(old_dir);
 	new_dir->i_ctime = new_dir->i_mtime = CURRENT_TIME;
-	mark_inode_dirty(new_dir);
 	new_dir->i_version = ++event;
+	mark_inode_dirty(new_dir);
 	if (new_inode) {
 		new_inode->i_nlink--;
 		new_inode->i_ctime = CURRENT_TIME;

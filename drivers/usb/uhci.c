@@ -61,15 +61,17 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td)
 	/* Some debugging code */
 	if (status) {
 		int i = 10;
-		struct uhci_td *tmp = dev->control_td;
+		struct uhci_td *tmp = td->first;
 		printk("uhci_td_result() failed with status %d\n", status);
 		show_status(dev->uhci);
 		do {
 			show_td(tmp);
-			tmp++;
+			if ((tmp->link & 1) || (tmp->link & 2))
+				break;
+			tmp = bus_to_virt(tmp->link & ~0xF);
 			if (!--i)
 				break;
-		} while (tmp <= td);
+		} while (1);
 	}
 	return status;		
 }
@@ -279,7 +281,7 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 	unsigned int destination, status;
 
 	/* Destination: pipe destination with INPUT */
-	destination = (pipe & 0x0007ff00)  |  0x69;
+	destination = (pipe & 0x0007ff00) | 0x69;
 
 	/* Status:    slow/fast,      Interrupt,   Active,    Short Packet Detect     Infinite Errors */
 	status = (pipe & (1 << 26)) | (1 << 24) | (1 << 23)   |   (1 << 29)       |    (0 << 27);
@@ -292,6 +294,7 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 	td->status = status;			/* In */
 	td->info = destination | (7 << 21);	/* 8 bytes of data */
 	td->buffer = virt_to_bus(dev->data);
+	td->first = td;
 	td->qh = interrupt_qh;
 	interrupt_qh->skel = &dev->uhci->root_hub->skel_int8_qh;
 
@@ -302,6 +305,202 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 	/* Add it into the skeleton */
 	uhci_insert_qh(&dev->uhci->root_hub->skel_int8_qh, interrupt_qh);
 	return 0;
+}
+
+/*
+ * Isochronous thread operations
+ */
+
+int uhci_compress_isochronous(struct usb_device *usb_dev, void *_isodesc)
+{
+	struct uhci_iso_td *isodesc = (struct uhci_iso_td *)_isodesc;
+	char *data = isodesc->data;
+	int i, totlen = 0;
+
+	for (i = 0; i < isodesc->num; i++) {
+		char *cdata = bus_to_virt(isodesc->td[i].buffer & ~0xF);
+		int n = (isodesc->td[i].status + 1) & 0x7FF;
+
+		if ((cdata != data) && (n))
+			memmove(data, cdata, n);
+
+#if 0
+if (n && n != 960)
+	printk("underrun: %d %d\n", i, n);
+#endif
+if ((isodesc->td[i].status >> 16) & 0xFF)
+	printk("error: %d %X\n", i, (isodesc->td[i].status >> 16));
+
+		data += n;
+		totlen += n;
+	}
+
+	return totlen;
+}
+
+int uhci_unsched_isochronous(struct usb_device *usb_dev, void *_isodesc)
+{
+	struct uhci_device *dev = usb_to_uhci(usb_dev);
+	struct uhci *uhci = dev->uhci;
+	struct uhci_iso_td *isodesc = (struct uhci_iso_td *)_isodesc;
+	int i;
+
+	if ((isodesc->frame < 0) || (isodesc->frame > 1023))
+		return 1;
+
+	/* Remove from previous frames */
+	for (i = 0; i < isodesc->num; i++) {
+		/* Turn off Active and IOC bits */
+		isodesc->td[i].status &= ~(3 << 23);
+		uhci->fl->frame[(isodesc->frame + i) % 1024] = isodesc->td[i].link;
+	}
+
+	isodesc->frame = -1;
+
+	return 0;
+}
+	
+/* td points to the one td we allocated for isochronous transfers */
+int uhci_sched_isochronous(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
+{
+	struct uhci_device *dev = usb_to_uhci(usb_dev);
+	struct uhci *uhci = dev->uhci;
+	struct uhci_iso_td *isodesc = (struct uhci_iso_td *)_isodesc;
+	struct uhci_iso_td *pisodesc = (struct uhci_iso_td *)_pisodesc;
+	int frame, i;
+
+	if (isodesc->frame != -1) {
+		printk("isoc queue not removed\n");
+		uhci_unsched_isochronous(usb_dev, isodesc);
+	}
+
+	/* Insert TD into list */
+	if (!pisodesc) {
+		frame = inw(uhci->io_addr + USBFRNUM) % 1024;
+		/* HACK: Start 2 frames from now */
+		frame = (frame + 2) % 1024;
+	} else
+		frame = (pisodesc->endframe + 1) % 1024;
+
+#if 0
+printk("scheduling first at frame %d\n", frame);
+#endif
+
+	for (i = 0; i < isodesc->num; i++) {
+		/* Active */
+		isodesc->td[i].status |= (1 << 23);
+		isodesc->td[i].backptr = &uhci->fl->frame[(frame + i) % 1024];
+		isodesc->td[i].link = uhci->fl->frame[(frame + i) % 1024];
+		uhci->fl->frame[(frame + i) % 1024] = virt_to_bus(&isodesc->td[i]);
+	}
+
+#if 0
+printk("last at frame %d\n", (frame + i - 1) % 1024);
+#endif
+
+	/* Interrupt */
+	isodesc->td[i - 1].status |= (1 << 24);
+
+	isodesc->frame = frame;
+	isodesc->endframe = (frame + isodesc->num - 1) % 1024;
+
+#if 0
+	return uhci_td_result(dev, td[num - 1]);
+#endif
+	return 0;
+}
+
+/*
+ * Initialize isochronous queue
+ */
+void *uhci_alloc_isochronous(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
+{
+	struct uhci_device *dev = usb_to_uhci(usb_dev);
+	unsigned long destination, status;
+	struct uhci_td *td;
+	int ret, i;
+	struct uhci_iso_td *isodesc;
+
+	isodesc = kmalloc(sizeof(*isodesc), GFP_KERNEL);
+	if (!isodesc) {
+		printk("Couldn't allocate isodesc!\n");
+		return NULL;
+	}
+	memset(isodesc, 0, sizeof(*isodesc));
+
+	/* Carefully work around the non contiguous pages */
+	isodesc->num = (len / PAGE_SIZE) * (PAGE_SIZE / maxsze);
+	isodesc->td = kmalloc(sizeof(struct uhci_td) * isodesc->num, GFP_KERNEL);
+	isodesc->frame = isodesc->endframe = -1;
+	isodesc->data = data;
+	isodesc->maxsze = maxsze;
+	
+	if (!isodesc->td) {
+		printk("Couldn't allocate td's\n");
+		kfree(isodesc);
+		return NULL;
+	}
+
+	isodesc->frame = isodesc->endframe = -1;
+
+	/*
+	 * Build the DATA TD's
+	 */
+	i = 0;
+	do {
+		/* Build the TD for control status */
+		td = &isodesc->td[i];
+
+		/* The "pipe" thing contains the destination in bits 8--18 */
+		destination = (pipe & 0x0007ff00);
+
+		if (usb_pipeout(pipe))
+			destination |= 0xE1;	/* OUT */
+		else
+			destination |= 0x69;	/* IN */
+
+		/* Status:    slow/fast,       Active,       Isochronous */
+		status = (pipe & (1 << 26)) | (1 << 23)   |   (1 << 25);
+
+		/*
+		 * Build the TD for the control request
+		 */
+		td->status = status;
+		td->info = destination | ((maxsze - 1) << 21);
+		td->buffer = virt_to_bus(data);
+		td->first = td;
+		td->backptr = NULL;
+
+		i++;
+
+		data += maxsze;
+
+		if (((int)data % PAGE_SIZE) + maxsze >= PAGE_SIZE)
+			data = (char *)(((int)data + maxsze) & ~(PAGE_SIZE - 1));
+		
+		len -= maxsze;
+	} while (i < isodesc->num);
+
+	/* IOC on the last TD */
+	td->status |= (1 << 24);
+	uhci_add_irq_list(dev->uhci, td, completed, dev_id);
+
+	return isodesc;
+}
+
+void uhci_delete_isochronous(struct usb_device *usb_dev, void *_isodesc)
+{
+	struct uhci_iso_td *isodesc = (struct uhci_iso_td *)_isodesc;
+
+	/* If it's still scheduled, unschedule them */
+	if (isodesc->frame)
+		uhci_unsched_isochronous(usb_dev, isodesc);
+
+	/* Remove it from the IRQ list */
+	uhci_remove_irq_list(&isodesc->td[isodesc->num - 1]);
+
+	kfree(isodesc->td);
+	kfree(isodesc);
 }
 
 /*
@@ -420,6 +619,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	td->status = status;				/* Try forever */
 	td->info = destination | (7 << 21);		/* 8 bytes of data */
 	td->buffer = virt_to_bus(cmd);
+	td->first = td;
 
 	/*
 	 * If direction is "send", change the frame from SETUP (0x2D)
@@ -450,6 +650,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 		td->status = status;					/* Status */
 		td->info = destination | ((pktsze-1) << 21);		/* pktsze bytes of data */
 		td->buffer = virt_to_bus(data);
+		td->first = first;
 		td->backptr = &prevtd->link;
 
 		prevtd = td;
@@ -470,6 +671,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	td->status = status | (1 << 24);		/* IOC */
 	td->info = destination | (0x7ff << 21);		/* 0 bytes of data */
 	td->buffer = 0;
+	td->first = first;
 	td->backptr = &prevtd->link;
 
 	/* Start it up.. */
@@ -554,12 +756,16 @@ static int uhci_usb_deallocate(struct usb_device *usb_dev)
 	for (i = 0; i < UHCI_MAXTD; ++i) {
 		struct uhci_td *td = dev->td + i;
 
-		/* And remove it from the irq list, if it's active */
-		if (td->status & (1 << 23))
-			uhci_remove_irq_list(td);
-
-		if (td->inuse)
+		if (td->inuse) {
 			uhci_remove_td(td);
+
+			/* And remove it from the irq list, if it's active */
+			if (td->status & (1 << 23))
+				td->status &= ~(1 << 23);
+#if 0
+				uhci_remove_irq_list(td);
+#endif
+		}
 	}
 
 	/* Remove the td from any queues */
@@ -710,15 +916,18 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 			__list_del(tmp->prev, next);
 			INIT_LIST_HEAD(tmp);
 			if (td->completed(td->status, bus_to_virt(td->buffer), td->dev_id)) {
-				struct uhci_qh *interrupt_qh = td->qh;
-
 				list_add(&td->irq_list, &uhci->interrupt_list);
-				td->info ^= 1 << 19; /* toggle between data0 and data1 */
-				td->status = (td->status & 0x2f000000) | (1 << 23) | (1 << 24);	/* active */
 
-				/* Remove then readd? Is that necessary */
-				uhci_remove_td(td);
-				uhci_insert_td_in_qh(interrupt_qh, td);
+				if (!(td->status & (1 << 25))) {
+					struct uhci_qh *interrupt_qh = td->qh;
+
+					td->info ^= 1 << 19; /* toggle between data0 and data1 */
+					td->status = (td->status & 0x2f000000) | (1 << 23) | (1 << 24);	/* active */
+
+					/* Remove then readd? Is that necessary */
+					uhci_remove_td(td);
+					uhci_insert_td_in_qh(interrupt_qh, td);
+				}
 			}
 			/* If completed wants to not reactivate, then it's */
 			/* responsible for free'ing the TD's and QH's */
@@ -764,6 +973,9 @@ static void uhci_interrupt(int irq, void *__uhci, struct pt_regs *regs)
 	status = inw(io_addr + USBSTS);
 	outw(status, io_addr + USBSTS);
 
+	if ((status & ~0x21) != 0)
+		printk("interrupt: %X\n", status);
+
 	/* Walk the list of pending TD's to see which ones completed.. */
 	uhci_interrupt_notify(uhci);
 
@@ -787,6 +999,7 @@ static void uhci_init_ticktd(struct uhci *uhci)
 	td->status = (1 << 24);					/* interrupt on completion */
 	td->info = (15 << 21) | 0x7f69;				/* (ignored) input packet, 16 bytes, device 127 */
 	td->buffer = 0;
+	td->first = td;
 	td->qh = NULL;
 
 	uhci->fl->frame[0] = virt_to_bus(td);
@@ -1047,11 +1260,12 @@ static int uhci_control_thread(void * __uhci)
 		}
 	}
 
-#if 0
+	{
+	int i;
 	if(uhci->root_hub)
 		for(i = 0; i < uhci->root_hub->usb->maxchild; i++)
 			usb_disconnect(uhci->root_hub->usb->children + i);
-#endif
+	}
 
 	cleanup_drivers();
 
@@ -1195,6 +1409,9 @@ int uhci_init(void)
 #ifdef CONFIG_USB_AUDIO		
 		usb_audio_init();
 #endif		
+#ifdef CONFIG_USB_CPIA
+		cpia_init();
+#endif
 #ifdef CONFIG_APM
 		apm_register_callback(&handle_apm_event);
 #endif

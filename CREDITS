@@ -91,6 +91,11 @@ S: 20 Ames Street
 S: Cambridge, Massachusetts 02139
 S: USA
 
+N: Michel Aubry
+E: giovanni <giovanni@sudfr.com>
+D: Aladdin 1533/1543(C) chipset IDE
+D: VIA MVP-3/TX Pro III chipset IDE
+
 N: Jens Axboe
 E: axboe@image.dk
 D: Linux CD-ROM maintainer
@@ -765,6 +770,17 @@ N: Andrew Haylett
 E: ajh@primag.co.uk
 D: Selection mechanism
 
+N: Andre Hedrick
+E: hedrick@astro.dyer.vanderbilt.edu
+D: Uniform Multi-Platform E-IDE driver
+D: Aladdin 1533/1543(C) chipset IDE
+D: HighPoint HPT343/5 chipset IDE
+D: PIIX chipset IDE
+D: Promise Ultra/33 chipset IDE
+D: Promise Ultra/66 chipset IDE
+S: Nashville, TN
+S: USA
+
 N: Jochen Hein
 E: jochen.hein@delphi.central.de
 P: 1024/4A27F015 25 72 FB E3 85 9F DE 3B  CB 0A DA DA 40 77 05 6C
@@ -928,6 +944,10 @@ S: Na Orechovce 7
 S: 160 00 Praha 6
 S: Czech Republic
 
+N: Andreas S. Krebs
+E: akrebs@altavista.net
+D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
+
 N: Niels Kristian Bech Jensen
 E: nkbj@image.dk
 W: http://www.image.dk/~nkbj
@@ -937,6 +957,13 @@ D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj
 S: Denmark
+
+N: Andrzej Krzysztofowicz
+E: ankry@green.mif.pg.gda.pl
+D: Aladdin 1533/1543(C) chipset IDE
+D: PIIX chipset IDE
+S: Faculty of Applied Phys. & Math.
+S: Technical University of Gdansk
 
 N: Michael K. Johnson
 E: johnsonm@redhat.com
@@ -1729,6 +1756,10 @@ E: hps@tanstaafl.de
 D: added PCI support to the serial driver
 S: Buckenhof, Germany
 
+N: Michael Schmitz
+E:
+D: Macintosh IDE Driver
+
 N: Martin Schulze
 E: joey@linux.de
 W: http://home.pages.de/~joey/
@@ -2015,6 +2046,9 @@ D: m68k/Amiga and PPC/CHRP Longtrail coordinator
 D: Frame buffer device and XF68_FBDev maintainer
 D: m68k IDE maintainer
 D: Amiga Zorro maintainer
+D: Amiga Buddha and Catweasel chipset IDE
+D: Atari Falcon chipset IDE
+D: Amiga Gayle chipset IDE
 S: C. Huysmansstraat 12
 S: B-3128 Baal
 S: Belgium

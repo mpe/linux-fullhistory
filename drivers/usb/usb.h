@@ -326,6 +326,8 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 /* Create control pipes.. */
 #define usb_sndctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint))
 #define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_sndisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint) | 0x80)
 #define usb_snddefctrl(dev)		((2 << 30) | __default_pipe(dev))
 #define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | 0x80)
 

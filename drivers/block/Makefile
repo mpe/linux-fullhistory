@@ -158,12 +158,52 @@ ifeq ($(CONFIG_BLK_DEV_VIA82C586),y)
 IDE_OBJS += via82c586.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_GAYLE),y)
+IDE_OBJS += gayle.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_FALCON_IDE),y)
+IDE_OBJS += falconide.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_MAC_IDE),y)
+IDE_OBJS += macide.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_BUDDHA),y)
+IDE_OBJS += buddha.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_CMD646),y)
 IDE_OBJS += cmd646.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
 IDE_OBJS += sl82c105.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_ALI15X3),y)
+IDE_OBJS += alim15x3.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_CY82C693),y)
+IDE_OBJS += cy82c693.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_PIIX),y)
+IDE_OBJS += piix.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_PDC202XX),y)
+IDE_OBJS += pdc202xx.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_AEC6210),y)
+IDE_OBJS += aec6210.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_HPT343),y)
+IDE_OBJS += hpt343.o
 endif
 
 ### if CONFIG_BLK_DEV_IDE is n, IDE_OBJS will be ignored

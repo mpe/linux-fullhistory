@@ -226,4 +226,10 @@ extern void *sparc_alloc_io(u32 pa, void *va, int sz, char *name,
 extern void sparc_free_io (void *va, int sz);
 extern void *sparc_dvma_malloc (int sz, char *name, __u32 *dvma_addr);
 
+/* Nothing to do */
+
+#define dma_cache_inv(_start,_size)		do { } while (0)
+#define dma_cache_wback(_start,_size)		do { } while (0)
+#define dma_cache_wback_inv(_start,_size)	do { } while (0)
+
 #endif /* !(__SPARC64_IO_H) */

@@ -10,9 +10,10 @@
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/hdreg.h>
+#include <linux/hdsmart.h>
 #include <linux/blkdev.h>
 #include <linux/proc_fs.h>
-#include <asm/ide.h>
+#include <asm/hdreg.h>
 
 /*
  * This is the multiple IDE interface driver, as evolved from hd.c.
@@ -177,6 +178,40 @@ typedef unsigned char	byte;	/* used everywhere */
 }
 
 /*
+ * Check for an interrupt and acknowledge the interrupt status
+ */
+struct hwif_s;
+typedef int (ide_ack_intr_t)(struct hwif_s *);
+
+/*
+ * Structure to hold all information about the location of this port
+ */
+typedef struct hw_regs_s {
+	ide_ioreg_t	io_ports[IDE_NR_PORTS];	/* task file registers */
+	int		irq;			/* our irq number */
+	ide_ack_intr_t	*ack_intr;		/* acknowledge interrupt */
+	void		*priv;			/* interface specific data */
+} hw_regs_t;
+
+/*
+ * Register new hardware with ide
+ */
+int ide_register_hw(hw_regs_t *hw, struct hwif_s **hwifp);
+
+/*
+ * Set up hw_regs_t structure before calling ide_register_hw (optional)
+ */
+void ide_setup_ports(	hw_regs_t *hw,
+			ide_ioreg_t base,
+			int *offsets,
+			ide_ioreg_t ctrl,
+			ide_ioreg_t intr,
+			ide_ack_intr_t *ack_intr,
+			int irq);
+
+#include <asm/ide.h>
+
+/*
  * Now for the data we need to maintain per-drive:  ide_drive_t
  */
 
@@ -259,6 +294,13 @@ typedef struct ide_drive_s {
 	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
 	void		*settings;	/* /proc/ide/ drive settings */
 	char		driver_req[10];	/* requests specific driver */
+#if 1
+	struct thresholds_s	*smart_thresholds;
+	struct values_s		*smart_values;
+#else
+	thresholds_t		smart_thresholds;
+	values_t		smart_values;
+#endif
 	} ide_drive_t;
 
 /*
@@ -272,9 +314,10 @@ typedef struct ide_drive_s {
  * Returns 1 if DMA read/write could not be started, in which case the caller
  * should either try again later, or revert to PIO for the current request.
  */
-typedef enum {	ide_dma_read,	ide_dma_write,	ide_dma_begin,	ide_dma_end,
-		ide_dma_check,	ide_dma_on,	ide_dma_off,	ide_dma_off_quietly,
-		ide_dma_test_irq
+typedef enum {	ide_dma_read,	ide_dma_write,		ide_dma_begin,
+		ide_dma_end,	ide_dma_check,		ide_dma_on,
+		ide_dma_off,	ide_dma_off_quietly,	ide_dma_test_irq,
+		ide_dma_bad_drive,			ide_dma_good_drive
 	} ide_dma_action_t;
 
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
@@ -306,7 +349,7 @@ typedef enum {	ide_unknown,	ide_generic,	ide_pci,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
 		ide_qd6580,	ide_umc8672,	ide_ht6560b,
 		ide_pdc4030,	ide_rz1000,	ide_trm290,
-		ide_cmd646,	ide_4drives
+		ide_cmd646,	ide_cy82c693,	ide_4drives
 	} hwif_chipset_t;
 
 typedef struct ide_pci_devid_s {
@@ -321,6 +364,7 @@ typedef struct hwif_s {
 	struct hwif_s	*next;		/* for linked-list in ide_hwgroup_t */
 	void		*hwgroup;	/* actually (ide_hwgroup_t *) */
 	ide_ioreg_t	io_ports[IDE_NR_PORTS];	/* task file registers */
+	hw_regs_t	hw;		/* Hardware info */
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
@@ -649,6 +693,8 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
  */
 int ide_wait_cmd (ide_drive_t *drive, int cmd, int nsect, int feature, int sectors, byte *buf);
 
+void ide_delay_50ms (void);
+
 /*
  * ide_system_bus_speed() returns what we think is the system VESA/PCI
  * bus speed (in MHz).  This is used for calculating interface PIO timings.
@@ -701,6 +747,12 @@ void do_ide4_request (void);
 #if MAX_HWIFS > 5
 void do_ide5_request (void);
 #endif
+#if MAX_HWIFS > 6
+void do_ide6_request (void);
+#endif
+#if MAX_HWIFS > 7
+void do_ide7_request (void);
+#endif
 void ide_init_subdrivers (void);
 
 #ifndef _IDE_C
@@ -743,14 +795,13 @@ int ide_replace_subdriver(ide_drive_t *drive, const char *driver);
 #else /* CONFIG_BLK_DEV_OFFBOARD */
 #  define OFF_BOARD		NEVER_BOARD
 #endif /* CONFIG_BLK_DEV_OFFBOARD */
-
 unsigned long ide_find_free_region (unsigned short size) __init;
 void ide_scan_pcibus (void) __init;
 #endif
 #ifdef CONFIG_BLK_DEV_IDEDMA
 #define BAD_DMA_DRIVE		0
 #define GOOD_DMA_DRIVE		1
-int ide_build_dmatable (ide_drive_t *drive);
+int ide_build_dmatable (ide_drive_t *drive, ide_dma_action_t func);
 void ide_dma_intr  (ide_drive_t *drive);
 int check_drive_lists (ide_drive_t *drive, int good_bad);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
@@ -759,6 +810,7 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_po
 unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif
 
+/* This is too ugly to live! */
 #ifdef CONFIG_BLK_DEV_PDC4030
 #include "pdc4030.h"
 #define IS_PDC4030_DRIVE (HWIF(drive)->chipset == ide_pdc4030)

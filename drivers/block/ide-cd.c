@@ -258,13 +258,14 @@
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/cdrom.h>
+#include <linux/ide.h>
+
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 
-#include "ide.h"
 #include "ide-cd.h"
 
 /****************************************************************************
@@ -670,7 +671,8 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 
 	OUT_BYTE (xferlen & 0xff, IDE_LCYL_REG);
 	OUT_BYTE (xferlen >> 8  , IDE_HCYL_REG);
-	OUT_BYTE (drive->ctl, IDE_CONTROL_REG);
+	if (IDE_CONTROL_REG)
+		OUT_BYTE (drive->ctl, IDE_CONTROL_REG);
  
 	if (info->dma)
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
@@ -2940,7 +2942,19 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
         else 	
         	printk (" drive");
 
-	printk (", %dkB Cache\n", ntohs(buf.cap.buffer_size));
+	printk (", %dkB Cache", ntohs(buf.cap.buffer_size));
+
+	if (drive->using_dma) {
+		if ((drive->id->field_valid & 4) &&
+		    (drive->id->dma_ultra & (drive->id->dma_ultra >> 8) & 7)) {
+			printk(", UDMA");	/* UDMA BIOS-enabled! */
+		} else if (drive->id->field_valid & 4) {
+			printk(", (U)DMA");	/* Can be BIOS-enabled! */
+		} else {
+			printk(", DMA");
+		}
+	}
+	printk("\n");
 
 	return nslots;
 }
@@ -2955,6 +2969,53 @@ static void ide_cdrom_add_settings(ide_drive_t *drive)
 	ide_add_setting(drive,	"max_kb_per_request",	SETTING_RW, BLKSECTGET, BLKSECTSET, TYPE_INTA, 1, 255, 1, 2, &max_sectors[major][minor], NULL);
 	ide_add_setting(drive,	"dsc_overlap",		SETTING_RW, -1, -1, TYPE_BYTE, 0, 1, 1,	1, &drive->dsc_overlap, NULL);
 }
+
+#ifdef CONFIG_IDECD_SLOTS
+static void ide_cdrom_slot_check (ide_drive_t *drive, int nslots)
+{
+	tracktype tracks;
+	struct cdrom_info *info = drive->driver_data;
+	struct cdrom_device_info *devinfo = &info->devinfo;
+	int slot_count = 0, drive_stat = 0, tmp;
+
+	for (slot_count=0;slot_count<nslots;slot_count++) {
+		(void) ide_cdrom_select_disc(devinfo, slot_count);
+		printk("     CD Slot %d ", slot_count+1);
+
+		drive_stat = ide_cdrom_drive_status(devinfo, slot_count);
+		if (drive_stat<0) {
+			continue;
+		} else switch(drive_stat) {
+			case CDS_DISC_OK:
+				/* use routine in Uniform CD-ROM driver */
+				cdrom_count_tracks(devinfo, &tracks);
+				tmp = tracks.audio + tracks.data +
+					tracks.cdi + tracks.xa;
+				printk(": Disc has %d track%s: ", tmp,
+					(tmp == 1)? "" : "s");
+				printk("%d=data %d=audio %d=Cd-I %d=XA\n",
+					tracks.data, tracks.audio,
+					tracks.cdi, tracks.xa);
+				break;
+			case CDS_NO_DISC:
+				printk("Empty slot.\n");
+				break;
+			case CDS_TRAY_OPEN:
+				printk("CD-ROM tray open.\n");
+				break;
+			case CDS_DRIVE_NOT_READY:
+				printk("CD-ROM drive not ready.\n");
+				break;
+			case CDS_NO_INFO:
+				printk("No Information available.\n");
+				break;
+			default:
+				printk("This Should not happen!\n");
+				break;
+		}
+	}
+}
+#endif /* CONFIG_IDECD_SLOTS */
 
 static
 int ide_cdrom_setup (ide_drive_t *drive)
@@ -3083,6 +3144,11 @@ int ide_cdrom_setup (ide_drive_t *drive)
 		return 1;
 	}
 	ide_cdrom_add_settings(drive);
+#ifdef CONFIG_IDECD_SLOTS
+	if (CDROM_CONFIG_FLAGS (drive)->is_changer) {
+		ide_cdrom_slot_check(drive, nslots);
+	}
+#endif /* CONFIG_IDECD_SLOTS */
 	return 0;
 }
 

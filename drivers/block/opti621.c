@@ -98,8 +98,10 @@
 #include <linux/ioport.h>
 #include <linux/blkdev.h>
 #include <linux/hdreg.h>
+#include <linux/ide.h>
+
 #include <asm/io.h>
-#include "ide.h"
+
 #include "ide_modes.h"
 
 #define OPTI621_MAX_PIO 3

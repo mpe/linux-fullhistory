@@ -17,9 +17,9 @@
 #include <linux/hdreg.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
-#include <asm/io.h>
-#include "ide.h"
+#include <linux/ide.h>
 
+#include <asm/io.h>
 
 static unsigned int ns87415_count = 0, ns87415_control[MAX_HWIFS] = { 0 };
 

@@ -124,7 +124,7 @@ static int usb_expect_descriptor(unsigned char *ptr, int len, unsigned char desc
 			
 		if (n_len < 2 || n_len > len)
 		{
-			printk("Short descriptor.\n");
+			printk("Short descriptor\n");
 			return -1;
 		}
 		printk(
@@ -152,9 +152,12 @@ static int usb_check_descriptor(unsigned char *ptr, int len, unsigned char desct
 {
 	int n_len = ptr[0];
 
+	if (len <= 0)
+		return -1;
+
 	if (n_len < 2 || n_len > len)
 	{
-		printk("Short descriptor.\n");
+		printk("Short descriptor. (%d, %d)\n", len, n_len);
 		return -1;
 	}
 
@@ -247,6 +250,11 @@ static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor
 	len -= *ptr;
 	parsed += *ptr;
 
+	if (config->MaxPower == 200) {
+		printk("bNumInterfaces kludge\n");
+		config->bNumInterfaces += 3;
+	}
+
 	if (config->bNumInterfaces > USB_MAXINTERFACES)
 	{
 		printk(KERN_WARNING "usb: too many interfaces.\n");
@@ -298,8 +306,10 @@ int usb_parse_configuration(struct usb_device *dev, void *__buf, int bytes)
 		if (retval < 0)
 			return retval;
 		ptr += retval;
-		bytes += retval;
+		bytes -= retval;
 	}
+	if (bytes)
+		printk(KERN_WARNING "usb: %d bytes of extra configuration data left\n", bytes);
 	return 0;
 }
 
@@ -533,6 +543,23 @@ int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 
 	return 0;
 }
+
+int usb_set_interface(struct usb_device *dev, int interface, int alternate)
+{
+	devrequest dr;
+
+	dr.requesttype = 1;
+	dr.request = USB_REQ_SET_INTERFACE;
+	dr.value = alternate;
+	dr.index = interface;
+	dr.length = 0;
+
+	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0))
+		return -1;
+
+	return 0;
+}
+
 
 int usb_set_configuration(struct usb_device *dev, int configuration)
 {

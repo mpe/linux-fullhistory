@@ -138,9 +138,6 @@ int adfs_dir_read_parent (struct inode *inode, struct buffer_head **bhp)
 	struct super_block *sb;
 	int i, size;
 
-	if (!inode)
-		return 0;
-
 	sb = inode->i_sb;
 
 	size = 2048 >> sb->s_blocksize_bits;

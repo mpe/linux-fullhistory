@@ -354,16 +354,7 @@ ncp_lookup_validate(struct dentry * dentry, int flags)
 	int len = dentry->d_name.len;      
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
-
-        if (!dentry->d_inode) {
-                DPRINTK(KERN_DEBUG "ncp_lookup_validate: called with dentry->d_inode already NULL.\n");
-                return 0;
-        }
         
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_lookup_validate: inode is NULL or not a directory.\n");
-		goto finished;
-	}
 	server = NCP_SERVER(dir);
 
 	if (!ncp_conn_valid(server))

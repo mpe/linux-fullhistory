@@ -892,7 +892,6 @@ void sysv_read_inode(struct inode * inode)
 		for (block = 0; block < 10+1+1+1; block++)
 			inode->u.sysv_i.i_data[block] =
 				read3byte(&raw_inode->i_a.i_addb[3*block]);
-	brelse(bh);
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &sysv_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))
@@ -901,6 +900,7 @@ void sysv_read_inode(struct inode * inode)
 		inode->i_op = &sysv_symlink_inode_operations;
 	else
 		init_special_inode(inode, inode->i_mode,raw_inode->i_a.i_rdev);
+	brelse(bh);
 }
 
 /* To avoid inconsistencies between inodes in memory and inodes on disk. */

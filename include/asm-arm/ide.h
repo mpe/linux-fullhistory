@@ -48,4 +48,4 @@ typedef union {
 
 #endif /* __KERNEL__ */
 
-#endif /* __ASMi386_IDE_H */
+#endif /* __ASMARM_IDE_H */

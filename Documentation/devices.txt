@@ -1215,10 +1215,24 @@ Your cooperation is appreciated.
 		  1 = /dev/comx1	COMX channel 1
 		    ...
 
+    block	Sixth IDE hard disk/CD-ROM interface
+		  0 = /dev/hdm		Master: whole disk (or CD-ROM)
+		 64 = /dev/hdn		Slave: whole disk (or CD-ROM)
+
+		Partitions are handled the same way as for the first
+		interface (see major number 3).
+
  89 char	I2C bus interface
 		  0 = /dev/i2c0		First I2C adapter
 		  1 = /dev/i2c1		Second I2C adapter
 		    ...
+
+    block	Seventh IDE hard disk/CD-ROM interface
+		  0 = /dev/hdo		Master: whole disk (or CD-ROM)
+		 64 = /dev/hdp		Slave: whole disk (or CD-ROM)
+
+		Partitions are handled the same way as for the first
+		interface (see major number 3).
 
  90 char	Memory Technology Device (RAM, ROM, Flash)
 		  0 = /dev/mtd0		First MTD (rw)

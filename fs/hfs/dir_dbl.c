@@ -201,10 +201,6 @@ static int dbl_readdir(struct file * filp,
         struct hfs_cat_entry *entry;
 	struct inode *dir = filp->f_dentry->d_inode;
 
-	if (!dir || !dir->i_sb || !S_ISDIR(dir->i_mode)) {
-		return -EBADF;
-	}
-
 	entry = HFS_I(dir)->entry;
 
 	if (filp->f_pos == 0) {

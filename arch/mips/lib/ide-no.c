@@ -11,6 +11,7 @@
  */
 #include <linux/hdreg.h>
 #include <linux/kernel.h>
+#include <asm/hdreg.h>
 #include <asm/ptrace.h>
 #include <asm/ide.h>
 
@@ -24,8 +25,10 @@ static ide_ioreg_t no_ide_default_io_base(int index)
 	return 0;
 }
 
-static void no_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base,
-                                     int *irq)
+static void no_ide_init_hwif_ports (	hw_regs_t *hw,
+					ide_ioreg_t data_port,
+					ide_ioreg_t ctrl_port,
+					int *irq)
 {
 }
 

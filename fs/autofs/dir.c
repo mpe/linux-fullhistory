@@ -16,8 +16,6 @@ static int autofs_dir_readdir(struct file *filp,
 			       void *dirent, filldir_t filldir)
 {
 	struct inode *inode=filp->f_dentry->d_inode;
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -ENOTDIR;
 
 	switch((unsigned long) filp->f_pos)
 	{

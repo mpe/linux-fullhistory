@@ -15,7 +15,7 @@
  * breaking the fragile cmd640.c support.
  */
 
-#if defined(CONFIG_BLK_DEV_CMD640) || defined(CONFIG_IDE_CHIPSETS) || defined(CONFIG_BLK_DEV_OPTI621) || defined(CONFIG_BLK_DEV_IDE_PMAC)
+#ifdef CONFIG_BLK_DEV_IDE_MODES
 
 /*
  * Standard (generic) timings for PIO modes, from ATA2 specification.
@@ -111,6 +111,8 @@ static struct ide_pio_info {
 	{ "ST3600A",  1 },
 	{ "ST3290A",  0 },
 	{ "ST3144A",  0 },
+	{ "ST3491A",  1 },	/* reports 3, should be 1 or 2 (depending on */	
+				/* drive) according to Seagates FIND-ATA program */
 
 	{ "QUANTUM ELS127A", 0 },
 	{ "QUANTUM ELS170A", 0 },
@@ -222,5 +224,5 @@ byte ide_get_best_pio_mode (ide_drive_t *drive, byte mode_wanted, byte max_mode,
 }
 
 #endif /* _IDE_C */
-#endif /* defined(CONFIG_BLK_DEV_CMD640) || defined(CONFIG_IDE_CHIPSETS) || defined(CONFIG_BLK_DEV_OPTI621) */
+#endif /* CONFIG_BLK_DEV_IDE_MODES */
 #endif /* _IDE_MODES_H */

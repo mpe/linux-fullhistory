@@ -561,9 +561,9 @@ apus_ide_fix_driveid(struct hd_driveid *id)
 }
 
 __initfunc(void
-apus_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
+apus_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq))
 {
-        m68k_ide_init_hwif_ports(p, base, irq);
+        m68k_ide_init_hwif_ports(hw, data_port, ctrl_port, irq);
 }
 #endif
 

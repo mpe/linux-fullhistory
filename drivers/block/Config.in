@@ -19,7 +19,13 @@ if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
 else
   bool '   Use old disk-only driver on primary interface' CONFIG_BLK_DEV_HD_IDE
   dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
+  if [ "$CONFIG_BLK_DEV_IDEDISK" != "n" ]; then
+    bool '     Use multi-mode by default' CONFIG_IDEDISK_MULTI_MODE
+  fi
   dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
+  if [ "$CONFIG_BLK_DEV_IDECD" = "y" ]; then
+    bool '     Include CD-Changer Reporting' CONFIG_IDECD_SLOTS
+  fi
   dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
   dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
@@ -34,16 +40,29 @@ else
       if [ "$CONFIG_BLK_DEV_IDEPCI" = "y" ]; then
         bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
         bool '     Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
+        bool '     AEC6210 chipset support' CONFIG_BLK_DEV_AEC6210
         if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
           bool '     Use DMA by default when available' CONFIG_IDEDMA_AUTO
         fi
         if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
           bool '     OPTi 82C621 chipset enhanced support (EXPERIMENTAL)' CONFIG_BLK_DEV_OPTI621
+          bool '     Intel PIIXn chipsets support (EXPERIMENTAL)' CONFIG_BLK_DEV_PIIX
           if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
             bool '     Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
             bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
             bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
             bool '     CMD646 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CMD646
+            bool '     ALI M15x3 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_ALI15X3
+            bool '     CY82C693 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CY82C693
+            bool '     PDC20246 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC20246
+            bool '     PDC20262 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC20262
+            if [ "$CONFIG_BLK_DEV_PDC20246" = "y" -o \
+                 "$CONFIG_BLK_DEV_PDC20262" = "y" ]; then
+              define_bool CONFIG_BLK_DEV_PDC202XX y
+            else
+              define_bool CONFIG_BLK_DEV_PDC202XX n
+            fi
+            bool '     HPT343 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_HPT343
           fi
         fi
       fi
@@ -72,9 +91,24 @@ else
       bool '     UMC-8672 support' CONFIG_BLK_DEV_UMC8672
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
         if [ "$CONFIG_BLK_DEV_IDEDISK" = "y" ]; then
-        bool '     PROMISE DC4030 support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC4030
-	 fi
+          bool '     PROMISE DC4030 support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC4030
+        fi
       fi
+    fi
+    if [ "$CONFIG_AMIGA" = "y" ]; then
+      bool '   Amiga Gayle IDE interface support' CONFIG_BLK_DEV_GAYLE
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+        bool '   Amiga IDE Doubler support' CONFIG_BLK_DEV_IDEDOUBLER $CONFIG_BLK_DEV_GAYLE
+      fi
+    fi
+    if [ "$CONFIG_ZORRO" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+        bool '   Buddha/Catweasel IDE interface support' CONFIG_BLK_DEV_BUDDHA
+    fi
+    if [ "$CONFIG_ATARI" = "y" ]; then
+      bool '   Falcon IDE interface support' CONFIG_BLK_DEV_FALCON_IDE
+    fi
+    if [ "$CONFIG_MAC" = "y" ]; then
+      bool '   Macintosh Quadra/Powerbook IDE interface support' CONFIG_BLK_DEV_MAC_IDE
     fi
   fi
 fi
@@ -127,6 +161,19 @@ fi
 dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARIDE_PARPORT
 if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then
   source drivers/block/paride/Config.in
+fi
+
+
+if [ "$CONFIG_BLK_DEV_CMD640" = "y" -o \
+     "$CONFIG_IDE_CHIPSETS" = "y" -o \
+     "$CONFIG_BLK_DEV_OPTI621" = "y" -o \
+     "$CONFIG_BLK_DEV_IDE_PMAC" = "y" -o \
+     "$CONFIG_BLK_DEV_CY82C693" = "y" -o \
+     "$CONFIG_BLK_DEV_HPT343" = "y" -o \
+     "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
+  define_bool CONFIG_BLK_DEV_IDE_MODES y
+else
+  define_bool CONFIG_BLK_DEV_IDE_MODES n
 fi
 
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then

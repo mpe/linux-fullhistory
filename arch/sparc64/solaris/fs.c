@@ -410,7 +410,11 @@ static int report_statvfs(struct inode *inode, u32 buf)
 	mm_segment_t old_fs = get_fs();
 	int error;
 	struct sol_statvfs *ss = (struct sol_statvfs *)A(buf);
-			
+
+	if (!inode->i_sb)
+		return -ENODEV;
+	if (!inode->i_sb->s_op->statfs)
+		return -ENOSYS;
 	set_fs (KERNEL_DS);
 	error = inode->i_sb->s_op->statfs(inode->i_sb, &s, sizeof(struct statfs));
 	set_fs (old_fs);
@@ -448,6 +452,10 @@ static int report_statvfs64(struct inode *inode, u32 buf)
 	int error;
 	struct sol_statvfs64 *ss = (struct sol_statvfs64 *)A(buf);
 			
+	if (!inode->i_sb)
+		return -ENODEV;
+	if (!inode->i_sb->s_op->statfs)
+		return -ENOSYS;
 	set_fs (KERNEL_DS);
 	error = inode->i_sb->s_op->statfs(inode->i_sb, &s, sizeof(struct statfs));
 	set_fs (old_fs);
@@ -489,9 +497,7 @@ asmlinkage int solaris_statvfs(u32 path, u32 buf)
 	if (!IS_ERR(dentry)) {
 		struct inode * inode = dentry->d_inode;
 
-		error = -ENOSYS;
-		if (inode->i_sb->s_op->statfs)
-			error = report_statvfs(inode, buf);
+		error = report_statvfs(inode, buf);
 		dput(dentry);
 	}
 	unlock_kernel();
@@ -515,10 +521,6 @@ asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 		error = -ENOENT;
 	else if (!(inode = dentry->d_inode))
 		error = -ENOENT;
-	else if (!inode->i_sb)
-		error = -ENODEV;
-	else if (!inode->i_sb->s_op->statfs)
-		error = -ENOSYS;
 	else
 		error = report_statvfs(inode, buf);
 	fput(file);
@@ -538,9 +540,7 @@ asmlinkage int solaris_statvfs64(u32 path, u32 buf)
 	if (!IS_ERR(dentry)) {
 		struct inode * inode = dentry->d_inode;
 
-		error = -ENOSYS;
-		if (inode->i_sb->s_op->statfs)
-			error = report_statvfs64(inode, buf);
+		error = report_statvfs64(inode, buf);
 		dput(dentry);
 	}
 	unlock_kernel();
@@ -564,10 +564,6 @@ asmlinkage int solaris_fstatvfs64(unsigned int fd, u32 buf)
 		error = -ENOENT;
 	else if (!(inode = dentry->d_inode))
 		error = -ENOENT;
-	else if (!inode->i_sb)
-		error = -ENODEV;
-	else if (!inode->i_sb->s_op->statfs)
-		error = -ENOSYS;
 	else
 		error = report_statvfs64(inode, buf);
 	fput(file);
