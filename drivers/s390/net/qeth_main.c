@@ -1071,6 +1071,35 @@ qeth_setup_card(struct qeth_card *card)
 }
 
 static int
+is_1920_device (struct qeth_card *card)
+{
+	int single_queue = 0;
+	struct ccw_device *ccwdev;
+	struct channelPath_dsc {
+		u8 flags;
+		u8 lsn;
+		u8 desc;
+		u8 chpid;
+		u8 swla;
+		u8 zeroes;
+		u8 chla;
+		u8 chpp;
+	} *chp_dsc;
+
+	QETH_DBF_TEXT(setup, 2, "chk_1920");
+
+	ccwdev = card->data.ccwdev;
+	chp_dsc = (struct channelPath_dsc *)ccw_device_get_chp_desc(ccwdev, 0);
+	if (chp_dsc != NULL) {
+		/* CHPP field bit 6 == 1 -> single queue */
+		single_queue = ((chp_dsc->chpp & 0x02) == 0x02);
+		kfree(chp_dsc);
+	}
+	QETH_DBF_TEXT_(setup, 2, "rc:%x", single_queue);
+	return single_queue;
+}
+
+static int
 qeth_determine_card_type(struct qeth_card *card)
 {
 	int i = 0;
@@ -1081,7 +1110,14 @@ qeth_determine_card_type(struct qeth_card *card)
 		if ((CARD_RDEV(card)->id.dev_type == known_devices[i][2]) &&
 		    (CARD_RDEV(card)->id.dev_model == known_devices[i][3])) {
 			card->info.type = known_devices[i][4];
-			card->qdio.no_out_queues = known_devices[i][8];
+			if (is_1920_device(card)) {
+				PRINT_INFO("Priority Queueing not able "
+					   "due to hardware limitations!\n");
+				card->qdio.no_out_queues = 1;
+				card->qdio.default_out_queue = 0;
+			} else {
+				card->qdio.no_out_queues = known_devices[i][8];
+			}
 			card->info.is_multicast_different = known_devices[i][9];
 			return 0;
 		}
@@ -1112,6 +1148,10 @@ qeth_probe_device(struct ccwgroup_device *gdev)
 		QETH_DBF_TEXT_(setup, 2, "1err%d", -ENOMEM);
 		return -ENOMEM;
 	}
+	card->read.ccwdev  = gdev->cdev[0];
+	card->write.ccwdev = gdev->cdev[1];
+	card->data.ccwdev  = gdev->cdev[2];
+
 	if ((rc = qeth_setup_card(card))){
 		QETH_DBF_TEXT_(setup, 2, "2err%d", rc);
 		put_device(dev);
@@ -1130,9 +1170,6 @@ qeth_probe_device(struct ccwgroup_device *gdev)
 		qeth_free_card(card);
 		return rc;
 	}
-	card->read.ccwdev  = gdev->cdev[0];
-	card->write.ccwdev = gdev->cdev[1];
-	card->data.ccwdev  = gdev->cdev[2];
 	if ((rc = qeth_determine_card_type(card))){
 		PRINT_WARN("%s: not a valid card type\n", __func__);
 		QETH_DBF_TEXT_(setup, 2, "3err%d", rc);
@@ -3642,8 +3679,9 @@ qeth_get_priority_queue(struct qeth_card *card, struct sk_buff *skb,
 			/* TODO: IPv6!!! */
 		}
 		return card->qdio.default_out_queue;
+	case 1: /* fallthrough for single-out-queue 1920-device */
 	default:
-		return 0;
+		return card->qdio.default_out_queue;
 	}
 }
 

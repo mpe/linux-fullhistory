@@ -1,6 +1,6 @@
 /*
  *
- * linux/drivers/s390/net/qeth_sys.c ($Revision: 1.49 $)
+ * linux/drivers/s390/net/qeth_sys.c ($Revision: 1.51 $)
  *
  * Linux on zSeries OSA Express and HiperSockets support
  * This file contains code related to sysfs.
@@ -20,7 +20,7 @@
 #include "qeth_mpc.h"
 #include "qeth_fs.h"
 
-const char *VERSION_QETH_SYS_C = "$Revision: 1.49 $";
+const char *VERSION_QETH_SYS_C = "$Revision: 1.51 $";
 
 /*****************************************************************************/
 /*                                                                           */
@@ -248,6 +248,16 @@ qeth_dev_prioqing_store(struct device *dev, const char *buf, size_t count)
 	if ((card->state != CARD_STATE_DOWN) &&
 	    (card->state != CARD_STATE_RECOVER))
 		return -EPERM;
+
+	/* check if 1920 devices are supported ,
+	 * if though we have to permit priority queueing
+	 */
+	if (card->qdio.no_out_queues == 1) {
+		PRINT_WARN("Priority queueing disabled due "
+			   "to hardware limitations!\n");
+		card->qdio.do_prio_queueing = QETH_PRIOQ_DEFAULT;
+		return -EPERM;
+	}
 
 	tmp = strsep((char **) &buf, "\n");
 	if (!strcmp(tmp, "prio_queueing_prec"))

@@ -188,4 +188,5 @@ extern int _ccw_device_get_subchannel_number(struct ccw_device *);
 extern struct device *s390_root_dev_register(const char *);
 extern void s390_root_dev_unregister(struct device *);
 
+extern void *ccw_device_get_chp_desc(struct ccw_device *, int);
 #endif /* _S390_CCWDEV_H_ */

@@ -24,6 +24,7 @@
 #include "cio.h"
 #include "cio_debug.h"
 #include "css.h"
+#include "chsc.h"
 #include "device.h"
 #include "qdio.h"
 
@@ -559,6 +560,15 @@ out_unlock:
 	return ret;
 }
 
+void *
+ccw_device_get_chp_desc(struct ccw_device *cdev, int chp_no)
+{
+	struct subchannel *sch;
+
+	sch = to_subchannel(cdev->dev.parent);
+	return chsc_get_chp_desc(sch, chp_no);
+}
+
 // FIXME: these have to go:
 
 int
@@ -589,4 +599,5 @@ EXPORT_SYMBOL(read_conf_data);
 EXPORT_SYMBOL(read_dev_chars);
 EXPORT_SYMBOL(_ccw_device_get_subchannel_number);
 EXPORT_SYMBOL(_ccw_device_get_device_number);
+EXPORT_SYMBOL_GPL(ccw_device_get_chp_desc);
 EXPORT_SYMBOL_GPL(read_conf_data_lpm);
