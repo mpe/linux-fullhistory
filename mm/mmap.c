@@ -39,6 +39,29 @@ pgprot_t protection_map[16] = {
 	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
 };
 
+/*
+ * Combine the mmap "prot" and "flags" argument into one "vm_flags" used
+ * internally. Essentially, translate the "PROT_xxx" and "MAP_xxx" bits
+ * into "VM_xxx".
+ */
+static inline unsigned long vm_flags(unsigned long prot, unsigned long flags)
+{
+#define _trans(x,bit1,bit2) \
+((bit1==bit2)?(x&bit1):(x&bit1)?bit2:0)
+
+	unsigned long prot_bits, flag_bits;
+	prot_bits =
+		_trans(prot, PROT_READ, VM_READ) |
+		_trans(prot, PROT_WRITE, VM_WRITE) |
+		_trans(prot, PROT_EXEC, VM_EXEC);
+	flag_bits =
+		_trans(flags, MAP_GROWSDOWN, VM_GROWSDOWN) |
+		_trans(flags, MAP_DENYWRITE, VM_DENYWRITE) |
+		_trans(flags, MAP_EXECUTABLE, VM_EXECUTABLE);
+	return prot_bits | flag_bits;
+#undef _trans
+}
+
 unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
 {
@@ -126,9 +149,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_mm = current->mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
-	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE | VM_EXECUTABLE);
-	vma->vm_flags |= current->mm->def_flags;
+	vma->vm_flags = vm_flags(prot,flags) | current->mm->def_flags;
 
 	if (file) {
 		if (file->f_mode & 1)

@@ -660,7 +660,7 @@ send a problem report to linux-kernel@vger.rutgers.edu or post a
 message to the linux.dev.kernel news group.
 
 Please indicate the kernel version you are trying to configure and
-which menu you were trying to enter when this error occured.
+which menu you were trying to enter when this error occurred.
 
 EOM
 			cleanup

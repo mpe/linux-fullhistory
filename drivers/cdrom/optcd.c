@@ -53,6 +53,10 @@
 				copied from Werner Zimmermann, who copied it
 				from Heiko Schlittermann's mcdx.
 	17-1-96		v0.6	Multisession works; some cleanup too.
+	18-4-96		v0.7	Increased some timing constants;
+				thanks to Luke McFarlane. Also tidied up some
+				printk behaviour. ISP16 initialization
+				is now handled by a separate driver.
 */
 
 /* Includes */
@@ -87,7 +91,7 @@ static void debug(int debug_this, const char* fmt, ...)
 
 	va_start(args, fmt);
 	vsprintf(s, fmt, args);
-	printk("optcd: %s\n", s);
+	printk(KERN_DEBUG "optcd: %s\n", s);
 	va_end(args);
 }
 #else
@@ -732,7 +736,7 @@ static struct cdrom_subchnl toc[MAX_TRACKS];
 #if DEBUG_TOC
 void toc_debug_info(int i)
 {
-	printk("#%3d ctl %1x, adr %1x, track %2d index %3d"
+	printk(KERN_DEBUG "#%3d ctl %1x, adr %1x, track %2d index %3d"
 		"  %2d:%02d.%02d %2d:%02d.%02d\n",
 		i, toc[i].cdsc_ctrl, toc[i].cdsc_adr,
 		toc[i].cdsc_trk, toc[i].cdsc_ind,
@@ -951,7 +955,7 @@ static int update_toc(void)
 		get_multi_disk_info();	/* Here disk_info.multi is set */
 #endif MULTISESSION
 	if (disk_info.multi)
-		printk("optcd: Multisession support experimental, "
+		printk(KERN_WARNING "optcd: Multisession support experimental, "
 			"see linux/Documentation/cdrom/optcd\n");
 
 	DEBUG((DEBUG_TOC, "exiting update_toc"));
@@ -992,7 +996,7 @@ inline static void opt_invalidate_buffers(void)
 static void transfer(void)
 {
 #if DEBUG_BUFFERS | DEBUG_REQUEST
-	printk("optcd: executing transfer\n");
+	printk(KERN_DEBUG "optcd: executing transfer\n");
 #endif
 
 	if (!CURRENT_VALID)
@@ -1078,11 +1082,11 @@ static void poll(void)
 	int skip = 0;
 
 	if (error) {
-		printk("optcd: I/O error 0x%02x\n", error);
+		printk(KERN_ERR "optcd: I/O error 0x%02x\n", error);
 		opt_invalidate_buffers();
 		if (!tries--) {
-			printk("optcd: read block %d failed; Giving up\n",
-			       next_bn);
+			printk(KERN_ERR "optcd: read block %d failed;"
+				" Giving up\n", next_bn);
 			if (transfer_is_active)
 				loop_again = 0;
 			if (CURRENT_VALID)
@@ -1104,9 +1108,9 @@ static void poll(void)
 		else {
 			state_old = state;
 			if (++state_n > 1)
-				printk("optcd: %ld times in previous state\n",
-					state_n);
-			printk("optcd: state %d\n", state);
+				printk(KERN_DEBUG "optcd: %ld times "
+					"in previous state\n", state_n);
+			printk(KERN_DEBUG "optcd: state %d\n", state);
 			state_n = 0;
 		}
 #endif
@@ -1141,9 +1145,10 @@ static void poll(void)
 			if ((status & ST_DOOR_OPEN) || (status & ST_DRVERR)) {
 				toc_uptodate = 0;
 				opt_invalidate_buffers();
-				printk((status & ST_DOOR_OPEN)
-				       ? "optcd: door open\n"
-				       : "optcd: disk removed\n");
+				printk(KERN_WARNING "optcd: %s\n",
+					(status & ST_DOOR_OPEN)
+					? "door open"
+					: "disk removed");
 				state = S_IDLE;
 				while (CURRENT_VALID)
 					end_request(0);
@@ -1184,16 +1189,17 @@ static void poll(void)
 #if DEBUG_STATE
 			if (flags != flags_old) {
 				flags_old = flags;
-				printk("optcd: flags:%x\n", flags);
+				printk(KERN_DEBUG "optcd: flags:%x\n", flags);
 			}
 			if (flags == FL_STEN)
-				printk("timeout cnt: %d\n", timeout);
+				printk(KERN_DEBUG "timeout cnt: %d\n", timeout);
 #endif
 
 			switch (flags) {
 			case FL_DTEN:		/* only STEN low */
 				if (!tries--) {
-					printk("optcd: read block %d failed; "
+					printk(KERN_ERR
+						"optcd: read block %d failed; "
 						"Giving up\n", next_bn);
 					if (transfer_is_active) {
 						tries = 0;
@@ -1216,19 +1222,22 @@ static void poll(void)
 					break;
 				}
 				if (read_count<=0)
-					printk("optcd: warning - try to read"
+					printk(KERN_WARNING
+						"optcd: warning - try to read"
 						" 0 frames\n");
 				while (read_count) {
 					buf_bn[buf_in] = NOBUF;
 					if (!flag_low(FL_DTEN, BUSY_TIMEOUT)) {
 					/* should be no waiting here!?? */
-						printk("read_count:%d "
+						printk(KERN_ERR
+						   "read_count:%d "
 						   "CURRENT->nr_sectors:%ld "
 						   "buf_in:%d\n",
 							read_count,
 							CURRENT->nr_sectors,
 							buf_in);
-						printk("transfer active: %x\n",
+						printk(KERN_ERR
+							"transfer active: %x\n",
 							transfer_is_active);
 						read_count = 0;
 						state = S_STOP;
@@ -1287,7 +1296,8 @@ static void poll(void)
 			break;
 		case S_STOP:
 			if (read_count != 0)
-				printk("optcd: discard data=%x frames\n",
+				printk(KERN_ERR
+					"optcd: discard data=%x frames\n",
 					read_count);
 			flush_data();
 			if (send_cmd(COMDRVST)) {
@@ -1323,13 +1333,13 @@ static void poll(void)
 			}
 			break;
 		default:
-			printk("optcd: invalid state %d\n", state);
+			printk(KERN_ERR "optcd: invalid state %d\n", state);
 			return;
 		} /* case */
 	} /* while */
 
 	if (!timeout--) {
-		printk("optcd: timeout in state %d\n", state);
+		printk(KERN_ERR "optcd: timeout in state %d\n", state);
 		state = S_STOP;
 		if (exec_cmd(COMSTOP) < 0) {
 			state = S_IDLE;
@@ -1349,7 +1359,7 @@ static void do_optcd_request(void)
 	       CURRENT -> sector, CURRENT -> nr_sectors));
 
 	if (disk_info.audio) {
-		printk("optcd: Error: tried to mount an Audio CD\n");
+		printk(KERN_WARNING "optcd: tried to mount an Audio CD\n");
 		end_request(0);
 		return;
 	}
@@ -1521,9 +1531,6 @@ static int cdromreadtocentry(unsigned long arg)
 	struct cdrom_tocentry entry;
 	struct cdrom_subchnl *tocptr;
 
-	status = verify_area(VERIFY_READ, (void *) arg, sizeof entry);
-	if (status)
-		return status;
 	status = verify_area(VERIFY_WRITE, (void *) arg, sizeof entry);
 	if (status)
 		return status;
@@ -1586,9 +1593,6 @@ static int cdromsubchnl(unsigned long arg)
 	int status;
 	struct cdrom_subchnl subchnl;
 
-	status = verify_area(VERIFY_READ, (void *) arg, sizeof subchnl);
-	if (status)
-		return status;
 	status = verify_area(VERIFY_WRITE, (void *) arg, sizeof subchnl);
 	if (status)
 		return status;
@@ -1615,9 +1619,6 @@ static int cdromread(unsigned long arg, int blocksize, int cmd)
 	struct cdrom_msf msf;
 	char buf[CD_FRAMESIZE_RAWER];
 
-	status = verify_area(VERIFY_READ, (void *) arg, sizeof msf);
-	if (status)
-		return status;
 	status = verify_area(VERIFY_WRITE, (void *) arg, blocksize);
 	if (status)
 		return status;
@@ -1667,9 +1668,6 @@ static int cdrommultisession(unsigned long arg)
 	int status;
 	struct cdrom_multisession ms;
 
-	status = verify_area(VERIFY_READ, (void*) arg, sizeof ms);
-	if (status)
-		return status;
 	status = verify_area(VERIFY_WRITE, (void*) arg, sizeof ms);
 	if (status)
 		return status;
@@ -1692,13 +1690,15 @@ static int cdrommultisession(unsigned long arg)
 
 #if DEBUG_MULTIS
  	if (ms.addr_format == CDROM_MSF)
-               	printk("optcd: multisession xa:%d, msf:%02d:%02d.%02d\n",
+               	printk(KERN_DEBUG
+			"optcd: multisession xa:%d, msf:%02d:%02d.%02d\n",
 			ms.xa_flag,
 			ms.addr.msf.minute,
 			ms.addr.msf.second,
 			ms.addr.msf.frame);
 	else
-		printk("optcd: multisession %d, lba:0x%08x [%02d:%02d.%02d])\n",
+		printk(KERN_DEBUG
+		    "optcd: multisession %d, lba:0x%08x [%02d:%02d.%02d])\n",
 			ms.xa_flag,
 			ms.addr.lba,
 			disk_info.last_session.minute,
@@ -1884,7 +1884,7 @@ static int opt_open(struct inode *ip, struct file *fp)
 		}
 		DEBUG((DEBUG_VFS, "status: %02x", status));
 		if ((status & ST_DOOR_OPEN) || (status & ST_DRVERR)) {
-			printk("optcd: no disk or door open\n");
+			printk(KERN_INFO "optcd: no disk or door open\n");
 			return -EIO;
 		}
 		status = exec_cmd(COMLOCK);		/* Lock door */
@@ -1984,7 +1984,7 @@ static int version_ok(void)
 	if (ch < 0)
 		return 0;
 
-	printk("optcd: Device %s detected\n", devname);
+	printk(KERN_INFO "optcd: Device %s detected\n", devname);
 	return ((devname[0] == 'D')
 	     && (devname[1] == 'O')
 	     && (devname[2] == 'L')
@@ -2026,32 +2026,33 @@ int optcd_init(void)
 	int status;
 
 	if (optcd_port <= 0) {
-		printk("optcd: no Optics Storage CDROM Initialization\n");
+		printk(KERN_INFO
+			"optcd: no Optics Storage CDROM Initialization\n");
 		return -EIO;
 	}
 	if (check_region(optcd_port, 4)) {
-		printk("optcd: conflict, I/O port 0x%x already used\n",
+		printk(KERN_ERR "optcd: conflict, I/O port 0x%x already used\n",
 			optcd_port);
 		return -EIO;
 	}
 
 	if (!reset_drive()) {
-		printk("optcd: drive at 0x%x not ready\n", optcd_port);
+		printk(KERN_ERR "optcd: drive at 0x%x not ready\n", optcd_port);
 		return -EIO;
 	}
 	if (!version_ok()) {
-		printk("optcd: unknown drive detected; aborting\n");
+		printk(KERN_ERR "optcd: unknown drive detected; aborting\n");
 		return -EIO;
 	}
 	status = exec_cmd(COMINITDOUBLE);
 	if (status < 0) {
-		printk("optcd: cannot init double speed mode\n");
+		printk(KERN_ERR "optcd: cannot init double speed mode\n");
 		DEBUG((DEBUG_VFS, "exec_cmd COMINITDOUBLE: %02x", -status));
 		return -EIO;
 	}
 	if (register_blkdev(MAJOR_NR, "optcd", &opt_fops) != 0)
 	{
-		printk("optcd: unable to get major %d\n", MAJOR_NR);
+		printk(KERN_ERR "optcd: unable to get major %d\n", MAJOR_NR);
 		return -EIO;
 	}
 
@@ -2074,7 +2075,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (unregister_blkdev(MAJOR_NR, "optcd") == -EINVAL) {
-		printk("optcd: what's that: can't unregister\n");
+		printk(KERN_ERR "optcd: what's that: can't unregister\n");
 		return;
 	}
 	release_region(optcd_port, 4);

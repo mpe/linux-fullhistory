@@ -31,11 +31,17 @@ extern void timer_interrupt(struct pt_regs * regs);
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
-#if NR_IRQS == 33
+#if NR_IRQS == 48
+  static unsigned int cache_irq_mask = 0x7fffffff; /* enable EISA */
+#elif NR_IRQS == 33
   static unsigned int  cache_804 = 0x00ffffef;
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+  static unsigned short cache_536 = 0xffff;
+#else
   static unsigned char cache_26 = 0xdf;
   static unsigned char cache_27 = 0xff;
+#endif
 #endif
 
 static void mask_irq(int irq)
@@ -51,12 +57,23 @@ static void mask_irq(int irq)
 			cache_A1 |= mask;
 			outb(cache_A1, 0xA1);
 		}
-#if NR_IRQS == 33
+#if NR_IRQS == 48
+	} else {
+		mask = 1 << (irq - 16);
+		cache_irq_mask |= mask;
+		*(unsigned int *)GRU_INT_MASK = ~cache_irq_mask; /* invert */
+#elif NR_IRQS == 33
 	} else {
 		mask = 1 << (irq - 16);
 		cache_804 |= mask;
 		outl(cache_804, 0x804);
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+	} else {
+		mask = 1 << (irq & 15);
+		cache_536 |= mask;
+		outw(~cache_536, 0x536); /* note invert */
+#else
 	} else {
 		mask = 1 << (irq & 7);
 		if (irq < 24) {
@@ -66,6 +83,7 @@ static void mask_irq(int irq)
 			cache_27 |= mask;
 			outb(cache_27, 0x27);
 		}
+#endif
 #endif
 	}
 }
@@ -83,12 +101,23 @@ static void unmask_irq(unsigned long irq)
 			cache_A1 &= mask;
 			outb(cache_A1, 0xA1);
 		}
-#if NR_IRQS == 33
+#if NR_IRQS == 48
+	} else {
+		mask = ~(1 << (irq - 16));
+		cache_irq_mask &= mask;
+		*(unsigned int *)GRU_INT_MASK = ~cache_irq_mask; /* invert */
+#elif NR_IRQS == 33
 	} else {
 		mask = ~(1 << (irq - 16));
 		cache_804 &= mask;
 		outl(cache_804, 0x804);
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+	} else {
+		mask = ~(1 << (irq & 15));
+		cache_536 &= mask;
+		outw(~cache_536, 0x536); /* note invert */
+#else
 	} else {
 		mask = ~(1 << (irq & 7));
 
@@ -99,6 +128,7 @@ static void unmask_irq(unsigned long irq)
 			cache_27 &= mask;
 			outb(cache_27, 0x27);
 		}
+#endif
 #endif
 	}
 }
@@ -115,9 +145,8 @@ void disable_irq(unsigned int irq_nr)
 
 void enable_irq(unsigned int irq_nr)
 {
-	unsigned long flags, mask;
+	unsigned long flags;
 
-	mask = ~(1 << (irq_nr & 7));
 	save_flags(flags);
 	cli();
 	unmask_irq(irq_nr);
@@ -199,7 +228,8 @@ int request_irq(unsigned int irq,
 		shared = 1;
 	}
 
-	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+	action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
+					     GFP_KERNEL);
 	if (!action)
 		return -ENOMEM;
 
@@ -352,8 +382,8 @@ static inline void isa_device_interrupt(unsigned long vector,
 #	define IACK_SC	APECS_IACK_SC
 #elif defined(CONFIG_ALPHA_LCA)
 #	define IACK_SC	LCA_IACK_SC
-#elif defined(CONFIG_ALPHA_ALCOR)
-#	define IACK_SC	ALCOR_IACK_SC
+#elif defined(CONFIG_ALPHA_CIA)
+#	define IACK_SC	CIA_IACK_SC
 #else
 	/*
 	 * This is bogus but necessary to get it to compile
@@ -559,11 +589,17 @@ unsigned long probe_irq_on(void)
 	
 	/* now filter out any obviously spurious interrupts */
 	irqmask = (((unsigned long)cache_A1)<<8) | (unsigned long) cache_21;
-#if NR_IRQS == 33
+#if NR_IRQS == 48
+	irqmask |= (unsigned long) cache_irq_mask << 16;
+#elif NR_IRQS == 33
 	irqmask |= (unsigned long) cache_804 << 16;
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+	irqmask |= (unsigned long) cache_536 << 16;
+#else
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
+#endif
 #endif
 	irqs &= ~irqmask;
 	return irqs;
@@ -580,11 +616,17 @@ int probe_irq_off(unsigned long irqs)
 	int i;
 	
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
-#if NR_IRQS == 33
+#if NR_IRQS == 48
+	irqmask |= (unsigned long) cache_irq_mask << 16;
+#elif NR_IRQS == 33
 	irqmask |= (unsigned long) cache_804 << 16;
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+	irqmask |= (unsigned long) cache_536 << 16;
+#else
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
+#endif
 #endif
 	irqs &= irqmask & ~1;	/* always mask out irq 0---it's the unused timer */
 #ifdef CONFIG_ALPHA_P2K
@@ -608,10 +650,10 @@ static void machine_check(unsigned long vector, unsigned long la, struct pt_regs
 	extern void apecs_machine_check(unsigned long vector, unsigned long la,
 					struct pt_regs * regs);
 	apecs_machine_check(vector, la, regs);
-#elif defined(CONFIG_ALPHA_ALCOR)
-	extern void alcor_machine_check(unsigned long vector, unsigned long la,
+#elif defined(CONFIG_ALPHA_CIA)
+	extern void cia_machine_check(unsigned long vector, unsigned long la,
 					struct pt_regs * regs);
-	alcor_machine_check(vector, la, regs);
+	cia_machine_check(vector, la, regs);
 #else
 	printk("Machine check\n");
 #endif
@@ -638,7 +680,11 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 #elif NR_IRQS == 33
 			cabriolet_and_eb66p_device_interrupt(vector, &regs);
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+#	error  we got a problem here Charlie MIKASA should be SRM console
+#else
 			eb66_and_eb64p_device_interrupt(vector, &regs);
+#endif
 #elif NR_IRQS == 16
 			isa_device_interrupt(vector, &regs);
 #endif
@@ -661,11 +707,17 @@ void init_IRQ(void)
 	dma_outb(0, DMA2_RESET_REG);
 	dma_outb(0, DMA1_CLR_MASK_REG);
 	dma_outb(0, DMA2_CLR_MASK_REG);
-#if NR_IRQS == 33
+#if NR_IRQS == 48
+	*(unsigned int *)GRU_INT_MASK = ~cache_irq_mask; /* invert */
+#elif NR_IRQS == 33
 	outl(cache_804, 0x804);
 #elif NR_IRQS == 32
+#ifdef CONFIG_ALPHA_MIKASA
+	outw(~cache_536, 0x536); /* note invert */
+#else
 	outb(cache_26, 0x26);
 	outb(cache_27, 0x27);
+#endif
 #endif
 	enable_irq(2);		/* enable cascade */
 }

@@ -92,10 +92,12 @@ void unplug_device(void * data)
 	save_flags(flags);
 	cli();
 	if (dev->current_request == &dev->plug) {
-		dev->current_request = dev->plug.next;
-		dev->plug.next = NULL;
-		if (dev->current_request)
+		struct request * next = dev->plug.next;
+		dev->current_request = next;
+		if (next) {
+			dev->plug.next = NULL;
 			(dev->request_fn)();
+		}
 	}
 	restore_flags(flags);
 }

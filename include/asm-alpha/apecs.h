@@ -35,6 +35,12 @@
    Yes, this does map 0 to 64Mb-1 twice, but only window 1 will actually
    be used for that range (via virt_to_bus()).
 
+   Note that we actually fudge the window 1 maximum as 48Mb instead of 64Mb,
+   to keep virt_to_bus() from returning an address in the first window, for
+   a data area that goes beyond the 64Mb first DMA window.  Sigh...
+   The fudge factor MUST match with <asm/dma.h> MAX_DMA_ADDRESS, but
+   we can't just use that here, because of header file looping... :-(
+
    Window 1 will be used for all DMA from the ISA bus; yes, that does
    limit what memory an ISA floppy or soundcard or Ethernet can touch, but
    it's also a known limitation on other platforms as well. We use the
@@ -60,10 +66,11 @@
    however, that an XL kernel will run on an AVANTI without problems.
 
 */
-#define APECS_XL_DMA_WIN1_BASE	(64*1024*1024)
-#define APECS_XL_DMA_WIN1_SIZE	(64*1024*1024)
-#define APECS_XL_DMA_WIN2_BASE	(512*1024*1024)
-#define APECS_XL_DMA_WIN2_SIZE	(512*1024*1024)
+#define APECS_XL_DMA_WIN1_BASE		(64*1024*1024)
+#define APECS_XL_DMA_WIN1_SIZE		(64*1024*1024)
+#define APECS_XL_DMA_WIN1_SIZE_PARANOID	(48*1024*1024)
+#define APECS_XL_DMA_WIN2_BASE		(512*1024*1024)
+#define APECS_XL_DMA_WIN2_SIZE		(512*1024*1024)
 
 #else /* CONFIG_ALPHA_XL */
 
@@ -214,11 +221,17 @@
  * Translate physical memory address as seen on (PCI) bus into
  * a kernel virtual address and vv.
  */
+/* NOTE: we fudge the window 1 maximum as 48Mb instead of 64Mb, to prevent 
+   virt_to_bus() from returning an address in the first window, for a
+   data area that goes beyond the 64Mb first DMA window. Sigh...
+   This MUST match with <asm/dma.h> MAX_DMA_ADDRESS for consistency, but
+   we can't just use that here, because of header file looping... :-(
+*/
 extern inline unsigned long virt_to_bus(void * address)
 {
 	unsigned long paddr = virt_to_phys(address);
 #ifdef CONFIG_ALPHA_XL
-	if (paddr < APECS_XL_DMA_WIN1_SIZE)
+	if (paddr < APECS_XL_DMA_WIN1_SIZE_PARANOID)
 	  return paddr + APECS_XL_DMA_WIN1_BASE;
 	else
 	  return paddr + APECS_XL_DMA_WIN2_BASE; /* win 2 xlates to 0 also */

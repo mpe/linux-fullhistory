@@ -641,7 +641,7 @@ static inline void udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	/* I assume this includes the IP options, as per RFC1122 (4.1.3.2). */
 	/* If not, please let me know. -- MS */
 
-	if (sock_queue_rcv_skb(sk,skb)<0) {
+	if (__sock_queue_rcv_skb(sk,skb)<0) {
 		udp_statistics.UdpInErrors++;
 		ip_statistics.IpInDiscards++;
 		ip_statistics.IpInDelivers--;

@@ -63,7 +63,7 @@ static const char *group_1_commands[] = {
 
 static const char *group_2_commands[] = {
 /* 40-41 */ "Change Definition", "Write Same", 
-/* 42-48 */ unknown, unknown, unknown, unknown, unknown, unknown, unknown, 
+/* 42-48 */ unknown, "Read TOC", unknown, unknown, unknown, unknown, unknown, 
 /* 49-4f */ unknown, unknown, unknown, "Log Select", "Log Sense", unknown, unknown,
 /* 50-55 */ unknown, unknown, unknown, unknown, unknown, "Mode Select (10)",
 /* 56-5b */ unknown, unknown, unknown, unknown, "Mode Sense (10)", unknown,
@@ -101,7 +101,11 @@ static void print_opcode(int opcode) {
 	printk("%s(0x%02x) ", vendor, opcode); 
 	break;
     default:
-	printk("%s ",table[opcode & 0x1f]);
+	if (table[opcode & 0x1f] != unknown)
+	    printk("%s ",table[opcode & 0x1f]);
+	else
+	    printk("%s(0x%02x) ", unknown, opcode);
+	break;
     }
 }
 #else /* CONST & CONST_COMMAND */

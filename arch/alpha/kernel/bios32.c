@@ -87,7 +87,7 @@ extern struct hwrpb_struct *hwrpb;
 
 #if PCI_MODIFY
 
-#if 0
+#if defined(CONFIG_ALPHA_MIKASA) || defined(CONFIG_ALPHA_ALCOR)
 static unsigned int	io_base	 = 64*KB;	/* <64KB are (E)ISA ports */
 #else
 static unsigned int	io_base	 = 0xb000;
@@ -115,6 +115,17 @@ static void disable_dev(struct pci_dev *dev)
 {
 	struct pci_bus *bus;
 	unsigned short cmd;
+
+#if defined(CONFIG_ALPHA_MIKASA) || defined(CONFIG_ALPHA_ALCOR)
+	/*
+	 * HACK: the PCI-to-EISA bridge does not seem to identify
+	 *       itself as a bridge... :-(
+	 */
+        if (dev->vendor == 0x8086 && dev->device == 0x0482) {
+          DBG_DEVS(("disable_dev: ignoring...\n"));
+          return;
+        }
+#endif
 
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
@@ -525,7 +536,13 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
 	for (dev = pci_devices; dev; dev = dev->next) {
-	        if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) {
+	        if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE
+#if defined(CONFIG_ALPHA_MIKASA) || defined(CONFIG_ALPHA_ALCOR)
+		    /* PCEB (PCI to EISA bridge) does not identify
+		       itself as a bridge... :-( */
+		    && !((dev->vendor==0x8086) && (dev->device==0x482))
+#endif
+		    ) {
 		        dev->irq = 0;
 			/*
 			 * This device is not on the primary bus, we need to figure out which
@@ -554,8 +571,10 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 			        /* work out the slot */
 		                slot = PCI_SLOT(dev->devfn) ;
 				/* read the pin */
-				pcibios_read_config_byte(dev->bus->number, dev->devfn,
-						 PCI_INTERRUPT_PIN, &pin);
+				pcibios_read_config_byte(dev->bus->number,
+							 dev->devfn,
+							 PCI_INTERRUPT_PIN,
+							 &pin);
 			}
 			if (irq_tab[slot - min_idsel][pin] != -1)
 			        dev->irq = irq_tab[slot - min_idsel][pin];
@@ -568,7 +587,8 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 			 * if it's a VGA, enable its BIOS ROM at C0000
 			 */
 			if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
-			  pcibios_write_config_dword(dev->bus->number, dev->devfn,
+			  pcibios_write_config_dword(dev->bus->number,
+						     dev->devfn,
 						     PCI_ROM_ADDRESS,
 						     0x000c0000 | PCI_ROM_ADDRESS_ENABLE);
 			}
@@ -746,6 +766,116 @@ static inline void eb66_and_eb64p_fixup(void)
 		{16+6, 16+6, 16+6, 16+6,  16+6},	/* IdSel 9,  TULIP */
 	};
 	common_fixup(5, 9, 5, irq_tab, 0);
+}
+
+
+/*
+ * Fixup configuration for MIKASA (NORITAKE is different)
+ *
+ * Summary @ 0x536:
+ * Bit      Meaning
+ * 0        Interrupt Line A from slot 0
+ * 1        Interrupt Line B from slot 0
+ * 2        Interrupt Line C from slot 0
+ * 3        Interrupt Line D from slot 0
+ * 4        Interrupt Line A from slot 1
+ * 5        Interrupt line B from slot 1
+ * 6        Interrupt Line C from slot 1
+ * 7        Interrupt Line D from slot 1
+ * 8        Interrupt Line A from slot 2
+ * 9        Interrupt Line B from slot 2
+ *10        Interrupt Line C from slot 2
+ *11        Interrupt Line D from slot 2
+ *12        NCR 810 SCSI
+ *13        Power Supply Fail
+ *14        Temperature Warn
+ *15        Reserved
+ *
+ * The device to slot mapping looks like:
+ *
+ * Slot     Device
+ *  6       NCR SCSI controller
+ *  7       Intel PCI-EISA bridge chip
+ * 11       PCI on board slot 0
+ * 12       PCI on board slot 1
+ * 13       PCI on board slot 2
+ *   
+ *
+ * This two layered interrupt approach means that we allocate IRQ 16 and 
+ * above for PCI interrupts.  The IRQ relates to which bit the interrupt
+ * comes in on.  This makes interrupt processing much easier.
+ */
+static inline void mikasa_fixup(void)
+{
+	char irq_tab[8][5] = {
+	  /*INT    INTA   INTB   INTC   INTD */
+	  {16+12, 16+12, 16+12, 16+12, 16+12},	/* IdSel 17,  SCSI */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 18,  PCEB */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 19,  ???? */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 20,  ???? */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 21,  ???? */
+	  { 16+0,  16+0,  16+1,  16+2,  16+3},	/* IdSel 22,  slot 0 */
+	  { 16+4,  16+4,  16+5,  16+6,  16+7},	/* IdSel 23,  slot 1 */
+	  { 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 24,  slot 2 */
+	};
+	common_fixup(6, 13, 5, irq_tab, 0);
+}
+
+/*
+ * Fixup configuration for ALCOR
+ *
+ * Summary @ GRU_INT_REQ:
+ * Bit      Meaning
+ * 0        Interrupt Line A from slot 2
+ * 1        Interrupt Line B from slot 2
+ * 2        Interrupt Line C from slot 2
+ * 3        Interrupt Line D from slot 2
+ * 4        Interrupt Line A from slot 1
+ * 5        Interrupt line B from slot 1
+ * 6        Interrupt Line C from slot 1
+ * 7        Interrupt Line D from slot 1
+ * 8        Interrupt Line A from slot 0
+ * 9        Interrupt Line B from slot 0
+ *10        Interrupt Line C from slot 0
+ *11        Interrupt Line D from slot 0
+ *12        Interrupt Line A from slot 4
+ *13        Interrupt Line B from slot 4
+ *14        Interrupt Line C from slot 4
+ *15        Interrupt Line D from slot 4
+ *16        Interrupt Line D from slot 3
+ *17        Interrupt Line D from slot 3
+ *18        Interrupt Line D from slot 3
+ *19        Interrupt Line D from slot 3
+ *20-30     Reserved
+ *31        EISA interrupt
+ *
+ * The device to slot mapping looks like:
+ *
+ * Slot     Device
+ *  7       PCI on board slot 0
+ *  8       PCI on board slot 3
+ *  9       PCI on board slot 4
+ * 10       PCEB (PCI-EISA bridge)
+ * 11       PCI on board slot 2
+ * 12       PCI on board slot 1
+ *   
+ *
+ * This two layered interrupt approach means that we allocate IRQ 16 and 
+ * above for PCI interrupts.  The IRQ relates to which bit the interrupt
+ * comes in on.  This makes interrupt processing much easier.
+ */
+static inline void alcor_fixup(void)
+{
+	char irq_tab[6][5] = {
+	  /*INT    INTA   INTB   INTC   INTD */
+	  { 16+8,  16+8,  16+9, 16+10, 16+11},	/* IdSel 18,  slot 0 */
+	  {16+16, 16+16, 16+17, 16+18, 16+19},	/* IdSel 19,  slot 3 */
+	  {16+12, 16+12, 16+13, 16+14, 16+15},	/* IdSel 20,  slot 4 */
+	  {   -1,    -1,    -1,    -1,    -1},	/* IdSel 21,  PCEB   */
+	  { 16+0,  16+0,  16+1,  16+2,  16+3},	/* IdSel 22,  slot 2 */
+	  { 16+4,  16+4,  16+5,  16+6,  16+7},	/* IdSel 23,  slot 1 */
+	};
+	common_fixup(7, 12, 5, irq_tab, 0);
 }
 
 
@@ -929,6 +1059,10 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	eb66_and_eb64p_fixup();
 #elif defined(CONFIG_ALPHA_EB64P)
 	eb66_and_eb64p_fixup();
+#elif defined(CONFIG_ALPHA_MIKASA)
+	mikasa_fixup();
+#elif defined(CONFIG_ALPHA_ALCOR)
+	alcor_fixup();
 #else
 #	error You must tell me what kind of platform you want.
 #endif

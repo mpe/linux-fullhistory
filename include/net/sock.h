@@ -501,6 +501,18 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		return -ENOMEM;
 	atomic_add(skb->truesize, &sk->rmem_alloc);
 	skb->sk=sk;
+	skb_queue_tail(&sk->receive_queue,skb);
+	if (!sk->dead)
+		sk->data_ready(sk,skb->len);
+	return 0;
+}
+
+extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
+{
+	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
+		return -ENOMEM;
+	atomic_add(skb->truesize, &sk->rmem_alloc);
+	skb->sk=sk;
 	__skb_queue_tail(&sk->receive_queue,skb);
 	if (!sk->dead)
 		sk->data_ready(sk,skb->len);

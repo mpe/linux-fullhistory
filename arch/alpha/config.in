@@ -35,6 +35,7 @@ fi
 
 choice 'Alpha system type' \
 	"Avanti		CONFIG_ALPHA_AVANTI		\
+	 Alpha-XL	CONFIG_ALPHA_XL			\
 	 Cabriolet	CONFIG_ALPHA_CABRIOLET		\
 	 EB66		CONFIG_ALPHA_EB66		\
 	 EB66+		CONFIG_ALPHA_EB66P		\
@@ -43,6 +44,8 @@ choice 'Alpha system type' \
 	 PC164		CONFIG_ALPHA_PC164		\
 	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
+	 Mikasa		CONFIG_ALPHA_MIKASA		\
+	 Alcor		CONFIG_ALPHA_ALCOR		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
 if [ "$CONFIG_ALPHA_NONAME" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
 	-o "$CONFIG_ALPHA_EB66P" = "y" -o "$CONFIG_ALPHA_P2K" = "y" ]
@@ -50,33 +53,33 @@ then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_LCA y
 fi
-if [ "$CONFIG_ALPHA_AVANTI" = "y" ]
-then
-	bool 'Is it really a true XL' CONFIG_ALPHA_XL
-fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
-	-o "$CONFIG_ALPHA_EB64P" = "y" ]
+	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
+	-o "$CONFIG_ALPHA_XL" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_APECS y
 fi
-if [ "$CONFIG_ALPHA_EB164" = "y" -o "$CONFIG_ALPHA_PC164" = "y" ]
+if [ "$CONFIG_ALPHA_EB164" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
+	-o "$CONFIG_ALPHA_ALCOR" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
-	define_bool CONFIG_ALPHA_ALCOR y
+	define_bool CONFIG_ALPHA_CIA y
 else
 	# EV5 and newer supports all rounding modes in hw:
 	define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 fi
 
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
-	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" ]
+	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" \
+	-o "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_ALCOR" = "y" ]
 then
-	if [ "$CONFIG_ALPHA_XL" = "n" ]
-	then
-		bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
-	fi
+	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+fi
+if [ "$CONFIG_ALPHA_XL" = "y" ]
+then
+	define_bool CONFIG_ALPHA_AVANTI y
 fi
 
 bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO

@@ -59,7 +59,7 @@
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
 extern int NCR53c7xx_detect(Scsi_Host_Template *tpnt);
 extern int NCR53c7xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-extern int NCR53c7xx_reset(Scsi_Cmnd *);
+extern int NCR53c7xx_reset(Scsi_Cmnd *, unsigned int);
 #ifdef MODULE
 extern int NCR53c7xx_release(struct Scsi_Host *);
 #else

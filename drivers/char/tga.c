@@ -205,6 +205,10 @@ set_palette (void)
 {
   int i, j;
 
+  if (console_blanked || vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
+    return;
+
+
   if (tga_type == 0) { /* 8-plane */
     BT485_WRITE(0x00, BT485_ADDR_PAL_WRITE);
     TGA_WRITE_REG(BT485_DATA_PAL, TGA_RAMDAC_SETUP_REG);

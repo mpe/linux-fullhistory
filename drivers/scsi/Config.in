@@ -1,8 +1,8 @@
-comment 'SCSI support type (disk, tape, CDrom)'
+comment 'SCSI support type (disk, tape, CD-ROM)'
 
 dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
 dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
-dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+dep_tristate 'SCSI CD-ROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
 dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
 comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'

@@ -12,8 +12,10 @@
 
 #if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P) || defined(CONFIG_ALPHA_EB164) || defined(CONFIG_ALPHA_PC164)
 # define NR_IRQS	33
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P) || defined(CONFIG_ALPHA_MIKASA)
 # define NR_IRQS	32
+#elif defined(CONFIG_ALPHA_ALCOR)
+# define NR_IRQS	48
 #else
 # define NR_IRQS	16
 #endif

@@ -71,14 +71,14 @@ extern void _sethae (unsigned long addr);	/* cached version */
 #endif /* !__KERNEL__ */
 
 /*
- * There are different version of the Alpha PC motherboards:
+ * There are different chipsets to interface the Alpha CPUs to the world.
  */
 #if defined(CONFIG_ALPHA_LCA)
 # include <asm/lca.h>		/* get chip-specific definitions */
 #elif defined(CONFIG_ALPHA_APECS)
 # include <asm/apecs.h>		/* get chip-specific definitions */
-#elif defined(CONFIG_ALPHA_ALCOR)
-# include <asm/alcor.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_CIA)
+# include <asm/cia.h>		/* get chip-specific definitions */
 #else
 # include <asm/jensen.h>
 #endif

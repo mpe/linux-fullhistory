@@ -15,6 +15,10 @@
  *
  *  03/96: Modularised by Angelo Haritsis <ah@doc.ic.ac.uk>
  *
+ *  rs_set_termios fixed to look also for changes of the input
+ *      flags INPCK, BRKINT, PARMRK, IGNPAR and IGNBRK.
+ *                                            Bernd Anhdupl 05/17/96.
+ * 
  * This module exports the following rs232 io functions:
  *
  *	int rs_init(void);
@@ -405,7 +409,9 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 			break;
 		tty->flip.count++;
 		if (*status & (UART_LSR_BI)) {
+#ifdef SERIAL_DEBUG_INTR
 			printk("handling break....");
+#endif
 			*tty->flip.flag_buf_ptr++ = TTY_BREAK;
 			if (info->flags & ASYNC_SAK)
 				do_SAK(tty);
@@ -1266,6 +1272,8 @@ static void change_speed(struct async_struct *info)
 	/*
 	 * Set up parity check flag
 	 */
+#define RELEVANT_IFLAG(iflag) (iflag & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK))
+
 	info->read_status_mask = UART_LSR_OE | UART_LSR_THRE | UART_LSR_DR;
 	if (I_INPCK(info->tty))
 		info->read_status_mask |= UART_LSR_FE | UART_LSR_PE;
@@ -1273,10 +1281,13 @@ static void change_speed(struct async_struct *info)
 		info->read_status_mask |= UART_LSR_BI;
 	
 	info->ignore_status_mask = 0;
+#if 0
+	/* This should be safe, but for some broken bits of hardware... */
 	if (I_IGNPAR(info->tty)) {
 		info->ignore_status_mask |= UART_LSR_PE | UART_LSR_FE;
 		info->read_status_mask |= UART_LSR_PE | UART_LSR_FE;
 	}
+#endif
 	if (I_IGNBRK(info->tty)) {
 		info->ignore_status_mask |= UART_LSR_BI;
 		info->read_status_mask |= UART_LSR_BI;
@@ -1285,11 +1296,12 @@ static void change_speed(struct async_struct *info)
 		 * overruns too.  (For real raw support).
 		 */
 		if (I_IGNPAR(info->tty)) {
-			info->ignore_status_mask |= UART_LSR_OE;
-			info->read_status_mask |= UART_LSR_OE;
+			info->ignore_status_mask |= UART_LSR_OE | \
+				UART_LSR_PE | UART_LSR_FE;
+			info->read_status_mask |= UART_LSR_OE | \
+				UART_LSR_PE | UART_LSR_FE;
 		}
 	}
-	
 	cli();
 	serial_outp(info, UART_LCR, cval | UART_LCR_DLAB);	/* set DLAB */
 	serial_outp(info, UART_DLL, quot & 0xff);	/* LS of divisor */
@@ -2065,8 +2077,10 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
 
-	if (tty->termios->c_cflag == old_termios->c_cflag)
-		return;
+	if (   (tty->termios->c_cflag == old_termios->c_cflag)
+	    && (   RELEVANT_IFLAG(tty->termios->c_iflag) 
+		== RELEVANT_IFLAG(old_termios->c_iflag)))
+	  return;
 
 	change_speed(info);
 

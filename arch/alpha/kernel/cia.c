@@ -1,5 +1,5 @@
 /*
- * Code common to all ALCOR chips.
+ * Code common to all CIA chips.
  *
  * Written by David A Rusling (david.rusling@reo.mts.dec.com).
  * December 1995.
@@ -25,7 +25,7 @@ extern int alpha_sys_type;
  * BIOS32-style PCI interface:
  */
 
-#ifdef CONFIG_ALPHA_ALCOR
+#ifdef CONFIG_ALPHA_CIA
 
 #ifdef DEBUG 
 # define DBG(args)	printk args
@@ -36,14 +36,14 @@ extern int alpha_sys_type;
 #define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int  *
 
-static volatile unsigned int ALCOR_mcheck_expected = 0;
-static volatile unsigned int ALCOR_mcheck_taken = 0;
-static unsigned long ALCOR_jd, ALCOR_jd1, ALCOR_jd2;
+static volatile unsigned int CIA_mcheck_expected = 0;
+static volatile unsigned int CIA_mcheck_taken = 0;
+static unsigned long CIA_jd, CIA_jd1, CIA_jd2;
 
 
 /*
  * Given a bus, device, and function number, compute resulting
- * configuration space address and setup the ALCOR_HAXR2 register
+ * configuration space address and setup the CIA_HAXR2 register
  * accordingly.  It is therefore not safe to have concurrent
  * invocations to configuration space access routines, but there
  * really shouldn't be any need for this.
@@ -126,32 +126,32 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
 	/* reset status register to avoid losing errors: */
-	stat0 = *((volatile unsigned int *)ALCOR_IOC_CIA_ERR);
-	*((volatile unsigned int *)ALCOR_IOC_CIA_ERR) = stat0;
+	stat0 = *((volatile unsigned int *)CIA_IOC_CIA_ERR);
+	*((volatile unsigned int *)CIA_IOC_CIA_ERR) = stat0;
 	mb();
-	DBG(("conf_read: ALCOR CIA ERR was 0x%x\n", stat0));
+	DBG(("conf_read: CIA ERR was 0x%x\n", stat0));
 	/* if Type1 access, must set CIA CFG */
 	if (type1) {
-		cia_cfg = *((unsigned int *)ALCOR_IOC_CFG);
+		cia_cfg = *((unsigned int *)CIA_IOC_CFG);
 		mb();
-		*((unsigned int *)ALCOR_IOC_CFG) = cia_cfg | 1;
+		*((unsigned int *)CIA_IOC_CFG) = cia_cfg | 1;
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 
 	draina();
-	ALCOR_mcheck_expected = 1;
-	ALCOR_mcheck_taken = 0;
+	CIA_mcheck_expected = 1;
+	CIA_mcheck_taken = 0;
 	mb();
 	/* access configuration space: */
 	value = *((volatile unsigned int *)addr);
 	mb();
 	mb();
-	if (ALCOR_mcheck_taken) {
-		ALCOR_mcheck_taken = 0;
+	if (CIA_mcheck_taken) {
+		CIA_mcheck_taken = 0;
 		value = 0xffffffffU;
 		mb();
 	}
-	ALCOR_mcheck_expected = 0;
+	CIA_mcheck_expected = 0;
 	mb();
 	/*
 	 * david.rusling@reo.mts.dec.com.  This code is needed for the
@@ -163,16 +163,16 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	draina();
 
 	/* now look for any errors */
-	stat0 = *((unsigned int *)ALCOR_IOC_CIA_ERR);
-	DBG(("conf_read: ALCOR CIA ERR after read 0x%x\n", stat0));
+	stat0 = *((unsigned int *)CIA_IOC_CIA_ERR);
+	DBG(("conf_read: CIA ERR after read 0x%x\n", stat0));
 	if (stat0 & 0x8280U) { /* is any error bit set? */
 		/* if not NDEV, print status */
 		if (!(stat0 & 0x0080)) {
-			printk("ALCOR.c:conf_read: got stat0=%x\n", stat0);
+			printk("CIA.c:conf_read: got stat0=%x\n", stat0);
 		}
 
 		/* reset error status: */
-		*((volatile unsigned long *)ALCOR_IOC_CIA_ERR) = stat0;
+		*((volatile unsigned long *)CIA_IOC_CIA_ERR) = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 		value = 0xffffffff;
@@ -181,7 +181,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 
 	/* if Type1 access, must reset IOC CFG so normal IO space ops work */
 	if (type1) {
-		*((unsigned int *)ALCOR_IOC_CFG) = cia_cfg & ~1;
+		*((unsigned int *)CIA_IOC_CFG) = cia_cfg & ~1;
 		mb();
 	}
 
@@ -202,26 +202,26 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 	cli();
 
 	/* reset status register to avoid losing errors: */
-	stat0 = *((volatile unsigned int *)ALCOR_IOC_CIA_ERR);
-	*((volatile unsigned int *)ALCOR_IOC_CIA_ERR) = stat0;
+	stat0 = *((volatile unsigned int *)CIA_IOC_CIA_ERR);
+	*((volatile unsigned int *)CIA_IOC_CIA_ERR) = stat0;
 	mb();
-	DBG(("conf_write: ALCOR CIA ERR was 0x%x\n", stat0));
+	DBG(("conf_write: CIA ERR was 0x%x\n", stat0));
 	/* if Type1 access, must set CIA CFG */
 	if (type1) {
-		cia_cfg = *((unsigned int *)ALCOR_IOC_CFG);
+		cia_cfg = *((unsigned int *)CIA_IOC_CFG);
 		mb();
-		*((unsigned int *)ALCOR_IOC_CFG) = cia_cfg | 1;
+		*((unsigned int *)CIA_IOC_CFG) = cia_cfg | 1;
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 
 	draina();
-	ALCOR_mcheck_expected = 1;
+	CIA_mcheck_expected = 1;
 	mb();
 	/* access configuration space: */
 	*((volatile unsigned int *)addr) = value;
 	mb();
 	mb();
-	ALCOR_mcheck_expected = 0;
+	CIA_mcheck_expected = 0;
 	mb();
 	/*
 	 * david.rusling@reo.mts.dec.com.  This code is needed for the
@@ -233,16 +233,16 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 	draina();
 
 	/* now look for any errors */
-	stat0 = *((unsigned int *)ALCOR_IOC_CIA_ERR);
-	DBG(("conf_write: ALCOR CIA ERR after write 0x%x\n", stat0));
+	stat0 = *((unsigned int *)CIA_IOC_CIA_ERR);
+	DBG(("conf_write: CIA ERR after write 0x%x\n", stat0));
 	if (stat0 & 0x8280U) { /* is any error bit set? */
 		/* if not NDEV, print status */
 		if (!(stat0 & 0x0080)) {
-			printk("ALCOR.c:conf_read: got stat0=%x\n", stat0);
+			printk("CIA.c:conf_read: got stat0=%x\n", stat0);
 		}
 
 		/* reset error status: */
-		*((volatile unsigned long *)ALCOR_IOC_CIA_ERR) = stat0;
+		*((volatile unsigned long *)CIA_IOC_CIA_ERR) = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 		value = 0xffffffff;
@@ -251,7 +251,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 
 	/* if Type1 access, must reset IOC CFG so normal IO space ops work */
 	if (type1) {
-		*((unsigned int *)ALCOR_IOC_CFG) = cia_cfg & ~1;
+		*((unsigned int *)CIA_IOC_CFG) = cia_cfg & ~1;
 		mb();
 	}
 
@@ -263,7 +263,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 int pcibios_read_config_byte (unsigned char bus, unsigned char device_fn,
 			      unsigned char where, unsigned char *value)
 {
-	unsigned long addr = ALCOR_CONF;
+	unsigned long addr = CIA_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
@@ -284,7 +284,7 @@ int pcibios_read_config_byte (unsigned char bus, unsigned char device_fn,
 int pcibios_read_config_word (unsigned char bus, unsigned char device_fn,
 			      unsigned char where, unsigned short *value)
 {
-	unsigned long addr = ALCOR_CONF;
+	unsigned long addr = CIA_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
@@ -308,7 +308,7 @@ int pcibios_read_config_word (unsigned char bus, unsigned char device_fn,
 int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
 			       unsigned char where, unsigned int *value)
 {
-	unsigned long addr = ALCOR_CONF;
+	unsigned long addr = CIA_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
@@ -329,7 +329,7 @@ int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
 int pcibios_write_config_byte (unsigned char bus, unsigned char device_fn,
 			       unsigned char where, unsigned char value)
 {
-	unsigned long addr = ALCOR_CONF;
+	unsigned long addr = CIA_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
@@ -345,7 +345,7 @@ int pcibios_write_config_byte (unsigned char bus, unsigned char device_fn,
 int pcibios_write_config_word (unsigned char bus, unsigned char device_fn,
 			       unsigned char where, unsigned short value)
 {
-	unsigned long addr = ALCOR_CONF;
+	unsigned long addr = CIA_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
@@ -361,7 +361,7 @@ int pcibios_write_config_word (unsigned char bus, unsigned char device_fn,
 int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 				unsigned char where, unsigned int value)
 {
-	unsigned long addr = ALCOR_CONF;
+	unsigned long addr = CIA_CONF;
 	unsigned long pci_addr;
 	unsigned char type1;
 
@@ -374,16 +374,16 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 }
 
 
-unsigned long alcor_init(unsigned long mem_start, unsigned long mem_end)
+unsigned long cia_init(unsigned long mem_start, unsigned long mem_end)
 {
         unsigned int cia_err ;
 
         /* 
 	 * Set up error reporting.
 	 */
-	cia_err = *(vuip)ALCOR_IOC_CIA_ERR ;
+	cia_err = *(vuip)CIA_IOC_CIA_ERR ;
 	cia_err |= (0x1 << 7) ;   /* master abort */
-	*(vuip)ALCOR_IOC_CIA_ERR = cia_err ;
+	*(vuip)CIA_IOC_CIA_ERR = cia_err ;
 	mb() ;
 
 	/*
@@ -393,19 +393,19 @@ unsigned long alcor_init(unsigned long mem_start, unsigned long mem_end)
 	 * goes at 1 GB and is 1 GB large.
 	 */
 
-	*(vuip)ALCOR_IOC_PCI_W0_BASE = 1U | (ALCOR_DMA_WIN_BASE & 0xfff00000U);
- 	*(vuip)ALCOR_IOC_PCI_W0_MASK = (ALCOR_DMA_WIN_SIZE - 1) & 0xfff00000U;
-	*(vuip)ALCOR_IOC_PCI_T0_BASE = 0;
+	*(vuip)CIA_IOC_PCI_W0_BASE = 1U | (CIA_DMA_WIN_BASE & 0xfff00000U);
+ 	*(vuip)CIA_IOC_PCI_W0_MASK = (CIA_DMA_WIN_SIZE - 1) & 0xfff00000U;
+	*(vuip)CIA_IOC_PCI_T0_BASE = 0;
 
-	*(vuip)ALCOR_IOC_PCI_W1_BASE = 0x0 ;
-	*(vuip)ALCOR_IOC_PCI_W2_BASE = 0x0 ;
-	*(vuip)ALCOR_IOC_PCI_W3_BASE = 0x0 ;
+	*(vuip)CIA_IOC_PCI_W1_BASE = 0x0 ;
+	*(vuip)CIA_IOC_PCI_W2_BASE = 0x0 ;
+	*(vuip)CIA_IOC_PCI_W3_BASE = 0x0 ;
 
 	/*
 	 * check ASN in HWRPB for validity, report if bad
 	 */
 	if (hwrpb->max_asn != MAX_ASN) {
-		printk("alcor_init: max ASN from HWRPB is bad (0x%lx)\n",
+		printk("CIA_init: max ASN from HWRPB is bad (0x%lx)\n",
 			hwrpb->max_asn);
 		hwrpb->max_asn = MAX_ASN;
 	}
@@ -418,43 +418,43 @@ unsigned long alcor_init(unsigned long mem_start, unsigned long mem_end)
          */
         {
 #if 0
-          unsigned int cia_cfg = *((unsigned int *)ALCOR_IOC_CFG); mb();
-          if (cia_cfg) printk("alcor_init: CFG was 0x%x\n", cia_cfg);
+          unsigned int cia_cfg = *((unsigned int *)CIA_IOC_CFG); mb();
+          if (cia_cfg) printk("CIA_init: CFG was 0x%x\n", cia_cfg);
 #endif
-          *((unsigned int *)ALCOR_IOC_CFG) = 0; mb();
+          *((unsigned int *)CIA_IOC_CFG) = 0; mb();
         }
  
 	return mem_start;
 }
 
-int ALCOR_pci_clr_err(void)
+int cia_pci_clr_err(void)
 {
-	ALCOR_jd = *((unsigned int *)ALCOR_IOC_CIA_ERR);
-	DBG(("ALCOR_pci_clr_err: ALCOR CIA ERR after read 0x%x\n", ALCOR_jd));
-	*((unsigned long *)ALCOR_IOC_CIA_ERR) = 0x0080;
+	CIA_jd = *((unsigned int *)CIA_IOC_CIA_ERR);
+	DBG(("CIA_pci_clr_err: CIA ERR after read 0x%x\n", CIA_jd));
+	*((unsigned long *)CIA_IOC_CIA_ERR) = 0x0080;
 	mb();
 	return 0;
 }
 
-void alcor_machine_check(unsigned long vector, unsigned long la_ptr,
+void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 			 struct pt_regs * regs)
 {
 #if 1
-        printk("ALCOR machine check\n") ;
+        printk("CIA machine check\n") ;
 #else
 	struct el_common *mchk_header;
-	struct el_ALCOR_sysdata_mcheck *mchk_sysdata;
+	struct el_CIA_sysdata_mcheck *mchk_sysdata;
 
 	mchk_header = (struct el_common *)la_ptr;
 
 	mchk_sysdata = 
-	  (struct el_ALCOR_sysdata_mcheck *)(la_ptr + mchk_header->sys_offset);
+	  (struct el_CIA_sysdata_mcheck *)(la_ptr + mchk_header->sys_offset);
 
-	DBG(("ALCOR_machine_check: vector=0x%lx la_ptr=0x%lx\n", vector, la_ptr));
+	DBG(("cia_machine_check: vector=0x%lx la_ptr=0x%lx\n", vector, la_ptr));
 	DBG(("                     pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
 	     regs->pc, mchk_header->size, mchk_header->proc_offset, mchk_header->sys_offset));
-	DBG(("ALCOR_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
-	     ALCOR_mcheck_expected, mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear));
+	DBG(("cia_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
+	     CIA_mcheck_expected, mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear));
 #ifdef DEBUG
 	{
 	    unsigned long *ptr;
@@ -470,12 +470,12 @@ void alcor_machine_check(unsigned long vector, unsigned long la_ptr,
 	 * Check if machine check is due to a badaddr() and if so,
 	 * ignore the machine check.
 	 */
-	if (ALCOR_mcheck_expected && (mchk_sysdata->epic_dcsr && 0x0c00UL)) {
-		ALCOR_mcheck_expected = 0;
-		ALCOR_mcheck_taken = 1;
+	if (CIA_mcheck_expected && (mchk_sysdata->epic_dcsr && 0x0c00UL)) {
+		CIA_mcheck_expected = 0;
+		CIA_mcheck_taken = 1;
 		mb();
 		mb();
-		ALCOR_pci_clr_err();
+		cia_pci_clr_err();
 		wrmces(0x7);
 		mb();
 		draina();
@@ -483,4 +483,4 @@ void alcor_machine_check(unsigned long vector, unsigned long la_ptr,
 #endif
 }
 
-#endif /* CONFIG_ALPHA_ALCOR */
+#endif /* CONFIG_ALPHA_CIA */

@@ -78,8 +78,15 @@
 #ifdef CONFIG_ALPHA_XL
 /* The maximum address that we can perform a DMA transfer to on Alpha XL,
    due to a hardware SIO (PCI<->ISA bus bridge) chip limitation, is 64MB.
-   see <asm/apecs.h> for more info */
-#define MAX_DMA_ADDRESS		(0xfffffc0004000000UL)
+   See <asm/apecs.h> for more info.
+*/
+/* NOTE: we must define the maximum as something less than 64Mb, to prevent 
+   virt_to_bus() from returning an address in the first window, for a
+   data area that goes beyond the 64Mb first DMA window. Sigh...
+   We MUST coordinate the maximum with <asm/apecs.h> for consistency.
+   For now, this limit is set to 48Mb...
+*/
+#define MAX_DMA_ADDRESS		(0xfffffc0003000000UL)
 #else /* CONFIG_ALPHA_XL */
 /* The maximum address that we can perform a DMA transfer to on normal
    Alpha platforms */

@@ -5600,7 +5600,7 @@ NCR53c7xx_abort (Scsi_Cmnd *cmd) {
  */
  
 int 
-NCR53c7xx_reset (Scsi_Cmnd *cmd) {
+NCR53c7xx_reset (Scsi_Cmnd *cmd, unsigned int reset_flags) {
     NCR53c7x0_local_declare();
     unsigned long flags;
     int found = 0;

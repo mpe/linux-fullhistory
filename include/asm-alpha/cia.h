@@ -1,10 +1,10 @@
-#ifndef __ALPHA_ALCOR__H__
-#define __ALPHA_ALCOR__H__
+#ifndef __ALPHA_CIA__H__
+#define __ALPHA_CIA__H__
 
 #include <linux/types.h>
 
 /*
- * ALCOR is the internal name for the 2117x chipset which provides
+ * CIA is the internal name for the 2117x chipset which provides
  * memory controller and PCI access for the 21164 chip based systems.
  *
  * This file is based on:
@@ -35,7 +35,7 @@
 **------------------------------------------------------------------------*/
 
 
-/* ALCOR ADDRESS BIT DEFINITIONS
+/* CIA ADDRESS BIT DEFINITIONS
  *
  *  3 3 3 3|3 3 3 3|3 3 2 2|2 2 2 2|2 2 2 2|1 1 1 1|1 1 1 1|1 1 
  *  9 8 7 6|5 4 3 2|1 0 9 8|7 6 5 4|3 2 1 0|9 8 7 6|5 4 3 2|1 0 9 8|7 6 5 4|3 2 1 0
@@ -76,100 +76,114 @@
 #define MEM_SP1_MASK 0x1fffffff  /* Mem sparse space 1 mask is 29 bits */
 
 
-#define ALCOR_DMA_WIN_BASE	(1024UL*1024UL*1024UL)
-#define ALCOR_DMA_WIN_SIZE	(1024*1024*1024)
+#define CIA_DMA_WIN_BASE	(1024UL*1024UL*1024UL)
+#define CIA_DMA_WIN_SIZE	(1024*1024*1024)
 
 /*
  * 21171-CA Control and Status Registers (p4-1)
  */
-#define ALCOR_IOC_CIA_REV               (IDENT_ADDR + 0x8740000080UL)
-#define ALCOR_IOC_PCI_LAT               (IDENT_ADDR + 0x87400000C0UL)
-#define ALCOR_IOC_CIA_CTRL              (IDENT_ADDR + 0x8740000100UL)
-#define ALCOR_IOC_HAE_MEM               (IDENT_ADDR + 0x8740000400UL)
-#define ALCOR_IOC_HAE_IO                (IDENT_ADDR + 0x8740000440UL)
-#define ALCOR_IOC_CFG                   (IDENT_ADDR + 0x8740000480UL)
-#define ALCOR_IOC_CACK_EN               (IDENT_ADDR + 0x8740000600UL)
+#define CIA_IOC_CIA_REV               (IDENT_ADDR + 0x8740000080UL)
+#define CIA_IOC_PCI_LAT               (IDENT_ADDR + 0x87400000C0UL)
+#define CIA_IOC_CIA_CTRL              (IDENT_ADDR + 0x8740000100UL)
+#define CIA_IOC_HAE_MEM               (IDENT_ADDR + 0x8740000400UL)
+#define CIA_IOC_HAE_IO                (IDENT_ADDR + 0x8740000440UL)
+#define CIA_IOC_CFG                   (IDENT_ADDR + 0x8740000480UL)
+#define CIA_IOC_CACK_EN               (IDENT_ADDR + 0x8740000600UL)
 
 /*
  * 21171-CA Diagnostic Registers (p4-2)
  */
-#define ALCOR_IOC_CIA_DIAG              (IDENT_ADDR + 0x8740002000UL)
-#define ALCOR_IOC_DIAG_CHECK            (IDENT_ADDR + 0x8740003000UL)
+#define CIA_IOC_CIA_DIAG              (IDENT_ADDR + 0x8740002000UL)
+#define CIA_IOC_DIAG_CHECK            (IDENT_ADDR + 0x8740003000UL)
 
 /*
  * 21171-CA Performance Monitor registers (p4-3)
  */
-#define ALCOR_IOC_PERF_MONITOR          (IDENT_ADDR + 0x8740004000UL)
-#define ALCOR_IOC_PERF_CONTROL          (IDENT_ADDR + 0x8740004040UL)
+#define CIA_IOC_PERF_MONITOR          (IDENT_ADDR + 0x8740004000UL)
+#define CIA_IOC_PERF_CONTROL          (IDENT_ADDR + 0x8740004040UL)
 
 /*
  * 21171-CA Error registers (p4-3)
  */
-#define ALCOR_IOC_CPU_ERR0              (IDENT_ADDR + 0x8740008000UL)
-#define ALCOR_IOC_CPU_ERR1              (IDENT_ADDR + 0x8740008040UL)
-#define ALCOR_IOC_CIA_ERR               (IDENT_ADDR + 0x8740008200UL)
-#define ALCOR_IOC_CIA_STAT              (IDENT_ADDR + 0x8740008240UL)
-#define ALCOR_IOC_ERR_MASK              (IDENT_ADDR + 0x8740008280UL)
-#define ALCOR_IOC_CIA_SYN               (IDENT_ADDR + 0x8740008300UL)
-#define ALCOR_IOC_MEM_ERR0              (IDENT_ADDR + 0x8740008400UL)
-#define ALCOR_IOC_MEM_ERR1              (IDENT_ADDR + 0x8740008440UL)
-#define ALCOR_IOC_PCI_ERR0              (IDENT_ADDR + 0x8740008800UL)
-#define ALCOR_IOC_PCI_ERR1              (IDENT_ADDR + 0x8740008840UL)
-#define ALCOR_IOC_PCI_ERR3              (IDENT_ADDR + 0x8740008880UL)
+#define CIA_IOC_CPU_ERR0              (IDENT_ADDR + 0x8740008000UL)
+#define CIA_IOC_CPU_ERR1              (IDENT_ADDR + 0x8740008040UL)
+#define CIA_IOC_CIA_ERR               (IDENT_ADDR + 0x8740008200UL)
+#define CIA_IOC_CIA_STAT              (IDENT_ADDR + 0x8740008240UL)
+#define CIA_IOC_ERR_MASK              (IDENT_ADDR + 0x8740008280UL)
+#define CIA_IOC_CIA_SYN               (IDENT_ADDR + 0x8740008300UL)
+#define CIA_IOC_MEM_ERR0              (IDENT_ADDR + 0x8740008400UL)
+#define CIA_IOC_MEM_ERR1              (IDENT_ADDR + 0x8740008440UL)
+#define CIA_IOC_PCI_ERR0              (IDENT_ADDR + 0x8740008800UL)
+#define CIA_IOC_PCI_ERR1              (IDENT_ADDR + 0x8740008840UL)
+#define CIA_IOC_PCI_ERR3              (IDENT_ADDR + 0x8740008880UL)
 
 /*
  * 2117A-CA PCI Address Translation Registers.   I've only defined
  * the first window fully as that's the only one that we're currently using.
  * The other window bases are needed to disable the windows.
  */
-#define ALCOR_IOC_PCI_TBIA              (IDENT_ADDR + 0x8760000100UL)
-#define ALCOR_IOC_PCI_W0_BASE           (IDENT_ADDR + 0x8760000400UL)
-#define ALCOR_IOC_PCI_W0_MASK           (IDENT_ADDR + 0x8760000440UL)
-#define ALCOR_IOC_PCI_T0_BASE           (IDENT_ADDR + 0x8760000480UL)
+#define CIA_IOC_PCI_TBIA              (IDENT_ADDR + 0x8760000100UL)
+#define CIA_IOC_PCI_W0_BASE           (IDENT_ADDR + 0x8760000400UL)
+#define CIA_IOC_PCI_W0_MASK           (IDENT_ADDR + 0x8760000440UL)
+#define CIA_IOC_PCI_T0_BASE           (IDENT_ADDR + 0x8760000480UL)
 
-#define ALCOR_IOC_PCI_W1_BASE           (IDENT_ADDR + 0x8760000500UL)
-#define ALCOR_IOC_PCI_W2_BASE           (IDENT_ADDR + 0x8760000600UL)
-#define ALCOR_IOC_PCI_W3_BASE           (IDENT_ADDR + 0x8760000700UL)
+#define CIA_IOC_PCI_W1_BASE           (IDENT_ADDR + 0x8760000500UL)
+#define CIA_IOC_PCI_W2_BASE           (IDENT_ADDR + 0x8760000600UL)
+#define CIA_IOC_PCI_W3_BASE           (IDENT_ADDR + 0x8760000700UL)
 
 /*
  * 21171-CA System configuration registers (p4-3)
  */
-#define ALCOR_IOC_MCR                   (IDENT_ADDR + 0x8750000000UL)
-#define ALCOR_IOC_MBA0                  (IDENT_ADDR + 0x8750000600UL)
-#define ALCOR_IOC_MBA2                  (IDENT_ADDR + 0x8750000680UL)
-#define ALCOR_IOC_MBA4                  (IDENT_ADDR + 0x8750000700UL)
-#define ALCOR_IOC_MBA6                  (IDENT_ADDR + 0x8750000780UL)
-#define ALCOR_IOC_MBA8                  (IDENT_ADDR + 0x8750000800UL)
-#define ALCOR_IOC_MBAA                  (IDENT_ADDR + 0x8750000880UL)
-#define ALCOR_IOC_MBAC                  (IDENT_ADDR + 0x8750000900UL)
-#define ALCOR_IOC_MBAE                  (IDENT_ADDR + 0x8750000980UL)
-#define ALCOR_IOC_TMG0                  (IDENT_ADDR + 0x8750000B00UL)
-#define ALCOR_IOC_TMG1                  (IDENT_ADDR + 0x8750000B40UL)
-#define ALCOR_IOC_TMG2                  (IDENT_ADDR + 0x8750000B80UL)
+#define CIA_IOC_MCR                   (IDENT_ADDR + 0x8750000000UL)
+#define CIA_IOC_MBA0                  (IDENT_ADDR + 0x8750000600UL)
+#define CIA_IOC_MBA2                  (IDENT_ADDR + 0x8750000680UL)
+#define CIA_IOC_MBA4                  (IDENT_ADDR + 0x8750000700UL)
+#define CIA_IOC_MBA6                  (IDENT_ADDR + 0x8750000780UL)
+#define CIA_IOC_MBA8                  (IDENT_ADDR + 0x8750000800UL)
+#define CIA_IOC_MBAA                  (IDENT_ADDR + 0x8750000880UL)
+#define CIA_IOC_MBAC                  (IDENT_ADDR + 0x8750000900UL)
+#define CIA_IOC_MBAE                  (IDENT_ADDR + 0x8750000980UL)
+#define CIA_IOC_TMG0                  (IDENT_ADDR + 0x8750000B00UL)
+#define CIA_IOC_TMG1                  (IDENT_ADDR + 0x8750000B40UL)
+#define CIA_IOC_TMG2                  (IDENT_ADDR + 0x8750000B80UL)
 
 /*
  * Memory spaces:
  */
-#define ALCOR_IACK_SC		        (IDENT_ADDR + 0x8720000000UL)
-#define ALCOR_CONF		        (IDENT_ADDR + 0x8700000000UL)
-#define ALCOR_IO			(IDENT_ADDR + 0x8580000000UL)
-#define ALCOR_SPARSE_MEM		(IDENT_ADDR + 0x8000000000UL)
-#define ALCOR_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
+#define CIA_IACK_SC		        (IDENT_ADDR + 0x8720000000UL)
+#define CIA_CONF		        (IDENT_ADDR + 0x8700000000UL)
+#define CIA_IO				(IDENT_ADDR + 0x8580000000UL)
+#define CIA_SPARSE_MEM			(IDENT_ADDR + 0x8000000000UL)
+#define CIA_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
+
+/*
+ * ALCOR's GRU ASIC registers
+ */
+#define GRU_INT_REQ			(IDENT_ADDR + 0x8780000000UL)
+#define GRU_INT_MASK			(IDENT_ADDR + 0x8780000040UL)
+#define GRU_INT_EDGE			(IDENT_ADDR + 0x8780000080UL)
+#define GRU_INT_HILO			(IDENT_ADDR + 0x87800000C0UL)
+#define GRU_INT_CLEAR			(IDENT_ADDR + 0x8780000100UL)
+
+#define GRU_CACHE_CNFG			(IDENT_ADDR + 0x8780000200UL)
+#define GRU_SCR				(IDENT_ADDR + 0x8780000300UL)
+#define GRU_LED				(IDENT_ADDR + 0x8780000800UL)
+#define GRU_RESET			(IDENT_ADDR + 0x8780000900UL)
 
 /*
  * Bit definitions for I/O Controller status register 0:
  */
-#define ALCOR_IOC_STAT0_CMD		0xf
-#define ALCOR_IOC_STAT0_ERR		(1<<4)
-#define ALCOR_IOC_STAT0_LOST		(1<<5)
-#define ALCOR_IOC_STAT0_THIT		(1<<6)
-#define ALCOR_IOC_STAT0_TREF		(1<<7)
-#define ALCOR_IOC_STAT0_CODE_SHIFT	8
-#define ALCOR_IOC_STAT0_CODE_MASK	0x7
-#define ALCOR_IOC_STAT0_P_NBR_SHIFT	13
-#define ALCOR_IOC_STAT0_P_NBR_MASK	0x7ffff
+#define CIA_IOC_STAT0_CMD		0xf
+#define CIA_IOC_STAT0_ERR		(1<<4)
+#define CIA_IOC_STAT0_LOST		(1<<5)
+#define CIA_IOC_STAT0_THIT		(1<<6)
+#define CIA_IOC_STAT0_TREF		(1<<7)
+#define CIA_IOC_STAT0_CODE_SHIFT	8
+#define CIA_IOC_STAT0_CODE_MASK		0x7
+#define CIA_IOC_STAT0_P_NBR_SHIFT	13
+#define CIA_IOC_STAT0_P_NBR_MASK	0x7ffff
 
-#define HAE_ADDRESS	                ALCOR_IOC_HAE_MEM
+#define HAE_ADDRESS	                CIA_IOC_HAE_MEM
 
 #ifdef __KERNEL__
 
@@ -179,18 +193,18 @@
  */
 extern inline unsigned long virt_to_bus(void * address)
 {
-	return virt_to_phys(address) + ALCOR_DMA_WIN_BASE;
+	return virt_to_phys(address) + CIA_DMA_WIN_BASE;
 }
 
 extern inline void * bus_to_virt(unsigned long address)
 {
-	return phys_to_virt(address - ALCOR_DMA_WIN_BASE);
+	return phys_to_virt(address - CIA_DMA_WIN_BASE);
 }
 
 /*
  * I/O functions:
  *
- * Alcor (the 2117x PCI/memory support chipset for the EV5 (21164)
+ * CIA (the 2117x PCI/memory support chipset for the EV5 (21164)
  * series of processors uses a sparse address mapping scheme to
  * get at PCI memory and I/O.
  */
@@ -199,7 +213,7 @@ extern inline void * bus_to_virt(unsigned long address)
 
 extern inline unsigned int __inb(unsigned long addr)
 {
-	long result = *(vuip) ((addr << 5) + ALCOR_IO + 0x00);
+	long result = *(vuip) ((addr << 5) + CIA_IO + 0x00);
 	result >>= (addr & 3) * 8;
 	return 0xffUL & result;
 }
@@ -209,13 +223,13 @@ extern inline void __outb(unsigned char b, unsigned long addr)
 	unsigned int w;
 
 	asm ("insbl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
-	*(vuip) ((addr << 5) + ALCOR_IO + 0x00) = w;
+	*(vuip) ((addr << 5) + CIA_IO + 0x00) = w;
 	mb();
 }
 
 extern inline unsigned int __inw(unsigned long addr)
 {
-	long result = *(vuip) ((addr << 5) + ALCOR_IO + 0x08);
+	long result = *(vuip) ((addr << 5) + CIA_IO + 0x08);
 	result >>= (addr & 3) * 8;
 	return 0xffffUL & result;
 }
@@ -225,18 +239,18 @@ extern inline void __outw(unsigned short b, unsigned long addr)
 	unsigned int w;
 
 	asm ("inswl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
-	*(vuip) ((addr << 5) + ALCOR_IO + 0x08) = w;
+	*(vuip) ((addr << 5) + CIA_IO + 0x08) = w;
 	mb();
 }
 
 extern inline unsigned int __inl(unsigned long addr)
 {
-	return *(vuip) ((addr << 5) + ALCOR_IO + 0x18);
+	return *(vuip) ((addr << 5) + CIA_IO + 0x18);
 }
 
 extern inline void __outl(unsigned int b, unsigned long addr)
 {
-	*(vuip) ((addr << 5) + ALCOR_IO + 0x18) = b;
+	*(vuip) ((addr << 5) + CIA_IO + 0x18) = b;
 	mb();
 }
 
@@ -283,7 +297,7 @@ extern inline unsigned long __readb(unsigned long addr)
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
-	result = *(vuip) ((addr << 5) + ALCOR_SPARSE_MEM + 0x00) ;
+	result = *(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x00) ;
 	result >>= shift;
 	return 0xffUL & result;
 }
@@ -298,14 +312,14 @@ extern inline unsigned long __readw(unsigned long addr)
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
-	result = *(vuip) ((addr << 5) + ALCOR_SPARSE_MEM + 0x08);
+	result = *(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08);
 	result >>= shift;
 	return 0xffffUL & result;
 }
 
 extern inline unsigned long __readl(unsigned long addr)
 {
-	return *(vuip) (addr + ALCOR_DENSE_MEM);
+	return *(vuip) (addr + CIA_DENSE_MEM);
 }
 
 extern inline void __writeb(unsigned char b, unsigned long addr)
@@ -317,7 +331,7 @@ extern inline void __writeb(unsigned char b, unsigned long addr)
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
-	*(vuip) ((addr << 5) + ALCOR_SPARSE_MEM + 0x00) = b * 0x01010101;
+	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x00) = b * 0x01010101;
 }
 
 extern inline void __writew(unsigned short b, unsigned long addr)
@@ -329,12 +343,12 @@ extern inline void __writew(unsigned short b, unsigned long addr)
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
-	*(vuip) ((addr << 5) + ALCOR_SPARSE_MEM + 0x08) = b * 0x00010001;
+	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08) = b * 0x00010001;
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)
 {
-	*(vuip) (addr + ALCOR_DENSE_MEM) = b;
+	*(vuip) (addr + CIA_DENSE_MEM) = b;
 }
 
 #define inb(port) \
@@ -348,15 +362,15 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 
 #undef vuip
 
-extern unsigned long alcor_init (unsigned long mem_start,
+extern unsigned long cia_init (unsigned long mem_start,
 				 unsigned long mem_end);
 
 #endif /* __KERNEL__ */
 
 /*
- * Data structure for handling ALCOR machine checks:
+ * Data structure for handling CIA machine checks:
  */
-struct el_ALCOR_sysdata_mcheck {
+struct el_CIA_sysdata_mcheck {
     u_long      coma_gcr;                       
     u_long      coma_edsr;                      
     u_long      coma_ter;                       
@@ -404,4 +418,4 @@ struct el_ALCOR_sysdata_mcheck {
 #define RTC_ADDR(x)	(0x80 | (x))
 #define RTC_ALWAYS_BCD	0
 
-#endif /* __ALPHA_ALCOR__H__ */
+#endif /* __ALPHA_CIA__H__ */

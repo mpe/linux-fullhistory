@@ -40,7 +40,7 @@
 #include "constants.h"
 
 #define MAX_RETRIES 3
-#define SR_TIMEOUT (150 * HZ)
+#define SR_TIMEOUT (15 * HZ)
 
 static int sr_init(void);
 static void sr_finish(void);
@@ -152,12 +152,50 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 {
 	int result = SCpnt->result;
 	int this_count = SCpnt->this_count;
+	int good_sectors = (result == 0 ? this_count : 0);
+	int block_sectors = 0;
     
 #ifdef DEBUG
 	printk("sr.c done: %x %x\n",result, SCpnt->request.bh->b_data);
 #endif
-	if (!result)
-    { /* No error */
+    /*
+      Handle MEDIUM ERRORs or VOLUME OVERFLOWs that indicate partial success.
+      Since this is a relatively rare error condition, no care is taken to
+      avoid unnecessary additional work such as memcpy's that could be avoided.
+    */
+
+	if (driver_byte(result) != 0 &&		    /* An error occurred */
+	    SCpnt->sense_buffer[0] == 0xF0 &&	    /* Sense data is valid */
+	    (SCpnt->sense_buffer[2] == MEDIUM_ERROR ||
+	     SCpnt->sense_buffer[2] == VOLUME_OVERFLOW))
+	  {
+	    long error_sector = (SCpnt->sense_buffer[3] << 24) |
+				(SCpnt->sense_buffer[4] << 16) |
+				(SCpnt->sense_buffer[5] << 8) |
+				SCpnt->sense_buffer[6];
+	    int device_nr = DEVICE_NR(SCpnt->request.rq_dev);
+	    if (SCpnt->request.bh != NULL)
+	      block_sectors = SCpnt->request.bh->b_size >> 9;
+	    if (block_sectors < 4) block_sectors = 4;
+	    if (scsi_CDs[device_nr].sector_size == 2048)
+	      error_sector <<= 2;
+	    error_sector &= ~ (block_sectors - 1);
+	    good_sectors = error_sector - SCpnt->request.sector;
+	    if (good_sectors < 0 || good_sectors >= this_count)
+	      good_sectors = 0;
+	    /*
+	      The SCSI specification allows for the value returned by READ
+	      CAPACITY to be up to 75 2K sectors past the last readable
+	      block.  Therefore, if we hit a medium error within the last
+	      75 2K sectors, we decrease the saved size value.
+	    */
+	    if ((error_sector >> 1) < sr_sizes[device_nr] &&
+		scsi_CDs[device_nr].capacity - error_sector < 4*75)
+	      sr_sizes[device_nr] = error_sector >> 1;
+	  }
+
+	if (good_sectors > 0)
+    { /* Some sectors were read successfully. */
 	if (SCpnt->use_sg == 0) {
 		    if (SCpnt->buffer != SCpnt->request.buffer)
 	    {
@@ -165,20 +203,20 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		offset = (SCpnt->request.sector % 4) << 9;
 		memcpy((char *)SCpnt->request.buffer, 
 		       (char *)SCpnt->buffer + offset, 
-		       this_count << 9);
+		       good_sectors << 9);
 		/* Even though we are not using scatter-gather, we look
 		 * ahead and see if there is a linked request for the
 		 * other half of this buffer.  If there is, then satisfy
 		 * it. */
-		if((offset == 0) && this_count == 2 &&
-		   SCpnt->request.nr_sectors > this_count && 
+		if((offset == 0) && good_sectors == 2 &&
+		   SCpnt->request.nr_sectors > good_sectors && 
 		   SCpnt->request.bh &&
 		   SCpnt->request.bh->b_reqnext &&
 		   SCpnt->request.bh->b_reqnext->b_size == 1024) {
 		    memcpy((char *)SCpnt->request.bh->b_reqnext->b_data, 
 			   (char *)SCpnt->buffer + 1024, 
 			   1024);
-		    this_count += 2;
+		    good_sectors += 2;
 		};
 		
 		scsi_free(SCpnt->buffer, 2048);
@@ -196,15 +234,15 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		};
 		    };
 		    scsi_free(SCpnt->buffer, SCpnt->sglist_len);  /* Free list of scatter-gather pointers */
-		    if(SCpnt->request.sector % 4) this_count -= 2;
+		    if(SCpnt->request.sector % 4) good_sectors -= 2;
 	    /* See   if there is a padding record at the end that needs to be removed */
-		    if(this_count > SCpnt->request.nr_sectors)
-		this_count -= 2;
+		    if(good_sectors > SCpnt->request.nr_sectors)
+		good_sectors -= 2;
 	};
 	
 #ifdef DEBUG
 		printk("(%x %x %x) ",SCpnt->request.bh, SCpnt->request.nr_sectors, 
-		       this_count);
+		       good_sectors);
 #endif
 		if (SCpnt->request.nr_sectors > this_count)
 	{	 
@@ -214,12 +252,16 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		      SCpnt->request.sector, this_count);
 	}
 	
-	SCpnt = end_scsi_request(SCpnt, 1, this_count);  /* All done */
-	requeue_sr_request(SCpnt);
-	return;
-    } /* Normal completion */
+	SCpnt = end_scsi_request(SCpnt, 1, good_sectors);  /* All done */
+	if (result == 0)
+	  {
+	    requeue_sr_request(SCpnt);
+	    return;
+	  }
+    }
     
-	/* We only come through here if we have an error of some kind */
+    if (good_sectors == 0) {
+	/* We only come through here if no sectors were read successfully. */
     
     /* Free up any indirection buffers we allocated for DMA purposes. */
 	if (SCpnt->use_sg) {
@@ -229,14 +271,16 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	for(i=0; i<SCpnt->use_sg; i++) {
 	    if (sgpnt[i].alt_address) {
 		scsi_free(sgpnt[i].address, sgpnt[i].length);
-	    };
-	};
+	    }
+	}
 	scsi_free(SCpnt->buffer, SCpnt->sglist_len);  /* Free list of scatter-gather pointers */
 	} else {
 	if (SCpnt->buffer != SCpnt->request.buffer)
 	    scsi_free(SCpnt->buffer, SCpnt->bufflen);
-	};
+	}
     
+    }
+
 	if (driver_byte(result) != 0) {
 		if ((SCpnt->sense_buffer[0] & 0x7f) == 0x70) {
 			if ((SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
@@ -267,13 +311,37 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 			}
 	    
 		}
-	
+
 		if (SCpnt->sense_buffer[2] == NOT_READY) {
-			printk("CDROM not ready.  Make sure you have a disc in the drive.\n");
+			printk("CD-ROM not ready.  Make sure you have a disc in the drive.\n");
 			SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			requeue_sr_request(SCpnt); /* Do next request */
 			return;
-		};
+		}
+
+		if (SCpnt->sense_buffer[2] == MEDIUM_ERROR) {
+		    printk("scsi%d: MEDIUM ERROR on "
+			   "channel %d, id %d, lun %d, CDB: ",
+			   SCpnt->host->host_no, (int) SCpnt->channel, 
+			   (int) SCpnt->target, (int) SCpnt->lun);
+		    print_command(SCpnt->cmnd);
+		    print_sense("sr", SCpnt);
+		    SCpnt = end_scsi_request(SCpnt, 0, block_sectors);
+		    requeue_sr_request(SCpnt);
+		    return;
+		}
+
+		if (SCpnt->sense_buffer[2] == VOLUME_OVERFLOW) {
+		    printk("scsi%d: VOLUME OVERFLOW on "
+			   "channel %d, id %d, lun %d, CDB: ",
+			   SCpnt->host->host_no, (int) SCpnt->channel, 
+			   (int) SCpnt->target, (int) SCpnt->lun);
+		    print_command(SCpnt->cmnd);
+		    print_sense("sr", SCpnt);
+		    SCpnt = end_scsi_request(SCpnt, 0, block_sectors);
+		    requeue_sr_request(SCpnt);
+		    return;
+		}
     }
 	
 	/* We only get this far if we have an error we have not recognized */
@@ -433,7 +501,7 @@ void sr_photocd(struct inode *inode)
 	memset(buf,0,40);
 	*((unsigned long*)buf)   = 0;
 	*((unsigned long*)buf+1) = 12;
-	cmd[0] = 0x1a;
+	cmd[0] = MODE_SENSE;
 	cmd[2] = 1;
 	cmd[4] = 12;
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
@@ -454,7 +522,7 @@ void sr_photocd(struct inode *inode)
 	    memset(buf,0,40);
 	    *((unsigned long*)buf)   = 12;  /* sending 12 bytes... */
 	    *((unsigned long*)buf+1) = 0;
-	    cmd[0] = 0x15;
+	    cmd[0] = MODE_SELECT;
 	    cmd[1] = (1 << 4);
 	    cmd[4] = 12;
 	    send = &cmd[6];                 /* this is a 6-Byte command    */
@@ -477,10 +545,11 @@ void sr_photocd(struct inode *inode)
 #ifdef DEBUG
 	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER code\n");
 #endif
+	get_sectorsize(MINOR(inode->i_rdev));	/* spinup (avoid timeout) */
 	memset(buf,0,40);
 	*((unsigned long*)buf)   = 0x0;   /* we send nothing...     */
 	*((unsigned long*)buf+1) = 0x0c;  /* and receive 0x0c bytes */
-	cmd[0] = 0x43; /* Read TOC */
+	cmd[0] = READ_TOC;
 	cmd[8] = 0x0c;
 	cmd[9] = 0x40;
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
@@ -488,11 +557,11 @@ void sr_photocd(struct inode *inode)
 	
 	if (rc != 0) {
             if (rc != 0x28000002) /* drop "not ready" */
-                printk(KERN_WARNING "sr_photocd: ioctl error (SONY): 0x%x\n",rc);
+                printk(KERN_WARNING "sr_photocd: ioctl error (SONY/PIONEER): 0x%x\n",rc);
 	    break;
 	}
 	if ((rec[0] << 8) + rec[1] != 0x0a) {
-	    printk(KERN_INFO "sr_photocd: (SONY) Hmm, seems the CDROM doesn't support multisession CD's\n");
+	    printk(KERN_INFO "sr_photocd: (SONY/PIONEER) Hmm, seems the CDROM doesn't support multisession CD's\n");
 	    no_multi = 1;
 	    break;
 	}
@@ -523,31 +592,31 @@ void sr_photocd(struct inode *inode)
 
 static int sr_open(struct inode * inode, struct file * filp)
 {
-	if(MINOR(inode->i_rdev) >= sr_template.nr_dev || 
-	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -ENXIO;   /* No such device */
-    
-	if (filp->f_mode & 2)  
-	    return -EROFS;
-    
+    if(MINOR(inode->i_rdev) >= sr_template.nr_dev || 
+       !scsi_CDs[MINOR(inode->i_rdev)].device) return -ENXIO;   /* No such device */
+
+    if (filp->f_mode & 2)  
+	return -EROFS;
+
     check_disk_change(inode->i_rdev);
     
-	if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
+    if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
 	sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
-	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
+    if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
 	(*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)++;
-	if(sr_template.usage_count) (*sr_template.usage_count)++;
+    if(sr_template.usage_count) (*sr_template.usage_count)++;
     
-	sr_photocd(inode);
+    sr_photocd(inode);
     
-	/* If this device did not have media in the drive at boot time, then
-	 * we would have been unable to get the sector size.  Check to see if
-	 * this is the case, and try again.
-	 */
-    
-	if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
+    /* If this device did not have media in the drive at boot time, then
+     * we would have been unable to get the sector size.  Check to see if
+     * this is the case, and try again.
+     */
+
+    if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
 	get_sectorsize(MINOR(inode->i_rdev));
-    
-	return 0;
+
+    return 0;
 }
 
 
@@ -1058,42 +1127,42 @@ static int sr_registered = 0;
 
 static int sr_init()
 {
-	int i;
-    
-	if(sr_template.dev_noticed == 0) return 0;
-    
-	if(!sr_registered) {
+    int i;
+
+    if(sr_template.dev_noticed == 0) return 0;
+
+    if(!sr_registered) {
 	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
 	    printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
 	    return 1;
 	}
 	sr_registered++;
-	}
+    }
+
     
-	
-	if (scsi_CDs) return 0;
-	sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
-	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
-	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
-    
-	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
-	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
-    
-	sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max * 
-					     sizeof(int), GFP_ATOMIC);
-	for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
-	blksize_size[MAJOR_NR] = sr_blocksizes;
-	return 0;
+    if (scsi_CDs) return 0;
+    sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
+    scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
+    memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
+
+    sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
+    memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
+
+    sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max * 
+					 sizeof(int), GFP_ATOMIC);
+    for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
+    blksize_size[MAJOR_NR] = sr_blocksizes;
+    return 0;
 }
 
 void sr_finish()
 {
     int i;
     
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	blk_size[MAJOR_NR] = sr_sizes;	
-    
-	for (i = 0; i < sr_template.nr_dev; ++i)
+    blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+    blk_size[MAJOR_NR] = sr_sizes;	
+
+    for (i = 0; i < sr_template.nr_dev; ++i)
     {
 	/* If we have already seen this, then skip it.  Comes up
 	 * with loadable modules. */
@@ -1114,15 +1183,15 @@ void sr_finish()
     }
     
     
-	/* If our host adapter is capable of scatter-gather, then we increase
-	 * the read-ahead to 16 blocks (32 sectors).  If not, we use
-	 * a two block (4 sector) read ahead. */
-	if(scsi_CDs[0].device && scsi_CDs[0].device->host->sg_tablesize)
+    /* If our host adapter is capable of scatter-gather, then we increase
+     * the read-ahead to 16 blocks (32 sectors).  If not, we use
+     * a two block (4 sector) read ahead. */
+    if(scsi_CDs[0].device && scsi_CDs[0].device->host->sg_tablesize)
 	read_ahead[MAJOR_NR] = 32;  /* 32 sector read-ahead.  Always removable. */
-	else
+    else
 	read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
-    
-	return;
+
+    return;
 }	
 
 static void sr_detach(Scsi_Device * SDp)

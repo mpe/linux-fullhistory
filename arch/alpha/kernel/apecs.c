@@ -519,7 +519,13 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 	 * Check if machine check is due to a badaddr() and if so,
 	 * ignore the machine check.
 	 */
+#ifdef CONFIG_ALPHA_MIKASA
+	/* for now on MIKASA, if it was expected, ignore it */
+	/* we need the details of the mcheck frame to really know... */
+	if (apecs_mcheck_expected) {
+#else
 	if (apecs_mcheck_expected && (mchk_sysdata->epic_dcsr && 0x0c00UL)) {
+#endif
 		apecs_mcheck_expected = 0;
 		apecs_mcheck_taken = 1;
 		mb();

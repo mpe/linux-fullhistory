@@ -153,8 +153,8 @@ void setup_arch(char **cmdline_p,
 	*memory_start_p = lca_init(*memory_start_p, *memory_end_p);
 #elif defined(CONFIG_ALPHA_APECS)
 	*memory_start_p = apecs_init(*memory_start_p, *memory_end_p);
-#elif defined(CONFIG_ALPHA_ALCOR)
-	*memory_start_p = alcor_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_CIA)
+	*memory_start_p = cia_init(*memory_start_p, *memory_end_p);
 #endif
 }
 

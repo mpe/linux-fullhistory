@@ -37,11 +37,11 @@
 /* Various timeout loop repetition counts. */
 #define BUSY_TIMEOUT		10000000	/* for busy wait */
 #define FAST_TIMEOUT		100000		/* ibid. for probing */
-#define SLEEP_TIMEOUT		3000		/* for timer wait */
-#define MULTI_SEEK_TIMEOUT	500		/* for timer wait */
-#define READ_TIMEOUT		3000		/* for poll wait */
-#define STOP_TIMEOUT		1000		/* for poll wait */
-#define RESET_WAIT		1000		/* busy wait at drive reset */
+#define SLEEP_TIMEOUT		6000		/* for timer wait */
+#define MULTI_SEEK_TIMEOUT	1000		/* for timer wait */
+#define READ_TIMEOUT		6000		/* for poll wait */
+#define STOP_TIMEOUT		2000		/* for poll wait */
+#define RESET_WAIT		5000		/* busy wait at drive reset */
 
 /* # of buffers for block size conversion. 6 is optimal for my setup (P75),
    giving 280 kb/s, with 0.4% CPU usage. Experiment to find your optimal

@@ -48,12 +48,14 @@ int isp1020_release(struct Scsi_Host *);
 const char * isp1020_info(struct Scsi_Host *);
 int isp1020_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int isp1020_abort(Scsi_Cmnd *);
-int isp1020_reset(Scsi_Cmnd *);
-int isp1020_biosparam(Disk *, int, int[]);
+int isp1020_reset(Scsi_Cmnd *, unsigned int);
+int isp1020_biosparam(Disk *, kdev_t, int[]);
 
 #ifndef NULL
 #define NULL (0)
 #endif
+
+extern struct proc_dir_entry proc_scsi_isp1020;
 
 #define QLOGICISP {					\
 	/* next */		NULL,			\

@@ -113,7 +113,7 @@ static inline void raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
 	
-	if (sock_queue_rcv_skb(sk,skb)<0)
+	if (__sock_queue_rcv_skb(sk,skb)<0)
 	{
 		ip_statistics.IpInDiscards++;
 		skb->sk=NULL;
