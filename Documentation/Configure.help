@@ -7218,6 +7218,14 @@ CONFIG_SEALEVEL_4021
   If you want to do that, say M here. The module will be called
   sealevel.o.
 
+SyncLink HDLC/SYNCPPP support
+CONFIG_SYNCLINK_SYNCPPP
+  Enables HDLC/SYNCPPP support for the SyncLink WAN driver.
+  Normally the SyncLink WAN driver works with the main PPP
+  driver (ppp.c) and pppd program. HDLC/SYNCPPP support allows use
+  of the Cisco HDLC/PPP driver (syncppp.c).
+  The SyncLink WAN driver (in character devices) must also be enabled.
+
 Frame Relay (DLCI) support
 CONFIG_DLCI
   This is support for the frame relay protocol; frame relay is a fast
@@ -8458,7 +8466,7 @@ CONFIG_ARCNET_RIM_I
   This is yet another chipset driver for the COM90xx cards, but this
   time only using memory-mapped mode, and no IO ports at all. This
   driver is completely untested, so if you have one of these cards,
-  please mail David.Woodhouse@mvhi.com, especially if it works!
+  please mail dwmw2@infradead.org, especially if it works!
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
@@ -9550,6 +9558,182 @@ CONFIG_QUOTA
   support; for details, read the Quota mini-HOWTO, available from
   http://www.linuxdoc.org/docs.html#howto . Probably the quota
   support is only useful for multi user systems. If unsure, say N.
+
+Memory Technology Device (MTD) support
+CONFIG_MTD
+  Memory Technology Devices are flash, RAM and similar chips, often
+  used for solid state filesystems on embedded devices. This option
+  will provide the generic support for MTD drivers to register
+  themselves with the kernel and for potential users of MTD devices
+  to enumerate the devices which are present and obtain a handle on
+  them. It will also allow you to select individual drivers for 
+  particular hardware and users of MTD device. If unsure, say N.
+
+M-Systems Disk-On-Chip 1000 support
+CONFIG_MTD_DOC1000
+  This provides an MTD device driver for the M-Systems DiskOnChip
+  1000 devices, which are obsolete so you probably want to say 'N'.
+
+M-Systems Disk-On-Chip 2000 support
+CONFIG_MTD_DOC2000
+  This provides an MTD device driver for the M-Systems DiskOnChip
+  2000 devices. If you use this, you probably also want the NFTL
+  'NAND Flash Translation Layer' below, which is used to emulate
+  a block device by using a kind of filesystem on the flash chips.
+
+M-Systems Disk-On-Chip Millennium support
+CONFIG_MTD_DOC2001
+  This provides an MTD device driver for the M-Systems DiskOnChip
+  Millennium devices. If you use this, you probably also want the
+  NFTL 'NAND Flash Translation Layer' below, which is used to emulate
+  a block device by using a kind of filesystem on the flash chips.
+
+Use extra onboard system memory as MTD device
+CONFIG_MTD_SLRAM
+  If your CPU cannot cache all of the physical memory in your machine,
+  you can still use it for storage or swap by using this driver to
+  present it to the system as a Memory Technology Device.
+
+Ramix PMC551 PCI Mezzanine ram card support
+CONFIG_MTD_PMC551
+  This provides an MTD device driver for the Ramix PMC551 RAM card.
+  If you have one, you probably want to enable this.
+
+PMC551 256M DRAM Bugfix.
+CONFIG_MTD_PMC551_BUGFIX
+  Some PMC551 boards hacve invalid column and row mux values. This 
+  option will fix them, but will break other memory configurations.
+
+Debugging RAM test driver
+CONFIG_MTD_MTDRAM
+  This enables a test MTD device driver which uses vmalloc() to 
+  provide storage. You probably want to say 'N' unless you're 
+  testing stuff, or unless you want to use it in place of a ramdisk
+  when I've eventually got round to making the CONFIG_BLK_DEV option
+  and you've turned it off.
+
+Common Flash Interface (CFI) support
+CONFIG_MTD_CFI
+  Intel's Common Flash Interface specification provides a universal
+  method for probing the capabilities of flash devices. If you wish
+  to support any device which uses CFI-compliant devices, you need
+  to enable this option.
+
+CFI support for Intel/Sharp Extended Command Set chips
+CONFIG_MTD_CFI_INTELEXT
+  The Common Flash Interface defines a number of different command
+  sets which a CFI-compliant chip may claim to implement. This code
+  provides support for one of those command sets, used on Intel
+  Strataflash and other parts.
+
+Flash chip mapping in physical memory
+CONFIG_MTD_PHYSMAP
+  This provides a 'mapping' driver which allows the CFI probe and
+  command set driver code to communicate with flash chips which 
+  are mapped physically into the CPU's memory. You will need to
+  configure the physical address and size of the flash chips on
+  your particular board.
+
+Physical start location of flash chip mapping
+CONFIG_MTD_PHYSMAP_START
+  This is the physical memory location at which the flash chips
+  are mapped on your particular target board. Refer to the 
+  memory map which should hopefully be in the documentation for
+  your board.
+
+Physical length of flash chip mapping
+CONFIG_MTD_PHYSMAP_LEN
+  This is the total length of the mapping of the flash chips on
+  your particular board. If there is space, or aliases, in the 
+  physical memory map between the chips, this could be larger
+  than the total amount of flash present. Refer to the memory
+  map which should hopefully be in the documentation for your
+  board. 
+
+Flash chip mapping on Mixcom piggyback card
+CONFIG_MTD_MIXMEM
+  This supports the paging arrangement for access to flash chips
+  on the Mixcom piggyback card, allowing the flash chip drivers 
+  to get on with their job of driving the flash chips without 
+  having to know about the paging. If you have one of these boards,
+  you probably want to enable this mapping driver.
+
+Flash chip mapping on Nora
+CONFIG_MTD_NORA
+  If you had to ask, you don't have one. Say 'N'.
+
+Flash chip mapping on Octagon 5066 SBC
+CONFIG_MTD_OCTAGON
+  This provides a 'mapping' driver which supports the way in which
+  the flash chips are connected in the Octagon-5066 Single Board
+  Computer. You will also need to complete and enable the driver
+  for JEDEC flash chips.
+
+Flash chip mapping on RPXlite PPC board
+CONFIG_MTD_RPXLITE
+  The RPXLite PowerPC board has CFI-compliant chips mapped in 
+  a strange sparse mapping. This 'mapping' driver supports that
+  arrangement, allowing the CFI probe and command set driver code
+  to communicate with the chips on the RPXLite board.
+
+Flash chip mapping on Tempustech VMAX SBC301
+CONFIG_MTD_VMAX
+  This provides a 'mapping' driver which supports the way in which
+  the flash chips are connected in the Tempustech VMAX SBC301 Single
+  Board Computer. You will also need to complete and enable the driver
+  for JEDEC flash chips.
+
+Direct chardevice access to MTD devices
+CONFIG_MTD_CHAR
+  This provides a character device for each MTD device present in
+  the system, allowing the user to read and write directly to the
+  memory chips, and also use ioctl() to obtain information about
+  the device, or to erase parts of it.
+
+Pseudo-blockdevice access to MTD devices
+CONFIG_MTD_BLOCK
+  Although flash chips have an erase size too large to useful as
+  block devices, it is possible to use MTD devices which are based
+  on RAM chips in this manner. This blockdevice user of MTD devices
+  performs that function. At the moment, it is also required for 
+  the Journalling Flash File System to obtain a handle on the MTD 
+  device when it's mounted - although the JFFS doesn't actually use
+  any of the functions of the mtdblock device.
+
+  Later, it may be extended to perform read/erase/modify/write cycles
+  on flash chips to emulate a smaller block size. Needless to say,
+  this is very unsafe, but could be useful for filesystems which are
+  almost never written to.
+
+FTL (Flash Translation Layer) support
+CONFIG_FTL
+  This provides support for the original Flash Translation Layer which
+  is part of the PCMCIA specification. It uses a kind of pseudo-
+  filesystem on a flash device to emulate a block device with 512-byte
+  sectors, on top of which you put a 'normal' filesystem. You may find
+  that the algorithms used in this code are patented unless you live
+  in the Free World where software patents aren't legal - in the USA
+  you are only permitted to use this on PCMCIA hardware, although 
+  under the terms of the GPL you're obviously permitted to copy,
+  modify and distribute the code as you wish. Just not use it.
+
+NFTL (NAND Flash Translation Layer) support
+CONFIG_NFTL
+  This provides support for the NAND Flash Translation Layer which is
+  used on M-Systems' DiskOnChip devices. It uses a kind of pseudo-
+  filesystem on a flash device to emulate a block device with 512-byte
+  sectors, on top of which you put a 'normal' filesystem. You may find
+  that the algorithms used in this code are patented unless you live
+  in the Free World where software patents aren't legal - in the USA
+  you are only permitted to use this on DiskOnChip hardware, although 
+  under the terms of the GPL you're obviously permitted to copy,
+  modify and distribute the code as you wish. Just not use it.
+
+Write support for NFTL (EXPERIMENTAL)
+CONFIG_NFTL_RW
+  If you're lucky, this will actually work. Don't whinge if it doesn't.
+  Contact dwmw2@infradead.org if you want to help to make it more 
+  reliable.
 
 Support for USB
 CONFIG_USB
@@ -10780,6 +10964,22 @@ CONFIG_EFS_FS
   code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
   The module will be called efs.o. 
+
+Journalling Flash File System (JFFS) support (EXPERIMENTAL)
+CONFIG_JFFS_FS
+  JFFS is a new file system designed for use on flash memory devices
+  rather than on block devices. It was developed on the 2.0 kernel
+  by Axis Communications AB for use on their Linux-based products,
+  and released under GPL, then 'borrowed' and ported to work with 
+  the 2.4 kernel and the new Memory Technology Device system. 
+
+  The 2.4 port is experimental and not yet supported by Axis. Basically,
+  the good bits are probably theirs, and if it's broken in 2.4 it's 
+  probably our fault. See http://www.developer.axis.com/software/jffs/
+  for more information about JFFS.
+
+  Any potential patches or queries should be sent to Axis' mailing 
+  list for JFFS: <jffs-dev@axis.com>
 
 UFS file system support (read-only)
 CONFIG_UFS_FS
@@ -12433,7 +12633,7 @@ CONFIG_APPLICOM
   fieldbus cards made by Applicom International. More information
   about these cards can be found on the WWW at the address
   http://www.applicom-int.com/ , or by email from David Woodhouse
-  <dwmw2@mvhi.com>.
+  <dwmw2@infradead.org>.
 
   To compile this driver as a module ( = code which can be inserted in
   and removed from the running kernel whenever you want), say M here
@@ -12614,15 +12814,6 @@ CONFIG_APM_DISPLAY_BLANK
   option doesn't work for all laptops -- it might not turn off your
   backlight at all, or it might print a lot of errors to the console,
   especially if you are using gpm.
-
-Ignore multiple suspend/resume cycles
-CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-  This option is necessary on the Dell Inspiron 3200 and others, but
-  should be safe for all other laptops. When enabled, a system suspend
-  event that occurs within three seconds of a resume is ignored.
-  Without this the Inspiron will shut itself off a few seconds after
-  you open the lid, requiring you to press the power button to resume
-  it a second time. Say Y.
 
 RTC stores time in GMT
 CONFIG_APM_RTC_IS_GMT

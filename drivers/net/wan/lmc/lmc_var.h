@@ -248,7 +248,7 @@ struct lmc___media {
 #define STATCHECK     0xBEEFCAFE
 
 /*  Included in this structure are first
- *   - standard enet_statistics
+ *   - standard net_device_stats
  *   - some other counters used for debug and driver performance
  *  evaluation -baz
  */

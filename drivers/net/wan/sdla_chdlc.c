@@ -143,7 +143,7 @@ static int if_rebuild_hdr (void* hdr, struct net_device* dev, unsigned long radd
         struct sk_buff* skb);
 #endif
 static int if_send (struct sk_buff* skb, struct net_device* dev);
-static struct enet_statistics* if_stats (struct net_device* dev);
+static struct net_device_stats* if_stats (struct net_device* dev);
 
 /* CHDLC Firmware interface functions */
 static int chdlc_configure 	(sdla_t* card, void* data);
@@ -1169,7 +1169,7 @@ unsigned short calc_checksum (char *data, int len)
 
 /*============================================================================
  * Get ethernet-style interface statistics.
- * Return a pointer to struct enet_statistics.
+ * Return a pointer to struct net_device_stats.
  */
 #ifdef LINUX_2_1
 static struct net_device_stats* if_stats (struct net_device* dev)
@@ -1181,7 +1181,7 @@ static struct net_device_stats* if_stats (struct net_device* dev)
 	return &my_card->wandev.stats; 
 }
 #else
-static struct enet_statistics* if_stats (struct net_device* dev)
+static struct net_device_stats* if_stats (struct net_device* dev)
 {
         sdla_t *my_card;
         chdlc_private_area_t* chdlc_priv_area = dev->priv;

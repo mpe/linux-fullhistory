@@ -1588,9 +1588,9 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
 
 /*============================================================================
  * Get ethernet-style interface statistics.
- * Return a pointer to struct enet_statistics.
+ * Return a pointer to struct net_device_stats.
  */
-static struct enet_statistics* if_stats (struct net_device* dev)
+static struct net_device_stats* if_stats (struct net_device* dev)
 {
 	fr_channel_t* chan = dev->priv;
 	

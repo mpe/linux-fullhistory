@@ -16,6 +16,7 @@ CONFIG_EXPERIMENTAL=y
 # CONFIG_COBALT_MICRO_SERVER is not set
 # CONFIG_DECSTATION is not set
 # CONFIG_DDB5074 is not set
+# CONFIG_ORION is not set
 # CONFIG_MIPS_MAGNUM_4000 is not set
 # CONFIG_OLIVETTI_M700 is not set
 CONFIG_SGI_IP22=y
@@ -110,12 +111,8 @@ CONFIG_IP_PNP_BOOTP=y
 # CONFIG_NET_IPIP is not set
 # CONFIG_NET_IPGRE is not set
 # CONFIG_IP_ALIAS is not set
+# CONFIG_INET_ECN is not set
 # CONFIG_SYN_COOKIES is not set
-
-#
-# (it is safe to leave these untouched)
-#
-# CONFIG_SKB_LARGE is not set
 # CONFIG_IPV6 is not set
 # CONFIG_KHTTPD is not set
 # CONFIG_ATM is not set

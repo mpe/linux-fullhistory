@@ -2,6 +2,7 @@
  * Copytight (C) 1999, 2000 Ralf Baechle (ralf@gnu.org)
  * Copytight (C) 1999, 2000 Silicon Graphics, Inc.
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -38,7 +39,7 @@ static unsigned long ct_cur[NR_CPUS];	/* What counter should be at next timer ir
 static long last_rtc_update = 0;	/* Last time the rtc clock got updated */
 
 extern rwlock_t xtime_lock;
-extern volatile unsigned long lost_ticks;
+extern volatile unsigned long wall_jiffies;
 
 
 static int set_rtc_mmss(unsigned long nowtime)
@@ -175,7 +176,7 @@ void do_gettimeofday(struct timeval *tv)
 	read_lock_irqsave(&xtime_lock, flags);
 	usec = do_gettimeoffset();
 	{
-		unsigned long lost = lost_ticks;
+		unsigned long lost = jiffies - wall_jiffies;
 		if (lost)
 			usec += lost * (1000000 / HZ);
 	}
@@ -196,7 +197,7 @@ void do_settimeofday(struct timeval *tv)
 {
 	write_lock_irq(&xtime_lock);
 	tv->tv_usec -= do_gettimeoffset();
-	tv->tv_usec -= lost_ticks * (1000000 / HZ);
+	tv->tv_usec -= (jiffies - wall_jiffies) * (1000000 / HZ);
 
 	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;

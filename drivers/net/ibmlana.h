@@ -41,7 +41,7 @@ typedef enum { Media_10BaseT, Media_10Base5,
 
 typedef struct {
 	unsigned int slot;	/* MCA-Slot-#                       */
-	struct enet_statistics stat;	/* packet statistics            */
+	struct net_device_stats stat;	/* packet statistics            */
 	int realirq;		/* memorizes actual IRQ, even when 
 				   currently not allocated          */
 	ibmlana_medium medium;	/* physical cannector               */

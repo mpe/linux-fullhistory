@@ -4,8 +4,8 @@
  * Copyright (C) 1999, 2000 Ralf Baechle (ralf@gnu.org)
  * Copyright (C) 1999, 2000 Silicon Graphics, Inc.
  */
+#include <linux/config.h>
 #include <linux/init.h>
-
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>

@@ -8,47 +8,24 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := partitions.o
-O_OBJS   := check.o
+OX_OBJS   := check.o
 
-ifeq ($(CONFIG_ACORN_PARTITION),y)
-O_OBJS += acorn.o
-endif
+obj-$(CONFIG_ACORN_PARTITION) += acorn.o
+obj-$(CONFIG_AMIGA_PARTITION) += amiga.o
+obj-$(CONFIG_ATARI_PARTITION) += atari.o
+obj-$(CONFIG_MAC_PARTITION) += mac.o
+obj-$(CONFIG_MSDOS_PARTITION) += msdos.o
+obj-$(CONFIG_OSF_PARTITION) += osf.o
+obj-$(CONFIG_SGI_PARTITION) += sgi.o
+obj-$(CONFIG_SUN_PARTITION) += sun.o
+obj-$(CONFIG_ULTRIX_PARTITION) += ultrix.o
 
-ifeq ($(CONFIG_AMIGA_PARTITION),y)
-O_OBJS += amiga.o
-endif
-
-ifeq ($(CONFIG_ATARI_PARTITION),y)
-O_OBJS += atari.o
-endif
-
+O_OBJS += $(obj-y)
+M_OBJS += $(obj-m)
 ifeq ($(CONFIG_IBM_PARTITION),y)
 O_OBJS += ibm.o
 endif
 
-ifeq ($(CONFIG_MAC_PARTITION),y)
-O_OBJS += mac.o
-endif
-
-ifeq ($(CONFIG_MSDOS_PARTITION),y)
-O_OBJS += msdos.o
-endif
-
-ifeq ($(CONFIG_OSF_PARTITION),y)
-O_OBJS += osf.o
-endif
-
-ifeq ($(CONFIG_SGI_PARTITION),y)
-O_OBJS += sgi.o
-endif
-
-ifeq ($(CONFIG_SUN_PARTITION),y)
-O_OBJS += sun.o
-endif
-
-ifeq ($(CONFIG_ULTRIX_PARTITION),y)
-O_OBJS += ultrix.o
-endif
-
 
 include $(TOPDIR)/Rules.make
+

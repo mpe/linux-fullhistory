@@ -39,7 +39,9 @@ ifndef CONFIG_DECSTATION
   ifndef CONFIG_BAGET_MIPS
     O_OBJS += time.o
     ifndef CONFIG_SGI_IP22
-      OX_OBJS += irq.o
+      ifndef CONFIG_ORION
+        OX_OBJS += irq.o
+      endif
     endif
   endif
 endif

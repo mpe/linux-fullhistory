@@ -154,7 +154,7 @@ struct frhdr
 
 struct dlci_local
 {
-   struct enet_statistics stats;
+   struct net_device_stats stats;
    struct net_device          *slave;
    struct dlci_conf       config;
    int                    configured;
@@ -165,7 +165,7 @@ struct dlci_local
 
 struct frad_local
 {
-   struct enet_statistics stats;
+   struct net_device_stats stats;
 
    /* devices which this FRAD is slaved to */
    struct net_device     *master[CONFIG_DLCI_MAX];

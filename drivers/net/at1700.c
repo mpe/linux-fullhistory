@@ -110,7 +110,7 @@ typedef unsigned char uchar;
 
 /* Information that need to be kept for each board. */
 struct net_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	spinlock_t lock;
 	unsigned char mc_filter[8];
 	uint jumpered:1;			/* Set iff the board has jumper config. */
@@ -164,7 +164,7 @@ static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct net_device *dev);
 static int net_close(struct net_device *dev);
-static struct enet_statistics *net_get_stats(struct net_device *dev);
+static struct net_device_stats *net_get_stats(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
 static void net_tx_timeout (struct net_device *dev);
 
@@ -796,7 +796,7 @@ static int net_close(struct net_device *dev)
    This may be called with the card open or closed.
    There are no on-chip counters, so this function is trivial.
 */
-static struct enet_statistics *
+static struct net_device_stats *
 net_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;

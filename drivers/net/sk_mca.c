@@ -1016,7 +1016,7 @@ static int skmca_tx(struct sk_buff *skb, struct SKMCA_NETDEV *dev)
 
 /* return pointer to Ethernet statistics */
 
-static struct enet_statistics *skmca_stats(struct SKMCA_NETDEV *dev)
+static struct net_device_stats *skmca_stats(struct SKMCA_NETDEV *dev)
 {
 	skmca_priv *priv = (skmca_priv *) dev->priv;
 
@@ -1164,7 +1164,7 @@ int skmca_probe(struct SKMCA_NETDEV *dev)
 	priv->ctrladdr = base + 0x3ff2;
 	priv->cmdaddr = base + 0x3ff3;
 	priv->medium = medium;
-	memset(&(priv->stat), 0, sizeof(struct enet_statistics));
+	memset(&(priv->stat), 0, sizeof(struct net_device_stats));
 
 	/* set base + irq for this device (irq not allocated so far) */
 	dev->irq = 0;

@@ -240,11 +240,7 @@ struct hdlcdrv_state {
 	struct hdlcdrv_bitbuffer bitbuf_hdlc;
 #endif /* HDLCDRV_DEBUG */
 
-#if LINUX_VERSION_CODE < 0x20119
-	struct enet_statistics stats;
-#else
 	struct net_device_stats stats;
-#endif
 	int ptt_keyed;
 
 	/* queued skb for transmission */

@@ -440,7 +440,7 @@ static inline int memory_pressure(void)
 }
 
 /*
- * Check if there is any memory pressure (free_pages < pages_low)
+ * Check if there recently has been memory pressure (zone_wake_kswapd)
  */
 static inline int keep_kswapd_awake(void)
 {
@@ -541,16 +541,16 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 			if (--swap_count < 0)
 				break;
 
-		priority--;
-	} while (priority >= 0);
+	} while (--priority >= 0);
 
-	/* Always end on a shrink_mmap.. */
+	/* Always end on a shrink_mmap.., may sleep... */
 	while (shrink_mmap(0, gfp_mask)) {
 		if (!--count)
 			goto done;
 	}
-	/* We return 1 if we are freed some page */
-	return (count != FREE_COUNT);
+	/* We return 1 if we are freed some page, or
+	 * there are no memory pressure remaining   */
+	return (count != FREE_COUNT || !memory_pressure());
  
 done:
 	return 1;

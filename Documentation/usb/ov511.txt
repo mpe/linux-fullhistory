@@ -6,7 +6,9 @@ Author: Mark McClelland
 Homepage: http://alpha.dyndns.org/ov511
 
 NEW IN THIS VERSION:
- o Preliminary support for YUV422 and YUV422P V4L modes
+ o Sensor detection fixes
+ o More efficient/reliable buffer allocation
+ o Many minor fixes
 
 INTRODUCTION:
 
@@ -176,7 +178,7 @@ MODULE PARAMETERS:
 
 WORKING FEATURES:
  o Color streaming/capture at 640x480, 448x336, 384x288, 352x288, and 320x240
- o YUV420 color
+ o YUV420 and YUV422P color
  o Monochrome
  o Setting/getting of saturation, contrast and brightness (no hue yet; only
    works with OV7610, not the OV7620 or OV7620AE)

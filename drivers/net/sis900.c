@@ -161,7 +161,7 @@ static void sis900_finish_xmit (struct net_device *net_dev);
 static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int sis900_close(struct net_device *net_dev);
 static int mii_ioctl(struct net_device *net_dev, struct ifreq *rq, int cmd);
-static struct enet_statistics *sis900_get_stats(struct net_device *net_dev);
+static struct net_device_stats *sis900_get_stats(struct net_device *net_dev);
 static u16 sis900_compute_hashtable_index(u8 *addr);
 static void set_rx_mode(struct net_device *net_dev);
 static void sis900_reset(struct net_device *net_dev);
@@ -1140,7 +1140,7 @@ static int mii_ioctl(struct net_device *net_dev, struct ifreq *rq, int cmd)
 	}
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 sis900_get_stats(struct net_device *net_dev)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;

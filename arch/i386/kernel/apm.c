@@ -142,6 +142,8 @@
  *         <andy_henroid@yahoo.com> fixed by sfr).
  *         Make power off work on SMP again (Tony Hoyle
  *         <tmh@magenta-logic.com> and <zlatko@iskon.hr>) modified by sfr.
+ *         Remove CONFIG_APM_SUSPEND_BOUNCE.  The bounce ignore
+ *         interval is now configurable.
  *
  * APM 1.1 Reference:
  *
@@ -178,6 +180,7 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/pm.h>
+#include <linux/kernel.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -267,10 +270,9 @@ extern int (*console_blank_hook)(int);
 #define APM_CHECK_TIMEOUT	(HZ)
 
 /*
- * If CONFIG_APM_IGNORE_SUSPEND_BOUNCE is defined then
- * ignore suspend events for this amount of time after a resume
+ * Ignore suspend events for this amount of time after a resume
  */
-#define BOUNCE_INTERVAL		(3 * HZ)
+#define DEFAULT_BOUNCE_INTERVAL		(3 * HZ)
 
 /*
  * Save a segment register away
@@ -314,28 +316,30 @@ static struct {
 	unsigned short	segment;
 }				apm_bios_entry;
 #ifdef CONFIG_APM_CPU_IDLE
-static int			clock_slowed = 0;
+static int			clock_slowed;
 #endif
-static int			suspends_pending = 0;
-static int			standbys_pending = 0;
-static int			waiting_for_resume = 0;
+static int			suspends_pending;
+static int			standbys_pending;
+static int			waiting_for_resume;
+static int			ignore_normal_resume;
+static int			bounce_interval = DEFAULT_BOUNCE_INTERVAL;
 
 #ifdef CONFIG_APM_RTC_IS_GMT
 #	define	clock_cmos_diff	0
 #	define	got_clock_diff	1
 #else
 static long			clock_cmos_diff;
-static int			got_clock_diff = 0;
+static int			got_clock_diff;
 #endif
-static int			debug = 0;
-static int			apm_disabled = 0;
+static int			debug;
+static int			apm_disabled;
 #ifdef CONFIG_SMP
-static int			power_off = 0;
+static int			power_off;
 #else
 static int			power_off = 1;
 #endif
-static int			exit_kapmd = 0;
-static int			kapmd_running = 0;
+static int			exit_kapmd;
+static int			kapmd_running;
 
 static DECLARE_WAIT_QUEUE_HEAD(apm_waitqueue);
 static DECLARE_WAIT_QUEUE_HEAD(apm_suspend_waitqueue);
@@ -912,16 +916,16 @@ static int suspend(void)
 	set_time();
 	if (err == APM_NO_ERROR)
 		err = APM_SUCCESS;
-	if (err != APM_SUCCESS) {
+	if (err != APM_SUCCESS)
 		apm_error("suspend", err);
-		send_event(APM_NORMAL_RESUME);
-		sti();
-		queue_event(APM_NORMAL_RESUME, NULL);
-	}
+	send_event(APM_NORMAL_RESUME);
+	sti();
+	queue_event(APM_NORMAL_RESUME, NULL);
 	for (as = user_list; as != NULL; as = as->next) {
 		as->suspend_wait = 0;
 		as->suspend_result = ((err == APM_SUCCESS) ? 0 : -EIO);
 	}
+	ignore_normal_resume = 1;
 	wake_up_interruptible(&apm_suspend_waitqueue);
 	return err;
 }
@@ -942,7 +946,7 @@ static apm_event_t get_event(void)
 	apm_event_t	event;
 	apm_eventinfo_t	info;
 
-	static int notified = 0;
+	static int notified;
 
 	/* we don't use the eventinfo */
 	error = apm_get_event(&event, &info);
@@ -958,10 +962,8 @@ static apm_event_t get_event(void)
 static void check_events(void)
 {
 	apm_event_t		event;
-#ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-	static unsigned long	last_resume = 0;
-	static int		ignore_bounce = 0;
-#endif
+	static unsigned long	last_resume;
+	static int		ignore_bounce;
 
 	while ((event = get_event()) != 0) {
 		if (debug) {
@@ -972,11 +974,12 @@ static void check_events(void)
 				printk(KERN_DEBUG "apm: received unknown "
 				       "event 0x%02x\n", event);
 		}
-#ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
 		if (ignore_bounce
-		    && ((jiffies - last_resume) > BOUNCE_INTERVAL))
+		    && ((jiffies - last_resume) > bounce_interval))
 			ignore_bounce = 0;
-#endif
+		if (ignore_normal_resume && (event != APM_NORMAL_RESUME))
+			ignore_normal_resume = 0;
+
 		switch (event) {
 		case APM_SYS_STANDBY:
 		case APM_USER_STANDBY:
@@ -994,10 +997,11 @@ static void check_events(void)
 			break;
 #endif
 		case APM_SYS_SUSPEND:
-#ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-			if (ignore_bounce)
+			if (ignore_bounce) {
+				if (apm_bios_info.version > 0x100)
+					apm_set_power_state(APM_STATE_REJECT);
 				break;
-#endif
+			}
 			/*
 			 * If we are already processing a SUSPEND,
 			 * then further SUSPEND events from the BIOS
@@ -1020,14 +1024,14 @@ static void check_events(void)
 		case APM_CRITICAL_RESUME:
 		case APM_STANDBY_RESUME:
 			waiting_for_resume = 0;
-#ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
 			last_resume = jiffies;
 			ignore_bounce = 1;
-#endif
-			set_time();
-			send_event(event);
-			sti();
-			queue_event(event, NULL);
+			if ((event != APM_NORMAL_RESUME)
+			    || (ignore_normal_resume == 0)) {
+				set_time();
+				send_event(event);
+				queue_event(event, NULL);
+			}
 			break;
 
 		case APM_CAPABILITY_CHANGE:
@@ -1519,6 +1523,7 @@ static int apm(void *unused)
 	return 0;
 }
 
+#ifndef MODULE
 static int __init apm_setup(char *str)
 {
 	int	invert;
@@ -1536,6 +1541,9 @@ static int __init apm_setup(char *str)
 		if ((strncmp(str, "power-off", 9) == 0) ||
 		    (strncmp(str, "power_off", 9) == 0))
 			power_off = !invert;
+		if ((strncmp(str, "bounce-interval=", 16) == 0) ||
+		    (strncmp(str, "bounce_interval=", 16) == 0))
+			bounce_interval = simple_strtol(str + 16, NULL, 0);
 		str = strchr(str, ',');
 		if (str != NULL)
 			str += strspn(str, ", \t");
@@ -1544,6 +1552,7 @@ static int __init apm_setup(char *str)
 }
 
 __setup("apm=", apm_setup);
+#endif
 
 static struct file_operations apm_bios_fops = {
 	owner:		THIS_MODULE,
@@ -1702,5 +1711,9 @@ MODULE_AUTHOR("Stephen Rothwell");
 MODULE_DESCRIPTION("Advanced Power Management");
 MODULE_PARM(debug, "i");
 MODULE_PARM_DESC(debug, "Enable debug mode");
+MODULE_PARM(power_off, "i");
+MODULE_PARM_DESC(power_off, "Enable power off");
+MODULE_PARM(bounce_interval, "i");
+MODULE_PARM_DESC(bounce_interval, "Set the number of ticks to ignore suspend bounces");
 
 EXPORT_NO_SYMBOLS;

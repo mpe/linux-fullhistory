@@ -8,6 +8,7 @@
  * Copyright (C) 1992 Linus Torvalds
  * Copyright (C) 1994 - 2000 Ralf Baechle
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/kernel_stat.h>

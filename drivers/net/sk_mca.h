@@ -49,7 +49,7 @@ typedef struct {
 	int nexttxdone;		/* index of next TX descriptor to 
 				   be finished                      */
 	int txbusy;		/* # of busy TX descriptors         */
-	struct enet_statistics stat;	/* packet statistics            */
+	struct net_device_stats stat;	/* packet statistics            */
 	int realirq;		/* memorizes actual IRQ, even when 
 				   currently not allocated          */
 	skmca_medium medium;	/* physical cannector               */

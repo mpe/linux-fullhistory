@@ -518,7 +518,7 @@ struct speedo_private {
 	unsigned int cur_rx, dirty_rx;		/* The next free ring entry */
 	long last_rx_time;			/* Last Rx, in jiffies, to handle Rx hang. */
 	const char *product_name;
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	struct speedo_stats *lstats;
 	dma_addr_t lstats_dma;
 	int chip_id;
@@ -585,7 +585,7 @@ static int speedo_rx(struct net_device *dev);
 static void speedo_tx_buffer_gc(struct net_device *dev);
 static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int speedo_close(struct net_device *dev);
-static struct enet_statistics *speedo_get_stats(struct net_device *dev);
+static struct net_device_stats *speedo_get_stats(struct net_device *dev);
 static int speedo_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static void set_rx_mode(struct net_device *dev);
 static void speedo_show_state(struct net_device *dev);
@@ -1905,7 +1905,7 @@ speedo_close(struct net_device *dev)
 
    Oh, and incoming frames are dropped while executing dump-stats!
    */
-static struct enet_statistics *
+static struct net_device_stats *
 speedo_get_stats(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;

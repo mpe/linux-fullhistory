@@ -45,7 +45,7 @@
 #include "irq_impl.h"
 
 extern rwlock_t xtime_lock;
-extern volatile unsigned long lost_ticks;	/* kernel/sched.c */
+extern unsigned long wall_jiffies;	/* kernel/timer.c */
 
 static int set_rtc_mmss(unsigned long);
 
@@ -312,7 +312,7 @@ do_gettimeofday(struct timeval *tv)
 	sec = xtime.tv_sec;
 	usec = xtime.tv_usec;
 	partial_tick = state.partial_tick;
-	lost = lost_ticks;
+	lost = jiffies - wall_jiffies;
 
 	read_unlock_irqrestore(&xtime_lock, flags);
 
@@ -363,12 +363,12 @@ do_settimeofday(struct timeval *tv)
 	   time.  Without this, a full-tick error is possible.  */
 
 #ifdef CONFIG_SMP
-	delta_usec = lost_ticks * (1000000 / HZ);
+	delta_usec = (jiffies - wall_jiffies) * (1000000 / HZ);
 #else
 	delta_usec = rpcc() - state.last_time;
 	delta_usec = (delta_usec * state.scaled_ticks_per_cycle 
 		      + state.partial_tick
-		      + (lost_ticks << FIX_SHIFT)) * 15625;
+		      + ((jiffies - wall_jiffies) << FIX_SHIFT)) * 15625;
 	delta_usec = ((delta_usec / ((1UL << (FIX_SHIFT-6-1)) * HZ)) + 1) / 2;
 #endif
 

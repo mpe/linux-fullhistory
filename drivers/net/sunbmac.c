@@ -164,7 +164,7 @@ static void bigmac_stop(struct bigmac *bp)
 
 static void bigmac_get_counters(struct bigmac *bp, unsigned long bregs)
 {
-	struct enet_statistics *stats = &bp->enet_stats;
+	struct net_device_stats *stats = &bp->enet_stats;
 
 	stats->rx_crc_errors += sbus_readl(bregs + BMAC_RCRCECTR);
 	sbus_writel(0, bregs + BMAC_RCRCECTR);
@@ -974,7 +974,7 @@ static int bigmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return 0;
 }
 
-static struct enet_statistics *bigmac_get_stats(struct net_device *dev)
+static struct net_device_stats *bigmac_get_stats(struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 

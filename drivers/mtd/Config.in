@@ -4,11 +4,6 @@ comment 'Memory Technology Devices (MTD)'
 tristate 'Memory Technology Device (MTD) support' CONFIG_MTD
 
 if [ "$CONFIG_MTD" != "n" ]; then
-	dep_tristate 'Common Flash Interface (CFI) support' CONFIG_MTD_CFI $CONFIG_MTD
-	dep_tristate 'CFI support for Intel/Sharp Extended Command Set chips' CONFIG_MTD_CFI_INTELEXT $CONFIG_CFI	
-	dep_tristate 'CFI chips in virtual memory map' CONFIG_MTD_NORA $CONFIG_MTD_CFI
-	dep_tristate 'CFI chips in physical memory map' CONFIG_MTD_PHYSMAP $CONFIG_MTD_CFI
-	dep_tristate 'CFI chips on RPXLite PPC board' CONFIG_MTD_RPXLITE $CONFIG_MTD_CFI
 	dep_tristate 'M-Systems Disk-On-Chip 1000 support' CONFIG_MTD_DOC1000 $CONFIG_MTD
 	dep_tristate 'M-Systems Disk-On-Chip 2000' CONFIG_MTD_DOC2000 $CONFIG_MTD
 	dep_tristate 'M-Systems Disk-On-Chip Millennium' CONFIG_MTD_DOC2001 $CONFIG_MTD
@@ -22,22 +17,43 @@ if [ "$CONFIG_MTD" != "n" ]; then
 	  fi
 	fi
 	dep_tristate 'Use extra onboard system memory as MTD device' CONFIG_MTD_SLRAM $CONFIG_MTD
-	dep_tristate 'Octagon 5066 SBC onboard flash support' CONFIG_MTD_OCTAGON $CONFIG_MTD
-	dep_tristate 'Tempustech VMAX SBC301 onboard flash support' CONFIG_MTD_VMAX $CONFIG_MTD
-	dep_tristate 'Mixcom piggyback flash card support' CONFIG_MTD_MIXMEM $CONFIG_MTD
 	dep_tristate 'Ramix PMC551 PCI Mezzanine ram card support' CONFIG_MTD_PMC551 $CONFIG_MTD
 	if [ "$CONFIG_MTD_PMC551" != "n" ]; then
 	  bool 'PMC551 256M DRAM Bugfix' CONFIG_MTD_PMC551_BUGFIX
 	fi
 	dep_tristate 'Debugging RAM test driver' CONFIG_MTD_MTDRAM $CONFIG_MTD
 
+mainmenu_option next_comment
+comment 'MTD drivers for mapped chips'
+
+	dep_tristate 'Common Flash Interface (CFI) support' CONFIG_MTD_CFI $CONFIG_MTD
+	dep_tristate 'CFI support for Intel/Sharp Extended Command Set chips' CONFIG_MTD_CFI_INTELEXT $CONFIG_CFI
+	define_bool CONFIG_MTD_JEDEC n
+	define_bool CONFIG_MTD_RAM n
+	define_bool CONFIG_MTD_ROM n
+mainmenu_option next_comment
+comment 'Drivers for chip mappings'
+
+	dep_tristate 'Flash chip mapping in physical memory' CONFIG_MTD_PHYSMAP $CONFIG_MTD_CFI
+	if [ "$CONFIG_MTD_PHYSMAP" != "n" ]; then
+		hex '        Physical start location of flash chip mapping (0x8000000)' CONFIG_MTD_PHYSMAP_START 0x8000000
+		hex '        Physical length of flash chip mapping         (0x4000000)' CONFIG_MTD_PHYSMAP_LEN 0x4000000
+	fi
+	dep_tristate 'Flash chip mapping on Mixcom piggyback card' CONFIG_MTD_MIXMEM $CONFIG_MTD_JEDEC
+	dep_tristate 'Flash chip mapping on Nora' CONFIG_MTD_NORA $CONFIG_MTD_CFI
+	dep_tristate 'Flash chip mapping on Octagon 5066 SBC' CONFIG_MTD_OCTAGON $CONFIG_MTD_JEDEC
+	dep_tristate 'Flash chip mapping on RPXLite PPC board' CONFIG_MTD_RPXLITE $CONFIG_MTD_CFI
+	dep_tristate 'Flash chip mapping on Tempustech VMAX SBC301' CONFIG_MTD_VMAX $CONFIG_MTD_JEDEC
+
+mainmenu_option next_comment
+comment 'User modules and translation layers for MTD devices'
+	dep_tristate 'Direct chardevice access to MTD devices' CONFIG_MTD_CHAR $CONFIG_MTD
+	dep_tristate 'Pseudo-blockdevice access to MTD devices' CONFIG_MTD_BLOCK $CONFIG_MTD
 	dep_tristate 'FTL (Flash Translation Layer) support' CONFIG_FTL $CONFIG_MTD
 	dep_tristate 'NFTL (NAND Flash Translation Layer) support' CONFIG_NFTL $CONFIG_MTD
 	if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_NFTL" != "n" ]; then
 	  bool 'Write support for NFTL (EXPERIMENTAL)' CONFIG_NFTL_RW
 	fi
-	dep_tristate 'Direct blockdevice access to MTD devices' CONFIG_MTD_BLOCK $CONFIG_MTD
-	dep_tristate 'Direct chardevice access to MTD devices' CONFIG_MTD_CHAR $CONFIG_MTD
 fi
 
 endmenu

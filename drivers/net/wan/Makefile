@@ -49,6 +49,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SYNCLINK_SYNCPPP),y)
+CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_SYNCLINK_SYNCPPP),m)
+  CONFIG_SYNCPPP_MODULE = y
+  endif
+endif
+
 ifeq ($(CONFIG_COMX),y)
 LX_OBJS += comx.o
 else

@@ -227,6 +227,23 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 	 * We are falling back to lower-level zones if allocation
 	 * in a higher zone fails.
 	 */
+
+	for (;;) {
+		zone_t *z = *(zone++);
+		if (!z)
+			break;
+		if (!z->size)
+			BUG();
+
+		/* If there are zones with a lot of free memory allocate from them */
+		if (z->free_pages > z->pages_high) {
+			struct page *page = rmqueue(z, order);
+			if (page)
+				return page;
+		}
+	}
+
+	zone = zonelist->zones;
 	for (;;) {
 		zone_t *z = *(zone++);
 		if (!z)

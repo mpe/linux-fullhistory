@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.195 2000/06/30 13:25:28 anton Exp $
+/* $Id: sun4c.c,v 1.196 2000/07/07 07:33:11 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -44,6 +44,8 @@
  */
 
 extern int num_segmaps, num_contexts;
+
+extern unsigned long page_kernel;
 
 #ifdef CONFIG_SUN4
 #define SUN4C_VAC_SIZE sun4c_vacinfo.num_bytes
@@ -2604,6 +2606,7 @@ void __init ld_mmu_sun4c(void)
 	BTFIXUPSET_INT(page_copy, pgprot_val(SUN4C_PAGE_COPY));
 	BTFIXUPSET_INT(page_readonly, pgprot_val(SUN4C_PAGE_READONLY));
 	BTFIXUPSET_INT(page_kernel, pgprot_val(SUN4C_PAGE_KERNEL));
+	page_kernel = pgprot_val(SUN4C_PAGE_KERNEL);
 	pg_iobits = _SUN4C_PAGE_PRESENT | _SUN4C_READABLE | _SUN4C_WRITEABLE |
 		    _SUN4C_PAGE_IO | _SUN4C_PAGE_NOCACHE;
 	

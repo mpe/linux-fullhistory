@@ -235,7 +235,7 @@ static void netwave_watchdog(u_long);	/* Transmission watchdog */
 
 /* Statistics */
 static void update_stats(struct net_device *dev);
-static struct enet_statistics *netwave_get_stats(struct net_device *dev);
+static struct net_device_stats *netwave_get_stats(struct net_device *dev);
 
 /* Wireless extensions */
 #ifdef WIRELESS_EXT
@@ -312,14 +312,14 @@ typedef struct netwave_private {
     spinlock_t lock;
     struct timer_list      watchdog;	/* To avoid blocking state */
     struct site_survey     nss;
-    struct enet_statistics stats;
+    struct net_device_stats stats;
 #ifdef WIRELESS_EXT
     struct iw_statistics   iw_stats;    /* Wireless stats */
 #endif
 } netwave_private;
 
 #ifdef NETWAVE_STATS
-static struct enet_statistics *netwave_get_stats(struct net_device *dev);
+static struct net_device_stats *netwave_get_stats(struct net_device *dev);
 #endif
 
 /*
@@ -1434,7 +1434,7 @@ static void netwave_watchdog(u_long a) {
 	
 } /* netwave_watchdog */
 
-static struct enet_statistics *netwave_get_stats(struct net_device *dev) {
+static struct net_device_stats *netwave_get_stats(struct net_device *dev) {
     netwave_private *priv = (netwave_private*)dev->priv;
 
     update_stats(dev);

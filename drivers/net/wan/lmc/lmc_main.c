@@ -127,7 +127,7 @@ static int lmc_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static int lmc_rx (struct net_device *dev);
 static int lmc_open(struct net_device *dev);
 static int lmc_close(struct net_device *dev);
-static struct enet_statistics *lmc_get_stats(struct net_device *dev);
+static struct net_device_stats *lmc_get_stats(struct net_device *dev);
 static void lmc_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int lmc_set_config(struct net_device *dev, struct ifmap *map);
 static void lmc_initcsrs(lmc_softc_t * const sc, lmc_csrptr_t csr_base, size_t csr_size);
@@ -1961,7 +1961,7 @@ skip_out_of_mem:
     return 0;
 }
 
-static struct enet_statistics *lmc_get_stats (struct net_device *dev) /*fold00*/
+static struct net_device_stats *lmc_get_stats (struct net_device *dev) /*fold00*/
 {
     lmc_softc_t *sc;
     LMC_SPIN_FLAGS;
@@ -1978,7 +1978,7 @@ static struct enet_statistics *lmc_get_stats (struct net_device *dev) /*fold00*/
 
     lmc_trace(dev, "lmc_get_stats out");
 
-    return (struct enet_statistics *) &sc->stats;
+    return (struct net_device_stats *) &sc->stats;
 }
 
 #ifdef MODULE

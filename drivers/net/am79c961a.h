@@ -109,7 +109,7 @@
 #define TST_BUFF	0x8000
 
 struct dev_priv {
-    struct enet_statistics stats;
+    struct net_device_stats stats;
     unsigned long	rxbuffer[RX_BUFFERS];
     unsigned long	txbuffer[TX_BUFFERS];
     unsigned char	txhead;

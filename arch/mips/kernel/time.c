@@ -25,7 +25,7 @@
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
 
-extern volatile unsigned long lost_ticks;
+extern volatile unsigned long wall_jiffies;
 unsigned long r4k_interval = 0;
 extern rwlock_t xtime_lock;
 
@@ -226,10 +226,10 @@ void do_gettimeofday(struct timeval *tv)
 	tv->tv_usec += do_gettimeoffset();
 
 	/*
-	 * xtime is atomically updated in timer_bh. lost_ticks is
-	 * nonzero if the timer bottom half hasnt executed yet.
+	 * xtime is atomically updated in timer_bh. jiffies - wall_jiffies
+	 * is nonzero if the timer bottom half hasnt executed yet.
 	 */
-	if (lost_ticks)
+	if (jiffies - wall_jiffies)
 		tv->tv_usec += USECS_PER_JIFFY;
 
 	read_unlock_irqrestore (&xtime_lock, flags);

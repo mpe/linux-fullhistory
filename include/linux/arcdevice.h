@@ -95,7 +95,7 @@ extern int arcnet_debug;
 
 /* see how long a function call takes to run, expressed in CPU cycles */
 #define TIME(name, bytes, call) BUGLVL(D_TIMING) { \
-	    cycles_t _x, _y; \
+	    unsigned long _x, _y; \
 	    _x = get_cycles(); \
 	    call; \
 	    _y = get_cycles(); \

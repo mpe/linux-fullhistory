@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.57 2000/06/30 10:18:39 davem Exp $
+/* $Id: bitops.h,v 1.58 2000/07/07 07:29:30 anton Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -18,8 +18,6 @@
  * atomic, so packages like nthreads should do some locking around these
  * themself.
  */
-
-#define __SMPVOL
 
 extern __inline__ unsigned long set_bit(unsigned long nr, void *addr)
 {
@@ -83,19 +81,13 @@ extern __inline__ void change_bit(unsigned long nr, void *addr)
 
 #include <asm/system.h>
 
-#ifdef CONFIG_SMP
-#define __SMPVOL volatile
-#else
-#define __SMPVOL
-#endif
-
 /* Set bit 'nr' in 32-bit quantity at address 'addr' where bit '0'
  * is in the highest of the four bytes and bit '31' is the high bit
  * within the first byte. Sparc is BIG-Endian. Unless noted otherwise
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ int test_and_set_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ int test_and_set_bit(unsigned long nr, volatile void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -112,12 +104,12 @@ extern __inline__ int test_and_set_bit(unsigned long nr, __SMPVOL void *addr)
 	return mask != 0;
 }
 
-extern __inline__ void set_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ void set_bit(unsigned long nr, volatile void *addr)
 {
 	(void) test_and_set_bit(nr, addr);
 }
 
-extern __inline__ int test_and_clear_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ int test_and_clear_bit(unsigned long nr, volatile void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -135,12 +127,12 @@ extern __inline__ int test_and_clear_bit(unsigned long nr, __SMPVOL void *addr)
 	return mask != 0;
 }
 
-extern __inline__ void clear_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ void clear_bit(unsigned long nr, volatile void *addr)
 {
 	(void) test_and_clear_bit(nr, addr);
 }
 
-extern __inline__ int test_and_change_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ int test_and_change_bit(unsigned long nr, volatile void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -158,7 +150,7 @@ extern __inline__ int test_and_change_bit(unsigned long nr, __SMPVOL void *addr)
 	return mask != 0;
 }
 
-extern __inline__ void change_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ void change_bit(unsigned long nr, volatile void *addr)
 {
 	(void) test_and_change_bit(nr, addr);
 }
@@ -166,7 +158,7 @@ extern __inline__ void change_bit(unsigned long nr, __SMPVOL void *addr)
 #endif /* __KERNEL__ */
 
 /* The following routine need not be atomic. */
-extern __inline__ int test_bit(int nr, __const__ __SMPVOL void *addr)
+extern __inline__ int test_bit(int nr, __const__ void *addr)
 {
 	return (1 & (((__const__ unsigned int *) addr)[nr >> 5] >> (nr & 31))) != 0;
 }
@@ -298,7 +290,7 @@ extern __inline__ int clear_le_bit(int nr, void *addr)
 
 /* Now for the ext2 filesystem bit operations and helper routines. */
 
-extern __inline__ int set_le_bit(int nr,void * addr)
+extern __inline__ int set_le_bit(int nr, volatile void * addr)
 {
 	register int mask asm("g2");
 	register unsigned char *ADDR asm("g1");
@@ -316,7 +308,7 @@ extern __inline__ int set_le_bit(int nr,void * addr)
 	return mask;
 }
 
-extern __inline__ int clear_le_bit(int nr, void * addr)
+extern __inline__ int clear_le_bit(int nr, volatile void * addr)
 {
 	register int mask asm("g2");
 	register unsigned char *ADDR asm("g1");

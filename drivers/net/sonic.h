@@ -460,7 +460,7 @@ struct sonic_local {
     unsigned int  cur_tx;
     unsigned int  dirty_tx;                /* last unacked transmit packet */
     char tx_full;
-    struct enet_statistics stats;
+    struct net_device_stats stats;
 };
 
 /* Index to functions, as function prototypes. */
@@ -470,7 +470,7 @@ static int sonic_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void sonic_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void sonic_rx(struct net_device *dev);
 static int sonic_close(struct net_device *dev);
-static struct enet_statistics *sonic_get_stats(struct net_device *dev);
+static struct net_device_stats *sonic_get_stats(struct net_device *dev);
 static void sonic_multicast_list(struct net_device *dev);
 static int sonic_init(struct net_device *dev);
 

@@ -681,7 +681,7 @@ typedef struct {
 typedef struct isdn_net_local_s {
   ulong                  magic;
   char                   name[10];     /* Name of device                   */
-  struct enet_statistics stats;        /* Ethernet Statistics              */
+  struct net_device_stats stats;        /* Ethernet Statistics              */
   int                    isdn_device;  /* Index to isdn-device             */
   int                    isdn_channel; /* Index to isdn-channel            */
   int			 ppp_slot;     /* PPPD device slot number          */

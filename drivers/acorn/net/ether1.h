@@ -31,7 +31,7 @@
 #define IDPROM_ADDRESS	(dev->base_addr + 0x09)
 
 struct ether1_priv {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	unsigned int tx_link;
 	unsigned int tx_head;
 	volatile unsigned int tx_tail;

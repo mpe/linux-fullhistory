@@ -1,3 +1,13 @@
+2000-06-30  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* parport_pc.c: Support for the full range of Timedia cards.
+
+2000-07-08  Tim Waugh  <twaugh@redhat.com>
+
+	* daisy.c: License block comments as part of parportbook.
+	* ieee1284.c: Likewise.
+	* share.c: Likewise.
+
 2000-06-30  Petr Vandrovec  <vandrove@vc.cvut.cz>
 
 	* procfs.c (do_hardware_modes): Generated string can be up to 34

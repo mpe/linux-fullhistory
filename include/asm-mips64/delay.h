@@ -12,8 +12,6 @@
 
 #include <linux/config.h>
 
-#include <linux/config.h>
-
 extern __inline__ void
 __delay(unsigned long loops)
 {

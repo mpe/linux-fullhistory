@@ -164,7 +164,7 @@ static int sealevel_ioctl(struct net_device *d, struct ifreq *ifr, int cmd)
 	return sppp_do_ioctl(d, ifr,cmd);
 }
 
-static struct enet_statistics *sealevel_get_stats(struct net_device *d)
+static struct net_device_stats *sealevel_get_stats(struct net_device *d)
 {
 	struct slvl_device *slvl=d->priv;
 	if(slvl)

@@ -440,11 +440,7 @@ typedef struct wan_device
 					/****** status and statistics *******/
 	char state;			/* device state */
 	char api_status;		/* device api status */
-#ifdef LINUX_2_1
 	struct net_device_stats stats; 	/* interface statistics */
-#else
-	struct enet_statistics stats;	/* interface statistics */
-#endif
 	unsigned reserved[16];		/* reserved for future use */
 	unsigned critical;		/* critical section flag */
 					/****** device management methods ***/

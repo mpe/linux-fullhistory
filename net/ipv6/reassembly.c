@@ -23,6 +23,7 @@
  *      Horst von Brand Add missing #include <linux/string.h>
  *	Alexey Kuznetsov	SMP races, threading, cleanup.
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/string.h>

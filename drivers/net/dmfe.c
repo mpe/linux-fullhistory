@@ -214,7 +214,7 @@ struct dmfe_board_info {
 	u8 rx_error_cnt;	/* recievd abnormal case count */
 	u8 dm910x_chk_mode;	/* Operating mode check */
 	struct timer_list timer;
-	struct enet_statistics stats;	/* statistic counter */
+	struct net_device_stats stats;	/* statistic counter */
 	unsigned char srom[128];
 };
 
@@ -313,7 +313,7 @@ static unsigned long CrcTable[256] =
 static int dmfe_open(struct net_device *);
 static int dmfe_start_xmit(struct sk_buff *, struct net_device *);
 static int dmfe_stop(struct net_device *);
-static struct enet_statistics *dmfe_get_stats(struct net_device *);
+static struct net_device_stats *dmfe_get_stats(struct net_device *);
 static void dmfe_set_filter_mode(struct net_device *);
 static int dmfe_do_ioctl(struct net_device *, struct ifreq *, int);
 static u16 read_srom_word(long, int);
@@ -849,7 +849,7 @@ static void dmfe_rx_packet(struct net_device *dev, struct dmfe_board_info *db)
 /*
    Get statistics from driver.
  */
-static struct enet_statistics *dmfe_get_stats(struct net_device *dev)
+static struct net_device_stats *dmfe_get_stats(struct net_device *dev)
 {
 	struct dmfe_board_info *db = (struct dmfe_board_info *) dev->priv;
 

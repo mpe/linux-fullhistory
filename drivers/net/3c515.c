@@ -310,7 +310,7 @@ struct corkscrew_private {
 	struct sk_buff *tx_skbuff[TX_RING_SIZE];
 	unsigned int cur_rx, cur_tx;	/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;/* The ring entries to be free()ed. */
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	struct sk_buff *tx_skb;	/* Packet being eaten by bus master ctrl.  */
 	struct timer_list timer;	/* Media selection timer. */
 	int capabilities	;	/* Adapter capabilities word. */
@@ -384,7 +384,7 @@ static void corkscrew_interrupt(int irq, void *dev_id,
 				    struct pt_regs *regs);
 static int corkscrew_close(struct net_device *dev);
 static void update_stats(int addr, struct net_device *dev);
-static struct enet_statistics *corkscrew_get_stats(struct net_device *dev);
+static struct net_device_stats *corkscrew_get_stats(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
 
 
@@ -1505,7 +1505,7 @@ static int corkscrew_close(struct net_device *dev)
 	return 0;
 }
 
-static struct enet_statistics *corkscrew_get_stats(struct net_device *dev)
+static struct net_device_stats *corkscrew_get_stats(struct net_device *dev)
 {
 	struct corkscrew_private *vp =
 	    (struct corkscrew_private *) dev->priv;

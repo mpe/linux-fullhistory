@@ -7,6 +7,7 @@
  * Copyright (C) 2000 Silicon Graphics, Inc.
  * Written by Ulf Carlsson (ulfc@engr.sgi.com)
  */
+#include <linux/config.h>
 #include <linux/threads.h>
 #include <asm/asm.h>
 #include <asm/regdef.h>

@@ -100,7 +100,7 @@ static int  sbni_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void sbni_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int  sbni_close(struct net_device *dev);
 static void sbni_drop_tx_queue(struct net_device *dev);
-static struct enet_statistics *sbni_get_stats(struct net_device *dev);
+static struct net_device_stats *sbni_get_stats(struct net_device *dev);
 static void card_start(struct net_device *dev);
 static inline unsigned short sbni_recv(struct net_device *dev);
 void change_level(struct net_device *dev);
@@ -952,7 +952,7 @@ static void sbni_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	spin_unlock(&lp->lock);
 }
 
-static struct enet_statistics *sbni_get_stats(struct net_device *dev)
+static struct net_device_stats *sbni_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;

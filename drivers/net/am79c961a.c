@@ -322,7 +322,7 @@ am79c961_close(struct net_device *dev)
  * Get the current statistics.	This may be called with the card open or
  * closed.
  */
-static struct enet_statistics *am79c961_getstats (struct net_device *dev)
+static struct net_device_stats *am79c961_getstats (struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	return &priv->stats;

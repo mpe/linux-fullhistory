@@ -142,7 +142,7 @@ static int pti_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct ptifddi *pp = (struct ptifddi *) dev->priv;
 }
 
-static struct enet_statistics *pti_get_stats(struct net_device *dev)
+static struct net_device_stats *pti_get_stats(struct net_device *dev)
 { return &(((struct ptifddi *)dev->priv)->enet_stats); }
 
 static void pti_set_multicast(struct net_device *dev)

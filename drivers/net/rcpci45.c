@@ -122,7 +122,7 @@ typedef struct
     U32    bus;
     U32    function;
     struct timer_list timer;        /*  timer */
-    struct enet_statistics  stats; /* the statistics structure */
+    struct net_device_stats  stats; /* the statistics structure */
     struct net_device *next;            /* points to the next RC adapter */
     unsigned long numOutRcvBuffers;/* number of outstanding receive buffers*/
     unsigned char shutdown;
@@ -152,7 +152,7 @@ static int RCopen(struct net_device *);
 static int RC_xmit_packet(struct sk_buff *, struct net_device *);
 static void RCinterrupt(int, void *, struct pt_regs *);
 static int RCclose(struct net_device *dev);
-static struct enet_statistics *RCget_stats(struct net_device *);
+static struct net_device_stats *RCget_stats(struct net_device *);
 static int RCioctl(struct net_device *, struct ifreq *, int);
 static int RCconfig(struct net_device *, struct ifmap *);
 static void RCxmit_callback(U32, U16, PU32, U16);
@@ -936,7 +936,7 @@ RCclose(struct net_device *dev)
     return 0;
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 RCget_stats(struct net_device *dev)
 {
     RCLINKSTATS    RCstats;
@@ -1019,7 +1019,7 @@ RCget_stats(struct net_device *dev)
         pDpa->stats.tx_heartbeat_errors = 0;
         pDpa->stats.tx_window_errors = 0;
 
-        return ((struct enet_statistics *)&(pDpa->stats));
+        return ((struct net_device_stats *)&(pDpa->stats));
     }
     return 0;
 }

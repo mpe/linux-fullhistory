@@ -50,7 +50,7 @@ typedef struct ray_dev_t {
     UCHAR auth_id[6];
     UCHAR net_default_tx_rate;
     UCHAR encryption;
-    struct enet_statistics stats;
+    struct net_device_stats stats;
 
     UCHAR net_type;
     UCHAR sta_type;

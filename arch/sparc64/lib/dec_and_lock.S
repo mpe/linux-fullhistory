@@ -1,4 +1,4 @@
-/* $Id$
+/* $Id: dec_and_lock.S,v 1.1 2000/07/10 20:57:34 davem Exp $
  * dec_and_lock.S: Sparc64 version of "atomic_dec_and_lock()"
  *                 using cas and ldstub instructions.
  *

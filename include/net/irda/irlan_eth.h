@@ -35,6 +35,6 @@ void irlan_eth_flow_indication( void *instance, void *sap, LOCAL_FLOW flow);
 void irlan_eth_send_gratuitous_arp(struct net_device *dev);
 
 void irlan_eth_set_multicast_list( struct net_device *dev);
-struct enet_statistics *irlan_eth_get_stats(struct net_device *dev);
+struct net_device_stats *irlan_eth_get_stats(struct net_device *dev);
 
 #endif

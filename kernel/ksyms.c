@@ -439,7 +439,9 @@ EXPORT_SYMBOL(cdevname);
 EXPORT_SYMBOL(simple_strtoul);
 EXPORT_SYMBOL(system_utsname);	/* UTS data */
 EXPORT_SYMBOL(uts_sem);		/* UTS semaphore */
+#ifndef __mips__
 EXPORT_SYMBOL(sys_call_table);
+#endif
 EXPORT_SYMBOL(machine_restart);
 EXPORT_SYMBOL(machine_halt);
 EXPORT_SYMBOL(machine_power_off);

@@ -25,9 +25,10 @@
 #define MACH_GROUP_COBALT       7 /* Cobalt servers		 	      */
 #define MACH_GROUP_NEC_DDB	8 /* NEC DDB */
 #define MACH_GROUP_BAGET	9 /* Baget */
+#define MACH_GROUP_ORION       10 /* CoSine Orion */
 
 #define GROUP_NAMES { "unknown", "Jazz", "Digital", "ARC", \
-                      "SNI", "ACN", "SGI", "Cobalt", "NEC DDB", "Baget" }
+                      "SNI", "ACN", "SGI", "Cobalt", "NEC DDB", "Baget", "Orion" }
 
 /*
  * Valid machtype values for group unknown (low order halfword of mips_machtype)

@@ -10,6 +10,7 @@
 #ifndef _ASM_SN_ADDRS_H
 #define _ASM_SN_ADDRS_H
 
+#include <linux/config.h>
 #if _LANGUAGE_C
 #include <linux/types.h>
 #endif /* _LANGUAGE_C */

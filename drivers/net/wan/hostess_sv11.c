@@ -166,7 +166,7 @@ static int hostess_ioctl(struct net_device *d, struct ifreq *ifr, int cmd)
 	return sppp_do_ioctl(d, ifr,cmd);
 }
 
-static struct enet_statistics *hostess_get_stats(struct net_device *d)
+static struct net_device_stats *hostess_get_stats(struct net_device *d)
 {
 	struct sv11_device *sv11=d->priv;
 	if(sv11)

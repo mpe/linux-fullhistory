@@ -181,7 +181,7 @@ static unsigned int net_debug = NET_DEBUG;
 
 /* Information that need to be kept for each board. */
 struct eepro_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	unsigned rx_start;
 	unsigned tx_start; /* start of the transmit chain */
 	int tx_last;  /* pointer to last packet in the transmit chain */
@@ -293,7 +293,7 @@ static void	eepro_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void 	eepro_rx(struct net_device *dev);
 static void 	eepro_transmit_interrupt(struct net_device *dev);
 static int	eepro_close(struct net_device *dev);
-static struct enet_statistics *eepro_get_stats(struct net_device *dev);
+static struct net_device_stats *eepro_get_stats(struct net_device *dev);
 static void     set_multicast_list(struct net_device *dev);
 static void     eepro_tx_timeout (struct net_device *dev);
 
@@ -1247,7 +1247,7 @@ static int eepro_close(struct net_device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct enet_statistics *
+static struct net_device_stats *
 eepro_get_stats(struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;

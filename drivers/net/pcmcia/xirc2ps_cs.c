@@ -398,7 +398,7 @@ typedef struct local_info_t {
     dev_link_t link;
     struct net_device dev;
     dev_node_t node;
-    struct enet_statistics stats;
+    struct net_device_stats stats;
     int card_type;
     int probe_port;
     int silicon; /* silicon revision. 0=old CE2, 1=Scipper, 4=Mohawk */
@@ -416,7 +416,7 @@ typedef struct local_info_t {
  */
 static int do_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void do_tx_timeout(struct net_device *dev);
-static struct enet_statistics *do_get_stats(struct net_device *dev);
+static struct net_device_stats *do_get_stats(struct net_device *dev);
 static void set_addresses(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
 static int set_card_type(dev_link_t *link, const void *s);
@@ -1648,7 +1648,7 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
     return 0;
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 do_get_stats(struct net_device *dev)
 {
     local_info_t *lp = dev->priv;

@@ -49,6 +49,8 @@ struct rtc_wkalrm {
 #define RTC_UIE_OFF	_IO('p', 0x04)	/* ... off			*/
 #define RTC_PIE_ON	_IO('p', 0x05)	/* Periodic int. enable on	*/
 #define RTC_PIE_OFF	_IO('p', 0x06)	/* ... off			*/
+#define RTC_WIE_ON	_IO('p', 0x0f)  /* Watchdog int. enable on	*/
+#define RTC_WIE_OFF	_IO('p', 0x10)  /* ... off			*/
 
 #define RTC_ALM_SET	_IOW('p', 0x07, struct rtc_time) /* Set alarm time  */
 #define RTC_ALM_READ	_IOR('p', 0x08, struct rtc_time) /* Read alarm time */

@@ -129,7 +129,7 @@ enum RxFilter {
 #define SKB_QUEUE_SIZE	64
 
 struct el3_private {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	struct net_device *next_dev;
 	spinlock_t lock;
 	/* skb send-queue */
@@ -146,7 +146,7 @@ static int el3_open(struct net_device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void update_stats(struct net_device *dev);
-static struct enet_statistics *el3_get_stats(struct net_device *dev);
+static struct net_device_stats *el3_get_stats(struct net_device *dev);
 static int el3_rx(struct net_device *dev);
 static int el3_close(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
@@ -789,7 +789,7 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static struct enet_statistics *
+static struct net_device_stats *
 el3_get_stats(struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;

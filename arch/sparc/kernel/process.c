@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.147 2000/05/09 17:40:13 davem Exp $
+/*  $Id: process.c,v 1.148 2000/07/10 23:22:32 anton Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -109,7 +109,7 @@ out:
 int cpu_idle(void)
 {
 	/* endless idle loop with no priority at all */
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 	init_idle();
 
@@ -233,6 +233,7 @@ void show_backtrace(void)
 void smp_show_backtrace_all_cpus(void)
 {
 	xc0((smpfunc_t) show_backtrace);
+	show_backtrace();
 }
 #endif
 

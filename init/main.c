@@ -101,6 +101,10 @@ extern int usb_init(void);
 extern void free_initmem(void);
 extern void filesystem_setup(void);
 
+#ifdef CONFIG_TC
+extern void tc_init(void);
+#endif
+
 extern void ecard_init(void);
 
 #if defined(CONFIG_SYSVIPC)
@@ -689,6 +693,9 @@ static void __init do_basic_setup(void)
 #ifdef CONFIG_USB
 	usb_init();	/* Do this before doing initcalls, so that we can make
 			usbcore initialize here, and all drivers initialize later */
+#endif
+#ifdef CONFIG_TC
+	tc_init();
 #endif
 
 	/* Networking initialization needs a process context */ 

@@ -717,7 +717,7 @@ static int tulip_close (struct net_device *dev)
 	return 0;
 }
 
-static struct enet_statistics *tulip_get_stats(struct net_device *dev)
+static struct net_device_stats *tulip_get_stats(struct net_device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;

@@ -11,6 +11,7 @@
 #include <linux/pm.h>
 #include <linux/pci.h>
 #include <linux/apm_bios.h>
+#include <linux/kernel.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -89,6 +90,7 @@ EXPORT_SYMBOL_NOVERS(__put_user_4);
 
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strpbrk);
+EXPORT_SYMBOL(simple_strtol);
 
 EXPORT_SYMBOL(strncpy_from_user);
 EXPORT_SYMBOL(__strncpy_from_user);

@@ -577,7 +577,7 @@ static void update_process_times(int user_tick)
 			p->counter = 0;
 			p->need_resched = 1;
 		}
-		if (p->priority < DEF_PRIORITY)
+		if (p->nice > 0)
 			kstat.cpu_nice += user_tick;
 		else
 			kstat.cpu_user += user_tick;

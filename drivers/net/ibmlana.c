@@ -1001,7 +1001,7 @@ static int ibmlana_tx(struct sk_buff *skb, struct IBMLANA_NETDEV *dev)
 
 /* return pointer to Ethernet statistics */
 
-static struct enet_statistics *ibmlana_stats(struct IBMLANA_NETDEV *dev)
+static struct net_device_stats *ibmlana_stats(struct IBMLANA_NETDEV *dev)
 {
 	ibmlana_priv *priv = (ibmlana_priv *) dev->priv;
 
@@ -1131,7 +1131,7 @@ int ibmlana_probe(struct IBMLANA_NETDEV *dev)
 	priv->slot = slot;
 	priv->realirq = irq;
 	priv->medium = medium;
-	memset(&(priv->stat), 0, sizeof(struct enet_statistics));
+	memset(&(priv->stat), 0, sizeof(struct net_device_stats));
 
 	/* set base + irq for this device (irq not allocated so far) */
 

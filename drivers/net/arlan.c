@@ -94,7 +94,7 @@ static  int 	arlan_open(struct net_device *dev);
 static  int 	arlan_tx(struct sk_buff *skb, struct net_device *dev);
 static  void 	arlan_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static  int 	arlan_close(struct net_device *dev);
-static  struct enet_statistics *
+static  struct net_device_stats *
 		arlan_statistics		(struct net_device *dev);
 static  void 	arlan_set_multicast		(struct net_device *dev);
 static  int 	arlan_hw_tx			(struct net_device* dev, char *buf, int length );
@@ -1907,7 +1907,7 @@ static long alignLong(volatile u_char * ptr)
  * This may be called with the card open or closed.
  */
 
-static struct enet_statistics *arlan_statistics(struct net_device *dev)
+static struct net_device_stats *arlan_statistics(struct net_device *dev)
 {
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;

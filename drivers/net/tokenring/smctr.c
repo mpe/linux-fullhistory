@@ -124,7 +124,7 @@ static unsigned int smctr_get_num_rx_bdbs(struct net_device *dev);
 static int smctr_get_physical_drop_number(struct net_device *dev);
 static __u8 *smctr_get_rx_pointer(struct net_device *dev, short queue);
 static int smctr_get_station_id(struct net_device *dev);
-static struct enet_statistics *smctr_get_stats(struct net_device *dev);
+static struct net_device_stats *smctr_get_stats(struct net_device *dev);
 static FCBlock *smctr_get_tx_fcb(struct net_device *dev, __u16 queue,
         __u16 bytes_count);
 static int smctr_get_upstream_neighbor_addr(struct net_device *dev);
@@ -1402,11 +1402,11 @@ static int smctr_get_station_id(struct net_device *dev)
  * Get the current statistics. This may be called with the card open
  * or closed.
  */
-static struct enet_statistics *smctr_get_stats(struct net_device *dev)
+static struct net_device_stats *smctr_get_stats(struct net_device *dev)
 {
         struct net_local *tp = (struct net_local *)dev->priv;
 
-        return ((struct enet_statistics *)&tp->MacStat);
+        return ((struct net_device_stats *)&tp->MacStat);
 }
 
 static FCBlock *smctr_get_tx_fcb(struct net_device *dev, __u16 queue,

@@ -143,6 +143,15 @@ LOADADDR      += 0x80080000
 endif
 
 #
+# Orion Board
+#
+ifdef CONFIG_ORION
+LIBS          += arch/mips/orion/orionkern.a
+SUBDIRS       += arch/mips/orion
+LINKSCRIPT    = arch/mips/orion/ld.script.orion
+endif
+
+#
 # Choosing incompatible machines durings configuration will result in
 # error messages during linking.  Select a default linkscript if
 # none has been choosen above.
@@ -179,6 +188,13 @@ BAGETBOOT = $(MAKE) -C arch/$(ARCH)/baget
 balo:  vmlinux
 	$(BAGETBOOT) balo
 
+endif
+
+ifdef CONFIG_ORION
+ORIONBOOT = $(MAKE) -C arch/$(ARCH)/orion
+
+orionboot:
+	$(ORIONBOOT) orionboot
 endif
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot

@@ -143,31 +143,37 @@ void __init smp_boot_cpus(void)
 }
 
 void smp_flush_cache_all(void)
-{ xc0((smpfunc_t) BTFIXUP_CALL(local_flush_cache_all)); }
+{
+	xc0((smpfunc_t) BTFIXUP_CALL(local_flush_cache_all));
+	local_flush_cache_all();
+}
 
 void smp_flush_tlb_all(void)
-{ xc0((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_all)); }
+{
+	xc0((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_all));
+	local_flush_tlb_all();
+}
 
 void smp_flush_cache_mm(struct mm_struct *mm)
-{ 
+{
 	if(mm->context != NO_CONTEXT) {
-		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
-			local_flush_cache_mm(mm);
-		else
+		if(mm->cpu_vm_mask != (1 << smp_processor_id()))
 			xc1((smpfunc_t) BTFIXUP_CALL(local_flush_cache_mm), (unsigned long) mm);
+
+		local_flush_cache_mm(mm);
 	}
 }
 
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT) {
-		if(mm->cpu_vm_mask == (1 << smp_processor_id())) {
-			local_flush_tlb_mm(mm);
-		} else {
+		if(mm->cpu_vm_mask != (1 << smp_processor_id())) {
 			xc1((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_mm), (unsigned long) mm);
 			if(atomic_read(&mm->mm_users) == 1 && current->active_mm == mm)
 				mm->cpu_vm_mask = (1 << smp_processor_id());
 		}
+
+		local_flush_tlb_mm(mm);
 	}
 }
 
@@ -175,11 +181,10 @@ void smp_flush_cache_range(struct mm_struct *mm, unsigned long start,
 			   unsigned long end)
 {
 	if(mm->context != NO_CONTEXT) {
-		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
-			local_flush_cache_range(mm, start, end);
-		else
-			xc3((smpfunc_t) BTFIXUP_CALL(local_flush_cache_range), (unsigned long) mm,
-			    start, end);
+		if(mm->cpu_vm_mask != (1 << smp_processor_id()))
+			xc3((smpfunc_t) BTFIXUP_CALL(local_flush_cache_range), (unsigned long) mm, start, end);
+
+		local_flush_cache_range(mm, start, end);
 	}
 }
 
@@ -187,11 +192,10 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			 unsigned long end)
 {
 	if(mm->context != NO_CONTEXT) {
-		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
-			local_flush_tlb_range(mm, start, end);
-		else
-			xc3((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_range), (unsigned long) mm,
-			    start, end);
+		if(mm->cpu_vm_mask != (1 << smp_processor_id()))
+			xc3((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_range), (unsigned long) mm, start, end);
+
+		local_flush_tlb_range(mm, start, end);
 	}
 }
 
@@ -200,11 +204,10 @@ void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT) {
-		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
-			local_flush_cache_page(vma, page);
-		else
-			xc2((smpfunc_t) BTFIXUP_CALL(local_flush_cache_page),
-			    (unsigned long) vma, page);
+		if(mm->cpu_vm_mask != (1 << smp_processor_id()))
+			xc2((smpfunc_t) BTFIXUP_CALL(local_flush_cache_page), (unsigned long) vma, page);
+
+		local_flush_cache_page(vma, page);
 	}
 }
 
@@ -213,10 +216,10 @@ void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT) {
-		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
-			local_flush_tlb_page(vma, page);
-		else
+		if(mm->cpu_vm_mask != (1 << smp_processor_id()))
 			xc2((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_page), (unsigned long) vma, page);
+
+		local_flush_tlb_page(vma, page);
 	}
 }
 
@@ -230,6 +233,7 @@ void smp_flush_page_to_ram(unsigned long page)
 	 */
 #if 1
 	xc1((smpfunc_t) BTFIXUP_CALL(local_flush_page_to_ram), page);
+	local_flush_page_to_ram(page);
 #else
 	local_flush_page_to_ram(page);
 #endif
@@ -237,10 +241,10 @@ void smp_flush_page_to_ram(unsigned long page)
 
 void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
 {
-	if(mm->cpu_vm_mask == (1 << smp_processor_id()))
-		local_flush_sig_insns(mm, insn_addr);
-	else
+	if(mm->cpu_vm_mask != (1 << smp_processor_id()))
 		xc2((smpfunc_t) BTFIXUP_CALL(local_flush_sig_insns), (unsigned long) mm, insn_addr);
+
+	local_flush_sig_insns(mm, insn_addr);
 }
 
 /* Reschedule call back. */

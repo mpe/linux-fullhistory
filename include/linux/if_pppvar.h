@@ -128,7 +128,7 @@ struct ppp {
 	int	 sc_xfer;		/* PID of reserved PPP table */
 	char	name[16];		/* space for unit name */
 	struct net_device	dev;		/* net device structure */
-	struct enet_statistics estats;	/* more detailed stats */
+	struct net_device_stats estats;	/* more detailed stats */
 
 	/* tty output buffer */
 	unsigned char	obuf[OBUFSIZE];	/* buffer for characters to send */

@@ -2430,12 +2430,12 @@ static int dev_set_mac_address(struct net_device *dev, void *addr)
     return 0;
 }
 
-static struct enet_statistics *strip_get_stats(struct net_device *dev)
+static struct net_device_stats *strip_get_stats(struct net_device *dev)
 {
-    static struct enet_statistics stats;
+    static struct net_device_stats stats;
     struct strip *strip_info = (struct strip *)(dev->priv);
 
-    memset(&stats, 0, sizeof(struct enet_statistics));
+    memset(&stats, 0, sizeof(struct net_device_stats));
 
     stats.rx_packets     = strip_info->rx_packets;
     stats.tx_packets     = strip_info->tx_packets;

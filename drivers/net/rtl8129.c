@@ -260,11 +260,7 @@ struct rtl8129_private {
 	int chip_id;
 	int chip_revision;
 	unsigned char pci_bus, pci_devfn;
-#if LINUX_VERSION_CODE > 0x20139
 	struct net_device_stats stats;
-#else
-	struct enet_statistics stats;
-#endif
 	struct timer_list timer;	/* Media selection timer. */
 	unsigned int cur_rx;		/* Index into the Rx buffer of next Rx pkt. */
 	unsigned int cur_tx, dirty_tx, tx_flag;
@@ -306,7 +302,7 @@ static int rtl8129_rx(struct net_device *dev);
 static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int rtl8129_close(struct net_device *dev);
 static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
-static struct enet_statistics *rtl8129_get_stats(struct net_device *dev);
+static struct net_device_stats *rtl8129_get_stats(struct net_device *dev);
 static inline u32 ether_crc(int length, unsigned char *data);
 static void set_rx_mode(struct net_device *dev);
 
@@ -1365,7 +1361,7 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 rtl8129_get_stats(struct net_device *dev)
 {
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;

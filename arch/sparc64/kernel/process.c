@@ -80,7 +80,7 @@ int cpu_idle(void)
 #define unidle_me()		(cpu_data[current->processor].idle_volume = 0)
 int cpu_idle(void)
 {
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 	init_idle();
 

@@ -3118,7 +3118,7 @@ inline int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
 
 
 
- struct enet_statistics *awc_get_stats(struct net_device *dev)
+ struct net_device_stats *awc_get_stats(struct net_device *dev)
 {
 	struct awc_private *priv = (struct awc_private *)dev->priv;
 //        unsigned long flags;

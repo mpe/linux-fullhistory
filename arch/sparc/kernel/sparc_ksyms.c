@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.99 2000/06/30 10:18:38 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.100 2000/07/07 07:49:08 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -254,6 +254,7 @@ EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strpbrk);
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strstr);
+EXPORT_SYMBOL(page_kernel);
 
 /* Special internal versions of library functions. */
 EXPORT_SYMBOL(__copy_1page);

@@ -1031,12 +1031,12 @@ int
 pmu_register_sleep_notifier(struct pmu_sleep_notifier *n)
 {
 	struct list_head *list;
-	struct pmu_sleep_notifier *current;
+	struct pmu_sleep_notifier *notifier;
 
 	for (list = sleep_notifiers.next; list != &sleep_notifiers;
 	     list = list->next) {
-		current = list_entry(list, struct pmu_sleep_notifier, list);
-		if (n->priority > current->priority)
+		notifier = list_entry(list, struct pmu_sleep_notifier, list);
+		if (n->priority > notifier->priority)
 			break;
 	}
 	__list_add(&n->list, list->prev, list);
@@ -1059,18 +1059,18 @@ broadcast_sleep(int when, int fallback)
 {
 	int ret = PBOOK_SLEEP_OK;
 	struct list_head *list;
-	struct pmu_sleep_notifier *current;
+	struct pmu_sleep_notifier *notifier;
 
 	for (list = sleep_notifiers.prev; list != &sleep_notifiers;
 	     list = list->prev) {
-		current = list_entry(list, struct pmu_sleep_notifier, list);
-		ret = current->notifier_call(current, when);
+		notifier = list_entry(list, struct pmu_sleep_notifier, list);
+		ret = notifier->notifier_call(notifier, when);
 		if (ret != PBOOK_SLEEP_OK) {
 			printk(KERN_DEBUG "sleep %d rejected by %p (%p)\n",
-			       when, current, current->notifier_call);
+			       when, notifier, notifier->notifier_call);
 			for (; list != &sleep_notifiers; list = list->next) {
-				current = list_entry(list, struct pmu_sleep_notifier, list);
-				current->notifier_call(current, fallback);
+				notifier = list_entry(list, struct pmu_sleep_notifier, list);
+				notifier->notifier_call(notifier, fallback);
 			}
 			return ret;
 		}
@@ -1084,12 +1084,12 @@ broadcast_wake(void)
 {
 	int ret = PBOOK_SLEEP_OK;
 	struct list_head *list;
-	struct pmu_sleep_notifier *current;
+	struct pmu_sleep_notifier *notifier;
 
 	for (list = sleep_notifiers.next; list != &sleep_notifiers;
 	     list = list->next) {
-		current = list_entry(list, struct pmu_sleep_notifier, list);
-		current->notifier_call(current, PBOOK_WAKE);
+		notifier = list_entry(list, struct pmu_sleep_notifier, list);
+		notifier->notifier_call(notifier, PBOOK_WAKE);
 	}
 	return ret;
 }

@@ -1,5 +1,5 @@
 /*
- * $Id: physmap.c,v 1.1 2000/07/04 08:58:10 dwmw2 Exp $
+ * $Id: physmap.c,v 1.2 2000/07/11 09:42:32 dwmw2 Exp $
  *
  * Normal mappings of chips in physical memory
  */
@@ -10,10 +10,11 @@
 #include <asm/io.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/map.h>
+#include <linux/config.h>
 
 
-#define WINDOW_ADDR 0x8000000
-#define WINDOW_SIZE 0x4000000
+#define WINDOW_ADDR CONFIG_MTD_PHYSMAP_START
+#define WINDOW_SIZE CONFIG_MTD_PHYSMAP_LEN
 
 static struct mtd_info *mymtd;
 

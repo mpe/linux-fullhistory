@@ -70,7 +70,7 @@ static int ether1_open(struct net_device *dev);
 static int ether1_sendpacket(struct sk_buff *skb, struct net_device *dev);
 static void ether1_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int ether1_close(struct net_device *dev);
-static struct enet_statistics *ether1_getstats(struct net_device *dev);
+static struct net_device_stats *ether1_getstats(struct net_device *dev);
 static void ether1_setmulticastlist(struct net_device *dev);
 static void ether1_timeout(struct net_device *dev);
 
@@ -661,7 +661,7 @@ ether1_open (struct net_device *dev)
 		return -EAGAIN;
 	}
 
-	memset (&priv->stats, 0, sizeof (struct enet_statistics));
+	memset (&priv->stats, 0, sizeof (struct net_device_stats));
 
 	if (ether1_init_for_open (dev)) {
 		free_irq (dev->irq, dev);
@@ -978,7 +978,7 @@ ether1_close (struct net_device *dev)
 	return 0;
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 ether1_getstats (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;

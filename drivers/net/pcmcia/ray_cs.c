@@ -94,7 +94,7 @@ static void ray_detach(dev_link_t *);
 /***** Prototypes indicated by device structure ******************************/
 static int ray_dev_close(struct net_device *dev);
 static int ray_dev_config(struct net_device *dev, struct ifmap *map);
-static struct enet_statistics *ray_get_stats(struct net_device *dev);
+static struct net_device_stats *ray_get_stats(struct net_device *dev);
 static int ray_dev_init(struct net_device *dev);
 static int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int ray_open(struct net_device *dev);
@@ -1679,13 +1679,13 @@ static int parse_addr(char *in_str, UCHAR *out)
     return status;
 }
 /*===========================================================================*/
-static struct enet_statistics *ray_get_stats(struct net_device *dev)
+static struct net_device_stats *ray_get_stats(struct net_device *dev)
 {
     ray_dev_t *local = (ray_dev_t *)dev->priv;
     dev_link_t *link = local->finder;
     struct status *p = (struct status *)(local->sram + STATUS_BASE);
     if (!(link->state & DEV_PRESENT)) {
-        DEBUG(2,"ray_cs enet_statistics - device not present\n");
+        DEBUG(2,"ray_cs net_device_stats - device not present\n");
         return &local->stats;
     }
     if (readb(&p->mrx_overflow_for_host))

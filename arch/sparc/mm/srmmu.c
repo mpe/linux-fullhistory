@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.215 2000/06/30 13:25:28 anton Exp $
+/* $Id: srmmu.c,v 1.218 2000/07/10 23:22:32 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -56,6 +56,8 @@ int vac_badbits;
 extern struct resource sparc_iomap;
 
 extern unsigned long last_valid_pfn;
+
+extern unsigned long page_kernel;
 
 pgd_t *srmmu_swapper_pg_dir;
 
@@ -442,7 +444,6 @@ static pte_t *srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 	if(srmmu_pmd_none(*pmd)) {
 		pte_t *page = (pte_t *)srmmu_get_nocache(SRMMU_PTE_TABLE_SIZE, SRMMU_PTE_TABLE_SIZE);
 		if(page) {
-			spin_unlock(&pte_spinlock);
 			srmmu_pmd_set(pmd, page);
 			return page + address;
 		}
@@ -467,7 +468,6 @@ static pmd_t *srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 	if(srmmu_pgd_none(*pgd)) {
 		pmd_t *page = (pmd_t *)srmmu_get_nocache(SRMMU_PMD_TABLE_SIZE, SRMMU_PMD_TABLE_SIZE);
 		if(page) {
-			spin_unlock(&pte_spinlock);
 			srmmu_pgd_set(pgd, page);
 			return page + address;
 		}
@@ -2101,6 +2101,7 @@ static void __init patch_window_trap_handlers(void)
 static void smp_flush_page_for_dma(unsigned long page)
 {
 	xc1((smpfunc_t) BTFIXUP_CALL(local_flush_page_for_dma), page);
+	local_flush_page_for_dma(page);
 }
 
 #endif
@@ -2129,6 +2130,7 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_INT(page_copy, pgprot_val(SRMMU_PAGE_COPY));
 	BTFIXUPSET_INT(page_readonly, pgprot_val(SRMMU_PAGE_RDONLY));
 	BTFIXUPSET_INT(page_kernel, pgprot_val(SRMMU_PAGE_KERNEL));
+	page_kernel = pgprot_val(SRMMU_PAGE_KERNEL);
 	pg_iobits = SRMMU_VALID | SRMMU_WRITE | SRMMU_REF;
 	
 	/* Functions */

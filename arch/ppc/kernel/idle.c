@@ -48,7 +48,7 @@ atomic_t zeropage_calls; /* # zero'd pages request that've been made */
 int idled(void)
 {
 	/* endless loop with no priority at all */
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 	init_idle();	
 	for (;;)

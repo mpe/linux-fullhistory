@@ -90,12 +90,4 @@ struct ethhdr
 	unsigned short	h_proto;		/* packet type ID field	*/
 };
 
-/*
- *	We Have changed the ethernet statistics collection data. This
- *	is just for partial compatibility for now.
- */
- 
- 
-#define enet_statistics net_device_stats
-
 #endif	/* _LINUX_IF_ETHER_H */

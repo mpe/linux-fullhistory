@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.5 2000/06/04 06:23:53 anton Exp $ */
+/* $Id: pgalloc.h,v 1.6 2000/07/10 20:56:53 anton Exp $ */
 #ifndef _SPARC_PGALLOC_H
 #define _SPARC_PGALLOC_H
 
@@ -92,14 +92,10 @@ extern struct pgtable_cache_struct {
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
 	unsigned long pgd_cache_sz;
-	spinlock_t pgd_spinlock;
-	spinlock_t pte_spinlock;
 } pgt_quicklists;
 #define pgd_quicklist           (pgt_quicklists.pgd_cache)
 #define pmd_quicklist           ((unsigned long *)0)
 #define pte_quicklist           (pgt_quicklists.pte_cache)
-#define pgd_spinlock		(pgt_quicklists.pgd_spinlock)
-#define pte_spinlock		(pgt_quicklists.pte_spinlock)
 #define pgtable_cache_size      (pgt_quicklists.pgtable_cache_sz)
 #define pgd_cache_size		(pgt_quicklists.pgd_cache_sz)
 

@@ -273,6 +273,10 @@
 #include "esp.h"
 #endif
 
+#ifdef CONFIG_SCSI_SGIWD93
+#include "sgiwd93.h"
+#endif
+
 #ifdef CONFIG_SCSI_QLOGICPTI
 #include "qlogicpti.h"
 #endif
@@ -677,9 +681,15 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_IMM
     IMM,
 #endif
+#ifdef CONFIG_SCSI_SGIWD93
+    SGIWD93_SCSI,
+#endif
+#ifdef CONFIG_JAZZ_ESP	
+    SCSI_JAZZ_ESP,
+#endif
 #ifdef CONFIG_SUN3X_ESP  
     SCSI_SUN3X_ESP,
-#endif  
+#endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,
 #endif

@@ -33,14 +33,13 @@ ld $7, PT_R7(sp)
 ld $2, PT_R2(sp)
 #endif
 	dmfc0	a2, CP0_BADVADDR
+	__BUILD_\interruptible
 	li	a1, \writebit
 	sd	a2, PT_BVADDR(sp)
 	move	a0, sp
-	__BUILD_\interruptible
 	jal	do_page_fault
+	j	ret_from_sys_call
 	END(__\name)
-	RESTORE_ALL
-	eret
 	.endm
 
 	tlb_handler	xtlb_mod sti 1

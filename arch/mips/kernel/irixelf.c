@@ -1156,7 +1156,7 @@ static int irix_core_dump(long signr, struct pt_regs * regs, struct file *file)
 	psinfo.pr_state = i;
 	psinfo.pr_sname = (i < 0 || i > 5) ? '.' : "RSDZTD"[i];
 	psinfo.pr_zomb = psinfo.pr_sname == 'Z';
-	psinfo.pr_nice = current->priority-15;
+	psinfo.pr_nice = current->nice;
 	psinfo.pr_flag = current->flags;
 	psinfo.pr_uid = current->uid;
 	psinfo.pr_gid = current->gid;

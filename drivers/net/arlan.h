@@ -343,7 +343,7 @@ struct TxRingPoint  {
 #define TX_RING_SIZE 2
 /* Information that need to be kept for each board. */
 struct arlan_private {
-      struct enet_statistics stats;
+      struct net_device_stats stats;
       long open_time;			/* Useless example local info. */
       struct arlan_shmem * card;
       struct arlan_shmem * conf;

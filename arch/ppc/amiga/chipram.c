@@ -5,6 +5,7 @@
 **          - 64-bit aligned allocations for full AGA compatibility
 */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>

@@ -377,7 +377,7 @@ sonic_rx(struct net_device *dev)
  * Get the current statistics.
  * This may be called with the device open or closed.
  */
-static struct enet_statistics *
+static struct net_device_stats *
 sonic_get_stats(struct net_device *dev)
 {
     struct sonic_local *lp = (struct sonic_local *)dev->priv;

@@ -1522,7 +1522,7 @@ struct awc_private {
 	int 			full_stats;
 	int 			debug;
 	
-	struct enet_statistics  stats;
+	struct net_device_stats stats;
 	
 	struct ctl_table * proc_table;
 
@@ -1537,7 +1537,7 @@ extern int 		awc_open(struct net_device *dev);
 extern void 		awc_tx_timeout(struct net_device *dev);
 extern int 		awc_start_xmit(struct sk_buff *, struct net_device *);
 extern void 		awc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-extern struct enet_statistics *	awc_get_stats(struct net_device *dev);
+extern struct net_device_stats *	awc_get_stats(struct net_device *dev);
 extern int 		awc_rx(struct net_device *dev, struct awc_fid * rx_fid);
 extern void		awc_set_multicast_list(struct net_device *dev);
 extern int awc_change_mtu(struct net_device *dev, int new_mtu);  

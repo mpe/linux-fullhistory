@@ -409,7 +409,7 @@ void irlan_eth_set_multicast_list(struct net_device *dev)
  *    Get the current statistics for this device
  *
  */
-struct enet_statistics *irlan_eth_get_stats(struct net_device *dev) 
+struct net_device_stats *irlan_eth_get_stats(struct net_device *dev) 
 {
 	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
 

@@ -106,7 +106,7 @@ struct sbni_in_stats {
  *    Board-specific info in dev->priv. 
  */
 struct net_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 
 	struct timer_list watchdog;
 	unsigned int realframelen;	/* the current size of the SB-frame */

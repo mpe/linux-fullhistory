@@ -600,6 +600,13 @@ L:	isdn4linux@listserv.isdn4linux.de
 W:	http://www.melware.de
 S:	Maintained
 
+JOURNALLING FLASH FILE SYSTEM (JFFS)
+P:	Axis Communications AB
+M:	jffs-dev@axis.com
+L:	jffs-dev@axis.com
+W:	http://www.developer.axis.com/software/jffs/
+S:	Maintained
+
 JOYSTICK DRIVER
 P:	Vojtech Pavlik
 M:	vojtech@suse.cz
@@ -645,11 +652,6 @@ W:	http://www.linuxppc.org/
 L:	linuxppc-dev@lists.linuxppc.org
 S:	Maintained
 
-MAESTRO PCI SOUND DRIVER
-P:	Zach Brown
-M:	zab@zabbo.net
-S:	Odd Fixes
-
 M68K
 P:	Jes Sorensen
 M:	Jes.Sorensen@cern.ch
@@ -668,6 +670,18 @@ M68K ON HP9000/300
 P:	Philip Blundell
 M:	philb@gnu.org
 W:	http://www.tazenda.demon.co.uk/phil/linux-hp
+S:	Maintained
+
+MAESTRO PCI SOUND DRIVER
+P:	Zach Brown
+M:	zab@zabbo.net
+S:	Odd Fixes
+
+MEMORY TECHNOLOGY DEVICES
+P:	David Woodhouse
+M:	dwmw2@redhat.com
+W:	http://www.linux-mtd.infradead.org/
+L:	mtd@infradead.org
 S:	Maintained
 
 MIPS

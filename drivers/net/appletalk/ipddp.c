@@ -122,10 +122,10 @@ int ipddp_init(struct net_device *dev)
 	/* Initalize the device structure. */
         dev->hard_start_xmit = ipddp_xmit;
 
-        dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+        dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
         if(!dev->priv)
                 return -ENOMEM;
-        memset(dev->priv,0,sizeof(struct enet_statistics));
+        memset(dev->priv,0,sizeof(struct net_device_stats));
 
 	dev->open 	    = ipddp_open;
         dev->stop 	    = ipddp_close;

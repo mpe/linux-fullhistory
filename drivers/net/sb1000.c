@@ -92,7 +92,7 @@ static int sb1000_open(struct net_device *dev);
 static int sb1000_dev_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd);
 static int sb1000_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void sb1000_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static struct enet_statistics *sb1000_stats(struct net_device *dev);
+static struct net_device_stats *sb1000_stats(struct net_device *dev);
 static int sb1000_close(struct net_device *dev);
 
 
@@ -760,7 +760,7 @@ sb1000_rx(struct net_device *dev)
 	unsigned int skbsize;
 	struct sk_buff *skb;
 	struct sb1000_private *lp = (struct sb1000_private *)dev->priv;
-	struct enet_statistics *stats = &lp->stats;
+	struct net_device_stats *stats = &lp->stats;
 
 	/* SB1000 frame constants */
 	const int FrameSize = FRAMESIZE;

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.96 2000/06/05 06:08:46 anton Exp $ */
+/* $Id: pgtable.h,v 1.97 2000/07/07 07:33:11 anton Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -125,7 +125,14 @@ BTFIXUPDEF_INT(page_kernel)
 #define PAGE_SHARED    __pgprot(BTFIXUP_INT(page_shared))
 #define PAGE_COPY      __pgprot(BTFIXUP_INT(page_copy))
 #define PAGE_READONLY  __pgprot(BTFIXUP_INT(page_readonly))
+
+extern unsigned long page_kernel;
+
+#ifdef MODULE
+#define PAGE_KERNEL	page_kernel
+#else
 #define PAGE_KERNEL    __pgprot(BTFIXUP_INT(page_kernel))
+#endif
 
 /* Top-level page directory */
 extern pgd_t swapper_pg_dir[1024];

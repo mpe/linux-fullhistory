@@ -107,7 +107,7 @@ struct sgiseeq_private {
 	unsigned char control;
 	unsigned char mode;
 
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 };
 
 static inline void hpc3_eth_reset(volatile struct hpc3_ethregs *hregs)
@@ -552,7 +552,7 @@ static void timeout(struct net_device *dev)
 	netif_wake_queue(dev);
 }
 
-static struct enet_statistics *sgiseeq_get_stats(struct net_device *dev)
+static struct net_device_stats *sgiseeq_get_stats(struct net_device *dev)
 {
 	struct sgiseeq_private *sp = (struct sgiseeq_private *) dev->priv;
 
